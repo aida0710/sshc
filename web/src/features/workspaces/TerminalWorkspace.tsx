@@ -10,6 +10,7 @@ import { workspaceApi, type SavedWorkspace } from "./api";
 import { WorkspaceCommandCenter, type WorkspaceCommandTarget } from "./WorkspaceCommandCenter";
 import { consoleDragMimeType, type LiveWorkspaceSummary } from "./live";
 import { browserSessionStorage, loadLiveWorkspace, saveLiveWorkspace, type LiveWorkspaceNode } from "./livePersistence";
+import { useDismissibleLayer } from "../../ui/useDismissibleLayer";
 
 export type WorkspaceRestoreRequest = { id: string; sequence: number };
 export type WorkspaceRenameRequest = { name: string; sequence: number };
@@ -121,10 +122,17 @@ export function TerminalWorkspace({
   const [problem, setProblem] = useState("");
   const [liveRestoreReady, setLiveRestoreReady] = useState(false);
   const [liveWorkspaceName, setLiveWorkspaceName] = useState("");
+  const [savedMenuOpen, setSavedMenuOpen] = useState(false);
+  const savedMenuRef = useRef<HTMLDetailsElement>(null);
   const consumedRestore = useRef(0);
   const consumedRename = useRef(0);
   const liveWorkspaceID = useRef(paneID());
   const liveStorage = useMemo(() => browserSessionStorage(), []);
+  useDismissibleLayer({
+    open: savedMenuOpen,
+    containerRefs: [savedMenuRef],
+    onDismiss: () => setSavedMenuOpen(false),
+  });
   const active = sessions.find((session) => session.id === activeSessionId) ?? null;
   const sessionByID = useMemo(() => new Map(sessions.map((session) => [session.id, session])), [sessions]);
   const layoutSessionIDs = useMemo(() => layout === null ? [] : paneSessionIDs(layout.root), [layout]);
@@ -564,7 +572,12 @@ export function TerminalWorkspace({
         ) : null}
         <Button disabled={connectedCommandTargets === 0} onClick={() => setCommandCenter(true)}>{t("workspace.broadcastCommand")}</Button>
         {focusModePaneId === null ? null : <Button onClick={() => setFocusModePaneId(null)}>{t("workspace.exitFocusMode")}</Button>}
-        <details className="group relative ml-auto">
+        <details
+          ref={savedMenuRef}
+          open={savedMenuOpen}
+          onToggle={(event) => setSavedMenuOpen(event.currentTarget.open)}
+          className="group relative ml-auto"
+        >
           <summary className="flex cursor-pointer list-none items-center gap-2 rounded-md border border-control-line bg-control px-3 py-1.5 text-xs text-ink marker:hidden hover:bg-select-fill">
             <span aria-hidden="true" className="text-ink-faint group-open:rotate-90">›</span>
             {t("workspace.savedLayouts")}

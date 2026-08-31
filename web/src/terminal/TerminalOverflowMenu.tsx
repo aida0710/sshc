@@ -1,5 +1,6 @@
-import { useEffect, useRef } from "react";
+import { useRef, type RefObject } from "react";
 import { useTranslate } from "../i18n/context";
+import { useDismissibleLayer } from "../ui/useDismissibleLayer";
 
 export function TerminalOverflowMenu({
   osc52Enabled,
@@ -8,6 +9,7 @@ export function TerminalOverflowMenu({
   onCopyContext,
   onToggleOsc52,
   onClose,
+  triggerRef,
 }: {
   osc52Enabled: boolean;
   onQuickCommands: () => void;
@@ -15,24 +17,17 @@ export function TerminalOverflowMenu({
   onCopyContext: () => void;
   onToggleOsc52: () => void | Promise<void>;
   onClose: () => void;
+  triggerRef?: RefObject<HTMLElement | null>;
 }) {
   const t = useTranslate();
   const panel = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    const dismiss = (event: PointerEvent) => {
-      if (!panel.current?.contains(event.target as Node)) onClose();
-    };
-    const escape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    document.addEventListener("pointerdown", dismiss);
-    document.addEventListener("keydown", escape);
-    return () => {
-      document.removeEventListener("pointerdown", dismiss);
-      document.removeEventListener("keydown", escape);
-    };
-  }, [onClose]);
+  useDismissibleLayer({
+    open: true,
+    containerRefs: triggerRef === undefined ? [panel] : [panel, triggerRef],
+    onDismiss: onClose,
+    ...(triggerRef === undefined ? {} : { returnFocusRef: triggerRef }),
+  });
 
   const action = (callback: () => void | Promise<void>) => () => {
     void callback();
