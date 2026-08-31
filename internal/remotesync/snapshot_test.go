@@ -270,6 +270,12 @@ func TestReadRefusesAPathWindowsCannotRepresent(t *testing.T) {
 	}
 }
 
+func TestUnsafePathErrorDescribesThePortablePathContract(t *testing.T) {
+	if !strings.Contains(remotesync.ErrUnsafePath.Error(), "non-portable") {
+		t.Fatalf("ErrUnsafePath = %q", remotesync.ErrUnsafePath)
+	}
+}
+
 func TestWindowsDeviceNamePrefixesRemainUsable(t *testing.T) {
 	for _, name := range []string{"console", "company/config", "com0", "com10", "lpt0", "lpt10", "auxiliary"} {
 		t.Run(name, func(t *testing.T) {
