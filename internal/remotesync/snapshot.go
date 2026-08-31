@@ -63,7 +63,7 @@ var (
 	// ErrUnsafePath は、ワークスペースから抜け出すパス、または対応OS間で
 	// 同じファイル名として安全に再現できないパスを報告する。スナップショットは
 	// 信用できない入力であり、tar の中の "../" は最も古い手口である。
-	ErrUnsafePath = errors.New("a snapshot entry names a path outside the workspace")
+	ErrUnsafePath = errors.New("a snapshot entry names an unsafe or non-portable path")
 	// ErrUnsafeMode は、このアプリケーションが書かない権限ビットを持つエントリを報告
 	// する。スナップショットが秘密鍵の権限を広げられてはならない。
 	ErrUnsafeMode = errors.New("a snapshot entry has permissions this application does not write")
