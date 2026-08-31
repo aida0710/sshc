@@ -990,6 +990,27 @@ export const en = {
   "sync.heading": "Remote sync",
   "sync.overviewHeading": "Sync",
   "sync.manageSettings": "Manage sync settings",
+  "sync.exclusions.heading": "Files to sync",
+  "sync.exclusions.open": "Selection and exclusion rules",
+  "sync.exclusions.loading": "Loading synchronization files…",
+  "sync.exclusions.summary": "{included} included · {ignored} excluded",
+  "sync.exclusions.hint":
+    "Unchecked files are not sent, overwritten, or removed by a receive. Existing local copies stay in place.",
+  "sync.exclusions.defaults":
+    "There is no .sshcignore yet. The built-in rules exclude OS metadata, backups, temporary files, and lock files. Saving shares the rules with every machine.",
+  "sync.exclusions.search": "Search file names and paths",
+  "sync.exclusions.empty": "No files match this search.",
+  "sync.exclusions.sensitiveWarning":
+    "A connection file or key is excluded. Other machines may not be able to reproduce that connection.",
+  "sync.exclusions.advanced": "Edit .sshcignore",
+  "sync.exclusions.rules": "Synchronization exclusion rules",
+  "sync.exclusions.syntax":
+    "Use Gitignore syntax including *, **, ?, [a-z], and ! to include again. .sshcignore itself and sshc device-local state are handled independently.",
+  "sync.exclusions.save": "Save exclusions",
+  "sync.exclusions.shared": ".sshcignore is synchronized so every machine uses the same rules.",
+  "sync.exclusions.invalid": "The exclusion rules are not valid.",
+  "sync.exclusions.loadFailed": "Could not load the synchronization files.",
+  "sync.exclusions.saveFailed": "Could not save the exclusion rules.",
   "sync.receiveRemote": "Receive from remote",
   "sync.autoBlockedReason": "Sync is paused. Reason: {reason}",
   "sync.autoFailedReason": "The previous sync failed. Reason: {reason}",
@@ -1081,7 +1102,29 @@ export const en = {
     "The saved key cannot decrypt the snapshot in this bucket. Check that every machine uses the same key, or explicitly replace the remote snapshot from Bucket status.",
   "sync.wrongMaster": "The master password for this machine is incorrect.",
   "sync.unreachable":
-    "The bucket did not respond. Nothing was saved. Check the endpoint, bucket name, and credentials.",
+    "The object store refused the request. Nothing was saved. Check the bucket, access key, secret, region, and permissions.",
+  "sync.bucketTimeout":
+    "The object store did not respond in time. Check the network and endpoint.",
+  "sync.bucketDNSFailed":
+    "The endpoint hostname could not be resolved. Check the address and this device's DNS connection.",
+  "sync.bucketTLSFailed":
+    "The secure connection to the endpoint could not be verified. Check the HTTPS address and this device's clock.",
+  "sync.bucketUnreachable":
+    "The object store could not be reached. Check this device's network and the endpoint.",
+  "sync.snapshotDownloadIncomplete":
+    "The encrypted snapshot download ended early. Check the network and try receiving it again.",
+  "sync.snapshotCostRefused":
+    "This snapshot requires more decryption work than the safety limit allows.",
+  "sync.snapshotSchemaUnsupported":
+    "This snapshot uses a format unsupported by this version of sshc. Update to the same or a newer version than the machine that created it.",
+  "sync.snapshotRejected":
+    "The downloaded data is not a valid sshc snapshot or is damaged. Nothing was overwritten.",
+  "sync.snapshotTooLarge":
+    "The snapshot exceeds the safe read limit. Nothing was overwritten.",
+  "sync.noSnapshot":
+    "There is no current snapshot at the specified bucket and path.",
+  "sync.internalFailed":
+    "Sync encountered an unclassified internal error. Include the diagnostic code below when reporting it.",
   "sync.failed":
     "Sync could not be completed. Nothing was overwritten. Check the connection and try again.",
   "sync.localChanged":
@@ -1126,6 +1169,9 @@ export const en = {
     "The remote snapshot uses an unsupported format. The same generation will not be downloaded again automatically.",
   "sync.autoFailed": "The setting could not be saved.",
   "sync.autoNow": "Sync now",
+  "sync.autoNow.both": "Sync now",
+  "sync.autoNow.pull": "Receive now",
+  "sync.autoNow.push": "Send now",
   "sync.autoNowFailed": "The sync check could not be run.",
   "sync.transferHeading": "Send or review changes",
   "sync.transferHint.both":
@@ -1200,6 +1246,9 @@ export const en = {
   "sync.forceConfirm":
     "I understand that the current remote snapshot will be replaced with this machine's workspace.",
   "sync.forcePush": "Replace the remote snapshot",
+  "sync.forcePushShort": "Force send",
+  "sync.forcePull": "Force receive",
+  "sync.dialogClose": "Close",
   "sync.forcePushed": "Replaced the confirmed remote snapshot.",
   "sync.forceFailed":
     "The remote snapshot could not be replaced. Refresh the bucket status and confirm again.",

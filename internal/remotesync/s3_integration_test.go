@@ -158,6 +158,9 @@ func uniqueRealPath(t *testing.T) string {
 func TestAgainstARealBucketAuditPrefixIsEmpty(t *testing.T) {
 	client, _ := integrationBucket(t)
 	objects, truncated, err := client.ListNewest(context.Background(), "sshc-audit/remotesync/", 1000)
+	if errors.Is(err, objectstore.ErrNotFound) {
+		return
+	}
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -212,6 +215,97 @@ func TestAgainstARealBucketASnapshotTravelsBetweenTwoMachines(t *testing.T) {
 	}
 	if got := second.read(t, "keys/work/id_ed25519"); !strings.HasPrefix(got, "-----BEGIN") {
 		t.Errorf("the private key did not arrive: %q", got)
+	}
+}
+
+func TestAgainstARealBucketSharedExclusionsProtectReceiverFiles(t *testing.T) {
+	remotePath := uniqueRealPath(t)
+	sender := realInstallationAt(t, remotePath, map[string]string{
+		"config":              "Host shared\n\tHostName 203.0.113.20\n",
+		remotesync.IgnorePath: "*.tmp\n",
+		"cache/upload.tmp":    "sender temporary bytes",
+	})
+	if _, err := sender.service.Push(context.Background(), syncPassphrase, "share exclusions"); err != nil {
+		t.Fatalf("Push = %v", err)
+	}
+
+	receiver := realInstallationAt(t, remotePath, map[string]string{
+		"local-only.tmp": "receiver temporary bytes",
+	})
+	result, err := receiver.service.Pull(context.Background(), syncPassphrase, remotesync.ResolveRemote)
+	if err != nil {
+		t.Fatalf("Pull = %v", err)
+	}
+	if err := receiver.service.Apply(result); err != nil {
+		t.Fatalf("Apply = %v", err)
+	}
+	if got := receiver.read(t, remotesync.IgnorePath); got != "*.tmp\n" {
+		t.Fatalf("shared ignore document = %q", got)
+	}
+	if got := receiver.read(t, "local-only.tmp"); got != "receiver temporary bytes" {
+		t.Fatalf("excluded receiver file = %q", got)
+	}
+	if _, err := os.Stat(filepath.Join(receiver.workspace.Root(), "cache", "upload.tmp")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("excluded sender file unexpectedly travelled: %v", err)
+	}
+}
+
+func TestAgainstARealBucketFreshReceiveOnlySetupVerifiesAndPulls(t *testing.T) {
+	remotePath := uniqueRealPath(t)
+	sender := realInstallationAt(t, remotePath, map[string]string{
+		"config": "Host receive-only\n\tHostName 192.0.2.10\n",
+	})
+	if _, err := sender.service.Push(context.Background(), syncPassphrase, "Create receive-only fixture"); err != nil {
+		t.Fatalf("sender Push = %v", err)
+	}
+
+	home := t.TempDir()
+	root := filepath.Join(home, ".ssh")
+	if err := os.MkdirAll(root, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager := storage.NewManager(workspace, time.Now, rand.Reader)
+	receiver := remotesync.NewService(workspace, manager,
+		func() string { return time.Now().UTC().Format(time.RFC3339) },
+		func() (string, error) { return "fresh-receiver", nil })
+	receiver.OpenVault = func() ([]byte, error) { return nil, nil }
+	receiver.SealVault = func(document []byte) ([]byte, error) { return document, nil }
+	receiver.EmptyVaultDocument = func() ([]byte, error) { return []byte("empty-vault"), nil }
+	config := sender.config
+	config.Direction = remotesync.DirectionPull
+	client := *sender.client
+
+	inspection, err := remotesync.InspectSetupTarget(context.Background(), &client, config)
+	if err != nil {
+		t.Fatalf("InspectSetupTarget = %v", err)
+	}
+	persisted := false
+	if err := receiver.CompleteSetup(context.Background(), config, sender.creds, &client, inspection, syncPassphrase, func() error {
+		persisted = true
+		return nil
+	}); err != nil {
+		t.Fatalf("fresh receive-only CompleteSetup = %v", err)
+	}
+	if !persisted || receiver.Direction() != remotesync.DirectionPull {
+		t.Fatalf("setup result: persisted=%v direction=%q", persisted, receiver.Direction())
+	}
+	result, err := receiver.Pull(context.Background(), syncPassphrase, remotesync.ResolveNone)
+	if err != nil {
+		t.Fatalf("fresh receive-only Pull = %v", err)
+	}
+	if err := receiver.Apply(result); err != nil {
+		t.Fatalf("fresh receive-only Apply = %v", err)
+	}
+	contents, err := os.ReadFile(filepath.Join(root, "config"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(contents) != "Host receive-only\n\tHostName 192.0.2.10\n" {
+		t.Fatalf("received config = %q", contents)
 	}
 }
 

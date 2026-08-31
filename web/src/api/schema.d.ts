@@ -502,6 +502,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sync/exclusions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getSyncExclusions"];
+        put: operations["saveSyncExclusions"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sync/push": {
         parameters: {
             query?: never;
@@ -2318,6 +2334,18 @@ export interface components {
             added: number;
             modified: number;
             removed: number;
+        };
+        SyncExclusionCandidate: {
+            path: string;
+            ignored: boolean;
+        };
+        SyncExclusions: {
+            document: string;
+            usingDefaults: boolean;
+            candidates: components["schemas"]["SyncExclusionCandidate"][];
+        };
+        SyncExclusionsRequest: {
+            document: string;
         };
         SyncBucketObject: {
             key: string;
@@ -4231,6 +4259,55 @@ export interface operations {
             400: components["responses"]["Problem"];
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
+        };
+    };
+    getSyncExclusions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Effective Gitignore-style exclusion rules and current workspace candidates */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncExclusions"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+        };
+    };
+    saveSyncExclusions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SyncExclusionsRequest"];
+            };
+        };
+        responses: {
+            /** @description The validated shared .sshcignore document and updated candidates */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncExclusions"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
         };
     };
     getSyncPushDraft: {

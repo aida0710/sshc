@@ -99,6 +99,19 @@ function buildApi(
       removed: 0,
     }),
     configureSync: vi.fn().mockResolvedValue({ ...status, configured: true }),
+    syncExclusions: vi.fn().mockResolvedValue({
+      document: "*.tmp\n",
+      usingDefaults: true,
+      candidates: [
+        { path: "config", ignored: false },
+        { path: "cache/session.tmp", ignored: true },
+      ],
+    }),
+    saveSyncExclusions: vi.fn().mockResolvedValue({
+      document: "*.tmp\n",
+      usingDefaults: false,
+      candidates: [],
+    }),
     pushSnapshot: vi.fn().mockResolvedValue({
       status: { ...status, synced: true },
       result: {
@@ -321,9 +334,7 @@ describe("SyncPanel", () => {
     render(<SyncPanel api={api} />);
 
     await userEvent.click(
-      await screen.findByText("Replace the remote snapshot", {
-        selector: "summary",
-      }),
+      await screen.findByRole("button", { name: "Force send" }),
     );
     const replace = screen.getByRole("button", {
       name: "Replace the remote snapshot",
@@ -418,12 +429,14 @@ describe("SyncPanel", () => {
   });
 
   it("keeps configured credentials collapsed until they need editing", async () => {
-    const { container } = render(
+    render(
       <SyncPanel api={buildApi(configured, nothingToDo)} />,
     );
 
     await screen.findByText("Manage sync settings");
-    const summary = container.querySelector("summary") as HTMLElement;
+    const summary = screen
+      .getByText("Manage sync settings")
+      .closest("summary") as HTMLElement;
     expect(summary).not.toBeNull();
     const settings = summary.closest("details");
     expect(settings).not.toHaveAttribute("open");
@@ -712,10 +725,18 @@ describe("SyncPanel", () => {
   });
 
   it("offers no push on a machine set to receive only, and says why", async () => {
-    const api = buildApi({ ...configured, direction: "pull" }, nothingToDo);
+    const syncNow = vi
+      .fn()
+      .mockResolvedValue({ ...configured, direction: "pull" });
+    const api = buildApi({ ...configured, direction: "pull" }, nothingToDo, {
+      syncNow,
+    });
     render(<SyncPanel api={api} />);
 
-    await screen.findByRole("button", { name: "Review remote changes" });
+    const sync = await screen.findByRole("button", { name: "Receive now" });
+    expect(
+      screen.getByRole("button", { name: "Review remote changes" }),
+    ).toBeEnabled();
     expect(
       screen.queryByRole("button", { name: "Push this workspace" }),
     ).not.toBeInTheDocument();
@@ -724,6 +745,9 @@ describe("SyncPanel", () => {
       screen.getByText(/Changes on this machine are never pushed/),
     ).toBeInTheDocument();
     expect(api.syncPushDraft).not.toHaveBeenCalled();
+
+    await userEvent.click(sync);
+    await waitFor(() => expect(syncNow).toHaveBeenCalledOnce());
   });
 
   it("lets a receive-only machine explicitly review and accept a diverged remote head", async () => {
@@ -780,6 +804,35 @@ describe("SyncPanel", () => {
         true,
       ),
     );
+  });
+
+  it("previews the current remote before an explicit force receive", async () => {
+    const remote = {
+      ...nothingToDo,
+      written: ["config"],
+      origin: "remote-device-2",
+    };
+    const pullSnapshot = vi.fn().mockResolvedValue(remote);
+    const api = buildApi(configured, remote, { pullSnapshot });
+    render(<SyncPanel api={api} />);
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Force receive" }),
+    );
+
+    await waitFor(() =>
+      expect(pullSnapshot).toHaveBeenLastCalledWith(
+        false,
+        "remote",
+        undefined,
+        undefined,
+        true,
+      ),
+    );
+    expect(
+      await screen.findByRole("heading", { name: "Receive current remote" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("config")).toBeInTheDocument();
   });
 
   it("keeps the specific receive-only recovery state instead of adding a generic error", async () => {
@@ -1025,6 +1078,52 @@ describe("SyncPanel", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       /Nothing was saved/i,
     );
+  });
+
+  it("shows a specific network cause and a stable diagnostic code", async () => {
+    const api = buildApi(unconfigured, nothingToDo, {
+      checkSyncSetup: vi
+        .fn()
+        .mockRejectedValue(new ApiError("bucket_dns_failed", 502, null)),
+    });
+    render(<SyncPanel api={api} />);
+
+    await userEvent.type(
+      await screen.findByLabelText("Endpoint"),
+      "https://misspelled.invalid",
+    );
+    await userEvent.type(screen.getByLabelText("Bucket name"), "sshc");
+    await userEvent.type(screen.getByLabelText("Access key ID"), "AKID");
+    await userEvent.type(
+      screen.getByLabelText("Secret access key"),
+      "the-secret",
+    );
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Check connection" }),
+    );
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(/hostname could not be resolved/i);
+    expect(alert).toHaveTextContent("Code: bucket_dns_failed");
+  });
+
+  it("keeps the automatic cycle failure cause visible after the request returns", async () => {
+    const api = buildApi(
+      {
+        ...configured,
+        auto: {
+          enabled: true,
+          phase: "failed",
+          detail: "bucket_dns_failed",
+        },
+      },
+      nothingToDo,
+    );
+    render(<SyncPanel api={api} />);
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(/hostname could not be resolved/i);
+    expect(alert).toHaveTextContent("Code: bucket_dns_failed");
   });
 
   it("explains an endpoint that carries a path instead of just refusing it", async () => {

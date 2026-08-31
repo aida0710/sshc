@@ -997,6 +997,27 @@ export const ja = {
   "sync.heading": "Sync",
   "sync.overviewHeading": "同期",
   "sync.manageSettings": "同期設定を管理",
+  "sync.exclusions.heading": "同期するファイル",
+  "sync.exclusions.open": "選択・除外ルール",
+  "sync.exclusions.loading": "同期対象を読み込んでいます…",
+  "sync.exclusions.summary": "対象 {included} 件 · 除外 {ignored} 件",
+  "sync.exclusions.hint":
+    "チェックを外したファイルは送信せず、受信時にも上書き・削除しません。ローカルにある内容はそのまま残ります。",
+  "sync.exclusions.defaults":
+    "まだ .sshcignore はありません。OSの管理ファイル、バックアップ、一時ファイル、ロックファイルを除外する既定ルールが有効です。保存すると端末間で共有されます。",
+  "sync.exclusions.search": "ファイル名・パスを検索",
+  "sync.exclusions.empty": "一致するファイルはありません。",
+  "sync.exclusions.sensitiveWarning":
+    "接続設定または鍵が除外されています。別の端末ではその接続を再現できない可能性があります。",
+  "sync.exclusions.advanced": ".sshcignore を編集",
+  "sync.exclusions.rules": "同期除外ルール",
+  "sync.exclusions.syntax":
+    "Gitignoreと同じ形式で *、**、?、[a-z]、!（再追加）を使えます。.sshcignore自身とsshcの端末固有状態はこの設定に関係なく扱われます。",
+  "sync.exclusions.save": "除外設定を保存",
+  "sync.exclusions.shared": ".sshcignore は同期され、すべての端末で同じルールを使います。",
+  "sync.exclusions.invalid": "除外ルールの書式が正しくありません。",
+  "sync.exclusions.loadFailed": "同期対象を読み込めませんでした。",
+  "sync.exclusions.saveFailed": "除外設定を保存できませんでした。",
   "sync.receiveRemote": "リモートから受信",
   "sync.autoBlockedReason": "同期を停止しています。理由：{reason}",
   "sync.autoFailedReason": "前回の同期に失敗しました。理由：{reason}",
@@ -1087,7 +1108,29 @@ export const ja = {
     "保存済みのキーでは、このバケットのスナップショットを復号できません。すべてのマシンで同じキーを使用しているか確認するか、バケットの状態からリモートスナップショットを明示的に置き換えてください。",
   "sync.wrongMaster": "このマシンのマスターパスワードと違います。",
   "sync.unreachable":
-    "そのバケットは応答しませんでした。何も保存していません。エンドポイント、バケット名、キーを確認してください。",
+    "オブジェクトストレージが要求を拒否しました。何も保存していません。バケット名、アクセスキー、シークレット、リージョン、権限を確認してください。",
+  "sync.bucketTimeout":
+    "オブジェクトストレージが時間内に応答しませんでした。回線とエンドポイントを確認してください。",
+  "sync.bucketDNSFailed":
+    "エンドポイントのホスト名を解決できませんでした。入力したアドレスと端末のDNS接続を確認してください。",
+  "sync.bucketTLSFailed":
+    "エンドポイントとの安全な接続を検証できませんでした。HTTPSのアドレスと端末の日時を確認してください。",
+  "sync.bucketUnreachable":
+    "オブジェクトストレージへ接続できませんでした。端末のネットワークとエンドポイントを確認してください。",
+  "sync.snapshotDownloadIncomplete":
+    "暗号化スナップショットの受信が途中で終了しました。回線を確認して、もう一度受信してください。",
+  "sync.snapshotCostRefused":
+    "このスナップショットは復号時の負荷が安全上限を超えるため開けません。",
+  "sync.snapshotSchemaUnsupported":
+    "このスナップショットは現在のsshcが対応していない形式です。作成した端末のsshcと同じか新しい版へ更新してください。",
+  "sync.snapshotRejected":
+    "取得したデータは有効なsshcスナップショットではないか、破損しています。何も上書きしていません。",
+  "sync.snapshotTooLarge":
+    "スナップショットが安全に読み込める上限を超えています。何も上書きしていません。",
+  "sync.noSnapshot":
+    "指定したバケットとパスに現在のスナップショットがありません。",
+  "sync.internalFailed":
+    "同期処理で分類できない内部エラーが発生しました。下の診断コードを添えて報告してください。",
   "sync.failed":
     "同期できませんでした。何も上書きしていません。接続を確認してから、もう一度お試しください。",
   "sync.localChanged":
@@ -1132,6 +1175,9 @@ export const ja = {
     "リモートスナップショットの形式に対応していません。同じスナップショットの自動取得は再試行しません。",
   "sync.autoFailed": "設定を保存できませんでした。",
   "sync.autoNow": "今すぐ同期",
+  "sync.autoNow.both": "今すぐ同期",
+  "sync.autoNow.pull": "今すぐ受信",
+  "sync.autoNow.push": "今すぐ送信",
   "sync.autoNowFailed": "その確認を実行できませんでした。",
   "sync.transferHeading": "送信・変更確認",
   "sync.transferHint.both":
@@ -1205,6 +1251,9 @@ export const ja = {
   "sync.forceConfirm":
     "現在のリモートスナップショットを、このマシンのワークスペースで置き換えることを理解しました。",
   "sync.forcePush": "リモートスナップショットを置き換える",
+  "sync.forcePushShort": "強制送信",
+  "sync.forcePull": "強制受信",
+  "sync.dialogClose": "閉じる",
   "sync.forcePushed": "確認したリモートスナップショットを置き換えました。",
   "sync.forceFailed":
     "リモートスナップショットを置き換えられませんでした。バケットの状態を更新し、もう一度確認してください。",

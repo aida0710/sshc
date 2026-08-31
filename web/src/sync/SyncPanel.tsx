@@ -29,6 +29,7 @@ import {
   SyncResultCard,
   type SyncResultView,
 } from "./SyncResultCard";
+import { SyncExclusionsPanel } from "./SyncExclusionsPanel";
 
 type SyncPanelProps = { api?: IntegrationsApi };
 
@@ -60,6 +61,20 @@ function SyncRow({
   );
 }
 
+function SyncErrorNotice({ message, code }: { message: string; code: string }) {
+  if (message === "") return null;
+  return (
+    <Notice tone="danger">
+      <span className="flex min-w-0 flex-col gap-1">
+        <span>{message}</span>
+        {code === "" ? null : (
+          <code className="text-xs text-ink-muted">Code: {code}</code>
+        )}
+      </span>
+    </Notice>
+  );
+}
+
 type SyncStatusState =
   | { phase: "loading" }
   | { phase: "error"; message: string }
@@ -78,12 +93,24 @@ type HistoryState =
   | { phase: "ready"; value: SyncHistory };
 
 const refusals: Record<string, MessageKey> = {
+  not_configured: "sync.notConfigured",
   wrong_master_password: "sync.wrongMaster",
   wrong_passphrase: "sync.wrongKey",
   sync_key_missing: "sync.keyMissing",
   passphrase_too_short: "sync.keyTooShort",
   bucket_refused: "sync.unreachable",
+  bucket_timeout: "sync.bucketTimeout",
+  bucket_dns_failed: "sync.bucketDNSFailed",
+  bucket_tls_failed: "sync.bucketTLSFailed",
+  bucket_unreachable: "sync.bucketUnreachable",
   sync_failed: "sync.failed",
+  sync_internal_failed: "sync.internalFailed",
+  snapshot_download_incomplete: "sync.snapshotDownloadIncomplete",
+  snapshot_cost_refused: "sync.snapshotCostRefused",
+  snapshot_schema_unsupported: "sync.snapshotSchemaUnsupported",
+  snapshot_rejected: "sync.snapshotRejected",
+  snapshot_too_large: "sync.snapshotTooLarge",
+  sync_no_snapshot: "sync.noSnapshot",
   endpoint_must_have_no_path: "sync.endpointPath",
   sync_remote_moved: "sync.remoteMoved",
   sync_remote_deleted: "sync.remoteDeleted",
@@ -93,6 +120,7 @@ const refusals: Record<string, MessageKey> = {
   preview_stale: "sync.previewStale",
   sync_nothing_to_push: "sync.noLocalChanges",
   sync_commit_message_invalid: "sync.commitMessageInvalid",
+  sync_ignore_invalid: "sync.exclusions.invalid",
   sync_setup_target_changed: "sync.setup.changed",
   sync_setup_target_incomplete: "sync.setup.incomplete",
   sync_local_changed: "sync.localChanged",
@@ -134,6 +162,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
   >(undefined);
   const [previewAcceptRemoteHead, setPreviewAcceptRemoteHead] = useState(false);
   const [forceConfirmed, setForceConfirmed] = useState(false);
+  const [forcePushOpen, setForcePushOpen] = useState(false);
   const [acceptedRemovals, setAcceptedRemovals] = useState(false);
   const [resolve, setResolve] = useState<"local" | "remote" | undefined>(
     undefined,
@@ -142,6 +171,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
   const [resultView, setResultView] = useState<SyncResultView | null>(null);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const [errorCode, setErrorCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [editingSettings, setEditingSettings] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -229,6 +259,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
         next.auto.detail === "remote_moved"
       ) {
         setError("");
+        setErrorCode("");
       }
     } catch {
       setStatusState({ phase: "error", message: t("sync.statusFailed") });
@@ -262,6 +293,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
     explain?: (code: string) => string,
   ) {
     setError("");
+    setErrorCode("");
     setNotice("");
     setBusy(true);
     try {
@@ -277,6 +309,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
         return;
       }
       const named = refusals[code];
+      setErrorCode(code);
       setError(explain?.(code) || (named === undefined ? failure : t(named)));
     } finally {
       setBusy(false);
@@ -370,7 +403,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
           title={t("sync.heading")}
           description={t("sync.pageDescription")}
         />
-        {error === "" ? null : <Notice tone="danger">{error}</Notice>}
+        <SyncErrorNotice message={error} code={errorCode} />
         <section className="sshc-card grid overflow-hidden rounded-md bg-card md:grid-cols-[minmax(0,0.9fr)_minmax(18rem,1.1fr)]">
           <div className="flex flex-col justify-between gap-8 bg-toolbar p-6 md:p-8">
             <span className="flex h-12 w-12 items-center justify-center rounded-md bg-select-fill text-accent">
@@ -545,7 +578,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
         </ol>
       )}
 
-      {error === "" ? null : <Notice tone="danger">{error}</Notice>}
+      <SyncErrorNotice message={error} code={errorCode} />
       {notice === "" ? null : (
         <p role="status" className="text-sm text-ink-muted">
           {notice}
@@ -608,6 +641,18 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
                 </Notice>
                 <p className={hintText}>{t("sync.remoteHeadReviewHint")}</p>
               </div>
+            ) : status.auto.phase === "failed" ? (
+              <SyncErrorNotice
+                message={t(
+                  status.auto.detail === "wrong_passphrase"
+                    ? "sync.autoFailedWrongKey"
+                    : status.auto.detail === "snapshot_schema_unsupported"
+                      ? "sync.autoFailedSchema"
+                      : (refusals[status.auto.detail ?? ""] ??
+                        "sync.autoFailedLast"),
+                )}
+                code={status.auto.detail ?? "sync_failed"}
+              />
             ) : (
               <p role="status" className={hintText}>
                 {status.auto.phase === "blocked"
@@ -618,62 +663,72 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
                           ? "sync.autoBlockedRemoteDeleted"
                           : "sync.autoBlockedRemovals",
                     )
-                  : status.auto.phase === "failed"
-                    ? t(
-                        status.auto.detail === "wrong_passphrase"
-                          ? "sync.autoFailedWrongKey"
-                          : status.auto.detail === "snapshot_schema_unsupported"
-                            ? "sync.autoFailedSchema"
-                            : "sync.autoFailedLast",
-                      )
-                    : status.auto.at === undefined
-                      ? t("sync.autoIdle")
-                      : t("sync.autoLastRan", { at: status.auto.at })}
+                  : status.auto.at === undefined
+                    ? t("sync.autoIdle")
+                    : t("sync.autoLastRan", { at: status.auto.at })}
               </p>
             )}
             <div className="flex flex-wrap gap-2">
-              {status.direction === "pull" ? (
-                <Button
-                  kind="primary"
-                  disabled={busy || !status.keyConfigured}
-                  onClick={() =>
-                    void (remoteHeadBlocked
-                      ? previewCurrentRemoteHead()
-                      : previewWith(undefined))
-                  }
-                >
-                  {t(
-                    remoteHeadBlocked
-                      ? "sync.remoteHeadReview"
-                      : "sync.checkRemoteChanges",
-                  )}
-                </Button>
-              ) : (
-                <Button
-                  kind="primary"
-                  disabled={busy || !status.keyConfigured}
-                  onClick={() =>
-                    void run(
-                      () => api.syncNow(),
-                      (next) => setStatusState({ phase: "ready", value: next }),
-                      t("sync.autoNowFailed"),
-                    )
-                  }
-                >
-                  {t("sync.autoNow")}
-                </Button>
-              )}
-              {status.direction !== "both" || remoteHeadBlocked ? null : (
+              <Button
+                kind="primary"
+                disabled={busy || !status.keyConfigured}
+                onClick={() =>
+                  void (remoteHeadBlocked
+                    ? previewCurrentRemoteHead()
+                    : run(
+                        () => api.syncNow(),
+                        (next) =>
+                          setStatusState({ phase: "ready", value: next }),
+                        t("sync.autoNowFailed"),
+                      ))
+                }
+              >
+                {t(
+                  remoteHeadBlocked
+                    ? "sync.remoteHeadReview"
+                    : (`sync.autoNow.${status.direction}` as MessageKey),
+                )}
+              </Button>
+              {status.direction === "push" || remoteHeadBlocked ? null : (
                 <Button
                   disabled={busy || !status.keyConfigured}
                   onClick={() => void previewWith(undefined)}
                 >
-                  {t("sync.receiveRemote")}
+                  {t("sync.checkRemoteChanges")}
+                </Button>
+              )}
+              {status.direction === "push" ? null : (
+                <Button
+                  disabled={busy || !status.keyConfigured}
+                  onClick={() => void previewCurrentRemoteHead()}
+                >
+                  {t("sync.forcePull")}
+                </Button>
+              )}
+              {status.direction === "pull" ? null : (
+                <Button
+                  kind="danger"
+                  disabled={busy || !status.keyConfigured}
+                  onClick={() => {
+                    setForceConfirmed(false);
+                    setForcePushOpen(true);
+                  }}
+                >
+                  {t("sync.forcePushShort")}
                 </Button>
               )}
             </div>
           </div>
         </section>
+      ) : null}
+
+      {status.configured ? (
+        <SyncExclusionsPanel
+          api={api}
+          onSaved={() => {
+            void refreshPushDraft();
+          }}
+        />
       ) : null}
 
       <details
@@ -1199,65 +1254,6 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
                     )}
                   </div>
 
-                  {bucketState.value.live === undefined ||
-                  status.direction === "pull" ? null : (
-                    <details className="rounded border border-danger/40 bg-danger/5 p-3 lg:col-span-2">
-                      <summary className="cursor-pointer text-sm font-medium text-danger">
-                        {t("sync.forceHeading")}
-                      </summary>
-                      <div className="mt-3 flex flex-col gap-3 border-t border-danger/30 pt-3">
-                        <p className="text-sm leading-6 text-ink-muted">
-                          {t("sync.forceHint")}
-                        </p>
-                        <label className="flex items-start gap-2 text-sm text-ink">
-                          <input
-                            type="checkbox"
-                            checked={forceConfirmed}
-                            onChange={(event) =>
-                              setForceConfirmed(event.target.checked)
-                            }
-                            className="mt-0.5"
-                          />
-                          <span>{t("sync.forceConfirm")}</span>
-                        </label>
-                        <Button
-                          kind="danger"
-                          disabled={
-                            busy ||
-                            !forceConfirmed ||
-                            !status.keyConfigured ||
-                            pushMessage.trim() === ""
-                          }
-                          onClick={() =>
-                            void run(
-                              () => api.forcePushSnapshot(pushMessage.trim()),
-                              (next) => {
-                                setStatusState({
-                                  phase: "ready",
-                                  value: next.status,
-                                });
-                                setPreview(null);
-                                setResultView({
-                                  kind: "push",
-                                  result: next.result,
-                                });
-                                setForceConfirmed(false);
-                                setNotice(t("sync.forcePushed"));
-                                pushMessageDirty.current = false;
-                                void refreshPushDraft();
-                                void refreshBucket();
-                                void refreshHistory();
-                              },
-                              t("sync.forceFailed"),
-                            )
-                          }
-                        >
-                          {t("sync.forcePush")}
-                        </Button>
-                      </div>
-                    </details>
-                  )}
-
                   <p className={`lg:col-span-2 ${hintText}`}>
                     {t("sync.bucketCheckedAt", {
                       at: bucketState.value.checkedAt,
@@ -1460,6 +1456,82 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
         </details>
       ) : null}
 
+      {forcePushOpen ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="sync-force-push-heading"
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-3 sm:items-center"
+        >
+          <section className="sshc-card flex max-h-[90vh] w-full max-w-lg flex-col overflow-auto rounded-md bg-card">
+            <header className="flex items-center justify-between gap-3 border-b border-line bg-toolbar px-4 py-3">
+              <h3 id="sync-force-push-heading" className={sectionHeading}>
+                {t("sync.forceHeading")}
+              </h3>
+              <Button
+                onClick={() => setForcePushOpen(false)}
+                disabled={busy}
+              >
+                {t("sync.dialogClose")}
+              </Button>
+            </header>
+            <div className="flex flex-col gap-4 p-4">
+              <Notice tone="danger">{t("sync.forceHint")}</Notice>
+              <Field label={t("sync.commitMessage")}>
+                <input
+                  value={pushMessage}
+                  maxLength={240}
+                  onChange={(event) => {
+                    pushMessageDirty.current = true;
+                    setPushMessage(event.target.value);
+                  }}
+                  className={control}
+                />
+              </Field>
+              <label className="flex items-start gap-2 text-sm text-ink">
+                <input
+                  type="checkbox"
+                  checked={forceConfirmed}
+                  onChange={(event) => setForceConfirmed(event.target.checked)}
+                  className="mt-0.5"
+                />
+                <span>{t("sync.forceConfirm")}</span>
+              </label>
+              <Button
+                kind="danger"
+                disabled={
+                  busy ||
+                  !forceConfirmed ||
+                  !status.keyConfigured ||
+                  pushMessage.trim() === ""
+                }
+                onClick={() =>
+                  void run(
+                    () => api.forcePushSnapshot(pushMessage.trim()),
+                    (next) => {
+                      setStatusState({ phase: "ready", value: next.status });
+                      setPreview(null);
+                      setResultView({ kind: "push", result: next.result });
+                      setForceConfirmed(false);
+                      setForcePushOpen(false);
+                      setNotice(t("sync.forcePushed"));
+                      pushMessageDirty.current = false;
+                      void refreshPushDraft();
+                      void refreshBucket();
+                      void refreshHistory();
+                    },
+                    t("sync.forceFailed"),
+                  )
+                }
+                className="self-start"
+              >
+                {t("sync.forcePush")}
+              </Button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
       {resultView !== null ? (
         <SyncResultCard view={resultView} />
       ) : status.lastOperation === undefined ? null : (
@@ -1469,16 +1541,25 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
       )}
 
       {preview === null ? null : (
-        <section className="sshc-card overflow-hidden rounded-md bg-card">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="sync-pull-preview-heading"
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-3 sm:items-center"
+        >
+        <section className="sshc-card max-h-[90vh] w-full max-w-2xl overflow-auto rounded-md bg-card">
           <header className="flex items-center gap-2 border-b border-line bg-toolbar px-4 py-3">
             <Icon name="config" className="h-4 w-4 text-ink-muted" />
-            <h3 className={sectionHeading}>
+            <h3 id="sync-pull-preview-heading" className={`${sectionHeading} flex-1`}>
               {t(
                 previewAcceptRemoteHead
                   ? "sync.remoteHeadPreviewHeading"
                   : "sync.previewHeading",
               )}
             </h3>
+            <Button disabled={busy} onClick={() => setPreview(null)}>
+              {t("sync.dialogClose")}
+            </Button>
           </header>
           <div className="flex flex-col gap-3 px-4 py-4">
             {previewAcceptRemoteHead ? (
@@ -1601,6 +1682,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
             </Button>
           </div>
         </section>
+        </div>
       )}
     </div>
   );

@@ -5,7 +5,9 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -325,6 +327,56 @@ func TestPushResponseReportsTheMeasuredTransferAndLastSuccessfulOperation(t *tes
 	}
 }
 
+func TestSyncExclusionsExposeDefaultsAndSaveSharedRules(t *testing.T) {
+	bucket := &measuredSyncBucket{}
+	installation := newMeasuredSyncInstallation(t, bucket, map[string]string{
+		"config": "Host edge\n", "cache/session.tmp": "temporary", "keys/work/id_ed25519": "private",
+	})
+
+	defaults := sendSync(t, installation.engine, http.MethodGet, "/api/v1/sync/exclusions", "")
+	if defaults.Code != http.StatusOK {
+		t.Fatalf("get exclusions = %d: %s", defaults.Code, defaults.Body.String())
+	}
+	var defaultView api.SyncExclusions
+	if err := json.Unmarshal(defaults.Body.Bytes(), &defaultView); err != nil {
+		t.Fatal(err)
+	}
+	if !defaultView.UsingDefaults || defaultView.Document != remotesync.DefaultIgnoreDocument {
+		t.Fatalf("default exclusions = %+v", defaultView)
+	}
+	if len(defaultView.Candidates) != 3 {
+		t.Fatalf("candidates = %+v", defaultView.Candidates)
+	}
+
+	saved := sendSync(t, installation.engine, http.MethodPut, "/api/v1/sync/exclusions", `{"document":"keys/**\n"}`)
+	if saved.Code != http.StatusOK {
+		t.Fatalf("save exclusions = %d: %s", saved.Code, saved.Body.String())
+	}
+	var savedView api.SyncExclusions
+	if err := json.Unmarshal(saved.Body.Bytes(), &savedView); err != nil {
+		t.Fatal(err)
+	}
+	if savedView.UsingDefaults || savedView.Document != "keys/**\n" {
+		t.Fatalf("saved exclusions = %+v", savedView)
+	}
+	manifest, _, err := installation.service.Collect()
+	if err != nil {
+		t.Fatal(err)
+	}
+	paths := map[string]bool{}
+	for _, entry := range manifest.Files {
+		paths[entry.Path] = true
+	}
+	if paths["keys/work/id_ed25519"] || !paths[remotesync.IgnorePath] || !paths["cache/session.tmp"] {
+		t.Fatalf("collected paths = %v", paths)
+	}
+
+	invalid := sendSync(t, installation.engine, http.MethodPut, "/api/v1/sync/exclusions", `{"document":"broken[\n"}`)
+	if invalid.Code != http.StatusBadRequest || !strings.Contains(invalid.Body.String(), `"code":"sync_ignore_invalid"`) {
+		t.Fatalf("invalid exclusions = %d: %s", invalid.Code, invalid.Body.String())
+	}
+}
+
 func TestPushRejectsRequestsFromOlderClients(t *testing.T) {
 	engine, _ := syncEngine(t)
 	for name, body := range map[string]string{
@@ -545,16 +597,26 @@ func TestReceiveOnlyCanPreviewAndApplyAnExplicitRemoteHead(t *testing.T) {
 	}
 }
 
-func TestExplicitRemoteHeadIsRestrictedToReceiveOnly(t *testing.T) {
+func TestExplicitRemoteHeadIsAvailableToReceiversAndRefusedForSendOnly(t *testing.T) {
 	bucket := &measuredSyncBucket{}
-	engine, producer, _ := measuredSyncEngine(t, bucket, map[string]string{"config": "Host one\n"})
-	if _, err := producer.Push(context.Background(), measuredSyncKey, "Initial snapshot"); err != nil {
+	installation := newMeasuredSyncInstallation(t, bucket, map[string]string{"config": "Host one\n"})
+	if _, err := installation.service.Push(context.Background(), measuredSyncKey, "Initial snapshot"); err != nil {
 		t.Fatal(err)
 	}
-	response := sendSync(t, engine, http.MethodPost, "/api/v1/sync/pull",
+	response := sendSync(t, installation.engine, http.MethodPost, "/api/v1/sync/pull",
+		`{"apply":false,"resolve":"remote","acceptRemoteHead":true}`)
+	if response.Code != http.StatusOK {
+		t.Fatalf("explicit remote head in bidirectional mode = %d: %s", response.Code, response.Body.String())
+	}
+	sendOnly := installation.config
+	sendOnly.Direction = remotesync.DirectionPush
+	if err := installation.service.Configure(sendOnly, installation.credentials, installation.client); err != nil {
+		t.Fatal(err)
+	}
+	response = sendSync(t, installation.engine, http.MethodPost, "/api/v1/sync/pull",
 		`{"apply":false,"resolve":"remote","acceptRemoteHead":true}`)
 	if response.Code != http.StatusBadRequest {
-		t.Fatalf("explicit remote head in bidirectional mode = %d, want 400: %s", response.Code, response.Body.String())
+		t.Fatalf("explicit remote head in send-only mode = %d, want 400: %s", response.Code, response.Body.String())
 	}
 }
 
@@ -942,6 +1004,40 @@ func TestSettingsThatCannotReachTheBucketAreNotStored(t *testing.T) {
 	}
 	if settings, err := secrets.SyncSettings(); err != nil || settings.Bucket != "" {
 		t.Errorf("the settings were stored anyway: %+v (%v)", settings, err)
+	}
+}
+
+func TestSyncConnectionFailuresHaveSpecificSafeCodes(t *testing.T) {
+	tests := []struct {
+		name   string
+		err    error
+		status int
+		code   string
+	}{
+		{name: "timeout", err: context.DeadlineExceeded, status: http.StatusGatewayTimeout, code: "bucket_timeout"},
+		{name: "dns", err: &net.DNSError{Err: "no such host", Name: "private.example"}, status: http.StatusBadGateway, code: "bucket_dns_failed"},
+		{name: "network", err: &net.OpError{Op: "dial", Net: "tcp", Err: errors.New("offline")}, status: http.StatusBadGateway, code: "bucket_unreachable"},
+		{name: "internal", err: errors.New("unclassified failure"), status: http.StatusInternalServerError, code: "sync_internal_failed"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			engine, service, secrets := syncEngineWithVault(t)
+			if err := secrets.Initialise(syncTestPassphrase); err != nil {
+				t.Fatal(err)
+			}
+			engine = echo.New()
+			registerSyncRoutes(engine, SyncHandlers{
+				Service: service, Secrets: secrets,
+				Reach: func(context.Context, *objectstore.Client, string) error { return test.err },
+			})
+			recorder := sendSync(t, engine, http.MethodPut, "/api/v1/sync/settings", settings("pull"))
+			if recorder.Code != test.status || !strings.Contains(recorder.Body.String(), `"code":"`+test.code+`"`) {
+				t.Fatalf("response = %d %s, want %d %s", recorder.Code, recorder.Body.String(), test.status, test.code)
+			}
+			if strings.Contains(recorder.Body.String(), "private.example") || strings.Contains(recorder.Body.String(), "unclassified failure") {
+				t.Fatalf("unsafe underlying detail escaped: %s", recorder.Body.String())
+			}
+		})
 	}
 }
 

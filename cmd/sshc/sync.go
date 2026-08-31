@@ -143,6 +143,8 @@ func runSyncPull(ctx context.Context, engine *engineAPI, force bool) (api.PullRe
 	if force {
 		resolve := api.Remote
 		previewRequest.Resolve = &resolve
+		accept := true
+		previewRequest.AcceptRemoteHead = &accept
 	}
 	var preview api.PullResponse
 	if err := engine.sendJSON(ctx, http.MethodPost, "/api/v1/sync/pull", previewRequest, &preview); err != nil {
@@ -167,6 +169,8 @@ func runSyncPull(ctx context.Context, engine *engineAPI, force bool) (api.PullRe
 	if force {
 		resolve := api.Remote
 		applyRequest.Resolve = &resolve
+		accept := true
+		applyRequest.AcceptRemoteHead = &accept
 	}
 	var applied api.PullResponse
 	if err := engine.sendJSON(ctx, http.MethodPost, "/api/v1/sync/pull", applyRequest, &applied); err != nil {

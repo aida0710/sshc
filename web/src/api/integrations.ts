@@ -74,10 +74,26 @@ export type SyncOperation = components["schemas"]["SyncOperation"];
 export type PushResult = components["schemas"]["PushResult"];
 export type PushResponse = components["schemas"]["PushResponse"];
 export type SyncPushDraft = components["schemas"]["SyncPushDraft"];
+export type SyncExclusions = components["schemas"]["SyncExclusions"];
 export type PullResponse = components["schemas"]["PullResponse"];
 export type SyncBucketStatus = components["schemas"]["SyncBucketStatus"];
 export type SyncHistory = components["schemas"]["SyncHistory"];
 export type SyncHistoryRevision = components["schemas"]["SyncHistoryRevision"];
+
+const locallyExplainedSyncFailures = [
+  "bucket_refused",
+  "bucket_timeout",
+  "bucket_dns_failed",
+  "bucket_tls_failed",
+  "bucket_unreachable",
+  "snapshot_download_incomplete",
+  "snapshot_cost_refused",
+  "snapshot_schema_unsupported",
+  "snapshot_rejected",
+  "snapshot_too_large",
+  "wrong_passphrase",
+  "sync_ignore_invalid",
+] as const;
 export type SyncHistoryDiff = components["schemas"]["SyncHistoryDiff"];
 
 export const REACHABILITY_ACTION_KIND = "diagnostics.reachability";
@@ -194,6 +210,8 @@ export type IntegrationsApi = {
   ): Promise<SyncSetupCheckResponse>;
   completeSyncSetup(settings: SyncSetupRequest): Promise<SyncSetupResponse>;
   configureSync(settings: SyncSettingsRequest): Promise<SyncStatus>;
+  syncExclusions(): Promise<SyncExclusions>;
+  saveSyncExclusions(document: string): Promise<SyncExclusions>;
   syncPushDraft(): Promise<SyncPushDraft>;
   pushSnapshot(message: string): Promise<PushResponse>;
   forcePushSnapshot(message: string): Promise<PushResponse>;
@@ -696,6 +714,18 @@ function validateSyncPushDraft(value: unknown): SyncPushDraft {
   return record as unknown as SyncPushDraft;
 }
 
+function validateSyncExclusions(value: unknown): SyncExclusions {
+  const record = asRecord(value);
+  asString(record.document);
+  asBoolean(record.usingDefaults);
+  for (const raw of asArray(record.candidates)) {
+    const candidate = asRecord(raw);
+    asString(candidate.path);
+    asBoolean(candidate.ignored);
+  }
+  return record as unknown as SyncExclusions;
+}
+
 function validateSyncBucketStatus(value: unknown): SyncBucketStatus {
   const record = asRecord(value);
   asString(record.checkedAt);
@@ -1164,7 +1194,7 @@ export const integrationsApi: IntegrationsApi = {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(settings),
-      }),
+      }, { locallyHandledCodes: locallyExplainedSyncFailures }),
     );
   },
   async completeSyncSetup(settings) {
@@ -1173,7 +1203,7 @@ export const integrationsApi: IntegrationsApi = {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(settings),
-      }),
+      }, { locallyHandledCodes: locallyExplainedSyncFailures }),
     );
   },
   async configureSync(settings) {
@@ -1183,6 +1213,20 @@ export const integrationsApi: IntegrationsApi = {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(settings),
       }),
+    );
+  },
+  async syncExclusions() {
+    return validateSyncExclusions(
+      await apiClient.read("/api/v1/sync/exclusions"),
+    );
+  },
+  async saveSyncExclusions(document) {
+    return validateSyncExclusions(
+      await apiClient.mutate<unknown>("/api/v1/sync/exclusions", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ document }),
+      }, { locallyHandledCodes: ["sync_ignore_invalid"] }),
     );
   },
   async syncPushDraft() {
@@ -1231,7 +1275,7 @@ export const integrationsApi: IntegrationsApi = {
     };
     return validatePullResponse(
       await postJSON<unknown>("/api/v1/sync/pull", request, undefined, [
-        "bucket_refused",
+        ...locallyExplainedSyncFailures,
         "sync_failed",
         "sync_local_changed",
         "sync_workspace_busy",

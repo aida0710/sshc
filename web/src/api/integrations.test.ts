@@ -788,6 +788,31 @@ describe("integrationsApi remote sync measurements", () => {
     await expect(integrationsApi.syncBucketStatus()).resolves.toEqual(response);
   });
 
+  it("loads and saves the shared synchronization exclusions", async () => {
+    const response = {
+      document: "*.tmp\n",
+      usingDefaults: false,
+      candidates: [
+        { path: "config", ignored: false },
+        { path: "cache/session.tmp", ignored: true },
+      ],
+    };
+    const fetcher = vi.fn().mockImplementation(() =>
+      Promise.resolve(jsonResponse(response)),
+    );
+    vi.stubGlobal("fetch", fetcher);
+
+    await expect(integrationsApi.syncExclusions()).resolves.toEqual(response);
+    expect(fetcher.mock.calls[0]?.[0]).toBe("/api/v1/sync/exclusions");
+    await expect(
+      integrationsApi.saveSyncExclusions("*.tmp\n"),
+    ).resolves.toEqual(response);
+    const [path, init] = fetcher.mock.calls[1] as [string, RequestInit];
+    expect(path).toBe("/api/v1/sync/exclusions");
+    expect(init.method).toBe("PUT");
+    expect(sentJson(init)).toEqual({ document: "*.tmp\n" });
+  });
+
   it("accepts the measured result of an apply download", async () => {
     const response = {
       applied: true,

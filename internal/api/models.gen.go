@@ -1287,6 +1287,24 @@ type SyncConflict struct {
 // SyncDirection defines model for SyncDirection.
 type SyncDirection string
 
+// SyncExclusionCandidate defines model for SyncExclusionCandidate.
+type SyncExclusionCandidate struct {
+	Ignored bool   `json:"ignored"`
+	Path    string `json:"path"`
+}
+
+// SyncExclusions defines model for SyncExclusions.
+type SyncExclusions struct {
+	Candidates    []SyncExclusionCandidate `json:"candidates"`
+	Document      string                   `json:"document"`
+	UsingDefaults bool                     `json:"usingDefaults"`
+}
+
+// SyncExclusionsRequest defines model for SyncExclusionsRequest.
+type SyncExclusionsRequest struct {
+	Document string `json:"document"`
+}
+
 // SyncHistory defines model for SyncHistory.
 type SyncHistory struct {
 	CheckedAt         string                `json:"checkedAt"`

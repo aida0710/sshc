@@ -269,6 +269,29 @@ func TestSaveRejectsRawTextThatBreaksQuotingAndWritesNothing(t *testing.T) {
 	}
 }
 
+func TestSyncPullPreservesNonConfigurationFilesWithoutParsingThemAsSSHConfig(t *testing.T) {
+	service, workspace := newTestService(t)
+	path := filepath.Join(workspace.Root(), ".DS_Store")
+	remote := []byte{0x00, 0xff, 0x22, 0x0a, 0x80, 0x01}
+
+	_, err := service.manager.Commit(storage.Request{
+		Operation: "sync.pull",
+		Changes: []storage.Change{{
+			Path: path, Contents: remote,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("sync pull parsed a non-config file as SSH configuration: %v", err)
+	}
+	got, readErr := os.ReadFile(path)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if !bytes.Equal(got, remote) {
+		t.Fatalf("non-config file = %x, want %x", got, remote)
+	}
+}
+
 func TestSaveRejectsAnEditThatIntroducesAnIncludeCycle(t *testing.T) {
 	service, workspace := newTestService(t)
 

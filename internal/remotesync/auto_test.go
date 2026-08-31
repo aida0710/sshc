@@ -560,6 +560,34 @@ func TestAutoCachesAnUnreadableRemoteGeneration(t *testing.T) {
 	}
 }
 
+func TestAutoReportsTheInternalFailureStageWithoutChangingTheSafeView(t *testing.T) {
+	bucket := &fakeBucket{}
+	producer := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
+	if _, err := producer.service.Push(context.Background(), syncPassphrase, ""); err != nil {
+		t.Fatal(err)
+	}
+	consumer := newInstallation(t, bucket, map[string]string{})
+	auto := autoFor(t, consumer, true)
+	auto.Key = func() (string, bool) {
+		return "a wrong but sufficiently long synchronization key", true
+	}
+	stage := ""
+	auto.ReportFailure = func(got string, err error) {
+		stage = got
+		if !errors.Is(err, remotesync.ErrWrongPassphrase) {
+			t.Errorf("reported error = %v", err)
+		}
+	}
+
+	view := once(t, auto)
+	if stage != "pull" {
+		t.Fatalf("reported stage = %q, want pull", stage)
+	}
+	if view.Phase != remotesync.AutoFailed || view.Detail != "wrong_passphrase" {
+		t.Fatalf("safe view = %+v", view)
+	}
+}
+
 func TestAutoRetriesATransientFailureAfterBoundedBackoff(t *testing.T) {
 	bucket := &fakeBucket{}
 	producer := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
@@ -573,11 +601,11 @@ func TestAutoRetriesATransientFailureAfterBoundedBackoff(t *testing.T) {
 	auto.Enabled = func() bool { return true }
 	auto.Key = func() (string, bool) { return syncPassphrase, true }
 	bucket.refuseObjectGets(3)
-	if first := once(t, auto); first.Phase != remotesync.AutoFailed || first.Detail != "unreachable" {
+	if first := once(t, auto); first.Phase != remotesync.AutoFailed || first.Detail != "bucket_refused" {
 		t.Fatalf("first transient failure = %+v", first)
 	}
 	downloads := bucket.downloads()
-	if second := once(t, auto); second.Phase != remotesync.AutoFailed || second.Detail != "unreachable" {
+	if second := once(t, auto); second.Phase != remotesync.AutoFailed || second.Detail != "bucket_refused" {
 		t.Fatalf("backoff view = %+v", second)
 	}
 	if got := bucket.downloads(); got != downloads {

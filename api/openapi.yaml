@@ -597,6 +597,33 @@ paths:
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
+  /api/v1/sync/exclusions:
+    get:
+      operationId: getSyncExclusions
+      responses:
+        "200":
+          description: Effective Gitignore-style exclusion rules and current workspace candidates
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SyncExclusions" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+    put:
+      operationId: saveSyncExclusions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SyncExclusionsRequest" }
+      responses:
+        "200":
+          description: The validated shared .sshcignore document and updated candidates
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SyncExclusions" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
   /api/v1/sync/push:
     get:
       operationId: getSyncPushDraft
@@ -2917,6 +2944,30 @@ components:
         added: { type: integer, minimum: 0, maximum: 4096 }
         modified: { type: integer, minimum: 0, maximum: 4096 }
         removed: { type: integer, minimum: 0, maximum: 4096 }
+    SyncExclusionCandidate:
+      type: object
+      additionalProperties: false
+      required: [path, ignored]
+      properties:
+        path: { type: string, minLength: 1, maxLength: 4096 }
+        ignored: { type: boolean }
+    SyncExclusions:
+      type: object
+      additionalProperties: false
+      required: [document, usingDefaults, candidates]
+      properties:
+        document: { type: string, maxLength: 32768 }
+        usingDefaults: { type: boolean }
+        candidates:
+          type: array
+          maxItems: 4096
+          items: { $ref: "#/components/schemas/SyncExclusionCandidate" }
+    SyncExclusionsRequest:
+      type: object
+      additionalProperties: false
+      required: [document]
+      properties:
+        document: { type: string, maxLength: 32768 }
     SyncBucketObject:
       type: object
       additionalProperties: false
@@ -3115,7 +3166,7 @@ components:
         apply: { type: boolean }
         # 両側で変更されたファイルの採用元。省略時は衝突を報告して停止する。
         resolve: { type: string, enum: [local, remote] }
-        # 受信専用のマシンで、既知の履歴につながらないlive headを利用者が
+        # 受信可能なマシンで、既知の履歴につながらないlive headを利用者が
         # 明示的に確認して受け取る。resolve=remoteかつhistoryKeyなしの場合だけ有効。
         # apply時は通常pullと同じく直前のETagとrevisionを必須とする。
         acceptRemoteHead: { type: boolean }
