@@ -2082,13 +2082,17 @@ func (s *Service) readState() (state, error) {
 	decoder := json.NewDecoder(bytes.NewReader(body))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&parsed); err != nil || parsed.SchemaVersion != stateSchemaVersion ||
-		parsed.ETag == "" || parsed.Key == "" || parsed.Base == nil || parsed.LastOperation == nil ||
-		parsed.Base.SchemaVersion != SchemaVersion {
+		parsed.ETag == "" || parsed.Key == "" || parsed.Base == nil || parsed.LastOperation == nil {
 		// 壊れた state ファイルは回復可能である。次の pull はこのマシンを、一度も
 		// 同期していないマシンとして扱う。それは保守的な扱いだ、何も削除せず、
 		// 推測する代わりに衝突として報告する。
 		return state{}, nil
 	}
+	migratedBase, err := migrateSnapshotManifest(*parsed.Base)
+	if err != nil {
+		return state{}, nil
+	}
+	parsed.Base = &migratedBase
 	return parsed, nil
 }
 

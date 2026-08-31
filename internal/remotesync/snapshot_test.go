@@ -156,8 +156,44 @@ func TestReadRefusesATamperedRevision(t *testing.T) {
 	}
 }
 
-func TestReadRejectsEveryOtherSchemaVersion(t *testing.T) {
-	for _, version := range []int{1, 2, 3, 4, remotesync.SchemaVersion + 1} {
+func TestReadMigratesSchemaV5ToV6(t *testing.T) {
+	parent := strings.Repeat("a", 64)
+	manifest := remotesync.Manifest{
+		SchemaVersion: 5,
+		CreatedAt:     "2026-08-30T00:00:00Z", Origin: "v5-origin",
+		ParentRevision: parent, Message: "Existing v5 snapshot",
+		Files: []remotesync.Entry{entry("config", "Host migrated\n")},
+	}
+	manifest.Revision, _ = remotesync.RevisionFor(manifest)
+	archive := handBuilt(t, map[string]string{"config": "Host migrated\n"}, manifest)
+
+	migrated, _, err := remotesync.Read(archive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if migrated.SchemaVersion != 6 || migrated.Revision != manifest.Revision ||
+		len(migrated.Ancestors) != 1 || migrated.Ancestors[0] != parent {
+		t.Fatalf("migrated manifest = %#v", migrated)
+	}
+}
+
+func TestReadRejectsAClaimedV5ManifestWithV6Fields(t *testing.T) {
+	parent := strings.Repeat("a", 64)
+	manifest := remotesync.Manifest{
+		SchemaVersion: 5,
+		CreatedAt:     "2026-08-30T00:00:00Z", Origin: "v5-origin",
+		ParentRevision: parent, Ancestors: []string{parent}, Message: "Not really v5",
+	}
+	manifest.Revision, _ = remotesync.RevisionFor(manifest)
+	archive := handBuilt(t, map[string]string{}, manifest)
+	if _, _, err := remotesync.Read(archive); !errors.Is(err, remotesync.ErrNotASnapshot) {
+		t.Fatalf("Read = %v, want ErrNotASnapshot", err)
+	}
+}
+
+func TestReadRejectsUnsupportedSchemaVersions(t *testing.T) {
+	versions := []int{1, 2, 3, 4, remotesync.SchemaVersion + 1}
+	for _, version := range versions {
 		archive := handBuilt(t, map[string]string{}, remotesync.Manifest{SchemaVersion: version})
 		if _, _, err := remotesync.Read(archive); !errors.Is(err, remotesync.ErrUnsupportedVersion) {
 			t.Errorf("schema %d: Read = %v, want ErrUnsupportedVersion", version, err)
