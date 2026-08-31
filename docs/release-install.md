@@ -53,7 +53,7 @@ sshc update
 - `install.ps1`版は、インストール時と同じPowerShellコマンドを再実行して更新します。
 - その他のWindows手動配置、ソースビルド、判定不能な導入は変更せず、元の導入方法で更新するよう表示します。
 
-`sshc service install`で作成したsystemdユーザーサービスがactiveの場合、更新後に自動で再起動します。再起動後はvaultがロックされるため、対話端末から`sshc vault unlock`を実行してください。停止中のサービス、手書きunit、systemd管理外のengineは自動で起動、再起動しません。後者は更新後に停止し、新しい`sshc engine`を起動してください。
+`sshc service install`で作成したsystemdユーザーサービスがactiveで、unitの実行パスが今回の更新対象と一致する場合だけ、更新後に`try-restart`します。再起動後はvaultがロックされるため、対話端末から`sshc vault unlock`を実行してください。binary更新後の再起動だけに失敗した場合は、表示される`sshc service install`を実行して復旧できます。停止中のサービス、手書きunit、別のsshc導入を指すunit、systemd管理外のengineは自動で起動、再起動しません。後者は更新後に停止し、新しい`sshc engine`を起動してください。
 
 ## Windows
 

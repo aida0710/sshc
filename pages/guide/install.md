@@ -60,13 +60,15 @@ sshc
 
 systemdを使用しているLinuxでは、ユーザーサービスをインストールできます。sudoは不要です。
 
+フォアグラウンドやtmuxで起動している`sshc engine`がある場合は、先にそのプロセスを停止してください。既存engineがlockを保持したままでは、systemd側のengineを起動できません。
+
 ```sh
 sshc service install
 sshc service status
 sshc vault unlock
 ```
 
-`service install`は`~/.config/systemd/user/sshc.service`を作成し、有効化して起動します。Homebrew版では更新後も変わらない`opt/sshc/bin/sshc`を、`install.sh`版では確認済みのインストール先を登録します。手動配置やソースビルドは自動登録しません。
+`service install`は`~/.config/systemd/user/sshc.service`を作成し、有効化して起動します。systemdのMain PIDとsshcのstatus APIを確認してから成功を返します。Homebrew版では更新後も変わらない`opt/sshc/bin/sshc`を、`install.sh`版では確認済みのインストール先を登録します。手動配置やソースビルドは自動登録しません。
 
 同名のunitがすでに手作業で作成されている場合、sshcは上書きしません。既存unitを停止して退避してから実行してください。
 
@@ -91,4 +93,4 @@ loginctl enable-linger "$USER"
 - Windows: インストール用のPowerShellコマンドを再実行
 - Android: GitHub Releasesから新しいAPKをインストール
 
-`sshc service install`で管理しているサービスが動作中なら、`sshc update`が更新後に自動で再起動します。再起動後はVaultがロックされるため、`sshc vault unlock`を実行してください。サービス管理外のエンジンは`sshc engine --replace`で再起動します。
+`sshc service install`で管理しているサービスが動作中で、登録先が今回の更新対象と一致する場合だけ、`sshc update`が更新後に再起動します。再起動後はVaultがロックされるため、`sshc vault unlock`を実行してください。更新は成功したものの再起動だけに失敗した場合は、表示に従って`sshc service install`を再実行できます。サービス管理外のエンジンは`sshc engine --replace`で再起動します。

@@ -46,13 +46,15 @@ sshc sync auto off --json
 
 ## systemd（ユーザーサービス）
 
+foregroundやtmuxで起動中の`sshc engine`があれば、先にそのprocessを停止します。engine lockを保持したままではsystemd側のengineを起動できません。
+
 ```sh
 sshc service install
 sshc service status
 sshc vault unlock
 ```
 
-`sshc service install`は`~/.config/systemd/user/sshc.service`を0600で原子的に作成し、`systemctl --user`で有効化して起動します。unitはforegroundの`sshc engine`を`Type=simple`で実行し、`Restart=on-failure`と`SuccessExitStatus=130`を設定します。
+`sshc service install`は`~/.config/systemd/user/sshc.service`を0600で原子的に作成し、`systemctl --user`で有効化して起動します。unitはforegroundの`sshc engine`を`Type=simple`で実行し、`Restart=on-failure`と`SuccessExitStatus=130`を設定します。commandはsystemdのMain PIDとsshc handoffのPIDを照合し、status APIが応答してから成功を返します。
 
 登録できるのは、実行中ファイルの所有元を確認できたHomebrew版またはreceipt対応`install.sh`版だけです。Homebrew版はCellar内のversion付き実体ではなく、更新後も同じ場所を指すformulaの`opt/sshc/bin/sshc`を登録します。手動copy、`make install`、source buildは推測で登録しません。
 
@@ -65,7 +67,7 @@ systemctl --user daemon-reload
 sshc service install
 ```
 
-`sshc service disable`はsshc管理下のunitだけを停止、無効化、削除します。`sshc update`は管理下のunitがactiveの場合だけ更新後に再起動します。再起動によりvaultはロックされるため、別の対話端末から`sshc vault unlock`を再実行してください。停止中のunitをupdateが起動することはありません。
+`sshc service disable`はsshc管理下のunitだけを停止、無効化、削除します。unit変更はuser単位のlockで直列化し、停止後にも内容が変わっていないことを確認してから削除します。`sshc update`は管理unitの実行パスが更新対象と完全に一致し、activeの場合だけ`try-restart`します。再起動によりvaultはロックされるため、別の対話端末から`sshc vault unlock`を再実行してください。停止中のunitをupdateが起動することはありません。binary更新後の再起動だけに失敗した場合は、`sshc service install`を再実行して復旧できます。
 
 SSH loginを切断した後もuser managerを動作させる必要がある場合は、管理者にlingerの有効化を依頼するか、権限があれば次を実行します。
 
