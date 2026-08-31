@@ -2442,7 +2442,12 @@ func TestForcePushReplacesOnlyTheConfirmedRemoteGeneration(t *testing.T) {
 	if confirmation.ETag == "" || confirmation.Evidence == "" {
 		t.Fatalf("confirmation = %#v", confirmation)
 	}
-	if _, err := second.service.ForcePush(context.Background(), syncPassphrase, confirmation.ETag, ""); err != nil {
+	if _, err := second.service.ForcePush(context.Background(), syncPassphrase, remotesync.ForcePushConfirmation{
+		ETag: confirmation.ETag, Evidence: confirmation.Evidence,
+	}, ""); !errors.Is(err, remotesync.ErrForcePushTarget) {
+		t.Fatalf("ForcePush with ETag-only confirmation = %v, want ErrForcePushTarget", err)
+	}
+	if _, err := second.service.ForcePush(context.Background(), syncPassphrase, confirmation, ""); err != nil {
 		t.Fatalf("ForcePush = %v", err)
 	}
 
@@ -2468,8 +2473,80 @@ func TestForcePushReplacesOnlyTheConfirmedRemoteGeneration(t *testing.T) {
 		t.Fatal(err)
 	}
 	bucket.replace(remotesync.ObjectName, `"moved-after-confirmation"`)
-	if _, err := second.service.ForcePush(context.Background(), syncPassphrase, stale.ETag, ""); !errors.Is(err, remotesync.ErrRemoteMoved) {
+	if _, err := second.service.ForcePush(context.Background(), syncPassphrase, stale, ""); !errors.Is(err, remotesync.ErrRemoteMoved) {
 		t.Fatalf("ForcePush after remote change = %v, want ErrRemoteMoved", err)
+	}
+}
+
+func TestForcePushConfirmationCannotCrossConfiguredTargetsWithTheSameETag(t *testing.T) {
+	firstBucket := &fakeBucket{}
+	first := newInstallation(t, firstBucket, map[string]string{"config": "Host first-target\n"})
+	if _, err := first.service.Push(context.Background(), syncPassphrase, "First target"); err != nil {
+		t.Fatal(err)
+	}
+	secondBucket := &fakeBucket{}
+	second := newInstallation(t, secondBucket, map[string]string{"config": "Host second-target\n"})
+	if _, err := second.service.Push(context.Background(), syncPassphrase, "Second target"); err != nil {
+		t.Fatal(err)
+	}
+
+	actor := newInstallation(t, firstBucket, map[string]string{"config": "Host replacement\n"})
+	confirmation, err := actor.service.ForcePushConfirmation(context.Background(), remotesync.ForcePushTarget)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondETag, err := second.client.Head(context.Background(), remotesync.ObjectName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if confirmation.ETag != secondETag {
+		t.Fatalf("fixture ETags differ: first %q, second %q", confirmation.ETag, secondETag)
+	}
+	beforeBody := append([]byte(nil), secondBucket.object(remotesync.ObjectName)...)
+	beforeKeys := strings.Join(secondBucket.keys(), "\n")
+
+	if err := actor.service.Configure(second.config, second.creds, second.client); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := actor.service.ForcePush(context.Background(), syncPassphrase, confirmation, "Wrong target"); !errors.Is(err, remotesync.ErrRemoteMoved) {
+		t.Fatalf("ForcePush after target switch = %v, want ErrRemoteMoved", err)
+	}
+	if !bytes.Equal(secondBucket.object(remotesync.ObjectName), beforeBody) ||
+		strings.Join(secondBucket.keys(), "\n") != beforeKeys {
+		t.Fatal("force push wrote to the newly configured target")
+	}
+}
+
+func TestForcePushConfirmationBindsTheConfiguredCredentialGeneration(t *testing.T) {
+	bucket := &fakeBucket{}
+	machine := newInstallation(t, bucket, map[string]string{"config": "Host source\n"})
+	if _, err := machine.service.Push(context.Background(), syncPassphrase, "Initial snapshot"); err != nil {
+		t.Fatal(err)
+	}
+	confirmation, err := machine.service.ForcePushConfirmation(context.Background(), remotesync.ForcePushTarget)
+	if err != nil {
+		t.Fatal(err)
+	}
+	beforeKeys := strings.Join(bucket.keys(), "\n")
+
+	nextCredentials := objectstore.Credentials{AccessKeyID: "NEXT", SecretAccessKey: "next-secret"}
+	nextClient := *machine.client
+	nextClient.Creds = nextCredentials
+	if err := machine.service.Configure(machine.config, nextCredentials, &nextClient); err != nil {
+		t.Fatal(err)
+	}
+	next, err := machine.service.ForcePushConfirmation(context.Background(), remotesync.ForcePushTarget)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if next.ETag != confirmation.ETag || next.Evidence == confirmation.Evidence {
+		t.Fatalf("confirmation did not bind the new binding version: before %#v, after %#v", confirmation, next)
+	}
+	if _, err := machine.service.ForcePush(context.Background(), syncPassphrase, confirmation, "Stale binding"); !errors.Is(err, remotesync.ErrRemoteMoved) {
+		t.Fatalf("ForcePush after credential reconfigure = %v, want ErrRemoteMoved", err)
+	}
+	if strings.Join(bucket.keys(), "\n") != beforeKeys {
+		t.Fatal("stale confirmation created a history candidate")
 	}
 }
 
@@ -2486,7 +2563,7 @@ func TestReceiveOnlyCanExplicitlyAcceptAnUnrelatedRemoteHead(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := replacement.service.ForcePush(context.Background(), syncPassphrase, confirmation.ETag, "Replace head"); err != nil {
+	if _, err := replacement.service.ForcePush(context.Background(), syncPassphrase, confirmation, "Replace head"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2771,6 +2848,10 @@ func TestForcePushReadsTheSynchronizationKeyAfterAConcurrentRotation(t *testing.
 	if _, err := machine.service.Push(context.Background(), syncPassphrase, "Initial setup"); err != nil {
 		t.Fatal(err)
 	}
+	confirmation, err := machine.service.ForcePushConfirmation(context.Background(), remotesync.ForcePushTarget)
+	if err != nil {
+		t.Fatal(err)
+	}
 	const next = "a different strong shared synchronization key"
 	currentKey := syncPassphrase
 	commitEntered := make(chan struct{})
@@ -2791,7 +2872,7 @@ func TestForcePushReadsTheSynchronizationKeyAfterAConcurrentRotation(t *testing.
 		_, err := machine.service.ForcePushUsing(context.Background(), func() (string, error) {
 			providerCalled <- currentKey
 			return currentKey, nil
-		}, `"preview-before-rotation"`, "Forced")
+		}, confirmation, "Forced")
 		forceDone <- err
 	}()
 	select {

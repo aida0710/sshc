@@ -562,7 +562,7 @@ func (h SyncHandlers) ForcePush(c *echo.Context) error {
 		remotesync.ForcePushTarget, confirmation.Evidence); !allowed {
 		return response
 	}
-	result, err := h.Service.ForcePushUsing(c.Request().Context(), h.keyProvider(), confirmation.ETag, message)
+	result, err := h.Service.ForcePushUsing(c.Request().Context(), h.keyProvider(), confirmation, message)
 	if err != nil {
 		return syncKeyProblem(c, err)
 	}

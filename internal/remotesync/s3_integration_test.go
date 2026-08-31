@@ -616,7 +616,7 @@ func TestAgainstARealBucketForcePushUsesTheConfirmedGeneration(t *testing.T) {
 	if _, err := first.service.Push(ctx, syncPassphrase, ""); err != nil {
 		t.Fatalf("competing Push = %v", err)
 	}
-	if _, err := replacement.service.ForcePush(ctx, syncPassphrase, stale.ETag, ""); !errors.Is(err, remotesync.ErrRemoteMoved) {
+	if _, err := replacement.service.ForcePush(ctx, syncPassphrase, stale, ""); !errors.Is(err, remotesync.ErrRemoteMoved) {
 		t.Fatalf("ForcePush with stale confirmed generation = %v, want ErrRemoteMoved", err)
 	}
 
@@ -624,7 +624,7 @@ func TestAgainstARealBucketForcePushUsesTheConfirmedGeneration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("second ForcePushConfirmation = %v", err)
 	}
-	if _, err := replacement.service.ForcePush(ctx, syncPassphrase, current.ETag, ""); err != nil {
+	if _, err := replacement.service.ForcePush(ctx, syncPassphrase, current, ""); err != nil {
 		t.Fatalf("ForcePush with current confirmed generation = %v", err)
 	}
 	view, err := replacement.service.BucketStatus(ctx)

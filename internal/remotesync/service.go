@@ -816,29 +816,66 @@ func (s *Service) PushUsing(ctx context.Context, key KeyProvider, message string
 	return s.push(ctx, passphrase, "", message)
 }
 
-// ForcePush replaces the exact remote ETag which the user confirmed. It never
-// performs an unconditional write; a remote change after confirmation is
-// reported as ErrRemoteMoved.
-func (s *Service) ForcePush(ctx context.Context, passphrase, expectedETag, message string) (PushResult, error) {
+// ForcePush replaces the exact remote binding and ETag which the user confirmed.
+// It never performs an unconditional write; a binding or remote generation
+// change after confirmation is reported as ErrRemoteMoved.
+func (s *Service) ForcePush(ctx context.Context, passphrase string, confirmation ForcePushConfirmation, message string) (PushResult, error) {
 	s.operationMu.Lock()
 	defer s.operationMu.Unlock()
-	if expectedETag == "" {
-		return PushResult{}, ErrForcePushTarget
+	binding, err := s.validateForcePushBinding(confirmation)
+	if err != nil {
+		return PushResult{}, err
 	}
-	return s.push(ctx, passphrase, expectedETag, message)
+	if err := validateForcePushGeneration(ctx, binding, confirmation); err != nil {
+		return PushResult{}, err
+	}
+	return s.push(ctx, passphrase, confirmation.ETag, message)
 }
 
-func (s *Service) ForcePushUsing(ctx context.Context, key KeyProvider, expectedETag, message string) (PushResult, error) {
+func (s *Service) ForcePushUsing(ctx context.Context, key KeyProvider, confirmation ForcePushConfirmation, message string) (PushResult, error) {
 	s.operationMu.Lock()
 	defer s.operationMu.Unlock()
-	if expectedETag == "" {
-		return PushResult{}, ErrForcePushTarget
+	binding, err := s.validateForcePushBinding(confirmation)
+	if err != nil {
+		return PushResult{}, err
 	}
 	passphrase, err := currentOperationKey(key)
 	if err != nil {
 		return PushResult{}, err
 	}
-	return s.push(ctx, passphrase, expectedETag, message)
+	if err := validateForcePushGeneration(ctx, binding, confirmation); err != nil {
+		return PushResult{}, err
+	}
+	return s.push(ctx, passphrase, confirmation.ETag, message)
+}
+
+func (s *Service) validateForcePushBinding(confirmation ForcePushConfirmation) (remoteBinding, error) {
+	if confirmation.ETag == "" || confirmation.bindingVersion == 0 || confirmation.targetID == "" ||
+		confirmation.Evidence != forcePushEvidence(confirmation.bindingVersion, confirmation.targetID, confirmation.ETag) {
+		return remoteBinding{}, ErrForcePushTarget
+	}
+	binding, version, err := s.configuredBindingVersion()
+	if err != nil {
+		return remoteBinding{}, err
+	}
+	if version != confirmation.bindingVersion || targetID(binding.config) != confirmation.targetID {
+		return remoteBinding{}, ErrRemoteMoved
+	}
+	return binding, nil
+}
+
+func validateForcePushGeneration(ctx context.Context, binding remoteBinding, confirmation ForcePushConfirmation) error {
+	etag, err := binding.client.Head(ctx, ObjectKeyFor(binding.config))
+	if err != nil {
+		if errors.Is(err, objectstore.ErrNotFound) {
+			return ErrRemoteMoved
+		}
+		return err
+	}
+	if etag != confirmation.ETag {
+		return ErrRemoteMoved
+	}
+	return nil
 }
 
 func currentOperationKey(provider KeyProvider) (string, error) {
@@ -1457,18 +1494,22 @@ func bucketObjectView(config Config, item objectstore.ObjectInfo) *BucketObjectV
 type ForcePushConfirmation struct {
 	ETag     string
 	Evidence string
+
+	bindingVersion uint64
+	targetID       string
 }
 
 // ForcePushConfirmation binds one action token to the current configured
-// destination and live ETag. The handler passes the same ETag to ForcePush, so
-// a race after token consumption still fails the conditional PUT.
+// binding, target identity, and live ETag. ForcePush validates the complete
+// confirmation again while holding operationMu, then retains the remote CAS as
+// the final guard against a writer outside this process.
 func (s *Service) ForcePushConfirmation(ctx context.Context, target string) (ForcePushConfirmation, error) {
 	s.operationMu.Lock()
 	defer s.operationMu.Unlock()
 	if target != ForcePushTarget {
 		return ForcePushConfirmation{}, ErrForcePushTarget
 	}
-	binding, err := s.configuredBinding()
+	binding, bindingVersion, err := s.configuredBindingVersion()
 	if err != nil {
 		return ForcePushConfirmation{}, err
 	}
@@ -1480,10 +1521,18 @@ func (s *Service) ForcePushConfirmation(ctx context.Context, target string) (For
 		}
 		return ForcePushConfirmation{}, err
 	}
-	evidence := Digest([]byte(strings.Join([]string{
-		binding.config.Endpoint, binding.config.Bucket, objectKey, live.ETag,
+	targetIdentity := targetID(binding.config)
+	evidence := forcePushEvidence(bindingVersion, targetIdentity, live.ETag)
+	return ForcePushConfirmation{
+		ETag: live.ETag, Evidence: evidence,
+		bindingVersion: bindingVersion, targetID: targetIdentity,
+	}, nil
+}
+
+func forcePushEvidence(bindingVersion uint64, target, etag string) string {
+	return Digest([]byte(strings.Join([]string{
+		"force-push-v2", fmt.Sprintf("%d", bindingVersion), target, etag,
 	}, "\x00")))
-	return ForcePushConfirmation{ETag: live.ETag, Evidence: evidence}, nil
 }
 
 func snapshotSummary(manifest Manifest, contents map[string][]byte, snapshotBytes int) SnapshotSummary {
