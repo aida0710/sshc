@@ -292,6 +292,39 @@ describe("App", () => {
     expect(vault).toHaveBeenCalledTimes(2);
   });
 
+  it("rechecks an ordinary window focus without concealing the console", async () => {
+    let poll: (() => void) | null = null;
+    const originalSetInterval = window.setInterval.bind(window);
+    vi.spyOn(window, "setInterval").mockImplementation((handler, delay, ...args) => {
+      if (delay === vaultStatePollIntervalMs && typeof handler === "function") poll = handler as () => void;
+      return originalSetInterval(handler, delay, ...args) as unknown as ReturnType<typeof setInterval>;
+    });
+    const focused = deferred<Awaited<ReturnType<typeof openVault>>>();
+    const vault = vi.fn()
+      .mockImplementationOnce(openVault)
+      .mockReturnValueOnce(focused.promise);
+    vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+    render(
+      <App
+        bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
+        health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
+        vault={vault}
+      />,
+    );
+    expect(await screen.findByRole("navigation", { name: "Primary" })).toBeInTheDocument();
+    await waitFor(() => expect(poll).not.toBeNull());
+
+    act(() => {
+      window.dispatchEvent(new Event("focus"));
+    });
+
+    await waitFor(() => expect(vault).toHaveBeenCalledTimes(2));
+    expect(screen.getByRole("navigation", { name: "Primary" })).toBeInTheDocument();
+    expect(screen.queryByText(/Checking that the vault is still unlocked/)).toBeNull();
+
+    await act(async () => focused.resolve(await openVault()));
+  });
+
   it("keeps an in-progress form mounted while the resumed vault check conceals it", async () => {
     window.history.replaceState(null, "", "/settings");
     const resumed = deferred<Awaited<ReturnType<typeof openVault>>>();
@@ -312,7 +345,7 @@ describe("App", () => {
     await user.type(field, "keep this input");
 
     await act(async () => {
-      window.dispatchEvent(new Event("focus"));
+      document.dispatchEvent(new Event("visibilitychange"));
       await Promise.resolve();
     });
     expect(screen.queryByRole("navigation", { name: "Primary" })).toBeNull();
@@ -346,7 +379,7 @@ describe("App", () => {
     await waitFor(() => expect(poll).not.toBeNull());
 
     act(() => {
-      window.dispatchEvent(new Event("focus"));
+      document.dispatchEvent(new Event("visibilitychange"));
     });
     await act(async () => resumed.reject(new Error("offline")));
 
