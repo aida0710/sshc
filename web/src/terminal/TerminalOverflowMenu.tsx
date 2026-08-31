@@ -1,6 +1,7 @@
 import { useRef, type RefObject } from "react";
 import { useTranslate } from "../i18n/context";
 import { useDismissibleLayer } from "../ui/useDismissibleLayer";
+import { useMenuKeyboard } from "../ui/useMenuKeyboard";
 
 export function TerminalOverflowMenu({
   osc52Enabled,
@@ -28,6 +29,7 @@ export function TerminalOverflowMenu({
     onDismiss: onClose,
     ...(triggerRef === undefined ? {} : { returnFocusRef: triggerRef }),
   });
+  useMenuKeyboard({ open: true, menuRef: panel, onClose });
 
   const action = (callback: () => void | Promise<void>) => () => {
     void callback();

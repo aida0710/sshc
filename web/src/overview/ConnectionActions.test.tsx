@@ -74,6 +74,32 @@ describe("ConnectionActions", () => {
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
 
+  it("moves through enabled menu items with the keyboard", async () => {
+    const user = userEvent.setup();
+    render(
+      <ConnectionActions
+        alias="database"
+        path="config"
+        busy={false}
+        onOpenSettings={vi.fn()}
+        onConnect={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Actions for database" }));
+    const settings = screen.getByRole("menuitem", { name: "Open connection settings" });
+    const connect = screen.getByRole("menuitem", { name: "Connect" });
+    expect(settings).toHaveFocus();
+    await user.keyboard("{ArrowDown}");
+    expect(connect).toHaveFocus();
+    await user.keyboard("{ArrowDown}");
+    expect(settings).toHaveFocus();
+    await user.keyboard("{End}");
+    expect(connect).toHaveFocus();
+    await user.keyboard("{Home}");
+    expect(settings).toHaveFocus();
+  });
+
   it("keeps settings available while disabling a duplicate connection", async () => {
     render(
       <ConnectionActions

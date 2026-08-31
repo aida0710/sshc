@@ -8,6 +8,8 @@ import { consoleDragMimeType, type LiveWorkspaceSummary } from "../features/work
 import { connectionProgressText } from "./progress";
 import { agentStatusLabel, terminalDisplayTitle } from "./agentPresentation";
 import type { AgentUnreadBySession } from "./agentNotifications";
+import { useDismissibleLayer } from "../ui/useDismissibleLayer";
+import { useMenuKeyboard } from "../ui/useMenuKeyboard";
 
 type ConsoleListProps = {
   sessions: TerminalSession[];
@@ -69,6 +71,7 @@ export function ConsoleList({
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
   const [shiftPressed, setShiftPressed] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const menuTriggerRef = useRef<HTMLButtonElement | null>(null);
   const workspaceMenuRef = useRef<HTMLLIElement | null>(null);
 
   const live = sessions.filter((session) => session.exited === undefined).length;
@@ -86,20 +89,23 @@ export function ConsoleList({
     if (workspace === null) setWorkspaceMenuOpen(false);
   }, [sessions, menuFor, renaming, workspace]);
 
-  useEffect(() => {
-    if (menuFor === null && !workspaceMenuOpen) return;
-    function dismiss(event: PointerEvent) {
-      const target = event.target as Node;
-      const insideSessionMenu = menuFor !== null && menuRef.current?.contains(target) === true;
-      const insideWorkspaceMenu = workspaceMenuOpen && workspaceMenuRef.current?.contains(target) === true;
-      if (!insideSessionMenu && !insideWorkspaceMenu) {
-        setMenuFor(null);
-        setWorkspaceMenuOpen(false);
-      }
-    }
-    document.addEventListener("pointerdown", dismiss);
-    return () => document.removeEventListener("pointerdown", dismiss);
-  }, [menuFor, workspaceMenuOpen]);
+  useDismissibleLayer({
+    open: menuFor !== null || workspaceMenuOpen,
+    containerRefs: [menuRef, menuTriggerRef, workspaceMenuRef],
+    onDismiss: () => {
+      setMenuFor(null);
+      setWorkspaceMenuOpen(false);
+    },
+    returnFocusRef: menuTriggerRef,
+  });
+  useMenuKeyboard({
+    open: menuFor !== null || workspaceMenuOpen,
+    menuRef,
+    onClose: () => {
+      setMenuFor(null);
+      setWorkspaceMenuOpen(false);
+    },
+  });
 
   useEffect(() => {
     function keyDown(event: KeyboardEvent) {
@@ -198,7 +204,8 @@ export function ConsoleList({
                   type="button"
                   aria-label={t("workspace.rowMenu", { name: workspace.name })}
                   aria-expanded={workspaceMenuOpen}
-                  onClick={() => {
+                  onClick={(event) => {
+                    menuTriggerRef.current = event.currentTarget;
                     setMenuFor(null);
                     setWorkspaceMenuOpen((open) => !open);
                   }}
@@ -354,6 +361,7 @@ export function ConsoleList({
                     aria-label={t("terminal.rowMenu", { title: session.title })}
                     aria-expanded={menuFor === session.id}
                     onClick={(event) => {
+                      menuTriggerRef.current = event.currentTarget;
                       if (menuFor === session.id) {
                         setMenuFor(null);
                         return;
