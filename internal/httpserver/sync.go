@@ -2,7 +2,10 @@ package httpserver
 
 import (
 	"context"
+	"crypto/x509"
 	"errors"
+	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"path/filepath"
@@ -50,6 +53,8 @@ func registerSyncRoutes(engine *echo.Echo, handlers SyncHandlers) {
 	engine.POST("/api/v1/sync/setup/check", handlers.CheckSetup)
 	engine.PUT("/api/v1/sync/setup", handlers.CompleteSetup)
 	engine.PUT("/api/v1/sync/settings", handlers.Configure)
+	engine.GET("/api/v1/sync/exclusions", handlers.Exclusions)
+	engine.PUT("/api/v1/sync/exclusions", handlers.SaveExclusions)
 	engine.PUT("/api/v1/sync/key", handlers.SetKey)
 	engine.PUT("/api/v1/sync/auto", handlers.SetAuto)
 	engine.POST("/api/v1/sync/now", handlers.Now)
@@ -356,6 +361,45 @@ func (h SyncHandlers) Configure(c *echo.Context) error {
 	return h.status(c)
 }
 
+func exclusionsResponse(view remotesync.ExclusionView) api.SyncExclusions {
+	response := api.SyncExclusions{
+		Document: view.Document, UsingDefaults: view.UsingDefaults,
+		Candidates: make([]api.SyncExclusionCandidate, 0, len(view.Candidates)),
+	}
+	for _, candidate := range view.Candidates {
+		response.Candidates = append(response.Candidates, api.SyncExclusionCandidate{
+			Path: candidate.Path, Ignored: candidate.Ignored,
+		})
+	}
+	return response
+}
+
+func (h SyncHandlers) Exclusions(c *echo.Context) error {
+	view, err := h.Service.Exclusions()
+	if err != nil {
+		return syncProblem(c, err)
+	}
+	return c.JSON(http.StatusOK, exclusionsResponse(view))
+}
+
+func (h SyncHandlers) SaveExclusions(c *echo.Context) error {
+	var request api.SyncExclusionsRequest
+	if err := decodeJSON(c, &request); err != nil {
+		return problem(c, http.StatusBadRequest, "invalid_request")
+	}
+	view, err := h.Service.SaveExclusions(request.Document)
+	if err != nil {
+		if errors.Is(err, remotesync.ErrInvalidIgnoreRules) {
+			return problem(c, http.StatusBadRequest, "sync_ignore_invalid")
+		}
+		return syncProblem(c, err)
+	}
+	if h.Auto != nil {
+		h.Auto.NotifyLocalChange()
+	}
+	return c.JSON(http.StatusOK, exclusionsResponse(view))
+}
+
 // sealingKey は、vault に保存した同期専用の暗号鍵を返す。
 // 取得できない場合は HTTP 応答を書き込み、ok=false を返す。
 func (h SyncHandlers) sealingKey(c *echo.Context) (string, bool, error) {
@@ -652,7 +696,7 @@ func (h SyncHandlers) Pull(c *echo.Context) error {
 		historyKey = *request.HistoryKey
 	}
 	acceptRemoteHead := request.AcceptRemoteHead != nil && *request.AcceptRemoteHead
-	if acceptRemoteHead && (h.Service.Direction() != remotesync.DirectionPull ||
+	if acceptRemoteHead && (h.Service.Direction() == remotesync.DirectionPush ||
 		historyKey != "" || resolve != remotesync.ResolveRemote) {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
@@ -811,12 +855,16 @@ func syncProblem(c *echo.Context, err error) error {
 		return problem(c, http.StatusBadRequest, "sync_history_target_invalid")
 	case errors.Is(err, remotesync.ErrCommitMessage):
 		return problem(c, http.StatusBadRequest, "sync_commit_message_invalid")
+	case errors.Is(err, remotesync.ErrInvalidIgnoreRules):
+		return problem(c, http.StatusBadRequest, "sync_ignore_invalid")
 	case errors.Is(err, remotesync.ErrWrongPassphrase):
 		return problem(c, http.StatusForbidden, "wrong_passphrase")
 	case errors.Is(err, remotesync.ErrWeakPassphrase):
 		return problem(c, http.StatusBadRequest, "passphrase_too_short")
 	case errors.Is(err, remotesync.ErrCostRefused):
 		return problem(c, http.StatusConflict, "snapshot_cost_refused")
+	case errors.Is(err, remotesync.ErrObjectTooLarge), errors.Is(err, remotesync.ErrSnapshotTooLarge):
+		return problem(c, http.StatusConflict, "snapshot_too_large")
 	case errors.Is(err, remotesync.ErrUnsupportedEnvelopeVersion), errors.Is(err, remotesync.ErrUnsupportedVersion):
 		return problem(c, http.StatusConflict, "snapshot_schema_unsupported")
 	case errors.Is(err, remotesync.ErrUnsafePath), errors.Is(err, remotesync.ErrUnsafeMode),
@@ -824,13 +872,40 @@ func syncProblem(c *echo.Context, err error) error {
 		return problem(c, http.StatusConflict, "snapshot_rejected")
 	case errors.Is(err, remotesync.ErrRefused), errors.Is(err, remotesync.ErrInsecureEndpoint):
 		return problem(c, http.StatusBadGateway, "bucket_refused")
+	case errors.Is(err, context.DeadlineExceeded):
+		return problemDetail(c, http.StatusGatewayTimeout, "bucket_timeout", "the object store did not respond before the request timeout")
+	case isSyncDNSError(err):
+		return problemDetail(c, http.StatusBadGateway, "bucket_dns_failed", "the object store hostname could not be resolved")
+	case isSyncTLSError(err):
+		return problemDetail(c, http.StatusBadGateway, "bucket_tls_failed", "the secure connection to the object store could not be verified")
+	case isSyncNetworkError(err):
+		return problemDetail(c, http.StatusBadGateway, "bucket_unreachable", "the network connection to the object store could not be established")
+	case errors.Is(err, io.ErrUnexpectedEOF):
+		return problemDetail(c, http.StatusBadGateway, "snapshot_download_incomplete", "the encrypted snapshot download ended before it was complete")
 	case remotesync.IsLocalChange(err):
 		return problem(c, http.StatusConflict, "sync_local_changed")
 	case errors.Is(err, remotesync.ErrWorkspaceBusy):
 		return problem(c, http.StatusConflict, "sync_workspace_busy")
 	default:
-		return problem(c, http.StatusBadGateway, "sync_failed")
+		return problemDetail(c, http.StatusInternalServerError, "sync_internal_failed", "the synchronization operation failed for an unclassified internal reason")
 	}
+}
+
+func isSyncDNSError(err error) bool {
+	var dns *net.DNSError
+	return errors.As(err, &dns)
+}
+
+func isSyncTLSError(err error) bool {
+	var unknownAuthority x509.UnknownAuthorityError
+	var hostname x509.HostnameError
+	var invalid x509.CertificateInvalidError
+	return errors.As(err, &unknownAuthority) || errors.As(err, &hostname) || errors.As(err, &invalid)
+}
+
+func isSyncNetworkError(err error) bool {
+	var network net.Error
+	return errors.As(err, &network)
 }
 
 // keyConfigured は、vault から値を公開せず、同期鍵の設定有無だけを返す。

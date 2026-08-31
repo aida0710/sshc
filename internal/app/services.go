@@ -217,6 +217,12 @@ func buildSync(
 
 	autoSync := remotesync.NewAuto(syncService, remotesync.AutoInterval,
 		func() string { return time.Now().UTC().Format(time.RFC3339) })
+	if dependencies.Logger != nil {
+		autoSync.ReportFailure = func(stage string, err error) {
+			dependencies.Logger.Error("automatic synchronization failed",
+				"stage", stage, "code", remotesync.FailureCode(err), "error", err)
+		}
+	}
 	autoSync.Enabled = func() bool {
 		settings, err := passwordService.SyncSettings()
 		return err == nil && settings.Auto

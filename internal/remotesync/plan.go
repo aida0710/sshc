@@ -49,14 +49,27 @@ type Conflict struct {
 //   - local は、ワークスペース相対のパスを、いまこのディスク上のダイジェストへ対応付ける。
 //   - remote は、いま取得したマニフェストで、contents はそのファイル群。
 func Plan(root string, base *Manifest, local map[string]string, remote Manifest, contents map[string][]byte, resolve Resolution) (storage.Request, []Conflict, error) {
+	return PlanWithIgnore(root, base, local, remote, contents, resolve, nil)
+}
+
+// PlanWithIgnore keeps paths selected by the shared exclusion rules outside
+// both writes and removals. The local copy of an excluded path is never touched.
+func PlanWithIgnore(root string, base *Manifest, local map[string]string, remote Manifest, contents map[string][]byte, resolve Resolution, ignored func(string) bool) (storage.Request, []Conflict, error) {
+	isIgnored := func(path string) bool { return ignored != nil && ignored(path) }
 	baseDigests := map[string]string{}
 	if base != nil {
 		for _, item := range base.Files {
+			if isIgnored(item.Path) {
+				continue
+			}
 			baseDigests[item.Path] = item.SHA256
 		}
 	}
 	remoteDigests := map[string]string{}
 	for _, item := range remote.Files {
+		if isIgnored(item.Path) {
+			continue
+		}
 		remoteDigests[item.Path] = item.SHA256
 	}
 
@@ -64,6 +77,9 @@ func Plan(root string, base *Manifest, local map[string]string, remote Manifest,
 	var conflicts []Conflict
 
 	for _, item := range remote.Files {
+		if isIgnored(item.Path) {
+			continue
+		}
 		localDigest, present := local[item.Path]
 		if present && localDigest == item.SHA256 {
 			continue
@@ -101,6 +117,9 @@ func Plan(root string, base *Manifest, local map[string]string, remote Manifest,
 	// ないなら削除、どちらにもないならここで新しく作られたものであり、手を触れ
 	// ない。
 	for path, localDigest := range local {
+		if isIgnored(path) {
+			continue
+		}
 		if _, stillRemote := remoteDigests[path]; stillRemote {
 			continue
 		}

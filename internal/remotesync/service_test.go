@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/xml"
 	"errors"
+	"fmt"
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
@@ -632,6 +633,121 @@ func TestCollectDoesNotFollowSymbolicLinks(t *testing.T) {
 	}
 	if _, ok := contents["linked-directory/outside-private-key"]; ok {
 		t.Fatal("a symbolic directory target was read into the snapshot")
+	}
+}
+
+func TestCollectUsesDefaultAndSharedExclusionRules(t *testing.T) {
+	installation := newInstallation(t, &fakeBucket{}, map[string]string{
+		"config":                     "Host bastion\n",
+		".DS_Store":                  "finder metadata",
+		"connections/work/Thumbs.db": "thumbnail cache",
+		"keys/work/private.bak":      "backup key",
+		"known_hosts.tmp":            "temporary known hosts",
+		"active.lock":                "editor lock",
+	})
+
+	view, err := installation.service.Exclusions()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !view.UsingDefaults || view.Document != remotesync.DefaultIgnoreDocument {
+		t.Fatalf("default exclusion view = %+v", view)
+	}
+	manifest, _, err := installation.service.Collect()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range manifest.Files {
+		if entry.Path != "config" {
+			t.Errorf("default snapshot unexpectedly contains %q", entry.Path)
+		}
+	}
+
+	custom := "*.tmp\n!known_hosts.tmp\n"
+	saved, err := installation.service.SaveExclusions(custom)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if saved.UsingDefaults || saved.Document != custom {
+		t.Fatalf("saved exclusion view = %+v", saved)
+	}
+	manifest, _, err = installation.service.Collect()
+	if err != nil {
+		t.Fatal(err)
+	}
+	paths := map[string]bool{}
+	for _, entry := range manifest.Files {
+		paths[entry.Path] = true
+	}
+	if !paths[remotesync.IgnorePath] || !paths["known_hosts.tmp"] || paths["keys/work/private.bak"] == false {
+		t.Fatalf("custom snapshot paths = %v", paths)
+	}
+	if paths[".DS_Store"] == false || paths["connections/work/Thumbs.db"] == false || paths["active.lock"] == false {
+		t.Fatalf("saving custom rules did not replace defaults: %v", paths)
+	}
+}
+
+func TestIgnoredFilesDoNotConsumeTheSnapshotEntryLimit(t *testing.T) {
+	files := map[string]string{"config": "Host bastion\n"}
+	for index := 0; index < remotesync.MaxEntries+1; index++ {
+		files[fmt.Sprintf("cache/%04d.tmp", index)] = "temporary"
+	}
+	installation := newInstallation(t, &fakeBucket{}, files)
+
+	manifest, _, err := installation.service.Collect()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(manifest.Files) != 1 || manifest.Files[0].Path != "config" {
+		t.Fatalf("snapshot files = %+v", manifest.Files)
+	}
+}
+
+func TestPullKeepsAFileNewlyExcludedByTheRemoteRules(t *testing.T) {
+	bucket := &fakeBucket{}
+	sender := newInstallation(t, bucket, map[string]string{
+		"config": "Host sender\n", remotesync.IgnorePath: "", "local.cache": "first",
+	})
+	if _, err := sender.service.Push(context.Background(), syncPassphrase, "Initial snapshot"); err != nil {
+		t.Fatal(err)
+	}
+
+	receiver := newInstallation(t, bucket, map[string]string{})
+	initial, err := receiver.service.Pull(context.Background(), syncPassphrase, remotesync.ResolveRemote)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := receiver.service.Apply(initial); err != nil {
+		t.Fatal(err)
+	}
+	receiver.write(t, "local.cache", "receiver must keep this")
+
+	if _, err := sender.service.SaveExclusions("*.cache\n"); err != nil {
+		t.Fatal(err)
+	}
+	sender.write(t, "config", "Host sender\n  ServerAliveInterval 30\n")
+	sender.write(t, "local.cache", "sender cache must not travel")
+	if _, err := sender.service.Push(context.Background(), syncPassphrase, "Ignore local caches"); err != nil {
+		t.Fatal(err)
+	}
+
+	next, err := receiver.service.Pull(context.Background(), syncPassphrase, remotesync.ResolveRemote)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, removal := range next.Request.Removals {
+		if strings.HasSuffix(removal.Path, "local.cache") {
+			t.Fatalf("excluded path scheduled for removal: %+v", next.Request)
+		}
+	}
+	if err := receiver.service.Apply(next); err != nil {
+		t.Fatal(err)
+	}
+	if got := receiver.read(t, "local.cache"); got != "receiver must keep this" {
+		t.Fatalf("excluded local file = %q", got)
+	}
+	if got := receiver.read(t, remotesync.IgnorePath); got != "*.cache\n" {
+		t.Fatalf("shared ignore file = %q", got)
 	}
 }
 
@@ -2167,14 +2283,15 @@ func TestExplicitRemoteHeadApplyRejectsAChangedGeneration(t *testing.T) {
 	}
 }
 
-func TestExplicitRemoteHeadRequiresReceiveOnlyDirection(t *testing.T) {
+func TestExplicitRemoteHeadRefusesSendOnlyDirection(t *testing.T) {
 	bucket := &fakeBucket{}
 	machine := newInstallation(t, bucket, map[string]string{"config": "Host local\n"})
 	if _, err := machine.service.Push(context.Background(), syncPassphrase, "Initial setup"); err != nil {
 		t.Fatal(err)
 	}
+	machine.direct(remotesync.DirectionPush)
 	if _, err := machine.service.PullRemoteHead(context.Background(), syncPassphrase); !errors.Is(err, remotesync.ErrApplyRefused) {
-		t.Fatalf("PullRemoteHead in bidirectional mode = %v, want ErrApplyRefused", err)
+		t.Fatalf("PullRemoteHead in send-only mode = %v, want ErrApplyRefused", err)
 	}
 }
 

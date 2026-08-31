@@ -2,7 +2,10 @@ package remotesync
 
 import (
 	"context"
+	"crypto/x509"
 	"errors"
+	"io"
+	"net"
 	"sync"
 	"time"
 )
@@ -43,6 +46,9 @@ type AutoView struct {
 // Auto は定期的に同期する。競合と削除は自動適用せず AutoBlocked として報告する。
 type Auto struct {
 	service *Service
+	// ReportFailure records the internal stage and error for local diagnostics.
+	// Detail exposed through AutoView remains a stable, secret-free code.
+	ReportFailure func(stage string, err error)
 	// Key は同期鍵を返す。vault がロック中または未設定なら false を返す。
 	Key func() (string, bool)
 	// Enabled は、この設置で自動同期が入っているかを返す。設定は保管庫の中に
@@ -409,6 +415,7 @@ func (a *Auto) receive(ctx context.Context, key string) (AutoPhase, string, bool
 		a.rememberBlocked(generation.target, generation.etag, "remote_moved")
 		return AutoBlocked, "remote_moved", true
 	case err != nil && !errors.Is(err, ErrNothingToApply):
+		a.reportFailure("pull", err)
 		detail := failureDetail(err)
 		a.rememberFailed(generation, key, err, detail)
 		return AutoFailed, detail, true
@@ -426,15 +433,23 @@ func (a *Auto) receive(ctx context.Context, key string) (AutoPhase, string, bool
 	// 差分がなくてもApplyはremote世代を記録する。これを省くと同じsnapshotを
 	// 毎分取得し続け、次のpushも古いETagで拒否される。
 	if err := a.service.validatePullForApply(ctx, result); err != nil {
+		a.reportFailure("validate_apply", err)
 		return AutoFailed, failureDetail(err), true
 	}
 	if err := a.service.apply(result); err != nil {
 		if errors.Is(err, ErrApplyRefused) {
 			return AutoIdle, "", false
 		}
+		a.reportFailure("apply", err)
 		return AutoFailed, failureDetail(err), true
 	}
 	return AutoIdle, "", false
+}
+
+func (a *Auto) reportFailure(stage string, err error) {
+	if a.ReportFailure != nil && err != nil {
+		a.ReportFailure(stage, err)
+	}
 }
 
 // send はローカルに変更があれば push する。
@@ -562,7 +577,8 @@ func deterministicSyncFailure(err error) bool {
 	return errors.Is(err, ErrWrongPassphrase) || errors.Is(err, ErrUnsupportedEnvelopeVersion) ||
 		errors.Is(err, ErrUnsupportedVersion) || errors.Is(err, ErrCostRefused) ||
 		errors.Is(err, ErrUnsafePath) || errors.Is(err, ErrUnsafeMode) ||
-		errors.Is(err, ErrManifestMismatch) || errors.Is(err, ErrNotASnapshot)
+		errors.Is(err, ErrManifestMismatch) || errors.Is(err, ErrNotASnapshot) ||
+		errors.Is(err, ErrInvalidIgnoreRules)
 }
 
 func (a *Auto) enter(phase AutoPhase, detail string) {
@@ -588,11 +604,51 @@ func failureDetail(err error) string {
 		return "conflicts"
 	case errors.Is(err, ErrWrongPassphrase):
 		return "wrong_passphrase"
+	case errors.Is(err, ErrCostRefused):
+		return "snapshot_cost_refused"
+	case errors.Is(err, ErrObjectTooLarge), errors.Is(err, ErrSnapshotTooLarge):
+		return "snapshot_too_large"
 	case errors.Is(err, ErrUnsupportedEnvelopeVersion), errors.Is(err, ErrUnsupportedVersion):
 		return "snapshot_schema_unsupported"
 	case errors.Is(err, ErrUnsafePath), errors.Is(err, ErrUnsafeMode),
 		errors.Is(err, ErrManifestMismatch), errors.Is(err, ErrNotASnapshot):
 		return "snapshot_rejected"
+	case errors.Is(err, ErrInvalidIgnoreRules):
+		return "sync_ignore_invalid"
+	case errors.Is(err, ErrRefused), errors.Is(err, ErrInsecureEndpoint):
+		return "bucket_refused"
+	case errors.Is(err, context.DeadlineExceeded):
+		return "bucket_timeout"
+	case isAutoDNSError(err):
+		return "bucket_dns_failed"
+	case isAutoTLSError(err):
+		return "bucket_tls_failed"
+	case errors.Is(err, io.ErrUnexpectedEOF):
+		return "snapshot_download_incomplete"
+	case isAutoNetworkError(err):
+		return "bucket_unreachable"
 	}
-	return "unreachable"
+	return "sync_internal_failed"
+}
+
+// FailureCode returns the same secret-free stable code exposed by AutoView.
+// Engine diagnostics may pair it with a local-only error without changing the
+// HTTP contract or exposing implementation text to the browser.
+func FailureCode(err error) string { return failureDetail(err) }
+
+func isAutoDNSError(err error) bool {
+	var dns *net.DNSError
+	return errors.As(err, &dns)
+}
+
+func isAutoTLSError(err error) bool {
+	var unknownAuthority x509.UnknownAuthorityError
+	var hostname x509.HostnameError
+	var invalid x509.CertificateInvalidError
+	return errors.As(err, &unknownAuthority) || errors.As(err, &hostname) || errors.As(err, &invalid)
+}
+
+func isAutoNetworkError(err error) bool {
+	var network net.Error
+	return errors.As(err, &network)
 }
