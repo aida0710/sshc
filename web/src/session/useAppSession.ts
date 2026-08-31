@@ -142,13 +142,16 @@ export function useAppSession({
     const checkWhenVisible = () => {
       if (document.visibilityState === "visible") void checkVaultState(true);
     };
+    const checkWhenFocused = () => {
+      if (document.visibilityState === "visible") void checkVaultState();
+    };
     document.addEventListener("visibilitychange", checkWhenVisible);
-    window.addEventListener("focus", checkWhenVisible);
+    window.addEventListener("focus", checkWhenFocused);
     return () => {
       active = false;
       window.clearInterval(interval);
       document.removeEventListener("visibilitychange", checkWhenVisible);
-      window.removeEventListener("focus", checkWhenVisible);
+      window.removeEventListener("focus", checkWhenFocused);
     };
   }, [state, vault]);
 
