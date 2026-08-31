@@ -74,8 +74,9 @@ const SnippetsPath = "sshc/snippets.json"
 const SnapshotPrefix = "snapshots/"
 
 // ForcePushTarget is the fixed action-token target used for replacing the live
-// remote snapshot. The token evidence also binds endpoint, bucket, object key,
-// and ETag, so changing any of them invalidates the confirmation.
+// remote snapshot. The token evidence also binds the configured binding
+// generation, target identity, and ETag, so changing any of them invalidates
+// the confirmation.
 const ForcePushTarget = "remote-workspace"
 
 // datedLayout は、スナップショットが作られた瞬間にちなんでコピーを名付ける。
