@@ -18,6 +18,7 @@ FUZZ_TARGETS = \
 
 
 generate:
+	go generate ./cmd/sshc
 	go generate ./internal/api
 	npm run generate:api --prefix web
 	@# Go の検証規則と適合コーパスを web 用に生成する。規則の定義は Go 側に置く。
@@ -59,7 +60,8 @@ verify-ui-dist:
 # APIモデルと埋込みUIを再生成し、コミット済みの生成物と異なれば失敗する。
 # api/openapi.yaml をGoとTypeScriptの共通schemaとして扱う。
 verify-generated: generate verify-ui-dist
-	git diff --exit-code -- internal/api/models.gen.go web/src/api/schema.d.ts \
+	git diff --exit-code -- cmd/sshc/cli_contract.gen.go internal/api/models.gen.go \
+		web/src/api/schema.d.ts web/src/api/validators.generated.ts \
 		web/src/rules/generated.ts web/src/rules/corpus.generated.json
 
 # VERSION を caller が渡した場合は専用の build channel へそのまま渡す。空なら

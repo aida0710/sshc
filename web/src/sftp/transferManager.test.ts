@@ -5,11 +5,17 @@ import { SFTPTransferManager } from "./transferManager";
 function engineAPI(overrides: Record<string, unknown> = {}) {
   const jobs = new Map<string, TransferJob>();
   const now = () => new Date().toISOString();
+  const allowedActions = (status: TransferJob["status"]): TransferJob["allowedActions"] => {
+    if (status === "queued" || status === "running") return ["pause", "cancel"];
+    if (status === "paused" || status === "reattach" || status === "needs_overwrite") return ["resume", "cancel"];
+    if (status === "failed") return ["retry", "cancel"];
+    return [];
+  };
   const createTransfer = vi.fn(async (input: CreateTransferJob): Promise<TransferJob> => {
     const existing = jobs.get(input.id);
     if (existing !== undefined) return existing;
     const job: TransferJob = {
-      ...input, transferredBytes: 0, bytesPerSecond: 0, remainingSeconds: -1, status: "queued",
+      ...input, transferredBytes: 0, bytesPerSecond: 0, remainingSeconds: -1, status: "queued", allowedActions: ["pause", "cancel"],
       attempt: 1, problem: "", expectedRevision: "", sourceFingerprint: "", overwrite: false,
       downloadRevision: "", createdAt: now(), updatedAt: now(),
     };
@@ -27,8 +33,9 @@ function engineAPI(overrides: Record<string, unknown> = {}) {
       start: "running", pause: "paused", resume: "queued", retry: "queued", cancel: "cancelled",
       complete: "completed", fail: "failed", needs_overwrite: "needs_overwrite",
     };
+    const status = statuses[action] ?? current.status;
     const updated: TransferJob = {
-      ...current, status: statuses[action] ?? current.status,
+      ...current, status, allowedActions: allowedActions(status),
       attempt: action === "retry" ? current.attempt + 1 : current.attempt,
       problem: action === "fail" ? options.problem ?? "sftp_failed" : action === "retry" ? "" : current.problem,
       overwrite: action === "resume" && current.status === "needs_overwrite" ? true : current.overwrite,
@@ -63,11 +70,11 @@ function engineAPI(overrides: Record<string, unknown> = {}) {
     })),
     completeUpload: vi.fn(async (_alias: string, id: string, _path: string, size: number) => {
       const current = jobs.get(id);
-      if (current !== undefined) jobs.set(id, { ...current, status: "completed", transferredBytes: size, remainingSeconds: 0 });
+      if (current !== undefined) jobs.set(id, { ...current, status: "completed", allowedActions: [], transferredBytes: size, remainingSeconds: 0 });
     }),
     cancelUpload: vi.fn(async (_alias: string, id: string) => {
       const current = jobs.get(id);
-      if (current !== undefined) jobs.set(id, { ...current, status: "cancelled", problem: "" });
+      if (current !== undefined) jobs.set(id, { ...current, status: "cancelled", allowedActions: [], problem: "" });
     }),
     streamDownload: vi.fn(async (
       _alias: string, _id: string, _path: string, _directory: boolean, _offset: number,
@@ -277,7 +284,7 @@ describe("SFTPTransferManager engine ownership", () => {
     });
     api.jobs.set(created.id, {
       ...created, transferredBytes: 4, downloadRevision: '"content-sha256:full"',
-      status: "failed", problem: "connection_lost",
+      status: "failed", allowedActions: ["retry", "cancel"], problem: "connection_lost",
     });
     const manager = new SFTPTransferManager(api);
     await manager.reconcile();

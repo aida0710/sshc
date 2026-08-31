@@ -210,7 +210,7 @@ export class SFTPTransferManager {
 
   async pause(id: string): Promise<void> {
     const job = this.find(id);
-    if (job === undefined || (job.status !== "running" && job.status !== "queued")) return;
+    if (job === undefined || !job.allowedActions.includes("pause")) return;
     this.controllers.get(id)?.abort();
     const operation = this.api.updateTransfer(id, "pause").then((updated) => { this.replaceServer(updated); });
     this.trackControl(id, operation);
@@ -219,7 +219,7 @@ export class SFTPTransferManager {
 
   async resume(id: string): Promise<void> {
     const job = this.find(id);
-    if (job === undefined || !["paused", "reattach", "needs_overwrite"].includes(job.status) || !networkReady(job, this.files)) return;
+    if (job === undefined || !job.allowedActions.includes("resume") || !networkReady(job, this.files)) return;
     if (job.direction === "download" && job.kind === "folder") {
       this.downloadChunks.set(id, []);
       const sink = this.downloadSinks.get(id);
@@ -233,7 +233,7 @@ export class SFTPTransferManager {
 
   async retry(id: string): Promise<void> {
     const job = this.find(id);
-    if (job === undefined || job.status !== "failed" || !networkReady(job, this.files)) return;
+    if (job === undefined || !job.allowedActions.includes("retry") || !networkReady(job, this.files)) return;
     const reset = job.direction === "download" && job.kind === "folder";
     if (reset) {
       this.downloadChunks.set(id, []);
@@ -257,7 +257,7 @@ export class SFTPTransferManager {
 
   async cancel(id: string): Promise<void> {
     const job = this.find(id);
-    if (job === undefined || job.status === "completed" || job.status === "cancelled") return;
+    if (job === undefined || !job.allowedActions.includes("cancel")) return;
     this.controllers.get(id)?.abort();
     if (job.direction === "upload") {
       try {

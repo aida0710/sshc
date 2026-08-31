@@ -4,11 +4,11 @@ import {
   asArray,
   asString,
   asNumber,
-  asBoolean,
   jsonHeaders,
   issueAction,
 } from "./guards";
 import type { components } from "./schema";
+import { validateOpenAPISchema } from "./validators.generated";
 
 export type ConfigCheckResponse = components["schemas"]["ConfigCheckResponse"];
 export type EffectiveResponse = components["schemas"]["EffectiveResponse"];
@@ -238,310 +238,57 @@ export type IntegrationsApi = {
 };
 
 function validateUpdate(value: unknown): UpdateStatus {
-  const record = asRecord(value);
-  if (
-    typeof record.current !== "string" ||
-    typeof record.available !== "boolean"
-  ) {
-    throw new Error("invalid_response");
-  }
-  return {
-    current: record.current,
-    available: record.available,
-    ...(typeof record.latest === "string" ? { latest: record.latest } : {}),
-    ...(typeof record.pageUrl === "string" ? { pageUrl: record.pageUrl } : {}),
-  };
-}
-
-function asNonnegativeInteger(value: unknown): number {
-  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
-    throw new Error("invalid_response");
-  }
-  return value;
+  return validateOpenAPISchema<UpdateStatus>("UpdateStatus", value);
 }
 
 function validateConfigCheck(value: unknown): ConfigCheckResponse {
-  const record = asRecord(value);
-  asString(record.root);
-  for (const file of asArray(record.files)) {
-    const entry = asRecord(file);
-    asString(entry.path);
-    asBoolean(entry.editable);
-    asBoolean(entry.missing);
-    asNumber(entry.loads);
-    asNumber(entry.includes);
-  }
-  for (const diagnostic of asArray(record.diagnostics)) {
-    const entry = asRecord(diagnostic);
-    asString(entry.severity);
-    asString(entry.code);
-    asString(entry.path);
-    asNumber(entry.line);
-    asString(entry.detail);
-  }
-  return record as unknown as ConfigCheckResponse;
+  return validateOpenAPISchema<ConfigCheckResponse>("ConfigCheckResponse", value);
 }
 
 function validateEffective(value: unknown): EffectiveResponse {
-  const record = asRecord(value);
-  asString(record.alias);
-  asString(record.tokenWarning);
-  for (const directive of asArray(record.executableDirectives)) {
-    const entry = asRecord(directive);
-    asString(entry.keyword);
-    asString(entry.command);
-    asString(entry.path);
-    asNumber(entry.line);
-    asBoolean(entry.onEvaluate);
-    asBoolean(entry.onConnect);
-    asBoolean(entry.overridable);
-  }
-  for (const source of asArray(record.sources)) {
-    const entry = asRecord(source);
-    asString(entry.keyword);
-    asString(entry.value);
-    asString(entry.path);
-    asNumber(entry.line);
-    asBoolean(entry.winner);
-  }
-  for (const note of asArray(record.complexities)) {
-    const entry = asRecord(note);
-    asString(entry.code);
-    asString(entry.path);
-    asNumber(entry.line);
-    asString(entry.condition);
-    asString(entry.detail);
-  }
-  for (const stage of asArray(record.route)) {
-    const entry = asRecord(stage);
-    asNumber(entry.order);
-    asNumber(entry.depth);
-    asString(entry.parent);
-    asString(entry.hop);
-    asString(entry.hostname);
-    asString(entry.user);
-    asString(entry.port);
-    asBoolean(entry.complex);
-  }
-  return record as unknown as EffectiveResponse;
+  return validateOpenAPISchema<EffectiveResponse>("EffectiveResponse", value);
 }
 
 function validateReachability(value: unknown): ReachabilityResponse {
-  const record = asRecord(value);
-  asString(record.address);
-  asString(record.outcome);
-  asNumber(record.elapsedMs);
-  asString(record.detail);
-  asString(record.notice);
-  return record as unknown as ReachabilityResponse;
+  return validateOpenAPISchema<ReachabilityResponse>("ReachabilityResponse", value);
 }
 
 function validateAuthentication(value: unknown): AuthenticationResponse {
-  const record = asRecord(value);
-  asString(record.outcome);
-  asBoolean(record.authenticated);
-  asString(record.method);
-  asString(record.detail);
-  asBoolean(record.truncated);
-  asNumber(record.elapsedMs);
-  return record as unknown as AuthenticationResponse;
-}
-
-function validateTerminalSession(value: unknown): TerminalSession {
-  const record = asRecord(value);
-  asString(record.id);
-  const kind = asString(record.kind);
-  if (kind !== "ssh" && kind !== "shell") throw new Error("invalid_response");
-  asString(record.title);
-  asString(record.startedAt);
-  const state = asString(record.state);
-  if (
-    state !== "connecting" &&
-    state !== "connected" &&
-    state !== "reconnecting" &&
-    state !== "exited"
-  ) {
-    throw new Error("invalid_response");
-  }
-  asString(record.problem);
-  if (record.progress !== undefined) {
-    const progress = asRecord(record.progress);
-    const phase = asString(progress.phase);
-    if (
-      ![
-        "dialing",
-        "host_key",
-        "authenticating",
-        "authenticated",
-        "opening_session",
-      ].includes(phase)
-    ) {
-      throw new Error("invalid_response");
-    }
-    asString(progress.alias);
-    asString(progress.hostName);
-    asString(progress.user);
-    const hop = asNonnegativeInteger(progress.hop);
-    const hops = asNonnegativeInteger(progress.hops);
-    if (hop < 1 || hops < 1 || hop > hops) throw new Error("invalid_response");
-  }
-  if (record.reconnect !== undefined) {
-    const reconnect = asRecord(record.reconnect);
-    const attempt = asNonnegativeInteger(reconnect.attempt);
-    const limit = asNonnegativeInteger(reconnect.limit);
-    if (attempt < 1 || attempt > 5 || limit < 1 || limit > 5 || attempt > limit)
-      throw new Error("invalid_response");
-    asString(reconnect.retryAt);
-    asString(reconnect.problem);
-  }
-  if (record.alias !== undefined) asString(record.alias);
-  if (record.exited !== undefined) {
-    const exited = asRecord(record.exited);
-    asNumber(exited.code);
-    asString(exited.signal);
-    asString(exited.at);
-  }
-  if (record.forwards !== undefined) {
-    for (const forward of asArray(record.forwards)) {
-      const entry = asRecord(forward);
-      asString(entry.id);
-      const kind = asString(entry.kind);
-      if (kind !== "local" && kind !== "dynamic" && kind !== "agent")
-        throw new Error("invalid_response");
-      asString(entry.listen);
-      asString(entry.to);
-      asString(entry.problem);
-      asBoolean(entry.temporary);
-    }
-  }
-  if (record.presentation !== undefined) {
-    const presentation = asRecord(record.presentation);
-    asString(presentation.displayTitle);
-    const source = asString(presentation.titleSource);
-    if (
-      !["user", "agent", "candidate", "connection", "fallback"].includes(source)
-    ) {
-      throw new Error("invalid_response");
-    }
-    asBoolean(presentation.titlePinned);
-  }
-  if (record.agent !== undefined) {
-    const agent = asRecord(record.agent);
-    if (!["claude", "codex", "opencode"].includes(asString(agent.kind)))
-      throw new Error("invalid_response");
-    if (
-      !["working", "attention", "ready", "unknown"].includes(
-        asString(agent.state),
-      )
-    ) {
-      throw new Error("invalid_response");
-    }
-    asBoolean(agent.resumable);
-    asNonnegativeInteger(agent.observationVersion);
-    asNonnegativeInteger(agent.signalVersion);
-    if (agent.cwd !== undefined) asString(agent.cwd);
-    if (agent.model !== undefined) asString(agent.model);
-    if (agent.sessionName !== undefined) asString(agent.sessionName);
-    if (agent.lastSignal !== undefined) {
-      const signal = asRecord(agent.lastSignal);
-      if (!["attention", "completed"].includes(asString(signal.kind)))
-        throw new Error("invalid_response");
-      asString(signal.occurredAt);
-    }
-  }
-  return record as unknown as TerminalSession;
+  return validateOpenAPISchema<AuthenticationResponse>("AuthenticationResponse", value);
 }
 
 function validateTerminalSessionList(value: unknown): TerminalSessionList {
-  const record = asRecord(value);
-  for (const session of asArray(record.sessions))
-    validateTerminalSession(session);
-  asNonnegativeInteger(record.maxSessions);
-  return record as unknown as TerminalSessionList;
+  return validateOpenAPISchema<TerminalSessionList>("TerminalSessionList", value);
 }
 
 function validateRecentConnections(value: unknown): RecentConnectionList {
-  const record = asRecord(value);
-  const connections = asArray(record.connections).map((value) => {
-    const connection = asRecord(value);
-    return {
-      alias: asString(connection.alias),
-      hostName: asString(connection.hostName),
-      user: asString(connection.user),
-      port: asString(connection.port),
-      lastConnectedAt: asString(connection.lastConnectedAt),
-    };
-  });
-  return { connections };
+  return validateOpenAPISchema<RecentConnectionList>("RecentConnectionList", value);
 }
 
 function validateOpenTerminalSession(
   value: unknown,
 ): OpenTerminalSessionResponse {
-  const record = asRecord(value);
-  validateTerminalSession(record.session);
-  asString(record.streamTicket);
-  return record as unknown as OpenTerminalSessionResponse;
+  return validateOpenAPISchema<OpenTerminalSessionResponse>("OpenTerminalSessionResponse", value);
 }
 
 function validateLocalShellProfiles(value: unknown): LocalShellProfileList {
-  const record = asRecord(value);
-  const profiles = asArray(record.profiles).map((value) => {
-    const profile = asRecord(value);
-    return {
-      id: asString(profile.id),
-      label: asString(profile.label),
-      path: asString(profile.path),
-      arguments: asArray(profile.arguments).map(asString),
-      default: asBoolean(profile.default),
-    };
-  });
-  return { profiles };
+  return validateOpenAPISchema<LocalShellProfileList>("LocalShellProfileList", value);
 }
 
 function validateStreamTicket(value: unknown): TerminalStreamTicket {
-  const record = asRecord(value);
-  asString(record.streamTicket);
-  return record as unknown as TerminalStreamTicket;
+  return validateOpenAPISchema<TerminalStreamTicket>("TerminalStreamTicket", value);
 }
 
 function validateKnownHosts(value: unknown): KnownHostsResponse {
-  const record = asRecord(value);
-  asString(record.path);
-  for (const entry of asArray(record.entries)) {
-    const item = asRecord(entry);
-    asNumber(item.line);
-    asString(item.digest);
-    asString(item.marker);
-    asArray(item.hosts);
-    asBoolean(item.hashed);
-    asString(item.keyType);
-    asString(item.fingerprint);
-    asString(item.comment);
-  }
-  return record as unknown as KnownHostsResponse;
+  return validateOpenAPISchema<KnownHostsResponse>("KnownHostsResponse", value);
 }
 
 function validateChange(value: unknown): KnownHostsChangeResponse {
-  const record = asRecord(value);
-  asBoolean(record.changed);
-  asString(record.transactionId);
-  return record as unknown as KnownHostsChangeResponse;
+  return validateOpenAPISchema<KnownHostsChangeResponse>("KnownHostsChangeResponse", value);
 }
 
 function validateScan(value: unknown): KnownHostsScanResponse {
-  const record = asRecord(value);
-  asString(record.notice);
-  for (const candidate of asArray(record.candidates)) {
-    const item = asRecord(candidate);
-    asString(item.host);
-    asNumber(item.port);
-    asString(item.keyType);
-    asString(item.key);
-    asString(item.fingerprint);
-    asBoolean(item.verified);
-  }
-  return record as unknown as KnownHostsScanResponse;
+  return validateOpenAPISchema<KnownHostsScanResponse>("KnownHostsScanResponse", value);
 }
 
 async function postJSON<T>(
@@ -559,18 +306,12 @@ async function postJSON<T>(
   );
 }
 
+async function postEmpty<T>(path: string): Promise<T> {
+  return apiClient.mutate<T>(path, { method: "POST" });
+}
+
 function validateVaultStatus(value: unknown): PasswordVaultStatus {
-  const record = asRecord(value);
-  asBoolean(record.exists);
-  asBoolean(record.unlocked);
-  for (const alias of asArray(record.aliases)) asString(alias);
-  for (const relativePath of asArray(record.dedicatedKeyPassphrases))
-    asString(relativePath);
-  if (record.migratedFromVersion !== undefined)
-    asNumber(record.migratedFromVersion);
-  if (record.migratedToVersion !== undefined)
-    asNumber(record.migratedToVersion);
-  return record as unknown as PasswordVaultStatus;
+  return validateOpenAPISchema<PasswordVaultStatus>("PasswordVaultStatus", value);
 }
 
 function credentialPath(kind: CredentialKind, name: string): string {
@@ -578,242 +319,59 @@ function credentialPath(kind: CredentialKind, name: string): string {
 }
 
 function validateCredentialList(value: unknown): CredentialList {
-  const record = asRecord(value);
-  for (const credential of asArray(record.credentials)) {
-    const entry = asRecord(credential);
-    asString(entry.kind);
-    asString(entry.name);
-    for (const use of asArray(entry.uses)) asString(use);
-    for (const host of asArray(entry.hosts)) asString(host);
-  }
-  for (const dedicated of asArray(record.dedicatedKeyPassphrases)) {
-    const entry = asRecord(dedicated);
-    asString(entry.key);
-    for (const host of asArray(entry.hosts)) asString(host);
-  }
-  asBoolean(record.keyHostUsageComplete);
-  return record as unknown as CredentialList;
+  return validateOpenAPISchema<CredentialList>("CredentialList", value);
 }
 
 function validateRevealCredential(value: unknown): RevealCredentialResponse {
-  const record = asRecord(value);
-  asString(record.kind);
-  asString(record.name);
-  asString(record.secret);
-  return record as unknown as RevealCredentialResponse;
+  return validateOpenAPISchema<RevealCredentialResponse>("RevealCredentialResponse", value);
 }
 
 function validatePasswordEligibility(value: unknown): PasswordEligibility {
-  const record = asRecord(value);
-  asString(record.alias);
-  asBoolean(record.storable);
-  for (const group of [record.blockers, record.warnings]) {
-    for (const notice of asArray(group)) asString(asRecord(notice).code);
-  }
-  return record as unknown as PasswordEligibility;
+  return validateOpenAPISchema<PasswordEligibility>("PasswordEligibility", value);
 }
 
 function validateSyncStatus(value: unknown): SyncStatus {
-  const record = asRecord(value);
-  asBoolean(record.configured);
-  asBoolean(record.locked);
-  asBoolean(record.keyConfigured);
-  const auto = asRecord(record.auto);
-  asBoolean(auto.enabled);
-  const phase = asString(auto.phase);
-  if (
-    phase !== "idle" &&
-    phase !== "running" &&
-    phase !== "blocked" &&
-    phase !== "failed"
-  ) {
-    throw new Error(`unexpected auto sync phase: ${phase}`);
-  }
-  asString(record.endpoint);
-  asString(record.bucket);
-  asBoolean(record.synced);
-  const direction = asString(record.direction);
-  if (direction !== "both" && direction !== "push" && direction !== "pull") {
-    throw new Error(`unexpected sync direction: ${direction}`);
-  }
-  if (record.path !== undefined) asString(record.path);
-  if (record.region !== undefined) asString(record.region);
-  if (record.lastSyncedAt !== undefined) asString(record.lastSyncedAt);
-  if (record.origin !== undefined) asString(record.origin);
-  if (record.fileCount !== undefined) asNonnegativeInteger(record.fileCount);
-  if (record.lastOperation !== undefined)
-    validateSyncOperation(record.lastOperation);
-  return record as unknown as SyncStatus;
+  return validateOpenAPISchema<SyncStatus>("SyncStatus", value);
 }
 
 function validateSyncSetupCheck(value: unknown): SyncSetupCheckResponse {
-  const record = asRecord(value);
-  const state = asString(record.state);
-  if (state !== "empty" && state !== "existing" && state !== "incomplete") {
-    throw new Error(`unexpected sync setup state: ${state}`);
-  }
-  asBoolean(record.historyPresent);
-  asString(record.checkedAt);
-  if (record.etag !== undefined) asString(record.etag);
-  return record as unknown as SyncSetupCheckResponse;
+  return validateOpenAPISchema<SyncSetupCheckResponse>("SyncSetupCheckResponse", value);
 }
 
 function validateSyncSetup(value: unknown): SyncSetupResponse {
-  const record = asRecord(value);
-  validateSyncStatus(record.status);
-  if (record.generatedKey !== undefined) asString(record.generatedKey);
-  return record as unknown as SyncSetupResponse;
-}
-
-function validateSnapshotSummary(value: unknown): SnapshotSummary {
-  const record = asRecord(value);
-  asString(record.createdAt);
-  asNonnegativeInteger(record.fileCount);
-  asNonnegativeInteger(record.sourceBytes);
-  asNonnegativeInteger(record.snapshotBytes);
-  return record as unknown as SnapshotSummary;
-}
-
-function validateSyncOperation(value: unknown): SyncOperation {
-  const record = asRecord(value);
-  const kind = asString(record.kind);
-  validateSnapshotSummary(record.summary);
-  asString(record.completedAt);
-  if (kind === "push") {
-    asNonnegativeInteger(record.objectCount);
-    asNonnegativeInteger(record.uploadedBytes);
-  } else if (kind === "apply") {
-    asNonnegativeInteger(record.downloadedBytes);
-    asNonnegativeInteger(record.written);
-    asNonnegativeInteger(record.removed);
-  } else {
-    throw new Error("invalid_response");
-  }
-  return record as unknown as SyncOperation;
+  return validateOpenAPISchema<SyncSetupResponse>("SyncSetupResponse", value);
 }
 
 function validateSyncKey(value: unknown): SyncKeyResponse {
-  const record = asRecord(value);
-  asString(record.key);
-  return record as unknown as SyncKeyResponse;
+  return validateOpenAPISchema<SyncKeyResponse>("SyncKeyResponse", value);
 }
 
 function validatePushResponse(value: unknown): PushResponse {
-  const record = asRecord(value);
-  validateSyncStatus(record.status);
-  const result = asRecord(record.result);
-  validateSnapshotSummary(result.summary);
-  asNonnegativeInteger(result.objectCount);
-  asNonnegativeInteger(result.uploadedBytes);
-  asString(result.completedAt);
-  return record as unknown as PushResponse;
+  return validateOpenAPISchema<PushResponse>("PushResponse", value);
 }
 
 function validateSyncPushDraft(value: unknown): SyncPushDraft {
-  const record = asRecord(value);
-  asString(record.message);
-  asNonnegativeInteger(record.added);
-  asNonnegativeInteger(record.modified);
-  asNonnegativeInteger(record.removed);
-  return record as unknown as SyncPushDraft;
+  return validateOpenAPISchema<SyncPushDraft>("SyncPushDraft", value);
 }
 
 function validateSyncExclusions(value: unknown): SyncExclusions {
-  const record = asRecord(value);
-  asString(record.document);
-  asBoolean(record.usingDefaults);
-  for (const raw of asArray(record.candidates)) {
-    const candidate = asRecord(raw);
-    asString(candidate.path);
-    asBoolean(candidate.ignored);
-  }
-  return record as unknown as SyncExclusions;
+  return validateOpenAPISchema<SyncExclusions>("SyncExclusions", value);
 }
 
 function validateSyncBucketStatus(value: unknown): SyncBucketStatus {
-  const record = asRecord(value);
-  asString(record.checkedAt);
-  asBoolean(record.localIsLive);
-  asBoolean(record.historyTruncated);
-  const validateObject = (value: unknown) => {
-    const item = asRecord(value);
-    asString(item.key);
-    asNonnegativeInteger(item.size);
-    if (item.lastModified !== undefined) asString(item.lastModified);
-  };
-  if (record.live !== undefined) validateObject(record.live);
-  for (const item of asArray(record.history)) validateObject(item);
-  return record as unknown as SyncBucketStatus;
-}
-
-function asRevision(value: unknown): string {
-  const revision = asString(value);
-  if (!/^[0-9a-f]{64}$/.test(revision)) throw new Error("invalid_response");
-  return revision;
+  return validateOpenAPISchema<SyncBucketStatus>("SyncBucketStatus", value);
 }
 
 function validateSyncHistory(value: unknown): SyncHistory {
-  const record = asRecord(value);
-  asString(record.checkedAt);
-  asRevision(record.headRevision);
-  asBoolean(record.historyTruncated);
-  asBoolean(record.downloadTruncated);
-  asNonnegativeInteger(record.downloadedBytes);
-  asNonnegativeInteger(record.skipped);
-  for (const raw of asArray(record.revisions)) {
-    const revision = asRecord(raw);
-    asString(revision.key);
-    asRevision(revision.revision);
-    if (revision.parentRevision !== undefined)
-      asRevision(revision.parentRevision);
-    if (revision.message !== undefined) asString(revision.message);
-    asString(revision.createdAt);
-    asString(revision.origin);
-    asNonnegativeInteger(revision.fileCount);
-    asNonnegativeInteger(revision.size);
-    if (revision.lastModified !== undefined) asString(revision.lastModified);
-    if (!["head", "ancestor", "branch"].includes(asString(revision.relation))) {
-      throw new Error("invalid_response");
-    }
-  }
-  return record as unknown as SyncHistory;
+  return validateOpenAPISchema<SyncHistory>("SyncHistory", value);
 }
 
 function validateSyncHistoryDiff(value: unknown): SyncHistoryDiff {
-  const record = asRecord(value);
-  asRevision(record.fromRevision);
-  asRevision(record.toRevision);
-  for (const path of asArray(record.added)) asString(path);
-  for (const path of asArray(record.modified)) asString(path);
-  for (const path of asArray(record.removed)) asString(path);
-  asNonnegativeInteger(record.downloadedBytes);
-  return record as unknown as SyncHistoryDiff;
+  return validateOpenAPISchema<SyncHistoryDiff>("SyncHistoryDiff", value);
 }
 
 function validatePullResponse(value: unknown): PullResponse {
-  const record = asRecord(value);
-  asBoolean(record.applied);
-  validateSnapshotSummary(record.summary);
-  asNonnegativeInteger(record.downloadedBytes);
-  asString(record.completedAt);
-  asString(record.remoteETag);
-  asRevision(record.remoteRevision);
-  for (const conflict of asArray(record.conflicts)) {
-    const entry = asRecord(conflict);
-    asString(entry.path);
-    asBoolean(entry.changedHere);
-    asBoolean(entry.changedThere);
-    for (const key of ["baseMode", "localMode", "remoteMode"] as const) {
-      if (entry[key] === undefined) continue;
-      const mode = asString(entry[key]);
-      if (mode !== "0600" && mode !== "0700") {
-        throw new Error("invalid_response");
-      }
-    }
-  }
-  for (const path of asArray(record.written)) asString(path);
-  for (const path of asArray(record.removed)) asString(path);
-  return record as unknown as PullResponse;
+  return validateOpenAPISchema<PullResponse>("PullResponse", value);
 }
 
 function readAppearance(value: unknown): TerminalAppearance {
@@ -831,18 +389,13 @@ function readAppearance(value: unknown): TerminalAppearance {
 }
 
 function validateBackground(value: unknown): TerminalBackground {
-  const record = asRecord(value);
-  return {
-    name: asString(record.name),
-    bytes: asNumber(record.bytes),
-    type: asString(record.type),
-  };
+  return validateOpenAPISchema<TerminalBackground>("TerminalBackground", value);
 }
 
 export const integrationsApi: IntegrationsApi = {
   async configCheck() {
     return validateConfigCheck(
-      await postJSON<unknown>("/api/v1/diagnostics/config", {}),
+      await postEmpty<unknown>("/api/v1/diagnostics/config"),
     );
   },
   async effective(alias) {
@@ -887,17 +440,15 @@ export const integrationsApi: IntegrationsApi = {
   },
   async terminalStreamTicket(id) {
     return validateStreamTicket(
-      await postJSON<unknown>(
+      await postEmpty<unknown>(
         `/api/v1/terminal/sessions/${encodeURIComponent(id)}/stream`,
-        {},
       ),
     );
   },
   async reconnectTerminalSession(id) {
     return validateTerminalSessionList(
-      await postJSON<unknown>(
+      await postEmpty<unknown>(
         `/api/v1/terminal/sessions/${encodeURIComponent(id)}/reconnect`,
-        {},
       ),
     );
   },
@@ -979,7 +530,7 @@ export const integrationsApi: IntegrationsApi = {
   },
   async lockVault() {
     return validateVaultStatus(
-      await postJSON<unknown>("/api/v1/passwords/lock", {}),
+      await postEmpty<unknown>("/api/v1/passwords/lock"),
     );
   },
   async updateStatus() {
@@ -1315,7 +866,7 @@ export const integrationsApi: IntegrationsApi = {
     );
   },
   async syncNow() {
-    return validateSyncStatus(await postJSON<unknown>("/api/v1/sync/now", {}));
+    return validateSyncStatus(await postEmpty<unknown>("/api/v1/sync/now"));
   },
   async knownHosts(query) {
     return validateKnownHosts(

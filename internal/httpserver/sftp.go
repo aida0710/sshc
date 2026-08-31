@@ -140,29 +140,30 @@ func sftpProblem(c *echo.Context, err error) error {
 }
 
 type sftpTransferJobResponse struct {
-	ID                string                     `json:"id"`
-	BatchID           string                     `json:"batchId"`
-	BatchName         string                     `json:"batchName"`
-	BatchKind         sshcSFTP.TransferKind      `json:"batchKind"`
-	Alias             string                     `json:"alias"`
-	Direction         sshcSFTP.TransferDirection `json:"direction"`
-	Kind              sshcSFTP.TransferKind      `json:"kind"`
-	Name              string                     `json:"name"`
-	RemotePath        string                     `json:"remotePath"`
-	TotalBytes        int64                      `json:"totalBytes"`
-	TransferredBytes  int64                      `json:"transferredBytes"`
-	BytesPerSecond    float64                    `json:"bytesPerSecond"`
-	RemainingSeconds  int64                      `json:"remainingSeconds"`
-	Status            sshcSFTP.TransferJobStatus `json:"status"`
-	Attempt           int                        `json:"attempt"`
-	Problem           string                     `json:"problem"`
-	LastModified      int64                      `json:"lastModified"`
-	ExpectedRevision  string                     `json:"expectedRevision"`
-	SourceFingerprint string                     `json:"sourceFingerprint"`
-	Overwrite         bool                       `json:"overwrite"`
-	DownloadRevision  string                     `json:"downloadRevision"`
-	CreatedAt         string                     `json:"createdAt"`
-	UpdatedAt         string                     `json:"updatedAt"`
+	ID                string                           `json:"id"`
+	BatchID           string                           `json:"batchId"`
+	BatchName         string                           `json:"batchName"`
+	BatchKind         sshcSFTP.TransferKind            `json:"batchKind"`
+	Alias             string                           `json:"alias"`
+	Direction         sshcSFTP.TransferDirection       `json:"direction"`
+	Kind              sshcSFTP.TransferKind            `json:"kind"`
+	Name              string                           `json:"name"`
+	RemotePath        string                           `json:"remotePath"`
+	TotalBytes        int64                            `json:"totalBytes"`
+	TransferredBytes  int64                            `json:"transferredBytes"`
+	BytesPerSecond    float64                          `json:"bytesPerSecond"`
+	RemainingSeconds  int64                            `json:"remainingSeconds"`
+	Status            sshcSFTP.TransferJobStatus       `json:"status"`
+	AllowedActions    []sshcSFTP.TransferControlAction `json:"allowedActions"`
+	Attempt           int                              `json:"attempt"`
+	Problem           string                           `json:"problem"`
+	LastModified      int64                            `json:"lastModified"`
+	ExpectedRevision  string                           `json:"expectedRevision"`
+	SourceFingerprint string                           `json:"sourceFingerprint"`
+	Overwrite         bool                             `json:"overwrite"`
+	DownloadRevision  string                           `json:"downloadRevision"`
+	CreatedAt         string                           `json:"createdAt"`
+	UpdatedAt         string                           `json:"updatedAt"`
 }
 
 func describeTransferJob(job sshcSFTP.TransferJob) sftpTransferJobResponse {
@@ -171,7 +172,8 @@ func describeTransferJob(job sshcSFTP.TransferJob) sftpTransferJobResponse {
 		Alias: job.Alias, Direction: job.Direction,
 		Kind: job.Kind, Name: job.Name, RemotePath: job.RemotePath, TotalBytes: job.TotalBytes,
 		TransferredBytes: job.TransferredBytes, BytesPerSecond: job.BytesPerSecond,
-		RemainingSeconds: job.RemainingSeconds, Status: job.Status, Attempt: job.Attempt,
+		RemainingSeconds: job.RemainingSeconds, Status: job.Status,
+		AllowedActions: sshcSFTP.AllowedTransferActions(job), Attempt: job.Attempt,
 		Problem: job.Problem, LastModified: job.LastModified,
 		ExpectedRevision: job.ExpectedRevision, SourceFingerprint: job.SourceFingerprint,
 		Overwrite: job.Overwrite, DownloadRevision: job.DownloadRevision,
@@ -495,7 +497,7 @@ type resumableUploadResponse struct {
 	Path             string `json:"path"`
 	Offset           int64  `json:"offset"`
 	Size             int64  `json:"size"`
-	ExpectedRevision string `json:"expectedRevision,omitempty"`
+	ExpectedRevision string `json:"expectedRevision"`
 }
 
 type sftpStartUploadRequest struct {

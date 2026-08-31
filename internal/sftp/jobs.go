@@ -54,6 +54,31 @@ const (
 	TransferNeedsOverwriteAction TransferJobAction = "needs_overwrite"
 )
 
+type TransferControlAction string
+
+const (
+	TransferPauseControl  TransferControlAction = "pause"
+	TransferResumeControl TransferControlAction = "resume"
+	TransferRetryControl  TransferControlAction = "retry"
+	TransferCancelControl TransferControlAction = "cancel"
+)
+
+// AllowedTransferActions returns the user-visible control actions permitted by
+// the engine state machine. Data-plane-only actions such as progress and
+// complete intentionally remain private to the transfer implementation.
+func AllowedTransferActions(job TransferJob) []TransferControlAction {
+	switch job.Status {
+	case TransferQueued, TransferRunning:
+		return []TransferControlAction{TransferPauseControl, TransferCancelControl}
+	case TransferPaused, TransferReattach, TransferNeedsOverwrite:
+		return []TransferControlAction{TransferResumeControl, TransferCancelControl}
+	case TransferFailed:
+		return []TransferControlAction{TransferRetryControl, TransferCancelControl}
+	default:
+		return []TransferControlAction{}
+	}
+}
+
 type TransferJob struct {
 	ID                string
 	BatchID           string

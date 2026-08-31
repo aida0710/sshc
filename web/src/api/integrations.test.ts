@@ -118,7 +118,7 @@ describe("integrationsApi terminal sessions", () => {
   it("opens a session and returns the single-use stream ticket", async () => {
     const fetcher = vi
       .fn()
-      .mockResolvedValue(jsonResponse({ session, streamTicket: "one-time" }));
+      .mockResolvedValue(jsonResponse({ session, streamTicket: "one-time" }, 201));
     vi.stubGlobal("fetch", fetcher);
 
     await expect(
@@ -136,7 +136,7 @@ describe("integrationsApi terminal sessions", () => {
     const fetcher = vi
       .fn()
       .mockResolvedValue(
-        jsonResponse({ sessions: [session], maxSessions: 50 }),
+        jsonResponse({ sessions: [session], maxSessions: 50 }, 200),
       );
     vi.stubGlobal("fetch", fetcher);
 
@@ -747,9 +747,9 @@ describe("integrationsApi remote sync measurements", () => {
       .fn()
       .mockResolvedValueOnce(
         jsonResponse({
-          token: "action-token",
+          token: "a".repeat(43),
           expiresAt: "2026-08-12T01:04:04Z",
-        }),
+        }, 201),
       )
       .mockResolvedValueOnce(jsonResponse(response));
     vi.stubGlobal("fetch", fetcher);
@@ -767,7 +767,7 @@ describe("integrationsApi remote sync measurements", () => {
     });
     const [path, init] = fetcher.mock.calls[1] as [string, RequestInit];
     expect(path).toBe("/api/v1/sync/force-push");
-    expect(new Headers(init.headers).get("X-SSHC-Action")).toBe("action-token");
+    expect(new Headers(init.headers).get("X-SSHC-Action")).toBe("a".repeat(43));
     expect(sentJson(init)).toEqual({ message: "Replace remote workspace" });
   });
 

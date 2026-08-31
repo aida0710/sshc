@@ -16,6 +16,7 @@ import type { ConnectionSavedState } from "./connectionSavedState";
 import { NoticeList, SavePreviewPanel } from "./SavePreview";
 import { identityKey } from "./connectionBrowser";
 import { HostInspector } from "./HostInspector";
+import { activateTabFromKeyboard } from "../ui/tabKeyboard";
 
 type HostDetailPanelProps = {
   detail: HostDetail;
@@ -45,6 +46,7 @@ const areas: { area: ConnectionPanel; label: "conn.areaBasic" | "conn.areaAnalys
   { area: "Advanced", label: "conn.areaAdvanced" },
   { area: "Sshc", label: "conn.areaSshc" },
 ];
+const areaNames = areas.map((item) => item.area);
 
 export function HostDetailPanel({
   detail,
@@ -121,7 +123,7 @@ export function HostDetailPanel({
 
       <div data-connection-editor className="min-w-0">
         <div role="tablist" aria-label={t("conn.editorLabel")} className="grid grid-cols-4 border-b border-line">
-          {areas.map((item) => (
+          {areas.map((item, index) => (
             <button
               key={item.area}
               id={`connection-area-${item.area.toLowerCase()}-tab`}
@@ -129,7 +131,9 @@ export function HostDetailPanel({
               role="tab"
               aria-selected={panel === item.area}
               aria-controls={`connection-area-${item.area.toLowerCase()}-panel`}
+              tabIndex={panel === item.area ? 0 : -1}
               onClick={() => selectArea(item.area)}
+              onKeyDown={(event) => activateTabFromKeyboard(event, index, areaNames, selectArea)}
               className={`min-h-11 whitespace-nowrap border-b-2 px-2 py-2.5 text-sm transition-colors ${panel === item.area ? "border-accent font-medium text-ink" : "border-transparent text-ink-muted hover:bg-select-fill/50 hover:text-ink"}`}
             >
               {t(item.label)}

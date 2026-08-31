@@ -1,18 +1,19 @@
 import { apiClient } from "../api/client";
-import { asArray, asNumber, asRecord, asString, issueAction, jsonHeaders } from "../api/guards";
+import { issueAction, jsonHeaders } from "../api/guards";
 import type { components } from "../api/schema";
+import { validateOpenAPISchema } from "../api/validators.generated";
 import { saveWithAndroid } from "../android/native";
 
 export type RemoteEntry = components["schemas"]["SFTPEntry"];
 export type RemoteTextFile = components["schemas"]["SFTPTextFile"];
-type GeneratedResumableUpload = components["schemas"]["SFTPResumableUpload"];
-export type ResumableUpload = Omit<GeneratedResumableUpload, "expectedRevision"> & { expectedRevision: string };
+export type ResumableUpload = components["schemas"]["SFTPResumableUpload"];
 export type TransferJob = components["schemas"]["SFTPTransferJob"];
 export type CreateTransferJob = components["schemas"]["SFTPCreateTransferJobRequest"];
 export type TransferDirection = TransferJob["direction"];
 export type TransferKind = TransferJob["kind"];
 export type TransferJobStatus = TransferJob["status"];
 export type TransferJobAction = components["schemas"]["SFTPTransferJobActionRequest"]["action"];
+export type TransferControlAction = TransferJob["allowedActions"][number];
 
 export type StreamDownloadOptions = {
   signal?: AbortSignal;
@@ -27,61 +28,20 @@ function pathFor(alias: string, suffix: string, remotePath: string): string {
 }
 
 function entry(value: unknown): RemoteEntry {
-  const item = asRecord(value);
-  const type = asString(item.type);
-  if (type !== "file" && type !== "directory" && type !== "symlink" && type !== "other") {
-    throw new Error("invalid_response");
-  }
-  return {
-    name: asString(item.name),
-    path: asString(item.path),
-    type,
-    size: asNumber(item.size),
-    mode: asString(item.mode),
-    modifiedAt: asString(item.modifiedAt),
-    revision: asString(item.revision),
-  };
+  return validateOpenAPISchema<RemoteEntry>("SFTPEntry", value);
 }
 
 function resumableUpload(value: unknown): ResumableUpload {
-  const upload = asRecord(value);
-  return {
-    id: asString(upload.id),
-    path: asString(upload.path),
-    offset: asNumber(upload.offset),
-    size: asNumber(upload.size),
-    expectedRevision: asString(upload.expectedRevision),
-  };
+  return validateOpenAPISchema<ResumableUpload>("SFTPResumableUpload", value);
 }
 
 function transferJob(value: unknown): TransferJob {
-  const job = asRecord(value);
-  const direction = asString(job.direction);
-  const kind = asString(job.kind);
-  const batchKind = asString(job.batchKind);
-  const status = asString(job.status);
-  if ((direction !== "upload" && direction !== "download") || (kind !== "file" && kind !== "folder") ||
-      (batchKind !== "file" && batchKind !== "folder") || typeof job.overwrite !== "boolean" ||
-      !["queued", "running", "paused", "reattach", "needs_overwrite", "completed", "failed", "cancelled"].includes(status)) {
-    throw new Error("invalid_response");
-  }
-  return {
-    id: asString(job.id), batchId: asString(job.batchId), batchName: asString(job.batchName), batchKind,
-    alias: asString(job.alias), direction, kind,
-    name: asString(job.name), remotePath: asString(job.remotePath), totalBytes: asNumber(job.totalBytes),
-    transferredBytes: asNumber(job.transferredBytes), bytesPerSecond: asNumber(job.bytesPerSecond),
-    remainingSeconds: asNumber(job.remainingSeconds), status: status as TransferJobStatus,
-    attempt: asNumber(job.attempt), problem: asString(job.problem), lastModified: asNumber(job.lastModified),
-    expectedRevision: asString(job.expectedRevision), sourceFingerprint: asString(job.sourceFingerprint),
-    overwrite: job.overwrite, downloadRevision: asString(job.downloadRevision),
-    createdAt: asString(job.createdAt), updatedAt: asString(job.updatedAt),
-  };
+  return validateOpenAPISchema<TransferJob>("SFTPTransferJob", value);
 }
 
 export const sftpApi = {
   async listTransfers(): Promise<{ maxConcurrent: number; jobs: TransferJob[] }> {
-    const value = asRecord(await apiClient.read("/api/v1/sftp/transfers"));
-    return { maxConcurrent: asNumber(value.maxConcurrent), jobs: asArray(value.jobs).map(transferJob) };
+    return validateOpenAPISchema<components["schemas"]["SFTPTransferJobList"]>("SFTPTransferJobList", await apiClient.read("/api/v1/sftp/transfers"));
   },
   async createTransfer(input: CreateTransferJob): Promise<TransferJob> {
     return transferJob(await apiClient.mutate<unknown>("/api/v1/sftp/transfers", {
@@ -109,22 +69,19 @@ export const sftpApi = {
   async list(alias: string, remotePath: string): Promise<{ path: string; entries: RemoteEntry[] }> {
     // Directory listing also establishes the SFTP connection. An unavailable host is
     // an expected result handled inline by SFTPPanel, not an application-wide failure.
-    const value = asRecord(await apiClient.read(pathFor(alias, "entries", remotePath), {
+    return validateOpenAPISchema<components["schemas"]["SFTPListing"]>("SFTPListing", await apiClient.read(pathFor(alias, "entries", remotePath), {
       locallyHandledCodes: ["sftp_failed"],
     }));
-    return { path: asString(value.path), entries: asArray(value.entries).map(entry) };
   },
   async readText(alias: string, remotePath: string): Promise<RemoteTextFile> {
-    const value = asRecord(await apiClient.read(pathFor(alias, "text", remotePath)));
-    return { entry: entry(value.entry), contents: asString(value.contents), revision: asString(value.revision) };
+    return validateOpenAPISchema<RemoteTextFile>("SFTPTextFile", await apiClient.read(pathFor(alias, "text", remotePath)));
   },
   async saveText(alias: string, remotePath: string, contents: string, expectedRevision: string): Promise<RemoteTextFile> {
-    const value = asRecord(await apiClient.mutate<unknown>(pathFor(alias, "text", remotePath), {
+    return validateOpenAPISchema<RemoteTextFile>("SFTPTextFile", await apiClient.mutate<unknown>(pathFor(alias, "text", remotePath), {
       method: "PUT",
       headers: jsonHeaders,
       body: JSON.stringify({ contents, expectedRevision }),
     }));
-    return { entry: entry(value.entry), contents: asString(value.contents), revision: asString(value.revision) };
   },
   async mkdir(alias: string, remotePath: string): Promise<RemoteEntry> {
     return entry(await apiClient.mutate<unknown>(`/api/v1/sftp/${encodeURIComponent(alias)}/entries`, {

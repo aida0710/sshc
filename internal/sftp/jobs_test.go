@@ -5,12 +5,37 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"sshc/internal/sftp"
 )
+
+func TestAllowedTransferActionsAreDerivedFromEngineState(t *testing.T) {
+	tests := []struct {
+		status sftp.TransferJobStatus
+		want   []sftp.TransferControlAction
+	}{
+		{sftp.TransferQueued, []sftp.TransferControlAction{sftp.TransferPauseControl, sftp.TransferCancelControl}},
+		{sftp.TransferRunning, []sftp.TransferControlAction{sftp.TransferPauseControl, sftp.TransferCancelControl}},
+		{sftp.TransferPaused, []sftp.TransferControlAction{sftp.TransferResumeControl, sftp.TransferCancelControl}},
+		{sftp.TransferReattach, []sftp.TransferControlAction{sftp.TransferResumeControl, sftp.TransferCancelControl}},
+		{sftp.TransferNeedsOverwrite, []sftp.TransferControlAction{sftp.TransferResumeControl, sftp.TransferCancelControl}},
+		{sftp.TransferFailed, []sftp.TransferControlAction{sftp.TransferRetryControl, sftp.TransferCancelControl}},
+		{sftp.TransferCompleted, []sftp.TransferControlAction{}},
+		{sftp.TransferCancelled, []sftp.TransferControlAction{}},
+	}
+	for _, test := range tests {
+		t.Run(string(test.status), func(t *testing.T) {
+			got := sftp.AllowedTransferActions(sftp.TransferJob{Status: test.status})
+			if !slices.Equal(got, test.want) {
+				t.Fatalf("actions = %v, want %v", got, test.want)
+			}
+		})
+	}
+}
 
 func TestTransferJobsShareConcurrencyAndTrackRate(t *testing.T) {
 	now := time.Date(2026, 8, 25, 0, 0, 0, 0, time.UTC)

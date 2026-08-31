@@ -3159,6 +3159,7 @@ export interface components {
             remainingSeconds: number;
             /** @enum {string} */
             status: "queued" | "running" | "paused" | "reattach" | "needs_overwrite" | "completed" | "failed" | "cancelled";
+            allowedActions: ("pause" | "resume" | "retry" | "cancel")[];
             attempt: number;
             problem: string;
             /** Format: int64 */
@@ -3229,7 +3230,7 @@ export interface components {
             offset: number;
             /** Format: int64 */
             size: number;
-            expectedRevision?: string;
+            expectedRevision: string;
         };
         WorkspacePane: {
             id: string;
@@ -3256,7 +3257,10 @@ export interface components {
             layout: components["schemas"]["WorkspaceNode"];
             focusedPaneId: string;
         };
-        TerminalWorkspace: components["schemas"]["WorkspaceDefinition"] & {
+        TerminalWorkspace: {
+            name: string;
+            layout: components["schemas"]["WorkspaceNode"];
+            focusedPaneId: string;
             id: string;
             /** Format: date-time */
             createdAt: string;
@@ -3292,7 +3296,11 @@ export interface components {
             command: string;
             variables: components["schemas"]["SnippetVariable"][];
         };
-        Snippet: components["schemas"]["SnippetDraft"] & {
+        Snippet: {
+            name: string;
+            description: string;
+            command: string;
+            variables: components["schemas"]["SnippetVariable"][];
             id: string;
             /** Format: date-time */
             createdAt: string;
@@ -3360,7 +3368,15 @@ export interface components {
             /** Format: date-time */
             actionExpiresAt: string;
         };
-        SnippetExecuteRequest: components["schemas"]["SnippetPreviewRequest"] & {
+        /** @description Exactly one of snippetId or command and exactly one of aliases or targets must be supplied. targets permits repeated aliases when targetId values are distinct. */
+        SnippetExecuteRequest: {
+            snippetId?: string;
+            command?: string;
+            aliases?: string[];
+            targets?: components["schemas"]["SnippetExecutionTarget"][];
+            inputs: {
+                [key: string]: string;
+            };
             evidence: string;
             concurrency: number;
         };

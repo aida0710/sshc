@@ -120,6 +120,9 @@ export function useDismissibleLayer({
       initialFocus: () => initialFocus.current?.current ?? null,
       trapFocus,
     };
+    // React clears element refs before running effect cleanup. Keep the mounted
+    // nodes so a close-button unmount can still tell that it owned focus.
+    const mountedContainers = layer.containers();
     topLayer()?.dismiss("superseded");
     layers.push(layer);
     listen();
@@ -132,9 +135,18 @@ export function useDismissibleLayer({
       target?.focus();
     }
     return () => {
+      const returnTarget = layer.restoreFocus();
       const index = layers.findIndex((candidate) => candidate.id === layer.id);
       if (index >= 0) layers.splice(index, 1);
       unlisten();
+      // A close button or a successful submit unmounts the layer without going
+      // through Escape. Restore only if focus was still owned by this layer;
+      // an outside click or a replacement layer keeps its newly chosen focus.
+      queueMicrotask(() => {
+        const current = document.activeElement;
+        const stillOwned = current instanceof Node && mountedContainers.some((container) => container?.contains(current) === true);
+        if (returnTarget?.isConnected === true && (current === document.body || stillOwned)) returnTarget.focus();
+      });
     };
   }, [closeOnOutside, open, trapFocus]);
 }

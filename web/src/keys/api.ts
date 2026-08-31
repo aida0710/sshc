@@ -1,6 +1,7 @@
 import { apiClient } from "../api/client";
-import { asRecord, asArray, asString, asNumber, asBoolean, jsonHeaders, issueAction } from "../api/guards";
+import { jsonHeaders, issueAction } from "../api/guards";
 import type { components } from "../api/schema";
+import { validateOpenAPISchema } from "../api/validators.generated";
 
 export type KeyItem = components["schemas"]["KeyItem"];
 export type KeyCertificate = components["schemas"]["KeyCertificate"];
@@ -34,38 +35,11 @@ export function selectablePrivateKeys(inventory: Pick<KeyInventoryResponse, "ite
   return inventory.items.filter((item) => item.kind === "private_key");
 }
 
-export type KeyLocationInput = {
-  newName?: string;
-  group?: string;
-};
-
-export type GenerateKeyInput = {
-  algorithm: string;
-  fileName: string;
-  group: string;
-  comment: string;
-  passphrase: string;
-  unencrypted: boolean;
-  bits?: number;
-};
-
-export type HardwareCommandInput = {
-  algorithm: string;
-  fileName: string;
-  group: string;
-  comment: string;
-};
-
-export type PassphraseInput = {
-  currentPassphrase: string;
-  newPassphrase: string;
-  unencrypted: boolean;
-};
-
-export type RegisterAgentInput = {
-  passphrase: string;
-  lifetimeSeconds: number;
-};
+export type KeyLocationInput = components["schemas"]["RelocateKeyRequest"];
+export type GenerateKeyInput = components["schemas"]["GenerateKeyRequest"];
+export type HardwareCommandInput = components["schemas"]["HardwareCommandRequest"];
+export type PassphraseInput = components["schemas"]["ChangePassphraseRequest"];
+export type RegisterAgentInput = components["schemas"]["RegisterKeyRequest"];
 
 export type KeysApi = {
   inventory(): Promise<KeyInventoryResponse>;
@@ -90,142 +64,39 @@ export type KeysApi = {
 
 
 function validateInventory(value: unknown): KeyInventoryResponse {
-  const record = asRecord(value);
-  for (const item of asArray(record.items)) {
-    const entry = asRecord(item);
-    asString(entry.id);
-    asString(entry.relativePath);
-    asString(entry.kind);
-    asString(entry.permission);
-    asNumber(entry.bits);
-    asBoolean(entry.encrypted);
-    asArray(entry.references);
-    asArray(entry.notes);
-  }
-  for (const file of asArray(record.unreadable)) {
-    const entry = asRecord(file);
-    asString(entry.relativePath);
-    asString(entry.reason);
-  }
-  asArray(record.agentDelegations);
-  for (const reference of asArray(record.unresolvedReferences)) {
-    const entry = asRecord(reference);
-    asString(entry.directive);
-    asString(entry.value);
-    asString(entry.configPath);
-    asNumber(entry.line);
-    asString(entry.reason);
-  }
-  asBoolean(record.agentAvailable);
-  validateAgentIdentities(record.agentIdentities);
-  return record as unknown as KeyInventoryResponse;
+  return validateOpenAPISchema<KeyInventoryResponse>("KeyInventoryResponse", value);
 }
 
 function validateAgentIdentitiesResponse(value: unknown): AgentIdentitiesResponse {
-  const record = asRecord(value);
-  asString(record.id);
-  asBoolean(record.agentAvailable);
-  validateAgentIdentities(record.identities);
-  return record as unknown as AgentIdentitiesResponse;
+  return validateOpenAPISchema<AgentIdentitiesResponse>("AgentIdentitiesResponse", value);
 }
 
 function validateAlgorithms(value: unknown): KeyAlgorithmsResponse {
-  const record = asRecord(value);
-  for (const variant of asArray(record.variants)) {
-    const entry = asRecord(variant);
-    asString(entry.algorithm);
-    asString(entry.label);
-    asNumber(entry.bits);
-    asBoolean(entry.inProcess);
-  }
-  asString(record.source);
-  return record as unknown as KeyAlgorithmsResponse;
+  return validateOpenAPISchema<KeyAlgorithmsResponse>("KeyAlgorithmsResponse", value);
 }
 
 function validateReveal(value: unknown): RevealPrivateKeyResponse {
-  const record = asRecord(value);
-  asString(record.id);
-  asString(record.relativePath);
-  asString(record.privateKey);
-  asBoolean(record.encrypted);
-  return record as unknown as RevealPrivateKeyResponse;
-}
-
-function validateAgentIdentities(value: unknown): void {
-  for (const identity of asArray(value)) {
-    const entry = asRecord(identity);
-    asNumber(entry.bits);
-    asString(entry.fingerprint);
-    asString(entry.comment);
-    asString(entry.algorithm);
-  }
+  return validateOpenAPISchema<RevealPrivateKeyResponse>("RevealPrivateKeyResponse", value);
 }
 
 function validateRegister(value: unknown): RegisterKeyResponse {
-  const record = asRecord(value);
-  asString(record.id);
-  asString(record.relativePath);
-  asString(record.fingerprint);
-  asNumber(record.lifetimeSeconds);
-  validateAgentIdentities(record.identities);
-  return record as unknown as RegisterKeyResponse;
+  return validateOpenAPISchema<RegisterKeyResponse>("RegisterKeyResponse", value);
 }
 
 function validatePublicKey(value: unknown): PublicKeyResponse {
-  const record = asRecord(value);
-  asString(record.id);
-  asString(record.relativePath);
-  asString(record.publicKey);
-  asString(record.fingerprint);
-  asString(record.comment);
-  return record as unknown as PublicKeyResponse;
+  return validateOpenAPISchema<PublicKeyResponse>("PublicKeyResponse", value);
 }
 
 function validateRelocate(value: unknown): RelocateKeyResponse {
-  const record = asRecord(value);
-  asString(record.relativePath);
-  asString(record.group);
-  for (const file of asArray(record.files)) {
-    const entry = asRecord(file);
-    asString(entry.from);
-    asString(entry.to);
-  }
-  for (const reference of asArray(record.references)) {
-    const entry = asRecord(reference);
-    asString(entry.directive);
-    asString(entry.configPath);
-    asNumber(entry.line);
-    asString(entry.from);
-    asString(entry.to);
-  }
-  asArray(record.skipped);
-  asArray(record.notes);
-  asArray(record.blockers);
-  return record as unknown as RelocateKeyResponse;
+  return validateOpenAPISchema<RelocateKeyResponse>("RelocateKeyResponse", value);
 }
 
 function validateTrashList(value: unknown): TrashListResponse {
-  const record = asRecord(value);
-  asNumber(record.retentionDays);
-  for (const entry of asArray(record.entries)) {
-    const item = asRecord(entry);
-    asString(item.id);
-    asString(item.deletedAt);
-    asNumber(item.ageDays);
-    asBoolean(item.stale);
-    asBoolean(item.restorable);
-    asArray(item.files);
-    asArray(item.blockers);
-  }
-  return record as unknown as TrashListResponse;
+  return validateOpenAPISchema<TrashListResponse>("TrashListResponse", value);
 }
 
 function validateRestore(value: unknown): RestoreTrashResponse {
-  const record = asRecord(value);
-  asString(record.entryId);
-  asArray(record.restored);
-  asArray(record.blockers);
-  return record as unknown as RestoreTrashResponse;
+  return validateOpenAPISchema<RestoreTrashResponse>("RestoreTrashResponse", value);
 }
 
 

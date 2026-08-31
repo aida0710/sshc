@@ -209,7 +209,7 @@ export function ConsoleList({
                     setMenuFor(null);
                     setWorkspaceMenuOpen((open) => !open);
                   }}
-                  className="flex size-7 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-select-fill"
+                  className="hidden size-7 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-select-fill md:flex"
                 >
                   <Icon name="moreHorizontal" className="size-3.5" />
                 </button>
@@ -219,7 +219,7 @@ export function ConsoleList({
                   ref={menuRef}
                   role="menu"
                   aria-label={t("workspace.rowMenu", { name: workspace.name })}
-                  className="absolute right-1 top-full z-10 mt-0.5 w-48 rounded-lg border border-control-line bg-card p-1 shadow-lg"
+                  className="absolute right-1 top-full z-10 mt-0.5 hidden w-48 rounded-lg border border-control-line bg-card p-1 shadow-lg md:block"
                 >
                   <button
                     type="button"

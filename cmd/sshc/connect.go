@@ -33,9 +33,6 @@ type connectAnswer struct {
 	Warnings         []string          `json:"warnings"`
 }
 
-// OpenSubcommand は起動中の engine から UI URL を取得する予約語である。
-const OpenSubcommand = "open"
-
 // runOpen は engine から一度限りの UI URL を取得して出力する。
 // open が true の場合だけ URL をブラウザへ渡す。
 func runOpen(

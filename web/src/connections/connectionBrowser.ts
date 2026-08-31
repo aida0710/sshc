@@ -1,11 +1,5 @@
 import type { HostEntry, HostIdentity, Overview } from "../api/config";
 
-export type ConnectionBrowserLocation =
-  | { view: "servers" }
-  | { view: "groups"; scope: "root" }
-  | { view: "groups"; scope: "named"; group: string }
-  | { view: "groups"; scope: "ungrouped" };
-
 export type BrowserServer = {
   host: HostEntry;
   identity: HostEntry["identity"];
@@ -31,21 +25,8 @@ export type ConnectionBrowserIndex = {
   groups: BrowserGroup[];
   duplicateAliases: ReadonlySet<string>;
   groupByName: ReadonlyMap<string, BrowserGroup>;
-  directServersByGroup: ReadonlyMap<string, BrowserServer[]>;
   visibleChildrenByParent: ReadonlyMap<string, BrowserGroup[]>;
 };
-
-export type BrowserProjection =
-  | { kind: "servers"; servers: BrowserServer[] }
-  | {
-      kind: "group-level";
-      group: string | null;
-      groups: BrowserGroup[];
-      servers: BrowserServer[];
-      ungroupedCount: number;
-    }
-  | { kind: "search-results"; scope: string | null; servers: BrowserServer[] }
-  | { kind: "missing-group"; group: string };
 
 export function identityKey(identity: HostIdentity): string {
   return `${identity.path}\u0000${identity.alias}`;
@@ -63,17 +44,6 @@ function nearestDeclaredParent(name: string, declared: ReadonlySet<string>): str
 
 function belongsBelow(server: BrowserServer, group: string): boolean {
   return server.group === group || server.group.startsWith(`${group}/`);
-}
-
-function matches(server: BrowserServer, query: string): boolean {
-  const needle = query.trim().toLocaleLowerCase();
-  if (needle === "") return true;
-  if (server.identity.alias.toLocaleLowerCase().includes(needle)) return true;
-  if (server.host.patterns.some((pattern) => pattern.toLocaleLowerCase().includes(needle))) {
-    return true;
-  }
-  if (server.group.toLocaleLowerCase().includes(needle)) return true;
-  return server.tags.some((tag) => tag.toLocaleLowerCase().includes(needle));
 }
 
 export function duplicateAliasesOf(hosts: readonly HostEntry[]): ReadonlySet<string> {
@@ -168,66 +138,6 @@ export function buildConnectionBrowserIndex(overview: Overview): ConnectionBrows
     groups,
     duplicateAliases,
     groupByName,
-    directServersByGroup,
     visibleChildrenByParent,
-  };
-}
-
-function filteredServers(servers: BrowserServer[], query: string) {
-  return servers.filter((server) => matches(server, query));
-}
-
-export function projectConnectionBrowser(
-  index: ConnectionBrowserIndex,
-  browser: ConnectionBrowserLocation,
-  query: string,
-): BrowserProjection {
-  if (browser.view === "servers") {
-    return { kind: "servers", servers: filteredServers(index.servers, query) };
-  }
-  if (browser.scope === "named" && !index.groupByName.has(browser.group)) {
-    return { kind: "missing-group", group: browser.group };
-  }
-
-  const trimmedQuery = query.trim();
-  const scope = browser.scope === "named" ? browser.group : null;
-  if (trimmedQuery !== "") {
-    let candidates = index.servers;
-    if (browser.scope === "named") {
-      candidates = candidates.filter((server) => belongsBelow(server, browser.group));
-    } else if (browser.scope === "ungrouped") {
-      candidates = candidates.filter((server) => server.group === "");
-    }
-    return {
-      kind: "search-results",
-      scope,
-      servers: filteredServers(candidates, trimmedQuery),
-    };
-  }
-
-  if (browser.scope === "ungrouped") {
-    const servers = filteredServers(index.directServersByGroup.get("") ?? [], "");
-    return {
-      kind: "group-level",
-      group: null,
-      groups: [],
-      servers,
-      ungroupedCount: servers.length,
-    };
-  }
-
-  const group = browser.scope === "named" ? browser.group : "";
-  const groups = index.visibleChildrenByParent.get(group) ?? [];
-  const servers =
-    browser.scope === "root"
-      ? []
-      : filteredServers(index.directServersByGroup.get(group) ?? [], "");
-  const ungrouped = index.directServersByGroup.get("") ?? [];
-  return {
-    kind: "group-level",
-    group: browser.scope === "root" ? null : group,
-    groups,
-    servers,
-    ungroupedCount: ungrouped.length,
   };
 }

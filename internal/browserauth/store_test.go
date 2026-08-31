@@ -51,6 +51,33 @@ func TestRegisterStoresOnlyAHashAndVerifiesAfterRestart(t *testing.T) {
 	}
 }
 
+func TestChangingPortRevokesRegistrationsButKeepingItPreservesRestartRecovery(t *testing.T) {
+	store := newStore(t, bytes.Repeat([]byte{0x53}, 32))
+	if err := store.SetPort(55447); err != nil {
+		t.Fatal(err)
+	}
+	token, issued, err := store.Register("")
+	if err != nil || !issued {
+		t.Fatalf("Register = (%q, %t, %v)", token, issued, err)
+	}
+	if err := store.SetPort(55447); err != nil {
+		t.Fatal(err)
+	}
+	if !store.Verify(token) {
+		t.Fatal("same-port restart revoked a valid browser registration")
+	}
+
+	if err := store.SetPort(56447); err != nil {
+		t.Fatal(err)
+	}
+	if store.Verify(token) {
+		t.Fatal("registration issued for the previous port remained valid")
+	}
+	if registered, err := store.HasRegistrations(); err != nil || registered {
+		t.Fatalf("HasRegistrations after port change = (%t, %v)", registered, err)
+	}
+}
+
 func TestInvalidDocumentIsNotSilentlyReplaced(t *testing.T) {
 	store := newStore(t, bytes.Repeat([]byte{0x52}, 32))
 	if err := os.MkdirAll(filepath.Dir(store.Path()), 0o700); err != nil {

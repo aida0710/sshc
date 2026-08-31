@@ -43,17 +43,24 @@ describe("SFTPPanel uploads", () => {
 	api.completeUpload.mockResolvedValue(undefined);
 	api.cancelUpload.mockResolvedValue(undefined);
     const server = new Map<string, Record<string, unknown>>();
+    const allowedActions = (status: string): string[] => {
+      if (status === "queued" || status === "running") return ["pause", "cancel"];
+      if (status === "paused" || status === "reattach" || status === "needs_overwrite") return ["resume", "cancel"];
+      if (status === "failed") return ["retry", "cancel"];
+      return [];
+    };
     api.createTransfer.mockImplementation(async (input: Record<string, unknown>) => {
       const existing = server.get(input.id as string);
       if (existing !== undefined) return existing;
-      const created = { ...input, transferredBytes: 0, bytesPerSecond: 0, remainingSeconds: -1, status: "queued", attempt: 1, problem: "", expectedRevision: "", sourceFingerprint: "", overwrite: false, downloadRevision: "", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+      const created = { ...input, transferredBytes: 0, bytesPerSecond: 0, remainingSeconds: -1, status: "queued", allowedActions: ["pause", "cancel"], attempt: 1, problem: "", expectedRevision: "", sourceFingerprint: "", overwrite: false, downloadRevision: "", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
       server.set(input.id as string, created);
       return created;
     });
     api.updateTransfer.mockImplementation(async (id: string, action: string, options: { transferredBytes?: number; problem?: string } = {}) => {
       const current = server.get(id) ?? {};
       const statuses: Record<string, string> = { start: "running", pause: "paused", resume: "queued", retry: "queued", cancel: "cancelled", complete: "completed", fail: "failed", needs_overwrite: "needs_overwrite" };
-      const updated = { ...current, ...options, status: statuses[action] ?? current.status, overwrite: action === "resume" && current.status === "needs_overwrite" ? true : current.overwrite, problem: action === "fail" ? options.problem ?? "sftp_failed" : current.problem ?? "" };
+      const status = statuses[action] ?? current.status as string;
+      const updated = { ...current, ...options, status, allowedActions: allowedActions(status), overwrite: action === "resume" && current.status === "needs_overwrite" ? true : current.overwrite, problem: action === "fail" ? options.problem ?? "sftp_failed" : current.problem ?? "" };
       server.set(id, updated);
       return updated;
     });
@@ -61,7 +68,7 @@ describe("SFTPPanel uploads", () => {
     api.saveDownload.mockReturnValue(undefined);
     api.completeUpload.mockImplementation(async (_alias: string, id: string, _path: string, size: number) => {
       const current = server.get(id);
-      if (current !== undefined) server.set(id, { ...current, transferredBytes: size, status: "completed", remainingSeconds: 0 });
+      if (current !== undefined) server.set(id, { ...current, transferredBytes: size, status: "completed", allowedActions: [], remainingSeconds: 0 });
     });
     api.listTransfers.mockImplementation(async () => ({ maxConcurrent: 2, jobs: [...server.values()] }));
     api.clearFinishedTransfers.mockImplementation(async () => {
@@ -100,6 +107,58 @@ describe("SFTPPanel uploads", () => {
 
     await userEvent.selectOptions(screen.getByLabelText("Host"), "edge");
     await waitFor(() => expect(api.list).toHaveBeenCalledWith("edge", "/"));
+  });
+
+  it("ignores a stale host listing that resolves after the current host", async () => {
+    let resolveEdge: ((listing: { path: string; entries: never[] }) => void) | undefined;
+    api.list.mockImplementation((alias: string) => {
+      if (alias === "edge") {
+        return new Promise((resolve) => { resolveEdge = resolve; });
+      }
+      return Promise.resolve({ path: "/current", entries: [] });
+    });
+
+    render(<SFTPPanel aliases={["edge", "miyabi"]} />);
+    await userEvent.selectOptions(screen.getByLabelText("Host"), "edge");
+    await waitFor(() => expect(api.list).toHaveBeenCalledWith("edge", "/"));
+    await userEvent.selectOptions(screen.getByLabelText("Host"), "miyabi");
+    await waitFor(() => expect(screen.getByLabelText("Remote path")).toHaveValue("/current"));
+
+    resolveEdge?.({ path: "/stale", entries: [] });
+    await waitFor(() => expect(screen.getByLabelText("Remote path")).toHaveValue("/current"));
+    expect(screen.getByLabelText("Host")).toHaveValue("miyabi");
+  });
+
+  it("clears old rows immediately and ignores a file read completed after a host switch", async () => {
+    let resolveRead: ((file: {
+      entry: { name: string; path: string; type: "file"; size: number; mode: string; modifiedAt: string; revision: string };
+      contents: string;
+      revision: string;
+    }) => void) | undefined;
+    api.list.mockImplementation(async (alias: string) => alias === "edge"
+      ? {
+          path: "/edge",
+          entries: [{ name: "old.txt", path: "/edge/old.txt", type: "file", size: 3, mode: "0644", modifiedAt: "", revision: "old" }],
+        }
+      : { path: "/miyabi", entries: [] });
+    api.readText.mockImplementation(() => new Promise((resolve) => { resolveRead = resolve; }));
+
+    render(<SFTPPanel aliases={["edge", "miyabi"]} />);
+    await userEvent.selectOptions(screen.getByLabelText("Host"), "edge");
+    await userEvent.click(await screen.findByRole("button", { name: "old.txt" }));
+    await waitFor(() => expect(api.readText).toHaveBeenCalledWith("edge", "/edge/old.txt"));
+
+    await userEvent.selectOptions(screen.getByLabelText("Host"), "miyabi");
+    expect(screen.queryByRole("button", { name: "old.txt" })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText("Remote path")).toHaveValue("/miyabi"));
+
+    resolveRead?.({
+      entry: { name: "old.txt", path: "/edge/old.txt", type: "file", size: 3, mode: "0644", modifiedAt: "", revision: "old" },
+      contents: "old",
+      revision: "old",
+    });
+    await waitFor(() => expect(screen.queryByText("/edge/old.txt")).not.toBeInTheDocument());
+    expect(screen.getByLabelText("Host")).toHaveValue("miyabi");
   });
 
   it("opens the parent directory requested by a terminal path action", async () => {

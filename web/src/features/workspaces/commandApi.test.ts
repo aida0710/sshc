@@ -5,6 +5,8 @@ import { terminalCommandApi, type TerminalCommandRequest } from "./commandApi";
 
 const csrfToken = "c".repeat(43);
 const actionToken = "a".repeat(43);
+const evidence = "e".repeat(64);
+const reviewEvidence = "r".repeat(64);
 
 function jsonResponse(body: unknown): Response {
   return new Response(JSON.stringify(body), {
@@ -32,8 +34,8 @@ describe("terminalCommandApi", () => {
     };
     const prepared = {
       snippetId: "",
-      evidence: "evidence",
-      reviewEvidence: "review-evidence",
+      evidence,
+      reviewEvidence,
       actionToken,
       actionExpiresAt: "2026-08-27T10:00:00Z",
       targets: [
@@ -42,7 +44,7 @@ describe("terminalCommandApi", () => {
       ],
     };
     const delivered = {
-      results: prepared.targets.map((target) => ({ ...target, status: "delivered" })),
+      results: prepared.targets.map(({ command: _command, ...target }) => ({ ...target, status: "delivered" })),
     };
     const fetcher = vi.fn()
       .mockResolvedValueOnce(jsonResponse(prepared))
@@ -61,7 +63,7 @@ describe("terminalCommandApi", () => {
     const [dispatchPath, dispatchInit] = fetcher.mock.calls[1] as [string, RequestInit];
     expect(dispatchPath).toBe("/api/v1/terminal/commands");
     expect(new Headers(dispatchInit.headers).get("X-SSHC-Action")).toBe(actionToken);
-    expect(sentJson(dispatchInit)).toEqual({ ...request, submit: true, evidence: "evidence" });
+    expect(sentJson(dispatchInit)).toEqual({ ...request, submit: true, evidence });
   });
 
   it("rejects an unknown delivery status", async () => {
@@ -70,7 +72,7 @@ describe("terminalCommandApi", () => {
     })));
     const request: TerminalCommandRequest = { command: "pwd", inputs: {}, targets: [{ targetId: "pane-a", sessionId: "session-a" }] };
     const preview = {
-      snippetId: "", evidence: "evidence", reviewEvidence: "review-evidence", actionToken, actionExpiresAt: "2026-08-27T10:00:00Z", targets: [],
+      snippetId: "", evidence, reviewEvidence, actionToken, actionExpiresAt: "2026-08-27T10:00:00Z", targets: [],
     };
 
     await expect(terminalCommandApi.dispatch(preview, request)).rejects.toThrow("invalid_response");

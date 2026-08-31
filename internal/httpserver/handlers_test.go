@@ -79,6 +79,9 @@ func TestRegisteredBrowserRecoversWithoutReplacingAValidSessionCookie(t *testing
 	}
 	random := bytes.NewReader(bytes.Repeat([]byte{0x74}, 512))
 	registrations := browserauth.NewStore(workspace, random)
+	if err := registrations.SetPort(43123); err != nil {
+		t.Fatal(err)
+	}
 	manager, bootstrap, err := session.NewManager(random)
 	if err != nil {
 		t.Fatal(err)
@@ -138,6 +141,13 @@ func TestRegisteredBrowserRecoversWithoutReplacingAValidSessionCookie(t *testing
 	denied := call(engine(restarted), "/api/v1/session/recover", nil, map[string]string{"X-SSHC-Browser": "x"})
 	if denied.Code != http.StatusUnauthorized || len(denied.Result().Cookies()) != 0 {
 		t.Fatalf("invalid registration status=%d cookies=%#v", denied.Code, denied.Result().Cookies())
+	}
+	if err := registrations.SetPort(44123); err != nil {
+		t.Fatal(err)
+	}
+	moved := call(engine(restarted), "/api/v1/session/recover", nil, map[string]string{"X-SSHC-Browser": *established.BrowserToken})
+	if moved.Code != http.StatusUnauthorized || len(moved.Result().Cookies()) != 0 {
+		t.Fatalf("previous-port registration status=%d cookies=%#v", moved.Code, moved.Result().Cookies())
 	}
 }
 
