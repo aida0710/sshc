@@ -96,6 +96,8 @@ export function CommandPalette({
     containerRefs: [panel],
     onDismiss: onClose,
     ...(returnFocusRef === undefined ? {} : { returnFocusRef }),
+    initialFocusRef: input,
+    trapFocus: true,
   });
 
   const items = useMemo<PaletteItem[]>(() => [
@@ -179,6 +181,7 @@ export function CommandPalette({
     >
       <section
         ref={panel}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-labelledby="command-palette-heading"

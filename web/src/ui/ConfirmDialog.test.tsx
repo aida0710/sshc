@@ -42,4 +42,17 @@ describe("ConfirmDialog", () => {
     expect(onCancel).toHaveBeenCalled();
     expect(onConfirm).not.toHaveBeenCalled();
   });
+
+  it("keeps keyboard focus inside the modal", async () => {
+    open();
+    const user = userEvent.setup();
+    const cancel = screen.getByRole("button", { name: "Keep it open" });
+    const confirm = screen.getByRole("button", { name: "Close" });
+
+    expect(cancel).toHaveFocus();
+    await user.tab({ shift: true });
+    expect(confirm).toHaveFocus();
+    await user.tab();
+    expect(cancel).toHaveFocus();
+  });
 });
