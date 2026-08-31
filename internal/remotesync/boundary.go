@@ -56,6 +56,10 @@ func NewClient(config Config, credentials Credentials) *Client {
 
 // ValidateKey は、暗号化処理の前に鍵の強度を検証する。
 func ValidateKey(key string) error {
-	_, err := envelope.Derive(key)
-	return err
+	derived, err := envelope.Derive(key)
+	if err != nil {
+		return err
+	}
+	derived.Destroy()
+	return nil
 }

@@ -912,10 +912,11 @@ func (s *Service) replaceKey(ctx context.Context, oldKey, newKey string, confirm
 	if object.ETag != current.ETag {
 		return ErrRemoteMoved
 	}
-	archive, _, err := envelope.OpenWithin(object.Body, oldKey, envelope.AcceptedFromRemote)
+	archive, openedKey, err := envelope.OpenWithin(object.Body, oldKey, envelope.AcceptedFromRemote)
 	if err != nil {
 		return err
 	}
+	openedKey.Destroy()
 	// Rotation is deliberately not a legacy reader. Refuse to bless ciphertext
 	// whose snapshot schema this binary would not otherwise accept.
 	if _, _, err := Read(archive); err != nil {
@@ -926,6 +927,7 @@ func (s *Service) replaceKey(ctx context.Context, oldKey, newKey string, confirm
 		return err
 	}
 	resealed, err := key.Seal(archive)
+	key.Destroy()
 	if err != nil {
 		return err
 	}
@@ -1072,10 +1074,11 @@ func (s *Service) resolveKeyRecovery(ctx context.Context, binding remoteBinding,
 	if journal.Phase == keyRecoveryRemoteAdvanced && (journal.NewETag == "" || etag != journal.NewETag) {
 		return true, ErrRecoveryRequired
 	}
-	archive, _, err := envelope.OpenWithin(object.Body, candidate, envelope.AcceptedFromRemote)
+	archive, openedKey, err := envelope.OpenWithin(object.Body, candidate, envelope.AcceptedFromRemote)
 	if err != nil {
 		return true, err
 	}
+	openedKey.Destroy()
 	if _, _, err := Read(archive); err != nil {
 		return true, err
 	}
@@ -1163,6 +1166,7 @@ func (s *Service) push(ctx context.Context, passphrase, forcedETag, message stri
 		return PushResult{}, err
 	}
 	sealed, err := key.Seal(archive)
+	key.Destroy()
 	if err != nil {
 		return PushResult{}, err
 	}
