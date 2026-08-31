@@ -38,16 +38,3 @@ func TestFailureDetailKeepsAStableSafeCause(t *testing.T) {
 		})
 	}
 }
-
-func TestCredentialFailuresWaitForConfigurationChange(t *testing.T) {
-	for _, err := range []error{ErrAuthenticationFailed, ErrAccessDenied} {
-		if !deterministicSyncFailure(err) {
-			t.Errorf("deterministicSyncFailure(%v) = false, want true", err)
-		}
-	}
-	for _, err := range []error{ErrRateLimited, ErrServiceUnavailable} {
-		if deterministicSyncFailure(err) {
-			t.Errorf("deterministicSyncFailure(%v) = true, want false", err)
-		}
-	}
-}

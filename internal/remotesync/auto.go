@@ -578,8 +578,7 @@ func deterministicSyncFailure(err error) bool {
 		errors.Is(err, ErrUnsupportedVersion) || errors.Is(err, ErrCostRefused) ||
 		errors.Is(err, ErrUnsafePath) || errors.Is(err, ErrUnsafeMode) ||
 		errors.Is(err, ErrManifestMismatch) || errors.Is(err, ErrNotASnapshot) ||
-		errors.Is(err, ErrInvalidIgnoreRules) || errors.Is(err, ErrAuthenticationFailed) ||
-		errors.Is(err, ErrAccessDenied)
+		errors.Is(err, ErrInvalidIgnoreRules)
 }
 
 func (a *Auto) enter(phase AutoPhase, detail string) {
