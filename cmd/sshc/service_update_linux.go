@@ -26,6 +26,7 @@ func restartManagedServiceAfterUpdate(ctx context.Context, executable string) (b
 		home:      filepath.Clean(home),
 		files:     storage.OSFileSystem{},
 		waitReady: waitForServiceReady,
+		lock:      serviceOperationLock(filepath.Clean(home)),
 	}
 	matches, err := manager.unitMatches(executable)
 	if err != nil || !matches {

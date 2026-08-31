@@ -23,10 +23,14 @@ type fakeServiceCommandRunner struct {
 	calls   [][]string
 	results []serviceCommandResult
 	err     error
+	onCall  func([]string)
 }
 
 func (runner *fakeServiceCommandRunner) Run(_ context.Context, arguments ...string) (serviceCommandResult, error) {
 	runner.calls = append(runner.calls, append([]string(nil), arguments...))
+	if runner.onCall != nil {
+		runner.onCall(arguments)
+	}
 	if runner.err != nil {
 		return serviceCommandResult{}, runner.err
 	}
@@ -46,6 +50,9 @@ func testLinuxServiceManager(t *testing.T, runner serviceCommandRunner) *linuxSe
 		files:  storage.OSFileSystem{},
 		waitReady: func(context.Context, string, serviceCommandRunner) error {
 			return nil
+		},
+		lock: func() (func() error, error) {
+			return func() error { return nil }, nil
 		},
 	}
 }
@@ -269,6 +276,49 @@ func TestLinuxServiceDisableRemovesOnlyManagedUnit(t *testing.T) {
 	}
 	if got := strings.Join(runner.calls[1], " "); got != "--user daemon-reload" {
 		t.Fatalf("second call = %q", got)
+	}
+}
+
+func TestLinuxServiceDisableLeavesAUnitChangedDuringTheOperation(t *testing.T) {
+	manager := testLinuxServiceManager(t, &fakeServiceCommandRunner{})
+	if err := os.MkdirAll(filepath.Dir(manager.unitPath()), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	unit, err := systemdUnit("/opt/sshc/bin/sshc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(manager.unitPath(), []byte(unit), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	manual := []byte("[Service]\nExecStart=/custom/sshc engine\n")
+	runner := &fakeServiceCommandRunner{onCall: func(arguments []string) {
+		if strings.Join(arguments, " ") == "--user disable --now sshc.service" {
+			if err := os.WriteFile(manager.unitPath(), manual, 0o600); err != nil {
+				t.Errorf("replace unit: %v", err)
+			}
+		}
+	}}
+	manager.runner = runner
+	removed, err := manager.Disable(context.Background())
+	if err == nil || removed || !strings.Contains(err.Error(), "changed during the operation") {
+		t.Fatalf("disable = %v, %v", removed, err)
+	}
+	contents, readErr := os.ReadFile(manager.unitPath())
+	if readErr != nil || !bytes.Equal(contents, manual) {
+		t.Fatalf("manual unit = %q, %v", contents, readErr)
+	}
+}
+
+func TestServiceOperationLockRejectsAConcurrentCommand(t *testing.T) {
+	lock := serviceOperationLock(t.TempDir())
+	release, err := lock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = release() }()
+	if _, err := lock(); err == nil || !strings.Contains(err.Error(), "operation is in progress") {
+		t.Fatalf("second lock error = %v", err)
 	}
 }
 

@@ -17,6 +17,7 @@ import (
 	"unicode"
 
 	"sshc/internal/app"
+	"sshc/internal/enginelock"
 	"sshc/internal/handoff"
 	"sshc/internal/storage"
 )
@@ -64,6 +65,12 @@ type linuxServiceManager struct {
 	runner    serviceCommandRunner
 	files     storage.FileSystem
 	waitReady func(context.Context, string, serviceCommandRunner) error
+	lock      func() (func() error, error)
+}
+
+type serviceUnitSnapshot struct {
+	state    serviceState
+	contents []byte
 }
 
 func newPlatformServiceManager(home string) (engineServiceManager, error) {
@@ -79,7 +86,19 @@ func newPlatformServiceManager(home string) (engineServiceManager, error) {
 		runner:    osServiceCommandRunner{path: systemctl},
 		files:     storage.OSFileSystem{},
 		waitReady: waitForServiceReady,
+		lock:      serviceOperationLock(filepath.Clean(home)),
 	}, nil
+}
+
+func serviceOperationLock(home string) func() (func() error, error) {
+	path := filepath.Join(home, ".config", "sshc", "service.mutation.lock")
+	return func() (func() error, error) {
+		release, err := enginelock.Acquire(path)
+		if errors.Is(err, enginelock.ErrRunning) {
+			return nil, errors.New("another sshc service operation is in progress")
+		}
+		return release, err
+	}
 }
 
 func resolveSystemctl(
@@ -122,12 +141,17 @@ func (manager *linuxServiceManager) unitPath() string {
 	return filepath.Join(manager.home, ".config", "systemd", "user", serviceUnitName)
 }
 
-func (manager *linuxServiceManager) Install(ctx context.Context, executable string) error {
-	state, err := manager.unitState()
+func (manager *linuxServiceManager) Install(ctx context.Context, executable string) (result error) {
+	release, err := manager.acquireOperationLock()
 	if err != nil {
 		return err
 	}
-	if state == serviceUnmanaged {
+	defer func() { result = errors.Join(result, release()) }()
+	snapshot, err := manager.readUnitSnapshot()
+	if err != nil {
+		return err
+	}
+	if snapshot.state == serviceUnmanaged {
 		return errUnmanagedServiceUnit
 	}
 	unit, err := systemdUnit(executable)
@@ -137,6 +161,9 @@ func (manager *linuxServiceManager) Install(ctx context.Context, executable stri
 	directory := filepath.Dir(manager.unitPath())
 	if err := os.MkdirAll(directory, 0o700); err != nil {
 		return fmt.Errorf("create systemd user directory: %w", err)
+	}
+	if err := manager.ensureUnitUnchanged(snapshot); err != nil {
+		return err
 	}
 	if err := storage.WriteAtomicFile(manager.files, manager.unitPath(), ".sshc-service-", 0o600, []byte(unit)); err != nil {
 		return fmt.Errorf("write %s: %w", manager.unitPath(), err)
@@ -154,6 +181,13 @@ func (manager *linuxServiceManager) Install(ctx context.Context, executable stri
 	}
 	if err := manager.waitUntilReady(ctx); err != nil {
 		return fmt.Errorf("service did not become ready: %w", err)
+	}
+	matches, err := manager.unitMatches(executable)
+	if err != nil {
+		return err
+	}
+	if !matches {
+		return errors.New("sshc.service changed while the service was starting")
 	}
 	return nil
 }
@@ -179,7 +213,12 @@ func (manager *linuxServiceManager) Status(ctx context.Context) (serviceState, e
 
 // RestartIfActive はsshc管理下で現在動作中のunitだけを再起動する。停止中のunitを
 // updateが勝手に起動せず、手書きunitにも触れないための更新連携用境界である。
-func (manager *linuxServiceManager) RestartIfActive(ctx context.Context, executable string) (bool, error) {
+func (manager *linuxServiceManager) RestartIfActive(ctx context.Context, executable string) (restarted bool, result error) {
+	release, err := manager.acquireOperationLock()
+	if err != nil {
+		return false, err
+	}
+	defer func() { result = errors.Join(result, release()) }()
 	matches, err := manager.unitMatches(executable)
 	if err != nil || !matches {
 		return false, err
@@ -190,6 +229,10 @@ func (manager *linuxServiceManager) RestartIfActive(ctx context.Context, executa
 	}
 	if state != serviceActive {
 		return false, nil
+	}
+	matches, err = manager.unitMatches(executable)
+	if err != nil || !matches {
+		return false, err
 	}
 	if err := manager.run(ctx, "--user", "try-restart", serviceUnitName); err != nil {
 		return false, err
@@ -204,7 +247,21 @@ func (manager *linuxServiceManager) RestartIfActive(ctx context.Context, executa
 	if err := manager.waitUntilReady(ctx); err != nil {
 		return false, fmt.Errorf("restarted service did not become ready: %w", err)
 	}
+	matches, err = manager.unitMatches(executable)
+	if err != nil {
+		return false, err
+	}
+	if !matches {
+		return false, errors.New("sshc.service changed while the service was restarting")
+	}
 	return true, nil
+}
+
+func (manager *linuxServiceManager) acquireOperationLock() (func() error, error) {
+	if manager.lock == nil {
+		return nil, errors.New("service operation lock is unavailable")
+	}
+	return manager.lock()
 }
 
 func (manager *linuxServiceManager) waitUntilReady(ctx context.Context) error {
@@ -280,18 +337,26 @@ func (manager *linuxServiceManager) unitMatches(executable string) (bool, error)
 	return bytes.Equal(contents, []byte(expected)), nil
 }
 
-func (manager *linuxServiceManager) Disable(ctx context.Context) (bool, error) {
-	state, err := manager.unitState()
+func (manager *linuxServiceManager) Disable(ctx context.Context) (removed bool, result error) {
+	release, err := manager.acquireOperationLock()
 	if err != nil {
 		return false, err
 	}
-	if state == serviceAbsent {
+	defer func() { result = errors.Join(result, release()) }()
+	snapshot, err := manager.readUnitSnapshot()
+	if err != nil {
+		return false, err
+	}
+	if snapshot.state == serviceAbsent {
 		return false, nil
 	}
-	if state == serviceUnmanaged {
+	if snapshot.state == serviceUnmanaged {
 		return false, errUnmanagedServiceUnit
 	}
 	if err := manager.run(ctx, "--user", "disable", "--now", serviceUnitName); err != nil {
+		return false, err
+	}
+	if err := manager.ensureUnitUnchanged(snapshot); err != nil {
 		return false, err
 	}
 	if err := manager.files.Remove(manager.unitPath()); err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -304,17 +369,33 @@ func (manager *linuxServiceManager) Disable(ctx context.Context) (bool, error) {
 }
 
 func (manager *linuxServiceManager) unitState() (serviceState, error) {
+	snapshot, err := manager.readUnitSnapshot()
+	return snapshot.state, err
+}
+
+func (manager *linuxServiceManager) readUnitSnapshot() (serviceUnitSnapshot, error) {
 	contents, err := manager.files.ReadFile(manager.unitPath())
 	if errors.Is(err, os.ErrNotExist) {
-		return serviceAbsent, nil
+		return serviceUnitSnapshot{state: serviceAbsent}, nil
 	}
 	if err != nil {
-		return serviceAbsent, fmt.Errorf("read %s: %w", manager.unitPath(), err)
+		return serviceUnitSnapshot{state: serviceAbsent}, fmt.Errorf("read %s: %w", manager.unitPath(), err)
 	}
 	if !strings.HasPrefix(string(contents), serviceUnitMarker) {
-		return serviceUnmanaged, nil
+		return serviceUnitSnapshot{state: serviceUnmanaged, contents: contents}, nil
 	}
-	return serviceInactive, nil
+	return serviceUnitSnapshot{state: serviceInactive, contents: contents}, nil
+}
+
+func (manager *linuxServiceManager) ensureUnitUnchanged(expected serviceUnitSnapshot) error {
+	actual, err := manager.readUnitSnapshot()
+	if err != nil {
+		return err
+	}
+	if actual.state != expected.state || !bytes.Equal(actual.contents, expected.contents) {
+		return errors.New("sshc.service changed during the operation; it was left in place")
+	}
+	return nil
 }
 
 func (manager *linuxServiceManager) run(ctx context.Context, arguments ...string) error {
