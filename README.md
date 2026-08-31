@@ -38,7 +38,7 @@ sshc engine
 sshc
 ```
 
-`sshc engine`はforegroundで動き、デーモン化しません。引数なしの `sshc` はエンジンを起動しません。Linuxでは`sshc service install`でsystemdユーザーサービスへ登録できます。その他の環境ではtmux、systemd、launchdなどのプロセス管理機能を使用します。
+`sshc engine`はforegroundで動き、デーモン化しません。引数なしの `sshc` はエンジンを起動しません。自動起動は OS のプロセス管理機能で設定します。Linuxでは`sshc service install`でsystemdユーザーサービスへ登録でき、その他の環境ではtmux、systemd、launchdなどを利用できます。
 
 初回はWeb UIまたはCLIでvaultを作成し、開きます。
 
