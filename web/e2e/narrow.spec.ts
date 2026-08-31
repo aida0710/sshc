@@ -501,7 +501,7 @@ test("removes the session status badge from the mobile header", async ({ page, i
   await expect(page.locator("[data-session-status-badge]")).toBeHidden();
 });
 
-test("keeps mobile navigation and display controls behind header menus", async ({ page, installation }) => {
+test("keeps mobile navigation and display controls predictable at 360 and 390 pixels", async ({ page, installation }) => {
   await openApplication(page, installation);
 
   const primaryNavigation = page.getByRole("navigation", { name: "Primary" });
@@ -524,10 +524,21 @@ test("keeps mobile navigation and display controls behind header menus", async (
   await expect(primaryNavigation).toBeInViewport();
   await expect(primaryNavigation.getByRole("button", { name: "Search everything" })).toBeVisible();
   await primaryNavigation.getByRole("button", { name: "Search everything" }).click();
-  await expect(page.getByRole("dialog", { name: "Search sessions, hosts, files, snippets and settings" })).toBeVisible();
+  const palette = page.getByRole("dialog", { name: "Search sessions, hosts, files, snippets and settings" });
+  await expect(palette).toBeVisible();
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
     await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/sshc-v0.16.0-command-palette-mobile.png`, fullPage: true });
   }
+  await page.keyboard.press("Escape");
+  await expect(palette).toBeHidden();
+  await expect(page.getByRole("button", { name: "Navigation", exact: true })).toBeFocused();
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByLabel("Display menu").click();
+  await expect(page.getByLabel("Theme menu")).toBeVisible();
+  await page.locator("main").click({ position: { x: 20, y: 40 } });
+  await expect(page.getByLabel("Theme menu")).toBeHidden();
+  await expectNoHorizontalOverflow(page, "Mobile header at 390px");
 });
 
 test("keeps the removed connection view switch absent and Config structure aligned while scrolling on mobile", async ({ page, installation }) => {

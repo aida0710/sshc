@@ -78,6 +78,7 @@ import type { RemotePathAction } from "./terminal/TerminalLinkPopover";
 import type { SFTPTarget } from "./sftp/SFTPPanel";
 import { useAppSession } from "./session/useAppSession";
 import { useTerminalWorkspaceController } from "./terminal/useTerminalWorkspaceController";
+import { useDismissibleLayer } from "./ui/useDismissibleLayer";
 
 export { vaultStatePollIntervalMs } from "./session/useAppSession";
 
@@ -282,6 +283,8 @@ export function App({
     [],
   );
   const [navigationOpen, setNavigationOpen] = useState(false);
+  const navigationPanelRef = useRef<HTMLElement>(null);
+  const navigationTriggerRef = useRef<HTMLButtonElement>(null);
   const [desktopNavigationVisible, setDesktopNavigationVisible] = useState(
     detectNavigationVisible,
   );
@@ -291,6 +294,14 @@ export function App({
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [inspector, setInspector] = useState<InspectorContent>(null);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const commandPaletteReturnFocusRef = useRef<HTMLElement>(null);
+
+  useDismissibleLayer({
+    open: navigationOpen,
+    containerRefs: [navigationPanelRef, navigationTriggerRef],
+    onDismiss: () => setNavigationOpen(false),
+    returnFocusRef: navigationTriggerRef,
+  });
 
   useEffect(() => {
     setAndroidAppearance(resolvedTheme);
@@ -309,39 +320,13 @@ export function App({
       )
         return;
       event.preventDefault();
+      commandPaletteReturnFocusRef.current =
+        document.activeElement instanceof HTMLElement ? document.activeElement : null;
       setCommandPaletteOpen((open) => !open);
     }
     document.addEventListener("keydown", togglePalette);
     return () => document.removeEventListener("keydown", togglePalette);
   }, [state]);
-
-  useEffect(() => {
-    if (!navigationOpen) return;
-    function close(event: KeyboardEvent) {
-      if (event.key === "Escape") setNavigationOpen(false);
-    }
-    document.addEventListener("keydown", close);
-    return () => document.removeEventListener("keydown", close);
-  }, [navigationOpen]);
-
-  useEffect(() => {
-    if (!navigationOpen) return;
-    function closeOutsideNavigation(event: PointerEvent) {
-      const target = event.target;
-      if (!(target instanceof Node)) return;
-      if (document.getElementById(navigationId)?.contains(target) === true)
-        return;
-      if (
-        target instanceof Element &&
-        target.closest(`[aria-controls="${navigationId}"]`) !== null
-      )
-        return;
-      setNavigationOpen(false);
-    }
-    document.addEventListener("pointerdown", closeOutsideNavigation, true);
-    return () =>
-      document.removeEventListener("pointerdown", closeOutsideNavigation, true);
-  }, [navigationOpen]);
 
   useEffect(() => {
     function closeTransientUi(event: Event) {
@@ -601,6 +586,7 @@ export function App({
           navigationOpen={navigationOpen}
           desktopNavigationVisible={desktopNavigationVisible}
           navigationId={navigationId}
+          navigationToggleRef={navigationTriggerRef}
           onToggleNavigation={() => setNavigationOpen((open) => !open)}
           onToggleDesktopNavigation={toggleDesktopNavigation}
           inspector={inspector}
@@ -611,7 +597,10 @@ export function App({
           localeLabels={localeLabels}
           theme={theme}
           onThemeChange={setTheme}
-          onOpenCommandPalette={() => setCommandPaletteOpen(true)}
+          onOpenCommandPalette={(trigger) => {
+            commandPaletteReturnFocusRef.current = trigger;
+            setCommandPaletteOpen(true);
+          }}
           onOpenTransfers={() => navigate("Files")}
         />
         {requestFailure === null ? null : (
@@ -649,6 +638,7 @@ export function App({
             />
           ) : null}
           <AppNavigation
+            navigationRef={navigationPanelRef}
             navigationId={navigationId}
             version={version}
             navigationOpen={navigationOpen}
@@ -675,6 +665,7 @@ export function App({
             localShellProfiles={localShellProfiles}
             onOpenShell={(profileId) => void openLocalShell(profileId)}
             onOpenCommandPalette={() => {
+              commandPaletteReturnFocusRef.current = navigationTriggerRef.current;
               setNavigationOpen(false);
               setCommandPaletteOpen(true);
             }}
@@ -865,6 +856,7 @@ export function App({
         {state === "ready" ? (
           <CommandPalette
             open={commandPaletteOpen}
+            returnFocusRef={commandPaletteReturnFocusRef}
             hosts={paletteHosts}
             files={configFiles}
             sessions={orderedConsoles}

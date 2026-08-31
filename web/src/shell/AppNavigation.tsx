@@ -5,6 +5,7 @@ import {
   type MouseEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
+  type RefObject,
 } from "react";
 import { ConsoleList } from "../terminal/ConsoleList";
 import { UpdateBadge } from "./UpdateBadge";
@@ -24,6 +25,7 @@ import {
 } from "./navigationLayout";
 
 export function AppNavigation({
+  navigationRef,
   navigationId,
   version,
   navigationOpen,
@@ -48,6 +50,7 @@ export function AppNavigation({
   onOpenShell,
   onOpenCommandPalette,
 }: {
+  navigationRef?: RefObject<HTMLElement | null>;
   navigationId: string;
   version: string;
   navigationOpen: boolean;
@@ -84,6 +87,7 @@ export function AppNavigation({
   );
   return (
     <nav
+      ref={navigationRef}
       id={navigationId}
       aria-label={t("shell.primaryNavigation")}
       className={`fixed inset-y-0 left-0 z-30 flex min-h-0 w-72 max-w-[calc(100vw-2rem)] flex-col overflow-hidden border-r border-line bg-sidebar p-2 transition-transform motion-reduce:transition-none md:relative md:inset-auto md:z-auto md:w-auto md:max-w-none md:translate-x-0 md:shadow-none ${
