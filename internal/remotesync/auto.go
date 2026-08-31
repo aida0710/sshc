@@ -426,7 +426,7 @@ func (a *Auto) receive(ctx context.Context, key string) (AutoPhase, string, bool
 		return AutoBlocked, "conflicts", true
 	}
 	// 削除はユーザーの確認が必要なため自動適用しない。
-	if len(result.Request.Removals) > 0 {
+	if len(result.Removed) > 0 {
 		a.rememberBlocked(result.target, result.ETag, "removals")
 		return AutoBlocked, "removals", true
 	}

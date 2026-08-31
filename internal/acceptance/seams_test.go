@@ -3,9 +3,12 @@ package acceptance_test
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
+
+	"sshc/internal/remotesync"
 )
 
 // productionGoFiles は、配布物に載る Go ファイルを走査する。
@@ -43,6 +46,23 @@ func productionGoFiles(t *testing.T, visit func(relative, contents string)) {
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestRemoteSyncDoesNotExposeStorageTransactions keeps the transport-facing
+// pull preview in remotesync vocabulary. A direct import check cannot detect a
+// storage.Request smuggled through an exported service result.
+func TestRemoteSyncDoesNotExposeStorageTransactions(t *testing.T) {
+	result := reflect.TypeOf(remotesync.PullResult{})
+	for index := range result.NumField() {
+		field := result.Field(index)
+		if !field.IsExported() {
+			continue
+		}
+		if strings.HasPrefix(field.Type.PkgPath(), "sshc/internal/storage") ||
+			strings.Contains(field.Type.String(), "storage.") {
+			t.Errorf("remotesync.PullResult.%s exposes persistence type %s", field.Name, field.Type)
+		}
 	}
 }
 
