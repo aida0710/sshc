@@ -194,6 +194,12 @@
   }
 }
 
+/* FitAddon only subtracts padding applied to xterm itself. Keeping this
+   spacing on the parent makes short, vertically split panes overflow. */
+[data-terminal-host] > .xterm {
+  padding: 0.5rem;
+}
+
 .sshc-card {
   border: 1px solid var(--ui-line);
   border-radius: var(--radius-lg);
