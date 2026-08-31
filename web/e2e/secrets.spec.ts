@@ -3,6 +3,7 @@ import {
   masterPassword,
   openApplication,
   openSection,
+  openSettingsPage,
   sessionStatus,
   test,
 } from "./support/environment";
@@ -119,8 +120,8 @@ test("keeps application controls in Settings and changes the master password the
   await openSection(page, "Secrets");
   await expect(page.getByRole("region", { name: "Master password" })).toHaveCount(0);
 
-  await openSection(page, "Settings");
-  await expect(page).toHaveURL(/\/settings$/);
+  await openSettingsPage(page, "Master password");
+  await expect(page).toHaveURL(/\/settings\/password$/);
   const master = page.getByRole("region", { name: "Master password" });
   await expect(master).toBeVisible();
   await master.getByLabel("Current master password", { exact: true }).fill(masterPassword);
@@ -153,7 +154,7 @@ test("saves the Vault auto-lock policy and warns when automatic locking is disab
   installation,
 }) => {
   await openApplication(page, installation);
-  await openSection(page, "Settings");
+  await openSettingsPage(page, "Engine");
 
   const engine = page.getByRole("region", { name: "Engine" });
   const policy = engine.getByLabel("Vault auto-lock");

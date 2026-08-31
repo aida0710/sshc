@@ -14,9 +14,9 @@ describe("settings routes", () => {
     expect(canonicalSettingsPath(`${path}/`)).toBe(path);
   });
 
-  it("keeps the legacy settings URL on the engine page", () => {
-    expect(parseSettingsPage("/settings")).toBe("Engine");
-    expect(canonicalSettingsPath("/settings")).toBe("/settings");
+  it.each(["/settings", "/settings/"])("rejects the removed settings landing %s", (path) => {
+    expect(parseSettingsPage(path)).toBeNull();
+    expect(canonicalSettingsPath(path)).toBeNull();
   });
 
   it("rejects an unknown settings page", () => {

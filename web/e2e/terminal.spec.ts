@@ -3,6 +3,7 @@ import {
   type Installation,
   openApplication,
   openSection,
+  openSettingsPage,
   shellSays,
   test,
 } from "./support/environment";
@@ -71,7 +72,7 @@ async function seedTerminalSettings(installation: Installation) {
 }
 
 async function openLoadedTerminalSettings(page: Page): Promise<Locator> {
-  await openSection(page, "Settings");
+  await openSettingsPage(page, "Terminal");
   const region = page.getByRole("region", { name: "Terminal" });
   // The sentinel proves that the Settings effect has applied its metadata GET.
   // Without this gate, a slow initial GET can overwrite a value filled by the test.
@@ -406,7 +407,7 @@ test("closes every open connection from the settings screen", async ({ page, ins
   await panel.getByRole("button", { name: "Local shell" }).click();
   await expect(rows).toHaveCount(2);
 
-  await openSection(page, "Settings");
+  await openSettingsPage(page, "Open connections");
   const region = page.getByRole("region", { name: "Open connections" });
   await expect(region.getByText("2 open")).toBeVisible();
   await region.getByRole("button", { name: "Close every connection" }).click();
@@ -529,7 +530,7 @@ test("keeps the same terminal alive while another screen is shown", async ({ pag
   const sameTerminal = await markTerminal(page, "1");
   await typeIntoConsole(page, shellSays.lateEcho("late-42"));
 
-  await openSection(page, "Settings");
+  await openSettingsPage(page, "Engine");
   await expect(screen).toBeHidden();
 
   const reopened = await openConsolePanel(page);
