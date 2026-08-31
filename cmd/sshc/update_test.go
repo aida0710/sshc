@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -74,6 +75,54 @@ func TestRunUpdateDelegatesANewerStableRelease(t *testing.T) {
 	})
 	if code != 0 || got.Version != "v0.14.0" || !strings.Contains(stdout.String(), "restart any running") {
 		t.Fatalf("code=%d release=%#v stdout=%q", code, got, stdout.String())
+	}
+}
+
+func TestRunUpdateRestartsAnActiveManagedService(t *testing.T) {
+	restarted := false
+	var stdout bytes.Buffer
+	code := runUpdate(context.Background(), "v0.13.6", &stdout, io.Discard, updateDependencies{
+		executable: func() (string, error) { return "/managed/sshc", nil },
+		detect: func(string) (installation, error) {
+			return installation{manager: managerShell}, nil
+		},
+		latest: func(context.Context) (selfupdate.Release, error) {
+			return selfupdate.Release{Version: "v0.14.0"}, nil
+		},
+		install: func(context.Context, installation, selfupdate.Release, io.Writer, io.Writer) error {
+			return nil
+		},
+		restartService: func(context.Context) (bool, error) {
+			restarted = true
+			return true, nil
+		},
+	})
+	if code != 0 || !restarted || !strings.Contains(stdout.String(), "managed service restarted") ||
+		strings.Contains(stdout.String(), "restart any running") {
+		t.Fatalf("code=%d restarted=%v stdout=%q", code, restarted, stdout.String())
+	}
+}
+
+func TestRunUpdateReportsAPartialSuccessWhenManagedServiceRestartFails(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := runUpdate(context.Background(), "v0.13.6", &stdout, &stderr, updateDependencies{
+		executable: func() (string, error) { return "/managed/sshc", nil },
+		detect: func(string) (installation, error) {
+			return installation{manager: managerShell}, nil
+		},
+		latest: func(context.Context) (selfupdate.Release, error) {
+			return selfupdate.Release{Version: "v0.14.0"}, nil
+		},
+		install: func(context.Context, installation, selfupdate.Release, io.Writer, io.Writer) error {
+			return nil
+		},
+		restartService: func(context.Context) (bool, error) {
+			return false, errors.New("systemctl failed")
+		},
+	})
+	if code != 1 || !strings.Contains(stdout.String(), "updated to v0.14.0") ||
+		!strings.Contains(stderr.String(), "update succeeded") {
+		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
 }
 

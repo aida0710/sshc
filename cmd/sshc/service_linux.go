@@ -127,6 +127,22 @@ func (manager *linuxServiceManager) Status(ctx context.Context) (serviceState, e
 	}
 }
 
+// RestartIfActive はsshc管理下で現在動作中のunitだけを再起動する。停止中のunitを
+// updateが勝手に起動せず、手書きunitにも触れないための更新連携用境界である。
+func (manager *linuxServiceManager) RestartIfActive(ctx context.Context) (bool, error) {
+	state, err := manager.Status(ctx)
+	if err != nil {
+		return false, err
+	}
+	if state != serviceActive {
+		return false, nil
+	}
+	if err := manager.run(ctx, "--user", "restart", serviceUnitName); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 func (manager *linuxServiceManager) Disable(ctx context.Context) (bool, error) {
 	state, err := manager.unitState()
 	if err != nil {
