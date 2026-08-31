@@ -17,7 +17,7 @@ describe("live workspace session persistence", () => {
     layout = reduceLayout(layout, { type: "connection-started", paneId: "web", sessionId: "session-web" });
     layout = reduceLayout(layout, { type: "connection-started", paneId: "db", sessionId: "session-db" });
 
-    saveLiveWorkspace(window.sessionStorage, layout, "db");
+    saveLiveWorkspace(window.sessionStorage, layout, "db", "Operations");
 
     const raw = window.sessionStorage.getItem(liveWorkspaceStorageKey) ?? "";
     expect(raw).not.toContain("private-web-alias");
@@ -34,6 +34,7 @@ describe("live workspace session persistence", () => {
       },
       focusedPaneId: "db",
       focusModePaneId: "db",
+      name: "Operations",
     });
   });
 
@@ -57,6 +58,7 @@ describe("live workspace session persistence", () => {
       },
       focusedPaneId: "db",
       focusModePaneId: "db",
+      name: "Build workers",
     }));
 
     expect(loadLiveWorkspace(window.sessionStorage, new Set(["session-web", "session-logs"]))).toEqual({
@@ -70,6 +72,7 @@ describe("live workspace session persistence", () => {
       },
       focusedPaneId: "web",
       focusModePaneId: null,
+      name: "Build workers",
     });
   });
 
