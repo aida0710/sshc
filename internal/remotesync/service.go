@@ -646,7 +646,7 @@ func (s *Service) collect() (Manifest, map[string][]byte, error) {
 			return Manifest{}, nil, err
 		}
 		mode := "0600"
-		if info, err := s.workspace.FileSystem().Lstat(absolute); err == nil && info.Mode().Perm() == 0o700 {
+		if info, err := s.workspace.FileSystem().Lstat(absolute); err == nil && info.Mode().Perm()&0o100 != 0 {
 			mode = "0700"
 		}
 		contents[relative] = body
