@@ -47,6 +47,7 @@ import { keysApi } from "../keys/api";
 import { ConnectionSummary } from "./ConnectionSummary";
 import { loadConnectionSavedState, type ConnectionSavedState } from "./connectionSavedState";
 import { ManageConnection } from "./ManageConnection";
+import { ConfirmDialog } from "../ui/ConfirmDialog";
 
 const groupNoticeCodes = new Set([
   "group_not_declared",
@@ -84,6 +85,11 @@ type SaveAttempt =
   | { saved: false; overview: null }
   | { saved: true; overview: Overview | null };
 
+type DiscardIntent =
+  | { kind: "create" }
+  | { kind: "select"; host: HostEntry }
+  | { kind: "navigate"; location: BrowserLocation };
+
 export function ConnectionsPage({
   onInspector,
   creationDraft = null,
@@ -114,6 +120,7 @@ export function ConnectionsPage({
   const [savedState, setSavedState] = useState<ConnectionSavedState | null>(null);
   const [refreshState, setRefreshState] = useState<"idle" | "refreshing" | "failed">("idle");
   const [savedRevision, setSavedRevision] = useState(0);
+  const [discardIntent, setDiscardIntent] = useState<DiscardIntent | null>(null);
   const basicDiscardRef = useRef<(() => void) | null>(null);
   const {
     editorDirty, setEditorDirty,
@@ -185,10 +192,31 @@ export function ConnectionsPage({
   }
 
   function beginCreation() {
-    if (editorDirty && !window.confirm(t("conn.discardPrompt"))) return;
-    if (editorDirty) basicDiscardRef.current?.();
+    if (editorDirty) {
+      setDiscardIntent({ kind: "create" });
+      return;
+    }
     onCreationDraftChange?.(null);
     setCreating(true);
+  }
+
+  function confirmDiscard() {
+    const intent = discardIntent;
+    if (intent === null) return;
+    setDiscardIntent(null);
+    editorDirtyRef.current = false;
+    setEditorDirty(false);
+    basicDiscardRef.current?.();
+    if (intent.kind === "create") {
+      onCreationDraftChange?.(null);
+      setCreating(true);
+      return;
+    }
+    if (intent.kind === "select") {
+      selectHost(intent.host);
+      return;
+    }
+    onNavigateLocation?.(`${intent.location.pathname}${intent.location.search}`);
   }
 
   function leaveForCreationPrerequisite(section: CreationPrerequisite, draft: CreateConnectionDraft) {
@@ -301,11 +329,12 @@ export function ConnectionsPage({
           return true;
         }
       }
-      return window.confirm(t("conn.discardPrompt"));
+      setDiscardIntent({ kind: "navigate", location: next });
+      return false;
     };
     onNavigationBlockerChange?.(blocker);
     return () => onNavigationBlockerChange?.(null);
-  }, [editorDirty, onNavigationBlockerChange, selection, t]);
+  }, [editorDirty, onNavigationBlockerChange, selection]);
 
   useEffect(() => {
     if (!editorDirty) return;
@@ -460,7 +489,7 @@ export function ConnectionsPage({
     }
   }
 
-  function onSelect(host: HostEntry) {
+  function selectHost(host: HostEntry) {
     if (host.identity.alias === "") return;
     const nextSelection = { path: host.identity.path, alias: host.identity.alias };
     const currentSelection = selectionRef.current;
@@ -478,6 +507,16 @@ export function ConnectionsPage({
     setSelection(nextSelection);
     setActivePanel("Basic");
     setActiveAdvanced("Jump");
+  }
+
+  function onSelect(host: HostEntry) {
+    const current = selectionRef.current;
+    const switching = current?.path !== host.identity.path || current.alias !== host.identity.alias;
+    if (editorDirty && switching) {
+      setDiscardIntent({ kind: "select", host });
+      return;
+    }
+    selectHost(host);
   }
 
   function onFieldEdits(fields: FieldEdit[]) {
@@ -855,6 +894,17 @@ export function ConnectionsPage({
         onCreated={(result) => void onConnectionCreated(result)}
       />
     ) : null}
+    {discardIntent === null ? null : (
+      <ConfirmDialog
+        id="connection-discard-heading"
+        heading={t("conn.discardChanges")}
+        body={<p className="text-sm text-ink-muted">{t("conn.discardPrompt")}</p>}
+        confirmLabel={t("conn.discardChanges")}
+        cancelLabel={t("conn.keepEditing")}
+        onConfirm={confirmDiscard}
+        onCancel={() => setDiscardIntent(null)}
+      />
+    )}
     </>
   );
 }

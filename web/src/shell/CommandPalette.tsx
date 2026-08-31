@@ -8,7 +8,7 @@ import { Icon } from "../ui/icons";
 import type { TerminalSession } from "../api/integrations";
 import { agentStatusLabel, terminalDisplayTitle } from "../terminal/agentPresentation";
 import type { AgentUnreadBySession } from "../terminal/agentNotifications";
-import { useDismissibleLayer } from "../ui/useDismissibleLayer";
+import { ModalShell } from "../ui/ModalShell";
 
 type PaletteItem = {
   id: string;
@@ -65,7 +65,6 @@ export function CommandPalette({
 }) {
   const t = useTranslate();
   const input = useRef<HTMLInputElement>(null);
-  const panel = useRef<HTMLElement>(null);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(0);
   const [snippets, setSnippets] = useState<Snippet[]>([]);
@@ -90,15 +89,6 @@ export function CommandPalette({
       });
     return () => { active = false; };
   }, [open]);
-
-  useDismissibleLayer({
-    open,
-    containerRefs: [panel],
-    onDismiss: onClose,
-    ...(returnFocusRef === undefined ? {} : { returnFocusRef }),
-    initialFocusRef: input,
-    trapFocus: true,
-  });
 
   const items = useMemo<PaletteItem[]>(() => [
     ...sessions.filter((session) => session.exited === undefined).map((session) => {
@@ -176,17 +166,15 @@ export function CommandPalette({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-[70] flex items-start justify-center bg-canvas/80 px-3 pt-[10vh] backdrop-blur-[2px] md:pt-[14vh]"
+    <ModalShell
+      labelledBy="command-palette-heading"
+      onDismiss={onClose}
+      initialFocusRef={input}
+      {...(returnFocusRef === undefined ? {} : { returnFocusRef })}
+      placement="palette"
+      zIndexClassName="z-[70]"
+      panelClassName="flex max-h-[72vh] w-full max-w-2xl flex-col overflow-hidden rounded-lg"
     >
-      <section
-        ref={panel}
-        tabIndex={-1}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="command-palette-heading"
-        className="flex max-h-[72vh] w-full max-w-2xl flex-col overflow-hidden rounded border border-control-line bg-card shadow-2xl"
-      >
         <h2 id="command-palette-heading" className="sr-only">{t("palette.heading")}</h2>
         <label className="flex h-12 shrink-0 items-center gap-2 border-b border-line px-3">
           <Icon name="search" className="h-4 w-4 text-ink-muted" />
@@ -245,8 +233,7 @@ export function CommandPalette({
           ) : null}
         </div>
         <p className="shrink-0 border-t border-line px-3 py-2 text-[11px] text-ink-faint">{t("palette.hint")}</p>
-      </section>
-    </div>
+    </ModalShell>
   );
 }
 

@@ -126,6 +126,7 @@ export const ja = {
   "sftp.delete": "削除",
   "sftp.chmod": "権限変更",
   "sftp.chmodPrompt": "権限（8 進数、例：640）",
+  "sftp.chmodInvalid": "000〜777の3桁の8進数で入力してください。",
   "sftp.overwriteHeading": "このリモートファイルを上書きしますか？",
   "sftp.overwrite": "上書き",
   "sftp.skip": "スキップ",
@@ -144,6 +145,9 @@ export const ja = {
     "2 MiBを超えるファイルはダウンロードできますが、編集はできません。",
   "sftp.mkdirPrompt": "フォルダ名",
   "sftp.renamePrompt": "新しい名前",
+  "sftp.nameRequired": "名前を入力してください。",
+  "sftp.nameInvalid": "名前にスラッシュは使用できません。",
+  "sftp.renameUnchanged": "現在とは異なる名前を入力してください。",
   "sftp.deleteHeading": "このリモート項目を削除しますか？",
   "workspace.saved": "保存レイアウトを選択",
   "workspace.new": "新しい保存レイアウト",
@@ -176,6 +180,9 @@ export const ja = {
   "workspace.maxPanes":
     "1 つのワークスペースに配置できるのは最大 {count} ペインです。",
   "workspace.namePrompt": "保存レイアウト名",
+  "workspace.nameRequired": "保存レイアウト名を入力してください。",
+  "workspace.saveConfirm": "レイアウトを保存",
+  "workspace.cancel": "キャンセル",
   "workspace.savedLayouts": "保存レイアウト",
   "workspace.savedDescription":
     "SSH 接続先、ローカルシェル、ペイン配置を名前付きで保存し、あとで新しいセッションとして開き直せます。1 レイアウトにつき最大 {count} ペインです。",
@@ -1928,6 +1935,7 @@ export const ja = {
     "接続の識別情報や保存場所を変更する前に、編集中の下書きを保存または破棄してください。",
   "conn.discardPrompt":
     "未保存の接続設定を破棄して、この接続から移動しますか？",
+  "conn.keepEditing": "編集を続ける",
   "conn.reloadConnection": "保存済み接続を再読み込み",
   "conn.moveToFile": "保存ファイル",
   "conn.moveToFilePlaceholder": "保存ファイルを選択…",

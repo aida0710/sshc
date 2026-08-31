@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { failureCode } from "../api/client";
 import type {
   CredentialKind,
@@ -10,7 +9,7 @@ import { useTranslate } from "../i18n/context";
 import { Field, control, hintText } from "../ui/form";
 import { PasswordField } from "../ui/PasswordField";
 import { Button, Notice } from "../ui/surface";
-import { useDismissibleLayer } from "../ui/useDismissibleLayer";
+import { ModalShell } from "../ui/ModalShell";
 
 type CredentialEditDialogProps = {
   kind: CredentialKind;
@@ -27,7 +26,7 @@ export function CredentialEditDialog({ kind, name, api, onSaved, onClose }: Cred
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const dialog = useRef<HTMLElement>(null);
+  const nameInput = useRef<HTMLInputElement>(null);
 
   const close = useCallback(() => {
     setSecret("");
@@ -54,14 +53,6 @@ export function CredentialEditDialog({ kind, name, api, onSaved, onClose }: Cred
     };
   }, [api, kind, name, t]);
 
-  useDismissibleLayer({
-    open: true,
-    containerRefs: [dialog],
-    onDismiss: close,
-    closeOnOutside: false,
-    trapFocus: true,
-  });
-
   async function save() {
     setSaving(true);
     try {
@@ -79,16 +70,13 @@ export function CredentialEditDialog({ kind, name, api, onSaved, onClose }: Cred
   const heading = kind === "password" ? t("secrets.editPassword") : t("secrets.editPassphrase");
   const valueLabel = kind === "password" ? t("secrets.passwordValue") : t("secrets.passphraseValue");
 
-  return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-canvas/80 p-4">
-      <section
-        ref={dialog}
-        tabIndex={-1}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="credential-edit-heading"
-        className="sshc-card flex w-full max-w-lg flex-col gap-4 rounded-md bg-card p-5"
-      >
+  return (
+    <ModalShell
+      labelledBy="credential-edit-heading"
+      onDismiss={close}
+      initialFocusRef={nameInput}
+      panelClassName="flex w-full max-w-lg flex-col gap-4 rounded-lg p-5"
+    >
         <div>
           <h2 id="credential-edit-heading" className="text-base font-semibold text-ink">{heading}</h2>
           <p className={`mt-1 ${hintText}`}>{t("secrets.editNote")}</p>
@@ -99,7 +87,7 @@ export function CredentialEditDialog({ kind, name, api, onSaved, onClose }: Cred
         ) : (
           <>
             <Field label={t("secrets.credentialName")}>
-              <input autoFocus value={nextName} onChange={(event) => setNextName(event.target.value)} className={control} />
+              <input ref={nameInput} value={nextName} onChange={(event) => setNextName(event.target.value)} className={control} />
             </Field>
             <PasswordField
               label={valueLabel}
@@ -120,8 +108,6 @@ export function CredentialEditDialog({ kind, name, api, onSaved, onClose }: Cred
             {saving ? t("secrets.saving") : t("secrets.saveChanges")}
           </Button>
         </div>
-      </section>
-    </div>,
-    document.body,
+    </ModalShell>
   );
 }

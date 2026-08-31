@@ -1,10 +1,9 @@
-import { useRef } from "react";
 import type { PullResponse, SyncDirection } from "../api/integrations";
 import type { Translate } from "../i18n/context";
 import { hintText, sectionHeading } from "../ui/form";
 import { Icon } from "../ui/icons";
 import { Button, Notice } from "../ui/surface";
-import { useDismissibleLayer } from "../ui/useDismissibleLayer";
+import { ModalShell } from "../ui/ModalShell";
 
 type SyncPullPreviewDialogProps = {
   preview: PullResponse;
@@ -32,28 +31,15 @@ export function SyncPullPreviewDialog({
   onResolve,
 }: SyncPullPreviewDialogProps) {
   const conflicted = preview.conflicts.length > 0;
-  const dialogRef = useRef<HTMLDivElement | null>(null);
-
-  useDismissibleLayer({
-    open: true,
-    containerRefs: [dialogRef],
-    onDismiss: () => {
-      if (!busy) onClose();
-    },
-    closeOnOutside: false,
-    trapFocus: true,
-  });
-
   return (
-    <div
-      ref={dialogRef}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="sync-pull-preview-heading"
-      tabIndex={-1}
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-3 sm:items-center"
+    <ModalShell
+      labelledBy="sync-pull-preview-heading"
+      onDismiss={() => {
+        if (!busy) onClose();
+      }}
+      placement="sheet"
+      panelClassName="max-h-[90vh] w-full max-w-2xl overflow-auto rounded-lg"
     >
-      <section className="sshc-card max-h-[90vh] w-full max-w-2xl overflow-auto rounded-md bg-card">
         <header className="flex items-center gap-2 border-b border-line bg-toolbar px-4 py-3">
           <Icon name="config" className="h-4 w-4 text-ink-muted" />
           <h3
@@ -172,7 +158,6 @@ export function SyncPullPreviewDialog({
             {t(acceptRemoteHead ? "sync.remoteHeadApply" : "sync.apply")}
           </Button>
         </div>
-      </section>
-    </div>
+    </ModalShell>
   );
 }

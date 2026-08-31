@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useRef, useState } from "react";
 import { CopyButton } from "../ui/CopyButton";
 import { useTranslate } from "../i18n/context";
 import type { KeysApi } from "./api";
+import { ModalShell } from "../ui/ModalShell";
 
 type RevealDialogProps = {
   keyId: string;
@@ -16,20 +17,13 @@ export function RevealDialog({ keyId, relativePath, api, onClose }: RevealDialog
   const t = useTranslate();
   const [state, setState] = useState<DialogState>("confirm");
   const [material, setMaterial] = useState("");
+  const showButton = useRef<HTMLButtonElement>(null);
 
   function close() {
     setMaterial("");
     setState("confirm");
     onClose();
   }
-
-  useEffect(() => {
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") close();
-    }
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  });
 
   async function confirm() {
     setState("loading");
@@ -44,10 +38,11 @@ export function RevealDialog({ keyId, relativePath, api, onClose }: RevealDialog
   }
 
   return (
-    <div
-      role="dialog"
-      aria-labelledby="reveal-heading"
-      className="rounded-md border border-line bg-surface-subtle p-4 sm:p-5"
+    <ModalShell
+      labelledBy="reveal-heading"
+      onDismiss={close}
+      initialFocusRef={showButton}
+      panelClassName="w-full max-w-2xl rounded-lg p-4 sm:p-5"
     >
       <h3 id="reveal-heading" className="font-medium">
         {t("reveal.heading", { path: relativePath })}
@@ -56,6 +51,7 @@ export function RevealDialog({ keyId, relativePath, api, onClose }: RevealDialog
         <>
           <p className="mt-3 rounded-md bg-notice px-3 py-2 text-sm text-notice-ink">{t("reveal.warning")}</p>
           <button
+            ref={showButton}
             type="button"
             className="mt-4 rounded-md border border-control-line bg-card px-3 py-2 text-sm font-medium hover:bg-select-fill"
             onClick={() => void confirm()}
@@ -88,6 +84,6 @@ export function RevealDialog({ keyId, relativePath, api, onClose }: RevealDialog
       <button type="button" className="mt-4 rounded-md border border-control-line px-3 py-2" onClick={close}>
         {t("reveal.close")}
       </button>
-    </div>
+    </ModalShell>
   );
 }

@@ -1,7 +1,6 @@
 import { useRef, type ReactNode } from "react";
-import { createPortal } from "react-dom";
 import { dangerAction, secondaryAction } from "./form";
-import { useDismissibleLayer } from "./useDismissibleLayer";
+import { ModalShell } from "./ModalShell";
 export function ConfirmDialog({
   id,
   heading,
@@ -20,27 +19,13 @@ export function ConfirmDialog({
   onCancel: () => void;
 }) {
   const cancelRef = useRef<HTMLButtonElement>(null);
-  const dialogRef = useRef<HTMLDivElement>(null);
-
-  useDismissibleLayer({
-    open: true,
-    containerRefs: [dialogRef],
-    onDismiss: onCancel,
-    closeOnOutside: false,
-    initialFocusRef: cancelRef,
-    trapFocus: true,
-  });
-
-  return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-canvas/75 p-4">
-      <div
-        ref={dialogRef}
-        tabIndex={-1}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={id}
-        className="flex w-full max-w-sm flex-col gap-3 rounded-lg border border-control-line bg-card p-4"
-      >
+  return (
+    <ModalShell
+      labelledBy={id}
+      onDismiss={onCancel}
+      initialFocusRef={cancelRef}
+      panelClassName="flex w-full max-w-sm flex-col gap-3 rounded-lg p-4"
+    >
         <h2 id={id} className="text-sm font-medium text-ink">
           {heading}
         </h2>
@@ -53,8 +38,6 @@ export function ConfirmDialog({
             {confirmLabel}
           </button>
         </div>
-      </div>
-    </div>,
-    document.body,
+    </ModalShell>
   );
 }
