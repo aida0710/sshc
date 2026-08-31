@@ -64,6 +64,7 @@ import {
 } from "./terminal/sessions";
 import {
   TerminalWorkspace,
+  type WorkspaceRenameRequest,
   type WorkspaceRestoreRequest,
 } from "./features/workspaces/TerminalWorkspace";
 import type { LiveWorkspaceSummary } from "./features/workspaces/live";
@@ -388,12 +389,15 @@ export function App({
     activeConsole,
     liveWorkspace,
     restoreRequest: workspaceRestoreRequest,
+    renameRequest: workspaceRenameRequest,
     orderedConsoles,
     showConsole,
     openWorkspace,
+    renameWorkspace,
     openLocalShell,
     duplicateConsole,
     consumeRestore: consumeWorkspaceRestore,
+    consumeRename: consumeWorkspaceRename,
     reorderConsoles: setConsoleOrder,
     setLiveWorkspace,
     setSettings: setTerminalSettings,
@@ -663,6 +667,7 @@ export function App({
             orderedConsoles={orderedConsoles}
             activeConsole={activeConsole}
             liveWorkspace={liveWorkspace}
+            onRenameWorkspace={renameWorkspace}
             unreadBySession={unreadAgentSessions}
             onShowConsole={showConsole}
             onDuplicateConsole={(id) => void duplicateConsole(id)}
@@ -772,6 +777,8 @@ export function App({
                       onOpenRemotePath={openRemotePath}
                       restoreRequest={workspaceRestoreRequest}
                       onRestoreConsumed={consumeWorkspaceRestore}
+                      renameRequest={workspaceRenameRequest}
+                      onRenameConsumed={consumeWorkspaceRename}
                     />
                   </div>
                 ) : null}
@@ -960,6 +967,8 @@ function TerminalScreen({
   onOpenShell,
   restoreRequest,
   onRestoreConsumed,
+  renameRequest,
+  onRenameConsumed,
   onOpenRemotePath,
   onOSC52Change,
 }: {
@@ -978,6 +987,8 @@ function TerminalScreen({
   >;
   restoreRequest: WorkspaceRestoreRequest | null;
   onRestoreConsumed: (sequence: number) => void;
+  renameRequest: WorkspaceRenameRequest | null;
+  onRenameConsumed: (sequence: number) => void;
   onOpenRemotePath: (
     alias: string,
     path: string,
@@ -998,6 +1009,8 @@ function TerminalScreen({
       onOpenShell={onOpenShell}
       restoreRequest={restoreRequest}
       onRestoreConsumed={onRestoreConsumed}
+      renameRequest={renameRequest}
+      onRenameConsumed={onRenameConsumed}
       onLiveWorkspaceChange={onLiveWorkspaceChange}
       renderTerminal={(session) => {
         const appearance = resolveAppearance(
