@@ -435,7 +435,21 @@ func (m *Manager) WithSnapshot(fn func() error) error {
 		return err
 	}
 	defer unlock()
+	if err := m.ensureNoPendingTransaction(); err != nil {
+		return err
+	}
 	return fn()
+}
+
+func (m *Manager) ensureNoPendingTransaction() error {
+	records, err := m.readRecords(m.journalDirectory())
+	if err != nil {
+		return err
+	}
+	if len(records) != 0 {
+		return ErrPendingTransaction
+	}
+	return nil
 }
 
 // journalPlan は、これから記録するエントリと、それに紐づく内容をひとつの値にする。
@@ -479,6 +493,9 @@ func (m *Manager) commit(request Request, rollbackOnError, discardBackups bool, 
 		return Result{}, err
 	}
 	defer unlock()
+	if err := m.ensureNoPendingTransaction(); err != nil {
+		return Result{}, err
+	}
 
 	fileSystem := m.workspace.FileSystem()
 
@@ -823,6 +840,9 @@ func (m *Manager) Note(operation string, paths []string) (Result, error) {
 		return Result{}, err
 	}
 	defer unlock()
+	if err := m.ensureNoPendingTransaction(); err != nil {
+		return Result{}, err
+	}
 
 	entries, err := resolveEntries()
 	if err != nil {
