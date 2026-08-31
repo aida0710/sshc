@@ -12,7 +12,7 @@ _sshc_completion() {
   local current aliases
   current="${COMP_WORDS[COMP_CWORD]}"
   if (( COMP_CWORD == 1 )); then
-    COMPREPLY=( $(compgen -W "engine ssh info sync terminal serial telnet open status update vault version help completion" -- "$current") )
+    COMPREPLY=( $(compgen -W "engine ssh info sync terminal serial telnet open status update service vault version help completion" -- "$current") )
     return
   fi
   if [[ "${COMP_WORDS[1]}" == "ssh" && "$COMP_CWORD" -eq 2 ]]; then
@@ -28,7 +28,7 @@ const zshCompletion = `#compdef sshc
 _sshc() {
   if (( CURRENT == 2 )); then
     local -a commands
-    commands=(engine ssh info sync terminal serial telnet open status update vault version help completion)
+    commands=(engine ssh info sync terminal serial telnet open status update service vault version help completion)
     _describe 'sshc command' commands
     return
   fi
@@ -54,7 +54,7 @@ function __sshc_ssh_needs_alias
     test (count $words) -eq 2; and test "$words[2]" = ssh
 end
 
-complete -c sshc -f -n __sshc_needs_command -a 'engine ssh info sync terminal serial telnet open status update vault version help completion'
+complete -c sshc -f -n __sshc_needs_command -a 'engine ssh info sync terminal serial telnet open status update service vault version help completion'
 complete -c sshc -f -n __sshc_ssh_needs_alias -a '(command sshc ssh --list 2>/dev/null)'
 complete -c sshc -f -n __sshc_ssh_needs_alias -l list -d 'Print every concrete Host alias'
 complete -c sshc -f -n __sshc_ssh_needs_alias -l help -d 'Show help for sshc ssh'
