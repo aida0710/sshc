@@ -65,6 +65,8 @@ export function ConsoleList({
   const [closing, setClosing] = useState<TerminalSession | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
+  const [renamingWorkspace, setRenamingWorkspace] = useState(false);
+  const [workspaceDraft, setWorkspaceDraft] = useState("");
   const [dragging, setDragging] = useState<string | null>(null);
   const [dropBefore, setDropBefore] = useState<string | null>(null);
   const [workspaceExpanded, setWorkspaceExpanded] = useState(false);
@@ -72,7 +74,6 @@ export function ConsoleList({
   const [shiftPressed, setShiftPressed] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const menuTriggerRef = useRef<HTMLButtonElement | null>(null);
-  const workspaceMenuRef = useRef<HTMLLIElement | null>(null);
 
   const live = sessions.filter((session) => session.exited === undefined).length;
   const full = maxSessions > 0 && live >= maxSessions;
@@ -86,12 +87,15 @@ export function ConsoleList({
   useEffect(() => {
     if (menuFor !== null && !sessions.some((session) => session.id === menuFor)) setMenuFor(null);
     if (renaming !== null && !sessions.some((session) => session.id === renaming)) setRenaming(null);
-    if (workspace === null) setWorkspaceMenuOpen(false);
+    if (workspace === null) {
+      setWorkspaceMenuOpen(false);
+      setRenamingWorkspace(false);
+    }
   }, [sessions, menuFor, renaming, workspace]);
 
   useDismissibleLayer({
     open: menuFor !== null || workspaceMenuOpen,
-    containerRefs: [menuRef, menuTriggerRef, workspaceMenuRef],
+    containerRefs: [menuRef, menuTriggerRef],
     onDismiss: () => {
       setMenuFor(null);
       setWorkspaceMenuOpen(false);
@@ -161,6 +165,13 @@ export function ConsoleList({
     await onRename(id, wanted);
   }
 
+  function commitWorkspaceRename() {
+    const wanted = workspaceDraft.trim();
+    setRenamingWorkspace(false);
+    if (workspace === null || wanted === "" || wanted === workspace.name) return;
+    onRenameWorkspace(wanted);
+  }
+
   return (
     <div className="flex flex-col gap-2">
       {problem === "" ? null : (
@@ -180,7 +191,7 @@ export function ConsoleList({
           onDrop={() => drop(null)}
         >
           {workspace === null || groupedSessions.length < 2 ? null : (
-            <li ref={workspaceMenuRef} className="relative rounded-lg border border-control-line bg-control/70 p-1">
+            <li className="relative rounded-lg border border-control-line bg-control/70 p-1">
               <div className={`flex items-center gap-1 rounded-md ${workspaceMembers.has(selected ?? "") ? "bg-select-fill" : ""}`}>
                 <button
                   type="button"
@@ -191,15 +202,33 @@ export function ConsoleList({
                 >
                   <span aria-hidden="true" className="text-xs">{workspaceExpanded ? "▾" : "▸"}</span>
                 </button>
-                <button type="button" aria-label={workspace.name} onClick={() => onSelect(workspace.focusedSessionId)} className="min-w-0 grow px-1 py-1 text-left">
-                  <span className="flex min-w-0 items-center gap-1.5">
-                    <span className="block min-w-0 truncate text-sm font-medium text-ink">{workspace.name}</span>
-                    {groupedSessions.some((session) => unreadBySession.has(session.id)) ? (
-                      <span aria-label={t("terminal.unreadWorkspace")} className="size-2 shrink-0 rounded-full bg-accent" />
-                    ) : null}
-                  </span>
-                  <span className="block text-xs text-ink-faint">{t("workspace.groupCount", { count: String(groupedSessions.length) })}</span>
-                </button>
+                {renamingWorkspace ? (
+                  <div className="min-w-0 grow px-1 py-1">
+                    <input
+                      autoFocus
+                      aria-label={t("workspace.renameLabel", { name: workspace.name })}
+                      value={workspaceDraft}
+                      onChange={(event) => setWorkspaceDraft(event.target.value)}
+                      onBlur={commitWorkspaceRename}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") commitWorkspaceRename();
+                        if (event.key === "Escape") setRenamingWorkspace(false);
+                      }}
+                      className="w-full rounded border border-accent bg-card px-1 py-0.5 text-sm text-ink"
+                    />
+                    <span className="block text-xs text-ink-faint">{t("workspace.groupCount", { count: String(groupedSessions.length) })}</span>
+                  </div>
+                ) : (
+                  <button type="button" aria-label={workspace.name} onClick={() => onSelect(workspace.focusedSessionId)} className="min-w-0 grow px-1 py-1 text-left">
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      <span className="block min-w-0 truncate text-sm font-medium text-ink">{workspace.name}</span>
+                      {groupedSessions.some((session) => unreadBySession.has(session.id)) ? (
+                        <span aria-label={t("terminal.unreadWorkspace")} className="size-2 shrink-0 rounded-full bg-accent" />
+                      ) : null}
+                    </span>
+                    <span className="block text-xs text-ink-faint">{t("workspace.groupCount", { count: String(groupedSessions.length) })}</span>
+                  </button>
+                )}
                 <button
                   type="button"
                   aria-label={t("workspace.rowMenu", { name: workspace.name })}
@@ -225,9 +254,9 @@ export function ConsoleList({
                     type="button"
                     role="menuitem"
                     onClick={() => {
+                      setWorkspaceDraft(workspace.name);
+                      setRenamingWorkspace(true);
                       setWorkspaceMenuOpen(false);
-                      const name = window.prompt(t("workspace.renamePrompt"), workspace.name)?.trim() ?? "";
-                      if (name !== "" && name !== workspace.name) onRenameWorkspace(name);
                     }}
                     className="block w-full rounded px-2 py-1.5 text-left text-xs text-ink hover:bg-select-fill"
                   >
