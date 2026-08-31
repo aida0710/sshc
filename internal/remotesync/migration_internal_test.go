@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"sshc/internal/platform/windowsacl/acltest"
 	"sshc/internal/storage"
 )
 
@@ -50,9 +51,7 @@ func TestReadStateMigratesItsV5Base(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(service.statePath()), storage.DirectoryPermission); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(service.statePath(), document, storage.FilePermission); err != nil {
-		t.Fatal(err)
-	}
+	acltest.WritePrivateFile(t, service.statePath(), document)
 
 	loaded, err := service.readState()
 	if err != nil {
