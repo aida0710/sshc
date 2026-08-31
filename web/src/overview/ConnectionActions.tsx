@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslate } from "../i18n/context";
 import { connectionLocation } from "../routing/connectionRoute";
 import { Icon } from "../ui/icons";
+import { useDismissibleLayer } from "../ui/useDismissibleLayer";
 
 type ConnectionActionsProps = {
   alias: string;
@@ -25,24 +26,12 @@ export function ConnectionActions({
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
 
-  useEffect(() => {
-    if (!open) return;
-
-    const closeOutside = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
-    };
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      setOpen(false);
-      triggerRef.current?.focus();
-    };
-    document.addEventListener("pointerdown", closeOutside);
-    document.addEventListener("keydown", closeOnEscape);
-    return () => {
-      document.removeEventListener("pointerdown", closeOutside);
-      document.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [open]);
+  useDismissibleLayer({
+    open,
+    containerRefs: [rootRef],
+    onDismiss: () => setOpen(false),
+    returnFocusRef: triggerRef,
+  });
 
   const settingsLocation = connectionLocation({ path, alias, panel: "Basic", advanced: "Jump" });
 

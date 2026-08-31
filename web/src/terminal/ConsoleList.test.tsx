@@ -176,6 +176,18 @@ describe("ConsoleList", () => {
     expect(screen.getByRole("menuitem", { name: "Move down" })).toBeEnabled();
   });
 
+  it("closes the row menu with Escape and returns focus to its trigger", async () => {
+    const user = userEvent.setup();
+    renderList();
+    const trigger = screen.getByRole("button", { name: "Actions for bastion" });
+
+    await user.click(trigger);
+    await user.keyboard("{Escape}");
+
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+  });
+
   it("opens the row menu upward when the navigation has no room below", async () => {
     const user = userEvent.setup();
     renderList();

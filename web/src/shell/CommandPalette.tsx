@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from "react";
 import type { FileNode, HostEntry, HostIdentity } from "../api/config";
 import { snippetsApi, type Snippet } from "../snippets/api";
 import { useTranslate } from "../i18n/context";
@@ -8,6 +8,7 @@ import { Icon } from "../ui/icons";
 import type { TerminalSession } from "../api/integrations";
 import { agentStatusLabel, terminalDisplayTitle } from "../terminal/agentPresentation";
 import type { AgentUnreadBySession } from "../terminal/agentNotifications";
+import { useDismissibleLayer } from "../ui/useDismissibleLayer";
 
 type PaletteItem = {
   id: string;
@@ -45,6 +46,7 @@ export function CommandPalette({
   onNavigate,
   onOpenSnippet,
   onOpenSession,
+  returnFocusRef,
 }: {
   open: boolean;
   hosts: HostEntry[];
@@ -59,9 +61,11 @@ export function CommandPalette({
   onNavigate: (section: Section) => void;
   onOpenSnippet: (id: string) => void;
   onOpenSession: (id: string) => void;
+  returnFocusRef?: RefObject<HTMLElement | null>;
 }) {
   const t = useTranslate();
   const input = useRef<HTMLInputElement>(null);
+  const panel = useRef<HTMLElement>(null);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(0);
   const [snippets, setSnippets] = useState<Snippet[]>([]);
@@ -87,16 +91,12 @@ export function CommandPalette({
     return () => { active = false; };
   }, [open]);
 
-  useEffect(() => {
-    if (!open) return;
-    function closeOnEscape(event: globalThis.KeyboardEvent) {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      onClose();
-    }
-    document.addEventListener("keydown", closeOnEscape);
-    return () => document.removeEventListener("keydown", closeOnEscape);
-  }, [onClose, open]);
+  useDismissibleLayer({
+    open,
+    containerRefs: [panel],
+    onDismiss: onClose,
+    ...(returnFocusRef === undefined ? {} : { returnFocusRef }),
+  });
 
   const items = useMemo<PaletteItem[]>(() => [
     ...sessions.filter((session) => session.exited === undefined).map((session) => {
@@ -176,9 +176,9 @@ export function CommandPalette({
   return (
     <div
       className="fixed inset-0 z-[70] flex items-start justify-center bg-canvas/80 px-3 pt-[10vh] backdrop-blur-[2px] md:pt-[14vh]"
-      onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}
     >
       <section
+        ref={panel}
         role="dialog"
         aria-modal="true"
         aria-labelledby="command-palette-heading"

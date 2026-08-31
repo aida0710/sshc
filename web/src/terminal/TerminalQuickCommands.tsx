@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import type { TerminalSession } from "../api/integrations";
 import { failureCode } from "../api/client";
 import { useTranslate } from "../i18n/context";
 import { snippetsApi, type Snippet } from "../snippets/api";
 import { clipboard } from "../ui/clipboard";
 import { terminalCommandApi } from "../features/workspaces/commandApi";
+import { useDismissibleLayer } from "../ui/useDismissibleLayer";
 
 type Prepared = {
   command: string;
@@ -16,10 +17,12 @@ export function TerminalQuickCommands({
   session,
   onClose,
   initialCommand = "",
+  returnFocusRef,
 }: {
   session: TerminalSession;
   onClose: () => void;
   initialCommand?: string;
+  returnFocusRef?: RefObject<HTMLElement | null>;
 }) {
   const t = useTranslate();
   const panel = useRef<HTMLDivElement>(null);
@@ -47,20 +50,12 @@ export function TerminalQuickCommands({
     return () => { active = false; };
   }, []);
 
-  useEffect(() => {
-    function dismiss(event: PointerEvent) {
-      if (!panel.current?.contains(event.target as Node)) onClose();
-    }
-    function escape(event: KeyboardEvent) {
-      if (event.key === "Escape") onClose();
-    }
-    document.addEventListener("pointerdown", dismiss);
-    document.addEventListener("keydown", escape);
-    return () => {
-      document.removeEventListener("pointerdown", dismiss);
-      document.removeEventListener("keydown", escape);
-    };
-  }, [onClose]);
+  useDismissibleLayer({
+    open: true,
+    containerRefs: [panel],
+    onDismiss: onClose,
+    ...(returnFocusRef === undefined ? {} : { returnFocusRef }),
+  });
 
   useEffect(() => {
     setPrepared(null);

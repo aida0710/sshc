@@ -7,8 +7,9 @@ import { locales, type Locale } from "../i18n/locale";
 import { themes, type Theme } from "../theme/theme";
 import type { MessageKey } from "../i18n/messages";
 import type { Section } from "../routing/sectionRoute";
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useRef, useState, useSyncExternalStore, type RefObject } from "react";
 import { sftpTransferManager } from "../sftp/transferManager";
+import { useDismissibleLayer } from "../ui/useDismissibleLayer";
 
 export function AppHeader({
   route,
@@ -17,6 +18,7 @@ export function AppHeader({
   navigationOpen,
   desktopNavigationVisible,
   navigationId,
+  navigationToggleRef,
   onToggleNavigation,
   onToggleDesktopNavigation,
   inspector,
@@ -36,6 +38,7 @@ export function AppHeader({
   navigationOpen: boolean;
   desktopNavigationVisible: boolean;
   navigationId: string;
+  navigationToggleRef?: RefObject<HTMLButtonElement | null>;
   onToggleNavigation: () => void;
   onToggleDesktopNavigation: () => void;
   inspector: InspectorContent | null;
@@ -46,7 +49,7 @@ export function AppHeader({
   localeLabels: Record<Locale, MessageKey>;
   theme: Theme;
   onThemeChange: (theme: Theme) => void;
-  onOpenCommandPalette: () => void;
+  onOpenCommandPalette: (trigger: HTMLElement) => void;
   onOpenTransfers: () => void;
 }) {
   const { t, locale, setLocale } = useLanguage();
@@ -54,36 +57,16 @@ export function AppHeader({
   const [preferenceMenuOpen, setPreferenceMenuOpen] = useState(false);
   const transfers = useSyncExternalStore(sftpTransferManager.subscribe, sftpTransferManager.getSnapshot);
   const activeTransfers = transfers.filter((job) => ["queued", "running", "paused", "reattach", "needs_overwrite"].includes(job.status)).length;
-  useEffect(() => {
-    function closeOutsidePreferenceMenu(event: PointerEvent) {
-      const menu = preferenceMenu.current;
-      if (menu === null || !menu.open) return;
-      const target = event.target;
-      if (target instanceof Node && !menu.contains(target)) setPreferenceMenuOpen(false);
-    }
-    function closePreferenceMenuWithKeyboard(event: KeyboardEvent) {
-      if (event.key === "Escape" && preferenceMenu.current?.open === true) {
-        setPreferenceMenuOpen(false);
-      }
-    }
-    function closePreferenceMenuForAndroidBack(event: Event) {
-      if (preferenceMenu.current?.open !== true) return;
-      event.preventDefault();
-      setPreferenceMenuOpen(false);
-    }
-    document.addEventListener("pointerdown", closeOutsidePreferenceMenu, true);
-    document.addEventListener("keydown", closePreferenceMenuWithKeyboard);
-    window.addEventListener("sshc-android-back", closePreferenceMenuForAndroidBack);
-    return () => {
-      document.removeEventListener("pointerdown", closeOutsidePreferenceMenu, true);
-      document.removeEventListener("keydown", closePreferenceMenuWithKeyboard);
-      window.removeEventListener("sshc-android-back", closePreferenceMenuForAndroidBack);
-    };
-  }, []);
+  useDismissibleLayer({
+    open: preferenceMenuOpen,
+    containerRefs: [preferenceMenu],
+    onDismiss: () => setPreferenceMenuOpen(false),
+  });
   return (
     <header data-app-header className="sticky top-0 z-20 flex h-12 shrink-0 items-center gap-2 border-b border-line bg-toolbar px-2 md:gap-3 md:px-3">
       <div className="flex min-w-0 flex-1 items-center gap-2 md:contents">
         <button
+          ref={navigationToggleRef}
           type="button"
           aria-label={t("shell.navigationToggle")}
           aria-expanded={navigationOpen}
@@ -149,7 +132,7 @@ export function AppHeader({
         <button
           type="button"
           aria-label={t("palette.open")}
-          onClick={onOpenCommandPalette}
+          onClick={(event) => onOpenCommandPalette(event.currentTarget)}
           className="mr-1 flex h-8 min-w-44 items-center gap-2 rounded border border-control-line bg-control px-2.5 text-xs text-ink-muted hover:border-accent hover:text-ink"
         >
           <Icon name="search" className="h-3.5 w-3.5" />

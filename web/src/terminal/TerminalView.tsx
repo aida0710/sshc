@@ -122,6 +122,7 @@ export function TerminalView({
   const [quickCommandsOpen, setQuickCommandsOpen] = useState(false);
   const [quickCommandSelection, setQuickCommandSelection] = useState("");
   const [overflowOpen, setOverflowOpen] = useState(false);
+  const overflowTrigger = useRef<HTMLButtonElement>(null);
   const [portForwardsOpen, setPortForwardsOpen] = useState(false);
   const [linkSelection, setLinkSelection] = useState<TerminalLinkSelection | null>(null);
   const control = useRef<{ now: () => void; stop: () => void }>({ now: () => {}, stop: () => {} });
@@ -557,6 +558,7 @@ export function TerminalView({
           <Icon name="search" className="size-3.5" />
         </button>
         <button
+          ref={overflowTrigger}
           type="button"
           aria-label={t("terminal.moreActions")}
           aria-expanded={overflowOpen}
@@ -567,6 +569,7 @@ export function TerminalView({
         </button>
         {overflowOpen ? (
           <TerminalOverflowMenu
+            triggerRef={overflowTrigger}
             osc52Enabled={osc52Enabled}
             onQuickCommands={() => {
               setQuickCommandSelection(terminal.current?.getSelection() ?? "");
@@ -758,6 +761,7 @@ export function TerminalView({
         <TerminalQuickCommands
           session={session}
           initialCommand={quickCommandSelection}
+          returnFocusRef={overflowTrigger}
           onClose={() => setQuickCommandsOpen(false)}
         />
       ) : null}

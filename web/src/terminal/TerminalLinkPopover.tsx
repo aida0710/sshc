@@ -1,8 +1,9 @@
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 import { createPortal } from "react-dom";
 import { useTranslate } from "../i18n/context";
 import { clipboard } from "../ui/clipboard";
 import { isSafeHttpURL, type TerminalLinkMatch } from "./links";
+import { useDismissibleLayer } from "../ui/useDismissibleLayer";
 
 export type RemotePathAction = "browse" | "edit" | "download";
 
@@ -32,20 +33,7 @@ export function TerminalLinkPopover({
   const t = useTranslate();
   const panel = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    function dismiss(event: PointerEvent) {
-      if (!panel.current?.contains(event.target as Node)) onClose();
-    }
-    function escape(event: KeyboardEvent) {
-      if (event.key === "Escape") onClose();
-    }
-    document.addEventListener("pointerdown", dismiss);
-    document.addEventListener("keydown", escape);
-    return () => {
-      document.removeEventListener("pointerdown", dismiss);
-      document.removeEventListener("keydown", escape);
-    };
-  }, [onClose]);
+  useDismissibleLayer({ open: true, containerRefs: [panel], onDismiss: onClose });
 
   function copy() {
     void clipboard.writeText(selection.link.target).finally(onClose);
