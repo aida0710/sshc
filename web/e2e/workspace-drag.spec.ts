@@ -23,7 +23,7 @@ const sessions = [
   },
 ];
 
-test("docks connected terminals into a live workspace", async ({ page, installation }) => {
+async function mockWorkspaceSessions(page: import("@playwright/test").Page) {
   let ticket = 0;
   await page.route("**/api/v1/terminal/sessions**", async (route) => {
     const request = route.request();
@@ -47,6 +47,10 @@ test("docks connected terminals into a live workspace", async ({ page, installat
     const current = new URL(socket.url()).searchParams.get("ticket") ?? "terminal";
     socket.send(Buffer.from(`[sshc] ${current} connected\r\n$ `));
   });
+}
+
+test("docks connected terminals into a live workspace", async ({ page, installation }) => {
+  await mockWorkspaceSessions(page);
 
   await openApplication(page, installation);
   const navigation = page.getByRole("navigation", { name: "Primary" });
@@ -102,6 +106,37 @@ test("docks connected terminals into a live workspace", async ({ page, installat
   if (visualDirectory !== undefined) {
     await page.screenshot({ path: `${visualDirectory}/sshc-v0.16.0-live-workspace-mobile.png`, fullPage: true });
   }
+});
+
+test("keeps terminal rows inside vertically split panes", async ({ page, installation }) => {
+  await mockWorkspaceSessions(page);
+  await openApplication(page, installation);
+
+  const navigation = page.getByRole("navigation", { name: "Primary" });
+  await navigation.getByRole("button", { name: "edge", exact: true }).click();
+  const target = page.locator("[data-single-terminal-drop-target='workspace-edge']");
+  await expect(target).toBeVisible();
+  const databaseRow = navigation
+    .getByRole("list", { name: "Open consoles" })
+    .getByRole("listitem")
+    .filter({ hasText: "connected · database" });
+  const targetBox = await target.boundingBox();
+  expect(targetBox).not.toBeNull();
+  await databaseRow.dragTo(target, {
+    targetPosition: { x: targetBox!.width / 2, y: Math.max(1, targetBox!.height - 8) },
+  });
+
+  const panes = page.locator("[data-workspace-pane]");
+  await expect(panes).toHaveCount(2);
+  const overflows = await panes.evaluateAll((elements) => elements.map((pane) => {
+    const host = pane.querySelector("[data-terminal-host]");
+    if (host === null) return Number.POSITIVE_INFINITY;
+    const terminal = host.querySelector(".xterm");
+    if (terminal === null) return Number.POSITIVE_INFINITY;
+    return terminal.getBoundingClientRect().bottom - host.getBoundingClientRect().bottom;
+  }));
+  expect(overflows).toHaveLength(2);
+  for (const overflow of overflows) expect(overflow).toBeLessThanOrEqual(0.5);
 });
 
 test("selects the whole local console row and docks local shells", async ({ page, installation }) => {
