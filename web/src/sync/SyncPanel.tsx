@@ -1,21 +1,9 @@
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
-import { failureCode } from "../api/client";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import {
   integrationsApi,
   type IntegrationsApi,
-  type PullResponse,
-  type SyncBucketStatus,
   type SyncDirection,
-  type SyncHistory,
   type SyncHistoryDiff,
-  type SyncPushDraft,
-  type SyncSetupCheckResponse,
   type SyncStatus,
 } from "../api/integrations";
 import { useLanguage } from "../i18n/context";
@@ -24,12 +12,15 @@ import { Field, control, hintText, sectionHeading } from "../ui/form";
 import { Button, Notice } from "../ui/surface";
 import { PageHeader } from "../ui/page";
 import { Icon } from "../ui/icons";
-import {
-  formatBytes,
-  SyncResultCard,
-  type SyncResultView,
-} from "./SyncResultCard";
+import { formatBytes, SyncResultCard } from "./SyncResultCard";
 import { SyncExclusionsPanel } from "./SyncExclusionsPanel";
+import { useSyncSetupForm } from "./useSyncSetupForm";
+import { useSyncRemoteState } from "./useSyncRemoteState";
+import { useSyncOperation } from "./useSyncOperation";
+import { useSyncPullPreview } from "./useSyncPullPreview";
+import { SyncForcePushDialog } from "./SyncForcePushDialog";
+import { SyncPullPreviewDialog } from "./SyncPullPreviewDialog";
+import { SyncHistorySection } from "./SyncHistorySection";
 
 type SyncPanelProps = { api?: IntegrationsApi };
 
@@ -80,18 +71,6 @@ type SyncStatusState =
   | { phase: "error"; message: string }
   | { phase: "ready"; value: SyncStatus };
 
-type BucketStatusState =
-  | { phase: "idle" }
-  | { phase: "loading" }
-  | { phase: "error"; message: string }
-  | { phase: "ready"; value: SyncBucketStatus };
-
-type HistoryState =
-  | { phase: "idle" }
-  | { phase: "loading" }
-  | { phase: "error"; message: string }
-  | { phase: "ready"; value: SyncHistory };
-
 const refusals: Record<string, MessageKey> = {
   not_configured: "sync.notConfigured",
   wrong_master_password: "sync.wrongMaster",
@@ -132,147 +111,117 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
   const [statusState, setStatusState] = useState<SyncStatusState>({
     phase: "loading",
   });
-  const [endpoint, setEndpoint] = useState("");
-  const [bucket, setBucket] = useState("");
-  const [path, setPath] = useState("");
-  const [region, setRegion] = useState("");
-  const [accessKeyId, setAccessKeyId] = useState("");
-  const [secretAccessKey, setSecretAccessKey] = useState("");
-  const [direction, setDirection] = useState<SyncDirection>("both");
-  const [setupCheck, setSetupCheck] = useState<SyncSetupCheckResponse | null>(
-    null,
-  );
-  const [master, setMaster] = useState("");
-  const [revealed, setRevealed] = useState("");
-  const [ownKey, setOwnKey] = useState("");
-  const [chooseOwn, setChooseOwn] = useState(false);
-  const [confirmHistoryLoss, setConfirmHistoryLoss] = useState(false);
-  const [bucketState, setBucketState] = useState<BucketStatusState>({
-    phase: "idle",
-  });
-  const [historyState, setHistoryState] = useState<HistoryState>({
-    phase: "idle",
-  });
-  const [historyDiff, setHistoryDiff] = useState<SyncHistoryDiff | null>(null);
-  const [selectedHistoryKey, setSelectedHistoryKey] = useState<string | null>(
-    null,
-  );
-  const [previewHistoryKey, setPreviewHistoryKey] = useState<
-    string | undefined
-  >(undefined);
-  const [previewAcceptRemoteHead, setPreviewAcceptRemoteHead] = useState(false);
-  const [forceConfirmed, setForceConfirmed] = useState(false);
-  const [forcePushOpen, setForcePushOpen] = useState(false);
-  const [acceptedRemovals, setAcceptedRemovals] = useState(false);
-  const [resolve, setResolve] = useState<"local" | "remote" | undefined>(
-    undefined,
-  );
-  const [preview, setPreview] = useState<PullResponse | null>(null);
-  const [resultView, setResultView] = useState<SyncResultView | null>(null);
-  const [notice, setNotice] = useState("");
-  const [error, setError] = useState("");
-  const [errorCode, setErrorCode] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [editingSettings, setEditingSettings] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [bucketHistoryExpanded, setBucketHistoryExpanded] = useState(false);
-  const [pushDraft, setPushDraft] = useState<SyncPushDraft | null>(null);
-  const [pushMessage, setPushMessage] = useState("");
-  const pushMessageDirty = useRef(false);
-
-  function editSettings(current: SyncStatus) {
-    setEndpoint(current.endpoint ?? "");
-    setBucket(current.bucket ?? "");
-    setPath(current.path ?? "");
-    setRegion(current.region ?? "");
-    setDirection(current.direction);
-    setAccessKeyId("");
-    setSecretAccessKey("");
-    setSetupCheck(null);
-    setEditingSettings(true);
-    setSettingsOpen(true);
-  }
-
-  const setupInput = {
+  const {
     endpoint,
     bucket,
     path,
     region,
     accessKeyId,
     secretAccessKey,
-  };
-
-  const refreshBucket = useCallback(async () => {
-    setBucketState({ phase: "loading" });
-    try {
-      setBucketState({ phase: "ready", value: await api.syncBucketStatus() });
-    } catch {
-      setBucketState({ phase: "error", message: t("sync.bucketStatusFailed") });
-    }
-  }, [api, t]);
-
-  const refreshHistory = useCallback(async () => {
-    setHistoryState({ phase: "loading" });
-    try {
-      const value = await api.syncHistory();
-      setHistoryState({ phase: "ready", value });
-      setSelectedHistoryKey((current) =>
-        current !== null &&
-        value.revisions.some((revision) => revision.key === current)
-          ? current
-          : null,
-      );
-    } catch {
-      setHistoryState({ phase: "error", message: t("sync.historyFailed") });
-    }
-  }, [api, t]);
-
-  const refreshPushDraft = useCallback(async () => {
-    try {
-      const draft = await api.syncPushDraft();
-      setPushDraft(draft);
-      if (!pushMessageDirty.current) setPushMessage(draft.message);
-    } catch {
-      setPushDraft(null);
-    }
-  }, [api]);
-
+    direction,
+    setupCheck,
+    ownKey,
+    chooseOwn,
+    confirmHistoryLoss,
+    editingSettings,
+    settingsOpen,
+    setupInput,
+    editSettings,
+    setEndpoint,
+    setBucket,
+    setPath,
+    setRegion,
+    setAccessKeyId,
+    setSecretAccessKey,
+    setDirection,
+    setSetupCheck,
+    setOwnKey,
+    setChooseOwn,
+    setConfirmHistoryLoss,
+    setEditingSettings,
+    setSettingsOpen,
+  } = useSyncSetupForm();
+  const [master, setMaster] = useState("");
+  const [revealed, setRevealed] = useState("");
+  const {
+    bucketState,
+    historyState,
+    selectedHistoryKey,
+    bucketHistoryExpanded,
+    pushDraft,
+    pushMessage,
+    refreshBucket,
+    refreshHistory,
+    refreshPushDraft,
+    resetBucket,
+    resetHistory,
+    resetPush,
+    selectHistory: selectHistoryKey,
+    toggleBucketHistory,
+    editPushMessage,
+    acceptPushMessage,
+  } = useSyncRemoteState(api, t);
+  const [historyDiff, setHistoryDiff] = useState<SyncHistoryDiff | null>(null);
+  const [forcePushOpen, setForcePushOpen] = useState(false);
+  const operation = useSyncOperation(t, refusals);
+  const {
+    resultView,
+    notice,
+    error,
+    errorCode,
+    busy,
+    execute,
+    clearError,
+    showNotice: setNotice,
+    showResult: setResultView,
+  } = operation;
+  const pull = useSyncPullPreview();
+  const {
+    preview,
+    historyKey: previewHistoryKey,
+    acceptRemoteHead: previewAcceptRemoteHead,
+    acceptedRemovals,
+    resolve,
+  } = pull;
   const reload = useCallback(async () => {
     setStatusState({ phase: "loading" });
     try {
       const next = await api.syncStatus();
       setStatusState({ phase: "ready", value: next });
       if (next.configured) void refreshBucket();
-      else setBucketState({ phase: "idle" });
+      else resetBucket();
       if (next.configured && next.keyConfigured) void refreshHistory();
-      else setHistoryState({ phase: "idle" });
+      else resetHistory();
       if (next.configured && next.direction !== "pull") {
         void refreshPushDraft();
       } else {
-        setPushDraft(null);
-        setPushMessage("");
-        pushMessageDirty.current = false;
+        resetPush();
       }
       if (
         next.direction === "pull" &&
         next.auto.phase === "blocked" &&
         next.auto.detail === "remote_moved"
       ) {
-        setError("");
-        setErrorCode("");
+        clearError();
       }
     } catch {
       setStatusState({ phase: "error", message: t("sync.statusFailed") });
     }
-  }, [api, refreshBucket, refreshHistory, refreshPushDraft, t]);
+  }, [
+    api,
+    refreshBucket,
+    refreshHistory,
+    refreshPushDraft,
+    resetBucket,
+    resetHistory,
+    resetPush,
+    t,
+    clearError,
+  ]);
 
   useEffect(() => {
     void reload();
   }, [reload]);
-
-  useEffect(() => {
-    setSetupCheck(null);
-  }, [endpoint, bucket, path, region, accessKeyId, secretAccessKey]);
 
   const shouldPollBucket =
     statusState.phase === "ready" &&
@@ -292,39 +241,25 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
     failure: string,
     explain?: (code: string) => string,
   ) {
-    setError("");
-    setErrorCode("");
-    setNotice("");
-    setBusy(true);
-    try {
-      apply(await operation());
-    } catch (caught) {
-      const code = failureCode(caught);
+    await execute(operation, apply, failure, explain, async (code) => {
       if (
-        code === "sync_remote_moved" &&
-        statusState.phase === "ready" &&
-        statusState.value.direction === "pull"
+        code !== "sync_remote_moved" ||
+        statusState.phase !== "ready" ||
+        statusState.value.direction !== "pull"
       ) {
-        await reload();
-        return;
+        return false;
       }
-      const named = refusals[code];
-      setErrorCode(code);
-      setError(explain?.(code) || (named === undefined ? failure : t(named)));
-    } finally {
-      setBusy(false);
-    }
+      await reload();
+      return true;
+    });
   }
 
   async function previewWith(choice?: "local" | "remote", historyKey?: string) {
-    setResolve(choice);
-    setPreviewHistoryKey(historyKey);
-    setPreviewAcceptRemoteHead(false);
+    pull.prepare(choice, historyKey);
     await run(
       () => api.pullSnapshot(false, choice, historyKey),
       (next) => {
-        setPreview(next);
-        setAcceptedRemovals(false);
+        pull.show(next);
         setResultView({ kind: "preview", result: next });
         setNotice(
           next.written.length + next.removed.length + next.conflicts.length ===
@@ -338,14 +273,11 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
   }
 
   async function previewCurrentRemoteHead() {
-    setResolve("remote");
-    setPreviewHistoryKey(undefined);
-    setPreviewAcceptRemoteHead(true);
+    pull.prepareRemoteHead();
     await run(
       () => api.pullSnapshot(false, "remote", undefined, undefined, true),
       (next) => {
-        setPreview(next);
-        setAcceptedRemovals(false);
+        pull.show(next);
         setResultView({ kind: "preview", result: next });
         setNotice(
           next.written.length + next.removed.length === 0
@@ -358,7 +290,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
   }
 
   async function selectHistory(key: string) {
-    setSelectedHistoryKey(key);
+    selectHistoryKey(key);
     setHistoryDiff(null);
     await run(
       () => api.diffSyncHistory(key),
@@ -451,19 +383,12 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
     );
   }
 
-  const conflicted = (preview?.conflicts ?? []).length > 0;
   const remoteHeadBlocked =
     status.auto.phase === "blocked" && status.auto.detail === "remote_moved";
   const pushChangeCount =
     pushDraft === null
       ? null
       : pushDraft.added + pushDraft.modified + pushDraft.removed;
-  const selectedHistory =
-    historyState.phase === "ready" && selectedHistoryKey !== null
-      ? historyState.value.revisions.find(
-          (revision) => revision.key === selectedHistoryKey,
-        )
-      : undefined;
   const bucketHistoryItems =
     bucketState.phase === "ready" ? bucketState.value.history : [];
   const visibleBucketHistory = bucketHistoryExpanded
@@ -491,8 +416,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
             value={pushMessage}
             maxLength={240}
             onChange={(event) => {
-              pushMessageDirty.current = true;
-              setPushMessage(event.target.value);
+              editPushMessage(event.target.value);
             }}
             className={control}
             placeholder={t("sync.commitMessagePlaceholder")}
@@ -524,10 +448,10 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
                 () => api.pushSnapshot(pushMessage.trim()),
                 (next) => {
                   setStatusState({ phase: "ready", value: next.status });
-                  setPreview(null);
+                  pull.close();
                   setResultView({ kind: "push", result: next.result });
                   setNotice(t("sync.pushed"));
-                  pushMessageDirty.current = false;
+                  acceptPushMessage();
                   void refreshPushDraft();
                   void refreshBucket();
                   void refreshHistory();
@@ -709,10 +633,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
                 <Button
                   kind="danger"
                   disabled={busy || !status.keyConfigured}
-                  onClick={() => {
-                    setForceConfirmed(false);
-                    setForcePushOpen(true);
-                  }}
+                  onClick={() => setForcePushOpen(true)}
                 >
                   {t("sync.forcePushShort")}
                 </Button>
@@ -1238,9 +1159,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
                         </ul>
                         {bucketState.value.history.length <= 5 ? null : (
                           <Button
-                            onClick={() =>
-                              setBucketHistoryExpanded((current) => !current)
-                            }
+                            onClick={toggleBucketHistory}
                             className="self-start"
                           >
                             {t(
@@ -1263,273 +1182,49 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
               )}
             </section>
 
-            <section
-              aria-labelledby="sync-history-heading"
-              className="flex flex-col gap-3 rounded-lg border border-line bg-surface-subtle p-4 lg:col-span-2"
-            >
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <h4 id="sync-history-heading" className={sectionHeading}>
-                    {t("sync.historyHeading")}
-                  </h4>
-                  <p className={`mt-1 ${hintText}`}>{t("sync.historyHint")}</p>
-                </div>
-                <Button
-                  disabled={
-                    busy ||
-                    !status.keyConfigured ||
-                    historyState.phase === "loading"
-                  }
-                  onClick={() => void refreshHistory()}
-                >
-                  {t("sync.historyRefresh")}
-                </Button>
-              </div>
-
-              {historyState.phase === "idle" ? (
-                <p className={hintText}>{t("sync.historyNeedsKey")}</p>
-              ) : historyState.phase === "loading" ? (
-                <p role="status" className={hintText}>
-                  {t("sync.historyLoading")}
-                </p>
-              ) : historyState.phase === "error" ? (
-                <Notice tone="danger">{historyState.message}</Notice>
-              ) : (
-                <div className="border-t border-line pt-3">
-                  <p className={hintText}>
-                    {t("sync.historySummary", {
-                      count: historyState.value.revisions.length,
-                      size: formatBytes(
-                        historyState.value.downloadedBytes,
-                        locale,
-                      ),
-                    })}
-                  </p>
-                  {historyState.value.historyTruncated ||
-                  historyState.value.downloadTruncated ? (
-                    <p className="mt-1 text-xs text-notice-ink">
-                      {t("sync.historyTruncated")}
-                    </p>
-                  ) : null}
-                  {historyState.value.skipped > 0 ? (
-                    <p className="mt-1 text-xs text-notice-ink">
-                      {t("sync.historySkipped", {
-                        count: historyState.value.skipped,
-                      })}
-                    </p>
-                  ) : null}
-
-                  <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1.1fr)_minmax(18rem,0.9fr)]">
-                    <ol
-                      className="max-h-80 space-y-2 overflow-auto pr-1"
-                      aria-label={t("sync.historyTimeline")}
-                    >
-                      {historyState.value.revisions.map((revision) => (
-                        <li
-                          key={revision.key}
-                          className="relative border-l-2 border-line pl-4"
-                        >
-                          <span className="absolute -left-[5px] top-4 h-2 w-2 rounded-full bg-accent" />
-                          <button
-                            type="button"
-                            disabled={busy}
-                            onClick={() => void selectHistory(revision.key)}
-                            className={`w-full rounded border px-3 py-2 text-left ${
-                              selectedHistoryKey === revision.key
-                                ? "border-accent bg-select-fill"
-                                : "border-hairline bg-surface hover:border-line"
-                            }`}
-                          >
-                            <span className="flex flex-wrap items-center justify-between gap-2">
-                              <span className="font-mono text-xs font-semibold text-ink">
-                                {revision.revision.slice(0, 12)}
-                              </span>
-                              <span className="rounded-full bg-toolbar px-2 py-0.5 text-[11px] font-medium text-ink-muted">
-                                {t(
-                                  `sync.historyRelation.${revision.relation}` as MessageKey,
-                                )}
-                              </span>
-                            </span>
-                            <span className="mt-1 block text-xs text-ink-muted">
-                              {t("sync.historyRevisionMeta", {
-                                at: revision.createdAt,
-                                count: revision.fileCount,
-                                origin: revision.origin.slice(0, 8),
-                              })}
-                            </span>
-                            <span className="mt-1 block text-sm font-medium text-ink">
-                              {revision.message}
-                            </span>
-                            {revision.parentRevision === undefined ? null : (
-                              <span className="mt-1 block font-mono text-[11px] text-ink-muted">
-                                {t("sync.historyParent", {
-                                  revision: revision.parentRevision.slice(
-                                    0,
-                                    12,
-                                  ),
-                                })}
-                              </span>
-                            )}
-                          </button>
-                        </li>
-                      ))}
-                    </ol>
-
-                    <div className="min-w-0 rounded border border-line bg-surface p-3">
-                      {selectedHistory === undefined ? (
-                        <p className={hintText}>{t("sync.historySelect")}</p>
-                      ) : (
-                        <div className="flex flex-col gap-3">
-                          <div>
-                            <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">
-                              {t("sync.historySelected")}
-                            </p>
-                            <p className="mt-1 break-all font-mono text-xs text-ink">
-                              {selectedHistory.key}
-                            </p>
-                          </div>
-                          {historyDiff === null ? (
-                            <p role="status" className={hintText}>
-                              {busy
-                                ? t("sync.historyDiffLoading")
-                                : t("sync.historyDiffEmpty")}
-                            </p>
-                          ) : (
-                            <div className="grid gap-2 text-xs sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
-                              {(
-                                [
-                                  ["added", historyDiff.added, "text-success"],
-                                  [
-                                    "modified",
-                                    historyDiff.modified,
-                                    "text-notice-ink",
-                                  ],
-                                  [
-                                    "removed",
-                                    historyDiff.removed,
-                                    "text-danger",
-                                  ],
-                                ] as const
-                              ).map(([kind, paths, tone]) => (
-                                <div
-                                  key={kind}
-                                  className="min-w-0 rounded bg-toolbar p-2"
-                                >
-                                  <p className={`font-medium ${tone}`}>
-                                    {t(
-                                      `sync.historyDiff.${kind}` as MessageKey,
-                                      { count: paths.length },
-                                    )}
-                                  </p>
-                                  <ul className="mt-1 max-h-24 space-y-0.5 overflow-auto font-mono text-[11px] text-ink-muted">
-                                    {paths.map((path) => (
-                                      <li key={path} className="break-all">
-                                        {path}
-                                      </li>
-                                    ))}
-                                  </ul>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                          <p className={hintText}>
-                            {t("sync.historyRestoreHint")}
-                          </p>
-                          <Button
-                            kind="primary"
-                            disabled={busy || status.direction === "push"}
-                            onClick={() =>
-                              void previewWith(undefined, selectedHistory.key)
-                            }
-                            className="self-start"
-                          >
-                            {t("sync.historyRestorePreview")}
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </section>
+            <SyncHistorySection
+              busy={busy}
+              direction={status.direction}
+              historyDiff={historyDiff}
+              historyState={historyState}
+              keyConfigured={status.keyConfigured}
+              locale={locale}
+              selectedKey={selectedHistoryKey}
+              t={t}
+              onPreview={(key) => void previewWith(undefined, key)}
+              onRefresh={() => void refreshHistory()}
+              onSelect={(key) => void selectHistory(key)}
+            />
           </div>
         </details>
       ) : null}
 
       {forcePushOpen ? (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="sync-force-push-heading"
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-3 sm:items-center"
-        >
-          <section className="sshc-card flex max-h-[90vh] w-full max-w-lg flex-col overflow-auto rounded-md bg-card">
-            <header className="flex items-center justify-between gap-3 border-b border-line bg-toolbar px-4 py-3">
-              <h3 id="sync-force-push-heading" className={sectionHeading}>
-                {t("sync.forceHeading")}
-              </h3>
-              <Button
-                onClick={() => setForcePushOpen(false)}
-                disabled={busy}
-              >
-                {t("sync.dialogClose")}
-              </Button>
-            </header>
-            <div className="flex flex-col gap-4 p-4">
-              <Notice tone="danger">{t("sync.forceHint")}</Notice>
-              <Field label={t("sync.commitMessage")}>
-                <input
-                  value={pushMessage}
-                  maxLength={240}
-                  onChange={(event) => {
-                    pushMessageDirty.current = true;
-                    setPushMessage(event.target.value);
-                  }}
-                  className={control}
-                />
-              </Field>
-              <label className="flex items-start gap-2 text-sm text-ink">
-                <input
-                  type="checkbox"
-                  checked={forceConfirmed}
-                  onChange={(event) => setForceConfirmed(event.target.checked)}
-                  className="mt-0.5"
-                />
-                <span>{t("sync.forceConfirm")}</span>
-              </label>
-              <Button
-                kind="danger"
-                disabled={
-                  busy ||
-                  !forceConfirmed ||
-                  !status.keyConfigured ||
-                  pushMessage.trim() === ""
-                }
-                onClick={() =>
-                  void run(
-                    () => api.forcePushSnapshot(pushMessage.trim()),
-                    (next) => {
-                      setStatusState({ phase: "ready", value: next.status });
-                      setPreview(null);
-                      setResultView({ kind: "push", result: next.result });
-                      setForceConfirmed(false);
-                      setForcePushOpen(false);
-                      setNotice(t("sync.forcePushed"));
-                      pushMessageDirty.current = false;
-                      void refreshPushDraft();
-                      void refreshBucket();
-                      void refreshHistory();
-                    },
-                    t("sync.forceFailed"),
-                  )
-                }
-                className="self-start"
-              >
-                {t("sync.forcePush")}
-              </Button>
-            </div>
-          </section>
-        </div>
+        <SyncForcePushDialog
+          busy={busy}
+          keyConfigured={status.keyConfigured}
+          message={pushMessage}
+          t={t}
+          onMessageChange={editPushMessage}
+          onClose={() => setForcePushOpen(false)}
+          onSubmit={() =>
+            void run(
+              () => api.forcePushSnapshot(pushMessage.trim()),
+              (next) => {
+                setStatusState({ phase: "ready", value: next.status });
+                pull.close();
+                setResultView({ kind: "push", result: next.result });
+                setForcePushOpen(false);
+                setNotice(t("sync.forcePushed"));
+                acceptPushMessage();
+                void refreshPushDraft();
+                void refreshBucket();
+                void refreshHistory();
+              },
+              t("sync.forceFailed"),
+            )
+          }
+        />
       ) : null}
 
       {resultView !== null ? (
@@ -1541,164 +1236,38 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
       )}
 
       {preview === null ? null : (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="sync-pull-preview-heading"
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-3 sm:items-center"
-        >
-        <section className="sshc-card max-h-[90vh] w-full max-w-2xl overflow-auto rounded-md bg-card">
-          <header className="flex items-center gap-2 border-b border-line bg-toolbar px-4 py-3">
-            <Icon name="config" className="h-4 w-4 text-ink-muted" />
-            <h3 id="sync-pull-preview-heading" className={`${sectionHeading} flex-1`}>
-              {t(
+        <SyncPullPreviewDialog
+          preview={preview}
+          acceptRemoteHead={previewAcceptRemoteHead}
+          acceptedRemovals={acceptedRemovals}
+          busy={busy}
+          direction={status.direction}
+          t={t}
+          onAcceptRemovals={pull.acceptRemovals}
+          onClose={pull.close}
+          onResolve={(choice) => void previewWith(choice, previewHistoryKey)}
+          onApply={() =>
+            void run(
+              () =>
                 previewAcceptRemoteHead
-                  ? "sync.remoteHeadPreviewHeading"
-                  : "sync.previewHeading",
-              )}
-            </h3>
-            <Button disabled={busy} onClick={() => setPreview(null)}>
-              {t("sync.dialogClose")}
-            </Button>
-          </header>
-          <div className="flex flex-col gap-3 px-4 py-4">
-            {previewAcceptRemoteHead ? (
-              <Notice tone="notice">
-                {t("sync.remoteHeadPreview", {
-                  at: preview.summary.createdAt,
-                  origin: preview.origin ?? "—",
-                })}
-              </Notice>
-            ) : null}
-            {conflicted ? (
-              <>
-                <p className="text-sm text-notice-ink">
-                  {t("sync.conflictExplain")}
-                </p>
-                <ul className="flex flex-col gap-2 text-xs text-notice-ink">
-                  {preview.conflicts.map((conflict) => {
-                    const modeChanged =
-                      conflict.baseMode !== conflict.localMode ||
-                      conflict.baseMode !== conflict.remoteMode;
-                    return (
-                      <li key={conflict.path} className="flex flex-col gap-0.5">
-                        <span className="font-mono">{conflict.path}</span>
-                        {modeChanged ? (
-                          <span className="text-ink-muted">
-                            {t("sync.conflictPermissions", {
-                              base: conflict.baseMode ?? "—",
-                              local: conflict.localMode ?? "—",
-                              remote: conflict.remoteMode ?? "—",
-                            })}
-                          </span>
-                        ) : null}
-                      </li>
-                    );
-                  })}
-                </ul>
-
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => void previewWith("local", previewHistoryKey)}
-                    className="rounded border border-line px-3 py-1.5 text-sm text-ink"
-                  >
-                    {t("sync.keepMine")}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() =>
-                      void previewWith("remote", previewHistoryKey)
-                    }
-                    className="rounded border border-line px-3 py-1.5 text-sm text-ink"
-                  >
-                    {t("sync.takeTheirs")}
-                  </button>
-                </div>
-              </>
-            ) : null}
-            {preview.written.length === 0 ? null : (
-              <>
-                <p className={hintText}>
-                  {t("sync.wouldWrite", { count: preview.written.length })}
-                </p>
-                <ul className="flex flex-col gap-1 font-mono text-xs text-ink-muted">
-                  {preview.written.map((path) => (
-                    <li key={path}>{path}</li>
-                  ))}
-                </ul>
-              </>
-            )}
-            {preview.removed.length === 0 ? null : (
-              <>
-                <p className={hintText}>
-                  {t("sync.wouldRemove", { count: preview.removed.length })}
-                </p>
-                <ul className="flex flex-col gap-1 font-mono text-xs text-danger">
-                  {preview.removed.map((path) => (
-                    <li key={path}>{path}</li>
-                  ))}
-                </ul>
-              </>
-            )}
-            {preview.removed.length === 0 ? null : (
-              <label className="flex items-start gap-2 rounded border border-notice-line bg-notice p-3 text-sm text-notice-ink">
-                <input
-                  type="checkbox"
-                  checked={acceptedRemovals}
-                  onChange={(event) =>
-                    setAcceptedRemovals(event.target.checked)
-                  }
-                  className="mt-0.5"
-                />
-                <span>{t("sync.confirmOverwrite")}</span>
-              </label>
-            )}
-            <Button
-              kind="primary"
-              disabled={
-                busy ||
-                conflicted ||
-                status.direction === "push" ||
-                (preview.removed.length > 0 && !acceptedRemovals)
-              }
-              onClick={() =>
-                void run(
-                  () =>
-                    previewAcceptRemoteHead
-                      ? api.pullSnapshot(
-                          true,
-                          resolve,
-                          previewHistoryKey,
-                          preview,
-                          true,
-                        )
-                      : api.pullSnapshot(
-                          true,
-                          resolve,
-                          previewHistoryKey,
-                          preview,
-                        ),
-                  (next) => {
-                    setPreview(next);
-                    setResultView({ kind: "apply", result: next });
-                    setNotice(t("sync.applied"));
-                    void reload();
-                  },
-                  t("sync.applyFailed"),
-                )
-              }
-              className="self-start"
-            >
-              {t(
-                previewAcceptRemoteHead ? "sync.remoteHeadApply" : "sync.apply",
-              )}
-            </Button>
-          </div>
-        </section>
-        </div>
+                  ? api.pullSnapshot(
+                      true,
+                      resolve,
+                      previewHistoryKey,
+                      preview,
+                      true,
+                    )
+                  : api.pullSnapshot(true, resolve, previewHistoryKey, preview),
+              (next) => {
+                pull.replace(next);
+                setResultView({ kind: "apply", result: next });
+                setNotice(t("sync.applied"));
+                void reload();
+              },
+              t("sync.applyFailed"),
+            )
+          }
+        />
       )}
     </div>
   );
