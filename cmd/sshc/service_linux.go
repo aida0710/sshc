@@ -7,12 +7,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 	"unicode"
 
+	"sshc/internal/app"
+	"sshc/internal/handoff"
 	"sshc/internal/storage"
 )
 
@@ -22,6 +27,8 @@ const (
 )
 
 var defaultSystemctlCandidates = []string{"/usr/bin/systemctl", "/bin/systemctl"}
+
+const serviceReadyTimeout = 5 * time.Second
 
 type serviceCommandResult struct {
 	ExitCode int
@@ -53,9 +60,10 @@ func (runner osServiceCommandRunner) Run(ctx context.Context, arguments ...strin
 }
 
 type linuxServiceManager struct {
-	home   string
-	runner serviceCommandRunner
-	files  storage.FileSystem
+	home      string
+	runner    serviceCommandRunner
+	files     storage.FileSystem
+	waitReady func(context.Context, string, serviceCommandRunner) error
 }
 
 func newPlatformServiceManager(home string) (engineServiceManager, error) {
@@ -67,9 +75,10 @@ func newPlatformServiceManager(home string) (engineServiceManager, error) {
 		return nil, err
 	}
 	return &linuxServiceManager{
-		home:   filepath.Clean(home),
-		runner: osServiceCommandRunner{path: systemctl},
-		files:  storage.OSFileSystem{},
+		home:      filepath.Clean(home),
+		runner:    osServiceCommandRunner{path: systemctl},
+		files:     storage.OSFileSystem{},
+		waitReady: waitForServiceReady,
 	}, nil
 }
 
@@ -140,7 +149,13 @@ func (manager *linuxServiceManager) Install(ctx context.Context, executable stri
 	}
 	// enable --nowは既に動いているunitのExecStartを更新しないため、再導入でも
 	// 新しいbinaryへ確実に切り替わるよう明示的にrestartする。
-	return manager.run(ctx, "--user", "restart", serviceUnitName)
+	if err := manager.run(ctx, "--user", "restart", serviceUnitName); err != nil {
+		return err
+	}
+	if err := manager.waitUntilReady(ctx); err != nil {
+		return fmt.Errorf("service did not become ready: %w", err)
+	}
+	return nil
 }
 
 func (manager *linuxServiceManager) Status(ctx context.Context) (serviceState, error) {
@@ -179,7 +194,75 @@ func (manager *linuxServiceManager) RestartIfActive(ctx context.Context, executa
 	if err := manager.run(ctx, "--user", "try-restart", serviceUnitName); err != nil {
 		return false, err
 	}
+	state, err = manager.Status(ctx)
+	if err != nil {
+		return false, err
+	}
+	if state != serviceActive {
+		return false, nil
+	}
+	if err := manager.waitUntilReady(ctx); err != nil {
+		return false, fmt.Errorf("restarted service did not become ready: %w", err)
+	}
 	return true, nil
+}
+
+func (manager *linuxServiceManager) waitUntilReady(ctx context.Context) error {
+	if manager.waitReady == nil {
+		return errors.New("service readiness check is unavailable")
+	}
+	return manager.waitReady(ctx, manager.home, manager.runner)
+}
+
+func waitForServiceReady(ctx context.Context, home string, runner serviceCommandRunner) error {
+	readyCtx, cancel := context.WithTimeout(ctx, serviceReadyTimeout)
+	defer cancel()
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
+	client := &http.Client{Timeout: 250 * time.Millisecond}
+
+	for {
+		result, err := runner.Run(readyCtx, "--user", "show", "--property=MainPID", "--value", serviceUnitName)
+		if err == nil && result.ExitCode == 0 {
+			pid, parseErr := strconv.Atoi(strings.TrimSpace(string(result.Output)))
+			if parseErr == nil && pid > 0 {
+				document, readErr := handoff.Read(app.HandoffDir(home))
+				if readErr == nil && document.PID == pid {
+					answer, statusErr := requestStatus(readyCtx, document, client)
+					if statusErr == nil && answer.Owner == document.Owner && answer.Version == document.Version &&
+						answer.ProtocolVersion == document.ProtocolVersion {
+						return nil
+					}
+				}
+			}
+		}
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-readyCtx.Done():
+			detail := serviceFailureDetail(ctx, runner)
+			if detail == "" {
+				detail = "engine readiness was not published"
+			}
+			return fmt.Errorf("%s; stop any manually running `sshc engine` and retry", detail)
+		case <-ticker.C:
+		}
+	}
+}
+
+func serviceFailureDetail(ctx context.Context, runner serviceCommandRunner) string {
+	result, err := runner.Run(ctx, "--user", "show",
+		"--property=ActiveState", "--property=SubState", "--property=Result", "--property=ExecMainStatus",
+		"--value", serviceUnitName)
+	if err != nil || result.ExitCode != 0 {
+		return ""
+	}
+	lines := strings.Fields(string(result.Output))
+	if len(lines) == 0 {
+		return ""
+	}
+	return "systemd reports " + strings.Join(lines, "/")
 }
 
 func (manager *linuxServiceManager) unitMatches(executable string) (bool, error) {

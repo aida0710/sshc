@@ -3,13 +3,19 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"sshc/internal/app"
+	"sshc/internal/handoff"
 	"sshc/internal/storage"
 )
 
@@ -38,6 +44,9 @@ func testLinuxServiceManager(t *testing.T, runner serviceCommandRunner) *linuxSe
 		home:   t.TempDir(),
 		runner: runner,
 		files:  storage.OSFileSystem{},
+		waitReady: func(context.Context, string, serviceCommandRunner) error {
+			return nil
+		},
 	}
 }
 
@@ -154,7 +163,8 @@ func TestLinuxServiceRestartTouchesOnlyAnActiveManagedUnit(t *testing.T) {
 	if err != nil || !restarted {
 		t.Fatalf("restart = %v, %v", restarted, err)
 	}
-	if len(runner.calls) != 2 || strings.Join(runner.calls[1], " ") != "--user try-restart sshc.service" {
+	if len(runner.calls) != 3 || strings.Join(runner.calls[1], " ") != "--user try-restart sshc.service" ||
+		strings.Join(runner.calls[2], " ") != "--user is-active --quiet sshc.service" {
 		t.Fatalf("calls = %#v", runner.calls)
 	}
 
@@ -163,8 +173,74 @@ func TestLinuxServiceRestartTouchesOnlyAnActiveManagedUnit(t *testing.T) {
 		t.Fatal(err)
 	}
 	restarted, err = manager.RestartIfActive(context.Background(), "/opt/sshc/bin/sshc")
-	if err != nil || restarted || len(runner.calls) != 2 {
+	if err != nil || restarted || len(runner.calls) != 3 {
 		t.Fatalf("unmanaged restart = %v, %v calls=%#v", restarted, err, runner.calls)
+	}
+}
+
+func TestLinuxServiceTryRestartDoesNotStartAServiceStoppedAfterTheCheck(t *testing.T) {
+	runner := &fakeServiceCommandRunner{results: []serviceCommandResult{
+		{ExitCode: 0},
+		{ExitCode: 0},
+		{ExitCode: 3},
+	}}
+	manager := testLinuxServiceManager(t, runner)
+	if err := os.MkdirAll(filepath.Dir(manager.unitPath()), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	unit, err := systemdUnit("/opt/sshc/bin/sshc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(manager.unitPath(), []byte(unit), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	restarted, err := manager.RestartIfActive(context.Background(), "/opt/sshc/bin/sshc")
+	if err != nil || restarted {
+		t.Fatalf("restart = %v, %v", restarted, err)
+	}
+	if got := strings.Join(runner.calls[1], " "); got != "--user try-restart sshc.service" {
+		t.Fatalf("transition = %q", got)
+	}
+}
+
+func TestLinuxServiceInstallFailsWhenTheEngineNeverBecomesReady(t *testing.T) {
+	runner := &fakeServiceCommandRunner{}
+	manager := testLinuxServiceManager(t, runner)
+	manager.waitReady = func(context.Context, string, serviceCommandRunner) error {
+		return errors.New("engine lock is held")
+	}
+	err := manager.Install(context.Background(), "/opt/sshc/bin/sshc")
+	if err == nil || !strings.Contains(err.Error(), "did not become ready") {
+		t.Fatalf("install error = %v", err)
+	}
+}
+
+func TestServiceReadinessRequiresTheSystemdPIDAndStatusAPI(t *testing.T) {
+	secret, err := handoff.Mint(bytes.NewReader(make([]byte, 32)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.Header.Get(handoff.HeaderName) != secret {
+			http.Error(writer, "forbidden", http.StatusForbidden)
+			return
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(writer, `{"owner":"engine","version":"test","protocolVersion":1,"vault":false,"unlocked":false,"sessions":0}`)
+	}))
+	defer server.Close()
+	home := t.TempDir()
+	document := handoff.Handoff{
+		SchemaVersion: handoff.SchemaVersion, URL: server.URL, Secret: secret,
+		Owner: handoff.OwnerEngine, PID: 4242, Version: "test", ProtocolVersion: handoff.ProtocolVersion,
+	}
+	if err := handoff.Write(app.HandoffDir(home), document); err != nil {
+		t.Fatal(err)
+	}
+	runner := &fakeServiceCommandRunner{results: []serviceCommandResult{{ExitCode: 0, Output: []byte("4242\n")}}}
+	if err := waitForServiceReady(context.Background(), home, runner); err != nil {
+		t.Fatal(err)
 	}
 }
 
