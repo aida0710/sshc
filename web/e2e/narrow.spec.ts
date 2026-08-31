@@ -4,6 +4,41 @@ import { drawnRowFont, drawnRows, outsideTerminal, screenRect, terminalKeyboard 
 
 const hosts = "Host alpha\n\tHostName 198.51.100.10\n\nHost bravo\n\tHostName 198.51.100.11\n";
 
+const mobileWorkspaceSessions = [
+  { id: "mobile-zsh", kind: "shell", title: "zsh", startedAt: "2026-08-31T08:00:00Z", state: "connected", problem: "", forwards: [] },
+  { id: "mobile-bash", kind: "shell", title: "bash", startedAt: "2026-08-31T08:01:00Z", state: "connected", problem: "", forwards: [] },
+];
+
+async function mockMobileWorkspace(page: import("@playwright/test").Page) {
+  let ticket = 0;
+  await page.route("**/api/v1/terminal/sessions**", async (route) => {
+    if (new URL(route.request().url()).pathname.endsWith("/stream")) {
+      ticket += 1;
+      await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ streamTicket: `mobile-${ticket}` }) });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ sessions: mobileWorkspaceSessions, maxSessions: 12 }),
+    });
+  });
+  await page.routeWebSocket("**/terminal/stream?**", (socket) => socket.send(Buffer.from("local shell\r\n$ ")));
+  await page.addInitScript(() => window.sessionStorage.setItem("sshc.terminal.live-workspace.v1", JSON.stringify({
+    version: 1,
+    root: {
+      split: {
+        direction: "horizontal",
+        ratio: 50,
+        first: { pane: { id: "mobile-pane-zsh", sessionId: "mobile-zsh" } },
+        second: { pane: { id: "mobile-pane-bash", sessionId: "mobile-bash" } },
+      },
+    },
+    focusedPaneId: "mobile-pane-zsh",
+    focusModePaneId: null,
+  })));
+}
+
 const sections = [
   { navigation: "Connections", heading: "Connections" },
   { navigation: "SFTP", heading: "Remote files" },
@@ -435,6 +470,28 @@ test("keeps workspace management out of the mobile terminal", async ({ page, ins
   await expect(page.getByRole("button", { name: "Send command…" })).toBeHidden();
   await expect(page.locator("summary").filter({ hasText: "Saved layouts" })).toBeHidden();
   await expect(page.getByRole("navigation", { name: "Primary" })).toHaveClass(/shadow-none/);
+});
+
+test("renames a live workspace from the mobile navigation", async ({ page, installation }) => {
+  await mockMobileWorkspace(page);
+  await openApplication(page, installation);
+
+  await page.getByRole("button", { name: "Navigation", exact: true }).click();
+  const navigation = page.getByRole("navigation", { name: "Primary" });
+  await expect(navigation.getByText("localhost", { exact: true })).toBeVisible();
+  page.once("dialog", async (dialog) => {
+    expect(dialog.message()).toBe("Live workspace name");
+    expect(dialog.defaultValue()).toBe("localhost");
+    await dialog.accept("Mobile build");
+  });
+  await navigation.getByRole("button", { name: "Actions for localhost" }).click();
+  await navigation.getByRole("menuitem", { name: "Rename workspace" }).click();
+
+  await expect(navigation).not.toBeInViewport();
+  await expect(page.locator("[data-desktop-workspace-controls]").getByRole("button", { name: "Rename workspace" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Navigation", exact: true }).click();
+  await expect(navigation.getByText("Mobile build", { exact: true })).toBeVisible();
+  await expectNoHorizontalOverflow(page, "renamed mobile workspace");
 });
 
 test("removes the session status badge from the mobile header", async ({ page, installation }) => {
