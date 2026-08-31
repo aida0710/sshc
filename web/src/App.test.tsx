@@ -148,15 +148,18 @@ vi.mock("./keys/KeysScreen", () => ({
 }));
 vi.mock("./diagnostics/DiagnosticsPanel", () => ({ DiagnosticsPanel: () => <div>diagnostics panel</div> }));
 vi.mock("./settings/SettingsPanel", () => ({
-  SettingsPanel: () => {
+  SettingsPanel: ({ page = "All" }: { page?: string }) => {
     const [draft, setDraft] = useState("");
     return (
       <div>
-        settings panel
-        <label>
-          settings draft
-          <input value={draft} onChange={(event) => setDraft(event.target.value)} />
-        </label>
+        <h2>{page}</h2>
+        <section aria-label={page}>
+          settings panel
+          <label>
+            settings draft
+            <input value={draft} onChange={(event) => setDraft(event.target.value)} />
+          </label>
+        </section>
       </div>
     );
   },
@@ -474,6 +477,12 @@ describe("App", () => {
     const engine = within(settings).getByRole("link", { name: "Open Engine" });
     expect(engine).toHaveAttribute("href", "/settings/engine");
     expect(engine.querySelector("use")).toHaveAttribute("href", "#icon-settings");
+
+    await user.click(engine);
+    expect(window.location.pathname).toBe("/settings/engine");
+    expect(await screen.findByRole("heading", { name: "Engine" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Engine" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Notifications" })).toBeNull();
   });
 
   it("restores and changes the desktop navigation layout", async () => {
