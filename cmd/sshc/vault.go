@@ -37,7 +37,9 @@ var (
 // no-echo 読み取りができない入力を先に拒むことで、パイプや履歴へ秘密を置かない。
 type passwordTerminal interface {
 	IsTerminal(fd int) bool
-	ReadPassword(ctx context.Context, input *os.File) ([]byte, error)
+	// ReadPassword calls prompt only after no-echo input is active. It restores the
+	// terminal mode before returning, including when prompt or the read fails.
+	ReadPassword(ctx context.Context, input *os.File, prompt func() error) ([]byte, error)
 }
 
 type systemPasswordTerminal struct{}
@@ -237,11 +239,18 @@ func promptVaultPassword(
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if _, err := fmt.Fprint(stderr, prompt); err != nil {
-		return nil, err
+	prompted := false
+	typed, err := terminal.ReadPassword(ctx, stdin, func() error {
+		if _, err := fmt.Fprint(stderr, prompt); err != nil {
+			return err
+		}
+		prompted = true
+		return nil
+	})
+	var newlineErr error
+	if prompted {
+		_, newlineErr = fmt.Fprintln(stderr)
 	}
-	typed, err := terminal.ReadPassword(ctx, stdin)
-	_, newlineErr := fmt.Fprintln(stderr)
 	if err != nil {
 		return typed, err
 	}

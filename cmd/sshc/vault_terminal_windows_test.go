@@ -7,12 +7,63 @@ import (
 	"context"
 	"errors"
 	"io"
+	"slices"
 	"sync"
 	"testing"
 	"time"
 
 	"golang.org/x/sys/windows"
 )
+
+func TestWindowsPasswordPromptRunsAfterNoEchoSetupAndBeforeRead(t *testing.T) {
+	fake := newFakeWindowsPasswordOperations()
+	fake.events = []windowsKeyInput{windowsEnterKey()}
+	close(fake.inputReady)
+	events := make([]string, 0, 4)
+	operations := fake.operations()
+	setMode := operations.setMode
+	operations.setMode = func(handle windows.Handle, mode uint32) error {
+		if len(events) == 0 {
+			events = append(events, "no-echo")
+		} else {
+			events = append(events, "restore")
+		}
+		return setMode(handle, mode)
+	}
+	readInput := operations.readInput
+	operations.readInput = func(handle windows.Handle) (windowsKeyInput, error) {
+		events = append(events, "read")
+		return readInput(handle)
+	}
+
+	password, err := readWindowsPasswordWithPrompt(context.Background(), windows.Handle(40), operations, func() error {
+		events = append(events, "prompt")
+		return nil
+	})
+	defer zeroBytes(password)
+	if err != nil || len(password) != 0 {
+		t.Fatalf("password=%q error=%v", password, err)
+	}
+	want := []string{"no-echo", "prompt", "read", "restore"}
+	if !slices.Equal(events, want) {
+		t.Fatalf("events=%q, want %q", events, want)
+	}
+}
+
+func TestWindowsPasswordPromptFailureRestoresNoEchoModeBeforeReturning(t *testing.T) {
+	promptFailure := errors.New("prompt failed")
+	fake := newFakeWindowsPasswordOperations()
+	password, err := readWindowsPasswordWithPrompt(
+		context.Background(), windows.Handle(40), fake.operations(), func() error { return promptFailure },
+	)
+	if password != nil || !errors.Is(err, promptFailure) {
+		t.Fatalf("prompt failure=%v, %v", password, err)
+	}
+	fake.assertRestored(t)
+	if fake.closeEventCalls != 1 {
+		t.Fatalf("closed cancel events=%d, want 1", fake.closeEventCalls)
+	}
+}
 
 func TestWindowsPasswordReaderCancellationWakesWaitAndRestoresExactMode(t *testing.T) {
 	fake := newFakeWindowsPasswordOperations()
