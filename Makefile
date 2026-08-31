@@ -1,4 +1,4 @@
-.PHONY: generate test deadcode build build-cli android-bind release-binaries release-cli-current fuzz e2e verify-generated integration integration-up integration-down integration-sshd-relax install install-binary uninstall uninstall-binary update
+.PHONY: generate test deadcode build build-cli android-bind release-binaries release-cli-current fuzz e2e verify-generated verify-ui-dist integration integration-up integration-down integration-sshd-relax install install-binary uninstall uninstall-binary update
 
 # FUZZTIME は target ごとの実行時間。長時間試す場合は、たとえば
 # `make fuzz FUZZTIME=10m` のように上書きする。
@@ -50,9 +50,15 @@ fuzz:
 e2e: build
 	npm run e2e --prefix web
 
-# API モデルを再生成し、コミット済みの生成物と異なれば失敗する。
-# api/openapi.yaml を Go と TypeScript の共通スキーマとして扱う。
-verify-generated: generate
+# Web sourceから埋込み用の配布assetを再生成し、tracked fileの変更だけでなく
+# hash名を持つ新しいuntracked assetも含めて、コミット済みの内容と比較する。
+verify-ui-dist:
+	npm run build --prefix web
+	scripts/ci/check-ui-dist.sh
+
+# APIモデルと埋込みUIを再生成し、コミット済みの生成物と異なれば失敗する。
+# api/openapi.yaml をGoとTypeScriptの共通schemaとして扱う。
+verify-generated: generate verify-ui-dist
 	git diff --exit-code -- internal/api/models.gen.go web/src/api/schema.d.ts \
 		web/src/rules/generated.ts web/src/rules/corpus.generated.json
 
