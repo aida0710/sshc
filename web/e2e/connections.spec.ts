@@ -1,4 +1,4 @@
-import { clickAndAwait, expect, openSection, test, openApplication } from "./support/environment";
+import { clickAndAwait, expect, openSection, openSettingsPage, test, openApplication } from "./support/environment";
 import type { Page } from "@playwright/test";
 
 async function openBastion(page: Page, url: string) {
@@ -417,7 +417,7 @@ test("opens a connection inside the application, with nothing to choose and noth
   });
   await openApplication(page, installation);
 
-  await openSection(page, "Settings");
+  await openSettingsPage(page, "Engine");
   await expect(page.getByRole("region", { name: "Default connection application" })).toHaveCount(0);
   await expect(page.getByLabel("Open connections with")).toHaveCount(0);
 

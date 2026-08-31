@@ -22,8 +22,12 @@ test("keeps sessions in the sidebar and moves product navigation to the Menu pag
   await expect(page.getByRole("link", { name: "Open Home", exact: true })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Open Connections", exact: true })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Open SFTP", exact: true })).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "Open Settings", exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Open Terminal", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Open Settings", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Open Engine", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Open Terminal", exact: true })).toHaveAttribute(
+    "href",
+    "/settings/terminal",
+  );
 
   const visualDirectory = process.env.SSHC_VISUAL_DIR;
   if (visualDirectory !== undefined) {

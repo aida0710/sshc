@@ -50,7 +50,7 @@ const sections = [
   { navigation: "Install Key on Server", heading: "Install Key on Server" },
   { navigation: "Ad hoc checks", heading: "Ad hoc checks" },
   { navigation: "Secrets", heading: "The vault" },
-  { navigation: "Settings", heading: "Settings" },
+  { navigation: "Engine", heading: "Engine" },
   { navigation: "Sync", heading: "Remote sync" },
   { navigation: "History", heading: "History" },
   { navigation: "Terminal", heading: "No console is open" },
@@ -403,7 +403,7 @@ test("uses established product names in the Japanese navigation", async ({ page,
   await expect(navigation.getByRole("tab")).toHaveCount(0);
   await navigation.getByRole("link", { name: "Menu", exact: true }).click();
 
-  for (const group of ["Configuration", "Security", "Tools"]) {
+  for (const group of ["Configuration", "Security", "Settings", "Tools"]) {
     await expect(page.getByRole("heading", { name: group, exact: true })).toBeVisible();
   }
   for (const section of [
@@ -415,7 +415,11 @@ test("uses established product names in the Japanese navigation", async ({ page,
     "Diagnostics",
     "Vault",
     "Snippets",
-    "Settings",
+    "エンジン",
+    "ターミナル",
+    "通知",
+    "開いている接続",
+    "マスターパスワード",
     "Sync",
     "History",
   ]) {

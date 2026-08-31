@@ -33,7 +33,7 @@ const paths: Record<Section, string> = {
   "Remote Keys": "/install-key",
   Diagnostics: "/diagnostics",
   Secrets: "/secrets",
-  Settings: "/settings",
+  Settings: "/settings/engine",
   Sync: "/sync",
   History: "/history",
 };

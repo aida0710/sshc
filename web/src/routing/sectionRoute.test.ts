@@ -15,7 +15,7 @@ const routes = [
   ["Remote Keys", "/install-key"],
   ["Diagnostics", "/diagnostics"],
   ["Secrets", "/secrets"],
-  ["Settings", "/settings"],
+  ["Settings", "/settings/engine"],
   ["Sync", "/sync"],
   ["History", "/history"],
 ] as const;
@@ -85,7 +85,7 @@ describe("section routes", () => {
     });
   });
 
-  it.each(["/missing", "/Connections", "/settings/unknown"])(
+  it.each(["/missing", "/Connections", "/settings", "/settings/", "/settings/unknown"])(
     "rejects unknown path %s",
     (path) => {
       expect(parseSectionPath(path)).toEqual({ kind: "not-found", pathname: path });

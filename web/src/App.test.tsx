@@ -329,7 +329,7 @@ describe("App", () => {
   });
 
   it("keeps an in-progress form mounted while the resumed vault check conceals it", async () => {
-    window.history.replaceState(null, "", "/settings");
+    window.history.replaceState(null, "", "/settings/engine");
     const resumed = deferred<Awaited<ReturnType<typeof openVault>>>();
     const vault = vi
       .fn()
@@ -723,7 +723,7 @@ describe("App", () => {
   });
 
   it("renders Settings directly and follows browser history back to it", async () => {
-    window.history.replaceState(null, "", "/settings");
+    window.history.replaceState(null, "", "/settings/engine");
     render(
       <App
         bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
@@ -733,7 +733,7 @@ describe("App", () => {
     );
 
     expect(await screen.findByText("settings panel")).toBeInTheDocument();
-    expect(window.location.pathname).toBe("/settings");
+    expect(window.location.pathname).toBe("/settings/engine");
 
     act(() => {
       window.history.pushState(null, "", "/history");
@@ -742,7 +742,7 @@ describe("App", () => {
     expect(await screen.findByText("history panel")).toBeInTheDocument();
 
     act(() => {
-      window.history.replaceState(null, "", "/settings");
+      window.history.replaceState(null, "", "/settings/engine");
       window.dispatchEvent(new PopStateEvent("popstate"));
     });
     expect(screen.getByText("settings panel")).toBeInTheDocument();
@@ -750,7 +750,7 @@ describe("App", () => {
 
   it("keeps Menu in browser history when opening a destination", async () => {
     const user = userEvent.setup();
-    window.history.replaceState(null, "", "/settings");
+    window.history.replaceState(null, "", "/settings/engine");
     const pushed = vi.spyOn(window.history, "pushState");
     render(
       <App
@@ -965,9 +965,9 @@ describe("App", () => {
     expect(screen.getByText("existing vault fixture")).toBeInTheDocument();
   });
 
-  it("keeps an unknown URL and links back to Home", async () => {
+  it.each(["/missing", "/settings"])("keeps unknown URL %s and links back to Home", async (path) => {
     const user = userEvent.setup();
-    window.history.replaceState(null, "", "/missing");
+    window.history.replaceState(null, "", path);
     render(
       <App
         bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
@@ -977,7 +977,7 @@ describe("App", () => {
     );
 
     expect(await screen.findByRole("heading", { name: "Page not found", level: 2 })).toBeInTheDocument();
-    expect(window.location.pathname).toBe("/missing");
+    expect(window.location.pathname).toBe(path);
     const home = screen.getByRole("link", { name: "Go to Home" });
     expect(home).toHaveAttribute("href", "/");
 

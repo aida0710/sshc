@@ -52,7 +52,6 @@ export function settingsPagePath(page: SettingsPage): string {
 }
 
 export function parseSettingsPage(pathname: string): SettingsPage | null {
-  if (pathname === "/settings" || pathname === "/settings/") return "Engine";
   return settingsPages.find((page) => {
     const path = settingsPagePath(page);
     return pathname === path || pathname === `${path}/`;
@@ -60,7 +59,6 @@ export function parseSettingsPage(pathname: string): SettingsPage | null {
 }
 
 export function canonicalSettingsPath(pathname: string): string | null {
-  if (pathname === "/settings" || pathname === "/settings/") return "/settings";
   const page = parseSettingsPage(pathname);
   return page === null ? null : settingsPagePath(page);
 }
