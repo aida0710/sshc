@@ -258,6 +258,16 @@ export async function openSection(page: Page, name: string): Promise<void> {
   await page.getByRole("link", { name: `Open ${name}`, exact: true }).click();
 }
 
+export async function openSettingsPage(
+  page: Page,
+  name: "Engine" | "Terminal" | "Notifications" | "Open connections" | "Master password",
+): Promise<void> {
+  await expect(sessionStatus(page)).toContainText("Local session active");
+  const navigation = page.getByRole("navigation", { name: "Primary" });
+  await navigation.getByRole("link", { name: "Menu", exact: true }).click();
+  await page.getByRole("link", { name: `Open ${name}`, exact: true }).click();
+}
+
 export async function clickAndAwait(
   page: Page,
   buttonName: string,

@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { expect, openApplication, openSection, test } from "./support/environment";
+import { expect, openApplication, openSection, openSettingsPage, test } from "./support/environment";
 import { terminalKeyboard, terminalScrollbarSlider } from "./support/terminal";
 
 const visualDirectory = process.env.SSHC_VISUAL_DIR;
@@ -60,7 +60,7 @@ test("keeps terminal actions compact and exposes the new terminal settings", asy
   }
 
   await page.keyboard.press("Escape");
-  await openSection(page, "Settings");
+  await openSettingsPage(page, "Terminal");
   const settings = page.getByRole("region", { name: "Terminal" });
   await expect(settings.getByLabel("Browser scrollback (lines)")).toBeVisible();
   await expect(settings.getByLabel("Default local shell")).toBeVisible();
