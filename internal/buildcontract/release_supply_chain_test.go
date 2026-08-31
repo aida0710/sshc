@@ -261,7 +261,7 @@ func TestOperatorReleaseScriptPreservesTheReleaseGates(t *testing.T) {
 
 	documentation := readContractFile(t, "docs", "releasing.md")
 	for _, required := range []string{
-		"scripts/release/publish.sh v0.23.0",
+		"scripts/release/publish.sh v0.24.0",
 		"scripts/release/publish.sh --verify-only v0.17.3",
 		"tagを動かしたり削除したりせず終了",
 	} {

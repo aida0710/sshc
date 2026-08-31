@@ -9,6 +9,8 @@ description: Remote file operations and a resumable SFTP Transfer Manager.
 
 sshc waits for you to choose a host before connecting and reuses its saved SSH configuration, host keys and credentials.
 
+Switching hosts immediately clears the previous listing and open file. A delayed response from the previous host is discarded instead of being shown under the new selection.
+
 ## File operations
 
 - Navigate, create, rename, chmod and delete remote entries

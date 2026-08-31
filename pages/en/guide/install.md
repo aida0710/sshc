@@ -15,11 +15,11 @@ sshc is a terminal app for macOS, Linux, Windows, and Android. On desktop, one `
 brew install aida0710/tap/sshc
 ```
 
-Without Homebrew, pin both the installer URL and the binary version to the same release. This example installs `v0.23.0`.
+Without Homebrew, pin both the installer URL and the binary version to the same release. This example installs `v0.24.0`.
 
 ```sh
-SSHC_VERSION=v0.23.0 sh -c \
-  'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.23.0/install.sh | sh'
+SSHC_VERSION=v0.24.0 sh -c \
+  'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.24.0/install.sh | sh'
 ```
 
 After installation, `sshc update` delegates upgrades to Homebrew or to a receipt-aware installer.
@@ -54,7 +54,7 @@ sshc
 
 The engine stays in the foreground. Use tmux, systemd, launchd or another OS process manager if you want it to stay running.
 
-Desktop first uses `http://127.0.0.1:54447/`. If another user or application already owns that port, sshc selects an available port once and stores it as this device's stable URL. Check the current URL with `sshc status`. Run `sshc` to open a one-time URL and enrol that browser. Afterwards, the same browser profile can use a bookmark or an installed web app directly, including after an engine restart. Run `sshc` again to enrol another browser or profile.
+Desktop first uses `http://127.0.0.1:54447/`. If another user or application already owns that port, sshc selects an available port once and stores it as this device's stable URL. Check the current URL with `sshc status`. Run `sshc` to open a one-time URL and enrol that browser. Afterwards, the same browser profile can use a bookmark or an installed web app directly, including after an engine restart on the same port. If the saved port is unavailable and the URL changes, sshc revokes the previous browser registration. Run `sshc` once against the current engine to enrol it again. Use the same command to add another browser or profile.
 
 Chrome and Edge can install sshc from their **Install app** action. The web app does not start the engine; run `sshc engine` or keep the OS service running first.
 

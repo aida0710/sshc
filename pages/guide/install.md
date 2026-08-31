@@ -15,11 +15,11 @@ sshcはmacOS、Linux、Windows、Androidで利用できるターミナルアプ�
 brew install aida0710/tap/sshc
 ```
 
-Homebrewを使わない場合は、インストーラーとバイナリのバージョンを同じReleaseタグに固定してください。次は`v0.23.0`を導入する例です。
+Homebrewを使わない場合は、インストーラーとバイナリのバージョンを同じReleaseタグに固定してください。次は`v0.24.0`を導入する例です。
 
 ```sh
-SSHC_VERSION=v0.23.0 sh -c \
-  'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.23.0/install.sh | sh'
+SSHC_VERSION=v0.24.0 sh -c \
+  'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.24.0/install.sh | sh'
 ```
 
 導入後は`sshc update`で更新できます。Homebrewで入れた場合はHomebrewから、`install.sh`で入れた場合は同じ配布元から更新されます。
@@ -54,7 +54,7 @@ sshc
 
 `sshc engine`で起動するエンジンは、フォアグラウンドプロセスです。常駐には、tmux、systemd、launchdなど、OSのプロセス管理機能を利用できます。
 
-デスクトップ版は`http://127.0.0.1:54447/`を最初に使用します。別のユーザーやアプリが使用中なら空きポートを一度だけ選び、端末固有のURLとして保存します。現在のURLは`sshc status`で確認できます。`sshc`が開く一度だけ有効なURLでブラウザーを最初に登録すると、以後はブックマークやインストールしたWebアプリから直接開けます。engineを再起動した場合も、同じブラウザーなら自動で再認証します。別のブラウザーやブラウザープロファイルでは、もう一度`sshc`を実行して登録してください。
+デスクトップ版は`http://127.0.0.1:54447/`を最初に使用します。別のユーザーやアプリが使用中なら空きポートを一度だけ選び、端末固有のURLとして保存します。現在のURLは`sshc status`で確認できます。`sshc`が開く一度だけ有効なURLでブラウザーを最初に登録すると、以後はブックマークやインストールしたWebアプリから直接開けます。engineを再起動した場合も、同じポートとブラウザーなら自動で再認証します。保存していたポートを使用できずURLが変わった場合は、以前のブラウザー登録を失効します。現在のengineに対して、もう一度`sshc`を実行してください。別のブラウザーやブラウザープロファイルを追加する場合も同じです。
 
 ChromeやEdgeでは、ブラウザーの「アプリをインストール」からsshcをWebアプリとして追加できます。Webアプリはengineを起動するものではありません。先に`sshc engine`またはOSのサービスでengineを動かしてください。
 

@@ -13,7 +13,7 @@
 ## 公開
 
 ```sh
-scripts/release/publish.sh v0.23.0
+scripts/release/publish.sh v0.24.0
 ```
 
 スクリプトは次を順番に行います。
