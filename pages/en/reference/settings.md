@@ -5,7 +5,7 @@ description: Appearance, terminal, input, notifications, and local-shell setting
 
 # Settings
 
-Open Menu → Settings. Connection-specific behavior lives in the connection's sshc tab.
+Menu has a Settings group with direct links to Engine, Terminal, Notifications, Open connections, and Master password. Each opens as its own page. Connection-specific behavior lives in the connection's sshc tab.
 
 ## Appearance
 
