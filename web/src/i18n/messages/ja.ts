@@ -160,6 +160,8 @@ export const ja = {
   "workspace.dock.top": "上に配置",
   "workspace.dock.bottom": "下に配置",
   "workspace.groupCount": "{count} セッション",
+  "workspace.rename": "名前変更",
+  "workspace.renamePrompt": "ワークスペース名",
   "workspace.expandGroup": "{name}のターミナルを表示",
   "workspace.collapseGroup": "{name}のターミナルを隠す",
   "workspace.resizeSplit": "分割サイズを変更",

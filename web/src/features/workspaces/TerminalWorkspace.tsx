@@ -117,6 +117,7 @@ export function TerminalWorkspace({
   const [compactViewport, setCompactViewport] = useState(compactWorkspaceViewport);
   const [problem, setProblem] = useState("");
   const [liveRestoreReady, setLiveRestoreReady] = useState(false);
+  const [liveWorkspaceName, setLiveWorkspaceName] = useState("");
   const consumedRestore = useRef(0);
   const liveWorkspaceID = useRef(paneID());
   const liveStorage = useMemo(() => browserSessionStorage(), []);
@@ -156,13 +157,15 @@ export function TerminalWorkspace({
   const workspacePaneCount = visibleLayout === null ? (active === null ? 0 : 1) : paneIDs(visibleLayout.root).length;
   const workspaceDisplayName = useMemo(() => {
     if (visibleLayout === null) return active?.title ?? t("workspace.live");
+    const liveName = liveWorkspaceName.trim();
+    if (liveName !== "") return liveName;
     const selectedName = saved.find((item) => item.id === selectedWorkspace)?.name.trim() ?? "";
     if (selectedName !== "") return selectedName;
     const aliases: string[] = [];
     visit(storeLayout(visibleLayout).layout, (pane) => aliases.push(pane.alias));
     const uniqueAliases = [...new Set(aliases)];
     return uniqueAliases.slice(0, 2).join(" + ") + (uniqueAliases.length > 2 ? ` +${uniqueAliases.length - 2}` : "") || t("workspace.live");
-  }, [active?.title, saved, selectedWorkspace, t, visibleLayout]);
+  }, [active?.title, liveWorkspaceName, saved, selectedWorkspace, t, visibleLayout]);
 
   useEffect(() => { void workspaceApi.list().then(setSaved).catch(() => undefined); }, []);
   useEffect(() => {
@@ -185,6 +188,7 @@ export function TerminalWorkspace({
         const next = { root, focusedPaneId };
         setLayout(next);
         setFocusModePaneId(restored.focusModePaneId);
+        setLiveWorkspaceName(restored.name);
         const focusedSessionId = findPane(root, focusedPaneId)?.sessionId;
         if (focusedSessionId !== undefined) onActive(focusedSessionId);
       }
@@ -193,8 +197,11 @@ export function TerminalWorkspace({
   }, [liveRestoreReady, liveStorage, onActive, restoreRequest, sessionByID, sessionsLoaded]);
   useEffect(() => {
     if (!sessionsLoaded || !liveRestoreReady) return;
-    saveLiveWorkspace(liveStorage, layout, focusModePaneId);
-  }, [focusModePaneId, layout, liveRestoreReady, liveStorage, sessionsLoaded]);
+    saveLiveWorkspace(liveStorage, layout, focusModePaneId, liveWorkspaceName);
+  }, [focusModePaneId, layout, liveRestoreReady, liveStorage, liveWorkspaceName, sessionsLoaded]);
+  useEffect(() => {
+    if (layout === null && liveRestoreReady) setLiveWorkspaceName("");
+  }, [layout, liveRestoreReady]);
   useEffect(() => {
     if (movingPaneId === null) return;
     if (layout === null || !paneIDs(layout.root).includes(movingPaneId)) {
@@ -223,11 +230,11 @@ export function TerminalWorkspace({
     const focusedSessionId = findPane(layout.root, layout.focusedPaneId)?.sessionId ?? memberSessionIds[0] ?? "";
     onLiveWorkspaceChange({
       id: liveWorkspaceID.current,
-      name: selectedName || automaticName || t("workspace.live"),
+      name: liveWorkspaceName.trim() || selectedName || automaticName || t("workspace.live"),
       memberSessionIds,
       focusedSessionId,
     });
-  }, [layout, onLiveWorkspaceChange, saved, selectedWorkspace, t]);
+  }, [layout, liveWorkspaceName, onLiveWorkspaceChange, saved, selectedWorkspace, t]);
   useEffect(() => {
     if (layout === null) return;
     // Opening several saved panes causes independent session refreshes. A short
@@ -318,6 +325,8 @@ export function TerminalWorkspace({
         edge,
         pane: paneForSession(source),
       });
+      setSelectedWorkspace("");
+      setLiveWorkspaceName("");
       setLayout(next);
       setProblem("");
       onActive(source.id);
@@ -368,6 +377,8 @@ export function TerminalWorkspace({
     if (paneIDs(layout.root).length <= 2) {
       setLayout(null);
       setFocusModePaneId(null);
+      setSelectedWorkspace("");
+      setLiveWorkspaceName("");
       return;
     }
     update({ type: "close", paneId });
@@ -409,12 +420,12 @@ export function TerminalWorkspace({
       } }, id), { type: "connection-started", paneId: id, sessionId: active.id });
     }
     if (effective === null) return;
-    const name = window.prompt(t("workspace.namePrompt"), saved.find((item) => item.id === selectedWorkspace)?.name ?? "")?.trim() ?? "";
+    const name = window.prompt(t("workspace.namePrompt"), liveWorkspaceName.trim() || (saved.find((item) => item.id === selectedWorkspace)?.name ?? ""))?.trim() ?? "";
     if (name === "") return;
     try {
       const stored = storeLayout(effective);
       const value = selectedWorkspace === "" ? await workspaceApi.create({ name, ...stored }) : await workspaceApi.update(selectedWorkspace, { name, ...stored });
-      setSelectedWorkspace(value.id); setSaved(await workspaceApi.list()); setProblem("");
+      setSelectedWorkspace(value.id); setLiveWorkspaceName(value.name); setSaved(await workspaceApi.list()); setProblem("");
     } catch (error) { setProblem(failureCode(error) || "workspace_failed"); }
   }
 
@@ -423,6 +434,7 @@ export function TerminalWorkspace({
     try {
       const stored = await workspaceApi.restore(id);
       setSelectedWorkspace(id);
+      setLiveWorkspaceName("");
       setFocusModePaneId(null);
       let restored = restoreLayout(stored.layout, stored.focusedPaneId);
       const panes: { id: string; alias: string; kind?: "shell" }[] = [];
@@ -447,6 +459,11 @@ export function TerminalWorkspace({
       setProblem("");
     } catch (error) { setProblem(failureCode(error) || "workspace_failed"); }
   }, [onActive, onOpenAlias, onOpenShell]);
+
+  function renameLiveWorkspace() {
+    const name = window.prompt(t("workspace.renamePrompt"), workspaceDisplayName)?.trim() ?? "";
+    if (name !== "") setLiveWorkspaceName(name);
+  }
 
   useEffect(() => {
     if (restoreRequest === null || restoreRequest.sequence <= consumedRestore.current) return;
@@ -536,6 +553,7 @@ export function TerminalWorkspace({
           <div className="mr-2 flex min-w-0 items-center gap-2 border-r border-line pr-4">
             <span className="max-w-52 truncate text-xs font-semibold text-ink">{workspaceDisplayName}</span>
             <span className="whitespace-nowrap text-[11px] text-ink-faint">{t("workspace.groupCount", { count: String(workspacePaneCount) })}</span>
+            <button type="button" className="whitespace-nowrap rounded px-1.5 py-1 text-[11px] text-accent hover:bg-select-fill" onClick={renameLiveWorkspace}>{t("workspace.rename")}</button>
           </div>
         ) : null}
         <Button disabled={connectedCommandTargets === 0} onClick={() => setCommandCenter(true)}>{t("workspace.broadcastCommand")}</Button>
