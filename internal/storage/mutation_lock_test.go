@@ -50,6 +50,67 @@ func TestWithSnapshotExcludesWorkspaceCommits(t *testing.T) {
 	}
 }
 
+func TestPendingTransactionBlocksMutationsAndSnapshotsUntilRecovery(t *testing.T) {
+	manager, workspace, first, _ := interruptedCommit(t)
+	created := filepath.Join(workspace.Root(), "blocked.conf")
+	pending, err := manager.Pending()
+	if err != nil || len(pending) != 1 {
+		t.Fatalf("Pending = %#v, %v", pending, err)
+	}
+
+	snapshotCalled := false
+	attempts := []struct {
+		name string
+		run  func() error
+	}{
+		{name: "commit", run: func() error {
+			_, err := manager.Commit(Request{Operation: "blocked.commit", Changes: []Change{{Path: created, Contents: []byte("blocked")}}})
+			return err
+		}},
+		{name: "atomic commit", run: func() error {
+			_, err := manager.CommitAtomic(Request{Operation: "blocked.atomic", Changes: []Change{{Path: created, Contents: []byte("blocked")}}})
+			return err
+		}},
+		{name: "note", run: func() error {
+			_, err := manager.Note("blocked.note", []string{first})
+			return err
+		}},
+		{name: "snapshot", run: func() error {
+			return manager.WithSnapshot(func() error {
+				snapshotCalled = true
+				return nil
+			})
+		}},
+	}
+	for _, attempt := range attempts {
+		t.Run(attempt.name, func(t *testing.T) {
+			err := attempt.run()
+			if !errors.Is(err, ErrPendingTransaction) || !errors.Is(err, ErrWorkspaceBusy) {
+				t.Fatalf("error = %v, want pending transaction/workspace busy", err)
+			}
+		})
+	}
+	if snapshotCalled {
+		t.Fatal("snapshot observed a workspace with a pending transaction")
+	}
+	if _, statErr := os.Stat(created); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("blocked mutation created a file: %v", statErr)
+	}
+	stillPending, err := manager.Pending()
+	if err != nil || len(stillPending) != 1 || stillPending[0].ID != pending[0].ID {
+		t.Fatalf("Pending after refusals = %#v, %v", stillPending, err)
+	}
+
+	if err := manager.Complete(pending[0].ID); err != nil {
+		t.Fatalf("Complete = %v", err)
+	}
+	if _, err := manager.Commit(Request{
+		Operation: "after.recovery", Changes: []Change{{Path: created, Contents: []byte("allowed")}},
+	}); err != nil {
+		t.Fatalf("Commit after recovery = %v", err)
+	}
+}
+
 func TestDiscardBackupPublishRunsBeforeMutationBarrierRelease(t *testing.T) {
 	workspace := newTestWorkspace(t)
 	manager := NewManager(workspace, time.Now, rand.Reader)
