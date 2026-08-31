@@ -39,6 +39,19 @@ sshc ssh <alias> --non-interactive -- <command...>
 sshc info <alias> --json
 ```
 
+Homebrew版ではbash、zsh、fishの補完が一緒に導入されます。その他の導入方法では、利用中のシェルに合わせて次のいずれかを起動設定へ追加してください。`sshc ssh <Tab>`の候補は、実行時点の`~/.ssh/config`と到達可能な`Include`から取得されます。
+
+```sh
+# bash
+source <(sshc completion bash)
+
+# zsh
+source <(sshc completion zsh)
+
+# fish
+sshc completion fish | source
+```
+
 `sshc info`では、エンジンを起動せずに、実際の接続と同じ`Include`、`Match`、`ProxyJump`、文字コードの解決結果を確認できます。保存済みの認証情報、`SetEnv`の値、`ProxyCommand`の本文は表示されません。
 
 非対話コマンドは次の形式です。未知のホスト鍵、2FA、未保存のパスワードなど、利用者への確認が必要な状態では実行できません。

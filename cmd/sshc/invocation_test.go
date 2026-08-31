@@ -55,6 +55,9 @@ func TestParseInvocationSeparatesOwnersFromDesktopActivation(t *testing.T) {
 		{[]string{"sshc", "ssh", "server-a"}, invocationConnect, []string{"server-a"}},
 		{[]string{"sshc", "ssh", "--list"}, invocationList, nil},
 		{[]string{"sshc", "ssh", "--help"}, invocationHelp, nil},
+		{[]string{"sshc", "completion", "bash"}, invocationCompletion, []string{"bash"}},
+		{[]string{"sshc", "completion", "zsh"}, invocationCompletion, []string{"zsh"}},
+		{[]string{"sshc", "completion", "fish"}, invocationCompletion, []string{"fish"}},
 		{[]string{"sshc", "open"}, invocationOpen, nil},
 		{[]string{"sshc", "status"}, invocationStatus, nil},
 		{[]string{"sshc", "service", "install"}, invocationService, []string{"install"}},
@@ -85,6 +88,7 @@ func TestEveryPublishedCommandAcceptsItsOwnHelpFlag(t *testing.T) {
 	}{
 		{[]string{"sshc", "engine", "--help"}, "engine", "sshc engine [--port <n>] [--replace]"},
 		{[]string{"sshc", "ssh", "--help"}, "ssh", "sshc ssh <alias>"},
+		{[]string{"sshc", "completion", "--help"}, "completion", "sshc completion bash|zsh|fish"},
 		{[]string{"sshc", "info", "--help"}, "info", "sshc info <alias> [--json]"},
 		{[]string{"sshc", "sync", "--help"}, "sync", "sshc sync push"},
 		{[]string{"sshc", "sync", "setup", "--help"}, "sync setup", "sshc sync setup"},
@@ -131,6 +135,18 @@ func TestEveryPublishedCommandAcceptsItsOwnHelpFlag(t *testing.T) {
 				t.Errorf("help for %q does not contain %q:\n%s", test.topic, test.want, output.String())
 			}
 		})
+	}
+}
+
+func TestCompletionAcceptsExactlyOneSupportedShell(t *testing.T) {
+	for _, argv := range [][]string{
+		{"sshc", "completion"},
+		{"sshc", "completion", "powershell"},
+		{"sshc", "completion", "bash", "extra"},
+	} {
+		if called, err := parseInvocation(argv); err == nil || called.Kind != invocationInvalid {
+			t.Errorf("parseInvocation(%q) = %#v, %v; want invalid invocation", argv, called, err)
+		}
 	}
 }
 
