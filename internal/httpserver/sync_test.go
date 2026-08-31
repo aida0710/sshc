@@ -1201,3 +1201,36 @@ func TestSyncNowWithoutALoopIsRefused(t *testing.T) {
 		t.Fatalf("POST /now = %d, want 409: %s", recorder.Code, recorder.Body.String())
 	}
 }
+
+func TestSyncNowInternalFailureIsNotReportedAsHTTP200(t *testing.T) {
+	engine := echo.New()
+	engine.POST("/", func(c *echo.Context) error {
+		return autoSyncFailureProblem(c, "sync_internal_failed")
+	})
+	recorder := sendSync(t, engine, http.MethodPost, "/", "")
+	if recorder.Code != http.StatusInternalServerError {
+		t.Fatalf("internal auto failure = %d, want 500: %s", recorder.Code, recorder.Body.String())
+	}
+	var body api.Problem
+	if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Code != "sync_internal_failed" {
+		t.Fatalf("problem = %+v", body)
+	}
+}
+
+func TestSyncNowPropagatesAnAutomaticCycleFailure(t *testing.T) {
+	_, service, secrets := syncEngineWithVault(t)
+	if err := secrets.Initialise(syncTestPassphrase); err != nil {
+		t.Fatal(err)
+	}
+	auto := remotesync.NewAuto(service, time.Minute, func() string { return "2026-08-31T00:00:00Z" })
+	auto.Key = func() (string, bool) { return measuredSyncKey, true }
+	engine := echo.New()
+	registerSyncRoutes(engine, SyncHandlers{Service: service, Secrets: secrets, Auto: auto, Reach: reachable})
+	recorder := sendSync(t, engine, http.MethodPost, "/api/v1/sync/now", "")
+	if recorder.Code != http.StatusConflict || !strings.Contains(recorder.Body.String(), "sync_not_configured") {
+		t.Fatalf("POST /now failed cycle = %d: %s", recorder.Code, recorder.Body.String())
+	}
+}

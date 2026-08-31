@@ -265,6 +265,26 @@ func TestAnIdenticalSnapshotIsNothingToApply(t *testing.T) {
 	}
 }
 
+func TestModeOnlyDifferenceProducesAWrite(t *testing.T) {
+	base := remotesync.Manifest{Files: []remotesync.Entry{{Path: "script", SHA256: digestOf("same"), Mode: "0600"}}}
+	remote := remotesync.Manifest{Files: []remotesync.Entry{{Path: "script", SHA256: digestOf("same"), Mode: "0700"}}}
+	local := map[string]remotesync.LocalEntry{
+		"script": {SHA256: digestOf("same"), Mode: "0600"},
+	}
+	request, conflicts, err := remotesync.PlanEntriesWithIgnore(root, &base, local, remote,
+		map[string][]byte{"script": []byte("same")}, remotesync.ResolveRemote, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(conflicts) != 0 || len(request.Changes) != 1 {
+		t.Fatalf("request=%+v conflicts=%+v", request, conflicts)
+	}
+	change := request.Changes[0]
+	if change.Mode != 0o700 || change.Precondition.Mode != 0o600 {
+		t.Fatalf("mode change = %04o from %04o", change.Mode, change.Precondition.Mode)
+	}
+}
+
 func TestPlanNeedsNothingStorageDoesNotAlreadyHave(t *testing.T) {
 	// 現在の Change、Removal、Request で pull を表現できないなら、設計の方が誤って
 	// いるのであって、ストレージ層を膨らませるのではなく計画へ戻るべきである。これは、

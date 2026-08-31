@@ -156,9 +156,6 @@ func runSyncPull(ctx context.Context, engine *engineAPI, force bool) (api.PullRe
 	if !force && (len(preview.Conflicts) != 0 || len(preview.Removed) != 0) {
 		return api.PullResponse{}, errSyncPullRequiresForce
 	}
-	if len(preview.Written) == 0 && len(preview.Removed) == 0 && len(preview.Conflicts) == 0 {
-		return preview, nil
-	}
 	if preview.RemoteETag == "" || len(preview.RemoteRevision) != 64 {
 		return api.PullResponse{}, errEngineInvalidResponse
 	}

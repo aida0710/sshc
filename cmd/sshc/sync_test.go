@@ -621,13 +621,14 @@ func TestSyncPullStaleApplyDoesNotRepreviewOrRetry(t *testing.T) {
 	}
 }
 
-func TestSyncPullNoChangesSucceedsFromPreviewWithoutApply(t *testing.T) {
+func TestSyncPullNoChangesStillAcknowledgesTheRemoteGeneration(t *testing.T) {
 	calls := 0
 	_, server, stateDir := newSyncCommandHarness(t, func(response http.ResponseWriter, request *http.Request) {
 		calls++
 		result := pullResponseFixture()
 		result.Written = []string{}
 		result.Removed = []string{}
+		result.Applied = calls == 2
 		response.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(response).Encode(result)
 	})
@@ -635,7 +636,7 @@ func TestSyncPullNoChangesSucceedsFromPreviewWithoutApply(t *testing.T) {
 	var stdout, stderr strings.Builder
 	code := runSync(context.Background(), syncInvocation{Action: syncPull}, stateDir,
 		server.Client(), nil, &stdout, &stderr, nil)
-	if code != 0 || calls != 1 || stderr.Len() != 0 || !strings.Contains(stdout.String(), "no changes") {
+	if code != 0 || calls != 2 || stderr.Len() != 0 || !strings.Contains(stdout.String(), "applied") {
 		t.Fatalf("code=%d calls=%d stdout=%q stderr=%q", code, calls, stdout.String(), stderr.String())
 	}
 }
