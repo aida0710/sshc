@@ -340,7 +340,7 @@ func writeHumanSyncFailure(stderr io.Writer, failure commandFailure) {
 	case "bucket_authentication_failed":
 		fmt.Fprintln(stderr, "sshc: the object store could not authenticate the request; check the access key and secret")
 	case "bucket_access_denied":
-		fmt.Fprintln(stderr, "sshc: the object store denied access; check the bucket, region, and key permissions")
+		fmt.Fprintln(stderr, "sshc: the object store denied access; check the credentials, bucket, region, and key permissions")
 	case "bucket_rate_limited":
 		fmt.Fprintln(stderr, "sshc: the object store is rate limiting requests; wait and try again")
 	case "bucket_unavailable":
