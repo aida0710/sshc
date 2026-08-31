@@ -22,6 +22,7 @@ const (
 type engineServiceManager interface {
 	Install(context.Context, string) error
 	Status(context.Context) (serviceState, error)
+	RestartIfActive(context.Context) (bool, error)
 	Disable(context.Context) (bool, error)
 }
 

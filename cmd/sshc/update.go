@@ -43,10 +43,11 @@ type installation struct {
 }
 
 type updateDependencies struct {
-	executable func() (string, error)
-	detect     func(string) (installation, error)
-	latest     func(context.Context) (selfupdate.Release, error)
-	install    func(context.Context, installation, selfupdate.Release, io.Writer, io.Writer) error
+	executable     func() (string, error)
+	detect         func(string) (installation, error)
+	latest         func(context.Context) (selfupdate.Release, error)
+	install        func(context.Context, installation, selfupdate.Release, io.Writer, io.Writer) error
+	restartService func(context.Context) (bool, error)
 }
 
 func defaultUpdateDependencies() updateDependencies {
@@ -71,6 +72,7 @@ func defaultUpdateDependencies() updateDependencies {
 		install: func(ctx context.Context, found installation, release selfupdate.Release, stdout, stderr io.Writer) error {
 			return installUpdate(ctx, found, release, installerClient, commands, stdout, stderr)
 		},
+		restartService: restartManagedServiceAfterUpdate,
 	}
 }
 
@@ -123,6 +125,21 @@ func runUpdate(ctx context.Context, current string, stdout, stderr io.Writer, de
 		return 1
 	}
 	fmt.Fprintf(stdout, "sshc: updated to %s\n", tag)
+	if dependencies.restartService != nil {
+		restarted, err := dependencies.restartService(ctx)
+		if err != nil {
+			if errors.Is(ctx.Err(), context.Canceled) {
+				return 130
+			}
+			fmt.Fprintf(stderr, "sshc: update succeeded, but restart the managed service: %v\n", err)
+			return 1
+		}
+		if restarted {
+			fmt.Fprintln(stdout, "sshc: managed service restarted; vault is locked")
+			fmt.Fprintln(stdout, "sshc: run `sshc vault unlock` from an interactive terminal")
+			return 0
+		}
+	}
 	fmt.Fprintln(stdout, "sshc: restart any running `sshc engine` to use the new version")
 	return 0
 }
