@@ -1374,6 +1374,14 @@ func TestPendingReportsAnUnreadableRecordWithoutFailingTheWholeListing(t *testin
 			{Path: second, Contents: []byte("second after\n"), Precondition: Precondition{Exists: true, Digest: Digest([]byte("second before\n"))}},
 		},
 	})
+	// New writers refuse to create another transaction while one is pending.
+	// Hide the first fixture briefly so this test can still cover two records
+	// produced by older versions or copied in during recovery.
+	tamperedJournal := filepath.Join(workspace.StateDir(), journalDirectoryName, tamperedID+".json")
+	heldJournal := tamperedJournal + ".held"
+	if err := os.Rename(tamperedJournal, heldJournal); err != nil {
+		t.Fatal(err)
+	}
 
 	third := writeWorkspaceFile(t, workspace, "third.conf", "third before\n", 0o600)
 	fourth := writeWorkspaceFile(t, workspace, "fourth.conf", "fourth before\n", 0o600)
@@ -1384,6 +1392,9 @@ func TestPendingReportsAnUnreadableRecordWithoutFailingTheWholeListing(t *testin
 			{Path: fourth, Contents: []byte("fourth after\n"), Precondition: Precondition{Exists: true, Digest: Digest([]byte("fourth before\n"))}},
 		},
 	})
+	if err := os.Rename(heldJournal, tamperedJournal); err != nil {
+		t.Fatal(err)
+	}
 
 	// 中断されたトランザクションが触れるはずだったファイルを、外から書き換える。
 	// これで、記録のどちらの状態とも一致しなくなる。

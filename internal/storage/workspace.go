@@ -2,6 +2,7 @@ package storage
 
 import (
 	"errors"
+	"fmt"
 	"io/fs"
 	"path/filepath"
 	"strings"
@@ -20,6 +21,12 @@ var (
 	ErrInvalidHome      = errors.New("home directory must be an absolute path")
 	ErrWorkspaceBusy    = errors.New("another sshc process is updating this workspace")
 )
+
+// ErrPendingTransaction reports a durable, interrupted mutation which must be
+// completed or rolled back before another workspace generation is observed.
+// It wraps ErrWorkspaceBusy so existing API clients keep their stable conflict
+// response while local callers can distinguish recovery from lock contention.
+var ErrPendingTransaction = fmt.Errorf("%w: a pending transaction must be recovered first", ErrWorkspaceBusy)
 
 const (
 	mutationLockName = "mutation.lock"
