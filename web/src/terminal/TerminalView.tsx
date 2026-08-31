@@ -690,6 +690,7 @@ export function TerminalView({
       <div className="relative min-h-0 flex-1 overflow-hidden bg-term-bg">
         <div
           ref={host}
+          data-terminal-host=""
           {...(palette === undefined || palette === "" ? {} : { "data-term-palette": palette })}
           {...(font === undefined || font === "" ? {} : { "data-term-font": font })}
           {...(hasBackground ? { "data-term-background": background ?? "" } : {})}
@@ -701,7 +702,7 @@ export function TerminalView({
                 } as CSSProperties
               : undefined
           }
-          className="absolute inset-0 bg-term-bg p-2"
+          className="absolute inset-0 bg-term-bg"
         />
         {searchOpen ? (
           <div className="absolute inset-x-2 top-2 z-20 flex items-center gap-1.5 rounded-lg border border-line bg-toolbar/95 p-1.5 shadow-lg backdrop-blur sm:left-auto sm:w-[34rem]">
