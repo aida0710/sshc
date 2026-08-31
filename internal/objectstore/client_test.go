@@ -320,6 +320,38 @@ func TestAnyOtherRejectionCarriesNoResponseBody(t *testing.T) {
 	}
 }
 
+func TestHTTPRejectionsKeepSpecificSafeCauses(t *testing.T) {
+	tests := []struct {
+		name   string
+		status int
+		want   error
+	}{
+		{name: "authentication", status: http.StatusUnauthorized, want: objectstore.ErrAuthenticationFailed},
+		{name: "access", status: http.StatusForbidden, want: objectstore.ErrAccessDenied},
+		{name: "rate limit", status: http.StatusTooManyRequests, want: objectstore.ErrRateLimited},
+		{name: "service failure", status: http.StatusInternalServerError, want: objectstore.ErrServiceUnavailable},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			client, _ := newClient(t, func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(test.status)
+				_, _ = w.Write([]byte("<Error><BucketName>private-bucket</BucketName></Error>"))
+			})
+
+			_, err := client.Get(context.Background(), "k")
+			if !errors.Is(err, test.want) {
+				t.Fatalf("Get = %v, want %v", err, test.want)
+			}
+			if !errors.Is(err, objectstore.ErrRefused) {
+				t.Fatalf("Get = %v, want compatibility with ErrRefused", err)
+			}
+			if strings.Contains(err.Error(), "private-bucket") {
+				t.Error("the error carries the response body")
+			}
+		})
+	}
+}
+
 func TestAnErrorBodyIsDiscardedBeforeTheSDKReadsIt(t *testing.T) {
 	body := &observedBody{}
 	client := objectstore.Client{
