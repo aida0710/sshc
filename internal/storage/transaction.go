@@ -63,6 +63,9 @@ var (
 type Precondition struct {
 	Exists bool
 	Digest string
+	// Mode is checked only when non-zero. It lets callers bind a write to both
+	// the bytes and the owner permission bits they inspected.
+	Mode fs.FileMode
 }
 
 // Change は、トランザクションが置き換えるか新規作成するファイルひとつ。
@@ -78,7 +81,11 @@ type Change struct {
 	Path         string
 	Contents     []byte
 	Precondition Precondition
-	SkipBackup   bool
+	// Mode selects the exact owner-only permission set for the new file. Zero
+	// preserves the existing secure mode (or uses FilePermission for a new file).
+	// Sync uses this to restore executable 0700 files without broadening access.
+	Mode       fs.FileMode
+	SkipBackup bool
 }
 
 // Move は、ワークスペース内でファイルひとつを rename(2) により移す。
@@ -728,6 +735,9 @@ func (m *Manager) sourceState(path string, precondition Precondition) (string, f
 	if digest != expected {
 		return "", 0, &ConflictError{Path: path, Expected: expected, Actual: digest}
 	}
+	if precondition.Mode != 0 && mode != precondition.Mode {
+		return "", 0, &ConflictError{Path: path, Expected: expected, Actual: digest}
+	}
 	return digest, mode, nil
 }
 
@@ -885,8 +895,9 @@ func (m *Manager) discardRollbackBackups(record *journalRecord) error {
 	return nil
 }
 
-// currentState は、置き換えられるファイルを読む。返されるモードは、既存のより
-// 厳しい権限を保ち、より緩いものは FilePermission まで締める。
+// currentState は、置き換えられるファイルを読む。返されるモードはownerの権限だけを
+// 保ち、group/otherの権限は落とす。これにより既存の0700は維持しつつ、0644のような
+// 緩い権限を次の書き込みで0600へ締める。
 func (m *Manager) currentState(path string) (contents []byte, mode fs.FileMode, exists bool, err error) {
 	info, err := m.workspace.FileSystem().Lstat(path)
 	if errors.Is(err, fs.ErrNotExist) {
@@ -899,7 +910,7 @@ func (m *Manager) currentState(path string) (contents []byte, mode fs.FileMode, 
 	if err != nil {
 		return nil, 0, false, err
 	}
-	return contents, info.Mode().Perm() & FilePermission, true, nil
+	return contents, info.Mode().Perm() & 0o700, true, nil
 }
 
 func (m *Manager) writeFile(path string, contents []byte, permission fs.FileMode) error {
@@ -1022,13 +1033,26 @@ func (b *commitBuilder) stageChanges() error {
 		if actual != expected {
 			return &ConflictError{Path: target, Expected: expected, Actual: actual, Current: previous}
 		}
+		if change.Precondition.Mode != 0 && (!exists || mode != change.Precondition.Mode) {
+			return &ConflictError{Path: target, Expected: expected, Actual: actual, Current: previous}
+		}
+		targetMode := mode
+		if !exists {
+			targetMode = FilePermission
+		}
+		if change.Mode != 0 {
+			if change.Mode != FilePermission && change.Mode != DirectoryPermission {
+				return invalidJournal("invalid write mode")
+			}
+			targetMode = change.Mode
+		}
 
 		entry := journalEntry{
 			Action:      actionWrite,
 			Path:        target,
 			NoBackup:    change.SkipBackup,
 			HadPrevious: exists,
-			Mode:        uint32(mode),
+			Mode:        uint32(targetMode),
 			Digest:      Digest(change.Contents),
 		}
 		if exists {

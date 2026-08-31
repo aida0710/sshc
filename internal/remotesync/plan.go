@@ -37,6 +37,23 @@ type Conflict struct {
 	RemoteDigest string
 }
 
+// LocalEntry is the exact local state used by a three-way pull plan. Mode is
+// part of the synchronized state: equal bytes with different permissions are
+// still a change.
+type LocalEntry struct {
+	SHA256 string
+	Mode   string
+}
+
+func entryState(digest, mode string) LocalEntry {
+	// Unit-level callers which predate mode-aware planning omit Mode. Production
+	// manifests have already passed snapshot validation and always carry it.
+	if mode == "" {
+		mode = "0600"
+	}
+	return LocalEntry{SHA256: digest, Mode: mode}
+}
+
 // Plan は、復号したスナップショットと現在のワークスペースから、このマシンをそれに
 // 一致させるトランザクション、または衝突を導き出す。
 //
@@ -55,22 +72,31 @@ func Plan(root string, base *Manifest, local map[string]string, remote Manifest,
 // PlanWithIgnore keeps paths selected by the shared exclusion rules outside
 // both writes and removals. The local copy of an excluded path is never touched.
 func PlanWithIgnore(root string, base *Manifest, local map[string]string, remote Manifest, contents map[string][]byte, resolve Resolution, ignored func(string) bool) (storage.Request, []Conflict, error) {
+	entries := make(map[string]LocalEntry, len(local))
+	for path, digest := range local {
+		entries[path] = entryState(digest, "0600")
+	}
+	return PlanEntriesWithIgnore(root, base, entries, remote, contents, resolve, ignored)
+}
+
+// PlanEntriesWithIgnore is the mode-aware planner used by the sync service.
+func PlanEntriesWithIgnore(root string, base *Manifest, local map[string]LocalEntry, remote Manifest, contents map[string][]byte, resolve Resolution, ignored func(string) bool) (storage.Request, []Conflict, error) {
 	isIgnored := func(path string) bool { return ignored != nil && ignored(path) }
-	baseDigests := map[string]string{}
+	baseEntries := map[string]LocalEntry{}
 	if base != nil {
 		for _, item := range base.Files {
 			if isIgnored(item.Path) {
 				continue
 			}
-			baseDigests[item.Path] = item.SHA256
+			baseEntries[item.Path] = entryState(item.SHA256, item.Mode)
 		}
 	}
-	remoteDigests := map[string]string{}
+	remoteEntries := map[string]LocalEntry{}
 	for _, item := range remote.Files {
 		if isIgnored(item.Path) {
 			continue
 		}
-		remoteDigests[item.Path] = item.SHA256
+		remoteEntries[item.Path] = entryState(item.SHA256, item.Mode)
 	}
 
 	request := storage.Request{Operation: "sync.pull"}
@@ -80,17 +106,18 @@ func PlanWithIgnore(root string, base *Manifest, local map[string]string, remote
 		if isIgnored(item.Path) {
 			continue
 		}
-		localDigest, present := local[item.Path]
-		if present && localDigest == item.SHA256 {
+		localEntry, present := local[item.Path]
+		remoteEntry := entryState(item.SHA256, item.Mode)
+		if present && localEntry == remoteEntry {
 			continue
 		}
-		baseDigest, hadBase := baseDigests[item.Path]
-		contested := present && (!hadBase || localDigest != baseDigest)
+		baseEntry, hadBase := baseEntries[item.Path]
+		contested := present && (!hadBase || localEntry != baseEntry)
 		if contested && resolve == ResolveNone {
 			// 両側で変更された内容は自動マージせず、digest だけを競合として報告する。
-			conflict := Conflict{Path: item.Path, LocalDigest: localDigest, RemoteDigest: item.SHA256}
+			conflict := Conflict{Path: item.Path, LocalDigest: localEntry.SHA256, RemoteDigest: item.SHA256}
 			if hadBase {
-				conflict.BaseDigest = baseDigest
+				conflict.BaseDigest = baseEntry.SHA256
 			}
 			conflicts = append(conflicts, conflict)
 			continue
@@ -101,12 +128,13 @@ func PlanWithIgnore(root string, base *Manifest, local map[string]string, remote
 		}
 		precondition := storage.Precondition{}
 		if present {
-			precondition = storage.Precondition{Exists: true, Digest: localDigest}
+			precondition = storage.Precondition{Exists: true, Digest: localEntry.SHA256, Mode: modeBits(localEntry.Mode)}
 		}
 		request.Changes = append(request.Changes, storage.Change{
 			Path:         filepath.Join(root, filepath.FromSlash(item.Path)),
 			Contents:     contents[item.Path],
 			Precondition: precondition,
+			Mode:         modeBits(item.Mode),
 			// 秘密鍵を含め、置き換えるファイルは暗号化された世代バックアップへ残す。
 		})
 	}
@@ -116,18 +144,18 @@ func PlanWithIgnore(root string, base *Manifest, local map[string]string, remote
 	// できるのは、最後に同期したマニフェストだけである。base にあって remote に
 	// ないなら削除、どちらにもないならここで新しく作られたものであり、手を触れ
 	// ない。
-	for path, localDigest := range local {
+	for path, localEntry := range local {
 		if isIgnored(path) {
 			continue
 		}
-		if _, stillRemote := remoteDigests[path]; stillRemote {
+		if _, stillRemote := remoteEntries[path]; stillRemote {
 			continue
 		}
-		baseDigest, hadBase := baseDigests[path]
+		baseEntry, hadBase := baseEntries[path]
 		if !hadBase {
 			continue
 		}
-		if localDigest != baseDigest {
+		if localEntry != baseEntry {
 			// リモートで削除され、ローカルで編集された競合。
 			switch resolve {
 			case ResolveLocal:
@@ -137,14 +165,14 @@ func PlanWithIgnore(root string, base *Manifest, local map[string]string, remote
 				// リモートを採用し、削除前の内容を History に残す。
 			default:
 				conflicts = append(conflicts, Conflict{
-					Path: path, BaseDigest: baseDigest, LocalDigest: localDigest,
+					Path: path, BaseDigest: baseEntry.SHA256, LocalDigest: localEntry.SHA256,
 				})
 				continue
 			}
 		}
 		request.Removals = append(request.Removals, storage.Removal{
 			Path:         filepath.Join(root, filepath.FromSlash(path)),
-			Precondition: storage.Precondition{Exists: true, Digest: localDigest},
+			Precondition: storage.Precondition{Exists: true, Digest: localEntry.SHA256, Mode: modeBits(localEntry.Mode)},
 			// リモート削除を適用する前に、暗号化された世代バックアップを残す。
 			Backup: true,
 		})

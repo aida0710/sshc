@@ -53,6 +53,8 @@ type fakeBucket struct {
 	listETagOverride         string
 	historyUnconditional     int
 	refuseGets               int
+	listStarted              chan struct{}
+	releaseList              chan struct{}
 }
 
 type storedObject struct {
@@ -135,6 +137,20 @@ func (b *fakeBucket) object(key string) []byte {
 
 func (b *fakeBucket) handler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Query().Get("list-type") == "2" {
+			b.mu.Lock()
+			started, release := b.listStarted, b.releaseList
+			b.mu.Unlock()
+			if started != nil {
+				select {
+				case started <- struct{}{}:
+				default:
+				}
+			}
+			if release != nil {
+				<-release
+			}
+		}
 		b.mu.Lock()
 		defer b.mu.Unlock()
 		if b.objects == nil {
@@ -1078,6 +1094,23 @@ func TestPullReportsDownloadedAndExpandedBytesWithoutPersistingPreview(t *testin
 		view.LastOperation.Removed != 0 {
 		t.Fatalf("apply operation = %#v", view.LastOperation)
 	}
+	history, err := consumer.manager.History()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(history) != 1 || history[0].Operation != "sync.pull" {
+		t.Fatalf("pull and sync state were not committed together: %#v", history)
+	}
+	wantState := filepath.Join(consumer.workspace.Root(), filepath.FromSlash(remotesync.StatePath))
+	wantConfig := filepath.Join(consumer.workspace.Root(), "config")
+	foundConfig, foundState := false, false
+	for _, path := range history[0].Paths {
+		foundConfig = foundConfig || path == wantConfig
+		foundState = foundState || path == wantState
+	}
+	if !foundConfig || !foundState {
+		t.Fatalf("atomic pull paths = %#v", history[0].Paths)
+	}
 }
 
 func TestFailedPushReportsItsCompletedUploadAndPreservesPriorSuccess(t *testing.T) {
@@ -1462,6 +1495,47 @@ func TestBucketStatusReadsLiveAndDatedHistoryFromTheRemote(t *testing.T) {
 	}
 	if view.LocalIsLive {
 		t.Fatal("a changed remote generation was reported as locally acknowledged")
+	}
+}
+
+func TestBucketStatusDoesNotHoldTheSyncOperationLockDuringS3Listing(t *testing.T) {
+	bucket := &fakeBucket{}
+	machine := newInstallation(t, bucket, map[string]string{"config": "Host one\n"})
+	if _, err := machine.service.Push(context.Background(), syncPassphrase, "initial"); err != nil {
+		t.Fatal(err)
+	}
+	bucket.mu.Lock()
+	bucket.listStarted = make(chan struct{}, 1)
+	bucket.releaseList = make(chan struct{})
+	started, release := bucket.listStarted, bucket.releaseList
+	bucket.mu.Unlock()
+	statusDone := make(chan error, 1)
+	go func() {
+		_, err := machine.service.BucketStatus(context.Background())
+		statusDone <- err
+	}()
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("BucketStatus did not reach the remote listing")
+	}
+	machine.write(t, "config", "Host two\n")
+	pushDone := make(chan error, 1)
+	go func() {
+		_, err := machine.service.Push(context.Background(), syncPassphrase, "second")
+		pushDone <- err
+	}()
+	select {
+	case err := <-pushDone:
+		if err != nil {
+			t.Fatalf("Push while BucketStatus was listing = %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("BucketStatus held operationMu across the S3 listing")
+	}
+	close(release)
+	if err := <-statusDone; !errors.Is(err, remotesync.ErrRemoteMoved) {
+		t.Fatalf("BucketStatus after concurrent Push = %v, want ErrRemoteMoved", err)
 	}
 }
 

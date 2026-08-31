@@ -50,6 +50,10 @@ const MaxSnapshotBytes = 64 << 20
 // MaxEntries は、ひとつのスナップショットが運べるファイル数に上限を設ける。
 const MaxEntries = 4096
 
+// MaxManifestAncestors bounds authenticated ancestry carried by new snapshots.
+// This avoids opening one Argon2-protected history object per missed update.
+const MaxManifestAncestors = 50
+
 var (
 	// ErrNotASnapshot は、そもそもスナップショットでないバイト列を報告する。
 	ErrNotASnapshot = errors.New("these bytes are not an sshc snapshot")
@@ -99,17 +103,21 @@ type Manifest struct {
 	// ParentRevision は、このsnapshotを作る直前にlocalが採用していた世代。
 	// 空なら履歴のrootである。
 	ParentRevision string `json:"parentRevision,omitempty"`
+	// Ancestors begins with ParentRevision and continues toward the root. It is
+	// encrypted and covered by Revision, so the object store does not learn it.
+	Ancestors []string `json:"ancestors,omitempty"`
 	// Message はremoteでは暗号化manifest内だけに保存し、object metadataへ複製しない。
 	Message string  `json:"message"`
 	Files   []Entry `json:"files"`
 }
 
 type revisionDocument struct {
-	CreatedAt      string  `json:"createdAt"`
-	Origin         string  `json:"origin"`
-	ParentRevision string  `json:"parentRevision,omitempty"`
-	Message        string  `json:"message"`
-	Files          []Entry `json:"files"`
+	CreatedAt      string   `json:"createdAt"`
+	Origin         string   `json:"origin"`
+	ParentRevision string   `json:"parentRevision,omitempty"`
+	Ancestors      []string `json:"ancestors,omitempty"`
+	Message        string   `json:"message"`
+	Files          []Entry  `json:"files"`
 }
 
 // RevisionFor returns the stable content identity of a manifest. Revision and
@@ -120,7 +128,8 @@ func RevisionFor(manifest Manifest) (string, error) {
 	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
 	document, err := json.Marshal(revisionDocument{
 		CreatedAt: manifest.CreatedAt, Origin: manifest.Origin,
-		ParentRevision: manifest.ParentRevision, Message: manifest.Message, Files: files,
+		ParentRevision: manifest.ParentRevision, Ancestors: manifest.Ancestors,
+		Message: manifest.Message, Files: files,
 	})
 	if err != nil {
 		return "", err
@@ -135,6 +144,12 @@ func FinalizeManifest(manifest *Manifest, parentRevision string) error {
 	}
 	manifest.SchemaVersion = SchemaVersion
 	manifest.ParentRevision = parentRevision
+	if parentRevision != "" && len(manifest.Ancestors) == 0 {
+		manifest.Ancestors = []string{parentRevision}
+	}
+	if err := validateAncestors(parentRevision, manifest.Ancestors); err != nil {
+		return err
+	}
 	message, err := NormalizeCommitMessage(manifest.Message)
 	if err != nil {
 		return err
@@ -169,6 +184,29 @@ func validRevision(revision string) bool {
 	}
 	_, err := hex.DecodeString(revision)
 	return err == nil
+}
+
+func validateAncestors(parent string, ancestors []string) error {
+	if parent == "" {
+		if len(ancestors) != 0 {
+			return ErrManifestMismatch
+		}
+		return nil
+	}
+	if len(ancestors) == 0 || len(ancestors) > MaxManifestAncestors || ancestors[0] != parent {
+		return ErrManifestMismatch
+	}
+	seen := make(map[string]struct{}, len(ancestors))
+	for _, revision := range ancestors {
+		if !validRevision(revision) {
+			return ErrManifestMismatch
+		}
+		if _, exists := seen[revision]; exists {
+			return ErrManifestMismatch
+		}
+		seen[revision] = struct{}{}
+	}
+	return nil
 }
 
 // Build は、与えられたファイルを圧縮アーカイブに詰める。
@@ -207,7 +245,8 @@ func Build(manifest Manifest, contents map[string][]byte) ([]byte, error) {
 		manifest.Revision = expectedRevision
 	}
 	if manifest.Revision != expectedRevision ||
-		(manifest.ParentRevision != "" && !validRevision(manifest.ParentRevision)) {
+		(manifest.ParentRevision != "" && !validRevision(manifest.ParentRevision)) ||
+		validateAncestors(manifest.ParentRevision, manifest.Ancestors) != nil {
 		return nil, ErrManifestMismatch
 	}
 	document, err := json.Marshal(manifest)
@@ -357,7 +396,8 @@ func Read(archive []byte) (Manifest, map[string][]byte, error) {
 		return Manifest{}, nil, ErrManifestMismatch
 	}
 	if manifest.Revision != revision ||
-		(manifest.ParentRevision != "" && !validRevision(manifest.ParentRevision)) {
+		(manifest.ParentRevision != "" && !validRevision(manifest.ParentRevision)) ||
+		validateAncestors(manifest.ParentRevision, manifest.Ancestors) != nil {
 		return Manifest{}, nil, ErrManifestMismatch
 	}
 	return manifest, contents, nil

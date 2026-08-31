@@ -92,7 +92,8 @@ func TestRevisionIsStableAndCarriesItsParent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.ParentRevision != parent || got.Message != "Add bastion connection" || len(got.Revision) != 64 {
+	if got.ParentRevision != parent || len(got.Ancestors) != 1 || got.Ancestors[0] != parent ||
+		got.Message != "Add bastion connection" || len(got.Revision) != 64 {
 		t.Fatalf("manifest = %#v", got)
 	}
 	want, err := remotesync.RevisionFor(got)
@@ -101,6 +102,20 @@ func TestRevisionIsStableAndCarriesItsParent(t *testing.T) {
 	}
 	if got.Revision != want {
 		t.Fatalf("revision = %q, want %q", got.Revision, want)
+	}
+}
+
+func TestSnapshotRejectsAnInvalidAuthenticatedAncestorChain(t *testing.T) {
+	parent := strings.Repeat("a", 64)
+	manifest := remotesync.Manifest{
+		CreatedAt: "2026-08-31T00:00:00Z", Origin: "origin", Message: "invalid lineage",
+		ParentRevision: parent,
+		Ancestors:      []string{parent, parent},
+		Files:          []remotesync.Entry{entry("config", "Host test\n")},
+	}
+	manifest.Revision, _ = remotesync.RevisionFor(manifest)
+	if _, err := remotesync.Build(manifest, map[string][]byte{"config": []byte("Host test\n")}); !errors.Is(err, remotesync.ErrManifestMismatch) {
+		t.Fatalf("Build duplicate ancestors = %v, want ErrManifestMismatch", err)
 	}
 }
 
