@@ -22,7 +22,12 @@ sshc vault create
 sshc vault unlock
 sshc vault lock
 sshc vault change-password
+sshc service install
+sshc service status
+sshc service disable
 ```
+
+`sshc service` manages a systemd user service on Linux. `install` registers a stable Homebrew or `install.sh` path, and `disable` removes only a unit created by sshc.
 
 ## SSH
 

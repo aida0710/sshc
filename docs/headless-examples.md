@@ -46,34 +46,32 @@ sshc sync auto off --json
 
 ## systemd（ユーザーサービス）
 
-`~/.config/systemd/user/sshc.service`:
-
-次の例はインストールスクリプトの既定パスを使用します。Homebrew などで別の場所へインストールした場合は、`command -v sshc` の結果に合わせて `ExecStart` を変更してください。
-
-```ini
-[Unit]
-Description=sshc engine
-After=default.target
-
-[Service]
-Type=simple
-ExecStart=%h/.local/bin/sshc engine
-Restart=on-failure
-SuccessExitStatus=130
-
-[Install]
-WantedBy=default.target
-```
-
-`Type=simple` は、エンジンがフォアグラウンドで動作することを表します。`SuccessExitStatus=130` により、Ctrl+C で停止した場合の自動再起動を防ぎます。
-
 ```sh
-systemctl --user daemon-reload
-systemctl --user enable --now sshc
+sshc service install
+sshc service status
 sshc vault unlock
 ```
 
-sshc は unit ファイルを自動作成しません。配置場所と起動方法は利用者が管理します。
+`sshc service install`は`~/.config/systemd/user/sshc.service`を0600で原子的に作成し、`systemctl --user`で有効化して起動します。unitはforegroundの`sshc engine`を`Type=simple`で実行し、`Restart=on-failure`と`SuccessExitStatus=130`を設定します。
+
+登録できるのは、実行中ファイルの所有元を確認できたHomebrew版またはreceipt対応`install.sh`版だけです。Homebrew版はCellar内のversion付き実体ではなく、更新後も同じ場所を指すformulaの`opt/sshc/bin/sshc`を登録します。手動copy、`make install`、source buildは推測で登録しません。
+
+同名unitがすでに存在し、sshcの管理markerがない場合は上書きも削除もしません。手作業で作成したunitから移行する場合は、利用者自身で停止して退避します。
+
+```sh
+systemctl --user disable --now sshc
+mv ~/.config/systemd/user/sshc.service ~/.config/systemd/user/sshc.service.manual
+systemctl --user daemon-reload
+sshc service install
+```
+
+`sshc service disable`はsshc管理下のunitだけを停止、無効化、削除します。`sshc update`は管理下のunitがactiveの場合だけ更新後に再起動します。再起動によりvaultはロックされるため、別の対話端末から`sshc vault unlock`を再実行してください。停止中のunitをupdateが起動することはありません。
+
+SSH loginを切断した後もuser managerを動作させる必要がある場合は、管理者にlingerの有効化を依頼するか、権限があれば次を実行します。
+
+```sh
+loginctl enable-linger "$USER"
+```
 
 ## tmux
 
