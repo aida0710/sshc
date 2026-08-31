@@ -7,7 +7,7 @@ import { locales, type Locale } from "../i18n/locale";
 import { themes, type Theme } from "../theme/theme";
 import type { MessageKey } from "../i18n/messages";
 import type { Section } from "../routing/sectionRoute";
-import { useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { sftpTransferManager } from "../sftp/transferManager";
 
 export function AppHeader({
@@ -50,8 +50,36 @@ export function AppHeader({
   onOpenTransfers: () => void;
 }) {
   const { t, locale, setLocale } = useLanguage();
+  const preferenceMenu = useRef<HTMLDetailsElement>(null);
+  const [preferenceMenuOpen, setPreferenceMenuOpen] = useState(false);
   const transfers = useSyncExternalStore(sftpTransferManager.subscribe, sftpTransferManager.getSnapshot);
   const activeTransfers = transfers.filter((job) => ["queued", "running", "paused", "reattach", "needs_overwrite"].includes(job.status)).length;
+  useEffect(() => {
+    function closeOutsidePreferenceMenu(event: PointerEvent) {
+      const menu = preferenceMenu.current;
+      if (menu === null || !menu.open) return;
+      const target = event.target;
+      if (target instanceof Node && !menu.contains(target)) setPreferenceMenuOpen(false);
+    }
+    function closePreferenceMenuWithKeyboard(event: KeyboardEvent) {
+      if (event.key === "Escape" && preferenceMenu.current?.open === true) {
+        setPreferenceMenuOpen(false);
+      }
+    }
+    function closePreferenceMenuForAndroidBack(event: Event) {
+      if (preferenceMenu.current?.open !== true) return;
+      event.preventDefault();
+      setPreferenceMenuOpen(false);
+    }
+    document.addEventListener("pointerdown", closeOutsidePreferenceMenu, true);
+    document.addEventListener("keydown", closePreferenceMenuWithKeyboard);
+    window.addEventListener("sshc-android-back", closePreferenceMenuForAndroidBack);
+    return () => {
+      document.removeEventListener("pointerdown", closeOutsidePreferenceMenu, true);
+      document.removeEventListener("keydown", closePreferenceMenuWithKeyboard);
+      window.removeEventListener("sshc-android-back", closePreferenceMenuForAndroidBack);
+    };
+  }, []);
   return (
     <header data-app-header className="sticky top-0 z-20 flex h-12 shrink-0 items-center gap-2 border-b border-line bg-toolbar px-2 md:gap-3 md:px-3">
       <div className="flex min-w-0 flex-1 items-center gap-2 md:contents">
@@ -171,7 +199,12 @@ export function AppHeader({
         </select>
       </div>
 
-      <details className="group relative shrink-0 md:hidden">
+      <details
+        ref={preferenceMenu}
+        open={preferenceMenuOpen}
+        onToggle={(event) => setPreferenceMenuOpen(event.currentTarget.open)}
+        className="group relative shrink-0 md:hidden"
+      >
         <summary
           aria-label={t("shell.preferenceMenu")}
           className="grid h-10 w-10 cursor-pointer list-none place-items-center rounded text-ink-muted marker:hidden hover:bg-select-fill hover:text-ink"

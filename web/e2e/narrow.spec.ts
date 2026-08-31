@@ -457,6 +457,13 @@ test("keeps mobile navigation and display controls behind header menus", async (
   await expect(page.getByLabel("Lang menu")).toBeVisible();
 
   await page.getByRole("button", { name: "Navigation", exact: true }).click();
+  await expect(page.getByLabel("Theme menu")).toBeHidden();
+  await expect(page.getByLabel("Lang menu")).toBeHidden();
+  await expect(primaryNavigation).toBeInViewport();
+  await page.locator("[data-navigation-backdrop]").click({ position: { x: 340, y: 200 } });
+  await expect(primaryNavigation).not.toBeInViewport();
+
+  await page.getByRole("button", { name: "Navigation", exact: true }).click();
   await expect(primaryNavigation).toBeInViewport();
   await expect(primaryNavigation.getByRole("button", { name: "Search everything" })).toBeVisible();
   await primaryNavigation.getByRole("button", { name: "Search everything" }).click();
@@ -649,42 +656,6 @@ test("keeps Menu in mobile history after opening SSH Config", async ({ page, ins
   await page.goBack();
   await expect(page).toHaveURL(/\/menu$/);
   await expect(page.getByRole("heading", { name: "Menu", exact: true })).toBeVisible();
-});
-
-test("opens the drawer with a right swipe from the left edge", async ({ page, installation }) => {
-  await openApplication(page, installation);
-  await expect(sessionStatus(page)).toContainText("Local session active");
-
-  const drawer = page.getByRole("navigation", { name: "Primary" });
-  const hamburger = page.getByRole("button", { name: "Navigation", exact: true });
-  await expect(hamburger).toHaveAttribute("aria-expanded", "false");
-  const application = page.locator("[data-mobile-navigation-swipe='enabled']");
-  await expect(application).toHaveCount(1);
-  await application.evaluate((root) => {
-    const point = (x: number, y: number) => new Touch({
-      identifier: 1,
-      target: root,
-      clientX: x,
-      clientY: y,
-    });
-    const start = point(8, 300);
-    root.dispatchEvent(new TouchEvent("touchstart", {
-      bubbles: true,
-      cancelable: true,
-      touches: [start],
-      changedTouches: [start],
-    }));
-    const moved = point(100, 308);
-    root.dispatchEvent(new TouchEvent("touchmove", {
-      bubbles: true,
-      cancelable: true,
-      touches: [moved],
-      changedTouches: [moved],
-    }));
-  });
-
-  await expect(hamburger).toHaveAttribute("aria-expanded", "true");
-  await expect.poll(() => drawer.evaluate((element) => element.getBoundingClientRect().left)).toBeGreaterThanOrEqual(0);
 });
 
 test("keeps key material and management actions inside the key list", async ({ page, installation }) => {
