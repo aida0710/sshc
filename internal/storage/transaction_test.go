@@ -226,38 +226,125 @@ func TestRecoveryCompletesAfterAModeOnlyWriteWithStaleProgress(t *testing.T) {
 	assertFileContents(t, second, "after\n")
 }
 
-func TestReleasedV1PendingJournalCompletesAndRollsBack(t *testing.T) {
-	for _, test := range []struct {
-		name string
-		run  func(*Manager, string) error
-		want string
-	}{
-		{name: "complete", run: func(manager *Manager, id string) error { return manager.Complete(id) }, want: "after\n"},
-		{name: "rollback", run: func(manager *Manager, id string) error { return manager.Rollback(id) }, want: "before\n"},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			workspace := newTestWorkspace(t)
-			first := writeWorkspaceFile(t, workspace, "first.conf", "before\n", FilePermission)
-			second := writeWorkspaceFile(t, workspace, "second.conf", "before\n", FilePermission)
-			id := commitWithStaleJournal(t, workspace, 0x83, Request{
-				Operation: "config.save",
-				Changes: []Change{
-					{Path: first, Contents: []byte("after\n"), Precondition: Precondition{Exists: true, Digest: Digest([]byte("before\n")), Mode: FilePermission}},
-					{Path: second, Contents: []byte("after\n"), Precondition: Precondition{Exists: true, Digest: Digest([]byte("before\n")), Mode: FilePermission}},
-				},
-			})
-			journalPath := filepath.Join(workspace.StateDir(), journalDirectoryName, id+".json")
-			downgradeJournalRecordToV1(t, journalPath)
+func TestReleasedV1PendingJournalCompletesButDoesNotClaimAnExactRollback(t *testing.T) {
+	workspace := newTestWorkspace(t)
+	first := writeWorkspaceFile(t, workspace, "first.conf", "before\n", FilePermission)
+	second := writeWorkspaceFile(t, workspace, "second.conf", "before\n", FilePermission)
+	id := commitWithStaleJournal(t, workspace, 0x83, Request{
+		Operation: "config.save",
+		Changes: []Change{
+			{Path: first, Contents: []byte("after\n"), Precondition: Precondition{Exists: true, Digest: Digest([]byte("before\n")), Mode: FilePermission}},
+			{Path: second, Contents: []byte("after\n"), Precondition: Precondition{Exists: true, Digest: Digest([]byte("before\n")), Mode: FilePermission}},
+		},
+	})
+	journalPath := filepath.Join(workspace.StateDir(), journalDirectoryName, id+".json")
+	downgradeJournalRecordToV1(t, journalPath)
 
-			restarted := restartedManager(t, workspace)
-			reconciledPending(t, restarted, id, 1)
-			if err := test.run(restarted, id); err != nil {
-				t.Fatal(err)
-			}
-			assertFileContents(t, first, test.want)
-			assertFileContents(t, second, test.want)
-		})
+	restarted := restartedManager(t, workspace)
+	pending := reconciledPending(t, restarted, id, 1)
+	if pending.CanRollback || !pending.CanComplete {
+		t.Fatalf("v1 pending recovery choices = %#v", pending)
 	}
+	if err := restarted.Rollback(id); !errors.Is(err, ErrCannotRollback) {
+		t.Fatalf("Rollback = %v, want ErrCannotRollback", err)
+	}
+	assertFileContents(t, first, "after\n")
+	assertFileContents(t, second, "before\n")
+	if err := restarted.Complete(id); err != nil {
+		t.Fatal(err)
+	}
+	assertFileContents(t, first, "after\n")
+	assertFileContents(t, second, "after\n")
+}
+
+func TestReleasedV1ModeChangeCannotMisreportRollback(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows does not expose Unix executable permission bits")
+	}
+	workspace := newTestWorkspace(t)
+	modeOnly := writeWorkspaceFile(t, workspace, "mode-only", "same bytes\n", FilePermission)
+	second := writeWorkspaceFile(t, workspace, "second.conf", "before\n", FilePermission)
+	id := commitWithStaleJournal(t, workspace, 0x84, Request{
+		Operation: "sync.pull",
+		Changes: []Change{
+			{Path: modeOnly, Contents: []byte("same bytes\n"), Mode: DirectoryPermission, Precondition: Precondition{Exists: true, Digest: Digest([]byte("same bytes\n")), Mode: FilePermission}},
+			{Path: second, Contents: []byte("after\n"), Precondition: Precondition{Exists: true, Digest: Digest([]byte("before\n")), Mode: FilePermission}},
+		},
+	})
+	downgradeJournalRecordToV1(t, filepath.Join(workspace.StateDir(), journalDirectoryName, id+".json"))
+
+	restarted := restartedManager(t, workspace)
+	pending := reconciledPending(t, restarted, id, 1)
+	if pending.CanRollback || !pending.CanComplete {
+		t.Fatalf("v1 mode recovery choices = %#v", pending)
+	}
+	if err := restarted.Rollback(id); !errors.Is(err, ErrCannotRollback) {
+		t.Fatalf("Rollback = %v, want ErrCannotRollback", err)
+	}
+	if info, err := os.Lstat(modeOnly); err != nil || info.Mode().Perm() != DirectoryPermission {
+		t.Fatalf("mode after refused rollback = %v, %v; want 0700", info, err)
+	}
+	if err := restarted.Complete(id); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestReleasedV1ModeUncertaintyPersistsWithoutBlockingAnUnappliedRollback(t *testing.T) {
+	workspace := newTestWorkspace(t)
+	target := writeWorkspaceFile(t, workspace, "config", "before\n", FilePermission)
+	failure := errors.New("injected first rename failure")
+	workspace.fileSystem = faultyFileSystem{
+		FileSystem: OSFileSystem{},
+		failOn: func(operation, path string) error {
+			if operation == "rename" && path == target {
+				return failure
+			}
+			return nil
+		},
+	}
+	manager := NewManager(workspace, fixedClock(), bytes.NewReader(bytes.Repeat([]byte{0x85}, 4096)))
+	result, err := manager.Commit(Request{
+		Operation: "config.save",
+		Changes: []Change{{
+			Path: target, Contents: []byte("after\n"),
+			Precondition: Precondition{Exists: true, Digest: Digest([]byte("before\n")), Mode: FilePermission},
+		}},
+	})
+	if !errors.Is(err, failure) || result.ID == "" {
+		t.Fatalf("Commit = %#v, %v; want the injected rename failure", result, err)
+	}
+	workspace.fileSystem = OSFileSystem{}
+	journalPath := filepath.Join(workspace.StateDir(), journalDirectoryName, result.ID+".json")
+	downgradeJournalRecordToV1(t, journalPath)
+
+	restarted := restartedManager(t, workspace)
+	record, _, err := restarted.loadPending(result.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !record.LegacyWriteModesUnknown || record.appliedLegacyWriteModeUnknown() {
+		t.Fatalf("loaded v1 uncertainty = %#v", record)
+	}
+	body, err := os.ReadFile(journalPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var migrated journalRecord
+	if err := json.Unmarshal(body, &migrated); err != nil {
+		t.Fatal(err)
+	}
+	if migrated.Version != journalVersion || !migrated.LegacyWriteModesUnknown {
+		t.Fatalf("persisted migration = %#v", migrated)
+	}
+	restarted = restartedManager(t, workspace)
+	pending := reconciledPending(t, restarted, result.ID, 0)
+	if !pending.CanRollback {
+		t.Fatalf("unapplied v1 write cannot roll back: %#v", pending)
+	}
+	if err := restarted.Rollback(result.ID); err != nil {
+		t.Fatalf("Rollback after restart = %v", err)
+	}
+	assertFileContents(t, target, "before\n")
 }
 
 func TestReleasedV1HistoryRemainsReadable(t *testing.T) {

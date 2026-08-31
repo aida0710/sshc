@@ -90,7 +90,7 @@ func (m *Manager) Pending() ([]Pending, error) {
 			StartedAt:   record.StartedAt,
 			Committed:   record.Committed,
 			CanComplete: !unresolved && ((record.Status == statusStaged && !record.Atomic) || (record.Status == statusApplied && record.DiscardBackups)),
-			CanRollback: !unresolved && record.Status != statusApplied,
+			CanRollback: !unresolved && !record.appliedLegacyWriteModeUnknown() && record.Status != statusApplied,
 		}
 		for index, entry := range record.Entries {
 			pendingEntry := PendingEntry{
@@ -171,7 +171,7 @@ func (m *Manager) Rollback(identifier string) error {
 	if err != nil {
 		return err
 	}
-	if record.Status == statusApplied {
+	if record.appliedLegacyWriteModeUnknown() || record.Status == statusApplied {
 		return ErrCannotRollback
 	}
 	return m.rollbackRecord(record, journalPath)
@@ -332,6 +332,7 @@ func (m *Manager) loadPending(identifier string) (*journalRecord, string, error)
 		return nil, "", err
 	}
 	zeroBytes(contents)
+	wasLegacy := record.Version == 1
 	if err := migrateLoadedJournalRecord(&record); err != nil {
 		return nil, "", err
 	}
@@ -340,7 +341,7 @@ func (m *Manager) loadPending(identifier string) (*journalRecord, string, error)
 	}
 	if changed, err := m.reconcileRecord(&record); err != nil {
 		return nil, "", err
-	} else if changed {
+	} else if changed || wasLegacy {
 		if err := m.validateLoadedJournalRecord(record, filepath.Base(journalPath), m.journalDirectory()); err != nil {
 			return nil, "", err
 		}
@@ -640,8 +641,9 @@ func invalidJournal(reason string) error {
 }
 
 // migrateLoadedJournalRecord upgrades the released v1 contract in memory.
-// In v1 a write had one Mode because its before and after modes were identical.
-// v2 separates them so a mode-only write is recoverable after a crash.
+// v1 stored only the mode after a write. Existing-file writes therefore cannot
+// promise a rollback to the exact previous state; v2 keeps that uncertainty as
+// a durable marker while still allowing the recorded transaction to complete.
 func migrateLoadedJournalRecord(record *journalRecord) error {
 	if record.Version == journalVersion {
 		return nil
@@ -656,6 +658,7 @@ func migrateLoadedJournalRecord(record *journalRecord) error {
 		}
 		if entry.Action == actionWrite && entry.HadPrevious {
 			entry.PreviousMode = entry.Mode
+			record.LegacyWriteModesUnknown = true
 		}
 	}
 	record.Version = journalVersion

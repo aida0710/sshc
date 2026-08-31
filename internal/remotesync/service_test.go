@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -868,6 +869,42 @@ func TestAnUnchangedManualPushCreatesNoHistory(t *testing.T) {
 	}
 	if after, _ := bucket.uploads(); after != before {
 		t.Fatalf("unchanged Push created objects: %d then %d", before, after)
+	}
+}
+
+func TestOwnerReadExecuteModeCollectsAsExecutableWithoutAnotherPush(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows does not expose Unix executable permission bits")
+	}
+	bucket := &fakeBucket{}
+	machine := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n", "helper.sh": "#!/bin/sh\n"})
+	helper := filepath.Join(machine.home, ".ssh", "helper.sh")
+	if err := os.Chmod(helper, 0o500); err != nil {
+		t.Fatal(err)
+	}
+
+	manifest, _, err := machine.service.Collect()
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantExecutable := false
+	for _, entry := range manifest.Files {
+		if entry.Path == "helper.sh" {
+			wantExecutable = entry.Mode == "0700"
+		}
+	}
+	if !wantExecutable {
+		t.Fatalf("0500 helper was not collected as logical mode 0700: %#v", manifest.Files)
+	}
+	if _, err := machine.service.Push(context.Background(), syncPassphrase, "Initial executable"); err != nil {
+		t.Fatal(err)
+	}
+	before, _ := bucket.uploads()
+	if _, err := machine.service.Push(context.Background(), syncPassphrase, "Duplicate executable"); !errors.Is(err, remotesync.ErrNothingToPush) {
+		t.Fatalf("unchanged 0500 Push = %v, want ErrNothingToPush", err)
+	}
+	if after, _ := bucket.uploads(); after != before {
+		t.Fatalf("unchanged 0500 Push created objects: %d then %d", before, after)
 	}
 }
 

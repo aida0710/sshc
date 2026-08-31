@@ -273,8 +273,24 @@ type journalRecord struct {
 	// DiscardBackups marks an atomic replacement whose previous bytes exist only
 	// to recover an interrupted commit. They bypass the normal backup sealer and
 	// are removed once either the old or the new generation is authoritative.
-	DiscardBackups bool           `json:"discardBackups,omitempty"`
-	Entries        []journalEntry `json:"entries"`
+	DiscardBackups bool `json:"discardBackups,omitempty"`
+	// LegacyWriteModesUnknown marks a v1 record whose existing-file writes did
+	// not preserve their modes from before the write.
+	LegacyWriteModesUnknown bool           `json:"legacyWriteModesUnknown,omitempty"`
+	Entries                 []journalEntry `json:"entries"`
+}
+
+func (record journalRecord) appliedLegacyWriteModeUnknown() bool {
+	if !record.LegacyWriteModesUnknown {
+		return false
+	}
+	committed := min(record.Committed, len(record.Entries))
+	for _, entry := range record.Entries[:committed] {
+		if entry.Action == actionWrite && entry.HadPrevious {
+			return true
+		}
+	}
+	return false
 }
 
 // Manager は、ワークスペース内でジャーナル付きの原子的な複数ファイル書き込みを行う。
