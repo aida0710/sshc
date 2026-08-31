@@ -7,11 +7,11 @@ export const en = {
     "The vault state could not be confirmed. Protected content remains hidden while sshc retries.",
   "shell.active": "Local session active · {version}",
   "shell.bootstrapFailed":
-    "Secure local session could not be started. Restart sshc and use the newly opened tab.",
+    "Secure local session could not be started. Run sshc in a terminal to enrol this browser again.",
   "shell.bootstrapRetry": "Try again",
   "shell.sessionEndedHeading": "Session ended",
   "shell.sessionEnded":
-    "Reload to renew the local session. If it no longer exists, restart sshc and use the newly opened tab.",
+    "Reload to recover the local session automatically. If this browser is no longer enrolled, run sshc in a terminal once.",
   "shell.sessionReload": "Reload session",
   "shell.pageNotFound": "Page not found",
   "shell.pageNotFoundDescription": "No sshc section exists at this URL.",
@@ -507,7 +507,7 @@ export const en = {
   "engine.heading": "Engine",
   "engine.portLabel": "Port",
   "engine.portHint":
-    "Leave this empty to select a random port from 30000 to 60000. Applies the next time the engine starts.",
+    "Leave this empty to use a device-local stable port (initially 54447). A stable port keeps bookmarks and the installed web app working. Applies the next time the engine starts.",
   "engine.portOutOfRange": "The port must be between 1024 and 65535.",
   "engine.loading": "Loading engine settings…",
   "engine.saved": "Saved. Auto-lock applies now; a port change applies the next time the engine starts.",

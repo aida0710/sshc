@@ -10,6 +10,7 @@ import (
 	"golang.org/x/crypto/ssh"
 
 	"sshc/internal/application"
+	"sshc/internal/browserauth"
 	"sshc/internal/diagnostics"
 	"sshc/internal/keys"
 	"sshc/internal/knownhosts"
@@ -28,6 +29,7 @@ import (
 // engineServices は、engine がひとつのワークスペースの上に組む部品一式である。
 type engineServices struct {
 	workspace    *storage.Workspace
+	browserAuth  *browserauth.Store
 	transactions *storage.Manager
 	config       *application.Service
 	keys         *keys.Service
@@ -156,7 +158,8 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 
 	services := &engineServices{
 		workspace: workspace, transactions: transactions,
-		config: configService, keys: keyService, diagnostics: diagnosticsService,
+		browserAuth: browserauth.NewStore(workspace, dependencies.Random),
+		config:      configService, keys: keyService, diagnostics: diagnosticsService,
 		knownHosts: knownHostsService, passwords: passwordService,
 		remoteKeys: remoteKeyService, recentStore: recentStore, recent: recentService,
 		sftp: sftpService, workspaces: workspaceService, snippets: snippetService, ssh: ssh,

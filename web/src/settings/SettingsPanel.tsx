@@ -430,7 +430,7 @@ export function SettingsPanel({
                 max={65535}
                 className={control}
                 value={port}
-                placeholder="30000-60000"
+                placeholder="54447"
                 disabled={!engineLoaded || portBusy}
                 onChange={(event) => {
                   setPort(event.target.value);

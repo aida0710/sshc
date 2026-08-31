@@ -1093,7 +1093,7 @@ describe("App", () => {
     render(<App bootstrap={vi.fn().mockRejectedValue(new Error("rejected"))} health={vi.fn()} vault={openVault} />);
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Secure local session could not be started. Restart sshc and use the newly opened tab.",
+    "Secure local session could not be started. Run sshc in a terminal to enrol this browser again.",
     );
   });
 
@@ -1101,7 +1101,7 @@ describe("App", () => {
     render(<App bootstrap={vi.fn().mockRejectedValue(new Error("session_expired"))} health={vi.fn()} vault={openVault} />);
 
     const alert = await screen.findByRole("alert");
-    expect(alert).toHaveTextContent("Reload to renew the local session");
+    expect(alert).toHaveTextContent("Reload to recover the local session automatically");
     expect(alert.closest("main")).toHaveClass("min-h-screen", "place-items-center");
     expect(screen.getByRole("button", { name: "Reload session" })).toBeVisible();
   });
@@ -1115,7 +1115,7 @@ describe("App", () => {
       />,
     );
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("Reload to renew the local session");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Reload to recover the local session automatically");
     expect(screen.queryByText("Secure local session could not be started")).toBeNull();
   });
 
@@ -1137,7 +1137,7 @@ describe("App", () => {
       await expect(apiClient.read("/api/v1/example")).rejects.toMatchObject({ code: "invalid_session" });
     });
 
-    expect(screen.getByRole("alert")).toHaveTextContent("Reload to renew the local session");
+    expect(screen.getByRole("alert")).toHaveTextContent("Reload to recover the local session automatically");
     expect(screen.queryByRole("navigation", { name: "Primary" })).toBeNull();
   });
 

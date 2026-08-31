@@ -11,6 +11,10 @@ paths:
           in: header
           required: true
           schema: { type: string, minLength: 43, maxLength: 43 }
+        - name: X-SSHC-Browser
+          in: header
+          required: false
+          schema: { type: string, minLength: 43, maxLength: 43 }
       responses:
         "200":
           description: Session established
@@ -22,6 +26,24 @@ paths:
               schema: { $ref: "#/components/schemas/BootstrapResponse" }
         "401": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
+  /api/v1/session/recover:
+    post:
+      operationId: recoverSession
+      parameters:
+        - name: X-SSHC-Browser
+          in: header
+          required: true
+          schema: { type: string, minLength: 43, maxLength: 43 }
+      responses:
+        "200":
+          description: Session restored for an enrolled browser
+          headers:
+            Cache-Control:
+              schema: { type: string, enum: [no-store] }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BootstrapResponse" }
+        "401": { $ref: "#/components/responses/Problem" }
   /api/v1/session/renew:
     post:
       # リロード後も port-origin ごとの sessionStorage に残る現在の CSRF トークンを
@@ -1984,6 +2006,7 @@ components:
       required: [csrfToken]
       properties:
         csrfToken: { type: string, minLength: 43, maxLength: 43 }
+        browserToken: { type: string, minLength: 43, maxLength: 43 }
     HealthResponse:
       type: object
       additionalProperties: false

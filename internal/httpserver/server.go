@@ -18,6 +18,7 @@ import (
 	"github.com/labstack/echo/v5"
 
 	"sshc/internal/application"
+	"sshc/internal/browserauth"
 	"sshc/internal/diagnostics"
 	"sshc/internal/handoff"
 	"sshc/internal/knownhosts"
@@ -51,9 +52,12 @@ type Options struct {
 	Updates  *selfupdate.Checker
 	Listener net.Listener
 	Sessions *session.Manager
-	UI       fs.FS
-	Version  string
-	Owner    handoff.Owner
+	// BrowserAuth keeps only hashes of browser enrolment capabilities. It is
+	// device-local state and lets a fixed-origin bookmark recover after restart.
+	BrowserAuth *browserauth.Store
+	UI          fs.FS
+	Version     string
+	Owner       handoff.Owner
 	// StopEngine は engine の停止を要求する。nil の場合、停止 API は未実装として応答する。
 	StopEngine func()
 	// ProtocolVersion は handoff と同じ CLI contract の版である。
@@ -315,8 +319,9 @@ func New(options Options) (*Server, error) {
 	// 固定する。
 	e.Use(server.stoppingGate)
 
-	handlers := Handlers{Sessions: options.Sessions, Version: options.Version}
+	handlers := Handlers{Sessions: options.Sessions, BrowserAuth: options.BrowserAuth, Version: options.Version}
 	e.POST("/api/v1/session/bootstrap", handlers.Bootstrap)
+	e.POST("/api/v1/session/recover", handlers.Recover)
 	e.POST("/api/v1/session/renew", handlers.Renew)
 	e.GET("/api/v1/health", handlers.Health)
 	if options.Config != nil {

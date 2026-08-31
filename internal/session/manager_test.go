@@ -316,3 +316,36 @@ func TestCommandSessionDoesNotConsumeBrowserBootstrap(t *testing.T) {
 		t.Fatal("browser session unexpectedly expired")
 	}
 }
+
+func TestBootstrapAndRecoveryJoinAnExistingBrowserSession(t *testing.T) {
+	manager, bootstrap, err := NewManager(bytes.NewReader(bytes.Repeat([]byte{0x77}, 256)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := manager.Bootstrap(bootstrap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	joined, setCookie, err := manager.JoinOrIssue(first.SessionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if setCookie || joined.SessionID != first.SessionID {
+		t.Fatalf("joined = %#v, setCookie=%t", joined, setCookie)
+	}
+	if !manager.VerifyCSRF(first.SessionID, first.CSRFToken) || !manager.VerifyCSRF(first.SessionID, joined.CSRFToken) {
+		t.Fatal("joining a tab revoked another tab token")
+	}
+
+	restarted, _, err := NewManager(bytes.NewReader(bytes.Repeat([]byte{0x78}, 256)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	recovered, setCookie, err := restarted.JoinOrIssue(first.SessionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !setCookie || recovered.SessionID == first.SessionID || !restarted.Authenticate(recovered.SessionID) {
+		t.Fatalf("recovered = %#v, setCookie=%t", recovered, setCookie)
+	}
+}

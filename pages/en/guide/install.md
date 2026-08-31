@@ -46,7 +46,7 @@ See [Android](/en/platform/android) for mobile startup and file picker behavior.
 sshc engine
 ```
 
-Open the UI from another terminal.
+When started in an interactive terminal, the first browser enrolment opens automatically. After service startup, if it does not open, or when adding another browser, open the UI from another terminal.
 
 ```sh
 sshc
@@ -54,7 +54,11 @@ sshc
 
 The engine stays in the foreground. Use tmux, systemd, launchd or another OS process manager if you want it to stay running.
 
-The first launch asks you to create the vault master password. Run `sshc` from another terminal to open a one-time local UI URL.
+Desktop first uses `http://127.0.0.1:54447/`. If another user or application already owns that port, sshc selects an available port once and stores it as this device's stable URL. Check the current URL with `sshc status`. Run `sshc` to open a one-time URL and enrol that browser. Afterwards, the same browser profile can use a bookmark or an installed web app directly, including after an engine restart. Run `sshc` again to enrol another browser or profile.
+
+Chrome and Edge can install sshc from their **Install app** action. The web app does not start the engine; run `sshc engine` or keep the OS service running first.
+
+The first launch asks you to create the vault master password.
 
 ## Keep the engine running on Ubuntu / Linux
 

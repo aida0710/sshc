@@ -13,6 +13,8 @@ import (
 	"os/signal"
 	"time"
 
+	"golang.org/x/term"
+
 	"sshc/internal/app"
 	"sshc/internal/handoff"
 	"sshc/internal/selfupdate"
@@ -34,13 +36,15 @@ var (
 type engineDependencies struct {
 	acquire         func(string) (func() error, error)
 	runApp          func(context.Context, app.Dependencies, string) error
+	openBrowser     func(context.Context, string) bool
 	shutdownTimeout time.Duration
 }
 
 func defaultEngineDependencies() engineDependencies {
 	return engineDependencies{
-		acquire: lockEngineStart,
-		runApp:  app.Run,
+		acquire:     lockEngineStart,
+		runApp:      app.Run,
+		openBrowser: openInBrowser,
 	}
 }
 
@@ -149,13 +153,21 @@ func runEngineApp(
 	}
 	announce := announceReadiness(stdout)
 	dependencyValues := app.Dependencies{
-		Random: rand.Reader,
-		Port:   options.Port,
+		Random:      rand.Reader,
+		Port:        options.Port,
+		DefaultPort: app.DefaultPort,
 		Announce: func(readiness app.Readiness) error {
 			// HTTP受付開始を先に知らせる。最新版確認が遅い／失敗する場合もengineは
 			// 既に利用でき、その失敗で停止させない。
 			if err := announce(readiness); err != nil {
 				return err
+			}
+			if readiness.BrowserRegistrationRequired && terminalOutput(stdout) && dependencies.openBrowser != nil {
+				if !dependencies.openBrowser(runCtx, readiness.Entrance) {
+					if _, err := fmt.Fprintln(stdout, "sshc: open the UI with `sshc`"); err != nil {
+						return err
+					}
+				}
 			}
 			reportAvailableUpdate(runCtx, updates, version, stdout, logger)
 			return nil
@@ -182,6 +194,11 @@ func runEngineApp(
 		return 1
 	}
 	return exitForCause(cause, logger)
+}
+
+func terminalOutput(output io.Writer) bool {
+	file, ok := output.(*os.File)
+	return ok && term.IsTerminal(int(file.Fd()))
 }
 
 // reportAvailableUpdate はengineが受付を始めた直後に一度だけ確認し、新版がある

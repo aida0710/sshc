@@ -7,6 +7,10 @@ description: Appearance, terminal, input, notifications, and local-shell setting
 
 Menu has a Settings group with direct links to Engine, Terminal, Notifications, Open connections, and Master password. Each opens as its own page. Connection-specific behavior lives in the connection's sshc tab.
 
+## Engine
+
+Desktop uses a device-local stable port so bookmarks and the installed web app keep the same URL. It first tries `127.0.0.1:54447`, then stores an available fallback if that port is already in use. You may change the port, but must enrol the browser again at the new origin. The native Android app manages its own local port.
+
 ## Appearance
 
 - System, light, or dark theme
@@ -44,4 +48,4 @@ Choose a default shell profile and start directory. Detected choices include Pow
 
 Browser notification permission is requested only after an explicit click. Configure Coding Agent attention/completion sounds, volume, and test delivery.
 
-The application theme, display language, and notification sounds use browser local storage. Terminal settings, including the terminal color scheme, font, background, and tint, are stored in workspace metadata together with connection-specific settings. Vault secrets and sync credentials are never written to plaintext settings.
+The application theme, display language, notification sounds, and browser registration use browser local storage. Terminal settings, including the terminal color scheme, font, background, and tint, are stored in workspace metadata together with connection-specific settings. The browser registration token is not stored in the workspace or sync snapshots; the device keeps only its verification hash. Vault secrets and sync credentials are never written to plaintext settings.

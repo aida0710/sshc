@@ -87,8 +87,9 @@ var androidFieldIntent = map[string]string{
 	"KeyAgent":  "absent: ssh-agent が Android に居ない",
 	"Updates":   "absent: バイナリを置き換える経路が無い",
 
-	"StopEngine": "default: Run が自分で埋める。engine を止められるのは engine 自身だけである",
-	"Port":       "default: WebView は通知された URL を使うため、ポート番号を指定させない",
+	"StopEngine":  "default: Run が自分で埋める。engine を止められるのは engine 自身だけである",
+	"Port":        "default: WebView は通知された URL を使うため、ポート番号を指定させない",
+	"DefaultPort": "default: native WebView は空きポートを使い、desktopの固定originを共有しない",
 
 	// 空で既定に落ちるのが正しいもの。
 	"ScanHostKeys":    "default: internal/sshclient がプロセス内で SSH 通信する",
