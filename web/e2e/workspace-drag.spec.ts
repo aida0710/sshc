@@ -1,4 +1,5 @@
 import { expect, openApplication, test } from "./support/environment";
+import { terminalHostBottomOverflow } from "./support/terminal";
 
 const sessions = [
   {
@@ -128,13 +129,10 @@ test("keeps terminal rows inside vertically split panes", async ({ page, install
 
   const panes = page.locator("[data-workspace-pane]");
   await expect(panes).toHaveCount(2);
-  const overflows = await panes.evaluateAll((elements) => elements.map((pane) => {
-    const host = pane.querySelector("[data-terminal-host]");
-    if (host === null) return Number.POSITIVE_INFINITY;
-    const terminal = host.querySelector(".xterm");
-    if (terminal === null) return Number.POSITIVE_INFINITY;
-    return terminal.getBoundingClientRect().bottom - host.getBoundingClientRect().bottom;
-  }));
+  const overflows = await Promise.all([
+    terminalHostBottomOverflow(panes.nth(0)),
+    terminalHostBottomOverflow(panes.nth(1)),
+  ]);
   expect(overflows).toHaveLength(2);
   for (const overflow of overflows) expect(overflow).toBeLessThanOrEqual(0.5);
 });
