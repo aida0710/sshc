@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { failureCode } from "../api/client";
 import {
   configApi,
@@ -20,7 +20,7 @@ import { PasswordField } from "../ui/PasswordField";
 import { isValidHostName } from "../rules/rules";
 import { Button, Notice } from "../ui/surface";
 import { Icon } from "../ui/icons";
-import { useDismissibleLayer } from "../ui/useDismissibleLayer";
+import { ModalShell } from "../ui/ModalShell";
 
 type AuthenticationKind = CreateConnectionAuthentication["kind"];
 
@@ -93,7 +93,6 @@ export function CreateConnectionModal({
   const [vaultBusy, setVaultBusy] = useState(false);
   const [error, setError] = useState("");
   const [touched, setTouched] = useState<Set<TouchedField>>(() => new Set());
-  const dialog = useRef<HTMLElement>(null);
 
   function clearSecrets() {
     setDedicatedPassword("");
@@ -137,16 +136,6 @@ export function CreateConnectionModal({
       active = false;
     };
   }, [initialDraft, keys, secrets, t]);
-
-  useDismissibleLayer({
-    open: true,
-    containerRefs: [dialog],
-    onDismiss: () => {
-      if (!busy && !vaultBusy) close();
-    },
-    closeOnOutside: false,
-    trapFocus: true,
-  });
 
   const aliasError = alias === ""
     ? t("conn.createAliasRequired")
@@ -296,15 +285,13 @@ export function CreateConnectionModal({
   })();
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-canvas/80 p-4 backdrop-blur-sm">
-      <section
-        ref={dialog}
-        tabIndex={-1}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="create-connection-heading"
-        className="sshc-card flex max-h-full w-full max-w-2xl flex-col overflow-hidden rounded-lg bg-card shadow-xl"
-      >
+    <ModalShell
+      labelledBy="create-connection-heading"
+      onDismiss={() => {
+        if (!busy && !vaultBusy) close();
+      }}
+      panelClassName="flex max-h-full w-full max-w-2xl flex-col overflow-hidden rounded-lg"
+    >
         <div className="border-b border-line px-5 py-5">
           <div className="flex items-start gap-3">
             <span aria-hidden="true" className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-select-fill text-accent">
@@ -497,7 +484,6 @@ export function CreateConnectionModal({
             </Button>
           </div>
         </form>
-      </section>
-    </div>
+    </ModalShell>
   );
 }

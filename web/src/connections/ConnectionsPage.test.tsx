@@ -361,7 +361,6 @@ describe("ConnectionsPage", () => {
     const onNavigationBlockerChange = vi.fn((next) => {
       blocker = next;
     });
-    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
     render(
       <ConnectionsPage
         {...consoleProps}
@@ -380,21 +379,18 @@ describe("ConnectionsPage", () => {
       pathname: "/connections/servers",
       search: "?path=config&host=bastion&panel=analysis",
     })).toBe(true);
-    expect(confirm).not.toHaveBeenCalled();
     expect(activeBlocker({ pathname: "/keys", search: "" })).toBe(false);
-    expect(confirm).toHaveBeenCalledOnce();
+    const discardDialog = await screen.findByRole("dialog", { name: "Discard changes" });
+    await user.click(within(discardDialog).getByRole("button", { name: "Keep editing" }));
+    expect(screen.queryByRole("dialog", { name: "Discard changes" })).not.toBeInTheDocument();
 
     const beforeUnload = new Event("beforeunload", { cancelable: true });
     window.dispatchEvent(beforeUnload);
     expect(beforeUnload.defaultPrevented).toBe(true);
 
-    confirm.mockReturnValue(true);
-    expect(activeBlocker({ pathname: "/keys", search: "" })).toBe(true);
-    await user.click(screen.getByRole("button", { name: "Discard changes" }));
-    confirm.mockClear();
-    confirm.mockReturnValue(false);
-    expect(activeBlocker({ pathname: "/keys", search: "" })).toBe(true);
-    expect(confirm).not.toHaveBeenCalled();
+    expect(activeBlocker({ pathname: "/keys", search: "" })).toBe(false);
+    const confirmedDialog = await screen.findByRole("dialog", { name: "Discard changes" });
+    await user.click(within(confirmedDialog).getByRole("button", { name: "Discard changes" }));
     await waitFor(() => expect(onNavigationBlockerChange).toHaveBeenLastCalledWith(null));
   });
 
@@ -420,7 +416,6 @@ describe("ConnectionsPage", () => {
     vi.mocked(configApi.host).mockImplementation(async (_path, alias) =>
       alias === "edge" ? edgeDetail as never : detail as never);
     let blocker: ((next: { pathname: string; search: string }) => boolean) | null = null;
-    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
     const onNavigateLocation = vi.fn((url: string) => {
       const next = new URL(url, "http://localhost");
       return blocker?.({ pathname: next.pathname, search: next.search }) ?? true;
@@ -441,13 +436,15 @@ describe("ConnectionsPage", () => {
     await user.type(screen.getByLabelText("Port"), "2222");
     await user.click(screen.getByRole("button", { name: /^edge/ }));
 
-    expect(confirm).toHaveBeenCalledOnce();
+    const firstDialog = await screen.findByRole("dialog", { name: "Discard changes" });
     expect(configApi.host).not.toHaveBeenCalledWith("config", "edge");
     expect(screen.getByRole("heading", { name: "bastion" })).toBeInTheDocument();
     expect(screen.getByLabelText("Port")).toHaveValue(2222);
+    await user.click(within(firstDialog).getByRole("button", { name: "Keep editing" }));
 
-    confirm.mockReturnValue(true);
     await user.click(screen.getByRole("button", { name: /^edge/ }));
+    const secondDialog = await screen.findByRole("dialog", { name: "Discard changes" });
+    await user.click(within(secondDialog).getByRole("button", { name: "Discard changes" }));
     expect(await screen.findByRole("heading", { name: "edge" })).toBeInTheDocument();
     expect(configApi.host).toHaveBeenCalledWith("config", "edge");
   });

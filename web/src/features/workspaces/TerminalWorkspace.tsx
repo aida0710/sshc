@@ -11,6 +11,7 @@ import { WorkspaceCommandCenter, type WorkspaceCommandTarget } from "./Workspace
 import { consoleDragMimeType, type LiveWorkspaceSummary } from "./live";
 import { browserSessionStorage, loadLiveWorkspace, saveLiveWorkspace, type LiveWorkspaceNode } from "./livePersistence";
 import { useDismissibleLayer } from "../../ui/useDismissibleLayer";
+import { InputDialog } from "../../ui/InputDialog";
 
 export type WorkspaceRestoreRequest = { id: string; sequence: number };
 export type WorkspaceRenameRequest = { name: string; sequence: number };
@@ -123,6 +124,7 @@ export function TerminalWorkspace({
   const [liveRestoreReady, setLiveRestoreReady] = useState(false);
   const [liveWorkspaceName, setLiveWorkspaceName] = useState("");
   const [savedMenuOpen, setSavedMenuOpen] = useState(false);
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const savedMenuRef = useRef<HTMLDetailsElement>(null);
   const consumedRestore = useRef(0);
   const consumedRename = useRef(0);
@@ -420,7 +422,7 @@ export function TerminalWorkspace({
     window.addEventListener("pointercancel", stop, { once: true });
   }
 
-  async function saveWorkspace() {
+  async function saveWorkspace(name: string) {
     let effective = visibleLayout;
     if (effective === null && active !== null) {
       const id = paneID();
@@ -432,8 +434,6 @@ export function TerminalWorkspace({
       } }, id), { type: "connection-started", paneId: id, sessionId: active.id });
     }
     if (effective === null) return;
-    const name = window.prompt(t("workspace.namePrompt"), liveWorkspaceName.trim() || (saved.find((item) => item.id === selectedWorkspace)?.name ?? ""))?.trim() ?? "";
-    if (name === "") return;
     try {
       const stored = storeLayout(effective);
       const value = selectedWorkspace === "" ? await workspaceApi.create({ name, ...stored }) : await workspaceApi.update(selectedWorkspace, { name, ...stored });
@@ -590,7 +590,7 @@ export function TerminalWorkspace({
               {saved.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
             </select>
             <div className="mt-3 flex flex-wrap gap-2">
-              <Button disabled={visibleLayout === null && active === null} onClick={() => void saveWorkspace()}>{t("workspace.save")}</Button>
+              <Button disabled={visibleLayout === null && active === null} onClick={() => setSaveDialogOpen(true)}>{t("workspace.save")}</Button>
               <Button disabled={selectedWorkspace === ""} onClick={() => void restoreWorkspace(selectedWorkspace)}>{t("workspace.reopen")}</Button>
               <button disabled={selectedWorkspace === ""} className="px-2 text-xs text-danger disabled:opacity-40" onClick={() => void workspaceApi.remove(selectedWorkspace).then(async () => { setSelectedWorkspace(""); setSaved(await workspaceApi.list()); })}>{t("workspace.delete")}</button>
             </div>
@@ -598,6 +598,22 @@ export function TerminalWorkspace({
         </details>
       </div> : null}
       {commandCenter && commandTargets.length > 0 ? <WorkspaceCommandCenter paneTargets={commandTargets} onClose={() => setCommandCenter(false)} /> : null}
+      {saveDialogOpen ? (
+        <InputDialog
+          id="workspace-save-heading"
+          heading={t("workspace.save")}
+          label={t("workspace.namePrompt")}
+          initialValue={liveWorkspaceName.trim() || (saved.find((item) => item.id === selectedWorkspace)?.name ?? "")}
+          submitLabel={t("workspace.saveConfirm")}
+          cancelLabel={t("workspace.cancel")}
+          validate={(value) => value === "" ? t("workspace.nameRequired") : ""}
+          onSubmit={(value) => {
+            setSaveDialogOpen(false);
+            void saveWorkspace(value);
+          }}
+          onCancel={() => setSaveDialogOpen(false)}
+        />
+      ) : null}
       {problem === "" ? null : <p role="alert" className="bg-notice px-3 py-1 text-xs text-notice-ink">{problem}</p>}
       {compactViewport && compactPanes.length > 1 ? (
         <nav aria-label={t("workspace.mobilePaneSwitcher")} className="flex shrink-0 gap-1 overflow-x-auto border-b border-line bg-toolbar px-2 py-1">

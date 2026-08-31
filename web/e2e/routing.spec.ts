@@ -107,14 +107,10 @@ test("keeps the back destination after rejecting navigation with an unsaved draf
   await page.getByLabel("Port", { exact: true }).fill("2244");
   await expect(page.getByText("Unsaved changes", { exact: true })).toBeVisible();
 
-  const dismissed = new Promise<void>((resolve) => {
-    page.once("dialog", async (dialog) => {
-      await dialog.dismiss();
-      resolve();
-    });
-  });
   await page.evaluate(() => window.history.back());
-  await dismissed;
+  const discardDialog = page.getByRole("dialog", { name: "Discard changes" });
+  await expect(discardDialog).toBeVisible();
+  await discardDialog.getByRole("button", { name: "Keep editing" }).click();
 
   await expect(page).toHaveURL(detailURL);
   await expect.poll(historyPoint).toBe(2);

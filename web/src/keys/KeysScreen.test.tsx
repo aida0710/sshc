@@ -667,7 +667,7 @@ describe("KeysScreen", () => {
     );
   });
 
-  it("places the private-key confirmation directly below its key row", async () => {
+  it("opens private-key confirmation in the shared modal layer", async () => {
     const api = buildApi({
       reveal: vi.fn().mockResolvedValue({
         id: "key-one",
@@ -685,10 +685,9 @@ describe("KeysScreen", () => {
     await userEvent.click(within(actions).getByRole("button", { name: "Show private key" }));
 
     const dialog = screen.getByRole("dialog");
-    const detailRow = dialog.closest("tr");
-    expect(detailRow).toHaveAttribute("data-key-detail-for", "key-one");
-    expect(detailRow?.closest("table")).toBe(row.closest("table"));
-    expect(dialog).not.toHaveAttribute("aria-modal");
+    expect(dialog.closest("tr")).toBeNull();
+    expect(document.body.contains(dialog)).toBe(true);
+    expect(dialog).toHaveAttribute("aria-modal", "true");
     await userEvent.click(within(dialog).getByRole("button", { name: "Show private key" }));
     expect(await within(dialog).findByLabelText("Private key")).toHaveTextContent("BEGIN OPENSSH PRIVATE KEY");
   });

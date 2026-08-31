@@ -319,7 +319,6 @@ describe("SFTPPanel uploads", () => {
       entries: [{ name: "project", path: "/remote/project", type: "directory", size: 0, mode: "drwxr-x---", modifiedAt: "2026-08-24T10:00:00Z", revision: "rev" }],
     });
     api.chmod.mockResolvedValue(undefined);
-    vi.spyOn(window, "prompt").mockReturnValue("750");
     render(<SFTPPanel aliases={["edge"]} />);
     await userEvent.selectOptions(screen.getByLabelText("Host"), "edge");
     await screen.findByRole("button", { name: /project/ });
@@ -327,6 +326,9 @@ describe("SFTPPanel uploads", () => {
     await userEvent.click(screen.getByRole("button", { name: "Download" }));
     await waitFor(() => expect(api.streamDownload).toHaveBeenCalledWith("edge", expect.any(String), "/remote/project", true, 0, expect.objectContaining({ signal: expect.any(AbortSignal) })));
     await userEvent.click(screen.getByRole("button", { name: "Change permissions" }));
+    const dialog = screen.getByRole("dialog", { name: "Change permissions" });
+    expect(within(dialog).getByRole("textbox", { name: "Permissions (octal, for example 640)" })).toHaveValue("750");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Change permissions" }));
     await waitFor(() => expect(api.chmod).toHaveBeenCalledWith("edge", "/remote/project", "750", "rev"));
   });
 });

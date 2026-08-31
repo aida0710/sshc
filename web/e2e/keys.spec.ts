@@ -91,10 +91,14 @@ test("lists generated keys and reveals one only after an explicit confirmation",
   await page.getByRole("group", { name: "Key actions" }).getByRole("button", { name: "Show private key" }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
-  await expect(dialog.locator("xpath=ancestor::tr[@data-key-detail-for]")).toHaveCount(1);
-  await expect(dialog.locator("xpath=ancestor::table")).toHaveCount(1);
+  await expect(dialog).toHaveAttribute("aria-modal", "true");
+  await expect(dialog.locator("xpath=ancestor::tr[@data-key-detail-for]")).toHaveCount(0);
+  await expect(dialog.locator("xpath=ancestor::table")).toHaveCount(0);
   await expect(dialog.locator('pre[aria-label="Private key"]')).toHaveCount(0);
   await expect(page.locator("body")).not.toContainText("BEGIN OPENSSH PRIVATE KEY");
+  if (process.env.SSHC_VISUAL_DIR !== undefined) {
+    await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/private-key-confirmation-modal.png`, fullPage: true });
+  }
 
   await dialog.getByRole("button", { name: "Show private key" }).click();
   await expect(dialog.locator('pre[aria-label="Private key"]')).toContainText(
@@ -104,7 +108,7 @@ test("lists generated keys and reveals one only after an explicit confirmation",
   await dialog.getByRole("button", { name: "Close" }).click();
   await expect(page.locator("body")).not.toContainText("BEGIN OPENSSH PRIVATE KEY");
 
-  expect(await page.evaluate(() => Object.keys(window.localStorage))).toEqual([]);
+  expect(await page.evaluate(() => Object.keys(window.localStorage))).toEqual(["sshc.browser.registration.v1"]);
   expect(await page.evaluate(() => Object.keys(window.sessionStorage))).toEqual(["sshc.session.csrf"]);
   expect(await page.evaluate(() => document.cookie)).toBe("");
 });

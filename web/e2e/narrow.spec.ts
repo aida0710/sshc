@@ -729,7 +729,7 @@ test("keeps Menu in mobile history after opening SSH Config", async ({ page, ins
   await expect(page.getByRole("heading", { name: "Menu", exact: true })).toBeVisible();
 });
 
-test("keeps key material and management actions inside the key list", async ({ page, installation }) => {
+test("keeps key actions in the list and opens private material in a modal", async ({ page, installation }) => {
   await openApplication(page, installation);
   await openSectionThroughDrawer(page, "Keys");
   await page.getByLabel("File name").fill("id_keys_layout");
@@ -754,10 +754,11 @@ test("keeps key material and management actions inside the key list", async ({ p
 
   await management.getByRole("button", { name: "Show private key" }).click();
   const confirmation = page.getByRole("dialog");
-  await expect(confirmation.locator("xpath=ancestor::table")).toHaveCount(1);
+  await expect(confirmation).toHaveAttribute("aria-modal", "true");
+  await expect(confirmation.locator("xpath=ancestor::table")).toHaveCount(0);
   await expectNoHorizontalOverflow(page, "Private-key confirmation");
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
-    await table.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/sshc-keys-private-inline-mobile.png` });
+    await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/sshc-keys-private-modal-mobile.png`, fullPage: true });
   }
   await confirmation.getByRole("button", { name: "Close" }).click();
 

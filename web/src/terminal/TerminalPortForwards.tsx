@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { useEffect, useMemo, useState } from "react";
 import { ApiError } from "../api/client";
 import { configApi } from "../api/config";
 import {
@@ -12,7 +11,7 @@ import { useTranslate } from "../i18n/context";
 import { clipboard } from "../ui/clipboard";
 import { control, hintText } from "../ui/form";
 import { Button, Notice } from "../ui/surface";
-import { useDismissibleLayer } from "../ui/useDismissibleLayer";
+import { ModalShell } from "../ui/ModalShell";
 
 type ForwardApi = Pick<IntegrationsApi, "startTerminalForward" | "stopTerminalForward">;
 type SaveApi = Pick<typeof configApi, "overview" | "host" | "save">;
@@ -40,19 +39,8 @@ export function TerminalPortForwards({
   const [stopping, setStopping] = useState("");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
-  const dialog = useRef<HTMLElement>(null);
 
   useEffect(() => setForwards(session.forwards ?? []), [session.forwards]);
-  useDismissibleLayer({
-    open: true,
-    containerRefs: [dialog],
-    onDismiss: () => {
-      if (!busy && stopping === "") onClose();
-    },
-    closeOnOutside: false,
-    trapFocus: true,
-  });
-
   const connected = session.state === "connected";
   const canSave = session.alias !== undefined && session.alias !== "";
   const listenError = listenPort === "" || validPort(listenPort) ? "" : t("conn.forwardInvalidPort");
@@ -116,9 +104,14 @@ export function TerminalPortForwards({
     }
   }
 
-  return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-canvas/80 p-3 backdrop-blur-sm">
-      <section ref={dialog} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="terminal-forward-heading" className="sshc-card flex max-h-full w-full max-w-2xl flex-col overflow-hidden rounded-lg bg-card shadow-xl">
+  return (
+    <ModalShell
+      labelledBy="terminal-forward-heading"
+      onDismiss={() => {
+        if (!busy && stopping === "") onClose();
+      }}
+      panelClassName="flex max-h-full w-full max-w-2xl flex-col overflow-hidden rounded-lg"
+    >
         <header className="flex items-start gap-3 border-b border-line px-4 py-4 sm:px-5">
           <div className="min-w-0 grow">
             <h2 id="terminal-forward-heading" className="text-base font-semibold text-ink">{t("terminal.portForwarding")}</h2>
@@ -203,9 +196,7 @@ export function TerminalPortForwards({
             </div>
           </section>
         </div>
-      </section>
-    </div>,
-    document.body,
+    </ModalShell>
   );
 }
 

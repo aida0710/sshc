@@ -24,7 +24,17 @@ test("moves workspace panes by drag and drop and saves the new placement", async
     const request = route.request();
     const path = new URL(request.url()).pathname;
     if (path.endsWith("/restore")) {
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ workspace: savedWorkspace }) });
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          workspace: savedWorkspace,
+          panes: [
+            { paneId: "api-pane", alias: "bastion", kind: "ssh", state: "reconnect_required" },
+            { paneId: "db-pane", alias: "nas", kind: "ssh", state: "reconnect_required" },
+          ],
+        }),
+      });
       return;
     }
     if (request.method() === "PUT") {
@@ -40,7 +50,7 @@ test("moves workspace panes by drag and drop and saves the new placement", async
     const request = route.request();
     const path = new URL(request.url()).pathname;
     if (path.endsWith("/stream")) {
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ streamTicket: "fixture-stream-ticket" }) });
+      await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ streamTicket: "fixture-stream-ticket" }) });
       return;
     }
     if (request.method() === "POST") {
@@ -79,8 +89,15 @@ test("moves workspace panes by drag and drop and saves the new placement", async
   await page.getByRole("button", { name: "Exit focus mode" }).first().click();
   await expect(panes).toHaveCount(2);
 
-  page.once("dialog", (dialog) => dialog.accept("Production"));
+  await page.locator("summary").filter({ hasText: "Saved layouts" }).click();
   await page.getByRole("button", { name: "Save with a name" }).click();
+  const saveDialog = page.getByRole("dialog", { name: "Save with a name" });
+  await expect(saveDialog).toBeVisible();
+  await saveDialog.getByRole("textbox", { name: "Saved layout name" }).fill("Production");
+  if (process.env.SSHC_VISUAL_DIR !== undefined) {
+    await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/workspace-save-modal.png`, fullPage: true });
+  }
+  await saveDialog.getByRole("button", { name: "Save layout" }).click();
   await expect.poll(() => savedRequests.length).toBe(1);
   const savedRequest = savedRequests[0];
   if (savedRequest === undefined) throw new Error("workspace save request was not captured");
@@ -96,14 +113,20 @@ test("opens a saved workspace from Home only after the explicit action", async (
   const sessions: Array<Record<string, unknown>> = [];
   await page.route("**/api/v1/workspaces**", async (route) => {
     const path = new URL(route.request().url()).pathname;
-    const body = path.endsWith("/restore") ? { workspace: savedWorkspace } : { workspaces: [savedWorkspace] };
+    const body = path.endsWith("/restore") ? {
+      workspace: savedWorkspace,
+      panes: [
+        { paneId: "api-pane", alias: "bastion", kind: "ssh", state: "reconnect_required" },
+        { paneId: "db-pane", alias: "nas", kind: "ssh", state: "reconnect_required" },
+      ],
+    } : { workspaces: [savedWorkspace] };
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
   });
   await page.route("**/api/v1/terminal/sessions**", async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
     if (path.endsWith("/stream")) {
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ streamTicket: "fixture-stream-ticket" }) });
+      await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ streamTicket: "fixture-stream-ticket" }) });
       return;
     }
     if (request.method() === "POST") {
