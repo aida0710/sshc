@@ -578,7 +578,8 @@ func deterministicSyncFailure(err error) bool {
 		errors.Is(err, ErrUnsupportedVersion) || errors.Is(err, ErrCostRefused) ||
 		errors.Is(err, ErrUnsafePath) || errors.Is(err, ErrUnsafeMode) ||
 		errors.Is(err, ErrManifestMismatch) || errors.Is(err, ErrNotASnapshot) ||
-		errors.Is(err, ErrInvalidIgnoreRules)
+		errors.Is(err, ErrInvalidIgnoreRules) || errors.Is(err, ErrAuthenticationFailed) ||
+		errors.Is(err, ErrAccessDenied)
 }
 
 func (a *Auto) enter(phase AutoPhase, detail string) {
@@ -615,6 +616,14 @@ func failureDetail(err error) string {
 		return "snapshot_rejected"
 	case errors.Is(err, ErrInvalidIgnoreRules):
 		return "sync_ignore_invalid"
+	case errors.Is(err, ErrAuthenticationFailed):
+		return "bucket_authentication_failed"
+	case errors.Is(err, ErrAccessDenied):
+		return "bucket_access_denied"
+	case errors.Is(err, ErrRateLimited):
+		return "bucket_rate_limited"
+	case errors.Is(err, ErrServiceUnavailable):
+		return "bucket_unavailable"
 	case errors.Is(err, ErrRefused), errors.Is(err, ErrInsecureEndpoint):
 		return "bucket_refused"
 	case errors.Is(err, context.DeadlineExceeded):

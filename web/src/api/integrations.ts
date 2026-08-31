@@ -81,6 +81,10 @@ export type SyncHistory = components["schemas"]["SyncHistory"];
 export type SyncHistoryRevision = components["schemas"]["SyncHistoryRevision"];
 
 const locallyExplainedSyncFailures = [
+  "bucket_authentication_failed",
+  "bucket_access_denied",
+  "bucket_rate_limited",
+  "bucket_unavailable",
   "bucket_refused",
   "bucket_timeout",
   "bucket_dns_failed",

@@ -305,6 +305,8 @@ func classifyCommandFailure(err error) commandFailure {
 		switch problem.Code {
 		case "sync_remote_moved", "sync_remote_deleted", "preview_stale", "sync_setup_target_changed":
 			retryable = true
+		case "bucket_authentication_failed", "bucket_access_denied":
+			retryable = false
 		}
 		return commandFailure{Kind: problem.Code, Retryable: retryable}
 	}
@@ -335,6 +337,14 @@ func writeHumanSyncFailure(stderr io.Writer, failure commandFailure) {
 		fmt.Fprintln(stderr, "sshc: sync is not configured; run sshc sync setup")
 	case "sync_remote_moved", "sync_remote_deleted", "preview_stale", "sync_setup_target_changed":
 		fmt.Fprintf(stderr, "sshc: remote sync state changed (%s); run the command again to inspect the new state\n", failure.Kind)
+	case "bucket_authentication_failed":
+		fmt.Fprintln(stderr, "sshc: the object store could not authenticate the request; check the access key and secret")
+	case "bucket_access_denied":
+		fmt.Fprintln(stderr, "sshc: the object store denied access; check the bucket, region, and key permissions")
+	case "bucket_rate_limited":
+		fmt.Fprintln(stderr, "sshc: the object store is rate limiting requests; wait and try again")
+	case "bucket_unavailable":
+		fmt.Fprintln(stderr, "sshc: the object store service is temporarily unavailable; try again later")
 	case "outcome_unknown":
 		fmt.Fprintln(stderr, "sshc: the sync operation outcome is unknown; do not rerun it until you inspect sshc sync status and the remote target")
 	case "transport_error", "sync_failed", "bucket_refused", "engine_unavailable":

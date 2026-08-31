@@ -879,6 +879,14 @@ func syncProblem(c *echo.Context, err error) error {
 	case errors.Is(err, remotesync.ErrUnsafePath), errors.Is(err, remotesync.ErrUnsafeMode),
 		errors.Is(err, remotesync.ErrManifestMismatch), errors.Is(err, remotesync.ErrNotASnapshot):
 		return problem(c, http.StatusConflict, "snapshot_rejected")
+	case errors.Is(err, remotesync.ErrAuthenticationFailed):
+		return problem(c, http.StatusBadGateway, "bucket_authentication_failed")
+	case errors.Is(err, remotesync.ErrAccessDenied):
+		return problem(c, http.StatusBadGateway, "bucket_access_denied")
+	case errors.Is(err, remotesync.ErrRateLimited):
+		return problem(c, http.StatusTooManyRequests, "bucket_rate_limited")
+	case errors.Is(err, remotesync.ErrServiceUnavailable):
+		return problem(c, http.StatusServiceUnavailable, "bucket_unavailable")
 	case errors.Is(err, remotesync.ErrRefused), errors.Is(err, remotesync.ErrInsecureEndpoint):
 		return problem(c, http.StatusBadGateway, "bucket_refused")
 	case errors.Is(err, context.DeadlineExceeded):
@@ -992,8 +1000,12 @@ func autoSyncFailureProblem(c *echo.Context, detail string) error {
 		return problem(c, http.StatusForbidden, detail)
 	case "bucket_timeout":
 		return problem(c, http.StatusGatewayTimeout, detail)
-	case "bucket_refused", "bucket_dns_failed", "bucket_tls_failed", "bucket_unreachable", "snapshot_download_incomplete":
+	case "bucket_authentication_failed", "bucket_access_denied", "bucket_refused", "bucket_dns_failed", "bucket_tls_failed", "bucket_unreachable", "snapshot_download_incomplete":
 		return problem(c, http.StatusBadGateway, detail)
+	case "bucket_rate_limited":
+		return problem(c, http.StatusTooManyRequests, detail)
+	case "bucket_unavailable":
+		return problem(c, http.StatusServiceUnavailable, detail)
 	case "remote_moved", "remote_deleted", "conflicts", "snapshot_cost_refused", "snapshot_too_large",
 		"snapshot_schema_unsupported", "snapshot_rejected", "sync_ignore_invalid":
 		return problem(c, http.StatusConflict, detail)

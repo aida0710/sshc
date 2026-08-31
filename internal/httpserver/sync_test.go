@@ -1085,6 +1085,10 @@ func TestSyncConnectionFailuresHaveSpecificSafeCodes(t *testing.T) {
 		{name: "timeout", err: context.DeadlineExceeded, status: http.StatusGatewayTimeout, code: "bucket_timeout"},
 		{name: "dns", err: &net.DNSError{Err: "no such host", Name: "private.example"}, status: http.StatusBadGateway, code: "bucket_dns_failed"},
 		{name: "network", err: &net.OpError{Op: "dial", Net: "tcp", Err: errors.New("offline")}, status: http.StatusBadGateway, code: "bucket_unreachable"},
+		{name: "authentication", err: objectstore.ErrAuthenticationFailed, status: http.StatusBadGateway, code: "bucket_authentication_failed"},
+		{name: "access", err: objectstore.ErrAccessDenied, status: http.StatusBadGateway, code: "bucket_access_denied"},
+		{name: "rate limit", err: objectstore.ErrRateLimited, status: http.StatusTooManyRequests, code: "bucket_rate_limited"},
+		{name: "service", err: objectstore.ErrServiceUnavailable, status: http.StatusServiceUnavailable, code: "bucket_unavailable"},
 		{name: "internal", err: errors.New("unclassified failure"), status: http.StatusInternalServerError, code: "sync_internal_failed"},
 	}
 	for _, test := range tests {
@@ -1285,6 +1289,30 @@ func TestSyncNowInternalFailureIsNotReportedAsHTTP200(t *testing.T) {
 	}
 	if body.Code != "sync_internal_failed" {
 		t.Fatalf("problem = %+v", body)
+	}
+}
+
+func TestSyncNowKeepsObjectStoreFailureClassification(t *testing.T) {
+	tests := []struct {
+		detail string
+		status int
+	}{
+		{detail: "bucket_authentication_failed", status: http.StatusBadGateway},
+		{detail: "bucket_access_denied", status: http.StatusBadGateway},
+		{detail: "bucket_rate_limited", status: http.StatusTooManyRequests},
+		{detail: "bucket_unavailable", status: http.StatusServiceUnavailable},
+	}
+	for _, test := range tests {
+		t.Run(test.detail, func(t *testing.T) {
+			engine := echo.New()
+			engine.POST("/", func(c *echo.Context) error {
+				return autoSyncFailureProblem(c, test.detail)
+			})
+			recorder := sendSync(t, engine, http.MethodPost, "/", "")
+			if recorder.Code != test.status || !strings.Contains(recorder.Body.String(), `"code":"`+test.detail+`"`) {
+				t.Fatalf("automatic failure = %d %s, want %d %s", recorder.Code, recorder.Body.String(), test.status, test.detail)
+			}
+		})
 	}
 }
 

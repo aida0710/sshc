@@ -22,6 +22,14 @@ var (
 	ErrInsecureEndpoint = objectstore.ErrInsecureEndpoint
 	// ErrRefused は、相手が受け付けなかったことを報告する。
 	ErrRefused = objectstore.ErrRefused
+	// ErrAuthenticationFailed は、object storeが資格情報を認証できなかったことを報告する。
+	ErrAuthenticationFailed = objectstore.ErrAuthenticationFailed
+	// ErrAccessDenied は、object storeが同期先へのアクセスを許可しなかったことを報告する。
+	ErrAccessDenied = objectstore.ErrAccessDenied
+	// ErrRateLimited は、object storeが要求頻度を制限したことを報告する。
+	ErrRateLimited = objectstore.ErrRateLimited
+	// ErrServiceUnavailable は、object store自身が5xxで処理不能を報告したことを示す。
+	ErrServiceUnavailable = objectstore.ErrServiceUnavailable
 	// ErrObjectTooLarge は、暗号化されたremote objectが受信上限を超えたことを報告する。
 	ErrObjectTooLarge = objectstore.ErrObjectTooLarge
 	// ErrWrongPassphrase は、復号できなかったことを報告する。
