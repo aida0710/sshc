@@ -1262,6 +1262,12 @@ func TestASecondPushFromTheSameMachineSucceeds(t *testing.T) {
 }
 
 func TestPullAcceptsReadOnlyLocalFiles(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		// Windows maps os.Chmod without owner-write to the DOS read-only
+		// attribute. It cannot represent the Unix owner-only 0400/0500 modes
+		// whose normalization and precondition behavior this test exercises.
+		t.Skip("Windows does not represent Unix owner-only read-only modes")
+	}
 	for _, test := range []struct {
 		name       string
 		localMode  os.FileMode
