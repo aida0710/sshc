@@ -376,7 +376,7 @@ export function ConsoleList({
                       setWorkspaceMenuOpen(false);
                       setMenuFor(session.id);
                     }}
-                    className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-select-fill"
+                    className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-select-fill focus:bg-select-fill focus:outline-none md:size-6"
                   >
                     <Icon name="moreHorizontal" className="size-3.5" />
                   </button>
@@ -390,7 +390,7 @@ export function ConsoleList({
                       }
                       setClosing(session);
                     }}
-                    className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-select-fill"
+                    className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-select-fill focus:bg-select-fill focus:outline-none md:size-6"
                   >
                     <Icon name="close" className="size-3.5" />
                   </button>
@@ -410,7 +410,7 @@ export function ConsoleList({
                         setRenaming(session.id);
                         setMenuFor(null);
                       }}
-                      className="block w-full rounded px-2 py-1.5 text-left text-xs text-ink hover:bg-select-fill"
+                      className="block min-h-10 w-full rounded px-2 py-1.5 text-left text-xs text-ink hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-0"
                     >
                       {t("terminal.rename")}
                     </button>
@@ -422,7 +422,7 @@ export function ConsoleList({
                           void onUnpinTitle(session.id);
                           setMenuFor(null);
                         }}
-                        className="block w-full rounded px-2 py-1.5 text-left text-xs text-ink hover:bg-select-fill"
+                        className="block min-h-10 w-full rounded px-2 py-1.5 text-left text-xs text-ink hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-0"
                       >
                         {t("terminal.unpinTitle")}
                       </button>
@@ -435,7 +435,7 @@ export function ConsoleList({
                         onDuplicate(session.id);
                         setMenuFor(null);
                       }}
-                      className="block w-full rounded px-2 py-1.5 text-left text-xs text-ink hover:bg-select-fill disabled:text-ink-faint"
+                      className="block min-h-10 w-full rounded px-2 py-1.5 text-left text-xs text-ink hover:bg-select-fill focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:min-h-0"
                     >
                       {t("terminal.duplicate")}
                     </button>
@@ -445,7 +445,7 @@ export function ConsoleList({
                       role="menuitem"
                       disabled={index === 0}
                       onClick={() => move(session.id, -1)}
-                      className="block w-full rounded px-2 py-1.5 text-left text-xs text-ink hover:bg-select-fill disabled:text-ink-faint"
+                      className="block min-h-10 w-full rounded px-2 py-1.5 text-left text-xs text-ink hover:bg-select-fill focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:min-h-0"
                     >
                       {t("terminal.moveUp")}
                     </button>
@@ -454,7 +454,7 @@ export function ConsoleList({
                       role="menuitem"
                       disabled={index === sessions.length - 1}
                       onClick={() => move(session.id, 1)}
-                      className="block w-full rounded px-2 py-1.5 text-left text-xs text-ink hover:bg-select-fill disabled:text-ink-faint"
+                      className="block min-h-10 w-full rounded px-2 py-1.5 text-left text-xs text-ink hover:bg-select-fill focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:min-h-0"
                     >
                       {t("terminal.moveDown")}
                     </button>

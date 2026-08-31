@@ -552,7 +552,7 @@ export function TerminalView({
           type="button"
           aria-label={t("terminal.search")}
           title={t("terminal.search")}
-          className="rounded border border-control-line px-2 py-1 text-xs text-ink-muted hover:bg-select-fill"
+          className="flex min-h-10 min-w-10 items-center justify-center rounded border border-control-line px-2 py-1 text-xs text-ink-muted hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-0 md:min-w-0"
           onClick={() => setSearchOpen((current) => !current)}
         >
           <Icon name="search" className="size-3.5" />
@@ -562,7 +562,7 @@ export function TerminalView({
           type="button"
           aria-label={t("terminal.moreActions")}
           aria-expanded={overflowOpen}
-          className="rounded border border-control-line px-2 py-1 text-ink-muted hover:bg-select-fill"
+          className="flex min-h-10 min-w-10 items-center justify-center rounded border border-control-line px-2 py-1 text-ink-muted hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-0 md:min-w-0"
           onClick={() => setOverflowOpen((current) => !current)}
         >
           <Icon name="moreHorizontal" className="size-3.5" />
