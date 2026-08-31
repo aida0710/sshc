@@ -22,7 +22,12 @@ sshc vault create
 sshc vault unlock
 sshc vault lock
 sshc vault change-password
+sshc service install
+sshc service status
+sshc service disable
 ```
+
+`sshc service`はLinuxのsystemdユーザーサービスを管理します。`install`はHomebrewまたは`install.sh`で導入された安定パスを登録し、`disable`はsshcが作成したunitだけを削除します。
 
 ## SSH
 

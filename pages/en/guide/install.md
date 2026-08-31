@@ -9,7 +9,7 @@ sshc is a terminal app for macOS, Linux, Windows, and Android. On desktop, one `
 
 ## macOS / Linux
 
-Homebrew is the shortest path.
+[Homebrew](https://brew.sh/) is the shortest path. Follow its official installation instructions if it is not already installed.
 
 ```sh
 brew install aida0710/tap/sshc
@@ -56,10 +56,39 @@ The engine stays in the foreground. Use tmux, systemd, launchd or another OS pro
 
 The first launch asks you to create the vault master password. Run `sshc` from another terminal to open a one-time local UI URL.
 
+## Keep the engine running on Ubuntu / Linux
+
+On Linux systems using systemd, install sshc as a user service without sudo.
+
+```sh
+sshc service install
+sshc service status
+sshc vault unlock
+```
+
+`service install` creates, enables, and starts `~/.config/systemd/user/sshc.service`. It records Homebrew's stable `opt/sshc/bin/sshc` path or a verified `install.sh` destination. Manually copied and source-built executables are not registered automatically.
+
+sshc will not overwrite an existing hand-written unit. Stop and move that unit before switching to sshc management.
+
+```sh
+systemctl --user disable --now sshc
+mv ~/.config/systemd/user/sshc.service ~/.config/systemd/user/sshc.service.manual
+systemctl --user daemon-reload
+sshc service install
+```
+
+To keep the user manager running after you log out, ask an administrator to enable lingering, or run this if you have permission:
+
+```sh
+loginctl enable-linger "$USER"
+```
+
+Run `sshc service disable` to stop and remove the service. It only removes a unit created by sshc.
+
 ## Update
 
 - Homebrew or `install.sh`: `sshc update`
 - Windows: run the PowerShell installer again
 - Android: install the newer APK from GitHub Releases
 
-If the CLI and engine versions differ after an update, restart with `sshc engine --replace`.
+When an active service is managed by `sshc service install`, `sshc update` restarts it automatically. The restart locks the vault, so run `sshc vault unlock` again. Restart engines outside service management with `sshc engine --replace`.

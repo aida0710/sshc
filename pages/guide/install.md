@@ -9,7 +9,7 @@ sshcはmacOS、Linux、Windows、Androidで利用できるターミナルアプ�
 
 ## macOS / Linux
 
-Homebrewに対応しています。
+[Homebrew](https://brew.sh/ja/)に対応しています。Homebrewが未導入の場合は、公式サイトの手順でインストールできます。
 
 ```sh
 brew install aida0710/tap/sshc
@@ -56,10 +56,39 @@ sshc
 
 起動後、別のターミナルから`sshc`を実行すると、一度だけ有効なローカルUIのURLがブラウザーで開きます。初回起動時にVaultのマスターパスワードを設定できます。
 
+## Ubuntu / Linuxで常駐させる
+
+systemdを使用しているLinuxでは、ユーザーサービスをインストールできます。sudoは不要です。
+
+```sh
+sshc service install
+sshc service status
+sshc vault unlock
+```
+
+`service install`は`~/.config/systemd/user/sshc.service`を作成し、有効化して起動します。Homebrew版では更新後も変わらない`opt/sshc/bin/sshc`を、`install.sh`版では確認済みのインストール先を登録します。手動配置やソースビルドは自動登録しません。
+
+同名のunitがすでに手作業で作成されている場合、sshcは上書きしません。既存unitを停止して退避してから実行してください。
+
+```sh
+systemctl --user disable --now sshc
+mv ~/.config/systemd/user/sshc.service ~/.config/systemd/user/sshc.service.manual
+systemctl --user daemon-reload
+sshc service install
+```
+
+SSHログインを切断した後も起動を続ける場合は、管理者にlingerの有効化を依頼するか、権限があれば次を実行します。
+
+```sh
+loginctl enable-linger "$USER"
+```
+
+サービスを削除する場合は`sshc service disable`を実行します。このコマンドもsshcが作成したunitだけを削除します。
+
 ## 更新
 
 - Homebrew／`install.sh`: `sshc update`
 - Windows: インストール用のPowerShellコマンドを再実行
 - Android: GitHub Releasesから新しいAPKをインストール
 
-更新後にCLIとエンジンのバージョンが異なる場合は、`sshc engine --replace`でエンジンを再起動してください。
+`sshc service install`で管理しているサービスが動作中なら、`sshc update`が更新後に自動で再起動します。再起動後はVaultがロックされるため、`sshc vault unlock`を実行してください。サービス管理外のエンジンは`sshc engine --replace`で再起動します。

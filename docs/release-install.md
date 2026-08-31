@@ -53,7 +53,7 @@ sshc update
 - `install.ps1`版は、インストール時と同じPowerShellコマンドを再実行して更新します。
 - その他のWindows手動配置、ソースビルド、判定不能な導入は変更せず、元の導入方法で更新するよう表示します。
 
-更新時にengineが動作していた場合、engineは旧バイナリのままです。更新後に停止し、新しい`sshc engine`を起動してください。
+`sshc service install`で作成したsystemdユーザーサービスがactiveの場合、更新後に自動で再起動します。再起動後はvaultがロックされるため、対話端末から`sshc vault unlock`を実行してください。停止中のサービス、手書きunit、systemd管理外のengineは自動で起動、再起動しません。後者は更新後に停止し、新しい`sshc engine`を起動してください。
 
 ## Windows
 
@@ -89,7 +89,7 @@ sshc engine      # フォアグラウンドでエンジンを起動
 sshc             # URL を表示し、可能であればブラウザで開く
 ```
 
-`sshc engine` はデーモン化しません。常駐させる場合は tmux、screen、systemd、launchd などを使用してください。
+`sshc engine` はデーモン化しません。LinuxではHomebrew版またはreceipt対応`install.sh`版を`sshc service install`でsystemdユーザーサービスへ登録できます。その他の環境ではtmux、screen、systemd、launchdなどを手動で使用してください。
 
 ```sh
 tmux new -d -s sshc 'sshc engine'
