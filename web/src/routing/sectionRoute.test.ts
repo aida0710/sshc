@@ -51,6 +51,27 @@ describe("section routes", () => {
   });
 
   it.each([
+    "/settings/engine",
+    "/settings/terminal",
+    "/settings/notifications",
+    "/settings/connections",
+    "/settings/password",
+  ])("keeps the settings page %s inside the Settings section", (path) => {
+    expect(parseSectionPath(path)).toEqual({
+      kind: "section",
+      section: "Settings",
+      canonicalPath: path,
+      canonical: true,
+    });
+    expect(parseSectionPath(`${path}/`)).toEqual({
+      kind: "section",
+      section: "Settings",
+      canonicalPath: path,
+      canonical: false,
+    });
+  });
+
+  it.each([
     "/connections/servers",
     "/connections/groups",
     "/connections/groups/home/eu",
@@ -64,7 +85,7 @@ describe("section routes", () => {
     });
   });
 
-  it.each(["/missing", "/Connections"])(
+  it.each(["/missing", "/Connections", "/settings/unknown"])(
     "rejects unknown path %s",
     (path) => {
       expect(parseSectionPath(path)).toEqual({ kind: "not-found", pathname: path });

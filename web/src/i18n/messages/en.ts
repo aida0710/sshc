@@ -625,6 +625,16 @@ export const en = {
   "settings.heading": "Settings",
   "settings.pageDescription":
     "Configure embedded terminals, sshc's lifecycle, and protection for this machine's encrypted data.",
+  "settings.engineDescription":
+    "Configure the sshc engine port and automatic vault locking.",
+  "settings.terminalDescription":
+    "Configure the behavior, appearance, and controls used by new terminals.",
+  "settings.notificationsDescription":
+    "Configure browser notifications and sounds for agent status changes.",
+  "settings.connectionsDescription":
+    "Review the connections open in this browser and close them together.",
+  "settings.passwordDescription":
+    "Change the master password that protects encrypted data on this machine.",
   "secrets.heading": "The vault",
   "secrets.pageDescription":
     "Manage named account passwords and key passphrases. Values are shown only while editing.",

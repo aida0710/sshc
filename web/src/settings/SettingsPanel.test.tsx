@@ -42,6 +42,16 @@ async function fillMasterPassword(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe("SettingsPanel", () => {
+  it("renders only the selected settings page", () => {
+    render(<SettingsPanel api={buildApi()} page="Terminal" />);
+
+    expect(screen.getByRole("heading", { name: "Terminal" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Terminal" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Engine" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Notifications" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Settings" })).not.toBeInTheDocument();
+  });
+
   it("loads the twelve-hour default and saves a timed Vault lock with the port", async () => {
     const user = userEvent.setup();
     const setEngineSettings = vi.fn().mockResolvedValue(undefined);

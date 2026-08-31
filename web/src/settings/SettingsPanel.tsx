@@ -31,6 +31,10 @@ import { CheckboxField, Field, control, hintText } from "../ui/form";
 import { Icon, type IconName } from "../ui/icons";
 import { PageHeader } from "../ui/page";
 import { Button, Notice } from "../ui/surface";
+import {
+  settingsPageMeta,
+  type SettingsPage,
+} from "./settingsRoute";
 
 const mobileTouchTargets =
   "[&_button]:min-h-10 [&_a]:inline-flex [&_a]:min-h-10 [&_a]:items-center " +
@@ -40,22 +44,29 @@ function SettingsSection({
   id,
   label,
   icon,
+  showHeading = true,
   children,
 }: {
   id: string;
   label: string;
   icon: IconName;
+  showHeading?: boolean;
   children: ReactNode;
 }) {
   return (
     <section id={id} aria-label={label} className="scroll-mt-6 border-b border-line last:border-b-0">
-      <div className="grid gap-5 px-4 py-6 sm:px-6 lg:grid-cols-[11rem_minmax(0,1fr)] lg:gap-8 lg:py-8">
-        <header className="flex items-center gap-3 self-start lg:sticky lg:top-6">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-select-fill text-accent">
-            <Icon name={icon} />
-          </span>
-          <h3 className="text-sm font-semibold text-ink">{label}</h3>
-        </header>
+      <div className={showHeading
+        ? "grid gap-5 px-4 py-6 sm:px-6 lg:grid-cols-[11rem_minmax(0,1fr)] lg:gap-8 lg:py-8"
+        : "px-4 py-6 sm:px-6 lg:px-8 lg:py-8"}
+      >
+        {showHeading ? (
+          <header className="flex items-center gap-3 self-start lg:sticky lg:top-6">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-select-fill text-accent">
+              <Icon name={icon} />
+            </span>
+            <h3 className="text-sm font-semibold text-ink">{label}</h3>
+          </header>
+        ) : null}
         <div className="min-w-0">{children}</div>
       </div>
     </section>
@@ -135,11 +146,17 @@ function TerminalPreview({
 
 type SettingsPanelProps = {
   api?: IntegrationsApi;
+  page?: SettingsPage | "All";
   onTerminalSettingsChange?: (settings: TerminalSettings) => void | Promise<void>;
   consoles?: Pick<TerminalSessionsState, "sessions" | "busy" | "closeAll">;
 };
 
-export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSettingsChange }: SettingsPanelProps) {
+export function SettingsPanel({
+  api = integrationsApi,
+  page = "All",
+  consoles,
+  onTerminalSettingsChange,
+}: SettingsPanelProps) {
   const t = useTranslate();
   const liveConsoles = (consoles?.sessions ?? []).filter((session) => session.exited === undefined).length;
   const [confirmingCloseAll, setConfirmingCloseAll] = useState(false);
@@ -393,33 +410,18 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
 
   const canChangeMaster = !masterBusy && currentMaster !== "" && nextMaster.length >= 12 &&
     nextMaster === confirmMaster;
+  const pageTitle = page === "All" ? "settings.heading" : settingsPageMeta[page].label;
+  const pageDescription = page === "All"
+    ? "settings.pageDescription"
+    : settingsPageMeta[page].description;
 
   return (
     <div className={`mx-auto flex w-full max-w-6xl flex-col gap-6 ${mobileTouchTargets}`}>
-      <PageHeader title={t("settings.heading")} description={t("settings.pageDescription")} />
-
-      <nav aria-label={t("settings.heading")} className="flex flex-wrap gap-1 border-b border-line pb-3">
-        <a href="#settings-engine" className="rounded-md px-3 py-1.5 text-sm text-ink-muted hover:bg-select-fill hover:text-ink">
-          {t("engine.heading")}
-        </a>
-        <a href="#settings-terminal" className="rounded-md px-3 py-1.5 text-sm text-ink-muted hover:bg-select-fill hover:text-ink">
-          {t("terminal.settingsHeading")}
-        </a>
-        <a href="#settings-notifications" className="rounded-md px-3 py-1.5 text-sm text-ink-muted hover:bg-select-fill hover:text-ink">
-          {t("terminal.browserNotificationsHeading")}
-        </a>
-        {consoles === undefined ? null : (
-          <a href="#settings-connections" className="rounded-md px-3 py-1.5 text-sm text-ink-muted hover:bg-select-fill hover:text-ink">
-            {t("desktop.closeAllHeading")}
-          </a>
-        )}
-        <a href="#settings-password" className="rounded-md px-3 py-1.5 text-sm text-ink-muted hover:bg-select-fill hover:text-ink">
-          {t("secrets.changeHeading")}
-        </a>
-      </nav>
+      <PageHeader title={t(pageTitle)} description={t(pageDescription)} />
 
       <div className="sshc-card overflow-hidden rounded-md bg-card">
-        <SettingsSection id="settings-engine" label={t("engine.heading")} icon="settings">
+        {page === "All" || page === "Engine" ? (
+        <SettingsSection id="settings-engine" label={t("engine.heading")} icon="settings" showHeading={page === "All"}>
           <div className="max-w-2xl">
             <Field label={t("engine.portLabel")} hint={t("engine.portHint")}>
               <input
@@ -500,8 +502,10 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
             </ActionArea>
           </div>
         </SettingsSection>
+        ) : null}
 
-        <SettingsSection id="settings-terminal" label={t("terminal.settingsHeading")} icon="terminal">
+        {page === "All" || page === "Terminal" ? (
+        <SettingsSection id="settings-terminal" label={t("terminal.settingsHeading")} icon="terminal" showHeading={page === "All"}>
           <fieldset
             disabled={!terminalLoaded || terminalBusy}
             className="min-w-0 border-0 p-0 disabled:opacity-70"
@@ -751,11 +755,14 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
           </ActionArea>
           </fieldset>
         </SettingsSection>
+        ) : null}
 
+        {page === "All" || page === "Notifications" ? (
         <SettingsSection
           id="settings-notifications"
           label={t("terminal.browserNotificationsHeading")}
           icon="notification"
+          showHeading={page === "All"}
         >
           <div className="grid max-w-2xl gap-5">
             <p className="text-sm leading-6 text-ink-muted">
@@ -856,9 +863,10 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
             </div>
           </div>
         </SettingsSection>
+        ) : null}
 
-        {consoles === undefined ? null : (
-          <SettingsSection id="settings-connections" label={t("desktop.closeAllHeading")} icon="connections">
+        {consoles === undefined || (page !== "All" && page !== "Connections") ? null : (
+          <SettingsSection id="settings-connections" label={t("desktop.closeAllHeading")} icon="connections" showHeading={page === "All"}>
             <p className="max-w-2xl text-sm leading-6 text-ink-muted">{t("desktop.closeAllNote")}</p>
             <ActionArea status={(
               <p role="status" className="text-sm text-ink-muted">
@@ -892,7 +900,8 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
           </SettingsSection>
         )}
 
-        <SettingsSection id="settings-password" label={t("secrets.changeHeading")} icon="secrets">
+        {page === "All" || page === "Password" ? (
+        <SettingsSection id="settings-password" label={t("secrets.changeHeading")} icon="secrets" showHeading={page === "All"}>
           <div className="max-w-2xl">
             <p className="mb-5 text-sm leading-6 text-ink-muted">{t("secrets.changeNote")}</p>
             <div className="grid gap-4 sm:grid-cols-2">
@@ -927,6 +936,7 @@ export function SettingsPanel({ api = integrationsApi, consoles, onTerminalSetti
             </ActionArea>
           </div>
         </SettingsSection>
+        ) : null}
       </div>
     </div>
   );
