@@ -655,8 +655,8 @@ paths:
   /api/v1/sync/force-push:
     post:
       operationId: forcePushSnapshot
-      # 現在のendpoint・bucket・object key・ETagへ結び付いた一度限りの確認が必要。
-      # 実行時もそのETagをIf-Matchに使い、無条件には上書きしない。
+      # 現在のbinding世代・target digest・ETagへ結び付いた一度限りの確認が必要。
+      # 実行lock内で同じbindingとtargetを再検証し、そのETagをIf-Matchに使う。
       parameters:
         - { name: X-SSHC-Action, in: header, required: true, schema: { type: string } }
       requestBody:
