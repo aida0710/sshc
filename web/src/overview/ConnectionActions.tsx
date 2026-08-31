@@ -64,7 +64,7 @@ export function ConnectionActions({
               setOpen(false);
               onOpenSettings(settingsLocation);
             }}
-            className="block min-h-10 w-full rounded-md px-3 py-2 text-left text-sm text-ink hover:bg-select-fill md:min-h-0"
+            className="block min-h-10 w-full rounded-md px-3 py-2 text-left text-sm text-ink hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-0"
           >
             {t("home.openConnectionSettings")}
           </button>
@@ -76,7 +76,7 @@ export function ConnectionActions({
               setOpen(false);
               onConnect();
             }}
-            className="block min-h-10 w-full rounded-md px-3 py-2 text-left text-sm text-ink hover:bg-select-fill disabled:text-ink-faint md:min-h-0"
+            className="block min-h-10 w-full rounded-md px-3 py-2 text-left text-sm text-ink hover:bg-select-fill focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:min-h-0"
           >
             {opening ? t("home.opening") : t("home.connect")}
           </button>
