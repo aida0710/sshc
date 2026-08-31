@@ -456,8 +456,15 @@ test("opens quick connection actions above the trigger on mobile", async ({ page
     expect(menuBox.y + menuBox.height).toBeLessThanOrEqual(triggerBox.y);
     expect(menuBox.y).toBeGreaterThanOrEqual(0);
   }
-  await expect(menu.getByRole("menuitem", { name: "Open connection settings" })).toBeInViewport();
-  await expect(menu.getByRole("menuitem", { name: "Connect", exact: true })).toBeInViewport();
+  const settings = menu.getByRole("menuitem", { name: "Open connection settings" });
+  const connect = menu.getByRole("menuitem", { name: "Connect", exact: true });
+  await expect(settings).toBeInViewport();
+  await expect(connect).toBeInViewport();
+  await expect(settings).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await expect(connect).toBeFocused();
+  await page.keyboard.press("ArrowUp");
+  await expect(settings).toBeFocused();
 });
 
 test("keeps workspace management out of the mobile terminal", async ({ page, installation }) => {
