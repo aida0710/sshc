@@ -21,6 +21,33 @@ func TestMakefileVerifiesEmbeddedUIAssets(t *testing.T) {
 	}
 }
 
+func TestCIWebJobVerifiesEmbeddedUIAfterBuild(t *testing.T) {
+	document := readWorkflowDocument(t)
+	job, ok := document.Jobs["web"]
+	if !ok {
+		t.Fatal("jobs.web is missing")
+	}
+	build := -1
+	verification := -1
+	for index, step := range job.Steps {
+		switch step.Run {
+		case "npm run build":
+			build = index
+		case "../scripts/ci/check-ui-dist.sh":
+			verification = index
+		}
+	}
+	if build < 0 {
+		t.Fatal("jobs.web does not build the production UI")
+	}
+	if verification < 0 {
+		t.Fatal("jobs.web does not verify the embedded UI assets")
+	}
+	if verification != build+1 {
+		t.Fatalf("embedded UI verification step = %d, want immediately after build step %d", verification, build)
+	}
+}
+
 func TestEmbeddedUIVerifierDetectsTrackedAndUntrackedDifferences(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("the verifier runs in the Ubuntu generated-files job")
