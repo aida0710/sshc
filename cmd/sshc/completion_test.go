@@ -8,9 +8,9 @@ import (
 
 func TestCompletionScriptsReadCurrentSSHAliases(t *testing.T) {
 	tests := map[string][]string{
-		"bash": {"complete -F _sshc_completion sshc", "command sshc ssh --list"},
-		"zsh":  {"#compdef sshc", "compdef _sshc sshc", "command sshc ssh --list"},
-		"fish": {"complete -c sshc", "command sshc ssh --list"},
+		"bash": {"complete -F _sshc_completion sshc", "command sshc ssh --list", "service"},
+		"zsh":  {"#compdef sshc", "compdef _sshc sshc", "command sshc ssh --list", "service"},
+		"fish": {"complete -c sshc", "command sshc ssh --list", "service"},
 	}
 	for shell, required := range tests {
 		t.Run(shell, func(t *testing.T) {
