@@ -1,4 +1,5 @@
 import type { components } from "../api/schema";
+import { validateOpenAPISchema } from "../api/validators.generated";
 
 type BootstrapResponse = components["schemas"]["BootstrapResponse"];
 
@@ -65,10 +66,12 @@ function storeBrowserToken(value: string, storage: Pick<Storage, "setItem"> = wi
 }
 
 function isBootstrapResponse(value: unknown): value is BootstrapResponse {
-  if (typeof value !== "object" || value === null) return false;
-  const token = (value as Record<string, unknown>).csrfToken;
-  const browserToken = (value as Record<string, unknown>).browserToken;
-  return csrfToken(token) && (browserToken === undefined || csrfToken(browserToken));
+  try {
+    validateOpenAPISchema<BootstrapResponse>("BootstrapResponse", value);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function recoverSession(fetcher: typeof fetch): Promise<SessionState> {

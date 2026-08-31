@@ -35,7 +35,7 @@ describe("useDismissibleLayer", () => {
         onDismiss: () => setOpen(false),
         returnFocusRef: trigger,
       });
-      return <><button ref={trigger} onClick={() => setOpen((value) => !value)}>Trigger</button>{open ? <div ref={panel}>Panel</div> : null}<button>Outside</button></>;
+      return <><button ref={trigger} onClick={() => setOpen((value) => !value)}>Trigger</button>{open ? <div ref={panel}>Panel <button onClick={() => setOpen(false)}>Close</button></div> : null}<button>Outside</button></>;
     }
     const user = userEvent.setup();
     render(<Fixture />);
@@ -49,6 +49,11 @@ describe("useDismissibleLayer", () => {
 
     await user.click(trigger);
     await user.keyboard("{Escape}");
+    expect(screen.queryByText("Panel")).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+
+    await user.click(trigger);
+    await user.click(screen.getByRole("button", { name: "Close" }));
     expect(screen.queryByText("Panel")).not.toBeInTheDocument();
     expect(trigger).toHaveFocus();
   });

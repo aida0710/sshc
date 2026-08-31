@@ -113,6 +113,32 @@ describe("HostDetailPanel", () => {
     expect(onLocationChange).toHaveBeenCalledWith("Sshc", "Jump");
   });
 
+  it("supports the WAI-ARIA keyboard pattern for editor tabs", async () => {
+    const user = userEvent.setup();
+    const onLocationChange = vi.fn();
+    const harness = renderPanel({ panel: "Basic", advanced: "Jump", onLocationChange });
+    const areaTabs = screen.getByRole("tablist", { name: "Connection editor" });
+    const tabs = within(areaTabs).getAllByRole("tab");
+
+    expect(tabs.map((tab) => tab.tabIndex)).toEqual([0, -1, -1, -1]);
+    tabs[0]?.focus();
+    await user.keyboard("{ArrowRight}");
+    expect(tabs[1]).toHaveFocus();
+    expect(onLocationChange).toHaveBeenLastCalledWith("Analysis", "Jump");
+
+    harness.rerender(<HostDetailPanel {...harness.props} panel="Analysis" advanced="Jump" />);
+    expect(tabs.map((tab) => tab.tabIndex)).toEqual([-1, 0, -1, -1]);
+    await user.keyboard("{End}");
+    expect(tabs[3]).toHaveFocus();
+    expect(onLocationChange).toHaveBeenLastCalledWith("Sshc", "Jump");
+    await user.keyboard("{Home}");
+    expect(tabs[0]).toHaveFocus();
+    expect(onLocationChange).toHaveBeenLastCalledWith("Basic", "Jump");
+    await user.keyboard("{ArrowLeft}");
+    expect(tabs[3]).toHaveFocus();
+    expect(onLocationChange).toHaveBeenLastCalledWith("Sshc", "Jump");
+  });
+
   it("shows connection-specific app settings in the sshc panel", () => {
     renderPanel({ panel: "Sshc", advanced: "Jump" });
 
@@ -151,5 +177,28 @@ describe("HostDetailPanel", () => {
 
     await user.selectOptions(screen.getByRole("combobox", { name: "Advanced setting views" }), "Directives");
     expect(onLocationChange).toHaveBeenCalledWith("Advanced", "Directives");
+  });
+
+  it("supports the WAI-ARIA keyboard pattern for advanced tabs", async () => {
+    const user = userEvent.setup();
+    const onLocationChange = vi.fn();
+    renderPanel({ panel: "Advanced", advanced: "Jump", onLocationChange });
+    const advancedTabs = screen.getByRole("tablist", { name: "Advanced setting views" });
+    const tabs = within(advancedTabs).getAllByRole("tab");
+
+    expect(tabs.map((tab) => tab.tabIndex)).toEqual([0, -1, -1, -1]);
+    expect(tabs.every((tab) => tab.getAttribute("aria-controls") === "advanced-settings-panel")).toBe(true);
+    expect(document.getElementById("advanced-settings-panel")).toHaveAttribute("role", "tabpanel");
+
+    tabs[0]?.focus();
+    await user.keyboard("{ArrowLeft}");
+    expect(tabs[3]).toHaveFocus();
+    expect(onLocationChange).toHaveBeenLastCalledWith("Advanced", "Raw");
+    await user.keyboard("{Home}");
+    expect(tabs[0]).toHaveFocus();
+    expect(onLocationChange).toHaveBeenLastCalledWith("Advanced", "Jump");
+    await user.keyboard("{End}");
+    expect(tabs[3]).toHaveFocus();
+    expect(onLocationChange).toHaveBeenLastCalledWith("Advanced", "Raw");
   });
 });

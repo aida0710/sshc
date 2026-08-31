@@ -43,10 +43,10 @@ func parseTerminalInvocation(args []string) (invocation, error) {
 		return invalidInvocation("terminal requires an action")
 	}
 	if helpRequested(args) {
-		return helpInvocation(terminalSubcommand), nil
+		return helpInvocation(canonicalCLICommand(cliCommandTerminal)), nil
 	}
 	if len(args) > 1 && validTerminalAction(args[0]) && isHelpFlag(args[1]) {
-		return helpInvocation(terminalSubcommand + " " + args[0]), nil
+		return helpInvocation(canonicalCLICommand(cliCommandTerminal) + " " + args[0]), nil
 	}
 	parsed := terminalInvocation{Submit: true, Limit: 32 << 10, Timeout: 5 * time.Minute}
 	action, rest := args[0], args[1:]
@@ -224,15 +224,6 @@ func parseTerminalInvocation(args []string) (invocation, error) {
 	return invocation{Kind: invocationTerminal, JSON: parsed.JSON, Terminal: &parsed}, nil
 }
 
-func validTerminalAction(action string) bool {
-	switch action {
-	case "list", "show", "read", "send", "wait", "create", "rename", "close":
-		return true
-	default:
-		return false
-	}
-}
-
 func parseTerminalJSONOnly(args []string, parsed *terminalInvocation) error {
 	if len(args) == 0 {
 		return nil
@@ -254,14 +245,4 @@ func validateTerminalSelector(selector string) error {
 		}
 	}
 	return nil
-}
-
-func validTerminalWaitState(state string) bool {
-	switch state {
-	case "connecting", "connected", "reconnecting", "exited",
-		"agent-working", "agent-attention", "agent-ready", "agent-ended":
-		return true
-	default:
-		return false
-	}
 }

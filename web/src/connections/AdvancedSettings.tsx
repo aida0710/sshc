@@ -6,6 +6,7 @@ import { control, hintText, narrowControl } from "../ui/form";
 import { Button, Card, Notice, Row } from "../ui/surface";
 import { formatValues, parseValues } from "../rules/rules";
 import { identityKey } from "./connectionBrowser";
+import { activateTabFromKeyboard } from "../ui/tabKeyboard";
 
 type AdvancedSettingsProps = {
   detail: HostDetail;
@@ -20,6 +21,14 @@ type AdvancedSettingsProps = {
 function fieldKey(field: FormField): string {
   return `${field.line}-${field.keyword}`;
 }
+
+const tabs: { area: AdvancedArea; label: "host.tabJump" | "conn.portForwarding" | "conn.advancedDirectives" | "host.tabRaw" }[] = [
+  { area: "Jump", label: "host.tabJump" },
+  { area: "Forwards", label: "conn.portForwarding" },
+  { area: "Directives", label: "conn.advancedDirectives" },
+  { area: "Raw", label: "host.tabRaw" },
+];
+const tabAreas = tabs.map((tab) => tab.area);
 
 export function AdvancedSettings({
   detail,
@@ -152,13 +161,6 @@ export function AdvancedSettings({
     setLocalError("");
   }
 
-  const tabs: { area: AdvancedArea; label: "host.tabJump" | "conn.portForwarding" | "conn.advancedDirectives" | "host.tabRaw" }[] = [
-    { area: "Jump", label: "host.tabJump" },
-    { area: "Forwards", label: "conn.portForwarding" },
-    { area: "Directives", label: "conn.advancedDirectives" },
-    { area: "Raw", label: "host.tabRaw" },
-  ];
-
   return (
     <section aria-label={t("conn.advancedLabel")} className="flex flex-col gap-4">
       <label className="flex items-center gap-3 md:hidden">
@@ -174,13 +176,17 @@ export function AdvancedSettings({
       </label>
 
       <div role="tablist" aria-label={t("conn.advancedViews")} className="hidden border-b border-line md:flex">
-        {tabs.map((tab) => (
+        {tabs.map((tab, index) => (
           <button
             key={tab.area}
+            id={`advanced-area-${tab.area.toLowerCase()}-tab`}
             type="button"
             role="tab"
             aria-selected={area === tab.area}
+            aria-controls="advanced-settings-panel"
+            tabIndex={area === tab.area ? 0 : -1}
             onClick={() => onAreaChange(tab.area)}
+            onKeyDown={(event) => activateTabFromKeyboard(event, index, tabAreas, onAreaChange)}
             className={`min-h-10 border-b-2 px-5 py-2 text-sm transition-colors ${area === tab.area ? "border-accent font-medium text-ink" : "border-transparent text-ink-muted hover:bg-select-fill/50 hover:text-ink"}`}
           >
             {t(tab.label)}
@@ -190,7 +196,12 @@ export function AdvancedSettings({
 
       {localError === "" ? null : <Notice tone="danger">{localError}</Notice>}
 
-      <div hidden={area === "Raw"} className="flex flex-col gap-3">
+      <div
+        id="advanced-settings-panel"
+        role="tabpanel"
+        aria-labelledby={`advanced-area-${area.toLowerCase()}-tab`}
+      >
+        <div hidden={area === "Raw"} className="flex flex-col gap-3">
         {rawDirty ? <Notice>{t("conn.advancedRawBlocksFields")}</Notice> : null}
         {area === "Forwards" ? (
           <>
@@ -324,9 +335,9 @@ export function AdvancedSettings({
             {t("host.saveChanges")}
           </Button>
         </div> : null}
-      </div>
+        </div>
 
-      <div hidden={area !== "Raw"} className="flex flex-col gap-2">
+        <div hidden={area !== "Raw"} className="flex flex-col gap-2">
         {fieldDirty ? <Notice>{t("conn.advancedFieldsBlockRaw")}</Notice> : null}
         <label htmlFor="block-raw" className="text-xs text-ink-muted">{t("host.blockText")}</label>
         <textarea
@@ -345,6 +356,7 @@ export function AdvancedSettings({
             {t("host.saveBlock")}
           </Button>
         </div> : null}
+        </div>
       </div>
     </section>
   );

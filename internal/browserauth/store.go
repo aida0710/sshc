@@ -67,6 +67,9 @@ func (s *Store) Port() (int, error) {
 }
 
 // SetPort persists the desktop browser origin without putting it in sync metadata.
+// A registration is an origin capability. Moving to another port changes that
+// origin, so every capability issued for the previous port is revoked in the
+// same atomic state update. Reusing the same port preserves restart recovery.
 func (s *Store) SetPort(port int) error {
 	if port < 1024 || port > 65535 {
 		return ErrInvalidDocument
@@ -81,6 +84,7 @@ func (s *Store) SetPort(port int) error {
 		return nil
 	}
 	stored.Port = port
+	stored.Hashes = []string{}
 	return s.write(stored)
 }
 

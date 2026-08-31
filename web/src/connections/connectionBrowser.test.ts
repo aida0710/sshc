@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { HostEntry, HostIdentity, Overview } from "../api/config";
-import {
-  buildConnectionBrowserIndex,
-  identityKey,
-  projectConnectionBrowser,
-} from "./connectionBrowser";
+import { buildConnectionBrowserIndex, identityKey } from "./connectionBrowser";
 
 function host(path: string, alias: string, group?: string): HostEntry {
   return {
@@ -134,45 +130,20 @@ describe("connection browser index", () => {
     expect(index.duplicateAliases).toEqual(new Set(["nas"]));
   });
 
-  it("projects one declared group level at a time and preserves empty groups", () => {
+  it("indexes visible group levels and preserves empty groups", () => {
     const index = buildConnectionBrowserIndex(overview);
-    const root = projectConnectionBrowser(index, { view: "groups", scope: "root" }, "");
-    const home = projectConnectionBrowser(
-      index,
-      { view: "groups", scope: "named", group: "home" },
-      "",
-    );
-    const eu = projectConnectionBrowser(
-      index,
-      { view: "groups", scope: "named", group: "home/eu" },
-      "",
-    );
 
-    expect(root).toMatchObject({
-      kind: "group-level",
-      group: null,
-      groups: [
-        { name: "home", descendantCount: 2 },
-        { name: "work", descendantCount: 1 },
-        { name: "empty", descendantCount: 0 },
-        { name: "hidden/east", descendantCount: 1 },
-        { name: "hidden-direct", descendantCount: 1 },
-      ],
-      servers: [],
-      ungroupedCount: 1,
-    });
-    expect(home).toMatchObject({
-      kind: "group-level",
-      group: "home",
-      groups: [{ name: "home/eu", descendantCount: 1 }],
-      servers: [{ identity: { alias: "nas" } }],
-    });
-    expect(eu).toMatchObject({
-      kind: "group-level",
-      group: "home/eu",
-      groups: [],
-      servers: [{ identity: { alias: "eu-api" } }],
-    });
+    expect(index.visibleChildrenByParent.get("")).toMatchObject([
+      { name: "home", descendantCount: 2 },
+      { name: "work", descendantCount: 1 },
+      { name: "empty", descendantCount: 0 },
+      { name: "hidden/east", descendantCount: 1 },
+      { name: "hidden-direct", descendantCount: 1 },
+    ]);
+    expect(index.visibleChildrenByParent.get("home")).toMatchObject([
+      { name: "home/eu", descendantCount: 1 },
+    ]);
+    expect(index.visibleChildrenByParent.get("home/eu")).toEqual([]);
   });
 
   it("uses Overview.groups as vocabulary and never invents metadata or host groups", () => {
@@ -180,44 +151,7 @@ describe("connection browser index", () => {
 
     expect(index.groups.map((group) => group.name)).not.toContain("metadata-only");
     expect(index.groups.map((group) => group.name)).not.toContain("not-declared");
-    expect(projectConnectionBrowser(
-      index,
-      { view: "groups", scope: "named", group: "metadata-only" },
-      "",
-    )).toEqual({ kind: "missing-group", group: "metadata-only" });
-  });
-
-  it("recursively searches a named scope and includes full group paths", () => {
-    const index = buildConnectionBrowserIndex(overview);
-
-    expect(projectConnectionBrowser(
-      index,
-      { view: "groups", scope: "named", group: "home" },
-      "eu-api",
-    )).toMatchObject({
-      kind: "search-results",
-      scope: "home",
-      servers: [{ identity: { alias: "eu-api" }, group: "home/eu" }],
-    });
-    expect(projectConnectionBrowser(
-      index,
-      { view: "groups", scope: "root" },
-      "home/eu",
-    )).toMatchObject({
-      kind: "search-results",
-      scope: null,
-      servers: [{ identity: { alias: "eu-api" }, group: "home/eu" }],
-    });
-  });
-
-  it("keeps a filtered zero-result projection distinct from missing data", () => {
-    const index = buildConnectionBrowserIndex(overview);
-
-    expect(projectConnectionBrowser(index, { view: "servers" }, "no-such-server")).toEqual({
-      kind: "servers",
-      servers: [],
-    });
-    expect(index.servers).not.toHaveLength(0);
+    expect(index.groupByName.has("metadata-only")).toBe(false);
   });
 });
 

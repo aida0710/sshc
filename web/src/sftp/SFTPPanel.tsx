@@ -113,6 +113,7 @@ export function SFTPPanel({
   const folderUpload = useRef<HTMLInputElement>(null);
   const openingTarget = useRef(false);
   const handledTarget = useRef(0);
+  const loadGeneration = useRef(0);
 
   useEffect(() => {
     if (typeof window.matchMedia !== "function") return;
@@ -143,12 +144,33 @@ export function SFTPPanel({
     setSort((current) => nextSort(current.key, current.direction, key));
   }
 
+  function selectHost(nextAlias: string) {
+    // Invalidate every request started for the previous host before React runs
+    // the alias effect. Keeping its rows visible would also let an action for
+    // host A be submitted with host B's alias during the hand-off render.
+    loadGeneration.current += 1;
+    setAlias(nextAlias);
+    setPath("/");
+    setPathDraft("/");
+    setEntries([]);
+    setOpened(null);
+    setContents("");
+    setDeleting(null);
+    setProblem("");
+    setBusy(false);
+  }
+
   async function load(nextPath = path, nextAlias = alias, preserveEditor = false): Promise<RemoteEntry[] | null> {
-    if (nextAlias === "") return null;
+    const generation = ++loadGeneration.current;
+    if (nextAlias === "") {
+      setBusy(false);
+      return null;
+    }
     setBusy(true);
     setProblem("");
     try {
       const listing = await sftpApi.list(nextAlias, nextPath);
+      if (generation !== loadGeneration.current) return null;
       setPath(listing.path);
       setPathDraft(listing.path);
       setEntries(listing.entries);
@@ -158,11 +180,12 @@ export function SFTPPanel({
       }
       return listing.entries;
     } catch (error) {
+      if (generation !== loadGeneration.current) return null;
       const code = failureCode(error);
       setProblem(code === "sftp_failed" ? t("sftp.connectionFailed") : code || (error instanceof Error ? error.message : t("sftp.connectionFailed")));
       return null;
     } finally {
-      setBusy(false);
+      if (generation === loadGeneration.current) setBusy(false);
     }
   }
 
@@ -175,7 +198,7 @@ export function SFTPPanel({
       return;
     }
     openingTarget.current = true;
-    setAlias(target.alias);
+    selectHost(target.alias);
     const directory = parentOf(target.path);
     void load(directory, target.alias).then(async (loaded) => {
       if (loaded === null) return;
@@ -221,13 +244,16 @@ export function SFTPPanel({
       setProblem(t("sftp.unsavedBlocked"));
       return;
     }
+    const generation = ++loadGeneration.current;
     setBusy(true);
     setProblem("");
     try {
       const file = await sftpApi.readText(targetAlias, entry.path);
+      if (generation !== loadGeneration.current) return;
       setOpened(file);
       setContents(file.contents);
     } catch (error) {
+      if (generation !== loadGeneration.current) return;
       const code = failureCode(error);
       if (code === "sftp_not_utf8" || code === "sftp_text_too_large") {
         setProblem(t(code === "sftp_not_utf8" ? "sftp.binaryHint" : "sftp.tooLargeHint"));
@@ -235,36 +261,44 @@ export function SFTPPanel({
         setProblem(code || (error instanceof Error ? error.message : "sftp_failed"));
       }
     } finally {
-      setBusy(false);
+      if (generation === loadGeneration.current) setBusy(false);
     }
   }
 
   async function save() {
     if (opened === null) return;
+    const generation = loadGeneration.current;
+    const targetAlias = alias;
     setBusy(true);
     setProblem("");
     try {
-      const saved = await sftpApi.saveText(alias, opened.entry.path, contents, opened.revision);
-      setOpened(saved);
-      setContents(saved.contents);
-      await load(parentOf(saved.entry.path));
+      const saved = await sftpApi.saveText(targetAlias, opened.entry.path, contents, opened.revision);
+      if (generation !== loadGeneration.current) return;
+      const loaded = await load(parentOf(saved.entry.path), targetAlias);
+      if (loaded === null) return;
       setOpened(saved);
       setContents(saved.contents);
     } catch (error) {
+      if (generation !== loadGeneration.current) return;
       setProblem(failureCode(error) === "sftp_conflict" ? t("sftp.conflict") : failureCode(error) || "sftp_failed");
     } finally {
-      setBusy(false);
+      if (generation === loadGeneration.current) setBusy(false);
     }
   }
 
   async function makeDirectory() {
     const name = window.prompt(t("sftp.mkdirPrompt"))?.trim() ?? "";
     if (name === "" || name.includes("/")) return;
+    const generation = loadGeneration.current;
+    const targetAlias = alias;
+    const targetPath = path;
     setBusy(true);
     try {
-      await sftpApi.mkdir(alias, join(path, name));
-      await load();
+      await sftpApi.mkdir(targetAlias, join(targetPath, name));
+      if (generation !== loadGeneration.current) return;
+      await load(targetPath, targetAlias);
     } catch (error) {
+      if (generation !== loadGeneration.current) return;
       setProblem(failureCode(error) || "sftp_failed");
       setBusy(false);
     }
@@ -273,11 +307,16 @@ export function SFTPPanel({
   async function rename(entry: RemoteEntry) {
     const name = window.prompt(t("sftp.renamePrompt"), entry.name)?.trim() ?? "";
     if (name === "" || name === entry.name || name.includes("/")) return;
+    const generation = loadGeneration.current;
+    const targetAlias = alias;
+    const targetPath = path;
     setBusy(true);
     try {
-      await sftpApi.rename(alias, entry.path, join(path, name));
-      await load();
+      await sftpApi.rename(targetAlias, entry.path, join(targetPath, name));
+      if (generation !== loadGeneration.current) return;
+      await load(targetPath, targetAlias);
     } catch (error) {
+      if (generation !== loadGeneration.current) return;
       setProblem(failureCode(error) || "sftp_failed");
       setBusy(false);
     }
@@ -285,12 +324,17 @@ export function SFTPPanel({
 
   async function remove() {
     if (deleting === null) return;
+    const generation = loadGeneration.current;
+    const targetAlias = alias;
+    const targetPath = path;
     setBusy(true);
     try {
-      await sftpApi.remove(alias, deleting.path);
+      await sftpApi.remove(targetAlias, deleting.path);
+      if (generation !== loadGeneration.current) return;
       setDeleting(null);
-      await load();
+      await load(targetPath, targetAlias);
     } catch (error) {
+      if (generation !== loadGeneration.current) return;
       setProblem(failureCode(error) || (error instanceof Error ? error.message : "delete_failed"));
       setDeleting(null);
       setBusy(false);
@@ -308,6 +352,7 @@ export function SFTPPanel({
       return safe === null ? [] : [safe];
     });
     if (safeFiles.length === 0 && safeDirectories.length === 0) return;
+    const generation = loadGeneration.current;
     setBusy(true);
     setProblem("");
     const selections = safeFiles.map((source) => ({
@@ -337,7 +382,7 @@ export function SFTPPanel({
       setProblem(failureCode(error) || (error instanceof Error ? error.message : "sftp_failed"));
     } finally {
       admission?.release();
-      setBusy(false);
+      if (generation === loadGeneration.current) setBusy(false);
     }
   }
 
@@ -363,11 +408,16 @@ export function SFTPPanel({
     if (entry.type === "symlink" || entry.type === "other") return;
     const mode = window.prompt(t("sftp.chmodPrompt"), symbolicModeToOctal(entry.mode))?.trim() ?? "";
     if (!/^0?[0-7]{3}$/.test(mode)) return;
+    const generation = loadGeneration.current;
+    const targetAlias = alias;
+    const targetPath = path;
     setBusy(true);
     try {
-      await sftpApi.chmod(alias, entry.path, mode, entry.revision);
-      await load(path, alias, true);
+      await sftpApi.chmod(targetAlias, entry.path, mode, entry.revision);
+      if (generation !== loadGeneration.current) return;
+      await load(targetPath, targetAlias, true);
     } catch (error) {
+      if (generation !== loadGeneration.current) return;
       setProblem(failureCode(error) === "sftp_conflict" ? t("sftp.conflict") : failureCode(error) || "sftp_failed");
       setBusy(false);
     }
@@ -380,7 +430,7 @@ export function SFTPPanel({
         <select
           aria-label={t("sftp.host")}
           value={alias}
-          onChange={(event) => setAlias(event.target.value)}
+          onChange={(event) => selectHost(event.target.value)}
           className="rounded-md border border-control-line bg-control px-2 py-1.5 text-sm"
         >
           <option value="" disabled>{t(aliases.length === 0 ? "sftp.noHosts" : "sftp.chooseHost")}</option>

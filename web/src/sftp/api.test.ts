@@ -28,6 +28,24 @@ describe("sftpApi resumable download", () => {
     expect(diagnostic).not.toHaveBeenCalled();
   });
 
+  it("uses the engine-provided transfer controls as the UI contract", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+      maxConcurrent: 2,
+      jobs: [{
+        id: "transfer_test01", batchId: "batch_test0001", batchName: "file.bin", batchKind: "file",
+        alias: "edge", direction: "download", kind: "file", name: "file.bin", remotePath: "/file.bin",
+        totalBytes: 4, transferredBytes: 0, bytesPerSecond: 0, remainingSeconds: -1,
+        status: "queued", allowedActions: ["pause", "cancel"], attempt: 1, problem: "", lastModified: 0,
+        expectedRevision: "", sourceFingerprint: "", overwrite: false, downloadRevision: "",
+        createdAt: "2026-08-31T00:00:00Z", updatedAt: "2026-08-31T00:00:00Z",
+      }],
+    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+
+    const response = await sftpApi.listTransfers();
+
+    expect(response.jobs[0]?.allowedActions).toEqual(["pause", "cancel"]);
+  });
+
   it("sends only source identity when starting an engine-owned upload", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
       id: "transfer_test01", path: "/remote/file.bin", offset: 0, size: 4, expectedRevision: "absent",

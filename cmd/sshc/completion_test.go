@@ -37,14 +37,15 @@ func TestCompletionRejectsAnUnsupportedShell(t *testing.T) {
 }
 
 func TestEveryShellCompletesThePublishedCommandTree(t *testing.T) {
+	grammar := cliCompletionGrammar
 	required := []string{
-		"engine ssh info sync terminal serial telnet open status update service vault version help completion",
-		"setup push pull now auto",
-		"list show read send wait create rename close",
-		"status create unlock lock change-password",
-		"install status disable",
-		"utf-8 shift_jis euc-jp iso-2022-jp",
-		"connecting connected reconnecting exited agent-working agent-attention agent-ready agent-ended",
+		strings.Join(grammar.topLevel, " "),
+		strings.Join(grammar.syncActions, " "),
+		strings.Join(grammar.terminalActions, " "),
+		strings.Join(grammar.vaultActions, " "),
+		strings.Join(grammar.serviceActions, " "),
+		strings.Join(grammar.encodings, " "),
+		strings.Join(grammar.waitStates, " "),
 	}
 	for _, shell := range []string{"bash", "zsh", "fish"} {
 		t.Run(shell, func(t *testing.T) {
@@ -52,12 +53,35 @@ func TestEveryShellCompletesThePublishedCommandTree(t *testing.T) {
 			if err := writeCompletion(&output, shell); err != nil {
 				t.Fatal(err)
 			}
+			if strings.Contains(output.String(), "{{") {
+				t.Fatal("completion contains an unresolved grammar placeholder")
+			}
 			for _, fragment := range required {
 				if !strings.Contains(output.String(), fragment) {
 					t.Errorf("%s completion lacks command tree %q", shell, fragment)
 				}
 			}
 		})
+	}
+}
+
+func TestCompletionGrammarOnlyPublishesValidHelpTopics(t *testing.T) {
+	grammar := cliCompletionGrammar
+	for _, topic := range grammar.helpTopics {
+		if !validHelpTopic(topic) {
+			t.Errorf("completion publishes unknown help topic %q", topic)
+		}
+	}
+	for parent, actions := range map[string][]string{
+		"sync": grammar.syncActions, "terminal": grammar.terminalActions,
+		"service": grammar.serviceActions, "vault": grammar.vaultActions,
+	} {
+		for _, action := range actions {
+			topic := parent + " " + action
+			if !validHelpTopic(topic) {
+				t.Errorf("completion publishes unknown help topic %q", topic)
+			}
+		}
 	}
 }
 

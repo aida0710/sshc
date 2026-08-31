@@ -85,14 +85,28 @@ func TestRunUsesRandomIPv4LoopbackAndReturnsOnCancel(t *testing.T) {
 	}
 }
 
-func TestDesktopDefaultPortFallsBackOnceAndPersistsTheActualOrigin(t *testing.T) {
+func TestDesktopOccupiedBrowserOriginFallsBackRevokesRegistrationAndPersistsNewPort(t *testing.T) {
 	home := t.TempDir()
+	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	registrations := browserauth.NewStore(workspace, bytes.NewReader(bytes.Repeat([]byte{0x84}, 32)))
+	if err := registrations.SetPort(DefaultPort); err != nil {
+		t.Fatal(err)
+	}
+	oldToken, issued, err := registrations.Register("")
+	if err != nil || !issued {
+		t.Fatalf("seed browser registration = (%q, %t, %v)", oldToken, issued, err)
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	var actualPort int
+	var registrationRequired bool
 	dependencies := Dependencies{
 		Random:      bytes.NewReader(bytes.Repeat([]byte{0x83}, 512)),
 		DefaultPort: DefaultPort,
-		Announce: func(Readiness) error {
+		Announce: func(readiness Readiness) error {
+			registrationRequired = readiness.BrowserRegistrationRequired
 			cancel()
 			return nil
 		},
@@ -112,13 +126,15 @@ func TestDesktopDefaultPortFallsBackOnceAndPersistsTheActualOrigin(t *testing.T)
 	if err := Run(ctx, dependencies, "test"); err != nil {
 		t.Fatal(err)
 	}
-	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
-	if err != nil {
-		t.Fatal(err)
-	}
-	stored, err := browserauth.NewStore(workspace, bytes.NewReader(nil)).Port()
+	stored, err := registrations.Port()
 	if err != nil || stored != actualPort || stored == 0 || stored == DefaultPort {
 		t.Fatalf("stored port=%d actual=%d err=%v", stored, actualPort, err)
+	}
+	if !registrationRequired {
+		t.Fatal("fallback did not require foreground browser registration")
+	}
+	if registrations.Verify(oldToken) {
+		t.Fatal("default-port registration remained valid on the fallback port")
 	}
 }
 

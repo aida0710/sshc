@@ -1,6 +1,6 @@
 import { apiClient } from "./client";
-import { asRecord, asArray, asString } from "./guards";
 import type { components } from "./schema";
+import { validateOpenAPISchema } from "./validators.generated";
 
 export type Overview = components["schemas"]["Overview"];
 export type HostEntry = components["schemas"]["HostEntry"];
@@ -36,81 +36,31 @@ export type UpdateConnectionKeyPassphrase = components["schemas"]["UpdateConnect
 
 
 function validateOverview(value: unknown): Overview {
-  const record = asRecord(value);
-  asString(asRecord(record.entry).absolute);
-  for (const file of asArray(record.files)) {
-    asString(asRecord(asRecord(file).file).absolute);
-  }
-  for (const host of asArray(record.hosts)) {
-    const entry = asRecord(host);
-    asString(asRecord(entry.identity).alias);
-    asString(asRecord(entry.file).absolute);
-    asArray(entry.patterns);
-  }
-  asRecord(record.metadata);
-  asArray(record.diagnostics);
-  asArray(record.notices);
-  return record as unknown as Overview;
+  return validateOpenAPISchema<Overview>("Overview", value);
 }
 
 function validateHostDetail(value: unknown): HostDetail {
-  const record = asRecord(value);
-  const form = asRecord(record.form);
-  asArray(form.fields);
-  asString(form.raw);
-  asRecord(record.metadata);
-  asRecord(record.effective);
-  validateFileContents(record.file);
-  return record as unknown as HostDetail;
+  return validateOpenAPISchema<HostDetail>("HostDetail", value);
 }
 
 function validateFileContents(value: unknown): FileContents {
-  const record = asRecord(value);
-  asString(asRecord(record.file).absolute);
-  asString(record.contents);
-  asString(record.digest);
-  return record as unknown as FileContents;
+  return validateOpenAPISchema<FileContents>("FileContents", value);
 }
 
 function validateSavePreview(value: unknown): SavePreview {
-  const record = asRecord(value);
-  asString(record.operation);
-  for (const diff of asArray(record.diffs)) {
-    const entry = asRecord(diff);
-    asString(entry.path);
-    asArray(entry.lines);
-  }
-  return record as unknown as SavePreview;
+  return validateOpenAPISchema<SavePreview>("SavePreview", value);
 }
 
 function validateSaveResult(value: unknown): SaveResult {
-  const record = asRecord(value);
-  asString(record.transactionId);
-  asArray(record.written);
-  validateSavePreview(record.preview);
-  return record as unknown as SaveResult;
+  return validateOpenAPISchema<SaveResult>("SaveResult", value);
 }
 
 function validateCreateConnectionResponse(value: unknown): CreateConnectionResponse {
-  const record = asRecord(value);
-  asString(record.transactionId);
-  const identity = asRecord(record.identity);
-  asString(identity.path);
-  asString(identity.alias);
-  validateSavePreview(record.preview);
-  return record as unknown as CreateConnectionResponse;
+  return validateOpenAPISchema<CreateConnectionResponse>("CreateConnectionResponse", value);
 }
 
 function validateHistory(value: unknown): HistoryEntry[] {
-  const record = asRecord(value);
-  const entries = asArray(record.entries);
-  for (const entry of entries) {
-    const item = asRecord(entry);
-    asString(item.id);
-    asString(item.operation);
-    asArray(item.paths);
-  }
-  return entries as unknown as HistoryEntry[];
+  return validateOpenAPISchema<components["schemas"]["HistoryList"]>("HistoryList", value).entries;
 }
 
 function mutateJSON<T>(path: string, method: "POST" | "PATCH", body: unknown): Promise<T> {

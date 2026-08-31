@@ -1,6 +1,7 @@
 import { apiClient } from "../api/client";
-import { asRecord, asArray, asString, asNumber, asBoolean, jsonHeaders } from "../api/guards";
+import { jsonHeaders } from "../api/guards";
 import type { components } from "../api/schema";
+import { validateOpenAPISchema } from "../api/validators.generated";
 
 export type RemoteKeyPlan = components["schemas"]["RemoteKeyPlan"];
 export type RemoteKeyRegisterResponse = components["schemas"]["RemoteKeyRegisterResponse"];
@@ -28,39 +29,11 @@ export type RemoteKeysApi = {
 
 
 function validatePlan(value: unknown): RemoteKeyPlan {
-  const record = asRecord(value);
-  asString(record.alias);
-  asString(record.user);
-  asString(record.hostname);
-  asString(record.port);
-  asString(record.valuesFrom);
-  asString(record.fingerprint);
-  asString(record.keyPath);
-  asString(record.keyLine);
-  asString(record.remotePath);
-  asString(record.routine);
-  asBoolean(record.supported);
-  for (const step of asArray(record.manual)) asString(step);
-  for (const directive of asArray(record.executableDirectives)) {
-    const entry = asRecord(directive);
-    asString(entry.keyword);
-    asString(entry.command);
-    asString(entry.path);
-    asNumber(entry.line);
-    asBoolean(entry.overridable);
-  }
-  asString(record.actionToken);
-  asString(record.actionExpiresAt);
-  return record as unknown as RemoteKeyPlan;
+  return validateOpenAPISchema<RemoteKeyPlan>("RemoteKeyPlan", value);
 }
 
 function validateRegistration(value: unknown): RemoteKeyRegisterResponse {
-  const record = asRecord(value);
-  asString(record.outcome);
-  asNumber(record.exitCode);
-  asString(record.stderr);
-  asBoolean(record.truncated);
-  return record as unknown as RemoteKeyRegisterResponse;
+  return validateOpenAPISchema<RemoteKeyRegisterResponse>("RemoteKeyRegisterResponse", value);
 }
 
 
