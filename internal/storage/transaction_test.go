@@ -122,6 +122,40 @@ func TestCommitWritesEveryChangeAndRecordsHistory(t *testing.T) {
 	}
 }
 
+func TestCommitAppliesAndChecksExecutableMode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows does not expose Unix executable permission bits")
+	}
+	manager, workspace := newTestManager(t)
+	target := writeWorkspaceFile(t, workspace, "scripts/connect", "#!/bin/sh\n", FilePermission)
+	digest := Digest([]byte("#!/bin/sh\n"))
+	if _, err := manager.Commit(Request{
+		Operation: "sync.pull",
+		Changes: []Change{{
+			Path: target, Contents: []byte("#!/bin/sh\n"), Mode: DirectoryPermission,
+			Precondition: Precondition{Exists: true, Digest: digest, Mode: FilePermission},
+		}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Lstat(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != DirectoryPermission {
+		t.Fatalf("mode = %04o, want 0700", info.Mode().Perm())
+	}
+	if _, err := manager.Commit(Request{
+		Operation: "sync.pull",
+		Changes: []Change{{
+			Path: target, Contents: []byte("#!/bin/sh\n"), Mode: FilePermission,
+			Precondition: Precondition{Exists: true, Digest: digest, Mode: FilePermission},
+		}},
+	}); err == nil {
+		t.Fatal("mode-only concurrent change was not rejected")
+	}
+}
+
 func TestAfterCommitReportsOnlySuccessfulMutations(t *testing.T) {
 	manager, workspace := newTestManager(t)
 	path := filepath.Join(workspace.Root(), "config")

@@ -699,7 +699,7 @@ func (m *Manager) validateLoadedJournalEntry(record journalRecord, entry journal
 	previousDigestValid := validJournalDigest(entry.PreviousDigest)
 	switch entry.Action {
 	case actionWrite:
-		if entry.Target != "" || entry.Mode&^uint32(FilePermission) != 0 || !digestValid {
+		if entry.Target != "" || !validOwnerFileMode(entry.Mode) || !digestValid {
 			return invalidJournal("invalid write entry")
 		}
 		if record.Atomic && entry.NoBackup {
@@ -733,14 +733,14 @@ func (m *Manager) validateLoadedJournalEntry(record journalRecord, entry journal
 		}
 	case actionMove:
 		if entry.Target == "" || entry.Temp != "" || entry.Backup != "" || entry.NoBackup || !entry.HadPrevious ||
-			entry.Mode&^uint32(FilePermission) != 0 || !digestValid || entry.PreviousDigest != entry.Digest {
+			!validOwnerFileMode(entry.Mode) || !digestValid || entry.PreviousDigest != entry.Digest {
 			return invalidJournal("invalid move entry")
 		}
 		if record.Atomic {
 			return invalidJournal("atomic record contains a move")
 		}
 	case actionRemove:
-		if entry.Target != "" || entry.Temp != "" || !entry.HadPrevious || entry.Mode&^uint32(FilePermission) != 0 ||
+		if entry.Target != "" || entry.Temp != "" || !entry.HadPrevious || !validOwnerFileMode(entry.Mode) ||
 			!digestValid || entry.PreviousDigest != entry.Digest {
 			return invalidJournal("invalid remove entry")
 		}
@@ -772,6 +772,10 @@ func (m *Manager) validateLoadedJournalEntry(record journalRecord, entry journal
 		return invalidJournal("unknown entry action")
 	}
 	return nil
+}
+
+func validOwnerFileMode(mode uint32) bool {
+	return mode&^uint32(0o700) == 0
 }
 
 func (m *Manager) validateLoadedBackup(record journalRecord, entry journalEntry, pending bool) error {

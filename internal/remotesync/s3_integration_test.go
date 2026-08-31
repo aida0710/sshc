@@ -8,11 +8,13 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"sshc/internal/application"
 	"sshc/internal/objectstore"
 	"sshc/internal/remotesync"
 	"sshc/internal/storage"
@@ -102,6 +104,9 @@ func realInstallationAt(t *testing.T, objectPath string, files map[string]string
 	}
 	counter := 0
 	manager := storage.NewManager(workspace, time.Now, rand.Reader)
+	// Match production wiring: application owns the storage validator. This
+	// catches snapshots which pass remotesync in isolation but fail at Commit.
+	_ = application.NewService(workspace, manager)
 	service := remotesync.NewService(workspace,
 		manager,
 		func() string { return time.Now().UTC().Format(time.RFC3339) },
@@ -174,8 +179,14 @@ func TestAgainstARealBucketASnapshotTravelsBetweenTwoMachines(t *testing.T) {
 	first := realInstallationAt(t, remotePath, map[string]string{
 		"config":               "Host bastion\r\n\tPort 2222   \n",
 		"keys/work/id_ed25519": "-----BEGIN OPENSSH PRIVATE KEY-----\nnot really\n",
+		".DS_Store":            "opaque os metadata",
+		"arbitrary.bin":        "\x00\x01\x02not ssh config",
+		"scripts/connect":      "#!/bin/sh\nexit 0\n",
 		"sshc/metadata.json":   `{"schemaVersion":3}`,
 	})
+	if err := os.Chmod(filepath.Join(first.workspace.Root(), "scripts", "connect"), 0o700); err != nil {
+		t.Fatal(err)
+	}
 	// テストごとの隔離prefixなので通常は空だが、同じtest process内の再試行で
 	// すでにobjectがある場合も本番と同じくpullしてETagを記録してから進める。
 	result, err := first.service.Pull(context.Background(), syncPassphrase, remotesync.ResolveNone)
@@ -215,6 +226,21 @@ func TestAgainstARealBucketASnapshotTravelsBetweenTwoMachines(t *testing.T) {
 	}
 	if got := second.read(t, "keys/work/id_ed25519"); !strings.HasPrefix(got, "-----BEGIN") {
 		t.Errorf("the private key did not arrive: %q", got)
+	}
+	if _, err := os.Stat(filepath.Join(second.workspace.Root(), ".DS_Store")); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("default-excluded OS metadata unexpectedly arrived: %v", err)
+	}
+	if got := second.read(t, "arbitrary.bin"); got != "\x00\x01\x02not ssh config" {
+		t.Errorf("arbitrary binary did not arrive: %q", got)
+	}
+	if runtime.GOOS != "windows" {
+		info, err := os.Lstat(filepath.Join(second.workspace.Root(), "scripts", "connect"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Mode().Perm() != 0o700 {
+			t.Fatalf("received executable mode = %04o, want 0700", info.Mode().Perm())
+		}
 	}
 }
 

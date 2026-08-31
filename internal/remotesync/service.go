@@ -1116,6 +1116,7 @@ func (s *Service) push(ctx context.Context, passphrase, forcedETag, message stri
 			}
 		}
 	}
+	manifest.Ancestors = manifestAncestors(current.Base)
 	if strings.TrimSpace(message) == "" {
 		message = draftFor(current.Base, manifest).Message
 	}
@@ -1221,6 +1222,9 @@ func (s *Service) liveSnapshotFollows(
 	if incoming.Revision == base.Revision || incoming.ParentRevision == base.Revision {
 		return true, nil
 	}
+	if slices.Contains(incoming.Ancestors, base.Revision) {
+		return true, nil
+	}
 	infos, _, err := binding.client.ListNewest(
 		ctx, joinKey(binding.config.Path, SnapshotPrefix), maxHistoryGraphRevisions,
 	)
@@ -1287,6 +1291,21 @@ func (s *Service) liveSnapshotFollows(
 	return false, nil
 }
 
+func manifestAncestors(base *Manifest) []string {
+	if base == nil || !validRevision(base.Revision) {
+		return nil
+	}
+	ancestors := make([]string, 0, min(MaxManifestAncestors, 1+len(base.Ancestors)))
+	ancestors = append(ancestors, base.Revision)
+	for _, revision := range base.Ancestors {
+		if len(ancestors) == MaxManifestAncestors || slices.Contains(ancestors, revision) {
+			break
+		}
+		ancestors = append(ancestors, revision)
+	}
+	return ancestors
+}
+
 func lineageReaches(manifests map[string]Manifest, revision, wanted string) bool {
 	seen := map[string]bool{}
 	for revision != "" && !seen[revision] {
@@ -1323,29 +1342,27 @@ type BucketView struct {
 const maxBucketHistoryObjects = 10000
 
 func (s *Service) BucketStatus(ctx context.Context) (BucketView, error) {
-	s.operationMu.Lock()
-	defer s.operationMu.Unlock()
-	return s.bucketStatus(ctx)
-}
-
-func (s *Service) bucketStatus(ctx context.Context) (BucketView, error) {
-	binding, err := s.configuredBinding()
+	captured, err := s.captureHistoryRead()
 	if err != nil {
 		return BucketView{}, err
 	}
+	return s.bucketStatus(ctx, captured)
+}
+
+func (s *Service) bucketStatus(ctx context.Context, captured historyReadSnapshot) (BucketView, error) {
+	binding := captured.binding
 	objectKey := ObjectKeyFor(binding.config)
 	view := BucketView{CheckedAt: s.now(), History: []BucketObjectView{}}
 	live, err := binding.client.Stat(ctx, objectKey)
 	if err != nil && !errors.Is(err, objectstore.ErrNotFound) {
 		return BucketView{}, err
 	}
+	liveExists := err == nil
+	liveETag := ""
 	if err == nil {
+		liveETag = live.ETag
 		view.Live = bucketObjectView(binding.config, live)
-		current, stateErr := s.readState()
-		if stateErr != nil {
-			return BucketView{}, stateErr
-		}
-		view.LocalIsLive = stateMatchesTarget(current, binding.config) && current.ETag != "" && current.ETag == live.ETag
+		view.LocalIsLive = captured.state.target == targetID(binding.config) && captured.state.etag != "" && captured.state.etag == live.ETag
 	}
 	history, truncated, err := binding.client.ListNewest(ctx, joinKey(binding.config.Path, SnapshotPrefix), maxBucketHistoryObjects)
 	if err != nil {
@@ -1360,6 +1377,27 @@ func (s *Service) bucketStatus(ctx context.Context) (BucketView, error) {
 	})
 	for _, item := range history {
 		view.History = append(view.History, *bucketObjectView(binding.config, item))
+	}
+	latest, latestErr := binding.client.Stat(ctx, objectKey)
+	if latestErr != nil && !errors.Is(latestErr, objectstore.ErrNotFound) {
+		return BucketView{}, latestErr
+	}
+	if (latestErr == nil) != liveExists || (latestErr == nil && latest.ETag != liveETag) {
+		return BucketView{}, ErrRemoteMoved
+	}
+	s.operationMu.Lock()
+	defer s.operationMu.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.bindingVersion != captured.bindingVersion {
+		return BucketView{}, ErrRemoteMoved
+	}
+	current, err := s.readState()
+	if err != nil {
+		return BucketView{}, err
+	}
+	if snapshotHistoryState(current) != captured.state {
+		return BucketView{}, ErrRemoteMoved
 	}
 	return view, nil
 }
@@ -1554,7 +1592,7 @@ func (s *Service) pullWithRemoteAcceptance(
 			return PullResult{}, ErrRemoteMoved
 		}
 	}
-	var local map[string]string
+	var local map[string]LocalEntry
 	readLocal := func() error {
 		var readErr error
 		local, readErr = s.localDigests(manifest, base, ignoreRules)
@@ -1569,7 +1607,7 @@ func (s *Service) pullWithRemoteAcceptance(
 		return PullResult{}, err
 	}
 
-	request, conflicts, err := PlanWithIgnore(s.workspace.Root(), base, local, manifest, contents, resolve, ignoreRules.Match)
+	request, conflicts, err := PlanEntriesWithIgnore(s.workspace.Root(), base, local, manifest, contents, resolve, ignoreRules.Match)
 	if exchangeErr := s.stageVault(&request); exchangeErr != nil {
 		return PullResult{}, exchangeErr
 	}
@@ -1725,27 +1763,8 @@ func (s *Service) applyWithSecretGeneration(result PullResult) error {
 	if err := s.exchangeSnippets(&result.Request); err != nil {
 		return err
 	}
-	if len(result.Request.Changes)+len(result.Request.Removals) > 0 {
-		// 別のマシンからのスナップショットは、このマシンにはないかもしれない
-		// ディレクトリ（connections/work/、keys/work/）を指定する。そして
-		// トランザクションマネージャが所有するのはファイルであってディレクトリでは
-		// ない。ResolveForWrite は、親のない書き込みを拒否する。そこで、その
-		// ディレクトリを同じリクエストに載せる。以前はジャーナルの外で作っており、
-		// mkdir とコミットのあいだで落ちれば空のディレクトリが残った。
-		result.Request.Directories = append(result.Request.Directories,
-			changeDirectories(s.workspace.Root(), result.Request.Changes)...)
-		if _, err := s.transactions.Commit(result.Request); err != nil {
-			return err
-		}
-		// 保管庫を置き換えたなら、それを配っている側に読み直させる。読み直さな
-		// ければ、運ばれてきたパスワードは次にロック解除するまで存在しないのと同じで
-		// ある。
-		if s.VaultAdopted != nil && replacesVault(s.workspace.Root(), result.Request) {
-			if err := s.VaultAdopted(); err != nil {
-				return err
-			}
-		}
-	}
+	written := len(result.Request.Changes)
+	removed := len(result.Request.Removals)
 	current, err := s.readState()
 	if err != nil {
 		return err
@@ -1760,13 +1779,38 @@ func (s *Service) applyWithSecretGeneration(result PullResult) error {
 	operation := SyncOperation{
 		Kind: OperationApply, Summary: result.Summary,
 		DownloadedBytes: result.DownloadedBytes,
-		Written:         len(result.Request.Changes), Removed: len(result.Request.Removals),
+		Written:         written, Removed: removed,
 		CompletedAt: s.now(),
 	}
-	return s.writeState(state{
+	stateChange, err := s.stateChange(state{
 		ETag: result.ETag, Key: result.objectKey, Target: result.target, Base: &manifest, Origin: origin,
 		LastOperation: &operation,
 	})
+	if err != nil {
+		return err
+	}
+	if result.Request.Operation == "" {
+		result.Request.Operation = "sync.pull"
+	}
+	// State is deliberately the last write in the same journal as the workspace
+	// files. A crash can therefore be completed from one durable transaction and
+	// cannot leave a newly applied workspace paired with an older sync baseline.
+	result.Request.Changes = append(result.Request.Changes, stateChange)
+	// 別のマシンからのスナップショットは、このマシンにはないかもしれない
+	// ディレクトリ（connections/work/、keys/work/）を指定する。stateの親も含め、
+	// すべて同じrequestへ載せる。
+	result.Request.Directories = append(result.Request.Directories,
+		changeDirectories(s.workspace.Root(), result.Request.Changes)...)
+	if _, err := s.transactions.Commit(result.Request); err != nil {
+		return err
+	}
+	// 保管庫を置き換えたなら、それを配っている側に読み直させる。
+	if s.VaultAdopted != nil && replacesVault(s.workspace.Root(), result.Request) {
+		if err := s.VaultAdopted(); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // exchangeSnippets maps the logical plaintext snapshot entry onto the same
@@ -1858,7 +1902,7 @@ func changeDirectories(root string, changes []storage.Change) []storage.Director
 
 // localDigests は、どちらかの側が知っているすべてのパスをハッシュする。これにより、
 // このディスク上にあってどちらのマニフェストにもないファイルは、参照も変更もされない。
-func (s *Service) localDigests(remote Manifest, base *Manifest, ignoreRules IgnoreRules) (map[string]string, error) {
+func (s *Service) localDigests(remote Manifest, base *Manifest, ignoreRules IgnoreRules) (map[string]LocalEntry, error) {
 	paths := map[string]bool{}
 	for _, item := range remote.Files {
 		paths[item.Path] = true
@@ -1869,7 +1913,7 @@ func (s *Service) localDigests(remote Manifest, base *Manifest, ignoreRules Igno
 		}
 	}
 
-	digests := map[string]string{}
+	digests := map[string]LocalEntry{}
 	for path := range paths {
 		if ignoreRules.Match(path) {
 			continue
@@ -1881,7 +1925,7 @@ func (s *Service) localDigests(remote Manifest, base *Manifest, ignoreRules Igno
 				return nil, err
 			}
 			if document != nil || manifestContains(base, TravelPath) {
-				digests[path] = Digest(document)
+				digests[path] = LocalEntry{SHA256: Digest(document), Mode: "0600"}
 			}
 			continue
 		}
@@ -1891,18 +1935,27 @@ func (s *Service) localDigests(remote Manifest, base *Manifest, ignoreRules Igno
 				return nil, err
 			}
 			if document != nil {
-				digests[path] = Digest(document)
+				digests[path] = LocalEntry{SHA256: Digest(document), Mode: "0600"}
 			}
 			continue
 		}
-		body, err := s.workspace.FileSystem().ReadFile(filepath.Join(s.workspace.Root(), filepath.FromSlash(path)))
+		localPath := filepath.Join(s.workspace.Root(), filepath.FromSlash(path))
+		body, err := s.workspace.FileSystem().ReadFile(localPath)
 		if err != nil {
 			if errors.Is(err, fs.ErrNotExist) {
 				continue
 			}
 			return nil, err
 		}
-		digests[path] = Digest(body)
+		mode := "0600"
+		info, err := s.workspace.FileSystem().Lstat(localPath)
+		if err != nil {
+			return nil, err
+		}
+		if info.Mode().Perm() == 0o700 {
+			mode = "0700"
+		}
+		digests[path] = LocalEntry{SHA256: Digest(body), Mode: mode}
 	}
 	return digests, nil
 }
@@ -2040,34 +2093,40 @@ func (s *Service) readState() (state, error) {
 }
 
 func (s *Service) writeState(next state) error {
-	next.SchemaVersion = stateSchemaVersion
-	body, err := json.MarshalIndent(next, "", "  ")
+	change, err := s.stateChange(next)
 	if err != nil {
 		return err
 	}
-	body = append(body, '\n')
-	if err := s.workspace.EnsureDirectory(s.workspace.StateDir()); err != nil {
-		return err
+	_, err = s.transactions.Commit(storage.Request{
+		Operation:   "sync.state",
+		Directories: changeDirectories(s.workspace.Root(), []storage.Change{change}),
+		Changes:     []storage.Change{change},
+	})
+	return err
+}
+
+func (s *Service) stateChange(next state) (storage.Change, error) {
+	next.SchemaVersion = stateSchemaVersion
+	body, err := json.MarshalIndent(next, "", "  ")
+	if err != nil {
+		return storage.Change{}, err
 	}
+	body = append(body, '\n')
 	precondition := storage.Precondition{}
 	if current, err := s.workspace.FileSystem().ReadFile(s.statePath()); err == nil {
 		precondition = storage.Precondition{Exists: true, Digest: storage.Digest(current)}
 	} else if !errors.Is(err, fs.ErrNotExist) {
-		return err
+		return storage.Change{}, err
 	}
-	_, err = s.transactions.Commit(storage.Request{
-		Operation: "sync.state",
-		Changes: []storage.Change{{
-			Path:         s.statePath(),
-			Contents:     body,
-			Precondition: precondition,
-			// state は秘密を何も指定しないが、このアプリケーション自身のファイルで
-			// あり、同期のたびにその世代が増えるのは、バックアップディレクトリの中の
-			// 雑音でしかない。
-			SkipBackup: true,
-		}},
-	})
-	return err
+	return storage.Change{
+		Path:         s.statePath(),
+		Contents:     body,
+		Precondition: precondition,
+		// state は秘密を何も指定しないが、このアプリケーション自身のファイルで
+		// あり、同期のたびにその世代が増えるのは、バックアップディレクトリの中の
+		// 雑音でしかない。
+		SkipBackup: true,
+	}, nil
 }
 
 // Target は、この実行が指しているエンドポイントとバケットを、表示のために返す。

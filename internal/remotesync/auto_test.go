@@ -21,6 +21,7 @@ func autoFor(t *testing.T, machine installation, enabled bool) *remotesync.Auto 
 	auto := remotesync.NewAuto(machine.service, time.Minute, func() string { return "2026-08-18T00:00:00Z" })
 	auto.Enabled = func() bool { return enabled }
 	auto.Key = func() (string, bool) { return syncPassphrase, true }
+	auto.ReportFailure = func(stage string, err error) { t.Logf("auto failure at %s: %v", stage, err) }
 	return auto
 }
 
@@ -388,7 +389,7 @@ func TestAutoLineageProofDecodesRepeatedCiphertextOnlyOnce(t *testing.T) {
 	}
 }
 
-func TestAutoLineageProofFailsClosedAfterItsDistinctCiphertextBudget(t *testing.T) {
+func TestAutoUsesAuthenticatedAncestorsBeyondLegacyCiphertextBudget(t *testing.T) {
 	bucket := &fakeBucket{}
 	producer := newInstallation(t, bucket, map[string]string{"config": "Host first\n"})
 	if _, err := producer.service.Push(context.Background(), syncPassphrase, "First"); err != nil {
@@ -418,11 +419,11 @@ func TestAutoLineageProofFailsClosedAfterItsDistinctCiphertextBudget(t *testing.
 		}
 		bucket.putObject(fmt.Sprintf("%szz-distinct-%02d", remotesync.SnapshotPrefix, index), resealed, fmt.Sprintf(`"distinct-%02d"`, index))
 	}
-	if view := once(t, auto); view.Phase != remotesync.AutoBlocked || view.Detail != "remote_moved" {
-		t.Fatalf("receive beyond lineage budget = %+v, want blocked remote_moved", view)
+	if view := once(t, auto); view.Phase != remotesync.AutoIdle {
+		t.Fatalf("receive beyond legacy lineage budget = %+v", view)
 	}
-	if got := consumer.read(t, "config"); got != "Host first\n" {
-		t.Fatalf("blocked lineage changed config to %q", got)
+	if got := consumer.read(t, "config"); got != "Host third\n" {
+		t.Fatalf("authenticated lineage did not advance config: %q", got)
 	}
 }
 

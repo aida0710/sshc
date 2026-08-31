@@ -968,6 +968,27 @@ func (h SyncHandlers) Now(c *echo.Context) error {
 	if h.Auto == nil {
 		return problem(c, http.StatusConflict, "auto_sync_off")
 	}
-	h.Auto.Now(c.Request().Context())
+	view := h.Auto.Now(c.Request().Context())
+	if view.Phase == remotesync.AutoFailed {
+		return autoSyncFailureProblem(c, view.Detail)
+	}
 	return h.status(c)
+}
+
+func autoSyncFailureProblem(c *echo.Context, detail string) error {
+	switch detail {
+	case "not_configured":
+		return problem(c, http.StatusConflict, "sync_not_configured")
+	case "wrong_passphrase":
+		return problem(c, http.StatusForbidden, detail)
+	case "bucket_timeout":
+		return problem(c, http.StatusGatewayTimeout, detail)
+	case "bucket_refused", "bucket_dns_failed", "bucket_tls_failed", "bucket_unreachable", "snapshot_download_incomplete":
+		return problem(c, http.StatusBadGateway, detail)
+	case "remote_moved", "remote_deleted", "conflicts", "snapshot_cost_refused", "snapshot_too_large",
+		"snapshot_schema_unsupported", "snapshot_rejected", "sync_ignore_invalid":
+		return problem(c, http.StatusConflict, detail)
+	default:
+		return problem(c, http.StatusInternalServerError, "sync_internal_failed")
+	}
 }
