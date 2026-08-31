@@ -63,10 +63,11 @@ func verifySetupKey(ctx context.Context, client *objectstore.Client, config Conf
 	if object.ETag != expectedETag {
 		return ErrSetupTargetChanged
 	}
-	archive, _, err := envelope.OpenWithin(object.Body, key, envelope.AcceptedFromRemote)
+	archive, openedKey, err := envelope.OpenWithin(object.Body, key, envelope.AcceptedFromRemote)
 	if err != nil {
 		return err
 	}
+	openedKey.Destroy()
 	_, _, err = Read(archive)
 	return err
 }
