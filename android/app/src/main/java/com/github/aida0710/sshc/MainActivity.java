@@ -16,7 +16,6 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.graphics.Insets;
-import android.graphics.Rect;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -47,7 +46,6 @@ import org.json.JSONObject;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.Arrays;
-import java.util.Collections;
 
 import mobile.Mobile;
 
@@ -196,11 +194,6 @@ public final class MainActivity extends Activity {
         webView.getSettings().setJavaScriptEnabled(true);
         webView.getSettings().setDomStorageEnabled(true);
         webView.addJavascriptInterface(nativeBridge, "sshcAndroid");
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            webView.addOnLayoutChangeListener((view, left, top, right, bottom,
-                    oldLeft, oldTop, oldRight, oldBottom) -> updateNavigationGestureExclusion(view));
-        }
-
         // WebView のデバッグはページ内容と session cookie を参照できるため、
         // debuggable ビルドだけで有効にする。
         if ((getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
@@ -564,21 +557,6 @@ public final class MainActivity extends Activity {
 
     private int dp(int value) {
         return Math.round(value * getResources().getDisplayMetrics().density);
-    }
-
-    /** Androidの戻るジェスチャーと競合する左端のうち、drawer用の最小領域だけを確保する。 */
-    @TargetApi(Build.VERSION_CODES.Q)
-    private void updateNavigationGestureExclusion(View view) {
-        int verticalMargin = dp(56);
-        int availableHeight = Math.max(0, view.getHeight() - verticalMargin * 2);
-        int exclusionHeight = Math.min(dp(200), availableHeight);
-        if (exclusionHeight == 0) {
-            view.setSystemGestureExclusionRects(Collections.emptyList());
-            return;
-        }
-        int top = (view.getHeight() - exclusionHeight) / 2;
-        view.setSystemGestureExclusionRects(Collections.singletonList(
-                new Rect(0, top, dp(28), top + exclusionHeight)));
     }
 
     /** system bar、display cutout、IME の inset を padding に反映する。 */

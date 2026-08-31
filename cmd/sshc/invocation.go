@@ -29,6 +29,7 @@ const (
 	invocationInfo
 	invocationSync
 	invocationTerminal
+	invocationCompletion
 )
 
 type syncAction uint8
@@ -67,19 +68,20 @@ type invocation struct {
 }
 
 const (
-	engineSubcommand   = "engine"
-	vaultSubcommand    = "vault"
-	helpSubcommand     = "help"
-	versionSubcommand  = "version"
-	updateSubcommand   = "update"
-	serviceSubcommand  = "service"
-	infoSubcommand     = "info"
-	syncSubcommand     = "sync"
-	terminalSubcommand = "terminal"
-	StatusSubcommand   = "status"
-	serialSubcommand   = "serial"
-	telnetSubcommand   = "telnet"
-	sshSubcommand      = "ssh"
+	engineSubcommand     = "engine"
+	vaultSubcommand      = "vault"
+	helpSubcommand       = "help"
+	versionSubcommand    = "version"
+	updateSubcommand     = "update"
+	serviceSubcommand    = "service"
+	infoSubcommand       = "info"
+	syncSubcommand       = "sync"
+	terminalSubcommand   = "terminal"
+	completionSubcommand = "completion"
+	StatusSubcommand     = "status"
+	serialSubcommand     = "serial"
+	telnetSubcommand     = "telnet"
+	sshSubcommand        = "ssh"
 )
 
 // parseInvocation は、コマンドが誰の責務を求めるかを副作用なしに決める。
@@ -115,6 +117,14 @@ func parseInvocation(argv []string) (invocation, error) {
 		return parseSyncInvocation(args)
 	case terminalSubcommand:
 		return parseTerminalInvocation(args)
+	case completionSubcommand:
+		if helpRequested(args) {
+			return helpInvocation(completionSubcommand), nil
+		}
+		if len(args) != 1 || !validCompletionShell(args[0]) {
+			return invalidInvocation("completion requires bash, zsh, or fish")
+		}
+		return invocation{Kind: invocationCompletion, Args: copyInvocationArgs(args)}, nil
 	case OpenSubcommand:
 		if helpRequested(args) {
 			return helpInvocation(OpenSubcommand), nil
@@ -208,6 +218,15 @@ func validVaultAction(action string) bool {
 func validServiceAction(action string) bool {
 	switch action {
 	case "install", "status", "disable":
+		return true
+	default:
+		return false
+	}
+}
+
+func validCompletionShell(shell string) bool {
+	switch shell {
+	case "bash", "zsh", "fish":
 		return true
 	default:
 		return false
@@ -402,6 +421,8 @@ func usage(out io.Writer) {
                        --list      print every concrete Host alias
   sshc ssh <alias> --non-interactive -- <command>
                        run an SSH command without an interactive terminal
+  sshc completion bash|zsh|fish
+                       print shell completion that includes SSH Host aliases
   sshc info <alias> [--json]
                        print the resolved SSH target without connecting
   sshc sync [--json]   print synchronization status from the running engine
@@ -469,7 +490,7 @@ func validHelpTopic(topic string) bool {
 		serialSubcommand, telnetSubcommand, OpenSubcommand, StatusSubcommand, updateSubcommand,
 		serviceSubcommand, "service install", "service status", "service disable",
 		vaultSubcommand, "vault status", "vault create", "vault unlock", "vault lock",
-		"vault change-password", versionSubcommand:
+		"vault change-password", completionSubcommand, versionSubcommand:
 		return true
 	default:
 		return false
@@ -496,6 +517,12 @@ Start the engine in the foreground.
   sshc ssh <alias> --non-interactive -- <command>
 
 Choose or connect to a Host alias from ~/.ssh/config.
+`,
+		completionSubcommand: `usage:
+  sshc completion bash|zsh|fish
+
+Print a shell completion script. Host aliases for sshc ssh are read dynamically
+from the same ~/.ssh/config and Include files as sshc itself.
 `,
 		infoSubcommand: `usage:
   sshc info <alias> [--json]
