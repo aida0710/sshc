@@ -20,9 +20,10 @@ export type LiveWorkspaceSnapshot = {
   root: LiveWorkspaceNode;
   focusedPaneId: string;
   focusModePaneId: string | null;
+  name: string;
 };
 
-type PersistedLiveWorkspace = LiveWorkspaceSnapshot & { version: 1 };
+type PersistedLiveWorkspace = Omit<LiveWorkspaceSnapshot, "name"> & { version: 1; name?: string };
 
 export function browserSessionStorage(): StorageAccess | null {
   try {
@@ -36,6 +37,7 @@ export function saveLiveWorkspace(
   storage: StorageAccess | null,
   layout: LayoutState | null,
   focusModePaneId: string | null,
+  name = "",
 ): void {
   if (storage === null) return;
   try {
@@ -49,6 +51,7 @@ export function saveLiveWorkspace(
       root,
       focusedPaneId: layout.focusedPaneId,
       focusModePaneId,
+      ...(validWorkspaceName(name) && name.trim() !== "" ? { name: name.trim() } : {}),
     };
     storage.setItem(liveWorkspaceStorageKey, JSON.stringify(value));
   } catch {
@@ -75,6 +78,7 @@ export function loadLiveWorkspace(
       focusModePaneId: value.focusModePaneId !== null && paneIds.has(value.focusModePaneId)
         ? value.focusModePaneId
         : null,
+      name: value.name?.trim() ?? "",
     };
   } catch {
     return discard(storage);
@@ -96,6 +100,7 @@ function snapshotNode(root: RuntimeNode): LiveWorkspaceNode | null {
 function parseSnapshot(value: unknown): PersistedLiveWorkspace | null {
   if (!isRecord(value) || value.version !== 1 || !validIdentifier(value.focusedPaneId)) return null;
   if (value.focusModePaneId !== null && !validIdentifier(value.focusModePaneId)) return null;
+  if (value.name !== undefined && !validWorkspaceName(value.name)) return null;
   const seenPaneIds = new Set<string>();
   const seenSessionIds = new Set<string>();
   const root = parseNode(value.root, 0, seenPaneIds, seenSessionIds);
@@ -105,7 +110,12 @@ function parseSnapshot(value: unknown): PersistedLiveWorkspace | null {
     root,
     focusedPaneId: value.focusedPaneId,
     focusModePaneId: value.focusModePaneId,
+    ...(value.name === undefined ? {} : { name: value.name.trim() }),
   };
+}
+
+function validWorkspaceName(value: unknown): value is string {
+  return typeof value === "string" && value.length <= 256 && !/[\u0000-\u001f\u007f]/u.test(value);
 }
 
 function parseNode(

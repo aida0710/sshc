@@ -122,6 +122,7 @@ describe("TerminalWorkspace pane movement", () => {
       },
       focusedPaneId: "pane-secondary",
       focusModePaneId: null,
+      name: "Build workers",
     }));
     const active = vi.fn();
 
@@ -142,6 +143,7 @@ describe("TerminalWorkspace pane movement", () => {
     ]));
     const separator = screen.getByRole("separator");
     expect(separator.previousElementSibling).toHaveStyle({ flexBasis: "65%" });
+    expect(screen.getByText("Build workers")).toBeVisible();
     expect(active).toHaveBeenCalledWith(secondary.id);
   });
 
@@ -319,6 +321,40 @@ describe("TerminalWorkspace pane movement", () => {
       name: "edge + database",
       memberSessionIds: [primary.id, secondary.id],
       focusedSessionId: secondary.id,
+    })));
+  });
+
+  it("renames an unsaved live workspace and publishes the new name", async () => {
+    const changed = vi.fn();
+    const prompt = vi.spyOn(window, "prompt").mockReturnValue("Build workers");
+    function LocalHarness() {
+      const [active, setActive] = useState(localPrimary.id);
+      return <TerminalWorkspace
+        sessions={[localPrimary, localSecondary]}
+        activeSessionId={active}
+        onActive={setActive}
+        onOpenAlias={vi.fn()}
+        onOpenShell={vi.fn()}
+        onLiveWorkspaceChange={changed}
+        renderTerminal={(session) => <div>{session.title}</div>}
+      />;
+    }
+
+    const { container } = render(<LocalHarness />);
+    dockConnectedSession(container, localSecondary.id);
+    await waitFor(() => expect(container.querySelectorAll("[data-workspace-pane]")).toHaveLength(2));
+    expect(screen.getByText("localhost")).toBeVisible();
+
+    await userEvent.click(screen.getByRole("button", { name: "Rename workspace" }));
+
+    expect(prompt).toHaveBeenCalledWith("Live workspace name", "localhost");
+    expect(screen.getByText("Build workers")).toBeVisible();
+    await waitFor(() => expect(changed).toHaveBeenCalledWith(expect.objectContaining({
+      name: "Build workers",
+      memberSessionIds: [localPrimary.id, localSecondary.id],
+    })));
+    await waitFor(() => expect(JSON.parse(window.sessionStorage.getItem(liveWorkspaceStorageKey) ?? "{}")).toEqual(expect.objectContaining({
+      name: "Build workers",
     })));
   });
 

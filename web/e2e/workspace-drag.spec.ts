@@ -201,6 +201,14 @@ test("selects the whole local console row and docks local shells", async ({ page
 
   await expect(page.locator("[data-workspace-pane]")).toHaveCount(2);
   await expect(page.locator("[data-pane-toolbar]")).toHaveCount(2);
+  page.once("dialog", async (dialog) => {
+    expect(dialog.message()).toBe("Live workspace name");
+    expect(dialog.defaultValue()).toBe("localhost");
+    await dialog.accept("Build workers");
+  });
+  await page.getByRole("button", { name: "Rename workspace" }).click();
+  await expect(page.locator("[data-desktop-workspace-controls]").getByText("Build workers", { exact: true })).toBeVisible();
+  await expect(navigation.getByText("Build workers", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Send command…" }).click();
   const broadcast = page.getByRole("dialog", { name: "Send to connected terminals" });
   await expect(broadcast).toContainText("localhost");
