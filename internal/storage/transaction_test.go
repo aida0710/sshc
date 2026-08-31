@@ -156,6 +156,133 @@ func TestCommitAppliesAndChecksExecutableMode(t *testing.T) {
 	}
 }
 
+func TestRecoveryDistinguishesAndRollsBackAModeOnlyWrite(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows does not expose Unix executable permission bits")
+	}
+	workspace := newTestWorkspace(t)
+	modeOnly := writeWorkspaceFile(t, workspace, "mode-only", "same bytes\n", FilePermission)
+	second := writeWorkspaceFile(t, workspace, "second.conf", "before\n", FilePermission)
+	id := commitWithStaleJournal(t, workspace, 0x81, Request{
+		Operation: "sync.pull",
+		Changes: []Change{
+			{
+				Path: modeOnly, Contents: []byte("same bytes\n"), Mode: DirectoryPermission,
+				Precondition: Precondition{Exists: true, Digest: Digest([]byte("same bytes\n")), Mode: FilePermission},
+			},
+			{
+				Path: second, Contents: []byte("after\n"),
+				Precondition: Precondition{Exists: true, Digest: Digest([]byte("before\n")), Mode: FilePermission},
+			},
+		},
+	})
+	if info, err := os.Lstat(modeOnly); err != nil || info.Mode().Perm() != DirectoryPermission {
+		t.Fatalf("applied mode = %v, %v; want 0700", info, err)
+	}
+
+	restarted := restartedManager(t, workspace)
+	if item := reconciledPending(t, restarted, id, 1); !item.CanRollback {
+		t.Fatalf("mode-only write was not recoverable: %#v", item)
+	}
+	if err := restarted.Rollback(id); err != nil {
+		t.Fatal(err)
+	}
+	if info, err := os.Lstat(modeOnly); err != nil || info.Mode().Perm() != FilePermission {
+		t.Fatalf("rolled-back mode = %v, %v; want 0600", info, err)
+	}
+	assertFileContents(t, modeOnly, "same bytes\n")
+	assertFileContents(t, second, "before\n")
+}
+
+func TestRecoveryCompletesAfterAModeOnlyWriteWithStaleProgress(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows does not expose Unix executable permission bits")
+	}
+	workspace := newTestWorkspace(t)
+	modeOnly := writeWorkspaceFile(t, workspace, "mode-only", "same bytes\n", FilePermission)
+	second := writeWorkspaceFile(t, workspace, "second.conf", "before\n", FilePermission)
+	id := commitWithStaleJournal(t, workspace, 0x82, Request{
+		Operation: "sync.pull",
+		Changes: []Change{
+			{
+				Path: modeOnly, Contents: []byte("same bytes\n"), Mode: DirectoryPermission,
+				Precondition: Precondition{Exists: true, Digest: Digest([]byte("same bytes\n")), Mode: FilePermission},
+			},
+			{
+				Path: second, Contents: []byte("after\n"),
+				Precondition: Precondition{Exists: true, Digest: Digest([]byte("before\n")), Mode: FilePermission},
+			},
+		},
+	})
+
+	restarted := restartedManager(t, workspace)
+	reconciledPending(t, restarted, id, 1)
+	if err := restarted.Complete(id); err != nil {
+		t.Fatal(err)
+	}
+	if info, err := os.Lstat(modeOnly); err != nil || info.Mode().Perm() != DirectoryPermission {
+		t.Fatalf("completed mode = %v, %v; want 0700", info, err)
+	}
+	assertFileContents(t, second, "after\n")
+}
+
+func TestReleasedV1PendingJournalCompletesAndRollsBack(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		run  func(*Manager, string) error
+		want string
+	}{
+		{name: "complete", run: func(manager *Manager, id string) error { return manager.Complete(id) }, want: "after\n"},
+		{name: "rollback", run: func(manager *Manager, id string) error { return manager.Rollback(id) }, want: "before\n"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			workspace := newTestWorkspace(t)
+			first := writeWorkspaceFile(t, workspace, "first.conf", "before\n", FilePermission)
+			second := writeWorkspaceFile(t, workspace, "second.conf", "before\n", FilePermission)
+			id := commitWithStaleJournal(t, workspace, 0x83, Request{
+				Operation: "config.save",
+				Changes: []Change{
+					{Path: first, Contents: []byte("after\n"), Precondition: Precondition{Exists: true, Digest: Digest([]byte("before\n")), Mode: FilePermission}},
+					{Path: second, Contents: []byte("after\n"), Precondition: Precondition{Exists: true, Digest: Digest([]byte("before\n")), Mode: FilePermission}},
+				},
+			})
+			journalPath := filepath.Join(workspace.StateDir(), journalDirectoryName, id+".json")
+			downgradeJournalRecordToV1(t, journalPath)
+
+			restarted := restartedManager(t, workspace)
+			reconciledPending(t, restarted, id, 1)
+			if err := test.run(restarted, id); err != nil {
+				t.Fatal(err)
+			}
+			assertFileContents(t, first, test.want)
+			assertFileContents(t, second, test.want)
+		})
+	}
+}
+
+func TestReleasedV1HistoryRemainsReadable(t *testing.T) {
+	manager, workspace := newTestManager(t)
+	target := writeWorkspaceFile(t, workspace, "config", "before\n", FilePermission)
+	result, err := manager.Commit(Request{
+		Operation: "config.save",
+		Changes: []Change{{
+			Path: target, Contents: []byte("after\n"),
+			Precondition: Precondition{Exists: true, Digest: Digest([]byte("before\n")), Mode: FilePermission},
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	downgradeJournalRecordToV1(t, filepath.Join(workspace.StateDir(), historyDirectoryName, result.ID+".json"))
+	history, err := manager.History()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(history) != 1 || history[0].ID != result.ID || history[0].Status != statusCompleted {
+		t.Fatalf("v1 history = %#v", history)
+	}
+}
+
 func TestAfterCommitReportsOnlySuccessfulMutations(t *testing.T) {
 	manager, workspace := newTestManager(t)
 	path := filepath.Join(workspace.Root(), "config")
@@ -762,6 +889,29 @@ func commitWithStaleJournal(t *testing.T, workspace *Workspace, filler byte, req
 	}
 	workspace.fileSystem = OSFileSystem{}
 	return result.ID
+}
+
+func downgradeJournalRecordToV1(t *testing.T, path string) {
+	t.Helper()
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var record journalRecord
+	if err := json.Unmarshal(body, &record); err != nil {
+		t.Fatal(err)
+	}
+	record.Version = 1
+	for index := range record.Entries {
+		record.Entries[index].PreviousMode = 0
+	}
+	body, err = json.Marshal(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, body, FilePermission); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func restartedManager(t *testing.T, workspace *Workspace) *Manager {

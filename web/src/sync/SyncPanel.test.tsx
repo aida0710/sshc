@@ -556,7 +556,16 @@ describe("SyncPanel", () => {
     const api = buildApi(configured, {
       ...nothingToDo,
       applied: false,
-      conflicts: [{ path: "config", changedHere: true, changedThere: true }],
+      conflicts: [
+        {
+          path: "config",
+          changedHere: true,
+          changedThere: true,
+          baseMode: "0600",
+          localMode: "0700",
+          remoteMode: "0600",
+        },
+      ],
       written: [],
       removed: [],
     });
@@ -568,6 +577,11 @@ describe("SyncPanel", () => {
 
     expect(
       await screen.findByText(/changed on this machine and another machine/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Permissions: last sync 0600 · this machine 0700 · remote 0600",
+      ),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Apply the snapshot" }),

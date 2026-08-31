@@ -503,6 +503,62 @@ func TestPullResponseReportsEachDownloadAndTheAppliedOperation(t *testing.T) {
 	}
 }
 
+func TestSyncConflictResponseIncludesPermissionChanges(t *testing.T) {
+	for _, test := range []struct {
+		name              string
+		conflict          remotesync.Conflict
+		changedHere       bool
+		changedThere      bool
+		remoteModePresent bool
+	}{
+		{
+			name: "local permission and remote contents",
+			conflict: remotesync.Conflict{
+				Path: "keys/id_ed25519", BaseDigest: "same", LocalDigest: "same", RemoteDigest: "different",
+				BaseMode: "0600", LocalMode: "0700", RemoteMode: "0600",
+			},
+			changedHere: true, changedThere: true, remoteModePresent: true,
+		},
+		{
+			name: "remote permission only",
+			conflict: remotesync.Conflict{
+				Path: "script", BaseDigest: "same", LocalDigest: "same", RemoteDigest: "same",
+				BaseMode: "0600", LocalMode: "0600", RemoteMode: "0700",
+			},
+			changedHere: false, changedThere: true, remoteModePresent: true,
+		},
+		{
+			name: "remote deletion",
+			conflict: remotesync.Conflict{
+				Path: "deleted", BaseDigest: "same", LocalDigest: "same",
+				BaseMode: "0600", LocalMode: "0600",
+			},
+			changedHere: false, changedThere: true, remoteModePresent: false,
+		},
+		{
+			name: "created on both sides",
+			conflict: remotesync.Conflict{
+				Path: "new", LocalDigest: "local", RemoteDigest: "remote",
+				LocalMode: "0600", RemoteMode: "0700",
+			},
+			changedHere: true, changedThere: true, remoteModePresent: true,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			response := syncConflictResponse(test.conflict)
+			if response.ChangedHere != test.changedHere || response.ChangedThere != test.changedThere {
+				t.Fatalf("changed flags = here %t, there %t", response.ChangedHere, response.ChangedThere)
+			}
+			if (response.RemoteMode != nil) != test.remoteModePresent {
+				t.Fatalf("remote mode = %v, present want %t", response.RemoteMode, test.remoteModePresent)
+			}
+			if test.conflict.LocalMode != "" && (response.LocalMode == nil || *response.LocalMode != test.conflict.LocalMode) {
+				t.Fatalf("local mode = %v, want %q", response.LocalMode, test.conflict.LocalMode)
+			}
+		})
+	}
+}
+
 func TestPullCanPreviewAndApplyRemoteWinsForAConflictingWorkspace(t *testing.T) {
 	bucket := &measuredSyncBucket{}
 	_, producer, _ := measuredSyncEngine(t, bucket, map[string]string{"config": "Host remote\n"})

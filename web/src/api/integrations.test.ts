@@ -832,6 +832,40 @@ describe("integrationsApi remote sync measurements", () => {
     ).resolves.toEqual(response);
   });
 
+  it("accepts synchronized permission details and rejects other modes", async () => {
+    const response = {
+      applied: false,
+      conflicts: [
+        {
+          path: "config",
+          changedHere: true,
+          changedThere: true,
+          baseMode: "0600",
+          localMode: "0700",
+          remoteMode: "0600",
+        },
+      ],
+      written: [],
+      removed: [],
+      summary,
+      downloadedBytes: 900,
+      completedAt: "2026-08-12T01:03:00Z",
+      remoteETag: '"generation-1"',
+      remoteRevision: "a".repeat(64),
+    };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(response)));
+    await expect(integrationsApi.pullSnapshot(false)).resolves.toEqual(response);
+
+    const invalid = {
+      ...response,
+      conflicts: [{ ...response.conflicts[0], localMode: "0644" }],
+    };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(invalid)));
+    await expect(integrationsApi.pullSnapshot(false)).rejects.toThrow(
+      "invalid_response",
+    );
+  });
+
   it("marks an explicit receive-only remote-head preview and apply", async () => {
     const response = {
       applied: false,

@@ -1279,9 +1279,12 @@ type SyncBucketStatus struct {
 
 // SyncConflict defines model for SyncConflict.
 type SyncConflict struct {
-	ChangedHere  bool   `json:"changedHere"`
-	ChangedThere bool   `json:"changedThere"`
-	Path         string `json:"path"`
+	BaseMode     *string `json:"baseMode,omitempty"`
+	ChangedHere  bool    `json:"changedHere"`
+	ChangedThere bool    `json:"changedThere"`
+	LocalMode    *string `json:"localMode,omitempty"`
+	Path         string  `json:"path"`
+	RemoteMode   *string `json:"remoteMode,omitempty"`
 }
 
 // SyncDirection defines model for SyncDirection.

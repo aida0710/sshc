@@ -1281,6 +1281,8 @@ export const ja = {
   "sync.previewHeading": "取得した場合の変更",
   "sync.conflictExplain":
     "これらのファイルは、このマシンと他のマシンの両方で変更されています。同じ設定ブロックを自動的に統合できないため、何も適用していません。設定ファイル画面で手動で統合するか、採用する内容を持つマシンから送信してください。",
+  "sync.conflictPermissions":
+    "権限: 前回の同期 {base}・このマシン {local}・リモート {remote}",
   "sync.keepMine": "このマシンの内容を残す",
   "sync.takeTheirs": "他のマシンの内容を使用",
   "sync.wouldWrite": "{count} 個のファイルが書き込まれます:",
