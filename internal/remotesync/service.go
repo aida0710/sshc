@@ -317,26 +317,7 @@ type Service struct {
 	newOrigin    func() (string, error)
 	historySeq   uint64
 
-	// OpenVault と SealVault は、vault 文書の復号と受信側での再暗号化を抽象化する。
-	// secret パッケージへの依存を避けるため、関数として注入する。
-	OpenVault func() ([]byte, error)
-	SealVault func(document []byte) ([]byte, error)
-	// EmptyVaultDocument returns the canonical logical empty vault. It is then
-	// passed through SealVault so the receiving installation keeps its own
-	// master-key generation while adopting a credential tombstone.
-	EmptyVaultDocument func() ([]byte, error)
-	// VaultAdopted は、vault の置換後にメモリ上の状態を再読込する通知。
-	VaultAdopted func() error
-	OpenSnippets func() ([]byte, error)
-	SealSnippets func(document []byte) ([]byte, error)
-	// SecretMutation holds the master-key generation while logical protected
-	// documents are sealed and committed during pull.
-	SecretMutation func(func() error) error
-	// StableSnapshot runs Collect's complete local read while application-level
-	// secret and workspace mutation barriers are held. A nil hook preserves the
-	// standalone package behaviour used by tests and embedders that have no
-	// shared mutation coordinator.
-	StableSnapshot func(func() error) error
+	integrations IntegrationHooks
 
 	// operationMu serializes every stateful sync operation, including a complete
 	// automatic receive/send cycle. binding has a separate, short-lived lock so
@@ -351,12 +332,61 @@ type Service struct {
 	bindingVersion uint64
 }
 
+// IntegrationHooks binds remote synchronization to the encrypted local
+// documents and mutation barriers owned by other packages. It is supplied once
+// at construction and is immutable after the Service is published.
+type IntegrationHooks struct {
+	OpenVault          func() ([]byte, error)
+	SealVault          func(document []byte) ([]byte, error)
+	EmptyVaultDocument func() ([]byte, error)
+	VaultAdopted       func() error
+	OpenSnippets       func() ([]byte, error)
+	SealSnippets       func(document []byte) ([]byte, error)
+	SecretMutation     func(func() error) error
+	StableSnapshot     func(func() error) error
+}
+
+func (hooks IntegrationHooks) validate() error {
+	required := []struct {
+		name    string
+		present bool
+	}{
+		{"OpenVault", hooks.OpenVault != nil},
+		{"SealVault", hooks.SealVault != nil},
+		{"EmptyVaultDocument", hooks.EmptyVaultDocument != nil},
+		{"VaultAdopted", hooks.VaultAdopted != nil},
+		{"OpenSnippets", hooks.OpenSnippets != nil},
+		{"SealSnippets", hooks.SealSnippets != nil},
+		{"SecretMutation", hooks.SecretMutation != nil},
+		{"StableSnapshot", hooks.StableSnapshot != nil},
+	}
+	for _, dependency := range required {
+		if !dependency.present {
+			return fmt.Errorf("remotesync integration %s is required", dependency.name)
+		}
+	}
+	return nil
+}
+
 // NewService は、未設定のサービスを返す。
 func NewService(workspace *storage.Workspace, transactions *storage.Manager,
 	now func() string, newOrigin func() (string, error)) *Service {
 	return &Service{
 		workspace: workspace, transactions: transactions, now: now, newOrigin: newOrigin,
 	}
+}
+
+// NewIntegratedService constructs the production service. Unlike NewService,
+// which is the standalone core used by focused package tests, this constructor
+// rejects incomplete cross-package wiring before the engine starts.
+func NewIntegratedService(workspace *storage.Workspace, transactions *storage.Manager,
+	now func() string, newOrigin func() (string, error), integrations IntegrationHooks) (*Service, error) {
+	if err := integrations.validate(); err != nil {
+		return nil, err
+	}
+	service := NewService(workspace, transactions, now, newOrigin)
+	service.integrations = integrations
+	return service, nil
 }
 
 // Configure は、この実行のバケットと資格情報を設定する。
@@ -572,8 +602,8 @@ func (s *Service) Collect() (Manifest, map[string][]byte, error) {
 		manifest, contents, err = s.collect()
 		return err
 	}
-	if s.StableSnapshot != nil {
-		if err := s.StableSnapshot(collect); err != nil {
+	if s.integrations.StableSnapshot != nil {
+		if err := s.integrations.StableSnapshot(collect); err != nil {
 			return Manifest{}, nil, err
 		}
 	} else if err := collect(); err != nil {
@@ -583,7 +613,7 @@ func (s *Service) Collect() (Manifest, map[string][]byte, error) {
 }
 
 func (s *Service) collect() (Manifest, map[string][]byte, error) {
-	if s.OpenVault == nil {
+	if s.integrations.OpenVault == nil {
 		return Manifest{}, nil, ErrVaultCodec
 	}
 	ignoreRules, _, _, err := s.loadIgnoreRules()
@@ -628,7 +658,7 @@ func (s *Service) collect() (Manifest, map[string][]byte, error) {
 	}
 	// 保管庫は中身として載る。ディスク上のどのファイルとも対応しないので、
 	// ここだけは読むのではなく尋ねる。
-	document, err := s.OpenVault()
+	document, err := s.integrations.OpenVault()
 	if err != nil {
 		return Manifest{}, nil, err
 	}
@@ -642,8 +672,8 @@ func (s *Service) collect() (Manifest, map[string][]byte, error) {
 			Path: TravelPath, SHA256: Digest(document), Mode: "0600",
 		})
 	}
-	if s.OpenSnippets != nil {
-		document, err := s.OpenSnippets()
+	if s.integrations.OpenSnippets != nil {
+		document, err := s.integrations.OpenSnippets()
 		if err != nil {
 			return Manifest{}, nil, err
 		}
@@ -1458,8 +1488,12 @@ func snapshotSummary(manifest Manifest, contents map[string][]byte, snapshotByte
 }
 
 // PullResult は、適用する前の、pull が行うであろう内容。
+//
+// 永続化トランザクションは remotesync の実装詳細であり、transport へ公開しない。
+// Written と Removed は利用者へ表示できるワークスペース相対パスである。
 type PullResult struct {
-	Request         storage.Request
+	Written         []string
+	Removed         []string
 	Conflicts       []Conflict
 	Manifest        Manifest
 	Summary         SnapshotSummary
@@ -1474,6 +1508,19 @@ type PullResult struct {
 	bindingVersion  uint64
 	localState      historyStateSnapshot
 	liveMissing     bool
+	request         storage.Request
+}
+
+func (s *Service) pullPaths(request storage.Request) (written, removed []string) {
+	written = make([]string, 0, len(request.Changes))
+	for _, change := range request.Changes {
+		written = append(written, s.DisplayPath(change.Path))
+	}
+	removed = make([]string, 0, len(request.Removals))
+	for _, removal := range request.Removals {
+		removed = append(removed, s.DisplayPath(removal.Path))
+	}
+	return written, removed
 }
 
 // Pull はスナップショットを取得し、それを適用すると何が変わるかを算出する。
@@ -1598,8 +1645,8 @@ func (s *Service) pullWithRemoteAcceptance(
 		local, readErr = s.localDigests(manifest, base, ignoreRules)
 		return readErr
 	}
-	if s.StableSnapshot != nil {
-		err = s.StableSnapshot(readLocal)
+	if s.integrations.StableSnapshot != nil {
+		err = s.integrations.StableSnapshot(readLocal)
 	} else {
 		err = readLocal()
 	}
@@ -1614,13 +1661,14 @@ func (s *Service) pullWithRemoteAcceptance(
 	if err != nil && !errors.Is(err, ErrNothingToApply) {
 		return PullResult{}, err
 	}
+	written, removed := s.pullPaths(request)
 	return PullResult{
-		Request: request, Conflicts: conflicts, Manifest: manifest,
+		Written: written, Removed: removed, Conflicts: conflicts, Manifest: manifest,
 		Summary:         snapshotSummary(manifest, contents, len(object.Body)),
 		DownloadedBytes: int64(len(object.Body)), CompletedAt: s.now(),
 		ETag: stateETag, Origin: manifest.Origin, objectKey: objectKey, target: targetID(binding.config),
 		sourceKey: sourceKey, sourceETag: object.ETag, bindingVersion: bindingVersion,
-		localState: localState, liveMissing: liveMissing,
+		localState: localState, liveMissing: liveMissing, request: request,
 	}, err
 }
 
@@ -1736,8 +1784,8 @@ func (s *Service) validatePullForApply(ctx context.Context, result PullResult) e
 }
 
 func (s *Service) apply(result PullResult) error {
-	if s.SecretMutation != nil {
-		return s.SecretMutation(func() error { return s.applyWithSecretGeneration(result) })
+	if s.integrations.SecretMutation != nil {
+		return s.integrations.SecretMutation(func() error { return s.applyWithSecretGeneration(result) })
 	}
 	return s.applyWithSecretGeneration(result)
 }
@@ -1754,17 +1802,17 @@ func (s *Service) applyWithSecretGeneration(result PullResult) error {
 	}
 	// PullResult is a reusable preview. Keep its logical plaintext request
 	// untouched and seal a private copy only at the final commit boundary.
-	result.Request.Changes = slices.Clone(result.Request.Changes)
-	result.Request.Removals = slices.Clone(result.Request.Removals)
-	result.Request.Directories = slices.Clone(result.Request.Directories)
-	if err := s.exchangeVault(&result.Request); err != nil {
+	result.request.Changes = slices.Clone(result.request.Changes)
+	result.request.Removals = slices.Clone(result.request.Removals)
+	result.request.Directories = slices.Clone(result.request.Directories)
+	if err := s.exchangeVault(&result.request); err != nil {
 		return err
 	}
-	if err := s.exchangeSnippets(&result.Request); err != nil {
+	if err := s.exchangeSnippets(&result.request); err != nil {
 		return err
 	}
-	written := len(result.Request.Changes)
-	removed := len(result.Request.Removals)
+	written := len(result.request.Changes)
+	removed := len(result.request.Removals)
 	current, err := s.readState()
 	if err != nil {
 		return err
@@ -1789,24 +1837,24 @@ func (s *Service) applyWithSecretGeneration(result PullResult) error {
 	if err != nil {
 		return err
 	}
-	if result.Request.Operation == "" {
-		result.Request.Operation = "sync.pull"
+	if result.request.Operation == "" {
+		result.request.Operation = "sync.pull"
 	}
 	// State is deliberately the last write in the same journal as the workspace
 	// files. A crash can therefore be completed from one durable transaction and
 	// cannot leave a newly applied workspace paired with an older sync baseline.
-	result.Request.Changes = append(result.Request.Changes, stateChange)
+	result.request.Changes = append(result.request.Changes, stateChange)
 	// 別のマシンからのスナップショットは、このマシンにはないかもしれない
 	// ディレクトリ（connections/work/、keys/work/）を指定する。stateの親も含め、
 	// すべて同じrequestへ載せる。
-	result.Request.Directories = append(result.Request.Directories,
-		changeDirectories(s.workspace.Root(), result.Request.Changes)...)
-	if _, err := s.transactions.Commit(result.Request); err != nil {
+	result.request.Directories = append(result.request.Directories,
+		changeDirectories(s.workspace.Root(), result.request.Changes)...)
+	if _, err := s.transactions.Commit(result.request); err != nil {
 		return err
 	}
 	// 保管庫を置き換えたなら、それを配っている側に読み直させる。
-	if s.VaultAdopted != nil && replacesVault(s.workspace.Root(), result.Request) {
-		if err := s.VaultAdopted(); err != nil {
+	if s.integrations.VaultAdopted != nil && replacesVault(s.workspace.Root(), result.request) {
+		if err := s.integrations.VaultAdopted(); err != nil {
 			return err
 		}
 	}
@@ -1823,13 +1871,13 @@ func (s *Service) exchangeSnippets(request *storage.Request) error {
 		if request.Changes[index].Path != local {
 			continue
 		}
-		if s.SealSnippets == nil {
+		if s.integrations.SealSnippets == nil {
 			return ErrVaultCodec
 		}
 		if err := s.requireSnippetPrecondition(local, request.Changes[index].Precondition); err != nil {
 			return err
 		}
-		sealed, err := s.SealSnippets(request.Changes[index].Contents)
+		sealed, err := s.integrations.SealSnippets(request.Changes[index].Contents)
 		if err != nil {
 			return err
 		}
@@ -1865,10 +1913,10 @@ func (s *Service) exchangeSnippets(request *storage.Request) error {
 }
 
 func (s *Service) requireSnippetPrecondition(path string, expected storage.Precondition) error {
-	if s.OpenSnippets == nil {
+	if s.integrations.OpenSnippets == nil {
 		return ErrVaultCodec
 	}
-	document, err := s.OpenSnippets()
+	document, err := s.integrations.OpenSnippets()
 	if err != nil {
 		return err
 	}
@@ -1919,8 +1967,8 @@ func (s *Service) localDigests(remote Manifest, base *Manifest, ignoreRules Igno
 			continue
 		}
 		// TravelPath はディスク上に存在しないため、復号済み vault 文書の digest を使う。
-		if path == TravelPath && s.OpenVault != nil {
-			document, err := s.OpenVault()
+		if path == TravelPath && s.integrations.OpenVault != nil {
+			document, err := s.integrations.OpenVault()
 			if err != nil {
 				return nil, err
 			}
@@ -1929,8 +1977,8 @@ func (s *Service) localDigests(remote Manifest, base *Manifest, ignoreRules Igno
 			}
 			continue
 		}
-		if path == SnippetsPath && s.OpenSnippets != nil {
-			document, err := s.OpenSnippets()
+		if path == SnippetsPath && s.integrations.OpenSnippets != nil {
+			document, err := s.integrations.OpenSnippets()
 			if err != nil {
 				return nil, err
 			}
@@ -2203,7 +2251,7 @@ func (s *Service) stageVault(request *storage.Request) error {
 // exchangeVault validates the logical preview against the current unlocked
 // vault, then seals it with the exact master-key generation held by apply.
 func (s *Service) exchangeVault(request *storage.Request) error {
-	if s.SealVault == nil {
+	if s.integrations.SealVault == nil {
 		return ErrVaultCodec
 	}
 	local := filepath.Join(s.workspace.Root(), filepath.FromSlash(VaultPath))
@@ -2217,16 +2265,16 @@ func (s *Service) exchangeVault(request *storage.Request) error {
 		var sealed []byte
 		var err error
 		if len(request.Changes[index].Contents) == 0 {
-			if s.EmptyVaultDocument == nil {
+			if s.integrations.EmptyVaultDocument == nil {
 				return ErrVaultCodec
 			}
 			var empty []byte
-			empty, err = s.EmptyVaultDocument()
+			empty, err = s.integrations.EmptyVaultDocument()
 			if err == nil {
-				sealed, err = s.SealVault(empty)
+				sealed, err = s.integrations.SealVault(empty)
 			}
 		} else {
-			sealed, err = s.SealVault(request.Changes[index].Contents)
+			sealed, err = s.integrations.SealVault(request.Changes[index].Contents)
 		}
 		if err != nil {
 			return err
@@ -2245,10 +2293,10 @@ func (s *Service) exchangeVault(request *storage.Request) error {
 }
 
 func (s *Service) requireVaultPrecondition(path string, expected storage.Precondition) error {
-	if s.OpenVault == nil {
+	if s.integrations.OpenVault == nil {
 		return ErrVaultCodec
 	}
-	document, err := s.OpenVault()
+	document, err := s.integrations.OpenVault()
 	if err != nil {
 		return err
 	}

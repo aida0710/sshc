@@ -161,7 +161,10 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 		remoteKeys: remoteKeyService, recentStore: recentStore, recent: recentService,
 		sftp: sftpService, workspaces: workspaceService, snippets: snippetService, ssh: ssh,
 	}
-	services.sync, services.autoSync = buildSync(workspace, transactions, passwordService, snippetStore, dependencies)
+	services.sync, services.autoSync, err = buildSync(workspace, transactions, passwordService, snippetStore, dependencies)
+	if err != nil {
+		return nil, err
+	}
 	notifyLocalChange := func(operation string) {
 		// Remote apply and local synchronization bookkeeping are not user edits.
 		// Scheduling them would immediately echo a received snapshot back to S3.
@@ -197,22 +200,27 @@ func buildSync(
 	passwordService *secret.Service,
 	snippetStore *snippets.Store,
 	dependencies Dependencies,
-) (*remotesync.Service, *remotesync.Auto) {
-	syncService := remotesync.NewService(workspace, transactions,
+) (*remotesync.Service, *remotesync.Auto, error) {
+	syncService, err := remotesync.NewIntegratedService(workspace, transactions,
 		func() string { return time.Now().UTC().Format(time.RFC3339) },
 		newOrigin(dependencies.Random),
+		remotesync.IntegrationHooks{
+			OpenVault:          passwordService.TravelDocument,
+			SealVault:          passwordService.AdoptTravelDocument,
+			EmptyVaultDocument: passwordService.EmptyTravelDocument,
+			VaultAdopted:       passwordService.Reload,
+			OpenSnippets:       snippetStore.TravelDocument,
+			SealSnippets:       snippetStore.AdoptTravelDocument,
+			SecretMutation:     passwordService.WithStableSnapshot,
+			StableSnapshot: func(snapshot func() error) error {
+				return passwordService.WithStableSnapshot(func() error {
+					return transactions.WithSnapshot(snapshot)
+				})
+			},
+		},
 	)
-	syncService.OpenVault = passwordService.TravelDocument
-	syncService.SealVault = passwordService.AdoptTravelDocument
-	syncService.EmptyVaultDocument = passwordService.EmptyTravelDocument
-	syncService.VaultAdopted = passwordService.Reload
-	syncService.OpenSnippets = snippetStore.TravelDocument
-	syncService.SealSnippets = snippetStore.AdoptTravelDocument
-	syncService.SecretMutation = passwordService.WithStableSnapshot
-	syncService.StableSnapshot = func(snapshot func() error) error {
-		return passwordService.WithStableSnapshot(func() error {
-			return transactions.WithSnapshot(snapshot)
-		})
+	if err != nil {
+		return nil, nil, fmt.Errorf("remote sync integration: %w", err)
 	}
 
 	autoSync := remotesync.NewAuto(syncService, remotesync.AutoInterval,
@@ -259,7 +267,7 @@ func buildSync(
 		)
 	}
 
-	return syncService, autoSync
+	return syncService, autoSync, nil
 }
 
 // buildTerminals は、埋め込みターミナルのセッション台帳を組む。

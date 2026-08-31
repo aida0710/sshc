@@ -731,18 +731,12 @@ func (h SyncHandlers) Pull(c *echo.Context) error {
 		Applied: false, Summary: snapshotSummaryResponse(result.Summary),
 		DownloadedBytes: result.DownloadedBytes, CompletedAt: result.CompletedAt,
 		Conflicts:  make([]api.SyncConflict, 0, len(result.Conflicts)),
-		Written:    make([]string, 0, len(result.Request.Changes)),
-		Removed:    make([]string, 0, len(result.Request.Removals)),
+		Written:    append([]string(nil), result.Written...),
+		Removed:    append([]string(nil), result.Removed...),
 		RemoteETag: result.ETag, RemoteRevision: result.Manifest.Revision,
 	}
 	for _, conflict := range result.Conflicts {
 		response.Conflicts = append(response.Conflicts, syncConflictResponse(conflict))
-	}
-	for _, change := range result.Request.Changes {
-		response.Written = append(response.Written, h.Service.DisplayPath(change.Path))
-	}
-	for _, removal := range result.Request.Removals {
-		response.Removed = append(response.Removed, h.Service.DisplayPath(removal.Path))
 	}
 	if result.Origin != "" {
 		origin := result.Origin

@@ -302,6 +302,37 @@ type installation struct {
 	client *objectstore.Client
 }
 
+func defaultIntegrationHooks() remotesync.IntegrationHooks {
+	return remotesync.IntegrationHooks{
+		OpenVault:          func() ([]byte, error) { return nil, nil },
+		SealVault:          func(document []byte) ([]byte, error) { return document, nil },
+		EmptyVaultDocument: func() ([]byte, error) { return []byte("empty-vault"), nil },
+		VaultAdopted:       func() error { return nil },
+		OpenSnippets:       func() ([]byte, error) { return nil, nil },
+		SealSnippets:       func(document []byte) ([]byte, error) { return document, nil },
+		SecretMutation:     func(run func() error) error { return run() },
+		StableSnapshot:     func(run func() error) error { return run() },
+	}
+}
+
+func (i *installation) replaceIntegrations(t *testing.T, configure func(*remotesync.IntegrationHooks)) {
+	t.Helper()
+	hooks := defaultIntegrationHooks()
+	configure(&hooks)
+	counter := 0
+	service, err := remotesync.NewIntegratedService(i.workspace, i.manager,
+		func() string { return "2026-08-05T00:00:00Z" },
+		func() (string, error) { counter++; return "origin-" + string(rune('A'+counter)), nil },
+		hooks)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := service.Configure(i.config, i.creds, i.client); err != nil {
+		t.Fatal(err)
+	}
+	i.service = service
+}
+
 // direct は、設定フォームと同じやり方で、このインストールを同じバケットの別の
 // direction へ向け直す。
 func (i installation) direct(direction remotesync.Direction) {
@@ -342,12 +373,13 @@ func newInstallation(t *testing.T, bucket *fakeBucket, files map[string]string) 
 	manager := storage.NewManager(workspace, time.Now, rand.Reader)
 
 	counter := 0
-	service := remotesync.NewService(workspace, manager,
+	service, err := remotesync.NewIntegratedService(workspace, manager,
 		func() string { return "2026-08-05T00:00:00Z" },
-		func() (string, error) { counter++; return "origin-" + string(rune('A'+counter)), nil })
-	service.OpenVault = func() ([]byte, error) { return nil, nil }
-	service.SealVault = func(document []byte) ([]byte, error) { return document, nil }
-	service.EmptyVaultDocument = func() ([]byte, error) { return []byte("empty-vault"), nil }
+		func() (string, error) { counter++; return "origin-" + string(rune('A'+counter)), nil },
+		defaultIntegrationHooks())
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	server := httptest.NewTLSServer(bucket.handler())
 	t.Cleanup(server.Close)
@@ -495,10 +527,12 @@ func TestPersistedRestoreCannotOverwriteAnExplicitBinding(t *testing.T) {
 func TestCollectRunsInsideStableSnapshotHook(t *testing.T) {
 	installation := newInstallation(t, &fakeBucket{}, map[string]string{"config": "Host current\n"})
 	called := false
-	installation.service.StableSnapshot = func(snapshot func() error) error {
-		called = true
-		return snapshot()
-	}
+	installation.replaceIntegrations(t, func(hooks *remotesync.IntegrationHooks) {
+		hooks.StableSnapshot = func(snapshot func() error) error {
+			called = true
+			return snapshot()
+		}
+	})
 	if _, _, err := installation.service.Collect(); err != nil {
 		t.Fatal(err)
 	}
@@ -555,24 +589,28 @@ func TestSnippetDocumentIsResealedForTheReceivingMachine(t *testing.T) {
 		remotesync.SnippetsPath: "ciphertext-from-machine-a",
 	})
 	logical := []byte(`{"schemaVersion":1,"snippets":[{"command":"deploy --token=top-secret"}]}`)
-	first.service.OpenSnippets = func() ([]byte, error) { return logical, nil }
+	first.replaceIntegrations(t, func(hooks *remotesync.IntegrationHooks) {
+		hooks.OpenSnippets = func() ([]byte, error) { return logical, nil }
+	})
 	if _, err := first.service.Push(context.Background(), syncPassphrase, ""); err != nil {
 		t.Fatal(err)
 	}
 
 	second := newInstallation(t, bucket, map[string]string{})
-	second.service.OpenSnippets = func() ([]byte, error) { return nil, nil }
-	second.service.SealSnippets = func(document []byte) ([]byte, error) {
-		if !bytes.Equal(document, logical) {
-			t.Fatalf("SealSnippets received %q", document)
-		}
-		return []byte("ciphertext-from-machine-b"), nil
-	}
 	mutations := 0
-	second.service.SecretMutation = func(apply func() error) error {
-		mutations++
-		return apply()
-	}
+	second.replaceIntegrations(t, func(hooks *remotesync.IntegrationHooks) {
+		hooks.OpenSnippets = func() ([]byte, error) { return nil, nil }
+		hooks.SealSnippets = func(document []byte) ([]byte, error) {
+			if !bytes.Equal(document, logical) {
+				t.Fatalf("SealSnippets received %q", document)
+			}
+			return []byte("ciphertext-from-machine-b"), nil
+		}
+		hooks.SecretMutation = func(apply func() error) error {
+			mutations++
+			return apply()
+		}
+	})
 	result, err := second.service.Pull(context.Background(), syncPassphrase, remotesync.ResolveNone)
 	if err != nil {
 		t.Fatal(err)
@@ -592,15 +630,19 @@ func TestSnippetApplyRejectsALocalEditMadeAfterPreview(t *testing.T) {
 	bucket := &fakeBucket{}
 	first := newInstallation(t, bucket, map[string]string{remotesync.SnippetsPath: "ciphertext-a"})
 	remoteDocument := []byte(`{"schemaVersion":1,"snippets":[{"command":"remote"}]}`)
-	first.service.OpenSnippets = func() ([]byte, error) { return remoteDocument, nil }
+	first.replaceIntegrations(t, func(hooks *remotesync.IntegrationHooks) {
+		hooks.OpenSnippets = func() ([]byte, error) { return remoteDocument, nil }
+	})
 	if _, err := first.service.Push(context.Background(), syncPassphrase, ""); err != nil {
 		t.Fatal(err)
 	}
 
 	second := newInstallation(t, bucket, map[string]string{})
 	var localDocument []byte
-	second.service.OpenSnippets = func() ([]byte, error) { return localDocument, nil }
-	second.service.SealSnippets = func(document []byte) ([]byte, error) { return append([]byte("sealed:"), document...), nil }
+	second.replaceIntegrations(t, func(hooks *remotesync.IntegrationHooks) {
+		hooks.OpenSnippets = func() ([]byte, error) { return localDocument, nil }
+		hooks.SealSnippets = func(document []byte) ([]byte, error) { return append([]byte("sealed:"), document...), nil }
+	})
 	result, err := second.service.Pull(context.Background(), syncPassphrase, remotesync.ResolveNone)
 	if err != nil {
 		t.Fatal(err)
@@ -751,9 +793,9 @@ func TestPullKeepsAFileNewlyExcludedByTheRemoteRules(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, removal := range next.Request.Removals {
-		if strings.HasSuffix(removal.Path, "local.cache") {
-			t.Fatalf("excluded path scheduled for removal: %+v", next.Request)
+	for _, removal := range next.Removed {
+		if strings.HasSuffix(removal, "local.cache") {
+			t.Fatalf("excluded path scheduled for removal: %+v", next.Removed)
 		}
 	}
 	if err := receiver.service.Apply(next); err != nil {
@@ -1329,10 +1371,12 @@ func TestASnapshotCarriesTheVaultAndNotTheKeyToItsOwnBucket(t *testing.T) {
 		"connections/.sshc-staged":     "transaction temporary file",
 	})
 
-	installation.service.OpenVault = func() ([]byte, error) { return []byte(`{"schemaVersion":4}`), nil }
-	installation.service.OpenSnippets = func() ([]byte, error) {
-		return []byte(`{"schemaVersion":1,"snippets":[{"command":"top-secret"}]}`), nil
-	}
+	installation.replaceIntegrations(t, func(hooks *remotesync.IntegrationHooks) {
+		hooks.OpenVault = func() ([]byte, error) { return []byte(`{"schemaVersion":4}`), nil }
+		hooks.OpenSnippets = func() ([]byte, error) {
+			return []byte(`{"schemaVersion":1,"snippets":[{"command":"top-secret"}]}`), nil
+		}
+	})
 	exchanged, contents, err := installation.service.Collect()
 	if err != nil {
 		t.Fatalf("Collect = %v", err)
@@ -1379,11 +1423,14 @@ func TestASnapshotCarriesTheVaultAndNotTheKeyToItsOwnBucket(t *testing.T) {
 	}
 }
 
-func TestCollectRefusesAMissingVaultCodec(t *testing.T) {
+func TestIntegratedServiceRefusesAMissingVaultCodec(t *testing.T) {
 	installation := newInstallation(t, &fakeBucket{}, map[string]string{"config": "Host bastion\n"})
-	installation.service.OpenVault = nil
-	if _, _, err := installation.service.Collect(); !errors.Is(err, remotesync.ErrVaultCodec) {
-		t.Fatalf("Collect = %v, want ErrVaultCodec", err)
+	hooks := defaultIntegrationHooks()
+	hooks.OpenVault = nil
+	if _, err := remotesync.NewIntegratedService(installation.workspace, installation.manager,
+		func() string { return "2026-08-05T00:00:00Z" },
+		func() (string, error) { return "origin-test", nil }, hooks); err == nil {
+		t.Fatal("NewIntegratedService accepted a missing vault codec")
 	}
 }
 
@@ -2337,7 +2384,10 @@ func TestForcePushReplacesOnlyTheConfirmedRemoteGeneration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := string(pulled.Request.Changes[0].Contents); got != "Host replacement\n" {
+	if err := reader.service.Apply(pulled); err != nil {
+		t.Fatal(err)
+	}
+	if got := reader.read(t, "config"); got != "Host replacement\n" {
 		t.Fatalf("remote contents = %q", got)
 	}
 
@@ -2452,12 +2502,14 @@ func TestStatefulSyncOperationsAreSerializedByTheService(t *testing.T) {
 		}
 		return snapshot()
 	}
-	service := remotesync.NewService(machine.workspace, machine.manager,
+	hooks := defaultIntegrationHooks()
+	hooks.StableSnapshot = stableSnapshot
+	service, err := remotesync.NewIntegratedService(machine.workspace, machine.manager,
 		func() string { return "2026-08-25T02:00:00Z" },
-		func() (string, error) { return "serialized-origin", nil })
-	service.OpenVault = func() ([]byte, error) { return nil, nil }
-	service.SealVault = func(document []byte) ([]byte, error) { return document, nil }
-	service.StableSnapshot = stableSnapshot
+		func() (string, error) { return "serialized-origin", nil }, hooks)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := service.Configure(machine.config, machine.creds, machine.client); err != nil {
 		t.Fatal(err)
 	}
@@ -2509,12 +2561,14 @@ func TestConfigureWaitsForAnInFlightPush(t *testing.T) {
 		<-resume
 		return snapshot()
 	}
-	service := remotesync.NewService(workspace, manager,
+	hooks := defaultIntegrationHooks()
+	hooks.StableSnapshot = stableSnapshot
+	service, err := remotesync.NewIntegratedService(workspace, manager,
 		func() string { return "2026-08-05T00:00:00Z" },
-		func() (string, error) { return "origin-A", nil })
-	service.OpenVault = func() ([]byte, error) { return nil, nil }
-	service.SealVault = func(document []byte) ([]byte, error) { return document, nil }
-	service.StableSnapshot = stableSnapshot
+		func() (string, error) { return "origin-A", nil }, hooks)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	oldBucket, newBucket := &fakeBucket{}, &fakeBucket{}
 	oldServer := httptest.NewTLSServer(oldBucket.handler())
@@ -2631,7 +2685,10 @@ func TestPushReadsTheSynchronizationKeyAfterAConcurrentRotation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new head was not sealed by the current key: %v", err)
 	}
-	if got := string(result.Request.Changes[0].Contents); got != "Host changed\n" {
+	if err := reader.service.Apply(result); err != nil {
+		t.Fatal(err)
+	}
+	if got := reader.read(t, "config"); got != "Host changed\n" {
 		t.Fatalf("pushed config = %q", got)
 	}
 }
@@ -3002,16 +3059,18 @@ func TestChangingTheObjectKeyDoesNotStrandAMachineThatHasSynced(t *testing.T) {
 }
 
 // withVault は、この設置に本物の保管庫を与え、同期へvault 変換関数を繋ぐ。
-func withVault(t *testing.T, machine installation, master string) *secret.Service {
+func withVault(t *testing.T, machine *installation, master string) *secret.Service {
 	t.Helper()
 	secrets := secret.NewService(machine.workspace, machine.manager, time.Now)
 	if err := secrets.Initialise(master); err != nil {
 		t.Fatalf("Initialise: %v", err)
 	}
-	machine.service.OpenVault = secrets.TravelDocument
-	machine.service.SealVault = secrets.AdoptTravelDocument
-	machine.service.EmptyVaultDocument = secrets.EmptyTravelDocument
-	machine.service.VaultAdopted = secrets.Reload
+	machine.replaceIntegrations(t, func(hooks *remotesync.IntegrationHooks) {
+		hooks.OpenVault = secrets.TravelDocument
+		hooks.SealVault = secrets.AdoptTravelDocument
+		hooks.EmptyVaultDocument = secrets.EmptyTravelDocument
+		hooks.VaultAdopted = secrets.Reload
+	})
 	return secrets
 }
 
@@ -3021,7 +3080,7 @@ func withVault(t *testing.T, machine installation, master string) *secret.Servic
 func TestSavedPasswordsTravelWhileMasterPasswordsStayLocal(t *testing.T) {
 	bucket := &fakeBucket{}
 	first := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
-	sender := withVault(t, first, "the first machine's master")
+	sender := withVault(t, &first, "the first machine's master")
 	const binding = "abababababababababababababababababababababababababababababababab"
 	if err := sender.SetBound("bastion", "the password for bastion", binding); err != nil {
 		t.Fatal(err)
@@ -3049,7 +3108,7 @@ func TestSavedPasswordsTravelWhileMasterPasswordsStayLocal(t *testing.T) {
 
 	// 2 台目は、自分のマスターパスワードで自分の保管庫を作る。
 	second := newInstallation(t, bucket, map[string]string{})
-	receiver := withVault(t, second, "the second machine's own master")
+	receiver := withVault(t, &second, "the second machine's own master")
 	result, err := second.service.Pull(context.Background(), syncPassphrase, remotesync.ResolveNone)
 	if err != nil {
 		t.Fatalf("Pull = %v", err)
@@ -3082,7 +3141,7 @@ func TestSavedPasswordsTravelWhileMasterPasswordsStayLocal(t *testing.T) {
 func TestAnExplicitEmptyVaultClearsCredentialsOnAnotherInstallation(t *testing.T) {
 	bucket := &fakeBucket{}
 	first := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
-	sender := withVault(t, first, "the first machine's master")
+	sender := withVault(t, &first, "the first machine's master")
 	const binding = "abababababababababababababababababababababababababababababababab"
 	if err := sender.SetBound("bastion", "password to revoke", binding); err != nil {
 		t.Fatal(err)
@@ -3092,7 +3151,7 @@ func TestAnExplicitEmptyVaultClearsCredentialsOnAnotherInstallation(t *testing.T
 	}
 
 	second := newInstallation(t, bucket, map[string]string{})
-	receiver := withVault(t, second, "the second machine's master")
+	receiver := withVault(t, &second, "the second machine's master")
 	initial, err := second.service.Pull(context.Background(), syncPassphrase, remotesync.ResolveNone)
 	if err != nil {
 		t.Fatal(err)
@@ -3127,8 +3186,8 @@ func TestAnExplicitEmptyVaultClearsCredentialsOnAnotherInstallation(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(removal.Conflicts) != 0 || len(removal.Request.Removals) != 0 {
-		t.Fatalf("empty vault preview = conflicts %+v, removals %+v", removal.Conflicts, removal.Request.Removals)
+	if len(removal.Conflicts) != 0 || len(removal.Removed) != 0 {
+		t.Fatalf("empty vault preview = conflicts %+v, removals %+v", removal.Conflicts, removal.Removed)
 	}
 	if err := second.service.Apply(removal); err != nil {
 		t.Fatal(err)
@@ -3150,7 +3209,7 @@ func TestAnExplicitEmptyVaultClearsCredentialsOnAnotherInstallation(t *testing.T
 func TestAnEmptyVaultDoesNotTravel(t *testing.T) {
 	bucket := &fakeBucket{}
 	machine := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
-	withVault(t, machine, "a master password")
+	withVault(t, &machine, "a master password")
 	if _, err := machine.service.Push(context.Background(), syncPassphrase, ""); err != nil {
 		t.Fatal(err)
 	}

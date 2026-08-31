@@ -28,6 +28,19 @@ import (
 	"sshc/internal/storage"
 )
 
+func testSyncIntegrations(secrets *secret.Service) remotesync.IntegrationHooks {
+	return remotesync.IntegrationHooks{
+		OpenVault:          secrets.TravelDocument,
+		SealVault:          secrets.AdoptTravelDocument,
+		EmptyVaultDocument: secrets.EmptyTravelDocument,
+		VaultAdopted:       secrets.Reload,
+		OpenSnippets:       func() ([]byte, error) { return nil, nil },
+		SealSnippets:       func(document []byte) ([]byte, error) { return document, nil },
+		SecretMutation:     func(run func() error) error { return run() },
+		StableSnapshot:     func(run func() error) error { return run() },
+	}
+}
+
 func syncEngine(t *testing.T) (*echo.Echo, *remotesync.Service) {
 	t.Helper()
 	home := t.TempDir()
@@ -38,12 +51,6 @@ func syncEngine(t *testing.T) (*echo.Echo, *remotesync.Service) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	service := remotesync.NewService(workspace,
-		storage.NewManager(workspace, time.Now, rand.Reader),
-		func() string { return "2026-08-05T00:00:00Z" },
-		func() (string, error) { return "origin-test", nil },
-	)
-
 	secrets := secret.NewService(workspace, storage.NewManager(workspace, time.Now, rand.Reader), time.Now)
 	if err := secrets.Initialise(syncTestPassphrase); err != nil {
 		t.Fatal(err)
@@ -52,10 +59,15 @@ func syncEngine(t *testing.T) (*echo.Echo, *remotesync.Service) {
 	if err := secrets.SetSyncKey(measuredSyncKey); err != nil {
 		t.Fatal(err)
 	}
-	// vault は復号済み文書として同期し、受信側で再暗号化する。
-	service.OpenVault = secrets.TravelDocument
-	service.SealVault = secrets.AdoptTravelDocument
-	service.VaultAdopted = secrets.Reload
+	service, err := remotesync.NewIntegratedService(workspace,
+		storage.NewManager(workspace, time.Now, rand.Reader),
+		func() string { return "2026-08-05T00:00:00Z" },
+		func() (string, error) { return "origin-test", nil },
+		testSyncIntegrations(secrets),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
 	engine := echo.New()
 	registerSyncRoutes(engine, SyncHandlers{Service: service, Secrets: secrets, Reach: reachable})
 	return engine, service
@@ -215,21 +227,12 @@ func newMeasuredSyncInstallation(t *testing.T, bucket *measuredSyncBucket, files
 	if err != nil {
 		t.Fatal(err)
 	}
-	service := remotesync.NewService(
-		workspace,
-		storage.NewManager(workspace, time.Now, rand.Reader),
-		func() string { return "2026-08-12T01:02:03Z" },
-		func() (string, error) { return "origin-api-test", nil },
-	)
 	server := httptest.NewTLSServer(http.HandlerFunc(bucket.handler))
 	t.Cleanup(server.Close)
 	credentials := objectstore.Credentials{AccessKeyID: "AKID", SecretAccessKey: "secret"}
 	config := remotesync.Config{Endpoint: server.URL, Bucket: "sshc", Region: "auto", Direction: remotesync.DirectionBoth}
 	client := &objectstore.Client{
 		HTTP: server.Client(), Endpoint: server.URL, Bucket: "sshc", Region: "auto", Creds: credentials,
-	}
-	if err := service.Configure(config, credentials, client); err != nil {
-		t.Fatal(err)
 	}
 	secrets := secret.NewService(workspace, storage.NewManager(workspace, time.Now, rand.Reader), time.Now)
 	if err := secrets.Initialise(syncTestPassphrase); err != nil {
@@ -238,10 +241,19 @@ func newMeasuredSyncInstallation(t *testing.T, bucket *measuredSyncBucket, files
 	if err := secrets.SetSyncKey(measuredSyncKey); err != nil {
 		t.Fatal(err)
 	}
-	// vault は復号済み文書として同期し、受信側で再暗号化する。
-	service.OpenVault = secrets.TravelDocument
-	service.SealVault = secrets.AdoptTravelDocument
-	service.VaultAdopted = secrets.Reload
+	service, err := remotesync.NewIntegratedService(
+		workspace,
+		storage.NewManager(workspace, time.Now, rand.Reader),
+		func() string { return "2026-08-12T01:02:03Z" },
+		func() (string, error) { return "origin-api-test", nil },
+		testSyncIntegrations(secrets),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := service.Configure(config, credentials, client); err != nil {
+		t.Fatal(err)
+	}
 	engine := echo.New()
 	registerSyncRoutes(engine, SyncHandlers{Service: service, Secrets: secrets, Reach: reachable})
 	return measuredSyncInstallation{

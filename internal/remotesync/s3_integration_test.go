@@ -107,13 +107,14 @@ func realInstallationAt(t *testing.T, objectPath string, files map[string]string
 	// Match production wiring: application owns the storage validator. This
 	// catches snapshots which pass remotesync in isolation but fail at Commit.
 	_ = application.NewService(workspace, manager)
-	service := remotesync.NewService(workspace,
+	service, err := remotesync.NewIntegratedService(workspace,
 		manager,
 		func() string { return time.Now().UTC().Format(time.RFC3339) },
-		func() (string, error) { counter++; return "origin-integration", nil })
-	service.OpenVault = func() ([]byte, error) { return nil, nil }
-	service.SealVault = func(document []byte) ([]byte, error) { return document, nil }
-	service.EmptyVaultDocument = func() ([]byte, error) { return []byte("empty-vault"), nil }
+		func() (string, error) { counter++; return "origin-integration", nil },
+		defaultIntegrationHooks())
+	if err != nil {
+		t.Fatal(err)
+	}
 	config := remotesync.Config{
 		Endpoint: endpoint, Bucket: client.Bucket, Path: objectPath, Region: client.Region,
 		Direction: remotesync.DirectionBoth,
@@ -295,12 +296,12 @@ func TestAgainstARealBucketFreshReceiveOnlySetupVerifiesAndPulls(t *testing.T) {
 		t.Fatal(err)
 	}
 	manager := storage.NewManager(workspace, time.Now, rand.Reader)
-	receiver := remotesync.NewService(workspace, manager,
+	receiver, err := remotesync.NewIntegratedService(workspace, manager,
 		func() string { return time.Now().UTC().Format(time.RFC3339) },
-		func() (string, error) { return "fresh-receiver", nil })
-	receiver.OpenVault = func() ([]byte, error) { return nil, nil }
-	receiver.SealVault = func(document []byte) ([]byte, error) { return document, nil }
-	receiver.EmptyVaultDocument = func() ([]byte, error) { return []byte("empty-vault"), nil }
+		func() (string, error) { return "fresh-receiver", nil }, defaultIntegrationHooks())
+	if err != nil {
+		t.Fatal(err)
+	}
 	config := sender.config
 	config.Direction = remotesync.DirectionPull
 	client := *sender.client
