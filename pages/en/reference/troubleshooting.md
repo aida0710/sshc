@@ -34,3 +34,5 @@ sshc sync now
 ```
 
 Check that the vault is unlocked, the direction permits the operation, the bucket status is current and a recent check is recorded. `outcome_unknown` means a write may have reached storage but its result was not confirmed. Refresh remote state before deciding whether to retry.
+
+Sync failures show a cause and a stable `Code`. For `bucket_refused`, check credentials, region and permissions. `bucket_dns_failed` indicates name resolution; `bucket_tls_failed` indicates HTTPS certificate verification or the device clock; `bucket_timeout` and `bucket_unreachable` indicate network reachability. `wrong_passphrase` means the sync key does not match the data at that target. Report `sync_internal_failed` with its diagnostic code because it is an unclassified product failure.
