@@ -217,3 +217,10 @@ func TestStoreRejectsDanglingStartupAndSecretDefaults(t *testing.T) {
 		t.Fatalf("Save(secret default) = %v", err)
 	}
 }
+
+func TestCloneSnippetKeepsRequiredEmptyVariablesAsAnArray(t *testing.T) {
+	cloned := cloneSnippet(Snippet{Variables: nil})
+	if cloned.Variables == nil {
+		t.Fatal("cloneSnippet returned nil variables; the API contract requires an array")
+	}
+}

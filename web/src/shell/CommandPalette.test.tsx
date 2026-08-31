@@ -96,6 +96,16 @@ describe("CommandPalette", () => {
     expect(onConnect).toHaveBeenCalledWith("r540");
   });
 
+  it("closes when the backdrop is clicked", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    renderPalette({ onClose });
+
+    await user.click(document.body);
+
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
   it("opens host settings from the trailing action without connecting", async () => {
     const user = userEvent.setup();
     const onConnect = vi.fn();

@@ -389,11 +389,17 @@ func cloneLibrary(library Library) Library {
 
 func cloneSnippet(snippet Snippet) Snippet {
 	cloned := snippet
-	cloned.Variables = append([]Variable(nil), snippet.Variables...)
-	for index := range cloned.Variables {
-		if snippet.Variables[index].Default != nil {
-			value := *snippet.Variables[index].Default
-			cloned.Variables[index].Default = &value
+	cloned.Variables = cloneVariables(snippet.Variables)
+	return cloned
+}
+
+func cloneVariables(variables []Variable) []Variable {
+	cloned := make([]Variable, len(variables))
+	copy(cloned, variables)
+	for index := range cloned {
+		if variables[index].Default != nil {
+			value := *variables[index].Default
+			cloned[index].Default = &value
 		}
 	}
 	return cloned

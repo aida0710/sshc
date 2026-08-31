@@ -80,7 +80,7 @@ func (s *Service) Create(draft Draft) (Snippet, error) {
 		moment := s.now().UTC()
 		snippet = Snippet{
 			ID: id, Name: draft.Name, Description: draft.Description, Command: draft.Command,
-			Variables: append([]Variable(nil), draft.Variables...), CreatedAt: moment, UpdatedAt: moment,
+			Variables: cloneVariables(draft.Variables), CreatedAt: moment, UpdatedAt: moment,
 		}
 		library.Snippets = append(library.Snippets, snippet)
 		return nil
@@ -107,7 +107,7 @@ func (s *Service) Update(id string, draft Draft) (Snippet, error) {
 		updated.Name = draft.Name
 		updated.Description = draft.Description
 		updated.Command = draft.Command
-		updated.Variables = append([]Variable(nil), draft.Variables...)
+		updated.Variables = cloneVariables(draft.Variables)
 		updated.UpdatedAt = s.now().UTC()
 		if updated.UpdatedAt.Before(updated.CreatedAt) {
 			updated.UpdatedAt = updated.CreatedAt
