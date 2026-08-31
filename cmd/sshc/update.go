@@ -281,25 +281,9 @@ func installUpdate(ctx context.Context, found installation, release selfupdate.R
 }
 
 func upgradeHomebrew(ctx context.Context, found installation, tag string, commands updateCommands, stdout, stderr io.Writer) error {
-	prefixOutput, err := commands.Output(ctx, found.brew, "--prefix", "--installed", homebrewFormula)
+	managedPath, err := homebrewManagedExecutable(ctx, found, commands)
 	if err != nil {
-		return fmt.Errorf("Homebrew does not report %s as installed: %w", homebrewFormula, err)
-	}
-	prefix := strings.TrimSpace(string(prefixOutput))
-	if prefix == "" || !filepath.IsAbs(prefix) || strings.ContainsAny(prefix, "\r\n") {
-		return errors.New("Homebrew returned an invalid formula prefix")
-	}
-	managedPath := filepath.Join(prefix, "bin", "sshc")
-	managed, err := os.Stat(managedPath)
-	if err != nil {
-		return fmt.Errorf("inspect Homebrew's sshc: %w", err)
-	}
-	running, err := os.Stat(found.executable)
-	if err != nil {
-		return fmt.Errorf("inspect this sshc: %w", err)
-	}
-	if !os.SameFile(managed, running) {
-		return fmt.Errorf("Homebrew manages %s, not the running executable %s", managedPath, found.executable)
+		return err
 	}
 	if err := commands.Run(ctx, found.brew,
 		[]string{"upgrade", "--formula", "--no-ask", homebrewFormula}, nil, nil, stdout, stderr); err != nil {
@@ -313,6 +297,33 @@ func upgradeHomebrew(ctx context.Context, found installation, tag string, comman
 		return fmt.Errorf("Homebrew completed but %s does not report version %s", managedPath, tag)
 	}
 	return nil
+}
+
+// homebrewManagedExecutable は、現在の実行ファイルを所有するformulaの安定パスを返す。
+// Cellar内のversion付きパスをunitへ保存するとupgrade後に古いkegへ固定されるため、
+// serviceとupdateの両方がこの照合済みパスを使う。
+func homebrewManagedExecutable(ctx context.Context, found installation, commands updateCommands) (string, error) {
+	prefixOutput, err := commands.Output(ctx, found.brew, "--prefix", "--installed", homebrewFormula)
+	if err != nil {
+		return "", fmt.Errorf("Homebrew does not report %s as installed: %w", homebrewFormula, err)
+	}
+	prefix := strings.TrimSpace(string(prefixOutput))
+	if prefix == "" || !filepath.IsAbs(prefix) || strings.ContainsAny(prefix, "\r\n") {
+		return "", errors.New("Homebrew returned an invalid formula prefix")
+	}
+	managedPath := filepath.Join(prefix, "bin", "sshc")
+	managed, err := os.Stat(managedPath)
+	if err != nil {
+		return "", fmt.Errorf("inspect Homebrew's sshc: %w", err)
+	}
+	running, err := os.Stat(found.executable)
+	if err != nil {
+		return "", fmt.Errorf("inspect this sshc: %w", err)
+	}
+	if !os.SameFile(managed, running) {
+		return "", fmt.Errorf("Homebrew manages %s, not the running executable %s", managedPath, found.executable)
+	}
+	return managedPath, nil
 }
 
 func runTaggedInstaller(ctx context.Context, found installation, tag string, client *http.Client, commands updateCommands, stdout, stderr io.Writer) error {

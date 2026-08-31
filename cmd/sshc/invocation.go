@@ -21,6 +21,7 @@ const (
 	invocationStatus
 	invocationVault
 	invocationUpdate
+	invocationService
 	invocationHelp
 	invocationVersion
 	invocationTransport
@@ -71,6 +72,7 @@ const (
 	helpSubcommand     = "help"
 	versionSubcommand  = "version"
 	updateSubcommand   = "update"
+	serviceSubcommand  = "service"
 	infoSubcommand     = "info"
 	syncSubcommand     = "sync"
 	terminalSubcommand = "terminal"
@@ -131,6 +133,17 @@ func parseInvocation(argv []string) (invocation, error) {
 			return helpInvocation(updateSubcommand), nil
 		}
 		return noArguments(invocationUpdate, word, args)
+	case serviceSubcommand:
+		if helpRequested(args) {
+			return helpInvocation(serviceSubcommand), nil
+		}
+		if len(args) > 1 && validServiceAction(args[0]) && isHelpFlag(args[1]) {
+			return helpInvocation(serviceSubcommand + " " + args[0]), nil
+		}
+		if len(args) != 1 || !validServiceAction(args[0]) {
+			return invalidInvocation("service requires install, status, or disable")
+		}
+		return invocation{Kind: invocationService, Args: copyInvocationArgs(args)}, nil
 	case vaultSubcommand:
 		if helpRequested(args) {
 			return helpInvocation(vaultSubcommand), nil
@@ -186,6 +199,15 @@ func isHelpFlag(argument string) bool {
 func validVaultAction(action string) bool {
 	switch action {
 	case "status", "create", "unlock", "lock", "change-password":
+		return true
+	default:
+		return false
+	}
+}
+
+func validServiceAction(action string) bool {
+	switch action {
+	case "install", "status", "disable":
 		return true
 	default:
 		return false
@@ -422,6 +444,9 @@ func usage(out io.Writer) {
   sshc status          print what the running engine is doing
                        --json      print it as JSON, for the shell
   sshc update          update an installation managed by Homebrew or install.sh
+  sshc service install install and start a systemd user service on Linux
+  sshc service status  print whether the managed service is active
+  sshc service disable stop and remove the managed service
   sshc vault status    describe the running engine and vault
   sshc vault create    create and unlock a new vault
   sshc vault unlock    unlock the vault in the running engine
@@ -442,6 +467,7 @@ func validHelpTopic(topic string) bool {
 		terminalSubcommand, "terminal list", "terminal show", "terminal read", "terminal send",
 		"terminal wait", "terminal create", "terminal rename", "terminal close",
 		serialSubcommand, telnetSubcommand, OpenSubcommand, StatusSubcommand, updateSubcommand,
+		serviceSubcommand, "service install", "service status", "service disable",
 		vaultSubcommand, "vault status", "vault create", "vault unlock", "vault lock",
 		"vault change-password", versionSubcommand:
 		return true
@@ -598,6 +624,28 @@ Print what the running engine is doing.
   sshc update
 
 Update an installation managed by Homebrew or install.sh.
+`,
+		serviceSubcommand: `usage:
+  sshc service install
+  sshc service status
+  sshc service disable
+
+Manage the sshc engine as a systemd user service on Linux.
+`,
+		"service install": `usage:
+  sshc service install
+
+Install, enable, and start the sshc systemd user service on Linux.
+`,
+		"service status": `usage:
+  sshc service status
+
+Print whether the sshc-managed systemd user service is active.
+`,
+		"service disable": `usage:
+  sshc service disable
+
+Stop, disable, and remove the sshc-managed systemd user service.
 `,
 		vaultSubcommand: `usage:
   sshc vault status
