@@ -14,6 +14,7 @@ import (
 	"container/heap"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -39,6 +40,17 @@ var (
 	// エラードキュメントにはバケット名とリクエスト ID が含まれるが、どちらもこの
 	// アプリケーションが表示するメッセージに入れてよいものではない。
 	ErrRefused = errors.New("the object store refused the request")
+	// ErrAuthenticationFailed は、object storeが資格情報を認証できなかったことを
+	// 報告する。ErrRefusedにも一致させ、従来の呼び出し側との互換性を保つ。
+	ErrAuthenticationFailed = fmt.Errorf("the object store could not authenticate the request: %w", ErrRefused)
+	// ErrAccessDenied は、認証済みかどうかにかかわらず、object storeが対象への
+	// アクセスを許可しなかったことを報告する。
+	ErrAccessDenied = fmt.Errorf("the object store denied access to the target: %w", ErrRefused)
+	// ErrRateLimited は、object storeが要求頻度を制限したことを報告する。
+	ErrRateLimited = fmt.Errorf("the object store rate limited the request: %w", ErrRefused)
+	// ErrServiceUnavailable は、object store自身が5xxで処理不能を報告したことを
+	// 示す。ネットワーク到達不能とは区別する。
+	ErrServiceUnavailable = fmt.Errorf("the object store service could not process the request: %w", ErrRefused)
 	// ErrBothConditions は、If-Match と If-None-Match を同時に設定した呼び出しを
 	// 拒否する。これはプログラミングの誤りであり、リクエストを送る前に捕まえる。
 	ErrBothConditions = errors.New("If-Match and If-None-Match are mutually exclusive")
@@ -415,7 +427,16 @@ func classify(err error) error {
 	// 誰かが先に到達した、ということである。
 	case http.StatusPreconditionFailed, http.StatusConflict:
 		return ErrPreconditionFailed
+	case http.StatusUnauthorized:
+		return ErrAuthenticationFailed
+	case http.StatusForbidden:
+		return ErrAccessDenied
+	case http.StatusTooManyRequests:
+		return ErrRateLimited
 	default:
+		if response.HTTPStatusCode() >= http.StatusInternalServerError {
+			return ErrServiceUnavailable
+		}
 		return ErrRefused
 	}
 }
