@@ -81,6 +81,35 @@ func TestLoadedJournalValidationRejectsMalformedRecords(t *testing.T) {
 	}
 }
 
+func TestLoadedJournalMigratesV1WriteModes(t *testing.T) {
+	record := journalRecord{
+		Version: 1,
+		Entries: []journalEntry{{
+			Action: actionWrite, HadPrevious: true,
+			Mode: 0o600, Digest: Digest([]byte("same")), PreviousDigest: Digest([]byte("same")),
+		}},
+	}
+	if err := migrateLoadedJournalRecord(&record); err != nil {
+		t.Fatal(err)
+	}
+	if record.Version != journalVersion || record.Entries[0].PreviousMode != 0o600 {
+		t.Fatalf("migrated record = %#v", record)
+	}
+}
+
+func TestLoadedJournalRejectsV1RecordWithV2ModeField(t *testing.T) {
+	record := journalRecord{
+		Version: 1,
+		Entries: []journalEntry{{
+			Action: actionWrite, HadPrevious: true,
+			Mode: 0o700, PreviousMode: 0o600,
+		}},
+	}
+	if err := migrateLoadedJournalRecord(&record); !errors.Is(err, ErrInvalidJournal) {
+		t.Fatalf("migration = %v, want ErrInvalidJournal", err)
+	}
+}
+
 func TestJournalRecoveryRejectsOutsidePathsBeforeTouchingThem(t *testing.T) {
 	for _, test := range []struct {
 		name   string

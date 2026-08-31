@@ -3185,6 +3185,9 @@ components:
         path: { type: string }
         changedHere: { type: boolean }
         changedThere: { type: boolean }
+        baseMode: { type: string, pattern: "^0[67]00$" }
+        localMode: { type: string, pattern: "^0[67]00$" }
+        remoteMode: { type: string, pattern: "^0[67]00$" }
     PullResponse:
       type: object
       additionalProperties: false

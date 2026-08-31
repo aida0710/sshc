@@ -2,6 +2,7 @@ package remotesync
 
 import (
 	"errors"
+	"io/fs"
 	"path/filepath"
 	"sort"
 
@@ -35,14 +36,19 @@ type Conflict struct {
 	BaseDigest   string
 	LocalDigest  string
 	RemoteDigest string
+	BaseMode     string
+	LocalMode    string
+	RemoteMode   string
 }
 
 // LocalEntry is the exact local state used by a three-way pull plan. Mode is
 // part of the synchronized state: equal bytes with different permissions are
 // still a change.
 type LocalEntry struct {
-	SHA256 string
-	Mode   string
+	SHA256       string
+	Mode         string
+	ObservedMode fs.FileMode
+	ModeObserved bool
 }
 
 func entryState(digest, mode string) LocalEntry {
@@ -52,6 +58,17 @@ func entryState(digest, mode string) LocalEntry {
 		mode = "0600"
 	}
 	return LocalEntry{SHA256: digest, Mode: mode}
+}
+
+func synchronizedEqual(left, right LocalEntry) bool {
+	return left.SHA256 == right.SHA256 && left.Mode == right.Mode
+}
+
+func preconditionMode(entry LocalEntry) fs.FileMode {
+	if entry.ModeObserved {
+		return entry.ObservedMode
+	}
+	return modeBits(entry.Mode)
 }
 
 // Plan は、復号したスナップショットと現在のワークスペースから、このマシンをそれに
@@ -108,16 +125,20 @@ func PlanEntriesWithIgnore(root string, base *Manifest, local map[string]LocalEn
 		}
 		localEntry, present := local[item.Path]
 		remoteEntry := entryState(item.SHA256, item.Mode)
-		if present && localEntry == remoteEntry {
+		if present && synchronizedEqual(localEntry, remoteEntry) {
 			continue
 		}
 		baseEntry, hadBase := baseEntries[item.Path]
-		contested := present && (!hadBase || localEntry != baseEntry)
+		contested := present && (!hadBase || !synchronizedEqual(localEntry, baseEntry))
 		if contested && resolve == ResolveNone {
 			// 両側で変更された内容は自動マージせず、digest だけを競合として報告する。
-			conflict := Conflict{Path: item.Path, LocalDigest: localEntry.SHA256, RemoteDigest: item.SHA256}
+			conflict := Conflict{
+				Path: item.Path, LocalDigest: localEntry.SHA256, RemoteDigest: item.SHA256,
+				LocalMode: localEntry.Mode, RemoteMode: item.Mode,
+			}
 			if hadBase {
 				conflict.BaseDigest = baseEntry.SHA256
+				conflict.BaseMode = baseEntry.Mode
 			}
 			conflicts = append(conflicts, conflict)
 			continue
@@ -128,7 +149,7 @@ func PlanEntriesWithIgnore(root string, base *Manifest, local map[string]LocalEn
 		}
 		precondition := storage.Precondition{}
 		if present {
-			precondition = storage.Precondition{Exists: true, Digest: localEntry.SHA256, Mode: modeBits(localEntry.Mode)}
+			precondition = storage.Precondition{Exists: true, Digest: localEntry.SHA256, Mode: preconditionMode(localEntry)}
 		}
 		request.Changes = append(request.Changes, storage.Change{
 			Path:         filepath.Join(root, filepath.FromSlash(item.Path)),
@@ -155,7 +176,7 @@ func PlanEntriesWithIgnore(root string, base *Manifest, local map[string]LocalEn
 		if !hadBase {
 			continue
 		}
-		if localEntry != baseEntry {
+		if !synchronizedEqual(localEntry, baseEntry) {
 			// リモートで削除され、ローカルで編集された競合。
 			switch resolve {
 			case ResolveLocal:
@@ -166,13 +187,14 @@ func PlanEntriesWithIgnore(root string, base *Manifest, local map[string]LocalEn
 			default:
 				conflicts = append(conflicts, Conflict{
 					Path: path, BaseDigest: baseEntry.SHA256, LocalDigest: localEntry.SHA256,
+					BaseMode: baseEntry.Mode, LocalMode: localEntry.Mode,
 				})
 				continue
 			}
 		}
 		request.Removals = append(request.Removals, storage.Removal{
 			Path:         filepath.Join(root, filepath.FromSlash(path)),
-			Precondition: storage.Precondition{Exists: true, Digest: localEntry.SHA256, Mode: modeBits(localEntry.Mode)},
+			Precondition: storage.Precondition{Exists: true, Digest: localEntry.SHA256, Mode: preconditionMode(localEntry)},
 			// リモート削除を適用する前に、暗号化された世代バックアップを残す。
 			Backup: true,
 		})

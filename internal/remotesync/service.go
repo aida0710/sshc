@@ -1947,15 +1947,19 @@ func (s *Service) localDigests(remote Manifest, base *Manifest, ignoreRules Igno
 			}
 			return nil, err
 		}
-		mode := "0600"
 		info, err := s.workspace.FileSystem().Lstat(localPath)
 		if err != nil {
 			return nil, err
 		}
-		if info.Mode().Perm() == 0o700 {
+		observedMode := info.Mode().Perm() & 0o700
+		mode := "0600"
+		if observedMode&0o100 != 0 {
 			mode = "0700"
 		}
-		digests[path] = LocalEntry{SHA256: Digest(body), Mode: mode}
+		digests[path] = LocalEntry{
+			SHA256: Digest(body), Mode: mode,
+			ObservedMode: observedMode, ModeObserved: true,
+		}
 	}
 	return digests, nil
 }

@@ -14,6 +14,8 @@ sshc does not auto-merge snapshots. It compares local and remote revisions and m
 
 `sshc sync now` follows the configured direction and performs only decisions that are safe to automate.
 
+Conflict previews show `0600` and `0700` permission differences alongside content changes, separated into the last sync, this machine, and the remote. Files kept locally as `0400` or executable `0500` are checked against their actual permissions before replacement.
+
 When automatic sync is enabled, sshc polls remote state once a minute while the Vault is unlocked, without uploading during the check. Changes made through sshc are pushed once after a five-second quiet period. Changes from external editors are detected by the next remote check and use the same delay. A remote update is handled before any local push.
 
 The configured direction limits automatic work:

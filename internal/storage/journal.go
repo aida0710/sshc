@@ -103,7 +103,7 @@ func (m *Manager) Pending() ([]Pending, error) {
 			switch {
 			case pendingEntry.Committed && pendingEntry.Action == actionRemove && entry.NoBackup:
 				item.CanRollback = false
-			case pendingEntry.Committed && pendingEntry.Action == actionWrite && entry.HadPrevious && entry.NoBackup && !entry.noOpWrite():
+			case pendingEntry.Committed && pendingEntry.Action == actionWrite && entry.HadPrevious && entry.NoBackup && !entry.sameContentsWrite():
 				item.CanRollback = false
 			case !pendingEntry.Committed && pendingEntry.Action == actionWrite:
 				pendingEntry.HasStaged = m.stagedMatches(entry)
@@ -189,7 +189,7 @@ func (m *Manager) rollbackRecord(record *journalRecord, journalPath string) erro
 		if entry.Action == actionRemove && entry.NoBackup {
 			return ErrIrreversibleRemoval
 		}
-		if entry.Action == actionWrite && entry.HadPrevious && entry.NoBackup && !entry.noOpWrite() {
+		if entry.Action == actionWrite && entry.HadPrevious && entry.NoBackup && !entry.sameContentsWrite() {
 			return ErrIrreversibleChange
 		}
 	}
@@ -252,6 +252,18 @@ func (m *Manager) rollbackRecord(record *journalRecord, journalPath string) erro
 				// 変わっていないものを、作られなかった控えから戻す必要はない。
 				continue
 			}
+			if entry.sameContentsWrite() && entry.Backup == "" {
+				contents, readErr := fileSystem.ReadFile(entry.Path)
+				if readErr != nil {
+					return readErr
+				}
+				writeErr := m.writeFile(entry.Path, contents, fs.FileMode(entry.beforeMode()))
+				zeroBytes(contents)
+				if writeErr != nil {
+					return writeErr
+				}
+				continue
+			}
 			var contents []byte
 			var readErr error
 			if record.DiscardBackups {
@@ -262,7 +274,11 @@ func (m *Manager) rollbackRecord(record *journalRecord, journalPath string) erro
 			if readErr != nil {
 				return readErr
 			}
-			writeErr := m.writeFile(entry.Path, contents, fs.FileMode(entry.Mode))
+			restoreMode := entry.Mode
+			if entry.Action == actionWrite {
+				restoreMode = entry.beforeMode()
+			}
+			writeErr := m.writeFile(entry.Path, contents, fs.FileMode(restoreMode))
 			// 復元したのは秘密鍵かもしれない。書き終えた控えは残さない。
 			zeroBytes(contents)
 			if writeErr != nil {
@@ -283,6 +299,10 @@ func (m *Manager) rollbackRecord(record *journalRecord, journalPath string) erro
 
 func (m *Manager) stagedMatches(entry journalEntry) bool {
 	if entry.Temp == "" {
+		return false
+	}
+	info, err := m.workspace.FileSystem().Lstat(entry.Temp)
+	if err != nil || uint32(info.Mode().Perm()&0o700) != entry.Mode {
 		return false
 	}
 	contents, err := m.workspace.FileSystem().ReadFile(entry.Temp)
@@ -312,6 +332,9 @@ func (m *Manager) loadPending(identifier string) (*journalRecord, string, error)
 		return nil, "", err
 	}
 	zeroBytes(contents)
+	if err := migrateLoadedJournalRecord(&record); err != nil {
+		return nil, "", err
+	}
 	if err := m.validateLoadedJournalRecord(record, filepath.Base(journalPath), m.journalDirectory()); err != nil {
 		return nil, "", err
 	}
@@ -446,16 +469,16 @@ func (m *Manager) entryEvidence(entry journalEntry) (entryEvidence, error) {
 			// 対象は書く前も書いた後も同じ姿である。何も語らない。
 			return evidenceNone, nil
 		}
-		digest, exists, err := m.targetDigest(entry.Path)
+		digest, mode, exists, err := m.targetFileState(entry.Path)
 		if err != nil {
 			return evidenceNone, err
 		}
 		switch {
 		case !exists && !entry.HadPrevious:
 			return evidenceUnapplied, nil
-		case exists && digest == entry.Digest:
+		case exists && digest == entry.Digest && uint32(mode) == entry.Mode:
 			return evidenceApplied, nil
-		case exists && entry.HadPrevious && digest == entry.PreviousDigest:
+		case exists && entry.HadPrevious && digest == entry.PreviousDigest && uint32(mode) == entry.beforeMode():
 			return evidenceUnapplied, nil
 		}
 		return evidenceNone, ErrRecoveryStateUnknown
@@ -516,16 +539,28 @@ func (m *Manager) directoryPresent(path string) (bool, error) {
 // targetDigest はハッシュを取り終えたバイト列をゼロで埋める。復旧が読むのは、
 // 秘密鍵かもしれないファイルそのものだからである。
 func (m *Manager) targetDigest(path string) (string, bool, error) {
-	contents, err := m.workspace.FileSystem().ReadFile(path)
+	digest, _, exists, err := m.targetFileState(path)
+	return digest, exists, err
+}
+
+func (m *Manager) targetFileState(path string) (string, fs.FileMode, bool, error) {
+	info, err := m.workspace.FileSystem().Lstat(path)
 	if errors.Is(err, fs.ErrNotExist) {
-		return "", false, nil
+		return "", 0, false, nil
 	}
 	if err != nil {
-		return "", false, err
+		return "", 0, false, err
+	}
+	contents, err := m.workspace.FileSystem().ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return "", 0, false, nil
+	}
+	if err != nil {
+		return "", 0, false, err
 	}
 	digest := Digest(contents)
 	zeroBytes(contents)
-	return digest, true, nil
+	return digest, info.Mode().Perm() & 0o700, true, nil
 }
 
 // readRecords は、ディレクトリ内のすべてのジャーナル文書を古い順に読み込む。
@@ -568,6 +603,9 @@ func (m *Manager) readRecords(directory string) ([]journalRecord, error) {
 			return nil, unmarshalErr
 		}
 		zeroBytes(contents)
+		if migrationErr := migrateLoadedJournalRecord(&record); migrationErr != nil {
+			return nil, migrationErr
+		}
 		if validationErr := m.validateLoadedJournalRecord(record, name, directory); validationErr != nil {
 			return nil, validationErr
 		}
@@ -599,6 +637,29 @@ func journalIdentifierFromName(name string) (string, error) {
 
 func invalidJournal(reason string) error {
 	return fmt.Errorf("%w: %s", ErrInvalidJournal, reason)
+}
+
+// migrateLoadedJournalRecord upgrades the released v1 contract in memory.
+// In v1 a write had one Mode because its before and after modes were identical.
+// v2 separates them so a mode-only write is recoverable after a crash.
+func migrateLoadedJournalRecord(record *journalRecord) error {
+	if record.Version == journalVersion {
+		return nil
+	}
+	if record.Version != 1 {
+		return invalidJournal("identity or version mismatch")
+	}
+	for index := range record.Entries {
+		entry := &record.Entries[index]
+		if entry.PreviousMode != 0 {
+			return invalidJournal("v1 entry contains a v2 mode")
+		}
+		if entry.Action == actionWrite && entry.HadPrevious {
+			entry.PreviousMode = entry.Mode
+		}
+	}
+	record.Version = journalVersion
+	return nil
 }
 
 func (m *Manager) validateLoadedJournalRecord(record journalRecord, name, directory string) error {
@@ -708,6 +769,9 @@ func (m *Manager) validateLoadedJournalEntry(record journalRecord, entry journal
 		if entry.HadPrevious != previousDigestValid {
 			return invalidJournal("write previous digest mismatch")
 		}
+		if (!entry.HadPrevious && entry.PreviousMode != 0) || !validOwnerFileMode(entry.PreviousMode) {
+			return invalidJournal("write previous mode mismatch")
+		}
 		if entry.Temp != "" {
 			prefix := temporaryPrefix + record.ID + "-"
 			if filepath.Dir(entry.Temp) != filepath.Dir(entry.Path) || !strings.HasPrefix(filepath.Base(entry.Temp), prefix) {
@@ -733,7 +797,7 @@ func (m *Manager) validateLoadedJournalEntry(record journalRecord, entry journal
 		}
 	case actionMove:
 		if entry.Target == "" || entry.Temp != "" || entry.Backup != "" || entry.NoBackup || !entry.HadPrevious ||
-			!validOwnerFileMode(entry.Mode) || !digestValid || entry.PreviousDigest != entry.Digest {
+			entry.PreviousMode != 0 || !validOwnerFileMode(entry.Mode) || !digestValid || entry.PreviousDigest != entry.Digest {
 			return invalidJournal("invalid move entry")
 		}
 		if record.Atomic {
@@ -741,7 +805,7 @@ func (m *Manager) validateLoadedJournalEntry(record journalRecord, entry journal
 		}
 	case actionRemove:
 		if entry.Target != "" || entry.Temp != "" || !entry.HadPrevious || !validOwnerFileMode(entry.Mode) ||
-			!digestValid || entry.PreviousDigest != entry.Digest {
+			entry.PreviousMode != 0 || !digestValid || entry.PreviousDigest != entry.Digest {
 			return invalidJournal("invalid remove entry")
 		}
 		if record.Atomic {
@@ -752,12 +816,12 @@ func (m *Manager) validateLoadedJournalEntry(record journalRecord, entry journal
 		}
 	case actionMakeDir:
 		if entry.Target != "" || entry.Temp != "" || entry.Backup != "" || entry.NoBackup ||
-			entry.Digest != "" || entry.PreviousDigest != "" || entry.Mode != uint32(DirectoryPermission) {
+			entry.Digest != "" || entry.PreviousDigest != "" || entry.PreviousMode != 0 || entry.Mode != uint32(DirectoryPermission) {
 			return invalidJournal("invalid mkdir entry")
 		}
 	case actionRemoveDir:
 		if entry.Target != "" || entry.Temp != "" || entry.Backup != "" || entry.NoBackup || !entry.HadPrevious ||
-			entry.Digest != "" || entry.PreviousDigest != "" || entry.Mode&^uint32(0o777) != 0 {
+			entry.Digest != "" || entry.PreviousDigest != "" || entry.PreviousMode != 0 || entry.Mode&^uint32(0o777) != 0 {
 			return invalidJournal("invalid rmdir entry")
 		}
 		if record.Atomic {
@@ -765,7 +829,7 @@ func (m *Manager) validateLoadedJournalEntry(record journalRecord, entry journal
 		}
 	case actionNote:
 		if entry.Target != "" || entry.Temp != "" || entry.Backup != "" || entry.NoBackup || entry.HadPrevious ||
-			entry.Digest != "" || entry.PreviousDigest != "" || entry.Mode != 0 {
+			entry.Digest != "" || entry.PreviousDigest != "" || entry.PreviousMode != 0 || entry.Mode != 0 {
 			return invalidJournal("invalid note entry")
 		}
 	default:

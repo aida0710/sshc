@@ -2,6 +2,7 @@ package remotesync_test
 
 import (
 	"errors"
+	"io/fs"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -282,6 +283,77 @@ func TestModeOnlyDifferenceProducesAWrite(t *testing.T) {
 	change := request.Changes[0]
 	if change.Mode != 0o700 || change.Precondition.Mode != 0o600 {
 		t.Fatalf("mode change = %04o from %04o", change.Mode, change.Precondition.Mode)
+	}
+}
+
+func TestPlanUsesTheObservedReadOnlyModeForItsPrecondition(t *testing.T) {
+	base := manifestOf(file("config", "old"))
+	remote := manifestOf(file("config", "new"))
+	local := map[string]remotesync.LocalEntry{
+		"config": {
+			SHA256:       digestOf("old"),
+			Mode:         "0600",
+			ObservedMode: fs.FileMode(0o400),
+			ModeObserved: true,
+		},
+	}
+
+	request, conflicts, err := remotesync.PlanEntriesWithIgnore(root, &base, local, remote,
+		map[string][]byte{"config": []byte("new")}, remotesync.ResolveNone, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(conflicts) != 0 || len(request.Changes) != 1 {
+		t.Fatalf("request=%+v conflicts=%+v", request, conflicts)
+	}
+	if got := request.Changes[0].Precondition.Mode; got != 0o400 {
+		t.Fatalf("precondition mode = %04o, want the observed 0400", got)
+	}
+}
+
+func TestPlanUsesTheObservedReadOnlyExecutableModeForItsPrecondition(t *testing.T) {
+	base := remotesync.Manifest{Files: []remotesync.Entry{{Path: "script", SHA256: digestOf("old"), Mode: "0700"}}}
+	remote := remotesync.Manifest{Files: []remotesync.Entry{{Path: "script", SHA256: digestOf("new"), Mode: "0700"}}}
+	local := map[string]remotesync.LocalEntry{
+		"script": {
+			SHA256:       digestOf("old"),
+			Mode:         "0700",
+			ObservedMode: fs.FileMode(0o500),
+			ModeObserved: true,
+		},
+	}
+
+	request, conflicts, err := remotesync.PlanEntriesWithIgnore(root, &base, local, remote,
+		map[string][]byte{"script": []byte("new")}, remotesync.ResolveNone, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(conflicts) != 0 || len(request.Changes) != 1 {
+		t.Fatalf("request=%+v conflicts=%+v", request, conflicts)
+	}
+	if got := request.Changes[0].Precondition.Mode; got != 0o500 {
+		t.Fatalf("precondition mode = %04o, want the observed 0500", got)
+	}
+}
+
+func TestModeOnlyConflictCarriesAllThreeModes(t *testing.T) {
+	base := remotesync.Manifest{Files: []remotesync.Entry{{Path: "script", SHA256: digestOf("same"), Mode: "0600"}}}
+	remote := remotesync.Manifest{Files: []remotesync.Entry{{Path: "script", SHA256: digestOf("remote"), Mode: "0600"}}}
+	local := map[string]remotesync.LocalEntry{
+		"script": {SHA256: digestOf("same"), Mode: "0700"},
+	}
+
+	request, conflicts, err := remotesync.PlanEntriesWithIgnore(root, &base, local, remote,
+		map[string][]byte{"script": []byte("remote")}, remotesync.ResolveNone, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(request.Changes) != 0 || len(conflicts) != 1 {
+		t.Fatalf("request=%+v conflicts=%+v", request, conflicts)
+	}
+	conflict := conflicts[0]
+	if conflict.BaseMode != "0600" || conflict.LocalMode != "0700" || conflict.RemoteMode != "0600" {
+		t.Fatalf("conflict modes = base %q, local %q, remote %q", conflict.BaseMode, conflict.LocalMode, conflict.RemoteMode)
 	}
 }
 

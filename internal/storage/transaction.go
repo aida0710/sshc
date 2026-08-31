@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	journalVersion       = 1
+	journalVersion       = 2
 	journalDirectoryName = "journal"
 	historyDirectoryName = "history"
 	backupDirectoryName  = "backups"
@@ -216,14 +216,17 @@ func Digest(contents []byte) string {
 }
 
 type journalEntry struct {
-	Action         string `json:"action,omitempty"`
-	Path           string `json:"path"`
-	Target         string `json:"target,omitempty"`
-	Temp           string `json:"temp,omitempty"`
-	Backup         string `json:"backup,omitempty"`
-	NoBackup       bool   `json:"noBackup,omitempty"`
-	HadPrevious    bool   `json:"hadPrevious"`
+	Action      string `json:"action,omitempty"`
+	Path        string `json:"path"`
+	Target      string `json:"target,omitempty"`
+	Temp        string `json:"temp,omitempty"`
+	Backup      string `json:"backup,omitempty"`
+	NoBackup    bool   `json:"noBackup,omitempty"`
+	HadPrevious bool   `json:"hadPrevious"`
+	// Mode is the state after a write. PreviousMode is the state before it.
+	// Other actions keep their single existing mode in Mode.
 	Mode           uint32 `json:"mode"`
+	PreviousMode   uint32 `json:"previousMode,omitempty"`
 	Digest         string `json:"digest"`
 	PreviousDigest string `json:"previousDigest,omitempty"`
 }
@@ -234,7 +237,20 @@ type journalEntry struct {
 // これは例外ではなく日常の記録である。巻き戻せない変更ではない。戻したあとの
 // 対象は同じバイト列であり、控えを残さなかったとしても失うものが無い。
 func (e journalEntry) noOpWrite() bool {
+	return e.sameContentsWrite() && e.Mode == e.beforeMode()
+}
+
+func (e journalEntry) sameContentsWrite() bool {
 	return e.Action == actionWrite && e.HadPrevious && e.Digest == e.PreviousDigest
+}
+
+func (e journalEntry) beforeMode() uint32 {
+	if e.PreviousMode != 0 {
+		return e.PreviousMode
+	}
+	// v1 and old hand-built fixtures had one mode because before and after were
+	// identical. Production v2 writes PreviousMode explicitly.
+	return e.Mode
 }
 
 // zeroBytes は、鍵素材を保持しているかもしれないバッファを上書きする。keys.Wipe と
@@ -581,7 +597,11 @@ func (m *Manager) commit(request Request, rollbackOnError, discardBackups bool, 
 			}
 			contents = sealed
 		}
-		if err := m.writeFile(backupPath, contents, fs.FileMode(entry.Mode)); err != nil {
+		backupMode := entry.Mode
+		if entry.Action == actionWrite {
+			backupMode = entry.beforeMode()
+		}
+		if err := m.writeFile(backupPath, contents, fs.FileMode(backupMode)); err != nil {
 			return fail(err)
 		}
 		entry.Backup = backupPath
@@ -1057,6 +1077,7 @@ func (b *commitBuilder) stageChanges() error {
 		}
 		if exists {
 			entry.PreviousDigest = actual
+			entry.PreviousMode = uint32(mode)
 		}
 		b.plan.add(entry, change.Contents, previous)
 		b.written = append(b.written, target)

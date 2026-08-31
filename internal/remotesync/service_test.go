@@ -1182,6 +1182,67 @@ func TestASecondPushFromTheSameMachineSucceeds(t *testing.T) {
 	}
 }
 
+func TestPullAcceptsReadOnlyLocalFiles(t *testing.T) {
+	for _, test := range []struct {
+		name       string
+		localMode  os.FileMode
+		remoteMode os.FileMode
+	}{
+		{name: "non executable", localMode: 0o400, remoteMode: 0o600},
+		{name: "executable", localMode: 0o500, remoteMode: 0o700},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			bucket := &fakeBucket{}
+			writer := newInstallation(t, bucket, map[string]string{"config": "old\n"})
+			writerPath := filepath.Join(writer.workspace.Root(), "config")
+			if err := os.Chmod(writerPath, test.remoteMode); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := writer.service.Push(context.Background(), syncPassphrase, "initial"); err != nil {
+				t.Fatal(err)
+			}
+
+			reader := newInstallation(t, bucket, map[string]string{})
+			initial, err := reader.service.Pull(context.Background(), syncPassphrase, remotesync.ResolveNone)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := reader.service.Apply(initial); err != nil {
+				t.Fatal(err)
+			}
+			readerPath := filepath.Join(reader.workspace.Root(), "config")
+			if err := os.Chmod(readerPath, test.localMode); err != nil {
+				t.Fatal(err)
+			}
+
+			writer.write(t, "config", "new\n")
+			if _, err := writer.service.Push(context.Background(), syncPassphrase, "content update"); err != nil {
+				t.Fatal(err)
+			}
+			update, err := reader.service.Pull(context.Background(), syncPassphrase, remotesync.ResolveNone)
+			if err != nil {
+				t.Fatalf("Pull with local mode %04o = %v", test.localMode, err)
+			}
+			if len(update.Conflicts) != 0 {
+				t.Fatalf("Pull with local mode %04o reported false conflicts: %+v", test.localMode, update.Conflicts)
+			}
+			if err := reader.service.Apply(update); err != nil {
+				t.Fatalf("Apply with local mode %04o = %v", test.localMode, err)
+			}
+			if got := reader.read(t, "config"); got != "new\n" {
+				t.Fatalf("config = %q, want updated contents", got)
+			}
+			info, err := os.Stat(readerPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := info.Mode().Perm() & 0o700; got != test.remoteMode {
+				t.Fatalf("applied mode = %04o, want %04o", got, test.remoteMode)
+			}
+		})
+	}
+}
+
 func TestAReceiveOnlyMachineWillNotPush(t *testing.T) {
 	bucket := &fakeBucket{}
 	machine := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
