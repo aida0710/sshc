@@ -32,8 +32,10 @@ func systemUnixPasswordOperations() unixPasswordOperations {
 	}
 }
 
-func (systemPasswordTerminal) ReadPassword(ctx context.Context, input *os.File) ([]byte, error) {
-	return readUnixPassword(ctx, input, systemUnixPasswordOperations())
+func (systemPasswordTerminal) ReadPassword(
+	ctx context.Context, input *os.File, prompt func() error,
+) ([]byte, error) {
+	return readUnixPasswordWithPrompt(ctx, input, systemUnixPasswordOperations(), prompt)
 }
 
 // readUnixPassword は端末とキャンセルパイプを同じ poll で待つ。補助 goroutine は
@@ -41,6 +43,12 @@ func (systemPasswordTerminal) ReadPassword(ctx context.Context, input *os.File) 
 // stdin を所有せず、閉じることもない。
 func readUnixPassword(
 	ctx context.Context, input *os.File, operations unixPasswordOperations,
+) (password []byte, resultErr error) {
+	return readUnixPasswordWithPrompt(ctx, input, operations, nil)
+}
+
+func readUnixPasswordWithPrompt(
+	ctx context.Context, input *os.File, operations unixPasswordOperations, prompt func() error,
 ) (password []byte, resultErr error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -84,6 +92,14 @@ func readUnixPassword(
 		_ = wakeWrite.Close()
 	}()
 
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if prompt != nil {
+		if err := prompt(); err != nil {
+			return nil, err
+		}
+	}
 	password, err = readUnixPasswordBytes(ctx, fd, int(wakeRead.Fd()), operations)
 	if err != nil {
 		zeroBytes(password)

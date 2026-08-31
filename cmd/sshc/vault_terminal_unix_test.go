@@ -16,6 +16,7 @@ import (
 	"os/signal"
 	"reflect"
 	"runtime"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -103,6 +104,55 @@ func TestVaultPromptPTYHelperProcess(t *testing.T) {
 type unixPasswordTestResult struct {
 	password []byte
 	err      error
+}
+
+func TestUnixPasswordPromptRunsAfterNoEchoSetupAndBeforeRead(t *testing.T) {
+	operations, _ := scriptedUnixPasswordOperations([]byte{'\n'}, io.EOF)
+	events := make([]string, 0, 4)
+	makeRaw := operations.makeRaw
+	operations.makeRaw = func(fd int) (*term.State, error) {
+		events = append(events, "no-echo")
+		return makeRaw(fd)
+	}
+	read := operations.read
+	operations.read = func(fd int, destination []byte) (int, error) {
+		events = append(events, "read")
+		return read(fd, destination)
+	}
+	restore := operations.restore
+	operations.restore = func(fd int, state *term.State) error {
+		events = append(events, "restore")
+		return restore(fd, state)
+	}
+
+	password, err := readUnixPasswordWithPrompt(context.Background(), vaultTestInput(t), operations, func() error {
+		events = append(events, "prompt")
+		return nil
+	})
+	defer zeroBytes(password)
+	if err != nil || len(password) != 0 {
+		t.Fatalf("password=%q error=%v", password, err)
+	}
+	want := []string{"no-echo", "prompt", "read", "restore"}
+	if !slices.Equal(events, want) {
+		t.Fatalf("events=%q, want %q", events, want)
+	}
+}
+
+func TestUnixPasswordPromptFailureRestoresNoEchoModeBeforeReturning(t *testing.T) {
+	promptFailure := errors.New("prompt failed")
+	operations, restored := scriptedUnixPasswordOperations(nil, io.EOF)
+	read := operations.read
+	operations.read = func(fd int, destination []byte) (int, error) {
+		t.Fatal("password input was read after the prompt failed")
+		return read(fd, destination)
+	}
+	password, err := readUnixPasswordWithPrompt(context.Background(), vaultTestInput(t), operations, func() error {
+		return promptFailure
+	})
+	if password != nil || !errors.Is(err, promptFailure) || *restored != 1 {
+		t.Fatalf("prompt failure=%v, %v restore calls=%d", password, err, *restored)
+	}
 }
 
 func TestUnixPasswordReaderEditsAndBoundsBytesWithoutControlCharacters(t *testing.T) {
@@ -253,7 +303,7 @@ func TestUnixPasswordReaderCancellationDuringReadRestoresExactMode(t *testing.T)
 	ctx, cancel := context.WithCancel(context.Background())
 	result := make(chan unixPasswordTestResult, 1)
 	go func() {
-		password, err := systemPasswordTerminal{}.ReadPassword(ctx, slave)
+		password, err := systemPasswordTerminal{}.ReadPassword(ctx, slave, func() error { return nil })
 		result <- unixPasswordTestResult{password: password, err: err}
 	}()
 	waitForTerminalModeChange(t, slave, prior)
@@ -285,7 +335,7 @@ func TestUnixPasswordReaderSuccessRestoresExactMode(t *testing.T) {
 	}
 	result := make(chan unixPasswordTestResult, 1)
 	go func() {
-		password, err := systemPasswordTerminal{}.ReadPassword(context.Background(), slave)
+		password, err := systemPasswordTerminal{}.ReadPassword(context.Background(), slave, func() error { return nil })
 		result <- unixPasswordTestResult{password: password, err: err}
 	}()
 	waitForTerminalModeChange(t, slave, prior)
@@ -316,7 +366,7 @@ func TestUnixPasswordReaderReadCancelRaceAlwaysRestoresModeAndReturns(t *testing
 		ctx, cancel := context.WithCancel(context.Background())
 		result := make(chan unixPasswordTestResult, 1)
 		go func() {
-			password, err := systemPasswordTerminal{}.ReadPassword(ctx, slave)
+			password, err := systemPasswordTerminal{}.ReadPassword(ctx, slave, func() error { return nil })
 			result <- unixPasswordTestResult{password: password, err: err}
 		}()
 		waitForTerminalModeChange(t, slave, prior)
