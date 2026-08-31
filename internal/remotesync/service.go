@@ -685,6 +685,12 @@ func (s *Service) collect() (Manifest, map[string][]byte, error) {
 	if len(entries) > MaxEntries {
 		return Manifest{}, nil, ErrSnapshotTooLarge
 	}
+	paths := newPortablePathSet()
+	for _, entry := range entries {
+		if err := paths.add(entry.Path); err != nil {
+			return Manifest{}, nil, err
+		}
+	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Path < entries[j].Path })
 
 	return Manifest{

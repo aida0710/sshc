@@ -291,6 +291,54 @@ func TestWindowsDeviceNamePrefixesRemainUsable(t *testing.T) {
 	}
 }
 
+func TestBuildRefusesCaseInsensitivePathCollisions(t *testing.T) {
+	for _, test := range []struct {
+		name  string
+		paths []string
+	}{
+		{name: "file name", paths: []string{"config", "CONFIG"}},
+		{name: "directory spelling", paths: []string{"Connections/a.conf", "connections/b.conf"}},
+		{name: "file and directory", paths: []string{"keys", "KEYS/id_ed25519"}},
+		{name: "duplicate", paths: []string{"config", "config"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			manifest := remotesync.Manifest{
+				CreatedAt: "2026-08-31T00:00:00Z", Origin: "origin", Message: "Colliding paths",
+			}
+			contents := map[string][]byte{}
+			for _, name := range test.paths {
+				manifest.Files = append(manifest.Files, entry(name, name))
+				contents[name] = []byte(name)
+			}
+			if err := remotesync.FinalizeManifest(&manifest, ""); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := remotesync.Build(manifest, contents); !errors.Is(err, remotesync.ErrUnsafePath) {
+				t.Fatalf("Build = %v, want ErrUnsafePath", err)
+			}
+		})
+	}
+}
+
+func TestReadRefusesCaseInsensitivePathCollisions(t *testing.T) {
+	for _, paths := range [][]string{
+		{"config", "CONFIG"},
+		{"Connections/a.conf", "connections/b.conf"},
+		{"keys", "KEYS/id_ed25519"},
+	} {
+		files := map[string]string{}
+		manifest := remotesync.Manifest{Files: make([]remotesync.Entry, 0, len(paths))}
+		for _, name := range paths {
+			files[name] = name
+			manifest.Files = append(manifest.Files, entry(name, name))
+		}
+		archive := handBuilt(t, files, manifest)
+		if _, _, err := remotesync.Read(archive); !errors.Is(err, remotesync.ErrUnsafePath) {
+			t.Fatalf("Read(%v) = %v, want ErrUnsafePath", paths, err)
+		}
+	}
+}
+
 func TestReadRefusesDeviceLocalAndRawVaultPaths(t *testing.T) {
 	for _, name := range []string{
 		"sshc/secrets",
