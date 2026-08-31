@@ -35,6 +35,13 @@ func main() {
 		printVersion(os.Stdout)
 		os.Exit(0)
 	}
+	if called.Kind == invocationCompletion {
+		if err := writeCompletion(os.Stdout, called.Args[0]); err != nil {
+			fmt.Fprintf(os.Stderr, "sshc: %v\n", err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
 	if called.Kind == invocationTransport || called.Kind == invocationRunTransport {
 		ctx, stopSignals := notifySignals(context.Background())
 		defer stopSignals()
