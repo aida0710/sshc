@@ -169,6 +169,7 @@ export function CommandPalette({
     <ModalShell
       labelledBy="command-palette-heading"
       onDismiss={onClose}
+      closeOnOutside
       initialFocusRef={input}
       {...(returnFocusRef === undefined ? {} : { returnFocusRef })}
       placement="palette"
