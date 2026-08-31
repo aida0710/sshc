@@ -25,6 +25,7 @@ function renderList(overrides: Partial<Parameters<typeof ConsoleList>[0]> = {}) 
     onSelect: vi.fn(),
     onClose: vi.fn(),
     onRename: vi.fn(async () => true),
+    onRenameWorkspace: vi.fn(),
     onUnpinTitle: vi.fn(async () => true),
     onDuplicate: vi.fn(),
     onReorder: vi.fn(),
@@ -100,6 +101,25 @@ describe("ConsoleList", () => {
     expect(screen.getByRole("button", { name: "db-primary" })).toBeVisible();
     await user.click(screen.getByRole("button", { name: "bastion + db-primary" }));
     expect(props.onSelect).toHaveBeenCalledWith(live.id);
+  });
+
+  it("renames the live workspace from its row menu", async () => {
+    const user = userEvent.setup();
+    const prompt = vi.spyOn(window, "prompt").mockReturnValue("Production");
+    const props = renderList({
+      workspace: {
+        id: "live-workspace",
+        name: "bastion + db-primary",
+        memberSessionIds: [live.id, dead.id],
+        focusedSessionId: live.id,
+      },
+    });
+
+    await user.click(screen.getByRole("button", { name: "Actions for bastion + db-primary" }));
+    await user.click(screen.getByRole("menuitem", { name: "Rename workspace" }));
+
+    expect(prompt).toHaveBeenCalledWith("Live workspace name", "bastion + db-primary");
+    expect(props.onRenameWorkspace).toHaveBeenCalledWith("Production");
   });
 
   it("renames a session in place and leaves its destination alone", async () => {

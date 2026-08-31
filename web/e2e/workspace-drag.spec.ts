@@ -206,9 +206,11 @@ test("selects the whole local console row and docks local shells", async ({ page
     expect(dialog.defaultValue()).toBe("localhost");
     await dialog.accept("Build workers");
   });
-  await page.getByRole("button", { name: "Rename workspace" }).click();
+  await navigation.getByRole("button", { name: "Actions for localhost" }).click();
+  await page.getByRole("menuitem", { name: "Rename workspace" }).click();
   await expect(page.locator("[data-desktop-workspace-controls]").getByText("Build workers", { exact: true })).toBeVisible();
   await expect(navigation.getByText("Build workers", { exact: true })).toBeVisible();
+  await expect(page.locator("[data-desktop-workspace-controls]").getByRole("button", { name: "Rename workspace" })).toHaveCount(0);
   await page.getByRole("button", { name: "Send command…" }).click();
   const broadcast = page.getByRole("dialog", { name: "Send to connected terminals" });
   await expect(broadcast).toContainText("localhost");

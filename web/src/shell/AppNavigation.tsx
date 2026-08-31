@@ -39,6 +39,7 @@ export function AppNavigation({
   orderedConsoles,
   activeConsole,
   liveWorkspace,
+  onRenameWorkspace,
   unreadBySession,
   onShowConsole,
   onDuplicateConsole,
@@ -62,6 +63,7 @@ export function AppNavigation({
   orderedConsoles: TerminalSession[];
   activeConsole: string | null;
   liveWorkspace: LiveWorkspaceSummary | null;
+  onRenameWorkspace: (name: string) => void;
   unreadBySession: AgentUnreadBySession;
   onShowConsole: (id: string) => void;
   onDuplicateConsole: (id: string) => void;
@@ -125,6 +127,7 @@ export function AppNavigation({
           sessions={orderedConsoles}
           selected={activeConsole}
           workspace={liveWorkspace}
+          onRenameWorkspace={onRenameWorkspace}
           unreadBySession={unreadBySession}
           maxSessions={consoles.maxSessions}
           busy={consoles.busy}

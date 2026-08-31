@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { IntegrationsApi, TerminalSettings } from "../api/integrations";
 import type { Section } from "../routing/sectionRoute";
-import type { WorkspaceRestoreRequest } from "../features/workspaces/TerminalWorkspace";
+import type { WorkspaceRenameRequest, WorkspaceRestoreRequest } from "../features/workspaces/TerminalWorkspace";
 import type { LiveWorkspaceSummary } from "../features/workspaces/live";
 import type { TerminalSessionsState } from "./sessions";
 
@@ -33,8 +33,11 @@ export function useTerminalWorkspaceController({
     useState<LiveWorkspaceSummary | null>(null);
   const [restoreRequest, setRestoreRequest] =
     useState<WorkspaceRestoreRequest | null>(null);
+  const [renameRequest, setRenameRequest] =
+    useState<WorkspaceRenameRequest | null>(null);
   const [consoleOrder, setConsoleOrder] = useState<string[]>([]);
   const restoreSequence = useRef(0);
+  const renameSequence = useRef(0);
 
   useEffect(() => {
     if (!enabled) return;
@@ -97,6 +100,22 @@ export function useTerminalWorkspaceController({
     );
   }, []);
 
+  const renameWorkspace = useCallback(
+    (name: string) => {
+      renameSequence.current += 1;
+      setRenameRequest({ name, sequence: renameSequence.current });
+      closeNavigation();
+      navigate("Terminal");
+    },
+    [closeNavigation, navigate],
+  );
+
+  const consumeRename = useCallback((sequence: number) => {
+    setRenameRequest((current) =>
+      current?.sequence === sequence ? null : current,
+    );
+  }, []);
+
   const orderedConsoles = useMemo(() => {
     const rank = new Map(consoleOrder.map((id, index) => [id, index]));
     return consoles.sessions
@@ -142,12 +161,15 @@ export function useTerminalWorkspaceController({
     activeConsole,
     liveWorkspace,
     restoreRequest,
+    renameRequest,
     orderedConsoles,
     showConsole,
     openWorkspace,
+    renameWorkspace,
     openLocalShell,
     duplicateConsole,
     consumeRestore,
+    consumeRename,
     reorderConsoles: setConsoleOrder,
     setLiveWorkspace,
     setSettings,

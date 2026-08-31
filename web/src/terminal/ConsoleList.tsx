@@ -20,6 +20,7 @@ type ConsoleListProps = {
   onSelect: (id: string) => void;
   onClose: (id: string) => void;
   onRename: (id: string, title: string) => Promise<boolean>;
+  onRenameWorkspace: (name: string) => void;
   onUnpinTitle: (id: string) => Promise<boolean>;
   onDuplicate: (id: string) => void;
   onReorder: (order: string[]) => void;
@@ -49,6 +50,7 @@ export function ConsoleList({
   onSelect,
   onClose,
   onRename,
+  onRenameWorkspace,
   onUnpinTitle,
   onDuplicate,
   onReorder,
@@ -64,8 +66,10 @@ export function ConsoleList({
   const [dragging, setDragging] = useState<string | null>(null);
   const [dropBefore, setDropBefore] = useState<string | null>(null);
   const [workspaceExpanded, setWorkspaceExpanded] = useState(false);
+  const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
   const [shiftPressed, setShiftPressed] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const workspaceMenuRef = useRef<HTMLLIElement | null>(null);
 
   const live = sessions.filter((session) => session.exited === undefined).length;
   const full = maxSessions > 0 && live >= maxSessions;
@@ -79,16 +83,23 @@ export function ConsoleList({
   useEffect(() => {
     if (menuFor !== null && !sessions.some((session) => session.id === menuFor)) setMenuFor(null);
     if (renaming !== null && !sessions.some((session) => session.id === renaming)) setRenaming(null);
-  }, [sessions, menuFor, renaming]);
+    if (workspace === null) setWorkspaceMenuOpen(false);
+  }, [sessions, menuFor, renaming, workspace]);
 
   useEffect(() => {
-    if (menuFor === null) return;
+    if (menuFor === null && !workspaceMenuOpen) return;
     function dismiss(event: PointerEvent) {
-      if (!menuRef.current?.contains(event.target as Node)) setMenuFor(null);
+      const target = event.target as Node;
+      const insideSessionMenu = menuFor !== null && menuRef.current?.contains(target) === true;
+      const insideWorkspaceMenu = workspaceMenuOpen && workspaceMenuRef.current?.contains(target) === true;
+      if (!insideSessionMenu && !insideWorkspaceMenu) {
+        setMenuFor(null);
+        setWorkspaceMenuOpen(false);
+      }
     }
     document.addEventListener("pointerdown", dismiss);
     return () => document.removeEventListener("pointerdown", dismiss);
-  }, [menuFor]);
+  }, [menuFor, workspaceMenuOpen]);
 
   useEffect(() => {
     function keyDown(event: KeyboardEvent) {
@@ -163,7 +174,7 @@ export function ConsoleList({
           onDrop={() => drop(null)}
         >
           {workspace === null || groupedSessions.length < 2 ? null : (
-            <li className="rounded-lg border border-control-line bg-control/70 p-1">
+            <li ref={workspaceMenuRef} className="relative rounded-lg border border-control-line bg-control/70 p-1">
               <div className={`flex items-center gap-1 rounded-md ${workspaceMembers.has(selected ?? "") ? "bg-select-fill" : ""}`}>
                 <button
                   type="button"
@@ -183,7 +194,40 @@ export function ConsoleList({
                   </span>
                   <span className="block text-xs text-ink-faint">{t("workspace.groupCount", { count: String(groupedSessions.length) })}</span>
                 </button>
+                <button
+                  type="button"
+                  aria-label={t("workspace.rowMenu", { name: workspace.name })}
+                  aria-expanded={workspaceMenuOpen}
+                  onClick={() => {
+                    setMenuFor(null);
+                    setWorkspaceMenuOpen((open) => !open);
+                  }}
+                  className="flex size-7 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-select-fill"
+                >
+                  <Icon name="moreHorizontal" className="size-3.5" />
+                </button>
               </div>
+              {workspaceMenuOpen ? (
+                <div
+                  ref={menuRef}
+                  role="menu"
+                  aria-label={t("workspace.rowMenu", { name: workspace.name })}
+                  className="absolute right-1 top-full z-10 mt-0.5 w-48 rounded-lg border border-control-line bg-card p-1 shadow-lg"
+                >
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setWorkspaceMenuOpen(false);
+                      const name = window.prompt(t("workspace.renamePrompt"), workspace.name)?.trim() ?? "";
+                      if (name !== "" && name !== workspace.name) onRenameWorkspace(name);
+                    }}
+                    className="block w-full rounded px-2 py-1.5 text-left text-xs text-ink hover:bg-select-fill"
+                  >
+                    {t("workspace.rename")}
+                  </button>
+                </div>
+              ) : null}
             </li>
           )}
           {displayedSessions.map((session) => {
@@ -321,6 +365,7 @@ export function ConsoleList({
                       const spaceBelow = lowerEdge - trigger.bottom;
                       const spaceAbove = trigger.top - upperEdge;
                       setMenuPlacement(spaceBelow < 132 && spaceAbove > spaceBelow ? "up" : "down");
+                      setWorkspaceMenuOpen(false);
                       setMenuFor(session.id);
                     }}
                     className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-select-fill"

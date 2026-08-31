@@ -326,8 +326,8 @@ describe("TerminalWorkspace pane movement", () => {
 
   it("renames an unsaved live workspace and publishes the new name", async () => {
     const changed = vi.fn();
-    const prompt = vi.spyOn(window, "prompt").mockReturnValue("Build workers");
-    function LocalHarness() {
+    const consumed = vi.fn();
+    function LocalHarness({ renameRequest }: { renameRequest: { name: string; sequence: number } | null }) {
       const [active, setActive] = useState(localPrimary.id);
       return <TerminalWorkspace
         sessions={[localPrimary, localSecondary]}
@@ -335,20 +335,22 @@ describe("TerminalWorkspace pane movement", () => {
         onActive={setActive}
         onOpenAlias={vi.fn()}
         onOpenShell={vi.fn()}
+        renameRequest={renameRequest}
+        onRenameConsumed={consumed}
         onLiveWorkspaceChange={changed}
         renderTerminal={(session) => <div>{session.title}</div>}
       />;
     }
 
-    const { container } = render(<LocalHarness />);
+    const { container, rerender } = render(<LocalHarness renameRequest={null} />);
     dockConnectedSession(container, localSecondary.id);
     await waitFor(() => expect(container.querySelectorAll("[data-workspace-pane]")).toHaveLength(2));
     expect(screen.getByText("localhost")).toBeVisible();
 
-    await userEvent.click(screen.getByRole("button", { name: "Rename workspace" }));
+    rerender(<LocalHarness renameRequest={{ name: "Build workers", sequence: 1 }} />);
 
-    expect(prompt).toHaveBeenCalledWith("Live workspace name", "localhost");
-    expect(screen.getByText("Build workers")).toBeVisible();
+    await waitFor(() => expect(screen.getByText("Build workers")).toBeVisible());
+    expect(consumed).toHaveBeenCalledWith(1);
     await waitFor(() => expect(changed).toHaveBeenCalledWith(expect.objectContaining({
       name: "Build workers",
       memberSessionIds: [localPrimary.id, localSecondary.id],

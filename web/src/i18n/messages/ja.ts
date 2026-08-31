@@ -162,6 +162,7 @@ export const ja = {
   "workspace.groupCount": "{count} セッション",
   "workspace.rename": "名前変更",
   "workspace.renamePrompt": "ワークスペース名",
+  "workspace.rowMenu": "{name}のワークスペース操作",
   "workspace.expandGroup": "{name}のターミナルを表示",
   "workspace.collapseGroup": "{name}のターミナルを隠す",
   "workspace.resizeSplit": "分割サイズを変更",

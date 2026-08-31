@@ -12,6 +12,7 @@ import { consoleDragMimeType, type LiveWorkspaceSummary } from "./live";
 import { browserSessionStorage, loadLiveWorkspace, saveLiveWorkspace, type LiveWorkspaceNode } from "./livePersistence";
 
 export type WorkspaceRestoreRequest = { id: string; sequence: number };
+export type WorkspaceRenameRequest = { name: string; sequence: number };
 
 function paneID(): string {
   const bytes = new Uint8Array(16);
@@ -93,7 +94,7 @@ function compactWorkspaceViewport(): boolean {
 
 export function TerminalWorkspace({
   sessions, activeSessionId, onActive, onOpenAlias, onOpenShell, renderTerminal, restoreRequest = null, onRestoreConsumed = () => undefined,
-  onLiveWorkspaceChange = () => undefined, sessionsLoaded = true,
+  renameRequest = null, onRenameConsumed = () => undefined, onLiveWorkspaceChange = () => undefined, sessionsLoaded = true,
 }: {
   sessions: TerminalSession[];
   activeSessionId: string | null;
@@ -103,6 +104,8 @@ export function TerminalWorkspace({
   renderTerminal: (session: TerminalSession) => ReactNode;
   restoreRequest?: WorkspaceRestoreRequest | null;
   onRestoreConsumed?: (sequence: number) => void;
+  renameRequest?: WorkspaceRenameRequest | null;
+  onRenameConsumed?: (sequence: number) => void;
   onLiveWorkspaceChange?: (workspace: LiveWorkspaceSummary | null) => void;
   sessionsLoaded?: boolean;
 }) {
@@ -119,6 +122,7 @@ export function TerminalWorkspace({
   const [liveRestoreReady, setLiveRestoreReady] = useState(false);
   const [liveWorkspaceName, setLiveWorkspaceName] = useState("");
   const consumedRestore = useRef(0);
+  const consumedRename = useRef(0);
   const liveWorkspaceID = useRef(paneID());
   const liveStorage = useMemo(() => browserSessionStorage(), []);
   const active = sessions.find((session) => session.id === activeSessionId) ?? null;
@@ -460,17 +464,20 @@ export function TerminalWorkspace({
     } catch (error) { setProblem(failureCode(error) || "workspace_failed"); }
   }, [onActive, onOpenAlias, onOpenShell]);
 
-  function renameLiveWorkspace() {
-    const name = window.prompt(t("workspace.renamePrompt"), workspaceDisplayName)?.trim() ?? "";
-    if (name !== "") setLiveWorkspaceName(name);
-  }
-
   useEffect(() => {
     if (restoreRequest === null || restoreRequest.sequence <= consumedRestore.current) return;
     consumedRestore.current = restoreRequest.sequence;
     onRestoreConsumed(restoreRequest.sequence);
     void restoreWorkspace(restoreRequest.id);
   }, [onRestoreConsumed, restoreRequest, restoreWorkspace]);
+
+  useEffect(() => {
+    if (renameRequest === null || renameRequest.sequence <= consumedRename.current) return;
+    consumedRename.current = renameRequest.sequence;
+    onRenameConsumed(renameRequest.sequence);
+    const name = renameRequest.name.trim();
+    if (layout !== null && name !== "") setLiveWorkspaceName(name);
+  }, [layout, onRenameConsumed, renameRequest]);
 
   function terminal(session: TerminalSession) { return renderTerminal(session); }
 
@@ -553,7 +560,6 @@ export function TerminalWorkspace({
           <div className="mr-2 flex min-w-0 items-center gap-2 border-r border-line pr-4">
             <span className="max-w-52 truncate text-xs font-semibold text-ink">{workspaceDisplayName}</span>
             <span className="whitespace-nowrap text-[11px] text-ink-faint">{t("workspace.groupCount", { count: String(workspacePaneCount) })}</span>
-            <button type="button" className="whitespace-nowrap rounded px-1.5 py-1 text-[11px] text-accent hover:bg-select-fill" onClick={renameLiveWorkspace}>{t("workspace.rename")}</button>
           </div>
         ) : null}
         <Button disabled={connectedCommandTargets === 0} onClick={() => setCommandCenter(true)}>{t("workspace.broadcastCommand")}</Button>
