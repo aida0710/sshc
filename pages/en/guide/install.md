@@ -60,13 +60,15 @@ The first launch asks you to create the vault master password. Run `sshc` from a
 
 On Linux systems using systemd, install sshc as a user service without sudo.
 
+Stop any `sshc engine` running in the foreground or under tmux first. The systemd engine cannot start while another engine holds the lock.
+
 ```sh
 sshc service install
 sshc service status
 sshc vault unlock
 ```
 
-`service install` creates, enables, and starts `~/.config/systemd/user/sshc.service`. It records Homebrew's stable `opt/sshc/bin/sshc` path or a verified `install.sh` destination. Manually copied and source-built executables are not registered automatically.
+`service install` creates, enables, and starts `~/.config/systemd/user/sshc.service`. It reports success only after matching systemd's main PID to sshc and reaching the status API. It records Homebrew's stable `opt/sshc/bin/sshc` path or a verified `install.sh` destination. Manually copied and source-built executables are not registered automatically.
 
 sshc will not overwrite an existing hand-written unit. Stop and move that unit before switching to sshc management.
 
@@ -91,4 +93,4 @@ Run `sshc service disable` to stop and remove the service. It only removes a uni
 - Windows: run the PowerShell installer again
 - Android: install the newer APK from GitHub Releases
 
-When an active service is managed by `sshc service install`, `sshc update` restarts it automatically. The restart locks the vault, so run `sshc vault unlock` again. Restart engines outside service management with `sshc engine --replace`.
+When an active service was created by `sshc service install` and its executable matches the installation being updated, `sshc update` restarts it automatically. The restart locks the vault, so run `sshc vault unlock` again. If the update succeeds but only the restart fails, follow the message and run `sshc service install` again. Restart engines outside service management with `sshc engine --replace`.
