@@ -602,11 +602,11 @@ func TestAutoRetriesATransientFailureAfterBoundedBackoff(t *testing.T) {
 	auto.Enabled = func() bool { return true }
 	auto.Key = func() (string, bool) { return syncPassphrase, true }
 	bucket.refuseObjectGets(3)
-	if first := once(t, auto); first.Phase != remotesync.AutoFailed || first.Detail != "bucket_refused" {
+	if first := once(t, auto); first.Phase != remotesync.AutoFailed || first.Detail != "bucket_unavailable" {
 		t.Fatalf("first transient failure = %+v", first)
 	}
 	downloads := bucket.downloads()
-	if second := once(t, auto); second.Phase != remotesync.AutoFailed || second.Detail != "bucket_refused" {
+	if second := once(t, auto); second.Phase != remotesync.AutoFailed || second.Detail != "bucket_unavailable" {
 		t.Fatalf("backoff view = %+v", second)
 	}
 	if got := bucket.downloads(); got != downloads {

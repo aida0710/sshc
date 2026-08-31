@@ -20,6 +20,10 @@ func TestFailureDetailKeepsAStableSafeCause(t *testing.T) {
 		{name: "dns", err: &net.DNSError{Err: "not found", Name: "invalid.example"}, want: "bucket_dns_failed"},
 		{name: "tls", err: x509.UnknownAuthorityError{}, want: "bucket_tls_failed"},
 		{name: "network", err: &net.OpError{Op: "dial", Net: "tcp", Err: errors.New("refused")}, want: "bucket_unreachable"},
+		{name: "authentication", err: ErrAuthenticationFailed, want: "bucket_authentication_failed"},
+		{name: "access", err: ErrAccessDenied, want: "bucket_access_denied"},
+		{name: "rate limit", err: ErrRateLimited, want: "bucket_rate_limited"},
+		{name: "service", err: ErrServiceUnavailable, want: "bucket_unavailable"},
 		{name: "short download", err: io.ErrUnexpectedEOF, want: "snapshot_download_incomplete"},
 		{name: "cost", err: ErrCostRefused, want: "snapshot_cost_refused"},
 		{name: "remote size", err: ErrObjectTooLarge, want: "snapshot_too_large"},
@@ -32,5 +36,18 @@ func TestFailureDetailKeepsAStableSafeCause(t *testing.T) {
 				t.Fatalf("failureDetail() = %q, want %q", got, test.want)
 			}
 		})
+	}
+}
+
+func TestCredentialFailuresWaitForConfigurationChange(t *testing.T) {
+	for _, err := range []error{ErrAuthenticationFailed, ErrAccessDenied} {
+		if !deterministicSyncFailure(err) {
+			t.Errorf("deterministicSyncFailure(%v) = false, want true", err)
+		}
+	}
+	for _, err := range []error{ErrRateLimited, ErrServiceUnavailable} {
+		if deterministicSyncFailure(err) {
+			t.Errorf("deterministicSyncFailure(%v) = true, want false", err)
+		}
 	}
 }

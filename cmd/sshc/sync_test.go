@@ -174,6 +174,33 @@ func TestSyncJSONFailureIsOneStdoutObjectAndNoStderr(t *testing.T) {
 	}
 }
 
+func TestObjectStoreFailureCodesKeepRetryAndHumanGuidance(t *testing.T) {
+	tests := []struct {
+		code      string
+		status    int
+		retryable bool
+		message   string
+	}{
+		{code: "bucket_authentication_failed", status: http.StatusBadGateway, retryable: false, message: "check the access key and secret"},
+		{code: "bucket_access_denied", status: http.StatusBadGateway, retryable: false, message: "check the bucket, region, and key permissions"},
+		{code: "bucket_rate_limited", status: http.StatusTooManyRequests, retryable: true, message: "wait and try again"},
+		{code: "bucket_unavailable", status: http.StatusServiceUnavailable, retryable: true, message: "try again later"},
+	}
+	for _, test := range tests {
+		t.Run(test.code, func(t *testing.T) {
+			failure := classifyCommandFailure(engineProblem{Status: test.status, Code: test.code, Retryable: retryableStatus(test.status)})
+			if failure.Kind != test.code || failure.Retryable != test.retryable {
+				t.Fatalf("failure = %+v, want kind %q retryable %t", failure, test.code, test.retryable)
+			}
+			var stderr strings.Builder
+			writeHumanSyncFailure(&stderr, failure)
+			if !strings.Contains(stderr.String(), test.message) {
+				t.Fatalf("message = %q, want %q", stderr.String(), test.message)
+			}
+		})
+	}
+}
+
 func TestSyncStatusHumanFailureIsActionableAndDoesNotUseStdout(t *testing.T) {
 	var stdout, stderr strings.Builder
 	code := runSync(context.Background(), syncInvocation{Action: syncStatus}, t.TempDir(),

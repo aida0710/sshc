@@ -1094,6 +1094,35 @@ describe("SyncPanel", () => {
     );
   });
 
+  it("explains an object store authentication failure specifically", async () => {
+    const api = buildApi(unconfigured, nothingToDo, {
+      checkSyncSetup: vi
+        .fn()
+        .mockRejectedValue(
+          new ApiError("bucket_authentication_failed", 502, null),
+        ),
+    });
+    render(<SyncPanel api={api} />);
+
+    await userEvent.type(
+      await screen.findByLabelText("Endpoint"),
+      "https://acc.r2.cloudflarestorage.com",
+    );
+    await userEvent.type(screen.getByLabelText("Bucket name"), "sshc");
+    await userEvent.type(screen.getByLabelText("Access key ID"), "AKID");
+    await userEvent.type(
+      screen.getByLabelText("Secret access key"),
+      "bad-secret",
+    );
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Check connection" }),
+    );
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(/could not authenticate/i);
+    expect(alert).toHaveTextContent("Code: bucket_authentication_failed");
+  });
+
   it("shows a specific network cause and a stable diagnostic code", async () => {
     const api = buildApi(unconfigured, nothingToDo, {
       checkSyncSetup: vi

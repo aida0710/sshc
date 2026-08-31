@@ -1104,6 +1104,14 @@ export const en = {
   "sync.wrongKey":
     "The saved key cannot decrypt the snapshot in this bucket. Check that every machine uses the same key, or explicitly replace the remote snapshot from Bucket status.",
   "sync.wrongMaster": "The master password for this machine is incorrect.",
+  "sync.bucketAuthenticationFailed":
+    "The object store could not authenticate the request. Nothing was saved. Check the access key and secret.",
+  "sync.bucketAccessDenied":
+    "The object store denied access. Nothing was saved. Check the bucket, region, and key permissions.",
+  "sync.bucketRateLimited":
+    "The object store is limiting requests. Wait a moment and try again.",
+  "sync.bucketUnavailable":
+    "The object store service is temporarily unavailable. Try again later.",
   "sync.unreachable":
     "The object store refused the request. Nothing was saved. Check the bucket, access key, secret, region, and permissions.",
   "sync.bucketTimeout":
