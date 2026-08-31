@@ -48,8 +48,9 @@ var allowedToStartPrograms = []string{
 	// tagのscriptへ委ねる。どちらにも該当しない実行ファイルからは起動しない。
 	"cmd/sshc/update.go",
 	// Linuxのservice commandはsshc管理marker付きunitだけを作成、確認、削除する。
-	// systemctlは/usr/binの固定パスと固定argvで呼び、利用者の入力をprogramや引数へ
-	// 渡さない。update連携も管理unitがactiveの場合のrestartだけに限定する。
+	// systemctlは既知のpathまたはPATHから実行可能な絶対pathへ一度解決し、固定argvで
+	// 呼ぶ。利用者の入力をprogramや引数へ渡さず、update連携も実行pathが一致する
+	// activeな管理unitのtry-restartだけに限定する。
 	"cmd/sshc/service_linux.go",
 	// ローカルシェルには擬似端末が要る。インターフェースは出力を集めて返すものなので、
 	// PTY を握って対話し続けるこれは、そもそもあそこを通れない。
