@@ -182,7 +182,7 @@ func TestObjectStoreFailureCodesKeepRetryAndHumanGuidance(t *testing.T) {
 		message   string
 	}{
 		{code: "bucket_authentication_failed", status: http.StatusBadGateway, retryable: false, message: "check the access key and secret"},
-		{code: "bucket_access_denied", status: http.StatusBadGateway, retryable: false, message: "check the bucket, region, and key permissions"},
+		{code: "bucket_access_denied", status: http.StatusBadGateway, retryable: false, message: "check the credentials, bucket, region, and key permissions"},
 		{code: "bucket_rate_limited", status: http.StatusTooManyRequests, retryable: true, message: "wait and try again"},
 		{code: "bucket_unavailable", status: http.StatusServiceUnavailable, retryable: true, message: "try again later"},
 	}

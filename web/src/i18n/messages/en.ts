@@ -1107,7 +1107,7 @@ export const en = {
   "sync.bucketAuthenticationFailed":
     "The object store could not authenticate the request. Nothing was saved. Check the access key and secret.",
   "sync.bucketAccessDenied":
-    "The object store denied access. Nothing was saved. Check the bucket, region, and key permissions.",
+    "The object store denied access. Nothing was saved. Check the credentials, bucket, region, and key permissions.",
   "sync.bucketRateLimited":
     "The object store is limiting requests. Wait a moment and try again.",
   "sync.bucketUnavailable":
