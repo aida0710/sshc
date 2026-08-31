@@ -95,6 +95,92 @@ func TestCompleteFinishesTheRemainingRenames(t *testing.T) {
 	assertNoTemporaryFiles(t, workspace.Root())
 }
 
+func TestFinalChangeWaitsForRemovalAndRestartedCompletion(t *testing.T) {
+	workspace := newTestWorkspace(t)
+	config := writeWorkspaceFile(t, workspace, "config", "Host before\n", 0o600)
+	movedFrom := writeWorkspaceFile(t, workspace, "move-from.conf", "Host moved\n", 0o600)
+	movedTo := filepath.Join(workspace.Root(), "move-to.conf")
+	removed := writeWorkspaceFile(t, workspace, "gone.conf", "Host gone\n", 0o600)
+	state := writeWorkspaceFile(t, workspace, "sshc/sync-state.json", "old-state\n", 0o600)
+	failure := errors.New("injected removal failure")
+	workspace.fileSystem = faultyFileSystem{
+		FileSystem: OSFileSystem{},
+		failOn: func(operation, path string) error {
+			if operation == "remove" && path == removed {
+				return failure
+			}
+			return nil
+		},
+	}
+	manager := NewManager(workspace, fixedClock(), bytes.NewReader(bytes.Repeat([]byte{0x5a}, 4096)))
+	result, err := manager.Commit(Request{
+		Operation: "sync.pull",
+		Changes: []Change{{
+			Path: config, Contents: []byte("Host after\n"),
+			Precondition: Precondition{Exists: true, Digest: Digest([]byte("Host before\n"))},
+		}},
+		Moves: []Move{{
+			From: movedFrom, To: movedTo,
+			Precondition: Precondition{Exists: true, Digest: Digest([]byte("Host moved\n"))},
+		}},
+		Removals: []Removal{{
+			Path: removed, Precondition: Precondition{Exists: true, Digest: Digest([]byte("Host gone\n"))}, Backup: true,
+		}},
+		FinalChanges: []Change{{
+			Path: state, Contents: []byte("new-state\n"),
+			Precondition: Precondition{Exists: true, Digest: Digest([]byte("old-state\n"))}, SkipBackup: true,
+		}},
+	})
+	if !errors.Is(err, failure) || result.ID == "" {
+		t.Fatalf("Commit = %#v, %v", result, err)
+	}
+	if got, readErr := os.ReadFile(config); readErr != nil || string(got) != "Host after\n" {
+		t.Fatalf("config after interruption = %q, %v", got, readErr)
+	}
+	if got, readErr := os.ReadFile(movedTo); readErr != nil || string(got) != "Host moved\n" {
+		t.Fatalf("move before interruption = %q, %v", got, readErr)
+	}
+	if _, statErr := os.Stat(movedFrom); !errors.Is(statErr, fs.ErrNotExist) {
+		t.Fatalf("move source survived: %v", statErr)
+	}
+	if got, readErr := os.ReadFile(state); readErr != nil || string(got) != "old-state\n" {
+		t.Fatalf("state advanced before removal = %q, %v", got, readErr)
+	}
+	if got, readErr := os.ReadFile(removed); readErr != nil || string(got) != "Host gone\n" {
+		t.Fatalf("failed removal target = %q, %v", got, readErr)
+	}
+
+	var operations []string
+	workspace.fileSystem = recordingFileSystem{FileSystem: OSFileSystem{}, operations: &operations}
+	restarted := NewManager(workspace, fixedClock(), bytes.NewReader(bytes.Repeat([]byte{0x6a}, 4096)))
+	pending, err := restarted.Pending()
+	if err != nil || len(pending) != 1 || pending[0].ID != result.ID || !pending[0].CanComplete {
+		t.Fatalf("Pending after restart = %#v, %v", pending, err)
+	}
+	record, _, err := restarted.loadPending(result.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	last := record.Entries[len(record.Entries)-1]
+	if last.Action != actionWrite || last.Path != state {
+		t.Fatalf("journal terminal entry = %#v", last)
+	}
+	if err := restarted.Complete(result.ID); err != nil {
+		t.Fatalf("Complete after restart = %v", err)
+	}
+	if _, statErr := os.Stat(removed); !errors.Is(statErr, fs.ErrNotExist) {
+		t.Fatalf("removal survived completion: %v", statErr)
+	}
+	if got, readErr := os.ReadFile(state); readErr != nil || string(got) != "new-state\n" {
+		t.Fatalf("state after completion = %q, %v", got, readErr)
+	}
+	removedAt := operationIndex(operations, "remove "+removed)
+	stateAt := operationIndex(operations, "rename "+state)
+	if removedAt < 0 || stateAt < 0 || removedAt >= stateAt {
+		t.Fatalf("recovery operations = %#v; removal=%d state=%d", operations, removedAt, stateAt)
+	}
+}
+
 func TestRollbackRestoresEveryCommittedFile(t *testing.T) {
 	manager, workspace, first, second := interruptedCommit(t)
 	pending, err := manager.Pending()
@@ -436,6 +522,35 @@ func stagedPathFor(t *testing.T, manager *Manager, identifier string, index int)
 		t.Fatalf("entry %d has no staged file", index)
 	}
 	return record.Entries[index].Temp
+}
+
+type recordingFileSystem struct {
+	FileSystem
+	operations *[]string
+}
+
+func (fileSystem recordingFileSystem) Rename(oldPath, newPath string) error {
+	*fileSystem.operations = append(*fileSystem.operations, "rename "+newPath)
+	return fileSystem.FileSystem.Rename(oldPath, newPath)
+}
+
+func (fileSystem recordingFileSystem) MovePrivate(oldPath, newPath string) error {
+	*fileSystem.operations = append(*fileSystem.operations, "rename "+newPath)
+	return fileSystem.FileSystem.MovePrivate(oldPath, newPath)
+}
+
+func (fileSystem recordingFileSystem) Remove(path string) error {
+	*fileSystem.operations = append(*fileSystem.operations, "remove "+path)
+	return fileSystem.FileSystem.Remove(path)
+}
+
+func operationIndex(operations []string, wanted string) int {
+	for index, operation := range operations {
+		if operation == wanted {
+			return index
+		}
+	}
+	return -1
 }
 
 func assertNoTemporaryFiles(t *testing.T, root string) {
