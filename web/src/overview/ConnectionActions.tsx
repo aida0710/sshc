@@ -3,6 +3,7 @@ import { useTranslate } from "../i18n/context";
 import { connectionLocation } from "../routing/connectionRoute";
 import { Icon } from "../ui/icons";
 import { useDismissibleLayer } from "../ui/useDismissibleLayer";
+import { useMenuKeyboard } from "../ui/useMenuKeyboard";
 
 type ConnectionActionsProps = {
   alias: string;
@@ -25,6 +26,7 @@ export function ConnectionActions({
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useDismissibleLayer({
     open,
@@ -32,6 +34,7 @@ export function ConnectionActions({
     onDismiss: () => setOpen(false),
     returnFocusRef: triggerRef,
   });
+  useMenuKeyboard({ open, menuRef, onClose: () => setOpen(false) });
 
   const settingsLocation = connectionLocation({ path, alias, panel: "Basic", advanced: "Jump" });
 
@@ -50,6 +53,7 @@ export function ConnectionActions({
       </button>
       {open ? (
         <div
+          ref={menuRef}
           role="menu"
           className="absolute bottom-full right-0 z-20 mb-1 min-w-48 rounded-lg border border-line bg-card p-1 shadow-lg"
         >
