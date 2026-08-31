@@ -242,6 +242,11 @@ jobs:
       - name: Build
         run: npm run build
 
+      # Buildが書き出したhash付きassetも含め、Go binaryへ埋め込む配布物が
+      # Web sourceと一致することを同じjob内で確認する。
+      - name: Verify embedded UI assets
+        run: ../scripts/ci/check-ui-dist.sh
+
   pages:
     name: Documentation site
     runs-on: ubuntu-latest
