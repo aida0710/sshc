@@ -39,7 +39,7 @@ sshc ssh <alias> --non-interactive -- <command...>
 sshc info <alias> --json
 ```
 
-The Homebrew formula installs completions for bash, zsh, and fish. For other installation methods, add the matching command below to your shell startup file. Candidates for `sshc ssh <Tab>` are read from the current `~/.ssh/config` and reachable `Include` files.
+The Homebrew formula installs completions for bash, zsh, and fish. For other installation methods, add the matching command below to your shell startup file. Completion covers subcommands, options, enumerated values, and connection aliases for `sshc ssh`, `sshc info`, and `sshc terminal create ssh`. Alias candidates are read from the current `~/.ssh/config` and reachable `Include` files whenever you press Tab.
 
 ```sh
 # bash
