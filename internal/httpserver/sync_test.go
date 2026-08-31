@@ -622,8 +622,12 @@ func TestReceiveOnlyCanPreviewAndApplyAnExplicitRemoteHead(t *testing.T) {
 	}
 
 	_, replacement, _ := measuredSyncEngine(t, bucket, map[string]string{"config": "Host replacement\n"})
+	confirmation, err := replacement.ForcePushConfirmation(context.Background(), remotesync.ForcePushTarget)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, err := replacement.ForcePush(
-		context.Background(), measuredSyncKey, bucket.liveETag(), "Replace head",
+		context.Background(), measuredSyncKey, confirmation, "Replace head",
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -730,7 +734,11 @@ func TestApplyRejectsARemoteGenerationThatChangedAfterPreview(t *testing.T) {
 	}
 
 	_, replacement, _ := measuredSyncEngine(t, bucket, map[string]string{"config": "Host second\n"})
-	if _, err := replacement.ForcePush(context.Background(), measuredSyncKey, bucket.liveETag(), "Replacement snapshot"); err != nil {
+	confirmation, err := replacement.ForcePushConfirmation(context.Background(), remotesync.ForcePushTarget)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := replacement.ForcePush(context.Background(), measuredSyncKey, confirmation, "Replacement snapshot"); err != nil {
 		t.Fatal(err)
 	}
 	request, err := json.Marshal(map[string]any{
