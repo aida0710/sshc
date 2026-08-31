@@ -32,6 +32,8 @@ Force Pull previews conflicts and removals with the remote selected as authorita
 
 Bucket history is read directly from S3. The screen initially shows the latest five entries. Expand the list or reveal long S3 object names only when needed. Listing encrypted objects does not require decryption; content diffs and restoration require the sync key.
 
+Existing schema v5 snapshots are automatically read as v6 after decryption and validation. A receive-only device never rewrites S3. The next push from a device allowed to send stores the live snapshot and subsequent history as v6.
+
 ```sh
 sshc sync
 sshc sync push --json

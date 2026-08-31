@@ -36,9 +36,9 @@ const ManifestName = "manifest.json"
 
 // SchemaVersion は、マニフェスト文書のバージョン。
 //
-// バージョン 5 は、revision、parent、messageを必須契約とする。過去形式を読み分ける
-// 分岐は持たず、この版が書く形式だけを受け付ける。
-const SchemaVersion = 5
+// バージョン 6 は、revision、parent、messageに加えて、認証済みのancestor chainを
+// 必須契約とする。過去形式を読み分ける分岐は持たず、この版が書く形式だけを受け付ける。
+const SchemaVersion = 6
 
 // MaxCommitMessageRunes は、履歴へ保存する一行メッセージの最大長。
 const MaxCommitMessageRunes = 240
@@ -104,37 +104,129 @@ type Manifest struct {
 	// 空なら履歴のrootである。
 	ParentRevision string `json:"parentRevision,omitempty"`
 	// Ancestors begins with ParentRevision and continues toward the root. It is
-	// encrypted and covered by Revision, so the object store does not learn it.
+	// encrypted and authenticated by the snapshot envelope, so the object store
+	// neither learns nor alters it. It is excluded from Revision so a validated
+	// v5 revision keeps its identity while the manifest migrates to v6.
 	Ancestors []string `json:"ancestors,omitempty"`
 	// Message はremoteでは暗号化manifest内だけに保存し、object metadataへ複製しない。
 	Message string  `json:"message"`
 	Files   []Entry `json:"files"`
 }
 
-type revisionDocument struct {
-	CreatedAt      string   `json:"createdAt"`
-	Origin         string   `json:"origin"`
-	ParentRevision string   `json:"parentRevision,omitempty"`
-	Ancestors      []string `json:"ancestors,omitempty"`
-	Message        string   `json:"message"`
-	Files          []Entry  `json:"files"`
+// manifestV5 is the exact previous snapshot contract. Keeping it separate from
+// Manifest makes DisallowUnknownFields meaningful during migration: a document
+// cannot claim to be v5 while carrying fields which only v6 understands.
+type manifestV5 struct {
+	SchemaVersion  int     `json:"schemaVersion"`
+	CreatedAt      string  `json:"createdAt"`
+	Origin         string  `json:"origin"`
+	Revision       string  `json:"revision"`
+	ParentRevision string  `json:"parentRevision,omitempty"`
+	Message        string  `json:"message"`
+	Files          []Entry `json:"files"`
 }
 
-// RevisionFor returns the stable content identity of a manifest. Revision and
-// schemaVersion are excluded because they describe, rather than comprise, the
-// revision contents.
+type snapshotMigration func(*Manifest) error
+
+const snapshotMigrationBaseVersion = 5
+
+var registeredSnapshotMigrations = map[int]snapshotMigration{
+	5: migrateSnapshotV5ToV6,
+}
+
+type revisionDocument struct {
+	CreatedAt      string  `json:"createdAt"`
+	Origin         string  `json:"origin"`
+	ParentRevision string  `json:"parentRevision,omitempty"`
+	Message        string  `json:"message"`
+	Files          []Entry `json:"files"`
+}
+
+// RevisionFor returns the stable content identity of a manifest. Revision,
+// schemaVersion and the derived ancestor cache are excluded. The direct parent
+// remains part of the identity; the envelope authenticates the complete chain.
 func RevisionFor(manifest Manifest) (string, error) {
 	files := append([]Entry(nil), manifest.Files...)
 	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
 	document, err := json.Marshal(revisionDocument{
 		CreatedAt: manifest.CreatedAt, Origin: manifest.Origin,
-		ParentRevision: manifest.ParentRevision, Ancestors: manifest.Ancestors,
-		Message: manifest.Message, Files: files,
+		ParentRevision: manifest.ParentRevision,
+		Message:        manifest.Message, Files: files,
 	})
 	if err != nil {
 		return "", err
 	}
 	return Digest(document), nil
+}
+
+func migrateSnapshotV5ToV6(manifest *Manifest) error {
+	if manifest.SchemaVersion != 5 || len(manifest.Ancestors) != 0 {
+		return ErrManifestMismatch
+	}
+	if manifest.ParentRevision != "" {
+		manifest.Ancestors = []string{manifest.ParentRevision}
+	}
+	manifest.SchemaVersion = 6
+	return nil
+}
+
+func migrateSnapshotManifest(manifest Manifest) (Manifest, error) {
+	if manifest.SchemaVersion < snapshotMigrationBaseVersion || manifest.SchemaVersion > SchemaVersion {
+		return Manifest{}, ErrUnsupportedVersion
+	}
+	for manifest.SchemaVersion < SchemaVersion {
+		step := registeredSnapshotMigrations[manifest.SchemaVersion]
+		if step == nil {
+			return Manifest{}, ErrUnsupportedVersion
+		}
+		if err := step(&manifest); err != nil {
+			return Manifest{}, err
+		}
+	}
+	return manifest, nil
+}
+
+func decodeManifest(document []byte) (Manifest, error) {
+	var version struct {
+		SchemaVersion int `json:"schemaVersion"`
+	}
+	if err := json.Unmarshal(document, &version); err != nil {
+		return Manifest{}, ErrNotASnapshot
+	}
+
+	var manifest Manifest
+	switch version.SchemaVersion {
+	case 5:
+		var legacy manifestV5
+		if err := decodeStrictJSON(document, &legacy); err != nil {
+			return Manifest{}, ErrNotASnapshot
+		}
+		manifest = Manifest{
+			SchemaVersion: legacy.SchemaVersion,
+			CreatedAt:     legacy.CreatedAt, Origin: legacy.Origin,
+			Revision: legacy.Revision, ParentRevision: legacy.ParentRevision,
+			Message: legacy.Message, Files: legacy.Files,
+		}
+	case SchemaVersion:
+		if err := decodeStrictJSON(document, &manifest); err != nil {
+			return Manifest{}, ErrNotASnapshot
+		}
+	default:
+		return Manifest{}, ErrUnsupportedVersion
+	}
+	return migrateSnapshotManifest(manifest)
+}
+
+func decodeStrictJSON(document []byte, target any) error {
+	decoder := json.NewDecoder(bytes.NewReader(document))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(target); err != nil {
+		return err
+	}
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		return ErrNotASnapshot
+	}
+	return nil
 }
 
 // FinalizeManifest prepares a new manifest for writing and records its parent.
@@ -337,19 +429,9 @@ func Read(archive []byte) (Manifest, map[string][]byte, error) {
 		}
 
 		if header.Name == ManifestName {
-			var version struct {
-				SchemaVersion int `json:"schemaVersion"`
-			}
-			if err := json.Unmarshal(body, &version); err != nil {
-				return Manifest{}, nil, ErrNotASnapshot
-			}
-			if version.SchemaVersion != SchemaVersion {
-				return Manifest{}, nil, ErrUnsupportedVersion
-			}
-			decoder := json.NewDecoder(bytes.NewReader(body))
-			decoder.DisallowUnknownFields()
-			if err := decoder.Decode(&manifest); err != nil {
-				return Manifest{}, nil, ErrNotASnapshot
+			manifest, err = decodeManifest(body)
+			if err != nil {
+				return Manifest{}, nil, err
 			}
 			seenManifest = true
 			continue
