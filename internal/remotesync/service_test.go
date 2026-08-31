@@ -1138,6 +1138,77 @@ func TestTheStateFileRecordsWhatWasSynced(t *testing.T) {
 	}
 }
 
+func TestPushRefusesAWorkspaceWithPendingRecoveryBeforeUploading(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fault-injection wrapper does not expose the Windows private-state reader")
+	}
+	home := t.TempDir()
+	root := filepath.Join(home, ".ssh")
+	if err := os.MkdirAll(root, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(root, "interrupted.conf")
+	if err := os.WriteFile(target, []byte("Host interrupted\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	failure := errors.New("injected removal failure")
+	fileSystem := pendingRecoveryFileSystem{
+		FileSystem: storage.OSFileSystem{}, target: target, failure: failure,
+	}
+	workspace, err := storage.NewWorkspace(fileSystem, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager := storage.NewManager(workspace, time.Now, rand.Reader)
+	hooks := defaultIntegrationHooks()
+	hooks.StableSnapshot = manager.WithSnapshot
+	service, err := remotesync.NewIntegratedService(workspace, manager,
+		func() string { return "2026-08-31T00:00:00Z" },
+		func() (string, error) { return "origin-pending", nil }, hooks)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bucket := &fakeBucket{}
+	server := httptest.NewTLSServer(bucket.handler())
+	t.Cleanup(server.Close)
+	config := remotesync.Config{Endpoint: server.URL, Bucket: "sshc", Region: "auto", Direction: remotesync.DirectionBoth}
+	credentials := objectstore.Credentials{AccessKeyID: "AKID", SecretAccessKey: "secret"}
+	client := &objectstore.Client{
+		HTTP: server.Client(), Endpoint: server.URL, Bucket: "sshc", Region: "auto", Creds: credentials,
+	}
+	if err := service.Configure(config, credentials, client); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.Commit(storage.Request{
+		Operation: "interrupted.remove",
+		Removals: []storage.Removal{{
+			Path: target, Precondition: storage.Precondition{Exists: true, Digest: storage.Digest([]byte("Host interrupted\n"))},
+		}},
+	}); !errors.Is(err, failure) {
+		t.Fatalf("fixture Commit = %v, want injected failure", err)
+	}
+
+	if _, err := service.Push(context.Background(), syncPassphrase, "Blocked push"); !errors.Is(err, storage.ErrPendingTransaction) || !errors.Is(err, remotesync.ErrWorkspaceBusy) {
+		t.Fatalf("Push = %v, want pending transaction/workspace busy", err)
+	}
+	if count, bytes := bucket.uploads(); count != 0 || bytes != 0 {
+		t.Fatalf("blocked Push uploaded %d objects / %d bytes", count, bytes)
+	}
+}
+
+type pendingRecoveryFileSystem struct {
+	storage.FileSystem
+	target  string
+	failure error
+}
+
+func (fileSystem pendingRecoveryFileSystem) Remove(path string) error {
+	if path == fileSystem.target {
+		return fileSystem.failure
+	}
+	return fileSystem.FileSystem.Remove(path)
+}
+
 func TestPushReportsMeasuredBytesAndPersistsTheSuccessfulOperation(t *testing.T) {
 	bucket := &fakeBucket{}
 	machine := newInstallation(t, bucket, map[string]string{
@@ -1218,6 +1289,53 @@ func TestPullReportsDownloadedAndExpandedBytesWithoutPersistingPreview(t *testin
 	}
 	if !foundConfig || !foundState {
 		t.Fatalf("atomic pull paths = %#v", history[0].Paths)
+	}
+}
+
+func TestPullCommitsSyncStateAsTheTerminalWrite(t *testing.T) {
+	bucket := &fakeBucket{}
+	producer := newInstallation(t, bucket, map[string]string{
+		"config": "Host first\n", "gone.conf": "Host gone\n",
+	})
+	if _, err := producer.service.Push(context.Background(), syncPassphrase, "Initial"); err != nil {
+		t.Fatal(err)
+	}
+	consumer := newInstallation(t, bucket, map[string]string{})
+	initial, err := consumer.service.Pull(context.Background(), syncPassphrase, remotesync.ResolveNone)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := consumer.service.Apply(initial); err != nil {
+		t.Fatal(err)
+	}
+
+	producer.write(t, "config", "Host second\n")
+	producer.remove(t, "gone.conf")
+	if _, err := producer.service.Push(context.Background(), syncPassphrase, "Remove obsolete config"); err != nil {
+		t.Fatal(err)
+	}
+	next, err := consumer.service.Pull(context.Background(), syncPassphrase, remotesync.ResolveRemote)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var committed storage.Request
+	consumer.manager.Validate = func(request storage.Request) error {
+		if request.Operation == "sync.pull" {
+			committed = request
+		}
+		return nil
+	}
+	if err := consumer.service.Apply(next); err != nil {
+		t.Fatal(err)
+	}
+	statePath := filepath.Join(consumer.workspace.Root(), filepath.FromSlash(remotesync.StatePath))
+	if len(committed.Removals) != 1 || len(committed.FinalChanges) != 1 || committed.FinalChanges[0].Path != statePath {
+		t.Fatalf("pull transaction = removals %#v, final changes %#v", committed.Removals, committed.FinalChanges)
+	}
+	for _, change := range committed.Changes {
+		if change.Path == statePath {
+			t.Fatalf("sync state remained an ordinary write: %#v", committed.Changes)
+		}
 	}
 }
 
