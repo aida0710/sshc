@@ -203,11 +203,9 @@
 
 - `make install` は `~/.local/bin/sshc` へ atomic にインストールし、sudo は不要です。`make uninstall` はこのバイナリだけを削除します。
 - `sshc` と実行中 engine のバージョンが異なる場合は接続前に拒否し、それぞれの実行ファイルパスを表示します。どちらが古いかは判定しません。
-- engine の継続実行は OS の process supervisor に委ねます。`sshc engine` は foreground で動作するため、`tmux`、`systemd` user unit、`launchd` などを使用できます。具体例は [docs/headless-examples.md](headless-examples.md) を参照してください。このアプリケーション自身は unit や scheduled task を作成しません。
+- engine の継続実行は OS の process supervisor に委ねます。`sshc engine` は foreground で動作するため、`tmux`、`systemd` user unit、`launchd` などを使用できます。具体例は [docs/headless-examples.md](headless-examples.md) を参照してください。Linuxでは`sshc service install`が`~/.config/systemd/user/sshc.service`を作成し、`status`と`disable`を含めてsshc管理marker付きunitだけを管理します。同名の手書きunitは上書きも削除もしません。macOS、Windows、scheduled task、desktop login itemは作成しません。
 
-  以前は、アプリケーションが `~/Library/LaunchAgents/com.github.aida0710.sshc.plist` と `~/.config/systemd/user/sshc.service` を作成し、`sshc service refresh` / `disable` で管理する方式と、デスクトップアプリケーションを OS のログイン項目に登録して engine を子プロセスとして起動する方式がありました。どちらも削除しました。
-
-  現在、常駐対象は `sshc engine` の foreground process です。OS のログイン項目ではなく process supervisor に登録します。引数なしの `sshc` は engine を起動しないため、常駐設定には使用しません。
+  常駐対象は `sshc engine` のforeground processです。引数なしの`sshc`はengineを起動しないため、unitの`ExecStart`には使用しません。登録するbinaryは管理元を確認できたHomebrewのformula安定パス、またはreceipt対応`install.sh`の配置先に限ります。`sshc update`は管理unitがactiveのときだけ更新後に再起動し、停止中のunitや手書きunitには触れません。
 - `sshc ssh --list` は `~/.ssh/config` と到達可能な `Include` を読み、具体的な接続先 alias を辞書順で 1 行ずつ表示します。`Host *`、ワイルドカード、否定パターンは接続先名ではないため表示せず、重複 alias は 1 回だけ表示します。設定の読み取り時に `ssh` や `Match exec` は実行しません。
 - 引数なしの `sshc ssh` は現在のターミナルに検索 TUI を表示します。alias、設定から計算した `HostName`・`User`・`Port`、metadata のタグで絞り込み、alias順に表示します。上下キーで選択し、Enter で同じ端末から接続します。Web UI は起動せず、`sshc ssh <接続先>` と同じ保存済み鍵パスフレーズの経路を使用します。設定ファイルが存在するが読み取れない場合は、接続先 0 件として扱わず読み取りエラーを表示します。
 - TUI の入力は端末からの read 単位で解釈します。`Esc` は単独キーであると同時に矢印キー列の先頭でもあるため、read の末尾にある場合だけ単独キーとして扱います。未対応の escape sequence は終端まで読み捨て、`Delete` や `Ctrl-矢印` の後続バイトが検索文字列に入らないようにします。行は端末幅で切り、表示できない件数を `N more` として表示します。

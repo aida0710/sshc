@@ -10,6 +10,8 @@ OpenSSHの設定を正本のまま使う、local-firstなSSH workspaceです。�
 
 macOS / Linux:
 
+[Homebrew](https://brew.sh/)を未導入の場合は、公式サイトの手順でインストールします。
+
 ```sh
 brew install aida0710/tap/sshc
 ```
@@ -36,7 +38,7 @@ sshc engine
 sshc
 ```
 
-`sshc engine`はforegroundで動き、デーモン化しません。引数なしの `sshc` はエンジンを起動しません。常駐させる場合はtmux、systemd、launchdなどを使い、自動起動は OS のプロセス管理機能で設定します。
+`sshc engine`はforegroundで動き、デーモン化しません。引数なしの `sshc` はエンジンを起動しません。Linuxでは`sshc service install`でsystemdユーザーサービスへ登録できます。その他の環境ではtmux、systemd、launchdなどのプロセス管理機能を使用します。
 
 初回はWeb UIまたはCLIでvaultを作成し、開きます。
 
