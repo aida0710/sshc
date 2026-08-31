@@ -3,24 +3,14 @@ import {
   lazy,
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
   type CSSProperties,
   type MouseEvent,
 } from "react";
-import {
-  apiClient,
-  failureCode,
-  whenLocked,
-  whenRequestFailed,
-  whenSessionEnded,
-  type HealthResponse,
-  type RequestFailureDiagnostic,
-} from "./api/client";
+import { type HealthResponse } from "./api/client";
 import {
   integrationsApi,
-  type LocalShellProfile,
   type PasswordVaultStatus,
   type TerminalAppearance,
   type TerminalSettings,
@@ -28,10 +18,12 @@ import {
 import { resolveAppearance } from "./terminal/appearance";
 import { configApi, type FileNode, type HostEntry } from "./api/config";
 import type { SessionState } from "./session/bootstrap";
-import type { CreateConnectionDraft, CreationPrerequisite } from "./connections/CreateConnectionModal";
+import type {
+  CreateConnectionDraft,
+  CreationPrerequisite,
+} from "./connections/CreateConnectionModal";
 import type { FileTarget } from "./explorer/ConfigExplorer";
 import { LockScreen } from "./secrets/LockScreen";
-import { announceVaultLocked, observeVaultLocked } from "./secrets/vaultLockSignal";
 import { OverviewPanel } from "./overview/OverviewPanel";
 import { useLanguage } from "./i18n/context";
 import type { Locale } from "./i18n/locale";
@@ -55,13 +47,25 @@ import {
   rememberNavigationVisible,
   rememberNavigationWidth,
 } from "./shell/navigationLayout";
-import type { Declared, Handoff, Navigation, Shell } from "./shell/sectionProps";
+import type {
+  Declared,
+  Handoff,
+  Navigation,
+  Shell,
+} from "./shell/sectionProps";
+import { useSectionRoute } from "./routing/useSectionRoute";
+import type {
+  GeneratedPrivateKeyHandoff,
+  GeneratedPublicKeyHandoff,
+} from "./keys/workflow";
 import {
-  useSectionRoute,
-} from "./routing/useSectionRoute";
-import type { GeneratedPrivateKeyHandoff, GeneratedPublicKeyHandoff } from "./keys/workflow";
-import { useTerminalSessions, type TerminalSessionsState } from "./terminal/sessions";
-import { TerminalWorkspace, type WorkspaceRestoreRequest } from "./features/workspaces/TerminalWorkspace";
+  useTerminalSessions,
+  type TerminalSessionsState,
+} from "./terminal/sessions";
+import {
+  TerminalWorkspace,
+  type WorkspaceRestoreRequest,
+} from "./features/workspaces/TerminalWorkspace";
 import type { LiveWorkspaceSummary } from "./features/workspaces/live";
 import { TransferNotifications } from "./sftp/TransferNotifications";
 import { sftpTransferManager } from "./sftp/transferManager";
@@ -71,45 +75,77 @@ import { setAndroidAppearance } from "./android/native";
 import { useAgentNotifications } from "./terminal/agentNotifications";
 import type { RemotePathAction } from "./terminal/TerminalLinkPopover";
 import type { SFTPTarget } from "./sftp/SFTPPanel";
+import { useAppSession } from "./session/useAppSession";
+import { useTerminalWorkspaceController } from "./terminal/useTerminalWorkspaceController";
+
+export { vaultStatePollIntervalMs } from "./session/useAppSession";
 
 const TerminalView = lazy(() =>
-  import("./terminal/TerminalView").then(({ TerminalView }) => ({ default: TerminalView })),
+  import("./terminal/TerminalView").then(({ TerminalView }) => ({
+    default: TerminalView,
+  })),
 );
 const ConnectionsPage = lazy(() =>
-  import("./connections/ConnectionsPage").then(({ ConnectionsPage }) => ({ default: ConnectionsPage })),
+  import("./connections/ConnectionsPage").then(({ ConnectionsPage }) => ({
+    default: ConnectionsPage,
+  })),
 );
 const ConfigExplorer = lazy(() =>
-  import("./explorer/ConfigExplorer").then(({ ConfigExplorer }) => ({ default: ConfigExplorer })),
+  import("./explorer/ConfigExplorer").then(({ ConfigExplorer }) => ({
+    default: ConfigExplorer,
+  })),
 );
 const GroupsPanel = lazy(() =>
-  import("./groups/GroupsPanel").then(({ GroupsPanel }) => ({ default: GroupsPanel })),
+  import("./groups/GroupsPanel").then(({ GroupsPanel }) => ({
+    default: GroupsPanel,
+  })),
 );
 const HistoryPanel = lazy(() =>
-  import("./history/HistoryPanel").then(({ HistoryPanel }) => ({ default: HistoryPanel })),
+  import("./history/HistoryPanel").then(({ HistoryPanel }) => ({
+    default: HistoryPanel,
+  })),
 );
 const KeysScreen = lazy(() =>
-  import("./keys/KeysScreen").then(({ KeysScreen }) => ({ default: KeysScreen })),
+  import("./keys/KeysScreen").then(({ KeysScreen }) => ({
+    default: KeysScreen,
+  })),
 );
 const DiagnosticsPanel = lazy(() =>
-  import("./diagnostics/DiagnosticsPanel").then(({ DiagnosticsPanel }) => ({ default: DiagnosticsPanel })),
+  import("./diagnostics/DiagnosticsPanel").then(({ DiagnosticsPanel }) => ({
+    default: DiagnosticsPanel,
+  })),
 );
 const SecretsPanel = lazy(() =>
-  import("./secrets/SecretsPanel").then(({ SecretsPanel }) => ({ default: SecretsPanel })),
+  import("./secrets/SecretsPanel").then(({ SecretsPanel }) => ({
+    default: SecretsPanel,
+  })),
 );
 const SettingsPanel = lazy(() =>
-  import("./settings/SettingsPanel").then(({ SettingsPanel }) => ({ default: SettingsPanel })),
+  import("./settings/SettingsPanel").then(({ SettingsPanel }) => ({
+    default: SettingsPanel,
+  })),
 );
 const SyncPanel = lazy(() =>
   import("./sync/SyncPanel").then(({ SyncPanel }) => ({ default: SyncPanel })),
 );
 const KnownHostsPanel = lazy(() =>
-  import("./knownhosts/KnownHostsPanel").then(({ KnownHostsPanel }) => ({ default: KnownHostsPanel })),
+  import("./knownhosts/KnownHostsPanel").then(({ KnownHostsPanel }) => ({
+    default: KnownHostsPanel,
+  })),
 );
 const RemoteKeyPanel = lazy(() =>
-  import("./remotekeys/RemoteKeyPanel").then(({ RemoteKeyPanel }) => ({ default: RemoteKeyPanel })),
+  import("./remotekeys/RemoteKeyPanel").then(({ RemoteKeyPanel }) => ({
+    default: RemoteKeyPanel,
+  })),
 );
-const SFTPPanel = lazy(() => import("./sftp/SFTPPanel").then(({ SFTPPanel }) => ({ default: SFTPPanel })));
-const SnippetsPanel = lazy(() => import("./snippets/SnippetsPanel").then(({ SnippetsPanel }) => ({ default: SnippetsPanel })));
+const SFTPPanel = lazy(() =>
+  import("./sftp/SFTPPanel").then(({ SFTPPanel }) => ({ default: SFTPPanel })),
+);
+const SnippetsPanel = lazy(() =>
+  import("./snippets/SnippetsPanel").then(({ SnippetsPanel }) => ({
+    default: SnippetsPanel,
+  })),
+);
 
 type AppProps = {
   bootstrap: () => Promise<SessionState>;
@@ -162,17 +198,32 @@ const sectionIcons: Record<Section, IconName> = {
 
 const startSections: Section[] = ["Home", "Connections", "Files"];
 
-export function resolveOSC52(policy: "allow" | "deny" | undefined, fallback: boolean): boolean {
+export function resolveOSC52(
+  policy: "allow" | "deny" | undefined,
+  fallback: boolean,
+): boolean {
   return policy === undefined ? fallback : policy === "allow";
 }
 
 const navGroups: { label: MessageKey; sections: Section[] }[] = [
   { label: "shell.navStart", sections: startSections },
   { label: "shell.navConnections", sections: ["Config", "Groups"] },
-  { label: "shell.navKeysHosts", sections: ["Keys", "Known Hosts", "Remote Keys"] },
-  { label: "shell.navMaintenance", sections: ["Diagnostics", "Secrets", "Snippets", "Settings", "Sync", "History"] },
+  {
+    label: "shell.navKeysHosts",
+    sections: ["Keys", "Known Hosts", "Remote Keys"],
+  },
+  {
+    label: "shell.navMaintenance",
+    sections: [
+      "Diagnostics",
+      "Secrets",
+      "Snippets",
+      "Settings",
+      "Sync",
+      "History",
+    ],
+  },
 ];
-
 
 const themeLabels: Record<Theme, MessageKey> = {
   system: "shell.themeSystem",
@@ -181,38 +232,61 @@ const themeLabels: Record<Theme, MessageKey> = {
 };
 
 const navigationId = "primary-navigation";
-export const vaultStatePollIntervalMs = 15_000;
-
-export function App({ bootstrap, health, vault = integrationsApi.passwordVault }: AppProps) {
+export function App({
+  bootstrap,
+  health,
+  vault = integrationsApi.passwordVault,
+}: AppProps) {
   const { t } = useLanguage();
   const { theme, setTheme, resolved: resolvedTheme } = useTheme();
-  const { route, location, navigate, navigateLocation, setNavigationBlocker } = useSectionRoute();
+  const { route, location, navigate, navigateLocation, setNavigationBlocker } =
+    useSectionRoute();
   const section = route.kind === "section" ? route.section : null;
   const terminalFace = section === "Terminal";
-  const [state, setState] = useState<"starting" | "locked" | "ready" | "session-ended" | "error">("starting");
-  const [vaultRecheck, setVaultRecheck] = useState<"idle" | "checking" | "retrying">("idle");
-  const [failure, setFailure] = useState("");
-  const [vaultExists, setVaultExists] = useState(false);
-  const [version, setVersion] = useState("");
-  const [requestFailure, setRequestFailure] = useState<RequestFailureDiagnostic | null>(null);
-  const [vaultMigration, setVaultMigration] = useState<{ from: number; to: number } | null>(null);
+  const session = useAppSession({ bootstrap, health, vault });
+  const {
+    state,
+    vaultRecheck,
+    failure,
+    vaultExists,
+    version,
+    requestFailure,
+    vaultMigration,
+  } = session;
   const [fileTarget, setFileTarget] = useState<FileTarget | null>(null);
   const [sftpTarget, setSftpTarget] = useState<SFTPTarget | null>(null);
   const sftpTargetSequence = useRef(0);
   const [groups, setGroups] = useState<string[]>([]);
-  const [hostAppearance, setHostAppearance] = useState<Map<string, TerminalAppearance>>(new Map());
-  const [hostOSC52, setHostOSC52] = useState<Map<string, "allow" | "deny">>(new Map());
+  const [hostAppearance, setHostAppearance] = useState<
+    Map<string, TerminalAppearance>
+  >(new Map());
+  const [hostOSC52, setHostOSC52] = useState<Map<string, "allow" | "deny">>(
+    new Map(),
+  );
   const [knownAliases, setKnownAliases] = useState<string[]>([]);
   const [paletteHosts, setPaletteHosts] = useState<HostEntry[]>([]);
   const [configFiles, setConfigFiles] = useState<FileNode[]>([]);
-  const [connectionDraft, setConnectionDraft] = useState<CreateConnectionDraft | null>(null);
-  const [preferredConnectionKey, setPreferredConnectionKey] = useState<GeneratedPrivateKeyHandoff | null>(null);
-  const [preferredPublicKey, setPreferredPublicKey] = useState<GeneratedPublicKeyHandoff | null>(null);
-  const consumePreferredConnectionKey = useCallback(() => setPreferredConnectionKey(null), []);
-  const consumePreferredPublicKey = useCallback(() => setPreferredPublicKey(null), []);
+  const [connectionDraft, setConnectionDraft] =
+    useState<CreateConnectionDraft | null>(null);
+  const [preferredConnectionKey, setPreferredConnectionKey] =
+    useState<GeneratedPrivateKeyHandoff | null>(null);
+  const [preferredPublicKey, setPreferredPublicKey] =
+    useState<GeneratedPublicKeyHandoff | null>(null);
+  const consumePreferredConnectionKey = useCallback(
+    () => setPreferredConnectionKey(null),
+    [],
+  );
+  const consumePreferredPublicKey = useCallback(
+    () => setPreferredPublicKey(null),
+    [],
+  );
   const [navigationOpen, setNavigationOpen] = useState(false);
-  const [desktopNavigationVisible, setDesktopNavigationVisible] = useState(detectNavigationVisible);
-  const [desktopNavigationWidth, setDesktopNavigationWidth] = useState(detectNavigationWidth);
+  const [desktopNavigationVisible, setDesktopNavigationVisible] = useState(
+    detectNavigationVisible,
+  );
+  const [desktopNavigationWidth, setDesktopNavigationWidth] = useState(
+    detectNavigationWidth,
+  );
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [inspector, setInspector] = useState<InspectorContent>(null);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
@@ -227,7 +301,12 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
       return;
     }
     function togglePalette(event: KeyboardEvent) {
-      if (!(event.ctrlKey || event.metaKey) || event.altKey || event.key.toLocaleLowerCase() !== "k") return;
+      if (
+        !(event.ctrlKey || event.metaKey) ||
+        event.altKey ||
+        event.key.toLocaleLowerCase() !== "k"
+      )
+        return;
       event.preventDefault();
       setCommandPaletteOpen((open) => !open);
     }
@@ -249,12 +328,18 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
     function closeOutsideNavigation(event: PointerEvent) {
       const target = event.target;
       if (!(target instanceof Node)) return;
-      if (document.getElementById(navigationId)?.contains(target) === true) return;
-      if (target instanceof Element && target.closest(`[aria-controls="${navigationId}"]`) !== null) return;
+      if (document.getElementById(navigationId)?.contains(target) === true)
+        return;
+      if (
+        target instanceof Element &&
+        target.closest(`[aria-controls="${navigationId}"]`) !== null
+      )
+        return;
       setNavigationOpen(false);
     }
     document.addEventListener("pointerdown", closeOutsideNavigation, true);
-    return () => document.removeEventListener("pointerdown", closeOutsideNavigation, true);
+    return () =>
+      document.removeEventListener("pointerdown", closeOutsideNavigation, true);
   }, [navigationOpen]);
 
   useEffect(() => {
@@ -271,7 +356,8 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
       }
     }
     window.addEventListener("sshc-android-back", closeTransientUi);
-    return () => window.removeEventListener("sshc-android-back", closeTransientUi);
+    return () =>
+      window.removeEventListener("sshc-android-back", closeTransientUi);
   }, [commandPaletteOpen, inspectorOpen, navigationOpen]);
 
   function toggleDesktopNavigation() {
@@ -287,103 +373,47 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
     rememberNavigationWidth(nextWidth);
   }
   const consoles = useTerminalSessions(integrationsApi, t, state === "ready");
-  const [terminalSettings, setTerminalSettings] = useState<TerminalSettings>({});
-  const [localShellProfiles, setLocalShellProfiles] = useState<LocalShellProfile[]>([]);
-  const [activeConsole, setActiveConsole] = useState<string | null>(null);
-  const [liveWorkspace, setLiveWorkspace] = useState<LiveWorkspaceSummary | null>(null);
-  const [workspaceRestoreRequest, setWorkspaceRestoreRequest] = useState<WorkspaceRestoreRequest | null>(null);
-  const workspaceRestoreSequence = useRef(0);
+  const closeNavigation = useCallback(() => setNavigationOpen(false), []);
+  const terminalWorkspace = useTerminalWorkspaceController({
+    api: integrationsApi,
+    consoles,
+    enabled: state === "ready",
+    section,
+    navigate,
+    closeNavigation,
+  });
+  const {
+    settings: terminalSettings,
+    localShellProfiles,
+    activeConsole,
+    liveWorkspace,
+    restoreRequest: workspaceRestoreRequest,
+    orderedConsoles,
+    showConsole,
+    openWorkspace,
+    openLocalShell,
+    duplicateConsole,
+    consumeRestore: consumeWorkspaceRestore,
+    reorderConsoles: setConsoleOrder,
+    setLiveWorkspace,
+    setSettings: setTerminalSettings,
+  } = terminalWorkspace;
 
   useEffect(() => {
     if (state !== "ready") return;
-    let active = true;
-    void integrationsApi.terminalSettings()
-      .then((settings) => {
-        if (active) setTerminalSettings(settings);
-      })
-      .catch(() => undefined);
-    if (integrationsApi.localShellProfiles !== undefined) {
-      void integrationsApi.localShellProfiles()
-        .then((answer) => {
-          if (active) setLocalShellProfiles(answer.profiles);
-        })
-        .catch(() => undefined);
-    }
-    return () => {
-      active = false;
+    const refresh = () => {
+      void sftpTransferManager.reconcile().catch(() => undefined);
     };
-  }, [state, section]);
-
-  useEffect(() => {
-    if (state !== "ready") return;
-    const refresh = () => { void sftpTransferManager.reconcile().catch(() => undefined); };
     refresh();
     const timer = globalThis.setInterval(refresh, 2_000);
     return () => globalThis.clearInterval(timer);
   }, [state]);
 
-  useEffect(() => {
-    if (activeConsole === null) return;
-    if (!consoles.sessions.some((session) => session.id === activeConsole)) setActiveConsole(null);
-  }, [consoles.sessions, activeConsole]);
-
-  useEffect(() => {
-    if (activeConsole !== null || consoles.sessions.length === 0) return;
-    setActiveConsole(consoles.sessions[0]?.id ?? null);
-  }, [consoles.sessions, activeConsole]);
-
-  const showConsole = useCallback(
-    (id: string) => {
-      setActiveConsole(id);
-      setNavigationOpen(false);
-      navigate("Terminal");
-      void consoles.refresh();
-    },
-    [navigate, consoles],
-  );
   const unreadAgentSessions = useAgentNotifications(
     consoles.sessions,
     terminalFace ? activeConsole : null,
     t,
     showConsole,
-  );
-
-  const openWorkspace = useCallback((id: string) => {
-    workspaceRestoreSequence.current += 1;
-    setWorkspaceRestoreRequest({ id, sequence: workspaceRestoreSequence.current });
-    navigate("Terminal");
-  }, [navigate]);
-  const consumeWorkspaceRestore = useCallback((sequence: number) => {
-    setWorkspaceRestoreRequest((current) => current?.sequence === sequence ? null : current);
-  }, []);
-
-  const [consoleOrder, setConsoleOrder] = useState<string[]>([]);
-  const orderedConsoles = useMemo(() => {
-    const rank = new Map(consoleOrder.map((id, index) => [id, index]));
-    return consoles.sessions
-      .map((session, index) => ({ session, rank: rank.get(session.id) ?? consoleOrder.length + index }))
-      .sort((left, right) => left.rank - right.rank)
-      .map((entry) => entry.session);
-  }, [consoles.sessions, consoleOrder]);
-
-  const openLocalShell = useCallback(async (profileId?: string) => {
-    const opened = await consoles.open({ kind: "shell", ...(profileId === undefined ? {} : { profileId }) });
-    if (opened !== null) showConsole(opened.id);
-  }, [consoles, showConsole]);
-
-  const duplicateConsole = useCallback(
-    async (id: string) => {
-      const session = consoles.sessions.find((candidate) => candidate.id === id);
-      if (session === undefined) return null;
-      const opened = await consoles.open(
-        session.kind === "ssh" && session.alias !== undefined
-          ? { kind: "ssh", alias: session.alias }
-          : { kind: "shell" },
-      );
-      if (opened !== null) showConsole(opened.id);
-      return opened;
-    },
-    [consoles, showConsole],
   );
 
   useEffect(() => {
@@ -395,7 +425,11 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
     navigate("Config");
   }
 
-  function openRemotePath(alias: string, path: string, action: RemotePathAction) {
+  function openRemotePath(
+    alias: string,
+    path: string,
+    action: RemotePathAction,
+  ) {
     sftpTargetSequence.current += 1;
     setSftpTarget({ alias, path, action, request: sftpTargetSequence.current });
     navigate("Files");
@@ -411,7 +445,10 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
     navigate("Remote Keys");
   }
 
-  function followSectionLink(event: MouseEvent<HTMLAnchorElement>, target: Section) {
+  function followSectionLink(
+    event: MouseEvent<HTMLAnchorElement>,
+    target: Section,
+  ) {
     if (
       event.defaultPrevented ||
       event.button !== 0 ||
@@ -425,124 +462,6 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
     event.preventDefault();
     navigate(target);
   }
-
-  useEffect(() => {
-    let active = true;
-    void bootstrap()
-      .then((sessionState) => {
-        if (!active) return null;
-        apiClient.setCSRF(sessionState.csrfToken);
-        return health();
-      })
-      .then((result) => {
-        if (!active || result === null) return null;
-        setVersion(result.version);
-        return vault();
-      })
-      .then((status) => {
-        if (!active || status === null) return;
-        setVaultExists(status.exists);
-        if (!status.unlocked) {
-          setState("locked");
-          return;
-        }
-        setState("ready");
-      })
-      .catch((reason: unknown) => {
-        console.error("sshc could not start its session", reason);
-        if (!active) return;
-        const code = failureCode(reason);
-        if (
-          (reason instanceof Error && reason.message === "session_expired") ||
-          code === "session_required" ||
-          code === "invalid_session" ||
-          code === "invalid_csrf"
-        ) {
-          setState("session-ended");
-          return;
-        }
-        setFailure(reason instanceof Error ? reason.message : String(reason));
-        setState("error");
-      });
-
-    return () => {
-      active = false;
-      apiClient.clear();
-    };
-  }, [bootstrap, health, vault]);
-
-  useEffect(() => {
-    whenLocked(() => {
-      setVaultExists(true);
-      setState("locked");
-      announceVaultLocked();
-    });
-    const stopObserving = observeVaultLocked(() => {
-      setVaultExists(true);
-      setState("locked");
-    });
-    return () => {
-      whenLocked(null);
-      stopObserving();
-    };
-  }, []);
-
-  useEffect(() => {
-    if (state !== "ready") return;
-    let active = true;
-    let checking = false;
-    let concealUntilChecked = false;
-    const checkVaultState = async (failClosed = false) => {
-      if (failClosed) {
-        concealUntilChecked = true;
-        setVaultRecheck("checking");
-      }
-      if (checking) return;
-      checking = true;
-      try {
-        const status = await vault();
-        if (!active) return;
-        if (!status.unlocked) {
-          setVaultExists(status.exists);
-          setState("locked");
-          announceVaultLocked();
-          return;
-        }
-        if (concealUntilChecked) {
-          concealUntilChecked = false;
-          setVaultRecheck("idle");
-        }
-      } catch {
-        // Request handling reports actionable failures. A resume check stays
-        // fail-closed and the interval retries without restoring protected UI.
-        if (active && concealUntilChecked) setVaultRecheck("retrying");
-      } finally {
-        checking = false;
-      }
-    };
-    const interval = window.setInterval(() => void checkVaultState(), vaultStatePollIntervalMs);
-    const checkWhenVisible = () => {
-      if (document.visibilityState === "visible") void checkVaultState(true);
-    };
-    document.addEventListener("visibilitychange", checkWhenVisible);
-    window.addEventListener("focus", checkWhenVisible);
-    return () => {
-      active = false;
-      window.clearInterval(interval);
-      document.removeEventListener("visibilitychange", checkWhenVisible);
-      window.removeEventListener("focus", checkWhenVisible);
-    };
-  }, [state, vault]);
-
-  useEffect(() => {
-    whenSessionEnded(() => setState("session-ended"));
-    return () => whenSessionEnded(null);
-  }, []);
-
-  useEffect(() => {
-    whenRequestFailed(setRequestFailure);
-    return () => whenRequestFailed(null);
-  }, []);
 
   useEffect(() => {
     if (state !== "ready") return;
@@ -561,15 +480,25 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
             ),
           ),
         );
-        setHostOSC52(new Map(
-          (overview.metadata.hosts ?? []).flatMap((host) =>
-            host.osc52 === undefined || host.identity.alias === ""
-              ? []
-              : [[host.identity.alias, host.osc52] as const],
+        setHostOSC52(
+          new Map(
+            (overview.metadata.hosts ?? []).flatMap((host) =>
+              host.osc52 === undefined || host.identity.alias === ""
+                ? []
+                : [[host.identity.alias, host.osc52] as const],
+            ),
           ),
-        ));
-        setKnownAliases([...new Set(overview.hosts.map((host) => host.identity.alias).filter((alias) => alias !== ""))]);
-        setPaletteHosts(overview.hosts.filter((host) => host.identity.alias !== ""));
+        );
+        setKnownAliases([
+          ...new Set(
+            overview.hosts
+              .map((host) => host.identity.alias)
+              .filter((alias) => alias !== ""),
+          ),
+        ]);
+        setPaletteHosts(
+          overview.hosts.filter((host) => host.identity.alias !== ""),
+        );
         setConfigFiles(overview.files);
       })
       .catch(() => undefined);
@@ -583,18 +512,8 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
       <LockScreen
         exists={vaultExists}
         version={version}
-        onExists={() => setVaultExists(true)}
-        onOpen={(status) => {
-          if (
-            typeof status?.migratedFromVersion === "number" &&
-            typeof status.migratedToVersion === "number"
-          ) {
-            setVaultMigration({ from: status.migratedFromVersion, to: status.migratedToVersion });
-          }
-          setVaultExists(true);
-          setVaultRecheck("idle");
-          setState("ready");
-        }}
+        onExists={session.markVaultExists}
+        onOpen={session.openVault}
       />
     );
   }
@@ -606,12 +525,14 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
           <ErrorDiagnosticNotice
             diagnostic={requestFailure}
             version={version}
-            onClose={() => setRequestFailure(null)}
+            onClose={session.clearRequestFailure}
           />
         )}
         <main className="flex flex-col items-start gap-3 p-6">
           <h1 className="text-base font-semibold">{t("shell.title")}</h1>
-          <p role="alert" className="text-sm text-danger">{t("shell.bootstrapFailed")}</p>
+          <p role="alert" className="text-sm text-danger">
+            {t("shell.bootstrapFailed")}
+          </p>
 
           {failure === "" ? null : (
             <code className="max-w-full overflow-x-auto rounded-md border border-line bg-card px-2 py-1 text-xs">
@@ -621,7 +542,11 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
 
           <Button
             kind="primary"
-            onClick={() => window.location.replace(window.location.pathname + window.location.search)}
+            onClick={() =>
+              window.location.replace(
+                window.location.pathname + window.location.search,
+              )
+            }
           >
             {t("shell.bootstrapRetry")}
           </Button>
@@ -634,11 +559,19 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
     return (
       <main className="grid min-h-screen place-items-center bg-canvas p-6 text-ink">
         <section className="sshc-card flex w-full max-w-md flex-col items-start gap-4 rounded-lg bg-card p-6 sm:p-8">
-          <h1 className="text-lg font-semibold">{t("shell.sessionEndedHeading")}</h1>
-          <p role="alert" className="text-sm leading-6 text-ink-muted">{t("shell.sessionEnded")}</p>
+          <h1 className="text-lg font-semibold">
+            {t("shell.sessionEndedHeading")}
+          </h1>
+          <p role="alert" className="text-sm leading-6 text-ink-muted">
+            {t("shell.sessionEnded")}
+          </p>
           <Button
             kind="primary"
-            onClick={() => window.location.replace(window.location.pathname + window.location.search)}
+            onClick={() =>
+              window.location.replace(
+                window.location.pathname + window.location.search,
+              )
+            }
           >
             {t("shell.sessionReload")}
           </Button>
@@ -653,262 +586,322 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
       <div
         className="contents"
         inert={state === "ready" && vaultRecheck !== "idle"}
-        aria-hidden={state === "ready" && vaultRecheck !== "idle" ? true : undefined}
+        aria-hidden={
+          state === "ready" && vaultRecheck !== "idle" ? true : undefined
+        }
       >
-      <AppHeader
-        route={route}
-        version={version}
-        state={state}
-        navigationOpen={navigationOpen}
-        desktopNavigationVisible={desktopNavigationVisible}
-        navigationId={navigationId}
-        onToggleNavigation={() => setNavigationOpen((open) => !open)}
-        onToggleDesktopNavigation={toggleDesktopNavigation}
-        inspector={inspector}
-        inspectorOpen={inspectorOpen}
-        onToggleInspector={() => setInspectorOpen((open) => !open)}
-        sectionLabels={sectionLabels}
-        themeLabels={themeLabels}
-        localeLabels={localeLabels}
-        theme={theme}
-        onThemeChange={setTheme}
-        onOpenCommandPalette={() => setCommandPaletteOpen(true)}
-        onOpenTransfers={() => navigate("Files")}
-      />
-      {requestFailure === null ? null : (
-        <ErrorDiagnosticNotice
-          diagnostic={requestFailure}
+        <AppHeader
+          route={route}
           version={version}
-          onClose={() => setRequestFailure(null)}
+          state={state}
+          navigationOpen={navigationOpen}
+          desktopNavigationVisible={desktopNavigationVisible}
+          navigationId={navigationId}
+          onToggleNavigation={() => setNavigationOpen((open) => !open)}
+          onToggleDesktopNavigation={toggleDesktopNavigation}
+          inspector={inspector}
+          inspectorOpen={inspectorOpen}
+          onToggleInspector={() => setInspectorOpen((open) => !open)}
+          sectionLabels={sectionLabels}
+          themeLabels={themeLabels}
+          localeLabels={localeLabels}
+          theme={theme}
+          onThemeChange={setTheme}
+          onOpenCommandPalette={() => setCommandPaletteOpen(true)}
+          onOpenTransfers={() => navigate("Files")}
         />
-      )}
-      <div
-        data-desktop-navigation-visible={desktopNavigationVisible}
-        style={{ "--navigation-width": `${desktopNavigationWidth}px` } as CSSProperties}
-        className={`grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)] ${
-          desktopNavigationVisible
-            ? "md:grid-cols-[var(--navigation-width)_minmax(0,1fr)]"
-            : "md:grid-cols-[minmax(0,1fr)]"
-        } ${
-          inspector !== null && inspectorOpen
-            ? desktopNavigationVisible
-              ? "lg:grid-cols-[var(--navigation-width)_minmax(0,1fr)_17rem]"
-              : "lg:grid-cols-[minmax(0,1fr)_17rem]"
-            : ""
-        }`}
-      >
+        {requestFailure === null ? null : (
+          <ErrorDiagnosticNotice
+            diagnostic={requestFailure}
+            version={version}
+            onClose={session.clearRequestFailure}
+          />
+        )}
+        <div
+          data-desktop-navigation-visible={desktopNavigationVisible}
+          style={
+            {
+              "--navigation-width": `${desktopNavigationWidth}px`,
+            } as CSSProperties
+          }
+          className={`grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)] ${
+            desktopNavigationVisible
+              ? "md:grid-cols-[var(--navigation-width)_minmax(0,1fr)]"
+              : "md:grid-cols-[minmax(0,1fr)]"
+          } ${
+            inspector !== null && inspectorOpen
+              ? desktopNavigationVisible
+                ? "lg:grid-cols-[var(--navigation-width)_minmax(0,1fr)_17rem]"
+                : "lg:grid-cols-[minmax(0,1fr)_17rem]"
+              : ""
+          }`}
+        >
+          {navigationOpen ? (
+            <div
+              aria-hidden="true"
+              data-navigation-backdrop
+              onClick={() => setNavigationOpen(false)}
+              className="fixed inset-0 z-20 bg-canvas/70 md:hidden"
+            />
+          ) : null}
+          <AppNavigation
+            navigationId={navigationId}
+            version={version}
+            navigationOpen={navigationOpen}
+            desktopVisible={desktopNavigationVisible}
+            desktopWidth={desktopNavigationWidth}
+            onDesktopWidthChange={resizeDesktopNavigation}
+            startSections={startSections}
+            section={section}
+            sectionIcons={sectionIcons}
+            sectionLabels={sectionLabels}
+            onNavigate={(event, name) => {
+              setNavigationOpen(false);
+              followSectionLink(event, name);
+            }}
+            consoles={consoles}
+            orderedConsoles={orderedConsoles}
+            activeConsole={activeConsole}
+            liveWorkspace={liveWorkspace}
+            unreadBySession={unreadAgentSessions}
+            onShowConsole={showConsole}
+            onDuplicateConsole={(id) => void duplicateConsole(id)}
+            onReorderConsoles={setConsoleOrder}
+            localShellProfiles={localShellProfiles}
+            onOpenShell={(profileId) => void openLocalShell(profileId)}
+            onOpenCommandPalette={() => {
+              setNavigationOpen(false);
+              setCommandPaletteOpen(true);
+            }}
+          />
 
-        {navigationOpen ? (
-          <div
-            aria-hidden="true"
-            data-navigation-backdrop
-            onClick={() => setNavigationOpen(false)}
-            className="fixed inset-0 z-20 bg-canvas/70 md:hidden"
+          <main className="relative flex min-h-0 min-w-0 flex-col overflow-hidden">
+            {vaultMigration === null ? null : (
+              <div
+                role="status"
+                className="flex shrink-0 items-center gap-3 border-b border-notice-line bg-notice px-4 py-2 text-sm text-notice-ink"
+              >
+                <p className="min-w-0 grow">
+                  {t("lock.migrationCompleted", {
+                    current: vaultMigration.from,
+                    required: vaultMigration.to,
+                  })}
+                </p>
+                <Button
+                  className="shrink-0"
+                  onClick={session.clearVaultMigration}
+                >
+                  {t("lock.migrationDismiss")}
+                </Button>
+              </div>
+            )}
+            {connectionDraft !== null &&
+            (section === "Groups" || section === "Keys") ? (
+              <div className="flex shrink-0 items-center gap-3 border-b border-notice-line bg-notice px-4 py-2 text-sm text-notice-ink">
+                <p className="min-w-0 grow truncate">
+                  {t("conn.createDraftWaiting", {
+                    alias:
+                      connectionDraft.alias || t("conn.createUntitledDraft"),
+                  })}
+                </p>
+                <Button
+                  className="shrink-0"
+                  onClick={() => navigate("Connections")}
+                >
+                  {t("conn.createReturnToDraft")}
+                </Button>
+              </div>
+            ) : null}
+            {state === "ready" ? (
+              <div className="relative min-h-0 flex-1 overflow-hidden">
+                {terminalFace || activeConsole !== null ? (
+                  <div className={terminalFace ? "h-full" : "hidden"}>
+                    <TerminalScreen
+                      consoles={consoles}
+                      activeConsole={activeConsole}
+                      settings={terminalSettings}
+                      hostAppearance={hostAppearance}
+                      hostOSC52={hostOSC52}
+                      onActive={showConsole}
+                      onLiveWorkspaceChange={setLiveWorkspace}
+                      onOpenAlias={(alias) =>
+                        consoles.open({ kind: "ssh", alias })
+                      }
+                      onOpenShell={() => consoles.open({ kind: "shell" })}
+                      onOSC52Change={async (session, enabled) => {
+                        if (
+                          session.kind !== "ssh" ||
+                          session.alias === undefined
+                        ) {
+                          const next = { ...terminalSettings };
+                          if (enabled) next.osc52 = true;
+                          else delete next.osc52;
+                          await integrationsApi.setTerminalSettings(next);
+                          setTerminalSettings(next);
+                          return;
+                        }
+                        const overview = await configApi.overview();
+                        const identity = overview.hosts.find(
+                          (host) => host.identity.alias === session.alias,
+                        )?.identity;
+                        if (identity === undefined)
+                          throw new Error("host_not_found");
+                        const hosts = [...(overview.metadata.hosts ?? [])];
+                        const index = hosts.findIndex(
+                          (host) =>
+                            host.identity.path === identity.path &&
+                            host.identity.alias === identity.alias,
+                        );
+                        const updated = {
+                          ...(index < 0 ? {} : hosts[index]),
+                          identity,
+                          osc52: enabled
+                            ? ("allow" as const)
+                            : ("deny" as const),
+                        };
+                        if (index < 0) hosts.push(updated);
+                        else hosts[index] = updated;
+                        await configApi.save({
+                          kind: "metadata",
+                          metadata: { ...overview.metadata, hosts },
+                        });
+                        setHostOSC52((current) =>
+                          new Map(current).set(session.alias!, updated.osc52),
+                        );
+                      }}
+                      onOpenRemotePath={openRemotePath}
+                      restoreRequest={workspaceRestoreRequest}
+                      onRestoreConsumed={consumeWorkspaceRestore}
+                    />
+                  </div>
+                ) : null}
+                {route.kind === "section" ? (
+                  <Suspense fallback={<RouteSkeleton />}>
+                    <SectionView
+                      key={route.section}
+                      section={route.section}
+                      navigation={{
+                        location,
+                        fileTarget,
+                        onNavigate: navigate,
+                        onNavigateLocation: navigateLocation,
+                        onNavigateForCreation: (target: CreationPrerequisite) =>
+                          navigate(target),
+                        onOpenFile: openFile,
+                        onNavigationBlockerChange: setNavigationBlocker,
+                      }}
+                      handoff={{
+                        connectionKey: preferredConnectionKey,
+                        publicKey: preferredPublicKey,
+                        connectionDraft,
+                        onAssignGeneratedKey: assignGeneratedKey,
+                        onInstallGeneratedKey: installGeneratedKey,
+                        onConnectionKeyApplied: consumePreferredConnectionKey,
+                        onPublicKeyHandled: consumePreferredPublicKey,
+                        onConnectionDraftChange: setConnectionDraft,
+                      }}
+                      shell={{
+                        onLock: session.lock,
+                        onInspector: setInspector,
+                        consoles,
+                        onShowConsole: showConsole,
+                        onOpenWorkspace: openWorkspace,
+                        onTerminalSettingsChange: async (settings) => {
+                          setTerminalSettings(settings);
+                          await consoles.refresh();
+                        },
+                      }}
+                      declared={{ groups, knownAliases }}
+                      sftpTarget={sftpTarget}
+                      onSftpTargetHandled={(request) =>
+                        setSftpTarget((current) =>
+                          current?.request === request ? null : current,
+                        )
+                      }
+                    />
+                  </Suspense>
+                ) : (
+                  <div className="h-full overflow-y-auto p-4 md:p-5">
+                    <section
+                      aria-labelledby="not-found-heading"
+                      className="flex max-w-2xl flex-col gap-3"
+                    >
+                      <h2 id="not-found-heading" className="font-medium">
+                        {t("shell.pageNotFound")}
+                      </h2>
+                      <p className="text-sm text-ink-muted">
+                        {t("shell.pageNotFoundDescription")}
+                      </p>
+                      <code className="w-fit rounded-md border border-line bg-card px-2 py-1 text-sm">
+                        {route.pathname}
+                      </code>
+                      <a
+                        href={sectionPath("Home")}
+                        onClick={(event) => followSectionLink(event, "Home")}
+                        className={`${secondaryAction} w-fit`}
+                      >
+                        {t("shell.goHome")}
+                      </a>
+                    </section>
+                  </div>
+                )}
+              </div>
+            ) : null}
+          </main>
+          {inspector !== null && inspectorOpen ? (
+            <InspectorPane label={inspector.label}>
+              {inspector.body}
+            </InspectorPane>
+          ) : null}
+        </div>
+        {state === "ready" ? <TransferNotifications /> : null}
+        {state === "ready" ? (
+          <CommandPalette
+            open={commandPaletteOpen}
+            hosts={paletteHosts}
+            files={configFiles}
+            sessions={orderedConsoles}
+            unreadBySession={unreadAgentSessions}
+            sectionLabels={sectionLabels}
+            onClose={() => setCommandPaletteOpen(false)}
+            onConnect={async (alias) => {
+              const opened = await consoles.open({ kind: "ssh", alias });
+              if (opened !== null) showConsole(opened.id);
+            }}
+            onOpenHostSettings={(identity) =>
+              navigateLocation(
+                connectionLocation({
+                  path: identity.path,
+                  alias: identity.alias,
+                  panel: "Basic",
+                  advanced: "Jump",
+                }),
+              )
+            }
+            onOpenFile={(path) => openFile(path, 1)}
+            onNavigate={navigate}
+            onOpenSnippet={(id) =>
+              navigateLocation(
+                `${sectionPath("Snippets")}?snippet=${encodeURIComponent(id)}`,
+              )
+            }
+            onOpenSession={showConsole}
           />
         ) : null}
-        <AppNavigation
-          navigationId={navigationId}
-          version={version}
-          navigationOpen={navigationOpen}
-          desktopVisible={desktopNavigationVisible}
-          desktopWidth={desktopNavigationWidth}
-          onDesktopWidthChange={resizeDesktopNavigation}
-          startSections={startSections}
-          section={section}
-          sectionIcons={sectionIcons}
-          sectionLabels={sectionLabels}
-          onNavigate={(event, name) => {
-            setNavigationOpen(false);
-            followSectionLink(event, name);
-          }}
-          consoles={consoles}
-          orderedConsoles={orderedConsoles}
-          activeConsole={activeConsole}
-          liveWorkspace={liveWorkspace}
-          unreadBySession={unreadAgentSessions}
-          onShowConsole={showConsole}
-          onDuplicateConsole={(id) => void duplicateConsole(id)}
-          onReorderConsoles={setConsoleOrder}
-          localShellProfiles={localShellProfiles}
-          onOpenShell={(profileId) => void openLocalShell(profileId)}
-          onOpenCommandPalette={() => {
-            setNavigationOpen(false);
-            setCommandPaletteOpen(true);
-          }}
-        />
-
-        <main className="relative flex min-h-0 min-w-0 flex-col overflow-hidden">
-          {vaultMigration === null ? null : (
-            <div role="status" className="flex shrink-0 items-center gap-3 border-b border-notice-line bg-notice px-4 py-2 text-sm text-notice-ink">
-              <p className="min-w-0 grow">
-                {t("lock.migrationCompleted", { current: vaultMigration.from, required: vaultMigration.to })}
-              </p>
-              <Button className="shrink-0" onClick={() => setVaultMigration(null)}>
-                {t("lock.migrationDismiss")}
-              </Button>
-            </div>
-          )}
-          {connectionDraft !== null && (section === "Groups" || section === "Keys") ? (
-            <div className="flex shrink-0 items-center gap-3 border-b border-notice-line bg-notice px-4 py-2 text-sm text-notice-ink">
-              <p className="min-w-0 grow truncate">
-                {t("conn.createDraftWaiting", { alias: connectionDraft.alias || t("conn.createUntitledDraft") })}
-              </p>
-              <Button className="shrink-0" onClick={() => navigate("Connections")}>
-                {t("conn.createReturnToDraft")}
-              </Button>
-            </div>
-          ) : null}
-          {state === "ready" ? (
-            <div className="relative min-h-0 flex-1 overflow-hidden">
-
-              {terminalFace || activeConsole !== null ? (
-                <div className={terminalFace ? "h-full" : "hidden"}>
-                  <TerminalScreen
-                    consoles={consoles}
-                    activeConsole={activeConsole}
-                    settings={terminalSettings}
-                    hostAppearance={hostAppearance}
-                    hostOSC52={hostOSC52}
-                    onActive={showConsole}
-                    onLiveWorkspaceChange={setLiveWorkspace}
-                    onOpenAlias={(alias) => consoles.open({ kind: "ssh", alias })}
-                    onOpenShell={() => consoles.open({ kind: "shell" })}
-                    onOSC52Change={async (session, enabled) => {
-                      if (session.kind !== "ssh" || session.alias === undefined) {
-                        const next = { ...terminalSettings };
-                        if (enabled) next.osc52 = true;
-                        else delete next.osc52;
-                        await integrationsApi.setTerminalSettings(next);
-                        setTerminalSettings(next);
-                        return;
-                      }
-                      const overview = await configApi.overview();
-                      const identity = overview.hosts.find((host) =>
-                        host.identity.alias === session.alias
-                      )?.identity;
-                      if (identity === undefined) throw new Error("host_not_found");
-                      const hosts = [...(overview.metadata.hosts ?? [])];
-                      const index = hosts.findIndex((host) =>
-                        host.identity.path === identity.path && host.identity.alias === identity.alias
-                      );
-                      const updated = {
-                        ...(index < 0 ? {} : hosts[index]),
-                        identity,
-                        osc52: enabled ? "allow" as const : "deny" as const,
-                      };
-                      if (index < 0) hosts.push(updated);
-                      else hosts[index] = updated;
-                      await configApi.save({ kind: "metadata", metadata: { ...overview.metadata, hosts } });
-                      setHostOSC52((current) => new Map(current).set(session.alias!, updated.osc52));
-                    }}
-                    onOpenRemotePath={openRemotePath}
-                    restoreRequest={workspaceRestoreRequest}
-                    onRestoreConsumed={consumeWorkspaceRestore}
-                  />
-                </div>
-              ) : null}
-              {route.kind === "section" ? (
-                <Suspense fallback={<RouteSkeleton />}>
-                  <SectionView
-                    key={route.section}
-                    section={route.section}
-                    navigation={{
-                      location,
-                      fileTarget,
-                      onNavigate: navigate,
-                      onNavigateLocation: navigateLocation,
-                      onNavigateForCreation: (target: CreationPrerequisite) => navigate(target),
-                      onOpenFile: openFile,
-                      onNavigationBlockerChange: setNavigationBlocker,
-                    }}
-                    handoff={{
-                      connectionKey: preferredConnectionKey,
-                      publicKey: preferredPublicKey,
-                      connectionDraft,
-                      onAssignGeneratedKey: assignGeneratedKey,
-                      onInstallGeneratedKey: installGeneratedKey,
-                      onConnectionKeyApplied: consumePreferredConnectionKey,
-                      onPublicKeyHandled: consumePreferredPublicKey,
-                      onConnectionDraftChange: setConnectionDraft,
-                    }}
-                    shell={{
-                      onLock: () => {
-                        setVaultExists(true);
-                        setState("locked");
-                        announceVaultLocked();
-                      },
-                      onInspector: setInspector,
-                      consoles,
-                      onShowConsole: showConsole,
-                      onOpenWorkspace: openWorkspace,
-                      onTerminalSettingsChange: async (settings) => {
-                        setTerminalSettings(settings);
-                        await consoles.refresh();
-                      },
-                    }}
-                    declared={{ groups, knownAliases }}
-                    sftpTarget={sftpTarget}
-                    onSftpTargetHandled={(request) => setSftpTarget((current) => current?.request === request ? null : current)}
-                  />
-                </Suspense>
-              ) : (
-                <div className="h-full overflow-y-auto p-4 md:p-5">
-                  <section aria-labelledby="not-found-heading" className="flex max-w-2xl flex-col gap-3">
-                    <h2 id="not-found-heading" className="font-medium">{t("shell.pageNotFound")}</h2>
-                    <p className="text-sm text-ink-muted">{t("shell.pageNotFoundDescription")}</p>
-                    <code className="w-fit rounded-md border border-line bg-card px-2 py-1 text-sm">
-                      {route.pathname}
-                    </code>
-                    <a
-                      href={sectionPath("Home")}
-                      onClick={(event) => followSectionLink(event, "Home")}
-                      className={`${secondaryAction} w-fit`}
-                    >
-                      {t("shell.goHome")}
-                    </a>
-                  </section>
-                </div>
-              )}
-            </div>
-          ) : null}
-        </main>
-        {inspector !== null && inspectorOpen ? (
-          <InspectorPane label={inspector.label}>{inspector.body}</InspectorPane>
-        ) : null}
-      </div>
-      {state === "ready" ? <TransferNotifications /> : null}
-      {state === "ready" ? (
-        <CommandPalette
-          open={commandPaletteOpen}
-          hosts={paletteHosts}
-          files={configFiles}
-          sessions={orderedConsoles}
-          unreadBySession={unreadAgentSessions}
-          sectionLabels={sectionLabels}
-          onClose={() => setCommandPaletteOpen(false)}
-          onConnect={async (alias) => {
-            const opened = await consoles.open({ kind: "ssh", alias });
-            if (opened !== null) showConsole(opened.id);
-          }}
-          onOpenHostSettings={(identity) => navigateLocation(connectionLocation({
-            path: identity.path,
-            alias: identity.alias,
-            panel: "Basic",
-            advanced: "Jump",
-          }))}
-          onOpenFile={(path) => openFile(path, 1)}
-          onNavigate={navigate}
-          onOpenSnippet={(id) => navigateLocation(`${sectionPath("Snippets")}?snippet=${encodeURIComponent(id)}`)}
-          onOpenSession={showConsole}
-        />
-      ) : null}
       </div>
       {state === "ready" && vaultRecheck !== "idle" ? (
         <div className="fixed inset-0 z-[100] grid min-h-screen place-items-center bg-canvas p-6">
-          <section role="status" className="sshc-card w-full max-w-md rounded-lg bg-card p-6 sm:p-8">
+          <section
+            role="status"
+            className="sshc-card w-full max-w-md rounded-lg bg-card p-6 sm:p-8"
+          >
             <h1 className="text-lg font-semibold">{t("shell.title")}</h1>
             <p className="mt-3 text-sm leading-6 text-ink-muted">
-              {t(vaultRecheck === "checking" ? "shell.vaultChecking" : "shell.vaultCheckRetrying")}
+              {t(
+                vaultRecheck === "checking"
+                  ? "shell.vaultChecking"
+                  : "shell.vaultCheckRetrying",
+              )}
             </p>
           </section>
         </div>
@@ -948,7 +941,11 @@ function SectionView(props: SectionViewProps) {
       />
     );
   }
-  return <div className="h-full overflow-y-auto p-4 md:p-5">{<PaddedSection {...props} />}</div>;
+  return (
+    <div className="h-full overflow-y-auto p-4 md:p-5">
+      {<PaddedSection {...props} />}
+    </div>
+  );
 }
 
 function TerminalScreen({
@@ -973,31 +970,114 @@ function TerminalScreen({
   hostOSC52: Map<string, "allow" | "deny">;
   onActive: (id: string) => void;
   onLiveWorkspaceChange: (workspace: LiveWorkspaceSummary | null) => void;
-  onOpenAlias: (alias: string) => Promise<import("./api/integrations").TerminalSession | null>;
-  onOpenShell: () => Promise<import("./api/integrations").TerminalSession | null>;
+  onOpenAlias: (
+    alias: string,
+  ) => Promise<import("./api/integrations").TerminalSession | null>;
+  onOpenShell: () => Promise<
+    import("./api/integrations").TerminalSession | null
+  >;
   restoreRequest: WorkspaceRestoreRequest | null;
   onRestoreConsumed: (sequence: number) => void;
-  onOpenRemotePath: (alias: string, path: string, action: RemotePathAction) => void;
-  onOSC52Change: (session: import("./api/integrations").TerminalSession, enabled: boolean) => Promise<void>;
+  onOpenRemotePath: (
+    alias: string,
+    path: string,
+    action: RemotePathAction,
+  ) => void;
+  onOSC52Change: (
+    session: import("./api/integrations").TerminalSession,
+    enabled: boolean,
+  ) => Promise<void>;
 }) {
   return (
-    <TerminalWorkspace sessions={consoles.sessions} sessionsLoaded={consoles.loaded} activeSessionId={activeConsole} onActive={onActive} onOpenAlias={onOpenAlias} onOpenShell={onOpenShell} restoreRequest={restoreRequest} onRestoreConsumed={onRestoreConsumed} onLiveWorkspaceChange={onLiveWorkspaceChange} renderTerminal={(session) => {
-      const appearance = resolveAppearance(session.alias === undefined ? undefined : hostAppearance.get(session.alias), settings.appearance);
-      const hostPolicy = session.alias === undefined ? undefined : hostOSC52.get(session.alias);
-      const osc52Enabled = resolveOSC52(hostPolicy, settings.osc52 ?? false);
-      return <Suspense fallback={<RouteSkeleton kind="terminal" />}><TerminalView key={session.id} session={session} {...(settings.fontSize === undefined ? {} : { fontSize: settings.fontSize })} {...(settings.browserScrollbackLines === undefined ? {} : { scrollbackLines: settings.browserScrollbackLines })} osc52Enabled={osc52Enabled} jisYenBackslash={settings.jisYenBackslash ?? false} onOsc52Change={(enabled) => onOSC52Change(session, enabled)} onForwardsChanged={consoles.refresh} {...(appearance.palette === "" ? {} : { palette: appearance.palette })} {...(appearance.font === "" ? {} : { font: appearance.font })} {...(appearance.background === "" ? {} : { background: appearance.background })} {...(appearance.tint === undefined ? {} : { tint: appearance.tint })} copyOnSelect={settings.copyOnSelect ?? true} rightClickPaste={settings.rightClickPaste ?? true} onExit={() => consoles.markExited(session.id)} onReconnect={() => consoles.reconnect(session.id)} onResumeAgent={async (placement) => {
-        const resumed = await consoles.resumeAgent?.(session.id, session.agent?.observationVersion ?? 0, placement) ?? null;
-        if (resumed === null) return false;
-        if (placement === "new-pane") onActive(resumed.id);
-        return true;
-      }} onOpenRemotePath={onOpenRemotePath} /></Suspense>;
-    }} />
+    <TerminalWorkspace
+      sessions={consoles.sessions}
+      sessionsLoaded={consoles.loaded}
+      activeSessionId={activeConsole}
+      onActive={onActive}
+      onOpenAlias={onOpenAlias}
+      onOpenShell={onOpenShell}
+      restoreRequest={restoreRequest}
+      onRestoreConsumed={onRestoreConsumed}
+      onLiveWorkspaceChange={onLiveWorkspaceChange}
+      renderTerminal={(session) => {
+        const appearance = resolveAppearance(
+          session.alias === undefined
+            ? undefined
+            : hostAppearance.get(session.alias),
+          settings.appearance,
+        );
+        const hostPolicy =
+          session.alias === undefined
+            ? undefined
+            : hostOSC52.get(session.alias);
+        const osc52Enabled = resolveOSC52(hostPolicy, settings.osc52 ?? false);
+        return (
+          <Suspense fallback={<RouteSkeleton kind="terminal" />}>
+            <TerminalView
+              key={session.id}
+              session={session}
+              {...(settings.fontSize === undefined
+                ? {}
+                : { fontSize: settings.fontSize })}
+              {...(settings.browserScrollbackLines === undefined
+                ? {}
+                : { scrollbackLines: settings.browserScrollbackLines })}
+              osc52Enabled={osc52Enabled}
+              jisYenBackslash={settings.jisYenBackslash ?? false}
+              onOsc52Change={(enabled) => onOSC52Change(session, enabled)}
+              onForwardsChanged={consoles.refresh}
+              {...(appearance.palette === ""
+                ? {}
+                : { palette: appearance.palette })}
+              {...(appearance.font === "" ? {} : { font: appearance.font })}
+              {...(appearance.background === ""
+                ? {}
+                : { background: appearance.background })}
+              {...(appearance.tint === undefined
+                ? {}
+                : { tint: appearance.tint })}
+              copyOnSelect={settings.copyOnSelect ?? true}
+              rightClickPaste={settings.rightClickPaste ?? true}
+              onExit={() => consoles.markExited(session.id)}
+              onReconnect={() => consoles.reconnect(session.id)}
+              onResumeAgent={async (placement) => {
+                const resumed =
+                  (await consoles.resumeAgent?.(
+                    session.id,
+                    session.agent?.observationVersion ?? 0,
+                    placement,
+                  )) ?? null;
+                if (resumed === null) return false;
+                if (placement === "new-pane") onActive(resumed.id);
+                return true;
+              }}
+              onOpenRemotePath={onOpenRemotePath}
+            />
+          </Suspense>
+        );
+      }}
+    />
   );
 }
 
-function PaddedSection({ section, navigation, handoff, shell, declared, sftpTarget, onSftpTargetHandled }: SectionViewProps) {
+function PaddedSection({
+  section,
+  navigation,
+  handoff,
+  shell,
+  declared,
+  sftpTarget,
+  onSftpTargetHandled,
+}: SectionViewProps) {
   const { fileTarget, onNavigate, onNavigateLocation } = navigation;
-  const { onLock, onInspector, consoles, onShowConsole, onOpenWorkspace, onTerminalSettingsChange } = shell;
+  const {
+    onLock,
+    onInspector,
+    consoles,
+    onShowConsole,
+    onOpenWorkspace,
+    onTerminalSettingsChange,
+  } = shell;
   if (section === "Home") {
     return (
       <OverviewPanel
@@ -1031,7 +1111,14 @@ function PaddedSection({ section, navigation, handoff, shell, declared, sftpTarg
     );
   }
   if (section === "Snippets") {
-    return <SnippetsPanel aliases={declared.knownAliases} selectedSnippetId={new URLSearchParams(navigation.location.search).get("snippet")} />;
+    return (
+      <SnippetsPanel
+        aliases={declared.knownAliases}
+        selectedSnippetId={new URLSearchParams(navigation.location.search).get(
+          "snippet",
+        )}
+      />
+    );
   }
   if (section === "Groups") {
     return <GroupsPanel onInspector={onInspector} />;
@@ -1040,7 +1127,12 @@ function PaddedSection({ section, navigation, handoff, shell, declared, sftpTarg
     return <SecretsPanel onLock={onLock} />;
   }
   if (section === "Settings") {
-    return <SettingsPanel consoles={consoles} onTerminalSettingsChange={onTerminalSettingsChange} />;
+    return (
+      <SettingsPanel
+        consoles={consoles}
+        onTerminalSettingsChange={onTerminalSettingsChange}
+      />
+    );
   }
   if (section === "Sync") {
     return <SyncPanel />;
@@ -1075,7 +1167,9 @@ function PaddedSection({ section, navigation, handoff, shell, declared, sftpTarg
   }
   return (
     <section aria-labelledby="section-heading" className="flex flex-col gap-4">
-      <h2 id="section-heading" className="font-medium">{section}</h2>
+      <h2 id="section-heading" className="font-medium">
+        {section}
+      </h2>
     </section>
   );
 }
