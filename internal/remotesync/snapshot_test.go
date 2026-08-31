@@ -373,6 +373,7 @@ func TestReadRefusesDeviceLocalAndRawVaultPaths(t *testing.T) {
 		"sshc/history/entry.json",
 		"sshc/trash/deleted.conf",
 		"sshc/recent-connections.json",
+		"sshc/browser-registrations.json",
 		"sshc/workspaces.json",
 		"sshc/mutation.lock",
 		"connections/.sshc-apply-temporary",

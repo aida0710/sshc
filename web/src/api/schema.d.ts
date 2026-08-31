@@ -20,6 +20,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/session/recover": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["recoverSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/session/renew": {
         parameters: {
             query?: never;
@@ -1728,6 +1744,7 @@ export interface components {
     schemas: {
         BootstrapResponse: {
             csrfToken: string;
+            browserToken?: string;
         };
         HealthResponse: {
             /** @enum {string} */
@@ -3392,6 +3409,7 @@ export interface operations {
             query?: never;
             header: {
                 "X-SSHC-Bootstrap": string;
+                "X-SSHC-Browser"?: string;
             };
             path?: never;
             cookie?: never;
@@ -3410,6 +3428,30 @@ export interface operations {
             };
             401: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
+        };
+    };
+    recoverSession: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-SSHC-Browser": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Session restored for an enrolled browser */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BootstrapResponse"];
+                };
+            };
+            401: components["responses"]["Problem"];
         };
     };
     renewSession: {

@@ -9,11 +9,11 @@ export const ja = {
     "Vault の状態を確認できませんでした。保護された内容を隠したまま再試行します。",
   "shell.active": "ローカルセッション稼働中 · {version}",
   "shell.bootstrapFailed":
-    "ローカルセッションを開始できませんでした。sshc を再起動し、新しく開いたタブを使ってください。",
+    "ローカルセッションを開始できませんでした。ターミナルで sshc を一度実行し、このブラウザーを登録し直してください。",
   "shell.bootstrapRetry": "もう一度試す",
   "shell.sessionEndedHeading": "セッションが終了しました",
   "shell.sessionEnded":
-    "再読み込みしてローカルセッションを更新してください。更新できない場合は sshc を再起動し、新しく開いたタブを使ってください。",
+    "再読み込みするとローカルセッションを自動で復旧します。このブラウザーの登録が無効な場合だけ、ターミナルで sshc を一度実行してください。",
   "shell.sessionReload": "セッションを再読み込み",
   "shell.pageNotFound": "ページが見つかりません",
   "shell.pageNotFoundDescription":
@@ -511,7 +511,7 @@ export const ja = {
   "engine.heading": "エンジン",
   "engine.portLabel": "ポート",
   "engine.portHint":
-    "空欄の場合は 30000〜60000 からランダムに選択します。次回のエンジン起動時から適用されます。",
+    "空欄の場合、デスクトップでは端末固有の固定ポート（初期値54447）を使用します。ブックマークやインストールしたWebアプリを継続して使えます。次回のエンジン起動時から適用されます。",
   "engine.portOutOfRange": "ポートは 1024〜65535 の範囲で指定してください。",
   "engine.loading": "エンジン設定を読み込んでいます…",
   "engine.saved": "保存しました。自動ロックはすぐに、ポートの変更は次回のエンジン起動時から適用されます。",

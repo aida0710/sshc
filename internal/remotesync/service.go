@@ -544,6 +544,9 @@ var neverTravels = []string{
 	"sshc/trash",
 	// 接続履歴はこの端末での操作状態であり、別の端末へ移さない。
 	"sshc/recent-connections.json",
+	// Browser enrolment is a capability for this device's loopback origin. Only
+	// hashes are stored, but moving them would still be meaningless and unsafe.
+	"sshc/browser-registrations.json",
 	// pane layout is device-local and contains no process/session state that can
 	// be meaningfully restored on another engine.
 	"sshc/workspaces.json",

@@ -96,25 +96,56 @@ func (m *Manager) Reissue() (string, error) {
 }
 
 func (m *Manager) Bootstrap(presented string) (Credentials, error) {
+	credentials, _, err := m.BootstrapForSession(presented, "")
+	return credentials, err
+}
+
+// BootstrapForSession はone-time bootstrapを消費し、すでに有効なcookieがあれば
+// そのsessionへ新しいtab用CSRF tokenを追加する。cookieを差し替えないことで、
+// 同じブラウザで開いている別tabを切断しない。
+func (m *Manager) BootstrapForSession(presented, existingSessionID string) (Credentials, bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	if m.bootstrapUsed {
-		return Credentials{}, ErrBootstrapUsed
+		return Credentials{}, false, ErrBootstrapUsed
 	}
 
 	presentedHash := sha256.Sum256([]byte(presented))
 	if subtle.ConstantTimeCompare(presentedHash[:], m.bootstrapHash[:]) != 1 {
-		return Credentials{}, ErrInvalidBootstrap
+		return Credentials{}, false, ErrInvalidBootstrap
 	}
 
-	credentials, err := m.issueLocked(time.Time{})
+	credentials, setCookie, err := m.joinOrIssueLocked(existingSessionID)
 	if err != nil {
-		return Credentials{}, err
+		return Credentials{}, false, err
 	}
 
 	m.bootstrapUsed = true
-	return credentials, nil
+	return credentials, setCookie, nil
+}
+
+// JoinOrIssue adds a tab token to an existing browser session, or creates a session when
+// the engine was restarted and the browser cookie belongs to the previous process.
+func (m *Manager) JoinOrIssue(existingSessionID string) (Credentials, bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.joinOrIssueLocked(existingSessionID)
+}
+
+func (m *Manager) joinOrIssueLocked(existingSessionID string) (Credentials, bool, error) {
+	if existing, ok := m.sessionLocked(existingSessionID); ok {
+		csrf, err := token(m.random)
+		if err != nil {
+			return Credentials{}, false, err
+		}
+		key := sha256.Sum256([]byte(existingSessionID))
+		existing.csrfHashes = appendCSRFLocked(existing.csrfHashes, sha256.Sum256([]byte(csrf)))
+		m.sessions[key] = existing
+		return Credentials{SessionID: existingSessionID, CSRFToken: csrf}, false, nil
+	}
+	credentials, err := m.issueLocked(time.Time{})
+	return credentials, true, err
 }
 
 // IssueExpiring は、ブラウザ用 bootstrap を消費せず、指定した期間だけ有効な
@@ -205,15 +236,18 @@ func (m *Manager) RenewCSRF(sessionID, presented string) (string, bool) {
 	if err != nil {
 		return "", false
 	}
-	freshHash := sha256.Sum256([]byte(csrf))
-	if len(existing.csrfHashes) < MaxCSRFTokensPerSession {
-		existing.csrfHashes = append(existing.csrfHashes, freshHash)
-	} else {
-		copy(existing.csrfHashes, existing.csrfHashes[1:])
-		existing.csrfHashes[len(existing.csrfHashes)-1] = freshHash
-	}
+	existing.csrfHashes = appendCSRFLocked(existing.csrfHashes, sha256.Sum256([]byte(csrf)))
 	m.sessions[key] = existing
 	return csrf, true
+}
+
+func appendCSRFLocked(hashes [][sha256.Size]byte, fresh [sha256.Size]byte) [][sha256.Size]byte {
+	if len(hashes) < MaxCSRFTokensPerSession {
+		return append(hashes, fresh)
+	}
+	copy(hashes, hashes[1:])
+	hashes[len(hashes)-1] = fresh
+	return hashes
 }
 
 // Authenticate は、セッションが存在するかどうかだけを報告する。

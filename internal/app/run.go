@@ -16,6 +16,7 @@ import (
 	"golang.org/x/crypto/ssh"
 
 	"sshc/internal/application"
+	"sshc/internal/browserauth"
 	"sshc/internal/handoff"
 	"sshc/internal/httpserver"
 	"sshc/internal/keys"
@@ -46,11 +47,15 @@ type Dependencies struct {
 	Listen     ListenFunc
 	StopEngine func()
 	Port       int
-	UI         fs.FS
-	Logger     *slog.Logger
-	Home       string
-	Owner      handoff.Owner
-	PID        int
+	// DefaultPort is used only when neither --port nor saved settings choose a
+	// port. Desktop uses a stable origin; mobile leaves this zero and keeps an
+	// ephemeral listener behind its native WebView.
+	DefaultPort int
+	UI          fs.FS
+	Logger      *slog.Logger
+	Home        string
+	Owner       handoff.Owner
+	PID         int
 	// Toolchain と KeyAgent は、鍵 vault とオペレーティングシステムとの境界。
 	Toolchain    platform.Toolchain
 	KeyAgent     platform.KeyAgent
@@ -77,6 +82,9 @@ type Readiness struct {
 	// Entrance は起動時に使用する UI URL である。
 	Entrance    string
 	VaultExists bool
+	// BrowserRegistrationRequired is true only before any browser profile has
+	// enrolled on this device. Native runners may open Entrance once in this case.
+	BrowserRegistrationRequired bool
 }
 
 func buildKeyService(workspace *storage.Workspace, dependencies Dependencies, configuration *application.Service) (*keys.Service, *storage.Manager) {
@@ -100,14 +108,15 @@ func Build(dependencies Dependencies, version string) (*httpserver.Server, strin
 
 // runtime は、build が組み立てたもののうち、寿命の管理に要るものである。
 type runtime struct {
-	server     *httpserver.Server
-	bootstrap  string
-	document   handoff.Handoff
-	terminals  *terminal.Registry
-	passwords  *secret.Service
-	autoSync   *remotesync.Auto
-	autoCancel context.CancelFunc
-	autoDone   chan struct{}
+	server      *httpserver.Server
+	bootstrap   string
+	document    handoff.Handoff
+	terminals   *terminal.Registry
+	passwords   *secret.Service
+	autoSync    *remotesync.Auto
+	autoCancel  context.CancelFunc
+	autoDone    chan struct{}
+	browserAuth *browserauth.Store
 }
 
 func build(dependencies Dependencies, version string) (runtime, error) {
@@ -119,10 +128,39 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 	if wanted == 0 {
 		wanted = services.config.EngineSettings().Port
 	}
+	strictPort := wanted != 0
+	persistBrowserPort := !strictPort && dependencies.DefaultPort != 0
+	if persistBrowserPort {
+		storedPort, portErr := services.browserAuth.Port()
+		if portErr != nil {
+			return runtime{}, fmt.Errorf("browser origin: %w", portErr)
+		}
+		wanted = storedPort
+		if wanted == 0 {
+			wanted = dependencies.DefaultPort
+		}
+	}
 
 	listener, err := listenLoopback(dependencies.Listen, wanted, randomBelow)
+	// A stable default may already belong to another OS user. Select one fallback
+	// once and persist it as device-local browser origin state. Explicit --port
+	// and saved user settings remain strict and never silently move.
+	if err != nil && persistBrowserPort {
+		listener, err = listenLoopback(dependencies.Listen, 0, randomBelow)
+	}
 	if err != nil {
 		return runtime{}, fmt.Errorf("%w: %w", ErrListen, err)
+	}
+	if persistBrowserPort {
+		tcpAddress, ok := listener.Addr().(*net.TCPAddr)
+		if !ok || tcpAddress.Port < 1 {
+			listener.Close()
+			return runtime{}, fmt.Errorf("%w: browser origin listener has no TCP port", ErrListen)
+		}
+		if err := services.browserAuth.SetPort(tcpAddress.Port); err != nil {
+			listener.Close()
+			return runtime{}, fmt.Errorf("browser origin: %w", err)
+		}
 	}
 
 	sessions, bootstrap, err := session.NewManager(dependencies.Random)
@@ -162,6 +200,7 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 		},
 		ConnectAliases:    ssh.aliases,
 		Sessions:          sessions,
+		BrowserAuth:       services.browserAuth,
 		UI:                dependencies.UI,
 		Version:           version,
 		Owner:             dependencies.Owner,
@@ -224,12 +263,13 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 		return runtime{}, fmt.Errorf("publish the command-line handoff: %w", err)
 	}
 	return runtime{
-		server:    server,
-		bootstrap: bootstrap,
-		document:  document,
-		terminals: terminals,
-		passwords: passwordService,
-		autoSync:  autoSync,
+		server:      server,
+		bootstrap:   bootstrap,
+		document:    document,
+		terminals:   terminals,
+		passwords:   passwordService,
+		autoSync:    autoSync,
+		browserAuth: services.browserAuth,
 	}, nil
 }
 
@@ -270,6 +310,11 @@ func Run(ctx context.Context, dependencies Dependencies, version string) error {
 			Entrance:    built.server.URL() + "/#bootstrap=" + built.bootstrap,
 			VaultExists: exists,
 		}
+		registered, registrationErr := built.browserAuth.HasRegistrations()
+		if registrationErr != nil {
+			return stop(fmt.Errorf("read browser registration state: %w", registrationErr))
+		}
+		readiness.BrowserRegistrationRequired = !registered
 		if err := dependencies.Announce(readiness); err != nil {
 			return stop(fmt.Errorf("announce the entrance: %w", err))
 		}

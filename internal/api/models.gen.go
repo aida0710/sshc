@@ -476,7 +476,8 @@ type AutoSyncRequest struct {
 
 // BootstrapResponse defines model for BootstrapResponse.
 type BootstrapResponse struct {
-	CsrfToken string `json:"csrfToken"`
+	BrowserToken *string `json:"browserToken,omitempty"`
+	CsrfToken    string  `json:"csrfToken"`
 }
 
 // ChangeMasterPasswordRequest defines model for ChangeMasterPasswordRequest.
