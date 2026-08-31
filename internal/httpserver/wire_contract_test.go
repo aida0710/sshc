@@ -461,6 +461,10 @@ var wireEnumValues = map[reflect.Type][]string{
 		string(sftp.TransferRetryAction), string(sftp.TransferCancelAction), string(sftp.TransferProgressAction),
 		string(sftp.TransferCompleteAction), string(sftp.TransferFailAction), string(sftp.TransferNeedsOverwriteAction),
 	},
+	reflect.TypeOf(sftp.TransferControlAction("")): {
+		string(sftp.TransferPauseControl), string(sftp.TransferResumeControl),
+		string(sftp.TransferRetryControl), string(sftp.TransferCancelControl),
+	},
 	reflect.TypeOf(sftpMkdirType("")):            {string(sftpMkdirDirectory)},
 	reflect.TypeOf(workspace.Direction("")):      {string(workspace.Horizontal), string(workspace.Vertical)},
 	reflect.TypeOf(workspace.PaneKind("")):       {string(workspace.PaneSSH), string(workspace.PaneShell)},

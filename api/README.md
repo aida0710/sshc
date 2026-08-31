@@ -7,11 +7,26 @@ API 仕様は [`openapi.yaml`](openapi.yaml) で管理しています。仕様�
 ## 生成と検証
 
 ```sh
+go generate ./cmd/sshc
 go generate ./internal/api
 npm run generate:api --prefix web
 go test ./internal/api -count=1
 npm run typecheck --prefix web
 ```
+
+`go generate ./internal/api` は Go のモデルに加えて、
+`web/src/api/validators.generated.ts` も生成します。Web の共通APIクライアントは、
+OpenAPIに宣言されたJSON request/responseをpath・method・statusごとのschemaで検証します。
+個別画面のvalidatorを追加せず、制約は原則として `openapi.yaml` に追加してください。
+
+複数フィールド間の大小関係や排他的な入力のようにOpenAPI 3.0標準だけでは表せない制約には、
+`x-sshc-less-than-or-equal` と `x-sshc-exactly-one` を使用します。これらの拡張もruntime generatorが読み取るため、
+検証ロジックをTypeScript側へ重複して記述する必要はありません。
+
+CLIはOpenAPIとは別の契約ですが、`cmd/sshc/internal/clispec` を正本として、
+parser dispatch、help、Bash/Zsh/Fish補完の共通語彙を
+`cmd/sshc/cli_contract.gen.go` へ同時に生成します。引数間の意味的な制約だけは、
+各command parserの手書きコードに残します。
 
 OpenAPI 3.1 固有の機能を追加する場合は、先にジェネレータの対応状況を確認し、Go と TypeScript の生成結果を比較してから仕様のバージョンを変更してください。
 

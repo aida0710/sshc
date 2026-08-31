@@ -1,5 +1,6 @@
 import type { components } from "./schema";
 import { clearSessionCSRF, storeSessionCSRF } from "../session/bootstrap";
+import { validateAPIRequest, validateAPIResponse, validateOpenAPISchema } from "./validators.generated";
 
 export type HealthResponse = components["schemas"]["HealthResponse"];
 export type Problem = components["schemas"]["Problem"];
@@ -37,10 +38,7 @@ export function failureCode(error: unknown): string {
 async function readProblem(response: Response): Promise<Problem | null> {
   try {
     const payload: unknown = await response.json();
-    if (typeof payload !== "object" || payload === null) return null;
-    const record = payload as Record<string, unknown>;
-    if (typeof record.code !== "string" || typeof record.message !== "string") return null;
-    return record as Problem;
+    return validateOpenAPISchema<Problem>("Problem", payload);
   } catch {
     return null;
   }
@@ -120,24 +118,44 @@ async function failure(
 }
 
 function validateHealth(value: unknown): HealthResponse {
-  if (typeof value !== "object" || value === null) {
+  try {
+    return validateOpenAPISchema<HealthResponse>("HealthResponse", value);
+  } catch {
     throw new Error("invalid_health_response");
   }
-
-  const record = value as Record<string, unknown>;
-  if (record.status !== "ok" || typeof record.version !== "string" || record.version.length === 0) {
-    throw new Error("invalid_health_response");
-  }
-  return { status: "ok", version: record.version };
 }
 
 let csrfToken: string | null = null;
 let renewal: Readonly<{ token: string; attempt: symbol; promise: Promise<boolean> }> | null = null;
 
 function validCSRF(value: unknown): value is { csrfToken: string } {
-  if (typeof value !== "object" || value === null) return false;
-  const token = (value as Record<string, unknown>).csrfToken;
-  return typeof token === "string" && /^[A-Za-z0-9_-]{43}$/.test(token);
+  try {
+    validateOpenAPISchema<components["schemas"]["BootstrapResponse"]>("BootstrapResponse", value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function apiPath(path: string): string {
+  return new URL(path, window.location.origin).pathname;
+}
+
+async function validatedJSON<T>(response: Response, method: string, path: string): Promise<T> {
+  const payload: unknown = await response.json();
+  return validateAPIResponse<T>(method, apiPath(path), response.status, payload);
+}
+
+function validateJSONRequest(method: string, path: string, init: RequestInit): void {
+  const headers = new Headers(init.headers);
+  if (!headers.get("Content-Type")?.toLowerCase().startsWith("application/json") || typeof init.body !== "string") return;
+  let payload: unknown;
+  try {
+    payload = JSON.parse(init.body) as unknown;
+  } catch {
+    throw new Error("invalid_request");
+  }
+  validateAPIRequest(method, apiPath(path), payload);
 }
 
 function endSession(expectedToken?: string) {
@@ -163,7 +181,7 @@ async function renewCSRF(expectedToken: string): Promise<boolean> {
         endSession(expectedToken);
         return false;
       }
-      const payload: unknown = await response.json();
+      const payload = await validatedJSON<unknown>(response, "POST", "/api/v1/session/renew");
       if (!validCSRF(payload)) {
         endSession(expectedToken);
         return false;
@@ -237,6 +255,8 @@ export const apiClient = {
       throw error;
     }
     if (!response.ok) throw await failure(response, "GET", "/api/v1/health");
+    // Keep the stable health-specific diagnostic while the actual contract is
+    // still generated from HealthResponse in OpenAPI.
     return validateHealth(await response.json());
   },
   async read(path: string, options: RequestFailureOptions = {}): Promise<unknown> {
@@ -249,7 +269,7 @@ export const apiClient = {
       throw error;
     }
     if (!response.ok) throw await failure(response, "GET", path, options);
-    return response.json() as Promise<unknown>;
+    return validatedJSON<unknown>(response, "GET", path);
   },
   async send(path: string, init: RequestInit, options: RequestFailureOptions = {}): Promise<Response> {
     const target = new URL(path, window.location.origin);
@@ -259,6 +279,7 @@ export const apiClient = {
     if (!csrfToken) throw new Error("csrf_unavailable");
 
     const method = init.method ?? "POST";
+    validateJSONRequest(method, path, init);
     let response: Response;
     try {
       response = await requestWithSession(path, init, csrfToken);
@@ -278,6 +299,6 @@ export const apiClient = {
     const method = init.method ?? "POST";
     const response = await this.send(path, init, options);
     if (!response.ok) throw await failure(response, method, path, options);
-    return response.json() as Promise<T>;
+    return validatedJSON<T>(response, method, path);
   },
 };

@@ -483,26 +483,18 @@ test("keeps workspace management out of the mobile terminal", async ({ page, ins
   await expect(page.getByRole("navigation", { name: "Primary" })).toHaveClass(/shadow-none/);
 });
 
-test("renames a live workspace from the mobile navigation", async ({ page, installation }) => {
+test("keeps a live workspace visible without mobile rename controls", async ({ page, installation }) => {
   await mockMobileWorkspace(page);
   await openApplication(page, installation);
 
   await page.getByRole("button", { name: "Navigation", exact: true }).click();
   const navigation = page.getByRole("navigation", { name: "Primary" });
   await expect(navigation.getByText("localhost", { exact: true })).toBeVisible();
-  page.once("dialog", async (dialog) => {
-    expect(dialog.message()).toBe("Live workspace name");
-    expect(dialog.defaultValue()).toBe("localhost");
-    await dialog.accept("Mobile build");
-  });
-  await navigation.getByRole("button", { name: "Actions for localhost" }).click();
-  await navigation.getByRole("menuitem", { name: "Rename workspace" }).click();
-
-  await expect(navigation).not.toBeInViewport();
+  await expect(navigation.getByText("2 terminals", { exact: true })).toBeVisible();
+  await expect(navigation.getByRole("button", { name: "Actions for localhost" })).toBeHidden();
+  await expect(navigation.getByRole("menuitem", { name: "Rename workspace" })).toHaveCount(0);
   await expect(page.locator("[data-desktop-workspace-controls]").getByRole("button", { name: "Rename workspace" })).toHaveCount(0);
-  await page.getByRole("button", { name: "Navigation", exact: true }).click();
-  await expect(navigation.getByText("Mobile build", { exact: true })).toBeVisible();
-  await expectNoHorizontalOverflow(page, "renamed mobile workspace");
+  await expectNoHorizontalOverflow(page, "mobile workspace without management controls");
 });
 
 test("removes the session status badge from the mobile header", async ({ page, installation }) => {

@@ -33,7 +33,7 @@ describe("bootstrapSession", () => {
     expect(window.sessionStorage.getItem("sshc.session.csrf")).toBe(csrfToken);
   });
 
-   it("stores the browser enrolment returned by a one-time bootstrap", async () => {
+  it("stores the browser enrolment returned by a one-time bootstrap", async () => {
     const browserToken = "r".repeat(43);
     const fetcher = vi.fn().mockResolvedValue(new Response(
       JSON.stringify({ csrfToken: "c".repeat(43), browserToken }),
@@ -45,6 +45,30 @@ describe("bootstrapSession", () => {
       fetcher,
     );
     expect(window.localStorage.getItem("sshc.browser.registration.v1")).toBe(browserToken);
+  });
+
+  it("replaces an invalidated registration through the foreground handoff", async () => {
+    const previous = "p".repeat(43);
+    const replacement = "r".repeat(43);
+    window.localStorage.setItem("sshc.browser.registration.v1", previous);
+    const fetcher = vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({ csrfToken: "c".repeat(43), browserToken: replacement }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    ));
+
+    await bootstrapSession(
+      { hash: `#bootstrap=${"b".repeat(43)}`, pathname: "/", search: "" },
+      { replaceState: vi.fn() },
+      fetcher,
+    );
+
+    expect(fetcher).toHaveBeenCalledWith("/api/v1/session/bootstrap", expect.objectContaining({
+      headers: expect.objectContaining({
+        "X-SSHC-Bootstrap": "b".repeat(43),
+        "X-SSHC-Browser": previous,
+      }),
+    }));
+    expect(window.localStorage.getItem("sshc.browser.registration.v1")).toBe(replacement);
   });
 
   it.each([
@@ -141,6 +165,20 @@ describe("a reload", () => {
       headers: { "X-SSHC-Browser": browserToken },
     }));
     expect(state.csrfToken).toBe(csrfToken);
+  });
+
+  it("refuses recovery after the server invalidates the previous-port registration", async () => {
+    const browserToken = "r".repeat(43);
+    window.localStorage.setItem("sshc.browser.registration.v1", browserToken);
+    const fetcher = vi.fn().mockResolvedValue(new Response("", { status: 401 }));
+
+    await expect(
+      bootstrapSession({ hash: "", pathname: "/", search: "" }, { replaceState: vi.fn() }, fetcher),
+    ).rejects.toThrow("session_expired");
+
+    expect(fetcher).toHaveBeenCalledWith("/api/v1/session/recover", expect.objectContaining({
+      headers: { "X-SSHC-Browser": browserToken },
+    }));
   });
 
   it("falls back to browser recovery after an engine restart invalidates the cookie", async () => {

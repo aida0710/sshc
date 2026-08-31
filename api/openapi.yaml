@@ -2005,8 +2005,8 @@ components:
       additionalProperties: false
       required: [csrfToken]
       properties:
-        csrfToken: { type: string, minLength: 43, maxLength: 43 }
-        browserToken: { type: string, minLength: 43, maxLength: 43 }
+        csrfToken: { type: string, minLength: 43, maxLength: 43, pattern: "^[A-Za-z0-9_-]{43}$" }
+        browserToken: { type: string, minLength: 43, maxLength: 43, pattern: "^[A-Za-z0-9_-]{43}$" }
     HealthResponse:
       type: object
       additionalProperties: false
@@ -2653,6 +2653,8 @@ components:
     TerminalConnectionProgress:
       type: object
       additionalProperties: false
+      x-sshc-less-than-or-equal:
+        - [hop, hops]
       required: [phase, alias, hostName, user, hop, hops]
       properties:
         phase:
@@ -2666,6 +2668,8 @@ components:
     TerminalReconnect:
       type: object
       additionalProperties: false
+      x-sshc-less-than-or-equal:
+        - [attempt, limit]
       required: [attempt, limit, retryAt, problem]
       properties:
         attempt: { type: integer, minimum: 1, maximum: 5 }
@@ -2686,7 +2690,7 @@ components:
       required: [sessions, maxSessions]
       properties:
         sessions: { type: array, items: { $ref: "#/components/schemas/TerminalSession" } }
-        maxSessions: { type: integer }
+        maxSessions: { type: integer, minimum: 0, maximum: 200 }
     TerminalControlCursor:
       type: object
       additionalProperties: false
@@ -4210,7 +4214,7 @@ components:
     SFTPTransferJob:
       type: object
       additionalProperties: false
-      required: [id, batchId, batchName, batchKind, alias, direction, kind, name, remotePath, totalBytes, transferredBytes, bytesPerSecond, remainingSeconds, status, attempt, problem, lastModified, expectedRevision, sourceFingerprint, overwrite, downloadRevision, createdAt, updatedAt]
+      required: [id, batchId, batchName, batchKind, alias, direction, kind, name, remotePath, totalBytes, transferredBytes, bytesPerSecond, remainingSeconds, status, allowedActions, attempt, problem, lastModified, expectedRevision, sourceFingerprint, overwrite, downloadRevision, createdAt, updatedAt]
       properties:
         id: { type: string, pattern: "^[A-Za-z0-9_-]{8,128}$" }
         batchId: { type: string, pattern: "^[A-Za-z0-9_-]{8,128}$" }
@@ -4226,6 +4230,11 @@ components:
         bytesPerSecond: { type: number, format: double, minimum: 0 }
         remainingSeconds: { type: integer, format: int64, minimum: -1 }
         status: { type: string, enum: [queued, running, paused, reattach, needs_overwrite, completed, failed, cancelled] }
+        allowedActions:
+          type: array
+          uniqueItems: true
+          maxItems: 2
+          items: { type: string, enum: [pause, resume, retry, cancel] }
         attempt: { type: integer, minimum: 1 }
         problem: { type: string, maxLength: 128 }
         lastModified: { type: integer, format: int64, minimum: 0 }
@@ -4295,7 +4304,7 @@ components:
     SFTPResumableUpload:
       type: object
       additionalProperties: false
-      required: [id, path, offset, size]
+      required: [id, path, offset, size, expectedRevision]
       properties:
         id: { type: string }
         path: { type: string }
@@ -4322,6 +4331,8 @@ components:
     WorkspaceNode:
       type: object
       additionalProperties: false
+      x-sshc-exactly-one:
+        - [pane, split]
       properties:
         pane: { $ref: "#/components/schemas/WorkspacePane" }
         split: { $ref: "#/components/schemas/WorkspaceSplit" }
@@ -4334,14 +4345,16 @@ components:
         layout: { $ref: "#/components/schemas/WorkspaceNode" }
         focusedPaneId: { type: string }
     TerminalWorkspace:
-      allOf:
-        - { $ref: "#/components/schemas/WorkspaceDefinition" }
-        - type: object
-          required: [id, createdAt, updatedAt]
-          properties:
-            id: { type: string }
-            createdAt: { type: string, format: date-time }
-            updatedAt: { type: string, format: date-time }
+      type: object
+      additionalProperties: false
+      required: [name, layout, focusedPaneId, id, createdAt, updatedAt]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+        layout: { $ref: "#/components/schemas/WorkspaceNode" }
+        focusedPaneId: { type: string }
+        id: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
     WorkspaceList:
       type: object
       additionalProperties: false
@@ -4383,14 +4396,17 @@ components:
         command: { type: string, minLength: 1, maxLength: 65536 }
         variables: { type: array, maxItems: 32, items: { $ref: "#/components/schemas/SnippetVariable" } }
     Snippet:
-      allOf:
-        - { $ref: "#/components/schemas/SnippetDraft" }
-        - type: object
-          required: [id, createdAt, updatedAt]
-          properties:
-            id: { type: string }
-            createdAt: { type: string, format: date-time }
-            updatedAt: { type: string, format: date-time }
+      type: object
+      additionalProperties: false
+      required: [name, description, command, variables, id, createdAt, updatedAt]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 96 }
+        description: { type: string, maxLength: 2048 }
+        command: { type: string, minLength: 1, maxLength: 65536 }
+        variables: { type: array, maxItems: 32, items: { $ref: "#/components/schemas/SnippetVariable" } }
+        id: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
     StartupSnippet:
       type: object
       additionalProperties: false
@@ -4416,6 +4432,9 @@ components:
     SnippetPreviewRequest:
       type: object
       additionalProperties: false
+      x-sshc-exactly-one:
+        - [snippetId, command]
+        - [aliases, targets]
       description: Exactly one of snippetId or command and exactly one of aliases or targets must be supplied. targets permits repeated aliases when targetId values are distinct.
       required: [inputs]
       properties:
@@ -4474,13 +4493,21 @@ components:
         actionToken: { type: string }
         actionExpiresAt: { type: string, format: date-time }
     SnippetExecuteRequest:
-      allOf:
-        - { $ref: "#/components/schemas/SnippetPreviewRequest" }
-        - type: object
-          required: [evidence, concurrency]
-          properties:
-            evidence: { type: string }
-            concurrency: { type: integer, minimum: 1, maximum: 8 }
+      type: object
+      additionalProperties: false
+      x-sshc-exactly-one:
+        - [snippetId, command]
+        - [aliases, targets]
+      description: Exactly one of snippetId or command and exactly one of aliases or targets must be supplied. targets permits repeated aliases when targetId values are distinct.
+      required: [inputs, evidence, concurrency]
+      properties:
+        snippetId: { type: string }
+        command: { type: string, minLength: 1, maxLength: 65536 }
+        aliases: { type: array, minItems: 1, maxItems: 64, items: { type: string } }
+        targets: { type: array, minItems: 1, maxItems: 64, items: { $ref: "#/components/schemas/SnippetExecutionTarget" } }
+        inputs: { type: object, additionalProperties: { type: string } }
+        evidence: { type: string }
+        concurrency: { type: integer, minimum: 1, maximum: 8 }
     SnippetTargetResult:
       type: object
       additionalProperties: false

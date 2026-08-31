@@ -70,11 +70,11 @@ export function TransferManagerList() {
                       <span className="tabular-nums text-ink-muted">{item.remainingSeconds >= 0 && item.status === "running" ? t("sftp.manager.remaining", { duration: duration(item.remainingSeconds) }) : "—"}</span>
                       <span className="col-span-2 flex flex-wrap items-center justify-end gap-2 whitespace-nowrap">
                         <span className={statusClass(displayedStatus)}>{displayedStatus === "failed" ? item.problem : t(`sftp.manager.status.${displayedStatus}`)}</span>
-                        {!sourceMissing && (item.status === "running" || item.status === "queued") ? <button type="button" className="text-accent" onClick={() => void sftpTransferManager.pause(item.id)}>{t("sftp.transfer.pause")}</button> : null}
-                        {!sourceMissing && (item.status === "paused" || item.status === "reattach") ? <button type="button" className="text-accent" onClick={() => void sftpTransferManager.resume(item.id)}>{t("sftp.transfer.resume")}</button> : null}
-                        {item.status === "failed" ? <button type="button" className="text-accent" onClick={() => void sftpTransferManager.retry(item.id)}>{t("sftp.manager.retry")}</button> : null}
-                        {item.status === "needs_overwrite" ? <button type="button" className="text-notice-ink" onClick={() => void sftpTransferManager.overwrite(item.id)}>{t("sftp.overwrite")}</button> : null}
-                        {!['completed', 'cancelled'].includes(item.status) ? <button type="button" className="text-danger" onClick={() => void sftpTransferManager.cancel(item.id)}>{t("sftp.cancel")}</button> : null}
+                        {!sourceMissing && item.allowedActions.includes("pause") ? <button type="button" className="text-accent" onClick={() => void sftpTransferManager.pause(item.id)}>{t("sftp.transfer.pause")}</button> : null}
+                        {!sourceMissing && item.allowedActions.includes("resume") && item.status !== "needs_overwrite" ? <button type="button" className="text-accent" onClick={() => void sftpTransferManager.resume(item.id)}>{t("sftp.transfer.resume")}</button> : null}
+                        {item.allowedActions.includes("retry") ? <button type="button" className="text-accent" onClick={() => void sftpTransferManager.retry(item.id)}>{t("sftp.manager.retry")}</button> : null}
+                        {item.allowedActions.includes("resume") && item.status === "needs_overwrite" ? <button type="button" className="text-notice-ink" onClick={() => void sftpTransferManager.overwrite(item.id)}>{t("sftp.overwrite")}</button> : null}
+                        {item.allowedActions.includes("cancel") ? <button type="button" className="text-danger" onClick={() => void sftpTransferManager.cancel(item.id)}>{t("sftp.cancel")}</button> : null}
                       </span>
                     </li>
                   );

@@ -1,50 +1,39 @@
 import { apiClient } from "../../api/client";
-import { asArray, asRecord, asString, jsonHeaders } from "../../api/guards";
+import { jsonHeaders } from "../../api/guards";
+import type { components } from "../../api/schema";
+import { validateOpenAPISchema } from "../../api/validators.generated";
 import type { StoredNode } from "./layout";
 
-export type SavedWorkspace = {
-  id: string;
-  name: string;
-  layout: StoredNode;
-  focusedPaneId: string;
-  createdAt: string;
-  updatedAt: string;
-};
+type WireWorkspace = components["schemas"]["TerminalWorkspace"];
+type WireWorkspaceList = components["schemas"]["WorkspaceList"];
+type WireRestorePlan = components["schemas"]["WorkspaceRestorePlan"];
+
+export type SavedWorkspace = Omit<WireWorkspace, "layout"> & { layout: StoredNode };
 
 export type WorkspaceDefinition = Pick<SavedWorkspace, "name" | "layout" | "focusedPaneId">;
 
-function node(value: unknown): StoredNode {
-  const item = asRecord(value);
-  if (item.pane !== undefined) {
-    const pane = asRecord(item.pane);
-    const kind = pane.kind === undefined ? undefined : asString(pane.kind);
-    if (kind !== undefined && kind !== "ssh" && kind !== "shell") throw new Error("invalid_response");
+function node(value: components["schemas"]["WorkspaceNode"]): StoredNode {
+  if (value.pane !== undefined) {
     return { pane: {
-      id: asString(pane.id),
-      alias: asString(pane.alias),
-      ...(kind === "shell" ? { kind } : {}),
+      id: value.pane.id,
+      alias: value.pane.alias,
+      ...(value.pane.kind === "shell" ? { kind: value.pane.kind } : {}),
     } };
   }
-  const split = asRecord(item.split);
-  const direction = asString(split.direction);
-  if (direction !== "horizontal" && direction !== "vertical") throw new Error("invalid_response");
-  const ratio = split.ratio;
-  if (typeof ratio !== "number") throw new Error("invalid_response");
-  return { split: { direction, ratio, first: node(split.first), second: node(split.second) } };
+  // OpenAPI's x-sshc-exactly-one validator guarantees one of pane/split.
+  const split = value.split!;
+  return { split: { direction: split.direction, ratio: split.ratio, first: node(split.first), second: node(split.second) } };
 }
 
 function workspace(value: unknown): SavedWorkspace {
-  const item = asRecord(value);
-  return {
-    id: asString(item.id), name: asString(item.name), layout: node(item.layout),
-    focusedPaneId: asString(item.focusedPaneId), createdAt: asString(item.createdAt), updatedAt: asString(item.updatedAt),
-  };
+  const item = validateOpenAPISchema<WireWorkspace>("TerminalWorkspace", value);
+  return { ...item, layout: node(item.layout) };
 }
 
 export const workspaceApi = {
   async list(): Promise<SavedWorkspace[]> {
-    const value = asRecord(await apiClient.read("/api/v1/workspaces"));
-    return asArray(value.workspaces).map(workspace);
+    const value = validateOpenAPISchema<WireWorkspaceList>("WorkspaceList", await apiClient.read("/api/v1/workspaces"));
+    return value.workspaces.map(workspace);
   },
   async create(definition: WorkspaceDefinition): Promise<SavedWorkspace> {
     return workspace(await apiClient.mutate<unknown>("/api/v1/workspaces", {
@@ -61,8 +50,8 @@ export const workspaceApi = {
     if (!response.ok) throw new Error("workspace_delete_failed");
   },
   async restore(id: string): Promise<SavedWorkspace> {
-    const value = asRecord(await apiClient.mutate<unknown>(`/api/v1/workspaces/${encodeURIComponent(id)}/restore`, {
-      method: "POST", headers: jsonHeaders, body: "{}",
+    const value = validateOpenAPISchema<WireRestorePlan>("WorkspaceRestorePlan", await apiClient.mutate<unknown>(`/api/v1/workspaces/${encodeURIComponent(id)}/restore`, {
+      method: "POST",
     }));
     return workspace(value.workspace);
   },

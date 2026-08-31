@@ -1,42 +1,31 @@
 import { apiClient } from "../api/client";
-import { asArray, asBoolean, asNumber, asRecord, asString, jsonHeaders } from "../api/guards";
+import { jsonHeaders } from "../api/guards";
+import type { components } from "../api/schema";
+import { validateOpenAPISchema } from "../api/validators.generated";
 
-export type SnippetVariable = { name: string; type: "string" | "integer" | "boolean" | "secret"; required?: boolean; default?: string; description?: string };
-export type Snippet = { id: string; name: string; description?: string; command: string; variables: SnippetVariable[]; createdAt: string; updatedAt: string };
-export type Startup = { alias: string; snippetId: string; inputs?: Record<string, string> };
-export type SnippetDraft = Pick<Snippet, "name" | "command"> & { description: string; variables: SnippetVariable[] };
-export type RouteHop = { alias: string; hostName: string; user: string; port: string; proxyCommand: string; strictHostKey: string; authentication: string[]; identityFiles: string[]; identitiesOnly: boolean; hostKeyAlgorithms: string[] };
-export type Preview = { snippetId: string; evidence: string; actionToken: string; actionExpiresAt: string; targets: { targetId: string; target: { alias: string; hostName: string; user: string; port: string; route: RouteHop[] }; command: string }[] };
-export type Job = { id: string; status: "running" | "completed" | "cancelled"; startedAt: string; finishedAt?: string; results: { targetId: string; alias: string; status: string; exitCode?: number; stdout?: string; stderr?: string; truncated?: boolean; problem?: string }[] };
-
-function variable(value: unknown): SnippetVariable {
-  const item = asRecord(value);
-  const type = asString(item.type);
-  if (type !== "string" && type !== "integer" && type !== "boolean" && type !== "secret") throw new Error("invalid_response");
-  return { name: asString(item.name), type, ...(item.required === undefined ? {} : { required: asBoolean(item.required) }), ...(item.default === undefined ? {} : { default: asString(item.default) }), ...(item.description === undefined ? {} : { description: asString(item.description) }) };
-}
+export type SnippetVariable = components["schemas"]["SnippetVariable"];
+export type Snippet = components["schemas"]["Snippet"];
+export type Startup = components["schemas"]["StartupSnippet"];
+export type SnippetDraft = components["schemas"]["SnippetDraft"];
+export type Preview = components["schemas"]["SnippetPreview"];
+export type Job = components["schemas"]["SnippetJob"];
+export type RouteHop = NonNullable<Preview["targets"][number]["target"]["route"]>[number];
 
 function snippet(value: unknown): Snippet {
-  const item = asRecord(value);
-  return { id: asString(item.id), name: asString(item.name), command: asString(item.command), variables: asArray(item.variables ?? []).map(variable), createdAt: asString(item.createdAt), updatedAt: asString(item.updatedAt), ...(item.description === undefined ? {} : { description: asString(item.description) }) };
+  return validateOpenAPISchema<Snippet>("Snippet", value);
 }
 
 function job(value: unknown): Job {
-  const item = asRecord(value);
-  const status = asString(item.status);
-  if (status !== "running" && status !== "completed" && status !== "cancelled") throw new Error("invalid_response");
-  return { id: asString(item.id), status, startedAt: asString(item.startedAt), ...(item.finishedAt === undefined ? {} : { finishedAt: asString(item.finishedAt) }), results: asArray(item.results).map((raw) => { const result = asRecord(raw); return { targetId: asString(result.targetId), alias: asString(result.alias), status: asString(result.status), ...(result.exitCode === undefined ? {} : { exitCode: asNumber(result.exitCode) }), ...(result.stdout === undefined ? {} : { stdout: asString(result.stdout) }), ...(result.stderr === undefined ? {} : { stderr: asString(result.stderr) }), ...(result.truncated === undefined ? {} : { truncated: asBoolean(result.truncated) }), ...(result.problem === undefined ? {} : { problem: asString(result.problem) }) }; }) };
+  return validateOpenAPISchema<Job>("SnippetJob", value);
 }
 
 function parsePreview(value: unknown): Preview {
-  const item = asRecord(value);
-  return { snippetId: asString(item.snippetId), evidence: asString(item.evidence), actionToken: asString(item.actionToken), actionExpiresAt: asString(item.actionExpiresAt), targets: asArray(item.targets).map((raw) => { const targetPreview = asRecord(raw); const target = asRecord(targetPreview.target); return { targetId: asString(targetPreview.targetId), target: { alias: asString(target.alias), hostName: asString(target.hostName), user: asString(target.user), port: asString(target.port), route: asArray(target.route ?? []).map((rawHop) => { const hop = asRecord(rawHop); return { alias: asString(hop.alias), hostName: asString(hop.hostName), user: asString(hop.user), port: asString(hop.port), proxyCommand: asString(hop.proxyCommand ?? ""), strictHostKey: asString(hop.strictHostKey), authentication: asArray(hop.authentication ?? []).map(asString), identityFiles: asArray(hop.identityFiles ?? []).map(asString), identitiesOnly: hop.identitiesOnly === true, hostKeyAlgorithms: asArray(hop.hostKeyAlgorithms ?? []).map(asString) }; }) }, command: asString(targetPreview.command) }; }) };
+  return validateOpenAPISchema<Preview>("SnippetPreview", value);
 }
 
 export const snippetsApi = {
   async library(): Promise<{ snippets: Snippet[]; startup: Startup[] }> {
-    const value = asRecord(await apiClient.read("/api/v1/snippets"));
-    return { snippets: asArray(value.snippets).map(snippet), startup: asArray(value.startup).map((raw) => { const item = asRecord(raw); return { alias: asString(item.alias), snippetId: asString(item.snippetId), ...(item.inputs === undefined ? {} : { inputs: Object.fromEntries(Object.entries(asRecord(item.inputs)).map(([key, input]) => [key, asString(input)])) }) }; }) };
+    return validateOpenAPISchema<components["schemas"]["SnippetLibrary"]>("SnippetLibrary", await apiClient.read("/api/v1/snippets"));
   },
   async create(draft: SnippetDraft): Promise<Snippet> { return snippet(await apiClient.mutate<unknown>("/api/v1/snippets", { method: "POST", headers: jsonHeaders, body: JSON.stringify(draft) })); },
   async update(id: string, draft: SnippetDraft): Promise<Snippet> { return snippet(await apiClient.mutate<unknown>(`/api/v1/snippets/${encodeURIComponent(id)}`, { method: "PUT", headers: jsonHeaders, body: JSON.stringify(draft) })); },

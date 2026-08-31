@@ -3,11 +3,28 @@ package main
 import (
 	"fmt"
 	"io"
+	"strings"
 )
+
+func renderCompletion(template string) string {
+	grammar := cliCompletionGrammar
+	return strings.NewReplacer(
+		"{{TOP_LEVEL}}", strings.Join(grammar.topLevel, " "),
+		"{{HELP_TOPICS}}", strings.Join(grammar.helpTopics, " "),
+		"{{SYNC_ACTIONS}}", strings.Join(grammar.syncActions, " "),
+		"{{TERMINAL_ACTIONS}}", strings.Join(grammar.terminalActions, " "),
+		"{{SERVICE_ACTIONS}}", strings.Join(grammar.serviceActions, " "),
+		"{{VAULT_ACTIONS}}", strings.Join(grammar.vaultActions, " "),
+		"{{ENCODINGS}}", strings.Join(grammar.encodings, " "),
+		"{{WAIT_STATES}}", strings.Join(grammar.waitStates, " "),
+		"{{SERIAL_OPTIONS}}", strings.Join(grammar.serialOptions, " "),
+		"{{TELNET_OPTIONS}}", strings.Join(grammar.telnetOptions, " "),
+	).Replace(template)
+}
 
 // 補完候補は生成時に設定へ焼き込まず、Tabを押した時点の `sshc ssh --list` を使う。
 // Include先の追加やSync受信後にも、補完ファイルを作り直さず最新のaliasを表示するためである。
-const bashCompletion = `# bash completion for sshc
+const bashCompletionTemplate = `# bash completion for sshc
 _sshc_completion() {
   local current previous command aliases
   current="${COMP_WORDS[COMP_CWORD]}"
@@ -26,19 +43,19 @@ _sshc_completion() {
   }
 
   if (( COMP_CWORD == 1 )); then
-    _sshc_complete_words "engine ssh info sync terminal serial telnet open status update service vault version help completion"
+    _sshc_complete_words "{{TOP_LEVEL}}"
     return
   fi
 
   case "$previous" in
-    --encoding) _sshc_complete_words "utf-8 shift_jis euc-jp iso-2022-jp"; return ;;
+    --encoding) _sshc_complete_words "{{ENCODINGS}}"; return ;;
     --data-bits) _sshc_complete_words "5 6 7 8"; return ;;
     --parity) _sshc_complete_words "none odd even mark space"; return ;;
     --stop-bits) _sshc_complete_words "1 1.5 2"; return ;;
     --flow) _sshc_complete_words "none rtscts xonxoff"; return ;;
     --dtr|--rts) _sshc_complete_words "on off"; return ;;
     --line-ending) _sshc_complete_words "none cr lf crlf"; return ;;
-    --for) _sshc_complete_words "connecting connected reconnecting exited agent-working agent-attention agent-ready agent-ended"; return ;;
+    --for) _sshc_complete_words "{{WAIT_STATES}}"; return ;;
     --script)
       COMPREPLY=()
       while IFS= read -r candidate; do COMPREPLY+=("$candidate"); done < <(compgen -f -- "$current")
@@ -68,7 +85,7 @@ _sshc_completion() {
       ;;
     sync)
       if (( COMP_CWORD == 2 )); then
-        _sshc_complete_words "setup push pull now auto --json --help"
+        _sshc_complete_words "{{SYNC_ACTIONS}} --json --help"
       else
         case "${COMP_WORDS[2]}" in
           push|pull) _sshc_complete_words "--force --json --help" ;;
@@ -81,7 +98,7 @@ _sshc_completion() {
       ;;
     terminal)
       if (( COMP_CWORD == 2 )); then
-        _sshc_complete_words "list show read send wait create rename close --help"
+        _sshc_complete_words "{{TERMINAL_ACTIONS}} --help"
       elif [[ "${COMP_WORDS[2]}" == "create" && "$COMP_CWORD" -eq 3 ]]; then
         _sshc_complete_words "shell ssh --help"
       elif [[ "${COMP_WORDS[2]}" == "create" && "${COMP_WORDS[3]}" == "ssh" && "$COMP_CWORD" -eq 4 ]]; then
@@ -101,31 +118,31 @@ _sshc_completion() {
       fi
       ;;
     serial)
-      _sshc_complete_words "--json --non-interactive --require-output --encoding --baud --data-bits --parity --stop-bits --flow --dtr --rts --break --expect --read-for --timeout --settle --max-bytes --line-ending --script --help"
+      _sshc_complete_words "{{SERIAL_OPTIONS}}"
       ;;
     telnet)
-      _sshc_complete_words "--non-interactive --require-output --encoding --connect-timeout --terminal-type --expect --read-for --timeout --settle --max-bytes --line-ending --script --json --help"
+      _sshc_complete_words "{{TELNET_OPTIONS}}"
       ;;
     status)
       _sshc_complete_words "--json --help"
       ;;
     service)
-      if (( COMP_CWORD == 2 )); then _sshc_complete_words "install status disable --help"; elif (( COMP_CWORD == 3 )); then _sshc_complete_words "--help"; fi
+      if (( COMP_CWORD == 2 )); then _sshc_complete_words "{{SERVICE_ACTIONS}} --help"; elif (( COMP_CWORD == 3 )); then _sshc_complete_words "--help"; fi
       ;;
     vault)
-      if (( COMP_CWORD == 2 )); then _sshc_complete_words "status create unlock lock change-password --help"; elif (( COMP_CWORD == 3 )); then _sshc_complete_words "--help"; fi
+      if (( COMP_CWORD == 2 )); then _sshc_complete_words "{{VAULT_ACTIONS}} --help"; elif (( COMP_CWORD == 3 )); then _sshc_complete_words "--help"; fi
       ;;
     help)
       if (( COMP_CWORD == 2 )); then
-        _sshc_complete_words "engine ssh info sync terminal serial telnet open status update service vault version completion"
+        _sshc_complete_words "{{HELP_TOPICS}}"
       elif [[ "${COMP_WORDS[2]}" == "sync" ]]; then
-        _sshc_complete_words "setup push pull now auto"
+        _sshc_complete_words "{{SYNC_ACTIONS}}"
       elif [[ "${COMP_WORDS[2]}" == "terminal" ]]; then
-        _sshc_complete_words "list show read send wait create rename close"
+        _sshc_complete_words "{{TERMINAL_ACTIONS}}"
       elif [[ "${COMP_WORDS[2]}" == "service" ]]; then
-        _sshc_complete_words "install status disable"
+        _sshc_complete_words "{{SERVICE_ACTIONS}}"
       elif [[ "${COMP_WORDS[2]}" == "vault" ]]; then
-        _sshc_complete_words "status create unlock lock change-password"
+        _sshc_complete_words "{{VAULT_ACTIONS}}"
       fi
       ;;
   esac
@@ -133,7 +150,7 @@ _sshc_completion() {
 complete -F _sshc_completion sshc
 `
 
-const zshCompletion = `#compdef sshc
+const zshCompletionTemplate = `#compdef sshc
 # zsh completion for sshc
 _sshc() {
   local command previous
@@ -151,19 +168,19 @@ _sshc() {
   }
 
   if (( CURRENT == 2 )); then
-    _sshc_values 'engine ssh info sync terminal serial telnet open status update service vault version help completion'
+    _sshc_values '{{TOP_LEVEL}}'
     return
   fi
 
   case "$previous" in
-    --encoding) _sshc_values 'utf-8 shift_jis euc-jp iso-2022-jp'; return ;;
+    --encoding) _sshc_values '{{ENCODINGS}}'; return ;;
     --data-bits) _sshc_values '5 6 7 8'; return ;;
     --parity) _sshc_values 'none odd even mark space'; return ;;
     --stop-bits) _sshc_values '1 1.5 2'; return ;;
     --flow) _sshc_values 'none rtscts xonxoff'; return ;;
     --dtr|--rts) _sshc_values 'on off'; return ;;
     --line-ending) _sshc_values 'none cr lf crlf'; return ;;
-    --for) _sshc_values 'connecting connected reconnecting exited agent-working agent-attention agent-ready agent-ended'; return ;;
+    --for) _sshc_values '{{WAIT_STATES}}'; return ;;
     --script) _files; return ;;
   esac
 
@@ -185,7 +202,7 @@ _sshc() {
       ;;
     sync)
       if (( CURRENT == 3 )); then
-        _sshc_values 'setup push pull now auto --json --help'
+        _sshc_values '{{SYNC_ACTIONS}} --json --help'
       else
         case "${words[3]}" in
           push|pull) _sshc_values '--force --json --help' ;;
@@ -196,7 +213,7 @@ _sshc() {
       ;;
     terminal)
       if (( CURRENT == 3 )); then
-        _sshc_values 'list show read send wait create rename close --help'
+        _sshc_values '{{TERMINAL_ACTIONS}} --help'
       elif [[ "${words[3]}" == 'create' && "$CURRENT" -eq 4 ]]; then
         _sshc_values 'shell ssh --help'
       elif [[ "${words[3]}" == 'create' && "${words[4]}" == 'ssh' && "$CURRENT" -eq 5 ]]; then
@@ -215,20 +232,20 @@ _sshc() {
         esac
       fi
       ;;
-    serial) _sshc_values '--json --non-interactive --require-output --encoding --baud --data-bits --parity --stop-bits --flow --dtr --rts --break --expect --read-for --timeout --settle --max-bytes --line-ending --script --help' ;;
-    telnet) _sshc_values '--non-interactive --require-output --encoding --connect-timeout --terminal-type --expect --read-for --timeout --settle --max-bytes --line-ending --script --json --help' ;;
+    serial) _sshc_values '{{SERIAL_OPTIONS}}' ;;
+    telnet) _sshc_values '{{TELNET_OPTIONS}}' ;;
     status) _sshc_values '--json --help' ;;
-    service) if (( CURRENT == 3 )); then _sshc_values 'install status disable --help'; elif (( CURRENT == 4 )); then _sshc_values '--help'; fi ;;
-    vault) if (( CURRENT == 3 )); then _sshc_values 'status create unlock lock change-password --help'; elif (( CURRENT == 4 )); then _sshc_values '--help'; fi ;;
+    service) if (( CURRENT == 3 )); then _sshc_values '{{SERVICE_ACTIONS}} --help'; elif (( CURRENT == 4 )); then _sshc_values '--help'; fi ;;
+    vault) if (( CURRENT == 3 )); then _sshc_values '{{VAULT_ACTIONS}} --help'; elif (( CURRENT == 4 )); then _sshc_values '--help'; fi ;;
     help)
       if (( CURRENT == 3 )); then
-        _sshc_values 'engine ssh info sync terminal serial telnet open status update service vault version completion'
+        _sshc_values '{{HELP_TOPICS}}'
       else
         case "${words[3]}" in
-          sync) _sshc_values 'setup push pull now auto' ;;
-          terminal) _sshc_values 'list show read send wait create rename close' ;;
-          service) _sshc_values 'install status disable' ;;
-          vault) _sshc_values 'status create unlock lock change-password' ;;
+          sync) _sshc_values '{{SYNC_ACTIONS}}' ;;
+          terminal) _sshc_values '{{TERMINAL_ACTIONS}}' ;;
+          service) _sshc_values '{{SERVICE_ACTIONS}}' ;;
+          vault) _sshc_values '{{VAULT_ACTIONS}}' ;;
         esac
       fi
       ;;
@@ -237,7 +254,7 @@ _sshc() {
 compdef _sshc sshc
 `
 
-const fishCompletion = `# fish completion for sshc
+const fishCompletionTemplate = `# fish completion for sshc
 function __sshc_prefix
     set -l words (commandline -opc)
     set -e words[1]
@@ -304,7 +321,7 @@ function __sshc_terminal_options
     end
 end
 
-complete -c sshc -f -n '__sshc_prefix' -a 'engine ssh info sync terminal serial telnet open status update service vault version help completion'
+complete -c sshc -f -n '__sshc_prefix' -a '{{TOP_LEVEL}}'
 complete -c sshc -f -n '__sshc_prefix completion' -a 'bash zsh fish --help'
 complete -c sshc -f -n '__sshc_prefix ssh' -a '(command sshc ssh --list 2>/dev/null)'
 complete -c sshc -f -n '__sshc_prefix ssh' -l list -d 'Print every concrete Host alias'
@@ -316,19 +333,19 @@ complete -c sshc -f -n '__sshc_prefix terminal create' -a 'shell ssh'
 complete -c sshc -f -n '__sshc_prefix terminal create ssh' -a '(command sshc ssh --list 2>/dev/null)'
 complete -c sshc -f -n '__sshc_prefix terminal list; or __sshc_prefix terminal show; or __sshc_prefix terminal read; or __sshc_prefix terminal send; or __sshc_prefix terminal wait; or __sshc_prefix terminal rename; or __sshc_prefix terminal close' -a '--help'
 
-complete -c sshc -f -n '__sshc_prefix sync' -a 'setup push pull now auto'
+complete -c sshc -f -n '__sshc_prefix sync' -a '{{SYNC_ACTIONS}}'
 complete -c sshc -f -n '__sshc_prefix sync auto' -a 'on off'
 complete -c sshc -f -n '__sshc_prefix sync setup; or __sshc_prefix sync push; or __sshc_prefix sync pull; or __sshc_prefix sync now; or __sshc_prefix sync auto' -a '--help'
-complete -c sshc -f -n '__sshc_prefix terminal' -a 'list show read send wait create rename close'
-complete -c sshc -f -n '__sshc_prefix service' -a 'install status disable --help'
-complete -c sshc -f -n '__sshc_prefix vault' -a 'status create unlock lock change-password --help'
+complete -c sshc -f -n '__sshc_prefix terminal' -a '{{TERMINAL_ACTIONS}}'
+complete -c sshc -f -n '__sshc_prefix service' -a '{{SERVICE_ACTIONS}} --help'
+complete -c sshc -f -n '__sshc_prefix vault' -a '{{VAULT_ACTIONS}} --help'
 complete -c sshc -f -n '__sshc_prefix service install; or __sshc_prefix service status; or __sshc_prefix service disable' -a '--help'
 complete -c sshc -f -n '__sshc_prefix vault status; or __sshc_prefix vault create; or __sshc_prefix vault unlock; or __sshc_prefix vault lock; or __sshc_prefix vault change-password' -a '--help'
-complete -c sshc -f -n '__sshc_prefix help' -a 'engine ssh info sync terminal serial telnet open status update service vault version completion'
-complete -c sshc -f -n '__sshc_prefix help sync' -a 'setup push pull now auto'
-complete -c sshc -f -n '__sshc_prefix help terminal' -a 'list show read send wait create rename close'
-complete -c sshc -f -n '__sshc_prefix help service' -a 'install status disable'
-complete -c sshc -f -n '__sshc_prefix help vault' -a 'status create unlock lock change-password'
+complete -c sshc -f -n '__sshc_prefix help' -a '{{HELP_TOPICS}}'
+complete -c sshc -f -n '__sshc_prefix help sync' -a '{{SYNC_ACTIONS}}'
+complete -c sshc -f -n '__sshc_prefix help terminal' -a '{{TERMINAL_ACTIONS}}'
+complete -c sshc -f -n '__sshc_prefix help service' -a '{{SERVICE_ACTIONS}}'
+complete -c sshc -f -n '__sshc_prefix help vault' -a '{{VAULT_ACTIONS}}'
 
 complete -c sshc -f -n '__sshc_command engine' -a '--port --replace --help'
 complete -c sshc -f -n '__sshc_command info; and __sshc_min_words 3' -a '--json'
@@ -339,11 +356,11 @@ complete -c sshc -f -n '__sshc_terminal_options' -a '--json'
 complete -c sshc -f -n '__sshc_action terminal read; and __sshc_min_words 4' -a '--cursor --limit'
 complete -c sshc -f -n '__sshc_action terminal send; and __sshc_min_words 4' -a '--text --no-enter'
 complete -c sshc -f -n '__sshc_action terminal wait; and __sshc_min_words 4' -a '--for --timeout'
-complete -c sshc -f -n '__sshc_previous --for' -a 'connecting connected reconnecting exited agent-working agent-attention agent-ready agent-ended'
+complete -c sshc -f -n '__sshc_previous --for' -a '{{WAIT_STATES}}'
 
-complete -c sshc -f -n '__sshc_command serial' -a '--json --non-interactive --require-output --encoding --baud --data-bits --parity --stop-bits --flow --dtr --rts --break --expect --read-for --timeout --settle --max-bytes --line-ending --script --help'
-complete -c sshc -f -n '__sshc_command telnet' -a '--non-interactive --require-output --encoding --connect-timeout --terminal-type --expect --read-for --timeout --settle --max-bytes --line-ending --script --json --help'
-complete -c sshc -f -n '__sshc_previous --encoding' -a 'utf-8 shift_jis euc-jp iso-2022-jp'
+complete -c sshc -f -n '__sshc_command serial' -a '{{SERIAL_OPTIONS}}'
+complete -c sshc -f -n '__sshc_command telnet' -a '{{TELNET_OPTIONS}}'
+complete -c sshc -f -n '__sshc_previous --encoding' -a '{{ENCODINGS}}'
 complete -c sshc -f -n '__sshc_previous --data-bits' -a '5 6 7 8'
 complete -c sshc -f -n '__sshc_previous --parity' -a 'none odd even mark space'
 complete -c sshc -f -n '__sshc_previous --stop-bits' -a '1 1.5 2'
@@ -352,6 +369,12 @@ complete -c sshc -f -n '__sshc_previous --dtr; or __sshc_previous --rts' -a 'on 
 complete -c sshc -f -n '__sshc_previous --line-ending' -a 'none cr lf crlf'
 complete -c sshc -F -n '__sshc_previous --script'
 `
+
+var (
+	bashCompletion = renderCompletion(bashCompletionTemplate)
+	zshCompletion  = renderCompletion(zshCompletionTemplate)
+	fishCompletion = renderCompletion(fishCompletionTemplate)
+)
 
 func writeCompletion(output io.Writer, shell string) error {
 	var script string

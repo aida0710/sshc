@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/client";
@@ -350,6 +350,28 @@ describe("SyncPanel", () => {
     );
   });
 
+  it("traps focus in the force-send dialog and restores it after Escape", async () => {
+    const user = userEvent.setup();
+    const api = buildApi(configured, nothingToDo);
+    render(<SyncPanel api={api} />);
+
+    const opener = await screen.findByRole("button", { name: "Force send" });
+    await user.click(opener);
+    const dialog = screen.getByRole("dialog");
+    const close = within(dialog).getByRole("button", { name: "Close" });
+    const confirmation = within(dialog).getByRole("checkbox", { name: /current remote snapshot/i });
+    await waitFor(() => expect(close).toHaveFocus());
+
+    await user.tab({ shift: true });
+    expect(confirmation).toHaveFocus();
+    await user.tab();
+    expect(close).toHaveFocus();
+
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await waitFor(() => expect(opener).toHaveFocus());
+  });
+
   it("starts with the generated message and sends the user's edit", async () => {
     const pushSnapshot = vi.fn().mockResolvedValue({
       status: configured,
@@ -550,6 +572,34 @@ describe("SyncPanel", () => {
         expect.objectContaining({ remoteRevision: historyRevision }),
       ),
     );
+  });
+
+  it("traps focus in the pull preview and restores it after Escape", async () => {
+    const user = userEvent.setup();
+    const api = buildApi(configured, {
+      ...nothingToDo,
+      applied: false,
+      conflicts: [],
+      written: ["config"],
+      removed: [],
+    });
+    render(<SyncPanel api={api} />);
+
+    const opener = await screen.findByRole("button", { name: "Check for changes" });
+    await user.click(opener);
+    const dialog = await screen.findByRole("dialog");
+    const close = within(dialog).getByRole("button", { name: "Close" });
+    const apply = within(dialog).getByRole("button", { name: "Apply the snapshot" });
+    await waitFor(() => expect(close).toHaveFocus());
+
+    await user.tab({ shift: true });
+    expect(apply).toHaveFocus();
+    await user.tab();
+    expect(close).toHaveFocus();
+
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await waitFor(() => expect(opener).toHaveFocus());
   });
 
   it("shows a conflict and refuses to apply it", async () => {

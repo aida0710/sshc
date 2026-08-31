@@ -52,7 +52,7 @@ describe("configApi", () => {
   it("escapes query parameters instead of concatenating them", async () => {
     const fetcher = vi.fn().mockResolvedValue(new Response(
       JSON.stringify({
-        form: { entry: overviewPayload.hosts[0], fields: [], raw: "" },
+        form: { entry: overviewPayload.hosts[0], fields: [], raw: "", comment: "", commentLines: 0 },
         metadata: { identity: { path: "config", alias: "a b" } },
         effective: { alias: "a b", entries: [] },
         file: {
