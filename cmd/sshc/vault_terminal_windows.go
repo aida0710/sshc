@@ -54,8 +54,10 @@ func systemWindowsPasswordOperations() windowsPasswordOperations {
 	}
 }
 
-func (systemPasswordTerminal) ReadPassword(ctx context.Context, input *os.File) ([]byte, error) {
-	return readWindowsPassword(ctx, windows.Handle(input.Fd()), systemWindowsPasswordOperations())
+func (systemPasswordTerminal) ReadPassword(
+	ctx context.Context, input *os.File, prompt func() error,
+) ([]byte, error) {
+	return readWindowsPasswordWithPrompt(ctx, windows.Handle(input.Fd()), systemWindowsPasswordOperations(), prompt)
 }
 
 // readWindowsPassword はコンソール入力とキャンセルイベントを同時に待つ。
@@ -63,6 +65,12 @@ func (systemPasswordTerminal) ReadPassword(ctx context.Context, input *os.File) 
 // コンソールモードを復元する前に終了を待つ。
 func readWindowsPassword(
 	ctx context.Context, input windows.Handle, operations windowsPasswordOperations,
+) (password []byte, resultErr error) {
+	return readWindowsPasswordWithPrompt(ctx, input, operations, nil)
+}
+
+func readWindowsPasswordWithPrompt(
+	ctx context.Context, input windows.Handle, operations windowsPasswordOperations, prompt func() error,
 ) (password []byte, resultErr error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -108,6 +116,14 @@ func readWindowsPassword(
 		_ = operations.closeHandle(cancelEvent)
 	}()
 
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if prompt != nil {
+		if err := prompt(); err != nil {
+			return nil, err
+		}
+	}
 	units := make([]uint16, 0, maxVaultPasswordBytes)
 	defer zeroUint16s(units)
 	for {

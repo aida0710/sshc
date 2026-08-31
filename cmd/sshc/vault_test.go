@@ -44,14 +44,25 @@ type orderedVaultPromptTerminal struct {
 
 func (orderedVaultPromptTerminal) IsTerminal(int) bool { return true }
 
-func (t orderedVaultPromptTerminal) ReadPassword(context.Context, *os.File) ([]byte, error) {
+func (t orderedVaultPromptTerminal) ReadPassword(
+	_ context.Context, _ *os.File, prompt func() error,
+) ([]byte, error) {
+	*t.events = append(*t.events, "no-echo")
+	if err := prompt(); err != nil {
+		return nil, err
+	}
 	*t.events = append(*t.events, "read-and-restore")
 	return []byte("master"), nil
 }
 
 func (f *fakePasswordTerminal) IsTerminal(int) bool { return f.terminal }
 
-func (f *fakePasswordTerminal) ReadPassword(context.Context, *os.File) ([]byte, error) {
+func (f *fakePasswordTerminal) ReadPassword(
+	_ context.Context, _ *os.File, prompt func() error,
+) ([]byte, error) {
+	if err := prompt(); err != nil {
+		return nil, err
+	}
 	index := f.reads
 	f.reads++
 	if f.afterRead != nil {
@@ -79,15 +90,15 @@ func vaultTestInput(t *testing.T) *os.File {
 	return file
 }
 
-func TestVaultPromptIsWrittenBeforeTerminalModeChangeAndNewlineAfterRestore(t *testing.T) {
-	events := make([]string, 0, 3)
+func TestVaultPromptIsWrittenAfterNoEchoAndNewlineAfterRestore(t *testing.T) {
+	events := make([]string, 0, 4)
 	password, err := promptVaultPassword(context.Background(), vaultTestInput(t),
 		orderedVaultPromptWriter{events: &events}, orderedVaultPromptTerminal{events: &events}, "Master password: ")
 	defer zeroBytes(password)
 	if err != nil || !bytes.Equal(password, []byte("master")) {
 		t.Fatalf("password=%q error=%v", password, err)
 	}
-	want := []string{"write:Master password: ", "read-and-restore", "write:\n"}
+	want := []string{"no-echo", "write:Master password: ", "read-and-restore", "write:\n"}
 	if !slices.Equal(events, want) {
 		t.Fatalf("events=%q, want %q", events, want)
 	}

@@ -34,8 +34,13 @@ func (terminal *setupPasswordTerminal) IsTerminal(fd int) bool {
 	return terminal.terminals[uintptr(fd)]
 }
 
-func (terminal *setupPasswordTerminal) ReadPassword(ctx context.Context, _ *os.File) ([]byte, error) {
+func (terminal *setupPasswordTerminal) ReadPassword(
+	ctx context.Context, _ *os.File, prompt func() error,
+) ([]byte, error) {
 	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if err := prompt(); err != nil {
 		return nil, err
 	}
 	index := terminal.reads
