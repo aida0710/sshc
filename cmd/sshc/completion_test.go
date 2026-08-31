@@ -2,6 +2,9 @@ package main
 
 import (
 	"bytes"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -31,4 +34,90 @@ func TestCompletionRejectsAnUnsupportedShell(t *testing.T) {
 	if err := writeCompletion(&bytes.Buffer{}, "powershell"); err == nil {
 		t.Fatal("unsupported shell was accepted")
 	}
+}
+
+func TestEveryShellCompletesThePublishedCommandTree(t *testing.T) {
+	required := []string{
+		"engine ssh info sync terminal serial telnet open status update service vault version help completion",
+		"setup push pull now auto",
+		"list show read send wait create rename close",
+		"status create unlock lock change-password",
+		"install status disable",
+		"utf-8 shift_jis euc-jp iso-2022-jp",
+		"connecting connected reconnecting exited agent-working agent-attention agent-ready agent-ended",
+	}
+	for _, shell := range []string{"bash", "zsh", "fish"} {
+		t.Run(shell, func(t *testing.T) {
+			var output bytes.Buffer
+			if err := writeCompletion(&output, shell); err != nil {
+				t.Fatal(err)
+			}
+			for _, fragment := range required {
+				if !strings.Contains(output.String(), fragment) {
+					t.Errorf("%s completion lacks command tree %q", shell, fragment)
+				}
+			}
+		})
+	}
+}
+
+func TestBashCompletionUsesLiveAliasesAndNestedValues(t *testing.T) {
+	bash, err := exec.LookPath("bash")
+	if err != nil {
+		t.Skip("bash is not installed")
+	}
+	directory := t.TempDir()
+	completionPath := filepath.Join(directory, "sshc-completion.bash")
+	if err := os.WriteFile(completionPath, []byte(bashCompletion), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	fakePath := filepath.Join(directory, "sshc")
+	fake := "#!/bin/sh\nif [ \"$1 $2\" = \"ssh --list\" ]; then printf 'alpha\\nbeta-prod\\n'; fi\n"
+	if err := os.WriteFile(fakePath, []byte(fake), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name  string
+		words []string
+		want  string
+	}{
+		{name: "ssh alias", words: []string{"sshc", "ssh", "b"}, want: "beta-prod"},
+		{name: "info alias", words: []string{"sshc", "info", "a"}, want: "alpha"},
+		{name: "terminal alias", words: []string{"sshc", "terminal", "create", "ssh", "b"}, want: "beta-prod"},
+		{name: "sync action", words: []string{"sshc", "sync", "p"}, want: "push"},
+		{name: "sync auto value", words: []string{"sshc", "sync", "auto", "o"}, want: "on"},
+		{name: "terminal state", words: []string{"sshc", "terminal", "wait", "deadbeef", "--for", "agent-r"}, want: "agent-ready"},
+		{name: "encoding", words: []string{"sshc", "serial", "/dev/ttyUSB0", "--encoding", "shift"}, want: "shift_jis"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			arguments := append([]string{"-c", `source "$COMPLETION"
+COMP_WORDS=("$@")
+COMP_CWORD=$((${#COMP_WORDS[@]} - 1))
+_sshc_completion
+printf '%s\n' "${COMPREPLY[@]}"`, "completion-test"}, test.words...)
+			command := exec.Command(bash, arguments...)
+			command.Env = append(os.Environ(),
+				"COMPLETION="+completionPath,
+				"PATH="+directory+string(os.PathListSeparator)+os.Getenv("PATH"),
+			)
+			output, err := command.CombinedOutput()
+			if err != nil {
+				t.Fatalf("completion failed: %v\n%s", err, output)
+			}
+			if candidates := strings.Fields(string(output)); !containsCompletion(candidates, test.want) {
+				t.Fatalf("completion = %q; want %q", candidates, test.want)
+			}
+		})
+	}
+}
+
+func containsCompletion(candidates []string, wanted string) bool {
+	for _, candidate := range candidates {
+		if candidate == wanted {
+			return true
+		}
+	}
+	return false
 }
