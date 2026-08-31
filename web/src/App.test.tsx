@@ -557,6 +557,43 @@ describe("App", () => {
     expect(document.body).not.toHaveTextContent(csrfToken);
   });
 
+  it("closes each mobile header menu when another part of the shell is pressed", async () => {
+    const user = userEvent.setup();
+    render(
+      <App
+        bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
+        health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
+        vault={openVault}
+      />,
+    );
+
+    const displayMenu = await screen.findByLabelText("Display menu");
+    const displayDetails = displayMenu.closest("details");
+    const navigation = screen.getByRole("button", { name: "Navigation" });
+
+    await user.click(displayMenu);
+    expect(displayDetails).toHaveAttribute("open");
+
+    await user.click(navigation);
+    expect(displayDetails).not.toHaveAttribute("open");
+    expect(navigation).toHaveAttribute("aria-expanded", "true");
+
+    await user.click(displayMenu);
+    expect(navigation).toHaveAttribute("aria-expanded", "false");
+    expect(displayDetails).toHaveAttribute("open");
+
+    await user.click(screen.getByRole("heading", { name: "sshc" }));
+    expect(displayDetails).not.toHaveAttribute("open");
+
+    await user.click(displayMenu);
+    const back = new Event("sshc-android-back", { cancelable: true });
+    act(() => {
+      window.dispatchEvent(back);
+    });
+    expect(back.defaultPrevented).toBe(true);
+    expect(displayDetails).not.toHaveAttribute("open");
+  });
+
   it("renders a direct section URL and links every primary destination", async () => {
     window.history.replaceState(null, "", "/keys");
     render(

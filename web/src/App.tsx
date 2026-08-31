@@ -68,7 +68,6 @@ import { sftpTransferManager } from "./sftp/transferManager";
 import { ErrorDiagnosticNotice } from "./shell/ErrorDiagnosticNotice";
 import { CommandPalette } from "./shell/CommandPalette";
 import { setAndroidAppearance } from "./android/native";
-import { MobileNavigationSwipeEdge } from "./shell/mobileNavigationSwipe";
 import { useAgentNotifications } from "./terminal/agentNotifications";
 import type { RemotePathAction } from "./terminal/TerminalLinkPopover";
 import type { SFTPTarget } from "./sftp/SFTPPanel";
@@ -243,6 +242,19 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
     }
     document.addEventListener("keydown", close);
     return () => document.removeEventListener("keydown", close);
+  }, [navigationOpen]);
+
+  useEffect(() => {
+    if (!navigationOpen) return;
+    function closeOutsideNavigation(event: PointerEvent) {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (document.getElementById(navigationId)?.contains(target) === true) return;
+      if (target instanceof Element && target.closest(`[aria-controls="${navigationId}"]`) !== null) return;
+      setNavigationOpen(false);
+    }
+    document.addEventListener("pointerdown", closeOutsideNavigation, true);
+    return () => document.removeEventListener("pointerdown", closeOutsideNavigation, true);
   }, [navigationOpen]);
 
   useEffect(() => {
@@ -643,8 +655,6 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
         inert={state === "ready" && vaultRecheck !== "idle"}
         aria-hidden={state === "ready" && vaultRecheck !== "idle" ? true : undefined}
       >
-        {navigationOpen ? null : <MobileNavigationSwipeEdge onOpen={() => setNavigationOpen(true)} />}
-
       <AppHeader
         route={route}
         version={version}
@@ -691,6 +701,7 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
         {navigationOpen ? (
           <div
             aria-hidden="true"
+            data-navigation-backdrop
             onClick={() => setNavigationOpen(false)}
             className="fixed inset-0 z-20 bg-canvas/70 md:hidden"
           />
