@@ -22,6 +22,8 @@ var (
 	ErrInsecureEndpoint = objectstore.ErrInsecureEndpoint
 	// ErrRefused は、相手が受け付けなかったことを報告する。
 	ErrRefused = objectstore.ErrRefused
+	// ErrObjectTooLarge は、暗号化されたremote objectが受信上限を超えたことを報告する。
+	ErrObjectTooLarge = objectstore.ErrObjectTooLarge
 	// ErrWrongPassphrase は、復号できなかったことを報告する。
 	ErrWrongPassphrase = envelope.ErrWrongPassphrase
 	// ErrWeakPassphrase は、暗号化に使うには短すぎる鍵を拒否する。

@@ -585,6 +585,9 @@ func TestSyncPullForceUsesRemoteResolutionForPreviewAndExactApply(t *testing.T) 
 		if request.Resolve == nil || *request.Resolve != api.Remote {
 			t.Fatalf("request %d resolve = %+v", index, request.Resolve)
 		}
+		if request.AcceptRemoteHead == nil || !*request.AcceptRemoteHead {
+			t.Fatalf("request %d accept remote head = %+v", index, request.AcceptRemoteHead)
+		}
 	}
 	if requests[1].ExpectedETag == nil || *requests[1].ExpectedETag != "preview-etag" ||
 		requests[1].ExpectedRevision == nil || *requests[1].ExpectedRevision != strings.Repeat("a", 64) {

@@ -122,6 +122,7 @@ test("shows push, preview, apply, persisted success, and a later failure as dist
   let refusePush = false;
   let pushedMessage = "";
   let localChanges = true;
+  let exclusionsDocument = "**/.DS_Store\n*.tmp\n*.lock\n";
   const status = () => ({
     configured: true,
     keyConfigured: true,
@@ -209,6 +210,42 @@ test("shows push, preview, apply, persisted success, and a later failure as dist
               lastModified: "2026-08-24T18:00:00Z",
               relation: "ancestor",
             },
+          ],
+        }),
+      });
+      return;
+    }
+    if (path === "/api/v1/sync/exclusions" && request.method() === "GET") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          document: exclusionsDocument,
+          usingDefaults: true,
+          candidates: [
+            { path: "config", ignored: false },
+            { path: "known_hosts", ignored: false },
+            { path: "connections/work/server.conf", ignored: false },
+            { path: "keys/work/server_key", ignored: false },
+            { path: ".DS_Store", ignored: true },
+            { path: "cache/session.tmp", ignored: true },
+            { path: "sshc/.cli.mutation.lock", ignored: true },
+          ],
+        }),
+      });
+      return;
+    }
+    if (path === "/api/v1/sync/exclusions" && request.method() === "PUT") {
+      exclusionsDocument = request.postDataJSON().document;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          document: exclusionsDocument,
+          usingDefaults: false,
+          candidates: [
+            { path: "config", ignored: false },
+            { path: "known_hosts", ignored: false },
           ],
         }),
       });
@@ -311,7 +348,7 @@ test("shows push, preview, apply, persisted success, and a later failure as dist
   await openSection(page, "Sync");
   await expect(page.getByRole("button", { name: "Sync now" })).toBeEnabled();
   await expect(
-    page.getByRole("button", { name: "Receive from remote" }),
+    page.getByRole("button", { name: "Review remote changes" }),
   ).toBeVisible();
   const visualDirectory = process.env.SSHC_VISUAL_DIR;
   if (visualDirectory !== undefined) {
@@ -320,14 +357,36 @@ test("shows push, preview, apply, persisted success, and a later failure as dist
       path: `${visualDirectory}/sync-desktop-en.png`,
       fullPage: true,
     });
-    await page.locator("#language").selectOption("ja");
+    await page.getByText("Files to sync").click();
+    await expect(page.getByPlaceholder("Search file names and paths")).toBeVisible();
+    await page.screenshot({
+      path: `${visualDirectory}/sync-exclusions-desktop-en.png`,
+      fullPage: true,
+    });
+    await page.getByText("Files to sync").click();
+    await page.locator("#language").evaluate((element) => {
+      const select = element as HTMLSelectElement;
+      select.value = "ja";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
     await page.locator("#sync-commit-message").fill("設定を更新");
     await page.evaluate(async () => { await document.fonts.ready; });
     await page.screenshot({
       path: `${visualDirectory}/sync-desktop-ja.png`,
       fullPage: true,
     });
-    await page.locator("#language").selectOption("en");
+    await page.getByText("同期するファイル").click();
+    await expect(page.getByPlaceholder("ファイル名・パスを検索")).toBeVisible();
+    await page.screenshot({
+      path: `${visualDirectory}/sync-exclusions-desktop-ja.png`,
+      fullPage: true,
+    });
+    await page.getByText("同期するファイル").click();
+    await page.locator("#language").evaluate((element) => {
+      const select = element as HTMLSelectElement;
+      select.value = "en";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
     await page.locator("#sync-commit-message").fill("Update config");
     await page.screenshot({
       path: `${visualDirectory}/sshc-v0.16.1-sync-settings-collapsed.png`,
@@ -390,6 +449,28 @@ test("shows push, preview, apply, persisted success, and a later failure as dist
     await page.screenshot({
       path: `${visualDirectory}/sshc-v0.16.1-sync-history-mobile.png`,
       fullPage: true,
+    });
+    await page.getByText("Details and history").click();
+    await page.locator("#language").evaluate((element) => {
+      const select = element as HTMLSelectElement;
+      select.value = "ja";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await page.getByText("同期するファイル").click();
+    await page.getByPlaceholder("ファイル名・パスを検索").fill("lock");
+    await page
+      .locator("main .h-full.overflow-y-auto")
+      .first()
+      .evaluate((element) => element.scrollTo({ top: 0 }));
+    await page.screenshot({
+      path: `${visualDirectory}/sync-exclusions-mobile-ja.png`,
+      fullPage: true,
+    });
+    await page.getByText("同期するファイル").click();
+    await page.locator("#language").evaluate((element) => {
+      const select = element as HTMLSelectElement;
+      select.value = "en";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
     });
     await page.setViewportSize({ width: 1280, height: 720 });
   }

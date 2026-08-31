@@ -143,6 +143,21 @@ func unstructuredColumn(text string) int {
 }
 
 func (s *Service) validate(request storage.Request) error {
+	// A remote snapshot is an exact replica of another workspace, not a UI edit
+	// authored against this installation's parser. A snapshot includes private
+	// keys, certificates and OS metadata beside OpenSSH configuration; treating
+	// every changed file as config makes otherwise valid snapshots impossible to
+	// receive. OpenSSH also accepts directives and quoting forms which sshc may
+	// preserve but not yet structure, and a receive-only replica must reproduce
+	// remote breakage for inspection.
+	// Rejecting those bytes here makes a snapshot upload successfully on one
+	// machine and then become impossible to receive on another. Snapshot path,
+	// mode, manifest and logical secret documents are validated by remotesync and
+	// storage before this boundary; diagnostics can report unsupported config
+	// lines after the exact bytes have been restored.
+	if request.Operation == "sync.pull" || request.Operation == "sync.ignore" {
+		return nil
+	}
 	pending, gone := overlayFor(request)
 
 	metadataPath := filepath.Clean(s.metadata.Path())

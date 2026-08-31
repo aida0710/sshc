@@ -137,6 +137,40 @@ func TestPlanDistinguishesDeletedThereFromCreatedHere(t *testing.T) {
 	}
 }
 
+func TestPlanWithIgnoreNeverWritesOrRemovesExcludedPaths(t *testing.T) {
+	base := manifestOf(
+		file("config", "old"),
+		file("cache/session.tmp", "old cache"),
+	)
+	local := map[string]string{
+		"config":            digestOf("old"),
+		"cache/session.tmp": digestOf("local cache"),
+	}
+	remote := manifestOf(
+		file("config", "new"),
+		file("cache/remote.tmp", "remote cache"),
+	)
+	contents := map[string][]byte{
+		"config":           []byte("new"),
+		"cache/remote.tmp": []byte("remote cache"),
+	}
+	rules, err := remotesync.CompileIgnoreRules([]byte("*.tmp\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	request, conflicts, err := remotesync.PlanWithIgnore(root, &base, local, remote, contents, remotesync.ResolveRemote, rules.Match)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(conflicts) != 0 || len(request.Changes) != 1 || len(request.Removals) != 0 {
+		t.Fatalf("request = %+v, conflicts = %+v", request, conflicts)
+	}
+	if request.Changes[0].Path != filepath.Join(root, "config") {
+		t.Fatalf("changed path = %q", request.Changes[0].Path)
+	}
+}
+
 func TestPlanReportsAConflictInsteadOfChoosing(t *testing.T) {
 	// 両側で変わった。同じ Host ブロックを双方が変えた二つの ssh_config のマージに
 	// 正解はなく、推測すれば、パーサが守るために存在するバイト保存の約束に反する

@@ -586,7 +586,11 @@ func (s *Service) collect() (Manifest, map[string][]byte, error) {
 	if s.OpenVault == nil {
 		return Manifest{}, nil, ErrVaultCodec
 	}
-	relatives, err := s.walkWorkspace()
+	ignoreRules, _, _, err := s.loadIgnoreRules()
+	if err != nil {
+		return Manifest{}, nil, err
+	}
+	relatives, err := s.walkWorkspaceMatching(ignoreRules.Match)
 	if err != nil {
 		return Manifest{}, nil, err
 	}
@@ -595,7 +599,7 @@ func (s *Service) collect() (Manifest, map[string][]byte, error) {
 	var entries []Entry
 	for _, relative := range relatives {
 		relative = filepath.ToSlash(relative)
-		if seen[relative] || excluded(relative) {
+		if seen[relative] || excluded(relative) || ignoreRules.Match(relative) {
 			continue
 		}
 		if err := checkPath(relative); err != nil {
@@ -664,6 +668,13 @@ func (s *Service) collect() (Manifest, map[string][]byte, error) {
 // walkWorkspace は ~/.ssh を root として再帰的に通常ファイルだけを集める。
 // Lstat を使うため symlink はディレクトリであっても追跡しない。
 func (s *Service) walkWorkspace() ([]string, error) {
+	return s.walkWorkspaceMatching(nil)
+}
+
+// walkWorkspaceMatching counts only files that can enter the returned set.
+// Ignored trees may contain more than MaxEntries temporary files without
+// making the synchronized snapshot exceed its entry limit.
+func (s *Service) walkWorkspaceMatching(ignore func(string) bool) ([]string, error) {
 	root := s.workspace.Root()
 	var found []string
 	var walk func(string, string) error
@@ -698,6 +709,9 @@ func (s *Service) walkWorkspace() ([]string, error) {
 				continue
 			}
 			if !info.Mode().IsRegular() {
+				continue
+			}
+			if ignore != nil && ignore(filepath.ToSlash(relative)) {
 				continue
 			}
 			found = append(found, relative)
@@ -1435,10 +1449,10 @@ func (s *Service) Pull(ctx context.Context, passphrase string, resolve Resolutio
 }
 
 // PullRemoteHead previews the current live head after the user explicitly chose
-// to trust it. This is the receive-only recovery path for a legitimate force
-// push which cannot be proven to descend from this installation's acknowledged
-// revision. The snapshot is still authenticated and the later apply is bound to
-// its exact ETag and revision.
+// to trust it. This is the force-receive path for a legitimate force push which
+// cannot be proven to descend from this installation's acknowledged revision.
+// The snapshot is still authenticated and the later apply is bound to its exact
+// ETag and revision. Send-only installations cannot apply any remote bytes.
 func (s *Service) PullRemoteHead(ctx context.Context, passphrase string) (PullResult, error) {
 	s.operationMu.Lock()
 	defer s.operationMu.Unlock()
@@ -1466,7 +1480,7 @@ func (s *Service) pullWithRemoteAcceptance(
 	historyKey string,
 	acceptRemoteHead bool,
 ) (PullResult, error) {
-	if acceptRemoteHead && s.Direction() != DirectionPull {
+	if acceptRemoteHead && s.Direction() == DirectionPush {
 		return PullResult{}, ErrApplyRefused
 	}
 	binding, bindingVersion, err := s.configuredBindingVersion()
@@ -1518,6 +1532,10 @@ func (s *Service) pullWithRemoteAcceptance(
 	if err != nil {
 		return PullResult{}, err
 	}
+	ignoreRules, err := ignoreRulesFromSnapshot(contents)
+	if err != nil {
+		return PullResult{}, err
+	}
 
 	base := current.Base
 	if !stateMatchesTarget(current, binding.config) {
@@ -1539,7 +1557,7 @@ func (s *Service) pullWithRemoteAcceptance(
 	var local map[string]string
 	readLocal := func() error {
 		var readErr error
-		local, readErr = s.localDigests(manifest, base)
+		local, readErr = s.localDigests(manifest, base, ignoreRules)
 		return readErr
 	}
 	if s.StableSnapshot != nil {
@@ -1551,7 +1569,7 @@ func (s *Service) pullWithRemoteAcceptance(
 		return PullResult{}, err
 	}
 
-	request, conflicts, err := Plan(s.workspace.Root(), base, local, manifest, contents, resolve)
+	request, conflicts, err := PlanWithIgnore(s.workspace.Root(), base, local, manifest, contents, resolve, ignoreRules.Match)
 	if exchangeErr := s.stageVault(&request); exchangeErr != nil {
 		return PullResult{}, exchangeErr
 	}
@@ -1589,8 +1607,8 @@ func (s *Service) PullAndApplyUsing(ctx context.Context, key KeyProvider, resolv
 }
 
 // PullAndApplyRemoteHeadUsing applies only the exact live head returned by an
-// earlier PullRemoteHead preview. It deliberately exists only as an explicit
-// receive-only recovery operation; ordinary pulls retain ancestry protection.
+// earlier PullRemoteHead preview. It exists only as an explicit force-receive
+// operation; ordinary pulls retain ancestry protection.
 func (s *Service) PullAndApplyRemoteHeadUsing(
 	ctx context.Context,
 	key KeyProvider,
@@ -1840,7 +1858,7 @@ func changeDirectories(root string, changes []storage.Change) []storage.Director
 
 // localDigests は、どちらかの側が知っているすべてのパスをハッシュする。これにより、
 // このディスク上にあってどちらのマニフェストにもないファイルは、参照も変更もされない。
-func (s *Service) localDigests(remote Manifest, base *Manifest) (map[string]string, error) {
+func (s *Service) localDigests(remote Manifest, base *Manifest, ignoreRules IgnoreRules) (map[string]string, error) {
 	paths := map[string]bool{}
 	for _, item := range remote.Files {
 		paths[item.Path] = true
@@ -1853,6 +1871,9 @@ func (s *Service) localDigests(remote Manifest, base *Manifest) (map[string]stri
 
 	digests := map[string]string{}
 	for path := range paths {
+		if ignoreRules.Match(path) {
+			continue
+		}
 		// TravelPath はディスク上に存在しないため、復号済み vault 文書の digest を使う。
 		if path == TravelPath && s.OpenVault != nil {
 			document, err := s.OpenVault()
