@@ -424,7 +424,11 @@ describe("App", () => {
       "Install Key on Server",
       "Ad hoc checks",
       "Secrets",
-      "Settings",
+      "Engine",
+      "Terminal",
+      "Notifications",
+      "Open connections",
+      "Master password",
       "Sync",
       "History",
     ]) {
@@ -432,9 +436,11 @@ describe("App", () => {
     }
     const maintenance = within(menu).getByRole("region", { name: "Maintenance" });
     expect(within(maintenance).queryByRole("heading", { name: "Maintenance" })).not.toBeNull();
-    const settings = within(maintenance).getByRole("link", { name: "Open Settings" });
-    expect(settings).toHaveAttribute("href", "/settings");
-    expect(settings.querySelector("use")).toHaveAttribute("href", "#icon-settings");
+    expect(within(maintenance).queryByRole("link", { name: "Open Settings" })).toBeNull();
+    const settings = within(menu).getByRole("region", { name: "Settings" });
+    const engine = within(settings).getByRole("link", { name: "Open Engine" });
+    expect(engine).toHaveAttribute("href", "/settings/engine");
+    expect(engine.querySelector("use")).toHaveAttribute("href", "#icon-settings");
   });
 
   it("restores and changes the desktop navigation layout", async () => {
