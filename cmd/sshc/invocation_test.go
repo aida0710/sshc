@@ -57,6 +57,9 @@ func TestParseInvocationSeparatesOwnersFromDesktopActivation(t *testing.T) {
 		{[]string{"sshc", "ssh", "--help"}, invocationHelp, nil},
 		{[]string{"sshc", "open"}, invocationOpen, nil},
 		{[]string{"sshc", "status"}, invocationStatus, nil},
+		{[]string{"sshc", "service", "install"}, invocationService, []string{"install"}},
+		{[]string{"sshc", "service", "status"}, invocationService, []string{"status"}},
+		{[]string{"sshc", "service", "disable"}, invocationService, []string{"disable"}},
 		{[]string{"sshc", "vault", "status"}, invocationVault, []string{"status"}},
 		{[]string{"sshc", "vault", "create"}, invocationVault, []string{"create"}},
 		{[]string{"sshc", "vault", "unlock"}, invocationVault, []string{"unlock"}},
@@ -103,6 +106,10 @@ func TestEveryPublishedCommandAcceptsItsOwnHelpFlag(t *testing.T) {
 		{[]string{"sshc", "open", "--help"}, "open", "sshc open"},
 		{[]string{"sshc", "status", "--help"}, "status", "sshc status [--json]"},
 		{[]string{"sshc", "update", "--help"}, "update", "sshc update"},
+		{[]string{"sshc", "service", "--help"}, "service", "sshc service install"},
+		{[]string{"sshc", "service", "install", "--help"}, "service install", "sshc service install"},
+		{[]string{"sshc", "service", "status", "--help"}, "service status", "sshc service status"},
+		{[]string{"sshc", "service", "disable", "--help"}, "service disable", "sshc service disable"},
 		{[]string{"sshc", "vault", "--help"}, "vault", "sshc vault status"},
 		{[]string{"sshc", "vault", "status", "--help"}, "vault status", "sshc vault status"},
 		{[]string{"sshc", "vault", "create", "--help"}, "vault create", "sshc vault create"},
@@ -455,5 +462,25 @@ func TestUpdateIsReservedAndTakesNoArguments(t *testing.T) {
 	usage(&out)
 	if !strings.Contains(out.String(), "sshc update") {
 		t.Error("usage does not mention the update command")
+	}
+}
+
+func TestServiceIsReservedAndRequiresOneKnownAction(t *testing.T) {
+	for _, argv := range [][]string{
+		{"sshc", "service"},
+		{"sshc", "service", "refresh"},
+		{"sshc", "service", "install", "extra"},
+	} {
+		if _, err := parseInvocation(argv); err == nil {
+			t.Fatalf("parseInvocation(%q) accepted an invalid service command", argv)
+		}
+	}
+
+	var out bytes.Buffer
+	usage(&out)
+	for _, command := range []string{"sshc service install", "sshc service status", "sshc service disable"} {
+		if !strings.Contains(out.String(), command) {
+			t.Errorf("usage does not mention %q", command)
+		}
 	}
 }
