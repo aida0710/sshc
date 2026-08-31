@@ -15,11 +15,11 @@ Homebrew is the shortest path.
 brew install aida0710/tap/sshc
 ```
 
-Without Homebrew, pin both the installer URL and the binary version to the same release. This example installs `v0.22.0`.
+Without Homebrew, pin both the installer URL and the binary version to the same release. This example installs `v0.23.0`.
 
 ```sh
-SSHC_VERSION=v0.22.0 sh -c \
-  'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.22.0/install.sh | sh'
+SSHC_VERSION=v0.23.0 sh -c \
+  'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.23.0/install.sh | sh'
 ```
 
 After installation, `sshc update` delegates upgrades to Homebrew or to a receipt-aware installer.
