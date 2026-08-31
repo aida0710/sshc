@@ -1,4 +1,4 @@
-import { StrictMode, useEffect } from "react";
+import { StrictMode, useEffect, useState } from "react";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -147,7 +147,20 @@ vi.mock("./keys/KeysScreen", () => ({
   ),
 }));
 vi.mock("./diagnostics/DiagnosticsPanel", () => ({ DiagnosticsPanel: () => <div>diagnostics panel</div> }));
-vi.mock("./settings/SettingsPanel", () => ({ SettingsPanel: () => <div>settings panel</div> }));
+vi.mock("./settings/SettingsPanel", () => ({
+  SettingsPanel: () => {
+    const [draft, setDraft] = useState("");
+    return (
+      <div>
+        settings panel
+        <label>
+          settings draft
+          <input value={draft} onChange={(event) => setDraft(event.target.value)} />
+        </label>
+      </div>
+    );
+  },
+}));
 vi.mock("./secrets/SecretsPanel", () => ({
   SecretsPanel: ({ onLock }: { onLock: () => void }) => (
     <button type="button" onClick={onLock}>lock fixture</button>
@@ -277,6 +290,36 @@ describe("App", () => {
     await act(async () => resumed.resolve(await openVault()));
     expect(await screen.findByRole("navigation", { name: "Primary" })).toBeInTheDocument();
     expect(vault).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps an in-progress form mounted while the resumed vault check conceals it", async () => {
+    window.history.replaceState(null, "", "/settings");
+    const resumed = deferred<Awaited<ReturnType<typeof openVault>>>();
+    const vault = vi
+      .fn()
+      .mockImplementationOnce(openVault)
+      .mockReturnValueOnce(resumed.promise);
+    vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+    const user = userEvent.setup();
+    render(
+      <App
+        bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
+        health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
+        vault={vault}
+      />,
+    );
+    const field = await screen.findByLabelText("settings draft");
+    await user.type(field, "keep this input");
+
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+      await Promise.resolve();
+    });
+    expect(screen.queryByRole("navigation", { name: "Primary" })).toBeNull();
+    expect(document.body.querySelector<HTMLInputElement>('input[value="keep this input"]')).not.toBeNull();
+
+    await act(async () => resumed.resolve(await openVault()));
+    expect(await screen.findByLabelText("settings draft")).toHaveValue("keep this input");
   });
 
   it("keeps protected UI hidden after a failed resume check until a retry succeeds", async () => {
