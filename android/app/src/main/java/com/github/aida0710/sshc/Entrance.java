@@ -15,4 +15,10 @@ final class Entrance {
         int fragment = url.indexOf('#');
         return fragment < 0 ? url : url.substring(0, fragment);
     }
+
+    /** 同じengineの入口を再通知されても、表示中のWebViewを読み直さない。 */
+    static boolean isAlreadyShowing(String current, String candidate) {
+        if (current == null || candidate == null) return false;
+        return current.equals(withoutFragment(candidate));
+    }
 }

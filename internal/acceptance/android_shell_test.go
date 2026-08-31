@@ -204,3 +204,18 @@ func TestTheAndroidShellBridgesDeviceSpecificWebFeatures(t *testing.T) {
 		t.Error("資格情報を含み得るentrance URLをlogcatへ出している")
 	}
 }
+
+// ランチャーや通知から戻っただけでMainActivityを積み増したり、同じengineの
+// WebViewを読み直したりしない。入力途中のフォームを通常のアプリ切り替えで失わないための境界。
+func TestTheAndroidShellKeepsTheVisibleWebViewAcrossAppSwitches(t *testing.T) {
+	manifest := readRepoFile(t, "android", "app", "src", "main", "AndroidManifest.xml")
+	activity := readRepoFile(t, "android", "app", "src", "main", "java",
+		"com", "github", "aida0710", "sshc", "MainActivity.java")
+
+	if !strings.Contains(manifest, `android:launchMode="singleTask"`) {
+		t.Error("MainActivityがランチャー復帰で重複しないsingleTaskになっていない")
+	}
+	if !strings.Contains(activity, "Entrance.isAlreadyShowing(lastEntrance, entrance)") {
+		t.Error("同じengine入口の再通知でWebViewを読み直す可能性がある")
+	}
+}
