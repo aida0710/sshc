@@ -11,7 +11,7 @@ import (
 	"sshc/internal/storage"
 )
 
-func restartManagedServiceAfterUpdate(ctx context.Context) (bool, error) {
+func restartManagedServiceAfterUpdate(ctx context.Context, executable string) (bool, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return false, fmt.Errorf("resolve home directory: %w", err)
@@ -26,5 +26,5 @@ func restartManagedServiceAfterUpdate(ctx context.Context) (bool, error) {
 		runner: osServiceCommandRunner{path: defaultSystemctl},
 		files:  storage.OSFileSystem{},
 	}
-	return manager.RestartIfActive(ctx)
+	return manager.RestartIfActive(ctx, executable)
 }

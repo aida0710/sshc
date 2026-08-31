@@ -3,6 +3,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -129,7 +130,11 @@ func (manager *linuxServiceManager) Status(ctx context.Context) (serviceState, e
 
 // RestartIfActive はsshc管理下で現在動作中のunitだけを再起動する。停止中のunitを
 // updateが勝手に起動せず、手書きunitにも触れないための更新連携用境界である。
-func (manager *linuxServiceManager) RestartIfActive(ctx context.Context) (bool, error) {
+func (manager *linuxServiceManager) RestartIfActive(ctx context.Context, executable string) (bool, error) {
+	matches, err := manager.unitMatches(executable)
+	if err != nil || !matches {
+		return false, err
+	}
 	state, err := manager.Status(ctx)
 	if err != nil {
 		return false, err
@@ -137,10 +142,25 @@ func (manager *linuxServiceManager) RestartIfActive(ctx context.Context) (bool, 
 	if state != serviceActive {
 		return false, nil
 	}
-	if err := manager.run(ctx, "--user", "restart", serviceUnitName); err != nil {
+	if err := manager.run(ctx, "--user", "try-restart", serviceUnitName); err != nil {
 		return false, err
 	}
 	return true, nil
+}
+
+func (manager *linuxServiceManager) unitMatches(executable string) (bool, error) {
+	expected, err := systemdUnit(executable)
+	if err != nil {
+		return false, err
+	}
+	contents, err := manager.files.ReadFile(manager.unitPath())
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("read %s: %w", manager.unitPath(), err)
+	}
+	return bytes.Equal(contents, []byte(expected)), nil
 }
 
 func (manager *linuxServiceManager) Disable(ctx context.Context) (bool, error) {

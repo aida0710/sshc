@@ -43,11 +43,12 @@ type installation struct {
 }
 
 type updateDependencies struct {
-	executable     func() (string, error)
-	detect         func(string) (installation, error)
-	latest         func(context.Context) (selfupdate.Release, error)
-	install        func(context.Context, installation, selfupdate.Release, io.Writer, io.Writer) error
-	restartService func(context.Context) (bool, error)
+	executable        func() (string, error)
+	detect            func(string) (installation, error)
+	latest            func(context.Context) (selfupdate.Release, error)
+	install           func(context.Context, installation, selfupdate.Release, io.Writer, io.Writer) error
+	serviceExecutable func(context.Context, installation) (string, error)
+	restartService    func(context.Context, string) (bool, error)
 }
 
 func defaultUpdateDependencies() updateDependencies {
@@ -71,6 +72,9 @@ func defaultUpdateDependencies() updateDependencies {
 		latest:     checker.Latest,
 		install: func(ctx context.Context, found installation, release selfupdate.Release, stdout, stderr io.Writer) error {
 			return installUpdate(ctx, found, release, installerClient, commands, stdout, stderr)
+		},
+		serviceExecutable: func(ctx context.Context, found installation) (string, error) {
+			return managedInstallationExecutable(ctx, found, commands)
 		},
 		restartService: restartManagedServiceAfterUpdate,
 	}
@@ -115,6 +119,18 @@ func runUpdate(ctx context.Context, current string, stdout, stderr io.Writer, de
 		fmt.Fprintf(stdout, "sshc: %s is already the latest release\n", current)
 		return 0
 	}
+	serviceExecutable := ""
+	if dependencies.restartService != nil {
+		if dependencies.serviceExecutable == nil {
+			fmt.Fprintln(stderr, "sshc: update cannot identify the executable registered with the managed service")
+			return 1
+		}
+		serviceExecutable, err = dependencies.serviceExecutable(ctx, found)
+		if err != nil {
+			fmt.Fprintf(stderr, "sshc: identify the executable registered with the managed service: %v\n", err)
+			return 1
+		}
+	}
 
 	fmt.Fprintf(stdout, "sshc: updating %s to %s\n", current, tag)
 	if err := dependencies.install(ctx, found, latest, stdout, stderr); err != nil {
@@ -126,12 +142,13 @@ func runUpdate(ctx context.Context, current string, stdout, stderr io.Writer, de
 	}
 	fmt.Fprintf(stdout, "sshc: updated to %s\n", tag)
 	if dependencies.restartService != nil {
-		restarted, err := dependencies.restartService(ctx)
+		restarted, err := dependencies.restartService(ctx, serviceExecutable)
 		if err != nil {
 			if errors.Is(ctx.Err(), context.Canceled) {
 				return 130
 			}
 			fmt.Fprintf(stderr, "sshc: update succeeded, but restart the managed service: %v\n", err)
+			fmt.Fprintln(stderr, "sshc: run `sshc service install` to retry the service restart")
 			return 1
 		}
 		if restarted {
