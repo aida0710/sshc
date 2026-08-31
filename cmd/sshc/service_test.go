@@ -25,7 +25,7 @@ func (manager *fakeServiceManager) Status(context.Context) (serviceState, error)
 	return manager.state, manager.err
 }
 
-func (manager *fakeServiceManager) RestartIfActive(context.Context) (bool, error) {
+func (manager *fakeServiceManager) RestartIfActive(context.Context, string) (bool, error) {
 	return manager.state == serviceActive, manager.err
 }
 

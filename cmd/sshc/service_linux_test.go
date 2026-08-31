@@ -146,11 +146,15 @@ func TestLinuxServiceRestartTouchesOnlyAnActiveManagedUnit(t *testing.T) {
 	if err := os.WriteFile(manager.unitPath(), []byte(unit), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	restarted, err := manager.RestartIfActive(context.Background())
+	restarted, err := manager.RestartIfActive(context.Background(), "/other/sshc")
+	if err != nil || restarted || len(runner.calls) != 0 {
+		t.Fatalf("different executable restart = %v, %v calls=%#v", restarted, err, runner.calls)
+	}
+	restarted, err = manager.RestartIfActive(context.Background(), "/opt/sshc/bin/sshc")
 	if err != nil || !restarted {
 		t.Fatalf("restart = %v, %v", restarted, err)
 	}
-	if len(runner.calls) != 2 || strings.Join(runner.calls[1], " ") != "--user restart sshc.service" {
+	if len(runner.calls) != 2 || strings.Join(runner.calls[1], " ") != "--user try-restart sshc.service" {
 		t.Fatalf("calls = %#v", runner.calls)
 	}
 
@@ -158,7 +162,7 @@ func TestLinuxServiceRestartTouchesOnlyAnActiveManagedUnit(t *testing.T) {
 	if err := os.WriteFile(manager.unitPath(), manual, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	restarted, err = manager.RestartIfActive(context.Background())
+	restarted, err = manager.RestartIfActive(context.Background(), "/opt/sshc/bin/sshc")
 	if err != nil || restarted || len(runner.calls) != 2 {
 		t.Fatalf("unmanaged restart = %v, %v calls=%#v", restarted, err, runner.calls)
 	}

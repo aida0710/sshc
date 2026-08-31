@@ -22,7 +22,7 @@ const (
 type engineServiceManager interface {
 	Install(context.Context, string) error
 	Status(context.Context) (serviceState, error)
-	RestartIfActive(context.Context) (bool, error)
+	RestartIfActive(context.Context, string) (bool, error)
 	Disable(context.Context) (bool, error)
 }
 
@@ -49,13 +49,17 @@ func managedServiceExecutable(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("inspect this installation: %w", err)
 	}
+	return managedInstallationExecutable(ctx, found, osUpdateCommands{})
+}
+
+func managedInstallationExecutable(ctx context.Context, found installation, commands updateCommands) (string, error) {
 	switch found.manager {
 	case managerHomebrew:
-		return homebrewManagedExecutable(ctx, found, osUpdateCommands{})
+		return homebrewManagedExecutable(ctx, found, commands)
 	case managerShell:
 		return found.executable, nil
 	default:
-		return "", fmt.Errorf("%s is not managed by Homebrew or sshc's install.sh", executable)
+		return "", fmt.Errorf("%s is not managed by Homebrew or sshc's install.sh", found.executable)
 	}
 }
 
