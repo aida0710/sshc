@@ -31,9 +31,9 @@ var startsAProcess = []string{"exec.Command"}
 // と言うことだった。起動する表記を選ぶのはこのアプリケーションではなく、
 // ~/.ssh/config を書いたユーザー本人である。
 //
-// ログイン時起動は OS に任せた。launchd や systemd の unit を書いていたのは
-// このアプリケーション自身だったが、その仕組みごと消えた。ここに並ぶものは
-// いずれも os/exec を直接呼んでおり、そうしてよい理由がそれぞれ違う。
+// 自動起動するprocessの所有はOSへ任せる。Linuxだけは明示commandでsystemd user
+// unitを作成し、その状態遷移に固定argvのsystemctlを使用する。ここに並ぶものは
+// いずれもos/execを直接呼んでおり、そうしてよい理由がそれぞれ違う。
 //
 // 一覧を持つ形にしてあるのは、増えたときに気づくためである。「OpenSSH が
 // 無いこと」を検査すると、OpenSSH でない何かが増えても緑のままになる。
@@ -47,6 +47,10 @@ var allowedToStartPrograms = []string{
 	// だけを固定argvで呼ぶか、digest付きreceiptが一致したinstall.sh版だけを公開済み
 	// tagのscriptへ委ねる。どちらにも該当しない実行ファイルからは起動しない。
 	"cmd/sshc/update.go",
+	// Linuxのservice commandはsshc管理marker付きunitだけを作成、確認、削除する。
+	// systemctlは/usr/binの固定パスと固定argvで呼び、利用者の入力をprogramや引数へ
+	// 渡さない。update連携も管理unitがactiveの場合のrestartだけに限定する。
+	"cmd/sshc/service_linux.go",
 	// ローカルシェルには擬似端末が要る。インターフェースは出力を集めて返すものなので、
 	// PTY を握って対話し続けるこれは、そもそもあそこを通れない。
 	"internal/terminal/pty_unix.go",
