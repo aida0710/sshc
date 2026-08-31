@@ -8,6 +8,8 @@ type Layer = {
   dismiss: (reason: DismissReason) => void;
   closeOnOutside: boolean;
   restoreFocus: () => HTMLElement | null;
+  initialFocus: () => HTMLElement | null;
+  trapFocus: boolean;
 };
 
 const layers: Layer[] = [];
@@ -26,7 +28,24 @@ function dismissOutside(event: PointerEvent) {
 
 function dismissWithEscape(event: KeyboardEvent) {
   const layer = topLayer();
-  if (layer === undefined || event.key !== "Escape") return;
+  if (layer === undefined) return;
+  if (event.key === "Tab" && layer.trapFocus) {
+    const focusable = layer.containers().flatMap((container) =>
+      container === null ? [] : [...container.querySelectorAll<HTMLElement>(
+        'a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"])',
+      )].filter((element) => !element.hasAttribute("disabled") && element.getAttribute("aria-hidden") !== "true"),
+    );
+    const first = focusable[0] ?? layer.containers()[0] ?? null;
+    const last = focusable[focusable.length - 1] ?? first;
+    if (first === null || last === null) return;
+    const active = document.activeElement;
+    if (event.shiftKey ? active === first || !focusable.includes(active as HTMLElement) : active === last || !focusable.includes(active as HTMLElement)) {
+      event.preventDefault();
+      (event.shiftKey ? last : first).focus();
+    }
+    return;
+  }
+  if (event.key !== "Escape") return;
   event.preventDefault();
   event.stopImmediatePropagation();
   const returnTarget = layer.restoreFocus();
@@ -68,20 +87,26 @@ export function useDismissibleLayer({
   onDismiss,
   closeOnOutside = true,
   returnFocusRef,
+  initialFocusRef,
+  trapFocus = false,
 }: {
   open: boolean;
   containerRefs: readonly RefObject<HTMLElement | null>[];
   onDismiss: (reason: DismissReason) => void;
   closeOnOutside?: boolean;
   returnFocusRef?: RefObject<HTMLElement | null>;
+  initialFocusRef?: RefObject<HTMLElement | null>;
+  trapFocus?: boolean;
 }) {
   const id = useRef(Symbol("dismissible-layer"));
   const containers = useRef(containerRefs);
   const dismiss = useRef(onDismiss);
   const returnFocus = useRef(returnFocusRef);
+  const initialFocus = useRef(initialFocusRef);
   containers.current = containerRefs;
   dismiss.current = onDismiss;
   returnFocus.current = returnFocusRef;
+  initialFocus.current = initialFocusRef;
 
   useEffect(() => {
     if (!open) return;
@@ -92,14 +117,24 @@ export function useDismissibleLayer({
       dismiss: (reason) => dismiss.current(reason),
       closeOnOutside,
       restoreFocus: () => returnFocus.current?.current ?? opener,
+      initialFocus: () => initialFocus.current?.current ?? null,
+      trapFocus,
     };
     topLayer()?.dismiss("superseded");
     layers.push(layer);
     listen();
+    if (trapFocus) {
+      const target = layer.initialFocus() ?? layer.containers().flatMap((container) =>
+        container === null ? [] : [...container.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])',
+        )],
+      )[0] ?? layer.containers()[0] ?? null;
+      target?.focus();
+    }
     return () => {
       const index = layers.findIndex((candidate) => candidate.id === layer.id);
       if (index >= 0) layers.splice(index, 1);
       unlisten();
     };
-  }, [closeOnOutside, open]);
+  }, [closeOnOutside, open, trapFocus]);
 }

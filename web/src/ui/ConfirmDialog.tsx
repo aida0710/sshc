@@ -1,6 +1,7 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { dangerAction, secondaryAction } from "./form";
+import { useDismissibleLayer } from "./useDismissibleLayer";
 export function ConfirmDialog({
   id,
   heading,
@@ -19,19 +20,22 @@ export function ConfirmDialog({
   onCancel: () => void;
 }) {
   const cancelRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    cancelRef.current?.focus();
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") onCancel();
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onCancel]);
+  useDismissibleLayer({
+    open: true,
+    containerRefs: [dialogRef],
+    onDismiss: onCancel,
+    closeOnOutside: false,
+    initialFocusRef: cancelRef,
+    trapFocus: true,
+  });
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-canvas/75 p-4">
       <div
+        ref={dialogRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-labelledby={id}
