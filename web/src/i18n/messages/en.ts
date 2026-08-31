@@ -155,7 +155,7 @@ export const en = {
   "workspace.dock.bottom": "Place below",
   "workspace.groupCount": "{count} terminals",
   "workspace.rename": "Rename workspace",
-  "workspace.renamePrompt": "Live workspace name",
+  "workspace.renameLabel": "New name for {name}",
   "workspace.rowMenu": "Actions for {name}",
   "workspace.expandGroup": "Show terminals in {name}",
   "workspace.collapseGroup": "Hide terminals in {name}",
