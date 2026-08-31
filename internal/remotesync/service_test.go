@@ -695,6 +695,20 @@ func TestCollectDoesNotFollowSymbolicLinks(t *testing.T) {
 	}
 }
 
+func TestCollectRefusesAPathWindowsCannotRepresent(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows cannot create these source paths")
+	}
+	for _, name := range []string{"NUL.conf", "connections/COM1/key", "trailing.", "trailing "} {
+		t.Run(name, func(t *testing.T) {
+			installation := newInstallation(t, &fakeBucket{}, map[string]string{"config": "Host portable\n", name: "x"})
+			if _, _, err := installation.service.Collect(); !errors.Is(err, remotesync.ErrUnsafePath) {
+				t.Fatalf("Collect = %v, want ErrUnsafePath", err)
+			}
+		})
+	}
+}
+
 func TestCollectUsesDefaultAndSharedExclusionRules(t *testing.T) {
 	installation := newInstallation(t, &fakeBucket{}, map[string]string{
 		"config":                     "Host bastion\n",

@@ -59,9 +59,9 @@ var (
 	ErrNotASnapshot = errors.New("these bytes are not an sshc snapshot")
 	// ErrUnsupportedVersion は、このビルドと異なるschemaのスナップショットを報告する。
 	ErrUnsupportedVersion = errors.New("this snapshot schema is not supported")
-	// ErrUnsafePath は、ワークスペースから抜け出すパスを持つエントリを報告する。
-	// スナップショットは信用できない入力であり、tar の中の "../" は最も古い手口で
-	// ある。
+	// ErrUnsafePath は、ワークスペースから抜け出すパス、または対応OS間で
+	// 同じファイル名として安全に再現できないパスを報告する。スナップショットは
+	// 信用できない入力であり、tar の中の "../" は最も古い手口である。
 	ErrUnsafePath = errors.New("a snapshot entry names a path outside the workspace")
 	// ErrUnsafeMode は、このアプリケーションが書かない権限ビットを持つエントリを報告
 	// する。スナップショットが秘密鍵の権限を広げられてはならない。
@@ -503,8 +503,28 @@ func checkPath(name string) error {
 		if segment == "" || segment == "." || segment == ".." {
 			return ErrUnsafePath
 		}
+		if strings.HasSuffix(segment, ".") || strings.HasSuffix(segment, " ") || windowsReservedName(segment) {
+			return ErrUnsafePath
+		}
 	}
 	return nil
+}
+
+// windowsReservedName recognizes device names which Win32 resolves as devices
+// even when they carry an extension. Rejecting them at snapshot creation keeps
+// a snapshot made on Linux applicable on every supported desktop OS.
+func windowsReservedName(segment string) bool {
+	base, _, _ := strings.Cut(segment, ".")
+	upper := strings.ToUpper(base)
+	switch upper {
+	case "CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$":
+		return true
+	}
+	runes := []rune(upper)
+	if len(runes) == 4 && (strings.HasPrefix(upper, "COM") || strings.HasPrefix(upper, "LPT")) {
+		return runes[3] >= '1' && runes[3] <= '9' || strings.ContainsRune("¹²³", runes[3])
+	}
+	return false
 }
 
 // checkMode は、このアプリケーションが書く二つの権限セットだけを受け付ける。それ

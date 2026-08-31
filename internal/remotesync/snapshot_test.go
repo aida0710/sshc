@@ -243,6 +243,54 @@ func TestReadRefusesAPathThatEscapesTheWorkspace(t *testing.T) {
 	}
 }
 
+func TestReadRefusesAPathWindowsCannotRepresent(t *testing.T) {
+	for _, name := range []string{
+		"CON",
+		"prn.conf",
+		"connections/AUX/key",
+		"COM1.pub",
+		"lpt9",
+		"CONIN$",
+		"conout$.log",
+		"COM¹",
+		"LPT³.txt",
+		"config.",
+		"config ",
+		"connections./work.conf",
+		"connections /work.conf",
+	} {
+		t.Run(name, func(t *testing.T) {
+			archive := handBuilt(t, map[string]string{name: "x"}, remotesync.Manifest{
+				Files: []remotesync.Entry{{Path: name, SHA256: remotesync.Digest([]byte("x")), Mode: "0600"}},
+			})
+			if _, _, err := remotesync.Read(archive); !errors.Is(err, remotesync.ErrUnsafePath) {
+				t.Fatalf("Read = %v, want ErrUnsafePath", err)
+			}
+		})
+	}
+}
+
+func TestWindowsDeviceNamePrefixesRemainUsable(t *testing.T) {
+	for _, name := range []string{"console", "company/config", "com0", "com10", "lpt0", "lpt10", "auxiliary"} {
+		t.Run(name, func(t *testing.T) {
+			manifest := remotesync.Manifest{
+				CreatedAt: "2026-08-31T00:00:00Z", Origin: "origin", Message: "Portable name",
+				Files: []remotesync.Entry{entry(name, "x")},
+			}
+			if err := remotesync.FinalizeManifest(&manifest, ""); err != nil {
+				t.Fatal(err)
+			}
+			archive, err := remotesync.Build(manifest, map[string][]byte{name: []byte("x")})
+			if err != nil {
+				t.Fatalf("Build = %v", err)
+			}
+			if _, _, err := remotesync.Read(archive); err != nil {
+				t.Fatalf("Read = %v", err)
+			}
+		})
+	}
+}
+
 func TestReadRefusesDeviceLocalAndRawVaultPaths(t *testing.T) {
 	for _, name := range []string{
 		"sshc/secrets",
