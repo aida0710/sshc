@@ -55,6 +55,16 @@ func TestTheFormulaBuildsSomethingThatExists(t *testing.T) {
 	}
 }
 
+func TestTheFormulaInstallsShellCompletions(t *testing.T) {
+	body, err := os.ReadFile(filepath.Join("..", "..", "packaging", "homebrew", "sshc.rb"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), `generate_completions_from_executable(bin/"sshc", "completion")`) {
+		t.Error("formula が sshc completion から bash/zsh/fish の補完を生成していない")
+	}
+}
+
 // 利用者に打たせる行は、打てば通る行でなければならない。
 //
 // docs は一度 `brew install --cask --no-quarantine ...` を案内していた。

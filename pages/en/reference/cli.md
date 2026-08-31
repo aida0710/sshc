@@ -39,6 +39,19 @@ sshc ssh <alias> --non-interactive -- <command...>
 sshc info <alias> --json
 ```
 
+The Homebrew formula installs completions for bash, zsh, and fish. For other installation methods, add the matching command below to your shell startup file. Candidates for `sshc ssh <Tab>` are read from the current `~/.ssh/config` and reachable `Include` files.
+
+```sh
+# bash
+source <(sshc completion bash)
+
+# zsh
+source <(sshc completion zsh)
+
+# fish
+sshc completion fish | source
+```
+
 `sshc info` resolves `Include`, `Match`, `ProxyJump` and encoding through the real connection path without an engine. It does not print saved credentials, `SetEnv` values or the `ProxyCommand` body.
 
 ```sh

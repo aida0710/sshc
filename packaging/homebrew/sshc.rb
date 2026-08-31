@@ -16,6 +16,7 @@ class Sshc < Formula
     # ./cmd/sshc をビルドし、実際のリリースバージョンを埋め込む。
     # -s -w は std_go_args が追加するため重ねて指定しない。
     system "go", "build", *std_go_args(ldflags: "-X main.version=#{version}"), "./cmd/sshc"
+    generate_completions_from_executable(bin/"sshc", "completion")
   end
 
   test do
