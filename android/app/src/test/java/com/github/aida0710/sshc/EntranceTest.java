@@ -1,7 +1,9 @@
 package com.github.aida0710.sshc;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
 
@@ -37,5 +39,16 @@ public final class EntranceTest {
     @Test
     public void 空の_fragment_も落とす() {
         assertEquals("http://x/", Entrance.withoutFragment("http://x/#"));
+    }
+
+    @Test
+    public void 同じengineの再通知では表示中の画面を維持する() {
+        assertTrue(Entrance.isAlreadyShowing(
+                "http://127.0.0.1:31337/",
+                "http://127.0.0.1:31337/#bootstrap=new-token"));
+        assertFalse(Entrance.isAlreadyShowing(
+                "http://127.0.0.1:31337/",
+                "http://127.0.0.1:31338/#bootstrap=new-token"));
+        assertFalse(Entrance.isAlreadyShowing(null, "http://127.0.0.1:31337/"));
     }
 }

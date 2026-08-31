@@ -635,33 +635,15 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
     );
   }
 
-  if (state === "ready" && vaultRecheck !== "idle") {
-    return (
-      <div className="min-h-screen bg-canvas text-ink">
-        <IconSprite />
-        {requestFailure === null ? null : (
-          <ErrorDiagnosticNotice
-            diagnostic={requestFailure}
-            version={version}
-            onClose={() => setRequestFailure(null)}
-          />
-        )}
-        <main className="grid min-h-screen place-items-center p-6">
-          <section role="status" className="sshc-card w-full max-w-md rounded-lg bg-card p-6 sm:p-8">
-            <h1 className="text-lg font-semibold">{t("shell.title")}</h1>
-            <p className="mt-3 text-sm leading-6 text-ink-muted">
-              {t(vaultRecheck === "checking" ? "shell.vaultChecking" : "shell.vaultCheckRetrying")}
-            </p>
-          </section>
-        </main>
-      </div>
-    );
-  }
-
   return (
     <div className="flex h-screen flex-col bg-canvas text-ink">
       <IconSprite />
-      {navigationOpen ? null : <MobileNavigationSwipeEdge onOpen={() => setNavigationOpen(true)} />}
+      <div
+        className="contents"
+        inert={state === "ready" && vaultRecheck !== "idle"}
+        aria-hidden={state === "ready" && vaultRecheck !== "idle" ? true : undefined}
+      >
+        {navigationOpen ? null : <MobileNavigationSwipeEdge onOpen={() => setNavigationOpen(true)} />}
 
       <AppHeader
         route={route}
@@ -908,6 +890,17 @@ export function App({ bootstrap, health, vault = integrationsApi.passwordVault }
           onOpenSnippet={(id) => navigateLocation(`${sectionPath("Snippets")}?snippet=${encodeURIComponent(id)}`)}
           onOpenSession={showConsole}
         />
+      ) : null}
+      </div>
+      {state === "ready" && vaultRecheck !== "idle" ? (
+        <div className="fixed inset-0 z-[100] grid min-h-screen place-items-center bg-canvas p-6">
+          <section role="status" className="sshc-card w-full max-w-md rounded-lg bg-card p-6 sm:p-8">
+            <h1 className="text-lg font-semibold">{t("shell.title")}</h1>
+            <p className="mt-3 text-sm leading-6 text-ink-muted">
+              {t(vaultRecheck === "checking" ? "shell.vaultChecking" : "shell.vaultCheckRetrying")}
+            </p>
+          </section>
+        </div>
       ) : null}
     </div>
   );
