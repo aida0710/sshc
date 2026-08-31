@@ -92,7 +92,7 @@ func TestLoadedJournalMigratesV1WriteModes(t *testing.T) {
 	if err := migrateLoadedJournalRecord(&record); err != nil {
 		t.Fatal(err)
 	}
-	if record.Version != journalVersion || record.Entries[0].PreviousMode != 0o600 {
+	if record.Version != journalVersion || record.Entries[0].PreviousMode != 0o600 || !record.LegacyWriteModesUnknown {
 		t.Fatalf("migrated record = %#v", record)
 	}
 }
