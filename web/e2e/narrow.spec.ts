@@ -736,6 +736,14 @@ test("keeps key material and management actions inside the key list", async ({ p
   const table = page.getByRole("table", { name: "Files classified by content and permissions" });
   const privateRow = table.getByRole("row", { name: /id_keys_layout\b/ }).first();
   await privateRow.getByRole("button", { name: "Show details" }).click();
+  await privateRow.getByRole("button", { name: "id_keys_layout", exact: true }).click();
+  const inspectorToggle = page.getByRole("button", { name: "Show Key details", exact: true });
+  await inspectorToggle.click();
+  const inspector = page.getByRole("complementary", { name: "Key details" });
+  await expect(inspector).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(inspector).toBeHidden();
+  await expect(inspectorToggle).toBeFocused();
   const management = table.getByRole("group", { name: "Key actions" });
   await expect(management).toBeVisible();
   await expect(management.locator("xpath=ancestor::tr[@data-key-detail-for]")).toHaveCount(1);

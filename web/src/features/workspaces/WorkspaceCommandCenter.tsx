@@ -4,6 +4,7 @@ import { failureCode } from "../../api/client";
 import { useTranslate } from "../../i18n/context";
 import { snippetsApi, type Snippet } from "../../snippets/api";
 import { Button, Segmented } from "../../ui/surface";
+import { useDismissibleLayer } from "../../ui/useDismissibleLayer";
 import {
   terminalCommandApi,
   type TerminalCommandDispatch,
@@ -36,8 +37,7 @@ export function WorkspaceCommandCenter({ paneTargets, onClose }: { paneTargets: 
   const [busy, setBusy] = useState(false);
   const operationSequence = useRef(0);
   const closeButton = useRef<HTMLButtonElement>(null);
-  const closeCallback = useRef(onClose);
-  closeCallback.current = onClose;
+  const dialog = useRef<HTMLElement>(null);
 
   const selectedSnippet = useMemo(() => snippets.find((item) => item.id === snippetId) ?? null, [snippetId, snippets]);
   const targets = useMemo(() => paneTargets.filter((target): target is WorkspaceCommandTarget & { sessionId: string } =>
@@ -53,14 +53,13 @@ export function WorkspaceCommandCenter({ paneTargets, onClose }: { paneTargets: 
     }).catch((error: unknown) => setProblem(failureCode(error) || "snippet_failed"));
   }, []);
 
-  useEffect(() => {
-    closeButton.current?.focus();
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") closeCallback.current();
-    };
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, []);
+  useDismissibleLayer({
+    open: true,
+    containerRefs: [dialog],
+    onDismiss: onClose,
+    initialFocusRef: closeButton,
+    trapFocus: true,
+  });
 
   useEffect(() => {
     operationSequence.current += 1;
@@ -123,8 +122,8 @@ export function WorkspaceCommandCenter({ paneTargets, onClose }: { paneTargets: 
   }
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-canvas/80 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <section role="dialog" aria-modal="true" aria-labelledby="workspace-command-heading" className="max-h-[90vh] w-full max-w-5xl overflow-auto rounded-md border border-control-line bg-card p-4 shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-canvas/80 p-4 backdrop-blur-sm">
+      <section ref={dialog} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="workspace-command-heading" className="max-h-[90vh] w-full max-w-5xl overflow-auto rounded-md border border-control-line bg-card p-4 shadow-2xl">
       <div className="flex flex-col gap-3">
         <div className="flex items-center gap-3">
           <div className="grow"><h2 id="workspace-command-heading" className="text-base font-semibold">{t("workspace.broadcastHeading")}</h2><p className="mt-1 text-xs text-ink-muted">{t("workspace.broadcastDescription")}</p></div>

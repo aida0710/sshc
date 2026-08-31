@@ -79,6 +79,7 @@ import type { SFTPTarget } from "./sftp/SFTPPanel";
 import { useAppSession } from "./session/useAppSession";
 import { useTerminalWorkspaceController } from "./terminal/useTerminalWorkspaceController";
 import { useDismissibleLayer } from "./ui/useDismissibleLayer";
+import { useMediaQuery } from "./ui/useMediaQuery";
 
 export { vaultStatePollIntervalMs } from "./session/useAppSession";
 
@@ -293,6 +294,9 @@ export function App({
   );
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [inspector, setInspector] = useState<InspectorContent>(null);
+  const inspectorPanelRef = useRef<HTMLElement>(null);
+  const inspectorTriggerRef = useRef<HTMLButtonElement>(null);
+  const inspectorIsOverlay = useMediaQuery("(max-width: 1023px)");
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const commandPaletteReturnFocusRef = useRef<HTMLElement>(null);
 
@@ -301,6 +305,15 @@ export function App({
     containerRefs: [navigationPanelRef, navigationTriggerRef],
     onDismiss: () => setNavigationOpen(false),
     returnFocusRef: navigationTriggerRef,
+  });
+  useDismissibleLayer({
+    open: inspectorOpen && inspector !== null && inspectorIsOverlay,
+    containerRefs: [inspectorPanelRef, inspectorTriggerRef],
+    onDismiss: () => setInspectorOpen(false),
+    closeOnOutside: false,
+    returnFocusRef: inspectorTriggerRef,
+    initialFocusRef: inspectorPanelRef,
+    trapFocus: true,
   });
 
   useEffect(() => {
@@ -591,6 +604,7 @@ export function App({
           onToggleDesktopNavigation={toggleDesktopNavigation}
           inspector={inspector}
           inspectorOpen={inspectorOpen}
+          inspectorToggleRef={inspectorTriggerRef}
           onToggleInspector={() => setInspectorOpen((open) => !open)}
           sectionLabels={sectionLabels}
           themeLabels={themeLabels}
@@ -847,7 +861,7 @@ export function App({
             ) : null}
           </main>
           {inspector !== null && inspectorOpen ? (
-            <InspectorPane label={inspector.label}>
+            <InspectorPane label={inspector.label} paneRef={inspectorPanelRef}>
               {inspector.body}
             </InspectorPane>
           ) : null}

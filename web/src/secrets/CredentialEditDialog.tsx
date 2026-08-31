@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { failureCode } from "../api/client";
 import type {
@@ -10,6 +10,7 @@ import { useTranslate } from "../i18n/context";
 import { Field, control, hintText } from "../ui/form";
 import { PasswordField } from "../ui/PasswordField";
 import { Button, Notice } from "../ui/surface";
+import { useDismissibleLayer } from "../ui/useDismissibleLayer";
 
 type CredentialEditDialogProps = {
   kind: CredentialKind;
@@ -26,6 +27,7 @@ export function CredentialEditDialog({ kind, name, api, onSaved, onClose }: Cred
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const dialog = useRef<HTMLElement>(null);
 
   const close = useCallback(() => {
     setSecret("");
@@ -52,13 +54,13 @@ export function CredentialEditDialog({ kind, name, api, onSaved, onClose }: Cred
     };
   }, [api, kind, name, t]);
 
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") close();
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [close]);
+  useDismissibleLayer({
+    open: true,
+    containerRefs: [dialog],
+    onDismiss: close,
+    closeOnOutside: false,
+    trapFocus: true,
+  });
 
   async function save() {
     setSaving(true);
@@ -80,6 +82,8 @@ export function CredentialEditDialog({ kind, name, api, onSaved, onClose }: Cred
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-canvas/80 p-4">
       <section
+        ref={dialog}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-labelledby="credential-edit-heading"

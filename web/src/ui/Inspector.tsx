@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ReactNode, RefObject } from "react";
 import { Icon } from "./icons";
 import { useTranslate } from "../i18n/context";
 
@@ -11,17 +11,20 @@ export function InspectorToggle({
   open,
   attention,
   onToggle,
+  buttonRef,
 }: {
   label: string;
   open: boolean;
   attention: boolean;
   onToggle: () => void;
+  buttonRef?: RefObject<HTMLButtonElement | null>;
 }) {
   const t = useTranslate();
   const action = t(open ? "shell.inspectorHideNamed" : "shell.inspectorShowNamed", { label });
   const name = attention ? `${action} ${t("shell.inspectorAttention")}` : action;
   return (
     <button
+      ref={buttonRef}
       type="button"
       aria-label={name}
       aria-expanded={open}
@@ -44,9 +47,19 @@ export function InspectorToggle({
   );
 }
 
-export function InspectorPane({ label, children }: { label: string; children: ReactNode }) {
+export function InspectorPane({
+  label,
+  children,
+  paneRef,
+}: {
+  label: string;
+  children: ReactNode;
+  paneRef?: RefObject<HTMLElement | null>;
+}) {
   return (
     <aside
+      ref={paneRef}
+      tabIndex={-1}
       id={inspectorId}
       aria-label={label}
       className="fixed inset-0 z-10 overflow-y-auto bg-sidebar p-3 lg:relative lg:z-auto lg:border-l lg:border-line"

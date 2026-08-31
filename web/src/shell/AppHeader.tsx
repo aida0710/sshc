@@ -23,6 +23,7 @@ export function AppHeader({
   onToggleDesktopNavigation,
   inspector,
   inspectorOpen,
+  inspectorToggleRef,
   onToggleInspector,
   sectionLabels,
   themeLabels,
@@ -43,6 +44,7 @@ export function AppHeader({
   onToggleDesktopNavigation: () => void;
   inspector: InspectorContent | null;
   inspectorOpen: boolean;
+  inspectorToggleRef?: RefObject<HTMLButtonElement | null>;
   onToggleInspector: () => void;
   sectionLabels: Record<Section, MessageKey>;
   themeLabels: Record<Theme, MessageKey>;
@@ -122,6 +124,7 @@ export function AppHeader({
               label={inspector.label}
               open={inspectorOpen}
               attention={inspector.attention}
+              {...(inspectorToggleRef === undefined ? {} : { buttonRef: inspectorToggleRef })}
               onToggle={() => onToggleInspector()}
             />
           </span>

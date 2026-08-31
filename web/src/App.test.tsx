@@ -512,6 +512,38 @@ describe("App", () => {
     expect(screen.queryByRole("complementary", { name: "Display and classification" })).toBeNull();
   });
 
+  it("モバイルInspectorをEscapeで閉じてtoggleへ戻る", async () => {
+    vi.stubGlobal("matchMedia", vi.fn(() => ({
+      matches: true,
+      media: "(max-width: 1023px)",
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })));
+    const user = userEvent.setup();
+    render(
+      <App
+        bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
+        health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
+        vault={openVault}
+      />,
+    );
+    await user.click(await screen.findByRole("link", { name: "Connections" }));
+    await user.click(await screen.findByRole("button", { name: "offer inspector" }));
+    const toggle = screen.getByRole("button", { name: "Show Display and classification Needs attention" });
+    await user.click(toggle);
+
+    const inspector = screen.getByRole("complementary", { name: "Display and classification" });
+    expect(inspector).toHaveFocus();
+    await user.keyboard("{Escape}");
+
+    expect(screen.queryByRole("complementary", { name: "Display and classification" })).toBeNull();
+    expect(toggle).toHaveFocus();
+  });
+
   it("offers the three appearances and remembers the chosen one", async () => {
     const user = userEvent.setup();
     render(
