@@ -1863,6 +1863,7 @@ func (s *Service) applyWithSecretGeneration(result PullResult) error {
 	// PullResult is a reusable preview. Keep its logical plaintext request
 	// untouched and seal a private copy only at the final commit boundary.
 	result.request.Changes = slices.Clone(result.request.Changes)
+	result.request.FinalChanges = slices.Clone(result.request.FinalChanges)
 	result.request.Removals = slices.Clone(result.request.Removals)
 	result.request.Directories = slices.Clone(result.request.Directories)
 	if err := s.exchangeVault(&result.request); err != nil {
@@ -1900,15 +1901,16 @@ func (s *Service) applyWithSecretGeneration(result PullResult) error {
 	if result.request.Operation == "" {
 		result.request.Operation = "sync.pull"
 	}
-	// State is deliberately the last write in the same journal as the workspace
-	// files. A crash can therefore be completed from one durable transaction and
-	// cannot leave a newly applied workspace paired with an older sync baseline.
-	result.request.Changes = append(result.request.Changes, stateChange)
+	// State is a terminal write in the same journal as the workspace files. The
+	// storage transaction applies it only after every move and removal succeeds,
+	// including when Complete resumes the transaction after a restart.
+	result.request.FinalChanges = append(result.request.FinalChanges, stateChange)
 	// 別のマシンからのスナップショットは、このマシンにはないかもしれない
 	// ディレクトリ（connections/work/、keys/work/）を指定する。stateの親も含め、
 	// すべて同じrequestへ載せる。
+	changesWithState := append(slices.Clone(result.request.Changes), result.request.FinalChanges...)
 	result.request.Directories = append(result.request.Directories,
-		changeDirectories(s.workspace.Root(), result.request.Changes)...)
+		changeDirectories(s.workspace.Root(), changesWithState)...)
 	if _, err := s.transactions.Commit(result.request); err != nil {
 		return err
 	}
