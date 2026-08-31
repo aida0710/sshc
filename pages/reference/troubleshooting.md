@@ -35,4 +35,4 @@ sshc sync now
 
 Vaultのロックが解除されているか、同期方向が合っているか、バケットの状態が最新か、最後の確認がいつ行われたかを確認してください。`outcome_unknown`は、変更を送信したものの、結果を確定できなかった状態です。同じ操作をすぐに繰り返さず、リモートの状態を更新してから判断してください。
 
-同期エラーには画面上の原因説明と`Code`が表示されます。`bucket_refused`は資格情報・リージョン・権限、`bucket_dns_failed`は名前解決、`bucket_tls_failed`はHTTPS証明書または端末時刻、`bucket_timeout`と`bucket_unreachable`はネットワークを確認してください。`wrong_passphrase`は、同じ保存先を使う端末で同期キーが一致していない状態です。`sync_internal_failed`は分類できない製品側の失敗なので、表示された診断コードを添えて報告してください。
+同期エラーには画面上の原因説明と`Code`が表示されます。`bucket_authentication_failed`はアクセスキーまたはシークレットが受理されなかった状態、`bucket_access_denied`はキーにバケットまたはオブジェクトへの権限がない状態です。`bucket_rate_limited`と`bucket_unavailable`は再実行できる一時的な保存先障害です。分類できない`bucket_refused`は資格情報・リージョン・権限、`bucket_dns_failed`は名前解決、`bucket_tls_failed`はHTTPS証明書または端末時刻、`bucket_timeout`と`bucket_unreachable`はネットワークを確認してください。`wrong_passphrase`は、同じ保存先を使う端末で同期キーが一致していない状態です。`sync_internal_failed`は分類できない製品側の失敗なので、表示された診断コードを添えて報告してください。
