@@ -86,10 +86,12 @@ func (loader overlayLoader) Glob(pattern string) ([]string, error) {
 }
 
 func overlayFor(request storage.Request) (map[string][]byte, map[string]bool) {
-	pending := make(map[string][]byte, len(request.Changes)+len(request.Moves))
+	pending := make(map[string][]byte, len(request.Changes)+len(request.FinalChanges)+len(request.Moves))
 	gone := make(map[string]bool, len(request.Moves)+len(request.Removals))
-	for _, change := range request.Changes {
-		pending[filepath.Clean(change.Path)] = change.Contents
+	for _, changes := range [][]storage.Change{request.Changes, request.FinalChanges} {
+		for _, change := range changes {
+			pending[filepath.Clean(change.Path)] = change.Contents
+		}
 	}
 	for _, move := range request.Moves {
 		gone[filepath.Clean(move.From)] = true
@@ -162,27 +164,29 @@ func (s *Service) validate(request storage.Request) error {
 
 	metadataPath := filepath.Clean(s.metadata.Path())
 	stateDir := filepath.Clean(s.workspace.StateDir())
-	for _, change := range request.Changes {
-		cleaned := filepath.Clean(change.Path)
-		if cleaned == metadataPath {
-			if _, err := DecodeMetadata(change.Contents); err != nil {
-				return err
+	for _, changes := range [][]storage.Change{request.Changes, request.FinalChanges} {
+		for _, change := range changes {
+			cleaned := filepath.Clean(change.Path)
+			if cleaned == metadataPath {
+				if _, err := DecodeMetadata(change.Contents); err != nil {
+					return err
+				}
+				continue
 			}
-			continue
-		}
-		if isInside(stateDir, cleaned) {
-			continue
-		}
-		parsed := config.Parse(change.Contents)
-		if !bytes.Equal(parsed.Render(), change.Contents) {
-			return &SyntaxError{Path: s.displayPath(cleaned), Line: 1, Column: 1, Detail: "parsed file does not render back to the same bytes"}
-		}
-		var base *config.File
-		if contents, ok := s.pendingBase[cleaned]; ok {
-			base = config.Parse(contents)
-		}
-		if line, column, found := newUnstructuredLine(base, parsed); found {
-			return &SyntaxError{Path: s.displayPath(cleaned), Line: line, Column: column, Detail: "unbalanced quoting"}
+			if isInside(stateDir, cleaned) {
+				continue
+			}
+			parsed := config.Parse(change.Contents)
+			if !bytes.Equal(parsed.Render(), change.Contents) {
+				return &SyntaxError{Path: s.displayPath(cleaned), Line: 1, Column: 1, Detail: "parsed file does not render back to the same bytes"}
+			}
+			var base *config.File
+			if contents, ok := s.pendingBase[cleaned]; ok {
+				base = config.Parse(contents)
+			}
+			if line, column, found := newUnstructuredLine(base, parsed); found {
+				return &SyntaxError{Path: s.displayPath(cleaned), Line: line, Column: column, Detail: "unbalanced quoting"}
+			}
 		}
 	}
 
@@ -216,9 +220,11 @@ func (s *Service) touchesConfiguration(request storage.Request) bool {
 		cleaned := filepath.Clean(path)
 		return cleaned != metadataPath && !isInside(stateDir, cleaned)
 	}
-	for _, change := range request.Changes {
-		if outside(change.Path) {
-			return true
+	for _, changes := range [][]storage.Change{request.Changes, request.FinalChanges} {
+		for _, change := range changes {
+			if outside(change.Path) {
+				return true
+			}
 		}
 	}
 	for _, move := range request.Moves {
