@@ -4,6 +4,6 @@ package main
 
 import "context"
 
-func restartManagedServiceAfterUpdate(context.Context) (bool, error) {
+func restartManagedServiceAfterUpdate(context.Context, string) (bool, error) {
 	return false, nil
 }

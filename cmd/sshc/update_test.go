@@ -92,7 +92,13 @@ func TestRunUpdateRestartsAnActiveManagedService(t *testing.T) {
 		install: func(context.Context, installation, selfupdate.Release, io.Writer, io.Writer) error {
 			return nil
 		},
-		restartService: func(context.Context) (bool, error) {
+		serviceExecutable: func(context.Context, installation) (string, error) {
+			return "/managed/sshc", nil
+		},
+		restartService: func(_ context.Context, executable string) (bool, error) {
+			if executable != "/managed/sshc" {
+				t.Fatalf("service executable = %q", executable)
+			}
 			restarted = true
 			return true, nil
 		},
@@ -116,12 +122,16 @@ func TestRunUpdateReportsAPartialSuccessWhenManagedServiceRestartFails(t *testin
 		install: func(context.Context, installation, selfupdate.Release, io.Writer, io.Writer) error {
 			return nil
 		},
-		restartService: func(context.Context) (bool, error) {
+		serviceExecutable: func(context.Context, installation) (string, error) {
+			return "/managed/sshc", nil
+		},
+		restartService: func(context.Context, string) (bool, error) {
 			return false, errors.New("systemctl failed")
 		},
 	})
 	if code != 1 || !strings.Contains(stdout.String(), "updated to v0.14.0") ||
-		!strings.Contains(stderr.String(), "update succeeded") {
+		!strings.Contains(stderr.String(), "update succeeded") ||
+		!strings.Contains(stderr.String(), "sshc service install") {
 		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
 }
