@@ -47,9 +47,13 @@ sshcはS3バケットを直接確認し、最新のスナップショットと�
 ```sh
 sshc sync
 sshc sync push --json
+sshc sync push --force --json
 sshc sync pull --json
+sshc sync pull --force --json
 sshc sync now --json
 sshc sync auto on
 ```
+
+`sync pull --force`は現在のリモートを正としてプレビューし、同じETagとリビジョンであることを再確認して適用します。`sync push --force`はリモートを上書きするため、対話確認または同等の明示的な確認が必要です。
 
 CIや画面のないホストでは`--json`を使い、終了コードと1つのJSONオブジェクトの両方を確認してください。

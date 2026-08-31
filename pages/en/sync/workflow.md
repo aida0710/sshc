@@ -35,7 +35,11 @@ Bucket history is read directly from S3. The screen initially shows the latest f
 ```sh
 sshc sync
 sshc sync push --json
+sshc sync push --force --json
 sshc sync pull --json
+sshc sync pull --force --json
 sshc sync now --json
 sshc sync auto on
 ```
+
+`sync pull --force` treats the current remote as authoritative, previews it, and applies only after rechecking the same ETag and revision. `sync push --force` replaces the remote and requires an interactive or equivalent explicit confirmation.
