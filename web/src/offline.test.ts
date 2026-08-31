@@ -10,6 +10,9 @@ describe("offline fallback", () => {
     const html = readFileSync(join(publicDirectory, "offline.html"), "utf8");
     const script = readFileSync(join(publicDirectory, "offline.js"), "utf8");
     const serviceWorker = readFileSync(join(publicDirectory, "sw.js"), "utf8");
+    const manifest = JSON.parse(
+      readFileSync(join(publicDirectory, "manifest.webmanifest"), "utf8"),
+    ) as { icons: Array<{ src: string; purpose: string }> };
 
     expect(html).toContain('<button id="offline-reload" type="button">');
     expect(html).toContain('<script src="/offline.js"></script>');
@@ -17,7 +20,14 @@ describe("offline fallback", () => {
     expect(script).toContain('addEventListener("click"');
     expect(script).toContain("window.location.reload()");
     expect(serviceWorker).toContain('"/offline.js"');
-    expect(serviceWorker).toContain("offlineAssets.includes(url.pathname)");
+    expect(serviceWorker).toContain('"/icon-maskable-512.png?v=2"');
+    expect(serviceWorker).toContain("offlineAssetPaths.has(url.pathname)");
     expect(serviceWorker).toContain("caches.match(request)");
+    expect(manifest.icons).toContainEqual({
+      src: "/icon-maskable-512.png?v=2",
+      sizes: "512x512",
+      type: "image/png",
+      purpose: "maskable",
+    });
   });
 });
