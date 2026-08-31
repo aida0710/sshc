@@ -15,6 +15,7 @@ Drag a connected terminal onto the current pane to split above, below, left or r
 - Drag dividers between 10% and 90%
 - Swap panes
 - Focus Mode for one pane
+- Rename a workspace before or after saving it
 - Save a named layout on this device
 
 The saved record contains pane kinds, targets, the split tree, ratios and focusâ€”not session IDs, remote processes or scrollback. Reopening it from Home starts fresh SSH sessions or local shells.
@@ -24,6 +25,8 @@ The saved record contains pane kinds, targets, the split tree, ratios and focusâ
 Preview the targets and expanded command, then send the command and Enter to every connected pane. SSH and local shells can be mixed; each PTY keeps its current directory, environment and shell state.
 
 On mobile, sshc shows workspace panes one at a time instead of squeezing the split layout into a narrow screen. The pane and workspace name remain visible, while rename and overflow management controls are hidden at narrow widths. Manage the layout from a desktop-width view.
+
+Rename a workspace from its actions menu in the session list. A live workspace can be named before its layout is saved.
 
 ## Build and reuse a workspace
 
