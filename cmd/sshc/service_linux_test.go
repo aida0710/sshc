@@ -203,3 +203,39 @@ func TestSystemdUnitRejectsUnsafeExecutablePaths(t *testing.T) {
 		}
 	}
 }
+
+func TestResolveSystemctlUsesAValidatedPathCandidate(t *testing.T) {
+	directory := t.TempDir()
+	candidate := filepath.Join(directory, "systemctl")
+	if err := os.WriteFile(candidate, []byte("binary"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	lookedUp := false
+	got, err := resolveSystemctl([]string{candidate}, func(string) (string, error) {
+		lookedUp = true
+		return "", errors.New("not found")
+	}, os.Stat)
+	if err != nil || got != candidate || !lookedUp {
+		t.Fatalf("resolve = %q, %v; lookedUp=%v", got, err, lookedUp)
+	}
+}
+
+func TestResolveSystemctlFallsBackToThePathLookup(t *testing.T) {
+	directory := t.TempDir()
+	found := filepath.Join(directory, "nix", "systemctl")
+	if err := os.MkdirAll(filepath.Dir(found), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(found, []byte("binary"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	got, err := resolveSystemctl([]string{"/missing/systemctl"}, func(name string) (string, error) {
+		if name != "systemctl" {
+			t.Fatalf("lookup name = %q", name)
+		}
+		return found, nil
+	}, os.Stat)
+	if err != nil || got != found {
+		t.Fatalf("resolve = %q, %v", got, err)
+	}
+}

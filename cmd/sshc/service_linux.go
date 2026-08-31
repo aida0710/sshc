@@ -19,8 +19,9 @@ import (
 const (
 	serviceUnitName   = "sshc.service"
 	serviceUnitMarker = "# Managed by sshc service install; schema=1\n"
-	defaultSystemctl  = "/usr/bin/systemctl"
 )
+
+var defaultSystemctlCandidates = []string{"/usr/bin/systemctl", "/bin/systemctl"}
 
 type serviceCommandResult struct {
 	ExitCode int
@@ -61,18 +62,51 @@ func newPlatformServiceManager(home string) (engineServiceManager, error) {
 	if !filepath.IsAbs(home) {
 		return nil, errors.New("home directory is not absolute")
 	}
-	info, err := os.Stat(defaultSystemctl)
+	systemctl, err := resolveSystemctl(defaultSystemctlCandidates, exec.LookPath, os.Stat)
 	if err != nil {
-		return nil, fmt.Errorf("inspect %s: %w", defaultSystemctl, err)
-	}
-	if info.IsDir() || info.Mode()&0o111 == 0 {
-		return nil, fmt.Errorf("%s is not executable", defaultSystemctl)
+		return nil, err
 	}
 	return &linuxServiceManager{
 		home:   filepath.Clean(home),
-		runner: osServiceCommandRunner{path: defaultSystemctl},
+		runner: osServiceCommandRunner{path: systemctl},
 		files:  storage.OSFileSystem{},
 	}, nil
+}
+
+func resolveSystemctl(
+	candidates []string,
+	lookPath func(string) (string, error),
+	stat func(string) (os.FileInfo, error),
+) (string, error) {
+	paths := append([]string(nil), candidates...)
+	if found, err := lookPath("systemctl"); err == nil {
+		if !filepath.IsAbs(found) {
+			found, err = filepath.Abs(found)
+			if err != nil {
+				return "", fmt.Errorf("resolve systemctl path: %w", err)
+			}
+		}
+		paths = append(paths, filepath.Clean(found))
+	}
+	seen := make(map[string]struct{}, len(paths))
+	for _, path := range paths {
+		if !filepath.IsAbs(path) || strings.ContainsAny(path, "\r\n\x00") {
+			continue
+		}
+		path = filepath.Clean(path)
+		if _, exists := seen[path]; exists {
+			continue
+		}
+		seen[path] = struct{}{}
+		info, err := stat(path)
+		if err != nil {
+			continue
+		}
+		if info.Mode().IsRegular() && info.Mode()&0o111 != 0 {
+			return path, nil
+		}
+	}
+	return "", errors.New("cannot find an executable systemctl")
 }
 
 func (manager *linuxServiceManager) unitPath() string {

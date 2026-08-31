@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 
 	"sshc/internal/storage"
@@ -22,9 +23,17 @@ func restartManagedServiceAfterUpdate(ctx context.Context, executable string) (b
 	// systemdがないLinuxでも、管理unitが存在しない通常のupdateを妨げない。
 	// Statusはunitがsshc管理下で動作中と確認した場合だけsystemctlを実行する。
 	manager := &linuxServiceManager{
-		home:   filepath.Clean(home),
-		runner: osServiceCommandRunner{path: defaultSystemctl},
-		files:  storage.OSFileSystem{},
+		home:  filepath.Clean(home),
+		files: storage.OSFileSystem{},
 	}
+	matches, err := manager.unitMatches(executable)
+	if err != nil || !matches {
+		return false, err
+	}
+	systemctl, err := resolveSystemctl(defaultSystemctlCandidates, exec.LookPath, os.Stat)
+	if err != nil {
+		return false, err
+	}
+	manager.runner = osServiceCommandRunner{path: systemctl}
 	return manager.RestartIfActive(ctx, executable)
 }
