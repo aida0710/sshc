@@ -23,7 +23,7 @@ The saved record contains pane kinds, targets, the split tree, ratios and focusâ
 
 Preview the targets and expanded command, then send the command and Enter to every connected pane. SSH and local shells can be mixed; each PTY keeps its current directory, environment and shell state.
 
-On mobile, sshc shows workspace panes one at a time instead of squeezing the split layout into a narrow screen.
+On mobile, sshc shows workspace panes one at a time instead of squeezing the split layout into a narrow screen. The pane and workspace name remain visible, while rename and overflow management controls are hidden at narrow widths. Manage the layout from a desktop-width view.
 
 ## Build and reuse a workspace
 
