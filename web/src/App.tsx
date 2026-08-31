@@ -39,7 +39,7 @@ import { sectionPath, type Section } from "./routing/sectionRoute";
 import { connectionLocation } from "./routing/connectionRoute";
 import { AppHeader } from "./shell/AppHeader";
 import { AppNavigation } from "./shell/AppNavigation";
-import { MenuPanel } from "./shell/MenuPanel";
+import { MenuPanel, type MenuGroup } from "./shell/MenuPanel";
 import {
   clampNavigationWidth,
   detectNavigationVisible,
@@ -80,6 +80,11 @@ import { useAppSession } from "./session/useAppSession";
 import { useTerminalWorkspaceController } from "./terminal/useTerminalWorkspaceController";
 import { useDismissibleLayer } from "./ui/useDismissibleLayer";
 import { useMediaQuery } from "./ui/useMediaQuery";
+import {
+  parseSettingsPage,
+  settingsPageMeta,
+  settingsPages,
+} from "./settings/settingsRoute";
 
 export { vaultStatePollIntervalMs } from "./session/useAppSession";
 
@@ -225,6 +230,41 @@ const navGroups: { label: MessageKey; sections: Section[] }[] = [
       "Sync",
       "History",
     ],
+  },
+];
+
+function sectionMenuItems(sections: Section[]) {
+  return sections.map((section) => ({
+    key: section,
+    label: sectionLabels[section],
+    icon: sectionIcons[section],
+    href: sectionPath(section),
+  }));
+}
+
+const menuGroups: MenuGroup[] = [
+  ...navGroups.slice(1, 3).map((group) => ({
+    label: group.label,
+    items: sectionMenuItems(group.sections),
+  })),
+  {
+    label: "section.settings",
+    items: settingsPages.map((page) => ({
+      key: page,
+      label: settingsPageMeta[page].label,
+      icon: settingsPageMeta[page].icon,
+      href: settingsPageMeta[page].path,
+    })),
+  },
+  {
+    label: "shell.navMaintenance",
+    items: sectionMenuItems([
+      "Diagnostics",
+      "Secrets",
+      "Snippets",
+      "Sync",
+      "History",
+    ]),
   },
 ];
 
@@ -1110,10 +1150,8 @@ function PaddedSection({
   if (section === "Menu") {
     return (
       <MenuPanel
-        groups={navGroups.slice(1)}
-        sectionIcons={sectionIcons}
-        sectionLabels={sectionLabels}
-        onNavigate={(target) => onNavigateLocation(sectionPath(target))}
+        groups={menuGroups}
+        onNavigate={onNavigateLocation}
       />
     );
   }
@@ -1148,6 +1186,7 @@ function PaddedSection({
   if (section === "Settings") {
     return (
       <SettingsPanel
+        page={parseSettingsPage(navigation.location.pathname) ?? "Engine"}
         consoles={consoles}
         onTerminalSettingsChange={onTerminalSettingsChange}
       />

@@ -56,6 +56,15 @@ export function parseSectionPath(pathname: string): SectionRoute {
       return { kind: "section", section, canonicalPath, canonical: false };
     }
   }
+  const settingsPath = canonicalSettingsPath(pathname);
+  if (settingsPath !== null) {
+    return {
+      kind: "section",
+      section: "Settings",
+      canonicalPath: settingsPath,
+      canonical: pathname === settingsPath,
+    };
+  }
   if (pathname.startsWith("/connections/")) {
     return {
       kind: "section",
@@ -66,3 +75,4 @@ export function parseSectionPath(pathname: string): SectionRoute {
   }
   return { kind: "not-found", pathname };
 }
+import { canonicalSettingsPath } from "../settings/settingsRoute";

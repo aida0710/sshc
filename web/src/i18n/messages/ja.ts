@@ -629,6 +629,16 @@ export const ja = {
   "settings.heading": "Settings",
   "settings.pageDescription":
     "ターミナルの動作、sshc の起動設定、このマシンに保存するデータの暗号化を設定します。",
+  "settings.engineDescription":
+    "sshc エンジンの待受ポートと Vault の自動ロックを設定します。",
+  "settings.terminalDescription":
+    "新しいターミナルに適用する動作、表示、操作方法を設定します。",
+  "settings.notificationsDescription":
+    "ブラウザ通知と、エージェントの状態変化を知らせる音を設定します。",
+  "settings.connectionsDescription":
+    "このブラウザで開いている接続を確認し、まとめて終了します。",
+  "settings.passwordDescription":
+    "このマシンの暗号化データを保護するマスターパスワードを変更します。",
   "secrets.heading": "Vault",
   "secrets.pageDescription":
     "名前付きのアカウントパスワードと鍵パスフレーズを管理します。値は編集時だけ表示されます。",
