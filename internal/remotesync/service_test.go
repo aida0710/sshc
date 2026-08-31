@@ -1147,16 +1147,20 @@ func TestPushRefusesAWorkspaceWithPendingRecoveryBeforeUploading(t *testing.T) {
 	if err := os.MkdirAll(root, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	target := filepath.Join(root, "interrupted.conf")
-	if err := os.WriteFile(target, []byte("Host interrupted\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
 	failure := errors.New("injected removal failure")
-	fileSystem := pendingRecoveryFileSystem{
-		FileSystem: storage.OSFileSystem{}, target: target, failure: failure,
+	fileSystem := &pendingRecoveryFileSystem{
+		FileSystem: storage.OSFileSystem{}, failure: failure,
 	}
 	workspace, err := storage.NewWorkspace(fileSystem, home)
 	if err != nil {
+		t.Fatal(err)
+	}
+	// macOS resolves /var below /private/var while constructing the workspace.
+	// Build fixture paths from the resolved root so the fault injection exercises
+	// the transaction rather than the native-path boundary.
+	target := filepath.Join(workspace.Root(), "interrupted.conf")
+	fileSystem.target = target
+	if err := os.WriteFile(target, []byte("Host interrupted\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	manager := storage.NewManager(workspace, time.Now, rand.Reader)
@@ -1202,7 +1206,7 @@ type pendingRecoveryFileSystem struct {
 	failure error
 }
 
-func (fileSystem pendingRecoveryFileSystem) Remove(path string) error {
+func (fileSystem *pendingRecoveryFileSystem) Remove(path string) error {
 	if path == fileSystem.target {
 		return fileSystem.failure
 	}
