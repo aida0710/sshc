@@ -64,6 +64,13 @@ export function terminalFitRects(page: Page): Promise<{
     return { root: rectangle(node), host: rectangle(node.parentElement!) };
   });
 }
+export function terminalHostBottomOverflow(container: Locator): Promise<number> {
+  return container.locator(ROOT).evaluate((node) => {
+    const host = node.closest("[data-terminal-host]");
+    if (host === null) return Number.POSITIVE_INFINITY;
+    return node.getBoundingClientRect().bottom - host.getBoundingClientRect().bottom;
+  });
+}
 export function viewportBackground(page: Page): Promise<string> {
   return page.locator(VIEWPORT).evaluate((node) => getComputedStyle(node as HTMLElement).backgroundColor);
 }
