@@ -50,6 +50,15 @@ describe("WorkspaceCommandCenter", () => {
     expect(close).toHaveBeenCalledTimes(1);
   });
 
+  it("closes when the backdrop is clicked", async () => {
+    const close = vi.fn();
+    render(<WorkspaceCommandCenter paneTargets={[edge]} onClose={close} />);
+
+    await userEvent.click(document.body);
+
+    expect(close).toHaveBeenCalledOnce();
+  });
+
   it("sends every connected pane even when aliases are duplicated", async () => {
     const user = userEvent.setup();
     const duplicate = { ...edge, targetId: "pane-b", sessionId: "session-b", title: "Second terminal", paneNumber: 2 };

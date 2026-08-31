@@ -115,6 +115,7 @@ export function WorkspaceCommandCenter({ paneTargets, onClose }: { paneTargets: 
     <ModalShell
       labelledBy="workspace-command-heading"
       onDismiss={onClose}
+      closeOnOutside
       initialFocusRef={closeButton}
       panelClassName="max-h-[90vh] w-full max-w-5xl overflow-auto rounded-lg p-4"
     >
