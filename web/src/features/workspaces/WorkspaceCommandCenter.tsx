@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { failureCode } from "../../api/client";
 import { useTranslate } from "../../i18n/context";
 import { snippetsApi, type Snippet } from "../../snippets/api";
 import { Button, Segmented } from "../../ui/surface";
-import { useDismissibleLayer } from "../../ui/useDismissibleLayer";
+import { ModalShell } from "../../ui/ModalShell";
 import {
   terminalCommandApi,
   type TerminalCommandDispatch,
@@ -37,7 +36,6 @@ export function WorkspaceCommandCenter({ paneTargets, onClose }: { paneTargets: 
   const [busy, setBusy] = useState(false);
   const operationSequence = useRef(0);
   const closeButton = useRef<HTMLButtonElement>(null);
-  const dialog = useRef<HTMLElement>(null);
 
   const selectedSnippet = useMemo(() => snippets.find((item) => item.id === snippetId) ?? null, [snippetId, snippets]);
   const targets = useMemo(() => paneTargets.filter((target): target is WorkspaceCommandTarget & { sessionId: string } =>
@@ -52,14 +50,6 @@ export function WorkspaceCommandCenter({ paneTargets, onClose }: { paneTargets: 
       setSnippetId((current) => current || library.snippets[0]?.id || "");
     }).catch((error: unknown) => setProblem(failureCode(error) || "snippet_failed"));
   }, []);
-
-  useDismissibleLayer({
-    open: true,
-    containerRefs: [dialog],
-    onDismiss: onClose,
-    initialFocusRef: closeButton,
-    trapFocus: true,
-  });
 
   useEffect(() => {
     operationSequence.current += 1;
@@ -121,9 +111,13 @@ export function WorkspaceCommandCenter({ paneTargets, onClose }: { paneTargets: 
     return `${target.alias} · ${target.title}${suffix}`;
   }
 
-  return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-canvas/80 p-4 backdrop-blur-sm">
-      <section ref={dialog} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="workspace-command-heading" className="max-h-[90vh] w-full max-w-5xl overflow-auto rounded-md border border-control-line bg-card p-4 shadow-2xl">
+  return (
+    <ModalShell
+      labelledBy="workspace-command-heading"
+      onDismiss={onClose}
+      initialFocusRef={closeButton}
+      panelClassName="max-h-[90vh] w-full max-w-5xl overflow-auto rounded-lg p-4"
+    >
       <div className="flex flex-col gap-3">
         <div className="flex items-center gap-3">
           <div className="grow"><h2 id="workspace-command-heading" className="text-base font-semibold">{t("workspace.broadcastHeading")}</h2><p className="mt-1 text-xs text-ink-muted">{t("workspace.broadcastDescription")}</p></div>
@@ -153,8 +147,6 @@ export function WorkspaceCommandCenter({ paneTargets, onClose }: { paneTargets: 
         {prepared === null ? null : <section className="rounded-lg border border-notice-line bg-notice p-3"><h3 className="text-sm font-medium">{t("workspace.previewHeading")}</h3><div className="mt-2 grid max-h-48 gap-2 overflow-auto md:grid-cols-2">{prepared.preview.targets.map((target) => <div key={target.targetId} className="min-w-0"><p className="truncate text-xs font-medium">{targetLabel(target)}</p><pre className="mt-1 overflow-auto rounded bg-code-bg p-2 text-xs text-code-fg">{target.command}</pre></div>)}</div><Button kind="primary" className="mt-3" disabled={busy} onClick={() => void run()}>{t("workspace.sendTargets", { count: prepared.preview.targets.length })}</Button></section>}
         {dispatch === null ? null : <section className="rounded-lg border border-line bg-card p-3"><h3 className="text-sm font-medium">{t("workspace.deliveryResults")}</h3><p className="mt-1 text-xs text-ink-muted">{t("workspace.deliveryNotice")}</p><div className="mt-2 grid max-h-56 gap-2 overflow-auto md:grid-cols-2">{dispatch.results.map((result) => <div key={result.targetId} className="min-w-0 rounded border border-line p-2"><p className="text-xs font-medium">{targetLabel(result)} · {t(result.status === "delivered" ? "workspace.delivered" : "workspace.deliveryFailed")}</p>{result.problem ? <p className="mt-1 text-xs text-danger">{result.problem}</p> : null}</div>)}</div></section>}
       </div>
-      </section>
-    </div>,
-    document.body,
+    </ModalShell>
   );
 }

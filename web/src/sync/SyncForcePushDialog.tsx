@@ -1,8 +1,8 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import type { Translate } from "../i18n/context";
 import { Field, control, sectionHeading } from "../ui/form";
 import { Button, Notice } from "../ui/surface";
-import { useDismissibleLayer } from "../ui/useDismissibleLayer";
+import { ModalShell } from "../ui/ModalShell";
 
 type SyncForcePushDialogProps = {
   busy: boolean;
@@ -24,28 +24,15 @@ export function SyncForcePushDialog({
   onSubmit,
 }: SyncForcePushDialogProps) {
   const [confirmed, setConfirmed] = useState(false);
-  const dialogRef = useRef<HTMLDivElement | null>(null);
-
-  useDismissibleLayer({
-    open: true,
-    containerRefs: [dialogRef],
-    onDismiss: () => {
-      if (!busy) onClose();
-    },
-    closeOnOutside: false,
-    trapFocus: true,
-  });
-
   return (
-    <div
-      ref={dialogRef}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="sync-force-push-heading"
-      tabIndex={-1}
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-3 sm:items-center"
+    <ModalShell
+      labelledBy="sync-force-push-heading"
+      onDismiss={() => {
+        if (!busy) onClose();
+      }}
+      placement="sheet"
+      panelClassName="flex max-h-[90vh] w-full max-w-lg flex-col overflow-auto rounded-lg"
     >
-      <section className="sshc-card flex max-h-[90vh] w-full max-w-lg flex-col overflow-auto rounded-md bg-card">
         <header className="flex items-center justify-between gap-3 border-b border-line bg-toolbar px-4 py-3">
           <h3 id="sync-force-push-heading" className={sectionHeading}>
             {t("sync.forceHeading")}
@@ -84,7 +71,6 @@ export function SyncForcePushDialog({
             {t("sync.forcePush")}
           </Button>
         </div>
-      </section>
-    </div>
+    </ModalShell>
   );
 }

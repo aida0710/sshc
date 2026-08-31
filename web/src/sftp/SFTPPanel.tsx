@@ -2,6 +2,7 @@ import { Suspense, lazy, useEffect, useRef, useState, useSyncExternalStore, type
 import { failureCode } from "../api/client";
 import { useTranslate } from "../i18n/context";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
+import { InputDialog } from "../ui/InputDialog";
 import { Button } from "../ui/surface";
 import {
   compareText,
@@ -35,6 +36,11 @@ function compactSFTPViewport(): boolean {
 }
 
 type SFTPSort = "name" | "type" | "size" | "modified" | "mode";
+
+type SFTPInputIntent =
+  | { kind: "mkdir" }
+  | { kind: "rename"; entry: RemoteEntry }
+  | { kind: "chmod"; entry: RemoteEntry };
 
 export type SFTPTarget = {
   alias: string;
@@ -103,6 +109,7 @@ export function SFTPPanel({
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState("");
   const [deleting, setDeleting] = useState<RemoteEntry | null>(null);
+  const [inputIntent, setInputIntent] = useState<SFTPInputIntent | null>(null);
   const [dragging, setDragging] = useState(false);
   const [compactViewport, setCompactViewport] = useState(compactSFTPViewport);
   const [sort, setSort] = useState<{ key: SFTPSort; direction: SortDirection }>({
@@ -286,9 +293,7 @@ export function SFTPPanel({
     }
   }
 
-  async function makeDirectory() {
-    const name = window.prompt(t("sftp.mkdirPrompt"))?.trim() ?? "";
-    if (name === "" || name.includes("/")) return;
+  async function makeDirectory(name: string) {
     const generation = loadGeneration.current;
     const targetAlias = alias;
     const targetPath = path;
@@ -304,9 +309,7 @@ export function SFTPPanel({
     }
   }
 
-  async function rename(entry: RemoteEntry) {
-    const name = window.prompt(t("sftp.renamePrompt"), entry.name)?.trim() ?? "";
-    if (name === "" || name === entry.name || name.includes("/")) return;
+  async function rename(entry: RemoteEntry, name: string) {
     const generation = loadGeneration.current;
     const targetAlias = alias;
     const targetPath = path;
@@ -404,10 +407,8 @@ export function SFTPPanel({
     }
   }
 
-  async function chmod(entry: RemoteEntry) {
+  async function chmod(entry: RemoteEntry, mode: string) {
     if (entry.type === "symlink" || entry.type === "other") return;
-    const mode = window.prompt(t("sftp.chmodPrompt"), symbolicModeToOctal(entry.mode))?.trim() ?? "";
-    if (!/^0?[0-7]{3}$/.test(mode)) return;
     const generation = loadGeneration.current;
     const targetAlias = alias;
     const targetPath = path;
@@ -459,7 +460,7 @@ export function SFTPPanel({
         >
           <div className="flex flex-wrap gap-2 border-b border-line bg-toolbar p-2">
             <Button disabled={busy || dirty || path === "/"} onClick={() => void load(parentOf(path))}>{t("sftp.up")}</Button>
-            <Button disabled={busy || alias === ""} onClick={() => void makeDirectory()}>{t("sftp.newFolder")}</Button>
+            <Button disabled={busy || alias === ""} onClick={() => setInputIntent({ kind: "mkdir" })}>{t("sftp.newFolder")}</Button>
             <Button disabled={busy || alias === ""} onClick={() => upload.current?.click()}>{t("sftp.upload")}</Button>
             <Button disabled={busy || alias === ""} onClick={() => folderUpload.current?.click()}>{t("sftp.uploadFolder")}</Button>
             <span className="ml-auto self-center text-xs text-ink-muted">{t(dragging ? "sftp.dropNow" : "sftp.dropHint")}</span>
@@ -515,8 +516,8 @@ export function SFTPPanel({
                     </button>
                     <div className="mt-2 grid grid-cols-2 gap-1 border-t border-hairline pt-2">
                       {entry.type === "file" || entry.type === "directory" ? <button className="min-h-10 rounded px-2 text-left text-xs text-accent" onClick={() => void download(entry)}>{t("sftp.download")}</button> : null}
-                      {entry.type === "file" || entry.type === "directory" ? <button className="min-h-10 rounded px-2 text-left text-xs text-accent" onClick={() => void chmod(entry)}>{t("sftp.chmod")}</button> : null}
-                      <button className="min-h-10 rounded px-2 text-left text-xs text-accent" onClick={() => void rename(entry)}>{t("sftp.rename")}</button>
+                      {entry.type === "file" || entry.type === "directory" ? <button className="min-h-10 rounded px-2 text-left text-xs text-accent" onClick={() => setInputIntent({ kind: "chmod", entry })}>{t("sftp.chmod")}</button> : null}
+                      <button className="min-h-10 rounded px-2 text-left text-xs text-accent" onClick={() => setInputIntent({ kind: "rename", entry })}>{t("sftp.rename")}</button>
                       <button className="min-h-10 rounded px-2 text-left text-xs text-danger" onClick={() => setDeleting(entry)}>{t("sftp.delete")}</button>
                     </div>
                   </li>
@@ -538,8 +539,8 @@ export function SFTPPanel({
                       <button type="button" className="block w-full truncate text-left font-mono hover:text-accent" onClick={() => entry.type === "directory" ? void load(entry.path) : void openText(entry)}>{entry.type === "directory" ? "▸ " : ""}{entry.name}</button>
                       <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1">
                         {entry.type === "file" || entry.type === "directory" ? <button className="text-xs text-accent" onClick={() => void download(entry)}>{t("sftp.download")}</button> : null}
-                        {entry.type === "file" || entry.type === "directory" ? <button className="text-xs text-accent" onClick={() => void chmod(entry)}>{t("sftp.chmod")}</button> : null}
-                        <button className="text-xs text-accent" onClick={() => void rename(entry)}>{t("sftp.rename")}</button>
+                        {entry.type === "file" || entry.type === "directory" ? <button className="text-xs text-accent" onClick={() => setInputIntent({ kind: "chmod", entry })}>{t("sftp.chmod")}</button> : null}
+                        <button className="text-xs text-accent" onClick={() => setInputIntent({ kind: "rename", entry })}>{t("sftp.rename")}</button>
                         <button className="text-xs text-danger" onClick={() => setDeleting(entry)}>{t("sftp.delete")}</button>
                       </div>
                     </td>
@@ -585,6 +586,32 @@ export function SFTPPanel({
           cancelLabel={t("sftp.cancel")}
           onConfirm={() => void remove()}
           onCancel={() => setDeleting(null)}
+        />
+      )}
+      {inputIntent === null ? null : (
+        <InputDialog
+          id="sftp-input-heading"
+          heading={t(inputIntent.kind === "mkdir" ? "sftp.newFolder" : inputIntent.kind === "rename" ? "sftp.rename" : "sftp.chmod")}
+          label={t(inputIntent.kind === "chmod" ? "sftp.chmodPrompt" : inputIntent.kind === "rename" ? "sftp.renamePrompt" : "sftp.mkdirPrompt")}
+          initialValue={inputIntent.kind === "mkdir" ? "" : inputIntent.kind === "rename" ? inputIntent.entry.name : symbolicModeToOctal(inputIntent.entry.mode)}
+          inputMode={inputIntent.kind === "chmod" ? "numeric" : "text"}
+          submitLabel={t(inputIntent.kind === "mkdir" ? "sftp.newFolder" : inputIntent.kind === "rename" ? "sftp.rename" : "sftp.chmod")}
+          cancelLabel={t("sftp.cancel")}
+          validate={(value) => {
+            if (inputIntent.kind === "chmod") return /^0?[0-7]{3}$/.test(value) ? "" : t("sftp.chmodInvalid");
+            if (value === "") return t("sftp.nameRequired");
+            if (value.includes("/")) return t("sftp.nameInvalid");
+            if (inputIntent.kind === "rename" && value === inputIntent.entry.name) return t("sftp.renameUnchanged");
+            return "";
+          }}
+          onSubmit={(value) => {
+            const intent = inputIntent;
+            setInputIntent(null);
+            if (intent.kind === "mkdir") void makeDirectory(value);
+            else if (intent.kind === "rename") void rename(intent.entry, value);
+            else void chmod(intent.entry, value);
+          }}
+          onCancel={() => setInputIntent(null)}
         />
       )}
     </section>

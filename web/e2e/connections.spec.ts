@@ -304,13 +304,19 @@ test("keeps a Basic draft while changing group scope and asks before a connectio
   expect(new URL(page.url()).pathname).toBe("/connections/servers");
   await expect(page.getByLabel("Port", { exact: true })).toHaveValue("2244");
 
-  page.once("dialog", async (dialog) => dialog.dismiss());
   await browser.getByRole("button", { name: "nas" }).click();
+  const firstDiscard = page.getByRole("dialog", { name: "Discard changes" });
+  await expect(firstDiscard).toBeVisible();
+  if (process.env.SSHC_VISUAL_DIR !== undefined) {
+    await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/connection-discard-modal.png`, fullPage: true });
+  }
+  await firstDiscard.getByRole("button", { name: "Keep editing" }).click();
   await expect(page.getByRole("heading", { name: "bastion", exact: true })).toBeVisible();
   await expect(page.getByLabel("Port", { exact: true })).toHaveValue("2244");
 
-  page.once("dialog", async (dialog) => dialog.accept());
   await browser.getByRole("button", { name: "nas" }).click();
+  const secondDiscard = page.getByRole("dialog", { name: "Discard changes" });
+  await secondDiscard.getByRole("button", { name: "Discard changes" }).click();
   await expect(page.getByRole("heading", { name: "nas", exact: true })).toBeVisible();
 });
 

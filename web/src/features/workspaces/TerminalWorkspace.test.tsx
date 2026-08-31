@@ -370,7 +370,6 @@ describe("TerminalWorkspace pane movement", () => {
       updatedAt: "2026-08-24T10:00:00Z",
     });
     workspace.list.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
-    vi.spyOn(window, "prompt").mockReturnValue("Local pair");
 
     function LocalHarness() {
       const [active, setActive] = useState(localPrimary.id);
@@ -392,6 +391,8 @@ describe("TerminalWorkspace pane movement", () => {
 
     await userEvent.click(screen.getByText("Saved layouts", { selector: "summary" }));
     await userEvent.click(screen.getByRole("button", { name: "Save with a name" }));
+    await userEvent.type(screen.getByRole("textbox", { name: "Saved layout name" }), "Local pair");
+    await userEvent.click(screen.getByRole("button", { name: "Save layout" }));
     await waitFor(() => expect(workspace.create).toHaveBeenCalledWith(expect.objectContaining({
       name: "Local pair",
       layout: expect.objectContaining({
