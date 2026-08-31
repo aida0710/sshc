@@ -318,8 +318,12 @@ func Build(manifest Manifest, contents map[string][]byte) ([]byte, error) {
 		return nil, ErrSnapshotTooLarge
 	}
 	sort.Slice(manifest.Files, func(i, j int) bool { return manifest.Files[i].Path < manifest.Files[j].Path })
+	paths := newPortablePathSet()
 	for _, entry := range manifest.Files {
 		if err := checkPath(entry.Path); err != nil {
+			return nil, err
+		}
+		if err := paths.add(entry.Path); err != nil {
 			return nil, err
 		}
 		if err := checkMode(entry.Mode); err != nil {
@@ -395,6 +399,7 @@ func Read(archive []byte) (Manifest, map[string][]byte, error) {
 	var manifest Manifest
 	seenManifest := false
 	contents := map[string][]byte{}
+	archivePaths := newPortablePathSet()
 	total := 0
 
 	for {
@@ -442,6 +447,9 @@ func Read(archive []byte) (Manifest, map[string][]byte, error) {
 		if inboundReserved(header.Name) {
 			return Manifest{}, nil, ErrUnsafePath
 		}
+		if err := archivePaths.add(header.Name); err != nil {
+			return Manifest{}, nil, err
+		}
 		contents[header.Name] = body
 	}
 
@@ -455,8 +463,12 @@ func Read(archive []byte) (Manifest, map[string][]byte, error) {
 	if len(manifest.Files) != len(contents) {
 		return Manifest{}, nil, ErrManifestMismatch
 	}
+	manifestPaths := newPortablePathSet()
 	for _, entry := range manifest.Files {
 		if err := checkPath(entry.Path); err != nil {
+			return Manifest{}, nil, err
+		}
+		if err := manifestPaths.add(entry.Path); err != nil {
 			return Manifest{}, nil, err
 		}
 		if inboundReserved(entry.Path) {
@@ -525,6 +537,49 @@ func windowsReservedName(segment string) bool {
 		return runes[3] >= '1' && runes[3] <= '9' || strings.ContainsRune("¹²³", runes[3])
 	}
 	return false
+}
+
+type portablePathNode struct {
+	spelling string
+	file     bool
+	children map[string]*portablePathNode
+}
+
+type portablePathSet struct {
+	root portablePathNode
+}
+
+func newPortablePathSet() *portablePathSet {
+	return &portablePathSet{root: portablePathNode{children: map[string]*portablePathNode{}}}
+}
+
+// add models the case-insensitive namespace used by supported Windows file
+// systems. A case-only spelling difference in a directory is rejected too:
+// otherwise a Windows round trip would silently rewrite every child path.
+func (paths *portablePathSet) add(name string) error {
+	node := &paths.root
+	segments := strings.Split(name, "/")
+	for index, segment := range segments {
+		if node.file {
+			return ErrUnsafePath
+		}
+		folded := strings.ToLower(segment)
+		child := node.children[folded]
+		if child == nil {
+			child = &portablePathNode{spelling: segment, children: map[string]*portablePathNode{}}
+			node.children[folded] = child
+		} else if child.spelling != segment {
+			return ErrUnsafePath
+		}
+		node = child
+		if index == len(segments)-1 {
+			if node.file || len(node.children) != 0 {
+				return ErrUnsafePath
+			}
+			node.file = true
+		}
+	}
+	return nil
 }
 
 // checkMode は、このアプリケーションが書く二つの権限セットだけを受け付ける。それ

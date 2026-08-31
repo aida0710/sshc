@@ -709,6 +709,21 @@ func TestCollectRefusesAPathWindowsCannotRepresent(t *testing.T) {
 	}
 }
 
+func TestCollectRefusesCaseInsensitivePathCollisionsOnLinux(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("this fixture requires a case-sensitive Linux filesystem")
+	}
+	for _, files := range []map[string]string{
+		{"config": "lower", "CONFIG": "upper"},
+		{"Connections/a.conf": "upper directory", "connections/b.conf": "lower directory"},
+	} {
+		installation := newInstallation(t, &fakeBucket{}, files)
+		if _, _, err := installation.service.Collect(); !errors.Is(err, remotesync.ErrUnsafePath) {
+			t.Fatalf("Collect(%v) = %v, want ErrUnsafePath", files, err)
+		}
+	}
+}
+
 func TestCollectUsesDefaultAndSharedExclusionRules(t *testing.T) {
 	installation := newInstallation(t, &fakeBucket{}, map[string]string{
 		"config":                     "Host bastion\n",
