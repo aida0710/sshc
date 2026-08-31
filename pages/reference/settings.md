@@ -5,7 +5,7 @@ description: 外観、Terminalの入力、通知、ローカルシェルに関�
 
 # 設定
 
-設定はMenu → Settingsから変更できます。接続先ごとの項目は、Connectionsのsshcタブにあります。
+Menuの「Settings」には、エンジン、ターミナル、通知、開いている接続、マスターパスワードへのリンクがあります。それぞれ独立したページとして直接開けます。接続先ごとの項目は、Connectionsのsshcタブにあります。
 
 ## 外観
 
