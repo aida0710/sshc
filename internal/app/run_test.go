@@ -20,9 +20,11 @@ import (
 	"testing"
 	"testing/fstest"
 
+	"sshc/internal/browserauth"
 	"sshc/internal/handoff"
 	"sshc/internal/httpserver"
 	"sshc/internal/platform"
+	"sshc/internal/storage"
 )
 
 func TestRunUsesRandomIPv4LoopbackAndReturnsOnCancel(t *testing.T) {
@@ -80,6 +82,43 @@ func TestRunUsesRandomIPv4LoopbackAndReturnsOnCancel(t *testing.T) {
 	cancel()
 	if err := <-done; err != nil {
 		t.Fatalf("Run = %v", err)
+	}
+}
+
+func TestDesktopDefaultPortFallsBackOnceAndPersistsTheActualOrigin(t *testing.T) {
+	home := t.TempDir()
+	ctx, cancel := context.WithCancel(context.Background())
+	var actualPort int
+	dependencies := Dependencies{
+		Random:      bytes.NewReader(bytes.Repeat([]byte{0x83}, 512)),
+		DefaultPort: DefaultPort,
+		Announce: func(Readiness) error {
+			cancel()
+			return nil
+		},
+		Listen: func(network, address string) (net.Listener, error) {
+			if address == net.JoinHostPort("127.0.0.1", strconv.Itoa(DefaultPort)) {
+				return nil, errors.New("occupied by another user")
+			}
+			listener, err := net.Listen(network, "127.0.0.1:0")
+			if err == nil {
+				actualPort = listener.Addr().(*net.TCPAddr).Port
+			}
+			return listener, err
+		},
+		UI: fstest.MapFS{"index.html": {Data: []byte("ok")}}, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Home: home, Owner: handoff.OwnerEngine, PID: 4242,
+	}
+	if err := Run(ctx, dependencies, "test"); err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stored, err := browserauth.NewStore(workspace, bytes.NewReader(nil)).Port()
+	if err != nil || stored != actualPort || stored == 0 || stored == DefaultPort {
+		t.Fatalf("stored port=%d actual=%d err=%v", stored, actualPort, err)
 	}
 }
 

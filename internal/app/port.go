@@ -12,6 +12,8 @@ import (
 // listen port を決定する。
 
 const (
+	// DefaultPort gives bookmarks and installed web apps a stable origin.
+	DefaultPort = 54447
 	// LowestPort は、無作為に選ぶ範囲の下端である。
 	LowestPort = 30000
 	// HighestPort は、上端である。

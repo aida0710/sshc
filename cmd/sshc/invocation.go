@@ -415,7 +415,7 @@ func usage(out io.Writer) {
 	fmt.Fprint(out, `usage:
   sshc                 open the UI for the running engine
   sshc engine          start the engine in the foreground
-                       --port <n>  listen there instead of a random port
+                       --port <n>  listen there instead of the preferred port 54447
                        --replace   stop the running engine first, without asking
   sshc ssh [<alias>]   choose a host, or connect to one from ~/.ssh/config
                        --list      print every concrete Host alias

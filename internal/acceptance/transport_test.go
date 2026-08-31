@@ -19,7 +19,7 @@ import (
 // 要るようにし、迷い込んだ 'unsafe-inline' が気づかれず紛れ込めないようにする。
 const expectedContentSecurityPolicy = "default-src 'self'; base-uri 'none'; object-src 'none'; " +
 	"frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
-	"img-src 'self' data:; connect-src 'self'; require-trusted-types-for 'script'"
+	"img-src 'self' data:; connect-src 'self'; trusted-types sshc-service-worker; require-trusted-types-for 'script'"
 
 // transportProblemCodes は、検査対象の transport check が拒否した
 // 証拠としてこの suite が受け入れる唯一の拒否である。
@@ -95,10 +95,12 @@ func TestEveryAPIRouteRefusesTheWrongHostOriginAndFetchSite(t *testing.T) {
 	}
 }
 
+// The historical test name is a design-proof identifier. "Bootstrap" here covers both
+// one-time bootstrap and registered-browser recovery, the two session entry routes.
 func TestEveryAPIRouteExceptBootstrapRequiresASession(t *testing.T) {
 	f := newFixture(t)
 	for _, route := range f.apiRoutes() {
-		if route.Path == "/api/v1/session/bootstrap" {
+		if route.Path == "/api/v1/session/bootstrap" || route.Path == "/api/v1/session/recover" {
 			continue
 		}
 		path := f.concretePath(route.Path)
@@ -127,12 +129,13 @@ func TestEveryAPIRouteExceptBootstrapRequiresASession(t *testing.T) {
 // それ自体が site なので、同じアドレスの別のポートで動くサーバーがこの
 // cookie を受け取る。受け取っても、token は受け取らない。
 func TestEveryAPIRouteThatChangesSomethingRequiresTheCSRFHeader(t *testing.T) {
-	// 除外は 2 つだけで、どちらもトークンをまだ持てない要求である。
+	// 除外はsession entryだけで、いずれもCSRF tokenをまだ持てない要求である。
 	//
 	// 一覧にして持つのは、3 つ目が足された日に気づくためである。除外を
 	// middleware の条件式の中だけに置くと、増えたことは誰にも見えない。
 	exempt := map[string]string{
 		"/api/v1/session/bootstrap": "セッションを作る要求である。作る前にトークンは無い",
+		"/api/v1/session/recover":   "登録済みブラウザーがengine再起動後のセッションを作る要求である",
 		"/api/v1/session/renew":     "トークンを失ったページがそれを得る手段である。reload には cookie しか無い",
 	}
 	f := newFixture(t)

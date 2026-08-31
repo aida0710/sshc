@@ -31,7 +31,7 @@ const (
 	// 描画できる。前者に必要な注入点をこのアプリケーションは持たない。React が
 	// エスケープし、dangerouslySetInnerHTML はどこにも無く、スクリプトは
 	// 依然として止まる。README の「SSH 実行の境界」に同じことが書いてある。
-	contentSecurityPolicy = "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; require-trusted-types-for 'script'"
+	contentSecurityPolicy = "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; trusted-types sshc-service-worker; require-trusted-types-for 'script'"
 
 	// spaFallbackRoute は single-page application を配信するパターンである。
 	// これにしかマッチしなかったリクエストは、どの API ルートにもマッチしなかったことになる。
@@ -56,7 +56,7 @@ func gateExempt(method, path string) bool {
 	switch path {
 	case "/api/v1/health":
 		return method == http.MethodGet
-	case "/api/v1/session/bootstrap", "/api/v1/session/renew":
+	case "/api/v1/session/bootstrap", "/api/v1/session/recover", "/api/v1/session/renew":
 		return method == http.MethodPost
 	case "/api/v1/passwords":
 		return method == http.MethodGet
@@ -102,12 +102,13 @@ func (s Security) Middleware(next echo.HandlerFunc) echo.HandlerFunc {
 			request.Body = http.MaxBytesReader(c.Response(), request.Body, MaxRequestBodyCeiling)
 		}
 
-		isBootstrap := request.Method == http.MethodPost && request.URL.Path == "/api/v1/session/bootstrap"
+		isSessionEntry := request.Method == http.MethodPost &&
+			(request.URL.Path == "/api/v1/session/bootstrap" || request.URL.Path == "/api/v1/session/recover")
 		isStateChanging := request.Method != http.MethodGet && request.Method != http.MethodHead
-		if (isStateChanging || isBootstrap) && request.Header.Get(echo.HeaderOrigin) != s.ExpectedOrigin {
+		if (isStateChanging || isSessionEntry) && request.Header.Get(echo.HeaderOrigin) != s.ExpectedOrigin {
 			return problem(c, http.StatusForbidden, "cross_site_request")
 		}
-		if isBootstrap {
+		if isSessionEntry {
 			return next(c)
 		}
 
