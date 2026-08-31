@@ -133,6 +133,37 @@ func TestLinuxServiceStatusDistinguishesManagedStates(t *testing.T) {
 	}
 }
 
+func TestLinuxServiceRestartTouchesOnlyAnActiveManagedUnit(t *testing.T) {
+	runner := &fakeServiceCommandRunner{results: []serviceCommandResult{{ExitCode: 0}, {ExitCode: 0}}}
+	manager := testLinuxServiceManager(t, runner)
+	if err := os.MkdirAll(filepath.Dir(manager.unitPath()), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	unit, err := systemdUnit("/opt/sshc/bin/sshc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(manager.unitPath(), []byte(unit), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	restarted, err := manager.RestartIfActive(context.Background())
+	if err != nil || !restarted {
+		t.Fatalf("restart = %v, %v", restarted, err)
+	}
+	if len(runner.calls) != 2 || strings.Join(runner.calls[1], " ") != "--user restart sshc.service" {
+		t.Fatalf("calls = %#v", runner.calls)
+	}
+
+	manual := []byte("[Service]\nExecStart=/custom/sshc engine\n")
+	if err := os.WriteFile(manager.unitPath(), manual, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	restarted, err = manager.RestartIfActive(context.Background())
+	if err != nil || restarted || len(runner.calls) != 2 {
+		t.Fatalf("unmanaged restart = %v, %v calls=%#v", restarted, err, runner.calls)
+	}
+}
+
 func TestLinuxServiceDisableRemovesOnlyManagedUnit(t *testing.T) {
 	runner := &fakeServiceCommandRunner{}
 	manager := testLinuxServiceManager(t, runner)
