@@ -150,6 +150,11 @@ type Request struct {
 	// RemoveDirectories は他のすべてのあとで、深いものから順に適用され、その時点で
 	// それぞれ空でなければならない。
 	RemoveDirectories []DirectoryRemoval
+	// FinalChanges are staged with every other write, but applied only after all
+	// moves, removals, and directory removals have succeeded. Generation markers
+	// such as sync-state belong here so they can never acknowledge a partially
+	// applied workspace.
+	FinalChanges []Change
 }
 
 // Result は、完了したトランザクションを記述する。
@@ -350,7 +355,7 @@ func (m *Manager) CommitAtomic(request Request) (Result, error) {
 	if len(request.Moves) > 0 || len(request.Removals) > 0 || len(request.RemoveDirectories) > 0 {
 		return Result{}, ErrAtomicWriteOnly
 	}
-	for _, change := range request.Changes {
+	for _, change := range append(append([]Change(nil), request.Changes...), request.FinalChanges...) {
 		if change.SkipBackup {
 			return Result{}, ErrAtomicWriteOnly
 		}
@@ -373,7 +378,7 @@ func (m *Manager) CommitAtomicDiscardBackups(request Request) (Result, error) {
 	if len(request.Directories) > 0 || len(request.Moves) > 0 || len(request.Removals) > 0 || len(request.RemoveDirectories) > 0 {
 		return Result{}, ErrAtomicWriteOnly
 	}
-	for _, change := range request.Changes {
+	for _, change := range append(append([]Change(nil), request.Changes...), request.FinalChanges...) {
 		if change.SkipBackup {
 			return Result{}, ErrAtomicWriteOnly
 		}
@@ -399,7 +404,7 @@ func (m *Manager) CommitAtomicDiscardBackupsAndPublish(request Request, publish 
 	if len(request.Directories) > 0 || len(request.Moves) > 0 || len(request.Removals) > 0 || len(request.RemoveDirectories) > 0 {
 		return Result{}, ErrAtomicWriteOnly
 	}
-	for _, change := range request.Changes {
+	for _, change := range append(append([]Change(nil), request.Changes...), request.FinalChanges...) {
 		if change.SkipBackup {
 			return Result{}, ErrAtomicWriteOnly
 		}
@@ -465,7 +470,7 @@ func (m *Manager) commit(request Request, rollbackOnError, discardBackups bool, 
 	if request.Operation == "" {
 		return Result{}, ErrInvalidOperation
 	}
-	if len(request.Changes)+len(request.Moves)+len(request.Removals)+
+	if len(request.Changes)+len(request.FinalChanges)+len(request.Moves)+len(request.Removals)+
 		len(request.Directories)+len(request.RemoveDirectories) == 0 {
 		return Result{}, ErrNoChanges
 	}
@@ -477,7 +482,7 @@ func (m *Manager) commit(request Request, rollbackOnError, discardBackups bool, 
 
 	fileSystem := m.workspace.FileSystem()
 
-	capacity := len(request.Changes) + len(request.Moves) + len(request.Removals) +
+	capacity := len(request.Changes) + len(request.FinalChanges) + len(request.Moves) + len(request.Removals) +
 		len(request.Directories) + len(request.RemoveDirectories)
 	// 計画を組むのは commitBuilder である。ここから下はもう組み立てない。
 	// 記録し、ステージし、置き換えるだけである。
@@ -1001,7 +1006,7 @@ func (b *commitBuilder) claim(path string) error {
 func (b *commitBuilder) stage() error {
 	for _, phase := range []func() error{
 		b.stageDirectories, b.stageChanges, b.stageMoves,
-		b.stageRemovals, b.stageDirectoryRemovals,
+		b.stageRemovals, b.stageDirectoryRemovals, b.stageFinalChanges,
 	} {
 		if err := phase(); err != nil {
 			return err
@@ -1045,7 +1050,18 @@ func (b *commitBuilder) stageDirectories() error {
 
 // stageChanges は、ファイルの置き換えを計画する。前提条件が合わなければ、ここで衝突を返す。
 func (b *commitBuilder) stageChanges() error {
-	for _, change := range b.request.Changes {
+	return b.stageChangeSet(b.request.Changes)
+}
+
+// stageFinalChanges uses the same validation and staging contract as an
+// ordinary write. Its position in stage() is the only difference and is the
+// durable guarantee: recovery replays the recorded entry order unchanged.
+func (b *commitBuilder) stageFinalChanges() error {
+	return b.stageChangeSet(b.request.FinalChanges)
+}
+
+func (b *commitBuilder) stageChangeSet(changes []Change) error {
+	for _, change := range changes {
 		target, err := b.manager.workspace.ResolveForWriteUnder(change.Path, b.planned)
 		if err != nil {
 			return err
