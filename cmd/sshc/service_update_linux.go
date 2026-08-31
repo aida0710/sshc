@@ -23,8 +23,9 @@ func restartManagedServiceAfterUpdate(ctx context.Context, executable string) (b
 	// systemdがないLinuxでも、管理unitが存在しない通常のupdateを妨げない。
 	// Statusはunitがsshc管理下で動作中と確認した場合だけsystemctlを実行する。
 	manager := &linuxServiceManager{
-		home:  filepath.Clean(home),
-		files: storage.OSFileSystem{},
+		home:      filepath.Clean(home),
+		files:     storage.OSFileSystem{},
+		waitReady: waitForServiceReady,
 	}
 	matches, err := manager.unitMatches(executable)
 	if err != nil || !matches {
