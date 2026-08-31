@@ -36,8 +36,8 @@ type SyncHandlers struct {
 	Reach func(ctx context.Context, client *remotesync.Client, key string) error
 	// Auto は自動同期の巡回処理。nil の場合は無効として応答する。
 	Auto *remotesync.Auto
-	// Actions binds a destructive force push to the exact remote ETag which the
-	// user inspected and confirmed.
+	// Actions binds a destructive force push to the exact binding generation,
+	// target identity, and remote ETag which the user inspected and confirmed.
 	Actions ActionHandlers
 }
 

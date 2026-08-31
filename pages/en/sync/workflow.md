@@ -28,7 +28,7 @@ The configured direction limits automatic work:
 
 When receive-only history diverges, automatic receive stops rather than rolling local state back. Review the current remote to see its creation time, source, and changed files, then explicitly accept it as authoritative. Receive-only operations do not write to S3.
 
-Force Push issues a short-lived confirmation token bound to the configured target and its current live ETag. The write uses a conditional PUT against that ETag, so a later remote write is rejected without overwriting it. Changing the bucket or path also invalidates the token.
+Force Push issues a short-lived confirmation token bound to the configured binding generation, target identity, and current live ETag. Inside the operation lock, sshc verifies the same binding and target again before using a conditional PUT against that ETag. A later remote write or a switch to another bucket or path—even one with the same ETag—is therefore rejected without overwriting it.
 
 Force Pull previews conflicts and removals with the remote selected as authoritative. Apply verifies the same ETag and revision again and writes nothing locally if the remote changed.
 

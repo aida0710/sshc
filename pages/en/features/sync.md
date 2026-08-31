@@ -37,7 +37,7 @@ During receive, files are restored from the authoritative remote snapshot with t
 - Review changes previews local and remote differences.
 - Push writes conditionally against the remote ETag last acknowledged by this device.
 - Pull applies only when the previewed ETag and revision still match.
-- Force Push replaces the remote through a confirmation token bound to the configured target and its current live ETag.
+- Force Push replaces the remote through a confirmation token bound to the configured binding generation, target, and current live ETag.
 - Force Pull resolves conflicts and removals in favor of the remote, then applies only the previewed ETag and revision.
 - History reads earlier snapshots directly from the bucket.
 
