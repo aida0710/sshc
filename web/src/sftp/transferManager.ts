@@ -249,6 +249,24 @@ export class SFTPTransferManager {
     await Promise.all(this.jobs.filter((job) => job.batchId === batchId && job.status === "failed").map((job) => this.retry(job.id)));
   }
 
+  async pauseAll(): Promise<void> {
+    await Promise.all([...this.jobs]
+      .filter((job) => job.allowedActions.includes("pause"))
+      .map((job) => this.pause(job.id)));
+  }
+
+  async resumeAll(): Promise<void> {
+    await Promise.all([...this.jobs]
+      .filter((job) => job.allowedActions.includes("resume") && job.status !== "needs_overwrite")
+      .map((job) => this.resume(job.id)));
+  }
+
+  async cancelAll(): Promise<void> {
+    for (const job of [...this.jobs]) {
+      if (this.find(job.id)?.allowedActions.includes("cancel")) await this.cancel(job.id);
+    }
+  }
+
   async overwrite(id: string): Promise<void> {
     const job = this.find(id);
     if (job === undefined || job.status !== "needs_overwrite" || !this.files.has(id)) return;
