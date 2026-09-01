@@ -21,7 +21,7 @@ import (
 func TestRunUpdateRefusesAnUnmanagedExecutableBeforeNetworkAccess(t *testing.T) {
 	latestCalled := false
 	var stderr bytes.Buffer
-	code := runUpdate(context.Background(), "dev", io.Discard, &stderr, updateDependencies{
+	code := runUpdate(context.Background(), "dev", true, io.Discard, &stderr, updateDependencies{
 		executable: func() (string, error) { return "/tmp/sshc", nil },
 		detect: func(string) (installation, error) {
 			return installation{manager: managerUnknown}, nil
@@ -39,7 +39,7 @@ func TestRunUpdateRefusesAnUnmanagedExecutableBeforeNetworkAccess(t *testing.T) 
 func TestRunUpdateSkipsTheInstallerWhenAlreadyCurrent(t *testing.T) {
 	installed := false
 	var stdout bytes.Buffer
-	code := runUpdate(context.Background(), "0.14.0", &stdout, io.Discard, updateDependencies{
+	code := runUpdate(context.Background(), "0.14.0", true, &stdout, io.Discard, updateDependencies{
 		executable: func() (string, error) { return "/managed/sshc", nil },
 		detect: func(string) (installation, error) {
 			return installation{manager: managerHomebrew}, nil
@@ -60,7 +60,7 @@ func TestRunUpdateSkipsTheInstallerWhenAlreadyCurrent(t *testing.T) {
 func TestRunUpdateDelegatesANewerStableRelease(t *testing.T) {
 	var got selfupdate.Release
 	var stdout bytes.Buffer
-	code := runUpdate(context.Background(), "v0.13.6", &stdout, io.Discard, updateDependencies{
+	code := runUpdate(context.Background(), "v0.13.6", true, &stdout, io.Discard, updateDependencies{
 		executable: func() (string, error) { return "/managed/sshc", nil },
 		detect: func(string) (installation, error) {
 			return installation{manager: managerShell}, nil
@@ -81,7 +81,7 @@ func TestRunUpdateDelegatesANewerStableRelease(t *testing.T) {
 func TestRunUpdateRestartsAnActiveManagedService(t *testing.T) {
 	restarted := false
 	var stdout bytes.Buffer
-	code := runUpdate(context.Background(), "v0.13.6", &stdout, io.Discard, updateDependencies{
+	code := runUpdate(context.Background(), "v0.13.6", true, &stdout, io.Discard, updateDependencies{
 		executable: func() (string, error) { return "/managed/sshc", nil },
 		detect: func(string) (installation, error) {
 			return installation{manager: managerShell}, nil
@@ -111,7 +111,7 @@ func TestRunUpdateRestartsAnActiveManagedService(t *testing.T) {
 
 func TestRunUpdateReportsAPartialSuccessWhenManagedServiceRestartFails(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	code := runUpdate(context.Background(), "v0.13.6", &stdout, &stderr, updateDependencies{
+	code := runUpdate(context.Background(), "v0.13.6", true, &stdout, &stderr, updateDependencies{
 		executable: func() (string, error) { return "/managed/sshc", nil },
 		detect: func(string) (installation, error) {
 			return installation{manager: managerShell}, nil
@@ -138,7 +138,7 @@ func TestRunUpdateReportsAPartialSuccessWhenManagedServiceRestartFails(t *testin
 
 func TestRunUpdateRejectsAnInvalidRemoteTag(t *testing.T) {
 	var stderr bytes.Buffer
-	code := runUpdate(context.Background(), "v0.13.6", io.Discard, &stderr, updateDependencies{
+	code := runUpdate(context.Background(), "v0.13.6", true, io.Discard, &stderr, updateDependencies{
 		executable: func() (string, error) { return "/managed/sshc", nil },
 		detect: func(string) (installation, error) {
 			return installation{manager: managerShell}, nil
@@ -149,6 +149,32 @@ func TestRunUpdateRejectsAnInvalidRemoteTag(t *testing.T) {
 	})
 	if code != 1 || !strings.Contains(stderr.String(), "invalid version") {
 		t.Fatalf("code=%d stderr=%q", code, stderr.String())
+	}
+}
+
+func TestRunUpdateConfirmsBeforeInstallingANewerRelease(t *testing.T) {
+	installed := false
+	confirmed := 0
+	var stdout bytes.Buffer
+	code := runUpdate(context.Background(), "v0.13.6", false, &stdout, io.Discard, updateDependencies{
+		executable: func() (string, error) { return "/managed/sshc", nil },
+		detect: func(string) (installation, error) {
+			return installation{manager: managerShell, executable: "/managed/sshc"}, nil
+		},
+		latest: func(context.Context) (selfupdate.Release, error) {
+			return selfupdate.Release{Version: "v0.14.0"}, nil
+		},
+		install: func(context.Context, installation, selfupdate.Release, io.Writer, io.Writer) error {
+			installed = true
+			return nil
+		},
+		confirm: func(context.Context, string) (bool, error) {
+			confirmed++
+			return false, nil
+		},
+	})
+	if code != 0 || installed || confirmed != 1 || !strings.Contains(stdout.String(), "canceled") {
+		t.Fatalf("code=%d installed=%v confirmed=%d stdout=%q", code, installed, confirmed, stdout.String())
 	}
 }
 

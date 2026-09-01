@@ -6,9 +6,12 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"time"
 )
 
-var errUnmanagedServiceUnit = errors.New("the existing sshc.service is not managed by sshc")
+var errUnmanagedServiceUnit = errors.New("the existing service definition is not managed by sshc")
+
+const serviceReadyTimeout = 5 * time.Second
 
 type serviceState uint8
 
@@ -20,21 +23,25 @@ const (
 )
 
 type engineServiceManager interface {
+	InstallPlan(string) (string, error)
 	Install(context.Context, string) error
 	Status(context.Context) (serviceState, error)
 	RestartIfActive(context.Context, string) (bool, error)
 	Disable(context.Context) (bool, error)
+	DisablePlan() string
 }
 
 type serviceDependencies struct {
 	manager    func(string) (engineServiceManager, error)
 	executable func(context.Context) (string, error)
+	confirm    actionConfirmer
 }
 
 func defaultServiceDependencies() serviceDependencies {
 	return serviceDependencies{
 		manager:    newPlatformServiceManager,
 		executable: managedServiceExecutable,
+		confirm:    systemActionConfirmer,
 	}
 }
 
@@ -66,6 +73,7 @@ func managedInstallationExecutable(ctx context.Context, found installation, comm
 func runService(
 	ctx context.Context,
 	action string,
+	yes bool,
 	home string,
 	stdout, stderr io.Writer,
 	dependencies serviceDependencies,
@@ -83,13 +91,27 @@ func runService(
 			fmt.Fprintf(stderr, "sshc: choose a stable service executable: %v\n", err)
 			return 1
 		}
+		plan, err := manager.InstallPlan(executable)
+		if err != nil {
+			fmt.Fprintf(stderr, "sshc: plan service installation: %v\n", err)
+			return 1
+		}
+		fmt.Fprintf(stdout, "sshc: %s\n", plan)
+		confirmed, code := confirmAction(ctx, yes, "Continue? [y/N] ", dependencies.confirm, stderr)
+		if code != 0 {
+			return code
+		}
+		if !confirmed {
+			fmt.Fprintln(stdout, "sshc: canceled; nothing changed")
+			return 0
+		}
 		if err := manager.Install(ctx, executable); err != nil {
 			if errors.Is(ctx.Err(), context.Canceled) {
 				return 130
 			}
 			if errors.Is(err, errUnmanagedServiceUnit) {
-				fmt.Fprintln(stderr, "sshc: ~/.config/systemd/user/sshc.service already exists and is not managed by sshc")
-				fmt.Fprintln(stderr, "sshc: remove or rename it yourself before running `sshc service install`")
+				fmt.Fprintln(stderr, "sshc: a service definition already exists and is not managed by sshc")
+				fmt.Fprintln(stderr, "sshc: move or remove it yourself before running `sshc service install`")
 			} else {
 				fmt.Fprintf(stderr, "sshc: install service: %v\n", err)
 			}
@@ -115,7 +137,7 @@ func runService(
 		case serviceActive:
 			fmt.Fprintln(stdout, "sshc: managed service is active")
 		case serviceUnmanaged:
-			fmt.Fprintln(stderr, "sshc: sshc.service exists but is not managed by sshc")
+			fmt.Fprintln(stderr, "sshc: a service definition exists but is not managed by sshc")
 			return 1
 		default:
 			fmt.Fprintln(stderr, "sshc: inspect service: unknown service state")
@@ -123,13 +145,42 @@ func runService(
 		}
 		return 0
 	case "disable":
+		state, err := manager.Status(ctx)
+		if err != nil {
+			if errors.Is(ctx.Err(), context.Canceled) {
+				return 130
+			}
+			if errors.Is(err, errUnmanagedServiceUnit) || state == serviceUnmanaged {
+				fmt.Fprintln(stderr, "sshc: refusing to remove the service definition because it is not managed by sshc")
+			} else {
+				fmt.Fprintf(stderr, "sshc: inspect service before disabling it: %v\n", err)
+			}
+			return 1
+		}
+		if state == serviceAbsent {
+			fmt.Fprintln(stdout, "sshc: service is not installed; nothing changed")
+			return 0
+		}
+		if state == serviceUnmanaged {
+			fmt.Fprintln(stderr, "sshc: refusing to remove the service definition because it is not managed by sshc")
+			return 1
+		}
+		fmt.Fprintf(stdout, "sshc: %s\n", manager.DisablePlan())
+		confirmed, code := confirmAction(ctx, yes, "Continue? [y/N] ", dependencies.confirm, stderr)
+		if code != 0 {
+			return code
+		}
+		if !confirmed {
+			fmt.Fprintln(stdout, "sshc: canceled; nothing changed")
+			return 0
+		}
 		removed, err := manager.Disable(ctx)
 		if err != nil {
 			if errors.Is(ctx.Err(), context.Canceled) {
 				return 130
 			}
 			if errors.Is(err, errUnmanagedServiceUnit) {
-				fmt.Fprintln(stderr, "sshc: refusing to remove sshc.service because it is not managed by sshc")
+				fmt.Fprintln(stderr, "sshc: refusing to remove the service definition because it is not managed by sshc")
 			} else {
 				fmt.Fprintf(stderr, "sshc: disable service: %v\n", err)
 			}

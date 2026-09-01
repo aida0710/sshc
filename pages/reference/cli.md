@@ -25,9 +25,10 @@ sshc vault change-password
 sshc service install
 sshc service status
 sshc service disable
+sshc update
 ```
 
-`sshc service`はLinuxのsystemdユーザーサービスを管理します。`install`はHomebrewまたは`install.sh`で導入された安定パスを登録し、`disable`はsshcが作成したunitだけを削除します。
+`sshc service`はLinuxではsystemdユーザーサービス、macOSではlaunchdユーザーエージェントを管理します。`install`はHomebrewまたは`install.sh`で導入された安定パスを登録し、`disable`はsshcが作成した定義だけを削除します。`install`、`disable`、`update`は変更内容を表示してから確認を求めます。自動化で確認を省略する場合だけ`-y`または`--yes`を付けてください。
 
 ## SSH
 

@@ -22,7 +22,7 @@ SSHC_VERSION=v0.25.0 sh -c \
   'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.25.0/install.sh | sh'
 ```
 
-After installation, `sshc update` delegates upgrades to Homebrew or to a receipt-aware installer.
+After installation, `sshc update` delegates upgrades to Homebrew or to a receipt-aware installer. It shows the planned change and asks for confirmation. In non-interactive automation, review the plan and use `sshc update --yes`.
 
 ## Windows
 
@@ -74,6 +74,8 @@ sshc vault unlock
 
 `service install` creates, enables, and starts `~/.config/systemd/user/sshc.service`. It reports success only after matching systemd's main PID to sshc and reaching the status API. It records Homebrew's stable `opt/sshc/bin/sshc` path or a verified `install.sh` destination. Manually copied and source-built executables are not registered automatically.
 
+The command shows the unit and executable before asking for confirmation. Use `sshc service install --yes` when reviewed automation must skip the prompt.
+
 sshc will not overwrite an existing hand-written unit. Stop and move that unit before switching to sshc management.
 
 ```sh
@@ -89,7 +91,19 @@ To keep the user manager running after you log out, ask an administrator to enab
 loginctl enable-linger "$USER"
 ```
 
-Run `sshc service disable` to stop and remove the service. It only removes a unit created by sshc.
+Run `sshc service disable` to stop and remove the service. It asks for confirmation and only removes a unit created by sshc. Automation can use `sshc service disable --yes`.
+
+## Keep the engine running on macOS
+
+On macOS, install sshc as a launchd user agent without sudo. Stop an engine running in the foreground or under tmux first.
+
+```sh
+sshc service install
+sshc service status
+sshc vault unlock
+```
+
+`service install` creates `~/Library/LaunchAgents/io.github.aida0710.sshc.plist`, registers it in the current GUI user domain, and starts it. It reports success only after matching launchd's PID to sshc and reaching the status API. sshc does not overwrite a hand-written plist with the same name. `sshc service disable` removes only the plist created by sshc.
 
 ## Update
 

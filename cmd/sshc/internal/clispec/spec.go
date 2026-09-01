@@ -94,11 +94,11 @@ Automation: --expect REGEX | --read-for D | --script FILE|-
 `},
 	{Name: "open", Route: "open", Help: "usage:\n  sshc open\n\nPrint a one-time UI URL for the running engine.\n"},
 	{Name: "status", Route: "status", Help: "usage:\n  sshc status [--json]\n\nPrint what the running engine is doing.\n"},
-	{Name: "update", Route: "update", Help: "usage:\n  sshc update\n\nUpdate an installation managed by Homebrew or install.sh.\n"},
-	{Name: "service", Route: "service", Help: "usage:\n  sshc service install\n  sshc service status\n  sshc service disable\n\nManage the sshc engine as a systemd user service on Linux.\n", Actions: []Action{
-		{Name: "install", Help: "usage:\n  sshc service install\n\nInstall, enable, and start the sshc systemd user service on Linux.\n"},
-		{Name: "status", Help: "usage:\n  sshc service status\n\nPrint whether the sshc-managed systemd user service is active.\n"},
-		{Name: "disable", Help: "usage:\n  sshc service disable\n\nStop, disable, and remove the sshc-managed systemd user service.\n"},
+	{Name: "update", Route: "update", Help: "usage:\n  sshc update [-y|--yes]\n\nUpdate an installation managed by Homebrew or install.sh. The command shows the plan and asks before changing the installation; -y or --yes skips the prompt.\n"},
+	{Name: "service", Route: "service", Help: "usage:\n  sshc service install [-y|--yes]\n  sshc service status\n  sshc service disable [-y|--yes]\n\nManage the sshc engine as a systemd user service on Linux or a launchd user agent on macOS. Mutating actions show the plan and ask for confirmation; -y or --yes skips the prompt.\n", Actions: []Action{
+		{Name: "install", Help: "usage:\n  sshc service install [-y|--yes]\n\nInstall and start the sshc user service on Linux or macOS. The command asks for confirmation unless -y or --yes is given.\n"},
+		{Name: "status", Help: "usage:\n  sshc service status\n\nPrint whether the sshc-managed user service is active.\n"},
+		{Name: "disable", Help: "usage:\n  sshc service disable [-y|--yes]\n\nStop and remove the sshc-managed user service. The command asks for confirmation unless -y or --yes is given.\n"},
 	}},
 	{Name: "vault", Route: "vault", Help: "usage:\n  sshc vault status\n  sshc vault create\n  sshc vault unlock\n  sshc vault lock\n  sshc vault change-password\n", Actions: []Action{
 		{Name: "status", Help: "usage:\n  sshc vault status\n\nDescribe the running engine and Vault.\n"},
@@ -178,8 +178,8 @@ const GlobalHelp = `usage:
   sshc open            print a one-time UI URL
   sshc status          print what the running engine is doing
                        --json      print it as JSON, for the shell
-  sshc update          update an installation managed by Homebrew or install.sh
-  sshc service install install and start a systemd user service on Linux
+  sshc update [-y]     update an installation managed by Homebrew or install.sh
+  sshc service install install and start a user service on Linux or macOS
   sshc service status  print whether the managed service is active
   sshc service disable stop and remove the managed service
   sshc vault status    describe the running engine and vault
