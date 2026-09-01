@@ -32,7 +32,7 @@ export function TransferManagerList() {
   }, [jobs]);
   if (jobs.length === 0) return null;
   return (
-    <section className="max-h-64 overflow-auto border-b border-line px-3 py-2 text-xs" aria-labelledby="transfer-manager-heading">
+    <section className="max-h-64 shrink-0 overflow-auto border-t border-line bg-toolbar/35 px-3 py-2 text-xs" aria-labelledby="transfer-manager-heading">
       <div className="mb-2 flex flex-wrap items-center gap-2">
         <h3 id="transfer-manager-heading" className="font-medium">{t("sftp.manager.heading")}</h3>
         <span className="text-ink-muted">{t("sftp.manager.limit", { count: sftpTransferManager.getMaxConcurrent() })}</span>

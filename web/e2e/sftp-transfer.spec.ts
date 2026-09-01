@@ -77,6 +77,9 @@ test("keeps a chunked SFTP upload visible while another section is open", async 
     buffer: Buffer.alloc((2 << 20) + 17, 0x61),
   });
   await expect(page.getByText("Transferring…")).toBeVisible();
+  const fileListBounds = await page.getByRole("table").boundingBox();
+  const transferManagerBounds = await page.getByRole("region", { name: "Transfer Manager" }).boundingBox();
+  expect(transferManagerBounds?.y).toBeGreaterThan(fileListBounds?.y ?? Number.POSITIVE_INFINITY);
 
   await openSection(page, "Connections");
   const sftpNavigation = page.getByRole("link", { name: "SFTP", exact: true });
