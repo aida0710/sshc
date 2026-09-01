@@ -38,6 +38,7 @@ export function useTerminalWorkspaceController({
   const [consoleOrder, setConsoleOrder] = useState<string[]>([]);
   const restoreSequence = useRef(0);
   const renameSequence = useRef(0);
+  const pendingConsole = useRef<string | null>(null);
 
   useEffect(() => {
     if (!enabled) return;
@@ -62,12 +63,15 @@ export function useTerminalWorkspaceController({
   }, [api, enabled, section]);
 
   useEffect(() => {
-    if (
-      activeConsole !== null &&
-      !consoles.sessions.some((session) => session.id === activeConsole)
-    ) {
-      setActiveConsole(null);
+    if (activeConsole === null) return;
+    if (consoles.sessions.some((session) => session.id === activeConsole)) {
+      pendingConsole.current = null;
+      return;
     }
+    // 開いた直後は一覧の再取得がまだ届いていない。取得が終わるまで選択を保ち、
+    // 一覧の先頭へ勝手に戻らないようにする。
+    if (pendingConsole.current === activeConsole) return;
+    setActiveConsole(null);
   }, [consoles.sessions, activeConsole]);
 
   useEffect(() => {
@@ -77,10 +81,13 @@ export function useTerminalWorkspaceController({
 
   const showConsole = useCallback(
     (id: string) => {
+      pendingConsole.current = id;
       setActiveConsole(id);
       closeNavigation();
       navigate("Terminal");
-      void consoles.refresh();
+      void consoles.refresh().finally(() => {
+        if (pendingConsole.current === id) pendingConsole.current = null;
+      });
     },
     [closeNavigation, consoles, navigate],
   );
