@@ -39,7 +39,7 @@ sshc ssh <alias> --non-interactive -- <command...>
 sshc info <alias> --json
 ```
 
-Homebrew版ではbash、zsh、fishの補完が一緒に導入されます。その他の導入方法では、利用中のシェルに合わせて次のいずれかを起動設定へ追加してください。サブコマンド、オプション、列挙値に加え、`sshc ssh`、`sshc info`、`sshc terminal create ssh`では接続先も補完します。接続先候補は、Tabを押した時点の`~/.ssh/config`と到達可能な`Include`から取得されます。
+Homebrew版ではbash、zsh、fishの補完が一緒に導入されます。その他の導入方法では、利用中のシェルに合わせて次のいずれかを起動設定へ追加してください。サブコマンド、オプション、列挙値に加え、`sshc ssh`、`sshc info`、`sshc terminal create ssh`では接続先も補完します。接続先候補は、Tabを押した時点の`~/.ssh/config`と到達可能な`Include`から取得されます。`sshc`が起動も評価もしないと定めた文字（shellメタ文字、空白、先頭の`-`など）を含むaliasは`sshc ssh --list`にも補完にも出さず、除外した理由をstderrに表示します。
 
 コマンドの解釈、個別ヘルプ、bash／zsh／fishの補完は、同じコマンド定義から作られています。補完に表示される名前や選択肢は、そのバージョンの`sshc help`と一致します。
 

@@ -26,7 +26,7 @@ func renderCompletion(template string) string {
 // Include先の追加やSync受信後にも、補完ファイルを作り直さず最新のaliasを表示するためである。
 const bashCompletionTemplate = `# bash completion for sshc
 _sshc_completion() {
-  local current previous command aliases
+  local current previous command candidate
   current="${COMP_WORDS[COMP_CWORD]}"
   previous=""
   if (( COMP_CWORD > 0 )); then
@@ -34,12 +34,21 @@ _sshc_completion() {
   fi
   command="${COMP_WORDS[1]}"
 
+  # compgen -W は語リストの各語をシェルとして展開する。コマンド置換もそこに含ま
+  # れるため、ssh_config 由来で信用できない alias を渡してはならない。静的な
+  # 語彙にだけ compgen -W を使い、alias は展開せず1行ずつ読んで前方一致で絞る。
   _sshc_complete_words() {
     COMPREPLY=( $(compgen -W "$1" -- "$current") )
   }
   _sshc_complete_aliases() {
-    aliases="$(command sshc ssh --list 2>/dev/null)"
-    _sshc_complete_words "$aliases"
+    COMPREPLY=()
+    while IFS= read -r candidate; do
+      [[ -z "$candidate" || "$candidate" != "$current"* ]] && continue
+      COMPREPLY+=("$candidate")
+    done < <(command sshc ssh --list 2>/dev/null)
+    if [[ -n "$1" ]]; then
+      COMPREPLY+=( $(compgen -W "$1" -- "$current") )
+    fi
   }
 
   if (( COMP_CWORD == 1 )); then
@@ -72,8 +81,7 @@ _sshc_completion() {
       ;;
     ssh)
       if (( COMP_CWORD == 2 )); then
-        aliases="$(command sshc ssh --list 2>/dev/null)"
-        _sshc_complete_words "$aliases --list --help"
+        _sshc_complete_aliases "--list --help"
       elif (( COMP_CWORD == 3 )) && [[ "${COMP_WORDS[2]}" != -* ]]; then
         _sshc_complete_words "--non-interactive"
       elif [[ "$previous" == "--non-interactive" ]]; then
