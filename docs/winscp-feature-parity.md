@@ -1,7 +1,7 @@
 # WinSCP機能差分台帳
 
 更新日: 2026-09-01  
-比較対象: sshc `87184a89` / WinSCP 6.5.6
+比較対象: sshc `main`（2026-09-01時点） / WinSCP 6.5.6
 
 ## 目的
 
@@ -18,9 +18,9 @@ WinSCPに存在する機能を漏れなく分類し、sshcで同じ利用目的�
 
 sshcのSFTPは、安全なアップロード／ダウンロード、フォルダー転送、複数選択、リモート編集、競合検出、バックグラウンドキューという中核を既に持つ。一方、日常のファイルマネージャーとして使う際の不足は大きく、特に次がWinSCPとの差になっている。
 
-1. 戻る／進む、Home／Root、ブックマーク、フィルター、リモート検索
+1. ディレクトリブックマーク／ツリー、複数SFTPタブ、リモート検索
 2. 空ファイル／リンク作成、複製、別ディレクトリへの移動、プロパティ表示と一括変更
-3. キューの並べ替え、帯域制限、全件操作、同時数設定、折りたたみと高さ変更
+3. キューの並べ替え、帯域制限、処理全体の停止、同時数設定、高さ変更
 4. 転送前オプション、timestamp／permission保持、mask、プリセット
 5. ローカルとリモートの2ペイン、ディレクトリ比較、ローカル・リモート同期、変更監視
 6. SFTPファイル操作のCLI／automation
@@ -63,11 +63,11 @@ sshcのSFTPは、安全なアップロード／ダウンロード、フォルダ
 |---|---|---|---|
 | clickによる単一選択 | 対応 | あり | 維持 |
 | checkboxによる複数選択 | 対応 | desktop／mobileとも対応 | 維持 |
-| Select All | 対応 | header checkbox | `Ctrl/Cmd+A`も追加 |
+| Select All | 対応 | header checkbox、`Ctrl/Cmd+A` | 維持 |
 | keyboardで行移動／Enterで開く | 部分 | focus済み行のEnterのみ | Arrow、Home、End、Spaceを追加 |
-| Shiftによるrange選択 | 未対応 | なし | P0 |
-| Ctrl/Cmdによる追加選択 | 未対応 | checkboxのみ | P0 |
-| 選択反転 | 未対応 | なし | 選択menuへ追加 |
+| Shiftによるrange選択 | 対応 | 表示中の並びを基準にrange選択 | 維持 |
+| Ctrl/Cmdによる追加選択 | 対応 | clickで追加／解除 | 維持 |
+| 選択反転 | 対応 | 表示中のentryだけ反転 | 維持 |
 | 選択解除／選択復元 | 部分 | header checkboxで解除可能。復元なし | 明示解除と直前選択の復元を追加 |
 | maskで選択／解除 | 未対応 | なし | filter/mask共通構文の後に追加 |
 | 同じ拡張子を選択 | 未対応 | なし | 選択menuへ追加 |
@@ -98,8 +98,8 @@ sshcのSFTPは、安全なアップロード／ダウンロード、フォルダ
 | rename | 対応 | 単一選択 | 維持 |
 | delete | 対応 | 複数選択、確認、symlink非追跡 | remote recycle binは未対応 |
 | clipboard copy／paste | 未対応 | file objectのclipboard操作なし | local panel／OS bridgeと合わせて設計 |
-| file名をcopy | 未対応 | なし | P0 |
-| full pathをcopy | 未対応 | なし | P0 |
+| file名をcopy | 対応 | 単一／複数を改行区切りでcopy | 維持 |
+| full pathをcopy | 対応 | 単一／複数を改行区切りでcopy | 維持 |
 | file URL生成 | 未対応 | なし | `sftp://`とsshc内deep linkを分けて設計 |
 | properties表示 | 部分 | mode、size、mtime、typeを一覧表示 | modalでpath、revision、link target等を表示 |
 | chmod | 対応 | 単一file／directory | 複数選択／再帰へ拡張 |
