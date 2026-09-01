@@ -233,7 +233,7 @@ export async function openApplication(
 }
 
 export function sessionStatus(page: Page) {
-  return page.getByRole("banner").getByRole("status");
+  return page.locator("[data-session-status]");
 }
 
 export async function openSection(page: Page, name: string): Promise<void> {
@@ -266,6 +266,20 @@ export async function openSettingsPage(
   const navigation = page.getByRole("navigation", { name: "Primary" });
   await navigation.getByRole("link", { name: "Menu", exact: true }).click();
   await page.getByRole("link", { name: `Open ${name}`, exact: true }).click();
+}
+
+export async function changeDisplayLanguage(
+  page: Page,
+  locale: "en" | "ja",
+): Promise<void> {
+  const returnURL = page.url();
+  await page.getByRole("link", { name: "Menu", exact: true }).click();
+  await page
+    .getByRole("region", { name: "Menu" })
+    .getByLabel("Language", { exact: true })
+    .selectOption(locale);
+  await page.goBack();
+  await expect(page).toHaveURL(returnURL);
 }
 
 export async function clickAndAwait(

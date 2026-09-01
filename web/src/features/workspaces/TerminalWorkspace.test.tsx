@@ -389,7 +389,7 @@ describe("TerminalWorkspace pane movement", () => {
     expect(screen.getAllByText("zsh")).not.toHaveLength(0);
     expect(screen.getAllByText("bash")).not.toHaveLength(0);
 
-    await userEvent.click(screen.getByText("Saved layouts", { selector: "summary" }));
+    await userEvent.click(screen.getByRole("button", { name: "Workspace actions" }));
     await userEvent.click(screen.getByRole("button", { name: "Save with a name" }));
     await userEvent.type(screen.getByRole("textbox", { name: "Saved layout name" }), "Local pair");
     await userEvent.click(screen.getByRole("button", { name: "Save layout" }));
@@ -540,7 +540,7 @@ describe("TerminalWorkspace pane movement", () => {
     const focusButtons = screen.getAllByRole("button", { name: "Focus edge" });
     await user.click(focusButtons[0] as HTMLElement);
     await waitFor(() => expect(container.querySelectorAll("[data-workspace-pane]")).toHaveLength(1));
-    expect(screen.getAllByRole("button", { name: "Exit focus mode" })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: "Exit focus mode" })).toHaveLength(1);
     fireEvent.keyDown(window, { key: "Escape" });
     await waitFor(() => expect(container.querySelectorAll("[data-workspace-pane]")).toHaveLength(2));
   });
@@ -566,6 +566,7 @@ describe("TerminalWorkspace pane movement", () => {
 
     await user.click(screen.getAllByRole("button", { name: "Focus edge" })[0] as HTMLElement);
     await waitFor(() => expect(container.querySelectorAll("[data-workspace-pane]")).toHaveLength(1));
+    await user.click(screen.getByRole("button", { name: "Workspace actions" }));
     await user.click(screen.getByRole("button", { name: "Send command…" }));
 
     expect(commandCenter.targets).toHaveBeenCalledWith([
@@ -598,6 +599,7 @@ describe("TerminalWorkspace pane movement", () => {
     dockConnectedSession(container, localPrimary.id);
     await waitFor(() => expect(container.querySelectorAll("[data-workspace-pane]")).toHaveLength(2));
 
+    await user.click(screen.getByRole("button", { name: "Workspace actions" }));
     await user.click(screen.getByRole("button", { name: "Send command…" }));
     expect(commandCenter.targets).toHaveBeenCalledWith([
       {

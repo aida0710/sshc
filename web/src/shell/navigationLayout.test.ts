@@ -1,36 +1,17 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   clampNavigationWidth,
-  defaultNavigationVisible,
   defaultNavigationWidth,
-  detectNavigationVisible,
   detectNavigationWidth,
   maximumNavigationWidth,
   minimumNavigationWidth,
-  navigationVisibleStorageKey,
   navigationWidthStorageKey,
-  rememberNavigationVisible,
   rememberNavigationWidth,
 } from "./navigationLayout";
 
 afterEach(() => {
   vi.restoreAllMocks();
   window.localStorage.clear();
-});
-
-describe("navigation visibility", () => {
-  it("is visible until the user chooses otherwise", () => {
-    expect(detectNavigationVisible()).toBe(defaultNavigationVisible);
-    window.localStorage.setItem(navigationVisibleStorageKey, "not-a-boolean");
-    expect(detectNavigationVisible()).toBe(defaultNavigationVisible);
-  });
-
-  it("remembers both visibility choices", () => {
-    rememberNavigationVisible(false);
-    expect(detectNavigationVisible()).toBe(false);
-    rememberNavigationVisible(true);
-    expect(detectNavigationVisible()).toBe(true);
-  });
 });
 
 describe("navigation width", () => {
@@ -68,9 +49,7 @@ describe("unavailable storage", () => {
       throw new Error("blocked");
     });
 
-    expect(detectNavigationVisible()).toBe(defaultNavigationVisible);
     expect(detectNavigationWidth()).toBe(defaultNavigationWidth);
-    expect(() => rememberNavigationVisible(false)).not.toThrow();
     expect(() => rememberNavigationWidth(300)).not.toThrow();
   });
 });

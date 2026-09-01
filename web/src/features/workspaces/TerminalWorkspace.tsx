@@ -125,7 +125,7 @@ export function TerminalWorkspace({
   const [liveWorkspaceName, setLiveWorkspaceName] = useState("");
   const [savedMenuOpen, setSavedMenuOpen] = useState(false);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
-  const savedMenuRef = useRef<HTMLDetailsElement>(null);
+  const savedMenuRef = useRef<HTMLDivElement>(null);
   const consumedRestore = useRef(0);
   const consumedRename = useRef(0);
   const liveWorkspaceID = useRef(paneID());
@@ -532,7 +532,7 @@ export function TerminalWorkspace({
           onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDockTarget((current) => current?.paneId === node.pane.id ? null : current); }}
           onDrop={(event) => dropPane(event, node.pane.id)}
         >
-          {multiple && !compactViewport ? <div data-pane-toolbar className="flex h-8 shrink-0 items-center gap-1 border-b border-line bg-toolbar px-1.5">
+          {multiple && !compactViewport ? <div data-pane-toolbar className="flex h-7 shrink-0 items-center gap-1 border-b border-line bg-toolbar px-1">
             <button type="button" draggable aria-pressed={moving} aria-label={t(moving ? "workspace.movePanePicked" : "workspace.movePane", { alias: paneLabel })} title={t("workspace.movePane", { alias: paneLabel })} className="flex size-6 shrink-0 cursor-grab items-center justify-center rounded text-xs text-ink-muted hover:bg-select-fill active:cursor-grabbing" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); choosePaneMove(node.pane.id); }} onDragStart={(event) => beginPaneDrag(event, node.pane.id)} onDragEnd={() => setMovingPaneId(null)} onKeyDown={(event) => { if (event.key === "Escape") setMovingPaneId(null); }}><Icon name="movePane" className="size-3.5" /></button>
             <span className="min-w-0 grow truncate text-xs font-medium text-ink-muted">{paneLabel}</span>
             <button type="button" aria-pressed={focusModePaneId === node.pane.id} aria-label={t(focusModePaneId === node.pane.id ? "workspace.exitFocusMode" : "workspace.focusMode", { alias: paneLabel })} title={t(focusModePaneId === node.pane.id ? "workspace.exitFocusMode" : "workspace.focusMode", { alias: paneLabel })} className="flex size-6 shrink-0 items-center justify-center rounded text-xs text-ink-muted hover:bg-select-fill" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); setFocusModePaneId((current) => current === node.pane.id ? null : node.pane.id); }}><Icon name="focus" className="size-3.5" /></button>
@@ -563,26 +563,25 @@ export function TerminalWorkspace({
   const compactPanes = visibleLayout === null ? [] : paneIDs(visibleLayout.root).map((id) => findPane(visibleLayout.root, id)).filter((pane): pane is RuntimePane => pane !== null);
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {workspacePaneCount !== 1 ? <div data-desktop-workspace-controls className="hidden shrink-0 items-center gap-2 border-b border-line bg-toolbar px-3 py-2 md:flex">
+      {workspacePaneCount !== 1 ? <div data-desktop-workspace-controls className="hidden h-8 shrink-0 items-center gap-2 border-b border-line bg-toolbar px-2 md:flex">
         {workspacePaneCount > 0 ? (
-          <div className="mr-2 flex min-w-0 items-center gap-2 border-r border-line pr-4">
-            <span className="max-w-52 truncate text-xs font-semibold text-ink">{workspaceDisplayName}</span>
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="max-w-52 truncate text-[11px] font-semibold text-ink">{workspaceDisplayName}</span>
             <span className="whitespace-nowrap text-[11px] text-ink-faint">{t("workspace.groupCount", { count: String(workspacePaneCount) })}</span>
           </div>
         ) : null}
-        <Button disabled={connectedCommandTargets === 0} onClick={() => setCommandCenter(true)}>{t("workspace.broadcastCommand")}</Button>
-        {focusModePaneId === null ? null : <Button onClick={() => setFocusModePaneId(null)}>{t("workspace.exitFocusMode")}</Button>}
-        <details
+        <div
           ref={savedMenuRef}
-          open={savedMenuOpen}
-          onToggle={(event) => setSavedMenuOpen(event.currentTarget.open)}
           className="group relative ml-auto"
         >
-          <summary className="flex cursor-pointer list-none items-center gap-2 rounded-md border border-control-line bg-control px-3 py-1.5 text-xs text-ink marker:hidden hover:bg-select-fill">
-            <span aria-hidden="true" className="text-ink-faint group-open:rotate-90">›</span>
-            {t("workspace.savedLayouts")}
-          </summary>
-          <div className="absolute right-0 top-[calc(100%+0.5rem)] z-30 w-80 rounded border border-control-line bg-card p-3 shadow-xl">
+          <button type="button" aria-label={t("workspace.actions")} aria-expanded={savedMenuOpen} title={t("workspace.actions")} onClick={() => setSavedMenuOpen((current) => !current)} className="flex size-6 items-center justify-center rounded text-ink-muted hover:bg-select-fill hover:text-ink">
+            <Icon name="moreHorizontal" className="size-3.5" />
+          </button>
+          {savedMenuOpen ? <div className="absolute right-0 top-[calc(100%+0.35rem)] z-30 w-80 rounded border border-control-line bg-card p-3 shadow-xl">
+            <div className="mb-3 flex flex-wrap gap-2 border-b border-hairline pb-3">
+              <Button disabled={connectedCommandTargets === 0} onClick={() => { setSavedMenuOpen(false); setCommandCenter(true); }}>{t("workspace.broadcastCommand")}</Button>
+              {focusModePaneId === null ? null : <Button onClick={() => { setSavedMenuOpen(false); setFocusModePaneId(null); }}>{t("workspace.exitFocusMode")}</Button>}
+            </div>
             <h2 className="text-sm font-semibold text-ink">{t("workspace.savedLayouts")}</h2>
             <p className="mt-1 text-xs leading-5 text-ink-muted">{t("workspace.savedDescription", { count: MAX_WORKSPACE_PANES })}</p>
             <select aria-label={t("workspace.saved")} value={selectedWorkspace} onChange={(event) => setSelectedWorkspace(event.target.value)} className="mt-3 w-full rounded border border-control-line bg-control px-2 py-1.5 text-xs">
@@ -594,8 +593,8 @@ export function TerminalWorkspace({
               <Button disabled={selectedWorkspace === ""} onClick={() => void restoreWorkspace(selectedWorkspace)}>{t("workspace.reopen")}</Button>
               <button disabled={selectedWorkspace === ""} className="px-2 text-xs text-danger disabled:opacity-40" onClick={() => void workspaceApi.remove(selectedWorkspace).then(async () => { setSelectedWorkspace(""); setSaved(await workspaceApi.list()); })}>{t("workspace.delete")}</button>
             </div>
-          </div>
-        </details>
+          </div> : null}
+        </div>
       </div> : null}
       {commandCenter && commandTargets.length > 0 ? <WorkspaceCommandCenter paneTargets={commandTargets} onClose={() => setCommandCenter(false)} /> : null}
       {saveDialogOpen ? (

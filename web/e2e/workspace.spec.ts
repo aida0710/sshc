@@ -66,7 +66,7 @@ test("moves workspace panes by drag and drop and saves the new placement", async
 
   await openApplication(page, installation);
   await openSection(page, "Terminal");
-  await page.locator("summary").filter({ hasText: "Saved layouts" }).click();
+  await page.getByRole("button", { name: "Workspace actions" }).click();
   await page.getByLabel("Choose a saved layout").selectOption("production");
   await page.getByRole("button", { name: "Open this layout" }).click();
 
@@ -89,7 +89,7 @@ test("moves workspace panes by drag and drop and saves the new placement", async
   await page.getByRole("button", { name: "Exit focus mode" }).first().click();
   await expect(panes).toHaveCount(2);
 
-  await page.locator("summary").filter({ hasText: "Saved layouts" }).click();
+  await page.getByRole("button", { name: "Workspace actions" }).click();
   await page.getByRole("button", { name: "Save with a name" }).click();
   const saveDialog = page.getByRole("dialog", { name: "Save with a name" });
   await expect(saveDialog).toBeVisible();

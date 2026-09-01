@@ -72,13 +72,24 @@ test("docks connected terminals into a live workspace", async ({ page, installat
   await expect(page.locator("[data-workspace-pane]")).toHaveCount(2);
   await expect(page.locator("[data-pane-toolbar]")).toHaveCount(2);
   await expect(navigation.getByRole("button", { name: "edge + database", exact: true })).toBeVisible();
-  await expect(navigation.getByText("2 terminals", { exact: true })).toBeVisible();
+  await expect(navigation.getByText("2 sessions", { exact: true })).toBeVisible();
 
   const visualDirectory = process.env.SSHC_VISUAL_DIR;
   if (visualDirectory !== undefined) {
-    await page.screenshot({ path: `${visualDirectory}/sshc-v0.16.0-live-workspace-desktop.png`, fullPage: true });
+    if (process.env.SSHC_VISUAL_LOCALE === "ja") {
+      await page.evaluate(() => window.localStorage.setItem("sshc.language", "ja"));
+      await page.reload();
+      await expect(page.getByRole("navigation", { name: "メインナビゲーション" })).toBeVisible();
+      await page.screenshot({ path: `${visualDirectory}/terminal-density-desktop-ja.png`, fullPage: true });
+      await page.evaluate(() => window.localStorage.setItem("sshc.language", "en"));
+      await page.reload();
+      await expect(page.getByRole("navigation", { name: "Primary" })).toBeVisible();
+    } else {
+      await page.screenshot({ path: `${visualDirectory}/sshc-v0.16.0-live-workspace-desktop.png`, fullPage: true });
+    }
   }
 
+  await page.getByRole("button", { name: "Workspace actions" }).click();
   await page.getByRole("button", { name: "Send command…" }).click();
   const broadcast = page.getByRole("dialog", { name: "Send to connected terminals" });
   await expect(broadcast).toBeVisible();
@@ -88,11 +99,10 @@ test("docks connected terminals into a live workspace", async ({ page, installat
   }
   await broadcast.getByRole("button", { name: "Close command delivery" }).click();
 
-  const savedLayouts = page.locator("summary").filter({ hasText: "Saved layouts" });
+  const savedLayouts = page.getByRole("button", { name: "Workspace actions" });
   await savedLayouts.click();
   await expect(page.getByText(/Save SSH targets, local shells, and split ratios/)).toBeVisible();
   if (visualDirectory !== undefined) {
-    await expect(savedLayouts.locator("[aria-hidden='true']")).toHaveText("›");
     await page.screenshot({ path: `${visualDirectory}/sshc-v0.16.1-saved-layouts.png`, fullPage: true });
   }
   await savedLayouts.click();
@@ -105,7 +115,16 @@ test("docks connected terminals into a live workspace", async ({ page, installat
   await expect(page.locator("[data-desktop-workspace-controls]")).toBeHidden();
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
   if (visualDirectory !== undefined) {
-    await page.screenshot({ path: `${visualDirectory}/sshc-v0.16.0-live-workspace-mobile.png`, fullPage: true });
+    if (process.env.SSHC_VISUAL_LOCALE === "ja") {
+      await page.evaluate(() => window.localStorage.setItem("sshc.language", "ja"));
+      await page.reload();
+      await expect(page.getByRole("navigation", { name: "ワークスペースのターミナル" })).toBeVisible();
+      await expect(page.locator("[data-workspace-pane]")).toHaveCount(1);
+      await expect(page.getByRole("region", { name: /^.+ のターミナル$/ })).toBeVisible();
+      await page.screenshot({ path: `${visualDirectory}/terminal-density-mobile-ja.png`, fullPage: true });
+    } else {
+      await page.screenshot({ path: `${visualDirectory}/sshc-v0.16.0-live-workspace-mobile.png`, fullPage: true });
+    }
   }
 });
 
@@ -208,6 +227,7 @@ test("selects the whole local console row and docks local shells", async ({ page
   await expect(page.locator("[data-desktop-workspace-controls]").getByText("Build workers", { exact: true })).toBeVisible();
   await expect(navigation.getByText("Build workers", { exact: true })).toBeVisible();
   await expect(page.locator("[data-desktop-workspace-controls]").getByRole("button", { name: "Rename workspace" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Workspace actions" }).click();
   await page.getByRole("button", { name: "Send command…" }).click();
   const broadcast = page.getByRole("dialog", { name: "Send to connected terminals" });
   await expect(broadcast).toContainText("localhost");
@@ -248,6 +268,7 @@ test("broadcasts one command to two live local shells", async ({ page, installat
   });
   await expect(page.locator("[data-workspace-pane]")).toHaveCount(2);
 
+  await page.getByRole("button", { name: "Workspace actions" }).click();
   await page.getByRole("button", { name: "Send command…" }).click();
   const broadcast = page.getByRole("dialog", { name: "Send to connected terminals" });
   await broadcast.getByRole("textbox", { name: "Command", exact: true }).fill("echo local-broadcast-canary");

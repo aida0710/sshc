@@ -523,7 +523,7 @@ export function TerminalView({
 
   return (
     <section aria-label={t("terminal.screenLabel", { title: displayTitle })} className="relative flex min-h-0 flex-1 flex-col">
-      <div className="relative flex shrink-0 items-center gap-2 border-b border-line bg-toolbar px-3 py-2">
+      <div className="relative flex shrink-0 items-center gap-2 border-b border-line bg-toolbar px-2 py-1.5 md:h-8 md:py-0">
         <span
           aria-hidden="true"
           className={`size-2 shrink-0 rounded-full ${
@@ -534,14 +534,14 @@ export function TerminalView({
                 : "bg-live"
           }`}
         />
-        <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 items-center gap-2">
-            <p className="min-w-0 flex-1 truncate text-xs font-semibold text-ink">{displayTitle}</p>
+        <div className="min-w-0 flex-1 md:flex md:items-center md:gap-2">
+          <div className="flex min-w-0 items-center gap-2 md:shrink-0">
+            <p className="min-w-0 flex-1 truncate text-xs font-semibold text-ink md:max-w-48 md:flex-none">{displayTitle}</p>
             {agentStatus === "" ? null : (
               <span role="status" className="shrink-0 truncate text-[11px] font-medium text-ink-muted">{agentStatus}</span>
             )}
           </div>
-          <div className="flex min-w-0 items-center gap-2 text-[11px] text-ink-muted">
+          <div className="flex min-w-0 items-center gap-2 text-[11px] text-ink-muted md:flex-1">
             <span className="min-w-0 truncate font-mono">{subtitle}</span>
             {session.state === "connected" && agentStatus !== "" ? null : (
               <span role="status" className="shrink-0">{connectionStatus}</span>
@@ -552,7 +552,7 @@ export function TerminalView({
           type="button"
           aria-label={t("terminal.search")}
           title={t("terminal.search")}
-          className="flex min-h-10 min-w-10 items-center justify-center rounded border border-control-line px-2 py-1 text-xs text-ink-muted hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-0 md:min-w-0"
+          className="flex min-h-10 min-w-10 items-center justify-center rounded border border-control-line px-2 py-1 text-xs text-ink-muted hover:bg-select-fill focus:bg-select-fill focus:outline-none md:size-6 md:min-h-0 md:min-w-0 md:p-0"
           onClick={() => setSearchOpen((current) => !current)}
         >
           <Icon name="search" className="size-3.5" />
@@ -562,7 +562,7 @@ export function TerminalView({
           type="button"
           aria-label={t("terminal.moreActions")}
           aria-expanded={overflowOpen}
-          className="flex min-h-10 min-w-10 items-center justify-center rounded border border-control-line px-2 py-1 text-ink-muted hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-0 md:min-w-0"
+          className="flex min-h-10 min-w-10 items-center justify-center rounded border border-control-line px-2 py-1 text-ink-muted hover:bg-select-fill focus:bg-select-fill focus:outline-none md:size-6 md:min-h-0 md:min-w-0 md:p-0"
           onClick={() => setOverflowOpen((current) => !current)}
         >
           <Icon name="moreHorizontal" className="size-3.5" />

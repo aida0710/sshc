@@ -1,6 +1,7 @@
 import {
   useEffect,
   useRef,
+  useSyncExternalStore,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent,
   type PointerEvent as ReactPointerEvent,
@@ -23,13 +24,14 @@ import {
   maximumNavigationWidth,
   minimumNavigationWidth,
 } from "./navigationLayout";
+import { sftpTransferManager } from "../sftp/transferManager";
 
 export function AppNavigation({
   navigationRef,
   navigationId,
   version,
+  state,
   navigationOpen,
-  desktopVisible,
   desktopWidth,
   onDesktopWidthChange,
   startSections,
@@ -49,12 +51,13 @@ export function AppNavigation({
   localShellProfiles = [],
   onOpenShell,
   onOpenCommandPalette,
+  onOpenTransfers,
 }: {
   navigationRef?: RefObject<HTMLElement | null>;
   navigationId: string;
   version: string;
+  state: string;
   navigationOpen: boolean;
-  desktopVisible: boolean;
   desktopWidth: number;
   onDesktopWidthChange: (width: number) => void;
   startSections: Section[];
@@ -74,8 +77,13 @@ export function AppNavigation({
   localShellProfiles?: LocalShellProfile[];
   onOpenShell: (profileId?: string) => void;
   onOpenCommandPalette: () => void;
+  onOpenTransfers: () => void;
 }) {
   const t = useTranslate();
+  const transfers = useSyncExternalStore(sftpTransferManager.subscribe, sftpTransferManager.getSnapshot);
+  const activeTransfers = transfers.filter((job) =>
+    ["queued", "running", "paused", "reattach", "needs_overwrite"].includes(job.status),
+  ).length;
   const navigationLink = (name: Section) => (
     <NavigationLink
       name={name}
@@ -90,22 +98,27 @@ export function AppNavigation({
       ref={navigationRef}
       id={navigationId}
       aria-label={t("shell.primaryNavigation")}
-      className={`fixed inset-y-0 left-0 z-30 flex min-h-0 w-72 max-w-[calc(100vw-2rem)] flex-col overflow-hidden border-r border-line bg-sidebar p-2 transition-transform motion-reduce:transition-none md:relative md:inset-auto md:z-auto md:w-auto md:max-w-none md:translate-x-0 md:shadow-none ${
+      className={`fixed inset-y-0 left-0 z-30 flex min-h-0 w-72 max-w-[calc(100vw-2rem)] flex-col overflow-hidden border-r border-line bg-sidebar p-2 transition-transform motion-reduce:transition-none md:relative md:inset-auto md:z-auto md:flex md:w-auto md:max-w-none md:translate-x-0 md:shadow-none ${
         navigationOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full shadow-none"
-      } ${desktopVisible ? "md:flex" : "md:hidden"}`}
+      }`}
     >
-      <div className="mb-1 flex h-10 shrink-0 items-center gap-2 border-b border-line px-1 md:hidden">
-        <BrandMark className="h-7 w-7" />
-        <span className="font-mono text-sm font-semibold tracking-tight">{t("shell.title")}</span>
+      <div data-navigation-heading className="mb-1 flex h-10 shrink-0 items-center gap-2 border-b border-line px-1">
+        <BrandMark className="h-6 w-6" />
+        <h1 className="font-mono text-sm font-semibold tracking-tight">{t("shell.title")}</h1>
+        <span aria-hidden="true" className="h-4 w-px bg-line" />
+        <span className="min-w-0 flex-1 truncate text-sm font-semibold">
+          {section === null ? t("shell.pageNotFound") : t(sectionLabels[section])}
+        </span>
       </div>
 
       <button
         type="button"
         onClick={onOpenCommandPalette}
-        className="mb-1 flex h-10 shrink-0 items-center gap-2 rounded border border-control-line bg-control px-2.5 text-sm text-ink-muted hover:text-ink md:hidden"
+        className="mb-1 flex h-10 shrink-0 items-center gap-2 rounded border border-control-line bg-control px-2.5 text-sm text-ink-muted hover:border-accent hover:text-ink md:h-8 md:text-xs"
       >
         <Icon name="search" className="h-4 w-4" />
         <span className="flex-1 text-left">{t("palette.open")}</span>
+        <kbd className="hidden font-mono text-[10px] text-ink-faint md:block">Ctrl K</kbd>
       </button>
 
       <div className="shrink-0">
@@ -119,6 +132,17 @@ export function AppNavigation({
       <div className="shrink-0 border-y border-line py-1">
         {navigationLink("Menu")}
       </div>
+
+      {activeTransfers > 0 ? (
+        <button
+          type="button"
+          onClick={onOpenTransfers}
+          className="mt-1 flex h-8 shrink-0 items-center gap-2 rounded px-2 text-xs text-ink-muted hover:bg-select-fill hover:text-ink"
+        >
+          <span aria-hidden="true" className="size-1.5 rounded-full bg-notice-ink" />
+          {t("sftp.activeTransfers", { count: activeTransfers })}
+        </button>
+      ) : null}
 
       <div data-navigation-scroll className="min-h-0 flex-1 overflow-y-auto pr-0.5 pt-2">
         <span
@@ -147,7 +171,18 @@ export function AppNavigation({
         />
       </div>
 
-      <div className="shrink-0 pt-1 md:pt-2">
+      <div className="relative shrink-0 pt-1 md:pt-2 [&>div]:pl-6">
+        <p role="status" data-session-status className="sr-only">
+          {state === "ready" ? t("shell.active", { version }) : t("shell.starting")}
+        </p>
+        <span
+          aria-hidden="true"
+          data-session-status-badge
+          title={state === "ready" ? t("shell.active", { version }) : t("shell.starting")}
+          className={`absolute left-2 top-[1.05rem] size-1.5 rounded-full shadow-[0_0_0_3px_color-mix(in_srgb,var(--ui-live)_14%,transparent)] md:top-[1.55rem] ${
+            state === "ready" ? "bg-live" : "bg-ink-faint"
+          }`}
+        />
         <UpdateBadge current={version} />
       </div>
 

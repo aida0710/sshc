@@ -26,12 +26,10 @@ import type { FileTarget } from "./explorer/ConfigExplorer";
 import { LockScreen } from "./secrets/LockScreen";
 import { OverviewPanel } from "./overview/OverviewPanel";
 import { useLanguage } from "./i18n/context";
-import type { Locale } from "./i18n/locale";
 import { secondaryAction } from "./ui/form";
 import { IconSprite, type IconName } from "./ui/icons";
-import { InspectorPane, type InspectorContent } from "./ui/Inspector";
+import { InspectorPane, InspectorToggle, type InspectorContent } from "./ui/Inspector";
 import { useTheme } from "./theme/context";
-import type { Theme } from "./theme/theme";
 import type { MessageKey } from "./i18n/messages";
 import { Button } from "./ui/surface";
 import { RouteSkeleton } from "./ui/RouteSkeleton";
@@ -42,9 +40,7 @@ import { AppNavigation } from "./shell/AppNavigation";
 import { MenuPanel, type MenuGroup } from "./shell/MenuPanel";
 import {
   clampNavigationWidth,
-  detectNavigationVisible,
   detectNavigationWidth,
-  rememberNavigationVisible,
   rememberNavigationWidth,
 } from "./shell/navigationLayout";
 import type {
@@ -180,11 +176,6 @@ const sectionLabels: Record<Section, MessageKey> = {
   History: "section.history",
 };
 
-const localeLabels: Record<Locale, MessageKey> = {
-  en: "shell.languageEnglish",
-  ja: "shell.languageJapanese",
-};
-
 const sectionIcons: Record<Section, IconName> = {
   Home: "home",
   Menu: "menu",
@@ -268,12 +259,6 @@ const menuGroups: MenuGroup[] = [
   },
 ];
 
-const themeLabels: Record<Theme, MessageKey> = {
-  system: "shell.themeSystem",
-  light: "shell.themeLight",
-  dark: "shell.themeDark",
-};
-
 const navigationId = "primary-navigation";
 export function App({
   bootstrap,
@@ -281,7 +266,7 @@ export function App({
   vault = integrationsApi.passwordVault,
 }: AppProps) {
   const { t } = useLanguage();
-  const { theme, setTheme, resolved: resolvedTheme } = useTheme();
+  const { resolved: resolvedTheme } = useTheme();
   const { route, location, navigate, navigateLocation, setNavigationBlocker } =
     useSectionRoute();
   const section = route.kind === "section" ? route.section : null;
@@ -326,9 +311,6 @@ export function App({
   const [navigationOpen, setNavigationOpen] = useState(false);
   const navigationPanelRef = useRef<HTMLElement>(null);
   const navigationTriggerRef = useRef<HTMLButtonElement>(null);
-  const [desktopNavigationVisible, setDesktopNavigationVisible] = useState(
-    detectNavigationVisible,
-  );
   const [desktopNavigationWidth, setDesktopNavigationWidth] = useState(
     detectNavigationWidth,
   );
@@ -398,13 +380,6 @@ export function App({
     return () =>
       window.removeEventListener("sshc-android-back", closeTransientUi);
   }, [commandPaletteOpen, inspectorOpen, navigationOpen]);
-
-  function toggleDesktopNavigation() {
-    setDesktopNavigationVisible((visible) => {
-      rememberNavigationVisible(!visible);
-      return !visible;
-    });
-  }
 
   function resizeDesktopNavigation(width: number) {
     const nextWidth = clampNavigationWidth(width);
@@ -634,28 +609,15 @@ export function App({
       >
         <AppHeader
           route={route}
-          version={version}
-          state={state}
           navigationOpen={navigationOpen}
-          desktopNavigationVisible={desktopNavigationVisible}
           navigationId={navigationId}
           navigationToggleRef={navigationTriggerRef}
           onToggleNavigation={() => setNavigationOpen((open) => !open)}
-          onToggleDesktopNavigation={toggleDesktopNavigation}
           inspector={inspector}
           inspectorOpen={inspectorOpen}
           inspectorToggleRef={inspectorTriggerRef}
           onToggleInspector={() => setInspectorOpen((open) => !open)}
           sectionLabels={sectionLabels}
-          themeLabels={themeLabels}
-          localeLabels={localeLabels}
-          theme={theme}
-          onThemeChange={setTheme}
-          onOpenCommandPalette={(trigger) => {
-            commandPaletteReturnFocusRef.current = trigger;
-            setCommandPaletteOpen(true);
-          }}
-          onOpenTransfers={() => navigate("Files")}
         />
         {requestFailure === null ? null : (
           <ErrorDiagnosticNotice
@@ -665,21 +627,14 @@ export function App({
           />
         )}
         <div
-          data-desktop-navigation-visible={desktopNavigationVisible}
           style={
             {
               "--navigation-width": `${desktopNavigationWidth}px`,
             } as CSSProperties
           }
-          className={`grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)] ${
-            desktopNavigationVisible
-              ? "md:grid-cols-[var(--navigation-width)_minmax(0,1fr)]"
-              : "md:grid-cols-[minmax(0,1fr)]"
-          } ${
+          className={`grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)] md:grid-cols-[var(--navigation-width)_minmax(0,1fr)] ${
             inspector !== null && inspectorOpen
-              ? desktopNavigationVisible
-                ? "lg:grid-cols-[var(--navigation-width)_minmax(0,1fr)_17rem]"
-                : "lg:grid-cols-[minmax(0,1fr)_17rem]"
+              ? "lg:grid-cols-[var(--navigation-width)_minmax(0,1fr)_17rem]"
               : ""
           }`}
         >
@@ -695,8 +650,8 @@ export function App({
             navigationRef={navigationPanelRef}
             navigationId={navigationId}
             version={version}
+            state={state}
             navigationOpen={navigationOpen}
-            desktopVisible={desktopNavigationVisible}
             desktopWidth={desktopNavigationWidth}
             onDesktopWidthChange={resizeDesktopNavigation}
             startSections={startSections}
@@ -723,9 +678,20 @@ export function App({
               setNavigationOpen(false);
               setCommandPaletteOpen(true);
             }}
+            onOpenTransfers={() => navigate("Files")}
           />
 
           <main className="relative flex min-h-0 min-w-0 flex-col overflow-hidden">
+            {inspector === null ? null : (
+              <span className="absolute right-2 top-2 z-10 hidden md:block [&>button]:h-8 [&>button]:w-8 [&>button]:justify-center [&>button>span]:hidden">
+                <InspectorToggle
+                  label={inspector.label}
+                  open={inspectorOpen}
+                  attention={inspector.attention}
+                  onToggle={() => setInspectorOpen((open) => !open)}
+                />
+              </span>
+            )}
             {vaultMigration === null ? null : (
               <div
                 role="status"
