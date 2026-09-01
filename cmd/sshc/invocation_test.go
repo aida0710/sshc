@@ -462,13 +462,19 @@ func TestUsageNamesTheVersionCommand(t *testing.T) {
 	}
 }
 
-func TestUpdateIsReservedAndTakesNoArguments(t *testing.T) {
+func TestUpdateIsReservedAndAcceptsYes(t *testing.T) {
 	called, err := parseInvocation([]string{"sshc", "update"})
 	if err != nil {
 		t.Fatalf("parse update = %v", err)
 	}
 	if called.Kind != invocationUpdate {
 		t.Fatalf("update kind = %v, want invocationUpdate", called.Kind)
+	}
+	for _, flag := range []string{"-y", "--yes"} {
+		called, err := parseInvocation([]string{"sshc", "update", flag})
+		if err != nil || called.Kind != invocationUpdate || !called.Yes {
+			t.Errorf("update %s = %#v, %v", flag, called, err)
+		}
 	}
 	if _, err := parseInvocation([]string{"sshc", "update", "later"}); err == nil {
 		t.Fatal("update accepted an argument")
@@ -490,6 +496,15 @@ func TestServiceIsReservedAndRequiresOneKnownAction(t *testing.T) {
 		if _, err := parseInvocation(argv); err == nil {
 			t.Fatalf("parseInvocation(%q) accepted an invalid service command", argv)
 		}
+	}
+	for _, action := range []string{"install", "disable"} {
+		called, err := parseInvocation([]string{"sshc", "service", action, "--yes"})
+		if err != nil || called.Kind != invocationService || !called.Yes || len(called.Args) != 1 || called.Args[0] != action {
+			t.Errorf("service %s --yes = %#v, %v", action, called, err)
+		}
+	}
+	if _, err := parseInvocation([]string{"sshc", "service", "status", "--yes"}); err == nil {
+		t.Fatal("service status accepted --yes")
 	}
 
 	var out bytes.Buffer

@@ -31,8 +31,8 @@ var startsAProcess = []string{"exec.Command"}
 // と言うことだった。起動する表記を選ぶのはこのアプリケーションではなく、
 // ~/.ssh/config を書いたユーザー本人である。
 //
-// 自動起動するprocessの所有はOSへ任せる。Linuxだけは明示commandでsystemd user
-// unitを作成し、その状態遷移に固定argvのsystemctlを使用する。ここに並ぶものは
+// 自動起動するprocessの所有はOSへ任せる。LinuxとmacOSでは明示commandでuser
+// service定義を作成し、その状態遷移に固定argvのOS管理commandを使用する。ここに並ぶものは
 // いずれもos/execを直接呼んでおり、そうしてよい理由がそれぞれ違う。
 //
 // 一覧を持つ形にしてあるのは、増えたときに気づくためである。「OpenSSH が
@@ -52,6 +52,10 @@ var allowedToStartPrograms = []string{
 	// 呼ぶ。利用者の入力をprogramや引数へ渡さず、update連携も実行pathが一致する
 	// activeな管理unitのtry-restartだけに限定する。
 	"cmd/sshc/service_linux.go",
+	// macOSのservice commandはsshc管理marker付きplistだけを作成、確認、削除する。
+	// launchctlは検証済みの絶対pathから固定argvで呼び、現在のGUI user domainにある
+	// 管理agentだけをbootstrap、bootout、kickstartする。
+	"cmd/sshc/service_launchd_unix.go",
 	// ローカルシェルには擬似端末が要る。インターフェースは出力を集めて返すものなので、
 	// PTY を握って対話し続けるこれは、そもそもあそこを通れない。
 	"internal/terminal/pty_unix.go",

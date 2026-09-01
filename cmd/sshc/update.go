@@ -49,6 +49,7 @@ type updateDependencies struct {
 	install           func(context.Context, installation, selfupdate.Release, io.Writer, io.Writer) error
 	serviceExecutable func(context.Context, installation) (string, error)
 	restartService    func(context.Context, string) (bool, error)
+	confirm           actionConfirmer
 }
 
 func defaultUpdateDependencies() updateDependencies {
@@ -77,10 +78,11 @@ func defaultUpdateDependencies() updateDependencies {
 			return managedInstallationExecutable(ctx, found, commands)
 		},
 		restartService: restartManagedServiceAfterUpdate,
+		confirm:        systemActionConfirmer,
 	}
 }
 
-func runUpdate(ctx context.Context, current string, stdout, stderr io.Writer, dependencies updateDependencies) int {
+func runUpdate(ctx context.Context, current string, yes bool, stdout, stderr io.Writer, dependencies updateDependencies) int {
 	executable, err := dependencies.executable()
 	if err != nil {
 		fmt.Fprintf(stderr, "sshc: find this executable: %v\n", err)
@@ -130,6 +132,22 @@ func runUpdate(ctx context.Context, current string, stdout, stderr io.Writer, de
 			fmt.Fprintf(stderr, "sshc: identify the executable registered with the managed service: %v\n", err)
 			return 1
 		}
+	}
+	manager := "sshc's install.sh"
+	if found.manager == managerHomebrew {
+		manager = "Homebrew"
+	}
+	fmt.Fprintf(stdout, "sshc: update %s from %s to %s using %s\n", found.executable, current, tag, manager)
+	if dependencies.restartService != nil {
+		fmt.Fprintln(stdout, "sshc: if its managed service is active, it will restart and the vault will lock")
+	}
+	confirmed, code := confirmAction(ctx, yes, "Continue? [y/N] ", dependencies.confirm, stderr)
+	if code != 0 {
+		return code
+	}
+	if !confirmed {
+		fmt.Fprintln(stdout, "sshc: canceled; nothing changed")
+		return 0
 	}
 
 	fmt.Fprintf(stdout, "sshc: updating %s to %s\n", current, tag)

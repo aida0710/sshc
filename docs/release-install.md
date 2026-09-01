@@ -48,12 +48,14 @@ gh attestation verify <downloaded-file> --repo aida0710/sshc
 sshc update
 ```
 
+更新するバージョン、実行ファイル、管理元を表示した後に確認を求めます。CIなど対話端末のない環境で実行する場合は、内容を確認した上で`sshc update --yes`を使用してください。
+
 - Homebrew版は、`brew --prefix --installed aida0710/tap/sshc`の`bin/sshc`と実行中ファイルが同一であることを確認し、`brew upgrade --formula --no-ask aida0710/tap/sshc`を実行します。
 - `install.sh`版はdigest付きreceiptを確認し、GitHubの最新安定版tagに固定したinstallerを実行します。installerは公開された`checksums.txt`でバイナリを検証し、同一ディレクトリ内のrenameで置換します。
 - `install.ps1`版は、インストール時と同じPowerShellコマンドを再実行して更新します。
 - その他のWindows手動配置、ソースビルド、判定不能な導入は変更せず、元の導入方法で更新するよう表示します。
 
-`sshc service install`で作成したsystemdユーザーサービスがactiveで、unitの実行パスが今回の更新対象と一致する場合だけ、更新後に`try-restart`します。再起動後はvaultがロックされるため、対話端末から`sshc vault unlock`を実行してください。binary更新後の再起動だけに失敗した場合は、表示される`sshc service install`を実行して復旧できます。停止中のサービス、手書きunit、別のsshc導入を指すunit、systemd管理外のengineは自動で起動、再起動しません。後者は更新後に停止し、新しい`sshc engine`を起動してください。
+`sshc service install`で作成したユーザーサービスがactiveで、登録した実行パスが今回の更新対象と一致する場合だけ、更新後に再起動します。Linuxではsystemdの`try-restart`、macOSではlaunchdの`kickstart -k`を使用します。再起動後はvaultがロックされるため、対話端末から`sshc vault unlock`を実行してください。binary更新後の再起動だけに失敗した場合は、表示される`sshc service install`を実行して復旧できます。停止中のサービス、sshc管理外の定義、別のsshc導入を指す定義、サービス管理外のengineは自動で起動、再起動しません。後者は更新後に停止し、新しい`sshc engine`を起動してください。
 
 ## Windows
 
@@ -89,7 +91,7 @@ sshc engine      # フォアグラウンドでエンジンを起動
 sshc             # URL を表示し、可能であればブラウザで開く
 ```
 
-`sshc engine` はデーモン化しません。LinuxではHomebrew版またはreceipt対応`install.sh`版を`sshc service install`でsystemdユーザーサービスへ登録できます。その他の環境ではtmux、screen、systemd、launchdなどを手動で使用してください。
+`sshc engine` はデーモン化しません。Homebrew版またはreceipt対応`install.sh`版は、Linuxではsystemdユーザーサービス、macOSではlaunchdユーザーエージェントへ`sshc service install`で登録できます。その他の環境ではtmuxやscreenなどを手動で使用してください。
 
 ```sh
 tmux new -d -s sshc 'sshc engine'
