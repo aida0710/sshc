@@ -34,11 +34,13 @@ test("draws one separator above the desktop navigation version", async ({ page, 
   await stubUpdateStatus(page);
   await openApplication(page, installation);
 
-  const header = page.getByRole("banner");
-  const brandMark = header.locator("[data-sshc-brand-mark]");
+  const navigation = page.getByRole("navigation", { name: "Primary" });
+  const brandMark = navigation.locator("[data-sshc-brand-mark]");
   await expect(brandMark).toBeVisible();
   await expect(brandMark).toHaveAttribute("viewBox", "0 0 512 512");
-  await expect(header).not.toContainText(">_");
+  await expect(navigation).not.toContainText(">_");
+  await expect(navigation.getByText("Home", { exact: true }).first()).toBeVisible();
+  await expect(page.locator("[data-app-header]")).toBeHidden();
   await expect.poll(() => navigationFooterTopBorders(page)).toBe(1);
 });
 
@@ -84,7 +86,7 @@ test("shows safe diagnostics for a failed operation", async ({ page, installatio
   if (screenshotPath !== undefined) await page.screenshot({ path: screenshotPath, fullPage: true });
 });
 
-test("keeps the header and the primary navigation still while a panel scrolls", async ({
+test("keeps the navigation heading and primary navigation still while a panel scrolls", async ({
   page,
   installation,
 }) => {
@@ -95,9 +97,9 @@ test("keeps the header and the primary navigation still while a panel scrolls", 
     page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "lab-00" }),
   ).toBeVisible();
 
-  const header = page.getByRole("banner");
+  const heading = page.locator("[data-navigation-heading]");
   const results = page.locator("[data-connection-results]");
-  const resting = await header.boundingBox();
+  const resting = await heading.boundingBox();
   expect(resting).not.toBeNull();
 
   const overflow = await results.evaluate((element) => element.scrollHeight - element.clientHeight);
@@ -107,7 +109,7 @@ test("keeps the header and the primary navigation still while a panel scrolls", 
     const root = document.scrollingElement ?? document.documentElement;
     return root.scrollHeight - root.clientHeight;
   });
-  expect(documentOverflow, "the document scrolls, so the header can leave the viewport").toBe(0);
+  expect(documentOverflow, "the document scrolls, so the navigation can leave the viewport").toBe(0);
 
   const windowOffset = await page.evaluate(() => {
     window.scrollTo(0, 10_000);
@@ -118,7 +120,7 @@ test("keeps the header and the primary navigation still while a panel scrolls", 
   await results.evaluate((element) => element.scrollTo(0, element.scrollHeight));
   expect(await results.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
 
-  expect(await header.boundingBox()).toEqual(resting);
+  expect(await heading.boundingBox()).toEqual(resting);
   await expect(page.getByRole("navigation", { name: "Primary" })).toBeInViewport();
   await expect(page.getByRole("link", { name: "Menu", exact: true })).toBeInViewport();
 
@@ -144,11 +146,11 @@ test("keeps start links fixed and sessions reachable when the viewport is short"
   await expect(navigation.getByRole("link", { name: "Menu", exact: true })).toBeInViewport();
   await sections.evaluate((element) => element.scrollTo(0, element.scrollHeight));
   await expect(navigation.getByRole("button", { name: "Local shell", exact: true })).toBeInViewport();
-  await expect(page.getByRole("banner")).toBeInViewport();
+  await expect(page.locator("[data-navigation-heading]")).toBeInViewport();
   expect(await sections.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
 });
 
-test("resizes, hides, and restores the desktop navigation", async ({ page, installation }) => {
+test("resizes and restores the permanent desktop navigation", async ({ page, installation }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await openApplication(page, installation);
 
@@ -176,14 +178,9 @@ test("resizes, hides, and restores the desktop navigation", async ({ page, insta
     "320",
   );
 
-  await page.getByRole("button", { name: "Hide navigation" }).click();
-  await expect(page.getByRole("navigation", { name: "Primary" })).toBeHidden();
-  await expect(page.getByRole("button", { name: "Show navigation" })).toBeVisible();
-
-  await page.reload();
-  await expect(page.getByRole("navigation", { name: "Primary" })).toBeHidden();
-  await page.getByRole("button", { name: "Show navigation" }).click();
   await expect(page.getByRole("navigation", { name: "Primary" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Hide navigation" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Show navigation" })).toHaveCount(0);
   await expect(page.getByRole("separator", { name: "Resize navigation" })).toHaveAttribute(
     "aria-valuenow",
     "320",

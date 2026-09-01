@@ -93,7 +93,7 @@ describe("ConsoleList", () => {
 
     expect(screen.getAllByRole("listitem")).toHaveLength(2);
     expect(screen.getByText("bastion + db-primary")).toBeVisible();
-    expect(screen.getByText("2 terminals")).toBeVisible();
+    expect(screen.getByText("2 sessions")).toBeVisible();
     expect(screen.queryByRole("button", { name: "bastion" })).toBeNull();
 
     await user.click(screen.getByRole("button", { name: "Show terminals in bastion + db-primary" }));

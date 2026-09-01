@@ -1,6 +1,10 @@
 import type { MouseEvent } from "react";
-import { useTranslate } from "../i18n/context";
+import { useLanguage } from "../i18n/context";
+import { locales, type Locale } from "../i18n/locale";
 import type { MessageKey } from "../i18n/messages";
+import { useTheme } from "../theme/context";
+import { themes, type Theme } from "../theme/theme";
+import { autoControl } from "../ui/form";
 import { Icon, type IconName } from "../ui/icons";
 
 export type MenuItem = {
@@ -15,6 +19,17 @@ export type MenuGroup = {
   items: MenuItem[];
 };
 
+const themeLabels: Record<Theme, MessageKey> = {
+  system: "shell.themeSystem",
+  light: "shell.themeLight",
+  dark: "shell.themeDark",
+};
+
+const localeLabels: Record<Locale, MessageKey> = {
+  en: "shell.languageEnglish",
+  ja: "shell.languageJapanese",
+};
+
 export function MenuPanel({
   groups,
   onNavigate,
@@ -22,7 +37,8 @@ export function MenuPanel({
   groups: MenuGroup[];
   onNavigate: (href: string) => void;
 }) {
-  const t = useTranslate();
+  const { t, locale, setLocale } = useLanguage();
+  const { theme, setTheme } = useTheme();
 
   function follow(event: MouseEvent<HTMLAnchorElement>, href: string) {
     if (
@@ -79,6 +95,46 @@ export function MenuPanel({
             </ul>
           </section>
         ))}
+        <section aria-labelledby="menu-display-settings">
+          <h3
+            id="menu-display-settings"
+            className="px-1 text-[11px] font-bold uppercase tracking-[0.14em] text-ink-faint"
+          >
+            {t("menu.displaySettings")}
+          </h3>
+          <div className="mt-2 grid gap-4 rounded border border-line bg-card p-4">
+            <label className="grid gap-1.5 text-xs font-medium text-ink-muted">
+              {t("menu.theme")}
+              <select
+                aria-label={t("menu.theme")}
+                value={theme}
+                onChange={(event) => setTheme(event.target.value as Theme)}
+                className={`${autoControl} h-10 w-full text-sm`}
+              >
+                {themes.map((candidate) => (
+                  <option key={candidate} value={candidate}>
+                    {t(themeLabels[candidate])}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="grid gap-1.5 text-xs font-medium text-ink-muted">
+              {t("menu.language")}
+              <select
+                aria-label={t("menu.language")}
+                value={locale}
+                onChange={(event) => setLocale(event.target.value as Locale)}
+                className={`${autoControl} h-10 w-full text-sm`}
+              >
+                {locales.map((candidate) => (
+                  <option key={candidate} value={candidate}>
+                    {t(localeLabels[candidate])}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        </section>
       </div>
     </section>
   );

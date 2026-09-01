@@ -485,7 +485,7 @@ describe("App", () => {
     expect(screen.queryByRole("region", { name: "Notifications" })).toBeNull();
   });
 
-  it("restores and changes the desktop navigation layout", async () => {
+  it("keeps desktop navigation visible and restores its width", async () => {
     window.localStorage.setItem("sshc.navigation.visible", "false");
     window.localStorage.setItem("sshc.navigation.width", "312");
     const user = userEvent.setup();
@@ -498,13 +498,11 @@ describe("App", () => {
     );
 
     await screen.findByRole("heading", { name: "sshc" });
-    const layout = container.querySelector<HTMLElement>("[data-desktop-navigation-visible]");
-    expect(layout).toHaveAttribute("data-desktop-navigation-visible", "false");
+    const layout = container.querySelector<HTMLElement>("[style*='--navigation-width']");
     expect(layout?.style.getPropertyValue("--navigation-width")).toBe("312px");
-
-    await user.click(screen.getByRole("button", { name: "Show navigation" }));
-    expect(layout).toHaveAttribute("data-desktop-navigation-visible", "true");
-    expect(window.localStorage.getItem("sshc.navigation.visible")).toBe("true");
+    expect(screen.getByRole("navigation", { name: "Primary" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Show navigation" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Hide navigation" })).toBeNull();
 
     const resize = screen.getByRole("separator", { name: "Resize navigation" });
     resize.focus();
@@ -529,7 +527,7 @@ describe("App", () => {
     expect(screen.queryByRole("button", { name: /details/i })).toBeNull();
 
     await user.click(screen.getByRole("button", { name: "offer inspector" }));
-    await user.click(screen.getByRole("button", { name: "Show Display and classification Needs attention" }));
+    await user.click(within(screen.getByRole("main")).getByRole("button", { name: "Show Display and classification Needs attention" }));
 
     expect(screen.getByRole("complementary", { name: "Display and classification" })).toHaveTextContent("inspector body");
 
@@ -551,7 +549,7 @@ describe("App", () => {
     );
     await user.click(await screen.findByRole("link", { name: "Connections" }));
     await user.click(await screen.findByRole("button", { name: "offer inspector" }));
-    await user.click(screen.getByRole("button", { name: "Show Display and classification Needs attention" }));
+    await user.click(within(screen.getByRole("main")).getByRole("button", { name: "Show Display and classification Needs attention" }));
     expect(screen.getByRole("complementary", { name: "Display and classification" })).toBeInTheDocument();
 
     const back = new Event("sshc-android-back", { cancelable: true });
@@ -581,7 +579,9 @@ describe("App", () => {
     );
     await user.click(await screen.findByRole("link", { name: "Connections" }));
     await user.click(await screen.findByRole("button", { name: "offer inspector" }));
-    const toggle = screen.getByRole("button", { name: "Show Display and classification Needs attention" });
+    const header = document.querySelector("[data-app-header]");
+    expect(header).not.toBeNull();
+    const toggle = within(header as HTMLElement).getByRole("button", { name: "Show Display and classification Needs attention" });
     await user.click(toggle);
 
     const inspector = screen.getByRole("complementary", { name: "Display and classification" });
@@ -604,7 +604,9 @@ describe("App", () => {
       </ThemeProvider>,
     );
 
-    const control = await screen.findByLabelText("Appearance");
+    await user.click(await screen.findByRole("link", { name: "Menu" }));
+    const menu = await screen.findByRole("region", { name: "Menu" });
+    const control = within(menu).getByLabelText("Theme");
     expect(control).toHaveValue("dark");
 
     await user.selectOptions(control, "dark");
@@ -637,7 +639,7 @@ describe("App", () => {
     expect(document.body).not.toHaveTextContent(csrfToken);
   });
 
-  it("closes each mobile header menu when another part of the shell is pressed", async () => {
+  it("keeps display settings out of the mobile header and closes its navigation with Android back", async () => {
     const user = userEvent.setup();
     render(
       <App
@@ -647,31 +649,20 @@ describe("App", () => {
       />,
     );
 
-    const displayMenu = await screen.findByLabelText("Display menu");
-    const displayDetails = displayMenu.closest("details");
+    const header = document.querySelector("[data-app-header]");
+    expect(header).not.toBeNull();
+    expect(within(header as HTMLElement).queryByLabelText("Display menu")).toBeNull();
     const navigation = screen.getByRole("button", { name: "Navigation" });
 
-    await user.click(displayMenu);
-    expect(displayDetails).toHaveAttribute("open");
-
     await user.click(navigation);
-    expect(displayDetails).not.toHaveAttribute("open");
     expect(navigation).toHaveAttribute("aria-expanded", "true");
 
-    await user.click(displayMenu);
-    expect(navigation).toHaveAttribute("aria-expanded", "false");
-    expect(displayDetails).toHaveAttribute("open");
-
-    await user.click(screen.getByRole("heading", { name: "sshc" }));
-    expect(displayDetails).not.toHaveAttribute("open");
-
-    await user.click(displayMenu);
     const back = new Event("sshc-android-back", { cancelable: true });
     act(() => {
       window.dispatchEvent(back);
     });
     expect(back.defaultPrevented).toBe(true);
-    expect(displayDetails).not.toHaveAttribute("open");
+    expect(navigation).toHaveAttribute("aria-expanded", "false");
   });
 
   it("renders a direct section URL and links every primary destination", async () => {
@@ -1176,7 +1167,7 @@ describe("App", () => {
     expect(screen.getByRole("navigation", { name: ja["shell.primaryNavigation"] })).toBeInTheDocument();
   });
 
-  it("switches language from the header and leaves the open section alone", async () => {
+  it("switches language from the Menu display settings", async () => {
     const user = userEvent.setup();
     render(
       <LanguageProvider initial="en">
@@ -1188,12 +1179,13 @@ describe("App", () => {
       </LanguageProvider>,
     );
 
-    await openFromMenu(user, "History");
-    expect(screen.getByText("history panel")).toBeInTheDocument();
+    await user.click(await screen.findByRole("link", { name: "Menu" }));
+    const menu = await screen.findByRole("region", { name: "Menu" });
+    const groups = within(menu).getAllByRole("heading", { level: 3 });
+    expect(groups.at(-1)).toHaveTextContent("Preferences");
+    await user.selectOptions(within(menu).getByLabelText("Language"), "ja");
 
-    await user.selectOptions(screen.getByLabelText("Lang"), "ja");
-
-    expect(window.location.pathname).toBe("/history");
-    expect(screen.getByText("history panel")).toBeInTheDocument();
+    expect(window.location.pathname).toBe("/menu");
+    expect(screen.getByRole("region", { name: ja["section.menu"] })).toBeInTheDocument();
   });
 });
