@@ -124,13 +124,13 @@ sshcのSFTPは、安全なアップロード／ダウンロード、フォルダ
 | waiting順のmove up/down | 未対応 | FIFO固定 | P0 |
 | Execute now／同時数を一時超過 | 未対応 | 最大同時数を厳守 | 必要性を判断 |
 | queue processing全体の開始／停止 | 未対応 | 常時自動処理 | P0 |
-| Suspend All／Resume All／Cancel All | 未対応 | job単位だけ | P0 |
+| Suspend All／Resume All／Cancel All | 対応 | 下部queueの操作menuから全jobへ適用 | 維持 |
 | job別speed limit | 未対応 | なし | token bucketをengine側へ追加 |
 | 全体speed limit | 未対応 | なし | job別上限と合わせて追加 |
 | 最大同時転送数の設定 | 部分 | engineは可変だがUI設定なし、既定2 | Preferencesへ追加 |
 | 複数接続で複数fileを転送 | 対応 | jobごとに独立SFTP transport、既定2並列 | 接続再利用は限定的 |
 | 1 fileを複数connectionで分割 | 未対応 | 1 job 1 stream | 大容量downloadだけ将来検討 |
-| queueの折りたたみ | 未対応 | jobがあれば常時表示 | P0 |
+| queueの折りたたみ | 対応 | headerを残して展開／折りたたみ | 維持 |
 | queue高さのresize | 未対応 | 最大高さ固定 | desktopへdrag handleを追加 |
 | queue file listの展開 | 部分 | batch配下へfile jobを常時表示 | 折りたたみ可能にする |
 | prompt／errorの保留表示 | 部分 | overwriteは開始前確認、errorはjob表示 | queue内で再確認待ちを扱えるようにする |

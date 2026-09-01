@@ -1,5 +1,8 @@
-import { useMemo, useSyncExternalStore } from "react";
+import { useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useTranslate } from "../i18n/context";
+import { Icon } from "../ui/icons";
+import { useDismissibleLayer } from "../ui/useDismissibleLayer";
+import { useMenuKeyboard } from "../ui/useMenuKeyboard";
 import { sftpTransferManager, type ManagedTransferJob } from "./transferManager";
 
 function bytes(value: number): string {
@@ -24,21 +27,52 @@ function statusClass(status: ManagedTransferJob["status"]): string {
 
 export function TransferManagerList() {
   const t = useTranslate();
+  const [collapsed, setCollapsed] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRoot = useRef<HTMLDivElement>(null);
+  const menuPanel = useRef<HTMLDivElement>(null);
+  const menuTrigger = useRef<HTMLButtonElement>(null);
   const jobs = useSyncExternalStore(sftpTransferManager.subscribe, sftpTransferManager.getSnapshot);
   const batches = useMemo(() => {
     const grouped = new Map<string, ManagedTransferJob[]>();
     for (const job of jobs) grouped.set(job.batchId, [...(grouped.get(job.batchId) ?? []), job]);
     return [...grouped.entries()];
   }, [jobs]);
+  const canPause = jobs.some((job) => job.allowedActions.includes("pause"));
+  const canResume = jobs.some((job) => job.allowedActions.includes("resume") && job.status !== "needs_overwrite");
+  const canCancel = jobs.some((job) => job.allowedActions.includes("cancel"));
+  const canClear = jobs.some((job) => job.status === "completed" || job.status === "cancelled");
+  useDismissibleLayer({
+    open: menuOpen,
+    containerRefs: [menuRoot],
+    onDismiss: () => setMenuOpen(false),
+    returnFocusRef: menuTrigger,
+  });
+  useMenuKeyboard({ open: menuOpen, menuRef: menuPanel, onClose: () => setMenuOpen(false) });
   if (jobs.length === 0) return null;
   return (
-    <section className="max-h-64 shrink-0 overflow-auto border-t border-line bg-toolbar/35 px-3 py-2 text-xs" aria-labelledby="transfer-manager-heading">
-      <div className="mb-2 flex flex-wrap items-center gap-2">
-        <h3 id="transfer-manager-heading" className="font-medium">{t("sftp.manager.heading")}</h3>
+    <section className="relative shrink-0 border-t border-line bg-toolbar/35 text-xs" aria-labelledby="transfer-manager-heading">
+      <div className="flex min-h-9 items-center gap-2 px-3 py-1.5">
+        <button type="button" aria-label={t(collapsed ? "sftp.manager.expand" : "sftp.manager.collapse")} aria-expanded={!collapsed} aria-controls="transfer-manager-jobs" onClick={() => setCollapsed((value) => !value)} className="flex min-w-0 items-center gap-1.5 rounded hover:text-accent focus:outline-none focus-visible:ring-1 focus-visible:ring-accent">
+          <Icon name="chevronRight" className={`size-3 transition-transform ${collapsed ? "" : "rotate-90"}`} />
+          <h3 id="transfer-manager-heading" className="truncate font-medium">{t("sftp.manager.heading")}</h3>
+        </button>
         <span className="text-ink-muted">{t("sftp.manager.limit", { count: sftpTransferManager.getMaxConcurrent() })}</span>
-        <button type="button" className="ml-auto text-ink-muted hover:text-ink" onClick={() => void sftpTransferManager.clearFinished()}>{t("sftp.transfer.clear")}</button>
+        <div ref={menuRoot} className="relative ml-auto">
+          <button ref={menuTrigger} type="button" aria-label={t("sftp.manager.actions")} aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((value) => !value)} className="flex size-8 items-center justify-center rounded text-ink-muted hover:bg-select-fill hover:text-ink focus:bg-select-fill focus:outline-none">
+            <Icon name="moreHorizontal" className="size-4" />
+          </button>
+          {menuOpen ? (
+            <div ref={menuPanel} role="menu" aria-label={t("sftp.manager.actions")} className="absolute bottom-full right-0 z-20 mb-1 w-48 rounded-lg border border-control-line bg-card p-1 shadow-lg">
+              {canPause ? <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); void sftpTransferManager.pauseAll(); }} className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-0">{t("sftp.manager.pauseAll")}</button> : null}
+              {canResume ? <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); void sftpTransferManager.resumeAll(); }} className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-0">{t("sftp.manager.resumeAll")}</button> : null}
+              {canCancel ? <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); void sftpTransferManager.cancelAll(); }} className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm text-danger hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-0">{t("sftp.manager.cancelAll")}</button> : null}
+              {canClear ? <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); void sftpTransferManager.clearFinished(); }} className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-0">{t("sftp.transfer.clear")}</button> : null}
+            </div>
+          ) : null}
+        </div>
       </div>
-      <div className="space-y-2">
+      {collapsed ? null : <div id="transfer-manager-jobs" className="max-h-56 space-y-2 overflow-auto px-3 pb-2">
         {batches.map(([batchId, items]) => {
           const first = items[0]!;
           const failed = items.filter((item) => item.status === "failed").length;
@@ -83,7 +117,7 @@ export function TransferManagerList() {
             </section>
           );
         })}
-      </div>
+      </div>}
     </section>
   );
 }
