@@ -5,7 +5,7 @@ description: Arrange SSH and local shells in up to four panes and save the layou
 
 # Workspaces
 
-![A workspace with four terminal panes](/images/workspace-desktop.png)
+![A workspace with multiple terminal panes](/images/workspace-desktop.png)
 
 Drag a connected terminal onto the current pane to split above, below, left or right according to the drop position. SSH and local shells belong to the same workspace model.
 

@@ -32,6 +32,9 @@ async function stubUpdateStatus(page: import("@playwright/test").Page) {
 
 test("draws one separator above the desktop navigation version", async ({ page, installation }) => {
   await stubUpdateStatus(page);
+  if (process.env.SSHC_VISUAL_DIR !== undefined) {
+    await page.setViewportSize({ width: 1440, height: 900 });
+  }
   await openApplication(page, installation);
 
   const navigation = page.getByRole("navigation", { name: "Primary" });
@@ -42,6 +45,10 @@ test("draws one separator above the desktop navigation version", async ({ page, 
   await expect(navigation.getByText("Home", { exact: true }).first()).toBeVisible();
   await expect(page.locator("[data-app-header]")).toBeHidden();
   await expect.poll(() => navigationFooterTopBorders(page)).toBe(1);
+
+  if (process.env.SSHC_VISUAL_DIR !== undefined) {
+    await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/home-desktop.png`, fullPage: true });
+  }
 });
 
 test("keeps the engine version visible when the release check fails", async ({ page, installation }) => {

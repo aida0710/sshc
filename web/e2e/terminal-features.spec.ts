@@ -4,6 +4,60 @@ import { terminalKeyboard, terminalScrollbarSlider } from "./support/terminal";
 
 const visualDirectory = process.env.SSHC_VISUAL_DIR;
 
+async function mockConnectedTerminal(
+  page: import("@playwright/test").Page,
+  session: Record<string, unknown>,
+  output: string,
+) {
+  await page.route("**/api/v1/terminal/sessions**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith("/stream")) {
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({ streamTicket: String(session.id) }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ sessions: [session], maxSessions: 50 }),
+    });
+  });
+  await page.routeWebSocket("**/terminal/stream?**", (socket) => {
+    socket.send(Buffer.from(output));
+  });
+}
+
+test("renders the documented non-interactive CLI example", async ({ page, installation }) => {
+  const session = {
+    id: "cli-production",
+    kind: "ssh",
+    alias: "production",
+    title: "production",
+    startedAt: "2026-09-01T00:00:00Z",
+    state: "connected",
+    problem: "",
+    forwards: [],
+  };
+  await mockConnectedTerminal(
+    page,
+    session,
+    "$ sshc ssh production --non-interactive -- uname -n\r\nproduction\r\n$ ",
+  );
+
+  await openApplication(page, installation);
+  await openSection(page, "Terminal");
+  const terminal = page.getByRole("region", { name: "Console for production" });
+  await expect(terminal).toContainText("sshc ssh production --non-interactive -- uname -n");
+  await expect(terminal).toContainText("production");
+
+  if (visualDirectory !== undefined) {
+    await page.screenshot({ path: join(visualDirectory, "cli-example-desktop.png"), fullPage: true });
+  }
+});
+
 test("uses a thin rounded scrollbar for terminal scrollback", async ({ page, installation }) => {
   await openApplication(page, installation);
   await openSection(page, "Terminal");
@@ -38,14 +92,24 @@ test("uses a thin rounded scrollbar for terminal scrollback", async ({ page, ins
   }
 });
 
-test("keeps terminal actions compact and exposes the new terminal settings", async ({ page, installation }) => {
+test("keeps terminal actions compact and exposes terminal settings", async ({ page, installation }) => {
+  await mockConnectedTerminal(
+    page,
+    {
+      id: "terminal-actions",
+      kind: "shell",
+      title: "docs-shell",
+      startedAt: "2026-09-01T00:00:00Z",
+      state: "connected",
+      problem: "",
+      forwards: [],
+    },
+    "developer@workstation:~$ ",
+  );
   await openApplication(page, installation);
   await openSection(page, "Terminal");
 
-  const navigation = page.getByRole("navigation", { name: "Primary" });
-  await navigation.getByRole("button", { name: "Local shell" }).click();
-
-  const terminal = page.getByRole("region", { name: /^Console for / });
+  const terminal = page.getByRole("region", { name: "Console for docs-shell" });
   await expect(terminal).toBeVisible();
   await expect(terminal.getByRole("button", { name: "Find" })).toBeVisible();
   await terminal.getByRole("button", { name: "More terminal actions" }).click();
