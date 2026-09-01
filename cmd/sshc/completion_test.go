@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -134,6 +135,64 @@ printf '%s\n' "${COMPREPLY[@]}"`, "completion-test"}, test.words...)
 				t.Fatalf("completion = %q; want %q", candidates, test.want)
 			}
 		})
+	}
+}
+
+// OpenSSH は `Host $(id)` のような alias も読む。`sshc ssh --list` はそれをその
+// まま出すので、補完はどの入口でも alias を展開せず、ただの文字列として扱う。
+func TestBashCompletionNeverEvaluatesAliasesFromTheSSHConfig(t *testing.T) {
+	bash, err := exec.LookPath("bash")
+	if err != nil {
+		t.Skip("bash is not installed")
+	}
+	directory := t.TempDir()
+	completionPath := filepath.Join(directory, "sshc-completion.bash")
+	if err := os.WriteFile(completionPath, []byte(bashCompletion), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	substitution := filepath.Join(directory, "substitution")
+	backquote := filepath.Join(directory, "backquote")
+	fakePath := filepath.Join(directory, "sshc")
+	fake := fmt.Sprintf(
+		"#!/bin/sh\nif [ \"$1 $2\" = \"ssh --list\" ]; then printf '$(touch %s)\\n`touch %s`\\nalpha\\n'; fi\n",
+		substitution, backquote,
+	)
+	if err := os.WriteFile(fakePath, []byte(fake), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	entries := map[string][]string{
+		"ssh":             {"sshc", "ssh", ""},
+		"info":            {"sshc", "info", ""},
+		"terminal create": {"sshc", "terminal", "create", "ssh", ""},
+	}
+	for name, words := range entries {
+		t.Run(name, func(t *testing.T) {
+			arguments := append([]string{"-c", `source "$COMPLETION"
+COMP_WORDS=("$@")
+COMP_CWORD=$((${#COMP_WORDS[@]} - 1))
+_sshc_completion
+printf '%s\n' "${COMPREPLY[@]}"`, "completion-test"}, words...)
+			command := exec.Command(bash, arguments...)
+			command.Env = append(os.Environ(),
+				"COMPLETION="+completionPath,
+				"PATH="+directory+string(os.PathListSeparator)+os.Getenv("PATH"),
+			)
+			output, err := command.CombinedOutput()
+			if err != nil {
+				t.Fatalf("completion failed: %v\n%s", err, output)
+			}
+			// 展開されずに読めていることを確かめる。全部落としてしまうと、この
+			// テストは何も守らないまま通ってしまう。
+			if !strings.Contains(string(output), "$(touch "+substitution+")") {
+				t.Fatalf("completion dropped the alias instead of offering it verbatim: %s", output)
+			}
+		})
+	}
+	for _, marker := range []string{substitution, backquote} {
+		if _, err := os.Stat(marker); err == nil {
+			t.Fatalf("completion executed the alias and created %s", marker)
+		}
 	}
 }
 
