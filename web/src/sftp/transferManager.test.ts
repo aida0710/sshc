@@ -220,6 +220,20 @@ describe("SFTPTransferManager engine ownership", () => {
     expect(api.clearFinishedTransfers).toHaveBeenCalledOnce();
   });
 
+  it("applies pause, resume, and cancel to every actionable transfer", async () => {
+    const api = engineAPI();
+    const manager = new SFTPTransferManager(api, 0);
+    await manager.addDownload("edge", "/first.bin", "file", 4);
+    await manager.addDownload("edge", "/second.bin", "file", 4);
+
+    await manager.pauseAll();
+    expect(manager.getSnapshot().map((job) => job.status)).toEqual(["paused", "paused"]);
+    await manager.resumeAll();
+    expect(manager.getSnapshot().map((job) => job.status)).toEqual(["queued", "queued"]);
+    await manager.cancelAll();
+    expect(manager.getSnapshot().map((job) => job.status)).toEqual(["cancelled", "cancelled"]);
+  });
+
   it("replaces a stale browser cache when another WebView changes the engine", async () => {
     const api = engineAPI();
     const first = new SFTPTransferManager(api, 0);

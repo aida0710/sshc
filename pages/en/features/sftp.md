@@ -24,7 +24,7 @@ Sort by name, type, bytes or modified time. Permissions appear below the entry n
 
 ## Transfer Manager
 
-The Transfer Manager is docked below the file list. Files and folders share one queue, with two concurrent transfers by default. See per-file progress, speed and remaining time, then pause, resume, retry or cancel. A failed batch can retry only its failed files.
+The Transfer Manager is docked below the file list. Files and folders share one queue, with two concurrent transfers by default. Collapse the queue to its header, or use its action menu to pause, resume or cancel all transfers. Per-file progress, speed and remaining time remain available together with individual controls and retrying only the failed files in a batch.
 
 Large uploads use a remote temporary file and an atomic rename after completion. After a disconnect, they can resume from the transferred remote size. File downloads use HTTP Range and resume when the retained local prefix still matches the remote revision.
 
