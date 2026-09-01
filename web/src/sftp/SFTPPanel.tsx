@@ -614,8 +614,7 @@ export function SFTPPanel({
               </div>
             ) : null}
           </div>
-          <TransferManagerList />
-          <div className="min-h-0 min-w-0 overflow-auto">
+          <div className="min-h-0 min-w-0 flex-1 overflow-auto">
             {compactViewport ? (
               <ul aria-label={t("sftp.entries")} className="divide-y divide-line">
                 {path !== "" && path !== "/" ? (
@@ -718,6 +717,7 @@ export function SFTPPanel({
             </table>
             )}
           </div>
+          <TransferManagerList />
         </div>
 
       </div>
