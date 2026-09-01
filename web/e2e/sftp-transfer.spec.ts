@@ -1,6 +1,7 @@
 import { changeDisplayLanguage, expect, openApplication, openSection, test } from "./support/environment";
 
 test("keeps a chunked SFTP upload visible while another section is open", async ({ page, installation }) => {
+  test.setTimeout(process.env.SSHC_VISUAL_DIR === undefined ? 30_000 : 60_000);
   let releaseFirstChunk: (() => void) | undefined;
   const firstChunkGate = new Promise<void>((resolve) => { releaseFirstChunk = resolve; });
   let offset = 0;
@@ -114,10 +115,21 @@ test("keeps a chunked SFTP upload visible while another section is open", async 
     await page.screenshot({ path: `${visualDirectory}/sshc-v0.16.1-transfer-manager-desktop.png`, fullPage: true });
     const listWidth = (await page.getByLabel("Upload files or folders to the current remote directory").boundingBox())?.width;
     await page.getByRole("button", { name: "notes.txt" }).dblclick();
-    await expect(page.getByRole("dialog", { name: "/large/notes.txt" })).toBeVisible();
+    const editorDialog = page.getByRole("dialog", { name: "/large/notes.txt" });
+    await expect(editorDialog).toBeVisible();
     await expect.poll(async () => (await page.getByLabel("Upload files or folders to the current remote directory").boundingBox())?.width).toBe(listWidth);
+    await expect(page.getByText("Loading editor…")).toBeHidden();
+    await expect(editorDialog.getByRole("button", { name: "Close" })).toBeVisible();
+    const monacoBounds = await editorDialog.locator(".monaco-editor").boundingBox();
+    expect(monacoBounds?.width).toBeGreaterThan(500);
+    expect(monacoBounds?.height).toBeGreaterThan(300);
+    const editorBounds = await editorDialog.boundingBox();
+    expect(editorBounds?.y).toBeGreaterThanOrEqual(0);
+    expect(editorBounds?.height).toBeLessThanOrEqual(page.viewportSize()?.height ?? 0);
+    await page.waitForTimeout(300);
     await page.screenshot({ path: `${visualDirectory}/sshc-v0.16.1-sftp-editor-modal.png`, fullPage: true });
-    await page.getByRole("dialog", { name: "/large/notes.txt" }).getByRole("button", { name: "Close" }).click();
+    await editorDialog.getByRole("button", { name: "Close" }).click();
+    await page.getByRole("button", { name: "project", exact: true }).click();
     await page.setViewportSize({ width: 360, height: 800 });
     await page.waitForTimeout(400);
     await expect(page.getByRole("list", { name: "Remote entries" })).toBeVisible();
