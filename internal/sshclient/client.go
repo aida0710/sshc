@@ -128,7 +128,12 @@ func (d Dialer) start(remote *ssh.Session, target Target, size terminal.Size, se
 	}
 
 	if !strings.EqualFold(target.RequestTTY, "no") {
-		modes := ssh.TerminalModes{ssh.ECHO: 1, ssh.TTY_OP_ISPEED: 14400, ssh.TTY_OP_OSPEED: 14400}
+		// xterm.js is not a local TTY, so there is no real input or output baud
+		// rate to forward. Inventing one can leave the remote PTY with a speed
+		// that its termios implementation cannot apply again when programs enter
+		// raw mode. Let the server keep its native PTY speeds and only request the
+		// interactive echo behaviour the browser terminal expects.
+		modes := ssh.TerminalModes{ssh.ECHO: 1}
 		if err := remote.RequestPty(TermName, int(size.Rows), int(size.Cols), modes); err != nil {
 			return err
 		}

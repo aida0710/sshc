@@ -43,6 +43,7 @@ type testServer struct {
 	mutex     sync.Mutex
 	ptyTerm   string
 	ptySize   [2]uint32
+	ptyModes  ssh.TerminalModes
 	sizes     [][2]uint32
 	env       []string
 	command   string
@@ -323,9 +324,10 @@ func (s *testServer) session(connection ssh.Conn, channel ssh.Channel, requests 
 	for request := range requests {
 		switch request.Type {
 		case "pty-req":
-			term, width, height := parsePTY(request.Payload)
+			term, width, height, modes := parsePTY(request.Payload)
 			s.mutex.Lock()
 			s.ptyTerm, s.ptySize = term, [2]uint32{width, height}
+			s.ptyModes = modes
 			s.mutex.Unlock()
 			s.reply(request, true)
 		case "window-change":
@@ -400,6 +402,16 @@ func (s *testServer) PTY() (string, [2]uint32) {
 	return s.ptyTerm, s.ptySize
 }
 
+func (s *testServer) PTYModes() ssh.TerminalModes {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	modes := make(ssh.TerminalModes, len(s.ptyModes))
+	for opcode, value := range s.ptyModes {
+		modes[opcode] = value
+	}
+	return modes
+}
+
 func (s *testServer) Sizes() [][2]uint32 {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
@@ -449,17 +461,31 @@ func (s *testServer) Dialed() []string {
 	return append([]string(nil), s.dialed...)
 }
 
-func parsePTY(payload []byte) (term string, width, height uint32) {
+func parsePTY(payload []byte) (term string, width, height uint32, modes ssh.TerminalModes) {
 	if len(payload) < 4 {
-		return "", 0, 0
+		return "", 0, 0, nil
 	}
 	length := binary.BigEndian.Uint32(payload)
-	if uint32(len(payload)) < 4+length+16 {
-		return "", 0, 0
+	if uint32(len(payload)) < 4+length+20 {
+		return "", 0, 0, nil
 	}
 	term = string(payload[4 : 4+length])
 	rest := payload[4+length:]
-	return term, binary.BigEndian.Uint32(rest), binary.BigEndian.Uint32(rest[4:])
+	width, height = binary.BigEndian.Uint32(rest), binary.BigEndian.Uint32(rest[4:])
+	modeLength := binary.BigEndian.Uint32(rest[16:])
+	if uint32(len(rest)) < 20+modeLength {
+		return "", 0, 0, nil
+	}
+	modes = ssh.TerminalModes{}
+	encoded := rest[20 : 20+modeLength]
+	for len(encoded) > 0 && encoded[0] != 0 {
+		if len(encoded) < 5 {
+			return "", 0, 0, nil
+		}
+		modes[encoded[0]] = binary.BigEndian.Uint32(encoded[1:])
+		encoded = encoded[5:]
+	}
+	return term, width, height, modes
 }
 
 func parseWindowChange(payload []byte) (width, height uint32) {

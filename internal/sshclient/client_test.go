@@ -117,6 +117,16 @@ func TestOpenRunsAShellAndCarriesItsOutput(t *testing.T) {
 	if term != sshclient.TermName || size != [2]uint32{120, 40} {
 		t.Errorf("pty-req = %q %v", term, size)
 	}
+	modes := server.PTYModes()
+	if len(modes) != 1 || modes[ssh.ECHO] != 1 {
+		t.Errorf("pty modes = %v, want only ECHO=1", modes)
+	}
+	if _, exists := modes[ssh.TTY_OP_ISPEED]; exists {
+		t.Error("pty request invented an input baud rate")
+	}
+	if _, exists := modes[ssh.TTY_OP_OSPEED]; exists {
+		t.Error("pty request invented an output baud rate")
+	}
 }
 
 func TestTheRemoteExitCodeReachesTheSessionListing(t *testing.T) {
