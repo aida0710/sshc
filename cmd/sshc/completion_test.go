@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -152,11 +151,15 @@ func TestBashCompletionNeverEvaluatesAliasesFromTheSSHConfig(t *testing.T) {
 	}
 	substitution := filepath.Join(directory, "substitution")
 	backquote := filepath.Join(directory, "backquote")
+	aliasesPath := filepath.Join(directory, "aliases.txt")
+	aliases := "$(touch " + substitution + ")\n`touch " + backquote + "`\nalpha\n"
+	if err := os.WriteFile(aliasesPath, []byte(aliases), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	fakePath := filepath.Join(directory, "sshc")
-	fake := fmt.Sprintf(
-		"#!/bin/sh\nif [ \"$1 $2\" = \"ssh --list\" ]; then printf '$(touch %s)\\n`touch %s`\\nalpha\\n'; fi\n",
-		substitution, backquote,
-	)
+	// 候補をscriptのprintf formatへ埋め込むと、Windows pathの `\001` などが
+	// escapeとして解釈される。候補そのものを評価しないfixtureにするため、別fileを読む。
+	fake := "#!/bin/sh\nif [ \"$1 $2\" = \"ssh --list\" ]; then cat \"$SSHC_TEST_ALIASES\"; fi\n"
 	if err := os.WriteFile(fakePath, []byte(fake), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -177,6 +180,7 @@ printf '%s\n' "${COMPREPLY[@]}"`, "completion-test"}, words...)
 			command.Env = append(os.Environ(),
 				"COMPLETION="+completionPath,
 				"PATH="+directory+string(os.PathListSeparator)+os.Getenv("PATH"),
+				"SSHC_TEST_ALIASES="+aliasesPath,
 			)
 			output, err := command.CombinedOutput()
 			if err != nil {
