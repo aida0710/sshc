@@ -33,9 +33,9 @@ sshcのSFTPは、安全なアップロード／ダウンロード、フォルダ
 | Commander型のlocal／remote 2 panel | 未対応 | remoteだけを表示 | desktop向けlocal panelを設計。mobileは単一panelを維持 |
 | `..`による親directory移動 | 対応 | 一覧先頭に表示 | 維持 |
 | path直接入力 | 対応 | 絶対pathを入力して移動 | 維持 |
-| Back／Forward履歴 | 未対応 | path履歴を保持しない | P0 |
-| Home directoryへ移動 | 部分 | 接続直後はhomeだが戻る操作がない | P0 |
-| Root directoryへ移動 | 部分 | `/`を入力すれば移動可能 | P0の明示操作 |
+| Back／Forward履歴 | 対応 | hostを切り替えるまでpath履歴を保持 | 維持 |
+| Home directoryへ移動 | 対応 | serverのworking directoryを再解決して移動 | 維持 |
+| Root directoryへ移動 | 対応 | navigation buttonまたは`/`の直接入力 | 維持 |
 | directory bookmark | 未対応 | favoriteを保持しない | host単位と共通bookmarkを設計 |
 | directory tree | 未対応 | 一覧だけ | desktopの任意表示として検討 |
 | synchronized browsing | 未対応 | local panelがない | 2 panel導入後 |
@@ -43,7 +43,7 @@ sshcのSFTPは、安全なアップロード／ダウンロード、フォルダ
 | opposite panelのpathへ移動 | 未対応 | local panelがない | 2 panel導入後 |
 | directory stateのsession別記憶 | 部分 | URLへalias/pathを反映 | sort、selection、historyも保存する |
 | 複数SFTP tab | 未対応 | SFTP画面は1接続だけ | host/path状態を持つtabを検討 |
-| panel内の名前filter | 未対応 | sortだけ | P0 |
+| panel内の名前filter | 対応 | 現在directoryを名前の部分一致で絞り込み | mask式は後続 |
 | remote配下の再帰file検索 | 未対応 | APIなし | P1、server側上限付き検索 |
 | directory cache | 未対応 | 現在pathを都度取得 | stale表示を避ける明示cacheとして設計 |
 | refresh | 対応 | path横の移動操作で再取得可能 | icon／shortcutを明確化 |
