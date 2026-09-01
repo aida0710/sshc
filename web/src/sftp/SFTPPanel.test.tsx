@@ -28,6 +28,13 @@ const clipboard = vi.hoisted(() => ({ writeText: vi.fn(async () => undefined) })
 
 vi.mock("./api", () => ({ sftpApi: api }));
 vi.mock("../ui/clipboard", () => ({ clipboard: { readText: vi.fn(), writeText: clipboard.writeText } }));
+vi.mock("../api/integrations", () => ({ integrationsApi: { recentConnections: vi.fn(async () => ({ connections: [] })) } }));
+
+async function chooseHost(alias: string) {
+  await userEvent.click(screen.getByRole("button", { name: "Host" }));
+  const label = await screen.findByText(alias, { selector: "span.font-medium" });
+  await userEvent.click(label.closest("button")!);
+}
 
 describe("SFTPPanel uploads", () => {
   beforeEach(async () => {
@@ -87,7 +94,7 @@ describe("SFTPPanel uploads", () => {
     });
     render(<SFTPPanel aliases={["edge"]} />);
     expect(api.list).not.toHaveBeenCalled();
-    await userEvent.selectOptions(screen.getByLabelText("Host"), "edge");
+    await chooseHost("edge");
     await waitFor(() => expect(api.list).toHaveBeenCalledWith("edge", ""));
 
     const first = new File(["alpha"], "first.txt", { type: "text/plain" });
@@ -106,10 +113,10 @@ describe("SFTPPanel uploads", () => {
   it("does not connect until a host is selected", async () => {
     render(<SFTPPanel aliases={["edge"]} />);
 
-    expect(screen.getByLabelText("Host")).toHaveValue("");
+    expect(screen.getByRole("button", { name: "Host" })).toHaveAttribute("data-value", "");
     expect(api.list).not.toHaveBeenCalled();
 
-    await userEvent.selectOptions(screen.getByLabelText("Host"), "edge");
+    await chooseHost("edge");
     await waitFor(() => expect(api.list).toHaveBeenCalledWith("edge", ""));
     expect(screen.getByLabelText("Remote path")).toHaveValue("/remote");
   });
@@ -120,7 +127,7 @@ describe("SFTPPanel uploads", () => {
       entries: path === "" ? [{ name: "project", path: "/remote/project", type: "directory", size: 0, mode: "0755", modifiedAt: "2026-08-24T10:00:00Z", revision: "rev" }] : [],
     }));
     render(<SFTPPanel aliases={["edge"]} />);
-    await userEvent.selectOptions(screen.getByLabelText("Host"), "edge");
+    await chooseHost("edge");
 
     const table = await screen.findByRole("table");
     const rows = within(table).getAllByRole("row");
@@ -143,7 +150,7 @@ describe("SFTPPanel uploads", () => {
       };
     });
     render(<SFTPPanel aliases={["edge"]} />);
-    await userEvent.selectOptions(screen.getByLabelText("Host"), "edge");
+    await chooseHost("edge");
     await userEvent.dblClick(await screen.findByRole("button", { name: "project" }));
     await waitFor(() => expect(screen.getByLabelText("Remote path")).toHaveValue("/home/edge/project"));
 
@@ -169,7 +176,7 @@ describe("SFTPPanel uploads", () => {
       ],
     });
     render(<SFTPPanel aliases={["edge"]} />);
-    await userEvent.selectOptions(screen.getByLabelText("Host"), "edge");
+    await chooseHost("edge");
     await screen.findByRole("button", { name: "alpha.txt" });
 
     await userEvent.type(screen.getByRole("searchbox", { name: "Filter remote entries" }), "alpha");
@@ -187,7 +194,7 @@ describe("SFTPPanel uploads", () => {
       ? { path, entries: [] }
       : { path: "/remote", entries: [{ name: "project", path: "/remote/project", type: "directory", size: 0, mode: "0755", modifiedAt: "2026-08-24T10:00:00Z", revision: "rev" }] });
     render(<SFTPPanel aliases={["edge"]} />);
-    await userEvent.selectOptions(screen.getByLabelText("Host"), "edge");
+    await chooseHost("edge");
 
     const project = await screen.findByRole("button", { name: "project" });
     await userEvent.click(project);
@@ -209,7 +216,7 @@ describe("SFTPPanel uploads", () => {
       ],
     });
     render(<SFTPPanel aliases={["edge"]} />);
-    await userEvent.selectOptions(screen.getByLabelText("Host"), "edge");
+    await chooseHost("edge");
 
     await userEvent.click(await screen.findByRole("checkbox", { name: "Select project" }));
     await userEvent.click(screen.getByRole("checkbox", { name: "Select notes.txt" }));
@@ -233,7 +240,7 @@ describe("SFTPPanel uploads", () => {
       ],
     });
     render(<SFTPPanel aliases={["edge"]} />);
-    await userEvent.selectOptions(screen.getByLabelText("Host"), "edge");
+    await chooseHost("edge");
 
     fireEvent.click(await screen.findByRole("button", { name: "alpha.txt" }));
     fireEvent.click(screen.getByRole("button", { name: "gamma.txt" }), { shiftKey: true });
@@ -259,7 +266,7 @@ describe("SFTPPanel uploads", () => {
       ],
     });
     render(<SFTPPanel aliases={["edge"]} />);
-    await userEvent.selectOptions(screen.getByLabelText("Host"), "edge");
+    await chooseHost("edge");
     await userEvent.click(await screen.findByRole("checkbox", { name: "Select all entries" }));
     await userEvent.click(screen.getByRole("button", { name: "Actions for 2 selected items" }));
     await userEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
@@ -286,7 +293,7 @@ describe("SFTPPanel uploads", () => {
       revision: "rev",
     });
     const { container } = render(<SFTPPanel aliases={["edge"]} />);
-    await userEvent.selectOptions(screen.getByLabelText("Host"), "edge");
+    await chooseHost("edge");
     await userEvent.dblClick(await screen.findByRole("button", { name: "notes.txt" }));
 
     const dialog = await screen.findByRole("dialog", { name: "/remote/notes.txt" });
@@ -307,14 +314,14 @@ describe("SFTPPanel uploads", () => {
     });
 
     render(<SFTPPanel aliases={["edge", "miyabi"]} />);
-    await userEvent.selectOptions(screen.getByLabelText("Host"), "edge");
+    await chooseHost("edge");
     await waitFor(() => expect(api.list).toHaveBeenCalledWith("edge", ""));
-    await userEvent.selectOptions(screen.getByLabelText("Host"), "miyabi");
+    await chooseHost("miyabi");
     await waitFor(() => expect(screen.getByLabelText("Remote path")).toHaveValue("/current"));
 
     resolveEdge?.({ path: "/stale", entries: [] });
     await waitFor(() => expect(screen.getByLabelText("Remote path")).toHaveValue("/current"));
-    expect(screen.getByLabelText("Host")).toHaveValue("miyabi");
+    expect(screen.getByRole("button", { name: "Host" })).toHaveAttribute("data-value", "miyabi");
   });
 
   it("clears old rows immediately and ignores a file read completed after a host switch", async () => {
@@ -332,11 +339,11 @@ describe("SFTPPanel uploads", () => {
     api.readText.mockImplementation(() => new Promise((resolve) => { resolveRead = resolve; }));
 
     render(<SFTPPanel aliases={["edge", "miyabi"]} />);
-    await userEvent.selectOptions(screen.getByLabelText("Host"), "edge");
+    await chooseHost("edge");
     await userEvent.dblClick(await screen.findByRole("button", { name: "old.txt" }));
     await waitFor(() => expect(api.readText).toHaveBeenCalledWith("edge", "/edge/old.txt"));
 
-    await userEvent.selectOptions(screen.getByLabelText("Host"), "miyabi");
+    await chooseHost("miyabi");
     expect(screen.queryByRole("button", { name: "old.txt" })).not.toBeInTheDocument();
     await waitFor(() => expect(screen.getByLabelText("Remote path")).toHaveValue("/miyabi"));
 
@@ -346,7 +353,7 @@ describe("SFTPPanel uploads", () => {
       revision: "old",
     });
     await waitFor(() => expect(screen.queryByText("/edge/old.txt")).not.toBeInTheDocument());
-    expect(screen.getByLabelText("Host")).toHaveValue("miyabi");
+    expect(screen.getByRole("button", { name: "Host" })).toHaveAttribute("data-value", "miyabi");
   });
 
   it("opens the parent directory requested by a terminal path action", async () => {
@@ -355,7 +362,7 @@ describe("SFTPPanel uploads", () => {
 
     await waitFor(() => expect(api.list).toHaveBeenCalledWith("edge", "/var/log"));
     expect(handled).toHaveBeenCalledWith(1);
-    expect(screen.getByLabelText("Host")).toHaveValue("edge");
+    expect(screen.getByRole("button", { name: "Host" })).toHaveAttribute("data-value", "edge");
     expect(screen.getByLabelText("Remote path")).toHaveValue("/remote");
   });
 
@@ -405,7 +412,7 @@ describe("SFTPPanel uploads", () => {
     api.list.mockRejectedValueOnce(new ApiError("sftp_failed", 502, null));
     render(<SFTPPanel aliases={["miyabi"]} />);
 
-    await userEvent.selectOptions(screen.getByLabelText("Host"), "miyabi");
+    await chooseHost("miyabi");
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Could not connect.");
     expect(screen.queryByText("sftp_failed")).not.toBeInTheDocument();
@@ -420,7 +427,7 @@ describe("SFTPPanel uploads", () => {
       ],
     });
     render(<SFTPPanel aliases={["edge"]} />);
-    await userEvent.selectOptions(screen.getByLabelText("Host"), "edge");
+    await chooseHost("edge");
     await screen.findByRole("button", { name: "alpha" });
 
     const table = screen.getByRole("table");
@@ -439,7 +446,7 @@ describe("SFTPPanel uploads", () => {
       ],
     });
     render(<SFTPPanel aliases={["edge"]} />);
-    await userEvent.selectOptions(screen.getByLabelText("Host"), "edge");
+    await chooseHost("edge");
 
     const table = await screen.findByRole("table");
     expect(table).toHaveClass("min-w-[44rem]");
@@ -450,7 +457,7 @@ describe("SFTPPanel uploads", () => {
 
   it("preserves folder paths and creates parent directories before upload", async () => {
     const { container } = render(<SFTPPanel aliases={["edge"]} />);
-    await userEvent.selectOptions(screen.getByLabelText("Host"), "edge");
+    await chooseHost("edge");
     await waitFor(() => expect(api.list).toHaveBeenCalled());
     const nested = new File(["nested"], "file.txt");
     Object.defineProperty(nested, "webkitRelativePath", { value: "project/config/file.txt" });
@@ -470,7 +477,7 @@ describe("SFTPPanel uploads", () => {
     const reserve = vi.spyOn(sftpTransferManager, "reserveUploads")
       .mockImplementationOnce(() => { throw new Error("sftp_transfer_limit"); });
     const { container } = render(<SFTPPanel aliases={["edge"]} />);
-    await userEvent.selectOptions(screen.getByLabelText("Host"), "edge");
+    await chooseHost("edge");
     await waitFor(() => expect(api.list).toHaveBeenCalled());
     const nested = new File(["nested"], "file.txt");
     Object.defineProperty(nested, "webkitRelativePath", { value: "project/file.txt" });
@@ -489,7 +496,7 @@ describe("SFTPPanel uploads", () => {
   it("asks before retrying an existing remote file with overwrite enabled", async () => {
     api.startUpload.mockRejectedValueOnce(new ApiError("sftp_exists", 409, null)).mockImplementationOnce(async (_alias: string, id: string, path: string, size: number) => ({ id, path, offset: 0, size, expectedRevision: "meta" }));
     const { container } = render(<SFTPPanel aliases={["edge"]} />);
-    await userEvent.selectOptions(screen.getByLabelText("Host"), "edge");
+    await chooseHost("edge");
     await waitFor(() => expect(api.list).toHaveBeenCalled());
     const file = new File(["replacement"], "existing.txt");
     const picker = container.querySelectorAll<HTMLInputElement>('input[type="file"]')[0];
@@ -508,7 +515,7 @@ describe("SFTPPanel uploads", () => {
     });
     api.chmod.mockResolvedValue(undefined);
     render(<SFTPPanel aliases={["edge"]} />);
-    await userEvent.selectOptions(screen.getByLabelText("Host"), "edge");
+    await chooseHost("edge");
     await userEvent.click(await screen.findByRole("button", { name: "project" }));
 
     await userEvent.click(screen.getByRole("button", { name: "Actions for project" }));

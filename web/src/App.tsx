@@ -828,7 +828,7 @@ export function App({
                           await consoles.refresh();
                         },
                       }}
-                      declared={{ groups, knownAliases }}
+                      declared={{ groups, knownAliases, hosts: paletteHosts }}
                       sftpTarget={sftpTarget}
                       onSftpTargetHandled={(request) =>
                         setSftpTarget((current) =>
@@ -1127,6 +1127,7 @@ function PaddedSection({
     return (
       <SFTPPanel
         aliases={declared.knownAliases}
+        hosts={declared.hosts}
         target={sftpTarget}
         onTargetHandled={onSftpTargetHandled}
       />

@@ -194,6 +194,7 @@ sshcのSFTPは、安全なアップロード／ダウンロード、フォルダ
 
 | WinSCP機能 | 状態 | sshcの現状 | 実装方針 |
 |---|---|---|---|
+| Site Manager／保存済みhost選択 | 対応 | modalでalias、host、userを検索。最近接続した順／group表示を切替 | 維持 |
 | SFTP | 対応 | OpenSSH設定を正本に接続 | 維持 |
 | SCP file transfer | 未対応 | terminal SSHのみ | 判断 |
 | FTP／FTPS | 未対応 | なし | SSH clientという製品範囲外候補 |

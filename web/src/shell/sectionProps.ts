@@ -6,6 +6,7 @@ import type { Section } from "../routing/sectionRoute";
 import type { InspectorContent } from "../ui/Inspector";
 import type { TerminalSessionsState } from "../terminal/sessions";
 import type { TerminalSettings } from "../api/integrations";
+import type { HostEntry } from "../api/config";
 
 
 export type Navigation = {
@@ -41,4 +42,5 @@ export type Shell = {
 export type Declared = {
   groups: string[];
   knownAliases: string[];
+  hosts: HostEntry[];
 };
