@@ -13,8 +13,8 @@ Homebrew formula はソースからビルドするため、Go toolchain も Home
 ## インストールスクリプト（macOS / Linux）
 
 ```sh
-SSHC_VERSION=v0.24.1 sh -c \
-  'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.24.1/install.sh | sh'
+SSHC_VERSION=v0.25.0 sh -c \
+  'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.25.0/install.sh | sh'
 ```
 
 URLと`SSHC_VERSION`には同じ導入対象のタグを指定します。`main`上のスクリプトは次の変更で内容が変わるため、pipeで直接実行しません。新しい版へ更新するときは、[GitHub Releases](https://github.com/aida0710/sshc/releases)でタグを確認して両方を置き換えます。
@@ -70,8 +70,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://github.com/a
 再現可能な導入では、スクリプトと成果物を同じタグへ固定します。
 
 ```powershell
-$env:SSHC_VERSION = 'v0.24.1'
-irm https://github.com/aida0710/sshc/releases/download/v0.24.1/install.ps1 | iex
+$env:SSHC_VERSION = 'v0.25.0'
+irm https://github.com/aida0710/sshc/releases/download/v0.25.0/install.ps1 | iex
 ```
 
 手動で配置する場合は、[GitHub Releases](https://github.com/aida0710/sshc/releases) からx64では`sshc-windows-amd64.exe`、Arm64では`sshc-windows-arm64.exe`を取得し、`checksums.txt`と照合してから`sshc.exe`へ名前を変更します。
