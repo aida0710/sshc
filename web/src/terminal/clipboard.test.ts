@@ -142,6 +142,72 @@ describe("terminal clipboard interactions", () => {
     expect(sendEnhancedKey).toHaveBeenCalledWith("\u001b[13;2u");
   });
 
+  it("copies a selection before encoding the shortcut as an enhanced key", () => {
+    const container = document.createElement("div");
+    let keyHandler: ((event: KeyboardEvent) => boolean) | undefined;
+    const writeText = vi.fn(async () => undefined);
+    const enhancedKey = vi.fn(() => "\u001b[67;6u");
+    const sendEnhancedKey = vi.fn();
+    attachTerminalClipboard({
+      container,
+      terminal: {
+        attachCustomKeyEventHandler: (handler) => { keyHandler = handler; },
+        onSelectionChange: () => ({ dispose: () => {} }),
+        hasSelection: () => true,
+        getSelection: () => "selected text",
+        paste: vi.fn(),
+      },
+      clipboard: { readText: vi.fn(), writeText },
+      settings: () => ({ copyOnSelect: false, rightClickPaste: false }),
+      refuse: vi.fn(),
+      enhancedKey,
+      sendEnhancedKey,
+    });
+    const event = new KeyboardEvent("keydown", {
+      key: "C",
+      ctrlKey: true,
+      shiftKey: true,
+    });
+
+    expect(keyHandler?.(event)).toBe(false);
+    expect(writeText).toHaveBeenCalledWith("selected text");
+    expect(enhancedKey).not.toHaveBeenCalled();
+    expect(sendEnhancedKey).not.toHaveBeenCalled();
+  });
+
+  it("still sends the enhanced copy shortcut when there is no selection", () => {
+    const container = document.createElement("div");
+    let keyHandler: ((event: KeyboardEvent) => boolean) | undefined;
+    const writeText = vi.fn(async () => undefined);
+    const enhancedKey = vi.fn(() => "\u001b[67;6u");
+    const sendEnhancedKey = vi.fn();
+    attachTerminalClipboard({
+      container,
+      terminal: {
+        attachCustomKeyEventHandler: (handler) => { keyHandler = handler; },
+        onSelectionChange: () => ({ dispose: () => {} }),
+        hasSelection: () => false,
+        getSelection: () => "",
+        paste: vi.fn(),
+      },
+      clipboard: { readText: vi.fn(), writeText },
+      settings: () => ({ copyOnSelect: false, rightClickPaste: false }),
+      refuse: vi.fn(),
+      enhancedKey,
+      sendEnhancedKey,
+    });
+    const event = new KeyboardEvent("keydown", {
+      key: "C",
+      ctrlKey: true,
+      shiftKey: true,
+    });
+
+    expect(keyHandler?.(event)).toBe(false);
+    expect(writeText).not.toHaveBeenCalled();
+    expect(enhancedKey).toHaveBeenCalledWith(event);
+    expect(sendEnhancedKey).toHaveBeenCalledWith("\u001b[67;6u");
+  });
+
   it("removes DOM handlers when the terminal is disposed", () => {
     const subject = harness();
     subject.detach();

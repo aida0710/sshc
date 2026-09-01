@@ -59,21 +59,21 @@ export function attachTerminalClipboard({
 
   terminal.attachCustomKeyEventHandler((event) => {
     if (event.type !== "keydown") return true;
-    const sequence = enhancedKey?.(event) ?? null;
-    if (sequence !== null) {
-      sendEnhancedKey?.(sequence);
-      return false;
-    }
-    if (!event.metaKey && !(event.ctrlKey && event.shiftKey)) return true;
+    const clipboardShortcut = event.metaKey || (event.ctrlKey && event.shiftKey);
     const key = event.key.toLowerCase();
-    if (key === "c" && terminal.hasSelection()) {
+    if (clipboardShortcut && key === "c" && terminal.hasSelection()) {
       copySelection();
       return false;
     }
-    if (key === "v") {
+    if (clipboardShortcut && key === "v") {
       // Let the browser emit its normal paste event. The capture handler below
       // owns that event before xterm's nested listeners see it. Returning false
-      // keeps xterm from also translating Ctrl+V into terminal input.
+      // keeps xterm from also translating the shortcut into terminal input.
+      return false;
+    }
+    const sequence = enhancedKey?.(event) ?? null;
+    if (sequence !== null) {
+      sendEnhancedKey?.(sequence);
       return false;
     }
     return true;
