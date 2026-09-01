@@ -19,6 +19,20 @@ func NewClient(client *pkgsftp.Client) *Client {
 
 func (c *Client) Close() error { return c.client.Close() }
 
+func (c *Client) Getwd(ctx context.Context) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	workingDirectory, err := c.client.Getwd()
+	if err != nil {
+		return "", err
+	}
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	return workingDirectory, nil
+}
+
 func (c *Client) ReadDir(ctx context.Context, path string) ([]fs.FileInfo, error) {
 	return c.client.ReadDirContext(ctx, path)
 }

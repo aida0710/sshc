@@ -53,6 +53,13 @@ type Entry struct {
 	Revision   string
 }
 
+// Listing は、SFTP serverが正規化した絶対パスと、その直下の項目をまとめる。
+// Pathは初期表示でserverの作業ディレクトリを解決した場合にも絶対パスになる。
+type Listing struct {
+	Path    string
+	Entries []Entry
+}
+
 // TextFile は、editor に渡せる UTF-8 ファイルである。
 // Revision は内容を含む revision であり、SaveText へそのまま返す。
 type TextFile struct {
@@ -92,6 +99,7 @@ type WriteSeekCloser interface {
 // 実装は同じ接続に対する呼び出しを直列化する必要はない。Service は操作ごとに接続を開く。
 type Remote interface {
 	io.Closer
+	Getwd(ctx context.Context) (string, error)
 	ReadDir(ctx context.Context, path string) ([]fs.FileInfo, error)
 	Lstat(path string) (fs.FileInfo, error)
 	ReadLink(path string) (string, error)
