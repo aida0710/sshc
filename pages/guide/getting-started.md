@@ -9,6 +9,8 @@ sshcは、SSHとローカルシェルを扱うターミナルアプリです。�
 
 ![SSH接続を開いたTerminal画面](/images/terminal-desktop.png)
 
+デスクトップでは、左側のナビゲーションからHome、Connections、SFTP、Menuと、開いているTerminalへ移動します。モバイルでは左上のメニューボタンから同じナビゲーションを開き、外側をタップすると閉じられます。
+
 ## こんなときに向いています
 
 - SSH、ローカルシェル、SFTP、ポート転送を1つのアプリで使いたい

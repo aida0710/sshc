@@ -47,6 +47,10 @@ test("gives one named secret to two hosts and writes neither name into the file"
   const assignedHosts = office.getByRole("list", { name: "Assigned hosts" });
   await expect(assignedHosts.getByRole("listitem")).toHaveText(["bastion", "nas"]);
 
+  if (process.env.SSHC_VISUAL_DIR !== undefined) {
+    await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/credentials-desktop.png`, fullPage: true });
+  }
+
   const sealed = await installation.read("sshc/secrets");
   for (const absent of ["hunter2", "office-vm", "bastion", "nas"]) {
     expect(sealed).not.toContain(absent);

@@ -30,7 +30,7 @@ The engine replay buffer and browser scrollback both stay in memory. They are no
 
 ## Input and clipboard
 
-Configure copy-on-select and right-click paste in Settings. OSC 52 has a global default and a per-SSH-host allow/deny override. Because it lets remote software write to your clipboard, enable it only for hosts you trust.
+Normal text-selection copying stays inside the browser and does not require OSC 52. Configure automatic copy-on-select and right-click paste under **Settings → Terminal**. OSC 52 lets remote software write to the device clipboard. It has a global default and a per-SSH-host allow/deny override, so enable it only for hosts you trust.
 
 Kitty keyboard mode follows requests from the remote application. A JIS option sends the yen key as backslash. Mobile adds a special-key row for Ctrl, Alt, Esc, Tab, and arrows.
 

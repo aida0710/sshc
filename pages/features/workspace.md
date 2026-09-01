@@ -5,7 +5,7 @@ description: SSHとローカルシェルを最大4ペインに並べ、配置を
 
 # Workspace
 
-![4つのTerminalを開いたワークスペース](/images/workspace-desktop.png)
+![複数のTerminalを開いたワークスペース](/images/workspace-desktop.png)
 
 セッション一覧のTerminalを表示中のペインへドラッグ＆ドロップすると、ドロップした位置に合わせて上下左右に分割できます。SSHとローカルシェルを同じワークスペースに並べられます。
 

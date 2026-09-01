@@ -5,7 +5,7 @@ description: Appearance, terminal, input, notifications, and local-shell setting
 
 # Settings
 
-Menu has a Settings group with direct links to Engine, Terminal, Notifications, Open connections, and Master password. Each opens as its own page. Connection-specific behavior lives in the connection's sshc tab.
+Menu is organized into feature groups. Its Settings group links directly to Engine, Terminal, Notifications, Open connections, and Master password. Preferences at the bottom of Menu controls the theme and display language. Connection-specific behavior lives in the connection's sshc tab.
 
 ## Engine
 
@@ -13,9 +13,12 @@ Desktop uses a device-local stable port so bookmarks and the installed web app k
 
 ## Appearance
 
+Use Preferences for:
+
 - System, light, or dark theme
 - Japanese or English
-- Color palette, font, background, and tint
+
+Configure the terminal color scheme, font, background, and tint under **Settings → Terminal**.
 
 Theme and language controls are also available on vault create and unlock screens.
 
