@@ -51,7 +51,6 @@ export function AppNavigation({
   localShellProfiles = [],
   onOpenShell,
   onOpenCommandPalette,
-  onOpenTransfers,
 }: {
   navigationRef?: RefObject<HTMLElement | null>;
   navigationId: string;
@@ -77,7 +76,6 @@ export function AppNavigation({
   localShellProfiles?: LocalShellProfile[];
   onOpenShell: (profileId?: string) => void;
   onOpenCommandPalette: () => void;
-  onOpenTransfers: () => void;
 }) {
   const t = useTranslate();
   const transfers = useSyncExternalStore(sftpTransferManager.subscribe, sftpTransferManager.getSnapshot);
@@ -91,6 +89,8 @@ export function AppNavigation({
       sectionIcons={sectionIcons}
       sectionLabels={sectionLabels}
       onNavigate={onNavigate}
+      attention={name === "Files" && activeTransfers > 0}
+      attentionLabel={name === "Files" && activeTransfers > 0 ? t("sftp.activeTransfers", { count: activeTransfers }) : undefined}
     />
   );
   return (
@@ -132,17 +132,6 @@ export function AppNavigation({
       <div className="shrink-0 border-y border-line py-1">
         {navigationLink("Menu")}
       </div>
-
-      {activeTransfers > 0 ? (
-        <button
-          type="button"
-          onClick={onOpenTransfers}
-          className="mt-1 flex h-8 shrink-0 items-center gap-2 rounded px-2 text-xs text-ink-muted hover:bg-select-fill hover:text-ink"
-        >
-          <span aria-hidden="true" className="size-1.5 rounded-full bg-notice-ink" />
-          {t("sftp.activeTransfers", { count: activeTransfers })}
-        </button>
-      ) : null}
 
       <div data-navigation-scroll className="min-h-0 flex-1 overflow-y-auto pr-0.5 pt-2">
         <span
@@ -292,12 +281,16 @@ function NavigationLink({
   sectionIcons,
   sectionLabels,
   onNavigate,
+  attention = false,
+  attentionLabel,
 }: {
   name: Section;
   section: Section | null;
   sectionIcons: Record<Section, IconName>;
   sectionLabels: Record<Section, MessageKey>;
   onNavigate: (event: MouseEvent<HTMLAnchorElement>, name: Section) => void;
+  attention?: boolean;
+  attentionLabel?: string | undefined;
 }) {
   const t = useTranslate();
   const active = section === name;
@@ -323,7 +316,15 @@ function NavigationLink({
       >
         <Icon name={sectionIcons[name]} className="h-4 w-4" />
       </span>
-      <span className="truncate">{t(sectionLabels[name])}</span>
+      <span className="min-w-0 grow truncate">{t(sectionLabels[name])}</span>
+      {attention ? (
+        <span
+          aria-hidden="true"
+          data-sftp-transfer-indicator
+          title={attentionLabel}
+          className="mr-1 size-1.5 shrink-0 rounded-full bg-notice-ink shadow-[0_0_0_3px_color-mix(in_srgb,var(--ui-notice-ink)_12%,transparent)]"
+        />
+      ) : null}
     </a>
   );
 }
