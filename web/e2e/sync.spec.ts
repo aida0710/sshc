@@ -1,4 +1,5 @@
 import {
+  changeDisplayLanguage,
   expect,
   openApplication,
   openSection,
@@ -364,11 +365,7 @@ test("shows push, preview, apply, persisted success, and a later failure as dist
       fullPage: true,
     });
     await page.getByText("Files to sync").click();
-    await page.locator("#language").evaluate((element) => {
-      const select = element as HTMLSelectElement;
-      select.value = "ja";
-      select.dispatchEvent(new Event("change", { bubbles: true }));
-    });
+    await changeDisplayLanguage(page, "ja");
     await page.locator("#sync-commit-message").fill("設定を更新");
     await page.evaluate(async () => { await document.fonts.ready; });
     await page.screenshot({
@@ -382,11 +379,7 @@ test("shows push, preview, apply, persisted success, and a later failure as dist
       fullPage: true,
     });
     await page.getByText("同期するファイル").click();
-    await page.locator("#language").evaluate((element) => {
-      const select = element as HTMLSelectElement;
-      select.value = "en";
-      select.dispatchEvent(new Event("change", { bubbles: true }));
-    });
+    await changeDisplayLanguage(page, "en");
     await page.locator("#sync-commit-message").fill("Update config");
     await page.screenshot({
       path: `${visualDirectory}/sshc-v0.16.1-sync-settings-collapsed.png`,
@@ -451,11 +444,7 @@ test("shows push, preview, apply, persisted success, and a later failure as dist
       fullPage: true,
     });
     await page.getByText("Details and history").click();
-    await page.locator("#language").evaluate((element) => {
-      const select = element as HTMLSelectElement;
-      select.value = "ja";
-      select.dispatchEvent(new Event("change", { bubbles: true }));
-    });
+    await changeDisplayLanguage(page, "ja");
     await page.getByText("同期するファイル").click();
     await page.getByPlaceholder("ファイル名・パスを検索").fill("lock");
     await page
@@ -467,11 +456,7 @@ test("shows push, preview, apply, persisted success, and a later failure as dist
       fullPage: true,
     });
     await page.getByText("同期するファイル").click();
-    await page.locator("#language").evaluate((element) => {
-      const select = element as HTMLSelectElement;
-      select.value = "en";
-      select.dispatchEvent(new Event("change", { bubbles: true }));
-    });
+    await changeDisplayLanguage(page, "en");
     await page.setViewportSize({ width: 1280, height: 720 });
   }
   await page.getByRole("button", { name: "Push this workspace" }).click();

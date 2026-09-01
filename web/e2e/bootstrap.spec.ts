@@ -99,7 +99,8 @@ test("keeps only the origin-scoped CSRF token in session storage", async ({ page
     /^[A-Za-z0-9_-]{43}$/,
   );
 
-  await page.getByLabel("Lang", { exact: true }).selectOption("ja");
+  await openSection(page, "Menu");
+  await page.getByRole("region", { name: "Menu" }).getByLabel("Language", { exact: true }).selectOption("ja");
 
   const stored = await page.evaluate(() => ({
     keys: Object.keys(window.localStorage).sort(),
@@ -117,14 +118,16 @@ test("keeps the chosen appearance, and writes nothing else", async ({ page, inst
 
   expect(await page.evaluate(() => Object.keys(window.localStorage))).toEqual([]);
 
-  await page.getByLabel("Appearance").selectOption("dark");
+  await openSection(page, "Menu");
+  const menu = page.getByRole("region", { name: "Menu" });
+  await menu.getByLabel("Theme").selectOption("dark");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
 
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
 
-  await page.getByLabel("Appearance").selectOption("system");
-  await page.getByLabel("Lang", { exact: true }).selectOption("ja");
+  await menu.getByLabel("Theme").selectOption("system");
+  await menu.getByLabel("Language", { exact: true }).selectOption("ja");
 
   const stored = await page.evaluate(() => ({
     keys: Object.keys(window.localStorage).sort(),
@@ -141,7 +144,8 @@ test("keeps the chosen language across a reload, and translates the panels", asy
   await openApplication(page, installation);
   await expect(sessionStatus(page)).toContainText("Local session active");
 
-  await page.getByLabel("Lang", { exact: true }).selectOption("ja");
+  await openSection(page, "Menu");
+  await page.getByRole("region", { name: "Menu" }).getByLabel("Language", { exact: true }).selectOption("ja");
   await page.getByRole("navigation", { name: "メインナビゲーション" }).getByRole("link", { name: "Menu", exact: true }).click();
   await expect(page.getByRole("link", { name: "SSH Keysを開く", exact: true })).toBeVisible();
   await page.getByRole("link", { name: "SSH Keysを開く", exact: true }).click();

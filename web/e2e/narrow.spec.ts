@@ -399,7 +399,7 @@ test("uses established product names in the Japanese navigation", async ({ page,
     await expect(navigation.getByRole("link", { name: section, exact: true })).toBeVisible();
   }
   await expect(navigation.getByText("Sessions", { exact: true })).toBeVisible();
-  await expect(navigation.getByRole("button", { name: "ローカルシェル", exact: true })).toBeVisible();
+  await expect(navigation.getByRole("button", { name: "Local shell", exact: true })).toBeVisible();
   await expect(navigation.getByRole("tab")).toHaveCount(0);
   await navigation.getByRole("link", { name: "Menu", exact: true }).click();
 
@@ -479,7 +479,7 @@ test("keeps workspace management out of the mobile terminal", async ({ page, ins
   await expect(page.getByRole("button", { name: "Split down" })).toHaveCount(0);
   await expect(page.locator("[data-desktop-workspace-controls]")).toBeHidden();
   await expect(page.getByRole("button", { name: "Send command…" })).toBeHidden();
-  await expect(page.locator("summary").filter({ hasText: "Saved layouts" })).toBeHidden();
+  await expect(page.getByRole("button", { name: "Workspace actions" })).toBeHidden();
   await expect(page.getByRole("navigation", { name: "Primary" })).toHaveClass(/shadow-none/);
 });
 
@@ -490,7 +490,7 @@ test("keeps a live workspace visible without mobile rename controls", async ({ p
   await page.getByRole("button", { name: "Navigation", exact: true }).click();
   const navigation = page.getByRole("navigation", { name: "Primary" });
   await expect(navigation.getByText("localhost", { exact: true })).toBeVisible();
-  await expect(navigation.getByText("2 terminals", { exact: true })).toBeVisible();
+  await expect(navigation.getByText("2 sessions", { exact: true })).toBeVisible();
   await expect(navigation.getByRole("button", { name: "Actions for localhost" })).toBeHidden();
   await expect(navigation.getByRole("menuitem", { name: "Rename workspace" })).toHaveCount(0);
   await expect(page.locator("[data-desktop-workspace-controls]").getByRole("button", { name: "Rename workspace" })).toHaveCount(0);
@@ -501,7 +501,10 @@ test("removes the session status badge from the mobile header", async ({ page, i
   await openApplication(page, installation);
 
   await expect(sessionStatus(page)).toContainText("Local session active");
-  await expect(page.locator("[data-session-status-badge]")).toBeHidden();
+  await expect(page.locator("[data-app-header] [data-session-status-badge]")).toHaveCount(0);
+  await expect(
+    page.getByRole("navigation", { name: "Primary" }).locator("[data-session-status-badge]"),
+  ).toHaveCount(1);
 });
 
 test("keeps mobile navigation and display controls predictable at 360 and 390 pixels", async ({ page, installation }) => {
@@ -512,13 +515,10 @@ test("keeps mobile navigation and display controls predictable at 360 and 390 pi
   await expect(page.locator("[data-app-header]")).toHaveCSS("height", "48px");
   await expect(page.locator("[data-app-header]")).toHaveCSS("position", "sticky");
 
-  await page.getByLabel("Display menu").click();
-  await expect(page.getByLabel("Theme menu")).toBeVisible();
-  await expect(page.getByLabel("Lang menu")).toBeVisible();
+  const mobileHeader = page.locator("[data-app-header]");
+  await expect(mobileHeader.getByLabel("Display menu")).toHaveCount(0);
 
   await page.getByRole("button", { name: "Navigation", exact: true }).click();
-  await expect(page.getByLabel("Theme menu")).toBeHidden();
-  await expect(page.getByLabel("Lang menu")).toBeHidden();
   await expect(primaryNavigation).toBeInViewport();
   await page.locator("[data-navigation-backdrop]").click({ position: { x: 340, y: 200 } });
   await expect(primaryNavigation).not.toBeInViewport();
@@ -537,10 +537,22 @@ test("keeps mobile navigation and display controls predictable at 360 and 390 pi
   await expect(page.getByRole("button", { name: "Navigation", exact: true })).toBeFocused();
 
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.getByLabel("Display menu").click();
-  await expect(page.getByLabel("Theme menu")).toBeVisible();
-  await page.locator("main").click({ position: { x: 20, y: 40 } });
-  await expect(page.getByLabel("Theme menu")).toBeHidden();
+  await page.getByRole("button", { name: "Navigation", exact: true }).click();
+  await primaryNavigation.getByRole("link", { name: "Menu", exact: true }).click();
+  const menu = page.getByRole("region", { name: "Menu" });
+  await expect(menu.getByRole("heading", { name: "Preferences" })).toBeVisible();
+  await expect(menu.getByLabel("Theme")).toBeVisible();
+  await expect(menu.getByLabel("Language")).toBeVisible();
+  if (process.env.SSHC_VISUAL_DIR !== undefined) {
+    if (process.env.SSHC_VISUAL_LOCALE === "ja") {
+      await menu.getByLabel("Language").selectOption("ja");
+      await page.evaluate(async () => { await document.fonts.ready; });
+    }
+    await page.screenshot({
+      path: `${process.env.SSHC_VISUAL_DIR}/display-settings-mobile${process.env.SSHC_VISUAL_LOCALE === "ja" ? "-ja" : ""}.png`,
+      fullPage: true,
+    });
+  }
   await expectNoHorizontalOverflow(page, "Mobile header at 390px");
 });
 

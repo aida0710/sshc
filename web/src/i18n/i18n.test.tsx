@@ -56,6 +56,9 @@ describe("the catalogue", () => {
         "keys.relocateReference",
         "keys.unreadableEntry",
         "kh.heading",
+        "menu.displaySettings",
+        "menu.language",
+        "menu.theme",
         "rk.alias",
         "rk.hostAlias",
         "section.connections",
@@ -78,8 +81,10 @@ describe("the catalogue", () => {
         "snippets.heading",
         "sync.historyRelation.head",
         "terminal.localhost",
+        "terminal.openShell",
         "terminal.rowDetail",
         "tree.navLabel",
+        "workspace.groupCount",
       ].sort(),
     );
   });
