@@ -1,7 +1,8 @@
-import { Suspense, lazy, useEffect, useRef, useState, useSyncExternalStore, type DragEvent as ReactDragEvent } from "react";
+import { Suspense, lazy, useEffect, useRef, useState, useSyncExternalStore, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent } from "react";
 import { failureCode } from "../api/client";
 import { useTranslate } from "../i18n/context";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
+import { clipboard } from "../ui/clipboard";
 import { InputDialog } from "../ui/InputDialog";
 import { Icon } from "../ui/icons";
 import { ModalShell } from "../ui/ModalShell";
@@ -135,6 +136,7 @@ export function SFTPPanel({
   const menuPanel = useRef<HTMLDivElement>(null);
   const menuTrigger = useRef<HTMLButtonElement>(null);
   const selectAll = useRef<HTMLInputElement>(null);
+  const selectionAnchor = useRef<string | null>(null);
 
   useDismissibleLayer({
     open: menu !== null,
@@ -489,8 +491,27 @@ export function SFTPPanel({
     else void openText(entry);
   }
 
-  function selectOnly(entry: RemoteEntry) {
-    setSelectedPaths(new Set([entry.path]));
+  function selectEntry(entry: RemoteEntry, event?: ReactMouseEvent<HTMLButtonElement>) {
+    const anchorIndex = selectionAnchor.current === null
+      ? -1
+      : displayedEntries.findIndex((candidate) => candidate.path === selectionAnchor.current);
+    const entryIndex = displayedEntries.findIndex((candidate) => candidate.path === entry.path);
+    if (event?.shiftKey && anchorIndex >= 0 && entryIndex >= 0) {
+      const start = Math.min(anchorIndex, entryIndex);
+      const end = Math.max(anchorIndex, entryIndex);
+      setSelectedPaths((current) => {
+        const next = event.metaKey || event.ctrlKey ? new Set(current) : new Set<string>();
+        for (const candidate of displayedEntries.slice(start, end + 1)) next.add(candidate.path);
+        return next;
+      });
+    } else if (event?.metaKey || event?.ctrlKey) {
+      toggleSelection(entry);
+      selectionAnchor.current = entry.path;
+      return;
+    } else {
+      setSelectedPaths(new Set([entry.path]));
+      selectionAnchor.current = entry.path;
+    }
     setMenu(null);
   }
 
@@ -501,6 +522,7 @@ export function SFTPPanel({
       else next.add(entry.path);
       return next;
     });
+    selectionAnchor.current = entry.path;
     setMenu(null);
   }
 
@@ -514,6 +536,37 @@ export function SFTPPanel({
       return next;
     });
     setMenu(null);
+  }
+
+  function selectAllDisplayed() {
+    setSelectedPaths((current) => {
+      const next = new Set(current);
+      for (const entry of displayedEntries) next.add(entry.path);
+      return next;
+    });
+    selectionAnchor.current = displayedEntries[0]?.path ?? null;
+    setMenu(null);
+  }
+
+  function invertDisplayedSelection() {
+    setSelectedPaths((current) => {
+      const next = new Set(current);
+      for (const entry of displayedEntries) {
+        if (next.has(entry.path)) next.delete(entry.path);
+        else next.add(entry.path);
+      }
+      return next;
+    });
+    setMenu(null);
+  }
+
+  async function copySelected(kind: "name" | "path") {
+    setMenu(null);
+    try {
+      await clipboard.writeText(selectedEntries.map((entry) => kind === "name" ? entry.name : entry.path).join("\n"));
+    } catch {
+      setProblem(t("copy.refused"));
+    }
   }
 
   async function navigateHistory(offset: -1 | 1) {
@@ -668,12 +721,20 @@ export function SFTPPanel({
                 {selectedEntries.some((entry) => entry.type === "file" || entry.type === "directory") ? <button type="button" role="menuitem" disabled={busy} onClick={() => { setMenu(null); void downloadEntries(selectedEntries); }} className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:min-h-0">{t("sftp.download")}</button> : null}
                 {selectedEntry !== null && (selectedEntry.type === "file" || selectedEntry.type === "directory") ? <button type="button" role="menuitem" disabled={busy} onClick={() => { setMenu(null); setInputIntent({ kind: "chmod", entry: selectedEntry }); }} className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:min-h-0">{t("sftp.chmod")}</button> : null}
                 {selectedEntry === null ? null : <button type="button" role="menuitem" disabled={busy} onClick={() => { setMenu(null); setInputIntent({ kind: "rename", entry: selectedEntry }); }} className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:min-h-0">{t("sftp.rename")}</button>}
+                <button type="button" role="menuitem" onClick={() => void copySelected("name")} className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-0">{t(selectedEntries.length === 1 ? "sftp.copyName" : "sftp.copyNames")}</button>
+                <button type="button" role="menuitem" onClick={() => void copySelected("path")} className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-0">{t(selectedEntries.length === 1 ? "sftp.copyPath" : "sftp.copyPaths")}</button>
                 <button type="button" role="menuitem" disabled={busy} onClick={() => { setMenu(null); setDeleting(selectedEntries); }} className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm text-danger hover:bg-select-fill focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:min-h-0">{t("sftp.delete")}</button>
+                <button type="button" role="menuitem" onClick={invertDisplayedSelection} className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-0">{t("sftp.invertSelection")}</button>
                 <button type="button" role="menuitem" onClick={() => { setMenu(null); setSelectedPaths(new Set()); }} className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-0">{t("sftp.clearSelection")}</button>
               </div>
             ) : null}
           </div>
-          <div className="min-h-0 min-w-0 flex-1 overflow-auto">
+          <div className="min-h-0 min-w-0 flex-1 overflow-auto" onKeyDown={(event) => {
+            if ((event.metaKey || event.ctrlKey) && event.key.toLocaleLowerCase() === "a") {
+              event.preventDefault();
+              selectAllDisplayed();
+            }
+          }}>
             {compactViewport ? (
               <ul aria-label={t("sftp.entries")} className="divide-y divide-line">
                 {path !== "" && path !== "/" ? (
@@ -699,7 +760,7 @@ export function SFTPPanel({
                       aria-label={entry.name}
                       aria-pressed={selectedPaths.has(entry.path)}
                       className="flex min-h-10 min-w-0 grow items-center gap-2 px-2 py-1.5 text-left hover:bg-select-fill"
-                      onClick={() => selectOnly(entry)}
+                      onClick={(event) => selectEntry(entry, event)}
                       onDoubleClick={() => activate(entry)}
                       onKeyDown={(event) => { if (event.key === "Enter") activate(entry); }}
                     >
@@ -759,7 +820,7 @@ export function SFTPPanel({
                       />
                     </td>
                     <td className="max-w-64 px-2 py-1">
-                      <button type="button" aria-label={entry.name} aria-pressed={selectedPaths.has(entry.path)} onClick={() => selectOnly(entry)} className="flex w-full min-w-0 items-center gap-2 rounded text-left focus:outline-none focus-visible:ring-1 focus-visible:ring-accent" onKeyDown={(event) => { if (event.key === "Enter") activate(entry); }}>
+                      <button type="button" aria-label={entry.name} aria-pressed={selectedPaths.has(entry.path)} onClick={(event) => selectEntry(entry, event)} className="flex w-full min-w-0 items-center gap-2 rounded text-left focus:outline-none focus-visible:ring-1 focus-visible:ring-accent" onKeyDown={(event) => { if (event.key === "Enter") activate(entry); }}>
                         <Icon name={entry.type === "directory" ? "groups" : entry.type === "symlink" ? "chevronRight" : "config"} className={`size-4 ${entry.type === "directory" ? "text-accent" : "text-ink-muted"}`} />
                         <span className="min-w-0">
                           <span className="block truncate font-mono text-sm leading-4">{entry.name}</span>

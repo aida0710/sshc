@@ -24,8 +24,10 @@ const api = vi.hoisted(() => ({
   listTransfers: vi.fn(),
   clearFinishedTransfers: vi.fn(),
 }));
+const clipboard = vi.hoisted(() => ({ writeText: vi.fn(async () => undefined) }));
 
 vi.mock("./api", () => ({ sftpApi: api }));
+vi.mock("../ui/clipboard", () => ({ clipboard: { readText: vi.fn(), writeText: clipboard.writeText } }));
 
 describe("SFTPPanel uploads", () => {
   beforeEach(async () => {
@@ -219,6 +221,33 @@ describe("SFTPPanel uploads", () => {
     expect(screen.queryByRole("menuitem", { name: "Rename" })).not.toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: "Download" })).toBeEnabled();
     expect(screen.getByRole("menuitem", { name: "Delete" })).toBeEnabled();
+  });
+
+  it("supports range/additive selection and copies selected names or full paths", async () => {
+    api.list.mockResolvedValue({
+      path: "/remote",
+      entries: [
+        { name: "alpha.txt", path: "/remote/alpha.txt", type: "file", size: 1, mode: "0644", modifiedAt: "", revision: "alpha" },
+        { name: "beta.txt", path: "/remote/beta.txt", type: "file", size: 2, mode: "0644", modifiedAt: "", revision: "beta" },
+        { name: "gamma.txt", path: "/remote/gamma.txt", type: "file", size: 3, mode: "0644", modifiedAt: "", revision: "gamma" },
+      ],
+    });
+    render(<SFTPPanel aliases={["edge"]} />);
+    await userEvent.selectOptions(screen.getByLabelText("Host"), "edge");
+
+    fireEvent.click(await screen.findByRole("button", { name: "alpha.txt" }));
+    fireEvent.click(screen.getByRole("button", { name: "gamma.txt" }), { shiftKey: true });
+    expect(screen.getByText("3 selected")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "beta.txt" }), { ctrlKey: true });
+    expect(screen.getByText("2 selected")).toBeVisible();
+
+    await userEvent.click(screen.getByRole("button", { name: "Actions for 2 selected items" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Copy names" }));
+    expect(clipboard.writeText).toHaveBeenLastCalledWith("alpha.txt\ngamma.txt");
+
+    await userEvent.click(screen.getByRole("button", { name: "Actions for 2 selected items" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Copy full paths" }));
+    expect(clipboard.writeText).toHaveBeenLastCalledWith("/remote/alpha.txt\n/remote/gamma.txt");
   });
 
   it("deletes multiple selected entries after one confirmation", async () => {
