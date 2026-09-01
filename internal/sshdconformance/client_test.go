@@ -264,6 +264,28 @@ func TestOpenAsksForThePasswordAndRunsAShell(t *testing.T) {
 	readUntil(t, process, "interactive-canary")
 }
 
+// TestOpenPTYAllowsProgramsToEnterRawMode は、prompt_toolkit などの対話CLIが
+// OpenSSH上のPTYをraw modeへ切り替え、元へ戻せることを検証する。
+func TestOpenPTYAllowsProgramsToEnterRawMode(t *testing.T) {
+	remote := integrationServer(t)
+	process, err := remote.keyDialer(t, nil).Open(
+		t.Context(),
+		remote.keyTarget(),
+		terminal.Size{Cols: 80, Rows: 24},
+	)
+	if err != nil {
+		t.Fatalf("opening a session: %v", err)
+	}
+	defer func() { _ = process.Close() }()
+
+	readUntil(t, process, "$ ")
+	command := "stty raw; status=$?; stty sane; printf 'raw-mode-status=%s\\n' \"$status\"\n"
+	if _, err := io.WriteString(process, command); err != nil {
+		t.Fatalf("asking the remote PTY to enter raw mode: %v", err)
+	}
+	readUntil(t, process, "raw-mode-status=0")
+}
+
 // Local Forwardのlistener、SSH direct-tcpip channel、container network、転送先を
 // 一続きで検証する。転送先OpenSSHのbannerまで届けば、往復の経路が通っている。
 func TestLocalForwardCarriesTrafficThroughRealOpenSSH(t *testing.T) {
