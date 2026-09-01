@@ -274,15 +274,15 @@ func (h SFTPHandlers) CheckpointDownload(c *echo.Context) error {
 
 func (h SFTPHandlers) List(c *echo.Context) error {
 	remotePath := c.QueryParam("path")
-	entries, err := h.Service.List(c.Request().Context(), c.Param("alias"), remotePath)
+	listing, err := h.Service.ListDirectory(c.Request().Context(), c.Param("alias"), remotePath)
 	if err != nil {
 		return sftpProblem(c, err)
 	}
-	described := make([]sftpEntry, 0, len(entries))
-	for _, entry := range entries {
+	described := make([]sftpEntry, 0, len(listing.Entries))
+	for _, entry := range listing.Entries {
 		described = append(described, describeSFTPEntry(entry))
 	}
-	return c.JSON(http.StatusOK, sftpListingResponse{Path: remotePath, Entries: described})
+	return c.JSON(http.StatusOK, sftpListingResponse{Path: listing.Path, Entries: described})
 }
 
 func (h SFTPHandlers) ReadText(c *echo.Context) error {

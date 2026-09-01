@@ -107,6 +107,17 @@ func integrationUpload(t *testing.T, service *sftp.Service, target string, paylo
 	}
 }
 
+func TestListDirectoryStartsAtOpenSSHUserHome(t *testing.T) {
+	service := integrationService(t)
+	listing, err := service.ListDirectory(t.Context(), "integration", "")
+	if err != nil {
+		t.Fatalf("list initial directory: %v", err)
+	}
+	if listing.Path != "/config" {
+		t.Fatalf("initial path = %q, want fixture user's home /config", listing.Path)
+	}
+}
+
 func TestServiceRoundTripsFilesAgainstOpenSSHSFTP(t *testing.T) {
 	service := integrationService(t)
 	root := fmt.Sprintf("/tmp/sshc-sftp-%d", time.Now().UnixNano())

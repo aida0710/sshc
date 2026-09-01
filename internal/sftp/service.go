@@ -198,20 +198,34 @@ func (s Service) prepareDownload(ctx context.Context, alias, remotePath, tempora
 	return prepared, nil
 }
 
-func (s Service) List(ctx context.Context, alias, remotePath string) ([]Entry, error) {
-	cleaned, err := cleanPublicPath(remotePath, true)
-	if err != nil {
-		return nil, err
+func (s Service) ListDirectory(ctx context.Context, alias, remotePath string) (Listing, error) {
+	var cleaned string
+	var err error
+	if remotePath != "" {
+		cleaned, err = cleanPublicPath(remotePath, true)
+		if err != nil {
+			return Listing{}, err
+		}
 	}
 	remote, err := s.openRequest(ctx, alias)
 	if err != nil {
-		return nil, err
+		return Listing{}, err
 	}
 	defer remote.Close()
+	if remotePath == "" {
+		workingDirectory, err := remote.Getwd(ctx)
+		if err != nil {
+			return Listing{}, err
+		}
+		cleaned, err = cleanPublicPath(workingDirectory, true)
+		if err != nil {
+			return Listing{}, err
+		}
+	}
 
 	infos, err := remote.ReadDir(ctx, cleaned)
 	if err != nil {
-		return nil, err
+		return Listing{}, err
 	}
 	entries := make([]Entry, 0, len(infos))
 	for _, info := range infos {
@@ -233,7 +247,12 @@ func (s Service) List(ctx context.Context, alias, remotePath string) ([]Entry, e
 		}
 		return leftName < rightName
 	})
-	return entries, nil
+	return Listing{Path: cleaned, Entries: entries}, nil
+}
+
+func (s Service) List(ctx context.Context, alias, remotePath string) ([]Entry, error) {
+	listing, err := s.ListDirectory(ctx, alias, remotePath)
+	return listing.Entries, err
 }
 
 func (s Service) Stat(ctx context.Context, alias, remotePath string) (Entry, error) {

@@ -66,10 +66,13 @@ export const sftpApi = {
     const response = await apiClient.send(endpoint, { method: "GET", headers: { "If-Range": revision } });
     if (response.status !== 204) throw new Error("download_changed");
   },
-  async list(alias: string, remotePath: string): Promise<{ path: string; entries: RemoteEntry[] }> {
+  async list(alias: string, remotePath = ""): Promise<{ path: string; entries: RemoteEntry[] }> {
     // Directory listing also establishes the SFTP connection. An unavailable host is
     // an expected result handled inline by SFTPPanel, not an application-wide failure.
-    return validateOpenAPISchema<components["schemas"]["SFTPListing"]>("SFTPListing", await apiClient.read(pathFor(alias, "entries", remotePath), {
+    const endpoint = remotePath === ""
+      ? `/api/v1/sftp/${encodeURIComponent(alias)}/entries`
+      : pathFor(alias, "entries", remotePath);
+    return validateOpenAPISchema<components["schemas"]["SFTPListing"]>("SFTPListing", await apiClient.read(endpoint, {
       locallyHandledCodes: ["sftp_failed"],
     }));
   },

@@ -1753,7 +1753,7 @@ paths:
     get:
       operationId: listSFTPEntries
       parameters:
-        - { name: path, in: query, required: true, schema: { type: string } }
+        - { name: path, in: query, required: false, description: Omit to list the remote user's working directory, schema: { type: string } }
       responses:
         "200": { description: Remote directory listing, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPListing" } } } }
         "400": { $ref: "#/components/responses/Problem" }

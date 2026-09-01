@@ -11,6 +11,7 @@ const api = vi.hoisted(() => ({
   upload: vi.fn(),
   mkdir: vi.fn(),
   chmod: vi.fn(),
+  remove: vi.fn(),
   download: vi.fn(),
   startUpload: vi.fn(),
   appendUpload: vi.fn(),
@@ -38,6 +39,7 @@ describe("SFTPPanel uploads", () => {
       revision: "rev",
     });
     api.mkdir.mockResolvedValue(undefined);
+    api.remove.mockResolvedValue(undefined);
 	api.startUpload.mockImplementation(async (_alias: string, id: string, path: string, size: number) => ({ id, path, offset: 0, size, expectedRevision: "absent" }));
 	api.appendUpload.mockImplementation(async (_alias: string, id: string, path: string, _offset: number, total: number) => ({ id, path, offset: total, size: total, expectedRevision: "" }));
 	api.completeUpload.mockResolvedValue(undefined);
@@ -84,7 +86,7 @@ describe("SFTPPanel uploads", () => {
     render(<SFTPPanel aliases={["edge"]} />);
     expect(api.list).not.toHaveBeenCalled();
     await userEvent.selectOptions(screen.getByLabelText("Host"), "edge");
-    await waitFor(() => expect(api.list).toHaveBeenCalledWith("edge", "/"));
+    await waitFor(() => expect(api.list).toHaveBeenCalledWith("edge", ""));
 
     const first = new File(["alpha"], "first.txt", { type: "text/plain" });
     const second = new File(["beta"], "second.txt", { type: "text/plain" });
@@ -106,7 +108,114 @@ describe("SFTPPanel uploads", () => {
     expect(api.list).not.toHaveBeenCalled();
 
     await userEvent.selectOptions(screen.getByLabelText("Host"), "edge");
+    await waitFor(() => expect(api.list).toHaveBeenCalledWith("edge", ""));
+    expect(screen.getByLabelText("Remote path")).toHaveValue("/remote");
+  });
+
+  it("shows a parent-directory row first and uses it instead of a separate up button", async () => {
+    api.list.mockImplementation(async (_alias: string, path: string) => ({
+      path: path === "" ? "/remote" : path,
+      entries: path === "" ? [{ name: "project", path: "/remote/project", type: "directory", size: 0, mode: "0755", modifiedAt: "2026-08-24T10:00:00Z", revision: "rev" }] : [],
+    }));
+    render(<SFTPPanel aliases={["edge"]} />);
+    await userEvent.selectOptions(screen.getByLabelText("Host"), "edge");
+
+    const table = await screen.findByRole("table");
+    const rows = within(table).getAllByRole("row");
+    expect(rows[1]).toHaveAccessibleName("Parent directory");
+    expect(within(rows[1] as HTMLElement).getByText("..")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Up" })).not.toBeInTheDocument();
+
+    await userEvent.click(within(rows[1] as HTMLElement).getByRole("button", { name: "Parent directory" }));
     await waitFor(() => expect(api.list).toHaveBeenCalledWith("edge", "/"));
+  });
+
+  it("selects a compact row without opening it and opens it on double click", async () => {
+    api.list.mockImplementation(async (_alias: string, path: string) => path === "/remote/project"
+      ? { path, entries: [] }
+      : { path: "/remote", entries: [{ name: "project", path: "/remote/project", type: "directory", size: 0, mode: "0755", modifiedAt: "2026-08-24T10:00:00Z", revision: "rev" }] });
+    render(<SFTPPanel aliases={["edge"]} />);
+    await userEvent.selectOptions(screen.getByLabelText("Host"), "edge");
+
+    const project = await screen.findByRole("button", { name: "project" });
+    await userEvent.click(project);
+    expect(project).toHaveAttribute("aria-pressed", "true");
+    expect(api.list).not.toHaveBeenCalledWith("edge", "/remote/project");
+    expect(screen.queryByRole("button", { name: "Download" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Actions for project" })).toBeEnabled();
+
+    await userEvent.dblClick(project);
+    await waitFor(() => expect(api.list).toHaveBeenCalledWith("edge", "/remote/project"));
+  });
+
+  it("selects multiple entries with checkboxes and limits the batch action menu", async () => {
+    api.list.mockResolvedValue({
+      path: "/remote",
+      entries: [
+        { name: "project", path: "/remote/project", type: "directory", size: 0, mode: "0755", modifiedAt: "2026-08-24T10:00:00Z", revision: "dir" },
+        { name: "notes.txt", path: "/remote/notes.txt", type: "file", size: 12, mode: "0644", modifiedAt: "2026-08-24T11:00:00Z", revision: "file" },
+      ],
+    });
+    render(<SFTPPanel aliases={["edge"]} />);
+    await userEvent.selectOptions(screen.getByLabelText("Host"), "edge");
+
+    await userEvent.click(await screen.findByRole("checkbox", { name: "Select project" }));
+    await userEvent.click(screen.getByRole("checkbox", { name: "Select notes.txt" }));
+    expect(screen.getByText("2 selected")).toBeVisible();
+
+    await userEvent.click(screen.getByRole("button", { name: "Actions for 2 selected items" }));
+    expect(screen.queryByRole("menuitem", { name: "Open folder" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Change permissions" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Rename" })).not.toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Download" })).toBeEnabled();
+    expect(screen.getByRole("menuitem", { name: "Delete" })).toBeEnabled();
+  });
+
+  it("deletes multiple selected entries after one confirmation", async () => {
+    api.list.mockResolvedValue({
+      path: "/remote",
+      entries: [
+        { name: "first.txt", path: "/remote/first.txt", type: "file", size: 1, mode: "0644", modifiedAt: "", revision: "first" },
+        { name: "second.txt", path: "/remote/second.txt", type: "file", size: 2, mode: "0644", modifiedAt: "", revision: "second" },
+      ],
+    });
+    render(<SFTPPanel aliases={["edge"]} />);
+    await userEvent.selectOptions(screen.getByLabelText("Host"), "edge");
+    await userEvent.click(await screen.findByRole("checkbox", { name: "Select all entries" }));
+    await userEvent.click(screen.getByRole("button", { name: "Actions for 2 selected items" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
+
+    const dialog = screen.getByRole("dialog", { name: "Delete 2 remote entries?" });
+    expect(dialog).toHaveTextContent("/remote/first.txt");
+    expect(dialog).toHaveTextContent("/remote/second.txt");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
+    await waitFor(() => expect(api.remove).toHaveBeenCalledTimes(2));
+    expect(api.remove.mock.calls).toEqual([
+      ["edge", "/remote/first.txt"],
+      ["edge", "/remote/second.txt"],
+    ]);
+  });
+
+  it("opens the text editor as a modal without resizing the file list", async () => {
+    api.list.mockResolvedValue({
+      path: "/remote",
+      entries: [{ name: "notes.txt", path: "/remote/notes.txt", type: "file", size: 12, mode: "0644", modifiedAt: "", revision: "rev" }],
+    });
+    api.readText.mockResolvedValue({
+      entry: { name: "notes.txt", path: "/remote/notes.txt", type: "file", size: 12, mode: "0644", modifiedAt: "", revision: "rev" },
+      contents: "hello\n",
+      revision: "rev",
+    });
+    const { container } = render(<SFTPPanel aliases={["edge"]} />);
+    await userEvent.selectOptions(screen.getByLabelText("Host"), "edge");
+    await userEvent.dblClick(await screen.findByRole("button", { name: "notes.txt" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "/remote/notes.txt" });
+    expect(dialog).toHaveAttribute("aria-modal", "true");
+    expect(container.querySelector(".grid-cols-1")).not.toBeNull();
+    expect(screen.getByRole("table")).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("dialog", { name: "/remote/notes.txt" })).not.toBeInTheDocument();
   });
 
   it("ignores a stale host listing that resolves after the current host", async () => {
@@ -120,7 +229,7 @@ describe("SFTPPanel uploads", () => {
 
     render(<SFTPPanel aliases={["edge", "miyabi"]} />);
     await userEvent.selectOptions(screen.getByLabelText("Host"), "edge");
-    await waitFor(() => expect(api.list).toHaveBeenCalledWith("edge", "/"));
+    await waitFor(() => expect(api.list).toHaveBeenCalledWith("edge", ""));
     await userEvent.selectOptions(screen.getByLabelText("Host"), "miyabi");
     await waitFor(() => expect(screen.getByLabelText("Remote path")).toHaveValue("/current"));
 
@@ -145,7 +254,7 @@ describe("SFTPPanel uploads", () => {
 
     render(<SFTPPanel aliases={["edge", "miyabi"]} />);
     await userEvent.selectOptions(screen.getByLabelText("Host"), "edge");
-    await userEvent.click(await screen.findByRole("button", { name: "old.txt" }));
+    await userEvent.dblClick(await screen.findByRole("button", { name: "old.txt" }));
     await waitFor(() => expect(api.readText).toHaveBeenCalledWith("edge", "/edge/old.txt"));
 
     await userEvent.selectOptions(screen.getByLabelText("Host"), "miyabi");
@@ -236,11 +345,11 @@ describe("SFTPPanel uploads", () => {
     await screen.findByRole("button", { name: "alpha" });
 
     const table = screen.getByRole("table");
-    expect(within(table).getAllByRole("row")[1]).toHaveTextContent("alpha");
+    expect(within(table).getAllByRole("row")[2]).toHaveTextContent("alpha");
     await userEvent.click(within(table).getByRole("button", { name: /Bytes.*sort ascending/ }));
-    expect(within(table).getAllByRole("row")[1]).toHaveTextContent("zeta");
+    expect(within(table).getAllByRole("row")[2]).toHaveTextContent("zeta");
     await userEvent.click(within(table).getByRole("button", { name: /Bytes.*sort descending/ }));
-    expect(within(table).getAllByRole("row")[1]).toHaveTextContent("alpha");
+    expect(within(table).getAllByRole("row")[2]).toHaveTextContent("alpha");
   });
 
   it("keeps the type header and values on one line in a scrollable table", async () => {
@@ -254,7 +363,7 @@ describe("SFTPPanel uploads", () => {
     await userEvent.selectOptions(screen.getByLabelText("Host"), "edge");
 
     const table = await screen.findByRole("table");
-    expect(table).toHaveClass("min-w-[52rem]");
+    expect(table).toHaveClass("min-w-[44rem]");
     expect(within(table).getByRole("columnheader", { name: /Type/ }))
       .toHaveClass("whitespace-nowrap");
     expect(within(table).getByText("Folder")).toHaveClass("whitespace-nowrap");
@@ -321,11 +430,13 @@ describe("SFTPPanel uploads", () => {
     api.chmod.mockResolvedValue(undefined);
     render(<SFTPPanel aliases={["edge"]} />);
     await userEvent.selectOptions(screen.getByLabelText("Host"), "edge");
-    await screen.findByRole("button", { name: /project/ });
+    await userEvent.click(await screen.findByRole("button", { name: "project" }));
 
-    await userEvent.click(screen.getByRole("button", { name: "Download" }));
+    await userEvent.click(screen.getByRole("button", { name: "Actions for project" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Download" }));
     await waitFor(() => expect(api.streamDownload).toHaveBeenCalledWith("edge", expect.any(String), "/remote/project", true, 0, expect.objectContaining({ signal: expect.any(AbortSignal) })));
-    await userEvent.click(screen.getByRole("button", { name: "Change permissions" }));
+    await userEvent.click(screen.getByRole("button", { name: "Actions for project" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Change permissions" }));
     const dialog = screen.getByRole("dialog", { name: "Change permissions" });
     expect(within(dialog).getByRole("textbox", { name: "Permissions (octal, for example 640)" })).toHaveValue("750");
     await userEvent.click(within(dialog).getByRole("button", { name: "Change permissions" }));

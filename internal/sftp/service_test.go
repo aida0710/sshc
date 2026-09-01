@@ -37,6 +37,7 @@ func (n node) Sys() any           { return nil }
 
 type fakeRemote struct {
 	nodes        map[string]node
+	workingDir   string
 	closed       bool
 	replacements [][2]string
 	removals     []string
@@ -68,6 +69,16 @@ func (r *fakeRemote) Close() error {
 	}
 	r.closed = true
 	return nil
+}
+
+func (r *fakeRemote) Getwd(ctx context.Context) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	if r.workingDir == "" {
+		return "/", nil
+	}
+	return r.workingDir, nil
 }
 
 func (r *fakeRemote) ReadDir(ctx context.Context, directory string) ([]fs.FileInfo, error) {
@@ -330,6 +341,26 @@ func TestListAndStatExposeStableMetadata(t *testing.T) {
 	}
 	if !remote.closed {
 		t.Fatal("remote was not closed")
+	}
+}
+
+func TestListDirectoryUsesRemoteWorkingDirectoryWhenPathIsOmitted(t *testing.T) {
+	remote := remoteWith(map[string]node{
+		"/home":            directory("home"),
+		"/home/aida":       directory("aida"),
+		"/home/aida/notes": file("notes", "hello", 0o600),
+	})
+	remote.workingDir = "/home/aida/./"
+
+	listing, err := serviceFor(remote).ListDirectory(t.Context(), "edge", "")
+	if err != nil {
+		t.Fatalf("ListDirectory() = %v", err)
+	}
+	if listing.Path != "/home/aida" {
+		t.Fatalf("path = %q, want /home/aida", listing.Path)
+	}
+	if len(listing.Entries) != 1 || listing.Entries[0].Path != "/home/aida/notes" {
+		t.Fatalf("entries = %#v", listing.Entries)
 	}
 }
 

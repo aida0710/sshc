@@ -99,8 +99,10 @@ OpenSSHコンテナに対するプロトコル往復は`make integration`で自�
 8. folder uploadのうち1 fileだけを失敗させ、batchの「失敗のみ再試行」で成功済みfileを再送せず失敗fileだけattemptが増えることを確認する。
 9. 転送中にnetworkを一時的に切り、uploadがremote part sizeから、file downloadがHTTP Rangeから再開することを確認する。folder ZIPはretry時に先頭からやり直すことも確認する。
 10. pause／resume／retry／cancelをuploadとfile downloadで試し、cancelしたuploadのpart fileが削除されること、失敗通知を閉じられることを確認する。
-8. fileとdirectoryの権限をchmodで変更し、一覧の権限・更新日時・種別列とsortを確認する。symlinkにはchmodが表示されないことを確認する。
-9. 作成したfileとdirectoryを削除して原状復帰する。
+11. fileとdirectoryの権限をchmodで変更し、一覧で名前の下に権限が表示されること、名前・更新日時・サイズ・種別でsortできることを確認する。symlinkにはchmodが表示されないことを確認する。
+12. checkboxでfileとdirectoryを複数選択し、一括downloadと削除確認を実行できることを確認する。1件だけ選んだ場合に限り、renameとchmodが操作menuへ表示されることも確認する。
+13. text fileを開いたとき、一覧の横幅が変わらずmodal editorが表示されることを確認する。未保存の変更がある間は意図せず閉じないことも確認する。
+14. 作成したfileとdirectoryを削除して原状復帰する。
 
 ## M8. Workspace Command Center
 

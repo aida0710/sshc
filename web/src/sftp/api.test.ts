@@ -28,6 +28,15 @@ describe("sftpApi resumable download", () => {
     expect(diagnostic).not.toHaveBeenCalled();
   });
 
+  it("omits the path query when opening the remote user's initial directory", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+      path: "/home/aida", entries: [],
+    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+
+    await expect(sftpApi.list("edge")).resolves.toMatchObject({ path: "/home/aida" });
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/v1/sftp/edge/entries");
+  });
+
   it("uses the engine-provided transfer controls as the UI contract", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
       maxConcurrent: 2,

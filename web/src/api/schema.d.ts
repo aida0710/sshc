@@ -6021,8 +6021,9 @@ export interface operations {
     };
     listSFTPEntries: {
         parameters: {
-            query: {
-                path: string;
+            query?: {
+                /** @description Omit to list the remote user's working directory */
+                path?: string;
             };
             header?: never;
             path: {
