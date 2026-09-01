@@ -54,6 +54,8 @@ sshc service status
 sshc vault unlock
 ```
 
+`install`は作成するunitと実行ファイルを表示して確認を求めます。自動化で確認を省略するときは`sshc service install --yes`を使用します。
+
 `sshc service install`は`~/.config/systemd/user/sshc.service`を0600で原子的に作成し、`systemctl --user`で有効化して起動します。unitはforegroundの`sshc engine`を`Type=simple`で実行し、`Restart=on-failure`と`SuccessExitStatus=130`を設定します。commandはsystemdのMain PIDとsshc handoffのPIDを照合し、status APIが応答してから成功を返します。
 
 登録できるのは、実行中ファイルの所有元を確認できたHomebrew版またはreceipt対応`install.sh`版だけです。Homebrew版はCellar内のversion付き実体ではなく、更新後も同じ場所を指すformulaの`opt/sshc/bin/sshc`を登録します。手動copy、`make install`、source buildは推測で登録しません。
@@ -69,11 +71,27 @@ sshc service install
 
 `sshc service disable`はsshc管理下のunitだけを停止、無効化、削除します。unit変更はuser単位のlockで直列化し、停止後にも内容が変わっていないことを確認してから削除します。`sshc update`は管理unitの実行パスが更新対象と完全に一致し、activeの場合だけ`try-restart`します。再起動によりvaultはロックされるため、別の対話端末から`sshc vault unlock`を再実行してください。停止中のunitをupdateが起動することはありません。binary更新後の再起動だけに失敗した場合は、`sshc service install`を再実行して復旧できます。
 
+`disable`も削除対象を表示して確認を求めます。対話端末のない自動化では`sshc service disable --yes`を使用してください。
+
 SSH loginを切断した後もuser managerを動作させる必要がある場合は、管理者にlingerの有効化を依頼するか、権限があれば次を実行します。
 
 ```sh
 loginctl enable-linger "$USER"
 ```
+
+## launchd（macOSユーザーエージェント）
+
+foregroundやtmuxで起動中の`sshc engine`があれば、先にそのprocessを停止します。
+
+```sh
+sshc service install
+sshc service status
+sshc vault unlock
+```
+
+`sshc service install`は`~/Library/LaunchAgents/io.github.aida0710.sshc.plist`を0600で原子的に作成し、現在のGUIユーザードメインへ`launchctl bootstrap`で登録します。launchdのPID、sshc handoffのPID、status APIが一致してから成功を返します。再登録時は既存のsshc管理エージェントを`bootout`してから新しい定義を読み込みます。
+
+同名plistにsshcの管理markerがない場合は上書きも削除もしません。`sshc service disable`はsshcが作成したplistだけを`bootout`して削除します。`sshc update`は登録内容が更新対象の実行パスと完全に一致し、エージェントがactiveの場合だけ`launchctl kickstart -k`で再起動します。
 
 ## tmux
 

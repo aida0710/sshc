@@ -61,7 +61,9 @@ type invocation struct {
 	// Replace は既存の engine を確認なしで停止して置き換える。
 	Replace bool
 	// JSON は `sshc status --json` の機械可読出力を選択する。
-	JSON      bool
+	JSON bool
+	// Yes は変更内容の確認を省略する。
+	Yes       bool
 	Transport *transportInvocation
 	Sync      *syncInvocation
 	Terminal  *terminalInvocation
@@ -125,7 +127,7 @@ func parseInvocation(argv []string) (invocation, error) {
 		if helpRequested(args) {
 			return helpInvocation(canonicalCLICommand(cliCommandUpdate)), nil
 		}
-		return noArguments(invocationUpdate, word, args)
+		return parseConfirmationOnlyInvocation(invocationUpdate, word, args)
 	case cliCommandService:
 		if helpRequested(args) {
 			return helpInvocation(canonicalCLICommand(cliCommandService)), nil
@@ -133,10 +135,22 @@ func parseInvocation(argv []string) (invocation, error) {
 		if len(args) > 1 && validServiceAction(args[0]) && isHelpFlag(args[1]) {
 			return helpInvocation(canonicalCLICommand(cliCommandService) + " " + args[0]), nil
 		}
-		if len(args) != 1 || !validServiceAction(args[0]) {
+		if len(args) == 0 || !validServiceAction(args[0]) {
 			return invalidInvocation("service requires install, status, or disable")
 		}
-		return invocation{Kind: invocationService, Args: copyInvocationArgs(args)}, nil
+		action := args[0]
+		if action == "status" {
+			if len(args) != 1 {
+				return invalidInvocation("service status takes no flags")
+			}
+			return invocation{Kind: invocationService, Args: []string{action}}, nil
+		}
+		parsed, err := parseConfirmationOnlyInvocation(invocationService, "service "+action, args[1:])
+		if err != nil {
+			return parsed, err
+		}
+		parsed.Args = []string{action}
+		return parsed, nil
 	case cliCommandVault:
 		if helpRequested(args) {
 			return helpInvocation(canonicalCLICommand(cliCommandVault)), nil
@@ -176,6 +190,22 @@ func parseInvocation(argv []string) (invocation, error) {
 	}
 
 	return invalidInvocation(fmt.Sprintf("unknown command %q", word))
+}
+
+func parseConfirmationOnlyInvocation(kind invocationKind, command string, args []string) (invocation, error) {
+	called := invocation{Kind: kind}
+	for _, argument := range args {
+		switch argument {
+		case "-y", "--yes":
+			if called.Yes {
+				return invalidInvocation(command + " accepts -y or --yes only once")
+			}
+			called.Yes = true
+		default:
+			return invalidInvocation(command + " only accepts -y or --yes")
+		}
+	}
+	return called, nil
 }
 
 func helpInvocation(topic string) invocation {

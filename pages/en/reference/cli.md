@@ -25,9 +25,10 @@ sshc vault change-password
 sshc service install
 sshc service status
 sshc service disable
+sshc update
 ```
 
-`sshc service` manages a systemd user service on Linux. `install` registers a stable Homebrew or `install.sh` path, and `disable` removes only a unit created by sshc.
+`sshc service` manages a systemd user service on Linux or a launchd user agent on macOS. `install` registers a stable Homebrew or `install.sh` path, and `disable` removes only a definition created by sshc. `install`, `disable`, and `update` show the planned changes and ask for confirmation. Use `-y` or `--yes` only when automation must skip the prompt.
 
 ## SSH
 

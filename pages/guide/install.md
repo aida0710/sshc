@@ -22,7 +22,7 @@ SSHC_VERSION=v0.25.0 sh -c \
   'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.25.0/install.sh | sh'
 ```
 
-導入後は`sshc update`で更新できます。Homebrewで入れた場合はHomebrewから、`install.sh`で入れた場合は同じ配布元から更新されます。
+導入後は`sshc update`で更新できます。Homebrewで入れた場合はHomebrewから、`install.sh`で入れた場合は同じ配布元から更新されます。更新内容を表示して確認を求めるため、対話端末のない自動化では確認後に`sshc update --yes`を使用してください。
 
 ## Windows
 
@@ -74,6 +74,8 @@ sshc vault unlock
 
 `service install`は`~/.config/systemd/user/sshc.service`を作成し、有効化して起動します。systemdのMain PIDとsshcのstatus APIを確認してから成功を返します。Homebrew版では更新後も変わらない`opt/sshc/bin/sshc`を、`install.sh`版では確認済みのインストール先を登録します。手動配置やソースビルドは自動登録しません。
 
+作成するunitと実行ファイルを表示して確認を求めます。自動化で確認を省略するときは`sshc service install --yes`を使用してください。
+
 同名のunitがすでに手作業で作成されている場合、sshcは上書きしません。既存unitを停止して退避してから実行してください。
 
 ```sh
@@ -89,7 +91,19 @@ SSHログインを切断した後も起動を続ける場合は、管理者にli
 loginctl enable-linger "$USER"
 ```
 
-サービスを削除する場合は`sshc service disable`を実行します。このコマンドもsshcが作成したunitだけを削除します。
+サービスを削除する場合は`sshc service disable`を実行します。このコマンドもsshcが作成したunitだけを削除し、削除前に確認を求めます。自動化では`sshc service disable --yes`を使用できます。
+
+## macOSで常駐させる
+
+macOSでは、ユーザーエージェントとしてlaunchdへ登録できます。sudoは不要です。フォアグラウンドやtmuxで起動しているengineを停止してから実行してください。
+
+```sh
+sshc service install
+sshc service status
+sshc vault unlock
+```
+
+`service install`は`~/Library/LaunchAgents/io.github.aida0710.sshc.plist`を作成し、現在のGUIユーザーへ登録して起動します。launchdのPIDとsshcのstatus APIを確認してから成功を返します。同名の手書きplistは上書きしません。削除は`sshc service disable`で行い、sshcが作成したplistだけを対象にします。
 
 ## 更新
 

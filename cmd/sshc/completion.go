@@ -134,8 +134,15 @@ _sshc_completion() {
     status)
       _sshc_complete_words "--json --help"
       ;;
+    update)
+      _sshc_complete_words "-y --yes --help"
+      ;;
     service)
-      if (( COMP_CWORD == 2 )); then _sshc_complete_words "{{SERVICE_ACTIONS}} --help"; elif (( COMP_CWORD == 3 )); then _sshc_complete_words "--help"; fi
+      if (( COMP_CWORD == 2 )); then
+        _sshc_complete_words "{{SERVICE_ACTIONS}} --help"
+      elif (( COMP_CWORD == 3 )); then
+        case "${COMP_WORDS[2]}" in install|disable) _sshc_complete_words "-y --yes --help" ;; *) _sshc_complete_words "--help" ;; esac
+      fi
       ;;
     vault)
       if (( COMP_CWORD == 2 )); then _sshc_complete_words "{{VAULT_ACTIONS}} --help"; elif (( COMP_CWORD == 3 )); then _sshc_complete_words "--help"; fi
@@ -243,7 +250,14 @@ _sshc() {
     serial) _sshc_values '{{SERIAL_OPTIONS}}' ;;
     telnet) _sshc_values '{{TELNET_OPTIONS}}' ;;
     status) _sshc_values '--json --help' ;;
-    service) if (( CURRENT == 3 )); then _sshc_values '{{SERVICE_ACTIONS}} --help'; elif (( CURRENT == 4 )); then _sshc_values '--help'; fi ;;
+    update) _sshc_values '-y --yes --help' ;;
+    service)
+      if (( CURRENT == 3 )); then
+        _sshc_values '{{SERVICE_ACTIONS}} --help'
+      elif (( CURRENT == 4 )); then
+        case "${words[3]}" in install|disable) _sshc_values '-y --yes --help' ;; *) _sshc_values '--help' ;; esac
+      fi
+      ;;
     vault) if (( CURRENT == 3 )); then _sshc_values '{{VAULT_ACTIONS}} --help'; elif (( CURRENT == 4 )); then _sshc_values '--help'; fi ;;
     help)
       if (( CURRENT == 3 )); then
@@ -347,7 +361,8 @@ complete -c sshc -f -n '__sshc_prefix sync setup; or __sshc_prefix sync push; or
 complete -c sshc -f -n '__sshc_prefix terminal' -a '{{TERMINAL_ACTIONS}}'
 complete -c sshc -f -n '__sshc_prefix service' -a '{{SERVICE_ACTIONS}} --help'
 complete -c sshc -f -n '__sshc_prefix vault' -a '{{VAULT_ACTIONS}} --help'
-complete -c sshc -f -n '__sshc_prefix service install; or __sshc_prefix service status; or __sshc_prefix service disable' -a '--help'
+complete -c sshc -f -n '__sshc_prefix service install; or __sshc_prefix service disable' -a '-y --yes --help'
+complete -c sshc -f -n '__sshc_prefix service status' -a '--help'
 complete -c sshc -f -n '__sshc_prefix vault status; or __sshc_prefix vault create; or __sshc_prefix vault unlock; or __sshc_prefix vault lock; or __sshc_prefix vault change-password' -a '--help'
 complete -c sshc -f -n '__sshc_prefix help' -a '{{HELP_TOPICS}}'
 complete -c sshc -f -n '__sshc_prefix help sync' -a '{{SYNC_ACTIONS}}'
@@ -358,6 +373,7 @@ complete -c sshc -f -n '__sshc_prefix help vault' -a '{{VAULT_ACTIONS}}'
 complete -c sshc -f -n '__sshc_command engine' -a '--port --replace --help'
 complete -c sshc -f -n '__sshc_command info; and __sshc_min_words 3' -a '--json'
 complete -c sshc -f -n '__sshc_command status' -a '--json --help'
+complete -c sshc -f -n '__sshc_command update' -a '-y --yes --help'
 complete -c sshc -f -n '__sshc_action sync push; or __sshc_action sync pull' -a '--force'
 complete -c sshc -f -n '__sshc_sync_json' -a '--json'
 complete -c sshc -f -n '__sshc_terminal_options' -a '--json'

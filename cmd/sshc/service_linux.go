@@ -29,8 +29,6 @@ const (
 
 var defaultSystemctlCandidates = []string{"/usr/bin/systemctl", "/bin/systemctl"}
 
-const serviceReadyTimeout = 5 * time.Second
-
 type serviceCommandResult struct {
 	ExitCode int
 	Output   []byte
@@ -139,6 +137,17 @@ func resolveSystemctl(
 
 func (manager *linuxServiceManager) unitPath() string {
 	return filepath.Join(manager.home, ".config", "systemd", "user", serviceUnitName)
+}
+
+func (manager *linuxServiceManager) InstallPlan(executable string) (string, error) {
+	if _, err := systemdUnit(executable); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("install, enable, and start the systemd user service at %s using %s", manager.unitPath(), filepath.Clean(executable)), nil
+}
+
+func (manager *linuxServiceManager) DisablePlan() string {
+	return fmt.Sprintf("stop, disable, and remove the systemd user service at %s", manager.unitPath())
 }
 
 func (manager *linuxServiceManager) Install(ctx context.Context, executable string) (result error) {
