@@ -79,7 +79,10 @@ test("keeps a chunked SFTP upload visible while another section is open", async 
   await expect(page.getByText("Transferring…")).toBeVisible();
 
   await openSection(page, "Connections");
-  await expect(page.getByRole("button", { name: "1 active" })).toBeVisible();
+  const sftpNavigation = page.getByRole("link", { name: "SFTP", exact: true });
+  await expect(sftpNavigation.locator("[data-sftp-transfer-indicator]"))
+    .toHaveAttribute("title", "1 active");
+  await expect(page.getByRole("button", { name: "1 active" })).toHaveCount(0);
   await openSection(page, "SFTP");
   await expect(page.getByText("Transferring…")).toBeVisible();
   const reloadBastion = async () => {
