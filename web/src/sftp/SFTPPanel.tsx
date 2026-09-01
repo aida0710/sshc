@@ -1,5 +1,6 @@
 import { Suspense, lazy, useEffect, useRef, useState, useSyncExternalStore, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent } from "react";
 import { failureCode } from "../api/client";
+import type { HostEntry } from "../api/config";
 import { useTranslate } from "../i18n/context";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { clipboard } from "../ui/clipboard";
@@ -20,10 +21,12 @@ import { sftpApi, type RemoteEntry, type RemoteTextFile } from "./api";
 import { directoryPaths, safeRelativePath, symbolicModeToOctal, type LocalTransferFile } from "./transfers";
 import { TransferManagerList } from "./TransferManagerList";
 import { sftpTransferManager } from "./transferManager";
+import { SFTPHostPicker } from "./SFTPHostPicker";
 
 const MonacoEditor = lazy(() =>
   import("./MonacoEditor").then(({ MonacoEditor }) => ({ default: MonacoEditor })),
 );
+const noHosts: HostEntry[] = [];
 
 function parentOf(remotePath: string): string {
   if (remotePath === "/") return "/";
@@ -99,10 +102,12 @@ async function droppedFiles(transfer: DataTransfer): Promise<{ files: LocalTrans
 
 export function SFTPPanel({
   aliases,
+  hosts = noHosts,
   target = null,
   onTargetHandled = () => undefined,
 }: {
   aliases: string[];
+  hosts?: HostEntry[];
   target?: SFTPTarget | null;
   onTargetHandled?: (request: number) => void;
 }) {
@@ -589,15 +594,7 @@ export function SFTPPanel({
     <section className="flex h-full min-h-0 min-w-0 flex-col gap-2" aria-labelledby="sftp-heading">
       <div className="flex flex-wrap items-center gap-2 border-b border-line pb-2">
         <h2 id="sftp-heading" className="mr-auto font-medium">{t("sftp.heading")}</h2>
-        <select
-          aria-label={t("sftp.host")}
-          value={alias}
-          onChange={(event) => selectHost(event.target.value)}
-          className="rounded-md border border-control-line bg-control px-2 py-1.5 text-sm"
-        >
-          <option value="" disabled>{t(aliases.length === 0 ? "sftp.noHosts" : "sftp.chooseHost")}</option>
-          {aliases.map((value) => <option key={value} value={value}>{value}</option>)}
-        </select>
+        <SFTPHostPicker aliases={aliases} hosts={hosts} value={alias} disabled={dirty} onChange={selectHost} />
         <div role="group" aria-label={t("sftp.navigation")} className="flex shrink-0 overflow-hidden rounded-md border border-control-line bg-control">
           <button type="button" aria-label={t("sftp.back")} disabled={busy || dirty || navigation.index <= 0} onClick={() => void navigateHistory(-1)} className="flex size-9 items-center justify-center border-r border-control-line text-ink-muted hover:bg-select-fill disabled:text-ink-faint">
             <span aria-hidden="true">←</span>

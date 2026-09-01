@@ -70,7 +70,12 @@ test("keeps a chunked SFTP upload visible while another section is open", async 
 
   await openApplication(page, installation);
   await openSection(page, "SFTP");
-  await page.getByRole("combobox", { name: "Host" }).selectOption("bastion");
+  const chooseHost = async (alias: string) => {
+    await page.locator("button[data-value]").click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByText(alias, { exact: true }).click();
+  };
+  await chooseHost("bastion");
   await page.locator('input[type="file"]:not([webkitdirectory])').setInputFiles({
     name: "large.bin",
     mimeType: "application/octet-stream",
@@ -94,9 +99,8 @@ test("keeps a chunked SFTP upload visible while another section is open", async 
   await openSection(page, "SFTP");
   await expect(page.getByText("Transferring…")).toBeVisible();
   const reloadBastion = async () => {
-    const host = page.getByRole("combobox");
-    await host.selectOption("nas");
-    await host.selectOption("bastion");
+    await chooseHost("nas");
+    await chooseHost("bastion");
     await expect(page.getByRole("button", { name: "project", exact: true })).toBeVisible();
   };
   await reloadBastion();
@@ -124,6 +128,10 @@ test("keeps a chunked SFTP upload visible while another section is open", async 
     await reloadBastion();
     await page.getByRole("button", { name: "project", exact: true }).click();
     await page.screenshot({ path: `${visualDirectory}/sshc-v0.16.1-transfer-manager-desktop.png`, fullPage: true });
+    await page.locator("button[data-value]").click();
+    await expect(page.getByRole("dialog", { name: "Choose a remote host" })).toBeVisible();
+    await page.screenshot({ path: `${visualDirectory}/sshc-v0.16.1-sftp-host-picker-desktop.png`, fullPage: true });
+    await page.keyboard.press("Escape");
     const listWidth = (await page.getByLabel("Upload files or folders to the current remote directory").boundingBox())?.width;
     await page.getByRole("button", { name: "notes.txt" }).dblclick();
     const editorDialog = page.getByRole("dialog", { name: "/large/notes.txt" });
@@ -149,6 +157,10 @@ test("keeps a chunked SFTP upload visible while another section is open", async 
     await page.keyboard.press("Escape");
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
     await page.screenshot({ path: `${visualDirectory}/sshc-v0.16.1-transfer-manager-mobile.png`, fullPage: true });
+    await page.locator("button[data-value]").click();
+    await expect(page.getByRole("dialog", { name: "Choose a remote host" })).toBeVisible();
+    await page.screenshot({ path: `${visualDirectory}/sshc-v0.16.1-sftp-host-picker-mobile.png`, fullPage: true });
+    await page.keyboard.press("Escape");
   }
 
   releaseFirstChunk?.();
