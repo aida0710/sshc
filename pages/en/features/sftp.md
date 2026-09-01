@@ -18,7 +18,7 @@ Switching hosts immediately clears the previous listing and open file. A delayed
 - Download files or folders as ZIP archives
 - Edit UTF-8 text files up to 2 MiB with Monaco Editor
 
-Use the leading `..` row to move to the parent directory. Select one row, or use the checkboxes to select multiple entries, then use the action menu at the upper right to download or delete them. Permission and rename actions remain available for a single selection. Double-click or press Enter to open a folder or edit a text file in a modal without resizing the list. Creation and uploads are grouped in the `+` menu at the upper left.
+Use the leading `..` row to move to the parent directory. The navigation controls move back or forward through visited directories, return to the server home directory, or open the root directory. You can filter the current list by name. Select one row, or use the checkboxes to select multiple entries, then use the action menu at the upper right to download or delete them. Permission and rename actions remain available for a single selection. Double-click or press Enter to open a folder or edit a text file in a modal without resizing the list. Creation and uploads are grouped in the `+` menu at the upper left.
 
 Sort by name, type, bytes or modified time. Permissions appear below the entry name. The selected host and directory are reflected in navigation state, so a terminal remote-path action can open the same location.
 

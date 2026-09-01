@@ -117,6 +117,8 @@ export function SFTPPanel({
   const [deleting, setDeleting] = useState<RemoteEntry[] | null>(null);
   const [inputIntent, setInputIntent] = useState<SFTPInputIntent | null>(null);
   const [selectedPaths, setSelectedPaths] = useState<Set<string>>(() => new Set());
+  const [navigation, setNavigation] = useState<{ paths: string[]; index: number }>({ paths: [], index: -1 });
+  const [filter, setFilter] = useState("");
   const [menu, setMenu] = useState<SFTPMenu | null>(null);
   const [dragging, setDragging] = useState(false);
   const [compactViewport, setCompactViewport] = useState(compactSFTPViewport);
@@ -153,7 +155,7 @@ export function SFTPPanel({
   const transferJobs = useSyncExternalStore(sftpTransferManager.subscribe, sftpTransferManager.getSnapshot);
   const refreshedUploads = useRef(new Set<string>());
   const dirty = opened !== null && contents !== opened.contents;
-  const displayedEntries = ordered(
+  const sortedEntries = ordered(
     entries,
     (left, right) => {
       switch (sort.key) {
@@ -165,7 +167,11 @@ export function SFTPPanel({
     },
     sort.direction,
   );
-  const selectedEntries = displayedEntries.filter((entry) => selectedPaths.has(entry.path));
+  const normalizedFilter = filter.trim().toLocaleLowerCase();
+  const displayedEntries = normalizedFilter === ""
+    ? sortedEntries
+    : sortedEntries.filter((entry) => entry.name.toLocaleLowerCase().includes(normalizedFilter));
+  const selectedEntries = entries.filter((entry) => selectedPaths.has(entry.path));
   const selectedEntry = selectedEntries.length === 1 ? selectedEntries[0] ?? null : null;
   const allDisplayedSelected = displayedEntries.length > 0 && displayedEntries.every((entry) => selectedPaths.has(entry.path));
 
@@ -192,12 +198,14 @@ export function SFTPPanel({
     setContents("");
     setDeleting(null);
     setSelectedPaths(new Set());
+    setNavigation({ paths: [], index: -1 });
+    setFilter("");
     setMenu(null);
     setProblem("");
     setBusy(false);
   }
 
-  async function load(nextPath = path, nextAlias = alias, preserveEditor = false): Promise<RemoteEntry[] | null> {
+  async function load(nextPath = path, nextAlias = alias, preserveEditor = false, recordNavigation = true): Promise<RemoteEntry[] | null> {
     const generation = ++loadGeneration.current;
     if (nextAlias === "") {
       setBusy(false);
@@ -211,6 +219,13 @@ export function SFTPPanel({
       setPath(listing.path);
       setPathDraft(listing.path);
       setEntries(listing.entries);
+      if (recordNavigation) {
+        setNavigation((current) => {
+          if (current.paths[current.index] === listing.path) return current;
+          const paths = [...current.paths.slice(0, current.index + 1), listing.path];
+          return { paths, index: paths.length - 1 };
+        });
+      }
       setSelectedPaths((current) => new Set(listing.entries.filter((entry) => current.has(entry.path)).map((entry) => entry.path)));
       setMenu(null);
       if (!preserveEditor) {
@@ -490,8 +505,26 @@ export function SFTPPanel({
   }
 
   function toggleAllDisplayed() {
-    setSelectedPaths(allDisplayedSelected ? new Set() : new Set(displayedEntries.map((entry) => entry.path)));
+    setSelectedPaths((current) => {
+      const next = new Set(current);
+      for (const entry of displayedEntries) {
+        if (allDisplayedSelected) next.delete(entry.path);
+        else next.add(entry.path);
+      }
+      return next;
+    });
     setMenu(null);
+  }
+
+  async function navigateHistory(offset: -1 | 1) {
+    const nextIndex = navigation.index + offset;
+    const destination = navigation.paths[nextIndex];
+    if (destination === undefined) return;
+    const loaded = await load(destination, alias, false, false);
+    if (loaded === null) return;
+    setNavigation((current) => current.paths[nextIndex] === destination
+      ? { ...current, index: nextIndex }
+      : current);
   }
 
   function toggleMenu(next: SFTPMenu, trigger: HTMLButtonElement) {
@@ -512,6 +545,20 @@ export function SFTPPanel({
           <option value="" disabled>{t(aliases.length === 0 ? "sftp.noHosts" : "sftp.chooseHost")}</option>
           {aliases.map((value) => <option key={value} value={value}>{value}</option>)}
         </select>
+        <div role="group" aria-label={t("sftp.navigation")} className="flex shrink-0 overflow-hidden rounded-md border border-control-line bg-control">
+          <button type="button" aria-label={t("sftp.back")} disabled={busy || dirty || navigation.index <= 0} onClick={() => void navigateHistory(-1)} className="flex size-9 items-center justify-center border-r border-control-line text-ink-muted hover:bg-select-fill disabled:text-ink-faint">
+            <span aria-hidden="true">←</span>
+          </button>
+          <button type="button" aria-label={t("sftp.forward")} disabled={busy || dirty || navigation.index < 0 || navigation.index >= navigation.paths.length - 1} onClick={() => void navigateHistory(1)} className="flex size-9 items-center justify-center border-r border-control-line text-ink-muted hover:bg-select-fill disabled:text-ink-faint">
+            <span aria-hidden="true">→</span>
+          </button>
+          <button type="button" aria-label={t("sftp.homeDirectory")} disabled={busy || dirty || alias === ""} onClick={() => void load("")} className="flex size-9 items-center justify-center border-r border-control-line text-ink-muted hover:bg-select-fill disabled:text-ink-faint">
+            <Icon name="home" className="size-4" />
+          </button>
+          <button type="button" aria-label={t("sftp.rootDirectory")} disabled={busy || dirty || alias === "" || path === "/"} onClick={() => void load("/")} className="flex size-9 items-center justify-center font-mono text-sm text-ink-muted hover:bg-select-fill disabled:text-ink-faint">
+            /
+          </button>
+        </div>
         <input
           aria-label={t("sftp.path")}
           value={pathDraft}
@@ -545,7 +592,19 @@ export function SFTPPanel({
             >
               <Icon name="plus" className="size-4" />
             </button>
-            <span className="min-w-0 grow truncate text-xs text-ink-muted">{t(dragging ? "sftp.dropNow" : "sftp.dropHint")}</span>
+            <label className="relative min-w-24 max-w-52 grow">
+              <span className="sr-only">{t("sftp.filter")}</span>
+              <Icon name="search" className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-ink-muted" />
+              <input
+                type="search"
+                aria-label={t("sftp.filter")}
+                value={filter}
+                onChange={(event) => setFilter(event.target.value)}
+                placeholder={t("sftp.filterPlaceholder")}
+                className="h-8 w-full rounded border border-control-line bg-control py-1 pl-7 pr-2 text-xs outline-none focus:border-accent"
+              />
+            </label>
+            <span className="hidden min-w-0 grow truncate text-xs text-ink-muted lg:block">{t(dragging ? "sftp.dropNow" : "sftp.dropHint")}</span>
             {selectedEntries.length === 0 ? null : (
               <span className="hidden max-w-40 truncate text-xs text-ink-muted sm:block">
                 {selectedEntry === null

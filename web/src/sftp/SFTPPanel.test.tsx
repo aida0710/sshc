@@ -130,6 +130,56 @@ describe("SFTPPanel uploads", () => {
     await waitFor(() => expect(api.list).toHaveBeenCalledWith("edge", "/"));
   });
 
+  it("navigates back, forward, home, and root without losing directory history", async () => {
+    api.list.mockImplementation(async (_alias: string, requestedPath: string) => {
+      const resolvedPath = requestedPath === "" ? "/home/edge" : requestedPath;
+      return {
+        path: resolvedPath,
+        entries: resolvedPath === "/home/edge"
+          ? [{ name: "project", path: "/home/edge/project", type: "directory", size: 0, mode: "0755", modifiedAt: "", revision: "project" }]
+          : [],
+      };
+    });
+    render(<SFTPPanel aliases={["edge"]} />);
+    await userEvent.selectOptions(screen.getByLabelText("Host"), "edge");
+    await userEvent.dblClick(await screen.findByRole("button", { name: "project" }));
+    await waitFor(() => expect(screen.getByLabelText("Remote path")).toHaveValue("/home/edge/project"));
+
+    await userEvent.click(screen.getByRole("button", { name: "Back" }));
+    await waitFor(() => expect(screen.getByLabelText("Remote path")).toHaveValue("/home/edge"));
+    expect(screen.getByRole("button", { name: "Forward" })).toBeEnabled();
+
+    await userEvent.click(screen.getByRole("button", { name: "Forward" }));
+    await waitFor(() => expect(screen.getByLabelText("Remote path")).toHaveValue("/home/edge/project"));
+    await userEvent.click(screen.getByRole("button", { name: "Root directory" }));
+    await waitFor(() => expect(screen.getByLabelText("Remote path")).toHaveValue("/"));
+    await userEvent.click(screen.getByRole("button", { name: "Home directory" }));
+    await waitFor(() => expect(screen.getByLabelText("Remote path")).toHaveValue("/home/edge"));
+    expect(api.list).toHaveBeenCalledWith("edge", "");
+  });
+
+  it("filters the current directory without clearing hidden selections", async () => {
+    api.list.mockResolvedValue({
+      path: "/remote",
+      entries: [
+        { name: "alpha.txt", path: "/remote/alpha.txt", type: "file", size: 1, mode: "0644", modifiedAt: "", revision: "alpha" },
+        { name: "beta.txt", path: "/remote/beta.txt", type: "file", size: 2, mode: "0644", modifiedAt: "", revision: "beta" },
+      ],
+    });
+    render(<SFTPPanel aliases={["edge"]} />);
+    await userEvent.selectOptions(screen.getByLabelText("Host"), "edge");
+    await screen.findByRole("button", { name: "alpha.txt" });
+
+    await userEvent.type(screen.getByRole("searchbox", { name: "Filter remote entries" }), "alpha");
+    expect(screen.getByRole("button", { name: "alpha.txt" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "beta.txt" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("checkbox", { name: "Select all entries" }));
+
+    await userEvent.clear(screen.getByRole("searchbox", { name: "Filter remote entries" }));
+    expect(screen.getByRole("checkbox", { name: "Select alpha.txt" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Select beta.txt" })).not.toBeChecked();
+  });
+
   it("selects a compact row without opening it and opens it on double click", async () => {
     api.list.mockImplementation(async (_alias: string, path: string) => path === "/remote/project"
       ? { path, entries: [] }
