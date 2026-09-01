@@ -9,6 +9,8 @@ sshc is a terminal app that uses your existing OpenSSH configuration. Open SSH s
 
 ![An SSH connection open in the terminal](/images/terminal-desktop.png)
 
+On desktop, the left navigation opens Home, Connections, SFTP, Menu, and your live terminals. On mobile, use the menu button to open the same navigation and tap outside it to close.
+
 ## When to use it
 
 - You want SSH, local shells, SFTP, and port forwarding in one app.

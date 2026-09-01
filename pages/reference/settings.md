@@ -5,7 +5,7 @@ description: 外観、Terminalの入力、通知、ローカルシェルに関�
 
 # 設定
 
-Menuの「Settings」には、エンジン、ターミナル、通知、開いている接続、マスターパスワードへのリンクがあります。それぞれ独立したページとして直接開けます。接続先ごとの項目は、Connectionsのsshcタブにあります。
+Menuには機能ごとのグループがあります。「Settings」グループから、Engine、Terminal、Notifications、Open connections、Master passwordをそれぞれ直接開けます。Menu下部の「Preferences」では、テーマと表示言語を切り替えられます。接続先ごとの項目は、Connectionsのsshcタブにあります。
 
 ## Engine
 
@@ -13,9 +13,12 @@ Menuの「Settings」には、エンジン、ターミナル、通知、開い�
 
 ## 外観
 
+Preferencesで設定します。
+
 - システム／ライト／ダークテーマ
 - 日本語／English
-- カラーパレット、フォント、背景、色合い
+
+Terminalのカラーパレット、フォント、背景、色合いは「Settings」→「Terminal」で設定します。
 
 Vaultの作成／ロック解除画面でも、テーマと言語を切り替えられます。
 

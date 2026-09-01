@@ -57,6 +57,11 @@ test("docks connected terminals into a live workspace", async ({ page, installat
   const navigation = page.getByRole("navigation", { name: "Primary" });
   await navigation.getByRole("button", { name: "edge", exact: true }).click();
 
+  if (process.env.SSHC_VISUAL_DIR !== undefined) {
+    await expect(page.getByRole("region", { name: "Console for edge" })).toContainText("connected");
+    await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/terminal-desktop.png`, fullPage: true });
+  }
+
   const target = page.locator("[data-single-terminal-drop-target='workspace-edge']");
   await expect(target).toBeVisible();
   const databaseRow = navigation
