@@ -859,6 +859,30 @@ func TestCancelOwnedRetainsCleanupFailureForRetry(t *testing.T) {
 	}
 }
 
+func TestCancelOwnedDoesNotConnectForAPristineQueuedUpload(t *testing.T) {
+	opened := false
+	manager := sftp.NewTransferManager(&sftp.Service{Open: func(context.Context, string) (sftp.Remote, error) {
+		opened = true
+		return nil, errors.New("host unavailable")
+	}})
+	input := sftp.CreateTransferJob{
+		ID: "transfer_pristine", BatchID: "batch_pristine1", Alias: "edge", Direction: sftp.TransferUpload,
+		Kind: sftp.TransferFile, Name: "file", RemotePath: "/remote/file", TotalBytes: 4,
+	}
+	if _, err := manager.CreateJob(input); err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.CancelOwned(t.Context(), input.Alias, input.ID, input.RemotePath); err != nil {
+		t.Fatal(err)
+	}
+	if opened {
+		t.Fatal("pristine cancellation opened a remote connection")
+	}
+	if job := manager.ListJobs()[0]; job.Status != sftp.TransferCancelled {
+		t.Fatalf("cancelled job = %+v", job)
+	}
+}
+
 func TestCancelOwnedRemovesOnlyTheDeterministicPartAfterJobStateLoss(t *testing.T) {
 	const (
 		id     = "transfer_lostjob1"

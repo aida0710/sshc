@@ -87,6 +87,7 @@ const (
 	TransferResumeControl TransferControlAction = "resume"
 	TransferRetryControl  TransferControlAction = "retry"
 	TransferCancelControl TransferControlAction = "cancel"
+	TransferRemoveControl TransferControlAction = "remove"
 )
 
 // AllowedTransferActions returns the user-visible control actions permitted by
@@ -99,7 +100,9 @@ func AllowedTransferActions(job TransferJob) []TransferControlAction {
 	case TransferPaused, TransferReattach, TransferNeedsOverwrite:
 		return []TransferControlAction{TransferResumeControl, TransferCancelControl}
 	case TransferFailed:
-		return []TransferControlAction{TransferRetryControl, TransferCancelControl}
+		return []TransferControlAction{TransferRetryControl, TransferCancelControl, TransferRemoveControl}
+	case TransferCompleted, TransferCancelled:
+		return []TransferControlAction{TransferRemoveControl}
 	default:
 		return []TransferControlAction{}
 	}
@@ -206,9 +209,6 @@ func (m *TransferManager) AuthorizeUpload(id, alias, remotePath string, total in
 		return ErrConflict
 	}
 	if cancelling {
-		if job.Status == TransferCompleted {
-			return ErrTransferState
-		}
 		return nil
 	}
 	if job.Status != TransferRunning {
@@ -825,6 +825,63 @@ func (m *TransferManager) ClearFinished() int {
 	return len(removed)
 }
 
+// RemoveJob dismisses one retained transfer record. Failed regular uploads may
+// still own an unpublished sibling on the remote server, so that exact part is
+// removed before the ledger entry disappears. A missing record is already in
+// the requested state and makes DELETE safe to retry after a lost response.
+func (m *TransferManager) RemoveJob(id string) error {
+	if m.isClosed() {
+		return ErrUnavailable
+	}
+	if !transferIDPattern.MatchString(id) {
+		return ErrInvalidTransfer
+	}
+	unlock := m.lock("", "\x00job-owner:"+id)
+	defer unlock()
+
+	m.jobsMutex.Lock()
+	m.initializeJobsLocked()
+	record := m.jobs[id]
+	if record == nil {
+		m.jobsMutex.Unlock()
+		return nil
+	}
+	if !retainedTransferStatus(record.job.Status) || record.cleanupInFlight || m.dataPlane[id] != 0 {
+		m.jobsMutex.Unlock()
+		return ErrTransferState
+	}
+	job := record.job
+	if job.Status == TransferFailed && uploadJobHasRemotePart(job) {
+		record.cleanupInFlight = true
+		_ = m.persistJobsLocked(true)
+		m.jobsMutex.Unlock()
+
+		cleanupErr := m.cleanupEvictedUploadPart(job)
+		m.jobsMutex.Lock()
+		current := m.jobs[id]
+		if current == nil {
+			m.jobsMutex.Unlock()
+			return nil
+		}
+		current.cleanupInFlight = false
+		if cleanupErr != nil {
+			current.cleanupTombstone = true
+			current.job.Problem = "sftp_cleanup_pending"
+			current.job.UpdatedAt = m.now().UTC()
+			_ = m.persistJobsLocked(true)
+			m.jobsMutex.Unlock()
+			return cleanupErr
+		}
+	}
+	delete(m.jobs, id)
+	delete(m.dataPlane, id)
+	m.removeJobOrderLocked(id)
+	_ = m.persistJobsLocked(true)
+	m.jobsMutex.Unlock()
+	m.releasePreparedDownload(id)
+	return nil
+}
+
 func (m *TransferManager) UpdateJob(id string, update UpdateTransferJob) (TransferJob, error) {
 	if m.isClosed() {
 		return TransferJob{}, ErrUnavailable
@@ -967,11 +1024,10 @@ func (m *TransferManager) updateJob(id string, update UpdateTransferJob, origin 
 		record.sampleAt, record.sampleBytes = now, job.TransferredBytes
 	case TransferCancelAction:
 		if terminalTransferStatus(job.Status) {
-			if job.Status == TransferCancelled {
-				committed = true
-				return *job, nil
-			}
-			return TransferJob{}, ErrTransferState
+			// Cancel is idempotent across a completion race. A completed transfer
+			// stays completed; callers only asked that no work remain active.
+			committed = true
+			return *job, nil
 		}
 		m.releaseJobLocked(job.Status)
 		job.Status, job.Problem = TransferCancelled, ""
@@ -1231,6 +1287,11 @@ func terminalTransferStatus(status TransferJobStatus) bool {
 
 func retainedTransferStatus(status TransferJobStatus) bool {
 	return terminalTransferStatus(status) || status == TransferFailed
+}
+
+func uploadJobHasRemotePart(job TransferJob) bool {
+	return job.Direction == TransferUpload && job.Kind == TransferFile &&
+		(job.ExpectedRevision != "" || job.TransferredBytes > 0 || len(job.UploadRanges) > 0)
 }
 
 func evictableTransferJob(job TransferJob) bool {

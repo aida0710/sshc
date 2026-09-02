@@ -41,6 +41,23 @@ const previewProblems = [
   "sftp_failed",
 ];
 
+// Background transfer failures are rendered by TransferManagerList and its
+// completion notice. Reporting the same expected failure as an application-wide
+// diagnostic obscures the queue controls, especially on a narrow screen.
+const transferProblems = [
+  "sftp_failed",
+  "sftp_cleanup_pending",
+  "sftp_conflict",
+  "sftp_exists",
+  "sftp_not_found",
+  "sftp_range_invalid",
+  "sftp_transfer_limit",
+  "sftp_transfer_not_found",
+  "sftp_transfer_state",
+  "sftp_transfer_too_large",
+  "sftp_unsupported_entry",
+];
+
 export type StreamDownloadOptions = {
   signal?: AbortSignal;
   revision?: string;
@@ -72,12 +89,12 @@ export const sftpApi = {
   async updateTransferSettings(settings: TransferSettings): Promise<TransferJobList> {
     return validateOpenAPISchema<TransferJobList>("SFTPTransferJobList", await apiClient.mutate<unknown>("/api/v1/sftp/transfers/settings", {
       method: "PUT", headers: jsonHeaders, body: JSON.stringify(settings),
-    }));
+    }, { locallyHandledCodes: transferProblems }));
   },
   async moveTransfer(id: string, move: TransferQueueMove): Promise<TransferJobList> {
     return validateOpenAPISchema<TransferJobList>("SFTPTransferJobList", await apiClient.mutate<unknown>(`/api/v1/sftp/transfers/${encodeURIComponent(id)}/queue-position`, {
       method: "POST", headers: jsonHeaders, body: JSON.stringify({ move }),
-    }));
+    }, { locallyHandledCodes: transferProblems }));
   },
   async createTransfer(input: CreateTransferJob): Promise<TransferJob> {
     return transferJob(await apiClient.mutate<unknown>("/api/v1/sftp/transfers", {
@@ -92,17 +109,22 @@ export const sftpApi = {
     }));
   },
   async clearFinishedTransfers(): Promise<void> {
-    await apiClient.mutate<unknown>("/api/v1/sftp/transfers/finished", { method: "DELETE" });
+    await apiClient.mutate<unknown>("/api/v1/sftp/transfers/finished", { method: "DELETE" }, { locallyHandledCodes: transferProblems });
+  },
+  async removeTransfer(id: string): Promise<void> {
+    await apiClient.mutate<unknown>(`/api/v1/sftp/transfers/${encodeURIComponent(id)}`, { method: "DELETE" }, {
+      locallyHandledCodes: transferProblems,
+    });
   },
   async updateTransfer(id: string, action: TransferJobAction, options: { transferredBytes?: number; totalBytes?: number; problem?: string; resetProgress?: boolean } = {}): Promise<TransferJob> {
     return transferJob(await apiClient.mutate<unknown>(`/api/v1/sftp/transfers/${encodeURIComponent(id)}/actions`, {
       method: "POST", headers: jsonHeaders, body: JSON.stringify({ action, ...options }),
-    }));
+    }, { locallyHandledCodes: transferProblems }));
   },
   async checkpointDownload(id: string, offset: number, revision: string): Promise<TransferJob> {
     return transferJob(await apiClient.mutate<unknown>(`/api/v1/sftp/transfers/${encodeURIComponent(id)}/download-checkpoint`, {
       method: "POST", headers: jsonHeaders, body: JSON.stringify({ offset, revision }),
-    }));
+    }, { locallyHandledCodes: transferProblems }));
   },
   async verifyDownload(alias: string, jobId: string, remotePath: string, revision: string): Promise<void> {
     const endpoint = `${pathFor(alias, "download", remotePath)}&jobId=${encodeURIComponent(jobId)}&verify=true`;
@@ -177,7 +199,7 @@ export const sftpApi = {
       method: "POST",
       headers: jsonHeaders,
       body: JSON.stringify({ path: remotePath, size, sourceFingerprint }),
-    }));
+    }, { locallyHandledCodes: transferProblems }));
   },
   async appendUpload(alias: string, id: string, remotePath: string, offset: number, total: number, chunk: Blob, signal?: AbortSignal): Promise<ResumableUpload> {
     const query = `/api/v1/sftp/${encodeURIComponent(alias)}/uploads/${encodeURIComponent(id)}?path=${encodeURIComponent(remotePath)}&offset=${offset}&total=${total}`;
@@ -186,7 +208,7 @@ export const sftpApi = {
       headers: { "Content-Type": "application/octet-stream" },
       body: chunk,
       ...(signal === undefined ? {} : { signal }),
-    }));
+    }, { locallyHandledCodes: transferProblems }));
   },
   async appendUploadRange(alias: string, id: string, remotePath: string, offset: number, total: number, chunk: Blob, signal?: AbortSignal): Promise<ResumableUpload> {
     const query = `/api/v1/sftp/${encodeURIComponent(alias)}/uploads/${encodeURIComponent(id)}?path=${encodeURIComponent(remotePath)}&offset=${offset}&total=${total}&range=true&length=${chunk.size}`;
@@ -195,19 +217,19 @@ export const sftpApi = {
       headers: { "Content-Type": "application/octet-stream" },
       body: chunk,
       ...(signal === undefined ? {} : { signal }),
-    }));
+    }, { locallyHandledCodes: transferProblems }));
   },
   async completeUpload(alias: string, id: string, remotePath: string, size: number, expectedRevision: string, sourceFingerprint: string): Promise<void> {
     await apiClient.mutate<unknown>(`/api/v1/sftp/${encodeURIComponent(alias)}/uploads/${encodeURIComponent(id)}/complete`, {
       method: "POST",
       headers: jsonHeaders,
       body: JSON.stringify({ path: remotePath, size, expectedRevision, sourceFingerprint }),
-    });
+    }, { locallyHandledCodes: transferProblems });
   },
   async cancelUpload(alias: string, id: string, remotePath: string): Promise<void> {
     await apiClient.mutate<unknown>(`/api/v1/sftp/${encodeURIComponent(alias)}/uploads/${encodeURIComponent(id)}?path=${encodeURIComponent(remotePath)}`, {
       method: "DELETE",
-    });
+    }, { locallyHandledCodes: transferProblems });
   },
   async streamDownload(alias: string, jobId: string, remotePath: string, directory: boolean, offset: number, options: StreamDownloadOptions): Promise<{ bytes: number; total: number | null }> {
     const headers = !directory && offset > 0
@@ -216,7 +238,7 @@ export const sftpApi = {
     const endpoint = `${pathFor(alias, directory ? "archive" : "download", remotePath)}&jobId=${encodeURIComponent(jobId)}`;
     const response = await apiClient.send(endpoint, {
       method: "GET", ...(headers === undefined ? {} : { headers }), ...(options.signal === undefined ? {} : { signal: options.signal }),
-    });
+    }, { locallyHandledCodes: transferProblems });
     if (!response.ok || (!directory && offset > 0 && response.status !== 200 && response.status !== 206)) throw new Error("download_failed");
     const length = Number(response.headers.get("Content-Length"));
     const reset = !directory && offset > 0 && response.status === 200;

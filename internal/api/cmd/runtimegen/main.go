@@ -55,6 +55,7 @@ type endpoint struct {
 	RequestRequired bool           `json:"requestRequired,omitempty"`
 	Request         any            `json:"request,omitempty"`
 	Responses       map[string]any `json:"responses"`
+	NoContent       []string       `json:"noContent,omitempty"`
 }
 
 func main() {
@@ -138,6 +139,8 @@ func collectEndpoints(parsed document) []endpoint {
 				}
 				if schema := jsonSchema(response.Content); schema != nil {
 					item.Responses[status] = schema
+				} else if len(response.Content) == 0 {
+					item.NoContent = append(item.NoContent, status)
 				}
 			}
 			endpoints = append(endpoints, item)
@@ -175,6 +178,7 @@ type Endpoint = Readonly<{
   requestRequired?: boolean;
   request?: Schema;
   responses: Readonly<Record<string, Schema>>;
+  noContent?: readonly string[];
 }>;
 
 const componentSchemas = __SCHEMAS__ as const satisfies Readonly<Record<string, Schema>>;
@@ -362,6 +366,10 @@ export function validateAPIRequest(method: string, path: string, value: unknown)
 export function validateAPIResponse<T>(method: string, path: string, status: number, value: unknown): T {
   const endpoint = endpointFor(method, path);
   if (endpoint === undefined) return value as T;
+  if (endpoint.noContent?.includes(String(status)) === true) {
+    if (value !== undefined) invalid();
+    return value as T;
+  }
   const schema = endpoint?.responses[String(status)] ?? endpoint?.responses.default;
   if (schema === undefined) invalid();
   validate(schema, value);

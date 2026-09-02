@@ -968,6 +968,23 @@ func (m *TransferManager) replayCompletedUpload(id, alias, remotePath string, to
 func (m *TransferManager) CancelOwned(ctx context.Context, alias, id, remotePath string) error {
 	unlock := m.lock("", "\x00job-owner:"+id)
 	defer unlock()
+	m.jobsMutex.Lock()
+	m.initializeJobsLocked()
+	record := m.jobs[id]
+	if record != nil && terminalTransferStatus(record.job.Status) {
+		m.jobsMutex.Unlock()
+		return nil
+	}
+	// A job without a recorded remote revision, acknowledged byte, or completed
+	// range has not successfully prepared its deterministic remote part. This
+	// includes a connection failure during the first preparation attempt, even
+	// though the source fingerprint was already recorded for a safe retry.
+	pristine := record != nil && !uploadJobHasRemotePart(record.job)
+	m.jobsMutex.Unlock()
+	if pristine {
+		_, err := m.updateUploadJob(id, UpdateTransferJob{Action: TransferCancelAction})
+		return err
+	}
 	done, err := m.KeepJobActive(id)
 	if errors.Is(err, ErrTransferNotFound) {
 		// Queue state is intentionally process-local. After an engine restart the

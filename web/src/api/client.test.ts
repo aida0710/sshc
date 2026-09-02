@@ -230,6 +230,14 @@ describe("apiClient", () => {
     expect(diagnostic).not.toHaveBeenCalled();
   });
 
+  it("accepts a successful OpenAPI no-content mutation without parsing JSON", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 204 })));
+    apiClient.setCSRF("c".repeat(43));
+
+    await expect(apiClient.mutate<void>("/api/v1/sftp/transfers/finished", { method: "DELETE" }))
+      .resolves.toBeUndefined();
+  });
+
   it("reports network failure using fixed safe diagnostics", async () => {
     const diagnostic = vi.fn();
     whenRequestFailed(diagnostic);

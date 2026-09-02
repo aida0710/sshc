@@ -22,12 +22,13 @@ func TestCollectEndpointsOrdersRoutesAndKeepsOnlyJSONSchemas(t *testing.T) {
 		},
 		"/a": {Get: &operation{Responses: map[string]response{
 			"200": {Content: map[string]mediaSchema{"text/plain": {Schema: map[string]any{"type": "string"}}}},
+			"204": {},
 		}}},
 	}}
 
 	got := collectEndpoints(parsed)
 	want := []endpoint{
-		{Method: "GET", Path: "/a", Responses: map[string]any{}},
+		{Method: "GET", Path: "/a", Responses: map[string]any{}, NoContent: []string{"204"}},
 		{Method: "POST", Path: "/z/{id}", RequestRequired: true, Request: request, Responses: map[string]any{"201": responseSchema}},
 	}
 	if !reflect.DeepEqual(got, want) {

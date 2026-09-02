@@ -23,9 +23,9 @@ func TestAllowedTransferActionsAreDerivedFromEngineState(t *testing.T) {
 		{sftp.TransferPaused, []sftp.TransferControlAction{sftp.TransferResumeControl, sftp.TransferCancelControl}},
 		{sftp.TransferReattach, []sftp.TransferControlAction{sftp.TransferResumeControl, sftp.TransferCancelControl}},
 		{sftp.TransferNeedsOverwrite, []sftp.TransferControlAction{sftp.TransferResumeControl, sftp.TransferCancelControl}},
-		{sftp.TransferFailed, []sftp.TransferControlAction{sftp.TransferRetryControl, sftp.TransferCancelControl}},
-		{sftp.TransferCompleted, []sftp.TransferControlAction{}},
-		{sftp.TransferCancelled, []sftp.TransferControlAction{}},
+		{sftp.TransferFailed, []sftp.TransferControlAction{sftp.TransferRetryControl, sftp.TransferCancelControl, sftp.TransferRemoveControl}},
+		{sftp.TransferCompleted, []sftp.TransferControlAction{sftp.TransferRemoveControl}},
+		{sftp.TransferCancelled, []sftp.TransferControlAction{sftp.TransferRemoveControl}},
 	}
 	for _, test := range tests {
 		t.Run(string(test.status), func(t *testing.T) {
@@ -34,6 +34,120 @@ func TestAllowedTransferActionsAreDerivedFromEngineState(t *testing.T) {
 				t.Fatalf("actions = %v, want %v", got, test.want)
 			}
 		})
+	}
+}
+
+func TestRemoveJobOnlyDismissesRetainedWork(t *testing.T) {
+	manager := sftp.NewTransferManager(nil)
+	input := sftp.CreateTransferJob{
+		ID: "transfer_remove1", BatchID: "batch_remove01", Alias: "edge", Direction: sftp.TransferDownload,
+		Kind: sftp.TransferFile, Name: "file", RemotePath: "/file", TotalBytes: 4,
+	}
+	if _, err := manager.CreateJob(input); err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.RemoveJob(input.ID); !errors.Is(err, sftp.ErrTransferState) {
+		t.Fatalf("remove queued = %v", err)
+	}
+	if _, err := manager.UpdateJob(input.ID, sftp.UpdateTransferJob{Action: sftp.TransferStartAction}); err != nil {
+		t.Fatal(err)
+	}
+	completed := int64(4)
+	if _, err := manager.UpdateJob(input.ID, sftp.UpdateTransferJob{Action: sftp.TransferCompleteAction, TransferredBytes: &completed}); err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.RemoveJob(input.ID); err != nil {
+		t.Fatal(err)
+	}
+	if jobs := manager.ListJobs(); len(jobs) != 0 {
+		t.Fatalf("jobs after remove = %+v", jobs)
+	}
+	if err := manager.RemoveJob(input.ID); err != nil {
+		t.Fatalf("repeated remove = %v", err)
+	}
+}
+
+func TestRemoveFailedUploadCleansItsUnpublishedPart(t *testing.T) {
+	remote := remoteWith(map[string]node{"/remote": directory("remote")})
+	manager := sftp.NewTransferManager(&sftp.Service{Open: func(context.Context, string) (sftp.Remote, error) { return remote, nil }})
+	input := sftp.CreateTransferJob{
+		ID: "transfer_remove2", BatchID: "batch_remove02", Alias: "edge", Direction: sftp.TransferUpload,
+		Kind: sftp.TransferFile, Name: "file", RemotePath: "/remote/file", TotalBytes: 4,
+	}
+	if _, err := manager.CreateJob(input); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.UpdateJob(input.ID, sftp.UpdateTransferJob{Action: sftp.TransferStartAction}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.StartOwned(t.Context(), input.Alias, input.ID, input.RemotePath, sftp.StartUploadOptions{Size: 4}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.AppendOwned(t.Context(), input.Alias, input.ID, input.RemotePath, 0, 4, []byte("part")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.UpdateJob(input.ID, sftp.UpdateTransferJob{Action: sftp.TransferFailAction, Problem: "network"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.RemoveJob(input.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := remote.Lstat("/remote/.file.sshc-upload-transfer_remove2.part"); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("unpublished part remains: %v", err)
+	}
+}
+
+func TestRemoveUploadWhoseFirstConnectionFailedDoesNotReconnect(t *testing.T) {
+	opens := 0
+	manager := sftp.NewTransferManager(&sftp.Service{Open: func(context.Context, string) (sftp.Remote, error) {
+		opens++
+		return nil, errors.New("host unavailable")
+	}})
+	input := sftp.CreateTransferJob{
+		ID: "transfer_remove3", BatchID: "batch_remove03", Alias: "edge", Direction: sftp.TransferUpload,
+		Kind: sftp.TransferFile, Name: "file", RemotePath: "/remote/file", TotalBytes: 4,
+	}
+	if _, err := manager.CreateJob(input); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.UpdateJob(input.ID, sftp.UpdateTransferJob{Action: sftp.TransferStartAction}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.StartOwned(t.Context(), input.Alias, input.ID, input.RemotePath, sftp.StartUploadOptions{
+		Size: 4, SourceFingerprint: "tree-sha256:" + strings.Repeat("a", 64),
+	}); err == nil {
+		t.Fatal("first connection unexpectedly succeeded")
+	}
+	if _, err := manager.UpdateJob(input.ID, sftp.UpdateTransferJob{Action: sftp.TransferFailAction, Problem: "network"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.RemoveJob(input.ID); err != nil {
+		t.Fatal(err)
+	}
+	if opens != 1 {
+		t.Fatalf("remove retried unavailable host: opens = %d", opens)
+	}
+}
+
+func TestCancelAfterCompletionIsIdempotent(t *testing.T) {
+	manager := sftp.NewTransferManager(nil)
+	input := sftp.CreateTransferJob{
+		ID: "transfer_cancel1", BatchID: "batch_cancel01", Alias: "edge", Direction: sftp.TransferDownload,
+		Kind: sftp.TransferFile, Name: "file", RemotePath: "/file", TotalBytes: 4,
+	}
+	if _, err := manager.CreateJob(input); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.UpdateJob(input.ID, sftp.UpdateTransferJob{Action: sftp.TransferStartAction}); err != nil {
+		t.Fatal(err)
+	}
+	completed := int64(4)
+	if _, err := manager.UpdateJob(input.ID, sftp.UpdateTransferJob{Action: sftp.TransferCompleteAction, TransferredBytes: &completed}); err != nil {
+		t.Fatal(err)
+	}
+	job, err := manager.UpdateJobFromClient(input.ID, sftp.UpdateTransferJob{Action: sftp.TransferCancelAction})
+	if err != nil || job.Status != sftp.TransferCompleted {
+		t.Fatalf("cancel completed = %+v, %v", job, err)
 	}
 }
 

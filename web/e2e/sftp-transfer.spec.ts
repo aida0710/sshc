@@ -126,6 +126,14 @@ test("keeps a chunked SFTP upload visible while another section is open", async 
     }
     if (request.method() === "POST") {
       const body = request.postDataJSON() as { path: string; size: number };
+      if (body.path.endsWith("/broken.bin")) {
+        await route.fulfill({
+          status: 502,
+          contentType: "application/problem+json",
+          body: JSON.stringify({ code: "sftp_failed", message: "request rejected" }),
+        });
+        return;
+      }
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(uploadState(id, body.path, body.size)) });
       return;
     }
@@ -283,6 +291,36 @@ test("keeps a chunked SFTP upload visible while another section is open", async 
     await page.keyboard.press("Escape");
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
     await page.screenshot({ path: `${visualDirectory}/sshc-v0.16.1-transfer-manager-mobile.png`, fullPage: true });
+    await page.locator('input[type="file"]:not([webkitdirectory])').first().setInputFiles({
+      name: "broken.bin",
+      mimeType: "application/octet-stream",
+      buffer: Buffer.from("broken"),
+    });
+    await expect(page.getByText(/Upload failed: broken\.bin/)).toBeVisible();
+    await changeDisplayLanguage(page, "ja");
+    const mobileTransferManager = page.getByRole("region", { name: "転送マネージャー" });
+    await mobileTransferManager.getByRole("button", { name: "転送マネージャーを展開" }).click();
+    const mobileResizeGrip = mobileTransferManager.getByRole("separator", { name: "ドラッグして転送キューの高さを変える" });
+    const mobileResizeBounds = await mobileResizeGrip.boundingBox();
+    expect(mobileResizeBounds?.height).toBeGreaterThanOrEqual(24);
+    if (mobileResizeBounds !== null) {
+      await page.mouse.move(mobileResizeBounds.x + mobileResizeBounds.width / 2, mobileResizeBounds.y + mobileResizeBounds.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(mobileResizeBounds.x + mobileResizeBounds.width / 2, mobileResizeBounds.y - 88);
+      await page.mouse.up();
+    }
+    await expect(mobileResizeGrip).toHaveAttribute("aria-valuenow", "308");
+    await expect(mobileTransferManager.getByText("失敗 · sftp_failed", { exact: true })).toBeVisible();
+    await mobileTransferManager.getByRole("button", { name: "転送キューの操作" }).click();
+    await expect(page.getByRole("menuitem", { name: "すべてキャンセル" })).toBeInViewport();
+    await expect(page.getByRole("menuitem", { name: "失敗項目を一覧から削除" })).toBeInViewport();
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+    await page.screenshot({ path: `${visualDirectory}/transfer-manager-actions-mobile-ja.png`, fullPage: true });
+    await page.keyboard.press("Escape");
+    await mobileTransferManager.getByRole("button", { name: "一覧から削除" }).click();
+    await expect(mobileTransferManager.getByText("broken.bin", { exact: true })).toHaveCount(0);
+    await mobileTransferManager.getByRole("button", { name: "転送マネージャーを折りたたむ" }).click();
+    await changeDisplayLanguage(page, "en");
     await page.locator("button[data-value]").first().click();
     await expect(page.getByRole("dialog", { name: "Choose a remote host" })).toBeVisible();
     await page.screenshot({ path: `${visualDirectory}/sshc-v0.16.1-sftp-host-picker-mobile.png`, fullPage: true });

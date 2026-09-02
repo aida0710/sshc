@@ -60,6 +60,7 @@ type ManagerAPI = {
   moveTransfer(id: string, move: TransferQueueMove): Promise<TransferJobList>;
   createTransfer(input: CreateTransferJob): Promise<TransferJob>;
   clearFinishedTransfers(): Promise<void>;
+  removeTransfer(id: string): Promise<void>;
   updateTransfer(id: string, action: TransferJobAction, options?: { transferredBytes?: number; totalBytes?: number; problem?: string; resetProgress?: boolean }): Promise<TransferJob>;
   checkpointDownload(id: string, offset: number, revision: string): Promise<TransferJob>;
   verifyDownload(alias: string, jobId: string, remotePath: string, revision: string): Promise<void>;
@@ -354,9 +355,16 @@ export class SFTPTransferManager {
   }
 
   async cancelAll(): Promise<void> {
+    let firstFailure: unknown;
     for (const job of [...this.jobs]) {
-      if (this.find(job.id)?.allowedActions.includes("cancel")) await this.cancel(job.id);
+      if (!this.find(job.id)?.allowedActions.includes("cancel")) continue;
+      try {
+        await this.cancel(job.id);
+      } catch (error) {
+        firstFailure ??= error;
+      }
     }
+    if (firstFailure !== undefined) throw firstFailure;
   }
 
   async overwrite(id: string): Promise<void> {
@@ -379,7 +387,7 @@ export class SFTPTransferManager {
           return;
         }
         await this.reconcile().catch(() => undefined);
-        return;
+        throw error;
       }
       this.files.delete(id);
     } else {
@@ -400,6 +408,29 @@ export class SFTPTransferManager {
     await this.api.clearFinishedTransfers();
     this.commit(this.jobs.filter((job) => job.status !== "completed" && job.status !== "cancelled"));
     for (const id of removed) void this.cleanupDownload(id);
+  }
+
+  async remove(id: string): Promise<void> {
+    const job = this.find(id);
+    if (job === undefined || !job.allowedActions.includes("remove")) return;
+    await this.api.removeTransfer(id);
+    this.files.delete(id);
+    this.downloadChunks.delete(id);
+    await this.cleanupDownload(id);
+    this.commit(this.jobs.filter((candidate) => candidate.id !== id));
+  }
+
+  async clearFailed(): Promise<void> {
+    let firstFailure: unknown;
+    for (const job of [...this.jobs]) {
+      if (job.status !== "failed" || !job.allowedActions.includes("remove")) continue;
+      try {
+        await this.remove(job.id);
+      } catch (error) {
+        firstFailure ??= error;
+      }
+    }
+    if (firstFailure !== undefined) throw firstFailure;
   }
 
   dismissNotice(id: string): void {
@@ -775,9 +806,10 @@ export class SFTPTransferManager {
 
   private trackControl(id: string, operation: Promise<void>): void {
     this.controlOperations.set(id, operation);
-    void operation.finally(() => {
+    const settled = () => {
       if (this.controlOperations.get(id) === operation) this.controlOperations.delete(id);
-    });
+    };
+    void operation.then(settled, settled);
   }
 
   private async retryOperation<T>(operation: () => Promise<T>): Promise<T> {

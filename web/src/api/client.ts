@@ -299,6 +299,9 @@ export const apiClient = {
     const method = init.method ?? "POST";
     const response = await this.send(path, init, options);
     if (!response.ok) throw await failure(response, method, path, options);
+    if (response.status === 204) {
+      return validateAPIResponse<T>(method, apiPath(path), response.status, undefined);
+    }
     return validatedJSON<T>(response, method, path);
   },
 };

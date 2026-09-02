@@ -273,7 +273,10 @@ export async function changeDisplayLanguage(
   locale: "en" | "ja",
 ): Promise<void> {
   const returnURL = page.url();
-  await page.getByRole("link", { name: "Menu", exact: true }).click();
+  await page.evaluate(() => {
+    window.history.pushState(null, "", "/menu");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  });
   await page
     .getByRole("region", { name: "Menu" })
     .getByLabel("Language", { exact: true })

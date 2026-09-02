@@ -159,4 +159,17 @@ func TestTransferManagerHTTPContractAndSharedLimit(t *testing.T) {
 	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &remaining) != nil || len(remaining.Jobs) != 1 || remaining.Jobs[0].ID != "transfer_http02" {
 		t.Fatalf("remaining after clear = %d: %s", response.Code, response.Body.String())
 	}
+	if _, err := manager.UpdateJob("transfer_http02", sshcSFTP.UpdateTransferJob{Action: sshcSFTP.TransferCancelAction}); err != nil {
+		t.Fatal(err)
+	}
+	response = httptest.NewRecorder()
+	engine.ServeHTTP(response, httptest.NewRequest(http.MethodDelete, "/api/v1/sftp/transfers/transfer_http02", nil))
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("remove one transfer = %d: %s", response.Code, response.Body.String())
+	}
+	response = httptest.NewRecorder()
+	engine.ServeHTTP(response, httptest.NewRequest(http.MethodDelete, "/api/v1/sftp/transfers/transfer_http02", nil))
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("repeat remove one transfer = %d: %s", response.Code, response.Body.String())
+	}
 }

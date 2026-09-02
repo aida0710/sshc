@@ -61,6 +61,22 @@ describe("sftpApi resumable download", () => {
     expect(response.jobs[0]?.allowedActions).toEqual(["pause", "cancel"]);
   });
 
+  it("removes one retained transfer without escalating an expected cleanup failure", async () => {
+    const diagnostic = vi.fn();
+    whenRequestFailed(diagnostic);
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(new Response(
+        JSON.stringify({ code: "sftp_failed", message: "request rejected" }),
+        { status: 502, headers: { "Content-Type": "application/problem+json" } },
+      ));
+
+    await expect(sftpApi.removeTransfer("transfer_test01")).resolves.toBeUndefined();
+    await expect(sftpApi.removeTransfer("transfer_test02")).rejects.toMatchObject({ code: "sftp_failed" });
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/v1/sftp/transfers/transfer_test01");
+    expect(diagnostic).not.toHaveBeenCalled();
+  });
+
   it("sends only source identity when starting an engine-owned upload", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
       id: "transfer_test01", path: "/remote/file.bin", offset: 0, size: 4, expectedRevision: "absent",
