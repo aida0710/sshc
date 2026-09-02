@@ -1540,7 +1540,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** @description Engine-wide transfer concurrency and auto-clear delay. Held for the life of the engine process. */
+        /** @description Engine-wide queue and split-transfer defaults, persisted across engine restarts and shared by Web and CLI. */
         put: operations["updateSFTPTransferSettings"];
         post?: never;
         delete?: never;
@@ -3390,6 +3390,16 @@ export interface components {
             /** Format: int64 */
             size: number;
             expectedRevision: string;
+            completedRanges: components["schemas"]["SFTPUploadRange"][];
+            parallelism: number;
+            /** Format: int64 */
+            chunkBytes: number;
+        };
+        SFTPUploadRange: {
+            /** Format: int64 */
+            offset: number;
+            /** Format: int64 */
+            size: number;
         };
         WorkspacePane: {
             id: string;
@@ -6692,6 +6702,8 @@ export interface operations {
                 path: string;
                 offset: number;
                 total: number;
+                range?: boolean;
+                length?: number;
             };
             header?: never;
             path: {

@@ -88,10 +88,15 @@ sshc sftp put bastion ./release.tar.gz /tmp/release.tar.gz
 sshc sftp get bastion /srv/data ./data --recursive
 sshc sftp put bastion ./public /var/www/public --recursive
 sshc sftp get bastion /srv/archive ./archive --recursive --jobs 4
+sshc sftp settings
+sshc sftp settings --split-size 73 --split-jobs 6 --chunk-size 41
 sshc sftp get bastion /backup/disk.img ./disk.img --split-size 100 --split-jobs 4 --chunk-size 512
+sshc sftp put bastion ./disk.img /backup/disk.img --split-size 100 --split-jobs 4 --chunk-size 512
 ```
 
-`-j` or `--jobs` sets the number of files transferred concurrently from 1 to 8; the default is 1. For downloads, `--split-size` overrides the split threshold in MiB (16–1024), `--split-jobs` overrides the SFTP connections used for one file (1–8), and `--chunk-size` sets the range size in MiB (8–4096). `--split-jobs 1` disables splitting. If omitted, the engine settings apply: initially, files of at least 100 MiB use four connections and 32 MiB chunks. Combining `--jobs 4 --split-jobs 4` can use up to 16 connections, so choose values that fit the server's limits. Regular file downloads support up to 512 GiB.
+`sshc sftp settings` displays the split threshold, connections per file, and chunk size shared by Web and CLI. Add `--split-size` (16–1024 MiB), `--split-jobs` (1–8), or `--chunk-size` (8–4096 MiB) to persist only the supplied defaults. `--json` returns the saved values for automation.
+
+`-j` or `--jobs` sets the number of files transferred concurrently from 1 to 8; the default is 1. Split options on `get` or `put` override the saved defaults for that invocation. `--split-jobs 1` disables splitting. Initial defaults are 100 MiB, four connections, and 32 MiB chunks. Combining `--jobs 4 --split-jobs 4` can use up to 16 connections, so choose values that fit the server's limits. Regular file uploads and downloads support up to 512 GiB.
 
 Existing files are never overwritten implicitly. `--overwrite` shows one confirmation before replacing them; add `--yes` only when automation must skip that confirmation. Use `--skip-existing` to preserve existing files or `--dry-run` to inspect the plan without changing anything. With `--json`, stdout contains one JSON result while progress remains on stderr. Pressing `Ctrl+C` also cancels the remote temporary upload.
 

@@ -675,11 +675,14 @@ func (writer *countingWriter) Write(contents []byte) (int, error) {
 }
 
 type resumableUploadResponse struct {
-	ID               string `json:"id"`
-	Path             string `json:"path"`
-	Offset           int64  `json:"offset"`
-	Size             int64  `json:"size"`
-	ExpectedRevision string `json:"expectedRevision"`
+	ID               string                 `json:"id"`
+	Path             string                 `json:"path"`
+	Offset           int64                  `json:"offset"`
+	Size             int64                  `json:"size"`
+	ExpectedRevision string                 `json:"expectedRevision"`
+	CompletedRanges  []sshcSFTP.UploadRange `json:"completedRanges"`
+	Parallelism      int                    `json:"parallelism"`
+	ChunkBytes       int64                  `json:"chunkBytes"`
 }
 
 type sftpStartUploadRequest struct {
@@ -696,9 +699,14 @@ type sftpCompleteUploadRequest struct {
 }
 
 func describeResumableUpload(upload sshcSFTP.ResumableUpload) resumableUploadResponse {
+	ranges := append([]sshcSFTP.UploadRange(nil), upload.CompletedRanges...)
+	if ranges == nil {
+		ranges = []sshcSFTP.UploadRange{}
+	}
 	return resumableUploadResponse{
 		ID: upload.ID, Path: upload.Path, Offset: upload.Offset, Size: upload.Size,
-		ExpectedRevision: upload.ExpectedRevision,
+		ExpectedRevision: upload.ExpectedRevision, CompletedRanges: ranges,
+		Parallelism: upload.Parallelism, ChunkBytes: upload.ChunkBytes,
 	}
 }
 
@@ -727,6 +735,17 @@ func (h SFTPHandlers) AppendUpload(c *echo.Context) error {
 	total, err := strconv.ParseInt(c.QueryParam("total"), 10, 64)
 	if err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
+	}
+	if c.QueryParam("range") == "true" {
+		length, parseErr := strconv.ParseInt(c.QueryParam("length"), 10, 64)
+		if parseErr != nil || length <= 0 || c.Request().ContentLength > length {
+			return problem(c, http.StatusBadRequest, "invalid_request")
+		}
+		upload, rangeErr := h.Transfers.AppendRangeOwned(c.Request().Context(), c.Param("alias"), c.Param("id"), c.QueryParam("path"), offset, total, length, c.Request().Body)
+		if rangeErr != nil {
+			return sftpProblem(c, rangeErr)
+		}
+		return c.JSON(http.StatusOK, describeResumableUpload(upload))
 	}
 	contents, err := io.ReadAll(io.LimitReader(c.Request().Body, MaxRequestBodyCeiling+1))
 	if err != nil {

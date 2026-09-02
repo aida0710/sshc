@@ -180,6 +180,32 @@ func TestSecurityBoundsABodyAHandlerReadsWithoutItsOwnLimit(t *testing.T) {
 	}
 }
 
+func TestSecurityAllowsLargeBodiesOnlyForSFTPUploadRanges(t *testing.T) {
+	const largerThanDefault = int64(MaxRequestBodyCeiling + 1)
+	rangeRequest := httptest.NewRequest(http.MethodPatch, "/api/v1/sftp/edge/uploads/job?range=true", nil)
+	if got := requestBodyCeiling(rangeRequest); got != MaxSFTPUploadRangeBodyCeiling {
+		t.Fatalf("upload range ceiling = %d", got)
+	}
+	for _, candidate := range []struct {
+		method string
+		path   string
+	}{
+		{http.MethodPost, "/api/v1/sftp/edge/uploads/job"},
+		{http.MethodPatch, "/api/v1/sftp/edge/uploads/job"},
+		{http.MethodPatch, "/api/v1/sftp/edge/uploads/job?range=false"},
+		{http.MethodPatch, "/api/v1/sftp/edge/downloads/job"},
+		{http.MethodPatch, "/api/v1/other/uploads/job"},
+	} {
+		request := httptest.NewRequest(candidate.method, candidate.path, nil)
+		if got := requestBodyCeiling(request); got != MaxRequestBodyCeiling {
+			t.Errorf("%s %s ceiling = %d", candidate.method, candidate.path, got)
+		}
+	}
+	if largerThanDefault >= MaxSFTPUploadRangeBodyCeiling {
+		t.Fatal("test body does not distinguish the two limits")
+	}
+}
+
 func TestSecurityNavigationHeadersAndAPIAuthentication(t *testing.T) {
 	manager, bootstrap, err := session.NewManager(bytes.NewReader(bytes.Repeat([]byte{0x52}, 96)))
 	if err != nil {

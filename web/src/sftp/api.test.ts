@@ -64,6 +64,7 @@ describe("sftpApi resumable download", () => {
   it("sends only source identity when starting an engine-owned upload", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
       id: "transfer_test01", path: "/remote/file.bin", offset: 0, size: 4, expectedRevision: "absent",
+      completedRanges: [], parallelism: 1, chunkBytes: 32 << 20,
     }), { status: 200, headers: { "Content-Type": "application/json" } }));
 
     await sftpApi.startUpload("edge", "transfer_test01", "/remote/file.bin", 4, `tree-sha256:${"a".repeat(64)}`);
@@ -75,6 +76,20 @@ describe("sftpApi resumable download", () => {
     expect(JSON.parse(body as string)).toEqual({
       path: "/remote/file.bin", size: 4, sourceFingerprint: `tree-sha256:${"a".repeat(64)}`,
     });
+  });
+
+  it("streams one upload range with its declared offset and length", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+      id: "transfer_test01", path: "/remote/file.bin", offset: 6, size: 8, expectedRevision: "absent",
+      completedRanges: [{ offset: 2, size: 4 }], parallelism: 2, chunkBytes: 8 << 20,
+    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    const chunk = new Blob(["cdef"]);
+
+    await sftpApi.appendUploadRange("edge", "transfer_test01", "/remote/file.bin", 2, 8, chunk);
+
+    const request = fetchMock.mock.calls[0];
+    expect(request?.[0]).toContain("offset=2&total=8&range=true&length=4");
+    expect(request?.[1]?.body).toBe(chunk);
   });
 
   it("streams a resumed file with Range and If-Range", async () => {

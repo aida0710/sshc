@@ -1880,7 +1880,7 @@ paths:
   /api/v1/sftp/transfers/settings:
     put:
       operationId: updateSFTPTransferSettings
-      description: Engine-wide transfer concurrency and auto-clear delay. Held for the life of the engine process.
+      description: Engine-wide queue and split-transfer defaults, persisted across engine restarts and shared by Web and CLI.
       requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPTransferSettingsRequest" } } } }
       responses:
         "200": { description: Settings applied, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPTransferJobList" } } } }
@@ -1937,7 +1937,9 @@ paths:
         - { name: path, in: query, required: true, schema: { type: string } }
         - { name: offset, in: query, required: true, schema: { type: integer, format: int64, minimum: 0 } }
         - { name: total, in: query, required: true, schema: { type: integer, format: int64, minimum: 0 } }
-      requestBody: { required: true, content: { application/octet-stream: { schema: { type: string, format: binary, maxLength: 2097152 } } } }
+        - { name: range, in: query, required: false, schema: { type: boolean, default: false } }
+        - { name: length, in: query, required: false, schema: { type: integer, format: int64, minimum: 1, maximum: 4294967296 } }
+      requestBody: { required: true, content: { application/octet-stream: { schema: { type: string, format: binary, maxLength: 4294967296 } } } }
       responses:
         "200": { description: Chunk appended, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPResumableUpload" } } } }
         "400": { $ref: "#/components/responses/Problem" }
@@ -4414,7 +4416,7 @@ components:
         remotePath: { type: string, minLength: 1 }
         totalBytes: { type: integer, format: int64, minimum: -1 }
         lastModified: { type: integer, format: int64, minimum: 0 }
-        # Optional per-download overrides. Omission inherits the engine settings.
+        # Optional per-file split-transfer overrides for uploads and downloads. Omission inherits the engine settings.
         largeFileThresholdBytes: { type: integer, format: int64, minimum: 16777216, maximum: 1073741824 }
         largeFileParallelism: { type: integer, minimum: 1, maximum: 8 }
         largeFileChunkBytes: { type: integer, format: int64, minimum: 8388608, maximum: 4294967296 }
@@ -4441,7 +4443,7 @@ components:
       required: [path, size, sourceFingerprint]
       properties:
         path: { type: string }
-        size: { type: integer, format: int64, minimum: 0 }
+        size: { type: integer, format: int64, minimum: 0, maximum: 549755813888 }
         sourceFingerprint: { type: string, pattern: '^tree-sha256:[0-9a-f]{64}$' }
     SFTPCompleteUploadRequest:
       type: object
@@ -4455,13 +4457,26 @@ components:
     SFTPResumableUpload:
       type: object
       additionalProperties: false
-      required: [id, path, offset, size, expectedRevision]
+      required: [id, path, offset, size, expectedRevision, completedRanges, parallelism, chunkBytes]
       properties:
         id: { type: string }
         path: { type: string }
         offset: { type: integer, format: int64, minimum: 0 }
         size: { type: integer, format: int64, minimum: 0 }
         expectedRevision: { type: string }
+        completedRanges:
+          type: array
+          maxItems: 65536
+          items: { $ref: "#/components/schemas/SFTPUploadRange" }
+        parallelism: { type: integer, minimum: 1, maximum: 8 }
+        chunkBytes: { type: integer, format: int64, minimum: 8388608, maximum: 4294967296 }
+    SFTPUploadRange:
+      type: object
+      additionalProperties: false
+      required: [offset, size]
+      properties:
+        offset: { type: integer, format: int64, minimum: 0 }
+        size: { type: integer, format: int64, minimum: 1, maximum: 4294967296 }
     WorkspacePane:
       type: object
       additionalProperties: false

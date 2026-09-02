@@ -131,7 +131,7 @@ func TestTransferJobCreateIsIdempotentAndRejectsChangedIdentity(t *testing.T) {
 	}
 }
 
-func TestTransferJobValidatesDownloadSplitOverrides(t *testing.T) {
+func TestTransferJobValidatesFileSplitOverrides(t *testing.T) {
 	manager := sftp.NewTransferManager(nil)
 	base := sftp.CreateTransferJob{
 		ID: "transfer_split01", BatchID: "batch_split001", Alias: "edge", Direction: sftp.TransferDownload,
@@ -146,7 +146,7 @@ func TestTransferJobValidatesDownloadSplitOverrides(t *testing.T) {
 		func(input *sftp.CreateTransferJob) { input.LargeFileThresholdBytes = sftp.MinLargeFileThreshold - 1 },
 		func(input *sftp.CreateTransferJob) { input.LargeFileParallelism = 9 },
 		func(input *sftp.CreateTransferJob) { input.LargeFileChunkBytes = sftp.MinLargeFileChunkBytes - 1 },
-		func(input *sftp.CreateTransferJob) { input.Direction = sftp.TransferUpload },
+		func(input *sftp.CreateTransferJob) { input.Kind = sftp.TransferFolder },
 	} {
 		invalid := base
 		invalid.ID = fmt.Sprintf("transfer_bad_%02d", index)
@@ -154,6 +154,12 @@ func TestTransferJobValidatesDownloadSplitOverrides(t *testing.T) {
 		if _, err := manager.CreateJob(invalid); !errors.Is(err, sftp.ErrInvalidTransfer) {
 			t.Errorf("invalid split override %d = %v", index, err)
 		}
+	}
+	upload := base
+	upload.ID = "transfer_upload1"
+	upload.Direction = sftp.TransferUpload
+	if _, err := manager.CreateJob(upload); err != nil {
+		t.Fatalf("upload split override: %v", err)
 	}
 }
 

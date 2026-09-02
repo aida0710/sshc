@@ -40,8 +40,17 @@ const (
 	// MaxRequestBodyCeiling は、あらゆる /api/ リクエストの body を読む際の
 	// 絶対的な上限である。各ハンドラは自前のより小さな制限を課すが、これが存在するのは、
 	// 後で追加されたルートが忘れて無制限の body を読めないようにするためだ。
-	MaxRequestBodyCeiling = 2 << 20
+	MaxRequestBodyCeiling         = 2 << 20
+	MaxSFTPUploadRangeBodyCeiling = int64(4 << 30)
 )
+
+func requestBodyCeiling(request *http.Request) int64 {
+	if request.Method == http.MethodPatch && strings.HasPrefix(request.URL.Path, "/api/v1/sftp/") &&
+		strings.Contains(request.URL.Path, "/uploads/") && request.URL.Query().Get("range") == "true" {
+		return MaxSFTPUploadRangeBodyCeiling
+	}
+	return MaxRequestBodyCeiling
+}
 
 type Security struct {
 	ExpectedHost   string
@@ -93,13 +102,14 @@ func (s Security) Middleware(next echo.HandlerFunc) echo.HandlerFunc {
 		// 実行される前に拒否される。だから body を無視するルート。現状の
 		// /diagnostics/config と /keys/:keyId/trash、そしてパスだけから
 		// 入力を得る後日追加されるどんなルートも。無制限の body を渡されずに済む。
-		if request.ContentLength > MaxRequestBodyCeiling {
+		bodyCeiling := requestBodyCeiling(request)
+		if request.ContentLength > bodyCeiling {
 			return problem(c, http.StatusRequestEntityTooLarge, "request_body_too_large")
 		}
 		// chunked リクエストは長さを宣言しないため、読み取るハンドラのために
 		// reader 自体にも上限を設けておく必要がある。
 		if request.Body != nil {
-			request.Body = http.MaxBytesReader(c.Response(), request.Body, MaxRequestBodyCeiling)
+			request.Body = http.MaxBytesReader(c.Response(), request.Body, bodyCeiling)
 		}
 
 		isSessionEntry := request.Method == http.MethodPost &&
