@@ -8,7 +8,8 @@ function engineAPI(overrides: Record<string, unknown> = {}) {
   const allowedActions = (status: TransferJob["status"]): TransferJob["allowedActions"] => {
     if (status === "queued" || status === "running") return ["pause", "cancel"];
     if (status === "paused" || status === "reattach" || status === "needs_overwrite") return ["resume", "cancel"];
-    if (status === "failed") return ["retry", "cancel"];
+    if (status === "failed") return ["retry", "cancel", "remove"];
+    if (status === "completed" || status === "cancelled") return ["remove"];
     return [];
   };
   const createTransfer = vi.fn(async (input: CreateTransferJob): Promise<TransferJob> => {
@@ -59,6 +60,7 @@ function engineAPI(overrides: Record<string, unknown> = {}) {
     clearFinishedTransfers: vi.fn(async () => {
       for (const [id, job] of jobs) if (job.status === "completed" || job.status === "cancelled") jobs.delete(id);
     }),
+    removeTransfer: vi.fn(async (id: string) => { jobs.delete(id); }),
     checkpointDownload: vi.fn(async (id: string, offset: number, revision: string) => {
       const current = jobs.get(id);
       if (current === undefined) throw new Error("sftp_transfer_not_found");
@@ -256,6 +258,25 @@ describe("SFTPTransferManager engine ownership", () => {
     await manager.clearFinished();
     expect(manager.getSnapshot()).toEqual([]);
     expect(api.clearFinishedTransfers).toHaveBeenCalledOnce();
+  });
+
+  it("removes one failed job through the engine without clearing other history", async () => {
+    const api = engineAPI();
+    const first = await api.createTransfer({
+      id: "transfer_failed1", batchId: "batch_failed01", batchName: "failed", batchKind: "file",
+      alias: "edge", direction: "download", kind: "file", name: "failed", remotePath: "/failed", totalBytes: 4, lastModified: 0,
+    });
+    const second = await api.createTransfer({
+      id: "transfer_done01", batchId: "batch_done0001", batchName: "done", batchKind: "file",
+      alias: "edge", direction: "download", kind: "file", name: "done", remotePath: "/done", totalBytes: 4, lastModified: 0,
+    });
+    api.jobs.set(first.id, { ...first, status: "failed", allowedActions: ["retry", "cancel", "remove"], problem: "network" });
+    api.jobs.set(second.id, { ...second, status: "completed", allowedActions: ["remove"] });
+    const manager = new SFTPTransferManager(api, 0);
+    await manager.reconcile();
+    await manager.remove(first.id);
+    expect(manager.getSnapshot().map((job) => job.id)).toEqual([second.id]);
+    expect(api.removeTransfer).toHaveBeenCalledWith(first.id);
   });
 
   it("applies pause, resume, and cancel to every actionable transfer", async () => {

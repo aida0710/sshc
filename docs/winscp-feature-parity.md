@@ -135,7 +135,7 @@ sshcのSFTPは、安全なアップロード／ダウンロード、フォルダ
 | 複数接続で複数fileを転送 | 対応 | jobごとに独立SFTP transport、既定2並列 | 接続再利用は限定的 |
 | 1 fileを複数connectionで分割 | 対応 | 512 GiBまでのupload／downloadを、既定で100 MiB以上、32 MiB単位、最大4接続で処理。開始サイズ16〜1024 MiB、接続数1〜8、chunk 8〜4096 MiBを設定でき、接続数1で無効化 | 実サーバーで継続検証 |
 | queueの折りたたみ | 対応 | headerを残して展開／折りたたみ | 維持 |
-| queue高さのresize | 対応 | 上端のdrag handleで96〜560px。keyboardの↑↓でも変えられ、折りたたみ状態とともに保存する | 維持 |
+| queue高さのresize | 対応 | 上端に24pxのtouch領域を持つgripを表示。mobileは画面高に応じた3段階へsnapし、desktopは96〜560pxを連続変更する。双方の高さを別々に保存し、keyboardの↑↓／Home／Endにも対応 | 維持 |
 | queue file listの展開 | 部分 | batch配下へfile jobを常時表示 | 折りたたみ可能にする |
 | prompt／errorの保留表示 | 部分 | overwriteは開始前確認、errorはjob表示 | queue内で再確認待ちを扱えるようにする |
 | 完了時action（disconnect/sleep/shutdown） | 未対応 | なし | browser製品では通知／engine停止までを候補とする |
