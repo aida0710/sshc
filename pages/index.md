@@ -34,7 +34,7 @@ outline: false
       <article class="sshc-feature"><img class="sshc-feature-image" src="/images/credentials-desktop.png" alt="保存済みパスワードを複数ホストへ割り当てたVault画面" width="1280" height="720"><div class="sshc-feature-body"><span class="index">03</span><h3>認証情報は一度保存</h3><p>パスワードや鍵のパスフレーズはVaultに一度保存すれば、Terminal、SFTP、CLIでそのまま使えます。機能ごとに設定し直す必要はありません。</p></div></article>
       <article class="sshc-feature"><img class="sshc-feature-image" src="/images/cli-desktop.png" alt="sshcの非対話CLIを実行したTerminal画面" width="1280" height="720"><div class="sshc-feature-body"><span class="index">04</span><h3>AIエージェントから使えるCLI</h3><p>CodexなどのAIエージェントからsshcを直接実行できます。接続にはVaultに保存した認証情報を使っています。</p></div></article>
       <article class="sshc-feature"><img class="sshc-feature-image" src="/images/sftp-desktop.png" alt="リモートファイルを操作するSFTP画面" width="1280" height="720"><div class="sshc-feature-body"><span class="index">05</span><h3>SFTP</h3><p>リモートファイルの編集、フォルダー転送、2つの接続先の比較と直接コピーを、Terminalと行き来しながら操作できます。</p></div></article>
-      <article class="sshc-feature"><img class="sshc-feature-image" src="/images/sync-desktop-ja.png" alt="暗号化スナップショットを管理するSync画面" width="1280" height="720"><div class="sshc-feature-body"><span class="index">06</span><h3>暗号化同期</h3><p>接続設定、鍵、認証情報、スニペットを端末上で暗号化し、利用者が用意したS3互換ストレージを介して同期できます。sshcは同期用ストレージを提供せず、データを預かりません。</p></div></article>
+      <article class="sshc-feature"><img class="sshc-feature-image" src="/images/sync-desktop-ja.png" alt="暗号化スナップショットを管理するSync画面" width="1280" height="720"><div class="sshc-feature-body"><span class="index">06</span><h3>暗号化同期</h3><p>接続設定、認証情報、スニペット、同期対象のSSH鍵を端末上で暗号化し、利用者が用意したS3互換ストレージを介して同期できます。ストレージ事業者は、暗号化された内容を平文では取得できません。</p></div></article>
     </div>
   </section>
 
