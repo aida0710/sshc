@@ -29,19 +29,21 @@ func syncStatusFixture() api.SyncStatus {
 	autoDetail := "next check scheduled"
 	objects := 4
 	uploaded := int64(8192)
+	accessSuffix := "AMPLE"
 	return api.SyncStatus{
-		Configured:    true,
-		Endpoint:      "https://objects.example.test",
-		Bucket:        "ssh-config",
-		Path:          &path,
-		Region:        &region,
-		Direction:     api.SyncDirectionBoth,
-		Locked:        false,
-		KeyConfigured: true,
-		Synced:        true,
-		LastSyncedAt:  &lastSynced,
-		Origin:        &origin,
-		FileCount:     &files,
+		Configured:      true,
+		Endpoint:        "https://objects.example.test",
+		Bucket:          "ssh-config",
+		Path:            &path,
+		Region:          &region,
+		Direction:       api.SyncDirectionBoth,
+		Locked:          false,
+		KeyConfigured:   true,
+		AccessKeySuffix: &accessSuffix,
+		Synced:          true,
+		LastSyncedAt:    &lastSynced,
+		Origin:          &origin,
+		FileCount:       &files,
 		Auto: api.AutoSync{
 			Enabled: true, Phase: api.AutoSyncPhaseIdle, At: &autoAt, Detail: &autoDetail,
 		},
@@ -84,7 +86,7 @@ func TestSyncStatusHumanOutputNamesSafeOperationalState(t *testing.T) {
 	printed := stdout.String()
 	for _, want := range []string{
 		"configured", "yes", "vault", "unlocked", "sync key", "https://objects.example.test",
-		"ssh-config", "team/hosts", "ap-northeast-1", "both", "auto", "idle",
+		"access key", "*****AMPLE", "ssh-config", "team/hosts", "ap-northeast-1", "both", "auto", "idle",
 		"2026-08-29T10:00:00Z", "workstation-a", "17", "push", "4", "8192",
 		"16384", "4096", "2026-08-29T10:00:02Z",
 	} {
@@ -554,7 +556,7 @@ func TestSyncPullNormalRefusesConflictOrRemovalBeforeApply(t *testing.T) {
 		conflicts []api.SyncConflict
 		removed   []string
 	}{
-		{name: "conflict", conflicts: []api.SyncConflict{{Path: "config", ChangedHere: true, ChangedThere: true}}, removed: []string{}},
+		{name: "conflict with legacy null removal list", conflicts: []api.SyncConflict{{Path: "config", ChangedHere: true, ChangedThere: true}}, removed: nil},
 		{name: "removal", conflicts: []api.SyncConflict{}, removed: []string{"old.conf"}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -653,8 +655,11 @@ func TestSyncPullNoChangesStillAcknowledgesTheRemoteGeneration(t *testing.T) {
 	_, server, stateDir := newSyncCommandHarness(t, func(response http.ResponseWriter, request *http.Request) {
 		calls++
 		result := pullResponseFixture()
-		result.Written = []string{}
-		result.Removed = []string{}
+		// Older engines encoded empty lists as null. The CLI must still treat
+		// that as an empty result rather than claiming the versions mismatch.
+		result.Conflicts = nil
+		result.Written = nil
+		result.Removed = nil
 		result.Applied = calls == 2
 		response.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(response).Encode(result)

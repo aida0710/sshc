@@ -34,6 +34,53 @@ const (
 	vaultPTYStateEnvironment  = "SSHC_VAULT_PTY_STATE"
 )
 
+func TestMaskedSetupPromptEchoesStarsAndBackspaceBeforeEnter(t *testing.T) {
+	terminal, input, err := pty.Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer terminal.Close()
+	defer input.Close()
+
+	type result struct {
+		password []byte
+		err      error
+	}
+	completed := make(chan result, 1)
+	go func() {
+		password, err := promptMaskedSetupValue(context.Background(), input, input,
+			systemPasswordTerminal{}, "Access key ID: ")
+		completed <- result{password: password, err: err}
+	}()
+
+	readPTYThrough(t, terminal, []byte("Access key ID: "), 2*time.Second)
+	if _, err := terminal.Write([]byte("abc")); err != nil {
+		t.Fatal(err)
+	}
+	readPTYThrough(t, terminal, []byte("***"), 2*time.Second)
+	if _, err := terminal.Write([]byte{0x7f}); err != nil {
+		t.Fatal(err)
+	}
+	readPTYThrough(t, terminal, []byte("\b \b"), 2*time.Second)
+	if _, err := terminal.Write([]byte("d")); err != nil {
+		t.Fatal(err)
+	}
+	readPTYThrough(t, terminal, []byte("*"), 2*time.Second)
+	if _, err := terminal.Write([]byte{'\n'}); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case got := <-completed:
+		defer zeroBytes(got.password)
+		if got.err != nil || !bytes.Equal(got.password, []byte("abd")) {
+			t.Fatalf("password=%q error=%v", got.password, got.err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("masked setup prompt did not finish")
+	}
+}
+
 func TestRunVaultPromptCtrlCReturns130WithoutEnterAndRestoresEcho(t *testing.T) {
 	var requests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {

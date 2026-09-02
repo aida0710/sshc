@@ -45,7 +45,7 @@ Print the resolved SSH target without connecting.
   sshc sync now [--json]
   sshc sync auto on|off [--json]
 `, Actions: []Action{
-		{Name: "setup", Help: "usage:\n  sshc sync setup\n\nConfigure synchronization in an interactive terminal.\n"},
+		{Name: "setup", Help: "usage:\n  sshc sync setup\n\nConfigure synchronization in an interactive terminal. Existing values become defaults; blank hidden values keep configured credentials. Direction accepts both, push, or pull.\n"},
 		{Name: "push", Help: "usage:\n  sshc sync push [--force] [--json]\n\nPush local synchronization changes through the running engine.\n"},
 		{Name: "pull", Help: "usage:\n  sshc sync pull [--force] [--json]\n\nPull synchronization changes through the running engine.\n"},
 		{Name: "now", Help: "usage:\n  sshc sync now [--json]\n\nRun one synchronization cycle through the running engine.\n"},

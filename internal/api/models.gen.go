@@ -1488,12 +1488,13 @@ type SyncSettingsRequest struct {
 
 // SyncSetupCheckRequest defines model for SyncSetupCheckRequest.
 type SyncSetupCheckRequest struct {
-	AccessKeyId     string  `json:"accessKeyId"`
-	Bucket          string  `json:"bucket"`
-	Endpoint        string  `json:"endpoint"`
-	Path            *string `json:"path,omitempty"`
-	Region          *string `json:"region,omitempty"`
-	SecretAccessKey string  `json:"secretAccessKey"`
+	AccessKeyId      *string `json:"accessKeyId,omitempty"`
+	Bucket           string  `json:"bucket"`
+	Endpoint         string  `json:"endpoint"`
+	Path             *string `json:"path,omitempty"`
+	Region           *string `json:"region,omitempty"`
+	ReuseCredentials bool    `json:"reuseCredentials"`
+	SecretAccessKey  *string `json:"secretAccessKey,omitempty"`
 }
 
 // SyncSetupCheckResponse defines model for SyncSetupCheckResponse.
@@ -1506,17 +1507,19 @@ type SyncSetupCheckResponse struct {
 
 // SyncSetupRequest defines model for SyncSetupRequest.
 type SyncSetupRequest struct {
-	AccessKeyId     string               `json:"accessKeyId"`
-	Bucket          string               `json:"bucket"`
-	Direction       SyncDirection        `json:"direction"`
-	Endpoint        string               `json:"endpoint"`
-	ExpectedETag    *string              `json:"expectedETag,omitempty"`
-	ExpectedState   SyncSetupTargetState `json:"expectedState"`
-	HistoryPresent  bool                 `json:"historyPresent"`
-	Key             string               `json:"key"`
-	Path            *string              `json:"path,omitempty"`
-	Region          *string              `json:"region,omitempty"`
-	SecretAccessKey string               `json:"secretAccessKey"`
+	AccessKeyId      *string              `json:"accessKeyId,omitempty"`
+	Bucket           string               `json:"bucket"`
+	Direction        SyncDirection        `json:"direction"`
+	Endpoint         string               `json:"endpoint"`
+	ExpectedETag     *string              `json:"expectedETag,omitempty"`
+	ExpectedState    SyncSetupTargetState `json:"expectedState"`
+	HistoryPresent   bool                 `json:"historyPresent"`
+	Key              string               `json:"key"`
+	Path             *string              `json:"path,omitempty"`
+	Region           *string              `json:"region,omitempty"`
+	ReuseCredentials bool                 `json:"reuseCredentials"`
+	ReuseKey         bool                 `json:"reuseKey"`
+	SecretAccessKey  *string              `json:"secretAccessKey,omitempty"`
 }
 
 // SyncSetupResponse defines model for SyncSetupResponse.
@@ -1530,20 +1533,21 @@ type SyncSetupTargetState string
 
 // SyncStatus defines model for SyncStatus.
 type SyncStatus struct {
-	Auto          AutoSync       `json:"auto"`
-	Bucket        string         `json:"bucket"`
-	Configured    bool           `json:"configured"`
-	Direction     SyncDirection  `json:"direction"`
-	Endpoint      string         `json:"endpoint"`
-	FileCount     *int           `json:"fileCount,omitempty"`
-	KeyConfigured bool           `json:"keyConfigured"`
-	LastOperation *SyncOperation `json:"lastOperation,omitempty"`
-	LastSyncedAt  *string        `json:"lastSyncedAt,omitempty"`
-	Locked        bool           `json:"locked"`
-	Origin        *string        `json:"origin,omitempty"`
-	Path          *string        `json:"path,omitempty"`
-	Region        *string        `json:"region,omitempty"`
-	Synced        bool           `json:"synced"`
+	AccessKeySuffix *string        `json:"accessKeySuffix,omitempty"`
+	Auto            AutoSync       `json:"auto"`
+	Bucket          string         `json:"bucket"`
+	Configured      bool           `json:"configured"`
+	Direction       SyncDirection  `json:"direction"`
+	Endpoint        string         `json:"endpoint"`
+	FileCount       *int           `json:"fileCount,omitempty"`
+	KeyConfigured   bool           `json:"keyConfigured"`
+	LastOperation   *SyncOperation `json:"lastOperation,omitempty"`
+	LastSyncedAt    *string        `json:"lastSyncedAt,omitempty"`
+	Locked          bool           `json:"locked"`
+	Origin          *string        `json:"origin,omitempty"`
+	Path            *string        `json:"path,omitempty"`
+	Region          *string        `json:"region,omitempty"`
+	Synced          bool           `json:"synced"`
 }
 
 // TerminalAgent defines model for TerminalAgent.

@@ -20,7 +20,10 @@ import (
 	"sshc/internal/session"
 )
 
-var errSyncKeyMissing = errors.New("synchronization key is missing")
+var (
+	errSyncKeyMissing          = errors.New("synchronization key is missing")
+	errSyncSetupInvalidRequest = errors.New("invalid sync setup request")
+)
 
 // SyncHandlers はリモートのスナップショットを提供する。
 type SyncHandlers struct {
@@ -67,10 +70,10 @@ func registerSyncRoutes(engine *echo.Echo, handlers SyncHandlers) {
 	engine.POST("/api/v1/sync/history/diff", handlers.HistoryDiff)
 }
 
-func syncSetupInput(request api.SyncSetupCheckRequest) (remotesync.Config, remotesync.Credentials, error) {
+func syncSetupInput(request api.SyncSetupCheckRequest, credentials remotesync.Credentials) (remotesync.Config, remotesync.Credentials, error) {
 	if len(request.Endpoint) == 0 || len(request.Endpoint) > 2048 ||
-		len(request.AccessKeyId) == 0 || len(request.AccessKeyId) > 512 ||
-		len(request.SecretAccessKey) == 0 || len(request.SecretAccessKey) > 512 ||
+		len(credentials.AccessKeyID) == 0 || len(credentials.AccessKeyID) > 512 ||
+		len(credentials.SecretAccessKey) == 0 || len(credentials.SecretAccessKey) > 512 ||
 		(request.Path != nil && len(*request.Path) > 255) ||
 		(request.Region != nil && len(*request.Region) > 64) {
 		return remotesync.Config{}, remotesync.Credentials{}, errors.New("invalid_request")
@@ -99,7 +102,43 @@ func syncSetupInput(request api.SyncSetupCheckRequest) (remotesync.Config, remot
 	return remotesync.Config{
 		Endpoint: strings.TrimRight(request.Endpoint, "/"), Bucket: request.Bucket,
 		Path: path, Region: region, Direction: remotesync.DirectionBoth,
-	}, remotesync.Credentials{AccessKeyID: request.AccessKeyId, SecretAccessKey: request.SecretAccessKey}, nil
+	}, credentials, nil
+}
+
+func (h SyncHandlers) setupCredentials(
+	reuse bool, accessKeyID, secretAccessKey *string,
+) (remotesync.Credentials, error) {
+	if reuse {
+		if accessKeyID != nil || secretAccessKey != nil || h.Secrets == nil {
+			return remotesync.Credentials{}, errSyncSetupInvalidRequest
+		}
+		settings, err := h.Secrets.SyncSettings()
+		if err != nil {
+			return remotesync.Credentials{}, err
+		}
+		if settings.AccessKeyID == "" || settings.SecretAccessKey == "" {
+			return remotesync.Credentials{}, errSyncSetupInvalidRequest
+		}
+		return remotesync.Credentials{
+			AccessKeyID: settings.AccessKeyID, SecretAccessKey: settings.SecretAccessKey,
+		}, nil
+	}
+	if accessKeyID == nil || secretAccessKey == nil {
+		return remotesync.Credentials{}, errSyncSetupInvalidRequest
+	}
+	return remotesync.Credentials{
+		AccessKeyID: *accessKeyID, SecretAccessKey: *secretAccessKey,
+	}, nil
+}
+
+func setupCredentialsProblem(c *echo.Context, err error) error {
+	if errors.Is(err, secret.ErrLocked) || errors.Is(err, secret.ErrNoVault) {
+		return problem(c, http.StatusConflict, "vault_locked")
+	}
+	if errors.Is(err, errSyncSetupInvalidRequest) {
+		return problem(c, http.StatusBadRequest, "invalid_request")
+	}
+	return problem(c, http.StatusInternalServerError, "vault_unreadable")
 }
 
 func setupInputProblem(c *echo.Context, err error) error {
@@ -117,7 +156,11 @@ func (h SyncHandlers) CheckSetup(c *echo.Context) error {
 	if err := decodeJSON(c, &request); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
-	config, credentials, err := syncSetupInput(request)
+	credentials, err := h.setupCredentials(request.ReuseCredentials, request.AccessKeyId, request.SecretAccessKey)
+	if err != nil {
+		return setupCredentialsProblem(c, err)
+	}
+	config, credentials, err := syncSetupInput(request, credentials)
 	if err != nil {
 		return setupInputProblem(c, err)
 	}
@@ -142,10 +185,14 @@ func (h SyncHandlers) CompleteSetup(c *echo.Context) error {
 	if err := decodeJSON(c, &request); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
+	credentials, err := h.setupCredentials(request.ReuseCredentials, request.AccessKeyId, request.SecretAccessKey)
+	if err != nil {
+		return setupCredentialsProblem(c, err)
+	}
 	config, credentials, err := syncSetupInput(api.SyncSetupCheckRequest{
 		Endpoint: request.Endpoint, Bucket: request.Bucket, Path: request.Path, Region: request.Region,
-		AccessKeyId: request.AccessKeyId, SecretAccessKey: request.SecretAccessKey,
-	})
+		ReuseCredentials: request.ReuseCredentials,
+	}, credentials)
 	if err != nil {
 		return setupInputProblem(c, err)
 	}
@@ -163,7 +210,15 @@ func (h SyncHandlers) CompleteSetup(c *echo.Context) error {
 	}
 	key := strings.TrimSpace(request.Key)
 	generated := false
-	if key == "" {
+	if request.ReuseKey {
+		if key != "" || request.ExpectedState != api.Existing {
+			return problem(c, http.StatusBadRequest, "invalid_request")
+		}
+		key, err = h.currentSyncKey()
+		if err != nil {
+			return syncKeyProblem(c, err)
+		}
+	} else if key == "" {
 		if request.ExpectedState != api.Empty {
 			return problem(c, http.StatusBadRequest, "sync_key_missing")
 		}
@@ -283,6 +338,9 @@ func (h SyncHandlers) statusResponse() api.SyncStatus {
 		KeyConfigured: h.keyConfigured(),
 		Auto:          h.autoResponse(),
 	}
+	if suffix := h.Service.AccessKeySuffix(); suffix != "" {
+		response.AccessKeySuffix = &suffix
+	}
 	if state.Synced {
 		response.LastSyncedAt = &state.At
 		response.Origin = &state.Origin
@@ -311,10 +369,12 @@ func (h SyncHandlers) Configure(c *echo.Context) error {
 	if err := decodeJSON(c, &request); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
+	credentials := remotesync.Credentials{
+		AccessKeyID: request.AccessKeyId, SecretAccessKey: request.SecretAccessKey,
+	}
 	config, credentials, err := syncSetupInput(api.SyncSetupCheckRequest{
 		Endpoint: request.Endpoint, Bucket: request.Bucket, Path: request.Path, Region: request.Region,
-		AccessKeyId: request.AccessKeyId, SecretAccessKey: request.SecretAccessKey,
-	})
+	}, credentials)
 	if err != nil {
 		return setupInputProblem(c, err)
 	}
@@ -731,8 +791,8 @@ func (h SyncHandlers) Pull(c *echo.Context) error {
 		Applied: false, Summary: snapshotSummaryResponse(result.Summary),
 		DownloadedBytes: result.DownloadedBytes, CompletedAt: result.CompletedAt,
 		Conflicts:  make([]api.SyncConflict, 0, len(result.Conflicts)),
-		Written:    append([]string(nil), result.Written...),
-		Removed:    append([]string(nil), result.Removed...),
+		Written:    append([]string{}, result.Written...),
+		Removed:    append([]string{}, result.Removed...),
 		RemoteETag: result.ETag, RemoteRevision: result.Manifest.Revision,
 	}
 	for _, conflict := range result.Conflicts {

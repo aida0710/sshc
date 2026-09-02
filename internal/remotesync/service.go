@@ -2261,6 +2261,19 @@ func (s *Service) Target() (endpoint, bucket, path, region string) {
 	return s.binding.config.Endpoint, s.binding.config.Bucket, s.binding.config.Path, s.binding.config.Region
 }
 
+// AccessKeySuffix returns only the final five characters needed to identify
+// the configured account in setup and status output. The complete identifier
+// and secret access key never leave the engine.
+func (s *Service) AccessKeySuffix() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	characters := []rune(s.binding.creds.AccessKeyID)
+	if len(characters) > 5 {
+		characters = characters[len(characters)-5:]
+	}
+	return string(characters)
+}
+
 // SyncState returns a detached view so callers cannot mutate the state value
 // retained by a later response.
 func (s *Service) SyncState() SyncStateView {

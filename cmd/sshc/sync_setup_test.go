@@ -11,6 +11,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"sshc/internal/api"
 )
@@ -121,15 +122,21 @@ func newSyncSetupServer(t *testing.T, state api.SyncSetupTargetState) (*syncSetu
 	generated := setupGeneratedCanary
 	result := api.SyncSetupResponse{Status: api.SyncStatus{
 		Configured: true, Endpoint: "https://objects.example.test", Bucket: "ssh-config",
-		Direction: api.SyncDirectionBoth, KeyConfigured: true,
+		Direction: api.SyncDirectionBoth, KeyConfigured: true, Auto: api.AutoSync{Phase: api.AutoSyncPhaseIdle},
 	}}
 	if state == api.Empty {
 		result.GeneratedKey = &generated
 	}
+	currentBody, err := json.Marshal(api.SyncStatus{
+		Direction: api.SyncDirectionBoth, Auto: api.AutoSync{Phase: api.AutoSyncPhaseIdle},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	script := &syncSetupServer{
 		t: t,
 		base: &engineAPIScript{
-			t: t, statusBody: validEngineStatus(), syncBody: `{"configured":true}`,
+			t: t, statusBody: validEngineStatus(), syncBody: string(currentBody),
 		},
 		checkResponse: check, completeResponse: result,
 	}
@@ -143,6 +150,15 @@ type setupRunResult struct {
 	code   int
 	stdout string
 	prompt string
+}
+
+func setSetupCurrentStatus(t *testing.T, server *syncSetupServer, status api.SyncStatus) {
+	t.Helper()
+	body, err := json.Marshal(status)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server.base.syncBody = string(body)
 }
 
 func runSetupFixture(
@@ -243,7 +259,7 @@ func TestSyncSetupPromptsWithoutEchoingSecrets(t *testing.T) {
 		t.Fatalf("code=%d stdout=%q prompt=%q", result.code, result.stdout, result.prompt)
 	}
 	for _, prompt := range []string{
-		"Endpoint [https://]:", "Bucket:", "Path []:", "Region [auto]:", "Direction [both]:",
+		"Endpoint [https://]:", "Bucket []:", "Path []:", "Region [auto]:", "Direction [both] (both/push/pull):",
 		"Access key ID:", "Secret access key:", "Sync key:",
 	} {
 		if !strings.Contains(result.prompt, prompt) {
@@ -255,6 +271,11 @@ func TestSyncSetupPromptsWithoutEchoingSecrets(t *testing.T) {
 			t.Fatalf("setup output echoed %q", secret)
 		}
 	}
+	for _, answer := range standardHiddenSetup(true) {
+		if !strings.Contains(result.prompt, strings.Repeat("*", utf8.RuneCount(answer))) {
+			t.Errorf("setup prompt did not confirm hidden input length %d: %q", utf8.RuneCount(answer), result.prompt)
+		}
+	}
 	if len(script.checkBodies) != 1 || len(script.completeBodies) != 1 {
 		t.Fatalf("check=%d complete=%d", len(script.checkBodies), len(script.completeBodies))
 	}
@@ -262,6 +283,54 @@ func TestSyncSetupPromptsWithoutEchoingSecrets(t *testing.T) {
 		if !allZero(secret) {
 			t.Errorf("hidden input %d was not erased: %q", index, secret)
 		}
+	}
+}
+
+func TestSyncSetupUsesExistingDefaultsAndKeepsHiddenValuesOnBlankInput(t *testing.T) {
+	script, server, stateDir := newSyncSetupServer(t, api.Existing)
+	defer server.Close()
+	path := "team/hosts"
+	region := "ap-northeast-1"
+	suffix := "AMPLE"
+	setSetupCurrentStatus(t, script, api.SyncStatus{
+		Configured: true, Endpoint: "https://objects.example.test", Bucket: "ssh-config",
+		Path: &path, Region: &region, Direction: api.SyncDirectionPull,
+		KeyConfigured: true, AccessKeySuffix: &suffix, Auto: api.AutoSync{Phase: api.AutoSyncPhaseIdle},
+	})
+	result := runSetupFixture(t, stateDir, server.Client(), "\n\n\n\n\n",
+		&setupPasswordTerminal{answers: [][]byte{{}, {}, {}}})
+	if result.code != 0 {
+		t.Fatalf("code=%d stdout=%q prompt=%q", result.code, result.stdout, result.prompt)
+	}
+	for _, want := range []string{
+		"Endpoint [https://objects.example.test]:", "Bucket [ssh-config]:", "Path [team/hosts]:",
+		"Region [ap-northeast-1]:", "Direction [pull] (both/push/pull):",
+		"Access key ID [*****AMPLE; Enter to keep]:",
+		"Secret access key [configured; Enter to keep]:",
+		"Sync key [configured; Enter to keep]:",
+	} {
+		if !strings.Contains(result.prompt, want) {
+			t.Errorf("prompt omitted %q: %q", want, result.prompt)
+		}
+	}
+	if len(script.checkBodies) != 1 || len(script.completeBodies) != 1 {
+		t.Fatalf("check=%d complete=%d", len(script.checkBodies), len(script.completeBodies))
+	}
+	var check api.SyncSetupCheckRequest
+	if err := json.Unmarshal(script.checkBodies[0], &check); err != nil {
+		t.Fatal(err)
+	}
+	if !check.ReuseCredentials || check.AccessKeyId != nil || check.SecretAccessKey != nil ||
+		check.Endpoint != "https://objects.example.test" || check.Bucket != "ssh-config" {
+		t.Fatalf("check request = %+v", check)
+	}
+	var complete api.SyncSetupRequest
+	if err := json.Unmarshal(script.completeBodies[0], &complete); err != nil {
+		t.Fatal(err)
+	}
+	if !complete.ReuseCredentials || !complete.ReuseKey || complete.AccessKeyId != nil ||
+		complete.SecretAccessKey != nil || complete.Key != "" || complete.Direction != api.SyncDirectionPull {
+		t.Fatalf("complete request = %+v", complete)
 	}
 }
 
@@ -301,7 +370,8 @@ func TestSyncSetupChecksBeforeSavingExistingTarget(t *testing.T) {
 	}
 	if check.Endpoint != "https://objects.example.test" || check.Bucket != "ssh-config" ||
 		check.Path == nil || *check.Path != "team/hosts" || check.Region == nil || *check.Region != "ap-northeast-1" ||
-		check.AccessKeyId != setupAccessCanary || check.SecretAccessKey != setupSecretCanary {
+		check.AccessKeyId == nil || *check.AccessKeyId != setupAccessCanary ||
+		check.SecretAccessKey == nil || *check.SecretAccessKey != setupSecretCanary || check.ReuseCredentials {
 		t.Fatalf("check request = %+v", check)
 	}
 	var complete api.SyncSetupRequest
@@ -310,7 +380,8 @@ func TestSyncSetupChecksBeforeSavingExistingTarget(t *testing.T) {
 	}
 	if complete.ExpectedState != api.Existing || complete.ExpectedETag == nil ||
 		*complete.ExpectedETag != "etag-from-check" || !complete.HistoryPresent ||
-		complete.Key != setupExistingCanary || complete.Direction != api.SyncDirectionBoth {
+		complete.Key != setupExistingCanary || complete.Direction != api.SyncDirectionBoth ||
+		complete.ReuseCredentials || complete.ReuseKey {
 		t.Fatalf("complete request did not preserve check evidence: %+v", complete)
 	}
 }

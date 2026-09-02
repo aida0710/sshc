@@ -478,6 +478,10 @@ func TestPullResponseReportsEachDownloadAndTheAppliedOperation(t *testing.T) {
 	if len(previewBody.Written) != 1 {
 		t.Errorf("preview written = %v", previewBody.Written)
 	}
+	if !strings.Contains(preview.Body.String(), `"conflicts":[]`) ||
+		!strings.Contains(preview.Body.String(), `"removed":[]`) {
+		t.Errorf("empty pull collections must be arrays: %s", preview.Body.String())
+	}
 
 	applyRequest, err := json.Marshal(map[string]any{
 		"apply": true, "expectedETag": previewBody.RemoteETag,
@@ -866,7 +870,7 @@ func TestARefusedDirectionIsAConflictAndNotAGatewayFailure(t *testing.T) {
 // 設定は保存されるため、2 回目の実行でもそれが残っている。決して
 // 外へ漏れてはならないのは access key である。status は画面が読む
 // ものであり、bucket の場所と vault がロック中かどうかだけを伝える。
-func TestSyncStatusNeverCarriesTheAccessKey(t *testing.T) {
+func TestSyncStatusCarriesOnlyTheAccessKeySuffix(t *testing.T) {
 	engine, service, secrets := syncEngineWithVault(t)
 	_ = service
 	if err := secrets.Initialise(syncTestPassphrase); err != nil {
@@ -887,6 +891,34 @@ func TestSyncStatusNeverCarriesTheAccessKey(t *testing.T) {
 	}
 	if !strings.Contains(response.Body.String(), "s3.example.invalid") {
 		t.Errorf("the status does not say where the bucket is: %s", response.Body.String())
+	}
+	if !strings.Contains(response.Body.String(), `"accessKeySuffix":"AMPLE"`) {
+		t.Errorf("the status does not identify the configured access key suffix: %s", response.Body.String())
+	}
+}
+
+func TestSetupCanReuseCredentialsWithoutReturningThem(t *testing.T) {
+	_, _, secrets := syncEngineWithVault(t)
+	if err := secrets.Initialise(syncTestPassphrase); err != nil {
+		t.Fatal(err)
+	}
+	if err := secrets.SetSyncSettings(secret.SyncSettings{
+		Endpoint: "https://s3.example.invalid", Bucket: "b", Region: "auto",
+		AccessKeyID: "AKIAEXAMPLE", SecretAccessKey: "s3cret-key", Direction: "both",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	handlers := SyncHandlers{Secrets: secrets}
+	credentials, err := handlers.setupCredentials(true, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if credentials.AccessKeyID != "AKIAEXAMPLE" || credentials.SecretAccessKey != "s3cret-key" {
+		t.Fatalf("credentials were not reused: %+v", credentials)
+	}
+	unexpected := "replacement"
+	if _, err := handlers.setupCredentials(true, &unexpected, nil); err == nil {
+		t.Fatal("reuse accepted a replacement credential in the same request")
 	}
 }
 

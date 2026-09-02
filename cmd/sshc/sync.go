@@ -180,8 +180,7 @@ func runSyncPull(ctx context.Context, engine *engineAPI, force bool) (api.PullRe
 }
 
 func validPullResponseShape(response api.PullResponse) bool {
-	return response.Conflicts != nil && response.Written != nil && response.Removed != nil &&
-		response.DownloadedBytes >= 0 && response.Summary.FileCount >= 0 &&
+	return response.DownloadedBytes >= 0 && response.Summary.FileCount >= 0 &&
 		response.Summary.SourceBytes >= 0 && response.Summary.SnapshotBytes >= 0
 }
 
@@ -361,6 +360,7 @@ func writeSyncStatus(out io.Writer, status api.SyncStatus) {
 		{"configured", yesNo(status.Configured)},
 		{"vault", lockedState(status.Locked)},
 		{"sync key", configuredState(status.KeyConfigured)},
+		{"access key", accessKeyStatus(status)},
 		{"endpoint", dash(status.Endpoint)},
 		{"bucket", dash(status.Bucket)},
 		{"path", optionalString(status.Path)},
@@ -391,6 +391,16 @@ func writeSyncStatus(out io.Writer, status api.SyncStatus) {
 		rows = append(rows, [2]string{"last operation", "-"})
 	}
 	writeSyncRows(out, rows)
+}
+
+func accessKeyStatus(status api.SyncStatus) string {
+	if status.AccessKeySuffix != nil && *status.AccessKeySuffix != "" {
+		return maskedAccessKeySuffix(*status.AccessKeySuffix)
+	}
+	if status.Configured {
+		return "configured"
+	}
+	return "missing"
 }
 
 func writeSyncRows(out io.Writer, rows [][2]string) {

@@ -74,6 +74,8 @@ sshc sync now [--json]
 sshc sync auto on|off [--json]
 ```
 
+`sshc sync setup` shows the configured endpoint, bucket, path, region, and direction as defaults. Direction accepts `both`, `push`, or `pull`. The Access Key ID is identified only by its masked final five characters; the Secret Access Key and sync key are shown only as configured. Press Enter on blank secret prompts to keep the values already held by the engine. While a new hidden value is typed, each character appears as `*`, and Backspace updates the mask without printing the plaintext.
+
 ## SFTP transfers
 
 Transfers use the running engine and the same OpenSSH configuration, host-key checks, and Vault credentials as the Web UI. Specify remote paths as absolute POSIX paths such as `/var/log/app.log`.
