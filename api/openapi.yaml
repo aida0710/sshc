@@ -1859,6 +1859,19 @@ paths:
         "201": { description: Transfer job registered, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPTransferJob" } } } }
         "400": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
+  /api/v1/sftp/compare:
+    get:
+      operationId: compareSFTPDirectories
+      parameters:
+        - { name: leftAlias, in: query, required: true, schema: { type: string, minLength: 1, maxLength: 255 } }
+        - { name: leftPath, in: query, required: true, schema: { type: string } }
+        - { name: rightAlias, in: query, required: true, schema: { type: string, minLength: 1, maxLength: 255 } }
+        - { name: rightPath, in: query, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Metadata comparison of two remote directory trees, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPDirectoryComparison" } } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "413": { $ref: "#/components/responses/Problem" }
+        "502": { $ref: "#/components/responses/Problem" }
   /api/v1/sftp/transfers/finished:
     delete:
       operationId: clearFinishedSFTPTransferJobs
@@ -2776,6 +2789,8 @@ components:
       properties:
         kind: { type: string, enum: [ssh, shell] }
         alias: { type: string, minLength: 1, maxLength: 255 }
+        # ssh kind only. An absolute POSIX directory selected by the SFTP UI.
+        cwd: { type: string, minLength: 1, maxLength: 4096 }
         cols: { type: integer }
         rows: { type: integer }
         # shell kind only. Must match one of LocalShellProfileList; executable
@@ -4277,14 +4292,17 @@ components:
     SFTPTransferJob:
       type: object
       additionalProperties: false
-      required: [id, batchId, batchName, batchKind, alias, direction, kind, name, remotePath, totalBytes, transferredBytes, bytesPerSecond, remainingSeconds, status, allowedActions, attempt, problem, lastModified, expectedRevision, sourceFingerprint, overwrite, downloadRevision, createdAt, updatedAt]
+      required: [id, batchId, batchName, batchKind, alias, sourceAlias, sourcePath, operation, direction, kind, name, remotePath, totalBytes, transferredBytes, bytesPerSecond, remainingSeconds, status, allowedActions, attempt, problem, lastModified, expectedRevision, sourceFingerprint, overwrite, downloadRevision, createdAt, updatedAt]
       properties:
         id: { type: string, pattern: "^[A-Za-z0-9_-]{8,128}$" }
         batchId: { type: string, pattern: "^[A-Za-z0-9_-]{8,128}$" }
         batchName: { type: string, minLength: 1, maxLength: 1024 }
         batchKind: { type: string, enum: [file, folder] }
         alias: { type: string, minLength: 1, maxLength: 255 }
-        direction: { type: string, enum: [upload, download] }
+        sourceAlias: { type: string, maxLength: 255 }
+        sourcePath: { type: string }
+        operation: { type: string, enum: ["", copy, move] }
+        direction: { type: string, enum: [upload, download, remote] }
         kind: { type: string, enum: [file, folder] }
         name: { type: string, minLength: 1, maxLength: 1024 }
         remotePath: { type: string, minLength: 1 }
@@ -4328,6 +4346,23 @@ components:
         # true means a budget stopped the walk before it finished.
         truncated: { type: boolean }
         entries: { type: array, maxItems: 200, items: { $ref: "#/components/schemas/SFTPEntry" } }
+    SFTPDirectoryDifference:
+      type: object
+      additionalProperties: false
+      required: [relativePath, status]
+      properties:
+        relativePath: { type: string }
+        status: { type: string, enum: [same, different, left_only, right_only, type_mismatch] }
+        left: { $ref: "#/components/schemas/SFTPEntry" }
+        right: { $ref: "#/components/schemas/SFTPEntry" }
+    SFTPDirectoryComparison:
+      type: object
+      additionalProperties: false
+      required: [leftPath, rightPath, entries]
+      properties:
+        leftPath: { type: string }
+        rightPath: { type: string }
+        entries: { type: array, maxItems: 20000, items: { $ref: "#/components/schemas/SFTPDirectoryDifference" } }
     SFTPTransferSettingsRequest:
       type: object
       additionalProperties: false
@@ -4345,14 +4380,18 @@ components:
     SFTPCreateTransferJobRequest:
       type: object
       additionalProperties: false
-      required: [id, batchId, batchName, batchKind, alias, direction, kind, name, remotePath, totalBytes, lastModified]
+      required: [id, batchId, batchName, batchKind, alias, sourceAlias, sourcePath, operation, overwrite, direction, kind, name, remotePath, totalBytes, lastModified]
       properties:
         id: { type: string, pattern: "^[A-Za-z0-9_-]{8,128}$" }
         batchId: { type: string, pattern: "^[A-Za-z0-9_-]{8,128}$" }
         batchName: { type: string, minLength: 1, maxLength: 1024 }
         batchKind: { type: string, enum: [file, folder] }
         alias: { type: string, minLength: 1, maxLength: 255 }
-        direction: { type: string, enum: [upload, download] }
+        sourceAlias: { type: string, maxLength: 255 }
+        sourcePath: { type: string }
+        operation: { type: string, enum: ["", copy, move] }
+        overwrite: { type: boolean }
+        direction: { type: string, enum: [upload, download, remote] }
         kind: { type: string, enum: [file, folder] }
         name: { type: string, minLength: 1, maxLength: 1024 }
         remotePath: { type: string, minLength: 1 }

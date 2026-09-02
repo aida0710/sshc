@@ -45,9 +45,10 @@ describe("sftpApi resumable download", () => {
       jobs: [{
         id: "transfer_test01", batchId: "batch_test0001", batchName: "file.bin", batchKind: "file",
         alias: "edge", direction: "download", kind: "file", name: "file.bin", remotePath: "/file.bin",
+        sourceAlias: "", sourcePath: "", operation: "", overwrite: false,
         totalBytes: 4, transferredBytes: 0, bytesPerSecond: 0, remainingSeconds: -1,
         status: "queued", allowedActions: ["pause", "cancel"], attempt: 1, problem: "", lastModified: 0,
-        expectedRevision: "", sourceFingerprint: "", overwrite: false, downloadRevision: "",
+        expectedRevision: "", sourceFingerprint: "", downloadRevision: "",
         createdAt: "2026-08-31T00:00:00Z", updatedAt: "2026-08-31T00:00:00Z",
       }],
     }), { status: 200, headers: { "Content-Type": "application/json" } }));

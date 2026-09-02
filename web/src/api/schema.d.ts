@@ -1500,6 +1500,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sftp/compare": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["compareSFTPDirectories"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sftp/transfers/finished": {
         parameters: {
             query?: never;
@@ -2287,6 +2303,7 @@ export interface components {
             /** @enum {string} */
             kind: "ssh" | "shell";
             alias?: string;
+            cwd?: string;
             cols?: number;
             rows?: number;
             profileId?: string;
@@ -3223,8 +3240,12 @@ export interface components {
             /** @enum {string} */
             batchKind: "file" | "folder";
             alias: string;
+            sourceAlias: string;
+            sourcePath: string;
             /** @enum {string} */
-            direction: "upload" | "download";
+            operation: "" | "copy" | "move";
+            /** @enum {string} */
+            direction: "upload" | "download" | "remote";
             /** @enum {string} */
             kind: "file" | "folder";
             name: string;
@@ -3265,6 +3286,18 @@ export interface components {
             truncated: boolean;
             entries: components["schemas"]["SFTPEntry"][];
         };
+        SFTPDirectoryDifference: {
+            relativePath: string;
+            /** @enum {string} */
+            status: "same" | "different" | "left_only" | "right_only" | "type_mismatch";
+            left?: components["schemas"]["SFTPEntry"];
+            right?: components["schemas"]["SFTPEntry"];
+        };
+        SFTPDirectoryComparison: {
+            leftPath: string;
+            rightPath: string;
+            entries: components["schemas"]["SFTPDirectoryDifference"][];
+        };
         SFTPTransferSettingsRequest: {
             maxConcurrent: number;
             clearCompletedAfterSeconds: number;
@@ -3281,8 +3314,13 @@ export interface components {
             /** @enum {string} */
             batchKind: "file" | "folder";
             alias: string;
+            sourceAlias: string;
+            sourcePath: string;
             /** @enum {string} */
-            direction: "upload" | "download";
+            operation: "" | "copy" | "move";
+            overwrite: boolean;
+            /** @enum {string} */
+            direction: "upload" | "download" | "remote";
             /** @enum {string} */
             kind: "file" | "folder";
             name: string;
@@ -6407,6 +6445,34 @@ export interface operations {
             };
             400: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
+        };
+    };
+    compareSFTPDirectories: {
+        parameters: {
+            query: {
+                leftAlias: string;
+                leftPath: string;
+                rightAlias: string;
+                rightPath: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Metadata comparison of two remote directory trees */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SFTPDirectoryComparison"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            413: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
         };
     };
     clearFinishedSFTPTransferJobs: {

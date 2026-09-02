@@ -33,6 +33,7 @@ import { TerminalQuickCommands } from "./TerminalQuickCommands";
 import { TerminalOverflowMenu } from "./TerminalOverflowMenu";
 import { TerminalPortForwards } from "./TerminalPortForwards";
 import { attachWebglRenderer } from "./webgl";
+import { attachOSC7Directory } from "./osc7";
 import { Icon } from "../ui/icons";
 
 type TerminalViewProps = {
@@ -118,6 +119,7 @@ export function TerminalView({
   const intlYenRef = useRef(jisYenBackslash);
   intlYenRef.current = jisYenBackslash;
   const [terminalNotice, setTerminalNotice] = useState("");
+  const [currentDirectory, setCurrentDirectory] = useState(session.agent?.cwd ?? "");
 
   const [quickCommandsOpen, setQuickCommandsOpen] = useState(false);
   const [quickCommandSelection, setQuickCommandSelection] = useState("");
@@ -135,7 +137,8 @@ export function TerminalView({
 
   useEffect(() => {
     setOsc52Enabled(initialOsc52Enabled);
-  }, [initialOsc52Enabled, session.id]);
+    setCurrentDirectory(session.agent?.cwd ?? "");
+  }, [initialOsc52Enabled, session.agent?.cwd, session.id]);
 
   async function reconnectExitedSession() {
     if (onReconnect === undefined || manualReconnectBusy) return;
@@ -300,6 +303,7 @@ export function TerminalView({
       copied: () => setTerminalNotice(t("terminal.osc52Copied")),
       refused: () => setProblem(t("terminal.clipboardRefused")),
     });
+    const osc7Directory = attachOSC7Directory(view.parser, setCurrentDirectory);
     const terminalLinks = view.registerLinkProvider({
       provideLinks: (bufferLineNumber, callback) => {
         const line = view.buffer.active.getLine(bufferLineNumber - 1)?.translateToString(true) ?? "";
@@ -484,6 +488,7 @@ export function TerminalView({
       detachOverlay();
       detachClipboard();
       detachOsc52();
+      osc7Directory.dispose();
       kittyKeyboard.dispose();
       terminalLinks.dispose();
       webgl?.dispose();
@@ -576,6 +581,9 @@ export function TerminalView({
               setQuickCommandsOpen(true);
             }}
             onPortForwarding={session.kind === "ssh" ? () => setPortForwardsOpen(true) : undefined}
+            onOpenRemoteDirectory={session.kind === "ssh" && session.alias !== undefined && currentDirectory !== "" && onOpenRemotePath !== undefined
+              ? () => onOpenRemotePath(session.alias!, currentDirectory, "browse")
+              : undefined}
             onCopyContext={() => copyContext.current()}
             onToggleOsc52={async () => {
               const next = !osc52Enabled;

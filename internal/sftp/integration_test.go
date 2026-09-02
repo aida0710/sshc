@@ -71,7 +71,7 @@ func integrationService(t *testing.T) sftp.Service {
 		Timeout: 30 * time.Second, Strict: "yes",
 	}
 	return sftp.Service{Open: func(ctx context.Context, alias string) (sftp.Remote, error) {
-		if alias != target.Alias {
+		if alias != target.Alias && alias != "integration-source" && alias != "integration-target" {
 			return nil, fmt.Errorf("unexpected alias %q", alias)
 		}
 		transport, err := dialer.Connect(ctx, target)
@@ -85,6 +85,71 @@ func integrationService(t *testing.T) sftp.Service {
 		}
 		return &integrationRemote{Remote: sftp.NewClient(client), transport: transport}, nil
 	}}
+}
+
+func TestRemoteCopyMoveAndCompareAgainstOpenSSHSFTP(t *testing.T) {
+	service := integrationService(t)
+	root := fmt.Sprintf("/tmp/sshc-sftp-remote-%d", time.Now().UnixNano())
+	sourceRoot := path.Join(root, "source")
+	targetRoot := path.Join(root, "target")
+	sourceFile := path.Join(sourceRoot, "copy.txt")
+	movingFile := path.Join(sourceRoot, "move.txt")
+	t.Cleanup(func() {
+		for _, candidate := range []string{
+			path.Join(targetRoot, "copy.txt"), path.Join(targetRoot, "move.txt"),
+			sourceFile, movingFile,
+		} {
+			_ = service.Delete(context.Background(), "integration", candidate)
+		}
+		_ = service.Delete(context.Background(), "integration", sourceRoot)
+		_ = service.Delete(context.Background(), "integration", targetRoot)
+		_ = service.Delete(context.Background(), "integration", root)
+	})
+	for _, directory := range []string{root, sourceRoot, targetRoot} {
+		if _, err := service.Mkdir(t.Context(), "integration", directory); err != nil {
+			t.Fatal(err)
+		}
+	}
+	integrationUpload(t, &service, sourceFile, []byte("copied directly\n"), false)
+	integrationUpload(t, &service, movingFile, []byte("moved directly\n"), false)
+
+	if err := service.CopyRemote(t.Context(), sftp.RemoteTransferRequest{
+		SourceAlias: "integration-source", SourcePath: sourceFile,
+		TargetAlias: "integration-target", TargetPath: path.Join(targetRoot, "copy.txt"),
+		Operation: sftp.RemoteCopy,
+	}, nil); err != nil {
+		t.Fatalf("remote copy: %v", err)
+	}
+	comparison, err := service.CompareDirectories(t.Context(), "integration-source", sourceRoot, "integration-target", targetRoot)
+	if err != nil {
+		t.Fatalf("compare: %v", err)
+	}
+	if len(comparison.Entries) != 2 {
+		t.Fatalf("comparison = %#v", comparison.Entries)
+	}
+
+	if err := service.CopyRemote(t.Context(), sftp.RemoteTransferRequest{
+		SourceAlias: "integration-source", SourcePath: movingFile,
+		TargetAlias: "integration-target", TargetPath: path.Join(targetRoot, "move.txt"),
+		Operation: sftp.RemoteMove,
+	}, nil); err != nil {
+		t.Fatalf("remote move: %v", err)
+	}
+	if _, err := service.Stat(t.Context(), "integration-source", movingFile); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("moved source still exists: %v", err)
+	}
+	var downloaded bytes.Buffer
+	prepared, err := service.PrepareDownload(t.Context(), "integration-target", path.Join(targetRoot, "move.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer prepared.Close()
+	if _, err := prepared.WriteFrom(t.Context(), 0, &downloaded); err != nil {
+		t.Fatal(err)
+	}
+	if downloaded.String() != "moved directly\n" {
+		t.Fatalf("moved contents = %q", downloaded.String())
+	}
 }
 
 func integrationUpload(t *testing.T, service *sftp.Service, target string, payload []byte, overwrite bool) {

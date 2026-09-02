@@ -1177,6 +1177,10 @@ function PaddedSection({
         onTargetHandled={onSftpTargetHandled}
         onNavigationBlockerChange={navigation.onNavigationBlockerChange}
         onNavigateLocation={onNavigateLocation}
+        onOpenTerminal={async (alias, path) => {
+          const opened = await consoles.open({ kind: "ssh", alias, cwd: path });
+          if (opened !== null) onShowConsole(opened.id);
+        }}
       />
     );
   }
