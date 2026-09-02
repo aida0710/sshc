@@ -5,6 +5,7 @@ import { ModalShell } from "../ui/ModalShell";
 import { Button } from "../ui/surface";
 import { sftpApi, type DirectoryComparison } from "./api";
 import { sftpTransferManager, type RemoteTransferSelection } from "./transferManager";
+import { PanelState } from "../ui/PanelState";
 
 type Location = { alias: string; path: string };
 
@@ -94,9 +95,9 @@ export function SFTPCompareDialog({ left, right, onDismiss }: { left: Location; 
       </header>
       {problem === "" ? null : <p role="alert" className="border-b border-notice-line bg-notice px-5 py-2 text-sm text-notice-ink">{problem}</p>}
       <div className="min-h-0 flex-1 overflow-auto">
-        {busy && comparison === null ? <p className="p-5 text-sm text-ink-muted">{t("sftp.compare.loading")}</p> : null}
-        {!busy && changes.length === 0 ? <p className="p-5 text-sm text-ink-muted">{t("sftp.compare.noChanges")}</p> : null}
-        <table className="w-full min-w-[38rem] text-left text-sm">
+        {busy && comparison === null ? <PanelState tone="loading" title={t("sftp.compare.loading")} /> : null}
+        {!busy && changes.length === 0 ? <PanelState tone="empty" title={t("sftp.compare.noChanges")} /> : null}
+        {changes.length === 0 ? null : <table className="w-full min-w-[38rem] text-left text-sm">
           <thead className="sticky top-0 bg-toolbar text-xs text-ink-muted"><tr>
             <th className="w-10 px-3 py-2"><span className="sr-only">{t("sftp.selectAll")}</span></th>
             <th className="px-2 py-2">{t("sftp.name")}</th>
@@ -113,7 +114,7 @@ export function SFTPCompareDialog({ left, right, onDismiss }: { left: Location; 
               <td className="px-2 py-2 text-right text-xs text-ink-muted">{difference.right?.type === "file" ? difference.right.size.toLocaleString() : difference.right === undefined ? "—" : t(`sftp.type.${difference.right.type}`)}</td>
             </tr>
           ))}</tbody>
-        </table>
+        </table>}
       </div>
       <footer className="flex flex-wrap justify-end gap-2 border-t border-line/60 px-5 py-4">
         <Button onClick={onDismiss}>{t("sftp.cancel")}</Button>

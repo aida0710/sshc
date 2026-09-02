@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { Translate } from "../i18n/context";
-import { Field, control, sectionHeading } from "../ui/form";
+import { CheckboxField, Field, control, sectionHeading } from "../ui/form";
 import { Button, Notice } from "../ui/surface";
 import { ModalShell } from "../ui/ModalShell";
 
@@ -51,15 +51,7 @@ export function SyncForcePushDialog({
               className={control}
             />
           </Field>
-          <label className="flex items-start gap-2 text-sm text-ink">
-            <input
-              type="checkbox"
-              checked={confirmed}
-              onChange={(event) => setConfirmed(event.target.checked)}
-              className="mt-0.5"
-            />
-            <span>{t("sync.forceConfirm")}</span>
-          </label>
+          <CheckboxField label={t("sync.forceConfirm")} checked={confirmed} onChange={setConfirmed} tone="danger" />
           <Button
             kind="danger"
             disabled={

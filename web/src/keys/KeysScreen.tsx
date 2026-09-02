@@ -32,8 +32,10 @@ import {
   tableHeadRow,
 } from "../ui/form";
 import { Button, Card, Row } from "../ui/surface";
-import { PageHeader } from "../ui/page";
+import { MetricCard, MetricGrid, PageHeader } from "../ui/page";
 import { Icon } from "../ui/icons";
+import { PanelState } from "../ui/PanelState";
+import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { PasswordInput } from "../ui/PasswordField";
 import { integrationsApi, type IntegrationsApi } from "../api/integrations";
 import {
@@ -596,10 +598,10 @@ export function KeysScreen({
   }
 
   if (state === "loading") {
-    return <p aria-live="polite">{t("keys.reading")}</p>;
+    return <PanelState tone="loading" title={t("keys.reading")} />;
   }
   if (state === "error" || inventory === null || trash === null) {
-    return <p role="alert">{t("keys.unreadable")}</p>;
+    return <PanelState tone="failed" title={t("keys.unreadable")} />;
   }
 
   const query = keyQuery.trim().toLowerCase();
@@ -684,44 +686,11 @@ export function KeysScreen({
           </a>
         }
       />
-      <dl className="sshc-card grid overflow-hidden rounded-md bg-card sm:grid-cols-3 sm:divide-x sm:divide-line">
-        <div className="flex items-center gap-3 border-b border-line px-4 py-3 sm:border-b-0">
-          <span className="grid h-9 w-9 place-items-center rounded-lg bg-surface text-accent">
-            <Icon name="keys" className="h-5 w-5" />
-          </span>
-          <div>
-            <dt className="text-xs font-medium tracking-wide text-ink-muted">
-              {t("keys.metricFiles")}
-            </dt>
-            <dd className="mt-0.5 text-xl font-semibold tabular-nums text-ink">
-              {inventory.items.length}
-            </dd>
-          </div>
-        </div>
-        <div className="border-b border-line px-4 py-3 sm:border-b-0">
-          <dt className="text-xs font-medium tracking-wide text-ink-muted">
-            {t("keys.metricPrivate")}
-          </dt>
-          <dd className="mt-1 text-xl font-semibold tabular-nums text-ink">
-            {
-              inventory.items.filter((item) => item.kind === "private_key")
-                .length
-            }
-          </dd>
-        </div>
-        <div className={`px-4 py-3 ${keyAttention > 0 ? "bg-notice" : ""}`}>
-          <dt
-            className={`text-xs font-medium tracking-wide ${keyAttention > 0 ? "text-notice-ink" : "text-ink-muted"}`}
-          >
-            {t("keys.metricAttention")}
-          </dt>
-          <dd
-            className={`mt-1 text-xl font-semibold tabular-nums ${keyAttention > 0 ? "text-notice-ink" : "text-ink"}`}
-          >
-            {keyAttention}
-          </dd>
-        </div>
-      </dl>
+      <MetricGrid className="sm:grid-cols-3 lg:grid-cols-3">
+        <MetricCard label={t("keys.metricFiles")} value={inventory.items.length} icon={<Icon name="keys" className="h-5 w-5" />} />
+        <MetricCard label={t("keys.metricPrivate")} value={inventory.items.filter((item) => item.kind === "private_key").length} />
+        <MetricCard label={t("keys.metricAttention")} value={keyAttention} attention={keyAttention > 0} />
+      </MetricGrid>
       {failure !== "" && (
         <p
           role="alert"
@@ -822,7 +791,7 @@ export function KeysScreen({
             </label>
           </div>
         </div>
-        <div className="sshc-card overflow-hidden rounded-md bg-card">
+        <Card radius="md">
           <div className="flex flex-col md:flex-row">
             <FolderPane
               rows={rows}
@@ -967,33 +936,13 @@ export function KeysScreen({
                             >
                               {t("keys.restore")}
                             </button>
-                            {pendingPurge === entry.id ? (
-                              <>
-                                <span>{t("keys.purgeWarning")}</span>
-                                <button
-                                  type="button"
-                                  className={rowDanger}
-                                  onClick={() => void purge(entry.id)}
-                                >
-                                  {t("keys.confirmPurge")}
-                                </button>
-                                <button
-                                  type="button"
-                                  className={rowAction}
-                                  onClick={() => setPendingPurge("")}
-                                >
-                                  {t("keys.cancel")}
-                                </button>
-                              </>
-                            ) : (
-                              <button
-                                type="button"
-                                className={rowDanger}
-                                onClick={() => setPendingPurge(entry.id)}
-                              >
-                                {t("keys.purge")}
-                              </button>
-                            )}
+                            <button
+                              type="button"
+                              className={rowDanger}
+                              onClick={() => setPendingPurge(entry.id)}
+                            >
+                              {t("keys.purge")}
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -1010,7 +959,7 @@ export function KeysScreen({
               </div>
             </div>
           </details>
-        </div>
+        </Card>
       </section>
 
       <StoredPassphrasePanel
@@ -1340,6 +1289,17 @@ export function KeysScreen({
             />
           </div>
         </div>
+      )}
+      {pendingPurge === "" ? null : (
+        <ConfirmDialog
+          id="key-purge-heading"
+          heading={t("keys.purge")}
+          body={<p className="text-sm text-danger">{t("keys.purgeWarning")}</p>}
+          confirmLabel={t("keys.confirmPurge")}
+          cancelLabel={t("keys.cancel")}
+          onConfirm={() => void purge(pendingPurge)}
+          onCancel={() => setPendingPurge("")}
+        />
       )}
     </section>
   );

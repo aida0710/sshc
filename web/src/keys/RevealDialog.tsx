@@ -3,6 +3,7 @@ import { CopyButton } from "../ui/CopyButton";
 import { useTranslate } from "../i18n/context";
 import type { KeysApi } from "./api";
 import { ModalShell } from "../ui/ModalShell";
+import { Button } from "../ui/surface";
 
 type RevealDialogProps = {
   keyId: string;
@@ -50,14 +51,13 @@ export function RevealDialog({ keyId, relativePath, api, onClose }: RevealDialog
       {state === "confirm" && (
         <>
           <p className="mt-3 rounded-md bg-notice px-3 py-2 text-sm text-notice-ink">{t("reveal.warning")}</p>
-          <button
+          <Button
             ref={showButton}
-            type="button"
-            className="mt-4 rounded-md border border-control-line bg-card px-3 py-2 text-sm font-medium hover:bg-select-fill"
+            className="mt-4"
             onClick={() => void confirm()}
           >
             {t("reveal.show")}
-          </button>
+          </Button>
         </>
       )}
       {state === "loading" && (
@@ -81,9 +81,9 @@ export function RevealDialog({ keyId, relativePath, api, onClose }: RevealDialog
           {t("reveal.failed")}
         </p>
       )}
-      <button type="button" className="mt-4 rounded-md border border-control-line px-3 py-2" onClick={close}>
+      <Button className="mt-4" onClick={close}>
         {t("reveal.close")}
-      </button>
+      </Button>
     </ModalShell>
   );
 }

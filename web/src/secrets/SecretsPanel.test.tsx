@@ -105,7 +105,7 @@ describe("SecretsPanel", () => {
     });
     render(<SecretsPanel api={api} />);
 
-    expect(await screen.findByRole("status")).toHaveTextContent(/could not be fully confirmed/i);
+    expect(await screen.findByText(/could not be fully confirmed/i)).toBeVisible();
     const office = screen.getByRole("article", { name: "office" });
     expect(within(office).getByRole("list", { name: "Assigned hosts" })).toHaveTextContent("web-1");
     const team = screen.getByRole("article", { name: "team" });
