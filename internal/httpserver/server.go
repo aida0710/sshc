@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io/fs"
 	"log/slog"
 	"mime"
@@ -73,10 +74,13 @@ type Options struct {
 	KnownHosts        *knownhosts.Service
 	RemoteKeys        *remotekey.Service
 	// Recent は、この端末で成功した接続を現在の設定へ解決する。
-	Recent     *recent.Service
-	SFTP       *sshcSFTP.Service
-	Workspaces *workspace.Service
-	Snippets   *snippets.Service
+	Recent *recent.Service
+	SFTP   *sshcSFTP.Service
+	// SFTPTransferStatePath stores the device-local transfer ledger. Empty keeps
+	// the historical in-memory behavior used by small handler tests.
+	SFTPTransferStatePath string
+	Workspaces            *workspace.Service
+	Snippets              *snippets.Service
 	// Passwords は保存されたパスワードの vault である。nil の service は
 	// すべてのパスワード用ルートを未登録のままに
 	// する。これは、それを配線しないテストが当てにしていることである。
@@ -388,6 +392,12 @@ func New(options Options) (*Server, error) {
 				time.Duration(stored.ClearCompletedAfterSeconds)*time.Second,
 				stored.ProcessingStopped,
 			)
+		}
+		if options.SFTPTransferStatePath != "" {
+			if err := transfers.EnableQueuePersistence(options.SFTPTransferStatePath); err != nil {
+				_ = transfers.Close()
+				return nil, fmt.Errorf("restore SFTP transfer queue: %w", err)
+			}
 		}
 		registerSFTPRoutes(e, SFTPHandlers{
 			Service: options.SFTP, Transfers: transfers, Config: options.Config, Actions: actions,

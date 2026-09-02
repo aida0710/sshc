@@ -86,6 +86,57 @@ func (e ResumeTerminalAgentRequestPlacement) Valid() bool {
 	}
 }
 
+// Defines values for SFTPDirectoryDifferenceStatus.
+const (
+	Different    SFTPDirectoryDifferenceStatus = "different"
+	LeftOnly     SFTPDirectoryDifferenceStatus = "left_only"
+	RightOnly    SFTPDirectoryDifferenceStatus = "right_only"
+	Same         SFTPDirectoryDifferenceStatus = "same"
+	TypeMismatch SFTPDirectoryDifferenceStatus = "type_mismatch"
+)
+
+// Valid indicates whether the value is a known member of the SFTPDirectoryDifferenceStatus enum.
+func (e SFTPDirectoryDifferenceStatus) Valid() bool {
+	switch e {
+	case Different:
+		return true
+	case LeftOnly:
+		return true
+	case RightOnly:
+		return true
+	case Same:
+		return true
+	case TypeMismatch:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SFTPEntryType.
+const (
+	Directory SFTPEntryType = "directory"
+	File      SFTPEntryType = "file"
+	Other     SFTPEntryType = "other"
+	Symlink   SFTPEntryType = "symlink"
+)
+
+// Valid indicates whether the value is a known member of the SFTPEntryType enum.
+func (e SFTPEntryType) Valid() bool {
+	switch e {
+	case Directory:
+		return true
+	case File:
+		return true
+	case Other:
+		return true
+	case Symlink:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SyncDirection.
 const (
 	SyncDirectionBoth SyncDirection = "both"
@@ -944,6 +995,7 @@ type Notice struct {
 type OpenTerminalSessionRequest struct {
 	Alias     *string                        `json:"alias,omitempty"`
 	Cols      *int                           `json:"cols,omitempty"`
+	Cwd       *string                        `json:"cwd,omitempty"`
 	Kind      OpenTerminalSessionRequestKind `json:"kind"`
 	ProfileId *string                        `json:"profileId,omitempty"`
 	Rows      *int                           `json:"rows,omitempty"`
@@ -1231,6 +1283,38 @@ type RewrittenKeyReference struct {
 	Line       int    `json:"line"`
 	To         string `json:"to"`
 }
+
+// SFTPDirectoryComparison defines model for SFTPDirectoryComparison.
+type SFTPDirectoryComparison struct {
+	Entries   []SFTPDirectoryDifference `json:"entries"`
+	LeftPath  string                    `json:"leftPath"`
+	RightPath string                    `json:"rightPath"`
+}
+
+// SFTPDirectoryDifference defines model for SFTPDirectoryDifference.
+type SFTPDirectoryDifference struct {
+	Left         *SFTPEntry                    `json:"left,omitempty"`
+	RelativePath string                        `json:"relativePath"`
+	Right        *SFTPEntry                    `json:"right,omitempty"`
+	Status       SFTPDirectoryDifferenceStatus `json:"status"`
+}
+
+// SFTPDirectoryDifferenceStatus defines model for SFTPDirectoryDifference.Status.
+type SFTPDirectoryDifferenceStatus string
+
+// SFTPEntry defines model for SFTPEntry.
+type SFTPEntry struct {
+	Mode       string        `json:"mode"`
+	ModifiedAt time.Time     `json:"modifiedAt"`
+	Name       string        `json:"name"`
+	Path       string        `json:"path"`
+	Revision   string        `json:"revision"`
+	Size       int64         `json:"size"`
+	Type       SFTPEntryType `json:"type"`
+}
+
+// SFTPEntryType defines model for SFTPEntry.Type.
+type SFTPEntryType string
 
 // SetTerminalSessionTitleRequest defines model for SetTerminalSessionTitleRequest.
 type SetTerminalSessionTitleRequest struct {

@@ -50,6 +50,11 @@ type TransferManager struct {
 	maxConcurrent     int
 	now               func() time.Time
 	dataPlane         map[string]int
+	remoteJobsMutex   sync.Mutex
+	remoteCancels     map[string]context.CancelFunc
+	queuePath         string
+	lastQueuePersist  time.Time
+	queuePersistError error
 }
 
 const (
@@ -155,7 +160,7 @@ type transferLock struct {
 }
 
 func NewTransferManager(service *Service) *TransferManager {
-	manager := &TransferManager{Service: service, locks: make(map[string]*transferLock), remotes: make(map[string]Remote), downloads: make(map[string]preparedDownloadCache), spoolDir: downloadSpoolDirectory()}
+	manager := &TransferManager{Service: service, locks: make(map[string]*transferLock), remotes: make(map[string]Remote), downloads: make(map[string]preparedDownloadCache), spoolDir: downloadSpoolDirectory(), remoteCancels: make(map[string]context.CancelFunc)}
 	manager.ConfigureJobs(DefaultTransferConcurrency, time.Now)
 	return manager
 }
@@ -168,6 +173,12 @@ func (m *TransferManager) Close() error {
 		return nil
 	}
 	m.closeOnce.Do(func() {
+		m.remoteJobsMutex.Lock()
+		for id, cancel := range m.remoteCancels {
+			cancel()
+			delete(m.remoteCancels, id)
+		}
+		m.remoteJobsMutex.Unlock()
 		m.mutex.Lock()
 		m.closed = true
 		remotes := make([]Remote, 0, len(m.remotes))

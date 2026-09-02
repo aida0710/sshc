@@ -550,6 +550,9 @@ var neverTravels = []string{
 	// pane layout is device-local and contains no process/session state that can
 	// be meaningfully restored on another engine.
 	"sshc/workspaces.json",
+	// Transfer jobs, resume checkpoints and device-local paths belong to one
+	// engine and must never be copied to another machine.
+	"sshc/transfers.json",
 	// The workspace-wide process lock is runtime coordination state. Including
 	// it would make every serialized local mutation look like a user edit and
 	// can also surface a meaningless lock file on another machine.

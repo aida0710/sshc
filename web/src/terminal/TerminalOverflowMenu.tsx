@@ -7,6 +7,7 @@ export function TerminalOverflowMenu({
   osc52Enabled,
   onQuickCommands,
   onPortForwarding,
+  onOpenRemoteDirectory,
   onCopyContext,
   onToggleOsc52,
   onClose,
@@ -15,6 +16,7 @@ export function TerminalOverflowMenu({
   osc52Enabled: boolean;
   onQuickCommands: () => void;
   onPortForwarding?: (() => void) | undefined;
+  onOpenRemoteDirectory?: (() => void) | undefined;
   onCopyContext: () => void;
   onToggleOsc52: () => void | Promise<void>;
   onClose: () => void;
@@ -49,6 +51,11 @@ export function TerminalOverflowMenu({
       {onPortForwarding === undefined ? null : (
         <button type="button" role="menuitem" className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-0" onClick={action(onPortForwarding)}>
           {t("terminal.portForwarding")}
+        </button>
+      )}
+      {onOpenRemoteDirectory === undefined ? null : (
+        <button type="button" role="menuitem" className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-0" onClick={action(onOpenRemoteDirectory)}>
+          {t("terminal.openDirectoryInSFTP")}
         </button>
       )}
       <button type="button" role="menuitem" className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-0" title={t("terminal.copyContextHint")} onClick={action(onCopyContext)}>

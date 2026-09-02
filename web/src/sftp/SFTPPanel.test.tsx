@@ -128,6 +128,17 @@ describe("SFTPPanel uploads", () => {
     expect(screen.getByTestId("sftp-current-path")).toHaveAttribute("data-path", "/remote");
   });
 
+  it("opens a terminal at the displayed remote directory", async () => {
+    const onOpenTerminal = vi.fn();
+    render(<SFTPPanel aliases={["edge"]} onOpenTerminal={onOpenTerminal} />);
+    await chooseHost("edge");
+    await waitFor(() => expect(api.list).toHaveBeenCalledWith("edge", ""));
+
+    await userEvent.click(screen.getByRole("button", { name: "Open Terminal here" }));
+
+    expect(onOpenTerminal).toHaveBeenCalledWith("edge", "/remote");
+  });
+
   it("shows a parent-directory row first and uses it instead of a separate up button", async () => {
     api.list.mockImplementation(async (_alias: string, path: string) => ({
       path: path === "" ? "/remote" : path,

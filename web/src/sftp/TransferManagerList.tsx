@@ -226,7 +226,7 @@ export function TransferManagerList() {
           return (
             <section key={batchId} className="rounded-md bg-surface-subtle/70 p-2" aria-label={first.batchName}>
               <div className="mb-1 flex flex-wrap items-center gap-2">
-                <span aria-hidden="true">{first.direction === "upload" ? "↑" : "↓"}</span>
+                <span aria-hidden="true">{first.direction === "upload" ? "↑" : first.direction === "download" ? "↓" : "⇄"}</span>
                 <span className="min-w-0 grow truncate font-medium" title={first.batchName}>{first.batchName}</span>
                 <span className="text-ink-muted">{t(first.batchKind === "folder" ? "sftp.manager.folder" : "sftp.manager.file")}</span>
                 <span className="tabular-nums text-ink-muted">{completed}/{items.length}</span>

@@ -8,7 +8,9 @@ export type RemoteEntry = components["schemas"]["SFTPEntry"];
 export type RemoteTextFile = components["schemas"]["SFTPTextFile"];
 export type ResumableUpload = components["schemas"]["SFTPResumableUpload"];
 export type TransferJob = components["schemas"]["SFTPTransferJob"];
-export type CreateTransferJob = components["schemas"]["SFTPCreateTransferJobRequest"];
+type CreateTransferJobWire = components["schemas"]["SFTPCreateTransferJobRequest"];
+export type CreateTransferJob = Omit<CreateTransferJobWire, "sourceAlias" | "sourcePath" | "operation" | "overwrite"> &
+  Partial<Pick<CreateTransferJobWire, "sourceAlias" | "sourcePath" | "operation" | "overwrite">>;
 export type TransferDirection = TransferJob["direction"];
 export type TransferKind = TransferJob["kind"];
 export type TransferJobStatus = TransferJob["status"];
@@ -19,6 +21,7 @@ export type TransferSettings = components["schemas"]["SFTPTransferSettingsReques
 export type TransferJobList = components["schemas"]["SFTPTransferJobList"];
 
 export type RemoteSearchResult = components["schemas"]["SFTPSearchResult"];
+export type DirectoryComparison = components["schemas"]["SFTPDirectoryComparison"];
 
 export type RemotePreview = {
   contentType: string;
@@ -78,7 +81,14 @@ export const sftpApi = {
   },
   async createTransfer(input: CreateTransferJob): Promise<TransferJob> {
     return transferJob(await apiClient.mutate<unknown>("/api/v1/sftp/transfers", {
-      method: "POST", headers: jsonHeaders, body: JSON.stringify(input),
+      method: "POST", headers: jsonHeaders,
+      body: JSON.stringify({ sourceAlias: "", sourcePath: "", operation: "", overwrite: false, ...input }),
+    }));
+  },
+  async compareDirectories(leftAlias: string, leftPath: string, rightAlias: string, rightPath: string): Promise<DirectoryComparison> {
+    const query = new URLSearchParams({ leftAlias, leftPath, rightAlias, rightPath });
+    return validateOpenAPISchema<DirectoryComparison>("SFTPDirectoryComparison", await apiClient.read(`/api/v1/sftp/compare?${query.toString()}`, {
+      locallyHandledCodes: ["sftp_failed", "sftp_compare_limit", "sftp_not_found"],
     }));
   },
   async clearFinishedTransfers(): Promise<void> {

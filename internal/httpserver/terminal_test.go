@@ -35,6 +35,22 @@ type scriptedPTY struct {
 	closed  bool
 }
 
+func TestRemoteWorkingDirectoryAndShellQuote(t *testing.T) {
+	t.Parallel()
+	directory, err := remoteWorkingDirectory("/srv/project's files")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if quoted := quotePOSIXShell(directory); quoted != `'/srv/project'"'"'s files'` {
+		t.Fatalf("quoted directory = %q", quoted)
+	}
+	for _, candidate := range []string{"relative", "/srv/../etc", "/srv\nwhoami"} {
+		if _, err := remoteWorkingDirectory(candidate); err == nil {
+			t.Fatalf("accepted unsafe directory %q", candidate)
+		}
+	}
+}
+
 func newScriptedPTY() *scriptedPTY {
 	return &scriptedPTY{ready: make(chan struct{}, 1), done: make(chan struct{})}
 }
@@ -472,7 +488,7 @@ func TestStartupSnippetWaitsForEverySSHConnectionToBecomeReady(t *testing.T) {
 		},
 	}
 	alias := "production"
-	spec, err := handlers.spec(terminal.KindSSH, &alias, terminal.Size{Cols: 80, Rows: 24})
+	spec, err := handlers.spec(terminal.KindSSH, &alias, nil, terminal.Size{Cols: 80, Rows: 24})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -511,7 +527,7 @@ func TestSSHSessionLifetimePreservesForwarderCapability(t *testing.T) {
 		},
 	}
 	alias := "production"
-	spec, err := handlers.spec(terminal.KindSSH, &alias, terminal.Size{Cols: 80, Rows: 24})
+	spec, err := handlers.spec(terminal.KindSSH, &alias, nil, terminal.Size{Cols: 80, Rows: 24})
 	if err != nil {
 		t.Fatal(err)
 	}

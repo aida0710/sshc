@@ -450,7 +450,14 @@ var wireEnumValues = map[reflect.Type][]string{
 		string(sftp.EntryFile), string(sftp.EntryDirectory), string(sftp.EntrySymlink), string(sftp.EntryOther),
 	},
 	reflect.TypeOf(sftp.TransferDirection("")): {
-		string(sftp.TransferUpload), string(sftp.TransferDownload),
+		string(sftp.TransferUpload), string(sftp.TransferDownload), string(sftp.TransferRemote),
+	},
+	reflect.TypeOf(sftp.RemoteTransferOperation("")): {
+		"", string(sftp.RemoteCopy), string(sftp.RemoteMove),
+	},
+	reflect.TypeOf(sftp.DirectoryDifferenceStatus("")): {
+		string(sftp.DirectorySame), string(sftp.DirectoryDifferent), string(sftp.DirectoryLeftOnly),
+		string(sftp.DirectoryRightOnly), string(sftp.DirectoryTypeMismatch),
 	},
 	reflect.TypeOf(sftp.TransferKind("")): {
 		string(sftp.TransferFile), string(sftp.TransferFolder),

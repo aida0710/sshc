@@ -26,6 +26,17 @@ export type UploadSelection = {
   file: File;
 };
 
+export type RemoteTransferSelection = {
+  sourceAlias: string;
+  sourcePath: string;
+  targetAlias: string;
+  targetPath: string;
+  kind: TransferKind;
+  name: string;
+  totalBytes: number;
+  overwrite?: boolean;
+};
+
 export type UploadAdmission = {
   readonly count: number;
   release(): void;
@@ -36,7 +47,7 @@ export type TransferNotice = {
   jobId: string;
   status: "completed" | "failed";
   name: string;
-  direction: "upload" | "download";
+  direction: "upload" | "download" | "remote";
   problem: string;
 };
 
@@ -76,7 +87,7 @@ function baseName(remotePath: string): string {
 }
 
 function networkReady(job: ManagedTransferJob, files: Map<string, File>): boolean {
-  return job.direction === "download" || files.has(job.id);
+  return job.direction === "remote" || job.direction === "download" || files.has(job.id);
 }
 
 function reattachableUpload(job: ManagedTransferJob, selection: UploadSelection, files: Map<string, File>): boolean {
@@ -236,6 +247,37 @@ export class SFTPTransferManager {
     return id;
   }
 
+  async addRemoteTransfers(selections: RemoteTransferSelection[], operation: "copy" | "move"): Promise<string[]> {
+    if (selections.length === 0) return [];
+    const reserved = [...this.uploadAdmissions].reduce((sum, admission) => sum + admission.count, 0);
+    if (this.jobs.length + reserved + selections.length > maxTransferJobs) throw new Error("sftp_transfer_limit");
+    const batchId = identifier("remote_batch");
+    const batchName = selections.length === 1 ? selections[0]!.name : `${selections.length} remote items`;
+    const batchKind: TransferKind = selections.length === 1 ? selections[0]!.kind : "folder";
+    const ids: string[] = [];
+    for (const selection of selections) {
+      const id = identifier("remote");
+      const job = await this.api.createTransfer({
+        id, batchId, batchName, batchKind,
+        alias: selection.targetAlias,
+        sourceAlias: selection.sourceAlias,
+        sourcePath: selection.sourcePath,
+        operation,
+        overwrite: selection.overwrite === true,
+        direction: "remote",
+        kind: selection.kind,
+        name: selection.name,
+        remotePath: selection.targetPath,
+        totalBytes: selection.totalBytes,
+        lastModified: 0,
+      });
+      this.commit([...this.jobs, job]);
+      ids.push(id);
+    }
+    await this.reconcile();
+    return ids;
+  }
+
   async pause(id: string): Promise<void> {
     const job = this.find(id);
     if (job === undefined || !job.allowedActions.includes("pause")) return;
@@ -355,6 +397,7 @@ export class SFTPTransferManager {
     if (this.processingStopped) return;
     while (this.active < this.maxConcurrent) {
       const job = this.jobs.find((candidate) => candidate.status === "queued" &&
+        candidate.direction !== "remote" &&
         !this.inFlight.has(candidate.id) && (this.retryAfter.get(candidate.id) ?? 0) <= this.now() &&
         networkReady(candidate, this.files));
       if (job === undefined) return;

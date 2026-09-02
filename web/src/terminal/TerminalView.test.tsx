@@ -124,6 +124,22 @@ describe("TerminalView", () => {
     expect(screen.queryByRole("button", { name: "Copy recent terminal context" })).toBeNull();
   });
 
+  it("opens the current SSH working directory in SFTP", async () => {
+    const onOpenRemotePath = vi.fn();
+    render(<TerminalView session={{
+      ...session,
+      kind: "ssh",
+      alias: "bastion",
+      title: "bastion",
+      agent: { kind: "codex", state: "ready", resumable: true, observationVersion: 1, signalVersion: 0, cwd: "/srv/app" },
+    }} onOpenRemotePath={onOpenRemotePath} api={{ terminalStreamTicket: vi.fn(async () => ({ streamTicket: "one-time" })) }} />);
+
+    await userEvent.click(screen.getByRole("button", { name: "More terminal actions" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Open current directory in SFTP" }));
+
+    expect(onOpenRemotePath).toHaveBeenCalledWith("bastion", "/srv/app", "browse");
+  });
+
   it("shows the current SSH hop and connection phase in the header", () => {
     render(<TerminalView session={{
       ...session, kind: "ssh", alias: "destination", title: "destination", state: "connecting",

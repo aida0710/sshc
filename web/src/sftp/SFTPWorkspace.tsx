@@ -5,6 +5,7 @@ import { useTranslate } from "../i18n/context";
 import { Icon } from "../ui/icons";
 import { activateTabFromKeyboard } from "../ui/tabKeyboard";
 import { SFTPPanel, type SFTPTarget } from "./SFTPPanel";
+import { SFTPCompareDialog } from "./SFTPCompareDialog";
 import { TransferManagerList } from "./TransferManagerList";
 
 const storageKey = "sshc.sftp.tabs";
@@ -96,6 +97,7 @@ export function SFTPWorkspace({
   onTargetHandled = () => undefined,
   onNavigationBlockerChange,
   onNavigateLocation,
+  onOpenTerminal,
 }: {
   aliases: string[];
   hosts?: HostEntry[];
@@ -103,12 +105,14 @@ export function SFTPWorkspace({
   onTargetHandled?: (request: number) => void;
   onNavigationBlockerChange?: (blocker: NavigationBlocker | null) => void;
   onNavigateLocation?: (url: string) => void;
+  onOpenTerminal?: (alias: string, path: string) => void | Promise<void>;
 }) {
   const t = useTranslate();
   const [tabs, setTabs] = useState<SFTPTab[]>(restore);
   const [activeId, setActiveId] = useState(() => tabs[0]?.id ?? "");
   const [split, setSplit] = useState(restoreSplit);
   const [secondary, setSecondary] = useState<SFTPLocation>(restoreSecondary);
+  const [compareOpen, setCompareOpen] = useState(false);
   // Restoring is a one-shot per tab: once a panel has opened its remembered
   // directory, later navigation inside it must not be pulled back.
   const restoring = useRef(new Map(tabs.map((tab) => [tab.id, { alias: tab.alias, path: tab.path }])));
@@ -247,6 +251,17 @@ export function SFTPWorkspace({
         </div>
         <button
           type="button"
+          aria-label={t("sftp.compare.heading")}
+          title={t("sftp.compare.heading")}
+          disabled={!split || tabs.find((tab) => tab.id === active)?.alias === "" || secondary.alias === ""}
+          onClick={() => setCompareOpen(true)}
+          className="mr-1 hidden h-9 shrink-0 self-center items-center gap-1.5 rounded-md px-3 text-sm text-ink-muted hover:bg-toolbar hover:text-ink disabled:text-ink-faint lg:flex"
+        >
+          <span aria-hidden="true">⇄</span>
+          {t("sftp.compare.action")}
+        </button>
+        <button
+          type="button"
           aria-pressed={split}
           aria-label={t(split ? "sftp.singlePane" : "sftp.splitPane")}
           title={t(split ? "sftp.singlePane" : "sftp.splitPane")}
@@ -280,6 +295,7 @@ export function SFTPWorkspace({
                   showTransfers={false}
                   onNavigationBlockerChange={selected ? updatePrimaryBlocker : undefined}
                   onNavigateLocation={onNavigateLocation}
+                  onOpenTerminal={onOpenTerminal}
                   onTargetHandled={onTargetHandled}
                   onLocationChange={(alias, path) => relocate(tab.id, alias, path)}
                 />
@@ -295,11 +311,19 @@ export function SFTPWorkspace({
             showTransfers={false}
             onNavigationBlockerChange={updateSecondaryBlocker}
             onNavigateLocation={onNavigateLocation}
+            onOpenTerminal={onOpenTerminal}
             onLocationChange={relocateSecondary}
           />
         </div>
       </div>
       <TransferManagerList />
+      {compareOpen ? (
+        <SFTPCompareDialog
+          left={{ alias: tabs.find((tab) => tab.id === active)?.alias ?? "", path: tabs.find((tab) => tab.id === active)?.path || "/" }}
+          right={{ alias: secondary.alias, path: secondary.path || "/" }}
+          onDismiss={() => setCompareOpen(false)}
+        />
+      ) : null}
     </section>
   );
 }

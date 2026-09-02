@@ -40,6 +40,8 @@ var (
 	ErrPreviewTooLarge  = errors.New("remote file is too large to preview")
 	ErrPreviewType      = errors.New("remote file has no previewable type")
 	ErrInvalidQuery     = errors.New("search needs something to look for")
+	ErrUnsupportedEntry = errors.New("remote entry type cannot be copied")
+	ErrCompareLimit     = errors.New("directory comparison exceeded its safety limit")
 )
 
 type EntryType string
@@ -87,6 +89,53 @@ type SearchResult struct {
 	Query     string
 	Entries   []Entry
 	Truncated bool
+}
+
+type DirectoryDifferenceStatus string
+
+const (
+	DirectorySame         DirectoryDifferenceStatus = "same"
+	DirectoryDifferent    DirectoryDifferenceStatus = "different"
+	DirectoryLeftOnly     DirectoryDifferenceStatus = "left_only"
+	DirectoryRightOnly    DirectoryDifferenceStatus = "right_only"
+	DirectoryTypeMismatch DirectoryDifferenceStatus = "type_mismatch"
+)
+
+// DirectoryDifference describes one relative path below two independently
+// connected SFTP roots. Entries are pointers because one side may not exist.
+type DirectoryDifference struct {
+	RelativePath string
+	Status       DirectoryDifferenceStatus
+	Left         *Entry
+	Right        *Entry
+}
+
+type DirectoryComparison struct {
+	LeftPath  string
+	RightPath string
+	Entries   []DirectoryDifference
+}
+
+type RemoteTransferOperation string
+
+const (
+	RemoteCopy RemoteTransferOperation = "copy"
+	RemoteMove RemoteTransferOperation = "move"
+)
+
+type RemoteTransferRequest struct {
+	SourceAlias string
+	SourcePath  string
+	TargetAlias string
+	TargetPath  string
+	Operation   RemoteTransferOperation
+	Overwrite   bool
+}
+
+type RemoteTransferPlan struct {
+	Kind       TransferKind
+	Name       string
+	TotalBytes int64
 }
 
 // Preview は、詳細モーダルがそのまま描ける bytes である。ContentType は

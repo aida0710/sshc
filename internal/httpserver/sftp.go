@@ -15,6 +15,7 @@ import (
 
 	"github.com/labstack/echo/v5"
 
+	"sshc/internal/api"
 	"sshc/internal/application"
 	"sshc/internal/session"
 	sshcSFTP "sshc/internal/sftp"
@@ -101,6 +102,7 @@ func registerSFTPRoutes(engine *echo.Echo, handlers SFTPHandlers) {
 	engine.POST("/api/v1/sftp/transfers/:id/queue-position", handlers.MoveTransfer)
 	engine.POST("/api/v1/sftp/transfers/:id/actions", handlers.UpdateTransfer)
 	engine.POST("/api/v1/sftp/transfers/:id/download-checkpoint", handlers.CheckpointDownload)
+	engine.GET("/api/v1/sftp/compare", handlers.CompareDirectories)
 	engine.GET("/api/v1/sftp/:alias/entries", handlers.List)
 	engine.POST("/api/v1/sftp/:alias/entries", handlers.Mkdir)
 	engine.GET("/api/v1/sftp/:alias/preview", handlers.Preview)
@@ -122,6 +124,13 @@ func describeSFTPEntry(entry sshcSFTP.Entry) sftpEntry {
 	return sftpEntry{
 		Name: entry.Name, Path: entry.Path, Type: entry.Type, Size: entry.Size,
 		Mode: entry.Mode.String(), ModifiedAt: entry.ModifiedAt.UTC().Format(time.RFC3339Nano), Revision: entry.Revision,
+	}
+}
+
+func describeSFTPAPIEntry(entry sshcSFTP.Entry) api.SFTPEntry {
+	return api.SFTPEntry{
+		Name: entry.Name, Path: entry.Path, Type: api.SFTPEntryType(entry.Type), Size: entry.Size,
+		Mode: entry.Mode.String(), ModifiedAt: entry.ModifiedAt.UTC(), Revision: entry.Revision,
 	}
 }
 
@@ -153,6 +162,10 @@ func sftpProblem(c *echo.Context, err error) error {
 		return problem(c, http.StatusUnprocessableEntity, "sftp_not_utf8")
 	case errors.Is(err, sshcSFTP.ErrNotRegularFile), errors.Is(err, sshcSFTP.ErrNotDirectory):
 		return problem(c, http.StatusUnprocessableEntity, "sftp_wrong_type")
+	case errors.Is(err, sshcSFTP.ErrUnsupportedEntry):
+		return problem(c, http.StatusUnprocessableEntity, "sftp_unsupported_entry")
+	case errors.Is(err, sshcSFTP.ErrCompareLimit):
+		return problem(c, http.StatusRequestEntityTooLarge, "sftp_compare_limit")
 	default:
 		return problem(c, http.StatusBadGateway, "sftp_failed")
 	}
@@ -164,6 +177,9 @@ type sftpTransferJobResponse struct {
 	BatchName         string                           `json:"batchName"`
 	BatchKind         sshcSFTP.TransferKind            `json:"batchKind"`
 	Alias             string                           `json:"alias"`
+	SourceAlias       string                           `json:"sourceAlias"`
+	SourcePath        string                           `json:"sourcePath"`
+	Operation         sshcSFTP.RemoteTransferOperation `json:"operation"`
 	Direction         sshcSFTP.TransferDirection       `json:"direction"`
 	Kind              sshcSFTP.TransferKind            `json:"kind"`
 	Name              string                           `json:"name"`
@@ -188,7 +204,8 @@ type sftpTransferJobResponse struct {
 func describeTransferJob(job sshcSFTP.TransferJob) sftpTransferJobResponse {
 	return sftpTransferJobResponse{
 		ID: job.ID, BatchID: job.BatchID, BatchName: job.BatchName, BatchKind: job.BatchKind,
-		Alias: job.Alias, Direction: job.Direction,
+		Alias: job.Alias, SourceAlias: job.SourceAlias, SourcePath: job.SourcePath,
+		Operation: job.Operation, Direction: job.Direction,
 		Kind: job.Kind, Name: job.Name, RemotePath: job.RemotePath, TotalBytes: job.TotalBytes,
 		TransferredBytes: job.TransferredBytes, BytesPerSecond: job.BytesPerSecond,
 		RemainingSeconds: job.RemainingSeconds, Status: job.Status,
@@ -220,17 +237,21 @@ type sftpTransferQueueMoveRequest struct {
 }
 
 type sftpCreateTransferJobRequest struct {
-	ID           string                     `json:"id"`
-	BatchID      string                     `json:"batchId"`
-	BatchName    string                     `json:"batchName"`
-	BatchKind    sshcSFTP.TransferKind      `json:"batchKind"`
-	Alias        string                     `json:"alias"`
-	Direction    sshcSFTP.TransferDirection `json:"direction"`
-	Kind         sshcSFTP.TransferKind      `json:"kind"`
-	Name         string                     `json:"name"`
-	RemotePath   string                     `json:"remotePath"`
-	TotalBytes   int64                      `json:"totalBytes"`
-	LastModified int64                      `json:"lastModified"`
+	ID           string                           `json:"id"`
+	BatchID      string                           `json:"batchId"`
+	BatchName    string                           `json:"batchName"`
+	BatchKind    sshcSFTP.TransferKind            `json:"batchKind"`
+	Alias        string                           `json:"alias"`
+	SourceAlias  string                           `json:"sourceAlias"`
+	SourcePath   string                           `json:"sourcePath"`
+	Operation    sshcSFTP.RemoteTransferOperation `json:"operation"`
+	Overwrite    bool                             `json:"overwrite"`
+	Direction    sshcSFTP.TransferDirection       `json:"direction"`
+	Kind         sshcSFTP.TransferKind            `json:"kind"`
+	Name         string                           `json:"name"`
+	RemotePath   string                           `json:"remotePath"`
+	TotalBytes   int64                            `json:"totalBytes"`
+	LastModified int64                            `json:"lastModified"`
 }
 
 type sftpTransferJobActionRequest struct {
@@ -306,13 +327,47 @@ func (h SFTPHandlers) CreateTransfer(c *echo.Context) error {
 	}
 	job, err := h.Transfers.CreateJob(sshcSFTP.CreateTransferJob{
 		ID: body.ID, BatchID: body.BatchID, BatchName: body.BatchName, BatchKind: body.BatchKind, Alias: body.Alias,
+		SourceAlias: body.SourceAlias, SourcePath: body.SourcePath, Operation: body.Operation,
+		Overwrite: body.Overwrite,
 		Direction: body.Direction, Kind: body.Kind,
 		Name: body.Name, RemotePath: body.RemotePath, TotalBytes: body.TotalBytes, LastModified: body.LastModified,
 	})
 	if err != nil {
 		return sftpProblem(c, err)
 	}
+	if job.Direction == sshcSFTP.TransferRemote {
+		h.Transfers.ScheduleRemoteJob(job.ID)
+	}
 	return c.JSON(http.StatusCreated, describeTransferJob(job))
+}
+
+func (h SFTPHandlers) CompareDirectories(c *echo.Context) error {
+	comparison, err := h.Service.CompareDirectories(
+		c.Request().Context(), c.QueryParam("leftAlias"), c.QueryParam("leftPath"),
+		c.QueryParam("rightAlias"), c.QueryParam("rightPath"),
+	)
+	if err != nil {
+		return sftpProblem(c, err)
+	}
+	entries := make([]api.SFTPDirectoryDifference, 0, len(comparison.Entries))
+	for _, difference := range comparison.Entries {
+		entry := api.SFTPDirectoryDifference{
+			RelativePath: difference.RelativePath,
+			Status:       api.SFTPDirectoryDifferenceStatus(difference.Status),
+		}
+		if difference.Left != nil {
+			described := describeSFTPAPIEntry(*difference.Left)
+			entry.Left = &described
+		}
+		if difference.Right != nil {
+			described := describeSFTPAPIEntry(*difference.Right)
+			entry.Right = &described
+		}
+		entries = append(entries, entry)
+	}
+	return c.JSON(http.StatusOK, api.SFTPDirectoryComparison{
+		LeftPath: comparison.LeftPath, RightPath: comparison.RightPath, Entries: entries,
+	})
 }
 
 func (h SFTPHandlers) ClearFinishedTransfers(c *echo.Context) error {

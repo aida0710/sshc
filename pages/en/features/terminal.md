@@ -34,7 +34,7 @@ Normal text-selection copying stays inside the browser and does not require OSC 
 
 Kitty keyboard mode follows requests from the remote application. A JIS option sends the yen key as backslash. Mobile adds a special-key row for Ctrl, Alt, Esc, Tab, and arrows.
 
-OSC 8 links and detected URLs open in the system browser. A detected remote path can open SFTP at the same host and directory.
+OSC 8 links and detected URLs open in the system browser. A detected remote path or the current working directory reported through OSC 7 can open SFTP at the same host and directory. SFTP can also open a new SSH Terminal at its displayed directory.
 
 Local shells use the same subsystem as SSH: search, Quick Commands, workspaces, and broadcast commands all apply.
 
