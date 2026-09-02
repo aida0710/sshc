@@ -160,19 +160,23 @@ export function AppNavigation({
         />
       </div>
 
-      <div className="relative shrink-0 pt-1 md:pt-2 [&>div]:pl-6">
+      <div className="shrink-0 pt-1 md:pt-2">
         <p role="status" data-session-status className="sr-only">
           {state === "ready" ? t("shell.active", { version }) : t("shell.starting")}
         </p>
-        <span
-          aria-hidden="true"
-          data-session-status-badge
-          title={state === "ready" ? t("shell.active", { version }) : t("shell.starting")}
-          className={`absolute left-2 top-[1.05rem] size-1.5 rounded-full shadow-[0_0_0_3px_color-mix(in_srgb,var(--ui-live)_14%,transparent)] md:top-[1.55rem] ${
-            state === "ready" ? "bg-live" : "bg-ink-faint"
-          }`}
+        <UpdateBadge
+          current={version}
+          indicator={(
+            <span
+              aria-hidden="true"
+              data-session-status-badge
+              title={state === "ready" ? t("shell.active", { version }) : t("shell.starting")}
+              className={`size-1.5 shrink-0 rounded-full shadow-[0_0_0_3px_color-mix(in_srgb,var(--ui-live)_14%,transparent)] ${
+                state === "ready" ? "bg-live" : "bg-ink-faint"
+              }`}
+            />
+          )}
         />
-        <UpdateBadge current={version} />
       </div>
 
       <NavigationResizeHandle width={desktopWidth} onWidthChange={onDesktopWidthChange} />
