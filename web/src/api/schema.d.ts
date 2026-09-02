@@ -2968,6 +2968,11 @@ export interface components {
             maxConcurrent?: number;
             clearCompletedAfterSeconds?: number;
             processingStopped?: boolean;
+            /** Format: int64 */
+            largeFileThresholdBytes?: number;
+            largeFileParallelism?: number;
+            /** Format: int64 */
+            largeFileChunkBytes?: number;
         };
         EmbeddedTerminal: {
             maxSessions?: number;
@@ -3282,6 +3287,11 @@ export interface components {
             maxConcurrent: number;
             clearCompletedAfterSeconds: number;
             processingStopped: boolean;
+            /** Format: int64 */
+            largeFileThresholdBytes: number;
+            largeFileParallelism: number;
+            /** Format: int64 */
+            largeFileChunkBytes: number;
             jobs: components["schemas"]["SFTPTransferJob"][];
         };
         SFTPSearchResult: {
@@ -3306,6 +3316,11 @@ export interface components {
             maxConcurrent: number;
             clearCompletedAfterSeconds: number;
             processingStopped: boolean;
+            /** Format: int64 */
+            largeFileThresholdBytes: number;
+            largeFileParallelism: number;
+            /** Format: int64 */
+            largeFileChunkBytes: number;
         };
         SFTPTransferQueueMoveRequest: {
             /** @enum {string} */
@@ -3333,6 +3348,11 @@ export interface components {
             totalBytes: number;
             /** Format: int64 */
             lastModified: number;
+            /** Format: int64 */
+            largeFileThresholdBytes?: number;
+            largeFileParallelism?: number;
+            /** Format: int64 */
+            largeFileChunkBytes?: number;
         };
         SFTPTransferJobActionRequest: {
             /** @enum {string} */

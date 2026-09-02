@@ -18,6 +18,7 @@ func TestTransferQueueRestoresAfterEngineRestart(t *testing.T) {
 		ID: "transfer_persist_01", BatchID: "batch_persist_01", Alias: "edge",
 		Direction: sftp.TransferDownload, Kind: sftp.TransferFile, Name: "large.bin",
 		RemotePath: "/large.bin", TotalBytes: 4096,
+		LargeFileThresholdBytes: 50 << 20, LargeFileParallelism: 6, LargeFileChunkBytes: 512 << 20,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -30,7 +31,8 @@ func TestTransferQueueRestoresAfterEngineRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	jobs := second.ListJobs()
-	if len(jobs) != 1 || jobs[0].ID != created.ID || jobs[0].Status != sftp.TransferPaused {
+	if len(jobs) != 1 || jobs[0].ID != created.ID || jobs[0].Status != sftp.TransferPaused ||
+		jobs[0].LargeFileThresholdBytes != 50<<20 || jobs[0].LargeFileParallelism != 6 || jobs[0].LargeFileChunkBytes != 512<<20 {
 		t.Fatalf("restored jobs = %#v", jobs)
 	}
 	info, err := filepath.Glob(filepath.Join(filepath.Dir(filename), ".transfers-*.tmp"))

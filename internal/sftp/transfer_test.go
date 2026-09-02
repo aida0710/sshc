@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"io/fs"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -13,6 +15,29 @@ import (
 
 	"sshc/internal/sftp"
 )
+
+type rangeOpenLog struct {
+	mutex   sync.Mutex
+	offsets []int64
+}
+
+type rangeTrackingRemote struct {
+	*fakeRemote
+	log *rangeOpenLog
+}
+
+func (remote *rangeTrackingRemote) Close() error { return nil }
+
+func (remote *rangeTrackingRemote) OpenRange(candidate string, offset int64) (io.ReadCloser, error) {
+	remote.log.mutex.Lock()
+	remote.log.offsets = append(remote.log.offsets, offset)
+	remote.log.mutex.Unlock()
+	entry, ok := remote.nodes[candidate]
+	if !ok {
+		return nil, fs.ErrNotExist
+	}
+	return io.NopCloser(bytes.NewReader(entry.content[offset:])), nil
+}
 
 func TestDownloadFromReturnsOnlyRemainingBytes(t *testing.T) {
 	remote := remoteWith(map[string]node{"/large.bin": file("large.bin", "abcdefgh", 0o600)})
@@ -78,6 +103,58 @@ func TestPreparedDownloadSpoolIsReusedForTheOwningJob(t *testing.T) {
 	}
 	if _, err := manager.UpdateJobFromClient(input.ID, sftp.UpdateTransferJob{Action: sftp.TransferCompleteAction}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestLargePreparedDownloadReadsIndependentRangesInParallel(t *testing.T) {
+	const testSize = 40 << 20
+	contents := bytes.Repeat([]byte("parallel-sftp-range\n"), testSize/20+1)
+	contents = contents[:testSize]
+	base := remoteWith(map[string]node{"/large.bin": {name: "large.bin", mode: 0o600, content: contents, modTime: testTime}})
+	log := &rangeOpenLog{}
+	var connections atomic.Int32
+	service := &sftp.Service{Open: func(context.Context, string) (sftp.Remote, error) {
+		connections.Add(1)
+		return &rangeTrackingRemote{fakeRemote: base, log: log}, nil
+	}}
+	manager := sftp.NewTransferManager(service)
+	if err := manager.SetTransferSettings(2, 0, false, sftp.MaxLargeFileThreshold, 2, sftp.DefaultLargeFileChunkBytes); err != nil {
+		t.Fatal(err)
+	}
+	input := sftp.CreateTransferJob{
+		ID: "transfer_ranges1", BatchID: "batch_ranges001", Alias: "edge", Direction: sftp.TransferDownload,
+		Kind: sftp.TransferFile, Name: "large.bin", RemotePath: "/large.bin", TotalBytes: int64(len(contents)),
+		LargeFileThresholdBytes: sftp.MinLargeFileThreshold, LargeFileParallelism: 4,
+		LargeFileChunkBytes: 8 << 20,
+	}
+	if _, err := manager.CreateJob(input); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.UpdateJob(input.ID, sftp.UpdateTransferJob{Action: sftp.TransferStartAction}); err != nil {
+		t.Fatal(err)
+	}
+	prepared, err := manager.PrepareOwnedDownload(t.Context(), input.ID, input.Alias, input.RemotePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer prepared.Close()
+	var downloaded bytes.Buffer
+	if _, err := prepared.WriteFrom(t.Context(), 0, &downloaded); err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(downloaded.Bytes(), contents) {
+		t.Fatal("parallel download changed the file contents")
+	}
+	log.mutex.Lock()
+	offsets := slices.Clone(log.offsets)
+	log.mutex.Unlock()
+	slices.Sort(offsets)
+	want := []int64{0, 8 << 20, 16 << 20, 24 << 20, 32 << 20}
+	if !slices.Equal(offsets, want) {
+		t.Fatalf("range offsets = %v, want %v", offsets, want)
+	}
+	if got := connections.Load(); got != 4 {
+		t.Fatalf("SFTP connections = %d, want 4 for five chunks", got)
 	}
 }
 

@@ -45,20 +45,25 @@ type TransferManager struct {
 	// clearCompletedAfter が 0 なら、完了項目は手動でだけ消える。
 	clearCompletedAfter time.Duration
 	// processingStopped の間は start を通さない。実行中のものは走り切る。
-	processingStopped bool
-	activeJobs        int
-	maxConcurrent     int
-	now               func() time.Time
-	dataPlane         map[string]int
-	remoteJobsMutex   sync.Mutex
-	remoteCancels     map[string]context.CancelFunc
-	queuePath         string
-	lastQueuePersist  time.Time
-	queuePersistError error
+	processingStopped    bool
+	activeJobs           int
+	maxConcurrent        int
+	largeFileThreshold   int64
+	largeFileParallelism int
+	largeFileChunkBytes  int64
+	now                  func() time.Time
+	dataPlane            map[string]int
+	remoteJobsMutex      sync.Mutex
+	remoteCancels        map[string]context.CancelFunc
+	queuePath            string
+	lastQueuePersist     time.Time
+	queuePersistError    error
 }
 
 const (
-	maxProcessDownloadSpoolBytes = int64(4 << 30)
+	// A maximum-sized file may be prepared at once. The process-wide reservation
+	// rejects additional work before another temporary file is created.
+	maxProcessDownloadSpoolBytes = int64(512 << 30)
 	maxArchiveSpoolBytes         = maxArchiveBytes + int64(maxArchiveEntries*2048) + (1 << 20)
 )
 
@@ -329,13 +334,17 @@ func downloadSpoolTreeBytes(root string) int64 {
 func (m *TransferManager) PrepareOwnedDownload(ctx context.Context, id, alias, remotePath string) (*PreparedDownload, error) {
 	return m.prepareOwnedSpool(id, func() (*PreparedDownload, int64, error) {
 		var reserved int64
+		threshold, parallelism, chunkBytes, err := m.downloadSplitSettings(id)
+		if err != nil {
+			return nil, 0, err
+		}
 		prepared, err := m.Service.prepareDownload(ctx, alias, remotePath, m.spoolDir, func(size int64) error {
 			if err := reserveProcessSpool(size); err != nil {
 				return err
 			}
 			reserved = size
 			return nil
-		})
+		}, threshold, parallelism, chunkBytes)
 		if err != nil {
 			if reserved > 0 {
 				releaseProcessSpool(reserved)
@@ -344,6 +353,27 @@ func (m *TransferManager) PrepareOwnedDownload(ctx context.Context, id, alias, r
 		}
 		return prepared, reserved, nil
 	})
+}
+
+func (m *TransferManager) downloadSplitSettings(id string) (int64, int, int64, error) {
+	m.jobsMutex.Lock()
+	defer m.jobsMutex.Unlock()
+	m.initializeJobsLocked()
+	record := m.jobs[id]
+	if record == nil {
+		return 0, 0, 0, ErrTransferNotFound
+	}
+	threshold, parallelism, chunkBytes := m.largeFileThreshold, m.largeFileParallelism, m.largeFileChunkBytes
+	if record.job.LargeFileThresholdBytes != 0 {
+		threshold = record.job.LargeFileThresholdBytes
+	}
+	if record.job.LargeFileParallelism != 0 {
+		parallelism = record.job.LargeFileParallelism
+	}
+	if record.job.LargeFileChunkBytes != 0 {
+		chunkBytes = record.job.LargeFileChunkBytes
+	}
+	return threshold, parallelism, chunkBytes, nil
 }
 
 func (m *TransferManager) PrepareOwnedArchive(ctx context.Context, id, alias, remotePath string) (*PreparedDownload, error) {

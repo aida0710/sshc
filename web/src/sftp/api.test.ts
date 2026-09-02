@@ -42,6 +42,9 @@ describe("sftpApi resumable download", () => {
       maxConcurrent: 2,
       clearCompletedAfterSeconds: 0,
       processingStopped: false,
+      largeFileThresholdBytes: 100 << 20,
+      largeFileParallelism: 4,
+      largeFileChunkBytes: 32 << 20,
       jobs: [{
         id: "transfer_test01", batchId: "batch_test0001", batchName: "file.bin", batchKind: "file",
         alias: "edge", direction: "download", kind: "file", name: "file.bin", remotePath: "/file.bin",

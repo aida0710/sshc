@@ -34,7 +34,10 @@ describe("SFTP tabs", () => {
       path: requestedPath === "" ? "/home/edge" : requestedPath,
       entries: [],
     }));
-    api.listTransfers.mockResolvedValue({ maxConcurrent: 2, jobs: [] });
+    api.listTransfers.mockResolvedValue({
+      maxConcurrent: 2, clearCompletedAfterSeconds: 0, processingStopped: false,
+      largeFileThresholdBytes: 100 << 20, largeFileParallelism: 4, largeFileChunkBytes: 32 << 20, jobs: [],
+    });
   });
 
   it("keeps each tab on its own host and directory", async () => {

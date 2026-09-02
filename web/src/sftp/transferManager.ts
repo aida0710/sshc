@@ -16,6 +16,9 @@ import {
 const chunkBytes = 1 << 20;
 const fallbackDownloadLimit = 64 << 20;
 const maxTransferJobs = 200;
+const defaultLargeFileThreshold = 100 << 20;
+const defaultLargeFileParallelism = 4;
+const defaultLargeFileChunkBytes = 32 << 20;
 
 export type ManagedTransferJob = TransferJob;
 
@@ -115,6 +118,9 @@ export class SFTPTransferManager {
   private maxConcurrent: number;
   private clearCompletedAfter = 0;
   private processingStopped = false;
+  private largeFileThreshold = defaultLargeFileThreshold;
+  private largeFileParallelism = defaultLargeFileParallelism;
+  private largeFileChunkBytes = defaultLargeFileChunkBytes;
 
   constructor(
     private readonly api: ManagerAPI = sftpApi,
@@ -129,6 +135,9 @@ export class SFTPTransferManager {
   getMaxConcurrent = (): number => this.maxConcurrent;
   getClearCompletedAfter = (): number => this.clearCompletedAfter;
   getProcessingStopped = (): boolean => this.processingStopped;
+  getLargeFileThreshold = (): number => this.largeFileThreshold;
+  getLargeFileParallelism = (): number => this.largeFileParallelism;
+  getLargeFileChunkBytes = (): number => this.largeFileChunkBytes;
   hasUploadSource = (id: string): boolean => this.files.has(id);
 
   subscribe = (listener: () => void): (() => void) => {
@@ -157,8 +166,17 @@ export class SFTPTransferManager {
 
   // The queue belongs to the engine, so the settings do too: one value, shared
   // by every browser and every tab looking at the same engine.
-  async applySettings(maxConcurrent: number, clearCompletedAfterSeconds: number, processingStopped: boolean): Promise<void> {
-    const listed = await this.api.updateTransferSettings({ maxConcurrent, clearCompletedAfterSeconds, processingStopped });
+  async applySettings(
+    maxConcurrent: number,
+    clearCompletedAfterSeconds: number,
+    processingStopped: boolean,
+    largeFileThresholdBytes: number,
+    largeFileParallelism: number,
+    largeFileChunkBytes: number,
+  ): Promise<void> {
+    const listed = await this.api.updateTransferSettings({
+      maxConcurrent, clearCompletedAfterSeconds, processingStopped, largeFileThresholdBytes, largeFileParallelism, largeFileChunkBytes,
+    });
     this.adoptSettings(listed);
     this.commit(listed.jobs);
     this.kick();
@@ -389,6 +407,9 @@ export class SFTPTransferManager {
     this.maxConcurrent = listed.maxConcurrent;
     this.clearCompletedAfter = listed.clearCompletedAfterSeconds ?? 0;
     this.processingStopped = listed.processingStopped === true;
+    this.largeFileThreshold = listed.largeFileThresholdBytes ?? defaultLargeFileThreshold;
+    this.largeFileParallelism = listed.largeFileParallelism ?? defaultLargeFileParallelism;
+    this.largeFileChunkBytes = listed.largeFileChunkBytes ?? defaultLargeFileChunkBytes;
   }
 
   private kick(): void {

@@ -35,6 +35,19 @@ func TestDownloadOffsetAcceptsOnlySingleOpenEndedRange(t *testing.T) {
 	}
 }
 
+func TestTransferTooLargeUsesAFileTransferProblemCode(t *testing.T) {
+	engine := echo.New()
+	engine.GET("/too-large", func(c *echo.Context) error {
+		return sftpProblem(c, sshcSFTP.ErrTransferTooLarge)
+	})
+	response := httptest.NewRecorder()
+	engine.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/too-large", nil))
+	if response.Code != http.StatusRequestEntityTooLarge ||
+		!bytes.Contains(response.Body.Bytes(), []byte(`"code":"sftp_transfer_too_large"`)) {
+		t.Fatalf("transfer too large = %d: %s", response.Code, response.Body.String())
+	}
+}
+
 func TestTransferManagerHTTPContractAndSharedLimit(t *testing.T) {
 	manager := sshcSFTP.NewTransferManager(nil)
 	manager.ConfigureJobs(1, nil)
@@ -84,6 +97,15 @@ func TestTransferManagerHTTPContractAndSharedLimit(t *testing.T) {
 	if response := action("transfer_http02", "start", nil); response.Code != http.StatusConflict || !bytes.Contains(response.Body.Bytes(), []byte("sftp_transfer_limit")) {
 		t.Fatalf("limit = %d: %s", response.Code, response.Body.String())
 	}
+	settings := httptest.NewRecorder()
+	settingsRequest := httptest.NewRequest(http.MethodPut, "/api/v1/sftp/transfers/settings", bytes.NewBufferString(
+		`{"maxConcurrent":3,"clearCompletedAfterSeconds":300,"processingStopped":false,"largeFileThresholdBytes":52428800,"largeFileParallelism":6,"largeFileChunkBytes":536870912}`,
+	))
+	settingsRequest.Header.Set("Content-Type", "application/json")
+	engine.ServeHTTP(settings, settingsRequest)
+	if settings.Code != http.StatusOK {
+		t.Fatalf("update settings = %d: %s", settings.Code, settings.Body.String())
+	}
 	missingFingerprint := httptest.NewRecorder()
 	engine.ServeHTTP(missingFingerprint, httptest.NewRequest(http.MethodPost,
 		"/api/v1/sftp/edge/uploads/transfer_http01", bytes.NewBufferString(`{"path":"/transfer_http01.bin","size":10}`)))
@@ -101,8 +123,11 @@ func TestTransferManagerHTTPContractAndSharedLimit(t *testing.T) {
 		t.Fatalf("list = %d: %s", response.Code, response.Body.String())
 	}
 	var listed struct {
-		MaxConcurrent int `json:"maxConcurrent"`
-		Jobs          []struct {
+		MaxConcurrent           int   `json:"maxConcurrent"`
+		LargeFileThresholdBytes int64 `json:"largeFileThresholdBytes"`
+		LargeFileParallelism    int   `json:"largeFileParallelism"`
+		LargeFileChunkBytes     int64 `json:"largeFileChunkBytes"`
+		Jobs                    []struct {
 			ID               string `json:"id"`
 			BatchName        string `json:"batchName"`
 			Status           string `json:"status"`
@@ -112,7 +137,8 @@ func TestTransferManagerHTTPContractAndSharedLimit(t *testing.T) {
 	if err := json.Unmarshal(response.Body.Bytes(), &listed); err != nil {
 		t.Fatal(err)
 	}
-	if listed.MaxConcurrent != 1 || len(listed.Jobs) != 2 || listed.Jobs[0].BatchName != "HTTP batch" || listed.Jobs[0].Status != "running" || listed.Jobs[0].TransferredBytes != 0 {
+	if listed.MaxConcurrent != 3 || listed.LargeFileThresholdBytes != 50<<20 || listed.LargeFileParallelism != 6 || listed.LargeFileChunkBytes != 512<<20 ||
+		len(listed.Jobs) != 2 || listed.Jobs[0].BatchName != "HTTP batch" || listed.Jobs[0].Status != "running" || listed.Jobs[0].TransferredBytes != 0 {
 		t.Fatalf("listed = %+v", listed)
 	}
 	if _, err := manager.UpdateJob("transfer_http01", sshcSFTP.UpdateTransferJob{Action: sshcSFTP.TransferCancelAction}); err != nil {

@@ -26,6 +26,9 @@ const manager = vi.hoisted(() => {
     getMaxConcurrent: vi.fn(() => 2),
     getClearCompletedAfter: vi.fn(() => 0),
     getProcessingStopped: vi.fn(() => false),
+    getLargeFileThreshold: vi.fn(() => 100 << 20),
+    getLargeFileParallelism: vi.fn(() => 4),
+    getLargeFileChunkBytes: vi.fn(() => 32 << 20),
     hasUploadSource: vi.fn(() => true),
     applySettings: vi.fn(async () => undefined),
     move: vi.fn(async () => undefined),
@@ -82,6 +85,9 @@ describe("the transfer queue", () => {
     manager.getMaxConcurrent.mockReturnValue(2);
     manager.getClearCompletedAfter.mockReturnValue(0);
     manager.getProcessingStopped.mockReturnValue(false);
+    manager.getLargeFileThreshold.mockReturnValue(100 << 20);
+    manager.getLargeFileParallelism.mockReturnValue(4);
+    manager.getLargeFileChunkBytes.mockReturnValue(32 << 20);
     manager.setJobs([]);
   });
 
@@ -129,10 +135,19 @@ describe("the transfer queue", () => {
     expect(screen.getByRole("combobox", { name: "Clear finished after" })).toHaveValue("300");
 
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "At once" }), "5");
-    expect(manager.applySettings).toHaveBeenCalledWith(5, 300, false);
+    expect(manager.applySettings).toHaveBeenCalledWith(5, 300, false, 100 << 20, 4, 32 << 20);
 
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "Clear finished after" }), "0");
-    expect(manager.applySettings).toHaveBeenLastCalledWith(2, 0, false);
+    expect(manager.applySettings).toHaveBeenLastCalledWith(2, 0, false, 100 << 20, 4, 32 << 20);
+
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Split at" }), String(250 << 20));
+    expect(manager.applySettings).toHaveBeenLastCalledWith(2, 300, false, 250 << 20, 4, 32 << 20);
+
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Streams" }), "1");
+    expect(manager.applySettings).toHaveBeenLastCalledWith(2, 300, false, 100 << 20, 1, 32 << 20);
+
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Chunk" }), String(512 << 20));
+    expect(manager.applySettings).toHaveBeenLastCalledWith(2, 300, false, 100 << 20, 4, 512 << 20);
   });
 
   it("stops the whole queue without touching what is already running", async () => {
@@ -140,7 +155,7 @@ describe("the transfer queue", () => {
     const { rerender } = render(<TransferManagerList />);
 
     await userEvent.click(screen.getByRole("button", { name: "Stop starting new transfers" }));
-    expect(manager.applySettings).toHaveBeenCalledWith(2, 0, true);
+    expect(manager.applySettings).toHaveBeenCalledWith(2, 0, true, 100 << 20, 4, 32 << 20);
 
     manager.getProcessingStopped.mockReturnValue(true);
     rerender(<TransferManagerList />);

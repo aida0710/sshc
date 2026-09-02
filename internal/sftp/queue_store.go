@@ -88,6 +88,16 @@ func validPersistedJob(job TransferJob) error {
 	if _, err := cleanPublicPath(job.RemotePath, false); err != nil {
 		return err
 	}
+	if (job.LargeFileThresholdBytes != 0 &&
+		(job.LargeFileThresholdBytes < MinLargeFileThreshold || job.LargeFileThresholdBytes > MaxLargeFileThreshold)) ||
+		(job.LargeFileParallelism != 0 &&
+			(job.LargeFileParallelism < 1 || job.LargeFileParallelism > MaxLargeFileParallelism)) ||
+		(job.LargeFileChunkBytes != 0 &&
+			(job.LargeFileChunkBytes < MinLargeFileChunkBytes || job.LargeFileChunkBytes > MaxLargeFileChunkBytes)) ||
+		((job.Direction != TransferDownload || job.Kind != TransferFile) &&
+			(job.LargeFileThresholdBytes != 0 || job.LargeFileParallelism != 0 || job.LargeFileChunkBytes != 0)) {
+		return ErrInvalidTransfer
+	}
 	if job.Direction == TransferRemote {
 		if err := validateAlias(job.SourceAlias); err != nil {
 			return err

@@ -83,6 +83,10 @@ Options:
   --overwrite       replace existing destination files after confirmation
   --skip-existing   leave existing destination files unchanged
   --dry-run         inspect the transfer plan without changing files
+  -j, --jobs <n>    transfer up to 1..8 files in parallel (default 1)
+  --split-size <MiB> split downloads at 16..1024 MiB (engine default 100)
+  --split-jobs <n>  use 1..8 streams per large download (engine default 4; 1 disables)
+  --chunk-size <MiB> split range size from 8..4096 MiB (engine default 32)
   --json            print one machine-readable result on stdout
   -y, --yes         skip the --overwrite confirmation
 `, Actions: []Action{
@@ -142,7 +146,7 @@ var Values = map[string][]string{
 	"wait-states":       {"connecting", "connected", "reconnecting", "exited", "agent-working", "agent-attention", "agent-ready", "agent-ended"},
 	"serial-options":    {"--json", "--non-interactive", "--require-output", "--encoding", "--baud", "--data-bits", "--parity", "--stop-bits", "--flow", "--dtr", "--rts", "--break", "--expect", "--read-for", "--timeout", "--settle", "--max-bytes", "--line-ending", "--script", "--help"},
 	"telnet-options":    {"--non-interactive", "--require-output", "--encoding", "--connect-timeout", "--terminal-type", "--expect", "--read-for", "--timeout", "--settle", "--max-bytes", "--line-ending", "--script", "--json", "--help"},
-	"sftp-options":      {"-r", "--recursive", "--overwrite", "--skip-existing", "--dry-run", "--json", "-y", "--yes", "--help"},
+	"sftp-options":      {"-r", "--recursive", "--overwrite", "--skip-existing", "--dry-run", "-j", "--jobs", "--split-size", "--split-jobs", "--chunk-size", "--json", "-y", "--yes", "--help"},
 }
 
 const GlobalHelp = `usage:

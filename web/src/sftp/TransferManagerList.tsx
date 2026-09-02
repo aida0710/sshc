@@ -18,6 +18,9 @@ const maxQueueHeight = 560;
 const defaultQueueHeight = 224;
 const concurrencyChoices = [1, 2, 3, 4, 5, 6, 7, 8];
 const autoClearChoices = [0, 30, 300, 3600];
+const largeFileThresholdChoices = [16, 50, 100, 250, 500, 1024];
+const largeFileChunkChoices = [8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096];
+const mebibyte = 1 << 20;
 
 type QueueView = { collapsed: boolean; height: number };
 
@@ -77,6 +80,9 @@ export function TransferManagerList() {
   const maxConcurrent = sftpTransferManager.getMaxConcurrent();
   const clearCompletedAfter = sftpTransferManager.getClearCompletedAfter();
   const processingStopped = sftpTransferManager.getProcessingStopped();
+  const largeFileThreshold = sftpTransferManager.getLargeFileThreshold();
+  const largeFileParallelism = sftpTransferManager.getLargeFileParallelism();
+  const largeFileChunkBytes = sftpTransferManager.getLargeFileChunkBytes();
   const activeJobs = jobs.filter((job) => job.status !== "completed" && job.status !== "cancelled" && job.status !== "failed");
   const runningJobs = jobs.filter((job) => job.status === "running");
   const aggregateTotal = activeJobs.reduce((sum, job) => sum + Math.max(job.totalBytes, 0), 0);
@@ -118,11 +124,21 @@ export function TransferManagerList() {
     else if (key === "ArrowDown") changeView({ height: clampHeight(view.height - 32) });
   }
 
-  function applySettings(next: { maxConcurrent?: number; clearCompletedAfterSeconds?: number; processingStopped?: boolean }) {
+  function applySettings(next: {
+    maxConcurrent?: number;
+    clearCompletedAfterSeconds?: number;
+    processingStopped?: boolean;
+    largeFileThresholdBytes?: number;
+    largeFileParallelism?: number;
+    largeFileChunkBytes?: number;
+  }) {
     void sftpTransferManager.applySettings(
       next.maxConcurrent ?? maxConcurrent,
       next.clearCompletedAfterSeconds ?? clearCompletedAfter,
       next.processingStopped ?? processingStopped,
+      next.largeFileThresholdBytes ?? largeFileThreshold,
+      next.largeFileParallelism ?? largeFileParallelism,
+      next.largeFileChunkBytes ?? largeFileChunkBytes,
     ).catch(() => undefined);
   }
   useDismissibleLayer({
@@ -153,7 +169,7 @@ export function TransferManagerList() {
           className="absolute inset-x-0 -top-1 z-10 h-2 cursor-row-resize focus:outline-none focus-visible:bg-accent/40"
         />
       )}
-      <div className="flex min-h-9 items-center gap-2 px-3 py-1.5 md:min-h-8 md:py-1">
+      <div className="flex min-h-9 flex-wrap items-center gap-2 px-3 py-1.5 md:min-h-8 md:py-1">
         <button type="button" aria-label={t(collapsed ? "sftp.manager.expand" : "sftp.manager.collapse")} aria-expanded={!collapsed} aria-controls="transfer-manager-jobs" onClick={() => changeView({ collapsed: !collapsed })} className="flex min-w-0 items-center gap-1.5 rounded hover:text-accent focus:outline-none focus-visible:ring-1 focus-visible:ring-accent">
           <Icon name="chevronRight" className={`size-3 transition-transform ${collapsed ? "" : "rotate-90"}`} />
           <h3 id="transfer-manager-heading" className={`${collapsed ? "text-ink-muted" : "text-ink"} truncate font-medium`}>{t("sftp.manager.heading")}</h3>
@@ -199,6 +215,45 @@ export function TransferManagerList() {
           >
             {autoClearChoices.map((choice) => (
               <option key={choice} value={choice}>{choice === 0 ? t("sftp.manager.autoClearOff") : duration(choice)}</option>
+            ))}
+          </select>
+        </label>
+        <label className="flex items-center gap-1 text-ink-muted">
+          <span>{t("sftp.manager.largeFileThreshold")}</span>
+          <select
+            aria-label={t("sftp.manager.largeFileThreshold")}
+            value={largeFileThresholdChoices.includes(largeFileThreshold / mebibyte) ? largeFileThreshold : 100 * mebibyte}
+            onChange={(event) => applySettings({ largeFileThresholdBytes: Number(event.target.value) })}
+            className="rounded border border-control-line bg-control px-1 py-0.5 text-xs"
+          >
+            {largeFileThresholdChoices.map((choice) => (
+              <option key={choice} value={choice * mebibyte}>{t("sftp.manager.largeFileThresholdValue", { size: choice })}</option>
+            ))}
+          </select>
+        </label>
+        <label className="flex items-center gap-1 text-ink-muted">
+          <span>{t("sftp.manager.largeFileParallelism")}</span>
+          <select
+            aria-label={t("sftp.manager.largeFileParallelism")}
+            value={largeFileParallelism}
+            onChange={(event) => applySettings({ largeFileParallelism: Number(event.target.value) })}
+            className="rounded border border-control-line bg-control px-1 py-0.5 text-xs"
+          >
+            {concurrencyChoices.map((choice) => (
+              <option key={choice} value={choice}>{choice === 1 ? t("sftp.manager.largeFileParallelismOff") : choice}</option>
+            ))}
+          </select>
+        </label>
+        <label className="flex items-center gap-1 text-ink-muted">
+          <span>{t("sftp.manager.largeFileChunk")}</span>
+          <select
+            aria-label={t("sftp.manager.largeFileChunk")}
+            value={largeFileChunkChoices.includes(largeFileChunkBytes / mebibyte) ? largeFileChunkBytes : 32 * mebibyte}
+            onChange={(event) => applySettings({ largeFileChunkBytes: Number(event.target.value) })}
+            className="rounded border border-control-line bg-control px-1 py-0.5 text-xs"
+          >
+            {largeFileChunkChoices.map((choice) => (
+              <option key={choice} value={choice * mebibyte}>{t("sftp.manager.largeFileChunkValue", { size: choice })}</option>
             ))}
           </select>
         </label>

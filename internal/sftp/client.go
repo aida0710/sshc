@@ -43,6 +43,18 @@ func (c *Client) ReadLink(path string) (string, error) { return c.client.ReadLin
 
 func (c *Client) Open(path string) (io.ReadCloser, error) { return c.client.Open(path) }
 
+func (c *Client) OpenRange(path string, offset int64) (io.ReadCloser, error) {
+	file, err := c.client.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := file.Seek(offset, io.SeekStart); err != nil {
+		_ = file.Close()
+		return nil, err
+	}
+	return file, nil
+}
+
 func (c *Client) Create(path string) (io.WriteCloser, error) { return c.client.Create(path) }
 
 func (c *Client) OpenFile(path string, flags int) (WriteSeekCloser, error) {
@@ -69,3 +81,4 @@ func (c *Client) Remove(path string) error { return c.client.Remove(path) }
 func (c *Client) RemoveDirectory(path string) error { return c.client.RemoveDirectory(path) }
 
 var _ Remote = (*Client)(nil)
+var _ RangeRemote = (*Client)(nil)

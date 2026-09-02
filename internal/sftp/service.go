@@ -41,6 +41,10 @@ const (
 	maxArchiveEntries = 10_000
 	maxArchiveDepth   = 64
 	maxArchiveBytes   = int64(1 << 30)
+	// A file download is explicitly requested and may be much larger than an
+	// archive assembled from an entire directory. Keep a finite safety bound,
+	// but do not reuse the 1 GiB archive-expansion budget for ordinary files.
+	maxPreparedDownloadBytes = int64(512 << 30)
 )
 
 type archiveBudget struct {
@@ -132,10 +136,13 @@ func (download *PreparedDownload) WriteFrom(ctx context.Context, offset int64, d
 }
 
 func (s Service) PrepareDownload(ctx context.Context, alias, remotePath string) (_ *PreparedDownload, resultErr error) {
-	return s.prepareDownload(ctx, alias, remotePath, "", nil)
+	return s.prepareDownload(ctx, alias, remotePath, "", nil, 0, 1, 0)
 }
 
-func (s Service) prepareDownload(ctx context.Context, alias, remotePath, temporaryDirectory string, reserve func(int64) error) (_ *PreparedDownload, resultErr error) {
+func (s Service) prepareDownload(
+	ctx context.Context, alias, remotePath, temporaryDirectory string, reserve func(int64) error,
+	splitThreshold int64, splitParallelism int, splitChunkBytes int64,
+) (_ *PreparedDownload, resultErr error) {
 	cleaned, err := cleanPublicPath(remotePath, false)
 	if err != nil {
 		return nil, err
@@ -152,7 +159,7 @@ func (s Service) prepareDownload(ctx context.Context, alias, remotePath, tempora
 	if !before.Mode().IsRegular() {
 		return nil, ErrNotRegularFile
 	}
-	if before.Size() < 0 || before.Size() > maxArchiveBytes {
+	if before.Size() < 0 || before.Size() > maxPreparedDownloadBytes {
 		return nil, ErrTransferTooLarge
 	}
 	// Reserve the complete known size before opening or creating a spool. This
@@ -162,11 +169,6 @@ func (s Service) prepareDownload(ctx context.Context, alias, remotePath, tempora
 			return nil, err
 		}
 	}
-	source, err := remote.Open(cleaned)
-	if err != nil {
-		return nil, err
-	}
-	defer source.Close()
 	temporary, err := os.CreateTemp(temporaryDirectory, "download-*.part")
 	if err != nil {
 		return nil, err
@@ -177,21 +179,17 @@ func (s Service) prepareDownload(ctx context.Context, alias, remotePath, tempora
 			_ = prepared.Close()
 		}
 	}()
-	hash := sha256.New()
-	// The manager reserved exactly before.Size() bytes. Limit the open handle to
-	// that amount and probe one extra byte without writing it, so a growing
-	// remote file can never make the disk spool exceed the reservation.
-	written, err := copyContext(ctx, io.MultiWriter(temporary, hash), io.LimitReader(source, before.Size()), 0)
+	written := int64(0)
+	if before.Size() >= splitThreshold && splitThreshold > 0 && splitParallelism > 1 && splitChunkBytes > 0 {
+		if _, supported := remote.(RangeRemote); supported {
+			written, err = s.copyDownloadRanges(ctx, remote, alias, cleaned, temporary, before.Size(), splitParallelism, splitChunkBytes)
+		}
+	}
+	if written == 0 && before.Size() > 0 && err == nil {
+		written, err = copyDownloadSequential(ctx, remote, cleaned, temporary, before.Size())
+	}
 	if err != nil {
 		return nil, err
-	}
-	var extra [1]byte
-	extraBytes, extraErr := source.Read(extra[:])
-	if extraBytes != 0 {
-		return nil, ErrConflict
-	}
-	if extraErr != nil && !errors.Is(extraErr, io.EOF) {
-		return nil, extraErr
 	}
 	after, err := remote.Lstat(cleaned)
 	if err != nil {
@@ -203,9 +201,143 @@ func (s Service) prepareDownload(ctx context.Context, alias, remotePath, tempora
 	if err := temporary.Sync(); err != nil {
 		return nil, err
 	}
+	if _, err := temporary.Seek(0, io.SeekStart); err != nil {
+		return nil, err
+	}
+	hash := sha256.New()
+	if hashed, err := copyContext(ctx, hash, temporary, 0); err != nil {
+		return nil, err
+	} else if hashed != written {
+		return nil, ErrConflict
+	}
 	prepared.Size = written
 	prepared.Revision = "content-sha256:" + hex.EncodeToString(hash.Sum(nil))
 	return prepared, nil
+}
+
+func copyDownloadSequential(ctx context.Context, remote Remote, remotePath string, destination *os.File, size int64) (int64, error) {
+	source, err := remote.Open(remotePath)
+	if err != nil {
+		return 0, err
+	}
+	defer source.Close()
+	written, err := copyContext(ctx, destination, io.LimitReader(source, size), 0)
+	if err != nil {
+		return 0, err
+	}
+	var extra [1]byte
+	extraBytes, extraErr := source.Read(extra[:])
+	if extraBytes != 0 {
+		return 0, ErrConflict
+	}
+	if extraErr != nil && !errors.Is(extraErr, io.EOF) {
+		return 0, extraErr
+	}
+	return written, nil
+}
+
+type downloadRange struct {
+	offset int64
+	size   int64
+}
+
+// copyDownloadRanges reads non-overlapping ranges over independent SFTP
+// connections. The local spool still becomes the single immutable, hashed
+// representation used by HTTP retries and browser checkpoints.
+func (s Service) copyDownloadRanges(
+	ctx context.Context, firstRemote Remote, alias, remotePath string, destination *os.File, size int64, parallelism int, chunkBytes int64,
+) (int64, error) {
+	if size <= 0 || parallelism <= 1 || chunkBytes <= 0 {
+		return 0, ErrInvalidTransfer
+	}
+	ranges := make([]downloadRange, 0, int((size+chunkBytes-1)/chunkBytes))
+	for offset := int64(0); offset < size; offset += chunkBytes {
+		ranges = append(ranges, downloadRange{offset: offset, size: min(chunkBytes, size-offset)})
+	}
+	if err := destination.Truncate(size); err != nil {
+		return 0, err
+	}
+	workerContext, cancel := context.WithCancel(ctx)
+	defer cancel()
+	work := make(chan downloadRange, len(ranges))
+	for _, portion := range ranges {
+		work <- portion
+	}
+	close(work)
+	writtenParts := make(chan int64, len(ranges))
+	var workers sync.WaitGroup
+	var firstErr error
+	var errorOnce sync.Once
+	fail := func(err error) {
+		errorOnce.Do(func() {
+			firstErr = err
+			cancel()
+		})
+	}
+	for workerIndex := range min(parallelism, len(ranges)) {
+		workers.Add(1)
+		go func(workerIndex int) {
+			defer workers.Done()
+			remote := firstRemote
+			if workerIndex != 0 {
+				var err error
+				remote, err = s.openRequest(workerContext, alias)
+				if err != nil {
+					fail(err)
+					return
+				}
+				defer remote.Close()
+			}
+			ranged, ok := remote.(RangeRemote)
+			if !ok {
+				fail(ErrInvalidTransfer)
+				return
+			}
+			for portion := range work {
+				last := portion.offset+portion.size == size
+				written, err := copyDownloadRange(workerContext, ranged, remotePath, destination, portion, last)
+				if err != nil {
+					fail(err)
+					return
+				}
+				writtenParts <- written
+			}
+		}(workerIndex)
+	}
+	workers.Wait()
+	close(writtenParts)
+	if firstErr != nil {
+		return 0, firstErr
+	}
+	var written int64
+	for part := range writtenParts {
+		written += part
+	}
+	return written, nil
+}
+
+func copyDownloadRange(
+	ctx context.Context, remote RangeRemote, remotePath string, destination *os.File, portion downloadRange, last bool,
+) (int64, error) {
+	source, err := remote.OpenRange(remotePath, portion.offset)
+	if err != nil {
+		return 0, err
+	}
+	defer source.Close()
+	written, err := copyContext(ctx, io.NewOffsetWriter(destination, portion.offset), io.LimitReader(source, portion.size), 0)
+	if err != nil {
+		return written, err
+	}
+	if written != portion.size {
+		return written, ErrConflict
+	}
+	if last {
+		var extra [1]byte
+		if count, readErr := source.Read(extra[:]); count != 0 || (readErr != nil && !errors.Is(readErr, io.EOF)) {
+			return written, ErrConflict
+		}
+	}
+	return written, nil
 }
 
 func (s Service) ListDirectory(ctx context.Context, alias, remotePath string) (Listing, error) {
@@ -938,7 +1070,20 @@ func bindRemoteContext(ctx context.Context, remote Remote) Remote {
 	if closed {
 		stop()
 	}
+	if _, ok := remote.(RangeRemote); ok {
+		return &contextRangeRemote{contextRemote: bound}
+	}
 	return bound
+}
+
+type contextRangeRemote struct{ *contextRemote }
+
+func (remote *contextRangeRemote) OpenRange(candidate string, offset int64) (io.ReadCloser, error) {
+	ranged, ok := remote.Remote.(RangeRemote)
+	if !ok {
+		return nil, ErrInvalidTransfer
+	}
+	return ranged.OpenRange(candidate, offset)
 }
 
 func (remote *contextRemote) Close() error {

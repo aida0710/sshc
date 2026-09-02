@@ -387,10 +387,25 @@ func New(options Options) (*Server, error) {
 			if concurrency == 0 {
 				concurrency = sshcSFTP.DefaultTransferConcurrency
 			}
+			threshold := stored.LargeFileThresholdBytes
+			if threshold == 0 {
+				threshold = sshcSFTP.DefaultLargeFileThreshold
+			}
+			parallelism := stored.LargeFileParallelism
+			if parallelism == 0 {
+				parallelism = sshcSFTP.DefaultLargeFileParallelism
+			}
+			chunkBytes := stored.LargeFileChunkBytes
+			if chunkBytes == 0 {
+				chunkBytes = sshcSFTP.DefaultLargeFileChunkBytes
+			}
 			_ = transfers.SetTransferSettings(
 				concurrency,
 				time.Duration(stored.ClearCompletedAfterSeconds)*time.Second,
 				stored.ProcessingStopped,
+				threshold,
+				parallelism,
+				chunkBytes,
 			)
 		}
 		if options.SFTPTransferStatePath != "" {
