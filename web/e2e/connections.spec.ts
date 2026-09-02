@@ -44,6 +44,10 @@ test("separates classification, filtered results, and connection detail without 
   await expect(results.getByRole("region", { name: "home group, 1 connections" })).toBeVisible();
   await expect(results.getByRole("region", { name: "home/eu group, 1 connections" })).toBeVisible();
   await expect(results.getByRole("region", { name: "Ungrouped group, 1 connections" })).toBeVisible();
+  const headerHeight = await page.locator("[data-connections-header]").evaluate((element) =>
+    element.getBoundingClientRect().height,
+  );
+  expect(headerHeight).toBeLessThanOrEqual(52);
 
   await browser.getByRole("button", { name: "home", exact: true }).click();
   await expect(results.getByRole("button", { name: "nas" })).toBeVisible();
