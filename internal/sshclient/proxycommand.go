@@ -137,7 +137,12 @@ func (c *commandConn) Close() error {
 		c.mutex.Unlock()
 
 		_ = c.writer.Close()
-		_ = c.reader.Close()
+		// Windows の匿名パイプは、別 goroutine が同期 ReadFile で待っていると
+		// Close 自体がその読み取りの終了まで待つ。ここで直に閉じると、その先の
+		// process.Kill へ進めず、ProxyCommand と SSH の双方が相手の終了を待つ。
+		// 読み取り側だけを別 goroutine で閉じ、プロセスを止める猶予と上限を
+		// 必ず実行できるようにする。
+		go func() { _ = c.reader.Close() }()
 
 		finished := make(chan error, 1)
 		go func() { finished <- c.process.Wait() }()
