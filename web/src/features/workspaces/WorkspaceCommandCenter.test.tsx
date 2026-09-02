@@ -151,7 +151,7 @@ describe("WorkspaceCommandCenter", () => {
     const user = userEvent.setup();
     render(<WorkspaceCommandCenter paneTargets={[edge]} onClose={() => undefined} />);
     await user.click(screen.getByRole("button", { name: "Saved snippet" }));
-    await user.type(await screen.findByLabelText(/token/), "top-secret");
+    await user.type(await screen.findByLabelText(/token/, { selector: "input" }), "top-secret");
     await user.click(screen.getByRole("button", { name: "Preview execution" }));
     expect(commands.preview).toHaveBeenCalledWith({
       snippetId: "secret",
