@@ -329,6 +329,33 @@ func TestEngineAPIIssueActionUsesTheTypedEndpoint(t *testing.T) {
 	}
 }
 
+func TestEngineAPIDoRawPreservesStreamingBodyAndSecurityHeaders(t *testing.T) {
+	var gotBody string
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if request.Header.Get(httpserver.CSRFHeader) != "csrf" || request.Header.Get("Origin") != serverOrigin(request) {
+			t.Errorf("security headers = %#v", request.Header)
+		}
+		if request.Header.Get("Content-Type") != "application/octet-stream" {
+			t.Errorf("content type = %q", request.Header.Get("Content-Type"))
+		}
+		body, _ := io.ReadAll(request.Body)
+		gotBody = string(body)
+		response.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+	engine := &engineAPI{
+		origin: server.URL, csrf: "csrf", cookie: http.Cookie{Name: httpserver.SessionCookie, Value: "session"}, client: server.Client(),
+	}
+	response, err := engine.doRaw(context.Background(), http.MethodPatch, "/raw", "application/octet-stream", strings.NewReader("raw contents"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	discardEngineResponse(response)
+	if gotBody != "raw contents" {
+		t.Fatalf("body = %q", gotBody)
+	}
+}
+
 func serverOrigin(request *http.Request) string {
 	return "http://" + request.Host
 }

@@ -29,8 +29,30 @@ const (
 	invocationInfo
 	invocationSync
 	invocationTerminal
+	invocationSFTP
 	invocationCompletion
 )
+
+type sftpAction uint8
+
+const (
+	sftpInvalid sftpAction = iota
+	sftpGet
+	sftpPut
+)
+
+type sftpInvocation struct {
+	Action       sftpAction
+	Alias        string
+	Source       string
+	Destination  string
+	Recursive    bool
+	Overwrite    bool
+	SkipExisting bool
+	DryRun       bool
+	JSON         bool
+	Yes          bool
+}
 
 type syncAction uint8
 
@@ -67,6 +89,7 @@ type invocation struct {
 	Transport *transportInvocation
 	Sync      *syncInvocation
 	Terminal  *terminalInvocation
+	SFTP      *sftpInvocation
 }
 
 // parseInvocation は、コマンドが誰の責務を求めるかを副作用なしに決める。
@@ -102,6 +125,8 @@ func parseInvocation(argv []string) (invocation, error) {
 		return parseSyncInvocation(args)
 	case cliCommandTerminal:
 		return parseTerminalInvocation(args)
+	case cliCommandSftp:
+		return parseSFTPInvocation(args)
 	case cliCommandCompletion:
 		if helpRequested(args) {
 			return helpInvocation(canonicalCLICommand(cliCommandCompletion)), nil
@@ -190,6 +215,73 @@ func parseInvocation(argv []string) (invocation, error) {
 	}
 
 	return invalidInvocation(fmt.Sprintf("unknown command %q", word))
+}
+
+func parseSFTPInvocation(args []string) (invocation, error) {
+	if helpRequested(args) {
+		return helpInvocation(canonicalCLICommand(cliCommandSftp)), nil
+	}
+	if len(args) > 1 && (args[0] == "get" || args[0] == "put") && isHelpFlag(args[1]) {
+		return helpInvocation(canonicalCLICommand(cliCommandSftp) + " " + args[0]), nil
+	}
+	if len(args) == 0 || (args[0] != "get" && args[0] != "put") {
+		return invalidInvocation("sftp requires get or put")
+	}
+	called := sftpInvocation{Action: sftpGet}
+	if args[0] == "put" {
+		called.Action = sftpPut
+	}
+	positionals := make([]string, 0, 3)
+	for _, argument := range args[1:] {
+		switch argument {
+		case "-r", "--recursive":
+			if called.Recursive {
+				return invalidInvocation("sftp accepts -r or --recursive only once")
+			}
+			called.Recursive = true
+		case "--overwrite":
+			if called.Overwrite {
+				return invalidInvocation("sftp accepts --overwrite only once")
+			}
+			called.Overwrite = true
+		case "--skip-existing":
+			if called.SkipExisting {
+				return invalidInvocation("sftp accepts --skip-existing only once")
+			}
+			called.SkipExisting = true
+		case "--dry-run":
+			if called.DryRun {
+				return invalidInvocation("sftp accepts --dry-run only once")
+			}
+			called.DryRun = true
+		case "--json":
+			if called.JSON {
+				return invalidInvocation("sftp accepts --json only once")
+			}
+			called.JSON = true
+		case "-y", "--yes":
+			if called.Yes {
+				return invalidInvocation("sftp accepts -y or --yes only once")
+			}
+			called.Yes = true
+		default:
+			if strings.HasPrefix(argument, "-") {
+				return invalidInvocation(fmt.Sprintf("unknown sftp option %q", argument))
+			}
+			positionals = append(positionals, argument)
+		}
+	}
+	if len(positionals) != 3 || positionals[0] == "" || positionals[1] == "" || positionals[2] == "" {
+		return invalidInvocation("sftp get and put require an alias, source, and destination")
+	}
+	if called.Overwrite && called.SkipExisting {
+		return invalidInvocation("sftp cannot combine --overwrite and --skip-existing")
+	}
+	if called.Yes && !called.Overwrite {
+		return invalidInvocation("sftp --yes requires --overwrite")
+	}
+	called.Alias, called.Source, called.Destination = positionals[0], positionals[1], positionals[2]
+	return invocation{Kind: invocationSFTP, JSON: called.JSON, Yes: called.Yes, SFTP: &called}, nil
 }
 
 func parseConfirmationOnlyInvocation(kind invocationKind, command string, args []string) (invocation, error) {

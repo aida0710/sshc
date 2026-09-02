@@ -129,6 +129,11 @@ func dispatchInvocation(called invocation, home string, client *http.Client) int
 		defer cancel()
 		return runTerminal(terminalCtx, *called.Terminal, app.HandoffDir(home), client,
 			os.Stdout, os.Stderr)
+	case invocationSFTP:
+		sftpCtx, cancel := signal.NotifyContext(ctx, os.Interrupt)
+		defer cancel()
+		return runSFTP(sftpCtx, *called.SFTP, app.HandoffDir(home), client,
+			os.Stdout, os.Stderr, systemActionConfirmer)
 	default:
 		fmt.Fprintln(os.Stderr, "sshc: invalid invocation")
 		return 2

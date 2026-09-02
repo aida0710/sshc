@@ -12,6 +12,7 @@ const (
 	cliCommandInfo
 	cliCommandSync
 	cliCommandTerminal
+	cliCommandSftp
 	cliCommandSerial
 	cliCommandTelnet
 	cliCommandOpen
@@ -36,6 +37,8 @@ func generatedCLICommand(word string) cliCommandRoute {
 		return cliCommandSync
 	case "terminal":
 		return cliCommandTerminal
+	case "sftp":
+		return cliCommandSftp
 	case "serial":
 		return cliCommandSerial
 	case "telnet":
@@ -75,6 +78,8 @@ func canonicalCLICommand(route cliCommandRoute) string {
 		return "sync"
 	case cliCommandTerminal:
 		return "terminal"
+	case cliCommandSftp:
+		return "sftp"
 	case cliCommandSerial:
 		return "serial"
 	case cliCommandTelnet:
@@ -128,6 +133,10 @@ func validCLIAction(command, action string) bool {
 		return true
 	case "terminal close":
 		return true
+	case "sftp get":
+		return true
+	case "sftp put":
+		return true
 	case "service install":
 		return true
 	case "service status":
@@ -171,7 +180,7 @@ func generatedStringSet(value string, allowed []string) bool {
 
 func validHelpTopic(topic string) bool { _, ok := generatedCLIHelp[topic]; return ok }
 
-const generatedGlobalHelp = "usage:\n  sshc                 open the UI for the running engine\n  sshc engine          start the engine in the foreground\n                       --port <n>  listen there instead of the preferred port 54447\n                       --replace   stop the running engine first, without asking\n  sshc ssh [<alias>]   choose a host, or connect to one from ~/.ssh/config\n                       --list      print every concrete Host alias\n  sshc ssh <alias> --non-interactive -- <command>\n                       run an SSH command without an interactive terminal\n  sshc completion bash|zsh|fish\n                       print shell completion that includes SSH Host aliases\n  sshc info <alias> [--json]\n                       print the resolved SSH target without connecting\n  sshc sync [--json]   print synchronization status from the running engine\n  sshc sync setup      configure synchronization in an interactive terminal\n  sshc sync push [--force] [--json]\n  sshc sync pull [--force] [--json]\n  sshc sync now [--json]\n  sshc sync auto on|off [--json]\n                       run or configure synchronization through the engine\n  sshc terminal list [--json]\n  sshc terminal show <session-id> [--json]\n  sshc terminal read <session-id> [--cursor N] [--limit N] [--json]\n  sshc terminal send <session-id> --text <text> [--no-enter] [--json]\n  sshc terminal wait <session-id> --for <state> [--timeout D] [--json]\n                       states: connecting, connected, reconnecting, exited,\n                               agent-working, agent-attention, agent-ready, agent-ended\n  sshc terminal create shell [--json]\n  sshc terminal create ssh <alias> [--json]\n  sshc terminal rename <session-id> <title> [--json]\n  sshc terminal close <session-id> [--json]\n                       inspect and control terminals owned by the running engine\n  sshc serial [--json]\n                       list serial devices\n  sshc serial <device> [options]\n                       connect interactively to a serial device\n                       options: --baud N --data-bits 5..8 --parity none|odd|even|mark|space\n                                --stop-bits 1|1.5|2 --flow none|rtscts|xonxoff\n                                --dtr on|off --rts on|off --break D --encoding NAME\n  sshc telnet <host>[:port] [options]\n                       connect interactively with unencrypted Telnet\n                       options: --connect-timeout D --terminal-type TYPE --encoding NAME\n  sshc serial <device> [options] --non-interactive [automation] -- <text>\n  sshc telnet <host>[:port] [options] --non-interactive [automation] -- <text>\n                       send text and wait for --expect or --read-for\n                       automation: --expect REGEX | --read-for D | --script FILE|-\n                                   --timeout D --settle D --max-bytes N --line-ending MODE\n                                   --require-output --json\n                       encodings: utf-8, shift_jis, euc-jp, iso-2022-jp\n  sshc open            print a one-time UI URL\n  sshc status          print what the running engine is doing\n                       --json      print it as JSON, for the shell\n  sshc update [-y]     update an installation managed by Homebrew or install.sh\n  sshc service install install and start a user service on Linux or macOS\n  sshc service status  print whether the managed service is active\n  sshc service disable stop and remove the managed service\n  sshc vault status    describe the running engine and vault\n  sshc vault create    create and unlock a new vault\n  sshc vault unlock    unlock the vault in the running engine\n  sshc vault lock      lock the vault without closing SSH sessions\n  sshc vault change-password\n                       change the password of an unlocked vault\n  sshc version         print the version, and what it was built for\n  sshc help [<command> ...]\n                       print all commands or help for one command\n\n"
+const generatedGlobalHelp = "usage:\n  sshc                 open the UI for the running engine\n  sshc engine          start the engine in the foreground\n                       --port <n>  listen there instead of the preferred port 54447\n                       --replace   stop the running engine first, without asking\n  sshc ssh [<alias>]   choose a host, or connect to one from ~/.ssh/config\n                       --list      print every concrete Host alias\n  sshc ssh <alias> --non-interactive -- <command>\n                       run an SSH command without an interactive terminal\n  sshc completion bash|zsh|fish\n                       print shell completion that includes SSH Host aliases\n  sshc info <alias> [--json]\n                       print the resolved SSH target without connecting\n  sshc sync [--json]   print synchronization status from the running engine\n  sshc sync setup      configure synchronization in an interactive terminal\n  sshc sync push [--force] [--json]\n  sshc sync pull [--force] [--json]\n  sshc sync now [--json]\n  sshc sync auto on|off [--json]\n                       run or configure synchronization through the engine\n  sshc terminal list [--json]\n  sshc terminal show <session-id> [--json]\n  sshc terminal read <session-id> [--cursor N] [--limit N] [--json]\n  sshc terminal send <session-id> --text <text> [--no-enter] [--json]\n  sshc terminal wait <session-id> --for <state> [--timeout D] [--json]\n                       states: connecting, connected, reconnecting, exited,\n                               agent-working, agent-attention, agent-ready, agent-ended\n  sshc terminal create shell [--json]\n  sshc terminal create ssh <alias> [--json]\n  sshc terminal rename <session-id> <title> [--json]\n  sshc terminal close <session-id> [--json]\n                       inspect and control terminals owned by the running engine\n  sshc sftp get <alias> <remote-path> <local-path> [options]\n  sshc sftp put <alias> <local-path> <remote-path> [options]\n                       transfer files through the running engine\n                       options: -r --overwrite --skip-existing --dry-run --json -y\n  sshc serial [--json]\n                       list serial devices\n  sshc serial <device> [options]\n                       connect interactively to a serial device\n                       options: --baud N --data-bits 5..8 --parity none|odd|even|mark|space\n                                --stop-bits 1|1.5|2 --flow none|rtscts|xonxoff\n                                --dtr on|off --rts on|off --break D --encoding NAME\n  sshc telnet <host>[:port] [options]\n                       connect interactively with unencrypted Telnet\n                       options: --connect-timeout D --terminal-type TYPE --encoding NAME\n  sshc serial <device> [options] --non-interactive [automation] -- <text>\n  sshc telnet <host>[:port] [options] --non-interactive [automation] -- <text>\n                       send text and wait for --expect or --read-for\n                       automation: --expect REGEX | --read-for D | --script FILE|-\n                                   --timeout D --settle D --max-bytes N --line-ending MODE\n                                   --require-output --json\n                       encodings: utf-8, shift_jis, euc-jp, iso-2022-jp\n  sshc open            print a one-time UI URL\n  sshc status          print what the running engine is doing\n                       --json      print it as JSON, for the shell\n  sshc update [-y]     update an installation managed by Homebrew or install.sh\n  sshc service install install and start a user service on Linux or macOS\n  sshc service status  print whether the managed service is active\n  sshc service disable stop and remove the managed service\n  sshc vault status    describe the running engine and vault\n  sshc vault create    create and unlock a new vault\n  sshc vault unlock    unlock the vault in the running engine\n  sshc vault lock      lock the vault without closing SSH sessions\n  sshc vault change-password\n                       change the password of an unlocked vault\n  sshc version         print the version, and what it was built for\n  sshc help [<command> ...]\n                       print all commands or help for one command\n\n"
 
 var generatedCLIHelp = map[string]string{
 	"completion":            "usage:\n  sshc completion bash|zsh|fish\n\nPrint a shell completion script. Host aliases for sshc ssh are read dynamically\nfrom the same ~/.ssh/config and Include files as sshc itself.\n",
@@ -183,6 +192,9 @@ var generatedCLIHelp = map[string]string{
 	"service disable":       "usage:\n  sshc service disable [-y|--yes]\n\nStop and remove the sshc-managed user service. The command asks for confirmation unless -y or --yes is given.\n",
 	"service install":       "usage:\n  sshc service install [-y|--yes]\n\nInstall and start the sshc user service on Linux or macOS. The command asks for confirmation unless -y or --yes is given.\n",
 	"service status":        "usage:\n  sshc service status\n\nPrint whether the sshc-managed user service is active.\n",
+	"sftp":                  "usage:\n  sshc sftp get <alias> <remote-path> <local-path> [options]\n  sshc sftp put <alias> <local-path> <remote-path> [options]\n\nTransfer files through the running engine and its SSH/Vault configuration.\nRemote paths must be absolute POSIX paths.\n\nOptions:\n  -r, --recursive   copy directories recursively\n  --overwrite       replace existing destination files after confirmation\n  --skip-existing   leave existing destination files unchanged\n  --dry-run         inspect the transfer plan without changing files\n  --json            print one machine-readable result on stdout\n  -y, --yes         skip the --overwrite confirmation\n",
+	"sftp get":              "usage:\n  sshc sftp get <alias> <remote-path> <local-path> [options]\n\nDownload a file or, with --recursive, a directory. Existing files require\n--overwrite and confirmation, or --skip-existing.\n",
+	"sftp put":              "usage:\n  sshc sftp put <alias> <local-path> <remote-path> [options]\n\nUpload a file or, with --recursive, a directory. Existing files require\n--overwrite and confirmation, or --skip-existing.\n",
 	"ssh":                   "usage:\n  sshc ssh\n  sshc ssh --list\n  sshc ssh <alias>\n  sshc ssh <alias> --non-interactive -- <command>\n\nChoose or connect to a Host alias from ~/.ssh/config.\n",
 	"status":                "usage:\n  sshc status [--json]\n\nPrint what the running engine is doing.\n",
 	"sync":                  "usage:\n  sshc sync [--json]\n  sshc sync setup\n  sshc sync push [--force] [--json]\n  sshc sync pull [--force] [--json]\n  sshc sync now [--json]\n  sshc sync auto on|off [--json]\n",
@@ -216,23 +228,27 @@ type completionGrammar struct {
 	helpTopics      []string
 	syncActions     []string
 	terminalActions []string
+	sftpActions     []string
 	serviceActions  []string
 	vaultActions    []string
 	encodings       []string
 	waitStates      []string
 	serialOptions   []string
 	telnetOptions   []string
+	sftpOptions     []string
 }
 
 var cliCompletionGrammar = completionGrammar{
-	topLevel:        []string{"engine", "ssh", "info", "sync", "terminal", "serial", "telnet", "open", "status", "update", "service", "vault", "version", "help", "completion"},
-	helpTopics:      []string{"engine", "ssh", "info", "sync", "terminal", "serial", "telnet", "open", "status", "update", "service", "vault", "version", "completion"},
+	topLevel:        []string{"engine", "ssh", "info", "sync", "terminal", "sftp", "serial", "telnet", "open", "status", "update", "service", "vault", "version", "help", "completion"},
+	helpTopics:      []string{"engine", "ssh", "info", "sync", "terminal", "sftp", "serial", "telnet", "open", "status", "update", "service", "vault", "version", "completion"},
 	syncActions:     []string{"setup", "push", "pull", "now", "auto"},
 	terminalActions: []string{"list", "show", "read", "send", "wait", "create", "rename", "close"},
+	sftpActions:     []string{"get", "put"},
 	serviceActions:  []string{"install", "status", "disable"},
 	vaultActions:    []string{"status", "create", "unlock", "lock", "change-password"},
 	encodings:       []string{"utf-8", "shift_jis", "euc-jp", "iso-2022-jp"},
 	waitStates:      []string{"connecting", "connected", "reconnecting", "exited", "agent-working", "agent-attention", "agent-ready", "agent-ended"},
 	serialOptions:   []string{"--json", "--non-interactive", "--require-output", "--encoding", "--baud", "--data-bits", "--parity", "--stop-bits", "--flow", "--dtr", "--rts", "--break", "--expect", "--read-for", "--timeout", "--settle", "--max-bytes", "--line-ending", "--script", "--help"},
 	telnetOptions:   []string{"--non-interactive", "--require-output", "--encoding", "--connect-timeout", "--terminal-type", "--expect", "--read-for", "--timeout", "--settle", "--max-bytes", "--line-ending", "--script", "--json", "--help"},
+	sftpOptions:     []string{"-r", "--recursive", "--overwrite", "--skip-existing", "--dry-run", "--json", "-y", "--yes", "--help"},
 }
