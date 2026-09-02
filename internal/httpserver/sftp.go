@@ -15,6 +15,7 @@ import (
 
 	"github.com/labstack/echo/v5"
 
+	"sshc/internal/application"
 	"sshc/internal/session"
 	sshcSFTP "sshc/internal/sftp"
 	"sshc/internal/validate"
@@ -23,7 +24,10 @@ import (
 type SFTPHandlers struct {
 	Service   *sshcSFTP.Service
 	Transfers *sshcSFTP.TransferManager
-	Actions   ActionHandlers
+	// Config は転送キューの設定を metadata.json へ残す。nil なら engine の
+	// process が生きているあいだだけ効く。
+	Config  *application.Service
+	Actions ActionHandlers
 }
 
 type sftpEntry struct {
@@ -39,6 +43,13 @@ type sftpEntry struct {
 type sftpListingResponse struct {
 	Path    string      `json:"path"`
 	Entries []sftpEntry `json:"entries"`
+}
+
+type sftpSearchResponse struct {
+	Path      string      `json:"path"`
+	Query     string      `json:"query"`
+	Truncated bool        `json:"truncated"`
+	Entries   []sftpEntry `json:"entries"`
 }
 
 type sftpTextFileResponse struct {
@@ -86,10 +97,14 @@ func registerSFTPRoutes(engine *echo.Echo, handlers SFTPHandlers) {
 	engine.GET("/api/v1/sftp/transfers", handlers.ListTransfers)
 	engine.POST("/api/v1/sftp/transfers", handlers.CreateTransfer)
 	engine.DELETE("/api/v1/sftp/transfers/finished", handlers.ClearFinishedTransfers)
+	engine.PUT("/api/v1/sftp/transfers/settings", handlers.UpdateTransferSettings)
+	engine.POST("/api/v1/sftp/transfers/:id/queue-position", handlers.MoveTransfer)
 	engine.POST("/api/v1/sftp/transfers/:id/actions", handlers.UpdateTransfer)
 	engine.POST("/api/v1/sftp/transfers/:id/download-checkpoint", handlers.CheckpointDownload)
 	engine.GET("/api/v1/sftp/:alias/entries", handlers.List)
 	engine.POST("/api/v1/sftp/:alias/entries", handlers.Mkdir)
+	engine.GET("/api/v1/sftp/:alias/preview", handlers.Preview)
+	engine.GET("/api/v1/sftp/:alias/search", handlers.Search)
 	engine.GET("/api/v1/sftp/:alias/text", handlers.ReadText)
 	engine.PUT("/api/v1/sftp/:alias/text", handlers.SaveText)
 	engine.GET("/api/v1/sftp/:alias/download", handlers.Download)
@@ -118,7 +133,7 @@ func sftpProblem(c *echo.Context, err error) error {
 		return problem(c, http.StatusNotFound, "sftp_not_found")
 	case errors.Is(err, sshcSFTP.ErrTransferNotFound):
 		return problem(c, http.StatusNotFound, "sftp_transfer_not_found")
-	case errors.Is(err, sshcSFTP.ErrInvalidAlias), errors.Is(err, sshcSFTP.ErrInvalidPath), errors.Is(err, sshcSFTP.ErrRootOperation), errors.Is(err, sshcSFTP.ErrRevisionRequired), errors.Is(err, sshcSFTP.ErrInvalidTransfer):
+	case errors.Is(err, sshcSFTP.ErrInvalidAlias), errors.Is(err, sshcSFTP.ErrInvalidPath), errors.Is(err, sshcSFTP.ErrRootOperation), errors.Is(err, sshcSFTP.ErrRevisionRequired), errors.Is(err, sshcSFTP.ErrInvalidTransfer), errors.Is(err, sshcSFTP.ErrInvalidQuery):
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	case errors.Is(err, sshcSFTP.ErrConflict), errors.Is(err, sshcSFTP.ErrOffsetMismatch), errors.Is(err, sshcSFTP.ErrUploadIncomplete):
 		return problem(c, http.StatusConflict, "sftp_conflict")
@@ -130,6 +145,10 @@ func sftpProblem(c *echo.Context, err error) error {
 		return problem(c, http.StatusConflict, "sftp_exists")
 	case errors.Is(err, sshcSFTP.ErrTextTooLarge), errors.Is(err, sshcSFTP.ErrTransferTooLarge):
 		return problem(c, http.StatusRequestEntityTooLarge, "sftp_text_too_large")
+	case errors.Is(err, sshcSFTP.ErrPreviewTooLarge):
+		return problem(c, http.StatusRequestEntityTooLarge, "sftp_preview_too_large")
+	case errors.Is(err, sshcSFTP.ErrPreviewType):
+		return problem(c, http.StatusUnsupportedMediaType, "sftp_preview_type")
 	case errors.Is(err, sshcSFTP.ErrNotUTF8):
 		return problem(c, http.StatusUnprocessableEntity, "sftp_not_utf8")
 	case errors.Is(err, sshcSFTP.ErrNotRegularFile), errors.Is(err, sshcSFTP.ErrNotDirectory):
@@ -182,8 +201,22 @@ func describeTransferJob(job sshcSFTP.TransferJob) sftpTransferJobResponse {
 }
 
 type sftpTransferJobListResponse struct {
-	MaxConcurrent int                       `json:"maxConcurrent"`
-	Jobs          []sftpTransferJobResponse `json:"jobs"`
+	MaxConcurrent int `json:"maxConcurrent"`
+	// 0 は自動消去なしである。
+	ClearCompletedAfterSeconds int `json:"clearCompletedAfterSeconds"`
+	// 停止中は待機の job を新しく開始しない。
+	ProcessingStopped bool                      `json:"processingStopped"`
+	Jobs              []sftpTransferJobResponse `json:"jobs"`
+}
+
+type sftpTransferSettingsRequest struct {
+	MaxConcurrent              int  `json:"maxConcurrent"`
+	ClearCompletedAfterSeconds int  `json:"clearCompletedAfterSeconds"`
+	ProcessingStopped          bool `json:"processingStopped"`
+}
+
+type sftpTransferQueueMoveRequest struct {
+	Move sshcSFTP.TransferQueueMove `json:"move"`
 }
 
 type sftpCreateTransferJobRequest struct {
@@ -214,14 +247,56 @@ type sftpDownloadCheckpointRequest struct {
 }
 
 func (h SFTPHandlers) ListTransfers(c *echo.Context) error {
+	return c.JSON(http.StatusOK, h.describeTransferQueue())
+}
+
+func (h SFTPHandlers) describeTransferQueue() sftpTransferJobListResponse {
 	jobs := h.Transfers.ListJobs()
 	described := make([]sftpTransferJobResponse, 0, len(jobs))
 	for _, job := range jobs {
 		described = append(described, describeTransferJob(job))
 	}
-	return c.JSON(http.StatusOK, sftpTransferJobListResponse{
-		MaxConcurrent: h.Transfers.MaxConcurrent(), Jobs: described,
-	})
+	return sftpTransferJobListResponse{
+		MaxConcurrent:              h.Transfers.MaxConcurrent(),
+		ClearCompletedAfterSeconds: int(h.Transfers.ClearCompletedAfter() / time.Second),
+		ProcessingStopped:          h.Transfers.ProcessingStopped(),
+		Jobs:                       described,
+	}
+}
+
+// UpdateTransferSettings は、engine が持つ転送キューの設定を差し替え、
+// metadata.json へ残す。転送は engine の資源なので、設定も browser ごとでは
+// なく engine にひとつだけ置く。
+func (h SFTPHandlers) UpdateTransferSettings(c *echo.Context) error {
+	var body sftpTransferSettingsRequest
+	if err := decodeJSON(c, &body); err != nil {
+		return problem(c, http.StatusBadRequest, "invalid_request")
+	}
+	if err := h.Transfers.SetTransferSettings(body.MaxConcurrent, time.Duration(body.ClearCompletedAfterSeconds)*time.Second, body.ProcessingStopped); err != nil {
+		return sftpProblem(c, err)
+	}
+	if h.Config != nil {
+		if _, err := h.Config.SetFileTransferSettings(application.FileTransferSettings{
+			MaxConcurrent:              body.MaxConcurrent,
+			ClearCompletedAfterSeconds: body.ClearCompletedAfterSeconds,
+			ProcessingStopped:          body.ProcessingStopped,
+		}); err != nil {
+			return serviceProblem(c, err)
+		}
+	}
+	return c.JSON(http.StatusOK, h.describeTransferQueue())
+}
+
+// MoveTransfer は、待機中の job を待機列の中で入れ替える。
+func (h SFTPHandlers) MoveTransfer(c *echo.Context) error {
+	var body sftpTransferQueueMoveRequest
+	if err := decodeJSON(c, &body); err != nil {
+		return problem(c, http.StatusBadRequest, "invalid_request")
+	}
+	if err := h.Transfers.MoveQueuedJob(c.Param("id"), body.Move); err != nil {
+		return sftpProblem(c, err)
+	}
+	return c.JSON(http.StatusOK, h.describeTransferQueue())
 }
 
 func (h SFTPHandlers) CreateTransfer(c *echo.Context) error {
@@ -285,6 +360,22 @@ func (h SFTPHandlers) List(c *echo.Context) error {
 	return c.JSON(http.StatusOK, sftpListingResponse{Path: listing.Path, Entries: described})
 }
 
+// Search は、あるディレクトリ配下の名前一致を返す。歩き切れなかったときは
+// truncated がそう言う。
+func (h SFTPHandlers) Search(c *echo.Context) error {
+	found, err := h.Service.Search(c.Request().Context(), c.Param("alias"), c.QueryParam("path"), c.QueryParam("query"))
+	if err != nil {
+		return sftpProblem(c, err)
+	}
+	described := make([]sftpEntry, 0, len(found.Entries))
+	for _, entry := range found.Entries {
+		described = append(described, describeSFTPEntry(entry))
+	}
+	return c.JSON(http.StatusOK, sftpSearchResponse{
+		Path: found.Path, Query: found.Query, Truncated: found.Truncated, Entries: described,
+	})
+}
+
 func (h SFTPHandlers) ReadText(c *echo.Context) error {
 	file, err := h.Service.ReadText(c.Request().Context(), c.Param("alias"), c.QueryParam("path"))
 	if err != nil {
@@ -293,6 +384,20 @@ func (h SFTPHandlers) ReadText(c *echo.Context) error {
 	return c.JSON(http.StatusOK, sftpTextFileResponse{
 		Entry: describeSFTPEntry(file.Entry), Contents: file.Contents, Revision: file.Revision,
 	})
+}
+
+// Preview は、詳細モーダルが描く画像そのものを返す。
+//
+// 名乗る型は Service が中身から決めたものだけであり、SFTP server の申告でも
+// 拡張子でもない。X-Content-Type-Options は Security.Middleware が全応答へ
+// 付けているので、ここで名乗った型より先へブラウザが推測することはない。
+func (h SFTPHandlers) Preview(c *echo.Context) error {
+	preview, err := h.Service.ReadPreview(c.Request().Context(), c.Param("alias"), c.QueryParam("path"))
+	if err != nil {
+		return sftpProblem(c, err)
+	}
+	c.Response().Header().Set("ETag", strconv.Quote(preview.Revision))
+	return c.Blob(http.StatusOK, preview.ContentType, preview.Contents)
 }
 
 func (h SFTPHandlers) SaveText(c *echo.Context) error {

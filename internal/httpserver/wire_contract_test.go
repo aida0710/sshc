@@ -37,6 +37,7 @@ func TestHandwrittenHTTPWireTypesMatchOpenAPIRecursively(t *testing.T) {
 		"SFTPEntry":                       sftpEntry{},
 		"SFTPListing":                     sftpListingResponse{},
 		"SFTPTextFile":                    sftpTextFileResponse{},
+		"SFTPSearchResult":                sftpSearchResponse{},
 		"SFTPSaveTextRequest":             sftpSaveTextRequest{},
 		"SFTPMkdirRequest":                sftpMkdirRequest{},
 		"SFTPRenameRequest":               sftpRenameRequest{},
@@ -46,6 +47,8 @@ func TestHandwrittenHTTPWireTypesMatchOpenAPIRecursively(t *testing.T) {
 		"SFTPTransferJobList":             sftpTransferJobListResponse{},
 		"SFTPCreateTransferJobRequest":    sftpCreateTransferJobRequest{},
 		"SFTPTransferJobActionRequest":    sftpTransferJobActionRequest{},
+		"SFTPTransferSettingsRequest":     sftpTransferSettingsRequest{},
+		"SFTPTransferQueueMoveRequest":    sftpTransferQueueMoveRequest{},
 		"SFTPDownloadCheckpointRequest":   sftpDownloadCheckpointRequest{},
 		"SFTPStartUploadRequest":          sftpStartUploadRequest{},
 		"SFTPCompleteUploadRequest":       sftpCompleteUploadRequest{},
@@ -455,6 +458,10 @@ var wireEnumValues = map[reflect.Type][]string{
 	reflect.TypeOf(sftp.TransferJobStatus("")): {
 		string(sftp.TransferQueued), string(sftp.TransferRunning), string(sftp.TransferPaused), string(sftp.TransferReattach),
 		string(sftp.TransferNeedsOverwrite), string(sftp.TransferCompleted), string(sftp.TransferFailed), string(sftp.TransferCancelled),
+	},
+	reflect.TypeOf(sftp.TransferQueueMove("")): {
+		string(sftp.TransferMoveUp), string(sftp.TransferMoveDown),
+		string(sftp.TransferMoveTop), string(sftp.TransferMoveBottom),
 	},
 	reflect.TypeOf(sftp.TransferJobAction("")): {
 		string(sftp.TransferStartAction), string(sftp.TransferPauseAction), string(sftp.TransferResumeAction),

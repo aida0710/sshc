@@ -168,6 +168,159 @@ func TestTransferLedgerOwnsBatchMetadataAndClearsOnlyFinishedJobs(t *testing.T) 
 	}
 }
 
+func TestQueueReorderMovesOnlyWaitingJobs(t *testing.T) {
+	now := time.Date(2026, 8, 25, 0, 0, 0, 0, time.UTC)
+	manager := sftp.NewTransferManager(nil)
+	manager.ConfigureJobs(1, func() time.Time { return now })
+	for _, id := range []string{"transfer_first01", "transfer_second1", "transfer_third01"} {
+		if _, err := manager.CreateJob(sftp.CreateTransferJob{
+			ID: id, BatchID: "batch_reorder1", Alias: "edge", Direction: sftp.TransferDownload,
+			Kind: sftp.TransferFile, Name: id + ".bin", RemotePath: "/" + id + ".bin", TotalBytes: 8,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// 先頭を running にする。並べ替えても running は動かない。
+	if _, err := manager.UpdateJob("transfer_first01", sftp.UpdateTransferJob{Action: sftp.TransferStartAction}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := manager.MoveQueuedJob("transfer_third01", sftp.TransferMoveUp); err != nil {
+		t.Fatal(err)
+	}
+	if order := jobIDs(manager); !slices.Equal(order, []string{"transfer_first01", "transfer_third01", "transfer_second1"}) {
+		t.Fatalf("order after up = %v", order)
+	}
+
+	if err := manager.MoveQueuedJob("transfer_second1", sftp.TransferMoveTop); err != nil {
+		t.Fatal(err)
+	}
+	if order := jobIDs(manager); !slices.Equal(order, []string{"transfer_first01", "transfer_second1", "transfer_third01"}) {
+		t.Fatalf("order after top = %v", order)
+	}
+
+	if err := manager.MoveQueuedJob("transfer_first01", sftp.TransferMoveDown); !errors.Is(err, sftp.ErrTransferState) {
+		t.Fatalf("moving a running job = %v, want %v", err, sftp.ErrTransferState)
+	}
+	if err := manager.MoveQueuedJob("transfer_second1", "sideways"); !errors.Is(err, sftp.ErrInvalidTransfer) {
+		t.Fatalf("unknown move = %v, want %v", err, sftp.ErrInvalidTransfer)
+	}
+	if err := manager.MoveQueuedJob("transfer_missing1", sftp.TransferMoveUp); !errors.Is(err, sftp.ErrTransferNotFound) {
+		t.Fatalf("unknown job = %v, want %v", err, sftp.ErrTransferNotFound)
+	}
+}
+
+func TestTransferSettingsBoundConcurrencyAndExpireFinishedJobs(t *testing.T) {
+	now := time.Date(2026, 8, 25, 0, 0, 0, 0, time.UTC)
+	manager := sftp.NewTransferManager(nil)
+	manager.ConfigureJobs(2, func() time.Time { return now })
+
+	for _, invalid := range []struct {
+		concurrency int
+		clearAfter  time.Duration
+	}{
+		{concurrency: 0, clearAfter: 0},
+		{concurrency: sftp.MaxTransferConcurrency + 1, clearAfter: 0},
+		{concurrency: 2, clearAfter: time.Second},
+		{concurrency: 2, clearAfter: sftp.MaxClearCompletedAfter + time.Second},
+	} {
+		if err := manager.SetTransferSettings(invalid.concurrency, invalid.clearAfter, false); !errors.Is(err, sftp.ErrInvalidTransfer) {
+			t.Fatalf("SetTransferSettings(%d, %v) = %v", invalid.concurrency, invalid.clearAfter, err)
+		}
+	}
+	if err := manager.SetTransferSettings(4, time.Minute, false); err != nil {
+		t.Fatal(err)
+	}
+	if manager.MaxConcurrent() != 4 || manager.ClearCompletedAfter() != time.Minute {
+		t.Fatalf("settings = %d, %v", manager.MaxConcurrent(), manager.ClearCompletedAfter())
+	}
+
+	if _, err := manager.CreateJob(sftp.CreateTransferJob{
+		ID: "transfer_expire01", BatchID: "batch_expire01", Alias: "edge", Direction: sftp.TransferDownload,
+		Kind: sftp.TransferFile, Name: "done.bin", RemotePath: "/done.bin", TotalBytes: 4,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.CreateJob(sftp.CreateTransferJob{
+		ID: "transfer_failed01", BatchID: "batch_expire01", Alias: "edge", Direction: sftp.TransferDownload,
+		Kind: sftp.TransferFile, Name: "bad.bin", RemotePath: "/bad.bin", TotalBytes: 4,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{"transfer_expire01", "transfer_failed01"} {
+		if _, err := manager.UpdateJob(id, sftp.UpdateTransferJob{Action: sftp.TransferStartAction}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	progress := int64(4)
+	if _, err := manager.UpdateJob("transfer_expire01", sftp.UpdateTransferJob{Action: sftp.TransferProgressAction, TransferredBytes: &progress}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.UpdateJob("transfer_expire01", sftp.UpdateTransferJob{Action: sftp.TransferCompleteAction}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.UpdateJob("transfer_failed01", sftp.UpdateTransferJob{Action: sftp.TransferFailAction, Problem: "sftp_failed"}); err != nil {
+		t.Fatal(err)
+	}
+	if order := jobIDs(manager); !slices.Equal(order, []string{"transfer_expire01", "transfer_failed01"}) {
+		t.Fatalf("order before expiry = %v", order)
+	}
+
+	now = now.Add(time.Minute)
+	// 完了だけが消える。失敗は原因を読む前に消えてはならない。
+	if order := jobIDs(manager); !slices.Equal(order, []string{"transfer_failed01"}) {
+		t.Fatalf("order after expiry = %v", order)
+	}
+}
+
+func TestStoppedQueueLeavesWaitingJobsWaiting(t *testing.T) {
+	manager := sftp.NewTransferManager(nil)
+	manager.ConfigureJobs(2, nil)
+	for _, id := range []string{"transfer_running1", "transfer_waiting1"} {
+		if _, err := manager.CreateJob(sftp.CreateTransferJob{
+			ID: id, BatchID: "batch_stopped1", Alias: "edge", Direction: sftp.TransferDownload,
+			Kind: sftp.TransferFile, Name: id + ".bin", RemotePath: "/" + id + ".bin", TotalBytes: 8,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := manager.UpdateJob("transfer_running1", sftp.UpdateTransferJob{Action: sftp.TransferStartAction}); err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.SetTransferSettings(2, 0, true); err != nil {
+		t.Fatal(err)
+	}
+	if !manager.ProcessingStopped() {
+		t.Fatal("ProcessingStopped() = false after stopping the queue")
+	}
+
+	// 停止中は新しく始まらない。
+	if _, err := manager.UpdateJob("transfer_waiting1", sftp.UpdateTransferJob{Action: sftp.TransferStartAction}); !errors.Is(err, sftp.ErrTransferLimit) {
+		t.Fatalf("start while stopped = %v, want %v", err, sftp.ErrTransferLimit)
+	}
+	// すでに走っているものは止めない。止めたいなら pause がある。
+	jobs := manager.ListJobs()
+	if len(jobs) != 2 || jobs[0].Status != sftp.TransferRunning || jobs[1].Status != sftp.TransferQueued {
+		t.Fatalf("jobs = %+v", jobs)
+	}
+
+	if err := manager.SetTransferSettings(2, 0, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.UpdateJob("transfer_waiting1", sftp.UpdateTransferJob{Action: sftp.TransferStartAction}); err != nil {
+		t.Fatalf("start after resuming = %v", err)
+	}
+}
+
+func jobIDs(manager *sftp.TransferManager) []string {
+	jobs := manager.ListJobs()
+	ids := make([]string, 0, len(jobs))
+	for _, job := range jobs {
+		ids = append(ids, job.ID)
+	}
+	return ids
+}
+
 func TestStaleRunningTransferReleasesItsSlot(t *testing.T) {
 	now := time.Date(2026, 8, 25, 0, 0, 0, 0, time.UTC)
 	manager := sftp.NewTransferManager(nil)
