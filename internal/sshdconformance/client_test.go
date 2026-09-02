@@ -252,8 +252,24 @@ func TestOpenAsksForThePasswordAndRunsAShell(t *testing.T) {
 	defer func() { _ = process.Close() }()
 
 	readUntil(t, process, "Password for ")
-	if _, err := io.WriteString(process, remote.password+"\n"); err != nil {
-		t.Fatalf("answering the password prompt: %v", err)
+	// 実際の PTY を通し、Enter 前にも各文字が即座に伏せ字として返ることを確認する。
+	// 最後に余計な一文字と Backspace も送り、表示と入力値の双方が戻ることを検証する。
+	for _, character := range remote.password {
+		if _, err := io.WriteString(process, string(character)); err != nil {
+			t.Fatalf("typing a password character: %v", err)
+		}
+		readUntil(t, process, "*")
+	}
+	if _, err := io.WriteString(process, "x"); err != nil {
+		t.Fatalf("typing the character to erase: %v", err)
+	}
+	readUntil(t, process, "*")
+	if _, err := process.Write([]byte{0x7f}); err != nil {
+		t.Fatalf("erasing a password character: %v", err)
+	}
+	readUntil(t, process, "\b \b")
+	if _, err := io.WriteString(process, "\n"); err != nil {
+		t.Fatalf("submitting the password prompt: %v", err)
 	}
 
 	// PTY の入力 echo とコマンド出力を区別するため、入力にはシェルが除去する

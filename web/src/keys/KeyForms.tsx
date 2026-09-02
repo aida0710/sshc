@@ -10,6 +10,7 @@ import {
   sectionHeading,
 } from "../ui/form";
 import { Button, Card, Row } from "../ui/surface";
+import { PasswordInput } from "../ui/PasswordField";
 import type {
   useAgentForm,
   usePassphraseForm,
@@ -19,17 +20,28 @@ import type {
 } from "./forms";
 import { describeBlocker, noteLabels, rowDanger } from "./labels";
 
-
-function namedStoredFor(phrases: Credential[], item: KeyItem): Credential | undefined {
-  return phrases.find((credential) => credential.uses.includes(item.relativePath));
+function namedStoredFor(
+  phrases: Credential[],
+  item: KeyItem,
+): Credential | undefined {
+  return phrases.find((credential) =>
+    credential.uses.includes(item.relativePath),
+  );
 }
 
 function dedicatedStoredFor(paths: string[], item: KeyItem): boolean {
   return paths.includes(item.relativePath);
 }
 
-function hasStoredFor(phrases: Credential[], dedicatedPaths: string[], item: KeyItem): boolean {
-  return namedStoredFor(phrases, item) !== undefined || dedicatedStoredFor(dedicatedPaths, item);
+function hasStoredFor(
+  phrases: Credential[],
+  dedicatedPaths: string[],
+  item: KeyItem,
+): boolean {
+  return (
+    namedStoredFor(phrases, item) !== undefined ||
+    dedicatedStoredFor(dedicatedPaths, item)
+  );
 }
 
 export function RelocateForm({
@@ -59,10 +71,18 @@ export function RelocateForm({
       <p className="text-sm text-ink-muted">{t("keys.relocateNote")}</p>
       <Card>
         <Row label={t("keys.relocateNewName")}>
-          <input className={control} value={form.newName} onChange={(event) => form.setNewName(event.target.value)} />
+          <input
+            className={control}
+            value={form.newName}
+            onChange={(event) => form.setNewName(event.target.value)}
+          />
         </Row>
         <Row label={t("keys.relocateGroup")}>
-          <select className={control} value={form.newGroup} onChange={(event) => form.setNewGroup(event.target.value)}>
+          <select
+            className={control}
+            value={form.newGroup}
+            onChange={(event) => form.setNewGroup(event.target.value)}
+          >
             <option value="">{t("keys.groupNone")}</option>
             {groups.map((group) => (
               <option key={group} value={group}>
@@ -76,9 +96,7 @@ export function RelocateForm({
         <Button kind="primary" type="submit">
           {t("keys.relocateSubmit")}
         </Button>
-        <Button onClick={form.close}>
-          {t("keys.cancel")}
-        </Button>
+        <Button onClick={form.close}>{t("keys.cancel")}</Button>
       </div>
     </form>
   );
@@ -108,20 +126,18 @@ export function PassphraseForm({
       </h3>
       <p className="text-sm text-ink-muted">{t("keys.passphraseNote")}</p>
       <Card>
-        <Row label={t("keys.currentPassphrase")}>
-          <input
-            className={control}
-            type="password"
+        <Row label={t("keys.currentPassphrase")} interactiveChildren>
+          <PasswordInput
+            label={t("keys.currentPassphrase")}
             value={form.currentPassphrase}
-            onChange={(event) => form.setCurrentPassphrase(event.target.value)}
+            onChange={form.setCurrentPassphrase}
           />
         </Row>
-        <Row label={t("keys.newPassphrase")}>
-          <input
-            className={control}
-            type="password"
+        <Row label={t("keys.newPassphrase")} interactiveChildren>
+          <PasswordInput
+            label={t("keys.newPassphrase")}
             value={form.newPassphrase}
-            onChange={(event) => form.setNewPassphrase(event.target.value)}
+            onChange={form.setNewPassphrase}
             disabled={form.removePassphrase}
           />
         </Row>
@@ -138,9 +154,7 @@ export function PassphraseForm({
         <Button kind="primary" type="submit">
           {t("keys.savePassphrase")}
         </Button>
-        <Button onClick={form.close}>
-          {t("keys.cancel")}
-        </Button>
+        <Button onClick={form.close}>{t("keys.cancel")}</Button>
       </div>
     </form>
   );
@@ -160,7 +174,8 @@ export function AgentForm({
   const t = useTranslate();
   const item = form.registering;
   if (item === null) return null;
-  const { phrases, dedicatedPhrasePaths, chosenPhrase, setChosenPhrase } = storedPhrases;
+  const { phrases, dedicatedPhrasePaths, chosenPhrase, setChosenPhrase } =
+    storedPhrases;
   const stored = hasStoredFor(phrases, dedicatedPhrasePaths, item);
   return (
     <form
@@ -177,12 +192,15 @@ export function AgentForm({
       <p className="text-sm text-ink-muted">{t("keys.registerNote")}</p>
       <Card>
         {item.encrypted && (
-          <Row label={t("keys.keyPassphrase")} {...(!stored ? {} : { hint: t("keys.typedWins") })}>
-            <input
-              className={control}
-              type="password"
+          <Row
+            label={t("keys.keyPassphrase")}
+            interactiveChildren
+            {...(!stored ? {} : { hint: t("keys.typedWins") })}
+          >
+            <PasswordInput
+              label={t("keys.keyPassphrase")}
               value={form.agentPassphrase}
-              onChange={(event) => form.setAgentPassphrase(event.target.value)}
+              onChange={form.setAgentPassphrase}
             />
           </Row>
         )}
@@ -190,7 +208,9 @@ export function AgentForm({
           <select
             className={control}
             value={String(form.agentLifetime)}
-            onChange={(event) => form.setAgentLifetime(Number(event.target.value))}
+            onChange={(event) =>
+              form.setAgentLifetime(Number(event.target.value))
+            }
           >
             <option value="0">{t("keys.lifetimeForever")}</option>
             <option value="3600">{t("keys.lifetimeHour")}</option>
@@ -204,13 +224,19 @@ export function AgentForm({
         <p className={hintText}>
           {dedicatedStoredFor(dedicatedPhrasePaths, item)
             ? t("keys.usesDedicatedPassphrase")
-            : t("keys.usesStoredPassphrase", { name: namedStoredFor(phrases, item)!.name })}
+            : t("keys.usesStoredPassphrase", {
+                name: namedStoredFor(phrases, item)!.name,
+              })}
         </p>
       )}
       {item.encrypted && phrases.length > 0 && (
         <div className="flex flex-wrap items-end gap-3">
           <Row label={t("keys.useStoredPassphrase")}>
-            <select className={control} value={chosenPhrase} onChange={(event) => setChosenPhrase(event.target.value)}>
+            <select
+              className={control}
+              value={chosenPhrase}
+              onChange={(event) => setChosenPhrase(event.target.value)}
+            >
               <option value="">{t("keys.choosePassphraseName")}</option>
               {phrases.map((credential) => (
                 <option key={credential.name} value={credential.name}>
@@ -231,9 +257,7 @@ export function AgentForm({
         <Button kind="primary" type="submit">
           {t("keys.registerSubmit")}
         </Button>
-        <Button onClick={form.close}>
-          {t("keys.cancel")}
-        </Button>
+        <Button onClick={form.close}>{t("keys.cancel")}</Button>
       </div>
     </form>
   );
@@ -255,9 +279,13 @@ export function StoredPassphrasePanel({
   const t = useTranslate();
   const item = form.managingPassphrase;
   if (item === null) return null;
-  const { phrases, dedicatedPhrasePaths, chosenPhrase, setChosenPhrase } = storedPhrases;
+  const { phrases, dedicatedPhrasePaths, chosenPhrase, setChosenPhrase } =
+    storedPhrases;
   return (
-    <section aria-labelledby="stored-passphrase-heading" className={sectionCard}>
+    <section
+      aria-labelledby="stored-passphrase-heading"
+      className={sectionCard}
+    >
       <h3 id="stored-passphrase-heading" className={sectionHeading}>
         {t("keys.storedPassphraseHeading", { path: item.relativePath })}
       </h3>
@@ -267,7 +295,9 @@ export function StoredPassphrasePanel({
           <p className="grow text-sm text-ink">
             {dedicatedStoredFor(dedicatedPhrasePaths, item)
               ? t("keys.usesDedicatedPassphrase")
-              : t("keys.usesStoredPassphrase", { name: namedStoredFor(phrases, item)!.name })}
+              : t("keys.usesStoredPassphrase", {
+                  name: namedStoredFor(phrases, item)!.name,
+                })}
           </p>
           <Button onClick={() => onUnassign(item)}>
             {t("keys.unassignPassphrase")}
@@ -278,17 +308,20 @@ export function StoredPassphrasePanel({
       {phrases.length === 0 ? null : (
         <div className="flex flex-wrap items-end gap-3">
           <Field label={t("keys.useStoredPassphrase")}>
-            <select className={control} value={chosenPhrase} onChange={(event) => setChosenPhrase(event.target.value)}>
+            <select
+              className={control}
+              value={chosenPhrase}
+              onChange={(event) => setChosenPhrase(event.target.value)}
+            >
               <option value="">{t("keys.choosePassphraseName")}</option>
               {phrases.map((credential) => (
-                <option key={credential.name} value={credential.name}>{credential.name}</option>
+                <option key={credential.name} value={credential.name}>
+                  {credential.name}
+                </option>
               ))}
             </select>
           </Field>
-          <Button
-            disabled={chosenPhrase === ""}
-            onClick={() => onAssign(item)}
-          >
+          <Button disabled={chosenPhrase === ""} onClick={() => onAssign(item)}>
             {t("keys.useThisPassphrase")}
           </Button>
         </div>
@@ -302,26 +335,25 @@ export function StoredPassphrasePanel({
             className={control}
           />
         </Field>
-        <Field label={t("keys.newStoredPassphraseValue")}>
-          <input
-            type="password"
+        <Field label={t("keys.newStoredPassphraseValue")} interactiveChildren>
+          <PasswordInput
+            label={t("keys.newStoredPassphraseValue")}
             value={form.storedPhraseSecret}
-            onChange={(event) => form.setStoredPhraseSecret(event.target.value)}
-            className={control}
+            onChange={form.setStoredPhraseSecret}
           />
         </Field>
       </div>
       <div className="flex flex-wrap gap-2">
         <Button
           kind="primary"
-          disabled={form.storedPhraseName === "" || form.storedPhraseSecret === ""}
+          disabled={
+            form.storedPhraseName === "" || form.storedPhraseSecret === ""
+          }
           onClick={() => onStoreAndAssign(item)}
         >
           {t("keys.storeAndUsePassphrase")}
         </Button>
-        <Button onClick={form.close}>
-          {t("keys.cancel")}
-        </Button>
+        <Button onClick={form.close}>{t("keys.cancel")}</Button>
       </div>
     </section>
   );
@@ -369,12 +401,14 @@ export function TrashConfirmation({
       )}
       <p className={hintText}>{t("keys.trashIsRecoverable")}</p>
       <div className="flex flex-wrap gap-2">
-        <button type="button" className={rowDanger} onClick={() => onConfirm(item.id)}>
+        <button
+          type="button"
+          className={rowDanger}
+          onClick={() => onConfirm(item.id)}
+        >
           {t("keys.trashConfirm")}
         </button>
-        <Button onClick={onCancel}>
-          {t("keys.trashCancel")}
-        </Button>
+        <Button onClick={onCancel}>{t("keys.trashCancel")}</Button>
       </div>
     </section>
   );
@@ -390,7 +424,10 @@ export function RelocateResult({
   const t = useTranslate();
   if (result === null) return null;
   return (
-    <section aria-labelledby="relocate-result-heading" className="flex flex-col gap-2 text-sm">
+    <section
+      aria-labelledby="relocate-result-heading"
+      className="flex flex-col gap-2 text-sm"
+    >
       <h3 id="relocate-result-heading" className={sectionHeading}>
         {result.blockers.length > 0
           ? t("keys.relocateRefused")
@@ -405,20 +442,28 @@ export function RelocateResult({
       )}
       {result.files.length > 0 && (
         <>
-          <h4 className="text-xs uppercase tracking-wide text-ink-muted">{t("keys.relocateMoved")}</h4>
+          <h4 className="text-xs uppercase tracking-wide text-ink-muted">
+            {t("keys.relocateMoved")}
+          </h4>
           <ul className="font-mono text-xs text-ink-muted">
             {result.files.map((file) => (
-              <li key={file.from}>{t("keys.relocateFilePair", { from: file.from, to: file.to })}</li>
+              <li key={file.from}>
+                {t("keys.relocateFilePair", { from: file.from, to: file.to })}
+              </li>
             ))}
           </ul>
         </>
       )}
       {result.references.length > 0 && (
         <>
-          <h4 className="text-xs uppercase tracking-wide text-ink-muted">{t("keys.relocateRewritten")}</h4>
+          <h4 className="text-xs uppercase tracking-wide text-ink-muted">
+            {t("keys.relocateRewritten")}
+          </h4>
           <ul className="text-xs text-ink-muted">
             {result.references.map((reference) => (
-              <li key={`${reference.configPath}:${reference.line}:${reference.from}`}>
+              <li
+                key={`${reference.configPath}:${reference.line}:${reference.from}`}
+              >
                 {t("keys.relocateReference", {
                   directive: reference.directive,
                   from: reference.from,
@@ -432,7 +477,9 @@ export function RelocateResult({
         </>
       )}
       {result.skipped.length > 0 && (
-        <p className="text-ink-muted">{t("keys.relocateSkipped", { paths: result.skipped.join(", ") })}</p>
+        <p className="text-ink-muted">
+          {t("keys.relocateSkipped", { paths: result.skipped.join(", ") })}
+        </p>
       )}
       {result.notes.map((note) => (
         <p key={note} className="text-notice-ink">
@@ -440,9 +487,7 @@ export function RelocateResult({
         </p>
       ))}
       <div>
-        <Button onClick={onClose}>
-          {t("keys.close")}
-        </Button>
+        <Button onClick={onClose}>{t("keys.close")}</Button>
       </div>
     </section>
   );
