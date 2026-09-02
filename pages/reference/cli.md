@@ -40,7 +40,7 @@ sshc ssh <alias> --non-interactive -- <command...>
 sshc info <alias> --json
 ```
 
-Homebrew版ではbash、zsh、fishの補完が一緒に導入されます。その他の導入方法では、利用中のシェルに合わせて次のいずれかを起動設定へ追加してください。サブコマンド、オプション、列挙値に加え、`sshc ssh`、`sshc info`、`sshc terminal create ssh`では接続先も補完します。接続先候補は、Tabを押した時点の`~/.ssh/config`と到達可能な`Include`から取得されます。`sshc`が起動も評価もしないと定めた文字（shellメタ文字、空白、先頭の`-`など）を含むaliasは`sshc ssh --list`にも補完にも出さず、除外した理由をstderrに表示します。
+Homebrew版ではbash、zsh、fishの補完が一緒に導入されます。その他の導入方法では、利用中のシェルに合わせて次のいずれかを起動設定へ追加してください。サブコマンド、オプション、列挙値に加え、`sshc ssh`、`sshc info`、`sshc terminal create ssh`、`sshc sftp`では接続先も補完します。接続先候補は、Tabを押した時点の`~/.ssh/config`と到達可能な`Include`から取得されます。`sshc`が起動も評価もしないと定めた文字（shellメタ文字、空白、先頭の`-`など）を含むaliasは`sshc ssh --list`にも補完にも出さず、除外した理由をstderrに表示します。
 
 コマンドの解釈、個別ヘルプ、bash／zsh／fishの補完は、同じコマンド定義から作られています。補完に表示される名前や選択肢は、そのバージョンの`sshc help`と一致します。
 
@@ -73,6 +73,19 @@ sshc sync pull [--force] [--json]
 sshc sync now [--json]
 sshc sync auto on|off [--json]
 ```
+
+## SFTP転送
+
+起動中のエンジンと、Web UIと同じOpenSSH設定、Host Key検証、Vaultの認証情報を使って転送します。リモートパスは`/var/log/app.log`のような絶対POSIXパスで指定します。
+
+```sh
+sshc sftp get bastion /var/log/app.log ./app.log
+sshc sftp put bastion ./release.tar.gz /tmp/release.tar.gz
+sshc sftp get bastion /srv/data ./data --recursive
+sshc sftp put bastion ./public /var/www/public --recursive
+```
+
+既存ファイルは暗黙に上書きしません。上書きする場合は`--overwrite`を付けると実行前にまとめて確認し、`--yes`を併用した場合だけ確認を省略します。既存ファイルを残す場合は`--skip-existing`、変更せず転送計画だけ確認する場合は`--dry-run`を利用できます。自動化では`--json`を付けるとstdoutへ1つのJSON結果を出し、進捗はstderrへ分離します。`Ctrl+C`で中断したアップロードは、リモートの一時ファイルも取り消します。
 
 ## Serial / Telnet
 

@@ -126,22 +126,25 @@ func generate() ([]byte, error) {
 	helpTopics []string
 	syncActions []string
 	terminalActions []string
+	sftpActions []string
 	serviceActions []string
 	vaultActions []string
 	encodings []string
 	waitStates []string
 	serialOptions []string
 	telnetOptions []string
+	sftpOptions []string
 }
 
 `)
 	fmt.Fprintf(&source, "var cliCompletionGrammar = completionGrammar{\n\ttopLevel: %s,\n\thelpTopics: %s,\n", stringSlice(topLevel), stringSlice(helpTopics))
-	for _, key := range []string{"sync", "terminal", "service", "vault"} {
+	for _, key := range []string{"sync", "terminal", "sftp", "service", "vault"} {
 		fmt.Fprintf(&source, "\t%sActions: %s,\n", key, stringSlice(actionsFor(commands, key)))
 	}
-	fmt.Fprintf(&source, "\tencodings: %s,\n\twaitStates: %s,\n\tserialOptions: %s,\n\ttelnetOptions: %s,\n}\n",
+	fmt.Fprintf(&source, "\tencodings: %s,\n\twaitStates: %s,\n\tserialOptions: %s,\n\ttelnetOptions: %s,\n\tsftpOptions: %s,\n}\n",
 		stringSlice(clispec.Values["encodings"]), stringSlice(clispec.Values["wait-states"]),
-		stringSlice(clispec.Values["serial-options"]), stringSlice(clispec.Values["telnet-options"]))
+		stringSlice(clispec.Values["serial-options"]), stringSlice(clispec.Values["telnet-options"]),
+		stringSlice(clispec.Values["sftp-options"]))
 	return format.Source(source.Bytes())
 }
 
