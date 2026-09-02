@@ -74,6 +74,7 @@ Print the resolved SSH target without connecting.
 	{Name: "sftp", Route: "sftp", Help: `usage:
   sshc sftp get <alias> <remote-path> <local-path> [options]
   sshc sftp put <alias> <local-path> <remote-path> [options]
+  sshc sftp settings [split-options]
 
 Transfer files through the running engine and its SSH/Vault configuration.
 Remote paths must be absolute POSIX paths.
@@ -84,14 +85,15 @@ Options:
   --skip-existing   leave existing destination files unchanged
   --dry-run         inspect the transfer plan without changing files
   -j, --jobs <n>    transfer up to 1..8 files in parallel (default 1)
-  --split-size <MiB> split downloads at 16..1024 MiB (engine default 100)
-  --split-jobs <n>  use 1..8 streams per large download (engine default 4; 1 disables)
+  --split-size <MiB> split files at 16..1024 MiB (engine default 100)
+  --split-jobs <n>  use 1..8 streams per large file (engine default 4; 1 disables)
   --chunk-size <MiB> split range size from 8..4096 MiB (engine default 32)
   --json            print one machine-readable result on stdout
   -y, --yes         skip the --overwrite confirmation
 `, Actions: []Action{
 		{Name: "get", Help: "usage:\n  sshc sftp get <alias> <remote-path> <local-path> [options]\n\nDownload a file or, with --recursive, a directory. Existing files require\n--overwrite and confirmation, or --skip-existing.\n"},
 		{Name: "put", Help: "usage:\n  sshc sftp put <alias> <local-path> <remote-path> [options]\n\nUpload a file or, with --recursive, a directory. Existing files require\n--overwrite and confirmation, or --skip-existing.\n"},
+		{Name: "settings", Help: "usage:\n  sshc sftp settings [--split-size <MiB>] [--split-jobs <n>] [--chunk-size <MiB>] [--json]\n\nShow the engine-wide split-transfer defaults. Supplied values are persisted and\nused by Web and CLI transfers; get/put flags still override one invocation.\n"},
 	}},
 	{Name: "serial", Route: "serial", Help: `usage:
   sshc serial [--json]
@@ -141,12 +143,13 @@ from the same ~/.ssh/config and Include files as sshc itself.
 }
 
 var Values = map[string][]string{
-	"completion-shells": {"bash", "zsh", "fish"},
-	"encodings":         {"utf-8", "shift_jis", "euc-jp", "iso-2022-jp"},
-	"wait-states":       {"connecting", "connected", "reconnecting", "exited", "agent-working", "agent-attention", "agent-ready", "agent-ended"},
-	"serial-options":    {"--json", "--non-interactive", "--require-output", "--encoding", "--baud", "--data-bits", "--parity", "--stop-bits", "--flow", "--dtr", "--rts", "--break", "--expect", "--read-for", "--timeout", "--settle", "--max-bytes", "--line-ending", "--script", "--help"},
-	"telnet-options":    {"--non-interactive", "--require-output", "--encoding", "--connect-timeout", "--terminal-type", "--expect", "--read-for", "--timeout", "--settle", "--max-bytes", "--line-ending", "--script", "--json", "--help"},
-	"sftp-options":      {"-r", "--recursive", "--overwrite", "--skip-existing", "--dry-run", "-j", "--jobs", "--split-size", "--split-jobs", "--chunk-size", "--json", "-y", "--yes", "--help"},
+	"completion-shells":     {"bash", "zsh", "fish"},
+	"encodings":             {"utf-8", "shift_jis", "euc-jp", "iso-2022-jp"},
+	"wait-states":           {"connecting", "connected", "reconnecting", "exited", "agent-working", "agent-attention", "agent-ready", "agent-ended"},
+	"serial-options":        {"--json", "--non-interactive", "--require-output", "--encoding", "--baud", "--data-bits", "--parity", "--stop-bits", "--flow", "--dtr", "--rts", "--break", "--expect", "--read-for", "--timeout", "--settle", "--max-bytes", "--line-ending", "--script", "--help"},
+	"telnet-options":        {"--non-interactive", "--require-output", "--encoding", "--connect-timeout", "--terminal-type", "--expect", "--read-for", "--timeout", "--settle", "--max-bytes", "--line-ending", "--script", "--json", "--help"},
+	"sftp-options":          {"-r", "--recursive", "--overwrite", "--skip-existing", "--dry-run", "-j", "--jobs", "--split-size", "--split-jobs", "--chunk-size", "--json", "-y", "--yes", "--help"},
+	"sftp-settings-options": {"--split-size", "--split-jobs", "--chunk-size", "--json", "--help"},
 }
 
 const GlobalHelp = `usage:
@@ -183,8 +186,10 @@ const GlobalHelp = `usage:
                        inspect and control terminals owned by the running engine
   sshc sftp get <alias> <remote-path> <local-path> [options]
   sshc sftp put <alias> <local-path> <remote-path> [options]
+  sshc sftp settings [split-options]
                        transfer files through the running engine
-                       options: -r --overwrite --skip-existing --dry-run --json -y
+                       split options: --split-size --split-jobs --chunk-size
+                       transfer options: -r --overwrite --skip-existing --dry-run --json -y
   sshc serial [--json]
                        list serial devices
   sshc serial <device> [options]

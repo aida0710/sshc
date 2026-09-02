@@ -21,6 +21,7 @@ func renderCompletion(template string) string {
 		"{{SERIAL_OPTIONS}}", strings.Join(grammar.serialOptions, " "),
 		"{{TELNET_OPTIONS}}", strings.Join(grammar.telnetOptions, " "),
 		"{{SFTP_OPTIONS}}", strings.Join(grammar.sftpOptions, " "),
+		"{{SFTP_SETTINGS_OPTIONS}}", strings.Join(grammar.sftpSettingsOptions, " "),
 	).Replace(template)
 }
 
@@ -130,13 +131,13 @@ _sshc_completion() {
     sftp)
       if (( COMP_CWORD == 2 )); then
         _sshc_complete_words "{{SFTP_ACTIONS}} --help"
-      elif (( COMP_CWORD == 3 )); then
+      elif (( COMP_CWORD == 3 )) && [[ "${COMP_WORDS[2]}" == "get" || "${COMP_WORDS[2]}" == "put" ]]; then
         _sshc_complete_aliases "--help"
 	  elif [[ "${COMP_WORDS[2]}" == "put" && "$COMP_CWORD" -eq 4 || "${COMP_WORDS[2]}" == "get" && "$COMP_CWORD" -eq 5 ]]; then
 		COMPREPLY=()
 		while IFS= read -r candidate; do COMPREPLY+=("$candidate"); done < <(compgen -f -- "$current")
       else
-        _sshc_complete_words "{{SFTP_OPTIONS}}"
+        case "${COMP_WORDS[2]}" in settings) _sshc_complete_words "{{SFTP_SETTINGS_OPTIONS}}" ;; *) _sshc_complete_words "{{SFTP_OPTIONS}}" ;; esac
       fi
       ;;
     serial)
@@ -266,12 +267,12 @@ _sshc() {
     sftp)
       if (( CURRENT == 3 )); then
         _sshc_values '{{SFTP_ACTIONS}} --help'
-      elif (( CURRENT == 4 )); then
+      elif (( CURRENT == 4 )) && [[ "${words[3]}" == 'get' || "${words[3]}" == 'put' ]]; then
         _sshc_aliases
 	  elif [[ "${words[3]}" == 'put' && "$CURRENT" -eq 5 || "${words[3]}" == 'get' && "$CURRENT" -eq 6 ]]; then
 		_files
       else
-		_sshc_values '{{SFTP_OPTIONS}}'
+		case "${words[3]}" in settings) _sshc_values '{{SFTP_SETTINGS_OPTIONS}}' ;; *) _sshc_values '{{SFTP_OPTIONS}}' ;; esac
       fi
       ;;
     serial) _sshc_values '{{SERIAL_OPTIONS}}' ;;
@@ -414,7 +415,8 @@ complete -c sshc -f -n '__sshc_command engine' -a '--port --replace --help'
 complete -c sshc -f -n '__sshc_command info; and __sshc_min_words 3' -a '--json'
 complete -c sshc -f -n '__sshc_command status' -a '--json --help'
 complete -c sshc -f -n '__sshc_command update' -a '-y --yes --help'
-complete -c sshc -f -n '__sshc_command sftp' -a '{{SFTP_OPTIONS}}'
+complete -c sshc -f -n '__sshc_action sftp settings' -a '{{SFTP_SETTINGS_OPTIONS}}'
+complete -c sshc -f -n '__sshc_action sftp get; or __sshc_action sftp put' -a '{{SFTP_OPTIONS}}'
 complete -c sshc -f -n '__sshc_action sync push; or __sshc_action sync pull' -a '--force'
 complete -c sshc -f -n '__sshc_sync_json' -a '--json'
 complete -c sshc -f -n '__sshc_terminal_options' -a '--json'

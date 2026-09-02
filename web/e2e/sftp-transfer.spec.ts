@@ -6,6 +6,16 @@ test("keeps a chunked SFTP upload visible while another section is open", async 
   const firstChunkGate = new Promise<void>((resolve) => { releaseFirstChunk = resolve; });
   let offset = 0;
   let chunks = 0;
+  const uploadState = (id: string, path: string, size: number) => ({
+    id,
+    path,
+    offset,
+    size,
+    expectedRevision: "absent",
+    completedRanges: offset === 0 ? [] : [{ offset: 0, length: offset }],
+    parallelism: 1,
+    chunkBytes: 32 << 20,
+  });
 
   await page.route("**/api/v1/sftp/bastion/entries**", (route) => route.fulfill({
     status: 200,
@@ -116,14 +126,14 @@ test("keeps a chunked SFTP upload visible while another section is open", async 
     }
     if (request.method() === "POST") {
       const body = request.postDataJSON() as { path: string; size: number };
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ id, path: body.path, offset, size: body.size, expectedRevision: "absent" }) });
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(uploadState(id, body.path, body.size)) });
       return;
     }
     if (request.method() === "PATCH") {
       if (chunks++ === 0) await firstChunkGate;
       offset += request.postDataBuffer()?.byteLength ?? 0;
       const total = Number(url.searchParams.get("total"));
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ id, path: url.searchParams.get("path"), offset, size: total, expectedRevision: "" }) });
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(uploadState(id, url.searchParams.get("path") ?? "", total)) });
       return;
     }
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ changed: true }) });

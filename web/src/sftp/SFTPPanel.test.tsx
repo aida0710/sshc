@@ -16,7 +16,8 @@ const api = vi.hoisted(() => ({
   remove: vi.fn(),
   download: vi.fn(),
   startUpload: vi.fn(),
-  appendUpload: vi.fn(),
+	appendUpload: vi.fn(),
+	appendUploadRange: vi.fn(),
   completeUpload: vi.fn(),
   cancelUpload: vi.fn(),
   createTransfer: vi.fn(),
@@ -56,8 +57,8 @@ describe("SFTPPanel uploads", () => {
     api.rename.mockResolvedValue(undefined);
     api.previewFile.mockRejectedValue(new ApiError("sftp_preview_type", 415, null));
     api.remove.mockResolvedValue(undefined);
-	api.startUpload.mockImplementation(async (_alias: string, id: string, path: string, size: number) => ({ id, path, offset: 0, size, expectedRevision: "absent" }));
-	api.appendUpload.mockImplementation(async (_alias: string, id: string, path: string, _offset: number, total: number) => ({ id, path, offset: total, size: total, expectedRevision: "" }));
+	api.startUpload.mockImplementation(async (_alias: string, id: string, path: string, size: number) => ({ id, path, offset: 0, size, expectedRevision: "absent", completedRanges: [], parallelism: 1, chunkBytes: 32 << 20 }));
+	api.appendUpload.mockImplementation(async (_alias: string, id: string, path: string, _offset: number, total: number) => ({ id, path, offset: total, size: total, expectedRevision: "", completedRanges: [], parallelism: 1, chunkBytes: 32 << 20 }));
 	api.completeUpload.mockResolvedValue(undefined);
 	api.cancelUpload.mockResolvedValue(undefined);
     const server = new Map<string, Record<string, unknown>>();

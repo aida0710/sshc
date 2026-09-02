@@ -159,6 +159,16 @@ type ResumableUpload struct {
 	Offset           int64
 	Size             int64
 	ExpectedRevision string
+	CompletedRanges  []UploadRange
+	Parallelism      int
+	ChunkBytes       int64
+}
+
+// UploadRange is one complete, durable range in a parallel upload part.
+// Ranges are sorted, non-overlapping and coalesced before they are persisted.
+type UploadRange struct {
+	Offset int64 `json:"offset"`
+	Size   int64 `json:"size"`
 }
 
 type StartUploadOptions struct {
@@ -171,6 +181,7 @@ type StartUploadOptions struct {
 type WriteSeekCloser interface {
 	io.Writer
 	io.Seeker
+	Truncate(size int64) error
 	io.Closer
 }
 

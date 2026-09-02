@@ -73,7 +73,7 @@ func generate() ([]byte, error) {
 			help[topic] = action.Help
 		}
 	}
-	for _, key := range []string{"completion-shells", "encodings", "wait-states", "serial-options", "telnet-options"} {
+	for _, key := range []string{"completion-shells", "encodings", "wait-states", "serial-options", "telnet-options", "sftp-options", "sftp-settings-options"} {
 		if len(clispec.Values[key]) == 0 {
 			return nil, fmt.Errorf("CLI value set %q is empty or missing", key)
 		}
@@ -134,6 +134,7 @@ func generate() ([]byte, error) {
 	serialOptions []string
 	telnetOptions []string
 	sftpOptions []string
+	sftpSettingsOptions []string
 }
 
 `)
@@ -141,10 +142,10 @@ func generate() ([]byte, error) {
 	for _, key := range []string{"sync", "terminal", "sftp", "service", "vault"} {
 		fmt.Fprintf(&source, "\t%sActions: %s,\n", key, stringSlice(actionsFor(commands, key)))
 	}
-	fmt.Fprintf(&source, "\tencodings: %s,\n\twaitStates: %s,\n\tserialOptions: %s,\n\ttelnetOptions: %s,\n\tsftpOptions: %s,\n}\n",
+	fmt.Fprintf(&source, "\tencodings: %s,\n\twaitStates: %s,\n\tserialOptions: %s,\n\ttelnetOptions: %s,\n\tsftpOptions: %s,\n\tsftpSettingsOptions: %s,\n}\n",
 		stringSlice(clispec.Values["encodings"]), stringSlice(clispec.Values["wait-states"]),
 		stringSlice(clispec.Values["serial-options"]), stringSlice(clispec.Values["telnet-options"]),
-		stringSlice(clispec.Values["sftp-options"]))
+		stringSlice(clispec.Values["sftp-options"]), stringSlice(clispec.Values["sftp-settings-options"]))
 	return format.Source(source.Bytes())
 }
 

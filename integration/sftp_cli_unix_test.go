@@ -106,7 +106,7 @@ func TestSFTPCLIRoundTripsAgainstRealOpenSSH(t *testing.T) {
 		}
 	}
 	remoteRoot := fmt.Sprintf("/tmp/sshc-sftp-cli-%d", time.Now().UnixNano())
-	put := start(t, home, "sftp", "put", alias, source, remoteRoot, "--recursive", "--jobs", "3", "--json")
+	put := start(t, home, "sftp", "put", alias, source, remoteRoot, "--recursive", "--jobs", "3", "--split-size", "16", "--split-jobs", "4", "--chunk-size", "8", "--json")
 	if code := put.wait(t, 90*time.Second); code != 0 {
 		t.Fatalf("sftp put exit = %d\nstdout: %s\nstderr: %s", code, put.Stdout.String(), put.Stderr.String())
 	}

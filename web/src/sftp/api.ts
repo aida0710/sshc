@@ -188,6 +188,15 @@ export const sftpApi = {
       ...(signal === undefined ? {} : { signal }),
     }));
   },
+  async appendUploadRange(alias: string, id: string, remotePath: string, offset: number, total: number, chunk: Blob, signal?: AbortSignal): Promise<ResumableUpload> {
+    const query = `/api/v1/sftp/${encodeURIComponent(alias)}/uploads/${encodeURIComponent(id)}?path=${encodeURIComponent(remotePath)}&offset=${offset}&total=${total}&range=true&length=${chunk.size}`;
+    return resumableUpload(await apiClient.mutate<unknown>(query, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/octet-stream" },
+      body: chunk,
+      ...(signal === undefined ? {} : { signal }),
+    }));
+  },
   async completeUpload(alias: string, id: string, remotePath: string, size: number, expectedRevision: string, sourceFingerprint: string): Promise<void> {
     await apiClient.mutate<unknown>(`/api/v1/sftp/${encodeURIComponent(alias)}/uploads/${encodeURIComponent(id)}/complete`, {
       method: "POST",

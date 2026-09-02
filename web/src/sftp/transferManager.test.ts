@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { CreateTransferJob, StreamDownloadOptions, TransferJob, TransferJobAction } from "./api";
+import type { CreateTransferJob, ResumableUpload, StreamDownloadOptions, TransferJob, TransferJobAction } from "./api";
 import { SFTPTransferManager } from "./transferManager";
 
 function engineAPI(overrides: Record<string, unknown> = {}) {
@@ -68,10 +68,14 @@ function engineAPI(overrides: Record<string, unknown> = {}) {
     }),
     verifyDownload: vi.fn(async () => undefined),
     startUpload: vi.fn(async (_alias: string, id: string, path: string, size: number) => ({
-      id, path, offset: 0, size, expectedRevision: "absent",
+      id, path, offset: 0, size, expectedRevision: "absent", completedRanges: [] as ResumableUpload["completedRanges"], parallelism: 1, chunkBytes: 32 << 20,
     })),
     appendUpload: vi.fn(async (_alias: string, id: string, path: string, _offset: number, total: number) => ({
-      id, path, offset: total, size: total, expectedRevision: "",
+      id, path, offset: total, size: total, expectedRevision: "", completedRanges: [], parallelism: 1, chunkBytes: 32 << 20,
+    })),
+    appendUploadRange: vi.fn(async (_alias: string, id: string, path: string, offset: number, total: number, chunk: Blob) => ({
+      id, path, offset: offset + chunk.size, size: total, expectedRevision: "absent",
+      completedRanges: [{ offset, size: chunk.size }], parallelism: 4, chunkBytes: 8 << 20,
     })),
     completeUpload: vi.fn(async (_alias: string, id: string, _path: string, size: number) => {
       const current = jobs.get(id);
@@ -127,6 +131,35 @@ describe("SFTPTransferManager engine ownership", () => {
     }));
   });
 
+  it("uploads one large file as independent ranges and resumes completed ranges", async () => {
+    const api = engineAPI();
+    api.startUpload.mockImplementation(async (_alias, id, path, size) => ({
+      id, path, offset: 2, size, expectedRevision: "absent",
+      completedRanges: [{ offset: 0, size: 2 }], parallelism: 2, chunkBytes: 2,
+    }));
+    const acknowledged: Array<{ offset: number; body: string }> = [];
+    api.appendUploadRange.mockImplementation(async (_alias, id, path, offset, total, chunk) => {
+      acknowledged.push({ offset, body: await chunk.text() });
+      return {
+        id, path, offset: 2 + acknowledged.reduce((sum, range) => sum + range.body.length, 0), size: total,
+        expectedRevision: "absent", completedRanges: [{ offset: 0, size: 2 }, { offset, size: chunk.size }],
+        parallelism: 2, chunkBytes: 2,
+      };
+    });
+    const manager = new SFTPTransferManager(api);
+    await manager.addUploads([{
+      alias: "edge", remotePath: "/large.bin", localName: "large.bin", file: new File(["abcdefgh"], "large.bin"),
+    }]);
+    await vi.waitFor(() => expect(manager.getSnapshot()[0]?.status).toBe("completed"));
+    expect(api.appendUpload).not.toHaveBeenCalled();
+    expect(acknowledged.sort((left, right) => left.offset - right.offset)).toEqual([
+      { offset: 2, body: "cd" }, { offset: 4, body: "ef" }, { offset: 6, body: "gh" },
+    ]);
+    expect(api.completeUpload).toHaveBeenCalledWith(
+      "edge", expect.any(String), "/large.bin", 8, "absent", expect.stringMatching(/^tree-sha256:/),
+    );
+  });
+
   it("registers downloads in the engine and mirrors engine progress", async () => {
     const api = engineAPI();
     const manager = new SFTPTransferManager(api);
@@ -165,7 +198,7 @@ describe("SFTPTransferManager engine ownership", () => {
     const api = engineAPI();
     api.startUpload.mockImplementation(async (_alias, id, path, size) => {
       if (path.endsWith("bad.txt") && failBad) throw new Error("connection_lost");
-      return { id, path, offset: 0, size, expectedRevision: "absent" };
+      return { id, path, offset: 0, size, expectedRevision: "absent", completedRanges: [], parallelism: 1, chunkBytes: 32 << 20 };
     });
     const manager = new SFTPTransferManager(api);
     await manager.addUploads([
@@ -187,7 +220,7 @@ describe("SFTPTransferManager engine ownership", () => {
     const api = engineAPI();
     api.appendUpload.mockImplementation(async (_alias, id, path, _offset, total) => {
       await new Promise<void>((resolve) => releases.push(resolve));
-      return { id, path, offset: total, size: total, expectedRevision: "" };
+      return { id, path, offset: total, size: total, expectedRevision: "", completedRanges: [], parallelism: 1, chunkBytes: 32 << 20 };
     });
     api.streamDownload.mockImplementation(async (_alias, _id, _path, _directory, _offset, options) => {
       options.onRevision?.('"revision-limit"');

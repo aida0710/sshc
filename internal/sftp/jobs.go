@@ -133,6 +133,7 @@ type TransferJob struct {
 	LargeFileThresholdBytes int64
 	LargeFileParallelism    int
 	LargeFileChunkBytes     int64
+	UploadRanges            []UploadRange
 	CreatedAt               time.Time
 	UpdatedAt               time.Time
 }
@@ -613,7 +614,7 @@ func (m *TransferManager) CreateJob(input CreateTransferJob) (TransferJob, error
 			(input.LargeFileParallelism < 1 || input.LargeFileParallelism > MaxLargeFileParallelism)) ||
 		(input.LargeFileChunkBytes != 0 &&
 			(input.LargeFileChunkBytes < MinLargeFileChunkBytes || input.LargeFileChunkBytes > MaxLargeFileChunkBytes)) ||
-		((input.Direction != TransferDownload || input.Kind != TransferFile) &&
+		(((input.Direction != TransferDownload && input.Direction != TransferUpload) || input.Kind != TransferFile) &&
 			(input.LargeFileThresholdBytes != 0 || input.LargeFileParallelism != 0 || input.LargeFileChunkBytes != 0)) {
 		return TransferJob{}, ErrInvalidTransfer
 	}
@@ -931,6 +932,9 @@ func (m *TransferManager) updateJob(id string, update UpdateTransferJob, origin 
 		}
 		if update.ResetProgress {
 			job.TransferredBytes = 0
+			if job.Direction == TransferUpload {
+				job.UploadRanges = nil
+			}
 			if job.Direction == TransferDownload {
 				record.sentBytes, record.revision = 0, ""
 			}
@@ -949,6 +953,9 @@ func (m *TransferManager) updateJob(id string, update UpdateTransferJob, origin 
 		}
 		if update.ResetProgress {
 			job.TransferredBytes = 0
+			if job.Direction == TransferUpload {
+				job.UploadRanges = nil
+			}
 			if job.Direction == TransferDownload {
 				record.sentBytes, record.revision = 0, ""
 				job.DownloadRevision = ""

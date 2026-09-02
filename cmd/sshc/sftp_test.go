@@ -61,6 +61,55 @@ func testSFTPEngine(server *httptest.Server) *engineAPI {
 	}
 }
 
+func TestSFTPSettingsShowsAndPersistsSplitDefaults(t *testing.T) {
+	settings := sftpCLITransferQueue{
+		MaxConcurrent: 3, ClearCompletedAfterSeconds: 300, ProcessingStopped: true,
+		LargeFileThresholdBytes: 100 << 20, LargeFileParallelism: 4, LargeFileChunkBytes: 32 << 20,
+		Jobs: []json.RawMessage{},
+	}
+	var updates int
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		switch {
+		case request.Method == http.MethodGet && request.URL.Path == "/api/v1/sftp/transfers":
+			writeTestJSON(response, http.StatusOK, settings)
+		case request.Method == http.MethodPut && request.URL.Path == "/api/v1/sftp/transfers/settings":
+			updates++
+			if err := json.NewDecoder(request.Body).Decode(&settings); err != nil {
+				t.Errorf("decode settings: %v", err)
+			}
+			settings.Jobs = []json.RawMessage{}
+			writeTestJSON(response, http.StatusOK, settings)
+		default:
+			t.Errorf("unexpected request: %s %s", request.Method, request.URL.String())
+			response.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	var stdout, stderr strings.Builder
+	called := sftpInvocation{Action: sftpSettings, SplitSizeMiB: 73, SplitJobs: 7, ChunkSizeMiB: 41}
+	if code := runSFTPSettings(context.Background(), testSFTPEngine(server), called, &stdout, &stderr); code != 0 {
+		t.Fatalf("code=%d stderr=%q", code, stderr.String())
+	}
+	if updates != 1 || settings.MaxConcurrent != 3 || settings.ClearCompletedAfterSeconds != 300 || !settings.ProcessingStopped ||
+		settings.LargeFileThresholdBytes != 73<<20 || settings.LargeFileParallelism != 7 || settings.LargeFileChunkBytes != 41<<20 {
+		t.Fatalf("settings=%+v updates=%d", settings, updates)
+	}
+	if got := stdout.String(); got != "split-size  73 MiB\nsplit-jobs  7\nchunk-size  41 MiB\n" {
+		t.Fatalf("stdout=%q", got)
+	}
+
+	stdout.Reset()
+	called = sftpInvocation{Action: sftpSettings, JSON: true}
+	if code := runSFTPSettings(context.Background(), testSFTPEngine(server), called, &stdout, &stderr); code != 0 {
+		t.Fatalf("json code=%d stderr=%q", code, stderr.String())
+	}
+	if updates != 1 || !strings.Contains(stdout.String(), `"splitSizeMiB":73`) || !strings.Contains(stdout.String(), `"splitJobs":7`) ||
+		!strings.Contains(stdout.String(), `"chunkSizeMiB":41`) {
+		t.Fatalf("json stdout=%q updates=%d", stdout.String(), updates)
+	}
+}
+
 func TestSFTPDownloadUsesRemotePathAndPublishesAtomically(t *testing.T) {
 	var createdRemotePath string
 	var checkpointOffset float64
@@ -153,7 +202,7 @@ func TestSFTPUploadStreamsChunksAndCarriesOverwritePolicy(t *testing.T) {
 	}
 	err := sftpUploadFile(context.Background(), testSFTPEngine(server), "server-a", "batch_12345678", sftpCLIFile{
 		Source: source, Destination: "/remote/file.txt", Size: 7,
-	}, true)
+	}, true, 0, 0, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -181,6 +230,31 @@ func TestSFTPFingerprintMatchesTheBrowserTreeHash(t *testing.T) {
 	const want = "tree-sha256:e13dee54bfc1b26042c1fec4b1d8ef2054b22fa1ab1263adce665eb013f829d5"
 	if got != want {
 		t.Fatalf("fingerprint = %q, want %q", got, want)
+	}
+}
+
+func TestValidSFTPUploadRangesRejectsUntrustedEngineProgress(t *testing.T) {
+	const chunk = int64(8 << 20)
+	tests := []struct {
+		name        string
+		ranges      []sftpCLIUploadRange
+		transferred int64
+		valid       bool
+	}{
+		{"empty", nil, 0, true},
+		{"coalesced prefix", []sftpCLIUploadRange{{Offset: 0, Size: 2 * chunk}}, 2 * chunk, true},
+		{"last partial", []sftpCLIUploadRange{{Offset: 2 * chunk, Size: chunk / 2}}, chunk / 2, true},
+		{"overlap", []sftpCLIUploadRange{{Offset: 0, Size: 2 * chunk}, {Offset: chunk, Size: chunk}}, 3 * chunk, false},
+		{"unaligned start", []sftpCLIUploadRange{{Offset: 1, Size: chunk}}, chunk, false},
+		{"progress mismatch", []sftpCLIUploadRange{{Offset: 0, Size: chunk}}, 0, false},
+		{"past total", []sftpCLIUploadRange{{Offset: 2 * chunk, Size: chunk}}, chunk, false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := validSFTPUploadRanges(test.ranges, test.transferred, 2*chunk+chunk/2, chunk); got != test.valid {
+				t.Fatalf("validSFTPUploadRanges() = %v", got)
+			}
+		})
 	}
 }
 

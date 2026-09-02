@@ -39,6 +39,7 @@ const (
 	sftpInvalid sftpAction = iota
 	sftpGet
 	sftpPut
+	sftpSettings
 )
 
 type sftpInvocation struct {
@@ -225,11 +226,14 @@ func parseSFTPInvocation(args []string) (invocation, error) {
 	if helpRequested(args) {
 		return helpInvocation(canonicalCLICommand(cliCommandSftp)), nil
 	}
-	if len(args) > 1 && (args[0] == "get" || args[0] == "put") && isHelpFlag(args[1]) {
+	if len(args) > 1 && (args[0] == "get" || args[0] == "put" || args[0] == "settings") && isHelpFlag(args[1]) {
 		return helpInvocation(canonicalCLICommand(cliCommandSftp) + " " + args[0]), nil
 	}
-	if len(args) == 0 || (args[0] != "get" && args[0] != "put") {
-		return invalidInvocation("sftp requires get or put")
+	if len(args) == 0 || (args[0] != "get" && args[0] != "put" && args[0] != "settings") {
+		return invalidInvocation("sftp requires get, put, or settings")
+	}
+	if args[0] == "settings" {
+		return parseSFTPSettingsInvocation(args[1:])
 	}
 	called := sftpInvocation{Action: sftpGet, Jobs: 1}
 	jobsSet := false
@@ -357,11 +361,60 @@ func parseSFTPInvocation(args []string) (invocation, error) {
 	if called.Yes && !called.Overwrite {
 		return invalidInvocation("sftp --yes requires --overwrite")
 	}
-	if called.Action != sftpGet && (called.SplitSizeMiB != 0 || called.SplitJobs != 0 || called.ChunkSizeMiB != 0) {
-		return invalidInvocation("sftp put does not accept --split-size, --split-jobs, or --chunk-size")
-	}
 	called.Alias, called.Source, called.Destination = positionals[0], positionals[1], positionals[2]
 	return invocation{Kind: invocationSFTP, JSON: called.JSON, Yes: called.Yes, SFTP: &called}, nil
+}
+
+func parseSFTPSettingsInvocation(args []string) (invocation, error) {
+	called := sftpInvocation{Action: sftpSettings}
+	splitSizeSet := false
+	splitJobsSet := false
+	chunkSizeSet := false
+	for index := 0; index < len(args); index++ {
+		switch args[index] {
+		case "--json":
+			if called.JSON {
+				return invalidInvocation("sftp settings accepts --json only once")
+			}
+			called.JSON = true
+		case "--split-size":
+			if splitSizeSet || index+1 >= len(args) {
+				return invalidInvocation("sftp settings --split-size requires one MiB value from 16 to 1024")
+			}
+			index++
+			size, err := strconv.Atoi(args[index])
+			if err != nil || size < 16 || size > 1024 {
+				return invalidInvocation("sftp settings --split-size requires one MiB value from 16 to 1024")
+			}
+			called.SplitSizeMiB = size
+			splitSizeSet = true
+		case "--split-jobs":
+			if splitJobsSet || index+1 >= len(args) {
+				return invalidInvocation("sftp settings --split-jobs requires one number from 1 to 8")
+			}
+			index++
+			jobs, err := strconv.Atoi(args[index])
+			if err != nil || jobs < 1 || jobs > 8 {
+				return invalidInvocation("sftp settings --split-jobs requires one number from 1 to 8")
+			}
+			called.SplitJobs = jobs
+			splitJobsSet = true
+		case "--chunk-size":
+			if chunkSizeSet || index+1 >= len(args) {
+				return invalidInvocation("sftp settings --chunk-size requires one MiB value from 8 to 4096")
+			}
+			index++
+			size, err := strconv.Atoi(args[index])
+			if err != nil || size < 8 || size > 4096 {
+				return invalidInvocation("sftp settings --chunk-size requires one MiB value from 8 to 4096")
+			}
+			called.ChunkSizeMiB = size
+			chunkSizeSet = true
+		default:
+			return invalidInvocation(fmt.Sprintf("unknown sftp settings option %q", args[index]))
+		}
+	}
+	return invocation{Kind: invocationSFTP, JSON: called.JSON, SFTP: &called}, nil
 }
 
 func parseConfirmationOnlyInvocation(kind invocationKind, command string, args []string) (invocation, error) {

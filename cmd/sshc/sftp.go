@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -49,11 +50,19 @@ type sftpCLIListing struct {
 }
 
 type sftpCLIUpload struct {
-	ID               string `json:"id"`
-	Path             string `json:"path"`
-	Offset           int64  `json:"offset"`
-	Size             int64  `json:"size"`
-	ExpectedRevision string `json:"expectedRevision"`
+	ID               string               `json:"id"`
+	Path             string               `json:"path"`
+	Offset           int64                `json:"offset"`
+	Size             int64                `json:"size"`
+	ExpectedRevision string               `json:"expectedRevision"`
+	CompletedRanges  []sftpCLIUploadRange `json:"completedRanges"`
+	Parallelism      int                  `json:"parallelism"`
+	ChunkBytes       int64                `json:"chunkBytes"`
+}
+
+type sftpCLIUploadRange struct {
+	Offset int64 `json:"offset"`
+	Size   int64 `json:"size"`
 }
 
 type sftpCLITransfer struct {
@@ -73,6 +82,22 @@ type sftpCLIResult struct {
 	Skipped     int    `json:"skipped"`
 	Overwritten int    `json:"overwritten"`
 	DryRun      bool   `json:"dryRun"`
+}
+
+type sftpCLITransferQueue struct {
+	MaxConcurrent              int               `json:"maxConcurrent"`
+	ClearCompletedAfterSeconds int               `json:"clearCompletedAfterSeconds"`
+	ProcessingStopped          bool              `json:"processingStopped"`
+	LargeFileThresholdBytes    int64             `json:"largeFileThresholdBytes"`
+	LargeFileParallelism       int               `json:"largeFileParallelism"`
+	LargeFileChunkBytes        int64             `json:"largeFileChunkBytes"`
+	Jobs                       []json.RawMessage `json:"jobs"`
+}
+
+type sftpCLISettingsResult struct {
+	SplitSizeMiB int64 `json:"splitSizeMiB"`
+	SplitJobs    int   `json:"splitJobs"`
+	ChunkSizeMiB int64 `json:"chunkSizeMiB"`
 }
 
 type sftpCLIFile struct {
@@ -107,6 +132,9 @@ func runSFTP(
 		return finishSFTPFailure(called.JSON, err, stdout, stderr)
 	}
 	defer func() { _ = engine.Close() }()
+	if called.Action == sftpSettings {
+		return runSFTPSettings(ctx, engine, called, stdout, stderr)
+	}
 
 	var plan sftpCLIPlan
 	if called.Action == sftpGet {
@@ -177,6 +205,59 @@ func runSFTP(
 		return finishSFTPFailure(called.JSON, err, stdout, stderr)
 	}
 	return finishSFTPSuccess(called.JSON, result, stdout)
+}
+
+func runSFTPSettings(ctx context.Context, engine *engineAPI, called sftpInvocation, stdout, stderr io.Writer) int {
+	var settings sftpCLITransferQueue
+	if err := engine.sendJSON(ctx, http.MethodGet, "/api/v1/sftp/transfers", nil, &settings); err != nil {
+		return finishSFTPFailure(called.JSON, err, stdout, stderr)
+	}
+	if !validSFTPCLITransferSettings(settings) {
+		return finishSFTPFailure(called.JSON, errEngineInvalidResponse, stdout, stderr)
+	}
+	if called.SplitSizeMiB > 0 {
+		settings.LargeFileThresholdBytes = int64(called.SplitSizeMiB) << 20
+	}
+	if called.SplitJobs > 0 {
+		settings.LargeFileParallelism = called.SplitJobs
+	}
+	if called.ChunkSizeMiB > 0 {
+		settings.LargeFileChunkBytes = int64(called.ChunkSizeMiB) << 20
+	}
+	if called.SplitSizeMiB > 0 || called.SplitJobs > 0 || called.ChunkSizeMiB > 0 {
+		request := map[string]any{
+			"maxConcurrent": settings.MaxConcurrent, "clearCompletedAfterSeconds": settings.ClearCompletedAfterSeconds,
+			"processingStopped": settings.ProcessingStopped, "largeFileThresholdBytes": settings.LargeFileThresholdBytes,
+			"largeFileParallelism": settings.LargeFileParallelism, "largeFileChunkBytes": settings.LargeFileChunkBytes,
+		}
+		if err := engine.sendJSON(ctx, http.MethodPut, "/api/v1/sftp/transfers/settings", request, &settings); err != nil {
+			return finishSFTPFailure(called.JSON, err, stdout, stderr)
+		}
+		if !validSFTPCLITransferSettings(settings) {
+			return finishSFTPFailure(called.JSON, errEngineInvalidResponse, stdout, stderr)
+		}
+	}
+	result := sftpCLISettingsResult{
+		SplitSizeMiB: settings.LargeFileThresholdBytes >> 20,
+		SplitJobs:    settings.LargeFileParallelism,
+		ChunkSizeMiB: settings.LargeFileChunkBytes >> 20,
+	}
+	if called.JSON {
+		if err := writeCommandEnvelope(stdout, commandEnvelope{SchemaVersion: 1, Success: true, Result: result}); err != nil {
+			return 1
+		}
+		return 0
+	}
+	fmt.Fprintf(stdout, "split-size  %d MiB\nsplit-jobs  %d\nchunk-size  %d MiB\n", result.SplitSizeMiB, result.SplitJobs, result.ChunkSizeMiB)
+	return 0
+}
+
+func validSFTPCLITransferSettings(settings sftpCLITransferQueue) bool {
+	return settings.MaxConcurrent >= 1 && settings.MaxConcurrent <= 8 &&
+		settings.ClearCompletedAfterSeconds >= 0 && settings.ClearCompletedAfterSeconds <= 86400 &&
+		settings.LargeFileThresholdBytes >= 16<<20 && settings.LargeFileThresholdBytes <= 1024<<20 &&
+		settings.LargeFileParallelism >= 1 && settings.LargeFileParallelism <= 8 &&
+		settings.LargeFileChunkBytes >= 8<<20 && settings.LargeFileChunkBytes <= int64(4096)<<20
 }
 
 func buildSFTPGetPlan(ctx context.Context, engine *engineAPI, called sftpInvocation) (sftpCLIPlan, error) {
@@ -398,7 +479,7 @@ func executeSFTPPut(ctx context.Context, engine *engineAPI, plan sftpCLIPlan, ca
 		fmt.Fprintf(stderr, "put  %s -> %s:%s\n", file.Source, plan.Alias, file.Destination)
 	}
 	return runSFTPFileWorkers(ctx, files, called.Jobs, func(workerContext context.Context, file sftpCLIFile) error {
-		return sftpUploadFile(workerContext, engine, plan.Alias, batchID, file, called.Overwrite)
+		return sftpUploadFile(workerContext, engine, plan.Alias, batchID, file, called.Overwrite, called.SplitSizeMiB, called.SplitJobs, called.ChunkSizeMiB)
 	})
 }
 
@@ -540,7 +621,7 @@ func sftpDownloadFile(
 	return sftpJobAction(ctx, engine, jobID, "complete")
 }
 
-func sftpUploadFile(ctx context.Context, engine *engineAPI, alias, batchID string, file sftpCLIFile, overwrite bool) (returnErr error) {
+func sftpUploadFile(ctx context.Context, engine *engineAPI, alias, batchID string, file sftpCLIFile, overwrite bool, splitSizeMiB, splitJobs, chunkSizeMiB int) (returnErr error) {
 	input, err := os.Open(file.Source)
 	if err != nil {
 		return err
@@ -557,7 +638,7 @@ func sftpUploadFile(ctx context.Context, engine *engineAPI, alias, batchID strin
 	if err != nil {
 		return err
 	}
-	if err := sftpCreateJobWithOverwrite(ctx, engine, jobID, batchID, alias, "upload", file, overwrite); err != nil {
+	if err := sftpCreateUploadJob(ctx, engine, jobID, batchID, alias, file, overwrite, splitSizeMiB, splitJobs, chunkSizeMiB); err != nil {
 		return err
 	}
 	defer func() {
@@ -585,6 +666,19 @@ func sftpUploadFile(ctx context.Context, engine *engineAPI, alias, batchID strin
 	}
 	if upload.Offset < 0 || upload.Offset > file.Size || upload.ExpectedRevision == "" {
 		return errEngineInvalidResponse
+	}
+	if upload.Parallelism > 1 {
+		if !validSFTPUploadRanges(upload.CompletedRanges, upload.Offset, upload.Size, upload.ChunkBytes) {
+			return errEngineInvalidResponse
+		}
+		if err := sftpUploadFileRanges(ctx, engine, input, basePath, file, upload); err != nil {
+			return err
+		}
+		var completed sftpCLITransfer
+		return engine.sendJSON(ctx, http.MethodPost, basePath+"/complete", map[string]any{
+			"path": file.Destination, "size": file.Size, "expectedRevision": upload.ExpectedRevision,
+			"sourceFingerprint": fingerprint,
+		}, &completed)
 	}
 	if _, err := input.Seek(upload.Offset, io.SeekStart); err != nil {
 		return err
@@ -629,6 +723,81 @@ func sftpUploadFile(ctx context.Context, engine *engineAPI, alias, batchID strin
 	}, &completed)
 }
 
+func validSFTPUploadRanges(ranges []sftpCLIUploadRange, transferred, total, chunkBytes int64) bool {
+	if chunkBytes <= 0 || len(ranges) > 65536 || transferred < 0 || transferred > total {
+		return false
+	}
+	var previousEnd, completed int64
+	for index, portion := range ranges {
+		if portion.Offset < 0 || portion.Size <= 0 || portion.Offset%chunkBytes != 0 || portion.Offset > total ||
+			portion.Size > total-portion.Offset || (index > 0 && portion.Offset <= previousEnd) {
+			return false
+		}
+		end := portion.Offset + portion.Size
+		if end != total && end%chunkBytes != 0 {
+			return false
+		}
+		previousEnd = end
+		completed += portion.Size
+	}
+	return completed == transferred
+}
+
+func sftpUploadFileRanges(ctx context.Context, engine *engineAPI, input *os.File, basePath string, file sftpCLIFile, upload sftpCLIUpload) error {
+	ranges := make([]sftpCLIUploadRange, 0)
+	for offset := int64(0); offset < file.Size; offset += upload.ChunkBytes {
+		size := min(upload.ChunkBytes, file.Size-offset)
+		covered := false
+		for _, done := range upload.CompletedRanges {
+			if offset >= done.Offset && offset+size <= done.Offset+done.Size {
+				covered = true
+				break
+			}
+		}
+		if !covered {
+			ranges = append(ranges, sftpCLIUploadRange{Offset: offset, Size: size})
+		}
+	}
+	workerContext, cancel := context.WithCancel(ctx)
+	defer cancel()
+	work := make(chan sftpCLIUploadRange, len(ranges))
+	for _, portion := range ranges {
+		work <- portion
+	}
+	close(work)
+	errCh := make(chan error, min(upload.Parallelism, len(ranges)))
+	var workers sync.WaitGroup
+	for range min(upload.Parallelism, len(ranges)) {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			for portion := range work {
+				query := url.Values{"path": {file.Destination}, "offset": {fmt.Sprint(portion.Offset)}, "total": {fmt.Sprint(file.Size)},
+					"range": {"true"}, "length": {fmt.Sprint(portion.Size)}}
+				response, err := engine.doRaw(workerContext, http.MethodPatch, basePath+"?"+query.Encode(), "application/octet-stream", io.NewSectionReader(input, portion.Offset, portion.Size))
+				if err == nil {
+					var result sftpCLIUpload
+					err = decodeEngineJSONResponse(response, &result)
+				}
+				if err != nil {
+					select {
+					case errCh <- err:
+					default:
+					}
+					cancel()
+					return
+				}
+			}
+		}()
+	}
+	workers.Wait()
+	close(errCh)
+	if err := <-errCh; err != nil {
+		return err
+	}
+	return ctx.Err()
+}
+
 func sftpCreateDownloadJob(
 	ctx context.Context, engine *engineAPI, jobID, batchID, alias string, file sftpCLIFile, splitSizeMiB, splitJobs, chunkSizeMiB int,
 ) error {
@@ -646,8 +815,17 @@ func sftpCreateDownloadJob(
 	return engine.sendJSON(ctx, http.MethodPost, "/api/v1/sftp/transfers", request, &ignored)
 }
 
-func sftpCreateJobWithOverwrite(ctx context.Context, engine *engineAPI, jobID, batchID, alias, direction string, file sftpCLIFile, overwrite bool) error {
-	request := sftpCreateJobRequest(jobID, batchID, alias, direction, file, overwrite)
+func sftpCreateUploadJob(ctx context.Context, engine *engineAPI, jobID, batchID, alias string, file sftpCLIFile, overwrite bool, splitSizeMiB, splitJobs, chunkSizeMiB int) error {
+	request := sftpCreateJobRequest(jobID, batchID, alias, "upload", file, overwrite)
+	if splitSizeMiB > 0 {
+		request["largeFileThresholdBytes"] = int64(splitSizeMiB) << 20
+	}
+	if splitJobs > 0 {
+		request["largeFileParallelism"] = splitJobs
+	}
+	if chunkSizeMiB > 0 {
+		request["largeFileChunkBytes"] = int64(chunkSizeMiB) << 20
+	}
 	var ignored map[string]any
 	return engine.sendJSON(ctx, http.MethodPost, "/api/v1/sftp/transfers", request, &ignored)
 }
