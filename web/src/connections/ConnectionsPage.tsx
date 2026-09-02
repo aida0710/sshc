@@ -782,14 +782,17 @@ export function ConnectionsPage({
   return (
     <>
     <div className="flex h-full min-h-0 flex-col bg-page">
-      <header className="flex shrink-0 items-center justify-between gap-4 border-b border-line bg-card px-4 py-3 md:px-5">
-        <div className="min-w-0">
-          <h1 className="text-lg font-semibold tracking-tight text-ink">{t("conn.heading")}</h1>
-          <p className="mt-0.5 text-xs text-ink-muted">
+      <header
+        data-connections-header
+        className="flex shrink-0 items-center justify-between gap-3 border-b border-line bg-card px-3 py-2 md:px-4"
+      >
+        <div className="flex min-w-0 items-baseline gap-2">
+          <h1 className="truncate text-sm font-semibold tracking-tight text-ink">{t("conn.heading")}</h1>
+          <p className="shrink-0 text-xs text-ink-muted">
             {t("conn.count", { count: overview.hosts.filter((host) => host.identity.alias !== "").length })}
           </p>
         </div>
-        <Button kind="primary" className="min-h-10 shrink-0 md:min-h-0" onClick={beginCreation}>
+        <Button kind="primary" className="shrink-0" onClick={beginCreation}>
           {t("conn.new")}
         </Button>
       </header>
