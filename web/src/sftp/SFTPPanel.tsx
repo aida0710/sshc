@@ -1122,21 +1122,21 @@ export function SFTPPanel({
   const breadcrumbPaths = pathPieces.map((_, index) => `/${pathPieces.slice(0, index + 1).join("/")}`);
 
   return (
-    <section ref={panelRoot} className="flex h-full min-h-0 min-w-0 flex-col gap-1.5" aria-labelledby={headingId}>
+    <section ref={panelRoot} className="flex h-full min-h-0 min-w-0 flex-col gap-1.5 md:gap-1" aria-labelledby={headingId}>
       <h2 id={headingId} className="sr-only">{t("sftp.heading")}</h2>
-      <div className="flex flex-wrap items-center gap-1.5 border-b border-line/50 pb-1.5">
+      <div className="flex flex-wrap items-center gap-1.5 border-b border-line/50 pb-1.5 md:pb-1">
         <SFTPHostPicker aliases={aliases} hosts={hosts} value={alias} disabled={dirty} onChange={selectHost} />
         <div role="group" aria-label={t("sftp.navigation")} className="flex shrink-0 overflow-hidden rounded-md bg-toolbar/70">
-          <button type="button" aria-label={t("sftp.back")} disabled={busy || dirty || navigation.index <= 0} onClick={() => void navigateHistory(-1)} className="flex size-9 items-center justify-center text-ink-muted hover:bg-select-fill disabled:text-ink-faint">
+          <button type="button" aria-label={t("sftp.back")} disabled={busy || dirty || navigation.index <= 0} onClick={() => void navigateHistory(-1)} className="flex size-9 items-center justify-center text-ink-muted hover:bg-select-fill disabled:text-ink-faint md:size-8">
             <span aria-hidden="true">←</span>
           </button>
-          <button type="button" aria-label={t("sftp.forward")} disabled={busy || dirty || navigation.index < 0 || navigation.index >= navigation.paths.length - 1} onClick={() => void navigateHistory(1)} className="flex size-9 items-center justify-center text-ink-muted hover:bg-select-fill disabled:text-ink-faint">
+          <button type="button" aria-label={t("sftp.forward")} disabled={busy || dirty || navigation.index < 0 || navigation.index >= navigation.paths.length - 1} onClick={() => void navigateHistory(1)} className="flex size-9 items-center justify-center text-ink-muted hover:bg-select-fill disabled:text-ink-faint md:size-8">
             <span aria-hidden="true">→</span>
           </button>
-          <button type="button" aria-label={t("sftp.homeDirectory")} disabled={busy || dirty || alias === ""} onClick={() => void load("")} className="flex size-9 items-center justify-center text-ink-muted hover:bg-select-fill disabled:text-ink-faint">
+          <button type="button" aria-label={t("sftp.homeDirectory")} disabled={busy || dirty || alias === ""} onClick={() => void load("")} className="flex size-9 items-center justify-center text-ink-muted hover:bg-select-fill disabled:text-ink-faint md:size-8">
             <Icon name="home" className="size-4" />
           </button>
-          <button type="button" aria-label={t("sftp.rootDirectory")} disabled={busy || dirty || alias === "" || path === "/"} onClick={() => void load("/")} className="flex size-9 items-center justify-center font-mono text-sm text-ink-muted hover:bg-select-fill disabled:text-ink-faint">
+          <button type="button" aria-label={t("sftp.rootDirectory")} disabled={busy || dirty || alias === "" || path === "/"} onClick={() => void load("/")} className="flex size-9 items-center justify-center font-mono text-sm text-ink-muted hover:bg-select-fill disabled:text-ink-faint md:size-8">
             /
           </button>
         </div>
@@ -1157,21 +1157,21 @@ export function SFTPPanel({
                   void load(pathDraft);
                 }
               }}
-              className="min-w-44 grow rounded-md border border-control-line/70 bg-control px-2 py-1.5 font-mono text-sm outline-none focus:border-accent"
+              className="min-w-44 grow rounded-md border border-control-line/70 bg-control px-2 py-1.5 font-mono text-sm outline-none focus:border-accent md:py-1"
             />
             <Button disabled={busy || dirty || alias === ""} onClick={() => void load(pathDraft)}>{t("sftp.go")}</Button>
           </>
         ) : (
           <div className="flex min-w-44 grow items-center rounded-md bg-control/60 px-1" data-testid="sftp-current-path" data-path={path}>
             <nav aria-label={t("sftp.path")} className="flex min-w-0 grow items-center overflow-x-auto whitespace-nowrap font-mono text-sm">
-              <button type="button" disabled={busy || dirty || alias === "" || path === "/"} onClick={() => void load("/")} className="rounded px-1.5 py-1.5 text-ink-muted hover:bg-select-fill hover:text-ink disabled:text-ink-faint">/</button>
+              <button type="button" disabled={busy || dirty || alias === "" || path === "/"} onClick={() => void load("/")} className="rounded px-1.5 py-1.5 text-ink-muted hover:bg-select-fill hover:text-ink disabled:text-ink-faint md:py-1">/</button>
               {pathPieces.map((piece, index) => (
                 <span key={breadcrumbPaths[index]} className="flex min-w-0 items-center">
                   {index > 0 || path !== "/" ? <Icon name="chevronRight" className="size-3 text-ink-faint" /> : null}
                   {index === pathPieces.length - 1 ? (
-                    <span className="max-w-48 truncate px-1.5 py-1.5 font-medium text-ink" title={piece}>{piece}</span>
+                    <span className="max-w-48 truncate px-1.5 py-1.5 font-medium text-ink md:py-1" title={piece}>{piece}</span>
                   ) : (
-                    <button type="button" disabled={busy || dirty} onClick={() => void load(breadcrumbPaths[index])} className="max-w-40 truncate rounded px-1.5 py-1.5 text-ink-muted hover:bg-select-fill hover:text-ink disabled:text-ink-faint" title={piece}>{piece}</button>
+                    <button type="button" disabled={busy || dirty} onClick={() => void load(breadcrumbPaths[index])} className="max-w-40 truncate rounded px-1.5 py-1.5 text-ink-muted hover:bg-select-fill hover:text-ink disabled:text-ink-faint md:py-1" title={piece}>{piece}</button>
                   )}
                 </span>
               ))}
@@ -1215,7 +1215,7 @@ export function SFTPPanel({
           onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false); }}
           onDrop={(event) => { void acceptDrop(event); }}
         >
-          <div ref={menuRoot} className="relative flex min-h-10 items-center gap-1 border-b border-line/50 bg-toolbar/45 px-2 py-1">
+          <div ref={menuRoot} className="relative flex min-h-10 items-center gap-1 border-b border-line/50 bg-toolbar/45 px-2 py-1 md:min-h-8 md:py-0.5">
             {selectedEntries.length > 0 ? (
               <>
                 <button type="button" aria-label={t("sftp.clearSelection")} onClick={() => setSelectedPaths(new Set())} className="flex size-10 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-select-fill hover:text-ink md:size-7">
@@ -1243,7 +1243,7 @@ export function SFTPPanel({
                       void runSearch();
                     }}
                     placeholder={t("sftp.filterPlaceholder")}
-                    className="h-8 w-full rounded-md border border-control-line/60 bg-control/70 py-1 pl-7 pr-2 text-xs outline-none focus:border-accent"
+                    className="h-8 w-full rounded-md border border-control-line/60 bg-control/70 py-1 pl-7 pr-2 text-xs outline-none focus:border-accent md:h-7"
                   />
                 </label>
                 {compactViewport ? null : <button type="button" disabled={busy} onClick={showDetails} className="rounded px-2 py-1 text-xs text-ink-muted hover:bg-select-fill hover:text-ink disabled:text-ink-faint">{t("sftp.details")}</button>}
@@ -1299,7 +1299,7 @@ export function SFTPPanel({
                   void runSearch();
                 }}
                 placeholder={t("sftp.filterPlaceholder")}
-                className="h-8 w-full rounded-md border border-control-line/60 bg-control/70 py-1 pl-7 pr-2 text-xs outline-none focus:border-accent"
+                className="h-8 w-full rounded-md border border-control-line/60 bg-control/70 py-1 pl-7 pr-2 text-xs outline-none focus:border-accent md:h-7"
               />
             </label>
             <button
@@ -1446,7 +1446,7 @@ export function SFTPPanel({
                       disabled={busy || dirty}
                       onFocus={() => setFocusedKey(parentRowKey)}
                       onClick={() => { pendingFocus.current = parentRowKey; void load(parentOf(path)); }}
-                      className="flex min-h-11 w-full items-center gap-2 px-2 py-1.5 text-left text-sm hover:bg-select-fill disabled:text-ink-faint"
+                      className="flex min-h-11 w-full items-center gap-2 px-2 py-1.5 text-left text-sm hover:bg-select-fill disabled:text-ink-faint md:min-h-8 md:py-0.5"
                     >
                       <Icon name="groups" className="size-4 text-ink-muted" />
                       <span aria-hidden="true" className="font-mono">..</span>
@@ -1461,7 +1461,7 @@ export function SFTPPanel({
                     className={`flex items-center transition-colors ${selectedPaths.has(entry.path) ? "bg-select-fill/75" : ""}`}
                     onContextMenu={(event) => rowContextMenu(event, entry)}
                   >
-                    <label className="flex size-11 shrink-0 items-center justify-center">
+                    <label className="flex size-11 shrink-0 items-center justify-center md:size-8">
                       <input
                         type="checkbox"
                         aria-label={t("sftp.selectEntry", { name: entry.name })}
@@ -1477,7 +1477,7 @@ export function SFTPPanel({
                       aria-label={entry.name}
                       aria-pressed={selectedPaths.has(entry.path)}
                       tabIndex={activeRowKey === entry.path ? 0 : -1}
-                      className="flex min-h-11 min-w-0 grow items-center gap-2 px-2 py-1.5 text-left hover:bg-select-fill"
+                      className="flex min-h-11 min-w-0 grow items-center gap-2 px-2 py-1.5 text-left hover:bg-select-fill md:min-h-8 md:py-0.5"
                       onFocus={() => setFocusedKey(entry.path)}
                       onClick={(event) => clickEntry(entry, event)}
                       onDoubleClick={() => activate(entry)}
@@ -1502,7 +1502,7 @@ export function SFTPPanel({
             ) : (
             <table className="w-full min-w-[44rem] text-left text-sm">
               <thead className="sticky top-0 bg-toolbar/75 text-xs text-ink-muted"><tr>
-                <th scope="col" className="w-9 px-2 py-1.5">
+                <th scope="col" className="w-9 px-2 py-1.5 md:py-1">
                   <input
                     ref={selectAll}
                     type="checkbox"
@@ -1512,15 +1512,16 @@ export function SFTPPanel({
                     className="size-4 accent-accent"
                   />
                 </th>
-                <SortableTableHeader column="name" activeColumn={sort.key} direction={sort.direction} onSort={changeSort} className="px-2 py-1.5">{t("sftp.name")}</SortableTableHeader>
-                <SortableTableHeader column="modified" activeColumn={sort.key} direction={sort.direction} onSort={changeSort} className="px-2 py-1.5">{t("sftp.modified")}</SortableTableHeader>
-                <SortableTableHeader column="size" activeColumn={sort.key} direction={sort.direction} onSort={changeSort} className="px-2 py-1.5 text-right" buttonClassName="justify-end">{t("sftp.size")}</SortableTableHeader>
-                <SortableTableHeader column="type" activeColumn={sort.key} direction={sort.direction} onSort={changeSort} className="w-24 whitespace-nowrap px-2 py-1.5">{t("sftp.type")}</SortableTableHeader>
+                <SortableTableHeader column="name" activeColumn={sort.key} direction={sort.direction} onSort={changeSort} className="px-2 py-1.5 md:py-1">{t("sftp.name")}</SortableTableHeader>
+                <SortableTableHeader column="modified" activeColumn={sort.key} direction={sort.direction} onSort={changeSort} className="px-2 py-1.5 md:py-1">{t("sftp.modified")}</SortableTableHeader>
+                <SortableTableHeader column="size" activeColumn={sort.key} direction={sort.direction} onSort={changeSort} className="px-2 py-1.5 text-right md:py-1" buttonClassName="justify-end">{t("sftp.size")}</SortableTableHeader>
+                <SortableTableHeader column="type" activeColumn={sort.key} direction={sort.direction} onSort={changeSort} className="w-24 whitespace-nowrap px-2 py-1.5 md:py-1">{t("sftp.type")}</SortableTableHeader>
+                <th scope="col" className="w-28 whitespace-nowrap px-2 py-1.5 md:py-1">{t("sftp.permissions")}</th>
               </tr></thead>
               <tbody>
                 {parentRowVisible ? (
                   <tr data-row-key={parentRowKey} className="border-t border-line/40 hover:bg-select-fill/60">
-                    <td className="px-2 py-1" colSpan={5}>
+                    <td className="px-2 py-1 md:py-0.5" colSpan={6}>
                       <button
                         type="button"
                         ref={(node) => { registerRow(parentRowKey, node); }}
@@ -1546,7 +1547,7 @@ export function SFTPPanel({
                     onContextMenu={(event) => rowContextMenu(event, entry)}
                     className={`cursor-default border-t border-line/40 transition-colors ${selectedPaths.has(entry.path) ? "bg-select-fill/75" : "hover:bg-select-fill/55"}`}
                   >
-                    <td className="w-9 px-2 py-1">
+                    <td className="w-9 px-2 py-1 md:py-0.5">
                       <input
                         type="checkbox"
                         aria-label={t("sftp.selectEntry", { name: entry.name })}
@@ -1557,7 +1558,7 @@ export function SFTPPanel({
                         className="size-4 accent-accent"
                       />
                     </td>
-                    <td className="max-w-64 px-2 py-1">
+                    <td className="max-w-64 px-2 py-1 md:py-0.5">
                       <button
                         type="button"
                         ref={(node) => { registerRow(entry.path, node); }}
@@ -1573,17 +1574,16 @@ export function SFTPPanel({
                         className="flex w-full min-w-0 items-center gap-2 rounded text-left focus:outline-none focus-visible:ring-1 focus-visible:ring-accent"
                       >
                         <Icon name={entry.type === "directory" ? "groups" : entry.type === "symlink" ? "chevronRight" : "config"} className="size-4 text-ink-muted" />
-                        <span className="min-w-0">
+                        <span className="min-w-0 grow">
                           <span className="block truncate font-mono text-sm font-medium leading-4 text-ink">{entry.name}</span>
-                          <span className="block truncate font-mono text-[10px] leading-3 text-ink-muted">
-                            {search === null ? entry.mode : parentOf(entry.path)}
-                          </span>
+                          {search === null ? null : <span className="block truncate font-mono text-[10px] leading-3 text-ink-muted">{parentOf(entry.path)}</span>}
                         </span>
                       </button>
                     </td>
-                    <td className="whitespace-nowrap px-2 py-1 text-xs text-ink-muted">{new Date(entry.modifiedAt).toLocaleString()}</td>
-                    <td className="px-2 py-1 text-right text-xs text-ink-muted">{entry.type === "file" ? entry.size.toLocaleString() : "—"}</td>
-                    <td className="w-24 whitespace-nowrap px-2 py-1 text-xs text-ink-muted">{t(`sftp.type.${entry.type}`)}</td>
+                    <td className="whitespace-nowrap px-2 py-1 text-xs text-ink-muted md:py-0.5">{new Date(entry.modifiedAt).toLocaleString()}</td>
+                    <td className="px-2 py-1 text-right text-xs text-ink-muted md:py-0.5">{entry.type === "file" ? entry.size.toLocaleString() : "—"}</td>
+                    <td className="w-24 whitespace-nowrap px-2 py-1 text-xs text-ink-muted md:py-0.5">{t(`sftp.type.${entry.type}`)}</td>
+                    <td className="w-28 whitespace-nowrap px-2 py-1 font-mono text-xs text-ink-muted md:py-0.5">{entry.mode}</td>
                   </tr>
                 ))}
               </tbody>
