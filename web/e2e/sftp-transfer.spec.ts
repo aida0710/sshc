@@ -142,7 +142,7 @@ test("keeps a chunked SFTP upload visible while another section is open", async 
   await openApplication(page, installation);
   await openSection(page, "SFTP");
   const chooseHost = async (alias: string, scope = page.getByRole("tabpanel")) => {
-    await scope.locator("button[data-value]").click();
+    await scope.locator("button[data-value]:visible").click();
     const dialog = page.getByRole("dialog");
     await dialog.getByText(alias, { exact: true }).click();
   };
@@ -206,14 +206,20 @@ test("keeps a chunked SFTP upload visible while another section is open", async 
     await page.screenshot({ path: `${visualDirectory}/transfer-manager-ja.png`, fullPage: true });
     await japaneseTransferManager.getByRole("button", { name: "転送マネージャーを折りたたむ" }).click();
     await page.getByRole("button", { name: "2ペイン" }).click();
+    const secondTabs = page.getByRole("tablist", { name: "右ペインのタブ" });
+    await expect(secondTabs.getByRole("tab")).toHaveCount(1);
+    await page.locator('[data-sftp-pane-tabs="secondary"]').getByRole("button", { name: "新しいタブ" }).click();
     const secondPane = page.getByLabel("2つ目のリモートペイン");
     await chooseHost("nas", secondPane);
+    await expect(secondTabs.getByRole("tab")).toHaveCount(2);
+    await expect(page.locator('[data-sftp-pane-tabs="secondary"]').getByRole("button", { name: "新しいタブ" })).toBeVisible();
+    expect(await secondTabs.evaluate((node) => node.scrollWidth > node.clientWidth)).toBe(true);
     await expect(secondPane.getByRole("button", { name: "backups" })).toBeVisible();
     await expect(page.getByRole("button", { name: "ここでTerminalを開く" })).toHaveCount(2);
     await page.screenshot({ path: `${visualDirectory}/sftp-two-pane-desktop.png`, fullPage: true });
-    const projectRow = page.getByRole("tabpanel").getByRole("button", { name: "project", exact: true })
+    const projectRow = page.getByLabel("1つ目のリモートペイン").getByRole("button", { name: "project", exact: true })
       .locator("xpath=ancestor::*[@draggable='true'][1]");
-    await projectRow.dragTo(secondPane.getByLabel(/現在のリモートディレクトリへ/));
+    await projectRow.dragTo(secondPane.getByRole("tabpanel").getByLabel(/現在のリモートディレクトリへ/));
     const remoteTransfer = page.getByRole("dialog", { name: "リモート項目を転送" });
     await expect(remoteTransfer).toBeVisible();
     await expect(remoteTransfer.getByRole("button", { name: "ここへコピー" })).toBeVisible();
@@ -228,11 +234,14 @@ test("keeps a chunked SFTP upload visible while another section is open", async 
     await page.screenshot({ path: `${visualDirectory}/sftp-compare-ja.png`, fullPage: true });
     await compareDialog.getByRole("button", { name: "キャンセル" }).click();
     await changeDisplayLanguage(page, "en");
+    const englishSecondPane = page.getByLabel("Second remote pane");
+    await expect(englishSecondPane.locator("button[data-value]:visible")).toHaveAttribute("data-value", "nas");
     await page.getByRole("button", { name: "Compare directories", exact: true }).click();
     const englishCompareDialog = page.getByRole("dialog", { name: "Compare directories" });
     await expect(englishCompareDialog.getByText("Left only", { exact: true })).toBeVisible();
     await page.screenshot({ path: `${visualDirectory}/sftp-compare-en.png`, fullPage: true });
     await englishCompareDialog.getByRole("button", { name: "Cancel" }).click();
+    await page.screenshot({ path: `${visualDirectory}/sftp-two-pane-desktop-en.png`, fullPage: true });
     await page.getByRole("button", { name: "One pane" }).click();
     await reloadBastion();
     await page.getByRole("button", { name: "project", exact: true }).click();
@@ -258,8 +267,16 @@ test("keeps a chunked SFTP upload visible while another section is open", async 
     await page.screenshot({ path: `${visualDirectory}/sftp-details-desktop.png`, fullPage: true });
     await detailsDialog.getByRole("button", { name: "Close" }).click();
     await page.getByRole("button", { name: "project", exact: true }).click();
+    await page.getByRole("button", { name: "Two panes" }).click();
     await page.setViewportSize({ width: 360, height: 800 });
     await page.waitForTimeout(400);
+    await expect(page.getByRole("tablist", { name: "Left pane tabs" })).toBeVisible();
+    await expect(page.getByRole("tablist", { name: "Right pane tabs" })).toHaveCount(0);
+    await expect(page.locator('[aria-label="First remote pane"]')).toBeVisible();
+    await expect(page.locator('[aria-label="Second remote pane"]')).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Two panes" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "One pane" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Compare directories", exact: true })).toHaveCount(0);
     await expect(page.getByRole("list", { name: "Remote entries" })).toBeVisible();
     await page.getByRole("button", { name: "Actions for project" }).click();
     await expect(page.getByRole("menuitem", { name: "Download" })).toBeInViewport();
