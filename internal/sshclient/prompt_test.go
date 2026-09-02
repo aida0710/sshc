@@ -42,8 +42,8 @@ func TestAVisibleAnswerIsEchoedSoTheUserSeesWhatTheyType(t *testing.T) {
 	}
 }
 
-// 結果を端末へ書き戻さない。書けば画面にもスクロールバックにも残る。
-func TestASecretAnswerIsNeverWrittenBackToTheTerminal(t *testing.T) {
+// 結果を端末へ書き戻さず、文字数だけを伏せ字で知らせる。
+func TestASecretAnswerUsesAsterisksWithoutWritingTheValue(t *testing.T) {
 	output, prompter := promptOver("hunter2\r")
 	answer, err := prompter.Secret("passphrase: ")
 	if err != nil {
@@ -55,8 +55,34 @@ func TestASecretAnswerIsNeverWrittenBackToTheTerminal(t *testing.T) {
 	if strings.Contains(output.String(), "hunter2") {
 		t.Fatalf("the secret was echoed into the terminal: %q", output.String())
 	}
+	if !strings.Contains(output.String(), "passphrase: *******\r\n") {
+		t.Errorf("the live mask was not written: %q", output.String())
+	}
 	if !strings.Contains(output.String(), "passphrase: ") {
 		t.Errorf("the prompt was not written: %q", output.String())
+	}
+}
+
+func TestASecretBackspaceAndControlUEditTheLiveMask(t *testing.T) {
+	output, prompter := promptOver("abc\x7fd\x15ok\r")
+	answer, err := prompter.Secret("password: ")
+	if err != nil || answer != "ok" {
+		t.Fatalf("Secret() = %q, %v", answer, err)
+	}
+	want := "password: ***\b \b*" + strings.Repeat("\b \b", 3) + "**\r\n"
+	if output.String() != want {
+		t.Fatalf("masked editing output = %q, want %q", output.String(), want)
+	}
+}
+
+func TestAUnicodeSecretUsesOneAsteriskPerCharacter(t *testing.T) {
+	output, prompter := promptOver("鍵abc\r")
+	answer, err := prompter.Secret("password: ")
+	if err != nil || answer != "鍵abc" {
+		t.Fatalf("Secret() = %q, %v", answer, err)
+	}
+	if output.String() != "password: ****\r\n" {
+		t.Fatalf("masked Unicode output = %q", output.String())
 	}
 }
 

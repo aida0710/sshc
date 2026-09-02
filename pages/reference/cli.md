@@ -28,6 +28,8 @@ sshc service disable
 sshc update
 ```
 
+Vaultのマスターパスワードなどを対話入力すると、入力した値は表示せず、1文字ごとに`*`を表示します。Backspaceや`Ctrl+U`による修正も伏せ字へ反映され、平文がTerminalのスクロールバックに残ることはありません。
+
 `sshc service`はLinuxではsystemdユーザーサービス、macOSではlaunchdユーザーエージェントを管理します。`install`はHomebrewまたは`install.sh`で導入された安定パスを登録し、`disable`はsshcが作成した定義だけを削除します。`install`、`disable`、`update`は変更内容を表示してから確認を求めます。自動化で確認を省略する場合だけ`-y`または`--yes`を付けてください。
 
 ## SSH

@@ -98,7 +98,7 @@ func TestVaultPromptIsWrittenAfterNoEchoAndNewlineAfterRestore(t *testing.T) {
 	if err != nil || !bytes.Equal(password, []byte("master")) {
 		t.Fatalf("password=%q error=%v", password, err)
 	}
-	want := []string{"no-echo", "write:Master password: ", "read-and-restore", "write:\n"}
+	want := []string{"no-echo", "write:Master password: ", "read-and-restore", "write:******", "write:\n"}
 	if !slices.Equal(events, want) {
 		t.Fatalf("events=%q, want %q", events, want)
 	}
