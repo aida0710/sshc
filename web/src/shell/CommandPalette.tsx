@@ -9,6 +9,7 @@ import type { TerminalSession } from "../api/integrations";
 import { agentStatusLabel, terminalDisplayTitle } from "../terminal/agentPresentation";
 import type { AgentUnreadBySession } from "../terminal/agentNotifications";
 import { ModalShell } from "../ui/ModalShell";
+import { PanelState } from "../ui/PanelState";
 
 // A command is something the palette performs, rather than somewhere it goes.
 export type PaletteCommand = {
@@ -251,7 +252,7 @@ export function CommandPalette({
             </div>
           ))}
           {visible.length === 0 ? (
-            <p className="px-3 py-8 text-center text-sm text-ink-muted">{loading ? t("palette.loading") : t("palette.empty")}</p>
+            <PanelState tone={loading ? "loading" : "empty"} title={loading ? t("palette.loading") : t("palette.empty")} />
           ) : null}
         </div>
         <p className="shrink-0 border-t border-line px-3 py-2 text-[11px] text-ink-faint">{t("palette.hint")}</p>

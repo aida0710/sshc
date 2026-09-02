@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { cloneElement, isValidElement, useId, type ReactElement, type ReactNode } from "react";
 
 export const control =
   "w-full rounded-md border border-control-line bg-control px-2 py-1.5 text-sm text-ink " +
@@ -34,6 +34,7 @@ export const tableHeadCell = "py-2 pr-3 text-left font-medium";
 type FieldProps = {
   label: string;
   hint?: string;
+  error?: string;
   children: ReactNode;
   interactiveChildren?: boolean;
 };
@@ -41,13 +42,23 @@ type FieldProps = {
 export function Field({
   label,
   hint,
+  error,
   children,
   interactiveChildren = false,
 }: FieldProps) {
+  const errorId = useId();
+  let describedChild = children;
+  if (error !== undefined && error !== "" && isValidElement(children)) {
+    const child = children as ReactElement<{ "aria-describedby"?: string; "aria-invalid"?: boolean }>;
+    describedChild = cloneElement(child, {
+      "aria-describedby": [child.props["aria-describedby"], errorId].filter(Boolean).join(" "),
+      "aria-invalid": true,
+    });
+  }
   const contents = (
     <>
       <span className={fieldLabel}>{label}</span>
-      {children}
+      {describedChild}
     </>
   );
   return (
@@ -58,26 +69,36 @@ export function Field({
         <label className="flex flex-col gap-1">{contents}</label>
       )}
       {hint === undefined ? null : <span className={hintText}>{hint}</span>}
+      {error === undefined || error === "" ? null : (
+        <span id={errorId} role="alert" className="text-xs text-danger">{error}</span>
+      )}
     </div>
   );
 }
 
 type CheckboxFieldProps = {
   label: string;
+  hint?: string;
   checked: boolean;
   onChange: (checked: boolean) => void;
   disabled?: boolean;
+  tone?: "default" | "notice" | "danger";
+  className?: string;
 };
 
 export function CheckboxField({
   label,
+  hint,
   checked,
   onChange,
   disabled = false,
+  tone = "default",
+  className = "",
 }: CheckboxFieldProps) {
+  const toneClass = tone === "notice" ? "text-notice-ink" : tone === "danger" ? "text-danger" : disabled ? "text-ink-faint" : "text-ink";
   return (
     <label
-      className={`flex items-start gap-2 text-sm ${disabled ? "text-ink-faint" : "text-ink"}`}
+      className={`flex items-start gap-2 text-sm ${toneClass} ${className}`}
     >
       <input
         type="checkbox"
@@ -86,7 +107,10 @@ export function CheckboxField({
         onChange={(event) => onChange(event.target.checked)}
         className="mt-0.5 h-4 w-4 shrink-0 accent-accent"
       />
-      <span>{label}</span>
+      <span>
+        {label}
+        {hint === undefined ? null : <span className={`block ${hintText}`}>{hint}</span>}
+      </span>
     </label>
   );
 }

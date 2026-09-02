@@ -48,6 +48,7 @@ import { ConnectionSummary } from "./ConnectionSummary";
 import { loadConnectionSavedState, type ConnectionSavedState } from "./connectionSavedState";
 import { ManageConnection } from "./ManageConnection";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
+import { PanelState } from "../ui/PanelState";
 
 const groupNoticeCodes = new Set([
   "group_not_declared",
@@ -766,7 +767,16 @@ export function ConnectionsPage({
   }
 
   if (overview === null) {
-    return <p role="status" className="text-sm text-ink-muted">{t("conn.loading")}</p>;
+    return problem === null ? (
+      <PanelState tone="loading" title={t("conn.loading")} />
+    ) : (
+      <PanelState
+        tone="failed"
+        title={problem.message}
+        {...(problem.detail === undefined ? {} : { detail: problem.detail })}
+        action={<Button onClick={() => void reload()}>{t("shell.bootstrapRetry")}</Button>}
+      />
+    );
   }
 
   return (

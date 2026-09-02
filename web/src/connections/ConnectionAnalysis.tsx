@@ -3,7 +3,7 @@ import type { HostDetail } from "../api/config";
 import type { EffectiveResponse, IntegrationsApi } from "../api/integrations";
 import { useTranslate } from "../i18n/context";
 import { hintText, sectionHeading, tableHeadCell, tableHeadRow } from "../ui/form";
-import { Button, Notice } from "../ui/surface";
+import { Button, Card, Notice } from "../ui/surface";
 import { NoticeList } from "./SavePreview";
 
 type ConnectionAnalysisProps = {
@@ -45,14 +45,14 @@ export function ConnectionAnalysis({ detail, alias, api, disabled = false }: Con
           <h3 className={sectionHeading}>{t("conn.analysisExplained")}</h3>
           <p className={`mt-1 ${hintText}`}>{t("conn.analysisExplainedHint")}</p>
         </div>
-        <ul className="sshc-card overflow-hidden rounded-md bg-card">
+        <Card as="ul" radius="md">
           {detail.effective.entries.map((entry, index) => (
             <li key={`${entry.keyword}-${index}`} className="grid gap-1 border-t border-hairline px-4 py-2.5 first:border-t-0 sm:grid-cols-[minmax(0,1fr)_minmax(10rem,0.7fr)] sm:items-baseline">
               <p className="font-mono text-xs text-ink">{`${entry.keyword} ${entry.values.join(" ")}`}</p>
               <p className={`${hintText} break-all font-mono sm:text-right`}>{`${entry.source.path ?? entry.source.absolute ?? ""}:${entry.source.line ?? 0}`}</p>
             </li>
           ))}
-        </ul>
+        </Card>
         <NoticeList notices={detail.effective.notices ?? []} />
       </div>
 
@@ -90,7 +90,7 @@ export function ConnectionAnalysis({ detail, alias, api, disabled = false }: Con
         ) : null}
 
         {effective !== null && effective.sources.length > 0 ? (
-          <div className="sshc-card overflow-x-auto rounded-md bg-card px-4 py-2">
+          <Card radius="md" overflow="x-auto" className="px-4 py-2">
             <table aria-label={t("conn.analysisSources")} className="w-full text-sm">
               <thead>
                 <tr className={tableHeadRow}>
@@ -111,7 +111,7 @@ export function ConnectionAnalysis({ detail, alias, api, disabled = false }: Con
                 ))}
               </tbody>
             </table>
-          </div>
+          </Card>
         ) : null}
       </div>
     </section>

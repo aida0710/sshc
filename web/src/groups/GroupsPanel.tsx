@@ -13,10 +13,11 @@ import {
   sectionHeading,
 } from "../ui/form";
 import { useTranslate } from "../i18n/context";
-import { Button, Notice } from "../ui/surface";
+import { Button, Card, Notice } from "../ui/surface";
 import type { InspectorContent } from "../ui/Inspector";
 import { GroupInspector } from "./GroupInspector";
-import { PageHeader } from "../ui/page";
+import { MetricCard, MetricGrid, PageHeader } from "../ui/page";
+import { PanelState } from "../ui/PanelState";
 
 
 export function depthOf(name: string): number {
@@ -114,7 +115,11 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
   }, [selected, metadata, overview, onInspector]);
 
   if (overview === null || metadata === null) {
-    return <p role="status" className="text-sm text-ink-muted">{t("groups.loading")}</p>;
+    return problem === null ? (
+      <PanelState tone="loading" title={t("groups.loading")} />
+    ) : (
+      <PanelState tone="failed" title={problem.message} {...(problem.detail === undefined ? {} : { detail: problem.detail })} action={<Button onClick={() => void reload()}>{t("shell.bootstrapRetry")}</Button>} />
+    );
   }
 
   const loaded: Metadata = metadata;
@@ -258,18 +263,15 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 [&_button]:min-h-10 sm:[&_button]:min-h-0">
       <PageHeader title={t("groups.pageTitle")} description={t("groups.pageDescription")} />
-      <div className="sshc-card grid overflow-hidden rounded-md bg-card sm:grid-cols-3">
-        {[
+      <MetricGrid className="sm:grid-cols-3 lg:grid-cols-3">
+        {([
           [t("groups.metricGroups"), groups.length],
           [t("groups.metricConnections"), hosts.filter((host) => host.identity.alias !== "").length],
           [t("groups.metricDraft"), unsaved ? 1 : 0],
-        ].map(([label, value], index) => (
-          <div key={String(label)} className={`flex items-center justify-between gap-4 px-4 py-3 ${index === 0 ? "" : "border-t border-line sm:border-l sm:border-t-0"}`}>
-            <span className="text-xs font-medium text-ink-muted">{label}</span>
-            <span className={`font-mono text-lg font-semibold ${unsaved && index === 2 ? "text-notice-ink" : "text-ink"}`}>{value}</span>
-          </div>
+        ] as const).map(([label, value], index) => (
+          <MetricCard key={String(label)} label={String(label)} value={value} compact attention={unsaved && index === 2} />
         ))}
-      </div>
+      </MetricGrid>
       <details className="rounded-lg border border-line bg-surface-subtle px-4 py-3">
         <summary className="cursor-pointer text-sm font-medium text-ink">{t("groups.howItWorks")}</summary>
         <div className="mt-3 border-t border-line pt-3">
@@ -286,7 +288,7 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
 
       <NoticeList notices={groupNotices} />
 
-      <section className="sshc-card overflow-hidden rounded-md bg-card">
+      <Card as="section" radius="md">
         <div className="border-b border-line bg-surface-subtle px-4 py-3">
           <h3 className={sectionHeading}>{t("groups.addHeading")}</h3>
           <div className="mt-3 flex flex-wrap items-end gap-2">
@@ -466,11 +468,11 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
           </li>
         ))}
       </ul>
-      </section>
+      </Card>
 
 
       {selected === "" ? null : (
-      <section className="sshc-card flex flex-col gap-4 rounded-md bg-card p-4">
+      <Card as="section" radius="md" className="flex flex-col gap-4 p-4">
         <h3 className={sectionHeading}>{t("groups.settingHeadingFor", { name: selected })}</h3>
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label={t("groups.directive")}>
@@ -495,7 +497,7 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
         <Button onClick={addSetting} className="self-start">
           {t("groups.addSetting")}
         </Button>
-      </section>
+      </Card>
       )}
 
 

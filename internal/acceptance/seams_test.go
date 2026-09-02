@@ -85,6 +85,47 @@ func TestWebPasswordsUseTheSharedControl(t *testing.T) {
 	}
 }
 
+// TestWebCardsUseTheSharedControl は、製品画面がカードの見た目を複製しないようにする。
+// UIプリミティブはこのclassを組み合わせてよいが、機能側はCardなどの共通部品を通し、
+// 角丸・背景・overflowが画面ごとに再び分岐しないようにする。
+func TestWebCardsUseTheSharedControl(t *testing.T) {
+	root := filepath.Join("..", "..", "web", "src")
+	var found []string
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			if path != root && entry.Name() == "ui" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(entry.Name(), ".tsx") || strings.HasSuffix(entry.Name(), ".test.tsx") {
+			return nil
+		}
+		contents, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if strings.Contains(string(contents), "sshc-card") {
+			relative, err := filepath.Rel(filepath.Join("..", ".."), path)
+			if err != nil {
+				return err
+			}
+			found = append(found, filepath.ToSlash(relative))
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	slices.Sort(found)
+	if len(found) != 0 {
+		t.Errorf("Card を介さず製品画面に sshc-card を実装している: %v", found)
+	}
+}
+
 // TestRemoteSyncDoesNotExposeStorageTransactions keeps the transport-facing
 // pull preview in remotesync vocabulary. A direct import check cannot detect a
 // storage.Request smuggled through an exported service result.

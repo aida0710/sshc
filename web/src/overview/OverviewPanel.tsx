@@ -4,11 +4,11 @@ import { configApi, type Overview } from "../api/config";
 import { integrationsApi, type RecentConnectionList, type SyncStatus } from "../api/integrations";
 import { useTranslate } from "../i18n/context";
 import { BrandMark } from "../ui/BrandMark";
-import { hintText } from "../ui/form";
-import { Button, Notice } from "../ui/surface";
+import { Button, Card, Notice } from "../ui/surface";
 import { QuickConnectBrowser } from "./QuickConnectBrowser";
 import { workspaceApi, type SavedWorkspace } from "../features/workspaces/api";
 import { storedPaneCount } from "../features/workspaces/layout";
+import { PanelState } from "../ui/PanelState";
 
 export type OverviewDestination = "Connections" | "Config" | "Sync" | "History";
 
@@ -123,7 +123,7 @@ export function OverviewPanel({
 
         <div className="p-3 sm:p-4">
           {loading ? (
-            <p aria-live="polite" className={hintText}>{t("home.loading")}</p>
+            <PanelState tone="loading" title={t("home.loading")} />
           ) : overview === null ? null : (
             <QuickConnectBrowser
               overview={overview}
@@ -137,7 +137,7 @@ export function OverviewPanel({
       </section>
 
       {workspaces.length === 0 ? null : (
-        <section aria-labelledby="saved-workspaces-heading" className="sshc-card overflow-hidden rounded bg-card">
+        <Card as="section" aria-labelledby="saved-workspaces-heading" radius="sm">
           <div className="border-b border-line px-4 py-3 sm:px-5">
             <h3 id="saved-workspaces-heading" className="font-semibold">{t("home.savedWorkspaces")}</h3>
             <p className="mt-0.5 text-xs text-ink-muted">{t("home.savedWorkspacesHint")}</p>
@@ -163,7 +163,7 @@ export function OverviewPanel({
               </li>
             ))}
           </ul>
-        </section>
+        </Card>
       )}
 
       <dl

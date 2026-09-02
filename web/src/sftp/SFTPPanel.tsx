@@ -31,6 +31,7 @@ import {
 } from "../ui/tableSort";
 import { useDismissibleLayer } from "../ui/useDismissibleLayer";
 import { useMenuKeyboard } from "../ui/useMenuKeyboard";
+import { useCompactViewport } from "../ui/useMediaQuery";
 import { sftpApi, type RemoteEntry, type RemoteTextFile } from "./api";
 import { formatBytes } from "./format";
 import { sftpPlaces } from "./places";
@@ -60,10 +61,6 @@ function parentOf(remotePath: string): string {
 
 function join(parent: string, name: string): string {
   return `${parent === "/" ? "" : parent}/${name}`;
-}
-
-function compactSFTPViewport(): boolean {
-  return typeof window.matchMedia === "function" && window.matchMedia("(max-width: 767px)").matches;
 }
 
 type SFTPSort = "name" | "type" | "size" | "modified";
@@ -218,7 +215,6 @@ export function SFTPPanel({
   const [focusedKey, setFocusedKey] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const [remoteDrop, setRemoteDrop] = useState<RemoteDragPayload | null>(null);
-  const [compactViewport, setCompactViewport] = useState(compactSFTPViewport);
   const [sort, setSort] = useState<{ key: SFTPSort; direction: SortDirection }>({
     key: "name",
     direction: "ascending",
@@ -227,6 +223,7 @@ export function SFTPPanel({
   const folderUpload = useRef<HTMLInputElement>(null);
   const pathInput = useRef<HTMLInputElement>(null);
   const panelRoot = useRef<HTMLElement>(null);
+  const compactViewport = useCompactViewport(panelRoot);
   const headingId = useId();
   const openingTarget = useRef(false);
   const handledTarget = useRef(0);
@@ -255,22 +252,6 @@ export function SFTPPanel({
   });
   useMenuKeyboard({ open: menu !== null, menuRef: menuPanel, onClose: () => setMenu(null) });
 
-  useEffect(() => {
-    const element = panelRoot.current;
-    const media = typeof window.matchMedia === "function" ? window.matchMedia("(max-width: 767px)") : null;
-    const update = () => {
-      const width = element?.clientWidth ?? 0;
-      setCompactViewport((media?.matches ?? false) || (width > 0 && width < 680));
-    };
-    update();
-    media?.addEventListener("change", update);
-    const observer = typeof ResizeObserver === "undefined" || element === null ? null : new ResizeObserver(update);
-    if (element !== null) observer?.observe(element);
-    return () => {
-      media?.removeEventListener("change", update);
-      observer?.disconnect();
-    };
-  }, []);
   useEffect(() => {
     if (!pathEditing) return;
     pathInput.current?.focus();

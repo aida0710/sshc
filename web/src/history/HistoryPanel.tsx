@@ -4,9 +4,10 @@ import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import type { Problem } from "../api/client";
 import { configApi, type HistoryEntry, type PendingTransaction } from "../api/config";
-import { Button, Notice } from "../ui/surface";
-import { PageHeader } from "../ui/page";
+import { Button, Card, Notice } from "../ui/surface";
+import { MetricCard, MetricGrid, PageHeader } from "../ui/page";
 import { Icon } from "../ui/icons";
+import { PanelState } from "../ui/PanelState";
 
 const mobileTouchTargets = "[&_button]:min-h-10 md:[&_button]:min-h-0";
 
@@ -91,7 +92,7 @@ export function HistoryPanel() {
   }
 
   if (entries === null) {
-    return <p role="status" className="text-sm text-ink-muted">{t("history.loading")}</p>;
+    return <PanelState tone="loading" title={t("history.loading")} />;
   }
 
   const restorableCount = entries.reduce((count, entry) => count + (entry.restorable?.length ?? 0), 0);
@@ -99,25 +100,22 @@ export function HistoryPanel() {
   return (
     <div className={`mx-auto flex w-full max-w-6xl flex-col gap-6 ${mobileTouchTargets}`}>
       <PageHeader title={t("history.pageTitle")} description={t("history.pageDescription")} />
-      <dl className="sshc-card flex flex-wrap overflow-hidden rounded-md bg-toolbar">
-        {[
+      <MetricGrid className="sm:grid-cols-3 lg:grid-cols-3">
+        {([
           [t("history.metricChanges"), entries.length, false],
           [t("history.metricInterrupted"), pending.length, pending.length > 0],
           [t("history.metricRestorable"), restorableCount, false],
-        ].map(([label, value, attention]) => (
-          <div key={String(label)} className={`flex min-w-40 flex-1 items-center justify-between gap-4 border-r border-hairline px-4 py-2.5 last:border-r-0 ${attention ? "bg-notice" : ""}`}>
-            <dt className={`text-xs font-medium ${attention ? "text-notice-ink" : "text-ink-muted"}`}>{label}</dt>
-            <dd className={`font-mono text-sm font-semibold ${attention ? "text-notice-ink" : "text-ink"}`}>{value}</dd>
-          </div>
+        ] as const).map(([label, value, attention]) => (
+          <MetricCard key={String(label)} label={String(label)} value={value} compact attention={Boolean(attention)} />
         ))}
-      </dl>
+      </MetricGrid>
       {problem === null ? null : (
         <Notice tone="danger">{t("history.requestRejected", { code: problem.code })}</Notice>
       )}
       {message === "" ? null : <p role="status" className="text-sm text-live">{message}</p>}
 
       {pending.length === 0 ? null : (
-        <section aria-labelledby="pending-heading" className="sshc-card overflow-hidden rounded-md bg-notice">
+        <Card as="section" aria-labelledby="pending-heading" radius="md" tone="notice">
           <header className="flex items-center gap-2 border-b border-notice-line px-4 py-3">
             <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-card text-notice-ink">
               <Icon name="history" className="h-4 w-4" />
@@ -151,10 +149,10 @@ export function HistoryPanel() {
               </article>
             ))}
           </div>
-        </section>
+        </Card>
       )}
 
-      <section aria-labelledby="history-heading" className="sshc-card overflow-hidden rounded-md bg-card">
+      <Card as="section" aria-labelledby="history-heading" radius="md">
         <header className="flex items-center justify-between gap-3 border-b border-line bg-toolbar px-4 py-3">
           <div className="flex items-center gap-2">
             <Icon name="history" className="h-4 w-4 text-ink-muted" />
@@ -163,7 +161,7 @@ export function HistoryPanel() {
           <span className="rounded-md bg-surface px-2 py-0.5 font-mono text-xs text-ink-muted">{entries.length}</span>
         </header>
         {entries.length === 0 ? (
-          <p className="px-4 py-8 text-center text-sm text-ink-muted">{t("history.empty")}</p>
+          <PanelState tone="empty" title={t("history.empty")} />
         ) : (
           <ol className="divide-y divide-line">
             {entries.map((entry) => (
@@ -188,7 +186,7 @@ export function HistoryPanel() {
           </ol>
         )}
         <p className="border-t border-line bg-toolbar px-4 py-3 text-xs text-ink-faint">{t("history.backupsKept")}</p>
-      </section>
+      </Card>
     </div>
   );
 }

@@ -1,21 +1,45 @@
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import {
+  forwardRef,
+  type ButtonHTMLAttributes,
+  type ElementType,
+  type HTMLAttributes,
+  type ReactNode,
+} from "react";
 import { dangerAction, hintText, primaryAction, secondaryAction } from "./form";
 
+type CardElement = "div" | "section" | "article" | "dl" | "ul";
+
+type CardProps = {
+  as?: CardElement;
+  padded?: boolean;
+  radius?: "sm" | "md" | "lg";
+  tone?: "card" | "notice" | "subtle";
+  overflow?: "hidden" | "visible" | "x-auto";
+} & HTMLAttributes<HTMLElement>;
+
 export function Card({
+  as,
   children,
   padded = false,
-}: {
-  children: ReactNode;
-  padded?: boolean;
-}) {
+  radius = "lg",
+  tone = "card",
+  overflow = "hidden",
+  className = "",
+  ...rest
+}: CardProps) {
+  const Component = (as ?? "div") as ElementType;
+  const radiusClass = radius === "sm" ? "rounded" : radius === "md" ? "rounded-md" : "rounded-lg";
+  const toneClass = tone === "notice" ? "bg-notice" : tone === "subtle" ? "bg-surface-subtle" : "bg-card";
+  const overflowClass = overflow === "visible" ? "overflow-visible" : overflow === "x-auto" ? "overflow-x-auto" : "overflow-hidden";
   return (
-    <div
-      className={`sshc-card overflow-hidden rounded-lg bg-card ${
+    <Component
+      className={`sshc-card ${overflowClass} ${radiusClass} ${toneClass} ${
         padded ? "flex flex-col gap-3 p-3" : ""
-      }`}
+      } ${className}`}
+      {...rest}
     >
       {children}
-    </div>
+    </Component>
   );
 }
 
@@ -142,17 +166,20 @@ type ButtonProps = {
   kind?: "primary" | "secondary" | "danger";
 } & ButtonHTMLAttributes<HTMLButtonElement>;
 
-export function Button({
-  kind = "secondary",
-  className = "",
-  type = "button",
-  ...rest
-}: ButtonProps) {
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
+  {
+    kind = "secondary",
+    className = "",
+    type = "button",
+    ...rest
+  },
+  ref,
+) {
   const base =
     kind === "primary"
       ? primaryAction
       : kind === "danger"
         ? dangerAction
         : secondaryAction;
-  return <button type={type} className={`${base} ${className}`} {...rest} />;
-}
+  return <button ref={ref} type={type} className={`${base} ${className}`} {...rest} />;
+});

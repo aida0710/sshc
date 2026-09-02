@@ -1,6 +1,7 @@
 import { useRef, type ReactNode, type RefObject } from "react";
-import { dangerAction, secondaryAction } from "./form";
 import { ModalShell } from "./ModalShell";
+import { Button } from "./surface";
+
 export function ConfirmDialog({
   id,
   heading,
@@ -29,18 +30,18 @@ export function ConfirmDialog({
       {...(returnFocusRef === undefined ? {} : { returnFocusRef })}
       panelClassName="flex w-full max-w-sm flex-col gap-3 rounded-lg p-4"
     >
-        <h2 id={id} className="text-sm font-medium text-ink">
-          {heading}
-        </h2>
-        {body}
-        <div className="flex justify-end gap-2">
-          <button ref={cancelRef} type="button" onClick={onCancel} className={secondaryAction}>
-            {cancelLabel}
-          </button>
-          <button type="button" onClick={onConfirm} className={dangerAction}>
-            {confirmLabel}
-          </button>
-        </div>
+      <h2 id={id} className="text-sm font-medium text-ink">
+        {heading}
+      </h2>
+      {body}
+      <div className="flex justify-end gap-2">
+        <Button ref={cancelRef} onClick={onCancel}>
+          {cancelLabel}
+        </Button>
+        <Button kind="danger" onClick={onConfirm}>
+          {confirmLabel}
+        </Button>
+      </div>
     </ModalShell>
   );
 }

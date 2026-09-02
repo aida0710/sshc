@@ -1,5 +1,5 @@
 import { useTranslate } from "../i18n/context";
-import { Button } from "../ui/surface";
+import { Button, Card } from "../ui/surface";
 import { Icon } from "../ui/icons";
 import { summarizeConnection, type ConnectionSavedState } from "./connectionSavedState";
 
@@ -66,7 +66,7 @@ export function ConnectionSummary({
   }
 
   return (
-    <section data-connection-summary aria-labelledby="connection-summary-heading" className="sshc-card shrink-0 overflow-hidden rounded-md bg-card">
+    <Card as="section" data-connection-summary aria-labelledby="connection-summary-heading" radius="md" className="shrink-0">
       <header className="px-4 py-4 sm:px-5 sm:py-5">
         <div className="flex min-w-0 items-start gap-3">
           <span aria-hidden="true" className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-lg bg-select-fill text-accent">
@@ -135,6 +135,6 @@ export function ConnectionSummary({
           </p>
         ) : null}
       </div>
-    </section>
+    </Card>
   );
 }

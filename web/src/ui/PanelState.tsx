@@ -16,18 +16,23 @@ export function PanelState({
   title,
   detail,
   action,
+  icon,
+  className = "",
 }: {
   tone: PanelStateTone;
   title: string;
   detail?: string;
   action?: ReactNode;
+  icon?: ReactNode;
+  className?: string;
 }) {
   return (
     <div
       role={tone === "failed" ? "alert" : "status"}
       aria-busy={tone === "loading"}
-      className="flex min-h-32 flex-col items-center justify-center gap-2 px-4 py-8 text-center"
+      className={`flex min-h-32 flex-col items-center justify-center gap-2 px-4 py-8 text-center ${className}`}
     >
+      {icon}
       <p className={`text-sm ${toneClasses[tone]}`}>{title}</p>
       {detail === undefined ? null : <p className="max-w-prose text-xs text-ink-faint">{detail}</p>}
       {action}

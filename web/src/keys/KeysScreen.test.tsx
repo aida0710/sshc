@@ -413,8 +413,9 @@ describe("KeysScreen", () => {
     await userEvent.click(within(trashRow).getByRole("button", { name: "Delete permanently" }));
     expect(api.purge).not.toHaveBeenCalled();
 
-    expect(within(trashRow).getByText(/cannot be undone/)).toBeInTheDocument();
-    await userEvent.click(within(trashRow).getByRole("button", { name: "Confirm permanent delete" }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText(/cannot be undone/)).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole("button", { name: "Confirm permanent delete" }));
     await waitFor(() => expect(api.purge).toHaveBeenCalledWith("20260805T090000.000-aabbccdd"));
   });
 
@@ -424,7 +425,7 @@ describe("KeysScreen", () => {
 
     const trashRow = await screen.findByRole("row", { name: /id_old/ });
     await userEvent.click(within(trashRow).getByRole("button", { name: "Delete permanently" }));
-    await userEvent.click(within(trashRow).getByRole("button", { name: "Cancel" }));
+    await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Cancel" }));
 
     expect(api.purge).not.toHaveBeenCalled();
     expect(within(trashRow).getByRole("button", { name: "Delete permanently" })).toBeInTheDocument();

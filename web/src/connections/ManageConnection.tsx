@@ -3,7 +3,7 @@ import type { FileNode, GroupMetadata, HostDetail } from "../api/config";
 import { useTranslate } from "../i18n/context";
 import { control, hintText, sectionHeading } from "../ui/form";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
-import { Button } from "../ui/surface";
+import { Button, Card } from "../ui/surface";
 import { identityKey } from "./connectionBrowser";
 
 type ManageConnectionProps = {
@@ -56,10 +56,12 @@ export function ManageConnection({
   const groupDirty = group !== currentGroup;
 
   return (
-    <section
+    <Card
+      as="section"
       aria-label={t("conn.manageLabel")}
       aria-disabled={disabled}
-      className="sshc-card flex shrink-0 flex-col gap-5 overflow-hidden rounded-md bg-card p-5"
+      radius="md"
+      className="flex shrink-0 flex-col gap-5 p-5"
     >
       <div>
         <h3 className="text-base font-semibold tracking-tight text-ink">{t("conn.manageLabel")}</h3>
@@ -162,6 +164,6 @@ export function ManageConnection({
           ) : null}
         </div>
       </fieldset>
-    </section>
+    </Card>
   );
 }

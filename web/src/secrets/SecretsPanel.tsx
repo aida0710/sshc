@@ -11,10 +11,11 @@ import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import { PasswordField } from "../ui/PasswordField";
 import { Field, control, hintText, sectionHeading } from "../ui/form";
-import { Button, Notice } from "../ui/surface";
-import { PageHeader } from "../ui/page";
+import { Button, Card, Notice } from "../ui/surface";
+import { MetricCard, MetricGrid, PageHeader } from "../ui/page";
 import { Icon } from "../ui/icons";
 import { CredentialEditDialog } from "./CredentialEditDialog";
+import { PanelState } from "../ui/PanelState";
 
 const mobileTouchTargets = "[&_button]:min-h-10 md:[&_button]:min-h-0";
 
@@ -144,7 +145,11 @@ export function SecretsPanel({
   }
 
   if (status === null) {
-    return <p className={hintText}>{t("secrets.loading")}</p>;
+    return error === "" ? (
+      <PanelState tone="loading" title={t("secrets.loading")} />
+    ) : (
+      <PanelState tone="failed" title={error} action={<Button onClick={() => void reload()}>{t("shell.bootstrapRetry")}</Button>} />
+    );
   }
 
   if (!status.unlocked) {
@@ -157,9 +162,11 @@ export function SecretsPanel({
           title={t("secrets.heading")}
           description={t("secrets.pageDescription")}
         />
-        <section
+        <Card
+          as="section"
           aria-label={t("secrets.heading")}
-          className="sshc-card grid overflow-hidden rounded-md bg-card md:grid-cols-[minmax(0,0.9fr)_minmax(18rem,1.1fr)]"
+          radius="md"
+          className="grid md:grid-cols-[minmax(0,0.9fr)_minmax(18rem,1.1fr)]"
         >
           <div className="flex flex-col justify-between gap-8 bg-toolbar p-6 md:p-8">
             <span className="flex h-12 w-12 items-center justify-center rounded-md bg-select-fill text-accent">
@@ -201,7 +208,7 @@ export function SecretsPanel({
               {creating ? t("secrets.create") : t("secrets.unlock")}
             </Button>
           </div>
-        </section>
+        </Card>
       </div>
     );
   }
@@ -233,23 +240,20 @@ export function SecretsPanel({
           </Button>
         }
       />
-      <dl className="sshc-card flex flex-wrap overflow-hidden rounded-md bg-toolbar">
-        {[
+      <MetricGrid className="sm:grid-cols-3 lg:grid-cols-3">
+        {([
           [t("secrets.metricPasswords"), passwordCount],
           [t("secrets.metricPassphrases"), passphraseCount],
           [t("secrets.metricAssignments"), assignmentCount],
-        ].map(([label, value]) => (
-          <div
+        ] as const).map(([label, value]) => (
+          <MetricCard
             key={String(label)}
-            className="flex min-w-40 flex-1 items-center justify-between gap-4 border-r border-hairline px-4 py-2.5 last:border-r-0"
-          >
-            <dt className="text-xs font-medium text-ink-muted">{label}</dt>
-            <dd className="font-mono text-sm font-semibold text-ink">
-              {value}
-            </dd>
-          </div>
+            label={String(label)}
+            value={value}
+            compact
+          />
         ))}
-      </dl>
+      </MetricGrid>
       {error === "" ? null : <Notice tone="danger">{error}</Notice>}
       {keyHostUsageComplete ? null : (
         <Notice>{t("secrets.keyHostUsageIncomplete")}</Notice>
@@ -263,10 +267,11 @@ export function SecretsPanel({
         const dedicated =
           group.kind === "key_passphrase" ? dedicatedKeyPassphrases : [];
         return (
-          <section
+          <Card
+            as="section"
             key={group.kind}
             aria-label={t(group.heading)}
-            className="sshc-card overflow-hidden rounded-md bg-card"
+            radius="md"
           >
             <header className="flex items-center justify-between gap-3 border-b border-line bg-toolbar px-4 py-3">
               <div className="flex items-center gap-2">
@@ -464,7 +469,7 @@ export function SecretsPanel({
                 {t(group.store)}
               </Button>
             </div>
-          </section>
+          </Card>
         );
       })}
 
