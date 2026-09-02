@@ -91,9 +91,13 @@ describe("the transfer queue", () => {
     manager.setJobs([]);
   });
 
-  it("stays out of the way while nothing is transferring", () => {
-    const { container } = render(<TransferManagerList />);
-    expect(container).toBeEmptyDOMElement();
+  it("keeps the saved split settings available before a transfer starts", () => {
+    render(<TransferManagerList />);
+    expect(screen.getByRole("button", { name: "Collapse Transfer Manager" })).toBeVisible();
+    expect(screen.getByRole("spinbutton", { name: "Split at" })).toHaveValue(100);
+    expect(screen.getByRole("combobox", { name: "Streams" })).toHaveValue("4");
+    expect(screen.getByRole("spinbutton", { name: "Chunk" })).toHaveValue(32);
+    expect(screen.queryByRole("separator")).not.toBeInTheDocument();
   });
 
   it("starts as a compact dock and summarises active work", () => {
@@ -140,14 +144,18 @@ describe("the transfer queue", () => {
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "Clear finished after" }), "0");
     expect(manager.applySettings).toHaveBeenLastCalledWith(2, 0, false, 100 << 20, 4, 32 << 20);
 
-    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Split at" }), String(250 << 20));
-    expect(manager.applySettings).toHaveBeenLastCalledWith(2, 300, false, 250 << 20, 4, 32 << 20);
+    const splitAt = screen.getByRole("spinbutton", { name: "Split at" });
+    fireEvent.change(splitAt, { target: { value: "73" } });
+    fireEvent.blur(splitAt);
+    expect(manager.applySettings).toHaveBeenLastCalledWith(2, 300, false, 73 << 20, 4, 32 << 20);
 
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "Streams" }), "1");
     expect(manager.applySettings).toHaveBeenLastCalledWith(2, 300, false, 100 << 20, 1, 32 << 20);
 
-    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Chunk" }), String(512 << 20));
-    expect(manager.applySettings).toHaveBeenLastCalledWith(2, 300, false, 100 << 20, 4, 512 << 20);
+    const chunk = screen.getByRole("spinbutton", { name: "Chunk" });
+    fireEvent.change(chunk, { target: { value: "41" } });
+    fireEvent.blur(chunk);
+    expect(manager.applySettings).toHaveBeenLastCalledWith(2, 300, false, 100 << 20, 4, 41 << 20);
   });
 
   it("stops the whole queue without touching what is already running", async () => {

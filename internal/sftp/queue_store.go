@@ -94,8 +94,13 @@ func validPersistedJob(job TransferJob) error {
 			(job.LargeFileParallelism < 1 || job.LargeFileParallelism > MaxLargeFileParallelism)) ||
 		(job.LargeFileChunkBytes != 0 &&
 			(job.LargeFileChunkBytes < MinLargeFileChunkBytes || job.LargeFileChunkBytes > MaxLargeFileChunkBytes)) ||
-		((job.Direction != TransferDownload || job.Kind != TransferFile) &&
+		(((job.Direction != TransferDownload && job.Direction != TransferUpload) || job.Kind != TransferFile) &&
 			(job.LargeFileThresholdBytes != 0 || job.LargeFileParallelism != 0 || job.LargeFileChunkBytes != 0)) {
+		return ErrInvalidTransfer
+	}
+	if err := validateUploadRanges(job.UploadRanges, job.TotalBytes); err != nil ||
+		(job.Direction != TransferUpload && len(job.UploadRanges) != 0) || len(job.UploadRanges) > 65536 ||
+		(len(job.UploadRanges) != 0 && uploadRangeBytes(job.UploadRanges) != job.TransferredBytes) {
 		return ErrInvalidTransfer
 	}
 	if job.Direction == TransferRemote {

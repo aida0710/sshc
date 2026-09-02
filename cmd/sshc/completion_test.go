@@ -74,6 +74,7 @@ func TestCompletionGrammarOnlyPublishesValidHelpTopics(t *testing.T) {
 	}
 	for parent, actions := range map[string][]string{
 		"sync": grammar.syncActions, "terminal": grammar.terminalActions,
+		"sftp":    grammar.sftpActions,
 		"service": grammar.serviceActions, "vault": grammar.vaultActions,
 	} {
 		for _, action := range actions {
@@ -112,6 +113,8 @@ func TestBashCompletionUsesLiveAliasesAndNestedValues(t *testing.T) {
 		{name: "sync action", words: []string{"sshc", "sync", "p"}, want: "push"},
 		{name: "sync auto value", words: []string{"sshc", "sync", "auto", "o"}, want: "on"},
 		{name: "terminal state", words: []string{"sshc", "terminal", "wait", "deadbeef", "--for", "agent-r"}, want: "agent-ready"},
+		{name: "sftp alias", words: []string{"sshc", "sftp", "get", "b"}, want: "beta-prod"},
+		{name: "sftp settings option", words: []string{"sshc", "sftp", "settings", "--split"}, want: "--split-size"},
 		{name: "encoding", words: []string{"sshc", "serial", "/dev/ttyUSB0", "--encoding", "shift"}, want: "shift_jis"},
 	}
 	for _, test := range tests {

@@ -533,13 +533,20 @@ func TestSFTPParsesTransfersAndSafetyOptions(t *testing.T) {
 		t.Fatalf("sftp invocation = %#v", got)
 	}
 
-	put, err := parseInvocation([]string{"sshc", "sftp", "put", "server-a", "local.txt", "/tmp/local.txt", "--skip-existing"})
-	if err != nil || put.SFTP == nil || put.SFTP.Action != sftpPut || !put.SFTP.SkipExisting || put.SFTP.Jobs != 1 {
+	put, err := parseInvocation([]string{"sshc", "sftp", "put", "server-a", "local.txt", "/tmp/local.txt", "--skip-existing", "--split-size", "50", "--split-jobs", "4", "--chunk-size", "128"})
+	if err != nil || put.SFTP == nil || put.SFTP.Action != sftpPut || !put.SFTP.SkipExisting || put.SFTP.Jobs != 1 ||
+		put.SFTP.SplitSizeMiB != 50 || put.SFTP.SplitJobs != 4 || put.SFTP.ChunkSizeMiB != 128 {
 		t.Fatalf("put = %#v, %v", put, err)
 	}
 	equals, err := parseInvocation([]string{"sshc", "sftp", "get", "server-a", "/file", "file", "--jobs=8"})
 	if err != nil || equals.SFTP == nil || equals.SFTP.Jobs != 8 {
 		t.Fatalf("jobs with equals = %#v, %v", equals, err)
+	}
+
+	settings, err := parseInvocation([]string{"sshc", "sftp", "settings", "--split-size", "73", "--split-jobs", "7", "--chunk-size", "41", "--json"})
+	if err != nil || settings.SFTP == nil || settings.SFTP.Action != sftpSettings || settings.SFTP.SplitSizeMiB != 73 ||
+		settings.SFTP.SplitJobs != 7 || settings.SFTP.ChunkSizeMiB != 41 || !settings.SFTP.JSON {
+		t.Fatalf("settings = %#v, %v", settings, err)
 	}
 }
 
@@ -558,10 +565,12 @@ func TestSFTPRejectsAmbiguousOrUnsafeFlagCombinations(t *testing.T) {
 		{"sshc", "sftp", "get", "server-a", "/a", "b", "--split-size", "15"},
 		{"sshc", "sftp", "get", "server-a", "/a", "b", "--split-size", "1025"},
 		{"sshc", "sftp", "get", "server-a", "/a", "b", "--split-jobs", "0"},
-		{"sshc", "sftp", "put", "server-a", "a", "/b", "--split-jobs", "4"},
 		{"sshc", "sftp", "get", "server-a", "/a", "b", "--chunk-size", "7"},
 		{"sshc", "sftp", "get", "server-a", "/a", "b", "--chunk-size", "4097"},
-		{"sshc", "sftp", "put", "server-a", "a", "/b", "--chunk-size", "512"},
+		{"sshc", "sftp", "settings", "--split-size", "15"},
+		{"sshc", "sftp", "settings", "--split-jobs", "9"},
+		{"sshc", "sftp", "settings", "--chunk-size", "7"},
+		{"sshc", "sftp", "settings", "--overwrite"},
 	} {
 		if _, err := parseInvocation(argv); err == nil {
 			t.Errorf("parseInvocation(%q) accepted invalid arguments", argv)

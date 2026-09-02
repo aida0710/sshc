@@ -65,6 +65,7 @@ type ManagerAPI = {
   verifyDownload(alias: string, jobId: string, remotePath: string, revision: string): Promise<void>;
   startUpload(alias: string, id: string, remotePath: string, size: number, sourceFingerprint: string): Promise<ResumableUpload>;
   appendUpload(alias: string, id: string, remotePath: string, offset: number, total: number, chunk: Blob, signal?: AbortSignal): Promise<ResumableUpload>;
+  appendUploadRange(alias: string, id: string, remotePath: string, offset: number, total: number, chunk: Blob, signal?: AbortSignal): Promise<ResumableUpload>;
   completeUpload(alias: string, id: string, remotePath: string, size: number, expectedRevision: string, sourceFingerprint: string): Promise<void>;
   cancelUpload(alias: string, id: string, remotePath: string): Promise<void>;
   streamDownload(alias: string, jobId: string, remotePath: string, directory: boolean, offset: number, options: StreamDownloadOptions): Promise<{ bytes: number; total: number | null }>;
@@ -242,6 +243,9 @@ export class SFTPTransferManager {
         id, batchId, batchName, batchKind, alias: selection.alias, direction: "upload", kind: "file",
         name: selection.localName, remotePath: selection.remotePath, totalBytes: selection.file.size,
         lastModified: selection.file.lastModified,
+        largeFileThresholdBytes: this.largeFileThreshold,
+        largeFileParallelism: this.largeFileParallelism,
+        largeFileChunkBytes: this.largeFileChunkBytes,
       });
       this.files.set(id, selection.file);
       this.commit([...this.jobs, job]);
@@ -502,6 +506,10 @@ export class SFTPTransferManager {
     if (file === undefined || job === undefined) return;
     const started = await this.api.startUpload(job.alias, id, job.remotePath, job.totalBytes, sourceFingerprint);
     this.replace(id, { transferredBytes: started.offset, expectedRevision: started.expectedRevision });
+    if (started.parallelism > 1) {
+      await this.runParallelUpload(id, file, started, sourceFingerprint);
+      return;
+    }
     let offset = started.offset;
     while (offset < file.size) {
       job = this.find(id);
@@ -520,6 +528,41 @@ export class SFTPTransferManager {
     await this.reconcile();
     const completed = this.find(id);
     if (completed !== undefined) this.notify(completed);
+  }
+
+  private async runParallelUpload(id: string, file: File, started: ResumableUpload, sourceFingerprint: string): Promise<void> {
+    const ranges: Array<{ offset: number; size: number }> = [];
+    for (let offset = 0; offset < file.size; offset += started.chunkBytes) {
+      const size = Math.min(started.chunkBytes, file.size - offset);
+      if (!started.completedRanges.some((range) => offset >= range.offset && offset + size <= range.offset + range.size)) {
+        ranges.push({ offset, size });
+      }
+    }
+    const controller = new AbortController();
+    this.controllers.set(id, controller);
+    let next = 0;
+    const worker = async () => {
+      while (next < ranges.length) {
+        const portion = ranges[next++];
+        if (portion === undefined) return;
+        const job = this.find(id);
+        if (job === undefined || job.status !== "running") return;
+        const appended = await this.retryOperation(() => this.api.appendUploadRange(
+          job.alias, id, job.remotePath, portion.offset, file.size,
+          file.slice(portion.offset, portion.offset + portion.size), controller.signal,
+        ));
+        const current = this.find(id)?.transferredBytes ?? 0;
+        this.recordProgress(id, Math.max(current, appended.offset), file.size);
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(started.parallelism, ranges.length) }, worker));
+    let job = this.find(id);
+    if (job === undefined || job.status !== "running") return;
+    await this.api.completeUpload(job.alias, id, job.remotePath, job.totalBytes, started.expectedRevision, sourceFingerprint);
+    this.files.delete(id);
+    await this.reconcile();
+    job = this.find(id);
+    if (job !== undefined) this.notify(job);
   }
 
   private async runDownload(id: string): Promise<void> {

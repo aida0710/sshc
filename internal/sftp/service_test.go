@@ -280,6 +280,21 @@ func (w *fakeSeekWriter) Write(contents []byte) (int, error) {
 	return len(contents), nil
 }
 
+func (w *fakeSeekWriter) Truncate(size int64) error {
+	if size < 0 {
+		return fs.ErrInvalid
+	}
+	if size < int64(len(w.contents)) {
+		w.contents = w.contents[:size]
+	} else if size > int64(len(w.contents)) {
+		w.contents = append(w.contents, make([]byte, size-int64(len(w.contents)))...)
+	}
+	if w.offset > size {
+		w.offset = size
+	}
+	return nil
+}
+
 func (w *fakeSeekWriter) Close() error {
 	if w.closed {
 		return nil

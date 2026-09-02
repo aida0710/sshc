@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent } from "react";
 import { useTranslate } from "../i18n/context";
 import { Icon } from "../ui/icons";
 import { useDismissibleLayer } from "../ui/useDismissibleLayer";
@@ -18,11 +18,54 @@ const maxQueueHeight = 560;
 const defaultQueueHeight = 224;
 const concurrencyChoices = [1, 2, 3, 4, 5, 6, 7, 8];
 const autoClearChoices = [0, 30, 300, 3600];
-const largeFileThresholdChoices = [16, 50, 100, 250, 500, 1024];
-const largeFileChunkChoices = [8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096];
 const mebibyte = 1 << 20;
 
 type QueueView = { collapsed: boolean; height: number };
+
+function MiBSetting({ label, valueBytes, min, max, onCommit }: {
+  label: string;
+  valueBytes: number;
+  min: number;
+  max: number;
+  onCommit: (valueBytes: number) => void;
+}) {
+  const valueMiB = valueBytes / mebibyte;
+  const [draft, setDraft] = useState(String(valueMiB));
+  useEffect(() => setDraft(String(valueMiB)), [valueMiB]);
+  function commit() {
+    const parsed = Number(draft);
+    if (!Number.isInteger(parsed) || parsed < min || parsed > max) {
+      setDraft(String(valueMiB));
+      return;
+    }
+    onCommit(parsed * mebibyte);
+  }
+  return (
+    <label className="flex items-center gap-1 text-ink-muted">
+      <span>{label}</span>
+      <input
+        type="number"
+        inputMode="numeric"
+        aria-label={label}
+        min={min}
+        max={max}
+        step={1}
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={commit}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") event.currentTarget.blur();
+          if (event.key === "Escape") {
+            setDraft(String(valueMiB));
+            event.currentTarget.blur();
+          }
+        }}
+        className="w-16 rounded border border-control-line bg-control px-1 py-0.5 text-right text-xs tabular-nums"
+      />
+      <span aria-hidden="true">MiB</span>
+    </label>
+  );
+}
 
 function clampHeight(value: number): number {
   return Math.min(maxQueueHeight, Math.max(minQueueHeight, Math.round(value)));
@@ -148,10 +191,9 @@ export function TransferManagerList() {
     returnFocusRef: menuTrigger,
   });
   useMenuKeyboard({ open: menuOpen, menuRef: menuPanel, onClose: () => setMenuOpen(false) });
-  if (jobs.length === 0) return null;
   return (
     <section className="relative mt-2 shrink-0 overflow-hidden rounded-md border border-line/60 bg-toolbar/30 text-xs" aria-labelledby="transfer-manager-heading">
-      {collapsed ? null : (
+      {collapsed || jobs.length === 0 ? null : (
         <div
           role="separator"
           aria-orientation="horizontal"
@@ -218,19 +260,13 @@ export function TransferManagerList() {
             ))}
           </select>
         </label>
-        <label className="flex items-center gap-1 text-ink-muted">
-          <span>{t("sftp.manager.largeFileThreshold")}</span>
-          <select
-            aria-label={t("sftp.manager.largeFileThreshold")}
-            value={largeFileThresholdChoices.includes(largeFileThreshold / mebibyte) ? largeFileThreshold : 100 * mebibyte}
-            onChange={(event) => applySettings({ largeFileThresholdBytes: Number(event.target.value) })}
-            className="rounded border border-control-line bg-control px-1 py-0.5 text-xs"
-          >
-            {largeFileThresholdChoices.map((choice) => (
-              <option key={choice} value={choice * mebibyte}>{t("sftp.manager.largeFileThresholdValue", { size: choice })}</option>
-            ))}
-          </select>
-        </label>
+        <MiBSetting
+          label={t("sftp.manager.largeFileThreshold")}
+          valueBytes={largeFileThreshold}
+          min={16}
+          max={1024}
+          onCommit={(value) => applySettings({ largeFileThresholdBytes: value })}
+        />
         <label className="flex items-center gap-1 text-ink-muted">
           <span>{t("sftp.manager.largeFileParallelism")}</span>
           <select
@@ -244,19 +280,13 @@ export function TransferManagerList() {
             ))}
           </select>
         </label>
-        <label className="flex items-center gap-1 text-ink-muted">
-          <span>{t("sftp.manager.largeFileChunk")}</span>
-          <select
-            aria-label={t("sftp.manager.largeFileChunk")}
-            value={largeFileChunkChoices.includes(largeFileChunkBytes / mebibyte) ? largeFileChunkBytes : 32 * mebibyte}
-            onChange={(event) => applySettings({ largeFileChunkBytes: Number(event.target.value) })}
-            className="rounded border border-control-line bg-control px-1 py-0.5 text-xs"
-          >
-            {largeFileChunkChoices.map((choice) => (
-              <option key={choice} value={choice * mebibyte}>{t("sftp.manager.largeFileChunkValue", { size: choice })}</option>
-            ))}
-          </select>
-        </label>
+        <MiBSetting
+          label={t("sftp.manager.largeFileChunk")}
+          valueBytes={largeFileChunkBytes}
+          min={8}
+          max={4096}
+          onCommit={(value) => applySettings({ largeFileChunkBytes: value })}
+        />
         </>
         )}
         <div ref={menuRoot} className="relative ml-auto">
@@ -273,7 +303,7 @@ export function TransferManagerList() {
           ) : null}
         </div>
       </div>
-      {collapsed ? null : <div id="transfer-manager-jobs" style={{ height: view.height }} className="space-y-1.5 overflow-auto px-2.5 pb-2.5">
+      {collapsed || jobs.length === 0 ? null : <div id="transfer-manager-jobs" style={{ height: view.height }} className="space-y-1.5 overflow-auto px-2.5 pb-2.5">
         {batches.map(([batchId, items]) => {
           const first = items[0]!;
           const failed = items.filter((item) => item.status === "failed").length;

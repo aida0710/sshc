@@ -41,10 +41,10 @@ const (
 	maxArchiveEntries = 10_000
 	maxArchiveDepth   = 64
 	maxArchiveBytes   = int64(1 << 30)
-	// A file download is explicitly requested and may be much larger than an
-	// archive assembled from an entire directory. Keep a finite safety bound,
-	// but do not reuse the 1 GiB archive-expansion budget for ordinary files.
-	maxPreparedDownloadBytes = int64(512 << 30)
+	// A regular file transfer is explicitly requested and may be much larger
+	// than an archive assembled from an entire directory. Keep a finite safety
+	// bound, but do not reuse the 1 GiB archive-expansion budget for files.
+	maxRegularFileTransferBytes = int64(512 << 30)
 )
 
 type archiveBudget struct {
@@ -159,7 +159,7 @@ func (s Service) prepareDownload(
 	if !before.Mode().IsRegular() {
 		return nil, ErrNotRegularFile
 	}
-	if before.Size() < 0 || before.Size() > maxPreparedDownloadBytes {
+	if before.Size() < 0 || before.Size() > maxRegularFileTransferBytes {
 		return nil, ErrTransferTooLarge
 	}
 	// Reserve the complete known size before opening or creating a spool. This

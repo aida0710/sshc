@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"io/fs"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -155,6 +156,104 @@ func TestLargePreparedDownloadReadsIndependentRangesInParallel(t *testing.T) {
 	}
 	if got := connections.Load(); got != 4 {
 		t.Fatalf("SFTP connections = %d, want 4 for five chunks", got)
+	}
+}
+
+func TestParallelUploadPersistsRangesAndPublishesOnlyWhenComplete(t *testing.T) {
+	const chunk = int64(8 << 20)
+	contents := bytes.Repeat([]byte("parallel-upload\n"), int((2*chunk)/16))
+	contents = contents[:2*chunk]
+	remote := remoteWith(nil)
+	service := serviceFor(remote)
+	manager := sftp.NewTransferManager(&service)
+	queuePath := filepath.Join(t.TempDir(), "transfers.json")
+	if err := manager.EnableQueuePersistence(queuePath); err != nil {
+		t.Fatal(err)
+	}
+	job := sftp.CreateTransferJob{
+		ID: "transfer_uprange", BatchID: "batch_upranges", Alias: "edge", Direction: sftp.TransferUpload,
+		Kind: sftp.TransferFile, Name: "large.bin", RemotePath: "/large.bin", TotalBytes: int64(len(contents)),
+		LargeFileThresholdBytes: sftp.MinLargeFileThreshold, LargeFileParallelism: 2, LargeFileChunkBytes: chunk,
+	}
+	if _, err := manager.CreateJob(job); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.UpdateJob(job.ID, sftp.UpdateTransferJob{Action: sftp.TransferStartAction}); err != nil {
+		t.Fatal(err)
+	}
+	fingerprint, err := sftp.SourceFingerprint(t.Context(), bytes.NewReader(contents), int64(len(contents)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	started, err := manager.StartOwned(t.Context(), job.Alias, job.ID, job.RemotePath, sftp.StartUploadOptions{Size: job.TotalBytes, SourceFingerprint: fingerprint})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if started.Parallelism != 2 || started.ChunkBytes != chunk || started.Offset != 0 {
+		t.Fatalf("start = %+v", started)
+	}
+	second, err := manager.AppendRangeOwned(t.Context(), job.Alias, job.ID, job.RemotePath, chunk, job.TotalBytes, chunk, bytes.NewReader(contents[chunk:]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.Offset != chunk {
+		t.Fatalf("second-range progress = %d", second.Offset)
+	}
+	restarted := sftp.NewTransferManager(&service)
+	if err := restarted.EnableQueuePersistence(queuePath); err != nil {
+		t.Fatal(err)
+	}
+	restored := restarted.ListJobs()
+	if len(restored) != 1 || restored[0].Status != sftp.TransferReattach || len(restored[0].UploadRanges) != 1 || restored[0].UploadRanges[0].Offset != chunk {
+		t.Fatalf("restored upload = %+v", restored)
+	}
+	if _, err := restarted.UpdateJob(job.ID, sftp.UpdateTransferJob{Action: sftp.TransferResumeAction}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := restarted.UpdateJob(job.ID, sftp.UpdateTransferJob{Action: sftp.TransferStartAction}); err != nil {
+		t.Fatal(err)
+	}
+	manager = restarted
+	resumed, err := manager.StartOwned(t.Context(), job.Alias, job.ID, job.RemotePath, sftp.StartUploadOptions{Size: job.TotalBytes, SourceFingerprint: fingerprint})
+	if err != nil || len(resumed.CompletedRanges) != 1 || resumed.CompletedRanges[0].Offset != chunk {
+		t.Fatalf("resume = %+v, %v", resumed, err)
+	}
+	if _, err := manager.CompleteOwned(t.Context(), job.Alias, job.ID, job.RemotePath, job.TotalBytes, started.ExpectedRevision, fingerprint); !errors.Is(err, sftp.ErrUploadIncomplete) {
+		t.Fatalf("incomplete publish = %v", err)
+	}
+	delete(remote.nodes, "/.large.bin.sshc-upload-transfer_uprange.part")
+	reset, err := manager.StartOwned(t.Context(), job.Alias, job.ID, job.RemotePath, sftp.StartUploadOptions{Size: job.TotalBytes, SourceFingerprint: fingerprint})
+	if err != nil || reset.Offset != 0 || len(reset.CompletedRanges) != 0 {
+		t.Fatalf("start after lost remote part = %+v, %v", reset, err)
+	}
+	if restored := manager.ListJobs(); len(restored) != 1 || restored[0].TransferredBytes != 0 || len(restored[0].UploadRanges) != 0 {
+		t.Fatalf("ranges after remote part reset = %+v", restored)
+	}
+	if _, err := manager.AppendRangeOwned(t.Context(), job.Alias, job.ID, job.RemotePath, 0, job.TotalBytes, chunk, bytes.NewReader(contents[:chunk])); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.AppendRangeOwned(t.Context(), job.Alias, job.ID, job.RemotePath, chunk, job.TotalBytes, chunk, bytes.NewReader(contents[chunk:])); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.CompleteOwned(t.Context(), job.Alias, job.ID, job.RemotePath, job.TotalBytes, started.ExpectedRevision, fingerprint); err != nil {
+		t.Fatal(err)
+	}
+	if got := remote.nodes["/large.bin"].content; !bytes.Equal(got, contents) {
+		t.Fatal("parallel upload changed contents")
+	}
+}
+
+func TestUploadRejectsFilesLargerThan512GiBBeforeConnecting(t *testing.T) {
+	var opens atomic.Int32
+	manager := sftp.NewTransferManager(&sftp.Service{Open: func(context.Context, string) (sftp.Remote, error) {
+		opens.Add(1)
+		return remoteWith(nil), nil
+	}})
+	if _, err := manager.Start(t.Context(), "edge", "transfer_too_large", "/large.bin", sftp.StartUploadOptions{Size: (512 << 30) + 1}); !errors.Is(err, sftp.ErrTransferTooLarge) {
+		t.Fatalf("Start(512 GiB + 1) = %v", err)
+	}
+	if opens.Load() != 0 {
+		t.Fatal("oversized upload opened an SFTP connection")
 	}
 }
 
@@ -569,7 +668,7 @@ func TestAppendOwnedReplaysAnAcknowledgedChunkAfterResponseLoss(t *testing.T) {
 		t.Fatal(err)
 	}
 	replayed, err := manager.AppendOwned(t.Context(), input.Alias, input.ID, input.RemotePath, 0, 4, []byte("data"))
-	if err != nil || replayed.Offset != 4 {
+	if err != nil || replayed.Offset != 4 || replayed.ExpectedRevision == "" || replayed.Parallelism != 1 || replayed.ChunkBytes != sftp.DefaultLargeFileChunkBytes || replayed.CompletedRanges == nil {
 		t.Fatalf("replayed append = %+v, %v", replayed, err)
 	}
 	part := "/remote/.file.sshc-upload-transfer_appendack.part"

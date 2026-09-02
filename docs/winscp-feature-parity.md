@@ -133,7 +133,7 @@ sshcのSFTPは、安全なアップロード／ダウンロード、フォルダ
 | 全体speed limit | 未対応 | なし | job別上限と合わせて追加 |
 | 最大同時転送数の設定 | 対応 | queue headerの選択で1〜8。metadata.jsonの`fileTransfers`節に残り、engine再起動後も効く | 維持 |
 | 複数接続で複数fileを転送 | 対応 | jobごとに独立SFTP transport、既定2並列 | 接続再利用は限定的 |
-| 1 fileを複数connectionで分割 | 対応 | 512 GiBまでのdownloadを、既定で100 MiB以上、32 MiB単位、最大4接続で処理。開始サイズ16〜1024 MiB、接続数1〜8、chunk 8〜4096 MiBを設定でき、接続数1で無効化 | uploadは1 streamを維持 |
+| 1 fileを複数connectionで分割 | 対応 | 512 GiBまでのupload／downloadを、既定で100 MiB以上、32 MiB単位、最大4接続で処理。開始サイズ16〜1024 MiB、接続数1〜8、chunk 8〜4096 MiBを設定でき、接続数1で無効化 | 実サーバーで継続検証 |
 | queueの折りたたみ | 対応 | headerを残して展開／折りたたみ | 維持 |
 | queue高さのresize | 対応 | 上端のdrag handleで96〜560px。keyboardの↑↓でも変えられ、折りたたみ状態とともに保存する | 維持 |
 | queue file listの展開 | 部分 | batch配下へfile jobを常時表示 | 折りたたみ可能にする |
@@ -149,7 +149,7 @@ sshcのSFTPは、安全なアップロード／ダウンロード、フォルダ
 |---|---|---|---|
 | transfer options dialog | 未対応 | 即時queue登録 | 普段は省略可能な確認sheetを追加 |
 | destination directory／operation mask | 部分 | current path＋元file名のみ | 転送前にdestinationとrename maskを指定可能にする |
-| default transfer settings | 部分 | 最大同時file数、大容量downloadの分割開始サイズと接続数をengine設定として永続化 | speed／timestamp等は未対応 |
+| default transfer settings | 部分 | 最大同時file数と、大容量upload／downloadの分割開始サイズ・接続数・chunkサイズをengine設定として永続化。Webと`sshc sftp settings`から変更可能 | speed／timestamp等は未対応 |
 | per-transfer settings | 未対応 | 固定 | transfer sheetへ追加 |
 | named preset | 未対応 | なし | host／path rule付きpresetは後段 |
 | background／foreground選択 | 判断 | sshcは常にbackground | UIをblockするforegroundは導入しない |
@@ -224,7 +224,7 @@ sshcのSFTPは、安全なアップロード／ダウンロード、フォルダ
 | WinSCP機能 | 状態 | sshcの現状 | 実装方針 |
 |---|---|---|---|
 | command-line interface | 対応 | 接続、run、sync、管理、SFTP転送CLIあり | 維持 |
-| SFTP upload/download CLI | 対応 | `sshc sftp get/put`。recursive、上書き確認、skip、dry-run、JSON、file並列と大容量download分割を備える | 維持 |
+| SFTP upload/download CLI | 対応 | `sshc sftp get/put`。recursive、上書き確認、skip、dry-run、JSON、file並列と大容量file分割を備える | 維持 |
 | file operation scripting | 対応 | `--yes --json`で非対話実行でき、終了codeで失敗を返す | operation mask等は未対応 |
 | script file／batch automation | 部分 | Snippetsと`sshc run`はremote command用 | file transfer planは未対応 |
 | .NET assembly／COM API | 判断 | なし | cross-platform REST/CLIを正本とし導入しない候補 |
