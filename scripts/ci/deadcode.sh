@@ -6,6 +6,12 @@
 # 検出する。コンパイルできても本番から参照されないコードを確認するために使う。
 set -euo pipefail
 
+# **並べ方と比べ方を揃える。** sort はロケールの照合順で並べ、comm はバイトで
+# 比べる。en_US.UTF-8 のような環境では両者が食い違い、comm は「並んでいない」と
+# 言って止まる——実際、`internal/platform/windows/toolchain.go` が増えた日に
+# 手元だけが赤くなった。CI のランナーは C ロケールなので、そこでは見えない。
+export LC_ALL=C
+
 cd "$(dirname "$0")/../.."
 
 # tool 自体は host 向けに建てる。`go tool` に GOOS を渡すと tool ごと
