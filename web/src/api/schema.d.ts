@@ -1586,6 +1586,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sftp/transfers/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** @description Remove one completed, cancelled, or failed transfer from the engine-owned ledger. Failed uploads first clean their unpublished temporary file. */
+        delete: operations["removeSFTPTransferJob"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sftp/transfers/{id}/download-checkpoint": {
         parameters: {
             query?: never;
@@ -3269,7 +3288,7 @@ export interface components {
             remainingSeconds: number;
             /** @enum {string} */
             status: "queued" | "running" | "paused" | "reattach" | "needs_overwrite" | "completed" | "failed" | "cancelled";
-            allowedActions: ("pause" | "resume" | "retry" | "cancel")[];
+            allowedActions: ("pause" | "resume" | "retry" | "cancel" | "remove")[];
             attempt: number;
             problem: string;
             /** Format: int64 */
@@ -6608,6 +6627,29 @@ export interface operations {
             400: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
+        };
+    };
+    removeSFTPTransferJob: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Transfer job removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
         };
     };
     checkpointSFTPDownload: {

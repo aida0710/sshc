@@ -9,6 +9,8 @@ description: Queue files and folders, then pause, resume, retry, or cancel them.
 
 File upload, folder upload, file download, folder download, and remote-to-remote copy or move share one queue. Two transfers run concurrently by default. The Transfer Manager is docked below the SFTP view and normally shows only the active count, aggregate progress, and speed. Expand it for per-file status and controls.
 
+While expanded, drag the grip on its upper edge to resize the job list. Mobile resizing snaps to three useful heights, while desktop resizing remains continuous; each viewport keeps its own saved height. With the grip focused, the arrow, Home, and End keys provide the same control from a keyboard.
+
 Each job shows per-file progress, transferred and total bytes, current speed, remaining time, and a queued/running/paused/completed/failed/canceled state.
 
 - Pause stops new reads and writes while retaining recovery state.
@@ -16,6 +18,9 @@ Each job shows per-file progress, transferred and total bytes, current speed, re
 - Retry reruns failed files only.
 - Cancel ends the job.
 - Clear finished removes completed and canceled entries from the view.
+- Remove from list dismisses one completed, canceled, or failed entry. Clear failed dismisses failed entries without clearing successful history.
+
+The overflow menu only appears when at least one bulk action is currently available. A cancel request that races with completion is idempotent and keeps the completed result. If sshc cannot remove an upload's remote temporary file, it keeps the failed entry visible with an explanation so that you can retry cancel or removal after restoring the connection.
 
 Uploads use a temporary file in the target directory, verify the complete contents, and atomically rename it on completion. Existing destinations require confirmation. After a reload, select the same local file again. If its name, size, and modified time match and the remote temporary file is still usable, the upload skips ranges already recorded as complete and continues with the remainder.
 

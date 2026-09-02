@@ -41,6 +41,9 @@ const manager = vi.hoisted(() => {
     resumeAll: vi.fn(async () => undefined),
     cancelAll: vi.fn(async () => undefined),
     clearFinished: vi.fn(async () => undefined),
+    clearFailed: vi.fn(async () => undefined),
+    remove: vi.fn(async () => undefined),
+    reconcile: vi.fn(async () => undefined),
     retryFailed: vi.fn(async () => undefined),
   };
 });
@@ -187,5 +190,65 @@ describe("the transfer queue", () => {
     render(<TransferManagerList />);
     expect(screen.getByRole("button", { name: "Expand Transfer Manager" })).toBeVisible();
     expect(screen.queryByRole("separator")).not.toBeInTheDocument();
+  });
+
+  it("shows a touch-sized grip and snaps mobile resizing without changing the desktop height", () => {
+    const originalMatchMedia = window.matchMedia;
+    const originalInnerHeight = window.innerHeight;
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query === "(max-width: 767px)",
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })) as unknown as typeof window.matchMedia;
+    Object.defineProperty(window, "innerHeight", { configurable: true, value: 640 });
+    manager.setJobs([job("one")]);
+
+    const { unmount } = render(<TransferManagerList />);
+    try {
+      const handle = screen.getByRole("separator", { name: "Drag to resize the transfer queue" });
+      expect(handle).toHaveClass("h-6", "touch-none");
+      expect(handle.querySelector("span")).toHaveClass("w-10", "rounded-full");
+
+      fireEvent.pointerDown(handle, { clientY: 400 });
+      fireEvent.pointerMove(window, { clientY: 300 });
+      fireEvent.pointerUp(window);
+
+      expect(handle).toHaveAttribute("aria-valuenow", "360");
+      expect(JSON.parse(window.localStorage.getItem("sshc.sftp.queueView") ?? "{}")).toMatchObject({
+        height: 224,
+        mobileHeight: 360,
+      });
+    } finally {
+      unmount();
+      window.matchMedia = originalMatchMedia;
+      Object.defineProperty(window, "innerHeight", { configurable: true, value: originalInnerHeight });
+    }
+  });
+
+  it("does not render an inert overflow trigger when the queue has no actions", () => {
+    render(<TransferManagerList />);
+    expect(screen.queryByRole("button", { name: "Transfer queue actions" })).not.toBeInTheDocument();
+  });
+
+  it("opens queue actions above the clipped job area and clears failed work", async () => {
+    manager.setJobs([job("failed", { status: "failed", allowedActions: ["retry", "cancel", "remove"] })]);
+    render(<TransferManagerList />);
+    const region = screen.getByRole("region", { name: "Transfer Manager" });
+    expect(region).toHaveClass("overflow-visible");
+    await userEvent.click(screen.getByRole("button", { name: "Transfer queue actions" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Remove failed from list" }));
+    expect(manager.clearFailed).toHaveBeenCalledOnce();
+  });
+
+  it("removes an individual failed transfer from the list", async () => {
+    manager.setJobs([job("failed", { status: "failed", allowedActions: ["retry", "cancel", "remove"] })]);
+    render(<TransferManagerList />);
+    await userEvent.click(screen.getByRole("button", { name: "Remove from list" }));
+    expect(manager.remove).toHaveBeenCalledWith("failed");
   });
 });

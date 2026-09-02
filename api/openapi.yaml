@@ -1908,6 +1908,17 @@ paths:
         "400": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
+  /api/v1/sftp/transfers/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, pattern: "^[A-Za-z0-9_-]{8,128}$" } }
+    delete:
+      operationId: removeSFTPTransferJob
+      description: Remove one completed, cancelled, or failed transfer from the engine-owned ledger. Failed uploads first clean their unpublished temporary file.
+      responses:
+        "204": { description: Transfer job removed, or it was already absent }
+        "400": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "502": { $ref: "#/components/responses/Problem" }
   /api/v1/sftp/transfers/{id}/download-checkpoint:
     parameters:
       - { name: id, in: path, required: true, schema: { type: string, pattern: "^[A-Za-z0-9_-]{8,128}$" } }
@@ -4327,8 +4338,8 @@ components:
         allowedActions:
           type: array
           uniqueItems: true
-          maxItems: 2
-          items: { type: string, enum: [pause, resume, retry, cancel] }
+          maxItems: 3
+          items: { type: string, enum: [pause, resume, retry, cancel, remove] }
         attempt: { type: integer, minimum: 1 }
         problem: { type: string, maxLength: 128 }
         lastModified: { type: integer, format: int64, minimum: 0 }

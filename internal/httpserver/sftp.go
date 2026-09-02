@@ -98,6 +98,7 @@ func registerSFTPRoutes(engine *echo.Echo, handlers SFTPHandlers) {
 	engine.GET("/api/v1/sftp/transfers", handlers.ListTransfers)
 	engine.POST("/api/v1/sftp/transfers", handlers.CreateTransfer)
 	engine.DELETE("/api/v1/sftp/transfers/finished", handlers.ClearFinishedTransfers)
+	engine.DELETE("/api/v1/sftp/transfers/:id", handlers.RemoveTransfer)
 	engine.PUT("/api/v1/sftp/transfers/settings", handlers.UpdateTransferSettings)
 	engine.POST("/api/v1/sftp/transfers/:id/queue-position", handlers.MoveTransfer)
 	engine.POST("/api/v1/sftp/transfers/:id/actions", handlers.UpdateTransfer)
@@ -394,6 +395,13 @@ func (h SFTPHandlers) CompareDirectories(c *echo.Context) error {
 
 func (h SFTPHandlers) ClearFinishedTransfers(c *echo.Context) error {
 	h.Transfers.ClearFinished()
+	return c.NoContent(http.StatusNoContent)
+}
+
+func (h SFTPHandlers) RemoveTransfer(c *echo.Context) error {
+	if err := h.Transfers.RemoveJob(c.Param("id")); err != nil {
+		return sftpProblem(c, err)
+	}
 	return c.NoContent(http.StatusNoContent)
 }
 

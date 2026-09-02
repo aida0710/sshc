@@ -118,7 +118,7 @@ describe("SFTPPanel uploads", () => {
     expect(api.startUpload).toHaveBeenCalledWith("edge", expect.any(String), "/remote/first.txt", first.size, expect.stringMatching(/^tree-sha256:/));
     expect(api.startUpload).toHaveBeenCalledWith("edge", expect.any(String), "/remote/second.txt", second.size, expect.stringMatching(/^tree-sha256:/));
     expect(await screen.findByText("Completed")).toBeInTheDocument();
-    expect(await screen.findByText("upload_failed")).toBeInTheDocument();
+    expect(await screen.findByText("Failed · upload_failed")).toBeInTheDocument();
   });
 
   it("does not connect until a host is selected", async () => {
