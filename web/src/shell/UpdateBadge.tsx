@@ -1,13 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { integrationsApi, type IntegrationsApi, type UpdateStatus } from "../api/integrations";
 import { useTranslate } from "../i18n/context";
 
 type UpdateBadgeProps = {
   api?: IntegrationsApi;
   current?: string;
+  indicator?: ReactNode;
 };
 
-export function UpdateBadge({ api = integrationsApi, current = "" }: UpdateBadgeProps) {
+export function UpdateBadge({ api = integrationsApi, current = "", indicator }: UpdateBadgeProps) {
   const t = useTranslate();
   const [status, setStatus] = useState<UpdateStatus | null>(null);
 
@@ -30,9 +31,12 @@ export function UpdateBadge({ api = integrationsApi, current = "" }: UpdateBadge
   }
   return (
     <div className="border-t border-line px-2 py-2 text-xs text-ink-muted">
-      <p>{t("update.version", { version: displayedCurrent })}</p>
+      <div className="flex items-center gap-2">
+        {indicator}
+        <p>{t("update.version", { version: displayedCurrent })}</p>
+      </div>
       {status === null || !status.available || status.pageUrl === undefined ? null : (
-        <p className="mt-1">
+        <p className={indicator === undefined ? "mt-1" : "mt-1 pl-3.5"}>
           <a
             href={status.pageUrl}
             target="_blank"

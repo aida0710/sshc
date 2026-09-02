@@ -367,6 +367,13 @@ test("draws one separator above the version in the mobile drawer", async ({ page
     return count;
   });
   expect(borders).toBe(1);
+  const status = navigation.locator("[data-session-status-badge]");
+  const [versionBox, statusBox] = await Promise.all([version.boundingBox(), status.boundingBox()]);
+  expect(versionBox).not.toBeNull();
+  expect(statusBox).not.toBeNull();
+  if (versionBox !== null && statusBox !== null) {
+    expect(Math.abs(versionBox.y + versionBox.height / 2 - statusBox.y - statusBox.height / 2)).toBeLessThanOrEqual(1);
+  }
 
   const menu = navigation.getByRole("link", { name: "Menu", exact: true });
   const localShell = navigation.getByRole("button", { name: "Local shell", exact: true });

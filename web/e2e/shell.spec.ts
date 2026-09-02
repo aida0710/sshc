@@ -45,6 +45,15 @@ test("draws one separator above the desktop navigation version", async ({ page, 
   await expect(navigation.getByText("Home", { exact: true }).first()).toBeVisible();
   await expect(page.locator("[data-app-header]")).toBeHidden();
   await expect.poll(() => navigationFooterTopBorders(page)).toBe(1);
+  const [versionBox, statusBox] = await Promise.all([
+    navigation.getByText(/^Version /).boundingBox(),
+    navigation.locator("[data-session-status-badge]").boundingBox(),
+  ]);
+  expect(versionBox).not.toBeNull();
+  expect(statusBox).not.toBeNull();
+  if (versionBox !== null && statusBox !== null) {
+    expect(Math.abs(versionBox.y + versionBox.height / 2 - statusBox.y - statusBox.height / 2)).toBeLessThanOrEqual(1);
+  }
 
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
     await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/home-desktop.png`, fullPage: true });

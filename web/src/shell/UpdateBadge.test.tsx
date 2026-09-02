@@ -13,7 +13,7 @@ describe("UpdateBadge", () => {
 
     const version = await screen.findByText("Version 0.1.0");
     expect(version).toBeInTheDocument();
-    expect(version.parentElement).toHaveClass("border-t");
+    expect(version.parentElement?.parentElement).toHaveClass("border-t");
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
   });
 
@@ -42,5 +42,18 @@ describe("UpdateBadge", () => {
     await waitFor(() => expect(api.updateStatus).toHaveBeenCalled());
     expect(screen.getByText("Version 0.1.0")).toBeVisible();
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
+  });
+
+  it("places an optional status indicator in the version row", async () => {
+    render(
+      <UpdateBadge
+        api={buildApi({ current: "0.1.0", available: false })}
+        indicator={<span data-testid="indicator" />}
+      />,
+    );
+
+    const version = await screen.findByText("Version 0.1.0");
+    expect(screen.getByTestId("indicator").parentElement).toBe(version.parentElement);
+    expect(version.parentElement).toHaveClass("items-center");
   });
 });
