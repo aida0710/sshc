@@ -102,7 +102,12 @@ OpenSSHコンテナに対するプロトコル往復は`make integration`で自�
 11. fileとdirectoryの権限をchmodで変更し、一覧で名前の下に権限が表示されること、名前・更新日時・サイズ・種別でsortできることを確認する。symlinkにはchmodが表示されないことを確認する。
 12. checkboxでfileとdirectoryを複数選択し、一括downloadと削除確認を実行できることを確認する。1件だけ選んだ場合に限り、renameとchmodが操作menuへ表示されることも確認する。
 13. text fileを開いたとき、一覧の横幅が変わらずmodal editorが表示されることを確認する。未保存の変更がある間は意図せず閉じないことも確認する。
-14. 作成したfileとdirectoryを削除して原状復帰する。
+14. desktopで異なるhostを2ペインに開き、fileとdirectoryを片方からもう片方へDrag & Dropする。copyではsourceが残り、moveではtargetの完了後だけsourceが消えること、local端末に平文の一時fileが作られないことを確認する。
+15. 同じhostの別directoryを2ペインに開き、moveがserver-side renameで完了することを確認する。directoryを自分自身の配下へcopy／moveしようとした場合は、targetを作らず拒否されることも確認する。
+16. 2ペインの「比較」を開き、同一・左のみ・右のみ・差分・種別違いがsize、mtime、permission、種別を基準に表示されることを確認する。項目を選んで左右へcopyし、相手側だけのfileが自動削除されないことを確認する。
+17. SFTPから「この場所でTerminalを開く」を実行し、同じhostのshellが現在directoryから始まることを確認する。TerminalでOSC 7を出すshellからは、現在directoryを同じhostのSFTPで開けることを確認する。
+18. 待機中・一時停止中・転送中のjobを作ってengineを再起動し、queueが復元されることを確認する。Remote→Remoteの転送中jobは待機へ戻って再実行され、`~/.ssh/sshc/transfers.json`が0600で、Remote Syncのsnapshotに含まれないことを確認する。
+19. 作成したfileとdirectoryを削除して原状復帰する。
 
 ## M8. Workspace Command Center
 

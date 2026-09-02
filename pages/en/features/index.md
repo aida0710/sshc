@@ -29,7 +29,7 @@ Passwords and key passphrases are encrypted in the vault and assigned to connect
 
 ## SFTP
 
-[SFTP](./sftp) provides remote file browsing and editing, folder transfers, and an engine-managed queue that keeps transfers running while you navigate within the same application. File transfers can resume when their recovery requirements are met.
+[SFTP](./sftp) provides remote file browsing and editing. On desktop, place two remote connections side by side, compare their directories, and copy or move entries directly between them. The engine owns and persists the transfer queue so its state survives navigation and engine restarts.
 
 ## CLI
 
