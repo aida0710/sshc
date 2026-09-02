@@ -141,6 +141,13 @@ func (b *fakeBucket) handler() http.HandlerFunc {
 		if r.Method == http.MethodGet && r.URL.Query().Get("list-type") == "2" {
 			b.mu.Lock()
 			started, release := b.listStarted, b.releaseList
+			// A blocked listing models one in-flight BucketStatus request. Do not
+			// block a concurrent Push that happens to list history as part of its
+			// own work; the test is checking operationMu, not serialising S3.
+			if release != nil {
+				b.listStarted = nil
+				b.releaseList = nil
+			}
 			b.mu.Unlock()
 			if started != nil {
 				select {
