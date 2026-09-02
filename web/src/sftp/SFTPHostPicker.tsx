@@ -85,7 +85,7 @@ export function SFTPHostPicker({
 
   return (
     <>
-      <button ref={trigger} type="button" aria-label={t("sftp.host")} data-value={value} disabled={disabled || aliases.length === 0} onClick={() => setOpen(true)} className="flex min-h-9 min-w-36 items-center justify-between gap-2 rounded-md border border-control-line bg-control px-3 py-1.5 text-left text-sm disabled:text-ink-faint">
+      <button ref={trigger} type="button" aria-label={t("sftp.host")} data-value={value} disabled={disabled || aliases.length === 0} onClick={() => setOpen(true)} className="flex min-h-9 min-w-36 items-center justify-between gap-2 rounded-md border border-control-line bg-control px-3 py-1.5 text-left text-sm disabled:text-ink-faint md:min-h-8 md:py-1">
         <span className="truncate">{value || t(aliases.length === 0 ? "sftp.noHosts" : "sftp.chooseHost")}</span>
         <Icon name="chevronRight" className="size-3 rotate-90 text-ink-muted" />
       </button>
