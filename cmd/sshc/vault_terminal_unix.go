@@ -35,7 +35,13 @@ func systemUnixPasswordOperations() unixPasswordOperations {
 func (systemPasswordTerminal) ReadPassword(
 	ctx context.Context, input *os.File, prompt func() error,
 ) ([]byte, error) {
-	return readUnixPasswordWithPrompt(ctx, input, systemUnixPasswordOperations(), prompt)
+	return readUnixPasswordWithFeedback(ctx, input, systemUnixPasswordOperations(), prompt, nil)
+}
+
+func (systemPasswordTerminal) ReadPasswordMasked(
+	ctx context.Context, input *os.File, prompt func() error, feedback func(int) error,
+) ([]byte, error) {
+	return readUnixPasswordWithFeedback(ctx, input, systemUnixPasswordOperations(), prompt, feedback)
 }
 
 // readUnixPassword は端末とキャンセルパイプを同じ poll で待つ。補助 goroutine は
@@ -44,11 +50,21 @@ func (systemPasswordTerminal) ReadPassword(
 func readUnixPassword(
 	ctx context.Context, input *os.File, operations unixPasswordOperations,
 ) (password []byte, resultErr error) {
-	return readUnixPasswordWithPrompt(ctx, input, operations, nil)
+	return readUnixPasswordWithFeedback(ctx, input, operations, nil, nil)
 }
 
 func readUnixPasswordWithPrompt(
 	ctx context.Context, input *os.File, operations unixPasswordOperations, prompt func() error,
+) (password []byte, resultErr error) {
+	return readUnixPasswordWithFeedback(ctx, input, operations, prompt, nil)
+}
+
+func readUnixPasswordWithFeedback(
+	ctx context.Context,
+	input *os.File,
+	operations unixPasswordOperations,
+	prompt func() error,
+	feedback func(int) error,
 ) (password []byte, resultErr error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -100,7 +116,7 @@ func readUnixPasswordWithPrompt(
 			return nil, err
 		}
 	}
-	password, err = readUnixPasswordBytes(ctx, fd, int(wakeRead.Fd()), operations)
+	password, err = readUnixPasswordBytesWithFeedback(ctx, fd, int(wakeRead.Fd()), operations, feedback)
 	if err != nil {
 		zeroBytes(password)
 		return nil, err
@@ -111,9 +127,19 @@ func readUnixPasswordWithPrompt(
 func readUnixPasswordBytes(
 	ctx context.Context, terminalFD, wakeFD int, operations unixPasswordOperations,
 ) ([]byte, error) {
+	return readUnixPasswordBytesWithFeedback(ctx, terminalFD, wakeFD, operations, nil)
+}
+
+func readUnixPasswordBytesWithFeedback(
+	ctx context.Context,
+	terminalFD, wakeFD int,
+	operations unixPasswordOperations,
+	feedback func(int) error,
+) ([]byte, error) {
 	// 固定容量のバッファを使い、append によるスライス拡張で古いヒープ領域へ
 	// パスワードのコピーを残さないようにする。
 	password := make([]byte, 0, maxVaultPasswordBytes)
+	reportedRunes := 0
 	for {
 		if err := ctx.Err(); err != nil {
 			zeroBytes(password)
@@ -149,6 +175,16 @@ func readUnixPasswordBytes(
 			if editErr != nil {
 				zeroBytes(password)
 				return nil, editErr
+			}
+			if feedback != nil && utf8.Valid(password) {
+				after := utf8.RuneCount(password)
+				if after != reportedRunes {
+					if feedbackErr := feedback(after); feedbackErr != nil {
+						zeroBytes(password)
+						return nil, feedbackErr
+					}
+					reportedRunes = after
+				}
 			}
 			if finished {
 				if err := ctx.Err(); err != nil {

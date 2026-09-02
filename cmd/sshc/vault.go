@@ -42,6 +42,15 @@ type passwordTerminal interface {
 	ReadPassword(ctx context.Context, input *os.File, prompt func() error) ([]byte, error)
 }
 
+// maskedPasswordTerminal is implemented by real OS terminals so setup can
+// confirm each hidden character as it is typed. Test doubles and alternative
+// terminals may omit it; the caller then confirms the input after Enter.
+type maskedPasswordTerminal interface {
+	ReadPasswordMasked(
+		ctx context.Context, input *os.File, prompt func() error, feedback func(int) error,
+	) ([]byte, error)
+}
+
 type systemPasswordTerminal struct{}
 
 func (systemPasswordTerminal) IsTerminal(fd int) bool { return term.IsTerminal(fd) }

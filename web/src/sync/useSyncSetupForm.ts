@@ -83,6 +83,7 @@ export function useSyncSetupForm() {
     region: state.region,
     accessKeyId: state.accessKeyId,
     secretAccessKey: state.secretAccessKey,
+    reuseCredentials: false,
   };
 
   return {
