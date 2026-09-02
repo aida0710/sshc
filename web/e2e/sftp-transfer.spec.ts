@@ -1,7 +1,7 @@
 import { changeDisplayLanguage, expect, openApplication, openSection, test } from "./support/environment";
 
 test("keeps a chunked SFTP upload visible while another section is open", async ({ page, installation }) => {
-  test.setTimeout(process.env.SSHC_VISUAL_DIR === undefined ? 30_000 : 60_000);
+  test.setTimeout(process.env.SSHC_VISUAL_DIR === undefined ? 30_000 : 120_000);
   let releaseFirstChunk: (() => void) | undefined;
   const firstChunkGate = new Promise<void>((resolve) => { releaseFirstChunk = resolve; });
   let offset = 0;
@@ -50,6 +50,44 @@ test("keeps a chunked SFTP upload visible while another section is open", async 
         modifiedAt: "2026-08-31T05:12:00Z", mode: "0640", revision: "manifest-v1",
       },
     ] }),
+  }));
+  await page.route("**/api/v1/sftp/compare**", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      leftPath: "/large",
+      rightPath: "/data",
+      entries: [
+        {
+          relativePath: "project",
+          status: "left_only",
+          left: {
+            name: "project", path: "/large/project", type: "directory", size: 0,
+            modifiedAt: "2026-08-31T10:49:00Z", mode: "0755", revision: "project-v1",
+          },
+        },
+        {
+          relativePath: "manifest.json",
+          status: "right_only",
+          right: {
+            name: "manifest.json", path: "/data/manifest.json", type: "file", size: 8192,
+            modifiedAt: "2026-08-31T05:12:00Z", mode: "0640", revision: "manifest-v1",
+          },
+        },
+        {
+          relativePath: "notes.txt",
+          status: "different",
+          left: {
+            name: "notes.txt", path: "/large/notes.txt", type: "file", size: 2048,
+            modifiedAt: "2026-08-27T03:00:00Z", mode: "0644", revision: "notes-v1",
+          },
+          right: {
+            name: "notes.txt", path: "/data/notes.txt", type: "file", size: 4096,
+            modifiedAt: "2026-08-30T03:00:00Z", mode: "0644", revision: "notes-v2",
+          },
+        },
+      ],
+    }),
   }));
   await page.route("**/api/v1/sftp/bastion/text**", (route) => route.fulfill({
     status: 200,
@@ -161,9 +199,31 @@ test("keeps a chunked SFTP upload visible while another section is open", async 
     const secondPane = page.getByLabel("2つ目のリモートペイン");
     await chooseHost("nas", secondPane);
     await expect(secondPane.getByRole("button", { name: "backups" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "ここでTerminalを開く" })).toHaveCount(2);
     await page.screenshot({ path: `${visualDirectory}/sftp-two-pane-desktop.png`, fullPage: true });
-    await page.getByRole("button", { name: "1ペイン" }).click();
+    const projectRow = page.getByRole("tabpanel").getByRole("button", { name: "project", exact: true })
+      .locator("xpath=ancestor::*[@draggable='true'][1]");
+    await projectRow.dragTo(secondPane.getByLabel(/現在のリモートディレクトリへ/));
+    const remoteTransfer = page.getByRole("dialog", { name: "リモート項目を転送" });
+    await expect(remoteTransfer).toBeVisible();
+    await expect(remoteTransfer.getByRole("button", { name: "ここへコピー" })).toBeVisible();
+    await expect(remoteTransfer.getByRole("button", { name: "ここへ移動" })).toBeVisible();
+    await page.screenshot({ path: `${visualDirectory}/sftp-remote-drag-ja.png`, fullPage: true });
+    await remoteTransfer.getByRole("button", { name: "キャンセル" }).click();
+    await page.getByRole("button", { name: "ディレクトリを比較", exact: true }).click();
+    const compareDialog = page.getByRole("dialog", { name: "ディレクトリを比較" });
+    await expect(compareDialog.getByText("左のみ", { exact: true })).toBeVisible();
+    await expect(compareDialog.getByText("右のみ", { exact: true })).toBeVisible();
+    await expect(compareDialog.getByText("変更あり", { exact: true })).toBeVisible();
+    await page.screenshot({ path: `${visualDirectory}/sftp-compare-ja.png`, fullPage: true });
+    await compareDialog.getByRole("button", { name: "キャンセル" }).click();
     await changeDisplayLanguage(page, "en");
+    await page.getByRole("button", { name: "Compare directories", exact: true }).click();
+    const englishCompareDialog = page.getByRole("dialog", { name: "Compare directories" });
+    await expect(englishCompareDialog.getByText("Left only", { exact: true })).toBeVisible();
+    await page.screenshot({ path: `${visualDirectory}/sftp-compare-en.png`, fullPage: true });
+    await englishCompareDialog.getByRole("button", { name: "Cancel" }).click();
+    await page.getByRole("button", { name: "One pane" }).click();
     await reloadBastion();
     await page.getByRole("button", { name: "project", exact: true }).click();
     await page.screenshot({ path: `${visualDirectory}/sshc-v0.16.1-transfer-manager-desktop.png`, fullPage: true });

@@ -15,7 +15,8 @@ function engineAPI(overrides: Record<string, unknown> = {}) {
     const existing = jobs.get(input.id);
     if (existing !== undefined) return existing;
     const job: TransferJob = {
-      ...input, transferredBytes: 0, bytesPerSecond: 0, remainingSeconds: -1, status: "queued", allowedActions: ["pause", "cancel"],
+      sourceAlias: "", sourcePath: "", operation: "", ...input,
+      transferredBytes: 0, bytesPerSecond: 0, remainingSeconds: -1, status: "queued", allowedActions: ["pause", "cancel"],
       attempt: 1, problem: "", expectedRevision: "", sourceFingerprint: "", overwrite: false,
       downloadRevision: "", createdAt: now(), updatedAt: now(),
     };

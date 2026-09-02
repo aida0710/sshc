@@ -35,6 +35,7 @@ type TransferDirection string
 const (
 	TransferUpload   TransferDirection = "upload"
 	TransferDownload TransferDirection = "download"
+	TransferRemote   TransferDirection = "remote"
 )
 
 type TransferKind string
@@ -102,6 +103,9 @@ type TransferJob struct {
 	BatchName         string
 	BatchKind         TransferKind
 	Alias             string
+	SourceAlias       string
+	SourcePath        string
+	Operation         RemoteTransferOperation
 	Direction         TransferDirection
 	Kind              TransferKind
 	Name              string
@@ -128,6 +132,10 @@ type CreateTransferJob struct {
 	BatchName    string
 	BatchKind    TransferKind
 	Alias        string
+	SourceAlias  string
+	SourcePath   string
+	Operation    RemoteTransferOperation
+	Overwrite    bool
 	Direction    TransferDirection
 	Kind         TransferKind
 	Name         string
@@ -288,6 +296,7 @@ func (m *TransferManager) BeginDownload(id string, total int64, revision string,
 		return TransferJob{}, ErrOffsetMismatch
 	}
 	job.UpdatedAt = m.now().UTC()
+	_ = m.persistJobsLocked(true)
 	return *job, nil
 }
 
@@ -319,6 +328,7 @@ func (m *TransferManager) RecordDownloadSent(id string, sent, total int64, revis
 		record.sentBytes = sent
 	}
 	job.UpdatedAt = m.now().UTC()
+	_ = m.persistJobsLocked(false)
 	return *job, nil
 }
 
@@ -344,6 +354,7 @@ func (m *TransferManager) VerifyDownloadComplete(id string, total int64, revisio
 		return TransferJob{}, ErrOffsetMismatch
 	}
 	job.UpdatedAt = m.now().UTC()
+	_ = m.persistJobsLocked(true)
 	return *job, nil
 }
 
@@ -376,6 +387,7 @@ func (m *TransferManager) AcknowledgeDownload(id string, offset int64, revision 
 	job.TransferredBytes = offset
 	m.updateRateLocked(record, now)
 	job.UpdatedAt = now
+	_ = m.persistJobsLocked(false)
 	return *job, nil
 }
 
@@ -531,6 +543,7 @@ func (m *TransferManager) MoveQueuedJob(id string, move TransferQueueMove) error
 	for position, index := range slots {
 		m.jobOrder[index] = waiting[position]
 	}
+	_ = m.persistJobsLocked(true)
 	return nil
 }
 
@@ -541,12 +554,25 @@ func (m *TransferManager) CreateJob(input CreateTransferJob) (TransferJob, error
 	m.sweepPreparedDownloads()
 	if !transferIDPattern.MatchString(input.ID) || !transferIDPattern.MatchString(input.BatchID) ||
 		strings.TrimSpace(input.Alias) == "" || len(input.Alias) > 255 || input.TotalBytes < -1 ||
-		(input.Direction != TransferUpload && input.Direction != TransferDownload) ||
+		(input.Direction != TransferUpload && input.Direction != TransferDownload && input.Direction != TransferRemote) ||
 		(input.Kind != TransferFile && input.Kind != TransferFolder) || input.LastModified < 0 {
 		return TransferJob{}, ErrInvalidTransfer
 	}
 	if err := validateAlias(input.Alias); err != nil {
 		return TransferJob{}, err
+	}
+	if input.Direction == TransferRemote {
+		if err := validateAlias(input.SourceAlias); err != nil {
+			return TransferJob{}, err
+		}
+		if input.Operation != RemoteCopy && input.Operation != RemoteMove {
+			return TransferJob{}, ErrInvalidTransfer
+		}
+		if _, err := cleanPublicPath(input.SourcePath, false); err != nil {
+			return TransferJob{}, err
+		}
+	} else if input.SourceAlias != "" || input.SourcePath != "" || input.Operation != "" {
+		return TransferJob{}, ErrInvalidTransfer
 	}
 	cleaned, err := cleanPublicPath(input.RemotePath, false)
 	if err != nil {
@@ -659,14 +685,16 @@ func (m *TransferManager) CreateJob(input CreateTransferJob) (TransferJob, error
 	now := m.now().UTC()
 	job := TransferJob{
 		ID: input.ID, BatchID: input.BatchID, BatchName: batchName, BatchKind: batchKind,
-		Alias: input.Alias, Direction: input.Direction,
+		Alias: input.Alias, SourceAlias: input.SourceAlias, SourcePath: input.SourcePath,
+		Operation: input.Operation, Direction: input.Direction,
 		Kind: input.Kind, Name: name, RemotePath: cleaned, TotalBytes: input.TotalBytes,
-		LastModified: input.LastModified,
-		Status:       TransferQueued, Attempt: 1, CreatedAt: now, UpdatedAt: now,
+		LastModified: input.LastModified, Overwrite: input.Overwrite,
+		Status: TransferQueued, Attempt: 1, CreatedAt: now, UpdatedAt: now,
 		RemainingSeconds: -1,
 	}
 	m.jobs[input.ID] = &transferJobRecord{job: job, sampleAt: now}
 	m.jobOrder = append(m.jobOrder, input.ID)
+	_ = m.persistJobsLocked(true)
 	m.jobsMutex.Unlock()
 	closeRemotes(staleRemotes)
 	return job, nil
@@ -703,6 +731,7 @@ func (m *TransferManager) ListJobs() []TransferJob {
 			result = append(result, record.job)
 		}
 	}
+	_ = m.persistJobsLocked(false)
 	m.jobsMutex.Unlock()
 	closeRemotes(staleRemotes)
 	return result
@@ -726,6 +755,7 @@ func (m *TransferManager) ClearFinished() int {
 		kept = append(kept, id)
 	}
 	m.jobOrder = kept
+	_ = m.persistJobsLocked(true)
 	m.jobsMutex.Unlock()
 	for _, id := range removed {
 		m.releasePreparedDownload(id)
@@ -753,6 +783,14 @@ func (m *TransferManager) UpdateJobFromClient(id string, update UpdateTransferJo
 	job, err := m.updateJob(id, update, transferUpdateClient)
 	if err == nil && job.Direction == TransferDownload && (update.Action == TransferCancelAction || update.Action == TransferCompleteAction) {
 		m.releasePreparedDownload(id)
+	}
+	if err == nil && job.Direction == TransferRemote {
+		switch update.Action {
+		case TransferPauseAction, TransferCancelAction:
+			m.cancelRemoteJob(id)
+		case TransferResumeAction, TransferRetryAction:
+			m.ScheduleRemoteJob(id)
+		}
 	}
 	return job, err
 }
@@ -839,7 +877,7 @@ func (m *TransferManager) updateJob(id string, update UpdateTransferJob, origin 
 			job.BytesPerSecond, job.RemainingSeconds = 0, -1
 			record.sampleAt, record.sampleBytes = now, 0
 		}
-		if job.Status == TransferNeedsOverwrite && job.Direction == TransferUpload {
+		if job.Status == TransferNeedsOverwrite && (job.Direction == TransferUpload || job.Direction == TransferRemote) {
 			job.Overwrite = true
 		}
 		job.Status = TransferQueued
@@ -915,6 +953,7 @@ func (m *TransferManager) updateJob(id string, update UpdateTransferJob, origin 
 	if job.Status != TransferRunning && job.Status != TransferQueued {
 		terminalRemote = m.detachRemote(job.Alias, job.ID, job.RemotePath)
 	}
+	_ = m.persistJobsLocked(update.Action != TransferProgressAction)
 	committed = true
 	return *job, nil
 }
@@ -1111,8 +1150,9 @@ func sameTransferIdentity(job TransferJob, input CreateTransferJob, cleaned, nam
 		batchKind = input.Kind
 	}
 	return job.BatchID == input.BatchID && job.Alias == input.Alias && job.Direction == input.Direction &&
+		job.SourceAlias == input.SourceAlias && job.SourcePath == input.SourcePath && job.Operation == input.Operation &&
 		job.Kind == input.Kind && job.Name == name && job.RemotePath == cleaned && job.TotalBytes == input.TotalBytes &&
-		job.BatchName == batchName && job.BatchKind == batchKind && job.LastModified == input.LastModified
+		job.BatchName == batchName && job.BatchKind == batchKind && job.LastModified == input.LastModified && job.Overwrite == input.Overwrite
 }
 
 func terminalTransferStatus(status TransferJobStatus) bool {

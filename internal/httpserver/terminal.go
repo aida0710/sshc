@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"path"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -267,7 +269,7 @@ func (h TerminalHandlers) Open(c *echo.Context) error {
 		size = candidate
 	}
 
-	spec, err := h.spec(kind, request.Alias, size)
+	spec, err := h.spec(kind, request.Alias, request.Cwd, size)
 	if kind == terminal.KindShell && request.ProfileId != nil {
 		spec, err = h.shellSpec(request.ProfileId, size)
 	}
@@ -385,7 +387,7 @@ func (h TerminalHandlers) ResumeAgent(c *echo.Context) error {
 }
 
 // spec は、開こうとしているセッションひとつ分の起動一式を組み立てる。
-func (h TerminalHandlers) spec(kind terminal.Kind, alias *string, size terminal.Size) (terminal.Spec, error) {
+func (h TerminalHandlers) spec(kind terminal.Kind, alias, cwd *string, size terminal.Size) (terminal.Spec, error) {
 	if kind == terminal.KindShell {
 		return h.shellSpec(nil, size)
 	}
@@ -398,6 +400,14 @@ func (h TerminalHandlers) spec(kind terminal.Kind, alias *string, size terminal.
 	}
 	if h.Connect == nil {
 		return terminal.Spec{}, terminal.ErrNoStarter
+	}
+	initialDirectory := ""
+	if cwd != nil {
+		var err error
+		initialDirectory, err = remoteWorkingDirectory(*cwd)
+		if err != nil {
+			return terminal.Spec{}, err
+		}
 	}
 
 	// 設定を読むのはここである。読めなければセッションを作らない。設定の
@@ -425,14 +435,23 @@ func (h TerminalHandlers) spec(kind terminal.Kind, alias *string, size terminal.
 			// Open is also called by the registry when a disconnected transport is
 			// re-established. Resolve and inject the startup snippet here so every
 			// successful connection gets the same explicit startup automation.
+			commands := make([]string, 0, 2)
+			if initialDirectory != "" {
+				commands = append(commands, "cd -- "+quotePOSIXShell(initialDirectory))
+			}
 			if h.Startup != nil {
 				if command, ok := h.Startup(target); ok && command != "" {
-					go func() {
-						if !asynchronous || receiveReady(readier.Ready()) == nil {
+					commands = append(commands, command)
+				}
+			}
+			if len(commands) > 0 {
+				go func() {
+					if !asynchronous || receiveReady(readier.Ready()) == nil {
+						for _, command := range commands {
 							_, _ = lifetime.Write([]byte(command + "\r"))
 						}
-					}()
-				}
+					}
+				}()
 			}
 			return owned, nil
 		},
@@ -477,6 +496,21 @@ func (h TerminalHandlers) spec(kind terminal.Kind, alias *string, size terminal.
 		spec.ReplacementBusy = ok && command != ""
 	}
 	return spec, nil
+}
+
+func remoteWorkingDirectory(candidate string) (string, error) {
+	if candidate == "" || len(candidate) > 4096 || !strings.HasPrefix(candidate, "/") || strings.ContainsAny(candidate, "\x00\r\n") {
+		return "", errInvalidRemoteWorkingDirectory
+	}
+	cleaned := path.Clean(candidate)
+	if cleaned != candidate {
+		return "", errInvalidRemoteWorkingDirectory
+	}
+	return cleaned, nil
+}
+
+func quotePOSIXShell(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
 }
 
 func (h TerminalHandlers) shellSpec(requested *string, size terminal.Size) (terminal.Spec, error) {
@@ -630,6 +664,7 @@ func (s *sessionLifetime) ForceClose() error {
 }
 
 var errMissingAlias = errors.New("an ssh session needs an alias")
+var errInvalidRemoteWorkingDirectory = errors.New("remote working directory is invalid")
 
 // shellTitle は、タブに出す名前である。
 //
@@ -720,6 +755,8 @@ func (h TerminalHandlers) startProblem(c *echo.Context, err error) error {
 		return problem(c, http.StatusConflict, "terminal_session_limit")
 	case errors.Is(err, validate.ErrUnsafeAlias), errors.Is(err, errMissingAlias):
 		return problem(c, http.StatusBadRequest, "unsafe_alias")
+	case errors.Is(err, errInvalidRemoteWorkingDirectory):
+		return problem(c, http.StatusBadRequest, "invalid_request")
 	case errors.Is(err, platform.ErrUnknownShellProfile):
 		return problem(c, http.StatusBadRequest, "local_shell_profile_unavailable")
 	}

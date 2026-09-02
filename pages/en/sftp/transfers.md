@@ -7,7 +7,7 @@ description: Queue files and folders, then pause, resume, retry, or cancel them.
 
 ![The Transfer Manager in English](/images/transfer-manager-en.png)
 
-File upload, folder upload, file download, and folder download share one queue. Two transfers run concurrently by default. The Transfer Manager is docked below the SFTP view and normally shows only the active count, aggregate progress, and speed. Expand it for per-file status and controls.
+File upload, folder upload, file download, folder download, and remote-to-remote copy or move share one queue. Two transfers run concurrently by default. The Transfer Manager is docked below the SFTP view and normally shows only the active count, aggregate progress, and speed. Expand it for per-file status and controls.
 
 Each job shows per-file progress, transferred and total bytes, current speed, remaining time, and a queued/running/paused/completed/failed/canceled state.
 
@@ -21,6 +21,8 @@ Uploads use a temporary file in the target directory and atomically rename it on
 
 File downloads resume through HTTP Range when the browser retains the downloaded prefix and its revision still matches the remote file. Folder downloads stream a ZIP and cannot resume from the middle: after a pause, failure, or reload they restart at byte zero. Android hands the completed ZIP to the system file picker.
 
-The engine Transfer Manager owns the queue and its state. Registration, ordering, progress, concurrency, overwrite approval, and recovery checkpoints remain in the engine when the browser or WebView reloads. Views reconcile with the engine every two seconds, so multiple open views converge on the same queue.
+The engine Transfer Manager owns the queue and atomically persists it in `~/.ssh/sshc/transfers.json`. Registration, ordering, progress, concurrency, overwrite approval, and recovery checkpoints survive browser or WebView reloads and are restored after an engine restart. Views reconcile with the engine every two seconds, so multiple open views converge on the same queue.
 
-The browser or WebView still performs local file I/O because only it can access files on the device. Closing it therefore stops byte transfer, but the job is not stranded in browser-only storage. After a reload, an upload appears as waiting to resume and does not send data until the original local file is selected again. Stopping the engine also discards its in-memory queue, so transfers must be registered again after an engine restart.
+The browser or WebView still performs local file I/O because only it can access files on the device. Closing it therefore stops upload or download bytes, but the job is not stranded in browser-only storage. After a reload, an upload appears as waiting to resume and does not send data until the original local file is selected again.
+
+Remote-to-remote transfers are streamed by the engine through two SFTP connections, so they continue after the browser closes. Each file is written to a temporary sibling and atomically published when complete. A remote job interrupted by an engine shutdown returns to the queue and is automatically retried after startup.

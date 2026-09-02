@@ -44,6 +44,12 @@ const MonacoEditor = lazy(() =>
   import("./MonacoEditor").then(({ MonacoEditor }) => ({ default: MonacoEditor })),
 );
 const noHosts: HostEntry[] = [];
+const remoteEntriesMime = "application/x-sshc-sftp-entries";
+
+type RemoteDragPayload = {
+  alias: string;
+  entries: Array<Pick<RemoteEntry, "name" | "path" | "type" | "size">>;
+};
 
 function parentOf(remotePath: string): string {
   if (remotePath === "/") return "/";
@@ -170,6 +176,7 @@ export function SFTPPanel({
   onLocationChange = () => undefined,
   onNavigationBlockerChange,
   onNavigateLocation,
+  onOpenTerminal,
 }: {
   aliases: string[];
   hosts?: HostEntry[];
@@ -182,6 +189,7 @@ export function SFTPPanel({
   onLocationChange?: (alias: string, path: string) => void;
   onNavigationBlockerChange?: ((blocker: NavigationBlocker | null) => void) | undefined;
   onNavigateLocation?: ((url: string) => void) | undefined;
+  onOpenTerminal?: ((alias: string, path: string) => void | Promise<void>) | undefined;
 }) {
   const t = useTranslate();
   const [alias, setAlias] = useState("");
@@ -209,6 +217,7 @@ export function SFTPPanel({
   const [menu, setMenu] = useState<SFTPMenu | null>(null);
   const [focusedKey, setFocusedKey] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [remoteDrop, setRemoteDrop] = useState<RemoteDragPayload | null>(null);
   const [compactViewport, setCompactViewport] = useState(compactSFTPViewport);
   const [sort, setSort] = useState<{ key: SFTPSort; direction: SortDirection }>({
     key: "name",
@@ -649,8 +658,60 @@ export function SFTPPanel({
     event.preventDefault();
     setDragging(false);
     if (busy || alias === "") return;
+    const remote = typeof event.dataTransfer.getData === "function"
+      ? event.dataTransfer.getData(remoteEntriesMime)
+      : "";
+    if (remote !== "") {
+      try {
+        const parsed = JSON.parse(remote) as RemoteDragPayload;
+        if (typeof parsed.alias === "string" && parsed.alias !== "" && Array.isArray(parsed.entries) && parsed.entries.length > 0 &&
+            parsed.entries.every((entry) => typeof entry.name === "string" && typeof entry.path === "string" &&
+              (entry.type === "file" || entry.type === "directory") && typeof entry.size === "number")) {
+          setRemoteDrop(parsed);
+        }
+      } catch {
+        setProblem(t("sftp.remoteDropInvalid"));
+      }
+      return;
+    }
     const selection = await droppedFiles(event.dataTransfer);
     await uploadFiles(selection.files, selection.directories);
+  }
+
+  function beginRemoteDrag(event: ReactDragEvent<HTMLElement>, entry: RemoteEntry) {
+    if (entry.type !== "file" && entry.type !== "directory") {
+      event.preventDefault();
+      return;
+    }
+    const selected = selectedPaths.has(entry.path) ? selectedEntries : [entry];
+    const payload: RemoteDragPayload = {
+      alias,
+      entries: selected.filter((candidate) => candidate.type === "file" || candidate.type === "directory")
+        .map((candidate) => ({ name: candidate.name, path: candidate.path, type: candidate.type, size: candidate.size })),
+    };
+    event.dataTransfer.effectAllowed = "copyMove";
+    event.dataTransfer.setData(remoteEntriesMime, JSON.stringify(payload));
+    event.dataTransfer.setData("text/plain", payload.entries.map((candidate) => `${alias}:${candidate.path}`).join("\n"));
+  }
+
+  async function acceptRemoteDrop(operation: "copy" | "move") {
+    const payload = remoteDrop;
+    setRemoteDrop(null);
+    if (payload === null || alias === "" || path === "") return;
+    setProblem("");
+    try {
+      await sftpTransferManager.addRemoteTransfers(payload.entries.map((entry) => ({
+        sourceAlias: payload.alias,
+        sourcePath: entry.path,
+        targetAlias: alias,
+        targetPath: join(path, entry.name),
+        kind: entry.type === "directory" ? "folder" : "file",
+        name: entry.name,
+        totalBytes: entry.type === "file" ? entry.size : -1,
+      })), operation);
+    } catch (error) {
+      setProblem(failureCode(error) || (error instanceof Error ? error.message : "sftp_failed"));
+    }
   }
 
   async function download(entry: RemoteEntry, targetAlias = alias) {
@@ -1126,6 +1187,18 @@ export function SFTPPanel({
       <h2 id={headingId} className="sr-only">{t("sftp.heading")}</h2>
       <div className="flex flex-wrap items-center gap-1.5 border-b border-line/50 pb-1.5 md:pb-1">
         <SFTPHostPicker aliases={aliases} hosts={hosts} value={alias} disabled={dirty} onChange={selectHost} />
+        {onOpenTerminal === undefined ? null : (
+          <button
+            type="button"
+            aria-label={t("sftp.openTerminalHere")}
+            title={t("sftp.openTerminalHere")}
+            disabled={busy || dirty || alias === "" || path === ""}
+            onClick={() => void onOpenTerminal(alias, path)}
+            className="flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-select-fill hover:text-ink disabled:text-ink-faint md:size-8"
+          >
+            <Icon name="terminal" className="size-4" />
+          </button>
+        )}
         <div role="group" aria-label={t("sftp.navigation")} className="flex shrink-0 overflow-hidden rounded-md bg-toolbar/70">
           <button type="button" aria-label={t("sftp.back")} disabled={busy || dirty || navigation.index <= 0} onClick={() => void navigateHistory(-1)} className="flex size-9 items-center justify-center text-ink-muted hover:bg-select-fill disabled:text-ink-faint md:size-8">
             <span aria-hidden="true">←</span>
@@ -1460,6 +1533,8 @@ export function SFTPPanel({
                     data-row-key={entry.path}
                     className={`flex items-center transition-colors ${selectedPaths.has(entry.path) ? "bg-select-fill/75" : ""}`}
                     onContextMenu={(event) => rowContextMenu(event, entry)}
+                    draggable={entry.type === "file" || entry.type === "directory"}
+                    onDragStart={(event) => beginRemoteDrag(event, entry)}
                   >
                     <label className="flex size-11 shrink-0 items-center justify-center md:size-8">
                       <input
@@ -1545,6 +1620,8 @@ export function SFTPPanel({
                     aria-selected={selectedPaths.has(entry.path)}
                     onDoubleClick={() => activate(entry)}
                     onContextMenu={(event) => rowContextMenu(event, entry)}
+                    draggable={entry.type === "file" || entry.type === "directory"}
+                    onDragStart={(event) => beginRemoteDrag(event, entry)}
                     className={`cursor-default border-t border-line/40 transition-colors ${selectedPaths.has(entry.path) ? "bg-select-fill/75" : "hover:bg-select-fill/55"}`}
                   >
                     <td className="w-9 px-2 py-1 md:py-0.5">
@@ -1594,6 +1671,20 @@ export function SFTPPanel({
         </div>
 
       </div>
+
+      {remoteDrop === null ? null : (
+        <ModalShell labelledBy={`${headingId}-remote-drop`} onDismiss={() => setRemoteDrop(null)} panelClassName="w-full max-w-md rounded-lg p-5">
+          <h3 id={`${headingId}-remote-drop`} className="text-base font-semibold text-ink">{t("sftp.remoteDropTitle")}</h3>
+          <p className="mt-2 text-sm leading-6 text-ink-muted">
+            {t("sftp.remoteDropDescription", { count: remoteDrop.entries.length, alias })}
+          </p>
+          <div className="mt-5 flex flex-wrap justify-end gap-2">
+            <Button onClick={() => setRemoteDrop(null)}>{t("sftp.cancel")}</Button>
+            <Button onClick={() => void acceptRemoteDrop("move")}>{t("sftp.moveHere")}</Button>
+            <Button kind="primary" onClick={() => void acceptRemoteDrop("copy")}>{t("sftp.copyHere")}</Button>
+          </div>
+        </ModalShell>
+      )}
 
       {opened === null ? null : (
         <ModalShell
