@@ -87,7 +87,11 @@ sshc sftp get bastion /var/log/app.log ./app.log
 sshc sftp put bastion ./release.tar.gz /tmp/release.tar.gz
 sshc sftp get bastion /srv/data ./data --recursive
 sshc sftp put bastion ./public /var/www/public --recursive
+sshc sftp get bastion /srv/archive ./archive --recursive --jobs 4
+sshc sftp get bastion /backup/disk.img ./disk.img --split-size 100 --split-jobs 4 --chunk-size 512
 ```
+
+`-j`または`--jobs`には、同時に転送するファイル数を1〜8で指定します。既定は1です。ダウンロードでは、`--split-size`で分割を始めるファイルサイズをMiB単位（16〜1024）、`--split-jobs`で1ファイルに使うSFTP接続数（1〜8）、`--chunk-size`で取得範囲の粒度をMiB単位（8〜4096）で上書きできます。`--split-jobs 1`は分割しません。省略時はエンジン設定（初期値は100 MiB以上、4接続、32 MiBチャンク）を使います。複数ファイルを`--jobs 4 --split-jobs 4`で取得すると最大16接続になり得るため、接続先の上限に合わせて指定してください。通常ファイルは512 GiBまでダウンロードできます。
 
 既存ファイルは暗黙に上書きしません。上書きする場合は`--overwrite`を付けると実行前にまとめて確認し、`--yes`を併用した場合だけ確認を省略します。既存ファイルを残す場合は`--skip-existing`、変更せず転送計画だけ確認する場合は`--dry-run`を利用できます。自動化では`--json`を付けると標準出力へ1つのJSON結果を出し、進捗は標準エラー出力へ分離します。`Ctrl+C`で中断したアップロードでは、sshcがリモート側に作成した一時ファイルも削除します。
 
