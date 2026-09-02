@@ -34,7 +34,7 @@ const (
 	vaultPTYStateEnvironment  = "SSHC_VAULT_PTY_STATE"
 )
 
-func TestMaskedSetupPromptEchoesStarsAndBackspaceBeforeEnter(t *testing.T) {
+func TestMaskedCLIPromptEchoesStarsAndBackspaceBeforeEnter(t *testing.T) {
 	terminal, input, err := pty.Open()
 	if err != nil {
 		t.Fatal(err)
@@ -48,7 +48,7 @@ func TestMaskedSetupPromptEchoesStarsAndBackspaceBeforeEnter(t *testing.T) {
 	}
 	completed := make(chan result, 1)
 	go func() {
-		password, err := promptMaskedSetupValue(context.Background(), input, input,
+		password, err := promptMaskedPassword(context.Background(), input, input,
 			systemPasswordTerminal{}, "Access key ID: ")
 		completed <- result{password: password, err: err}
 	}()

@@ -102,7 +102,7 @@ func runSyncSetup(
 		if current.KeyConfigured {
 			label = "Sync key [configured; Enter to keep]: "
 		}
-		syncKey, err = promptMaskedSetupValue(ctx, stdin, prompt, terminal, label)
+		syncKey, err = promptMaskedPassword(ctx, stdin, prompt, terminal, label)
 		defer zeroBytes(syncKey)
 		if err != nil {
 			return err
@@ -204,12 +204,12 @@ func readSyncSetupInput(
 		}
 		secretLabel = "Secret access key [configured; Enter to keep]: "
 	}
-	accessKey, err := promptMaskedSetupValue(ctx, stdin, prompt, terminal, accessLabel)
+	accessKey, err := promptMaskedPassword(ctx, stdin, prompt, terminal, accessLabel)
 	if err != nil {
 		zeroBytes(accessKey)
 		return nil, err
 	}
-	secretKey, err := promptMaskedSetupValue(ctx, stdin, prompt, terminal, secretLabel)
+	secretKey, err := promptMaskedPassword(ctx, stdin, prompt, terminal, secretLabel)
 	if err != nil {
 		zeroBytes(accessKey)
 		zeroBytes(secretKey)
@@ -240,59 +240,6 @@ func maskedAccessKeySuffix(suffix string) string {
 		characters = characters[len(characters)-5:]
 	}
 	return "*****" + safeTerminalCell(string(characters))
-}
-
-// promptMaskedSetupValue confirms hidden input with stars after Enter. The
-// actual value is never written to a terminal or retained in a string.
-func promptMaskedSetupValue(
-	ctx context.Context, stdin *os.File, prompt io.Writer, terminal passwordTerminal, label string,
-) ([]byte, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	prompted := false
-	maskCount := 0
-	promptInput := func() error {
-		if _, err := fmt.Fprint(prompt, label); err != nil {
-			return err
-		}
-		prompted = true
-		return nil
-	}
-	feedback := func(next int) error {
-		if next > maskCount {
-			if _, err := fmt.Fprint(prompt, strings.Repeat("*", next-maskCount)); err != nil {
-				return err
-			}
-		} else if next < maskCount {
-			if _, err := fmt.Fprint(prompt, strings.Repeat("\b \b", maskCount-next)); err != nil {
-				return err
-			}
-		}
-		maskCount = next
-		return nil
-	}
-	live, liveFeedback := terminal.(maskedPasswordTerminal)
-	var typed []byte
-	var err error
-	if liveFeedback {
-		typed, err = live.ReadPasswordMasked(ctx, stdin, promptInput, feedback)
-	} else {
-		typed, err = terminal.ReadPassword(ctx, stdin, promptInput)
-	}
-	var outputErr error
-	if prompted {
-		if err == nil && !liveFeedback && len(typed) != 0 {
-			_, outputErr = fmt.Fprint(prompt, strings.Repeat("*", utf8.RuneCount(typed)))
-		}
-		if _, newlineErr := fmt.Fprintln(prompt); outputErr == nil {
-			outputErr = newlineErr
-		}
-	}
-	if err != nil {
-		return typed, err
-	}
-	return typed, outputErr
 }
 
 func promptVisibleSetup(
