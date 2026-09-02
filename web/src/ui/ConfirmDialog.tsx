@@ -1,4 +1,4 @@
-import { useRef, type ReactNode } from "react";
+import { useRef, type ReactNode, type RefObject } from "react";
 import { dangerAction, secondaryAction } from "./form";
 import { ModalShell } from "./ModalShell";
 export function ConfirmDialog({
@@ -9,6 +9,7 @@ export function ConfirmDialog({
   cancelLabel,
   onConfirm,
   onCancel,
+  returnFocusRef,
 }: {
   id: string;
   heading: string;
@@ -17,6 +18,7 @@ export function ConfirmDialog({
   cancelLabel: string;
   onConfirm: () => void;
   onCancel: () => void;
+  returnFocusRef?: RefObject<HTMLElement | null>;
 }) {
   const cancelRef = useRef<HTMLButtonElement>(null);
   return (
@@ -24,6 +26,7 @@ export function ConfirmDialog({
       labelledBy={id}
       onDismiss={onCancel}
       initialFocusRef={cancelRef}
+      {...(returnFocusRef === undefined ? {} : { returnFocusRef })}
       panelClassName="flex w-full max-w-sm flex-col gap-3 rounded-lg p-4"
     >
         <h2 id={id} className="text-sm font-medium text-ink">

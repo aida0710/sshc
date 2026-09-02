@@ -70,6 +70,30 @@ beforeEach(() => {
 });
 
 describe("CommandPalette", () => {
+  it("runs an action as well as navigating, and closes once it has", async () => {
+    const user = userEvent.setup();
+    const run = vi.fn();
+    const props = renderPalette({
+      commands: [{
+        id: "new-connection",
+        label: "Create a connection",
+        detail: "Open the new connection form",
+        search: "new connection create host add",
+        run,
+      }],
+    });
+
+    const search = screen.getByRole("searchbox", { name: "Search sessions, hosts, files, snippets and settings" });
+    await user.type(search, "create a conn");
+    const option = screen.getByRole("option", { name: /Create a connection/ });
+    expect(option).toHaveTextContent("Action");
+
+    await user.click(option);
+    expect(run).toHaveBeenCalledOnce();
+    expect(props.onClose).toHaveBeenCalled();
+  });
+
+
   it("searches hosts, files, snippets and settings without persisting the query", async () => {
     const user = userEvent.setup();
     renderPalette();

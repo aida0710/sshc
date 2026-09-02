@@ -1765,6 +1765,36 @@ paths:
         "201": { description: Directory created, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPEntry" } } } }
         "400": { $ref: "#/components/responses/Problem" }
         "502": { $ref: "#/components/responses/Problem" }
+  /api/v1/sftp/{alias}/preview:
+    parameters: *sftpAlias
+    get:
+      operationId: previewSFTPFile
+      description: Image bytes for the details dialog. The media type is decided by the leading bytes, never by the name.
+      parameters:
+        - { name: path, in: query, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Previewable remote file
+          headers: { ETag: { required: true, schema: { type: string } } }
+          content:
+            image/*: { schema: { type: string, format: binary } }
+        "404": { $ref: "#/components/responses/Problem" }
+        "413": { $ref: "#/components/responses/Problem" }
+        "415": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /api/v1/sftp/{alias}/search:
+    parameters: *sftpAlias
+    get:
+      operationId: searchSFTPEntries
+      description: Names matching a query under one remote directory. Symlinks are not followed and the walk is bounded; truncated says so.
+      parameters:
+        - { name: path, in: query, required: true, schema: { type: string } }
+        - { name: query, in: query, required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+      responses:
+        "200": { description: Matching remote entries, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPSearchResult" } } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "502": { $ref: "#/components/responses/Problem" }
   /api/v1/sftp/{alias}/text:
     parameters: *sftpAlias
     get:
@@ -1834,6 +1864,26 @@ paths:
       operationId: clearFinishedSFTPTransferJobs
       responses:
         "204": { description: Finished transfer jobs removed }
+  /api/v1/sftp/transfers/settings:
+    put:
+      operationId: updateSFTPTransferSettings
+      description: Engine-wide transfer concurrency and auto-clear delay. Held for the life of the engine process.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPTransferSettingsRequest" } } } }
+      responses:
+        "200": { description: Settings applied, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPTransferJobList" } } } }
+        "400": { $ref: "#/components/responses/Problem" }
+  /api/v1/sftp/transfers/{id}/queue-position:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, pattern: "^[A-Za-z0-9_-]{8,128}$" } }
+    post:
+      operationId: moveSFTPTransferJob
+      description: Reorder one waiting job inside the queue. Running jobs keep their place.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPTransferQueueMoveRequest" } } } }
+      responses:
+        "200": { description: Queue reordered, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPTransferJobList" } } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
   /api/v1/sftp/transfers/{id}/actions:
     parameters:
       - { name: id, in: path, required: true, schema: { type: string, pattern: "^[A-Za-z0-9_-]{8,128}$" } }
@@ -3786,8 +3836,21 @@ components:
         groupsFile: { type: string }
         embeddedTerminal: { $ref: "#/components/schemas/EmbeddedTerminal" }
         engine: { $ref: "#/components/schemas/EngineSettings" }
+        # 転送キューの設定は engine のものだが、engine 節とは別に置く。Settings
+        # 画面の engine 保存は節ごと置き換えるため、同居させると消える。
+        fileTransfers: { $ref: "#/components/schemas/FileTransferSettings" }
         groups: { type: array, items: { $ref: "#/components/schemas/GroupMetadata" } }
         hosts: { type: array, items: { $ref: "#/components/schemas/HostMetadata" } }
+    # SFTP転送キューの設定。engine processではなくmetadataが持ち、再起動しても残る。
+    FileTransferSettings:
+      type: object
+      additionalProperties: false
+      properties:
+        maxConcurrent: { type: integer, minimum: 1, maximum: 8 }
+        # 0 または省略時は、完了項目を自動では消さない。
+        clearCompletedAfterSeconds: { type: integer, minimum: 0, maximum: 86400 }
+        # 待機中のjobを新しく開始しない。実行中のものはそのまま終わる。
+        processingStopped: { type: boolean }
     # 埋め込みターミナルの設定。数値の範囲外は読み取りで既定へ戻し、書き込みでは拒否する。
     EmbeddedTerminal:
       type: object
@@ -4247,10 +4310,38 @@ components:
     SFTPTransferJobList:
       type: object
       additionalProperties: false
-      required: [maxConcurrent, jobs]
+      required: [maxConcurrent, clearCompletedAfterSeconds, processingStopped, jobs]
       properties:
         maxConcurrent: { type: integer, minimum: 1, maximum: 16 }
+        # 0 means finished jobs are only removed on request.
+        clearCompletedAfterSeconds: { type: integer, minimum: 0, maximum: 86400 }
+        # While stopped, waiting jobs stay waiting; running ones finish.
+        processingStopped: { type: boolean }
         jobs: { type: array, maxItems: 200, items: { $ref: "#/components/schemas/SFTPTransferJob" } }
+    SFTPSearchResult:
+      type: object
+      additionalProperties: false
+      required: [path, query, truncated, entries]
+      properties:
+        path: { type: string }
+        query: { type: string }
+        # true means a budget stopped the walk before it finished.
+        truncated: { type: boolean }
+        entries: { type: array, maxItems: 200, items: { $ref: "#/components/schemas/SFTPEntry" } }
+    SFTPTransferSettingsRequest:
+      type: object
+      additionalProperties: false
+      required: [maxConcurrent, clearCompletedAfterSeconds, processingStopped]
+      properties:
+        maxConcurrent: { type: integer, minimum: 1, maximum: 8 }
+        clearCompletedAfterSeconds: { type: integer, minimum: 0, maximum: 86400 }
+        processingStopped: { type: boolean }
+    SFTPTransferQueueMoveRequest:
+      type: object
+      additionalProperties: false
+      required: [move]
+      properties:
+        move: { type: string, enum: [up, down, top, bottom] }
     SFTPCreateTransferJobRequest:
       type: object
       additionalProperties: false

@@ -7,7 +7,10 @@ import {
   type StreamDownloadOptions,
   type TransferJob,
   type TransferJobAction,
+  type TransferJobList,
   type TransferKind,
+  type TransferQueueMove,
+  type TransferSettings,
 } from "./api";
 
 const chunkBytes = 1 << 20;
@@ -38,7 +41,9 @@ export type TransferNotice = {
 };
 
 type ManagerAPI = {
-  listTransfers(): Promise<{ maxConcurrent: number; jobs: TransferJob[] }>;
+  listTransfers(): Promise<TransferJobList>;
+  updateTransferSettings(settings: TransferSettings): Promise<TransferJobList>;
+  moveTransfer(id: string, move: TransferQueueMove): Promise<TransferJobList>;
   createTransfer(input: CreateTransferJob): Promise<TransferJob>;
   clearFinishedTransfers(): Promise<void>;
   updateTransfer(id: string, action: TransferJobAction, options?: { transferredBytes?: number; totalBytes?: number; problem?: string; resetProgress?: boolean }): Promise<TransferJob>;
@@ -97,6 +102,8 @@ export class SFTPTransferManager {
   private readonly noticeListeners = new Set<() => void>();
   private active = 0;
   private maxConcurrent: number;
+  private clearCompletedAfter = 0;
+  private processingStopped = false;
 
   constructor(
     private readonly api: ManagerAPI = sftpApi,
@@ -109,6 +116,8 @@ export class SFTPTransferManager {
   getSnapshot = (): readonly ManagedTransferJob[] => this.jobs;
   getNoticeSnapshot = (): readonly TransferNotice[] => this.notices;
   getMaxConcurrent = (): number => this.maxConcurrent;
+  getClearCompletedAfter = (): number => this.clearCompletedAfter;
+  getProcessingStopped = (): boolean => this.processingStopped;
   hasUploadSource = (id: string): boolean => this.files.has(id);
 
   subscribe = (listener: () => void): (() => void) => {
@@ -127,12 +136,31 @@ export class SFTPTransferManager {
     if (listed.jobs.length > maxTransferJobs || serverIDs.size !== listed.jobs.length) {
       throw new Error("sftp_transfer_limit");
     }
-    this.maxConcurrent = listed.maxConcurrent;
+    this.adoptSettings(listed);
     this.commit(listed.jobs);
     await this.cleanupOrphanDownloads(new Set(listed.jobs
       .filter((job) => !["completed", "cancelled"].includes(job.status))
       .map((job) => job.id)));
     this.kick();
+  }
+
+  // The queue belongs to the engine, so the settings do too: one value, shared
+  // by every browser and every tab looking at the same engine.
+  async applySettings(maxConcurrent: number, clearCompletedAfterSeconds: number, processingStopped: boolean): Promise<void> {
+    const listed = await this.api.updateTransferSettings({ maxConcurrent, clearCompletedAfterSeconds, processingStopped });
+    this.adoptSettings(listed);
+    this.commit(listed.jobs);
+    this.kick();
+  }
+
+  // Only waiting jobs move, and the engine decides what "waiting" means at the
+  // moment the request lands.
+  async move(id: string, move: TransferQueueMove): Promise<void> {
+    const job = this.find(id);
+    if (job === undefined || job.status !== "queued") return;
+    const listed = await this.api.moveTransfer(id, move);
+    this.adoptSettings(listed);
+    this.commit(listed.jobs);
   }
 
   reserveUploads(selections: UploadSelection[]): UploadAdmission {
@@ -315,7 +343,16 @@ export class SFTPTransferManager {
     for (const listener of this.noticeListeners) listener();
   }
 
+  private adoptSettings(listed: TransferJobList): void {
+    this.maxConcurrent = listed.maxConcurrent;
+    this.clearCompletedAfter = listed.clearCompletedAfterSeconds ?? 0;
+    this.processingStopped = listed.processingStopped === true;
+  }
+
   private kick(): void {
+    // The engine refuses a start while the queue is stopped. Asking anyway
+    // would just spend a request per waiting job on every tick.
+    if (this.processingStopped) return;
     while (this.active < this.maxConcurrent) {
       const job = this.jobs.find((candidate) => candidate.status === "queued" &&
         !this.inFlight.has(candidate.id) && (this.retryAfter.get(candidate.id) ?? 0) <= this.now() &&

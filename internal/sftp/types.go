@@ -11,6 +11,13 @@ import (
 
 const MaxEditableFileBytes = 2 << 20
 
+// MaxPreviewFileBytes は、一覧の詳細モーダルが画像を表示するために engine が
+// 丸ごと読んでよい上限である。編集用より大きいのは写真が 2 MiB を超えるのが
+// 普通だからで、これを超えるものは preview ではなく download に回す。
+//
+// data: URL は base64 なので、browser 側では約 4/3 倍の文字列になる。
+const MaxPreviewFileBytes = 8 << 20
+
 var (
 	ErrUnavailable      = errors.New("sftp service is unavailable")
 	ErrInvalidAlias     = errors.New("ssh alias is required")
@@ -30,6 +37,9 @@ var (
 	ErrTransferNotFound = errors.New("transfer job was not found")
 	ErrTransferState    = errors.New("transfer job state transition is invalid")
 	ErrTransferLimit    = errors.New("transfer concurrency limit reached")
+	ErrPreviewTooLarge  = errors.New("remote file is too large to preview")
+	ErrPreviewType      = errors.New("remote file has no previewable type")
+	ErrInvalidQuery     = errors.New("search needs something to look for")
 )
 
 type EntryType string
@@ -66,6 +76,26 @@ type TextFile struct {
 	Entry    Entry
 	Contents string
 	Revision string
+}
+
+// SearchResult は、あるディレクトリ配下の名前一致である。
+//
+// Truncated は、予算のどれかに当たって歩き切らずに戻ったことを言う。
+// 「これで全部だ」と言えないことを、画面がそのまま言えるようにする。
+type SearchResult struct {
+	Path      string
+	Query     string
+	Entries   []Entry
+	Truncated bool
+}
+
+// Preview は、詳細モーダルがそのまま描ける bytes である。ContentType は
+// 中身から決まった許可済みの型だけを取り、名前も SFTP server の申告も見ない。
+type Preview struct {
+	Entry       Entry
+	ContentType string
+	Contents    []byte
+	Revision    string
 }
 
 type Transfer struct {

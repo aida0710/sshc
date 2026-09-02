@@ -40,6 +40,8 @@ describe("sftpApi resumable download", () => {
   it("uses the engine-provided transfer controls as the UI contract", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
       maxConcurrent: 2,
+      clearCompletedAfterSeconds: 0,
+      processingStopped: false,
       jobs: [{
         id: "transfer_test01", batchId: "batch_test0001", batchName: "file.bin", batchKind: "file",
         alias: "edge", direction: "download", kind: "file", name: "file.bin", remotePath: "/file.bin",

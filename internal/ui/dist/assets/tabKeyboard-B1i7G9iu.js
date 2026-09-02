@@ -1,0 +1,1 @@
+function e(e,t,n,r){let i;switch(e.key){case`ArrowRight`:i=(t+1)%n.length;break;case`ArrowLeft`:i=(t-1+n.length)%n.length;break;case`Home`:i=0;break;case`End`:i=n.length-1;break;default:return}e.preventDefault(),(e.currentTarget.closest(`[role="tablist"]`)?.querySelectorAll(`[role="tab"]`))?.[i]?.focus();let a=n[i];a!==void 0&&r(a)}export{e as t};

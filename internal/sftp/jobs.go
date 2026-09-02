@@ -9,8 +9,25 @@ import (
 
 const (
 	DefaultTransferConcurrency = 2
+	MaxTransferConcurrency     = 8
 	maxRetainedTransferJobs    = 200
 	staleRunningTransferAfter  = 2 * time.Minute
+
+	// 完了項目の自動消去は、押し忘れても消える程度に長く、履歴として頼れる
+	// ほどには短い範囲に収める。0 は自動消去なしである。
+	MinClearCompletedAfter = 10 * time.Second
+	MaxClearCompletedAfter = 24 * time.Hour
+)
+
+// TransferQueueMove は、待機中の job を待機列の中でどこへ動かすかである。
+// running の job は動かさない。動かせば、いま走っているものが止まる。
+type TransferQueueMove string
+
+const (
+	TransferMoveUp     TransferQueueMove = "up"
+	TransferMoveDown   TransferQueueMove = "down"
+	TransferMoveTop    TransferQueueMove = "top"
+	TransferMoveBottom TransferQueueMove = "bottom"
 )
 
 type TransferDirection string
@@ -414,6 +431,109 @@ func (m *TransferManager) MaxConcurrent() int {
 	return m.maxConcurrent
 }
 
+// ClearCompletedAfter は、完了と取消の記録を自動で消すまでの時間である。
+// 0 は自動消去なしを意味する。
+func (m *TransferManager) ClearCompletedAfter() time.Duration {
+	m.jobsMutex.Lock()
+	defer m.jobsMutex.Unlock()
+	m.initializeJobsLocked()
+	return m.clearCompletedAfter
+}
+
+// ProcessingStopped は、待機中の job を新しく開始しない状態かどうかである。
+func (m *TransferManager) ProcessingStopped() bool {
+	m.jobsMutex.Lock()
+	defer m.jobsMutex.Unlock()
+	m.initializeJobsLocked()
+	return m.processingStopped
+}
+
+// SetTransferSettings は、同時転送数、完了項目の自動消去時間、キュー処理の
+// 停止を差し替える。
+//
+// 転送は engine の資源であって browser のものではないため、値は engine 側に
+// 一つだけ置く。永続化は呼び出し側の責務である。
+func (m *TransferManager) SetTransferSettings(maxConcurrent int, clearCompletedAfter time.Duration, processingStopped bool) error {
+	if maxConcurrent < 1 || maxConcurrent > MaxTransferConcurrency {
+		return ErrInvalidTransfer
+	}
+	if clearCompletedAfter != 0 && (clearCompletedAfter < MinClearCompletedAfter || clearCompletedAfter > MaxClearCompletedAfter) {
+		return ErrInvalidTransfer
+	}
+	m.jobsMutex.Lock()
+	defer m.jobsMutex.Unlock()
+	m.initializeJobsLocked()
+	m.maxConcurrent = maxConcurrent
+	m.clearCompletedAfter = clearCompletedAfter
+	m.processingStopped = processingStopped
+	return nil
+}
+
+// MoveQueuedJob は、待機中の job だけを待機列の中で入れ替える。running や
+// paused の位置は動かないので、並べ替えても走っている転送は影響を受けない。
+func (m *TransferManager) MoveQueuedJob(id string, move TransferQueueMove) error {
+	if !transferIDPattern.MatchString(id) {
+		return ErrInvalidTransfer
+	}
+	switch move {
+	case TransferMoveUp, TransferMoveDown, TransferMoveTop, TransferMoveBottom:
+	default:
+		return ErrInvalidTransfer
+	}
+	m.jobsMutex.Lock()
+	defer m.jobsMutex.Unlock()
+	m.initializeJobsLocked()
+	record := m.jobs[id]
+	if record == nil {
+		return ErrTransferNotFound
+	}
+	if record.job.Status != TransferQueued {
+		return ErrTransferState
+	}
+	slots := make([]int, 0, len(m.jobOrder))
+	current := -1
+	for index, candidate := range m.jobOrder {
+		waiting := m.jobs[candidate]
+		if waiting == nil || waiting.job.Status != TransferQueued {
+			continue
+		}
+		if candidate == id {
+			current = len(slots)
+		}
+		slots = append(slots, index)
+	}
+	if current < 0 || len(slots) < 2 {
+		return nil
+	}
+	destination := current
+	switch move {
+	case TransferMoveUp:
+		destination = current - 1
+	case TransferMoveDown:
+		destination = current + 1
+	case TransferMoveTop:
+		destination = 0
+	case TransferMoveBottom:
+		destination = len(slots) - 1
+	}
+	if destination < 0 || destination >= len(slots) || destination == current {
+		return nil
+	}
+	// 待機中の id だけを取り出し、順番を変えて同じ位置へ書き戻す。running の
+	// job が占める index は触らないので、待機列だけが並び替わる。
+	waiting := make([]string, 0, len(slots))
+	for _, index := range slots {
+		waiting = append(waiting, m.jobOrder[index])
+	}
+	moved := waiting[current]
+	waiting = append(waiting[:current], waiting[current+1:]...)
+	waiting = append(waiting[:destination], append([]string{moved}, waiting[destination:]...)...)
+	for position, index := range slots {
+		m.jobOrder[index] = waiting[position]
+	}
+	return nil
+}
+
 func (m *TransferManager) CreateJob(input CreateTransferJob) (TransferJob, error) {
 	if m.isClosed() {
 		return TransferJob{}, ErrUnavailable
@@ -573,6 +693,7 @@ func (m *TransferManager) cleanupEvictedUploadPart(job TransferJob) error {
 
 func (m *TransferManager) ListJobs() []TransferJob {
 	m.sweepPreparedDownloads()
+	m.expireFinishedJobs()
 	m.jobsMutex.Lock()
 	m.initializeJobsLocked()
 	staleRemotes := m.sweepJobsLocked()
@@ -687,6 +808,11 @@ func (m *TransferManager) updateJob(id string, update UpdateTransferJob, origin 
 	case TransferStartAction:
 		if job.Status != TransferQueued {
 			return TransferJob{}, ErrTransferState
+		}
+		// 停止中は待機のまま置く。実行中のものは止めない。止めたければ
+		// pause がある。
+		if m.processingStopped {
+			return TransferJob{}, ErrTransferLimit
 		}
 		if m.activeJobs >= m.maxConcurrent {
 			return TransferJob{}, ErrTransferLimit
@@ -928,6 +1054,39 @@ func (m *TransferManager) sweepJobsLocked() []Remote {
 		}
 	}
 	return detached
+}
+
+// expireFinishedJobs は、完了と取消の記録を設定された時間で落とす。失敗は
+// 残す。原因を見る前に消えてはならないからである。
+//
+// 解放は job の lock を手放してから行う。prepared download は別の mutex が
+// 守っており、二つを重ねて取れば順序が閉じない。
+func (m *TransferManager) expireFinishedJobs() {
+	m.jobsMutex.Lock()
+	m.initializeJobsLocked()
+	if m.clearCompletedAfter <= 0 {
+		m.jobsMutex.Unlock()
+		return
+	}
+	now := m.now().UTC()
+	removed := make([]string, 0)
+	kept := m.jobOrder[:0]
+	for _, id := range m.jobOrder {
+		record := m.jobs[id]
+		if record != nil && terminalTransferStatus(record.job.Status) &&
+			m.dataPlane[id] == 0 && now.Sub(record.job.UpdatedAt) >= m.clearCompletedAfter {
+			delete(m.jobs, id)
+			delete(m.dataPlane, id)
+			removed = append(removed, id)
+			continue
+		}
+		kept = append(kept, id)
+	}
+	m.jobOrder = kept
+	m.jobsMutex.Unlock()
+	for _, id := range removed {
+		m.releasePreparedDownload(id)
+	}
 }
 
 func closeRemotes(remotes []Remote) {
