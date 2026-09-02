@@ -169,6 +169,44 @@ func storedAppearance(chosen TerminalAppearance) *TerminalAppearance {
 	return &chosen
 }
 
+// FileTransferSettings は、保存されている転送キューの設定をそのまま返す。
+func (s *Service) FileTransferSettings() FileTransferSettings {
+	stored, _, err := s.metadata.Load()
+	if err != nil || stored.FileTransfers == nil {
+		return FileTransferSettings{}
+	}
+	return *stored.FileTransfers
+}
+
+// SetFileTransferSettings は、節をまるごと置き換える。
+func (s *Service) SetFileTransferSettings(settings FileTransferSettings) (SaveResult, error) {
+	stored, precondition, err := s.metadata.Load()
+	if err != nil {
+		return SaveResult{}, err
+	}
+	if settings == (FileTransferSettings{}) {
+		// 既定のままなら節ごと消す。空の節を残さない。
+		stored.FileTransfers = nil
+	} else {
+		stored.FileTransfers = &settings
+	}
+	if err := s.metadata.EnsureDirectory(); err != nil {
+		return SaveResult{}, err
+	}
+	change, err := s.metadata.Change(stored, precondition)
+	if err != nil {
+		return SaveResult{}, err
+	}
+	result, err := s.manager.Commit(storage.Request{
+		Operation: "sftp.transferSettings",
+		Changes:   []storage.Change{change},
+	})
+	if err != nil {
+		return SaveResult{}, err
+	}
+	return SaveResult{TransactionID: result.ID, Written: result.Written}, nil
+}
+
 // EngineSettings は、保存されている engine の設定をそのまま返す。
 func (s *Service) EngineSettings() EngineSettings {
 	stored, _, err := s.metadata.Load()

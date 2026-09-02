@@ -375,8 +375,22 @@ func New(options Options) (*Server, error) {
 	if options.SFTP != nil {
 		transfers := sshcSFTP.NewTransferManager(options.SFTP)
 		server.transfers = transfers
+		if options.Config != nil {
+			// 保存された設定を持って起動する。範囲外の値は握りつぶす。書けた
+			// 時点で範囲内だったものが、次の起動で engine を止めてはならない。
+			stored := options.Config.FileTransferSettings()
+			concurrency := stored.MaxConcurrent
+			if concurrency == 0 {
+				concurrency = sshcSFTP.DefaultTransferConcurrency
+			}
+			_ = transfers.SetTransferSettings(
+				concurrency,
+				time.Duration(stored.ClearCompletedAfterSeconds)*time.Second,
+				stored.ProcessingStopped,
+			)
+		}
 		registerSFTPRoutes(e, SFTPHandlers{
-			Service: options.SFTP, Transfers: transfers, Actions: actions,
+			Service: options.SFTP, Transfers: transfers, Config: options.Config, Actions: actions,
 		})
 	}
 	if options.Workspaces != nil {

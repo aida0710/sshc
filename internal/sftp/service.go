@@ -28,6 +28,16 @@ type Service struct {
 }
 
 const (
+	previewSniffBytes = 512
+
+	// 検索は「速く終わる」ことを機能の一部として扱う。SFTP の往復は高く、
+	// 深い木を全部歩けば数分かかる。予算に当たったら、そこまでの一致と
+	// 「まだ続きがある」を返して終わる。
+	MaxSearchQueryBytes = 128
+	maxSearchResults    = 200
+	maxSearchVisited    = 20_000
+	maxSearchDepth      = 32
+
 	maxArchiveEntries = 10_000
 	maxArchiveDepth   = 64
 	maxArchiveBytes   = int64(1 << 30)
@@ -250,6 +260,74 @@ func (s Service) ListDirectory(ctx context.Context, alias, remotePath string) (L
 	return Listing{Path: cleaned, Entries: entries}, nil
 }
 
+// Search は、あるディレクトリ配下から名前に query を含む項目を集める。
+//
+// symlink は辿らない。辿れば輪に入りうるし、同じ実体を別の名前で二度返す。
+func (s Service) Search(ctx context.Context, alias, remotePath, query string) (SearchResult, error) {
+	needle := strings.ToLower(strings.TrimSpace(query))
+	if needle == "" || len(needle) > MaxSearchQueryBytes {
+		return SearchResult{}, ErrInvalidQuery
+	}
+	root, err := cleanPublicPath(remotePath, true)
+	if err != nil {
+		return SearchResult{}, err
+	}
+	remote, err := s.openRequest(ctx, alias)
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer remote.Close()
+
+	result := SearchResult{Path: root, Query: query}
+	visited := 0
+	pending := []string{root}
+	for depth := 0; depth <= maxSearchDepth && len(pending) > 0; depth++ {
+		var next []string
+		for _, directory := range pending {
+			if err := ctx.Err(); err != nil {
+				return SearchResult{}, err
+			}
+			infos, err := remote.ReadDir(ctx, directory)
+			if err != nil {
+				// 読めない枝は飛ばす。権限のない一つのディレクトリで検索
+				// 全体を落とすほうが、利用者にとって役に立たない。
+				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+					return SearchResult{}, err
+				}
+				result.Truncated = true
+				continue
+			}
+			for _, info := range infos {
+				if isInternalName(info.Name()) {
+					continue
+				}
+				visited++
+				if visited > maxSearchVisited {
+					result.Truncated = true
+					return result, nil
+				}
+				entry := entryFrom(directory, info)
+				if strings.Contains(strings.ToLower(entry.Name), needle) {
+					if len(result.Entries) >= maxSearchResults {
+						result.Truncated = true
+						return result, nil
+					}
+					result.Entries = append(result.Entries, entry)
+				}
+				if entry.Type == EntryDirectory {
+					next = append(next, entry.Path)
+				}
+			}
+		}
+		if depth == maxSearchDepth && len(next) > 0 {
+			result.Truncated = true
+			break
+		}
+		pending = next
+	}
+	return result, nil
+}
+
 func (s Service) List(ctx context.Context, alias, remotePath string) ([]Entry, error) {
 	listing, err := s.ListDirectory(ctx, alias, remotePath)
 	return listing.Entries, err
@@ -283,6 +361,99 @@ func (s Service) ReadText(ctx context.Context, alias, remotePath string) (TextFi
 	}
 	defer remote.Close()
 	return readText(ctx, remote, cleaned)
+}
+
+// previewContentType は、先頭のバイト列だけからその型を返す。preview で
+// 描いてよい型でなければ空を返す。名前が名乗る型は使わない。拡張子は
+// 中身について何も保証しないからで、background 画像と同じ扱いである。
+//
+// 画像だけである。PDF は <iframe> でしか描けず、それには CSP へ blob: を
+// 足す必要がある。画像は data: URL で足りるので、policy はそのままでよい。
+//
+// SVG もここに無い。<img> の中では script が動かないとはいえ、中身から
+// 型が決まらない唯一の候補であり、background service も同じ理由で断る。
+func previewContentType(head []byte) string {
+	switch {
+	case len(head) >= 8 && string(head[:8]) == "\x89PNG\r\n\x1a\n":
+		return "image/png"
+	case len(head) >= 3 && head[0] == 0xFF && head[1] == 0xD8 && head[2] == 0xFF:
+		return "image/jpeg"
+	case len(head) >= 12 && string(head[:4]) == "RIFF" && string(head[8:12]) == "WEBP":
+		return "image/webp"
+	case len(head) >= 6 && (string(head[:6]) == "GIF87a" || string(head[:6]) == "GIF89a"):
+		return "image/gif"
+	case len(head) >= 2 && head[0] == 'B' && head[1] == 'M':
+		return "image/bmp"
+	}
+	return ""
+}
+
+// ReadPreview は、詳細モーダルが描ける画像を丸ごと返す。
+//
+// 型が分かるまでに読むのは先頭 previewSniffBytes だけである。preview に
+// できない大きな書庫を、断ると分かっている間ずっと転送し続けない。
+func (s Service) ReadPreview(ctx context.Context, alias, remotePath string) (Preview, error) {
+	cleaned, err := cleanPublicPath(remotePath, false)
+	if err != nil {
+		return Preview{}, err
+	}
+	remote, err := s.openRequest(ctx, alias)
+	if err != nil {
+		return Preview{}, err
+	}
+	defer remote.Close()
+	before, err := remote.Lstat(cleaned)
+	if err != nil {
+		return Preview{}, err
+	}
+	if !before.Mode().IsRegular() {
+		return Preview{}, ErrNotRegularFile
+	}
+	if before.Size() > MaxPreviewFileBytes {
+		return Preview{}, ErrPreviewTooLarge
+	}
+	contents, contentType, err := readPreviewBytes(ctx, remote, cleaned)
+	if err != nil {
+		return Preview{}, err
+	}
+	after, err := remote.Lstat(cleaned)
+	if err != nil {
+		return Preview{}, err
+	}
+	// 読んでいるあいだに置き換わったものを、古い metadata のまま見せない。
+	if metadataRevision(before) != metadataRevision(after) {
+		return Preview{}, ErrConflict
+	}
+	entry := entryFrom(path.Dir(cleaned), namedInfo{FileInfo: after, name: path.Base(cleaned)})
+	return Preview{Entry: entry, ContentType: contentType, Contents: contents, Revision: contentRevision(after, contents)}, nil
+}
+
+func readPreviewBytes(ctx context.Context, remote Remote, cleaned string) ([]byte, string, error) {
+	file, err := remote.Open(cleaned)
+	if err != nil {
+		return nil, "", err
+	}
+	defer func() { _ = file.Close() }()
+	reader := &contextReader{ctx: ctx, reader: file}
+	head := make([]byte, previewSniffBytes)
+	read, err := io.ReadFull(reader, head)
+	if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
+		return nil, "", err
+	}
+	head = head[:read]
+	contentType := previewContentType(head)
+	if contentType == "" {
+		return nil, "", ErrPreviewType
+	}
+	rest, err := io.ReadAll(io.LimitReader(reader, MaxPreviewFileBytes+1-int64(read)))
+	if err != nil {
+		return nil, "", err
+	}
+	contents := append(head, rest...)
+	if len(contents) > MaxPreviewFileBytes {
+		return nil, "", ErrPreviewTooLarge
+	}
+	return contents, contentType, nil
 }
 
 func (s Service) SaveText(

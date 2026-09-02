@@ -1392,6 +1392,44 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sftp/{alias}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alias: string;
+            };
+            cookie?: never;
+        };
+        /** @description Image bytes for the details dialog. The media type is decided by the leading bytes, never by the name. */
+        get: operations["previewSFTPFile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sftp/{alias}/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alias: string;
+            };
+            cookie?: never;
+        };
+        /** @description Names matching a query under one remote directory. Symlinks are not followed and the walk is bounded; truncated says so. */
+        get: operations["searchSFTPEntries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sftp/{alias}/text": {
         parameters: {
             query?: never;
@@ -1473,6 +1511,42 @@ export interface paths {
         put?: never;
         post?: never;
         delete: operations["clearFinishedSFTPTransferJobs"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sftp/transfers/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** @description Engine-wide transfer concurrency and auto-clear delay. Held for the life of the engine process. */
+        put: operations["updateSFTPTransferSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sftp/transfers/{id}/queue-position": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Reorder one waiting job inside the queue. Running jobs keep their place. */
+        post: operations["moveSFTPTransferJob"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -2865,8 +2939,14 @@ export interface components {
             groupsFile?: string;
             embeddedTerminal?: components["schemas"]["EmbeddedTerminal"];
             engine?: components["schemas"]["EngineSettings"];
+            fileTransfers?: components["schemas"]["FileTransferSettings"];
             groups?: components["schemas"]["GroupMetadata"][];
             hosts?: components["schemas"]["HostMetadata"][];
+        };
+        FileTransferSettings: {
+            maxConcurrent?: number;
+            clearCompletedAfterSeconds?: number;
+            processingStopped?: boolean;
         };
         EmbeddedTerminal: {
             maxSessions?: number;
@@ -3175,7 +3255,24 @@ export interface components {
         };
         SFTPTransferJobList: {
             maxConcurrent: number;
+            clearCompletedAfterSeconds: number;
+            processingStopped: boolean;
             jobs: components["schemas"]["SFTPTransferJob"][];
+        };
+        SFTPSearchResult: {
+            path: string;
+            query: string;
+            truncated: boolean;
+            entries: components["schemas"]["SFTPEntry"][];
+        };
+        SFTPTransferSettingsRequest: {
+            maxConcurrent: number;
+            clearCompletedAfterSeconds: number;
+            processingStopped: boolean;
+        };
+        SFTPTransferQueueMoveRequest: {
+            /** @enum {string} */
+            move: "up" | "down" | "top" | "bottom";
         };
         SFTPCreateTransferJobRequest: {
             id: string;
@@ -6074,6 +6171,63 @@ export interface operations {
             502: components["responses"]["Problem"];
         };
     };
+    previewSFTPFile: {
+        parameters: {
+            query: {
+                path: string;
+            };
+            header?: never;
+            path: {
+                alias: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Previewable remote file */
+            200: {
+                headers: {
+                    ETag: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/*": string;
+                };
+            };
+            404: components["responses"]["Problem"];
+            413: components["responses"]["Problem"];
+            415: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    searchSFTPEntries: {
+        parameters: {
+            query: {
+                path: string;
+                query: string;
+            };
+            header?: never;
+            path: {
+                alias: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Matching remote entries */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SFTPSearchResult"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+        };
+    };
     readSFTPText: {
         parameters: {
             query: {
@@ -6271,6 +6425,60 @@ export interface operations {
                 };
                 content?: never;
             };
+        };
+    };
+    updateSFTPTransferSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SFTPTransferSettingsRequest"];
+            };
+        };
+        responses: {
+            /** @description Settings applied */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SFTPTransferJobList"];
+                };
+            };
+            400: components["responses"]["Problem"];
+        };
+    };
+    moveSFTPTransferJob: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SFTPTransferQueueMoveRequest"];
+            };
+        };
+        responses: {
+            /** @description Queue reordered */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SFTPTransferJobList"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
         };
     };
     updateSFTPTransferJob: {

@@ -1,4 +1,4 @@
-import { apiClient } from "../api/client";
+import { ApiError, apiClient } from "../api/client";
 import { issueAction, jsonHeaders } from "../api/guards";
 import type { components } from "../api/schema";
 import { validateOpenAPISchema } from "../api/validators.generated";
@@ -14,6 +14,29 @@ export type TransferKind = TransferJob["kind"];
 export type TransferJobStatus = TransferJob["status"];
 export type TransferJobAction = components["schemas"]["SFTPTransferJobActionRequest"]["action"];
 export type TransferControlAction = TransferJob["allowedActions"][number];
+export type TransferQueueMove = components["schemas"]["SFTPTransferQueueMoveRequest"]["move"];
+export type TransferSettings = components["schemas"]["SFTPTransferSettingsRequest"];
+export type TransferJobList = components["schemas"]["SFTPTransferJobList"];
+
+export type RemoteSearchResult = components["schemas"]["SFTPSearchResult"];
+
+export type RemotePreview = {
+  contentType: string;
+  blob: Blob;
+  revision: string;
+};
+
+// preview が返しうる問題は、詳細モーダルがその場で言葉にする。共通の失敗
+// 通知まで重ねると、preview できない普通のファイルを開くたびに全画面の
+// 警告が出る。
+const previewProblems = [
+  "sftp_preview_type",
+  "sftp_preview_too_large",
+  "sftp_not_found",
+  "sftp_wrong_type",
+  "sftp_conflict",
+  "sftp_failed",
+];
 
 export type StreamDownloadOptions = {
   signal?: AbortSignal;
@@ -40,8 +63,18 @@ function transferJob(value: unknown): TransferJob {
 }
 
 export const sftpApi = {
-  async listTransfers(): Promise<{ maxConcurrent: number; jobs: TransferJob[] }> {
-    return validateOpenAPISchema<components["schemas"]["SFTPTransferJobList"]>("SFTPTransferJobList", await apiClient.read("/api/v1/sftp/transfers"));
+  async listTransfers(): Promise<TransferJobList> {
+    return validateOpenAPISchema<TransferJobList>("SFTPTransferJobList", await apiClient.read("/api/v1/sftp/transfers"));
+  },
+  async updateTransferSettings(settings: TransferSettings): Promise<TransferJobList> {
+    return validateOpenAPISchema<TransferJobList>("SFTPTransferJobList", await apiClient.mutate<unknown>("/api/v1/sftp/transfers/settings", {
+      method: "PUT", headers: jsonHeaders, body: JSON.stringify(settings),
+    }));
+  },
+  async moveTransfer(id: string, move: TransferQueueMove): Promise<TransferJobList> {
+    return validateOpenAPISchema<TransferJobList>("SFTPTransferJobList", await apiClient.mutate<unknown>(`/api/v1/sftp/transfers/${encodeURIComponent(id)}/queue-position`, {
+      method: "POST", headers: jsonHeaders, body: JSON.stringify({ move }),
+    }));
   },
   async createTransfer(input: CreateTransferJob): Promise<TransferJob> {
     return transferJob(await apiClient.mutate<unknown>("/api/v1/sftp/transfers", {
@@ -75,6 +108,26 @@ export const sftpApi = {
     return validateOpenAPISchema<components["schemas"]["SFTPListing"]>("SFTPListing", await apiClient.read(endpoint, {
       locallyHandledCodes: ["sftp_failed"],
     }));
+  },
+  async search(alias: string, remotePath: string, query: string): Promise<RemoteSearchResult> {
+    const endpoint = `/api/v1/sftp/${encodeURIComponent(alias)}/search?path=${encodeURIComponent(remotePath)}&query=${encodeURIComponent(query)}`;
+    return validateOpenAPISchema<RemoteSearchResult>("SFTPSearchResult", await apiClient.read(endpoint, {
+      locallyHandledCodes: ["sftp_failed", "sftp_not_found", "invalid_request"],
+    }));
+  },
+  async previewFile(alias: string, remotePath: string): Promise<RemotePreview> {
+    const endpoint = pathFor(alias, "preview", remotePath);
+    const response = await apiClient.send(endpoint, { method: "GET" }, { locallyHandledCodes: previewProblems });
+    if (!response.ok) {
+      const problem = await response.json().catch(() => null) as { code?: unknown } | null;
+      const code = typeof problem?.code === "string" ? problem.code : "sftp_failed";
+      throw new ApiError(code, response.status, null);
+    }
+    return {
+      contentType: (response.headers.get("Content-Type") ?? "").split(";")[0]?.trim() ?? "",
+      revision: response.headers.get("ETag") ?? "",
+      blob: await response.blob(),
+    };
   },
   async readText(alias: string, remotePath: string): Promise<RemoteTextFile> {
     return validateOpenAPISchema<RemoteTextFile>("SFTPTextFile", await apiClient.read(pathFor(alias, "text", remotePath)));

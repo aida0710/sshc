@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { control, hintText } from "./form";
 import { Button } from "./surface";
 import { ModalShell } from "./ModalShell";
@@ -15,6 +15,7 @@ export function InputDialog({
   onSubmit,
   onCancel,
   inputMode,
+  returnFocusRef,
 }: {
   id: string;
   heading: string;
@@ -27,6 +28,7 @@ export function InputDialog({
   onSubmit: (value: string) => void;
   onCancel: () => void;
   inputMode?: "text" | "numeric";
+  returnFocusRef?: RefObject<HTMLElement | null>;
 }) {
   const [value, setValue] = useState(initialValue);
   const [touched, setTouched] = useState(false);
@@ -49,6 +51,7 @@ export function InputDialog({
       {...(descriptionID === undefined ? {} : { describedBy: descriptionID })}
       onDismiss={onCancel}
       initialFocusRef={inputRef}
+      {...(returnFocusRef === undefined ? {} : { returnFocusRef })}
       panelClassName="flex w-full max-w-md flex-col gap-4 rounded-lg p-4 sm:p-5"
     >
       <div>

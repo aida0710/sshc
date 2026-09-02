@@ -128,6 +128,16 @@ type GroupMetadata struct {
 	Settings []Setting `json:"settings,omitempty"`
 }
 
+// FileTransferSettings は、SFTP転送キューの設定である。
+//
+// engine 節とは別に置く。Settings 画面の engine 保存は節をまるごと
+// 置き換えるので、同居させれば転送の設定はそのたびに消える。
+type FileTransferSettings struct {
+	MaxConcurrent              int  `json:"maxConcurrent,omitempty"`
+	ClearCompletedAfterSeconds int  `json:"clearCompletedAfterSeconds,omitempty"`
+	ProcessingStopped          bool `json:"processingStopped,omitempty"`
+}
+
 // EmbeddedTerminal は、埋め込みターミナルの設定である。
 type EmbeddedTerminal struct {
 	MaxSessions     int `json:"maxSessions,omitempty"`
@@ -161,6 +171,8 @@ type Metadata struct {
 	EmbeddedTerminal *EmbeddedTerminal `json:"embeddedTerminal,omitempty"`
 	// Engine は engine そのものの設定である。端末のものではない。
 	Engine *EngineSettings `json:"engine,omitempty"`
+	// FileTransfers は SFTP 転送キューの設定である。
+	FileTransfers *FileTransferSettings `json:"fileTransfers,omitempty"`
 	Groups []GroupMetadata `json:"groups,omitempty"`
 	Hosts  []HostMetadata  `json:"hosts,omitempty"`
 }

@@ -39,13 +39,17 @@ type TransferManager struct {
 	closeOnce sync.Once
 	closeErr  error
 
-	jobsMutex     sync.Mutex
-	jobs          map[string]*transferJobRecord
-	jobOrder      []string
-	activeJobs    int
-	maxConcurrent int
-	now           func() time.Time
-	dataPlane     map[string]int
+	jobsMutex sync.Mutex
+	jobs      map[string]*transferJobRecord
+	jobOrder  []string
+	// clearCompletedAfter が 0 なら、完了項目は手動でだけ消える。
+	clearCompletedAfter time.Duration
+	// processingStopped の間は start を通さない。実行中のものは走り切る。
+	processingStopped bool
+	activeJobs          int
+	maxConcurrent       int
+	now                 func() time.Time
+	dataPlane           map[string]int
 }
 
 const (

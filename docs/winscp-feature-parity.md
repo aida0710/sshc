@@ -18,9 +18,9 @@ WinSCPに存在する機能を漏れなく分類し、sshcで同じ利用目的�
 
 sshcのSFTPは、安全なアップロード／ダウンロード、フォルダー転送、複数選択、リモート編集、競合検出、バックグラウンドキューという中核を既に持つ。一方、日常のファイルマネージャーとして使う際の不足は大きく、特に次がWinSCPとの差になっている。
 
-1. ディレクトリブックマーク／ツリー、複数SFTPタブ、リモート検索
+1. ディレクトリツリー、local／remote 2 panel
 2. 空ファイル／リンク作成、複製、別ディレクトリへの移動、プロパティ表示と一括変更
-3. キューの並べ替え、帯域制限、処理全体の停止、同時数設定、高さ変更
+3. 帯域制限、process再起動後のキュー復元
 4. 転送前オプション、timestamp／permission保持、mask、プリセット
 5. ローカルとリモートの2ペイン、ディレクトリ比較、ローカル・リモート同期、変更監視
 6. SFTPファイル操作のCLI／automation
@@ -30,19 +30,22 @@ sshcのSFTPは、安全なアップロード／ダウンロード、フォルダ
 | WinSCP機能 | 状態 | sshcの現状 | 実装方針 |
 |---|---|---|---|
 | Explorer型の単一remote panel | 対応 | SFTP画面が相当 | 維持 |
-| Commander型のlocal／remote 2 panel | 未対応 | remoteだけを表示 | desktop向けlocal panelを設計。mobileは単一panelを維持 |
+| Commander型のlocal／remote 2 panel | 未対応 | desktopではremote／remoteの2ペイン表示に対応。local filesystemは表示しない | desktop向けlocal panelを設計。mobileは単一panelを維持 |
+| remote／remote 2 panel | 対応 | desktopで2つのhost／directoryを並べ、各ペインの状態を保存する。狭いペインはmetadataを1行へまとめる | ペイン間copy／moveは後続 |
 | `..`による親directory移動 | 対応 | 一覧先頭に表示 | 維持 |
-| path直接入力 | 対応 | 絶対pathを入力して移動 | 維持 |
+| path breadcrumb／直接入力 | 対応 | 通常は各階層をクリックできるbreadcrumbとして表示し、編集操作で絶対path入力へ切り替える | 維持 |
 | Back／Forward履歴 | 対応 | hostを切り替えるまでpath履歴を保持 | 維持 |
 | Home directoryへ移動 | 対応 | serverのworking directoryを再解決して移動 | 維持 |
 | Root directoryへ移動 | 対応 | navigation buttonまたは`/`の直接入力 | 維持 |
-| directory bookmark | 未対応 | favoriteを保持しない | host単位と共通bookmarkを設計 |
+| directory bookmark | 対応 | 場所menuでhost単位のbookmarkを追加／解除し、選ぶと移動する | 共通bookmarkは必要になった時点で検討 |
+| 最近開いたdirectory | 対応 | 場所menuにhost単位で直近10件を新しい順に表示する | 維持 |
 | directory tree | 未対応 | 一覧だけ | desktopの任意表示として検討 |
+| remote検索 | 対応 | 絞り込み欄のEnterまたは虫眼鏡で、開いているディレクトリ配下を再帰検索する。symlinkは辿らず、200件・20,000項目・深さ32で打ち切って`truncated`を返す | 更新日時やサイズでの条件は未対応 |
 | synchronized browsing | 未対応 | local panelがない | 2 panel導入後 |
 | pathをclipboardへcopy | 未対応 | path欄から手動選択のみ | P0 |
 | opposite panelのpathへ移動 | 未対応 | local panelがない | 2 panel導入後 |
-| directory stateのsession別記憶 | 部分 | URLへalias/pathを反映 | sort、selection、historyも保存する |
-| 複数SFTP tab | 未対応 | SFTP画面は1接続だけ | host/path状態を持つtabを検討 |
+| directory stateのsession別記憶 | 部分 | URLへalias/pathを反映し、2ペイン目のalias/pathも端末に保存する | sort、selection、historyも保存する |
+| 複数SFTP tab | 対応 | 最大8tab。各tabが自分のhost、履歴、選択を持ち、開いていた場所を再読み込み後も復元する | 維持 |
 | panel内の名前filter | 対応 | 現在directoryを名前の部分一致で絞り込み | mask式は後続 |
 | remote配下の再帰file検索 | 未対応 | APIなし | P1、server側上限付き検索 |
 | directory cache | 未対応 | 現在pathを都度取得 | stale表示を避ける明示cacheとして設計 |
@@ -55,7 +58,7 @@ sshcのSFTPは、安全なアップロード／ダウンロード、フォルダ
 | owner／group sort | 未対応 | owner／groupを取得しない | SFTP属性対応後 |
 | owner／group／link target列 | 未対応 | name、modified、size、typeだけ | 列表示設定と合わせて追加 |
 | 列幅／列表示のcustomize | 未対応 | 固定 | desktop向けに追加 |
-| status barと選択数／合計size | 部分 | 選択数だけtoolbarへ表示 | directory／selectionの件数とsizeを下部へ表示 |
+| status barと選択数／合計size | 部分 | 選択中だけcontextual toolbarへ件数／sizeと操作を表示 | directoryの件数とsizeを下部へ表示 |
 
 ## 2. 選択と入力操作
 
@@ -64,7 +67,7 @@ sshcのSFTPは、安全なアップロード／ダウンロード、フォルダ
 | clickによる単一選択 | 対応 | あり | 維持 |
 | checkboxによる複数選択 | 対応 | desktop／mobileとも対応 | 維持 |
 | Select All | 対応 | header checkbox、`Ctrl/Cmd+A` | 維持 |
-| keyboardで行移動／Enterで開く | 部分 | focus済み行のEnterのみ | Arrow、Home、End、Spaceを追加 |
+| keyboardで行移動／Enterで開く | 対応 | ↑↓／Home／Endで行移動、Spaceで選択、Enterでフォルダーを開くかプレビュー | 維持 |
 | Shiftによるrange選択 | 対応 | 表示中の並びを基準にrange選択 | 維持 |
 | Ctrl/Cmdによる追加選択 | 対応 | clickで追加／解除 | 維持 |
 | 選択反転 | 対応 | 表示中のentryだけ反転 | 維持 |
@@ -72,8 +75,8 @@ sshcのSFTPは、安全なアップロード／ダウンロード、フォルダ
 | maskで選択／解除 | 未対応 | なし | filter/mask共通構文の後に追加 |
 | 同じ拡張子を選択 | 未対応 | なし | 選択menuへ追加 |
 | double clickでdirectoryを開く | 対応 | あり | 維持 |
-| context menu | 未対応 | 右上の操作menuのみ | desktopの右click／長押しを同じaction modelへ接続 |
-| file manager shortcut（F2/F4/F5/F7/F8等） | 未対応 | 一部の一般shortcutだけ | 入力欄と衝突しない範囲で追加 |
+| context menu | 対応 | 右click／長押しで、右上の三点menuと同一のaction一覧を開く | 維持 |
+| file manager shortcut（F2/F4/F5/F7/F8等） | 部分 | F2でrename、Deleteで削除、Escで選択解除、Ctrl/Cmd+Aで全選択 | F4／F5／F7／F8は未割り当て |
 | drag and drop upload | 対応 | file／folder、空directoryを扱う | 維持 |
 | remote rowをfolderへdragして移動 | 未対応 | なし | remote move実装後 |
 | queueへdropして転送 | 未対応 | なし | local panel導入後 |
@@ -87,7 +90,7 @@ sshcのSFTPは、安全なアップロード／ダウンロード、フォルダ
 | symbolic link作成／編集 | 未対応 | linkは表示するが操作不可 | SFTP symlink/readlink APIを追加 |
 | internal text editor | 対応 | UTF-8、2 MiB以下をMonaco modalで編集 | 維持 |
 | external editor／Edit With | 未対応 | browserから外部editorを起動しない | desktop native連携の判断が必要 |
-| file preview | 未対応 | textはeditor、それ以外はdownload | image／PDFを明示操作のmodalで表示 |
+| file preview | 部分 | 詳細modalで画像とtextを表示。型はengineが先頭bytesから決める | PDFは<iframe>とCSPのblob:許可が要るため対象外 |
 | file upload | 対応 | picker／drop、競合確認、atomic publish、resume | 維持 |
 | folder upload | 対応 | relative pathと空folderを維持 | 維持 |
 | file download | 対応 | revision固定、Range resume | 維持 |
@@ -101,7 +104,7 @@ sshcのSFTPは、安全なアップロード／ダウンロード、フォルダ
 | file名をcopy | 対応 | 単一／複数を改行区切りでcopy | 維持 |
 | full pathをcopy | 対応 | 単一／複数を改行区切りでcopy | 維持 |
 | file URL生成 | 未対応 | なし | `sftp://`とsshc内deep linkを分けて設計 |
-| properties表示 | 部分 | mode、size、mtime、typeを一覧表示 | modalでpath、revision、link target等を表示 |
+| properties表示 | 対応 | 詳細modalでpath、type、size、mtime、権限、revisionを表示。複数選択では件数と合計size | link targetは未表示 |
 | chmod | 対応 | 単一file／directory | 複数選択／再帰へ拡張 |
 | chown／chgrp | 未対応 | owner/group属性なし | capability確認付きで追加 |
 | timestamp変更 | 未対応 | なし | SFTP Setstat対応後 |
@@ -120,18 +123,18 @@ sshcのSFTPは、安全なアップロード／ダウンロード、フォルダ
 | batch全体とfile別進捗 | 対応 | batchと各jobの進捗、速度、残り時間 | 維持 |
 | waiting／active／paused／failed／completed表示 | 対応 | あり | 維持 |
 | pause／resume／retry／cancel | 対応 | job単位 | 維持 |
-| completed消去 | 対応 | 完了・取消をまとめて消去 | 表示保持期間は未設定 |
-| waiting順のmove up/down | 未対応 | FIFO固定 | P0 |
+| completed消去 | 対応 | 手動の一括消去に加え、engineが設定時間で完了・取消を自動消去する | 維持 |
+| waiting順のmove up/down | 対応 | 待機中のjobだけをengine側の待機列で入れ替える。runningの位置は動かない | top/bottomはAPIにあるがUIは上下のみ |
 | Execute now／同時数を一時超過 | 未対応 | 最大同時数を厳守 | 必要性を判断 |
-| queue processing全体の開始／停止 | 未対応 | 常時自動処理 | P0 |
+| queue processing全体の開始／停止 | 対応 | queue headerの停止／再開。停止中は待機jobを新しく開始せず、実行中のものは走り切る | 維持 |
 | Suspend All／Resume All／Cancel All | 対応 | 下部queueの操作menuから全jobへ適用 | 維持 |
 | job別speed limit | 未対応 | なし | token bucketをengine側へ追加 |
 | 全体speed limit | 未対応 | なし | job別上限と合わせて追加 |
-| 最大同時転送数の設定 | 部分 | engineは可変だがUI設定なし、既定2 | Preferencesへ追加 |
+| 最大同時転送数の設定 | 対応 | queue headerの選択で1〜8。metadata.jsonの`fileTransfers`節に残り、engine再起動後も効く | 維持 |
 | 複数接続で複数fileを転送 | 対応 | jobごとに独立SFTP transport、既定2並列 | 接続再利用は限定的 |
 | 1 fileを複数connectionで分割 | 未対応 | 1 job 1 stream | 大容量downloadだけ将来検討 |
 | queueの折りたたみ | 対応 | headerを残して展開／折りたたみ | 維持 |
-| queue高さのresize | 未対応 | 最大高さ固定 | desktopへdrag handleを追加 |
+| queue高さのresize | 対応 | 上端のdrag handleで96〜560px。keyboardの↑↓でも変えられ、折りたたみ状態とともに保存する | 維持 |
 | queue file listの展開 | 部分 | batch配下へfile jobを常時表示 | 折りたたみ可能にする |
 | prompt／errorの保留表示 | 部分 | overwriteは開始前確認、errorはjob表示 | queue内で再確認待ちを扱えるようにする |
 | 完了時action（disconnect/sleep/shutdown） | 未対応 | なし | browser製品では通知／engine停止までを候補とする |

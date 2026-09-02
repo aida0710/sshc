@@ -7,7 +7,7 @@ description: Queue files and folders, then pause, resume, retry, or cancel them.
 
 ![The Transfer Manager in English](/images/transfer-manager-en.png)
 
-File upload, folder upload, file download, and folder download share one queue. Two transfers run concurrently by default.
+File upload, folder upload, file download, and folder download share one queue. Two transfers run concurrently by default. The Transfer Manager is docked below the SFTP view and normally shows only the active count, aggregate progress, and speed. Expand it for per-file status and controls.
 
 Each job shows per-file progress, transferred and total bytes, current speed, remaining time, and a queued/running/paused/completed/failed/canceled state.
 

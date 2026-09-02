@@ -10,9 +10,18 @@ import { agentStatusLabel, terminalDisplayTitle } from "../terminal/agentPresent
 import type { AgentUnreadBySession } from "../terminal/agentNotifications";
 import { ModalShell } from "../ui/ModalShell";
 
+// A command is something the palette performs, rather than somewhere it goes.
+export type PaletteCommand = {
+  id: string;
+  label: string;
+  detail: string;
+  search: string;
+  run: () => void | Promise<void>;
+};
+
 type PaletteItem = {
   id: string;
-  kind: "session" | "host" | "file" | "snippet" | "setting";
+  kind: "command" | "session" | "host" | "file" | "snippet" | "setting";
   label: string;
   detail: string;
   search: string;
@@ -34,6 +43,7 @@ function matches(item: PaletteItem, query: string): boolean {
 
 export function CommandPalette({
   open,
+  commands = [],
   hosts,
   files,
   sessions,
@@ -49,6 +59,7 @@ export function CommandPalette({
   returnFocusRef,
 }: {
   open: boolean;
+  commands?: PaletteCommand[];
   hosts: HostEntry[];
   files: FileNode[];
   sessions: TerminalSession[];
@@ -91,6 +102,16 @@ export function CommandPalette({
   }, [open]);
 
   const items = useMemo<PaletteItem[]>(() => [
+    // Commands lead: typing "new" should reach the action before it reaches a
+    // host whose name happens to contain the word.
+    ...commands.map((command) => ({
+      id: `command:${command.id}`,
+      kind: "command" as const,
+      label: command.label,
+      detail: command.detail,
+      search: `${command.search} command action 実行 コマンド 操作`,
+      action: command.run,
+    })),
     ...sessions.filter((session) => session.exited === undefined).map((session) => {
       const unread = unreadBySession.get(session.id);
       const status = session.agent === undefined ? t("terminal.connected") : agentStatusLabel(t, session);
@@ -137,7 +158,7 @@ export function CommandPalette({
       search: `${section} settings setting 設定`,
       action: () => onNavigate(section),
     })),
-  ], [files, hosts, onConnect, onNavigate, onOpenFile, onOpenSession, onOpenSnippet, sectionLabels, sessions, snippets, t, unreadBySession]);
+  ], [commands, files, hosts, onConnect, onNavigate, onOpenFile, onOpenSession, onOpenSnippet, sectionLabels, sessions, snippets, t, unreadBySession]);
 
   const visible = useMemo(() => items.filter((item) => matches(item, query)).slice(0, 40), [items, query]);
 

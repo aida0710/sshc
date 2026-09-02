@@ -67,7 +67,7 @@ import type { LiveWorkspaceSummary } from "./features/workspaces/live";
 import { TransferNotifications } from "./sftp/TransferNotifications";
 import { sftpTransferManager } from "./sftp/transferManager";
 import { ErrorDiagnosticNotice } from "./shell/ErrorDiagnosticNotice";
-import { CommandPalette } from "./shell/CommandPalette";
+import { CommandPalette, type PaletteCommand } from "./shell/CommandPalette";
 import { setAndroidAppearance } from "./android/native";
 import { useAgentNotifications } from "./terminal/agentNotifications";
 import type { RemotePathAction } from "./terminal/TerminalLinkPopover";
@@ -142,8 +142,10 @@ const RemoteKeyPanel = lazy(() =>
     default: RemoteKeyPanel,
   })),
 );
-const SFTPPanel = lazy(() =>
-  import("./sftp/SFTPPanel").then(({ SFTPPanel }) => ({ default: SFTPPanel })),
+const SFTPWorkspace = lazy(() =>
+  import("./sftp/SFTPWorkspace").then(({ SFTPWorkspace }) => ({
+    default: SFTPWorkspace,
+  })),
 );
 const SnippetsPanel = lazy(() =>
   import("./snippets/SnippetsPanel").then(({ SnippetsPanel }) => ({
@@ -451,6 +453,45 @@ export function App({
     setSftpTarget({ alias, path, action, request: sftpTargetSequence.current });
     navigate("Files");
   }
+
+  // Ctrl/Cmd+K performs as well as navigates. These are the actions that are
+  // otherwise several clicks deep from wherever the user happens to be.
+  const paletteCommands: PaletteCommand[] = [
+    {
+      id: "new-connection",
+      label: t("palette.newConnection"),
+      detail: t("palette.newConnectionDetail"),
+      search: "new connection create host add 新規 接続 追加 作成",
+      run: () => {
+        setConnectionDraft({
+          alias: "", group: "", hostName: "", user: "", port: "",
+          authentication: "dedicated_password", savedCredential: "", newCredential: "", keyID: "",
+        });
+        navigate("Connections");
+      },
+    },
+    {
+      id: "open-files",
+      label: t("palette.openRemoteFiles"),
+      detail: t("palette.openRemoteFilesDetail"),
+      search: "sftp files remote browse ファイル リモート 転送",
+      run: () => navigate("Files"),
+    },
+    {
+      id: "open-shell",
+      label: t("palette.openLocalShell"),
+      detail: t("palette.openLocalShellDetail"),
+      search: "shell local terminal console シェル ローカル ターミナル",
+      run: () => void openLocalShell(),
+    },
+    {
+      id: "lock-vault",
+      label: t("palette.lockVault"),
+      detail: t("palette.lockVaultDetail"),
+      search: "lock vault secure ロック 保管庫 施錠",
+      run: () => session.lock(),
+    },
+  ];
 
   function assignGeneratedKey(key: GeneratedPrivateKeyHandoff) {
     setPreferredConnectionKey(key);
@@ -875,6 +916,7 @@ export function App({
         {state === "ready" ? (
           <CommandPalette
             open={commandPaletteOpen}
+            commands={paletteCommands}
             returnFocusRef={commandPaletteReturnFocusRef}
             hosts={paletteHosts}
             files={configFiles}
@@ -960,7 +1002,10 @@ function SectionView(props: SectionViewProps) {
     );
   }
   return (
-    <div className="h-full overflow-y-auto p-4 md:p-5">
+    <div className={props.section === "Files"
+      ? "h-full overflow-y-auto px-4 pb-4 md:px-5 md:pb-5"
+      : "h-full overflow-y-auto p-4 md:p-5"}
+    >
       {<PaddedSection {...props} />}
     </div>
   );
@@ -1125,11 +1170,13 @@ function PaddedSection({
   }
   if (section === "Files") {
     return (
-      <SFTPPanel
+      <SFTPWorkspace
         aliases={declared.knownAliases}
         hosts={declared.hosts}
         target={sftpTarget}
         onTargetHandled={onSftpTargetHandled}
+        onNavigationBlockerChange={navigation.onNavigationBlockerChange}
+        onNavigateLocation={onNavigateLocation}
       />
     );
   }

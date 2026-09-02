@@ -48,7 +48,11 @@ function engineAPI(overrides: Record<string, unknown> = {}) {
   });
   return {
     jobs,
-    listTransfers: vi.fn(async () => ({ maxConcurrent: 2, jobs: [...jobs.values()] })),
+    listTransfers: vi.fn(async () => ({ maxConcurrent: 2, clearCompletedAfterSeconds: 0, processingStopped: false, jobs: [...jobs.values()] })),
+    updateTransferSettings: vi.fn(async (settings: { maxConcurrent: number; clearCompletedAfterSeconds: number; processingStopped: boolean }) => ({
+      ...settings, jobs: [...jobs.values()],
+    })),
+    moveTransfer: vi.fn(async () => ({ maxConcurrent: 2, clearCompletedAfterSeconds: 0, processingStopped: false, jobs: [...jobs.values()] })),
     createTransfer,
     updateTransfer,
     clearFinishedTransfers: vi.fn(async () => {

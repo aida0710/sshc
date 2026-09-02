@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"path"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -395,6 +396,99 @@ func TestReadTextAcceptsUTF8AndRejectsBinaryOrLargeFiles(t *testing.T) {
 				t.Fatalf("ReadText() = %v, want %v", err, test.want)
 			}
 		})
+	}
+}
+
+func TestReadPreviewNamesTheTypeFromTheBytesAndRefusesEverythingElse(t *testing.T) {
+	png := append([]byte("\x89PNG\r\n\x1a\n"), bytes.Repeat([]byte("d"), 32)...)
+
+	t.Run("png named as text", func(t *testing.T) {
+		// 拡張子は中身について何も言わない。中身が PNG なら PNG と名乗る。
+		remote := remoteWith(map[string]node{"/photo.txt": {name: "photo.txt", content: png, mode: 0o644, modTime: testTime}})
+		preview, err := serviceFor(remote).ReadPreview(context.Background(), "edge", "/photo.txt")
+		if err != nil {
+			t.Fatalf("ReadPreview() = %v", err)
+		}
+		if preview.ContentType != "image/png" || !bytes.Equal(preview.Contents, png) {
+			t.Fatalf("preview = %q %d bytes", preview.ContentType, len(preview.Contents))
+		}
+		if preview.Entry.Path != "/photo.txt" || !strings.HasPrefix(preview.Revision, "content-sha256:") {
+			t.Fatalf("entry = %#v revision = %q", preview.Entry, preview.Revision)
+		}
+	})
+
+	tests := []struct {
+		name     string
+		contents []byte
+		mode     fs.FileMode
+		want     error
+	}{
+		// 名前が png でも、中身が png でなければ preview にはしない。
+		{name: "html named as png", contents: []byte("<html><script>alert(1)</script>"), mode: 0o644, want: sftp.ErrPreviewType},
+		{name: "svg", contents: []byte(`<svg xmlns="http://www.w3.org/2000/svg"></svg>`), mode: 0o644, want: sftp.ErrPreviewType},
+		{name: "utf8 text", contents: []byte("一行目\n"), mode: 0o644, want: sftp.ErrPreviewType},
+		// PDF は <iframe> でしか描けず、CSP を緩めることになるので preview しない。
+		{name: "pdf", contents: []byte("%PDF-1.7\ntrailer"), mode: 0o644, want: sftp.ErrPreviewType},
+		{name: "directory", contents: nil, mode: fs.ModeDir | 0o755, want: sftp.ErrNotRegularFile},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			remote := remoteWith(map[string]node{"/candidate.png": {
+				name: "candidate.png", content: test.contents, mode: test.mode, modTime: testTime,
+			}})
+			if _, err := serviceFor(remote).ReadPreview(context.Background(), "edge", "/candidate.png"); !errors.Is(err, test.want) {
+				t.Fatalf("ReadPreview() = %v, want %v", err, test.want)
+			}
+		})
+	}
+
+	t.Run("too large", func(t *testing.T) {
+		oversized := append(append([]byte{}, png...), bytes.Repeat([]byte("d"), sftp.MaxPreviewFileBytes)...)
+		remote := remoteWith(map[string]node{"/huge.png": {name: "huge.png", content: oversized, mode: 0o644, modTime: testTime}})
+		if _, err := serviceFor(remote).ReadPreview(context.Background(), "edge", "/huge.png"); !errors.Is(err, sftp.ErrPreviewTooLarge) {
+			t.Fatalf("ReadPreview() = %v, want %v", err, sftp.ErrPreviewTooLarge)
+		}
+	})
+}
+
+func TestSearchMatchesNamesBelowARootWithoutFollowingSymlinks(t *testing.T) {
+	remote := remoteWith(map[string]node{
+		"/srv":                    directory("srv"),
+		"/srv/app":                directory("app"),
+		"/srv/app/report.log":     file("report.log", "one", 0o644),
+		"/srv/app/notes.txt":      file("notes.txt", "two", 0o644),
+		"/srv/app/logs":           directory("logs"),
+		"/srv/app/logs/other.log": file("other.log", "three", 0o644),
+		"/srv/elsewhere.log":      file("elsewhere.log", "four", 0o644),
+		"/outside.log":            file("outside.log", "five", 0o644),
+	})
+	service := serviceFor(remote)
+
+	found, err := service.Search(context.Background(), "edge", "/srv", "LOG")
+	if err != nil {
+		t.Fatalf("Search() = %v", err)
+	}
+	if found.Path != "/srv" || found.Query != "LOG" || found.Truncated {
+		t.Fatalf("result = %+v", found)
+	}
+	paths := make([]string, 0, len(found.Entries))
+	for _, entry := range found.Entries {
+		paths = append(paths, entry.Path)
+	}
+	sort.Strings(paths)
+	// 大文字小文字は問わず、rootの外へは出ず、ディレクトリ自身も一致する。
+	want := []string{"/srv/app/logs", "/srv/app/logs/other.log", "/srv/app/report.log", "/srv/elsewhere.log"}
+	if !slices.Equal(paths, want) {
+		t.Fatalf("paths = %v, want %v", paths, want)
+	}
+
+	for _, query := range []string{"", "   ", strings.Repeat("x", sftp.MaxSearchQueryBytes+1)} {
+		if _, err := service.Search(context.Background(), "edge", "/srv", query); !errors.Is(err, sftp.ErrInvalidQuery) {
+			t.Fatalf("Search(%q) = %v, want %v", query, err, sftp.ErrInvalidQuery)
+		}
+	}
+	if _, err := service.Search(context.Background(), "edge", "relative", "log"); !errors.Is(err, sftp.ErrInvalidPath) {
+		t.Fatalf("Search(relative) = %v, want %v", err, sftp.ErrInvalidPath)
 	}
 }
 

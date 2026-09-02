@@ -23,6 +23,10 @@ output-options:
     - createSFTPDirectory
     - readSFTPText
     - saveSFTPText
+    - previewSFTPFile
+    - searchSFTPEntries
+    - updateSFTPTransferSettings
+    - moveSFTPTransferJob
     - downloadSFTPFile
     - downloadSFTPDirectoryArchive
     - listSFTPTransferJobs
@@ -85,6 +89,7 @@ output-options:
     - EditRequest
     - EmbeddedTerminal
     - FieldEdit
+    - FileTransferSettings
     - GroupMetadata
     - HistoryEntry
     - HistoryList
