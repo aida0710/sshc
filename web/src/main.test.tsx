@@ -19,10 +19,15 @@ describe("main", () => {
     vi.resetModules();
   });
 
+  // **ここで測っているのは回数であって、速さではない。**
+  //
+  // `import("./main")` はアプリのモジュール木をまるごと変換させるので、
+  // 119 本のファイルを同時に走らせている最中は既定の 5 秒を超えることがある
+  // ——実際、この 1 本だけが不定期に赤くなっていた。**遅いことは失敗ではない。**
   it("creates one shared bootstrap exchange before rendering StrictMode", async () => {
     await import("./main");
 
     expect(mocked.bootstrapSession).toHaveBeenCalledTimes(1);
     expect(mocked.render).toHaveBeenCalledTimes(1);
-  });
+  }, 30_000);
 });

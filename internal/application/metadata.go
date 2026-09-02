@@ -173,8 +173,8 @@ type Metadata struct {
 	Engine *EngineSettings `json:"engine,omitempty"`
 	// FileTransfers は SFTP 転送キューの設定である。
 	FileTransfers *FileTransferSettings `json:"fileTransfers,omitempty"`
-	Groups []GroupMetadata `json:"groups,omitempty"`
-	Hosts  []HostMetadata  `json:"hosts,omitempty"`
+	Groups        []GroupMetadata       `json:"groups,omitempty"`
+	Hosts         []HostMetadata        `json:"hosts,omitempty"`
 }
 
 func (metadata Metadata) TerminalStartDirectory() string {

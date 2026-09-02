@@ -46,10 +46,10 @@ type TransferManager struct {
 	clearCompletedAfter time.Duration
 	// processingStopped の間は start を通さない。実行中のものは走り切る。
 	processingStopped bool
-	activeJobs          int
-	maxConcurrent       int
-	now                 func() time.Time
-	dataPlane           map[string]int
+	activeJobs        int
+	maxConcurrent     int
+	now               func() time.Time
+	dataPlane         map[string]int
 }
 
 const (
