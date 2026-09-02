@@ -88,7 +88,10 @@ describe("SFTPPanel uploads", () => {
       const current = server.get(id);
       if (current !== undefined) server.set(id, { ...current, transferredBytes: size, status: "completed", allowedActions: [], remainingSeconds: 0 });
     });
-    api.listTransfers.mockImplementation(async () => ({ maxConcurrent: 2, jobs: [...server.values()] }));
+    api.listTransfers.mockImplementation(async () => ({
+      maxConcurrent: 2, clearCompletedAfterSeconds: 0, processingStopped: false,
+      largeFileThresholdBytes: 100 << 20, largeFileParallelism: 4, largeFileChunkBytes: 32 << 20, jobs: [...server.values()],
+    }));
     api.clearFinishedTransfers.mockImplementation(async () => {
       for (const [id, job] of server) if (job.status === "completed" || job.status === "cancelled") server.delete(id);
     });

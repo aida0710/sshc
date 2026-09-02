@@ -36,6 +36,26 @@ func (n node) ModTime() time.Time { return n.modTime }
 func (n node) IsDir() bool        { return n.mode.IsDir() }
 func (n node) Sys() any           { return nil }
 
+type fileInfoWithSize struct {
+	fs.FileInfo
+	size int64
+}
+
+func (info fileInfoWithSize) Size() int64 { return info.size }
+
+type sizeReportingRemote struct {
+	*fakeRemote
+	size int64
+}
+
+func (remote *sizeReportingRemote) Lstat(candidate string) (fs.FileInfo, error) {
+	info, err := remote.fakeRemote.Lstat(candidate)
+	if err != nil {
+		return nil, err
+	}
+	return fileInfoWithSize{FileInfo: info, size: remote.size}, nil
+}
+
 type fakeRemote struct {
 	nodes        map[string]node
 	workingDir   string
@@ -565,6 +585,25 @@ func TestDownloadMkdirRenameAndDelete(t *testing.T) {
 	}
 	if _, ok := remote.nodes["/home/b"]; ok {
 		t.Fatal("renamed file remained after delete")
+	}
+}
+
+func TestPrepareDownloadRejectsFilesLargerThan512GiBBeforeReading(t *testing.T) {
+	base := remoteWith(map[string]node{
+		"/oversized.bin": {name: "oversized.bin", mode: 0o600, modTime: testTime},
+	})
+	opened := false
+	base.openHook = func(string) { opened = true }
+	remote := &sizeReportingRemote{fakeRemote: base, size: (512 << 30) + 1}
+	service := &sftp.Service{Open: func(context.Context, string) (sftp.Remote, error) {
+		return remote, nil
+	}}
+
+	if _, err := service.PrepareDownload(t.Context(), "edge", "/oversized.bin"); !errors.Is(err, sftp.ErrTransferTooLarge) {
+		t.Fatalf("PrepareDownload(512 GiB + 1) = %v, want ErrTransferTooLarge", err)
+	}
+	if opened {
+		t.Fatal("oversized file was opened before its size was rejected")
 	}
 }
 

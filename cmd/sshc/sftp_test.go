@@ -9,10 +9,51 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"sshc/internal/httpserver"
 )
+
+func TestSFTPFileWorkersBoundParallelFiles(t *testing.T) {
+	files := []sftpCLIFile{{Source: "one"}, {Source: "two"}, {Source: "three"}, {Source: "four"}}
+	started := make(chan struct{}, len(files))
+	release := make(chan struct{})
+	var active atomic.Int32
+	var maximum atomic.Int32
+	finished := make(chan error, 1)
+	go func() {
+		finished <- runSFTPFileWorkers(t.Context(), files, 3, func(context.Context, sftpCLIFile) error {
+			current := active.Add(1)
+			for observed := maximum.Load(); current > observed && !maximum.CompareAndSwap(observed, current); observed = maximum.Load() {
+			}
+			started <- struct{}{}
+			<-release
+			active.Add(-1)
+			return nil
+		})
+	}()
+	for range 3 {
+		select {
+		case <-started:
+		case <-time.After(time.Second):
+			t.Fatal("three workers did not start")
+		}
+	}
+	select {
+	case <-started:
+		t.Fatal("a fourth file started before a worker was available")
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(release)
+	if err := <-finished; err != nil {
+		t.Fatal(err)
+	}
+	if maximum.Load() != 3 {
+		t.Fatalf("maximum active files = %d, want 3", maximum.Load())
+	}
+}
 
 func testSFTPEngine(server *httptest.Server) *engineAPI {
 	return &engineAPI{
@@ -23,12 +64,16 @@ func testSFTPEngine(server *httptest.Server) *engineAPI {
 func TestSFTPDownloadUsesRemotePathAndPublishesAtomically(t *testing.T) {
 	var createdRemotePath string
 	var checkpointOffset float64
+	var splitThreshold, splitJobs, chunkBytes float64
 	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		switch {
 		case request.Method == http.MethodPost && request.URL.Path == "/api/v1/sftp/transfers":
 			var body map[string]any
 			_ = json.NewDecoder(request.Body).Decode(&body)
 			createdRemotePath, _ = body["remotePath"].(string)
+			splitThreshold, _ = body["largeFileThresholdBytes"].(float64)
+			splitJobs, _ = body["largeFileParallelism"].(float64)
+			chunkBytes, _ = body["largeFileChunkBytes"].(float64)
 			writeTestJSON(response, http.StatusCreated, map[string]any{})
 		case request.Method == http.MethodPost && strings.HasSuffix(request.URL.Path, "/actions"):
 			writeTestJSON(response, http.StatusOK, map[string]any{})
@@ -54,7 +99,7 @@ func TestSFTPDownloadUsesRemotePathAndPublishesAtomically(t *testing.T) {
 	destination := filepath.Join(t.TempDir(), "file.txt")
 	err := sftpDownloadFile(context.Background(), testSFTPEngine(server), "server-a", "batch_12345678", sftpCLIFile{
 		Source: "/remote/file.txt", Destination: destination, Size: 3,
-	})
+	}, 50, 6, 512)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,8 +107,8 @@ func TestSFTPDownloadUsesRemotePathAndPublishesAtomically(t *testing.T) {
 	if err != nil || string(contents) != "new" {
 		t.Fatalf("downloaded = %q, %v", contents, err)
 	}
-	if createdRemotePath != "/remote/file.txt" || checkpointOffset != 3 {
-		t.Fatalf("job remotePath=%q checkpoint=%v", createdRemotePath, checkpointOffset)
+	if createdRemotePath != "/remote/file.txt" || checkpointOffset != 3 || splitThreshold != 50<<20 || splitJobs != 6 || chunkBytes != 512<<20 {
+		t.Fatalf("job remotePath=%q checkpoint=%v split=%v/%v chunk=%v", createdRemotePath, checkpointOffset, splitThreshold, splitJobs, chunkBytes)
 	}
 	matches, _ := filepath.Glob(filepath.Join(filepath.Dir(destination), ".sshc-sftp-*"))
 	if len(matches) != 0 {

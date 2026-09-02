@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -373,16 +374,13 @@ func executeSFTPGet(ctx context.Context, engine *engineAPI, plan sftpCLIPlan, ca
 	if err != nil {
 		return err
 	}
-	for _, file := range plan.Files {
-		if file.Exists && called.SkipExisting {
-			continue
-		}
+	files := transferableSFTPFiles(plan.Files, called.SkipExisting)
+	for _, file := range files {
 		fmt.Fprintf(stderr, "get  %s:%s -> %s\n", plan.Alias, file.Source, file.Destination)
-		if err := sftpDownloadFile(ctx, engine, plan.Alias, batchID, file); err != nil {
-			return err
-		}
 	}
-	return nil
+	return runSFTPFileWorkers(ctx, files, called.Jobs, func(workerContext context.Context, file sftpCLIFile) error {
+		return sftpDownloadFile(workerContext, engine, plan.Alias, batchID, file, called.SplitSizeMiB, called.SplitJobs, called.ChunkSizeMiB)
+	})
 }
 
 func executeSFTPPut(ctx context.Context, engine *engineAPI, plan sftpCLIPlan, called sftpInvocation, stderr io.Writer) error {
@@ -395,24 +393,79 @@ func executeSFTPPut(ctx context.Context, engine *engineAPI, plan sftpCLIPlan, ca
 	if err != nil {
 		return err
 	}
-	for _, file := range plan.Files {
-		if file.Exists && called.SkipExisting {
-			continue
-		}
+	files := transferableSFTPFiles(plan.Files, called.SkipExisting)
+	for _, file := range files {
 		fmt.Fprintf(stderr, "put  %s -> %s:%s\n", file.Source, plan.Alias, file.Destination)
-		if err := sftpUploadFile(ctx, engine, plan.Alias, batchID, file, called.Overwrite); err != nil {
-			return err
-		}
 	}
-	return nil
+	return runSFTPFileWorkers(ctx, files, called.Jobs, func(workerContext context.Context, file sftpCLIFile) error {
+		return sftpUploadFile(workerContext, engine, plan.Alias, batchID, file, called.Overwrite)
+	})
 }
 
-func sftpDownloadFile(ctx context.Context, engine *engineAPI, alias, batchID string, file sftpCLIFile) (returnErr error) {
+func transferableSFTPFiles(files []sftpCLIFile, skipExisting bool) []sftpCLIFile {
+	if !skipExisting {
+		return files
+	}
+	selected := make([]sftpCLIFile, 0, len(files))
+	for _, file := range files {
+		if !file.Exists {
+			selected = append(selected, file)
+		}
+	}
+	return selected
+}
+
+// runSFTPFileWorkers bounds one CLI invocation independently from the
+// engine-wide queue limit. The engine remains authoritative when browsers or
+// another CLI are transferring at the same time.
+func runSFTPFileWorkers(
+	ctx context.Context, files []sftpCLIFile, jobs int,
+	transfer func(context.Context, sftpCLIFile) error,
+) error {
+	if len(files) == 0 {
+		return nil
+	}
+	if jobs < 1 {
+		jobs = 1
+	}
+	workerContext, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
+	work := make(chan sftpCLIFile)
+	var workers sync.WaitGroup
+	for range min(jobs, len(files)) {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			for file := range work {
+				if err := transfer(workerContext, file); err != nil {
+					cancel(err)
+					return
+				}
+			}
+		}()
+	}
+	for _, file := range files {
+		select {
+		case work <- file:
+		case <-workerContext.Done():
+			close(work)
+			workers.Wait()
+			return context.Cause(workerContext)
+		}
+	}
+	close(work)
+	workers.Wait()
+	return context.Cause(workerContext)
+}
+
+func sftpDownloadFile(
+	ctx context.Context, engine *engineAPI, alias, batchID string, file sftpCLIFile, splitSizeMiB, splitJobs, chunkSizeMiB int,
+) (returnErr error) {
 	jobID, err := sftpIdentifier("get")
 	if err != nil {
 		return err
 	}
-	if err := sftpCreateJob(ctx, engine, jobID, batchID, alias, "download", file); err != nil {
+	if err := sftpCreateDownloadJob(ctx, engine, jobID, batchID, alias, file, splitSizeMiB, splitJobs, chunkSizeMiB); err != nil {
 		return err
 	}
 	defer func() {
@@ -424,7 +477,7 @@ func sftpDownloadFile(ctx context.Context, engine *engineAPI, alias, batchID str
 			_ = sftpJobAction(context.Background(), engine, jobID, action)
 		}
 	}()
-	if err := sftpJobAction(ctx, engine, jobID, "start"); err != nil {
+	if err := sftpStartJob(ctx, engine, jobID); err != nil {
 		return err
 	}
 	requestPath := "/api/v1/sftp/" + url.PathEscape(alias) + "/download?" + url.Values{"path": {file.Source}, "jobId": {jobID}}.Encode()
@@ -520,7 +573,7 @@ func sftpUploadFile(ctx context.Context, engine *engineAPI, alias, batchID strin
 			}
 		}
 	}()
-	if err := sftpJobAction(ctx, engine, jobID, "start"); err != nil {
+	if err := sftpStartJob(ctx, engine, jobID); err != nil {
 		return err
 	}
 	basePath := "/api/v1/sftp/" + url.PathEscape(alias) + "/uploads/" + url.PathEscape(jobID)
@@ -576,28 +629,61 @@ func sftpUploadFile(ctx context.Context, engine *engineAPI, alias, batchID strin
 	}, &completed)
 }
 
-func sftpCreateJob(ctx context.Context, engine *engineAPI, jobID, batchID, alias, direction string, file sftpCLIFile) error {
-	return sftpCreateJobWithOverwrite(ctx, engine, jobID, batchID, alias, direction, file, false)
-}
-
-func sftpCreateJobWithOverwrite(ctx context.Context, engine *engineAPI, jobID, batchID, alias, direction string, file sftpCLIFile, overwrite bool) error {
-	remotePath := file.Destination
-	if direction == "download" {
-		remotePath = file.Source
+func sftpCreateDownloadJob(
+	ctx context.Context, engine *engineAPI, jobID, batchID, alias string, file sftpCLIFile, splitSizeMiB, splitJobs, chunkSizeMiB int,
+) error {
+	request := sftpCreateJobRequest(jobID, batchID, alias, "download", file, false)
+	if splitSizeMiB > 0 {
+		request["largeFileThresholdBytes"] = int64(splitSizeMiB) << 20
 	}
-	request := map[string]any{
-		"id": jobID, "batchId": batchID, "batchName": path.Base(remotePath), "batchKind": "file",
-		"alias": alias, "sourceAlias": "", "sourcePath": "", "operation": "", "overwrite": overwrite,
-		"direction": direction, "kind": "file", "name": path.Base(remotePath),
-		"remotePath": remotePath, "totalBytes": file.Size, "lastModified": file.ModifiedUnix,
+	if splitJobs > 0 {
+		request["largeFileParallelism"] = splitJobs
+	}
+	if chunkSizeMiB > 0 {
+		request["largeFileChunkBytes"] = int64(chunkSizeMiB) << 20
 	}
 	var ignored map[string]any
 	return engine.sendJSON(ctx, http.MethodPost, "/api/v1/sftp/transfers", request, &ignored)
 }
 
+func sftpCreateJobWithOverwrite(ctx context.Context, engine *engineAPI, jobID, batchID, alias, direction string, file sftpCLIFile, overwrite bool) error {
+	request := sftpCreateJobRequest(jobID, batchID, alias, direction, file, overwrite)
+	var ignored map[string]any
+	return engine.sendJSON(ctx, http.MethodPost, "/api/v1/sftp/transfers", request, &ignored)
+}
+
+func sftpCreateJobRequest(jobID, batchID, alias, direction string, file sftpCLIFile, overwrite bool) map[string]any {
+	remotePath := file.Destination
+	if direction == "download" {
+		remotePath = file.Source
+	}
+	return map[string]any{
+		"id": jobID, "batchId": batchID, "batchName": path.Base(remotePath), "batchKind": "file",
+		"alias": alias, "sourceAlias": "", "sourcePath": "", "operation": "", "overwrite": overwrite,
+		"direction": direction, "kind": "file", "name": path.Base(remotePath),
+		"remotePath": remotePath, "totalBytes": file.Size, "lastModified": file.ModifiedUnix,
+	}
+}
+
 func sftpJobAction(ctx context.Context, engine *engineAPI, jobID, action string) error {
 	var ignored map[string]any
 	return engine.sendJSON(ctx, http.MethodPost, "/api/v1/sftp/transfers/"+url.PathEscape(jobID)+"/actions", map[string]string{"action": action}, &ignored)
+}
+
+func sftpStartJob(ctx context.Context, engine *engineAPI, jobID string) error {
+	for {
+		err := sftpJobAction(ctx, engine, jobID, "start")
+		if !sftpIsTransferLimit(err) {
+			return err
+		}
+		timer := time.NewTimer(250 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		case <-timer.C:
+		}
+	}
 }
 
 func sftpList(ctx context.Context, engine *engineAPI, alias, remotePath string) (sftpCLIListing, error) {
@@ -662,6 +748,11 @@ func localFileConflict(localPath string) (bool, error) {
 func sftpIsNotFound(err error) bool {
 	var problem engineProblem
 	return errors.As(err, &problem) && problem.Code == "sftp_not_found"
+}
+
+func sftpIsTransferLimit(err error) bool {
+	var problem engineProblem
+	return errors.As(err, &problem) && problem.Code == "sftp_transfer_limit"
 }
 
 func sftpIdentifier(prefix string) (string, error) {

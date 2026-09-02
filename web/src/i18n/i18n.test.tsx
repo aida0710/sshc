@@ -73,6 +73,7 @@ describe("the catalogue", () => {
         "section.sync",
         "section.terminal",
         "settings.heading",
+        "sftp.manager.largeFileChunkValue",
         "shell.language",
         "shell.languageEnglish",
         "shell.languageJapanese",

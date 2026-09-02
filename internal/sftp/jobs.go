@@ -8,10 +8,18 @@ import (
 )
 
 const (
-	DefaultTransferConcurrency = 2
-	MaxTransferConcurrency     = 8
-	maxRetainedTransferJobs    = 200
-	staleRunningTransferAfter  = 2 * time.Minute
+	DefaultTransferConcurrency  = 2
+	MaxTransferConcurrency      = 8
+	DefaultLargeFileThreshold   = int64(100 << 20)
+	MinLargeFileThreshold       = int64(16 << 20)
+	MaxLargeFileThreshold       = int64(1 << 30)
+	DefaultLargeFileParallelism = 4
+	MaxLargeFileParallelism     = 8
+	DefaultLargeFileChunkBytes  = int64(32 << 20)
+	MinLargeFileChunkBytes      = int64(8 << 20)
+	MaxLargeFileChunkBytes      = int64(4 << 30)
+	maxRetainedTransferJobs     = 200
+	staleRunningTransferAfter   = 2 * time.Minute
 
 	// 完了項目の自動消去は、押し忘れても消える程度に長く、履歴として頼れる
 	// ほどには短い範囲に収める。0 は自動消去なしである。
@@ -98,50 +106,56 @@ func AllowedTransferActions(job TransferJob) []TransferControlAction {
 }
 
 type TransferJob struct {
-	ID                string
-	BatchID           string
-	BatchName         string
-	BatchKind         TransferKind
-	Alias             string
-	SourceAlias       string
-	SourcePath        string
-	Operation         RemoteTransferOperation
-	Direction         TransferDirection
-	Kind              TransferKind
-	Name              string
-	RemotePath        string
-	TotalBytes        int64
-	TransferredBytes  int64
-	BytesPerSecond    float64
-	RemainingSeconds  int64
-	Status            TransferJobStatus
-	Attempt           int
-	Problem           string
-	LastModified      int64
-	ExpectedRevision  string
-	SourceFingerprint string
-	Overwrite         bool
-	DownloadRevision  string
-	CreatedAt         time.Time
-	UpdatedAt         time.Time
+	ID                      string
+	BatchID                 string
+	BatchName               string
+	BatchKind               TransferKind
+	Alias                   string
+	SourceAlias             string
+	SourcePath              string
+	Operation               RemoteTransferOperation
+	Direction               TransferDirection
+	Kind                    TransferKind
+	Name                    string
+	RemotePath              string
+	TotalBytes              int64
+	TransferredBytes        int64
+	BytesPerSecond          float64
+	RemainingSeconds        int64
+	Status                  TransferJobStatus
+	Attempt                 int
+	Problem                 string
+	LastModified            int64
+	ExpectedRevision        string
+	SourceFingerprint       string
+	Overwrite               bool
+	DownloadRevision        string
+	LargeFileThresholdBytes int64
+	LargeFileParallelism    int
+	LargeFileChunkBytes     int64
+	CreatedAt               time.Time
+	UpdatedAt               time.Time
 }
 
 type CreateTransferJob struct {
-	ID           string
-	BatchID      string
-	BatchName    string
-	BatchKind    TransferKind
-	Alias        string
-	SourceAlias  string
-	SourcePath   string
-	Operation    RemoteTransferOperation
-	Overwrite    bool
-	Direction    TransferDirection
-	Kind         TransferKind
-	Name         string
-	RemotePath   string
-	TotalBytes   int64
-	LastModified int64
+	ID                      string
+	BatchID                 string
+	BatchName               string
+	BatchKind               TransferKind
+	Alias                   string
+	SourceAlias             string
+	SourcePath              string
+	Operation               RemoteTransferOperation
+	Overwrite               bool
+	Direction               TransferDirection
+	Kind                    TransferKind
+	Name                    string
+	RemotePath              string
+	TotalBytes              int64
+	LastModified            int64
+	LargeFileThresholdBytes int64
+	LargeFileParallelism    int
+	LargeFileChunkBytes     int64
 }
 
 type UpdateTransferJob struct {
@@ -401,6 +415,9 @@ func (m *TransferManager) ConfigureJobs(maxConcurrent int, now func() time.Time)
 	m.jobsMutex.Lock()
 	defer m.jobsMutex.Unlock()
 	m.maxConcurrent = maxConcurrent
+	m.largeFileThreshold = DefaultLargeFileThreshold
+	m.largeFileParallelism = DefaultLargeFileParallelism
+	m.largeFileChunkBytes = DefaultLargeFileChunkBytes
 	m.now = now
 	if m.jobs == nil {
 		m.jobs = make(map[string]*transferJobRecord)
@@ -460,16 +477,45 @@ func (m *TransferManager) ProcessingStopped() bool {
 	return m.processingStopped
 }
 
+func (m *TransferManager) LargeFileThreshold() int64 {
+	m.jobsMutex.Lock()
+	defer m.jobsMutex.Unlock()
+	m.initializeJobsLocked()
+	return m.largeFileThreshold
+}
+
+func (m *TransferManager) LargeFileParallelism() int {
+	m.jobsMutex.Lock()
+	defer m.jobsMutex.Unlock()
+	m.initializeJobsLocked()
+	return m.largeFileParallelism
+}
+
+func (m *TransferManager) LargeFileChunkBytes() int64 {
+	m.jobsMutex.Lock()
+	defer m.jobsMutex.Unlock()
+	m.initializeJobsLocked()
+	return m.largeFileChunkBytes
+}
+
 // SetTransferSettings は、同時転送数、完了項目の自動消去時間、キュー処理の
 // 停止を差し替える。
 //
 // 転送は engine の資源であって browser のものではないため、値は engine 側に
 // 一つだけ置く。永続化は呼び出し側の責務である。
-func (m *TransferManager) SetTransferSettings(maxConcurrent int, clearCompletedAfter time.Duration, processingStopped bool) error {
+func (m *TransferManager) SetTransferSettings(
+	maxConcurrent int, clearCompletedAfter time.Duration, processingStopped bool,
+	largeFileThreshold int64, largeFileParallelism int, largeFileChunkBytes int64,
+) error {
 	if maxConcurrent < 1 || maxConcurrent > MaxTransferConcurrency {
 		return ErrInvalidTransfer
 	}
 	if clearCompletedAfter != 0 && (clearCompletedAfter < MinClearCompletedAfter || clearCompletedAfter > MaxClearCompletedAfter) {
+		return ErrInvalidTransfer
+	}
+	if largeFileThreshold < MinLargeFileThreshold || largeFileThreshold > MaxLargeFileThreshold ||
+		largeFileParallelism < 1 || largeFileParallelism > MaxLargeFileParallelism ||
+		largeFileChunkBytes < MinLargeFileChunkBytes || largeFileChunkBytes > MaxLargeFileChunkBytes {
 		return ErrInvalidTransfer
 	}
 	m.jobsMutex.Lock()
@@ -478,6 +524,9 @@ func (m *TransferManager) SetTransferSettings(maxConcurrent int, clearCompletedA
 	m.maxConcurrent = maxConcurrent
 	m.clearCompletedAfter = clearCompletedAfter
 	m.processingStopped = processingStopped
+	m.largeFileThreshold = largeFileThreshold
+	m.largeFileParallelism = largeFileParallelism
+	m.largeFileChunkBytes = largeFileChunkBytes
 	return nil
 }
 
@@ -556,6 +605,16 @@ func (m *TransferManager) CreateJob(input CreateTransferJob) (TransferJob, error
 		strings.TrimSpace(input.Alias) == "" || len(input.Alias) > 255 || input.TotalBytes < -1 ||
 		(input.Direction != TransferUpload && input.Direction != TransferDownload && input.Direction != TransferRemote) ||
 		(input.Kind != TransferFile && input.Kind != TransferFolder) || input.LastModified < 0 {
+		return TransferJob{}, ErrInvalidTransfer
+	}
+	if (input.LargeFileThresholdBytes != 0 &&
+		(input.LargeFileThresholdBytes < MinLargeFileThreshold || input.LargeFileThresholdBytes > MaxLargeFileThreshold)) ||
+		(input.LargeFileParallelism != 0 &&
+			(input.LargeFileParallelism < 1 || input.LargeFileParallelism > MaxLargeFileParallelism)) ||
+		(input.LargeFileChunkBytes != 0 &&
+			(input.LargeFileChunkBytes < MinLargeFileChunkBytes || input.LargeFileChunkBytes > MaxLargeFileChunkBytes)) ||
+		((input.Direction != TransferDownload || input.Kind != TransferFile) &&
+			(input.LargeFileThresholdBytes != 0 || input.LargeFileParallelism != 0 || input.LargeFileChunkBytes != 0)) {
 		return TransferJob{}, ErrInvalidTransfer
 	}
 	if err := validateAlias(input.Alias); err != nil {
@@ -689,7 +748,9 @@ func (m *TransferManager) CreateJob(input CreateTransferJob) (TransferJob, error
 		Operation: input.Operation, Direction: input.Direction,
 		Kind: input.Kind, Name: name, RemotePath: cleaned, TotalBytes: input.TotalBytes,
 		LastModified: input.LastModified, Overwrite: input.Overwrite,
-		Status: TransferQueued, Attempt: 1, CreatedAt: now, UpdatedAt: now,
+		LargeFileThresholdBytes: input.LargeFileThresholdBytes, LargeFileParallelism: input.LargeFileParallelism,
+		LargeFileChunkBytes: input.LargeFileChunkBytes,
+		Status:              TransferQueued, Attempt: 1, CreatedAt: now, UpdatedAt: now,
 		RemainingSeconds: -1,
 	}
 	m.jobs[input.ID] = &transferJobRecord{job: job, sampleAt: now}
@@ -1152,7 +1213,9 @@ func sameTransferIdentity(job TransferJob, input CreateTransferJob, cleaned, nam
 	return job.BatchID == input.BatchID && job.Alias == input.Alias && job.Direction == input.Direction &&
 		job.SourceAlias == input.SourceAlias && job.SourcePath == input.SourcePath && job.Operation == input.Operation &&
 		job.Kind == input.Kind && job.Name == name && job.RemotePath == cleaned && job.TotalBytes == input.TotalBytes &&
-		job.BatchName == batchName && job.BatchKind == batchKind && job.LastModified == input.LastModified && job.Overwrite == input.Overwrite
+		job.BatchName == batchName && job.BatchKind == batchKind && job.LastModified == input.LastModified && job.Overwrite == input.Overwrite &&
+		job.LargeFileThresholdBytes == input.LargeFileThresholdBytes && job.LargeFileParallelism == input.LargeFileParallelism &&
+		job.LargeFileChunkBytes == input.LargeFileChunkBytes
 }
 
 func terminalTransferStatus(status TransferJobStatus) bool {

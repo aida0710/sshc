@@ -152,8 +152,10 @@ func sftpProblem(c *echo.Context, err error) error {
 		return problem(c, http.StatusConflict, "sftp_transfer_limit")
 	case errors.Is(err, sshcSFTP.ErrAlreadyExists):
 		return problem(c, http.StatusConflict, "sftp_exists")
-	case errors.Is(err, sshcSFTP.ErrTextTooLarge), errors.Is(err, sshcSFTP.ErrTransferTooLarge):
+	case errors.Is(err, sshcSFTP.ErrTextTooLarge):
 		return problem(c, http.StatusRequestEntityTooLarge, "sftp_text_too_large")
+	case errors.Is(err, sshcSFTP.ErrTransferTooLarge):
+		return problem(c, http.StatusRequestEntityTooLarge, "sftp_transfer_too_large")
 	case errors.Is(err, sshcSFTP.ErrPreviewTooLarge):
 		return problem(c, http.StatusRequestEntityTooLarge, "sftp_preview_too_large")
 	case errors.Is(err, sshcSFTP.ErrPreviewType):
@@ -218,7 +220,10 @@ func describeTransferJob(job sshcSFTP.TransferJob) sftpTransferJobResponse {
 }
 
 type sftpTransferJobListResponse struct {
-	MaxConcurrent int `json:"maxConcurrent"`
+	MaxConcurrent           int   `json:"maxConcurrent"`
+	LargeFileThresholdBytes int64 `json:"largeFileThresholdBytes"`
+	LargeFileParallelism    int   `json:"largeFileParallelism"`
+	LargeFileChunkBytes     int64 `json:"largeFileChunkBytes"`
 	// 0 は自動消去なしである。
 	ClearCompletedAfterSeconds int `json:"clearCompletedAfterSeconds"`
 	// 停止中は待機の job を新しく開始しない。
@@ -227,9 +232,12 @@ type sftpTransferJobListResponse struct {
 }
 
 type sftpTransferSettingsRequest struct {
-	MaxConcurrent              int  `json:"maxConcurrent"`
-	ClearCompletedAfterSeconds int  `json:"clearCompletedAfterSeconds"`
-	ProcessingStopped          bool `json:"processingStopped"`
+	MaxConcurrent              int   `json:"maxConcurrent"`
+	ClearCompletedAfterSeconds int   `json:"clearCompletedAfterSeconds"`
+	ProcessingStopped          bool  `json:"processingStopped"`
+	LargeFileThresholdBytes    int64 `json:"largeFileThresholdBytes"`
+	LargeFileParallelism       int   `json:"largeFileParallelism"`
+	LargeFileChunkBytes        int64 `json:"largeFileChunkBytes"`
 }
 
 type sftpTransferQueueMoveRequest struct {
@@ -237,21 +245,24 @@ type sftpTransferQueueMoveRequest struct {
 }
 
 type sftpCreateTransferJobRequest struct {
-	ID           string                           `json:"id"`
-	BatchID      string                           `json:"batchId"`
-	BatchName    string                           `json:"batchName"`
-	BatchKind    sshcSFTP.TransferKind            `json:"batchKind"`
-	Alias        string                           `json:"alias"`
-	SourceAlias  string                           `json:"sourceAlias"`
-	SourcePath   string                           `json:"sourcePath"`
-	Operation    sshcSFTP.RemoteTransferOperation `json:"operation"`
-	Overwrite    bool                             `json:"overwrite"`
-	Direction    sshcSFTP.TransferDirection       `json:"direction"`
-	Kind         sshcSFTP.TransferKind            `json:"kind"`
-	Name         string                           `json:"name"`
-	RemotePath   string                           `json:"remotePath"`
-	TotalBytes   int64                            `json:"totalBytes"`
-	LastModified int64                            `json:"lastModified"`
+	ID                      string                           `json:"id"`
+	BatchID                 string                           `json:"batchId"`
+	BatchName               string                           `json:"batchName"`
+	BatchKind               sshcSFTP.TransferKind            `json:"batchKind"`
+	Alias                   string                           `json:"alias"`
+	SourceAlias             string                           `json:"sourceAlias"`
+	SourcePath              string                           `json:"sourcePath"`
+	Operation               sshcSFTP.RemoteTransferOperation `json:"operation"`
+	Overwrite               bool                             `json:"overwrite"`
+	Direction               sshcSFTP.TransferDirection       `json:"direction"`
+	Kind                    sshcSFTP.TransferKind            `json:"kind"`
+	Name                    string                           `json:"name"`
+	RemotePath              string                           `json:"remotePath"`
+	TotalBytes              int64                            `json:"totalBytes"`
+	LastModified            int64                            `json:"lastModified"`
+	LargeFileThresholdBytes int64                            `json:"largeFileThresholdBytes,omitempty"`
+	LargeFileParallelism    int                              `json:"largeFileParallelism,omitempty"`
+	LargeFileChunkBytes     int64                            `json:"largeFileChunkBytes,omitempty"`
 }
 
 type sftpTransferJobActionRequest struct {
@@ -279,6 +290,9 @@ func (h SFTPHandlers) describeTransferQueue() sftpTransferJobListResponse {
 	}
 	return sftpTransferJobListResponse{
 		MaxConcurrent:              h.Transfers.MaxConcurrent(),
+		LargeFileThresholdBytes:    h.Transfers.LargeFileThreshold(),
+		LargeFileParallelism:       h.Transfers.LargeFileParallelism(),
+		LargeFileChunkBytes:        h.Transfers.LargeFileChunkBytes(),
 		ClearCompletedAfterSeconds: int(h.Transfers.ClearCompletedAfter() / time.Second),
 		ProcessingStopped:          h.Transfers.ProcessingStopped(),
 		Jobs:                       described,
@@ -293,7 +307,10 @@ func (h SFTPHandlers) UpdateTransferSettings(c *echo.Context) error {
 	if err := decodeJSON(c, &body); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
-	if err := h.Transfers.SetTransferSettings(body.MaxConcurrent, time.Duration(body.ClearCompletedAfterSeconds)*time.Second, body.ProcessingStopped); err != nil {
+	if err := h.Transfers.SetTransferSettings(
+		body.MaxConcurrent, time.Duration(body.ClearCompletedAfterSeconds)*time.Second, body.ProcessingStopped,
+		body.LargeFileThresholdBytes, body.LargeFileParallelism, body.LargeFileChunkBytes,
+	); err != nil {
 		return sftpProblem(c, err)
 	}
 	if h.Config != nil {
@@ -301,6 +318,9 @@ func (h SFTPHandlers) UpdateTransferSettings(c *echo.Context) error {
 			MaxConcurrent:              body.MaxConcurrent,
 			ClearCompletedAfterSeconds: body.ClearCompletedAfterSeconds,
 			ProcessingStopped:          body.ProcessingStopped,
+			LargeFileThresholdBytes:    body.LargeFileThresholdBytes,
+			LargeFileParallelism:       body.LargeFileParallelism,
+			LargeFileChunkBytes:        body.LargeFileChunkBytes,
 		}); err != nil {
 			return serviceProblem(c, err)
 		}
@@ -331,6 +351,8 @@ func (h SFTPHandlers) CreateTransfer(c *echo.Context) error {
 		Overwrite: body.Overwrite,
 		Direction: body.Direction, Kind: body.Kind,
 		Name: body.Name, RemotePath: body.RemotePath, TotalBytes: body.TotalBytes, LastModified: body.LastModified,
+		LargeFileThresholdBytes: body.LargeFileThresholdBytes, LargeFileParallelism: body.LargeFileParallelism,
+		LargeFileChunkBytes: body.LargeFileChunkBytes,
 	})
 	if err != nil {
 		return sftpProblem(c, err)

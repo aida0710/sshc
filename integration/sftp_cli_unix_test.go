@@ -93,7 +93,8 @@ func TestSFTPCLIRoundTripsAgainstRealOpenSSH(t *testing.T) {
 		t.Fatal(err)
 	}
 	pattern := []byte("sshc-sftp-cli-e2e\x00")
-	large := bytes.Repeat(pattern, (1<<20)/len(pattern)+2)
+	large := bytes.Repeat(pattern, (16<<20)/len(pattern)+2)
+	large = large[:16<<20]
 	want := map[string][]byte{
 		"small.txt":          []byte("put and get through OpenSSH\n"),
 		"nested/payload.bin": large,
@@ -105,7 +106,7 @@ func TestSFTPCLIRoundTripsAgainstRealOpenSSH(t *testing.T) {
 		}
 	}
 	remoteRoot := fmt.Sprintf("/tmp/sshc-sftp-cli-%d", time.Now().UnixNano())
-	put := start(t, home, "sftp", "put", alias, source, remoteRoot, "--recursive", "--json")
+	put := start(t, home, "sftp", "put", alias, source, remoteRoot, "--recursive", "--jobs", "3", "--json")
 	if code := put.wait(t, 90*time.Second); code != 0 {
 		t.Fatalf("sftp put exit = %d\nstdout: %s\nstderr: %s", code, put.Stdout.String(), put.Stderr.String())
 	}
@@ -114,7 +115,7 @@ func TestSFTPCLIRoundTripsAgainstRealOpenSSH(t *testing.T) {
 	}
 
 	destination := filepath.Join(home, "download")
-	get := start(t, home, "sftp", "get", alias, remoteRoot, destination, "--recursive", "--json")
+	get := start(t, home, "sftp", "get", alias, remoteRoot, destination, "--recursive", "--jobs", "3", "--split-size", "16", "--split-jobs", "4", "--chunk-size", "8", "--json")
 	if code := get.wait(t, 90*time.Second); code != 0 {
 		t.Fatalf("sftp get exit = %d\nstdout: %s\nstderr: %s", code, get.Stdout.String(), get.Stderr.String())
 	}
