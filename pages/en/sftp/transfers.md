@@ -21,6 +21,10 @@ Uploads use a temporary file in the target directory and atomically rename it on
 
 File downloads resume through HTTP Range when the browser retains the downloaded prefix and its revision still matches the remote file. Folder downloads stream a ZIP and cannot resume from the middle: after a pause, failure, or reload they restart at byte zero. Android hands the completed ZIP to the system file picker.
 
+In the expanded Transfer Manager, choose from one to eight concurrent file jobs. Large downloads initially divide files of at least 100 MiB into 32 MiB ranges and process them over up to four independent SFTP connections. The threshold can be set from 16 to 1024 MiB, stream count from one to eight, and chunk size from 8 to 4096 MiB; one stream disables splitting. The engine persists these settings and shares them with the Web UI and CLI. CLI invocations can override the defaults for that run with `--split-size`, `--split-jobs`, and `--chunk-size`.
+
+Regular files up to 512 GiB can be downloaded. To guarantee that retries use the same remote contents, the engine first prepares the entire file in its private spool, so keep roughly the file size available as temporary free space. Folder downloads packaged as ZIP use a separate limit.
+
 The engine Transfer Manager owns the queue and atomically persists it in `~/.ssh/sshc/transfers.json`. Registration, ordering, progress, concurrency, overwrite approval, and recovery checkpoints survive browser or WebView reloads and are restored after an engine restart. Views reconcile with the engine every two seconds, so multiple open views converge on the same queue.
 
 The browser or WebView still performs local file I/O because only it can access files on the device. Closing it therefore stops upload or download bytes, but the job is not stranded in browser-only storage. After a reload, an upload appears as waiting to resume and does not send data until the original local file is selected again.

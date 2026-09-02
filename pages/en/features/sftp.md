@@ -36,9 +36,9 @@ Narrow panes emphasize the filename and place permissions, size, and modified ti
 
 ## Transfer Manager
 
-The Transfer Manager is docked below the file list. Files and folders share one queue, with two concurrent transfers by default. Its compact state shows the active count, aggregate progress, and speed; expand it for per-file progress, speed, remaining time, and controls. Its action menu can pause, resume or cancel all transfers, and failed files in a batch can be retried independently.
+The Transfer Manager is docked below the file list. Files and folders share one queue, with two concurrent transfers by default and a configurable limit from one to eight. Its compact state shows the active count, aggregate progress, and speed; expand it for per-file progress, speed, remaining time, and controls. Its action menu can pause, resume or cancel all transfers, and failed files in a batch can be retried independently.
 
-Large uploads use a remote temporary file and an atomic rename after completion. After a disconnect, they can resume from the transferred remote size. File downloads use HTTP Range and resume when the retained local prefix still matches the remote revision.
+Large uploads use a remote temporary file and an atomic rename after completion. After a disconnect, they can resume from the transferred remote size. File downloads support files up to 512 GiB and use HTTP Range to resume when the retained local prefix still matches the remote revision. Initially, files of at least 100 MiB are divided into 32 MiB ranges and fetched over up to four independent SFTP connections. The expanded Transfer Manager lets you change the split threshold, stream count, and chunk size from 8 to 4096 MiB; one stream disables splitting. The engine needs temporary free space roughly equal to the downloaded file so it can preserve a safe resumable snapshot.
 
 The engine Transfer Manager owns the queue and persists it in `~/.ssh/sshc/transfers.json`. Queued, paused, and recoverable jobs are restored after an engine restart. Remote-to-remote transfers run entirely in the engine and continue even when the SFTP view or browser is closed.
 
