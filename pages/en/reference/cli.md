@@ -40,7 +40,7 @@ sshc ssh <alias> --non-interactive -- <command...>
 sshc info <alias> --json
 ```
 
-The Homebrew formula installs completions for bash, zsh, and fish. For other installation methods, add the matching command below to your shell startup file. Completion covers subcommands, options, enumerated values, and connection aliases for `sshc ssh`, `sshc info`, and `sshc terminal create ssh`. Alias candidates are read from the current `~/.ssh/config` and reachable `Include` files whenever you press Tab. An alias containing characters sshc refuses to launch or evaluate (shell metacharacters, whitespace, a leading `-`) is left out of both `sshc ssh --list` and completion, and the reason is reported on stderr.
+The Homebrew formula installs completions for bash, zsh, and fish. For other installation methods, add the matching command below to your shell startup file. Completion covers subcommands, options, enumerated values, and connection aliases for `sshc ssh`, `sshc info`, `sshc terminal create ssh`, and `sshc sftp`. Alias candidates are read from the current `~/.ssh/config` and reachable `Include` files whenever you press Tab. An alias containing characters sshc refuses to launch or evaluate (shell metacharacters, whitespace, a leading `-`) is left out of both `sshc ssh --list` and completion, and the reason is reported on stderr.
 
 Command parsing, per-command help, and bash, zsh, and fish completion are built from the same command definition. Names and choices offered by completion therefore match `sshc help` from the installed version.
 
@@ -73,6 +73,19 @@ sshc sync pull [--force] [--json]
 sshc sync now [--json]
 sshc sync auto on|off [--json]
 ```
+
+## SFTP transfers
+
+Transfers use the running engine and the same OpenSSH configuration, host-key checks, and Vault credentials as the Web UI. Specify remote paths as absolute POSIX paths such as `/var/log/app.log`.
+
+```sh
+sshc sftp get bastion /var/log/app.log ./app.log
+sshc sftp put bastion ./release.tar.gz /tmp/release.tar.gz
+sshc sftp get bastion /srv/data ./data --recursive
+sshc sftp put bastion ./public /var/www/public --recursive
+```
+
+Existing files are never overwritten implicitly. `--overwrite` shows one confirmation before replacing them; add `--yes` only when automation must skip that confirmation. Use `--skip-existing` to preserve existing files or `--dry-run` to inspect the plan without changing anything. With `--json`, stdout contains one JSON result while progress remains on stderr. Pressing `Ctrl+C` also cancels the remote temporary upload.
 
 ## Serial / Telnet
 

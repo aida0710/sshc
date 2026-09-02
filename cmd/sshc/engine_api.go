@@ -294,6 +294,43 @@ func (engine *engineAPI) doAPIWithAction(
 	return nil
 }
 
+// doRaw sends or receives a streaming API body. Successful callers own the
+// response body; failures are reduced to the same sanitized engineProblem used
+// by JSON commands so file contents and request URLs never reach diagnostics.
+func (engine *engineAPI) doRaw(
+	ctx context.Context, method, path, contentType string, body io.Reader,
+) (*http.Response, error) {
+	request, err := http.NewRequestWithContext(ctx, method, engine.origin+path, body)
+	if err != nil {
+		return nil, errEngineInvalidResponse
+	}
+	request.AddCookie(&engine.cookie)
+	request.Header.Set(httpserver.CSRFHeader, engine.csrf)
+	request.Header.Set("Sec-Fetch-Site", "same-origin")
+	mutation := method != http.MethodGet && method != http.MethodHead
+	if mutation {
+		request.Header.Set("Origin", engine.origin)
+	}
+	if contentType != "" {
+		request.Header.Set("Content-Type", contentType)
+	}
+	// A file transfer may legitimately take longer than the JSON command
+	// timeout. Its context (including Ctrl+C) owns cancellation instead.
+	client := *engine.client
+	client.Timeout = 0
+	response, err := client.Do(request)
+	if err != nil {
+		if response != nil {
+			discardEngineResponse(response)
+		}
+		return nil, transportProblem(err, mutation)
+	}
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		return nil, decodeEngineProblem(response)
+	}
+	return response, nil
+}
+
 func (engine *engineAPI) issueAction(
 	ctx context.Context, kind, target string,
 ) (api.IssueActionResponse, error) {

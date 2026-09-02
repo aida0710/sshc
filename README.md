@@ -58,6 +58,8 @@ sshc ssh <接続先> --non-interactive -- <コマンド>
 sshc info <接続先> --json    # engineなしで実効設定を表示
 sshc status --json           # engineの状態
 sshc sync                    # 同期状態
+sshc sftp get <接続先> /remote/file ./local-file
+sshc sftp put <接続先> ./local-file /remote/file
 sshc help                    # 全command
 ```
 
@@ -69,7 +71,7 @@ sshc help                    # 全command
 - SSHとlocal shellを最大4 paneに分割するWorkspace
 - host、file、Snippet、設定を横断するCommand Palette
 - S3互換storageへの暗号化snapshot同期
-- SSH、Serial、Telnet、同期、Terminal操作のCLI
+- SSH、SFTP、Serial、Telnet、同期、Terminal操作のCLI
 
 機能と安全上の境界は[利用者向けドキュメント](https://aida0710.github.io/sshc/)へ集約しています。内部設計は[docs/design.md](docs/design.md)を参照してください。
 

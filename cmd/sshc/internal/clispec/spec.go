@@ -71,6 +71,24 @@ Print the resolved SSH target without connecting.
 		{Name: "rename", Help: "usage:\n  sshc terminal rename <session-id> <title> [--json]\n\nSet the title of a terminal owned by the running engine.\n"},
 		{Name: "close", Help: "usage:\n  sshc terminal close <session-id> [--json]\n\nClose a terminal owned by the running engine.\n"},
 	}},
+	{Name: "sftp", Route: "sftp", Help: `usage:
+  sshc sftp get <alias> <remote-path> <local-path> [options]
+  sshc sftp put <alias> <local-path> <remote-path> [options]
+
+Transfer files through the running engine and its SSH/Vault configuration.
+Remote paths must be absolute POSIX paths.
+
+Options:
+  -r, --recursive   copy directories recursively
+  --overwrite       replace existing destination files after confirmation
+  --skip-existing   leave existing destination files unchanged
+  --dry-run         inspect the transfer plan without changing files
+  --json            print one machine-readable result on stdout
+  -y, --yes         skip the --overwrite confirmation
+`, Actions: []Action{
+		{Name: "get", Help: "usage:\n  sshc sftp get <alias> <remote-path> <local-path> [options]\n\nDownload a file or, with --recursive, a directory. Existing files require\n--overwrite and confirmation, or --skip-existing.\n"},
+		{Name: "put", Help: "usage:\n  sshc sftp put <alias> <local-path> <remote-path> [options]\n\nUpload a file or, with --recursive, a directory. Existing files require\n--overwrite and confirmation, or --skip-existing.\n"},
+	}},
 	{Name: "serial", Route: "serial", Help: `usage:
   sshc serial [--json]
   sshc serial <device> [options]
@@ -124,6 +142,7 @@ var Values = map[string][]string{
 	"wait-states":       {"connecting", "connected", "reconnecting", "exited", "agent-working", "agent-attention", "agent-ready", "agent-ended"},
 	"serial-options":    {"--json", "--non-interactive", "--require-output", "--encoding", "--baud", "--data-bits", "--parity", "--stop-bits", "--flow", "--dtr", "--rts", "--break", "--expect", "--read-for", "--timeout", "--settle", "--max-bytes", "--line-ending", "--script", "--help"},
 	"telnet-options":    {"--non-interactive", "--require-output", "--encoding", "--connect-timeout", "--terminal-type", "--expect", "--read-for", "--timeout", "--settle", "--max-bytes", "--line-ending", "--script", "--json", "--help"},
+	"sftp-options":      {"-r", "--recursive", "--overwrite", "--skip-existing", "--dry-run", "--json", "-y", "--yes", "--help"},
 }
 
 const GlobalHelp = `usage:
@@ -158,6 +177,10 @@ const GlobalHelp = `usage:
   sshc terminal rename <session-id> <title> [--json]
   sshc terminal close <session-id> [--json]
                        inspect and control terminals owned by the running engine
+  sshc sftp get <alias> <remote-path> <local-path> [options]
+  sshc sftp put <alias> <local-path> <remote-path> [options]
+                       transfer files through the running engine
+                       options: -r --overwrite --skip-existing --dry-run --json -y
   sshc serial [--json]
                        list serial devices
   sshc serial <device> [options]

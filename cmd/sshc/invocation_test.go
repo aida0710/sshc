@@ -515,3 +515,41 @@ func TestServiceIsReservedAndRequiresOneKnownAction(t *testing.T) {
 		}
 	}
 }
+
+func TestSFTPParsesTransfersAndSafetyOptions(t *testing.T) {
+	called, err := parseInvocation([]string{
+		"sshc", "sftp", "get", "server-a", "/srv/data", "./data",
+		"--recursive", "--overwrite", "--yes", "--dry-run", "--json",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if called.Kind != invocationSFTP || called.SFTP == nil {
+		t.Fatalf("called = %#v", called)
+	}
+	got := *called.SFTP
+	if got.Action != sftpGet || got.Alias != "server-a" || got.Source != "/srv/data" || got.Destination != "./data" ||
+		!got.Recursive || !got.Overwrite || !got.Yes || !got.DryRun || !got.JSON {
+		t.Fatalf("sftp invocation = %#v", got)
+	}
+
+	put, err := parseInvocation([]string{"sshc", "sftp", "put", "server-a", "local.txt", "/tmp/local.txt", "--skip-existing"})
+	if err != nil || put.SFTP == nil || put.SFTP.Action != sftpPut || !put.SFTP.SkipExisting {
+		t.Fatalf("put = %#v, %v", put, err)
+	}
+}
+
+func TestSFTPRejectsAmbiguousOrUnsafeFlagCombinations(t *testing.T) {
+	for _, argv := range [][]string{
+		{"sshc", "sftp"},
+		{"sshc", "sftp", "copy", "server-a", "a", "b"},
+		{"sshc", "sftp", "get", "server-a", "/a"},
+		{"sshc", "sftp", "get", "server-a", "/a", "b", "--overwrite", "--skip-existing"},
+		{"sshc", "sftp", "put", "server-a", "a", "/b", "--yes"},
+		{"sshc", "sftp", "put", "server-a", "a", "/b", "--mystery"},
+	} {
+		if _, err := parseInvocation(argv); err == nil {
+			t.Errorf("parseInvocation(%q) accepted invalid arguments", argv)
+		}
+	}
+}

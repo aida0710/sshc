@@ -13,12 +13,14 @@ func renderCompletion(template string) string {
 		"{{HELP_TOPICS}}", strings.Join(grammar.helpTopics, " "),
 		"{{SYNC_ACTIONS}}", strings.Join(grammar.syncActions, " "),
 		"{{TERMINAL_ACTIONS}}", strings.Join(grammar.terminalActions, " "),
+		"{{SFTP_ACTIONS}}", strings.Join(grammar.sftpActions, " "),
 		"{{SERVICE_ACTIONS}}", strings.Join(grammar.serviceActions, " "),
 		"{{VAULT_ACTIONS}}", strings.Join(grammar.vaultActions, " "),
 		"{{ENCODINGS}}", strings.Join(grammar.encodings, " "),
 		"{{WAIT_STATES}}", strings.Join(grammar.waitStates, " "),
 		"{{SERIAL_OPTIONS}}", strings.Join(grammar.serialOptions, " "),
 		"{{TELNET_OPTIONS}}", strings.Join(grammar.telnetOptions, " "),
+		"{{SFTP_OPTIONS}}", strings.Join(grammar.sftpOptions, " "),
 	).Replace(template)
 }
 
@@ -125,6 +127,18 @@ _sshc_completion() {
         esac
       fi
       ;;
+    sftp)
+      if (( COMP_CWORD == 2 )); then
+        _sshc_complete_words "{{SFTP_ACTIONS}} --help"
+      elif (( COMP_CWORD == 3 )); then
+        _sshc_complete_aliases "--help"
+	  elif [[ "${COMP_WORDS[2]}" == "put" && "$COMP_CWORD" -eq 4 || "${COMP_WORDS[2]}" == "get" && "$COMP_CWORD" -eq 5 ]]; then
+		COMPREPLY=()
+		while IFS= read -r candidate; do COMPREPLY+=("$candidate"); done < <(compgen -f -- "$current")
+      else
+        _sshc_complete_words "{{SFTP_OPTIONS}}"
+      fi
+      ;;
     serial)
       _sshc_complete_words "{{SERIAL_OPTIONS}}"
       ;;
@@ -154,6 +168,8 @@ _sshc_completion() {
         _sshc_complete_words "{{SYNC_ACTIONS}}"
       elif [[ "${COMP_WORDS[2]}" == "terminal" ]]; then
         _sshc_complete_words "{{TERMINAL_ACTIONS}}"
+	  elif [[ "${COMP_WORDS[2]}" == "sftp" ]]; then
+		_sshc_complete_words "{{SFTP_ACTIONS}}"
       elif [[ "${COMP_WORDS[2]}" == "service" ]]; then
         _sshc_complete_words "{{SERVICE_ACTIONS}}"
       elif [[ "${COMP_WORDS[2]}" == "vault" ]]; then
@@ -247,6 +263,17 @@ _sshc() {
         esac
       fi
       ;;
+    sftp)
+      if (( CURRENT == 3 )); then
+        _sshc_values '{{SFTP_ACTIONS}} --help'
+      elif (( CURRENT == 4 )); then
+        _sshc_aliases
+	  elif [[ "${words[3]}" == 'put' && "$CURRENT" -eq 5 || "${words[3]}" == 'get' && "$CURRENT" -eq 6 ]]; then
+		_files
+      else
+		_sshc_values '{{SFTP_OPTIONS}}'
+      fi
+      ;;
     serial) _sshc_values '{{SERIAL_OPTIONS}}' ;;
     telnet) _sshc_values '{{TELNET_OPTIONS}}' ;;
     status) _sshc_values '--json --help' ;;
@@ -266,6 +293,7 @@ _sshc() {
         case "${words[3]}" in
           sync) _sshc_values '{{SYNC_ACTIONS}}' ;;
           terminal) _sshc_values '{{TERMINAL_ACTIONS}}' ;;
+		  sftp) _sshc_values '{{SFTP_ACTIONS}}' ;;
           service) _sshc_values '{{SERVICE_ACTIONS}}' ;;
           vault) _sshc_values '{{VAULT_ACTIONS}}' ;;
         esac
@@ -321,6 +349,14 @@ function __sshc_sync_json
     __sshc_action sync auto; and __sshc_min_words 4
 end
 
+function __sshc_sftp_local_path
+	set -l words (commandline -opc)
+	if test (count $words) -eq 4; and test "$words[2]" = sftp; and test "$words[3]" = put
+		return 0
+	end
+	test (count $words) -eq 5; and test "$words[2]" = sftp; and test "$words[3]" = get
+end
+
 function __sshc_terminal_options
     set -l words (commandline -opc)
     if test (count $words) -lt 3; or test "$words[2]" != terminal
@@ -359,6 +395,9 @@ complete -c sshc -f -n '__sshc_prefix sync' -a '{{SYNC_ACTIONS}}'
 complete -c sshc -f -n '__sshc_prefix sync auto' -a 'on off'
 complete -c sshc -f -n '__sshc_prefix sync setup; or __sshc_prefix sync push; or __sshc_prefix sync pull; or __sshc_prefix sync now; or __sshc_prefix sync auto' -a '--help'
 complete -c sshc -f -n '__sshc_prefix terminal' -a '{{TERMINAL_ACTIONS}}'
+complete -c sshc -f -n '__sshc_prefix sftp' -a '{{SFTP_ACTIONS}}'
+complete -c sshc -f -n '__sshc_prefix sftp get; or __sshc_prefix sftp put' -a '(command sshc ssh --list 2>/dev/null)'
+complete -c sshc -F -n '__sshc_sftp_local_path'
 complete -c sshc -f -n '__sshc_prefix service' -a '{{SERVICE_ACTIONS}} --help'
 complete -c sshc -f -n '__sshc_prefix vault' -a '{{VAULT_ACTIONS}} --help'
 complete -c sshc -f -n '__sshc_prefix service install; or __sshc_prefix service disable' -a '-y --yes --help'
@@ -367,6 +406,7 @@ complete -c sshc -f -n '__sshc_prefix vault status; or __sshc_prefix vault creat
 complete -c sshc -f -n '__sshc_prefix help' -a '{{HELP_TOPICS}}'
 complete -c sshc -f -n '__sshc_prefix help sync' -a '{{SYNC_ACTIONS}}'
 complete -c sshc -f -n '__sshc_prefix help terminal' -a '{{TERMINAL_ACTIONS}}'
+complete -c sshc -f -n '__sshc_prefix help sftp' -a '{{SFTP_ACTIONS}}'
 complete -c sshc -f -n '__sshc_prefix help service' -a '{{SERVICE_ACTIONS}}'
 complete -c sshc -f -n '__sshc_prefix help vault' -a '{{VAULT_ACTIONS}}'
 
@@ -374,6 +414,7 @@ complete -c sshc -f -n '__sshc_command engine' -a '--port --replace --help'
 complete -c sshc -f -n '__sshc_command info; and __sshc_min_words 3' -a '--json'
 complete -c sshc -f -n '__sshc_command status' -a '--json --help'
 complete -c sshc -f -n '__sshc_command update' -a '-y --yes --help'
+complete -c sshc -f -n '__sshc_command sftp' -a '{{SFTP_OPTIONS}}'
 complete -c sshc -f -n '__sshc_action sync push; or __sshc_action sync pull' -a '--force'
 complete -c sshc -f -n '__sshc_sync_json' -a '--json'
 complete -c sshc -f -n '__sshc_terminal_options' -a '--json'
