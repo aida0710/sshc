@@ -133,9 +133,12 @@ type GroupMetadata struct {
 // engine 節とは別に置く。Settings 画面の engine 保存は節をまるごと
 // 置き換えるので、同居させれば転送の設定はそのたびに消える。
 type FileTransferSettings struct {
-	MaxConcurrent              int  `json:"maxConcurrent,omitempty"`
-	ClearCompletedAfterSeconds int  `json:"clearCompletedAfterSeconds,omitempty"`
-	ProcessingStopped          bool `json:"processingStopped,omitempty"`
+	MaxConcurrent              int   `json:"maxConcurrent,omitempty"`
+	ClearCompletedAfterSeconds int   `json:"clearCompletedAfterSeconds,omitempty"`
+	ProcessingStopped          bool  `json:"processingStopped,omitempty"`
+	LargeFileThresholdBytes    int64 `json:"largeFileThresholdBytes,omitempty"`
+	LargeFileParallelism       int   `json:"largeFileParallelism,omitempty"`
+	LargeFileChunkBytes        int64 `json:"largeFileChunkBytes,omitempty"`
 }
 
 // EmbeddedTerminal は、埋め込みターミナルの設定である。

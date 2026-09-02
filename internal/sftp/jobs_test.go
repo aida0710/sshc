@@ -131,6 +131,32 @@ func TestTransferJobCreateIsIdempotentAndRejectsChangedIdentity(t *testing.T) {
 	}
 }
 
+func TestTransferJobValidatesDownloadSplitOverrides(t *testing.T) {
+	manager := sftp.NewTransferManager(nil)
+	base := sftp.CreateTransferJob{
+		ID: "transfer_split01", BatchID: "batch_split001", Alias: "edge", Direction: sftp.TransferDownload,
+		Kind: sftp.TransferFile, Name: "large.bin", RemotePath: "/large.bin", TotalBytes: 1 << 20,
+		LargeFileThresholdBytes: 50 << 20, LargeFileParallelism: 6, LargeFileChunkBytes: 512 << 20,
+	}
+	created, err := manager.CreateJob(base)
+	if err != nil || created.LargeFileThresholdBytes != 50<<20 || created.LargeFileParallelism != 6 || created.LargeFileChunkBytes != 512<<20 {
+		t.Fatalf("created split override = %+v, %v", created, err)
+	}
+	for index, mutate := range []func(*sftp.CreateTransferJob){
+		func(input *sftp.CreateTransferJob) { input.LargeFileThresholdBytes = sftp.MinLargeFileThreshold - 1 },
+		func(input *sftp.CreateTransferJob) { input.LargeFileParallelism = 9 },
+		func(input *sftp.CreateTransferJob) { input.LargeFileChunkBytes = sftp.MinLargeFileChunkBytes - 1 },
+		func(input *sftp.CreateTransferJob) { input.Direction = sftp.TransferUpload },
+	} {
+		invalid := base
+		invalid.ID = fmt.Sprintf("transfer_bad_%02d", index)
+		mutate(&invalid)
+		if _, err := manager.CreateJob(invalid); !errors.Is(err, sftp.ErrInvalidTransfer) {
+			t.Errorf("invalid split override %d = %v", index, err)
+		}
+	}
+}
+
 func TestTransferLedgerOwnsBatchMetadataAndClearsOnlyFinishedJobs(t *testing.T) {
 	manager := sftp.NewTransferManager(nil)
 	completed, err := manager.CreateJob(sftp.CreateTransferJob{
@@ -218,20 +244,29 @@ func TestTransferSettingsBoundConcurrencyAndExpireFinishedJobs(t *testing.T) {
 	for _, invalid := range []struct {
 		concurrency int
 		clearAfter  time.Duration
+		threshold   int64
+		parallelism int
+		chunkBytes  int64
 	}{
-		{concurrency: 0, clearAfter: 0},
-		{concurrency: sftp.MaxTransferConcurrency + 1, clearAfter: 0},
-		{concurrency: 2, clearAfter: time.Second},
-		{concurrency: 2, clearAfter: sftp.MaxClearCompletedAfter + time.Second},
+		{concurrency: 0, threshold: sftp.DefaultLargeFileThreshold, parallelism: sftp.DefaultLargeFileParallelism, chunkBytes: sftp.DefaultLargeFileChunkBytes},
+		{concurrency: sftp.MaxTransferConcurrency + 1, threshold: sftp.DefaultLargeFileThreshold, parallelism: sftp.DefaultLargeFileParallelism, chunkBytes: sftp.DefaultLargeFileChunkBytes},
+		{concurrency: 2, clearAfter: time.Second, threshold: sftp.DefaultLargeFileThreshold, parallelism: sftp.DefaultLargeFileParallelism, chunkBytes: sftp.DefaultLargeFileChunkBytes},
+		{concurrency: 2, clearAfter: sftp.MaxClearCompletedAfter + time.Second, threshold: sftp.DefaultLargeFileThreshold, parallelism: sftp.DefaultLargeFileParallelism, chunkBytes: sftp.DefaultLargeFileChunkBytes},
+		{concurrency: 2, threshold: sftp.MinLargeFileThreshold - 1, parallelism: sftp.DefaultLargeFileParallelism, chunkBytes: sftp.DefaultLargeFileChunkBytes},
+		{concurrency: 2, threshold: sftp.MaxLargeFileThreshold + 1, parallelism: sftp.DefaultLargeFileParallelism, chunkBytes: sftp.DefaultLargeFileChunkBytes},
+		{concurrency: 2, threshold: sftp.DefaultLargeFileThreshold, parallelism: 0, chunkBytes: sftp.DefaultLargeFileChunkBytes},
+		{concurrency: 2, threshold: sftp.DefaultLargeFileThreshold, parallelism: sftp.MaxLargeFileParallelism + 1, chunkBytes: sftp.DefaultLargeFileChunkBytes},
+		{concurrency: 2, threshold: sftp.DefaultLargeFileThreshold, parallelism: sftp.DefaultLargeFileParallelism, chunkBytes: sftp.MinLargeFileChunkBytes - 1},
+		{concurrency: 2, threshold: sftp.DefaultLargeFileThreshold, parallelism: sftp.DefaultLargeFileParallelism, chunkBytes: sftp.MaxLargeFileChunkBytes + 1},
 	} {
-		if err := manager.SetTransferSettings(invalid.concurrency, invalid.clearAfter, false); !errors.Is(err, sftp.ErrInvalidTransfer) {
+		if err := manager.SetTransferSettings(invalid.concurrency, invalid.clearAfter, false, invalid.threshold, invalid.parallelism, invalid.chunkBytes); !errors.Is(err, sftp.ErrInvalidTransfer) {
 			t.Fatalf("SetTransferSettings(%d, %v) = %v", invalid.concurrency, invalid.clearAfter, err)
 		}
 	}
-	if err := manager.SetTransferSettings(4, time.Minute, false); err != nil {
+	if err := manager.SetTransferSettings(4, time.Minute, false, 64<<20, 6, 512<<20); err != nil {
 		t.Fatal(err)
 	}
-	if manager.MaxConcurrent() != 4 || manager.ClearCompletedAfter() != time.Minute {
+	if manager.MaxConcurrent() != 4 || manager.ClearCompletedAfter() != time.Minute || manager.LargeFileThreshold() != 64<<20 || manager.LargeFileParallelism() != 6 || manager.LargeFileChunkBytes() != 512<<20 {
 		t.Fatalf("settings = %d, %v", manager.MaxConcurrent(), manager.ClearCompletedAfter())
 	}
 
@@ -287,7 +322,7 @@ func TestStoppedQueueLeavesWaitingJobsWaiting(t *testing.T) {
 	if _, err := manager.UpdateJob("transfer_running1", sftp.UpdateTransferJob{Action: sftp.TransferStartAction}); err != nil {
 		t.Fatal(err)
 	}
-	if err := manager.SetTransferSettings(2, 0, true); err != nil {
+	if err := manager.SetTransferSettings(2, 0, true, sftp.DefaultLargeFileThreshold, sftp.DefaultLargeFileParallelism, sftp.DefaultLargeFileChunkBytes); err != nil {
 		t.Fatal(err)
 	}
 	if !manager.ProcessingStopped() {
@@ -304,7 +339,7 @@ func TestStoppedQueueLeavesWaitingJobsWaiting(t *testing.T) {
 		t.Fatalf("jobs = %+v", jobs)
 	}
 
-	if err := manager.SetTransferSettings(2, 0, false); err != nil {
+	if err := manager.SetTransferSettings(2, 0, false, sftp.DefaultLargeFileThreshold, sftp.DefaultLargeFileParallelism, sftp.DefaultLargeFileChunkBytes); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := manager.UpdateJob("transfer_waiting1", sftp.UpdateTransferJob{Action: sftp.TransferStartAction}); err != nil {

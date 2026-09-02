@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -183,6 +184,14 @@ func (p sshParts) sftp() sshcSFTP.OpenRemote {
 type sftpRemote struct {
 	sshcSFTP.Remote
 	transport *sshclient.Connection
+}
+
+func (remote *sftpRemote) OpenRange(candidate string, offset int64) (io.ReadCloser, error) {
+	ranged, ok := remote.Remote.(sshcSFTP.RangeRemote)
+	if !ok {
+		return nil, sshcSFTP.ErrInvalidTransfer
+	}
+	return ranged.OpenRange(candidate, offset)
 }
 
 func (remote *sftpRemote) Close() error {

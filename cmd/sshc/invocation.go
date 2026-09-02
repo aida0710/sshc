@@ -52,6 +52,10 @@ type sftpInvocation struct {
 	DryRun       bool
 	JSON         bool
 	Yes          bool
+	Jobs         int
+	SplitSizeMiB int
+	SplitJobs    int
+	ChunkSizeMiB int
 }
 
 type syncAction uint8
@@ -227,12 +231,17 @@ func parseSFTPInvocation(args []string) (invocation, error) {
 	if len(args) == 0 || (args[0] != "get" && args[0] != "put") {
 		return invalidInvocation("sftp requires get or put")
 	}
-	called := sftpInvocation{Action: sftpGet}
+	called := sftpInvocation{Action: sftpGet, Jobs: 1}
+	jobsSet := false
+	splitSizeSet := false
+	splitJobsSet := false
+	chunkSizeSet := false
 	if args[0] == "put" {
 		called.Action = sftpPut
 	}
 	positionals := make([]string, 0, 3)
-	for _, argument := range args[1:] {
+	for index := 1; index < len(args); index++ {
+		argument := args[index]
 		switch argument {
 		case "-r", "--recursive":
 			if called.Recursive {
@@ -264,7 +273,75 @@ func parseSFTPInvocation(args []string) (invocation, error) {
 				return invalidInvocation("sftp accepts -y or --yes only once")
 			}
 			called.Yes = true
+		case "-j", "--jobs":
+			if jobsSet {
+				return invalidInvocation("sftp accepts -j or --jobs only once")
+			}
+			if index+1 >= len(args) {
+				return invalidInvocation("sftp --jobs requires a number from 1 to 8")
+			}
+			index++
+			jobs, err := strconv.Atoi(args[index])
+			if err != nil || jobs < 1 || jobs > 8 {
+				return invalidInvocation("sftp --jobs requires a number from 1 to 8")
+			}
+			called.Jobs = jobs
+			jobsSet = true
+		case "--split-size":
+			if splitSizeSet {
+				return invalidInvocation("sftp accepts --split-size only once")
+			}
+			if index+1 >= len(args) {
+				return invalidInvocation("sftp --split-size requires a MiB value from 16 to 1024")
+			}
+			index++
+			size, err := strconv.Atoi(args[index])
+			if err != nil || size < 16 || size > 1024 {
+				return invalidInvocation("sftp --split-size requires a MiB value from 16 to 1024")
+			}
+			called.SplitSizeMiB = size
+			splitSizeSet = true
+		case "--split-jobs":
+			if splitJobsSet {
+				return invalidInvocation("sftp accepts --split-jobs only once")
+			}
+			if index+1 >= len(args) {
+				return invalidInvocation("sftp --split-jobs requires a number from 1 to 8")
+			}
+			index++
+			jobs, err := strconv.Atoi(args[index])
+			if err != nil || jobs < 1 || jobs > 8 {
+				return invalidInvocation("sftp --split-jobs requires a number from 1 to 8")
+			}
+			called.SplitJobs = jobs
+			splitJobsSet = true
+		case "--chunk-size":
+			if chunkSizeSet {
+				return invalidInvocation("sftp accepts --chunk-size only once")
+			}
+			if index+1 >= len(args) {
+				return invalidInvocation("sftp --chunk-size requires a MiB value from 8 to 4096")
+			}
+			index++
+			size, err := strconv.Atoi(args[index])
+			if err != nil || size < 8 || size > 4096 {
+				return invalidInvocation("sftp --chunk-size requires a MiB value from 8 to 4096")
+			}
+			called.ChunkSizeMiB = size
+			chunkSizeSet = true
 		default:
+			if value, found := strings.CutPrefix(argument, "--jobs="); found {
+				if jobsSet {
+					return invalidInvocation("sftp accepts -j or --jobs only once")
+				}
+				jobs, err := strconv.Atoi(value)
+				if err != nil || jobs < 1 || jobs > 8 {
+					return invalidInvocation("sftp --jobs requires a number from 1 to 8")
+				}
+				called.Jobs = jobs
+				jobsSet = true
+				continue
+			}
 			if strings.HasPrefix(argument, "-") {
 				return invalidInvocation(fmt.Sprintf("unknown sftp option %q", argument))
 			}
@@ -279,6 +356,9 @@ func parseSFTPInvocation(args []string) (invocation, error) {
 	}
 	if called.Yes && !called.Overwrite {
 		return invalidInvocation("sftp --yes requires --overwrite")
+	}
+	if called.Action != sftpGet && (called.SplitSizeMiB != 0 || called.SplitJobs != 0 || called.ChunkSizeMiB != 0) {
+		return invalidInvocation("sftp put does not accept --split-size, --split-jobs, or --chunk-size")
 	}
 	called.Alias, called.Source, called.Destination = positionals[0], positionals[1], positionals[2]
 	return invocation{Kind: invocationSFTP, JSON: called.JSON, Yes: called.Yes, SFTP: &called}, nil

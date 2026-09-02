@@ -30,7 +30,7 @@ var (
 	ErrConflict         = errors.New("remote file changed since it was read")
 	ErrAlreadyExists    = errors.New("remote path already exists")
 	ErrRevisionRequired = errors.New("content revision is required")
-	ErrTransferTooLarge = errors.New("uploaded file exceeds the requested size limit")
+	ErrTransferTooLarge = errors.New("transferred file exceeds the requested size limit")
 	ErrInvalidTransfer  = errors.New("invalid transfer identifier")
 	ErrOffsetMismatch   = errors.New("upload offset does not match the remote part file")
 	ErrUploadIncomplete = errors.New("upload part file is incomplete")
@@ -191,6 +191,13 @@ type Remote interface {
 	Rename(oldPath, newPath string) error
 	Remove(path string) error
 	RemoveDirectory(path string) error
+}
+
+// RangeRemote は、ひとつのremote fileを指定offsetから読める実装である。
+// 大きなdownloadは複数の独立したSFTP connectionから別々の範囲を読む。
+// 対応しないRemoteは従来どおり1本のstreamへ戻す。
+type RangeRemote interface {
+	OpenRange(path string, offset int64) (io.ReadCloser, error)
 }
 
 type OpenRemote func(ctx context.Context, alias string) (Remote, error)

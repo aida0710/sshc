@@ -29,6 +29,14 @@ type integrationRemote struct {
 	transport *sshclient.Connection
 }
 
+func (remote *integrationRemote) OpenRange(candidate string, offset int64) (io.ReadCloser, error) {
+	ranged, ok := remote.Remote.(sftp.RangeRemote)
+	if !ok {
+		return nil, sftp.ErrInvalidTransfer
+	}
+	return ranged.OpenRange(candidate, offset)
+}
+
 func (remote *integrationRemote) Close() error {
 	return errors.Join(remote.Remote.Close(), remote.transport.Close())
 }
@@ -439,3 +447,4 @@ func TestConcurrentFilesAgainstOpenSSHSFTP(t *testing.T) {
 }
 
 var _ io.Closer = (*integrationRemote)(nil)
+var _ sftp.RangeRemote = (*integrationRemote)(nil)

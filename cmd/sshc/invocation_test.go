@@ -519,7 +519,7 @@ func TestServiceIsReservedAndRequiresOneKnownAction(t *testing.T) {
 func TestSFTPParsesTransfersAndSafetyOptions(t *testing.T) {
 	called, err := parseInvocation([]string{
 		"sshc", "sftp", "get", "server-a", "/srv/data", "./data",
-		"--recursive", "--overwrite", "--yes", "--dry-run", "--json",
+		"--recursive", "--overwrite", "--yes", "--dry-run", "--jobs", "4", "--split-size", "50", "--split-jobs", "6", "--chunk-size", "512", "--json",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -529,13 +529,17 @@ func TestSFTPParsesTransfersAndSafetyOptions(t *testing.T) {
 	}
 	got := *called.SFTP
 	if got.Action != sftpGet || got.Alias != "server-a" || got.Source != "/srv/data" || got.Destination != "./data" ||
-		!got.Recursive || !got.Overwrite || !got.Yes || !got.DryRun || !got.JSON {
+		!got.Recursive || !got.Overwrite || !got.Yes || !got.DryRun || !got.JSON || got.Jobs != 4 || got.SplitSizeMiB != 50 || got.SplitJobs != 6 || got.ChunkSizeMiB != 512 {
 		t.Fatalf("sftp invocation = %#v", got)
 	}
 
 	put, err := parseInvocation([]string{"sshc", "sftp", "put", "server-a", "local.txt", "/tmp/local.txt", "--skip-existing"})
-	if err != nil || put.SFTP == nil || put.SFTP.Action != sftpPut || !put.SFTP.SkipExisting {
+	if err != nil || put.SFTP == nil || put.SFTP.Action != sftpPut || !put.SFTP.SkipExisting || put.SFTP.Jobs != 1 {
 		t.Fatalf("put = %#v, %v", put, err)
+	}
+	equals, err := parseInvocation([]string{"sshc", "sftp", "get", "server-a", "/file", "file", "--jobs=8"})
+	if err != nil || equals.SFTP == nil || equals.SFTP.Jobs != 8 {
+		t.Fatalf("jobs with equals = %#v, %v", equals, err)
 	}
 }
 
@@ -547,6 +551,17 @@ func TestSFTPRejectsAmbiguousOrUnsafeFlagCombinations(t *testing.T) {
 		{"sshc", "sftp", "get", "server-a", "/a", "b", "--overwrite", "--skip-existing"},
 		{"sshc", "sftp", "put", "server-a", "a", "/b", "--yes"},
 		{"sshc", "sftp", "put", "server-a", "a", "/b", "--mystery"},
+		{"sshc", "sftp", "get", "server-a", "/a", "b", "--jobs", "0"},
+		{"sshc", "sftp", "get", "server-a", "/a", "b", "--jobs=9"},
+		{"sshc", "sftp", "get", "server-a", "/a", "b", "--jobs"},
+		{"sshc", "sftp", "get", "server-a", "/a", "b", "-j", "2", "--jobs=3"},
+		{"sshc", "sftp", "get", "server-a", "/a", "b", "--split-size", "15"},
+		{"sshc", "sftp", "get", "server-a", "/a", "b", "--split-size", "1025"},
+		{"sshc", "sftp", "get", "server-a", "/a", "b", "--split-jobs", "0"},
+		{"sshc", "sftp", "put", "server-a", "a", "/b", "--split-jobs", "4"},
+		{"sshc", "sftp", "get", "server-a", "/a", "b", "--chunk-size", "7"},
+		{"sshc", "sftp", "get", "server-a", "/a", "b", "--chunk-size", "4097"},
+		{"sshc", "sftp", "put", "server-a", "a", "/b", "--chunk-size", "512"},
 	} {
 		if _, err := parseInvocation(argv); err == nil {
 			t.Errorf("parseInvocation(%q) accepted invalid arguments", argv)
