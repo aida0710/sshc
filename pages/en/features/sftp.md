@@ -24,15 +24,19 @@ Select one row, or use the checkboxes to select multiple entries, to reveal down
 
 Sort by name, type, bytes or modified time. Permissions appear below the entry name. The selected host and directory are reflected in navigation state, so a terminal remote-path action can open the same location.
 
-On desktop, switch to `2 panes` to keep two remote hosts or directories open side by side. Each pane remembers its selected host and location on the device. Drag files or folders from one pane to the other, then choose copy or move. Data streams directly between the two SFTP connections without a plaintext local spool file. A move within the same connection uses a server-side rename when possible.
+On desktop, switch to `2 panes` to keep two remote hosts or directories open side by side. The current tab is copied into the right pane when it is opened for the first time. Both panes have their own tab strip and `+` action, with up to eight independent tabs per side. When the tabs exceed the pane width, only the tab strip scrolls horizontally; `+` stays available at the right edge, and the selected or newly opened tab scrolls into view. Each tab remembers its selected host and location on the device, and the right-side tabs remain available after returning to one pane.
 
-Use **Compare** to recursively inspect the two open directories by metadata such as size, modification time, permissions, and type. The preview distinguishes left-only, right-only, changed, and type-mismatched entries. Select only the entries you want, then copy left to right or right to left. Comparison never deletes entries that exist only on the destination.
+Drag files or folders from the currently visible tab on one side to the visible tab on the other, then choose copy or move. Data streams directly between the two SFTP connections without a plaintext local spool file. A move within the same connection uses a server-side rename when possible.
+
+![The two-pane SFTP view with independent tabs on each side](/images/sftp-two-pane-en.png)
+
+Use **Compare** to recursively inspect the directories in the currently selected left and right tabs by metadata such as size, modification time, permissions, and type. The preview distinguishes left-only, right-only, changed, and type-mismatched entries. Select only the entries you want, then copy left to right or right to left. Comparison never deletes entries that exist only on the destination.
 
 ![Comparison preview for two remote directories](/images/sftp-compare-en.png)
 
 The pane action menu can open an SSH Terminal at the displayed directory. In the other direction, a remote directory reported by OSC 7 can be opened in SFTP from the Terminal action menu.
 
-Narrow panes emphasize the filename and place permissions, size, and modified time on one metadata line. Phones remain single-pane.
+Narrow panes emphasize the filename and place permissions, size, and modified time on one metadata line. Phones show one horizontally scrollable tab strip and one pane; the second connection and comparison stay inactive. Returning to desktop restores the saved right-side tabs.
 
 ## Transfer Manager
 

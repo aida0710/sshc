@@ -1,8 +1,8 @@
 # WinSCP機能差分台帳
 
-更新日: 2026-09-02
+更新日: 2026-09-03
 
-比較対象: sshc `main`（2026-09-02時点） / WinSCP 6.5.6
+比較対象: sshc `main`（2026-09-03時点） / WinSCP 6.5.6
 
 ## 目的
 
@@ -32,7 +32,7 @@ sshcのSFTPは、安全なアップロード／ダウンロード、フォルダ
 |---|---|---|---|
 | Explorer型の単一remote panel | 対応 | SFTP画面が相当 | 維持 |
 | Commander型のlocal／remote 2 panel | 未対応 | desktopではremote／remoteの2ペイン表示に対応。local filesystemは表示しない | desktop向けlocal panelを設計。mobileは単一panelを維持 |
-| remote／remote 2 panel | 対応 | desktopで2つのhost／directoryを並べ、各ペインの状態を保存する。ペイン間のfile／directoryはDrag & Dropでcopy／moveできる | 維持 |
+| remote／remote 2 panel | 対応 | desktopで2つのhost／directoryを並べる。左右が独立したtab列を持ち、表示中のtab間でfile／directoryをDrag & Dropしてcopy／moveできる | 維持 |
 | `..`による親directory移動 | 対応 | 一覧先頭に表示 | 維持 |
 | path breadcrumb／直接入力 | 対応 | 通常は各階層をクリックできるbreadcrumbとして表示し、編集操作で絶対path入力へ切り替える | 維持 |
 | Back／Forward履歴 | 対応 | hostを切り替えるまでpath履歴を保持 | 維持 |
@@ -45,8 +45,8 @@ sshcのSFTPは、安全なアップロード／ダウンロード、フォルダ
 | synchronized browsing | 未対応 | local panelがない | 2 panel導入後 |
 | pathをclipboardへcopy | 未対応 | path欄から手動選択のみ | P0 |
 | opposite panelのpathへ移動 | 未対応 | local panelがない | 2 panel導入後 |
-| directory stateのsession別記憶 | 部分 | URLへalias/pathを反映し、2ペイン目のalias/pathも端末に保存する | sort、selection、historyも保存する |
-| 複数SFTP tab | 対応 | 最大8tab。各tabが自分のhost、履歴、選択を持ち、開いていた場所を再読み込み後も復元する | 維持 |
+| directory stateのsession別記憶 | 部分 | URLへalias/pathを反映し、左右の全tabのalias/pathを端末に保存する。1ペインへ戻した間も右tabを保持する | sort、selection、historyも保存する |
+| 複数SFTP tab | 対応 | 左右それぞれ最大8tab。幅を超えたtab列は横scrollし、固定した追加操作と選択tabの自動追従を持つ。各tabが自分のhost、履歴、選択を持ち、開いていた場所を再読み込み後も復元する | 維持 |
 | panel内の名前filter | 対応 | 現在directoryを名前の部分一致で絞り込み | mask式は後続 |
 | remote配下の再帰file検索 | 未対応 | APIなし | P1、server側上限付き検索 |
 | directory cache | 未対応 | 現在pathを都度取得 | stale表示を避ける明示cacheとして設計 |
