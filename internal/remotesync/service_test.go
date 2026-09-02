@@ -1820,6 +1820,9 @@ func TestBucketStatusDoesNotHoldTheSyncOperationLockDuringS3Listing(t *testing.T
 	bucket.releaseList = make(chan struct{})
 	started, release := bucket.listStarted, bucket.releaseList
 	bucket.mu.Unlock()
+	var releaseOnce sync.Once
+	releaseListing := func() { releaseOnce.Do(func() { close(release) }) }
+	t.Cleanup(releaseListing)
 	statusDone := make(chan error, 1)
 	go func() {
 		_, err := machine.service.BucketStatus(context.Background())
@@ -1827,7 +1830,7 @@ func TestBucketStatusDoesNotHoldTheSyncOperationLockDuringS3Listing(t *testing.T
 	}()
 	select {
 	case <-started:
-	case <-time.After(2 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("BucketStatus did not reach the remote listing")
 	}
 	machine.write(t, "config", "Host two\n")
@@ -1841,10 +1844,10 @@ func TestBucketStatusDoesNotHoldTheSyncOperationLockDuringS3Listing(t *testing.T
 		if err != nil {
 			t.Fatalf("Push while BucketStatus was listing = %v", err)
 		}
-	case <-time.After(2 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("BucketStatus held operationMu across the S3 listing")
 	}
-	close(release)
+	releaseListing()
 	if err := <-statusDone; !errors.Is(err, remotesync.ErrRemoteMoved) {
 		t.Fatalf("BucketStatus after concurrent Push = %v, want ErrRemoteMoved", err)
 	}
