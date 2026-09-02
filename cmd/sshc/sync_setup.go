@@ -35,13 +35,14 @@ var (
 )
 
 type syncSetupInput struct {
-	endpoint  string
-	bucket    string
-	path      string
-	region    string
-	direction api.SyncDirection
-	accessKey []byte
-	secretKey []byte
+	endpoint         string
+	bucket           string
+	path             string
+	region           string
+	direction        api.SyncDirection
+	accessKey        []byte
+	secretKey        []byte
+	reuseCredentials bool
 }
 
 func requireSyncSetupTerminal(
@@ -63,7 +64,11 @@ func runSyncSetup(
 	prompt *os.File,
 	terminal passwordTerminal,
 ) error {
-	input, err := readSyncSetupInput(ctx, stdin, prompt, terminal)
+	var current api.SyncStatus
+	if err := engine.getJSON(ctx, "/api/v1/sync", &current); err != nil {
+		return err
+	}
+	input, err := readSyncSetupInput(ctx, stdin, prompt, terminal, current)
 	if input != nil {
 		defer zeroBytes(input.accessKey)
 		defer zeroBytes(input.secretKey)
@@ -91,19 +96,25 @@ func runSyncSetup(
 	}
 
 	var syncKey []byte
+	reuseKey := false
 	if checked.State == api.Existing {
-		syncKey, err = promptVaultPassword(ctx, stdin, prompt, terminal, "Sync key: ")
+		label := "Sync key: "
+		if current.KeyConfigured {
+			label = "Sync key [configured; Enter to keep]: "
+		}
+		syncKey, err = promptMaskedSetupValue(ctx, stdin, prompt, terminal, label)
 		defer zeroBytes(syncKey)
 		if err != nil {
 			return err
 		}
 		syncKey = bytes.TrimSpace(syncKey)
-		if len(syncKey) == 0 || len(syncKey) > maxSyncSnapshotKeySize || !utf8.Valid(syncKey) {
+		reuseKey = len(syncKey) == 0 && current.KeyConfigured
+		if (!reuseKey && len(syncKey) == 0) || len(syncKey) > maxSyncSnapshotKeySize || !utf8.Valid(syncKey) {
 			return errSyncSetupInput
 		}
 	}
 
-	completePayload, err := buildSyncSetupCompletePayload(*input, checked, syncKey)
+	completePayload, err := buildSyncSetupCompletePayload(*input, checked, syncKey, reuseKey)
 	if err != nil {
 		return errSyncSetupInput
 	}
@@ -134,25 +145,46 @@ func runSyncSetup(
 }
 
 func readSyncSetupInput(
-	ctx context.Context, stdin *os.File, prompt *os.File, terminal passwordTerminal,
+	ctx context.Context, stdin *os.File, prompt *os.File, terminal passwordTerminal, current api.SyncStatus,
 ) (*syncSetupInput, error) {
-	endpoint, err := promptVisibleSetup(ctx, stdin, prompt, "Endpoint [https://]: ", "https://")
+	endpointDefault := current.Endpoint
+	if endpointDefault == "" {
+		endpointDefault = "https://"
+	}
+	endpoint, err := promptVisibleSetup(ctx, stdin, prompt,
+		setupVisibleLabel("Endpoint", endpointDefault), endpointDefault)
 	if err != nil {
 		return nil, err
 	}
-	bucket, err := promptVisibleSetup(ctx, stdin, prompt, "Bucket: ", "")
+	bucket, err := promptVisibleSetup(ctx, stdin, prompt,
+		setupVisibleLabel("Bucket", current.Bucket), current.Bucket)
 	if err != nil {
 		return nil, err
 	}
-	path, err := promptVisibleSetup(ctx, stdin, prompt, "Path []: ", "")
+	pathDefault := ""
+	if current.Path != nil {
+		pathDefault = *current.Path
+	}
+	path, err := promptVisibleSetup(ctx, stdin, prompt,
+		setupVisibleLabel("Path", pathDefault), pathDefault)
 	if err != nil {
 		return nil, err
 	}
-	region, err := promptVisibleSetup(ctx, stdin, prompt, "Region [auto]: ", "auto")
+	regionDefault := "auto"
+	if current.Region != nil && *current.Region != "" {
+		regionDefault = *current.Region
+	}
+	region, err := promptVisibleSetup(ctx, stdin, prompt,
+		setupVisibleLabel("Region", regionDefault), regionDefault)
 	if err != nil {
 		return nil, err
 	}
-	directionName, err := promptVisibleSetup(ctx, stdin, prompt, "Direction [both]: ", "both")
+	directionDefault := string(current.Direction)
+	if _, ok := remotesync.ParseDirection(directionDefault); !ok {
+		directionDefault = "both"
+	}
+	directionName, err := promptVisibleSetup(ctx, stdin, prompt,
+		fmt.Sprintf("Direction [%s] (both/push/pull): ", safeTerminalCell(directionDefault)), directionDefault)
 	if err != nil {
 		return nil, err
 	}
@@ -161,19 +193,32 @@ func readSyncSetupInput(
 		return nil, errSyncSetupInput
 	}
 
-	accessKey, err := promptVaultPassword(ctx, stdin, prompt, terminal, "Access key ID: ")
+	credentialConfigured := current.Configured
+	accessLabel := "Access key ID: "
+	secretLabel := "Secret access key: "
+	if credentialConfigured {
+		accessLabel = "Access key ID [configured; Enter to keep]: "
+		if current.AccessKeySuffix != nil && *current.AccessKeySuffix != "" {
+			accessLabel = fmt.Sprintf("Access key ID [%s; Enter to keep]: ",
+				maskedAccessKeySuffix(*current.AccessKeySuffix))
+		}
+		secretLabel = "Secret access key [configured; Enter to keep]: "
+	}
+	accessKey, err := promptMaskedSetupValue(ctx, stdin, prompt, terminal, accessLabel)
 	if err != nil {
 		zeroBytes(accessKey)
 		return nil, err
 	}
-	secretKey, err := promptVaultPassword(ctx, stdin, prompt, terminal, "Secret access key: ")
+	secretKey, err := promptMaskedSetupValue(ctx, stdin, prompt, terminal, secretLabel)
 	if err != nil {
 		zeroBytes(accessKey)
 		zeroBytes(secretKey)
 		return nil, err
 	}
-	if len(accessKey) == 0 || len(accessKey) > maxSyncAccessKeyBytes || !utf8.Valid(accessKey) ||
-		len(secretKey) == 0 || len(secretKey) > maxSyncSecretKeyBytes || !utf8.Valid(secretKey) {
+	reuseCredentials := credentialConfigured && len(accessKey) == 0 && len(secretKey) == 0
+	if (!reuseCredentials && (len(accessKey) == 0 || len(secretKey) == 0)) ||
+		len(accessKey) > maxSyncAccessKeyBytes || !utf8.Valid(accessKey) ||
+		len(secretKey) > maxSyncSecretKeyBytes || !utf8.Valid(secretKey) {
 		zeroBytes(accessKey)
 		zeroBytes(secretKey)
 		return nil, errSyncSetupInput
@@ -181,7 +226,73 @@ func readSyncSetupInput(
 	return &syncSetupInput{
 		endpoint: endpoint, bucket: bucket, path: path, region: region,
 		direction: api.SyncDirection(direction), accessKey: accessKey, secretKey: secretKey,
+		reuseCredentials: reuseCredentials,
 	}, nil
+}
+
+func setupVisibleLabel(name, value string) string {
+	return fmt.Sprintf("%s [%s]: ", name, safeTerminalCell(value))
+}
+
+func maskedAccessKeySuffix(suffix string) string {
+	characters := []rune(suffix)
+	if len(characters) > 5 {
+		characters = characters[len(characters)-5:]
+	}
+	return "*****" + safeTerminalCell(string(characters))
+}
+
+// promptMaskedSetupValue confirms hidden input with stars after Enter. The
+// actual value is never written to a terminal or retained in a string.
+func promptMaskedSetupValue(
+	ctx context.Context, stdin *os.File, prompt io.Writer, terminal passwordTerminal, label string,
+) ([]byte, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	prompted := false
+	maskCount := 0
+	promptInput := func() error {
+		if _, err := fmt.Fprint(prompt, label); err != nil {
+			return err
+		}
+		prompted = true
+		return nil
+	}
+	feedback := func(next int) error {
+		if next > maskCount {
+			if _, err := fmt.Fprint(prompt, strings.Repeat("*", next-maskCount)); err != nil {
+				return err
+			}
+		} else if next < maskCount {
+			if _, err := fmt.Fprint(prompt, strings.Repeat("\b \b", maskCount-next)); err != nil {
+				return err
+			}
+		}
+		maskCount = next
+		return nil
+	}
+	live, liveFeedback := terminal.(maskedPasswordTerminal)
+	var typed []byte
+	var err error
+	if liveFeedback {
+		typed, err = live.ReadPasswordMasked(ctx, stdin, promptInput, feedback)
+	} else {
+		typed, err = terminal.ReadPassword(ctx, stdin, promptInput)
+	}
+	var outputErr error
+	if prompted {
+		if err == nil && !liveFeedback && len(typed) != 0 {
+			_, outputErr = fmt.Fprint(prompt, strings.Repeat("*", utf8.RuneCount(typed)))
+		}
+		if _, newlineErr := fmt.Fprintln(prompt); outputErr == nil {
+			outputErr = newlineErr
+		}
+	}
+	if err != nil {
+		return typed, err
+	}
+	return typed, outputErr
 }
 
 func promptVisibleSetup(
@@ -327,30 +438,44 @@ type zeroJSONField struct {
 }
 
 func buildSyncSetupCheckPayload(input syncSetupInput) ([]byte, error) {
-	return buildZeroJSON([]zeroJSONField{
+	reuse := input.reuseCredentials
+	fields := []zeroJSONField{
 		{name: "endpoint", value: []byte(input.endpoint)},
 		{name: "bucket", value: []byte(input.bucket)},
 		{name: "path", value: []byte(input.path)},
 		{name: "region", value: []byte(input.region)},
-		{name: "accessKeyId", value: input.accessKey},
-		{name: "secretAccessKey", value: input.secretKey},
-	})
+		{name: "reuseCredentials", boolean: &reuse},
+	}
+	if !input.reuseCredentials {
+		fields = append(fields,
+			zeroJSONField{name: "accessKeyId", value: input.accessKey},
+			zeroJSONField{name: "secretAccessKey", value: input.secretKey},
+		)
+	}
+	return buildZeroJSON(fields)
 }
 
 func buildSyncSetupCompletePayload(
-	input syncSetupInput, checked api.SyncSetupCheckResponse, syncKey []byte,
+	input syncSetupInput, checked api.SyncSetupCheckResponse, syncKey []byte, reuseKey bool,
 ) ([]byte, error) {
 	history := checked.HistoryPresent
+	reuseCredentials := input.reuseCredentials
 	fields := []zeroJSONField{
 		{name: "endpoint", value: []byte(input.endpoint)},
 		{name: "bucket", value: []byte(input.bucket)},
 		{name: "path", value: []byte(input.path)},
 		{name: "region", value: []byte(input.region)},
 		{name: "direction", value: []byte(input.direction)},
-		{name: "accessKeyId", value: input.accessKey},
-		{name: "secretAccessKey", value: input.secretKey},
+		{name: "reuseCredentials", boolean: &reuseCredentials},
 		{name: "expectedState", value: []byte(checked.State)},
 		{name: "historyPresent", boolean: &history},
+		{name: "reuseKey", boolean: &reuseKey},
+	}
+	if !input.reuseCredentials {
+		fields = append(fields,
+			zeroJSONField{name: "accessKeyId", value: input.accessKey},
+			zeroJSONField{name: "secretAccessKey", value: input.secretKey},
+		)
 	}
 	if checked.Etag != nil {
 		fields = append(fields, zeroJSONField{name: "expectedETag", value: []byte(*checked.Etag)})

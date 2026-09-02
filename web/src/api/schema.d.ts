@@ -2400,6 +2400,7 @@ export interface components {
         SyncStatus: {
             configured: boolean;
             keyConfigured: boolean;
+            accessKeySuffix?: string;
             auto: components["schemas"]["AutoSync"];
             locked: boolean;
             endpoint: string;
@@ -2533,8 +2534,9 @@ export interface components {
             bucket: string;
             path?: string;
             region?: string;
-            accessKeyId: string;
-            secretAccessKey: string;
+            accessKeyId?: string;
+            secretAccessKey?: string;
+            reuseCredentials: boolean;
         };
         SyncSetupCheckResponse: {
             state: components["schemas"]["SyncSetupTargetState"];
@@ -2547,13 +2549,15 @@ export interface components {
             bucket: string;
             path?: string;
             region?: string;
-            accessKeyId: string;
-            secretAccessKey: string;
+            accessKeyId?: string;
+            secretAccessKey?: string;
+            reuseCredentials: boolean;
             direction: components["schemas"]["SyncDirection"];
             expectedState: components["schemas"]["SyncSetupTargetState"];
             expectedETag?: string;
             historyPresent: boolean;
             key: string;
+            reuseKey: boolean;
         };
         SyncSetupResponse: {
             status: components["schemas"]["SyncStatus"];

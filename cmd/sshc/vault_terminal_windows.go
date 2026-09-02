@@ -57,7 +57,13 @@ func systemWindowsPasswordOperations() windowsPasswordOperations {
 func (systemPasswordTerminal) ReadPassword(
 	ctx context.Context, input *os.File, prompt func() error,
 ) ([]byte, error) {
-	return readWindowsPasswordWithPrompt(ctx, windows.Handle(input.Fd()), systemWindowsPasswordOperations(), prompt)
+	return readWindowsPasswordWithFeedback(ctx, windows.Handle(input.Fd()), systemWindowsPasswordOperations(), prompt, nil)
+}
+
+func (systemPasswordTerminal) ReadPasswordMasked(
+	ctx context.Context, input *os.File, prompt func() error, feedback func(int) error,
+) ([]byte, error) {
+	return readWindowsPasswordWithFeedback(ctx, windows.Handle(input.Fd()), systemWindowsPasswordOperations(), prompt, feedback)
 }
 
 // readWindowsPassword はコンソール入力とキャンセルイベントを同時に待つ。
@@ -66,11 +72,21 @@ func (systemPasswordTerminal) ReadPassword(
 func readWindowsPassword(
 	ctx context.Context, input windows.Handle, operations windowsPasswordOperations,
 ) (password []byte, resultErr error) {
-	return readWindowsPasswordWithPrompt(ctx, input, operations, nil)
+	return readWindowsPasswordWithFeedback(ctx, input, operations, nil, nil)
 }
 
 func readWindowsPasswordWithPrompt(
 	ctx context.Context, input windows.Handle, operations windowsPasswordOperations, prompt func() error,
+) (password []byte, resultErr error) {
+	return readWindowsPasswordWithFeedback(ctx, input, operations, prompt, nil)
+}
+
+func readWindowsPasswordWithFeedback(
+	ctx context.Context,
+	input windows.Handle,
+	operations windowsPasswordOperations,
+	prompt func() error,
+	feedback func(int) error,
 ) (password []byte, resultErr error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -144,9 +160,18 @@ func readWindowsPasswordWithPrompt(
 		if err != nil {
 			return nil, err
 		}
+		before := windowsPasswordRuneCount(units)
 		finished, err := consumeWindowsPasswordKey(&units, key)
 		if err != nil {
 			return nil, err
+		}
+		if feedback != nil {
+			after := windowsPasswordRuneCount(units)
+			if after != before {
+				if err := feedback(after); err != nil {
+					return nil, err
+				}
+			}
 		}
 		if !finished {
 			continue
@@ -161,6 +186,18 @@ func readWindowsPasswordWithPrompt(
 		}
 		return password, nil
 	}
+}
+
+func windowsPasswordRuneCount(units []uint16) int {
+	count := 0
+	for index := 0; index < len(units); index++ {
+		if units[index] >= 0xd800 && units[index] <= 0xdbff && index+1 < len(units) &&
+			units[index+1] >= 0xdc00 && units[index+1] <= 0xdfff {
+			index++
+		}
+		count++
+	}
+	return count
 }
 
 func consumeWindowsPasswordKey(units *[]uint16, key windowsKeyInput) (bool, error) {

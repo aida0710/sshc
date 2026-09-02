@@ -856,6 +856,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
                                   ? {}
                                   : { expectedETag: setupCheck.etag }),
                                 historyPresent: setupCheck.historyPresent,
+                                reuseKey: false,
                                 key:
                                   setupCheck.state === "existing" || chooseOwn
                                     ? ownKey

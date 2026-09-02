@@ -74,6 +74,8 @@ sshc sync now [--json]
 sshc sync auto on|off [--json]
 ```
 
+`sshc sync setup`は、設定済みのEndpoint、Bucket、Path、Region、Directionを既定値として表示します。Directionは`both`、`push`、`pull`から選びます。Access Key IDは末尾5文字だけを伏せ字付きで表示し、Secret Access Keyと同期鍵は値を表示せず「設定済み」と示します。再設定時は秘密値を空のままEnterすると、engine内の既存値を維持します。新しい値の入力中は、平文の代わりに1文字ずつ`*`を表示し、Backspaceも画面へ反映します。
+
 ## SFTP転送
 
 起動中のエンジンと、Web UIと同じOpenSSH設定、Host Key検証、Vaultの認証情報を使って転送します。リモートパスは`/var/log/app.log`のような絶対POSIXパスで指定します。

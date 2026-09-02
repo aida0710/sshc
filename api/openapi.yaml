@@ -2968,13 +2968,16 @@ components:
         configured: { type: boolean }
         # 同期鍵の設定有無。鍵の値は返さない。
         keyConfigured: { type: boolean }
+        # Access Key IDそのものは返さず、再設定時に利用者が対象を見分けるための
+        # 末尾5文字だけを返す。secret access keyは一部であっても返さない。
+        accessKeySuffix: { type: string, maxLength: 5 }
         # 自動同期。衝突や削除を伴う適用は phase=blocked で停止する。
         auto: { $ref: "#/components/schemas/AutoSync" }
         # フォームが空のとき、その理由。設定はマスターパスワードで暗号化されており、
-        # それが与えられるまで読めない。アクセスキーや secret は含めない。
+        # それが与えられるまで読めない。Access Key IDの識別用末尾以外やsecretは含めない。
         locked: { type: boolean }
         # エンドポイント・バケット・リージョンは、これが何を指しているかをユーザーが
-        # 見られるよう返す。アクセスキーと秘密が返ることは決してない。
+        # 見られるよう返す。Access Key IDの識別用末尾以外と秘密が返ることは決してない。
         endpoint: { type: string }
         bucket: { type: string }
         # 署名スコープに入る値。R2 では "auto"、本物の AWS ではバケットのリージョン
@@ -3174,7 +3177,7 @@ components:
     SyncSetupCheckRequest:
       type: object
       additionalProperties: false
-      required: [endpoint, bucket, accessKeyId, secretAccessKey]
+      required: [endpoint, bucket, reuseCredentials]
       properties:
         endpoint: { type: string, minLength: 1, maxLength: 2048 }
         bucket: { type: string, minLength: 1, maxLength: 255 }
@@ -3182,6 +3185,8 @@ components:
         region: { type: string, maxLength: 64 }
         accessKeyId: { type: string, minLength: 1, maxLength: 512 }
         secretAccessKey: { type: string, minLength: 1, maxLength: 512 }
+        # trueの場合はengine内の既存資格情報を再利用し、秘密値をクライアントへ返さない。
+        reuseCredentials: { type: boolean }
     SyncSetupCheckResponse:
       type: object
       additionalProperties: false
@@ -3194,7 +3199,7 @@ components:
     SyncSetupRequest:
       type: object
       additionalProperties: false
-      required: [endpoint, bucket, accessKeyId, secretAccessKey, direction, expectedState, historyPresent, key]
+      required: [endpoint, bucket, direction, expectedState, historyPresent, key, reuseCredentials, reuseKey]
       properties:
         endpoint: { type: string, minLength: 1, maxLength: 2048 }
         bucket: { type: string, minLength: 1, maxLength: 255 }
@@ -3202,12 +3207,15 @@ components:
         region: { type: string, maxLength: 64 }
         accessKeyId: { type: string, minLength: 1, maxLength: 512 }
         secretAccessKey: { type: string, minLength: 1, maxLength: 512 }
+        reuseCredentials: { type: boolean }
         direction: { $ref: "#/components/schemas/SyncDirection" }
         expectedState: { $ref: "#/components/schemas/SyncSetupTargetState" }
         expectedETag: { type: string, minLength: 1, maxLength: 1024 }
         historyPresent: { type: boolean }
         # Empty requests generate a key when this is empty. Existing targets require it.
         key: { type: string, maxLength: 1024 }
+        # Existing targetでtrueの場合、Vaultに保存済みの同期鍵を再利用する。
+        reuseKey: { type: boolean }
     SyncSetupResponse:
       type: object
       additionalProperties: false
