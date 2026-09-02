@@ -23,25 +23,40 @@ export const dangerAction =
 
 export const fieldLabel = "text-xs font-medium tracking-wide text-ink-muted";
 export const hintText = "text-xs text-ink-muted";
-export const sectionCard = "flex flex-col gap-4 rounded-lg border border-line bg-card p-4";
+export const sectionCard =
+  "flex flex-col gap-4 rounded-lg border border-line bg-card p-4";
 export const sectionHeading = "text-sm font-medium text-ink";
 
-export const tableHeadRow = "border-b border-line text-xs uppercase tracking-wide text-ink-muted";
+export const tableHeadRow =
+  "border-b border-line text-xs uppercase tracking-wide text-ink-muted";
 export const tableHeadCell = "py-2 pr-3 text-left font-medium";
 
 type FieldProps = {
   label: string;
   hint?: string;
   children: ReactNode;
+  interactiveChildren?: boolean;
 };
 
-export function Field({ label, hint, children }: FieldProps) {
+export function Field({
+  label,
+  hint,
+  children,
+  interactiveChildren = false,
+}: FieldProps) {
+  const contents = (
+    <>
+      <span className={fieldLabel}>{label}</span>
+      {children}
+    </>
+  );
   return (
     <div className="flex flex-col gap-1">
-      <label className="flex flex-col gap-1">
-        <span className={fieldLabel}>{label}</span>
-        {children}
-      </label>
+      {interactiveChildren ? (
+        <div className="flex flex-col gap-1">{contents}</div>
+      ) : (
+        <label className="flex flex-col gap-1">{contents}</label>
+      )}
       {hint === undefined ? null : <span className={hintText}>{hint}</span>}
     </div>
   );
@@ -54,9 +69,16 @@ type CheckboxFieldProps = {
   disabled?: boolean;
 };
 
-export function CheckboxField({ label, checked, onChange, disabled = false }: CheckboxFieldProps) {
+export function CheckboxField({
+  label,
+  checked,
+  onChange,
+  disabled = false,
+}: CheckboxFieldProps) {
   return (
-    <label className={`flex items-start gap-2 text-sm ${disabled ? "text-ink-faint" : "text-ink"}`}>
+    <label
+      className={`flex items-start gap-2 text-sm ${disabled ? "text-ink-faint" : "text-ink"}`}
+    >
       <input
         type="checkbox"
         checked={checked}

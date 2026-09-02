@@ -8,7 +8,7 @@ import {
 } from "../api/integrations";
 import { useLanguage } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
-import { Field, control, hintText, sectionHeading } from "../ui/form";
+import { control, hintText, sectionHeading } from "../ui/form";
 import { Button, Notice } from "../ui/surface";
 import { PageHeader } from "../ui/page";
 import { Icon } from "../ui/icons";
@@ -21,6 +21,7 @@ import { useSyncPullPreview } from "./useSyncPullPreview";
 import { SyncForcePushDialog } from "./SyncForcePushDialog";
 import { SyncPullPreviewDialog } from "./SyncPullPreviewDialog";
 import { SyncHistorySection } from "./SyncHistorySection";
+import { PasswordField, PasswordInput } from "../ui/PasswordField";
 
 type SyncPanelProps = { api?: IntegrationsApi };
 
@@ -30,21 +31,34 @@ function SyncRow({
   label,
   children,
   hint,
+  interactiveChildren = false,
 }: {
   label: string;
   children: ReactNode;
   hint?: string;
+  interactiveChildren?: boolean;
 }) {
+  const contents = (
+    <>
+      <span className="w-full shrink-0 text-sm text-ink-muted sm:w-32">
+        {label}
+      </span>
+      <span className="flex min-w-0 flex-1 justify-start sm:ml-auto sm:justify-end">
+        {children}
+      </span>
+    </>
+  );
   return (
     <div className="border-t border-hairline first:border-t-0">
-      <label className="flex flex-col items-stretch gap-2 px-3 py-3 sm:flex-row sm:items-center sm:gap-3 sm:py-2">
-        <span className="w-full shrink-0 text-sm text-ink-muted sm:w-32">
-          {label}
-        </span>
-        <span className="flex min-w-0 flex-1 justify-start sm:ml-auto sm:justify-end">
-          {children}
-        </span>
-      </label>
+      {interactiveChildren ? (
+        <div className="flex flex-col items-stretch gap-2 px-3 py-3 sm:flex-row sm:items-center sm:gap-3 sm:py-2">
+          {contents}
+        </div>
+      ) : (
+        <label className="flex flex-col items-stretch gap-2 px-3 py-3 sm:flex-row sm:items-center sm:gap-3 sm:py-2">
+          {contents}
+        </label>
+      )}
       {hint === undefined ? null : (
         <p className={`px-3 pb-3 sm:pb-2 ${hintText}`}>{hint}</p>
       )}
@@ -355,14 +369,11 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
             </div>
           </div>
           <div className="flex flex-col justify-center gap-4 p-6 md:p-8">
-            <Field label={t("secrets.master")}>
-              <input
-                type="password"
-                value={master}
-                onChange={(event) => setMaster(event.target.value)}
-                className={control}
-              />
-            </Field>
+            <PasswordField
+              label={t("secrets.master")}
+              value={master}
+              onChange={setMaster}
+            />
             <Button
               kind="primary"
               disabled={busy || master === ""}
@@ -766,14 +777,12 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
                   <SyncRow
                     label={t("sync.secretAccessKey")}
                     hint={t("sync.credentialsNote")}
+                    interactiveChildren
                   >
-                    <input
-                      type="password"
+                    <PasswordInput
+                      label={t("sync.secretAccessKey")}
                       value={secretAccessKey}
-                      onChange={(event) =>
-                        setSecretAccessKey(event.target.value)
-                      }
-                      className={control}
+                      onChange={setSecretAccessKey}
                     />
                   </SyncRow>
 
@@ -830,12 +839,10 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
                         </label>
                       ) : null}
                       {setupCheck.state === "existing" || chooseOwn ? (
-                        <input
-                          type="password"
-                          aria-label={t("sync.keyOwnValue")}
+                        <PasswordInput
+                          label={t("sync.keyOwnValue")}
                           value={ownKey}
-                          onChange={(event) => setOwnKey(event.target.value)}
-                          className={control}
+                          onChange={setOwnKey}
                         />
                       ) : null}
                       <Button
@@ -962,12 +969,10 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
                     {t("sync.keyChooseOwn")}
                   </label>
                   {chooseOwn ? (
-                    <input
-                      type="password"
-                      aria-label={t("sync.keyOwnValue")}
+                    <PasswordInput
+                      label={t("sync.keyOwnValue")}
                       value={ownKey}
-                      onChange={(event) => setOwnKey(event.target.value)}
-                      className={control}
+                      onChange={setOwnKey}
                     />
                   ) : null}
                   {status.keyConfigured ? (

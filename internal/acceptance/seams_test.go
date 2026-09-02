@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -46,6 +47,41 @@ func productionGoFiles(t *testing.T, visit func(relative, contents string)) {
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestWebPasswordsUseTheSharedControl は、表示切替やアクセシビリティが画面ごとに
+// 分岐しないよう、秘密入力の実装場所を PasswordField に限定する。
+func TestWebPasswordsUseTheSharedControl(t *testing.T) {
+	root := filepath.Join("..", "..", "web", "src")
+	passwordInput := regexp.MustCompile(`(?s)type\s*=\s*(?:["']password["']|\{.{0,160}?["']password["'].{0,160}?\})`)
+	var found []string
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".tsx") || entry.Name() == "PasswordField.tsx" {
+			return nil
+		}
+		contents, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if passwordInput.Match(contents) {
+			relative, err := filepath.Rel(filepath.Join("..", ".."), path)
+			if err != nil {
+				return err
+			}
+			found = append(found, filepath.ToSlash(relative))
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	slices.Sort(found)
+	if len(found) != 0 {
+		t.Errorf("PasswordField を介さず秘密入力を実装している: %v", found)
 	}
 }
 

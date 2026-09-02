@@ -6,6 +6,7 @@ import { snippetsApi, type Snippet } from "../snippets/api";
 import { clipboard } from "../ui/clipboard";
 import { terminalCommandApi } from "../features/workspaces/commandApi";
 import { useDismissibleLayer } from "../ui/useDismissibleLayer";
+import { PasswordInput } from "../ui/PasswordField";
 
 type Prepared = {
   command: string;
@@ -35,19 +36,28 @@ export function TerminalQuickCommands({
   const [saveOpen, setSaveOpen] = useState(false);
   const [saveName, setSaveName] = useState("");
   const [terminalSelectionSaved, setTerminalSelectionSaved] = useState(false);
-  const selected = useMemo(() => snippets.find((snippet) => snippet.id === selectedId) ?? null, [selectedId, snippets]);
+  const selected = useMemo(
+    () => snippets.find((snippet) => snippet.id === selectedId) ?? null,
+    [selectedId, snippets],
+  );
 
   useEffect(() => {
     let active = true;
-    void snippetsApi.library()
+    void snippetsApi
+      .library()
       .then((library) => {
         if (!active) return;
         setSnippets(library.snippets);
         setSelectedId(library.snippets[0]?.id ?? "");
       })
-      .catch((error: unknown) => active && setProblem(failureCode(error) || "snippet_failed"))
+      .catch(
+        (error: unknown) =>
+          active && setProblem(failureCode(error) || "snippet_failed"),
+      )
       .finally(() => active && setBusy(false));
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, []);
 
   useDismissibleLayer({
@@ -74,7 +84,12 @@ export function TerminalQuickCommands({
     setBusy(true);
     setProblem("");
     try {
-      const saved = await snippetsApi.create({ name, command, description: "", variables: [] });
+      const saved = await snippetsApi.create({
+        name,
+        command,
+        description: "",
+        variables: [],
+      });
       setSnippets((current) => [saved, ...current]);
       setSelectedId(saved.id);
       setSaveOpen(false);
@@ -97,12 +112,21 @@ export function TerminalQuickCommands({
         inputs,
         targets: [{ targetId: session.id, sessionId: session.id }],
       };
-      const preview = await terminalCommandApi.preview({ ...request, issueAction: false });
-      const target = preview.targets.find((item) => item.sessionId === session.id) ?? preview.targets[0];
-      if (target === undefined || target.command === "") throw new Error("invalid_response");
+      const preview = await terminalCommandApi.preview({
+        ...request,
+        issueAction: false,
+      });
+      const target =
+        preview.targets.find((item) => item.sessionId === session.id) ??
+        preview.targets[0];
+      if (target === undefined || target.command === "")
+        throw new Error("invalid_response");
       setPrepared({ command: target.command, preview, request });
     } catch (error) {
-      setProblem(failureCode(error) || (error instanceof Error ? error.message : "terminal_command_failed"));
+      setProblem(
+        failureCode(error) ||
+          (error instanceof Error ? error.message : "terminal_command_failed"),
+      );
       setPrepared(null);
     } finally {
       setBusy(false);
@@ -135,15 +159,19 @@ export function TerminalQuickCommands({
       issueAction: false,
       expectedReviewEvidence: prepared.preview.reviewEvidence,
     });
-    const target = revealed.targets.find((item) => item.sessionId === session.id) ?? revealed.targets[0];
-    if (target === undefined || target.command === "") throw new Error("invalid_response");
+    const target =
+      revealed.targets.find((item) => item.sessionId === session.id) ??
+      revealed.targets[0];
+    if (target === undefined || target.command === "")
+      throw new Error("invalid_response");
     return target.command;
   }
 
   async function insertPrepared() {
     if (prepared === null) return;
     const current = prepared;
-    setBusy(true); setProblem("");
+    setBusy(true);
+    setProblem("");
     try {
       const confirmed = await terminalCommandApi.preview({
         ...current.request,
@@ -163,7 +191,8 @@ export function TerminalQuickCommands({
   async function runPrepared() {
     if (prepared === null) return;
     const current = prepared;
-    setBusy(true); setProblem("");
+    setBusy(true);
+    setProblem("");
     try {
       const confirmed = await terminalCommandApi.preview({
         ...current.request,
@@ -183,14 +212,28 @@ export function TerminalQuickCommands({
   async function handleActionFailure(error: unknown, current: Prepared) {
     const code = failureCode(error);
     if (code !== "terminal_command_preview_changed") {
-      setProblem(code === "terminal_command_insert_unsafe" ? t("terminal.quickCommandInsertUnsafe") : code || "terminal_command_failed");
+      setProblem(
+        code === "terminal_command_insert_unsafe"
+          ? t("terminal.quickCommandInsertUnsafe")
+          : code || "terminal_command_failed",
+      );
       return;
     }
     try {
-      const preview = await terminalCommandApi.preview({ ...current.request, issueAction: false });
-      const target = preview.targets.find((item) => item.sessionId === session.id) ?? preview.targets[0];
-      if (target === undefined || target.command === "") throw new Error("invalid_response");
-      setPrepared({ command: target.command, preview, request: current.request });
+      const preview = await terminalCommandApi.preview({
+        ...current.request,
+        issueAction: false,
+      });
+      const target =
+        preview.targets.find((item) => item.sessionId === session.id) ??
+        preview.targets[0];
+      if (target === undefined || target.command === "")
+        throw new Error("invalid_response");
+      setPrepared({
+        command: target.command,
+        preview,
+        request: current.request,
+      });
       setProblem(t("terminal.quickCommandChanged"));
     } catch (refreshError) {
       setPrepared(null);
@@ -199,67 +242,211 @@ export function TerminalQuickCommands({
   }
 
   return (
-    <div ref={panel} role="dialog" aria-label={t("terminal.quickCommands")} className="absolute right-2 top-11 z-30 flex max-h-[min(32rem,75vh)] w-[min(24rem,calc(100vw-1rem))] flex-col gap-3 overflow-auto rounded-md border border-control-line bg-card p-3 shadow-2xl">
+    <div
+      ref={panel}
+      role="dialog"
+      aria-label={t("terminal.quickCommands")}
+      className="absolute right-2 top-11 z-30 flex max-h-[min(32rem,75vh)] w-[min(24rem,calc(100vw-1rem))] flex-col gap-3 overflow-auto rounded-md border border-control-line bg-card p-3 shadow-2xl"
+    >
       <div className="flex items-center gap-2">
-        <h3 className="grow text-sm font-semibold">{t("terminal.quickCommands")}</h3>
-        <button type="button" aria-label={t("terminal.quickCommandsClose")} className="rounded px-2 text-ink-muted hover:bg-select-fill" onClick={onClose}>×</button>
+        <h3 className="grow text-sm font-semibold">
+          {t("terminal.quickCommands")}
+        </h3>
+        <button
+          type="button"
+          aria-label={t("terminal.quickCommandsClose")}
+          className="rounded px-2 text-ink-muted hover:bg-select-fill"
+          onClick={onClose}
+        >
+          ×
+        </button>
       </div>
-      {problem === "" ? null : <p role="alert" className="rounded bg-notice px-2 py-1.5 text-xs text-notice-ink">{problem}</p>}
-      {terminalSelectionSaved ? <p role="status" className="rounded bg-notice px-2 py-1.5 text-xs text-notice-ink">{t("terminal.quickCommandSaved")}</p> : null}
+      {problem === "" ? null : (
+        <p
+          role="alert"
+          className="rounded bg-notice px-2 py-1.5 text-xs text-notice-ink"
+        >
+          {problem}
+        </p>
+      )}
+      {terminalSelectionSaved ? (
+        <p
+          role="status"
+          className="rounded bg-notice px-2 py-1.5 text-xs text-notice-ink"
+        >
+          {t("terminal.quickCommandSaved")}
+        </p>
+      ) : null}
       {initialCommand.trim() === "" ? null : saveOpen ? (
         <div className="grid gap-2 rounded border border-line p-2">
           <label className="text-xs text-ink-muted">
             {t("terminal.quickCommandName")}
-            <input autoFocus value={saveName} onChange={(event) => setSaveName(event.target.value)} className="mt-1 block w-full rounded border border-control-line bg-control px-2 py-1.5 text-sm text-ink" />
+            <input
+              autoFocus
+              value={saveName}
+              onChange={(event) => setSaveName(event.target.value)}
+              className="mt-1 block w-full rounded border border-control-line bg-control px-2 py-1.5 text-sm text-ink"
+            />
           </label>
-          <pre className="max-h-24 overflow-auto whitespace-pre-wrap rounded bg-code-bg p-2 text-xs text-code-fg">{initialCommand}</pre>
+          <pre className="max-h-24 overflow-auto whitespace-pre-wrap rounded bg-code-bg p-2 text-xs text-code-fg">
+            {initialCommand}
+          </pre>
           <div className="flex gap-2">
-            <button type="button" disabled={busy || saveName.trim() === ""} onClick={() => void saveSelection()} className="min-h-8 rounded bg-accent px-3 py-1 text-sm font-medium text-accent-contrast disabled:opacity-50">{t("terminal.quickCommandSave")}</button>
-            <button type="button" onClick={() => setSaveOpen(false)} className="min-h-8 rounded border border-control-line px-3 py-1 text-sm hover:bg-select-fill">{t("snippets.cancel")}</button>
+            <button
+              type="button"
+              disabled={busy || saveName.trim() === ""}
+              onClick={() => void saveSelection()}
+              className="min-h-8 rounded bg-accent px-3 py-1 text-sm font-medium text-accent-contrast disabled:opacity-50"
+            >
+              {t("terminal.quickCommandSave")}
+            </button>
+            <button
+              type="button"
+              onClick={() => setSaveOpen(false)}
+              className="min-h-8 rounded border border-control-line px-3 py-1 text-sm hover:bg-select-fill"
+            >
+              {t("snippets.cancel")}
+            </button>
           </div>
         </div>
       ) : (
-        <button type="button" className="min-h-8 self-start rounded border border-control-line px-3 py-1 text-sm hover:bg-select-fill" onClick={() => setSaveOpen(true)}>{t("terminal.quickCommandSaveSelection")}</button>
+        <button
+          type="button"
+          className="min-h-8 self-start rounded border border-control-line px-3 py-1 text-sm hover:bg-select-fill"
+          onClick={() => setSaveOpen(true)}
+        >
+          {t("terminal.quickCommandSaveSelection")}
+        </button>
       )}
-      {busy && snippets.length === 0 ? <p className="text-xs text-ink-muted">{t("palette.loading")}</p> : snippets.length === 0 ? (
+      {busy && snippets.length === 0 ? (
+        <p className="text-xs text-ink-muted">{t("palette.loading")}</p>
+      ) : snippets.length === 0 ? (
         <p className="text-xs text-ink-muted">{t("snippets.empty")}</p>
       ) : (
         <>
-          <label className="text-xs text-ink-muted">{t("workspace.savedSnippet")}
-            <select value={selectedId} onChange={(event) => { setSelectedId(event.target.value); invalidate({}); }} className="mt-1 block w-full rounded border border-control-line bg-control px-2 py-1.5 text-sm text-ink">
-              {snippets.map((snippet) => <option key={snippet.id} value={snippet.id}>{snippet.name}</option>)}
+          <label className="text-xs text-ink-muted">
+            {t("workspace.savedSnippet")}
+            <select
+              value={selectedId}
+              onChange={(event) => {
+                setSelectedId(event.target.value);
+                invalidate({});
+              }}
+              className="mt-1 block w-full rounded border border-control-line bg-control px-2 py-1.5 text-sm text-ink"
+            >
+              {snippets.map((snippet) => (
+                <option key={snippet.id} value={snippet.id}>
+                  {snippet.name}
+                </option>
+              ))}
             </select>
           </label>
-          {selected?.description ? <p className="text-xs text-ink-muted">{selected.description}</p> : null}
+          {selected?.description ? (
+            <p className="text-xs text-ink-muted">{selected.description}</p>
+          ) : null}
           {selected?.variables.map((variable) => (
-            <label key={variable.name} className="text-xs text-ink-muted">
-              <code>{`{{${variable.name}}}`}</code>{variable.description ? ` · ${variable.description}` : ""}
+            <div key={variable.name} className="text-xs text-ink-muted">
+              <span>
+                <code>{`{{${variable.name}}}`}</code>
+                {variable.description ? ` · ${variable.description}` : ""}
+              </span>
               {variable.type === "boolean" ? (
-                <select value={inputs[variable.name] ?? ""} onChange={(event) => invalidate({ ...inputs, [variable.name]: event.target.value })} className="mt-1 block w-full rounded border border-control-line bg-control px-2 py-1.5 text-sm text-ink">
-                  <option value="">{variable.default === undefined ? "" : `${t("workspace.useDefault")} (${variable.default})`}</option>
-                  <option value="true">true</option><option value="false">false</option>
+                <select
+                  aria-label={variable.name}
+                  value={inputs[variable.name] ?? ""}
+                  onChange={(event) =>
+                    invalidate({
+                      ...inputs,
+                      [variable.name]: event.target.value,
+                    })
+                  }
+                  className="mt-1 block w-full rounded border border-control-line bg-control px-2 py-1.5 text-sm text-ink"
+                >
+                  <option value="">
+                    {variable.default === undefined
+                      ? ""
+                      : `${t("workspace.useDefault")} (${variable.default})`}
+                  </option>
+                  <option value="true">true</option>
+                  <option value="false">false</option>
                 </select>
+              ) : variable.type === "secret" ? (
+                <PasswordInput
+                  label={variable.name}
+                  value={inputs[variable.name] ?? ""}
+                  placeholder={
+                    variable.default === undefined
+                      ? ""
+                      : `${t("workspace.useDefault")}: ${variable.default}`
+                  }
+                  onChange={(value) =>
+                    invalidate({ ...inputs, [variable.name]: value })
+                  }
+                  className="mt-1 block w-full rounded border border-control-line bg-control px-2 py-1.5 text-sm text-ink"
+                />
               ) : (
                 <input
-                  type={variable.type === "secret" ? "password" : variable.type === "integer" ? "number" : "text"}
+                  type={variable.type === "integer" ? "number" : "text"}
+                  aria-label={variable.name}
                   value={inputs[variable.name] ?? ""}
-                  placeholder={variable.default === undefined ? "" : `${t("workspace.useDefault")}: ${variable.default}`}
-                  onChange={(event) => invalidate({ ...inputs, [variable.name]: event.target.value })}
+                  placeholder={
+                    variable.default === undefined
+                      ? ""
+                      : `${t("workspace.useDefault")}: ${variable.default}`
+                  }
+                  onChange={(event) =>
+                    invalidate({
+                      ...inputs,
+                      [variable.name]: event.target.value,
+                    })
+                  }
                   className="mt-1 block w-full rounded border border-control-line bg-control px-2 py-1.5 text-sm text-ink"
                 />
               )}
-            </label>
+            </div>
           ))}
           {prepared === null ? (
-            <button type="button" disabled={busy || selected === null} onClick={() => void prepare()} className="min-h-8 self-start rounded border border-control-line bg-control px-3 py-1 text-sm font-medium hover:bg-select-fill disabled:opacity-50">{t("snippets.preview")}</button>
+            <button
+              type="button"
+              disabled={busy || selected === null}
+              onClick={() => void prepare()}
+              className="min-h-8 self-start rounded border border-control-line bg-control px-3 py-1 text-sm font-medium hover:bg-select-fill disabled:opacity-50"
+            >
+              {t("snippets.preview")}
+            </button>
           ) : (
             <>
-              <pre className="max-h-32 overflow-auto whitespace-pre-wrap rounded bg-code-bg p-2 text-xs text-code-fg">{prepared.command}</pre>
-              <p className="text-[11px] leading-4 text-ink-muted">{t("terminal.quickCommandContextWarning")}</p>
+              <pre className="max-h-32 overflow-auto whitespace-pre-wrap rounded bg-code-bg p-2 text-xs text-code-fg">
+                {prepared.command}
+              </pre>
+              <p className="text-[11px] leading-4 text-ink-muted">
+                {t("terminal.quickCommandContextWarning")}
+              </p>
               <div className="flex flex-wrap gap-2">
-                <button type="button" disabled={busy} onClick={() => void insertPrepared()} className="min-h-8 rounded border border-control-line bg-control px-3 py-1 text-sm hover:bg-select-fill disabled:opacity-50">{t("terminal.quickCommandInsert")}</button>
-                <button type="button" disabled={busy} onClick={() => void runPrepared()} className="min-h-8 rounded bg-accent px-3 py-1 text-sm font-medium text-accent-contrast disabled:opacity-50">{t("terminal.quickCommandRun")}</button>
-                <button type="button" disabled={busy} onClick={() => void copyPrepared()} className="min-h-8 rounded border border-control-line px-3 py-1 text-sm hover:bg-select-fill disabled:opacity-50">{t("terminal.quickCommandCopy")}</button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void insertPrepared()}
+                  className="min-h-8 rounded border border-control-line bg-control px-3 py-1 text-sm hover:bg-select-fill disabled:opacity-50"
+                >
+                  {t("terminal.quickCommandInsert")}
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void runPrepared()}
+                  className="min-h-8 rounded bg-accent px-3 py-1 text-sm font-medium text-accent-contrast disabled:opacity-50"
+                >
+                  {t("terminal.quickCommandRun")}
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void copyPrepared()}
+                  className="min-h-8 rounded border border-control-line px-3 py-1 text-sm hover:bg-select-fill disabled:opacity-50"
+                >
+                  {t("terminal.quickCommandCopy")}
+                </button>
               </div>
             </>
           )}
