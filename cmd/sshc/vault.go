@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -42,8 +43,8 @@ type passwordTerminal interface {
 	ReadPassword(ctx context.Context, input *os.File, prompt func() error) ([]byte, error)
 }
 
-// maskedPasswordTerminal is implemented by real OS terminals so setup can
-// confirm each hidden character as it is typed. Test doubles and alternative
+// maskedPasswordTerminal is implemented by real OS terminals so secret prompts
+// can confirm each hidden character as it is typed. Test doubles and alternative
 // terminals may omit it; the caller then confirms the input after Enter.
 type maskedPasswordTerminal interface {
 	ReadPasswordMasked(
@@ -245,25 +246,60 @@ func runVaultChange(
 func promptVaultPassword(
 	ctx context.Context, stdin *os.File, stderr io.Writer, terminal passwordTerminal, prompt string,
 ) ([]byte, error) {
+	return promptMaskedPassword(ctx, stdin, stderr, terminal, prompt)
+}
+
+// promptMaskedPassword writes one asterisk per Unicode character while a real
+// terminal reads without echo. The entered value itself is never written back.
+func promptMaskedPassword(
+	ctx context.Context, stdin *os.File, output io.Writer, terminal passwordTerminal, label string,
+) ([]byte, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	prompted := false
-	typed, err := terminal.ReadPassword(ctx, stdin, func() error {
-		if _, err := fmt.Fprint(stderr, prompt); err != nil {
+	maskCount := 0
+	promptInput := func() error {
+		if _, err := fmt.Fprint(output, label); err != nil {
 			return err
 		}
 		prompted = true
 		return nil
-	})
-	var newlineErr error
+	}
+	feedback := func(next int) error {
+		if next > maskCount {
+			if _, err := fmt.Fprint(output, strings.Repeat("*", next-maskCount)); err != nil {
+				return err
+			}
+		} else if next < maskCount {
+			if _, err := fmt.Fprint(output, strings.Repeat("\b \b", maskCount-next)); err != nil {
+				return err
+			}
+		}
+		maskCount = next
+		return nil
+	}
+	live, liveFeedback := terminal.(maskedPasswordTerminal)
+	var typed []byte
+	var err error
+	if liveFeedback {
+		typed, err = live.ReadPasswordMasked(ctx, stdin, promptInput, feedback)
+	} else {
+		typed, err = terminal.ReadPassword(ctx, stdin, promptInput)
+	}
+	var outputErr error
 	if prompted {
-		_, newlineErr = fmt.Fprintln(stderr)
+		if err == nil && !liveFeedback && len(typed) != 0 {
+			_, outputErr = fmt.Fprint(output, strings.Repeat("*", utf8.RuneCount(typed)))
+		}
+		if _, newlineErr := fmt.Fprintln(output); outputErr == nil {
+			outputErr = newlineErr
+		}
 	}
 	if err != nil {
 		return typed, err
 	}
-	return typed, newlineErr
+	return typed, outputErr
 }
 
 func vaultPromptFailure(ctx context.Context, err error, stderr io.Writer) int {

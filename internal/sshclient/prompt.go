@@ -6,6 +6,7 @@ import (
 	"io"
 	"strings"
 	"sync"
+	"unicode/utf8"
 )
 
 // ErrPromptAborted は、ユーザーが問いに応答せずに打ち切ったことを報告する。
@@ -23,7 +24,7 @@ var ErrPromptUnavailable = errors.New("authentication requires user input, but t
 type Prompter interface {
 	// Line は打った文字が見える問い。
 	Line(prompt string) (string, error)
-	// Secret は打った文字が見えない問い。
+	// Secret は値の代わりに1文字ずつ伏せ字を表示する問い。
 	Secret(prompt string) (string, error)
 	// Confirm は yes か no を求める。
 	Confirm(prompt string) (bool, error)
@@ -51,8 +52,9 @@ var noPrompt Prompter = nonInteractivePrompter{}
 // StreamPrompter は、端末のストリームへ問いを出す。
 //
 // 端末は raw モードである（xterm.js はローカルエコーを持たない）。だから
-// 見える問いのエコーはこちらが書く。見えない問いでは書かない。結果を
-// 端末へ書き戻さないのは、それが画面にもスクロールバックにも残るからである。
+// 見える問いのエコーはこちらが書く。秘密の問いでは値の代わりに伏せ字を
+// 書く。結果を端末へ書き戻さないのは、それが画面にもスクロールバックにも
+// 残るからである。
 type StreamPrompter struct {
 	Out io.Writer
 	In  io.Reader
@@ -62,8 +64,20 @@ type StreamPrompter struct {
 	end   func()
 }
 
-func (p StreamPrompter) Line(prompt string) (string, error)   { return p.read(prompt, true) }
-func (p StreamPrompter) Secret(prompt string) (string, error) { return p.read(prompt, false) }
+type promptEcho uint8
+
+const (
+	promptEchoVisible promptEcho = iota
+	promptEchoMasked
+)
+
+func (p StreamPrompter) Line(prompt string) (string, error) {
+	return p.read(prompt, promptEchoVisible)
+}
+
+func (p StreamPrompter) Secret(prompt string) (string, error) {
+	return p.read(prompt, promptEchoMasked)
+}
 
 // Confirm は yes か no だけを受ける。
 //
@@ -71,7 +85,7 @@ func (p StreamPrompter) Secret(prompt string) (string, error) { return p.read(pr
 // 打ち間違いで通ってよい問いではない。
 func (p StreamPrompter) Confirm(prompt string) (bool, error) {
 	for attempt := 0; attempt < maxConfirmAttempts; attempt++ {
-		answer, err := p.read(prompt, true)
+		answer, err := p.read(prompt, promptEchoVisible)
 		if err != nil {
 			return false, err
 		}
@@ -96,7 +110,7 @@ const maxConfirmAttempts = 3
 // maxAnswer は、ひとつの結果の長さの上限である。
 const maxAnswer = 1024
 
-func (p StreamPrompter) read(prompt string, echo bool) (string, error) {
+func (p StreamPrompter) read(prompt string, echo promptEcho) (string, error) {
 	if p.begin != nil {
 		p.begin()
 	}
@@ -110,6 +124,8 @@ func (p StreamPrompter) read(prompt string, echo bool) (string, error) {
 	}
 
 	var answer []byte
+	defer func() { clear(answer) }()
+	displayedRunes := 0
 	buffer := make([]byte, 1)
 	for {
 		read, err := p.In.Read(buffer)
@@ -139,27 +155,75 @@ func (p StreamPrompter) read(prompt string, echo bool) (string, error) {
 			if len(answer) == 0 {
 				continue
 			}
-			answer = answer[:len(answer)-1]
-			if echo {
+			answer = removeLastInputCharacter(answer)
+			if echo == promptEchoVisible {
 				if _, err := io.WriteString(p.Out, "\b \b"); err != nil {
 					return "", err
 				}
+			} else if err := writeMaskedPromptFeedback(p.Out, answer, &displayedRunes); err != nil {
+				return "", err
+			}
+		case 0x15: // Ctrl-U
+			if len(answer) == 0 {
+				continue
+			}
+			removed := utf8.RuneCount(answer)
+			clear(answer)
+			answer = answer[:0]
+			if echo == promptEchoVisible {
+				if _, err := io.WriteString(p.Out, strings.Repeat("\b \b", removed)); err != nil {
+					return "", err
+				}
+			} else if err := writeMaskedPromptFeedback(p.Out, answer, &displayedRunes); err != nil {
+				return "", err
 			}
 		default:
 			if character < 0x20 || len(answer) >= maxAnswer {
 				continue
 			}
 			answer = append(answer, character)
-			if echo {
+			if echo == promptEchoVisible {
 				if _, err := p.Out.Write(buffer); err != nil {
 					return "", err
 				}
+			} else if err := writeMaskedPromptFeedback(p.Out, answer, &displayedRunes); err != nil {
+				return "", err
 			}
 		}
 		if err != nil && !errors.Is(err, io.EOF) {
 			return "", err
 		}
 	}
+}
+
+func removeLastInputCharacter(answer []byte) []byte {
+	if !utf8.Valid(answer) {
+		answer[len(answer)-1] = 0
+		return answer[:len(answer)-1]
+	}
+	_, size := utf8.DecodeLastRune(answer)
+	clear(answer[len(answer)-size:])
+	return answer[:len(answer)-size]
+}
+
+func writeMaskedPromptFeedback(output io.Writer, answer []byte, displayedRunes *int) error {
+	// UTF-8は複数回のReadで届くため、ひとつのRuneが揃うまで表示数を変えない。
+	if !utf8.Valid(answer) {
+		return nil
+	}
+	next := utf8.RuneCount(answer)
+	switch {
+	case next > *displayedRunes:
+		if _, err := io.WriteString(output, strings.Repeat("*", next-*displayedRunes)); err != nil {
+			return err
+		}
+	case next < *displayedRunes:
+		if _, err := io.WriteString(output, strings.Repeat("\b \b", *displayedRunes-next)); err != nil {
+			return err
+		}
+	}
+	*displayedRunes = next
+	return nil
 }
 
 // InputBuffer は、握手のあいだに打たれたバイト列を溜める。
