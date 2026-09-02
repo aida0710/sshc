@@ -249,7 +249,7 @@ export function AdvancedSettings({
                   </Row>
                 ))}
               </Card>}
-            <div className="sshc-card grid gap-3 rounded-md bg-card p-4 sm:grid-cols-2 sm:items-end 2xl:grid-cols-[10rem_9rem_minmax(12rem,1fr)_auto]">
+            <Card radius="md" className="grid gap-3 p-4 sm:grid-cols-2 sm:items-end 2xl:grid-cols-[10rem_9rem_minmax(12rem,1fr)_auto]">
               <label className="flex flex-col gap-1 text-xs text-ink-muted">
                 {t("conn.forwardType")}
                 <select value={newForwardKind} disabled={fieldsDisabled} onChange={(event) => setNewForwardKind(event.currentTarget.value as "local" | "dynamic")} className={control}>
@@ -268,7 +268,7 @@ export function AdvancedSettings({
                 </label>
               ) : null}
               <Button className={`${narrowControl} sm:col-span-2 2xl:col-span-1 ${newForwardKind === "dynamic" ? "2xl:col-start-4" : ""}`} disabled={fieldsDisabled} onClick={addForward}>{t("conn.forwardAdd")}</Button>
-            </div>
+            </Card>
             <p className={hintText}>{t(newForwardKind === "local" ? "conn.forwardDestinationHint" : "conn.forwardDynamicHint")}</p>
           </>
         ) : visibleFields.length === 0 ? <p className={hintText}>{t("conn.advancedNoFields")}</p> : (
@@ -307,7 +307,7 @@ export function AdvancedSettings({
           </Card>
         )}
 
-        <div hidden={area !== "Directives"} className="sshc-card flex flex-col gap-3 rounded-md bg-card p-4">
+        <Card hidden={area !== "Directives"} radius="md" className="flex flex-col gap-3 p-4">
           <label htmlFor="new-directive" className="text-xs text-ink-muted">{t("host.newDirective")}</label>
           <input
             id="new-directive"
@@ -327,7 +327,7 @@ export function AdvancedSettings({
           <Button className={narrowControl} disabled={fieldsDisabled} onClick={addDirective}>
             {t("host.addDirective")}
           </Button>
-        </div>
+        </Card>
 
         {fieldDirty ? <div className="flex items-center justify-end gap-2 border-t border-line py-3">
           <Button disabled={!fieldDirty} onClick={discard}>{t("conn.discardChanges")}</Button>

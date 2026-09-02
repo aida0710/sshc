@@ -12,6 +12,7 @@ import { consoleDragMimeType, type LiveWorkspaceSummary } from "./live";
 import { browserSessionStorage, loadLiveWorkspace, saveLiveWorkspace, type LiveWorkspaceNode } from "./livePersistence";
 import { useDismissibleLayer } from "../../ui/useDismissibleLayer";
 import { InputDialog } from "../../ui/InputDialog";
+import { useMediaQuery } from "../../ui/useMediaQuery";
 
 export type WorkspaceRestoreRequest = { id: string; sequence: number };
 export type WorkspaceRenameRequest = { name: string; sequence: number };
@@ -90,10 +91,6 @@ function dockLabel(t: Translate, edge: DockEdge): string {
   }
 }
 
-function compactWorkspaceViewport(): boolean {
-  return typeof window.matchMedia === "function" && window.matchMedia("(max-width: 767px)").matches;
-}
-
 export function TerminalWorkspace({
   sessions, activeSessionId, onActive, onOpenAlias, onOpenShell, renderTerminal, restoreRequest = null, onRestoreConsumed = () => undefined,
   renameRequest = null, onRenameConsumed = () => undefined, onLiveWorkspaceChange = () => undefined, sessionsLoaded = true,
@@ -119,7 +116,7 @@ export function TerminalWorkspace({
   const [focusModePaneId, setFocusModePaneId] = useState<string | null>(null);
   const [movingPaneId, setMovingPaneId] = useState<string | null>(null);
   const [dockTarget, setDockTarget] = useState<{ paneId: string; edge: DockEdge } | null>(null);
-  const [compactViewport, setCompactViewport] = useState(compactWorkspaceViewport);
+  const compactViewport = useMediaQuery("(max-width: 767px)");
   const [problem, setProblem] = useState("");
   const [liveRestoreReady, setLiveRestoreReady] = useState(false);
   const [liveWorkspaceName, setLiveWorkspaceName] = useState("");
@@ -275,14 +272,6 @@ export function TerminalWorkspace({
     const exit = (event: KeyboardEvent) => { if (event.key === "Escape") setFocusModePaneId(null); };
     window.addEventListener("keydown", exit);
     return () => window.removeEventListener("keydown", exit);
-  }, []);
-  useEffect(() => {
-    if (typeof window.matchMedia !== "function") return;
-    const media = window.matchMedia("(max-width: 767px)");
-    const updateViewport = () => setCompactViewport(media.matches);
-    updateViewport();
-    media.addEventListener("change", updateViewport);
-    return () => media.removeEventListener("change", updateViewport);
   }, []);
   useEffect(() => {
     if (layout === null || activeSessionId === null || !layoutSessionIDs.includes(activeSessionId)) return;

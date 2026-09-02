@@ -8,8 +8,9 @@ import {
 } from "../api/integrations";
 import { useLanguage } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
-import { control, hintText, sectionHeading } from "../ui/form";
-import { Button, Notice } from "../ui/surface";
+import { CheckboxField, control, hintText, sectionHeading } from "../ui/form";
+import { Button, Card, Notice } from "../ui/surface";
+import { PanelState } from "../ui/PanelState";
 import { PageHeader } from "../ui/page";
 import { Icon } from "../ui/icons";
 import { formatBytes, SyncResultCard } from "./SyncResultCard";
@@ -318,11 +319,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
   }
 
   if (statusState.phase === "loading") {
-    return (
-      <p role="status" className={hintText}>
-        {t("sync.loading")}
-      </p>
-    );
+    return <PanelState tone="loading" title={t("sync.loading")} />;
   }
 
   if (statusState.phase === "error") {
@@ -354,7 +351,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
           description={t("sync.pageDescription")}
         />
         <SyncErrorNotice message={error} code={errorCode} />
-        <section className="sshc-card grid overflow-hidden rounded-md bg-card md:grid-cols-[minmax(0,0.9fr)_minmax(18rem,1.1fr)]">
+        <Card as="section" radius="md" className="grid md:grid-cols-[minmax(0,0.9fr)_minmax(18rem,1.1fr)]">
           <div className="flex flex-col justify-between gap-8 bg-toolbar p-6 md:p-8">
             <span className="flex h-12 w-12 items-center justify-center rounded-md bg-select-fill text-accent">
               <Icon name="sync" className="h-6 w-6" />
@@ -393,7 +390,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
               {t("secrets.unlock")}
             </Button>
           </div>
-        </section>
+        </Card>
       </div>
     );
   }
@@ -411,9 +408,11 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
     : bucketHistoryItems.slice(0, 5);
   const transferPanel =
     status.configured && status.direction !== "pull" ? (
-      <section
+      <Card
+        as="section"
         aria-labelledby="sync-transfer-heading"
-        className="sshc-card flex flex-col gap-3 rounded-md bg-card p-4"
+        radius="md"
+        className="flex flex-col gap-3 p-4"
       >
         <h3 id="sync-transfer-heading" className={sectionHeading}>
           {t("sync.transferHeading")}
@@ -484,7 +483,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
             {t("sync.preview")}
           </Button>
         </div>
-      </section>
+      </Card>
     ) : null;
 
   return (
@@ -533,7 +532,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
       )}
 
       {status.configured ? (
-        <section className="sshc-card overflow-hidden rounded-md bg-card">
+        <Card as="section" radius="md">
           <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line bg-toolbar px-4 py-3">
             <div>
               <h3 className={sectionHeading}>{t("sync.overviewHeading")}</h3>
@@ -551,24 +550,19 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
             </span>
           </header>
           <div className="flex flex-col gap-4 p-4">
-            <label className="flex items-center gap-2 text-sm text-ink">
-              <input
-                type="checkbox"
+            <CheckboxField
+                label={t("sync.autoEnable")}
+                hint={t(`sync.autoHint.${status.direction}` as MessageKey)}
                 checked={status.auto.enabled}
                 disabled={busy || !status.keyConfigured}
-                onChange={(event) =>
+                onChange={(checked) =>
                   void run(
-                    () => api.setAutoSync(event.target.checked),
+                    () => api.setAutoSync(checked),
                     (next) => setStatusState({ phase: "ready", value: next }),
                     t("sync.autoFailed"),
                   )
                 }
-              />
-              {t("sync.autoEnable")}
-            </label>
-            <p className={hintText}>
-              {t(`sync.autoHint.${status.direction}` as MessageKey)}
-            </p>
+            />
             {remoteHeadBlocked ? (
               <div className="flex flex-col gap-3">
                 <Notice tone="danger">
@@ -655,7 +649,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
               )}
             </div>
           </div>
-        </section>
+        </Card>
       ) : null}
 
       {status.configured ? (
@@ -827,16 +821,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
                           : t("sync.setup.emptyKey")}
                       </p>
                       {setupCheck.state === "empty" ? (
-                        <label className="flex items-center gap-2 text-sm text-ink-muted">
-                          <input
-                            type="checkbox"
-                            checked={chooseOwn}
-                            onChange={(event) =>
-                              setChooseOwn(event.target.checked)
-                            }
-                          />
-                          {t("sync.keyChooseOwn")}
-                        </label>
+                        <CheckboxField label={t("sync.keyChooseOwn")} checked={chooseOwn} onChange={setChooseOwn} />
                       ) : null}
                       {setupCheck.state === "existing" || chooseOwn ? (
                         <PasswordInput
@@ -960,14 +945,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
                   {t(status.keyConfigured ? "sync.keySet" : "sync.keyMissing")}
                 </p>
                 <div className="flex flex-col gap-3 border-t border-line pt-3">
-                  <label className="flex items-center gap-2 text-sm text-ink-muted">
-                    <input
-                      type="checkbox"
-                      checked={chooseOwn}
-                      onChange={(event) => setChooseOwn(event.target.checked)}
-                    />
-                    {t("sync.keyChooseOwn")}
-                  </label>
+                  <CheckboxField label={t("sync.keyChooseOwn")} checked={chooseOwn} onChange={setChooseOwn} />
                   {chooseOwn ? (
                     <PasswordInput
                       label={t("sync.keyOwnValue")}
@@ -976,16 +954,7 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
                     />
                   ) : null}
                   {status.keyConfigured ? (
-                    <label className="flex items-start gap-2 text-sm text-danger">
-                      <input
-                        type="checkbox"
-                        checked={confirmHistoryLoss}
-                        onChange={(event) =>
-                          setConfirmHistoryLoss(event.target.checked)
-                        }
-                      />
-                      <span>{t("sync.keyHistoryLossConfirm")}</span>
-                    </label>
+                    <CheckboxField label={t("sync.keyHistoryLossConfirm")} checked={confirmHistoryLoss} onChange={setConfirmHistoryLoss} tone="danger" />
                   ) : null}
                   <Button
                     kind="primary"
@@ -1072,13 +1041,11 @@ export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
               </div>
 
               {bucketState.phase === "idle" ? (
-                <p className={hintText}>{t("sync.bucketNotConfigured")}</p>
+                <PanelState tone="empty" title={t("sync.bucketNotConfigured")} />
               ) : bucketState.phase === "loading" ? (
-                <p role="status" className={hintText}>
-                  {t("sync.bucketLoading")}
-                </p>
+                <PanelState tone="loading" title={t("sync.bucketLoading")} />
               ) : bucketState.phase === "error" ? (
-                <Notice tone="danger">{bucketState.message}</Notice>
+                <PanelState tone="failed" title={bucketState.message} action={<Button onClick={() => void refreshBucket()}>{t("sync.bucketRefresh")}</Button>} />
               ) : (
                 <div className="grid gap-3 border-t border-line pt-3 lg:grid-cols-2">
                   <div className="rounded border border-line bg-surface p-3">

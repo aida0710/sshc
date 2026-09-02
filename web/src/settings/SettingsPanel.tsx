@@ -30,7 +30,7 @@ import { PasswordField } from "../ui/PasswordField";
 import { CheckboxField, Field, control, hintText } from "../ui/form";
 import { Icon, type IconName } from "../ui/icons";
 import { PageHeader } from "../ui/page";
-import { Button, Notice } from "../ui/surface";
+import { Button, Card, Notice } from "../ui/surface";
 import {
   settingsPageMeta,
   type SettingsPage,
@@ -419,7 +419,7 @@ export function SettingsPanel({
     <div className={`mx-auto flex w-full max-w-6xl flex-col gap-6 ${mobileTouchTargets}`}>
       <PageHeader title={t(pageTitle)} description={t(pageDescription)} />
 
-      <div className="sshc-card overflow-hidden rounded-md bg-card">
+      <Card radius="md">
         {page === "All" || page === "Engine" ? (
         <SettingsSection id="settings-engine" label={t("engine.heading")} icon="settings" showHeading={page === "All"}>
           <div className="max-w-2xl">
@@ -937,7 +937,7 @@ export function SettingsPanel({
           </div>
         </SettingsSection>
         ) : null}
-      </div>
+      </Card>
     </div>
   );
 }

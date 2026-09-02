@@ -11,8 +11,8 @@ import {
   type RemoteKeysApi,
 } from "./api";
 import { CopyButton } from "../ui/CopyButton";
-import { Button, Notice } from "../ui/surface";
-import { Field, control } from "../ui/form";
+import { Button, Card, Notice } from "../ui/surface";
+import { CheckboxField, Field, control } from "../ui/form";
 import { PageHeader } from "../ui/page";
 
 type RemoteKeyPanelProps = {
@@ -255,7 +255,7 @@ export function RemoteKeyPanel({
       ) : null}
 
 
-      <section className="sshc-card overflow-hidden rounded-md bg-card">
+      <Card as="section" radius="md">
         <div className="grid lg:grid-cols-2">
           <div className="border-b border-line p-5 lg:border-b-0 lg:border-r">
             <div className="mb-4 flex items-center gap-3">
@@ -385,10 +385,10 @@ export function RemoteKeyPanel({
             )}
           </div>
         </div>
-      </section>
+      </Card>
 
       {plannedTargets.length > 0 ? (
-        <section aria-labelledby="remote-key-plan-heading" className="sshc-card overflow-hidden rounded-md bg-card text-sm">
+        <Card as="section" aria-labelledby="remote-key-plan-heading" radius="md" className="text-sm">
           <div className="flex items-center gap-3 border-b border-line bg-surface-subtle px-5 py-4">
             <span aria-hidden="true" className="grid h-7 w-7 place-items-center rounded-full bg-live text-xs font-semibold text-accent-ink">3</span>
             <h3 id="remote-key-plan-heading" className="font-semibold">
@@ -419,21 +419,14 @@ export function RemoteKeyPanel({
                   </li>
                 ))}
               </ul>
-              <label className="mt-2 flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={acknowledged}
-                  onChange={(event) => setAcknowledged(event.target.checked)}
-                />
-                <span>{t("rk.acknowledgeRuns")}</span>
-              </label>
+              <CheckboxField className="mt-2" label={t("rk.acknowledgeRuns")} checked={acknowledged} onChange={setAcknowledged} tone="notice" />
             </div>
           ) : null}
-        </section>
+        </Card>
       ) : null}
 
       {results.length > 0 ? (
-        <section className="sshc-card overflow-hidden rounded-md bg-card text-sm">
+        <Card as="section" radius="md" className="text-sm">
           <h3 className="px-4 pt-4 font-semibold text-live">{t("rk.result")}</h3>
           <ul className="mt-2 divide-y divide-line">
             {results.map((result) => (
@@ -456,7 +449,7 @@ export function RemoteKeyPanel({
               </li>
             ))}
           </ul>
-        </section>
+        </Card>
       ) : null}
     </section>
   );

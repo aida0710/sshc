@@ -6,7 +6,7 @@ import { locales, type Locale } from "../i18n/locale";
 import type { MessageKey } from "../i18n/messages";
 import { useTheme } from "../theme/context";
 import { themes, type Theme } from "../theme/theme";
-import { autoControl } from "../ui/form";
+import { autoControl, CheckboxField } from "../ui/form";
 import { PasswordField } from "../ui/PasswordField";
 import { Button, Notice } from "../ui/surface";
 import { ErrorDiagnosticNotice } from "../shell/ErrorDiagnosticNotice";
@@ -239,15 +239,7 @@ export function LockScreen({
                 <Button type="button" disabled={busy || tooShort} onClick={() => void recoverCompatibleBackup()}>
                   {t("lock.restoreCompatibleBackup")}
                 </Button>
-                <label className="flex items-start gap-2 text-sm leading-5 text-ink-muted">
-                  <input
-                    className="mt-1"
-                    type="checkbox"
-                    checked={resetAcknowledged}
-                    onChange={(event) => setResetAcknowledged(event.target.checked)}
-                  />
-                  <span>{t("lock.resetUnsupportedAcknowledge")}</span>
-                </label>
+                <CheckboxField label={t("lock.resetUnsupportedAcknowledge")} checked={resetAcknowledged} onChange={setResetAcknowledged} tone="danger" />
                 <Button
                   kind="danger"
                   type="button"

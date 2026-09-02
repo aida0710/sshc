@@ -1,3 +1,4 @@
+import { createRef } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
@@ -91,5 +92,20 @@ describe("Button", () => {
     render(<Button disabled>Save</Button>);
 
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+  });
+
+  it("forwards a ref for modal focus management", () => {
+    const ref = createRef<HTMLButtonElement>();
+    render(<Button ref={ref}>Cancel</Button>);
+
+    expect(ref.current).toBe(screen.getByRole("button", { name: "Cancel" }));
+  });
+});
+
+describe("Card", () => {
+  it("supports semantic containers without rebuilding card classes", () => {
+    render(<Card as="section" aria-label="Summary" radius="md" tone="notice">Body</Card>);
+
+    expect(screen.getByRole("region", { name: "Summary" })).toHaveClass("sshc-card", "rounded-md", "bg-notice");
   });
 });

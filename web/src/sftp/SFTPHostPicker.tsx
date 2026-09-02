@@ -4,6 +4,7 @@ import { integrationsApi, type RecentConnection } from "../api/integrations";
 import { useTranslate } from "../i18n/context";
 import { Icon } from "../ui/icons";
 import { ModalShell } from "../ui/ModalShell";
+import { activateTabFromKeyboard } from "../ui/tabKeyboard";
 
 type HostChoice = { alias: string; group: string; hostName: string; user: string };
 const loadDefaultRecent = () => integrationsApi.recentConnections();
@@ -54,6 +55,7 @@ export function SFTPHostPicker({
     for (const host of matches) result.set(host.group, [...(result.get(host.group) ?? []), host]);
     return result;
   }, [matches]);
+  const views = recentChoices.length === 0 ? (["groups"] as const) : (["recent", "groups"] as const);
 
   useEffect(() => {
     if (!open) return;
@@ -101,8 +103,8 @@ export function SFTPHostPicker({
             <input ref={search} type="search" aria-label={t("sftp.searchHosts")} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("sftp.searchHostsPlaceholder")} className="w-full rounded-md border border-control-line bg-control py-2 pl-9 pr-3 text-sm" />
           </label>
           {normalized === "" ? <div className="mt-3 flex gap-1 rounded-md bg-toolbar p-1" role="tablist" aria-label={t("sftp.hostViews")}>
-            <button type="button" role="tab" aria-selected={view === "recent"} disabled={recentChoices.length === 0} onClick={() => setView("recent")} className={`grow rounded px-3 py-1.5 text-sm disabled:text-ink-faint ${view === "recent" ? "bg-card shadow-sm" : "text-ink-muted"}`}>{t("sftp.recentHosts")}</button>
-            <button type="button" role="tab" aria-selected={view === "groups"} onClick={() => setView("groups")} className={`grow rounded px-3 py-1.5 text-sm ${view === "groups" ? "bg-card shadow-sm" : "text-ink-muted"}`}>{t("sftp.hostGroups")}</button>
+            <button type="button" role="tab" aria-selected={view === "recent"} tabIndex={view === "recent" ? 0 : -1} disabled={recentChoices.length === 0} onClick={() => setView("recent")} onKeyDown={(event) => activateTabFromKeyboard(event, 0, views, setView)} className={`grow rounded px-3 py-1.5 text-sm disabled:text-ink-faint ${view === "recent" ? "bg-card shadow-sm" : "text-ink-muted"}`}>{t("sftp.recentHosts")}</button>
+            <button type="button" role="tab" aria-selected={view === "groups"} tabIndex={view === "groups" ? 0 : -1} onClick={() => setView("groups")} onKeyDown={(event) => activateTabFromKeyboard(event, views.length - 1, views, setView)} className={`grow rounded px-3 py-1.5 text-sm ${view === "groups" ? "bg-card shadow-sm" : "text-ink-muted"}`}>{t("sftp.hostGroups")}</button>
           </div> : null}
         </div>
         <div className="min-h-0 overflow-y-auto p-2">

@@ -7,6 +7,7 @@ import type {
 import { useLanguage } from "../i18n/context";
 import type { Locale } from "../i18n/locale";
 import { Icon } from "../ui/icons";
+import { Card } from "../ui/surface";
 
 export type SyncResultView =
   | { kind: "push"; result: PushResult }
@@ -102,7 +103,7 @@ export function SyncResultCard({ view }: { view: SyncResultView }) {
       );
 
   return (
-    <section aria-label={heading} className="sshc-card overflow-hidden rounded-md bg-card">
+    <Card as="section" aria-label={heading} radius="md">
       <header className="flex items-center justify-between gap-3 border-b border-line bg-toolbar px-4 py-3">
         <div className="flex items-center gap-2">
           <Icon name="sync" className="h-4 w-4 text-ink-muted" />
@@ -161,6 +162,6 @@ export function SyncResultCard({ view }: { view: SyncResultView }) {
           {formatBytes(summary.snapshotBytes, locale)}
         </span>
       </div>
-    </section>
+    </Card>
   );
 }

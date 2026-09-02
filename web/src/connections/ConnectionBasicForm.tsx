@@ -17,7 +17,7 @@ import { useTranslate } from "../i18n/context";
 import { keysApi, selectablePrivateKeys, type KeyItem, type KeysApi } from "../keys/api";
 import { eligibilityText } from "./eligibilityText";
 import { directIdentityFields, isConcreteIdentityValue } from "./authenticationPolicy";
-import { control, hintText, sectionHeading } from "../ui/form";
+import { CheckboxField, control, hintText, sectionHeading } from "../ui/form";
 import { PasswordField } from "../ui/PasswordField";
 import { Button, Card, Notice, Row } from "../ui/surface";
 import { deriveBasicField, type BasicFieldState, type BasicKeyword } from "./basicFields";
@@ -779,15 +779,7 @@ export function ConnectionBasicForm({
                       <PasswordField label={t("conn.createNewPassword")} value={newSharedPassword} onChange={setNewSharedPassword} />
                     </div>
                   ) : passwordAction === "remove" ? (
-                    <label className="flex items-start gap-2 text-sm text-danger">
-                      <input
-                        type="checkbox"
-                        checked={confirmRemove}
-                        onChange={(event) => setConfirmRemove(event.target.checked)}
-                        className="mt-0.5 accent-accent"
-                      />
-                      <span>{t("conn.basicConfirmRemove")}</span>
-                    </label>
+                    <CheckboxField label={t("conn.basicConfirmRemove")} checked={confirmRemove} onChange={setConfirmRemove} tone="danger" />
                   ) : null}
 
                   {passwordBlockers.map((blocker, index) => (

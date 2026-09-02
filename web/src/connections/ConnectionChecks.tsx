@@ -7,7 +7,7 @@ import type {
 } from "../api/integrations";
 import { useTranslate } from "../i18n/context";
 import { hintText, sectionHeading } from "../ui/form";
-import { Button, Notice } from "../ui/surface";
+import { Button, Card, Notice } from "../ui/surface";
 
 type ChecksApi = Pick<IntegrationsApi, "effective" | "reachability" | "authentication">;
 
@@ -87,7 +87,7 @@ export function ConnectionChecks({ alias, api, disabled, resetKey }: ConnectionC
   const blocked = disabled || busy !== null;
 
   return (
-    <section aria-label={t("conn.checksLabel")} className="sshc-card flex flex-col gap-3 rounded-lg bg-card px-4 py-3">
+    <Card as="section" aria-label={t("conn.checksLabel")} className="flex flex-col gap-3 px-4 py-3">
       <div className="flex flex-wrap items-center gap-2">
         <Button disabled={blocked} onClick={() => void checkReachability()}>
           {busy === "reachability" ? t("conn.checking") : t("conn.checkReachability")}
@@ -126,7 +126,7 @@ export function ConnectionChecks({ alias, api, disabled, resetKey }: ConnectionC
       )}
 
       {reachability === null && authentication === null ? null : (
-        <div className="sshc-card grid overflow-hidden rounded-lg bg-card sm:grid-cols-2 sm:divide-x sm:divide-line">
+        <Card className="grid sm:grid-cols-2 sm:divide-x sm:divide-line">
           {reachability === null ? null : (
             <div className="flex flex-col gap-1.5 p-3 text-sm">
               <h3 className={sectionHeading}>{t("diag.reachability")}</h3>
@@ -149,8 +149,8 @@ export function ConnectionChecks({ alias, api, disabled, resetKey }: ConnectionC
               )}
             </div>
           )}
-        </div>
+        </Card>
       )}
-    </section>
+    </Card>
   );
 }

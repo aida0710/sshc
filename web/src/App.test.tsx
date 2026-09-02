@@ -631,7 +631,7 @@ describe("App", () => {
     );
 
     expect(await screen.findByRole("heading", { name: "sshc" })).toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("Local session active · 0.1.0");
+    expect(document.querySelector("[data-session-status]")).toHaveTextContent("Local session active · 0.1.0");
     expect(screen.getByRole("link", { name: "Home" })).toHaveAttribute("aria-current", "page");
     for (const label of ["Home", "Connections", "SFTP", "Menu"]) {
       expect(screen.getByRole("link", { name: label })).toHaveAttribute("href");

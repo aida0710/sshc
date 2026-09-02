@@ -16,8 +16,8 @@ import {
   tableHeadCell,
   tableHeadRow,
 } from "../ui/form";
-import { Button, Notice } from "../ui/surface";
-import { PageHeader } from "../ui/page";
+import { Button, Card, Notice } from "../ui/surface";
+import { MetricCard, MetricGrid, PageHeader } from "../ui/page";
 import {
   compareText,
   nextSort,
@@ -25,6 +25,7 @@ import {
   SortableTableHeader,
   type SortDirection,
 } from "../ui/tableSort";
+import { ConfirmDialog } from "../ui/ConfirmDialog";
 
 type KnownHostsPanelProps = { api?: IntegrationsApi };
 type CandidateSort = "host" | "type" | "fingerprint" | "trust";
@@ -173,18 +174,15 @@ export function KnownHostsPanel({ api = integrationsApi }: KnownHostsPanelProps)
   return (
     <section aria-label={t("kh.heading")} className="mx-auto flex w-full max-w-5xl flex-col gap-6 [&_button]:min-h-10 sm:[&_button]:min-h-0">
       <PageHeader title={t("kh.heading")} description={t("kh.pageDescription")} />
-      <div className="sshc-card flex flex-wrap divide-x divide-line overflow-hidden rounded-md bg-card">
-        {[
+      <MetricGrid className="sm:grid-cols-3 lg:grid-cols-3">
+        {([
           [t("kh.metricEntries"), listing?.entries.length ?? 0],
           [t("kh.metricHashed"), listing?.entries.filter((entry) => entry.hashed).length ?? 0],
           [t("kh.metricCandidates"), candidates.length],
-        ].map(([label, value], index) => (
-          <div key={String(label)} className="flex min-w-40 flex-1 items-center justify-between gap-4 px-4 py-3">
-            <span className="text-xs font-medium text-ink-muted">{label}</span>
-            <span className={`font-mono text-lg font-semibold ${index === 2 && candidates.length > 0 ? "text-notice-ink" : "text-ink"}`}>{value}</span>
-          </div>
+        ] as const).map(([label, value], index) => (
+          <MetricCard key={String(label)} label={String(label)} value={value} compact attention={index === 2 && candidates.length > 0} />
         ))}
-      </div>
+      </MetricGrid>
 
       <p aria-live="polite" className="text-sm text-ink-muted">
         {status}
@@ -194,7 +192,7 @@ export function KnownHostsPanel({ api = integrationsApi }: KnownHostsPanelProps)
       ) : null}
 
 
-      <section className="sshc-card overflow-hidden rounded-md bg-card" aria-labelledby="known-hosts-scan-heading">
+      <Card as="section" radius="md" aria-labelledby="known-hosts-scan-heading">
         <div className="flex flex-wrap items-end justify-between gap-4 bg-surface-subtle px-4 py-4">
           <div>
             <h3 id="known-hosts-scan-heading" className={sectionHeading}>
@@ -288,9 +286,9 @@ export function KnownHostsPanel({ api = integrationsApi }: KnownHostsPanelProps)
             </div>
           </div>
         ) : null}
-      </section>
+      </Card>
 
-      <section className="sshc-card overflow-hidden rounded-md bg-card" aria-labelledby="known-hosts-trusted-heading">
+      <Card as="section" radius="md" aria-labelledby="known-hosts-trusted-heading">
         <div className="flex flex-wrap items-end justify-between gap-4 border-b border-line px-4 py-4">
           <div>
             <h3 id="known-hosts-trusted-heading" className={sectionHeading}>
@@ -354,26 +352,18 @@ export function KnownHostsPanel({ api = integrationsApi }: KnownHostsPanelProps)
           </div>
         ) : null}
 
-        {pending ? (
-          <div className="border-t border-line bg-surface-subtle p-4 text-sm">
-            <p>
-              {t("kh.confirmRemove", { line: pending.line, fingerprint: pending.fingerprint })}
-            </p>
-            <div className="mt-2 flex gap-2">
-              <Button
-                onClick={() => void confirmDelete()}
-              >
-                {t("kh.confirmDelete")}
-              </Button>
-              <Button
-                onClick={() => setPending(null)}
-              >
-                {t("kh.cancel")}
-              </Button>
-            </div>
-          </div>
-        ) : null}
-      </section>
+      </Card>
+      {pending === null ? null : (
+        <ConfirmDialog
+          id="known-host-delete-heading"
+          heading={t("kh.delete")}
+          body={<p className="text-sm text-ink-muted">{t("kh.confirmRemove", { line: pending.line, fingerprint: pending.fingerprint })}</p>}
+          confirmLabel={t("kh.confirmDelete")}
+          cancelLabel={t("kh.cancel")}
+          onConfirm={() => void confirmDelete()}
+          onCancel={() => setPending(null)}
+        />
+      )}
     </section>
   );
 }

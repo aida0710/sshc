@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type RefObject } from "react";
 
 function matches(query: string): boolean {
   return typeof window.matchMedia === "function" && window.matchMedia(query).matches;
@@ -17,4 +17,25 @@ export function useMediaQuery(query: string): boolean {
   }, [query]);
 
   return matched;
+}
+
+export function useCompactViewport(
+  container: RefObject<HTMLElement | null>,
+  minimumWidth = 680,
+): boolean {
+  const narrowViewport = useMediaQuery("(max-width: 767px)");
+  const [narrowContainer, setNarrowContainer] = useState(false);
+
+  useEffect(() => {
+    const element = container.current;
+    if (element === null) return;
+    const update = () => setNarrowContainer(element.clientWidth > 0 && element.clientWidth < minimumWidth);
+    update();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(update);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [container, minimumWidth]);
+
+  return narrowViewport || narrowContainer;
 }

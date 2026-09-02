@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toProblem } from "../api/guards";
-import { Button } from "../ui/surface";
+import { Button, Card } from "../ui/surface";
 import { useTranslate } from "../i18n/context";
 import type { Problem } from "../api/client";
 import { configApi, type FileContents, type Overview, type SavePreview } from "../api/config";
@@ -12,7 +12,9 @@ import {
   hintText,
   sectionHeading,
 } from "../ui/form";
-import { PageHeader } from "../ui/page";
+import { MetricCard, MetricGrid, PageHeader } from "../ui/page";
+import { PanelState } from "../ui/PanelState";
+import { ConfirmDialog } from "../ui/ConfirmDialog";
 
 export type FileTarget = { path: string; line: number };
 
@@ -203,7 +205,11 @@ export function ConfigExplorer({ target = null }: ConfigExplorerProps) {
   }
 
   if (overview === null) {
-    return <p role="status" className="text-sm text-ink-muted">{t("explorer.loading")}</p>;
+    return problem === null ? (
+      <PanelState tone="loading" title={t("explorer.loading")} />
+    ) : (
+      <PanelState tone="failed" title={problem.message} {...(problem.detail === undefined ? {} : { detail: problem.detail })} action={<Button onClick={() => void reload()}>{t("shell.bootstrapRetry")}</Button>} />
+    );
   }
 
   const openPath = file?.file.path ?? file?.file.absolute ?? "";
@@ -213,22 +219,19 @@ export function ConfigExplorer({ target = null }: ConfigExplorerProps) {
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
       <PageHeader title={t("explorer.pageTitle")} description={t("explorer.pageDescription")} />
-      <dl data-config-metrics className="sshc-card grid grid-cols-3 divide-x divide-hairline overflow-hidden rounded-md bg-toolbar">
-        {[
+      <MetricGrid data-config-metrics className="grid-cols-3 divide-x divide-hairline sm:grid-cols-3 lg:grid-cols-3">
+        {([
           [t("explorer.metricFiles"), overview.files.length, false],
           [t("explorer.metricEditable"), editableFiles, false],
           [t("explorer.metricDiagnostics"), overview.diagnostics.length, overview.diagnostics.length > 0],
-        ].map(([label, value, attention]) => (
-          <div key={String(label)} className="flex min-w-0 flex-col items-start gap-1 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-4">
-            <dt className={`min-w-0 break-words text-xs font-medium ${attention ? "text-notice-ink" : "text-ink-muted"}`}>{label}</dt>
-            <dd className={`font-mono text-sm font-semibold ${attention ? "text-notice-ink" : "text-ink"}`}>{value}</dd>
-          </div>
+        ] as const).map(([label, value, attention]) => (
+          <MetricCard key={String(label)} label={String(label)} value={value} compact attention={Boolean(attention)} className="min-w-0 flex-col items-start sm:flex-row sm:items-center" />
         ))}
-      </dl>
+      </MetricGrid>
 
       {jump === "" ? null : <p aria-live="polite" className={hintText}>{jump}</p>}
 
-      <div data-config-explorer className="sshc-card grid min-h-0 grid-cols-1 overflow-hidden rounded-md bg-card lg:grid-cols-[19rem_minmax(0,1fr)]">
+      <Card data-config-explorer radius="md" className="grid min-h-0 grid-cols-1 lg:grid-cols-[19rem_minmax(0,1fr)]">
         <section aria-labelledby="explorer-heading" className="flex min-h-0 flex-col bg-tree lg:border-r lg:border-line">
           <div data-explorer-header="tree" className="flex min-h-12 items-center justify-between gap-3 border-b border-line bg-toolbar px-4 py-2">
             <div className="flex min-w-0 items-center gap-2">
@@ -332,13 +335,15 @@ export function ConfigExplorer({ target = null }: ConfigExplorerProps) {
 
         <section className="flex min-w-0 flex-col border-t border-line lg:border-t-0">
           {file === null ? (
-            <div role="status" className="flex min-h-96 flex-1 flex-col items-center justify-center gap-2 bg-surface-subtle p-8 text-center">
-              <span className="flex h-12 w-12 items-center justify-center rounded-md bg-surface text-ink-faint">
+            <PanelState
+              tone="empty"
+              title={t("explorer.emptyHeading")}
+              detail={t("explorer.selectFile")}
+              className="min-h-96 flex-1 bg-surface-subtle"
+              icon={<span className="flex h-12 w-12 items-center justify-center rounded-md bg-surface text-ink-faint">
                 <Icon name="config" className="h-6 w-6" />
-              </span>
-              <h3 className={sectionHeading}>{t("explorer.emptyHeading")}</h3>
-              <p className={hintText}>{t("explorer.selectFile")}</p>
-            </div>
+              </span>}
+            />
           ) : (
             <>
               <div className="flex min-h-0 flex-1 flex-col">
@@ -386,14 +391,7 @@ export function ConfigExplorer({ target = null }: ConfigExplorerProps) {
                         className={`${control} min-h-10 min-w-48 max-w-sm font-mono text-xs md:min-h-0`}
                       />
                       <Button className="min-h-10 md:min-h-0" onClick={() => void renameFile()} disabled={renameTo === "" || renameTo === file.file.path || modified}>{t("explorer.renameFile")}</Button>
-                      {confirmingDelete ? (
-                        <>
-                          <Button kind="danger" className="min-h-10 md:min-h-0" onClick={() => void deleteFile()}>{t("explorer.confirmDelete")}</Button>
-                          <Button className="min-h-10 md:min-h-0" onClick={() => setConfirmingDelete(false)}>{t("explorer.cancelDelete")}</Button>
-                        </>
-                      ) : (
-                        <Button className="min-h-10 md:min-h-0" onClick={() => setConfirmingDelete(true)} disabled={modified}>{t("explorer.deleteFile")}</Button>
-                      )}
+                      <Button className="min-h-10 md:min-h-0" onClick={() => setConfirmingDelete(true)} disabled={modified}>{t("explorer.deleteFile")}</Button>
                     </div>
                   </div>
                   <p className={hintText}>{modified ? t("explorer.saveOrDiscardFirst") : t("explorer.deleteIsRecoverable")}</p>
@@ -402,9 +400,20 @@ export function ConfigExplorer({ target = null }: ConfigExplorerProps) {
             </>
           )}
         </section>
-      </div>
+      </Card>
 
       <SavePreviewPanel preview={preview} conflict={problem?.conflict ?? null} problem={problem} />
+      {confirmingDelete && file?.file.path !== undefined ? (
+        <ConfirmDialog
+          id="config-file-delete-heading"
+          heading={t("explorer.deleteFile")}
+          body={<div className="flex flex-col gap-2 text-sm text-ink-muted"><p className="break-all font-mono">{file.file.path}</p><p>{t("explorer.deleteIsRecoverable")}</p></div>}
+          confirmLabel={t("explorer.confirmDelete")}
+          cancelLabel={t("explorer.cancelDelete")}
+          onConfirm={() => void deleteFile()}
+          onCancel={() => setConfirmingDelete(false)}
+        />
+      ) : null}
     </div>
   );
 }

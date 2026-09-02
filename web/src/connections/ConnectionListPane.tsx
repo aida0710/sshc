@@ -2,6 +2,7 @@ import { useTranslate } from "../i18n/context";
 import type { HostEntry, Overview } from "../api/config";
 import { ConnectionTree, type HostSelection } from "./ConnectionTree";
 import type { DragPayload } from "./dragdrop";
+import { Button } from "../ui/surface";
 
 
 export function ConnectionListPane({
@@ -32,13 +33,12 @@ export function ConnectionListPane({
       {invalidLocation ? (
         <section className="m-4 flex flex-col gap-2 rounded-lg border border-line bg-card p-3 text-sm" role="status">
           <p className="font-medium">{t("browser.invalidUrl")}</p>
-          <button
-            type="button"
-            className="min-h-10 self-start rounded-md border border-control-line bg-card px-3 py-1.5 text-sm text-ink hover:bg-select-fill md:min-h-0"
+          <Button
+            className="min-h-10 self-start md:min-h-0"
             onClick={onDismissInvalidLocation}
           >
             {t("browser.backToServers")}
-          </button>
+          </Button>
         </section>
       ) : (
         <ConnectionTree

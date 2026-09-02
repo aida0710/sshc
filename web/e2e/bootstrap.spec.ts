@@ -61,7 +61,8 @@ test("enforces the content security policy in the browser, not only in the heade
   expect(response?.headers()["content-security-policy"]).toBe(
     "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; " +
       "form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
-      "img-src 'self' data:; connect-src 'self'; require-trusted-types-for 'script'",
+      "img-src 'self' data:; connect-src 'self'; trusted-types sshc-service-worker; " +
+      "require-trusted-types-for 'script'",
   );
 
   const inlineRan = await page.evaluate(async () => {
@@ -89,11 +90,14 @@ test("enforces the content security policy in the browser, not only in the heade
   expect(crossOrigin).toBe("blocked");
 });
 
-test("keeps only the origin-scoped CSRF token in session storage", async ({ page, installation }) => {
+test("keeps the browser registration separate from the origin-scoped CSRF token", async ({ page, installation }) => {
   await openApplication(page, installation);
   await expect(sessionStatus(page)).toContainText("Local session active");
 
-  expect(await page.evaluate(() => Object.keys(window.localStorage))).toEqual([]);
+  expect(await page.evaluate(() => Object.keys(window.localStorage))).toEqual(["sshc.browser.registration.v1"]);
+  expect(await page.evaluate(() => window.localStorage.getItem("sshc.browser.registration.v1"))).toMatch(
+    /^[A-Za-z0-9_-]{43}$/,
+  );
   expect(await page.evaluate(() => Object.keys(window.sessionStorage))).toEqual(["sshc.session.csrf"]);
   expect(await page.evaluate(() => window.sessionStorage.getItem("sshc.session.csrf"))).toMatch(
     /^[A-Za-z0-9_-]{43}$/,
@@ -107,7 +111,7 @@ test("keeps only the origin-scoped CSRF token in session storage", async ({ page
     language: window.localStorage.getItem("sshc.language"),
     session: window.sessionStorage.length,
   }));
-  expect(stored.keys).toEqual(["sshc.language"]);
+  expect(stored.keys).toEqual(["sshc.browser.registration.v1", "sshc.language"]);
   expect(["en", "ja"]).toContain(stored.language);
   expect(stored.session).toBe(1);
 });
@@ -116,7 +120,7 @@ test("keeps the chosen appearance, and writes nothing else", async ({ page, inst
   await openApplication(page, installation);
   await expect(sessionStatus(page)).toContainText("Local session active");
 
-  expect(await page.evaluate(() => Object.keys(window.localStorage))).toEqual([]);
+  expect(await page.evaluate(() => Object.keys(window.localStorage))).toEqual(["sshc.browser.registration.v1"]);
 
   await openSection(page, "Menu");
   const menu = page.getByRole("region", { name: "Menu" });
@@ -133,7 +137,7 @@ test("keeps the chosen appearance, and writes nothing else", async ({ page, inst
     keys: Object.keys(window.localStorage).sort(),
     theme: window.localStorage.getItem("sshc.theme"),
   }));
-  expect(stored.keys).toEqual(["sshc.language", "sshc.theme"]);
+  expect(stored.keys).toEqual(["sshc.browser.registration.v1", "sshc.language", "sshc.theme"]);
   expect(stored.theme).toBe("system");
 });
 
@@ -156,7 +160,10 @@ test("keeps the chosen language across a reload, and translates the panels", asy
   await expect(page).toHaveURL(/\/keys$/);
   await expect(page.getByRole("heading", { name: "SSH Keys", level: 2 })).toBeVisible();
   await expect(page.getByRole("button", { name: "鍵を作成" })).toBeVisible();
-  expect(await page.evaluate(() => Object.keys(window.localStorage).sort())).toEqual(["sshc.language"]);
+  expect(await page.evaluate(() => Object.keys(window.localStorage).sort())).toEqual([
+    "sshc.browser.registration.v1",
+    "sshc.language",
+  ]);
 });
 
 test("survives a reload", async ({ page, installation }) => {

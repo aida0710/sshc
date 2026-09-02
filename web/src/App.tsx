@@ -31,7 +31,7 @@ import { IconSprite, type IconName } from "./ui/icons";
 import { InspectorPane, InspectorToggle, type InspectorContent } from "./ui/Inspector";
 import { useTheme } from "./theme/context";
 import type { MessageKey } from "./i18n/messages";
-import { Button } from "./ui/surface";
+import { Button, Card } from "./ui/surface";
 import { RouteSkeleton } from "./ui/RouteSkeleton";
 import { sectionPath, type Section } from "./routing/sectionRoute";
 import { connectionLocation } from "./routing/connectionRoute";
@@ -616,7 +616,7 @@ export function App({
   if (state === "session-ended") {
     return (
       <main className="grid min-h-screen place-items-center bg-canvas p-6 text-ink">
-        <section className="sshc-card flex w-full max-w-md flex-col items-start gap-4 rounded-lg bg-card p-6 sm:p-8">
+        <Card as="section" className="flex w-full max-w-md flex-col items-start gap-4 p-6 sm:p-8">
           <h1 className="text-lg font-semibold">
             {t("shell.sessionEndedHeading")}
           </h1>
@@ -633,7 +633,7 @@ export function App({
           >
             {t("shell.sessionReload")}
           </Button>
-        </section>
+        </Card>
       </main>
     );
   }
@@ -951,9 +951,10 @@ export function App({
       </div>
       {state === "ready" && vaultRecheck !== "idle" ? (
         <div className="fixed inset-0 z-[100] grid min-h-screen place-items-center bg-canvas p-6">
-          <section
+          <Card
+            as="section"
             role="status"
-            className="sshc-card w-full max-w-md rounded-lg bg-card p-6 sm:p-8"
+            className="w-full max-w-md p-6 sm:p-8"
           >
             <h1 className="text-lg font-semibold">{t("shell.title")}</h1>
             <p className="mt-3 text-sm leading-6 text-ink-muted">
@@ -963,7 +964,7 @@ export function App({
                   : "shell.vaultCheckRetrying",
               )}
             </p>
-          </section>
+          </Card>
         </div>
       ) : null}
     </div>

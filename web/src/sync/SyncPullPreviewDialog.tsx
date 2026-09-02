@@ -1,6 +1,6 @@
 import type { PullResponse, SyncDirection } from "../api/integrations";
 import type { Translate } from "../i18n/context";
-import { hintText, sectionHeading } from "../ui/form";
+import { CheckboxField, hintText, sectionHeading } from "../ui/form";
 import { Icon } from "../ui/icons";
 import { Button, Notice } from "../ui/surface";
 import { ModalShell } from "../ui/ModalShell";
@@ -92,22 +92,18 @@ export function SyncPullPreviewDialog({
                 })}
               </ul>
               <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
+                <Button
                   disabled={busy}
                   onClick={() => onResolve("local")}
-                  className="rounded border border-line px-3 py-1.5 text-sm text-ink"
                 >
                   {t("sync.keepMine")}
-                </button>
-                <button
-                  type="button"
+                </Button>
+                <Button
                   disabled={busy}
                   onClick={() => onResolve("remote")}
-                  className="rounded border border-line px-3 py-1.5 text-sm text-ink"
                 >
                   {t("sync.takeTheirs")}
-                </button>
+                </Button>
               </div>
             </>
           ) : null}
@@ -133,15 +129,13 @@ export function SyncPullPreviewDialog({
                   <li key={path}>{path}</li>
                 ))}
               </ul>
-              <label className="flex items-start gap-2 rounded border border-notice-line bg-notice p-3 text-sm text-notice-ink">
-                <input
-                  type="checkbox"
-                  checked={acceptedRemovals}
-                  onChange={(event) => onAcceptRemovals(event.target.checked)}
-                  className="mt-0.5"
-                />
-                <span>{t("sync.confirmOverwrite")}</span>
-              </label>
+              <CheckboxField
+                label={t("sync.confirmOverwrite")}
+                checked={acceptedRemovals}
+                onChange={onAcceptRemovals}
+                tone="notice"
+                className="rounded border border-notice-line bg-notice p-3"
+              />
             </>
           )}
           <Button

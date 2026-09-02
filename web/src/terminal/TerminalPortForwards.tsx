@@ -9,8 +9,8 @@ import {
 } from "../api/integrations";
 import { useTranslate } from "../i18n/context";
 import { clipboard } from "../ui/clipboard";
-import { control, hintText } from "../ui/form";
-import { Button, Notice } from "../ui/surface";
+import { CheckboxField, Field, control, hintText } from "../ui/form";
+import { Button, Card, Notice } from "../ui/surface";
 import { ModalShell } from "../ui/ModalShell";
 
 type ForwardApi = Pick<IntegrationsApi, "startTerminalForward" | "stopTerminalForward">;
@@ -128,7 +128,7 @@ export function TerminalPortForwards({
           <section aria-labelledby="terminal-forward-active" className="flex flex-col gap-2">
             <h3 id="terminal-forward-active" className="text-sm font-medium text-ink">{t("terminal.forwardActive")}</h3>
             {forwards.length === 0 ? <p className={hintText}>{t("terminal.forwardNone")}</p> : (
-              <div className="sshc-card overflow-hidden rounded-lg bg-surface-subtle">
+              <Card tone="subtle">
                 {forwards.map((forward) => (
                   <div key={forward.id || `${forward.kind}-${forward.listen}-${forward.to}`} className="flex flex-col gap-2 border-t border-hairline px-3 py-3 first:border-t-0 sm:flex-row sm:items-center">
                     <div className="min-w-0 grow">
@@ -152,7 +152,7 @@ export function TerminalPortForwards({
                     </div>
                   </div>
                 ))}
-              </div>
+              </Card>
             )}
           </section>
 
@@ -160,34 +160,31 @@ export function TerminalPortForwards({
             <h3 id="terminal-forward-new" className="text-sm font-medium text-ink">{t("terminal.forwardNew")}</h3>
             <Notice>{t("conn.forwardLoopbackOnly")}</Notice>
             <div className="grid gap-3 sm:grid-cols-2">
-              <label className="flex flex-col gap-1 text-xs text-ink-muted">
-                {t("conn.forwardType")}
+              <Field label={t("conn.forwardType")}>
                 <select className={control} value={kind} disabled={!connected || busy} onChange={(event) => setKind(event.currentTarget.value as "local" | "dynamic")}>
                   <option value="local">{t("conn.forwardLocal")}</option>
                   <option value="dynamic">{t("conn.forwardDynamic")}</option>
                 </select>
-              </label>
-              <label className="flex flex-col gap-1 text-xs text-ink-muted">
-                {t("conn.forwardListenPort")}
+              </Field>
+              <Field label={t("conn.forwardListenPort")} error={listenError}>
                 <input autoFocus inputMode="numeric" className={control} value={listenPort} disabled={!connected || busy} onChange={(event) => setListenPort(event.currentTarget.value)} />
-                {listenError === "" ? null : <span className="text-danger">{listenError}</span>}
-              </label>
+              </Field>
               {kind === "local" ? (
-                <label className="flex flex-col gap-1 text-xs text-ink-muted sm:col-span-2">
-                  {t("conn.forwardDestination")}
-                  <input aria-label={t("conn.forwardDestination")} className={control} placeholder="127.0.0.1:5432" value={destination} disabled={!connected || busy} onChange={(event) => setDestination(event.currentTarget.value)} />
-                  {destinationError === "" ? null : <span className="text-danger">{destinationError}</span>}
-                </label>
+                <div className="sm:col-span-2">
+                  <Field label={t("conn.forwardDestination")} error={destinationError}>
+                    <input aria-label={t("conn.forwardDestination")} className={control} placeholder="127.0.0.1:5432" value={destination} disabled={!connected || busy} onChange={(event) => setDestination(event.currentTarget.value)} />
+                  </Field>
+                </div>
               ) : null}
             </div>
             <p className={hintText}>{t(kind === "local" ? "conn.forwardDestinationHint" : "conn.forwardDynamicHint")}</p>
-            <label className={`flex items-start gap-2 text-sm ${canSave ? "text-ink" : "text-ink-muted"}`}>
-              <input type="checkbox" checked={save} disabled={!canSave || busy} onChange={(event) => setSave(event.currentTarget.checked)} className="mt-0.5 size-4" />
-              <span>
-                {t("terminal.forwardSaveConnection")}
-                <span className={`block ${hintText}`}>{t(canSave ? "terminal.forwardSaveHint" : "terminal.forwardSaveUnavailable")}</span>
-              </span>
-            </label>
+            <CheckboxField
+              label={t("terminal.forwardSaveConnection")}
+              hint={t(canSave ? "terminal.forwardSaveHint" : "terminal.forwardSaveUnavailable")}
+              checked={save}
+              disabled={!canSave || busy}
+              onChange={setSave}
+            />
             {!connected ? <Notice>{t("terminal.forwardNeedsConnection")}</Notice> : null}
             <div className="flex justify-end">
               <Button kind="primary" disabled={!canStart || busy} onClick={() => void start()}>
