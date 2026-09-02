@@ -289,7 +289,7 @@ integration: build
 	SSHC_TEST_PROXY_DEST_USER=$(SSH_DEST_USER) \
 	SSHC_TEST_PROXY_DEST_PASSWORD=$(SSH_DEST_PASS) \
 	SSHC_TEST_PROXY_KNOWN_HOSTS="$(CURDIR)/.integration-proxy-known-hosts" \
-	go test ./integration -run '^TestCLIUsesVaultPasswordsAcrossARealProxyJump$$' -count=1 -v
+	go test ./integration -run '^(TestCLIUsesVaultPasswordsAcrossARealProxyJump|TestSFTPCLIRoundTripsAgainstRealOpenSSH)$$' -count=1 -v
 
 # バイナリは安定したパスへ置く。デスクトップ側はここへ symlink を張り、CLI と UI が
 # 同じバイナリを使用する。別の場所でビルドし直すと
