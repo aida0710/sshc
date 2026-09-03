@@ -172,7 +172,6 @@ export const en = {
   "sftp.manager.autoClearOff": "Keep",
   "sftp.manager.largeFileThreshold": "Split at",
   "sftp.manager.largeFileParallelism": "Streams",
-  "sftp.manager.largeFileParallelismOff": "No split",
   "sftp.manager.largeFileChunk": "Chunk",
   "sftp.manager.stopProcessing": "Stop starting new transfers",
   "sftp.manager.startProcessing": "Start transfers again",

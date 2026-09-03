@@ -38,7 +38,7 @@ Kitty keyboard mode follows requests from the remote application. A JIS option s
 
 OSC 8 links and detected URLs open in the system browser. A detected remote path or the current working directory reported through OSC 7 can open SFTP at the same host and directory. SFTP can also open a new SSH Terminal at its displayed directory.
 
-Local shells use the same subsystem as SSH: search, Quick Commands, workspaces, and broadcast commands all apply.
+Local shells use the same subsystem as SSH: search, Quick Commands, workspaces, and broadcast commands all apply. On macOS and Linux, sshc supplies the terminal information needed by line editors such as zsh and fish even when the engine was started as a background service.
 
 ## Coding Agent integration
 

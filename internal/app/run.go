@@ -235,10 +235,11 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 		LocalShellProfiles:        func() []platform.ShellProfile { return platform.ShellProfiles(dependencies.Lookup) },
 		TerminalLocalShellProfile: configService.TerminalLocalShellProfile,
 		TerminalEnvironment: func() []string {
-			if dependencies.Environ == nil {
-				return nil
+			var environment []string
+			if dependencies.Environ != nil {
+				environment = dependencies.Environ()
 			}
-			return platform.LoginEnvironment(dependencies.Environ())
+			return platform.LoginEnvironment(environment)
 		},
 	})
 	if err != nil {

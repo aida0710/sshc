@@ -94,9 +94,9 @@ sshc sftp get bastion /backup/disk.img ./disk.img --split-size 100 --split-jobs 
 sshc sftp put bastion ./disk.img /backup/disk.img --split-size 100 --split-jobs 4 --chunk-size 512
 ```
 
-`sshc sftp settings` displays the split threshold, connections per file, and chunk size shared by Web and CLI. Add `--split-size` (16–1024 MiB), `--split-jobs` (1–8), or `--chunk-size` (8–4096 MiB) to persist only the supplied defaults. `--json` returns the saved values for automation.
+`sshc sftp settings` displays the split threshold, connections per file, and chunk size shared by Web and CLI. Add `--split-size` (16–1024 MiB), `--split-jobs` (1–128), or `--chunk-size` (8–4096 MiB) to persist only the supplied defaults. `--json` returns the saved values for automation.
 
-`-j` or `--jobs` sets the number of files transferred concurrently from 1 to 8; the default is 1. Split options on `get` or `put` override the saved defaults for that invocation. `--split-jobs 1` disables splitting. Initial defaults are 100 MiB, four connections, and 32 MiB chunks. Combining `--jobs 4 --split-jobs 4` can use up to 16 connections, so choose values that fit the server's limits. Regular file uploads and downloads support up to 512 GiB.
+`-j` or `--jobs` sets the number of files transferred concurrently from 1 to 8; the default is 1. Split options on `get` or `put` override the saved defaults for that invocation. `--split-jobs 1` disables splitting. Initial defaults are 100 MiB, four connections, and 32 MiB chunks. `--split-jobs` accepts up to 128, while the actual connection count is limited by the number of unfinished chunks. Concurrent split transfers multiply the total connection count, so choose a value that fits both the server and the device. Regular file uploads and downloads support up to 512 GiB.
 
 In an interactive terminal, `sshc sftp get` displays one progress bar for each SFTP connection while the engine prepares the remote file. A four-connection split therefore shows four progress lines, while a non-split transfer shows one. Progress is suppressed for `--json` and non-interactive output so automation remains clean.
 

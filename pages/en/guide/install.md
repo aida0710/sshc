@@ -15,11 +15,11 @@ sshc is a terminal app for macOS, Linux, Windows, and Android. On desktop, one `
 brew install aida0710/tap/sshc
 ```
 
-Without Homebrew, pin both the installer URL and the binary version to the same release. This example installs `v0.27.2`.
+Without Homebrew, pin both the installer URL and the binary version to the same release. This example installs `v0.27.3`.
 
 ```sh
-SSHC_VERSION=v0.27.2 sh -c \
-  'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.27.2/install.sh | sh'
+SSHC_VERSION=v0.27.3 sh -c \
+  'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.27.3/install.sh | sh'
 ```
 
 After installation, `sshc update` delegates upgrades to Homebrew or to a receipt-aware installer. It shows the planned change and asks for confirmation. In non-interactive automation, review the plan and use `sshc update --yes`.
