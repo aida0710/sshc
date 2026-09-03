@@ -113,7 +113,7 @@ test("opens a local shell, runs a command and shows its output", async ({ page, 
   expect(violations).toEqual([]);
 });
 
-test("uses the transparent-safe renderer for a local shell with a background image", async ({ page, installation }) => {
+test("keeps image-backed terminal editing free of stale glyphs", async ({ page, installation }) => {
   await installation.write(
     "sshc/metadata.json",
     JSON.stringify({
@@ -146,6 +146,26 @@ test("uses the transparent-safe renderer for a local shell with a background ima
   await page.keyboard.type("fixed");
   await page.keyboard.press("Enter");
   await expect(screen).toContainText("fixed", { timeout: 20_000 });
+});
+
+test("keeps WebGL disabled when the terminal setting turns it off", async ({ page, installation }) => {
+  await installation.write(
+    "sshc/metadata.json",
+    JSON.stringify({
+      schemaVersion: 4,
+      embeddedTerminal: { webgl: false },
+    }),
+  );
+  await openApplication(page, installation);
+
+  const panel = await openConsolePanel(page);
+  await panel.getByRole("button", { name: "Local shell" }).click();
+  const screen = page.getByRole("region", { name: /^Console for / });
+  await expect(screen).toBeVisible();
+  await expect.poll(() => terminalCanvasCount(page)).toBe(0);
+
+  await typeIntoConsole(page, "printf webgl-disabled");
+  await expect(screen).toContainText("webgl-disabled", { timeout: 20_000 });
 });
 
 test("keeps the session and replays its scrollback after a reload", async ({ page, installation }) => {
@@ -682,4 +702,13 @@ test("wears the image that was brought in, and gets out of its way", async ({ pa
   expect(wiring.image).toContain("data:image/png");
   expect(wiring.image).toMatch(/^linear-gradient\(/);
   expect(wiring.viewport).toBe("rgba(0, 0, 0, 0)");
+
+  const cleared = await openLoadedTerminalSettings(page);
+  await cleared.getByLabel("Background image").selectOption("");
+  const saved = await saveTerminalSettings(page, cleared);
+  expect(saved.request().postDataJSON()).not.toHaveProperty("appearance");
+  await expect(cleared).toContainText("Saved");
+
+  await reopenFirstConsole(panel);
+  await expect.poll(() => surfaceBackgroundImage(page)).toBe("none");
 });

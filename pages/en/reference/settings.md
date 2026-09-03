@@ -43,7 +43,7 @@ The engine replay buffer retains bytes in memory so it can replay output when a 
 
 OSC 52 and encoding may be overridden per connection. OSC 8 and Kitty keyboard behavior are protocol-driven.
 
-Rendering prefers WebGL and automatically falls back to the DOM renderer when unavailable or when a background image needs reliable transparent-cell redraws; there is no user setting for this switch.
+Rendering uses WebGL by default and automatically falls back to the DOM renderer when WebGL is unavailable or a background image is active. If a GPU or browser duplicates characters or leaves visual traces, turn off **Use WebGL rendering** to always use DOM rendering.
 
 ## Local shell and notifications
 

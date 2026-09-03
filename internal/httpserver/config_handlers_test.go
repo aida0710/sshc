@@ -154,6 +154,35 @@ func TestEngineSettingsStoreTheVaultAutoLockChoice(t *testing.T) {
 	}
 }
 
+func TestTerminalAndEngineSettingsReturnTheirWireSaveResult(t *testing.T) {
+	harness := newConfigHarness(t)
+	for name, target := range map[string]string{
+		"terminal": "/api/v1/metadata/terminal",
+		"engine":   "/api/v1/metadata/engine",
+	} {
+		t.Run(name, func(t *testing.T) {
+			response := harness.call(t, http.MethodPut, target, map[string]any{}, true, true)
+			if response.Code != http.StatusOK {
+				t.Fatalf("save = %d, body %s", response.Code, response.Body.String())
+			}
+			var result api.SettingsSaveResult
+			if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
+				t.Fatal(err)
+			}
+			if result.TransactionId == "" || result.Written == nil {
+				t.Fatalf("result = %#v", result)
+			}
+			var raw map[string]json.RawMessage
+			if err := json.Unmarshal(response.Body.Bytes(), &raw); err != nil {
+				t.Fatal(err)
+			}
+			if _, exists := raw["preview"]; exists {
+				t.Fatalf("settings save unexpectedly returned an edit preview: %s", response.Body.String())
+			}
+		})
+	}
+}
+
 func TestEngineSettingsRejectInvalidVaultAutoLockChoices(t *testing.T) {
 	harness := newConfigHarness(t)
 	for name, chosen := range map[string]any{

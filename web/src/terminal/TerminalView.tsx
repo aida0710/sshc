@@ -45,6 +45,7 @@ type TerminalViewProps = {
   copyOnSelect?: boolean;
   fontSize?: number;
   rightClickPaste?: boolean;
+  webgl?: boolean;
   palette?: string;
   background?: string;
   tint?: number;
@@ -76,6 +77,7 @@ export function TerminalView({
   copyOnSelect = true,
   fontSize,
   rightClickPaste = true,
+  webgl: webglEnabled = true,
   palette,
   font,
   background,
@@ -202,14 +204,17 @@ export function TerminalView({
     let view: Terminal;
     view = new Terminal({
       allowProposedApi: true,
-      allowTransparency: backgroundConfigured,
+      // Background images are supplied by the host element. Keeping xterm's
+      // own cell background opaque avoids stale glyphs when Chromium redraws
+      // an edited line over an image.
+      allowTransparency: false,
       cols: 80,
       rows: 24,
       convertEol: false,
       cursorBlink: session.state !== "exited",
       fontFamily: fontStack(font ?? ""),
       fontSize: fontSize ?? (window.matchMedia("(max-width: 767px)").matches ? 15 : 13),
-      theme: terminalTheme(container, hasBackground),
+      theme: terminalTheme(container),
       scrollback: scrollbackLines,
       linkHandler: {
         activate: (event, target, range) => {
@@ -232,7 +237,10 @@ export function TerminalView({
     view.open(container);
     let webgl: { dispose(): void } | null = null;
     let terminalDisposed = false;
-    void attachWebglRenderer(view, { backgroundImage: backgroundConfigured }).then((attached) => {
+    void attachWebglRenderer(view, {
+      enabled: webglEnabled,
+      backgroundImage: backgroundConfigured,
+    }).then((attached) => {
       if (terminalDisposed) attached?.dispose();
       else webgl = attached;
     });
@@ -505,11 +513,11 @@ export function TerminalView({
       copyContext.current = () => {};
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session.id, api, backgroundConfigured]);
+  }, [session.id, api, backgroundConfigured, webglEnabled]);
 
   useEffect(() => {
     if (terminal.current === null || host.current === null) return;
-    terminal.current.options.theme = terminalTheme(host.current, hasBackground);
+    terminal.current.options.theme = terminalTheme(host.current);
   }, [resolved, palette, hasBackground]);
 
   useEffect(() => {

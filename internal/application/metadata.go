@@ -152,6 +152,8 @@ type EmbeddedTerminal struct {
 	Reconnect       *int  `json:"reconnect,omitempty"`
 	CopyOnSelect    *bool `json:"copyOnSelect,omitempty"`
 	RightClickPaste *bool `json:"rightClickPaste,omitempty"`
+	// WebGL は nil なら既定の有効、false なら明示的にDOM描画を使う。
+	WebGL *bool `json:"webgl,omitempty"`
 	// BrowserScrollbackLines はbrowserのxtermが保持する表示行数である。
 	// ScrollbackBytesはengineが再接続時に再生するbyte ringで、用途が異なる。
 	BrowserScrollbackLines int `json:"browserScrollbackLines,omitempty"`
