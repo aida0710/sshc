@@ -135,6 +135,18 @@ func WritePrivateFile(t *testing.T, path string, body []byte) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// OpenOrCreateFile deliberately preserves an existing private object's
+	// identity and DACL. Match os.WriteFile's replacement semantics here: a
+	// shorter fixture must not leave authenticated ciphertext from the previous
+	// contents at the end of the file.
+	if err := file.Truncate(0); err != nil {
+		_ = file.Close()
+		t.Fatal(err)
+	}
+	if _, err := file.Seek(0, 0); err != nil {
+		_ = file.Close()
+		t.Fatal(err)
+	}
 	if _, err := file.Write(body); err != nil {
 		_ = file.Close()
 		t.Fatal(err)
