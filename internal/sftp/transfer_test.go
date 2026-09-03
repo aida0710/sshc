@@ -157,6 +157,20 @@ func TestLargePreparedDownloadReadsIndependentRangesInParallel(t *testing.T) {
 	if got := connections.Load(); got != 4 {
 		t.Fatalf("SFTP connections = %d, want 4 for five chunks", got)
 	}
+	jobs := manager.ListJobs()
+	if len(jobs) != 1 || len(jobs[0].DownloadParts) != 4 {
+		t.Fatalf("download parts = %+v", jobs)
+	}
+	var preparedBytes int64
+	for index, part := range jobs[0].DownloadParts {
+		if part.Index != index || part.TransferredBytes != part.TotalBytes || part.TotalBytes <= 0 {
+			t.Fatalf("download part %d = %+v", index, part)
+		}
+		preparedBytes += part.TransferredBytes
+	}
+	if preparedBytes != int64(len(contents)) {
+		t.Fatalf("prepared bytes = %d, want %d", preparedBytes, len(contents))
+	}
 }
 
 func TestParallelUploadPersistsRangesAndPublishesOnlyWhenComplete(t *testing.T) {

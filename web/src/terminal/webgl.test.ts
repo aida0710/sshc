@@ -16,7 +16,19 @@ function addonHarness() {
 describe("WebGL terminal renderer", () => {
   it("keeps the DOM renderer when WebGL is unavailable", async () => {
     const terminal = { loadAddon: vi.fn() };
-    await expect(attachWebglRenderer(terminal, () => false)).resolves.toBeNull();
+    await expect(attachWebglRenderer(terminal, { supported: () => false })).resolves.toBeNull();
+    expect(terminal.loadAddon).not.toHaveBeenCalled();
+  });
+
+  it("keeps the DOM renderer when a transparent image background is configured", async () => {
+    const terminal = { loadAddon: vi.fn() };
+    const supported = vi.fn(() => true);
+    const load = vi.fn(async () => addonHarness().addon as never);
+
+    await expect(attachWebglRenderer(terminal, { backgroundImage: true, supported, load })).resolves.toBeNull();
+
+    expect(supported).not.toHaveBeenCalled();
+    expect(load).not.toHaveBeenCalled();
     expect(terminal.loadAddon).not.toHaveBeenCalled();
   });
 
@@ -25,8 +37,7 @@ describe("WebGL terminal renderer", () => {
     const { addon, loseContext } = addonHarness();
     const attached = await attachWebglRenderer(
       terminal,
-      () => true,
-      async () => addon as never,
+      { supported: () => true, load: async () => addon as never },
     );
 
     expect(terminal.loadAddon).toHaveBeenCalledWith(addon);
