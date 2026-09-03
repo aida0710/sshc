@@ -110,6 +110,10 @@ test("opens a local shell, runs a command and shows its output", async ({ page, 
   await typeIntoConsole(page, "echo embedded-terminal-canary");
 
   await expect(screen).toContainText("embedded-terminal-canary", { timeout: 20_000 });
+  if (process.platform !== "win32") {
+    await typeIntoConsole(page, 'printf "TERM=%s\\n" "$TERM"');
+    await expect(screen).toContainText("TERM=xterm-256color", { timeout: 20_000 });
+  }
   expect(violations).toEqual([]);
 });
 

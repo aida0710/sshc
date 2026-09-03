@@ -5,6 +5,8 @@ import (
 	"io"
 	"strconv"
 	"strings"
+
+	sftpcore "sshc/internal/sftp"
 )
 
 type invocationKind uint8
@@ -310,12 +312,12 @@ func parseSFTPInvocation(args []string) (invocation, error) {
 				return invalidInvocation("sftp accepts --split-jobs only once")
 			}
 			if index+1 >= len(args) {
-				return invalidInvocation("sftp --split-jobs requires a number from 1 to 8")
+				return invalidInvocation("sftp --split-jobs requires a number from 1 to 128")
 			}
 			index++
 			jobs, err := strconv.Atoi(args[index])
-			if err != nil || jobs < 1 || jobs > 8 {
-				return invalidInvocation("sftp --split-jobs requires a number from 1 to 8")
+			if err != nil || jobs < 1 || jobs > sftpcore.MaxLargeFileParallelism {
+				return invalidInvocation("sftp --split-jobs requires a number from 1 to 128")
 			}
 			called.SplitJobs = jobs
 			splitJobsSet = true
@@ -390,12 +392,12 @@ func parseSFTPSettingsInvocation(args []string) (invocation, error) {
 			splitSizeSet = true
 		case "--split-jobs":
 			if splitJobsSet || index+1 >= len(args) {
-				return invalidInvocation("sftp settings --split-jobs requires one number from 1 to 8")
+				return invalidInvocation("sftp settings --split-jobs requires one number from 1 to 128")
 			}
 			index++
 			jobs, err := strconv.Atoi(args[index])
-			if err != nil || jobs < 1 || jobs > 8 {
-				return invalidInvocation("sftp settings --split-jobs requires one number from 1 to 8")
+			if err != nil || jobs < 1 || jobs > sftpcore.MaxLargeFileParallelism {
+				return invalidInvocation("sftp settings --split-jobs requires one number from 1 to 128")
 			}
 			called.SplitJobs = jobs
 			splitJobsSet = true

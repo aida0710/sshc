@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"sshc/internal/httpserver"
+	sftpcore "sshc/internal/sftp"
 )
 
 func TestSFTPFileWorkersBoundParallelFiles(t *testing.T) {
@@ -82,6 +83,20 @@ func TestSFTPProgressUsesOneLinePerDownloadConnection(t *testing.T) {
 	if !strings.Contains(lines[0], "100%") || !strings.Contains(lines[1], " 50%") ||
 		!strings.Contains(lines[2], " 25%") || !strings.Contains(lines[3], "  0%") {
 		t.Fatalf("progress percentages = %q", lines)
+	}
+}
+
+func TestSFTPDownloadProgressAcceptsEverySupportedConnection(t *testing.T) {
+	parts := make([]sftpCLIDownloadPart, sftpcore.MaxLargeFileParallelism)
+	for index := range parts {
+		parts[index] = sftpCLIDownloadPart{Index: index, TotalBytes: 1}
+	}
+	if !validSFTPDownloadParts(parts) {
+		t.Fatalf("%d download progress parts were rejected", len(parts))
+	}
+	parts = append(parts, sftpCLIDownloadPart{Index: sftpcore.MaxLargeFileParallelism, TotalBytes: 1})
+	if validSFTPDownloadParts(parts) {
+		t.Fatalf("%d download progress parts were accepted", len(parts))
 	}
 }
 

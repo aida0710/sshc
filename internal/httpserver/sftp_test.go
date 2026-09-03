@@ -99,7 +99,7 @@ func TestTransferManagerHTTPContractAndSharedLimit(t *testing.T) {
 	}
 	settings := httptest.NewRecorder()
 	settingsRequest := httptest.NewRequest(http.MethodPut, "/api/v1/sftp/transfers/settings", bytes.NewBufferString(
-		`{"maxConcurrent":3,"clearCompletedAfterSeconds":300,"processingStopped":false,"largeFileThresholdBytes":52428800,"largeFileParallelism":6,"largeFileChunkBytes":536870912}`,
+		`{"maxConcurrent":3,"clearCompletedAfterSeconds":300,"processingStopped":false,"largeFileThresholdBytes":52428800,"largeFileParallelism":128,"largeFileChunkBytes":536870912}`,
 	))
 	settingsRequest.Header.Set("Content-Type", "application/json")
 	engine.ServeHTTP(settings, settingsRequest)
@@ -137,7 +137,7 @@ func TestTransferManagerHTTPContractAndSharedLimit(t *testing.T) {
 	if err := json.Unmarshal(response.Body.Bytes(), &listed); err != nil {
 		t.Fatal(err)
 	}
-	if listed.MaxConcurrent != 3 || listed.LargeFileThresholdBytes != 50<<20 || listed.LargeFileParallelism != 6 || listed.LargeFileChunkBytes != 512<<20 ||
+	if listed.MaxConcurrent != 3 || listed.LargeFileThresholdBytes != 50<<20 || listed.LargeFileParallelism != 128 || listed.LargeFileChunkBytes != 512<<20 ||
 		len(listed.Jobs) != 2 || listed.Jobs[0].BatchName != "HTTP batch" || listed.Jobs[0].Status != "running" || listed.Jobs[0].TransferredBytes != 0 {
 		t.Fatalf("listed = %+v", listed)
 	}

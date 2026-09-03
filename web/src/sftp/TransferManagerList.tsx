@@ -21,6 +21,7 @@ const defaultQueueHeight = 224;
 const concurrencyChoices = [1, 2, 3, 4, 5, 6, 7, 8];
 const autoClearChoices = [0, 30, 300, 3600];
 const mebibyte = 1 << 20;
+const maxLargeFileParallelism = 128;
 
 type QueueView = { collapsed: boolean; height: number; mobileHeight: number };
 
@@ -65,6 +66,49 @@ function MiBSetting({ label, valueBytes, min, max, onCommit }: {
         className="w-16 rounded border border-control-line bg-control px-1 py-0.5 text-right text-xs tabular-nums"
       />
       <span aria-hidden="true">MiB</span>
+    </label>
+  );
+}
+
+function IntegerSetting({ label, value, min, max, onCommit }: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  onCommit: (value: number) => void;
+}) {
+  const [draft, setDraft] = useState(String(value));
+  useEffect(() => setDraft(String(value)), [value]);
+  function commit() {
+    const parsed = Number(draft);
+    if (!Number.isInteger(parsed) || parsed < min || parsed > max) {
+      setDraft(String(value));
+      return;
+    }
+    onCommit(parsed);
+  }
+  return (
+    <label className="flex items-center gap-1 text-ink-muted">
+      <span>{label}</span>
+      <input
+        type="number"
+        inputMode="numeric"
+        aria-label={label}
+        min={min}
+        max={max}
+        step={1}
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={commit}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") event.currentTarget.blur();
+          if (event.key === "Escape") {
+            setDraft(String(value));
+            event.currentTarget.blur();
+          }
+        }}
+        className="w-14 rounded border border-control-line bg-control px-1 py-0.5 text-right text-xs tabular-nums"
+      />
     </label>
   );
 }
@@ -336,19 +380,13 @@ export function TransferManagerList() {
           max={1024}
           onCommit={(value) => applySettings({ largeFileThresholdBytes: value })}
         />
-        <label className="flex items-center gap-1 text-ink-muted">
-          <span>{t("sftp.manager.largeFileParallelism")}</span>
-          <select
-            aria-label={t("sftp.manager.largeFileParallelism")}
-            value={largeFileParallelism}
-            onChange={(event) => applySettings({ largeFileParallelism: Number(event.target.value) })}
-            className="rounded border border-control-line bg-control px-1 py-0.5 text-xs"
-          >
-            {concurrencyChoices.map((choice) => (
-              <option key={choice} value={choice}>{choice === 1 ? t("sftp.manager.largeFileParallelismOff") : choice}</option>
-            ))}
-          </select>
-        </label>
+        <IntegerSetting
+          label={t("sftp.manager.largeFileParallelism")}
+          value={largeFileParallelism}
+          min={1}
+          max={maxLargeFileParallelism}
+          onCommit={(value) => applySettings({ largeFileParallelism: value })}
+        />
         <MiBSetting
           label={t("sftp.manager.largeFileChunk")}
           valueBytes={largeFileChunkBytes}

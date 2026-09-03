@@ -213,7 +213,7 @@ func TestTheDocumentedInstallerPinsScriptAndArtifactsToOneRelease(t *testing.T) 
 		if strings.Contains(text, "raw.githubusercontent.com/aida0710/sshc/main/install.sh") {
 			t.Errorf("%s still executes the mutable main installer", path)
 		}
-		for _, required := range []string{"SSHC_VERSION=v0.27.2", "/sshc/v0.27.2/install.sh"} {
+		for _, required := range []string{"SSHC_VERSION=v0.27.3", "/sshc/v0.27.3/install.sh"} {
 			if !strings.Contains(text, required) {
 				t.Errorf("%s lacks version-pinned installer fragment %q", path, required)
 			}
