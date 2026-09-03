@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io/fs"
 	"path/filepath"
 	"slices"
@@ -1649,7 +1650,7 @@ func (s *Service) ChangeMasterPassword(current, next string) error {
 func (s *Service) reSealKeyBoundArtifacts(vault *Vault, previous envelope.Key, passphrase string, skipBackup, includeSettings bool) ([]storage.Change, error) {
 	changes, err := s.reSealProtectedDocuments(vault, previous, passphrase, skipBackup)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("re-seal protected documents: %w", err)
 	}
 
 	settings, err := s.workspace.FileSystem().ReadFile(s.settingsPath())
@@ -1657,7 +1658,7 @@ func (s *Service) reSealKeyBoundArtifacts(vault *Vault, previous envelope.Key, p
 	case err == nil && includeSettings:
 		plaintext, openErr := openWithKnownGeneration(settings, previous, passphrase)
 		if openErr != nil {
-			return nil, openErr
+			return nil, fmt.Errorf("open synchronization settings: %w", openErr)
 		}
 		defer clear(plaintext)
 		resealed, sealErr := vault.SealBytes(plaintext)
@@ -1691,7 +1692,11 @@ func (s *Service) reSealKeyBoundArtifacts(vault *Vault, previous envelope.Key, p
 		}
 		resealed, sealErr := s.reSealBackup(path, body, vault, previous, passphrase)
 		if sealErr != nil {
-			return sealErr
+			relative, relativeErr := filepath.Rel(backups, path)
+			if relativeErr != nil {
+				relative = filepath.Base(path)
+			}
+			return fmt.Errorf("re-seal backup %s: %w", filepath.ToSlash(relative), sealErr)
 		}
 		changes = append(changes, storage.Change{
 			Path: path, Contents: resealed,
@@ -1724,7 +1729,7 @@ func (s *Service) reSealBackup(path string, body []byte, vault *Vault, previous 
 	if err != nil {
 		// A single unreadable backup blocks a key-generation change. Ignoring it
 		// would make that generation permanently inaccessible after publication.
-		return nil, err
+		return nil, fmt.Errorf("open outer envelope: %w", err)
 	}
 	defer clear(plaintext)
 	keyBound, validate := s.backupKeyBoundDocument(path)
@@ -1739,7 +1744,7 @@ func (s *Service) reSealBackup(path string, body []byte, vault *Vault, previous 
 			openErr = nil
 		}
 		if openErr != nil {
-			return nil, openErr
+			return nil, fmt.Errorf("open inner envelope: %w", openErr)
 		}
 		defer clear(inner)
 		if validate != nil {
