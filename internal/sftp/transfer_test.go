@@ -157,7 +157,7 @@ func TestLargePreparedDownloadReadsIndependentRangesInParallel(t *testing.T) {
 	if got := connections.Load(); got != 4 {
 		t.Fatalf("SFTP connections = %d, want 4 for five chunks", got)
 	}
-	jobs := manager.ListJobs()
+	jobs := listJobs(t, manager)
 	if len(jobs) != 1 || len(jobs[0].DownloadParts) != 4 {
 		t.Fatalf("download parts = %+v", jobs)
 	}
@@ -217,7 +217,7 @@ func TestParallelUploadPersistsRangesAndPublishesOnlyWhenComplete(t *testing.T) 
 	if err := restarted.EnableQueuePersistence(queuePath); err != nil {
 		t.Fatal(err)
 	}
-	restored := restarted.ListJobs()
+	restored := listJobs(t, restarted)
 	if len(restored) != 1 || restored[0].Status != sftp.TransferReattach || len(restored[0].UploadRanges) != 1 || restored[0].UploadRanges[0].Offset != chunk {
 		t.Fatalf("restored upload = %+v", restored)
 	}
@@ -240,7 +240,7 @@ func TestParallelUploadPersistsRangesAndPublishesOnlyWhenComplete(t *testing.T) 
 	if err != nil || reset.Offset != 0 || len(reset.CompletedRanges) != 0 {
 		t.Fatalf("start after lost remote part = %+v, %v", reset, err)
 	}
-	if restored := manager.ListJobs(); len(restored) != 1 || restored[0].TransferredBytes != 0 || len(restored[0].UploadRanges) != 0 {
+	if restored := listJobs(t, manager); len(restored) != 1 || restored[0].TransferredBytes != 0 || len(restored[0].UploadRanges) != 0 {
 		t.Fatalf("ranges after remote part reset = %+v", restored)
 	}
 	if _, err := manager.AppendRangeOwned(t.Context(), job.Alias, job.ID, job.RemotePath, 0, job.TotalBytes, chunk, bytes.NewReader(contents[:chunk])); err != nil {
@@ -293,6 +293,65 @@ func TestTransferManagerCloseReleasesRetainedRemoteAndRejectsNewWork(t *testing.
 	}
 	if err := manager.Close(); err != nil {
 		t.Fatalf("second Close = %v", err)
+	}
+}
+
+func TestTransferManagerCloseWaitsForRemoteWorker(t *testing.T) {
+	remote := remoteWith(map[string]node{"/source.bin": file("source.bin", "data", 0o644)})
+	entered := make(chan struct{})
+	remoteClosed := make(chan struct{})
+	workerReleased := make(chan struct{})
+	allowWorkerReturn := make(chan struct{})
+	var enteredOnce sync.Once
+	var closedOnce sync.Once
+	remote.lstatHook = func(candidate string) error {
+		if candidate != "/source.bin" {
+			return nil
+		}
+		enteredOnce.Do(func() { close(entered) })
+		<-remoteClosed
+		close(workerReleased)
+		<-allowWorkerReturn
+		return fs.ErrClosed
+	}
+	remote.closeHook = func() { closedOnce.Do(func() { close(remoteClosed) }) }
+	service := &sftp.Service{Open: func(context.Context, string) (sftp.Remote, error) { return remote, nil }}
+	manager := sftp.NewTransferManager(service)
+	job := sftp.CreateTransferJob{
+		ID: "transfer_remoteclose", BatchID: "batch_remoteclose", Alias: "target", RemotePath: "/target.bin",
+		SourceAlias: "source", SourcePath: "/source.bin", Operation: sftp.RemoteCopy,
+		Direction: sftp.TransferRemote, Kind: sftp.TransferFile, Name: "source.bin", TotalBytes: -1,
+	}
+	if _, err := manager.CreateJob(job); err != nil {
+		t.Fatal(err)
+	}
+	manager.ScheduleRemoteJob(job.ID)
+	select {
+	case <-entered:
+	case <-time.After(time.Second):
+		t.Fatal("remote worker did not enter the blocking operation")
+	}
+
+	closed := make(chan error, 1)
+	go func() { closed <- manager.Close() }()
+	select {
+	case <-workerReleased:
+	case <-time.After(time.Second):
+		t.Fatal("Close did not cancel the remote worker transport")
+	}
+	select {
+	case err := <-closed:
+		t.Fatalf("Close returned before the remote worker exited: %v", err)
+	default:
+	}
+	close(allowWorkerReturn)
+	select {
+	case err := <-closed:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Close did not join the released remote worker")
 	}
 }
 
@@ -585,14 +644,14 @@ func TestOwnedUploadCommitsProgressAndCompletionWithoutClientStateRequests(t *te
 	if _, err := manager.AppendOwned(t.Context(), input.Alias, input.ID, input.RemotePath, 0, input.TotalBytes, []byte("abcdef")); err != nil {
 		t.Fatal(err)
 	}
-	jobs := manager.ListJobs()
+	jobs := listJobs(t, manager)
 	if len(jobs) != 1 || jobs[0].TransferredBytes != 6 || jobs[0].Status != sftp.TransferRunning {
 		t.Fatalf("job after append = %+v", jobs)
 	}
 	if _, err := manager.CompleteOwned(t.Context(), input.Alias, input.ID, input.RemotePath, input.TotalBytes, started.ExpectedRevision, transferFingerprint(t, []byte("abcdef"))); err != nil {
 		t.Fatal(err)
 	}
-	jobs = manager.ListJobs()
+	jobs = listJobs(t, manager)
 	if len(jobs) != 1 || jobs[0].TransferredBytes != 6 || jobs[0].Status != sftp.TransferCompleted {
 		t.Fatalf("job after publish = %+v", jobs)
 	}
@@ -622,7 +681,7 @@ func TestStartOwnedResumesFromAnExistingRemotePart(t *testing.T) {
 	if err != nil || resumed.Offset != 3 {
 		t.Fatalf("resume = %+v, %v", resumed, err)
 	}
-	if job := manager.ListJobs()[0]; job.TransferredBytes != 3 {
+	if job := listJobs(t, manager)[0]; job.TransferredBytes != 3 {
 		t.Fatalf("job progress = %d", job.TransferredBytes)
 	}
 }
@@ -790,7 +849,7 @@ func TestPrepareOwnedArchiveFailsBeforeReturningAPartialDownload(t *testing.T) {
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("prepare archive = %v", err)
 	}
-	if job := manager.ListJobs()[0]; job.TransferredBytes != 0 || job.Status != sftp.TransferRunning {
+	if job := listJobs(t, manager)[0]; job.TransferredBytes != 0 || job.Status != sftp.TransferRunning {
 		t.Fatalf("job after failed preparation = %+v", job)
 	}
 }
@@ -823,7 +882,7 @@ func TestRemoteCloseDoesNotHoldTheJobsMutex(t *testing.T) {
 	<-closeStarted
 	listed := make(chan struct{})
 	go func() {
-		_ = manager.ListJobs()
+		_, _ = manager.ListJobs()
 		close(listed)
 	}()
 	select {
@@ -857,14 +916,14 @@ func TestCancelOwnedRetainsCleanupFailureForRetry(t *testing.T) {
 	if err := manager.CancelOwned(t.Context(), input.Alias, input.ID, input.RemotePath); err == nil {
 		t.Fatal("cleanup failure was hidden")
 	}
-	if job := manager.ListJobs()[0]; job.Status != sftp.TransferFailed || job.Problem != "sftp_cleanup_pending" {
+	if job := listJobs(t, manager)[0]; job.Status != sftp.TransferFailed || job.Problem != "sftp_cleanup_pending" {
 		t.Fatalf("job after cleanup failure = %+v", job)
 	}
 	remote.removeErr = nil
 	if err := manager.CancelOwned(t.Context(), input.Alias, input.ID, input.RemotePath); err != nil {
 		t.Fatal(err)
 	}
-	if job := manager.ListJobs()[0]; job.Status != sftp.TransferCancelled {
+	if job := listJobs(t, manager)[0]; job.Status != sftp.TransferCancelled {
 		t.Fatalf("job after cleanup retry = %+v", job)
 	}
 	part := "/remote/.file.sshc-upload-transfer_cleanretry.part"
@@ -892,7 +951,7 @@ func TestCancelOwnedDoesNotConnectForAPristineQueuedUpload(t *testing.T) {
 	if opened {
 		t.Fatal("pristine cancellation opened a remote connection")
 	}
-	if job := manager.ListJobs()[0]; job.Status != sftp.TransferCancelled {
+	if job := listJobs(t, manager)[0]; job.Status != sftp.TransferCancelled {
 		t.Fatalf("cancelled job = %+v", job)
 	}
 }
@@ -956,7 +1015,7 @@ func TestCompleteOwnedCommitsAfterReplaceEvenWhenTargetLstatFails(t *testing.T) 
 	if _, err := manager.CompleteOwned(t.Context(), input.Alias, input.ID, input.RemotePath, 4, started.ExpectedRevision, transferFingerprint(t, []byte("data"))); err != nil {
 		t.Fatal(err)
 	}
-	if job := manager.ListJobs()[0]; job.Status != sftp.TransferCompleted {
+	if job := listJobs(t, manager)[0]; job.Status != sftp.TransferCompleted {
 		t.Fatalf("job = %+v", job)
 	}
 	if got := string(remote.nodes[input.RemotePath].content); got != "data" {
@@ -1015,7 +1074,7 @@ func TestUploadPublicationIsSerializedWithClientControls(t *testing.T) {
 	if err := <-pauseResult; !errors.Is(err, sftp.ErrTransferState) {
 		t.Fatalf("pause after publish = %v", err)
 	}
-	if got := manager.ListJobs()[0].Status; got != sftp.TransferCompleted {
+	if got := listJobs(t, manager)[0].Status; got != sftp.TransferCompleted {
 		t.Fatalf("status = %s", got)
 	}
 }

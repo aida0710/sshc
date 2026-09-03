@@ -294,11 +294,22 @@ type sftpDownloadCheckpointRequest struct {
 }
 
 func (h SFTPHandlers) ListTransfers(c *echo.Context) error {
-	return c.JSON(http.StatusOK, h.describeTransferQueue())
+	return h.respondTransferQueue(c)
 }
 
-func (h SFTPHandlers) describeTransferQueue() sftpTransferJobListResponse {
-	jobs := h.Transfers.ListJobs()
+func (h SFTPHandlers) respondTransferQueue(c *echo.Context) error {
+	queue, err := h.describeTransferQueue()
+	if err != nil {
+		return sftpProblem(c, err)
+	}
+	return c.JSON(http.StatusOK, queue)
+}
+
+func (h SFTPHandlers) describeTransferQueue() (sftpTransferJobListResponse, error) {
+	jobs, err := h.Transfers.ListJobs()
+	if err != nil {
+		return sftpTransferJobListResponse{}, err
+	}
 	described := make([]sftpTransferJobResponse, 0, len(jobs))
 	for _, job := range jobs {
 		described = append(described, describeTransferJob(job))
@@ -311,7 +322,7 @@ func (h SFTPHandlers) describeTransferQueue() sftpTransferJobListResponse {
 		ClearCompletedAfterSeconds: int(h.Transfers.ClearCompletedAfter() / time.Second),
 		ProcessingStopped:          h.Transfers.ProcessingStopped(),
 		Jobs:                       described,
-	}
+	}, nil
 }
 
 // UpdateTransferSettings は、engine が持つ転送キューの設定を差し替え、
@@ -340,7 +351,7 @@ func (h SFTPHandlers) UpdateTransferSettings(c *echo.Context) error {
 			return serviceProblem(c, err)
 		}
 	}
-	return c.JSON(http.StatusOK, h.describeTransferQueue())
+	return h.respondTransferQueue(c)
 }
 
 // MoveTransfer は、待機中の job を待機列の中で入れ替える。
@@ -352,7 +363,7 @@ func (h SFTPHandlers) MoveTransfer(c *echo.Context) error {
 	if err := h.Transfers.MoveQueuedJob(c.Param("id"), body.Move); err != nil {
 		return sftpProblem(c, err)
 	}
-	return c.JSON(http.StatusOK, h.describeTransferQueue())
+	return h.respondTransferQueue(c)
 }
 
 func (h SFTPHandlers) CreateTransfer(c *echo.Context) error {
@@ -408,7 +419,9 @@ func (h SFTPHandlers) CompareDirectories(c *echo.Context) error {
 }
 
 func (h SFTPHandlers) ClearFinishedTransfers(c *echo.Context) error {
-	h.Transfers.ClearFinished()
+	if _, err := h.Transfers.ClearFinished(); err != nil {
+		return sftpProblem(c, err)
+	}
 	return c.NoContent(http.StatusNoContent)
 }
 

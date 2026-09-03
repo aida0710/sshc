@@ -23,16 +23,19 @@ Reconnect an exited SSH session in the same pane while retaining its scrollback.
 - Case, regex, match highlighting, and result navigation
 - URL and remote-path context actions, including OSC 8 links
 - Quick Commands and snippets
+- Pre-send review for pastes containing line breaks or control characters
 - OSC 52 clipboard, Kitty keyboard protocol and JIS keyboards
 - Per-connection UTF-8, Shift_JIS, EUC-JP and ISO-2022-JP
 - A 16 KiB–4 MiB engine replay buffer, 1,000–100,000 lines of browser scrollback, and configurable font size
 - WebGL rendering with an automatic DOM-renderer fallback when unavailable or when a background image is active, plus an option to disable WebGL permanently
 
-The engine replay buffer and browser scrollback both stay in memory. They are not written to the vault, backups, or sync snapshots.
+On reconnect, sshc replays only bytes after the browser's last rendered position. Existing output is not duplicated, and older scrollback retained only by the browser is not cleared. If a long disconnect let required output fall out of the engine buffer, the terminal reports the gap. Both buffers stay in memory and are not written to the vault, backups, or sync snapshots.
 
 ## Input and clipboard
 
-Normal text-selection copying stays inside the browser and does not require OSC 52. Configure automatic copy-on-select and right-click paste under **Settings → Terminal**. OSC 52 lets remote software write to the device clipboard. It has a global default and a per-SSH-host allow/deny override, so enable it only for hosts you trust.
+Normal text-selection copying stays inside the browser and does not require OSC 52. Configure automatic copy-on-select and right-click paste under **Settings → Terminal**. A paste containing line breaks, a final Enter, or terminal control characters is not sent immediately. sshc shows the target, logical line count, and a bounded preview with control characters made visible. You can cancel, paste unchanged, or remove exactly one final Enter first. Neither the preview nor the original paste is stored.
+
+OSC 52 lets remote software write to the device clipboard. It has a global default and a per-SSH-host allow/deny override, so enable it only for hosts you trust.
 
 Kitty keyboard mode follows requests from the remote application. A JIS option sends the yen key as backslash. Mobile adds a special-key row for Ctrl, Alt, Esc, Tab, and arrows.
 

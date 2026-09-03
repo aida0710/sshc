@@ -55,6 +55,7 @@ type TransferManager struct {
 	dataPlane            map[string]int
 	remoteJobsMutex      sync.Mutex
 	remoteCancels        map[string]context.CancelFunc
+	remoteWorkers        sync.WaitGroup
 	queuePath            string
 	lastQueuePersist     time.Time
 	queuePersistError    error
@@ -178,12 +179,6 @@ func (m *TransferManager) Close() error {
 		return nil
 	}
 	m.closeOnce.Do(func() {
-		m.remoteJobsMutex.Lock()
-		for id, cancel := range m.remoteCancels {
-			cancel()
-			delete(m.remoteCancels, id)
-		}
-		m.remoteJobsMutex.Unlock()
 		m.mutex.Lock()
 		m.closed = true
 		remotes := make([]Remote, 0, len(m.remotes))
@@ -197,6 +192,16 @@ func (m *TransferManager) Close() error {
 			downloads = append(downloads, cached.download)
 		}
 		m.mutex.Unlock()
+		m.remoteJobsMutex.Lock()
+		for _, cancel := range m.remoteCancels {
+			cancel()
+		}
+		m.remoteJobsMutex.Unlock()
+		// A remote-to-remote worker owns request-scoped SFTP connections which
+		// are not present in m.remotes. Wait for cancellation to close those
+		// connections and for the goroutine to leave before server shutdown
+		// reports completion.
+		m.remoteWorkers.Wait()
 		var joined []error
 		for _, remote := range remotes {
 			if err := remote.Close(); err != nil {
@@ -539,7 +544,14 @@ func (m *TransferManager) StartOwned(ctx context.Context, alias, id, remotePath 
 		return ResumableUpload{}, ErrConflict
 	}
 	if options.SourceFingerprint != "" && record.job.SourceFingerprint == "" {
+		original := cloneTransferJobRecord(record)
 		record.job.SourceFingerprint = options.SourceFingerprint
+		record.job.UpdatedAt = m.now().UTC()
+		if err := m.persistJobsLocked(true); err != nil {
+			*record = original
+			m.jobsMutex.Unlock()
+			return ResumableUpload{}, err
+		}
 	}
 	job := record.job
 	options.Overwrite = job.Overwrite
@@ -569,17 +581,27 @@ func (m *TransferManager) StartOwned(ctx context.Context, alias, id, remotePath 
 	}
 	total, offset := options.Size, upload.Offset
 	m.jobsMutex.Lock()
-	if record := m.jobs[id]; record != nil {
-		record.job.ExpectedRevision = upload.ExpectedRevision
-		record.job.UploadRanges = append([]UploadRange(nil), upload.CompletedRanges...)
+	record = m.jobs[id]
+	if record == nil || record.job.Status != TransferRunning {
+		m.jobsMutex.Unlock()
+		m.releaseRemote(alias, id, upload.Path)
+		return ResumableUpload{}, ErrTransferState
 	}
-	m.jobsMutex.Unlock()
-	if _, err := m.updateUploadJob(id, UpdateTransferJob{
-		Action: TransferProgressAction, TransferredBytes: &offset, TotalBytes: &total, ResetProgress: true,
-	}); err != nil {
+	original := cloneTransferJobRecord(record)
+	record.job.ExpectedRevision = upload.ExpectedRevision
+	record.job.UploadRanges = append([]UploadRange(nil), upload.CompletedRanges...)
+	record.job.TransferredBytes = offset
+	record.job.TotalBytes = total
+	record.job.BytesPerSecond, record.job.RemainingSeconds = 0, -1
+	record.sampleAt, record.sampleBytes = m.now().UTC(), offset
+	record.job.UpdatedAt = record.sampleAt
+	if err := m.persistJobsLocked(true); err != nil {
+		*record = original
+		m.jobsMutex.Unlock()
 		m.releaseRemote(alias, id, upload.Path)
 		return ResumableUpload{}, err
 	}
+	m.jobsMutex.Unlock()
 	return upload, nil
 }
 
@@ -634,15 +656,14 @@ func (m *TransferManager) AppendRangeOwned(ctx context.Context, alias, id, remot
 	if record == nil || record.job.Status != TransferRunning || record.job.ExpectedRevision != expectedRevision {
 		return ResumableUpload{}, ErrTransferState
 	}
-	before := append([]UploadRange(nil), record.job.UploadRanges...)
+	original := cloneTransferJobRecord(record)
 	record.job.UploadRanges = addUploadRange(record.job.UploadRanges, UploadRange{Offset: offset, Size: length})
 	record.job.TransferredBytes = uploadRangeBytes(record.job.UploadRanges)
 	now := m.now().UTC()
 	m.updateRateLocked(record, now)
 	record.job.UpdatedAt = now
 	if err := m.persistJobsLocked(true); err != nil {
-		record.job.UploadRanges = before
-		record.job.TransferredBytes = uploadRangeBytes(before)
+		*record = original
 		return ResumableUpload{}, err
 	}
 	return ResumableUpload{ID: id, Path: path.Clean(remotePath), Offset: record.job.TransferredBytes, Size: total,
@@ -734,7 +755,7 @@ func (m *TransferManager) clearParallelUploadRangesBeforeReset(id string, comple
 	if record == nil || record.job.Status != TransferRunning {
 		return ErrTransferState
 	}
-	original := *record
+	original := cloneTransferJobRecord(record)
 	record.job.UploadRanges = nil
 	record.job.TransferredBytes = 0
 	record.job.BytesPerSecond = 0
@@ -914,7 +935,14 @@ func (m *TransferManager) CompleteOwned(ctx context.Context, alias, id, remotePa
 		return Transfer{}, ErrConflict
 	}
 	if record.job.SourceFingerprint == "" {
+		original := cloneTransferJobRecord(record)
 		record.job.SourceFingerprint = sourceFingerprint
+		record.job.UpdatedAt = m.now().UTC()
+		if err := m.persistJobsLocked(true); err != nil {
+			*record = original
+			m.jobsMutex.Unlock()
+			return Transfer{}, err
+		}
 	}
 	threshold, parallelism := m.largeFileThreshold, m.largeFileParallelism
 	if record.job.LargeFileThresholdBytes != 0 {
@@ -930,9 +958,6 @@ func (m *TransferManager) CompleteOwned(ctx context.Context, alias, id, remotePa
 	m.jobsMutex.Unlock()
 	transfer, err := m.Complete(ctx, alias, id, remotePath, total, expectedRevision, sourceFingerprint)
 	if err != nil {
-		return Transfer{}, err
-	}
-	if _, err := m.updateUploadJob(id, UpdateTransferJob{Action: TransferProgressAction, TransferredBytes: &total}); err != nil {
 		return Transfer{}, err
 	}
 	if _, err := m.updateUploadJob(id, UpdateTransferJob{Action: TransferCompleteAction, TransferredBytes: &total}); err != nil {

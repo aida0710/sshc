@@ -40,7 +40,7 @@ test("replaces the entire shell with a centered recovery screen when its session
   await openSection(page, "History");
 
   await expect(page.getByRole("heading", { name: "Session ended" })).toBeVisible();
-  await expect(page.getByRole("alert")).toContainText("Reload to renew the local session");
+  await expect(page.getByRole("alert")).toContainText("Reload to recover the local session automatically");
   await expect(page.getByRole("navigation", { name: "Primary" })).toHaveCount(0);
   const recovery = page.getByRole("heading", { name: "Session ended" }).locator("..");
   const box = await recovery.boundingBox();

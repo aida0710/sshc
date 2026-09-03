@@ -403,6 +403,36 @@ func TestAttachReplaysTheBufferAndThenFollowsTheLiveOutput(t *testing.T) {
 	}
 }
 
+func TestAttachFromReplaysOnlyMissingBytesAndReportsARingGap(t *testing.T) {
+	registry, starter := newRegistry(terminal.Limits{MaxSessions: 4, Scrollback: terminal.MinScrollback})
+	session := openShell(t, registry)
+	process := starter.last()
+
+	process.feed(strings.Repeat("x", terminal.MinScrollback) + "abcdef")
+	waitFor(t, func() bool {
+		snapshot := session.Snapshot()
+		return len(snapshot) == terminal.MinScrollback && strings.HasSuffix(string(snapshot), "abcdef")
+	})
+	end := uint64(terminal.MinScrollback + len("abcdef"))
+
+	missing, stream, ok := session.AttachFrom(end - 3)
+	if !ok || string(missing.Data) != "def" || missing.Start != end-3 || missing.Next != end || missing.Truncated {
+		t.Fatalf("AttachFrom(end-3) = %#v, %v", missing, ok)
+	}
+	session.Detach(stream)
+
+	old, stream, ok := session.AttachFrom(0)
+	if !ok || len(old.Data) != terminal.MinScrollback || !strings.HasSuffix(string(old.Data), "abcdef") ||
+		old.Start != uint64(len("abcdef")) || old.Next != end || !old.Truncated {
+		t.Fatalf("AttachFrom(0) = %#v, %v", old, ok)
+	}
+	session.Detach(stream)
+
+	if _, _, ok := session.AttachFrom(end + 1); ok {
+		t.Fatal("AttachFrom accepted a cursor beyond the newest output")
+	}
+}
+
 func TestAnAttachmentThatDoesNotReadIsDroppedAndThePTYKeepsRunning(t *testing.T) {
 	registry, starter := newRegistry(terminal.Limits{MaxSessions: 4, Scrollback: 1 << 10})
 	session := openShell(t, registry)

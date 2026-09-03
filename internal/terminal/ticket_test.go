@@ -20,7 +20,7 @@ func newTickets() (*terminal.Tickets, *testClock) {
 func TestATicketIsSpentByItsFirstUse(t *testing.T) {
 	tickets, _ := newTickets()
 
-	token, err := tickets.Issue("session-a")
+	token, err := tickets.Issue("session-a", 42)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -28,9 +28,9 @@ func TestATicketIsSpentByItsFirstUse(t *testing.T) {
 		t.Fatal("Issue() returned an empty ticket")
 	}
 
-	session, ok := tickets.Redeem(token)
-	if !ok || session != "session-a" {
-		t.Fatalf("Redeem() = %q, %v", session, ok)
+	claim, ok := tickets.Redeem(token)
+	if !ok || claim.SessionID != "session-a" || claim.Cursor != 42 {
+		t.Fatalf("Redeem() = %#v, %v", claim, ok)
 	}
 	if _, ok := tickets.Redeem(token); ok {
 		t.Fatal("the same ticket was redeemed twice")
@@ -40,11 +40,11 @@ func TestATicketIsSpentByItsFirstUse(t *testing.T) {
 func TestATicketOnlyEverYieldsTheSessionItWasBoundTo(t *testing.T) {
 	tickets, _ := newTickets()
 
-	first, err := tickets.Issue("session-a")
+	first, err := tickets.Issue("session-a", 10)
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := tickets.Issue("session-b")
+	second, err := tickets.Issue("session-b", 20)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,23 +52,23 @@ func TestATicketOnlyEverYieldsTheSessionItWasBoundTo(t *testing.T) {
 		t.Fatal("two issues produced the same ticket")
 	}
 
-	if session, _ := tickets.Redeem(first); session != "session-a" {
-		t.Fatalf("the ticket for session-a yielded %q", session)
+	if claim, _ := tickets.Redeem(first); claim.SessionID != "session-a" || claim.Cursor != 10 {
+		t.Fatalf("the ticket for session-a yielded %#v", claim)
 	}
-	if session, _ := tickets.Redeem(second); session != "session-b" {
-		t.Fatalf("the ticket for session-b yielded %q", session)
+	if claim, _ := tickets.Redeem(second); claim.SessionID != "session-b" || claim.Cursor != 20 {
+		t.Fatalf("the ticket for session-b yielded %#v", claim)
 	}
 }
 
 func TestATicketExpires(t *testing.T) {
 	tickets, clock := newTickets()
 
-	token, err := tickets.Issue("session-a")
+	token, err := tickets.Issue("session-a", 0)
 	if err != nil {
 		t.Fatal(err)
 	}
 	clock.advance(terminal.TicketTTL - time.Millisecond)
-	fresh, err := tickets.Issue("session-b")
+	fresh, err := tickets.Issue("session-b", 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,7 +84,7 @@ func TestATicketExpires(t *testing.T) {
 
 func TestAnUnknownOrEmptyTicketIsRefused(t *testing.T) {
 	tickets, _ := newTickets()
-	if _, err := tickets.Issue("session-a"); err != nil {
+	if _, err := tickets.Issue("session-a", 0); err != nil {
 		t.Fatal(err)
 	}
 	for _, presented := range []string{"", "not-a-ticket", "0000000000000000000000000000000000000000000"} {
@@ -97,11 +97,11 @@ func TestAnUnknownOrEmptyTicketIsRefused(t *testing.T) {
 func TestForgetDropsEveryTicketForOneSession(t *testing.T) {
 	tickets, _ := newTickets()
 
-	doomed, err := tickets.Issue("session-a")
+	doomed, err := tickets.Issue("session-a", 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	kept, err := tickets.Issue("session-b")
+	kept, err := tickets.Issue("session-b", 0)
 	if err != nil {
 		t.Fatal(err)
 	}

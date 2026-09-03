@@ -116,6 +116,36 @@ describe("ConnectionTree", () => {
     expect(screen.queryByRole("button", { name: /nas/ })).not.toBeInTheDocument();
   });
 
+  it("keeps repeated projections of one Host block as distinct accessible items", () => {
+    const projected = host("connections/shared.conf", "shared", "home");
+    const repeatedOverview: Overview = {
+      ...overview,
+      hosts: [projected, { ...projected }],
+      groups: overview.groups.filter((group) => group.name === "home"),
+      metadata: { schemaVersion: 2 },
+    };
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    try {
+      render(
+        <ConnectionTree overview={repeatedOverview} selected={null} onSelect={vi.fn()} onDrop={vi.fn()} />,
+      );
+
+      const projectedButtons = screen.getAllByRole("button", { name: "shared" });
+      const descriptionIds = projectedButtons.map((button) => button.getAttribute("aria-describedby"));
+      expect(descriptionIds).not.toContain(null);
+      expect(new Set(descriptionIds).size).toBe(projectedButtons.length);
+      descriptionIds.forEach((descriptionId) => {
+        expect(document.getElementById(descriptionId!)).toHaveTextContent(
+          "tester@shared.example, connections/shared.conf",
+        );
+      });
+      expect(consoleError.mock.calls.flat().join(" ")).not.toContain("same key");
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
   it("filters grouped results by subtree, exact group, and resolved destination", async () => {
     const user = userEvent.setup();
     render(

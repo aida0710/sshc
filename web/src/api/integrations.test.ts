@@ -132,6 +132,19 @@ describe("integrationsApi terminal sessions", () => {
     expect(new Headers(init.headers).get("X-SSHC-Action")).toBeNull();
   });
 
+  it("binds a reconnect stream ticket to the browser's rendered byte cursor", async () => {
+    const fetcher = vi.fn().mockResolvedValue(jsonResponse({ streamTicket: "next" }, 201));
+    vi.stubGlobal("fetch", fetcher);
+
+    await expect(integrationsApi.terminalStreamTicket("session id", 8192)).resolves.toEqual({
+      streamTicket: "next",
+    });
+
+    const [path, init] = fetcher.mock.calls[0] as [string, RequestInit];
+    expect(path).toBe("/api/v1/terminal/sessions/session%20id/stream?cursor=8192");
+    expect(init.method).toBe("POST");
+  });
+
   it("reconnects an exited session without an action token", async () => {
     const fetcher = vi
       .fn()

@@ -59,7 +59,7 @@ func TestRemoveJobOnlyDismissesRetainedWork(t *testing.T) {
 	if err := manager.RemoveJob(input.ID); err != nil {
 		t.Fatal(err)
 	}
-	if jobs := manager.ListJobs(); len(jobs) != 0 {
+	if jobs := listJobs(t, manager); len(jobs) != 0 {
 		t.Fatalf("jobs after remove = %+v", jobs)
 	}
 	if err := manager.RemoveJob(input.ID); err != nil {
@@ -305,10 +305,10 @@ func TestTransferLedgerOwnsBatchMetadataAndClearsOnlyFinishedJobs(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if removed := manager.ClearFinished(); removed != 1 {
-		t.Fatalf("removed = %d, want 1", removed)
+	if removed, err := manager.ClearFinished(); err != nil || removed != 1 {
+		t.Fatalf("removed = %d, err = %v; want 1", removed, err)
 	}
-	jobs := manager.ListJobs()
+	jobs := listJobs(t, manager)
 	if len(jobs) != 1 || jobs[0].ID != active.ID {
 		t.Fatalf("remaining jobs = %+v", jobs)
 	}
@@ -334,14 +334,14 @@ func TestQueueReorderMovesOnlyWaitingJobs(t *testing.T) {
 	if err := manager.MoveQueuedJob("transfer_third01", sftp.TransferMoveUp); err != nil {
 		t.Fatal(err)
 	}
-	if order := jobIDs(manager); !slices.Equal(order, []string{"transfer_first01", "transfer_third01", "transfer_second1"}) {
+	if order := jobIDs(t, manager); !slices.Equal(order, []string{"transfer_first01", "transfer_third01", "transfer_second1"}) {
 		t.Fatalf("order after up = %v", order)
 	}
 
 	if err := manager.MoveQueuedJob("transfer_second1", sftp.TransferMoveTop); err != nil {
 		t.Fatal(err)
 	}
-	if order := jobIDs(manager); !slices.Equal(order, []string{"transfer_first01", "transfer_second1", "transfer_third01"}) {
+	if order := jobIDs(t, manager); !slices.Equal(order, []string{"transfer_first01", "transfer_second1", "transfer_third01"}) {
 		t.Fatalf("order after top = %v", order)
 	}
 
@@ -417,13 +417,13 @@ func TestTransferSettingsBoundConcurrencyAndExpireFinishedJobs(t *testing.T) {
 	if _, err := manager.UpdateJob("transfer_failed01", sftp.UpdateTransferJob{Action: sftp.TransferFailAction, Problem: "sftp_failed"}); err != nil {
 		t.Fatal(err)
 	}
-	if order := jobIDs(manager); !slices.Equal(order, []string{"transfer_expire01", "transfer_failed01"}) {
+	if order := jobIDs(t, manager); !slices.Equal(order, []string{"transfer_expire01", "transfer_failed01"}) {
 		t.Fatalf("order before expiry = %v", order)
 	}
 
 	now = now.Add(time.Minute)
 	// 完了だけが消える。失敗は原因を読む前に消えてはならない。
-	if order := jobIDs(manager); !slices.Equal(order, []string{"transfer_failed01"}) {
+	if order := jobIDs(t, manager); !slices.Equal(order, []string{"transfer_failed01"}) {
 		t.Fatalf("order after expiry = %v", order)
 	}
 }
@@ -454,7 +454,7 @@ func TestStoppedQueueLeavesWaitingJobsWaiting(t *testing.T) {
 		t.Fatalf("start while stopped = %v, want %v", err, sftp.ErrTransferLimit)
 	}
 	// すでに走っているものは止めない。止めたいなら pause がある。
-	jobs := manager.ListJobs()
+	jobs := listJobs(t, manager)
 	if len(jobs) != 2 || jobs[0].Status != sftp.TransferRunning || jobs[1].Status != sftp.TransferQueued {
 		t.Fatalf("jobs = %+v", jobs)
 	}
@@ -467,8 +467,8 @@ func TestStoppedQueueLeavesWaitingJobsWaiting(t *testing.T) {
 	}
 }
 
-func jobIDs(manager *sftp.TransferManager) []string {
-	jobs := manager.ListJobs()
+func jobIDs(t *testing.T, manager *sftp.TransferManager) []string {
+	jobs := listJobs(t, manager)
 	ids := make([]string, 0, len(jobs))
 	for _, job := range jobs {
 		ids = append(ids, job.ID)
@@ -493,7 +493,7 @@ func TestStaleRunningTransferReleasesItsSlot(t *testing.T) {
 		t.Fatal(err)
 	}
 	now = now.Add(3 * time.Minute)
-	jobs := manager.ListJobs()
+	jobs := listJobs(t, manager)
 	if jobs[0].Status != sftp.TransferFailed || jobs[0].Problem != "transfer_interrupted" {
 		t.Fatalf("stale job = %+v", jobs[0])
 	}
@@ -521,12 +521,12 @@ func TestActiveDataPlaneIsNotFailedByTheStaleSweep(t *testing.T) {
 		t.Fatal(err)
 	}
 	now = now.Add(10 * time.Minute)
-	if got := manager.ListJobs()[0].Status; got != sftp.TransferRunning {
+	if got := listJobs(t, manager)[0].Status; got != sftp.TransferRunning {
 		t.Fatalf("active data plane was swept as %q", got)
 	}
 	done()
 	now = now.Add(3 * time.Minute)
-	if got := manager.ListJobs()[0].Status; got != sftp.TransferFailed {
+	if got := listJobs(t, manager)[0].Status; got != sftp.TransferFailed {
 		t.Fatalf("inactive stale job status = %q", got)
 	}
 }
@@ -692,7 +692,7 @@ func TestClientCannotForgeDownloadProgressThroughFailRetryAndComplete(t *testing
 	}); !errors.Is(err, sftp.ErrInvalidTransfer) {
 		t.Fatalf("client fail progress = %v", err)
 	}
-	job := manager.ListJobs()[0]
+	job := listJobs(t, manager)[0]
 	if job.Status != sftp.TransferRunning || job.TransferredBytes != 0 {
 		t.Fatalf("rejected mutation changed job: %+v", job)
 	}
@@ -863,7 +863,7 @@ func TestFailedEvictionCleanupKeepsARetryableTombstone(t *testing.T) {
 	if _, err := manager.CreateJob(input); !errors.Is(err, sftp.ErrTransferLimit) {
 		t.Fatalf("admission with failed cleanup = %v", err)
 	}
-	jobs := manager.ListJobs()
+	jobs := listJobs(t, manager)
 	if len(jobs) != 200 {
 		t.Fatalf("jobs after failed cleanup = %d", len(jobs))
 	}
@@ -886,7 +886,7 @@ func TestFailedEvictionCleanupKeepsARetryableTombstone(t *testing.T) {
 	if _, err := manager.CreateJob(input); err != nil {
 		t.Fatal(err)
 	}
-	for _, job := range manager.ListJobs() {
+	for _, job := range listJobs(t, manager) {
 		if job.ID == orphan.ID {
 			t.Fatal("cleanup tombstone remains after retry")
 		}
@@ -941,7 +941,7 @@ func TestFailedCleanupTombstoneDoesNotBlockSafeDownloadEviction(t *testing.T) {
 	if len(remote.removals) != removals {
 		t.Fatal("cleanup tombstone was retried before a network-free eviction")
 	}
-	jobs := manager.ListJobs()
+	jobs := listJobs(t, manager)
 	if len(jobs) != 200 {
 		t.Fatalf("jobs after safe eviction = %d", len(jobs))
 	}
@@ -999,7 +999,7 @@ func TestEvictionNetworkCleanupDoesNotHoldTheJobsMutex(t *testing.T) {
 	}()
 	<-cleanupStarted
 	listed := make(chan struct{})
-	go func() { _ = manager.ListJobs(); close(listed) }()
+	go func() { _, _ = manager.ListJobs(); close(listed) }()
 	select {
 	case <-listed:
 	case <-time.After(250 * time.Millisecond):

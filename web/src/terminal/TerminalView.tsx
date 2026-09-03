@@ -34,7 +34,10 @@ import { TerminalOverflowMenu } from "./TerminalOverflowMenu";
 import { TerminalPortForwards } from "./TerminalPortForwards";
 import { attachWebglRenderer } from "./webgl";
 import { attachOSC7Directory } from "./osc7";
+import { applyTerminalRuntimeOptions } from "./runtimeOptions";
 import { Icon } from "../ui/icons";
+import { inspectTerminalPaste, removeFinalTerminalLineBreak, type TerminalPasteInspection } from "./pasteGuard";
+import { TerminalPasteDialog } from "./TerminalPasteDialog";
 
 type TerminalViewProps = {
   session: TerminalSession;
@@ -122,6 +125,12 @@ export function TerminalView({
   const intlYenRef = useRef(jisYenBackslash);
   intlYenRef.current = jisYenBackslash;
   const [terminalNotice, setTerminalNotice] = useState("");
+  const [pendingPaste, setPendingPaste] = useState<{
+    sessionID: string;
+    raw: string;
+    inspection: TerminalPasteInspection;
+  } | null>(null);
+  const sendPaste = useRef<(text: string) => void>(() => {});
   const [currentDirectory, setCurrentDirectory] = useState(session.agent?.cwd ?? "");
 
   const [quickCommandsOpen, setQuickCommandsOpen] = useState(false);
@@ -141,7 +150,8 @@ export function TerminalView({
   useEffect(() => {
     setOsc52Enabled(initialOsc52Enabled);
     setCurrentDirectory(session.agent?.cwd ?? "");
-  }, [initialOsc52Enabled, session.agent?.cwd, session.id]);
+    setPendingPaste(null);
+  }, [initialOsc52Enabled, session.agent?.cwd, session.id, session.state]);
 
   async function reconnectExitedSession() {
     if (onReconnect === undefined || manualReconnectBusy) return;
@@ -342,7 +352,8 @@ export function TerminalView({
     let attempts = 0;
     let linkedAt = 0;
     let timer: ReturnType<typeof setInterval> | undefined;
-    const decoder = new TextDecoder();
+    let decoder = new TextDecoder();
+    let cursor: number | undefined;
 
     let sent = "";
     const syncSize = () => {
@@ -411,21 +422,41 @@ export function TerminalView({
       attempts += 1;
       setLink({ phase: "connecting", attempt: attempts });
       void api
-        .terminalStreamTicket(session.id)
+        .terminalStreamTicket(session.id, cursor)
         .then((issued) => {
           if (!live || stopped) return;
           sent = "";
           linkedAt = Date.now();
           stream = openStream(issued.streamTicket, {
-            onOutput: (chunk) => view.write(decoder.decode(chunk, { stream: true })),
+            onReplay: (replay) => {
+              cursor = replay.start;
+              if (replay.truncated) {
+                decoder = new TextDecoder();
+                // The retained ring may begin in the middle of CSI or OSC.
+                // CAN makes xterm abandon that parser state without clearing
+                // the visible screen as a full terminal reset would.
+                view.write("\u0018");
+                setTerminalNotice(t("terminal.replayTruncated"));
+              }
+            },
+            onOutput: (chunk) => {
+              // A confirmation belongs to the exact terminal context the user
+              // reviewed. Any output can be a new prompt or the reconnect
+              // notice for a replacement shell, so require a fresh paste.
+              setPendingPaste(null);
+              view.write(decoder.decode(chunk, { stream: true }));
+              cursor = (cursor ?? 0) + chunk.byteLength;
+            },
             onExit: () => {
               view.options.cursorBlink = false;
               stopped = true;
+              setPendingPaste(null);
               setLink({ phase: "live" });
               onExit?.();
             },
             onClose: () => {
               stream = null;
+              setPendingPaste(null);
               retry();
             },
           });
@@ -469,10 +500,18 @@ export function TerminalView({
     };
     attach();
 
+    sendPaste.current = (text) => stream?.send(prepareTerminalPaste(text, view.modes.bracketedPasteMode));
     const detachClipboard = attachTerminalClipboard({
       container,
       terminal: view,
-      paste: (text) => stream?.send(prepareTerminalPaste(text, view.modes.bracketedPasteMode)),
+      paste: (text) => {
+        const inspection = inspectTerminalPaste(text);
+        if (inspection.requiresConfirmation) {
+          setPendingPaste({ sessionID: session.id, raw: text, inspection });
+          return;
+        }
+        sendPaste.current(text);
+      },
       clipboard,
       coarsePointer: () => coarse,
       settings: () => clipboardSettings.current,
@@ -504,6 +543,7 @@ export function TerminalView({
       view.dispose();
       terminal.current = null;
       sendInput.current = () => {};
+      sendPaste.current = () => {};
       searchStep.current = () => {};
       searchRefresh.current = () => {};
       searchClear.current = () => {};
@@ -522,6 +562,16 @@ export function TerminalView({
     terminal.current.options.fontFamily = fontStack(font ?? "");
     refit.current?.();
   }, [font]);
+
+  useEffect(() => {
+    if (terminal.current === null) return;
+    const changed = applyTerminalRuntimeOptions(terminal.current.options, {
+      cursorBlink: session.state !== "exited",
+      fontSize: fontSize ?? (window.matchMedia("(max-width: 767px)").matches ? 15 : 13),
+      scrollback: scrollbackLines,
+    });
+    if (changed.refit) refit.current?.();
+  }, [fontSize, scrollbackLines, session.state]);
 
   const connectionStatus = session.state === "connecting" || session.state === "reconnecting"
     ? connectionProgressText(t, session)
@@ -794,6 +844,23 @@ export function TerminalView({
           {...(remoteAlias !== undefined && onOpenRemotePath !== undefined
             ? { onRemotePath: (path: string, action: RemotePathAction) => onOpenRemotePath(remoteAlias, path, action) }
             : {})}
+        />
+      )}
+      {pendingPaste === null || pendingPaste.sessionID !== session.id ? null : (
+        <TerminalPasteDialog
+          target={session.alias ?? session.title}
+          inspection={pendingPaste.inspection}
+          onCancel={() => setPendingPaste(null)}
+          onPaste={() => {
+            const raw = pendingPaste.raw;
+            setPendingPaste(null);
+            sendPaste.current(raw);
+          }}
+          onPasteWithoutFinalLineBreak={() => {
+            const raw = removeFinalTerminalLineBreak(pendingPaste.raw);
+            setPendingPaste(null);
+            sendPaste.current(raw);
+          }}
         />
       )}
       <KeyBar

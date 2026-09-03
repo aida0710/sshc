@@ -41,6 +41,7 @@ export function attachTerminalClipboard({
   enhancedKey,
   sendEnhancedKey,
 }: TerminalClipboardOptions): () => void {
+  let active = true;
   const copySelection = () => {
     if (!terminal.hasSelection()) return;
     const text = terminal.getSelection();
@@ -52,9 +53,13 @@ export function attachTerminalClipboard({
     void clipboard
       .readText()
       .then((text) => {
-        if (text !== "") pasteText(text);
+        // Clipboard reads can outlive the terminal effect which started them.
+        // Never deliver an old session's paste into a replacement session.
+        if (active && text !== "") pasteText(text);
       })
-      .catch(refuse);
+      .catch(() => {
+        if (active) refuse();
+      });
   };
 
   terminal.attachCustomKeyEventHandler((event) => {
@@ -102,6 +107,7 @@ export function attachTerminalClipboard({
   container.addEventListener("contextmenu", onContextMenu);
 
   return () => {
+    active = false;
     selection.dispose();
     container.removeEventListener("paste", onPaste, { capture: true });
     container.removeEventListener("contextmenu", onContextMenu);

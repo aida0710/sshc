@@ -15,7 +15,15 @@ vi.mock("./api", () => ({ sftpApi: api }));
 vi.mock("../api/integrations", () => ({
   integrationsApi: { recentConnections: vi.fn(async () => ({ connections: [] })) },
 }));
-
+vi.mock("./MonacoEditor", () => ({
+  MonacoEditor: ({ value, onChange }: { value: string; onChange: (value: string) => void }) => (
+    <textarea
+      aria-label="Remote file contents"
+      value={value}
+      onChange={(event) => onChange(event.currentTarget.value)}
+    />
+  ),
+}));
 async function chooseHost(alias: string, scope: HTMLElement = screen.getByRole("tabpanel")) {
   await userEvent.click(within(scope).getByRole("button", { name: "Host" }));
   const label = await screen.findByText(alias, { selector: "span.font-medium" });
@@ -81,6 +89,43 @@ describe("SFTP tabs", () => {
     const remaining = screen.getAllByRole("tab");
     expect(remaining).toHaveLength(1);
     expect(remaining[0]).toHaveAccessibleName("edge:edge");
+  });
+
+  it("asks before a tab with an unsaved remote edit is closed", async () => {
+    api.list.mockResolvedValue({
+      path: "/remote",
+      entries: [{ name: "notes.txt", path: "/remote/notes.txt", type: "file", size: 6, mode: "0644", modifiedAt: "", revision: "rev" }],
+    });
+    api.readText.mockResolvedValue({
+      entry: { name: "notes.txt", path: "/remote/notes.txt", type: "file", size: 6, mode: "0644", modifiedAt: "", revision: "rev" },
+      contents: "hello\n",
+      revision: "rev",
+    });
+    render(<SFTPWorkspace aliases={["edge"]} />);
+
+    await chooseHost("edge");
+    await userEvent.click(screen.getByRole("button", { name: "New tab" }));
+    await userEvent.click(screen.getByRole("tab", { name: "edge:remote" }));
+    await userEvent.dblClick(await screen.findByRole("button", { name: "notes.txt" }));
+    const details = await screen.findByRole("dialog", { name: "Details for notes.txt" });
+    await userEvent.click(within(details).getByRole("button", { name: "Edit file" }));
+    await userEvent.type(await screen.findByRole("textbox", { name: "Remote file contents" }), "changed");
+    await screen.findByText("Unsaved");
+
+    const close = screen.getByRole("button", { name: "Close the edge:remote tab" });
+    await userEvent.click(close);
+    let confirmation = await screen.findByRole("dialog", { name: "Leave without saving?" });
+    expect(confirmation).toHaveTextContent("/remote/notes.txt has changes that are not written to the server.");
+    expect(screen.getAllByRole("tab")).toHaveLength(2);
+
+    await userEvent.click(within(confirmation).getByRole("button", { name: "Keep editing" }));
+    expect(screen.getAllByRole("tab")).toHaveLength(2);
+
+    await userEvent.click(close);
+    confirmation = await screen.findByRole("dialog", { name: "Leave without saving?" });
+    await userEvent.click(within(confirmation).getByRole("button", { name: "Discard and leave" }));
+    await waitFor(() => expect(screen.getAllByRole("tab")).toHaveLength(1));
+    expect(screen.queryByRole("dialog", { name: "/remote/notes.txt" })).not.toBeInTheDocument();
   });
 
   it("keeps the add action visible while overflowing tabs scroll", async () => {
@@ -150,6 +195,38 @@ describe("SFTP tabs", () => {
     expect(rightTabs[1]).toHaveAttribute("aria-selected", "true");
   });
 
+  it("keeps an unsaved edit mounted while the second pane is hidden", async () => {
+    api.list.mockResolvedValue({
+      path: "/remote",
+      entries: [{ name: "notes.txt", path: "/remote/notes.txt", type: "file", size: 6, mode: "0644", modifiedAt: "", revision: "rev" }],
+    });
+    api.readText.mockResolvedValue({
+      entry: { name: "notes.txt", path: "/remote/notes.txt", type: "file", size: 6, mode: "0644", modifiedAt: "", revision: "rev" },
+      contents: "hello\n",
+      revision: "rev",
+    });
+    window.localStorage.setItem("sshc.sftp.split", "true");
+    window.localStorage.setItem("sshc.sftp.secondaryTabs", JSON.stringify([
+      { alias: "edge", path: "/remote" },
+    ]));
+    render(<SFTPWorkspace aliases={["edge"]} />);
+
+    const second = screen.getByLabelText("Second remote pane");
+    await userEvent.click(within(second).getByRole("button", { name: "Connect" }));
+    await userEvent.dblClick(await within(second).findByRole("button", { name: "notes.txt" }));
+    const details = await screen.findByRole("dialog", { name: "Details for notes.txt" });
+    await userEvent.click(within(details).getByRole("button", { name: "Edit file" }));
+    const editor = await screen.findByRole("textbox", { name: "Remote file contents" });
+    await userEvent.type(editor, "changed");
+
+    await userEvent.click(screen.getByRole("button", { name: "One pane" }));
+    expect(second).not.toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "Two panes" }));
+
+    expect(second).toBeVisible();
+    expect(screen.getByRole("textbox", { name: "Remote file contents" })).toHaveValue("hello\nchanged");
+  });
+
   it("restores independent tabs in both panes", async () => {
     window.localStorage.setItem("sshc.sftp.split", "true");
     window.localStorage.setItem("sshc.sftp.tabs", JSON.stringify([
@@ -197,7 +274,7 @@ describe("SFTP tabs", () => {
       expect(screen.getByRole("tablist", { name: "Left pane tabs" })).toBeVisible();
       expect(screen.queryByRole("tablist", { name: "Right pane tabs" })).not.toBeInTheDocument();
       expect(screen.getByLabelText("First remote pane")).toBeVisible();
-      expect(screen.queryByLabelText("Second remote pane")).not.toBeInTheDocument();
+      expect(screen.getByLabelText("Second remote pane")).not.toBeVisible();
       expect(screen.queryByRole("button", { name: "One pane" })).not.toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Compare directories" })).not.toBeInTheDocument();
       expect(window.localStorage.getItem("sshc.sftp.split")).toBe("true");

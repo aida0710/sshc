@@ -1,10 +1,8 @@
 package com.github.aida0710.sshc;
 
-import android.app.Activity;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
-import android.annotation.TargetApi;
 import android.Manifest;
 import android.content.ClipData;
 import android.content.ClipboardManager;
@@ -27,7 +25,6 @@ import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
-import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowInsets;
@@ -39,7 +36,9 @@ import android.widget.TextView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.Toast;
-import android.window.OnBackInvokedDispatcher;
+
+import androidx.activity.ComponentActivity;
+import androidx.activity.OnBackPressedCallback;
 
 import org.json.JSONObject;
 
@@ -50,7 +49,7 @@ import java.util.Arrays;
 import mobile.Mobile;
 
 /** EngineService から接続 URL を受け取り、WebView に表示する Activity。 */
-public final class MainActivity extends Activity {
+public final class MainActivity extends ComponentActivity {
     private static final String TAG = "sshc";
     private static final int FILE_CHOOSER_REQUEST = 20;
     private static final int SAVE_DESTINATION_REQUEST = 21;
@@ -132,9 +131,7 @@ public final class MainActivity extends Activity {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             getWindow().setDecorFitsSystemWindows(false);
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerBackCallback();
-        }
+        registerBackCallback();
         Intent intent = new Intent(this, EngineService.class);
         startForegroundService(intent);
         bound = bindService(intent, connection, Context.BIND_AUTO_CREATE);
@@ -614,11 +611,14 @@ public final class MainActivity extends Activity {
         }
     }
 
-    /** Android 13 以降のボタン・ジェスチャーによる戻る操作を受け取る。 */
-    @TargetApi(Build.VERSION_CODES.TIRAMISU)
+    /** AndroidX経由で旧OSのボタンとAndroid 13以降のpredictive backを同じ処理へ渡す。 */
     private void registerBackCallback() {
-        getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
-                OnBackInvokedDispatcher.PRIORITY_DEFAULT, this::navigateBack);
+        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                navigateBack();
+            }
+        });
     }
 
     /** Web画面の一時UIと履歴を優先し、ホームならアプリをバックグラウンドへ戻す。 */
@@ -643,15 +643,5 @@ public final class MainActivity extends Activity {
                     if (webView.canGoBack()) webView.goBack();
                     else moveTaskToBack(true);
                 });
-    }
-
-    /** Android 12 以前とハードウェアキーでも同じ戻る動作を行う。 */
-    @Override
-    public boolean onKeyDown(int keyCode, KeyEvent event) {
-        if (keyCode == KeyEvent.KEYCODE_BACK) {
-            navigateBack();
-            return true;
-        }
-        return super.onKeyDown(keyCode, event);
     }
 }

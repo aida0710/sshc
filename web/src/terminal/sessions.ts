@@ -41,10 +41,42 @@ export function useTerminalSessions(
 ): TerminalSessionsState {
   const [sessions, setSessions] = useState<TerminalSession[]>([]);
   const [maxSessions, setMaxSessions] = useState(0);
-  const [busy, setBusy] = useState(false);
+  const [pendingOperations, setPendingOperations] = useState(0);
   const [problem, setProblem] = useState("");
   const [loaded, setLoaded] = useState(false);
   const refreshGeneration = useRef(0);
+  const mutationGeneration = useRef(0);
+  const busy = pendingOperations > 0;
+
+  const beginOperation = useCallback(() => {
+    setPendingOperations((current) => current + 1);
+  }, []);
+
+  const finishOperation = useCallback(() => {
+    setPendingOperations((current) => Math.max(0, current - 1));
+  }, []);
+
+  const beginMutation = useCallback(() => {
+    // A response from a list request which began before this mutation cannot
+    // describe its result.
+    refreshGeneration.current += 1;
+    mutationGeneration.current += 1;
+    return mutationGeneration.current;
+  }, []);
+
+  const adoptMutationListing = useCallback((
+    listed: { sessions: TerminalSession[]; maxSessions: number },
+    generation: number,
+  ): boolean => {
+    if (generation !== mutationGeneration.current) return false;
+    // A mutation response describes state after the requested change. Retire
+    // every list request that started before this response so a slow poll
+    // cannot resurrect a closed session or restore an old title/state.
+    refreshGeneration.current += 1;
+    setSessions(listed.sessions);
+    setMaxSessions(listed.maxSessions);
+    return true;
+  }, []);
 
   const refresh = useCallback(async () => {
     if (!enabled) return;
@@ -85,7 +117,8 @@ export function useTerminalSessions(
 
   const open = useCallback(
     async (request: OpenTerminalSessionRequest): Promise<TerminalSession | null> => {
-      setBusy(true);
+      beginOperation();
+      beginMutation();
       setProblem("");
       try {
         const opened = await api.openTerminalSession(request);
@@ -95,54 +128,55 @@ export function useTerminalSessions(
         setProblem(translate(terminalProblemKey(failureCode(error))));
         return null;
       } finally {
-        setBusy(false);
+        finishOperation();
       }
     },
-    [api, refresh, translate],
+    [api, beginMutation, beginOperation, finishOperation, refresh, translate],
   );
 
   const close = useCallback(
     async (id: string) => {
-      setBusy(true);
+      beginOperation();
+      const generation = beginMutation();
       try {
         const listed = await api.closeTerminalSession(id);
-        setSessions(listed.sessions);
-        setMaxSessions(listed.maxSessions);
+        if (!adoptMutationListing(listed, generation)) await refresh();
       } catch {
         setProblem(translate("terminal.closeFailed"));
       } finally {
-        setBusy(false);
+        finishOperation();
       }
     },
-    [api, translate],
+    [adoptMutationListing, api, beginMutation, beginOperation, finishOperation, refresh, translate],
   );
 
   const reconnect = useCallback(
     async (id: string): Promise<boolean> => {
-      setBusy(true);
+      beginOperation();
       setProblem("");
+      const generation = beginMutation();
       try {
         const listed = await api.reconnectTerminalSession(id);
-        setSessions(listed.sessions);
-        setMaxSessions(listed.maxSessions);
+        if (!adoptMutationListing(listed, generation)) await refresh();
         return true;
       } catch (error) {
         setProblem(translate(terminalProblemKey(failureCode(error))));
         await refresh();
         return false;
       } finally {
-        setBusy(false);
+        finishOperation();
       }
     },
-    [api, refresh, translate],
+    [adoptMutationListing, api, beginMutation, beginOperation, finishOperation, refresh, translate],
   );
 
   const resumeAgent = useCallback(
     async (id: string, observationVersion: number, placement: "same-pane" | "new-pane"): Promise<TerminalSession | null> => {
-      setBusy(true);
+      beginOperation();
       setProblem("");
       try {
         if (api.resumeTerminalAgent === undefined) return null;
+        beginMutation();
         const resumed = await api.resumeTerminalAgent(id, { observationVersion, placement });
         await refresh();
         return resumed.session;
@@ -151,14 +185,14 @@ export function useTerminalSessions(
         await refresh();
         return null;
       } finally {
-        setBusy(false);
+        finishOperation();
       }
     },
-    [api, refresh, translate],
+    [api, beginMutation, beginOperation, finishOperation, refresh, translate],
   );
 
   const closeAll = useCallback(async () => {
-    setBusy(true);
+    beginOperation();
     let failed = false;
     try {
       let remaining = sessions;
@@ -166,57 +200,65 @@ export function useTerminalSessions(
         if (round > 0) await new Promise((resume) => setTimeout(resume, closeAllPause));
         for (const session of remaining) {
           try {
+            const generation = beginMutation();
             const listed = await api.closeTerminalSession(session.id);
-            setSessions(listed.sessions);
-            setMaxSessions(listed.maxSessions);
+            if (!adoptMutationListing(listed, generation)) await refresh();
             remaining = listed.sessions;
           } catch {
             failed = true;
           }
         }
+        const generation = beginMutation();
         const listed = await api.terminalSessions().catch(() => null);
         if (listed === null) break;
-        setSessions(listed.sessions);
-        setMaxSessions(listed.maxSessions);
+        if (!adoptMutationListing(listed, generation)) await refresh();
         remaining = listed.sessions;
       }
       if (failed && remaining.length > 0) setProblem(translate("terminal.closeFailed"));
     } finally {
-      setBusy(false);
+      finishOperation();
     }
-  }, [api, sessions, translate]);
+  }, [adoptMutationListing, api, beginMutation, beginOperation, finishOperation, refresh, sessions, translate]);
 
   const rename = useCallback(
     async (id: string, title: string): Promise<boolean> => {
+      beginOperation();
+      const generation = beginMutation();
       try {
         const listed = await api.renameTerminalSession(id, title);
-        setSessions(listed.sessions);
-        setMaxSessions(listed.maxSessions);
+        if (!adoptMutationListing(listed, generation)) await refresh();
         return true;
       } catch {
         setProblem(translate("terminal.renameFailed"));
         return false;
+      } finally {
+        finishOperation();
       }
     },
-    [api, translate],
+    [adoptMutationListing, api, beginMutation, beginOperation, finishOperation, refresh, translate],
   );
 
   const unpinTitle = useCallback(
     async (id: string): Promise<boolean> => {
+      beginOperation();
+      const generation = beginMutation();
       try {
         const listed = await api.renameTerminalSession(id, null);
-        setSessions(listed.sessions);
-        setMaxSessions(listed.maxSessions);
+        if (!adoptMutationListing(listed, generation)) await refresh();
         return true;
       } catch {
         setProblem(translate("terminal.renameFailed"));
         return false;
+      } finally {
+        finishOperation();
       }
     },
-    [api, translate],
+    [adoptMutationListing, api, beginMutation, beginOperation, finishOperation, refresh, translate],
   );
 
   const markExited = useCallback((id: string) => {
+    refreshGeneration.current += 1;
+    mutationGeneration.current += 1;
     setSessions((current) =>
       current.map((session) =>
         session.id === id && session.exited === undefined

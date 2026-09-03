@@ -350,6 +350,44 @@ test("pastes a desktop keyboard shortcut into the console only once", async ({ p
   await expect(screen).toContainText("keyboard-paste-count=1", { timeout: 20_000 });
 });
 
+test("reviews a multiline paste before sending any terminal input", async ({ page, context, installation }) => {
+  const inputFrames: string[] = [];
+  page.on("websocket", (socket) => socket.on("framesent", ({ payload }) => {
+    inputFrames.push(typeof payload === "string" ? payload : payload.toString("utf8"));
+  }));
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await openApplication(page, installation);
+
+  const panel = await openConsolePanel(page);
+  await panel.getByRole("button", { name: "Local shell" }).click();
+  const screen = page.getByRole("region", { name: /^Console for / });
+  await expect(screen).toContainText(/[$#%>]/, { timeout: 20_000 });
+  const risky = "echo safe-paste-first\necho safe-paste-second\n";
+  await page.evaluate((text) => navigator.clipboard.writeText(text), risky);
+
+  await terminalKeyboard(page).focus();
+  await page.keyboard.press("Control+Shift+V");
+
+  const dialog = page.getByRole("dialog", { name: /^Review paste to / });
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText("Nothing has been sent to the terminal yet.");
+  expect(inputFrames.filter((frame) => frame.includes("safe-paste"))).toEqual([]);
+  if (process.env.SSHC_VISUAL_DIR !== undefined) {
+    await page.screenshot({
+      path: `${process.env.SSHC_VISUAL_DIR}/terminal-safe-paste-review.png`,
+      fullPage: true,
+    });
+  }
+
+  await dialog.getByRole("button", { name: "Paste without final Enter" }).click();
+  const pastedFrames = inputFrames.filter((frame) => frame.includes("safe-paste"));
+  expect(pastedFrames, JSON.stringify(inputFrames)).toHaveLength(1);
+  expect(pastedFrames[0]).toContain("echo safe-paste-first\recho safe-paste-second");
+  expect(pastedFrames[0]).not.toContain("safe-paste-second\r");
+  await page.keyboard.press("Enter");
+  await expect(screen).toContainText("safe-paste-second", { timeout: 20_000 });
+});
+
 test("keeps terminal drawing stable while scrollback search overlays it", async ({ page, installation }) => {
   await openApplication(page, installation);
 

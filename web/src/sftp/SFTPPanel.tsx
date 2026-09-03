@@ -172,6 +172,7 @@ export function SFTPPanel({
   onTargetHandled = () => undefined,
   onLocationChange = () => undefined,
   onNavigationBlockerChange,
+  onDirtyChange,
   onNavigateLocation,
   onOpenTerminal,
 }: {
@@ -185,6 +186,7 @@ export function SFTPPanel({
   onTargetHandled?: (request: number) => void;
   onLocationChange?: (alias: string, path: string) => void;
   onNavigationBlockerChange?: ((blocker: NavigationBlocker | null) => void) | undefined;
+  onDirtyChange?: ((path: string | null) => void) | undefined;
   onNavigateLocation?: ((url: string) => void) | undefined;
   onOpenTerminal?: ((alias: string, path: string) => void | Promise<void>) | undefined;
 }) {
@@ -304,6 +306,11 @@ export function SFTPPanel({
   // to it. Repeating the same sentence in the banner above would be two voices
   // for one fact.
   const listingFailed = problem !== "" && alias !== "" && entries.length === 0;
+
+  useEffect(() => {
+    onDirtyChange?.(dirty ? opened?.entry.path ?? "" : null);
+    return () => onDirtyChange?.(null);
+  }, [dirty, onDirtyChange, opened?.entry.path]);
 
   useEffect(() => {
     if (!dirty) {

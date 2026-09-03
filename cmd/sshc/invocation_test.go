@@ -519,7 +519,8 @@ func TestServiceIsReservedAndRequiresOneKnownAction(t *testing.T) {
 func TestSFTPParsesTransfersAndSafetyOptions(t *testing.T) {
 	called, err := parseInvocation([]string{
 		"sshc", "sftp", "get", "server-a", "/srv/data", "./data",
-		"--recursive", "--overwrite", "--yes", "--dry-run", "--jobs", "4", "--split-size", "50", "--split-jobs", "6", "--chunk-size", "512", "--json",
+		"--recursive", "--overwrite", "--yes", "--dry-run", "--jobs", "4", "--split-size", "50", "--split-jobs", "6", "--chunk-size", "512",
+		"--max-depth", "70", "--max-entries", "20000", "--max-total-size", "8192", "--json",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -529,7 +530,8 @@ func TestSFTPParsesTransfersAndSafetyOptions(t *testing.T) {
 	}
 	got := *called.SFTP
 	if got.Action != sftpGet || got.Alias != "server-a" || got.Source != "/srv/data" || got.Destination != "./data" ||
-		!got.Recursive || !got.Overwrite || !got.Yes || !got.DryRun || !got.JSON || got.Jobs != 4 || got.SplitSizeMiB != 50 || got.SplitJobs != 6 || got.ChunkSizeMiB != 512 {
+		!got.Recursive || !got.Overwrite || !got.Yes || !got.DryRun || !got.JSON || got.Jobs != 4 || got.SplitSizeMiB != 50 || got.SplitJobs != 6 || got.ChunkSizeMiB != 512 ||
+		got.MaxDepth != 70 || got.MaxEntries != 20000 || got.MaxTotalMiB != 8192 {
 		t.Fatalf("sftp invocation = %#v", got)
 	}
 
@@ -568,6 +570,14 @@ func TestSFTPRejectsAmbiguousOrUnsafeFlagCombinations(t *testing.T) {
 		{"sshc", "sftp", "get", "server-a", "/a", "b", "--split-jobs", "129"},
 		{"sshc", "sftp", "get", "server-a", "/a", "b", "--chunk-size", "7"},
 		{"sshc", "sftp", "get", "server-a", "/a", "b", "--chunk-size", "4097"},
+		{"sshc", "sftp", "get", "server-a", "/a", "b", "--max-depth", "1"},
+		{"sshc", "sftp", "put", "server-a", "a", "/b", "--recursive", "--max-depth", "2"},
+		{"sshc", "sftp", "get", "server-a", "/a", "b", "--recursive", "--max-depth", "0"},
+		{"sshc", "sftp", "get", "server-a", "/a", "b", "--recursive", "--max-depth", "257"},
+		{"sshc", "sftp", "get", "server-a", "/a", "b", "--recursive", "--max-entries", "0"},
+		{"sshc", "sftp", "get", "server-a", "/a", "b", "--recursive", "--max-entries", "1000001"},
+		{"sshc", "sftp", "get", "server-a", "/a", "b", "--recursive", "--max-total-size", "0"},
+		{"sshc", "sftp", "get", "server-a", "/a", "b", "--recursive", "--max-total-size", "8388609"},
 		{"sshc", "sftp", "settings", "--split-size", "15"},
 		{"sshc", "sftp", "settings", "--split-jobs", "129"},
 		{"sshc", "sftp", "settings", "--chunk-size", "7"},

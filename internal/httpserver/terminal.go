@@ -281,7 +281,7 @@ func (h TerminalHandlers) Open(c *echo.Context) error {
 		return h.startProblem(c, err)
 	}
 
-	ticket, err := h.Tickets.Issue(session.ID())
+	ticket, err := h.Tickets.Issue(session.ID(), 0)
 	if err != nil {
 		// チケットを出せなければ誰も繋げない。開いたものは閉じる。
 		_ = h.Registry.Close(session.ID())
@@ -374,7 +374,7 @@ func (h TerminalHandlers) ResumeAgent(c *echo.Context) error {
 		}
 		return problem(c, http.StatusInternalServerError, "terminal_start_failed")
 	}
-	ticket, err := h.Tickets.Issue(session.ID())
+	ticket, err := h.Tickets.Issue(session.ID(), 0)
 	if err != nil {
 		if placement == terminal.AgentResumeNewPane {
 			_ = h.Registry.Close(session.ID())
@@ -783,11 +783,27 @@ func (h TerminalHandlers) Ticket(c *echo.Context) error {
 	if !ok {
 		return problem(c, http.StatusNotFound, "terminal_session_not_found")
 	}
-	ticket, err := h.Tickets.Issue(session.ID())
+	cursor, ok := terminalStreamCursor(c)
+	if !ok {
+		return problem(c, http.StatusBadRequest, "invalid_terminal_cursor")
+	}
+	if !session.CanAttachFrom(cursor) {
+		return problem(c, http.StatusConflict, "terminal_cursor_ahead")
+	}
+	ticket, err := h.Tickets.Issue(session.ID(), cursor)
 	if err != nil {
 		return problem(c, http.StatusInternalServerError, "terminal_start_failed")
 	}
 	return c.JSON(http.StatusCreated, api.TerminalStreamTicket{StreamTicket: ticket})
+}
+
+func terminalStreamCursor(c *echo.Context) (uint64, bool) {
+	raw := c.QueryParam("cursor")
+	if raw == "" {
+		return 0, true
+	}
+	cursor, err := strconv.ParseUint(raw, 10, 64)
+	return cursor, err == nil
 }
 
 // Reconnect は終了済みSSHセッションを、同じID、pane、scrollbackを保って

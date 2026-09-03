@@ -18,7 +18,7 @@ test("gives one named secret to two hosts and writes neither name into the file"
   const passwords = page.getByRole("region", { name: "Account passwords" });
   await expect(passwords).toBeVisible();
   await passwords.getByLabel("New account password name").fill("office-vm");
-  await passwords.getByLabel("New account password value").fill("hunter2");
+  await passwords.getByLabel("New account password value", { exact: true }).fill("hunter2");
   await passwords.getByRole("button", { name: "Store account password" }).click();
 
   await expect(passwords.getByRole("button", { name: "Delete office-vm" })).toBeVisible();
@@ -63,7 +63,7 @@ test("never offers a key passphrase where a host password is chosen", async ({ p
 
   const phrases = page.getByRole("region", { name: "Key passphrases" });
   await phrases.getByLabel("New key passphrase name").fill("build-key");
-  await phrases.getByLabel("New key passphrase value").fill("a passphrase");
+  await phrases.getByLabel("New key passphrase value", { exact: true }).fill("a passphrase");
   await phrases.getByRole("button", { name: "Store key passphrase" }).click();
   await expect(phrases.getByRole("button", { name: "Delete build-key" })).toBeVisible();
 
@@ -125,7 +125,7 @@ test("opens a named password masked and reveals it only on request", async ({ pa
 
   const passwords = page.getByRole("region", { name: "Account passwords" });
   await passwords.getByLabel("New account password name").fill("office-vm");
-  await passwords.getByLabel("New account password value").fill("original-test-password");
+  await passwords.getByLabel("New account password value", { exact: true }).fill("original-test-password");
   await passwords.getByRole("button", { name: "Store account password" }).click();
   await passwords.getByRole("button", { name: "Edit office-vm" }).click();
 

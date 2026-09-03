@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState, type CSSProperties, type DragEvent, type ReactNode } from "react";
+import { Fragment, useId, useMemo, useState, type CSSProperties, type DragEvent, type ReactNode } from "react";
 import type { HostEntry, Overview } from "../api/config";
 import { useTranslate } from "../i18n/context";
 import { control } from "../ui/form";
@@ -10,6 +10,8 @@ export type HostSelection = { path: string; alias: string };
 
 type DecoratedHost = {
   host: HostEntry;
+  projectionIdentity: string;
+  projectionOrder: number;
   group: string;
   tags: string[];
   colour: string;
@@ -84,6 +86,15 @@ function targetFor(host: HostEntry): string {
   return `${account}${host.hostName}${port}`;
 }
 
+function hostBlockIdentity(host: HostEntry): string {
+  return JSON.stringify([
+    host.file.absolute,
+    host.line,
+    host.identity.path,
+    host.identity.alias,
+  ]);
+}
+
 export function ConnectionTree({
   overview,
   selected,
@@ -92,6 +103,7 @@ export function ConnectionTree({
   movesDisabled = false,
 }: ConnectionTreeProps) {
   const t = useTranslate();
+  const descriptionIdPrefix = useId();
   const [scope, setScope] = useState<Scope>({ kind: "all" });
   const [query, setQuery] = useState("");
   const [sortOrder, setSortOrder] = useState<SortOrder>("name");
@@ -104,17 +116,27 @@ export function ConnectionTree({
       (overview.metadata.hosts ?? []).map((entry) => [identityKey(entry.identity), entry]),
     );
     const duplicates = duplicateAliasesOf(overview.hosts);
-    return overview.hosts.filter((host) => host.identity.alias !== "").map((host, sourceOrder) => {
+    const projectionOccurrences = new Map<string, number>();
+    return overview.hosts.flatMap((host, sourceOrder) => {
+      if (host.identity.alias === "") return [];
+      const blockIdentity = hostBlockIdentity(host);
+      const projectionOccurrence = projectionOccurrences.get(blockIdentity) ?? 0;
+      projectionOccurrences.set(blockIdentity, projectionOccurrence + 1);
       const display = metadata.get(identityKey(host.identity));
-      return {
+      return [{
         host,
+        // Include traversal may project the same physical Host block more than once.
+        // Retain that occurrence in the render identity so display sorting/filtering
+        // cannot collapse React siblings back onto the file-and-line identity.
+        projectionIdentity: `${blockIdentity}\u0000${projectionOccurrence}`,
+        projectionOrder: sourceOrder,
         group: host.group ?? "",
         tags: display?.tags ?? [],
         colour: display?.colour ?? "",
         order: display?.order ?? 0,
         sourceOrder,
         duplicateAlias: duplicates.has(host.identity.alias),
-      };
+      }];
     });
   }, [overview.hosts, overview.metadata.hosts]);
 
@@ -320,9 +342,9 @@ export function ConnectionTree({
   function renderItem(item: DecoratedHost) {
     const host = item.host;
     const active = selected?.path === host.identity.path && selected.alias === host.identity.alias;
-    const descriptionId = `connection-${host.file.absolute}-${host.line}`;
+    const descriptionId = `${descriptionIdPrefix}-connection-${item.projectionOrder}`;
     return (
-      <li key={`${host.file.absolute}:${host.line}`} className="border-b border-hairline last:border-b-0">
+      <li key={item.projectionIdentity} className="border-b border-hairline last:border-b-0">
         <button
           type="button"
           aria-label={host.identity.alias}

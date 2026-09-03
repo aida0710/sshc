@@ -115,7 +115,7 @@ func assertEveryHandwrittenJSONStructIsClassified(t *testing.T, contracts map[st
 	// ensuring a newly added JSON struct cannot silently bypass this test.
 	for _, name := range []string{
 		"CLIStatus", "connectRequest", "connectResponse", "openResponse",
-		"exitMessage", "resizeMessage", "vaultChangeRequest", "vaultPassphraseRequest",
+		"exitMessage", "replayMessage", "resizeMessage", "vaultChangeRequest", "vaultPassphraseRequest",
 	} {
 		classified[name] = true
 	}

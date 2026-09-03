@@ -713,6 +713,10 @@ func TestExitedSSHSessionCanBeExplicitlyReconnectedInPlace(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+	replay := readReplayNotice(t, connection, ctx)
+	if replay.Start != 0 || replay.Next == 0 {
+		t.Fatalf("replay notice = %#v", replay)
+	}
 	kind, payload, err := connection.Read(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -799,6 +803,26 @@ func TestTheStreamRefusesAnythingButOneFreshTicket(t *testing.T) {
 	}
 }
 
+func TestAStreamTicketValidatesAndBindsItsReplayCursor(t *testing.T) {
+	fixture := newTerminalFixture(t, terminal.Limits{MaxSessions: 4, Scrollback: 1 << 12})
+	id, _ := fixture.openShell(t)
+
+	for _, test := range []struct {
+		cursor string
+		status int
+		code   string
+	}{
+		{cursor: "not-a-number", status: http.StatusBadRequest, code: "invalid_terminal_cursor"},
+		{cursor: "1", status: http.StatusConflict, code: "terminal_cursor_ahead"},
+	} {
+		response, body := fixture.do(t, http.MethodPost,
+			"/api/v1/terminal/sessions/"+id+"/stream?cursor="+test.cursor, "")
+		if response.StatusCode != test.status || !strings.Contains(body, test.code) {
+			t.Fatalf("cursor %q = %d %s, want %d %s", test.cursor, response.StatusCode, body, test.status, test.code)
+		}
+	}
+}
+
 func TestTheStreamRefusesAnotherOrigin(t *testing.T) {
 	fixture := newTerminalFixture(t, terminal.Limits{MaxSessions: 4, Scrollback: 1 << 12})
 	_, ticket := fixture.openShell(t)
@@ -830,6 +854,10 @@ func TestTheStreamCarriesOutputKeystrokesAndTheExit(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+	replay := readReplayNotice(t, connection, ctx)
+	if replay.Start != 0 || replay.Next != 0 || replay.Truncated {
+		t.Fatalf("initial replay notice = %#v", replay)
+	}
 
 	process.feed("hello from the pty\r\n")
 	kind, payload, err := connection.Read(ctx)
@@ -901,9 +929,14 @@ func TestReattachingReplaysTheScrollbackAndKeepsTheSessionAlive(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+	initial := readReplayNotice(t, connection, ctx)
+	if initial.Start != 0 || initial.Next != 0 || initial.Truncated {
+		t.Fatalf("initial replay notice = %#v", initial)
+	}
 
 	process.feed("first line\r\n")
-	if _, _, err := connection.Read(ctx); err != nil {
+	_, first, err := connection.Read(ctx)
+	if err != nil {
 		t.Fatal(err)
 	}
 	// タブを閉じるのに相当する。
@@ -922,10 +955,14 @@ func TestReattachingReplaysTheScrollbackAndKeepsTheSessionAlive(t *testing.T) {
 	})
 
 	// 新しいチケットで繋ぎ直す。リロードしたページにはチケットが残っていない。
-	fresh := fixture.newTicket(t, id)
+	fresh := fixture.newTicket(t, id, uint64(len(first)))
 	again, _ := fixture.dial(t, fresh)
 	if again == nil {
 		t.Fatal("the reattach was refused")
+	}
+	replay := readReplayNotice(t, again, ctx)
+	if replay.Start != uint64(len(first)) || replay.Truncated {
+		t.Fatalf("reattach replay notice = %#v", replay)
 	}
 	kind, payload, err := again.Read(ctx)
 	if err != nil {
@@ -934,16 +971,20 @@ func TestReattachingReplaysTheScrollbackAndKeepsTheSessionAlive(t *testing.T) {
 	if kind != websocket.MessageBinary {
 		t.Fatalf("the replay was not a binary frame: %v", kind)
 	}
-	if replayed := string(payload); !strings.Contains(replayed, "first line") ||
+	if replayed := string(payload); strings.Contains(replayed, "first line") ||
 		!strings.Contains(replayed, "while detached") {
-		t.Fatalf("replay = %q, want everything written while detached", replayed)
+		t.Fatalf("replay = %q, want only output written while detached", replayed)
 	}
 }
 
 // newTicket は、すでに開いているセッションへ繋ぎ直すためのチケットを取る。
-func (f *terminalFixture) newTicket(t *testing.T, id string) string {
+func (f *terminalFixture) newTicket(t *testing.T, id string, cursors ...uint64) string {
 	t.Helper()
-	response, body := f.do(t, http.MethodPost, "/api/v1/terminal/sessions/"+id+"/stream", "{}")
+	path := "/api/v1/terminal/sessions/" + id + "/stream"
+	if len(cursors) != 0 {
+		path += fmt.Sprintf("?cursor=%d", cursors[0])
+	}
+	response, body := f.do(t, http.MethodPost, path, "{}")
 	if response.StatusCode != http.StatusCreated {
 		t.Fatalf("issue a ticket = %d: %s", response.StatusCode, body)
 	}
@@ -952,6 +993,31 @@ func (f *terminalFixture) newTicket(t *testing.T, id string) string {
 		t.Fatal(err)
 	}
 	return issued.StreamTicket
+}
+
+type replayNotice struct {
+	Start     uint64 `json:"start"`
+	Next      uint64 `json:"next"`
+	End       uint64 `json:"end"`
+	Truncated bool   `json:"truncated"`
+}
+
+func readReplayNotice(t *testing.T, connection *websocket.Conn, ctx context.Context) replayNotice {
+	t.Helper()
+	kind, payload, err := connection.Read(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if kind != websocket.MessageText {
+		t.Fatalf("replay notice kind = %v, want text", kind)
+	}
+	var message struct {
+		Replay replayNotice `json:"replay"`
+	}
+	if err := json.Unmarshal(payload, &message); err != nil {
+		t.Fatal(err)
+	}
+	return message.Replay
 }
 
 func waitUntil(t *testing.T, condition func() bool) {

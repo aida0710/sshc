@@ -1064,6 +1064,7 @@ function TerminalScreen({
       onActive={onActive}
       onOpenAlias={onOpenAlias}
       onOpenShell={onOpenShell}
+      onClose={consoles.close}
       restoreRequest={restoreRequest}
       onRestoreConsumed={onRestoreConsumed}
       renameRequest={renameRequest}

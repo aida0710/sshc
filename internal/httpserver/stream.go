@@ -32,6 +32,15 @@ type exitMessage struct {
 	} `json:"exit"`
 }
 
+type replayMessage struct {
+	Replay struct {
+		Start     uint64 `json:"start"`
+		Next      uint64 `json:"next"`
+		End       uint64 `json:"end"`
+		Truncated bool   `json:"truncated"`
+	} `json:"replay"`
+}
+
 const (
 	// maxKeystrokeFrame は、一度の打鍵として受け取る上限である。貼り付けは
 	// これより大きくなりうるので、ユーザーが打つ 1 文字ではなく 1 画面分を基準にする。
@@ -63,11 +72,11 @@ func (h TerminalHandlers) Stream(c *echo.Context) error {
 		return c.NoContent(http.StatusForbidden)
 	}
 
-	sessionID, ok := h.Tickets.Redeem(request.URL.Query().Get("ticket"))
+	claim, ok := h.Tickets.Redeem(request.URL.Query().Get("ticket"))
 	if !ok {
 		return c.NoContent(http.StatusForbidden)
 	}
-	session, ok := h.Registry.Lookup(sessionID)
+	session, ok := h.Registry.Lookup(claim.SessionID)
 	if !ok {
 		return c.NoContent(http.StatusForbidden)
 	}
@@ -80,11 +89,10 @@ func (h TerminalHandlers) Stream(c *echo.Context) error {
 	if err != nil {
 		return nil
 	}
-	// スクロールバックは大きい。1 セッションで最大 4 MiB まで許しているので、
-	// 再生を 1 フレームで送れるだけの上限を持たせる。
+	// クライアントから届くのは打鍵と小さい制御フレームだけである。
 	connection.SetReadLimit(maxKeystrokeFrame)
 
-	h.pump(request.Context(), connection, session)
+	h.pump(request.Context(), connection, session, claim.Cursor)
 	return nil
 }
 
@@ -92,19 +100,34 @@ func (h TerminalHandlers) Stream(c *echo.Context) error {
 //
 // coder/websocket は同時に 1 つの読み手と 1 つの書き手を許すので、打鍵は
 // このゴルーチン、出力と終了は別のゴルーチンが扱う。
-func (h TerminalHandlers) pump(parent context.Context, connection *websocket.Conn, session *terminal.Session) {
+func (h TerminalHandlers) pump(parent context.Context, connection *websocket.Conn, session *terminal.Session, cursor uint64) {
 	ctx, stop := context.WithCancel(parent)
 	defer stop()
 
-	replay, stream := session.Attach()
+	replay, stream, ok := session.AttachFrom(cursor)
+	if !ok {
+		_ = connection.Close(websocket.StatusPolicyViolation, "the replay cursor is ahead")
+		return
+	}
 	defer session.Detach(stream)
 
 	writerDone := make(chan struct{})
 	go func() {
 		defer close(writerDone)
 		defer stop()
-		// 再アタッチ時は、バッファの内容を先に送り、その後ライブの出力へ継ぐ。
-		if len(replay) > 0 && !writeFrame(ctx, connection, websocket.MessageBinary, replay) {
+		// メタデータを先に送る。ブラウザは replay のバイトを既読 cursor に
+		// 二重加算せず、リングから脱落した場合だけ decoder を初期化できる。
+		var announced replayMessage
+		announced.Replay.Start = replay.Start
+		announced.Replay.Next = replay.Next
+		announced.Replay.End = replay.End
+		announced.Replay.Truncated = replay.Truncated
+		encoded, err := json.Marshal(announced)
+		if err != nil || !writeFrame(ctx, connection, websocket.MessageText, encoded) {
+			return
+		}
+		// 再アタッチ時は、指定 cursor 以後だけを送り、その後ライブ出力へ継ぐ。
+		if len(replay.Data) > 0 && !writeFrame(ctx, connection, websocket.MessageBinary, replay.Data) {
 			return
 		}
 		for chunk := range stream.Output() {

@@ -66,7 +66,7 @@ sshc help                    # 全command
 ## 主な機能
 
 - OpenSSHのコメント、順序、空白、`Include`を保った設定管理
-- 接続状態、検索、再接続、文字コード、Quick Commandsを備えたTerminal
+- 接続状態、検索、差分再接続、安全な貼り付け確認、文字コード、Quick Commandsを備えたTerminal
 - folder転送、resume、background queue、editorを備えたSFTP
 - SSHとlocal shellを最大4 paneに分割するWorkspace
 - host、file、Snippet、設定を横断するCommand Palette

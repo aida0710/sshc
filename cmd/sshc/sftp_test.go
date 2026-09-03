@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -254,6 +255,130 @@ func TestSFTPDownloadUsesRemotePathAndPublishesAtomically(t *testing.T) {
 	matches, _ := filepath.Glob(filepath.Join(filepath.Dir(destination), ".sshc-sftp-*"))
 	if len(matches) != 0 {
 		t.Fatalf("temporary files remain: %v", matches)
+	}
+}
+
+func TestSFTPDownloadRefusesAFileThatGrewAfterPlanning(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		switch {
+		case request.Method == http.MethodPost && request.URL.Path == "/api/v1/sftp/transfers":
+			writeTestJSON(response, http.StatusCreated, map[string]any{})
+		case request.Method == http.MethodPost && strings.HasSuffix(request.URL.Path, "/actions"):
+			writeTestJSON(response, http.StatusOK, map[string]any{})
+		case request.Method == http.MethodGet && strings.HasSuffix(request.URL.Path, "/download"):
+			response.Header().Set("ETag", `"revision-grew"`)
+			_, _ = io.WriteString(response, "much larger than planned")
+		default:
+			t.Errorf("unexpected request: %s %s", request.Method, request.URL.String())
+			response.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	directory := t.TempDir()
+	destination := filepath.Join(directory, "file.txt")
+	err := sftpDownloadFile(context.Background(), testSFTPEngine(server), "server-a", "batch_12345678", sftpCLIFile{
+		Source: "/remote/file.txt", Destination: destination, Size: 3,
+	}, 0, 0, 0, nil)
+	if !errors.Is(err, io.ErrUnexpectedEOF) {
+		t.Fatalf("download error = %v, want %v", err, io.ErrUnexpectedEOF)
+	}
+	if _, err := os.Lstat(destination); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("destination exists after refused download: %v", err)
+	}
+	matches, _ := filepath.Glob(filepath.Join(directory, ".sshc-sftp-*"))
+	if len(matches) != 0 {
+		t.Fatalf("temporary files remain: %v", matches)
+	}
+}
+
+func TestSFTPRecursiveGetPlanHonorsTreeBudgets(t *testing.T) {
+	tests := []struct {
+		name     string
+		budget   sftpCLIRecursiveBudget
+		listings map[string][]sftpCLIEntry
+		wantCall int32
+	}{
+		{
+			name:   "entry count",
+			budget: sftpCLIRecursiveBudget{maxDepth: 64, maxEntries: 2, maxBytes: 100, entries: 1},
+			listings: map[string][]sftpCLIEntry{
+				"/root": {
+					{Name: "one", Path: "/root/one", Type: "file", Size: 1},
+					{Name: "two", Path: "/root/two", Type: "file", Size: 1},
+				},
+			},
+			wantCall: 1,
+		},
+		{
+			name:   "total bytes",
+			budget: sftpCLIRecursiveBudget{maxDepth: 64, maxEntries: 10, maxBytes: 10, entries: 1},
+			listings: map[string][]sftpCLIEntry{
+				"/root": {
+					{Name: "one", Path: "/root/one", Type: "file", Size: 6},
+					{Name: "two", Path: "/root/two", Type: "file", Size: 5},
+				},
+			},
+			wantCall: 1,
+		},
+		{
+			name:   "depth",
+			budget: sftpCLIRecursiveBudget{maxDepth: 1, maxEntries: 10, maxBytes: 100, entries: 1},
+			listings: map[string][]sftpCLIEntry{
+				"/root":        {{Name: "nested", Path: "/root/nested", Type: "directory"}},
+				"/root/nested": {{Name: "file", Path: "/root/nested/file", Type: "file", Size: 1}},
+			},
+			wantCall: 2,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var calls atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+				calls.Add(1)
+				remotePath := request.URL.Query().Get("path")
+				entries, exists := test.listings[remotePath]
+				if !exists {
+					t.Errorf("unexpected listing path %q", remotePath)
+					response.WriteHeader(http.StatusNotFound)
+					return
+				}
+				writeTestJSON(response, http.StatusOK, sftpCLIListing{Path: remotePath, Entries: entries})
+			}))
+			defer server.Close()
+
+			plan := sftpCLIPlan{}
+			budget := test.budget
+			err := walkRemoteGetPlan(t.Context(), testSFTPEngine(server), "server-a", "/root", t.TempDir(), 0, &budget, &plan)
+			if !errors.Is(err, errSFTPRecursiveLimit) {
+				t.Fatalf("walk error = %v, want %v", err, errSFTPRecursiveLimit)
+			}
+			if got := calls.Load(); got != test.wantCall {
+				t.Fatalf("listing calls = %d, want %d", got, test.wantCall)
+			}
+		})
+	}
+}
+
+func TestSFTPRecursiveGetPlanRejectsInvalidSizeAndPath(t *testing.T) {
+	tests := []sftpCLIEntry{
+		{Name: "negative", Path: "/root/negative", Type: "file", Size: -1},
+		{Name: "escaped", Path: "/elsewhere/escaped", Type: "file", Size: 1},
+	}
+	for _, entry := range tests {
+		t.Run(entry.Name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+				writeTestJSON(response, http.StatusOK, sftpCLIListing{Path: "/root", Entries: []sftpCLIEntry{entry}})
+			}))
+			defer server.Close()
+
+			plan := sftpCLIPlan{}
+			budget := sftpCLIRecursiveBudget{maxDepth: 64, maxEntries: 10, maxBytes: 100, entries: 1}
+			err := walkRemoteGetPlan(t.Context(), testSFTPEngine(server), "server-a", "/root", t.TempDir(), 0, &budget, &plan)
+			if !errors.Is(err, errEngineInvalidResponse) {
+				t.Fatalf("walk error = %v, want %v", err, errEngineInvalidResponse)
+			}
+		})
 	}
 }
 

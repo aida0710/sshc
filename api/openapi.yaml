@@ -366,14 +366,21 @@ paths:
           in: path
           required: true
           schema: { type: string, minLength: 1, maxLength: 64 }
+        - name: cursor
+          in: query
+          required: false
+          description: Absolute byte position already rendered by this browser. Omit on a fresh page to replay all retained output.
+          schema: { type: integer, format: uint64, minimum: 0, default: 0 }
       responses:
         "201":
           description: A single-use ticket bound to this session
           content:
             application/json:
               schema: { $ref: "#/components/schemas/TerminalStreamTicket" }
+        "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
         "500": { $ref: "#/components/responses/Problem" }
   # CLI やautomationは画面描画用のraw streamへ接続せず、明示的なlife-cycle
   # stateと、cursorで範囲を指定したplain text transcriptだけを読む。

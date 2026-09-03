@@ -263,6 +263,28 @@ func TestStoredTOTPDoesNotAnswerAnAmbiguousCodeQuestion(t *testing.T) {
 	}
 }
 
+func TestStoredTOTPDoesNotReplaceAPasswordForAnOTPNamedAccount(t *testing.T) {
+	server := newTestServer(t, serverOptions{Keyboard: map[string]string{
+		"Password for otp-admin: ": "hunter2",
+	}})
+	prompt := &scriptedPrompter{}
+	totpAsked := false
+	auth := sshclient.Auth{
+		Password: func(sshclient.Target) (string, bool) { return "hunter2", true },
+		TOTP: func(sshclient.Target, string) (string, bool) {
+			totpAsked = true
+			return "123456", true
+		},
+	}
+
+	if err := connect(t, server, targetWith(server), auth, prompt); err != nil {
+		t.Fatalf("connect = %v", err)
+	}
+	if totpAsked {
+		t.Fatal("the TOTP provider was called for an account name containing otp")
+	}
+}
+
 // IdentitiesOnly yes は、設定に書かれた鍵だけを使うという指定である。
 func TestIdentitiesOnlySkipsTheAgent(t *testing.T) {
 	home := t.TempDir()

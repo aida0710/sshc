@@ -146,8 +146,9 @@ func TestTheAndroidFailureScreenUsesOnlySanitizedDiagnostics(t *testing.T) {
 	}
 }
 
-// Android 13以降はKEYCODE_BACKでは戻るジェスチャーを受け取れない。
-// WebViewの履歴をroute履歴として使い、ホームでだけtaskを背面へ送る形を固定する。
+// Android 13以降はKEYCODE_BACKでは戻るジェスチャーを受け取れない。AndroidXの
+// OnBackPressedDispatcherへ一本化し、WebViewの履歴をroute履歴として使い、
+// ホームでだけtaskを背面へ送る形を固定する。
 func TestTheAndroidShellRoutesModernBackNavigationThroughTheWebView(t *testing.T) {
 	manifest := readRepoFile(t, "android", "app", "src", "main", "AndroidManifest.xml")
 	activity := readRepoFile(t, "android", "app", "src", "main", "java",
@@ -155,8 +156,8 @@ func TestTheAndroidShellRoutesModernBackNavigationThroughTheWebView(t *testing.T
 
 	for _, required := range []string{
 		`android:enableOnBackInvokedCallback="true"`,
-		"registerOnBackInvokedCallback(",
-		"OnBackInvokedDispatcher.PRIORITY_DEFAULT",
+		"getOnBackPressedDispatcher().addCallback(",
+		"new OnBackPressedCallback(true)",
 		"webView.evaluateJavascript(",
 		"sshc-android-back",
 		"[role=dialog]",
@@ -168,6 +169,12 @@ func TestTheAndroidShellRoutesModernBackNavigationThroughTheWebView(t *testing.T
 	} {
 		if !strings.Contains(manifest+activity, required) {
 			t.Errorf("Androidの戻る導線に %q が無い", required)
+		}
+	}
+	// 直接KEYCODE_BACKを見ると、predictive backを持つ端末で二重に反応する。
+	for _, forbidden := range []string{"KeyEvent.KEYCODE_BACK", "onKeyDown("} {
+		if strings.Contains(activity, forbidden) {
+			t.Errorf("Androidの戻る導線が %q を直に扱っている", forbidden)
 		}
 	}
 }

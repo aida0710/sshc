@@ -1,10 +1,16 @@
-import { createEvent, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, createEvent, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { useState } from "react";
+import { useState, type ComponentProps } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { TerminalSession } from "../../api/integrations";
-import { TerminalWorkspace } from "./TerminalWorkspace";
+import { TerminalWorkspace as ProductionTerminalWorkspace } from "./TerminalWorkspace";
 import { liveWorkspaceStorageKey } from "./livePersistence";
+
+function TerminalWorkspace({ onClose = async () => undefined, ...props }: Omit<ComponentProps<typeof ProductionTerminalWorkspace>, "onClose"> & {
+  onClose?: ComponentProps<typeof ProductionTerminalWorkspace>["onClose"];
+}) {
+  return <ProductionTerminalWorkspace {...props} onClose={onClose} />;
+}
 
 beforeEach(() => window.sessionStorage.removeItem(liveWorkspaceStorageKey));
 
@@ -675,6 +681,163 @@ describe("TerminalWorkspace pane movement", () => {
     await new Promise((resolve) => window.setTimeout(resolve, 0));
     expect(workspace.restore).toHaveBeenCalledTimes(1);
     expect(open).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps the latest restore when saved layouts arrive in reverse order", async () => {
+    workspace.restore.mockReset();
+    const oldStored = {
+      id: "old-workspace",
+      name: "Old workspace",
+      layout: {
+        split: {
+          direction: "horizontal" as const,
+          ratio: 50,
+          first: { pane: { id: "old-a", alias: "old-a" } },
+          second: { pane: { id: "old-b", alias: "old-b" } },
+        },
+      },
+      focusedPaneId: "old-a",
+      createdAt: "2026-09-04T00:00:00Z",
+      updatedAt: "2026-09-04T00:00:00Z",
+    };
+    const newStored = {
+      ...oldStored,
+      id: "new-workspace",
+      name: "New workspace",
+      layout: {
+        split: {
+          direction: "horizontal" as const,
+          ratio: 50,
+          first: { pane: { id: "new-a", alias: "new-a" } },
+          second: { pane: { id: "new-b", alias: "new-b" } },
+        },
+      },
+      focusedPaneId: "new-a",
+    };
+    let resolveOld: (value: typeof oldStored) => void = () => undefined;
+    const oldResponse = new Promise<typeof oldStored>((resolve) => { resolveOld = resolve; });
+    workspace.restore
+      .mockReturnValueOnce(oldResponse)
+      .mockResolvedValueOnce(newStored);
+    const open = vi.fn(async (alias: string) => ({
+      ...primary,
+      id: `${alias}-session`,
+      alias,
+      title: alias,
+    }));
+
+    function RestoreHarness({ request }: { request: { id: string; sequence: number } }) {
+      const [sessions, setSessions] = useState<TerminalSession[]>([]);
+      return <TerminalWorkspace
+        sessions={sessions}
+        activeSessionId={null}
+        onActive={() => undefined}
+        onOpenAlias={async (alias) => {
+          const session = await open(alias);
+          setSessions((current) => [...current, session]);
+          return session;
+        }}
+        onOpenShell={vi.fn()}
+        restoreRequest={request}
+        renderTerminal={(session) => <div>{session.title}</div>}
+      />;
+    }
+
+    const { container, rerender } = render(<RestoreHarness request={{ id: "old-workspace", sequence: 1 }} />);
+    await waitFor(() => expect(workspace.restore).toHaveBeenCalledTimes(1));
+    rerender(<RestoreHarness request={{ id: "new-workspace", sequence: 2 }} />);
+
+    await waitFor(() => expect(open).toHaveBeenCalledTimes(2));
+    expect(open).toHaveBeenNthCalledWith(1, "new-a");
+    expect(open).toHaveBeenNthCalledWith(2, "new-b");
+    await act(async () => { resolveOld(oldStored); await oldResponse; });
+
+    await waitFor(() => expect(container.querySelectorAll("[data-workspace-pane]")).toHaveLength(2));
+    expect(paneTitles(container)).toEqual(expect.arrayContaining([
+      expect.stringContaining("new-a"),
+      expect.stringContaining("new-b"),
+    ]));
+    expect(open).toHaveBeenCalledTimes(2);
+  });
+
+  it("closes sessions created by a restore that becomes stale", async () => {
+    workspace.restore.mockReset();
+    const stored = (prefix: string) => ({
+      id: `${prefix}-workspace`,
+      name: `${prefix} workspace`,
+      layout: {
+        split: {
+          direction: "horizontal" as const,
+          ratio: 50,
+          first: { pane: { id: `${prefix}-a-pane`, alias: `${prefix}-a` } },
+          second: { pane: { id: `${prefix}-b-pane`, alias: `${prefix}-b` } },
+        },
+      },
+      focusedPaneId: `${prefix}-a-pane`,
+      createdAt: "2026-09-04T00:00:00Z",
+      updatedAt: "2026-09-04T00:00:00Z",
+    });
+    workspace.restore
+      .mockResolvedValueOnce(stored("old"))
+      .mockResolvedValueOnce(stored("new"));
+    let resolveOldA: (value: TerminalSession) => void = () => undefined;
+    let resolveOldB: (value: TerminalSession) => void = () => undefined;
+    const oldAResponse = new Promise<TerminalSession>((resolve) => { resolveOldA = resolve; });
+    const oldBResponse = new Promise<TerminalSession>((resolve) => { resolveOldB = resolve; });
+    const opened = (alias: string): TerminalSession => ({
+      ...primary,
+      id: `${alias}-session`,
+      alias,
+      title: alias,
+    });
+    const open = vi.fn((alias: string) => {
+      if (alias === "old-a") return oldAResponse;
+      if (alias === "old-b") return oldBResponse;
+      return Promise.resolve(opened(alias));
+    });
+    const close = vi.fn<(id: string) => Promise<void>>();
+
+    function RestoreHarness({ request }: { request: { id: string; sequence: number } }) {
+      const [sessions, setSessions] = useState<TerminalSession[]>([]);
+      const openAlias = async (alias: string) => {
+        const session = await open(alias);
+        setSessions((current) => [...current, session]);
+        return session;
+      };
+      const closeSession = async (id: string) => {
+        await close(id);
+        setSessions((current) => current.filter((session) => session.id !== id));
+      };
+      return <TerminalWorkspace
+        sessions={sessions}
+        activeSessionId={null}
+        onActive={() => undefined}
+        onOpenAlias={openAlias}
+        onOpenShell={vi.fn()}
+        onClose={closeSession}
+        restoreRequest={request}
+        renderTerminal={(session) => <div>{session.title}</div>}
+      />;
+    }
+
+    const { container, rerender } = render(<RestoreHarness request={{ id: "old-workspace", sequence: 1 }} />);
+    await waitFor(() => expect(open).toHaveBeenCalledTimes(2));
+    await act(async () => { resolveOldA(opened("old-a")); await oldAResponse; });
+    await waitFor(() => expect(screen.getAllByText("old-a").length).toBeGreaterThan(0));
+
+    rerender(<RestoreHarness request={{ id: "new-workspace", sequence: 2 }} />);
+    await waitFor(() => expect(open).toHaveBeenCalledTimes(4));
+    await waitFor(() => expect(close).toHaveBeenCalledWith("old-a-session"));
+    await act(async () => { resolveOldB(opened("old-b")); await oldBResponse; });
+    await waitFor(() => expect(close).toHaveBeenCalledWith("old-b-session"));
+
+    expect(close).toHaveBeenCalledTimes(2);
+    expect(paneTitles(container)).toEqual(expect.arrayContaining([
+      expect.stringContaining("new-a"),
+      expect.stringContaining("new-b"),
+    ]));
+    expect(screen.queryByText("old-a")).toBeNull();
+    expect(screen.queryByText("old-b")).toBeNull();
   });
 
   it("recreates local panes through the local shell entry point", async () => {

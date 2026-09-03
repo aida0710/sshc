@@ -1,7 +1,9 @@
 
 export type ExitReport = { code: number; signal: string };
+export type ReplayReport = { start: number; next: number; end: number; truncated: boolean };
 
 export type StreamHandlers = {
+  onReplay: (replay: ReplayReport) => void;
   onOutput: (chunk: Uint8Array) => void;
   onExit: (exit: ExitReport) => void;
   onClose: () => void;
@@ -12,6 +14,11 @@ export type TerminalStream = {
   resize: (cols: number, rows: number) => void;
   close: () => void;
 };
+
+// Keep browser input messages well below the server's 1 MiB per-message read
+// limit. A terminal is a byte stream, so UTF-8 and bracketed-paste sequences
+// may safely span WebSocket messages as long as their order is preserved.
+const inputFrameBytes = 64 * 1024;
 
 export function streamURL(ticket: string, location: Location = window.location): string {
   const scheme = location.protocol === "https:" ? "wss:" : "ws:";
@@ -48,6 +55,11 @@ export function openStream(ticket: string, handlers: StreamHandlers): TerminalSt
     if (typeof event.data !== "string") return;
     try {
       const message: unknown = JSON.parse(event.data);
+      const replay = (message as { replay?: unknown }).replay;
+      if (validReplay(replay)) {
+        handlers.onReplay(replay);
+        return;
+      }
       const exit = (message as { exit?: ExitReport }).exit;
       if (exit === undefined) return;
       exited = true;
@@ -67,7 +79,10 @@ export function openStream(ticket: string, handlers: StreamHandlers): TerminalSt
 
   return {
     send(data) {
-      push(encoder.encode(data));
+      const encoded = encoder.encode(data);
+      for (let offset = 0; offset < encoded.byteLength; offset += inputFrameBytes) {
+        push(encoded.subarray(offset, offset + inputFrameBytes));
+      }
     },
     resize(cols, rows) {
       push(JSON.stringify({ resize: { cols, rows } }));
@@ -78,4 +93,13 @@ export function openStream(ticket: string, handlers: StreamHandlers): TerminalSt
       socket.close();
     },
   };
+}
+
+function validReplay(value: unknown): value is ReplayReport {
+  if (typeof value !== "object" || value === null) return false;
+  const replay = value as Partial<ReplayReport>;
+  return Number.isSafeInteger(replay.start) && Number.isSafeInteger(replay.next) &&
+    Number.isSafeInteger(replay.end) && replay.truncated !== undefined &&
+    typeof replay.truncated === "boolean" && replay.start! >= 0 &&
+    replay.start! <= replay.next! && replay.next! <= replay.end!;
 }

@@ -74,7 +74,7 @@ test("checks an existing destination and verifies its shared key before saving",
   await page.getByLabel("Bucket name").fill("sshc");
   await page.getByLabel("Path in the bucket").fill("team");
   await page.getByLabel("Access key ID").fill("AKID");
-  await page.getByLabel("Secret access key").fill("secret");
+  await page.getByLabel("Secret access key", { exact: true }).fill("secret");
   await page.getByRole("button", { name: "Check connection" }).click();
   await expect(page.getByText("Existing sync data was found.")).toBeVisible();
   await expect(

@@ -4169,7 +4169,10 @@ export interface operations {
     };
     issueTerminalStreamTicket: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Absolute byte position already rendered by this browser. Omit on a fresh page to replay all retained output. */
+                cursor?: number;
+            };
             header?: never;
             path: {
                 id: string;
@@ -4187,8 +4190,10 @@ export interface operations {
                     "application/json": components["schemas"]["TerminalStreamTicket"];
                 };
             };
+            400: components["responses"]["Problem"];
             401: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
             500: components["responses"]["Problem"];
         };
     };
