@@ -211,6 +211,24 @@ describe("SettingsPanel", () => {
     expect(await within(region).findByText(/Saved/)).toBeVisible();
   });
 
+  it("does not report a completed save as failed when live refresh fails", async () => {
+    const user = userEvent.setup();
+    const setTerminalSettings = vi.fn().mockResolvedValue(undefined);
+    const onTerminalSettingsChange = vi.fn().mockRejectedValue(new Error("refresh failed"));
+    render(<SettingsPanel
+      api={buildApi({ setTerminalSettings })}
+      onTerminalSettingsChange={onTerminalSettingsChange}
+    />);
+
+    const region = await screen.findByRole("region", { name: "Terminal" });
+    await user.type(within(region).getByLabelText("Font size"), "16");
+    await user.click(within(region).getByRole("button", { name: "Save" }));
+
+    expect(setTerminalSettings).toHaveBeenCalledWith({ fontSize: 16 });
+    expect(await within(region).findByText(/Saved/)).toBeVisible();
+    expect(within(region).queryByText("The terminal settings could not be saved.")).toBeNull();
+  });
+
   it("no longer offers a connection application to choose", async () => {
     render(<SettingsPanel api={buildApi()} />);
 
@@ -359,6 +377,20 @@ describe("SettingsPanel", () => {
     await user.click(within(region).getByRole("button", { name: "Save" }));
 
     expect(setTerminalSettings).toHaveBeenCalledWith({ copyOnSelect: false, rightClickPaste: false });
+  });
+
+  it("uses WebGL by default and persists an explicit disabled choice", async () => {
+    const user = userEvent.setup();
+    const setTerminalSettings = vi.fn().mockResolvedValue(undefined);
+    render(<SettingsPanel api={buildApi({ setTerminalSettings })} />);
+
+    const region = await screen.findByRole("region", { name: "Terminal" });
+    const webgl = await within(region).findByRole("checkbox", { name: "Use WebGL rendering" });
+    expect(webgl).toBeChecked();
+    await user.click(webgl);
+    await user.click(within(region).getByRole("button", { name: "Save" }));
+
+    expect(setTerminalSettings).toHaveBeenCalledWith({ webgl: false });
   });
 
   it("loads explicitly disabled clipboard choices", async () => {

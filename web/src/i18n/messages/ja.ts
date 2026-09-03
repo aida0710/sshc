@@ -730,6 +730,9 @@ export const ja = {
   "terminal.rightClickPasteLabel": "右クリックで貼り付ける",
   "terminal.rightClickPasteHint":
     "対応する端末では bracketed paste を使います。通常のコンテキストメニューを残す場合はオフにします。",
+  "terminal.webglLabel": "WebGL描画を使用する",
+  "terminal.webglHint":
+    "GPUを使って滑らかに描画します。文字が二重に見える、または残像が残る場合は無効にしてください。",
   "terminal.limitsOutOfRange": "指定値が有効範囲外です。",
   "terminal.startLabel": "開始ディレクトリ",
   "terminal.startHint":

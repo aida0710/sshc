@@ -1108,6 +1108,7 @@ function TerminalScreen({
                 : { tint: appearance.tint })}
               copyOnSelect={settings.copyOnSelect ?? true}
               rightClickPaste={settings.rightClickPaste ?? true}
+              webgl={settings.webgl ?? true}
               onExit={() => consoles.markExited(session.id)}
               onReconnect={() => consoles.reconnect(session.id)}
               onResumeAgent={async (placement) => {

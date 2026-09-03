@@ -1321,6 +1321,12 @@ type SetTerminalSessionTitleRequest struct {
 	Title *string `json:"title"`
 }
 
+// SettingsSaveResult defines model for SettingsSaveResult.
+type SettingsSaveResult struct {
+	TransactionId string   `json:"transactionId"`
+	Written       []string `json:"written"`
+}
+
 // SnapshotSummary defines model for SnapshotSummary.
 type SnapshotSummary struct {
 	CreatedAt     string `json:"createdAt"`
@@ -1779,6 +1785,7 @@ type TerminalSettings struct {
 	ScrollbackBytes        *int                `json:"scrollbackBytes,omitempty"`
 	StartDirectory         *string             `json:"startDirectory,omitempty"`
 	Verbosity              *int                `json:"verbosity,omitempty"`
+	Webgl                  *bool               `json:"webgl,omitempty"`
 }
 
 // TerminalStreamTicket defines model for TerminalStreamTicket.

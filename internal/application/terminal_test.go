@@ -150,8 +150,10 @@ func TestTheClipboardChoicesRoundTripAndCanBeCleared(t *testing.T) {
 
 func TestTerminalDisplayAndSecurityChoicesRoundTrip(t *testing.T) {
 	service, _ := newTerminalService(t)
+	webgl := false
 	want := TerminalSettings{
 		BrowserScrollbackLines: 12000,
+		WebGL:                  &webgl,
 		OSC52:                  true,
 		JISYenBackslash:        true,
 		LocalShellProfile:      "fish",
@@ -160,7 +162,7 @@ func TestTerminalDisplayAndSecurityChoicesRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := service.TerminalSettings()
-	if got.BrowserScrollbackLines != want.BrowserScrollbackLines || got.OSC52 != want.OSC52 ||
+	if got.BrowserScrollbackLines != want.BrowserScrollbackLines || got.WebGL == nil || *got.WebGL || got.OSC52 != want.OSC52 ||
 		got.JISYenBackslash != want.JISYenBackslash || got.LocalShellProfile != want.LocalShellProfile {
 		t.Fatalf("settings = %#v, want %#v", got, want)
 	}
@@ -204,6 +206,30 @@ func TestAStartDirectoryThatDisappearedFallsBackToTheHome(t *testing.T) {
 
 	if got := service.TerminalStartDirectory(); got != workspace.Home() {
 		t.Fatalf("start directory = %q, want the home %q", got, workspace.Home())
+	}
+}
+
+func TestAnUnchangedMissingStartDirectoryDoesNotBlockOtherTerminalSettings(t *testing.T) {
+	service, workspace := newTerminalService(t)
+	work := filepath.Join(workspace.Home(), "work")
+	if err := os.Mkdir(work, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.SetTerminalSettings(TerminalSettings{StartDirectory: "~/work"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(work); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := service.SetTerminalSettings(TerminalSettings{
+		StartDirectory: "~/work",
+		FontSize:       16,
+	}); err != nil {
+		t.Fatalf("saving an unrelated setting with the unchanged directory = %v", err)
+	}
+	if got := service.TerminalSettings(); got.StartDirectory != "~/work" || got.FontSize != 16 {
+		t.Fatalf("settings = %#v", got)
 	}
 }
 

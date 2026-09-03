@@ -32,6 +32,7 @@ type TerminalSettings struct {
 	// nil は既定の on、false は明示的に止めた値である。
 	CopyOnSelect           *bool
 	RightClickPaste        *bool
+	WebGL                  *bool
 	BrowserScrollbackLines int
 	OSC52                  bool
 	JISYenBackslash        bool
@@ -55,6 +56,7 @@ func (s *Service) TerminalSettings() TerminalSettings {
 		Reconnect:              stored.EmbeddedTerminal.Reconnect,
 		CopyOnSelect:           stored.EmbeddedTerminal.CopyOnSelect,
 		RightClickPaste:        stored.EmbeddedTerminal.RightClickPaste,
+		WebGL:                  stored.EmbeddedTerminal.WebGL,
 		BrowserScrollbackLines: stored.EmbeddedTerminal.BrowserScrollbackLines,
 		OSC52:                  stored.EmbeddedTerminal.OSC52,
 		JISYenBackslash:        stored.EmbeddedTerminal.JISYenBackslash,
@@ -73,19 +75,26 @@ func appearanceOf(stored *TerminalAppearance) TerminalAppearance {
 
 // SetTerminalSettings は、節をまるごと置き換える。
 func (s *Service) SetTerminalSettings(settings TerminalSettings) (SaveResult, error) {
-	resolved, err := platform.ResolveUnderHome(settings.StartDirectory, s.workspace.Home())
-	if err != nil {
-		return SaveResult{}, err
-	}
-	if resolved != "" {
-		if err := s.directoryExists(resolved); err != nil {
-			return SaveResult{}, err
-		}
-	}
-
 	stored, precondition, err := s.metadata.Load()
 	if err != nil {
 		return SaveResult{}, err
+	}
+	previousStartDirectory := ""
+	if stored.EmbeddedTerminal != nil {
+		previousStartDirectory = stored.EmbeddedTerminal.StartDirectory
+	}
+	// 開始位置は同期元のOSや後から消したdirectoryを指している場合がある。
+	// 別項目の保存まで妨げないよう、値を変更するときだけ現在のマシンで検査する。
+	if settings.StartDirectory != previousStartDirectory {
+		resolved, err := platform.ResolveUnderHome(settings.StartDirectory, s.workspace.Home())
+		if err != nil {
+			return SaveResult{}, err
+		}
+		if resolved != "" {
+			if err := s.directoryExists(resolved); err != nil {
+				return SaveResult{}, err
+			}
+		}
 	}
 	if settings == (TerminalSettings{}) {
 		// 何も設定されていないなら節ごと消す。空の節を残さない。
@@ -100,6 +109,7 @@ func (s *Service) SetTerminalSettings(settings TerminalSettings) (SaveResult, er
 			StartDirectory:         settings.StartDirectory,
 			CopyOnSelect:           settings.CopyOnSelect,
 			RightClickPaste:        settings.RightClickPaste,
+			WebGL:                  settings.WebGL,
 			BrowserScrollbackLines: settings.BrowserScrollbackLines,
 			OSC52:                  settings.OSC52,
 			JISYenBackslash:        settings.JISYenBackslash,

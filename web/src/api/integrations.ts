@@ -571,6 +571,7 @@ export const integrationsApi: IntegrationsApi = {
       ...(typeof terminal.rightClickPaste === "boolean"
         ? { rightClickPaste: terminal.rightClickPaste }
         : {}),
+      ...(typeof terminal.webgl === "boolean" ? { webgl: terminal.webgl } : {}),
       ...(typeof terminal.osc52 === "boolean" ? { osc52: terminal.osc52 } : {}),
       ...(typeof terminal.jisYenBackslash === "boolean"
         ? { jisYenBackslash: terminal.jisYenBackslash }

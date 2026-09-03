@@ -187,6 +187,7 @@ export function SettingsPanel({
   const [tint, setTint] = useState<number | undefined>(undefined);
   const [copyOnSelect, setCopyOnSelect] = useState(true);
   const [rightClickPaste, setRightClickPaste] = useState(true);
+  const [webgl, setWebgl] = useState(true);
   const [osc52, setOsc52] = useState(false);
   const [jisYenBackslash, setJisYenBackslash] = useState(false);
   const [localShellProfile, setLocalShellProfile] = useState("");
@@ -229,6 +230,7 @@ export function SettingsPanel({
         setTint(settings.appearance?.backgroundTint);
         setCopyOnSelect(settings.copyOnSelect ?? true);
         setRightClickPaste(settings.rightClickPaste ?? true);
+        setWebgl(settings.webgl ?? true);
         setOsc52(settings.osc52 ?? false);
         setJisYenBackslash(settings.jisYenBackslash ?? false);
         setLocalShellProfile(settings.localShellProfile ?? "");
@@ -359,13 +361,21 @@ export function SettingsPanel({
         ...(reconnect === "" ? {} : { reconnect: Number(reconnect) }),
         ...(copyOnSelect ? {} : { copyOnSelect: false }),
         ...(rightClickPaste ? {} : { rightClickPaste: false }),
+        ...(webgl ? {} : { webgl: false }),
         ...(osc52 ? { osc52: true } : {}),
         ...(jisYenBackslash ? { jisYenBackslash: true } : {}),
         ...(localShellProfile === "" ? {} : { localShellProfile }),
         ...(appearanceOf({ palette, font, background, tint })),
       };
       await api.setTerminalSettings(next);
-      await onTerminalSettingsChange?.(next);
+      // The PUT above is the durable operation. A live-console refresh is a
+      // best-effort follow-up and must not turn a completed save into a false
+      // failure message.
+      try {
+        await onTerminalSettingsChange?.(next);
+      } catch {
+        // The normal console poll will reconcile the view shortly.
+      }
       setTerminalSaved(true);
     } catch (error) {
       const code = failureCode(error);
@@ -729,6 +739,18 @@ export function SettingsPanel({
                   }}
                 />
                 <p className={hintText}>{t("terminal.rightClickPasteHint")}</p>
+              </div>
+              <div className="flex flex-col gap-1 rounded-lg bg-select-fill p-3">
+                <CheckboxField
+                  label={t("terminal.webglLabel")}
+                  checked={webgl}
+                  disabled={terminalBusy}
+                  onChange={(checked) => {
+                    setWebgl(checked);
+                    setTerminalSaved(false);
+                  }}
+                />
+                <p className={hintText}>{t("terminal.webglHint")}</p>
               </div>
             </div>
             <div className="self-start xl:sticky xl:top-6">

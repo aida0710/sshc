@@ -725,6 +725,9 @@ export const en = {
   "terminal.rightClickPasteLabel": "Paste with right click",
   "terminal.rightClickPasteHint":
     "Uses terminal bracketed paste when supported. Turn this off to keep the normal context menu.",
+  "terminal.webglLabel": "Use WebGL rendering",
+  "terminal.webglHint":
+    "Uses GPU rendering for smoother output. Turn this off if characters are duplicated or leave visual traces.",
   "terminal.limitsOutOfRange":
     "Those numbers are outside the range this build accepts.",
   "terminal.startLabel": "Starting directory",

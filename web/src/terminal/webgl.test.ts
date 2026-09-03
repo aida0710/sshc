@@ -14,6 +14,19 @@ function addonHarness() {
 }
 
 describe("WebGL terminal renderer", () => {
+  it("keeps the DOM renderer when the user disables WebGL", async () => {
+    const terminal = { loadAddon: vi.fn() };
+    const load = vi.fn();
+
+    await expect(attachWebglRenderer(terminal, {
+      enabled: false,
+      supported: () => true,
+      load,
+    })).resolves.toBeNull();
+    expect(load).not.toHaveBeenCalled();
+    expect(terminal.loadAddon).not.toHaveBeenCalled();
+  });
+
   it("keeps the DOM renderer when WebGL is unavailable", async () => {
     const terminal = { loadAddon: vi.fn() };
     await expect(attachWebglRenderer(terminal, { supported: () => false })).resolves.toBeNull();

@@ -9,6 +9,7 @@ type WebglTerminal = {
 type WebglSupport = () => boolean;
 
 type WebglOptions = {
+  enabled?: boolean;
   backgroundImage?: boolean;
   supported?: WebglSupport;
   load?: () => Promise<WebglAddon>;
@@ -31,6 +32,7 @@ export function browserSupportsWebgl(): boolean {
 export async function attachWebglRenderer(
   terminal: WebglTerminal,
   {
+    enabled = true,
     backgroundImage = false,
     supported = browserSupportsWebgl,
     load = async () => {
@@ -44,7 +46,7 @@ export async function attachWebglRenderer(
   // reliably (notably in Chromium on macOS), so edited command lines leave
   // characters behind. Keep xterm's DOM renderer for image-backed terminals;
   // it composites and clears transparent cells correctly.
-  if (backgroundImage) return null;
+  if (!enabled || backgroundImage) return null;
   if (!supported()) return null;
   let addon: WebglAddon;
   try {

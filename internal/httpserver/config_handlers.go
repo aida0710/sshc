@@ -212,6 +212,7 @@ func (h ConfigHandlers) SetTerminal(c *echo.Context) error {
 	settings.Reconnect = request.Reconnect
 	settings.CopyOnSelect = request.CopyOnSelect
 	settings.RightClickPaste = request.RightClickPaste
+	settings.WebGL = request.Webgl
 	if request.Osc52 != nil {
 		settings.OSC52 = *request.Osc52
 	}
@@ -252,7 +253,10 @@ func (h ConfigHandlers) SetTerminal(c *echo.Context) error {
 	case err != nil:
 		return serviceProblem(c, err)
 	}
-	return c.JSON(http.StatusOK, result)
+	return c.JSON(http.StatusOK, api.SettingsSaveResult{
+		TransactionId: result.TransactionID,
+		Written:       result.Written,
+	})
 }
 
 func (h ConfigHandlers) History(c *echo.Context) error {
@@ -345,5 +349,8 @@ func (h ConfigHandlers) SetEngine(c *echo.Context) error {
 	if h.Secrets != nil {
 		h.Secrets.SetIdleTimeout(settings.VaultIdleTimeout(secret.IdleTimeout))
 	}
-	return c.JSON(http.StatusOK, result)
+	return c.JSON(http.StatusOK, api.SettingsSaveResult{
+		TransactionId: result.TransactionID,
+		Written:       result.Written,
+	})
 }
