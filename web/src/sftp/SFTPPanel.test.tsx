@@ -71,7 +71,7 @@ describe("SFTPPanel uploads", () => {
     api.createTransfer.mockImplementation(async (input: Record<string, unknown>) => {
       const existing = server.get(input.id as string);
       if (existing !== undefined) return existing;
-      const created = { ...input, transferredBytes: 0, bytesPerSecond: 0, remainingSeconds: -1, status: "queued", allowedActions: ["pause", "cancel"], attempt: 1, problem: "", expectedRevision: "", sourceFingerprint: "", overwrite: false, downloadRevision: "", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+      const created = { ...input, transferredBytes: 0, bytesPerSecond: 0, remainingSeconds: -1, status: "queued", allowedActions: ["pause", "cancel"], attempt: 1, problem: "", expectedRevision: "", sourceFingerprint: "", overwrite: false, downloadRevision: "", downloadParts: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
       server.set(input.id as string, created);
       return created;
     });

@@ -74,6 +74,7 @@ function job(id: string, overrides: Partial<Job> = {}) {
     sourceFingerprint: "",
     overwrite: false,
     downloadRevision: "",
+    downloadParts: [],
     createdAt: "",
     updatedAt: "",
     ...overrides,

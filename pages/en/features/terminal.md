@@ -26,7 +26,7 @@ Reconnect an exited SSH session in the same pane while retaining its scrollback.
 - OSC 52 clipboard, Kitty keyboard protocol and JIS keyboards
 - Per-connection UTF-8, Shift_JIS, EUC-JP and ISO-2022-JP
 - A 16 KiB–4 MiB engine replay buffer, 1,000–100,000 lines of browser scrollback, and configurable font size
-- WebGL rendering with a canvas fallback
+- WebGL rendering with an automatic DOM-renderer fallback when WebGL is unavailable or a background image requires reliable transparent-cell redraws
 
 The engine replay buffer and browser scrollback both stay in memory. They are not written to the vault, backups, or sync snapshots.
 

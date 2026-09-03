@@ -19,7 +19,7 @@ function engineAPI(overrides: Record<string, unknown> = {}) {
       sourceAlias: "", sourcePath: "", operation: "", ...input,
       transferredBytes: 0, bytesPerSecond: 0, remainingSeconds: -1, status: "queued", allowedActions: ["pause", "cancel"],
       attempt: 1, problem: "", expectedRevision: "", sourceFingerprint: "", overwrite: false,
-      downloadRevision: "", createdAt: now(), updatedAt: now(),
+      downloadRevision: "", downloadParts: [], createdAt: now(), updatedAt: now(),
     };
     jobs.set(job.id, job);
     return job;

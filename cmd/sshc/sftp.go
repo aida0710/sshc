@@ -21,6 +21,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/term"
 )
 
 const sftpCLIChunkBytes = 1 << 20
@@ -92,6 +94,27 @@ type sftpCLITransferQueue struct {
 	LargeFileParallelism       int               `json:"largeFileParallelism"`
 	LargeFileChunkBytes        int64             `json:"largeFileChunkBytes"`
 	Jobs                       []json.RawMessage `json:"jobs"`
+}
+
+type sftpCLIDownloadPart struct {
+	Index            int   `json:"index"`
+	TransferredBytes int64 `json:"transferredBytes"`
+	TotalBytes       int64 `json:"totalBytes"`
+}
+
+type sftpCLIProgressJob struct {
+	ID            string                `json:"id"`
+	DownloadParts []sftpCLIDownloadPart `json:"downloadParts"`
+}
+
+type sftpCLIProgressDisplay struct {
+	engine    *engineAPI
+	output    io.Writer
+	refreshMu sync.Mutex
+	mu        sync.Mutex
+	tracked   map[string]string
+	jobs      map[string]sftpCLIProgressJob
+	lines     int
 }
 
 type sftpCLISettingsResult struct {
@@ -459,8 +482,9 @@ func executeSFTPGet(ctx context.Context, engine *engineAPI, plan sftpCLIPlan, ca
 	for _, file := range files {
 		fmt.Fprintf(stderr, "get  %s:%s -> %s\n", plan.Alias, file.Source, file.Destination)
 	}
+	progress := newSFTPCLIProgressDisplay(engine, stderr, called.JSON)
 	return runSFTPFileWorkers(ctx, files, called.Jobs, func(workerContext context.Context, file sftpCLIFile) error {
-		return sftpDownloadFile(workerContext, engine, plan.Alias, batchID, file, called.SplitSizeMiB, called.SplitJobs, called.ChunkSizeMiB)
+		return sftpDownloadFile(workerContext, engine, plan.Alias, batchID, file, called.SplitSizeMiB, called.SplitJobs, called.ChunkSizeMiB, progress)
 	})
 }
 
@@ -541,6 +565,7 @@ func runSFTPFileWorkers(
 
 func sftpDownloadFile(
 	ctx context.Context, engine *engineAPI, alias, batchID string, file sftpCLIFile, splitSizeMiB, splitJobs, chunkSizeMiB int,
+	progress *sftpCLIProgressDisplay,
 ) (returnErr error) {
 	jobID, err := sftpIdentifier("get")
 	if err != nil {
@@ -548,6 +573,9 @@ func sftpDownloadFile(
 	}
 	if err := sftpCreateDownloadJob(ctx, engine, jobID, batchID, alias, file, splitSizeMiB, splitJobs, chunkSizeMiB); err != nil {
 		return err
+	}
+	if progress != nil {
+		progress.track(jobID, path.Base(file.Source))
 	}
 	defer func() {
 		if returnErr != nil {
@@ -562,7 +590,7 @@ func sftpDownloadFile(
 		return err
 	}
 	requestPath := "/api/v1/sftp/" + url.PathEscape(alias) + "/download?" + url.Values{"path": {file.Source}, "jobId": {jobID}}.Encode()
-	response, err := engine.doRaw(ctx, http.MethodGet, requestPath, "", nil)
+	response, err := waitForSFTPDownloadResponse(ctx, engine, requestPath, progress)
 	if err != nil {
 		return err
 	}
@@ -619,6 +647,179 @@ func sftpDownloadFile(
 		return err
 	}
 	return sftpJobAction(ctx, engine, jobID, "complete")
+}
+
+type sftpRawResponse struct {
+	response *http.Response
+	err      error
+}
+
+func waitForSFTPDownloadResponse(
+	ctx context.Context, engine *engineAPI, requestPath string, progress *sftpCLIProgressDisplay,
+) (*http.Response, error) {
+	if progress == nil {
+		return engine.doRaw(ctx, http.MethodGet, requestPath, "", nil)
+	}
+	result := make(chan sftpRawResponse, 1)
+	go func() {
+		response, err := engine.doRaw(ctx, http.MethodGet, requestPath, "", nil)
+		result <- sftpRawResponse{response: response, err: err}
+	}()
+	ticker := time.NewTicker(125 * time.Millisecond)
+	defer ticker.Stop()
+	progress.refresh(ctx)
+	for {
+		select {
+		case answer := <-result:
+			progress.refresh(ctx)
+			return answer.response, answer.err
+		case <-ticker.C:
+			progress.refresh(ctx)
+		case <-ctx.Done():
+			answer := <-result
+			if answer.response != nil {
+				discardEngineResponse(answer.response)
+			}
+			return nil, ctx.Err()
+		}
+	}
+}
+
+func newSFTPCLIProgressDisplay(engine *engineAPI, output io.Writer, jsonOutput bool) *sftpCLIProgressDisplay {
+	if jsonOutput || engine == nil {
+		return nil
+	}
+	file, ok := output.(*os.File)
+	if !ok || !term.IsTerminal(int(file.Fd())) {
+		return nil
+	}
+	return &sftpCLIProgressDisplay{
+		engine: engine, output: output, tracked: make(map[string]string), jobs: make(map[string]sftpCLIProgressJob),
+	}
+}
+
+func (display *sftpCLIProgressDisplay) track(id, name string) {
+	display.mu.Lock()
+	display.tracked[id] = name
+	display.mu.Unlock()
+}
+
+func (display *sftpCLIProgressDisplay) refresh(ctx context.Context) {
+	if display == nil {
+		return
+	}
+	display.refreshMu.Lock()
+	defer display.refreshMu.Unlock()
+	requestContext, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
+	defer cancel()
+	var queue sftpCLITransferQueue
+	if err := display.engine.sendJSON(requestContext, http.MethodGet, "/api/v1/sftp/transfers", nil, &queue); err != nil {
+		return
+	}
+	display.mu.Lock()
+	for _, encoded := range queue.Jobs {
+		var job sftpCLIProgressJob
+		if json.Unmarshal(encoded, &job) != nil || job.ID == "" || !validSFTPDownloadParts(job.DownloadParts) {
+			continue
+		}
+		if _, tracked := display.tracked[job.ID]; tracked {
+			display.jobs[job.ID] = job
+		}
+	}
+	lines := sftpProgressLines(display.tracked, display.jobs)
+	display.renderLocked(lines)
+	display.mu.Unlock()
+}
+
+func (display *sftpCLIProgressDisplay) renderLocked(lines []string) {
+	if len(lines) == 0 {
+		return
+	}
+	if display.lines > 0 {
+		fmt.Fprintf(display.output, "\x1b[%dA", display.lines)
+	}
+	for _, line := range lines {
+		fmt.Fprintf(display.output, "\r\x1b[2K%s\n", line)
+	}
+	display.lines = len(lines)
+}
+
+func sftpProgressLines(tracked map[string]string, jobs map[string]sftpCLIProgressJob) []string {
+	ids := make([]string, 0, len(tracked))
+	for id := range tracked {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	lines := make([]string, 0)
+	for _, id := range ids {
+		job, found := jobs[id]
+		if !found || len(job.DownloadParts) == 0 {
+			lines = append(lines, fmt.Sprintf("preparing  %s", tracked[id]))
+			continue
+		}
+		parts := append([]sftpCLIDownloadPart(nil), job.DownloadParts...)
+		sort.Slice(parts, func(i, j int) bool { return parts[i].Index < parts[j].Index })
+		for _, part := range parts {
+			lines = append(lines, formatSFTPProgressLine(part, tracked[id]))
+		}
+	}
+	return lines
+}
+
+func formatSFTPProgressLine(part sftpCLIDownloadPart, name string) string {
+	const width = 24
+	percent := 0
+	if part.TotalBytes > 0 {
+		percent = int(min(int64(100), part.TransferredBytes*100/part.TotalBytes))
+	}
+	filled := percent * width / 100
+	bar := strings.Repeat("#", filled) + strings.Repeat("-", width-filled)
+	return fmt.Sprintf("connection %d [%s] %3d%%  %s / %s  %s",
+		part.Index+1, bar, percent, sftpProgressBytes(part.TransferredBytes), sftpProgressBytes(part.TotalBytes), compactSFTPProgressName(name))
+}
+
+func validSFTPDownloadParts(parts []sftpCLIDownloadPart) bool {
+	if len(parts) > 8 {
+		return false
+	}
+	seen := make(map[int]struct{}, len(parts))
+	for _, part := range parts {
+		if part.Index < 0 || part.Index >= 8 || part.TransferredBytes < 0 || part.TotalBytes < 0 || part.TransferredBytes > part.TotalBytes {
+			return false
+		}
+		if _, duplicate := seen[part.Index]; duplicate {
+			return false
+		}
+		seen[part.Index] = struct{}{}
+	}
+	return true
+}
+
+func compactSFTPProgressName(name string) string {
+	const maximum = 28
+	characters := []rune(name)
+	if len(characters) <= maximum {
+		return name
+	}
+	return "…" + string(characters[len(characters)-maximum+1:])
+}
+
+func sftpProgressBytes(value int64) string {
+	const (
+		kib = int64(1 << 10)
+		mib = int64(1 << 20)
+		gib = int64(1 << 30)
+	)
+	switch {
+	case value >= gib:
+		return fmt.Sprintf("%.1f GiB", float64(value)/float64(gib))
+	case value >= mib:
+		return fmt.Sprintf("%.1f MiB", float64(value)/float64(mib))
+	case value >= kib:
+		return fmt.Sprintf("%.1f KiB", float64(value)/float64(kib))
+	default:
+		return fmt.Sprintf("%d B", value)
+	}
 }
 
 func sftpUploadFile(ctx context.Context, engine *engineAPI, alias, batchID string, file sftpCLIFile, overwrite bool, splitSizeMiB, splitJobs, chunkSizeMiB int) (returnErr error) {

@@ -136,12 +136,12 @@ func (download *PreparedDownload) WriteFrom(ctx context.Context, offset int64, d
 }
 
 func (s Service) PrepareDownload(ctx context.Context, alias, remotePath string) (_ *PreparedDownload, resultErr error) {
-	return s.prepareDownload(ctx, alias, remotePath, "", nil, 0, 1, 0)
+	return s.prepareDownload(ctx, alias, remotePath, "", nil, 0, 1, 0, nil)
 }
 
 func (s Service) prepareDownload(
 	ctx context.Context, alias, remotePath, temporaryDirectory string, reserve func(int64) error,
-	splitThreshold int64, splitParallelism int, splitChunkBytes int64,
+	splitThreshold int64, splitParallelism int, splitChunkBytes int64, progress func(DownloadPartProgress),
 ) (_ *PreparedDownload, resultErr error) {
 	cleaned, err := cleanPublicPath(remotePath, false)
 	if err != nil {
@@ -182,11 +182,11 @@ func (s Service) prepareDownload(
 	written := int64(0)
 	if before.Size() >= splitThreshold && splitThreshold > 0 && splitParallelism > 1 && splitChunkBytes > 0 {
 		if _, supported := remote.(RangeRemote); supported {
-			written, err = s.copyDownloadRanges(ctx, remote, alias, cleaned, temporary, before.Size(), splitParallelism, splitChunkBytes)
+			written, err = s.copyDownloadRanges(ctx, remote, alias, cleaned, temporary, before.Size(), splitParallelism, splitChunkBytes, progress)
 		}
 	}
 	if written == 0 && before.Size() > 0 && err == nil {
-		written, err = copyDownloadSequential(ctx, remote, cleaned, temporary, before.Size())
+		written, err = copyDownloadSequential(ctx, remote, cleaned, temporary, before.Size(), progress)
 	}
 	if err != nil {
 		return nil, err
@@ -215,13 +215,25 @@ func (s Service) prepareDownload(
 	return prepared, nil
 }
 
-func copyDownloadSequential(ctx context.Context, remote Remote, remotePath string, destination *os.File, size int64) (int64, error) {
+func copyDownloadSequential(
+	ctx context.Context, remote Remote, remotePath string, destination *os.File, size int64,
+	progress func(DownloadPartProgress),
+) (int64, error) {
 	source, err := remote.Open(remotePath)
 	if err != nil {
 		return 0, err
 	}
 	defer source.Close()
-	written, err := copyContext(ctx, destination, io.LimitReader(source, size), 0)
+	if progress != nil {
+		progress(DownloadPartProgress{Index: 0, TotalBytes: size})
+	}
+	output := io.Writer(destination)
+	if progress != nil {
+		output = &downloadProgressWriter{destination: destination, progress: func(written int64) {
+			progress(DownloadPartProgress{Index: 0, TransferredBytes: written, TotalBytes: size})
+		}}
+	}
+	written, err := copyContext(ctx, output, io.LimitReader(source, size), 0)
 	if err != nil {
 		return 0, err
 	}
@@ -246,6 +258,7 @@ type downloadRange struct {
 // representation used by HTTP retries and browser checkpoints.
 func (s Service) copyDownloadRanges(
 	ctx context.Context, firstRemote Remote, alias, remotePath string, destination *os.File, size int64, parallelism int, chunkBytes int64,
+	progress func(DownloadPartProgress),
 ) (int64, error) {
 	if size <= 0 || parallelism <= 1 || chunkBytes <= 0 {
 		return 0, ErrInvalidTransfer
@@ -259,11 +272,12 @@ func (s Service) copyDownloadRanges(
 	}
 	workerContext, cancel := context.WithCancel(ctx)
 	defer cancel()
-	work := make(chan downloadRange, len(ranges))
-	for _, portion := range ranges {
-		work <- portion
+	workerCount := min(parallelism, len(ranges))
+	assignments := make([][]downloadRange, workerCount)
+	for index, portion := range ranges {
+		worker := index % workerCount
+		assignments[worker] = append(assignments[worker], portion)
 	}
-	close(work)
 	writtenParts := make(chan int64, len(ranges))
 	var workers sync.WaitGroup
 	var firstErr error
@@ -274,9 +288,16 @@ func (s Service) copyDownloadRanges(
 			cancel()
 		})
 	}
-	for workerIndex := range min(parallelism, len(ranges)) {
+	for workerIndex := range workerCount {
+		var workerTotal int64
+		for _, portion := range assignments[workerIndex] {
+			workerTotal += portion.size
+		}
+		if progress != nil {
+			progress(DownloadPartProgress{Index: workerIndex, TotalBytes: workerTotal})
+		}
 		workers.Add(1)
-		go func(workerIndex int) {
+		go func(workerIndex int, workerTotal int64) {
 			defer workers.Done()
 			remote := firstRemote
 			if workerIndex != 0 {
@@ -293,16 +314,22 @@ func (s Service) copyDownloadRanges(
 				fail(ErrInvalidTransfer)
 				return
 			}
-			for portion := range work {
+			var workerWritten int64
+			for _, portion := range assignments[workerIndex] {
 				last := portion.offset+portion.size == size
-				written, err := copyDownloadRange(workerContext, ranged, remotePath, destination, portion, last)
+				written, err := copyDownloadRange(workerContext, ranged, remotePath, destination, portion, last, func(chunkWritten int64) {
+					if progress != nil {
+						progress(DownloadPartProgress{Index: workerIndex, TransferredBytes: workerWritten + chunkWritten, TotalBytes: workerTotal})
+					}
+				})
 				if err != nil {
 					fail(err)
 					return
 				}
+				workerWritten += written
 				writtenParts <- written
 			}
-		}(workerIndex)
+		}(workerIndex, workerTotal)
 	}
 	workers.Wait()
 	close(writtenParts)
@@ -318,13 +345,18 @@ func (s Service) copyDownloadRanges(
 
 func copyDownloadRange(
 	ctx context.Context, remote RangeRemote, remotePath string, destination *os.File, portion downloadRange, last bool,
+	progress func(int64),
 ) (int64, error) {
 	source, err := remote.OpenRange(remotePath, portion.offset)
 	if err != nil {
 		return 0, err
 	}
 	defer source.Close()
-	written, err := copyContext(ctx, io.NewOffsetWriter(destination, portion.offset), io.LimitReader(source, portion.size), 0)
+	output := io.Writer(io.NewOffsetWriter(destination, portion.offset))
+	if progress != nil {
+		output = &downloadProgressWriter{destination: output, progress: progress}
+	}
+	written, err := copyContext(ctx, output, io.LimitReader(source, portion.size), 0)
 	if err != nil {
 		return written, err
 	}
@@ -338,6 +370,19 @@ func copyDownloadRange(
 		}
 	}
 	return written, nil
+}
+
+type downloadProgressWriter struct {
+	destination io.Writer
+	written     int64
+	progress    func(int64)
+}
+
+func (writer *downloadProgressWriter) Write(contents []byte) (int, error) {
+	written, err := writer.destination.Write(contents)
+	writer.written += int64(written)
+	writer.progress(writer.written)
+	return written, err
 }
 
 func (s Service) ListDirectory(ctx context.Context, alias, remotePath string) (Listing, error) {

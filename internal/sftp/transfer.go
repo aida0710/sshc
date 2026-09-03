@@ -334,6 +334,7 @@ func downloadSpoolTreeBytes(root string) int64 {
 func (m *TransferManager) PrepareOwnedDownload(ctx context.Context, id, alias, remotePath string) (*PreparedDownload, error) {
 	return m.prepareOwnedSpool(id, func() (*PreparedDownload, int64, error) {
 		var reserved int64
+		m.resetDownloadParts(id)
 		threshold, parallelism, chunkBytes, err := m.transferSplitSettings(id)
 		if err != nil {
 			return nil, 0, err
@@ -344,7 +345,9 @@ func (m *TransferManager) PrepareOwnedDownload(ctx context.Context, id, alias, r
 			}
 			reserved = size
 			return nil
-		}, threshold, parallelism, chunkBytes)
+		}, threshold, parallelism, chunkBytes, func(part DownloadPartProgress) {
+			m.recordDownloadPart(id, part)
+		})
 		if err != nil {
 			if reserved > 0 {
 				releaseProcessSpool(reserved)
@@ -353,6 +356,31 @@ func (m *TransferManager) PrepareOwnedDownload(ctx context.Context, id, alias, r
 		}
 		return prepared, reserved, nil
 	})
+}
+
+func (m *TransferManager) resetDownloadParts(id string) {
+	m.jobsMutex.Lock()
+	defer m.jobsMutex.Unlock()
+	if record := m.jobs[id]; record != nil {
+		record.job.DownloadParts = nil
+	}
+}
+
+func (m *TransferManager) recordDownloadPart(id string, part DownloadPartProgress) {
+	if part.Index < 0 || part.Index >= MaxLargeFileParallelism || part.TotalBytes < 0 ||
+		part.TransferredBytes < 0 || part.TransferredBytes > part.TotalBytes {
+		return
+	}
+	m.jobsMutex.Lock()
+	defer m.jobsMutex.Unlock()
+	record := m.jobs[id]
+	if record == nil || record.job.Direction != TransferDownload || record.job.Status != TransferRunning {
+		return
+	}
+	for len(record.job.DownloadParts) <= part.Index {
+		record.job.DownloadParts = append(record.job.DownloadParts, DownloadPartProgress{Index: len(record.job.DownloadParts)})
+	}
+	record.job.DownloadParts[part.Index] = part
 }
 
 func (m *TransferManager) transferSplitSettings(id string) (int64, int, int64, error) {

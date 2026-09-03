@@ -200,11 +200,24 @@ type sftpTransferJobResponse struct {
 	SourceFingerprint string                           `json:"sourceFingerprint"`
 	Overwrite         bool                             `json:"overwrite"`
 	DownloadRevision  string                           `json:"downloadRevision"`
+	DownloadParts     []sftpDownloadPartResponse       `json:"downloadParts"`
 	CreatedAt         string                           `json:"createdAt"`
 	UpdatedAt         string                           `json:"updatedAt"`
 }
 
+type sftpDownloadPartResponse struct {
+	Index            int   `json:"index"`
+	TransferredBytes int64 `json:"transferredBytes"`
+	TotalBytes       int64 `json:"totalBytes"`
+}
+
 func describeTransferJob(job sshcSFTP.TransferJob) sftpTransferJobResponse {
+	parts := make([]sftpDownloadPartResponse, 0, len(job.DownloadParts))
+	for _, part := range job.DownloadParts {
+		parts = append(parts, sftpDownloadPartResponse{
+			Index: part.Index, TransferredBytes: part.TransferredBytes, TotalBytes: part.TotalBytes,
+		})
+	}
 	return sftpTransferJobResponse{
 		ID: job.ID, BatchID: job.BatchID, BatchName: job.BatchName, BatchKind: job.BatchKind,
 		Alias: job.Alias, SourceAlias: job.SourceAlias, SourcePath: job.SourcePath,
@@ -216,7 +229,8 @@ func describeTransferJob(job sshcSFTP.TransferJob) sftpTransferJobResponse {
 		Problem: job.Problem, LastModified: job.LastModified,
 		ExpectedRevision: job.ExpectedRevision, SourceFingerprint: job.SourceFingerprint,
 		Overwrite: job.Overwrite, DownloadRevision: job.DownloadRevision,
-		CreatedAt: job.CreatedAt.Format(time.RFC3339Nano), UpdatedAt: job.UpdatedAt.Format(time.RFC3339Nano),
+		DownloadParts: parts,
+		CreatedAt:     job.CreatedAt.Format(time.RFC3339Nano), UpdatedAt: job.UpdatedAt.Format(time.RFC3339Nano),
 	}
 }
 

@@ -3297,10 +3297,18 @@ export interface components {
             sourceFingerprint: string;
             overwrite: boolean;
             downloadRevision: string;
+            downloadParts: components["schemas"]["SFTPDownloadPartProgress"][];
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
             updatedAt: string;
+        };
+        SFTPDownloadPartProgress: {
+            index: number;
+            /** Format: int64 */
+            transferredBytes: number;
+            /** Format: int64 */
+            totalBytes: number;
         };
         SFTPTransferJobList: {
             maxConcurrent: number;

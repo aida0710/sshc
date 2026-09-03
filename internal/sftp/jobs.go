@@ -90,6 +90,16 @@ const (
 	TransferRemoveControl TransferControlAction = "remove"
 )
 
+// DownloadPartProgress describes one SFTP connection used while the engine
+// prepares a large download. It is deliberately ephemeral: a prepared spool
+// can be reused after completion, but in-flight connection progress cannot be
+// resumed after an engine restart.
+type DownloadPartProgress struct {
+	Index            int   `json:"-"`
+	TransferredBytes int64 `json:"-"`
+	TotalBytes       int64 `json:"-"`
+}
+
 // AllowedTransferActions returns the user-visible control actions permitted by
 // the engine state machine. Data-plane-only actions such as progress and
 // complete intentionally remain private to the transfer implementation.
@@ -136,6 +146,7 @@ type TransferJob struct {
 	LargeFileThresholdBytes int64
 	LargeFileParallelism    int
 	LargeFileChunkBytes     int64
+	DownloadParts           []DownloadPartProgress `json:"-"`
 	UploadRanges            []UploadRange
 	CreatedAt               time.Time
 	UpdatedAt               time.Time
@@ -790,7 +801,9 @@ func (m *TransferManager) ListJobs() []TransferJob {
 	result := make([]TransferJob, 0, len(m.jobOrder))
 	for _, id := range m.jobOrder {
 		if record := m.jobs[id]; record != nil {
-			result = append(result, record.job)
+			job := record.job
+			job.DownloadParts = append([]DownloadPartProgress(nil), job.DownloadParts...)
+			result = append(result, job)
 		}
 	}
 	_ = m.persistJobsLocked(false)

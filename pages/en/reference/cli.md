@@ -98,6 +98,8 @@ sshc sftp put bastion ./disk.img /backup/disk.img --split-size 100 --split-jobs 
 
 `-j` or `--jobs` sets the number of files transferred concurrently from 1 to 8; the default is 1. Split options on `get` or `put` override the saved defaults for that invocation. `--split-jobs 1` disables splitting. Initial defaults are 100 MiB, four connections, and 32 MiB chunks. Combining `--jobs 4 --split-jobs 4` can use up to 16 connections, so choose values that fit the server's limits. Regular file uploads and downloads support up to 512 GiB.
 
+In an interactive terminal, `sshc sftp get` displays one progress bar for each SFTP connection while the engine prepares the remote file. A four-connection split therefore shows four progress lines, while a non-split transfer shows one. Progress is suppressed for `--json` and non-interactive output so automation remains clean.
+
 Existing files are never overwritten implicitly. `--overwrite` shows one confirmation before replacing them; add `--yes` only when automation must skip that confirmation. Use `--skip-existing` to preserve existing files or `--dry-run` to inspect the plan without changing anything. With `--json`, stdout contains one JSON result while progress remains on stderr. Pressing `Ctrl+C` also cancels the remote temporary upload.
 
 ## Serial / Telnet

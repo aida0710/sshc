@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -52,6 +53,82 @@ func TestSFTPFileWorkersBoundParallelFiles(t *testing.T) {
 	}
 	if maximum.Load() != 3 {
 		t.Fatalf("maximum active files = %d, want 3", maximum.Load())
+	}
+}
+
+func TestSFTPProgressUsesOneLinePerDownloadConnection(t *testing.T) {
+	tracked := map[string]string{"get_12345678": "archive.tar.gz"}
+	jobs := map[string]sftpCLIProgressJob{
+		"get_12345678": {
+			ID: "get_12345678",
+			DownloadParts: []sftpCLIDownloadPart{
+				{Index: 1, TransferredBytes: 16 << 20, TotalBytes: 32 << 20},
+				{Index: 0, TransferredBytes: 32 << 20, TotalBytes: 32 << 20},
+				{Index: 3, TransferredBytes: 0, TotalBytes: 16 << 20},
+				{Index: 2, TransferredBytes: 8 << 20, TotalBytes: 32 << 20},
+			},
+		},
+	}
+	lines := sftpProgressLines(tracked, jobs)
+	if len(lines) != 4 {
+		t.Fatalf("progress lines = %d, want 4: %q", len(lines), lines)
+	}
+	for index, line := range lines {
+		want := fmt.Sprintf("connection %d ", index+1)
+		if !strings.HasPrefix(line, want) || !strings.HasSuffix(line, "archive.tar.gz") {
+			t.Errorf("line %d = %q", index, line)
+		}
+	}
+	if !strings.Contains(lines[0], "100%") || !strings.Contains(lines[1], " 50%") ||
+		!strings.Contains(lines[2], " 25%") || !strings.Contains(lines[3], "  0%") {
+		t.Fatalf("progress percentages = %q", lines)
+	}
+}
+
+func TestSFTPDownloadPollsConnectionProgressWhileEnginePreparesFile(t *testing.T) {
+	var progressRequests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/api/v1/sftp/transfers":
+			progressRequests.Add(1)
+			writeTestJSON(response, http.StatusOK, map[string]any{
+				"maxConcurrent": 2, "clearCompletedAfterSeconds": 0, "processingStopped": false,
+				"largeFileThresholdBytes": 100 << 20, "largeFileParallelism": 4, "largeFileChunkBytes": 32 << 20,
+				"jobs": []map[string]any{{
+					"id": "get_12345678",
+					"downloadParts": []map[string]any{
+						{"index": 0, "transferredBytes": 8 << 20, "totalBytes": 32 << 20},
+						{"index": 1, "transferredBytes": 16 << 20, "totalBytes": 32 << 20},
+					},
+				}},
+			})
+		case "/download":
+			time.Sleep(180 * time.Millisecond)
+			response.Header().Set("ETag", `"revision"`)
+			response.WriteHeader(http.StatusOK)
+		default:
+			t.Errorf("unexpected request: %s", request.URL.Path)
+			response.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	engine := testSFTPEngine(server)
+	var output strings.Builder
+	display := &sftpCLIProgressDisplay{
+		engine: engine, output: &output, tracked: make(map[string]string), jobs: make(map[string]sftpCLIProgressJob),
+	}
+	display.track("get_12345678", "large.bin")
+	response, err := waitForSFTPDownloadResponse(t.Context(), engine, "/download", display)
+	if err != nil {
+		t.Fatal(err)
+	}
+	discardEngineResponse(response)
+	if progressRequests.Load() < 2 {
+		t.Fatalf("progress requests = %d, want at least 2", progressRequests.Load())
+	}
+	if rendered := output.String(); !strings.Contains(rendered, "connection 1") || !strings.Contains(rendered, "connection 2") {
+		t.Fatalf("rendered progress = %q", rendered)
 	}
 }
 
@@ -148,7 +225,7 @@ func TestSFTPDownloadUsesRemotePathAndPublishesAtomically(t *testing.T) {
 	destination := filepath.Join(t.TempDir(), "file.txt")
 	err := sftpDownloadFile(context.Background(), testSFTPEngine(server), "server-a", "batch_12345678", sftpCLIFile{
 		Source: "/remote/file.txt", Destination: destination, Size: 3,
-	}, 50, 6, 512)
+	}, 50, 6, 512, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

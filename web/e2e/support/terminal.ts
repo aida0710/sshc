@@ -20,6 +20,9 @@ export function drawnSpan(page: Page, text: string): Locator {
 export function terminalScreen(page: Page): Locator {
   return page.locator(SCREEN);
 }
+export function terminalCanvasCount(page: Page): Promise<number> {
+  return page.locator(`${SCREEN} canvas`).count();
+}
 export function terminalKeyboard(page: Page): Locator {
   return page.locator(KEYBOARD);
 }
