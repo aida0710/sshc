@@ -153,6 +153,7 @@ S3_IMAGE   ?= chrislusf/seaweedfs@sha256:43b768cd62b00d132439cda881b93fd1adebf1b
 SSHD_IMAGE ?= linuxserver/openssh-server@sha256:96b9a4d3b5106746d08d43a6911650d4d21f7d5c7f2ac9660e792bdb5e63157c
 S3_PORT    ?= 8333
 SSHD_PORT  ?= 2222
+TOTP_SSHD_PORT ?= 2223
 S3_KEY     ?= SSHUITESTKEY
 S3_SECRET  ?= sshuitestsecret
 SSH_USER   ?= tester
@@ -165,6 +166,7 @@ INTEGRATION_NETWORK ?= sshc-integration
 integration-up:
 	@printf '{"identities":[{"name":"sshc","credentials":[{"accessKey":"$(S3_KEY)","secretKey":"$(S3_SECRET)"}],"actions":["Admin","Read","Write","List","Tagging"]}]}' > .integration-s3.json
 	docker rm -f sshc-s3 sshc-sshd sshc-sshd-destination >/dev/null 2>&1 || true
+	docker rm -f sshc-sshd-totp >/dev/null 2>&1 || true
 	docker network rm $(INTEGRATION_NETWORK) >/dev/null 2>&1 || true
 	docker network create $(INTEGRATION_NETWORK) >/dev/null
 	docker run -d --name sshc-s3 -p 127.0.0.1:$(S3_PORT):8333 \
@@ -177,6 +179,9 @@ integration-up:
 	docker run -d --name sshc-sshd-destination --network $(INTEGRATION_NETWORK) \
 		-e PASSWORD_ACCESS=true -e USER_NAME=$(SSH_DEST_USER) -e USER_PASSWORD=$(SSH_DEST_PASS) \
 		$(SSHD_IMAGE)
+	docker build -q -f integration/totp-sshd.Dockerfile -t sshc-totp-sshd:integration integration >/dev/null
+	docker run -d --name sshc-sshd-totp --network $(INTEGRATION_NETWORK) \
+		-p 127.0.0.1:$(TOTP_SSHD_PORT):2222 sshc-totp-sshd:integration
 	@rm -f .integration-key/id_integration .integration-key/id_integration.pub
 	@mkdir -p .integration-key
 	@ssh-keygen -q -t ed25519 -N "$(SSH_KEY_PASSPHRASE)" \
@@ -191,6 +196,16 @@ integration-up:
 		docker logs sshc-s3 2>&1 | tail -100 >&2 || true; \
 		exit 1; \
 	fi
+	@ready=0; for i in $$(seq 1 60); do \
+		if ssh-keyscan -p $(TOTP_SSHD_PORT) 127.0.0.1 2>/dev/null | grep -q .; then ready=1; break; fi; \
+		sleep 1; \
+	done; \
+	if [ "$$ready" != 1 ]; then \
+		echo "TOTP sshd did not answer on port $(TOTP_SSHD_PORT) within 60s" >&2; \
+		docker logs sshc-sshd-totp 2>&1 | tail -100 >&2 || true; \
+		exit 1; \
+	fi
+	@ssh-keyscan -p $(TOTP_SSHD_PORT) 127.0.0.1 2>/dev/null > .integration-totp-known-hosts
 	@ready=0; for i in $$(seq 1 60); do \
 		if ssh-keyscan -p $(SSHD_PORT) 127.0.0.1 2>/dev/null | grep -q .; then ready=1; break; fi; \
 		sleep 1; \
@@ -260,10 +275,11 @@ integration-sshd-relax:
 
 # 統合テスト用の資格情報と鍵は実行時に生成し、終了時に削除する。
 integration-down:
-	docker rm -f sshc-s3 sshc-sshd sshc-sshd-destination >/dev/null 2>&1 || true
+	docker rm -f sshc-s3 sshc-sshd sshc-sshd-destination sshc-sshd-totp >/dev/null 2>&1 || true
 	docker network rm $(INTEGRATION_NETWORK) >/dev/null 2>&1 || true
 	rm -f .integration-s3.json
 	rm -f .integration-proxy-known-hosts
+	rm -f .integration-totp-known-hosts
 	rm -f .integration-key/id_integration .integration-key/id_integration.pub
 	rmdir .integration-key 2>/dev/null || true
 
@@ -289,7 +305,12 @@ integration: build
 	SSHC_TEST_PROXY_DEST_USER=$(SSH_DEST_USER) \
 	SSHC_TEST_PROXY_DEST_PASSWORD=$(SSH_DEST_PASS) \
 	SSHC_TEST_PROXY_KNOWN_HOSTS="$(CURDIR)/.integration-proxy-known-hosts" \
-	go test ./integration -run '^(TestCLIUsesVaultPasswordsAcrossARealProxyJump|TestSFTPCLIRoundTripsAgainstRealOpenSSH)$$' -count=1 -v
+	SSHC_TEST_TOTP_ADDR=127.0.0.1:$(TOTP_SSHD_PORT) \
+	SSHC_TEST_TOTP_USER=tester \
+	SSHC_TEST_TOTP_PASSWORD=integration-totp-password \
+	SSHC_TEST_TOTP_SECRET=JBSWY3DPEHPK3PXP \
+	SSHC_TEST_TOTP_KNOWN_HOSTS="$(CURDIR)/.integration-totp-known-hosts" \
+	go test ./integration -run '^(TestCLIUsesVaultPasswordsAcrossARealProxyJump|TestSFTPCLIRoundTripsAgainstRealOpenSSH|TestCLIAutomatesPasswordAndTOTPAgainstRealOpenSSH)$$' -count=1 -v
 
 # バイナリは安定したパスへ置く。デスクトップ側はここへ symlink を張り、CLI と UI が
 # 同じバイナリを使用する。別の場所でビルドし直すと

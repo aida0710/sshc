@@ -93,6 +93,58 @@ func TestAnAccountPasswordNeverComesBackAsAKeyPassphrase(t *testing.T) {
 	}
 }
 
+func TestTOTPProvisioningTravelsOnlyForTheBoundJumpChain(t *testing.T) {
+	const cliSecret = "the secret for this run"
+	home := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	vault := secret.NewService(workspace, storage.NewManager(workspace, time.Now, rand.Reader), time.Now)
+	if err := vault.Initialise(testPassphrase); err != nil {
+		t.Fatal(err)
+	}
+	if err := vault.SetCredential(secret.KindTOTP, "edge-token", "JBSWY3DPEHPK3PXP"); err != nil {
+		t.Fatal(err)
+	}
+	if err := vault.AssignTOTPCredential("edge", "edge-token", testPasswordBinding); err != nil {
+		t.Fatal(err)
+	}
+	engine := connectEngine(t, ConnectHandlers{
+		Secret: cliSecret, Passwords: vault,
+		Aliases:         func(alias string) []string { return []string{"edge", alias} },
+		PasswordBinding: fixedPasswordBinding,
+	})
+	recorder := send(t, engine, http.MethodPost, ConnectPath, `{"alias":"target"}`,
+		map[string]string{handoff.HeaderName: cliSecret})
+	var answer connectResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &answer); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(answer.TOTPs["edge"], "secret=JBSWY3DPEHPK3PXP") ||
+		answer.TOTPBindings["edge"] != testPasswordBinding || answer.TOTPs["target"] != "" {
+		t.Fatalf("TOTP chain response = %+v", answer)
+	}
+
+	stale := connectEngine(t, ConnectHandlers{
+		Secret: cliSecret, Passwords: vault,
+		Aliases:         func(alias string) []string { return []string{"edge", alias} },
+		PasswordBinding: func(string) (string, error) { return strings.Repeat("cd", 32), nil },
+	})
+	response := send(t, stale, http.MethodPost, ConnectPath, `{"alias":"target"}`,
+		map[string]string{handoff.HeaderName: cliSecret})
+	answer = connectResponse{}
+	if err := json.Unmarshal(response.Body.Bytes(), &answer); err != nil {
+		t.Fatal(err)
+	}
+	if len(answer.TOTPs) != 0 || len(answer.StaleTOTPs) != 1 || answer.StaleTOTPs[0] != "edge" {
+		t.Fatalf("stale TOTP response = %+v", answer)
+	}
+}
+
 // 保存済みアカウントパスワードだけを持つ alias は、鍵についての結果を持たない。
 // 返るのはパスワードひとつであり、鍵の欄は空のままである。
 func TestAnAliasWithOnlyAnAccountPasswordCarriesNoKey(t *testing.T) {

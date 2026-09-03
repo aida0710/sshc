@@ -36,7 +36,7 @@ Match host edge user operator
 		t.Fatal(err)
 	}
 
-	connection, err := NewCLIConnection(home, nil, nil)
+	connection, err := NewCLIConnection(home, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

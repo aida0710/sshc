@@ -67,8 +67,16 @@ export function CredentialEditDialog({ kind, name, api, onSaved, onClose }: Cred
     }
   }
 
-  const heading = kind === "password" ? t("secrets.editPassword") : t("secrets.editPassphrase");
-  const valueLabel = kind === "password" ? t("secrets.passwordValue") : t("secrets.passphraseValue");
+  const heading = kind === "password"
+    ? t("secrets.editPassword")
+    : kind === "totp"
+      ? t("secrets.editTOTP")
+      : t("secrets.editPassphrase");
+  const valueLabel = kind === "password"
+    ? t("secrets.passwordValue")
+    : kind === "totp"
+      ? t("secrets.totpValue")
+      : t("secrets.passphraseValue");
 
   return (
     <ModalShell
@@ -93,7 +101,7 @@ export function CredentialEditDialog({ kind, name, api, onSaved, onClose }: Cred
               label={valueLabel}
               value={secret}
               onChange={setSecret}
-              initialShown={kind !== "password"}
+              initialShown={kind === "key_passphrase"}
               disabled={saving}
             />
           </>

@@ -153,6 +153,7 @@ test("keeps a chunked SFTP upload visible while another section is open", async 
     await scope.locator("button[data-value]:visible").click();
     const dialog = page.getByRole("dialog");
     await dialog.getByText(alias, { exact: true }).click();
+    await scope.getByRole("button", { name: /^(Connect|接続)$/ }).click();
   };
   await chooseHost("bastion");
   await page.locator('input[type="file"]:not([webkitdirectory])').first().setInputFiles({

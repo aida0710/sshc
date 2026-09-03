@@ -336,7 +336,7 @@ func TestEmptyTravelDocumentUsesTheCurrentUnlockedKeyGeneration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Contains(empty, []byte(`"schemaVersion":4`)) {
+	if !bytes.Contains(empty, []byte(`"schemaVersion":5`)) {
 		t.Fatalf("EmptyTravelDocument = %q", empty)
 	}
 	sealed, err := service.AdoptTravelDocument(empty)
@@ -876,6 +876,38 @@ func TestCredentialsThroughTheService(t *testing.T) {
 	}
 	if err := service.SetCredential(secret.KindPassword, "x", "y"); !errors.Is(err, secret.ErrLocked) {
 		t.Errorf("SetCredential while locked = %v, want ErrLocked", err)
+	}
+}
+
+func TestTOTPCredentialRequiresAndPreservesAnAuthenticationBinding(t *testing.T) {
+	service, _ := newService(t)
+	if err := service.Initialise(passphrase); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.SetCredential(secret.KindTOTP, "production", "JBSWY3DPEHPK3PXP"); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.AssignCredential(secret.KindTOTP, "bastion", "production"); !errors.Is(err, secret.ErrPasswordBindingRequired) {
+		t.Fatalf("unbound AssignCredential = %v", err)
+	}
+	if err := service.AssignTOTPCredential("bastion", "production", testAuthenticationBinding); err != nil {
+		t.Fatal(err)
+	}
+	if got := service.BoundTOTPFor("bastion", testAuthenticationBinding); !strings.Contains(got, "secret=JBSWY3DPEHPK3PXP") {
+		t.Fatalf("BoundTOTPFor = %q", got)
+	}
+	if got := service.BoundTOTPFor("bastion", strings.Repeat("cd", 32)); got != "" {
+		t.Fatal("TOTP was released to a stale binding")
+	}
+	listed, err := service.Credentials()
+	if err != nil || !slices.Equal(listed[secret.KindTOTP]["production"], []string{"bastion"}) {
+		t.Fatalf("Credentials = %#v, %v", listed, err)
+	}
+	if err := service.Rename("bastion", "edge"); err != nil {
+		t.Fatal(err)
+	}
+	if got := service.BoundTOTPFor("edge", testAuthenticationBinding); got == "" {
+		t.Fatal("host rename did not carry its TOTP assignment")
 	}
 }
 
