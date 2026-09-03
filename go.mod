@@ -14,11 +14,11 @@ require (
 	github.com/labstack/echo/v5 v5.3.1
 	github.com/pkg/sftp v1.13.11
 	go.bug.st/serial v1.8.0
-	golang.org/x/crypto v0.54.0
+	golang.org/x/crypto v0.56.0
 	golang.org/x/mod v0.39.0
 	golang.org/x/sys v0.47.0
 	golang.org/x/term v0.45.0
-	golang.org/x/text v0.40.0
+	golang.org/x/text v0.41.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
