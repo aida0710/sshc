@@ -32,6 +32,27 @@ func (e AutoSyncPhase) Valid() bool {
 	}
 }
 
+// Defines values for CredentialKind.
+const (
+	KeyPassphrase CredentialKind = "key_passphrase"
+	Password      CredentialKind = "password"
+	Totp          CredentialKind = "totp"
+)
+
+// Valid indicates whether the value is a known member of the CredentialKind enum.
+func (e CredentialKind) Valid() bool {
+	switch e {
+	case KeyPassphrase:
+		return true
+	case Password:
+		return true
+	case Totp:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for OpenTerminalSessionRequestKind.
 const (
 	OpenTerminalSessionRequestKindShell OpenTerminalSessionRequestKind = "shell"
@@ -685,11 +706,14 @@ type CreateSavedPasswordAuthentication struct {
 
 // Credential defines model for Credential.
 type Credential struct {
-	Hosts []string `json:"hosts"`
-	Kind  string   `json:"kind"`
-	Name  string   `json:"name"`
-	Uses  []string `json:"uses"`
+	Hosts []string       `json:"hosts"`
+	Kind  CredentialKind `json:"kind"`
+	Name  string         `json:"name"`
+	Uses  []string       `json:"uses"`
 }
+
+// CredentialKind defines model for Credential.Kind.
+type CredentialKind string
 
 // CredentialList defines model for CredentialList.
 type CredentialList struct {

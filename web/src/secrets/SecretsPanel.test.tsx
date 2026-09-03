@@ -20,6 +20,12 @@ function buildApi(overrides: Partial<IntegrationsApi> = {}): IntegrationsApi {
           uses: ["keys/work/id_work", "keys/work/id_release"],
           hosts: ["build-1", "release-1"],
         },
+        {
+          kind: "totp",
+          name: "production-otp",
+          uses: ["bastion"],
+          hosts: ["bastion"],
+        },
       ],
       dedicatedKeyPassphrases: [{ key: "keys/id_owned", hosts: ["deploy-1"] }],
       keyHostUsageComplete: true,
@@ -153,6 +159,99 @@ describe("SecretsPanel", () => {
 
     await waitFor(() =>
       expect(api.storeCredential).toHaveBeenCalledWith("key_passphrase", "build", "phrase"),
+    );
+  });
+
+  it("stores and assigns a TOTP setup key to a host", async () => {
+    const user = userEvent.setup();
+    const api = buildApi();
+    render(<SecretsPanel api={api} />);
+    const tokens = await screen.findByRole("region", {
+      name: "One-time passwords (TOTP)",
+    });
+
+    await user.type(
+      within(tokens).getByLabelText("New one-time password name"),
+      "backup-otp",
+    );
+    await user.type(
+      within(tokens).getByLabelText("Base32 setup key or otpauth URI"),
+      "JBSWY3DPEHPK3PXP",
+    );
+    await user.click(
+      within(tokens).getByRole("button", {
+        name: "Store one-time password",
+      }),
+    );
+    await waitFor(() =>
+      expect(api.storeCredential).toHaveBeenCalledWith(
+        "totp",
+        "backup-otp",
+        "JBSWY3DPEHPK3PXP",
+      ),
+    );
+
+    await user.type(within(tokens).getByLabelText("Host alias"), "edge");
+    await user.selectOptions(
+      within(tokens).getByLabelText("One-time password"),
+      "production-otp",
+    );
+    await user.click(
+      within(tokens).getByRole("button", { name: "Assign to host" }),
+    );
+    await waitFor(() =>
+      expect(api.assignCredential).toHaveBeenCalledWith(
+        "totp",
+        "edge",
+        "production-otp",
+      ),
+    );
+  });
+
+  it("keeps a TOTP setup key in the form when storing it fails", async () => {
+    const user = userEvent.setup();
+    const api = buildApi({
+      storeCredential: vi.fn().mockRejectedValue(new Error("invalid TOTP")),
+    });
+    render(<SecretsPanel api={api} />);
+    const tokens = await screen.findByRole("region", {
+      name: "One-time passwords (TOTP)",
+    });
+    const name = within(tokens).getByLabelText(
+      "New one-time password name",
+    );
+    const setupKey = within(tokens).getByLabelText(
+      "Base32 setup key or otpauth URI",
+    );
+
+    await user.type(name, "backup-otp");
+    await user.type(setupKey, "not-a-valid-key");
+    await user.click(
+      within(tokens).getByRole("button", {
+        name: "Store one-time password",
+      }),
+    );
+
+    await waitFor(() => expect(api.storeCredential).toHaveBeenCalled());
+    expect(name).toHaveValue("backup-otp");
+    expect(setupKey).toHaveValue("not-a-valid-key");
+  });
+
+  it("removes a TOTP assignment from its host chip", async () => {
+    const user = userEvent.setup();
+    const api = buildApi();
+    render(<SecretsPanel api={api} />);
+    const token = await screen.findByRole("article", {
+      name: "production-otp",
+    });
+
+    await user.click(
+      within(token).getByRole("button", {
+        name: "Remove the one-time password assignment from bastion",
+      }),
+    );
+    await waitFor(() =>
+      expect(api.unassignCredential).toHaveBeenCalledWith("totp", "bastion"),
     );
   });
 

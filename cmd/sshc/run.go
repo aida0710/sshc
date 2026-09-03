@@ -7,10 +7,12 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"sshc/internal/app"
 	"sshc/internal/handoff"
 	"sshc/internal/sshclient"
+	"sshc/internal/totp"
 	"sshc/internal/validate"
 )
 
@@ -43,7 +45,7 @@ func runRemote(
 	}
 	writeConnectionNotices(stderr, answer)
 
-	connection, err := app.NewCLIConnection(home, savedPassphraseFor(answer), savedPasswordFor(answer))
+	connection, err := app.NewCLIConnection(home, savedPassphraseFor(answer), savedPasswordFor(answer), savedTOTPFor(answer))
 	if err != nil {
 		fmt.Fprintf(stderr, "sshc: %v\n", err)
 		return sshclient.RemoteFailureExit
@@ -99,5 +101,27 @@ func savedPasswordFor(answer connectAnswer) func(sshclient.Target) (string, bool
 			return "", false
 		}
 		return stored, true
+	}
+}
+
+func savedTOTPFor(answer connectAnswer) func(sshclient.Target, string) (string, bool) {
+	if len(answer.TOTPs) == 0 {
+		return nil
+	}
+	return func(candidate sshclient.Target, question string) (string, bool) {
+		if !totp.MatchesPrompt(question) {
+			return "", false
+		}
+		provisioning, found := answer.TOTPs[candidate.Alias]
+		binding := answer.TOTPBindings[candidate.Alias]
+		if !found || provisioning == "" || binding != candidate.AuthenticationBinding() {
+			return "", false
+		}
+		configuration, err := totp.Parse(provisioning)
+		if err != nil {
+			return "", false
+		}
+		code, err := configuration.Code(time.Now())
+		return code, err == nil
 	}
 }

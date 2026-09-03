@@ -7,7 +7,7 @@ description: Remote file operations and a resumable SFTP Transfer Manager.
 
 ![The SFTP file browser](/images/sftp-desktop.png)
 
-sshc waits for you to choose a host before connecting. The host picker searches aliases, groups, destination hosts and users, and switches between recently connected and SSH Config group views. It initially opens the login user's home directory reported by the SFTP server, and reuses the saved SSH configuration, host keys and credentials.
+Selecting a host does not open an SFTP connection. sshc connects only after you press **Connect**. Restored tabs show their saved host and path without reconnecting in the background. The host picker searches aliases, groups, destination hosts and users, and switches between recently connected and SSH Config group views. A first connection opens the login user's home directory reported by the SFTP server and reuses the saved SSH configuration, host keys and credentials.
 
 Switching hosts immediately clears the previous listing and open file. A delayed response from the previous host is discarded instead of being shown under the new selection.
 

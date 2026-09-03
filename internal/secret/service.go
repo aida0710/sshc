@@ -734,6 +734,7 @@ func (s *Service) Remove(alias string) error {
 	// 一緒に消える。
 	vault.RemoveDedicatedPassword(alias)
 	vault.Unassign(KindPassword, alias)
+	vault.Unassign(KindTOTP, alias)
 	_ = vault.Delete(KindPassword, alias)
 	s.mu.Unlock()
 	return s.write()
@@ -754,6 +755,10 @@ func (s *Service) Rename(from, to string) error {
 		s.mu.Unlock()
 		return err
 	}
+	if err := vault.Rename(KindTOTP, from, to); err != nil {
+		s.mu.Unlock()
+		return err
+	}
 	s.mu.Unlock()
 	return s.write()
 }
@@ -771,7 +776,7 @@ func (s *Service) Credentials() (map[Kind]map[string][]string, error) {
 		return nil, ErrLocked
 	}
 	listed := map[Kind]map[string][]string{}
-	for _, kind := range []Kind{KindPassword, KindKeyPassphrase} {
+	for _, kind := range []Kind{KindPassword, KindKeyPassphrase, KindTOTP} {
 		listed[kind] = map[string][]string{}
 		for _, name := range vault.Names(kind) {
 			uses := vault.Uses(kind, name)
@@ -910,7 +915,7 @@ func (s *Service) DeleteCredential(kind Kind, name string) error {
 // AssignCredential は、subject を同じ種別の資格情報に向ける。種別が防護である。
 // 他方の種別の名前が現れるマップは存在しない。
 func (s *Service) AssignCredential(kind Kind, subject, name string) error {
-	if kind == KindPassword {
+	if kind == KindPassword || kind == KindTOTP {
 		return ErrPasswordBindingRequired
 	}
 	s.mutationMu.Lock()
@@ -922,6 +927,34 @@ func (s *Service) AssignCredential(kind Kind, subject, name string) error {
 		return ErrLocked
 	}
 	if err := vault.Assign(kind, subject, name); err != nil {
+		s.mu.Unlock()
+		return err
+	}
+	s.mu.Unlock()
+	return s.write()
+}
+
+// AssignTOTPCredential binds a named TOTP seed to the current resolved
+// authentication destination of one alias. It deliberately shares the same
+// route-binding boundary as account passwords.
+func (s *Service) AssignTOTPCredential(subject, name, binding string) error {
+	if !validAuthenticationBinding(binding) {
+		return ErrPasswordBindingRequired
+	}
+	s.mutationMu.Lock()
+	defer s.mutationMu.Unlock()
+
+	s.mu.Lock()
+	vault := s.use()
+	if vault == nil {
+		s.mu.Unlock()
+		return ErrLocked
+	}
+	if err := vault.Assign(KindTOTP, subject, name); err != nil {
+		s.mu.Unlock()
+		return err
+	}
+	if err := vault.BindTOTP(subject, binding); err != nil {
 		s.mu.Unlock()
 		return err
 	}
@@ -982,6 +1015,32 @@ func (s *Service) BoundPasswordFor(alias, binding string) string {
 	}
 	value, _ := vault.BoundPasswordFor(alias, binding)
 	return value
+}
+
+// BoundTOTPFor returns TOTP provisioning data only while the host's resolved
+// authentication destination still matches the assignment confirmation.
+func (s *Service) BoundTOTPFor(alias, binding string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	vault := s.use()
+	if vault == nil {
+		return ""
+	}
+	value, _ := vault.BoundTOTPFor(alias, binding)
+	return value
+}
+
+// HasTOTPFor reports whether an unlocked vault has a TOTP assignment without
+// releasing its provisioning data.
+func (s *Service) HasTOTPFor(alias string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	vault := s.use()
+	if vault == nil {
+		return false
+	}
+	_, ok := vault.SecretFor(KindTOTP, alias)
+	return ok
 }
 
 // HasPasswordFor reports whether an unlocked vault has an account-password

@@ -304,6 +304,49 @@ func TestAssignCredentialRefusesAPasswordForADirectKeyButNotAKeyPassphrase(t *te
 	}
 }
 
+func TestTOTPCredentialCanBeStoredAssignedAndUnassigned(t *testing.T) {
+	_, service := passwordEngine(t)
+	if err := service.Initialise(testPassphrase); err != nil {
+		t.Fatal(err)
+	}
+	engine := echo.New()
+	registerPasswordRoutes(engine, PasswordHandlers{Service: service, Binding: fixedPasswordBinding})
+
+	stored := send(t, engine, http.MethodPut, credentialPath("totp", "/production"),
+		`{"secret":"JBSWY3DPEHPK3PXP"}`, nil)
+	if stored.Code != http.StatusOK || strings.Contains(stored.Body.String(), "JBSWY3DPEHPK3PXP") {
+		t.Fatalf("store TOTP = %d: %s", stored.Code, stored.Body.String())
+	}
+	assigned := send(t, engine, http.MethodPut, credentialPath("totp", "/assign"),
+		`{"subject":"bastion","name":"production"}`, nil)
+	if assigned.Code != http.StatusOK || service.BoundTOTPFor("bastion", testPasswordBinding) == "" {
+		t.Fatalf("assign TOTP = %d: %s", assigned.Code, assigned.Body.String())
+	}
+	removed := send(t, engine, http.MethodDelete, credentialPath("totp", "/assign/bastion"), "", nil)
+	if removed.Code != http.StatusOK || service.HasTOTPFor("bastion") {
+		t.Fatalf("unassign TOTP = %d: %s", removed.Code, removed.Body.String())
+	}
+}
+
+func TestInvalidTOTPCredentialIsRejectedWithoutPersistence(t *testing.T) {
+	_, service := passwordEngine(t)
+	if err := service.Initialise(testPassphrase); err != nil {
+		t.Fatal(err)
+	}
+	engine := echo.New()
+	registerPasswordRoutes(engine, PasswordHandlers{Service: service})
+
+	response := send(t, engine, http.MethodPut, credentialPath("totp", "/broken"),
+		`{"secret":"not a setup key!"}`, nil)
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("invalid TOTP = %d: %s", response.Code, response.Body.String())
+	}
+	listed, err := service.Credentials()
+	if err != nil || len(listed[secret.KindTOTP]) != 0 {
+		t.Fatalf("invalid TOTP was persisted: %#v, %v", listed, err)
+	}
+}
+
 func TestEligibilityIsReadableAndCarriesTheWarnings(t *testing.T) {
 	engine, service := passwordEngine(t)
 	if err := service.Initialise(testPassphrase); err != nil {
@@ -568,7 +611,7 @@ func TestCredentialMutationRemainsSuccessfulWhenKeyHostUsageIsUnavailable(t *tes
 	}
 	found := false
 	for _, credential := range answer.Credentials {
-		found = found || credential.Kind == string(secret.KindPassword) && credential.Name == "office"
+		found = found || credential.Kind == api.CredentialKind(secret.KindPassword) && credential.Name == "office"
 	}
 	if !found {
 		t.Fatalf("successful credential is absent: %s", response.Body.String())

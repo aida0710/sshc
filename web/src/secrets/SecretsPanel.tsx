@@ -45,6 +45,13 @@ const kinds: {
     valueLabel: "secrets.newPassphraseValue",
     store: "secrets.storePassphrase",
   },
+  {
+    kind: "totp",
+    heading: "secrets.totpHeading",
+    nameLabel: "secrets.newTOTPName",
+    valueLabel: "secrets.newTOTPValue",
+    store: "secrets.storeTOTP",
+  },
 ];
 
 function emptyCredentialList(): CredentialList {
@@ -59,9 +66,11 @@ type UsageListProps = {
   label: string;
   values: string[];
   emptyLabel: string;
+  onRemove?: (value: string) => void;
+  removeLabel?: (value: string) => string;
 };
 
-function UsageList({ label, values, emptyLabel }: UsageListProps) {
+function UsageList({ label, values, emptyLabel, onRemove, removeLabel }: UsageListProps) {
   return (
     <div className="flex flex-col gap-1">
       <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
@@ -74,9 +83,19 @@ function UsageList({ label, values, emptyLabel }: UsageListProps) {
           {values.map((value) => (
             <li
               key={value}
-              className="rounded-md bg-tree px-2 py-1 font-mono text-xs text-ink"
+              className="flex items-center gap-1 rounded-md bg-tree px-2 py-1 font-mono text-xs text-ink"
             >
-              {value}
+              <span>{value}</span>
+              {onRemove === undefined ? null : (
+                <button
+                  type="button"
+                  className="ml-1 text-ink-muted hover:text-danger"
+                  aria-label={removeLabel?.(value) ?? value}
+                  onClick={() => onRemove(value)}
+                >
+                  ×
+                </button>
+              )}
             </li>
           ))}
         </ul>
@@ -107,6 +126,8 @@ export function SecretsPanel({
     kind: CredentialKind;
     name: string;
   } | null>(null);
+  const [totpHost, setTOTPHost] = useState("");
+  const [totpCredential, setTOTPCredential] = useState("");
 
   const reload = useCallback(async () => {
     try {
@@ -126,17 +147,19 @@ export function SecretsPanel({
     void reload();
   }, [reload]);
 
-  async function run(action: () => Promise<unknown>, fallback: string) {
+  async function run(action: () => Promise<unknown>, fallback: string): Promise<boolean> {
     try {
       await action();
       setError("");
       await reload();
+      return true;
     } catch (caught) {
       setError(
         failureCode(caught) === "credential_in_use"
           ? t("secrets.inUse")
           : fallback,
       );
+      return false;
     }
   }
 
@@ -221,6 +244,9 @@ export function SecretsPanel({
   const passphraseCount =
     credentials.filter((credential) => credential.kind === "key_passphrase")
       .length + dedicatedKeyPassphrases.length;
+  const totpCount = credentials.filter(
+    (credential) => credential.kind === "totp",
+  ).length;
   const assignmentCount =
     credentials.reduce(
       (count, credential) => count + credential.uses.length,
@@ -240,10 +266,11 @@ export function SecretsPanel({
           </Button>
         }
       />
-      <MetricGrid className="sm:grid-cols-3 lg:grid-cols-3">
+      <MetricGrid className="sm:grid-cols-2 lg:grid-cols-4">
         {([
           [t("secrets.metricPasswords"), passwordCount],
           [t("secrets.metricPassphrases"), passphraseCount],
+          [t("secrets.metricTOTP"), totpCount],
           [t("secrets.metricAssignments"), assignmentCount],
         ] as const).map(([label, value]) => (
           <MetricCard
@@ -276,7 +303,7 @@ export function SecretsPanel({
             <header className="flex items-center justify-between gap-3 border-b border-line bg-toolbar px-4 py-3">
               <div className="flex items-center gap-2">
                 <Icon
-                  name={group.kind === "password" ? "connections" : "keys"}
+                  name={group.kind === "key_passphrase" ? "keys" : "connections"}
                   className="h-4 w-4 text-ink-muted"
                 />
                 <h3 className={sectionHeading}>{t(group.heading)}</h3>
@@ -301,7 +328,7 @@ export function SecretsPanel({
                         <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-select-fill text-ink-muted">
                           <Icon
                             name={
-                              group.kind === "password" ? "secrets" : "keys"
+                              group.kind === "key_passphrase" ? "keys" : "secrets"
                             }
                             className="h-4 w-4"
                           />
@@ -318,12 +345,25 @@ export function SecretsPanel({
                             emptyLabel={t("secrets.noKeys")}
                           />
                         ) : null}
-                        {credential.kind === "password" ||
+                        {credential.kind !== "key_passphrase" ||
                         keyHostUsageComplete ? (
                           <UsageList
                             label={t("secrets.assignedHosts")}
                             values={credential.hosts}
                             emptyLabel={t("secrets.noAssignedHosts")}
+                            {...(credential.kind === "totp"
+                              ? {
+                                  onRemove: (host: string) => {
+                                    void run(
+                                      () =>
+                                        api.unassignCredential("totp", host),
+                                      t("secrets.unassignTOTPFailed"),
+                                    );
+                                  },
+                                  removeLabel: (host: string) =>
+                                    t("secrets.unassignTOTP", { host }),
+                                }
+                              : {})}
                           />
                         ) : (
                           <div className="flex flex-col gap-1">
@@ -427,6 +467,56 @@ export function SecretsPanel({
               </ul>
             )}
 
+            {group.kind !== "totp" ? null : (
+              <div className="flex flex-col gap-3 border-t border-line bg-surface-subtle px-4 py-4">
+                <Notice>{t("secrets.totpWarning")}</Notice>
+                <div className="grid items-end gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+                  <Field label={t("secrets.totpHost")}>
+                    <input
+                      value={totpHost}
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      onChange={(event) => setTOTPHost(event.target.value)}
+                      className={control}
+                    />
+                  </Field>
+                  <Field label={t("secrets.totpCredential")}>
+                    <select
+                      value={totpCredential}
+                      onChange={(event) => setTOTPCredential(event.target.value)}
+                      className={control}
+                    >
+                      <option value="">{t("secrets.chooseTOTP")}</option>
+                      {mine.map((credential) => (
+                        <option key={credential.name} value={credential.name}>
+                          {credential.name}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Button
+                    disabled={totpHost === "" || totpCredential === ""}
+                    onClick={() =>
+                      void run(
+                        () =>
+                          api.assignCredential(
+                            "totp",
+                            totpHost,
+                            totpCredential,
+                          ),
+                        t("secrets.assignTOTPFailed"),
+                      ).then((assigned) => {
+                        if (assigned) setTOTPHost("");
+                      })
+                    }
+                  >
+                    {t("secrets.assignTOTP")}
+                  </Button>
+                </div>
+              </div>
+            )}
+
             <div className="grid items-end gap-3 border-t border-line bg-toolbar px-4 py-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
               <Field label={t(group.nameLabel)}>
                 <input
@@ -458,12 +548,13 @@ export function SecretsPanel({
                     () =>
                       api.storeCredential(group.kind, draft.name, draft.secret),
                     t("secrets.storeFailed"),
-                  ).then(() =>
-                    setDrafts({
-                      ...drafts,
+                  ).then((stored) => {
+                    if (!stored) return;
+                    setDrafts((current) => ({
+                      ...current,
                       [group.kind]: { name: "", secret: "" },
-                    }),
-                  )
+                    }));
+                  })
                 }
               >
                 {t(group.store)}
