@@ -76,6 +76,49 @@ test("never offers a key passphrase where a host password is chosen", async ({ p
   await expect(panel.getByRole("option", { name: "build-key" })).toHaveCount(0);
 });
 
+test("stores and assigns a TOTP seed without exposing it in the page or vault file", async ({
+  page,
+  installation,
+}) => {
+  const setupKey = "JBSWY3DPEHPK3PXP";
+  await openApplication(page, installation);
+  await openSection(page, "Secrets");
+
+  const tokens = page.getByRole("region", {
+    name: "One-time passwords (TOTP)",
+  });
+  await tokens.getByLabel("New one-time password name").fill("production-otp");
+  await tokens.getByLabel("Base32 setup key or otpauth URI", { exact: true }).fill(setupKey);
+  await tokens.getByRole("button", { name: "Store one-time password" }).click();
+  await expect(tokens.getByRole("article", { name: "production-otp" })).toBeVisible();
+
+  await tokens.getByLabel("Host alias").fill("bastion");
+  await tokens.locator("select").selectOption("production-otp");
+  await tokens.getByRole("button", { name: "Assign to host" }).click();
+  const token = tokens.getByRole("article", { name: "production-otp" });
+  await expect(token.getByRole("list", { name: "Assigned hosts" })).toContainText("bastion");
+  await expect(page.locator("body")).not.toContainText(setupKey);
+
+  if (process.env.SSHC_VISUAL_DIR !== undefined) {
+    await page.evaluate(() => window.localStorage.setItem("sshc.language", "ja"));
+    await page.reload();
+    await expect(
+      page.getByRole("region", { name: "ワンタイムパスワード（TOTP）" }),
+    ).toBeVisible();
+    await page.setViewportSize({ width: 1280, height: 1200 });
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.screenshot({
+      path: `${process.env.SSHC_VISUAL_DIR}/totp-vault-desktop.png`,
+      fullPage: true,
+    });
+  }
+
+  const sealed = await installation.read("sshc/secrets");
+  for (const absent of [setupKey, "production-otp", "bastion"]) {
+    expect(sealed).not.toContain(absent);
+  }
+});
+
 test("opens a named password masked and reveals it only on request", async ({ page, installation }) => {
   await openApplication(page, installation);
   await openSection(page, "Secrets");

@@ -2183,12 +2183,14 @@ components:
       additionalProperties: false
       required: [kind, name, uses, hosts]
       properties:
-        kind: { type: string }
+        kind:
+          type: string
+          enum: [password, key_passphrase, totp]
         name: { type: string }
         # この資格情報を指しているもの。パスワードなら alias、パスフレーズなら
         # 鍵のパスである。値そのものは決して含まない。
         uses: { type: array, items: { type: string } }
-        # パスワードなら uses と同じ alias。パスフレーズなら、その鍵を
+        # パスワードまたはTOTPなら uses と同じ alias。パスフレーズなら、その鍵を
         # effective IdentityFile として使う、確認できた具体的な alias。
         hosts: { type: array, items: { type: string } }
     DedicatedKeyPassphraseUsage:

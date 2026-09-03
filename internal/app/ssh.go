@@ -22,6 +22,7 @@ import (
 	"sshc/internal/storage"
 	"sshc/internal/terminal"
 	"sshc/internal/textencoding"
+	"sshc/internal/totp"
 )
 
 // errNoConfiguration は、設定を読む手段が配線されていないことを報告する。
@@ -42,6 +43,7 @@ func newSSHParts(
 	home string,
 	passphrase func(absolute string) (string, bool),
 	password func(target sshclient.Target) (string, bool),
+	oneTimeCode func(target sshclient.Target, question string) (string, bool),
 ) sshParts {
 	return sshParts{
 		dialer: sshclient.Dialer{
@@ -53,6 +55,7 @@ func newSSHParts(
 				AgentSocket: os.Getenv("SSH_AUTH_SOCK"),
 				Stored:      passphrase,
 				Password:    password,
+				TOTP:        oneTimeCode,
 			},
 			HostKeys: sshclient.HostKeys{
 				Read: readKnownHosts(hosts),
@@ -223,6 +226,29 @@ func storedPassword(passwords *secret.Service) func(sshclient.Target) (string, b
 	}
 }
 
+// storedTOTP generates a code only for an explicit one-time-password prompt.
+// The seed remains inside the unlocked vault for embedded sessions.
+func storedTOTP(passwords *secret.Service) func(sshclient.Target, string) (string, bool) {
+	if passwords == nil {
+		return nil
+	}
+	return func(target sshclient.Target, question string) (string, bool) {
+		if !totp.MatchesPrompt(question) {
+			return "", false
+		}
+		provisioning := passwords.BoundTOTPFor(target.Alias, target.AuthenticationBinding())
+		if provisioning == "" {
+			return "", false
+		}
+		configuration, err := totp.Parse(provisioning)
+		if err != nil {
+			return "", false
+		}
+		code, err := configuration.Code(time.Now())
+		return code, err == nil
+	}
+}
+
 func readKnownHosts(hosts *knownhosts.Service) func() ([]byte, error) {
 	if hosts == nil {
 		return nil
@@ -261,6 +287,7 @@ func NewCLIConnection(
 	home string,
 	passphrase func(relativePath string) (string, bool),
 	password func(target sshclient.Target) (string, bool),
+	oneTimeCode func(target sshclient.Target, question string) (string, bool),
 ) (CLIConnection, error) {
 	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
 	if err != nil {
@@ -281,7 +308,7 @@ func NewCLIConnection(
 		return passphrase(filepath.ToSlash(relative))
 	}
 
-	parts := newSSHParts(config, hosts, workspace.Home(), stored, password)
+	parts := newSSHParts(config, hosts, workspace.Home(), stored, password, oneTimeCode)
 	configuredVerbosity := parts.dialer.Verbosity
 	// `sshc ssh` はブラウザの接続中表示を持たないため、最低限の接続段階を
 	// 常に端末へ残す。詳細度を上げた設定はそのまま尊重する。

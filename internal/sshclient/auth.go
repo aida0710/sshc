@@ -12,6 +12,7 @@ import (
 	"golang.org/x/crypto/ssh/agent"
 
 	"sshc/internal/keys"
+	"sshc/internal/totp"
 )
 
 // ErrNoIdentity は、公開鍵認証に使える鍵がひとつも無いことを報告する。
@@ -38,6 +39,9 @@ type Auth struct {
 	// Password はリモートアカウントの認証に使う。
 	// 取り違えれば、鍵を開くための秘密がそのままリモートへ送られる。
 	Password func(target Target) (string, bool)
+	// TOTP は、明示的なワンタイムコード質問にだけ現在のコードを返す。
+	// provisioning secretの判定と時刻依存の生成はprovider側に閉じ込める。
+	TOTP func(target Target, question string) (string, bool)
 	// AgentSocket は SSH_AUTH_SOCK。空なら agent は使わない。
 	AgentSocket string
 	// ReadFile は鍵ファイルを読む。テストがフィクスチャを渡すためにある。
@@ -107,7 +111,7 @@ func (a Auth) Methods(target Target, prompt Prompter) []ssh.AuthMethod {
 		// ここでは vault を読まず、サーバーが実際に方式を提示した callback 内で
 		// 初めて stored を呼ぶ。publickey で通る接続が password を取り出しては
 		// ならない。
-		if a.Password == nil || target.Alias == "" {
+		if (a.Password == nil && a.TOTP == nil) || target.Alias == "" {
 			prompt = nil
 		}
 	}
@@ -164,18 +168,76 @@ func (a Auth) password(target Target, prompt Prompter, stored *passwordOffer) fu
 func (a Auth) keyboard(target Target, prompt Prompter, stored *passwordOffer) ssh.KeyboardInteractiveChallenge {
 	return func(name, instruction string, questions []string, echos []bool) ([]string, error) {
 		a.observe("keyboard-interactive")
-		if len(questions) == 1 && len(echos) == 1 && !echos[0] {
-			if password, found := stored.take(); found {
-				return []string{password}, nil
+		answers := make([]string, len(questions))
+		answered := make([]bool, len(questions))
+		for index, question := range questions {
+			if index < len(echos) && !echos[index] && a.TOTP != nil && totp.MatchesPrompt(question) {
+				if code, found := a.TOTP(target, question); found {
+					answers[index] = code
+					answered[index] = true
+				}
 			}
+		}
+		// A combined password+OTP challenge is common. Only after an explicit OTP
+		// question has been recognised do we release a saved password to the one
+		// remaining, strictly named Password question. This keeps the previous
+		// multi-question refusal for arbitrary challenges.
+		if anyAnswered(answered) {
+			passwordIndex := -1
+			for index, question := range questions {
+				if !answered[index] && index < len(echos) && !echos[index] && isPasswordQuestion(question) {
+					if passwordIndex != -1 {
+						passwordIndex = -1
+						break
+					}
+					passwordIndex = index
+				}
+			}
+			if passwordIndex >= 0 {
+				if password, found := stored.take(); found {
+					answers[passwordIndex] = password
+					answered[passwordIndex] = true
+				}
+			}
+		}
+		if len(questions) == 1 && len(echos) == 1 && !echos[0] && !answered[0] {
+			if password, found := stored.take(); found {
+				answers[0] = password
+				answered[0] = true
+			}
+		}
+		if allAnswered(answered) {
+			return answers, nil
 		}
 		context := "Authentication for " + authenticationTarget(target)
 		if stored.wasOffered() {
 			context = "Saved password was rejected.\r\n" + context
 		}
-		ask := keyboardChallenge(prompt, context)
-		return ask(name, instruction, questions, echos)
+		return answerKeyboardChallenge(prompt, context, name, instruction, questions, echos, answers, answered)
 	}
+}
+
+func allAnswered(answered []bool) bool {
+	for _, ok := range answered {
+		if !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func anyAnswered(answered []bool) bool {
+	for _, ok := range answered {
+		if ok {
+			return true
+		}
+	}
+	return false
+}
+
+func isPasswordQuestion(question string) bool {
+	question = strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(question), ":"))
+	return strings.EqualFold(question, "password") || question == "パスワード"
 }
 
 // publicKey は、鍵を必要になった時点で読む認証方式を組み立てる。
@@ -297,33 +359,38 @@ func (a Auth) read(path string) ([]byte, error) {
 	return os.ReadFile(path)
 }
 
-// keyboardChallenge は、サーバーの質問をそのままユーザーへ渡す。
-//
-// 質問文を作るのはサーバーである。こちらが言い換えると、2FA の指示が
-// 変わってしまう。
-func keyboardChallenge(prompt Prompter, context string) ssh.KeyboardInteractiveChallenge {
-	return func(name, instruction string, questions []string, echos []bool) ([]string, error) {
-		answers := make([]string, 0, len(questions))
-		// name と instruction は、サーバーがユーザーへ向けて書いた文である。捨てると
-		// 「何を応答すればよいか」がそのユーザーに届かない。最初の問いの前に置く。
-		preamble := strings.TrimSpace(strings.TrimSpace(context) + "\r\n" +
-			strings.TrimSpace(name) + "\r\n" + strings.TrimSpace(instruction))
-		for index, question := range questions {
-			ask := prompt.Secret
-			if index < len(echos) && echos[index] {
-				ask = prompt.Line
-			}
-			if index == 0 && preamble != "" {
-				question = preamble + "\r\n" + question
-			}
-			answer, err := ask(question)
-			if err != nil {
-				return nil, err
-			}
-			answers = append(answers, answer)
+func answerKeyboardChallenge(
+	prompt Prompter,
+	context, name, instruction string,
+	questions []string,
+	echos []bool,
+	answers []string,
+	answered []bool,
+) ([]string, error) {
+	// name と instruction は、サーバーがユーザーへ向けて書いた文である。捨てると
+	// 「何を応答すればよいか」がそのユーザーに届かない。最初の未回答の問いの前に置く。
+	preamble := strings.TrimSpace(strings.TrimSpace(context) + "\r\n" +
+		strings.TrimSpace(name) + "\r\n" + strings.TrimSpace(instruction))
+	preambleShown := false
+	for index, question := range questions {
+		if index < len(answered) && answered[index] {
+			continue
 		}
-		return answers, nil
+		ask := prompt.Secret
+		if index < len(echos) && echos[index] {
+			ask = prompt.Line
+		}
+		if !preambleShown && preamble != "" {
+			question = preamble + "\r\n" + question
+			preambleShown = true
+		}
+		answer, err := ask(question)
+		if err != nil {
+			return nil, err
+		}
+		answers[index] = answer
 	}
+	return answers, nil
 }
 
 func authenticationTarget(target Target) string {

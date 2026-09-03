@@ -58,7 +58,7 @@ func runInfo(alias, home string, asJSON bool, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "sshc: %q is not an alias this can describe\n", alias)
 		return 2
 	}
-	connection, err := app.NewCLIConnection(home, nil, nil)
+	connection, err := app.NewCLIConnection(home, nil, nil, nil)
 	if err != nil {
 		fmt.Fprintln(stderr, "sshc: could not read the SSH configuration")
 		return 1

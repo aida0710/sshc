@@ -1925,7 +1925,8 @@ export interface components {
             algorithm: string;
         };
         Credential: {
-            kind: string;
+            /** @enum {string} */
+            kind: "password" | "key_passphrase" | "totp";
             name: string;
             uses: string[];
             hosts: string[];

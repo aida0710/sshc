@@ -330,8 +330,7 @@ func eligibilityNotice(notice application.Notice) api.Notice {
 	return described
 }
 
-// kindOf はパスから namespace を読み取る。namespace は 2 つあり、
-// 暗黙に 3 つ目が増えることはない。未知の namespace は既定値にせず
+// kindOf はパスから namespace を読み取る。未知の namespace は既定値にせず
 // ここで拒否する。既定値にすると、typo が暗黙に namespace を選ぶことになるからだ。
 func kindOf(c *echo.Context) (secret.Kind, bool) {
 	kind := secret.Kind(c.Param("kind"))
@@ -350,7 +349,7 @@ func credentialProblem(c *echo.Context, err error, uses []string) error {
 	case errors.Is(err, secret.ErrCredentialAlreadyExists):
 		return problem(c, http.StatusConflict, "credential_already_exists")
 	case errors.Is(err, secret.ErrUnsafeName), errors.Is(err, secret.ErrEmptySecret),
-		errors.Is(err, secret.ErrUnknownKind):
+		errors.Is(err, secret.ErrUnknownKind), errors.Is(err, secret.ErrInvalidTOTP):
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	default:
 		return problem(c, http.StatusInternalServerError, "vault_failed")
@@ -400,7 +399,7 @@ func (h PasswordHandlers) listCredentials(c *echo.Context) error {
 		DedicatedKeyPassphrases: []api.DedicatedKeyPassphraseUsage{},
 		KeyHostUsageComplete:    keyHostUsageComplete,
 	}
-	for _, kind := range []secret.Kind{secret.KindPassword, secret.KindKeyPassphrase} {
+	for _, kind := range []secret.Kind{secret.KindPassword, secret.KindKeyPassphrase, secret.KindTOTP} {
 		names := make([]string, 0, len(listed[kind]))
 		for name := range listed[kind] {
 			names = append(names, name)
@@ -413,7 +412,7 @@ func (h PasswordHandlers) listCredentials(c *echo.Context) error {
 				hosts = joinedKeyHosts(uses, hostsByKey)
 			}
 			answer.Credentials = append(answer.Credentials, api.Credential{
-				Kind: string(kind), Name: name, Uses: uses, Hosts: hosts,
+				Kind: api.CredentialKind(kind), Name: name, Uses: uses, Hosts: hosts,
 			})
 		}
 	}
@@ -542,6 +541,16 @@ func (h PasswordHandlers) AssignCredential(c *echo.Context) error {
 			return response
 		}
 		if err := h.Service.AssignPasswordCredential(request.Subject, request.Name, binding); err != nil {
+			return credentialProblem(c, err, nil)
+		}
+		return h.listCredentials(c)
+	}
+	if kind == secret.KindTOTP {
+		binding, response := h.passwordBinding(c, request.Subject)
+		if response != nil {
+			return response
+		}
+		if err := h.Service.AssignTOTPCredential(request.Subject, request.Name, binding); err != nil {
 			return credentialProblem(c, err, nil)
 		}
 		return h.listCredentials(c)

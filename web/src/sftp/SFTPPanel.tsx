@@ -191,6 +191,7 @@ export function SFTPPanel({
   const t = useTranslate();
   const [alias, setAlias] = useState("");
   const [path, setPath] = useState("");
+  const [connected, setConnected] = useState(false);
   const [pathDraft, setPathDraft] = useState("");
   const [pathEditing, setPathEditing] = useState(false);
   const [entries, setEntries] = useState<RemoteEntry[]>([]);
@@ -355,6 +356,7 @@ export function SFTPPanel({
     loadGeneration.current += 1;
     reportLocation.current(nextAlias, "");
     setAlias(nextAlias);
+    setConnected(false);
     setPath("");
     setPathDraft("");
     setEntries([]);
@@ -385,6 +387,7 @@ export function SFTPPanel({
       const listing = await sftpApi.list(nextAlias, nextPath);
       if (generation !== loadGeneration.current) return null;
       setPath(listing.path);
+      setConnected(true);
       setPathDraft(listing.path);
       setPathEditing(false);
       setEntries(listing.entries);
@@ -453,30 +456,28 @@ export function SFTPPanel({
   }, [target?.request]);
 
   useEffect(() => {
-    if (alias !== "" && !openingTarget.current) void load("", alias);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [alias]);
-
-  useEffect(() => {
     if (initialLocation === null || openedInitialLocation.current) return;
     if (!aliases.includes(initialLocation.alias) || !initialLocation.path.startsWith("/")) return;
     openedInitialLocation.current = true;
-    openingTarget.current = true;
-    selectHost(initialLocation.alias);
-    void load(initialLocation.path, initialLocation.alias).finally(() => { openingTarget.current = false; });
-    // A restored tab reopens once. The ref, not the dependency list, is what
-    // keeps a re-render from reloading the directory under the user.
+    loadGeneration.current += 1;
+    setAlias(initialLocation.alias);
+    setPath(initialLocation.path);
+    setPathDraft(initialLocation.path);
+    setConnected(false);
+    // Restored tabs remember where they were, but never open an SSH connection
+    // until the user explicitly presses Connect.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aliases, initialLocation?.alias, initialLocation?.path]);
 
   useEffect(() => {
+    if (!connected) return;
     const completed = transferJobs.filter((job) => job.direction === "upload" && job.status === "completed" && job.alias === alias && parentOf(job.remotePath) === path && !refreshedUploads.current.has(job.id));
     if (completed.length === 0) return;
     for (const job of completed) refreshedUploads.current.add(job.id);
     void load(path, alias, true);
     // load intentionally follows the current alias/path snapshot for each completed job.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [transferJobs, alias, path]);
+  }, [transferJobs, alias, path, connected]);
 
   async function openText(entry: RemoteEntry, targetAlias = alias) {
     if (dirty) {
@@ -638,7 +639,7 @@ export function SFTPPanel({
   async function acceptDrop(event: ReactDragEvent<HTMLDivElement>) {
     event.preventDefault();
     setDragging(false);
-    if (busy || alias === "") return;
+    if (busy || alias === "" || !connected) return;
     const remote = typeof event.dataTransfer.getData === "function"
       ? event.dataTransfer.getData(remoteEntriesMime)
       : "";
@@ -1173,7 +1174,7 @@ export function SFTPPanel({
             type="button"
             aria-label={t("sftp.openTerminalHere")}
             title={t("sftp.openTerminalHere")}
-            disabled={busy || dirty || alias === "" || path === ""}
+            disabled={busy || dirty || !connected || path === ""}
             onClick={() => void onOpenTerminal(alias, path)}
             className="flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-select-fill hover:text-ink disabled:text-ink-faint md:size-8"
           >
@@ -1187,10 +1188,10 @@ export function SFTPPanel({
           <button type="button" aria-label={t("sftp.forward")} disabled={busy || dirty || navigation.index < 0 || navigation.index >= navigation.paths.length - 1} onClick={() => void navigateHistory(1)} className="flex size-9 items-center justify-center text-ink-muted hover:bg-select-fill disabled:text-ink-faint md:size-8">
             <span aria-hidden="true">→</span>
           </button>
-          <button type="button" aria-label={t("sftp.homeDirectory")} disabled={busy || dirty || alias === ""} onClick={() => void load("")} className="flex size-9 items-center justify-center text-ink-muted hover:bg-select-fill disabled:text-ink-faint md:size-8">
+          <button type="button" aria-label={t("sftp.homeDirectory")} disabled={busy || dirty || !connected} onClick={() => void load("")} className="flex size-9 items-center justify-center text-ink-muted hover:bg-select-fill disabled:text-ink-faint md:size-8">
             <Icon name="home" className="size-4" />
           </button>
-          <button type="button" aria-label={t("sftp.rootDirectory")} disabled={busy || dirty || alias === "" || path === "/"} onClick={() => void load("/")} className="flex size-9 items-center justify-center font-mono text-sm text-ink-muted hover:bg-select-fill disabled:text-ink-faint md:size-8">
+          <button type="button" aria-label={t("sftp.rootDirectory")} disabled={busy || dirty || !connected || path === "/"} onClick={() => void load("/")} className="flex size-9 items-center justify-center font-mono text-sm text-ink-muted hover:bg-select-fill disabled:text-ink-faint md:size-8">
             /
           </button>
         </div>
@@ -1213,24 +1214,24 @@ export function SFTPPanel({
               }}
               className="min-w-44 grow rounded-md border border-control-line/70 bg-control px-2 py-1.5 font-mono text-sm outline-none focus:border-accent md:py-1"
             />
-            <Button disabled={busy || dirty || alias === ""} onClick={() => void load(pathDraft)}>{t("sftp.go")}</Button>
+            <Button disabled={busy || dirty || !connected} onClick={() => void load(pathDraft)}>{t("sftp.go")}</Button>
           </>
         ) : (
           <div className="flex min-w-44 grow items-center rounded-md bg-control/60 px-1" data-testid="sftp-current-path" data-path={path}>
             <nav aria-label={t("sftp.path")} className="flex min-w-0 grow items-center overflow-x-auto whitespace-nowrap font-mono text-sm">
-              <button type="button" disabled={busy || dirty || alias === "" || path === "/"} onClick={() => void load("/")} className="rounded px-1.5 py-1.5 text-ink-muted hover:bg-select-fill hover:text-ink disabled:text-ink-faint md:py-1">/</button>
+              <button type="button" disabled={busy || dirty || !connected || path === "/"} onClick={() => void load("/")} className="rounded px-1.5 py-1.5 text-ink-muted hover:bg-select-fill hover:text-ink disabled:text-ink-faint md:py-1">/</button>
               {pathPieces.map((piece, index) => (
                 <span key={breadcrumbPaths[index]} className="flex min-w-0 items-center">
                   {index > 0 || path !== "/" ? <Icon name="chevronRight" className="size-3 text-ink-faint" /> : null}
                   {index === pathPieces.length - 1 ? (
                     <span className="max-w-48 truncate px-1.5 py-1.5 font-medium text-ink md:py-1" title={piece}>{piece}</span>
                   ) : (
-                    <button type="button" disabled={busy || dirty} onClick={() => void load(breadcrumbPaths[index])} className="max-w-40 truncate rounded px-1.5 py-1.5 text-ink-muted hover:bg-select-fill hover:text-ink disabled:text-ink-faint md:py-1" title={piece}>{piece}</button>
+                    <button type="button" disabled={busy || dirty || !connected} onClick={() => void load(breadcrumbPaths[index])} className="max-w-40 truncate rounded px-1.5 py-1.5 text-ink-muted hover:bg-select-fill hover:text-ink disabled:text-ink-faint md:py-1" title={piece}>{piece}</button>
                   )}
                 </span>
               ))}
             </nav>
-            <button type="button" aria-label={t("sftp.editPath")} disabled={busy || dirty || alias === ""} onClick={() => setPathEditing(true)} className="flex size-8 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-select-fill hover:text-ink disabled:text-ink-faint">
+            <button type="button" aria-label={t("sftp.editPath")} disabled={busy || dirty || !connected} onClick={() => setPathEditing(true)} className="flex size-8 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-select-fill hover:text-ink disabled:text-ink-faint">
               <Icon name="edit" className="size-3.5" />
             </button>
           </div>
@@ -1264,7 +1265,7 @@ export function SFTPPanel({
         <div
           aria-label={t("sftp.dropZone")}
           className={`flex min-h-0 min-w-0 flex-col rounded-md border bg-card transition-shadow ${dragging ? "border-accent ring-1 ring-accent" : "border-line/60"}`}
-          onDragEnter={(event) => { event.preventDefault(); if (!busy && alias !== "") setDragging(true); }}
+          onDragEnter={(event) => { event.preventDefault(); if (!busy && connected) setDragging(true); }}
           onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; }}
           onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false); }}
           onDrop={(event) => { void acceptDrop(event); }}
@@ -1322,7 +1323,7 @@ export function SFTPPanel({
               aria-label={t("sftp.createActions")}
               aria-haspopup="menu"
               aria-expanded={menu?.kind === "create"}
-              disabled={busy || alias === ""}
+              disabled={busy || !connected}
               onClick={(event) => toggleMenu("create", event.currentTarget)}
               className="flex size-10 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-select-fill focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:size-7"
             >
@@ -1333,7 +1334,7 @@ export function SFTPPanel({
               aria-label={t("sftp.places")}
               aria-haspopup="menu"
               aria-expanded={menu?.kind === "places"}
-              disabled={busy || alias === ""}
+              disabled={busy || !connected}
               onClick={(event) => toggleMenu("places", event.currentTarget)}
               className={`flex size-10 shrink-0 items-center justify-center rounded hover:bg-select-fill focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:size-7 ${bookmarkedHere ? "text-accent" : "text-ink-muted"}`}
             >
@@ -1360,7 +1361,7 @@ export function SFTPPanel({
               type="button"
               aria-label={t("sftp.searchBelow")}
               title={t("sftp.searchBelow")}
-              disabled={busy || alias === "" || filter.trim() === ""}
+              disabled={busy || !connected || filter.trim() === ""}
               onClick={() => void runSearch()}
               className="flex size-10 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-select-fill focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:size-7"
             >
@@ -1464,6 +1465,21 @@ export function SFTPPanel({
           <div className="min-h-0 min-w-0 flex-1 overflow-auto" onKeyDown={handleListKeys}>
             {alias === "" ? (
               <PanelState tone="empty" title={t("sftp.chooseHost")} detail={t("sftp.chooseHostHint")} />
+            ) : !connected && busy ? (
+              <PanelState tone="loading" title={t("sftp.connecting", { alias })} />
+            ) : !connected && problem !== "" ? (
+              <PanelState
+                tone="failed"
+                title={problem}
+                action={<Button onClick={() => void load(path, alias)}>{t("sftp.retry")}</Button>}
+              />
+            ) : !connected ? (
+              <PanelState
+                tone="empty"
+                title={t("sftp.readyToConnect", { alias })}
+                detail={t("sftp.connectHint")}
+                action={<Button kind="primary" onClick={() => void load(path, alias)}>{t("sftp.connect")}</Button>}
+              />
             ) : busy && entries.length === 0 && problem === "" ? (
               <PanelState tone="loading" title={t("sftp.loading")} />
             ) : listingFailed ? (

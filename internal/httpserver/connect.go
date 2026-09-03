@@ -106,7 +106,12 @@ type connectResponse struct {
 	// StalePasswords は、値は存在するが現在の認証経路には解放できなかった alias。
 	// 秘密そのものは含めず、CLI が突然の prompt の理由を説明するためだけに使う。
 	StalePasswords []string `json:"stalePasswords,omitempty"`
-	Warnings       []string `json:"warnings"`
+	// TOTPs contains provisioning data only for explicitly assigned hosts on
+	// the resolved route. The CLI generates a fresh code when challenged.
+	TOTPs        map[string]string `json:"totps,omitempty"`
+	TOTPBindings map[string]string `json:"totpBindings,omitempty"`
+	StaleTOTPs   []string          `json:"staleTotps,omitempty"`
+	Warnings     []string          `json:"warnings"`
 }
 
 // savedPassword は、その alias について保存されているアカウントパスワードを返す。
@@ -141,6 +146,36 @@ func savedPasswords(
 			found[alias] = password
 			bindings[alias] = current
 		} else if passwords.HasPasswordFor(alias) {
+			stale = append(stale, alias)
+		}
+	}
+	if len(found) == 0 {
+		found = nil
+		bindings = nil
+	}
+	return found, bindings, stale
+}
+
+func savedTOTPs(
+	passwords *secret.Service,
+	aliases []string,
+	binding func(alias string) (string, error),
+) (map[string]string, map[string]string, []string) {
+	if passwords == nil || binding == nil {
+		return nil, nil, nil
+	}
+	found := map[string]string{}
+	bindings := map[string]string{}
+	var stale []string
+	for _, alias := range aliases {
+		current, err := binding(alias)
+		if err != nil {
+			continue
+		}
+		if provisioning := passwords.BoundTOTPFor(alias, current); provisioning != "" {
+			found[alias] = provisioning
+			bindings[alias] = current
+		} else if passwords.HasTOTPFor(alias) {
 			stale = append(stale, alias)
 		}
 	}
@@ -368,5 +403,7 @@ func (h ConnectHandlers) Connect(c *echo.Context) error {
 	answer.Passphrases = savedPassphrases(h.Passwords, aliases, h.WorkspaceKeys)
 	answer.Passwords, answer.PasswordBindings, answer.StalePasswords =
 		savedPasswords(h.Passwords, aliases, h.PasswordBinding)
+	answer.TOTPs, answer.TOTPBindings, answer.StaleTOTPs =
+		savedTOTPs(h.Passwords, aliases, h.PasswordBinding)
 	return c.JSON(http.StatusOK, answer)
 }

@@ -207,6 +207,62 @@ func TestKeyboardInteractiveCarriesTheServerQuestions(t *testing.T) {
 	}
 }
 
+func TestStoredTOTPAnswersAnExplicitChallengeWithoutPrompting(t *testing.T) {
+	server := newTestServer(t, serverOptions{Keyboard: map[string]string{"Verification code: ": "123456"}})
+	prompt := &scriptedPrompter{}
+	auth := sshclient.Auth{TOTP: func(target sshclient.Target, question string) (string, bool) {
+		if target.Alias != "bastion" || question != "Verification code: " {
+			return "", false
+		}
+		return "123456", true
+	}}
+
+	if err := connect(t, server, targetWith(server), auth, prompt); err != nil {
+		t.Fatalf("connect = %v", err)
+	}
+	if len(prompt.asked) != 0 {
+		t.Fatalf("stored TOTP still prompted: %#v", prompt.asked)
+	}
+}
+
+func TestStoredPasswordAndTOTPAnswerACombinedChallenge(t *testing.T) {
+	server := newTestServer(t, serverOptions{Keyboard: map[string]string{
+		"Password: ": "hunter2", "OTP: ": "123456",
+	}})
+	prompt := &scriptedPrompter{}
+	auth := sshclient.Auth{
+		Password: func(sshclient.Target) (string, bool) { return "hunter2", true },
+		TOTP: func(_ sshclient.Target, question string) (string, bool) {
+			if question == "OTP: " {
+				return "123456", true
+			}
+			return "", false
+		},
+	}
+
+	if err := connect(t, server, targetWith(server), auth, prompt); err != nil {
+		t.Fatalf("connect = %v", err)
+	}
+	if len(prompt.asked) != 0 {
+		t.Fatalf("combined stored credentials still prompted: %#v", prompt.asked)
+	}
+}
+
+func TestStoredTOTPDoesNotAnswerAnAmbiguousCodeQuestion(t *testing.T) {
+	server := newTestServer(t, serverOptions{Keyboard: map[string]string{"Code: ": "manual"}})
+	prompt := &scriptedPrompter{answers: []string{"manual"}}
+	auth := sshclient.Auth{TOTP: func(sshclient.Target, string) (string, bool) {
+		return "123456", true
+	}}
+
+	if err := connect(t, server, targetWith(server), auth, prompt); err != nil {
+		t.Fatalf("connect = %v", err)
+	}
+	if len(prompt.secretly) != 1 || !strings.Contains(prompt.secretly[0], "Code") {
+		t.Fatalf("ambiguous prompt was not left to the user: %#v", prompt.secretly)
+	}
+}
+
 // IdentitiesOnly yes は、設定に書かれた鍵だけを使うという指定である。
 func TestIdentitiesOnlySkipsTheAgent(t *testing.T) {
 	home := t.TempDir()

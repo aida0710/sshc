@@ -385,7 +385,7 @@ func TestUnsupportedVaultDocumentsAreRefused(t *testing.T) {
 	for name, document := range map[string]string{
 		"old v2": `{"schemaVersion":2,"passwords":{},"keyPassphrases":{},"hosts":{},"keys":{}}`,
 		"old v3": `{"schemaVersion":3,"passwords":{},"keyPassphrases":{},"hosts":{},"keys":{}}`,
-		"future": `{"schemaVersion":5,"passwords":{},"keyPassphrases":{},"hosts":{},"keys":{}}`,
+		"future": `{"schemaVersion":6,"passwords":{},"keyPassphrases":{},"hosts":{},"keys":{},"totps":{},"totpHosts":{}}`,
 	} {
 		sealed, err := key.Seal([]byte(document))
 		if err != nil {
@@ -409,7 +409,7 @@ func TestCurrentVaultDocumentRejectsUnknownCompatibilityFields(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sealed, err := key.Seal([]byte(`{"schemaVersion":4,"passwords":{},"keyPassphrases":{},"hosts":{},"keys":{},"legacyPasswords":{}}`))
+	sealed, err := key.Seal([]byte(`{"schemaVersion":5,"passwords":{},"keyPassphrases":{},"hosts":{},"keys":{},"totps":{},"totpHosts":{},"legacyPasswords":{}}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -438,6 +438,50 @@ func TestSealedBytesCarryNothingFromEitherNamespace(t *testing.T) {
 		if bytes.Contains(sealed, []byte(absent)) {
 			t.Errorf("the sealed file carries %q", absent)
 		}
+	}
+}
+
+func TestTOTPIsNormalisedBoundAndRoundTripsThroughTheVault(t *testing.T) {
+	vault, err := secret.Create(passphrase)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := vault.Set(secret.KindTOTP, "production", "jbsw y3dp-ehpk3pxp"); err != nil {
+		t.Fatal(err)
+	}
+	if err := vault.Assign(secret.KindTOTP, "bastion", "production"); err != nil {
+		t.Fatal(err)
+	}
+	binding := strings.Repeat("ab", 32)
+	if err := vault.BindTOTP("bastion", binding); err != nil {
+		t.Fatal(err)
+	}
+	if value, ok := vault.BoundTOTPFor("bastion", binding); !ok || !strings.HasPrefix(value, "otpauth://totp/") {
+		t.Fatalf("BoundTOTPFor = %q, %t", value, ok)
+	}
+	if _, ok := vault.BoundTOTPFor("bastion", strings.Repeat("cd", 32)); ok {
+		t.Fatal("TOTP was released after its authentication route changed")
+	}
+	sealed, err := vault.Seal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := secret.Open(sealed, passphrase)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if value, ok := reopened.BoundTOTPFor("bastion", binding); !ok || !strings.Contains(value, "secret=JBSWY3DPEHPK3PXP") {
+		t.Fatalf("reopened TOTP = %q, %t", value, ok)
+	}
+}
+
+func TestTOTPRejectsInvalidSetupData(t *testing.T) {
+	vault, err := secret.Create(passphrase)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := vault.Set(secret.KindTOTP, "broken", "this-is-not-base32!"); !errors.Is(err, secret.ErrInvalidTOTP) {
+		t.Fatalf("Set = %v, want ErrInvalidTOTP", err)
 	}
 }
 

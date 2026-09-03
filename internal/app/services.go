@@ -81,7 +81,7 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 
 	// プロセス内 SSH クライアントの依存関係をここで一度だけ組み立てる。
 	ssh := newSSHParts(configService, knownHostsService, workspace.Home(),
-		storedPassphrase(passwordService, workspace.Root()), storedPassword(passwordService))
+		storedPassphrase(passwordService, workspace.Root()), storedPassword(passwordService), storedTOTP(passwordService))
 	recentService := recent.NewService(recentStore, func(alias string) (recent.Target, error) {
 		target, err := ssh.target(alias)
 		if err != nil {

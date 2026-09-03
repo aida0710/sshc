@@ -58,7 +58,7 @@ export type Credential = components["schemas"]["Credential"];
 export type CredentialList = components["schemas"]["CredentialList"];
 export type RevealCredentialResponse =
   components["schemas"]["RevealCredentialResponse"];
-export type CredentialKind = "password" | "key_passphrase";
+export type CredentialKind = "password" | "key_passphrase" | "totp";
 export type SyncStatus = components["schemas"]["SyncStatus"];
 export type SyncKeyResponse = components["schemas"]["SyncKeyResponse"];
 export type SyncSettingsRequest = components["schemas"]["SyncSettingsRequest"];

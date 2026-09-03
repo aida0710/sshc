@@ -20,6 +20,7 @@ async function chooseHost(alias: string, scope: HTMLElement = screen.getByRole("
   await userEvent.click(within(scope).getByRole("button", { name: "Host" }));
   const label = await screen.findByText(alias, { selector: "span.font-medium" });
   await userEvent.click(label.closest("button")!);
+  await userEvent.click(within(scope).getByRole("button", { name: "Connect" }));
 }
 
 function currentPath(): HTMLElement {
@@ -95,7 +96,7 @@ describe("SFTP tabs", () => {
     expect(add).toBeDisabled();
   });
 
-  it("reopens the directories that were open when the app last closed", async () => {
+  it("restores tab locations without reconnecting until requested", async () => {
     window.localStorage.setItem("sshc.sftp.tabs", JSON.stringify([
       { alias: "edge", path: "/var/log" },
       { alias: "miyabi", path: "/srv" },
@@ -103,10 +104,14 @@ describe("SFTP tabs", () => {
 
     render(<SFTPWorkspace aliases={["edge", "miyabi"]} />);
 
-    await waitFor(() => expect(api.list).toHaveBeenCalledWith("edge", "/var/log"));
-    expect(api.list).toHaveBeenCalledWith("miyabi", "/srv");
+    expect(api.list).not.toHaveBeenCalled();
     const tabs = screen.getAllByRole("tab");
     expect(tabs.map((tab) => tab.textContent)).toEqual(["edge:log", "miyabi:srv"]);
+    expect(screen.getByText("edge is disconnected")).toBeVisible();
+
+    await userEvent.click(within(screen.getByRole("tabpanel")).getByRole("button", { name: "Connect" }));
+    await waitFor(() => expect(api.list).toHaveBeenCalledWith("edge", "/var/log"));
+    expect(api.list).not.toHaveBeenCalledWith("miyabi", "/srv");
   });
 
   it("ignores remembered tabs whose host is no longer declared", async () => {
@@ -160,12 +165,13 @@ describe("SFTP tabs", () => {
 
     const leftTabs = screen.getByRole("tablist", { name: "Left pane tabs" });
     const rightTabs = screen.getByRole("tablist", { name: "Right pane tabs" });
-    await waitFor(() => expect(api.list).toHaveBeenCalledWith("miyabi", "/srv"));
-    expect(api.list).toHaveBeenCalledWith("edge", "/tmp");
+    expect(api.list).not.toHaveBeenCalled();
     await waitFor(() => expect(within(leftTabs).getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["edge:log"]));
     expect(within(rightTabs).getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["miyabi:srv", "edge:tmp"]);
     expect(within(rightTabs).getByRole("tab", { name: "edge:tmp" })).toHaveAttribute("aria-selected", "true");
     expect(within(screen.getByLabelText("Second remote pane")).getByRole("button", { name: "Host" })).toHaveAttribute("data-value", "edge");
+    expect(within(screen.getByLabelText("First remote pane")).getByText("edge is disconnected")).toBeVisible();
+    expect(within(screen.getByLabelText("Second remote pane")).getByText("edge is disconnected")).toBeVisible();
   });
 
   it("renders only the primary tab strip and pane on a compact viewport", () => {

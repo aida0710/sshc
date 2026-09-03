@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"sshc/internal/envelope"
+	"sshc/internal/totp"
 	"sshc/internal/validate"
 )
 
@@ -28,7 +29,7 @@ const SettingsPath = "sshc/sync-settings"
 
 // SchemaVersion は、暗号化の内側にある平文文書のバージョン。ヘッダーは envelope
 // 用に自前のバージョンを運ぶ。
-const SchemaVersion = 4
+const SchemaVersion = 5
 
 // envelope のエラーは再エクスポートしてある。vault を扱う呼び出し側が、どの
 // パッケージがそれを暗号化したかを知らずに済むようにするためだ。
@@ -60,6 +61,9 @@ var (
 	ErrUnknownCredential = errors.New("no credential of that kind has that name")
 	// ErrCredentialInUse は、まだ何かが指している秘密の削除を拒む。
 	ErrCredentialInUse = errors.New("something still uses this credential")
+	// ErrInvalidTOTP は、TOTP のセットアップキーまたは provisioning URI が
+	// RFC 6238 の設定として解釈できないことを報告する。
+	ErrInvalidTOTP = errors.New("the TOTP setup key is invalid")
 )
 
 // SchemaVersionError は、復号後に判明したvault documentの版差である。schema番号は
@@ -88,7 +92,7 @@ const MinPassphraseLength = envelope.MinPassphraseLength
 
 // Kind は、資格情報の名前空間を表す。
 //
-// ホストは KindPassword のみを、鍵は KindKeyPassphrase のみを参照できる。名前空間が
+// ホストは KindPassword と KindTOTP のみを、鍵は KindKeyPassphrase のみを参照できる。名前空間が
 // ひとつなら、ホストのパスワード選択画面が鍵のパスフレーズを提示できてしまい、それを
 // 選べばそのパスフレーズがログインパスワードとしてリモートホストへ送られる。二つに
 // 分ければ、それは起こりにくいどころか、表現すること自体が不可能になる。
@@ -99,12 +103,13 @@ type Kind string
 const (
 	KindPassword      Kind = "password"
 	KindKeyPassphrase Kind = "key_passphrase"
+	KindTOTP          Kind = "totp"
 )
 
 // ValidKind は、値が名前空間を表しているかを報告する。この集合が決まる唯一の場所
 // なので、ルートとフォームがそれについて食い違うことはありえない。
 func ValidKind(kind Kind) bool {
-	return kind == KindPassword || kind == KindKeyPassphrase
+	return kind == KindPassword || kind == KindKeyPassphrase || kind == KindTOTP
 }
 
 // SyncSettings は、オブジェクトストアが必要とするもの。
@@ -149,6 +154,9 @@ type document struct {
 	Hosts                   map[string]string `json:"hosts"`
 	PasswordBindings        map[string]string `json:"passwordBindings,omitempty"`
 	Keys                    map[string]string `json:"keys"`
+	TOTPs                   map[string]string `json:"totps"`
+	TOTPHosts               map[string]string `json:"totpHosts"`
+	TOTPBindings            map[string]string `json:"totpBindings,omitempty"`
 }
 
 // Vault は、開かれた secrets ファイル。
@@ -162,12 +170,13 @@ type Vault struct {
 	subjects                map[Kind]map[string]string
 	dedicatedPasswords      map[string]string
 	passwordBindings        map[string]string
+	totpBindings            map[string]string
 	dedicatedKeyPassphrases map[string]string
 }
 
 func newMaps() (map[Kind]map[string]string, map[Kind]map[string]string) {
-	return map[Kind]map[string]string{KindPassword: {}, KindKeyPassphrase: {}},
-		map[Kind]map[string]string{KindPassword: {}, KindKeyPassphrase: {}}
+	return map[Kind]map[string]string{KindPassword: {}, KindKeyPassphrase: {}, KindTOTP: {}},
+		map[Kind]map[string]string{KindPassword: {}, KindKeyPassphrase: {}, KindTOTP: {}}
 }
 
 // Create は、passphrase で暗号化された空の vault を返す。
@@ -181,6 +190,7 @@ func Create(passphrase string) (*Vault, error) {
 		key: key, secrets: secrets, subjects: subjects,
 		dedicatedPasswords:      map[string]string{},
 		passwordBindings:        map[string]string{},
+		totpBindings:            map[string]string{},
 		dedicatedKeyPassphrases: map[string]string{},
 	}, nil
 }
@@ -258,6 +268,7 @@ func openDocumentWithMigrations(
 	for kind, stored := range map[Kind]map[string]string{
 		KindPassword:      parsed.Passwords,
 		KindKeyPassphrase: parsed.KeyPassphrases,
+		KindTOTP:          parsed.TOTPs,
 	} {
 		for name, value := range stored {
 			secrets[kind][name] = value
@@ -266,6 +277,7 @@ func openDocumentWithMigrations(
 	for kind, stored := range map[Kind]map[string]string{
 		KindPassword:      parsed.Hosts,
 		KindKeyPassphrase: parsed.Keys,
+		KindTOTP:          parsed.TOTPHosts,
 	} {
 		for subject, name := range stored {
 			subjects[kind][subject] = name
@@ -283,6 +295,7 @@ func openDocumentWithMigrations(
 		key: key, secrets: secrets, subjects: subjects,
 		dedicatedPasswords:      dedicatedPasswords,
 		passwordBindings:        maps.Clone(parsed.PasswordBindings),
+		totpBindings:            maps.Clone(parsed.TOTPBindings),
 		dedicatedKeyPassphrases: dedicatedKeyPassphrases,
 	}
 	published = true
@@ -366,6 +379,9 @@ func (v *Vault) Document() ([]byte, error) {
 	if v.passwordBindings == nil {
 		v.passwordBindings = map[string]string{}
 	}
+	if v.totpBindings == nil {
+		v.totpBindings = map[string]string{}
+	}
 	return json.Marshal(document{
 		SchemaVersion:           SchemaVersion,
 		Passwords:               v.secrets[KindPassword],
@@ -375,6 +391,9 @@ func (v *Vault) Document() ([]byte, error) {
 		Hosts:                   v.subjects[KindPassword],
 		PasswordBindings:        v.passwordBindings,
 		Keys:                    v.subjects[KindKeyPassphrase],
+		TOTPs:                   v.secrets[KindTOTP],
+		TOTPHosts:               v.subjects[KindTOTP],
+		TOTPBindings:            v.totpBindings,
 	})
 }
 
@@ -485,6 +504,7 @@ func (v *Vault) clone() *Vault {
 		key: v.key.Clone(), secrets: secrets, subjects: subjects,
 		dedicatedPasswords:      maps.Clone(v.dedicatedPasswords),
 		passwordBindings:        maps.Clone(v.passwordBindings),
+		totpBindings:            maps.Clone(v.totpBindings),
 		dedicatedKeyPassphrases: maps.Clone(v.dedicatedKeyPassphrases),
 	}
 }
@@ -509,6 +529,13 @@ func (v *Vault) Set(kind Kind, name, value string) error {
 	}
 	if value == "" {
 		return ErrEmptySecret
+	}
+	if kind == KindTOTP {
+		configuration, err := totp.Parse(value)
+		if err != nil {
+			return ErrInvalidTOTP
+		}
+		value = configuration.URI()
 	}
 	v.secrets[kind][name] = value
 	return nil
@@ -578,7 +605,7 @@ func (v *Vault) Assign(kind Kind, subject, name string) error {
 	if !ValidKind(kind) {
 		return ErrUnknownKind
 	}
-	if kind == KindPassword {
+	if kind == KindPassword || kind == KindTOTP {
 		if err := validate.Alias(subject); err != nil {
 			return ErrUnsafeName
 		}
@@ -591,6 +618,8 @@ func (v *Vault) Assign(kind Kind, subject, name string) error {
 	if kind == KindPassword {
 		delete(v.dedicatedPasswords, subject)
 		delete(v.passwordBindings, subject)
+	} else if kind == KindTOTP {
+		delete(v.totpBindings, subject)
 	} else {
 		delete(v.dedicatedKeyPassphrases, subject)
 	}
@@ -603,6 +632,8 @@ func (v *Vault) Unassign(kind Kind, subject string) {
 	delete(v.subjects[kind], subject)
 	if kind == KindPassword {
 		delete(v.passwordBindings, subject)
+	} else if kind == KindTOTP {
+		delete(v.totpBindings, subject)
 	} else if kind == KindKeyPassphrase {
 		delete(v.dedicatedKeyPassphrases, subject)
 	}
@@ -657,6 +688,33 @@ func (v *Vault) BoundPasswordFor(subject, binding string) (string, bool) {
 	return v.SecretFor(KindPassword, subject)
 }
 
+// BindTOTP records the resolved authentication destination for one alias.
+// A token is never released after a host or ProxyJump route changes until the
+// user explicitly confirms the assignment again.
+func (v *Vault) BindTOTP(alias, binding string) error {
+	if err := validate.Alias(alias); err != nil || !validAuthenticationBinding(binding) {
+		return ErrUnsafeName
+	}
+	if _, ok := v.SecretFor(KindTOTP, alias); !ok {
+		return ErrUnknownCredential
+	}
+	if v.totpBindings == nil {
+		v.totpBindings = map[string]string{}
+	}
+	v.totpBindings[alias] = binding
+	return nil
+}
+
+// BoundTOTPFor releases provisioning data only to the destination that was
+// current when its host assignment was confirmed.
+func (v *Vault) BoundTOTPFor(subject, binding string) (string, bool) {
+	stored, ok := v.totpBindings[subject]
+	if !ok || stored != binding {
+		return "", false
+	}
+	return v.SecretFor(KindTOTP, subject)
+}
+
 // Rename は、subject の参照を新しい名前へ引き継ぐ。ホストの名前変更はこれを
 // しなければならず、さもなければ参照は、誰も尋ねない名前の下に暗黙に孤児に
 // なる。
@@ -688,7 +746,7 @@ func (v *Vault) Rename(kind Kind, from, to string) error {
 	if !ok {
 		return nil
 	}
-	if kind == KindPassword {
+	if kind == KindPassword || kind == KindTOTP {
 		if err := validate.Alias(to); err != nil {
 			return ErrUnsafeName
 		}
@@ -697,8 +755,19 @@ func (v *Vault) Rename(kind Kind, from, to string) error {
 	v.subjects[kind][to] = name
 	if kind == KindPassword {
 		v.movePasswordBinding(from, to)
+	} else if kind == KindTOTP {
+		v.moveTOTPBinding(from, to)
 	}
 	return nil
+}
+
+func (v *Vault) moveTOTPBinding(from, to string) {
+	binding, ok := v.totpBindings[from]
+	delete(v.totpBindings, from)
+	delete(v.totpBindings, to)
+	if ok {
+		v.totpBindings[to] = binding
+	}
 }
 
 func (v *Vault) movePasswordBinding(from, to string) {
@@ -728,7 +797,7 @@ func (v *Vault) RelocateSubjects(kind Kind, relocations map[string]string) (bool
 		if from == to {
 			continue
 		}
-		if kind == KindPassword {
+		if kind == KindPassword || kind == KindTOTP {
 			if err := validate.Alias(to); err != nil {
 				return false, ErrUnsafeName
 			}

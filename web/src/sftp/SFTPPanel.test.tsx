@@ -38,6 +38,7 @@ async function chooseHost(alias: string) {
   await userEvent.click(screen.getByRole("button", { name: "Host" }));
   const label = await screen.findByText(alias, { selector: "span.font-medium" });
   await userEvent.click(label.closest("button")!);
+  await userEvent.click(screen.getByRole("button", { name: "Connect" }));
 }
 
 describe("SFTPPanel uploads", () => {
@@ -121,13 +122,19 @@ describe("SFTPPanel uploads", () => {
     expect(await screen.findByText("Failed · upload_failed")).toBeInTheDocument();
   });
 
-  it("does not connect until a host is selected", async () => {
+  it("does not connect until the selected host is explicitly connected", async () => {
     render(<SFTPPanel aliases={["edge"]} />);
 
     expect(screen.getByRole("button", { name: "Host" })).toHaveAttribute("data-value", "");
     expect(api.list).not.toHaveBeenCalled();
 
-    await chooseHost("edge");
+    await userEvent.click(screen.getByRole("button", { name: "Host" }));
+    const label = await screen.findByText("edge", { selector: "span.font-medium" });
+    await userEvent.click(label.closest("button")!);
+    expect(api.list).not.toHaveBeenCalled();
+    expect(screen.getByText("edge is disconnected")).toBeVisible();
+
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
     await waitFor(() => expect(api.list).toHaveBeenCalledWith("edge", ""));
     expect(screen.getByTestId("sftp-current-path")).toHaveAttribute("data-path", "/remote");
   });
@@ -747,7 +754,7 @@ describe("SFTPPanel uploads", () => {
     api.list.mockResolvedValue({ path: "/", entries: [] });
     render(<SFTPPanel aliases={["edge"]} />);
 
-    expect(await screen.findByText("Pick a saved SSH host to browse its files.")).toBeVisible();
+    expect(await screen.findByText("Pick a saved SSH host, then connect.")).toBeVisible();
     await chooseHost("edge");
 
     expect(await screen.findByText("This directory is empty.")).toBeVisible();

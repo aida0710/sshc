@@ -30,6 +30,9 @@ type connectAnswer struct {
 	Passwords        map[string]string `json:"passwords"`
 	PasswordBindings map[string]string `json:"passwordBindings"`
 	StalePasswords   []string          `json:"stalePasswords"`
+	TOTPs            map[string]string `json:"totps"`
+	TOTPBindings     map[string]string `json:"totpBindings"`
+	StaleTOTPs       []string          `json:"staleTotps"`
 	Warnings         []string          `json:"warnings"`
 }
 
@@ -114,7 +117,7 @@ func runConnect(
 	writeConnectionNotices(stderr, answer)
 	// engine は ProxyJump を含む接続経路を解決済み。保存値が無い場合は端末で入力する。
 	connection, err := app.NewCLIConnection(home,
-		savedPassphraseFor(answer), savedPasswordFor(answer))
+		savedPassphraseFor(answer), savedPasswordFor(answer), savedTOTPFor(answer))
 	if err != nil {
 		fmt.Fprintf(stderr, "sshc: %v\n", err)
 		return 1
@@ -139,6 +142,9 @@ func writeConnectionNotices(stderr io.Writer, answer connectAnswer) {
 	}
 	for _, stale := range answer.StalePasswords {
 		fmt.Fprintf(stderr, "sshc: saved password for %s was not used because its authentication route changed; select the password again in Connections to confirm the current route\n", stale)
+	}
+	for _, stale := range answer.StaleTOTPs {
+		fmt.Fprintf(stderr, "sshc: saved one-time password for %s was not used because its authentication route changed; assign it again in Vault to confirm the current route\n", stale)
 	}
 }
 
