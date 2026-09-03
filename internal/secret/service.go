@@ -356,23 +356,38 @@ func (s *Service) Initialise(passphrase string) error {
 	if err != nil {
 		return err
 	}
+	sealed, err := vault.Seal()
+	if err != nil {
+		vault.Destroy()
+		return err
+	}
+	if err := s.workspace.EnsureDirectory(s.workspace.StateDir()); err != nil {
+		vault.Destroy()
+		return err
+	}
+	_, err = s.transactions.Commit(storage.Request{
+		Operation: "secret.vault",
+		Changes: []storage.Change{{
+			Path: s.path(), Contents: sealed,
+			// A zero precondition means the path must still be absent. Another
+			// initializer which wins after exists() must never be overwritten.
+			Precondition: storage.Precondition{},
+		}},
+	})
+	if err != nil {
+		vault.Destroy()
+		return err
+	}
 
+	// Publish only the exact candidate which is now durable. Readers continue
+	// to observe a locked service while encryption and storage are in flight.
 	s.mu.Lock()
 	s.vault.Destroy()
 	s.vault = vault
+	s.baseline = slices.Clone(sealed)
 	s.used = s.now()
 	s.lastMigration = Migration{}
 	s.mu.Unlock()
-	if err := s.write(); err != nil {
-		// disk に公開できなかった vault を memory だけで使える状態にしない。
-		s.mu.Lock()
-		s.vault.Destroy()
-		s.vault = nil
-		s.baseline = nil
-		s.used = time.Time{}
-		s.mu.Unlock()
-		return err
-	}
 	return nil
 }
 
@@ -694,74 +709,96 @@ func (s *Service) Has(alias string) bool {
 	return ok
 }
 
+// mutateVault prepares a private candidate and publishes it only after the
+// encrypted replacement is durable. The baseline belongs to the vault which
+// was cloned; using it as the precondition also prevents another process from
+// being overwritten after this service unlocked the document.
+func (s *Service) mutateVault(mutate func(*Vault) error) error {
+	s.mutationMu.Lock()
+	defer s.mutationMu.Unlock()
+
+	s.mu.Lock()
+	vault := s.use()
+	if vault == nil {
+		s.mu.Unlock()
+		return ErrLocked
+	}
+	clone := vault.clone()
+	baseline := slices.Clone(s.baseline)
+	s.mu.Unlock()
+
+	published := false
+	defer func() {
+		if !published {
+			clone.Destroy()
+		}
+	}()
+	if err := mutate(clone); err != nil {
+		return err
+	}
+	if len(baseline) == 0 {
+		return ErrNoVault
+	}
+	sealed, err := clone.Seal()
+	if err != nil {
+		return err
+	}
+	_, err = s.transactions.Commit(storage.Request{
+		Operation: "secret.vault",
+		Changes: []storage.Change{{
+			Path: s.path(), Contents: sealed,
+			Precondition: storage.Precondition{Exists: true, Digest: storage.Digest(baseline)},
+		}},
+	})
+	if err != nil {
+		return err
+	}
+
+	s.mu.Lock()
+	s.vault.Destroy()
+	s.vault = clone
+	published = true
+	s.baseline = slices.Clone(sealed)
+	s.mu.Unlock()
+	return nil
+}
+
 // SetBound stores a dedicated password and records the resolved authentication
 // destination that may receive it.
 func (s *Service) SetBound(alias, password, binding string) error {
 	if !validAuthenticationBinding(binding) {
 		return ErrPasswordBindingRequired
 	}
-	s.mutationMu.Lock()
-	defer s.mutationMu.Unlock()
-
-	s.mu.Lock()
-	vault := s.use()
-	if vault == nil {
-		s.mu.Unlock()
-		return ErrLocked
-	}
-	if err := vault.SetDedicatedPassword(alias, password); err != nil {
-		s.mu.Unlock()
-		return err
-	}
-	if err := vault.BindPassword(alias, binding); err != nil {
-		s.mu.Unlock()
-		return err
-	}
-	s.mu.Unlock()
-	return s.write()
+	return s.mutateVault(func(vault *Vault) error {
+		if err := vault.SetDedicatedPassword(alias, password); err != nil {
+			return err
+		}
+		return vault.BindPassword(alias, binding)
+	})
 }
 
 // Remove はパスワードを忘れ、vault を書き込む。
 func (s *Service) Remove(alias string) error {
-	s.mutationMu.Lock()
-	defer s.mutationMu.Unlock()
-	s.mu.Lock()
-	vault := s.use()
-	if vault == nil {
-		s.mu.Unlock()
-		return ErrLocked
-	}
-	// 参照は消える。他に何かが指していれば資格情報は残り、何も指さなくなれば
-	// 一緒に消える。
-	vault.RemoveDedicatedPassword(alias)
-	vault.Unassign(KindPassword, alias)
-	vault.Unassign(KindTOTP, alias)
-	_ = vault.Delete(KindPassword, alias)
-	s.mu.Unlock()
-	return s.write()
+	return s.mutateVault(func(vault *Vault) error {
+		// 参照は消える。他に何かが指していれば資格情報は残り、何も指さなくなれば
+		// 一緒に消える。
+		vault.RemoveDedicatedPassword(alias)
+		vault.Unassign(KindPassword, alias)
+		vault.Unassign(KindTOTP, alias)
+		_ = vault.Delete(KindPassword, alias)
+		return nil
+	})
 }
 
 // Rename は、保存済みのパスワードを新しい alias へ引き継ぐ。ホストの名前変更が
 // それを置き去りにすれば、二度と誰も尋ねない名前の下にパスワードが残る。
 func (s *Service) Rename(from, to string) error {
-	s.mutationMu.Lock()
-	defer s.mutationMu.Unlock()
-	s.mu.Lock()
-	vault := s.use()
-	if vault == nil {
-		s.mu.Unlock()
-		return ErrLocked
-	}
-	if err := vault.Rename(KindPassword, from, to); err != nil {
-		s.mu.Unlock()
-		return err
-	}
-	if err := vault.Rename(KindTOTP, from, to); err != nil {
-		s.mu.Unlock()
-		return err
-	}
-	s.mu.Unlock()
-	return s.write()
+	return s.mutateVault(func(vault *Vault) error {
+		if err := vault.Rename(KindPassword, from, to); err != nil {
+			return err
+		}
+		return vault.Rename(KindTOTP, from, to)
+	})
 }
 
 // Credentials は、両方の種別のすべての資格情報名と、その使用先を列挙する。
@@ -795,20 +832,7 @@ func (s *Service) Credentials() (map[Kind]map[string][]string, error) {
 // 置き換えは、共有された秘密をローテーションする方法である。その名前を指している
 // すべての subject が新しい値を読む。名前が存在する理由そのものだ。
 func (s *Service) SetCredential(kind Kind, name, value string) error {
-	s.mutationMu.Lock()
-	defer s.mutationMu.Unlock()
-	s.mu.Lock()
-	vault := s.use()
-	if vault == nil {
-		s.mu.Unlock()
-		return ErrLocked
-	}
-	if err := vault.Set(kind, name, value); err != nil {
-		s.mu.Unlock()
-		return err
-	}
-	s.mu.Unlock()
-	return s.write()
+	return s.mutateVault(func(vault *Vault) error { return vault.Set(kind, name, value) })
 }
 
 // Credential は、明示的な表示・編集操作に限って名前付き資格情報の値を返す。
@@ -897,20 +921,7 @@ func (s *Service) UpdateCredential(kind Kind, currentName, nextName, value strin
 
 // DeleteCredential は資格情報を忘れる。何かがそれを指しているあいだは拒否する。
 func (s *Service) DeleteCredential(kind Kind, name string) error {
-	s.mutationMu.Lock()
-	defer s.mutationMu.Unlock()
-	s.mu.Lock()
-	vault := s.use()
-	if vault == nil {
-		s.mu.Unlock()
-		return ErrLocked
-	}
-	if err := vault.Delete(kind, name); err != nil {
-		s.mu.Unlock()
-		return err
-	}
-	s.mu.Unlock()
-	return s.write()
+	return s.mutateVault(func(vault *Vault) error { return vault.Delete(kind, name) })
 }
 
 // AssignCredential は、subject を同じ種別の資格情報に向ける。種別が防護である。
@@ -919,20 +930,7 @@ func (s *Service) AssignCredential(kind Kind, subject, name string) error {
 	if kind == KindPassword || kind == KindTOTP {
 		return ErrPasswordBindingRequired
 	}
-	s.mutationMu.Lock()
-	defer s.mutationMu.Unlock()
-	s.mu.Lock()
-	vault := s.use()
-	if vault == nil {
-		s.mu.Unlock()
-		return ErrLocked
-	}
-	if err := vault.Assign(kind, subject, name); err != nil {
-		s.mu.Unlock()
-		return err
-	}
-	s.mu.Unlock()
-	return s.write()
+	return s.mutateVault(func(vault *Vault) error { return vault.Assign(kind, subject, name) })
 }
 
 // AssignTOTPCredential binds a named TOTP seed to the current resolved
@@ -942,25 +940,12 @@ func (s *Service) AssignTOTPCredential(subject, name, binding string) error {
 	if !validAuthenticationBinding(binding) {
 		return ErrPasswordBindingRequired
 	}
-	s.mutationMu.Lock()
-	defer s.mutationMu.Unlock()
-
-	s.mu.Lock()
-	vault := s.use()
-	if vault == nil {
-		s.mu.Unlock()
-		return ErrLocked
-	}
-	if err := vault.Assign(KindTOTP, subject, name); err != nil {
-		s.mu.Unlock()
-		return err
-	}
-	if err := vault.BindTOTP(subject, binding); err != nil {
-		s.mu.Unlock()
-		return err
-	}
-	s.mu.Unlock()
-	return s.write()
+	return s.mutateVault(func(vault *Vault) error {
+		if err := vault.Assign(KindTOTP, subject, name); err != nil {
+			return err
+		}
+		return vault.BindTOTP(subject, binding)
+	})
 }
 
 // AssignPasswordCredential binds a named account password to the current
@@ -969,40 +954,20 @@ func (s *Service) AssignPasswordCredential(subject, name, binding string) error 
 	if !validAuthenticationBinding(binding) {
 		return ErrPasswordBindingRequired
 	}
-	s.mutationMu.Lock()
-	defer s.mutationMu.Unlock()
-
-	s.mu.Lock()
-	vault := s.use()
-	if vault == nil {
-		s.mu.Unlock()
-		return ErrLocked
-	}
-	if err := vault.Assign(KindPassword, subject, name); err != nil {
-		s.mu.Unlock()
-		return err
-	}
-	if err := vault.BindPassword(subject, binding); err != nil {
-		s.mu.Unlock()
-		return err
-	}
-	s.mu.Unlock()
-	return s.write()
+	return s.mutateVault(func(vault *Vault) error {
+		if err := vault.Assign(KindPassword, subject, name); err != nil {
+			return err
+		}
+		return vault.BindPassword(subject, binding)
+	})
 }
 
 // UnassignCredential は subject の参照を忘れ、資格情報自体は残す。
 func (s *Service) UnassignCredential(kind Kind, subject string) error {
-	s.mutationMu.Lock()
-	defer s.mutationMu.Unlock()
-	s.mu.Lock()
-	vault := s.use()
-	if vault == nil {
-		s.mu.Unlock()
-		return ErrLocked
-	}
-	vault.Unassign(kind, subject)
-	s.mu.Unlock()
-	return s.write()
+	return s.mutateVault(func(vault *Vault) error {
+		vault.Unassign(kind, subject)
+		return nil
+	})
 }
 
 // BoundPasswordFor returns a password only if current resolved destination is
@@ -1294,54 +1259,6 @@ func (s *Service) writeSyncSettings(mutate func(SyncSettings) (SyncSettings, err
 		}},
 	})
 	return err
-}
-
-// write は vault を暗号化し、トランザクションマネージャを通してコミットする。
-//
-// 他のすべての書き込みと同じく、世代は保持される。バックアップ自体もこの vault の
-// 世代バックアップも同じ vault 鍵で暗号化する。
-func (s *Service) write() error {
-	s.mu.Lock()
-	vault := s.use()
-	if vault == nil {
-		s.mu.Unlock()
-		return ErrLocked
-	}
-	sealed, err := vault.Seal()
-	s.mu.Unlock()
-	if err != nil {
-		return err
-	}
-
-	if err := s.workspace.EnsureDirectory(s.workspace.StateDir()); err != nil {
-		return err
-	}
-	current, readErr := s.workspace.FileSystem().ReadFile(s.path())
-	precondition := storage.Precondition{}
-	if readErr == nil {
-		precondition = storage.Precondition{Exists: true, Digest: storage.Digest(current)}
-	} else if !errors.Is(readErr, fs.ErrNotExist) {
-		return readErr
-	}
-
-	_, err = s.transactions.Commit(storage.Request{
-		Operation: "secret.vault",
-		Changes: []storage.Change{{
-			Path:         s.path(),
-			Contents:     sealed,
-			Precondition: precondition,
-		}},
-	})
-	if err != nil {
-		return err
-	}
-	s.mu.Lock()
-	s.baseline = slices.Clone(sealed)
-	// A token is a capability for the value observed at issuance. Any vault
-	// write may change an assignment or shared value, so invalidate all of
-	// them instead of trying to infer which references moved.
-	s.mu.Unlock()
-	return nil
 }
 
 // WithPasswordMutation prepares a password-vault replacement and lets the

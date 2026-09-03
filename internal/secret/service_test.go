@@ -397,6 +397,28 @@ func (f *syncCASFileSystem) ReadFile(path string) ([]byte, error) {
 	return slices.Clone(f.replacement), nil
 }
 
+type initialiseCASFileSystem struct {
+	storage.FileSystem
+	path        string
+	replacement []byte
+	once        sync.Once
+	writeErr    error
+}
+
+func (f *initialiseCASFileSystem) Lstat(path string) (fs.FileInfo, error) {
+	info, err := f.FileSystem.Lstat(path)
+	if path == f.path && errors.Is(err, fs.ErrNotExist) {
+		f.once.Do(func() {
+			if makeErr := os.MkdirAll(filepath.Dir(path), 0o700); makeErr != nil {
+				f.writeErr = makeErr
+				return
+			}
+			f.writeErr = os.WriteFile(path, f.replacement, 0o600)
+		})
+	}
+	return info, err
+}
+
 // newClockedService は時間を所有するので、アイドルな 1 日を、丸一日待つのでは
 // なくテストの 1 行にできる。
 func newClockedService(t *testing.T, now func() time.Time) (*secret.Service, string) {
@@ -583,6 +605,42 @@ func TestFailedInitialiseCannotLeaveAnUnlockedMissingVault(t *testing.T) {
 	}
 	if state.Exists || state.Unlocked {
 		t.Fatalf("failed initialise state = %+v, want missing and locked", state)
+	}
+}
+
+func TestInitialiseRefusesToOverwriteAConcurrentlyCreatedVault(t *testing.T) {
+	home := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	fileSystem := &initialiseCASFileSystem{
+		FileSystem:  storage.OSFileSystem{},
+		replacement: []byte("concurrently created vault\n"),
+	}
+	workspace, err := storage.NewWorkspace(fileSystem, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fileSystem.path = filepath.Join(workspace.Root(), filepath.FromSlash(secret.WorkspacePath))
+	service := secret.NewService(workspace, storage.NewManager(workspace, time.Now, rand.Reader), time.Now)
+
+	err = service.Initialise(passphrase)
+	if fileSystem.writeErr != nil {
+		t.Fatal(fileSystem.writeErr)
+	}
+	var conflict *storage.ConflictError
+	if !errors.As(err, &conflict) {
+		t.Fatalf("Initialise = %v, want ConflictError", err)
+	}
+	body, readErr := os.ReadFile(fileSystem.path)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if !bytes.Equal(body, fileSystem.replacement) {
+		t.Fatal("the concurrently created vault was overwritten")
+	}
+	if service.Unlocked() {
+		t.Fatal("failed Initialise published its candidate vault")
 	}
 }
 
@@ -876,6 +934,66 @@ func TestCredentialsThroughTheService(t *testing.T) {
 	}
 	if err := service.SetCredential(secret.KindPassword, "x", "y"); !errors.Is(err, secret.ErrLocked) {
 		t.Errorf("SetCredential while locked = %v, want ErrLocked", err)
+	}
+}
+
+func TestFailedCredentialCommitDoesNotPublishTheCandidateVault(t *testing.T) {
+	service, fileSystem := newServiceWithStateFaults(t)
+	if err := service.Initialise(passphrase); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.SetCredential(secret.KindPassword, "office", "durable-secret"); err != nil {
+		t.Fatal(err)
+	}
+
+	injected := errors.New("injected credential commit failure")
+	fileSystem.renameErr = injected
+	err := service.SetCredential(secret.KindPassword, "office", "memory-only-secret")
+	fileSystem.renameErr = nil
+	if !errors.Is(err, injected) {
+		t.Fatalf("SetCredential = %v, want injected failure", err)
+	}
+	if got, readErr := service.Credential(secret.KindPassword, "office"); readErr != nil || got != "durable-secret" {
+		t.Fatalf("live credential after failed commit = %q, %v", got, readErr)
+	}
+
+	service.Lock()
+	if err := service.Unlock(passphrase); err != nil {
+		t.Fatal(err)
+	}
+	if got, readErr := service.Credential(secret.KindPassword, "office"); readErr != nil || got != "durable-secret" {
+		t.Fatalf("reopened credential after failed commit = %q, %v", got, readErr)
+	}
+}
+
+func TestCredentialMutationRefusesToOverwriteAnExternallyReplacedVault(t *testing.T) {
+	service, home := newService(t)
+	if err := service.Initialise(passphrase); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.SetCredential(secret.KindPassword, "office", "durable-secret"); err != nil {
+		t.Fatal(err)
+	}
+
+	replacement := []byte("externally replaced vault\n")
+	path := vaultPath(home)
+	if err := os.WriteFile(path, replacement, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	err := service.SetCredential(secret.KindPassword, "office", "stale-writer-secret")
+	var conflict *storage.ConflictError
+	if !errors.As(err, &conflict) {
+		t.Fatalf("SetCredential = %v, want ConflictError", err)
+	}
+	body, readErr := os.ReadFile(path)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if !bytes.Equal(body, replacement) {
+		t.Fatal("the externally replaced vault was overwritten")
+	}
+	if got, readErr := service.Credential(secret.KindPassword, "office"); readErr != nil || got != "durable-secret" {
+		t.Fatalf("live credential after conflict = %q, %v", got, readErr)
 	}
 }
 

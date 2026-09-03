@@ -34,4 +34,6 @@ The engine Transfer Manager owns the queue and atomically persists it in `~/.ssh
 
 The browser or WebView still performs local file I/O because only it can access files on the device. Closing it therefore stops upload or download bytes, but the job is not stranded in browser-only storage. After a reload, an upload appears as waiting to resume and does not send data until the original local file is selected again.
 
-Remote-to-remote transfers are streamed by the engine through two SFTP connections, so they continue after the browser closes. Each file is written to a temporary sibling and atomically published when complete. A remote job interrupted by an engine shutdown returns to the queue and is automatically retried after startup.
+Remote-to-remote transfers are streamed by the engine through two SFTP connections, so they continue after the browser closes. Each file is written to a temporary sibling and atomically published when complete. A remote job interrupted by an engine shutdown returns to the queue and is automatically retried after startup. It is not retried when the copy or move may already have published the target or removed the source but its terminal result could not be recorded in the device-local queue. Such an entry reports **Check the destination** and offers cancel as its only action, so you can verify the result before dismissing it.
+
+A damaged queue file does not stop the engine from starting. The damaged contents are preserved on the device for diagnosis, the queue starts empty, and the preserved copy is never synced.

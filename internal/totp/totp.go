@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"hash"
 	"net/url"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -155,9 +154,54 @@ func (c Config) Code(at time.Time) (string, error) {
 	return fmt.Sprintf("%0*d", c.Digits, value%modulus), nil
 }
 
-var otpPrompt = regexp.MustCompile(`(?i)(one[ -]?time(?: password| code)?|verification code|authenticator(?: code)?|totp|otp|ワンタイム(?:パスワード|コード)|認証コード)`)
-
 // MatchesPrompt deliberately recognizes only explicit OTP wording. A generic
 // password or passcode question must remain interactive rather than receiving
 // the second factor by mistake.
-func MatchesPrompt(prompt string) bool { return otpPrompt.MatchString(prompt) }
+func MatchesPrompt(prompt string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(prompt))
+	normalized = strings.TrimSpace(strings.TrimRight(normalized, ":：?？"))
+	normalized = strings.Join(strings.Fields(normalized), " ")
+
+	for _, prefix := range []string{
+		"please enter ", "enter ",
+		"please provide ", "provide ",
+		"please input ", "input ",
+		"please type ", "type ",
+	} {
+		if strings.HasPrefix(normalized, prefix) {
+			normalized = strings.TrimSpace(strings.TrimPrefix(normalized, prefix))
+			for _, article := range []string{"your ", "the ", "a ", "an "} {
+				if strings.HasPrefix(normalized, article) {
+					normalized = strings.TrimSpace(strings.TrimPrefix(normalized, article))
+					break
+				}
+			}
+			break
+		}
+	}
+
+	if normalized == "otp" || normalized == "totp" || normalized == "authenticator" ||
+		strings.HasPrefix(normalized, "otp (") || strings.HasPrefix(normalized, "totp (") {
+		return true
+	}
+	for _, phrase := range []string{
+		"otp code", "otp token", "otp password", "otp for",
+		"totp code", "totp token", "totp password", "totp for",
+		"one-time password", "one time password",
+		"one-time code", "one time code",
+		"verification code", "authenticator code",
+		"code from authenticator", "code from your authenticator", "code from the authenticator",
+	} {
+		if normalized == phrase || strings.HasPrefix(normalized, phrase+" ") {
+			return true
+		}
+	}
+	for _, phrase := range []string{"ワンタイムパスワード", "ワンタイムコード", "認証コード"} {
+		remainder := strings.TrimPrefix(normalized, phrase)
+		if remainder == "" || strings.HasPrefix(remainder, "を入力") ||
+			strings.HasPrefix(remainder, " (") || strings.HasPrefix(remainder, "（") {
+			return true
+		}
+	}
+	return false
+}

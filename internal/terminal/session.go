@@ -303,17 +303,37 @@ func (s *Session) Snapshot() []byte {
 
 // Attach は、バッファの内容を先に返し、その後ライブの出力へ継ぐ。
 func (s *Session) Attach() ([]byte, *Stream) {
+	replay, stream, _ := s.AttachFrom(0)
+	return replay.Data, stream
+}
+
+// CanAttachFrom reports whether cursor belongs to the output range written by
+// this session. An old cursor is valid and will be marked truncated; a cursor
+// ahead of the writer is not.
+func (s *Session) CanAttachFrom(cursor uint64) bool {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
-	replay := s.buffer.Snapshot()
+	return s.buffer.CanReadFrom(cursor)
+}
+
+// AttachFrom atomically returns only output after cursor and then follows live
+// output. Registering the stream under the same lock as the range read leaves
+// no gap between replay and live delivery.
+func (s *Session) AttachFrom(cursor uint64) (RingRead, *Stream, bool) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	replay, ok := s.buffer.ReadAvailableFrom(cursor)
+	if !ok {
+		return RingRead{}, nil, false
+	}
 	stream := &Stream{output: make(chan []byte, streamDepth)}
 	if s.exited != nil {
 		// 終了済みのセッションにライブの出力は無い。読めるものを渡してから閉じる。
 		stream.close()
-		return replay, stream
+		return replay, stream, true
 	}
 	s.streams[stream] = true
-	return replay, stream
+	return replay, stream, true
 }
 
 // Detach は接続を解除する。セッション自体は継続する。

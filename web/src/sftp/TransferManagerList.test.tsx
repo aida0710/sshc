@@ -6,6 +6,8 @@ import { TransferManagerList } from "./TransferManagerList";
 type Job = {
   id: string;
   status: string;
+  direction: string;
+  problem: string;
   allowedActions: string[];
 };
 
@@ -253,5 +255,19 @@ describe("the transfer queue", () => {
     render(<TransferManagerList />);
     await userEvent.click(screen.getByRole("button", { name: "Remove from list" }));
     expect(manager.remove).toHaveBeenCalledWith("failed");
+  });
+
+  it("asks for a destination check when a remote result could not be recorded", () => {
+    manager.setJobs([job("remote", {
+      direction: "remote",
+      status: "reattach",
+      problem: "sftp_reconciliation_required",
+      allowedActions: ["cancel"],
+    })]);
+    render(<TransferManagerList />);
+    expect(screen.getByText("Check the destination")).toBeInTheDocument();
+    expect(screen.queryByText("Select the same file")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Resume" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
   });
 });

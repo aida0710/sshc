@@ -154,11 +154,21 @@ function rememberView(view: QueueView): void {
   }
 }
 
-function statusClass(status: ManagedTransferJob["status"]): string {
+type DisplayedStatus = ManagedTransferJob["status"] | "reconcile";
+
+function statusClass(status: DisplayedStatus): string {
   if (status === "failed") return "text-danger";
   if (status === "completed") return "text-live";
-  if (status === "needs_overwrite") return "text-notice-ink";
+  if (status === "needs_overwrite" || status === "reconcile") return "text-notice-ink";
   return "text-ink-muted";
+}
+
+// A Remote→Remote job whose external copy or move already crossed its commit
+// point, but whose terminal result could not be recorded, must not read as an
+// upload waiting for the same local file again.
+function needsReconciliation(job: ManagedTransferJob): boolean {
+  return job.direction === "remote" && job.status === "reattach" &&
+    job.problem === "sftp_reconciliation_required";
 }
 
 export function TransferManagerList() {
@@ -432,7 +442,9 @@ export function TransferManagerList() {
                   const sourceMissing = item.direction === "upload" &&
                     (item.status === "queued" || item.status === "paused" || item.status === "reattach") &&
                     !sftpTransferManager.hasUploadSource(item.id);
-                  const displayedStatus: ManagedTransferJob["status"] = sourceMissing ? "reattach" : item.status;
+                  const displayedStatus: DisplayedStatus = needsReconciliation(item)
+                    ? "reconcile"
+                    : sourceMissing ? "reattach" : item.status;
                   return (
                     <li key={item.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1">
                       <span className="truncate font-mono" title={`${item.alias}:${item.remotePath}`}>{item.name}</span>

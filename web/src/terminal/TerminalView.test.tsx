@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { Terminal } from "@xterm/xterm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { StreamHandlers, TerminalStream } from "./stream";
 import { ApiError } from "../api/client";
@@ -124,6 +125,73 @@ describe("TerminalView", () => {
     expect(screen.queryByRole("button", { name: "Copy recent terminal context" })).toBeNull();
   });
 
+  it("reviews a multiline paste before sending it and can remove only the final Enter", async () => {
+    renderView();
+    await waitFor(() => expect(streams).toHaveLength(1));
+    const host = document.querySelector<HTMLElement>("[data-terminal-host]")!;
+
+    fireEvent.paste(host, {
+      clipboardData: { getData: () => "printf one\nprintf two\n" },
+    });
+
+    expect(await screen.findByRole("dialog", { name: "Review paste to zsh" })).toBeVisible();
+    expect(streams[0]!.stream.send).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Paste preview with control characters made visible")).toHaveTextContent(
+      "printf one\\n printf two\\n",
+      { normalizeWhitespace: true },
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Paste without final Enter" }));
+
+    expect(streams[0]!.stream.send).toHaveBeenCalledOnce();
+    expect(streams[0]!.stream.send).toHaveBeenCalledWith("printf one\rprintf two");
+    expect(screen.queryByRole("dialog", { name: "Review paste to zsh" })).toBeNull();
+  });
+
+  it("cancels a risky paste without sending any bytes", async () => {
+    renderView();
+    await waitFor(() => expect(streams).toHaveLength(1));
+    const host = document.querySelector<HTMLElement>("[data-terminal-host]")!;
+    fireEvent.paste(host, { clipboardData: { getData: () => "echo safe\necho dangerous" } });
+
+    await userEvent.click(await screen.findByRole("button", { name: "Cancel" }));
+
+    expect(streams[0]!.stream.send).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog", { name: "Review paste to zsh" })).toBeNull();
+  });
+
+  it("never carries a pending paste into a different terminal session", async () => {
+    const ticket = vi.fn(async () => ({ streamTicket: "one-time" }));
+    const rendered = render(<TerminalView session={session} api={{ terminalStreamTicket: ticket }} />);
+    await waitFor(() => expect(streams).toHaveLength(1));
+    const host = document.querySelector<HTMLElement>("[data-terminal-host]")!;
+    fireEvent.paste(host, { clipboardData: { getData: () => "echo one\necho two" } });
+    expect(await screen.findByRole("dialog", { name: "Review paste to zsh" })).toBeVisible();
+
+    rendered.rerender(
+      <TerminalView
+        session={{ ...session, id: "b", title: "bash" }}
+        api={{ terminalStreamTicket: ticket }}
+      />,
+    );
+
+    expect(screen.queryByRole("dialog", { name: /Review paste to/ })).toBeNull();
+    expect(streams[0]!.stream.send).not.toHaveBeenCalled();
+  });
+
+  it("invalidates a pending paste when terminal output changes its context", async () => {
+    renderView();
+    await waitFor(() => expect(streams).toHaveLength(1));
+    const host = document.querySelector<HTMLElement>("[data-terminal-host]")!;
+    fireEvent.paste(host, { clipboardData: { getData: () => "echo one\necho two" } });
+    expect(await screen.findByRole("dialog", { name: "Review paste to zsh" })).toBeVisible();
+
+    streams[0]!.handlers.onOutput(new TextEncoder().encode("[sshc] reconnected to a new shell\r\n"));
+
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Review paste to zsh" })).toBeNull());
+    expect(streams[0]!.stream.send).not.toHaveBeenCalled();
+  });
+
   it("opens the current SSH working directory in SFTP", async () => {
     const onOpenRemotePath = vi.fn();
     render(<TerminalView session={{
@@ -177,8 +245,12 @@ describe("TerminalView", () => {
   });
 
   it("says that it is retrying, counts down and reattaches on its own", async () => {
+    const reset = vi.spyOn(Terminal.prototype, "reset");
     const ticket = renderView();
     await waitFor(() => expect(streams).toHaveLength(1));
+    streams[0]!.handlers.onReplay({ start: 0, next: 0, end: 0, truncated: false });
+    streams[0]!.handlers.onOutput(new TextEncoder().encode("first"));
+    expect(reset).not.toHaveBeenCalled();
 
     vi.useFakeTimers({ shouldAdvanceTime: true });
     streams[0]!.handlers.onClose();
@@ -187,7 +259,20 @@ describe("TerminalView", () => {
     await vi.advanceTimersByTimeAsync(1000);
     await waitFor(() => expect(ticket).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(streams).toHaveLength(2));
+    expect(ticket).toHaveBeenLastCalledWith("a", 5);
+    expect(reset).not.toHaveBeenCalled();
     await waitFor(() => expect(screen.queryByText(/Attempt/)).toBeNull());
+  });
+
+  it("warns and restarts byte decoding when detached output exceeded the replay buffer", async () => {
+    const write = vi.spyOn(Terminal.prototype, "write");
+    renderView();
+    await waitFor(() => expect(streams).toHaveLength(1));
+
+    streams[0]!.handlers.onReplay({ start: 4096, next: 4096, end: 4096, truncated: true });
+
+    expect(await screen.findByText(/no longer in the engine replay buffer/)).toBeVisible();
+    expect(write).toHaveBeenCalledWith("\u0018");
   });
 
   it("connects at once when asked instead of waiting out the delay", async () => {

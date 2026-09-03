@@ -88,6 +88,9 @@ Options:
   --split-size <MiB> split files at 16..1024 MiB (engine default 100)
   --split-jobs <n>  use 1..128 streams per large file (engine default 4; 1 disables)
   --chunk-size <MiB> split range size from 8..4096 MiB (engine default 32)
+  --max-depth <n>    recursive get depth limit (default 64; maximum 256)
+  --max-entries <n>  recursive get item limit (default 10000; maximum 1000000)
+  --max-total-size <MiB> recursive get total size limit (default 1024)
   --json            print one machine-readable result on stdout
   -y, --yes         skip the --overwrite confirmation
 `, Actions: []Action{
@@ -148,7 +151,7 @@ var Values = map[string][]string{
 	"wait-states":           {"connecting", "connected", "reconnecting", "exited", "agent-working", "agent-attention", "agent-ready", "agent-ended"},
 	"serial-options":        {"--json", "--non-interactive", "--require-output", "--encoding", "--baud", "--data-bits", "--parity", "--stop-bits", "--flow", "--dtr", "--rts", "--break", "--expect", "--read-for", "--timeout", "--settle", "--max-bytes", "--line-ending", "--script", "--help"},
 	"telnet-options":        {"--non-interactive", "--require-output", "--encoding", "--connect-timeout", "--terminal-type", "--expect", "--read-for", "--timeout", "--settle", "--max-bytes", "--line-ending", "--script", "--json", "--help"},
-	"sftp-options":          {"-r", "--recursive", "--overwrite", "--skip-existing", "--dry-run", "-j", "--jobs", "--split-size", "--split-jobs", "--chunk-size", "--json", "-y", "--yes", "--help"},
+	"sftp-options":          {"-r", "--recursive", "--overwrite", "--skip-existing", "--dry-run", "-j", "--jobs", "--split-size", "--split-jobs", "--chunk-size", "--max-depth", "--max-entries", "--max-total-size", "--json", "-y", "--yes", "--help"},
 	"sftp-settings-options": {"--split-size", "--split-jobs", "--chunk-size", "--json", "--help"},
 }
 

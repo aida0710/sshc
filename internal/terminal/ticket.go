@@ -26,7 +26,16 @@ type Tickets struct {
 
 type ticket struct {
 	session string
+	cursor  uint64
 	expires time.Time
+}
+
+// TicketClaim is the terminal stream position bound to one redeemed ticket.
+// Cursor is kept inside the single-use secret instead of on the WebSocket URL,
+// so a caller cannot change which bytes are replayed after the ticket is issued.
+type TicketClaim struct {
+	SessionID string
+	Cursor    uint64
 }
 
 func (t *Tickets) now() time.Time {
@@ -50,8 +59,8 @@ func (t *Tickets) random() io.Reader {
 	return t.Random
 }
 
-// Issue は、ひとつのセッションに束縛された使い捨てのチケットを作る。
-func (t *Tickets) Issue(sessionID string) (string, error) {
+// Issue は、ひとつのセッションと再生開始位置に束縛された使い捨てのチケットを作る。
+func (t *Tickets) Issue(sessionID string, cursor uint64) (string, error) {
 	raw := make([]byte, 32)
 	if _, err := io.ReadFull(t.random(), raw); err != nil {
 		return "", err
@@ -64,14 +73,15 @@ func (t *Tickets) Issue(sessionID string) (string, error) {
 		t.issued = map[string]ticket{}
 	}
 	t.sweep()
-	t.issued[token] = ticket{session: sessionID, expires: t.now().Add(t.ttl())}
+	t.issued[token] = ticket{session: sessionID, cursor: cursor, expires: t.now().Add(t.ttl())}
 	return token, nil
 }
 
-// Redeem は、そのチケットが束縛しているセッション ID を返し、チケットを使い切る。
-func (t *Tickets) Redeem(token string) (string, bool) {
+// Redeem は、そのチケットが束縛しているセッションと再生開始位置を返し、
+// チケットを使い切る。
+func (t *Tickets) Redeem(token string) (TicketClaim, bool) {
 	if token == "" {
-		return "", false
+		return TicketClaim{}, false
 	}
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
@@ -80,10 +90,10 @@ func (t *Tickets) Redeem(token string) (string, bool) {
 		if len(candidate) == len(token) &&
 			subtle.ConstantTimeCompare([]byte(candidate), []byte(token)) == 1 {
 			delete(t.issued, candidate)
-			return entry.session, true
+			return TicketClaim{SessionID: entry.session, Cursor: entry.cursor}, true
 		}
 	}
-	return "", false
+	return TicketClaim{}, false
 }
 
 // Forget は、あるセッションに対して発行済みのチケットをすべて捨てる。
