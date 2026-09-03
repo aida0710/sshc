@@ -1625,7 +1625,7 @@ paths:
           description: The choice was written
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/SaveResult" }
+              schema: { $ref: "#/components/schemas/SettingsSaveResult" }
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
@@ -1643,7 +1643,7 @@ paths:
           description: The choice was written
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/SaveResult" }
+              schema: { $ref: "#/components/schemas/SettingsSaveResult" }
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
@@ -3913,6 +3913,9 @@ components:
         reconnect: { type: integer, minimum: 0, maximum: 5 }
         copyOnSelect: { type: boolean }
         rightClickPaste: { type: boolean }
+        # 無いときは有効。描画不具合やGPU相性問題を利用者が切り分けられるよう、
+        # false は明示的な選択として保存する。
+        webgl: { type: boolean }
         osc52: { type: boolean }
         jisYenBackslash: { type: boolean }
         localShellProfile: { type: string, pattern: '^[a-z0-9-]{1,64}$' }
@@ -3948,6 +3951,8 @@ components:
         reconnect: { type: integer, minimum: 0, maximum: 5 }
         copyOnSelect: { type: boolean }
         rightClickPaste: { type: boolean }
+        # 無いときは有効。false は明示的にDOM描画を選んだ値である。
+        webgl: { type: boolean }
         osc52: { type: boolean }
         jisYenBackslash: { type: boolean }
         localShellProfile: { type: string, pattern: '^[a-z0-9-]{1,64}$' }
@@ -4198,6 +4203,15 @@ components:
         transactionId: { type: string }
         written: { type: array, items: { type: string } }
         preview: { $ref: "#/components/schemas/SavePreview" }
+    # 設定節の置換は編集previewを持たない。通常のSaveResultを流用すると、
+    # 空のpreviewが成功レスポンス契約に違反するため、wire上も別の結果型にする。
+    SettingsSaveResult:
+      type: object
+      additionalProperties: false
+      required: [transactionId, written]
+      properties:
+        transactionId: { type: string }
+        written: { type: array, items: { type: string } }
     ConflictReport:
       type: object
       additionalProperties: false

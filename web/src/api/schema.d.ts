@@ -3002,6 +3002,7 @@ export interface components {
             reconnect?: number;
             copyOnSelect?: boolean;
             rightClickPaste?: boolean;
+            webgl?: boolean;
             osc52?: boolean;
             jisYenBackslash?: boolean;
             localShellProfile?: string;
@@ -3018,6 +3019,7 @@ export interface components {
             reconnect?: number;
             copyOnSelect?: boolean;
             rightClickPaste?: boolean;
+            webgl?: boolean;
             osc52?: boolean;
             jisYenBackslash?: boolean;
             localShellProfile?: string;
@@ -3181,6 +3183,10 @@ export interface components {
             transactionId: string;
             written: string[];
             preview: components["schemas"]["SavePreview"];
+        };
+        SettingsSaveResult: {
+            transactionId: string;
+            written: string[];
         };
         ConflictReport: {
             path: string;
@@ -6007,7 +6013,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SaveResult"];
+                    "application/json": components["schemas"]["SettingsSaveResult"];
                 };
             };
             400: components["responses"]["Problem"];
@@ -6034,7 +6040,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SaveResult"];
+                    "application/json": components["schemas"]["SettingsSaveResult"];
                 };
             };
             400: components["responses"]["Problem"];
