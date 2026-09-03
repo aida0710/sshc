@@ -15,11 +15,11 @@ sshcはmacOS、Linux、Windows、Androidで利用できるターミナルアプ�
 brew install aida0710/tap/sshc
 ```
 
-Homebrewを使わない場合は、インストーラーとバイナリのバージョンを同じReleaseタグに固定してください。次は`v0.27.0`を導入する例です。
+Homebrewを使わない場合は、インストーラーとバイナリのバージョンを同じReleaseタグに固定してください。次は`v0.27.1`を導入する例です。
 
 ```sh
-SSHC_VERSION=v0.27.0 sh -c \
-  'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.27.0/install.sh | sh'
+SSHC_VERSION=v0.27.1 sh -c \
+  'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.27.1/install.sh | sh'
 ```
 
 導入後は`sshc update`で更新できます。Homebrewで入れた場合はHomebrewから、`install.sh`で入れた場合は同じ配布元から更新されます。変更内容を事前に確認済みの自動処理では、`sshc update --yes`を指定して対話確認を省略できます。

@@ -17,6 +17,7 @@ import {
   selectionMarks,
   surfaceBackgroundImage,
   surfaceToken,
+  terminalCanvasCount,
   terminalFitRects,
   terminalKeyboard,
   terminalScreen,
@@ -110,6 +111,41 @@ test("opens a local shell, runs a command and shows its output", async ({ page, 
 
   await expect(screen).toContainText("embedded-terminal-canary", { timeout: 20_000 });
   expect(violations).toEqual([]);
+});
+
+test("uses the transparent-safe renderer for a local shell with a background image", async ({ page, installation }) => {
+  await installation.write(
+    "sshc/metadata.json",
+    JSON.stringify({
+      schemaVersion: 4,
+      embeddedTerminal: { appearance: { background: "terminal-wall.gif" } },
+    }),
+  );
+  await page.route("**/api/v1/terminal/backgrounds/terminal-wall.gif", async (route) => {
+    await route.fulfill({
+      body: Buffer.from("R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==", "base64"),
+      contentType: "image/gif",
+    });
+  });
+  await openApplication(page, installation);
+
+  const panel = await openConsolePanel(page);
+  await panel.getByRole("button", { name: "Local shell" }).click();
+  const screen = page.getByRole("region", { name: /^Console for / });
+  await expect(screen).toBeVisible();
+  await expect(screen.locator("[data-term-background='terminal-wall.gif']")).toBeVisible();
+  await expect.poll(() => terminalCanvasCount(page)).toBe(0);
+
+  await terminalKeyboard(page).focus();
+  await page.keyboard.type("printf stale");
+  await page.keyboard.press("Backspace");
+  await page.keyboard.press("Backspace");
+  await page.keyboard.press("Backspace");
+  await page.keyboard.press("Backspace");
+  await page.keyboard.press("Backspace");
+  await page.keyboard.type("fixed");
+  await page.keyboard.press("Enter");
+  await expect(screen).toContainText("fixed", { timeout: 20_000 });
 });
 
 test("keeps the session and replays its scrollback after a reload", async ({ page, installation }) => {

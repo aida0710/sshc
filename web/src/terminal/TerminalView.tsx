@@ -91,6 +91,7 @@ export function TerminalView({
   const { resolved } = useTheme();
   const host = useRef<HTMLDivElement>(null);
   const backgroundURL = useBackgroundImage(background ?? "");
+  const backgroundConfigured = (background ?? "") !== "";
   const hasBackground = backgroundURL !== "";
   const refit = useRef<(() => void) | null>(null);
   const terminal = useRef<Terminal | null>(null);
@@ -201,6 +202,7 @@ export function TerminalView({
     let view: Terminal;
     view = new Terminal({
       allowProposedApi: true,
+      allowTransparency: backgroundConfigured,
       cols: 80,
       rows: 24,
       convertEol: false,
@@ -230,7 +232,7 @@ export function TerminalView({
     view.open(container);
     let webgl: { dispose(): void } | null = null;
     let terminalDisposed = false;
-    void attachWebglRenderer(view).then((attached) => {
+    void attachWebglRenderer(view, { backgroundImage: backgroundConfigured }).then((attached) => {
       if (terminalDisposed) attached?.dispose();
       else webgl = attached;
     });
@@ -503,7 +505,7 @@ export function TerminalView({
       copyContext.current = () => {};
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session.id, api]);
+  }, [session.id, api, backgroundConfigured]);
 
   useEffect(() => {
     if (terminal.current === null || host.current === null) return;

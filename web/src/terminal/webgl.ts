@@ -8,6 +8,12 @@ type WebglTerminal = {
 
 type WebglSupport = () => boolean;
 
+type WebglOptions = {
+  backgroundImage?: boolean;
+  supported?: WebglSupport;
+  load?: () => Promise<WebglAddon>;
+};
+
 export function browserSupportsWebgl(): boolean {
   // jsdom exposes the canvas API but reports getContext through its virtual
   // console instead of implementing it. Skip before touching the method so
@@ -24,12 +30,21 @@ export function browserSupportsWebgl(): boolean {
 
 export async function attachWebglRenderer(
   terminal: WebglTerminal,
-  supported: WebglSupport = browserSupportsWebgl,
-  load: () => Promise<WebglAddon> = async () => {
-    const { WebglAddon } = await import("@xterm/addon-webgl");
-    return new WebglAddon();
-  },
+  {
+    backgroundImage = false,
+    supported = browserSupportsWebgl,
+    load = async () => {
+      const { WebglAddon } = await import("@xterm/addon-webgl");
+      return new WebglAddon();
+    },
+  }: WebglOptions = {},
 ): Promise<Disposable | null> {
+  // The WebGL addon repaints by drawing the terminal background over the
+  // previous frame. A fully transparent background cannot erase old glyphs
+  // reliably (notably in Chromium on macOS), so edited command lines leave
+  // characters behind. Keep xterm's DOM renderer for image-backed terminals;
+  // it composites and clears transparent cells correctly.
+  if (backgroundImage) return null;
   if (!supported()) return null;
   let addon: WebglAddon;
   try {

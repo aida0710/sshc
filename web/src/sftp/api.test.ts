@@ -51,7 +51,7 @@ describe("sftpApi resumable download", () => {
         sourceAlias: "", sourcePath: "", operation: "", overwrite: false,
         totalBytes: 4, transferredBytes: 0, bytesPerSecond: 0, remainingSeconds: -1,
         status: "queued", allowedActions: ["pause", "cancel"], attempt: 1, problem: "", lastModified: 0,
-        expectedRevision: "", sourceFingerprint: "", downloadRevision: "",
+        expectedRevision: "", sourceFingerprint: "", downloadRevision: "", downloadParts: [],
         createdAt: "2026-08-31T00:00:00Z", updatedAt: "2026-08-31T00:00:00Z",
       }],
     }), { status: 200, headers: { "Content-Type": "application/json" } }));
