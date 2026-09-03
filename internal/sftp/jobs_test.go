@@ -250,15 +250,15 @@ func TestTransferJobValidatesFileSplitOverrides(t *testing.T) {
 	base := sftp.CreateTransferJob{
 		ID: "transfer_split01", BatchID: "batch_split001", Alias: "edge", Direction: sftp.TransferDownload,
 		Kind: sftp.TransferFile, Name: "large.bin", RemotePath: "/large.bin", TotalBytes: 1 << 20,
-		LargeFileThresholdBytes: 50 << 20, LargeFileParallelism: 6, LargeFileChunkBytes: 512 << 20,
+		LargeFileThresholdBytes: 50 << 20, LargeFileParallelism: sftp.MaxLargeFileParallelism, LargeFileChunkBytes: 512 << 20,
 	}
 	created, err := manager.CreateJob(base)
-	if err != nil || created.LargeFileThresholdBytes != 50<<20 || created.LargeFileParallelism != 6 || created.LargeFileChunkBytes != 512<<20 {
+	if err != nil || created.LargeFileThresholdBytes != 50<<20 || created.LargeFileParallelism != sftp.MaxLargeFileParallelism || created.LargeFileChunkBytes != 512<<20 {
 		t.Fatalf("created split override = %+v, %v", created, err)
 	}
 	for index, mutate := range []func(*sftp.CreateTransferJob){
 		func(input *sftp.CreateTransferJob) { input.LargeFileThresholdBytes = sftp.MinLargeFileThreshold - 1 },
-		func(input *sftp.CreateTransferJob) { input.LargeFileParallelism = 9 },
+		func(input *sftp.CreateTransferJob) { input.LargeFileParallelism = sftp.MaxLargeFileParallelism + 1 },
 		func(input *sftp.CreateTransferJob) { input.LargeFileChunkBytes = sftp.MinLargeFileChunkBytes - 1 },
 		func(input *sftp.CreateTransferJob) { input.Kind = sftp.TransferFolder },
 	} {

@@ -99,7 +99,7 @@ describe("the transfer queue", () => {
     render(<TransferManagerList />);
     expect(screen.getByRole("button", { name: "Collapse Transfer Manager" })).toBeVisible();
     expect(screen.getByRole("spinbutton", { name: "Split at" })).toHaveValue(100);
-    expect(screen.getByRole("combobox", { name: "Streams" })).toHaveValue("4");
+    expect(screen.getByRole("spinbutton", { name: "Streams" })).toHaveValue(4);
     expect(screen.getByRole("spinbutton", { name: "Chunk" })).toHaveValue(32);
     expect(screen.queryByRole("separator")).not.toBeInTheDocument();
   });
@@ -153,8 +153,10 @@ describe("the transfer queue", () => {
     fireEvent.blur(splitAt);
     expect(manager.applySettings).toHaveBeenLastCalledWith(2, 300, false, 73 << 20, 4, 32 << 20);
 
-    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Streams" }), "1");
-    expect(manager.applySettings).toHaveBeenLastCalledWith(2, 300, false, 100 << 20, 1, 32 << 20);
+    const streams = screen.getByRole("spinbutton", { name: "Streams" });
+    fireEvent.change(streams, { target: { value: "128" } });
+    fireEvent.blur(streams);
+    expect(manager.applySettings).toHaveBeenLastCalledWith(2, 300, false, 100 << 20, 128, 32 << 20);
 
     const chunk = screen.getByRole("spinbutton", { name: "Chunk" });
     fireEvent.change(chunk, { target: { value: "41" } });

@@ -23,6 +23,8 @@ import (
 	"time"
 
 	"golang.org/x/term"
+
+	sftpcore "sshc/internal/sftp"
 )
 
 const sftpCLIChunkBytes = 1 << 20
@@ -279,7 +281,7 @@ func validSFTPCLITransferSettings(settings sftpCLITransferQueue) bool {
 	return settings.MaxConcurrent >= 1 && settings.MaxConcurrent <= 8 &&
 		settings.ClearCompletedAfterSeconds >= 0 && settings.ClearCompletedAfterSeconds <= 86400 &&
 		settings.LargeFileThresholdBytes >= 16<<20 && settings.LargeFileThresholdBytes <= 1024<<20 &&
-		settings.LargeFileParallelism >= 1 && settings.LargeFileParallelism <= 8 &&
+		settings.LargeFileParallelism >= 1 && settings.LargeFileParallelism <= sftpcore.MaxLargeFileParallelism &&
 		settings.LargeFileChunkBytes >= 8<<20 && settings.LargeFileChunkBytes <= int64(4096)<<20
 }
 
@@ -779,12 +781,12 @@ func formatSFTPProgressLine(part sftpCLIDownloadPart, name string) string {
 }
 
 func validSFTPDownloadParts(parts []sftpCLIDownloadPart) bool {
-	if len(parts) > 8 {
+	if len(parts) > sftpcore.MaxLargeFileParallelism {
 		return false
 	}
 	seen := make(map[int]struct{}, len(parts))
 	for _, part := range parts {
-		if part.Index < 0 || part.Index >= 8 || part.TransferredBytes < 0 || part.TotalBytes < 0 || part.TransferredBytes > part.TotalBytes {
+		if part.Index < 0 || part.Index >= sftpcore.MaxLargeFileParallelism || part.TransferredBytes < 0 || part.TotalBytes < 0 || part.TransferredBytes > part.TotalBytes {
 			return false
 		}
 		if _, duplicate := seen[part.Index]; duplicate {

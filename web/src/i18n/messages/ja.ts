@@ -176,7 +176,6 @@ export const ja = {
   "sftp.manager.autoClearOff": "残す",
   "sftp.manager.largeFileThreshold": "分割開始",
   "sftp.manager.largeFileParallelism": "分割並列数",
-  "sftp.manager.largeFileParallelismOff": "分割しない",
   "sftp.manager.largeFileChunk": "チャンク",
   "sftp.manager.stopProcessing": "新しい転送の開始を止める",
   "sftp.manager.startProcessing": "転送の開始を再開する",

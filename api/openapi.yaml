@@ -3888,7 +3888,7 @@ components:
         # 待機中のjobを新しく開始しない。実行中のものはそのまま終わる。
         processingStopped: { type: boolean }
         largeFileThresholdBytes: { type: integer, format: int64, minimum: 16777216, maximum: 1073741824 }
-        largeFileParallelism: { type: integer, minimum: 1, maximum: 8 }
+        largeFileParallelism: { type: integer, minimum: 1, maximum: 128 }
         largeFileChunkBytes: { type: integer, format: int64, minimum: 8388608, maximum: 4294967296 }
     # 埋め込みターミナルの設定。数値の範囲外は読み取りで既定へ戻し、書き込みでは拒否する。
     EmbeddedTerminal:
@@ -4363,7 +4363,7 @@ components:
         downloadRevision: { type: string, maxLength: 256 }
         downloadParts:
           type: array
-          maxItems: 8
+          maxItems: 128
           items: { $ref: "#/components/schemas/SFTPDownloadPartProgress" }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
@@ -4373,7 +4373,7 @@ components:
       x-sshc-less-than-or-equal: [[transferredBytes, totalBytes]]
       required: [index, transferredBytes, totalBytes]
       properties:
-        index: { type: integer, minimum: 0, maximum: 7 }
+        index: { type: integer, minimum: 0, maximum: 127 }
         transferredBytes: { type: integer, format: int64, minimum: 0 }
         totalBytes: { type: integer, format: int64, minimum: 0 }
     SFTPTransferJobList:
@@ -4387,7 +4387,7 @@ components:
         # While stopped, waiting jobs stay waiting; running ones finish.
         processingStopped: { type: boolean }
         largeFileThresholdBytes: { type: integer, format: int64, minimum: 16777216, maximum: 1073741824 }
-        largeFileParallelism: { type: integer, minimum: 1, maximum: 8 }
+        largeFileParallelism: { type: integer, minimum: 1, maximum: 128 }
         largeFileChunkBytes: { type: integer, format: int64, minimum: 8388608, maximum: 4294967296 }
         jobs: { type: array, maxItems: 200, items: { $ref: "#/components/schemas/SFTPTransferJob" } }
     SFTPSearchResult:
@@ -4426,7 +4426,7 @@ components:
         clearCompletedAfterSeconds: { type: integer, minimum: 0, maximum: 86400 }
         processingStopped: { type: boolean }
         largeFileThresholdBytes: { type: integer, format: int64, minimum: 16777216, maximum: 1073741824 }
-        largeFileParallelism: { type: integer, minimum: 1, maximum: 8 }
+        largeFileParallelism: { type: integer, minimum: 1, maximum: 128 }
         largeFileChunkBytes: { type: integer, format: int64, minimum: 8388608, maximum: 4294967296 }
     SFTPTransferQueueMoveRequest:
       type: object
@@ -4456,7 +4456,7 @@ components:
         lastModified: { type: integer, format: int64, minimum: 0 }
         # Optional per-file split-transfer overrides for uploads and downloads. Omission inherits the engine settings.
         largeFileThresholdBytes: { type: integer, format: int64, minimum: 16777216, maximum: 1073741824 }
-        largeFileParallelism: { type: integer, minimum: 1, maximum: 8 }
+        largeFileParallelism: { type: integer, minimum: 1, maximum: 128 }
         largeFileChunkBytes: { type: integer, format: int64, minimum: 8388608, maximum: 4294967296 }
     SFTPTransferJobActionRequest:
       type: object
@@ -4506,7 +4506,7 @@ components:
           type: array
           maxItems: 65536
           items: { $ref: "#/components/schemas/SFTPUploadRange" }
-        parallelism: { type: integer, minimum: 1, maximum: 8 }
+        parallelism: { type: integer, minimum: 1, maximum: 128 }
         chunkBytes: { type: integer, format: int64, minimum: 8388608, maximum: 4294967296 }
     SFTPUploadRange:
       type: object

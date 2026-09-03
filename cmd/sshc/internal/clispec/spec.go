@@ -86,7 +86,7 @@ Options:
   --dry-run         inspect the transfer plan without changing files
   -j, --jobs <n>    transfer up to 1..8 files in parallel (default 1)
   --split-size <MiB> split files at 16..1024 MiB (engine default 100)
-  --split-jobs <n>  use 1..8 streams per large file (engine default 4; 1 disables)
+  --split-jobs <n>  use 1..128 streams per large file (engine default 4; 1 disables)
   --chunk-size <MiB> split range size from 8..4096 MiB (engine default 32)
   --json            print one machine-readable result on stdout
   -y, --yes         skip the --overwrite confirmation

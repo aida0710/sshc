@@ -543,9 +543,9 @@ func TestSFTPParsesTransfersAndSafetyOptions(t *testing.T) {
 		t.Fatalf("jobs with equals = %#v, %v", equals, err)
 	}
 
-	settings, err := parseInvocation([]string{"sshc", "sftp", "settings", "--split-size", "73", "--split-jobs", "7", "--chunk-size", "41", "--json"})
+	settings, err := parseInvocation([]string{"sshc", "sftp", "settings", "--split-size", "73", "--split-jobs", "128", "--chunk-size", "41", "--json"})
 	if err != nil || settings.SFTP == nil || settings.SFTP.Action != sftpSettings || settings.SFTP.SplitSizeMiB != 73 ||
-		settings.SFTP.SplitJobs != 7 || settings.SFTP.ChunkSizeMiB != 41 || !settings.SFTP.JSON {
+		settings.SFTP.SplitJobs != 128 || settings.SFTP.ChunkSizeMiB != 41 || !settings.SFTP.JSON {
 		t.Fatalf("settings = %#v, %v", settings, err)
 	}
 }
@@ -565,10 +565,11 @@ func TestSFTPRejectsAmbiguousOrUnsafeFlagCombinations(t *testing.T) {
 		{"sshc", "sftp", "get", "server-a", "/a", "b", "--split-size", "15"},
 		{"sshc", "sftp", "get", "server-a", "/a", "b", "--split-size", "1025"},
 		{"sshc", "sftp", "get", "server-a", "/a", "b", "--split-jobs", "0"},
+		{"sshc", "sftp", "get", "server-a", "/a", "b", "--split-jobs", "129"},
 		{"sshc", "sftp", "get", "server-a", "/a", "b", "--chunk-size", "7"},
 		{"sshc", "sftp", "get", "server-a", "/a", "b", "--chunk-size", "4097"},
 		{"sshc", "sftp", "settings", "--split-size", "15"},
-		{"sshc", "sftp", "settings", "--split-jobs", "9"},
+		{"sshc", "sftp", "settings", "--split-jobs", "129"},
 		{"sshc", "sftp", "settings", "--chunk-size", "7"},
 		{"sshc", "sftp", "settings", "--overwrite"},
 	} {

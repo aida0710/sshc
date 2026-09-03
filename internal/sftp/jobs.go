@@ -14,7 +14,7 @@ const (
 	MinLargeFileThreshold       = int64(16 << 20)
 	MaxLargeFileThreshold       = int64(1 << 30)
 	DefaultLargeFileParallelism = 4
-	MaxLargeFileParallelism     = 8
+	MaxLargeFileParallelism     = 128
 	DefaultLargeFileChunkBytes  = int64(32 << 20)
 	MinLargeFileChunkBytes      = int64(8 << 20)
 	MaxLargeFileChunkBytes      = int64(4 << 30)

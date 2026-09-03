@@ -17,7 +17,10 @@ function isolatedEnvironment(home: string): NodeJS.ProcessEnv {
     npm_config_prefix: "/somewhere/desktop",
   };
   if (process.platform !== "win32") {
-    return { ...shared, HOME: home };
+    // launchd/systemd and GUI launchers may supply no useful TERM. Keep the
+    // engine fixture deliberately hostile so local-shell tests prove that
+    // sshc describes its embedded terminal rather than inheriting this value.
+    return { ...shared, HOME: home, TERM: "dumb" };
   }
   const systemRoot = process.env.SystemRoot ?? "C:\\Windows";
   return {

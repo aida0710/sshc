@@ -204,17 +204,14 @@ export function TerminalView({
     let view: Terminal;
     view = new Terminal({
       allowProposedApi: true,
-      // Background images are supplied by the host element. Keeping xterm's
-      // own cell background opaque avoids stale glyphs when Chromium redraws
-      // an edited line over an image.
-      allowTransparency: false,
+      allowTransparency: backgroundConfigured,
       cols: 80,
       rows: 24,
       convertEol: false,
       cursorBlink: session.state !== "exited",
       fontFamily: fontStack(font ?? ""),
       fontSize: fontSize ?? (window.matchMedia("(max-width: 767px)").matches ? 15 : 13),
-      theme: terminalTheme(container),
+      theme: terminalTheme(container, hasBackground),
       scrollback: scrollbackLines,
       linkHandler: {
         activate: (event, target, range) => {
@@ -517,7 +514,7 @@ export function TerminalView({
 
   useEffect(() => {
     if (terminal.current === null || host.current === null) return;
-    terminal.current.options.theme = terminalTheme(host.current);
+    terminal.current.options.theme = terminalTheme(host.current, hasBackground);
   }, [resolved, palette, hasBackground]);
 
   useEffect(() => {

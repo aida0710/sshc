@@ -5,6 +5,8 @@ import (
 	"strings"
 )
 
+const LocalTerminalType = "xterm-256color"
+
 // ErrNoLoginShell は、起動できるシェルがこのマシンに見つからないことを報告する。
 var ErrNoLoginShell = errors.New("no login shell was found")
 var ErrUnknownShellProfile = errors.New("local shell profile is not available")
@@ -48,19 +50,28 @@ func ResolveShellProfile(profiles []ShellProfile, id string) (ShellProfile, erro
 // `--prefix` の写しであり、それを継いだシェルの中で nvm は「知らない prefix
 // だ」と警告する。ここで開くのは利用者のシェルであって、ビルドの子ではない。
 //
-// 消すだけで足りる。起動するのはログインシェルなので、ユーザー本人が本当に設定して
-// いるものは、そのシェルが読む rc がもう一度設定する。
+// npm由来の値は落とすだけでよい。起動するのはログインシェルなので、ユーザー本人が
+// 設定した値はそのシェルが読む rc で再設定される。一方 TERM は、engineを
+// 起動した端末ではなく、この関数の先にある埋込みTerminalの能力を表す値へ必ず置き換える。
 //
 // 落とすのは小文字の `npm_` だけである。npm が輸出するのはそれであり、
 // NPM_TOKEN のような大文字はユーザーが自分で置いたものだからだ。
 func LoginEnvironment(environ []string) []string {
-	kept := make([]string, 0, len(environ))
+	kept := make([]string, 0, len(environ)+1)
 	for _, entry := range environ {
 		name, _, found := strings.Cut(entry, "=")
 		if found && (strings.HasPrefix(name, "npm_") || name == "INIT_CWD" || name == "NODE") {
 			continue
 		}
+		// TERM describes the terminal emulator in front of the shell, not the
+		// terminal (or launchd/systemd service) which happened to start sshc.
+		// Inheriting an empty, dumb, or unrelated value makes line editors such
+		// as zsh ZLE choose the wrong erase and cursor capabilities. SSH sessions
+		// already advertise this same type when they request their remote PTY.
+		if found && strings.EqualFold(name, "TERM") {
+			continue
+		}
 		kept = append(kept, entry)
 	}
-	return kept
+	return append(kept, "TERM="+LocalTerminalType)
 }
