@@ -127,7 +127,7 @@ export type IntegrationsApi = {
   openTerminalSession(
     request: OpenTerminalSessionRequest,
   ): Promise<OpenTerminalSessionResponse>;
-  terminalStreamTicket(id: string): Promise<TerminalStreamTicket>;
+  terminalStreamTicket(id: string, cursor?: number): Promise<TerminalStreamTicket>;
   reconnectTerminalSession(id: string): Promise<TerminalSessionList>;
   startTerminalForward(
     id: string,
@@ -438,10 +438,11 @@ export const integrationsApi: IntegrationsApi = {
       await postJSON<unknown>("/api/v1/terminal/sessions", request),
     );
   },
-  async terminalStreamTicket(id) {
+  async terminalStreamTicket(id, cursor) {
+    const suffix = cursor === undefined ? "" : `?cursor=${encodeURIComponent(String(cursor))}`;
     return validateStreamTicket(
       await postEmpty<unknown>(
-        `/api/v1/terminal/sessions/${encodeURIComponent(id)}/stream`,
+        `/api/v1/terminal/sessions/${encodeURIComponent(id)}/stream${suffix}`,
       ),
     );
   },

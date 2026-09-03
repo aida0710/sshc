@@ -2,6 +2,7 @@ package sftp
 
 import (
 	"context"
+	"errors"
 	"path"
 	"strings"
 	"time"
@@ -66,6 +67,12 @@ const (
 	TransferCancelled      TransferJobStatus = "cancelled"
 )
 
+// RemoteReconciliationProblem means the remote copy or move crossed its
+// external commit point, but the device-local queue could not durably record
+// the terminal result. It deliberately requires inspection/cancellation
+// instead of automatically repeating a possibly completed move.
+const RemoteReconciliationProblem = "sftp_reconciliation_required"
+
 type TransferJobAction string
 
 const (
@@ -104,6 +111,9 @@ type DownloadPartProgress struct {
 // the engine state machine. Data-plane-only actions such as progress and
 // complete intentionally remain private to the transfer implementation.
 func AllowedTransferActions(job TransferJob) []TransferControlAction {
+	if job.Direction == TransferRemote && job.Status == TransferReattach && job.Problem == RemoteReconciliationProblem {
+		return []TransferControlAction{TransferCancelControl}
+	}
 	switch job.Status {
 	case TransferQueued, TransferRunning:
 		return []TransferControlAction{TransferPauseControl, TransferCancelControl}
@@ -189,6 +199,44 @@ type transferJobRecord struct {
 	revision         string
 	cleanupInFlight  bool
 	cleanupTombstone bool
+}
+
+type transferQueueSnapshot struct {
+	jobs       map[string]*transferJobRecord
+	jobOrder   []string
+	activeJobs int
+	dataPlane  map[string]int
+}
+
+func cloneTransferJobRecord(record *transferJobRecord) transferJobRecord {
+	cloned := *record
+	cloned.job.DownloadParts = append([]DownloadPartProgress(nil), record.job.DownloadParts...)
+	cloned.job.UploadRanges = append([]UploadRange(nil), record.job.UploadRanges...)
+	return cloned
+}
+
+func (m *TransferManager) snapshotTransferQueueLocked() transferQueueSnapshot {
+	snapshot := transferQueueSnapshot{
+		jobs:       make(map[string]*transferJobRecord, len(m.jobs)),
+		jobOrder:   append([]string(nil), m.jobOrder...),
+		activeJobs: m.activeJobs,
+		dataPlane:  make(map[string]int, len(m.dataPlane)),
+	}
+	for id, record := range m.jobs {
+		cloned := cloneTransferJobRecord(record)
+		snapshot.jobs[id] = &cloned
+	}
+	for id, active := range m.dataPlane {
+		snapshot.dataPlane[id] = active
+	}
+	return snapshot
+}
+
+func (m *TransferManager) restoreTransferQueueLocked(snapshot transferQueueSnapshot) {
+	m.jobs = snapshot.jobs
+	m.jobOrder = snapshot.jobOrder
+	m.activeJobs = snapshot.activeJobs
+	m.dataPlane = snapshot.dataPlane
 }
 
 type transferUpdateOrigin uint8
@@ -308,6 +356,7 @@ func (m *TransferManager) BeginDownload(id string, total int64, revision string,
 	if job.Direction != TransferDownload || job.Status != TransferRunning {
 		return TransferJob{}, ErrTransferState
 	}
+	original := cloneTransferJobRecord(record)
 	changed := record.revision != revision || (total >= 0 && job.TotalBytes != total)
 	if changed {
 		record.revision, record.sentBytes = revision, 0
@@ -322,7 +371,10 @@ func (m *TransferManager) BeginDownload(id string, total int64, revision string,
 		return TransferJob{}, ErrOffsetMismatch
 	}
 	job.UpdatedAt = m.now().UTC()
-	_ = m.persistJobsLocked(true)
+	if err := m.persistJobsLocked(true); err != nil {
+		*record = original
+		return TransferJob{}, err
+	}
 	return *job, nil
 }
 
@@ -344,6 +396,7 @@ func (m *TransferManager) RecordDownloadSent(id string, sent, total int64, revis
 	if job.Direction != TransferDownload || job.Status != TransferRunning || record.revision != revision {
 		return TransferJob{}, ErrTransferState
 	}
+	original := cloneTransferJobRecord(record)
 	if total >= 0 {
 		if sent > total {
 			return TransferJob{}, ErrOffsetMismatch
@@ -354,7 +407,10 @@ func (m *TransferManager) RecordDownloadSent(id string, sent, total int64, revis
 		record.sentBytes = sent
 	}
 	job.UpdatedAt = m.now().UTC()
-	_ = m.persistJobsLocked(false)
+	if err := m.persistJobsLocked(false); err != nil {
+		*record = original
+		return TransferJob{}, err
+	}
 	return *job, nil
 }
 
@@ -379,8 +435,12 @@ func (m *TransferManager) VerifyDownloadComplete(id string, total int64, revisio
 	if job.TotalBytes != total || record.sentBytes != total {
 		return TransferJob{}, ErrOffsetMismatch
 	}
+	original := cloneTransferJobRecord(record)
 	job.UpdatedAt = m.now().UTC()
-	_ = m.persistJobsLocked(true)
+	if err := m.persistJobsLocked(true); err != nil {
+		*record = original
+		return TransferJob{}, err
+	}
 	return *job, nil
 }
 
@@ -405,6 +465,7 @@ func (m *TransferManager) AcknowledgeDownload(id string, offset int64, revision 
 	if offset > record.sentBytes || (job.TotalBytes >= 0 && offset > job.TotalBytes) {
 		return TransferJob{}, ErrOffsetMismatch
 	}
+	original := cloneTransferJobRecord(record)
 	now := m.now().UTC()
 	if offset < job.TransferredBytes {
 		job.BytesPerSecond, job.RemainingSeconds = 0, -1
@@ -413,7 +474,10 @@ func (m *TransferManager) AcknowledgeDownload(id string, offset int64, revision 
 	job.TransferredBytes = offset
 	m.updateRateLocked(record, now)
 	job.UpdatedAt = now
-	_ = m.persistJobsLocked(false)
+	if err := m.persistJobsLocked(false); err != nil {
+		*record = original
+		return TransferJob{}, err
+	}
 	return *job, nil
 }
 
@@ -592,6 +656,7 @@ func (m *TransferManager) MoveQueuedJob(id string, move TransferQueueMove) error
 	if destination < 0 || destination >= len(slots) || destination == current {
 		return nil
 	}
+	originalOrder := append([]string(nil), m.jobOrder...)
 	// 待機中の id だけを取り出し、順番を変えて同じ位置へ書き戻す。running の
 	// job が占める index は触らないので、待機列だけが並び替わる。
 	waiting := make([]string, 0, len(slots))
@@ -604,7 +669,10 @@ func (m *TransferManager) MoveQueuedJob(id string, move TransferQueueMove) error
 	for position, index := range slots {
 		m.jobOrder[index] = waiting[position]
 	}
-	_ = m.persistJobsLocked(true)
+	if err := m.persistJobsLocked(true); err != nil {
+		m.jobOrder = originalOrder
+		return err
+	}
 	return nil
 }
 
@@ -670,7 +738,17 @@ func (m *TransferManager) CreateJob(input CreateTransferJob) (TransferJob, error
 
 	m.jobsMutex.Lock()
 	m.initializeJobsLocked()
-	staleRemotes := m.sweepJobsLocked()
+	sweepSnapshot := m.snapshotTransferQueueLocked()
+	stale := m.sweepJobsLocked()
+	var staleRemotes []Remote
+	if len(stale) != 0 {
+		if err := m.persistJobsLocked(true); err != nil {
+			m.restoreTransferQueueLocked(sweepSnapshot)
+			m.jobsMutex.Unlock()
+			return TransferJob{}, err
+		}
+		staleRemotes = m.detachStaleRemotes(stale)
+	}
 	if existing := m.jobs[input.ID]; existing != nil {
 		if sameTransferIdentity(existing.job, input, cleaned, name) {
 			job := existing.job
@@ -682,6 +760,7 @@ func (m *TransferManager) CreateJob(input CreateTransferJob) (TransferJob, error
 		closeRemotes(staleRemotes)
 		return TransferJob{}, ErrConflict
 	}
+	admissionSnapshot := m.snapshotTransferQueueLocked()
 	if len(m.jobOrder) >= maxRetainedTransferJobs {
 		var cleanup *transferJobRecord
 		removedWithoutNetwork := false
@@ -725,25 +804,41 @@ func (m *TransferManager) CreateJob(input CreateTransferJob) (TransferJob, error
 			}
 		}
 		if cleanup != nil {
+			originalCleanup := cloneTransferJobRecord(cleanup)
 			cleanup.cleanupInFlight = true
 			cleanup.cleanupTombstone = true
 			cleanup.job.Problem = "sftp_cleanup_pending"
 			cleanup.job.UpdatedAt = m.now().UTC()
+			if persistErr := m.persistJobsLocked(true); persistErr != nil {
+				*cleanup = originalCleanup
+				m.jobsMutex.Unlock()
+				closeRemotes(staleRemotes)
+				return TransferJob{}, persistErr
+			}
 			cleanupJob := cleanup.job
 			m.jobsMutex.Unlock()
 			closeRemotes(staleRemotes)
 			cleanupErr := m.cleanupEvictedUploadPart(cleanupJob)
 			m.jobsMutex.Lock()
+			var persistErr error
 			if current := m.jobs[cleanupJob.ID]; current == cleanup {
 				current.cleanupInFlight = false
 				if cleanupErr == nil {
+					orderIndex := m.jobOrderIndexLocked(cleanupJob.ID)
 					delete(m.jobs, cleanupJob.ID)
 					m.removeJobOrderLocked(cleanupJob.ID)
+					if persistErr = m.persistJobsLocked(true); persistErr != nil {
+						m.jobs[cleanupJob.ID] = current
+						m.insertJobOrderLocked(orderIndex, cleanupJob.ID)
+					}
 				}
 			}
 			m.jobsMutex.Unlock()
 			if cleanupErr != nil {
 				return TransferJob{}, ErrTransferLimit
+			}
+			if persistErr != nil {
+				return TransferJob{}, persistErr
 			}
 			return m.CreateJob(input)
 		}
@@ -767,7 +862,12 @@ func (m *TransferManager) CreateJob(input CreateTransferJob) (TransferJob, error
 	}
 	m.jobs[input.ID] = &transferJobRecord{job: job, sampleAt: now}
 	m.jobOrder = append(m.jobOrder, input.ID)
-	_ = m.persistJobsLocked(true)
+	if persistErr := m.persistJobsLocked(true); persistErr != nil {
+		m.restoreTransferQueueLocked(admissionSnapshot)
+		m.jobsMutex.Unlock()
+		closeRemotes(staleRemotes)
+		return TransferJob{}, persistErr
+	}
 	m.jobsMutex.Unlock()
 	closeRemotes(staleRemotes)
 	return job, nil
@@ -782,6 +882,22 @@ func (m *TransferManager) removeJobOrderLocked(id string) {
 	}
 }
 
+func (m *TransferManager) jobOrderIndexLocked(id string) int {
+	for index, candidate := range m.jobOrder {
+		if candidate == id {
+			return index
+		}
+	}
+	return len(m.jobOrder)
+}
+
+func (m *TransferManager) insertJobOrderLocked(index int, id string) {
+	index = min(max(index, 0), len(m.jobOrder))
+	m.jobOrder = append(m.jobOrder, "")
+	copy(m.jobOrder[index+1:], m.jobOrder[index:])
+	m.jobOrder[index] = id
+}
+
 func (m *TransferManager) cleanupEvictedUploadPart(job TransferJob) error {
 	m.releasePreparedDownload(job.ID)
 	if job.Direction != TransferUpload || job.Kind != TransferFile || m.Service == nil || m.Service.Open == nil {
@@ -792,12 +908,24 @@ func (m *TransferManager) cleanupEvictedUploadPart(job TransferJob) error {
 	return m.Cancel(ctx, job.Alias, job.ID, job.RemotePath)
 }
 
-func (m *TransferManager) ListJobs() []TransferJob {
+func (m *TransferManager) ListJobs() ([]TransferJob, error) {
 	m.sweepPreparedDownloads()
-	m.expireFinishedJobs()
+	if err := m.expireFinishedJobs(); err != nil {
+		return nil, err
+	}
 	m.jobsMutex.Lock()
 	m.initializeJobsLocked()
-	staleRemotes := m.sweepJobsLocked()
+	snapshot := m.snapshotTransferQueueLocked()
+	stale := m.sweepJobsLocked()
+	var staleRemotes []Remote
+	if len(stale) != 0 {
+		if err := m.persistJobsLocked(true); err != nil {
+			m.restoreTransferQueueLocked(snapshot)
+			m.jobsMutex.Unlock()
+			return nil, err
+		}
+		staleRemotes = m.detachStaleRemotes(stale)
+	}
 	result := make([]TransferJob, 0, len(m.jobOrder))
 	for _, id := range m.jobOrder {
 		if record := m.jobs[id]; record != nil {
@@ -806,17 +934,17 @@ func (m *TransferManager) ListJobs() []TransferJob {
 			result = append(result, job)
 		}
 	}
-	_ = m.persistJobsLocked(false)
 	m.jobsMutex.Unlock()
 	closeRemotes(staleRemotes)
-	return result
+	return result, nil
 }
 
 // ClearFinished removes terminal records from the engine-owned ledger. Active,
 // paused and failed work remains available for control or diagnosis.
-func (m *TransferManager) ClearFinished() int {
+func (m *TransferManager) ClearFinished() (int, error) {
 	m.jobsMutex.Lock()
 	m.initializeJobsLocked()
+	snapshot := m.snapshotTransferQueueLocked()
 	removed := make([]string, 0)
 	kept := m.jobOrder[:0]
 	for _, id := range m.jobOrder {
@@ -830,12 +958,16 @@ func (m *TransferManager) ClearFinished() int {
 		kept = append(kept, id)
 	}
 	m.jobOrder = kept
-	_ = m.persistJobsLocked(true)
+	if err := m.persistJobsLocked(true); err != nil {
+		m.restoreTransferQueueLocked(snapshot)
+		m.jobsMutex.Unlock()
+		return 0, err
+	}
 	m.jobsMutex.Unlock()
 	for _, id := range removed {
 		m.releasePreparedDownload(id)
 	}
-	return len(removed)
+	return len(removed), nil
 }
 
 // RemoveJob dismisses one retained transfer record. Failed regular uploads may
@@ -866,7 +998,11 @@ func (m *TransferManager) RemoveJob(id string) error {
 	job := record.job
 	if job.Status == TransferFailed && uploadJobHasRemotePart(job) {
 		record.cleanupInFlight = true
-		_ = m.persistJobsLocked(true)
+		if err := m.persistJobsLocked(true); err != nil {
+			record.cleanupInFlight = false
+			m.jobsMutex.Unlock()
+			return err
+		}
 		m.jobsMutex.Unlock()
 
 		cleanupErr := m.cleanupEvictedUploadPart(job)
@@ -878,18 +1014,29 @@ func (m *TransferManager) RemoveJob(id string) error {
 		}
 		current.cleanupInFlight = false
 		if cleanupErr != nil {
+			original := cloneTransferJobRecord(current)
 			current.cleanupTombstone = true
 			current.job.Problem = "sftp_cleanup_pending"
 			current.job.UpdatedAt = m.now().UTC()
-			_ = m.persistJobsLocked(true)
+			persistErr := m.persistJobsLocked(true)
+			if persistErr != nil {
+				*current = original
+			}
 			m.jobsMutex.Unlock()
-			return cleanupErr
+			return errors.Join(cleanupErr, persistErr)
 		}
 	}
+	orderIndex := m.jobOrderIndexLocked(id)
+	removed := m.jobs[id]
 	delete(m.jobs, id)
 	delete(m.dataPlane, id)
 	m.removeJobOrderLocked(id)
-	_ = m.persistJobsLocked(true)
+	if err := m.persistJobsLocked(true); err != nil {
+		m.jobs[id] = removed
+		m.insertJobOrderLocked(orderIndex, id)
+		m.jobsMutex.Unlock()
+		return err
+	}
 	m.jobsMutex.Unlock()
 	m.releasePreparedDownload(id)
 	return nil
@@ -940,7 +1087,17 @@ func (m *TransferManager) updateJob(id string, update UpdateTransferJob, origin 
 	}
 	m.jobsMutex.Lock()
 	m.initializeJobsLocked()
-	staleRemotes := m.sweepJobsLocked()
+	sweepSnapshot := m.snapshotTransferQueueLocked()
+	stale := m.sweepJobsLocked()
+	var staleRemotes []Remote
+	if len(stale) != 0 {
+		if err := m.persistJobsLocked(true); err != nil {
+			m.restoreTransferQueueLocked(sweepSnapshot)
+			m.jobsMutex.Unlock()
+			return TransferJob{}, err
+		}
+		staleRemotes = m.detachStaleRemotes(stale)
+	}
 	var terminalRemote Remote
 	defer func() {
 		m.jobsMutex.Unlock()
@@ -956,7 +1113,7 @@ func (m *TransferManager) updateJob(id string, update UpdateTransferJob, origin 
 	if record.cleanupInFlight || (record.cleanupTombstone && !(origin == transferUpdateUploadData && update.Action == TransferCancelAction)) {
 		return TransferJob{}, ErrTransferState
 	}
-	original := *record
+	original := cloneTransferJobRecord(record)
 	originalActive := m.activeJobs
 	committed := false
 	defer func() {
@@ -1087,10 +1244,12 @@ func (m *TransferManager) updateJob(id string, update UpdateTransferJob, origin 
 		return TransferJob{}, ErrInvalidTransfer
 	}
 	job.UpdatedAt = now
+	if err := m.persistJobsLocked(update.Action != TransferProgressAction); err != nil {
+		return TransferJob{}, err
+	}
 	if job.Status != TransferRunning && job.Status != TransferQueued {
 		terminalRemote = m.detachRemote(job.Alias, job.ID, job.RemotePath)
 	}
-	_ = m.persistJobsLocked(update.Action != TransferProgressAction)
 	committed = true
 	return *job, nil
 }
@@ -1103,6 +1262,10 @@ func validateTransferUpdate(job TransferJob, update UpdateTransferJob, origin tr
 	hasTotal := update.TotalBytes != nil
 	hasProblem := strings.TrimSpace(update.Problem) != ""
 	noPayload := !hasTransferred && !hasTotal && !hasProblem && !update.ResetProgress
+	if job.Direction == TransferRemote && job.Problem == RemoteReconciliationProblem &&
+		(update.Action == TransferResumeAction || update.Action == TransferRetryAction) {
+		return ErrTransferState
+	}
 
 	if origin == transferUpdateClient {
 		if job.Direction == TransferUpload && (update.Action == TransferProgressAction || update.Action == TransferCompleteAction || update.Action == TransferCancelAction) {
@@ -1212,9 +1375,15 @@ func (m *TransferManager) updateRateLocked(record *transferJobRecord, now time.T
 	record.sampleAt, record.sampleBytes = now, record.job.TransferredBytes
 }
 
-func (m *TransferManager) sweepJobsLocked() []Remote {
+type staleTransferRemote struct {
+	alias      string
+	id         string
+	remotePath string
+}
+
+func (m *TransferManager) sweepJobsLocked() []staleTransferRemote {
 	now := m.now().UTC()
-	var detached []Remote
+	var stale []staleTransferRemote
 	for _, record := range m.jobs {
 		if m.dataPlane[record.job.ID] > 0 {
 			continue
@@ -1224,9 +1393,19 @@ func (m *TransferManager) sweepJobsLocked() []Remote {
 			record.job.Problem = "transfer_interrupted"
 			record.job.UpdatedAt = now
 			m.releaseJobLocked(TransferRunning)
-			if remote := m.detachRemote(record.job.Alias, record.job.ID, record.job.RemotePath); remote != nil {
-				detached = append(detached, remote)
-			}
+			stale = append(stale, staleTransferRemote{
+				alias: record.job.Alias, id: record.job.ID, remotePath: record.job.RemotePath,
+			})
+		}
+	}
+	return stale
+}
+
+func (m *TransferManager) detachStaleRemotes(stale []staleTransferRemote) []Remote {
+	detached := make([]Remote, 0, len(stale))
+	for _, target := range stale {
+		if remote := m.detachRemote(target.alias, target.id, target.remotePath); remote != nil {
+			detached = append(detached, remote)
 		}
 	}
 	return detached
@@ -1237,13 +1416,14 @@ func (m *TransferManager) sweepJobsLocked() []Remote {
 //
 // 解放は job の lock を手放してから行う。prepared download は別の mutex が
 // 守っており、二つを重ねて取れば順序が閉じない。
-func (m *TransferManager) expireFinishedJobs() {
+func (m *TransferManager) expireFinishedJobs() error {
 	m.jobsMutex.Lock()
 	m.initializeJobsLocked()
 	if m.clearCompletedAfter <= 0 {
 		m.jobsMutex.Unlock()
-		return
+		return nil
 	}
+	snapshot := m.snapshotTransferQueueLocked()
 	now := m.now().UTC()
 	removed := make([]string, 0)
 	kept := m.jobOrder[:0]
@@ -1259,10 +1439,18 @@ func (m *TransferManager) expireFinishedJobs() {
 		kept = append(kept, id)
 	}
 	m.jobOrder = kept
+	if len(removed) != 0 {
+		if err := m.persistJobsLocked(true); err != nil {
+			m.restoreTransferQueueLocked(snapshot)
+			m.jobsMutex.Unlock()
+			return err
+		}
+	}
 	m.jobsMutex.Unlock()
 	for _, id := range removed {
 		m.releasePreparedDownload(id)
 	}
+	return nil
 }
 
 func closeRemotes(remotes []Remote) {

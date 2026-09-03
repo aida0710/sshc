@@ -27,7 +27,21 @@ import (
 	sftpcore "sshc/internal/sftp"
 )
 
-const sftpCLIChunkBytes = 1 << 20
+const (
+	sftpCLIChunkBytes = 1 << 20
+
+	// Recursive get first builds a complete conflict-safe plan. Keep that walk
+	// within the same default tree budget as the Web folder archive so a hostile
+	// or accidentally broad remote path cannot grow memory, requests, or the
+	// eventual download without bound. Callers can deliberately raise each
+	// limit, but even overrides remain finite.
+	sftpCLIDefaultRecursiveDepth   = 64
+	sftpCLIDefaultRecursiveEntries = 10_000
+	sftpCLIDefaultRecursiveBytes   = int64(1 << 30)
+	sftpCLIMaxRecursiveDepth       = 256
+	sftpCLIMaxRecursiveEntries     = 1_000_000
+	sftpCLIMaxRecursiveMiB         = int64(8 * 1024 * 1024)
+)
 
 var (
 	errSFTPRecursiveRequired = errors.New("recursive transfer requires --recursive")
@@ -36,7 +50,19 @@ var (
 	errSFTPUnsupportedLocal  = errors.New("local source contains an unsupported file type")
 	errSFTPMissingRevision   = errors.New("download response has no revision")
 	errSFTPRemotePath        = errors.New("remote path must be absolute")
+	errSFTPRecursiveLimit    = errors.New("recursive download safety limit exceeded")
 )
+
+type sftpCLIRecursiveLimitError struct {
+	resource string
+	limit    int64
+}
+
+func (failure sftpCLIRecursiveLimitError) Error() string {
+	return fmt.Sprintf("%s: maximum %s is %d", errSFTPRecursiveLimit, failure.resource, failure.limit)
+}
+
+func (sftpCLIRecursiveLimitError) Unwrap() error { return errSFTPRecursiveLimit }
 
 type sftpCLIEntry struct {
 	Name       string `json:"name"`
@@ -142,6 +168,56 @@ type sftpCLIPlan struct {
 	Files       []sftpCLIFile
 	Skipped     int
 	Bytes       int64
+}
+
+type sftpCLIRecursiveBudget struct {
+	maxDepth   int
+	maxEntries int
+	maxBytes   int64
+	entries    int
+	bytes      int64
+}
+
+func recursiveSFTPCLIBudget(called sftpInvocation) sftpCLIRecursiveBudget {
+	depth := called.MaxDepth
+	if depth <= 0 || depth > sftpCLIMaxRecursiveDepth {
+		depth = sftpCLIDefaultRecursiveDepth
+	}
+	entries := called.MaxEntries
+	if entries <= 0 || entries > sftpCLIMaxRecursiveEntries {
+		entries = sftpCLIDefaultRecursiveEntries
+	}
+	totalMiB := called.MaxTotalMiB
+	if totalMiB <= 0 || totalMiB > sftpCLIMaxRecursiveMiB {
+		totalMiB = sftpCLIDefaultRecursiveBytes >> 20
+	}
+	bytes := totalMiB << 20
+	return sftpCLIRecursiveBudget{
+		maxDepth: depth, maxEntries: entries, maxBytes: bytes,
+		// The selected root is also materialized as a directory.
+		entries: 1,
+	}
+}
+
+func (budget *sftpCLIRecursiveBudget) include(entry sftpCLIEntry, depth int) error {
+	if depth > budget.maxDepth {
+		return sftpCLIRecursiveLimitError{resource: "depth", limit: int64(budget.maxDepth)}
+	}
+	if budget.entries >= budget.maxEntries {
+		return sftpCLIRecursiveLimitError{resource: "entries", limit: int64(budget.maxEntries)}
+	}
+	budget.entries++
+	if entry.Type != "file" {
+		return nil
+	}
+	if entry.Size < 0 {
+		return errEngineInvalidResponse
+	}
+	if budget.bytes > budget.maxBytes || entry.Size > budget.maxBytes-budget.bytes {
+		return sftpCLIRecursiveLimitError{resource: "total size in bytes", limit: budget.maxBytes}
+	}
+	budget.bytes += entry.Size
+	return nil
 }
 
 func runSFTP(
@@ -331,13 +407,21 @@ func buildSFTPGetPlan(ctx context.Context, engine *engineAPI, called sftpInvocat
 	}
 	plan.Destination = root
 	plan.Directories = append(plan.Directories, root)
-	if err := walkRemoteGetPlan(ctx, engine, called.Alias, source.Path, root, &plan); err != nil {
+	budget := recursiveSFTPCLIBudget(called)
+	if err := walkRemoteGetPlan(ctx, engine, called.Alias, source.Path, root, 0, &budget, &plan); err != nil {
 		return plan, err
 	}
 	return plan, nil
 }
 
-func walkRemoteGetPlan(ctx context.Context, engine *engineAPI, alias, remoteRoot, localRoot string, plan *sftpCLIPlan) error {
+func walkRemoteGetPlan(
+	ctx context.Context,
+	engine *engineAPI,
+	alias, remoteRoot, localRoot string,
+	depth int,
+	budget *sftpCLIRecursiveBudget,
+	plan *sftpCLIPlan,
+) error {
 	listing, err := sftpList(ctx, engine, alias, remoteRoot)
 	if err != nil {
 		return err
@@ -346,6 +430,12 @@ func walkRemoteGetPlan(ctx context.Context, engine *engineAPI, alias, remoteRoot
 	for _, entry := range listing.Entries {
 		if entry.Name == "" || entry.Name == "." || entry.Name == ".." || path.Base(entry.Name) != entry.Name || strings.Contains(entry.Name, "\\") {
 			return errEngineInvalidResponse
+		}
+		if entry.Path != path.Join(remoteRoot, entry.Name) {
+			return errEngineInvalidResponse
+		}
+		if err := budget.include(entry, depth+1); err != nil {
+			return err
 		}
 		target := filepath.Join(localRoot, entry.Name)
 		switch entry.Type {
@@ -356,7 +446,7 @@ func walkRemoteGetPlan(ctx context.Context, engine *engineAPI, alias, remoteRoot
 				return err
 			}
 			plan.Directories = append(plan.Directories, target)
-			if err := walkRemoteGetPlan(ctx, engine, alias, entry.Path, target, plan); err != nil {
+			if err := walkRemoteGetPlan(ctx, engine, alias, entry.Path, target, depth+1, budget, plan); err != nil {
 				return err
 			}
 		case "file":
@@ -615,7 +705,19 @@ func sftpDownloadFile(
 		_ = temporary.Close()
 		_ = os.Remove(temporaryName)
 	}()
-	written, copyErr := io.Copy(temporary, response.Body)
+	download := io.Reader(response.Body)
+	if file.Size >= 0 {
+		// The listing used to approve the recursive plan fixes this file's
+		// contribution to the total-size budget. Read one sentinel byte past
+		// that size to detect a replacement without filling local storage with
+		// an unexpectedly grown remote file.
+		limit := file.Size
+		if limit < int64(^uint64(0)>>1) {
+			limit++
+		}
+		download = io.LimitReader(response.Body, limit)
+	}
+	written, copyErr := io.Copy(temporary, download)
 	closeResponseErr := response.Body.Close()
 	if copyErr != nil {
 		return copyErr
@@ -1210,6 +1312,8 @@ func finishSFTPFailure(asJSON bool, err error, stdout, stderr io.Writer) int {
 		failure = commandFailure{Kind: "unsupported_file_type", Retryable: false}
 	case errors.Is(err, errSFTPRemotePath):
 		failure = commandFailure{Kind: "invalid_remote_path", Retryable: false}
+	case errors.Is(err, errSFTPRecursiveLimit):
+		failure = commandFailure{Kind: "recursive_limit", Retryable: false}
 	case errors.Is(err, fs.ErrNotExist):
 		failure = commandFailure{Kind: "local_not_found", Retryable: false}
 	}
@@ -1238,6 +1342,8 @@ func finishSFTPFailure(asJSON bool, err error, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "sshc: symlinks and special files are not transferred")
 	case "invalid_remote_path":
 		fmt.Fprintln(stderr, "sshc: remote paths must be absolute POSIX paths")
+	case "recursive_limit":
+		fmt.Fprintf(stderr, "sshc: %v; choose a narrower source or raise the recursive limit explicitly\n", err)
 	case "local_not_found":
 		fmt.Fprintln(stderr, "sshc: the local source does not exist")
 	case "canceled":

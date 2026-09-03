@@ -129,7 +129,7 @@ test("stores an encrypted key passphrase from the key row and shows only its nam
   await row.getByRole("button", { name: "Show details" }).click();
   await page.getByRole("group", { name: "Key actions" }).getByRole("button", { name: "Save passphrase" }).click();
   await page.getByLabel("Passphrase name").fill("saved-e2e-key");
-  await page.getByLabel("Passphrase value").fill(passphrase);
+  await page.getByLabel("Passphrase value", { exact: true }).fill(passphrase);
   const assigned = page.waitForResponse(
     (response) =>
       new URL(response.url()).pathname === "/api/v1/credentials/key_passphrase/assign" &&
@@ -138,7 +138,7 @@ test("stores an encrypted key passphrase from the key row and shows only its nam
   await page.getByRole("button", { name: "Save and use for this key" }).click();
   expect((await assigned).status()).toBe(200);
 
-  await expect(page.getByLabel("Passphrase value")).toHaveCount(0);
+  await expect(page.getByLabel("Passphrase value", { exact: true })).toHaveCount(0);
   await expect(page.locator("body")).not.toContainText(passphrase);
   await openSection(page, "Secrets");
   const passphrases = page.getByRole("region", { name: "Key passphrases" });

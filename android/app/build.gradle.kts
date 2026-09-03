@@ -55,6 +55,8 @@ android {
 dependencies {
     // sshc.aar は `make android-bind` が置く。Go の成果物なので追跡しない。
     implementation(files("libs/sshc.aar"))
+    // Android 16 の predictive back と旧 OS の戻る操作を同じ callback で扱う。
+    implementation("androidx.activity:activity:1.13.0")
 
     // Android API に依存しないネイティブ層の判断を JVM 上で検証する。
     testImplementation("junit:junit:4.13.2")

@@ -1,6 +1,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/client";
+import type { OpenTerminalSessionResponse } from "../api/integrations";
 import { useTerminalSessions, type TerminalSessionsApi } from "./sessions";
 
 const list = { sessions: [], maxSessions: 50 };
@@ -45,6 +46,51 @@ describe("useTerminalSessions", () => {
       await result.current.open({ kind: "shell" });
     });
     expect(result.current.problem).toBe("terminal.openFailed");
+  });
+
+  it("stays busy until every parallel session open has finished", async () => {
+    let resolveFirst: (value: OpenTerminalSessionResponse) => void = () => undefined;
+    let resolveSecond: (value: OpenTerminalSessionResponse) => void = () => undefined;
+    const first = new Promise<OpenTerminalSessionResponse>((resolve) => { resolveFirst = resolve; });
+    const second = new Promise<OpenTerminalSessionResponse>((resolve) => { resolveSecond = resolve; });
+    const openTerminalSession = vi.fn()
+      .mockReturnValueOnce(first)
+      .mockReturnValueOnce(second);
+    const { result } = renderHook(() => useTerminalSessions(api({ openTerminalSession }), translate));
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+
+    let firstOpen: Promise<unknown> = Promise.resolve();
+    let secondOpen: Promise<unknown> = Promise.resolve();
+    act(() => {
+      firstOpen = result.current.open({ kind: "shell" });
+      secondOpen = result.current.open({ kind: "shell" });
+    });
+    await waitFor(() => expect(openTerminalSession).toHaveBeenCalledTimes(2));
+    expect(result.current.busy).toBe(true);
+
+    await act(async () => {
+      resolveFirst({
+        session: {
+          id: "first", kind: "shell", title: "first", startedAt: "2026-09-04T00:00:00Z",
+          state: "connected", problem: "",
+        },
+        streamTicket: "first-ticket",
+      });
+      await firstOpen;
+    });
+    expect(result.current.busy).toBe(true);
+
+    await act(async () => {
+      resolveSecond({
+        session: {
+          id: "second", kind: "shell", title: "second", startedAt: "2026-09-04T00:00:01Z",
+          state: "connected", problem: "",
+        },
+        streamTicket: "second-ticket",
+      });
+      await secondOpen;
+    });
+    expect(result.current.busy).toBe(false);
   });
 
   it("reports a finished load even when the list could not be read", async () => {
@@ -114,6 +160,114 @@ describe("useTerminalSessions", () => {
       await initial;
     });
     expect(result.current.maxSessions).toBe(1);
+  });
+
+  it("does not let an in-flight refresh resurrect a session after close", async () => {
+    const connected = {
+      id: "a", kind: "ssh", alias: "bastion", title: "bastion",
+      startedAt: "2026-08-26T01:00:00Z", state: "connected", problem: "",
+    } as const;
+    const beforeClose = { sessions: [connected], maxSessions: 50 };
+    let resolveStale: (value: typeof beforeClose) => void = () => undefined;
+    const stale = new Promise<typeof beforeClose>((resolve) => { resolveStale = resolve; });
+    const terminalSessions = vi.fn()
+      .mockResolvedValueOnce(beforeClose)
+      .mockReturnValueOnce(stale);
+    const closeTerminalSession = vi.fn().mockResolvedValue({ sessions: [], maxSessions: 50 });
+    const client = api({ terminalSessions, closeTerminalSession });
+    const { result } = renderHook(() => useTerminalSessions(client, translate));
+    await waitFor(() => expect(result.current.sessions).toEqual([connected]));
+
+    let pendingRefresh: Promise<void> = Promise.resolve();
+    act(() => { pendingRefresh = result.current.refresh(); });
+    await waitFor(() => expect(terminalSessions).toHaveBeenCalledTimes(2));
+    await act(async () => { await result.current.close("a"); });
+    expect(result.current.sessions).toEqual([]);
+
+    await act(async () => {
+      resolveStale(beforeClose);
+      await pendingRefresh;
+    });
+    expect(result.current.sessions).toEqual([]);
+  });
+
+  it("does not let parallel mutation responses resurrect a session", async () => {
+    const first = {
+      id: "a", kind: "ssh", alias: "first", title: "first",
+      startedAt: "2026-09-04T01:00:00Z", state: "connected", problem: "",
+    } as const;
+    const second = {
+      id: "b", kind: "ssh", alias: "second", title: "second",
+      startedAt: "2026-09-04T01:00:01Z", state: "connected", problem: "",
+    } as const;
+    const initial = { sessions: [first, second], maxSessions: 50 };
+    let resolveFirst: (value: { sessions: [typeof second]; maxSessions: number }) => void = () => undefined;
+    let resolveSecond: (value: typeof list) => void = () => undefined;
+    const firstClose = new Promise<{ sessions: [typeof second]; maxSessions: number }>((resolve) => {
+      resolveFirst = resolve;
+    });
+    const secondClose = new Promise<typeof list>((resolve) => { resolveSecond = resolve; });
+    const terminalSessions = vi.fn()
+      .mockResolvedValueOnce(initial)
+      .mockResolvedValue(list);
+    const closeTerminalSession = vi.fn()
+      .mockReturnValueOnce(firstClose)
+      .mockReturnValueOnce(secondClose);
+    const client = api({ terminalSessions, closeTerminalSession });
+    const { result } = renderHook(() => useTerminalSessions(client, translate));
+    await waitFor(() => expect(result.current.sessions).toEqual([first, second]));
+
+    let closingFirst: Promise<void> = Promise.resolve();
+    let closingSecond: Promise<void> = Promise.resolve();
+    act(() => {
+      closingFirst = result.current.close("a");
+      closingSecond = result.current.close("b");
+    });
+    resolveSecond(list);
+    await act(async () => { await closingSecond; });
+    expect(result.current.sessions).toEqual([]);
+
+    // The older response arrives last with b still present. It is rejected and
+    // followed by an authoritative list read instead of reviving b locally.
+    resolveFirst({ sessions: [second], maxSessions: 50 });
+    await act(async () => { await closingFirst; });
+
+    expect(result.current.sessions).toEqual([]);
+    expect(terminalSessions).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not let an older close response erase a session opened afterwards", async () => {
+    const first = {
+      id: "a", kind: "ssh", alias: "first", title: "first",
+      startedAt: "2026-09-04T01:00:00Z", state: "connected", problem: "",
+    } as const;
+    const opened = {
+      id: "b", kind: "shell", title: "second",
+      startedAt: "2026-09-04T01:00:01Z", state: "connected", problem: "",
+    } as const;
+    let resolveClose: (value: typeof list) => void = () => undefined;
+    const closingResponse = new Promise<typeof list>((resolve) => { resolveClose = resolve; });
+    const terminalSessions = vi.fn()
+      .mockResolvedValueOnce({ sessions: [first], maxSessions: 50 })
+      .mockResolvedValue({ sessions: [opened], maxSessions: 50 });
+    const client = api({
+      terminalSessions,
+      closeTerminalSession: vi.fn(() => closingResponse),
+      openTerminalSession: vi.fn(async () => ({ session: opened, streamTicket: "ticket-b" })),
+    });
+    const { result } = renderHook(() => useTerminalSessions(client, translate));
+    await waitFor(() => expect(result.current.sessions).toEqual([first]));
+
+    let closing: Promise<void> = Promise.resolve();
+    act(() => { closing = result.current.close("a"); });
+    await act(async () => { await result.current.open({ kind: "shell" }); });
+    expect(result.current.sessions).toEqual([opened]);
+
+    resolveClose(list);
+    await act(async () => { await closing; });
+
+    expect(result.current.sessions).toEqual([opened]);
+    expect(terminalSessions).toHaveBeenCalledTimes(3);
   });
 
   it("says so when a rename is refused and keeps the list it had", async () => {

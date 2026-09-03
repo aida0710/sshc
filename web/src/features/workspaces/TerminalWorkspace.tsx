@@ -17,6 +17,12 @@ import { useMediaQuery } from "../../ui/useMediaQuery";
 export type WorkspaceRestoreRequest = { id: string; sequence: number };
 export type WorkspaceRenameRequest = { name: string; sequence: number };
 
+type RestoreAttempt = {
+  generation: number;
+  openedSessionIDs: Set<string>;
+  cleanup: Promise<void>;
+};
+
 function paneID(): string {
   const bytes = new Uint8Array(16);
   crypto.getRandomValues(bytes);
@@ -92,7 +98,7 @@ function dockLabel(t: Translate, edge: DockEdge): string {
 }
 
 export function TerminalWorkspace({
-  sessions, activeSessionId, onActive, onOpenAlias, onOpenShell, renderTerminal, restoreRequest = null, onRestoreConsumed = () => undefined,
+  sessions, activeSessionId, onActive, onOpenAlias, onOpenShell, onClose, renderTerminal, restoreRequest = null, onRestoreConsumed = () => undefined,
   renameRequest = null, onRenameConsumed = () => undefined, onLiveWorkspaceChange = () => undefined, sessionsLoaded = true,
 }: {
   sessions: TerminalSession[];
@@ -100,6 +106,7 @@ export function TerminalWorkspace({
   onActive: (id: string) => void;
   onOpenAlias: (alias: string) => Promise<TerminalSession | null>;
   onOpenShell: () => Promise<TerminalSession | null>;
+  onClose: (id: string) => Promise<void>;
   renderTerminal: (session: TerminalSession) => ReactNode;
   restoreRequest?: WorkspaceRestoreRequest | null;
   onRestoreConsumed?: (sequence: number) => void;
@@ -125,8 +132,31 @@ export function TerminalWorkspace({
   const savedMenuRef = useRef<HTMLDivElement>(null);
   const consumedRestore = useRef(0);
   const consumedRename = useRef(0);
+  const restoreGeneration = useRef(0);
+  const activeRestore = useRef<RestoreAttempt | null>(null);
+  const onCloseRef = useRef(onClose);
   const liveWorkspaceID = useRef(paneID());
   const liveStorage = useMemo(() => browserSessionStorage(), []);
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
+  // A superseded restore no longer owns visible panes, so every session it
+  // created must be retired. Chain closes to keep mutation listings ordered.
+  const retireRestoredSession = useCallback((attempt: RestoreAttempt, id: string): Promise<void> => {
+    if (!attempt.openedSessionIDs.delete(id)) return attempt.cleanup;
+    attempt.cleanup = attempt.cleanup
+      .then(() => onCloseRef.current(id))
+      .catch(() => undefined);
+    return attempt.cleanup;
+  }, []);
+  const retireRestoreAttempt = useCallback((attempt: RestoreAttempt): Promise<void> => {
+    for (const id of [...attempt.openedSessionIDs]) void retireRestoredSession(attempt, id);
+    return attempt.cleanup;
+  }, [retireRestoredSession]);
+  useEffect(() => () => {
+    restoreGeneration.current += 1;
+    const attempt = activeRestore.current;
+    activeRestore.current = null;
+    if (attempt !== null) void retireRestoreAttempt(attempt);
+  }, [retireRestoreAttempt]);
   useDismissibleLayer({
     open: savedMenuOpen,
     containerRefs: [savedMenuRef],
@@ -432,8 +462,17 @@ export function TerminalWorkspace({
 
   const restoreWorkspace = useCallback(async (id: string) => {
     if (id === "") return;
+    // Increment before the first await so reverse-order restore responses can
+    // never install an older layout over the user's latest choice.
+    const generation = restoreGeneration.current + 1;
+    restoreGeneration.current = generation;
+    const previous = activeRestore.current;
+    const attempt: RestoreAttempt = { generation, openedSessionIDs: new Set(), cleanup: Promise.resolve() };
+    activeRestore.current = attempt;
+    if (previous !== null) void retireRestoreAttempt(previous);
     try {
       const stored = await workspaceApi.restore(id);
+      if (attempt.generation !== restoreGeneration.current) return;
       setSelectedWorkspace(id);
       setLiveWorkspaceName("");
       setFocusModePaneId(null);
@@ -447,9 +486,15 @@ export function TerminalWorkspace({
       await Promise.all(panes.map(async (pane) => {
         const session = pane.kind === "shell" ? await onOpenShell() : await onOpenAlias(pane.alias);
         if (session === null) {
+          if (attempt.generation !== restoreGeneration.current) return;
           setLayout((current) => current === null ? current : reduceLayout(current, {
             type: "connection-failed", paneId: pane.id, problem: "open_failed",
           }));
+          return;
+        }
+        attempt.openedSessionIDs.add(session.id);
+        if (attempt.generation !== restoreGeneration.current) {
+          await retireRestoredSession(attempt, session.id);
           return;
         }
         setLayout((current) => current === null ? current : reduceLayout(current, {
@@ -457,9 +502,23 @@ export function TerminalWorkspace({
         }));
         if (pane.id === stored.focusedPaneId) onActive(session.id);
       }));
+      if (attempt.generation !== restoreGeneration.current) {
+        await retireRestoreAttempt(attempt);
+        return;
+      }
+      if (activeRestore.current === attempt) activeRestore.current = null;
+      attempt.openedSessionIDs.clear();
       setProblem("");
-    } catch (error) { setProblem(failureCode(error) || "workspace_failed"); }
-  }, [onActive, onOpenAlias, onOpenShell]);
+    } catch (error) {
+      if (attempt.generation !== restoreGeneration.current) {
+        await retireRestoreAttempt(attempt);
+        return;
+      }
+      if (activeRestore.current === attempt) activeRestore.current = null;
+      attempt.openedSessionIDs.clear();
+      setProblem(failureCode(error) || "workspace_failed");
+    }
+  }, [onActive, onOpenAlias, onOpenShell, retireRestoreAttempt, retireRestoredSession]);
 
   useEffect(() => {
     if (restoreRequest === null || restoreRequest.sequence <= consumedRestore.current) return;

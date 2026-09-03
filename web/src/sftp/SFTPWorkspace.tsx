@@ -4,6 +4,7 @@ import type { NavigationBlocker } from "../routing/useSectionRoute";
 import { useTranslate } from "../i18n/context";
 import { Icon } from "../ui/icons";
 import { activateTabFromKeyboard } from "../ui/tabKeyboard";
+import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { useCompactViewport } from "../ui/useMediaQuery";
 import { SFTPPanel, type SFTPTarget } from "./SFTPPanel";
 import { SFTPCompareDialog } from "./SFTPCompareDialog";
@@ -20,6 +21,11 @@ const maxTabs = 8;
 type SFTPTab = { id: string; alias: string; path: string };
 type SFTPLocation = { alias: string; path: string };
 type SFTPPane = "primary" | "secondary";
+type CloseTabIntent = { pane: SFTPPane; id: string; path: string };
+
+function tabStateKey(pane: SFTPPane, id: string): string {
+  return `${pane}:${id}`;
+}
 
 function identifier(): string {
   return globalThis.crypto?.randomUUID?.() ?? `tab_${Date.now()}_${Math.random().toString(36).slice(2)}`;
@@ -157,6 +163,8 @@ export function SFTPWorkspace({
   const [secondaryActiveId, setSecondaryActiveId] = useState(() => restoreActive(secondaryActiveStorageKey, secondaryTabs));
   const [focusedPane, setFocusedPane] = useState<SFTPPane>("primary");
   const [compareOpen, setCompareOpen] = useState(false);
+  const [dirtyTabs, setDirtyTabs] = useState<Map<string, string>>(() => new Map());
+  const [closeTabIntent, setCloseTabIntent] = useState<CloseTabIntent | null>(null);
   const workspaceRoot = useRef<HTMLElement | null>(null);
   const compactViewport = useCompactViewport(workspaceRoot);
   // Restoring is a one-shot per tab: once a panel has opened its remembered
@@ -167,6 +175,7 @@ export function SFTPWorkspace({
   });
   const tabScrollers = useRef<Record<SFTPPane, HTMLDivElement | null>>({ primary: null, secondary: null });
   const blockers = useRef<{ primary: NavigationBlocker | null; secondary: NavigationBlocker | null }>({ primary: null, secondary: null });
+  const dirtyReporters = useRef(new Map<string, (path: string | null) => void>());
   const active = tabs.some((tab) => tab.id === activeId) ? activeId : tabs[0]?.id ?? "";
   const secondaryActive = secondaryTabs.some((tab) => tab.id === secondaryActiveId)
     ? secondaryActiveId
@@ -228,6 +237,14 @@ export function SFTPWorkspace({
     const currentActive = pane === "primary" ? active : secondaryActive;
     const index = current.findIndex((tab) => tab.id === id);
     if (index < 0) return;
+    const stateKey = tabStateKey(pane, id);
+    setDirtyTabs((current) => {
+      if (!current.has(stateKey)) return current;
+      const next = new Map(current);
+      next.delete(stateKey);
+      return next;
+    });
+    dirtyReporters.current.delete(stateKey);
     restoring.current[pane].delete(id);
     const remaining = current.filter((tab) => tab.id !== id);
     const next = remaining.length === 0 ? [blankTab()] : remaining;
@@ -241,6 +258,37 @@ export function SFTPWorkspace({
     if (pane === "primary") setActiveId(nextActive);
     else setSecondaryActiveId(nextActive);
     rememberActive(activeKey, nextActive, next);
+  }
+
+  const updateDirtyTab = useCallback((key: string, path: string | null) => {
+    setDirtyTabs((current) => {
+      if (path === null) {
+        if (!current.has(key)) return current;
+        const next = new Map(current);
+        next.delete(key);
+        return next;
+      }
+      if (current.get(key) === path) return current;
+      return new Map(current).set(key, path);
+    });
+  }, []);
+
+  const dirtyReporter = useCallback((pane: SFTPPane, id: string) => {
+    const key = tabStateKey(pane, id);
+    const existing = dirtyReporters.current.get(key);
+    if (existing !== undefined) return existing;
+    const created = (path: string | null) => updateDirtyTab(key, path);
+    dirtyReporters.current.set(key, created);
+    return created;
+  }, [updateDirtyTab]);
+
+  function requestCloseTab(pane: SFTPPane, tab: SFTPTab) {
+    const dirtyPath = dirtyTabs.get(tabStateKey(pane, tab.id));
+    if (dirtyPath !== undefined) {
+      setCloseTabIntent({ pane, id: tab.id, path: dirtyPath });
+      return;
+    }
+    closeTab(pane, tab.id);
   }
 
   function switchTab(pane: SFTPPane, id: string) {
@@ -331,7 +379,7 @@ export function SFTPWorkspace({
                   <button
                     type="button"
                     aria-label={t("sftp.closeTab", { name: label })}
-                    onClick={() => closeTab(pane, tab.id)}
+                    onClick={() => requestCloseTab(pane, tab)}
                     className="flex size-12 items-center justify-center text-ink-faint hover:text-danger md:w-9"
                   >
                     <Icon name="close" className="size-3" />
@@ -354,13 +402,14 @@ export function SFTPWorkspace({
     );
   }
 
-  function renderPane(pane: SFTPPane) {
+  function renderPane(pane: SFTPPane, concealed = false) {
     const current = pane === "primary" ? tabs : secondaryTabs;
     const currentActive = pane === "primary" ? active : secondaryActive;
     const blocker = pane === "primary" ? updatePrimaryBlocker : updateSecondaryBlocker;
     return (
       <div
         className="flex min-h-0 min-w-0 flex-col"
+        hidden={concealed}
         aria-label={t(pane === "primary" ? "sftp.firstPane" : "sftp.secondPane")}
         onPointerDown={() => setFocusedPane(pane)}
         onFocusCapture={() => setFocusedPane(pane)}
@@ -385,6 +434,7 @@ export function SFTPWorkspace({
                 initialLocation={restored === undefined || restored.alias === "" || restored.path === "" ? null : restored}
                 showTransfers={false}
                 {...(selected ? { onNavigationBlockerChange: blocker } : {})}
+                onDirtyChange={dirtyReporter(pane, tab.id)}
                 {...(onNavigateLocation === undefined ? {} : { onNavigateLocation })}
                 {...(onOpenTerminal === undefined ? {} : { onOpenTerminal })}
                 {...(ownsTarget ? { onTargetHandled } : {})}
@@ -432,19 +482,37 @@ export function SFTPWorkspace({
         <div className={`flex min-w-0 ${visibleSplit ? "w-1/2 flex-none" : "flex-1"}`}>
           {renderTabs("primary")}
         </div>
-        {visibleSplit ? (
-          <div className="flex w-1/2 min-w-0 flex-none border-l border-line/60">
-            {renderTabs("secondary")}
-            {renderPaneActions()}
+        {secondaryTabs.length > 0 ? (
+          <div hidden={!visibleSplit} className="w-1/2 min-w-0 flex-none border-l border-line/60">
+            <div className="flex min-w-0">
+              {renderTabs("secondary")}
+              {visibleSplit ? renderPaneActions() : null}
+            </div>
           </div>
-        ) : compactViewport ? null : renderPaneActions()}
+        ) : null}
+        {visibleSplit || compactViewport ? null : renderPaneActions()}
       </div>
 
       <div className={`grid min-h-0 min-w-0 flex-1 gap-2 pt-2 ${visibleSplit ? "grid-cols-2" : "grid-cols-1"}`}>
         {renderPane("primary")}
-        {visibleSplit ? renderPane("secondary") : null}
+        {secondaryTabs.length > 0 ? renderPane("secondary", !visibleSplit) : null}
       </div>
       <TransferManagerList />
+      {closeTabIntent === null ? null : (
+        <ConfirmDialog
+          id="sftp-close-dirty-tab"
+          heading={t("sftp.leaveHeading")}
+          body={<p className="text-sm text-ink-muted">{t("sftp.leaveBody", { path: closeTabIntent.path })}</p>}
+          confirmLabel={t("sftp.leaveDiscard")}
+          cancelLabel={t("sftp.leaveStay")}
+          onConfirm={() => {
+            const intent = closeTabIntent;
+            setCloseTabIntent(null);
+            closeTab(intent.pane, intent.id);
+          }}
+          onCancel={() => setCloseTabIntent(null)}
+        />
+      )}
       {visibleSplit && compareOpen ? (
         <SFTPCompareDialog
           left={{ alias: primaryLocation?.alias ?? "", path: primaryLocation?.path || "/" }}

@@ -84,6 +84,35 @@ describe("terminal clipboard interactions", () => {
     await vi.waitFor(() => expect(subject.terminal.paste).toHaveBeenCalledWith("pasted text"));
   });
 
+  it("does not finish an old terminal's asynchronous clipboard read after detach", async () => {
+    const container = document.createElement("div");
+    let resolveRead: (text: string) => void = () => undefined;
+    const read = new Promise<string>((resolve) => { resolveRead = resolve; });
+    const paste = vi.fn();
+    const detach = attachTerminalClipboard({
+      container,
+      terminal: {
+        attachCustomKeyEventHandler: vi.fn(),
+        onSelectionChange: () => ({ dispose: () => {} }),
+        hasSelection: () => false,
+        getSelection: () => "",
+        paste: vi.fn(),
+      },
+      paste,
+      clipboard: { readText: vi.fn(() => read), writeText: vi.fn() },
+      settings: () => ({ copyOnSelect: false, rightClickPaste: true }),
+      refuse: vi.fn(),
+    });
+
+    container.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+    detach();
+    resolveRead("must stay with the old terminal");
+    await read;
+    await Promise.resolve();
+
+    expect(paste).not.toHaveBeenCalled();
+  });
+
   it("leaves keyboard paste to the browser paste event", () => {
     const subject = harness();
     subject.setSettings({ copyOnSelect: false, rightClickPaste: false });

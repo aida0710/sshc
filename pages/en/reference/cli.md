@@ -88,6 +88,7 @@ sshc sftp put bastion ./release.tar.gz /tmp/release.tar.gz
 sshc sftp get bastion /srv/data ./data --recursive
 sshc sftp put bastion ./public /var/www/public --recursive
 sshc sftp get bastion /srv/archive ./archive --recursive --jobs 4
+sshc sftp get bastion /srv/archive ./archive --recursive --max-total-size 8192
 sshc sftp settings
 sshc sftp settings --split-size 73 --split-jobs 6 --chunk-size 41
 sshc sftp get bastion /backup/disk.img ./disk.img --split-size 100 --split-jobs 4 --chunk-size 512
@@ -97,6 +98,8 @@ sshc sftp put bastion ./disk.img /backup/disk.img --split-size 100 --split-jobs 
 `sshc sftp settings` displays the split threshold, connections per file, and chunk size shared by Web and CLI. Add `--split-size` (16–1024 MiB), `--split-jobs` (1–128), or `--chunk-size` (8–4096 MiB) to persist only the supplied defaults. `--json` returns the saved values for automation.
 
 `-j` or `--jobs` sets the number of files transferred concurrently from 1 to 8; the default is 1. Split options on `get` or `put` override the saved defaults for that invocation. `--split-jobs 1` disables splitting. Initial defaults are 100 MiB, four connections, and 32 MiB chunks. `--split-jobs` accepts up to 128, while the actual connection count is limited by the number of unfinished chunks. Concurrent split transfers multiply the total connection count, so choose a value that fits both the server and the device. Regular file uploads and downloads support up to 512 GiB.
+
+Recursive downloads default to a safety budget of 64 levels below the selected root, 10,000 files and directories in total, and 1,024 MiB of file data. If a limit is reached, sshc stops before transferring anything. For an intentionally larger tree, raise the per-run limit with `--max-depth` (up to 256), `--max-entries` (up to 1,000,000), or `--max-total-size` (MiB, up to 8 TiB). These options apply only to `get --recursive`.
 
 In an interactive terminal, `sshc sftp get` displays one progress bar for each SFTP connection while the engine prepares the remote file. A four-connection split therefore shows four progress lines, while a non-split transfer shows one. Progress is suppressed for `--json` and non-interactive output so automation remains clean.
 

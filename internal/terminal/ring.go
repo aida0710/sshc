@@ -36,6 +36,8 @@ func NewRing(capacity int) *Ring {
 
 func (r *Ring) Len() int { return r.size }
 
+func (r *Ring) CanReadFrom(cursor uint64) bool { return cursor <= r.written }
+
 func (r *Ring) Write(p []byte) (int, error) {
 	written := len(p)
 	r.written += uint64(written)
@@ -64,8 +66,18 @@ func (r *Ring) Write(p []byte) (int, error) {
 // the current end is rejected so a cursor from another session or engine cannot
 // silently skip future output.
 func (r *Ring) ReadFrom(cursor uint64, limit int) (RingRead, bool) {
+	return r.readFrom(cursor, limit, true)
+}
+
+// ReadAvailableFrom returns every retained byte at or after cursor without
+// allocating the decoder context needed by the plain-text control API.
+func (r *Ring) ReadAvailableFrom(cursor uint64) (RingRead, bool) {
+	return r.readFrom(cursor, r.size, false)
+}
+
+func (r *Ring) readFrom(cursor uint64, limit int, includeContext bool) (RingRead, bool) {
 	oldest := r.written - uint64(r.size)
-	if cursor > r.written {
+	if !r.CanReadFrom(cursor) {
 		return RingRead{}, false
 	}
 	start := cursor
@@ -89,11 +101,14 @@ func (r *Ring) ReadFrom(cursor uint64, limit int) (RingRead, bool) {
 		copy(data[first:], r.data)
 	}
 	next := start + available
-	contextLength := int(next - oldest)
-	context := make([]byte, contextLength)
-	if contextLength != 0 {
-		first := copy(context, r.data[r.start:])
-		copy(context[first:], r.data)
+	var context []byte
+	if includeContext {
+		contextLength := int(next - oldest)
+		context = make([]byte, contextLength)
+		if contextLength != 0 {
+			first := copy(context, r.data[r.start:])
+			copy(context[first:], r.data)
+		}
 	}
 	return RingRead{
 		Data: data, Context: context, Emit: int(start - oldest),

@@ -1,6 +1,7 @@
 package sftp
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"io/fs"
@@ -27,29 +28,57 @@ func (m *TransferManager) EnableQueuePersistence(filename string) error {
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
+	var stored persistedTransferQueue
+	if err == nil {
+		invalid := json.Unmarshal(contents, &stored) != nil ||
+			stored.SchemaVersion != transferQueueSchemaVersion ||
+			len(stored.Jobs) > maxRetainedTransferJobs
+		seen := make(map[string]struct{}, len(stored.Jobs))
+		for _, job := range stored.Jobs {
+			if validationErr := validPersistedJob(job); validationErr != nil {
+				invalid = true
+				break
+			}
+			if _, duplicate := seen[job.ID]; duplicate {
+				invalid = true
+				break
+			}
+			seen[job.ID] = struct{}{}
+		}
+		if invalid {
+			// A damaged device-local queue must not make the whole SSH engine
+			// unavailable. Preserve the exact bytes for diagnosis before replacing
+			// the active queue with a valid empty snapshot.
+			if preserveErr := preserveCorruptQueue(filename, contents); preserveErr != nil {
+				return errors.Join(ErrInvalidTransfer, preserveErr)
+			}
+			stored = persistedTransferQueue{}
+		}
+	}
 	m.jobsMutex.Lock()
 	m.initializeJobsLocked()
 	m.queuePath = filename
 	if err == nil {
-		var stored persistedTransferQueue
-		if json.Unmarshal(contents, &stored) != nil || stored.SchemaVersion != transferQueueSchemaVersion || len(stored.Jobs) > maxRetainedTransferJobs {
-			m.jobsMutex.Unlock()
-			return ErrInvalidTransfer
-		}
 		for _, job := range stored.Jobs {
-			if err := validPersistedJob(job); err != nil || m.jobs[job.ID] != nil {
+			if m.jobs[job.ID] != nil {
 				m.jobsMutex.Unlock()
 				return ErrInvalidTransfer
 			}
 			if job.Status == TransferRunning {
 				if job.Direction == TransferRemote {
-					job.Status = TransferQueued
-					job.TransferredBytes = 0
+					if job.Problem == RemoteReconciliationProblem {
+						job.Status = TransferReattach
+					} else {
+						job.Status = TransferQueued
+						job.TransferredBytes = 0
+					}
 				} else {
 					job.Status = TransferReattach
 				}
 				job.BytesPerSecond, job.RemainingSeconds = 0, -1
-				job.Problem = "transfer_interrupted"
+				if job.Problem != RemoteReconciliationProblem {
+					job.Problem = "transfer_interrupted"
+				}
 				job.UpdatedAt = m.now().UTC()
 			}
 			record := &transferJobRecord{job: job, sampleAt: m.now().UTC(), sampleBytes: job.TransferredBytes}
@@ -71,6 +100,45 @@ func (m *TransferManager) EnableQueuePersistence(filename string) error {
 	m.jobsMutex.Unlock()
 	for _, id := range remoteJobs {
 		m.ScheduleRemoteJob(id)
+	}
+	return nil
+}
+
+func preserveCorruptQueue(filename string, contents []byte) error {
+	directory := filepath.Dir(filename)
+	if err := os.MkdirAll(directory, 0o700); err != nil {
+		return err
+	}
+	// The .sshc- prefix is also part of Remote Sync's denylist, keeping this
+	// device-local diagnostic snapshot from travelling to another machine.
+	backup, err := os.CreateTemp(directory, ".sshc-"+filepath.Base(filename)+".corrupt-*")
+	if err != nil {
+		return err
+	}
+	name := backup.Name()
+	keep := false
+	defer func() {
+		_ = backup.Close()
+		if !keep {
+			_ = os.Remove(name)
+		}
+	}()
+	if err := backup.Chmod(0o600); err != nil {
+		return err
+	}
+	if _, err := backup.ReadFrom(bytes.NewReader(contents)); err != nil {
+		return err
+	}
+	if err := backup.Sync(); err != nil {
+		return err
+	}
+	if err := backup.Close(); err != nil {
+		return err
+	}
+	keep = true
+	if opened, err := os.Open(directory); err == nil {
+		_ = opened.Sync()
+		_ = opened.Close()
 	}
 	return nil
 }

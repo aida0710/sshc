@@ -55,12 +55,24 @@ func TestParseRejectsInvalidProvisioning(t *testing.T) {
 }
 
 func TestPromptMatchingRequiresExplicitOTPWords(t *testing.T) {
-	for _, prompt := range []string{"Verification code: ", "OTP: ", "認証コード: ", "ワンタイムパスワード: "} {
+	for _, prompt := range []string{
+		"Verification code: ", "OTP: ", "OTP (6 digits) for user: ", "Enter your OTP code: ",
+		"One-time password: ", "Authenticator code: ",
+		"One-time password (OATH) for user: ",
+		"Enter the verification code shown in your authenticator app: ",
+		"Please provide the code from your authenticator app: ",
+		"認証コード: ", "ワンタイムパスワードを入力してください：",
+	} {
 		if !totp.MatchesPrompt(prompt) {
 			t.Errorf("did not match %q", prompt)
 		}
 	}
-	for _, prompt := range []string{"Password: ", "Passcode: ", "Code: "} {
+	for _, prompt := range []string{
+		"Password: ", "Passcode: ", "Code: ",
+		"Password for otp-admin: ", "Passcode for totp-user: ",
+		"Code for otp-user: ", "desktop token: ", "hotplug code: ",
+		"Authenticator application password: ", "The verification code is unavailable: ",
+	} {
 		if totp.MatchesPrompt(prompt) {
 			t.Errorf("matched ambiguous prompt %q", prompt)
 		}

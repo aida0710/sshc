@@ -61,12 +61,16 @@ describe("openStream", () => {
   it("delivers binary frames as output and text frames as control", () => {
     withFakeSocket();
     const onOutput = vi.fn();
+    const onReplay = vi.fn();
     const onExit = vi.fn();
     const onClose = vi.fn();
-    openStream("one-time", { onOutput, onExit, onClose });
+    openStream("one-time", { onReplay, onOutput, onExit, onClose });
     const socket = FakeSocket.last!;
 
     expect(socket.binaryType).toBe("arraybuffer");
+
+    socket.emit("message", { data: JSON.stringify({ replay: { start: 10, next: 15, end: 15, truncated: false } }) });
+    expect(onReplay).toHaveBeenCalledWith({ start: 10, next: 15, end: 15, truncated: false });
 
     const payload = new TextEncoder().encode("hello");
     const buffer = new ArrayBuffer(payload.byteLength);
@@ -81,7 +85,7 @@ describe("openStream", () => {
 
   it("sends keystrokes as bytes and resizes as JSON", () => {
     withFakeSocket();
-    const stream = openStream("one-time", { onOutput: vi.fn(), onExit: vi.fn(), onClose: vi.fn() });
+    const stream = openStream("one-time", { onReplay: vi.fn(), onOutput: vi.fn(), onExit: vi.fn(), onClose: vi.fn() });
     const socket = FakeSocket.last!;
     socket.open();
 
@@ -92,9 +96,32 @@ describe("openStream", () => {
     expect(JSON.parse(String(socket.sent[1]))).toEqual({ resize: { cols: 120, rows: 34 } });
   });
 
+  it("splits a large UTF-8 paste below the server's per-message limit without changing bytes", () => {
+    withFakeSocket();
+    const stream = openStream("one-time", { onReplay: vi.fn(), onOutput: vi.fn(), onExit: vi.fn(), onClose: vi.fn() });
+    const socket = FakeSocket.last!;
+    socket.open();
+    const pasted = `\u001b[200~${"日本語".repeat(100_000)}\u001b[201~`;
+    const expected = new TextEncoder().encode(pasted);
+
+    stream.send(pasted);
+
+    const frames = socket.sent as Uint8Array[];
+    expect(frames.length).toBeGreaterThan(1);
+    expect(frames.every((frame) => frame.byteLength <= 64 * 1024)).toBe(true);
+    const joined = new Uint8Array(frames.reduce((size, frame) => size + frame.byteLength, 0));
+    let offset = 0;
+    for (const frame of frames) {
+      joined.set(frame, offset);
+      offset += frame.byteLength;
+    }
+    expect(joined.byteLength).toBe(expected.byteLength);
+    expect(new TextDecoder().decode(joined)).toBe(pasted);
+  });
+
   it("holds frames sent before the socket opens and delivers them in order", () => {
     withFakeSocket();
-    const stream = openStream("one-time", { onOutput: vi.fn(), onExit: vi.fn(), onClose: vi.fn() });
+    const stream = openStream("one-time", { onReplay: vi.fn(), onOutput: vi.fn(), onExit: vi.fn(), onClose: vi.fn() });
     const socket = FakeSocket.last!;
 
     stream.resize(120, 34);
@@ -109,7 +136,7 @@ describe("openStream", () => {
 
   it("does not deliver held frames when it was closed before opening", () => {
     withFakeSocket();
-    const stream = openStream("one-time", { onOutput: vi.fn(), onExit: vi.fn(), onClose: vi.fn() });
+    const stream = openStream("one-time", { onReplay: vi.fn(), onOutput: vi.fn(), onExit: vi.fn(), onClose: vi.fn() });
     const socket = FakeSocket.last!;
 
     stream.resize(120, 34);
@@ -123,7 +150,7 @@ describe("openStream", () => {
     withFakeSocket();
     const onExit = vi.fn();
     const onClose = vi.fn();
-    openStream("one-time", { onOutput: vi.fn(), onExit, onClose });
+    openStream("one-time", { onReplay: vi.fn(), onOutput: vi.fn(), onExit, onClose });
 
     FakeSocket.last!.emit("close", {});
 
@@ -135,7 +162,7 @@ describe("openStream", () => {
     withFakeSocket();
     const onExit = vi.fn();
     const onClose = vi.fn();
-    openStream("one-time", { onOutput: vi.fn(), onExit, onClose });
+    openStream("one-time", { onReplay: vi.fn(), onOutput: vi.fn(), onExit, onClose });
     const socket = FakeSocket.last!;
 
     socket.emit("message", { data: JSON.stringify({ exit: { code: 0, signal: "" } }) });
@@ -148,7 +175,7 @@ describe("openStream", () => {
   it("survives a control frame it cannot read", () => {
     withFakeSocket();
     const onClose = vi.fn();
-    openStream("one-time", { onOutput: vi.fn(), onExit: vi.fn(), onClose });
+    openStream("one-time", { onReplay: vi.fn(), onOutput: vi.fn(), onExit: vi.fn(), onClose });
 
     FakeSocket.last!.emit("message", { data: "{not json" });
 

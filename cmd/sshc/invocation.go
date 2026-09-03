@@ -59,6 +59,9 @@ type sftpInvocation struct {
 	SplitSizeMiB int
 	SplitJobs    int
 	ChunkSizeMiB int
+	MaxDepth     int
+	MaxEntries   int
+	MaxTotalMiB  int64
 }
 
 type syncAction uint8
@@ -237,11 +240,18 @@ func parseSFTPInvocation(args []string) (invocation, error) {
 	if args[0] == "settings" {
 		return parseSFTPSettingsInvocation(args[1:])
 	}
-	called := sftpInvocation{Action: sftpGet, Jobs: 1}
+	called := sftpInvocation{
+		Action: sftpGet, Jobs: 1,
+		MaxDepth: sftpCLIDefaultRecursiveDepth, MaxEntries: sftpCLIDefaultRecursiveEntries,
+		MaxTotalMiB: sftpCLIDefaultRecursiveBytes >> 20,
+	}
 	jobsSet := false
 	splitSizeSet := false
 	splitJobsSet := false
 	chunkSizeSet := false
+	maxDepthSet := false
+	maxEntriesSet := false
+	maxTotalSet := false
 	if args[0] == "put" {
 		called.Action = sftpPut
 	}
@@ -335,6 +345,39 @@ func parseSFTPInvocation(args []string) (invocation, error) {
 			}
 			called.ChunkSizeMiB = size
 			chunkSizeSet = true
+		case "--max-depth":
+			if maxDepthSet || index+1 >= len(args) {
+				return invalidInvocation(fmt.Sprintf("sftp --max-depth requires a number from 1 to %d", sftpCLIMaxRecursiveDepth))
+			}
+			index++
+			depth, err := strconv.Atoi(args[index])
+			if err != nil || depth < 1 || depth > sftpCLIMaxRecursiveDepth {
+				return invalidInvocation(fmt.Sprintf("sftp --max-depth requires a number from 1 to %d", sftpCLIMaxRecursiveDepth))
+			}
+			called.MaxDepth = depth
+			maxDepthSet = true
+		case "--max-entries":
+			if maxEntriesSet || index+1 >= len(args) {
+				return invalidInvocation(fmt.Sprintf("sftp --max-entries requires a number from 1 to %d", sftpCLIMaxRecursiveEntries))
+			}
+			index++
+			entries, err := strconv.Atoi(args[index])
+			if err != nil || entries < 1 || entries > sftpCLIMaxRecursiveEntries {
+				return invalidInvocation(fmt.Sprintf("sftp --max-entries requires a number from 1 to %d", sftpCLIMaxRecursiveEntries))
+			}
+			called.MaxEntries = entries
+			maxEntriesSet = true
+		case "--max-total-size":
+			if maxTotalSet || index+1 >= len(args) {
+				return invalidInvocation(fmt.Sprintf("sftp --max-total-size requires a MiB value from 1 to %d", sftpCLIMaxRecursiveMiB))
+			}
+			index++
+			total, err := strconv.ParseInt(args[index], 10, 64)
+			if err != nil || total < 1 || total > sftpCLIMaxRecursiveMiB {
+				return invalidInvocation(fmt.Sprintf("sftp --max-total-size requires a MiB value from 1 to %d", sftpCLIMaxRecursiveMiB))
+			}
+			called.MaxTotalMiB = total
+			maxTotalSet = true
 		default:
 			if value, found := strings.CutPrefix(argument, "--jobs="); found {
 				if jobsSet {
@@ -362,6 +405,14 @@ func parseSFTPInvocation(args []string) (invocation, error) {
 	}
 	if called.Yes && !called.Overwrite {
 		return invalidInvocation("sftp --yes requires --overwrite")
+	}
+	if maxDepthSet || maxEntriesSet || maxTotalSet {
+		if called.Action != sftpGet {
+			return invalidInvocation("sftp recursive safety limits are available only for get")
+		}
+		if !called.Recursive {
+			return invalidInvocation("sftp recursive safety limits require --recursive")
+		}
 	}
 	called.Alias, called.Source, called.Destination = positionals[0], positionals[1], positionals[2]
 	return invocation{Kind: invocationSFTP, JSON: called.JSON, Yes: called.Yes, SFTP: &called}, nil

@@ -88,6 +88,7 @@ sshc sftp put bastion ./release.tar.gz /tmp/release.tar.gz
 sshc sftp get bastion /srv/data ./data --recursive
 sshc sftp put bastion ./public /var/www/public --recursive
 sshc sftp get bastion /srv/archive ./archive --recursive --jobs 4
+sshc sftp get bastion /srv/archive ./archive --recursive --max-total-size 8192
 sshc sftp settings
 sshc sftp settings --split-size 73 --split-jobs 6 --chunk-size 41
 sshc sftp get bastion /backup/disk.img ./disk.img --split-size 100 --split-jobs 4 --chunk-size 512
@@ -97,6 +98,8 @@ sshc sftp put bastion ./disk.img /backup/disk.img --split-size 100 --split-jobs 
 `sshc sftp settings`は、WebとCLIが共通で使う分割開始サイズ、1ファイルの接続数、チャンクサイズを表示します。同じコマンドへ`--split-size`（16〜1024 MiB）、`--split-jobs`（1〜128）、`--chunk-size`（8〜4096 MiB）を付けると、指定した項目だけを既定値として保存します。`--json`では保存後の値を機械可読形式で取得できます。
 
 `-j`または`--jobs`には、同時に転送するファイル数を1〜8で指定します。既定は1です。`get`／`put`へ分割オプションを付けた場合は、保存済みの既定値をその実行だけ上書きします。`--split-jobs 1`は分割しません。初期値は100 MiB以上、4接続、32 MiBチャンクです。`--split-jobs`は最大128まで指定できますが、実際の接続数は未転送チャンク数までです。複数ファイルを同時に分割転送すると合計接続数が増えるため、接続先と端末の上限に合わせて指定してください。通常ファイルはアップロード、ダウンロードともに512 GiBまで転送できます。
+
+再帰ダウンロードは、選択したルート以下の深さ64段、ファイルとディレクトリを合わせて10,000項目、合計1,024 MiBを既定の安全上限とします。上限に達した場合は何も転送せずに停止します。意図して大きなツリーを取得する場合だけ、`--max-depth`（最大256）、`--max-entries`（最大1,000,000）、`--max-total-size`（MiB単位、最大8 TiB）でその実行の上限を引き上げてください。これらは`get --recursive`専用です。
 
 対話ターミナルで`sshc sftp get`を実行すると、エンジンがリモートファイルを準備している間の進捗を接続ごとに表示します。4接続で分割している場合は4本の進捗バーになります。分割しない転送は1本です。`--json`や出力先が対話ターミナルでない場合は進捗表示を行わず、機械処理する出力を汚しません。
 
