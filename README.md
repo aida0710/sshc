@@ -49,8 +49,7 @@ sshc vault unlock
 
 master passwordはWeb UI または `sshc vault`から入力します。CLI は対話端末からのみ読み取り、引数や環境変数からは受け取りません。vaultは既定では12 時間操作がない場合に自動lockし、Settingsで1〜999分／時間または自動lockなしへ変更できます。
 
-## CLIの入口
-
+## CLIコマンド
 ```sh
 sshc ssh                     # 接続先を選択
 sshc ssh <接続先>            # 対話SSH
