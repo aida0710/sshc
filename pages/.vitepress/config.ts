@@ -13,6 +13,7 @@ const jaSidebar = [
     { text: "Terminalを使う", link: "/features/terminal" },
     { text: "Workspaceと分割", link: "/features/workspace" },
     { text: "クイックコマンド", link: "/terminal/commands" },
+    { text: "Coding Agent連携", link: "/terminal/agent-bridge" },
     { text: "ポート転送", link: "/terminal/port-forwarding" },
   ] },
   { text: "接続を管理する", items: [
@@ -50,6 +51,7 @@ const enSidebar = [
     { text: "Use the terminal", link: "/en/features/terminal" },
     { text: "Workspaces and splits", link: "/en/features/workspace" },
     { text: "Quick Commands", link: "/en/terminal/commands" },
+    { text: "Coding Agent integration", link: "/en/terminal/agent-bridge" },
     { text: "Port forwarding", link: "/en/terminal/port-forwarding" },
   ] },
   { text: "Manage connections", items: [
