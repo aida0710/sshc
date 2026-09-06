@@ -38,6 +38,8 @@ import { applyTerminalRuntimeOptions } from "./runtimeOptions";
 import { Icon } from "../ui/icons";
 import { inspectTerminalPaste, removeFinalTerminalLineBreak, type TerminalPasteInspection } from "./pasteGuard";
 import { TerminalPasteDialog } from "./TerminalPasteDialog";
+import { useMediaQuery } from "../ui/useMediaQuery";
+import { cursorAnimationEnabled, reducedMotionQuery } from "../ui/reducedMotion";
 
 type TerminalViewProps = {
   session: TerminalSession;
@@ -94,6 +96,7 @@ export function TerminalView({
 }: TerminalViewProps) {
   const t = useTranslate();
   const { resolved } = useTheme();
+  const reducedMotion = useMediaQuery(reducedMotionQuery);
   const host = useRef<HTMLDivElement>(null);
   const backgroundURL = useBackgroundImage(background ?? "");
   const backgroundConfigured = (background ?? "") !== "";
@@ -218,7 +221,7 @@ export function TerminalView({
       cols: 80,
       rows: 24,
       convertEol: false,
-      cursorBlink: session.state !== "exited",
+      cursorBlink: session.state !== "exited" && cursorAnimationEnabled(reducedMotion),
       fontFamily: fontStack(font ?? ""),
       fontSize: fontSize ?? (window.matchMedia("(max-width: 767px)").matches ? 15 : 13),
       theme: terminalTheme(container, hasBackground),
@@ -566,12 +569,12 @@ export function TerminalView({
   useEffect(() => {
     if (terminal.current === null) return;
     const changed = applyTerminalRuntimeOptions(terminal.current.options, {
-      cursorBlink: session.state !== "exited",
+      cursorBlink: session.state !== "exited" && cursorAnimationEnabled(reducedMotion),
       fontSize: fontSize ?? (window.matchMedia("(max-width: 767px)").matches ? 15 : 13),
       scrollback: scrollbackLines,
     });
     if (changed.refit) refit.current?.();
-  }, [fontSize, scrollbackLines, session.state]);
+  }, [fontSize, reducedMotion, scrollbackLines, session.state]);
 
   const connectionStatus = session.state === "connecting" || session.state === "reconnecting"
     ? connectionProgressText(t, session)
