@@ -3,6 +3,7 @@ import {
   lazy,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type CSSProperties,
@@ -323,6 +324,7 @@ export function App({
   const inspectorIsOverlay = useMediaQuery("(max-width: 1023px)");
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const commandPaletteReturnFocusRef = useRef<HTMLElement>(null);
+  const commandPaletteEnabledRef = useRef(false);
 
   useDismissibleLayer({
     open: navigationOpen,
@@ -344,13 +346,15 @@ export function App({
     setAndroidAppearance(resolvedTheme);
   }, [resolvedTheme]);
 
+  useLayoutEffect(() => {
+    commandPaletteEnabledRef.current = state === "ready";
+    if (state !== "ready") setCommandPaletteOpen(false);
+  }, [state]);
+
   useEffect(() => {
-    if (state !== "ready") {
-      setCommandPaletteOpen(false);
-      return;
-    }
     function togglePalette(event: KeyboardEvent) {
       if (
+        !commandPaletteEnabledRef.current ||
         !(event.ctrlKey || event.metaKey) ||
         event.altKey ||
         event.key.toLocaleLowerCase() !== "k"
@@ -363,7 +367,7 @@ export function App({
     }
     document.addEventListener("keydown", togglePalette);
     return () => document.removeEventListener("keydown", togglePalette);
-  }, [state]);
+  }, []);
 
   useEffect(() => {
     function closeTransientUi(event: Event) {
