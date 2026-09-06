@@ -28,6 +28,7 @@ Reconnect an exited SSH session in the same pane while retaining its scrollback.
 - Per-connection UTF-8, Shift_JIS, EUC-JP and ISO-2022-JP
 - A 16 KiB–4 MiB engine replay buffer, 1,000–100,000 lines of browser scrollback, and configurable font size
 - WebGL rendering with an automatic DOM-renderer fallback when unavailable or when a background image is active, plus an option to disable WebGL permanently
+- Static cursors in Terminal and the SFTP text editor when the operating system requests reduced motion, avoiding distracting rapid animation
 
 On reconnect, sshc replays only bytes after the browser's last rendered position. Existing output is not duplicated, and older scrollback retained only by the browser is not cleared. If a long disconnect let required output fall out of the engine buffer, the terminal reports the gap. Both buffers stay in memory and are not written to the vault, backups, or sync snapshots.
 
@@ -45,7 +46,7 @@ Local shells use the same subsystem as SSH: search, Quick Commands, workspaces, 
 
 ## Coding Agent integration
 
-After explicitly installing [sshc-agent-bridge](https://github.com/aida0710/sshc-agent-bridge), pane headers can show working, attention, and completion states from Claude Code, Codex, and OpenCode. Background attention/completion may trigger notifications. When the agent provides its own session ID, you can explicitly resume it in the same or a new pane.
+After explicitly installing [sshc-agent-bridge](/en/terminal/agent-bridge), pane headers can show working, attention, and completion states from Claude Code, Codex, and OpenCode. Background attention/completion may trigger notifications. In an SSH pane, you can explicitly resume the agent in the same or a new pane when it provides its own session ID.
 
 The integration is opt-in. Without it, sshc does not infer agent state from ordinary shell output or automatically rerun arbitrary commands.
 
