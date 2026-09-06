@@ -914,6 +914,39 @@ describe("App", () => {
     expect(window.location.pathname).toBe("/connections/servers");
   });
 
+  it("installs the command palette shortcut before vault unlock and enables it with the ready UI", async () => {
+    const addEventListener = vi.spyOn(document, "addEventListener");
+    const user = userEvent.setup();
+    render(
+      <App
+        bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
+        health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
+        vault={vi.fn().mockResolvedValue({
+          exists: true,
+          unlocked: false,
+          aliases: [],
+          dedicatedKeyPassphrases: [],
+          minPassphraseLength: 12,
+        })}
+      />,
+    );
+
+    await screen.findByText("existing vault fixture");
+    expect(addEventListener).toHaveBeenCalledWith("keydown", expect.any(Function));
+
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true }));
+    });
+    expect(screen.queryByRole("dialog", { name: "Search sessions, hosts, files, snippets and settings" })).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "unlock fixture" }));
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true }));
+    });
+
+    expect(screen.getByRole("dialog", { name: "Search sessions, hosts, files, snippets and settings" })).toBeVisible();
+  });
+
   it("shows and dismisses the version pair after an automatic vault migration", async () => {
     const user = userEvent.setup();
     render(

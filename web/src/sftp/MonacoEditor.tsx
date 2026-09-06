@@ -13,6 +13,8 @@ import "monaco-editor/languages/definitions/shell/register.js";
 import "monaco-editor/languages/definitions/typescript/register.js";
 import "monaco-editor/languages/definitions/yaml/register.js";
 import { useTheme } from "../theme/context";
+import { editorCursorBlinking, reducedMotionQuery } from "../ui/reducedMotion";
+import { useMediaQuery } from "../ui/useMediaQuery";
 
 type MonacoEditorProps = {
   path: string;
@@ -53,6 +55,7 @@ export function MonacoEditor({ path, value, onChange, readOnly = false }: Monaco
   const current = useRef(value);
   const editor = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const { resolved } = useTheme();
+  const reducedMotion = useMediaQuery(reducedMotionQuery);
   callback.current = onChange;
   current.current = value;
 
@@ -69,6 +72,7 @@ export function MonacoEditor({ path, value, onChange, readOnly = false }: Monaco
       lineNumbersMinChars: 3,
       padding: { top: 10, bottom: 10 },
       scrollBeyondLastLine: false,
+      cursorBlinking: editorCursorBlinking(reducedMotion),
       theme: resolved === "dark" ? "vs-dark" : "vs",
     });
     editor.current = view;
@@ -98,9 +102,10 @@ export function MonacoEditor({ path, value, onChange, readOnly = false }: Monaco
   useEffect(() => {
     editor.current?.updateOptions({
       readOnly,
+      cursorBlinking: editorCursorBlinking(reducedMotion),
       theme: resolved === "dark" ? "vs-dark" : "vs",
     });
-  }, [readOnly, resolved]);
+  }, [readOnly, reducedMotion, resolved]);
 
   return <div ref={container} className="h-full min-h-64 w-full overflow-hidden" />;
 }

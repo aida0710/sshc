@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { StreamHandlers, TerminalStream } from "./stream";
 import { ApiError } from "../api/client";
 import type { TerminalSession } from "../api/integrations";
+import { reducedMotionQuery } from "../ui/reducedMotion";
 
 const streams: { handlers: StreamHandlers; stream: TerminalStream }[] = [];
 vi.mock("./stream", () => ({
@@ -51,6 +52,46 @@ afterEach(() => {
 });
 
 describe("TerminalView", () => {
+  it("retains normal cursor blinking when reduced motion is disabled", () => {
+    let cursorBlink: boolean | undefined;
+    const originalOpen = Terminal.prototype.open;
+    const open = vi.spyOn(Terminal.prototype, "open").mockImplementation(function (this: Terminal, parent: HTMLElement) {
+      cursorBlink = this.options.cursorBlink;
+      return originalOpen.call(this, parent);
+    });
+
+    try {
+      renderView();
+      expect(cursorBlink).toBe(true);
+    } finally {
+      open.mockRestore();
+    }
+  });
+
+  it("keeps the cursor static when the operating system requests reduced motion", () => {
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query === reducedMotionQuery,
+      media: query,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    })) as unknown as typeof window.matchMedia;
+    let cursorBlink: boolean | undefined;
+    const originalOpen = Terminal.prototype.open;
+    const open = vi.spyOn(Terminal.prototype, "open").mockImplementation(function (this: Terminal, parent: HTMLElement) {
+      cursorBlink = this.options.cursorBlink;
+      return originalOpen.call(this, parent);
+    });
+
+    try {
+      renderView();
+      expect(cursorBlink).toBe(false);
+    } finally {
+      open.mockRestore();
+    }
+  });
+
   it("keeps its title and search toolbar visible", () => {
     render(<TerminalView session={session} api={{ terminalStreamTicket: vi.fn(async () => ({ streamTicket: "one-time" })) }} />);
 

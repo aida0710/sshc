@@ -1,0 +1,1 @@
+var e=`(prefers-reduced-motion: reduce)`;function t(e){return!e}function n(e){return e?`solid`:`blink`}export{n,e as r,t};
