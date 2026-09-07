@@ -1702,6 +1702,23 @@ paths:
               schema: { type: string, format: binary }
         "401": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
+    patch:
+      operationId: renameTerminalBackground
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RenameTerminalBackgroundRequest" }
+      responses:
+        "200":
+          description: The image and its saved references were renamed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TerminalBackground" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
     delete:
       operationId: deleteTerminalBackground
       responses:
@@ -3492,7 +3509,7 @@ components:
     UpdateConnectionRequest:
       type: object
       additionalProperties: false
-      required: [identity, base, password, keyPassphrase]
+      required: [identity, base, password, keyPassphrase, totp]
       properties:
         identity: { $ref: "#/components/schemas/HostIdentity" }
         base: { type: string, maxLength: 1048576 }
@@ -3502,6 +3519,7 @@ components:
         identityFile: { $ref: "#/components/schemas/ConnectionIdentityFileChange" }
         password: { $ref: "#/components/schemas/UpdateConnectionPassword" }
         keyPassphrase: { $ref: "#/components/schemas/UpdateConnectionKeyPassphrase" }
+        totp: { $ref: "#/components/schemas/UpdateConnectionTOTP" }
     ConnectionStringChange:
       x-go-type: json.RawMessage
       oneOf:
@@ -3582,6 +3600,37 @@ components:
       properties:
         kind: { type: string, enum: [unchanged], x-go-type: string }
     UpdatePasswordRemove:
+      type: object
+      additionalProperties: false
+      required: [kind]
+      properties:
+        kind: { type: string, enum: [remove], x-go-type: string }
+    UpdateConnectionTOTP:
+      x-go-type: json.RawMessage
+      oneOf:
+        - $ref: "#/components/schemas/UpdateTOTPUnchanged"
+        - $ref: "#/components/schemas/UpdateTOTPSaved"
+        - $ref: "#/components/schemas/UpdateTOTPRemove"
+      discriminator:
+        propertyName: kind
+        mapping:
+          unchanged: "#/components/schemas/UpdateTOTPUnchanged"
+          saved_totp: "#/components/schemas/UpdateTOTPSaved"
+          remove: "#/components/schemas/UpdateTOTPRemove"
+    UpdateTOTPUnchanged:
+      type: object
+      additionalProperties: false
+      required: [kind]
+      properties:
+        kind: { type: string, enum: [unchanged], x-go-type: string }
+    UpdateTOTPSaved:
+      type: object
+      additionalProperties: false
+      required: [kind, credential]
+      properties:
+        kind: { type: string, enum: [saved_totp], x-go-type: string }
+        credential: { type: string, minLength: 1, maxLength: 128 }
+    UpdateTOTPRemove:
       type: object
       additionalProperties: false
       required: [kind]
@@ -4002,6 +4051,12 @@ components:
         name: { type: string }
         bytes: { type: integer }
         type: { type: string }
+    RenameTerminalBackgroundRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 128 }
     TerminalBackgroundList:
       type: object
       additionalProperties: false

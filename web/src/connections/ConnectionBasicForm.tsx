@@ -5,6 +5,7 @@ import {
   type UpdateConnectionKeyPassphrase,
   type UpdateConnectionPassword,
   type UpdateConnectionRequest,
+  type UpdateConnectionTOTP,
 } from "../api/config";
 import {
   integrationsApi,
@@ -28,6 +29,7 @@ import type { ConnectionSavedState } from "./connectionSavedState";
 import { identityKey } from "./connectionBrowser";
 
 type PasswordAction = UpdateConnectionPassword["kind"];
+type TOTPAction = UpdateConnectionTOTP["kind"];
 
 type ConnectionBasicFormProps = {
   detail: HostDetail;
@@ -105,13 +107,17 @@ export function ConnectionBasicForm({
   const [eligibility, setEligibility] = useState<PasswordEligibility | null>(null);
   const [credentials, setCredentials] = useState<Credential[]>([]);
   const [keyCredentials, setKeyCredentials] = useState<Credential[]>([]);
+  const [totpCredentials, setTOTPCredentials] = useState<Credential[]>([]);
   const [assigned, setAssigned] = useState(false);
   const [assignedCredential, setAssignedCredential] = useState("");
+  const [assignedTOTP, setAssignedTOTP] = useState("");
   const [passwordAction, setPasswordAction] = useState<PasswordAction>("unchanged");
   const [password, setPassword] = useState("");
   const [savedCredential, setSavedCredential] = useState("");
   const [newCredential, setNewCredential] = useState("");
   const [newSharedPassword, setNewSharedPassword] = useState("");
+  const [totpAction, setTOTPAction] = useState<TOTPAction>("unchanged");
+  const [savedTOTP, setSavedTOTP] = useState("");
   const [keyPassphrase, setKeyPassphrase] = useState("");
   const [keyPassphraseConfirmation, setKeyPassphraseConfirmation] = useState("");
   const [keyPassphraseOpen, setKeyPassphraseOpen] = useState(false);
@@ -145,8 +151,10 @@ export function ConnectionBasicForm({
   function applyCredentialState(status: PasswordVaultStatus, listed: Credential[]) {
     const passwordCredentials = listed.filter((credential) => credential.kind === "password");
     setKeyCredentials(listed.filter((credential) => credential.kind === "key_passphrase"));
+    const oneTimePasswords = listed.filter((credential) => credential.kind === "totp");
     const reusable = passwordCredentials.find((credential) => credential.uses.includes(identity.alias));
     setCredentials(passwordCredentials);
+    setTOTPCredentials(oneTimePasswords);
     setSavedCredential((current) =>
       passwordCredentials.some((credential) => credential.name === current)
         ? current
@@ -154,6 +162,14 @@ export function ConnectionBasicForm({
     );
     setAssigned(status.aliases.includes(identity.alias));
     setAssignedCredential(reusable?.name ?? "");
+    const assignedOneTimePassword = oneTimePasswords.find((credential) =>
+      credential.uses.includes(identity.alias));
+    setAssignedTOTP(assignedOneTimePassword?.name ?? "");
+    setSavedTOTP((current) =>
+      oneTimePasswords.some((credential) => credential.name === current)
+        ? current
+        : oneTimePasswords[0]?.name ?? "",
+    );
   }
 
   useEffect(() => {
@@ -161,6 +177,7 @@ export function ConnectionBasicForm({
     setUser(initial.user);
     setPort(initial.port);
     setPasswordAction("unchanged");
+    setTOTPAction("unchanged");
     setConfirmRemove(false);
     setNewCredential("");
     clearSecrets();
@@ -225,8 +242,10 @@ export function ConnectionBasicForm({
       } else {
         setCredentials([]);
         setKeyCredentials([]);
+        setTOTPCredentials([]);
         setAssigned(status?.aliases.includes(identity.alias) ?? false);
         setAssignedCredential("");
+        setAssignedTOTP("");
         setCredentialOptionsStatus(savedState.credentials.status === "locked" ? "locked" : "failed");
       }
       setLoading(false);
@@ -349,7 +368,15 @@ export function ConnectionBasicForm({
     selectedPrivateKey !== undefined && selectedPrivateKey.encrypted && keyPassphrase !== ""
       ? { kind: "set_dedicated", keyId: selectedPrivateKey.id, passphrase: keyPassphrase }
       : { kind: "unchanged" };
+  const totpChange: UpdateConnectionTOTP = totpAction === "saved_totp"
+    ? savedTOTP === ""
+      ? { kind: "unchanged" }
+      : { kind: "saved_totp", credential: savedTOTP }
+    : totpAction === "remove"
+      ? { kind: "remove" }
+      : { kind: "unchanged" };
   const changesPassword = passwordChange.kind !== "unchanged";
+  const changesTOTP = totpChange.kind !== "unchanged";
   const hasKeyPassphraseDraft = keyPassphrase !== "" || keyPassphraseConfirmation !== "";
   const keyPassphraseMatches = keyPassphrase === keyPassphraseConfirmation;
   const keyPassphraseValid = !hasKeyPassphraseDraft || (keyPassphrase !== "" && keyPassphraseMatches);
@@ -357,14 +384,16 @@ export function ConnectionBasicForm({
   const passwordAllowed = passwordChange.kind === "remove" || passwordChange.kind === "unchanged" ||
     (!draftHasExplicitKey && nonIdentityBlockers.length === 0);
   const dirty = hostNameChange !== undefined || userChange !== undefined || portChange !== undefined ||
-    identityFileChange !== undefined || changesPassword || hasKeyPassphraseDraft;
+    identityFileChange !== undefined || changesPassword || hasKeyPassphraseDraft || changesTOTP;
   const passwordResourcesReady = vault?.unlocked === true && credentialOptionsStatus === "ready" && eligibility !== null;
   const keyPassphraseResourcesReady = vault?.unlocked === true && credentialOptionsStatus === "ready" && keyOptionsStatus === "ready";
+  const totpResourcesReady = vault?.unlocked === true && credentialOptionsStatus === "ready";
   const vaultAllowsConfig = vault === null || vault.unlocked;
   const canSave = !disabled && !loading && !busy && vaultAllowsConfig && dirty &&
     hostError === "" && userError === "" && portError === "" && passwordAllowed &&
     keyPassphraseValid && (!changesPassword || passwordResourcesReady) &&
-    (!hasKeyPassphraseDraft || keyPassphraseResourcesReady);
+    (!hasKeyPassphraseDraft || keyPassphraseResourcesReady) &&
+    (!changesTOTP || totpResourcesReady);
 
   useEffect(() => {
     if (credentialOptionsStatus !== "ready" || keyPassphraseDisclosureSubject === "") {
@@ -391,6 +420,7 @@ export function ConnectionBasicForm({
     setPort(initial.port);
     setSelectedKey(initialKey);
     setPasswordAction("unchanged");
+    setTOTPAction("unchanged");
     setConfirmRemove(false);
     setNewCredential("");
     setPassword("");
@@ -443,6 +473,7 @@ export function ConnectionBasicForm({
       base: detail.file.contents,
       password: passwordChange,
       keyPassphrase: keyPassphraseChange,
+      totp: totpChange,
     };
     if (hostNameChange !== undefined) request.hostName = hostNameChange;
     if (userChange !== undefined) request.user = userChange;
@@ -464,6 +495,7 @@ export function ConnectionBasicForm({
       }
       clearSecrets();
       setPasswordAction("unchanged");
+      setTOTPAction("unchanged");
       setConfirmRemove(false);
       setNewCredential("");
       if (onRequestRefresh !== undefined) {
@@ -793,11 +825,82 @@ export function ConnectionBasicForm({
               ) : null}
             </div>
           </div>}
+
+          <div className="border-t border-hairline px-3 py-3">
+            <div className="flex flex-col gap-3">
+              <div>
+                <p className="text-sm text-ink-muted">{t("conn.basicStoredTOTP")}</p>
+                {loading || credentialOptionsStatus === "loading" ? (
+                  <p className={hintText}>{t("conn.createLoadingOptions")}</p>
+                ) : null}
+                {credentialOptionsStatus === "failed" ? (
+                  <p className={hintText}>{t("conn.basicCredentialOptionsFailed")}</p>
+                ) : null}
+                {vault?.unlocked === true && credentialOptionsStatus === "ready" ? (
+                  <p className={hintText}>
+                    {assignedTOTP === ""
+                      ? t("conn.basicNoTOTP")
+                      : t("conn.basicAssignedTOTP", { name: assignedTOTP })}
+                  </p>
+                ) : null}
+              </div>
+
+              {vault?.unlocked === true && credentialOptionsStatus === "ready" ? (
+                <>
+                  <label className="flex flex-col gap-1">
+                    <span className="text-xs font-medium tracking-wide text-ink-muted">
+                      {t("conn.basicTOTPAction")}
+                    </span>
+                    <select
+                      aria-label={t("conn.basicTOTPAction")}
+                      value={totpAction}
+                      onChange={(event) => {
+                        setTOTPAction(event.target.value as TOTPAction);
+                        setLocalError("");
+                      }}
+                      className={control}
+                    >
+                      <option value="unchanged">{t("conn.basicTOTPUnchanged")}</option>
+                      <option value="saved_totp">{t("conn.basicUseSavedTOTP")}</option>
+                      {assignedTOTP === "" ? null : (
+                        <option value="remove">{t("conn.basicRemoveTOTP")}</option>
+                      )}
+                    </select>
+                  </label>
+
+                  {totpAction === "saved_totp" ? (
+                    <label className="flex flex-col gap-1">
+                      <span className="text-xs font-medium tracking-wide text-ink-muted">
+                        {t("conn.basicChooseSavedTOTP")}
+                      </span>
+                      <select
+                        value={savedTOTP}
+                        onChange={(event) => setSavedTOTP(event.target.value)}
+                        className={control}
+                      >
+                        {totpCredentials.length === 0 ? (
+                          <option value="">{t("conn.basicNoSavedTOTPs")}</option>
+                        ) : null}
+                        {totpCredentials.map((credential) => (
+                          <option key={credential.name} value={credential.name}>
+                            {credential.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : null}
+                  <p className={hintText}>{t("conn.basicTOTPNote")}</p>
+                </>
+              ) : null}
+            </div>
+          </div>
         </Card>
       </section>
 
       {dirty ? <div className="flex flex-wrap items-center justify-end gap-3 border-t border-line py-3">
-        {(changesPassword && !passwordResourcesReady) || (hasKeyPassphraseDraft && !keyPassphraseResourcesReady) ?
+        {(changesPassword && !passwordResourcesReady) ||
+        (hasKeyPassphraseDraft && !keyPassphraseResourcesReady) ||
+        (changesTOTP && !totpResourcesReady) ?
             <p className={`grow ${hintText}`}>{t("conn.basicNeedVault")}</p> :
             !passwordAllowed ? <p className={`grow ${hintText}`}>{t("conn.basicPasswordBlocked")}</p> : <span className="grow" />}
         <Button type="button" disabled={!dirty || busy} onClick={discardDraft}>

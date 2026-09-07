@@ -22,9 +22,11 @@ Key passphrases can be saved, edited, and removed per private key. A ProxyJump r
 
 ## Automatic TOTP entry
 
-Store a Base32 setup key or an `otpauth://totp/...` URI under **Vault → One-time passwords (TOTP)**, then assign it to a host alias. sshc generates a current code only for a hidden keyboard-interactive question that explicitly says `OTP`, `TOTP`, `Verification code`, or an equivalent phrase. It does not send the seed or a code to an ambiguous `Code` prompt or an ordinary password prompt.
+First, store a Base32 setup key or an `otpauth://totp/...` URI under **Vault → One-time passwords (TOTP)**. Then open the target under **Connections** and select the saved token from **Basic → Authentication → One-time password (TOTP)**. You no longer need to type a host alias to create the assignment.
 
-The assignment applies to Terminal, SFTP, `sshc ssh`, `sshc run`, and each ProxyJump hop. If the resolved host or jump route changes, sshc stops releasing the token until you confirm the assignment again.
+sshc generates a current code only for a hidden keyboard-interactive question that explicitly says `OTP`, `TOTP`, `Verification code`, or an equivalent phrase. For example, `Verification code:` is recognised. It does not send the seed or a code to an ambiguous `Code` prompt or an ordinary password prompt.
+
+The assignment applies to Terminal, SFTP, `sshc ssh`, `sshc run`, and each ProxyJump hop. If the resolved host, user, port, or jump route changes, sshc stops releasing the token so that it cannot be sent to an unintended peer. Select the TOTP again under Basic settings to confirm the new authentication destination.
 
 ::: warning Factor separation
 Keeping an account password and a TOTP seed in the same device vault is convenient, but a compromised device may expose both factors. Use this only when your organisation's security policy allows it.

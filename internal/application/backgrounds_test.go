@@ -116,6 +116,72 @@ func TestTwoImagesWithTheSameNameBothSurvive(t *testing.T) {
 	}
 }
 
+func TestRenamingABackgroundMovesSavedReferencesInTheSameTransaction(t *testing.T) {
+	service, workspace := newTerminalService(t)
+	added, err := service.AddBackground("office", png("one"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	metadata, precondition, err := service.metadata.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	metadata.EmbeddedTerminal = &EmbeddedTerminal{Appearance: &TerminalAppearance{Background: added.Name}}
+	metadata.Hosts = []HostMetadata{{
+		Identity:   HostIdentity{Path: "connections/work/host.conf", Alias: "host"},
+		Appearance: &TerminalAppearance{Background: added.Name},
+	}}
+	change, err := service.metadata.Change(metadata, precondition)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.manager.Commit(storage.Request{Operation: "fixture", Changes: []storage.Change{change}}); err != nil {
+		t.Fatal(err)
+	}
+
+	renamed, err := service.RenameBackground(added.Name, "Night Sky.jpeg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if renamed.Name != "night-sky.png" {
+		t.Fatalf("renamed = %q, want a safe name with the detected extension", renamed.Name)
+	}
+	if _, _, err := service.BackgroundContents(added.Name); !errors.Is(err, ErrUnknownBackground) {
+		t.Fatalf("old name still exists: %v", err)
+	}
+	contents, _, err := service.BackgroundContents(renamed.Name)
+	if err != nil || !bytes.Equal(contents, png("one")) {
+		t.Fatalf("renamed bytes = %q, %v", contents, err)
+	}
+	stored, _, err := service.metadata.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := stored.EmbeddedTerminal.Appearance.Background; got != renamed.Name {
+		t.Fatalf("overall background = %q", got)
+	}
+	if got := stored.Hosts[0].Appearance.Background; got != renamed.Name {
+		t.Fatalf("host background = %q", got)
+	}
+	if _, err := os.Stat(filepath.Join(workspace.Root(), filepath.FromSlash(BackgroundsDirectory), renamed.Name)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRenamingABackgroundWillNotOverwriteAnotherImage(t *testing.T) {
+	service, _ := newTerminalService(t)
+	first, err := service.AddBackground("first", png("one"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.AddBackground("second", png("two")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.RenameBackground(first.Name, "second"); !errors.Is(err, ErrBackgroundAlreadyExists) {
+		t.Fatalf("err = %v, want collision refused", err)
+	}
+}
+
 func TestThereIsARoofOverWhatTheBackgroundsMayWeigh(t *testing.T) {
 	service, _ := newTerminalService(t)
 

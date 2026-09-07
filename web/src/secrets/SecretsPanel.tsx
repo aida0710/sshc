@@ -126,8 +126,6 @@ export function SecretsPanel({
     kind: CredentialKind;
     name: string;
   } | null>(null);
-  const [totpHost, setTOTPHost] = useState("");
-  const [totpCredential, setTOTPCredential] = useState("");
 
   const reload = useCallback(async () => {
     try {
@@ -470,50 +468,7 @@ export function SecretsPanel({
             {group.kind !== "totp" ? null : (
               <div className="flex flex-col gap-3 border-t border-line bg-surface-subtle px-4 py-4">
                 <Notice>{t("secrets.totpWarning")}</Notice>
-                <div className="grid items-end gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
-                  <Field label={t("secrets.totpHost")}>
-                    <input
-                      value={totpHost}
-                      autoCapitalize="none"
-                      autoCorrect="off"
-                      spellCheck={false}
-                      onChange={(event) => setTOTPHost(event.target.value)}
-                      className={control}
-                    />
-                  </Field>
-                  <Field label={t("secrets.totpCredential")}>
-                    <select
-                      value={totpCredential}
-                      onChange={(event) => setTOTPCredential(event.target.value)}
-                      className={control}
-                    >
-                      <option value="">{t("secrets.chooseTOTP")}</option>
-                      {mine.map((credential) => (
-                        <option key={credential.name} value={credential.name}>
-                          {credential.name}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
-                  <Button
-                    disabled={totpHost === "" || totpCredential === ""}
-                    onClick={() =>
-                      void run(
-                        () =>
-                          api.assignCredential(
-                            "totp",
-                            totpHost,
-                            totpCredential,
-                          ),
-                        t("secrets.assignTOTPFailed"),
-                      ).then((assigned) => {
-                        if (assigned) setTOTPHost("");
-                      })
-                    }
-                  >
-                    {t("secrets.assignTOTP")}
-                  </Button>
-                </div>
+                <p className={hintText}>{t("secrets.totpAssignInConnection")}</p>
               </div>
             )}
 

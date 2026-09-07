@@ -1,12 +1,15 @@
 package httpserver
 
 import (
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/labstack/echo/v5"
 
+	"sshc/internal/api"
 	"sshc/internal/application"
 )
 
@@ -23,12 +26,17 @@ func registerBackgroundRoutes(engine *echo.Echo, handlers ConfigHandlers) {
 	engine.GET("/api/v1/terminal/backgrounds", handlers.Backgrounds)
 	engine.POST("/api/v1/terminal/backgrounds", handlers.AddBackground)
 	engine.GET("/api/v1/terminal/backgrounds/:name", handlers.Background)
+	engine.PATCH("/api/v1/terminal/backgrounds/:name", handlers.RenameBackground)
 	engine.DELETE("/api/v1/terminal/backgrounds/:name", handlers.DeleteBackground)
 }
 
 type backgroundListResponse struct {
-	Backgrounds    []application.Background `json:"backgrounds"`
+	Backgrounds    []api.TerminalBackground `json:"backgrounds"`
 	RemainingBytes int                      `json:"remainingBytes"`
+}
+
+func terminalBackground(background application.Background) api.TerminalBackground {
+	return api.TerminalBackground{Name: background.Name, Bytes: background.Bytes, Type: background.Type}
 }
 
 // backgroundList は、置いてある画像と、あと何バイト置けるかを返す。
@@ -48,9 +56,11 @@ func (h ConfigHandlers) Backgrounds(c *echo.Context) error {
 	if remaining < 0 {
 		remaining = 0
 	}
-	return c.JSON(http.StatusOK, backgroundListResponse{
-		Backgrounds: backgrounds, RemainingBytes: remaining,
-	})
+	response := make([]api.TerminalBackground, 0, len(backgrounds))
+	for _, background := range backgrounds {
+		response = append(response, terminalBackground(background))
+	}
+	return c.JSON(http.StatusOK, backgroundListResponse{Backgrounds: response, RemainingBytes: remaining})
 }
 
 func (h ConfigHandlers) AddBackground(c *echo.Context) error {
@@ -75,7 +85,7 @@ func (h ConfigHandlers) AddBackground(c *echo.Context) error {
 	case err != nil:
 		return problem(c, http.StatusInternalServerError, "background_not_stored")
 	}
-	return c.JSON(http.StatusCreated, background)
+	return c.JSON(http.StatusCreated, terminalBackground(background))
 }
 
 // Background は、画像そのものを返す。
@@ -93,6 +103,30 @@ func (h ConfigHandlers) Background(c *echo.Context) error {
 		return problem(c, http.StatusInternalServerError, "backgrounds_unreadable")
 	}
 	return c.Blob(http.StatusOK, mediaType, contents)
+}
+
+func (h ConfigHandlers) RenameBackground(c *echo.Context) error {
+	var request api.RenameTerminalBackgroundRequest
+	decoder := json.NewDecoder(io.LimitReader(c.Request().Body, 1025))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&request); err != nil || strings.TrimSpace(request.Name) == "" || len(request.Name) > 128 {
+		return problem(c, http.StatusBadRequest, "invalid_request")
+	}
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		return problem(c, http.StatusBadRequest, "invalid_request")
+	}
+	background, err := h.Service.RenameBackground(c.Param("name"), request.Name)
+	switch {
+	case errors.Is(err, application.ErrUnknownBackground):
+		return problem(c, http.StatusNotFound, "unknown_background")
+	case errors.Is(err, application.ErrBackgroundAlreadyExists):
+		return problem(c, http.StatusConflict, "background_already_exists")
+	case errors.Is(err, application.ErrNotAnImage):
+		return problem(c, http.StatusBadRequest, "not_an_image")
+	case err != nil:
+		return problem(c, http.StatusInternalServerError, "background_not_renamed")
+	}
+	return c.JSON(http.StatusOK, terminalBackground(background))
 }
 
 func (h ConfigHandlers) DeleteBackground(c *echo.Context) error {
