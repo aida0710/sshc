@@ -4,6 +4,7 @@ import { integrationsApi, type IntegrationsApi, type TerminalBackground } from "
 import { useTranslate } from "../i18n/context";
 import { Button } from "../ui/surface";
 import { control } from "../ui/form";
+import { InputDialog } from "../ui/InputDialog";
 import { useBackgroundImage } from "./backgroundImage";
 
 
@@ -13,7 +14,7 @@ type BackgroundPickerProps = {
   tint: number | undefined;
   onTintChange: (next: number | undefined) => void;
   unchosen: string;
-  api?: Pick<IntegrationsApi, "terminalBackgrounds" | "addTerminalBackground" | "deleteTerminalBackground">;
+  api?: Pick<IntegrationsApi, "terminalBackgrounds" | "addTerminalBackground" | "renameTerminalBackground" | "deleteTerminalBackground">;
 };
 
 export function BackgroundPicker({
@@ -28,6 +29,8 @@ export function BackgroundPicker({
   const [stored, setStored] = useState<TerminalBackground[]>([]);
   const [remaining, setRemaining] = useState(0);
   const [problem, setProblem] = useState("");
+  const [renameProblem, setRenameProblem] = useState("");
+  const [renameTarget, setRenameTarget] = useState<TerminalBackground | null>(null);
   const [busy, setBusy] = useState(false);
   const chooser = useRef<HTMLInputElement>(null);
 
@@ -78,6 +81,26 @@ export function BackgroundPicker({
     }
   }
 
+  async function rename(nextName: string) {
+    if (renameTarget === null) return;
+    setBusy(true);
+    setRenameProblem("");
+    try {
+      const renamed = await api.renameTerminalBackground(renameTarget.name, nextName);
+      if (value === renameTarget.name) onChange(renamed.name);
+      setRenameTarget(null);
+      await reload();
+    } catch (error) {
+      setRenameProblem(
+        failureCode(error) === "background_already_exists"
+          ? t("terminal.backgroundRenameExists")
+          : t("terminal.backgroundRenameFailed"),
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-2">
       <select className={control} value={value} onChange={(event) => onChange(event.target.value)}>
@@ -94,9 +117,20 @@ export function BackgroundPicker({
           {stored.map((background) => (
             <li key={background.name} className="flex flex-col items-start gap-1">
               <Thumbnail name={background.name} chosen={value === background.name} />
-              <Button onClick={() => void drop(background.name)} disabled={busy}>
-                {t("terminal.backgroundRemove", { name: background.name })}
-              </Button>
+              <div className="flex flex-wrap gap-1">
+                <Button
+                  onClick={() => {
+                    setRenameProblem("");
+                    setRenameTarget(background);
+                  }}
+                  disabled={busy}
+                >
+                  {t("terminal.backgroundRename", { name: background.name })}
+                </Button>
+                <Button onClick={() => void drop(background.name)} disabled={busy}>
+                  {t("terminal.backgroundRemove", { name: background.name })}
+                </Button>
+              </div>
             </li>
           ))}
         </ul>
@@ -143,6 +177,27 @@ export function BackgroundPicker({
           />
           <span className="text-xs text-ink-faint">{t("terminal.tintHint")}</span>
         </label>
+      )}
+
+      {renameTarget === null ? null : (
+        <InputDialog
+          key={renameTarget.name}
+          id="terminal-background-rename"
+          heading={t("terminal.backgroundRenameHeading")}
+          description={renameProblem === "" ? t("terminal.backgroundRenameHint") : (
+            <span role="alert" className="text-danger">{renameProblem}</span>
+          )}
+          label={t("terminal.backgroundRenameLabel")}
+          initialValue={renameTarget.name}
+          submitLabel={t("terminal.backgroundRenameSubmit")}
+          cancelLabel={t("terminal.backgroundRenameCancel")}
+          validate={(next) => next === "" ? t("terminal.backgroundRenameRequired") : ""}
+          onSubmit={(next) => void rename(next)}
+          onCancel={() => {
+            setRenameProblem("");
+            setRenameTarget(null);
+          }}
+        />
       )}
     </div>
   );

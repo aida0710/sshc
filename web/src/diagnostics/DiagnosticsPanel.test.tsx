@@ -67,6 +67,7 @@ function buildApi(overrides: Partial<IntegrationsApi> = {}): IntegrationsApi {
     setEngineSettings: vi.fn(),
     terminalBackgrounds: vi.fn().mockResolvedValue({ backgrounds: [], remainingBytes: 1 << 20 }),
     addTerminalBackground: vi.fn(),
+    renameTerminalBackground: vi.fn(),
     deleteTerminalBackground: vi.fn(),
     setTerminalSettings: vi.fn().mockResolvedValue(undefined),
     credentials: vi.fn().mockResolvedValue({ credentials: [] }),

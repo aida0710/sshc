@@ -45,6 +45,8 @@ OSC 52 and encoding may be overridden per connection. OSC 8 and Kitty keyboard b
 
 Rendering uses WebGL by default and automatically falls back to the DOM renderer when WebGL is unavailable or a background image is active. If a GPU or browser duplicates characters or leaves visual traces, turn off **Use WebGL rendering** to always use DOM rendering.
 
+Uploaded background images can be renamed from the list. The extension follows the detected image format, and references in overall and per-connection settings are updated in the same operation. An existing image is never overwritten.
+
 ## Local shell and notifications
 
 Choose a default shell profile and start directory. Detected choices include PowerShell variants on Windows and available zsh, fish, bash, and similar shells on Unix systems.

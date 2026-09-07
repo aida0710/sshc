@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/labstack/echo/v5"
@@ -139,5 +140,27 @@ func TestABackgroundCanBeThrownAway(t *testing.T) {
 	}
 	if served := harness.raw(t, http.MethodGet, "/api/v1/terminal/backgrounds/wall.png", nil); served.Code != http.StatusNotFound {
 		t.Fatalf("GET after delete = %d", served.Code)
+	}
+}
+
+func TestABackgroundCanBeRenamedWithoutOverwritingAnother(t *testing.T) {
+	harness := newConfigHarness(t)
+	for _, name := range []string{"wall", "desk"} {
+		created := harness.raw(t, http.MethodPost, "/api/v1/terminal/backgrounds?name="+name, pngBytes(name))
+		if created.Code != http.StatusCreated {
+			t.Fatalf("POST %s = %d", name, created.Code)
+		}
+	}
+
+	renamed := harness.raw(t, http.MethodPatch, "/api/v1/terminal/backgrounds/wall.png", []byte(`{"name":"Night Sky.jpg"}`))
+	if renamed.Code != http.StatusOK || !strings.Contains(renamed.Body.String(), `"name":"night-sky.png"`) {
+		t.Fatalf("PATCH = %d, body %s", renamed.Code, renamed.Body.String())
+	}
+	if old := harness.raw(t, http.MethodGet, "/api/v1/terminal/backgrounds/wall.png", nil); old.Code != http.StatusNotFound {
+		t.Fatalf("old GET = %d", old.Code)
+	}
+	collision := harness.raw(t, http.MethodPatch, "/api/v1/terminal/backgrounds/night-sky.png", []byte(`{"name":"desk"}`))
+	if collision.Code != http.StatusConflict || !strings.Contains(collision.Body.String(), "background_already_exists") {
+		t.Fatalf("collision = %d, body %s", collision.Code, collision.Body.String())
 	}
 }

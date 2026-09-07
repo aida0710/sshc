@@ -28,9 +28,11 @@ Vaultでは、パスワードをラベル付きで保存し、接続先へ割り
 
 ## TOTPを自動入力する
 
-［Vault］の［ワンタイムパスワード（TOTP）］へ、認証サービスが表示するBase32セットアップキー、または`otpauth://totp/...` URIを保存し、接続先エイリアスへ割り当てます。`OTP`、`TOTP`、`Verification code`、`認証コード`などを明示するkeyboard-interactiveの非表示質問だけに、その時点のコードを自動入力します。曖昧な`Code`や通常のパスワード質問にはTOTPを送りません。
+最初に［Vault］の［ワンタイムパスワード（TOTP）］へ、認証サービスが表示するBase32セットアップキー、または`otpauth://totp/...` URIを名前付きで保存します。次に［Connections］で対象の接続先を開き、［基本］→［認証］→［ワンタイムパスワード（TOTP）］から保存したTOTPを選択して保存します。接続先名を手入力して紐付ける必要はありません。
 
-Terminal、SFTP、`sshc ssh`、`sshc run`、ProxyJumpの各hopで同じ割り当てが使われます。接続先やProxyJump経路が変わった場合は自動入力を止め、再割り当てを求めます。
+`OTP`、`TOTP`、`Verification code`、`認証コード`などを明示するkeyboard-interactiveの非表示質問だけに、その時点のコードを自動入力します。たとえば`Verification code:`は自動入力の対象です。曖昧な`Code`や通常のパスワード質問にはTOTPを送りません。
+
+Terminal、SFTP、`sshc ssh`、`sshc run`、ProxyJumpの各hopで同じ割り当てが使われます。接続先、ユーザー、ポート、ProxyJump経路を変更した場合は、意図しない相手へコードを送らないよう自動入力を止めます。［基本］でTOTPを選び直して、新しい認証先への割り当てを明示してください。
 
 ::: warning 認証要素の分離
 パスワードとTOTPのセットアップキーを同じ端末のVaultに保存すると便利ですが、その端末を失った場合に両方の認証要素を同時に失う可能性があります。組織のセキュリティ方針で許可されている場合だけ使用してください。
