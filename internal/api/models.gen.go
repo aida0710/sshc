@@ -1248,6 +1248,11 @@ type RemoteKeyRegisterResponse struct {
 	Truncated bool   `json:"truncated"`
 }
 
+// RenameTerminalBackgroundRequest defines model for RenameTerminalBackgroundRequest.
+type RenameTerminalBackgroundRequest struct {
+	Name string `json:"name"`
+}
+
 // RenameTerminalSessionRequest defines model for RenameTerminalSessionRequest.
 type RenameTerminalSessionRequest struct {
 	Title string `json:"title"`
@@ -1616,6 +1621,13 @@ type TerminalAppearance struct {
 	Palette        *string `json:"palette,omitempty"`
 }
 
+// TerminalBackground defines model for TerminalBackground.
+type TerminalBackground struct {
+	Bytes int    `json:"bytes"`
+	Name  string `json:"name"`
+	Type  string `json:"type"`
+}
+
 // TerminalCommandDispatchRequest defines model for TerminalCommandDispatchRequest.
 type TerminalCommandDispatchRequest struct {
 	Command   *string           `json:"command,omitempty"`
@@ -1881,8 +1893,12 @@ type UpdateConnectionRequest struct {
 	KeyPassphrase UpdateConnectionKeyPassphrase `json:"keyPassphrase"`
 	Password      UpdateConnectionPassword      `json:"password"`
 	Port          *ConnectionPortChange         `json:"port,omitempty"`
+	Totp          UpdateConnectionTOTP          `json:"totp"`
 	User          *ConnectionStringChange       `json:"user,omitempty"`
 }
+
+// UpdateConnectionTOTP defines model for UpdateConnectionTOTP.
+type UpdateConnectionTOTP = json.RawMessage
 
 // UpdateCredentialRequest defines model for UpdateCredentialRequest.
 type UpdateCredentialRequest struct {
@@ -1906,6 +1922,22 @@ type UpdateStatus struct {
 	Current   string  `json:"current"`
 	Latest    *string `json:"latest,omitempty"`
 	PageUrl   *string `json:"pageUrl,omitempty"`
+}
+
+// UpdateTOTPRemove defines model for UpdateTOTPRemove.
+type UpdateTOTPRemove struct {
+	Kind string `json:"kind"`
+}
+
+// UpdateTOTPSaved defines model for UpdateTOTPSaved.
+type UpdateTOTPSaved struct {
+	Credential string `json:"credential"`
+	Kind       string `json:"kind"`
+}
+
+// UpdateTOTPUnchanged defines model for UpdateTOTPUnchanged.
+type UpdateTOTPUnchanged struct {
+	Kind string `json:"kind"`
 }
 
 // ValueSource defines model for ValueSource.

@@ -325,6 +325,7 @@ describe("ConnectionsPage", () => {
       port: { action: "set", value: 2222 },
       password: { kind: "unchanged" },
       keyPassphrase: { kind: "unchanged" },
+      totp: { kind: "unchanged" },
     }));
     expect(configApi.host).toHaveBeenCalledWith("config", "bastion");
   });

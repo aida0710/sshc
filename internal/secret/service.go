@@ -34,6 +34,8 @@ var (
 	ErrCredentialAlreadyExists = errors.New("a credential of that kind already has that name")
 	// ErrUnknownPasswordMutation は接続作成が扱う三つのパスワード源以外を拒否する。
 	ErrUnknownPasswordMutation = errors.New("that is not a password mutation kind")
+	// ErrUnknownTOTPMutation は接続編集が扱うTOTP割り当て以外を拒否する。
+	ErrUnknownTOTPMutation = errors.New("that is not a TOTP mutation kind")
 	// ErrPasswordBindingRequired prevents an account-password assignment from
 	// bypassing the resolved authentication-destination check.
 	ErrPasswordBindingRequired = errors.New("an authentication destination binding is required")
@@ -78,11 +80,29 @@ type KeyPassphraseMutation struct {
 	Passphrase   string
 }
 
+// TOTPMutationKind は接続aliasに対するTOTPの割り当て変更である。
+type TOTPMutationKind string
+
+const (
+	TOTPMutationSaved  TOTPMutationKind = "saved_totp"
+	TOTPMutationRemove TOTPMutationKind = "remove"
+)
+
+// TOTPMutation binds one saved TOTP seed to the authentication destination
+// resolved for an alias. Provisioning data never leaves the vault transaction.
+type TOTPMutation struct {
+	Kind       TOTPMutationKind
+	Alias      string
+	Credential string
+	Binding    string
+}
+
 // ConnectionSecretsMutation groups every vault change made by one connection
 // save so callers can commit one sealed replacement beside the SSH config.
 type ConnectionSecretsMutation struct {
 	Password      *PasswordMutation
 	KeyPassphrase *KeyPassphraseMutation
+	TOTP          *TOTPMutation
 }
 
 // IdleTimeout は、最後に資格情報を使用してから vault を自動ロックするまでの時間。
@@ -1311,7 +1331,11 @@ func (s *Service) WithConnectionSecretsTransaction(
 			return storage.Result{}, err
 		}
 		if !exists {
-			if mutation.Password != nil && mutation.Password.Kind == PasswordMutationRemove && mutation.KeyPassphrase == nil {
+			passwordOnlyRemoval := mutation.Password != nil && mutation.Password.Kind == PasswordMutationRemove &&
+				mutation.KeyPassphrase == nil && mutation.TOTP == nil
+			totpOnlyRemoval := mutation.TOTP != nil && mutation.TOTP.Kind == TOTPMutationRemove &&
+				mutation.Password == nil && mutation.KeyPassphrase == nil
+			if passwordOnlyRemoval || totpOnlyRemoval {
 				return commit(nil)
 			}
 			return storage.Result{}, ErrNoVault
@@ -1350,6 +1374,14 @@ func (s *Service) WithConnectionSecretsTransaction(
 			}
 			changed = true
 		}
+	}
+	if mutation.TOTP != nil {
+		totpChanged, err := applyTOTPMutation(vault, clone, *mutation.TOTP)
+		if err != nil {
+			s.mu.Unlock()
+			return storage.Result{}, err
+		}
+		changed = changed || totpChanged
 	}
 	if !changed {
 		s.mu.Unlock()
@@ -1450,6 +1482,34 @@ func applyPasswordMutation(vault, clone *Vault, mutation PasswordMutation) (bool
 		return true, nil
 	default:
 		return false, ErrUnknownPasswordMutation
+	}
+}
+
+func applyTOTPMutation(vault, clone *Vault, mutation TOTPMutation) (bool, error) {
+	if mutation.Kind != TOTPMutationRemove && !validAuthenticationBinding(mutation.Binding) {
+		return false, ErrPasswordBindingRequired
+	}
+	switch mutation.Kind {
+	case TOTPMutationSaved:
+		if current, ok := vault.Assigned(KindTOTP, mutation.Alias); ok &&
+			current == mutation.Credential && vault.totpBindings[mutation.Alias] == mutation.Binding {
+			return false, nil
+		}
+		if err := clone.Assign(KindTOTP, mutation.Alias, mutation.Credential); err != nil {
+			return false, err
+		}
+		if err := clone.BindTOTP(mutation.Alias, mutation.Binding); err != nil {
+			return false, err
+		}
+		return true, nil
+	case TOTPMutationRemove:
+		if _, ok := vault.SecretFor(KindTOTP, mutation.Alias); !ok {
+			return false, nil
+		}
+		clone.Unassign(KindTOTP, mutation.Alias)
+		return true, nil
+	default:
+		return false, ErrUnknownTOTPMutation
 	}
 }
 

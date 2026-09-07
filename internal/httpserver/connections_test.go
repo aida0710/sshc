@@ -61,6 +61,15 @@ func passwordForHTTPConnection(t *testing.T, harness *connectionHTTPHarness, ali
 	return harness.passwords.BoundPasswordFor(alias, binding)
 }
 
+func totpForHTTPConnection(t *testing.T, harness *connectionHTTPHarness, alias string) string {
+	t.Helper()
+	binding, err := harness.testHarness.service.PasswordBinding(alias)
+	if err != nil {
+		return ""
+	}
+	return harness.passwords.BoundTOTPFor(alias, binding)
+}
+
 func newConnectionHTTPHarness(t *testing.T, initialise bool) *connectionHTTPHarness {
 	t.Helper()
 	home := t.TempDir()
@@ -293,6 +302,7 @@ func connectionUpdateBody(password map[string]any) map[string]any {
 		"port":          map[string]any{"action": "set", "value": 2222},
 		"password":      password,
 		"keyPassphrase": map[string]any{"kind": "unchanged"},
+		"totp":          map[string]any{"kind": "unchanged"},
 	}
 }
 
@@ -387,6 +397,64 @@ func TestUpdateConnectionEndpointDecodesEveryPasswordMutation(t *testing.T) {
 	}
 }
 
+func TestUpdateConnectionEndpointAssignsAndRemovesSavedTOTP(t *testing.T) {
+	harness := newConnectionHTTPHarness(t, true)
+	if err := harness.passwords.SetCredential(secret.KindTOTP, "cluster-otp", "JBSWY3DPEHPK3PXP"); err != nil {
+		t.Fatal(err)
+	}
+	body := connectionUpdateBody(map[string]any{"kind": "unchanged"})
+	delete(body, "user")
+	delete(body, "port")
+	body["totp"] = map[string]any{"kind": "saved_totp", "credential": "cluster-otp"}
+	response := harness.call(t, http.MethodPatch, "/api/v1/connections", body, true, true)
+	if response.Code != http.StatusOK {
+		t.Fatalf("assign = %d, body %s", response.Code, response.Body.String())
+	}
+	if got := totpForHTTPConnection(t, harness, "existing"); !strings.Contains(got, "secret=JBSWY3DPEHPK3PXP") {
+		t.Fatalf("assigned TOTP = %q", got)
+	}
+
+	body = connectionUpdateBody(map[string]any{"kind": "unchanged"})
+	delete(body, "user")
+	delete(body, "port")
+	body["totp"] = map[string]any{"kind": "remove"}
+	response = harness.call(t, http.MethodPatch, "/api/v1/connections", body, true, true)
+	if response.Code != http.StatusOK {
+		t.Fatalf("remove = %d, body %s", response.Code, response.Body.String())
+	}
+	if got := totpForHTTPConnection(t, harness, "existing"); got != "" {
+		t.Fatalf("removed TOTP = %q", got)
+	}
+}
+
+func TestUpdateConnectionEndpointRejectsInvalidTOTPUnionMembers(t *testing.T) {
+	tests := []struct {
+		name  string
+		value any
+	}{
+		{name: "missing", value: nil},
+		{name: "unknown kind", value: map[string]any{"kind": "generated"}},
+		{name: "unchanged with credential", value: map[string]any{"kind": "unchanged", "credential": "cluster-otp"}},
+		{name: "saved missing credential", value: map[string]any{"kind": "saved_totp"}},
+		{name: "remove with credential", value: map[string]any{"kind": "remove", "credential": "cluster-otp"}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			harness := newConnectionHTTPHarness(t, true)
+			body := connectionUpdateBody(map[string]any{"kind": "unchanged"})
+			if test.value == nil {
+				delete(body, "totp")
+			} else {
+				body["totp"] = test.value
+			}
+			response := harness.call(t, http.MethodPatch, "/api/v1/connections", body, true, true)
+			if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "invalid_request") {
+				t.Fatalf("response = %d %s", response.Code, response.Body.String())
+			}
+		})
+	}
+}
+
 func TestUpdateConnectionEndpointMapsValidationAndConflicts(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -400,6 +468,7 @@ func TestUpdateConnectionEndpointMapsValidationAndConflicts(t *testing.T) {
 				"identity": map[string]any{"path": "config", "alias": "existing"},
 				"base":     connectionHTTPConfig, "password": map[string]any{"kind": "unchanged"},
 				"keyPassphrase": map[string]any{"kind": "unchanged"},
+				"totp":          map[string]any{"kind": "unchanged"},
 			}, wantStatus: 400, wantCode: "connection_no_change",
 		},
 		{

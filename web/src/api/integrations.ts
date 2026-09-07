@@ -177,6 +177,7 @@ export type IntegrationsApi = {
     suggested: string,
     image: Blob,
   ): Promise<TerminalBackground>;
+  renameTerminalBackground(name: string, nextName: string): Promise<TerminalBackground>;
   deleteTerminalBackground(name: string): Promise<void>;
   setTerminalSettings(settings: TerminalSettings): Promise<void>;
   passwordEligibility(alias: string): Promise<PasswordEligibility>;
@@ -636,6 +637,18 @@ export const integrationsApi: IntegrationsApi = {
           method: "POST",
           headers: { "Content-Type": "application/octet-stream" },
           body: image,
+        },
+      ),
+    );
+  },
+  async renameTerminalBackground(name, nextName) {
+    return validateBackground(
+      await apiClient.mutate<unknown>(
+        `/api/v1/terminal/backgrounds/${encodeURIComponent(name)}`,
+        {
+          method: "PATCH",
+          headers: jsonHeaders,
+          body: JSON.stringify({ name: nextName }),
         },
       ),
     );

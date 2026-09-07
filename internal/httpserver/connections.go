@@ -163,6 +163,11 @@ func updateConnectionRequestFromAPI(wire api.UpdateConnectionRequest) (applicati
 		return application.UpdateConnectionRequest{}, false, err
 	}
 	request.KeyPassphrase = keyPassphrase
+	totp, err := decodeUpdateConnectionTOTP(wire.Totp)
+	if err != nil {
+		return application.UpdateConnectionRequest{}, false, err
+	}
+	request.TOTP = totp
 	return request, needsInventory, nil
 }
 
@@ -333,6 +338,38 @@ func decodeUpdateConnectionKeyPassphrase(value api.UpdateConnectionKeyPassphrase
 	}
 }
 
+func decodeUpdateConnectionTOTP(value api.UpdateConnectionTOTP) (application.UpdateConnectionTOTP, error) {
+	kind, err := taggedValue(value, "kind")
+	if err != nil {
+		return application.UpdateConnectionTOTP{}, err
+	}
+	switch application.UpdateConnectionTOTPKind(kind) {
+	case application.UpdateTOTPUnchanged:
+		var unchanged api.UpdateTOTPUnchanged
+		if err := decodeConnectionAuthentication(value, &unchanged); err != nil {
+			return application.UpdateConnectionTOTP{}, errInvalidEdit
+		}
+		return application.UpdateConnectionTOTP{Kind: application.UpdateTOTPUnchanged}, nil
+	case application.UpdateTOTPSaved:
+		var saved api.UpdateTOTPSaved
+		if err := decodeConnectionAuthentication(value, &saved); err != nil ||
+			saved.Credential == "" || len(saved.Credential) > 128 {
+			return application.UpdateConnectionTOTP{}, errInvalidEdit
+		}
+		return application.UpdateConnectionTOTP{
+			Kind: application.UpdateTOTPSaved, Credential: saved.Credential,
+		}, nil
+	case application.UpdateTOTPRemove:
+		var remove api.UpdateTOTPRemove
+		if err := decodeConnectionAuthentication(value, &remove); err != nil {
+			return application.UpdateConnectionTOTP{}, errInvalidEdit
+		}
+		return application.UpdateConnectionTOTP{Kind: application.UpdateTOTPRemove}, nil
+	default:
+		return application.UpdateConnectionTOTP{}, errInvalidEdit
+	}
+}
+
 func connectionRequestFromAPI(wire api.CreateConnectionRequest) (application.CreateConnectionRequest, error) {
 	if len(wire.Alias) == 0 || len(wire.Alias) > 64 ||
 		len(wire.HostName) == 0 || len(wire.HostName) > validate.MaxHostnameLength ||
@@ -426,6 +463,7 @@ func connectionProblem(c *echo.Context, err error) error {
 		errors.Is(err, application.ErrUnknownConnectionChange),
 		errors.Is(err, application.ErrUnknownUpdatePassword),
 		errors.Is(err, application.ErrUnknownUpdateKeyPhrase),
+		errors.Is(err, application.ErrUnknownUpdateTOTP),
 		errors.Is(err, application.ErrUnquotableValue):
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	case errors.Is(err, validate.ErrUnsafeHostname):

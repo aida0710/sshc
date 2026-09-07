@@ -121,7 +121,7 @@
 - この認証は `~/.ssh` 自体を暗号化しません。config と鍵は OpenSSH が読み取れる形式で保存されます。保護対象は UI、vault の内容、世代バックアップであり、ディスクへアクセスできる攻撃者は対象外です。
 
 - 保管庫は `~/.ssh/sshc/secrets` の 1 ファイルです。AES-256-GCM で暗号化し、鍵はマスターパスワードから Argon2id で導出します。マスターパスワードは保存も送信もしません。復旧経路もないため、忘れた場合は内容を復元できません。
-- 名前空間は3つで、混ざりません。**アカウントのパスワード**、**鍵のパスフレーズ**、**TOTP provisioning data**です。ファイル形式、API、画面のいずれでも片方の名前が別種の選択肢に現れません。パスワードとTOTPは割り当て時の`AuthenticationBinding`へ結び付け、HostName、User、Port、ProxyJump経路が変われば解放を止めます。TOTP値はBase32または`otpauth://totp` URIとして受け取り、保存時にSHA1/SHA256/SHA512、6/8桁、periodを含むcanonical URIへ正規化します。
+- 名前空間は3つで、混ざりません。**アカウントのパスワード**、**鍵のパスフレーズ**、**TOTP provisioning data**です。ファイル形式、API、画面のいずれでも片方の名前が別種の選択肢に現れません。TOTPはVaultで名前付き保存し、接続先の基本設定から選択します。接続設定とTOTP割り当ては一つのtransactionで保存します。パスワードとTOTPは割り当て時の`AuthenticationBinding`へ結び付け、HostName、User、Port、ProxyJump経路が変われば解放を止めます。TOTP値はBase32または`otpauth://totp` URIとして受け取り、保存時にSHA1/SHA256/SHA512、6/8桁、periodを含むcanonical URIへ正規化します。
 - 秘密には名前を付け、複数のホストや鍵から参照します。値は 1 か所にあるので、更新は 1 回の編集で済みます。まだ参照されている秘密の削除は `credential_in_use` として拒否します。
 - 通常の一覧 API は名前と参照元だけを返します。名前付き資格情報の編集では、編集を明示した 1 件に限り、現在値のダイジェストへ結び付いた一度限りの action token を消費する専用 API が値を返します。応答は `Cache-Control: no-store` とし、一覧・更新応答・ログ・browser storage へ値を複製しません。名前と値、全参照の追従は 1 回の vault transaction で保存します。
 - 起動時にはマスターパスワードを要求せず、必要な画面で要求します。解錠後は、明示的に施錠した場合、engine が終了した場合、または設定した無操作時間を過ぎた場合に施錠します。画面表示時の状態取得は使用として扱いません。

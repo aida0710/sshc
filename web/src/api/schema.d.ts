@@ -1323,7 +1323,7 @@ export interface paths {
         delete: operations["deleteTerminalBackground"];
         options?: never;
         head?: never;
-        patch?: never;
+        patch: operations["renameTerminalBackground"];
         trace?: never;
     };
     "/api/v1/history": {
@@ -2732,6 +2732,7 @@ export interface components {
             identityFile?: components["schemas"]["ConnectionIdentityFileChange"];
             password: components["schemas"]["UpdateConnectionPassword"];
             keyPassphrase: components["schemas"]["UpdateConnectionKeyPassphrase"];
+            totp: components["schemas"]["UpdateConnectionTOTP"];
         };
         ConnectionStringChange: components["schemas"]["ConnectionStringSet"] | components["schemas"]["ConnectionInherit"];
         ConnectionStringSet: {
@@ -2776,6 +2777,29 @@ export interface components {
             kind: "unchanged";
         };
         UpdatePasswordRemove: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "remove";
+        };
+        UpdateConnectionTOTP: components["schemas"]["UpdateTOTPUnchanged"] | components["schemas"]["UpdateTOTPSaved"] | components["schemas"]["UpdateTOTPRemove"];
+        UpdateTOTPUnchanged: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "unchanged";
+        };
+        UpdateTOTPSaved: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "saved_totp";
+            credential: string;
+        };
+        UpdateTOTPRemove: {
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -3044,6 +3068,9 @@ export interface components {
             name: string;
             bytes: number;
             type: string;
+        };
+        RenameTerminalBackgroundRequest: {
+            name: string;
         };
         TerminalBackgroundList: {
             backgrounds: components["schemas"]["TerminalBackground"][];
@@ -6148,6 +6175,36 @@ export interface operations {
             };
             401: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
+        };
+    };
+    renameTerminalBackground: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RenameTerminalBackgroundRequest"];
+            };
+        };
+        responses: {
+            /** @description The image and its saved references were renamed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TerminalBackground"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
         };
     };
     getHistory: {

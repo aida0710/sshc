@@ -34,6 +34,8 @@ var (
 	ErrNotAnImage = errors.New("those bytes are not an image this application shows")
 	// ErrUnknownBackground は、置かれていない画像を指した要求を報告する。
 	ErrUnknownBackground = errors.New("there is no background by that name")
+	// ErrBackgroundAlreadyExists は、明示的な名前変更が既存画像を上書きしようとしたことを報告する。
+	ErrBackgroundAlreadyExists = errors.New("a background with that name already exists")
 )
 
 // Background は、置いてある画像 1 枚である。
@@ -184,6 +186,94 @@ func (s *Service) BackgroundContents(name string) ([]byte, string, error) {
 		return contents, background.Type, nil
 	}
 	return nil, "", ErrUnknownBackground
+}
+
+// RenameBackground は画像と、その画像を参照する全体・接続別の見た目設定を一緒に移す。
+// 片方だけ成功すれば保存済みの背景が消えて見えるため、同じstorage transactionに置く。
+func (s *Service) RenameBackground(current, suggested string) (Background, error) {
+	s.saveMutex.Lock()
+	defer s.saveMutex.Unlock()
+
+	existing, err := s.Backgrounds()
+	if err != nil {
+		return Background{}, err
+	}
+	var found *Background
+	taken := make(map[string]bool, len(existing))
+	for index := range existing {
+		background := &existing[index]
+		taken[background.Name] = true
+		if background.Name == current {
+			found = background
+		}
+	}
+	if found == nil {
+		return Background{}, ErrUnknownBackground
+	}
+	contents, err := s.workspace.FileSystem().ReadFile(filepath.Join(s.backgroundsRoot(), current))
+	if err != nil {
+		return Background{}, err
+	}
+	mediaType, extension := imageType(contents)
+	if mediaType == "" {
+		return Background{}, ErrNotAnImage
+	}
+	next := safeStem(suggested, contents) + "." + extension
+	if next == current {
+		return *found, nil
+	}
+	if taken[next] {
+		return Background{}, ErrBackgroundAlreadyExists
+	}
+
+	from, err := s.workspace.ResolveForWrite(filepath.Join(s.backgroundsRoot(), current))
+	if err != nil {
+		return Background{}, err
+	}
+	to, err := s.workspace.ResolveForWrite(filepath.Join(s.backgroundsRoot(), next))
+	if err != nil {
+		return Background{}, err
+	}
+	request := storage.Request{
+		Operation: "rename terminal background",
+		Moves: []storage.Move{{
+			From: from,
+			To:   to,
+			Precondition: storage.Precondition{
+				Exists: true,
+				Digest: storage.Digest(contents),
+			},
+		}},
+	}
+
+	metadata, precondition, err := s.metadata.Load()
+	if err != nil {
+		return Background{}, err
+	}
+	referenced := false
+	if terminal := metadata.EmbeddedTerminal; terminal != nil && terminal.Appearance != nil && terminal.Appearance.Background == current {
+		terminal.Appearance.Background = next
+		referenced = true
+	}
+	for index := range metadata.Hosts {
+		appearance := metadata.Hosts[index].Appearance
+		if appearance != nil && appearance.Background == current {
+			appearance.Background = next
+			referenced = true
+		}
+	}
+	if referenced {
+		change, err := s.metadata.Change(metadata, precondition)
+		if err != nil {
+			return Background{}, err
+		}
+		request.Changes = append(request.Changes, change)
+	}
+
+	if _, err := s.manager.Commit(request); err != nil {
+		return Background{}, err
+	}
+	return Background{Name: next, Bytes: found.Bytes, Type: mediaType}, nil
 }
 
 // RemoveBackground は、その画像を捨てる。

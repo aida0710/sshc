@@ -31,6 +31,7 @@ export type CreateConnectionResponse = components["schemas"]["CreateConnectionRe
 export type UpdateConnectionRequest = components["schemas"]["UpdateConnectionRequest"];
 export type UpdateConnectionPassword = components["schemas"]["UpdateConnectionPassword"];
 export type UpdateConnectionKeyPassphrase = components["schemas"]["UpdateConnectionKeyPassphrase"];
+export type UpdateConnectionTOTP = components["schemas"]["UpdateConnectionTOTP"];
 
 
 

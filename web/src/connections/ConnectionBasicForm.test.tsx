@@ -261,6 +261,53 @@ describe("ConnectionBasicForm", () => {
       port: { action: "inherit" },
       password: { kind: "unchanged" },
       keyPassphrase: { kind: "unchanged" },
+      totp: { kind: "unchanged" },
+    });
+  });
+
+  it("assigns a saved TOTP from the connection Basic settings", async () => {
+    const user = userEvent.setup();
+    const harness = renderForm({
+      credentials: vi.fn().mockResolvedValue({
+        credentials: [
+          { kind: "password", name: "office", uses: [] },
+          { kind: "totp", name: "pegasus-otp", uses: [] },
+        ],
+      }),
+    });
+    await screen.findByText("No one-time password is assigned.");
+
+    await user.selectOptions(screen.getByLabelText("One-time password action"), "saved_totp");
+    await user.selectOptions(screen.getByLabelText("Saved TOTP"), "pegasus-otp");
+    await user.click(screen.getByRole("button", { name: "Save Basic settings" }));
+
+    expect(harness.onSave).toHaveBeenCalledWith({
+      identity: buildDetail().form.entry.identity,
+      base: buildDetail().file.contents,
+      password: { kind: "unchanged" },
+      keyPassphrase: { kind: "unchanged" },
+      totp: { kind: "saved_totp", credential: "pegasus-otp" },
+    });
+  });
+
+  it("removes an assigned TOTP from the connection Basic settings", async () => {
+    const user = userEvent.setup();
+    const harness = renderForm({
+      credentials: vi.fn().mockResolvedValue({
+        credentials: [{ kind: "totp", name: "pegasus-otp", uses: ["edge"] }],
+      }),
+    });
+    await screen.findByText("Assigned: pegasus-otp");
+
+    await user.selectOptions(screen.getByLabelText("One-time password action"), "remove");
+    await user.click(screen.getByRole("button", { name: "Save Basic settings" }));
+
+    expect(harness.onSave).toHaveBeenCalledWith({
+      identity: buildDetail().form.entry.identity,
+      base: buildDetail().file.contents,
+      password: { kind: "unchanged" },
+      keyPassphrase: { kind: "unchanged" },
+      totp: { kind: "remove" },
     });
   });
 
@@ -288,6 +335,7 @@ describe("ConnectionBasicForm", () => {
       identityFile: { action: "set", keyId: secondKey.id },
       password: { kind: "unchanged" },
       keyPassphrase: { kind: "unchanged" },
+      totp: { kind: "unchanged" },
     });
   });
 
@@ -321,6 +369,7 @@ describe("ConnectionBasicForm", () => {
       base: detail.file.contents,
       password: { kind: "remove" },
       keyPassphrase: { kind: "unchanged" },
+      totp: { kind: "unchanged" },
     });
   });
 
@@ -402,6 +451,7 @@ describe("ConnectionBasicForm", () => {
       hostName: { action: "set", value: "retry.example" },
       password: { kind: "unchanged" },
       keyPassphrase: { kind: "unchanged" },
+      totp: { kind: "unchanged" },
     });
     expect(onDirtyChange).toHaveBeenCalledWith(true);
     expect(harness.keyInventory).not.toHaveBeenCalled();
@@ -469,6 +519,7 @@ describe("ConnectionBasicForm", () => {
       base: detail.file.contents,
       password: { kind: "remove" },
       keyPassphrase: { kind: "unchanged" },
+      totp: { kind: "unchanged" },
     });
   });
 
@@ -656,6 +707,7 @@ describe("ConnectionBasicForm", () => {
       base: detail.file.contents,
       password: { kind: "unchanged" },
       keyPassphrase: { kind: "set_dedicated", keyId: privateKey.id, passphrase: "correct phrase" },
+      totp: { kind: "unchanged" },
     });
   });
 

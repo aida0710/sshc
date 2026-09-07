@@ -162,7 +162,7 @@ describe("SecretsPanel", () => {
     );
   });
 
-  it("stores and assigns a TOTP setup key to a host", async () => {
+  it("stores a TOTP setup key and directs assignment to connection settings", async () => {
     const user = userEvent.setup();
     const api = buildApi();
     render(<SecretsPanel api={api} />);
@@ -191,21 +191,12 @@ describe("SecretsPanel", () => {
       ),
     );
 
-    await user.type(within(tokens).getByLabelText("Host alias"), "edge");
-    await user.selectOptions(
-      within(tokens).getByLabelText("One-time password"),
-      "production-otp",
-    );
-    await user.click(
-      within(tokens).getByRole("button", { name: "Assign to host" }),
-    );
-    await waitFor(() =>
-      expect(api.assignCredential).toHaveBeenCalledWith(
-        "totp",
-        "edge",
-        "production-otp",
+    expect(
+      within(tokens).getByText(
+        "To assign this token, open its target in Connections and choose it under One-time password (TOTP) in Basic settings.",
       ),
-    );
+    ).toBeInTheDocument();
+    expect(within(tokens).queryByLabelText("Host alias")).not.toBeInTheDocument();
   });
 
   it("keeps a TOTP setup key in the form when storing it fails", async () => {

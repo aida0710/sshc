@@ -448,6 +448,70 @@ func TestUpdateConnectionCanChangeOnlyTheStoredPassword(t *testing.T) {
 	}
 }
 
+func TestUpdateConnectionAssignsSavedTOTPToTheResolvedAuthenticationDestination(t *testing.T) {
+	const before = "Host edge\n\tHostName old.example\n\tUser deploy\n\tPort 22\n"
+	harness := newConnectionUpdateHarness(t, before)
+	if err := harness.secrets.SetCredential(secret.KindTOTP, "cluster-otp", "JBSWY3DPEHPK3PXP"); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := harness.service.UpdateConnection(harness.secrets, harness.inventory, UpdateConnectionRequest{
+		Identity: HostIdentity{Path: "config", Alias: "edge"}, Base: before,
+		HostName: &ConnectionStringChange{Action: ConnectionChangeSet, Value: "new.example"},
+		Password: unchangedPassword(),
+		TOTP: UpdateConnectionTOTP{
+			Kind: UpdateTOTPSaved, Credential: "cluster-otp",
+		},
+	})
+	if err != nil {
+		t.Fatalf("UpdateConnection = %v", err)
+	}
+	binding, err := harness.service.PasswordBinding("edge")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := harness.secrets.BoundTOTPFor("edge", binding); !strings.Contains(got, "secret=JBSWY3DPEHPK3PXP") {
+		t.Fatalf("BoundTOTPFor(edge) = %q", got)
+	}
+	listed, err := harness.secrets.Credentials()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if uses := listed[secret.KindTOTP]["cluster-otp"]; !slices.Equal(uses, []string{"edge"}) {
+		t.Fatalf("TOTP credential uses = %#v", uses)
+	}
+}
+
+func TestUpdateConnectionRemovesTOTPAssignmentWithoutChangingTheCredential(t *testing.T) {
+	const before = "Host edge\n\tHostName edge.example\n"
+	harness := newConnectionUpdateHarness(t, before)
+	if err := harness.secrets.SetCredential(secret.KindTOTP, "cluster-otp", "JBSWY3DPEHPK3PXP"); err != nil {
+		t.Fatal(err)
+	}
+	binding, err := harness.service.PasswordBinding("edge")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := harness.secrets.AssignTOTPCredential("edge", "cluster-otp", binding); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = harness.service.UpdateConnection(harness.secrets, harness.inventory, UpdateConnectionRequest{
+		Identity: HostIdentity{Path: "config", Alias: "edge"}, Base: before,
+		Password: unchangedPassword(),
+		TOTP:     UpdateConnectionTOTP{Kind: UpdateTOTPRemove},
+	})
+	if err != nil {
+		t.Fatalf("UpdateConnection = %v", err)
+	}
+	if got := harness.secrets.BoundTOTPFor("edge", binding); got != "" {
+		t.Fatalf("removed assignment still resolves to %q", got)
+	}
+	if got, credentialErr := harness.secrets.Credential(secret.KindTOTP, "cluster-otp"); credentialErr != nil || got == "" {
+		t.Fatalf("stored TOTP was removed: %q, %v", got, credentialErr)
+	}
+}
+
 func TestUpdateConnectionSkipsASemanticallyUnchangedPasswordAssignment(t *testing.T) {
 	const before = "Host edge\n\tHostName edge.example\n\tPort 22\n"
 	harness := newConnectionUpdateHarness(t, before)

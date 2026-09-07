@@ -22,6 +22,7 @@ var (
 	ErrUnknownConnectionChange = errors.New("unknown connection field change action")
 	ErrUnknownUpdatePassword   = errors.New("unknown connection password update kind")
 	ErrUnknownUpdateKeyPhrase  = errors.New("unknown connection key passphrase update kind")
+	ErrUnknownUpdateTOTP       = errors.New("unknown connection TOTP update kind")
 	ErrPasswordIneligible      = errors.New("connection cannot use a stored password")
 )
 
@@ -86,6 +87,19 @@ type UpdateConnectionKeyPassphrase struct {
 	Passphrase string                            `json:"passphrase,omitempty"`
 }
 
+type UpdateConnectionTOTPKind string
+
+const (
+	UpdateTOTPUnchanged UpdateConnectionTOTPKind = "unchanged"
+	UpdateTOTPSaved     UpdateConnectionTOTPKind = "saved_totp"
+	UpdateTOTPRemove    UpdateConnectionTOTPKind = "remove"
+)
+
+type UpdateConnectionTOTP struct {
+	Kind       UpdateConnectionTOTPKind `json:"kind"`
+	Credential string                   `json:"credential,omitempty"`
+}
+
 type UpdateConnectionRequest struct {
 	Identity      HostIdentity                  `json:"identity"`
 	Base          string                        `json:"base"`
@@ -95,6 +109,7 @@ type UpdateConnectionRequest struct {
 	IdentityFile  *ConnectionIdentityFileChange `json:"identityFile,omitempty"`
 	Password      UpdateConnectionPassword      `json:"password"`
 	KeyPassphrase UpdateConnectionKeyPassphrase `json:"keyPassphrase"`
+	TOTP          UpdateConnectionTOTP          `json:"totp"`
 }
 
 // UpdateConnection changes the small, stable connection form. The browser
@@ -105,8 +120,12 @@ func (s *Service) UpdateConnection(
 ) (SaveResult, error) {
 	passwordUnchanged := request.Password.Kind == "" || request.Password.Kind == UpdatePasswordUnchanged
 	keyPassphraseUnchanged := request.KeyPassphrase.Kind == "" || request.KeyPassphrase.Kind == UpdateKeyPassphraseUnchanged
+	totpUnchanged := request.TOTP.Kind == "" || request.TOTP.Kind == UpdateTOTPUnchanged
 	if !keyPassphraseUnchanged && request.KeyPassphrase.Kind != UpdateKeyPassphraseSetDedicated {
 		return SaveResult{}, ErrUnknownUpdateKeyPhrase
+	}
+	if !totpUnchanged && request.TOTP.Kind != UpdateTOTPSaved && request.TOTP.Kind != UpdateTOTPRemove {
+		return SaveResult{}, ErrUnknownUpdateTOTP
 	}
 
 	// Plan before inspecting policy so a stale base remains a conflict rather
@@ -125,7 +144,7 @@ func (s *Service) UpdateConnection(
 	}
 
 	passwordCleanup := prepared.explicitIdentityFile && passwordUnchanged
-	if passwordUnchanged && keyPassphraseUnchanged && !passwordCleanup {
+	if passwordUnchanged && keyPassphraseUnchanged && totpUnchanged && !passwordCleanup {
 		if !changed {
 			return SaveResult{}, ErrNoConnectionUpdate
 		}
@@ -176,6 +195,14 @@ func (s *Service) UpdateConnection(
 			Passphrase:   request.KeyPassphrase.Passphrase,
 		}
 	}
+	if !totpUnchanged {
+		mutation.TOTP = &secret.TOTPMutation{
+			Kind:       secret.TOTPMutationKind(request.TOTP.Kind),
+			Alias:      request.Identity.Alias,
+			Credential: request.TOTP.Credential,
+			Binding:    prepared.authenticationBinding,
+		}
+	}
 
 	var updated SaveResult
 	_, err = secrets.WithConnectionSecretsTransaction(mutation, func(vaultChange *storage.Change) (storage.Result, error) {
@@ -187,6 +214,10 @@ func (s *Service) UpdateConnection(
 		}
 		if mutation.Password != nil && mutation.Password.Kind != secret.PasswordMutationRemove &&
 			prepared.authenticationBinding != mutation.Password.Binding {
+			return storage.Result{}, ErrConnectionChanged
+		}
+		if mutation.TOTP != nil && mutation.TOTP.Kind != secret.TOTPMutationRemove &&
+			prepared.authenticationBinding != mutation.TOTP.Binding {
 			return storage.Result{}, ErrConnectionChanged
 		}
 		if prepared.explicitIdentityFile && !passwordUnchanged && request.Password.Kind != UpdatePasswordRemove {
