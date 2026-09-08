@@ -6,6 +6,7 @@ import {
   type CredentialKind,
   type IntegrationsApi,
   type PasswordVaultStatus,
+  type TOTPCodeSet,
 } from "../api/integrations";
 import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
@@ -22,6 +23,7 @@ const mobileTouchTargets = "[&_button]:min-h-10 md:[&_button]:min-h-0";
 type SecretsPanelProps = {
   api?: IntegrationsApi;
   onLock?: () => void;
+  kind?: CredentialKind;
 };
 
 const kinds: {
@@ -53,6 +55,88 @@ const kinds: {
     store: "secrets.storeTOTP",
   },
 ];
+
+const kindDescriptions: Record<CredentialKind, MessageKey> = {
+  password: "secrets.passwordsDescription",
+  key_passphrase: "secrets.passphrasesDescription",
+  totp: "secrets.totpDescription",
+};
+
+function readableCode(code: string): string {
+  return code.length === 6 ? `${code.slice(0, 3)} ${code.slice(3)}` : code;
+}
+
+function TOTPCodeCard({ name, api }: { name: string; api: IntegrationsApi }) {
+  const t = useTranslate();
+  const [codes, setCodes] = useState<TOTPCodeSet | null>(null);
+  const [remaining, setRemaining] = useState(0);
+  const [expanded, setExpanded] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  const reload = useCallback(async () => {
+    try {
+      const next = await api.totpCodes(name);
+      setCodes(next);
+      setRemaining(next.remainingSeconds);
+      setFailed(false);
+    } catch {
+      setFailed(true);
+    }
+  }, [api, name]);
+
+  useEffect(() => {
+    void reload();
+  }, [reload]);
+
+  useEffect(() => {
+    if (codes === null) return;
+    const timer = window.setInterval(() => {
+      setRemaining((current) => {
+        if (current > 1) return current - 1;
+        void reload();
+        return 0;
+      });
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [codes, reload]);
+
+  if (failed) {
+    return <Button onClick={() => void reload()}>{t("secrets.totpRetry")}</Button>;
+  }
+  if (codes === null) {
+    return <p className={hintText}>{t("secrets.totpLoading")}</p>;
+  }
+  return (
+    <div className="min-w-0 rounded-md bg-surface-subtle px-3 py-2">
+      <button
+        type="button"
+        aria-expanded={expanded}
+        aria-label={t(expanded ? "secrets.totpCollapse" : "secrets.totpExpand", { name })}
+        className="flex w-full items-center justify-between gap-3 text-left"
+        onClick={() => setExpanded((current) => !current)}
+      >
+        <span className="whitespace-nowrap font-mono text-lg font-semibold tracking-wider text-ink">
+          {readableCode(codes.current)}
+        </span>
+        <span className="text-xs tabular-nums text-ink-muted">
+          {t("secrets.totpRemaining", { seconds: remaining })} {expanded ? "⌃" : "⌄"}
+        </span>
+      </button>
+      {expanded ? (
+        <div className="mt-2 grid grid-cols-2 gap-2 border-t border-line pt-2 text-xs">
+          <div>
+            <p className="text-ink-faint">{t("secrets.totpPrevious")}</p>
+            <p className="mt-1 whitespace-nowrap font-mono tracking-wider text-ink-muted">{readableCode(codes.previous)}</p>
+          </div>
+          <div>
+            <p className="text-ink-faint">{t("secrets.totpNext")}</p>
+            <p className="mt-1 whitespace-nowrap font-mono tracking-wider text-ink-muted">{readableCode(codes.next)}</p>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 function emptyCredentialList(): CredentialList {
   return {
@@ -112,6 +196,7 @@ function keyBasename(key: string): string {
 export function SecretsPanel({
   api = integrationsApi,
   onLock,
+  kind,
 }: SecretsPanelProps) {
   const t = useTranslate();
   const [status, setStatus] = useState<PasswordVaultStatus | null>(null);
@@ -250,21 +335,27 @@ export function SecretsPanel({
       (count, credential) => count + credential.uses.length,
       0,
     ) + dedicatedKeyPassphrases.length;
+  const visibleKinds = kind === undefined
+    ? kinds
+    : kinds.filter((candidate) => candidate.kind === kind);
+  const selectedGroup = kind === undefined
+    ? null
+    : kinds.find((candidate) => candidate.kind === kind) ?? null;
 
   return (
     <div
       className={`mx-auto flex w-full max-w-5xl flex-col gap-6 ${mobileTouchTargets}`}
     >
       <PageHeader
-        title={t("secrets.heading")}
-        description={t("secrets.pageDescription")}
+        title={selectedGroup === null ? t("secrets.heading") : t(selectedGroup.heading)}
+        description={kind === undefined ? t("secrets.pageDescription") : t(kindDescriptions[kind])}
         actions={
           <Button onClick={() => void api.lockVault().then(() => onLock?.())}>
             {t("secrets.lock")}
           </Button>
         }
       />
-      <MetricGrid className="sm:grid-cols-2 lg:grid-cols-4">
+      {kind === undefined ? <MetricGrid className="sm:grid-cols-2 lg:grid-cols-4">
         {([
           [t("secrets.metricPasswords"), passwordCount],
           [t("secrets.metricPassphrases"), passphraseCount],
@@ -278,13 +369,13 @@ export function SecretsPanel({
             compact
           />
         ))}
-      </MetricGrid>
+      </MetricGrid> : null}
       {error === "" ? null : <Notice tone="danger">{error}</Notice>}
       {keyHostUsageComplete ? null : (
         <Notice>{t("secrets.keyHostUsageIncomplete")}</Notice>
       )}
 
-      {kinds.map((group) => {
+      {visibleKinds.map((group) => {
         const draft = draftFor(group.kind);
         const mine = credentials.filter(
           (credential) => credential.kind === group.kind,
@@ -336,6 +427,9 @@ export function SecretsPanel({
                         </h4>
                       </div>
                       <div className="grid gap-4 sm:grid-cols-2">
+                        {credential.kind === "totp" ? (
+                          <TOTPCodeCard name={credential.name} api={api} />
+                        ) : null}
                         {credential.kind === "key_passphrase" ? (
                           <UsageList
                             label={t("secrets.keys")}

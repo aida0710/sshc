@@ -15,6 +15,8 @@ sshc displays name resolution, jump hosts, host-key checks, authentication, shel
 
 When SSH needs an unsaved password, key passphrase, or hidden keyboard-interactive answer, each typed character appears as `*` instead of the value. Backspace and `Ctrl+U` update the mask without leaving the plaintext in scrollback.
 
+**Settings → Terminal → Connection log** can show connection stages, attempted authentication methods, whether a saved TOTP was available, jump hosts and timing for newly opened connections. **Everything (-vvv)** prints the active log level first. Passwords, generated TOTP codes and setup keys are never logged. `sshc run` uses the same setting.
+
 Reconnect an exited SSH session in the same pane while retaining its scrollback. Closing an SSH or local shell explicitly stops it immediately and removes it from the list.
 
 ## Terminal controls

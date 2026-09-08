@@ -144,7 +144,7 @@ func writeConnectionNotices(stderr io.Writer, answer connectAnswer) {
 		fmt.Fprintf(stderr, "sshc: saved password for %s was not used because its authentication route changed; select the password again in Connections to confirm the current route\n", stale)
 	}
 	for _, stale := range answer.StaleTOTPs {
-		fmt.Fprintf(stderr, "sshc: saved one-time password for %s was not used because its authentication route changed; assign it again in Vault to confirm the current route\n", stale)
+		fmt.Fprintf(stderr, "sshc: saved one-time password for %s was not used because its authentication route changed; select it again in Connections to confirm the current route\n", stale)
 	}
 }
 

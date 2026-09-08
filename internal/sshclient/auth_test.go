@@ -225,6 +225,62 @@ func TestStoredTOTPAnswersAnExplicitChallengeWithoutPrompting(t *testing.T) {
 	}
 }
 
+func TestStoredTOTPAnswersAnExplicitEchoedChallengeWithoutPrompting(t *testing.T) {
+	server := newTestServer(t, serverOptions{
+		Keyboard:     map[string]string{"Verification code: ": "123456"},
+		KeyboardEcho: true, KeyboardName: "tsukuba",
+	})
+	prompt := &scriptedPrompter{}
+	var observed sshclient.CredentialEvent
+	var echoed bool
+	auth := sshclient.Auth{
+		TOTP: func(target sshclient.Target, question string) (string, bool) {
+			if target.Alias != "bastion" || question != "Verification code: " {
+				return "", false
+			}
+			return "123456", true
+		},
+		ObserveCredential: func(_ sshclient.Target, event sshclient.CredentialEvent, shown bool) {
+			observed, echoed = event, shown
+		},
+	}
+
+	if err := connect(t, server, targetWith(server), auth, prompt); err != nil {
+		t.Fatalf("connect = %v", err)
+	}
+	if len(prompt.asked) != 0 {
+		t.Fatalf("echoed stored TOTP still prompted: %#v", prompt.asked)
+	}
+	if observed != sshclient.CredentialTOTPUsed || !echoed {
+		t.Fatalf("credential observation = %q, echoed %t", observed, echoed)
+	}
+}
+
+func TestUnavailableStoredTOTPIsReportedWithoutSuppressingManualEntry(t *testing.T) {
+	server := newTestServer(t, serverOptions{
+		Keyboard:     map[string]string{"Verification code: ": "123456"},
+		KeyboardEcho: true, KeyboardName: "tsukuba",
+	})
+	prompt := &scriptedPrompter{answers: []string{"123456"}}
+	var observed sshclient.CredentialEvent
+	auth := sshclient.Auth{
+		TOTP: func(sshclient.Target, string) (string, bool) { return "", false },
+		ObserveCredential: func(_ sshclient.Target, event sshclient.CredentialEvent, _ bool) {
+			observed = event
+		},
+	}
+
+	if err := connect(t, server, targetWith(server), auth, prompt); err != nil {
+		t.Fatalf("connect = %v", err)
+	}
+	if observed != sshclient.CredentialTOTPUnavailable {
+		t.Fatalf("credential observation = %q", observed)
+	}
+	if len(prompt.asked) != 1 || !strings.Contains(prompt.asked[0], "Verification code") {
+		t.Fatalf("manual entry was not preserved: %#v", prompt.asked)
+	}
+}
+
 func TestStoredPasswordAndTOTPAnswerACombinedChallenge(t *testing.T) {
 	server := newTestServer(t, serverOptions{Keyboard: map[string]string{
 		"Password: ": "hunter2", "OTP: ": "123456",

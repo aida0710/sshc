@@ -9,7 +9,7 @@ Use `sshc help` for the full command list. Use `sshc <command...> --help` or `ss
 
 The CLI uses the same OpenSSH configuration and the running engine's vault and sessions. For automation, use supported `--json` output instead of parsing human-readable text.
 
-Codex and other AI agents can call the CLI directly. When the vault is unlocked and the host key and credentials are already saved, non-interactive SSH uses the stored password or key passphrase. The agent does not need the credential itself.
+Codex and other AI agents can call the CLI directly. When the vault is unlocked and every host key and credential required by the route is already saved, non-interactive SSH uses the stored password, key passphrase, and assigned TOTP. The agent does not need the credential itself.
 
 ## Engine and vault
 
@@ -31,6 +31,21 @@ sshc update
 Interactive secrets such as the Vault master password display one `*` per typed character instead of the value. Backspace and `Ctrl+U` update the mask, and the plaintext is never written to Terminal scrollback.
 
 `sshc service` manages a systemd user service on Linux or a launchd user agent on macOS. `install` registers a stable Homebrew or `install.sh` path, and `disable` removes only a definition created by sshc. `install`, `disable`, and `update` show the planned changes and ask for confirmation. Use `-y` or `--yes` only when automation must skip the prompt.
+
+## OTP
+
+```sh
+sshc otp list
+sshc otp <name>
+sshc otp show <name> --json
+sshc otp add <name>
+sshc otp edit <name>
+sshc otp remove <name>
+```
+
+`list` prints saved names and assignments only. `sshc otp <name>` and `show` print the previous, current, and next code plus the remaining lifetime of the current code, which makes a clock boundary visible. The provisioning secret stays inside the engine and is absent from both human and JSON output.
+
+`add` and `edit` read a Base32 setup key or `otpauth://` URI from an interactive terminal, displaying `*` instead of the value. An assigned TOTP cannot be removed until its Connections assignments are cleared.
 
 ## SSH
 

@@ -31,7 +31,13 @@ test("keeps sessions in the sidebar and moves product navigation to the Menu pag
 
   const visualDirectory = process.env.SSHC_VISUAL_DIR;
   if (visualDirectory !== undefined) {
-    await page.screenshot({ path: `${visualDirectory}/sshc-menu-page-desktop.png`, fullPage: true });
+    await page.evaluate(() => window.localStorage.setItem("sshc.language", "ja"));
+    await page.reload();
+    await expect(page.getByRole("heading", { name: "Menu", exact: true })).toBeVisible();
+    await page.screenshot({ path: `${visualDirectory}/sshc-menu-page-desktop-ja.png`, fullPage: true });
+    await page.evaluate(() => window.localStorage.setItem("sshc.language", "en"));
+    await page.reload();
+    await expect(page.getByRole("heading", { name: "Menu", exact: true })).toBeVisible();
   }
   await page.setViewportSize({ width: 360, height: 800 });
   await expect(navigation).not.toBeInViewport();

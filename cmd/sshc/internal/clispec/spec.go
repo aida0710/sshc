@@ -127,6 +127,13 @@ Automation: --expect REGEX | --read-for D | --script FILE|-
 		{Name: "status", Help: "usage:\n  sshc service status\n\nPrint whether the sshc-managed user service is active.\n"},
 		{Name: "disable", Help: "usage:\n  sshc service disable [-y|--yes]\n\nStop and remove the sshc-managed user service. The command asks for confirmation unless -y or --yes is given.\n"},
 	}},
+	{Name: "otp", Route: "otp", Help: "usage:\n  sshc otp list [--json]\n  sshc otp <name> [--json]\n  sshc otp show <name> [--json]\n  sshc otp add <name>\n  sshc otp edit <name>\n  sshc otp remove <name> [-y|--yes]\n\nList and manage TOTP credentials in the unlocked vault. Showing a credential prints the previous, current, and next short-lived code; the provisioning secret never leaves the engine. Add and edit read the setup key interactively without echoing it.\n", Actions: []Action{
+		{Name: "list", Help: "usage:\n  sshc otp list [--json]\n\nList saved TOTP names and assigned hosts without revealing codes or setup keys.\n"},
+		{Name: "show", Help: "usage:\n  sshc otp show <name> [--json]\n  sshc otp <name> [--json]\n\nPrint the previous, current, and next code for one saved TOTP. The provisioning secret remains inside the engine.\n"},
+		{Name: "add", Help: "usage:\n  sshc otp add <name>\n\nRead a Base32 setup key or otpauth URI from an interactive terminal and store it under a new name.\n"},
+		{Name: "edit", Help: "usage:\n  sshc otp edit <name>\n\nInteractively replace the setup key of one saved TOTP.\n"},
+		{Name: "remove", Help: "usage:\n  sshc otp remove <name> [-y|--yes]\n\nRemove an unused saved TOTP after confirmation. Assigned credentials must be unassigned from their connections first.\n"},
+	}},
 	{Name: "vault", Route: "vault", Help: "usage:\n  sshc vault status\n  sshc vault create\n  sshc vault unlock\n  sshc vault lock\n  sshc vault change-password\n", Actions: []Action{
 		{Name: "status", Help: "usage:\n  sshc vault status\n\nDescribe the running engine and Vault.\n"},
 		{Name: "create", Help: "usage:\n  sshc vault create\n\nCreate and unlock a new Vault.\n"},
@@ -217,6 +224,12 @@ const GlobalHelp = `usage:
   sshc service install install and start a user service on Linux or macOS
   sshc service status  print whether the managed service is active
   sshc service disable stop and remove the managed service
+  sshc otp list        list saved one-time-password credentials
+  sshc otp <name>      print previous, current, and next TOTP codes
+  sshc otp add <name>  store a TOTP setup key in the unlocked vault
+  sshc otp edit <name> replace a saved TOTP setup key
+  sshc otp remove <name>
+                       remove an unused saved TOTP credential
   sshc vault status    describe the running engine and vault
   sshc vault create    create and unlock a new vault
   sshc vault unlock    unlock the vault in the running engine

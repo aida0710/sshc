@@ -23,6 +23,7 @@ export const en = {
   "shell.navStart": "Start",
   "shell.navConnections": "Connection files",
   "shell.navKeysHosts": "Keys and hosts",
+  "shell.navVault": "Vault",
   "shell.navMaintenance": "Maintenance",
   "menu.open": "Open {section}",
   "menu.displaySettings": "Preferences",
@@ -658,7 +659,7 @@ export const en = {
   "terminal.paletteLabel": "Colour scheme",
   "terminal.verbosityLabel": "Connection log",
   "terminal.verbosityHint":
-    "Displays connection details in the console, like ssh -v. Applies to new connections.",
+    "Displays diagnostics available to sshc, including connection stages, authentication methods and saved-TOTP availability. Applies to new connections and never prints secret values.",
   "terminal.verbosityQuiet": "None",
   "terminal.verbosityBrief": "Basic details (-v)",
   "terminal.verbosityDetailed": "Keys, hops and timings (-vv)",
@@ -817,6 +818,12 @@ export const en = {
   "secrets.heading": "The vault",
   "secrets.pageDescription":
     "Manage named account passwords, key passphrases, and one-time password seeds. Values are shown only while editing.",
+  "secrets.passwordsDescription":
+    "Manage named account passwords and the hosts that use them. Values are shown only while editing.",
+  "secrets.passphrasesDescription":
+    "Manage named and key-specific passphrases. Values are shown only while editing.",
+  "secrets.totpDescription":
+    "Register one-time passwords, view the current code, and manage their connection assignments.",
   "secrets.metricPasswords": "Account passwords",
   "secrets.metricPassphrases": "Key passphrases",
   "secrets.metricTOTP": "One-time passwords",
@@ -883,6 +890,13 @@ export const en = {
     "Automatic entry is used only for an explicit OTP challenge. Storing the password and OTP seed on the same device is convenient, but weakens separation between authentication factors.",
   "secrets.totpAssignInConnection":
     "To assign this token, open its target in Connections and choose it under One-time password (TOTP) in Basic settings.",
+  "secrets.totpLoading": "Generating the current code…",
+  "secrets.totpRetry": "Try generating the code again",
+  "secrets.totpExpand": "Show the previous and next codes for {name}",
+  "secrets.totpCollapse": "Hide the previous and next codes for {name}",
+  "secrets.totpRemaining": "{seconds}s",
+  "secrets.totpPrevious": "Previous",
+  "secrets.totpNext": "Next",
   "secrets.unassignTOTP": "Remove the one-time password assignment from {host}",
   "secrets.unassignTOTPFailed": "The one-time password assignment could not be removed.",
   "update.version": "Version {version}",
@@ -904,7 +918,9 @@ export const en = {
   "secrets.changeFailed": "The master password could not be changed.",
   "secrets.changedMasterLocally":
     "The master password was changed. The local vault, snippets, sync settings, and local backups now use the new password. Remote snapshots were not rewritten.",
-  "section.secrets": "Secrets",
+  "section.passwords": "Account passwords",
+  "section.keyPassphrases": "Key passphrases",
+  "section.otp": "OTP",
   "lock.explainNew":
     "Choose a master password to encrypt stored passwords, key passphrases, snippets, sync settings, and all backups created by sshc.",
   "lock.explainOpen": "Give your master password to open sshc.",
@@ -1267,7 +1283,7 @@ export const en = {
     "These settings are encrypted with the master password. Unlock the vault to view them.",
   "sync.unlockFailed": "The master password is incorrect.",
   "sync.noVault":
-    "This machine has no vault yet. Create one under Secrets, then come back.",
+    "This machine has no vault yet. Create one from a Vault page, then come back.",
   "sync.direction": "Direction",
   "sync.direction.both": "Send and receive",
   "sync.direction.push": "Send only",

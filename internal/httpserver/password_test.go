@@ -431,6 +431,10 @@ func TestCredentialsListNamesAndUses(t *testing.T) {
 }
 
 func credentialServer(t *testing.T) (*echo.Echo, *secret.Service, session.Credentials) {
+	return credentialServerAt(t, nil)
+}
+
+func credentialServerAt(t *testing.T, now func() time.Time) (*echo.Echo, *secret.Service, session.Credentials) {
 	t.Helper()
 	_, service := passwordEngine(t)
 	if err := service.Initialise(testPassphrase); err != nil {
@@ -451,9 +455,42 @@ func credentialServer(t *testing.T) (*echo.Echo, *secret.Service, session.Creden
 	actions := ActionHandlers{Sessions: manager, Kinds: registry}
 	registerActionRoutes(engine, actions)
 	registerPasswordRoutes(engine, PasswordHandlers{
-		Service: service, Binding: fixedPasswordBinding, Actions: actions,
+		Service: service, Binding: fixedPasswordBinding, Actions: actions, Now: now,
 	})
 	return engine, service, credentials
+}
+
+func TestTOTPCodeGenerationReturnsAdjacentCodesWithoutTheProvisioningSecret(t *testing.T) {
+	at := time.Unix(59, 0).UTC()
+	engine, service, credentials := credentialServerAt(t, func() time.Time { return at })
+	const setupKey = "JBSWY3DPEHPK3PXP"
+	if err := service.SetCredential(secret.KindTOTP, "tsukuba", setupKey); err != nil {
+		t.Fatal(err)
+	}
+	path := "/api/v1/credentials/totp/tsukuba/codes"
+	if got := sendKeyRequest(t, engine, credentials, http.MethodPost, path, nil, "").Code; got != http.StatusForbidden {
+		t.Fatalf("codes without token = %d", got)
+	}
+	token := issueToken(t, engine, credentials, session.ActionRevealCredential,
+		credentialActionTarget(secret.KindTOTP, "tsukuba"))
+	response := sendKeyRequest(t, engine, credentials, http.MethodPost, path, nil, token)
+	if response.Code != http.StatusOK {
+		t.Fatalf("codes = %d: %s", response.Code, response.Body.String())
+	}
+	if got := response.Header().Get("Cache-Control"); got != "no-store" {
+		t.Fatalf("Cache-Control = %q", got)
+	}
+	var codes api.TOTPCodeSet
+	if err := json.Unmarshal(response.Body.Bytes(), &codes); err != nil {
+		t.Fatal(err)
+	}
+	if codes.PeriodSeconds != 30 || codes.RemainingSeconds != 1 ||
+		len(codes.Previous) != 6 || len(codes.Current) != 6 || len(codes.Next) != 6 {
+		t.Fatalf("codes = %#v", codes)
+	}
+	if strings.Contains(response.Body.String(), setupKey) || strings.Contains(response.Body.String(), "otpauth") {
+		t.Fatalf("response exposed provisioning data: %s", response.Body.String())
+	}
 }
 
 func TestCredentialRevealRequiresAOneTimeTokenAndIsNeverCached(t *testing.T) {

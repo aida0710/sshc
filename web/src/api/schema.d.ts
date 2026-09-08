@@ -918,6 +918,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/credentials/totp/{name}/codes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["generateTOTPCodes"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/keys": {
         parameters: {
             query?: never;
@@ -1968,6 +1984,13 @@ export interface components {
             kind: string;
             name: string;
             secret: string;
+        };
+        TOTPCodeSet: {
+            previous: string;
+            current: string;
+            next: string;
+            periodSeconds: number;
+            remainingSeconds: number;
         };
         AssignCredentialRequest: {
             subject: string;
@@ -5353,6 +5376,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RevealCredentialResponse"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+        };
+    };
+    generateTOTPCodes: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-SSHC-Action": string;
+            };
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Previous, current, and next TOTP codes; the provisioning secret never leaves the engine */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TOTPCodeSet"];
                 };
             };
             400: components["responses"]["Problem"];

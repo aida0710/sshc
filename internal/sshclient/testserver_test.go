@@ -65,6 +65,11 @@ type serverOptions struct {
 	Password string
 	// Keyboard は keyboard-interactive の質問と正解。
 	Keyboard map[string]string
+	// KeyboardEcho はkeyboard-interactiveで入力を表示する指定を再現する。
+	// OTPを表示入力として返す実在サーバーがあるため、非表示だけでは不十分。
+	KeyboardEcho        bool
+	KeyboardName        string
+	KeyboardInstruction string
 	// ExitCode はシェルの終了コード。
 	ExitCode int
 	// OmitExitStatus は、transport が終了状態を残さず切れた場合を再現する。
@@ -154,7 +159,10 @@ func newTestServer(t *testing.T, options serverOptions) *testServer {
 				questions = append(questions, question)
 			}
 			echos := make([]bool, len(questions))
-			answers, err := challenge("", "", questions, echos)
+			for index := range echos {
+				echos[index] = options.KeyboardEcho
+			}
+			answers, err := challenge(options.KeyboardName, options.KeyboardInstruction, questions, echos)
 			if err != nil {
 				return nil, err
 			}

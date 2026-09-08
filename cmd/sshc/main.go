@@ -111,6 +111,11 @@ func dispatchInvocation(called invocation, home string, client *http.Client) int
 		serviceCtx, cancel := signal.NotifyContext(ctx, os.Interrupt)
 		defer cancel()
 		return runService(serviceCtx, called.Args[0], called.Yes, home, os.Stdout, os.Stderr, defaultServiceDependencies())
+	case invocationOTP:
+		otpCtx, cancel := signal.NotifyContext(ctx, os.Interrupt)
+		defer cancel()
+		return runOTP(otpCtx, *called.OTP, app.HandoffDir(home), client,
+			os.Stdin, os.Stdout, os.Stderr, systemPasswordTerminal{})
 	case invocationVault:
 		// password 読み取り中と loopback request 中の Ctrl-C を public 130 にする。
 		// engine の ownership signal は runEngine が別に持つため、ここでは利用者が
