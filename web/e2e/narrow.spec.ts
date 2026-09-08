@@ -247,7 +247,7 @@ test("keeps password setup inside 360 pixels without a decorative icon", async (
   await openSectionThroughDrawer(page, "Account passwords", "Account passwords");
   await page.getByRole("button", { name: "Lock sshc" }).click();
 
-  await expect(page.getByText("Give your master password to open sshc.")).toBeVisible();
+  await expect(page.getByText("Enter your master password to unlock sshc.")).toBeVisible();
   await expect(page.locator('use[href="#icon-secrets"]')).toHaveCount(0);
   await expectNoHorizontalOverflow(page, "Existing-vault password screen");
   await expectFullyInsideViewport(page, page.getByRole("button", { name: "Open" }), "Open sshc");
@@ -305,7 +305,7 @@ test("reports a completed vault migration with both versions on mobile", async (
   await page.getByRole("button", { name: "Vault を作成" }).click();
   await expect(page.getByText(/ローカルセッション稼働中/).first()).toBeAttached();
 
-  await page.goto(new URL("/secrets", installation.url).toString());
+  await page.goto(new URL("/vault/passwords", installation.url).toString());
   await page.getByRole("button", { name: "sshc をロック" }).click();
   const unlocked = await page.evaluate(async (passphrase) => {
     const csrf = window.sessionStorage.getItem("sshc.session.csrf") ?? "";
@@ -412,7 +412,7 @@ test("uses established product names in the Japanese navigation", async ({ page,
   await expect(navigation.getByRole("tab")).toHaveCount(0);
   await navigation.getByRole("link", { name: "Menu", exact: true }).click();
 
-  for (const group of ["Configuration", "Security", "Settings", "Tools"]) {
+  for (const group of ["Configuration", "Security", "Vault", "Settings", "Tools"]) {
     await expect(page.getByRole("heading", { name: group, exact: true })).toBeVisible();
   }
   for (const section of [
@@ -422,20 +422,21 @@ test("uses established product names in the Japanese navigation", async ({ page,
     "Known Hosts",
     "Remote Keys",
     "Diagnostics",
-    "Vault",
+    "Account passwords",
+    "Key passphrases",
+    "OTP",
     "Snippets",
-    "エンジン",
-    "ターミナル",
-    "通知",
-    "開いている接続",
-    "マスターパスワード",
+    "Engine",
+    "Terminal",
+    "Notifications",
+    "Open connections",
+    "Master password",
     "Sync",
     "History",
   ]) {
     await expect(page.getByRole("link", { name: `${section}を開く`, exact: true })).toBeVisible();
   }
   await expect(page.getByRole("link", { name: "Homeを開く", exact: true })).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "Terminalを開く", exact: true })).toHaveCount(0);
   await expectNoHorizontalOverflow(page, "Japanese navigation");
 
   if (process.env.SSHC_VISUAL_DIR !== undefined) {

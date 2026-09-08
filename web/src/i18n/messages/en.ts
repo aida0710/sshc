@@ -84,7 +84,7 @@ export const en = {
   "sftp.noFilterMatches": "Nothing here matches the filter.",
   "sftp.clearFilterHint": "Clear the filter to see every entry again.",
   "sftp.undo": "Undo",
-  "sftp.dismissUndo": "Dismiss this undo offer",
+  "sftp.dismissUndo": "Dismiss undo notification",
   "sftp.renamedTo": "Renamed to {name}.",
   "sftp.permissionsChanged": "Permissions set to {mode}.",
   "sftp.leaveHeading": "Leave without saving?",
@@ -172,14 +172,14 @@ export const en = {
   "sftp.manager.summaryRunning": "{count} active · {progress}% · {speed}/s",
   "sftp.manager.summaryIdle": "{count} transfers",
   "sftp.manager.actions": "Transfer queue actions",
-  "sftp.manager.concurrency": "At once",
+  "sftp.manager.concurrency": "Concurrent transfers",
   "sftp.manager.autoClear": "Clear finished after",
   "sftp.manager.autoClearOff": "Keep",
   "sftp.manager.largeFileThreshold": "Split at",
   "sftp.manager.largeFileParallelism": "Streams",
   "sftp.manager.largeFileChunk": "Chunk",
   "sftp.manager.stopProcessing": "Stop starting new transfers",
-  "sftp.manager.startProcessing": "Start transfers again",
+  "sftp.manager.startProcessing": "Resume processing the transfer queue",
   "sftp.manager.status.held": "Held",
   "sftp.manager.resize": "Drag to resize the transfer queue",
   "sftp.manager.moveUp": "Move {name} earlier in the queue",
@@ -189,7 +189,7 @@ export const en = {
   "sftp.manager.pauseAll": "Pause all",
   "sftp.manager.resumeAll": "Resume all",
   "sftp.manager.cancelAll": "Cancel all",
-  "sftp.manager.clearFailed": "Remove failed from list",
+  "sftp.manager.clearFailed": "Remove failed transfers from the list",
   "sftp.manager.remove": "Remove from list",
   "sftp.manager.controlChanged": "The transfer state changed. The list has been refreshed.",
   "sftp.manager.cleanupFailed": "The remote temporary file could not be removed. Check the connection and try again.",
@@ -202,7 +202,7 @@ export const en = {
   "sftp.manager.download": "Download",
   "sftp.manager.remaining": "{duration} left",
   "sftp.manager.retry": "Retry",
-  "sftp.manager.retryFailed": "Retry {count} failed",
+  "sftp.manager.retryFailed": "Retry failed transfers ({count})",
   "sftp.manager.status.queued": "Queued",
   "sftp.manager.status.running": "Transferring…",
   "sftp.manager.status.paused": "Paused",
@@ -254,7 +254,7 @@ export const en = {
   "sftp.skip": "Skip",
   "sftp.cancel": "Cancel",
   "sftp.remoteDropTitle": "Transfer remote items",
-  "sftp.remoteDropDescription": "Transfer {count} item(s) to {alias}. Data streams directly between the two SFTP connections.",
+  "sftp.remoteDropDescription": "Transfer {count} item(s) to {alias}. Data is transferred directly between the two SFTP connections.",
   "sftp.remoteDropInvalid": "This remote drag could not be read.",
   "sftp.copyHere": "Copy here",
   "sftp.moveHere": "Move here",
@@ -263,7 +263,7 @@ export const en = {
   "sftp.compare.heading": "Compare directories",
   "sftp.compare.description": "Copy selected differences in either direction. Items that exist only on the destination are not deleted.",
   "sftp.compare.loading": "Comparing both directory trees…",
-  "sftp.compare.noChanges": "The two directories have the same metadata.",
+  "sftp.compare.noChanges": "The two directories have matching metadata.",
   "sftp.compare.status": "Difference",
   "sftp.compare.same": "Same",
   "sftp.compare.different": "Changed",
@@ -513,7 +513,7 @@ export const en = {
   "terminal.unresolvable":
     "The settings for this connection could not be resolved. Open Analysis to see why.",
   "terminal.proxyCommandWithJump":
-    "ProxyCommand and ProxyJump cannot be set together. Remove one of them. OpenSSH also rejects this configuration.",
+    "sshc cannot use ProxyCommand and ProxyJump together. Remove one of them.",
   "terminal.jumpDepthExceeded":
     "The ProxyJump chain exceeds the supported depth.",
   "terminal.hostKeyUnknown":
@@ -528,7 +528,7 @@ export const en = {
     "No supported authentication method is available for this connection.",
   "terminal.authenticationCancelled": "Authentication was cancelled.",
   "terminal.keyPassphraseRequired":
-    "The private key needs a passphrase. Unlock or update its saved credential.",
+    "The private key needs a passphrase. Unlock the Vault or save the correct passphrase for this key.",
   "terminal.reconnectFailed":
     "The reconnect attempt failed. sshc will retry within the configured limit.",
   "terminal.reconnectExhausted":
@@ -607,7 +607,7 @@ export const en = {
   "terminal.forwardStop": "Stop",
   "terminal.forwardStopping": "Stopping…",
   "terminal.forwardStopped": "The forwarding was stopped.",
-  "terminal.forwardNew": "Start a forwarding",
+  "terminal.forwardNew": "Start port forwarding",
   "terminal.forwardSaveConnection": "Save to this connection",
   "terminal.forwardSaveHint":
     "The forwarding will start now and be restored the next time this connection opens.",
@@ -632,10 +632,10 @@ export const en = {
   "terminal.forwardFailed": "The forwarding operation could not be completed.",
   "terminal.settingsHeading": "Terminal",
   "terminal.settingsSaved":
-    "Saved. Clipboard choices apply now; new consoles use the other settings.",
+    "Saved. Clipboard settings apply immediately; other settings apply to newly opened terminals.",
   "terminal.settingsLoading": "Loading terminal settings…",
   "terminal.settingsStorageHint":
-    "These settings, including terminal appearance, are stored in workspace metadata and follow backups and sync. Theme, language and notification sounds are stored only in this browser.",
+    "These settings, including terminal appearance, are stored in workspace metadata and included in backups and sync. Theme, language and notification sounds are stored only in this browser.",
   "terminal.maxSessionsLabel": "Consoles open at once",
   "terminal.maxSessionsHint":
     "Enter a value from 1 to 200. Leave it empty to use 50. When the limit is reached, no new console can be opened; existing consoles remain open.",
@@ -748,7 +748,7 @@ export const en = {
   "terminal.fontFollowsOverall": "Use the overall setting",
   "connection.fontLabel": "Console font family",
   "connection.fontHint": "Only this connection's consoles use it.",
-  "terminal.paletteHint": "Applies to consoles that have not chosen their own.",
+  "terminal.paletteHint": "Applies to terminals without a custom colour scheme.",
   "terminal.paletteFollowsTheme": "Follow the application theme",
   "terminal.paletteFollowsOverall": "Use the overall setting",
   "connection.paletteLabel": "Console colour scheme",
@@ -767,7 +767,7 @@ export const en = {
   "connection.osc52Allow": "Allow for this connection",
   "connection.osc52Deny": "Block for this connection",
   "terminal.fontSizeHint":
-    "Pixels. Empty follows the screen — 15 on a narrow one, 13 otherwise.",
+    "Enter a font size in pixels. Leave this blank to use 15 on narrow screens or 13 on other screens.",
   "terminal.copyOnSelectLabel": "Copy selected text automatically",
   "terminal.copyOnSelectHint":
     "Copies once when you finish selecting. Turn this off if selections should not replace the system clipboard.",
@@ -946,7 +946,7 @@ export const en = {
   "section.otp": "OTP",
   "lock.explainNew":
     "Choose a master password to encrypt stored passwords, key passphrases, snippets, sync settings, and all backups created by sshc.",
-  "lock.explainOpen": "Give your master password to open sshc.",
+  "lock.explainOpen": "Enter your master password to unlock sshc.",
   "lock.noRecovery":
     "The master password cannot be recovered. If you lose it, the vault, snippets, and encrypted backups cannot be opened.",
   "lock.password": "Master password",
@@ -956,7 +956,7 @@ export const en = {
   "lock.wrong": "The master password is incorrect.",
   "lock.tooShort": "A master password must be at least {count} characters.",
   "lock.alreadyExists":
-    "A vault appeared in app storage. Enter its master password to open it.",
+    "A vault already exists in app storage. Enter its master password to unlock it.",
   "lock.storagePermission":
     "Android denied access to the app's private storage. Copy the details below for support.",
   "lock.storageFull":
@@ -1112,7 +1112,7 @@ export const en = {
   "notice.complex_external_rule":
     "This value cannot be edited in the simplified view because its source uses a wildcard, negation, Match block, or duplicate alias. The source is shown instead.",
   "notice.duplicate_alias":
-    "Another block declares the same alias. OpenSSH uses the first one it reads.",
+    "Another block declares the same alias. For most options, OpenSSH uses the first value it reads.",
   "notice.wildcard_shadow":
     "A catch-all block can override values for this host.",
   "notice.negated_pattern": "A negated pattern applies here.",
@@ -1127,7 +1127,7 @@ export const en = {
     "This file is outside ~/.ssh. It is shown but never written.",
   "notice.orphan_metadata":
     "The host for this note no longer exists. Review the target before reassigning it.",
-  "notice.group_cycle": "This group's parents form a cycle, so it was skipped.",
+  "notice.group_cycle": "This group's parent hierarchy is cyclic, so the group was skipped.",
   "notice.group_member_missing":
     "This group member has no host block in the configuration.",
   "refusal.directory_not_empty":
@@ -1144,7 +1144,7 @@ export const en = {
   "notice.group_not_declared":
     "This directory is under connections/, but no Include line references it. Declare it as a group or move its files.",
   "notice.group_directory_missing":
-    "This group is declared but its directory is not there. Nothing is read for it until something is put in one.",
+    "This group is declared, but its directory is missing. Its settings will not be loaded until you create the directory and add configuration files.",
   "notice.group_empty": "This group is declared but contains no files.",
   "notice.generated_region_damaged":
     "~/.ssh/config has the opening marker of this application's generated block but not its closing one, so it cannot tell where its own lines stop. The Include lines in it still work; groups cannot be saved until the closing marker is put back. Add a line reading “# <<< sshc groups” after the last generated Include, or delete the whole block and save the groups again.",
@@ -1193,7 +1193,7 @@ export const en = {
 
   "reveal.heading": "Show private key: {path}",
   "reveal.warning":
-    "The private key will be displayed in this page and can be copied by anyone who can read this window. This application cannot protect it from browser extensions or from clipboard history tools. Every reveal is recorded in history, without the key itself.",
+    "The private key will appear on this page. Anyone who can view the screen can copy it. sshc cannot protect the key from browser extensions or clipboard-history tools. Each reveal is recorded in History, but the key itself is not.",
   "reveal.show": "Show private key",
   "reveal.requesting": "Requesting a one-time confirmation…",
   "reveal.privateKeyLabel": "Private key",
@@ -1284,7 +1284,7 @@ export const en = {
   "sync.flowOperate": "Inspect, send, or receive",
   "sync.loading": "Reading the sync settings…",
   "sync.warning":
-    "Every file in ~/.ssh is synchronised, including private keys. The snapshot is encrypted on this machine with the key below before upload, so the storage provider does not receive plaintext. However, anyone with the bucket credentials can download the encrypted keys and attempt to guess the encryption key offline without a time limit.",
+    "The sync includes regular files under ~/.ssh that do not match the exclusion rules; this may include private keys. The snapshot is encrypted on this machine with the key below before upload, so the storage provider does not receive the synchronised content in plaintext. However, anyone with the bucket credentials can download the encrypted snapshot and attempt to guess the encryption key offline without a time limit.",
   "sync.statusFailed": "The sync settings could not be read.",
   "sync.bucketHeading": "Bucket",
   "sync.notConfigured": "No bucket is configured yet.",
@@ -1564,14 +1564,15 @@ export const en = {
   "diag.hostAlias": "Host alias",
   "diag.needsAlias": "Type a host alias to run a check.",
   "diag.explain": "Explain",
-  "diag.explainFailed": "The alias could not be explained.",
+  "diag.explainFailed": "Could not analyse the settings for this alias.",
   "diag.checkReachability": "Check reachability",
   "diag.reachabilityFailed": "The reachability check could not be run.",
   "diag.testAuthentication": "Test authentication",
   "diag.authenticationFailed": "The authentication test could not be run.",
   "diag.configuration": "Configuration",
   "diag.missingSuffix": " (missing)",
-  "diag.canRunCommand": "This configuration can run a command",
+  "diag.canRunCommand":
+    "This connection includes settings that may cause OpenSSH to run commands",
   "diag.directiveAt": "{keyword} at {path}:{line}",
   "diag.sourcesCaption":
     "Source of each value. A line marked “superseded” was read after the effective value and had no effect.",
@@ -1648,7 +1649,7 @@ export const en = {
   "rk.alreadyPresent":
     "The key was already present; the remote file was left as it was.",
   "rk.valuesFromEngine": "sshc reading your configuration; ssh was not run",
-  "rk.valuesFromSshG": "ssh -G, which OpenSSH itself resolved",
+  "rk.valuesFromSshG": "Resolved by OpenSSH using ssh -G",
   "rk.pickFromSsh": "Public key from ~/.ssh",
   "rk.typeInstead": "Type one below instead",
   "rk.hostAlias": "Host alias",
@@ -1738,7 +1739,7 @@ export const en = {
   "explorer.saveOrDiscardFirst":
     "There are unsaved edits. Save them or reopen the file before renaming or deleting it.",
   "explorer.newFileNote":
-    "To make OpenSSH read a new file, reference it from an Include in ~/.ssh/config. Move connections between groups on the Connections screen. Renaming and deleting arbitrary files and directories is not yet supported because those directory operations cannot currently be recorded in History.",
+    "To make OpenSSH read a new file, reference it with an Include directive in ~/.ssh/config. Move connections between groups on the Connections screen.",
   "explorer.diagnostics": "Diagnostics",
   "explorer.noIncludeProblem": "No Include problem detected.",
   "explorer.opened": "Opened {path} at line {line}.",
@@ -2004,7 +2005,7 @@ export const en = {
   "conn.basicConfirmKeyPassphrase": "Confirm saved key passphrase",
   "conn.basicKeyPassphraseMismatch": "The key passphrases do not match.",
   "conn.basicKeyPassphraseStoredNote":
-    "This saves an unlock value; it does not change the passphrase that encrypts the private-key file.",
+    "This saves the passphrase used to decrypt the private key. It does not change the passphrase that encrypts the private-key file.",
   "conn.basicKeyPassphraseWrong":
     "The entered passphrase does not unlock the selected private key.",
   "conn.basicKeyPassphraseChanged":
@@ -2028,7 +2029,7 @@ export const en = {
   "conn.basicChooseSavedTOTP": "Saved TOTP",
   "conn.basicNoSavedTOTPs": "No TOTP is stored in Vault",
   "conn.basicTOTPNote":
-    "Register TOTP seeds in Vault, then save their connection assignment here. sshc enters a code only for an explicit authentication prompt such as Verification code.",
+    "Register TOTP seeds in the Vault, then assign one to this connection here. sshc only enters the code when an authentication prompt explicitly requests it, such as “Verification code”.",
   "conn.basicPasswordCleanup":
     "A stored password is still assigned, but sshc will not use it. Saving Basic settings will remove this connection's assignment; a shared credential and its other hosts remain unchanged.",
   "conn.basicPasswordAction": "Stored password action",
@@ -2119,8 +2120,11 @@ export const en = {
     "Lists every line read for the saved connection, the file containing it, and whether the line takes effect.",
   "conn.analysisRun": "Show the sources",
   "conn.analysisRunning": "Reading…",
-  "conn.analysisExecutableHeading": "ssh -G may execute Match directives",
-  "conn.analysisSources": "Configuration lines read by OpenSSH",
+  "conn.analysisExecutableHeading":
+    "This connection includes directives that may cause OpenSSH to run commands",
+  "conn.analysisTokenWarning":
+    "OpenSSH does not shell-escape expanded tokens. Host name, port, or user values may therefore reach the command's shell unescaped.",
+  "conn.analysisSources": "Configuration lines related to this connection",
   "conn.advancedLabel": "Advanced settings",
   "conn.advancedViews": "Advanced setting views",
   "conn.advancedViewLabel": "View",
@@ -2329,12 +2333,12 @@ export const en = {
   "keys.cancel": "Cancel",
   "keys.passphraseHeading": "Change passphrase: {path}",
   "keys.passphraseNote":
-    "The passphrases typed here are used only for this change and are not stored. Use “Stored passphrase” in the key list when you explicitly want the sshc vault to remember one.",
+    "The passphrases typed here are used only for this change and are not stored. Use “Save passphrase” in the key list when you want the sshc Vault to remember one.",
   "keys.currentPassphrase": "Current passphrase",
   "keys.newPassphrase": "New passphrase",
   "keys.removePassphrase":
     "Remove the passphrase and leave the key unprotected on disk",
-  "keys.savePassphrase": "Save new passphrase",
+  "keys.savePassphrase": "Change passphrase",
   "keys.createHeading": "Create a key",
   "keys.generatedHeading": "Key created",
   "keys.generatedNext": "{path} is ready. Choose where to use it next.",
@@ -2355,7 +2359,7 @@ export const en = {
   "keys.trashNote":
     "Keys moved to Trash remain here until you delete them permanently. They are not deleted automatically.",
   "keys.trashCaption": "Soft-deleted keys",
-  "keys.trashEmpty": "Nothing has been deleted.",
+  "keys.trashEmpty": "Trash is empty.",
   "keys.colFiles": "Files",
   "keys.colAge": "Age",
   "keys.colStatus": "Status",
@@ -2365,7 +2369,7 @@ export const en = {
   "keys.restore": "Restore",
   "keys.purgeWarning":
     "This cannot be undone. There is no backup of a permanently deleted key.",
-  "keys.confirmPurge": "Confirm permanent delete",
+  "keys.confirmPurge": "Confirm permanent deletion",
   "keys.purge": "Delete permanently",
   "keys.noteFingerprintUnavailable": "Fingerprint unavailable",
   "keys.noteSymbolicLink": "Symbolic link, not followed",

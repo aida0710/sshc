@@ -34,6 +34,20 @@ test("keeps sessions in the sidebar and moves product navigation to the Menu pag
     await page.evaluate(() => window.localStorage.setItem("sshc.language", "ja"));
     await page.reload();
     await expect(page.getByRole("heading", { name: "Menu", exact: true })).toBeVisible();
+    const vault = page.getByRole("region", { name: "Vault", exact: true });
+    await expect(vault.getByText("Account passwords", { exact: true })).toBeVisible();
+    await expect(vault.getByText("Key passphrases", { exact: true })).toBeVisible();
+    await expect(vault.getByText("OTP", { exact: true })).toBeVisible();
+    const settings = page.getByRole("region", { name: "Settings", exact: true });
+    for (const label of [
+      "Engine",
+      "Terminal",
+      "Notifications",
+      "Open connections",
+      "Master password",
+    ]) {
+      await expect(settings.getByText(label, { exact: true })).toBeVisible();
+    }
     await page.screenshot({ path: `${visualDirectory}/sshc-menu-page-desktop-ja.png`, fullPage: true });
     await page.evaluate(() => window.localStorage.setItem("sshc.language", "en"));
     await page.reload();

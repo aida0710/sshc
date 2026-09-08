@@ -71,7 +71,7 @@ export function ConnectionAnalysis({ detail, alias, api, disabled = false }: Con
         {effective !== null && effective.executableDirectives.length > 0 ? (
           <div className="rounded border border-notice-line bg-notice p-3 text-sm">
             <h4 className="font-medium text-notice-ink">{t("conn.analysisExecutableHeading")}</h4>
-            <p className={hintText}>{effective.tokenWarning}</p>
+            <p className={hintText}>{t("conn.analysisTokenWarning")}</p>
             <ul className="mt-2 flex flex-col gap-2">
               {effective.executableDirectives.map((directive) => (
                 <li key={`${directive.path}:${directive.line}:${directive.keyword}`}>

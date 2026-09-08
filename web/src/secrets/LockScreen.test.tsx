@@ -77,7 +77,7 @@ describe("LockScreen", () => {
 
     expect(screen.queryByLabelText("Confirm master password")).not.toBeInTheDocument();
     expect(screen.queryByText(/cannot be recovered/i)).not.toBeInTheDocument();
-    expect(screen.getByText("Give your master password to open sshc.")).toBeInTheDocument();
+    expect(screen.getByText("Enter your master password to unlock sshc.")).toBeInTheDocument();
     expect(container.querySelector('use[href="#icon-secrets"]')).not.toBeInTheDocument();
 
     await userEvent.type(screen.getByLabelText("Master password"), "a long enough password");

@@ -367,7 +367,8 @@ describe("KeysScreen", () => {
 
     await userEvent.type(screen.getByLabelText("Current passphrase"), "first passphrase");
     await userEvent.type(screen.getByLabelText("New passphrase"), "second passphrase");
-    await userEvent.click(screen.getByRole("button", { name: "Save new passphrase" }));
+    const passphraseForm = screen.getByRole("heading", { name: "Change passphrase: id_work" }).closest("form")!;
+    await userEvent.click(within(passphraseForm).getByRole("button", { name: "Change passphrase" }));
 
     await waitFor(() =>
       expect(changePassphrase).toHaveBeenCalledWith("key-one", {
@@ -415,7 +416,7 @@ describe("KeysScreen", () => {
 
     const dialog = screen.getByRole("dialog");
     expect(within(dialog).getByText(/cannot be undone/)).toBeInTheDocument();
-    await userEvent.click(within(dialog).getByRole("button", { name: "Confirm permanent delete" }));
+    await userEvent.click(within(dialog).getByRole("button", { name: "Confirm permanent deletion" }));
     await waitFor(() => expect(api.purge).toHaveBeenCalledWith("20260805T090000.000-aabbccdd"));
   });
 

@@ -199,7 +199,7 @@ export function DiagnosticsPanel({ api = integrationsApi, host, hosts = [] }: Di
       {directives.length > 0 ? (
         <section className="border-b border-notice-line bg-notice px-4 py-4 text-sm">
           <h3 className="font-medium text-notice-ink">{t("diag.canRunCommand")}</h3>
-          <p className="text-ink-muted">{effective?.tokenWarning}</p>
+          <p className="text-ink-muted">{t("conn.analysisTokenWarning")}</p>
           <ul className="mt-2 flex flex-col gap-1">
             {directives.map((directive) => (
               <li key={`${directive.path}:${directive.line}:${directive.keyword}`}>
