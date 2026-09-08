@@ -26,6 +26,7 @@ export const ja = {
   "shell.navStart": "Main",
   "shell.navConnections": "Configuration",
   "shell.navKeysHosts": "Security",
+  "shell.navVault": "Vault",
   "shell.navMaintenance": "Tools",
   "menu.open": "{section}を開く",
   "menu.displaySettings": "Preferences",
@@ -662,7 +663,7 @@ export const ja = {
   "terminal.paletteLabel": "配色",
   "terminal.verbosityLabel": "接続のログ",
   "terminal.verbosityHint":
-    "ssh -v と同等の接続情報をターミナルへ表示します。新しい接続から適用されます。",
+    "接続、認証方式、保存済みTOTPの使用可否など、sshcが取得できる診断をターミナルへ表示します。新しい接続から適用され、秘密値は表示しません。",
   "terminal.verbosityQuiet": "表示しない",
   "terminal.verbosityBrief": "基本情報（-v）",
   "terminal.verbosityDetailed": "鍵・経由地・所要時間（-vv）",
@@ -821,6 +822,12 @@ export const ja = {
   "secrets.heading": "Vault",
   "secrets.pageDescription":
     "名前付きのアカウントパスワード、鍵パスフレーズ、ワンタイムパスワードを管理します。値は編集時だけ表示されます。",
+  "secrets.passwordsDescription":
+    "名前付きのアカウントパスワードと割り当て先を管理します。値は編集時だけ表示されます。",
+  "secrets.passphrasesDescription":
+    "名前付きまたは鍵専用のパスフレーズを管理します。値は編集時だけ表示されます。",
+  "secrets.totpDescription":
+    "ワンタイムパスワードを登録し、現在のコードと接続先への割り当てを確認します。",
   "secrets.metricPasswords": "アカウントパスワード",
   "secrets.metricPassphrases": "鍵パスフレーズ",
   "secrets.metricTOTP": "ワンタイムパスワード",
@@ -887,6 +894,13 @@ export const ja = {
     "明示的な OTP の質問にだけ自動入力します。パスワードと OTP の秘密を同じ端末に保存すると便利ですが、認証要素を分離する効果は弱くなります。",
   "secrets.totpAssignInConnection":
     "接続先への割り当ては、Connectionsで対象を開き、基本設定の「ワンタイムパスワード（TOTP）」から選択してください。",
+  "secrets.totpLoading": "現在のコードを生成しています…",
+  "secrets.totpRetry": "コードをもう一度生成",
+  "secrets.totpExpand": "{name} の前後のコードを表示",
+  "secrets.totpCollapse": "{name} の前後のコードを隠す",
+  "secrets.totpRemaining": "残り {seconds} 秒",
+  "secrets.totpPrevious": "ひとつ前",
+  "secrets.totpNext": "ひとつ後",
   "secrets.unassignTOTP": "{host} へのワンタイムパスワード割り当てを解除",
   "secrets.unassignTOTPFailed": "ワンタイムパスワードの割り当てを解除できませんでした。",
   "update.version": "バージョン {version}",
@@ -908,7 +922,9 @@ export const ja = {
   "secrets.changeFailed": "マスターパスワードを変更できませんでした。",
   "secrets.changedMasterLocally":
     "マスターパスワードを変更しました。ローカルの Vault、Snippet、同期設定、バックアップは新しいパスワードで暗号化されています。リモートスナップショットは書き換えていません。",
-  "section.secrets": "Vault",
+  "section.passwords": "アカウントパスワード",
+  "section.keyPassphrases": "鍵パスフレーズ",
+  "section.otp": "OTP",
   "lock.explainNew":
     "マスターパスワードを設定してください。保存済みパスワード、鍵のパスフレーズ、Snippet、同期設定、sshc が作成するすべてのバックアップを暗号化します。",
   "lock.explainOpen": "sshc を開くにはマスターパスワードを入力してください。",

@@ -49,7 +49,9 @@ const sections = [
   { navigation: "Known Hosts", heading: "Known Hosts" },
   { navigation: "Install Key on Server", heading: "Install Key on Server" },
   { navigation: "Ad hoc checks", heading: "Ad hoc checks" },
-  { navigation: "Secrets", heading: "The vault" },
+  { navigation: "Account passwords", heading: "Account passwords" },
+  { navigation: "Key passphrases", heading: "Key passphrases" },
+  { navigation: "OTP", heading: "One-time passwords (TOTP)" },
   { navigation: "Engine", heading: "Engine" },
   { navigation: "Sync", heading: "Remote sync" },
   { navigation: "History", heading: "History" },
@@ -242,7 +244,7 @@ test("keeps password setup inside 360 pixels without a decorative icon", async (
   await page.getByLabel("Confirm master password", { exact: true }).fill(masterPassword);
   await page.getByRole("button", { name: "Create the vault" }).click();
   await expect(sessionStatus(page)).toContainText("Local session active");
-  await openSectionThroughDrawer(page, "Secrets", "The vault");
+  await openSectionThroughDrawer(page, "Account passwords", "Account passwords");
   await page.getByRole("button", { name: "Lock sshc" }).click();
 
   await expect(page.getByText("Give your master password to open sshc.")).toBeVisible();

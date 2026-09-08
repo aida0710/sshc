@@ -77,6 +77,7 @@ function buildApi(overrides: Partial<IntegrationsApi> = {}): IntegrationsApi {
     credentials: vi.fn().mockResolvedValue({ credentials: [] }),
     storeCredential: vi.fn().mockResolvedValue({ credentials: [] }),
     revealCredential: vi.fn(),
+    totpCodes: vi.fn(),
     updateCredential: vi.fn().mockResolvedValue({ credentials: [], dedicatedKeyPassphrases: [], keyHostUsageComplete: true }),
     deleteCredential: vi.fn().mockResolvedValue({ credentials: [] }),
     assignCredential: vi.fn().mockResolvedValue({ credentials: [] }),

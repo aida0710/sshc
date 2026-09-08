@@ -63,6 +63,12 @@ func TestParseInvocationSeparatesOwnersFromDesktopActivation(t *testing.T) {
 		{[]string{"sshc", "service", "install"}, invocationService, []string{"install"}},
 		{[]string{"sshc", "service", "status"}, invocationService, []string{"status"}},
 		{[]string{"sshc", "service", "disable"}, invocationService, []string{"disable"}},
+		{[]string{"sshc", "otp", "list"}, invocationOTP, nil},
+		{[]string{"sshc", "otp", "production"}, invocationOTP, nil},
+		{[]string{"sshc", "otp", "show", "production"}, invocationOTP, nil},
+		{[]string{"sshc", "otp", "add", "production"}, invocationOTP, nil},
+		{[]string{"sshc", "otp", "edit", "production"}, invocationOTP, nil},
+		{[]string{"sshc", "otp", "remove", "production", "--yes"}, invocationOTP, nil},
 		{[]string{"sshc", "vault", "status"}, invocationVault, []string{"status"}},
 		{[]string{"sshc", "vault", "create"}, invocationVault, []string{"create"}},
 		{[]string{"sshc", "vault", "unlock"}, invocationVault, []string{"unlock"}},
@@ -114,6 +120,12 @@ func TestEveryPublishedCommandAcceptsItsOwnHelpFlag(t *testing.T) {
 		{[]string{"sshc", "service", "install", "--help"}, "service install", "sshc service install"},
 		{[]string{"sshc", "service", "status", "--help"}, "service status", "sshc service status"},
 		{[]string{"sshc", "service", "disable", "--help"}, "service disable", "sshc service disable"},
+		{[]string{"sshc", "otp", "--help"}, "otp", "sshc otp list [--json]"},
+		{[]string{"sshc", "otp", "list", "--help"}, "otp list", "sshc otp list [--json]"},
+		{[]string{"sshc", "otp", "show", "--help"}, "otp show", "sshc otp show <name> [--json]"},
+		{[]string{"sshc", "otp", "add", "--help"}, "otp add", "sshc otp add <name>"},
+		{[]string{"sshc", "otp", "edit", "--help"}, "otp edit", "sshc otp edit <name>"},
+		{[]string{"sshc", "otp", "remove", "--help"}, "otp remove", "sshc otp remove <name>"},
 		{[]string{"sshc", "vault", "--help"}, "vault", "sshc vault status"},
 		{[]string{"sshc", "vault", "status", "--help"}, "vault status", "sshc vault status"},
 		{[]string{"sshc", "vault", "create", "--help"}, "vault create", "sshc vault create"},
@@ -231,6 +243,50 @@ func TestParseInfoAndSyncInvocations(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestParseOTPInvocations(t *testing.T) {
+	tests := []struct {
+		argv   []string
+		action otpAction
+		name   string
+		json   bool
+		yes    bool
+	}{
+		{argv: []string{"sshc", "otp", "list"}, action: otpList},
+		{argv: []string{"sshc", "otp", "list", "--json"}, action: otpList, json: true},
+		{argv: []string{"sshc", "otp", "production"}, action: otpShow, name: "production"},
+		{argv: []string{"sshc", "otp", "production", "--json"}, action: otpShow, name: "production", json: true},
+		{argv: []string{"sshc", "otp", "show", "production"}, action: otpShow, name: "production"},
+		{argv: []string{"sshc", "otp", "add", "production"}, action: otpAdd, name: "production"},
+		{argv: []string{"sshc", "otp", "edit", "production"}, action: otpEdit, name: "production"},
+		{argv: []string{"sshc", "otp", "remove", "production", "-y"}, action: otpRemove, name: "production", yes: true},
+	}
+	for _, test := range tests {
+		t.Run(strings.Join(test.argv[2:], "_"), func(t *testing.T) {
+			got, err := parseInvocation(test.argv)
+			if err != nil || got.Kind != invocationOTP || got.OTP == nil {
+				t.Fatalf("parseInvocation(%q) = %#v, %v", test.argv, got, err)
+			}
+			if got.OTP.Action != test.action || got.OTP.Name != test.name ||
+				got.OTP.JSON != test.json || got.OTP.Yes != test.yes {
+				t.Fatalf("parseInvocation(%q) OTP = %#v", test.argv, got.OTP)
+			}
+		})
+	}
+
+	for _, argv := range [][]string{
+		{"sshc", "otp"},
+		{"sshc", "otp", "list", "extra"},
+		{"sshc", "otp", "show"},
+		{"sshc", "otp", "add"},
+		{"sshc", "otp", "edit", "name", "extra"},
+		{"sshc", "otp", "remove", "name", "--force"},
+	} {
+		if called, err := parseInvocation(argv); err == nil || called.Kind != invocationInvalid {
+			t.Errorf("parseInvocation(%q) = %#v, %v; want invalid", argv, called, err)
+		}
 	}
 }
 

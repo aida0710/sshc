@@ -57,6 +57,7 @@ func (d Dialer) connect(ctx context.Context, target Target, session *Session) {
 	trace := newTracer(level, session.writer)
 	trace.progress = session.setProgress
 	started := trace.now()
+	trace.say(Full, "接続ログ：すべて（-vvv）")
 
 	client, closers, err := d.chain(ctx, target, prompt, trace)
 	if err != nil {
@@ -208,7 +209,8 @@ func (d Dialer) connectOne(
 	}
 	trace.say(Detailed, "TCP 接続を確立しました（%s）。", trace.since(started).Round(time.Millisecond))
 
-	authMethods, closeAuth := d.Auth.methodsWithCleanup(target, prompt)
+	auth := d.authWithTrace(trace)
+	authMethods, closeAuth := auth.methodsWithCleanup(target, prompt)
 	defer closeAuth()
 	verifyHostKey := d.HostKeys.Callback(target, prompt)
 	config := &ssh.ClientConfig{
@@ -241,6 +243,33 @@ func (d Dialer) connectOne(
 	trace.say(Brief, "%s に接続しました（%d/%d）。", connectionTarget(target), hop, hops)
 	trace.stage(terminal.ConnectionAuthenticated, target, hop, hops)
 	return ssh.NewClient(connection, channels, requests), nil
+}
+
+// authWithTrace は共有DialerのAuthを接続単位で複製し、安全な診断だけを
+// tracerへ流す。共有値を書き換えないため、同時接続でもobserverが混ざらない。
+func (d Dialer) authWithTrace(trace *tracer) Auth {
+	auth := d.Auth
+	observeMethod := auth.Observe
+	auth.Observe = func(method string) {
+		if observeMethod != nil {
+			observeMethod(method)
+		}
+		trace.say(Detailed, "認証方式を試します：%s", method)
+	}
+	observeCredential := auth.ObserveCredential
+	auth.ObserveCredential = func(target Target, event CredentialEvent, echoed bool) {
+		if observeCredential != nil {
+			observeCredential(target, event, echoed)
+		}
+		switch event {
+		case CredentialTOTPUsed:
+			trace.say(Detailed, "保存済みTOTPを%sの認証コード質問へ入力しました。", connectionTarget(target))
+			trace.say(Full, "認証コード質問の入力表示：%s", map[bool]string{true: "あり", false: "なし"}[echoed])
+		case CredentialTOTPUnavailable:
+			trace.say(Detailed, "明示的な認証コード質問を検出しましたが、%sに利用できる保存済みTOTPがありません。Connectionsで割り当てを確認してください。", connectionTarget(target))
+		}
+	}
+	return auth
 }
 
 func connectionTarget(target Target) string {

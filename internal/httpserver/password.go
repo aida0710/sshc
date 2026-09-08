@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/labstack/echo/v5"
 
@@ -25,6 +26,7 @@ type PasswordHandlers struct {
 	Service *secret.Service
 	vault   *vaultOperations
 	Actions ActionHandlers
+	Now     func() time.Time
 	// KeyHosts projects saved key subjects through the current SSH configuration.
 	// It returns relationships only; the vault values never cross this boundary.
 	KeyHosts func(relativePaths []string) (map[string][]string, error)
@@ -151,6 +153,7 @@ func registerPasswordRoutes(engine *echo.Echo, handlers PasswordHandlers) {
 	engine.PUT("/api/v1/credentials/:kind/:name", handlers.SetCredential)
 	engine.PATCH("/api/v1/credentials/:kind/:name", handlers.UpdateCredential)
 	engine.POST("/api/v1/credentials/:kind/:name/reveal", handlers.RevealCredential)
+	engine.POST("/api/v1/credentials/totp/:name/codes", handlers.GenerateTOTPCodes)
 	engine.DELETE("/api/v1/credentials/:kind/:name", handlers.DeleteCredential)
 }
 
@@ -489,6 +492,30 @@ func (h PasswordHandlers) RevealCredential(c *echo.Context) error {
 	c.Response().Header().Set("Cache-Control", "no-store")
 	return c.JSON(http.StatusOK, api.RevealCredentialResponse{
 		Kind: string(kind), Name: name, Secret: value,
+	})
+}
+
+// GenerateTOTPCodes returns only the short-lived adjacent codes. The
+// provisioning secret remains inside the engine and is never serialized into
+// either the browser or CLI response.
+func (h PasswordHandlers) GenerateTOTPCodes(c *echo.Context) error {
+	name := c.Param("name")
+	target := credentialActionTarget(secret.KindTOTP, name)
+	if allowed, response := h.Actions.consume(c, session.ActionRevealCredential, target); !allowed {
+		return response
+	}
+	now := time.Now()
+	if h.Now != nil {
+		now = h.Now()
+	}
+	codes, err := h.Service.TOTPCodes(name, now)
+	if err != nil {
+		return credentialProblem(c, err, nil)
+	}
+	c.Response().Header().Set("Cache-Control", "no-store")
+	return c.JSON(http.StatusOK, api.TOTPCodeSet{
+		Previous: codes.Previous, Current: codes.Current, Next: codes.Next,
+		PeriodSeconds: codes.PeriodSeconds, RemainingSeconds: codes.RemainingSeconds,
 	})
 }
 

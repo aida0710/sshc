@@ -99,6 +99,21 @@ func TestStreamAnnouncesTheLocalProxyCommandOnStderr(t *testing.T) {
 	}
 }
 
+func TestStreamHonoursTheConfiguredConnectionLog(t *testing.T) {
+	_, dialer, target := streamSetup(t, serverOptions{})
+	dialer.Verbosity = func() sshclient.Verbosity { return sshclient.Full }
+	var errOut bytes.Buffer
+	if _, err := dialer.Stream(context.Background(), target, "true", sshclient.Streams{
+		Out: io.Discard, Err: &errOut,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(errOut.String(), "接続ログ：すべて（-vvv）") ||
+		!strings.Contains(errOut.String(), "認証方式を試します：publickey") {
+		t.Fatalf("configured connection log did not reach stderr: %q", errOut.String())
+	}
+}
+
 // 終了コードは結果であって失敗ではない。相手が応答したのだから、その結果を
 // そのまま返す。error にしてしまうと、呼び出し側は「走らなかった」と「走って
 // 失敗した」を区別できない。

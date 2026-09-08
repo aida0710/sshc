@@ -103,6 +103,7 @@ func generate() ([]byte, error) {
 	source.WriteString("func validSyncAction(value string) bool { return validCLIAction(\"sync\", value) }\n")
 	source.WriteString("func validTerminalAction(value string) bool { return validCLIAction(\"terminal\", value) }\n")
 	source.WriteString("func validServiceAction(value string) bool { return validCLIAction(\"service\", value) }\n")
+	source.WriteString("func validOTPAction(value string) bool { return validCLIAction(\"otp\", value) }\n")
 	source.WriteString("func validVaultAction(value string) bool { return validCLIAction(\"vault\", value) }\n")
 	fmt.Fprintf(&source, "func validCompletionShell(value string) bool { return generatedStringSet(value, %s) }\n", stringSlice(clispec.Values["completion-shells"]))
 	fmt.Fprintf(&source, "func validTerminalWaitState(value string) bool { return generatedStringSet(value, %s) }\n\n", stringSlice(clispec.Values["wait-states"]))
@@ -128,6 +129,7 @@ func generate() ([]byte, error) {
 	terminalActions []string
 	sftpActions []string
 	serviceActions []string
+	otpActions []string
 	vaultActions []string
 	encodings []string
 	waitStates []string
@@ -139,7 +141,7 @@ func generate() ([]byte, error) {
 
 `)
 	fmt.Fprintf(&source, "var cliCompletionGrammar = completionGrammar{\n\ttopLevel: %s,\n\thelpTopics: %s,\n", stringSlice(topLevel), stringSlice(helpTopics))
-	for _, key := range []string{"sync", "terminal", "sftp", "service", "vault"} {
+	for _, key := range []string{"sync", "terminal", "sftp", "service", "otp", "vault"} {
 		fmt.Fprintf(&source, "\t%sActions: %s,\n", key, stringSlice(actionsFor(commands, key)))
 	}
 	fmt.Fprintf(&source, "\tencodings: %s,\n\twaitStates: %s,\n\tserialOptions: %s,\n\ttelnetOptions: %s,\n\tsftpOptions: %s,\n\tsftpSettingsOptions: %s,\n}\n",

@@ -15,6 +15,7 @@ import (
 
 	"sshc/internal/envelope"
 	"sshc/internal/storage"
+	"sshc/internal/totp"
 )
 
 var (
@@ -883,6 +884,47 @@ func (s *Service) CredentialEvidence(kind Kind, name string) (string, error) {
 	}
 	digest := sha256.Sum256([]byte(string(kind) + "\x00" + name + "\x00" + value))
 	return hex.EncodeToString(digest[:]), nil
+}
+
+// TOTPCodeSet contains the adjacent codes needed to tolerate a clock boundary
+// without releasing the provisioning secret from the engine process.
+type TOTPCodeSet struct {
+	Previous         string
+	Current          string
+	Next             string
+	PeriodSeconds    int
+	RemainingSeconds int
+}
+
+// TOTPCodes generates the previous, current, and next code for one named TOTP
+// credential. The encrypted provisioning value stays inside the service.
+func (s *Service) TOTPCodes(name string, at time.Time) (TOTPCodeSet, error) {
+	value, err := s.Credential(KindTOTP, name)
+	if err != nil {
+		return TOTPCodeSet{}, err
+	}
+	configuration, err := totp.Parse(value)
+	if err != nil {
+		return TOTPCodeSet{}, ErrInvalidTOTP
+	}
+	period := time.Duration(configuration.Period) * time.Second
+	previous, err := configuration.Code(at.Add(-period))
+	if err != nil {
+		return TOTPCodeSet{}, ErrInvalidTOTP
+	}
+	current, err := configuration.Code(at)
+	if err != nil {
+		return TOTPCodeSet{}, ErrInvalidTOTP
+	}
+	next, err := configuration.Code(at.Add(period))
+	if err != nil {
+		return TOTPCodeSet{}, ErrInvalidTOTP
+	}
+	remaining := configuration.Period - int(at.Unix()%int64(configuration.Period))
+	return TOTPCodeSet{
+		Previous: previous, Current: current, Next: next,
+		PeriodSeconds: configuration.Period, RemainingSeconds: remaining,
+	}, nil
 }
 
 // UpdateCredential は、名前と値を一つの vault 置換として更新する。

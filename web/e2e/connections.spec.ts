@@ -379,7 +379,7 @@ test("saves and replaces a key-owned passphrase without changing another key's s
   expect(await clickAndAwait(page, "Save Basic settings", "/api/v1/connections", "PATCH")).toBe(200);
   await expect(page.getByText("A passphrase is saved only for this key.")).not.toBeVisible();
 
-  await openSection(page, "Secrets");
+  await openSection(page, "Key passphrases");
   const shared = page
     .getByRole("region", { name: "Key passphrases" })
     .getByRole("article", { name: "shared-sibling-phrase" });
