@@ -59,16 +59,20 @@ function buildApi(overrides: Partial<IntegrationsApi> = {}): IntegrationsApi {
 
 describe("SecretsPanel", () => {
   it("labels hosts and keys for named and dedicated secrets without mixing kinds", async () => {
+    const user = userEvent.setup();
     const api = buildApi();
     render(<SecretsPanel api={api} />);
 
     const passwords = await screen.findByRole("region", { name: "Account passwords" });
     const office = within(passwords).getByRole("article", { name: "office-vm" });
+    await user.click(within(office).getByRole("button", { name: "Show Assigned hosts for office-vm" }));
     expect(within(office).getByRole("list", { name: "Assigned hosts" })).toHaveTextContent("web-1");
     expect(within(office).getByRole("list", { name: "Assigned hosts" })).toHaveTextContent("web-2");
 
     const phrases = screen.getByRole("region", { name: "Key passphrases" });
     const build = within(phrases).getByRole("article", { name: "build-key" });
+    await user.click(within(build).getByRole("button", { name: "Show Keys for build-key" }));
+    await user.click(within(build).getByRole("button", { name: "Show Assigned hosts for build-key" }));
     expect(within(build).getByRole("list", { name: "Keys" })).toHaveTextContent("keys/work/id_work");
     expect(within(build).getByRole("list", { name: "Keys" })).toHaveTextContent("keys/work/id_release");
     expect(within(build).getByRole("list", { name: "Assigned hosts" })).toHaveTextContent("build-1");
@@ -76,6 +80,8 @@ describe("SecretsPanel", () => {
 
     const dedicated = within(phrases).getByRole("article", { name: "keys/id_owned" });
     expect(within(dedicated).getByText("Dedicated to this key")).toBeInTheDocument();
+    await user.click(within(dedicated).getByRole("button", { name: "Show Keys for keys/id_owned" }));
+    await user.click(within(dedicated).getByRole("button", { name: "Show Assigned hosts for keys/id_owned" }));
     expect(within(dedicated).getByRole("list", { name: "Keys" })).toHaveTextContent("keys/id_owned");
     expect(within(dedicated).getByRole("list", { name: "Assigned hosts" })).toHaveTextContent("deploy-1");
 
@@ -86,6 +92,7 @@ describe("SecretsPanel", () => {
   });
 
   it("distinguishes confirmed empty assignments from unavailable key hosts", async () => {
+    const user = userEvent.setup();
     const api = buildApi({
       credentials: vi.fn().mockResolvedValue({
         credentials: [
@@ -99,13 +106,17 @@ describe("SecretsPanel", () => {
     render(<SecretsPanel api={api} />);
 
     const password = await screen.findByRole("article", { name: "unused-password" });
+    await user.click(within(password).getByRole("button", { name: "Show Assigned hosts for unused-password" }));
     expect(within(password).getByText("No assigned hosts")).toBeInTheDocument();
     const phrase = screen.getByRole("article", { name: "unused-phrase" });
+    await user.click(within(phrase).getByRole("button", { name: "Show Keys for unused-phrase" }));
+    await user.click(within(phrase).getByRole("button", { name: "Show Assigned hosts for unused-phrase" }));
     expect(within(phrase).getByText("No assigned keys")).toBeInTheDocument();
     expect(within(phrase).getByText("No assigned hosts")).toBeInTheDocument();
   });
 
   it("keeps password hosts visible when key-host projection is incomplete", async () => {
+    const user = userEvent.setup();
     const api = buildApi({
       credentials: vi.fn().mockResolvedValue({
         credentials: [
@@ -120,8 +131,10 @@ describe("SecretsPanel", () => {
 
     expect(await screen.findByText(/could not be fully confirmed/i)).toBeVisible();
     const office = screen.getByRole("article", { name: "office" });
+    await user.click(within(office).getByRole("button", { name: "Show Assigned hosts for office" }));
     expect(within(office).getByRole("list", { name: "Assigned hosts" })).toHaveTextContent("web-1");
     const team = screen.getByRole("article", { name: "team" });
+    await user.click(within(team).getByRole("button", { name: "Show Assigned hosts for team" }));
     expect(within(team).getByText("Could not confirm assigned hosts")).toBeInTheDocument();
     expect(within(team).queryByText("No assigned hosts")).not.toBeInTheDocument();
   });
@@ -132,7 +145,8 @@ describe("SecretsPanel", () => {
     render(<SecretsPanel api={api} />);
 
     const dedicated = await screen.findByRole("article", { name: "keys/id_owned" });
-    await user.click(within(dedicated).getByRole("button", { name: "Remove saved passphrase for keys/id_owned" }));
+    await user.click(within(dedicated).getByRole("button", { name: "Actions for keys/id_owned" }));
+    await user.click(within(dedicated).getByRole("menuitem", { name: "Remove saved passphrase for keys/id_owned" }));
 
     await waitFor(() =>
       expect(api.unassignCredential).toHaveBeenCalledWith("key_passphrase", "keys/id_owned"),
@@ -215,8 +229,8 @@ describe("SecretsPanel", () => {
     const current = await within(token).findByRole("button", {
       name: "Show the previous and next codes for production-otp",
     });
-    expect(current).toHaveTextContent("222 222");
-    expect(current).toHaveTextContent("17s");
+    expect(within(token).getByText("222 222")).toBeVisible();
+    expect(within(token).getByText("17s")).toBeVisible();
     expect(within(token).queryByText("111 111")).not.toBeInTheDocument();
     expect(within(token).queryByText("333 333")).not.toBeInTheDocument();
 
@@ -262,6 +276,7 @@ describe("SecretsPanel", () => {
       name: "production-otp",
     });
 
+    await user.click(within(token).getByRole("button", { name: "Show Assigned hosts for production-otp" }));
     await user.click(
       within(token).getByRole("button", {
         name: "Remove the one-time password assignment from bastion",
@@ -278,7 +293,8 @@ describe("SecretsPanel", () => {
     render(<SecretsPanel api={api} />);
 
     const passwords = await screen.findByRole("region", { name: "Account passwords" });
-    await user.click(within(passwords).getByRole("button", { name: "Edit office-vm" }));
+    await user.click(within(passwords).getByRole("button", { name: "Actions for office-vm" }));
+    await user.click(within(passwords).getByRole("menuitem", { name: "Edit office-vm" }));
 
     const dialog = await screen.findByRole("dialog", { name: "Edit account password" });
     const name = within(dialog).getByLabelText("Name");
@@ -307,7 +323,8 @@ describe("SecretsPanel", () => {
     render(<SecretsPanel api={api} />);
 
     const phrases = await screen.findByRole("region", { name: "Key passphrases" });
-    await user.click(within(phrases).getByRole("button", { name: "Edit build-key" }));
+    await user.click(within(phrases).getByRole("button", { name: "Actions for build-key" }));
+    await user.click(within(phrases).getByRole("menuitem", { name: "Edit build-key" }));
 
     const dialog = await screen.findByRole("dialog", { name: "Edit key passphrase" });
     expect(within(dialog).getByLabelText("Name")).toHaveValue("build-key");
@@ -323,7 +340,8 @@ describe("SecretsPanel", () => {
     render(<SecretsPanel api={api} />);
     const passwords = await screen.findByRole("region", { name: "Account passwords" });
 
-    await user.click(within(passwords).getByRole("button", { name: "Delete office-vm" }));
+    await user.click(within(passwords).getByRole("button", { name: "Actions for office-vm" }));
+    await user.click(within(passwords).getByRole("menuitem", { name: "Delete office-vm" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/still assigned/i);
   });

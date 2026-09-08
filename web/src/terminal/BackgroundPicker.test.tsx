@@ -13,14 +13,17 @@ describe("BackgroundPicker", () => {
     const api = {
       terminalBackgrounds: vi.fn().mockResolvedValue({
         backgrounds: [{ name: "wall.png", bytes: 12, type: "image/png" }],
+        usedBytes: 12,
+        capacityBytes: 16 * 1024 * 1024,
         remainingBytes: 1024,
       }),
       addTerminalBackground: vi.fn(),
+      setTerminalBackgroundCapacity: vi.fn(),
       renameTerminalBackground: vi.fn().mockResolvedValue({
         name: "night-sky.png", bytes: 12, type: "image/png",
       }),
       deleteTerminalBackground: vi.fn(),
-    } satisfies Pick<IntegrationsApi, "terminalBackgrounds" | "addTerminalBackground" | "renameTerminalBackground" | "deleteTerminalBackground">;
+    } satisfies Pick<IntegrationsApi, "terminalBackgrounds" | "addTerminalBackground" | "setTerminalBackgroundCapacity" | "renameTerminalBackground" | "deleteTerminalBackground">;
 
     render(
       <BackgroundPicker
@@ -33,7 +36,9 @@ describe("BackgroundPicker", () => {
       />,
     );
 
-    await user.click(await screen.findByRole("button", { name: "Rename wall.png" }));
+    await user.click(await screen.findByRole("button", { name: "Change" }));
+    await user.click(screen.getByLabelText("Actions for wall.png"));
+    await user.click(screen.getByRole("button", { name: "Rename" }));
     const dialog = screen.getByRole("dialog", { name: "Rename background image" });
     const input = within(dialog).getByRole("textbox", { name: "New file name" });
     await user.clear(input);

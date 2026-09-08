@@ -1324,6 +1324,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/terminal/backgrounds/capacity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["setTerminalBackgroundCapacity"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/terminal/backgrounds/{name}": {
         parameters: {
             query?: never;
@@ -3028,8 +3044,12 @@ export interface components {
             embeddedTerminal?: components["schemas"]["EmbeddedTerminal"];
             engine?: components["schemas"]["EngineSettings"];
             fileTransfers?: components["schemas"]["FileTransferSettings"];
+            backgrounds?: components["schemas"]["BackgroundSettings"];
             groups?: components["schemas"]["GroupMetadata"][];
             hosts?: components["schemas"]["HostMetadata"][];
+        };
+        BackgroundSettings: {
+            capacityMiB?: number;
         };
         FileTransferSettings: {
             maxConcurrent?: number;
@@ -3095,8 +3115,13 @@ export interface components {
         RenameTerminalBackgroundRequest: {
             name: string;
         };
+        TerminalBackgroundCapacityRequest: {
+            capacityMiB: number;
+        };
         TerminalBackgroundList: {
             backgrounds: components["schemas"]["TerminalBackground"][];
+            usedBytes: number;
+            capacityBytes: number;
             remainingBytes: number;
         };
         PendingTransaction: {
@@ -6181,6 +6206,32 @@ export interface operations {
             400: components["responses"]["Problem"];
             401: components["responses"]["Problem"];
             413: components["responses"]["Problem"];
+        };
+    };
+    setTerminalBackgroundCapacity: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TerminalBackgroundCapacityRequest"];
+            };
+        };
+        responses: {
+            /** @description The updated image library and capacity */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TerminalBackgroundList"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
         };
     };
     getTerminalBackground: {

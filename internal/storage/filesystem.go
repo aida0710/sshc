@@ -62,15 +62,56 @@ func (OSFileSystem) WriteAtomic(path, prefix string, permission fs.FileMode, con
 }
 
 func (OSFileSystem) ReadFile(path string) ([]byte, error) {
+	return ReadFileLimited(OSFileSystem{}, path, MaxFileSize)
+}
+
+// ReadFileLimited reads a regular file without following a symbolic link and
+// applies a caller-specific limit. Large binary assets use this without
+// weakening the much smaller limit for ordinary configuration documents.
+func ReadFileLimited(fileSystem FileSystem, path string, maximum int64) ([]byte, error) {
+	if maximum < 0 {
+		return nil, ErrFileTooLarge
+	}
+	if _, native := fileSystem.(OSFileSystem); !native {
+		contents, err := fileSystem.ReadFile(path)
+		if err != nil {
+			return nil, err
+		}
+		if int64(len(contents)) > maximum {
+			return nil, ErrFileTooLarge
+		}
+		return contents, nil
+	}
 	file, err := openRegularNoFollow(path)
 	if err != nil {
 		return nil, err
 	}
 	defer file.Close()
-	return readBoundedRegularFile(file)
+	return readBoundedRegularFile(file, maximum)
 }
 
-func readBoundedRegularFile(file *os.File) ([]byte, error) {
+// ReadFilePrefix reads at most maximum leading bytes from a regular file.
+// Listing large binary assets needs only a magic header and must not allocate
+// the full file merely to identify its media type.
+func ReadFilePrefix(fileSystem FileSystem, path string, maximum int) ([]byte, error) {
+	if maximum < 0 {
+		return nil, os.ErrInvalid
+	}
+	if _, native := fileSystem.(OSFileSystem); !native {
+		contents, err := fileSystem.ReadFile(path)
+		if err != nil {
+			return nil, err
+		}
+		if len(contents) > maximum {
+			contents = contents[:maximum]
+		}
+		return contents, nil
+	}
+	file, err := openRegularNoFollow(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
 	info, err := file.Stat()
 	if err != nil {
 		return nil, err
@@ -78,11 +119,22 @@ func readBoundedRegularFile(file *os.File) ([]byte, error) {
 	if !info.Mode().IsRegular() {
 		return nil, ErrNotRegularFile
 	}
-	contents, err := io.ReadAll(io.LimitReader(file, MaxFileSize+1))
+	return io.ReadAll(io.LimitReader(file, int64(maximum)))
+}
+
+func readBoundedRegularFile(file *os.File, maximum int64) ([]byte, error) {
+	info, err := file.Stat()
 	if err != nil {
 		return nil, err
 	}
-	if len(contents) > MaxFileSize {
+	if !info.Mode().IsRegular() {
+		return nil, ErrNotRegularFile
+	}
+	contents, err := io.ReadAll(io.LimitReader(file, maximum+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(contents)) > maximum {
 		return nil, ErrFileTooLarge
 	}
 	return contents, nil

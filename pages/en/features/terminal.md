@@ -30,7 +30,7 @@ Reconnect an exited SSH session in the same pane while retaining its scrollback.
 - Per-connection UTF-8, Shift_JIS, EUC-JP and ISO-2022-JP
 - A 16 KiB–4 MiB engine replay buffer, 1,000–100,000 lines of browser scrollback, and configurable font size
 - WebGL rendering with an automatic DOM-renderer fallback when unavailable or when a background image is active, plus an option to disable WebGL permanently
-- Rename uploaded background images while automatically updating their overall and per-connection settings references
+- An uncompressed background image library with search, selection, rename, delete, a 1–1024 MiB storage limit, and atomic updates to overall and per-connection references
 - Static cursors in Terminal and the SFTP text editor when the operating system requests reduced motion, avoiding distracting rapid animation
 
 On reconnect, sshc replays only bytes after the browser's last rendered position. Existing output is not duplicated, and older scrollback retained only by the browser is not cleared. If a long disconnect let required output fall out of the engine buffer, the terminal reports the gap. Both buffers stay in memory and are not written to the vault, backups, or sync snapshots.

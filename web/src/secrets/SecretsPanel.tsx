@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { failureCode } from "../api/client";
 import {
   integrationsApi,
@@ -17,6 +17,8 @@ import { MetricCard, MetricGrid, PageHeader } from "../ui/page";
 import { Icon } from "../ui/icons";
 import { CredentialEditDialog } from "./CredentialEditDialog";
 import { PanelState } from "../ui/PanelState";
+import { useDismissibleLayer } from "../ui/useDismissibleLayer";
+import { useMenuKeyboard } from "../ui/useMenuKeyboard";
 
 const mobileTouchTargets = "[&_button]:min-h-10 md:[&_button]:min-h-0";
 
@@ -107,21 +109,24 @@ function TOTPCodeCard({ name, api }: { name: string; api: IntegrationsApi }) {
     return <p className={hintText}>{t("secrets.totpLoading")}</p>;
   }
   return (
-    <div className="min-w-0 rounded-md bg-surface-subtle px-3 py-2">
-      <button
-        type="button"
-        aria-expanded={expanded}
-        aria-label={t(expanded ? "secrets.totpCollapse" : "secrets.totpExpand", { name })}
-        className="flex w-full items-center justify-between gap-3 text-left"
-        onClick={() => setExpanded((current) => !current)}
-      >
-        <span className="whitespace-nowrap font-mono text-lg font-semibold tracking-wider text-ink">
+    <div className="min-w-0 rounded-md bg-surface-subtle px-3 py-2 sm:min-w-72">
+      <div className="flex items-center gap-3">
+        <span className="min-w-0 flex-1 whitespace-nowrap font-mono text-lg font-semibold tracking-wider text-ink">
           {readableCode(codes.current)}
         </span>
-        <span className="text-xs tabular-nums text-ink-muted">
-          {t("secrets.totpRemaining", { seconds: remaining })} {expanded ? "⌃" : "⌄"}
+        <span className="shrink-0 text-xs tabular-nums text-ink-muted">
+          {t("secrets.totpRemaining", { seconds: remaining })}
         </span>
-      </button>
+        <button
+          type="button"
+          aria-expanded={expanded}
+          aria-label={t(expanded ? "secrets.totpCollapse" : "secrets.totpExpand", { name })}
+          className="flex size-8 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-select-fill hover:text-ink"
+          onClick={() => setExpanded((current) => !current)}
+        >
+          <Icon name="chevronRight" className={`size-4 transition-transform ${expanded ? "rotate-90" : ""}`} />
+        </button>
+      </div>
       {expanded ? (
         <div className="mt-2 grid grid-cols-2 gap-2 border-t border-line pt-2 text-xs">
           <div>
@@ -154,36 +159,105 @@ type UsageListProps = {
   removeLabel?: (value: string) => string;
 };
 
-function UsageList({ label, values, emptyLabel, onRemove, removeLabel }: UsageListProps) {
+function UsageDisclosure({ label, values, emptyLabel, onRemove, removeLabel, owner }: UsageListProps & { owner: string }) {
+  const t = useTranslate();
+  const [expanded, setExpanded] = useState(false);
   return (
-    <div className="flex flex-col gap-1">
-      <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
-        {label}
-      </p>
-      {values.length === 0 ? (
-        <p className={hintText}>{emptyLabel}</p>
-      ) : (
-        <ul aria-label={label} className="flex flex-wrap gap-2">
-          {values.map((value) => (
-            <li
-              key={value}
-              className="flex items-center gap-1 rounded-md bg-tree px-2 py-1 font-mono text-xs text-ink"
-            >
-              <span>{value}</span>
-              {onRemove === undefined ? null : (
-                <button
-                  type="button"
-                  className="ml-1 text-ink-muted hover:text-danger"
-                  aria-label={removeLabel?.(value) ?? value}
-                  onClick={() => onRemove(value)}
+    <div className="rounded-md bg-surface-subtle">
+      <button
+        type="button"
+        aria-expanded={expanded}
+        aria-label={t(expanded ? "secrets.usageCollapse" : "secrets.usageExpand", { label, name: owner })}
+        className="flex min-h-10 w-full items-center gap-2 px-3 py-2 text-left text-sm text-ink-muted hover:bg-select-fill hover:text-ink"
+        onClick={() => setExpanded((current) => !current)}
+      >
+        <Icon name="chevronRight" className={`size-3.5 shrink-0 transition-transform ${expanded ? "rotate-90" : ""}`} />
+        <span className="min-w-0 flex-1 font-medium">{label}</span>
+        <span className="rounded bg-surface px-1.5 py-0.5 font-mono text-xs tabular-nums text-ink-faint">{values.length}</span>
+      </button>
+      {expanded ? (
+        <div className="border-t border-line px-3 py-3">
+          {values.length === 0 ? (
+            <p className={hintText}>{emptyLabel}</p>
+          ) : (
+            <ul aria-label={label} className="flex flex-wrap gap-2">
+              {values.map((value) => (
+                <li
+                  key={value}
+                  className="flex items-center gap-1 rounded-md bg-tree px-2 py-1 font-mono text-xs text-ink"
                 >
-                  ×
-                </button>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
+                  <span>{value}</span>
+                  {onRemove === undefined ? null : (
+                    <button
+                      type="button"
+                      className="ml-1 text-ink-muted hover:text-danger"
+                      aria-label={removeLabel?.(value) ?? value}
+                      onClick={() => onRemove(value)}
+                    >
+                      ×
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+type CredentialActionsProps = {
+  name: string;
+  edit?: { label: string; onSelect: () => void };
+  remove: { label: string; onSelect: () => void };
+};
+
+function CredentialActions({ name, edit, remove }: CredentialActionsProps) {
+  const t = useTranslate();
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useDismissibleLayer({
+    open,
+    containerRefs: [rootRef],
+    onDismiss: () => setOpen(false),
+    returnFocusRef: triggerRef,
+  });
+  useMenuKeyboard({ open, menuRef, onClose: () => setOpen(false) });
+
+  function select(action: () => void) {
+    setOpen(false);
+    action();
+  }
+
+  return (
+    <div ref={rootRef} className="relative shrink-0">
+      <button
+        ref={triggerRef}
+        type="button"
+        aria-label={t("secrets.actions", { name })}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+        className="flex size-9 items-center justify-center rounded-md text-ink-muted hover:bg-select-fill hover:text-ink"
+      >
+        <Icon name="moreHorizontal" className="size-5" />
+      </button>
+      {open ? (
+        <div ref={menuRef} role="menu" className="absolute right-0 top-full z-20 mt-1 min-w-48 rounded-md border border-line bg-card p-1 shadow-lg">
+          {edit === undefined ? null : (
+            <button type="button" role="menuitem" className="block w-full rounded px-3 py-2 text-left text-sm text-ink hover:bg-select-fill focus:bg-select-fill focus:outline-none" onClick={() => select(edit.onSelect)}>
+              {edit.label}
+            </button>
+          )}
+          <button type="button" role="menuitem" className="block w-full rounded px-3 py-2 text-left text-sm text-danger hover:bg-select-fill focus:bg-select-fill focus:outline-none" onClick={() => select(remove.onSelect)}>
+            {remove.label}
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -409,11 +483,8 @@ export function SecretsPanel({
               <ul className="divide-y divide-line">
                 {mine.map((credential) => (
                   <li key={credential.name}>
-                    <article
-                      aria-label={credential.name}
-                      className="grid gap-4 px-4 py-4 lg:grid-cols-[minmax(10rem,0.8fr)_minmax(0,1.4fr)_auto] lg:items-start"
-                    >
-                      <div className="flex min-w-0 items-center gap-3">
+                    <article aria-label={credential.name} className="px-4 py-4">
+                      <div className="flex min-w-0 items-start gap-3">
                         <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-select-fill text-ink-muted">
                           <Icon
                             name={
@@ -422,66 +493,54 @@ export function SecretsPanel({
                             className="h-4 w-4"
                           />
                         </span>
-                        <h4 className="truncate font-mono text-sm font-semibold text-ink">
-                          {credential.name}
-                        </h4>
-                      </div>
-                      <div className="grid gap-4 sm:grid-cols-2">
-                        {credential.kind === "totp" ? (
-                          <TOTPCodeCard name={credential.name} api={api} />
-                        ) : null}
-                        {credential.kind === "key_passphrase" ? (
-                          <UsageList
-                            label={t("secrets.keys")}
-                            values={credential.uses}
-                            emptyLabel={t("secrets.noKeys")}
-                          />
-                        ) : null}
-                        {credential.kind !== "key_passphrase" ||
-                        keyHostUsageComplete ? (
-                          <UsageList
-                            label={t("secrets.assignedHosts")}
-                            values={credential.hosts}
-                            emptyLabel={t("secrets.noAssignedHosts")}
-                            {...(credential.kind === "totp"
-                              ? {
-                                  onRemove: (host: string) => {
-                                    void run(
-                                      () =>
-                                        api.unassignCredential("totp", host),
-                                      t("secrets.unassignTOTPFailed"),
-                                    );
-                                  },
-                                  removeLabel: (host: string) =>
-                                    t("secrets.unassignTOTP", { host }),
-                                }
-                              : {})}
-                          />
-                        ) : (
-                          <div className="flex flex-col gap-1">
-                            <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
-                              {t("secrets.assignedHosts")}
-                            </p>
-                            <p className={hintText}>
-                              {t("secrets.keyHostsUnavailable")}
-                            </p>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center">
+                            <h4 className="min-w-0 flex-1 truncate font-mono text-sm font-semibold text-ink">
+                              {credential.name}
+                            </h4>
+                            {credential.kind === "totp" ? (
+                              <TOTPCodeCard name={credential.name} api={api} />
+                            ) : null}
                           </div>
-                        )}
-                      </div>
-                      <div className="flex flex-wrap justify-end gap-2">
-                        <Button
-                          onClick={() =>
-                            setEditing({
-                              kind: group.kind,
-                              name: credential.name,
-                            })
-                          }
-                        >
-                          {t("secrets.edit", { name: credential.name })}
-                        </Button>
-                        <Button
-                          kind="danger"
-                          onClick={() =>
+                          <div className="mt-3 flex flex-col gap-2">
+                            {credential.kind === "key_passphrase" ? (
+                              <UsageDisclosure
+                                owner={credential.name}
+                                label={t("secrets.keys")}
+                                values={credential.uses}
+                                emptyLabel={t("secrets.noKeys")}
+                              />
+                            ) : null}
+                            <UsageDisclosure
+                              owner={credential.name}
+                              label={t("secrets.assignedHosts")}
+                              values={credential.hosts}
+                              emptyLabel={credential.kind === "key_passphrase" && !keyHostUsageComplete
+                                ? t("secrets.keyHostsUnavailable")
+                                : t("secrets.noAssignedHosts")}
+                              {...(credential.kind === "totp"
+                                ? {
+                                    onRemove: (host: string) => {
+                                      void run(
+                                        () => api.unassignCredential("totp", host),
+                                        t("secrets.unassignTOTPFailed"),
+                                      );
+                                    },
+                                    removeLabel: (host: string) => t("secrets.unassignTOTP", { host }),
+                                  }
+                                : {})}
+                            />
+                          </div>
+                        </div>
+                        <CredentialActions
+                          name={credential.name}
+                          edit={{
+                            label: t("secrets.edit", { name: credential.name }),
+                            onSelect: () => setEditing({ kind: group.kind, name: credential.name }),
+                          }}
+                          remove={{
+                            label: t("secrets.delete", { name: credential.name }),
+                            onSelect: () =>
                             void run(
                               () =>
                                 api.deleteCredential(
@@ -489,70 +548,54 @@ export function SecretsPanel({
                                   credential.name,
                                 ),
                               t("secrets.deleteFailed"),
-                            )
-                          }
-                        >
-                          {t("secrets.delete", { name: credential.name })}
-                        </Button>
+                            ),
+                          }}
+                        />
                       </div>
                     </article>
                   </li>
                 ))}
                 {dedicated.map((credential) => (
                   <li key={credential.key}>
-                    <article
-                      aria-label={credential.key}
-                      className="grid gap-4 px-4 py-4 lg:grid-cols-[minmax(10rem,0.8fr)_minmax(0,1.4fr)_auto] lg:items-start"
-                    >
-                      <div className="flex min-w-0 items-center gap-3">
+                    <article aria-label={credential.key} className="px-4 py-4">
+                      <div className="flex min-w-0 items-start gap-3">
                         <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-select-fill text-ink-muted">
                           <Icon name="keys" className="h-4 w-4" />
                         </span>
-                        <div className="min-w-0">
-                          <h4 className="font-semibold text-ink">
+                        <div className="min-w-0 flex-1">
+                          <h4 className="truncate font-semibold text-ink">
                             {keyBasename(credential.key)}
                           </h4>
                           <p className={hintText}>{t("secrets.dedicated")}</p>
-                        </div>
-                      </div>
-                      <div className="grid gap-4 sm:grid-cols-2">
-                        <UsageList
-                          label={t("secrets.keys")}
-                          values={[credential.key]}
-                          emptyLabel={t("secrets.noKeys")}
-                        />
-                        {keyHostUsageComplete ? (
-                          <UsageList
-                            label={t("secrets.assignedHosts")}
-                            values={credential.hosts}
-                            emptyLabel={t("secrets.noAssignedHosts")}
-                          />
-                        ) : (
-                          <div className="flex flex-col gap-1">
-                            <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
-                              {t("secrets.assignedHosts")}
-                            </p>
-                            <p className={hintText}>
-                              {t("secrets.keyHostsUnavailable")}
-                            </p>
+                          <div className="mt-3 flex flex-col gap-2">
+                            <UsageDisclosure
+                              owner={credential.key}
+                              label={t("secrets.keys")}
+                              values={[credential.key]}
+                              emptyLabel={t("secrets.noKeys")}
+                            />
+                            <UsageDisclosure
+                              owner={credential.key}
+                              label={t("secrets.assignedHosts")}
+                              values={credential.hosts}
+                              emptyLabel={keyHostUsageComplete
+                                ? t("secrets.noAssignedHosts")
+                                : t("secrets.keyHostsUnavailable")}
+                            />
                           </div>
-                        )}
-                      </div>
-                      <Button
-                        kind="danger"
-                        onClick={() =>
-                          void run(
-                            () =>
-                              api.unassignCredential(
-                                "key_passphrase",
-                                credential.key,
+                        </div>
+                        <CredentialActions
+                          name={credential.key}
+                          remove={{
+                            label: t("secrets.removeDedicated", { key: credential.key }),
+                            onSelect: () =>
+                              void run(
+                                () => api.unassignCredential("key_passphrase", credential.key),
+                                t("secrets.deleteFailed"),
                               ),
-                            t("secrets.deleteFailed"),
-                          )
-                        }
-                      >
-                        {t("secrets.removeDedicated", { key: credential.key })}
-                      </Button>
+                          }}
+                        />
+                      </div>
                     </article>
                   </li>
                 ))}
@@ -560,8 +603,7 @@ export function SecretsPanel({
             )}
 
             {group.kind !== "totp" ? null : (
-              <div className="flex flex-col gap-3 border-t border-line bg-surface-subtle px-4 py-4">
-                <Notice>{t("secrets.totpWarning")}</Notice>
+              <div className="border-t border-line bg-surface-subtle px-4 py-4">
                 <p className={hintText}>{t("secrets.totpAssignInConnection")}</p>
               </div>
             )}

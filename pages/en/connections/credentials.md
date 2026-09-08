@@ -22,7 +22,7 @@ Key passphrases can be saved, edited, and removed per private key. A ProxyJump r
 
 ## Automatic TOTP entry
 
-First, store a Base32 setup key or an `otpauth://totp/...` URI under **Menu → Vault → OTP**. The page normally shows the current six-digit code only; click it to reveal the previous and next code. Then open the target under **Connections** and select the saved token from **Basic → Authentication → One-time password (TOTP)**. You no longer need to type a host alias to create the assignment.
+First, store a Base32 setup key or an `otpauth://totp/...` URI under **Menu → Vault → OTP**. The page normally shows the current six-digit code only; use the disclosure beside its remaining time to reveal the previous and next code. Assigned hosts appear in a separate row under each item and expand only when needed. Then open the target under **Connections** and select the saved token from **Basic → Authentication → One-time password (TOTP)**. You no longer need to type a host alias to create the assignment.
 
 The Vault is split into **Account passwords**, **Key passphrases**, and **OTP** pages so each list and registration form stays focused. The same TOTP entries can be managed from the CLI with `sshc otp list|show|add|edit|remove`.
 

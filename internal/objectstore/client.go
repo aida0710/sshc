@@ -63,15 +63,11 @@ var (
 
 // MaxObjectBytes は、このクライアントが送受信する最大のスナップショットサイズ。
 //
-// S3 は 1 回の PUT で 5 GiB を許すが、これはそれよりはるかに小さい。~/.ssh は
-// キロバイト単位であり、この上限に近づくというのは、誰かの設定が大きいという
-// ことではなく、何かがおかしいということだからだ。
+// S3 は 1 回の PUT で 5 GiB を許す。通常の設定は小さいままだが、利用者が明示的に
+// 許可した無変換の背景画像を暗号化snapshotとして運ぶ余地を確保する。
 const (
-	// A snapshot expands to at most 64 MiB. Allow room for tar headers, gzip
-	// framing, and the authenticated envelope without accepting a 256 MiB body
-	// which would be retained beside the KDF and AEAD working sets.
-	MaxObjectBytes        = 72 << 20
-	defaultRequestTimeout = 60 * time.Second
+	MaxObjectBytes        = 1152 << 20
+	defaultRequestTimeout = 30 * time.Minute
 )
 
 // Credentials はアクセスキーの組。ログに出ることはなく、URL に現れることもない。
