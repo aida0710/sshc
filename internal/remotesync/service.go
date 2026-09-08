@@ -645,7 +645,7 @@ func (s *Service) collect() (Manifest, map[string][]byte, error) {
 		seen[relative] = true
 
 		absolute := filepath.Join(s.workspace.Root(), filepath.FromSlash(relative))
-		body, err := s.workspace.FileSystem().ReadFile(absolute)
+		body, err := storage.ReadFileLimited(s.workspace.FileSystem(), absolute, maxEntryBytes(relative))
 		if err != nil {
 			if errors.Is(err, fs.ErrNotExist) {
 				continue

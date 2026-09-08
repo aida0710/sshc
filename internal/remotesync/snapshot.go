@@ -44,9 +44,19 @@ const SchemaVersion = 6
 // MaxCommitMessageRunes は、履歴へ保存する一行メッセージの最大長。
 const MaxCommitMessageRunes = 240
 
-// MaxSnapshotBytes は、Read が展開する量に上限を設ける。スナップショットは ~/.ssh
-// である。これに近づくものは、ワークスペースではなく展開爆弾だ。
-const MaxSnapshotBytes = 64 << 20
+// MaxSnapshotBytes は、Read が展開する量に上限を設ける。通常の設定ファイルは
+// 従来どおり1 MiBまでだが、利用者が明示的に許可した無変換の背景画像を同じ
+// workspace snapshotで運べるよう、asset分の余地を持つ。
+const MaxSnapshotBytes = (1024 + 64) << 20
+
+const maxBackgroundAssetBytes = 1024 << 20
+
+func maxEntryBytes(relative string) int64 {
+	if strings.HasPrefix(relative, "sshc/backgrounds/") {
+		return maxBackgroundAssetBytes
+	}
+	return storage.MaxFileSize
+}
 
 // MaxEntries は、ひとつのスナップショットが運べるファイル数に上限を設ける。
 const MaxEntries = 4096
@@ -355,7 +365,7 @@ func Build(manifest Manifest, contents map[string][]byte) ([]byte, error) {
 	}
 	total := int64(len(document))
 	for _, entry := range manifest.Files {
-		if len(contents[entry.Path]) > storage.MaxFileSize {
+		if int64(len(contents[entry.Path])) > maxEntryBytes(entry.Path) {
 			return nil, ErrSnapshotTooLarge
 		}
 		total += int64(len(contents[entry.Path]))
@@ -416,13 +426,14 @@ func Read(archive []byte) (Manifest, map[string][]byte, error) {
 			// 何の意味も持たず、好意的に解釈すべきものでもない。
 			return Manifest{}, nil, ErrUnsafePath
 		}
-		if header.Size < 0 || header.Size > storage.MaxFileSize {
+		if header.Size < 0 || header.Size > maxEntryBytes(header.Name) {
 			return Manifest{}, nil, ErrSnapshotTooLarge
 		}
 		if len(contents) >= MaxEntries {
 			return Manifest{}, nil, ErrSnapshotTooLarge
 		}
-		body, err := io.ReadAll(io.LimitReader(reader, storage.MaxFileSize+1))
+		maximum := maxEntryBytes(header.Name)
+		body, err := io.ReadAll(io.LimitReader(reader, maximum+1))
 		if err != nil {
 			return Manifest{}, nil, ErrNotASnapshot
 		}
@@ -430,7 +441,7 @@ func Read(archive []byte) (Manifest, map[string][]byte, error) {
 		if total > MaxSnapshotBytes {
 			return Manifest{}, nil, ErrSnapshotTooLarge
 		}
-		if len(body) > storage.MaxFileSize {
+		if int64(len(body)) > maximum {
 			return Manifest{}, nil, ErrSnapshotTooLarge
 		}
 

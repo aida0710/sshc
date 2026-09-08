@@ -45,7 +45,11 @@ OSC 52 and encoding may be overridden per connection. OSC 8 and Kitty keyboard b
 
 Rendering uses WebGL by default and automatically falls back to the DOM renderer when WebGL is unavailable or a background image is active. If a GPU or browser duplicates characters or leaves visual traces, turn off **Use WebGL rendering** to always use DOM rendering.
 
-Uploaded background images can be renamed from the list. The extension follows the detected image format, and references in overall and per-connection settings are updated in the same operation. An existing image is never overwritten.
+Select **Change** to open the searchable background image library. The normal settings page shows only the selected image; rename and delete actions live under each image's `…` menu. sshc stores the uploaded bytes unchanged and does not compress or convert the image.
+
+The library limit defaults to 16 MiB and can be set from 1 to 1024 MiB. Lowering it never removes or recompresses existing images. Large or numerous images increase local storage, encrypted-sync transfer, and memory use.
+
+When an image is renamed, its extension follows the detected format and overall and per-connection references are updated in the same operation. An existing image is never overwritten. Deleting an image clears references to it in the same transaction.
 
 ## Local shell and notifications
 

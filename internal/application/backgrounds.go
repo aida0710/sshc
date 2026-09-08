@@ -19,10 +19,11 @@ import (
 const BackgroundsDirectory = "sshc/backgrounds"
 
 const (
-	// MaxBackgroundBytes は、画像 1 枚の上限である。
-	MaxBackgroundBytes = storage.MaxFileSize
-	// MaxBackgroundsBytes は、置いてある画像の合計の上限である。
-	MaxBackgroundsBytes = 16 << 20
+	MinBackgroundCapacityMiB     = 1
+	DefaultBackgroundCapacityMiB = 16
+	MaxBackgroundCapacityMiB     = 1024
+	// MaxBackgroundBytes は、利用者が明示的に許可できる画像 1 枚の絶対上限である。
+	MaxBackgroundBytes = MaxBackgroundCapacityMiB << 20
 )
 
 var (
@@ -36,6 +37,8 @@ var (
 	ErrUnknownBackground = errors.New("there is no background by that name")
 	// ErrBackgroundAlreadyExists は、明示的な名前変更が既存画像を上書きしようとしたことを報告する。
 	ErrBackgroundAlreadyExists = errors.New("a background with that name already exists")
+	// ErrBackgroundCapacity は、設定可能な保存容量の範囲外を報告する。
+	ErrBackgroundCapacity = errors.New("the background capacity is outside the supported range")
 )
 
 // Background は、置いてある画像 1 枚である。
@@ -43,6 +46,53 @@ type Background struct {
 	Name  string `json:"name"`
 	Bytes int    `json:"bytes"`
 	Type  string `json:"type"`
+}
+
+// BackgroundCapacityMiB は保存済みの上限を返す。未設定は16 MiBである。
+func (s *Service) BackgroundCapacityMiB() int {
+	metadata, _, err := s.metadata.Load()
+	if err != nil || metadata.Backgrounds == nil {
+		return DefaultBackgroundCapacityMiB
+	}
+	value := metadata.Backgrounds.CapacityMiB
+	if value < MinBackgroundCapacityMiB || value > MaxBackgroundCapacityMiB {
+		return DefaultBackgroundCapacityMiB
+	}
+	return value
+}
+
+func (s *Service) backgroundCapacityBytes() int64 {
+	return int64(s.BackgroundCapacityMiB()) << 20
+}
+
+// SetBackgroundCapacityMiB changes only the image-library quota. Existing
+// images are never rewritten or removed when the quota is lowered.
+func (s *Service) SetBackgroundCapacityMiB(value int) (SaveResult, error) {
+	if value < MinBackgroundCapacityMiB || value > MaxBackgroundCapacityMiB {
+		return SaveResult{}, ErrBackgroundCapacity
+	}
+	s.saveMutex.Lock()
+	defer s.saveMutex.Unlock()
+	metadata, precondition, err := s.metadata.Load()
+	if err != nil {
+		return SaveResult{}, err
+	}
+	metadata.Backgrounds = &BackgroundSettings{CapacityMiB: value}
+	if err := s.metadata.EnsureDirectory(); err != nil {
+		return SaveResult{}, err
+	}
+	change, err := s.metadata.Change(metadata, precondition)
+	if err != nil {
+		return SaveResult{}, err
+	}
+	result, err := s.manager.Commit(storage.Request{
+		Operation: "terminal.backgrounds.capacity",
+		Changes:   []storage.Change{change},
+	})
+	if err != nil {
+		return SaveResult{}, err
+	}
+	return SaveResult{TransactionID: result.ID, Written: result.Written}, nil
 }
 
 // imageType は、バイト列の先頭からその型を返す。画像でなければ空である。
@@ -108,10 +158,10 @@ func (s *Service) Backgrounds() ([]Background, error) {
 			continue
 		}
 		info, err := entry.Info()
-		if err != nil || info.Size() > MaxBackgroundBytes {
+		if err != nil || info.Size() < 0 || info.Size() > int64(MaxBackgroundBytes) {
 			continue
 		}
-		contents, err := s.workspace.FileSystem().ReadFile(filepath.Join(s.backgroundsRoot(), entry.Name()))
+		contents, err := storage.ReadFilePrefix(s.workspace.FileSystem(), filepath.Join(s.backgroundsRoot(), entry.Name()), 12)
 		if err != nil {
 			continue
 		}
@@ -119,7 +169,7 @@ func (s *Service) Backgrounds() ([]Background, error) {
 		if mediaType == "" {
 			continue
 		}
-		found = append(found, Background{Name: entry.Name(), Bytes: len(contents), Type: mediaType})
+		found = append(found, Background{Name: entry.Name(), Bytes: int(info.Size()), Type: mediaType})
 	}
 	sort.Slice(found, func(one, other int) bool { return found[one].Name < found[other].Name })
 	return found, nil
@@ -145,7 +195,7 @@ func (s *Service) AddBackground(suggested string, contents []byte) (Background, 
 		total += background.Bytes
 		taken[background.Name] = true
 	}
-	if total > MaxBackgroundsBytes {
+	if int64(total) > s.backgroundCapacityBytes() {
 		return Background{}, ErrBackgroundsFull
 	}
 
@@ -179,7 +229,7 @@ func (s *Service) BackgroundContents(name string) ([]byte, string, error) {
 		if background.Name != name {
 			continue
 		}
-		contents, err := s.workspace.FileSystem().ReadFile(filepath.Join(s.backgroundsRoot(), name))
+		contents, err := storage.ReadFileLimited(s.workspace.FileSystem(), filepath.Join(s.backgroundsRoot(), name), int64(MaxBackgroundBytes))
 		if err != nil {
 			return nil, "", err
 		}
@@ -210,7 +260,7 @@ func (s *Service) RenameBackground(current, suggested string) (Background, error
 	if found == nil {
 		return Background{}, ErrUnknownBackground
 	}
-	contents, err := s.workspace.FileSystem().ReadFile(filepath.Join(s.backgroundsRoot(), current))
+	contents, err := storage.ReadFileLimited(s.workspace.FileSystem(), filepath.Join(s.backgroundsRoot(), current), int64(MaxBackgroundBytes))
 	if err != nil {
 		return Background{}, err
 	}
@@ -278,6 +328,9 @@ func (s *Service) RenameBackground(current, suggested string) (Background, error
 
 // RemoveBackground は、その画像を捨てる。
 func (s *Service) RemoveBackground(name string) error {
+	s.saveMutex.Lock()
+	defer s.saveMutex.Unlock()
+
 	existing, err := s.Backgrounds()
 	if err != nil {
 		return err
@@ -288,7 +341,51 @@ func (s *Service) RemoveBackground(name string) error {
 			if err != nil {
 				return err
 			}
-			return s.workspace.FileSystem().Remove(target)
+			contents, err := storage.ReadFileLimited(s.workspace.FileSystem(), target, int64(MaxBackgroundBytes))
+			if err != nil {
+				return err
+			}
+			request := storage.Request{
+				Operation: "remove terminal background",
+				Removals: []storage.Removal{{
+					Path: target,
+					Precondition: storage.Precondition{
+						Exists: true,
+						Digest: storage.Digest(contents),
+					},
+				}},
+			}
+			metadata, precondition, err := s.metadata.Load()
+			if err != nil {
+				return err
+			}
+			referenced := false
+			if terminal := metadata.EmbeddedTerminal; terminal != nil && terminal.Appearance != nil && terminal.Appearance.Background == name {
+				terminal.Appearance.Background = ""
+				if terminal.Appearance.Empty() {
+					terminal.Appearance = nil
+				}
+				referenced = true
+			}
+			for index := range metadata.Hosts {
+				appearance := metadata.Hosts[index].Appearance
+				if appearance != nil && appearance.Background == name {
+					appearance.Background = ""
+					if appearance.Empty() {
+						metadata.Hosts[index].Appearance = nil
+					}
+					referenced = true
+				}
+			}
+			if referenced {
+				change, err := s.metadata.Change(metadata, precondition)
+				if err != nil {
+					return err
+				}
+				request.Changes = append(request.Changes, change)
+			}
+			_, err = s.manager.Commit(request)
+			return err
 		}
 	}
 	return ErrUnknownBackground

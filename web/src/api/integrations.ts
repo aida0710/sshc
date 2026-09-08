@@ -178,6 +178,7 @@ export type IntegrationsApi = {
     suggested: string,
     image: Blob,
   ): Promise<TerminalBackground>;
+  setTerminalBackgroundCapacity(capacityMiB: number): Promise<TerminalBackgroundList>;
   renameTerminalBackground(name: string, nextName: string): Promise<TerminalBackground>;
   deleteTerminalBackground(name: string): Promise<void>;
   setTerminalSettings(settings: TerminalSettings): Promise<void>;
@@ -632,6 +633,8 @@ export const integrationsApi: IntegrationsApi = {
     );
     return {
       backgrounds: asArray(record.backgrounds).map(validateBackground),
+      usedBytes: asNumber(record.usedBytes),
+      capacityBytes: asNumber(record.capacityBytes),
       remainingBytes: asNumber(record.remainingBytes),
     };
   },
@@ -646,6 +649,18 @@ export const integrationsApi: IntegrationsApi = {
         },
       ),
     );
+  },
+  async setTerminalBackgroundCapacity(capacityMiB) {
+    const record = asRecord(await apiClient.mutate<unknown>(
+      "/api/v1/terminal/backgrounds/capacity",
+      { method: "PUT", headers: jsonHeaders, body: JSON.stringify({ capacityMiB }) },
+    ));
+    return {
+      backgrounds: asArray(record.backgrounds).map(validateBackground),
+      usedBytes: asNumber(record.usedBytes),
+      capacityBytes: asNumber(record.capacityBytes),
+      remainingBytes: asNumber(record.remainingBytes),
+    };
   },
   async renameTerminalBackground(name, nextName) {
     return validateBackground(

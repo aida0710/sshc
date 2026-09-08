@@ -21,7 +21,7 @@ test("gives one named secret to two hosts and writes neither name into the file"
   await passwords.getByLabel("New account password value", { exact: true }).fill("hunter2");
   await passwords.getByRole("button", { name: "Store account password" }).click();
 
-  await expect(passwords.getByRole("button", { name: "Delete office-vm" })).toBeVisible();
+  await expect(passwords.getByRole("button", { name: "Actions for office-vm" })).toBeVisible();
   await expect(page.locator("body")).not.toContainText("hunter2");
 
   for (const alias of ["bastion", "nas"]) {
@@ -44,6 +44,7 @@ test("gives one named secret to two hosts and writes neither name into the file"
   const office = page
     .getByRole("region", { name: "Account passwords" })
     .getByRole("article", { name: "office-vm" });
+  await office.getByRole("button", { name: "Show Assigned hosts for office-vm" }).click();
   const assignedHosts = office.getByRole("list", { name: "Assigned hosts" });
   await expect(assignedHosts.getByRole("listitem")).toHaveText(["bastion", "nas"]);
 
@@ -69,7 +70,7 @@ test("never offers a key passphrase where a host password is chosen", async ({ p
   await phrases.getByLabel("New key passphrase name").fill("build-key");
   await phrases.getByLabel("New key passphrase value", { exact: true }).fill("a passphrase");
   await phrases.getByRole("button", { name: "Store key passphrase" }).click();
-  await expect(phrases.getByRole("button", { name: "Delete build-key" })).toBeVisible();
+  await expect(phrases.getByRole("button", { name: "Actions for build-key" })).toBeVisible();
 
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
     await page.evaluate(() => window.localStorage.setItem("sshc.language", "ja"));
@@ -110,7 +111,7 @@ test("stores and assigns a TOTP seed without exposing it in the page or vault fi
   const currentCode = token.getByRole("button", {
     name: "Show the previous and next codes for production-otp",
   });
-  await expect(currentCode).toContainText(/^\d{3} \d{3}/);
+  await expect(token).toContainText(/\d{3} \d{3}/);
   await expect(token.getByText("Previous")).toHaveCount(0);
   await currentCode.click();
   await expect(token.getByText("Previous")).toBeVisible();
@@ -130,10 +131,17 @@ test("stores and assigns a TOTP seed without exposing it in the page or vault fi
 
   await openSection(page, "OTP");
   const assignedToken = page.getByRole("article", { name: "production-otp" });
+  await assignedToken.getByRole("button", { name: "Show Assigned hosts for production-otp" }).click();
   await expect(assignedToken.getByRole("list", { name: "Assigned hosts" })).toContainText("bastion");
   await expect(page.locator("body")).not.toContainText(setupKey);
 
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
+    for (const name of ["aws dubguild sso", "mdx"]) {
+      await tokens.getByLabel("New one-time password name").fill(name);
+      await tokens.getByLabel("Base32 setup key or otpauth URI", { exact: true }).fill(setupKey);
+      await tokens.getByRole("button", { name: "Store one-time password" }).click();
+      await expect(tokens.getByRole("article", { name })).toBeVisible();
+    }
     await page.evaluate(() => window.localStorage.setItem("sshc.language", "ja"));
     await page.reload();
     await expect(
@@ -167,7 +175,8 @@ test("opens a named password masked and reveals it only on request", async ({ pa
   await passwords.getByLabel("New account password name").fill("office-vm");
   await passwords.getByLabel("New account password value", { exact: true }).fill("original-test-password");
   await passwords.getByRole("button", { name: "Store account password" }).click();
-  await passwords.getByRole("button", { name: "Edit office-vm" }).click();
+  await passwords.getByRole("button", { name: "Actions for office-vm" }).click();
+  await passwords.getByRole("menuitem", { name: "Edit office-vm" }).click();
 
   const dialog = page.getByRole("dialog", { name: "Edit account password" });
   const password = dialog.getByLabel("Password", { exact: true });

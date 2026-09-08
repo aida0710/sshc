@@ -115,6 +115,8 @@ func TestTheListSaysHowMuchRoomIsLeft(t *testing.T) {
 			Name  string `json:"name"`
 			Bytes int    `json:"bytes"`
 		} `json:"backgrounds"`
+		UsedBytes      int `json:"usedBytes"`
+		CapacityBytes  int `json:"capacityBytes"`
 		RemainingBytes int `json:"remainingBytes"`
 	}
 	if err := json.Unmarshal(response.Body.Bytes(), &listed); err != nil {
@@ -123,8 +125,23 @@ func TestTheListSaysHowMuchRoomIsLeft(t *testing.T) {
 	if len(listed.Backgrounds) != 1 {
 		t.Fatalf("listed = %#v", listed.Backgrounds)
 	}
+	if listed.UsedBytes != len(pngBytes("abc")) || listed.CapacityBytes != 16<<20 {
+		t.Fatalf("capacity = used %d, total %d", listed.UsedBytes, listed.CapacityBytes)
+	}
 	if listed.RemainingBytes <= 0 || listed.RemainingBytes >= 1<<30 {
 		t.Fatalf("remainingBytes = %d, want what is actually left", listed.RemainingBytes)
+	}
+}
+
+func TestBackgroundCapacityCanBeChanged(t *testing.T) {
+	harness := newConfigHarness(t)
+	response := harness.raw(t, http.MethodPut, "/api/v1/terminal/backgrounds/capacity", []byte(`{"capacityMiB":64}`))
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"capacityBytes":67108864`) {
+		t.Fatalf("PUT = %d, body %s", response.Code, response.Body.String())
+	}
+	invalid := harness.raw(t, http.MethodPut, "/api/v1/terminal/backgrounds/capacity", []byte(`{"capacityMiB":1025}`))
+	if invalid.Code != http.StatusBadRequest {
+		t.Fatalf("invalid PUT = %d", invalid.Code)
 	}
 }
 

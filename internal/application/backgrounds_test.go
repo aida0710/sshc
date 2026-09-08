@@ -184,23 +184,47 @@ func TestRenamingABackgroundWillNotOverwriteAnotherImage(t *testing.T) {
 
 func TestThereIsARoofOverWhatTheBackgroundsMayWeigh(t *testing.T) {
 	service, _ := newTerminalService(t)
+	if MaxBackgroundBytes != 1<<30 { t.Fatalf("absolute maximum = %d", MaxBackgroundBytes) }
 
-	if _, err := service.AddBackground("huge", png(strings.Repeat("x", MaxBackgroundBytes))); !errors.Is(err, ErrBackgroundTooLarge) {
-		t.Fatalf("err = %v, want a single oversized image refused", err)
-	}
-
-	if MaxBackgroundBytes > storage.MaxFileSize {
-		t.Fatalf("MaxBackgroundBytes = %d, larger than the layer will read back (%d)", MaxBackgroundBytes, storage.MaxFileSize)
-	}
-
-	chunk := png(strings.Repeat("x", MaxBackgroundBytes-64))
+	chunkSize := 1 << 20
+	chunk := png(strings.Repeat("x", chunkSize-64))
 	var lastErr error
-	for round := 0; round < (MaxBackgroundsBytes/MaxBackgroundBytes)+2; round++ {
+	for round := 0; round < DefaultBackgroundCapacityMiB+2; round++ {
 		if _, lastErr = service.AddBackground("wall", chunk); lastErr != nil {
 			break
 		}
 	}
 	if !errors.Is(lastErr, ErrBackgroundsFull) {
 		t.Fatalf("err = %v, want the total to be capped", lastErr)
+	}
+}
+
+func TestBackgroundCapacityCanBeChangedWithoutRewritingImages(t *testing.T) {
+	service, workspace := newTerminalService(t)
+	added, err := service.AddBackground("original", png("exact bytes"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(workspace.Root(), filepath.FromSlash(BackgroundsDirectory), added.Name)
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := service.SetBackgroundCapacityMiB(64); err != nil {
+		t.Fatal(err)
+	}
+	if got := service.BackgroundCapacityMiB(); got != 64 {
+		t.Fatalf("capacity = %d", got)
+	}
+	after, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(before, after) {
+		t.Fatal("changing capacity rewrote the image")
+	}
+	if _, err := service.SetBackgroundCapacityMiB(0); !errors.Is(err, ErrBackgroundCapacity) {
+		t.Fatalf("err = %v", err)
 	}
 }

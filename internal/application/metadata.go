@@ -141,6 +141,12 @@ type FileTransferSettings struct {
 	LargeFileChunkBytes        int64 `json:"largeFileChunkBytes,omitempty"`
 }
 
+// BackgroundSettings は背景画像ライブラリの保存方針である。
+// 画像のバイト列は変換せず、ここでは利用者が許可する合計容量だけを持つ。
+type BackgroundSettings struct {
+	CapacityMiB int `json:"capacityMiB,omitempty"`
+}
+
 // EmbeddedTerminal は、埋め込みターミナルの設定である。
 type EmbeddedTerminal struct {
 	MaxSessions     int `json:"maxSessions,omitempty"`
@@ -178,8 +184,10 @@ type Metadata struct {
 	Engine *EngineSettings `json:"engine,omitempty"`
 	// FileTransfers は SFTP 転送キューの設定である。
 	FileTransfers *FileTransferSettings `json:"fileTransfers,omitempty"`
-	Groups        []GroupMetadata       `json:"groups,omitempty"`
-	Hosts         []HostMetadata        `json:"hosts,omitempty"`
+	// Backgrounds は端末設定の保存で巻き戻らない独立したライブラリ設定である。
+	Backgrounds *BackgroundSettings `json:"backgrounds,omitempty"`
+	Groups      []GroupMetadata     `json:"groups,omitempty"`
+	Hosts       []HostMetadata      `json:"hosts,omitempty"`
 }
 
 func (metadata Metadata) TerminalStartDirectory() string {
@@ -308,6 +316,11 @@ func ValidateMetadata(metadata Metadata) error {
 		}
 		if settings.LocalShellProfile != "" && !validShellProfileID(settings.LocalShellProfile) {
 			return fmt.Errorf("%w: localShellProfile", ErrMetadataTerminal)
+		}
+	}
+	if settings := metadata.Backgrounds; settings != nil {
+		if settings.CapacityMiB < MinBackgroundCapacityMiB || settings.CapacityMiB > MaxBackgroundCapacityMiB {
+			return fmt.Errorf("%w: background capacity %d", ErrMetadataTerminal, settings.CapacityMiB)
 		}
 	}
 	if _, err := checkRelative(metadata.GroupsPath()); err != nil {

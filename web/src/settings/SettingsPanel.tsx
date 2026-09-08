@@ -676,7 +676,7 @@ export function SettingsPanel({
                 />
               </Field>
               <div className="sm:col-span-2">
-                <Field label={t("terminal.backgroundLabel")} hint={t("terminal.backgroundHint")}>
+                <Field label={t("terminal.backgroundLabel")} hint={t("terminal.backgroundHint")} interactiveChildren>
                   <BackgroundPicker
                     value={background}
                     onChange={(next) => {
