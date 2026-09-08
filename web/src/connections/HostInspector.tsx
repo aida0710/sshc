@@ -73,7 +73,7 @@ export function HostInspector({
           />
         </Field>
 
-        <Field label={t("connection.backgroundLabel")} hint={t("connection.backgroundHint")}>
+        <Field label={t("connection.backgroundLabel")} hint={t("connection.backgroundHint")} interactiveChildren>
           <BackgroundPicker
             value={detail.metadata.appearance?.background ?? ""}
             onChange={(chosen) => onMetadata(chooseAppearance(detail.metadata, { background: chosen }))}

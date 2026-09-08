@@ -233,7 +233,7 @@ func (OSFileSystem) ReadPrivateFile(path string) ([]byte, error) {
 		return nil, mapPrivateOpenError(err)
 	}
 	defer file.Close()
-	return readBoundedRegularFile(file)
+	return readBoundedRegularFile(file, MaxFileSize)
 }
 
 func mapPrivateOpenError(err error) error {

@@ -25,6 +25,7 @@ import (
 func registerBackgroundRoutes(engine *echo.Echo, handlers ConfigHandlers) {
 	engine.GET("/api/v1/terminal/backgrounds", handlers.Backgrounds)
 	engine.POST("/api/v1/terminal/backgrounds", handlers.AddBackground)
+	engine.PUT("/api/v1/terminal/backgrounds/capacity", handlers.SetBackgroundCapacity)
 	engine.GET("/api/v1/terminal/backgrounds/:name", handlers.Background)
 	engine.PATCH("/api/v1/terminal/backgrounds/:name", handlers.RenameBackground)
 	engine.DELETE("/api/v1/terminal/backgrounds/:name", handlers.DeleteBackground)
@@ -32,6 +33,8 @@ func registerBackgroundRoutes(engine *echo.Echo, handlers ConfigHandlers) {
 
 type backgroundListResponse struct {
 	Backgrounds    []api.TerminalBackground `json:"backgrounds"`
+	UsedBytes      int                      `json:"usedBytes"`
+	CapacityBytes  int64                    `json:"capacityBytes"`
 	RemainingBytes int                      `json:"remainingBytes"`
 }
 
@@ -52,7 +55,8 @@ func (h ConfigHandlers) Backgrounds(c *echo.Context) error {
 	for _, background := range backgrounds {
 		used += background.Bytes
 	}
-	remaining := application.MaxBackgroundsBytes - used
+	capacity := int64(h.Service.BackgroundCapacityMiB()) << 20
+	remaining := capacity - int64(used)
 	if remaining < 0 {
 		remaining = 0
 	}
@@ -60,7 +64,9 @@ func (h ConfigHandlers) Backgrounds(c *echo.Context) error {
 	for _, background := range backgrounds {
 		response = append(response, terminalBackground(background))
 	}
-	return c.JSON(http.StatusOK, backgroundListResponse{Backgrounds: response, RemainingBytes: remaining})
+	return c.JSON(http.StatusOK, backgroundListResponse{
+		Backgrounds: response, UsedBytes: used, CapacityBytes: capacity, RemainingBytes: int(remaining),
+	})
 }
 
 func (h ConfigHandlers) AddBackground(c *echo.Context) error {
@@ -70,7 +76,8 @@ func (h ConfigHandlers) AddBackground(c *echo.Context) error {
 	}
 	// 1 バイト余分に読む。ちょうど上限で切ると、超えていることと
 	// ちょうど収まっていることが見分けられない。
-	contents, err := io.ReadAll(io.LimitReader(body, application.MaxBackgroundBytes+1))
+	limit := int64(h.Service.BackgroundCapacityMiB()) << 20
+	contents, err := io.ReadAll(io.LimitReader(body, limit+1))
 	if err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
@@ -86,6 +93,21 @@ func (h ConfigHandlers) AddBackground(c *echo.Context) error {
 		return problem(c, http.StatusInternalServerError, "background_not_stored")
 	}
 	return c.JSON(http.StatusCreated, terminalBackground(background))
+}
+
+func (h ConfigHandlers) SetBackgroundCapacity(c *echo.Context) error {
+	var request struct {
+		CapacityMiB int `json:"capacityMiB"`
+	}
+	if err := decodeJSON(c, &request); err != nil {
+		return problem(c, http.StatusBadRequest, "invalid_request")
+	}
+	if _, err := h.Service.SetBackgroundCapacityMiB(request.CapacityMiB); errors.Is(err, application.ErrBackgroundCapacity) {
+		return problem(c, http.StatusBadRequest, "background_capacity_out_of_range")
+	} else if err != nil {
+		return serviceProblem(c, err)
+	}
+	return h.Backgrounds(c)
 }
 
 // Background は、画像そのものを返す。

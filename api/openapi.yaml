@@ -1708,6 +1708,22 @@ paths:
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
         "413": { $ref: "#/components/responses/Problem" }
+  /api/v1/terminal/backgrounds/capacity:
+    put:
+      operationId: setTerminalBackgroundCapacity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TerminalBackgroundCapacityRequest" }
+      responses:
+        "200":
+          description: The updated image library and capacity
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TerminalBackgroundList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
   /api/v1/terminal/backgrounds/{name}:
     parameters:
       - in: path
@@ -3965,8 +3981,14 @@ components:
         # 転送キューの設定は engine のものだが、engine 節とは別に置く。Settings
         # 画面の engine 保存は節ごと置き換えるため、同居させると消える。
         fileTransfers: { $ref: "#/components/schemas/FileTransferSettings" }
+        backgrounds: { $ref: "#/components/schemas/BackgroundSettings" }
         groups: { type: array, items: { $ref: "#/components/schemas/GroupMetadata" } }
         hosts: { type: array, items: { $ref: "#/components/schemas/HostMetadata" } }
+    BackgroundSettings:
+      type: object
+      additionalProperties: false
+      properties:
+        capacityMiB: { type: integer, minimum: 1, maximum: 1024 }
     # SFTP転送キューの設定。engine processではなくmetadataが持ち、再起動しても残る。
     FileTransferSettings:
       type: object
@@ -4089,12 +4111,20 @@ components:
       required: [name]
       properties:
         name: { type: string, minLength: 1, maxLength: 128 }
+    TerminalBackgroundCapacityRequest:
+      type: object
+      additionalProperties: false
+      required: [capacityMiB]
+      properties:
+        capacityMiB: { type: integer, minimum: 1, maximum: 1024 }
     TerminalBackgroundList:
       type: object
       additionalProperties: false
-      required: [backgrounds, remainingBytes]
+      required: [backgrounds, usedBytes, capacityBytes, remainingBytes]
       properties:
         backgrounds: { type: array, items: { $ref: "#/components/schemas/TerminalBackground" } }
+        usedBytes: { type: integer }
+        capacityBytes: { type: integer }
         # 追加保存できる残りバイト数。
         remainingBytes: { type: integer }
     PendingTransaction:
