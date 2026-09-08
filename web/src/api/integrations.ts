@@ -58,6 +58,7 @@ export type Credential = components["schemas"]["Credential"];
 export type CredentialList = components["schemas"]["CredentialList"];
 export type RevealCredentialResponse =
   components["schemas"]["RevealCredentialResponse"];
+export type TOTPCodeSet = components["schemas"]["TOTPCodeSet"];
 export type CredentialKind = "password" | "key_passphrase" | "totp";
 export type SyncStatus = components["schemas"]["SyncStatus"];
 export type SyncKeyResponse = components["schemas"]["SyncKeyResponse"];
@@ -191,6 +192,7 @@ export type IntegrationsApi = {
     kind: CredentialKind,
     name: string,
   ): Promise<RevealCredentialResponse>;
+  totpCodes(name: string): Promise<TOTPCodeSet>;
   updateCredential(
     kind: CredentialKind,
     currentName: string,
@@ -325,6 +327,10 @@ function validateCredentialList(value: unknown): CredentialList {
 
 function validateRevealCredential(value: unknown): RevealCredentialResponse {
   return validateOpenAPISchema<RevealCredentialResponse>("RevealCredentialResponse", value);
+}
+
+function validateTOTPCodeSet(value: unknown): TOTPCodeSet {
+  return validateOpenAPISchema<TOTPCodeSet>("TOTPCodeSet", value);
 }
 
 function validatePasswordEligibility(value: unknown): PasswordEligibility {
@@ -727,6 +733,18 @@ export const integrationsApi: IntegrationsApi = {
         method: "POST",
         headers: { "X-SSHC-Action": token },
       }),
+    );
+  },
+  async totpCodes(name) {
+    const token = await issueAction(
+      CREDENTIAL_REVEAL_ACTION_KIND,
+      `totp\n${name}`,
+    );
+    return validateTOTPCodeSet(
+      await apiClient.mutate<unknown>(
+        `${credentialPath("totp", name)}/codes`,
+        { method: "POST", headers: { "X-SSHC-Action": token } },
+      ),
     );
   },
   async updateCredential(kind, currentName, name, secret) {

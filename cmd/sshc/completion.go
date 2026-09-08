@@ -15,6 +15,7 @@ func renderCompletion(template string) string {
 		"{{TERMINAL_ACTIONS}}", strings.Join(grammar.terminalActions, " "),
 		"{{SFTP_ACTIONS}}", strings.Join(grammar.sftpActions, " "),
 		"{{SERVICE_ACTIONS}}", strings.Join(grammar.serviceActions, " "),
+		"{{OTP_ACTIONS}}", strings.Join(grammar.otpActions, " "),
 		"{{VAULT_ACTIONS}}", strings.Join(grammar.vaultActions, " "),
 		"{{ENCODINGS}}", strings.Join(grammar.encodings, " "),
 		"{{WAIT_STATES}}", strings.Join(grammar.waitStates, " "),
@@ -159,6 +160,17 @@ _sshc_completion() {
         case "${COMP_WORDS[2]}" in install|disable) _sshc_complete_words "-y --yes --help" ;; *) _sshc_complete_words "--help" ;; esac
       fi
       ;;
+    otp)
+      if (( COMP_CWORD == 2 )); then
+        _sshc_complete_words "{{OTP_ACTIONS}} --help"
+      elif (( COMP_CWORD >= 3 )); then
+        case "${COMP_WORDS[2]}" in
+          list|show) _sshc_complete_words "--json --help" ;;
+          remove) _sshc_complete_words "-y --yes --help" ;;
+          *) _sshc_complete_words "--json --help" ;;
+        esac
+      fi
+      ;;
     vault)
       if (( COMP_CWORD == 2 )); then _sshc_complete_words "{{VAULT_ACTIONS}} --help"; elif (( COMP_CWORD == 3 )); then _sshc_complete_words "--help"; fi
       ;;
@@ -173,6 +185,8 @@ _sshc_completion() {
 		_sshc_complete_words "{{SFTP_ACTIONS}}"
       elif [[ "${COMP_WORDS[2]}" == "service" ]]; then
         _sshc_complete_words "{{SERVICE_ACTIONS}}"
+      elif [[ "${COMP_WORDS[2]}" == "otp" ]]; then
+        _sshc_complete_words "{{OTP_ACTIONS}}"
       elif [[ "${COMP_WORDS[2]}" == "vault" ]]; then
         _sshc_complete_words "{{VAULT_ACTIONS}}"
       fi
@@ -286,6 +300,17 @@ _sshc() {
         case "${words[3]}" in install|disable) _sshc_values '-y --yes --help' ;; *) _sshc_values '--help' ;; esac
       fi
       ;;
+    otp)
+      if (( CURRENT == 3 )); then
+        _sshc_values '{{OTP_ACTIONS}} --help'
+      elif (( CURRENT >= 4 )); then
+        case "${words[3]}" in
+          list|show) _sshc_values '--json --help' ;;
+          remove) _sshc_values '-y --yes --help' ;;
+          *) _sshc_values '--json --help' ;;
+        esac
+      fi
+      ;;
     vault) if (( CURRENT == 3 )); then _sshc_values '{{VAULT_ACTIONS}} --help'; elif (( CURRENT == 4 )); then _sshc_values '--help'; fi ;;
     help)
       if (( CURRENT == 3 )); then
@@ -296,6 +321,7 @@ _sshc() {
           terminal) _sshc_values '{{TERMINAL_ACTIONS}}' ;;
 		  sftp) _sshc_values '{{SFTP_ACTIONS}}' ;;
           service) _sshc_values '{{SERVICE_ACTIONS}}' ;;
+          otp) _sshc_values '{{OTP_ACTIONS}}' ;;
           vault) _sshc_values '{{VAULT_ACTIONS}}' ;;
         esac
       fi
@@ -400,15 +426,20 @@ complete -c sshc -f -n '__sshc_prefix sftp' -a '{{SFTP_ACTIONS}}'
 complete -c sshc -f -n '__sshc_prefix sftp get; or __sshc_prefix sftp put' -a '(command sshc ssh --list 2>/dev/null)'
 complete -c sshc -F -n '__sshc_sftp_local_path'
 complete -c sshc -f -n '__sshc_prefix service' -a '{{SERVICE_ACTIONS}} --help'
+complete -c sshc -f -n '__sshc_prefix otp' -a '{{OTP_ACTIONS}} --help'
 complete -c sshc -f -n '__sshc_prefix vault' -a '{{VAULT_ACTIONS}} --help'
 complete -c sshc -f -n '__sshc_prefix service install; or __sshc_prefix service disable' -a '-y --yes --help'
 complete -c sshc -f -n '__sshc_prefix service status' -a '--help'
+complete -c sshc -f -n '__sshc_prefix otp list; or __sshc_prefix otp show' -a '--json --help'
+complete -c sshc -f -n '__sshc_prefix otp add; or __sshc_prefix otp edit' -a '--help'
+complete -c sshc -f -n '__sshc_prefix otp remove' -a '-y --yes --help'
 complete -c sshc -f -n '__sshc_prefix vault status; or __sshc_prefix vault create; or __sshc_prefix vault unlock; or __sshc_prefix vault lock; or __sshc_prefix vault change-password' -a '--help'
 complete -c sshc -f -n '__sshc_prefix help' -a '{{HELP_TOPICS}}'
 complete -c sshc -f -n '__sshc_prefix help sync' -a '{{SYNC_ACTIONS}}'
 complete -c sshc -f -n '__sshc_prefix help terminal' -a '{{TERMINAL_ACTIONS}}'
 complete -c sshc -f -n '__sshc_prefix help sftp' -a '{{SFTP_ACTIONS}}'
 complete -c sshc -f -n '__sshc_prefix help service' -a '{{SERVICE_ACTIONS}}'
+complete -c sshc -f -n '__sshc_prefix help otp' -a '{{OTP_ACTIONS}}'
 complete -c sshc -f -n '__sshc_prefix help vault' -a '{{VAULT_ACTIONS}}'
 
 complete -c sshc -f -n '__sshc_command engine' -a '--port --replace --help'

@@ -44,6 +44,7 @@ func TestEveryShellCompletesThePublishedCommandTree(t *testing.T) {
 		strings.Join(grammar.terminalActions, " "),
 		strings.Join(grammar.vaultActions, " "),
 		strings.Join(grammar.serviceActions, " "),
+		strings.Join(grammar.otpActions, " "),
 		strings.Join(grammar.encodings, " "),
 		strings.Join(grammar.waitStates, " "),
 	}
@@ -76,6 +77,7 @@ func TestCompletionGrammarOnlyPublishesValidHelpTopics(t *testing.T) {
 		"sync": grammar.syncActions, "terminal": grammar.terminalActions,
 		"sftp":    grammar.sftpActions,
 		"service": grammar.serviceActions, "vault": grammar.vaultActions,
+		"otp": grammar.otpActions,
 	} {
 		for _, action := range actions {
 			topic := parent + " " + action
@@ -111,6 +113,7 @@ func TestBashCompletionUsesLiveAliasesAndNestedValues(t *testing.T) {
 		{name: "info alias", words: []string{"sshc", "info", "a"}, want: "alpha"},
 		{name: "terminal alias", words: []string{"sshc", "terminal", "create", "ssh", "b"}, want: "beta-prod"},
 		{name: "sync action", words: []string{"sshc", "sync", "p"}, want: "push"},
+		{name: "otp action", words: []string{"sshc", "otp", "e"}, want: "edit"},
 		{name: "sync auto value", words: []string{"sshc", "sync", "auto", "o"}, want: "on"},
 		{name: "terminal state", words: []string{"sshc", "terminal", "wait", "deadbeef", "--for", "agent-r"}, want: "agent-ready"},
 		{name: "sftp alias", words: []string{"sshc", "sftp", "get", "b"}, want: "beta-prod"},

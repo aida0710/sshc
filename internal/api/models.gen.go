@@ -1585,6 +1585,15 @@ type SyncStatus struct {
 	Synced          bool           `json:"synced"`
 }
 
+// TOTPCodeSet defines model for TOTPCodeSet.
+type TOTPCodeSet struct {
+	Current          string `json:"current"`
+	Next             string `json:"next"`
+	PeriodSeconds    int    `json:"periodSeconds"`
+	Previous         string `json:"previous"`
+	RemainingSeconds int    `json:"remainingSeconds"`
+}
+
 // TerminalAgent defines model for TerminalAgent.
 type TerminalAgent struct {
 	Cwd                *string              `json:"cwd,omitempty"`

@@ -52,11 +52,22 @@ type Auth struct {
 	// ssh.AuthMethod は暗号化された interface なので、外から包めない。
 	// どの方式で通ったかを言えるのは、方式を組み立てるここだけである。
 	Observe func(method string)
+	// ObserveCredential は、保存済み資格情報を認証質問へ使えたかを、秘密値を
+	// 渡さずに報告する。接続ログ専用であり、コードや質問への回答は含めない。
+	ObserveCredential func(target Target, event CredentialEvent, echoed bool)
 	// registerAgent is set on a per-handshake copy by methodsWithCleanup.
 	// Agent signers keep their socket alive, so the dialer must close it once
 	// authentication has completed or failed.
 	registerAgent func(io.Closer)
 }
+
+// CredentialEvent は、認証中の保存済み資格情報に関する安全な診断である。
+type CredentialEvent string
+
+const (
+	CredentialTOTPUsed        CredentialEvent = "totp_used"
+	CredentialTOTPUnavailable CredentialEvent = "totp_unavailable"
+)
 
 // passwordOffer makes a saved account password single-use across password and
 // keyboard-interactive while retaining whether a secret was actually offered.
@@ -93,6 +104,12 @@ func (a Auth) methodsWithCleanup(target Target, prompt Prompter) ([]ssh.AuthMeth
 func (a Auth) observe(method string) {
 	if a.Observe != nil {
 		a.Observe(method)
+	}
+}
+
+func (a Auth) observeCredential(target Target, event CredentialEvent, echoed bool) {
+	if a.ObserveCredential != nil {
+		a.ObserveCredential(target, event, echoed)
 	}
 }
 
@@ -171,12 +188,19 @@ func (a Auth) keyboard(target Target, prompt Prompter, stored *passwordOffer) ss
 		answers := make([]string, len(questions))
 		answered := make([]bool, len(questions))
 		for index, question := range questions {
-			if index < len(echos) && !echos[index] && a.TOTP != nil && totp.MatchesPrompt(question) {
+			if !totp.MatchesPrompt(question) {
+				continue
+			}
+			echoed := index < len(echos) && echos[index]
+			if a.TOTP != nil {
 				if code, found := a.TOTP(target, question); found {
 					answers[index] = code
 					answered[index] = true
+					a.observeCredential(target, CredentialTOTPUsed, echoed)
+					continue
 				}
 			}
+			a.observeCredential(target, CredentialTOTPUnavailable, echoed)
 		}
 		// A combined password+OTP challenge is common. Only after an explicit OTP
 		// question has been recognised do we release a saved password to the one

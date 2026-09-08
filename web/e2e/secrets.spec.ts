@@ -13,7 +13,7 @@ test("gives one named secret to two hosts and writes neither name into the file"
   installation,
 }) => {
   await openApplication(page, installation);
-  await openSection(page, "Secrets");
+  await openSection(page, "Account passwords");
 
   const passwords = page.getByRole("region", { name: "Account passwords" });
   await expect(passwords).toBeVisible();
@@ -40,7 +40,7 @@ test("gives one named secret to two hosts and writes neither name into the file"
     await expect(panel.getByText("Assigned: office-vm")).toBeVisible();
   }
 
-  await openSection(page, "Secrets");
+  await openSection(page, "Account passwords");
   const office = page
     .getByRole("region", { name: "Account passwords" })
     .getByRole("article", { name: "office-vm" });
@@ -48,7 +48,11 @@ test("gives one named secret to two hosts and writes neither name into the file"
   await expect(assignedHosts.getByRole("listitem")).toHaveText(["bastion", "nas"]);
 
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
-    await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/credentials-desktop.png`, fullPage: true });
+    await page.evaluate(() => window.localStorage.setItem("sshc.language", "ja"));
+    await page.reload();
+    await expect(page.getByRole("region", { name: "アカウントのパスワード" })).toBeVisible();
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/vault-account-passwords.png`, fullPage: true });
   }
 
   const sealed = await installation.read("sshc/secrets");
@@ -59,13 +63,24 @@ test("gives one named secret to two hosts and writes neither name into the file"
 
 test("never offers a key passphrase where a host password is chosen", async ({ page, installation }) => {
   await openApplication(page, installation);
-  await openSection(page, "Secrets");
+  await openSection(page, "Key passphrases");
 
   const phrases = page.getByRole("region", { name: "Key passphrases" });
   await phrases.getByLabel("New key passphrase name").fill("build-key");
   await phrases.getByLabel("New key passphrase value", { exact: true }).fill("a passphrase");
   await phrases.getByRole("button", { name: "Store key passphrase" }).click();
   await expect(phrases.getByRole("button", { name: "Delete build-key" })).toBeVisible();
+
+  if (process.env.SSHC_VISUAL_DIR !== undefined) {
+    await page.evaluate(() => window.localStorage.setItem("sshc.language", "ja"));
+    await page.reload();
+    await expect(page.getByRole("region", { name: "鍵のパスフレーズ" })).toBeVisible();
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/vault-key-passphrases.png`, fullPage: true });
+    await page.evaluate(() => window.localStorage.setItem("sshc.language", "en"));
+    await page.reload();
+    await expect(page.getByRole("region", { name: "Key passphrases" })).toBeVisible();
+  }
 
   await openSection(page, "Connections");
   await page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "bastion" }).click();
@@ -82,7 +97,7 @@ test("stores and assigns a TOTP seed without exposing it in the page or vault fi
 }) => {
   const setupKey = "JBSWY3DPEHPK3PXP";
   await openApplication(page, installation);
-  await openSection(page, "Secrets");
+  await openSection(page, "OTP");
 
   const tokens = page.getByRole("region", {
     name: "One-time passwords (TOTP)",
@@ -90,13 +105,32 @@ test("stores and assigns a TOTP seed without exposing it in the page or vault fi
   await tokens.getByLabel("New one-time password name").fill("production-otp");
   await tokens.getByLabel("Base32 setup key or otpauth URI", { exact: true }).fill(setupKey);
   await tokens.getByRole("button", { name: "Store one-time password" }).click();
-  await expect(tokens.getByRole("article", { name: "production-otp" })).toBeVisible();
-
-  await tokens.getByLabel("Host alias").fill("bastion");
-  await tokens.locator("select").selectOption("production-otp");
-  await tokens.getByRole("button", { name: "Assign to host" }).click();
   const token = tokens.getByRole("article", { name: "production-otp" });
-  await expect(token.getByRole("list", { name: "Assigned hosts" })).toContainText("bastion");
+  await expect(token).toBeVisible();
+  const currentCode = token.getByRole("button", {
+    name: "Show the previous and next codes for production-otp",
+  });
+  await expect(currentCode).toContainText(/^\d{3} \d{3}/);
+  await expect(token.getByText("Previous")).toHaveCount(0);
+  await currentCode.click();
+  await expect(token.getByText("Previous")).toBeVisible();
+  await expect(token.getByText("Next")).toBeVisible();
+
+  await openSection(page, "Connections");
+  await page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "bastion" }).click();
+  const authentication = page.getByRole("region", { name: "Authentication" });
+  await authentication.getByLabel("One-time password action").selectOption("saved_totp");
+  await authentication.getByLabel("Saved TOTP").selectOption("production-otp");
+  const saved = page.waitForResponse(
+    (response) => new URL(response.url()).pathname === "/api/v1/connections" && response.request().method() === "PATCH",
+  );
+  await page.getByRole("button", { name: "Save Basic settings" }).click();
+  expect((await saved).status()).toBe(200);
+  await expect(authentication.getByText("Assigned: production-otp")).toBeVisible();
+
+  await openSection(page, "OTP");
+  const assignedToken = page.getByRole("article", { name: "production-otp" });
+  await expect(assignedToken.getByRole("list", { name: "Assigned hosts" })).toContainText("bastion");
   await expect(page.locator("body")).not.toContainText(setupKey);
 
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
@@ -108,7 +142,13 @@ test("stores and assigns a TOTP seed without exposing it in the page or vault fi
     await page.setViewportSize({ width: 1280, height: 1200 });
     await page.evaluate(() => window.scrollTo(0, 0));
     await page.screenshot({
-      path: `${process.env.SSHC_VISUAL_DIR}/totp-vault-desktop.png`,
+      path: `${process.env.SSHC_VISUAL_DIR}/totp-vault-current.png`,
+      fullPage: true,
+    });
+    await page.getByRole("button", { name: "production-otp の前後のコードを表示" }).click();
+    await expect(page.getByText("ひとつ前")).toBeVisible();
+    await page.screenshot({
+      path: `${process.env.SSHC_VISUAL_DIR}/totp-vault-expanded.png`,
       fullPage: true,
     });
   }
@@ -121,7 +161,7 @@ test("stores and assigns a TOTP seed without exposing it in the page or vault fi
 
 test("opens a named password masked and reveals it only on request", async ({ page, installation }) => {
   await openApplication(page, installation);
-  await openSection(page, "Secrets");
+  await openSection(page, "Account passwords");
 
   const passwords = page.getByRole("region", { name: "Account passwords" });
   await passwords.getByLabel("New account password name").fill("office-vm");
@@ -164,7 +204,7 @@ test("keeps application controls in Settings and changes the master password the
   const nextMasterPassword = "a replacement end to end password";
   await openApplication(page, installation);
 
-  await openSection(page, "Secrets");
+  await openSection(page, "Account passwords");
   await expect(page.getByRole("region", { name: "Master password" })).toHaveCount(0);
 
   await openSettingsPage(page, "Master password");
@@ -189,7 +229,7 @@ test("keeps application controls in Settings and changes the master password the
   await expect(page.locator("body")).not.toContainText(masterPassword);
   await expect(page.locator("body")).not.toContainText(nextMasterPassword);
 
-  await openSection(page, "Secrets");
+  await openSection(page, "Account passwords");
   await page.getByRole("button", { name: "Lock sshc" }).click();
   await page.getByLabel("Master password", { exact: true }).fill(nextMasterPassword);
   await page.getByRole("button", { name: "Open" }).click();

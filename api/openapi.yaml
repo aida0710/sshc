@@ -1133,6 +1133,28 @@ paths:
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
+  /api/v1/credentials/totp/{name}/codes:
+    post:
+      operationId: generateTOTPCodes
+      parameters:
+        - { name: name, in: path, required: true, schema: { type: string } }
+        - name: X-SSHC-Action
+          in: header
+          required: true
+          schema: { type: string, minLength: 43, maxLength: 43 }
+      responses:
+        "200":
+          description: Previous, current, and next TOTP codes; the provisioning secret never leaves the engine
+          headers:
+            Cache-Control:
+              schema: { type: string, enum: [no-store] }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TOTPCodeSet" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
   /api/v1/keys:
     get:
       operationId: listKeys
@@ -2290,6 +2312,16 @@ components:
         kind: { type: string }
         name: { type: string }
         secret: { type: string }
+    TOTPCodeSet:
+      type: object
+      additionalProperties: false
+      required: [previous, current, next, periodSeconds, remainingSeconds]
+      properties:
+        previous: { type: string, pattern: "^[0-9]{6,8}$" }
+        current: { type: string, pattern: "^[0-9]{6,8}$" }
+        next: { type: string, pattern: "^[0-9]{6,8}$" }
+        periodSeconds: { type: integer, minimum: 5, maximum: 300 }
+        remainingSeconds: { type: integer, minimum: 1, maximum: 300 }
     AssignCredentialRequest:
       type: object
       additionalProperties: false

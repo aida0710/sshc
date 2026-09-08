@@ -713,8 +713,42 @@ func TestTheConnectionLogReachesTheTerminalWhenItIsAsked(t *testing.T) {
 
 	// 深さ 2 では、接続先とSSHハンドシェイクの完了を表示する。
 	readUntil(t, process, "へ接続します")
+	readUntil(t, process, "認証方式を試します：publickey")
 	readUntil(t, process, "SSH ハンドシェイクが完了しました")
 	readUntil(t, process, "ready")
+}
+
+func TestFullConnectionLogExplainsAnAutomaticallyAnsweredEchoedTOTP(t *testing.T) {
+	server := newTestServer(t, serverOptions{
+		Keyboard:     map[string]string{"Verification code: ": "123456"},
+		KeyboardEcho: true, KeyboardName: "tsukuba",
+		OnShell: func(channel ssh.Channel) { _, _ = io.WriteString(channel, "ready\r\n") },
+	})
+	auth := sshclient.Auth{TOTP: func(_ sshclient.Target, question string) (string, bool) {
+		return "123456", question == "Verification code: "
+	}}
+	dialer := dialerFor(t, server, auth)
+	dialer.Verbosity = func() sshclient.Verbosity { return sshclient.Full }
+	process, err := dialer.Open(context.Background(), targetWith(server), terminal.Size{Cols: 80, Rows: 24})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = process.Close() }()
+
+	seen := readUntil(t, process, "ready")
+	for _, want := range []string{
+		"接続ログ：すべて（-vvv）",
+		"認証方式を試します：keyboard-interactive",
+		"保存済みTOTPをbastionの認証コード質問へ入力しました。",
+		"認証コード質問の入力表示：あり",
+	} {
+		if !strings.Contains(seen, want) {
+			t.Errorf("full connection log did not contain %q:\n%s", want, seen)
+		}
+	}
+	if strings.Contains(seen, "123456") {
+		t.Fatalf("full connection log exposed the TOTP code:\n%s", seen)
+	}
 }
 
 // 既定は無言である。毎回この量が流れると、シェルの最初の一画面が押し流される。

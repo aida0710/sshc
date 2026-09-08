@@ -42,6 +42,13 @@ function buildApi(overrides: Partial<IntegrationsApi> = {}): IntegrationsApi {
     deleteCredential: vi.fn().mockResolvedValue({ credentials: [] }),
     assignCredential: vi.fn().mockResolvedValue({ credentials: [] }),
     unassignCredential: vi.fn().mockResolvedValue({ credentials: [] }),
+    totpCodes: vi.fn().mockResolvedValue({
+      previous: "111111",
+      current: "222222",
+      next: "333333",
+      periodSeconds: 30,
+      remainingSeconds: 17,
+    }),
     changeMasterPassword: vi.fn().mockResolvedValue({
       vault: { exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [] },
     }),
@@ -197,6 +204,25 @@ describe("SecretsPanel", () => {
       ),
     ).toBeInTheDocument();
     expect(within(tokens).queryByLabelText("Host alias")).not.toBeInTheDocument();
+  });
+
+  it("shows only the current TOTP until its code is expanded", async () => {
+    const user = userEvent.setup();
+    const api = buildApi();
+    render(<SecretsPanel api={api} kind="totp" />);
+
+    const token = await screen.findByRole("article", { name: "production-otp" });
+    const current = await within(token).findByRole("button", {
+      name: "Show the previous and next codes for production-otp",
+    });
+    expect(current).toHaveTextContent("222 222");
+    expect(current).toHaveTextContent("17s");
+    expect(within(token).queryByText("111 111")).not.toBeInTheDocument();
+    expect(within(token).queryByText("333 333")).not.toBeInTheDocument();
+
+    await user.click(current);
+    expect(within(token).getByText("111 111")).toBeVisible();
+    expect(within(token).getByText("333 333")).toBeVisible();
   });
 
   it("keeps a TOTP setup key in the form when storing it fails", async () => {

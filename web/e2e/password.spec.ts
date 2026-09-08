@@ -71,7 +71,7 @@ test("selecting a key removes the stored password assignment and returning to ag
 
 test("locking the vault returns the application to its front door", async ({ page, installation }) => {
   await openApplication(page, installation);
-  await openSection(page, "Secrets");
+  await openSection(page, "Account passwords");
 
   await page.getByRole("button", { name: "Lock sshc" }).click();
 

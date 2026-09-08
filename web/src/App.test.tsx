@@ -165,8 +165,11 @@ vi.mock("./settings/SettingsPanel", () => ({
   },
 }));
 vi.mock("./secrets/SecretsPanel", () => ({
-  SecretsPanel: ({ onLock }: { onLock: () => void }) => (
-    <button type="button" onClick={onLock}>lock fixture</button>
+  SecretsPanel: ({ onLock, kind }: { onLock: () => void; kind: string }) => (
+    <div>
+      <span>{`vault fixture ${kind}`}</span>
+      <button type="button" onClick={onLock}>lock fixture</button>
+    </div>
   ),
 }));
 vi.mock("./knownhosts/KnownHostsPanel", () => ({ KnownHostsPanel: () => <div>known hosts panel</div> }));
@@ -459,7 +462,9 @@ describe("App", () => {
       "Known Hosts",
       "Install Key on Server",
       "Ad hoc checks",
-      "Secrets",
+      "Account passwords",
+      "Key passphrases",
+      "OTP",
       "Engine",
       "Terminal",
       "Notifications",
@@ -983,7 +988,7 @@ describe("App", () => {
 
     expect(await screen.findByText("new vault fixture")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "unlock fixture" }));
-    await openFromMenu(user, "Secrets");
+    await openFromMenu(user, "Account passwords");
     await user.click(await screen.findByRole("button", { name: "lock fixture" }));
 
     expect(screen.getByText("existing vault fixture")).toBeInTheDocument();

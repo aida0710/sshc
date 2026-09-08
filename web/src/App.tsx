@@ -173,7 +173,9 @@ const sectionLabels: Record<Section, MessageKey> = {
   "Known Hosts": "section.knownHosts",
   "Remote Keys": "section.remoteKeys",
   Diagnostics: "section.diagnostics",
-  Secrets: "section.secrets",
+  Passwords: "section.passwords",
+  "Key Passphrases": "section.keyPassphrases",
+  OTP: "section.otp",
   Settings: "section.settings",
   Sync: "section.sync",
   History: "section.history",
@@ -192,7 +194,9 @@ const sectionIcons: Record<Section, IconName> = {
   "Known Hosts": "knownHosts",
   "Remote Keys": "remoteKeys",
   Diagnostics: "diagnostics",
-  Secrets: "secrets",
+  Passwords: "secrets",
+  "Key Passphrases": "keys",
+  OTP: "secrets",
   Settings: "settings",
   Sync: "sync",
   History: "history",
@@ -218,7 +222,6 @@ const navGroups: { label: MessageKey; sections: Section[] }[] = [
     label: "shell.navMaintenance",
     sections: [
       "Diagnostics",
-      "Secrets",
       "Snippets",
       "Settings",
       "Sync",
@@ -242,6 +245,10 @@ const menuGroups: MenuGroup[] = [
     items: sectionMenuItems(group.sections),
   })),
   {
+    label: "shell.navVault",
+    items: sectionMenuItems(["Passwords", "Key Passphrases", "OTP"]),
+  },
+  {
     label: "section.settings",
     items: settingsPages.map((page) => ({
       key: page,
@@ -254,7 +261,6 @@ const menuGroups: MenuGroup[] = [
     label: "shell.navMaintenance",
     items: sectionMenuItems([
       "Diagnostics",
-      "Secrets",
       "Snippets",
       "Sync",
       "History",
@@ -1204,8 +1210,13 @@ function PaddedSection({
   if (section === "Groups") {
     return <GroupsPanel onInspector={onInspector} />;
   }
-  if (section === "Secrets") {
-    return <SecretsPanel onLock={onLock} />;
+  if (section === "Passwords" || section === "Key Passphrases" || section === "OTP") {
+    const kind = section === "Passwords"
+      ? "password"
+      : section === "Key Passphrases"
+        ? "key_passphrase"
+        : "totp";
+    return <SecretsPanel kind={kind} onLock={onLock} />;
   }
   if (section === "Settings") {
     return (

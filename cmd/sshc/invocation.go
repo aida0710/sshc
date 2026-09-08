@@ -24,6 +24,7 @@ const (
 	invocationVault
 	invocationUpdate
 	invocationService
+	invocationOTP
 	invocationHelp
 	invocationVersion
 	invocationTransport
@@ -83,6 +84,24 @@ type syncInvocation struct {
 	Enabled bool
 }
 
+type otpAction uint8
+
+const (
+	otpInvalid otpAction = iota
+	otpList
+	otpShow
+	otpAdd
+	otpEdit
+	otpRemove
+)
+
+type otpInvocation struct {
+	Action otpAction
+	Name   string
+	JSON   bool
+	Yes    bool
+}
+
 type invocation struct {
 	Kind invocationKind
 	Args []string
@@ -100,6 +119,7 @@ type invocation struct {
 	Sync      *syncInvocation
 	Terminal  *terminalInvocation
 	SFTP      *sftpInvocation
+	OTP       *otpInvocation
 }
 
 // parseInvocation は、コマンドが誰の責務を求めるかを副作用なしに決める。
@@ -186,6 +206,8 @@ func parseInvocation(argv []string) (invocation, error) {
 		}
 		parsed.Args = []string{action}
 		return parsed, nil
+	case cliCommandOtp:
+		return parseOTPInvocation(args)
 	case cliCommandVault:
 		if helpRequested(args) {
 			return helpInvocation(canonicalCLICommand(cliCommandVault)), nil
@@ -225,6 +247,70 @@ func parseInvocation(argv []string) (invocation, error) {
 	}
 
 	return invalidInvocation(fmt.Sprintf("unknown command %q", word))
+}
+
+func parseOTPInvocation(args []string) (invocation, error) {
+	if helpRequested(args) {
+		return helpInvocation(canonicalCLICommand(cliCommandOtp)), nil
+	}
+	if len(args) > 1 && validOTPAction(args[0]) && isHelpFlag(args[1]) {
+		return helpInvocation(canonicalCLICommand(cliCommandOtp) + " " + args[0]), nil
+	}
+	if len(args) == 0 {
+		return invalidInvocation("otp requires list, a saved name, add, edit, or remove")
+	}
+	if args[0] == "list" {
+		if len(args) == 1 {
+			return invocation{Kind: invocationOTP, OTP: &otpInvocation{Action: otpList}}, nil
+		}
+		if len(args) == 2 && args[1] == "--json" {
+			return invocation{Kind: invocationOTP, OTP: &otpInvocation{Action: otpList, JSON: true}}, nil
+		}
+		return invalidInvocation("otp list only accepts --json")
+	}
+	if args[0] == "add" || args[0] == "edit" {
+		if len(args) != 2 || args[1] == "" {
+			return invalidInvocation("otp " + args[0] + " requires exactly one name")
+		}
+		action := otpAdd
+		if args[0] == "edit" {
+			action = otpEdit
+		}
+		return invocation{Kind: invocationOTP, OTP: &otpInvocation{Action: action, Name: args[1]}}, nil
+	}
+	if args[0] == "remove" {
+		if len(args) < 2 || len(args) > 3 || args[1] == "" {
+			return invalidInvocation("otp remove requires one name and optionally --yes")
+		}
+		yes := false
+		if len(args) == 3 {
+			if args[2] != "-y" && args[2] != "--yes" {
+				return invalidInvocation("otp remove only accepts -y or --yes")
+			}
+			yes = true
+		}
+		return invocation{Kind: invocationOTP, OTP: &otpInvocation{Action: otpRemove, Name: args[1], Yes: yes}}, nil
+	}
+	nameIndex := 0
+	if args[0] == "show" {
+		if len(args) < 2 {
+			return invalidInvocation("otp show requires one name")
+		}
+		nameIndex = 1
+	}
+	remaining := args[nameIndex+1:]
+	jsonOutput := false
+	if len(remaining) == 1 && remaining[0] == "--json" {
+		jsonOutput = true
+	} else if len(remaining) != 0 {
+		return invalidInvocation("otp code display only accepts --json")
+	}
+	if args[nameIndex] == "" {
+		return invalidInvocation("otp requires a non-empty saved name")
+	}
+	return invocation{Kind: invocationOTP, OTP: &otpInvocation{
+		Action: otpShow, Name: args[nameIndex], JSON: jsonOutput,
+	}}, nil
 }
 
 func parseSFTPInvocation(args []string) (invocation, error) {

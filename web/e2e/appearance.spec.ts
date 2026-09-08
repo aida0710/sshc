@@ -12,7 +12,9 @@ const sections = [
   "Known Hosts",
   "Install Key on Server",
   "Ad hoc checks",
-  "Secrets",
+  "Account passwords",
+  "Key passphrases",
+  "OTP",
   "Sync",
   "History",
 ];
