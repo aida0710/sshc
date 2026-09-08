@@ -77,8 +77,32 @@ describe("ConnectionAnalysis", () => {
     await userEvent.click(screen.getByRole("button", { name: "Show the sources" }));
 
     expect(api.effective).toHaveBeenCalledWith("bastion");
-    expect(await screen.findByRole("table", { name: "Configuration lines read by OpenSSH" })).toBeInTheDocument();
+    expect(await screen.findByRole("table", { name: "Configuration lines related to this connection" })).toBeInTheDocument();
     expect(screen.getByText("in effect")).toBeInTheDocument();
+  });
+
+  it("localises the executable-directive warning instead of showing backend prose", async () => {
+    const risky: EffectiveResponse = {
+      ...effective,
+      tokenWarning: "UNTRANSLATED_BACKEND_WARNING",
+      executableDirectives: [{
+        keyword: "ProxyCommand",
+        command: "/usr/bin/nc %h %p",
+        path: "config",
+        line: 9,
+        condition: "Host bastion",
+        onEvaluate: false,
+        onConnect: true,
+        overridable: false,
+      }],
+    };
+    const api = { effective: vi.fn().mockResolvedValue(risky) };
+    render(<ConnectionAnalysis detail={detail} alias="bastion" api={api} />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Show the sources" }));
+
+    expect(await screen.findByText(/does not shell-escape expanded tokens/)).toBeInTheDocument();
+    expect(screen.queryByText("UNTRANSLATED_BACKEND_WARNING")).not.toBeInTheDocument();
   });
 
 });

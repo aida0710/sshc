@@ -490,6 +490,41 @@ describe("App", () => {
     expect(screen.queryByRole("region", { name: "Notifications" })).toBeNull();
   });
 
+  it("keeps Menu destination names and page headings consistent in Japanese", async () => {
+    const user = userEvent.setup();
+    render(
+      <LanguageProvider initial="ja">
+        <App
+          bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
+          health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
+          vault={openVault}
+        />
+      </LanguageProvider>,
+    );
+
+    await screen.findByRole("heading", { name: "sshc" });
+    await user.click(screen.getByRole("link", { name: "Menu" }));
+    const menu = await screen.findByRole("region", { name: "Menu" });
+    const vault = within(menu).getByRole("region", { name: "Vault" });
+    expect(within(vault).getByText("Account passwords", { exact: true })).toBeInTheDocument();
+    expect(within(vault).getByText("Key passphrases", { exact: true })).toBeInTheDocument();
+    expect(within(vault).getByText("OTP", { exact: true })).toBeInTheDocument();
+
+    const settings = within(menu).getByRole("region", { name: "Settings" });
+    for (const label of [
+      "Engine",
+      "Terminal",
+      "Notifications",
+      "Open connections",
+      "Master password",
+    ]) {
+      expect(within(settings).getByText(label, { exact: true })).toBeInTheDocument();
+    }
+
+    await user.click(within(settings).getByRole("link", { name: "Engineを開く" }));
+    expect(await screen.findByRole("heading", { name: "Engine" })).toBeInTheDocument();
+  });
+
   it("keeps desktop navigation visible and restores its width", async () => {
     window.localStorage.setItem("sshc.navigation.visible", "false");
     window.localStorage.setItem("sshc.navigation.width", "312");

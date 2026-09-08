@@ -87,7 +87,7 @@ export const ja = {
   "sftp.noFilterMatches": "絞り込みに一致する項目はありません。",
   "sftp.clearFilterHint": "絞り込みを消すと、すべての項目が表示されます。",
   "sftp.undo": "取り消す",
-  "sftp.dismissUndo": "この取り消しを閉じる",
+  "sftp.dismissUndo": "取り消し通知を閉じる",
   "sftp.renamedTo": "{name} へ名前を変更しました。",
   "sftp.permissionsChanged": "権限を {mode} に変更しました。",
   "sftp.leaveHeading": "保存せずに移動しますか？",
@@ -119,10 +119,10 @@ export const ja = {
   "sftp.filterPlaceholder": "絞り込み",
   "sftp.searchBelow": "このディレクトリ配下を検索する",
   "sftp.searchResults": "{path} 配下で「{query}」に一致: {count}件",
-  "sftp.searchResultsTruncated": "{path} 配下で「{query}」に一致した先頭{count}件。検索は途中で打ち切られた。",
+  "sftp.searchResultsTruncated": "{path} 配下で「{query}」に一致した先頭{count}件。検索は途中で終了しました。",
   "sftp.searchNoMatches": "このディレクトリ配下に「{query}」を含む名前はありません。",
   "sftp.searchEnd": "検索を終える",
-  "sftp.revealInFolder": "あるフォルダーへ移動",
+  "sftp.revealInFolder": "この項目があるフォルダーへ移動",
   "sftp.up": "上へ",
   "sftp.parentDirectory": "親ディレクトリ",
   "sftp.createActions": "作成・アップロード",
@@ -183,7 +183,7 @@ export const ja = {
   "sftp.manager.largeFileParallelism": "分割並列数",
   "sftp.manager.largeFileChunk": "チャンク",
   "sftp.manager.stopProcessing": "新しい転送の開始を止める",
-  "sftp.manager.startProcessing": "転送の開始を再開する",
+  "sftp.manager.startProcessing": "転送キューの処理を再開する",
   "sftp.manager.status.held": "保留中",
   "sftp.manager.resize": "ドラッグして転送キューの高さを変える",
   "sftp.manager.moveUp": "{name} を待機列の前へ移す",
@@ -258,7 +258,7 @@ export const ja = {
   "sftp.skip": "スキップ",
   "sftp.cancel": "キャンセル",
   "sftp.remoteDropTitle": "リモート項目を転送",
-  "sftp.remoteDropDescription": "{count}件を{alias}へ転送します。データは2つのSFTP接続間を直接流れます。",
+  "sftp.remoteDropDescription": "{count}件を{alias}へ転送します。データは2つのSFTP接続間で直接転送されます。",
   "sftp.remoteDropInvalid": "リモート項目のドラッグ情報を読み取れませんでした。",
   "sftp.copyHere": "ここへコピー",
   "sftp.moveHere": "ここへ移動",
@@ -267,7 +267,7 @@ export const ja = {
   "sftp.compare.heading": "ディレクトリを比較",
   "sftp.compare.description": "選択した差分を左右どちらかへコピーします。コピー先だけにある項目は削除しません。",
   "sftp.compare.loading": "両方のディレクトリを比較しています…",
-  "sftp.compare.noChanges": "両方のディレクトリに差分はありません。",
+  "sftp.compare.noChanges": "2つのディレクトリのメタデータに差分はありません。",
   "sftp.compare.status": "差分",
   "sftp.compare.same": "同じ",
   "sftp.compare.different": "変更あり",
@@ -406,14 +406,14 @@ export const ja = {
   "terminal.connected": "接続済み",
   "terminal.agentWorking": "作業中",
   "terminal.agentAttention": "入力待ち",
-  "terminal.agentReady": "完了",
+  "terminal.agentReady": "待機中",
   "terminal.agentUnknown": "状態不明",
   "terminal.agentNotificationAttention": "{subject}が入力を待っています",
   "terminal.agentNotificationCompleted": "{subject}が完了しました",
   "terminal.unreadAttention": "未読：入力待ち",
   "terminal.unreadCompleted": "未読：完了",
   "terminal.unreadWorkspace": "このワークスペースに未読のAgent通知があります",
-  "terminal.browserNotificationsHeading": "通知",
+  "terminal.browserNotificationsHeading": "Notifications",
   "terminal.browserNotificationsDefault":
     "このタブがバックグラウンドにあるとき、Coding Agent の完了や入力待ちを sshc から通知できます。",
   "terminal.browserNotificationsGranted":
@@ -522,7 +522,7 @@ export const ja = {
   "terminal.unresolvable":
     "この接続の設定を解決できませんでした。理由は「Analysis」で確認できます。",
   "terminal.proxyCommandWithJump":
-    "ProxyCommand と ProxyJump は同時に指定できません。どちらか一方を削除してください。OpenSSH も同じ設定を拒否します。",
+    "sshcではProxyCommandとProxyJumpを同時に使用できません。どちらか一方を削除してください。",
   "terminal.jumpDepthExceeded": "ProxyJump の階層が上限を超えています。",
   "terminal.hostKeyUnknown":
     "ホスト鍵をまだ信頼していません。内容を確認してから対話接続してください。",
@@ -536,7 +536,7 @@ export const ja = {
     "この接続で利用できる認証方式がありません。",
   "terminal.authenticationCancelled": "認証を中止しました。",
   "terminal.keyPassphraseRequired":
-    "秘密鍵のパスフレーズが必要です。保存済み認証情報を解除または更新してください。",
+    "秘密鍵のパスフレーズが必要です。Vaultを開くか、この鍵に正しいパスフレーズを保存してください。",
   "terminal.reconnectFailed":
     "再接続に失敗しました。設定された上限まで再試行します。",
   "terminal.reconnectExhausted":
@@ -597,7 +597,7 @@ export const ja = {
   "terminal.portForwarding": "ポート転送",
   "terminal.openDirectoryInSFTP": "現在のディレクトリをSFTPで開く",
   "terminal.forwardDescription":
-    "{title} の接続中の SSH を使うトンネルを管理します。",
+    "{title}へのSSH接続を使うトンネルを管理します。",
   "terminal.forwardClose": "閉じる",
   "terminal.forwardActive": "動作中の転送",
   "terminal.forwardNone": "この接続で動作中の転送はありません。",
@@ -614,7 +614,7 @@ export const ja = {
   "terminal.forwardStop": "停止",
   "terminal.forwardStopping": "停止中…",
   "terminal.forwardStopped": "転送を停止しました。",
-  "terminal.forwardNew": "転送を開始",
+  "terminal.forwardNew": "ポート転送を開始",
   "terminal.forwardSaveConnection": "この接続設定にも保存する",
   "terminal.forwardSaveHint":
     "今すぐ開始し、次回この接続を開いたときにも復元します。",
@@ -634,12 +634,12 @@ export const ja = {
   "terminal.forwardSaveFailed":
     "転送は開始しましたが、接続設定へ保存できませんでした。",
   "terminal.forwardFailed": "ポート転送の操作を完了できませんでした。",
-  "terminal.settingsHeading": "ターミナル",
+  "terminal.settingsHeading": "Terminal",
   "terminal.settingsSaved":
-    "保存しました。クリップボード設定はすぐに反映され、その他はこれから開くターミナルが使います。",
+    "保存しました。クリップボード設定はすぐに反映され、その他の設定は新しく開くターミナルに適用されます。",
   "terminal.settingsLoading": "ターミナル設定を読み込んでいます…",
   "terminal.settingsStorageHint":
-    "ターミナルの外観を含むこれらの設定はworkspace metadataに保存され、バックアップと同期の対象になります。テーマ、言語、通知音はこのブラウザにだけ保存されます。",
+    "ターミナルの外観を含むこれらの設定は、ワークスペースのメタデータに保存され、バックアップと同期の対象になります。テーマ、言語、通知音はこのブラウザーにのみ保存されます。",
   "terminal.maxSessionsLabel": "最大セッション数",
   "terminal.maxSessionsHint":
     "1〜200。空欄の場合は 50 です。上限に達すると新しいセッションを開けません。既存のセッションは自動的に閉じられません。",
@@ -648,7 +648,7 @@ export const ja = {
     "ブラウザ再接続時にengineが再生する出力です。16384〜4194304、空欄は262144（256 KiB）。メモリだけに保持し、ディスクへ書きません。",
   "terminal.browserScrollbackLabel": "ブラウザのスクロールバック（行）",
   "terminal.browserScrollbackHint":
-    "各ブラウザ端末が保持する行数です。1000〜100000、空欄は5000。増やすほどブラウザのメモリを使用します。",
+    "ブラウザー内の各ターミナルが保持する行数です。1000〜100000、空欄は5000。増やすほどブラウザーのメモリを使用します。",
   "terminal.localShellProfileLabel": "既定のローカルシェル",
   "terminal.localShellProfileHint":
     "このマシンで検出・検証できた実行ファイルから選びます。ローカル端末を開くときだけ別のシェルを選ぶこともできます。",
@@ -677,7 +677,7 @@ export const ja = {
   "terminal.reconnectTwice": "2 回（最大 4 秒）",
   "terminal.reconnectThrice": "3 回（最大 10 秒）",
   "terminal.reconnectFive": "5 回（最大 40 秒）",
-  "engine.heading": "エンジン",
+  "engine.heading": "Engine",
   "engine.portLabel": "ポート",
   "engine.portHint":
     "空欄の場合、デスクトップでは端末固有の固定ポート（初期値54447）を使用します。ブックマークやインストールしたWebアプリを継続して使えます。次回のエンジン起動時から適用されます。",
@@ -767,7 +767,7 @@ export const ja = {
   "connection.encodingISO2022JP": "ISO-2022-JP（日本語）",
   "connection.osc52Label": "OSC 52クリップボード",
   "connection.osc52Hint":
-    "このSSH接続上のremote applicationによるシステムクリップボードへの書き込みを選びます。",
+    "このSSH接続のリモートアプリケーションが、システムのクリップボードへ書き込むことを許可するか選択します。",
   "connection.osc52Inherit": "Terminal全体の設定を使う",
   "connection.osc52Allow": "この接続では許可",
   "connection.osc52Deny": "この接続では拒否",
@@ -928,12 +928,12 @@ export const ja = {
   "secrets.unassignTOTPFailed": "ワンタイムパスワードの割り当てを解除できませんでした。",
   "update.version": "バージョン {version}",
   "update.available": "{version} が公開されています — 変更点を読む",
-  "desktop.closeAllHeading": "開いている接続",
+  "desktop.closeAllHeading": "Open connections",
   "desktop.closeAllNote":
     "すべてのセッション、ポート転送、ssh-agent 転送を終了します。エンジンは動作を続けます。",
   "desktop.openCount": "{count} 件",
   "desktop.closeAll": "接続をすべて閉じる",
-  "secrets.changeHeading": "マスターパスワード",
+  "secrets.changeHeading": "Master password",
   "secrets.changeNote":
     "変更すると、ローカルの Vault、Snippet、同期設定、このマシンの全バックアップを新しいパスワードで再暗号化します。リモートスナップショットは別の同期鍵を使うため書き換えません。",
   "secrets.currentMaster": "現在のマスターパスワード",
@@ -945,8 +945,8 @@ export const ja = {
   "secrets.changeFailed": "マスターパスワードを変更できませんでした。",
   "secrets.changedMasterLocally":
     "マスターパスワードを変更しました。ローカルの Vault、Snippet、同期設定、バックアップは新しいパスワードで暗号化されています。リモートスナップショットは書き換えていません。",
-  "section.passwords": "アカウントパスワード",
-  "section.keyPassphrases": "鍵パスフレーズ",
+  "section.passwords": "Account passwords",
+  "section.keyPassphrases": "Key passphrases",
   "section.otp": "OTP",
   "lock.explainNew":
     "マスターパスワードを設定してください。保存済みパスワード、鍵のパスフレーズ、Snippet、同期設定、sshc が作成するすべてのバックアップを暗号化します。",
@@ -1009,7 +1009,7 @@ export const ja = {
   "home.recentConnectionList": "最近使った接続先",
   "home.savedWorkspaces": "保存レイアウト",
   "home.savedWorkspacesHint":
-    "保存した接続先とペイン配置を、新しい SSH 接続としてまとめて開きます。",
+    "保存した接続先とペイン配置を、新しいセッションとしてまとめて開きます。",
   "home.savedWorkspaceList": "保存済みターミナルレイアウト",
   "home.workspacePanes": "{count} ペイン",
   "home.workspaceUpdated": "更新 {at}",
@@ -1115,7 +1115,7 @@ export const ja = {
   "notice.complex_external_rule":
     "ワイルドカード、否定、Match ブロック、alias の重複のいずれかが含まれるため、この値を単純な形式では編集できません。値の参照元を表示します。",
   "notice.duplicate_alias":
-    "別のブロックが同じ alias を宣言しています。OpenSSH は最初に読んだものを使います。",
+    "別のブロックも同じaliasを宣言しています。OpenSSHは多くの設定項目で、最初に読み込んだ値を使用します。",
   "notice.wildcard_shadow":
     "すべてに一致するブロックが、このホストの値に影響する可能性があります。",
   "notice.negated_pattern": "否定パターンがここに適用されます。",
@@ -1132,7 +1132,7 @@ export const ja = {
   "notice.orphan_metadata":
     "このメモに対応するホストが存在しません。接続先を確認して関連付け直してください。",
   "notice.group_cycle":
-    "このグループの親が循環しているため、スキップしました。",
+    "このグループの親子関係が循環しているため、スキップしました。",
   "notice.group_member_missing":
     "このグループのメンバーに対応する Host ブロックが設定にありません。",
   "refusal.directory_not_empty":
@@ -1200,7 +1200,7 @@ export const ja = {
 
   "reveal.heading": "秘密鍵を表示：{path}",
   "reveal.warning":
-    "秘密鍵はこのページに表示され、このウィンドウを読める人なら誰でもコピーできます。ブラウザ拡張やクリップボード履歴ツールからは、このアプリケーションでは保護できません。表示した事実は履歴に記録されます（鍵そのものは記録しません）。",
+    "秘密鍵はこのページに表示されます。この画面を見られる人は秘密鍵をコピーできます。sshcでは、ブラウザー拡張機能やクリップボード履歴ツールによる取得を防げません。表示操作は履歴に記録されます（鍵そのものは記録しません）。",
   "reveal.show": "秘密鍵を表示",
   "reveal.requesting": "一度限りの確認を要求しています…",
   "reveal.privateKeyLabel": "秘密鍵",
@@ -1292,7 +1292,7 @@ export const ja = {
   "sync.flowOperate": "状態を確認して送受信",
   "sync.loading": "同期設定を読み込んでいます…",
   "sync.warning":
-    "~/.ssh の全ファイル（秘密鍵を含む）が同期対象です。スナップショットは、アップロード前にこのマシン上で下のキーを使って暗号化されるため、ストレージ事業者には平文が送信されません。ただし、バケットの認証情報を持つ第三者は暗号化済みの鍵を取得し、暗号化キーの総当たりをオフラインで続けられます。",
+    "同期対象には、同期除外ルールに一致しない~/.ssh配下の通常ファイルが含まれます。秘密鍵も含まれる場合があります。スナップショットはアップロード前にこのマシン上で下のキーを使って暗号化されるため、ストレージ事業者に同期対象の平文は送信されません。ただし、バケットの認証情報を持つ第三者は暗号化済みスナップショットを取得し、暗号化キーの総当たりをオフラインで続けられます。",
   "sync.statusFailed": "同期設定を読み取れませんでした。",
   "sync.bucketHeading": "バケット",
   "sync.notConfigured": "まだバケットが設定されていません。",
@@ -1569,14 +1569,15 @@ export const ja = {
   "diag.hostAlias": "Host alias",
   "diag.needsAlias": "検査するには Host alias を入力してください。",
   "diag.explain": "設定を解析",
-  "diag.explainFailed": "この alias の設定を解析できませんでした。",
+  "diag.explainFailed": "この接続の設定を解析できませんでした。",
   "diag.checkReachability": "疎通を確認",
   "diag.reachabilityFailed": "疎通確認を実行できませんでした。",
   "diag.testAuthentication": "認証を確認",
   "diag.authenticationFailed": "認証テストを実行できませんでした。",
   "diag.configuration": "設定ファイル",
   "diag.missingSuffix": "（存在しません）",
-  "diag.canRunCommand": "この設定ではコマンドを実行できます",
+  "diag.canRunCommand":
+    "この接続には、OpenSSHがコマンドを実行する可能性のある設定があります",
   "diag.directiveAt": "{keyword}（{path}:{line}）",
   "diag.sourcesCaption":
     "各値の参照元。「不採用」と表示された行は、採用された行より後に読み込まれたため効果がありません。",
@@ -1654,7 +1655,7 @@ export const ja = {
     "鍵は既に存在したため、リモートのファイルはそのままです。",
   "rk.valuesFromEngine":
     "sshc が設定を読んだ結果です（ssh は実行していません）",
-  "rk.valuesFromSshG": "ssh -G が解決した結果です（OpenSSH 自身によるもの）",
+  "rk.valuesFromSshG": "OpenSSHがssh -Gで解決した結果です",
   "rk.pickFromSsh": "~/.ssh から公開鍵を選ぶ",
   "rk.typeInstead": "公開鍵を手動で入力",
   "rk.hostAlias": "Host alias",
@@ -1745,7 +1746,7 @@ export const ja = {
   "explorer.saveOrDiscardFirst":
     "未保存の編集があります。リネームや削除の前に保存するか、ファイルを開き直してください。",
   "explorer.newFileNote":
-    "新しいファイルを OpenSSH に読み込ませるには、~/.ssh/config の Include から参照してください。グループ間の移動は接続画面で行います。任意のファイルやディレクトリの名前変更・削除には、履歴へ記録できるディレクトリ操作が必要なため、現在は対応していません。",
+    "新しいファイルをOpenSSHに読み込ませるには、~/.ssh/configのIncludeから参照してください。接続をグループ間で移動するには、［Connections］を使用します。",
   "explorer.diagnostics": "診断",
   "explorer.noIncludeProblem": "Include の問題は検出されていません。",
   "explorer.opened": "{path} の {line} 行目を開きました。",
@@ -2011,7 +2012,7 @@ export const ja = {
   "conn.basicConfirmKeyPassphrase": "保存用鍵パスフレーズの確認",
   "conn.basicKeyPassphraseMismatch": "鍵パスフレーズが一致しません。",
   "conn.basicKeyPassphraseStoredNote":
-    "これは解錠用の値を保存します。秘密鍵ファイル自体を暗号化しているパスフレーズは変更しません。",
+    "秘密鍵の復号に使用するパスフレーズを保存します。秘密鍵ファイル自体を暗号化しているパスフレーズは変更しません。",
   "conn.basicKeyPassphraseWrong":
     "入力したパスフレーズでは、選択した秘密鍵を解錠できません。",
   "conn.basicKeyPassphraseChanged":
@@ -2035,7 +2036,7 @@ export const ja = {
   "conn.basicChooseSavedTOTP": "保存済みTOTP",
   "conn.basicNoSavedTOTPs": "Vaultに保存済みTOTPがありません",
   "conn.basicTOTPNote":
-    "TOTPの登録はVaultで行い、この接続先への割り当てはここで保存します。Verification codeなどの明示的な認証質問にだけ自動入力します。",
+    "TOTPの登録はVaultで行い、この接続先への割り当てはここで保存します。「Verification code」など、認証コードを明示的に求める入力欄にのみ自動入力します。",
   "conn.basicPasswordCleanup":
     "保存済みパスワードが割り当てられていますが、現在の SSH 設定では使用されません。基本設定を保存すると、この接続への割り当てだけを解除します。保存済みパスワードと、ほかの接続への割り当ては変更しません。",
   "conn.basicPasswordAction": "保存済みパスワードの操作",
@@ -2129,8 +2130,10 @@ export const ja = {
   "conn.analysisRun": "出所を表示",
   "conn.analysisRunning": "読み取っています…",
   "conn.analysisExecutableHeading":
-    "ssh -G が Match ディレクティブを実行する可能性があります",
-  "conn.analysisSources": "OpenSSH が参照した設定行",
+    "この接続には、OpenSSHがコマンドを実行する可能性のあるディレクティブがあります",
+  "conn.analysisTokenWarning":
+    "OpenSSHは展開したトークンをシェル向けにエスケープしません。そのため、ホスト名、ポート、ユーザー名の値が、エスケープされないままコマンドを実行するシェルに渡る可能性があります。",
+  "conn.analysisSources": "この接続に関係する設定行",
   "conn.advancedLabel": "詳細設定",
   "conn.advancedViews": "詳細設定の表示",
   "conn.advancedViewLabel": "表示",
@@ -2341,12 +2344,12 @@ export const ja = {
   "keys.cancel": "キャンセル",
   "keys.passphraseHeading": "パスフレーズを変更：{path}",
   "keys.passphraseNote":
-    "ここで入力したパスフレーズは、この変更にのみ使用され、保存されません。sshc Vault へ保存する場合は、鍵一覧の「パスフレーズを保存」を使用してください。",
+    "ここで入力したパスフレーズは、この変更にのみ使用され、保存されません。sshc Vaultへ保存する場合は、鍵一覧の「保存済みパスフレーズを管理」を使用してください。",
   "keys.currentPassphrase": "現在のパスフレーズ",
   "keys.newPassphrase": "新しいパスフレーズ",
   "keys.removePassphrase":
     "パスフレーズを削除する（秘密鍵は暗号化されなくなります）",
-  "keys.savePassphrase": "新しいパスフレーズを保存",
+  "keys.savePassphrase": "パスフレーズを変更",
   "keys.createHeading": "鍵を作成",
   "keys.generatedHeading": "鍵を作成しました",
   "keys.generatedNext": "{path} を作成しました。次の操作を選んでください。",
@@ -2367,7 +2370,7 @@ export const ja = {
   "keys.trashNote":
     "ゴミ箱へ移動した鍵は、手動で完全削除するまで残ります。自動削除されません。",
   "keys.trashCaption": "ゴミ箱内の鍵",
-  "keys.trashEmpty": "削除されたものはありません。",
+  "keys.trashEmpty": "ゴミ箱は空です。",
   "keys.colFiles": "ファイル",
   "keys.colAge": "経過",
   "keys.colStatus": "状態",
