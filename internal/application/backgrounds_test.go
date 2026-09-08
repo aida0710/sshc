@@ -184,7 +184,9 @@ func TestRenamingABackgroundWillNotOverwriteAnotherImage(t *testing.T) {
 
 func TestThereIsARoofOverWhatTheBackgroundsMayWeigh(t *testing.T) {
 	service, _ := newTerminalService(t)
-	if MaxBackgroundBytes != 1<<30 { t.Fatalf("absolute maximum = %d", MaxBackgroundBytes) }
+	if MaxBackgroundBytes != 1<<30 {
+		t.Fatalf("absolute maximum = %d", MaxBackgroundBytes)
+	}
 
 	chunkSize := 1 << 20
 	chunk := png(strings.Repeat("x", chunkSize-64))
