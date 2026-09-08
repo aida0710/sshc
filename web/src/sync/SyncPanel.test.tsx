@@ -209,7 +209,7 @@ describe("SyncPanel", () => {
     render(<SyncPanel api={buildApi(unconfigured, nothingToDo)} />);
 
     expect(
-      await screen.findByText(/including private keys/),
+      await screen.findByText(/may include private keys/),
     ).toBeInTheDocument();
     expect(
       screen.getByText(/guess the encryption key offline/),

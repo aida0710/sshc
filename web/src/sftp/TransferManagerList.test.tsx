@@ -144,7 +144,7 @@ describe("the transfer queue", () => {
 
     expect(screen.getByRole("combobox", { name: "Clear finished after" })).toHaveValue("300");
 
-    await userEvent.selectOptions(screen.getByRole("combobox", { name: "At once" }), "5");
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Concurrent transfers" }), "5");
     expect(manager.applySettings).toHaveBeenCalledWith(5, 300, false, 100 << 20, 4, 32 << 20);
 
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "Clear finished after" }), "0");
@@ -175,7 +175,7 @@ describe("the transfer queue", () => {
 
     manager.getProcessingStopped.mockReturnValue(true);
     rerender(<TransferManagerList />);
-    expect(screen.getByRole("button", { name: "Start transfers again" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Resume processing the transfer queue" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByText("Held")).toBeVisible();
   });
 
@@ -246,7 +246,7 @@ describe("the transfer queue", () => {
     const region = screen.getByRole("region", { name: "Transfer Manager" });
     expect(region).toHaveClass("overflow-visible");
     await userEvent.click(screen.getByRole("button", { name: "Transfer queue actions" }));
-    await userEvent.click(screen.getByRole("menuitem", { name: "Remove failed from list" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Remove failed transfers from the list" }));
     expect(manager.clearFailed).toHaveBeenCalledOnce();
   });
 
