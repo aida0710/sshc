@@ -30,9 +30,9 @@ export function OperatingSystemIcon({ os, colour = "" }: { os?: HostMetadata["os
   const source = sources[os ?? ""];
   return (
     <span role="img" aria-label={name} title={name}
-      className="relative grid size-10 shrink-0 place-items-center rounded-lg border border-line bg-control">
-      {source === undefined ? <Icon name="connections" className="size-6 text-ink-muted" /> : (
-        <img src={source} alt="" className={`size-7 ${os === "macos" ? "[[data-theme=dark]_&]:invert" : ""}`} />
+      className="relative grid size-6 shrink-0 place-items-center text-ink-muted">
+      {source === undefined ? <Icon name="connections" className="size-5" /> : (
+        <span aria-hidden="true" className="size-5 bg-current [mask-position:center] [mask-repeat:no-repeat] [mask-size:contain]" style={{ maskImage: `url("${source}")` }} />
       )}
       {colour === "" ? null : <span aria-hidden="true" className="absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border border-card" style={{ backgroundColor: colour }} />}
     </span>

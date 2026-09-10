@@ -291,7 +291,7 @@ Apache License 2.0 です（[LICENSE](../LICENSE)）。
 
 HomeのOSアイコンはHostMetadataの`os`を手動指定として優先し、空の場合は`detectedOS`を使用する。未判定は汎用サーバーを表示する。通常の対話SSH接続が開いた後、認証済みの最終接続先へ別のexec channelで`uname -s; cat /etc/os-release 2>/dev/null`を実行する。PTY・対話端末の入出力は使わず、os-releaseをsourceしない。WindowsのOpenSSH識別子も認識する。判定は3秒、保持する出力は8 KiBを上限とし、失敗しても接続を継続する。明示的なRemoteCommand、手動アイコン指定、対応する編集可能なHost blockがない場合は追加の判定をしない。SFTPだけの接続では判定しない。
 
-判定結果は既存metadata transactionで保存する。HostIdentityと認証先bindingを照合し、接続後に削除・移動・接続先変更・手動指定があった場合は遅れて届いた結果を反映しない。Homeの取得時もbindingが一致しない古い判定を隠す。OS名は固定の許可リストへ正規化し、保存するのは識別子とbindingのみで、OS情報の原文は保存しない。アイコンはDeviconのSVGを同梱し、外部CDNへ接続しない。ライセンスは`web/public/licenses/devicon.txt`として配布に含める。
+判定結果は既存metadata transactionで保存する。HostIdentityと認証先bindingを照合し、接続後に削除・移動・接続先変更・手動指定があった場合は遅れて届いた結果を反映しない。Homeの取得時もbindingが一致しない古い判定を隠す。OS名は固定の許可リストへ正規化し、保存するのは識別子とbindingのみで、OS情報の原文は保存しない。アイコンはDeviconのSVGを同梱し、外部CDNへ接続しない。表示は24pxの領域内に20pxの単色CSS maskを置き、枠と背景色を付けず、明暗テーマに応じた文字色へ合わせる。ライセンスは`web/public/licenses/devicon.txt`として配布に含める。
 
 貼り付け確認では原文全体をtextareaで編集でき、編集後の内容から行数・制御文字表示・末尾改行の有無を再計算する。可視化previewの4,096文字の上限は編集可能な原文の上限ではない。未編集時はCR/CRLFなどを保持し、送信確定時に既存の改行正規化とbracketed paste処理へ渡す。編集内容は確認画面の状態にだけ保持する。
 
