@@ -579,6 +579,7 @@ export function App({
     return (
       <LockScreen
         exists={vaultExists}
+        passwordless={session.passwordless}
         version={version}
         onExists={session.markVaultExists}
         onOpen={session.openVault}

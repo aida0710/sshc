@@ -860,7 +860,7 @@ export const en = {
   "secrets.unlock": "Unlock",
   "secrets.lock": "Lock sshc",
   "secrets.createFailed":
-    "The vault could not be created. A master password must be at least 12 characters.",
+    "The vault could not be created. A master password must be at least 4 characters.",
   "secrets.unlockFailed": "The master password is incorrect.",
   "secrets.failed": "The vault could not be read.",
   "secrets.storeFailed": "The credential could not be saved.",
@@ -931,7 +931,7 @@ export const en = {
   "desktop.closeAll": "Close every connection",
   "secrets.changeHeading": "Master password",
   "secrets.changeNote":
-    "Changing the master password re-encrypts the local vault, snippets, sync settings, and every local backup. Remote snapshots use the separate synchronization key and are not rewritten.",
+    "Choose password protection or automatic opening on this device. The change also updates protection for snippets, sync settings, and local backups. Sync uses an independent key.",
   "secrets.currentMaster": "Current master password",
   "secrets.newMaster": "New master password",
   "secrets.confirmMaster": "Confirm new master password",
@@ -940,15 +940,20 @@ export const en = {
     "The current master password is incorrect. Nothing was changed.",
   "secrets.changeFailed": "The master password could not be changed.",
   "secrets.changedMasterLocally":
-    "The master password was changed. The local vault, snippets, sync settings, and local backups now use the new password. Remote snapshots were not rewritten.",
+    "Local vault protection was updated, including snippets, sync settings, and backups. Remote snapshots were not rewritten.",
   "section.passwords": "Account passwords",
   "section.keyPassphrases": "Key passphrases",
   "section.otp": "OTP",
   "lock.explainNew":
-    "Choose a master password to encrypt stored passwords, key passphrases, snippets, sync settings, and all backups created by sshc.",
+    "Choose whether to protect this device’s vault with a password. A password must contain at least 4 characters.",
   "lock.explainOpen": "Enter your master password to unlock sshc.",
   "lock.noRecovery":
     "The master password cannot be recovered. If you lose it, the vault, snippets, and encrypted backups cannot be opened.",
+  "lock.explainPasswordless": "This device uses the vault without a password.",
+  "lock.withoutPassword": "Use without a password",
+  "lock.withoutPasswordHint": "Opens automatically when sshc starts. Protection of local data relies on your OS account and device security. Sync encryption stays enabled.",
+  "lock.shortPasswordHint": "A short password offers limited protection if local files are copied. A longer, unpredictable password provides stronger protection.",
+  "secrets.currentOptional": "Leave the current password blank if this vault has no password.",
   "lock.password": "Master password",
   "lock.confirm": "Confirm master password",
   "lock.create": "Create the vault",

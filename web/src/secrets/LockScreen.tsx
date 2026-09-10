@@ -13,6 +13,7 @@ import { ErrorDiagnosticNotice } from "../shell/ErrorDiagnosticNotice";
 
 type LockScreenProps = {
   exists: boolean;
+  passwordless?: boolean;
   onOpen: (status?: PasswordVaultStatus) => void;
   onExists?: () => void;
   version?: string;
@@ -27,6 +28,7 @@ const themeLabels: Record<Theme, MessageKey> = {
 
 export function LockScreen({
   exists,
+  passwordless = false,
   onOpen,
   onExists = () => undefined,
   version = "",
@@ -45,11 +47,14 @@ export function LockScreen({
   } | null>(null);
   const [resetAcknowledged, setResetAcknowledged] = useState(false);
   const [busy, setBusy] = useState(false);
-  const minimum = 12;
-  const tooShort = password.length < minimum;
-  const mismatched = !exists && confirmation !== password;
+  const [withoutPassword, setWithoutPassword] = useState(false);
+  const noPassword = exists ? passwordless : withoutPassword;
+  const minimum = 4;
+  const tooShort = !noPassword && [...password].length < (exists ? 1 : minimum);
+  const mismatched = !exists && !noPassword && confirmation !== password;
 
   async function submit() {
+    if (busy || tooShort || mismatched) return;
     setBusy(true);
     setError("");
     setDiagnostic(null);
@@ -57,8 +62,8 @@ export function LockScreen({
     setResetAcknowledged(false);
     try {
       const status = exists
-        ? await api.unlockVault(password)
-        : await api.initialiseVault(password);
+        ? await api.unlockVault(noPassword ? "" : password)
+        : await api.initialiseVault(noPassword ? "" : password);
       setPassword("");
       setConfirmation("");
       onOpen(status);
@@ -217,7 +222,7 @@ export function LockScreen({
             <div>
               <h1 className="text-2xl font-semibold tracking-tight text-ink">{t("shell.title")}</h1>
               <p className="mt-2 text-sm leading-6 text-ink-muted">
-                {exists ? t("lock.explainOpen") : t("lock.explainNew")}
+                {exists ? t(noPassword ? "lock.explainPasswordless" : "lock.explainOpen") : t("lock.explainNew")}
               </p>
             </div>
           </div>
@@ -229,7 +234,7 @@ export function LockScreen({
               void submit();
             }}
           >
-            {exists ? null : (
+            {exists || noPassword ? null : (
               <p className="rounded-lg bg-notice px-3 py-2 text-sm text-notice-ink">{t("lock.noRecovery")}</p>
             )}
             {error === "" ? null : <Notice tone="danger">{error}</Notice>}
@@ -250,10 +255,14 @@ export function LockScreen({
                 </Button>
               </div>
             )}
+            {exists ? null : <CheckboxField label={t("lock.withoutPassword")} checked={withoutPassword} onChange={setWithoutPassword} />}
+            {noPassword ? <p className="text-sm text-ink-muted">{t("lock.withoutPasswordHint")}</p> : <>
             <PasswordField label={t("lock.password")} value={password} onChange={setPassword} autoFocus />
             {exists ? null : (
               <PasswordField label={t("lock.confirm")} value={confirmation} onChange={setConfirmation} />
             )}
+            </>}
+            {!exists && !noPassword && [...password].length >= 4 && [...password].length < 12 ? <p className="text-sm text-ink-muted">{t("lock.shortPasswordHint")}</p> : null}
             <Button kind="primary" className="self-start" type="submit" disabled={busy || tooShort || mismatched}>
               {exists ? t("lock.open") : t("lock.create")}
             </Button>

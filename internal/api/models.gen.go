@@ -1057,6 +1057,7 @@ type PasswordVaultStatus struct {
 	MigratedFromVersion     *int     `json:"migratedFromVersion,omitempty"`
 	MigratedToVersion       *int     `json:"migratedToVersion,omitempty"`
 	MinPassphraseLength     *int     `json:"minPassphraseLength,omitempty"`
+	Passwordless            *bool    `json:"passwordless,omitempty"`
 	Unlocked                bool     `json:"unlocked"`
 }
 

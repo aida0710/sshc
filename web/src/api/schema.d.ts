@@ -2674,6 +2674,7 @@ export interface components {
             unlocked: boolean;
             aliases: string[];
             dedicatedKeyPassphrases: string[];
+            passwordless?: boolean;
             minPassphraseLength?: number;
             migratedFromVersion?: number;
             migratedToVersion?: number;

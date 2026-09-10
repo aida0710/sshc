@@ -154,6 +154,9 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 		manager.Seal = passwordService.SealBackup
 		manager.Unseal = passwordService.OpenBackup
 	}
+	if err := passwordService.AutoUnlock(); err != nil && !errors.Is(err, secret.ErrUnsupportedVersion) {
+		return nil, fmt.Errorf("auto-unlock vault: %w", err)
+	}
 	// vault のロック状態は secret.Service が管理する。
 
 	services := &engineServices{

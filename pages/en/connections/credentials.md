@@ -20,6 +20,12 @@ The assigned password is reused when the same connection is opened from the term
 
 Key passphrases can be saved, edited, and removed per private key. A ProxyJump route resolves credentials independently for every hop and the final host.
 
+## Choose vault protection
+
+During setup or in **Settings → Master password**, choose password protection or use without a password. Passwords require at least four characters; digits alone are accepted. Short passwords offer limited protection if local files are copied.
+
+Without a password, sshc opens the vault automatically on startup and relies on your OS account and device security for local protection. A manually locked vault can also be reopened without a password. Sync keeps using its independent encryption key. Switching protection modes preserves saved credentials.
+
 ## Automatic TOTP entry
 
 First, store a Base32 setup key or an `otpauth://totp/...` URI under **Menu → Vault → OTP**. The page normally shows the current six-digit code only; use the disclosure beside its remaining time to reveal the previous and next code. Assigned hosts appear in a separate row under each item and expand only when needed. Then open the target under **Connections** and select the saved token from **Basic → Authentication → One-time password (TOTP)**. You no longer need to type a host alias to create the assignment.

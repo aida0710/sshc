@@ -364,6 +364,8 @@ func TestReadRefusesDeviceLocalAndRawVaultPaths(t *testing.T) {
 	for _, name := range []string{
 		"sshc/secrets",
 		"sshc/sync-settings",
+		"sshc/local-vault-key",
+		"SSHC/LOCAL-VAULT-KEY",
 		"sshc/sync-state.json",
 		"sshc/sync-key-recovery.json",
 		"sshc/cli/request.json",

@@ -25,12 +25,12 @@ const (
 const maxVaultCLIBody = 4 << 10
 
 type vaultPassphraseRequest struct {
-	Passphrase string `json:"passphrase"`
+	Passphrase *string `json:"passphrase"`
 }
 
 type vaultChangeRequest struct {
-	Current string `json:"current"`
-	Next    string `json:"next"`
+	Current *string `json:"current"`
+	Next    *string `json:"next"`
 }
 
 func registerVaultCLIRoutes(engine *echo.Echo, handlers ConnectHandlers) {
@@ -103,7 +103,10 @@ func (h ConnectHandlers) VaultCreate(c *echo.Context) error {
 	if status := decodeVaultCLIJSON(c, &request); status != 0 {
 		return c.NoContent(status)
 	}
-	if err := h.vault.Initialise(request.Passphrase); err != nil {
+	if request.Passphrase == nil {
+		return c.NoContent(http.StatusBadRequest)
+	}
+	if err := h.vault.Initialise(*request.Passphrase); err != nil {
 		return vaultCLIProblem(c, err)
 	}
 	return c.NoContent(http.StatusNoContent)
@@ -117,7 +120,10 @@ func (h ConnectHandlers) VaultUnlock(c *echo.Context) error {
 	if status := decodeVaultCLIJSON(c, &request); status != 0 {
 		return c.NoContent(status)
 	}
-	if err := h.vault.Unlock(request.Passphrase); err != nil {
+	if request.Passphrase == nil {
+		return c.NoContent(http.StatusBadRequest)
+	}
+	if err := h.vault.Unlock(*request.Passphrase); err != nil {
 		return vaultCLIProblem(c, err)
 	}
 	return c.NoContent(http.StatusNoContent)
@@ -146,7 +152,10 @@ func (h ConnectHandlers) VaultChange(c *echo.Context) error {
 	if status := decodeVaultCLIJSON(c, &request); status != 0 {
 		return c.NoContent(status)
 	}
-	if err := h.vault.Change(c.Request().Context(), request.Current, request.Next); err != nil {
+	if request.Current == nil || request.Next == nil {
+		return c.NoContent(http.StatusBadRequest)
+	}
+	if err := h.vault.Change(c.Request().Context(), *request.Current, *request.Next); err != nil {
 		return vaultCLIProblem(c, err)
 	}
 	return c.NoContent(http.StatusNoContent)

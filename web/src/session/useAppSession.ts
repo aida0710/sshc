@@ -37,6 +37,7 @@ export function useAppSession({
   const [vaultRecheck, setVaultRecheck] = useState<VaultRecheckPhase>("idle");
   const [failure, setFailure] = useState("");
   const [vaultExists, setVaultExists] = useState(false);
+  const [passwordless, setPasswordless] = useState(false);
   const [version, setVersion] = useState("");
   const [requestFailure, setRequestFailure] =
     useState<RequestFailureDiagnostic | null>(null);
@@ -61,6 +62,7 @@ export function useAppSession({
       .then((status) => {
         if (!active || status === null) return;
         setVaultExists(status.exists);
+        setPasswordless(status.passwordless ?? false);
         setState(status.unlocked ? "ready" : "locked");
       })
       .catch((reason: unknown) => {
@@ -85,6 +87,15 @@ export function useAppSession({
       apiClient.clear();
     };
   }, [bootstrap, health, vault]);
+
+  useEffect(() => {
+    if (state !== "locked" || !vaultExists) return;
+    let active = true;
+    void vault().then((status) => {
+      if (active) setPasswordless(status.passwordless ?? false);
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, [state, vaultExists, vault]);
 
   const lock = useCallback(() => {
     setVaultExists(true);
@@ -119,6 +130,7 @@ export function useAppSession({
       try {
         const status = await vault();
         if (!active) return;
+        setPasswordless(status.passwordless ?? false);
         if (!status.unlocked) {
           setVaultExists(status.exists);
           setState("locked");
@@ -167,6 +179,7 @@ export function useAppSession({
 
   const markVaultExists = useCallback(() => setVaultExists(true), []);
   const openVault = useCallback((status?: PasswordVaultStatus) => {
+    setPasswordless(status?.passwordless ?? false);
     if (
       typeof status?.migratedFromVersion === "number" &&
       typeof status.migratedToVersion === "number"
@@ -186,6 +199,7 @@ export function useAppSession({
     vaultRecheck,
     failure,
     vaultExists,
+    passwordless,
     version,
     requestFailure,
     vaultMigration,

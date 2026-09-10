@@ -864,7 +864,7 @@ export const ja = {
   "secrets.unlock": "開く",
   "secrets.lock": "sshc をロック",
   "secrets.createFailed":
-    "Vault を作成できませんでした。マスターパスワードは 12 文字以上必要です。",
+    "Vault を作成できませんでした。マスターパスワードは 4 文字以上必要です。",
   "secrets.unlockFailed": "マスターパスワードが違います。",
   "secrets.failed": "Vault を読み込めませんでした。",
   "secrets.storeFailed": "保存できませんでした。",
@@ -935,7 +935,7 @@ export const ja = {
   "desktop.closeAll": "接続をすべて閉じる",
   "secrets.changeHeading": "Master password",
   "secrets.changeNote":
-    "変更すると、ローカルの Vault、Snippet、同期設定、このマシンの全バックアップを新しいパスワードで再暗号化します。リモートスナップショットは別の同期鍵を使うため書き換えません。",
+    "この端末でパスワード保護を使うか、自動で開くかを選べます。変更は Snippet、同期設定、ローカルのバックアップにも適用されます。同期には独立したキーを使います。",
   "secrets.currentMaster": "現在のマスターパスワード",
   "secrets.newMaster": "新しいマスターパスワード",
   "secrets.confirmMaster": "新しいマスターパスワード（確認）",
@@ -944,15 +944,20 @@ export const ja = {
     "現在のマスターパスワードが違います。何も変更していません。",
   "secrets.changeFailed": "マスターパスワードを変更できませんでした。",
   "secrets.changedMasterLocally":
-    "マスターパスワードを変更しました。ローカルの Vault、Snippet、同期設定、バックアップは新しいパスワードで暗号化されています。リモートスナップショットは書き換えていません。",
+    "Vault の保護設定を変更しました。Snippet、同期設定、ローカルのバックアップにも適用されています。リモートスナップショットは書き換えていません。",
   "section.passwords": "Account passwords",
   "section.keyPassphrases": "Key passphrases",
   "section.otp": "OTP",
   "lock.explainNew":
-    "マスターパスワードを設定してください。保存済みパスワード、鍵のパスフレーズ、Snippet、同期設定、sshc が作成するすべてのバックアップを暗号化します。",
+    "この端末の Vault をパスワードで保護するか選んでください。パスワードを使う場合は 4 文字以上で設定できます。",
   "lock.explainOpen": "sshc を開くにはマスターパスワードを入力してください。",
   "lock.noRecovery":
     "マスターパスワードは復旧できません。紛失すると Vault、Snippet、暗号化されたバックアップを開けなくなります。",
+  "lock.explainPasswordless": "この端末では Vault をパスワードなしで使えます。",
+  "lock.withoutPassword": "パスワードなしで使う",
+  "lock.withoutPasswordHint": "sshc の起動時に自動で開きます。ローカルデータの保護は OS アカウントと端末のセキュリティに任せます。同期データの暗号化は維持されます。",
+  "lock.shortPasswordHint": "短いパスワードは、ローカルファイルを持ち出された場合の保護が弱くなります。長く予測しにくいパスワードほど強く保護できます。",
+  "secrets.currentOptional": "現在パスワードなしで使っている場合は、現在のパスワードを空欄にしてください。",
   "lock.password": "マスターパスワード",
   "lock.confirm": "マスターパスワード（確認）",
   "lock.create": "Vault を作成",

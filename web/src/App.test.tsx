@@ -237,7 +237,7 @@ describe("App", () => {
     });
     const vault = vi.fn()
       .mockResolvedValueOnce({ exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [], minPassphraseLength: 12 })
-      .mockResolvedValueOnce({ exists: true, unlocked: false, aliases: [], dedicatedKeyPassphrases: [], minPassphraseLength: 12 });
+      .mockResolvedValue({ exists: true, unlocked: false, aliases: [], dedicatedKeyPassphrases: [], minPassphraseLength: 12 });
 
     render(
       <App

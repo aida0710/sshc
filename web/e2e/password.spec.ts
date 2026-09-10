@@ -78,3 +78,31 @@ test("locking the vault returns the application to its front door", async ({ pag
   await expect(page.getByLabel("Master password", { exact: true })).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Primary" })).toHaveCount(0);
 });
+
+
+test("passwordless setup, manual lock, and four-character protection work through the UI", async ({ page, installation }) => {
+  await page.goto(installation.url);
+  await page.getByLabel("Use without a password").check();
+  expect(await clickAndAwait(page, "Create the vault", "/api/v1/passwords/initialise")).toBe(200);
+  await expect(page.getByRole("navigation", { name: "Primary" })).toBeVisible();
+  await openSection(page, "Account passwords");
+  await page.getByRole("button", { name: "Lock sshc" }).click();
+  await expect(page.getByText("This device uses the vault without a password.")).toBeVisible();
+  await expect(page.getByLabel("Master password", { exact: true })).toHaveCount(0);
+  expect(await clickAndAwait(page, "Open", "/api/v1/passwords/unlock")).toBe(200);
+  await openSection(page, "Master password");
+  await page.getByLabel("New master password", { exact: true }).fill("1234");
+  await page.getByLabel("Confirm new master password", { exact: true }).fill("1234");
+  expect(await clickAndAwait(page, "Change the master password", "/api/v1/passwords/change")).toBe(200);
+  expect(await installation.read("sshc/local-vault-key")).toBe("");
+  await openSection(page, "Account passwords");
+  await page.getByRole("button", { name: "Lock sshc" }).click();
+  await expect(page.getByLabel("Master password", { exact: true })).toBeVisible();
+  await page.getByLabel("Master password", { exact: true }).fill("1234");
+  expect(await clickAndAwait(page, "Open", "/api/v1/passwords/unlock")).toBe(200);
+  await openSection(page, "Master password");
+  await page.getByLabel("Current master password", { exact: true }).fill("1234");
+  await page.getByLabel("Use without a password").check();
+  expect(await clickAndAwait(page, "Change the master password", "/api/v1/passwords/change")).toBe(200);
+  expect(await installation.read("sshc/local-vault-key")).not.toBe("");
+});
