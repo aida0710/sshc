@@ -24,15 +24,15 @@ export const operatingSystems = [
 
 const sources: Record<string, string> = { ubuntu, debian, redhat, fedora, centos, rocky, almalinux, arch, opensuse, macos, windows, linux, alpine: linux };
 
-export function OperatingSystemIcon({ os, colour = "" }: { os?: HostMetadata["os"] | undefined; colour?: string }) {
+export function OperatingSystemIcon({ os, colour = "", compact = false }: { os?: HostMetadata["os"] | undefined; colour?: string; compact?: boolean }) {
   const t = useTranslate();
   const name = os === "server" ? t("host.osGeneric") : operatingSystems.find(([value]) => value === os)?.[1] ?? t("host.osUnknown");
   const source = sources[os ?? ""];
   return (
     <span role="img" aria-label={name} title={name}
-      className="relative grid size-6 shrink-0 place-items-center text-ink-muted">
-      {source === undefined ? <Icon name="connections" className="size-5" /> : (
-        <span aria-hidden="true" className="size-5 bg-current [mask-position:center] [mask-repeat:no-repeat] [mask-size:contain]" style={{ maskImage: `url("${source}")` }} />
+      className={`relative grid ${compact ? "size-5" : "size-6"} shrink-0 place-items-center text-ink-muted`}>
+      {source === undefined ? <Icon name="connections" className={compact ? "size-4" : "size-5"} /> : (
+        <span aria-hidden="true" className={`${compact ? "size-4" : "size-5"} bg-current [mask-position:center] [mask-repeat:no-repeat] [mask-size:contain]`} style={{ maskImage: `url("${source}")` }} />
       )}
       {colour === "" ? null : <span aria-hidden="true" className="absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border border-card" style={{ backgroundColor: colour }} />}
     </span>
