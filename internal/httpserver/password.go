@@ -174,6 +174,7 @@ func (h PasswordHandlers) status(c *echo.Context) error {
 		dedicatedKeyPassphrases = []string{}
 	}
 	answer := api.PasswordVaultStatus{
+		Passwordless:            &state.Passwordless,
 		Exists:                  state.Exists,
 		Unlocked:                state.Unlocked,
 		Aliases:                 aliases,
@@ -260,7 +261,7 @@ func (h PasswordHandlers) Change(c *echo.Context) error {
 		dedicatedKeyPassphrases = []string{}
 	}
 	answer.Vault = api.PasswordVaultStatus{
-		Exists: state.Exists, Unlocked: state.Unlocked, Aliases: aliases,
+		Passwordless: &state.Passwordless, Exists: state.Exists, Unlocked: state.Unlocked, Aliases: aliases,
 		DedicatedKeyPassphrases: dedicatedKeyPassphrases, MinPassphraseLength: &minimum,
 	}
 	return c.JSON(http.StatusOK, answer)

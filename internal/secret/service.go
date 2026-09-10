@@ -112,8 +112,8 @@ const IdleTimeout = 12 * time.Hour
 
 // Service は、プロセスの寿命のあいだ、開いた vault を所有する。
 //
-// 導出された鍵はこの構造体の中にだけあり、他のどこにもない。書き出されず、ログにも
-// 出ず、返されることもない。外へ出るのはパスワードひとつだけであり、それも、この
+// 導出された鍵はこの構造体で保持し、ログやAPIへ返さない。パスワードなしの
+// 場合だけ、導出元となる端末専用の乱数をローカルファイルへ保存する。外へ出るのはパスワードひとつだけであり、それも、この
 // サービスが発行したトークンをひとつ持つ askpass リクエストひとつに対してである。
 type Service struct {
 	workspace    *storage.Workspace
@@ -130,9 +130,10 @@ type Service struct {
 	// mutationMu は vault の disk と memory の版をまたぐ変更を直列化する。storage
 	// commit はバックアップを暗号化するために下の mu を再取得するので、commit 中に保持
 	// するのはこちらだけである。
-	mutationMu sync.Mutex
-	mu         sync.Mutex
-	vault      *Vault
+	mutationMu   sync.Mutex
+	mu           sync.Mutex
+	vault        *Vault
+	passwordless bool
 	// backupVaultは、未commitの候補鍵で世代backupを封じる間だけ存在する。
 	// open/useはこれを返さないため、diskのcommit pointより先に候補が公開されない。
 	backupVault *Vault
@@ -174,6 +175,7 @@ type State struct {
 	Exists        bool
 	Unlocked      bool
 	LastMigration Migration
+	Passwordless  bool
 }
 
 // NewService はロックされたサービスを返す。Unlock まで何も読めない。
@@ -263,7 +265,7 @@ func (s *Service) open() *Vault {
 	if s.vault == nil {
 		return nil
 	}
-	if s.idle > 0 && s.now().Sub(s.used) >= s.idle {
+	if !s.passwordless && s.idle > 0 && s.now().Sub(s.used) >= s.idle {
 		s.vault.Destroy()
 		s.vault = nil
 		s.baseline = nil
@@ -337,6 +339,12 @@ func (s *Service) State() (State, error) {
 	if err != nil {
 		return State{}, err
 	}
+	localKey, err := s.localKey()
+	if err != nil {
+		return State{}, err
+	}
+	passwordless := len(localKey) > 0
+	clear(localKey)
 	s.mu.Lock()
 	if !exists {
 		// disk 上の vault を失ったあとも導出済み key だけを使い続けない。
@@ -348,7 +356,7 @@ func (s *Service) State() (State, error) {
 	unlocked := s.open() != nil
 	migration := s.lastMigration
 	s.mu.Unlock()
-	return State{Exists: exists, Unlocked: unlocked, LastMigration: migration}, nil
+	return State{Exists: exists, Unlocked: unlocked, LastMigration: migration, Passwordless: passwordless}, nil
 }
 
 // Unlocked は、このセッションでパスフレーズが与えられたかを報告する。
@@ -373,7 +381,15 @@ func (s *Service) Initialise(passphrase string) error {
 	if exists {
 		return ErrAlreadyExists
 	}
-	vault, err := Create(passphrase)
+	if err := s.workspace.EnsureDirectory(s.workspace.StateDir()); err != nil {
+		return err
+	}
+	localChange, effective, err := s.prepareProtection(passphrase)
+	if err != nil {
+		return err
+	}
+	defer clear(localChange.Contents)
+	vault, err := Create(effective)
 	if err != nil {
 		return err
 	}
@@ -382,18 +398,14 @@ func (s *Service) Initialise(passphrase string) error {
 		vault.Destroy()
 		return err
 	}
-	if err := s.workspace.EnsureDirectory(s.workspace.StateDir()); err != nil {
-		vault.Destroy()
-		return err
-	}
-	_, err = s.transactions.Commit(storage.Request{
+	_, err = s.transactions.CommitAtomicDiscardBackups(storage.Request{
 		Operation: "secret.vault",
 		Changes: []storage.Change{{
 			Path: s.path(), Contents: sealed,
 			// A zero precondition means the path must still be absent. Another
 			// initializer which wins after exists() must never be overwritten.
 			Precondition: storage.Precondition{},
-		}},
+		}, localChange},
 	})
 	if err != nil {
 		vault.Destroy()
@@ -405,6 +417,7 @@ func (s *Service) Initialise(passphrase string) error {
 	s.mu.Lock()
 	s.vault.Destroy()
 	s.vault = vault
+	s.passwordless = passphrase == ""
 	s.baseline = slices.Clone(sealed)
 	s.used = s.now()
 	s.lastMigration = Migration{}
@@ -423,6 +436,10 @@ func (s *Service) Initialise(passphrase string) error {
 // コストは導出 1 回分で、ロック解除と同じである。しかもここに到達するのは、ユーザーが
 // 求めた操作からだけだ。
 func (s *Service) Verify(passphrase string) (bool, error) {
+	passphrase, err := s.resolvePassphrase(passphrase)
+	if err != nil {
+		return false, err
+	}
 	sealed, err := s.workspace.FileSystem().ReadFile(s.path())
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -475,6 +492,11 @@ func (s *Service) refuse() {
 func (s *Service) Unlock(passphrase string) error {
 	s.mutationMu.Lock()
 	defer s.mutationMu.Unlock()
+	passwordless := passphrase == ""
+	passphrase, err := s.resolvePassphrase(passphrase)
+	if err != nil {
+		return err
+	}
 	sealed, err := s.workspace.FileSystem().ReadFile(s.path())
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -489,6 +511,9 @@ func (s *Service) Unlock(passphrase string) error {
 		}
 		return err
 	}
+	s.mu.Lock()
+	s.passwordless = passwordless
+	s.mu.Unlock()
 	if migration.Applied() {
 		migrated, sealErr := vault.Seal()
 		if sealErr != nil {
@@ -518,6 +543,11 @@ func (s *Service) Unlock(passphrase string) error {
 func (s *Service) RecoverCompatibleBackup(passphrase string) error {
 	s.mutationMu.Lock()
 	defer s.mutationMu.Unlock()
+
+	passphrase, err := s.resolvePassphrase(passphrase)
+	if err != nil {
+		return err
+	}
 
 	current, err := s.unsupportedVault(passphrase)
 	if err != nil {
@@ -582,6 +612,11 @@ func (s *Service) RecoverCompatibleBackup(passphrase string) error {
 func (s *Service) ResetUnsupported(passphrase string) error {
 	s.mutationMu.Lock()
 	defer s.mutationMu.Unlock()
+
+	passphrase, err := s.resolvePassphrase(passphrase)
+	if err != nil {
+		return err
+	}
 
 	current, err := s.unsupportedVault(passphrase)
 	if err != nil {
@@ -660,6 +695,14 @@ func (s *Service) replaceVault(
 	operation string,
 	migration Migration,
 ) error {
+	localKey, err := s.localKey()
+	if err != nil {
+		candidate.Destroy()
+		return err
+	}
+	passwordless := len(localKey) > 0
+	clear(localKey)
+
 	s.mu.Lock()
 	s.backupVault = candidate
 	s.mu.Unlock()
@@ -668,7 +711,7 @@ func (s *Service) replaceVault(
 		Path: s.path(), Contents: sealed,
 		Precondition: storage.Precondition{Exists: true, Digest: storage.Digest(current)},
 	})
-	_, err := s.transactions.Commit(storage.Request{
+	_, err = s.transactions.Commit(storage.Request{
 		Operation: operation,
 		Changes:   changes,
 		Removals:  removals,
@@ -688,6 +731,7 @@ func (s *Service) replaceVault(
 	if s.vault != nil && s.vault != candidate {
 		s.vault.Destroy()
 	}
+	s.passwordless = passwordless
 	s.vault = candidate
 	s.baseline = slices.Clone(sealed)
 	s.used = s.now()
@@ -1602,6 +1646,16 @@ func (s *Service) ChangeMasterPassword(current, next string) error {
 		return ErrWrongPassphrase
 	}
 
+	current, err := s.resolvePassphrase(current)
+	if err != nil {
+		return err
+	}
+	localChange, effective, err := s.prepareProtection(next)
+	if err != nil {
+		return err
+	}
+	defer clear(localChange.Contents)
+
 	s.mu.Lock()
 	vault := s.use()
 	if vault == nil {
@@ -1609,7 +1663,7 @@ func (s *Service) ChangeMasterPassword(current, next string) error {
 		return ErrLocked
 	}
 	candidate := vault.clone()
-	previous, err := candidate.Rekey(next)
+	previous, err := candidate.Rekey(effective)
 	if err != nil {
 		candidate.Destroy()
 		s.mu.Unlock()
@@ -1643,7 +1697,7 @@ func (s *Service) ChangeMasterPassword(current, next string) error {
 	})
 	if _, err := s.transactions.CommitAtomicDiscardBackupsAndPublish(storage.Request{
 		Operation: "secret.rekey",
-		Changes:   changes,
+		Changes:   append(changes, localChange),
 	}, func() {
 		// Publish while the workspace mutation barrier still excludes a normal
 		// commit. Its SealBackup callback can therefore observe only the new key
@@ -1652,6 +1706,7 @@ func (s *Service) ChangeMasterPassword(current, next string) error {
 		if s.vault != nil && s.vault != candidate {
 			s.vault.Destroy()
 		}
+		s.passwordless = next == ""
 		s.vault = candidate
 		s.baseline = slices.Clone(sealed)
 		s.mu.Unlock()

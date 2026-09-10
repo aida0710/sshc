@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"sshc/internal/remoteos"
 	"sshc/internal/storage"
 	"sshc/internal/terminal"
 	"sshc/internal/textencoding"
@@ -51,12 +52,15 @@ type Setting struct {
 
 // HostMetadata は 1 個のホストに付随する、UI 専用の情報である。
 type HostMetadata struct {
-	Identity HostIdentity `json:"identity"`
-	Tags     []string     `json:"tags,omitempty"`
-	Colour   string       `json:"colour,omitempty"`
-	Note     string       `json:"note,omitempty"`
-	Order    int          `json:"order,omitempty"`
-	Orphan   bool         `json:"orphan,omitempty"`
+	Identity          HostIdentity `json:"identity"`
+	Tags              []string     `json:"tags,omitempty"`
+	Colour            string       `json:"colour,omitempty"`
+	Note              string       `json:"note,omitempty"`
+	Order             int          `json:"order,omitempty"`
+	OS                string       `json:"os,omitempty"`
+	DetectedOS        string       `json:"detectedOS,omitempty"`
+	DetectedOSBinding string       `json:"detectedOSBinding,omitempty"`
+	Orphan            bool         `json:"orphan,omitempty"`
 	// Appearance は、この接続を開いたときの端末の見た目である。
 	Appearance *TerminalAppearance `json:"appearance,omitempty"`
 	// Encoding は、接続先との間で使う文字コード。空はUTF-8である。
@@ -349,6 +353,9 @@ func ValidateMetadata(metadata Metadata) error {
 		}
 		if host.Identity.Alias == "" {
 			return ErrMetadataPath
+		}
+		if !remoteos.Valid(host.OS) || !remoteos.Valid(host.DetectedOS) {
+			return errors.New("metadata operating system is invalid")
 		}
 		if host.Encoding != "" {
 			canonical, err := textencoding.Parse(host.Encoding)

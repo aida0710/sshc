@@ -156,7 +156,12 @@ func (k *Key) Destroy() {
 
 // Derive は、新しいパラメータで passphrase を伸ばして鍵にする。
 func Derive(passphrase string) (Key, error) {
-	if len([]rune(passphrase)) < MinPassphraseLength {
+	return DeriveWithMinimum(passphrase, MinPassphraseLength)
+}
+
+// DeriveWithMinimum applies the caller’s passphrase policy without changing the format.
+func DeriveWithMinimum(passphrase string, minimum int) (Key, error) {
+	if minimum < 1 || len([]rune(passphrase)) < minimum {
 		return Key{}, ErrWeakPassphrase
 	}
 	salt := make([]byte, saltLength)

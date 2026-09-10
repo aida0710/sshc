@@ -83,6 +83,19 @@ describe("QuickConnectBrowser", () => {
     window.localStorage.clear();
   });
 
+  it("shows detected OS icons, manual overrides, and unknown hosts", () => {
+    const data = structuredClone(overview);
+    data.metadata.hosts = [
+      { identity: data.hosts[0]!.identity, detectedOS: "ubuntu" },
+      { identity: data.hosts[1]!.identity, detectedOS: "redhat", os: "debian" },
+    ];
+    renderBrowser({ overview: data });
+    expect(screen.getByRole("img", { name: "Ubuntu" })).toBeVisible();
+    expect(screen.getByRole("img", { name: "Debian" })).toBeVisible();
+    expect(screen.queryByRole("img", { name: "Red Hat Enterprise Linux" })).not.toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "OS unknown" })).toBeVisible();
+  });
+
   it("orders recent connections first and shows the resolved destination", () => {
     renderBrowser();
 

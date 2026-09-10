@@ -101,6 +101,19 @@ describe("TerminalView", () => {
     expect(screen.getByText("connected", { exact: true })).toBeVisible();
   });
 
+  it("owns search from outside the terminal and repeated searches only while active", async () => {
+    const api = { terminalStreamTicket: vi.fn(async () => ({ streamTicket: "one-time" })) };
+    const view = render(<TerminalView session={session} api={api} searchShortcutActive />);
+    expect(fireEvent.keyDown(document.body, { key: "f", ctrlKey: true, cancelable: true })).toBe(false);
+    const input = await screen.findByRole("textbox", { name: "Search terminal output" });
+    expect(input).toHaveFocus();
+    fireEvent.change(input, { target: { value: "keep query" } });
+    expect(fireEvent.keyDown(input, { key: "f", ctrlKey: true, cancelable: true })).toBe(false);
+    expect(input).toHaveValue("keep query");
+    view.rerender(<TerminalView session={session} api={api} searchShortcutActive={false} />);
+    expect(fireEvent.keyDown(input, { key: "f", ctrlKey: true, cancelable: true })).toBe(true);
+  });
+
   it("opens search as an overlay with match-case, regex and invalid-pattern feedback", async () => {
     renderView();
     await userEvent.click(screen.getByRole("button", { name: "Find" }));

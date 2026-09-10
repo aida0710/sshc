@@ -1559,6 +1559,8 @@ func TestASnapshotCarriesTheVaultAndNotTheKeyToItsOwnBucket(t *testing.T) {
 		"sshc/secrets":                    "sealed vault bytes",
 		"sshc/snippets.json":              "device-master-key ciphertext",
 		"sshc/sync-settings":              "sealed access key",
+		"sshc/local-vault-key":            "device secret",
+		"SSHC/LOCAL-VAULT-KEY":            "case-variant device secret",
 		"SSHC/SYNC-SETTINGS":              "case-variant sealed access key",
 		"sshc/cli":                        `{"url":"http://127.0.0.1:1","secret":"s"}`,
 		"sshc/.cli.mutation.lock":         "runtime handoff lock state",
