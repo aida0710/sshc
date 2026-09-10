@@ -40,6 +40,17 @@ function build(): HostDetail {
 }
 
 describe("HostInspector", () => {
+  it("changes the OS override and can return to automatic detection", async () => {
+    const detail = build();
+    const onMetadata = vi.fn();
+    const { rerender } = render(<HostInspector detail={detail} onMetadata={onMetadata} />);
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Operating system icon" }), "ubuntu");
+    expect(onMetadata).toHaveBeenLastCalledWith({ ...detail.metadata, os: "ubuntu" });
+    detail.metadata.os = "ubuntu";
+    rerender(<HostInspector detail={detail} onMetadata={onMetadata} />);
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Operating system icon" }), "");
+    expect(onMetadata).toHaveBeenLastCalledWith({ ...detail.metadata, os: "" });
+  });
   it("edits the display settings that live only in metadata", () => {
     const onMetadata = vi.fn();
     render(<HostInspector detail={build()} onMetadata={onMetadata} />);

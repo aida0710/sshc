@@ -257,6 +257,17 @@ func (s *Service) Overview() (Overview, error) {
 		}
 	}
 	reconciled, orphanNotices := ReconcileMetadata(stored, identities)
+	// Do not show an old machine's detected icon after SSH settings change.
+	for i, host := range reconciled.Hosts {
+		if host.DetectedOS == "" {
+			continue
+		}
+		binding, err := s.passwordBindingForGraph(graph, host.Identity.Alias)
+		if err != nil || binding != host.DetectedOSBinding || s.osIdentity(graph, host.Identity.Alias) != host.Identity {
+			reconciled.Hosts[i].DetectedOS = ""
+			reconciled.Hosts[i].DetectedOSBinding = ""
+		}
+	}
 	notices = append(notices, orphanNotices...)
 	notices = append(notices, s.unreachedConnectionFiles(graph)...)
 

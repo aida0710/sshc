@@ -1,3 +1,4 @@
+import { KeyConfig } from "../keyconfig/KeyConfig";
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { failureCode } from "../api/client";
 import {
@@ -161,6 +162,7 @@ export function SettingsPanel({
   const liveConsoles = (consoles?.sessions ?? []).filter((session) => session.exited === undefined).length;
   const [confirmingCloseAll, setConfirmingCloseAll] = useState(false);
   const [currentMaster, setCurrentMaster] = useState("");
+  const [withoutPassword, setWithoutPassword] = useState(false);
   const [nextMaster, setNextMaster] = useState("");
   const [confirmMaster, setConfirmMaster] = useState("");
   const [masterBusy, setMasterBusy] = useState(false);
@@ -406,7 +408,7 @@ export function SettingsPanel({
     setMasterError("");
     setChanged("");
     try {
-      await api.changeMasterPassword(currentMaster, nextMaster);
+      await api.changeMasterPassword(currentMaster, withoutPassword ? "" : nextMaster);
       setChanged(t("secrets.changedMasterLocally"));
     } catch (caught) {
       setMasterError(
@@ -418,8 +420,8 @@ export function SettingsPanel({
     }
   }
 
-  const canChangeMaster = !masterBusy && currentMaster !== "" && nextMaster.length >= 12 &&
-    nextMaster === confirmMaster;
+  const canChangeMaster = !masterBusy && (withoutPassword || ([...nextMaster].length >= 4 &&
+    nextMaster === confirmMaster));
   const pageTitle = page === "All" ? "settings.heading" : settingsPageMeta[page].label;
   const pageDescription = page === "All"
     ? "settings.pageDescription"
@@ -430,6 +432,11 @@ export function SettingsPanel({
       <PageHeader title={t(pageTitle)} description={t(pageDescription)} />
 
       <Card radius="md">
+        {page === "All" || page === "Shortcuts" ? (
+          <SettingsSection id="settings-shortcuts" label={t("shortcuts.heading")} icon="settings" showHeading={page === "All"}>
+            <KeyConfig />
+          </SettingsSection>
+        ) : null}
         {page === "All" || page === "Engine" ? (
         <SettingsSection id="settings-engine" label={t("engine.heading")} icon="settings" showHeading={page === "All"}>
           <div className="max-w-2xl">
@@ -926,6 +933,9 @@ export function SettingsPanel({
         <SettingsSection id="settings-password" label={t("secrets.changeHeading")} icon="secrets" showHeading={page === "All"}>
           <div className="max-w-2xl">
             <p className="mb-5 text-sm leading-6 text-ink-muted">{t("secrets.changeNote")}</p>
+            <CheckboxField label={t("lock.withoutPassword")} checked={withoutPassword} onChange={setWithoutPassword} />
+            <p className="my-3 text-sm text-ink-muted">{t("secrets.currentOptional")}</p>
+            {withoutPassword ? <p className="mb-3 text-sm text-ink-muted">{t("lock.withoutPasswordHint")}</p> : null}
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="sm:col-span-2">
                 <PasswordField
@@ -935,6 +945,7 @@ export function SettingsPanel({
                   disabled={masterBusy}
                 />
               </div>
+              {withoutPassword ? null : <>
               <PasswordField
                 label={t("secrets.newMaster")}
                 value={nextMaster}
@@ -947,7 +958,9 @@ export function SettingsPanel({
                 onChange={setConfirmMaster}
                 disabled={masterBusy}
               />
+              </>}
             </div>
+            {!withoutPassword && [...nextMaster].length >= 4 && [...nextMaster].length < 12 ? <p className="mt-3 text-sm text-ink-muted">{t("lock.shortPasswordHint")}</p> : null}
             <ActionArea status={masterError === ""
               ? (changed === "" ? undefined : <p role="status" className="text-sm text-live">{changed}</p>)
               : <Notice tone="danger">{masterError}</Notice>}

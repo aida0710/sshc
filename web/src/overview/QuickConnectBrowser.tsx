@@ -9,6 +9,7 @@ import {
 import { useTranslate } from "../i18n/context";
 import { control } from "../ui/form";
 import { Segmented } from "../ui/surface";
+import { OperatingSystemIcon } from "../ui/OperatingSystemIcon";
 import { ConnectionActions } from "./ConnectionActions";
 
 type QuickConnectBrowserProps = {
@@ -158,11 +159,7 @@ export function QuickConnectBrowser({
           }`}
         >
           <span className="flex min-w-0 items-center gap-2">
-            {server.colour === "" ? (
-              <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-live" />
-            ) : (
-              <span aria-hidden="true" className="size-2 shrink-0 rounded-full" style={{ backgroundColor: server.colour }} />
-            )}
+            <OperatingSystemIcon os={server.os} colour={server.colour} />
             <span className="truncate text-sm font-semibold text-ink">{alias}</span>
             {server.duplicateAlias ? <span aria-label={t("browser.duplicateAlias")} className="text-notice-ink">⧉</span> : null}
           </span>

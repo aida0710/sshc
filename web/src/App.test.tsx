@@ -237,7 +237,7 @@ describe("App", () => {
     });
     const vault = vi.fn()
       .mockResolvedValueOnce({ exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [], minPassphraseLength: 12 })
-      .mockResolvedValueOnce({ exists: true, unlocked: false, aliases: [], dedicatedKeyPassphrases: [], minPassphraseLength: 12 });
+      .mockResolvedValue({ exists: true, unlocked: false, aliases: [], dedicatedKeyPassphrases: [], minPassphraseLength: 12 });
 
     render(
       <App
@@ -972,7 +972,7 @@ describe("App", () => {
     );
 
     await screen.findByText("existing vault fixture");
-    expect(addEventListener).toHaveBeenCalledWith("keydown", expect.any(Function));
+    expect(addEventListener).toHaveBeenCalledWith("keydown", expect.any(Function), true);
 
     act(() => {
       document.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true }));
@@ -1255,7 +1255,8 @@ describe("App", () => {
     await user.click(await screen.findByRole("link", { name: "Menu" }));
     const menu = await screen.findByRole("region", { name: "Menu" });
     const groups = within(menu).getAllByRole("heading", { level: 3 });
-    expect(groups.at(-1)).toHaveTextContent("Preferences");
+    expect(groups.at(-2)).toHaveTextContent("Preferences");
+    expect(groups.at(-1)).toHaveTextContent("Others");
     await user.selectOptions(within(menu).getByLabelText("Language"), "ja");
 
     expect(window.location.pathname).toBe("/menu");

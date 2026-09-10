@@ -1,0 +1,12 @@
+// Resolve the actual Android runtime AAR/JAR files so embedded notices are not missed.
+gradle.projectsEvaluated {
+    def app = gradle.rootProject.project(':app')
+    app.tasks.register('licenseArtifacts') {
+        doLast {
+            app.configurations.releaseRuntimeClasspath.resolvedConfiguration.resolvedArtifacts.each { artifact ->
+                def id = artifact.moduleVersion.id
+                println("SSHC_LICENSE_ARTIFACT\t${id.group}\t${id.name}\t${id.version}\t${artifact.file.absolutePath}")
+            }
+        }
+    }
+}

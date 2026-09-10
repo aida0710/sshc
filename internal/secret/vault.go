@@ -1,6 +1,6 @@
 // Package secret は、OpenSSH 接続で使用する資格情報を暗号化して保存する。
-// 保存先はワークスペース内の ~/.ssh/sshc/secrets で、暗号鍵は保存しない
-// マスターパスワードから導出する。
+// 保存先はワークスペース内の ~/.ssh/sshc/secrets。鍵はマスターパスワード、
+// またはパスワードなしモードの端末専用乱数から導出する。
 package secret
 
 import (
@@ -88,7 +88,7 @@ func (e *SchemaVersionError) Is(target error) bool {
 }
 
 // MinPassphraseLength は、これが受け付ける最短の vault パスフレーズ長。
-const MinPassphraseLength = envelope.MinPassphraseLength
+const MinPassphraseLength = 4
 
 // Kind は、資格情報の名前空間を表す。
 //
@@ -181,7 +181,7 @@ func newMaps() (map[Kind]map[string]string, map[Kind]map[string]string) {
 
 // Create は、passphrase で暗号化された空の vault を返す。
 func Create(passphrase string) (*Vault, error) {
-	key, err := envelope.Derive(passphrase)
+	key, err := envelope.DeriveWithMinimum(passphrase, MinPassphraseLength)
 	if err != nil {
 		return nil, err
 	}
@@ -334,7 +334,7 @@ func (v *Vault) OpenSettings(sealed []byte) (SyncSettings, error) {
 // ではなく vault のメソッドである理由はそこにある。呼び出し側は、二つの鍵を同時に
 // 必要とするからだ。
 func (v *Vault) Rekey(passphrase string) (envelope.Key, error) {
-	key, err := envelope.Derive(passphrase)
+	key, err := envelope.DeriveWithMinimum(passphrase, MinPassphraseLength)
 	if err != nil {
 		return envelope.Key{}, err
 	}

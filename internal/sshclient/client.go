@@ -21,8 +21,10 @@ const DefaultTimeout = 30 * time.Second
 
 // Dialer は、ひとつの接続を開く。
 type Dialer struct {
-	Auth     Auth
-	HostKeys HostKeys
+	// ObserveOS prepares an optional presentation-only OS observer for a target.
+	ObserveOS func(Target) func(string)
+	Auth      Auth
+	HostKeys  HostKeys
 	// Dial は TCP を開く。nil なら net.Dialer。テストと、将来の別の輸送のためにある。
 	Dial func(ctx context.Context, network, address string) (net.Conn, error)
 	// Verbosity は、接続の途中経過をどこまで端末へ書くかを、接続のたびに
@@ -43,12 +45,16 @@ type Dialer struct {
 // 理由が読めるのはそこだけである。
 func (d Dialer) Open(ctx context.Context, target Target, size terminal.Size) (terminal.Process, error) {
 	ctx, cancel := context.WithCancel(ctx)
+	var observed func(string)
+	if d.ObserveOS != nil && target.RemoteCommand == "" {
+		observed = d.ObserveOS(target)
+	}
 	session := newSession(size, cancel)
-	go d.connect(ctx, target, session)
+	go d.connect(ctx, target, session, observed)
 	return session, nil
 }
 
-func (d Dialer) connect(ctx context.Context, target Target, session *Session) {
+func (d Dialer) connect(ctx context.Context, target Target, session *Session, observed func(string)) {
 	prompt := session.Prompter()
 	level := Quiet
 	if d.Verbosity != nil {
@@ -101,6 +107,13 @@ func (d Dialer) connect(ctx context.Context, target Target, session *Session) {
 		session.fail(fmt.Errorf("sshc: %w", err))
 		closeAll(closers)
 		return
+	}
+	if observed != nil {
+		go func() {
+			if name := detectRemoteOS(ctx, client); name != "" {
+				observed(name)
+			}
+		}()
 	}
 	session.markReady(nil)
 	trace.say(Brief, "セッションを開始しました。")

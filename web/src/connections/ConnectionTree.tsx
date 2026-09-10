@@ -1,8 +1,9 @@
 import { Fragment, useId, useMemo, useState, type CSSProperties, type DragEvent, type ReactNode } from "react";
-import type { HostEntry, Overview } from "../api/config";
+import type { HostEntry, HostMetadata, Overview } from "../api/config";
 import { useTranslate } from "../i18n/context";
 import { control } from "../ui/form";
 import { Icon } from "../ui/icons";
+import { OperatingSystemIcon } from "../ui/OperatingSystemIcon";
 import { duplicateAliasesOf, identityKey } from "./connectionBrowser";
 import { canDrop, dragMimeType, type DragPayload } from "./dragdrop";
 
@@ -15,6 +16,7 @@ type DecoratedHost = {
   group: string;
   tags: string[];
   colour: string;
+  os: HostMetadata["os"];
   order: number;
   sourceOrder: number;
   duplicateAlias: boolean;
@@ -133,6 +135,7 @@ export function ConnectionTree({
         group: host.group ?? "",
         tags: display?.tags ?? [],
         colour: display?.colour ?? "",
+        os: display?.os || display?.detectedOS || "",
         order: display?.order ?? 0,
         sourceOrder,
         duplicateAlias: duplicates.has(host.identity.alias),
@@ -357,11 +360,7 @@ export function ConnectionTree({
           className={`min-h-14 w-full px-4 py-2.5 text-left text-sm transition-colors ${active ? "bg-select-fill text-ink" : "text-ink-muted hover:bg-surface hover:text-ink"}`}
         >
           <span className="flex min-w-0 items-center gap-2">
-            {item.colour === "" ? (
-              <Icon name="terminal" className="size-4 text-ink-faint" />
-            ) : (
-              <span aria-hidden="true" className="size-2 shrink-0 rounded-full" style={{ backgroundColor: item.colour }} />
-            )}
+            <OperatingSystemIcon os={item.os} colour={item.colour} compact />
             <span className="min-w-0 flex-1">
               <span className="flex min-w-0 items-center gap-1.5">
                 <span className={`truncate ${active ? "font-semibold" : "font-medium"}`}>{host.identity.alias}</span>

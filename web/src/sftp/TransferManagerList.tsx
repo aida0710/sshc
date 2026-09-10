@@ -334,8 +334,8 @@ export function TransferManagerList() {
           <span aria-hidden="true" className="h-1 w-10 rounded-full bg-control-line transition-colors group-hover:bg-ink-muted group-active:bg-accent group-focus-visible:bg-accent" />
         </div>
       )}
-      <div className="flex min-h-9 flex-wrap items-center gap-2 px-3 py-1.5 md:min-h-8 md:py-1">
-        <button type="button" aria-label={t(collapsed ? "sftp.manager.expand" : "sftp.manager.collapse")} aria-expanded={!collapsed} aria-controls="transfer-manager-jobs" onClick={() => changeView({ collapsed: !collapsed })} className="flex min-w-0 items-center gap-1.5 rounded hover:text-accent focus:outline-none focus-visible:ring-1 focus-visible:ring-accent">
+      <div className="relative flex min-h-9 flex-wrap items-center gap-2 px-3 py-1.5 md:min-h-8 md:py-1">
+        <button type="button" aria-label={t(collapsed ? "sftp.manager.expand" : "sftp.manager.collapse")} aria-expanded={!collapsed} aria-controls="transfer-manager-jobs" onClick={() => changeView({ collapsed: !collapsed })} className={`flex min-w-0 items-center gap-1.5 rounded ${collapsed ? "after:absolute after:inset-0 after:cursor-pointer after:rounded-md" : ""} hover:text-accent focus:outline-none focus-visible:ring-1 focus-visible:ring-accent`}>
           <Icon name="chevronRight" className={`size-3 transition-transform ${collapsed ? "" : "rotate-90"}`} />
           <h3 id="transfer-manager-heading" className={`${collapsed ? "text-ink-muted" : "text-ink"} truncate font-medium`}>{t("sftp.manager.heading")}</h3>
         </button>

@@ -17,6 +17,7 @@ export const sections = [
   "Settings",
   "Sync",
   "History",
+  "License",
 ] as const;
 
 export type Section = (typeof sections)[number];
@@ -40,6 +41,7 @@ const paths: Record<Section, string> = {
   Settings: "/settings/engine",
   Sync: "/sync",
   History: "/history",
+  License: "/license",
 };
 
 export type SectionRoute =

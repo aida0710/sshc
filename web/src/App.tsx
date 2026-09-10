@@ -1,3 +1,4 @@
+import { matchesShortcut, shortcutKey, shortcutsBlocked, useBindings } from "./keyconfig/bindings";
 import {
   Suspense,
   lazy,
@@ -84,6 +85,8 @@ import {
 } from "./settings/settingsRoute";
 
 export { vaultStatePollIntervalMs } from "./session/useAppSession";
+
+const LicensePage = lazy(() => import("./licenses/LicensePage").then((module) => ({ default: module.LicensePage })));
 
 const TerminalView = lazy(() =>
   import("./terminal/TerminalView").then(({ TerminalView }) => ({
@@ -179,6 +182,7 @@ const sectionLabels: Record<Section, MessageKey> = {
   Settings: "section.settings",
   Sync: "section.sync",
   History: "section.history",
+  License: "section.license",
 };
 
 const sectionIcons: Record<Section, IconName> = {
@@ -200,6 +204,7 @@ const sectionIcons: Record<Section, IconName> = {
   Settings: "settings",
   Sync: "sync",
   History: "history",
+  License: "inspector",
 };
 
 const startSections: Section[] = ["Home", "Connections", "Files"];
@@ -275,6 +280,7 @@ export function App({
   vault = integrationsApi.passwordVault,
 }: AppProps) {
   const { t } = useLanguage();
+  const shortcuts = useBindings();
   const { resolved: resolvedTheme } = useTheme();
   const { route, location, navigate, navigateLocation, setNavigationBlocker } =
     useSectionRoute();
@@ -358,24 +364,6 @@ export function App({
   }, [state]);
 
   useEffect(() => {
-    function togglePalette(event: KeyboardEvent) {
-      if (
-        !commandPaletteEnabledRef.current ||
-        !(event.ctrlKey || event.metaKey) ||
-        event.altKey ||
-        event.key.toLocaleLowerCase() !== "k"
-      )
-        return;
-      event.preventDefault();
-      commandPaletteReturnFocusRef.current =
-        document.activeElement instanceof HTMLElement ? document.activeElement : null;
-      setCommandPaletteOpen((open) => !open);
-    }
-    document.addEventListener("keydown", togglePalette);
-    return () => document.removeEventListener("keydown", togglePalette);
-  }, []);
-
-  useEffect(() => {
     function closeTransientUi(event: Event) {
       if (commandPaletteOpen) {
         event.preventDefault();
@@ -427,6 +415,46 @@ export function App({
     setLiveWorkspace,
     setSettings: setTerminalSettings,
   } = terminalWorkspace;
+
+  useEffect(() => {
+    function handleShortcut(event: KeyboardEvent) {
+      if (!commandPaletteEnabledRef.current || shortcutKey(event) === null) return;
+      const browserFind = terminalFace && !event.altKey && !event.shiftKey &&
+        (event.ctrlKey !== event.metaKey) && event.key.toLowerCase() === "f";
+      if (shortcutsBlocked(event)) {
+        // Keep confirmation dialogs in place, but do not open browser Find behind them.
+        if (browserFind && !(event.target instanceof Element && event.target.closest("[data-shortcut-editor]"))) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+        }
+        return;
+      }
+      let action: (() => void) | undefined;
+      if (matchesShortcut(event, "palette", shortcuts)) {
+        action = () => {
+          commandPaletteReturnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+          setCommandPaletteOpen(true);
+        };
+      } else if (matchesShortcut(event, "home", shortcuts)) action = () => navigate("Home");
+      else if (matchesShortcut(event, "sftp", shortcuts)) action = () => navigate("Files");
+      else if (orderedConsoles.length > 0) {
+        const delta = matchesShortcut(event, "nextSession", shortcuts) ? 1 : matchesShortcut(event, "previousSession", shortcuts) ? -1 : 0;
+        if (delta !== 0) action = () => {
+          const current = orderedConsoles.findIndex((session) => session.id === activeConsole);
+          const index = current < 0 ? (delta > 0 ? 0 : orderedConsoles.length - 1) : (current + delta + orderedConsoles.length) % orderedConsoles.length;
+          const selected = orderedConsoles[index];
+          if (selected !== undefined) showConsole(selected.id);
+        };
+      }
+      if (action === undefined && !browserFind) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (!event.repeat) action?.();
+    }
+    // Capture before xterm translates an application shortcut into SSH input.
+    document.addEventListener("keydown", handleShortcut, true);
+    return () => document.removeEventListener("keydown", handleShortcut, true);
+  }, [shortcuts, navigate, orderedConsoles, activeConsole, showConsole, terminalFace]);
 
   useEffect(() => {
     if (state !== "ready") return;
@@ -579,6 +607,7 @@ export function App({
     return (
       <LockScreen
         exists={vaultExists}
+        passwordless={session.passwordless}
         version={version}
         onExists={session.markVaultExists}
         onOpen={session.openVault}
@@ -783,6 +812,7 @@ export function App({
                 {terminalFace || activeConsole !== null ? (
                   <div className={terminalFace ? "h-full" : "hidden"}>
                     <TerminalScreen
+                      visible={terminalFace}
                       consoles={consoles}
                       activeConsole={activeConsole}
                       settings={terminalSettings}
@@ -1023,6 +1053,7 @@ function SectionView(props: SectionViewProps) {
 }
 
 function TerminalScreen({
+  visible,
   consoles,
   activeConsole,
   settings,
@@ -1039,6 +1070,7 @@ function TerminalScreen({
   onOpenRemotePath,
   onOSC52Change,
 }: {
+  visible: boolean;
   consoles: TerminalSessionsState;
   activeConsole: string | null;
   settings: TerminalSettings;
@@ -1097,6 +1129,7 @@ function TerminalScreen({
             <TerminalView
               key={session.id}
               session={session}
+              searchShortcutActive={visible && activeConsole === session.id}
               {...(settings.fontSize === undefined
                 ? {}
                 : { fontSize: settings.fontSize })}
@@ -1170,6 +1203,7 @@ function PaddedSection({
       />
     );
   }
+  if (section === "License") return <LicensePage />;
   if (section === "Menu") {
     return (
       <MenuPanel

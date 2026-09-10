@@ -189,7 +189,7 @@ func TestOpenSaysUpgradeRatherThanCorruptForAFutureFile(t *testing.T) {
 func TestCreateRefusesAShortPassphrase(t *testing.T) {
 	// このファイルはマシンの外へコピーでき、好きなだけ時間をかけてオフラインで攻撃
 	// できる。それを高くつくものにする唯一のものが長さである。
-	if _, err := secret.Create("short"); !errors.Is(err, secret.ErrWeakPassphrase) {
+	if _, err := secret.Create("abc"); !errors.Is(err, secret.ErrWeakPassphrase) {
 		t.Fatalf("Create = %v, want ErrWeakPassphrase", err)
 	}
 	if _, err := secret.Create(strings.Repeat("あ", secret.MinPassphraseLength)); err != nil {

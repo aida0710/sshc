@@ -185,7 +185,7 @@ func TestStoringRefusesWhileTheVaultIsLocked(t *testing.T) {
 func TestInitialiseRefusesAShortPassphraseAndDoesNotCreateAVault(t *testing.T) {
 	engine, service := passwordEngine(t)
 
-	response := send(t, engine, http.MethodPost, "/api/v1/passwords/initialise", `{"passphrase":"short"}`, nil)
+	response := send(t, engine, http.MethodPost, "/api/v1/passwords/initialise", `{"passphrase":"abc"}`, nil)
 	if response.Code != http.StatusBadRequest {
 		t.Fatalf("code = %d, want 400", response.Code)
 	}
