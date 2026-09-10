@@ -302,3 +302,10 @@ HomeのOSアイコンはHostMetadataの`os`を手動指定として優先し、�
 Menu末尾のOthersからLicense（`/license`）へ移動する。名前・バージョン・ライセンス名の一覧を検索でき、各行を展開すると配布元URLと著作権・ライセンス・NOTICEの原文を読める。本文はUIへ同梱して遅延読込みし、外部通信を必要としない。
 
 生成手順は`scripts/licenses/README.md`。Goの各配布先で使うモジュール、Webの非開発依存、Gradleで解決したAndroidの実AAR/JAR、Go runtime、JetBrains Mono、Deviconを収録する。MonacoのThirdPartyNoticesとAndroid archive内の通知文も取り込む。依存manifestと同梱ライセンスのhashをWebテストで照合し、変更時には一覧を再生成する。OSが提供するシステムライブラリはこの一覧の対象外。
+
+
+### アプリのキーコンフィグ
+
+Menuの設定一覧から/settings/shortcutsを開き、コマンド検索・Terminal内検索・コピー・貼り付け・前後セッション・Home・SFTPの割り当てを編集する。web/src/keyconfig/bindings.tsが既定値、正規化、検証、重複排除、localStorageのsshc.shortcuts.v1と同一タブ/他タブへの変更通知を管理する。ブラウザーごとの設定でありVaultやSyncには含めない。
+
+全体ショートカットとTerminal内検索はcapture phaseで処理し、処理したkeydownをxtermへ渡さない。IME合成・AltGraph・割り当て編集中・modal表示中は発火させない。Terminalのコピーは選択範囲がある場合に動作し、標準paste chordはブラウザーのpaste event、独自paste chordはClipboard APIから既存の検査/編集フローへ渡す。標準paste eventは割り当て解除後もブラウザー操作として利用できる。繰り返しkeydownによる重複貼り付けとモーダル展開を抑止する。

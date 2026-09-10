@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
+import { defaultBindings, saveBindings } from "../keyconfig/bindings";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { attachTerminalClipboard, prepareTerminalPaste, type TerminalClipboardSettings } from "./clipboard";
 
 function harness(initial: TerminalClipboardSettings = { copyOnSelect: true, rightClickPaste: true }) {
@@ -48,7 +49,23 @@ function harness(initial: TerminalClipboardSettings = { copyOnSelect: true, righ
   };
 }
 
+afterEach(() => localStorage.clear());
+
 describe("terminal clipboard interactions", () => {
+  it("uses a remapped paste chord once and observes changes without reattaching", async () => {
+    const subject = harness();
+    saveBindings({ ...defaultBindings, paste: ["Alt+V"] });
+    const event = new KeyboardEvent("keydown", { key: "v", altKey: true, cancelable: true });
+    expect(subject.key(event)).toBe(false);
+    expect(event.defaultPrevented).toBe(true);
+    await Promise.resolve();
+    expect(subject.clipboard.readText).toHaveBeenCalledTimes(1);
+    expect(subject.terminal.paste).toHaveBeenCalledWith("pasted text");
+    saveBindings({ ...defaultBindings, paste: [] });
+    expect(subject.key(new KeyboardEvent("keydown", { key: "v", altKey: true }))).toBe(true);
+    subject.detach();
+  });
+
   it("normalizes and brackets paste text before sending it to a terminal", () => {
     expect(prepareTerminalPaste("one\ntwo\r\nthree", false)).toBe("one\rtwo\rthree");
     expect(prepareTerminalPaste("one\ntwo", true)).toBe("\u001b[200~one\rtwo\u001b[201~");

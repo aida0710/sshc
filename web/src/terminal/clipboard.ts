@@ -1,3 +1,4 @@
+import { matchesShortcut } from "../keyconfig/bindings";
 export type TerminalClipboardSettings = {
   copyOnSelect: boolean;
   rightClickPaste: boolean;
@@ -64,16 +65,18 @@ export function attachTerminalClipboard({
 
   terminal.attachCustomKeyEventHandler((event) => {
     if (event.type !== "keydown") return true;
-    const clipboardShortcut = event.metaKey || (event.ctrlKey && event.shiftKey);
-    const key = event.key.toLowerCase();
-    if (clipboardShortcut && key === "c" && terminal.hasSelection()) {
+    if (matchesShortcut(event, "copy") && terminal.hasSelection()) {
+      event.preventDefault();
       copySelection();
       return false;
     }
-    if (clipboardShortcut && key === "v") {
-      // Let the browser emit its normal paste event. The capture handler below
-      // owns that event before xterm's nested listeners see it. Returning false
-      // keeps xterm from also translating the shortcut into terminal input.
+    if (matchesShortcut(event, "paste")) {
+      const nativePaste = !event.altKey && ((event.metaKey && !event.ctrlKey && !event.shiftKey) || (event.ctrlKey && !event.metaKey && event.shiftKey)) && event.key.toLowerCase() === "v";
+      if (!nativePaste) {
+        event.preventDefault();
+        if (!event.repeat) readAndPaste();
+      }
+      // Native chords are delivered by the browser paste event exactly once.
       return false;
     }
     const sequence = enhancedKey?.(event) ?? null;

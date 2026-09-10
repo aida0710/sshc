@@ -1,3 +1,4 @@
+import { useBindings } from "../keyconfig/bindings";
 import {
   useEffect,
   useRef,
@@ -78,6 +79,7 @@ export function AppNavigation({
   onOpenCommandPalette: () => void;
 }) {
   const t = useTranslate();
+  const shortcuts = useBindings();
   const transfers = useSyncExternalStore(sftpTransferManager.subscribe, sftpTransferManager.getSnapshot);
   const activeTransfers = transfers.filter((job) =>
     ["queued", "running", "paused", "reattach", "needs_overwrite"].includes(job.status),
@@ -118,7 +120,7 @@ export function AppNavigation({
       >
         <Icon name="search" className="h-4 w-4" />
         <span className="flex-1 text-left">{t("palette.open")}</span>
-        <kbd className="hidden font-mono text-[10px] text-ink-faint md:block">Ctrl K</kbd>
+        <kbd className="hidden font-mono text-[10px] text-ink-faint md:block">{shortcuts.palette.join(" / ")}</kbd>
       </button>
 
       <div className="shrink-0">

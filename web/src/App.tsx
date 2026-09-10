@@ -1,3 +1,4 @@
+import { matchesShortcut, shortcutKey, shortcutsBlocked, useBindings } from "./keyconfig/bindings";
 import {
   Suspense,
   lazy,
@@ -279,6 +280,7 @@ export function App({
   vault = integrationsApi.passwordVault,
 }: AppProps) {
   const { t } = useLanguage();
+  const shortcuts = useBindings();
   const { resolved: resolvedTheme } = useTheme();
   const { route, location, navigate, navigateLocation, setNavigationBlocker } =
     useSectionRoute();
@@ -362,24 +364,6 @@ export function App({
   }, [state]);
 
   useEffect(() => {
-    function togglePalette(event: KeyboardEvent) {
-      if (
-        !commandPaletteEnabledRef.current ||
-        !(event.ctrlKey || event.metaKey) ||
-        event.altKey ||
-        event.key.toLocaleLowerCase() !== "k"
-      )
-        return;
-      event.preventDefault();
-      commandPaletteReturnFocusRef.current =
-        document.activeElement instanceof HTMLElement ? document.activeElement : null;
-      setCommandPaletteOpen((open) => !open);
-    }
-    document.addEventListener("keydown", togglePalette);
-    return () => document.removeEventListener("keydown", togglePalette);
-  }, []);
-
-  useEffect(() => {
     function closeTransientUi(event: Event) {
       if (commandPaletteOpen) {
         event.preventDefault();
@@ -431,6 +415,36 @@ export function App({
     setLiveWorkspace,
     setSettings: setTerminalSettings,
   } = terminalWorkspace;
+
+  useEffect(() => {
+    function handleShortcut(event: KeyboardEvent) {
+      if (!commandPaletteEnabledRef.current || shortcutKey(event) === null || shortcutsBlocked(event)) return;
+      let action: (() => void) | undefined;
+      if (matchesShortcut(event, "palette", shortcuts)) {
+        action = () => {
+          commandPaletteReturnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+          setCommandPaletteOpen(true);
+        };
+      } else if (matchesShortcut(event, "home", shortcuts)) action = () => navigate("Home");
+      else if (matchesShortcut(event, "sftp", shortcuts)) action = () => navigate("Files");
+      else if (orderedConsoles.length > 0) {
+        const delta = matchesShortcut(event, "nextSession", shortcuts) ? 1 : matchesShortcut(event, "previousSession", shortcuts) ? -1 : 0;
+        if (delta !== 0) action = () => {
+          const current = orderedConsoles.findIndex((session) => session.id === activeConsole);
+          const index = current < 0 ? (delta > 0 ? 0 : orderedConsoles.length - 1) : (current + delta + orderedConsoles.length) % orderedConsoles.length;
+          const selected = orderedConsoles[index];
+          if (selected !== undefined) showConsole(selected.id);
+        };
+      }
+      if (action === undefined) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (!event.repeat) action();
+    }
+    // Capture before xterm translates an application shortcut into SSH input.
+    document.addEventListener("keydown", handleShortcut, true);
+    return () => document.removeEventListener("keydown", handleShortcut, true);
+  }, [shortcuts, navigate, orderedConsoles, activeConsole, showConsole]);
 
   useEffect(() => {
     if (state !== "ready") return;

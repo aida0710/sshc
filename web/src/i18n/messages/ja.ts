@@ -1,6 +1,26 @@
 import type { MessageKey } from "./en";
 
 export const ja = {
+  "shortcuts.heading": "キーコンフィグ",
+  "shortcuts.description": "このブラウザーで使うアプリのショートカットを設定します。",
+  "shortcuts.hint": "割り当て欄を押し、Ctrl・Alt・Meta（Command）を含む組み合わせ、またはファンクションキーを入力してください。Escで中止、Tabで次の項目へ移動します。変更はすぐに反映され、このブラウザーに保存されます。ブラウザーやOSのショートカットが優先される場合があります。コピー・貼り付け・ターミナル内検索はターミナル内で有効です。",
+  "shortcuts.palette": "コマンド検索",
+  "shortcuts.terminalSearch": "ターミナル内検索",
+  "shortcuts.copy": "選択範囲をコピー",
+  "shortcuts.paste": "貼り付け",
+  "shortcuts.nextSession": "次のコネクション",
+  "shortcuts.previousSession": "前のコネクション",
+  "shortcuts.home": "Homeを開く",
+  "shortcuts.sftp": "SFTPを開く",
+  "shortcuts.assign": "キーを割り当て: {action}",
+  "shortcuts.clearAction": "割り当てを解除: {action}",
+  "shortcuts.clear": "解除",
+  "shortcuts.recording": "キーを入力…（Escで中止）",
+  "shortcuts.unassigned": "未設定",
+  "shortcuts.reset": "初期設定に戻す",
+  "shortcuts.saved": "キー設定を保存しました。",
+  "shortcuts.saveFailed": "保存できませんでした。ブラウザーのストレージ設定を確認してください。",
+  "shortcuts.conflict": "{action}に割り当て済みです。先にその割り当てを解除してください。",
   "shell.title": "sshc",
   "shell.starting": "ローカルセッションを開始しています…",
   "shell.vaultChecking":

@@ -5,7 +5,15 @@ description: Appearance, terminal, input, notifications, and local-shell setting
 
 # Settings
 
-Menu is organized into feature groups. Its Settings group links directly to Engine, Terminal, Notifications, Open connections, and Master password. Preferences at the bottom of Menu controls the theme and display language. Connection-specific behavior lives in the connection's sshc tab.
+Menu is organized into feature groups. Its Settings group links directly to Engine, Terminal, Keyboard shortcuts, Notifications, Open connections, and Master password. Preferences at the bottom of Menu controls the theme and display language. Connection-specific behavior lives in the connection's sshc tab.
+
+## Keyboard shortcuts
+
+Open **Menu → Keyboard shortcuts** to assign command search, terminal search, copy/paste, previous/next connection, Home and SFTP. Click a binding and press a chord with Ctrl, Alt or Meta (Command), or a function key. Escape cancels; Tab moves to the next control.
+
+Duplicate bindings are rejected. Use **Clear** to disable an action or **Restore defaults** to reset all bindings. Connection switching defaults to Alt+PageDown / Alt+PageUp. Copy, paste and terminal search apply inside the terminal. Paste retains its normal confirmation and editing flow.
+
+Changes apply immediately and persist in this browser's local storage; they are not synced to other browsers. Browser or OS shortcuts may take priority. Native browser paste remains available.
 
 ## Engine
 

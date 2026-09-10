@@ -972,7 +972,7 @@ describe("App", () => {
     );
 
     await screen.findByText("existing vault fixture");
-    expect(addEventListener).toHaveBeenCalledWith("keydown", expect.any(Function));
+    expect(addEventListener).toHaveBeenCalledWith("keydown", expect.any(Function), true);
 
     act(() => {
       document.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true }));

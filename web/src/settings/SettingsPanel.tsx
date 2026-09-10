@@ -1,3 +1,4 @@
+import { KeyConfig } from "../keyconfig/KeyConfig";
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { failureCode } from "../api/client";
 import {
@@ -431,6 +432,11 @@ export function SettingsPanel({
       <PageHeader title={t(pageTitle)} description={t(pageDescription)} />
 
       <Card radius="md">
+        {page === "All" || page === "Shortcuts" ? (
+          <SettingsSection id="settings-shortcuts" label={t("shortcuts.heading")} icon="settings" showHeading={page === "All"}>
+            <KeyConfig />
+          </SettingsSection>
+        ) : null}
         {page === "All" || page === "Engine" ? (
         <SettingsSection id="settings-engine" label={t("engine.heading")} icon="settings" showHeading={page === "All"}>
           <div className="max-w-2xl">

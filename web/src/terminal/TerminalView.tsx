@@ -1,3 +1,4 @@
+import { matchesShortcut, shortcutsBlocked } from "../keyconfig/bindings";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
@@ -187,13 +188,14 @@ export function TerminalView({
 
   useEffect(() => {
     const openSearch = (event: KeyboardEvent) => {
-      if (!(event.ctrlKey || event.metaKey) || event.key.toLocaleLowerCase() !== "f") return;
       if (host.current === null || !host.current.contains(document.activeElement)) return;
+      if (!matchesShortcut(event, "terminalSearch") || shortcutsBlocked(event)) return;
       event.preventDefault();
-      setSearchOpen(true);
+      event.stopImmediatePropagation();
+      if (!event.repeat) setSearchOpen(true);
     };
-    window.addEventListener("keydown", openSearch);
-    return () => window.removeEventListener("keydown", openSearch);
+    window.addEventListener("keydown", openSearch, true);
+    return () => window.removeEventListener("keydown", openSearch, true);
   }, []);
 
   useEffect(() => {
