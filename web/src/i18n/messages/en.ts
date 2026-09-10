@@ -815,6 +815,12 @@ export const en = {
   "shell.themeDark": "Dark",
 
   "section.home": "Home",
+  "section.license": "License",
+  "menu.others": "Others",
+  "license.description": "Licenses and copyright notices for sshc and its components. Full texts are available offline.",
+  "license.search": "Search components or licenses",
+  "license.count": "Components: {count}",
+  "license.noMatches": "No matching components.",
   "section.menu": "Menu",
   "section.connections": "Connections",
   "section.terminal": "Terminal",

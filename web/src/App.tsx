@@ -85,6 +85,8 @@ import {
 
 export { vaultStatePollIntervalMs } from "./session/useAppSession";
 
+const LicensePage = lazy(() => import("./licenses/LicensePage").then((module) => ({ default: module.LicensePage })));
+
 const TerminalView = lazy(() =>
   import("./terminal/TerminalView").then(({ TerminalView }) => ({
     default: TerminalView,
@@ -179,6 +181,7 @@ const sectionLabels: Record<Section, MessageKey> = {
   Settings: "section.settings",
   Sync: "section.sync",
   History: "section.history",
+  License: "section.license",
 };
 
 const sectionIcons: Record<Section, IconName> = {
@@ -200,6 +203,7 @@ const sectionIcons: Record<Section, IconName> = {
   Settings: "settings",
   Sync: "sync",
   History: "history",
+  License: "inspector",
 };
 
 const startSections: Section[] = ["Home", "Connections", "Files"];
@@ -1171,6 +1175,7 @@ function PaddedSection({
       />
     );
   }
+  if (section === "License") return <LicensePage />;
   if (section === "Menu") {
     return (
       <MenuPanel

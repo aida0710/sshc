@@ -819,6 +819,12 @@ export const ja = {
   "shell.themeDark": "ダーク",
 
   "section.home": "Home",
+  "section.license": "License",
+  "menu.others": "Others",
+  "license.description": "sshcと使用コンポーネントのライセンス・著作権表示です。全文はオフラインでも読めます。",
+  "license.search": "コンポーネント・ライセンスを検索",
+  "license.count": "{count}件のコンポーネント",
+  "license.noMatches": "一致するコンポーネントがありません。",
   "section.menu": "Menu",
   "section.connections": "Connections",
   "section.terminal": "Terminal",
