@@ -130,14 +130,13 @@ describe("terminal clipboard interactions", () => {
     expect(paste).not.toHaveBeenCalled();
   });
 
-  it("leaves keyboard paste to the browser paste event", () => {
+  it.each([{ ctrlKey: true }, { ctrlKey: true, shiftKey: true }, { metaKey: true }])("leaves keyboard paste %j to the browser paste event", (modifiers) => {
     const subject = harness();
     subject.setSettings({ copyOnSelect: false, rightClickPaste: false });
 
     const shortcut = new KeyboardEvent("keydown", {
       key: "v",
-      ctrlKey: true,
-      shiftKey: true,
+      ...modifiers,
       cancelable: true,
     });
     expect(subject.key(shortcut)).toBe(false);

@@ -4,7 +4,7 @@ export const defaultBindings = {
   palette: ["Ctrl+K", "Meta+K"],
   terminalSearch: ["Ctrl+F", "Meta+F"],
   copy: ["Ctrl+Shift+C", "Meta+C"],
-  paste: ["Ctrl+Shift+V", "Meta+V"],
+  paste: ["Ctrl+V", "Meta+V", "Ctrl+Shift+V"],
   nextSession: ["Alt+PageDown"],
   previousSession: ["Alt+PageUp"],
   home: [],
@@ -47,7 +47,12 @@ export function parseBindings(raw: string): Bindings {
     const result: Bindings = { ...defaultBindings };
     for (const action of shortcutActions) {
       const keys = (value as Record<string, unknown>)[action];
-      if (Array.isArray(keys) && keys.length <= 2 && keys.every(validShortcut)) result[action] = [...new Set(keys)];
+      if (Array.isArray(keys) && keys.length <= 3 && keys.every(validShortcut)) result[action] = [...new Set(keys)];
+    }
+    // Upgrade the old default without changing custom bindings or introducing conflicts.
+    if (result.paste.length === 2 && result.paste.includes("Ctrl+Shift+V") && result.paste.includes("Meta+V") &&
+      !shortcutActions.some((action) => action !== "paste" && result[action].includes("Ctrl+V"))) {
+      result.paste = defaultBindings.paste;
     }
     // Reject conflicting storage (including hand edits) as a whole.
     const all = Object.values(result).flat();

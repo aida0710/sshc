@@ -321,34 +321,36 @@ test("pastes the clipboard into the console with right click", async ({ page, co
   await expect(screen).toContainText("right-click-paste-canary", { timeout: 20_000 });
 });
 
-test("pastes a desktop keyboard shortcut into the console only once", async ({ page, context, installation }) => {
-  const inputFrames: string[] = [];
-  page.on("websocket", (socket) => socket.on("framesent", ({ payload }) => {
-    inputFrames.push(typeof payload === "string" ? payload : payload.toString("utf8"));
-  }));
-  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
-  await openApplication(page, installation);
+for (const chord of ["Control+v", "Control+Shift+V"]) {
+  test(`pastes ${chord} into the console only once`, async ({ page, context, installation }) => {
+    const inputFrames: string[] = [];
+    page.on("websocket", (socket) => socket.on("framesent", ({ payload }) => {
+      inputFrames.push(typeof payload === "string" ? payload : payload.toString("utf8"));
+    }));
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await openApplication(page, installation);
 
-  const panel = await openConsolePanel(page);
-  await panel.getByRole("button", { name: "Local shell" }).click();
-  const screen = page.getByRole("region", { name: /^Console for / });
-  await expect(screen).toContainText(/[$#%>]/, { timeout: 20_000 });
-  await typeIntoConsole(page, 'rm -f "$HOME/keyboard-paste-data"');
-  await page.evaluate(() => navigator.clipboard.writeText('printf x >> "$HOME/keyboard-paste-data"; '));
+    const panel = await openConsolePanel(page);
+    await panel.getByRole("button", { name: "Local shell" }).click();
+    const screen = page.getByRole("region", { name: /^Console for / });
+    await expect(screen).toContainText(/[$#%>]/, { timeout: 20_000 });
+    await typeIntoConsole(page, 'rm -f "$HOME/keyboard-paste-data"');
+    await page.evaluate(() => navigator.clipboard.writeText('printf x >> "$HOME/keyboard-paste-data"; '));
 
-  await terminalKeyboard(page).focus();
-  await page.keyboard.press("Control+Shift+V");
-  await page.keyboard.press("Enter");
-  const pastedFrames = inputFrames.filter((frame) => frame.includes("keyboard-paste-data"));
-  expect(pastedFrames, JSON.stringify(inputFrames)).toHaveLength(1);
-  expect(
-    pastedFrames[0]!.split("keyboard-paste-data").length - 1,
-    JSON.stringify(pastedFrames[0]),
-  ).toBe(1);
-  await typeIntoConsole(page, 'echo keyboard-paste-count=$(wc -c < "$HOME/keyboard-paste-data")');
+    await terminalKeyboard(page).focus();
+    await page.keyboard.press(chord);
+    await page.keyboard.press("Enter");
+    const pastedFrames = inputFrames.filter((frame) => frame.includes("keyboard-paste-data"));
+    expect(pastedFrames, JSON.stringify(inputFrames)).toHaveLength(1);
+    expect(
+      pastedFrames[0]!.split("keyboard-paste-data").length - 1,
+      JSON.stringify(pastedFrames[0]),
+    ).toBe(1);
+    await typeIntoConsole(page, 'echo keyboard-paste-count=$(wc -c < "$HOME/keyboard-paste-data")');
 
-  await expect(screen).toContainText("keyboard-paste-count=1", { timeout: 20_000 });
-});
+    await expect(screen).toContainText("keyboard-paste-count=1", { timeout: 20_000 });
+  });
+}
 
 test("reviews a multiline paste before sending any terminal input", async ({ page, context, installation }) => {
   const inputFrames: string[] = [];

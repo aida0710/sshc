@@ -15,6 +15,8 @@ Duplicate bindings are rejected. Use **Clear** to disable an action or **Restore
 
 Changes apply immediately and persist in this browser's local storage; they are not synced to other browsers. Browser or OS shortcuts may take priority. Native browser paste remains available.
 
+Paste defaults to Ctrl+V (⌘V on Mac); Ctrl+Shift+V also remains available.
+
 ## Engine
 
 Desktop uses a device-local stable port so bookmarks and the installed web app keep the same URL. It first tries `127.0.0.1:54447`, then stores an available fallback if that port is already in use. You may change the port, but must enrol the browser again at the new origin. The native Android app manages its own local port.

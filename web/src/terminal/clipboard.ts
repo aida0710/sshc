@@ -71,7 +71,7 @@ export function attachTerminalClipboard({
       return false;
     }
     if (matchesShortcut(event, "paste")) {
-      const nativePaste = !event.altKey && ((event.metaKey && !event.ctrlKey && !event.shiftKey) || (event.ctrlKey && !event.metaKey && event.shiftKey)) && event.key.toLowerCase() === "v";
+      const nativePaste = !event.altKey && ((event.metaKey && !event.ctrlKey && !event.shiftKey) || (event.ctrlKey && !event.metaKey)) && event.key.toLowerCase() === "v";
       if (!nativePaste) {
         event.preventDefault();
         if (!event.repeat) readAndPaste();
