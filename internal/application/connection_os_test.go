@@ -19,12 +19,12 @@ func TestConnectionOSPersistsAndDoesNotOverwriteAnOverride(t *testing.T) {
 	if observed == nil {
 		t.Fatal("missing observer")
 	}
-	observed("ubuntu")
+	observed("amazonlinux")
 	overview, err := service.Overview()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(overview.Metadata.Hosts) != 1 || overview.Metadata.Hosts[0].DetectedOS != "ubuntu" {
+	if len(overview.Metadata.Hosts) != 1 || overview.Metadata.Hosts[0].DetectedOS != "amazonlinux" {
 		t.Fatalf("metadata: %+v", overview.Metadata.Hosts)
 	}
 	metadata := overview.Metadata
@@ -36,7 +36,7 @@ func TestConnectionOSPersistsAndDoesNotOverwriteAnOverride(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if stored.Hosts[0].OS != "debian" || stored.Hosts[0].Note != "keep this note" || stored.Hosts[0].DetectedOS != "ubuntu" {
+	if stored.Hosts[0].OS != "debian" || stored.Hosts[0].Note != "keep this note" || stored.Hosts[0].DetectedOS != "amazonlinux" {
 		t.Fatalf("override lost: %+v", stored.Hosts[0])
 	}
 	if service.ObserveConnectionOS(target) != nil {

@@ -4,14 +4,14 @@ import { terminalKeyboard } from "./support/terminal";
 
 test("shows OS icons and editable paste and close dialogs with synthetic connections", async ({ page, context, installation }) => {
   const hosts = [
-    ["demo-ubuntu", "ubuntu"], ["demo-redhat", "redhat"], ["demo-debian", "debian"],
+    ["demo-amazon", "amazonlinux"], ["demo-fedora", "fedora"], ["demo-ubuntu", "ubuntu"], ["demo-redhat", "redhat"], ["demo-debian", "debian"],
     ["demo-macos", "macos"], ["demo-windows", "windows"], ["demo-unknown", ""],
   ];
   await installation.write("config", hosts.map(([alias]) => `Host ${alias}\n  HostName 192.0.2.10\n  User demo\n`).join("\n"));
   await installation.write("sshc/metadata.json", JSON.stringify({ schemaVersion: 4, hosts: hosts.map(([alias, os]) => ({ identity: { path: "config", alias }, os })) }));
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await openApplication(page, installation);
-  for (const name of ["Ubuntu", "Red Hat Enterprise Linux", "Debian", "macOS", "Windows", "OS unknown"]) {
+  for (const name of ["Amazon Linux", "Fedora", "Ubuntu", "Red Hat Enterprise Linux", "Debian", "macOS", "Windows", "OS unknown"]) {
     await expect(page.getByRole("img", { name, exact: true })).toBeVisible();
   }
   await expect(page.getByRole("img", { name: "Ubuntu", exact: true })).toHaveCSS("width", "24px");
@@ -23,7 +23,7 @@ test("shows OS icons and editable paste and close dialogs with synthetic connect
   }
   await openSection(page, "Connections");
   const connectionList = page.getByRole("navigation", { name: "Connections", exact: true });
-  for (const name of ["Ubuntu", "Red Hat Enterprise Linux", "Debian", "macOS", "Windows", "OS unknown"]) {
+  for (const name of ["Amazon Linux", "Fedora", "Ubuntu", "Red Hat Enterprise Linux", "Debian", "macOS", "Windows", "OS unknown"]) {
     await expect(connectionList.getByRole("img", { name, exact: true })).toBeVisible();
   }
   const connectionsDir = process.env.SSHC_CONNECTIONS_VISUAL_DIR;

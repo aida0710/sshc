@@ -5,7 +5,7 @@ import "strings"
 
 func Valid(value string) bool {
 	switch value {
-	case "", "server", "linux", "ubuntu", "debian", "redhat", "fedora", "centos", "rocky", "almalinux", "arch", "alpine", "opensuse", "freebsd", "macos", "windows":
+	case "", "server", "linux", "amazonlinux", "ubuntu", "debian", "redhat", "fedora", "centos", "rocky", "almalinux", "arch", "alpine", "opensuse", "freebsd", "macos", "windows":
 		return true
 	}
 	return false
@@ -14,6 +14,8 @@ func Valid(value string) bool {
 func normalize(value string) string {
 	value = strings.ToLower(strings.Trim(value, " \t\r\"'"))
 	switch value {
+	case "amzn":
+		return "amazonlinux"
 	case "rhel":
 		return "redhat"
 	case "archlinux":

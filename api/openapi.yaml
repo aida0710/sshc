@@ -3931,11 +3931,11 @@ components:
         tags: { type: array, items: { type: string } }
         os:
           type: string
-          enum: ['', server, linux, ubuntu, debian, redhat, fedora, centos, rocky, almalinux, arch, alpine, opensuse, freebsd, macos, windows]
+          enum: ['', server, linux, amazonlinux, ubuntu, debian, redhat, fedora, centos, rocky, almalinux, arch, alpine, opensuse, freebsd, macos, windows]
           description: Home icon override. Empty or omitted enables automatic detection.
         detectedOS:
           type: string
-          enum: ['', server, linux, ubuntu, debian, redhat, fedora, centos, rocky, almalinux, arch, alpine, opensuse, freebsd, macos, windows]
+          enum: ['', server, linux, amazonlinux, ubuntu, debian, redhat, fedora, centos, rocky, almalinux, arch, alpine, opensuse, freebsd, macos, windows]
           description: Last operating system detected after connecting.
         detectedOSBinding: { type: string, maxLength: 64 }
         colour: { type: string }

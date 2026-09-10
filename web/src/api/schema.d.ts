@@ -3013,12 +3013,12 @@ export interface components {
              * @description Home icon override. Empty or omitted enables automatic detection.
              * @enum {string}
              */
-            os?: "" | "server" | "linux" | "ubuntu" | "debian" | "redhat" | "fedora" | "centos" | "rocky" | "almalinux" | "arch" | "alpine" | "opensuse" | "freebsd" | "macos" | "windows";
+            os?: "" | "server" | "linux" | "amazonlinux" | "ubuntu" | "debian" | "redhat" | "fedora" | "centos" | "rocky" | "almalinux" | "arch" | "alpine" | "opensuse" | "freebsd" | "macos" | "windows";
             /**
              * @description Last operating system detected after connecting.
              * @enum {string}
              */
-            detectedOS?: "" | "server" | "linux" | "ubuntu" | "debian" | "redhat" | "fedora" | "centos" | "rocky" | "almalinux" | "arch" | "alpine" | "opensuse" | "freebsd" | "macos" | "windows";
+            detectedOS?: "" | "server" | "linux" | "amazonlinux" | "ubuntu" | "debian" | "redhat" | "fedora" | "centos" | "rocky" | "almalinux" | "arch" | "alpine" | "opensuse" | "freebsd" | "macos" | "windows";
             detectedOSBinding?: string;
             colour?: string;
             note?: string;

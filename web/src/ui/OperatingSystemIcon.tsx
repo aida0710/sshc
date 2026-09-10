@@ -15,14 +15,14 @@ import windows from "./os-icons/windows11.svg";
 import linux from "./os-icons/linux.svg";
 
 export const operatingSystems = [
-  ["server", "Server"], ["linux", "Linux"], ["ubuntu", "Ubuntu"], ["debian", "Debian"],
+  ["server", "Server"], ["linux", "Linux"], ["amazonlinux", "Amazon Linux"], ["ubuntu", "Ubuntu"], ["debian", "Debian"],
   ["redhat", "Red Hat Enterprise Linux"], ["fedora", "Fedora"], ["centos", "CentOS"],
   ["rocky", "Rocky Linux"], ["almalinux", "AlmaLinux"], ["arch", "Arch Linux"],
   ["alpine", "Alpine Linux"], ["opensuse", "openSUSE / SUSE"], ["freebsd", "FreeBSD"],
   ["macos", "macOS"], ["windows", "Windows"],
 ] as const;
 
-const sources: Record<string, string> = { ubuntu, debian, redhat, fedora, centos, rocky, almalinux, arch, opensuse, macos, windows, linux, alpine: linux };
+const sources: Record<string, string> = { ubuntu, debian, redhat, fedora, centos, rocky, almalinux, arch, opensuse, macos, windows, linux, amazonlinux: linux, alpine: linux };
 
 export function OperatingSystemIcon({ os, colour = "", compact = false }: { os?: HostMetadata["os"] | undefined; colour?: string; compact?: boolean }) {
   const t = useTranslate();
