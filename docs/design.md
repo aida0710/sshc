@@ -313,3 +313,5 @@ Menuの設定一覧から/settings/shortcutsを開き、コマンド検索・Ter
 貼り付けの既定割り当てはCtrl+V / Meta+V / Ctrl+Shift+V。いずれもブラウザーのpaste eventで処理し、Clipboard APIの追加readを起こさない。旧既定の2キーが保存済みならCtrl+Vを追加するが、独自の貼り付け設定や他操作へのCtrl+V割り当ては維持する。
 
 Terminal画面のCtrl+F/Meta+FはブラウザーFindへ渡さない。選択中セッションへsearchShortcutActiveを渡し、サイドバー・検索欄・ツールバーからでも設定されたTerminal検索キーで同じ検索を開く。非選択セッションとHome等の背面に保持するTerminalViewはキーを受け取らない。modal表示時や検索キーを変更/解除した場合もTerminal画面では標準Findキーのブラウザー動作を抑止するが、他操作へ明示的に割り当てたキーはその操作を優先する。Terminal以外の画面は標準Ctrl+Fを妨げない。
+
+Connections一覧もHomeと同じOperatingSystemIconを使用し、手動OS指定→自動判定→汎用サーバーの順で表示する。20pxの単色アイコンで、接続ごとの色は小さなバッジとして保持する。

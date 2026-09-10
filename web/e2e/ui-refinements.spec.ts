@@ -1,5 +1,5 @@
 import { mkdir } from "node:fs/promises";
-import { expect, openApplication, test } from "./support/environment";
+import { expect, openApplication, openSection, test } from "./support/environment";
 import { terminalKeyboard } from "./support/terminal";
 
 test("shows OS icons and editable paste and close dialogs with synthetic connections", async ({ page, context, installation }) => {
@@ -20,6 +20,16 @@ test("shows OS icons and editable paste and close dialogs with synthetic connect
   if (dir !== undefined) {
     await mkdir(dir, { recursive: true });
     await page.screenshot({ path: `${dir}/home-os-icons-monochrome.png`, fullPage: true });
+  }
+  await openSection(page, "Connections");
+  const connectionList = page.getByRole("navigation", { name: "Connections", exact: true });
+  for (const name of ["Ubuntu", "Red Hat Enterprise Linux", "Debian", "macOS", "Windows", "OS unknown"]) {
+    await expect(connectionList.getByRole("img", { name, exact: true })).toBeVisible();
+  }
+  const connectionsDir = process.env.SSHC_CONNECTIONS_VISUAL_DIR;
+  if (connectionsDir !== undefined) {
+    await mkdir(connectionsDir, { recursive: true });
+    await page.screenshot({ path: `${connectionsDir}/connections-os-icons.png`, fullPage: true });
   }
   await page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Local shell" }).click();
   await expect(page.getByRole("region", { name: /^Console for / })).toContainText(/[$#%>]/);
