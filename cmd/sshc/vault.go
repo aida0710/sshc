@@ -143,7 +143,7 @@ func runVaultCreate(
 	ctx context.Context, found handoff.Handoff, client *http.Client, stdin *os.File,
 	stdout, stderr io.Writer, terminal passwordTerminal,
 ) int {
-	fmt.Fprintln(stderr, "Use at least 4 characters, or leave the new password blank to use this device without a vault password.")
+	fmt.Fprintln(stderr, "Enter at least 4 characters, or press Enter without typing a new password to use a passwordless vault. Leave the confirmation blank too.")
 	next, err := promptVaultPassword(ctx, stdin, stderr, terminal, "New master password: ")
 	defer zeroBytes(next)
 	if err != nil {
@@ -213,7 +213,7 @@ func runVaultChange(
 	if ctx.Err() != nil {
 		return 130
 	}
-	fmt.Fprintln(stderr, "Use at least 4 characters, or leave the new password blank to use this device without a vault password.")
+	fmt.Fprintln(stderr, "Enter at least 4 characters, or press Enter without typing a new password to use a passwordless vault. Leave the confirmation blank too.")
 	next, err := promptVaultPassword(ctx, stdin, stderr, terminal, "New master password: ")
 	defer zeroBytes(next)
 	if err != nil {
