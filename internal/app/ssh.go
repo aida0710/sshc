@@ -47,6 +47,12 @@ func newSSHParts(
 ) sshParts {
 	return sshParts{
 		dialer: sshclient.Dialer{
+			ObserveOS: func(target sshclient.Target) func(string) {
+				if config == nil {
+					return nil
+				}
+				return config.ObserveConnectionOS(target)
+			},
 			// 接続のたびに読む。 設定は走っているあいだに変えられる。
 			Verbosity: func() sshclient.Verbosity {
 				return sshclient.Verbosity(config.TerminalSettings().Verbosity)

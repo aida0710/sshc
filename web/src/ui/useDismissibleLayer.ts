@@ -55,6 +55,14 @@ function dismissWithEscape(event: KeyboardEvent) {
   });
 }
 
+// A late terminal connection or background widget must not take focus from a modal.
+function keepModalFocus(event: FocusEvent) {
+  const layer = topLayer();
+  if (layer === undefined || !layer.trapFocus || !(event.target instanceof Node)) return;
+  if (layer.containers().some((container) => container?.contains(event.target as Node))) return;
+  (layer.initialFocus() ?? layer.containers()[0])?.focus();
+}
+
 function dismissForAndroidBack(event: Event) {
   const layer = topLayer();
   if (layer === undefined) return;
@@ -71,6 +79,7 @@ function listen() {
   if (layers.length !== 1) return;
   document.addEventListener("pointerdown", dismissOutside, true);
   document.addEventListener("keydown", dismissWithEscape, true);
+  document.addEventListener("focusin", keepModalFocus, true);
   window.addEventListener("sshc-android-back", dismissForAndroidBack, true);
 }
 
@@ -78,6 +87,7 @@ function unlisten() {
   if (layers.length !== 0) return;
   document.removeEventListener("pointerdown", dismissOutside, true);
   document.removeEventListener("keydown", dismissWithEscape, true);
+  document.removeEventListener("focusin", keepModalFocus, true);
   window.removeEventListener("sshc-android-back", dismissForAndroidBack, true);
 }
 

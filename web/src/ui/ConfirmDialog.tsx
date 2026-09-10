@@ -35,10 +35,10 @@ export function ConfirmDialog({
       </h2>
       {body}
       <div className="flex justify-end gap-2">
-        <Button ref={cancelRef} onClick={onCancel}>
+        <Button ref={cancelRef} onClick={onCancel} className="focus:outline-2 focus:outline-offset-2 focus:outline-accent">
           {cancelLabel}
         </Button>
-        <Button kind="danger" onClick={onConfirm}>
+        <Button kind="danger" onClick={onConfirm} className="focus:outline-2 focus:outline-offset-2 focus:outline-accent">
           {confirmLabel}
         </Button>
       </div>

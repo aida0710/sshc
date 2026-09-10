@@ -570,7 +570,8 @@ export const ja = {
   "terminal.pasteNotSent": "まだターミナルには何も送信していません。",
   "terminal.pasteCancel": "キャンセル",
   "terminal.pasteWithoutFinalLineBreak": "末尾のEnterを除いて貼り付け",
-  "terminal.pasteUnchanged": "そのまま貼り付け",
+  "terminal.pasteEdit": "貼り付け内容を編集",
+  "terminal.pasteSend": "貼り付け",
   "terminal.search": "検索",
   "terminal.searchInput": "ターミナル出力を検索",
   "terminal.searchPlaceholder": "スクロールバックを検索…",
@@ -2221,6 +2222,11 @@ export const ja = {
   "host.commentFromNote":
     "これは sshc だけが保存していたメモです。保存すると設定ファイルへ書き込まれ、メモは廃止されます。",
   "host.saveComment": "コメントを保存",
+  "host.os": "OSアイコン",
+  "host.osAutomatic": "接続時に自動判定",
+  "host.osGeneric": "汎用サーバー",
+  "host.osUnknown": "OS未判定",
+  "host.osHint": "接続後にOSを判定します。手動でアイコンを選ぶこともできます。",
   "host.colour": "色",
   "host.clearColour": "色を消す",
   "host.displayOrder":

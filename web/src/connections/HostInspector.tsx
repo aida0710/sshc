@@ -7,6 +7,7 @@ import { AppearancePicker } from "../terminal/AppearancePicker";
 import { BackgroundPicker } from "../terminal/BackgroundPicker";
 import { chooseAppearance } from "../terminal/appearance";
 import { fonts } from "../terminal/fonts";
+import { operatingSystems, OperatingSystemIcon } from "../ui/OperatingSystemIcon";
 import { palettes } from "../terminal/palettes";
 
 function inherited(detail: HostDetail) {
@@ -54,6 +55,18 @@ export function HostInspector({
             </Button>
           )}
         </div>
+
+        <Field label={t("host.os")} hint={t("host.osHint")} interactiveChildren>
+          <div className="flex items-center gap-2">
+            <OperatingSystemIcon os={detail.metadata.os || detail.metadata.detectedOS || ""} />
+            <select aria-label={t("host.os")} value={detail.metadata.os ?? ""}
+              onChange={(event) => onMetadata({ ...detail.metadata, os: event.target.value as NonNullable<HostMetadata["os"]> })}
+              className={control}>
+              <option value="">{t("host.osAutomatic")}</option>
+              {operatingSystems.map(([value, label]) => <option key={value} value={value}>{value === "server" ? t("host.osGeneric") : label}</option>)}
+            </select>
+          </div>
+        </Field>
 
         <Field label={t("connection.paletteLabel")} hint={t("connection.paletteHint")}>
           <AppearancePicker

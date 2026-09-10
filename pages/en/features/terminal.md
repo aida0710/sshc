@@ -37,7 +37,7 @@ On reconnect, sshc replays only bytes after the browser's last rendered position
 
 ## Input and clipboard
 
-Normal text-selection copying stays inside the browser and does not require OSC 52. Configure automatic copy-on-select and right-click paste under **Settings → Terminal**. A paste containing line breaks, a final Enter, or terminal control characters is not sent immediately. sshc shows the target, logical line count, and a bounded preview with control characters made visible. You can cancel, paste unchanged, or remove exactly one final Enter first. Neither the preview nor the original paste is stored.
+Normal text-selection copying stays inside the browser and does not require OSC 52. Configure automatic copy-on-select and right-click paste under **Settings → Terminal**. A paste containing line breaks, a final Enter, or terminal control characters is not sent immediately. sshc shows the target, logical line count, and a bounded preview with control characters made visible. Edit the text in the review dialog; the line count and warnings update with it. You can cancel, paste the edited text, or remove exactly one final Enter first. Neither the preview nor the original paste is stored.
 
 OSC 52 lets remote software write to the device clipboard. It has a global default and a per-SSH-host allow/deny override, so enable it only for hosts you trust.
 
@@ -58,3 +58,5 @@ The integration is opt-in. Without it, sshc does not infer agent state from ordi
 Manage Local forwarding and Dynamic SOCKS per SSH connection. Local forwarding has a local bind endpoint and a destination host and port. Dynamic forwarding opens a local SOCKS endpoint. Remote forwarding is intentionally not provided.
 
 See [Port forwarding](/en/terminal/port-forwarding) for setup details.
+
+Closing a connection initially focuses **Keep it open**. Press Tab to focus **Close**, then Enter to confirm.

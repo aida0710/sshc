@@ -563,7 +563,8 @@ export const en = {
   "terminal.pasteNotSent": "Nothing has been sent to the terminal yet.",
   "terminal.pasteCancel": "Cancel",
   "terminal.pasteWithoutFinalLineBreak": "Paste without final Enter",
-  "terminal.pasteUnchanged": "Paste unchanged",
+  "terminal.pasteEdit": "Edit paste",
+  "terminal.pasteSend": "Paste",
   "terminal.search": "Find",
   "terminal.searchInput": "Search terminal output",
   "terminal.searchPlaceholder": "Search scrollback…",
@@ -2211,6 +2212,11 @@ export const en = {
   "host.commentFromNote":
     "This started as a note stored only by sshc. Saving it writes it into the configuration file and retires the note.",
   "host.saveComment": "Save comment",
+  "host.os": "Operating system icon",
+  "host.osAutomatic": "Auto-detect after connecting",
+  "host.osGeneric": "Generic server",
+  "host.osUnknown": "OS unknown",
+  "host.osHint": "Detected after connecting. Choose an icon to override detection.",
   "host.colour": "Colour",
   "host.clearColour": "Clear colour",
   "host.displayOrder":

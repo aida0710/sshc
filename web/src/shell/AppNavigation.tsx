@@ -142,7 +142,7 @@ export function AppNavigation({
         </span>
         <ConsoleList
           sessions={orderedConsoles}
-          selected={activeConsole}
+          selected={section === "Terminal" ? activeConsole : null}
           workspace={liveWorkspace}
           onRenameWorkspace={onRenameWorkspace}
           unreadBySession={unreadBySession}

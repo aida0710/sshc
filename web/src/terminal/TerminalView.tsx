@@ -36,7 +36,7 @@ import { attachWebglRenderer } from "./webgl";
 import { attachOSC7Directory } from "./osc7";
 import { applyTerminalRuntimeOptions } from "./runtimeOptions";
 import { Icon } from "../ui/icons";
-import { inspectTerminalPaste, removeFinalTerminalLineBreak, type TerminalPasteInspection } from "./pasteGuard";
+import { inspectTerminalPaste } from "./pasteGuard";
 import { TerminalPasteDialog } from "./TerminalPasteDialog";
 import { useMediaQuery } from "../ui/useMediaQuery";
 import { cursorAnimationEnabled, reducedMotionQuery } from "../ui/reducedMotion";
@@ -131,7 +131,6 @@ export function TerminalView({
   const [pendingPaste, setPendingPaste] = useState<{
     sessionID: string;
     raw: string;
-    inspection: TerminalPasteInspection;
   } | null>(null);
   const sendPaste = useRef<(text: string) => void>(() => {});
   const [currentDirectory, setCurrentDirectory] = useState(session.agent?.cwd ?? "");
@@ -510,7 +509,7 @@ export function TerminalView({
       paste: (text) => {
         const inspection = inspectTerminalPaste(text);
         if (inspection.requiresConfirmation) {
-          setPendingPaste({ sessionID: session.id, raw: text, inspection });
+          setPendingPaste({ sessionID: session.id, raw: text });
           return;
         }
         sendPaste.current(text);
@@ -852,15 +851,9 @@ export function TerminalView({
       {pendingPaste === null || pendingPaste.sessionID !== session.id ? null : (
         <TerminalPasteDialog
           target={session.alias ?? session.title}
-          inspection={pendingPaste.inspection}
+          text={pendingPaste.raw}
           onCancel={() => setPendingPaste(null)}
-          onPaste={() => {
-            const raw = pendingPaste.raw;
-            setPendingPaste(null);
-            sendPaste.current(raw);
-          }}
-          onPasteWithoutFinalLineBreak={() => {
-            const raw = removeFinalTerminalLineBreak(pendingPaste.raw);
+          onPaste={(raw) => {
             setPendingPaste(null);
             sendPaste.current(raw);
           }}
