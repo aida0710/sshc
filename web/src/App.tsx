@@ -418,7 +418,17 @@ export function App({
 
   useEffect(() => {
     function handleShortcut(event: KeyboardEvent) {
-      if (!commandPaletteEnabledRef.current || shortcutKey(event) === null || shortcutsBlocked(event)) return;
+      if (!commandPaletteEnabledRef.current || shortcutKey(event) === null) return;
+      const browserFind = terminalFace && !event.altKey && !event.shiftKey &&
+        (event.ctrlKey !== event.metaKey) && event.key.toLowerCase() === "f";
+      if (shortcutsBlocked(event)) {
+        // Keep confirmation dialogs in place, but do not open browser Find behind them.
+        if (browserFind && !(event.target instanceof Element && event.target.closest("[data-shortcut-editor]"))) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+        }
+        return;
+      }
       let action: (() => void) | undefined;
       if (matchesShortcut(event, "palette", shortcuts)) {
         action = () => {
@@ -436,15 +446,15 @@ export function App({
           if (selected !== undefined) showConsole(selected.id);
         };
       }
-      if (action === undefined) return;
+      if (action === undefined && !browserFind) return;
       event.preventDefault();
       event.stopImmediatePropagation();
-      if (!event.repeat) action();
+      if (!event.repeat) action?.();
     }
     // Capture before xterm translates an application shortcut into SSH input.
     document.addEventListener("keydown", handleShortcut, true);
     return () => document.removeEventListener("keydown", handleShortcut, true);
-  }, [shortcuts, navigate, orderedConsoles, activeConsole, showConsole]);
+  }, [shortcuts, navigate, orderedConsoles, activeConsole, showConsole, terminalFace]);
 
   useEffect(() => {
     if (state !== "ready") return;
@@ -802,6 +812,7 @@ export function App({
                 {terminalFace || activeConsole !== null ? (
                   <div className={terminalFace ? "h-full" : "hidden"}>
                     <TerminalScreen
+                      visible={terminalFace}
                       consoles={consoles}
                       activeConsole={activeConsole}
                       settings={terminalSettings}
@@ -1042,6 +1053,7 @@ function SectionView(props: SectionViewProps) {
 }
 
 function TerminalScreen({
+  visible,
   consoles,
   activeConsole,
   settings,
@@ -1058,6 +1070,7 @@ function TerminalScreen({
   onOpenRemotePath,
   onOSC52Change,
 }: {
+  visible: boolean;
   consoles: TerminalSessionsState;
   activeConsole: string | null;
   settings: TerminalSettings;
@@ -1116,6 +1129,7 @@ function TerminalScreen({
             <TerminalView
               key={session.id}
               session={session}
+              searchShortcutActive={visible && activeConsole === session.id}
               {...(settings.fontSize === undefined
                 ? {}
                 : { fontSize: settings.fontSize })}

@@ -63,3 +63,43 @@ test("edits shortcuts, keeps them after reload and uses them in a live terminal"
   await page.keyboard.press("Alt+PageDown");
   await expect(rows.nth(1).locator('[aria-current="true"]')).toBeVisible();
 });
+
+
+test("keeps Ctrl+F inside Terminal and leaves browser Find available on other pages", async ({ page, installation }) => {
+  await page.addInitScript(() => {
+    // Observe before application listeners; read cancellation after propagation finishes.
+    window.addEventListener("keydown", (event) => {
+      if (event.ctrlKey && event.key.toLowerCase() === "f") {
+        setTimeout(() => document.documentElement.setAttribute("data-test-find-prevented", String(event.defaultPrevented)), 0);
+      }
+    }, true);
+  });
+  await openApplication(page, installation);
+  const nav = page.getByRole("navigation", { name: "Primary" });
+  await nav.getByRole("button", { name: "Local shell", exact: true }).click();
+  await expect(page.getByRole("region", { name: /^Console for / })).toContainText(/[$#%>]/);
+  async function pressFind(prevented: boolean) {
+    await page.evaluate(() => document.documentElement.removeAttribute("data-test-find-prevented"));
+    await page.keyboard.press("Control+f");
+    await expect(page.locator("html")).toHaveAttribute("data-test-find-prevented", String(prevented));
+  }
+  // Sidebar focus used to bypass the terminal's handler.
+  await nav.getByRole("link", { name: "Home", exact: true }).focus();
+  await pressFind(true);
+  const search = page.getByRole("textbox", { name: "Search terminal output" });
+  await expect(search).toBeFocused();
+  await search.fill("retained-query");
+  await pressFind(true);
+  await expect(search).toHaveValue("retained-query");
+  await page.getByRole("button", { name: "Match case", exact: true }).focus();
+  await pressFind(true);
+  await expect(search).toBeFocused();
+  await page.getByRole("list", { name: "Open consoles" }).getByRole("button", { name: /^Close / }).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await pressFind(true);
+  await expect(page.getByRole("button", { name: "Keep it open", exact: true })).toBeFocused();
+  await page.getByRole("button", { name: "Keep it open", exact: true }).click();
+  await openSection(page, "Home");
+  // The shell remains mounted in the background; it must not intercept this key.
+  await pressFind(false);
+});

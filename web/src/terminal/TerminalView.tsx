@@ -44,6 +44,7 @@ import { cursorAnimationEnabled, reducedMotionQuery } from "../ui/reducedMotion"
 
 type TerminalViewProps = {
   session: TerminalSession;
+  searchShortcutActive?: boolean;
   api?: Pick<IntegrationsApi, "terminalStreamTicket">;
   onExit?: () => void;
   onReconnect?: () => Promise<boolean>;
@@ -76,6 +77,7 @@ const settled = 10_000;
 
 export function TerminalView({
   session,
+  searchShortcutActive,
   api = integrationsApi,
   onExit,
   onReconnect,
@@ -99,6 +101,8 @@ export function TerminalView({
   const { resolved } = useTheme();
   const reducedMotion = useMediaQuery(reducedMotionQuery);
   const host = useRef<HTMLDivElement>(null);
+  const region = useRef<HTMLElement>(null);
+  const searchInput = useRef<HTMLInputElement>(null);
   const backgroundURL = useBackgroundImage(background ?? "");
   const backgroundConfigured = (background ?? "") !== "";
   const hasBackground = backgroundURL !== "";
@@ -188,15 +192,19 @@ export function TerminalView({
 
   useEffect(() => {
     const openSearch = (event: KeyboardEvent) => {
-      if (host.current === null || !host.current.contains(document.activeElement)) return;
+      if (!(searchShortcutActive ?? region.current?.contains(document.activeElement))) return;
       if (!matchesShortcut(event, "terminalSearch") || shortcutsBlocked(event)) return;
       event.preventDefault();
       event.stopImmediatePropagation();
-      if (!event.repeat) setSearchOpen(true);
+      if (!event.repeat) {
+        setSearchOpen(true);
+        searchInput.current?.focus();
+        searchInput.current?.select();
+      }
     };
     window.addEventListener("keydown", openSearch, true);
     return () => window.removeEventListener("keydown", openSearch, true);
-  }, []);
+  }, [searchShortcutActive]);
 
   useEffect(() => {
     if (searchOpen) searchRefresh.current();
@@ -465,7 +473,9 @@ export function TerminalView({
             },
           });
           setLink({ phase: "live" });
-          if (session.state !== "exited") view.focus();
+          if (session.state !== "exited" && !searchInput.current?.parentElement?.contains(document.activeElement)) {
+            view.focus();
+          }
           syncSize();
         })
         .catch((error: unknown) => {
@@ -588,7 +598,7 @@ export function TerminalView({
   const remoteAlias = session.kind === "ssh" ? session.alias : undefined;
 
   return (
-    <section aria-label={t("terminal.screenLabel", { title: displayTitle })} className="relative flex min-h-0 flex-1 flex-col">
+    <section ref={region} aria-label={t("terminal.screenLabel", { title: displayTitle })} className="relative flex min-h-0 flex-1 flex-col">
       <div className="relative flex shrink-0 items-center gap-2 border-b border-line bg-toolbar px-2 py-1.5 md:h-8 md:py-0">
         <span
           aria-hidden="true"
@@ -779,6 +789,7 @@ export function TerminalView({
         {searchOpen ? (
           <div className="absolute inset-x-2 top-2 z-20 flex items-center gap-1.5 rounded-lg border border-line bg-toolbar/95 p-1.5 shadow-lg backdrop-blur sm:left-auto sm:w-[34rem]">
             <input
+              ref={searchInput}
               autoFocus
               aria-label={t("terminal.searchInput")}
               value={searchQuery}
