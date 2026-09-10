@@ -321,34 +321,36 @@ test("pastes the clipboard into the console with right click", async ({ page, co
   await expect(screen).toContainText("right-click-paste-canary", { timeout: 20_000 });
 });
 
-test("pastes a desktop keyboard shortcut into the console only once", async ({ page, context, installation }) => {
-  const inputFrames: string[] = [];
-  page.on("websocket", (socket) => socket.on("framesent", ({ payload }) => {
-    inputFrames.push(typeof payload === "string" ? payload : payload.toString("utf8"));
-  }));
-  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
-  await openApplication(page, installation);
+for (const chord of ["Control+v", "Control+Shift+V"]) {
+  test(`pastes ${chord} into the console only once`, async ({ page, context, installation }) => {
+    const inputFrames: string[] = [];
+    page.on("websocket", (socket) => socket.on("framesent", ({ payload }) => {
+      inputFrames.push(typeof payload === "string" ? payload : payload.toString("utf8"));
+    }));
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await openApplication(page, installation);
 
-  const panel = await openConsolePanel(page);
-  await panel.getByRole("button", { name: "Local shell" }).click();
-  const screen = page.getByRole("region", { name: /^Console for / });
-  await expect(screen).toContainText(/[$#%>]/, { timeout: 20_000 });
-  await typeIntoConsole(page, 'rm -f "$HOME/keyboard-paste-data"');
-  await page.evaluate(() => navigator.clipboard.writeText('printf x >> "$HOME/keyboard-paste-data"; '));
+    const panel = await openConsolePanel(page);
+    await panel.getByRole("button", { name: "Local shell" }).click();
+    const screen = page.getByRole("region", { name: /^Console for / });
+    await expect(screen).toContainText(/[$#%>]/, { timeout: 20_000 });
+    await typeIntoConsole(page, 'rm -f "$HOME/keyboard-paste-data"');
+    await page.evaluate(() => navigator.clipboard.writeText('printf x >> "$HOME/keyboard-paste-data"; '));
 
-  await terminalKeyboard(page).focus();
-  await page.keyboard.press("Control+Shift+V");
-  await page.keyboard.press("Enter");
-  const pastedFrames = inputFrames.filter((frame) => frame.includes("keyboard-paste-data"));
-  expect(pastedFrames, JSON.stringify(inputFrames)).toHaveLength(1);
-  expect(
-    pastedFrames[0]!.split("keyboard-paste-data").length - 1,
-    JSON.stringify(pastedFrames[0]),
-  ).toBe(1);
-  await typeIntoConsole(page, 'echo keyboard-paste-count=$(wc -c < "$HOME/keyboard-paste-data")');
+    await terminalKeyboard(page).focus();
+    await page.keyboard.press(chord);
+    await page.keyboard.press("Enter");
+    const pastedFrames = inputFrames.filter((frame) => frame.includes("keyboard-paste-data"));
+    expect(pastedFrames, JSON.stringify(inputFrames)).toHaveLength(1);
+    expect(
+      pastedFrames[0]!.split("keyboard-paste-data").length - 1,
+      JSON.stringify(pastedFrames[0]),
+    ).toBe(1);
+    await typeIntoConsole(page, 'echo keyboard-paste-count=$(wc -c < "$HOME/keyboard-paste-data")');
 
-  await expect(screen).toContainText("keyboard-paste-count=1", { timeout: 20_000 });
-});
+    await expect(screen).toContainText("keyboard-paste-count=1", { timeout: 20_000 });
+  });
+}
 
 test("reviews a multiline paste before sending any terminal input", async ({ page, context, installation }) => {
   const inputFrames: string[] = [];
@@ -386,6 +388,46 @@ test("reviews a multiline paste before sending any terminal input", async ({ pag
   expect(pastedFrames[0]).not.toContain("safe-paste-second\r");
   await page.keyboard.press("Enter");
   await expect(screen).toContainText("safe-paste-second", { timeout: 20_000 });
+});
+
+test("edits a multiline paste before sending the changed text", async ({ page, context, installation }) => {
+  const inputFrames: string[] = [];
+  page.on("websocket", (socket) => socket.on("framesent", ({ payload }) => {
+    inputFrames.push(typeof payload === "string" ? payload : payload.toString("utf8"));
+  }));
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await openApplication(page, installation);
+
+  const panel = await openConsolePanel(page);
+  await panel.getByRole("button", { name: "Local shell" }).click();
+  const screen = page.getByRole("region", { name: /^Console for / });
+  await expect(screen).toContainText(/[$#%>]/, { timeout: 20_000 });
+  const risky = "echo safe-paste-first\necho safe-paste-second\n";
+  await page.evaluate((text) => navigator.clipboard.writeText(text), risky);
+
+  await terminalKeyboard(page).focus();
+  await page.keyboard.press("Control+Shift+V");
+
+  const dialog = page.getByRole("dialog", { name: /^Review paste to / });
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText("Nothing has been sent to the terminal yet.");
+  expect(inputFrames.filter((frame) => frame.includes("safe-paste"))).toEqual([]);
+  if (process.env.SSHC_VISUAL_DIR !== undefined) {
+    await page.screenshot({
+      path: `${process.env.SSHC_VISUAL_DIR}/terminal-safe-paste-review.png`,
+      fullPage: true,
+    });
+  }
+
+  await dialog.getByRole("textbox", { name: "Edit paste" }).fill("echo safe-paste-edited\necho safe-paste-changed\n");
+  expect(inputFrames.filter((frame) => frame.includes("safe-paste"))).toEqual([]);
+  await dialog.getByRole("button", { name: "Paste without final Enter" }).click();
+  const pastedFrames = inputFrames.filter((frame) => frame.includes("safe-paste"));
+  expect(pastedFrames, JSON.stringify(inputFrames)).toHaveLength(1);
+  expect(pastedFrames[0]).toContain("echo safe-paste-edited\recho safe-paste-changed");
+  expect(pastedFrames[0]).not.toContain("safe-paste-changed\r");
+  await page.keyboard.press("Enter");
+  await expect(screen).toContainText("safe-paste-changed", { timeout: 20_000 });
 });
 
 test("keeps terminal drawing stable while scrollback search overlays it", async ({ page, installation }) => {
@@ -529,7 +571,11 @@ test("force closes a live local shell with one confirmation", async ({ page, ins
     const request = response.request();
     return request.method() === "DELETE" && /\/api\/v1\/terminal\/sessions\/[^/]+$/.test(new URL(response.url()).pathname);
   });
-  await page.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByRole("button", { name: "Keep it open" })).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(dialog.getByRole("button", { name: "Close", exact: true })).toBeFocused();
+  await page.keyboard.press("Enter");
   expect((await closeResponse).ok()).toBe(true);
 
   await expect(rows).toHaveCount(0);
@@ -753,4 +799,40 @@ test("wears the image that was brought in, and gets out of its way", async ({ pa
 
   await reopenFirstConsole(panel);
   await expect.poll(() => surfaceBackgroundImage(page)).toBe("none");
+});
+
+
+test("selects only the visible screen and opens a console from row padding", async ({ page, installation }) => {
+  await openApplication(page, installation);
+  const panel = await openConsolePanel(page);
+  await panel.getByRole("button", { name: "Local shell" }).click();
+  const row = panel.getByRole("list", { name: "Open consoles" }).getByRole("listitem").first();
+  await expect(row.locator("[aria-current=true]")).toHaveCount(1);
+  for (const destination of ["Home", "SFTP"]) {
+    await openSection(page, destination);
+    await expect(row.locator("[aria-current]")).toHaveCount(0);
+    // Bottom-right padding, below the actual action buttons, belongs to the row.
+    const box = await row.boundingBox();
+    if (box === null) throw new Error("missing console row");
+    await page.mouse.click(box.x + box.width - 3, box.y + box.height - 3);
+    await expect(row.locator("[aria-current=true]")).toHaveCount(1);
+    await expect(page.getByRole("region", { name: /^Console for / })).toBeVisible();
+  }
+  // The actual close button must remain independently clickable.
+  await row.getByRole("button", { name: /^Close / }).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await page.getByRole("button", { name: "Keep it open" }).click();
+});
+
+test("expands the transfer manager from its empty header space", async ({ page, installation }) => {
+  await openApplication(page, installation);
+  await page.evaluate(() => localStorage.setItem("sshc.sftp.queueView", JSON.stringify({ collapsed: true, height: 224, mobileHeight: 224 })));
+  await openSection(page, "SFTP");
+  const expand = page.getByRole("button", { name: "Expand transfer manager" });
+  await expect(expand).toBeVisible();
+  const header = expand.locator("..");
+  const box = await header.boundingBox();
+  if (box === null) throw new Error("missing transfer header");
+  await page.mouse.click(box.x + box.width * 0.75, box.y + box.height / 2);
+  await expect(page.getByRole("button", { name: "Collapse transfer manager" })).toHaveAttribute("aria-expanded", "true");
 });

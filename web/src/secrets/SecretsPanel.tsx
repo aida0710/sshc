@@ -1,3 +1,4 @@
+import { LockScreen } from "./LockScreen";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { failureCode } from "../api/client";
 import {
@@ -276,7 +277,6 @@ export function SecretsPanel({
   const [status, setStatus] = useState<PasswordVaultStatus | null>(null);
   const [credentialList, setCredentialList] =
     useState<CredentialList>(emptyCredentialList);
-  const [master, setMaster] = useState("");
   const [drafts, setDrafts] = useState<
     Record<string, { name: string; secret: string }>
   >({});
@@ -333,64 +333,7 @@ export function SecretsPanel({
   }
 
   if (!status.unlocked) {
-    const creating = !status.exists;
-    return (
-      <div
-        className={`mx-auto flex w-full max-w-5xl flex-col gap-6 ${mobileTouchTargets}`}
-      >
-        <PageHeader
-          title={t("secrets.heading")}
-          description={t("secrets.pageDescription")}
-        />
-        <Card
-          as="section"
-          aria-label={t("secrets.heading")}
-          radius="md"
-          className="grid md:grid-cols-[minmax(0,0.9fr)_minmax(18rem,1.1fr)]"
-        >
-          <div className="flex flex-col justify-between gap-8 bg-toolbar p-6 md:p-8">
-            <span className="flex h-12 w-12 items-center justify-center rounded-md bg-select-fill text-accent">
-              <Icon name="secrets" className="h-6 w-6" />
-            </span>
-            <div>
-              <h3 className="text-lg font-semibold text-ink">
-                {creating ? t("secrets.create") : t("secrets.unlock")}
-              </h3>
-              <p className="mt-2 text-sm leading-6 text-ink-muted">
-                {creating
-                  ? t("secrets.explainNew")
-                  : t("secrets.explainLocked")}
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-col justify-center gap-4 p-6 md:p-8">
-            {error === "" ? null : <Notice tone="danger">{error}</Notice>}
-            <PasswordField
-              label={t("secrets.master")}
-              value={master}
-              onChange={setMaster}
-            />
-            <Button
-              kind="primary"
-              className="self-start"
-              onClick={() =>
-                void run(
-                  () =>
-                    creating
-                      ? api.initialiseVault(master)
-                      : api.unlockVault(master),
-                  creating
-                    ? t("secrets.createFailed")
-                    : t("secrets.unlockFailed"),
-                ).then(() => setMaster(""))
-              }
-            >
-              {creating ? t("secrets.create") : t("secrets.unlock")}
-            </Button>
-          </div>
-        </Card>
-      </div>
-    );
+    return <LockScreen exists={status.exists} passwordless={status.passwordless ?? false} api={api} onOpen={() => void reload()} />;
   }
 
   const { credentials, dedicatedKeyPassphrases, keyHostUsageComplete } =

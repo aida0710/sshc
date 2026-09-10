@@ -73,3 +73,27 @@ func TestTheEngineRestoresTheConfiguredVaultClock(t *testing.T) {
 		})
 	}
 }
+
+func TestEngineAutomaticallyOpensOnlyPasswordlessVaults(t *testing.T) {
+	for _, password := range []string{"", "1234"} {
+		t.Run(password, func(t *testing.T) {
+			home := t.TempDir()
+			first, err := newEngineServices(Dependencies{Home: home, Random: rand.Reader})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := first.passwords.Initialise(password); err != nil {
+				t.Fatal(err)
+			}
+			first.passwords.Lock()
+			restarted, err := newEngineServices(Dependencies{Home: home, Random: rand.Reader})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer restarted.passwords.Lock()
+			if got := restarted.passwords.Unlocked(); got != (password == "") {
+				t.Fatalf("unlocked = %v", got)
+			}
+		})
+	}
+}

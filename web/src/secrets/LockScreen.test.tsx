@@ -64,8 +64,8 @@ describe("LockScreen", () => {
   it("refuses a password too short to be worth deriving a key from", async () => {
     render(<LockScreen exists={false} onOpen={vi.fn()} api={buildApi()} />);
 
-    await userEvent.type(screen.getByLabelText("Master password"), "short");
-    await userEvent.type(screen.getByLabelText("Confirm master password"), "short");
+    await userEvent.type(screen.getByLabelText("Master password"), "abc");
+    await userEvent.type(screen.getByLabelText("Confirm master password"), "abc");
 
     expect(screen.getByRole("button", { name: "Create the vault" })).toBeDisabled();
   });
@@ -233,4 +233,35 @@ describe("LockScreen", () => {
     expect(screen.queryByLabelText("Confirm master password")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Open" })).toBeInTheDocument();
   });
+});
+
+
+it("creates a passwordless vault only after selecting that mode", async () => {
+  const api = buildApi();
+  const onOpen = vi.fn();
+  render(<LockScreen exists={false} api={api} onOpen={onOpen} />);
+  expect(screen.getByRole("button", { name: "Create the vault" })).toBeDisabled();
+  await userEvent.click(screen.getByLabelText("Use without a password"));
+  expect(screen.queryByLabelText("Master password")).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "Create the vault" }));
+  await waitFor(() => expect(api.initialiseVault).toHaveBeenCalledWith(""));
+  expect(onOpen).toHaveBeenCalled();
+});
+
+it("accepts four Unicode characters and explains short-password protection", async () => {
+  const api = buildApi();
+  render(<LockScreen exists={false} api={api} onOpen={vi.fn()} />);
+  await userEvent.type(screen.getByLabelText("Master password"), "あいうえ");
+  await userEvent.type(screen.getByLabelText("Confirm master password"), "あいうえ");
+  expect(screen.getByText(/A short password offers limited protection/)).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "Create the vault" }));
+  await waitFor(() => expect(api.initialiseVault).toHaveBeenCalledWith("あいうえ"));
+});
+
+it("reopens a manually locked passwordless vault without an input field", async () => {
+  const api = buildApi();
+  render(<LockScreen exists passwordless api={api} onOpen={vi.fn()} />);
+  expect(screen.queryByLabelText("Master password")).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "Open" }));
+  await waitFor(() => expect(api.unlockVault).toHaveBeenCalledWith(""));
 });

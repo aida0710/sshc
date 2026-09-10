@@ -7,6 +7,7 @@ export type BrowserServer = {
   tags: string[];
   colour: string;
   order: number;
+  os: NonNullable<Overview["metadata"]["hosts"]>[number]["os"];
   duplicateAlias: boolean;
 };
 
@@ -71,6 +72,7 @@ export function buildConnectionBrowserIndex(overview: Overview): ConnectionBrows
         group: host.group ?? "",
         tags: metadata?.tags ?? [],
         colour: metadata?.colour ?? "",
+        os: (metadata?.os || metadata?.detectedOS || "") as BrowserServer["os"],
         order: metadata?.order ?? 0,
         duplicateAlias: duplicateAliases.has(host.identity.alias),
         sourceOrder,

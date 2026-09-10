@@ -142,7 +142,7 @@ func TestCLIVaultCreateMapsVaultOutcomes(t *testing.T) {
 	t.Run("short passphrase", func(t *testing.T) {
 		service := newCLIVaultService(t)
 		engine := connectEngine(t, ConnectHandlers{Secret: testCLISecret, Passwords: service})
-		response := send(t, engine, http.MethodPost, testVaultCreatePath, `{"passphrase":"short"}`, cliHeaders(testCLISecret))
+		response := send(t, engine, http.MethodPost, testVaultCreatePath, `{"passphrase":"abc"}`, cliHeaders(testCLISecret))
 		if response.Code != http.StatusBadRequest {
 			t.Fatalf("create = %d, want 400", response.Code)
 		}

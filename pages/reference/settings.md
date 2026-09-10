@@ -5,7 +5,7 @@ description: 外観、Terminalの入力、通知、ローカルシェルに関�
 
 # 設定
 
-［Menu］から、［Engine］、［Terminal］、［Notifications］、［Open connections］、［Master password］を直接開けます。テーマと表示言語は［Preferences］、接続先ごとの項目は［Connections］の［sshc］タブにあります。
+［Menu］から、［Engine］、［Terminal］、［キーコンフィグ］、［Notifications］、［Open connections］、［Master password］を直接開けます。テーマと表示言語は［Preferences］、接続先ごとの項目は［Connections］の［sshc］タブにあります。
 
 ## Engine
 
@@ -21,6 +21,16 @@ description: 外観、Terminalの入力、通知、ローカルシェルに関�
 Terminalのカラーパレット、フォント、背景、色合いは［Settings］→［Terminal］で設定します。
 
 Vaultの作成／ロック解除画面でも、テーマと言語を切り替えられます。
+
+## キーコンフィグ
+
+［Menu］→［キーコンフィグ］で、コマンド検索、Terminal内検索、コピー・貼り付け、前後のコネクション切り替え、Home・SFTPへの移動を設定できます。割り当て欄を押して、Ctrl・Alt・Meta（Command）を含む組み合わせ、またはファンクションキーを入力します。Escで中止、Tabで次の項目に移動します。
+
+重複する割り当ては保存できません。［解除］で無効化、［初期設定に戻す］で全項目を戻せます。コネクション切り替えの既定値はAlt+PageDown／Alt+PageUpです。コピー・貼り付け・Terminal内検索はTerminal内で有効です。貼り付けの確認・編集は通常と同じです。
+
+変更はすぐに反映され、このブラウザーのローカルストレージに保存されます。別のブラウザーには同期されません。ブラウザーやOSに予約されているキーはそちらが優先される場合があります。ブラウザー標準の貼り付け操作は引き続き使えます。
+
+貼り付けの初期設定はCtrl+V（Macでは⌘V）です。Ctrl+Shift+Vも使えます。
 
 ## Vaultの自動ロック
 

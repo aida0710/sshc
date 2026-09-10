@@ -1,3 +1,4 @@
+import { matchesShortcut, shortcutsBlocked } from "../keyconfig/bindings";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
@@ -36,13 +37,14 @@ import { attachWebglRenderer } from "./webgl";
 import { attachOSC7Directory } from "./osc7";
 import { applyTerminalRuntimeOptions } from "./runtimeOptions";
 import { Icon } from "../ui/icons";
-import { inspectTerminalPaste, removeFinalTerminalLineBreak, type TerminalPasteInspection } from "./pasteGuard";
+import { inspectTerminalPaste } from "./pasteGuard";
 import { TerminalPasteDialog } from "./TerminalPasteDialog";
 import { useMediaQuery } from "../ui/useMediaQuery";
 import { cursorAnimationEnabled, reducedMotionQuery } from "../ui/reducedMotion";
 
 type TerminalViewProps = {
   session: TerminalSession;
+  searchShortcutActive?: boolean;
   api?: Pick<IntegrationsApi, "terminalStreamTicket">;
   onExit?: () => void;
   onReconnect?: () => Promise<boolean>;
@@ -75,6 +77,7 @@ const settled = 10_000;
 
 export function TerminalView({
   session,
+  searchShortcutActive,
   api = integrationsApi,
   onExit,
   onReconnect,
@@ -98,6 +101,8 @@ export function TerminalView({
   const { resolved } = useTheme();
   const reducedMotion = useMediaQuery(reducedMotionQuery);
   const host = useRef<HTMLDivElement>(null);
+  const region = useRef<HTMLElement>(null);
+  const searchInput = useRef<HTMLInputElement>(null);
   const backgroundURL = useBackgroundImage(background ?? "");
   const backgroundConfigured = (background ?? "") !== "";
   const hasBackground = backgroundURL !== "";
@@ -131,7 +136,6 @@ export function TerminalView({
   const [pendingPaste, setPendingPaste] = useState<{
     sessionID: string;
     raw: string;
-    inspection: TerminalPasteInspection;
   } | null>(null);
   const sendPaste = useRef<(text: string) => void>(() => {});
   const [currentDirectory, setCurrentDirectory] = useState(session.agent?.cwd ?? "");
@@ -188,14 +192,19 @@ export function TerminalView({
 
   useEffect(() => {
     const openSearch = (event: KeyboardEvent) => {
-      if (!(event.ctrlKey || event.metaKey) || event.key.toLocaleLowerCase() !== "f") return;
-      if (host.current === null || !host.current.contains(document.activeElement)) return;
+      if (!(searchShortcutActive ?? region.current?.contains(document.activeElement))) return;
+      if (!matchesShortcut(event, "terminalSearch") || shortcutsBlocked(event)) return;
       event.preventDefault();
-      setSearchOpen(true);
+      event.stopImmediatePropagation();
+      if (!event.repeat) {
+        setSearchOpen(true);
+        searchInput.current?.focus();
+        searchInput.current?.select();
+      }
     };
-    window.addEventListener("keydown", openSearch);
-    return () => window.removeEventListener("keydown", openSearch);
-  }, []);
+    window.addEventListener("keydown", openSearch, true);
+    return () => window.removeEventListener("keydown", openSearch, true);
+  }, [searchShortcutActive]);
 
   useEffect(() => {
     if (searchOpen) searchRefresh.current();
@@ -464,7 +473,9 @@ export function TerminalView({
             },
           });
           setLink({ phase: "live" });
-          if (session.state !== "exited") view.focus();
+          if (session.state !== "exited" && !searchInput.current?.parentElement?.contains(document.activeElement)) {
+            view.focus();
+          }
           syncSize();
         })
         .catch((error: unknown) => {
@@ -510,7 +521,7 @@ export function TerminalView({
       paste: (text) => {
         const inspection = inspectTerminalPaste(text);
         if (inspection.requiresConfirmation) {
-          setPendingPaste({ sessionID: session.id, raw: text, inspection });
+          setPendingPaste({ sessionID: session.id, raw: text });
           return;
         }
         sendPaste.current(text);
@@ -587,7 +598,7 @@ export function TerminalView({
   const remoteAlias = session.kind === "ssh" ? session.alias : undefined;
 
   return (
-    <section aria-label={t("terminal.screenLabel", { title: displayTitle })} className="relative flex min-h-0 flex-1 flex-col">
+    <section ref={region} aria-label={t("terminal.screenLabel", { title: displayTitle })} className="relative flex min-h-0 flex-1 flex-col">
       <div className="relative flex shrink-0 items-center gap-2 border-b border-line bg-toolbar px-2 py-1.5 md:h-8 md:py-0">
         <span
           aria-hidden="true"
@@ -778,6 +789,7 @@ export function TerminalView({
         {searchOpen ? (
           <div className="absolute inset-x-2 top-2 z-20 flex items-center gap-1.5 rounded-lg border border-line bg-toolbar/95 p-1.5 shadow-lg backdrop-blur sm:left-auto sm:w-[34rem]">
             <input
+              ref={searchInput}
               autoFocus
               aria-label={t("terminal.searchInput")}
               value={searchQuery}
@@ -852,15 +864,9 @@ export function TerminalView({
       {pendingPaste === null || pendingPaste.sessionID !== session.id ? null : (
         <TerminalPasteDialog
           target={session.alias ?? session.title}
-          inspection={pendingPaste.inspection}
+          text={pendingPaste.raw}
           onCancel={() => setPendingPaste(null)}
-          onPaste={() => {
-            const raw = pendingPaste.raw;
-            setPendingPaste(null);
-            sendPaste.current(raw);
-          }}
-          onPasteWithoutFinalLineBreak={() => {
-            const raw = removeFinalTerminalLineBreak(pendingPaste.raw);
+          onPaste={(raw) => {
             setPendingPaste(null);
             sendPaste.current(raw);
           }}

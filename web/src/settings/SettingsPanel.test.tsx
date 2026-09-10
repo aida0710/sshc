@@ -556,3 +556,23 @@ describe("SettingsPanel", () => {
     expect(within(region).getByRole("button", { name: "Close every connection" })).toBeDisabled();
   });
 });
+
+
+it("removes password protection after verifying the current password", async () => {
+  const api = buildApi();
+  render(<SettingsPanel api={api} page="Password" />);
+  await userEvent.type(screen.getByLabelText("Current master password"), "old password");
+  await userEvent.click(screen.getByLabelText("Use without a password"));
+  expect(screen.queryByLabelText("New master password")).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "Change the master password" }));
+  await waitFor(() => expect(api.changeMasterPassword).toHaveBeenCalledWith("old password", ""));
+});
+
+it("adds a four-character password to a passwordless vault", async () => {
+  const api = buildApi();
+  render(<SettingsPanel api={api} page="Password" />);
+  await userEvent.type(screen.getByLabelText("New master password"), "1234");
+  await userEvent.type(screen.getByLabelText("Confirm new master password"), "1234");
+  await userEvent.click(screen.getByRole("button", { name: "Change the master password" }));
+  await waitFor(() => expect(api.changeMasterPassword).toHaveBeenCalledWith("", "1234"));
+});

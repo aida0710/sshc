@@ -337,7 +337,7 @@ export function ConsoleList({
                   <span aria-hidden="true" className="absolute inset-x-2 -top-px block h-0.5 rounded bg-accent" />
                 ) : null}
                 <div
-                  className={`flex items-start gap-2 rounded-md px-2 py-1.5 transition-colors ${
+                  className={`relative flex items-start gap-2 rounded-md px-2 py-1.5 transition-colors ${
                     shiftPressed
                       ? "bg-danger/10 hover:bg-danger/10"
                       : session.id === selected ? "bg-select-fill" : "hover:bg-select-fill"
@@ -369,7 +369,7 @@ export function ConsoleList({
                       aria-label={displayTitle}
                       aria-current={session.id === selected ? "true" : undefined}
                       onClick={() => onSelect(session.id)}
-                      className="flex min-w-0 grow items-start gap-2 text-left"
+                      className="flex min-w-0 grow items-start gap-2 text-left after:absolute after:inset-0 after:rounded-md"
                     >
                       {marker}
                       <span className="min-w-0 grow">
@@ -405,7 +405,7 @@ export function ConsoleList({
                       setWorkspaceMenuOpen(false);
                       setMenuFor(session.id);
                     }}
-                    className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-select-fill focus:bg-select-fill focus:outline-none md:size-6"
+                    className="relative mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-select-fill focus:bg-select-fill focus:outline-none md:size-6"
                   >
                     <Icon name="moreHorizontal" className="size-3.5" />
                   </button>
@@ -419,7 +419,7 @@ export function ConsoleList({
                       }
                       setClosing(session);
                     }}
-                    className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-select-fill focus:bg-select-fill focus:outline-none md:size-6"
+                    className="relative mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-select-fill focus:bg-select-fill focus:outline-none md:size-6"
                   >
                     <Icon name="close" className="size-3.5" />
                   </button>

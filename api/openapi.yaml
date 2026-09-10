@@ -2292,14 +2292,14 @@ components:
       additionalProperties: false
       required: [current, next]
       properties:
-        current: { type: string, minLength: 1, maxLength: 1024 }
-        next: { type: string, minLength: 1, maxLength: 1024 }
+        current: { type: string, maxLength: 1024 }
+        next: { type: string, maxLength: 1024 }
     ResetUnsupportedVaultRequest:
       type: object
       additionalProperties: false
       required: [passphrase, acknowledged]
       properties:
-        passphrase: { type: string, minLength: 1, maxLength: 1024 }
+        passphrase: { type: string, maxLength: 1024 }
         acknowledged: { type: boolean }
     ChangeMasterPasswordResult:
       type: object
@@ -3417,6 +3417,7 @@ components:
         dedicatedKeyPassphrases:
           type: array
           items: { type: string }
+        passwordless: { type: boolean }
         minPassphraseLength: { type: integer }
         # 直前の明示的なunlockで自動migrationを行った場合だけ返す。
         migratedFromVersion: { type: integer }
@@ -3443,7 +3444,7 @@ components:
       additionalProperties: false
       required: [passphrase]
       properties:
-        passphrase: { type: string, minLength: 1, maxLength: 1024 }
+        passphrase: { type: string, maxLength: 1024 }
     StorePasswordRequest:
       type: object
       additionalProperties: false
@@ -3928,6 +3929,15 @@ components:
       properties:
         identity: { $ref: "#/components/schemas/HostIdentity" }
         tags: { type: array, items: { type: string } }
+        os:
+          type: string
+          enum: ['', server, linux, amazonlinux, ubuntu, debian, redhat, fedora, centos, rocky, almalinux, arch, alpine, opensuse, freebsd, macos, windows]
+          description: Home icon override. Empty or omitted enables automatic detection.
+        detectedOS:
+          type: string
+          enum: ['', server, linux, amazonlinux, ubuntu, debian, redhat, fedora, centos, rocky, almalinux, arch, alpine, opensuse, freebsd, macos, windows]
+          description: Last operating system detected after connecting.
+        detectedOSBinding: { type: string, maxLength: 64 }
         colour: { type: string }
         note: { type: string }
         order: { type: integer }

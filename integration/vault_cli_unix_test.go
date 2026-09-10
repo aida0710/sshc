@@ -188,3 +188,38 @@ func vaultState(t *testing.T, home string) string {
 	t.Fatalf("vault status printed no vault line:\n%s", process.Stdout.String())
 	return ""
 }
+
+func TestPasswordlessVaultCanBeCreatedAndProtectedThroughATerminal(t *testing.T) {
+	home, _ := liveHeadless(t)
+	create := startOnTerminal(t, home, "vault", "create")
+	create.expect(t, "New master password: ", 20*time.Second)
+	create.typeLine(t, "")
+	create.expect(t, "Confirm new master password: ", 20*time.Second)
+	create.typeLine(t, "")
+	if code := create.wait(t, 30*time.Second); code != 0 {
+		t.Fatalf("create exit = %d", code)
+	}
+	if state := vaultState(t, home); state != "unlocked" {
+		t.Fatalf("state = %q", state)
+	}
+	change := startOnTerminal(t, home, "vault", "change-password")
+	change.expect(t, "Current master password: ", 20*time.Second)
+	change.typeLine(t, "")
+	change.expect(t, "New master password: ", 20*time.Second)
+	change.typeLine(t, "1234")
+	change.expect(t, "Confirm new master password: ", 20*time.Second)
+	change.typeLine(t, "1234")
+	if code := change.wait(t, 30*time.Second); code != 0 {
+		t.Fatalf("change exit = %d", code)
+	}
+	lock := start(t, home, "vault", "lock")
+	if code := lock.wait(t, 20*time.Second); code != 0 {
+		t.Fatalf("lock exit = %d", code)
+	}
+	unlock := startOnTerminal(t, home, "vault", "unlock")
+	unlock.expect(t, "Master password: ", 20*time.Second)
+	unlock.typeLine(t, "1234")
+	if code := unlock.wait(t, 30*time.Second); code != 0 {
+		t.Fatalf("unlock exit = %d", code)
+	}
+}

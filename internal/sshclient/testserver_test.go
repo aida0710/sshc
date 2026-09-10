@@ -80,6 +80,8 @@ type serverOptions struct {
 	Reached map[string]func() net.Conn
 	// OnShell は、シェルが開いたあとにサーバー側が行うことである。
 	OnShell func(channel ssh.Channel)
+	// OnExec handles exec requests separately when a test needs to distinguish shell traffic.
+	OnExec func(channel ssh.Channel)
 	// OnAgentChannel は、借りた agent へリモート側から話しかける。
 	OnAgentChannel func(conn net.Conn)
 	// Banner は、認証の前にサーバーが送る文言である。
@@ -361,13 +363,13 @@ func (s *testServer) session(connection ssh.Conn, channel ssh.Channel, requests 
 			s.shellRan = true
 			s.mutex.Unlock()
 			s.reply(request, true)
-			go s.run(channel)
+			go s.run(channel, false)
 		case "exec":
 			s.mutex.Lock()
 			s.command = string(request.Payload[4:])
 			s.mutex.Unlock()
 			s.reply(request, true)
-			go s.run(channel)
+			go s.run(channel, true)
 		default:
 			s.reply(request, false)
 		}
@@ -385,8 +387,10 @@ func (s *testServer) openAgent(connection ssh.Conn) {
 	_ = channel.Close()
 }
 
-func (s *testServer) run(channel ssh.Channel) {
-	if s.OnShell != nil {
+func (s *testServer) run(channel ssh.Channel, command bool) {
+	if command && s.options.OnExec != nil {
+		s.options.OnExec(channel)
+	} else if s.OnShell != nil {
 		s.OnShell(channel)
 	}
 	if !s.options.OmitExitStatus {

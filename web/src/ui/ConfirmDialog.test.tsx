@@ -36,6 +36,15 @@ describe("ConfirmDialog", () => {
     expect(screen.getByRole("button", { name: "Keep it open" })).toHaveFocus();
   });
 
+  it("keeps late terminal focus from leaving the confirmation", () => {
+    const input = document.createElement("textarea");
+    document.body.append(input);
+    open();
+    input.focus();
+    expect(screen.getByRole("button", { name: "Keep it open" })).toHaveFocus();
+    input.remove();
+  });
+
   it("takes Escape as leaving it alone", async () => {
     const { onCancel, onConfirm } = open();
     await userEvent.keyboard("{Escape}");

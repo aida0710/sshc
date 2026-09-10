@@ -11,7 +11,9 @@ The engine serves its Web UI and API on a loopback address. UI URLs are issued o
 
 ## Vault
 
-Account passwords, key passphrases and snippet secrets are encrypted with the master password. sshc does not accept that password through command-line arguments or environment variables. The Vault locks after 12 hours of inactivity by default; Settings can select 1–999 minutes or hours, or disable automatic locking.
+Password protection encrypts credentials, snippets, sync settings and backups using a key derived from the master password. At least four characters are required, with no character-class restrictions. Protection against copied local files depends on password strength. Passwords are not accepted through command-line arguments or environment variables. Automatic locking defaults to 12 hours and can be configured in Settings.
+
+Without a password, a random unlock secret is stored on the device and the vault opens automatically at startup. Idle locking does not apply. This does not protect against someone who can read both the device secret and ciphertext. The device secret is excluded from sync; remote data keeps using an independent sync key.
 
 ## SSH host keys
 

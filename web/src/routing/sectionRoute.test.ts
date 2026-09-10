@@ -20,6 +20,7 @@ const routes = [
   ["Settings", "/settings/engine"],
   ["Sync", "/sync"],
   ["History", "/history"],
+  ["License", "/license"],
 ] as const;
 
 describe("section routes", () => {

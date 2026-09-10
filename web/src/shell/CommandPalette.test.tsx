@@ -30,6 +30,7 @@ const labels = {
   Settings: "section.settings",
   Sync: "section.sync",
   History: "section.history",
+  License: "section.license",
 } as const;
 
 function renderPalette(overrides: Partial<ComponentProps<typeof CommandPalette>> = {}) {
