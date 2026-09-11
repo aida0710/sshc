@@ -17,6 +17,7 @@ import (
 const (
 	VaultStatusPath = "/cli/vault/status"
 	VaultCreatePath = "/cli/vault/create"
+	VaultVerifyPath = "/cli/vault/verify"
 	VaultUnlockPath = "/cli/vault/unlock"
 	VaultLockPath   = "/cli/vault/lock"
 	VaultChangePath = "/cli/vault/change-password"
@@ -37,6 +38,7 @@ func registerVaultCLIRoutes(engine *echo.Echo, handlers ConnectHandlers) {
 	engine.GET(VaultStatusPath, handlers.VaultStatus)
 	engine.POST(VaultCreatePath, handlers.VaultCreate)
 	engine.POST(VaultUnlockPath, handlers.VaultUnlock)
+	engine.POST(VaultVerifyPath, handlers.VaultVerify)
 	engine.POST(VaultLockPath, handlers.VaultLock)
 	engine.POST(VaultChangePath, handlers.VaultChange)
 }
@@ -129,6 +131,24 @@ func (h ConnectHandlers) VaultUnlock(c *echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
+// VaultVerify checks the current password without changing the unlocked state.
+func (h ConnectHandlers) VaultVerify(c *echo.Context) error {
+	if !h.vaultAuthorised(c) {
+		return c.NoContent(http.StatusUnauthorized)
+	}
+	var request vaultPassphraseRequest
+	if status := decodeVaultCLIJSON(c, &request); status != 0 {
+		return c.NoContent(status)
+	}
+	if request.Passphrase == nil {
+		return c.NoContent(http.StatusBadRequest)
+	}
+	if err := h.vault.Verify(*request.Passphrase); err != nil {
+		return vaultCLIProblem(c, err)
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
 func (h ConnectHandlers) VaultLock(c *echo.Context) error {
 	if !h.vaultAuthorised(c) {
 		return c.NoContent(http.StatusUnauthorized)
@@ -138,7 +158,7 @@ func (h ConnectHandlers) VaultLock(c *echo.Context) error {
 		return c.NoContent(status)
 	}
 	// session と vault は別の寿命を持つ。ここで触るのは導出済みの vault key だけである。
-	if err := h.vault.Lock(); err != nil {
+	if err := h.vault.LockPasswordProtected(); err != nil {
 		return vaultCLIProblem(c, err)
 	}
 	return c.NoContent(http.StatusNoContent)

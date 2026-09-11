@@ -136,8 +136,8 @@ export function MenuPanel({
             </label>
           </div>
         </section>
-        <section aria-labelledby="menu-others" className="lg:col-span-2 xl:col-span-3">
-          <h3 id="menu-others" className="px-1 text-[11px] font-bold uppercase tracking-[0.14em] text-ink-faint">{t("menu.others")}</h3>
+        <section aria-labelledby="menu-others" className="grid gap-x-8 lg:col-span-2 lg:grid-cols-2 xl:col-span-3 xl:grid-cols-3">
+          <h3 id="menu-others" className="col-span-full px-1 text-[11px] font-bold uppercase tracking-[0.14em] text-ink-faint">{t("menu.others")}</h3>
           <ul className="mt-2 overflow-hidden rounded border border-line bg-card">
             <li><a href={sectionPath("License")} onClick={(event) => follow(event, sectionPath("License"))}
               aria-label={t("menu.open", { section: t("section.license") })}
