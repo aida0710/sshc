@@ -4,6 +4,7 @@ import { failureCode } from "../api/client";
 import {
   integrationsApi,
   type IntegrationsApi,
+  type PasswordVaultStatus,
   type LocalShellProfile,
   type TerminalSettings,
 } from "../api/integrations";
@@ -146,6 +147,7 @@ function TerminalPreview({
 }
 
 type SettingsPanelProps = {
+  onVaultChanged?: ((status: PasswordVaultStatus) => void) | undefined;
   api?: IntegrationsApi;
   page?: SettingsPage | "All";
   onTerminalSettingsChange?: (settings: TerminalSettings) => void | Promise<void>;
@@ -156,11 +158,13 @@ export function SettingsPanel({
   api = integrationsApi,
   page = "All",
   consoles,
+  onVaultChanged,
   onTerminalSettingsChange,
 }: SettingsPanelProps) {
   const t = useTranslate();
   const liveConsoles = (consoles?.sessions ?? []).filter((session) => session.exited === undefined).length;
   const [confirmingCloseAll, setConfirmingCloseAll] = useState(false);
+  const [vaultPasswordless, setVaultPasswordless] = useState<boolean | null>(null);
   const [currentMaster, setCurrentMaster] = useState("");
   const [withoutPassword, setWithoutPassword] = useState(false);
   const [nextMaster, setNextMaster] = useState("");
@@ -211,6 +215,16 @@ export function SettingsPanel({
     setNotificationSounds(next);
     saveAgentSoundPreferences(next);
   }
+
+  useEffect(() => {
+    if (page !== "All" && page !== "Password") return;
+    let active = true;
+    setVaultPasswordless(null);
+    void api.passwordVault().then((status) => {
+      if (active) setVaultPasswordless(status.passwordless ?? false);
+    }).catch(() => { if (active) setMasterError(t("secrets.failed")); });
+    return () => { active = false; };
+  }, [api, page, t]);
 
   useEffect(() => {
     let active = true;
@@ -408,7 +422,9 @@ export function SettingsPanel({
     setMasterError("");
     setChanged("");
     try {
-      await api.changeMasterPassword(currentMaster, withoutPassword ? "" : nextMaster);
+      const result = await api.changeMasterPassword(vaultPasswordless ? "" : currentMaster, withoutPassword ? "" : nextMaster);
+      setVaultPasswordless(result.vault.passwordless ?? false);
+      onVaultChanged?.(result.vault);
       setChanged(t("secrets.changedMasterLocally"));
     } catch (caught) {
       setMasterError(
@@ -420,7 +436,7 @@ export function SettingsPanel({
     }
   }
 
-  const canChangeMaster = !masterBusy && (withoutPassword || ([...nextMaster].length >= 4 &&
+  const canChangeMaster = vaultPasswordless !== null && !masterBusy && (withoutPassword || ([...nextMaster].length >= 4 &&
     nextMaster === confirmMaster));
   const pageTitle = page === "All" ? "settings.heading" : settingsPageMeta[page].label;
   const pageDescription = page === "All"
@@ -934,17 +950,16 @@ export function SettingsPanel({
           <div className="max-w-2xl">
             <p className="mb-5 text-sm leading-6 text-ink-muted">{t("secrets.changeNote")}</p>
             <CheckboxField label={t("lock.withoutPassword")} checked={withoutPassword} onChange={setWithoutPassword} />
-            <p className="my-3 text-sm text-ink-muted">{t("secrets.currentOptional")}</p>
             {withoutPassword ? <p className="mb-3 text-sm text-ink-muted">{t("lock.withoutPasswordHint")}</p> : null}
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="sm:col-span-2">
+              {vaultPasswordless === false ? <div className="sm:col-span-2">
                 <PasswordField
                   label={t("secrets.currentMaster")}
                   value={currentMaster}
                   onChange={setCurrentMaster}
                   disabled={masterBusy}
                 />
-              </div>
+              </div> : null}
               {withoutPassword ? null : <>
               <PasswordField
                 label={t("secrets.newMaster")}

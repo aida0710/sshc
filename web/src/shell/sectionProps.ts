@@ -5,7 +5,7 @@ import type { FileTarget } from "../explorer/ConfigExplorer";
 import type { Section } from "../routing/sectionRoute";
 import type { InspectorContent } from "../ui/Inspector";
 import type { TerminalSessionsState } from "../terminal/sessions";
-import type { TerminalSettings } from "../api/integrations";
+import type { TerminalSettings, PasswordVaultStatus } from "../api/integrations";
 import type { HostEntry } from "../api/config";
 
 
@@ -32,6 +32,7 @@ export type Handoff = {
 
 export type Shell = {
   onLock: () => void;
+  onVaultChanged?: (status: PasswordVaultStatus) => void;
   onInspector: (content: InspectorContent) => void;
   consoles: TerminalSessionsState;
   onShowConsole: (id: string) => void;
