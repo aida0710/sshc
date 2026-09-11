@@ -48,6 +48,7 @@ SFTPの旧状態は390×640pxで転送管理を展開すると一覧が23px、39
 - localhost限定の専用OpenSSHコンテナへAndroidから接続し、SFTPのフォルダ移動、テキストpreviewの内容一致、転送シートの開閉とBackを確認しました。公開鍵はそのコンテナから取得して照合し、資格情報・ファイルはすべてテスト専用です。
 - Android検証で、WebGLにDOM行がないと選択領域が古い寸法で残る問題、IMEによる親要素のスクロール、resize後の入力textareaが画面外へ残る問題を発見。renderer非依存の計測、`overflow-clip`、resize後の入力座標補正を追加しました。
 - 初期AVDの`swiftshader_indirect`ではglyphが斜めに欠けました。アプリを介さない単純な四角形でも`TRIANGLE_STRIP`の半分だけが欠け、`TRIANGLES`とdesktop Chromiumでは正常だったため、エミュレーターGPU経路の問題と切り分けました。既存のcontext-loss fallbackでDOM描画へ戻ると正常表示となり、Android経由の文字入力と独立したshell出力行も確認できました。
+- 専用AVDを`-gpu swangle`で起動すると、四角形の描画テストは全12条件で正常となりました。最終APKの既定WebGL描画でも、Android経由の文字入力と独立したshell出力、IMEを開いたままの縦横回転・再タップ・Backを再確認しています。CDPの画像取得ではcanvasが黒く写るため、確認画像には`adb exec-out screencap -p`を使用しました。製品側の描画設定は変更していません。
 - 実際のスマートフォン本体とiOS Safariは未確認です。エミュレーターでの結果と実機の描画・操作感を区別します。
 
 ## 開発版APK
