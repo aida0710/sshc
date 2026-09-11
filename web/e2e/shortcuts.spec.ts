@@ -23,6 +23,7 @@ test("edits shortcuts, keeps them after reload and uses them in a live terminal"
   await assign("Terminal search", "Alt+f");
   await assign("Paste", "Alt+v");
   await assign("Open Home", "Alt+h");
+  await expect(page.getByRole("button", { name: "Assign shortcut: Open Home", exact: true })).toHaveText("Alt+H");
   await page.reload();
   await expect(page.getByRole("button", { name: "Assign shortcut: Command search", exact: true })).toHaveText("Alt+K");
   if (process.env.SSHC_SHORTCUTS_VISUAL_DIR !== undefined) {

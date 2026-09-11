@@ -1631,6 +1631,28 @@ paths:
         "404": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
         "422": { $ref: "#/components/responses/Problem" }
+  /api/v1/metadata/shortcuts:
+    put:
+      operationId: setShortcutPresets
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [base, presets]
+              properties:
+                base: { type: array, maxItems: 64, items: { $ref: "#/components/schemas/ShortcutPreset" } }
+                presets: { type: array, maxItems: 64, items: { $ref: "#/components/schemas/ShortcutPreset" } }
+      responses:
+        "200":
+          description: Saved shortcut presets
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SettingsSaveResult" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
   /api/v1/metadata:
     get:
       operationId: getMetadata
@@ -3979,12 +4001,33 @@ components:
         # 外す。OpenSSH が読むものは何も変わらない。
         hidden: { type: boolean }
         settings: { type: array, items: { $ref: "#/components/schemas/Setting" } }
+    ShortcutPreset:
+      type: object
+      additionalProperties: false
+      required: [id, name, bindings]
+      properties:
+        id: { type: string, pattern: '^[a-zA-Z0-9-]{1,64}$' }
+        name: { type: string, minLength: 1, maxLength: 80 }
+        bindings:
+          type: object
+          additionalProperties: false
+          required: [palette, terminalSearch, copy, paste, nextSession, previousSession, home, sftp]
+          properties:
+            palette: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
+            terminalSearch: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
+            copy: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
+            paste: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
+            nextSession: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
+            previousSession: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
+            home: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
+            sftp: { type: array, maxItems: 3, items: { type: string, maxLength: 64 } }
     Metadata:
       type: object
       additionalProperties: false
       required: [schemaVersion]
       properties:
         schemaVersion: { type: integer }
+        shortcutPresets: { type: array, maxItems: 64, items: { $ref: "#/components/schemas/ShortcutPreset" } }
         groupsFile: { type: string }
         embeddedTerminal: { $ref: "#/components/schemas/EmbeddedTerminal" }
         engine: { $ref: "#/components/schemas/EngineSettings" }

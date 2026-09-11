@@ -3547,3 +3547,41 @@ func TestASnapshotCarriesTheBackgroundImagesTheMetadataNames(t *testing.T) {
 		t.Fatalf("the background travelled with the wrong bytes")
 	}
 }
+
+func TestShortcutPresetsTravelInEncryptedSync(t *testing.T) {
+	bucket := &fakeBucket{}
+	body := `{"schemaVersion":5,"shortcutPresets":[{"id":"work","name":"Work","bindings":{"palette":["Alt+K"],"terminalSearch":[],"copy":[],"paste":[],"nextSession":[],"previousSession":[],"home":[],"sftp":[]}}]}`
+	writer := newInstallation(t, bucket, map[string]string{"config": "Host fixture\n", "sshc/metadata.json": body})
+	if _, err := writer.service.Push(context.Background(), syncPassphrase, "Shortcut presets"); err != nil {
+		t.Fatal(err)
+	}
+	archive, _, err := envelope.OpenWithin(bucket.object(remotesync.ObjectName), syncPassphrase, envelope.AcceptedFromRemote)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, contents, err := remotesync.Read(archive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(contents["sshc/metadata.json"]) != body {
+		t.Fatal("presets missing from encrypted snapshot")
+	}
+	reader := newInstallation(t, bucket, map[string]string{"config": "Host fixture\n"})
+	result, err := reader.service.Pull(context.Background(), syncPassphrase, remotesync.ResolveNone)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Conflicts) != 0 {
+		t.Fatal("unexpected sync conflict")
+	}
+	if err := reader.service.Apply(result); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(filepath.Join(reader.home, ".ssh", "sshc", "metadata.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != body {
+		t.Fatal("preset changed in transit")
+	}
+}
