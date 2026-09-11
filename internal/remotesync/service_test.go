@@ -2022,7 +2022,7 @@ func TestHistorySerializesRemoteDerivationAndDiscardsItsStaleGraph(t *testing.T)
 		t.Fatal(err)
 	}
 	started := make(chan struct{})
-	replacementStarted := make(chan struct{})
+	rotationReady := make(chan struct{})
 	release := make(chan struct{})
 	var releaseOnce sync.Once
 	releaseHistory := func() { releaseOnce.Do(func() { close(release) }) }
@@ -2037,8 +2037,6 @@ func TestHistorySerializesRemoteDerivationAndDiscardsItsStaleGraph(t *testing.T)
 		if call == 1 {
 			close(started)
 			<-release
-		} else if call == 2 {
-			close(replacementStarted)
 		}
 		step()
 	}
@@ -2052,16 +2050,18 @@ func TestHistorySerializesRemoteDerivationAndDiscardsItsStaleGraph(t *testing.T)
 	<-started
 	rotationDone := make(chan error, 1)
 	go func() {
-		rotationDone <- machine.service.ReplaceKey(
-			context.Background(), syncPassphrase, "a different strong shared synchronization key", true, func() error { return nil },
+		rotationDone <- machine.service.ReplaceKeyUsing(
+			context.Background(), "a different strong shared synchronization key", true,
+			func() (string, func() error, error) {
+				close(rotationReady)
+				return syncPassphrase, func() error { return nil }, nil
+			},
 		)
 	}()
+	// Hold operationMu before releasing the history derivation so its final
+	// validation observes the rotation. Do not impose a wall-clock limit on Argon2.
+	<-rotationReady
 	releaseHistory()
-	select {
-	case <-replacementStarted:
-	case <-time.After(2 * time.Second):
-		t.Fatal("ReplaceKey did not continue after the bounded remote derivation finished")
-	}
 	if err := <-rotationDone; err != nil {
 		t.Fatalf("ReplaceKey while History derives = %v", err)
 	}
@@ -2082,7 +2082,7 @@ func TestDiffHistorySerializesRemoteDerivationAndDiscardsItsStaleDiff(t *testing
 	}
 	key := history.Revisions[0].Key
 	started := make(chan struct{})
-	replacementStarted := make(chan struct{})
+	rotationReady := make(chan struct{})
 	release := make(chan struct{})
 	var releaseOnce sync.Once
 	releaseDiff := func() { releaseOnce.Do(func() { close(release) }) }
@@ -2097,8 +2097,6 @@ func TestDiffHistorySerializesRemoteDerivationAndDiscardsItsStaleDiff(t *testing
 		if call == 1 {
 			close(started)
 			<-release
-		} else if call == 2 {
-			close(replacementStarted)
 		}
 		step()
 	}
@@ -2112,16 +2110,18 @@ func TestDiffHistorySerializesRemoteDerivationAndDiscardsItsStaleDiff(t *testing
 	<-started
 	rotationDone := make(chan error, 1)
 	go func() {
-		rotationDone <- machine.service.ReplaceKey(
-			context.Background(), syncPassphrase, "a different strong shared synchronization key", true, func() error { return nil },
+		rotationDone <- machine.service.ReplaceKeyUsing(
+			context.Background(), "a different strong shared synchronization key", true,
+			func() (string, func() error, error) {
+				close(rotationReady)
+				return syncPassphrase, func() error { return nil }, nil
+			},
 		)
 	}()
+	// Hold operationMu before releasing the history derivation so its final
+	// validation observes the rotation. Do not impose a wall-clock limit on Argon2.
+	<-rotationReady
 	releaseDiff()
-	select {
-	case <-replacementStarted:
-	case <-time.After(2 * time.Second):
-		t.Fatal("ReplaceKey did not continue after the bounded remote derivation finished")
-	}
 	if err := <-rotationDone; err != nil {
 		t.Fatalf("ReplaceKey while DiffHistory derives = %v", err)
 	}
@@ -3545,5 +3545,43 @@ func TestASnapshotCarriesTheBackgroundImagesTheMetadataNames(t *testing.T) {
 	}
 	if string(contents["sshc/backgrounds/office.png"]) != "\x89PNG\r\n\x1a\nbytes" {
 		t.Fatalf("the background travelled with the wrong bytes")
+	}
+}
+
+func TestShortcutPresetsTravelInEncryptedSync(t *testing.T) {
+	bucket := &fakeBucket{}
+	body := `{"schemaVersion":5,"shortcutPresets":[{"id":"work","name":"Work","bindings":{"palette":["Alt+K"],"terminalSearch":[],"copy":[],"paste":[],"nextSession":[],"previousSession":[],"home":[],"sftp":[]}}]}`
+	writer := newInstallation(t, bucket, map[string]string{"config": "Host fixture\n", "sshc/metadata.json": body})
+	if _, err := writer.service.Push(context.Background(), syncPassphrase, "Shortcut presets"); err != nil {
+		t.Fatal(err)
+	}
+	archive, _, err := envelope.OpenWithin(bucket.object(remotesync.ObjectName), syncPassphrase, envelope.AcceptedFromRemote)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, contents, err := remotesync.Read(archive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(contents["sshc/metadata.json"]) != body {
+		t.Fatal("presets missing from encrypted snapshot")
+	}
+	reader := newInstallation(t, bucket, map[string]string{"config": "Host fixture\n"})
+	result, err := reader.service.Pull(context.Background(), syncPassphrase, remotesync.ResolveNone)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Conflicts) != 0 {
+		t.Fatal("unexpected sync conflict")
+	}
+	if err := reader.service.Apply(result); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(filepath.Join(reader.home, ".ssh", "sshc", "metadata.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != body {
+		t.Fatal("preset changed in transit")
 	}
 }

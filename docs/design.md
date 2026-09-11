@@ -306,7 +306,7 @@ Menu末尾のOthersからLicense（`/license`）へ移動する。名前・バ�
 
 ### アプリのキーコンフィグ
 
-Menuの設定一覧から/settings/shortcutsを開き、コマンド検索・Terminal内検索・コピー・貼り付け・前後セッション・Home・SFTPの割り当てを編集する。web/src/keyconfig/bindings.tsが既定値、正規化、検証、重複排除、localStorageのsshc.shortcuts.v1と同一タブ/他タブへの変更通知を管理する。ブラウザーごとの設定でありVaultやSyncには含めない。
+Menuの設定一覧から/settings/shortcutsを開き、コマンド検索・Terminal内検索・コピー・貼り付け・前後セッション・Home・SFTPの割り当てを編集する。web/src/keyconfig/bindings.tsが既定値、正規化、検証、重複排除、localStorageのsshc.shortcuts.v1と同一タブ/他タブへの変更通知を管理する。プリセットの内容はmetadata.jsonのshortcutPresetsに保存し、既存の暗号化Syncへ含める。使用中のIDはブラウザー内のsshc.shortcuts.selected.v1へ保存し同期しない。既存localStorage設定はImported shortcutsとして一度取り込む。標準は組み込みで、編集時は個人用を作成。選択中のプリセットが削除されたら標準へ戻る。PUT /api/v1/metadata/shortcutsはbaseの一覧を比較して古い編集を409で拒否し、metadataの他項目を保持する。同期完了後の変更は5秒間隔とfocus時の再取得で反映する。metadata schema v5へ移行し、v3/v4は読み込める。旧版による新しい設定の欠落を防ぐため、同期する全端末を対応版へ更新する。
 
 全体ショートカットとTerminal内検索はcapture phaseで処理し、処理したkeydownをxtermへ渡さない。IME合成・AltGraph・割り当て編集中・modal表示中は発火させない。Terminalのコピーは選択範囲がある場合に動作し、標準paste chordはブラウザーのpaste event、独自paste chordはClipboard APIから既存の検査/編集フローへ渡す。標準paste eventは割り当て解除後もブラウザー操作として利用できる。繰り返しkeydownによる重複貼り付けとモーダル展開を抑止する。
 

@@ -252,7 +252,7 @@ describe("SettingsPanel", () => {
     await waitFor(() =>
       expect(api.changeMasterPassword).toHaveBeenCalledWith("the old one is long", "the new one is long"),
     );
-    expect(await screen.findByRole("status")).toHaveTextContent(/remote snapshots were not rewritten/i);
+    expect(await screen.findByText(/remote snapshots were not rewritten/i)).toHaveAttribute("role", "status");
     expect(screen.getByLabelText("Current master password")).toHaveValue("");
     expect(screen.getByLabelText("New master password")).toHaveValue("");
     expect(screen.getByLabelText("Confirm new master password")).toHaveValue("");

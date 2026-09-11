@@ -41,6 +41,7 @@ func registerConfigRoutes(engine *echo.Echo, handlers ConfigHandlers) {
 	engine.POST("/api/v1/config/groups/rename", handlers.RenameGroup)
 	engine.POST("/api/v1/config/groups/delete", handlers.DeleteGroup)
 	engine.GET("/api/v1/metadata", handlers.Metadata)
+	engine.PUT("/api/v1/metadata/shortcuts", handlers.SetShortcuts)
 	engine.PUT("/api/v1/metadata/terminal", handlers.SetTerminal)
 	engine.PUT("/api/v1/metadata/engine", handlers.SetEngine)
 	registerBackgroundRoutes(engine, handlers)
@@ -353,4 +354,28 @@ func (h ConfigHandlers) SetEngine(c *echo.Context) error {
 		TransactionId: result.TransactionID,
 		Written:       result.Written,
 	})
+}
+
+func (h ConfigHandlers) SetShortcuts(c *echo.Context) error {
+	var request struct {
+		Base    []application.ShortcutPreset `json:"base"`
+		Presets []application.ShortcutPreset `json:"presets"`
+	}
+	if err := decodeJSON(c, &request); err != nil {
+		return problem(c, http.StatusBadRequest, "invalid_request")
+	}
+	if request.Base == nil || request.Presets == nil {
+		return problem(c, http.StatusBadRequest, "invalid_request")
+	}
+	result, err := h.Service.SetShortcutPresets(request.Base, request.Presets)
+	if errors.Is(err, application.ErrShortcutConflict) {
+		return problem(c, http.StatusConflict, "shortcut_presets_changed")
+	}
+	if errors.Is(err, application.ErrShortcutPresets) {
+		return problem(c, http.StatusBadRequest, "invalid_shortcut_presets")
+	}
+	if err != nil {
+		return serviceProblem(c, err)
+	}
+	return c.JSON(http.StatusOK, api.SettingsSaveResult{TransactionId: result.TransactionID, Written: result.Written})
 }
