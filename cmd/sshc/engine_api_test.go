@@ -99,6 +99,35 @@ func validEngineStatus() string {
 	return `{"owner":"engine","version":"test","protocolVersion":1,"vault":true,"unlocked":true,"sessions":0}`
 }
 
+func TestEngineAPIAcceptsCurrentServerVaultProtectionStatus(t *testing.T) {
+	for _, passwordless := range []bool{false, true} {
+		name := "protected"
+		if passwordless {
+			name = "passwordless"
+		}
+		t.Run(name, func(t *testing.T) {
+			body, err := json.Marshal(httpserver.CLIStatus{
+				Owner: handoff.Owner("engine"), Version: "test", ProtocolVersion: 1,
+				Vault: true, Unlocked: true, Passwordless: passwordless,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			script := &engineAPIScript{t: t, statusBody: string(body), syncBody: `{"configured":true}`}
+			opened, server, _ := openTestEngineAPI(t, script)
+			defer server.Close()
+			defer func() { _ = opened.Close() }()
+			var status api.SyncStatus
+			if err := opened.getJSON(context.Background(), "/api/v1/sync", &status); err != nil {
+				t.Fatalf("getJSON = %v", err)
+			}
+			if !status.Configured {
+				t.Fatal("command session did not read sync status")
+			}
+		})
+	}
+}
+
 func openTestEngineAPI(t *testing.T, script *engineAPIScript) (*engineAPI, *httptest.Server, string) {
 	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(script.handler))

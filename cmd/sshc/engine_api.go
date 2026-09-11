@@ -67,6 +67,7 @@ type engineStatusWire struct {
 	ProtocolVersion int           `json:"protocolVersion"`
 	Vault           *bool         `json:"vault"`
 	Unlocked        *bool         `json:"unlocked"`
+	Passwordless    bool          `json:"passwordless"`
 	Sessions        *int          `json:"sessions"`
 }
 
