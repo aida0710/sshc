@@ -13,7 +13,7 @@ Open **Menu → Keyboard shortcuts** to assign command search, terminal search, 
 
 Duplicate bindings are rejected. Use **Clear** to disable an action or **Restore defaults** to reset all bindings. Connection switching defaults to Alt+PageDown / Alt+PageUp. Copy, paste and terminal search apply inside the terminal. Paste retains its normal confirmation and editing flow.
 
-Changes apply immediately and persist in this browser's local storage; they are not synced to other browsers. Browser or OS shortcuts may take priority. Native browser paste remains available.
+Save named presets, duplicate, rename, edit or delete them. Preset contents are included in Sync; each browser selects its own preset. Existing bindings migrate once to Imported shortcuts. Editing Default creates a personal preset. Deleting the selected preset restores defaults. Reload after a concurrent edit conflict. Update all synced devices to a version that supports presets because the metadata format has changed. Browser or OS shortcuts may take priority. Native browser paste remains available.
 
 Paste defaults to Ctrl+V (⌘V on Mac); Ctrl+Shift+V also remains available.
 

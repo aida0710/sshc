@@ -19,7 +19,7 @@ import (
 
 const (
 	// MetadataSchemaVersion はこのビルドが書き込むバージョンである。
-	MetadataSchemaVersion = 4
+	MetadataSchemaVersion = 5
 	MetadataFileName      = "metadata.json"
 	DefaultGroupsFile     = "groups.sshc.conf"
 )
@@ -181,6 +181,7 @@ type EmbeddedTerminal struct {
 
 // Metadata は~/.ssh/sshc/metadata.json の全体である。
 type Metadata struct {
+	ShortcutPresets  []ShortcutPreset  `json:"shortcutPresets,omitempty"`
 	SchemaVersion    int               `json:"schemaVersion"`
 	GroupsFile       string            `json:"groupsFile,omitempty"`
 	EmbeddedTerminal *EmbeddedTerminal `json:"embeddedTerminal,omitempty"`
@@ -234,14 +235,15 @@ func DecodeMetadata(contents []byte) (Metadata, error) {
 	if err := json.Unmarshal(contents, &version); err != nil {
 		return Metadata{}, err
 	}
-	if version.SchemaVersion != MetadataSchemaVersion && version.SchemaVersion != MetadataSchemaVersion-1 {
+	if version.SchemaVersion != MetadataSchemaVersion && version.SchemaVersion != 4 && version.SchemaVersion != 3 {
 		return Metadata{}, ErrMetadataVersion
 	}
 	var metadata Metadata
 	if err := json.Unmarshal(contents, &metadata); err != nil {
 		return Metadata{}, err
 	}
-	// v3→v4は追加fieldだけの純粋なmigrationである。旧scrollbackBytesはengineの
+	// v3/v4→v5は追加fieldだけのmigrationである。v5は同期するキー設定を旧版で消さないための境界。
+	// 旧scrollbackBytesはengineの
 	// replay bufferとして意味を変えず、browser側は未設定の既定行数から始める。
 	metadata.SchemaVersion = MetadataSchemaVersion
 	if metadata.GroupsFile == "" {
@@ -280,6 +282,9 @@ func EncodeMetadata(metadata Metadata) ([]byte, error) {
 
 // ValidateMetadata は設計の不変条件を破る文書を拒否する。
 func ValidateMetadata(metadata Metadata) error {
+	if err := validateShortcutPresets(metadata.ShortcutPresets); err != nil {
+		return err
+	}
 	if settings := metadata.Engine; settings != nil {
 		if settings.Port != 0 && (settings.Port < 1024 || settings.Port > 65535) {
 			return fmt.Errorf("%w: port %d", ErrMetadataEngine, settings.Port)

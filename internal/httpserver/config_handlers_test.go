@@ -157,11 +157,16 @@ func TestEngineSettingsStoreTheVaultAutoLockChoice(t *testing.T) {
 func TestTerminalAndEngineSettingsReturnTheirWireSaveResult(t *testing.T) {
 	harness := newConfigHarness(t)
 	for name, target := range map[string]string{
-		"terminal": "/api/v1/metadata/terminal",
-		"engine":   "/api/v1/metadata/engine",
+		"terminal":  "/api/v1/metadata/terminal",
+		"engine":    "/api/v1/metadata/engine",
+		"shortcuts": "/api/v1/metadata/shortcuts",
 	} {
 		t.Run(name, func(t *testing.T) {
-			response := harness.call(t, http.MethodPut, target, map[string]any{}, true, true)
+			body := map[string]any{}
+			if name == "shortcuts" {
+				body = map[string]any{"base": []any{}, "presets": []any{}}
+			}
+			response := harness.call(t, http.MethodPut, target, body, true, true)
 			if response.Code != http.StatusOK {
 				t.Fatalf("save = %d, body %s", response.Code, response.Body.String())
 			}

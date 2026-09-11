@@ -1,8 +1,19 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { apiClient } from "../api/client";
+import { refreshPresets, type Preset } from "./presets";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { KeyConfig } from "./KeyConfig";
 import { defaultBindings, loadBindings, matchesShortcut, parseBindings, shortcutKey, shortcutsBlocked, storageKey } from "./bindings";
 
+beforeEach(async () => {
+  let presets: Preset[] = [];
+  vi.spyOn(apiClient, "read").mockImplementation(async () => ({ schemaVersion: 5, shortcutPresets: presets }));
+  vi.spyOn(apiClient, "mutate").mockImplementation(async (_path, options) => {
+    presets = JSON.parse(options?.body as string).presets as Preset[];
+    return {};
+  });
+  await refreshPresets();
+});
 afterEach(() => { localStorage.clear(); vi.restoreAllMocks(); });
 
 describe("application shortcuts", () => {
@@ -17,7 +28,7 @@ describe("application shortcuts", () => {
     expect(parseBindings(JSON.stringify(custom))).toEqual(custom);
   });
 
-  it("records, persists, disables and restores shortcuts without accepting duplicates", () => {
+  it("records, persists, disables and restores shortcuts without accepting duplicates", async () => {
     const view = render(<KeyConfig />);
     const assign = () => screen.getByRole("button", { name: "Assign shortcut: Command search" });
     fireEvent.click(assign());
@@ -25,21 +36,21 @@ describe("application shortcuts", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("Terminal search");
     expect(loadBindings().palette).toEqual(defaultBindings.palette);
     fireEvent.keyDown(assign(), { key: "p", ctrlKey: true, shiftKey: true });
-    expect(loadBindings().palette).toEqual(["Ctrl+Shift+P"]);
+    await waitFor(() => expect(loadBindings().palette).toEqual(["Ctrl+Shift+P"]));
     view.unmount();
     render(<KeyConfig />);
     expect(assign()).toHaveTextContent("Ctrl+Shift+P");
     fireEvent.click(screen.getByRole("button", { name: "Clear shortcut: Command search" }));
-    expect(loadBindings().palette).toEqual([]);
+    await waitFor(() => expect(loadBindings().palette).toEqual([]));
     fireEvent.click(screen.getByRole("button", { name: "Restore defaults" }));
-    expect(loadBindings()).toEqual(defaultBindings);
+    await waitFor(() => expect(loadBindings()).toEqual(defaultBindings));
   });
 
-  it("reports failed storage writes and leaves current bindings intact", () => {
+  it("reports failed storage writes and leaves current bindings intact", async () => {
     render(<KeyConfig />);
     vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("denied"); });
     fireEvent.click(screen.getByRole("button", { name: "Clear shortcut: Command search" }));
-    expect(screen.getByRole("alert")).toHaveTextContent("Could not save");
+    await waitFor(() => expect(screen.getAllByRole("alert").some((element) => element.textContent?.includes("Could not save"))).toBe(true));
     expect(loadBindings().palette).toEqual(defaultBindings.palette);
   });
 

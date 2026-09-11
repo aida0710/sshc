@@ -49,24 +49,31 @@ func TestDecodeMetadataAcceptsAnAbsentFileAndRejectsUnsupportedSchemas(t *testin
 	}
 }
 
-func TestMetadataMigratesVersionThreeAndRoundTripsVersionFour(t *testing.T) {
+func TestMetadataMigratesVersionThreeAndRoundTripsVersionFive(t *testing.T) {
 	migrated, err := DecodeMetadata([]byte(`{"schemaVersion":3,"embeddedTerminal":{"scrollbackBytes":32768},"hosts":[{"identity":{"path":"config","alias":"host"}}]}`))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if migrated.SchemaVersion != 4 || migrated.EmbeddedTerminal == nil || migrated.EmbeddedTerminal.ScrollbackBytes != 32768 {
+	if migrated.SchemaVersion != 5 || migrated.EmbeddedTerminal == nil || migrated.EmbeddedTerminal.ScrollbackBytes != 32768 {
 		t.Fatalf("migrated = %#v", migrated)
 	}
 	encoded, err := EncodeMetadata(migrated)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(encoded), `"schemaVersion": 4`) {
+	if !strings.Contains(string(encoded), `"schemaVersion": 5`) {
 		t.Fatalf("encoded migration = %s", encoded)
 	}
 	decoded, err := DecodeMetadata(encoded)
-	if err != nil || decoded.SchemaVersion != 4 {
-		t.Fatalf("v4 round trip = %#v, %v", decoded, err)
+	if err != nil || decoded.SchemaVersion != 5 {
+		t.Fatalf("v5 round trip = %#v, %v", decoded, err)
+	}
+}
+
+func TestMetadataMigratesVersionFourWithoutLosingSettings(t *testing.T) {
+	stored, err := DecodeMetadata([]byte(`{"schemaVersion":4,"embeddedTerminal":{"fontSize":18}}`))
+	if err != nil || stored.SchemaVersion != 5 || stored.EmbeddedTerminal == nil || stored.EmbeddedTerminal.FontSize != 18 {
+		t.Fatalf("migration failed: %v", err)
 	}
 }
 
@@ -277,8 +284,8 @@ func TestMetadataCarriesOnlyPresentation(t *testing.T) {
 			t.Errorf("encoded metadata still carries %s:\n%s", absent, encoded)
 		}
 	}
-	if !strings.Contains(string(encoded), `"schemaVersion": 4`) {
-		t.Errorf("encoded metadata is not version 4:\n%s", encoded)
+	if !strings.Contains(string(encoded), `"schemaVersion": 5`) {
+		t.Errorf("encoded metadata is not version 5:\n%s", encoded)
 	}
 }
 
