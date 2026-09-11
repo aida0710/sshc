@@ -32,6 +32,8 @@ Interactive secrets such as the Vault master password display one `*` per typed 
 
 `sshc service` manages a systemd user service on Linux or a launchd user agent on macOS. `install` registers a stable Homebrew or `install.sh` path, and `disable` removes only a definition created by sshc. `install`, `disable`, and `update` show the planned changes and ask for confirmation. Use `-y` or `--yes` only when automation must skip the prompt.
 
+`sshc vault change-password` validates the current password as soon as you press Enter, before asking for a new password. Passwordless Vaults skip the current-password prompt. Leave both the new password and confirmation empty to remove password protection. `sshc vault lock` keeps a passwordless Vault unlocked; set a master password to enable locking. After upgrading the CLI, restart the engine to apply these changes.
+
 ## OTP
 
 ```sh
@@ -71,6 +73,8 @@ source <(sshc completion zsh)
 # fish
 sshc completion fish | source
 ```
+
+On Linux, the system Bash completion loader may not search Homebrew's completion directory. If only filenames are offered, run `source <(sshc completion bash)` in the current shell. Add that line to `~/.bashrc` to load the current command definitions for each new shell. Reload it after updating sshc if the current shell still offers old commands.
 
 `sshc info` resolves `Include`, `Match`, `ProxyJump` and encoding through the real connection path without an engine. It does not print saved credentials, `SetEnv` values or the `ProxyCommand` body.
 

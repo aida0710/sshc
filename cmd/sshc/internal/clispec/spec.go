@@ -138,8 +138,8 @@ Automation: --expect REGEX | --read-for D | --script FILE|-
 		{Name: "status", Help: "usage:\n  sshc vault status\n\nDescribe the running engine and Vault.\n"},
 		{Name: "create", Help: "usage:\n  sshc vault create\n\nCreate and unlock a new Vault.\n"},
 		{Name: "unlock", Help: "usage:\n  sshc vault unlock\n\nUnlock the Vault in the running engine.\n"},
-		{Name: "lock", Help: "usage:\n  sshc vault lock\n\nLock the Vault without closing SSH sessions.\n"},
-		{Name: "change-password", Help: "usage:\n  sshc vault change-password\n\nChange the password of an unlocked Vault.\n"},
+		{Name: "lock", Help: "usage:\n  sshc vault lock\n\nLock a password-protected Vault without closing SSH sessions. Passwordless Vaults remain unlocked.\n"},
+		{Name: "change-password", Help: "usage:\n  sshc vault change-password\n\nChange the master password. The current password is checked before asking for a new one and is skipped for passwordless Vaults. Leave the new password and confirmation empty to use a passwordless Vault.\n"},
 	}},
 	{Name: "version", Route: "version", Aliases: []string{"-v", "--version"}, Help: "usage:\n  sshc version\n\nPrint the version and target operating system/architecture.\n"},
 	{Name: "help", Route: "help"},
@@ -233,7 +233,7 @@ const GlobalHelp = `usage:
   sshc vault status    describe the running engine and vault
   sshc vault create    create and unlock a new vault
   sshc vault unlock    unlock the vault in the running engine
-  sshc vault lock      lock the vault without closing SSH sessions
+  sshc vault lock      lock a password-protected vault; keep SSH sessions
   sshc vault change-password
                        change the password of an unlocked vault
   sshc version         print the version, and what it was built for

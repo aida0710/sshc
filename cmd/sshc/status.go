@@ -67,6 +67,8 @@ func writeStatus(out io.Writer, found handoff.Handoff, answer statusAnswer) {
 // vaultState は Vault の状態を CLI 表示用の値に変換する。
 func vaultState(answer statusAnswer) string {
 	switch {
+	case answer.Vault && answer.Unlocked && answer.Passwordless:
+		return "unlocked (passwordless)"
 	case answer.Vault && answer.Unlocked:
 		return "unlocked"
 	case answer.Vault:
@@ -101,6 +103,7 @@ func requestStatus(ctx context.Context, found handoff.Handoff, client *http.Clie
 
 // statusAnswer は engine の状態応答である。
 type statusAnswer struct {
+	Passwordless    bool          `json:"passwordless"`
 	Owner           handoff.Owner `json:"owner"`
 	Version         string        `json:"version"`
 	ProtocolVersion int           `json:"protocolVersion"`

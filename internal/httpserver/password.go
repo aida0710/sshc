@@ -82,6 +82,22 @@ func (v *vaultOperations) Unlock(passphrase string) error {
 	return v.service.Unlock(passphrase)
 }
 
+func (v *vaultOperations) Verify(passphrase string) error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if v.service == nil {
+		return errVaultUnavailable
+	}
+	valid, err := v.service.Verify(passphrase)
+	if err != nil {
+		return err
+	}
+	if !valid {
+		return secret.ErrWrongPassphrase
+	}
+	return nil
+}
+
 func (v *vaultOperations) RecoverCompatibleBackup(passphrase string) error {
 	v.mu.Lock()
 	defer v.mu.Unlock()
@@ -110,6 +126,27 @@ func (v *vaultOperations) Lock() error {
 	return nil
 }
 
+func (v *vaultOperations) LockPasswordProtected() error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if v.service == nil {
+		return errVaultUnavailable
+	}
+	state, err := v.service.State()
+	if err != nil {
+		return err
+	}
+	// The CLI must not require a passwordless vault to be unlocked manually.
+	if state.Passwordless {
+		if state.Unlocked {
+			return nil
+		}
+		return v.service.AutoUnlock()
+	}
+	v.service.Lock()
+	return nil
+}
+
 func (v *vaultOperations) Change(
 	ctx context.Context,
 	current string,
@@ -128,7 +165,12 @@ func (v *vaultOperations) Change(
 		return err
 	}
 	if !state.Unlocked {
-		return secret.ErrLocked
+		if !state.Passwordless {
+			return secret.ErrLocked
+		}
+		if err := v.service.AutoUnlock(); err != nil {
+			return err
+		}
 	}
 	return v.service.ChangeMasterPassword(current, next)
 }

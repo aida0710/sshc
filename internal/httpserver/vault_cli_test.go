@@ -617,3 +617,69 @@ func TestVaultMutationsReturnInternalErrorForStorageFailure(t *testing.T) {
 }
 
 var _ io.ReadCloser = (*unreadVaultBody)(nil)
+
+func TestCLIVaultVerifyDoesNotChangeLockState(t *testing.T) {
+	service := newCLIVaultService(t)
+	if err := service.Initialise(testPassphrase); err != nil {
+		t.Fatal(err)
+	}
+	engine := connectEngine(t, ConnectHandlers{Secret: testCLISecret, Passwords: service})
+	for _, unlocked := range []bool{true, false} {
+		if !unlocked {
+			service.Lock()
+		}
+		for _, test := range []struct {
+			body, token string
+			want        int
+		}{
+			{`{"passphrase":"` + testPassphrase + `"}`, "", http.StatusUnauthorized},
+			{`{"passphrase":"wrong"}`, testCLISecret, http.StatusUnauthorized},
+			{`{"passphrase":""}`, testCLISecret, http.StatusUnauthorized},
+			{`{}`, testCLISecret, http.StatusBadRequest},
+			{`{"passphrase":"x","unknown":true}`, testCLISecret, http.StatusBadRequest},
+			{`{"passphrase":"x"} {}`, testCLISecret, http.StatusBadRequest},
+			{`{"passphrase":"` + strings.Repeat("x", 5<<10) + `"}`, testCLISecret, http.StatusRequestEntityTooLarge},
+			{`{"passphrase":"` + testPassphrase + `"}`, testCLISecret, http.StatusNoContent},
+		} {
+			response := send(t, engine, http.MethodPost, VaultVerifyPath, test.body, cliHeaders(test.token))
+			if response.Code != test.want {
+				t.Errorf("status=%d want=%d", response.Code, test.want)
+			}
+			if service.Unlocked() != unlocked {
+				t.Fatal("verification changed lock state")
+			}
+		}
+	}
+}
+
+func TestPasswordlessVaultLockKeepsCredentialsAvailable(t *testing.T) {
+	service := newCLIVaultService(t)
+	if err := service.Initialise(""); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.SetCredential(secret.KindPassword, "fixture", "test-credential-value"); err != nil {
+		t.Fatal(err)
+	}
+	engine := connectEngine(t, ConnectHandlers{Secret: testCLISecret, Passwords: service})
+	for _, previouslyLocked := range []bool{false, true} {
+		if previouslyLocked {
+			service.Lock()
+		}
+		response := send(t, engine, http.MethodPost, VaultLockPath, `{}`, cliHeaders(testCLISecret))
+		if response.Code != http.StatusNoContent || !service.Unlocked() {
+			t.Fatalf("lock status=%d unlocked=%v", response.Code, service.Unlocked())
+		}
+		if value, err := service.Credential(secret.KindPassword, "fixture"); err != nil || value != "test-credential-value" {
+			t.Fatalf("credential unavailable: %v", err)
+		}
+	}
+	service.Lock()
+	response := send(t, engine, http.MethodPost, VaultChangePath, `{"current":"","next":"1234"}`, cliHeaders(testCLISecret))
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("change status=%d", response.Code)
+	}
+	response = send(t, engine, http.MethodPost, VaultLockPath, `{}`, cliHeaders(testCLISecret))
+	if response.Code != http.StatusNoContent || service.Unlocked() {
+		t.Fatal("password-protected vault did not lock")
+	}
+}
