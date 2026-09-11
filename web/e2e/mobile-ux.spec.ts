@@ -80,6 +80,9 @@ test("mobile transfer details preserve the file list at 640px and 480px heights"
   const dock = page.getByRole("button", { name: "Expand Transfer Manager", exact: true });
   for (const height of [640, 480]) {
     await page.setViewportSize({ width: 390, height });
+    // setViewportSize returns before the browser dispatches its resize event.
+    // Measure only once the app has adopted the new visible viewport.
+    await expect.poll(async () => (await page.locator(".sshc-app").boundingBox())?.height).toBe(height);
     await expect(dock).toBeVisible();
     const before = await list.boundingBox();
     expect(before?.height ?? 0).toBeGreaterThan(height === 640 ? 200 : 100);

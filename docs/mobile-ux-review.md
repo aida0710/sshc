@@ -2,7 +2,7 @@
 
 2026-09-12 JST。対象は `agent/mobile-ux-dev` の開発版 `0.33.2-mobile.1-dev`。正式版 v0.33.2 の後に行った変更で、まだ正式リリースとして公開していません。
 
-目的は、指での操作に応答を返し、一覧や入力対象に画面を使えるようにすることです。スマホ幅のブラウザーとAndroid WebViewで共通のUIを使います。以下の「確認項目」は合格済みの一覧ではありません。実行結果は後段で別に記録します。
+目的は、指での操作に応答を返し、一覧や入力対象に画面を使えるようにすることです。スマホ幅のブラウザーとAndroid WebViewで共通のUIを使います。以下の「確認項目」は観点の一覧です。実行結果と未確認の範囲は後段で区別しています。
 
 ## 画面ごとのレビュー
 
@@ -28,7 +28,7 @@
 | Snippets | 全件一覧・固定列・長い名前が編集画面を押し広げる | 狭い画面は選択欄へ置換、変数と接続先を1列化。実行中は実行ボタンを無効化 | 選択と新規作成、長い変数／接続先、previewと確認、二重実行防止 |
 | Settings／License／Keys／履歴など | 共通の入力・ボタン・modalの制約を受ける | 共通のタッチ対象とviewport対応を適用 | 長い画面のスクロール、検索、フォーム・確認操作。個別の挙動は既存契約を維持 |
 
-SFTPの旧状態は390×640pxで転送管理を展開すると一覧が23px、390×480pxでは0pxになっていました。新しいsheetは一覧のレイアウト外に表示するため、開閉で一覧を押し縮めません。新実装の実測値はブラウザー検証の結果へ記録します。
+SFTPの旧状態は390×640pxで転送管理を展開すると一覧が23px、390×480pxでは0pxになっていました。新しいsheetは一覧のレイアウト外に表示するため、開閉で一覧を押し縮めません。ブラウザーでは640px・480pxの両方で開閉前後の一覧の高さと位置が一致しました。API 36エミュレーターの412×842pxでは579.476pxの高さを維持しました。
 
 ## 検証記録
 
@@ -38,11 +38,17 @@ SFTPの旧状態は390×640pxで転送管理を展開すると一覧が23px、39
 - 最後に追加した「接続先pickerでIME用入力欄を自動focusしない」確認を含むHostPicker 3テストも成功しました。SFTP関連の現在の合計は66テストです。
 - SFTPのESLint、全Web TypeScript、変更差分の空白検査が成功しました。
 - Android runtime runnerの対象選択をfake SDK／adbで検査する6テストも成功しました。Dev／旧debugの識別、release／別package／異なるActivityの拒否、実機へのデータ削除防止を含みます。
-- 全体の回帰試験、実ブラウザー、Android APK起動の結果は統合担当が追記します。
+- 最終Web全134ファイル／1,298テスト、ESLint、TypeScript、`make verify-generated`、日英文書ビルドが成功しました。Goのbuildcontract・acceptance・mobile、Gradleの`testDebugUnitTest`／`assembleDebug`も成功しています。
 
 ### ブラウザー／Android
 
-記録時点では最終の実行結果をここへ転記していません。実Android端末のキーボード、ジェスチャー、描画性能は未確認です。ブラウザーのタッチエミュレーションだけで実機確認済みとはしません。
+- Chromiumの新規mobile 4件、既存narrow 19件、関連desktop 71件が成功。最後のAndroid向けTerminal修正後にはmobile 4件・narrow Terminal 5件・desktop描画5件を再検証しました。SFTPの遅延応答と転送データはこのブラウザー試験では合成しています。
+- API 36／x86_64の専用AndroidエミュレーターへDev APKをインストール。パスワードレスVault作成と再インストール後の直接起動、フォームのIME開閉・入力欄切替・入力欄の可視範囲、Android Backを確認しました。
+- 同エミュレーターでローカルPTYの入力、縦横の補助キー、IMEを開いたままの回転と復帰、横画面での再タップ・Backを確認しました。412×530pxと866×127pxのIME表示領域でもナビを隠したまま入力focusを維持します。
+- localhost限定の専用OpenSSHコンテナへAndroidから接続し、SFTPのフォルダ移動、テキストpreviewの内容一致、転送シートの開閉とBackを確認しました。公開鍵はそのコンテナから取得して照合し、資格情報・ファイルはすべてテスト専用です。
+- Android検証で、WebGLにDOM行がないと選択領域が古い寸法で残る問題、IMEによる親要素のスクロール、resize後の入力textareaが画面外へ残る問題を発見。renderer非依存の計測、`overflow-clip`、resize後の入力座標補正を追加しました。
+- 初期AVDの`swiftshader_indirect`ではglyphが斜めに欠けました。アプリを介さない単純な四角形でも`TRIANGLE_STRIP`の半分だけが欠け、`TRIANGLES`とdesktop Chromiumでは正常だったため、エミュレーターGPU経路の問題と切り分けました。既存のcontext-loss fallbackでDOM描画へ戻ると正常表示となり、Android経由の文字入力と独立したshell出力行も確認できました。
+- 実際のスマートフォン本体とiOS Safariは未確認です。エミュレーターでの結果と実機の描画・操作感を区別します。
 
 ## 開発版APK
 
@@ -53,6 +59,8 @@ SFTPの旧状態は390×640pxで転送管理を展開すると一覧が23px、39
 | namespace／Activity class | `com.github.aida0710.sshc`／`com.github.aida0710.sshc.MainActivity` | 同じ |
 | 今回のversionName | `0.33.2-mobile.1-dev` | 公開済みは`0.33.2` |
 | データ | Dev専用のVault・設定・WebView storage | 正式版専用のデータ |
+
+[確認用APK](https://drive.google.com/file/d/1gQaGug3-PdXqW4VbUwPBof0XpwZNBqrG/view)と[画像・SHA256SUMS・ビルド情報](https://drive.google.com/drive/folders/1tg3JwoUeXA8Tr99VxR0SjXWBeGNZYZVd)を共有しています。APKのソースは`e39fdc91ce879e44d93bd3da87825101f0523b44`、engine表示は`v0.33.2-mobile.1-dev+e39fdc91`です。
 
 2つのアプリは並べてインストールできます。Devを入れても正式版のデータを上書きせず、正式版からの自動移行も行いません。開発版の署名はGradleのdebug署名です。
 
