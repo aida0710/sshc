@@ -4,13 +4,40 @@ set -eu
 : "${ANDROID_SDK_ROOT:?set ANDROID_SDK_ROOT to an Android SDK containing platform-tools}"
 SSHC_ANDROID_ADB="$ANDROID_SDK_ROOT/platform-tools/adb"
 SSHC_ANDROID_APK=${1:-android/app/build/outputs/apk/debug/app-debug.apk}
-SSHC_ANDROID_PACKAGE=com.github.aida0710.sshc
-SSHC_ANDROID_ACTIVITY=.MainActivity
 SSHC_ANDROID_ARTIFACTS=${SSHC_ANDROID_ARTIFACTS:-artifacts/android-vault-lifecycle}
 SSHC_ANDROID_NODE=${SSHC_ANDROID_NODE:-node}
 
 if [ ! -f "$SSHC_ANDROID_APK" ]; then
   echo "APK not found: $SSHC_ANDROID_APK" >&2
+  exit 1
+fi
+
+# Derive both identifiers from the APK. The debug applicationId has a .dev
+# suffix while its Activity class remains in the release namespace.
+SSHC_ANDROID_AAPT=${SSHC_ANDROID_AAPT:-}
+if [ -z "$SSHC_ANDROID_AAPT" ]; then
+  for SSHC_ANDROID_CANDIDATE in "$ANDROID_SDK_ROOT"/build-tools/*/aapt; do
+    [ ! -x "$SSHC_ANDROID_CANDIDATE" ] || SSHC_ANDROID_AAPT=$SSHC_ANDROID_CANDIDATE
+  done
+fi
+if [ -z "$SSHC_ANDROID_AAPT" ] || [ ! -x "$SSHC_ANDROID_AAPT" ]; then
+  echo "Android build-tools with aapt are required; set SSHC_ANDROID_AAPT if installed elsewhere." >&2
+  exit 1
+fi
+SSHC_ANDROID_BADGING=$("$SSHC_ANDROID_AAPT" dump badging "$SSHC_ANDROID_APK")
+SSHC_ANDROID_PACKAGE=$(printf '%s\n' "$SSHC_ANDROID_BADGING" | sed -n "s/^package: name='\([^']*\)'.*/\1/p")
+SSHC_ANDROID_ACTIVITY=$(printf '%s\n' "$SSHC_ANDROID_BADGING" | sed -n "s/^launchable-activity: name='\([^']*\)'.*/\1/p")
+SSHC_ANDROID_DEBUGGABLE=$(printf '%s\n' "$SSHC_ANDROID_BADGING" | sed -n '/^application-debuggable$/p')
+case "$SSHC_ANDROID_PACKAGE" in
+  com.github.aida0710.sshc|com.github.aida0710.sshc.dev) ;;
+  *) echo "Refusing an APK with an unexpected package: $SSHC_ANDROID_PACKAGE" >&2; exit 1 ;;
+esac
+if [ "$SSHC_ANDROID_ACTIVITY" != "com.github.aida0710.sshc.MainActivity" ]; then
+  echo "Refusing an APK with an unexpected launcher: $SSHC_ANDROID_ACTIVITY" >&2
+  exit 1
+fi
+if [ "$SSHC_ANDROID_DEBUGGABLE" != "application-debuggable" ]; then
+  echo "A debuggable APK is required for the WebView runtime test; release APKs are not installed or cleared." >&2
   exit 1
 fi
 

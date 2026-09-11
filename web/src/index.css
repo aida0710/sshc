@@ -430,3 +430,94 @@
 [data-term-background] .xterm-viewport {
   background-color: transparent !important;
 }
+
+/* Visible viewport follows browser chrome and the soft keyboard. */
+.sshc-app {
+  height: var(--app-viewport-height, 100dvh);
+}
+.sshc-app[data-mobile="true"] {
+  position: fixed;
+  inset: 0 0 auto;
+  top: var(--app-viewport-top, 0px);
+}
+.sshc-app[data-mobile="true"] .sshc-app-layout {
+  grid-template-columns: minmax(0, 1fr);
+}
+.sshc-app[data-mobile="true"] [data-app-header] {
+  display: flex;
+  height: 48px;
+}
+.sshc-app[data-mobile="true"] [data-app-navigation] {
+  position: fixed;
+  inset: auto auto auto 0;
+  top: var(--app-viewport-top, 0px);
+  height: var(--app-viewport-height, 100dvh);
+  z-index: 30;
+  width: min(20rem, calc(100vw - 2rem));
+  max-width: none;
+  transform: translateX(-100%);
+}
+.sshc-app[data-mobile="true"] [data-navigation-open="true"] {
+  transform: translateX(0);
+}
+.sshc-app[data-mobile="true"] [data-app-navigation] > [role="separator"] {
+  display: none;
+}
+.sshc-app[data-mobile="true"] .sshc-navigation-backdrop {
+  display: block;
+}
+.sshc-mobile-navigation {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+:root[data-keyboard-open="true"] .sshc-mobile-navigation,
+:root[data-keyboard-open="true"] .sshc-app[data-mobile="true"] [data-app-header] {
+  display: none;
+}
+.sshc-modal-frame {
+  top: var(--app-viewport-top, 0px);
+  bottom: auto;
+  height: var(--app-viewport-height, 100dvh);
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
+}
+.sshc-modal-panel {
+  min-height: 0;
+  max-height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+@media (max-width: 767px), (pointer: coarse) {
+  /* Compact icon artwork keeps its size; the touch target is large enough. */
+  :where(button:not([data-touch-compact]), [role="button"], [role="menuitem"], nav a):not(.monaco-editor *):not(.xterm *) {
+    min-height: 44px;
+    min-width: 44px;
+    touch-action: manipulation;
+  }
+  :where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]), select, textarea):not(.monaco-editor *):not(.xterm *) {
+    min-height: 44px;
+    font-size: 16px;
+  }
+  :where(label:has(> input[type="checkbox"]), label:has(> input[type="radio"])):not(.monaco-editor *):not(.xterm *) {
+    min-height: 44px;
+  }
+  :where(button, [role="button"], [role="menuitem"], a):not(:disabled):not(.monaco-editor *):not(.xterm *):active {
+    background-color: var(--ui-select-fill);
+    filter: brightness(0.92);
+  }
+  .sshc-modal-panel {
+    animation: sshc-dialog-enter 140ms ease-out;
+  }
+  [data-modal-placement="sheet"] .sshc-modal-panel {
+    animation-name: sshc-sheet-enter;
+  }
+}
+@keyframes sshc-dialog-enter {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes sshc-sheet-enter {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sshc-modal-panel { animation: none; }
+}

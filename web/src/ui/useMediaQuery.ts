@@ -1,5 +1,8 @@
 import { useEffect, useState, type RefObject } from "react";
 
+// A phone remains a touch interface when rotated into landscape.
+export const mobileViewportQuery = "(max-width: 767px), (pointer: coarse) and (max-width: 1023px)";
+
 function matches(query: string): boolean {
   return typeof window.matchMedia === "function" && window.matchMedia(query).matches;
 }
@@ -23,7 +26,7 @@ export function useCompactViewport(
   container: RefObject<HTMLElement | null>,
   minimumWidth = 680,
 ): boolean {
-  const narrowViewport = useMediaQuery("(max-width: 767px)");
+  const narrowViewport = useMediaQuery(mobileViewportQuery);
   const [narrowContainer, setNarrowContainer] = useState(false);
 
   useEffect(() => {

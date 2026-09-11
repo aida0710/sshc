@@ -53,7 +53,8 @@ export function ModalShell({
 
   return createPortal(
     <div
-      className={`fixed inset-0 ${zIndexClassName} flex bg-canvas/80 backdrop-blur-[2px] ${placementClasses[placement]} ${backdropClassName}`}
+      data-modal-placement={placement}
+      className={`sshc-modal-frame fixed inset-0 ${zIndexClassName} flex bg-canvas/80 backdrop-blur-[2px] ${placementClasses[placement]} ${backdropClassName}`}
     >
       <section
         ref={panelRef}
@@ -62,7 +63,7 @@ export function ModalShell({
         aria-modal="true"
         aria-labelledby={labelledBy}
         aria-describedby={describedBy}
-        className={`sshc-card border border-control-line bg-card shadow-2xl ${panelClassName}`}
+        className={`sshc-card sshc-modal-panel border border-control-line bg-card shadow-2xl ${panelClassName}`}
       >
         {children}
       </section>

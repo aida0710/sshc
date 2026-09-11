@@ -54,4 +54,14 @@ describe("SFTPHostPicker", () => {
     expect(groups).toHaveAttribute("aria-selected", "true");
     expect(recent).toHaveAttribute("tabindex", "-1");
   });
+  it("opens compact host choices without focusing the keyboard input", async () => {
+    const onChange = vi.fn();
+    render(<SFTPHostPicker aliases={["edge", "miyabi"]} hosts={hosts} value="" compact loadRecent={async () => ({ connections: [] })} onChange={onChange} />);
+    await userEvent.click(screen.getByRole("button", { name: "Host" }));
+    expect(screen.getByRole("searchbox", { name: "Search remote hosts" })).not.toHaveFocus();
+    expect(screen.getByRole("button", { name: "Close host picker" })).toHaveFocus();
+    await userEvent.click(screen.getByRole("button", { name: /edge/ }));
+    expect(onChange).toHaveBeenCalledWith("edge");
+  });
+
 });

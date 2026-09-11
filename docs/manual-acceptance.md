@@ -203,10 +203,10 @@ A=~/Library/Android/sdk
 $A/emulator/emulator -avd Medium_Phone_API_36.1 -no-snapshot-load &
 $A/platform-tools/adb wait-for-device
 
-make android-bind
-cd android && ./gradlew clean assembleDebug && cd ..
+make android-bind ANDROID_VERSION=0.33.2-mobile.1-dev
+cd android && ./gradlew clean assembleDebug -PsshcVersionName=0.33.2-mobile.1 && cd ..
 $A/platform-tools/adb install -r android/app/build/outputs/apk/debug/app-debug.apk
-$A/platform-tools/adb shell am start -n com.github.aida0710.sshc/.MainActivity
+$A/platform-tools/adb shell am start -n com.github.aida0710.sshc.dev/com.github.aida0710.sshc.MainActivity
 ```
 
 画面の取得には `adb exec-out screencap -p > shot.png`、操作には

@@ -49,6 +49,7 @@ import { loadConnectionSavedState, type ConnectionSavedState } from "./connectio
 import { ManageConnection } from "./ManageConnection";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { PanelState } from "../ui/PanelState";
+import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
 
 const groupNoticeCodes = new Set([
   "group_not_declared",
@@ -107,6 +108,7 @@ export function ConnectionsPage({
   const t = useTranslate();
   const initialRoute = parseConnectionLocation(location);
   const initialTarget = initialRoute.kind === "valid" ? initialRoute.target : null;
+  const compact = useMediaQuery(mobileViewportQuery);
   const [overview, setOverview] = useState<Overview | null>(null);
   const entryPath = overview?.entry.path ?? "config";
   const {
@@ -796,8 +798,9 @@ export function ConnectionsPage({
           {t("conn.new")}
         </Button>
       </header>
-      <div className="grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)] md:grid-cols-[minmax(22rem,0.85fr)_minmax(0,1.15fr)]">
+      <div className={`grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)] ${compact ? "" : "md:grid-cols-[minmax(22rem,0.85fr)_minmax(0,1.15fr)]"}`}>
         <ConnectionListPane
+          compact={compact}
           overview={overview}
           selection={selection}
           invalidLocation={invalidLocation}
@@ -811,12 +814,12 @@ export function ConnectionsPage({
           movesDisabled={editorDirty || refreshState !== "idle"}
         />
         <div
-          className={`min-h-0 flex-col gap-4 overflow-y-auto p-4 md:flex ${
+          className={`min-h-0 flex-col gap-4 overflow-y-auto p-4 ${compact ? "" : "md:flex"} ${
             selection === null ? "hidden" : "flex"
           }`}
         >
 
-        <Button className="w-fit md:hidden" onClick={() => clearTarget()}>
+        <Button className={`w-fit ${compact ? "" : "md:hidden"}`} onClick={() => clearTarget()}>
           {t("conn.allConnections")}
         </Button>
 

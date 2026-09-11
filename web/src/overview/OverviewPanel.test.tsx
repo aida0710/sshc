@@ -125,7 +125,7 @@ describe("OverviewPanel", () => {
     expect(card).not.toBeNull();
     await userEvent.click(within(card as HTMLElement).getByRole("button", { name: "Actions for database" }));
     expect(launch).not.toHaveBeenCalled();
-    await userEvent.click(within(card as HTMLElement).getByRole("menuitem", { name: "Connect" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Connect" }));
     await waitFor(() => expect(launch).toHaveBeenCalledWith("database"));
   });
 
@@ -147,7 +147,7 @@ describe("OverviewPanel", () => {
     const card = database.closest("li");
     expect(card).not.toBeNull();
     await userEvent.click(within(card as HTMLElement).getByRole("button", { name: "Actions for database" }));
-    await userEvent.click(within(card as HTMLElement).getByRole("menuitem", { name: "Open connection settings" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Open connection settings" }));
 
     expect(navigateLocation).toHaveBeenCalledWith(
       "/connections/servers?path=connections%2Fwork.conf&host=database&panel=basic",
@@ -235,7 +235,7 @@ describe("OverviewPanel", () => {
     expect(card).toHaveTextContent("work");
     expect(card).toHaveTextContent("Last connected");
     await userEvent.click(within(card as HTMLElement).getByRole("button", { name: "Actions for database" }));
-    await userEvent.click(within(card as HTMLElement).getByRole("menuitem", { name: "Connect" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Connect" }));
     await waitFor(() => expect(launch).toHaveBeenCalledWith("database"));
   });
 

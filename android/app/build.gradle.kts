@@ -30,6 +30,13 @@ android {
         versionName = taggedVersionName
     }
 
+    buildTypes {
+        getByName("debug") {
+            applicationIdSuffix = ".dev"
+            versionNameSuffix = "-dev"
+        }
+    }
+
     if (keystorePath != null) {
         signingConfigs {
             create("release") {

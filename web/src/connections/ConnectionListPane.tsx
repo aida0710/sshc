@@ -6,6 +6,7 @@ import { Button } from "../ui/surface";
 
 
 export function ConnectionListPane({
+  compact = false,
   overview,
   selection,
   invalidLocation,
@@ -14,6 +15,7 @@ export function ConnectionListPane({
   onDrop,
   movesDisabled,
 }: {
+  compact?: boolean;
   overview: Overview;
   selection: HostSelection | null;
   invalidLocation: boolean;
@@ -25,7 +27,7 @@ export function ConnectionListPane({
   const t = useTranslate();
   return (
   <div
-    className={`min-h-0 flex-col border-r border-line bg-tree md:flex ${
+    className={`min-h-0 flex-col border-r border-line bg-tree ${compact ? "" : "md:flex"} ${
       selection === null ? "flex" : "hidden"
     }`}
   >

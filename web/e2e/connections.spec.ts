@@ -383,6 +383,7 @@ test("saves and replaces a key-owned passphrase without changing another key's s
   const shared = page
     .getByRole("region", { name: "Key passphrases" })
     .getByRole("article", { name: "shared-sibling-phrase" });
+  await shared.getByRole("button", { name: "Show Keys for shared-sibling-phrase" }).click();
   await expect(shared).toContainText("id_connection_sibling");
   await expect(shared).not.toContainText("id_connection_owned");
 
@@ -392,7 +393,12 @@ test("saves and replaces a key-owned passphrase without changing another key's s
   await page.getByRole("region", { name: "Actions for id_connection_owned" }).getByRole("button", { name: "Change passphrase" }).click();
   await page.getByLabel("Current passphrase", { exact: true }).fill(firstPassphrase);
   await page.getByLabel("New passphrase", { exact: true }).fill(nextPassphrase);
-  expect(await clickAndAwait(page, "Save new passphrase", "/passphrase")).toBe(200);
+  const [passphraseChanged] = await Promise.all([
+    page.waitForResponse((response) => response.url().includes("/passphrase") && response.request().method() === "POST"),
+    page.locator("form").filter({ has: page.getByLabel("Current passphrase", { exact: true }) })
+      .getByRole("button", { name: "Change passphrase", exact: true }).click(),
+  ]);
+  expect(passphraseChanged.status()).toBe(200);
 
   await openSection(page, "Connections");
   await page
@@ -527,7 +533,7 @@ test("shows where each value comes from without a confirmation", async ({ page, 
   await expect(show).toBeEnabled();
   await show.click();
 
-  await expect(page.getByRole("table", { name: "Configuration lines read by OpenSSH" })).toBeVisible();
+  await expect(page.getByRole("table", { name: "Configuration lines related to this connection" })).toBeVisible();
 });
 
 test("edits the display order it stores", async ({

@@ -33,6 +33,7 @@ export function AppNavigation({
   version,
   state,
   navigationOpen,
+  mobileLayout = false,
   desktopWidth,
   onDesktopWidthChange,
   startSections,
@@ -58,6 +59,7 @@ export function AppNavigation({
   version: string;
   state: string;
   navigationOpen: boolean;
+  mobileLayout?: boolean;
   desktopWidth: number;
   onDesktopWidthChange: (width: number) => void;
   startSections: Section[];
@@ -100,6 +102,10 @@ export function AppNavigation({
       ref={navigationRef}
       id={navigationId}
       aria-label={t("shell.primaryNavigation")}
+      aria-hidden={mobileLayout && !navigationOpen ? true : undefined}
+      inert={mobileLayout && !navigationOpen}
+      data-navigation-open={navigationOpen}
+      data-app-navigation
       className={`fixed inset-y-0 left-0 z-30 flex min-h-0 w-72 max-w-[calc(100vw-2rem)] flex-col overflow-hidden border-r border-line bg-sidebar p-2 transition-transform motion-reduce:transition-none md:relative md:inset-auto md:z-auto md:flex md:w-auto md:max-w-none md:translate-x-0 md:shadow-none ${
         navigationOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full shadow-none"
       }`}

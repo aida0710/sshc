@@ -101,6 +101,30 @@ describe("TerminalView", () => {
     expect(screen.getByText("connected", { exact: true })).toBeVisible();
   });
 
+  it("waits for a deliberate tap before focusing input on a touch device", async () => {
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query.includes("pointer: coarse"), media: query,
+      addEventListener: vi.fn(), removeEventListener: vi.fn(),
+      addListener: vi.fn(), removeListener: vi.fn(),
+    })) as unknown as typeof window.matchMedia;
+    const focus = vi.spyOn(Terminal.prototype, "focus");
+    try {
+      renderView();
+      await waitFor(() => expect(streams).toHaveLength(1));
+      expect(focus).not.toHaveBeenCalled();
+      const overlay = document.querySelector(".sshc-select-overlay")!;
+      fireEvent.touchStart(overlay, { touches: [{ clientX: 20, clientY: 20 }] });
+      fireEvent.touchMove(overlay, { touches: [{ clientX: 20, clientY: 60 }] });
+      fireEvent.touchEnd(overlay);
+      expect(focus).not.toHaveBeenCalled();
+      fireEvent.touchStart(overlay, { touches: [{ clientX: 20, clientY: 20 }] });
+      fireEvent.touchEnd(overlay);
+      expect(focus).toHaveBeenCalledOnce();
+    } finally {
+      focus.mockRestore();
+    }
+  });
+
   it("owns search from outside the terminal and repeated searches only while active", async () => {
     const api = { terminalStreamTicket: vi.fn(async () => ({ streamTicket: "one-time" })) };
     const view = render(<TerminalView session={session} api={api} searchShortcutActive />);

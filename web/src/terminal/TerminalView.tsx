@@ -17,7 +17,7 @@ import { clipboard } from "../ui/clipboard";
 import { attachImeKeys } from "./imeKeys";
 import { attachSelectionOverlay, selectionHeldIn } from "./selectionOverlay";
 import { prefersNativeSelection } from "./nativeSelection";
-import { cellHeight } from "./metrics";
+import { cellHeight, syncTerminalInputPosition } from "./metrics";
 import { newTouchScroll } from "./touchScroll";
 import { KeyBar, applyModifiers, encodeKey, type Modifiers } from "./KeyBar";
 import { openStream, type TerminalStream } from "./stream";
@@ -39,7 +39,7 @@ import { applyTerminalRuntimeOptions } from "./runtimeOptions";
 import { Icon } from "../ui/icons";
 import { inspectTerminalPaste } from "./pasteGuard";
 import { TerminalPasteDialog } from "./TerminalPasteDialog";
-import { useMediaQuery } from "../ui/useMediaQuery";
+import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
 import { cursorAnimationEnabled, reducedMotionQuery } from "../ui/reducedMotion";
 
 type TerminalViewProps = {
@@ -100,6 +100,9 @@ export function TerminalView({
   const t = useTranslate();
   const { resolved } = useTheme();
   const reducedMotion = useMediaQuery(reducedMotionQuery);
+  const mobile = useMediaQuery(mobileViewportQuery);
+  const reducedMotionRef = useRef(reducedMotion);
+  reducedMotionRef.current = reducedMotion;
   const host = useRef<HTMLDivElement>(null);
   const region = useRef<HTMLElement>(null);
   const searchInput = useRef<HTMLInputElement>(null);
@@ -379,32 +382,44 @@ export function TerminalView({
       if (container.clientWidth === 0 || container.clientHeight === 0) return;
       try {
         fit.fit();
+        if (coarse) syncTerminalInputPosition(view);
       } catch {
         return;
       }
       syncSize();
       view.refresh(0, Math.max(0, view.rows - 1));
     };
-    const measure = () => {
-      if (selectionHeldIn(container)) return;
-      fitAndSync();
-    };
+    // Keyboard/orientation changes must resize the PTY even while text is
+    // selected; the selection overlay releases its handles when its shape changes.
+    const measure = fitAndSync;
     measure();
     refit.current = fitAndSync;
 
-    const scroll = newTouchScroll(view, () => cellHeight(view, container));
+    const scroll = newTouchScroll(view, () => cellHeight(view, container), {
+      canScroll: () => !selectionHeldIn(container),
+      reducedMotion: () => reducedMotionRef.current,
+    });
     const single = (event: TouchEvent): Touch | null =>
       event.touches.length === 1 ? (event.touches[0] ?? null) : null;
     const touchStart = (event: TouchEvent) => {
       const finger = single(event);
-      if (finger !== null && !selectionHeldIn(container)) scroll.start(finger.clientY);
+      if (finger !== null) scroll.start(finger.clientY);
+      else scroll.cancel();
     };
     const touchMove = (event: TouchEvent) => {
       const finger = single(event);
-      if (finger !== null && !selectionHeldIn(container)) scroll.move(finger.clientY);
+      if (finger !== null) scroll.move(finger.clientY);
+      else scroll.cancel();
+    };
+    const touchEnd = () => scroll.end();
+    const selectionChanged = () => {
+      if (selectionHeldIn(container)) scroll.cancel();
     };
     container.addEventListener("touchstart", touchStart, { passive: true });
     container.addEventListener("touchmove", touchMove, { passive: true });
+    container.addEventListener("touchend", touchEnd, { passive: true });
+    container.addEventListener("touchcancel", scroll.cancel, { passive: true });
+    container.ownerDocument.addEventListener("selectionchange", selectionChanged);
 
 
     const releaseImeKeys = coarse
@@ -473,7 +488,7 @@ export function TerminalView({
             },
           });
           setLink({ phase: "live" });
-          if (session.state !== "exited" && !searchInput.current?.parentElement?.contains(document.activeElement)) {
+          if (!coarse && session.state !== "exited" && !searchInput.current?.parentElement?.contains(document.activeElement)) {
             view.focus();
           }
           syncSize();
@@ -544,6 +559,10 @@ export function TerminalView({
       observer.disconnect();
       container.removeEventListener("touchstart", touchStart);
       container.removeEventListener("touchmove", touchMove);
+      container.removeEventListener("touchend", touchEnd);
+      container.removeEventListener("touchcancel", scroll.cancel);
+      container.ownerDocument.removeEventListener("selectionchange", selectionChanged);
+      scroll.cancel();
       releaseImeKeys();
       detachOverlay();
       detachClipboard();
@@ -599,7 +618,7 @@ export function TerminalView({
 
   return (
     <section ref={region} aria-label={t("terminal.screenLabel", { title: displayTitle })} className="relative flex min-h-0 flex-1 flex-col">
-      <div className="relative flex shrink-0 items-center gap-2 border-b border-line bg-toolbar px-2 py-1.5 md:h-8 md:py-0">
+      <div className={`relative flex shrink-0 items-center gap-2 border-b border-line bg-toolbar px-2 ${mobile ? "py-0" : "h-8"}`}>
         <span
           aria-hidden="true"
           className={`size-2 shrink-0 rounded-full ${
@@ -628,7 +647,7 @@ export function TerminalView({
           type="button"
           aria-label={t("terminal.search")}
           title={t("terminal.search")}
-          className="flex min-h-10 min-w-10 items-center justify-center rounded border border-control-line px-2 py-1 text-xs text-ink-muted hover:bg-select-fill focus:bg-select-fill focus:outline-none md:size-6 md:min-h-0 md:min-w-0 md:p-0"
+          className={`flex shrink-0 items-center justify-center rounded border border-control-line text-xs text-ink-muted hover:bg-select-fill active:bg-select-fill focus:bg-select-fill focus:outline-none ${mobile ? "size-11" : "size-6"}`}
           onClick={() => setSearchOpen((current) => !current)}
         >
           <Icon name="search" className="size-3.5" />
@@ -638,7 +657,7 @@ export function TerminalView({
           type="button"
           aria-label={t("terminal.moreActions")}
           aria-expanded={overflowOpen}
-          className="flex min-h-10 min-w-10 items-center justify-center rounded border border-control-line px-2 py-1 text-ink-muted hover:bg-select-fill focus:bg-select-fill focus:outline-none md:size-6 md:min-h-0 md:min-w-0 md:p-0"
+          className={`flex shrink-0 items-center justify-center rounded border border-control-line text-ink-muted hover:bg-select-fill active:bg-select-fill focus:bg-select-fill focus:outline-none ${mobile ? "size-11" : "size-6"}`}
           onClick={() => setOverflowOpen((current) => !current)}
         >
           <Icon name="moreHorizontal" className="size-3.5" />
@@ -769,7 +788,7 @@ export function TerminalView({
           </button>
         </div>
       )}
-      <div className="relative min-h-0 flex-1 overflow-hidden bg-term-bg">
+      <div className="relative min-h-0 flex-1 overflow-clip bg-term-bg">
         <div
           ref={host}
           data-terminal-host=""
@@ -787,7 +806,7 @@ export function TerminalView({
           className="absolute inset-0 bg-term-bg"
         />
         {searchOpen ? (
-          <div className="absolute inset-x-2 top-2 z-20 flex items-center gap-1.5 rounded-lg border border-line bg-toolbar/95 p-1.5 shadow-lg backdrop-blur sm:left-auto sm:w-[34rem]">
+          <div className={`absolute inset-x-2 top-2 z-20 items-center gap-1.5 rounded-lg border border-line bg-toolbar/95 p-1.5 shadow-lg backdrop-blur ${mobile ? "grid grid-cols-6" : "left-auto flex w-[34rem]"}`}>
             <input
               ref={searchInput}
               autoFocus
@@ -798,7 +817,7 @@ export function TerminalView({
                 if (event.key === "Escape") setSearchOpen(false);
                 else if (event.key === "Enter") searchStep.current(event.shiftKey ? -1 : 1);
               }}
-              className="min-w-0 flex-1 rounded border border-control-line bg-control px-2 py-1 text-xs"
+              className={`min-w-0 flex-1 rounded border border-control-line bg-control px-2 py-1 ${mobile ? "col-span-6 min-h-11 text-base" : "text-xs"}`}
               placeholder={t("terminal.searchPlaceholder")}
             />
             <button
@@ -819,7 +838,7 @@ export function TerminalView({
             >
               .*
             </button>
-            <span role="status" className={`w-14 text-center text-[11px] ${searchInvalid ? "text-danger" : "text-ink-muted"}`}>
+            <span role="status" className={`${mobile ? "min-w-0" : "w-14"} text-center text-[11px] ${searchInvalid ? "text-danger" : "text-ink-muted"}`}>
               {searchInvalid
                 ? t("terminal.searchInvalidRegex")
                 : searchResult.total === 0

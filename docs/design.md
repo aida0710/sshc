@@ -40,7 +40,7 @@
 ## Connections UI とグループの境界
 
 - 起動直後の Home はホスト中心のランチャーです。具体的な alias を検索し、グループ、タグ、最近の接続順を見ながらコンソールを開けます。Home を表示しただけでは DNS、TCP、SSH のどれも開始せず、「接続」を選んだときだけ埋め込みターミナルが開きます。
-- Command Paletteはdesktop toolbarまたは`Ctrl/Cmd+K`から開き、現在読み込まれているhostとSSH設定file、保存済みsnippet、設定sectionを一時的なqueryで横断検索します。queryはURL、localStorage、snapshotへ保存しません。hostだけは選択時に接続を開始し、file、snippet、設定は該当画面へ移動します。mobileの入口は常設footerではなくdrawer内に置きます。
+- Command Paletteはdesktop toolbarまたは`Ctrl/Cmd+K`から開き、現在読み込まれているhostとSSH設定file、保存済みsnippet、設定sectionを一時的なqueryで横断検索します。queryはURL、localStorage、snapshotへ保存しません。hostだけは選択時に接続を開始し、file、snippet、設定は該当画面へ移動します。mobileでは下部ナビゲーションで主要画面を切り替え、Command Paletteへの入口はdrawer内に置きます。
 - Home は設定上の警告、中断した変更、同期状態を要約しますが、それらの編集機能は持ちません。詳細操作は Connections、Diagnostics、History、Sync の各専用画面で行います。
 
 - フォーム編集、任意キー・値編集、ブロック Raw 編集、ファイル全体 Raw 編集は、すべて `~/.ssh/config` と `Include` 先から構築した同じ lossless 構文木を更新します。変更していない行は 1 バイトも書き換えません。
@@ -87,13 +87,24 @@
 - パレットの規則は `web/src/ui/palette.test.ts` で検査します。Tailwind のパレット名（`text-red-400` など）、任意値（`text-[#ff0000]`）、inline style の hex 値を走査し、違反箇所をファイル名と行番号付きで報告します。例外は `palette-exempt` を記載した行だけで、現在は native の色入力が独自の既定値を必要とする 2 行に使用しています。
 - ローカルシェルの開始ディレクトリは、設定画面の「ターミナル」で変更できます。既定値は home です。エンジンの作業ディレクトリは、エンジンの起動方法によって変わり利用者が指定した値ではないため継承しません。`~/work` のようなパスはそのまま保存し、home の絶対パスに変換しません。存在しないディレクトリは保存時に拒否します。保存後にディレクトリが削除された場合は、シェルを起動できるよう home を使用します。
 - **端末で範囲を選ぶと、選択を終えた時点でシステムのクリップボードへコピーします。** 右クリックは貼り付けです。どちらも既定は on で、設定画面 →「ターミナル」から個別に止められ、開いている端末にもすぐ反映されます。右クリック、ブラウザーの paste event、Ctrl+V / Cmd+V / Ctrl+Shift+V は同じ送信前検査を通ります。CR、LF、末尾の1改行、ESC／NUL／DEL等の制御文字を含む場合は、制御文字を可視化した有界preview、論理行数、接続先を表示し、まだ1 byteも送らない状態で「キャンセル」「末尾のEnterだけ除く」「そのまま貼り付け」を選ばせます。previewと原文は保存しません。確認後にだけ改行を端末用CRへ変換し、接続先が bracketed paste mode を有効にしていればwrapperを付けます。bracketed pasteは確認を省く安全条件にはしません。Cmd+C（macOS 以外は Ctrl+Shift+C）による明示コピーも残します。**素の Ctrl+C はそのまま SIGINT として向こうへ渡します。** xterm の選択はブラウザの選択ではないので、これらは画面側で処理します。
-- 開いているコンソールは左側のナビゲーションに表示します。`Home`、`Connections`、`SFTP`、`Terminal` を上部に固定し、その下の領域を「設定」と「ターミナル」で切り替えます。端末は接続一覧の隣ではなく、専用画面に表示します。「設定」側には従来のセクション一覧を表示します。既定はターミナル側ですが、セッションが 0 件の場合は設定側から開始します。セッションはプロセス終了時に失われるため、常にターミナル側から開始すると起動直後に空の一覧を表示することになるためです。切り替え状態は保存せず、起動時にこの規則で決定します。モバイルdrawerは40pxの操作行を維持しつつ、外周、group間、見出しの余白をdesktopより小さくして、800px高で保守項目まで到達しやすくします。
+- 開いているコンソールは左側のナビゲーションに表示します。`Home`、`Connections`、`SFTP`、`Terminal` と `Menu` を上部に置き、その下のスクロール領域にターミナル一覧を置きます。ターミナルは接続先設定の隣ではなく、専用画面に表示します。mobileは同じナビゲーションをdrawerとして開き、主要5画面へは下部ナビゲーションから直接移動できます。drawer内の操作行も原則44px以上のタッチ対象を確保します。
 - コンソール一覧は状態別にグループ化しません。各項目は 2 行で、1 行目に名前、2 行目に「状態 · 接続先」を表示します。種類（SSH / シェル）は、接続先が `localhost` かどうかで判別できるため表示しません。終了した項目も元の位置に残し、接続失敗の詳細を見つけやすくします。
 - 各項目の `···` メニューから、名前変更、同じ接続先への新規接続、上下移動を実行できます。ドラッグによる並べ替えに加え、キーボード操作を可能にするためメニューにも上下移動を用意します。名前と並び順はセッション固有であり、`metadata.json` には保存しません。
 - 右側のインスペクタは Connections と Groups の 2 画面で使用します。Connections では `~/.ssh/config` に保存するグループ、コメント、alias を主画面に置き、`metadata.json` にだけ保存する色、タグ、表示順と、警告・継承元をインスペクタに置きます。Groups でも同様に、色、表示順、Connections での表示設定をインスペクタに置き、改名、削除、子グループ追加、共通設定を主画面に置きます。行を選択すると対象をインスペクタに表示します。他の 8 画面ではインスペクタを使用しないため、開閉ボタンも表示しません。
 - インスペクタは既定で閉じており、開閉状態はセクションをまたいで保持します。中身に注意がある時だけ開閉ボタンに琥珀の印が付き、その印は読み上げにも「確認が必要な項目があります」として届きます。印が無ければ開ける価値が無いことを意味します。
 - インスペクタにキーボードショートカットはありません。macOS の慣習は ⌥⌘I ですが、⌥⌘I は Chromium が開発者ツールとして先に取ります。
 - 主ナビゲーションのグループ見出しは見出し要素ではなく `aria-label` 付きのリストです。Playwright はアクセシブル名を既定で部分一致させるため、`鍵とホスト` という見出しがあると `鍵` を指す既存の検索が 2 件に一致して落ちます。見出しの名前空間はパネルのものです。
+
+## スマホの表示と操作
+
+- `useMediaQuery.ts`の`mobileViewportQuery`を共通の切り替え条件とします。幅767px以下、または主ポインターがcoarseで幅1023px以下の場合にスマホ用ナビゲーション、単一ペイン、ターミナル補助キーを使います。横向きのスマホでも、幅だけでdesktop用2ペインへ切り替えません。SFTPの狭いdesktopペインには別途コンテナー幅による一覧レイアウトを使いますが、マウスの選択・ダブルクリック操作は維持します。
+- 下部ナビゲーションはHome／Connections／SFTP／Terminal／Menuの5項目を常設し、選択中のページを示します。キーボード表示を検出した間は下部ナビゲーションとヘッダーを隠します。接続セッションとCommand Paletteはdrawerから選べます。
+- `useAppViewport`が`visualViewport.height`と`offsetTop`をアプリとportal内のmodalへ共有し、キーボードの上に残る表示領域へ収めます。Android側で適用済みのIME insetを再度引きません。ピンチズーム中は端末の行列を再計算しません。キーボード表示の検出は入力フォーカスと表示高さの変化による推定であり、全IMEでの動作保証とは分けます。
+- タッチ対象は原則44px以上、通常の入力欄は16px以上の文字にします。アイコンの絵自体を大きくする必要はありません。端末の8列補助キーなど、個別に幅を管理する部品は明示的な例外です。押下中の色変化を返し、シート／ダイアログの短い表示アニメーションと端末の慣性は`prefers-reduced-motion`に従います。
+- `ModalShell`は表示領域を上限として内部をスクロール可能にします。シートも同じfocus trapとdismissible layerを使い、子メニューを開いても親を閉じません。Escape・Android Backは最前面から1枚ずつ閉じ、閉じた後は対応する操作元へフォーカスを戻します。Homeと資格情報の行メニューはportalへ出し、画面端とスクロール領域で切れない位置に置きます。
+- ターミナルはタッチ移動の速度から減速する慣性スクロールを行います。再タッチ、選択、画面の非表示・破棄で停止し、バックグラウンドで遅延したフレームによる大きな移動を避けます。Ctrl／Esc／Tab／矢印を1行に置き、Altと記号は展開して使います。補助キーの押下と選択解除では不用意にblur／focusせず、IMEをちらつかせません。
+- スマホのConfig Explorerは階層一覧を折り畳み、ファイルを開くと編集に集中します。読込中は空状態と区別して表示します。Snippetsは一覧を選択欄に置き換え、変数と接続先の長い名前が画面幅を押し広げないよう1列へ切り替えます。
+- 画面ごとの問題・修正と検証範囲は[スマホ操作レビュー](mobile-ux-review.md)に記録します。ブラウザーのタッチエミュレーションと実Android端末の入力・描画の確認は区別します。
 
 ## 鍵管理の境界
 
@@ -193,6 +204,7 @@
 - **cookie はポートに紐づきません。** 同じ `127.0.0.1` の別ポートに居るサーバーがこの session の cookie を受け取りうるので、読み取りにも CSRF トークンを要求します。トークンは port-origin ごとの `sessionStorage` にあり、そこへは渡りません。
 - デスクトップパッケージは廃止し、`sshc-<OS>-<アーキ>` 形式の CLI バイナリだけを配布します。署名、公証、インストーラは使用しません。`curl` で取得し、`chmod +x` を設定して実行できます。Homebrew formula はソースからビルドします。
 - GUI アプリケーションとして配布するのは Android 版だけです。Android ではストア配布と WebView へのアクセス URL の受け渡しが必要です。iOS 版はラッパー、CI、検査がない状態で `ios-bind` target だけが残っていたため廃止しました。engine 側の `mobile` は gomobile のビルド対象として iOS を扱えますが、iOS 版の配布は保証しません。
+- Androidのdebug buildは`applicationIdSuffix = ".dev"`と`versionNameSuffix = "-dev"`を使い、`com.github.aida0710.sshc.dev`／`sshc Dev`として正式版と共存します。namespaceとActivityのclass名は従来どおりです。Vault、設定、WebView storageは別packageのapp dataに保存し、正式版から自動移行しません。release buildのpackageと署名方式は変えません。
 - Android版のengine ownerは同一packageの単一app processです。desktop／CLI用のOS file lockは使わず、Go側のprocess内mutexでstart／stopを直列化します。Service再生成などで`Start`が重複した場合は二重起動エラーにせず、以前のengineを停止して新しいengineへ置き換えます。desktop／CLIは別processを起動できるため、引き続き`engine.lock`を保持します。
 
 ## 更新の境界
@@ -256,7 +268,9 @@
 - リモート editor は UTF-8 の通常ファイルだけを扱い、上限は 2 MiB です。バイナリまたは大きなファイルは download を使用します。save は読み込み時の revision と現在の stat を比較して外部変更を検出し、同じ directory の一時ファイルを書いて rename します。既存 mode は維持します。delete は表示した stat に紐づく単回 action token が必要で、directory の再帰削除と symlink の追跡はしません。
 - upload／downloadはOpenAPIで定義した共通Transfer Job APIへ集約し、engineのTransfer Managerを唯一の台帳とします。jobはdirection、file／folder、batch、attempt、status、bytes、速度、残り時間、再開revision、上書き確認を持ち、登録、状態遷移、同時2件の上限、完了済みjobの消去をengineが処理します。Webは2秒ごとに台帳を同期し、別のブラウザ／WebViewによる操作も同じ状態へ収束します。`File`、OPFSの一時データ、保存先handleだけはブラウザ固有のI/O資源であり、job stateを`localStorage`へ保存しません。folder uploadはfile子jobへ展開し、同じbatchの成功済みfileを保ったまま失敗fileだけretryできます。画面移動中も転送workerとApp内通知は生存します。browser reload後のuploadはengine台帳のname・size・lastModifiedと一致するfileを再選択した場合だけ再開します。downloadはengineのrevision／offsetとOPFSの一時データが両方残る場合だけ再開し、OPFSを利用できないfallback受信chunkはreloadをまたぎません。
 - uploadはfile/folder pickerとDrag & Dropを同じ経路へ集約し、relative pathを検査して親directoryを浅い順に作成します。各fileは1 MiB以下のchunkとして送ります。remote側では対象と同じdirectoryの予約part fileへ期待offsetが一致する場合だけ追記し、完了時にtarget revisionを再検証してatomic renameします。pauseはpartを維持し、cancelはpartを削除します。既存ファイルは409を受けた時点で個別に上書き確認し、暗黙には置換しません。file downloadは受信済みbytesを保持してHTTP Rangeで自動再試行します。directory downloadは共通queueへ入るもののresume対象外のsymlink非追跡ZIP streamで、retry時は先頭からやり直します。symlinkはextract先を脱出できないようlink targetを内容とする通常ファイルへ変換します。chmodは現在のmetadata revisionと単回action tokenを必要とし、symlinkには適用しません。
-- SFTP は左ナビの Start 内で Terminal の直前に置きます。画面を開いただけでは接続せず、利用者が host を選んだ後に初めて一覧を取得します。SFTP、鍵、`known_hosts` の表は操作列を除く各データ列をクライアント側で安定ソートし、現在の方向を `aria-sort` でも公開します。
+- SFTP は左ナビの Start 内で Terminal の直前に置きます。画面を開いただけでは接続せず、利用者がhostを選んでConnectを実行した後に初めて一覧を取得します。SFTP、鍵、`known_hosts` の表は操作列を除く各データ列をクライアント側で安定ソートし、現在の方向を `aria-sort` でも公開します。
+- スマホSFTPは通常時のツールバーを接続先／戻る／現在フォルダ／検索／操作シートの1行にまとめます。作成・upload・場所・履歴・並べ替え等はシート内に保持します。名前の1タップでdirectoryへ移動、fileはpreviewを開きます。checkboxまたは長押しで選択し、選択中のタップは追加・解除に使います。長押し後のclickは同じ操作を重ねて実行しません。移動・検索中は行操作を止め、処理中の表示と移動先を出します。失敗した場合は既存のpathと一覧を維持し、失敗を表示します。
+- スマホのTransfer Managerは常に1行のdockです。desktopで展開状態を保存していても自動展開せず、詳細は一覧の外にportalのsheetとして開きます。転送設定とpreviewの属性情報は必要時に展開します。desktopは従来の高さ調整と折り畳み状態を保持します。接続先pickerもスマホでは検索欄に自動フォーカスせず、候補を選ぶだけの操作でIMEを開きません。
 - Monaco Editor は SFTP 画面を開いたときだけ読み込みます。editor worker は build に同梱して同一 origin から読み込み、blob URL や CDN は使用しません。従来の `script-src 'self'` と Trusted Types の方針は維持します。
 - 同じ engine 内の Monaco Editor 保存と upload 公開は、SSH alias と正規化済みtarget pathの組ごとに直列化します。これにより両操作が同じrevisionを同時に検証して互いを上書きすることはありません。ただし一般的な SFTP v3 には「revision が一致するときだけ rename」を行うatomic CASがないため、別のSSH clientやremote processが検証とrenameの間に書き換える競合の検出はbest-effortです。
 - Workspace はpane種別、SSH aliasまたはローカルシェル、分割木、比率、focusだけを `~/.ssh/sshc/workspaces.json` に保存します。kindを持たないschema version 1のpaneはSSHとして読み、次の保存でversion 2へ更新します。ローカルシェルは`kind: shell`と固定target `localhost`で表し、再オープン時はSSH aliasと同様に新しいsessionを開始します。split separatorはpointerまたはkeyboardで10〜90%へ変更し、その比率を保存します。Focus Modeは保存木を変更せず単一paneだけを一時表示し、Escで元layoutへ戻します。terminal session ID、scrollback、remote process は保存しません。Homeは名前、pane数、更新時刻の一覧だけを読み、明示的な「ワークスペースを開く」でrestore要求を1回だけTerminalへ渡します。一部paneの接続失敗は他paneを閉じません。このファイルは端末固有で、世代 backup と remote snapshot の対象外です。pane移動はterminal本体ではなく専用handleから開始し、drop先paneとruntime node全体を交換します。target、session ID、接続状態はpaneに追従し、split方向、比率、focus pane IDは変えません。handleを2つ順に選んでも同じ交換を行えます。Command Centerはlayout全体から接続中のterminal session IDをkindに関係なく集め、SSHとローカルシェルが混在してもsessionごとにcommandとcarriage returnを現在のPTY入力へ送ります。Focus Modeで一時的に非表示のpaneも対象です。未接続paneを接続先名から開き直すfallbackは持ちません。管理操作はdesktop向けで、単一terminal時とモバイルでは表示しません。単一terminal時もterminal名と検索toolbarは表示し、検索ボタンまたは`Ctrl/Cmd+F`で検索欄を開けます。保存済みWorkspaceとdesktopで作成したlayout自体は変更しません。

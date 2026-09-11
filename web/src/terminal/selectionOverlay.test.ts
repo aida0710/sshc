@@ -44,6 +44,12 @@ function harness(lines: string[]) {
   return { container, overlay, view, screen, detach, repaint: () => repaint() };
 }
 
+function touch(node: HTMLElement, type: string, fingers: { clientX: number; clientY: number }[] = []) {
+  const event = new Event(type, { bubbles: true });
+  Object.defineProperty(event, "touches", { value: fingers });
+  node.dispatchEvent(event);
+}
+
 describe("attachSelectionOverlay", () => {
   it("hangs the text outside the element that cannot be selected", () => {
     const { container, overlay, detach } = harness(["one", "two"]);
@@ -134,6 +140,60 @@ describe("attachSelectionOverlay", () => {
     overlay.dispatchEvent(touch);
     overlay.dispatchEvent(new Event("touchend", { bubbles: true }));
     expect(view.focus).toHaveBeenCalled();
+    detach();
+  });
+
+  it.each([
+    [40, 10],
+    [10, 40],
+  ])("does not focus after a finger moves to %i,%i", (clientX, clientY) => {
+    const { overlay, view, detach } = harness(["one"]);
+    touch(overlay, "touchstart", [{ clientX: 10, clientY: 10 }]);
+    touch(overlay, "touchmove", [{ clientX, clientY }]);
+    touch(overlay, "touchend");
+    expect(view.focus).not.toHaveBeenCalled();
+    detach();
+  });
+
+  it("does not focus after pinching or a cancelled gesture", () => {
+    const { overlay, view, detach } = harness(["one"]);
+    touch(overlay, "touchstart", [{ clientX: 10, clientY: 10 }]);
+    touch(overlay, "touchmove", [{ clientX: 10, clientY: 10 }, { clientX: 30, clientY: 10 }]);
+    touch(overlay, "touchend");
+    touch(overlay, "touchstart", [{ clientX: 10, clientY: 10 }]);
+    touch(overlay, "touchcancel");
+    touch(overlay, "touchend");
+    expect(view.focus).not.toHaveBeenCalled();
+    detach();
+  });
+
+  it("leaves long presses to native text selection", () => {
+    const now = vi.spyOn(Date, "now").mockReturnValue(1000);
+    const { overlay, view, detach } = harness(["one"]);
+    try {
+      touch(overlay, "touchstart", [{ clientX: 10, clientY: 10 }]);
+      now.mockReturnValue(1600);
+      touch(overlay, "touchend");
+      expect(view.focus).not.toHaveBeenCalled();
+    } finally {
+      now.mockRestore();
+      detach();
+    }
+  });
+
+  it("dismisses selection without opening the keyboard until a second tap", () => {
+    const { overlay, view, detach } = harness(["one"]);
+    const range = document.createRange();
+    range.selectNodeContents(overlay);
+    document.getSelection()?.removeAllRanges();
+    document.getSelection()?.addRange(range);
+    touch(overlay, "touchstart", [{ clientX: 10, clientY: 10 }]);
+    touch(overlay, "touchend");
+    expect(selectionHeldIn(overlay)).toBe(false);
+    expect(view.focus).not.toHaveBeenCalled();
+    touch(overlay, "touchstart", [{ clientX: 10, clientY: 10 }]);
+    touch(overlay, "touchend");
+    expect(view.focus).toHaveBeenCalledOnce();
     detach();
   });
 

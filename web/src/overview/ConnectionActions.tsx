@@ -1,9 +1,11 @@
 import { useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useTranslate } from "../i18n/context";
 import { connectionLocation } from "../routing/connectionRoute";
 import { Icon } from "../ui/icons";
 import { useDismissibleLayer } from "../ui/useDismissibleLayer";
 import { useMenuKeyboard } from "../ui/useMenuKeyboard";
+import { useAnchoredMenu } from "../ui/useAnchoredMenu";
 
 type ConnectionActionsProps = {
   alias: string;
@@ -30,11 +32,13 @@ export function ConnectionActions({
 
   useDismissibleLayer({
     open,
-    containerRefs: [rootRef],
+    containerRefs: [rootRef, menuRef],
     onDismiss: () => setOpen(false),
     returnFocusRef: triggerRef,
   });
   useMenuKeyboard({ open, menuRef, onClose: () => setOpen(false) });
+
+  useAnchoredMenu({ open, anchorRef: triggerRef, menuRef });
 
   const settingsLocation = connectionLocation({ path, alias, panel: "Basic", advanced: "Jump" });
 
@@ -51,11 +55,11 @@ export function ConnectionActions({
       >
         <Icon name="moreHorizontal" className="size-5" />
       </button>
-      {open ? (
+      {open ? createPortal(
         <div
           ref={menuRef}
           role="menu"
-          className="absolute bottom-full right-0 z-20 mb-1 min-w-48 rounded-lg border border-line bg-card p-1 shadow-lg"
+          className="fixed z-50 w-56 overflow-y-auto rounded-lg border border-line bg-card p-1 shadow-lg"
         >
           <button
             type="button"
@@ -80,7 +84,8 @@ export function ConnectionActions({
           >
             {opening ? t("home.opening") : t("home.connect")}
           </button>
-        </div>
+        </div>,
+        document.body,
       ) : null}
     </div>
   );

@@ -31,7 +31,7 @@ import {
 } from "../ui/tableSort";
 import { useDismissibleLayer } from "../ui/useDismissibleLayer";
 import { useMenuKeyboard } from "../ui/useMenuKeyboard";
-import { useCompactViewport } from "../ui/useMediaQuery";
+import { mobileViewportQuery, useCompactViewport, useMediaQuery } from "../ui/useMediaQuery";
 import { sftpApi, type RemoteEntry, type RemoteTextFile } from "./api";
 import { formatBytes } from "./format";
 import { sftpPlaces } from "./places";
@@ -69,6 +69,7 @@ type SFTPSort = "name" | "type" | "size" | "modified";
 // Anchoring them to one shape keeps a right click from offering less than the
 // three-dot button placed above the same rows.
 type SFTPMenu =
+  | { kind: "folder" }
   | { kind: "create" }
   | { kind: "places" }
   | { kind: "selected" }
@@ -227,6 +228,10 @@ export function SFTPPanel({
   const pathInput = useRef<HTMLInputElement>(null);
   const panelRoot = useRef<HTMLElement>(null);
   const compactViewport = useCompactViewport(panelRoot);
+  const mobileInteraction = useMediaQuery(mobileViewportQuery);
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+  const searchInput = useRef<HTMLInputElement>(null);
+  const [pendingPath, setPendingPath] = useState<string | null>(null);
   const headingId = useId();
   const openingTarget = useRef(false);
   const handledTarget = useRef(0);
@@ -248,18 +253,21 @@ export function SFTPPanel({
   const suppressNextClick = useRef(false);
 
   useDismissibleLayer({
-    open: menu !== null,
+    open: menu !== null && !mobileInteraction,
     containerRefs: [menuRoot],
     onDismiss: () => setMenu(null),
     returnFocusRef: menuTrigger,
   });
-  useMenuKeyboard({ open: menu !== null, menuRef: menuPanel, onClose: () => setMenu(null) });
+  useMenuKeyboard({ open: menu !== null && !mobileInteraction, menuRef: menuPanel, onClose: () => setMenu(null) });
 
   useEffect(() => {
     if (!pathEditing) return;
     pathInput.current?.focus();
     pathInput.current?.select();
   }, [pathEditing]);
+  useEffect(() => {
+    if (mobileSearchOpen) searchInput.current?.focus();
+  }, [mobileSearchOpen]);
   useEffect(() => () => {
     if (longPress.current !== null) globalThis.clearTimeout(longPress.current.timer);
   }, []);
@@ -380,6 +388,8 @@ export function SFTPPanel({
     setProblem("");
     setUndo(null);
     setBusy(false);
+    setPendingPath(null);
+    setMobileSearchOpen(false);
   }
 
   async function load(nextPath = path, nextAlias = alias, preserveEditor = false, recordNavigation = true): Promise<RemoteEntry[] | null> {
@@ -389,6 +399,8 @@ export function SFTPPanel({
       return null;
     }
     setBusy(true);
+    setPendingPath(nextPath);
+    setMenu(null);
     setProblem("");
     try {
       const listing = await sftpApi.list(nextAlias, nextPath);
@@ -422,7 +434,7 @@ export function SFTPPanel({
       setProblem(code === "sftp_failed" ? t("sftp.connectionFailed") : code || (error instanceof Error ? error.message : t("sftp.connectionFailed")));
       return null;
     } finally {
-      if (generation === loadGeneration.current) setBusy(false);
+      if (generation === loadGeneration.current) { setBusy(false); setPendingPath(null); }
     }
   }
 
@@ -751,6 +763,7 @@ export function SFTPPanel({
     if (alias === "" || needle === "" || root === "") return;
     const generation = ++loadGeneration.current;
     setBusy(true);
+    setPendingPath(root);
     setProblem("");
     try {
       const found = await sftpApi.search(alias, root, needle);
@@ -765,7 +778,7 @@ export function SFTPPanel({
       if (generation !== loadGeneration.current) return;
       setProblem(failureCode(error) || (error instanceof Error ? error.message : "sftp_failed"));
     } finally {
-      if (generation === loadGeneration.current) setBusy(false);
+      if (generation === loadGeneration.current) { setBusy(false); setPendingPath(null); }
     }
   }
 
@@ -801,6 +814,7 @@ export function SFTPPanel({
   }
 
   function activate(entry: RemoteEntry) {
+    if (busy || dirty) return;
     setMenu(null);
     if (entry.type === "directory") void load(entry.path);
     else setDetails([entry]);
@@ -843,7 +857,13 @@ export function SFTPPanel({
       suppressNextClick.current = false;
       return;
     }
+    if (busy || dirty) return;
     setFocusedKey(entry.path);
+    if (mobileInteraction && !event.shiftKey && !event.metaKey && !event.ctrlKey) {
+      if (selectedPaths.size > 0) toggleSelection(entry);
+      else activate(entry);
+      return;
+    }
     selectEntry(entry, { shift: event.shiftKey, additive: event.metaKey || event.ctrlKey });
   }
 
@@ -910,6 +930,7 @@ export function SFTPPanel({
   }
 
   function handleListKeys(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (busy) return;
     if ((event.metaKey || event.ctrlKey) && event.key.toLocaleLowerCase() === "a") {
       event.preventDefault();
       selectAllDisplayed();
@@ -974,6 +995,7 @@ export function SFTPPanel({
   // A right click on a row outside the selection acts on that row alone, the
   // way every file manager does; inside it, the whole selection is kept.
   function openContextMenu(entry: RemoteEntry, x: number, y: number) {
+    if (busy || dirty) return;
     if (!selectedPaths.has(entry.path)) {
       setSelectedPaths(new Set([entry.path]));
       selectionAnchor.current = entry.path;
@@ -995,7 +1017,7 @@ export function SFTPPanel({
   }
 
   function beginLongPress(event: ReactPointerEvent<HTMLElement>, entry: RemoteEntry) {
-    if (event.pointerType === "mouse") return;
+    if (event.pointerType === "mouse" || busy || dirty) return;
     cancelLongPress();
     // A long press that opened a menu but was never followed by a click must
     // not swallow the first tap on some other row.
@@ -1018,6 +1040,7 @@ export function SFTPPanel({
   }
 
   function toggleSelection(entry: RemoteEntry) {
+    if (busy) return;
     setSelectedPaths((current) => {
       const next = new Set(current);
       if (next.has(entry.path)) next.delete(entry.path);
@@ -1087,7 +1110,7 @@ export function SFTPPanel({
     void load(remotePath);
   }
 
-  function toggleMenu(kind: "create" | "places" | "selected", trigger: HTMLButtonElement) {
+  function toggleMenu(kind: "folder" | "create" | "places" | "selected", trigger: HTMLButtonElement) {
     menuTrigger.current = trigger;
     setMenu((current) => current?.kind === kind ? null : { kind });
   }
@@ -1168,12 +1191,52 @@ export function SFTPPanel({
       : t("sftp.selectedActions", { name: selectedEntry.name });
   }
 
+  function folderMenuActions(): SFTPMenuAction[] {
+    const navigate = (destination: string) => { setMenu(null); void load(destination); };
+    return [
+      { key: "newFolder", label: t("sftp.newFolder"), disabled: busy || !connected, run: () => { setMenu(null); setInputIntent({ kind: "mkdir" }); } },
+      { key: "upload", label: t("sftp.upload"), disabled: busy || !connected, run: () => { setMenu(null); upload.current?.click(); } },
+      { key: "uploadFolder", label: t("sftp.uploadFolder"), disabled: busy || !connected, run: () => { setMenu(null); folderUpload.current?.click(); } },
+      { key: "places", label: t("sftp.places"), disabled: busy || !connected, run: () => setMenu({ kind: "places" }) },
+      { key: "forward", label: t("sftp.forward"), disabled: busy || dirty || navigation.index < 0 || navigation.index >= navigation.paths.length - 1, run: () => { setMenu(null); void navigateHistory(1); } },
+      { key: "home", label: t("sftp.homeDirectory"), disabled: busy || dirty || !connected, run: () => navigate("") },
+      { key: "root", label: t("sftp.rootDirectory"), disabled: busy || dirty || !connected || path === "/", run: () => navigate("/") },
+      ...(onOpenTerminal === undefined ? [] : [{ key: "terminal", label: t("sftp.openTerminalHere"), disabled: busy || dirty || !connected, run: () => { setMenu(null); void onOpenTerminal(alias, path); } }]),
+      { key: "selectAll", label: t("sftp.selectAll"), disabled: busy || displayedEntries.length === 0, run: selectAllDisplayed },
+      ...(["name", "type", "size", "modified"] as const).map((key) => ({
+        key: `sort-${key}`,
+        label: `${t(`sftp.${key}`)}${t(sort.key === key && sort.direction === "ascending" ? "table.sortDescending" : "table.sortAscending")}`,
+        run: () => { changeSort(key); setMenu(null); },
+      })),
+    ];
+  }
+
   const pathPieces = path.split("/").filter(Boolean);
   const breadcrumbPaths = pathPieces.map((_, index) => `/${pathPieces.slice(0, index + 1).join("/")}`);
 
   return (
     <section ref={panelRoot} className="flex h-full min-h-0 min-w-0 flex-col gap-1.5 md:gap-1" aria-labelledby={headingId}>
       <h2 id={headingId} className="sr-only">{t("sftp.heading")}</h2>
+      {mobileInteraction ? (
+        <div className="flex min-h-11 shrink-0 items-center gap-1 border-b border-line/50 pb-1">
+          <SFTPHostPicker aliases={aliases} hosts={hosts} value={alias} disabled={dirty} onChange={selectHost} compact />
+          <button type="button" aria-label={t("sftp.back")} disabled={busy || dirty || navigation.index <= 0} onClick={() => void navigateHistory(-1)} className="flex size-11 shrink-0 items-center justify-center rounded text-ink-muted active:bg-select-fill disabled:text-ink-faint">←</button>
+          {pathEditing ? (
+            <form className="flex min-w-0 flex-1 items-center gap-1" onSubmit={(event) => { event.preventDefault(); if (!busy && !dirty) void load(pathDraft); }}>
+              <input ref={pathInput} aria-label={t("sftp.path")} value={pathDraft} onChange={(event) => setPathDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") { setPathDraft(path); setPathEditing(false); } }} className="h-11 min-w-0 w-full rounded border border-control-line bg-control px-2 font-mono text-base" />
+              <Button type="submit" disabled={busy || dirty || !connected}>{t("sftp.go")}</Button>
+            </form>
+          ) : (
+            <button type="button" data-testid="sftp-current-path" data-path={path} aria-label={t("sftp.editPath")} title={path} disabled={busy || dirty || !connected} onClick={() => setPathEditing(true)} className="flex h-11 min-w-0 flex-1 items-center gap-1 rounded px-2 text-left active:bg-select-fill disabled:text-ink-faint">
+              <span className="truncate font-mono text-sm font-medium">{pathPieces.at(-1) || "/"}</span><Icon name="chevronRight" className="size-3 shrink-0 rotate-90 text-ink-muted" />
+            </button>
+          )}
+          {pathEditing ? <button type="button" aria-label={t("sftp.cancel")} onClick={() => { setPathDraft(path); setPathEditing(false); }} className="flex size-11 shrink-0 items-center justify-center rounded text-ink-muted"><Icon name="close" className="size-4" /></button> : <>
+            <button type="button" aria-label={t("sftp.mobile.search")} aria-expanded={mobileSearchOpen} disabled={busy || !connected} onClick={() => setMobileSearchOpen((value) => !value)} className={`flex size-11 shrink-0 items-center justify-center rounded active:bg-select-fill ${mobileSearchOpen || filter !== "" ? "text-accent" : "text-ink-muted"}`}><Icon name="search" className="size-4" /></button>
+            <button type="button" aria-label={t("sftp.mobile.actions")} aria-haspopup="dialog" aria-expanded={menu?.kind === "folder"} onClick={(event) => toggleMenu("folder", event.currentTarget)} className="flex size-11 shrink-0 items-center justify-center rounded text-ink-muted active:bg-select-fill"><Icon name="moreHorizontal" className="size-4" /></button>
+          </>}
+        </div>
+      ) : (
       <div className="flex flex-wrap items-center gap-1.5 border-b border-line/50 pb-1.5 md:pb-1">
         <SFTPHostPicker aliases={aliases} hosts={hosts} value={alias} disabled={dirty} onChange={selectHost} />
         {onOpenTerminal === undefined ? null : (
@@ -1244,6 +1307,7 @@ export function SFTPPanel({
           </div>
         )}
       </div>
+      )}
 
       {problem === "" || listingFailed ? null : <p role="alert" className="rounded-md border border-notice-line bg-notice px-3 py-2 text-sm text-notice-ink">{problem}</p>}
       {search === null ? null : (
@@ -1271,14 +1335,15 @@ export function SFTPPanel({
       <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 gap-2">
         <div
           aria-label={t("sftp.dropZone")}
-          className={`flex min-h-0 min-w-0 flex-col rounded-md border bg-card transition-shadow ${dragging ? "border-accent ring-1 ring-accent" : "border-line/60"}`}
+          aria-busy={busy}
+          className={`relative flex min-h-0 min-w-0 flex-col rounded-md border bg-card transition-shadow ${dragging ? "border-accent ring-1 ring-accent" : "border-line/60"}`}
           onDragEnter={(event) => { event.preventDefault(); if (!busy && connected) setDragging(true); }}
           onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; }}
           onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false); }}
           onDrop={(event) => { void acceptDrop(event); }}
         >
-          <div ref={menuRoot} className="relative flex min-h-10 items-center gap-1 border-b border-line/50 bg-toolbar/45 px-2 py-1 md:min-h-8 md:py-0.5">
-            {selectedEntries.length > 0 ? (
+          <div ref={menuRoot} hidden={mobileInteraction && selectedEntries.length === 0 && !mobileSearchOpen} className={mobileInteraction && selectedEntries.length === 0 && !mobileSearchOpen ? "hidden" : "relative flex min-h-10 shrink-0 items-center gap-1 border-b border-line/50 bg-toolbar/45 px-2 py-1 md:min-h-8 md:py-0.5"}>
+            {selectedEntries.length > 0 && !(mobileInteraction && mobileSearchOpen) ? (
               <>
                 <button type="button" aria-label={t("sftp.clearSelection")} onClick={() => setSelectedPaths(new Set())} className="flex size-10 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-select-fill hover:text-ink md:size-7">
                   <Icon name="close" className="size-3.5" />
@@ -1291,7 +1356,7 @@ export function SFTPPanel({
                       })
                     : t("sftp.selected", { name: selectedEntry.name })}
                 </span>
-                <label className="relative min-w-20 max-w-32 grow">
+                <label className={mobileInteraction ? "hidden" : "relative min-w-20 max-w-32 grow"}>
                   <span className="sr-only">{t("sftp.filter")}</span>
                   <Icon name="search" className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-ink-muted" />
                   <input
@@ -1316,12 +1381,18 @@ export function SFTPPanel({
                   type="button"
                   aria-label={selectionMenuLabel()}
                   aria-haspopup="menu"
-                  aria-expanded={menu?.kind === "selected"}
+                  aria-expanded={!mobileInteraction && menu?.kind === "selected"}
                   onClick={(event) => toggleMenu("selected", event.currentTarget)}
                   className="flex size-10 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-select-fill focus:bg-select-fill focus:outline-none md:size-7"
                 >
                   <Icon name="moreHorizontal" className="size-4" />
                 </button>
+              </>
+            ) : mobileInteraction ? (
+              <>
+                <input ref={searchInput} type="search" aria-label={t("sftp.filter")} value={filter} onChange={(event) => setFilter(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void runSearch(); event.currentTarget.blur(); } }} placeholder={t("sftp.filterPlaceholder")} className="h-11 min-w-0 flex-1 rounded-md border border-control-line bg-control px-3 text-base" />
+                <button type="button" aria-label={t("sftp.searchBelow")} disabled={busy || !connected || filter.trim() === ""} onClick={() => { searchInput.current?.blur(); void runSearch(); }} className="flex size-11 shrink-0 items-center justify-center rounded text-ink-muted disabled:text-ink-faint"><Icon name="search" className="size-4" /></button>
+                <button type="button" aria-label={t("sftp.close")} onClick={() => { setMobileSearchOpen(false); setFilter(""); }} className="flex size-11 shrink-0 items-center justify-center rounded text-ink-muted"><Icon name="close" className="size-4" /></button>
               </>
             ) : (
             <>
@@ -1329,7 +1400,7 @@ export function SFTPPanel({
               type="button"
               aria-label={t("sftp.createActions")}
               aria-haspopup="menu"
-              aria-expanded={menu?.kind === "create"}
+              aria-expanded={!mobileInteraction && menu?.kind === "create"}
               disabled={busy || !connected}
               onClick={(event) => toggleMenu("create", event.currentTarget)}
               className="flex size-10 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-select-fill focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:size-7"
@@ -1340,7 +1411,7 @@ export function SFTPPanel({
               type="button"
               aria-label={t("sftp.places")}
               aria-haspopup="menu"
-              aria-expanded={menu?.kind === "places"}
+              aria-expanded={!mobileInteraction && menu?.kind === "places"}
               disabled={busy || !connected}
               onClick={(event) => toggleMenu("places", event.currentTarget)}
               className={`flex size-10 shrink-0 items-center justify-center rounded hover:bg-select-fill focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:size-7 ${bookmarkedHere ? "text-accent" : "text-ink-muted"}`}
@@ -1405,14 +1476,14 @@ export function SFTPPanel({
                 void uploadFiles(files);
               }}
             />
-            {menu?.kind === "create" ? (
+            {!mobileInteraction && menu?.kind === "create" ? (
               <div ref={menuPanel} role="menu" aria-label={t("sftp.createActions")} className="absolute left-2 top-full z-20 mt-1 w-52 rounded-lg border border-control-line bg-card p-1 shadow-lg">
                 <button type="button" role="menuitem" disabled={busy} onClick={() => { setMenu(null); setInputIntent({ kind: "mkdir" }); }} className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:min-h-0">{t("sftp.newFolder")}</button>
                 <button type="button" role="menuitem" disabled={busy} onClick={() => { setMenu(null); upload.current?.click(); }} className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:min-h-0">{t("sftp.upload")}</button>
                 <button type="button" role="menuitem" disabled={busy} onClick={() => { setMenu(null); folderUpload.current?.click(); }} className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:min-h-0">{t("sftp.uploadFolder")}</button>
               </div>
             ) : null}
-            {menu?.kind === "places" ? (
+            {!mobileInteraction && menu?.kind === "places" ? (
               <div ref={menuPanel} role="menu" aria-label={t("sftp.places")} className="absolute left-2 top-full z-20 mt-1 max-h-80 w-72 overflow-auto rounded-lg border border-control-line bg-card p-1 shadow-lg">
                 <button
                   type="button"
@@ -1449,12 +1520,12 @@ export function SFTPPanel({
                 ) : null}
               </div>
             ) : null}
-            {menu?.kind === "selected" && selectedEntries.length > 0 ? (
+            {!mobileInteraction && menu?.kind === "selected" && selectedEntries.length > 0 ? (
               <div ref={menuPanel} role="menu" aria-label={selectionMenuLabel()} className="absolute right-2 top-full z-20 mt-1 w-52 rounded-lg border border-control-line bg-card p-1 shadow-lg">
                 <MenuActionList actions={selectedMenuActions()} />
               </div>
             ) : null}
-            {menu?.kind === "context" && selectedEntries.length > 0 ? (
+            {!mobileInteraction && menu?.kind === "context" && selectedEntries.length > 0 ? (
               <div
                 ref={menuPanel}
                 role="menu"
@@ -1469,7 +1540,8 @@ export function SFTPPanel({
               </div>
             ) : null}
           </div>
-          <div className="min-h-0 min-w-0 flex-1 overflow-auto" onKeyDown={handleListKeys}>
+          {connected && pendingPath !== null ? <div role="status" className="absolute inset-0 z-10 flex items-center justify-center rounded-md bg-card/80 p-4 backdrop-blur-[1px]"><span className="flex min-w-0 items-center gap-3 rounded-lg bg-toolbar px-4 py-3 text-sm"><span aria-hidden="true" className="size-4 shrink-0 animate-spin rounded-full border-2 border-accent border-t-transparent motion-reduce:animate-none" /><span className="min-w-0"><span className="block">{t("sftp.loading")}</span><span className="block truncate font-mono text-xs text-ink-muted">{pendingPath || t("sftp.homeDirectory")}</span></span></span></div> : null}
+          <div data-testid="sftp-file-list" className="min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain" inert={connected && busy} onKeyDown={handleListKeys}>
             {alias === "" ? (
               <PanelState tone="empty" title={t("sftp.chooseHost")} detail={t("sftp.chooseHostHint")} />
             ) : !connected && busy ? (
@@ -1537,7 +1609,7 @@ export function SFTPPanel({
                     data-row-key={entry.path}
                     className={`flex items-center transition-colors ${selectedPaths.has(entry.path) ? "bg-select-fill/75" : ""}`}
                     onContextMenu={(event) => rowContextMenu(event, entry)}
-                    draggable={entry.type === "file" || entry.type === "directory"}
+                    draggable={!mobileInteraction && (entry.type === "file" || entry.type === "directory")}
                     onDragStart={(event) => beginRemoteDrag(event, entry)}
                   >
                     <label className="flex size-11 shrink-0 items-center justify-center md:size-8">
@@ -1546,6 +1618,7 @@ export function SFTPPanel({
                         aria-label={t("sftp.selectEntry", { name: entry.name })}
                         checked={selectedPaths.has(entry.path)}
                         tabIndex={activeRowKey === entry.path ? 0 : -1}
+                        disabled={busy}
                         onChange={() => toggleSelection(entry)}
                         className="size-4 accent-accent"
                       />
@@ -1556,10 +1629,11 @@ export function SFTPPanel({
                       aria-label={entry.name}
                       aria-pressed={selectedPaths.has(entry.path)}
                       tabIndex={activeRowKey === entry.path ? 0 : -1}
-                      className="flex min-h-11 min-w-0 grow items-center gap-2 px-2 py-1.5 text-left hover:bg-select-fill md:min-h-8 md:py-0.5"
+                      className="flex min-h-12 min-w-0 grow touch-pan-y select-none items-center gap-2 px-2 py-2 text-left hover:bg-select-fill active:bg-select-fill disabled:text-ink-faint"
                       onFocus={() => setFocusedKey(entry.path)}
                       onClick={(event) => clickEntry(entry, event)}
-                      onDoubleClick={() => activate(entry)}
+                      onDoubleClick={mobileInteraction ? undefined : () => activate(entry)}
+                      disabled={busy || dirty}
                       onPointerDown={(event) => beginLongPress(event, entry)}
                       onPointerMove={trackLongPress}
                       onPointerUp={cancelLongPress}
@@ -1624,7 +1698,7 @@ export function SFTPPanel({
                     aria-selected={selectedPaths.has(entry.path)}
                     onDoubleClick={() => activate(entry)}
                     onContextMenu={(event) => rowContextMenu(event, entry)}
-                    draggable={entry.type === "file" || entry.type === "directory"}
+                    draggable={!mobileInteraction && (entry.type === "file" || entry.type === "directory")}
                     onDragStart={(event) => beginRemoteDrag(event, entry)}
                     className={`cursor-default border-t border-line/40 transition-colors ${selectedPaths.has(entry.path) ? "bg-select-fill/75" : "hover:bg-select-fill/55"}`}
                   >
@@ -1634,6 +1708,7 @@ export function SFTPPanel({
                         aria-label={t("sftp.selectEntry", { name: entry.name })}
                         checked={selectedPaths.has(entry.path)}
                         tabIndex={activeRowKey === entry.path ? 0 : -1}
+                        disabled={busy}
                         onChange={() => toggleSelection(entry)}
                         onDoubleClick={(event) => event.stopPropagation()}
                         className="size-4 accent-accent"
@@ -1675,6 +1750,24 @@ export function SFTPPanel({
         </div>
 
       </div>
+
+      {mobileInteraction && menu !== null ? (
+        <ModalShell labelledBy={`${headingId}-mobile-actions`} onDismiss={() => setMenu(null)} closeOnOutside returnFocusRef={menuTrigger} placement="sheet" panelClassName="flex max-h-[80dvh] w-full max-w-lg flex-col overflow-hidden rounded-xl">
+          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-line px-4 py-1">
+            <h3 id={`${headingId}-mobile-actions`} className="min-w-0 truncate font-medium">{menu.kind === "selected" || menu.kind === "context" ? selectionMenuLabel() : menu.kind === "places" ? t("sftp.places") : t("sftp.mobile.actions")}</h3>
+            <button type="button" aria-label={t("sftp.close")} onClick={() => setMenu(null)} className="flex size-11 shrink-0 items-center justify-center rounded text-ink-muted"><Icon name="close" className="size-4" /></button>
+          </div>
+          <div role="menu" className="min-h-0 overflow-y-auto overscroll-contain p-2">
+            {menu.kind === "selected" || menu.kind === "context" ? <MenuActionList actions={selectedMenuActions()} /> : menu.kind === "places" ? <>
+              <MenuActionList actions={[{ key: "bookmark", label: t(bookmarkedHere ? "sftp.removeBookmark" : "sftp.addBookmark"), disabled: path === "", run: () => sftpPlaces.toggleBookmark(alias, path) }]} />
+              {bookmarkedPaths.length > 0 ? <h4 className="px-2.5 pt-3 text-xs text-ink-muted">{t("sftp.bookmarks")}</h4> : null}
+              {bookmarkedPaths.map((bookmark) => <div key={bookmark} className="flex items-center"><button type="button" role="menuitem" onClick={() => goTo(bookmark)} className="min-h-11 min-w-0 flex-1 truncate rounded px-2.5 text-left font-mono text-sm active:bg-select-fill">{bookmark}</button><button type="button" role="menuitem" aria-label={t("sftp.removeBookmarkFor", { path: bookmark })} onClick={() => sftpPlaces.removeBookmark(alias, bookmark)} className="flex size-11 shrink-0 items-center justify-center text-ink-muted"><Icon name="close" className="size-4" /></button></div>)}
+              {recentPaths.length > 0 ? <h4 className="px-2.5 pt-3 text-xs text-ink-muted">{t("sftp.recentPaths")}</h4> : null}
+              {recentPaths.map((recent) => <button key={recent} type="button" role="menuitem" onClick={() => goTo(recent)} className="block min-h-11 w-full truncate rounded px-2.5 text-left font-mono text-sm active:bg-select-fill">{recent}</button>)}
+            </> : <MenuActionList actions={folderMenuActions()} />}
+          </div>
+        </ModalShell>
+      ) : null}
 
       {remoteDrop === null ? null : (
         <ModalShell labelledBy={`${headingId}-remote-drop`} onDismiss={() => setRemoteDrop(null)} panelClassName="w-full max-w-md rounded-lg p-5">

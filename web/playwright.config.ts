@@ -43,7 +43,12 @@ export default defineConfig({
     screenshot: "off",
   },
   projects: [
-    { name: "chromium", use: { ...devices["Desktop Chrome"] }, testIgnore: /narrow\.spec\.ts/ },
+    { name: "chromium", use: { ...devices["Desktop Chrome"] }, testIgnore: /(narrow|mobile-ux)\.spec\.ts/ },
+    {
+      name: "mobile",
+      testMatch: /mobile-ux\.spec\.ts/,
+      use: { ...devices["Pixel 7"], viewport: { width: 390, height: 640 } },
+    },
     // 360x800 の touch viewport では狭幅専用の導線だけを検証する。
     {
       name: "narrow",

@@ -239,17 +239,26 @@ export function SnippetsPanel({
 
   return (
     <section
-      className="grid min-h-full gap-4 lg:grid-cols-[16rem_minmax(24rem,1fr)_minmax(20rem,0.8fr)]"
+      className="grid min-h-full min-w-0 content-start gap-4 xl:grid-cols-[16rem_minmax(0,1fr)_minmax(0,0.8fr)]"
       aria-labelledby="snippets-heading"
     >
-      <div className="flex flex-col gap-2">
+      <div className="flex min-w-0 flex-col gap-2">
         <div className="flex items-center">
           <h2 id="snippets-heading" className="grow font-medium">
             {t("snippets.heading")}
           </h2>
           <Button onClick={() => edit(null)}>{t("snippets.new")}</Button>
         </div>
-        <div className="flex flex-col gap-1">
+        <select
+          aria-label={t("snippets.heading")}
+          value={selected ?? ""}
+          onChange={(event) => edit(snippets.find((snippet) => snippet.id === event.target.value) ?? null)}
+          className="w-full rounded border border-control-line bg-control px-3 py-2 text-sm xl:hidden"
+        >
+          <option value="">{t("snippets.new")}</option>
+          {snippets.map((snippet) => <option key={snippet.id} value={snippet.id}>{snippet.name}</option>)}
+        </select>
+        <div className="hidden flex-col gap-1 xl:flex">
           {snippets.map((snippet) => (
             <button
               key={snippet.id}
@@ -314,7 +323,7 @@ export function SnippetsPanel({
         {variablesFor(draft.command, draft.variables).map((variable) => (
           <div
             key={variable.name}
-            className="grid grid-cols-[8rem_minmax(0,1fr)] gap-2"
+            className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-[8rem_minmax(0,1fr)]"
           >
             <label className="text-xs text-ink-muted">
               <code>{`{{${variable.name}}}`}</code>
@@ -406,9 +415,9 @@ export function SnippetsPanel({
       <div className="flex min-w-0 flex-col gap-3">
         <section className="rounded-lg border border-line bg-card p-4">
           <h3 className="text-sm font-medium">{t("snippets.targets")}</h3>
-          <div className="mt-2 grid max-h-40 grid-cols-2 gap-1 overflow-auto">
+          <div className="mt-2 grid max-h-40 grid-cols-1 gap-1 overflow-auto sm:grid-cols-2">
             {aliases.map((alias) => (
-              <label key={alias} className="flex items-center gap-2 text-sm">
+              <label key={alias} className="flex min-w-0 items-center gap-2 break-all text-sm">
                 <input
                   type="checkbox"
                   checked={targets.includes(alias)}
@@ -434,7 +443,7 @@ export function SnippetsPanel({
           </Button>
         </section>
         {preview === null ? null : (
-          <section className="rounded-lg border border-notice-line bg-notice p-4">
+          <section className="min-w-0 rounded-lg border border-notice-line bg-notice p-4">
             <h3 className="text-sm font-medium">{t("snippets.confirm")}</h3>
             {preview.targets.map((target) => (
               <div key={target.targetId} className="mt-2">
@@ -458,7 +467,7 @@ export function SnippetsPanel({
                 </pre>
               </div>
             ))}
-            <Button kind="primary" className="mt-3" onClick={() => void run()}>
+            <Button kind="primary" className="mt-3" disabled={busy} onClick={() => void run()}>
               {t("snippets.run")}
             </Button>
           </section>
