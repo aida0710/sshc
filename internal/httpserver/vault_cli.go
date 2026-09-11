@@ -158,7 +158,7 @@ func (h ConnectHandlers) VaultLock(c *echo.Context) error {
 		return c.NoContent(status)
 	}
 	// session と vault は別の寿命を持つ。ここで触るのは導出済みの vault key だけである。
-	if err := h.vault.LockPasswordProtected(); err != nil {
+	if err := h.vault.Lock(); err != nil {
 		return vaultCLIProblem(c, err)
 	}
 	return c.NoContent(http.StatusNoContent)

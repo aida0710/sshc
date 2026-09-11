@@ -80,23 +80,29 @@ test("locking the vault returns the application to its front door", async ({ pag
 });
 
 
-test("passwordless setup, manual lock, and four-character protection work through the UI", async ({ page, installation }) => {
+test("passwordless vaults hide manual locks and current password while protected vaults retain them", async ({ page, installation }) => {
   await page.goto(installation.url);
   await page.getByLabel("Use without a password").check();
   expect(await clickAndAwait(page, "Create the vault", "/api/v1/passwords/initialise")).toBe(200);
   await expect(page.getByRole("navigation", { name: "Primary" })).toBeVisible();
   await openSection(page, "Account passwords");
-  await page.getByRole("button", { name: "Lock sshc" }).click();
-  await expect(page.getByText("This device uses the vault without a password.")).toBeVisible();
-  await expect(page.getByLabel("Master password", { exact: true })).toHaveCount(0);
-  expect(await clickAndAwait(page, "Open", "/api/v1/passwords/unlock")).toBe(200);
+  await expect(page.getByRole("heading", { name: "Account passwords", exact: true, level: 2 })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Lock sshc" })).toHaveCount(0);
+  await page.keyboard.press("Control+k");
+  await page.getByRole("searchbox", { name: "Search sessions, hosts, files, snippets and settings" }).fill("Lock the vault");
+  await expect(page.getByRole("option", { name: /Lock the vault/ })).toHaveCount(0);
+  await page.keyboard.press("Escape");
   await openSection(page, "Master password");
+  await expect(page.getByLabel("Current master password", { exact: true })).toHaveCount(0);
   await page.getByLabel("New master password", { exact: true }).fill("1234");
   await page.getByLabel("Confirm new master password", { exact: true }).fill("1234");
   expect(await clickAndAwait(page, "Change the master password", "/api/v1/passwords/change")).toBe(200);
   expect(await installation.read("sshc/local-vault-key")).toBe("");
   await openSection(page, "Account passwords");
-  await page.getByRole("button", { name: "Lock sshc" }).click();
+  await expect(page.getByRole("button", { name: "Lock sshc" })).toBeVisible();
+  await page.keyboard.press("Control+k");
+  await page.getByRole("searchbox", { name: "Search sessions, hosts, files, snippets and settings" }).fill("Lock the vault");
+  await page.getByRole("option", { name: /Lock the vault/ }).click();
   await expect(page.getByLabel("Master password", { exact: true })).toBeVisible();
   await page.getByLabel("Master password", { exact: true }).fill("1234");
   expect(await clickAndAwait(page, "Open", "/api/v1/passwords/unlock")).toBe(200);
@@ -105,4 +111,15 @@ test("passwordless setup, manual lock, and four-character protection work throug
   await page.getByLabel("Use without a password").check();
   expect(await clickAndAwait(page, "Change the master password", "/api/v1/passwords/change")).toBe(200);
   expect(await installation.read("sshc/local-vault-key")).not.toBe("");
+  await expect(page.getByLabel("Current master password", { exact: true })).toHaveCount(0);
+  await page.keyboard.press("Control+k");
+  await page.getByRole("searchbox", { name: "Search sessions, hosts, files, snippets and settings" }).fill("Lock the vault");
+  await expect(page.getByRole("option", { name: /Lock the vault/ })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await page.reload();
+  await expect(page.getByRole("navigation", { name: "Primary" })).toBeVisible();
+  await expect(page.getByLabel("Master password", { exact: true }).and(page.locator("input"))).toHaveCount(0);
+  await openSection(page, "Account passwords");
+  await expect(page.getByRole("heading", { name: "Account passwords", exact: true, level: 2 })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Lock sshc" })).toHaveCount(0);
 });

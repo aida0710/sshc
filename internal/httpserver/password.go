@@ -122,21 +122,11 @@ func (v *vaultOperations) Lock() error {
 	if v.service == nil {
 		return errVaultUnavailable
 	}
-	v.service.Lock()
-	return nil
-}
-
-func (v *vaultOperations) LockPasswordProtected() error {
-	v.mu.Lock()
-	defer v.mu.Unlock()
-	if v.service == nil {
-		return errVaultUnavailable
-	}
 	state, err := v.service.State()
 	if err != nil {
 		return err
 	}
-	// The CLI must not require a passwordless vault to be unlocked manually.
+	// Passwordless vaults do not support manual locking. Shutdown still destroys keys.
 	if state.Passwordless {
 		if state.Unlocked {
 			return nil
