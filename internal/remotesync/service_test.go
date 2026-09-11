@@ -2022,7 +2022,7 @@ func TestHistorySerializesRemoteDerivationAndDiscardsItsStaleGraph(t *testing.T)
 		t.Fatal(err)
 	}
 	started := make(chan struct{})
-	replacementStarted := make(chan struct{})
+	rotationReady := make(chan struct{})
 	release := make(chan struct{})
 	var releaseOnce sync.Once
 	releaseHistory := func() { releaseOnce.Do(func() { close(release) }) }
@@ -2037,8 +2037,6 @@ func TestHistorySerializesRemoteDerivationAndDiscardsItsStaleGraph(t *testing.T)
 		if call == 1 {
 			close(started)
 			<-release
-		} else if call == 2 {
-			close(replacementStarted)
 		}
 		step()
 	}
@@ -2052,16 +2050,18 @@ func TestHistorySerializesRemoteDerivationAndDiscardsItsStaleGraph(t *testing.T)
 	<-started
 	rotationDone := make(chan error, 1)
 	go func() {
-		rotationDone <- machine.service.ReplaceKey(
-			context.Background(), syncPassphrase, "a different strong shared synchronization key", true, func() error { return nil },
+		rotationDone <- machine.service.ReplaceKeyUsing(
+			context.Background(), "a different strong shared synchronization key", true,
+			func() (string, func() error, error) {
+				close(rotationReady)
+				return syncPassphrase, func() error { return nil }, nil
+			},
 		)
 	}()
+	// Hold operationMu before releasing the history derivation so its final
+	// validation observes the rotation. Do not impose a wall-clock limit on Argon2.
+	<-rotationReady
 	releaseHistory()
-	select {
-	case <-replacementStarted:
-	case <-time.After(2 * time.Second):
-		t.Fatal("ReplaceKey did not continue after the bounded remote derivation finished")
-	}
 	if err := <-rotationDone; err != nil {
 		t.Fatalf("ReplaceKey while History derives = %v", err)
 	}
@@ -2082,7 +2082,7 @@ func TestDiffHistorySerializesRemoteDerivationAndDiscardsItsStaleDiff(t *testing
 	}
 	key := history.Revisions[0].Key
 	started := make(chan struct{})
-	replacementStarted := make(chan struct{})
+	rotationReady := make(chan struct{})
 	release := make(chan struct{})
 	var releaseOnce sync.Once
 	releaseDiff := func() { releaseOnce.Do(func() { close(release) }) }
@@ -2097,8 +2097,6 @@ func TestDiffHistorySerializesRemoteDerivationAndDiscardsItsStaleDiff(t *testing
 		if call == 1 {
 			close(started)
 			<-release
-		} else if call == 2 {
-			close(replacementStarted)
 		}
 		step()
 	}
@@ -2112,16 +2110,18 @@ func TestDiffHistorySerializesRemoteDerivationAndDiscardsItsStaleDiff(t *testing
 	<-started
 	rotationDone := make(chan error, 1)
 	go func() {
-		rotationDone <- machine.service.ReplaceKey(
-			context.Background(), syncPassphrase, "a different strong shared synchronization key", true, func() error { return nil },
+		rotationDone <- machine.service.ReplaceKeyUsing(
+			context.Background(), "a different strong shared synchronization key", true,
+			func() (string, func() error, error) {
+				close(rotationReady)
+				return syncPassphrase, func() error { return nil }, nil
+			},
 		)
 	}()
+	// Hold operationMu before releasing the history derivation so its final
+	// validation observes the rotation. Do not impose a wall-clock limit on Argon2.
+	<-rotationReady
 	releaseDiff()
-	select {
-	case <-replacementStarted:
-	case <-time.After(2 * time.Second):
-		t.Fatal("ReplaceKey did not continue after the bounded remote derivation finished")
-	}
 	if err := <-rotationDone; err != nil {
 		t.Fatalf("ReplaceKey while DiffHistory derives = %v", err)
 	}
