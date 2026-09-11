@@ -269,7 +269,8 @@ type CLIStatus struct {
 	// 未作成の vault に対してパスワード入力を求めないため、この値を分ける。
 	Vault bool `json:"vault"`
 	// Unlocked は vault が開いているか。
-	Unlocked bool `json:"unlocked"`
+	Unlocked     bool `json:"unlocked"`
+	Passwordless bool `json:"passwordless"`
 	// Sessions は実行中コンソールの本数。終了済みは数えない。
 	// 「閉じてよいか」を問うための数だからである。
 	Sessions int `json:"sessions"`
@@ -339,6 +340,7 @@ func (h ConnectHandlers) cliStatus() (CLIStatus, error) {
 		return CLIStatus{}, err
 	}
 	answer.Vault, answer.Unlocked = state.Exists, state.Unlocked
+	answer.Passwordless = state.Passwordless
 	if h.Sessions != nil {
 		answer.Sessions = h.Sessions()
 	}
