@@ -996,7 +996,6 @@ export const ja = {
   "lock.withoutPassword": "パスワードなしで使う",
   "lock.withoutPasswordHint": "sshc の起動時に自動で開きます。ローカルデータの保護は OS アカウントと端末のセキュリティに任せます。同期データの暗号化は維持されます。",
   "lock.shortPasswordHint": "短いパスワードは、ローカルファイルを持ち出された場合の保護が弱くなります。長く予測しにくいパスワードほど強く保護できます。",
-  "secrets.currentOptional": "現在パスワードなしで使っている場合は、現在のパスワードを空欄にしてください。",
   "lock.password": "マスターパスワード",
   "lock.confirm": "マスターパスワード（確認）",
   "lock.create": "Vault を作成",

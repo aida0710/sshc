@@ -38,6 +38,8 @@ By default, the Vault locks after saved passwords and key passphrases have not b
 
 With **Do not auto-lock**, the Vault stays unlocked until you lock it manually or restart sshc. Use this option only on a device you control.
 
+Passwordless Vaults do not offer manual locking. The current-password field is hidden when changing protection; adding a password restores that field and the lock controls.
+
 ## Terminal
 
 - Maximum concurrent sessions from 1 to 200, with a default of 50

@@ -12,6 +12,7 @@ afterEach(() => {
 
 function buildApi(overrides: Partial<IntegrationsApi> = {}): IntegrationsApi {
   return {
+    passwordVault: vi.fn().mockResolvedValue({ exists: true, unlocked: true, passwordless: false, aliases: [], dedicatedKeyPassphrases: [] }),
     terminalSettings: vi.fn().mockResolvedValue({}),
     localShellProfiles: vi.fn().mockResolvedValue({
       profiles: [
@@ -36,7 +37,7 @@ function buildApi(overrides: Partial<IntegrationsApi> = {}): IntegrationsApi {
 }
 
 async function fillMasterPassword(user: ReturnType<typeof userEvent.setup>) {
-  await user.type(screen.getByLabelText("Current master password"), "the old one is long");
+  await user.type(await screen.findByLabelText("Current master password"), "the old one is long");
   await user.type(screen.getByLabelText("New master password"), "the new one is long");
   await user.type(screen.getByLabelText("Confirm new master password"), "the new one is long");
 }
@@ -243,7 +244,7 @@ describe("SettingsPanel", () => {
     render(<SettingsPanel api={api} />);
     await screen.findByRole("region", { name: "Master password" });
 
-    await user.type(screen.getByLabelText("Current master password"), "the old one is long");
+    await user.type(await screen.findByLabelText("Current master password"), "the old one is long");
     await user.type(screen.getByLabelText("New master password"), "the new one is long");
     expect(screen.getByRole("button", { name: "Change the master password" })).toBeDisabled();
     await user.type(screen.getByLabelText("Confirm new master password"), "the new one is long");
@@ -561,7 +562,7 @@ describe("SettingsPanel", () => {
 it("removes password protection after verifying the current password", async () => {
   const api = buildApi();
   render(<SettingsPanel api={api} page="Password" />);
-  await userEvent.type(screen.getByLabelText("Current master password"), "old password");
+  await userEvent.type(await screen.findByLabelText("Current master password"), "old password");
   await userEvent.click(screen.getByLabelText("Use without a password"));
   expect(screen.queryByLabelText("New master password")).not.toBeInTheDocument();
   await userEvent.click(screen.getByRole("button", { name: "Change the master password" }));
@@ -569,10 +570,25 @@ it("removes password protection after verifying the current password", async () 
 });
 
 it("adds a four-character password to a passwordless vault", async () => {
-  const api = buildApi();
+  const api = buildApi({ passwordVault: vi.fn().mockResolvedValue({ exists: true, unlocked: true, passwordless: true, aliases: [], dedicatedKeyPassphrases: [] }) });
   render(<SettingsPanel api={api} page="Password" />);
+  await waitFor(() => expect(api.passwordVault).toHaveBeenCalled());
+  expect(screen.queryByLabelText("Current master password")).not.toBeInTheDocument();
   await userEvent.type(screen.getByLabelText("New master password"), "1234");
   await userEvent.type(screen.getByLabelText("Confirm new master password"), "1234");
   await userEvent.click(screen.getByRole("button", { name: "Change the master password" }));
   await waitFor(() => expect(api.changeMasterPassword).toHaveBeenCalledWith("", "1234"));
+  expect(await screen.findByLabelText("Current master password")).toBeInTheDocument();
+});
+
+it("hides the current password immediately after removing protection", async () => {
+  const status = { exists: true, unlocked: true, passwordless: true, aliases: [], dedicatedKeyPassphrases: [] };
+  const api = buildApi({ changeMasterPassword: vi.fn().mockResolvedValue({ vault: status }) });
+  const onVaultChanged = vi.fn();
+  render(<SettingsPanel api={api} page="Password" onVaultChanged={onVaultChanged} />);
+  await userEvent.type(await screen.findByLabelText("Current master password"), "old password");
+  await userEvent.click(screen.getByLabelText("Use without a password"));
+  await userEvent.click(screen.getByRole("button", { name: "Change the master password" }));
+  await waitFor(() => expect(onVaultChanged).toHaveBeenCalledWith(status));
+  expect(screen.queryByLabelText("Current master password")).not.toBeInTheDocument();
 });

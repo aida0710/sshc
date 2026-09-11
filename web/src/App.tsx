@@ -524,13 +524,18 @@ export function App({
       search: "shell local terminal console シェル ローカル ターミナル",
       run: () => void openLocalShell(),
     },
-    {
+    ...(!session.passwordless ? [{
       id: "lock-vault",
       label: t("palette.lockVault"),
       detail: t("palette.lockVaultDetail"),
       search: "lock vault secure ロック 保管庫 施錠",
-      run: () => session.lock(),
-    },
+      run: () => {
+        void integrationsApi.lockVault().then((status) => {
+          if (status.unlocked) session.openVault(status);
+          else session.lock();
+        }).catch(() => undefined);
+      },
+    }] : []),
   ];
 
   function assignGeneratedKey(key: GeneratedPrivateKeyHandoff) {
@@ -902,6 +907,7 @@ export function App({
                       }}
                       shell={{
                         onLock: session.lock,
+                        onVaultChanged: session.openVault,
                         onInspector: setInspector,
                         consoles,
                         onShowConsole: showConsole,
@@ -1189,6 +1195,7 @@ function PaddedSection({
   const { fileTarget, onNavigate, onNavigateLocation } = navigation;
   const {
     onLock,
+    onVaultChanged,
     onInspector,
     consoles,
     onShowConsole,
@@ -1260,6 +1267,7 @@ function PaddedSection({
         page={parseSettingsPage(navigation.location.pathname) ?? "Engine"}
         consoles={consoles}
         onTerminalSettingsChange={onTerminalSettingsChange}
+        onVaultChanged={onVaultChanged}
       />
     );
   }
