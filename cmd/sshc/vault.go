@@ -76,7 +76,7 @@ func runVault(
 		return 2
 	}
 
-	needsPassword := action == "create" || action == "unlock" || action == "change-password"
+	needsPassword := action == "create" || action == "change-password"
 	if needsPassword && (stdin == nil || terminal == nil || !terminal.IsTerminal(int(stdin.Fd()))) {
 		fmt.Fprintln(stderr, "sshc: vault passwords require an interactive terminal")
 		return 1
@@ -121,19 +121,29 @@ func runVault(
 			fmt.Fprintln(stdout, "vault is already unlocked")
 			return 0
 		}
+		if status.Passwordless {
+			return finishVaultMutation(ctx, client, found, httpserver.VaultUnlockPath, []byte(`{"passphrase":""}`), "vault unlocked", stderr, stdout)
+		}
+		if stdin == nil || terminal == nil || !terminal.IsTerminal(int(stdin.Fd())) {
+			fmt.Fprintln(stderr, "sshc: vault passwords require an interactive terminal")
+			return 1
+		}
 		return runVaultUnlock(ctx, found, client, stdin, stdout, stderr, terminal)
 	case "lock":
+		if status.Passwordless {
+			return finishVaultMutation(ctx, client, found, httpserver.VaultLockPath, []byte("{}"), "passwordless vault remains unlocked; set a master password to enable locking", stderr, stdout)
+		}
 		return runVaultLock(ctx, found, client, stdout, stderr)
 	case "change-password":
 		if !status.Vault {
 			fmt.Fprintln(stderr, "sshc: no vault exists; run sshc vault create")
 			return 1
 		}
-		if !status.Unlocked {
+		if !status.Unlocked && !status.Passwordless {
 			fmt.Fprintln(stderr, "sshc: the vault is locked; run sshc vault unlock first")
 			return 1
 		}
-		return runVaultChange(ctx, found, client, stdin, stdout, stderr, terminal)
+		return runVaultChange(ctx, found, client, stdin, stdout, stderr, terminal, status.Passwordless)
 	default:
 		return 2
 	}
@@ -203,15 +213,27 @@ func runVaultLock(
 
 func runVaultChange(
 	ctx context.Context, found handoff.Handoff, client *http.Client, stdin *os.File,
-	stdout, stderr io.Writer, terminal passwordTerminal,
+	stdout, stderr io.Writer, terminal passwordTerminal, passwordless bool,
 ) int {
-	current, err := promptVaultPassword(ctx, stdin, stderr, terminal, "Current master password: ")
+	var current []byte
+	var err error
+	if !passwordless {
+		current, err = promptVaultPassword(ctx, stdin, stderr, terminal, "Current master password: ")
+	}
 	defer zeroBytes(current)
 	if err != nil {
 		return vaultPromptFailure(ctx, err, stderr)
 	}
 	if ctx.Err() != nil {
 		return 130
+	}
+	payload, err := vaultPassphrasePayload(current)
+	if err != nil {
+		fmt.Fprintln(stderr, "sshc: the password could not be encoded safely")
+		return 1
+	}
+	if code := finishVaultMutation(ctx, client, found, httpserver.VaultVerifyPath, payload, "", stderr, io.Discard); code != 0 {
+		return code
 	}
 	fmt.Fprintln(stderr, "Enter at least 4 characters, or press Enter without typing a new password to use a passwordless vault. Leave the confirmation blank too.")
 	next, err := promptVaultPassword(ctx, stdin, stderr, terminal, "New master password: ")
@@ -234,7 +256,7 @@ func runVaultChange(
 		fmt.Fprintln(stderr, "sshc: password confirmation did not match")
 		return 1
 	}
-	payload, err := vaultChangePayload(current, next)
+	payload, err = vaultChangePayload(current, next)
 	if err != nil {
 		fmt.Fprintln(stderr, "sshc: a password could not be encoded safely")
 		return 1
@@ -347,8 +369,14 @@ func finishVaultMutation(
 		return 0
 	}
 	switch response.StatusCode {
+	case http.StatusNotFound:
+		if path == httpserver.VaultVerifyPath {
+			fmt.Fprintln(stderr, "sshc: the running engine does not support password verification; update and restart the engine, then try again")
+		} else {
+			fmt.Fprintln(stderr, "sshc: the vault operation failed")
+		}
 	case http.StatusUnauthorized:
-		if path == httpserver.VaultUnlockPath || path == httpserver.VaultChangePath {
+		if path == httpserver.VaultUnlockPath || path == httpserver.VaultChangePath || path == httpserver.VaultVerifyPath {
 			fmt.Fprintln(stderr, "sshc: the vault password or engine authentication was refused")
 		} else {
 			fmt.Fprintln(stderr, "sshc: engine authentication was refused")
@@ -366,8 +394,12 @@ func finishVaultMutation(
 }
 
 func writeUncertainVaultResult(path string, stderr io.Writer) {
+	if path == httpserver.VaultVerifyPath {
+		fmt.Fprintln(stderr, "sshc: current password verification did not complete; no password change was requested")
+		return
+	}
 	if path == httpserver.VaultChangePath {
-		fmt.Fprintln(stderr, "sshc: password change outcome is uncertain; the local password may already have changed. Run sshc vault lock (existing SSH sessions stay connected), then run sshc vault unlock with the new password first and the old password second.")
+		fmt.Fprintln(stderr, "sshc: password change outcome is uncertain; the local password may already have changed. Run sshc vault status first; if it reports passwordless, no password is required. Otherwise run sshc vault lock (existing SSH sessions stay connected), then run sshc vault unlock with the new password first and the old password second.")
 		return
 	}
 	fmt.Fprintln(stderr, "sshc: vault request outcome is uncertain; run sshc vault status to check the result")
@@ -398,6 +430,7 @@ func fetchVaultStatus(
 		Version         string        `json:"version"`
 		ProtocolVersion int           `json:"protocolVersion"`
 		Vault           *bool         `json:"vault"`
+		Passwordless    bool          `json:"passwordless"`
 		Unlocked        *bool         `json:"unlocked"`
 		Sessions        *int          `json:"sessions"`
 	}
@@ -411,7 +444,7 @@ func fetchVaultStatus(
 	}
 	return statusAnswer{
 		Owner: wire.Owner, Version: wire.Version, ProtocolVersion: wire.ProtocolVersion,
-		Vault: *wire.Vault, Unlocked: *wire.Unlocked, Sessions: *wire.Sessions,
+		Vault: *wire.Vault, Unlocked: *wire.Unlocked, Sessions: *wire.Sessions, Passwordless: wire.Passwordless,
 	}, nil
 }
 

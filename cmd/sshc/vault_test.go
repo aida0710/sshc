@@ -184,7 +184,7 @@ func TestRunVaultCreateChecksStateBeforePrompting(t *testing.T) {
 }
 
 func TestRunVaultRefusesPasswordActionsWithoutATerminalBeforeAnyRequest(t *testing.T) {
-	for _, action := range []string{"create", "unlock", "change-password"} {
+	for _, action := range []string{"create", "change-password"} {
 		t.Run(action, func(t *testing.T) {
 			requests := 0
 			server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { requests++ }))
@@ -207,6 +207,10 @@ func TestRunVaultConfirmationMismatchSendsNoMutation(t *testing.T) {
 		t.Run(action, func(t *testing.T) {
 			posts := 0
 			server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+				if request.URL.Path == httpserver.VaultVerifyPath {
+					response.WriteHeader(http.StatusNoContent)
+					return
+				}
 				if request.Method == http.MethodPost {
 					posts++
 				}
@@ -381,6 +385,9 @@ func (t *statusThenErrorTransport) RoundTrip(request *http.Request) (*http.Respo
 		}, nil
 	}
 	_, _ = io.ReadAll(request.Body)
+	if request.URL.Path == httpserver.VaultVerifyPath {
+		return &http.Response{StatusCode: http.StatusNoContent, Body: io.NopCloser(strings.NewReader("")), Header: make(http.Header)}, nil
+	}
 	return nil, t.error
 }
 
@@ -422,7 +429,7 @@ func TestRunVaultExplainsUncertainPasswordChangeAfterTimeoutOrCancel(t *testing.
 			code := runVault(context.Background(), "change-password", stateDir, &http.Client{Transport: transport},
 				vaultTestInput(t), &stdout, &stderr,
 				&fakePasswordTerminal{terminal: true, answers: [][]byte{current, next, confirmation}})
-			if code != test.wantCode || transport.requests != 2 {
+			if code != test.wantCode || transport.requests != 3 {
 				t.Fatalf("code=%d requests=%d stdout=%q stderr=%q", code, transport.requests, stdout.String(), stderr.String())
 			}
 			for _, phrase := range []string{
@@ -1076,4 +1083,79 @@ func allZero(value []byte) bool {
 		}
 	}
 	return true
+}
+
+func TestRunVaultVerifiesCurrentPasswordBeforeAskingForNewPassword(t *testing.T) {
+	for _, status := range []int{http.StatusUnauthorized, http.StatusNotFound, http.StatusNoContent} {
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			terminal := &fakePasswordTerminal{terminal: true, answers: [][]byte{[]byte("current"), []byte("1234"), []byte("1234")}}
+			var paths []string
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				paths = append(paths, r.URL.Path)
+				switch r.URL.Path {
+				case httpserver.VaultStatusPath:
+					io.WriteString(w, vaultStatusBody(handoff.OwnerEngine, true, true))
+				case httpserver.VaultVerifyPath:
+					if terminal.reads != 1 {
+						t.Errorf("verification after %d reads", terminal.reads)
+					}
+					w.WriteHeader(status)
+				case httpserver.VaultChangePath:
+					w.WriteHeader(http.StatusNoContent)
+				default:
+					t.Errorf("unexpected path %s", r.URL.Path)
+				}
+			}))
+			defer server.Close()
+			dir := t.TempDir()
+			writeVaultTestHandoff(t, dir, server.URL, handoff.OwnerEngine)
+			var out, diagnostic strings.Builder
+			code := runVault(context.Background(), "change-password", dir, server.Client(), vaultTestInput(t), &out, &diagnostic, terminal)
+			if status == http.StatusNoContent {
+				if code != 0 || terminal.reads != 3 || len(paths) != 3 {
+					t.Fatalf("code=%d reads=%d paths=%v: %s", code, terminal.reads, paths, diagnostic.String())
+				}
+			} else if code != 1 || terminal.reads != 1 || len(paths) != 2 || strings.Contains(diagnostic.String(), "New master password:") {
+				t.Fatalf("code=%d reads=%d paths=%v: %s", code, terminal.reads, paths, diagnostic.String())
+			}
+		})
+	}
+}
+
+func TestRunVaultPasswordlessActionsDoNotAskForCurrentPassword(t *testing.T) {
+	for _, action := range []string{"unlock", "lock", "change-password"} {
+		t.Run(action, func(t *testing.T) {
+			terminal := &fakePasswordTerminal{terminal: action == "change-password", answers: [][]byte{[]byte("1234"), []byte("1234")}}
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method == http.MethodGet {
+					body := strings.TrimSuffix(vaultStatusBody(handoff.OwnerEngine, true, false), "}") + `,"passwordless":true}`
+					io.WriteString(w, body)
+					return
+				}
+				var payload map[string]string
+				if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+					t.Error(err)
+				}
+				if payload["passphrase"] != "" || payload["current"] != "" {
+					t.Error("unexpected current password")
+				}
+				w.WriteHeader(http.StatusNoContent)
+			}))
+			defer server.Close()
+			dir := t.TempDir()
+			writeVaultTestHandoff(t, dir, server.URL, handoff.OwnerEngine)
+			var out, diagnostic strings.Builder
+			code := runVault(context.Background(), action, dir, server.Client(), vaultTestInput(t), &out, &diagnostic, terminal)
+			wantReads := 0
+			if action == "change-password" {
+				wantReads = 2
+			}
+			if code != 0 || terminal.reads != wantReads || strings.Contains(diagnostic.String(), "Current master password:") {
+				t.Fatalf("code=%d reads=%d: %s", code, terminal.reads, diagnostic.String())
+			}
+			if action == "lock" && !strings.Contains(out.String(), "remains unlocked") {
+				t.Fatalf("output=%s", out.String())
+			}
+		})
+	}
 }

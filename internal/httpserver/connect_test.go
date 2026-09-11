@@ -449,7 +449,7 @@ func TestCLIStatusIncludesOwner(t *testing.T) {
 	if err := json.Unmarshal(response.Body.Bytes(), &raw); err != nil {
 		t.Fatal(err)
 	}
-	if len(raw) != 6 {
+	if len(raw) != 7 {
 		t.Fatalf("status fields = %v, want exact CLIStatus shape", raw)
 	}
 }

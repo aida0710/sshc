@@ -196,7 +196,7 @@ export function QuickConnectBrowser({
             className={`${control} min-h-10 w-full md:min-h-0`}
           />
         </label>
-        <div className="[&_button]:min-h-10 md:[&_button]:min-h-0">
+        <div className="flex">
           <Segmented
             label={t("home.viewMode")}
             value={view}

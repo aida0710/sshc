@@ -181,7 +181,7 @@ func vaultState(t *testing.T, home string) string {
 	for _, line := range strings.Split(process.Stdout.String(), "\n") {
 		// 列で読む。表はラベルを右詰めの空白で揃えるので、表記の前後を
 		// そのまま切り出すと空白が付いてくる。
-		if fields := strings.Fields(line); len(fields) == 2 && fields[0] == "vault" {
+		if fields := strings.Fields(line); len(fields) >= 2 && fields[0] == "vault" {
 			return fields[1]
 		}
 	}
@@ -203,8 +203,6 @@ func TestPasswordlessVaultCanBeCreatedAndProtectedThroughATerminal(t *testing.T)
 		t.Fatalf("state = %q", state)
 	}
 	change := startOnTerminal(t, home, "vault", "change-password")
-	change.expect(t, "Current master password: ", 20*time.Second)
-	change.typeLine(t, "")
 	change.expect(t, "New master password: ", 20*time.Second)
 	change.typeLine(t, "1234")
 	change.expect(t, "Confirm new master password: ", 20*time.Second)
@@ -212,6 +210,10 @@ func TestPasswordlessVaultCanBeCreatedAndProtectedThroughATerminal(t *testing.T)
 	if code := change.wait(t, 30*time.Second); code != 0 {
 		t.Fatalf("change exit = %d", code)
 	}
+	if strings.Contains(change.output.String(), "Current master password:") {
+		t.Fatal("passwordless change asked for current password")
+	}
+
 	lock := start(t, home, "vault", "lock")
 	if code := lock.wait(t, 20*time.Second); code != 0 {
 		t.Fatalf("lock exit = %d", code)
@@ -221,5 +223,32 @@ func TestPasswordlessVaultCanBeCreatedAndProtectedThroughATerminal(t *testing.T)
 	unlock.typeLine(t, "1234")
 	if code := unlock.wait(t, 30*time.Second); code != 0 {
 		t.Fatalf("unlock exit = %d", code)
+	}
+
+	wrong := startOnTerminal(t, home, "vault", "change-password")
+	wrong.expect(t, "Current master password: ", 20*time.Second)
+	wrong.typeLine(t, "incorrect")
+	if code := wrong.wait(t, 30*time.Second); code != 1 || strings.Contains(wrong.output.String(), "New master password:") {
+		t.Fatalf("wrong current password was not rejected immediately: exit=%d", code)
+	}
+	remove := startOnTerminal(t, home, "vault", "change-password")
+	remove.expect(t, "Current master password: ", 20*time.Second)
+	remove.typeLine(t, "1234")
+	remove.expect(t, "New master password: ", 20*time.Second)
+	remove.typeLine(t, "")
+	remove.expect(t, "Confirm new master password: ", 20*time.Second)
+	remove.typeLine(t, "")
+	if code := remove.wait(t, 30*time.Second); code != 0 {
+		t.Fatalf("remove password exit=%d", code)
+	}
+	passwordlessLock := start(t, home, "vault", "lock")
+	if code := passwordlessLock.wait(t, 20*time.Second); code != 0 {
+		t.Fatalf("passwordless lock exit=%d", code)
+	}
+	if state := vaultState(t, home); state != "unlocked" {
+		t.Fatalf("passwordless vault locked: %s", state)
+	}
+	if !strings.Contains(passwordlessLock.Stdout.String(), "remains unlocked") {
+		t.Fatal("passwordless lock claimed to lock")
 	}
 }

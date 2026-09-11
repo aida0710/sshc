@@ -32,6 +32,8 @@ Vaultのマスターパスワードなどを対話入力すると、入力した
 
 `sshc service`はLinuxではsystemdユーザーサービス、macOSではlaunchdユーザーエージェントを管理します。`install`はHomebrewまたは`install.sh`で導入された安定パスを登録し、`disable`はsshcが作成した定義だけを削除します。`install`、`disable`、`update`は変更内容を表示してから確認を求めます。自動化で確認を省略する場合だけ`-y`または`--yes`を付けてください。
 
+`sshc vault change-password`は、現在のパスワードでEnterを押すと検証してから新しいパスワードを尋ねます。パスワードレスでは現在のパスワード入力を省きます。新しいパスワードと確認を両方空欄にすると、パスワード保護を外せます。パスワードレスに対する`sshc vault lock`は解錠状態を維持します。ロックを使う場合はマスターパスワードを設定してください。CLI更新後はエンジンも再起動して変更を反映してください。
+
 ## OTP
 
 ```sh
@@ -71,6 +73,8 @@ source <(sshc completion zsh)
 # fish
 sshc completion fish | source
 ```
+
+Linuxでは、システムのBash補完がHomebrewの補完ディレクトリを探さない場合があります。ファイル名しか出ないときは、現在のシェルで`source <(sshc completion bash)`を実行してください。同じ行を`~/.bashrc`に追加すれば、新しいシェルでも現在のコマンド定義を読み込みます。更新後も古い候補が残る場合は、現在のシェルでも読み込み直してください。
 
 `sshc info`では、エンジンを起動せずに、実際の接続時と同じ規則で`Include`、`Match`、`ProxyJump`、文字コードを読み、最終的に使われる値を確認できます。保存済みの認証情報、`SetEnv`の値、`ProxyCommand`の本文は表示されません。
 

@@ -112,6 +112,8 @@ func TestBashCompletionUsesLiveAliasesAndNestedValues(t *testing.T) {
 		{name: "ssh alias", words: []string{"sshc", "ssh", "b"}, want: "beta-prod"},
 		{name: "info alias", words: []string{"sshc", "info", "a"}, want: "alpha"},
 		{name: "terminal alias", words: []string{"sshc", "terminal", "create", "ssh", "b"}, want: "beta-prod"},
+		{name: "vault action", words: []string{"sshc", "vault", "ch"}, want: "change-password"},
+		{name: "vault help", words: []string{"sshc", "help", "vault", "un"}, want: "unlock"},
 		{name: "sync action", words: []string{"sshc", "sync", "p"}, want: "push"},
 		{name: "otp action", words: []string{"sshc", "otp", "e"}, want: "edit"},
 		{name: "sync auto value", words: []string{"sshc", "sync", "auto", "o"}, want: "on"},
