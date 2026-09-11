@@ -359,3 +359,19 @@ describe("SecretsPanel", () => {
   });
 
 });
+
+it("does not offer manual locking for a passwordless vault", async () => {
+  const api = buildApi({ passwordVault: vi.fn().mockResolvedValue({ exists: true, unlocked: true, passwordless: true, aliases: [], dedicatedKeyPassphrases: [] }) });
+  render(<SecretsPanel api={api} />);
+  await screen.findByText("office-vm");
+  expect(screen.queryByRole("button", { name: "Lock sshc" })).not.toBeInTheDocument();
+});
+
+it("does not show a lock screen when protection was removed before the lock request", async () => {
+  const api = buildApi({ lockVault: vi.fn().mockResolvedValue({ exists: true, unlocked: true, passwordless: true, aliases: [], dedicatedKeyPassphrases: [] }) });
+  const onLock = vi.fn();
+  render(<SecretsPanel api={api} onLock={onLock} />);
+  await userEvent.click(await screen.findByRole("button", { name: "Lock sshc" }));
+  await waitFor(() => expect(api.lockVault).toHaveBeenCalled());
+  expect(onLock).not.toHaveBeenCalled();
+});

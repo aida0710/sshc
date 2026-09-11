@@ -922,3 +922,28 @@ func TestResetUnsupportedVaultRequiresAnExplicitAcknowledgement(t *testing.T) {
 		}
 	}
 }
+
+func TestBrowserCannotManuallyLockPasswordlessVault(t *testing.T) {
+	engine, service := passwordEngine(t)
+	if err := service.Initialise(""); err != nil {
+		t.Fatal(err)
+	}
+	response := send(t, engine, http.MethodPost, "/api/v1/passwords/lock", `{}`, nil)
+	if response.Code != http.StatusOK || !service.Unlocked() {
+		t.Fatalf("lock status=%d unlocked=%v", response.Code, service.Unlocked())
+	}
+	var status api.PasswordVaultStatus
+	if err := json.Unmarshal(response.Body.Bytes(), &status); err != nil {
+		t.Fatal(err)
+	}
+	if !status.Unlocked || status.Passwordless == nil || !*status.Passwordless {
+		t.Fatal("response did not preserve passwordless state")
+	}
+	if err := service.ChangeMasterPassword("", testPassphrase); err != nil {
+		t.Fatal(err)
+	}
+	response = send(t, engine, http.MethodPost, "/api/v1/passwords/lock", `{}`, nil)
+	if response.Code != http.StatusOK || service.Unlocked() {
+		t.Fatal("password-protected vault did not lock")
+	}
+}

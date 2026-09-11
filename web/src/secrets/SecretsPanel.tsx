@@ -367,7 +367,10 @@ export function SecretsPanel({
         title={selectedGroup === null ? t("secrets.heading") : t(selectedGroup.heading)}
         description={kind === undefined ? t("secrets.pageDescription") : t(kindDescriptions[kind])}
         actions={
-          <Button onClick={() => void api.lockVault().then(() => onLock?.())}>
+          status.passwordless ? null : <Button onClick={() => void api.lockVault().then((next) => {
+            setStatus(next);
+            if (!next.unlocked) onLock?.();
+          }).catch(() => setError(t("secrets.failed")))}>
             {t("secrets.lock")}
           </Button>
         }

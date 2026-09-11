@@ -992,7 +992,6 @@ export const en = {
   "lock.withoutPassword": "Use without a password",
   "lock.withoutPasswordHint": "Opens automatically when sshc starts. Protection of local data relies on your OS account and device security. Sync encryption stays enabled.",
   "lock.shortPasswordHint": "A short password offers limited protection if local files are copied. A longer, unpredictable password provides stronger protection.",
-  "secrets.currentOptional": "Leave the current password blank if this vault has no password.",
   "lock.password": "Master password",
   "lock.confirm": "Confirm master password",
   "lock.create": "Create the vault",
