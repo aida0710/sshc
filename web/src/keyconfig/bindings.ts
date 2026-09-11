@@ -40,7 +40,7 @@ function snapshot(): string {
   try { return window.localStorage.getItem(storageKey) ?? ""; } catch { return ""; }
 }
 
-export function parseBindings(raw: string): Bindings {
+export function parseBindings(raw: string, upgradeLegacy = true): Bindings {
   try {
     const value: unknown = JSON.parse(raw);
     if (value === null || typeof value !== "object") return defaultBindings;
@@ -50,7 +50,7 @@ export function parseBindings(raw: string): Bindings {
       if (Array.isArray(keys) && keys.length <= 3 && keys.every(validShortcut)) result[action] = [...new Set(keys)];
     }
     // Upgrade the old default without changing custom bindings or introducing conflicts.
-    if (result.paste.length === 2 && result.paste.includes("Ctrl+Shift+V") && result.paste.includes("Meta+V") &&
+    if (upgradeLegacy && result.paste.length === 2 && result.paste.includes("Ctrl+Shift+V") && result.paste.includes("Meta+V") &&
       !shortcutActions.some((action) => action !== "paste" && result[action].includes("Ctrl+V"))) {
       result.paste = defaultBindings.paste;
     }
@@ -60,7 +60,10 @@ export function parseBindings(raw: string): Bindings {
   } catch { return defaultBindings; }
 }
 
-export function loadBindings(): Bindings { return parseBindings(snapshot()); }
+function isLegacyStorage(): boolean {
+  try { return !window.localStorage.getItem("sshc.shortcuts.selected.v1"); } catch { return true; }
+}
+export function loadBindings(): Bindings { return parseBindings(snapshot(), isLegacyStorage()); }
 export function saveBindings(value: Bindings): void {
   window.localStorage.setItem(storageKey, JSON.stringify(value));
   window.dispatchEvent(new Event(changedEvent));
@@ -72,7 +75,7 @@ function subscribe(listener: () => void): () => void {
 }
 export function useBindings(): Bindings {
   const raw = useSyncExternalStore(subscribe, snapshot, () => "");
-  return useMemo(() => parseBindings(raw), [raw]);
+  return useMemo(() => parseBindings(raw, isLegacyStorage()), [raw]);
 }
 export function matchesShortcut(event: KeyboardEvent, action: ShortcutAction, bindings?: Bindings): boolean {
   const key = shortcutKey(event);

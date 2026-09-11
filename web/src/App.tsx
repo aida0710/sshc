@@ -1,3 +1,4 @@
+import { usePresetSync } from "./keyconfig/presets";
 import { matchesShortcut, shortcutKey, shortcutsBlocked, useBindings } from "./keyconfig/bindings";
 import {
   Suspense,
@@ -296,6 +297,7 @@ export function App({
     requestFailure,
     vaultMigration,
   } = session;
+  usePresetSync(state === "ready");
   const [fileTarget, setFileTarget] = useState<FileTarget | null>(null);
   const [sftpTarget, setSftpTarget] = useState<SFTPTarget | null>(null);
   const sftpTargetSequence = useRef(0);

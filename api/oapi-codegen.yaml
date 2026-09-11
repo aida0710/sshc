@@ -15,6 +15,7 @@ output-options:
   # TypeScript の生成はこの Go 専用設定を使わないので、ブラウザ側の契約型は
   # 引き続き生成される。
   exclude-operation-ids:
+    - setShortcutPresets
     - listTerminalBackgrounds
     - addTerminalBackground
     - getTerminalBackground
@@ -61,6 +62,7 @@ output-options:
   # 名前付き型の制約が失われるため、生成対象から除外する。OpenAPI との整合性は
   # internal/acceptance/contract_drift_test.go で検証する。
   exclude-schemas:
+    - ShortcutPreset
     - CreateConnectionResponse
     - BackgroundSettings
     - Effective

@@ -1260,6 +1260,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/metadata/shortcuts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["setShortcutPresets"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/metadata": {
         parameters: {
             query?: never;
@@ -3050,8 +3066,23 @@ export interface components {
             hidden?: boolean;
             settings?: components["schemas"]["Setting"][];
         };
+        ShortcutPreset: {
+            id: string;
+            name: string;
+            bindings: {
+                palette: string[];
+                terminalSearch: string[];
+                copy: string[];
+                paste: string[];
+                nextSession: string[];
+                previousSession: string[];
+                home: string[];
+                sftp: string[];
+            };
+        };
         Metadata: {
             schemaVersion: number;
+            shortcutPresets?: components["schemas"]["ShortcutPreset"][];
             groupsFile?: string;
             embeddedTerminal?: components["schemas"]["EmbeddedTerminal"];
             engine?: components["schemas"]["EngineSettings"];
@@ -6093,6 +6124,35 @@ export interface operations {
             404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
             422: components["responses"]["Problem"];
+        };
+    };
+    setShortcutPresets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    base: components["schemas"]["ShortcutPreset"][];
+                    presets: components["schemas"]["ShortcutPreset"][];
+                };
+            };
+        };
+        responses: {
+            /** @description Saved shortcut presets */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingsSaveResult"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
         };
     };
     getMetadata: {
