@@ -23,6 +23,43 @@ export type CellMetrics = {
 function surface(view: MeasurableTerminal): HTMLElement | null {
   return view.element?.querySelector<HTMLElement>(".xterm-screen") ?? null;
 }
+
+export function observeTerminalSize(
+  view: MeasurableTerminal,
+  host: HTMLElement,
+  onResize: () => void,
+): () => void {
+  const screen = surface(view);
+  const sizeKey = () => {
+    const hostBox = host.getBoundingClientRect();
+    const screenBox = screen?.getBoundingClientRect();
+    return [hostBox.width, hostBox.height, screenBox?.width, screenBox?.height].join(":");
+  };
+  let fittedSize = sizeKey();
+  let frame: number | null = null;
+  const observer = new ResizeObserver(() => {
+    if (frame !== null || sizeKey() === fittedSize) return;
+    // Fitting changes the screen itself. Wait for the next frame so observing
+    // its size cannot cause a ResizeObserver delivery loop.
+    frame = window.requestAnimationFrame(() => {
+      frame = null;
+      if (sizeKey() === fittedSize) return;
+      onResize();
+      // Ignore the size change caused by this fit. Fractional pixel rounding
+      // can otherwise make FitAddon alternate between two row counts forever.
+      fittedSize = sizeKey();
+    });
+  });
+  observer.observe(host);
+  // Renderer fallback, font loading and DPI changes can change the cell size
+  // without resizing the host. All rows must still fit in the visible pane.
+  if (screen !== null) observer.observe(screen);
+  return () => {
+    observer.disconnect();
+    if (frame !== null) window.cancelAnimationFrame(frame);
+  };
+}
+
 function perRow(height: number, rows: number): number {
   return rows <= 0 ? 0 : height / rows;
 }

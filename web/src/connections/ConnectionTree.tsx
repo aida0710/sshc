@@ -347,7 +347,7 @@ export function ConnectionTree({
     const active = selected?.path === host.identity.path && selected.alias === host.identity.alias;
     const descriptionId = `${descriptionIdPrefix}-connection-${item.projectionOrder}`;
     return (
-      <li key={item.projectionIdentity}>
+      <li key={item.projectionIdentity} className="border-b border-hairline last:border-b-0">
         <button
           type="button"
           aria-label={host.identity.alias}
@@ -386,7 +386,7 @@ export function ConnectionTree({
     const name = section.name === "" ? t("tree.ungrouped") : section.name;
     return (
       <section key={section.name || "ungrouped"} data-connection-group={section.name || "ungrouped"} aria-label={t("tree.groupSection", { name, count: section.items.length })}>
-        <header className="sticky top-0 z-[1] flex min-h-8 items-center gap-2 bg-page px-3 py-2 text-[0.68rem] text-ink-muted">
+        <header className="sticky top-0 z-[1] flex min-h-8 items-center gap-2 border-y border-line bg-tree px-3 py-2 text-[0.68rem] text-ink-muted">
           <Icon name="groups" className="size-3.5 shrink-0 text-ink-faint" />
           <h3 className="min-w-0 flex-1 truncate font-medium">{name}</h3>
           <span className="shrink-0 font-mono tabular-nums text-ink-faint">{section.items.length}</span>
@@ -398,7 +398,7 @@ export function ConnectionTree({
 
   return (
     <nav aria-label={t("tree.navLabel")} className="grid h-full min-h-0 grid-cols-1 grid-rows-[minmax(0,1fr)] lg:grid-cols-[9rem_minmax(0,1fr)] md:grid-rows-1">
-      <aside className="hidden min-h-0 flex-col bg-tree lg:flex">
+      <aside className="hidden min-h-0 flex-col border-r border-line bg-tree lg:flex">
         <p className="shrink-0 px-3 pb-1 pt-3 text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-ink-faint">
           {t("tree.byGroups")}
         </p>
@@ -407,8 +407,8 @@ export function ConnectionTree({
         </div>
       </aside>
 
-      <section className="flex min-h-0 flex-col bg-page" aria-label={t("tree.resultsLabel")}>
-        <header className="shrink-0 border-b border-line bg-page p-3">
+      <section className="flex min-h-0 flex-col bg-card" aria-label={t("tree.resultsLabel")}>
+        <header className="shrink-0 border-b border-line bg-card p-3">
           <label className="mb-2 flex min-w-0 items-center gap-2 lg:hidden">
             <span className="shrink-0 text-xs font-medium text-ink-muted">{t("tree.byGroups")}</span>
             <select

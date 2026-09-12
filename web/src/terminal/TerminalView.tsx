@@ -17,7 +17,7 @@ import { clipboard } from "../ui/clipboard";
 import { attachImeKeys } from "./imeKeys";
 import { attachSelectionOverlay, selectionHeldIn } from "./selectionOverlay";
 import { prefersNativeSelection } from "./nativeSelection";
-import { cellHeight, syncTerminalInputPosition } from "./metrics";
+import { cellHeight, observeTerminalSize, syncTerminalInputPosition } from "./metrics";
 import { newTouchScroll } from "./touchScroll";
 import { KeyBar, applyModifiers, encodeKey, type Modifiers } from "./KeyBar";
 import { openStream, type TerminalStream } from "./stream";
@@ -549,14 +549,13 @@ export function TerminalView({
       sendEnhancedKey: (sequence) => stream?.send(sequence),
     });
 
-    const observer = new ResizeObserver(measure);
-    observer.observe(container);
+    const stopObservingSize = observeTerminalSize(view, container, measure);
 
     return () => {
       live = false;
       terminalDisposed = true;
       clearInterval(timer);
-      observer.disconnect();
+      stopObservingSize();
       container.removeEventListener("touchstart", touchStart);
       container.removeEventListener("touchmove", touchMove);
       container.removeEventListener("touchend", touchEnd);
