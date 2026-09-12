@@ -23,6 +23,7 @@ export function SFTPHostPicker({
   hosts = noHosts,
   value,
   disabled = false,
+  compact = false,
   loadRecent = loadDefaultRecent,
   onChange,
 }: {
@@ -30,6 +31,7 @@ export function SFTPHostPicker({
   hosts?: HostEntry[];
   value: string;
   disabled?: boolean;
+  compact?: boolean;
   loadRecent?: () => Promise<{ connections: RecentConnection[] }>;
   onChange: (alias: string) => void;
 }) {
@@ -40,6 +42,7 @@ export function SFTPHostPicker({
   const [recent, setRecent] = useState<RecentConnection[]>([]);
   const search = useRef<HTMLInputElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
+  const closeButton = useRef<HTMLButtonElement>(null);
   const available = useMemo(() => hostChoices(aliases, hosts), [aliases, hosts]);
   const byAlias = useMemo(() => new Map(available.map((host) => [host.alias, host])), [available]);
   const normalized = query.trim().toLocaleLowerCase();
@@ -87,15 +90,14 @@ export function SFTPHostPicker({
 
   return (
     <>
-      <button ref={trigger} type="button" aria-label={t("sftp.host")} data-value={value} disabled={disabled || aliases.length === 0} onClick={() => setOpen(true)} className="flex min-h-9 min-w-36 items-center justify-between gap-2 rounded-md border border-control-line bg-control px-3 py-1.5 text-left text-sm disabled:text-ink-faint md:min-h-8 md:py-1">
-        <span className="truncate">{value || t(aliases.length === 0 ? "sftp.noHosts" : "sftp.chooseHost")}</span>
-        <Icon name="chevronRight" className="size-3 rotate-90 text-ink-muted" />
+      <button ref={trigger} type="button" aria-label={t("sftp.host")} data-value={value} disabled={disabled || aliases.length === 0} onClick={() => setOpen(true)} title={value || t("sftp.chooseHost")} className={compact ? "flex size-11 shrink-0 items-center justify-center rounded-md border border-control-line bg-control text-ink-muted active:bg-select-fill disabled:text-ink-faint" : "flex min-h-9 min-w-0 max-w-full items-center justify-between gap-2 rounded-md border border-control-line bg-control px-3 py-1.5 text-left text-sm disabled:text-ink-faint md:min-h-8 md:py-1"}>
+        {compact ? <Icon name="terminal" className="size-4" /> : <><span className="truncate">{value || t(aliases.length === 0 ? "sftp.noHosts" : "sftp.chooseHost")}</span><Icon name="chevronRight" className="size-3 rotate-90 text-ink-muted" /></>}
       </button>
-      <ModalShell open={open} labelledBy="sftp-host-picker-heading" onDismiss={() => setOpen(false)} closeOnOutside initialFocusRef={search} returnFocusRef={trigger} placement="palette" panelClassName="flex max-h-[76vh] w-full max-w-xl flex-col overflow-hidden rounded-xl">
+      <ModalShell open={open} labelledBy="sftp-host-picker-heading" onDismiss={() => setOpen(false)} closeOnOutside initialFocusRef={compact ? closeButton : search} returnFocusRef={trigger} placement="palette" panelClassName="flex max-h-[76vh] w-full max-w-xl flex-col overflow-hidden rounded-xl">
         <div className="border-b border-line p-3">
           <div className="mb-3 flex items-center justify-between gap-3">
             <h2 id="sftp-host-picker-heading" className="font-semibold">{t("sftp.chooseHostHeading")}</h2>
-            <button type="button" aria-label={t("sftp.closeHostPicker")} onClick={() => setOpen(false)} className="flex size-8 items-center justify-center rounded text-ink-muted hover:bg-select-fill">×</button>
+            <button ref={closeButton} type="button" aria-label={t("sftp.closeHostPicker")} onClick={() => setOpen(false)} className="flex size-8 items-center justify-center rounded text-ink-muted hover:bg-select-fill">×</button>
           </div>
           <label className="relative block">
             <span className="sr-only">{t("sftp.searchHosts")}</span>

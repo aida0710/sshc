@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { Overview } from "../api/config";
@@ -64,7 +64,7 @@ const sync = {
 } as SyncStatus;
 
 describe("OverviewPanel", () => {
-  it("places quick connect before the compact workspace summary", async () => {
+  it("puts the connection browser first and preserves attention and sync actions", async () => {
     render(
       <OverviewPanel
         loadOverview={vi.fn().mockResolvedValue(overview)}
@@ -76,20 +76,18 @@ describe("OverviewPanel", () => {
       />,
     );
 
-    const quickConnect = await screen.findByRole("heading", { name: "Quick connect" });
-    const pageHeading = screen.getByRole("heading", { name: "Your connections" });
-    const metrics = screen.getByRole("group", { name: "Connections, Groups, Needs attention" });
-    expect(pageHeading.parentElement?.querySelector("p")).toBeNull();
-    expect(quickConnect.compareDocumentPosition(metrics) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
-    expect(within(metrics).getByText("2")).toBeInTheDocument();
-    expect(within(metrics).getAllByText("1")).toHaveLength(2);
-    expect(screen.getByText("Recently used hosts stay first; unused hosts follow in name order.")).toBeInTheDocument();
-    expect(document.querySelector('[data-sshc-brand-mark="true"]')).not.toBeNull();
-    expect(screen.queryByText(">_")).toBeNull();
+    const browser = await screen.findByRole("region", { name: "Quick connect" });
+    await within(browser).findByRole("searchbox", { name: "Search connections" });
+    expect(screen.getByRole("heading", { name: "Your connections" })).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "Quick connect" })).not.toBeInTheDocument();
+    const attention = screen.getByRole("region", { name: "Needs attention" });
+    expect(browser.compareDocumentPosition(attention) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+    expect(within(attention).getByRole("button", { name: "Review configuration" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Open sync" })).toBeEnabled();
   });
 
   it("puts recent connections first, searches groups and launches only from the explicit action", async () => {
-    const launch = vi.fn().mockResolvedValue({ launched: true });
+    const launch = vi.fn().mockResolvedValue({ session: { id: "session-1" } });
     render(
       <OverviewPanel
         loadOverview={vi.fn().mockResolvedValue(overview)}
@@ -125,8 +123,40 @@ describe("OverviewPanel", () => {
     expect(card).not.toBeNull();
     await userEvent.click(within(card as HTMLElement).getByRole("button", { name: "Actions for database" }));
     expect(launch).not.toHaveBeenCalled();
-    await userEvent.click(within(card as HTMLElement).getByRole("menuitem", { name: "Connect" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Connect" }));
     await waitFor(() => expect(launch).toHaveBeenCalledWith("database"));
+  });
+
+  it("opens once from the focused card and reports readiness after the pending state", async () => {
+    let finish!: (value: { session: { id: string } }) => void;
+    const launch = vi.fn(() => new Promise<{ session: { id: string } }>((resolve) => { finish = resolve; }));
+    const opened = vi.fn();
+    render(
+      <OverviewPanel
+        loadOverview={vi.fn().mockResolvedValue(overview)}
+        loadSync={vi.fn().mockResolvedValue(sync)}
+        loadRecent={vi.fn().mockResolvedValue({ connections: [] })}
+        loadWorkspaces={vi.fn().mockResolvedValue([])}
+        launch={launch}
+        onNavigate={vi.fn()}
+        onNavigateLocation={vi.fn()}
+        onConsoleOpened={opened}
+      />,
+    );
+
+    const card = await screen.findByRole("button", { name: /^Connect to database\./ });
+    card.focus();
+    await userEvent.keyboard("{Enter}");
+    expect(screen.getByRole("button", { name: "Opening database…" })).toBeDisabled();
+    const another = screen.getByRole("button", { name: /^Connect to bastion\./ });
+    await userEvent.click(another);
+    expect(launch).toHaveBeenCalledExactlyOnceWith("database");
+    expect(opened).not.toHaveBeenCalled();
+
+    await act(async () => finish({ session: { id: "session-1" } }));
+    expect(opened).toHaveBeenCalledExactlyOnceWith("session-1");
+    expect(another).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "Opening database…" })).not.toBeInTheDocument();
   });
 
   it("opens the exact connection settings URL without launching", async () => {
@@ -147,7 +177,7 @@ describe("OverviewPanel", () => {
     const card = database.closest("li");
     expect(card).not.toBeNull();
     await userEvent.click(within(card as HTMLElement).getByRole("button", { name: "Actions for database" }));
-    await userEvent.click(within(card as HTMLElement).getByRole("menuitem", { name: "Open connection settings" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Open connection settings" }));
 
     expect(navigateLocation).toHaveBeenCalledWith(
       "/connections/servers?path=connections%2Fwork.conf&host=database&panel=basic",
@@ -174,6 +204,24 @@ describe("OverviewPanel", () => {
     expect(navigate).toHaveBeenCalledWith("Config");
     expect(screen.queryByRole("button", { name: "Open diagnostics" })).not.toBeInTheDocument();
     expect(loadOverview).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps sync accessible without showing an empty attention section", async () => {
+    const navigate = vi.fn();
+    render(
+      <OverviewPanel
+        loadOverview={vi.fn().mockResolvedValue({ ...overview, diagnostics: [] })}
+        loadSync={vi.fn().mockResolvedValue({ ...sync, configured: false })}
+        loadRecent={vi.fn().mockResolvedValue({ connections: [] })}
+        loadWorkspaces={vi.fn().mockResolvedValue([])}
+        onNavigate={navigate}
+        onNavigateLocation={vi.fn()}
+      />,
+    );
+    await screen.findByText("database");
+    expect(screen.queryByRole("region", { name: "Needs attention" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Open sync" }));
+    expect(navigate).toHaveBeenCalledWith("Sync");
   });
 
   it("routes an interrupted write to History without showing a configuration action", async () => {
@@ -235,7 +283,7 @@ describe("OverviewPanel", () => {
     expect(card).toHaveTextContent("work");
     expect(card).toHaveTextContent("Last connected");
     await userEvent.click(within(card as HTMLElement).getByRole("button", { name: "Actions for database" }));
-    await userEvent.click(within(card as HTMLElement).getByRole("menuitem", { name: "Connect" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Connect" }));
     await waitFor(() => expect(launch).toHaveBeenCalledWith("database"));
   });
 

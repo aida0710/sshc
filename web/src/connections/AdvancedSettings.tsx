@@ -187,7 +187,7 @@ export function AdvancedSettings({
             tabIndex={area === tab.area ? 0 : -1}
             onClick={() => onAreaChange(tab.area)}
             onKeyDown={(event) => activateTabFromKeyboard(event, index, tabAreas, onAreaChange)}
-            className={`min-h-10 border-b-2 px-5 py-2 text-sm transition-colors ${area === tab.area ? "border-accent font-medium text-ink" : "border-transparent text-ink-muted hover:bg-select-fill/50 hover:text-ink"}`}
+            className={`min-h-10 border-b-2 px-5 py-2 text-sm transition-colors ${area === tab.area ? "border-accent bg-select-fill font-semibold text-accent" : "border-transparent text-ink-muted hover:bg-hover hover:text-ink"}`}
           >
             {t(tab.label)}
           </button>

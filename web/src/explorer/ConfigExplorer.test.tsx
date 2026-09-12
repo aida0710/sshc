@@ -51,6 +51,29 @@ beforeEach(() => {
 });
 
 describe("ConfigExplorer", () => {
+  it("collapses the mobile hierarchy immediately and reports the pending file load", async () => {
+    const user = userEvent.setup();
+    let complete: (() => void) | undefined;
+    render(<ConfigExplorer />);
+    await screen.findByLabelText(/File text.*config/);
+    const hierarchy = screen.getByRole("button", { name: "Include hierarchy" });
+    expect(hierarchy).toHaveAttribute("aria-expanded", "false");
+    await user.click(hierarchy);
+    expect(hierarchy).toHaveAttribute("aria-expanded", "true");
+    vi.mocked(configApi.file).mockImplementationOnce((path) => new Promise((resolve) => {
+      complete = () => resolve({
+        file: { path, absolute: `/home/tester/.ssh/${path}` },
+        contents: "Host next\n", digest: "next", editable: true, exists: true,
+      } as never);
+    }));
+    await user.click(screen.getByRole("button", { name: "conf.d/10-home.conf" }));
+    expect(hierarchy).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByRole("status")).toHaveAttribute("aria-busy", "true");
+    expect(screen.queryByLabelText(/File text/)).not.toBeInTheDocument();
+    complete?.();
+    expect(await screen.findByLabelText(/File text.*conf\.d/)).toHaveValue("Host next\n");
+  });
+
   it("opens the entry file by default instead of leaving the editor empty", async () => {
     render(<ConfigExplorer />);
 

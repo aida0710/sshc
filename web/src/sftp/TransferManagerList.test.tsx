@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { mobileViewportQuery } from "../ui/useMediaQuery";
 import { TransferManagerList } from "./TransferManagerList";
 
 type Job = {
@@ -197,41 +198,38 @@ describe("the transfer queue", () => {
     expect(screen.queryByRole("separator")).not.toBeInTheDocument();
   });
 
-  it("shows a touch-sized grip and snaps mobile resizing without changing the desktop height", () => {
+  it("opens mobile transfers in a dismissible sheet without restoring the expanded desktop queue", async () => {
     const originalMatchMedia = window.matchMedia;
-    const originalInnerHeight = window.innerHeight;
     window.matchMedia = vi.fn().mockImplementation((query: string) => ({
-      matches: query === "(max-width: 767px)",
-      media: query,
-      onchange: null,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      addListener: vi.fn(),
-      removeListener: vi.fn(),
-      dispatchEvent: vi.fn(),
+      matches: query === mobileViewportQuery, media: query,
+      addEventListener: vi.fn(), removeEventListener: vi.fn(),
     })) as unknown as typeof window.matchMedia;
-    Object.defineProperty(window, "innerHeight", { configurable: true, value: 640 });
     manager.setJobs([job("one")]);
-
-    const { unmount } = render(<TransferManagerList />);
+    const { container, unmount } = render(<TransferManagerList />);
     try {
-      const handle = screen.getByRole("separator", { name: "Drag to resize the transfer queue" });
-      expect(handle).toHaveClass("h-6", "touch-none");
-      expect(handle.querySelector("span")).toHaveClass("w-10", "rounded-full");
-
-      fireEvent.pointerDown(handle, { clientY: 400 });
-      fireEvent.pointerMove(window, { clientY: 300 });
-      fireEvent.pointerUp(window);
-
-      expect(handle).toHaveAttribute("aria-valuenow", "360");
-      expect(JSON.parse(window.localStorage.getItem("sshc.sftp.queueView") ?? "{}")).toMatchObject({
-        height: 224,
-        mobileHeight: 360,
-      });
+      const dock = screen.getByRole("button", { name: "Expand Transfer Manager" });
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      expect(screen.queryByText("one")).not.toBeInTheDocument();
+      await userEvent.click(dock);
+      expect(screen.getByRole("dialog", { name: "Transfer Manager" })).toBeVisible();
+      expect(screen.getByText("one")).toBeVisible();
+      expect(container.querySelector('[role="dialog"]')).toBeNull();
+      expect(screen.queryByRole("separator")).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Close Transfer Manager" })).toHaveFocus();
+      expect(screen.getByLabelText("Split at")).not.toBeVisible();
+      await userEvent.click(screen.getByText("Transfer settings"));
+      expect(screen.getByRole("spinbutton", { name: "Split at" })).toBeVisible();
+      await userEvent.click(screen.getByRole("button", { name: "Transfer queue actions" }));
+      expect(screen.getByRole("dialog", { name: "Transfer Manager" })).toBeVisible();
+      await userEvent.click(screen.getByRole("menuitem", { name: "Pause all" }));
+      expect(manager.pauseAll).toHaveBeenCalledOnce();
+      expect(screen.getByRole("dialog", { name: "Transfer Manager" })).toBeVisible();
+      await userEvent.keyboard("{Escape}");
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      expect(dock).toHaveFocus();
+      expect(JSON.parse(window.localStorage.getItem("sshc.sftp.queueView") ?? "{}")).toMatchObject({ collapsed: false, height: 224 });
     } finally {
-      unmount();
-      window.matchMedia = originalMatchMedia;
-      Object.defineProperty(window, "innerHeight", { configurable: true, value: originalInnerHeight });
+      unmount(); window.matchMedia = originalMatchMedia;
     }
   });
 

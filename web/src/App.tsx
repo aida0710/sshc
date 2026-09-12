@@ -30,7 +30,7 @@ import { LockScreen } from "./secrets/LockScreen";
 import { OverviewPanel } from "./overview/OverviewPanel";
 import { useLanguage } from "./i18n/context";
 import { secondaryAction } from "./ui/form";
-import { IconSprite, type IconName } from "./ui/icons";
+import { Icon, IconSprite, type IconName } from "./ui/icons";
 import { InspectorPane, InspectorToggle, type InspectorContent } from "./ui/Inspector";
 import { useTheme } from "./theme/context";
 import type { MessageKey } from "./i18n/messages";
@@ -78,7 +78,8 @@ import type { SFTPTarget } from "./sftp/SFTPPanel";
 import { useAppSession } from "./session/useAppSession";
 import { useTerminalWorkspaceController } from "./terminal/useTerminalWorkspaceController";
 import { useDismissibleLayer } from "./ui/useDismissibleLayer";
-import { useMediaQuery } from "./ui/useMediaQuery";
+import { mobileViewportQuery, useMediaQuery } from "./ui/useMediaQuery";
+import { useAppViewport } from "./ui/useAppViewport";
 import {
   parseSettingsPage,
   settingsPageMeta,
@@ -281,6 +282,8 @@ export function App({
   vault = integrationsApi.passwordVault,
 }: AppProps) {
   const { t } = useLanguage();
+  useAppViewport();
+  const mobileLayout = useMediaQuery(mobileViewportQuery);
   const shortcuts = useBindings();
   const { resolved: resolvedTheme } = useTheme();
   const { route, location, navigate, navigateLocation, setNavigationBlocker } =
@@ -345,6 +348,7 @@ export function App({
     containerRefs: [navigationPanelRef, navigationTriggerRef],
     onDismiss: () => setNavigationOpen(false),
     returnFocusRef: navigationTriggerRef,
+    trapFocus: mobileLayout,
   });
   useDismissibleLayer({
     open: inspectorOpen && inspector !== null && inspectorIsOverlay,
@@ -685,7 +689,7 @@ export function App({
   }
 
   return (
-    <div className="flex h-screen flex-col bg-canvas text-ink">
+    <div className="sshc-app flex h-screen flex-col bg-canvas text-ink" data-mobile={mobileLayout}>
       <IconSprite />
       <div
         className="contents"
@@ -719,7 +723,7 @@ export function App({
               "--navigation-width": `${desktopNavigationWidth}px`,
             } as CSSProperties
           }
-          className={`grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)] md:grid-cols-[var(--navigation-width)_minmax(0,1fr)] ${
+          className={`sshc-app-layout grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)] md:grid-cols-[var(--navigation-width)_minmax(0,1fr)] ${
             inspector !== null && inspectorOpen
               ? "lg:grid-cols-[var(--navigation-width)_minmax(0,1fr)_17rem]"
               : ""
@@ -730,7 +734,7 @@ export function App({
               aria-hidden="true"
               data-navigation-backdrop
               onClick={() => setNavigationOpen(false)}
-              className="fixed inset-0 z-20 bg-canvas/70 md:hidden"
+              className="sshc-navigation-backdrop fixed inset-0 z-20 bg-canvas/70 md:hidden"
             />
           ) : null}
           <AppNavigation
@@ -739,6 +743,7 @@ export function App({
             version={version}
             state={state}
             navigationOpen={navigationOpen}
+            mobileLayout={mobileLayout}
             desktopWidth={desktopNavigationWidth}
             onDesktopWidthChange={resizeDesktopNavigation}
             startSections={startSections}
@@ -960,6 +965,26 @@ export function App({
             </InspectorPane>
           ) : null}
         </div>
+        {state === "ready" && mobileLayout ? (
+          <nav aria-label={t("shell.mobileNavigation")} className="sshc-mobile-navigation grid shrink-0 grid-cols-5 border-t border-line bg-toolbar">
+            {(["Home", "Connections", "Files", "Terminal", "Menu"] as const).map((name) => (
+              <a
+                key={name}
+                href={sectionPath(name)}
+                aria-current={section === name ? "page" : undefined}
+                onClick={(event) => {
+                  setNavigationOpen(false);
+                  followSectionLink(event, name);
+                }}
+                className={`relative flex min-h-13 min-w-0 flex-col items-center justify-center gap-0.5 px-1 py-1 text-[10px] transition-colors ${section === name ? "bg-select-fill font-semibold text-accent" : "text-ink-muted active:bg-hover"}`}
+              >
+                {section === name ? <span aria-hidden="true" className="absolute inset-x-4 top-0 h-0.5 rounded-full bg-accent" /> : null}
+                <Icon name={sectionIcons[name]} className="size-5" />
+                <span className="max-w-full truncate">{t(sectionLabels[name])}</span>
+              </a>
+            ))}
+          </nav>
+        ) : null}
         {state === "ready" ? <TransferNotifications /> : null}
         {state === "ready" ? (
           <CommandPalette
@@ -1052,7 +1077,7 @@ function SectionView(props: SectionViewProps) {
   }
   return (
     <div className={props.section === "Files"
-      ? "h-full overflow-y-auto px-4 pb-4 md:px-5 md:pb-5"
+      ? "h-full overflow-hidden px-2 pb-2 md:px-5 md:pb-5"
       : "h-full overflow-y-auto p-4 md:p-5"}
     >
       {<PaddedSection {...props} />}

@@ -146,7 +146,7 @@ describe("SecretsPanel", () => {
 
     const dedicated = await screen.findByRole("article", { name: "keys/id_owned" });
     await user.click(within(dedicated).getByRole("button", { name: "Actions for keys/id_owned" }));
-    await user.click(within(dedicated).getByRole("menuitem", { name: "Remove saved passphrase for keys/id_owned" }));
+    await user.click(screen.getByRole("menuitem", { name: "Remove saved passphrase for keys/id_owned" }));
 
     await waitFor(() =>
       expect(api.unassignCredential).toHaveBeenCalledWith("key_passphrase", "keys/id_owned"),
@@ -294,7 +294,7 @@ describe("SecretsPanel", () => {
 
     const passwords = await screen.findByRole("region", { name: "Account passwords" });
     await user.click(within(passwords).getByRole("button", { name: "Actions for office-vm" }));
-    await user.click(within(passwords).getByRole("menuitem", { name: "Edit office-vm" }));
+    await user.click(screen.getByRole("menuitem", { name: "Edit office-vm" }));
 
     const dialog = await screen.findByRole("dialog", { name: "Edit account password" });
     const name = within(dialog).getByLabelText("Name");
@@ -324,7 +324,7 @@ describe("SecretsPanel", () => {
 
     const phrases = await screen.findByRole("region", { name: "Key passphrases" });
     await user.click(within(phrases).getByRole("button", { name: "Actions for build-key" }));
-    await user.click(within(phrases).getByRole("menuitem", { name: "Edit build-key" }));
+    await user.click(screen.getByRole("menuitem", { name: "Edit build-key" }));
 
     const dialog = await screen.findByRole("dialog", { name: "Edit key passphrase" });
     expect(within(dialog).getByLabelText("Name")).toHaveValue("build-key");
@@ -341,7 +341,7 @@ describe("SecretsPanel", () => {
     const passwords = await screen.findByRole("region", { name: "Account passwords" });
 
     await user.click(within(passwords).getByRole("button", { name: "Actions for office-vm" }));
-    await user.click(within(passwords).getByRole("menuitem", { name: "Delete office-vm" }));
+    await user.click(screen.getByRole("menuitem", { name: "Delete office-vm" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/still assigned/i);
   });

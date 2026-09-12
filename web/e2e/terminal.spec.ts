@@ -772,14 +772,17 @@ test("wears the image that was brought in, and gets out of its way", async ({ pa
   });
 
   const settings = await openLoadedTerminalSettings(page);
-  await settings.locator('input[type="file"]').setInputFiles({
+  await settings.getByRole("button", { name: "Change", exact: true }).click();
+  const library = page.getByRole("dialog", { name: "Background image library" });
+  await library.locator('input[type="file"]').setInputFiles({
     name: "Canary Wall.png",
     mimeType: "image/png",
     buffer: Buffer.from(encoded.split(",")[1] ?? "", "base64"),
   });
-  const thumbnail = settings.getByRole("img", { name: "canary-wall.png" });
+  const thumbnail = library.getByRole("img", { name: "canary-wall.png" });
   await expect(thumbnail).toBeVisible();
   await expect.poll(async () => thumbnail.evaluate((node) => (node as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
+  await library.getByRole("button", { name: "Use this image", exact: true }).click();
   await saveTerminalSettings(page, settings);
 
   await reopenFirstConsole(panel);
@@ -792,7 +795,7 @@ test("wears the image that was brought in, and gets out of its way", async ({ pa
   expect(wiring.viewport).toBe("rgba(0, 0, 0, 0)");
 
   const cleared = await openLoadedTerminalSettings(page);
-  await cleared.getByLabel("Background image").selectOption("");
+  await cleared.getByRole("button", { name: "Clear", exact: true }).click();
   const saved = await saveTerminalSettings(page, cleared);
   expect(saved.request().postDataJSON()).not.toHaveProperty("appearance");
   await expect(cleared).toContainText("Saved");

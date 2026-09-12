@@ -2,7 +2,7 @@
   "go.mod": "4e65c7e12ca000d60262dd14df5006cc7f38b5166d6924db30bda40c25e0af36",
   "go.sum": "6c853b7476aea0872ee3101ebbadd7b11f65d5d704b4e178933671193d06a15f",
   "web/package-lock.json": "cc3973a4db8e399354f80514e74ba38382f3876efe5cf2f3d53c16ab3afdfd78",
-  "android/app/build.gradle.kts": "e325ea7d63cac40a8eed2b13b4117f8a24dc9da730f2776c9364defa8d0c2e93",
+  "android/app/build.gradle.kts": "743266cee39952e977a899a44021a750d09b58d166d4e9d1fa4db15879918679",
   "LICENSE": "2175ad85766892504697fa1d2e92ab5c9515ae39a852798c0d9b377b600eb581",
   "web/public/fonts/OFL.txt": "30f0c136e3c88e422d0791acd97238870f9054a9729bc34cf2ff0d4ed8cac4ad",
   "web/src/ui/os-icons/LICENSE": "121194741d4a915b9f5890fdd6dd95121f9b1f816517c792358d72d7c838d664",

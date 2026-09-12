@@ -1,6 +1,7 @@
 import { useTranslate } from "../i18n/context";
-import { Button, Card } from "../ui/surface";
+import { Button } from "../ui/surface";
 import { Icon } from "../ui/icons";
+import { OperatingSystemIcon } from "../ui/OperatingSystemIcon";
 import { summarizeConnection, type ConnectionSavedState } from "./connectionSavedState";
 
 type ConnectionSummaryProps = {
@@ -31,7 +32,8 @@ export function ConnectionSummary({
   const passwordConflict = explicitKey && (
     summary.accountPassword.state === "dedicated" || summary.accountPassword.state === "named"
   );
-  const accountPasswordVisible = !explicitKey || passwordConflict;
+  const showPassphrase = explicitKey && summary.keyPassphrase.state !== "not_needed";
+  const showAccountPassword = !explicitKey && summary.accountPassword.state !== "none";
   const reasonID = `connection-actions-${encodeURIComponent(summary.alias)}`;
 
   function privateKeyText() {
@@ -66,75 +68,43 @@ export function ConnectionSummary({
   }
 
   return (
-    <Card as="section" data-connection-summary aria-labelledby="connection-summary-heading" radius="md" className="shrink-0">
-      <header className="px-4 py-4 sm:px-5 sm:py-5">
-        <div className="flex min-w-0 items-start gap-3">
-          <span aria-hidden="true" className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-lg bg-select-fill text-accent">
-            <Icon name="terminal" className="size-5" />
-          </span>
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-ink-faint">{t("conn.summarySaved")}</p>
-              <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${dirty ? "bg-notice text-notice-ink" : "bg-select-fill text-ink-muted"}`}>
-                {dirty ? t("conn.summaryUnsaved") : t("conn.summarySavedState")}
-              </span>
-            </div>
-            <h2 id="connection-summary-heading" className="truncate text-2xl font-semibold tracking-tight text-ink">
-              {summary.alias}
-            </h2>
-            <p className="mt-1 break-all font-mono text-sm text-ink-muted">{summary.endpoint}</p>
+    <section data-connection-summary aria-labelledby="connection-summary-heading" className="shrink-0 border-b border-line pb-4">
+      <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <OperatingSystemIcon os={state.detail.metadata.os || state.detail.metadata.detectedOS} compact />
+            <h2 id="connection-summary-heading" className="min-w-0 truncate text-xl font-semibold tracking-tight text-ink sm:text-2xl">{summary.alias}</h2>
+            {dirty ? <span className="rounded bg-notice px-2 py-1 text-xs font-medium text-notice-ink">{t("conn.summaryUnsaved")}</span> : null}
           </div>
+          <p className="mt-1 break-all font-mono text-sm text-ink-muted">{summary.endpoint}</p>
+          {summary.group === "" ? null : <p className="mt-1 flex items-center gap-1.5 text-xs text-ink-muted"><Icon name="groups" className="size-3.5" /><span className="sr-only">{t("conn.summaryGroup")}: </span>{summary.group}</p>}
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <Button kind="primary" disabled={blocked || connecting || !connectAvailable} aria-describedby={blocked ? reasonID : undefined} onClick={onConnect} className="inline-flex items-center gap-2">
+            <Icon name="terminal" className="size-4" />
+            {connecting ? t("conn.opening") : t("conn.connect")}
+          </Button>
+          <Button aria-label={t("conn.manage")} title={t("conn.manage")} aria-expanded={managing} onClick={onToggleManage} className={`flex size-9 items-center justify-center px-2 ${managing ? "border-accent bg-select-fill text-accent" : ""}`}>
+            <Icon name="moreHorizontal" className="size-4" />
+          </Button>
         </div>
       </header>
-
-      <dl
-        className={`grid gap-px border-y border-line bg-line ${
-          accountPasswordVisible ? "grid-cols-2 2xl:grid-cols-4" : "grid-cols-2 md:grid-cols-3"
-        }`}
-      >
-        <div className="min-w-0 bg-card px-4 py-3">
-          <dt className="text-[0.68rem] font-semibold uppercase tracking-wide text-ink-faint">{t("conn.summaryGroup")}</dt>
-          <dd className="mt-1 truncate text-sm text-ink">{summary.group || t("conn.summaryNoGroup")}</dd>
+      <dl className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-xs text-ink-muted">
+        <div className="min-w-0">
+          <dt className={explicitKey ? "mb-0.5 font-medium text-ink-muted" : "sr-only"}>{t("conn.summaryPrivateKey")}</dt>
+          <dd className="break-all">{privateKeyText()}</dd>
         </div>
-        <div className="min-w-0 bg-card px-4 py-3">
-          <dt className="text-[0.68rem] font-semibold uppercase tracking-wide text-ink-faint">{t("conn.summaryPrivateKey")}</dt>
-          <dd className="mt-1 break-words text-sm text-ink">{privateKeyText()}</dd>
-        </div>
-        <div className={`min-w-0 bg-card px-4 py-3 ${accountPasswordVisible ? "" : "col-span-2 md:col-span-1"}`}>
-          <dt className="text-[0.68rem] font-semibold uppercase tracking-wide text-ink-faint">{t("conn.summaryKeyPassphrase")}</dt>
-          <dd className="mt-1 text-sm text-ink">{keyPassphraseText()}</dd>
-        </div>
-        {!explicitKey ? (
-          <div className="min-w-0 bg-card px-4 py-3">
-            <dt className="text-[0.68rem] font-semibold uppercase tracking-wide text-ink-faint">{t("conn.summaryAccountPassword")}</dt>
-            <dd className="mt-1 text-sm text-ink">{accountPasswordText()}</dd>
-          </div>
-        ) : passwordConflict ? (
-          <div className="min-w-0 bg-notice px-4 py-3">
-            <dt className="text-[0.68rem] font-semibold uppercase tracking-wide text-notice-ink">{t("conn.summaryAccountPassword")}</dt>
-            <dd className="mt-1 text-sm text-notice-ink">{t("conn.summaryPasswordCleanup")}</dd>
-          </div>
-        ) : null}
+        {showPassphrase ? <div className="min-w-0">
+          <dt className="mb-0.5 font-medium text-ink-muted">{t("conn.summaryKeyPassphrase")}</dt>
+          <dd>{keyPassphraseText()}</dd>
+        </div> : null}
+        {showAccountPassword ? <div className="min-w-0">
+          <dt className="mb-0.5 font-medium text-ink-muted">{t("conn.summaryAccountPassword")}</dt>
+          <dd>{accountPasswordText()}</dd>
+        </div> : null}
       </dl>
-
-      <div className="flex flex-wrap items-center gap-2 px-4 py-3">
-        <Button
-          kind="primary"
-          disabled={blocked || connecting || !connectAvailable}
-          aria-describedby={blocked ? reasonID : undefined}
-          onClick={onConnect}
-        >
-          {connecting ? t("conn.opening") : t("conn.connect")}
-        </Button>
-        <Button aria-expanded={managing} onClick={onToggleManage}>
-          {t("conn.manage")}
-        </Button>
-        {blocked ? (
-          <p id={reasonID} className="w-full text-xs text-notice-ink sm:ml-auto sm:w-auto">
-            {dirty ? t("conn.summaryDraftBlocksActions") : t("conn.summaryRefreshing")}
-          </p>
-        ) : null}
-      </div>
-    </Card>
+      {passwordConflict ? <p role="status" className="mt-3 rounded border border-notice-line bg-notice px-3 py-2 text-sm text-notice-ink">{t("conn.summaryPasswordCleanup")}</p> : null}
+      {blocked ? <p id={reasonID} className="mt-3 text-xs text-notice-ink">{dirty ? t("conn.summaryDraftBlocksActions") : t("conn.summaryRefreshing")}</p> : null}
+    </section>
   );
 }

@@ -82,7 +82,7 @@ export function MenuPanel({
                       href={item.href}
                       aria-label={t("menu.open", { section: label })}
                       onClick={(event) => follow(event, item.href)}
-                      className="group flex min-h-14 items-center gap-3 px-3 py-2.5 transition-colors hover:bg-select-fill"
+                      className="group flex min-h-14 items-center gap-3 px-3 py-2.5 transition-colors hover:bg-hover"
                     >
                       <span className="grid size-8 shrink-0 place-items-center rounded bg-control text-ink-muted group-hover:text-ink">
                         <Icon name={item.icon} className="size-4" />
@@ -141,7 +141,7 @@ export function MenuPanel({
           <ul className="mt-2 overflow-hidden rounded border border-line bg-card">
             <li><a href={sectionPath("License")} onClick={(event) => follow(event, sectionPath("License"))}
               aria-label={t("menu.open", { section: t("section.license") })}
-              className="flex min-h-14 items-center gap-3 px-3 py-2.5 hover:bg-select-fill">
+              className="flex min-h-14 items-center gap-3 px-3 py-2.5 hover:bg-hover">
               <span className="grid size-8 shrink-0 place-items-center rounded bg-control text-ink-muted"><Icon name="inspector" className="size-4" /></span>
               <span className="flex-1 text-sm font-medium text-ink">{t("section.license")}</span>
               <Icon name="chevronRight" className="size-4 text-ink-faint" />

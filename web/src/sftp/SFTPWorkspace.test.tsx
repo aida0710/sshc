@@ -258,7 +258,7 @@ describe("SFTP tabs", () => {
       { alias: "miyabi", path: "/srv" },
     ]));
     window.matchMedia = vi.fn().mockImplementation((query: string) => ({
-      matches: query === "(max-width: 767px)",
+      matches: query.includes("(max-width: 767px)"),
       media: query,
       onchange: null,
       addEventListener: vi.fn(),

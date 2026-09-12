@@ -226,7 +226,7 @@ export function CommandPalette({
                 aria-selected={selected === index}
                 onMouseEnter={() => setSelected(index)}
                 onClick={() => void choose(item)}
-                className={`grid w-full grid-cols-[4.5rem_minmax(0,1fr)] items-center gap-x-3 rounded px-2.5 py-2 text-left text-sm ${item.host === undefined ? "" : "pr-12"} ${selected === index ? "bg-select-fill" : "hover:bg-select-fill"}`}
+                className={`grid w-full grid-cols-[4.5rem_minmax(0,1fr)] items-center gap-x-3 rounded px-2.5 py-2 text-left text-sm ${item.host === undefined ? "" : "pr-12"} ${selected === index ? "bg-select-fill" : "hover:bg-hover"}`}
               >
                 <span className="row-span-2 font-mono text-[10px] uppercase tracking-wide text-ink-faint">{t(`palette.kind.${item.kind}` as MessageKey)}</span>
                 <span className="truncate font-medium text-ink">{item.label}</span>
