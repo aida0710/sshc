@@ -35,6 +35,16 @@ const DefaultIgnoreDocument = `# OS metadata files
 
 # Lock files
 *.lock
+
+# ssh config
+authorized_keys
+authorized_keys2
+known_hosts
+known_hosts.old
+known_hosts2
+known_hosts2.old
+/environment
+/rc
 `
 
 var ErrInvalidIgnoreRules = errors.New("the synchronization exclusion rules are not valid")

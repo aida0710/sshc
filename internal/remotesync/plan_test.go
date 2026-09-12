@@ -142,20 +142,28 @@ func TestPlanWithIgnoreNeverWritesOrRemovesExcludedPaths(t *testing.T) {
 	base := manifestOf(
 		file("config", "old"),
 		file("cache/session.tmp", "old cache"),
+		file("known_hosts", "old trust"),
+		file("known_hosts.old", "older trust"),
 	)
 	local := map[string]string{
 		"config":            digestOf("old"),
 		"cache/session.tmp": digestOf("local cache"),
+		"known_hosts":       digestOf("local trust"),
+		"known_hosts.old":   digestOf("older trust"),
 	}
 	remote := manifestOf(
 		file("config", "new"),
 		file("cache/remote.tmp", "remote cache"),
+		file("known_hosts", "remote trust"),
+		file("authorized_keys", "remote allowed keys"),
 	)
 	contents := map[string][]byte{
 		"config":           []byte("new"),
 		"cache/remote.tmp": []byte("remote cache"),
+		"known_hosts":      []byte("remote trust"),
+		"authorized_keys":  []byte("remote allowed keys"),
 	}
-	rules, err := remotesync.CompileIgnoreRules([]byte("*.tmp\n"))
+	rules, err := remotesync.CompileIgnoreRules([]byte(remotesync.DefaultIgnoreDocument))
 	if err != nil {
 		t.Fatal(err)
 	}
