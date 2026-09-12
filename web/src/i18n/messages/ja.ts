@@ -1296,7 +1296,7 @@ export const ja = {
   "sync.exclusions.hint":
     "チェックを外したファイルは送信せず、受信時にも上書き・削除しません。ローカルにある内容はそのまま残ります。",
   "sync.exclusions.defaults":
-    "まだ .sshcignore はありません。OSの管理ファイル、バックアップ、一時ファイル、ロックファイルを除外する既定ルールが有効です。保存すると端末間で共有されます。",
+    "まだ .sshcignore はありません。OSの管理ファイル、バックアップ、一時ファイル、ロックファイル、authorized_keys、known_hosts、known_hosts.oldを除外する既定ルールが有効です。保存すると端末間で共有されます。",
   "sync.exclusions.search": "ファイル名・パスを検索",
   "sync.exclusions.empty": "一致するファイルはありません。",
   "sync.exclusions.sensitiveWarning":

@@ -8,7 +8,7 @@ import (
 	"sshc/internal/remotesync"
 )
 
-func TestDefaultIgnoreRulesCoverPortableNoise(t *testing.T) {
+func TestDefaultIgnoreRulesCoverPortableNoiseAndSSHState(t *testing.T) {
 	rules, err := remotesync.CompileIgnoreRules([]byte(remotesync.DefaultIgnoreDocument))
 	if err != nil {
 		t.Fatal(err)
@@ -16,13 +16,15 @@ func TestDefaultIgnoreRulesCoverPortableNoise(t *testing.T) {
 	for _, path := range []string{
 		".DS_Store", "connections/work/.DS_Store", "Thumbs.db",
 		"keys/group/desktop.ini", "config.bak", "nested/config.tmp", "edit.lock",
+		"authorized_keys", "known_hosts", "known_hosts.old",
+		"nested/authorized_keys", "nested/known_hosts", "nested/known_hosts.old",
 	} {
 		if !rules.Match(path) {
 			t.Errorf("default rules do not ignore %q", path)
 		}
 	}
 	for _, path := range []string{
-		"config", "known_hosts", "keys/work/id_ed25519", remotesync.IgnorePath,
+		"config", "known_hosts.custom", "authorized_keys.custom", "keys/work/id_ed25519", remotesync.IgnorePath,
 		remotesync.TravelPath, remotesync.SnippetsPath,
 	} {
 		if rules.Match(path) {

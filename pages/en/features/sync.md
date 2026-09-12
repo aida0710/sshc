@@ -49,16 +49,28 @@ When automatic sync is enabled, sshc polls the remote once a minute while the Va
 
 Use Files to sync on the Sync screen to search current files and include or exclude them. The advanced editor manages `.sshcignore` at the workspace root with Gitignore-like patterns. These are globs rather than regular expressions: use `*`, `**`, `?`, `!` to re-include a path, and a leading `/` to anchor a rule at the root.
 
-The initial rules exclude common OS metadata, backup files, temporary files, and lock files:
+The initial rules exclude common OS metadata, backup files, temporary files, lock files, and SSH authorized-key and known-host files:
 
 ```text
+# OS metadata files
 **/.DS_Store
 **/Thumbs.db
 **/desktop.ini
+
+# Backup and temporary files
 *.bak
 *.tmp
+
+# Lock files
 *.lock
+
+# ssh config
+authorized_keys
+known_hosts
+known_hosts.old
 ```
+
+These defaults apply when `.sshcignore` has not been saved. Existing saved exclusion rules are preserved.
 
 Once saved, `.sshcignore` itself is synchronized so every device sharing the target uses the same boundary. An existing local file that is excluded is neither overwritten nor removed by normal Pull or Force Pull. The screen warns when a rule excludes connection settings or keys because those files will not reach other devices.
 

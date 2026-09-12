@@ -17,11 +17,14 @@ describe("SyncExclusionsPanel", () => {
   it("loads on demand and saves exact path selections as shared rules", async () => {
     const api = {
       syncExclusions: vi.fn().mockResolvedValue({
-        document: "*.tmp\n",
+        document: "*.tmp\nauthorized_keys\nknown_hosts\nknown_hosts.old\n",
         usingDefaults: true,
         candidates: [
           { path: "config", ignored: false },
           { path: "cache/session.tmp", ignored: true },
+          { path: "authorized_keys", ignored: true },
+          { path: "known_hosts", ignored: true },
+          { path: "known_hosts.old", ignored: true },
         ],
       }),
       saveSyncExclusions: vi.fn().mockImplementation(async (document: string) => ({
@@ -30,6 +33,9 @@ describe("SyncExclusionsPanel", () => {
         candidates: [
           { path: "config", ignored: true },
           { path: "cache/session.tmp", ignored: true },
+          { path: "authorized_keys", ignored: true },
+          { path: "known_hosts", ignored: true },
+          { path: "known_hosts.old", ignored: true },
         ],
       })),
     };
@@ -38,13 +44,18 @@ describe("SyncExclusionsPanel", () => {
     expect(api.syncExclusions).not.toHaveBeenCalled();
     await userEvent.click(screen.getByText("同期するファイル"));
     expect(await screen.findByText("config")).toBeInTheDocument();
+    for (const name of ["authorized_keys", "known_hosts", "known_hosts.old"]) {
+      expect(screen.getByRole("checkbox", { name })).not.toBeChecked();
+    }
+    expect(screen.queryByText(/接続設定または鍵が除外されています/)).not.toBeInTheDocument();
     const config = screen.getByRole("checkbox", { name: "config" });
     expect(config).toBeChecked();
     await userEvent.click(config);
+    expect(screen.getByText(/接続設定または鍵が除外されています/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "除外設定を保存" }));
 
     await waitFor(() =>
-      expect(api.saveSyncExclusions).toHaveBeenCalledWith("*.tmp\n/config\n"),
+      expect(api.saveSyncExclusions).toHaveBeenCalledWith("*.tmp\nauthorized_keys\nknown_hosts\nknown_hosts.old\n/config\n"),
     );
   });
 

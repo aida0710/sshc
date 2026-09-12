@@ -68,7 +68,6 @@ export function SyncExclusionsPanel({ api, initial, onSaved }: Props) {
     return (
       ignored &&
       (candidate.path === "config" ||
-        candidate.path === "known_hosts" ||
         candidate.path.startsWith("connections/") ||
         candidate.path.startsWith("keys/"))
     );
