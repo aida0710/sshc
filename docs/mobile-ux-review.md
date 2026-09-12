@@ -1,8 +1,14 @@
 # スマホ操作レビュー
 
-2026-09-12 JST。対象は `agent/mobile-ux-dev` の開発版 `0.33.2-mobile.1-dev`。正式版 v0.33.2 の後に行った変更で、まだ正式リリースとして公開していません。
+2026-09-12 JST。正式版 v0.33.3 に含めるスマホ操作改善の記録です。以下の初回検証は `agent/mobile-ux-dev` の開発版 `0.33.2-mobile.1-dev` で行い、後続のHome・配色の検証は次節に記録しています。
 
 目的は、指での操作に応答を返し、一覧や入力対象に画面を使えるようにすることです。スマホ幅のブラウザーとAndroid WebViewで共通のUIを使います。以下の「確認項目」は観点の一覧です。実行結果と未確認の範囲は後段で区別しています。
+
+## v0.33.3に含める表示の調整
+
+Homeは検索・接続先を中心に整理し、常設Connectボタンと操作方法の案内文を置きません。スマホは1タップ、PCは1クリックで選択・ダブルクリックで接続し、Enter／Spaceにも対応します。開始中の表示と二重操作防止、独立した「…」メニューを残します。Connectionsは接続ボタンを詳細上部へ置きます。背景・文字・境界線をグレー基調にし、選択と主要操作に控えめな青を使います。
+
+これらの表示変更でWeb全1,303テスト・関連E2E65件が成功しました。最後のHome調整後も関連26テスト・PC／スマホ操作E2E4件・型／lint／build／生成再現を確認しています。明暗×390×844／640の20状態で横はみ出し・44px未満の操作対象・文字欠けはありません。初回Dev APKの実Android検証と、後続UIのブラウザー検証は区別します。
 
 ## 画面ごとのレビュー
 
@@ -51,14 +57,14 @@ SFTPの旧状態は390×640pxで転送管理を展開すると一覧が23px、39
 - 専用AVDを`-gpu swangle`で起動すると、四角形の描画テストは全12条件で正常となりました。最終APKの既定WebGL描画でも、Android経由の文字入力と独立したshell出力、IMEを開いたままの縦横回転・再タップ・Backを再確認しています。CDPの画像取得ではcanvasが黒く写るため、確認画像には`adb exec-out screencap -p`を使用しました。製品側の描画設定は変更していません。
 - 実際のスマートフォン本体とiOS Safariは未確認です。エミュレーターでの結果と実機の描画・操作感を区別します。
 
-## 開発版APK
+## 初回検証に使用した開発版APK
 
 | 項目 | 開発版 | 正式版 |
 | --- | --- | --- |
 | アプリ名 | sshc Dev | sshc |
 | applicationId | `com.github.aida0710.sshc.dev` | `com.github.aida0710.sshc` |
 | namespace／Activity class | `com.github.aida0710.sshc`／`com.github.aida0710.sshc.MainActivity` | 同じ |
-| 今回のversionName | `0.33.2-mobile.1-dev` | 公開済みは`0.33.2` |
+| 初回検証時のversionName | `0.33.2-mobile.1-dev` | 当時の正式版は`0.33.2` |
 | データ | Dev専用のVault・設定・WebView storage | 正式版専用のデータ |
 
 [確認用APK](https://drive.google.com/file/d/1gQaGug3-PdXqW4VbUwPBof0XpwZNBqrG/view)と[画像・SHA256SUMS・ビルド情報](https://drive.google.com/drive/folders/1tg3JwoUeXA8Tr99VxR0SjXWBeGNZYZVd)を共有しています。APKのソースは`e39fdc91ce879e44d93bd3da87825101f0523b44`、engine表示は`v0.33.2-mobile.1-dev+e39fdc91`です。
