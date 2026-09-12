@@ -739,6 +739,14 @@ func TestCollectUsesDefaultAndSharedExclusionRules(t *testing.T) {
 		"keys/work/private.bak":      "backup key",
 		"known_hosts.tmp":            "temporary known hosts",
 		"active.lock":                "editor lock",
+		"authorized_keys":            "allowed keys",
+		"authorized_keys2":           "more allowed keys",
+		"known_hosts":                "trusted hosts",
+		"known_hosts.old":            "previous trusted hosts",
+		"known_hosts2":               "more trusted hosts",
+		"known_hosts2.old":           "previous additional trusted hosts",
+		"environment":                "DEVICE=local\n",
+		"rc":                         "echo local initialization >&2\n",
 	})
 
 	view, err := installation.service.Exclusions()
@@ -779,6 +787,14 @@ func TestCollectUsesDefaultAndSharedExclusionRules(t *testing.T) {
 	}
 	if paths[".DS_Store"] == false || paths["connections/work/Thumbs.db"] == false || paths["active.lock"] == false {
 		t.Fatalf("saving custom rules did not replace defaults: %v", paths)
+	}
+	for _, path := range []string{
+		"authorized_keys", "authorized_keys2", "known_hosts", "known_hosts.old",
+		"known_hosts2", "known_hosts2.old", "environment", "rc",
+	} {
+		if !paths[path] {
+			t.Errorf("custom rules unexpectedly exclude %q", path)
+		}
 	}
 }
 
