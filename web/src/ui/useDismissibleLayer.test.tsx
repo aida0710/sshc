@@ -73,3 +73,27 @@ describe("useDismissibleLayer", () => {
     window.removeEventListener("sshc-android-back", lower);
   });
 });
+
+it("keeps a parent modal open while a nested menu handles Android back", async () => {
+  function Fixture() {
+    const parent = useRef<HTMLDivElement>(null);
+    const menu = useRef<HTMLDivElement>(null);
+    const [parentOpen, setParentOpen] = useState(true);
+    const [menuOpen, setMenuOpen] = useState(false);
+    useDismissibleLayer({ open: parentOpen, containerRefs: [parent], trapFocus: true, onDismiss: () => setParentOpen(false) });
+    useDismissibleLayer({ open: menuOpen, containerRefs: [menu], onDismiss: () => setMenuOpen(false) });
+    return parentOpen ? <div ref={parent} role="dialog" aria-label="Parent">
+      <button onClick={() => setMenuOpen(true)}>Open child menu</button>
+      {menuOpen ? <div ref={menu} role="menu"><button role="menuitem">Child action</button></div> : null}
+    </div> : null;
+  }
+  render(<Fixture />);
+  await userEvent.click(screen.getByRole("button", { name: "Open child menu" }));
+  expect(screen.getByRole("dialog", { name: "Parent" })).toBeInTheDocument();
+  expect(screen.getByRole("menu")).toBeInTheDocument();
+  act(() => { window.dispatchEvent(new Event("sshc-android-back", { cancelable: true })); });
+  expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  expect(screen.getByRole("dialog", { name: "Parent" })).toBeInTheDocument();
+  act(() => { window.dispatchEvent(new Event("sshc-android-back", { cancelable: true })); });
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+});

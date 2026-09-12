@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cellHeight, measureCells } from "./metrics";
+import { cellHeight, measureCells, syncTerminalInputPosition } from "./metrics";
 
 function terminal(options: { screen?: DOMRect; rows: number; letterSpacing?: string }) {
   const element = document.createElement("div");
@@ -44,10 +44,45 @@ describe("measureCells", () => {
     expect(measureCells(view)?.font.family).toBe("Menlo");
   });
 
+  it("measures WebGL terminals after the DOM rows have been replaced", () => {
+    const view = {
+      ...terminal({ screen: rect(832, 146), rows: 8 }),
+      options: { fontFamily: "Menlo", fontSize: 15, fontWeight: 400, letterSpacing: 0.5 },
+    };
+    view.element.querySelector(".xterm-rows")?.remove();
+    expect(measureCells(view)).toMatchObject({
+      rect: { width: 832, height: 146 },
+      cellHeight: 18.25,
+      font: { family: "Menlo", size: "15px", weight: "400", letterSpacing: "0.5px" },
+    });
+    view.screen.getBoundingClientRect = () => rect(378, 567);
+    view.rows = 31;
+    expect(measureCells(view)?.rect).toMatchObject({ width: 378, height: 567 });
+  });
+
   it("says nothing rather than zero while the surface is not up", () => {
     expect(measureCells({ element: undefined, rows: 30 })).toBeNull();
     expect(measureCells(terminal({ screen: rect(0, 0), rows: 30 }))).toBeNull();
     expect(measureCells(terminal({ screen: rect(800, 480), rows: 0 }))).toBeNull();
+  });
+});
+
+describe("syncTerminalInputPosition", () => {
+  it("moves the IME input with the resized cursor even without a cursor-move event", () => {
+    const textarea = document.createElement("textarea");
+    textarea.style.top = "540px";
+    textarea.style.left = "390px";
+    textarea.value = "ongoing composition";
+    const view = {
+      ...terminal({ screen: rect(800, 18), rows: 1 }),
+      cols: 100,
+      textarea,
+      buffer: { active: { cursorX: 5, cursorY: 0 } },
+    };
+    syncTerminalInputPosition(view);
+    expect(textarea.style.top).toBe("0px");
+    expect(textarea.style.left).toBe("40px");
+    expect(textarea.value).toBe("ongoing composition");
   });
 });
 

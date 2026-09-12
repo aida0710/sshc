@@ -262,8 +262,8 @@ export function ConnectionTree({
   }
 
   function facetClass(active: boolean): string {
-    return `flex min-h-10 w-auto items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors md:min-h-0 md:w-full ${
-      active ? "bg-select-fill text-ink" : "text-ink-muted hover:bg-surface hover:text-ink"
+    return `flex min-h-10 w-auto items-center gap-2 rounded-r-md border-l-2 px-2 py-1.5 text-left text-xs transition-colors md:min-h-0 md:w-full ${
+      active ? "border-accent bg-select-fill font-medium text-accent" : "border-transparent text-ink-muted hover:bg-hover hover:text-ink"
     }`;
   }
 
@@ -347,7 +347,7 @@ export function ConnectionTree({
     const active = selected?.path === host.identity.path && selected.alias === host.identity.alias;
     const descriptionId = `${descriptionIdPrefix}-connection-${item.projectionOrder}`;
     return (
-      <li key={item.projectionIdentity} className="border-b border-hairline last:border-b-0">
+      <li key={item.projectionIdentity}>
         <button
           type="button"
           aria-label={host.identity.alias}
@@ -357,7 +357,7 @@ export function ConnectionTree({
           onClick={() => onSelect(host)}
           onDragStart={(event) => startDrag(event, { kind: "connection", path: host.identity.path, alias: host.identity.alias, group: item.group })}
           onDragEnd={() => setDragging(null)}
-          className={`min-h-14 w-full px-4 py-2.5 text-left text-sm transition-colors ${active ? "bg-select-fill text-ink" : "text-ink-muted hover:bg-surface hover:text-ink"}`}
+          className={`min-h-14 w-full border-l-[3px] px-3 py-2.5 text-left text-sm transition-colors ${active ? "border-accent bg-select-fill text-ink" : "border-transparent text-ink-muted hover:bg-hover hover:text-ink"}`}
         >
           <span className="flex min-w-0 items-center gap-2">
             <OperatingSystemIcon os={item.os} colour={item.colour} compact />
@@ -366,10 +366,10 @@ export function ConnectionTree({
                 <span className={`truncate ${active ? "font-semibold" : "font-medium"}`}>{host.identity.alias}</span>
                 {item.duplicateAlias ? <span aria-hidden="true" className="shrink-0 text-notice-ink">⧉</span> : null}
               </span>
-              <span className="mt-0.5 block truncate font-mono text-[0.68rem] leading-4 text-ink-faint">{targetFor(host)}</span>
+              <span className={`mt-0.5 block truncate font-mono text-xs leading-4 ${active ? "text-ink-muted" : "text-ink-faint"}`}>{targetFor(host)}</span>
               {item.tags.length === 0 ? null : (
                 <span aria-hidden="true" className="mt-1 flex flex-wrap gap-1">
-                  {item.tags.map((tag) => <span key={tag} className="rounded bg-select-fill px-1 text-[0.65rem] text-ink-muted">{tag}</span>)}
+                  {item.tags.map((tag) => <span key={tag} className="rounded bg-toolbar px-1 text-[0.65rem] text-ink-muted">{tag}</span>)}
                 </span>
               )}
             </span>
@@ -386,7 +386,7 @@ export function ConnectionTree({
     const name = section.name === "" ? t("tree.ungrouped") : section.name;
     return (
       <section key={section.name || "ungrouped"} data-connection-group={section.name || "ungrouped"} aria-label={t("tree.groupSection", { name, count: section.items.length })}>
-        <header className="sticky top-0 z-[1] flex min-h-7 items-center gap-2 border-y border-hairline bg-tree px-3 py-1 text-[0.68rem] text-ink-muted">
+        <header className="sticky top-0 z-[1] flex min-h-8 items-center gap-2 bg-page px-3 py-2 text-[0.68rem] text-ink-muted">
           <Icon name="groups" className="size-3.5 shrink-0 text-ink-faint" />
           <h3 className="min-w-0 flex-1 truncate font-medium">{name}</h3>
           <span className="shrink-0 font-mono tabular-nums text-ink-faint">{section.items.length}</span>
@@ -397,8 +397,8 @@ export function ConnectionTree({
   }
 
   return (
-    <nav aria-label={t("tree.navLabel")} className="grid h-full min-h-0 grid-cols-1 grid-rows-[minmax(0,1fr)] md:grid-cols-[11rem_minmax(0,1fr)] md:grid-rows-1">
-      <aside className="hidden min-h-0 flex-col border-r border-line bg-tree md:flex">
+    <nav aria-label={t("tree.navLabel")} className="grid h-full min-h-0 grid-cols-1 grid-rows-[minmax(0,1fr)] lg:grid-cols-[9rem_minmax(0,1fr)] md:grid-rows-1">
+      <aside className="hidden min-h-0 flex-col bg-tree lg:flex">
         <p className="shrink-0 px-3 pb-1 pt-3 text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-ink-faint">
           {t("tree.byGroups")}
         </p>
@@ -408,8 +408,8 @@ export function ConnectionTree({
       </aside>
 
       <section className="flex min-h-0 flex-col bg-page" aria-label={t("tree.resultsLabel")}>
-        <header className="shrink-0 border-b border-line bg-card p-3">
-          <label className="mb-2 flex min-w-0 items-center gap-2 md:hidden">
+        <header className="shrink-0 border-b border-line bg-page p-3">
+          <label className="mb-2 flex min-w-0 items-center gap-2 lg:hidden">
             <span className="shrink-0 text-xs font-medium text-ink-muted">{t("tree.byGroups")}</span>
             <select
               aria-label={t("tree.groupFilter")}
@@ -441,7 +441,7 @@ export function ConnectionTree({
               </select>
             </label>
           </div>
-          {!movesDisabled ? <p className="mt-1 hidden text-[0.68rem] text-ink-faint md:block">{t("tree.dragGroupHint")}</p> : null}
+          {!movesDisabled ? <p className="sr-only">{t("tree.dragGroupHint")}</p> : null}
         </header>
         {visible.length === 0 ? <p role="status" className="p-5 text-sm text-ink-muted">{t("tree.noMatch")}</p> : <div data-connection-results className="min-h-0 flex-1 overflow-y-auto">{resultSections.map(renderResultSection)}</div>}
       </section>

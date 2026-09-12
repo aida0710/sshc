@@ -41,6 +41,8 @@ export function ConfigExplorer({ target = null }: ConfigExplorerProps) {
   const [renameTo, setRenameTo] = useState("");
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [jump, setJump] = useState("");
+  const [hierarchyOpen, setHierarchyOpen] = useState(false);
+  const [opening, setOpening] = useState(false);
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const jumped = useRef<FileTarget | null>(null);
   const openRequest = useRef(0);
@@ -84,6 +86,8 @@ export function ConfigExplorer({ target = null }: ConfigExplorerProps) {
 
   async function open(path: string) {
     const request = ++openRequest.current;
+    setOpening(true);
+    setHierarchyOpen(false);
     setFile(null);
     setDraft("");
     try {
@@ -98,6 +102,8 @@ export function ConfigExplorer({ target = null }: ConfigExplorerProps) {
     } catch (error) {
       if (request !== openRequest.current) return;
       setProblem(toProblem(error));
+    } finally {
+      if (request === openRequest.current) setOpening(false);
     }
   }
 
@@ -236,11 +242,22 @@ export function ConfigExplorer({ target = null }: ConfigExplorerProps) {
           <div data-explorer-header="tree" className="flex min-h-12 items-center justify-between gap-3 border-b border-line bg-toolbar px-4 py-2">
             <div className="flex min-w-0 items-center gap-2">
               <Icon name="config" className="h-4 w-4 text-ink-muted" />
-              <h3 id="explorer-heading" className={sectionHeading}>{t("explorer.hierarchy")}</h3>
+              <h3 id="explorer-heading" className={`${sectionHeading} hidden lg:block`}>{t("explorer.hierarchy")}</h3>
+              <button
+                type="button"
+                aria-expanded={hierarchyOpen}
+                aria-controls="config-hierarchy"
+                onClick={() => setHierarchyOpen((current) => !current)}
+                className="flex items-center gap-2 text-left text-sm font-semibold text-ink lg:hidden"
+              >
+                {t("explorer.hierarchy")}
+                <span aria-hidden="true">{hierarchyOpen ? "▾" : "▸"}</span>
+              </button>
             </div>
             <span className="rounded-md bg-surface px-2 py-0.5 font-mono text-xs text-ink-muted">{overview.files.length}</span>
           </div>
 
+          <div id="config-hierarchy" className={`${hierarchyOpen ? "flex" : "hidden"} min-h-0 flex-1 flex-col lg:flex`}>
           <ul className="flex max-h-96 flex-col gap-0.5 overflow-y-auto p-2 lg:max-h-none lg:flex-1">
             {overview.files.map((node) => {
               const current = (node.file.path ?? node.file.absolute) === openPath;
@@ -252,7 +269,7 @@ export function ConfigExplorer({ target = null }: ConfigExplorerProps) {
               return (
                 <li key={node.file.absolute} className={`rounded-lg ${current ? "bg-select-fill" : "hover:bg-surface-subtle"}`}>
                   <div className="flex items-start gap-2.5 px-2.5 py-2">
-                    <span data-config-node-icon aria-hidden="true" className={`mt-5 shrink-0 md:mt-2.5 ${current ? "text-accent" : "text-ink-faint"}`}>
+                    <span data-config-node-icon aria-hidden="true" className={`mt-5 shrink-0 md:mt-2.5 [@media(pointer:coarse)]:mt-[1.375rem] ${current ? "text-accent" : "text-ink-faint"}`}>
                       <Icon name="config" className="h-4 w-4" />
                     </span>
                     <div className="min-w-0 flex-1">
@@ -331,10 +348,11 @@ export function ConfigExplorer({ target = null }: ConfigExplorerProps) {
               </ul>
             )}
           </div>
+          </div>
         </section>
 
-        <section className="flex min-w-0 flex-col border-t border-line lg:border-t-0">
-          {file === null ? (
+        <section aria-busy={opening} className="flex min-w-0 flex-col border-t border-line lg:border-t-0">
+          {opening ? <PanelState tone="loading" title={t("explorer.loading")} className="min-h-48 flex-1" /> : file === null ? (
             <PanelState
               tone="empty"
               title={t("explorer.emptyHeading")}

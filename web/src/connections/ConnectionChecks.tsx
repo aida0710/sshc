@@ -7,7 +7,7 @@ import type {
 } from "../api/integrations";
 import { useTranslate } from "../i18n/context";
 import { hintText, sectionHeading } from "../ui/form";
-import { Button, Card, Notice } from "../ui/surface";
+import { Button, Notice } from "../ui/surface";
 
 type ChecksApi = Pick<IntegrationsApi, "effective" | "reachability" | "authentication">;
 
@@ -87,12 +87,12 @@ export function ConnectionChecks({ alias, api, disabled, resetKey }: ConnectionC
   const blocked = disabled || busy !== null;
 
   return (
-    <Card as="section" aria-label={t("conn.checksLabel")} className="flex flex-col gap-3 px-4 py-3">
+    <section aria-label={t("conn.checksLabel")} className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
-        <Button disabled={blocked} onClick={() => void checkReachability()}>
+        <Button disabled={blocked} onClick={() => void checkReachability()} className="max-w-full whitespace-normal text-left text-xs">
           {busy === "reachability" ? t("conn.checking") : t("conn.checkReachability")}
         </Button>
-        <Button disabled={blocked} onClick={() => void checkAuthentication()}>
+        <Button disabled={blocked} onClick={() => void checkAuthentication()} className="max-w-full whitespace-normal text-left text-xs">
           {busy === "authentication" ? t("conn.checking") : t("conn.checkAuthentication")}
         </Button>
         {disabled ? <p className={`w-full ${hintText}`}>{t("conn.summaryDraftBlocksActions")}</p> : null}
@@ -126,7 +126,7 @@ export function ConnectionChecks({ alias, api, disabled, resetKey }: ConnectionC
       )}
 
       {reachability === null && authentication === null ? null : (
-        <Card className="grid sm:grid-cols-2 sm:divide-x sm:divide-line">
+        <div className="grid border-t border-line pt-3 sm:grid-cols-2 sm:divide-x sm:divide-line">
           {reachability === null ? null : (
             <div className="flex flex-col gap-1.5 p-3 text-sm">
               <h3 className={sectionHeading}>{t("diag.reachability")}</h3>
@@ -149,8 +149,8 @@ export function ConnectionChecks({ alias, api, disabled, resetKey }: ConnectionC
               )}
             </div>
           )}
-        </Card>
+        </div>
       )}
-    </Card>
+    </section>
   );
 }

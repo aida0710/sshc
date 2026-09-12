@@ -2,28 +2,29 @@
 :root {
   color-scheme: light;
 
-  --ui-canvas: #f2f2f1;
-  --ui-sidebar: #e9e9e7;
-  --ui-tree: #f0f0ef;
-  --ui-toolbar: #ececeb;
-  --ui-card: #fafafa;
-  --ui-surface: #e7e7e5;
-  --ui-surface-subtle: #f1f1ef;
-  --ui-line: #d9dad8;
-  --ui-hairline: #ebebe9;
-  --ui-control: #fcfcfc;
-  --ui-control-line: #9ca09e;
-  --ui-select-fill: #dfdfdd;
-  --ui-ink: #202223;
-  --ui-ink-muted: #555a5c;
-  --ui-ink-faint: #626769;
-  --ui-accent: #5e6467;
-  --ui-accent-ink: #fafafa;
+  --ui-canvas: #f4f4f3;
+  --ui-sidebar: #eeeeec;
+  --ui-tree: #f7f7f5;
+  --ui-toolbar: #f0f0ee;
+  --ui-card: #ffffff;
+  --ui-surface: #e8e9e7;
+  --ui-surface-subtle: #f7f7f6;
+  --ui-line: #d6d8d5;
+  --ui-hairline: #e9eae7;
+  --ui-control: #ffffff;
+  --ui-control-line: #8c949a;
+  --ui-hover: #e9eae8;
+  --ui-select-fill: #e8edf4;
+  --ui-ink: #24282c;
+  --ui-ink-muted: #555d64;
+  --ui-ink-faint: #5b646d;
+  --ui-accent: #365f9d;
+  --ui-accent-ink: #ffffff;
   --ui-notice: #fff6df;
   --ui-notice-line: #efd08b;
   --ui-notice-ink: #71500a;
   --ui-danger: #c92b3a;
-  --ui-live: #198361;
+  --ui-live: #177451;
   --ui-code-bg: #080b0d;
   --ui-code-fg: #d8dfe4;
   --ui-connect-mark: #596671;
@@ -32,8 +33,8 @@
   --ui-brand-mark: #e3e5e5;
   --ui-brand-cursor: #a4aaac;
   --ui-card-shadow: 0 1px 2px rgb(20 24 27 / 0.06);
-  --ui-skeleton: #dedfdd;
-  --ui-skeleton-highlight: #f4f4f3;
+  --ui-skeleton: #e1e3e1;
+  --ui-skeleton-highlight: #f7f7f6;
   --ui-term-bg: #ffffff;
   --ui-term-fg: #1d1d1f;
   --ui-term-cursor: #1d1d1f;
@@ -59,36 +60,37 @@
 [data-theme="dark"] {
   color-scheme: dark;
 
-  --ui-canvas: #111315;
-  --ui-sidebar: #1b1d1f;
-  --ui-tree: #181a1c;
-  --ui-toolbar: #1b1d1f;
-  --ui-card: #202224;
-  --ui-surface: #292c2f;
-  --ui-surface-subtle: #181a1c;
-  --ui-line: #303336;
-  --ui-hairline: #272a2d;
-  --ui-control: #181a1c;
-  --ui-control-line: #595e62;
-  --ui-select-fill: #303438;
-  --ui-ink: #e2e3e4;
-  --ui-ink-muted: #aeb2b6;
-  --ui-ink-faint: #92989e;
-  --ui-accent: #c5c8ca;
-  --ui-accent-ink: #16181a;
+  --ui-canvas: #121416;
+  --ui-sidebar: #1a1c1f;
+  --ui-tree: #17191c;
+  --ui-toolbar: #1c1f22;
+  --ui-card: #222528;
+  --ui-surface: #2c3034;
+  --ui-surface-subtle: #1b1e21;
+  --ui-line: #3b4045;
+  --ui-hairline: #2e3337;
+  --ui-control: #1a1d20;
+  --ui-control-line: #687076;
+  --ui-hover: #2d3135;
+  --ui-select-fill: #2c3643;
+  --ui-ink: #e5e7e8;
+  --ui-ink-muted: #b9bfc4;
+  --ui-ink-faint: #a1a9af;
+  --ui-accent: #a4bbdc;
+  --ui-accent-ink: #17222f;
   --ui-notice: rgb(255 159 10 / 0.13);
   --ui-notice-line: rgb(255 159 10 / 0.32);
   --ui-notice-ink: #f0b429;
   --ui-danger: #ff858d;
-  --ui-live: #2aa374;
+  --ui-live: #54c69a;
   --ui-code-bg: #0d0f10;
   --ui-code-fg: #e2e3e4;
   --ui-brand-background: #292c2f;
   --ui-brand-mark: #e1e3e4;
   --ui-brand-cursor: #92989e;
   --ui-card-shadow: 0 1px 2px rgb(0 0 0 / 0.28);
-  --ui-skeleton: #292c2f;
-  --ui-skeleton-highlight: #3a3e42;
+  --ui-skeleton: #2c3034;
+  --ui-skeleton-highlight: #3e444a;
 
   --ui-term-bg: #080b0d;
   --ui-term-fg: #d8dfe4;
@@ -124,6 +126,7 @@
   --color-hairline: var(--ui-hairline);
   --color-control: var(--ui-control);
   --color-control-line: var(--ui-control-line);
+  --color-hover: var(--ui-hover);
   --color-select-fill: var(--ui-select-fill);
   --color-ink: var(--ui-ink);
   --color-ink-muted: var(--ui-ink-muted);
@@ -429,4 +432,101 @@
 }
 [data-term-background] .xterm-viewport {
   background-color: transparent !important;
+}
+
+/* Visible viewport follows browser chrome and the soft keyboard. */
+.sshc-app {
+  height: var(--app-viewport-height, 100dvh);
+}
+.sshc-app[data-mobile="true"] {
+  position: fixed;
+  inset: 0 0 auto;
+  top: var(--app-viewport-top, 0px);
+}
+.sshc-app[data-mobile="true"] .sshc-app-layout {
+  grid-template-columns: minmax(0, 1fr);
+}
+.sshc-app[data-mobile="true"] [data-app-header] {
+  display: flex;
+  height: 48px;
+}
+.sshc-app[data-mobile="true"] [data-app-navigation] {
+  position: fixed;
+  inset: auto auto auto 0;
+  top: var(--app-viewport-top, 0px);
+  height: var(--app-viewport-height, 100dvh);
+  z-index: 30;
+  width: min(20rem, calc(100vw - 2rem));
+  max-width: none;
+  transform: translateX(-100%);
+}
+.sshc-app[data-mobile="true"] [data-navigation-open="true"] {
+  transform: translateX(0);
+}
+.sshc-app[data-mobile="true"] [data-app-navigation] > [role="separator"] {
+  display: none;
+}
+.sshc-app[data-mobile="true"] .sshc-navigation-backdrop {
+  display: block;
+}
+.sshc-mobile-navigation {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+:root[data-keyboard-open="true"] .sshc-mobile-navigation,
+:root[data-keyboard-open="true"] .sshc-app[data-mobile="true"] [data-app-header] {
+  display: none;
+}
+.sshc-modal-frame {
+  top: var(--app-viewport-top, 0px);
+  bottom: auto;
+  height: var(--app-viewport-height, 100dvh);
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
+}
+.sshc-modal-panel {
+  min-height: 0;
+  max-height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+@media (max-width: 767px), (pointer: coarse) {
+  /* Compact icon artwork keeps its size; the touch target is large enough. */
+  :where(button:not([data-touch-compact]), [role="button"], [role="menuitem"], nav a):not(.monaco-editor *):not(.xterm *) {
+    min-height: 44px;
+    min-width: 44px;
+    touch-action: manipulation;
+  }
+  :where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]), select, textarea):not(.monaco-editor *):not(.xterm *) {
+    min-height: 44px;
+    font-size: 16px;
+  }
+  :where(label:has(> input[type="checkbox"]), label:has(> input[type="radio"])):not(.monaco-editor *):not(.xterm *) {
+    min-height: 44px;
+  }
+  :where(button, [role="button"], [role="menuitem"], a):not(:disabled):not(.monaco-editor *):not(.xterm *):active {
+    filter: brightness(0.92);
+  }
+  .sshc-modal-panel {
+    animation: sshc-dialog-enter 140ms ease-out;
+  }
+  [data-modal-placement="sheet"] .sshc-modal-panel {
+    animation-name: sshc-sheet-enter;
+  }
+}
+@keyframes sshc-dialog-enter {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes sshc-sheet-enter {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sshc-modal-panel { animation: none; }
+}
+
+/* Keyboard focus uses the same accent as the current page and selection.
+   Terminal and editor surfaces keep their own focus/selection rendering. */
+:where(button, a, [role="button"], [role="menuitem"], summary, input, select, textarea):not(.monaco-editor *):not(.xterm *):focus-visible {
+  outline: 2px solid var(--ui-accent);
+  outline-offset: 2px;
 }

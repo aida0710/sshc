@@ -141,7 +141,7 @@ export function Segmented<T extends string>({
     <div
       role="group"
       aria-label={label}
-      className="flex overflow-hidden rounded-md border border-control-line bg-control"
+      className="flex overflow-hidden rounded-md border border-line bg-control"
     >
       {options.map((option) => (
         <button
@@ -149,10 +149,10 @@ export function Segmented<T extends string>({
           type="button"
           aria-pressed={value === option.value}
           onClick={() => onChange(option.value)}
-          className={`border-r border-control-line px-2.5 py-1 text-xs transition-colors last:border-r-0 ${
+          className={`border-r border-line px-2.5 py-1 text-xs transition-colors last:border-r-0 ${
             value === option.value
-              ? "bg-select-fill text-ink"
-              : "text-ink-muted hover:text-ink"
+              ? "bg-select-fill font-medium text-accent"
+              : "text-ink-muted hover:bg-hover hover:text-ink"
           }`}
         >
           {option.label}

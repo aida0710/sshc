@@ -1,4 +1,7 @@
 import { useTranslate } from "../i18n/context";
+import { useRef, useState } from "react";
+import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
+import { useDismissibleLayer } from "../ui/useDismissibleLayer";
 
 const sequences: Record<string, string> = {
   Esc: "\x1b",
@@ -24,10 +27,11 @@ export function encodeKey(label: string, ctrl: boolean, alt: boolean): string {
   return applyModifiers(label, ctrl, alt);
 }
 
-const keys = ["Esc", "Tab", "↑", "↓", "←", "→", "|", "-", "~", "/"];
+const keys = ["Esc", "Tab", "←", "↑", "↓", "→"];
+const extraKeys = ["|", "-", "~", "/"];
 
 const keyShape =
-  "min-h-11 min-w-11 shrink-0 rounded border border-control-line px-3 font-mono text-sm text-ink";
+  "min-h-11 min-w-0 rounded border border-control-line font-mono text-sm text-ink active:bg-select-fill focus-visible:outline-2 focus-visible:outline-accent";
 
 function keepFocus(event: { preventDefault(): void }) {
   event.preventDefault();
@@ -44,13 +48,25 @@ export function KeyBar({
   onKey: (label: string) => void;
 }) {
   const t = useTranslate();
+  const visible = useMediaQuery(mobileViewportQuery);
+  const [extraOpen, setExtraOpen] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
+  useDismissibleLayer({ open: visible && extraOpen, containerRefs: [root], onDismiss: () => setExtraOpen(false) });
+  if (!visible) return null;
+
+  const press = (label: string) => {
+    onKey(label);
+    setExtraOpen(false);
+  };
   return (
     <div
+      ref={root}
       aria-label={t("terminal.keyBar")}
-      className="flex shrink-0 gap-1 overflow-x-auto border-t border-line bg-toolbar p-1 md:hidden"
+      className="relative grid shrink-0 grid-cols-8 border-t border-line bg-toolbar px-1"
     >
       <button
         type="button"
+        data-touch-compact
         aria-pressed={modifiers.ctrl}
         onPointerDown={keepFocus}
         onMouseDown={keepFocus}
@@ -59,28 +75,47 @@ export function KeyBar({
       >
         Ctrl
       </button>
-      <button
-        type="button"
-        aria-pressed={modifiers.alt}
-        onPointerDown={keepFocus}
-        onMouseDown={keepFocus}
-        onClick={() => onToggle("alt")}
-        className={`${keyShape} ${modifiers.alt ? "bg-select-fill" : "bg-card"}`}
-      >
-        Alt
-      </button>
       {keys.map((label) => (
         <button
           key={label}
           type="button"
+          data-touch-compact
           onPointerDown={keepFocus}
           onMouseDown={keepFocus}
-          onClick={() => onKey(label)}
+          onClick={() => press(label)}
           className={`${keyShape} bg-card`}
         >
           {label}
         </button>
       ))}
+      <button
+        type="button"
+        data-touch-compact
+        aria-label={t("terminal.extraKeys")}
+        title={t("terminal.extraKeys")}
+        aria-expanded={extraOpen}
+        onPointerDown={keepFocus}
+        onMouseDown={keepFocus}
+        onClick={() => setExtraOpen((current) => !current)}
+        className={`${keyShape} ${extraOpen || modifiers.alt ? "bg-select-fill" : "bg-card"}`}
+      >
+        {modifiers.alt ? "Alt" : "…"}
+      </button>
+      {extraOpen ? (
+        <div className="absolute inset-x-1 bottom-full z-30 mb-1 grid grid-cols-5 gap-1 rounded border border-line bg-toolbar p-1 shadow-lg">
+          <button
+            type="button"
+            aria-pressed={modifiers.alt}
+            onPointerDown={keepFocus}
+            onMouseDown={keepFocus}
+            onClick={() => { onToggle("alt"); setExtraOpen(false); }}
+            className={`${keyShape} ${modifiers.alt ? "bg-select-fill" : "bg-card"}`}
+          >Alt</button>
+          {extraKeys.map((label) => (
+            <button key={label} type="button" onPointerDown={keepFocus} onMouseDown={keepFocus} onClick={() => press(label)} className={`${keyShape} bg-card`}>{label}</button>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -4,6 +4,32 @@ import { describe, expect, it, vi } from "vitest";
 import { ConnectionActions } from "./ConnectionActions";
 
 describe("ConnectionActions", () => {
+  it("portals the menu and keeps it inside a short visual viewport", async () => {
+    const viewport = Object.assign(new EventTarget(), { offsetLeft: 0, offsetTop: 100, width: 390, height: 240 });
+    vi.stubGlobal("visualViewport", viewport);
+    let anchorTop = 280;
+    const rectangle = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      if (this.getAttribute("role") === "menu") return { width: 224, height: 104 } as DOMRect;
+      return { left: 336, right: 380, top: anchorTop, bottom: anchorTop + 44, width: 44, height: 44 } as DOMRect;
+    });
+    try {
+      render(<ConnectionActions alias="database" path="config" busy={false} onOpenSettings={vi.fn()} onConnect={vi.fn()} />);
+      await userEvent.click(screen.getByRole("button", { name: "Actions for database" }));
+      const menu = screen.getByRole("menu");
+      expect(menu.parentElement).toBe(document.body);
+      expect(menu).toHaveStyle({ left: "156px", top: "172px", maxHeight: "224px", maxWidth: "374px" });
+      anchorTop = 400;
+      fireEvent.scroll(window);
+      expect(menu).toHaveStyle({ top: "228px" });
+      anchorTop = 104;
+      viewport.dispatchEvent(new Event("resize"));
+      expect(menu).toHaveStyle({ top: "152px" });
+    } finally {
+      rectangle.mockRestore();
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("opens settings for the exact config identity without connecting", async () => {
     const openSettings = vi.fn();
     const connect = vi.fn();

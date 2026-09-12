@@ -100,9 +100,7 @@ describe("QuickConnectBrowser", () => {
     renderBrowser();
 
     const groupGrid = screen.getByRole("group", { name: "Filter connections by group" });
-    expect(groupGrid).toHaveClass("grid", "grid-cols-2", "md:grid-cols-4");
     expect(within(groupGrid).getAllByRole("button")).toHaveLength(1);
-    expect(screen.getByRole("heading", { name: "Groups 1" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Connections 3" })).toBeInTheDocument();
 
     const list = screen.getByRole("list", { name: "Available connections" });
@@ -111,7 +109,8 @@ describe("QuickConnectBrowser", () => {
     expect(cards[1]).toHaveTextContent("bastion");
     expect(cards[2]).toHaveTextContent("eu-api");
     expect(cards[0]).toHaveTextContent("admin@nas.lan:22");
-    expect(list).toHaveClass("grid-cols-1", "sm:grid-cols-2", "md:grid-cols-3", "lg:grid-cols-4");
+    expect(screen.queryByText("No group")).not.toBeInTheDocument();
+    expect(screen.queryByText("Not connected yet")).not.toBeInTheDocument();
   });
 
   it("drills into direct child groups and aggregates every descendant connection", async () => {
@@ -121,7 +120,6 @@ describe("QuickConnectBrowser", () => {
     await userEvent.click(screen.getByRole("button", { name: "Open home, 2 connections" }));
 
     expect(screen.getByRole("navigation", { name: "Selected group" })).toHaveTextContent("All/home");
-    expect(screen.getByRole("heading", { name: "Groups 1" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Connections 2" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Open home/lab, 1 connections" })).toBeInTheDocument();
     expect(screen.getByText("nas")).toBeInTheDocument();
@@ -129,8 +127,7 @@ describe("QuickConnectBrowser", () => {
     expect(screen.queryByText("bastion")).toBeNull();
 
     await userEvent.click(screen.getByRole("button", { name: "Open home/lab, 1 connections" }));
-    expect(screen.getByRole("heading", { name: "Groups 0" })).toBeInTheDocument();
-    expect(screen.getByText("No groups at this level.")).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Filter connections by group" })).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Connections 1" })).toBeInTheDocument();
     expect(screen.queryByText("nas")).toBeNull();
     expect(screen.getByText("eu-api")).toBeInTheDocument();
@@ -158,7 +155,7 @@ describe("QuickConnectBrowser", () => {
     fireEvent.pointerDown(nas, { pointerType: "mouse" });
     fireEvent.click(nas);
     expect(connect).not.toHaveBeenCalled();
-    expect(nas.closest("li")).toHaveClass("bg-select-fill");
+    expect(nas).toHaveAttribute("aria-pressed", "true");
 
     fireEvent.doubleClick(nas);
     expect(connect).toHaveBeenCalledWith("nas");
@@ -168,6 +165,44 @@ describe("QuickConnectBrowser", () => {
     fireEvent.pointerDown(eu, { pointerType: "touch" });
     fireEvent.click(eu);
     expect(connect).toHaveBeenCalledWith("eu-api");
+
+    connect.mockClear();
+    nas.focus();
+    await userEvent.keyboard("{Enter}");
+    expect(connect).toHaveBeenCalledExactlyOnceWith("nas");
+
+    connect.mockClear();
+    await userEvent.keyboard(" ");
+    expect(connect).toHaveBeenCalledExactlyOnceWith("nas");
+  });
+
+  it("keeps the action menu independent of selecting a card", async () => {
+    const connect = vi.fn();
+    renderBrowser({ onConnect: connect });
+
+    const button = screen.getByRole("button", { name: /^Connect to nas\./ });
+    const card = button.closest("li")!;
+    await userEvent.click(button);
+    expect(connect).not.toHaveBeenCalled();
+    expect(button).toHaveAttribute("aria-pressed", "true");
+    expect(within(card).queryByRole("button", { name: "Connect" })).not.toBeInTheDocument();
+
+    await userEvent.click(within(card).getByRole("button", { name: "Actions for nas" }));
+    expect(connect).not.toHaveBeenCalled();
+    expect(screen.getByRole("menu")).toBeVisible();
+  });
+
+  it("shows the pending host and prevents another launch while opening", async () => {
+    const connect = vi.fn();
+    renderBrowser({ onConnect: connect, launching: "nas" });
+    const opening = screen.getByRole("button", { name: "Opening nas…" });
+    expect(opening).toBeDisabled();
+    expect(opening).toHaveTextContent("Opening…");
+    expect(opening.closest("li")).toHaveAttribute("aria-busy", "true");
+    const another = screen.getByRole("button", { name: /^Connect to eu-api\./ });
+    expect(another).toBeDisabled();
+    await userEvent.click(another);
+    expect(connect).not.toHaveBeenCalled();
   });
 
   it("persists the selected display mode", async () => {

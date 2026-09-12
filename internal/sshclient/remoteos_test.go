@@ -15,12 +15,14 @@ import (
 func TestOSDetectionUsesASeparateAuthenticatedChannel(t *testing.T) {
 	path, contents, public := keyPair(t)
 	var calls atomic.Int32
+	shellStarted := make(chan struct{})
 	release := make(chan struct{})
 	defer close(release)
 	server := newTestServer(t, serverOptions{
 		AcceptKeys: []ssh.PublicKey{public},
 		OnShell: func(channel ssh.Channel) {
 			calls.Add(1)
+			close(shellStarted)
 			<-release
 		},
 		OnExec: func(channel ssh.Channel) {
@@ -52,6 +54,12 @@ func TestOSDetectionUsesASeparateAuthenticatedChannel(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("missing OS result")
+	}
+	// The server acknowledges shell readiness before starting its callback.
+	select {
+	case <-shellStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("interactive shell callback did not start")
 	}
 	if calls.Load() != 2 {
 		t.Fatalf("channels=%d", calls.Load())

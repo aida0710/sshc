@@ -18,6 +18,21 @@ function topLayer(): Layer | undefined {
   return layers[layers.length - 1];
 }
 
+function visible(element: HTMLElement): boolean {
+  if (element.closest('[hidden], [inert], [aria-hidden="true"]')) return false;
+  for (let node: HTMLElement | null = element; node; node = node.parentElement) {
+    const style = getComputedStyle(node);
+    if (style.display === "none" || style.visibility === "hidden") return false;
+  }
+  return true;
+}
+
+function focusableElements(container: HTMLElement): HTMLElement[] {
+  return [...container.querySelectorAll<HTMLElement>(
+    'a[href], button, input, select, textarea, [tabindex]',
+  )].filter((element) => !element.hasAttribute("disabled") && element.tabIndex >= 0 && visible(element));
+}
+
 function dismissOutside(event: PointerEvent) {
   const layer = topLayer();
   const target = event.target;
@@ -31,9 +46,7 @@ function dismissWithEscape(event: KeyboardEvent) {
   if (layer === undefined) return;
   if (event.key === "Tab" && layer.trapFocus) {
     const focusable = layer.containers().flatMap((container) =>
-      container === null ? [] : [...container.querySelectorAll<HTMLElement>(
-        'a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"])',
-      )].filter((element) => !element.hasAttribute("disabled") && element.getAttribute("aria-hidden") !== "true"),
+      container === null ? [] : focusableElements(container),
     );
     const first = focusable[0] ?? layer.containers()[0] ?? null;
     const last = focusable[focusable.length - 1] ?? first;
@@ -57,9 +70,10 @@ function dismissWithEscape(event: KeyboardEvent) {
 
 // A late terminal connection or background widget must not take focus from a modal.
 function keepModalFocus(event: FocusEvent) {
-  const layer = topLayer();
-  if (layer === undefined || !layer.trapFocus || !(event.target instanceof Node)) return;
-  if (layer.containers().some((container) => container?.contains(event.target as Node))) return;
+  const index = layers.reduce((found, candidate, position) => candidate.trapFocus ? position : found, -1);
+  const layer = layers[index];
+  if (layer === undefined || !(event.target instanceof Node)) return;
+  if (layers.slice(index).some((candidate) => candidate.containers().some((container) => container?.contains(event.target as Node)))) return;
   (layer.initialFocus() ?? layer.containers()[0])?.focus();
 }
 
@@ -133,14 +147,17 @@ export function useDismissibleLayer({
     // React clears element refs before running effect cleanup. Keep the mounted
     // nodes so a close-button unmount can still tell that it owned focus.
     const mountedContainers = layer.containers();
-    topLayer()?.dismiss("superseded");
+    const previous = topLayer();
+    // A menu opened inside a modal belongs to that modal. Keep its parent
+    // mounted so Back/Escape can dismiss the menu before closing the sheet.
+    const nested = previous?.trapFocus === true && opener !== null &&
+      previous.containers().some((container) => container?.contains(opener));
+    if (!nested) previous?.dismiss("superseded");
     layers.push(layer);
     listen();
     if (trapFocus) {
       const target = layer.initialFocus() ?? layer.containers().flatMap((container) =>
-        container === null ? [] : [...container.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])',
-        )],
+        container === null ? [] : focusableElements(container),
       )[0] ?? layer.containers()[0] ?? null;
       target?.focus();
     }
