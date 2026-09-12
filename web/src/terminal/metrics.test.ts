@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { cellHeight, measureCells, syncTerminalInputPosition } from "./metrics";
+import { describe, expect, it, vi } from "vitest";
+import { cellHeight, measureCells, observeTerminalSize, syncTerminalInputPosition } from "./metrics";
 
 function terminal(options: { screen?: DOMRect; rows: number; letterSpacing?: string }) {
   const element = document.createElement("div");
@@ -26,6 +26,164 @@ function terminal(options: { screen?: DOMRect; rows: number; letterSpacing?: str
 function rect(width: number, height: number, left = 0, top = 0): DOMRect {
   return { width, height, left, top, right: left + width, bottom: top + height, x: left, y: top, toJSON: () => ({}) };
 }
+
+function withResizeHarness(run: (harness: {
+  notify: () => void;
+  flush: () => void;
+  pending: () => number;
+  observed: Set<Element>;
+  disconnect: () => void;
+  cancel: (id: number) => void;
+}) => void) {
+  const previousObserver = Object.getOwnPropertyDescriptor(globalThis, "ResizeObserver");
+  const observed = new Set<Element>();
+  const frames = new Map<number, FrameRequestCallback>();
+  let nextFrame = 0;
+  let notify: () => void = () => { throw new Error("ResizeObserver has not been created"); };
+  const disconnect = vi.fn(() => observed.clear());
+  const cancel = vi.fn((id: number) => { frames.delete(id); });
+  class TestResizeObserver implements ResizeObserver {
+    constructor(callback: ResizeObserverCallback) {
+      notify = () => callback([...observed].map((target) => {
+        const contentRect = target.getBoundingClientRect();
+        const size = { inlineSize: contentRect.width, blockSize: contentRect.height };
+        return { target, contentRect, contentBoxSize: [size], borderBoxSize: [size], devicePixelContentBoxSize: [size] };
+      }), this);
+    }
+    observe(target: Element) { observed.add(target); }
+    unobserve(target: Element) { observed.delete(target); }
+    disconnect = disconnect;
+  }
+  Object.defineProperty(globalThis, "ResizeObserver", { configurable: true, value: TestResizeObserver });
+  const requestFrame = vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+    frames.set(++nextFrame, callback);
+    return nextFrame;
+  });
+  const cancelFrame = vi.spyOn(window, "cancelAnimationFrame").mockImplementation(cancel);
+  try {
+    run({
+      notify: () => notify(),
+      flush: () => {
+        const queued = [...frames.values()];
+        frames.clear();
+        queued.forEach((callback) => callback(0));
+      },
+      pending: () => frames.size,
+      observed,
+      disconnect,
+      cancel,
+    });
+  } finally {
+    requestFrame.mockRestore();
+    cancelFrame.mockRestore();
+    if (previousObserver === undefined) Reflect.deleteProperty(globalThis, "ResizeObserver");
+    else Object.defineProperty(globalThis, "ResizeObserver", previousObserver);
+  }
+}
+
+describe("observeTerminalSize", () => {
+  it("coalesces host and renderer geometry changes into one fit", () => {
+    withResizeHarness((harness) => {
+      const host = document.createElement("div");
+      let hostRect = rect(800, 500);
+      let screenRect = rect(780, 480);
+      host.getBoundingClientRect = () => hostRect;
+      const view = terminal({ rows: 30 });
+      view.screen.getBoundingClientRect = () => screenRect;
+      const fit = vi.fn();
+      const stop = observeTerminalSize(view, host, fit);
+      try {
+        expect(harness.observed).toEqual(new Set([host, view.screen]));
+        hostRect = rect(800, 400);
+        harness.notify();
+        screenRect = rect(780, 500);
+        harness.notify();
+        expect(fit).not.toHaveBeenCalled();
+        expect(harness.pending()).toBe(1);
+        harness.flush();
+        expect(fit).toHaveBeenCalledTimes(1);
+      } finally { stop(); }
+    });
+  });
+
+  it("ignores its own fit geometry while following later external changes", () => {
+    withResizeHarness((harness) => {
+      const host = document.createElement("div");
+      let hostRect = rect(800, 46);
+      let screenHeight = 15;
+      host.getBoundingClientRect = () => hostRect;
+      const view = terminal({ rows: 1 });
+      view.screen.getBoundingClientRect = () => rect(780, screenHeight);
+      // At fractional DPI, DOM rows can round to 15px for one row and 31px
+      // for two. Refitting the fit's own resize would oscillate indefinitely.
+      const fit = vi.fn(() => { screenHeight = screenHeight === 15 ? 31 : 15; });
+      const stop = observeTerminalSize(view, host, fit);
+      try {
+        screenHeight = 31;
+        harness.notify();
+        harness.flush();
+        expect(fit).toHaveBeenCalledTimes(1);
+        expect(screenHeight).toBe(15);
+        harness.notify();
+        expect(harness.pending()).toBe(0);
+        harness.flush();
+        expect(fit).toHaveBeenCalledTimes(1);
+
+        hostRect = rect(800, 62);
+        harness.notify();
+        harness.flush();
+        expect(fit).toHaveBeenCalledTimes(2);
+        harness.notify();
+        expect(harness.pending()).toBe(0);
+
+        screenHeight = 16;
+        harness.notify();
+        harness.flush();
+        expect(fit).toHaveBeenCalledTimes(3);
+      } finally { stop(); }
+    });
+  });
+
+  it("skips a queued fit when geometry has already returned to its prior size", () => {
+    withResizeHarness((harness) => {
+      const host = document.createElement("div");
+      let hostHeight = 500;
+      host.getBoundingClientRect = () => rect(800, hostHeight);
+      const view = terminal({ rows: 30, screen: rect(780, 480) });
+      const fit = vi.fn();
+      const stop = observeTerminalSize(view, host, fit);
+      try {
+        hostHeight = 400;
+        harness.notify();
+        expect(harness.pending()).toBe(1);
+        hostHeight = 500;
+        harness.flush();
+        expect(fit).not.toHaveBeenCalled();
+      } finally { stop(); }
+    });
+  });
+
+  it("disconnects and cancels a pending fit when disposed", () => {
+    withResizeHarness((harness) => {
+      const host = document.createElement("div");
+      let hostHeight = 500;
+      host.getBoundingClientRect = () => rect(800, hostHeight);
+      const view = terminal({ rows: 30, screen: rect(780, 480) });
+      const fit = vi.fn();
+      const stop = observeTerminalSize(view, host, fit);
+      hostHeight = 400;
+      harness.notify();
+      expect(harness.pending()).toBe(1);
+      stop();
+      expect(harness.disconnect).toHaveBeenCalledOnce();
+      expect(harness.cancel).toHaveBeenCalledOnce();
+      expect(harness.observed.size).toBe(0);
+      expect(harness.pending()).toBe(0);
+      harness.flush();
+      expect(fit).not.toHaveBeenCalled();
+    });
+  });
+});
 
 describe("measureCells", () => {
   it("divides the drawn surface by the number of rows", () => {

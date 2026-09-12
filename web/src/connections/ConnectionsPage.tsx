@@ -783,10 +783,10 @@ export function ConnectionsPage({
 
   return (
     <>
-    <div className="flex h-full min-h-0 flex-col bg-page">
+    <div className="flex h-full min-h-0 flex-col bg-canvas">
       <header
         data-connections-header
-        className="flex shrink-0 items-center justify-between gap-3 border-b border-line bg-page px-3 py-3 md:px-4"
+        className="flex shrink-0 items-center justify-between gap-3 border-b border-line bg-card px-3 py-3 md:px-4"
       >
         <div className="flex min-w-0 items-baseline gap-2">
           <h1 className="truncate text-sm font-semibold tracking-tight text-ink">{t("conn.heading")}</h1>
