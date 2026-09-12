@@ -67,6 +67,33 @@ export function terminalFitRects(page: Page): Promise<{
     return { root: rectangle(node), host: rectangle(node.parentElement!) };
   });
 }
+export function terminalDrawingRects(page: Page): Promise<{
+  screen: { x: number; y: number; width: number; height: number };
+  host: { x: number; y: number; width: number; height: number };
+}> {
+  return page.locator(SCREEN).evaluate((screen) => {
+    const host = screen.closest("[data-terminal-host]");
+    if (host === null) throw new Error("terminal screen has no host");
+    const rectangle = (element: Element) => {
+      const box = element.getBoundingClientRect();
+      return { x: box.x, y: box.y, width: box.width, height: box.height };
+    };
+    return { screen: rectangle(screen), host: rectangle(host) };
+  });
+}
+export function loseTerminalWebGLContext(page: Page): Promise<boolean> {
+  return page.locator(SCREEN).evaluate((screen) => {
+    for (const canvas of screen.querySelectorAll("canvas")) {
+      const context = canvas.getContext("webgl2") ?? canvas.getContext("webgl");
+      const extension = context?.getExtension("WEBGL_lose_context");
+      if (extension !== null && extension !== undefined) {
+        extension.loseContext();
+        return true;
+      }
+    }
+    return false;
+  });
+}
 export function terminalHostBottomOverflow(container: Locator): Promise<number> {
   return container.locator(ROOT).evaluate((node) => {
     const host = node.closest("[data-terminal-host]");
