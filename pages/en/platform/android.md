@@ -11,7 +11,7 @@ Install the signed APK from GitHub Releases. Android 13+ back navigation closes 
 
 ## Mobile controls
 
-The screen changes below are included in the development build `0.33.2-mobile.1-dev`. They are not part of the published v0.33.2 release.
+The screen changes below are available in release v0.33.3 and later.
 
 - Use **Home / Connections / SFTP / Terminal / Menu** in the bottom navigation to switch screens. The navigation and header hide while the keyboard is open, leaving more room for input.
 - Connections switches between the list and editor. Rotating a phone keeps this single-pane layout.
