@@ -197,7 +197,7 @@ export function QuickConnectBrowser({
             aria-label={t(opening ? "home.openingConnection" : "home.connectTo", { alias })}
             disabled={launching !== ""}
             onClick={connect}
-            className="pointer-events-auto inline-flex min-h-8 items-center justify-center gap-1.5 rounded-md border border-accent/35 bg-accent/10 px-2.5 py-1 text-xs font-medium text-accent hover:bg-accent/20 disabled:cursor-wait disabled:opacity-60"
+            className="pointer-events-auto inline-flex min-h-8 items-center justify-center gap-1.5 rounded-md border border-control-line bg-surface-subtle px-2.5 py-1 text-xs font-medium text-ink transition-colors hover:border-accent/60 hover:bg-hover disabled:cursor-wait disabled:opacity-60"
           >
             {opening ? <span aria-hidden="true" className="size-3 animate-spin rounded-full border-2 border-current border-r-transparent motion-reduce:animate-none" /> : null}
             <span aria-live="polite">{opening ? t("home.opening") : t("home.connect")}</span>

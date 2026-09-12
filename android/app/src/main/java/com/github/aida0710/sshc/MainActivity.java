@@ -439,7 +439,7 @@ public final class MainActivity extends ComponentActivity {
     private void applySystemBarAppearance(String appearance) {
         webAppearance = appearance;
         boolean dark = "dark".equals(appearance);
-        int colour = dark ? 0xFF19212C : 0xFFF0F3F8;
+        int colour = dark ? 0xFF1C1F22 : 0xFFF0F0EE;
         getWindow().setStatusBarColor(colour);
         getWindow().setNavigationBarColor(colour);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) getWindow().setNavigationBarDividerColor(colour);
@@ -589,7 +589,7 @@ public final class MainActivity extends ComponentActivity {
      */
     private int chromeColour() {
         int night = getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
-        return night == Configuration.UI_MODE_NIGHT_YES ? 0xFF19212C : 0xFFF0F3F8;
+        return night == Configuration.UI_MODE_NIGHT_YES ? 0xFF1C1F22 : 0xFFF0F0EE;
     }
 
     private String systemAppearance() {
