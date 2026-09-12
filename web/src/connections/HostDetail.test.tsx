@@ -102,7 +102,7 @@ describe("HostDetailPanel", () => {
     expect(editor).not.toBeNull();
     expect(editor).not.toHaveClass("sshc-card", "rounded-lg");
     expect(editor).not.toContainElement(reachability);
-    expect(reachability.closest("section")).toHaveClass("bg-card");
+    expect(screen.getByRole("region", { name: "Connection checks" })).toContainElement(reachability);
     expect(reachability).toBeEnabled();
     expect(harness.props.integrations.reachability).not.toHaveBeenCalled();
 

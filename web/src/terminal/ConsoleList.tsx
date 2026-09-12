@@ -198,7 +198,7 @@ export function ConsoleList({
                   aria-label={workspaceExpanded ? t("workspace.collapseGroup", { name: workspace.name }) : t("workspace.expandGroup", { name: workspace.name })}
                   aria-expanded={workspaceExpanded}
                   onClick={() => setWorkspaceExpanded((current) => !current)}
-                  className="flex size-7 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-select-fill"
+                  className="flex size-7 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover"
                 >
                   <span aria-hidden="true" className="text-xs">{workspaceExpanded ? "▾" : "▸"}</span>
                 </button>
@@ -238,7 +238,7 @@ export function ConsoleList({
                     setMenuFor(null);
                     setWorkspaceMenuOpen((open) => !open);
                   }}
-                  className="hidden size-7 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-select-fill md:flex"
+                  className="hidden size-7 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover md:flex"
                 >
                   <Icon name="moreHorizontal" className="size-3.5" />
                 </button>
@@ -258,7 +258,7 @@ export function ConsoleList({
                       setRenamingWorkspace(true);
                       setWorkspaceMenuOpen(false);
                     }}
-                    className="block w-full rounded px-2 py-1.5 text-left text-xs text-ink hover:bg-select-fill"
+                    className="block w-full rounded px-2 py-1.5 text-left text-xs text-ink hover:bg-hover"
                   >
                     {t("workspace.rename")}
                   </button>
@@ -340,7 +340,7 @@ export function ConsoleList({
                   className={`relative flex items-start gap-2 rounded-md px-2 py-1.5 transition-colors ${
                     shiftPressed
                       ? "bg-danger/10 hover:bg-danger/10"
-                      : session.id === selected ? "bg-select-fill" : "hover:bg-select-fill"
+                      : session.id === selected ? "bg-select-fill shadow-[inset_2px_0_0_var(--ui-accent)]" : "hover:bg-hover"
                   }`}
                 >
 
@@ -373,7 +373,7 @@ export function ConsoleList({
                     >
                       {marker}
                       <span className="min-w-0 grow">
-                        <span className="block truncate text-sm text-ink">{displayTitle}</span>
+                        <span className={`block truncate text-sm ${session.id === selected ? "font-semibold text-accent" : "text-ink"}`}>{displayTitle}</span>
                         {details}
                       </span>
                     </button>
@@ -405,7 +405,7 @@ export function ConsoleList({
                       setWorkspaceMenuOpen(false);
                       setMenuFor(session.id);
                     }}
-                    className="relative mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-select-fill focus:bg-select-fill focus:outline-none md:size-6"
+                    className="relative mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover focus:bg-select-fill focus:outline-none md:size-6"
                   >
                     <Icon name="moreHorizontal" className="size-3.5" />
                   </button>
@@ -419,7 +419,7 @@ export function ConsoleList({
                       }
                       setClosing(session);
                     }}
-                    className="relative mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-select-fill focus:bg-select-fill focus:outline-none md:size-6"
+                    className="relative mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover focus:bg-select-fill focus:outline-none md:size-6"
                   >
                     <Icon name="close" className="size-3.5" />
                   </button>
@@ -439,7 +439,7 @@ export function ConsoleList({
                         setRenaming(session.id);
                         setMenuFor(null);
                       }}
-                      className="block min-h-10 w-full rounded px-2 py-1.5 text-left text-xs text-ink hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-0"
+                      className="block min-h-10 w-full rounded px-2 py-1.5 text-left text-xs text-ink hover:bg-hover focus:bg-select-fill focus:outline-none md:min-h-0"
                     >
                       {t("terminal.rename")}
                     </button>
@@ -451,7 +451,7 @@ export function ConsoleList({
                           void onUnpinTitle(session.id);
                           setMenuFor(null);
                         }}
-                        className="block min-h-10 w-full rounded px-2 py-1.5 text-left text-xs text-ink hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-0"
+                        className="block min-h-10 w-full rounded px-2 py-1.5 text-left text-xs text-ink hover:bg-hover focus:bg-select-fill focus:outline-none md:min-h-0"
                       >
                         {t("terminal.unpinTitle")}
                       </button>
@@ -464,7 +464,7 @@ export function ConsoleList({
                         onDuplicate(session.id);
                         setMenuFor(null);
                       }}
-                      className="block min-h-10 w-full rounded px-2 py-1.5 text-left text-xs text-ink hover:bg-select-fill focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:min-h-0"
+                      className="block min-h-10 w-full rounded px-2 py-1.5 text-left text-xs text-ink hover:bg-hover focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:min-h-0"
                     >
                       {t("terminal.duplicate")}
                     </button>
@@ -474,7 +474,7 @@ export function ConsoleList({
                       role="menuitem"
                       disabled={index === 0}
                       onClick={() => move(session.id, -1)}
-                      className="block min-h-10 w-full rounded px-2 py-1.5 text-left text-xs text-ink hover:bg-select-fill focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:min-h-0"
+                      className="block min-h-10 w-full rounded px-2 py-1.5 text-left text-xs text-ink hover:bg-hover focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:min-h-0"
                     >
                       {t("terminal.moveUp")}
                     </button>
@@ -483,7 +483,7 @@ export function ConsoleList({
                       role="menuitem"
                       disabled={index === sessions.length - 1}
                       onClick={() => move(session.id, 1)}
-                      className="block min-h-10 w-full rounded px-2 py-1.5 text-left text-xs text-ink hover:bg-select-fill focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:min-h-0"
+                      className="block min-h-10 w-full rounded px-2 py-1.5 text-left text-xs text-ink hover:bg-hover focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:min-h-0"
                     >
                       {t("terminal.moveDown")}
                     </button>
@@ -499,7 +499,7 @@ export function ConsoleList({
           type="button"
           disabled={busy || full}
           onClick={() => onOpenShell()}
-          className="flex min-w-0 grow items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-ink hover:bg-select-fill disabled:text-ink-faint"
+          className="flex min-w-0 grow items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-ink hover:bg-hover disabled:text-ink-faint"
         >
           <Icon name="plus" className="size-3.5" aria-hidden="true" />
           {t("terminal.openShell")}
@@ -512,7 +512,7 @@ export function ConsoleList({
             onChange={(event) => {
               if (event.target.value !== "") onOpenShell(event.target.value);
             }}
-            className="h-8 w-10 cursor-pointer rounded-md border-0 bg-transparent px-1 text-xs text-ink-muted hover:bg-select-fill disabled:cursor-default"
+            className="h-8 w-10 cursor-pointer rounded-md border-0 bg-transparent px-1 text-xs text-ink-muted hover:bg-hover disabled:cursor-default"
           >
             <option value="">…</option>
             {localShellProfiles.filter((profile) => profile.id !== "default").map((profile) => (

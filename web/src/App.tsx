@@ -976,8 +976,9 @@ export function App({
                   setNavigationOpen(false);
                   followSectionLink(event, name);
                 }}
-                className={`flex min-h-13 min-w-0 flex-col items-center justify-center gap-0.5 px-1 py-1 text-[10px] ${section === name ? "bg-select-fill text-ink" : "text-ink-muted"}`}
+                className={`relative flex min-h-13 min-w-0 flex-col items-center justify-center gap-0.5 px-1 py-1 text-[10px] transition-colors ${section === name ? "bg-select-fill font-semibold text-accent" : "text-ink-muted active:bg-hover"}`}
               >
+                {section === name ? <span aria-hidden="true" className="absolute inset-x-4 top-0 h-0.5 rounded-full bg-accent" /> : null}
                 <Icon name={sectionIcons[name]} className="size-5" />
                 <span className="max-w-full truncate">{t(sectionLabels[name])}</span>
               </a>

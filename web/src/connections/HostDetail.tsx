@@ -109,7 +109,7 @@ export function HostDetailPanel({
   }
 
   return (
-    <section className="flex flex-col gap-5">
+    <section className="flex flex-col gap-4">
       <NoticeList notices={detail.form.notices ?? []} />
 
       {panel === "Basic" && identity.alias !== "" ? (
@@ -134,7 +134,7 @@ export function HostDetailPanel({
               tabIndex={panel === item.area ? 0 : -1}
               onClick={() => selectArea(item.area)}
               onKeyDown={(event) => activateTabFromKeyboard(event, index, areaNames, selectArea)}
-              className={`min-h-11 whitespace-nowrap border-b-2 px-2 py-2.5 text-sm transition-colors ${panel === item.area ? "border-accent font-medium text-ink" : "border-transparent text-ink-muted hover:bg-select-fill/50 hover:text-ink"}`}
+              className={`min-h-11 whitespace-nowrap border-b-2 px-2 py-2.5 text-sm transition-colors ${panel === item.area ? "border-accent bg-select-fill font-semibold text-accent" : "border-transparent text-ink-muted hover:bg-hover hover:text-ink"}`}
             >
               {t(item.label)}
             </button>

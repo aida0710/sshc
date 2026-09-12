@@ -77,7 +77,7 @@ for (const appearance of ["light", "dark"] as const) {
     const contrast = await page.evaluate(() => {
       const root = getComputedStyle(document.documentElement);
       const rgb = (name: string) => {
-        const value = root.getPropertyValue(name).trim();
+        const value = root.getPropertyValue(name).trim().replace(/^#([0-9a-f])([0-9a-f])([0-9a-f])$/i, "#$1$1$2$2$3$3");
         const match = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(value);
         if (match === null) throw new Error(`unexpected colour ${name}: ${value}`);
         return match.slice(1).map((part) => Number.parseInt(part, 16) / 255);
@@ -95,6 +95,9 @@ for (const appearance of ["light", "dark"] as const) {
         controlBorder: ratio("--ui-control-line", "--ui-control"),
         faintOnCard: ratio("--ui-ink-faint", "--ui-card"),
         faintOnSidebar: ratio("--ui-ink-faint", "--ui-sidebar"),
+        faintOnSelection: ratio("--ui-ink-faint", "--ui-select-fill"),
+        accentOnCard: ratio("--ui-accent", "--ui-card"),
+        primaryButton: ratio("--ui-accent-ink", "--ui-accent"),
       };
     });
 
@@ -102,6 +105,9 @@ for (const appearance of ["light", "dark"] as const) {
     expect(contrast.controlBorder).toBeGreaterThanOrEqual(2.5);
     expect(contrast.faintOnCard).toBeGreaterThanOrEqual(4.5);
     expect(contrast.faintOnSidebar).toBeGreaterThanOrEqual(4.5);
+    expect(contrast.faintOnSelection).toBeGreaterThanOrEqual(4.5);
+    expect(contrast.accentOnCard).toBeGreaterThanOrEqual(4.5);
+    expect(contrast.primaryButton).toBeGreaterThanOrEqual(4.5);
 
     await openSection(page, "Connections");
     await page
@@ -109,9 +115,9 @@ for (const appearance of ["light", "dark"] as const) {
       .getByRole("button", { name: "bastion", exact: true })
       .click();
     const summary = page.locator("[data-connection-summary]");
-    await expect(summary).toHaveCSS("border-left-width", "1px");
-    await expect(summary).toHaveCSS("border-right-width", "1px");
-    await expect(summary).toHaveCSS("border-radius", "12px");
+    await expect(summary).toHaveCSS("border-bottom-width", "1px");
+    await expect(summary.getByRole("heading")).toBeVisible();
+    await expect(summary.getByRole("button", { name: "Connect", exact: true })).toBeVisible();
     await expect(page.locator("[data-connection-editor] input").first()).toHaveCSS("border-radius", "8px");
     if (process.env.SSHC_VISUAL_DIR !== undefined) {
       await page.screenshot({

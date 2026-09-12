@@ -1073,7 +1073,7 @@ export const en = {
   "home.groupBreadcrumb": "Selected group",
   "home.openGroup": "Open {name}, {count} connections",
   "home.noChildGroups": "No groups at this level.",
-  "home.pointerHint": "Mouse: double-click · Touch: tap once",
+  "home.pointerHint": "Click Connect or double-click a host",
   "home.touchHint": "Tap once to connect",
   "home.connectGesture":
     "Connect to {alias}. Double-click with a mouse or tap once on a touch screen.",
@@ -1087,6 +1087,8 @@ export const en = {
   "home.connectionActions": "Actions for {alias}",
   "home.openConnectionSettings": "Open connection settings",
   "home.connect": "Connect",
+  "home.connectTo": "Connect to {alias}",
+  "home.openingConnection": "Opening {alias}…",
   "home.opening": "Opening…",
   "home.loadFailed": "The SSH configuration could not be read.",
   "home.workspace": "Workspace",

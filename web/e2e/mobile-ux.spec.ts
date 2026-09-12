@@ -108,6 +108,34 @@ test("mobile transfer details preserve the file list at 640px and 480px heights"
   }
 });
 
+test("connection actions stay inside their mobile cards and remain tappable", async ({ page, installation }) => {
+  await openApplication(page, installation);
+  const list = page.getByRole("list", { name: "Available connections" });
+  for (const height of [844, 640]) {
+    await page.setViewportSize({ width: 390, height });
+    for (const alias of ["bastion", "nas"]) {
+      const card = list.getByRole("listitem").filter({ hasText: alias });
+      await card.scrollIntoViewIfNeeded();
+      const connect = card.getByRole("button", { name: `Connect to ${alias}`, exact: true });
+      await expect(async () => {
+        const outer = await card.boundingBox();
+        const action = await connect.boundingBox();
+        expect(outer).not.toBeNull();
+        expect(action).not.toBeNull();
+        if (outer === null || action === null) return;
+        expect(action.height).toBeGreaterThanOrEqual(44);
+        expect(action.width).toBeGreaterThanOrEqual(44);
+        expect(action.x).toBeGreaterThanOrEqual(outer.x);
+        expect(action.y).toBeGreaterThanOrEqual(outer.y);
+        expect(action.x + action.width).toBeLessThanOrEqual(outer.x + outer.width);
+        expect(action.y + action.height).toBeLessThanOrEqual(outer.y + outer.height);
+      }).toPass();
+      // Trial performs hit testing without starting a connection to the fixture host.
+      await connect.tap({ trial: true });
+    }
+  }
+});
+
 test("one tap opens folders with immediate loading feedback and checkboxes enter selection mode", async ({ page, installation }) => {
   let finishProjects: (() => void) | undefined;
   const projectsGate = new Promise<void>((resolve) => { finishProjects = resolve; });

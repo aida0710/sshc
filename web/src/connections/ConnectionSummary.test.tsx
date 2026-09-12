@@ -114,7 +114,7 @@ describe("ConnectionSummary", () => {
     expect(screen.queryByText(/is not used and will be unassigned/i)).not.toBeInTheDocument();
   });
 
-  it("uses a complete three-cell layout when no account password is shown", () => {
+  it("keeps configured key details without an empty account-password field", () => {
     render(
       <ConnectionSummary
         state={{
@@ -140,10 +140,57 @@ describe("ConnectionSummary", () => {
       />,
     );
 
-    const summary = screen.getByText("Group").closest("dl");
-    expect(summary).toHaveClass("grid-cols-2", "md:grid-cols-3");
-    expect(screen.getByText("Key passphrase").closest("div")).toHaveClass("col-span-2", "md:col-span-1");
+    expect(screen.getByText("work")).toBeInTheDocument();
+    expect(screen.getByText("id_work · SHA256:work")).toBeInTheDocument();
+    expect(screen.getByText("Saved only for this key")).toBeInTheDocument();
     expect(screen.queryByText("Account password")).not.toBeInTheDocument();
+  });
+
+  it("keeps the default authentication summary concise and the main action available", async () => {
+    const user = userEvent.setup();
+    const onConnect = vi.fn();
+    render(
+      <ConnectionSummary
+        state={{
+          ...state,
+          detail: {
+            ...state.detail,
+            form: {
+              ...state.detail.form,
+              entry: { ...state.detail.form.entry, group: "" },
+              fields: state.detail.form.fields.filter((field) => field.keyword !== "IdentityFile"),
+            },
+          },
+          credentials: { status: "ready", value: [] },
+          vault: {
+            status: "ready",
+            value: {
+              exists: true,
+              unlocked: true,
+              aliases: [],
+              dedicatedKeyPassphrases: [],
+              minPassphraseLength: 4,
+            },
+          },
+        }}
+        dirty={false}
+        refreshing={false}
+        onConnect={onConnect}
+        connecting={false}
+        onToggleManage={vi.fn()}
+        managing={false}
+      />,
+    );
+
+    expect(screen.getByRole("region", { name: "bastion" })).toBeInTheDocument();
+    expect(screen.getByText("SSH agent or inherited keys")).toBeInTheDocument();
+    expect(screen.queryByText("Saved connection")).not.toBeInTheDocument();
+    expect(screen.queryByText("Saved")).not.toBeInTheDocument();
+    expect(screen.queryByText("Ungrouped")).not.toBeInTheDocument();
+    expect(screen.queryByText("Key passphrase")).not.toBeInTheDocument();
+    expect(screen.queryByText("Account password")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Connect" }));
+    expect(onConnect).toHaveBeenCalledOnce();
   });
 
   it("keeps committed text while disabling saved-state actions for a draft", async () => {
