@@ -1,4 +1,6 @@
 import { LockScreen } from "./LockScreen";
+import { createPortal } from "react-dom";
+import { useAnchoredMenu } from "../ui/useAnchoredMenu";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { failureCode } from "../api/client";
 import {
@@ -223,11 +225,12 @@ function CredentialActions({ name, edit, remove }: CredentialActionsProps) {
 
   useDismissibleLayer({
     open,
-    containerRefs: [rootRef],
+    containerRefs: [rootRef, menuRef],
     onDismiss: () => setOpen(false),
     returnFocusRef: triggerRef,
   });
   useMenuKeyboard({ open, menuRef, onClose: () => setOpen(false) });
+  useAnchoredMenu({ open, anchorRef: triggerRef, menuRef });
 
   function select(action: () => void) {
     setOpen(false);
@@ -247,8 +250,8 @@ function CredentialActions({ name, edit, remove }: CredentialActionsProps) {
       >
         <Icon name="moreHorizontal" className="size-5" />
       </button>
-      {open ? (
-        <div ref={menuRef} role="menu" className="absolute right-0 top-full z-20 mt-1 min-w-48 rounded-md border border-line bg-card p-1 shadow-lg">
+      {open ? createPortal(
+        <div ref={menuRef} role="menu" className="fixed z-50 w-56 overflow-y-auto rounded-md border border-line bg-card p-1 shadow-lg">
           {edit === undefined ? null : (
             <button type="button" role="menuitem" className="block w-full rounded px-3 py-2 text-left text-sm text-ink hover:bg-select-fill focus:bg-select-fill focus:outline-none" onClick={() => select(edit.onSelect)}>
               {edit.label}
@@ -257,7 +260,8 @@ function CredentialActions({ name, edit, remove }: CredentialActionsProps) {
           <button type="button" role="menuitem" className="block w-full rounded px-3 py-2 text-left text-sm text-danger hover:bg-select-fill focus:bg-select-fill focus:outline-none" onClick={() => select(remove.onSelect)}>
             {remove.label}
           </button>
-        </div>
+        </div>,
+        document.body,
       ) : null}
     </div>
   );

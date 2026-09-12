@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent } from "react";
 import { failureCode } from "../api/client";
 import { useTranslate } from "../i18n/context";
 import { Icon } from "../ui/icons";
+import { ModalShell } from "../ui/ModalShell";
 import { useDismissibleLayer } from "../ui/useDismissibleLayer";
-import { useMediaQuery } from "../ui/useMediaQuery";
+import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
 import { useMenuKeyboard } from "../ui/useMenuKeyboard";
 import { formatBytes as bytes } from "./format";
 import { sftpTransferManager, type ManagedTransferJob } from "./transferManager";
@@ -23,7 +24,7 @@ const autoClearChoices = [0, 30, 300, 3600];
 const mebibyte = 1 << 20;
 const maxLargeFileParallelism = 128;
 
-type QueueView = { collapsed: boolean; height: number; mobileHeight: number };
+type QueueView = { collapsed: boolean; height: number };
 
 function MiBSetting({ label, valueBytes, min, max, onCommit }: {
   label: string;
@@ -117,20 +118,8 @@ function clampHeight(value: number): number {
   return Math.min(maxQueueHeight, Math.max(minQueueHeight, Math.round(value)));
 }
 
-function mobileQueueHeights(viewportHeight: number): [number, number, number] {
-  const maximum = clampHeight(Math.min(maxQueueHeight, Math.max(240, viewportHeight - 280)));
-  const middle = clampHeight((minQueueHeight + maximum) / 2);
-  return [minQueueHeight, middle, maximum];
-}
-
-function nearestHeight(value: number, choices: readonly number[]): number {
-  return choices.reduce((nearest, choice) => (
-    Math.abs(choice - value) < Math.abs(nearest - value) ? choice : nearest
-  ));
-}
-
-// The queue keeps its size and its folded state across tab switches and
-// reloads: it is furniture, not part of any one directory.
+// Desktop size and folded state persist across directories. On mobile, the
+// dock always remains compact and its details open in a separate sheet.
 function restoreView(): QueueView {
   try {
     const raw: unknown = JSON.parse(window.localStorage.getItem(viewStorageKey) ?? "{}");
@@ -139,10 +128,9 @@ function restoreView(): QueueView {
     return {
       collapsed: stored.collapsed === undefined ? true : stored.collapsed === true,
       height: savedHeight,
-      mobileHeight: typeof stored.mobileHeight === "number" ? clampHeight(stored.mobileHeight) : savedHeight,
     };
   } catch {
-    return { collapsed: true, height: defaultQueueHeight, mobileHeight: defaultQueueHeight };
+    return { collapsed: true, height: defaultQueueHeight };
   }
 }
 
@@ -174,10 +162,14 @@ function needsReconciliation(job: ManagedTransferJob): boolean {
 export function TransferManagerList() {
   const t = useTranslate();
   const [view, setView] = useState<QueueView>(restoreView);
-  const compactViewport = useMediaQuery("(max-width: 767px)");
+  const compactViewport = useMediaQuery(mobileViewportQuery);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const dockTrigger = useRef<HTMLButtonElement>(null);
+  const closeSheet = useRef<HTMLButtonElement>(null);
+  const headingId = useId();
   const [menuOpen, setMenuOpen] = useState(false);
   const [controlProblem, setControlProblem] = useState("");
-  const collapsed = view.collapsed;
+  const collapsed = compactViewport ? !sheetOpen : view.collapsed;
   const menuRoot = useRef<HTMLDivElement>(null);
   const menuPanel = useRef<HTMLDivElement>(null);
   const menuTrigger = useRef<HTMLButtonElement>(null);
@@ -206,8 +198,13 @@ export function TransferManagerList() {
   const aggregateTransferred = activeJobs.reduce((sum, job) => sum + Math.max(job.transferredBytes, 0), 0);
   const aggregateProgress = aggregateTotal > 0 ? Math.min(100, Math.round((aggregateTransferred / aggregateTotal) * 100)) : 0;
   const aggregateSpeed = runningJobs.reduce((sum, job) => sum + Math.max(job.bytesPerSecond, 0), 0);
-  const queueHeight = compactViewport ? view.mobileHeight : view.height;
-  const queueMaximum = compactViewport ? mobileQueueHeights(window.innerHeight)[2] : maxQueueHeight;
+  const queueHeight = view.height;
+  const queueMaximum = maxQueueHeight;
+
+  function dismissSheet() {
+    setMenuOpen(false);
+    setSheetOpen(false);
+  }
 
   function changeView(next: Partial<QueueView>) {
     setView((current) => {
@@ -219,9 +216,7 @@ export function TransferManagerList() {
 
   function changeQueueHeight(height: number, remember = false) {
     setView((current) => {
-      const updated = compactViewport
-        ? { ...current, mobileHeight: height }
-        : { ...current, height };
+      const updated = { ...current, height };
       if (remember) rememberView(updated);
       return updated;
     });
@@ -240,15 +235,8 @@ export function TransferManagerList() {
       window.removeEventListener("pointerup", stop);
       window.removeEventListener("pointercancel", stop);
       setView((current) => {
-        const currentHeight = compactViewport ? current.mobileHeight : current.height;
-        const finalHeight = compactViewport
-          ? nearestHeight(currentHeight, mobileQueueHeights(window.innerHeight))
-          : currentHeight;
-        const updated = compactViewport
-          ? { ...current, mobileHeight: finalHeight }
-          : current;
-        rememberView(updated);
-        return updated;
+        rememberView(current);
+        return current;
       });
     };
     window.addEventListener("pointermove", move);
@@ -257,18 +245,6 @@ export function TransferManagerList() {
   }
 
   function resizeWithKeyboard(key: string) {
-    if (compactViewport) {
-      const choices = mobileQueueHeights(window.innerHeight);
-      const next = key === "Home"
-        ? choices[0]
-        : key === "End"
-          ? choices[2]
-          : key === "ArrowUp"
-            ? choices.find((height) => height > queueHeight) ?? choices[2]
-            : [...choices].reverse().find((height) => height < queueHeight) ?? choices[0];
-      changeQueueHeight(next, true);
-      return;
-    }
     if (key === "Home") changeQueueHeight(minQueueHeight, true);
     else if (key === "End") changeQueueHeight(maxQueueHeight, true);
     else if (key === "ArrowUp") changeQueueHeight(clampHeight(queueHeight + 32), true);
@@ -312,55 +288,9 @@ export function TransferManagerList() {
     returnFocusRef: menuTrigger,
   });
   useMenuKeyboard({ open: menuOpen, menuRef: menuPanel, onClose: () => setMenuOpen(false) });
-  return (
-    <section className="relative mt-3 shrink-0 overflow-visible rounded-md border border-line/60 bg-toolbar/30 text-xs md:mt-2" aria-labelledby="transfer-manager-heading">
-      {collapsed || jobs.length === 0 ? null : (
-        <div
-          role="separator"
-          aria-orientation="horizontal"
-          aria-label={t("sftp.manager.resize")}
-          aria-valuenow={queueHeight}
-          aria-valuemin={minQueueHeight}
-          aria-valuemax={queueMaximum}
-          tabIndex={0}
-          onPointerDown={resizeWithPointer}
-          onKeyDown={(event) => {
-            if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
-            event.preventDefault();
-            resizeWithKeyboard(event.key);
-          }}
-          className="group absolute inset-x-0 -top-3 z-10 flex h-6 touch-none cursor-row-resize items-center justify-center focus:outline-none"
-        >
-          <span aria-hidden="true" className="h-1 w-10 rounded-full bg-control-line transition-colors group-hover:bg-ink-muted group-active:bg-accent group-focus-visible:bg-accent" />
-        </div>
-      )}
-      <div className="relative flex min-h-9 flex-wrap items-center gap-2 px-3 py-1.5 md:min-h-8 md:py-1">
-        <button type="button" aria-label={t(collapsed ? "sftp.manager.expand" : "sftp.manager.collapse")} aria-expanded={!collapsed} aria-controls="transfer-manager-jobs" onClick={() => changeView({ collapsed: !collapsed })} className={`flex min-w-0 items-center gap-1.5 rounded ${collapsed ? "after:absolute after:inset-0 after:cursor-pointer after:rounded-md" : ""} hover:text-accent focus:outline-none focus-visible:ring-1 focus-visible:ring-accent`}>
-          <Icon name="chevronRight" className={`size-3 transition-transform ${collapsed ? "" : "rotate-90"}`} />
-          <h3 id="transfer-manager-heading" className={`${collapsed ? "text-ink-muted" : "text-ink"} truncate font-medium`}>{t("sftp.manager.heading")}</h3>
-        </button>
-        {collapsed ? (
-          <>
-            <span className="min-w-0 grow truncate font-medium text-ink">
-              {activeJobs.length > 0
-                ? t("sftp.manager.summaryRunning", { count: activeJobs.length, progress: aggregateProgress, speed: bytes(aggregateSpeed) })
-                : t("sftp.manager.summaryIdle", { count: jobs.length })}
-            </span>
-            {aggregateTotal > 0 ? <progress className="hidden w-28 sm:block" max={aggregateTotal} value={aggregateTransferred} /> : null}
-          </>
-        ) : (
-        <>
-          <button
-          type="button"
-          aria-pressed={processingStopped}
-          aria-label={t(processingStopped ? "sftp.manager.startProcessing" : "sftp.manager.stopProcessing")}
-          onClick={() => applySettings({ processingStopped: !processingStopped })}
-          className={`flex size-9 items-center justify-center rounded md:size-7 ${processingStopped ? "text-notice-ink" : "text-ink-muted"} hover:bg-select-fill focus:bg-select-fill focus:outline-none`}
-        >
-          <span aria-hidden="true">{processingStopped ? "▶" : "⏸"}</span>
-        </button>
+  const settings = <>
         <label className="flex items-center gap-1 text-ink-muted">
-          <span className="hidden sm:inline">{t("sftp.manager.concurrency")}</span>
+          <span className={compactViewport ? "" : "hidden sm:inline"}>{t("sftp.manager.concurrency")}</span>
           <select
             aria-label={t("sftp.manager.concurrency")}
             value={maxConcurrent}
@@ -371,7 +301,7 @@ export function TransferManagerList() {
           </select>
         </label>
         <label className="flex items-center gap-1 text-ink-muted">
-          <span className="hidden md:inline">{t("sftp.manager.autoClear")}</span>
+          <span className={compactViewport ? "" : "hidden md:inline"}>{t("sftp.manager.autoClear")}</span>
           <select
             aria-label={t("sftp.manager.autoClear")}
             value={autoClearChoices.includes(clearCompletedAfter) ? clearCompletedAfter : 0}
@@ -404,6 +334,57 @@ export function TransferManagerList() {
           max={4096}
           onCommit={(value) => applySettings({ largeFileChunkBytes: value })}
         />
+</>;
+  const content = (
+    <section className={compactViewport ? "flex min-h-0 flex-1 flex-col text-sm" : "relative mt-3 shrink-0 overflow-visible rounded-md border border-line/60 bg-toolbar/30 text-xs md:mt-2"} aria-labelledby={headingId}>
+      {compactViewport || collapsed || jobs.length === 0 ? null : (
+        <div
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label={t("sftp.manager.resize")}
+          aria-valuenow={queueHeight}
+          aria-valuemin={minQueueHeight}
+          aria-valuemax={queueMaximum}
+          tabIndex={0}
+          onPointerDown={resizeWithPointer}
+          onKeyDown={(event) => {
+            if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
+            event.preventDefault();
+            resizeWithKeyboard(event.key);
+          }}
+          className="group absolute inset-x-0 -top-3 z-10 flex h-6 touch-none cursor-row-resize items-center justify-center focus:outline-none"
+        >
+          <span aria-hidden="true" className="h-1 w-10 rounded-full bg-control-line transition-colors group-hover:bg-ink-muted group-active:bg-accent group-focus-visible:bg-accent" />
+        </div>
+      )}
+      <div className={`relative flex shrink-0 items-center gap-2 px-3 ${compactViewport ? "min-h-14 border-b border-line py-1" : "min-h-9 flex-wrap py-1.5 md:min-h-8 md:py-1"}`}>
+        {compactViewport ? <h3 id={headingId} className="min-w-0 flex-1 truncate font-medium">{t("sftp.manager.heading")}</h3> : (
+        <button type="button" aria-label={t(collapsed ? "sftp.manager.expand" : "sftp.manager.collapse")} aria-expanded={!collapsed} aria-controls={`${headingId}-jobs`} onClick={() => changeView({ collapsed: !collapsed })} className={`flex min-w-0 items-center gap-1.5 rounded ${collapsed ? "after:absolute after:inset-0 after:cursor-pointer after:rounded-md" : ""} hover:text-accent focus:outline-none focus-visible:ring-1 focus-visible:ring-accent`}>
+          <Icon name="chevronRight" className={`size-3 transition-transform ${collapsed ? "" : "rotate-90"}`} />
+          <h3 id={headingId} className={`${collapsed ? "text-ink-muted" : "text-ink"} truncate font-medium`}>{t("sftp.manager.heading")}</h3>
+        </button>
+        )}
+        {collapsed ? (
+          <>
+            <span className="min-w-0 grow truncate font-medium text-ink">
+              {activeJobs.length > 0
+                ? t("sftp.manager.summaryRunning", { count: activeJobs.length, progress: aggregateProgress, speed: bytes(aggregateSpeed) })
+                : t("sftp.manager.summaryIdle", { count: jobs.length })}
+            </span>
+            {aggregateTotal > 0 ? <progress className="hidden w-28 sm:block" max={aggregateTotal} value={aggregateTransferred} /> : null}
+          </>
+        ) : (
+        <>
+          <button
+          type="button"
+          aria-pressed={processingStopped}
+          aria-label={t(processingStopped ? "sftp.manager.startProcessing" : "sftp.manager.stopProcessing")}
+          onClick={() => applySettings({ processingStopped: !processingStopped })}
+          className={`flex size-9 items-center justify-center rounded md:size-7 ${processingStopped ? "text-notice-ink" : "text-ink-muted"} hover:bg-select-fill focus:bg-select-fill focus:outline-none`}
+        >
+          <span aria-hidden="true">{processingStopped ? "▶" : "⏸"}</span>
+        </button>
+        {compactViewport ? null : settings}
         </>
         )}
         <div ref={menuRoot} className="relative ml-auto">
@@ -411,7 +392,7 @@ export function TransferManagerList() {
             <Icon name="moreHorizontal" className="size-4" />
           </button> : null}
           {menuOpen ? (
-            <div ref={menuPanel} role="menu" aria-label={t("sftp.manager.actions")} className="absolute bottom-full right-0 z-20 mb-1 w-48 rounded-lg border border-control-line bg-card p-1 shadow-lg">
+            <div ref={menuPanel} role="menu" aria-label={t("sftp.manager.actions")} className={`absolute right-0 z-20 w-48 rounded-lg border border-control-line bg-card p-1 shadow-lg ${compactViewport ? "top-full mt-1" : "bottom-full mb-1"}`}>
               {canPause ? <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); runControl(() => sftpTransferManager.pauseAll()); }} className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-0">{t("sftp.manager.pauseAll")}</button> : null}
               {canResume ? <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); runControl(() => sftpTransferManager.resumeAll()); }} className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-0">{t("sftp.manager.resumeAll")}</button> : null}
               {canCancel ? <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); runControl(() => sftpTransferManager.cancelAll()); }} className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm text-danger hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-0">{t("sftp.manager.cancelAll")}</button> : null}
@@ -420,9 +401,12 @@ export function TransferManagerList() {
             </div>
           ) : null}
         </div>
+        {compactViewport ? <button ref={closeSheet} type="button" aria-label={t("sftp.manager.close")} onClick={dismissSheet} className="flex size-11 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-select-fill"><Icon name="close" className="size-4" /></button> : null}
       </div>
+      {compactViewport ? <details className="shrink-0 border-b border-line px-3"><summary className="cursor-pointer py-3 text-sm text-ink-muted">{t("sftp.manager.settings")}</summary><div className="flex max-h-40 flex-wrap items-center gap-3 overflow-y-auto pb-3">{settings}</div></details> : null}
       {controlProblem !== "" ? <div role="alert" className="mx-2.5 mb-2 flex items-start gap-2 rounded bg-danger/10 px-2.5 py-2 text-danger"><span className="grow">{controlProblem}</span><button type="button" aria-label={t("sftp.manager.dismissError")} onClick={() => setControlProblem("")} className="shrink-0 text-ink-muted hover:text-ink">×</button></div> : null}
-      {collapsed || jobs.length === 0 ? null : <div id="transfer-manager-jobs" style={{ height: queueHeight }} className="space-y-1.5 overflow-auto px-2.5 pb-2.5">
+      {compactViewport && jobs.length === 0 ? <p className="p-6 text-center text-ink-muted">{t("sftp.manager.summaryIdle", { count: 0 })}</p> : null}
+      {collapsed || jobs.length === 0 ? null : <div id={`${headingId}-jobs`} style={compactViewport ? undefined : { height: queueHeight }} className={`space-y-1.5 overflow-auto overscroll-contain px-2.5 pb-2.5 ${compactViewport ? "min-h-0 flex-1 pt-2" : ""}`}>
         {batches.map(([batchId, items]) => {
           const first = items[0]!;
           const failed = items.filter((item) => item.status === "failed").length;
@@ -486,5 +470,29 @@ export function TransferManagerList() {
         })}
       </div>}
     </section>
+  );
+  if (!compactViewport) return content;
+  return (
+    <>
+      <button
+        ref={dockTrigger}
+        type="button"
+        aria-label={t("sftp.manager.expand")}
+        aria-haspopup="dialog"
+        aria-expanded={sheetOpen}
+        onClick={() => setSheetOpen(true)}
+        className="relative mt-1 flex min-h-11 shrink-0 items-center gap-2 overflow-hidden rounded-md border border-line/60 bg-toolbar/50 px-3 text-left text-xs active:bg-select-fill"
+      >
+        <Icon name="chevronRight" className="size-3 -rotate-90 text-ink-muted" />
+        <span className="shrink-0 font-medium">{t("sftp.manager.heading")}</span>
+        <span className="min-w-0 flex-1 truncate text-ink-muted">{activeJobs.length > 0
+          ? t("sftp.manager.summaryRunning", { count: activeJobs.length, progress: aggregateProgress, speed: bytes(aggregateSpeed) })
+          : t("sftp.manager.summaryIdle", { count: jobs.length })}</span>
+        {aggregateTotal > 0 ? <span aria-hidden="true" className="absolute bottom-0 left-0 h-0.5 bg-accent transition-[width]" style={{ width: `${aggregateProgress}%` }} /> : null}
+      </button>
+      <ModalShell open={sheetOpen} labelledBy={headingId} onDismiss={dismissSheet} closeOnOutside initialFocusRef={closeSheet} returnFocusRef={dockTrigger} placement="sheet" panelClassName="flex h-[min(36rem,85dvh)] max-h-full w-full max-w-2xl flex-col overflow-hidden rounded-xl">
+        {content}
+      </ModalShell>
+    </>
   );
 }

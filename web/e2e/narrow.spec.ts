@@ -383,7 +383,9 @@ test("draws one separator above the version in the mobile drawer", async ({ page
   expect(menuBox).not.toBeNull();
   expect(shellBox).not.toBeNull();
   if (menuBox !== null && shellBox !== null) {
-    expect(shellBox.y + shellBox.height - menuBox.y).toBeLessThanOrEqual(132);
+    expect(shellBox.height).toBeGreaterThanOrEqual(44);
+    expect(menuBox.height).toBeGreaterThanOrEqual(44);
+    expect(shellBox.y - (menuBox.y + menuBox.height)).toBeLessThanOrEqual(64);
   }
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
     await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/sshc-v0.16.2-mobile-drawer-dark.png`, fullPage: true });
@@ -396,8 +398,8 @@ test("uses established product names in the Japanese navigation", async ({ page,
   await page.reload();
   await expect(sessionStatus(page)).toContainText("ローカルセッション稼働中");
 
-  const quickConnect = page.locator('section[aria-labelledby="quick-connect-heading"]');
-  await expect(quickConnect.locator('[data-sshc-brand-mark="true"]')).toHaveCount(1);
+  const quickConnect = page.getByRole("region", { name: "Quick Connect", exact: true });
+  await expect(quickConnect).toBeVisible();
   await expect(quickConnect).not.toContainText(">_");
 
   await page.getByRole("button", { name: "ナビゲーション", exact: true }).click();
@@ -454,7 +456,7 @@ test("uses established product names in the Japanese navigation", async ({ page,
   }
 });
 
-test("opens quick connection actions above the trigger on mobile", async ({ page, installation }) => {
+test("keeps quick connection actions inside the viewport on mobile", async ({ page, installation }) => {
   await installation.write("conf.d/20-lab.conf", hosts);
   await openApplication(page, installation);
 
@@ -467,8 +469,10 @@ test("opens quick connection actions above the trigger on mobile", async ({ page
   expect(triggerBox).not.toBeNull();
   expect(menuBox).not.toBeNull();
   if (triggerBox !== null && menuBox !== null) {
-    expect(menuBox.y + menuBox.height).toBeLessThanOrEqual(triggerBox.y);
     expect(menuBox.y).toBeGreaterThanOrEqual(0);
+    expect(menuBox.y + menuBox.height).toBeLessThanOrEqual(page.viewportSize()?.height ?? 0);
+    expect(menuBox.x).toBeGreaterThanOrEqual(0);
+    expect(menuBox.x + menuBox.width).toBeLessThanOrEqual(page.viewportSize()?.width ?? 0);
   }
   const settings = menu.getByRole("menuitem", { name: "Open connection settings" });
   const connect = menu.getByRole("menuitem", { name: "Connect", exact: true });
@@ -490,7 +494,8 @@ test("keeps workspace management out of the mobile terminal", async ({ page, ins
   await expect(page.locator("[data-desktop-workspace-controls]")).toBeHidden();
   await expect(page.getByRole("button", { name: "Send command…" })).toBeHidden();
   await expect(page.getByRole("button", { name: "Workspace actions" })).toBeHidden();
-  await expect(page.getByRole("navigation", { name: "Primary" })).toHaveClass(/shadow-none/);
+  await expect(page.getByRole("navigation", { name: "Primary" })).toBeHidden();
+  await expect(page.getByRole("navigation", { name: "Quick navigation" })).toBeVisible();
 });
 
 test("keeps a live workspace visible without mobile rename controls", async ({ page, installation }) => {
@@ -512,6 +517,7 @@ test("removes the session status badge from the mobile header", async ({ page, i
 
   await expect(sessionStatus(page)).toContainText("Local session active");
   await expect(page.locator("[data-app-header] [data-session-status-badge]")).toHaveCount(0);
+  await page.getByRole("button", { name: "Navigation", exact: true }).click();
   await expect(
     page.getByRole("navigation", { name: "Primary" }).locator("[data-session-status-badge]"),
   ).toHaveCount(1);
@@ -590,6 +596,7 @@ test("keeps the removed connection view switch absent and Config structure align
   }));
   expect(boundaries.every((width) => width >= 1)).toBe(true);
 
+  await page.getByRole("button", { name: "Include 階層", exact: true }).click();
   const alignment = await page.getByRole("button", { name: "conf.d/20-lab.conf" }).evaluate((button) => {
     const row = button.closest("li")?.firstElementChild;
     const icon = row?.querySelector("[data-config-node-icon]");
@@ -727,7 +734,8 @@ async function expectNothingCutOff(page: import("@playwright/test").Page, where:
 test("keeps Menu in mobile history after opening SSH Config", async ({ page, installation }) => {
   await openApplication(page, installation);
 
-  const drawer = page.getByRole("navigation", { name: "Primary" });
+  // The closed drawer is intentionally inert and excluded from accessibility.
+  const drawer = page.getByRole("navigation", { name: "Primary", includeHidden: true });
   const hamburger = page.getByRole("button", { name: "Navigation", exact: true });
 
   const restingLeft = await drawer.evaluate((element) => element.getBoundingClientRect().left);

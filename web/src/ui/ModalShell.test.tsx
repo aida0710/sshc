@@ -26,3 +26,18 @@ describe("ModalShell", () => {
     expect(dismiss).toHaveBeenCalledWith("escape");
   });
 });
+
+it("skips collapsed and hidden controls when choosing and trapping focus", async () => {
+  render(<ModalShell labelledBy="hidden-controls-heading" onDismiss={vi.fn()}>
+    <h2 id="hidden-controls-heading">Hidden controls</h2>
+    <div hidden><button>Hidden first</button></div>
+    <button>Visible first</button>
+    <button>Visible last</button>
+    <div style={{ display: "none" }}><button>Hidden last</button></div>
+  </ModalShell>);
+  expect(screen.getByRole("button", { name: "Visible first" })).toHaveFocus();
+  await userEvent.tab({ shift: true });
+  expect(screen.getByRole("button", { name: "Visible last" })).toHaveFocus();
+  await userEvent.tab();
+  expect(screen.getByRole("button", { name: "Visible first" })).toHaveFocus();
+});

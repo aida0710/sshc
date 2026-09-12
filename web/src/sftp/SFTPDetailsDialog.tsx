@@ -2,6 +2,7 @@ import { useEffect, useId, useState, type ReactNode, type RefObject } from "reac
 import { failureCode } from "../api/client";
 import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
+import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
 import { ModalShell } from "../ui/ModalShell";
 import { Button } from "../ui/surface";
 import { sftpApi, type RemoteEntry } from "./api";
@@ -73,6 +74,7 @@ export function SFTPDetailsDialog({
 }) {
   const t = useTranslate();
   const headingId = useId();
+  const mobileViewport = useMediaQuery(mobileViewportQuery);
   const [preview, setPreview] = useState<PreviewState>({ kind: "idle" });
   const entry = entries.length === 1 ? entries[0] ?? null : null;
   const previewPath = entry !== null && entry.type === "file" ? entry.path : null;
@@ -118,6 +120,30 @@ export function SFTPDetailsDialog({
     return () => { active = false; };
   }, [alias, previewPath]);
 
+  const properties = (
+        <dl role="group" className="min-h-0 overflow-auto border-t border-line px-3 py-2 md:border-l md:border-t-0" aria-label={t("sftp.properties")}>
+          {entry === null ? (
+            <>
+              <Property label={t("sftp.selectedItems")}>{entries.length.toLocaleString()}</Property>
+              <Property label={t("sftp.totalSize")}>{`${totalBytes.toLocaleString()} (${formatBytes(totalBytes)})`}</Property>
+            </>
+          ) : (
+            <>
+              <Property label={t("sftp.path")}>{entry.path}</Property>
+              <Property label={t("sftp.type")}>{t(`sftp.type.${entry.type}`)}</Property>
+              <Property label={t("sftp.size")}>
+                {entry.type === "file" ? `${entry.size.toLocaleString()} (${formatBytes(entry.size)})` : "—"}
+              </Property>
+              <Property label={t("sftp.modified")}>
+                <time dateTime={entry.modifiedAt}>{new Date(entry.modifiedAt).toLocaleString()}</time>
+              </Property>
+              <Property label={t("sftp.permissions")}>{`${entry.mode} (${symbolicModeToOctal(entry.mode)})`}</Property>
+              <Property label={t("sftp.revision")}>{entry.revision}</Property>
+            </>
+          )}
+        </dl>
+  );
+
   return (
     <ModalShell
       labelledBy={headingId}
@@ -130,8 +156,8 @@ export function SFTPDetailsDialog({
         <button type="button" className="text-xs text-ink-muted hover:text-ink" onClick={onClose}>{t("sftp.close")}</button>
       </div>
 
-      <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_auto] overflow-hidden md:grid-cols-[minmax(0,1fr)_18rem] md:grid-rows-1">
-        <div role="group" className="min-h-0 min-w-0 overflow-auto bg-surface-subtle p-3" aria-label={t("sftp.preview")}>
+      <div className={mobileViewport ? "flex min-h-0 flex-1 flex-col overflow-hidden" : "grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_18rem] overflow-hidden"}>
+        <div role="group" className="min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain bg-surface-subtle p-3" aria-label={t("sftp.preview")}>
           {entry === null ? (
             <ul className="space-y-1 text-xs" aria-label={t("sftp.selectedItems")}>
               {entries.map((item) => (
@@ -154,27 +180,7 @@ export function SFTPDetailsDialog({
           )}
         </div>
 
-        <dl role="group" className="min-h-0 overflow-auto border-t border-line px-3 py-2 md:border-l md:border-t-0" aria-label={t("sftp.properties")}>
-          {entry === null ? (
-            <>
-              <Property label={t("sftp.selectedItems")}>{entries.length.toLocaleString()}</Property>
-              <Property label={t("sftp.totalSize")}>{`${totalBytes.toLocaleString()} (${formatBytes(totalBytes)})`}</Property>
-            </>
-          ) : (
-            <>
-              <Property label={t("sftp.path")}>{entry.path}</Property>
-              <Property label={t("sftp.type")}>{t(`sftp.type.${entry.type}`)}</Property>
-              <Property label={t("sftp.size")}>
-                {entry.type === "file" ? `${entry.size.toLocaleString()} (${formatBytes(entry.size)})` : "—"}
-              </Property>
-              <Property label={t("sftp.modified")}>
-                <time dateTime={entry.modifiedAt}>{new Date(entry.modifiedAt).toLocaleString()}</time>
-              </Property>
-              <Property label={t("sftp.permissions")}>{`${entry.mode} (${symbolicModeToOctal(entry.mode)})`}</Property>
-              <Property label={t("sftp.revision")}>{entry.revision}</Property>
-            </>
-          )}
-        </dl>
+        {mobileViewport ? <details className="min-h-0 shrink-0 overflow-auto border-t border-line"><summary className="cursor-pointer px-3 py-3 text-sm text-ink-muted">{t("sftp.properties")}</summary><div className="max-h-40 overflow-auto">{properties}</div></details> : properties}
       </div>
 
       <div className="flex flex-wrap justify-end gap-2 border-t border-line px-3 py-2">

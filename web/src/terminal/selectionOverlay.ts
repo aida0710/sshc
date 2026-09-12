@@ -1,5 +1,5 @@
 import { viewportText, type ViewportBuffer } from "./buffer";
-import { measureCells } from "./metrics";
+import { measureCells, type MeasurableTerminal } from "./metrics";
 
 
 export const overlayClass = "sshc-select-overlay";
@@ -7,9 +7,7 @@ export const overlayClass = "sshc-select-overlay";
 const tapSlopPixels = 8;
 const tapHoldMillis = 400;
 
-type OverlayTerminal = {
-  readonly element: HTMLElement | undefined;
-  readonly rows: number;
+type OverlayTerminal = MeasurableTerminal & {
   readonly cols: number;
   readonly buffer: { readonly active: ViewportBuffer };
   focus(): void;
@@ -67,30 +65,47 @@ export function attachSelectionOverlay(container: HTMLElement, view: OverlayTerm
   };
 
   let touchedAt = 0;
+  let touchedX = 0;
   let touchedY = 0;
   let dragged = false;
+  let touching = false;
+  let beganWithSelection = false;
   const began = (event: TouchEvent) => {
     const finger = event.touches[0];
-    touchedAt = finger === undefined ? 0 : Date.now();
+    touching = event.touches.length === 1 && finger !== undefined;
+    touchedAt = Date.now();
+    touchedX = finger?.clientX ?? 0;
     touchedY = finger?.clientY ?? 0;
     dragged = false;
+    beganWithSelection = selectionHeldIn(overlay);
   };
   const moved = (event: TouchEvent) => {
     const finger = event.touches[0];
-    if (finger !== undefined && Math.abs(finger.clientY - touchedY) > tapSlopPixels) dragged = true;
+    if (event.touches.length !== 1) touching = false;
+    if (finger !== undefined && Math.hypot((finger.clientX ?? 0) - touchedX, finger.clientY - touchedY) > tapSlopPixels) dragged = true;
   };
   const ended = () => {
-    const tapped = !dragged && touchedAt !== 0 && Date.now() - touchedAt < tapHoldMillis;
-    touchedAt = 0;
+    const tapped = touching && !dragged && Date.now() - touchedAt < tapHoldMillis;
+    touching = false;
     if (!tapped) return;
-    if (selectionHeldIn(overlay)) overlay.ownerDocument.getSelection()?.removeAllRanges();
+    // Dismissing text selection is an action of its own. A second deliberate
+    // tap enters typing, rather than bringing up the IME while clearing handles.
+    if (beganWithSelection || selectionHeldIn(overlay)) {
+      overlay.ownerDocument.getSelection()?.removeAllRanges();
+      paint();
+      return;
+    }
+    // Android may keep the textarea focused after Back hides the IME. Refocus
+    // only after a deliberate tap so that tapping can reopen that keyboard.
     view.blur();
     view.focus();
   };
+  const cancelled = () => { touching = false; };
   const swallowCompatMouse = (event: MouseEvent) => event.preventDefault();
   container.addEventListener("touchstart", began, { passive: true });
   container.addEventListener("touchmove", moved, { passive: true });
   container.addEventListener("touchend", ended, { passive: true });
+  container.addEventListener("touchcancel", cancelled, { passive: true });
   container.addEventListener("mousedown", swallowCompatMouse);
 
   const render = view.onRender(paint);
@@ -101,6 +116,7 @@ export function attachSelectionOverlay(container: HTMLElement, view: OverlayTerm
     container.removeEventListener("touchstart", began);
     container.removeEventListener("touchmove", moved);
     container.removeEventListener("touchend", ended);
+    container.removeEventListener("touchcancel", cancelled);
     container.removeEventListener("mousedown", swallowCompatMouse);
     overlay.remove();
   };

@@ -62,20 +62,18 @@ test("drills through group levels and keeps every descendant connection in scope
   await openApplication(page, installation);
 
   const rootGroups = page.getByRole("group", { name: "Filter connections by group" });
-  await expect(page.getByRole("heading", { name: "Groups 8" })).toBeVisible();
+  await expect(rootGroups).toBeVisible();
   await expect(page.getByRole("heading", { name: "Connections 29" })).toBeVisible();
   await expect(rootGroups.getByRole("button")).toHaveCount(8);
+  await expect(page.getByRole("list", { name: "Available connections" }).getByRole("listitem")).toHaveCount(29);
   await expect(rootGroups.getByRole("button", { name: "Open Production, 10 connections" })).toBeVisible();
   await expect(rootGroups.getByRole("button", { name: "Open Production/Asia, 4 connections" })).toHaveCount(0);
 
-  const grid = await rootGroups.evaluate((element) => ({
-    display: getComputedStyle(element).display,
-    columns: getComputedStyle(element).gridTemplateColumns.split(" ").length,
+  const bounds = await rootGroups.evaluate((element) => ({
     scrollWidth: element.scrollWidth,
     clientWidth: element.clientWidth,
   }));
-  expect(grid).toMatchObject({ display: "grid", columns: 4 });
-  expect(grid.scrollWidth).toBeLessThanOrEqual(grid.clientWidth);
+  expect(bounds.scrollWidth).toBeLessThanOrEqual(bounds.clientWidth);
 
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
     await page.screenshot({
@@ -85,9 +83,9 @@ test("drills through group levels and keeps every descendant connection in scope
 
   await rootGroups.getByRole("button", { name: "Open Production, 10 connections" }).click();
   const productionGroups = page.getByRole("group", { name: "Filter connections by group" });
-  await expect(page.getByRole("heading", { name: "Groups 2" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Connections 10" })).toBeVisible();
   await expect(productionGroups.getByRole("button")).toHaveCount(2);
+  await expect(page.getByRole("list", { name: "Available connections" }).getByRole("listitem")).toHaveCount(10);
   await expect(productionGroups.getByRole("button", { name: "Open Production/Asia, 4 connections" })).toBeVisible();
   await expect(productionGroups.getByRole("button", { name: "Open Production/Europe, 3 connections" })).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Selected group" })).toContainText("All/Production");
