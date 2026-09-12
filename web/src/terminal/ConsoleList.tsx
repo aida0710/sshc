@@ -340,7 +340,7 @@ export function ConsoleList({
                   className={`relative flex items-start gap-2 rounded-md px-2 py-1.5 transition-colors ${
                     shiftPressed
                       ? "bg-danger/10 hover:bg-danger/10"
-                      : session.id === selected ? "bg-select-fill shadow-[inset_2px_0_0_var(--ui-accent)]" : "hover:bg-hover"
+                      : session.id === selected ? "bg-select-fill" : "hover:bg-hover"
                   }`}
                 >
 
