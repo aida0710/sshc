@@ -180,7 +180,7 @@ export function ConsoleList({
         </p>
       )}
       {sessions.length === 0 ? (
-        <p className="px-1 text-xs text-ink-muted">{t("terminal.noSessions")}</p>
+        <p className="px-2 text-xs text-ink-muted">{t("terminal.noSessions")}</p>
       ) : (
         <ul
           aria-label={t("terminal.consoleList")}
