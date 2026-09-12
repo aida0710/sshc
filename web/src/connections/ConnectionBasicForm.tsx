@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, useId, type FormEvent } from "react";
 import type { Problem } from "../api/client";
 import {
   type HostDetail,
@@ -20,7 +20,7 @@ import { eligibilityText } from "./eligibilityText";
 import { directIdentityFields, isConcreteIdentityValue } from "./authenticationPolicy";
 import { CheckboxField, control, hintText, sectionHeading } from "../ui/form";
 import { PasswordField } from "../ui/PasswordField";
-import { Button, Card, Notice, Row } from "../ui/surface";
+import { Button, Notice, Row } from "../ui/surface";
 import { deriveBasicField, type BasicFieldState, type BasicKeyword } from "./basicFields";
 import { formatValues, isValidHostName } from "../rules/rules";
 
@@ -70,6 +70,44 @@ function sourceText(field: BasicFieldState, t: ReturnType<typeof useTranslate>):
   if (field.origin === "complex") return t("conn.basicReadOnlyAdvanced");
   const path = field.source?.path ?? field.source?.absolute ?? "";
   return t("conn.basicInheritedFrom", { path, line: field.source?.line ?? 0 });
+}
+
+function ConnectionField({ field, label, error, inheritLabel, onChange, onInherit, numeric = false }: {
+  field: DraftField;
+  label: string;
+  error: string;
+  inheritLabel: string;
+  onChange: (value: string) => void;
+  onInherit: () => void;
+  numeric?: boolean;
+}) {
+  const t = useTranslate();
+  const id = useId();
+  const hint = field.state.origin === "direct" ? "" : sourceText(field.state, t);
+  const warning = field.state.origin === "complex" ? t("conn.basicComplex", { keyword: field.state.keyword }) : error;
+  return (
+    <div className="flex min-w-0 flex-col gap-1.5">
+      <label htmlFor={id} className="text-sm text-ink-muted">{label}</label>
+      <input
+        id={id}
+        type={numeric ? "number" : "text"}
+        {...(numeric ? { min: 1, max: 65535 } : {})}
+        value={field.value}
+        disabled={!field.state.editable || field.state.origin === "complex"}
+        onChange={(event) => onChange(event.target.value)}
+        aria-invalid={warning !== "" || undefined}
+        aria-describedby={hint !== "" || warning !== "" ? `${id}-detail` : undefined}
+        className={control}
+      />
+      {hint === "" && warning === "" ? null : <div id={`${id}-detail`} className="space-y-1 text-xs">
+        {hint === "" ? null : <p className="text-ink-muted">{hint}</p>}
+        {warning === "" ? null : <p className="text-notice-ink">{warning}</p>}
+      </div>}
+      {field.state.origin === "direct" ? <button type="button" aria-pressed={field.inherit} onClick={onInherit} className={`self-start rounded py-1 text-left text-xs underline-offset-4 hover:text-accent hover:underline ${field.inherit ? "font-medium text-notice-ink" : "text-ink-muted"}`}>
+        {field.inherit ? t("conn.basicKeepDirect") : inheritLabel}
+      </button> : null}
+    </div>
+  );
 }
 
 export function ConnectionBasicForm({
@@ -555,70 +593,18 @@ export function ConnectionBasicForm({
       <fieldset disabled={disabled} className="contents">
       <section className="flex flex-col gap-2" aria-labelledby="basic-connection-heading">
         <h3 id="basic-connection-heading" className={sectionHeading}>{t("conn.basicConnection")}</h3>
-        <Card>
-          <Row
-            label={t("conn.basicHostName")}
-            hint={sourceText(hostName.state, t)}
-            warning={hostName.state.origin === "complex" ? t("conn.basicComplex", { keyword: "HostName" }) : hostError || serverHostError || undefined}
-            action={hostName.state.origin === "direct" ? (
-              <Button onClick={() => setHostName({ ...hostName, inherit: !hostName.inherit })}>
-                {hostName.inherit ? t("conn.basicKeepDirect") : t("conn.basicUseInheritedHost")}
-              </Button>
-            ) : undefined}
-          >
-            <input
-              aria-label={t("conn.basicHostName")}
-              value={hostName.value}
-              disabled={!hostName.state.editable || hostName.state.origin === "complex"}
-              onChange={(event) => updateField(setHostName, hostName, event.target.value)}
-              className={control}
-            />
-          </Row>
-          <Row
-            label={t("conn.basicUser")}
-            hint={sourceText(user.state, t)}
-            warning={user.state.origin === "complex" ? t("conn.basicComplex", { keyword: "User" }) : userError || serverUserError || undefined}
-            action={user.state.origin === "direct" ? (
-              <Button onClick={() => setUser({ ...user, inherit: !user.inherit })}>
-                {user.inherit ? t("conn.basicKeepDirect") : t("conn.basicUseInheritedUser")}
-              </Button>
-            ) : undefined}
-          >
-            <input
-              aria-label={t("conn.basicUser")}
-              value={user.value}
-              disabled={!user.state.editable || user.state.origin === "complex"}
-              onChange={(event) => updateField(setUser, user, event.target.value)}
-              className={control}
-            />
-          </Row>
-          <Row
-            label={t("conn.basicPort")}
-            hint={sourceText(port.state, t)}
-            warning={port.state.origin === "complex" ? t("conn.basicComplex", { keyword: "Port" }) : portError || serverPortError || undefined}
-            action={port.state.origin === "direct" ? (
-              <Button onClick={() => setPort({ ...port, inherit: !port.inherit })}>
-                {port.inherit ? t("conn.basicKeepDirect") : t("conn.basicUseInheritedPort")}
-              </Button>
-            ) : undefined}
-          >
-            <input
-              aria-label={t("conn.basicPort")}
-              type="number"
-              min={1}
-              max={65535}
-              value={port.value}
-              disabled={!port.state.editable || port.state.origin === "complex"}
-              onChange={(event) => updateField(setPort, port, event.target.value)}
-              className={control}
-            />
-          </Row>
-        </Card>
+        <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2">
+          <div className="sm:col-span-2">
+            <ConnectionField field={hostName} label={t("conn.basicHostName")} error={hostError || serverHostError} inheritLabel={t("conn.basicUseInheritedHost")} onChange={(value) => updateField(setHostName, hostName, value)} onInherit={() => setHostName({ ...hostName, inherit: !hostName.inherit })} />
+          </div>
+          <ConnectionField field={user} label={t("conn.basicUser")} error={userError || serverUserError} inheritLabel={t("conn.basicUseInheritedUser")} onChange={(value) => updateField(setUser, user, value)} onInherit={() => setUser({ ...user, inherit: !user.inherit })} />
+          <ConnectionField field={port} label={t("conn.basicPort")} error={portError || serverPortError} inheritLabel={t("conn.basicUseInheritedPort")} onChange={(value) => updateField(setPort, port, value)} onInherit={() => setPort({ ...port, inherit: !port.inherit })} numeric />
+        </div>
       </section>
 
-      <section className="flex flex-col gap-2" aria-labelledby="basic-auth-heading">
+      <section className="flex flex-col gap-3 border-t border-line pt-4" aria-labelledby="basic-auth-heading">
         <h3 id="basic-auth-heading" className={sectionHeading}>{t("conn.basicAuthentication")}</h3>
-        <Card>
+        <div>
           <Row
             label={t("conn.basicPrivateKey")}
             warning={serverKeyError || undefined}
@@ -626,9 +612,7 @@ export function ConnectionBasicForm({
               ? t("conn.basicCustomKey", { path: customKey })
               : keyState === "complex"
                 ? t("conn.basicComplexKey")
-                : draftHasExplicitKey
-                  ? t("conn.basicThisConnection")
-                  : t("conn.basicAgentOrInherited")}
+                : undefined}
           >
             <select
               aria-label={t("conn.basicPrivateKey")}
@@ -670,7 +654,7 @@ export function ConnectionBasicForm({
               <summary className="cursor-pointer px-3 py-3 text-sm font-medium text-ink">
                 {t("conn.basicManageKeyPassphrase")}
               </summary>
-              <div className="flex flex-col gap-3 border-t border-hairline px-3 py-3">
+              <div className="flex flex-col gap-3 border-t border-hairline py-3">
                 <div>
                   <p className="text-sm text-ink-muted">{t("conn.basicKeyPassphraseHeading")}</p>
                   <p className={hintText}>
@@ -720,18 +704,18 @@ export function ConnectionBasicForm({
           ) : null}
 
           {selectedPrivateKey !== undefined && !selectedPrivateKey.encrypted ? (
-            <p className={`border-t border-hairline px-3 py-3 ${hintText}`}>
+            <p className={`border-t border-hairline py-3 ${hintText}`}>
               {t("conn.basicKeyPassphraseUnencrypted")}
             </p>
           ) : null}
 
           {draftHasExplicitKey ? (
             passwordCleanup ? (
-              <div className="border-t border-hairline px-3 py-3">
+              <div className="border-t border-hairline py-3">
                 <Notice>{t("conn.basicPasswordCleanup")}</Notice>
               </div>
             ) : null
-          ) : <div className="border-t border-hairline px-3 py-3">
+          ) : <div className="border-t border-hairline py-3">
             <div className="flex flex-col gap-3">
               <div>
                 <p className="text-sm text-ink-muted">{t("conn.basicStoredPassword")}</p>
@@ -826,7 +810,7 @@ export function ConnectionBasicForm({
             </div>
           </div>}
 
-          <div className="border-t border-hairline px-3 py-3">
+          <div className="border-t border-hairline py-3">
             <div className="flex flex-col gap-3">
               <div>
                 <p className="text-sm text-ink-muted">{t("conn.basicStoredTOTP")}</p>
@@ -894,7 +878,7 @@ export function ConnectionBasicForm({
               ) : null}
             </div>
           </div>
-        </Card>
+        </div>
       </section>
 
       {dirty ? <div className="flex flex-wrap items-center justify-end gap-3 border-t border-line py-3">

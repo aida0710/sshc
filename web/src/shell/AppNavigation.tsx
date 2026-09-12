@@ -110,7 +110,7 @@ export function AppNavigation({
         navigationOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full shadow-none"
       }`}
     >
-      <div data-navigation-heading className="mb-1 flex h-10 shrink-0 items-center gap-2 border-b border-line px-1">
+      <div data-navigation-heading className="mb-2 flex h-10 shrink-0 items-center gap-2 px-1">
         <BrandMark className="h-6 w-6" />
         <h1 className="font-mono text-sm font-semibold tracking-tight">{t("shell.title")}</h1>
         <span aria-hidden="true" className="h-4 w-px bg-line" />
@@ -122,11 +122,12 @@ export function AppNavigation({
       <button
         type="button"
         onClick={onOpenCommandPalette}
-        className="mb-1 flex h-10 shrink-0 items-center gap-2 rounded border border-control-line bg-control px-2.5 text-sm text-ink-muted hover:border-accent hover:text-ink md:h-8 md:text-xs"
+        title={`${t("palette.open")} (${shortcuts.palette.join(" / ")})`}
+        className="mb-3 flex h-10 shrink-0 items-center gap-2 rounded-md border border-line bg-control px-2.5 text-sm text-ink-muted transition-colors hover:border-accent/60 hover:text-ink md:h-9 md:text-xs"
       >
-        <Icon name="search" className="h-4 w-4" />
-        <span className="flex-1 text-left">{t("palette.open")}</span>
-        <kbd className="hidden font-mono text-[10px] text-ink-faint md:block">{shortcuts.palette.join(" / ")}</kbd>
+        <Icon name="search" className="h-4 w-4 shrink-0" />
+        <span className="min-w-0 flex-1 truncate text-left">{t("palette.open")}</span>
+        <kbd aria-hidden="true" className="hidden shrink-0 rounded border border-line px-1 py-0.5 font-mono text-[10px] text-ink-faint md:block">{shortcuts.palette[0]}</kbd>
       </button>
 
       <div className="shrink-0">
@@ -137,7 +138,7 @@ export function AppNavigation({
         </NavigationGroup>
       </div>
 
-      <div className="shrink-0 border-y border-line py-1">
+      <div className="mb-1 mt-1 shrink-0 border-b border-line pb-2">
         {navigationLink("Menu")}
       </div>
 
@@ -315,15 +316,15 @@ function NavigationLink({
       }}
       className={`group relative flex min-h-10 w-full items-center gap-2 overflow-hidden rounded-sm px-2 py-1 text-left text-sm transition-colors md:my-px md:min-h-8 md:gap-2.5 md:py-0.5 ${
         active
-          ? "bg-select-fill font-semibold text-ink"
-          : "font-medium text-ink-muted hover:bg-select-fill hover:text-ink"
+          ? "bg-select-fill font-semibold text-accent"
+          : "font-medium text-ink-muted hover:bg-hover hover:text-ink"
       }`}
     >
       {active ? <span aria-hidden="true" className="absolute inset-y-1 left-0 w-0.5 bg-accent" /> : null}
       <span
         aria-hidden="true"
         className={`grid h-6 w-6 shrink-0 place-items-center transition-colors md:h-5 md:w-5 ${
-          active ? "text-ink" : "text-ink-muted group-hover:text-ink"
+          active ? "text-accent" : "text-ink-muted group-hover:text-ink"
         }`}
       >
         <Icon name={sectionIcons[name]} className="h-4 w-4" />

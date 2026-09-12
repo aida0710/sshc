@@ -108,6 +108,48 @@ test("mobile transfer details preserve the file list at 640px and 480px heights"
   }
 });
 
+test("home cards connect with one tap and their menus stay inside the cards", async ({ page, installation }) => {
+  const requested: unknown[] = [];
+  await page.route("**/api/v1/terminal/sessions", async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    requested.push(route.request().postDataJSON());
+    await route.abort("failed");
+  });
+  await openApplication(page, installation);
+  const list = page.getByRole("list", { name: "Available connections" });
+  for (const height of [844, 640]) {
+    await page.setViewportSize({ width: 390, height });
+    for (const alias of ["bastion", "nas"]) {
+      const card = list.getByRole("listitem").filter({ hasText: alias });
+      await card.scrollIntoViewIfNeeded();
+      const connect = card.getByRole("button", { name: new RegExp(`^Connect to ${alias}\\.`) });
+      const menu = card.getByRole("button", { name: `Actions for ${alias}`, exact: true });
+      await expect(card.getByRole("button")).toHaveCount(2);
+      await expect(async () => {
+        const outer = await card.boundingBox();
+        const action = await menu.boundingBox();
+        expect(outer).not.toBeNull();
+        expect(action).not.toBeNull();
+        if (outer === null || action === null) return;
+        expect(action.height).toBeGreaterThanOrEqual(44);
+        expect(action.width).toBeGreaterThanOrEqual(44);
+        expect(action.x).toBeGreaterThanOrEqual(outer.x);
+        expect(action.y).toBeGreaterThanOrEqual(outer.y);
+        expect(action.x + action.width).toBeLessThanOrEqual(outer.x + outer.width);
+        expect(action.y + action.height).toBeLessThanOrEqual(outer.y + outer.height);
+      }).toPass();
+      // Trial performs hit testing without starting a connection to the fixture host.
+      await connect.tap({ trial: true });
+      await menu.tap();
+      await expect(page.getByRole("menuitem", { name: "Open connection settings" })).toBeVisible();
+      expect(requested).toEqual([]);
+      await page.keyboard.press("Escape");
+    }
+  }
+  await list.getByRole("button", { name: /^Connect to nas\./ }).tap();
+  await expect.poll(() => requested).toEqual([{ kind: "ssh", alias: "nas" }]);
+});
+
 test("one tap opens folders with immediate loading feedback and checkboxes enter selection mode", async ({ page, installation }) => {
   let finishProjects: (() => void) | undefined;
   const projectsGate = new Promise<void>((resolve) => { finishProjects = resolve; });

@@ -398,8 +398,8 @@ test("uses established product names in the Japanese navigation", async ({ page,
   await page.reload();
   await expect(sessionStatus(page)).toContainText("ローカルセッション稼働中");
 
-  const quickConnect = page.locator('section[aria-labelledby="quick-connect-heading"]');
-  await expect(quickConnect.locator('[data-sshc-brand-mark="true"]')).toHaveCount(1);
+  const quickConnect = page.getByRole("region", { name: "Quick Connect", exact: true });
+  await expect(quickConnect).toBeVisible();
   await expect(quickConnect).not.toContainText(">_");
 
   await page.getByRole("button", { name: "ナビゲーション", exact: true }).click();

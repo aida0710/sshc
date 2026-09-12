@@ -11,15 +11,15 @@ export const autoControl = control.replace("w-full", "w-auto");
 
 export const primaryAction =
   "whitespace-nowrap rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-ink " +
-  "hover:brightness-110 disabled:bg-line disabled:text-ink-faint";
+  "transition-[background-color,box-shadow,filter] duration-150 hover:brightness-110 active:brightness-95 disabled:cursor-not-allowed disabled:bg-line disabled:text-ink-faint";
 
 export const secondaryAction =
   "whitespace-nowrap rounded-md border border-control-line bg-card px-3 py-1.5 text-sm text-ink " +
-  "hover:bg-select-fill disabled:text-ink-faint";
+  "transition-colors duration-150 hover:border-accent/50 hover:bg-hover active:bg-select-fill disabled:cursor-not-allowed disabled:text-ink-faint";
 
 export const dangerAction =
   "whitespace-nowrap rounded-md border border-control-line px-3 py-1.5 text-sm text-danger " +
-  "hover:bg-select-fill";
+  "transition-colors duration-150 hover:border-danger/50 hover:bg-danger/10";
 
 export const fieldLabel = "text-xs font-medium tracking-wide text-ink-muted";
 export const hintText = "text-xs text-ink-muted";

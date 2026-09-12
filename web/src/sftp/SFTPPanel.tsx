@@ -107,7 +107,7 @@ function MenuActionList({ actions }: { actions: SFTPMenuAction[] }) {
           role="menuitem"
           disabled={action.disabled === true}
           onClick={action.run}
-          className={`block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:min-h-0 ${action.danger === true ? "text-danger" : ""}`}
+          className={`block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-hover focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:min-h-0 ${action.danger === true ? "text-danger" : ""}`}
         >
           {action.label}
         </button>
@@ -1246,22 +1246,22 @@ export function SFTPPanel({
             title={t("sftp.openTerminalHere")}
             disabled={busy || dirty || !connected || path === ""}
             onClick={() => void onOpenTerminal(alias, path)}
-            className="flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-select-fill hover:text-ink disabled:text-ink-faint md:size-8"
+            className="flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover hover:text-ink disabled:text-ink-faint md:size-8"
           >
             <Icon name="terminal" className="size-4" />
           </button>
         )}
         <div role="group" aria-label={t("sftp.navigation")} className="flex shrink-0 overflow-hidden rounded-md bg-toolbar/70">
-          <button type="button" aria-label={t("sftp.back")} disabled={busy || dirty || navigation.index <= 0} onClick={() => void navigateHistory(-1)} className="flex size-9 items-center justify-center text-ink-muted hover:bg-select-fill disabled:text-ink-faint md:size-8">
+          <button type="button" aria-label={t("sftp.back")} disabled={busy || dirty || navigation.index <= 0} onClick={() => void navigateHistory(-1)} className="flex size-9 items-center justify-center text-ink-muted hover:bg-hover disabled:text-ink-faint md:size-8">
             <span aria-hidden="true">←</span>
           </button>
-          <button type="button" aria-label={t("sftp.forward")} disabled={busy || dirty || navigation.index < 0 || navigation.index >= navigation.paths.length - 1} onClick={() => void navigateHistory(1)} className="flex size-9 items-center justify-center text-ink-muted hover:bg-select-fill disabled:text-ink-faint md:size-8">
+          <button type="button" aria-label={t("sftp.forward")} disabled={busy || dirty || navigation.index < 0 || navigation.index >= navigation.paths.length - 1} onClick={() => void navigateHistory(1)} className="flex size-9 items-center justify-center text-ink-muted hover:bg-hover disabled:text-ink-faint md:size-8">
             <span aria-hidden="true">→</span>
           </button>
-          <button type="button" aria-label={t("sftp.homeDirectory")} disabled={busy || dirty || !connected} onClick={() => void load("")} className="flex size-9 items-center justify-center text-ink-muted hover:bg-select-fill disabled:text-ink-faint md:size-8">
+          <button type="button" aria-label={t("sftp.homeDirectory")} disabled={busy || dirty || !connected} onClick={() => void load("")} className="flex size-9 items-center justify-center text-ink-muted hover:bg-hover disabled:text-ink-faint md:size-8">
             <Icon name="home" className="size-4" />
           </button>
-          <button type="button" aria-label={t("sftp.rootDirectory")} disabled={busy || dirty || !connected || path === "/"} onClick={() => void load("/")} className="flex size-9 items-center justify-center font-mono text-sm text-ink-muted hover:bg-select-fill disabled:text-ink-faint md:size-8">
+          <button type="button" aria-label={t("sftp.rootDirectory")} disabled={busy || dirty || !connected || path === "/"} onClick={() => void load("/")} className="flex size-9 items-center justify-center font-mono text-sm text-ink-muted hover:bg-hover disabled:text-ink-faint md:size-8">
             /
           </button>
         </div>
@@ -1289,19 +1289,19 @@ export function SFTPPanel({
         ) : (
           <div className="flex min-w-44 grow items-center rounded-md bg-control/60 px-1" data-testid="sftp-current-path" data-path={path}>
             <nav aria-label={t("sftp.path")} className="flex min-w-0 grow items-center overflow-x-auto whitespace-nowrap font-mono text-sm">
-              <button type="button" disabled={busy || dirty || !connected || path === "/"} onClick={() => void load("/")} className="rounded px-1.5 py-1.5 text-ink-muted hover:bg-select-fill hover:text-ink disabled:text-ink-faint md:py-1">/</button>
+              <button type="button" disabled={busy || dirty || !connected || path === "/"} onClick={() => void load("/")} className="rounded px-1.5 py-1.5 text-ink-muted hover:bg-hover hover:text-ink disabled:text-ink-faint md:py-1">/</button>
               {pathPieces.map((piece, index) => (
                 <span key={breadcrumbPaths[index]} className="flex min-w-0 items-center">
                   {index > 0 || path !== "/" ? <Icon name="chevronRight" className="size-3 text-ink-faint" /> : null}
                   {index === pathPieces.length - 1 ? (
                     <span className="max-w-48 truncate px-1.5 py-1.5 font-medium text-ink md:py-1" title={piece}>{piece}</span>
                   ) : (
-                    <button type="button" disabled={busy || dirty || !connected} onClick={() => void load(breadcrumbPaths[index])} className="max-w-40 truncate rounded px-1.5 py-1.5 text-ink-muted hover:bg-select-fill hover:text-ink disabled:text-ink-faint md:py-1" title={piece}>{piece}</button>
+                    <button type="button" disabled={busy || dirty || !connected} onClick={() => void load(breadcrumbPaths[index])} className="max-w-40 truncate rounded px-1.5 py-1.5 text-ink-muted hover:bg-hover hover:text-ink disabled:text-ink-faint md:py-1" title={piece}>{piece}</button>
                   )}
                 </span>
               ))}
             </nav>
-            <button type="button" aria-label={t("sftp.editPath")} disabled={busy || dirty || !connected} onClick={() => setPathEditing(true)} className="flex size-8 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-select-fill hover:text-ink disabled:text-ink-faint">
+            <button type="button" aria-label={t("sftp.editPath")} disabled={busy || dirty || !connected} onClick={() => setPathEditing(true)} className="flex size-8 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover hover:text-ink disabled:text-ink-faint">
               <Icon name="edit" className="size-3.5" />
             </button>
           </div>
@@ -1345,7 +1345,7 @@ export function SFTPPanel({
           <div ref={menuRoot} hidden={mobileInteraction && selectedEntries.length === 0 && !mobileSearchOpen} className={mobileInteraction && selectedEntries.length === 0 && !mobileSearchOpen ? "hidden" : "relative flex min-h-10 shrink-0 items-center gap-1 border-b border-line/50 bg-toolbar/45 px-2 py-1 md:min-h-8 md:py-0.5"}>
             {selectedEntries.length > 0 && !(mobileInteraction && mobileSearchOpen) ? (
               <>
-                <button type="button" aria-label={t("sftp.clearSelection")} onClick={() => setSelectedPaths(new Set())} className="flex size-10 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-select-fill hover:text-ink md:size-7">
+                <button type="button" aria-label={t("sftp.clearSelection")} onClick={() => setSelectedPaths(new Set())} className="flex size-10 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover hover:text-ink md:size-7">
                   <Icon name="close" className="size-3.5" />
                 </button>
                 <span className="min-w-0 grow truncate text-xs font-medium text-ink">
@@ -1373,17 +1373,17 @@ export function SFTPPanel({
                     className="h-8 w-full rounded-md border border-control-line/60 bg-control/70 py-1 pl-7 pr-2 text-xs outline-none focus:border-accent md:h-7"
                   />
                 </label>
-                {compactViewport ? null : <button type="button" disabled={busy} onClick={showDetails} className="rounded px-2 py-1 text-xs text-ink-muted hover:bg-select-fill hover:text-ink disabled:text-ink-faint">{t("sftp.details")}</button>}
-                {compactViewport ? null : <button type="button" disabled={busy || !selectedEntries.some((entry) => entry.type === "file" || entry.type === "directory")} onClick={() => void downloadEntries(selectedEntries)} className="rounded px-2 py-1 text-xs text-ink-muted hover:bg-select-fill hover:text-ink disabled:text-ink-faint">{t("sftp.download")}</button>}
-                {compactViewport || selectedEntry === null ? null : <button type="button" disabled={busy} onClick={renameSelection} className="rounded px-2 py-1 text-xs text-ink-muted hover:bg-select-fill hover:text-ink disabled:text-ink-faint">{t("sftp.rename")}</button>}
-                {compactViewport ? null : <button type="button" disabled={busy} onClick={deleteSelection} className="rounded px-2 py-1 text-xs text-danger hover:bg-select-fill disabled:text-ink-faint">{t("sftp.delete")}</button>}
+                {compactViewport ? null : <button type="button" disabled={busy} onClick={showDetails} className="rounded px-2 py-1 text-xs text-ink-muted hover:bg-hover hover:text-ink disabled:text-ink-faint">{t("sftp.details")}</button>}
+                {compactViewport ? null : <button type="button" disabled={busy || !selectedEntries.some((entry) => entry.type === "file" || entry.type === "directory")} onClick={() => void downloadEntries(selectedEntries)} className="rounded px-2 py-1 text-xs text-ink-muted hover:bg-hover hover:text-ink disabled:text-ink-faint">{t("sftp.download")}</button>}
+                {compactViewport || selectedEntry === null ? null : <button type="button" disabled={busy} onClick={renameSelection} className="rounded px-2 py-1 text-xs text-ink-muted hover:bg-hover hover:text-ink disabled:text-ink-faint">{t("sftp.rename")}</button>}
+                {compactViewport ? null : <button type="button" disabled={busy} onClick={deleteSelection} className="rounded px-2 py-1 text-xs text-danger hover:bg-hover disabled:text-ink-faint">{t("sftp.delete")}</button>}
                 <button
                   type="button"
                   aria-label={selectionMenuLabel()}
                   aria-haspopup="menu"
                   aria-expanded={!mobileInteraction && menu?.kind === "selected"}
                   onClick={(event) => toggleMenu("selected", event.currentTarget)}
-                  className="flex size-10 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-select-fill focus:bg-select-fill focus:outline-none md:size-7"
+                  className="flex size-10 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover focus:bg-select-fill focus:outline-none md:size-7"
                 >
                   <Icon name="moreHorizontal" className="size-4" />
                 </button>
@@ -1403,7 +1403,7 @@ export function SFTPPanel({
               aria-expanded={!mobileInteraction && menu?.kind === "create"}
               disabled={busy || !connected}
               onClick={(event) => toggleMenu("create", event.currentTarget)}
-              className="flex size-10 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-select-fill focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:size-7"
+              className="flex size-10 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:size-7"
             >
               <Icon name="plus" className="size-4" />
             </button>
@@ -1414,7 +1414,7 @@ export function SFTPPanel({
               aria-expanded={!mobileInteraction && menu?.kind === "places"}
               disabled={busy || !connected}
               onClick={(event) => toggleMenu("places", event.currentTarget)}
-              className={`flex size-10 shrink-0 items-center justify-center rounded hover:bg-select-fill focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:size-7 ${bookmarkedHere ? "text-accent" : "text-ink-muted"}`}
+              className={`flex size-10 shrink-0 items-center justify-center rounded hover:bg-hover focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:size-7 ${bookmarkedHere ? "text-accent" : "text-ink-muted"}`}
             >
               <Icon name="star" className="size-4" />
             </button>
@@ -1441,7 +1441,7 @@ export function SFTPPanel({
               title={t("sftp.searchBelow")}
               disabled={busy || !connected || filter.trim() === ""}
               onClick={() => void runSearch()}
-              className="flex size-10 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-select-fill focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:size-7"
+              className="flex size-10 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:size-7"
             >
               <Icon name="search" className="size-4" />
             </button>
@@ -1478,9 +1478,9 @@ export function SFTPPanel({
             />
             {!mobileInteraction && menu?.kind === "create" ? (
               <div ref={menuPanel} role="menu" aria-label={t("sftp.createActions")} className="absolute left-2 top-full z-20 mt-1 w-52 rounded-lg border border-control-line bg-card p-1 shadow-lg">
-                <button type="button" role="menuitem" disabled={busy} onClick={() => { setMenu(null); setInputIntent({ kind: "mkdir" }); }} className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:min-h-0">{t("sftp.newFolder")}</button>
-                <button type="button" role="menuitem" disabled={busy} onClick={() => { setMenu(null); upload.current?.click(); }} className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:min-h-0">{t("sftp.upload")}</button>
-                <button type="button" role="menuitem" disabled={busy} onClick={() => { setMenu(null); folderUpload.current?.click(); }} className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:min-h-0">{t("sftp.uploadFolder")}</button>
+                <button type="button" role="menuitem" disabled={busy} onClick={() => { setMenu(null); setInputIntent({ kind: "mkdir" }); }} className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-hover focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:min-h-0">{t("sftp.newFolder")}</button>
+                <button type="button" role="menuitem" disabled={busy} onClick={() => { setMenu(null); upload.current?.click(); }} className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-hover focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:min-h-0">{t("sftp.upload")}</button>
+                <button type="button" role="menuitem" disabled={busy} onClick={() => { setMenu(null); folderUpload.current?.click(); }} className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-hover focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:min-h-0">{t("sftp.uploadFolder")}</button>
               </div>
             ) : null}
             {!mobileInteraction && menu?.kind === "places" ? (
@@ -1490,7 +1490,7 @@ export function SFTPPanel({
                   role="menuitem"
                   disabled={path === ""}
                   onClick={() => sftpPlaces.toggleBookmark(alias, path)}
-                  className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-select-fill focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:min-h-0"
+                  className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-hover focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:min-h-0"
                 >
                   {t(bookmarkedHere ? "sftp.removeBookmark" : "sftp.addBookmark")}
                 </button>
@@ -1499,8 +1499,8 @@ export function SFTPPanel({
                     <p className="px-2.5 pt-2 text-[11px] uppercase tracking-wide text-ink-faint">{t("sftp.bookmarks")}</p>
                     {bookmarkedPaths.map((bookmark) => (
                       <span key={bookmark} className="flex items-center gap-1">
-                        <button type="button" role="menuitem" onClick={() => goTo(bookmark)} className="block min-h-10 min-w-0 grow truncate rounded px-2.5 py-2 text-left font-mono text-xs hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-0">{bookmark}</button>
-                        <button type="button" role="menuitem" aria-label={t("sftp.removeBookmarkFor", { path: bookmark })} onClick={() => sftpPlaces.removeBookmark(alias, bookmark)} className="flex size-8 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-select-fill hover:text-danger focus:bg-select-fill focus:outline-none">
+                        <button type="button" role="menuitem" onClick={() => goTo(bookmark)} className="block min-h-10 min-w-0 grow truncate rounded px-2.5 py-2 text-left font-mono text-xs hover:bg-hover focus:bg-select-fill focus:outline-none md:min-h-0">{bookmark}</button>
+                        <button type="button" role="menuitem" aria-label={t("sftp.removeBookmarkFor", { path: bookmark })} onClick={() => sftpPlaces.removeBookmark(alias, bookmark)} className="flex size-8 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover hover:text-danger focus:bg-select-fill focus:outline-none">
                           <Icon name="close" className="size-3" />
                         </button>
                       </span>
@@ -1511,7 +1511,7 @@ export function SFTPPanel({
                   <>
                     <p className="px-2.5 pt-2 text-[11px] uppercase tracking-wide text-ink-faint">{t("sftp.recentPaths")}</p>
                     {recentPaths.map((recent) => (
-                      <button key={recent} type="button" role="menuitem" onClick={() => goTo(recent)} className="block min-h-10 w-full truncate rounded px-2.5 py-2 text-left font-mono text-xs hover:bg-select-fill focus:bg-select-fill focus:outline-none md:min-h-0">{recent}</button>
+                      <button key={recent} type="button" role="menuitem" onClick={() => goTo(recent)} className="block min-h-10 w-full truncate rounded px-2.5 py-2 text-left font-mono text-xs hover:bg-hover focus:bg-select-fill focus:outline-none md:min-h-0">{recent}</button>
                     ))}
                   </>
                 )}
@@ -1595,7 +1595,7 @@ export function SFTPPanel({
                       disabled={busy || dirty}
                       onFocus={() => setFocusedKey(parentRowKey)}
                       onClick={() => { pendingFocus.current = parentRowKey; void load(parentOf(path)); }}
-                      className="flex min-h-11 w-full items-center gap-2 px-2 py-1.5 text-left text-sm hover:bg-select-fill disabled:text-ink-faint md:min-h-8 md:py-0.5"
+                      className="flex min-h-11 w-full items-center gap-2 px-2 py-1.5 text-left text-sm hover:bg-hover disabled:text-ink-faint md:min-h-8 md:py-0.5"
                     >
                       <Icon name="groups" className="size-4 text-ink-muted" />
                       <span aria-hidden="true" className="font-mono">..</span>
@@ -1629,7 +1629,7 @@ export function SFTPPanel({
                       aria-label={entry.name}
                       aria-pressed={selectedPaths.has(entry.path)}
                       tabIndex={activeRowKey === entry.path ? 0 : -1}
-                      className="flex min-h-12 min-w-0 grow touch-pan-y select-none items-center gap-2 px-2 py-2 text-left hover:bg-select-fill active:bg-select-fill disabled:text-ink-faint"
+                      className="flex min-h-12 min-w-0 grow touch-pan-y select-none items-center gap-2 px-2 py-2 text-left hover:bg-hover active:bg-select-fill disabled:text-ink-faint"
                       onFocus={() => setFocusedKey(entry.path)}
                       onClick={(event) => clickEntry(entry, event)}
                       onDoubleClick={mobileInteraction ? undefined : () => activate(entry)}
@@ -1673,7 +1673,7 @@ export function SFTPPanel({
               </tr></thead>
               <tbody>
                 {parentRowVisible ? (
-                  <tr data-row-key={parentRowKey} className="border-t border-line/40 hover:bg-select-fill/60">
+                  <tr data-row-key={parentRowKey} className="border-t border-line/40 hover:bg-hover/60">
                     <td className="px-2 py-1 md:py-0.5" colSpan={6}>
                       <button
                         type="button"
@@ -1700,7 +1700,7 @@ export function SFTPPanel({
                     onContextMenu={(event) => rowContextMenu(event, entry)}
                     draggable={!mobileInteraction && (entry.type === "file" || entry.type === "directory")}
                     onDragStart={(event) => beginRemoteDrag(event, entry)}
-                    className={`cursor-default border-t border-line/40 transition-colors ${selectedPaths.has(entry.path) ? "bg-select-fill/75" : "hover:bg-select-fill/55"}`}
+                    className={`cursor-default border-t border-line/40 transition-colors ${selectedPaths.has(entry.path) ? "bg-select-fill/75" : "hover:bg-hover/55"}`}
                   >
                     <td className="w-9 px-2 py-1 md:py-0.5">
                       <input

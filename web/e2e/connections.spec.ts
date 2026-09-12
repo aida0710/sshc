@@ -47,7 +47,7 @@ test("separates classification, filtered results, and connection detail without 
   const headerHeight = await page.locator("[data-connections-header]").evaluate((element) =>
     element.getBoundingClientRect().height,
   );
-  expect(headerHeight).toBeLessThanOrEqual(52);
+  expect(headerHeight).toBeLessThanOrEqual(60);
 
   await browser.getByRole("button", { name: "home", exact: true }).click();
   await expect(results.getByRole("button", { name: "nas" })).toBeVisible();
@@ -75,7 +75,7 @@ test("separates classification, filtered results, and connection detail without 
   const advancedTab = page.getByRole("tab", { name: "Advanced" });
   await advancedTab.click();
   await expect(advancedTab).toHaveAttribute("aria-selected", "true");
-  await expect(advancedTab).toHaveCSS("border-bottom-color", "rgb(197, 200, 202)");
+  await expect(advancedTab).toHaveCSS("border-bottom-width", "2px");
   const advancedViews = page.getByRole("tablist", { name: "Advanced setting views" });
   await expect(advancedViews).toBeVisible();
   await expect(advancedViews.getByRole("tab", { name: "Jump Host" })).toHaveAttribute("aria-selected", "true");

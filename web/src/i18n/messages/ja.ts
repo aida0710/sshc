@@ -1077,8 +1077,6 @@ export const ja = {
   "home.groupBreadcrumb": "選択中のグループ",
   "home.openGroup": "{name} を開く（接続先 {count} 件）",
   "home.noChildGroups": "この階層にグループはありません。",
-  "home.pointerHint": "マウス：ダブルクリック · タッチ：1 回タップ",
-  "home.touchHint": "1 回タップで接続",
   "home.connectGesture":
     "{alias} へ接続します。マウスではダブルクリック、タッチ画面では 1 回タップします。",
   "home.neverConnected": "接続履歴なし",
@@ -1092,6 +1090,7 @@ export const ja = {
   "home.connectionActions": "{alias} の操作",
   "home.openConnectionSettings": "接続設定を開く",
   "home.connect": "接続",
+  "home.openingConnection": "{alias} に接続中…",
   "home.opening": "接続中…",
   "home.loadFailed": "SSH 設定を読み込めませんでした。",
   "home.workspace": "ワークスペース",
