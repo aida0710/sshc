@@ -144,7 +144,7 @@ export function QuickConnectBrowser({
         <button
           type="button"
           data-touch-compact
-          aria-label={t("home.connectGesture", { alias })}
+          aria-label={t(opening ? "home.openingConnection" : "home.connectGesture", { alias })}
           aria-pressed={selected}
           disabled={launching !== ""}
           onPointerDown={(event) => { pointerType.current = event.pointerType; }}
@@ -163,7 +163,7 @@ export function QuickConnectBrowser({
             event.preventDefault();
             connect();
           }}
-          className={`flex w-full min-w-0 items-center gap-3 rounded-lg py-3 pl-3 pr-24 text-left disabled:cursor-wait max-md:min-h-28 max-md:pr-28 [@media(pointer:coarse)]:min-h-28 [@media(pointer:coarse)]:pr-28 ${
+          className={`flex w-full min-w-0 items-center gap-3 rounded-lg py-3 pl-3 pr-14 text-left disabled:cursor-wait ${
             panel ? "min-h-24" : "min-h-20"
           }`}
         >
@@ -174,16 +174,23 @@ export function QuickConnectBrowser({
               {server.duplicateAlias ? <span aria-label={t("browser.duplicateAlias")} className="text-notice-ink">⧉</span> : null}
             </span>
             <span className="mt-1 block truncate font-mono text-xs text-ink-muted" title={target}>{target}</span>
-            {server.group === "" && lastConnected === "" ? null : (
-              <span className="mt-1.5 flex min-w-0 items-center gap-1.5 text-[11px] text-ink-faint">
-                {server.group === "" ? null : <span className="truncate" title={server.group}>{server.group}</span>}
-                {server.group === "" || lastConnected === "" ? null : <span aria-hidden="true">·</span>}
-                {lastConnected === "" ? null : <span className="truncate" title={lastConnected}>{lastConnected}</span>}
-              </span>
-            )}
+            <span aria-live="polite">
+              {opening ? (
+                <span className="mt-1.5 flex items-center gap-1.5 text-xs text-ink-muted">
+                  <span aria-hidden="true" className="size-3 shrink-0 animate-spin rounded-full border-2 border-current border-r-transparent motion-reduce:animate-none" />
+                  {t("home.opening")}
+                </span>
+              ) : server.group === "" && lastConnected === "" ? null : (
+                <span className="mt-1.5 flex min-w-0 items-center gap-1.5 text-[11px] text-ink-faint">
+                  {server.group === "" ? null : <span className="truncate" title={server.group}>{server.group}</span>}
+                  {server.group === "" || lastConnected === "" ? null : <span aria-hidden="true">·</span>}
+                  {lastConnected === "" ? null : <span className="truncate" title={lastConnected}>{lastConnected}</span>}
+                </span>
+              )}
+            </span>
           </span>
         </button>
-        <div className="pointer-events-none absolute inset-y-2 right-2 flex flex-col items-end justify-between gap-1">
+        <div className="pointer-events-none absolute right-2 top-2">
           <ConnectionActions
             alias={alias}
             path={server.identity.path}
@@ -192,16 +199,6 @@ export function QuickConnectBrowser({
             onOpenSettings={onOpenSettings}
             onConnect={connect}
           />
-          <button
-            type="button"
-            aria-label={t(opening ? "home.openingConnection" : "home.connectTo", { alias })}
-            disabled={launching !== ""}
-            onClick={connect}
-            className="pointer-events-auto inline-flex min-h-8 items-center justify-center gap-1.5 rounded-md border border-control-line bg-surface-subtle px-2.5 py-1 text-xs font-medium text-ink transition-colors hover:border-accent/60 hover:bg-hover disabled:cursor-wait disabled:opacity-60"
-          >
-            {opening ? <span aria-hidden="true" className="size-3 animate-spin rounded-full border-2 border-current border-r-transparent motion-reduce:animate-none" /> : null}
-            <span aria-live="polite">{opening ? t("home.opening") : t("home.connect")}</span>
-          </button>
         </div>
       </li>
     );
@@ -288,11 +285,7 @@ export function QuickConnectBrowser({
         </section>
       )}
 
-      <div className="flex items-center justify-between gap-3">
-        <h3 className="text-xs font-semibold text-ink">{t("home.connectionCount", { count: servers.length })}</h3>
-        <span className="hidden text-right text-xs text-ink-faint md:inline">{t("home.pointerHint")}</span>
-        <span className="text-right text-xs text-ink-faint md:hidden">{t("home.touchHint")}</span>
-      </div>
+      <h3 className="text-xs font-semibold text-ink">{t("home.connectionCount", { count: servers.length })}</h3>
 
       {servers.length === 0 ? (
         <p className="border-y border-line bg-surface-subtle p-4 text-sm text-ink-muted">

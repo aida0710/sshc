@@ -170,20 +170,25 @@ describe("QuickConnectBrowser", () => {
     nas.focus();
     await userEvent.keyboard("{Enter}");
     expect(connect).toHaveBeenCalledExactlyOnceWith("nas");
+
+    connect.mockClear();
+    await userEvent.keyboard(" ");
+    expect(connect).toHaveBeenCalledExactlyOnceWith("nas");
   });
 
-  it("connects with the separate button and keeps other card actions independent", async () => {
+  it("keeps the action menu independent of selecting a card", async () => {
     const connect = vi.fn();
     renderBrowser({ onConnect: connect });
 
-    const button = screen.getByRole("button", { name: "Connect to nas" });
+    const button = screen.getByRole("button", { name: /^Connect to nas\./ });
     const card = button.closest("li")!;
     await userEvent.click(button);
-    expect(connect).toHaveBeenCalledExactlyOnceWith("nas");
-    expect(within(card).getByRole("button", { name: /^Connect to nas\./ })).toHaveAttribute("aria-pressed", "true");
+    expect(connect).not.toHaveBeenCalled();
+    expect(button).toHaveAttribute("aria-pressed", "true");
+    expect(within(card).queryByRole("button", { name: "Connect" })).not.toBeInTheDocument();
 
     await userEvent.click(within(card).getByRole("button", { name: "Actions for nas" }));
-    expect(connect).toHaveBeenCalledTimes(1);
+    expect(connect).not.toHaveBeenCalled();
     expect(screen.getByRole("menu")).toBeVisible();
   });
 
@@ -194,7 +199,7 @@ describe("QuickConnectBrowser", () => {
     expect(opening).toBeDisabled();
     expect(opening).toHaveTextContent("Opening…");
     expect(opening.closest("li")).toHaveAttribute("aria-busy", "true");
-    const another = screen.getByRole("button", { name: "Connect to eu-api" });
+    const another = screen.getByRole("button", { name: /^Connect to eu-api\./ });
     expect(another).toBeDisabled();
     await userEvent.click(another);
     expect(connect).not.toHaveBeenCalled();

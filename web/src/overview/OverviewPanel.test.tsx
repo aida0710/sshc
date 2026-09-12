@@ -127,7 +127,7 @@ describe("OverviewPanel", () => {
     await waitFor(() => expect(launch).toHaveBeenCalledWith("database"));
   });
 
-  it("opens once from the card button and reports readiness after the pending state", async () => {
+  it("opens once from the focused card and reports readiness after the pending state", async () => {
     let finish!: (value: { session: { id: string } }) => void;
     const launch = vi.fn(() => new Promise<{ session: { id: string } }>((resolve) => { finish = resolve; }));
     const opened = vi.fn();
@@ -144,9 +144,11 @@ describe("OverviewPanel", () => {
       />,
     );
 
-    await userEvent.click(await screen.findByRole("button", { name: "Connect to database" }));
+    const card = await screen.findByRole("button", { name: /^Connect to database\./ });
+    card.focus();
+    await userEvent.keyboard("{Enter}");
     expect(screen.getByRole("button", { name: "Opening database…" })).toBeDisabled();
-    const another = screen.getByRole("button", { name: "Connect to bastion" });
+    const another = screen.getByRole("button", { name: /^Connect to bastion\./ });
     await userEvent.click(another);
     expect(launch).toHaveBeenCalledExactlyOnceWith("database");
     expect(opened).not.toHaveBeenCalled();

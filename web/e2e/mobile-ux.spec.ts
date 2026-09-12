@@ -108,7 +108,13 @@ test("mobile transfer details preserve the file list at 640px and 480px heights"
   }
 });
 
-test("connection actions stay inside their mobile cards and remain tappable", async ({ page, installation }) => {
+test("home cards connect with one tap and their menus stay inside the cards", async ({ page, installation }) => {
+  const requested: unknown[] = [];
+  await page.route("**/api/v1/terminal/sessions", async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    requested.push(route.request().postDataJSON());
+    await route.abort("failed");
+  });
   await openApplication(page, installation);
   const list = page.getByRole("list", { name: "Available connections" });
   for (const height of [844, 640]) {
@@ -116,10 +122,12 @@ test("connection actions stay inside their mobile cards and remain tappable", as
     for (const alias of ["bastion", "nas"]) {
       const card = list.getByRole("listitem").filter({ hasText: alias });
       await card.scrollIntoViewIfNeeded();
-      const connect = card.getByRole("button", { name: `Connect to ${alias}`, exact: true });
+      const connect = card.getByRole("button", { name: new RegExp(`^Connect to ${alias}\\.`) });
+      const menu = card.getByRole("button", { name: `Actions for ${alias}`, exact: true });
+      await expect(card.getByRole("button")).toHaveCount(2);
       await expect(async () => {
         const outer = await card.boundingBox();
-        const action = await connect.boundingBox();
+        const action = await menu.boundingBox();
         expect(outer).not.toBeNull();
         expect(action).not.toBeNull();
         if (outer === null || action === null) return;
@@ -132,8 +140,14 @@ test("connection actions stay inside their mobile cards and remain tappable", as
       }).toPass();
       // Trial performs hit testing without starting a connection to the fixture host.
       await connect.tap({ trial: true });
+      await menu.tap();
+      await expect(page.getByRole("menuitem", { name: "Open connection settings" })).toBeVisible();
+      expect(requested).toEqual([]);
+      await page.keyboard.press("Escape");
     }
   }
+  await list.getByRole("button", { name: /^Connect to nas\./ }).tap();
+  await expect.poll(() => requested).toEqual([{ kind: "ssh", alias: "nas" }]);
 });
 
 test("one tap opens folders with immediate loading feedback and checkboxes enter selection mode", async ({ page, installation }) => {
