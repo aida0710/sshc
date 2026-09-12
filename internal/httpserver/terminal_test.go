@@ -241,6 +241,12 @@ func TestTemporaryForwardRoutesStartListAndStopOneListener(t *testing.T) {
 	if err := json.Unmarshal([]byte(body), &opened); err != nil {
 		t.Fatal(err)
 	}
+	// Ready is observed asynchronously; creating the session does not guarantee
+	// that its connected state is visible before the forwarding request.
+	waitUntil(t, func() bool {
+		session, ok := fixture.registry.Lookup(opened.Session.Id)
+		return ok && session.View().State == terminal.StateConnected
+	})
 
 	path := "/api/v1/terminal/sessions/" + opened.Session.Id + "/forwards"
 	response, body = fixture.do(t, http.MethodPost, path, `{"kind":"local","listenPort":18080,"destination":"db.internal:5432"}`)
