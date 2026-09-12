@@ -51,16 +51,35 @@ sshcは同期用のクラウドストレージを提供せず、同期データ�
 
 Sync画面の［同期するファイル］では、現在のファイルを検索して同期対象を切り替えられます。詳細設定では、ワークスペース直下の`.sshcignore`を編集できます。除外パターンには正規表現ではなく、Gitignoreと同様のglob形式を使います。`*`、`**`、`?`と、先頭`/`によるルート指定に対応しています。除外したファイルを再び含める場合は、パターンの先頭に`!`を付けます。
 
-初期状態では、次のOSメタデータ、バックアップ、一時ファイル、ロックファイルを除外します。
+初期状態では、次のOSメタデータ、バックアップ、一時ファイル、ロックファイル、SSHの許可鍵・既知ホスト情報、ログイン時の環境変数・初期化スクリプトを除外します。
 
 ```text
+# OS metadata files
 **/.DS_Store
 **/Thumbs.db
 **/desktop.ini
+
+# Backup and temporary files
 *.bak
 *.tmp
+
+# Lock files
 *.lock
+
+# ssh config
+authorized_keys
+authorized_keys2
+known_hosts
+known_hosts.old
+known_hosts2
+known_hosts2.old
+/environment
+/rc
 ```
+
+`/environment`と`/rc`は`.ssh`直下だけを対象とし、サブディレクトリ内の同名ファイルは除外しません。
+
+この既定値は`.sshcignore`が未保存の場合に使われます。保存済みの除外設定はそのまま維持されます。
 
 `.sshcignore`を保存すると、その内容自体は同期され、同じ保存先を使う端末で共通の除外設定になります。除外された既存のローカルファイルは、通常のPullでもForce Pullでも削除・上書きされません。接続設定や鍵を除外すると他端末へ届かなくなるため、画面上でも警告します。
 

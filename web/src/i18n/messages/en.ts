@@ -1289,7 +1289,7 @@ export const en = {
   "sync.exclusions.hint":
     "Unchecked files are not sent, overwritten, or removed by a receive. Existing local copies stay in place.",
   "sync.exclusions.defaults":
-    "There is no .sshcignore yet. The built-in rules exclude OS metadata, backups, temporary files, and lock files. Saving shares the rules with every machine.",
+    "There is no .sshcignore yet. The built-in rules exclude OS metadata, backups, temporary files, lock files, SSH authorized keys and known host files, and environment and rc at the root of .ssh. Saving shares the rules with every machine.",
   "sync.exclusions.search": "Search file names and paths",
   "sync.exclusions.empty": "No files match this search.",
   "sync.exclusions.sensitiveWarning":
