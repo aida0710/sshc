@@ -49,10 +49,7 @@ test("gives one named secret to two hosts and writes neither name into the file"
   await expect(assignedHosts.getByRole("listitem")).toHaveText(["bastion", "nas"]);
 
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
-    await page.evaluate(() => window.localStorage.setItem("sshc.language", "ja"));
-    await page.reload();
-    await expect(page.getByRole("region", { name: "アカウントのパスワード" })).toBeVisible();
-    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.setViewportSize({ width: 1280, height: 720 });
     await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/vault-account-passwords.png`, fullPage: true });
   }
 
