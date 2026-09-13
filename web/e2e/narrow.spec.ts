@@ -342,7 +342,7 @@ test("draws one separator above the version in the mobile drawer", async ({ page
   await page.route("**/api/v1/update", async (route) => {
     await route.fulfill({
       contentType: "application/json",
-      body: JSON.stringify({ current: "test", available: false }),
+      body: JSON.stringify({ current: process.env.SSHC_VISUAL_VERSION ?? "test", available: false }),
     });
   });
   await openApplication(page, installation);
