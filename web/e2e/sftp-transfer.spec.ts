@@ -1,7 +1,7 @@
 import { changeDisplayLanguage, expect, openApplication, openSection, test } from "./support/environment";
 
 test("keeps a chunked SFTP upload visible while another section is open", async ({ page, installation }) => {
-  test.setTimeout(process.env.SSHC_VISUAL_DIR === undefined ? 30_000 : 120_000);
+  test.setTimeout(process.env.SSHC_VISUAL_DIR === undefined ? 30_000 : 180_000);
   let releaseFirstChunk: (() => void) | undefined;
   const firstChunkGate = new Promise<void>((resolve) => { releaseFirstChunk = resolve; });
   let offset = 0;
@@ -243,8 +243,11 @@ test("keeps a chunked SFTP upload visible while another section is open", async 
     await page.screenshot({ path: `${visualDirectory}/sftp-compare-ja.png`, fullPage: true });
     await compareDialog.getByRole("button", { name: "キャンセル" }).click();
     await changeDisplayLanguage(page, "en");
+    const englishFirstPane = page.getByLabel("First remote pane");
     const englishSecondPane = page.getByLabel("Second remote pane");
     await expect(englishSecondPane.locator("button[data-value]:visible")).toHaveAttribute("data-value", "nas");
+    await chooseHost("bastion", englishFirstPane);
+    await chooseHost("nas", englishSecondPane);
     await page.getByRole("button", { name: "Compare directories", exact: true }).click();
     const englishCompareDialog = page.getByRole("dialog", { name: "Compare directories" });
     await expect(englishCompareDialog.getByText("Left only", { exact: true })).toBeVisible();
@@ -282,7 +285,7 @@ test("keeps a chunked SFTP upload visible while another section is open", async 
     await expect(page.getByRole("tablist", { name: "Left pane tabs" })).toBeVisible();
     await expect(page.getByRole("tablist", { name: "Right pane tabs" })).toHaveCount(0);
     await expect(page.locator('[aria-label="First remote pane"]')).toBeVisible();
-    await expect(page.locator('[aria-label="Second remote pane"]')).toHaveCount(0);
+    await expect(page.locator('[aria-label="Second remote pane"]')).toBeHidden();
     await expect(page.getByRole("button", { name: "Two panes" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "One pane" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Compare directories", exact: true })).toHaveCount(0);
@@ -299,18 +302,10 @@ test("keeps a chunked SFTP upload visible while another section is open", async 
     });
     await expect(page.getByText(/Upload failed: broken\.bin/)).toBeVisible();
     await changeDisplayLanguage(page, "ja");
-    const mobileTransferManager = page.getByRole("region", { name: "転送マネージャー" });
-    await mobileTransferManager.getByRole("button", { name: "転送マネージャーを展開" }).click();
-    const mobileResizeGrip = mobileTransferManager.getByRole("separator", { name: "ドラッグして転送キューの高さを変える" });
-    const mobileResizeBounds = await mobileResizeGrip.boundingBox();
-    expect(mobileResizeBounds?.height).toBeGreaterThanOrEqual(24);
-    if (mobileResizeBounds !== null) {
-      await page.mouse.move(mobileResizeBounds.x + mobileResizeBounds.width / 2, mobileResizeBounds.y + mobileResizeBounds.height / 2);
-      await page.mouse.down();
-      await page.mouse.move(mobileResizeBounds.x + mobileResizeBounds.width / 2, mobileResizeBounds.y - 88);
-      await page.mouse.up();
-    }
-    await expect(mobileResizeGrip).toHaveAttribute("aria-valuenow", "308");
+    await page.getByRole("button", { name: "転送マネージャーを展開" }).click();
+    const mobileTransferManager = page.getByRole("dialog", { name: "転送マネージャー" });
+    await expect(mobileTransferManager).toBeVisible();
+    await expect(mobileTransferManager.getByRole("separator")).toHaveCount(0);
     await expect(mobileTransferManager.getByText("失敗 · sftp_failed", { exact: true })).toBeVisible();
     await mobileTransferManager.getByRole("button", { name: "転送キューの操作" }).click();
     await expect(page.getByRole("menuitem", { name: "すべてキャンセル" })).toBeInViewport();
@@ -320,7 +315,7 @@ test("keeps a chunked SFTP upload visible while another section is open", async 
     await page.keyboard.press("Escape");
     await mobileTransferManager.getByRole("button", { name: "一覧から削除" }).click();
     await expect(mobileTransferManager.getByText("broken.bin", { exact: true })).toHaveCount(0);
-    await mobileTransferManager.getByRole("button", { name: "転送マネージャーを折りたたむ" }).click();
+    await mobileTransferManager.getByRole("button", { name: "転送マネージャーを閉じる" }).click();
     await changeDisplayLanguage(page, "en");
     await page.locator("button[data-value]").first().click();
     await expect(page.getByRole("dialog", { name: "Choose a remote host" })).toBeVisible();

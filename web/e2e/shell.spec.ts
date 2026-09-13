@@ -25,7 +25,7 @@ async function stubUpdateStatus(page: import("@playwright/test").Page) {
   await page.route("**/api/v1/update", async (route) => {
     await route.fulfill({
       contentType: "application/json",
-      body: JSON.stringify({ current: "test", available: false }),
+      body: JSON.stringify({ current: process.env.SSHC_VISUAL_VERSION ?? "test", available: false }),
     });
   });
 }
