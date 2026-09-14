@@ -523,6 +523,79 @@ describe("ConnectionBasicForm", () => {
     });
   });
 
+  it("confirms an assigned password for a destination changed in Basic", async () => {
+    const user = userEvent.setup();
+    const detail = buildDetail();
+    const harness = renderForm({
+      detail,
+      passwordVault: vi.fn().mockResolvedValue({
+        exists: true, unlocked: true, aliases: ["edge"], dedicatedKeyPassphrases: [],
+      }),
+      credentials: vi.fn().mockResolvedValue({
+        credentials: [
+          { kind: "password", name: "office", uses: ["edge"] },
+          { kind: "totp", name: "edge-code", uses: ["edge"] },
+        ],
+      }),
+      passwordEligibility: vi.fn().mockResolvedValue({
+        alias: "edge", storable: true, blockers: [], warnings: [],
+        passwordBinding: "current", totpBinding: "current",
+      }),
+    });
+    await screen.findByText("Assigned: office");
+
+    await user.clear(screen.getByLabelText("Host name or IP address"));
+    await user.type(screen.getByLabelText("Host name or IP address"), "new.example");
+    expect(screen.queryByText(/confirms the assigned password for the new authentication route/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/confirms the assigned TOTP for the new authentication route/i)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Save Basic settings" }));
+    expect(screen.getByRole("heading", { name: "Use saved credentials on this route?" })).toBeInTheDocument();
+    expect(harness.onSave).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Save and confirm" }));
+
+    expect(harness.onSave).toHaveBeenCalledWith({
+      identity: detail.form.entry.identity,
+      base: detail.file.contents,
+      hostName: { action: "set", value: "new.example" },
+      password: { kind: "confirm_route" },
+      keyPassphrase: { kind: "unchanged" },
+      totp: { kind: "confirm_route" },
+    });
+  });
+
+  it("shows a stale saved password and lets Save confirm the current route", async () => {
+    const user = userEvent.setup();
+    const detail = buildDetail();
+    const harness = renderForm({
+      detail,
+      passwordVault: vi.fn().mockResolvedValue({
+        exists: true, unlocked: true, aliases: ["edge"], dedicatedKeyPassphrases: [],
+      }),
+      credentials: vi.fn().mockResolvedValue({
+        credentials: [{ kind: "password", name: "office", uses: ["edge"] }],
+      }),
+      passwordEligibility: vi.fn().mockResolvedValue({
+        alias: "edge", storable: true, blockers: [], warnings: [], passwordBinding: "stale",
+      }),
+    });
+
+    await screen.findByText("Assigned: office");
+    expect(screen.queryByText(/not being used because the authentication route changed/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save Basic settings" })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: "Save Basic settings" }));
+    expect(screen.getByText(/saving allows the assigned password or one-time password/i)).toBeInTheDocument();
+    expect(harness.onSave).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Save and confirm" }));
+
+    expect(harness.onSave).toHaveBeenCalledWith({
+      identity: detail.form.entry.identity,
+      base: detail.file.contents,
+      password: { kind: "confirm_route" },
+      keyPassphrase: { kind: "unchanged" },
+      totp: { kind: "unchanged" },
+    });
+  });
+
   it("leaves duplicate and custom direct authentication fields read-only for Advanced", async () => {
     renderForm({
       detail: buildDetail([

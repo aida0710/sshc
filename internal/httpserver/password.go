@@ -312,17 +312,31 @@ func (h PasswordHandlers) Eligible(c *echo.Context) error {
 	if err := validate.Alias(alias); err != nil {
 		return problem(c, http.StatusBadRequest, "unsafe_alias")
 	}
+	var answer api.PasswordEligibility
 	if h.Eligibility == nil {
-		return c.JSON(http.StatusOK, api.PasswordEligibility{
+		answer = api.PasswordEligibility{
 			Alias: alias, Storable: true,
 			Blockers: []api.Notice{}, Warnings: []api.Notice{},
-		})
+		}
+	} else {
+		report, err := h.Eligibility(alias)
+		if err != nil {
+			return problem(c, http.StatusInternalServerError, "config_unreadable")
+		}
+		answer = describeEligibility(report)
 	}
-	report, err := h.Eligibility(alias)
-	if err != nil {
-		return problem(c, http.StatusInternalServerError, "config_unreadable")
+	if h.Service != nil && h.Binding != nil {
+		binding, err := h.Binding(alias)
+		if err != nil {
+			return problem(c, http.StatusInternalServerError, "config_unreadable")
+		}
+		password, totp := h.Service.AuthenticationBindingStates(alias, binding)
+		passwordState := api.PasswordEligibilityPasswordBinding(password)
+		totpState := api.PasswordEligibilityTotpBinding(totp)
+		answer.PasswordBinding = &passwordState
+		answer.TotpBinding = &totpState
 	}
-	return c.JSON(http.StatusOK, describeEligibility(report))
+	return c.JSON(http.StatusOK, answer)
 }
 
 func describeEligibility(report application.PasswordEligibility) api.PasswordEligibility {
@@ -345,6 +359,12 @@ func describeEligibility(report application.PasswordEligibility) api.PasswordEli
 	if report.Port != "" {
 		port := report.Port
 		described.Port = &port
+	}
+	if binding := api.PasswordEligibilityPasswordBinding(report.PasswordBinding); binding.Valid() {
+		described.PasswordBinding = &binding
+	}
+	if binding := api.PasswordEligibilityTotpBinding(report.TOTPBinding); binding.Valid() {
+		described.TotpBinding = &binding
 	}
 	return described
 }

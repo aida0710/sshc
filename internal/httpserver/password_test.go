@@ -352,6 +352,9 @@ func TestEligibilityIsReadableAndCarriesTheWarnings(t *testing.T) {
 	if err := service.Initialise(testPassphrase); err != nil {
 		t.Fatal(err)
 	}
+	if err := service.SetBound("bastion", "held-back", strings.Repeat("cd", 32)); err != nil {
+		t.Fatal(err)
+	}
 	registerPasswordRoutes(engine, PasswordHandlers{
 		Service: service, Binding: fixedPasswordBinding,
 		Eligibility: func(alias string) (application.PasswordEligibility, error) {
@@ -375,6 +378,12 @@ func TestEligibilityIsReadableAndCarriesTheWarnings(t *testing.T) {
 	}
 	if report.Warnings[0].Code != application.WarnHostKeyUnknown {
 		t.Errorf("warning = %#v", report.Warnings[0])
+	}
+	if report.PasswordBinding == nil || *report.PasswordBinding != api.PasswordEligibilityPasswordBindingStale {
+		t.Errorf("password binding = %#v, want stale", report.PasswordBinding)
+	}
+	if report.TotpBinding == nil || *report.TotpBinding != api.PasswordEligibilityTotpBindingNone {
+		t.Errorf("TOTP binding = %#v, want none", report.TotpBinding)
 	}
 }
 

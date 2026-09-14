@@ -26,12 +26,14 @@ const (
 )
 
 type PasswordEligibility struct {
-	Alias    string   `json:"alias"`
-	Storable bool     `json:"storable"`
-	Blockers []Notice `json:"blockers"`
-	Warnings []Notice `json:"warnings"`
-	HostName string   `json:"hostName,omitempty"`
-	Port     string   `json:"port,omitempty"`
+	Alias           string   `json:"alias"`
+	Storable        bool     `json:"storable"`
+	Blockers        []Notice `json:"blockers"`
+	Warnings        []Notice `json:"warnings"`
+	HostName        string   `json:"hostName,omitempty"`
+	Port            string   `json:"port,omitempty"`
+	PasswordBinding string   `json:"passwordBinding,omitempty"`
+	TOTPBinding     string   `json:"totpBinding,omitempty"`
 }
 
 func (s *Service) PasswordEligibility(alias string) (PasswordEligibility, error) {

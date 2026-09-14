@@ -39,6 +39,7 @@ export type ConnectionSummaryView = {
     | { state: "named"; name: string };
   accountPassword:
     | { state: "none" | "dedicated" | "locked" | "unavailable" }
+    | { state: "stale"; name?: string }
     | { state: "named"; name: string };
 };
 
@@ -123,6 +124,7 @@ function accountPassword(
   alias: string,
   vault: Loadable<PasswordVaultStatus>,
   credentials: Loadable<Credential[]>,
+  eligibility: Loadable<PasswordEligibility>,
 ): ConnectionSummaryView["accountPassword"] {
   if (vault.status === "locked" || credentials.status === "locked") return { state: "locked" };
   if (vault.status !== "ready" || credentials.status === "failed") return { state: "unavailable" };
@@ -132,6 +134,9 @@ function accountPassword(
   const named = credentials.value.find(
     (credential) => credential.kind === "password" && credential.uses.includes(alias),
   );
+  if (eligibility.status === "ready" && eligibility.value.passwordBinding === "stale") {
+    return named === undefined ? { state: "stale" } : { state: "stale", name: named.name };
+  }
   return named === undefined ? { state: "dedicated" } : { state: "named", name: named.name };
 }
 
@@ -167,6 +172,6 @@ export function summarizeConnection(saved: ConnectionSavedState): ConnectionSumm
     group: detail.form.entry.group ?? "",
     privateKey,
     keyPassphrase: keyPassphrase(privateKey, saved.vault, saved.credentials),
-    accountPassword: accountPassword(alias, saved.vault, saved.credentials),
+    accountPassword: accountPassword(alias, saved.vault, saved.credentials, saved.eligibility),
   };
 }
