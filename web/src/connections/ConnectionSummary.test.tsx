@@ -133,7 +133,7 @@ describe("ConnectionSummary", () => {
       />,
     );
 
-    expect(screen.getByText("Saved password blocked: authentication route changed")).toBeInTheDocument();
+    expect(screen.getByText("Saved password paused")).toBeInTheDocument();
   });
 
   it("keeps configured key details without an empty account-password field", () => {
