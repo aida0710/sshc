@@ -2070,6 +2070,11 @@ export const en = {
   "conn.basicNoPassword": "No stored password is assigned.",
   "conn.basicNoTOTP": "No one-time password is assigned.",
   "conn.basicAssignedTOTP": "Assigned: {name}",
+  "conn.basicRouteConfirmHeading": "Use saved credentials on this route?",
+  "conn.basicRouteConfirmBody":
+    "The authentication route changed. Saving allows the assigned password or one-time password to be used on the current route.",
+  "conn.basicRouteConfirmSave": "Save and confirm",
+  "conn.basicRouteConfirmCancel": "Cancel",
   "conn.basicTOTPAction": "One-time password action",
   "conn.basicTOTPUnchanged": "No assignment change",
   "conn.basicUseSavedTOTP": "Assign a saved TOTP",
@@ -2137,6 +2142,7 @@ export const en = {
   "conn.summaryPasswordNone": "No saved password",
   "conn.summaryPasswordDedicated": "Connection-only password saved",
   "conn.summaryPasswordNamed": "Saved password: {name}",
+  "conn.summaryPasswordRouteStale": "Saved password paused",
   "conn.summaryPasswordCleanup":
     "A stored password is assigned but is not used and will be unassigned when Basic settings are saved.",
   "conn.summaryLocked": "Unavailable while the vault is locked",

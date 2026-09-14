@@ -65,6 +65,7 @@ const (
 	UpdatePasswordDedicated UpdateConnectionPasswordKind = "dedicated_password"
 	UpdatePasswordSaved     UpdateConnectionPasswordKind = "saved_password"
 	UpdatePasswordNewShared UpdateConnectionPasswordKind = "new_shared_password"
+	UpdatePasswordRebind    UpdateConnectionPasswordKind = "confirm_route"
 	UpdatePasswordRemove    UpdateConnectionPasswordKind = "remove"
 )
 
@@ -92,6 +93,7 @@ type UpdateConnectionTOTPKind string
 const (
 	UpdateTOTPUnchanged UpdateConnectionTOTPKind = "unchanged"
 	UpdateTOTPSaved     UpdateConnectionTOTPKind = "saved_totp"
+	UpdateTOTPRebind    UpdateConnectionTOTPKind = "confirm_route"
 	UpdateTOTPRemove    UpdateConnectionTOTPKind = "remove"
 )
 
@@ -124,7 +126,7 @@ func (s *Service) UpdateConnection(
 	if !keyPassphraseUnchanged && request.KeyPassphrase.Kind != UpdateKeyPassphraseSetDedicated {
 		return SaveResult{}, ErrUnknownUpdateKeyPhrase
 	}
-	if !totpUnchanged && request.TOTP.Kind != UpdateTOTPSaved && request.TOTP.Kind != UpdateTOTPRemove {
+	if !totpUnchanged && request.TOTP.Kind != UpdateTOTPSaved && request.TOTP.Kind != UpdateTOTPRebind && request.TOTP.Kind != UpdateTOTPRemove {
 		return SaveResult{}, ErrUnknownUpdateTOTP
 	}
 
@@ -309,6 +311,8 @@ func passwordMutationForUpdate(request UpdateConnectionRequest, binding string) 
 		kind = secret.PasswordMutationSaved
 	case UpdatePasswordNewShared:
 		kind = secret.PasswordMutationNewShared
+	case UpdatePasswordRebind:
+		kind = secret.PasswordMutationRebind
 	case UpdatePasswordRemove:
 		kind = secret.PasswordMutationRemove
 	default:

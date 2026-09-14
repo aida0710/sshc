@@ -60,6 +60,7 @@ const (
 	PasswordMutationDedicated PasswordMutationKind = "dedicated_password"
 	PasswordMutationSaved     PasswordMutationKind = "saved_password"
 	PasswordMutationNewShared PasswordMutationKind = "new_shared_password"
+	PasswordMutationRebind    PasswordMutationKind = "confirm_route"
 	PasswordMutationRemove    PasswordMutationKind = "remove"
 )
 
@@ -86,7 +87,20 @@ type TOTPMutationKind string
 
 const (
 	TOTPMutationSaved  TOTPMutationKind = "saved_totp"
+	TOTPMutationRebind TOTPMutationKind = "confirm_route"
 	TOTPMutationRemove TOTPMutationKind = "remove"
+)
+
+// AuthenticationBindingState describes whether a saved authentication value
+// is available for the route currently resolved for its connection. It never
+// exposes the value itself.
+type AuthenticationBindingState string
+
+const (
+	AuthenticationBindingUnavailable AuthenticationBindingState = "unavailable"
+	AuthenticationBindingNone        AuthenticationBindingState = "none"
+	AuthenticationBindingCurrent     AuthenticationBindingState = "current"
+	AuthenticationBindingStale       AuthenticationBindingState = "stale"
 )
 
 // TOTPMutation binds one saved TOTP seed to the authentication destination
@@ -1129,6 +1143,28 @@ func (s *Service) HasPasswordFor(alias string) bool {
 	return ok
 }
 
+// AuthenticationBindingStates reports password and TOTP assignment state for
+// one resolved destination without releasing either saved value. Reading this
+// metadata does not extend the vault idle deadline.
+func (s *Service) AuthenticationBindingStates(alias, binding string) (AuthenticationBindingState, AuthenticationBindingState) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	vault := s.open()
+	if vault == nil {
+		return AuthenticationBindingUnavailable, AuthenticationBindingUnavailable
+	}
+	state := func(kind Kind, bindings map[string]string) AuthenticationBindingState {
+		if _, ok := vault.SecretFor(kind, alias); !ok {
+			return AuthenticationBindingNone
+		}
+		if stored, ok := bindings[alias]; ok && stored == binding {
+			return AuthenticationBindingCurrent
+		}
+		return AuthenticationBindingStale
+	}
+	return state(KindPassword, vault.passwordBindings), state(KindTOTP, vault.totpBindings)
+}
+
 // KeyPassphraseFor は、鍵のワークスペース相対パスを、保存済みのパスフレーズへ
 // 解決する。鍵を二段階ではなく一度の操作でエージェントへ追加できるのはこれの
 // おかげであり、鍵 vault が import するのではなく、そこへ注入される。
@@ -1559,6 +1595,17 @@ func applyPasswordMutation(vault, clone *Vault, mutation PasswordMutation) (bool
 			return false, err
 		}
 		return true, nil
+	case PasswordMutationRebind:
+		if _, ok := vault.SecretFor(KindPassword, mutation.Alias); !ok {
+			return false, ErrNoPassword
+		}
+		if vault.passwordBindings[mutation.Alias] == mutation.Binding {
+			return false, nil
+		}
+		if err := clone.BindPassword(mutation.Alias, mutation.Binding); err != nil {
+			return false, err
+		}
+		return true, nil
 	case PasswordMutationRemove:
 		if _, ok := clone.SecretFor(KindPassword, mutation.Alias); !ok {
 			return false, ErrNoPassword
@@ -1583,6 +1630,17 @@ func applyTOTPMutation(vault, clone *Vault, mutation TOTPMutation) (bool, error)
 		}
 		if err := clone.Assign(KindTOTP, mutation.Alias, mutation.Credential); err != nil {
 			return false, err
+		}
+		if err := clone.BindTOTP(mutation.Alias, mutation.Binding); err != nil {
+			return false, err
+		}
+		return true, nil
+	case TOTPMutationRebind:
+		if _, ok := vault.SecretFor(KindTOTP, mutation.Alias); !ok {
+			return false, ErrUnknownCredential
+		}
+		if vault.totpBindings[mutation.Alias] == mutation.Binding {
+			return false, nil
 		}
 		if err := clone.BindTOTP(mutation.Alias, mutation.Binding); err != nil {
 			return false, err
