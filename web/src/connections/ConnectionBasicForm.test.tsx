@@ -546,9 +546,12 @@ describe("ConnectionBasicForm", () => {
 
     await user.clear(screen.getByLabelText("Host name or IP address"));
     await user.type(screen.getByLabelText("Host name or IP address"), "new.example");
-    expect(screen.getByText(/confirms the assigned password for the new authentication route/i)).toBeInTheDocument();
-    expect(screen.getByText(/confirms the assigned TOTP for the new authentication route/i)).toBeInTheDocument();
+    expect(screen.queryByText(/confirms the assigned password for the new authentication route/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/confirms the assigned TOTP for the new authentication route/i)).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Save Basic settings" }));
+    expect(screen.getByRole("heading", { name: "Use saved credentials on this route?" })).toBeInTheDocument();
+    expect(harness.onSave).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Save and confirm" }));
 
     expect(harness.onSave).toHaveBeenCalledWith({
       identity: detail.form.entry.identity,
@@ -576,9 +579,13 @@ describe("ConnectionBasicForm", () => {
       }),
     });
 
-    expect(await screen.findByText(/not being used because the authentication route changed/i)).toBeInTheDocument();
+    await screen.findByText("Assigned: office");
+    expect(screen.queryByText(/not being used because the authentication route changed/i)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save Basic settings" })).toBeEnabled();
     await user.click(screen.getByRole("button", { name: "Save Basic settings" }));
+    expect(screen.getByText(/saving allows the assigned password or one-time password/i)).toBeInTheDocument();
+    expect(harness.onSave).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Save and confirm" }));
 
     expect(harness.onSave).toHaveBeenCalledWith({
       identity: detail.form.entry.identity,

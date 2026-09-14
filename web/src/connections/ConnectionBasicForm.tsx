@@ -21,6 +21,7 @@ import { directIdentityFields, isConcreteIdentityValue } from "./authenticationP
 import { CheckboxField, control, hintText, sectionHeading } from "../ui/form";
 import { PasswordField } from "../ui/PasswordField";
 import { Button, Notice, Row } from "../ui/surface";
+import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { deriveBasicField, type BasicFieldState, type BasicKeyword } from "./basicFields";
 import { formatValues, isValidHostName } from "../rules/rules";
 
@@ -168,6 +169,7 @@ export function ConnectionBasicForm({
   const [busy, setBusy] = useState(false);
   const [vaultBusy, setVaultBusy] = useState(false);
   const [localError, setLocalError] = useState("");
+  const [routeConfirmationOpen, setRouteConfirmationOpen] = useState(false);
 
   function clearKeyPassphrase() {
     setKeyPassphrase("");
@@ -220,6 +222,7 @@ export function ConnectionBasicForm({
     setNewCredential("");
     clearSecrets();
     setLocalError("");
+    setRouteConfirmationOpen(false);
     setLoading(true);
     setKeyOptionsStatus("loading");
     setCredentialOptionsStatus("loading");
@@ -477,6 +480,7 @@ export function ConnectionBasicForm({
     setKeyPassphrase("");
     setKeyPassphraseConfirmation("");
     setLocalError("");
+    setRouteConfirmationOpen(false);
   }, [initial, initialKey]);
 
   useEffect(() => {
@@ -518,9 +522,7 @@ export function ConnectionBasicForm({
     }
   }
 
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    if (!canSave) return;
+  function updateRequest(): UpdateConnectionRequest {
     const request: UpdateConnectionRequest = {
       identity,
       base: detail.file.contents,
@@ -532,7 +534,12 @@ export function ConnectionBasicForm({
     if (userChange !== undefined) request.user = userChange;
     if (portChange !== undefined) request.port = portChange;
     if (identityFileChange !== undefined) request.identityFile = identityFileChange;
+    return request;
+  }
 
+  async function save() {
+    if (!canSave) return;
+    const request = updateRequest();
     setBusy(true);
     setLocalError("");
     try {
@@ -573,6 +580,16 @@ export function ConnectionBasicForm({
     }
   }
 
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    if (!canSave) return;
+    if (confirmPasswordRoute || confirmTOTPRoute) {
+      setRouteConfirmationOpen(true);
+      return;
+    }
+    void save();
+  }
+
   const minimum = vault?.minPassphraseLength ?? 12;
   const canOpenVault = vault !== null && masterPassword.length >= minimum &&
     (vault.exists || masterConfirmation === masterPassword);
@@ -602,7 +619,7 @@ export function ConnectionBasicForm({
             : "";
 
   return (
-    <form className="flex flex-col gap-4" onSubmit={(event) => void submit(event)}>
+    <form className="flex flex-col gap-4" onSubmit={submit}>
       {localError === "" || problem !== null ? null : <Notice tone="danger">{localError}</Notice>}
 
       <fieldset disabled={disabled} className="contents">
@@ -749,14 +766,6 @@ export function ConnectionBasicForm({
                 ) : null}
               </div>
 
-              {confirmPasswordRoute ? (
-                <Notice>
-                  {t(eligibility?.passwordBinding === "stale"
-                    ? "conn.basicPasswordRouteStale"
-                    : "conn.basicPasswordRouteChanged")}
-                </Notice>
-              ) : null}
-
               {vault !== null && !vault.unlocked ? (
                 <div className="flex flex-col gap-3 rounded-lg border border-notice-line bg-notice p-3">
                   <p className="text-sm text-notice-ink">
@@ -852,14 +861,6 @@ export function ConnectionBasicForm({
                 ) : null}
               </div>
 
-              {confirmTOTPRoute ? (
-                <Notice>
-                  {t(eligibility?.totpBinding === "stale"
-                    ? "conn.basicTOTPRouteStale"
-                    : "conn.basicTOTPRouteChanged")}
-                </Notice>
-              ) : null}
-
               {vault?.unlocked === true && credentialOptionsStatus === "ready" ? (
                 <>
                   <label className="flex flex-col gap-1">
@@ -926,6 +927,21 @@ export function ConnectionBasicForm({
         </Button>
       </div> : null}
       </fieldset>
+      {routeConfirmationOpen ? (
+        <ConfirmDialog
+          id="connection-route-confirmation-heading"
+          heading={t("conn.basicRouteConfirmHeading")}
+          body={<p className="text-sm text-ink-muted">{t("conn.basicRouteConfirmBody")}</p>}
+          confirmLabel={t("conn.basicRouteConfirmSave")}
+          cancelLabel={t("conn.basicRouteConfirmCancel")}
+          confirmKind="primary"
+          onConfirm={() => {
+            setRouteConfirmationOpen(false);
+            void save();
+          }}
+          onCancel={() => setRouteConfirmationOpen(false)}
+        />
+      ) : null}
     </form>
   );
 }
