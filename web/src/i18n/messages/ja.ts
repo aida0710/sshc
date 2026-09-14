@@ -2077,6 +2077,11 @@ export const ja = {
   "conn.basicNoPassword": "保存済みパスワードは割り当てられていません。",
   "conn.basicNoTOTP": "ワンタイムパスワードは割り当てられていません。",
   "conn.basicAssignedTOTP": "割り当て済み：{name}",
+  "conn.basicRouteConfirmHeading": "保存済みの認証情報をこの経路で使いますか？",
+  "conn.basicRouteConfirmBody":
+    "認証経路が変更されています。保存すると、割り当て済みのパスワードまたはワンタイムパスワードを現在の経路で使用できるようにします。",
+  "conn.basicRouteConfirmSave": "保存して再確認",
+  "conn.basicRouteConfirmCancel": "キャンセル",
   "conn.basicTOTPAction": "ワンタイムパスワードの操作",
   "conn.basicTOTPUnchanged": "割り当ては変更しない",
   "conn.basicUseSavedTOTP": "保存済みTOTPを割り当てる",
@@ -2145,6 +2150,7 @@ export const ja = {
   "conn.summaryPasswordNone": "保存済みパスワードなし",
   "conn.summaryPasswordDedicated": "この接続専用のパスワードを保存済み",
   "conn.summaryPasswordNamed": "保存済みパスワード：{name}",
+  "conn.summaryPasswordRouteStale": "保存済みパスワードは停止中",
   "conn.summaryPasswordCleanup":
     "保存済みパスワードが割り当てられていますが、現在の SSH 設定では使用されません。基本設定を保存すると、この接続への割り当てを解除します。",
   "conn.summaryLocked": "施錠中のため確認できません",
