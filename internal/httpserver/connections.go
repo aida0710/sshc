@@ -299,6 +299,12 @@ func decodeUpdateConnectionPassword(value api.UpdateConnectionPassword) (applica
 			Kind:       application.UpdatePasswordNewShared,
 			Credential: password.Credential, Password: password.Password,
 		}, nil
+	case application.UpdatePasswordRebind:
+		var confirmation api.UpdatePasswordConfirmRoute
+		if err := decodeConnectionAuthentication(value, &confirmation); err != nil || confirmation.Kind != "confirm_route" {
+			return application.UpdateConnectionPassword{}, errInvalidEdit
+		}
+		return application.UpdateConnectionPassword{Kind: application.UpdatePasswordRebind}, nil
 	case application.UpdatePasswordRemove:
 		var remove api.UpdatePasswordRemove
 		if err := decodeConnectionAuthentication(value, &remove); err != nil {
@@ -359,6 +365,12 @@ func decodeUpdateConnectionTOTP(value api.UpdateConnectionTOTP) (application.Upd
 		return application.UpdateConnectionTOTP{
 			Kind: application.UpdateTOTPSaved, Credential: saved.Credential,
 		}, nil
+	case application.UpdateTOTPRebind:
+		var confirmation api.UpdateTOTPConfirmRoute
+		if err := decodeConnectionAuthentication(value, &confirmation); err != nil || confirmation.Kind != "confirm_route" {
+			return application.UpdateConnectionTOTP{}, errInvalidEdit
+		}
+		return application.UpdateConnectionTOTP{Kind: application.UpdateTOTPRebind}, nil
 	case application.UpdateTOTPRemove:
 		var remove api.UpdateTOTPRemove
 		if err := decodeConnectionAuthentication(value, &remove); err != nil {

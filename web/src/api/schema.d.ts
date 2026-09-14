@@ -2702,6 +2702,10 @@ export interface components {
             warnings: components["schemas"]["Notice"][];
             hostName?: string;
             port?: string;
+            /** @enum {string} */
+            passwordBinding?: "unavailable" | "none" | "current" | "stale";
+            /** @enum {string} */
+            totpBinding?: "unavailable" | "none" | "current" | "stale";
         };
         PassphraseRequest: {
             passphrase: string;
@@ -2824,13 +2828,20 @@ export interface components {
              */
             action: "inherit";
         };
-        UpdateConnectionPassword: components["schemas"]["UpdatePasswordUnchanged"] | components["schemas"]["CreateDedicatedPasswordAuthentication"] | components["schemas"]["CreateSavedPasswordAuthentication"] | components["schemas"]["CreateNewSharedPasswordAuthentication"] | components["schemas"]["UpdatePasswordRemove"];
+        UpdateConnectionPassword: components["schemas"]["UpdatePasswordUnchanged"] | components["schemas"]["CreateDedicatedPasswordAuthentication"] | components["schemas"]["CreateSavedPasswordAuthentication"] | components["schemas"]["CreateNewSharedPasswordAuthentication"] | components["schemas"]["UpdatePasswordConfirmRoute"] | components["schemas"]["UpdatePasswordRemove"];
         UpdatePasswordUnchanged: {
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
             kind: "unchanged";
+        };
+        UpdatePasswordConfirmRoute: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "confirm_route";
         };
         UpdatePasswordRemove: {
             /**
@@ -2839,7 +2850,7 @@ export interface components {
              */
             kind: "remove";
         };
-        UpdateConnectionTOTP: components["schemas"]["UpdateTOTPUnchanged"] | components["schemas"]["UpdateTOTPSaved"] | components["schemas"]["UpdateTOTPRemove"];
+        UpdateConnectionTOTP: components["schemas"]["UpdateTOTPUnchanged"] | components["schemas"]["UpdateTOTPSaved"] | components["schemas"]["UpdateTOTPConfirmRoute"] | components["schemas"]["UpdateTOTPRemove"];
         UpdateTOTPUnchanged: {
             /**
              * @description discriminator enum property added by openapi-typescript
@@ -2854,6 +2865,13 @@ export interface components {
              */
             kind: "saved_totp";
             credential: string;
+        };
+        UpdateTOTPConfirmRoute: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "confirm_route";
         };
         UpdateTOTPRemove: {
             /**

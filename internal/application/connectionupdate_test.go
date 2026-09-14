@@ -594,6 +594,47 @@ func TestChangingAuthenticationDestinationStopsAutomaticPasswordRelease(t *testi
 	}
 }
 
+func TestWebConfirmationRebindsSavedAuthenticationValuesToTheUpdatedRoute(t *testing.T) {
+	const before = "Host edge\n\tHostName original.example\n\tUser deploy\n\tPort 22\n"
+	harness := newConnectionUpdateHarness(t, before)
+	original, err := harness.service.PasswordBinding("edge")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := harness.secrets.SetBound("edge", "must-follow-confirmation", original); err != nil {
+		t.Fatal(err)
+	}
+	if err := harness.secrets.SetCredential(secret.KindTOTP, "edge-code", "JBSWY3DPEHPK3PXP"); err != nil {
+		t.Fatal(err)
+	}
+	if err := harness.secrets.AssignTOTPCredential("edge", "edge-code", original); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = harness.service.UpdateConnection(harness.secrets, harness.inventory, UpdateConnectionRequest{
+		Identity: HostIdentity{Path: "config", Alias: "edge"}, Base: before,
+		HostName: &ConnectionStringChange{Action: ConnectionChangeSet, Value: "retargeted.example"},
+		Password: UpdateConnectionPassword{Kind: UpdatePasswordRebind},
+		TOTP:     UpdateConnectionTOTP{Kind: UpdateTOTPRebind},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	retargeted, err := harness.service.PasswordBinding("edge")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := harness.secrets.BoundPasswordFor("edge", retargeted); got != "must-follow-confirmation" {
+		t.Fatalf("reconfirmed password = %q", got)
+	}
+	if got := harness.secrets.BoundTOTPFor("edge", retargeted); !strings.Contains(got, "secret=JBSWY3DPEHPK3PXP") {
+		t.Fatalf("reconfirmed TOTP = %q", got)
+	}
+	if got := harness.secrets.BoundPasswordFor("edge", original); got != "" {
+		t.Fatalf("old route still received password %q", got)
+	}
+}
+
 func TestUpdateConnectionNewSharedCollisionChangesNeitherConfigNorVault(t *testing.T) {
 	const before = "Host edge\n\tHostName edge.example\n\tPort 22\n"
 	harness := newConnectionUpdateHarness(t, before)
