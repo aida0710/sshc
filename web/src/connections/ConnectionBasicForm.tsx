@@ -353,6 +353,11 @@ export function ConnectionBasicForm({
   const draftHasExplicitKey = keyState === "custom" || keyState === "complex" ||
     (keyState === "editable" && selectedKey !== "");
   const passwordCleanup = assigned && draftHasExplicitKey;
+  const authenticationRouteChanged = hostNameChange !== undefined || userChange !== undefined || portChange !== undefined;
+  const confirmPasswordRoute = assigned && !draftHasExplicitKey && passwordAction === "unchanged" &&
+    (authenticationRouteChanged || eligibility?.passwordBinding === "stale");
+  const confirmTOTPRoute = assignedTOTP !== "" && totpAction === "unchanged" &&
+    (authenticationRouteChanged || eligibility?.totpBinding === "stale");
   const namedKeyPassphrase = selectedPrivateKey === undefined
     ? undefined
     : keyCredentials.find((credential) => credential.uses.includes(selectedPrivateKey.relativePath));
@@ -396,8 +401,10 @@ export function ConnectionBasicForm({
           : { kind: "new_shared_password", credential: newCredential, password: newSharedPassword };
       case "remove":
         return confirmRemove && assigned ? { kind: "remove" } : { kind: "unchanged" };
+      case "confirm_route":
+        return { kind: "confirm_route" };
       case "unchanged":
-        return { kind: "unchanged" };
+        return confirmPasswordRoute ? { kind: "confirm_route" } : { kind: "unchanged" };
     }
   }
 
@@ -412,7 +419,9 @@ export function ConnectionBasicForm({
       : { kind: "saved_totp", credential: savedTOTP }
     : totpAction === "remove"
       ? { kind: "remove" }
-      : { kind: "unchanged" };
+      : totpAction === "confirm_route" || confirmTOTPRoute
+        ? { kind: "confirm_route" }
+        : { kind: "unchanged" };
   const changesPassword = passwordChange.kind !== "unchanged";
   const changesTOTP = totpChange.kind !== "unchanged";
   const hasKeyPassphraseDraft = keyPassphrase !== "" || keyPassphraseConfirmation !== "";
@@ -490,9 +499,15 @@ export function ConnectionBasicForm({
       const status = vault.exists
         ? await secrets.unlockVault(masterPassword)
         : await secrets.initialiseVault(masterPassword);
-      const listed = status.unlocked ? (await secrets.credentials()).credentials : [];
+      const [listed, nextEligibility] = status.unlocked
+        ? await Promise.all([
+            secrets.credentials().then((response) => response.credentials),
+            secrets.passwordEligibility(identity.alias),
+          ])
+        : [[], eligibility];
       setVault(status);
       applyCredentialState(status, listed);
+      setEligibility(nextEligibility);
       setCredentialOptionsStatus(status.unlocked ? "ready" : "locked");
       clearSecrets();
     } catch {
@@ -734,6 +749,14 @@ export function ConnectionBasicForm({
                 ) : null}
               </div>
 
+              {confirmPasswordRoute ? (
+                <Notice>
+                  {t(eligibility?.passwordBinding === "stale"
+                    ? "conn.basicPasswordRouteStale"
+                    : "conn.basicPasswordRouteChanged")}
+                </Notice>
+              ) : null}
+
               {vault !== null && !vault.unlocked ? (
                 <div className="flex flex-col gap-3 rounded-lg border border-notice-line bg-notice p-3">
                   <p className="text-sm text-notice-ink">
@@ -828,6 +851,14 @@ export function ConnectionBasicForm({
                   </p>
                 ) : null}
               </div>
+
+              {confirmTOTPRoute ? (
+                <Notice>
+                  {t(eligibility?.totpBinding === "stale"
+                    ? "conn.basicTOTPRouteStale"
+                    : "conn.basicTOTPRouteChanged")}
+                </Notice>
+              ) : null}
 
               {vault?.unlocked === true && credentialOptionsStatus === "ready" ? (
                 <>

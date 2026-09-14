@@ -3461,6 +3461,12 @@ components:
           items: { $ref: "#/components/schemas/Notice" }
         hostName: { type: string }
         port: { type: string }
+        passwordBinding:
+          type: string
+          enum: [unavailable, none, current, stale]
+        totpBinding:
+          type: string
+          enum: [unavailable, none, current, stale]
     PassphraseRequest:
       type: object
       additionalProperties: false
@@ -3655,6 +3661,7 @@ components:
         - $ref: "#/components/schemas/CreateDedicatedPasswordAuthentication"
         - $ref: "#/components/schemas/CreateSavedPasswordAuthentication"
         - $ref: "#/components/schemas/CreateNewSharedPasswordAuthentication"
+        - $ref: "#/components/schemas/UpdatePasswordConfirmRoute"
         - $ref: "#/components/schemas/UpdatePasswordRemove"
       discriminator:
         propertyName: kind
@@ -3663,6 +3670,7 @@ components:
           dedicated_password: "#/components/schemas/CreateDedicatedPasswordAuthentication"
           saved_password: "#/components/schemas/CreateSavedPasswordAuthentication"
           new_shared_password: "#/components/schemas/CreateNewSharedPasswordAuthentication"
+          confirm_route: "#/components/schemas/UpdatePasswordConfirmRoute"
           remove: "#/components/schemas/UpdatePasswordRemove"
     UpdatePasswordUnchanged:
       type: object
@@ -3670,6 +3678,12 @@ components:
       required: [kind]
       properties:
         kind: { type: string, enum: [unchanged], x-go-type: string }
+    UpdatePasswordConfirmRoute:
+      type: object
+      additionalProperties: false
+      required: [kind]
+      properties:
+        kind: { type: string, enum: [confirm_route], x-go-type: string }
     UpdatePasswordRemove:
       type: object
       additionalProperties: false
@@ -3681,12 +3695,14 @@ components:
       oneOf:
         - $ref: "#/components/schemas/UpdateTOTPUnchanged"
         - $ref: "#/components/schemas/UpdateTOTPSaved"
+        - $ref: "#/components/schemas/UpdateTOTPConfirmRoute"
         - $ref: "#/components/schemas/UpdateTOTPRemove"
       discriminator:
         propertyName: kind
         mapping:
           unchanged: "#/components/schemas/UpdateTOTPUnchanged"
           saved_totp: "#/components/schemas/UpdateTOTPSaved"
+          confirm_route: "#/components/schemas/UpdateTOTPConfirmRoute"
           remove: "#/components/schemas/UpdateTOTPRemove"
     UpdateTOTPUnchanged:
       type: object
@@ -3701,6 +3717,12 @@ components:
       properties:
         kind: { type: string, enum: [saved_totp], x-go-type: string }
         credential: { type: string, minLength: 1, maxLength: 128 }
+    UpdateTOTPConfirmRoute:
+      type: object
+      additionalProperties: false
+      required: [kind]
+      properties:
+        kind: { type: string, enum: [confirm_route], x-go-type: string }
     UpdateTOTPRemove:
       type: object
       additionalProperties: false

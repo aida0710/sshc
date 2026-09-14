@@ -373,6 +373,13 @@ func TestUpdateConnectionEndpointDecodesEveryPasswordMutation(t *testing.T) {
 			}, want: "lab-secret",
 		},
 		{
+			name: "confirm route", password: map[string]any{"kind": "confirm_route"},
+			prepare: func(t *testing.T, harness *connectionHTTPHarness) {
+				t.Helper()
+				setPasswordForHTTPConnection(t, harness, "existing", "keep-me")
+			}, want: "keep-me",
+		},
+		{
 			name: "remove", password: map[string]any{"kind": "remove"},
 			prepare: func(t *testing.T, harness *connectionHTTPHarness) {
 				t.Helper()
@@ -424,6 +431,29 @@ func TestUpdateConnectionEndpointAssignsAndRemovesSavedTOTP(t *testing.T) {
 	}
 	if got := totpForHTTPConnection(t, harness, "existing"); got != "" {
 		t.Fatalf("removed TOTP = %q", got)
+	}
+}
+
+func TestUpdateConnectionEndpointConfirmsTOTPForAChangedRoute(t *testing.T) {
+	harness := newConnectionHTTPHarness(t, true)
+	if err := harness.passwords.SetCredential(secret.KindTOTP, "cluster-otp", "JBSWY3DPEHPK3PXP"); err != nil {
+		t.Fatal(err)
+	}
+	binding, err := harness.testHarness.service.PasswordBinding("existing")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := harness.passwords.AssignTOTPCredential("existing", "cluster-otp", binding); err != nil {
+		t.Fatal(err)
+	}
+	body := connectionUpdateBody(map[string]any{"kind": "unchanged"})
+	body["totp"] = map[string]any{"kind": "confirm_route"}
+	response := harness.call(t, http.MethodPatch, "/api/v1/connections", body, true, true)
+	if response.Code != http.StatusOK {
+		t.Fatalf("confirm route = %d, body %s", response.Code, response.Body.String())
+	}
+	if got := totpForHTTPConnection(t, harness, "existing"); !strings.Contains(got, "secret=JBSWY3DPEHPK3PXP") {
+		t.Fatalf("confirmed TOTP = %q", got)
 	}
 }
 

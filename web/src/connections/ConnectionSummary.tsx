@@ -30,7 +30,8 @@ export function ConnectionSummary({
   const blocked = dirty || refreshing;
   const explicitKey = summary.privateKey.state !== "none";
   const passwordConflict = explicitKey && (
-    summary.accountPassword.state === "dedicated" || summary.accountPassword.state === "named"
+    summary.accountPassword.state === "dedicated" || summary.accountPassword.state === "named" ||
+    summary.accountPassword.state === "stale"
   );
   const showPassphrase = explicitKey && summary.keyPassphrase.state !== "not_needed";
   const showAccountPassword = !explicitKey && summary.accountPassword.state !== "none";
@@ -62,6 +63,7 @@ export function ConnectionSummary({
       case "none": return t("conn.summaryPasswordNone");
       case "dedicated": return t("conn.summaryPasswordDedicated");
       case "named": return t("conn.summaryPasswordNamed", { name: summary.accountPassword.name });
+      case "stale": return t("conn.summaryPasswordRouteStale");
       case "locked": return t("conn.summaryLocked");
       case "unavailable": return t("conn.summaryUnavailable");
     }

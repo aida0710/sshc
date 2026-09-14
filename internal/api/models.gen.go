@@ -71,6 +71,54 @@ func (e OpenTerminalSessionRequestKind) Valid() bool {
 	}
 }
 
+// Defines values for PasswordEligibilityPasswordBinding.
+const (
+	PasswordEligibilityPasswordBindingCurrent     PasswordEligibilityPasswordBinding = "current"
+	PasswordEligibilityPasswordBindingNone        PasswordEligibilityPasswordBinding = "none"
+	PasswordEligibilityPasswordBindingStale       PasswordEligibilityPasswordBinding = "stale"
+	PasswordEligibilityPasswordBindingUnavailable PasswordEligibilityPasswordBinding = "unavailable"
+)
+
+// Valid indicates whether the value is a known member of the PasswordEligibilityPasswordBinding enum.
+func (e PasswordEligibilityPasswordBinding) Valid() bool {
+	switch e {
+	case PasswordEligibilityPasswordBindingCurrent:
+		return true
+	case PasswordEligibilityPasswordBindingNone:
+		return true
+	case PasswordEligibilityPasswordBindingStale:
+		return true
+	case PasswordEligibilityPasswordBindingUnavailable:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PasswordEligibilityTotpBinding.
+const (
+	PasswordEligibilityTotpBindingCurrent     PasswordEligibilityTotpBinding = "current"
+	PasswordEligibilityTotpBindingNone        PasswordEligibilityTotpBinding = "none"
+	PasswordEligibilityTotpBindingStale       PasswordEligibilityTotpBinding = "stale"
+	PasswordEligibilityTotpBindingUnavailable PasswordEligibilityTotpBinding = "unavailable"
+)
+
+// Valid indicates whether the value is a known member of the PasswordEligibilityTotpBinding enum.
+func (e PasswordEligibilityTotpBinding) Valid() bool {
+	switch e {
+	case PasswordEligibilityTotpBindingCurrent:
+		return true
+	case PasswordEligibilityTotpBindingNone:
+		return true
+	case PasswordEligibilityTotpBindingStale:
+		return true
+	case PasswordEligibilityTotpBindingUnavailable:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for PullRequestResolve.
 const (
 	Local  PullRequestResolve = "local"
@@ -1041,13 +1089,21 @@ type PassphraseRequest struct {
 
 // PasswordEligibility defines model for PasswordEligibility.
 type PasswordEligibility struct {
-	Alias    string   `json:"alias"`
-	Blockers []Notice `json:"blockers"`
-	HostName *string  `json:"hostName,omitempty"`
-	Port     *string  `json:"port,omitempty"`
-	Storable bool     `json:"storable"`
-	Warnings []Notice `json:"warnings"`
+	Alias           string                              `json:"alias"`
+	Blockers        []Notice                            `json:"blockers"`
+	HostName        *string                             `json:"hostName,omitempty"`
+	PasswordBinding *PasswordEligibilityPasswordBinding `json:"passwordBinding,omitempty"`
+	Port            *string                             `json:"port,omitempty"`
+	Storable        bool                                `json:"storable"`
+	TotpBinding     *PasswordEligibilityTotpBinding     `json:"totpBinding,omitempty"`
+	Warnings        []Notice                            `json:"warnings"`
 }
+
+// PasswordEligibilityPasswordBinding defines model for PasswordEligibility.PasswordBinding.
+type PasswordEligibilityPasswordBinding string
+
+// PasswordEligibilityTotpBinding defines model for PasswordEligibility.TotpBinding.
+type PasswordEligibilityTotpBinding string
 
 // PasswordVaultStatus defines model for PasswordVaultStatus.
 type PasswordVaultStatus struct {
@@ -1916,6 +1972,11 @@ type UpdateCredentialRequest struct {
 	Secret string `json:"secret"`
 }
 
+// UpdatePasswordConfirmRoute defines model for UpdatePasswordConfirmRoute.
+type UpdatePasswordConfirmRoute struct {
+	Kind string `json:"kind"`
+}
+
 // UpdatePasswordRemove defines model for UpdatePasswordRemove.
 type UpdatePasswordRemove struct {
 	Kind string `json:"kind"`
@@ -1932,6 +1993,11 @@ type UpdateStatus struct {
 	Current   string  `json:"current"`
 	Latest    *string `json:"latest,omitempty"`
 	PageUrl   *string `json:"pageUrl,omitempty"`
+}
+
+// UpdateTOTPConfirmRoute defines model for UpdateTOTPConfirmRoute.
+type UpdateTOTPConfirmRoute struct {
+	Kind string `json:"kind"`
 }
 
 // UpdateTOTPRemove defines model for UpdateTOTPRemove.

@@ -114,6 +114,28 @@ describe("ConnectionSummary", () => {
     expect(screen.queryByText(/is not used and will be unassigned/i)).not.toBeInTheDocument();
   });
 
+  it("shows when the saved password is blocked by an authentication route change", () => {
+    render(
+      <ConnectionSummary
+        state={{
+          ...state,
+          detail: { ...state.detail, form: { ...state.detail.form, fields: state.detail.form.fields.filter((field) => field.keyword !== "IdentityFile") } },
+          eligibility: { status: "ready", value: {
+            alias: "bastion", storable: true, blockers: [], warnings: [], passwordBinding: "stale",
+          } },
+        }}
+        dirty={false}
+        refreshing={false}
+        onConnect={vi.fn()}
+        connecting={false}
+        onToggleManage={vi.fn()}
+        managing={false}
+      />,
+    );
+
+    expect(screen.getByText("Saved password blocked: authentication route changed")).toBeInTheDocument();
+  });
+
   it("keeps configured key details without an empty account-password field", () => {
     render(
       <ConnectionSummary
