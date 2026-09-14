@@ -11,6 +11,7 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
   returnFocusRef,
+  confirmKind = "danger",
 }: {
   id: string;
   heading: string;
@@ -20,6 +21,7 @@ export function ConfirmDialog({
   onConfirm: () => void;
   onCancel: () => void;
   returnFocusRef?: RefObject<HTMLElement | null>;
+  confirmKind?: "primary" | "danger";
 }) {
   const cancelRef = useRef<HTMLButtonElement>(null);
   return (
@@ -38,7 +40,7 @@ export function ConfirmDialog({
         <Button ref={cancelRef} onClick={onCancel} className="focus:outline-2 focus:outline-offset-2 focus:outline-accent">
           {cancelLabel}
         </Button>
-        <Button kind="danger" onClick={onConfirm} className="focus:outline-2 focus:outline-offset-2 focus:outline-accent">
+        <Button kind={confirmKind} onClick={onConfirm} className="focus:outline-2 focus:outline-offset-2 focus:outline-accent">
           {confirmLabel}
         </Button>
       </div>
