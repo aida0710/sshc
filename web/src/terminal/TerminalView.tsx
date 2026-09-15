@@ -35,6 +35,8 @@ import { TerminalOverflowMenu } from "./TerminalOverflowMenu";
 import { TerminalPortForwards } from "./TerminalPortForwards";
 import { attachWebglRenderer } from "./webgl";
 import { attachOSC7Directory } from "./osc7";
+import { attachOSC133Commands } from "./osc133";
+import { showBrowserNotification } from "./agentNotifications";
 import { applyTerminalRuntimeOptions } from "./runtimeOptions";
 import { Icon } from "../ui/icons";
 import { inspectTerminalPaste } from "./pasteGuard";
@@ -336,6 +338,28 @@ export function TerminalView({
       refused: () => setProblem(t("terminal.clipboardRefused")),
     });
     const osc7Directory = attachOSC7Directory(view.parser, setCurrentDirectory);
+    const commandDecorations = new Set<{ dispose(): void }>();
+    const osc133Commands = attachOSC133Commands(view.parser, {
+      onCommandStarted: () => {
+        const marker = view.registerMarker();
+        const decoration = view.registerDecoration({ marker, width: 1, layer: "top" });
+        if (decoration === undefined) return;
+        commandDecorations.add(decoration);
+        decoration.onRender((element) => element.classList.add("sshc-command-marker"));
+        decoration.onDispose(() => commandDecorations.delete(decoration));
+      },
+      onCommandCompleted: ({ durationMilliseconds }) => {
+        if (durationMilliseconds < 30_000 || !document.hidden) return;
+        showBrowserNotification({
+          title: "sshc",
+          body: t("terminal.longCommandCompleted", {
+            subject: terminalDisplayTitle(session),
+            seconds: String(Math.round(durationMilliseconds / 1000)),
+          }),
+          tag: `sshc-command-${session.id}`,
+        });
+      },
+    });
     const terminalLinks = view.registerLinkProvider({
       provideLinks: (bufferLineNumber, callback) => {
         const line = view.buffer.active.getLine(bufferLineNumber - 1)?.translateToString(true) ?? "";
@@ -567,6 +591,8 @@ export function TerminalView({
       detachClipboard();
       detachOsc52();
       osc7Directory.dispose();
+      osc133Commands.dispose();
+      for (const decoration of commandDecorations) decoration.dispose();
       kittyKeyboard.dispose();
       terminalLinks.dispose();
       webgl?.dispose();
