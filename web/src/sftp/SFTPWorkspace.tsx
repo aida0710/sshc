@@ -6,7 +6,7 @@ import { Icon } from "../ui/icons";
 import { activateTabFromKeyboard } from "../ui/tabKeyboard";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { useCompactViewport } from "../ui/useMediaQuery";
-import { SFTPPanel, type SFTPTarget } from "./SFTPPanel";
+import { SFTPPanel, type SFTPSort, type SFTPSortState, type SFTPTarget } from "./SFTPPanel";
 import { SFTPCompareDialog } from "./SFTPCompareDialog";
 import { TransferManagerList } from "./TransferManagerList";
 
@@ -18,7 +18,7 @@ const secondaryTabsStorageKey = "sshc.sftp.secondaryTabs";
 const secondaryActiveStorageKey = "sshc.sftp.secondaryActiveTab";
 const maxTabs = 8;
 
-type SFTPTab = { id: string; alias: string; path: string };
+type SFTPTab = { id: string; alias: string; path: string; sort: SFTPSortState };
 type SFTPLocation = { alias: string; path: string };
 type SFTPPane = "primary" | "secondary";
 type CloseTabIntent = { pane: SFTPPane; id: string; path: string };
@@ -32,7 +32,16 @@ function identifier(): string {
 }
 
 function blankTab(): SFTPTab {
-  return { id: identifier(), alias: "", path: "" };
+  return { id: identifier(), alias: "", path: "", sort: { key: "name", direction: "ascending" } };
+}
+
+function restoredSort(value: Record<string, unknown>): SFTPSortState {
+  const keys: readonly SFTPSort[] = ["name", "type", "size", "modified"];
+  const key = typeof value.sortKey === "string" && keys.includes(value.sortKey as SFTPSort)
+    ? value.sortKey as SFTPSort
+    : "name";
+  const direction = value.sortDirection === "descending" ? "descending" : "ascending";
+  return { key, direction };
 }
 
 function restoreTabs(key: string, blankWhenEmpty: boolean): SFTPTab[] {
@@ -44,7 +53,7 @@ function restoreTabs(key: string, blankWhenEmpty: boolean): SFTPTab[] {
       const tab = value as Record<string, unknown>;
       const alias = typeof tab.alias === "string" ? tab.alias : "";
       const path = typeof tab.path === "string" && tab.path.startsWith("/") ? tab.path : "";
-      return [{ id: identifier(), alias, path }];
+      return [{ id: identifier(), alias, path, sort: restoredSort(tab) }];
     }).slice(0, maxTabs);
     return tabs.length === 0 && blankWhenEmpty ? [blankTab()] : tabs;
   } catch {
@@ -60,12 +69,17 @@ function restoreSecondaryTabs(): SFTPTab[] {
   const tabs = restoreTabs(secondaryTabsStorageKey, false);
   if (tabs.length > 0) return tabs;
   const legacy = restoreSecondary();
-  return legacy.alias === "" && legacy.path === "" ? [] : [{ id: identifier(), ...legacy }];
+  return legacy.alias === "" && legacy.path === "" ? [] : [{ id: identifier(), ...legacy, sort: { key: "name", direction: "ascending" } }];
 }
 
 function rememberTabs(key: string, tabs: SFTPTab[]): void {
   try {
-    window.localStorage.setItem(key, JSON.stringify(tabs.map(({ alias, path }) => ({ alias, path }))));
+    window.localStorage.setItem(key, JSON.stringify(tabs.map(({ alias, path, sort }) => ({
+      alias,
+      path,
+      sortKey: sort.key,
+      sortDirection: sort.direction,
+    }))));
   } catch {
     // A browser that refuses storage still keeps the tabs for this session.
   }
@@ -213,6 +227,16 @@ export function SFTPWorkspace({
       if (next.every((tab, index) => tab.alias === current[index]?.alias && tab.path === current[index]?.path)) {
         return current;
       }
+      rememberTabs(pane === "primary" ? storageKey : secondaryTabsStorageKey, next);
+      return next;
+    };
+    if (pane === "primary") setTabs(update);
+    else setSecondaryTabs(update);
+  }
+
+  function resort(pane: SFTPPane, id: string, sort: SFTPSortState) {
+    const update = (current: SFTPTab[]) => {
+      const next = current.map((tab) => tab.id === id ? { ...tab, sort } : tab);
       rememberTabs(pane === "primary" ? storageKey : secondaryTabsStorageKey, next);
       return next;
     };
@@ -432,6 +456,7 @@ export function SFTPWorkspace({
                 {...(hosts === undefined ? {} : { hosts })}
                 target={ownsTarget ? target : null}
                 initialLocation={restored === undefined || restored.alias === "" || restored.path === "" ? null : restored}
+                initialSort={tab.sort}
                 showTransfers={false}
                 {...(selected ? { onNavigationBlockerChange: blocker } : {})}
                 onDirtyChange={dirtyReporter(pane, tab.id)}
@@ -439,6 +464,7 @@ export function SFTPWorkspace({
                 {...(onOpenTerminal === undefined ? {} : { onOpenTerminal })}
                 {...(ownsTarget ? { onTargetHandled } : {})}
                 onLocationChange={(alias, path) => relocate(pane, tab.id, alias, path)}
+                onSortChange={(sort) => resort(pane, tab.id, sort)}
               />
             </div>
           );

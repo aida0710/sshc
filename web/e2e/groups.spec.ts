@@ -26,7 +26,7 @@ test("declares a group in the entry file and moves a connection into it", async 
     .click();
   await expect(page.getByRole("tablist", { name: "Connection editor" })).toBeVisible();
 
-  await page.getByRole("button", { name: "More connection actions" }).click();
+  await page.getByRole("button", { name: "Manage connection" }).click();
   await page.getByLabel("Primary group").selectOption("work");
   expect(await clickAndAwait(page, "Move to this group", "/api/v1/config/save")).toBe(200);
 
@@ -68,7 +68,7 @@ test("renames a group and carries its files, its Include line and its keys", asy
     .getByRole("navigation", { name: "Connections" })
     .getByRole("button", { name: "nas" })
     .click();
-  await page.getByRole("button", { name: "More connection actions" }).click();
+  await page.getByRole("button", { name: "Manage connection" }).click();
   await page.getByLabel("Primary group").selectOption("work");
   expect(await clickAndAwait(page, "Move to this group", "/api/v1/config/save")).toBe(200);
 
@@ -95,7 +95,7 @@ test("refuses to move a connection into a group nothing declares", async ({
     .click();
   await expect(page.getByRole("tablist", { name: "Connection editor" })).toBeVisible();
 
-  await page.getByRole("button", { name: "More connection actions" }).click();
+  await page.getByRole("button", { name: "Manage connection" }).click();
   await expect(page.getByRole("button", { name: "Move to this group" })).toBeDisabled();
   expect(await installation.read("conf.d/10-home.conf")).toContain("Host nas");
 });

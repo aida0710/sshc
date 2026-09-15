@@ -159,6 +159,27 @@ describe("SFTP tabs", () => {
     expect(api.list).not.toHaveBeenCalledWith("miyabi", "/srv");
   });
 
+  it("restores the sort order for each tab", async () => {
+    api.list.mockResolvedValue({
+      path: "/home/edge",
+      entries: [{ name: "notes.txt", path: "/home/edge/notes.txt", type: "file", size: 12, mode: "0644", modifiedAt: "2026-09-15T00:00:00Z", revision: "r1" }],
+    });
+    const first = render(<SFTPWorkspace aliases={["edge"]} />);
+    await chooseHost("edge");
+    const table = await screen.findByRole("table");
+    await userEvent.click(within(table).getByRole("button", { name: /Bytes.*sort ascending/ }));
+    await userEvent.click(within(table).getByRole("button", { name: /Bytes.*sort descending/ }));
+    expect(within(table).getByRole("columnheader", { name: /Bytes/ })).toHaveAttribute("aria-sort", "descending");
+    expect(window.localStorage.getItem("sshc.sftp.tabs")).toContain('"sortKey":"size"');
+    expect(window.localStorage.getItem("sshc.sftp.tabs")).toContain('"sortDirection":"descending"');
+
+    first.unmount();
+    render(<SFTPWorkspace aliases={["edge"]} />);
+    await userEvent.click(within(screen.getByRole("tabpanel")).getByRole("button", { name: "Connect" }));
+    const restored = await screen.findByRole("table");
+    expect(within(restored).getByRole("columnheader", { name: /Bytes/ })).toHaveAttribute("aria-sort", "descending");
+  });
+
   it("ignores remembered tabs whose host is no longer declared", async () => {
     window.localStorage.setItem("sshc.sftp.tabs", JSON.stringify([{ alias: "removed", path: "/gone" }]));
 

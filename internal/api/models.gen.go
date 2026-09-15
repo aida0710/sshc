@@ -155,6 +155,24 @@ func (e ResumeTerminalAgentRequestPlacement) Valid() bool {
 	}
 }
 
+// Defines values for SFTPCreateEntryRequestType.
+const (
+	SFTPCreateEntryRequestTypeDirectory SFTPCreateEntryRequestType = "directory"
+	SFTPCreateEntryRequestTypeFile      SFTPCreateEntryRequestType = "file"
+)
+
+// Valid indicates whether the value is a known member of the SFTPCreateEntryRequestType enum.
+func (e SFTPCreateEntryRequestType) Valid() bool {
+	switch e {
+	case SFTPCreateEntryRequestTypeDirectory:
+		return true
+	case SFTPCreateEntryRequestTypeFile:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SFTPDirectoryDifferenceStatus.
 const (
 	Different    SFTPDirectoryDifferenceStatus = "different"
@@ -184,22 +202,22 @@ func (e SFTPDirectoryDifferenceStatus) Valid() bool {
 
 // Defines values for SFTPEntryType.
 const (
-	Directory SFTPEntryType = "directory"
-	File      SFTPEntryType = "file"
-	Other     SFTPEntryType = "other"
-	Symlink   SFTPEntryType = "symlink"
+	SFTPEntryTypeDirectory SFTPEntryType = "directory"
+	SFTPEntryTypeFile      SFTPEntryType = "file"
+	SFTPEntryTypeOther     SFTPEntryType = "other"
+	SFTPEntryTypeSymlink   SFTPEntryType = "symlink"
 )
 
 // Valid indicates whether the value is a known member of the SFTPEntryType enum.
 func (e SFTPEntryType) Valid() bool {
 	switch e {
-	case Directory:
+	case SFTPEntryTypeDirectory:
 		return true
-	case File:
+	case SFTPEntryTypeFile:
 		return true
-	case Other:
+	case SFTPEntryTypeOther:
 		return true
-	case Symlink:
+	case SFTPEntryTypeSymlink:
 		return true
 	default:
 		return false
@@ -1370,6 +1388,15 @@ type RewrittenKeyReference struct {
 	To         string `json:"to"`
 }
 
+// SFTPCreateEntryRequest defines model for SFTPCreateEntryRequest.
+type SFTPCreateEntryRequest struct {
+	Path string                     `json:"path"`
+	Type SFTPCreateEntryRequestType `json:"type"`
+}
+
+// SFTPCreateEntryRequestType defines model for SFTPCreateEntryRequest.Type.
+type SFTPCreateEntryRequestType string
+
 // SFTPDirectoryComparison defines model for SFTPDirectoryComparison.
 type SFTPDirectoryComparison struct {
 	Entries   []SFTPDirectoryDifference `json:"entries"`
@@ -1387,6 +1414,15 @@ type SFTPDirectoryDifference struct {
 
 // SFTPDirectoryDifferenceStatus defines model for SFTPDirectoryDifference.Status.
 type SFTPDirectoryDifferenceStatus string
+
+// SFTPDirectoryStats defines model for SFTPDirectoryStats.
+type SFTPDirectoryStats struct {
+	Bytes       int64  `json:"bytes"`
+	Directories int    `json:"directories"`
+	Files       int    `json:"files"`
+	Path        string `json:"path"`
+	Truncated   bool   `json:"truncated"`
+}
 
 // SFTPEntry defines model for SFTPEntry.
 type SFTPEntry struct {

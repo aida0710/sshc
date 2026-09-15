@@ -64,15 +64,6 @@ type sftpSaveTextRequest struct {
 	ExpectedRevision string `json:"expectedRevision"`
 }
 
-type sftpMkdirType string
-
-const sftpMkdirDirectory sftpMkdirType = "directory"
-
-type sftpMkdirRequest struct {
-	Path string        `json:"path"`
-	Type sftpMkdirType `json:"type"`
-}
-
 type sftpRenameRequest struct {
 	From string `json:"from"`
 	To   string `json:"to"`
@@ -82,6 +73,7 @@ type sftpChmodRequest struct {
 	Path             string `json:"path"`
 	Mode             string `json:"mode"`
 	ExpectedRevision string `json:"expectedRevision"`
+	Recursive        bool   `json:"recursive"`
 }
 
 type sftpTransferResponse struct {
@@ -105,7 +97,8 @@ func registerSFTPRoutes(engine *echo.Echo, handlers SFTPHandlers) {
 	engine.POST("/api/v1/sftp/transfers/:id/download-checkpoint", handlers.CheckpointDownload)
 	engine.GET("/api/v1/sftp/compare", handlers.CompareDirectories)
 	engine.GET("/api/v1/sftp/:alias/entries", handlers.List)
-	engine.POST("/api/v1/sftp/:alias/entries", handlers.Mkdir)
+	engine.POST("/api/v1/sftp/:alias/entries", handlers.CreateEntry)
+	engine.GET("/api/v1/sftp/:alias/stats", handlers.DirectoryStats)
 	engine.GET("/api/v1/sftp/:alias/preview", handlers.Preview)
 	engine.GET("/api/v1/sftp/:alias/search", handlers.Search)
 	engine.GET("/api/v1/sftp/:alias/text", handlers.ReadText)
@@ -169,6 +162,8 @@ func sftpProblem(c *echo.Context, err error) error {
 		return problem(c, http.StatusUnprocessableEntity, "sftp_unsupported_entry")
 	case errors.Is(err, sshcSFTP.ErrCompareLimit):
 		return problem(c, http.StatusRequestEntityTooLarge, "sftp_compare_limit")
+	case errors.Is(err, sshcSFTP.ErrTraversalLimit):
+		return problem(c, http.StatusRequestEntityTooLarge, "sftp_traversal_limit")
 	default:
 		return problem(c, http.StatusBadGateway, "sftp_failed")
 	}
@@ -526,9 +521,9 @@ func (h SFTPHandlers) SaveText(c *echo.Context) error {
 	})
 }
 
-func (h SFTPHandlers) Mkdir(c *echo.Context) error {
-	var body sftpMkdirRequest
-	if err := decodeJSON(c, &body); err != nil || body.Type != sftpMkdirDirectory {
+func (h SFTPHandlers) CreateEntry(c *echo.Context) error {
+	var body api.SFTPCreateEntryRequest
+	if err := decodeJSON(c, &body); err != nil || !body.Type.Valid() {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
 	alias := c.Param("alias")
@@ -537,11 +532,27 @@ func (h SFTPHandlers) Mkdir(c *echo.Context) error {
 		return sftpProblem(c, err)
 	}
 	defer unlock()
-	entry, err := h.Service.Mkdir(c.Request().Context(), alias, body.Path)
+	var entry sshcSFTP.Entry
+	if body.Type == api.SFTPCreateEntryRequestTypeDirectory {
+		entry, err = h.Service.Mkdir(c.Request().Context(), alias, body.Path)
+	} else {
+		entry, err = h.Service.CreateEmptyFile(c.Request().Context(), alias, body.Path)
+	}
 	if err != nil {
 		return sftpProblem(c, err)
 	}
 	return c.JSON(http.StatusCreated, describeSFTPEntry(entry))
+}
+
+func (h SFTPHandlers) DirectoryStats(c *echo.Context) error {
+	stats, err := h.Service.DirectoryStats(c.Request().Context(), c.Param("alias"), c.QueryParam("path"))
+	if err != nil {
+		return sftpProblem(c, err)
+	}
+	return c.JSON(http.StatusOK, api.SFTPDirectoryStats{
+		Path: stats.Path, Bytes: stats.Bytes, Files: stats.Files,
+		Directories: stats.Directories, Truncated: stats.Truncated,
+	})
 }
 
 func (h SFTPHandlers) Rename(c *echo.Context) error {
@@ -850,10 +861,18 @@ func (h SFTPHandlers) Chmod(c *echo.Context) error {
 	}
 	defer unlock()
 	target := alias + ":" + body.Path + ":" + body.Mode
+	if body.Recursive {
+		target += ":recursive"
+	}
 	if allowed, response := h.Actions.consume(c, session.ActionSFTPChmod, target); !allowed {
 		return response
 	}
-	entry, err := h.Service.Chmod(c.Request().Context(), alias, body.Path, fs.FileMode(parsed), body.ExpectedRevision)
+	var entry sshcSFTP.Entry
+	if body.Recursive {
+		entry, err = h.Service.ChmodRecursive(c.Request().Context(), alias, body.Path, fs.FileMode(parsed), body.ExpectedRevision)
+	} else {
+		entry, err = h.Service.Chmod(c.Request().Context(), alias, body.Path, fs.FileMode(parsed), body.ExpectedRevision)
+	}
 	if err != nil {
 		return sftpProblem(c, err)
 	}
@@ -880,6 +899,9 @@ func addSFTPActions(registry actionRegistry, service *sshcSFTP.Service) {
 			alias, remainder, ok := strings.Cut(target, ":")
 			if !ok {
 				return "", sshcSFTP.ErrInvalidPath
+			}
+			if strings.HasSuffix(remainder, ":recursive") {
+				remainder = strings.TrimSuffix(remainder, ":recursive")
 			}
 			separator := strings.LastIndexByte(remainder, ':')
 			if separator <= 0 || separator == len(remainder)-1 {

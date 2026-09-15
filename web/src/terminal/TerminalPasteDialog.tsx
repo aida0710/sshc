@@ -1,6 +1,7 @@
 import { useId, useRef, useState } from "react";
 import { useTranslate } from "../i18n/context";
 import { ModalShell } from "../ui/ModalShell";
+import { Icon } from "../ui/icons";
 import { Button } from "../ui/surface";
 import { inspectTerminalPaste, removeFinalTerminalLineBreak } from "./pasteGuard";
 
@@ -51,15 +52,21 @@ export function TerminalPasteDialog({
           className="w-full resize-y rounded border border-control-line bg-control p-3 font-mono text-xs focus:border-accent focus:outline-none"
         />
       </label>
-      <pre
-        aria-label={t("terminal.pastePreview")}
-        className="max-h-64 overflow-auto whitespace-pre-wrap break-all rounded border border-control-line bg-control p-3 font-mono text-xs text-ink"
-      >
-        {inspection.preview}
-      </pre>
-      {inspection.previewTruncated ? (
-        <p className="text-xs text-ink-muted">{t("terminal.pastePreviewTruncated")}</p>
-      ) : null}
+      <details className="group overflow-hidden rounded border border-control-line bg-control">
+        <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-sm text-ink-muted hover:text-ink focus:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-accent [&::-webkit-details-marker]:hidden">
+          <Icon name="chevronRight" className="size-3.5 shrink-0 transition-transform group-open:rotate-90" />
+          <span>{t("terminal.pastePreview")}</span>
+        </summary>
+        <pre
+          aria-label={t("terminal.pastePreview")}
+          className="max-h-64 overflow-auto whitespace-pre-wrap break-all border-t border-control-line p-3 font-mono text-xs text-ink"
+        >
+          {inspection.preview}
+        </pre>
+        {inspection.previewTruncated ? (
+          <p className="border-t border-control-line px-3 py-2 text-xs text-ink-muted">{t("terminal.pastePreviewTruncated")}</p>
+        ) : null}
+      </details>
       <p className="text-xs font-medium text-notice-ink">{t("terminal.pasteNotSent")}</p>
       <div className="flex flex-wrap justify-end gap-2">
         <Button ref={cancel} onClick={onCancel}>{t("terminal.pasteCancel")}</Button>

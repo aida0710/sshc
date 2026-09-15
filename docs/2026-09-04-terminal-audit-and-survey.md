@@ -4,7 +4,7 @@
 
 最優先は、新しいプロトコルを増やすことではなく、端末入力と再接続の境界を安全にすることだった。この監査では、改行・制御文字を含む貼り付けを送信前に確認するSafe Pasteと、WebSocket再接続時に未受信分だけを再生するbyte cursorを実装した。
 
-次に実装する価値が高いのはOSC 133によるcommand／output zoneと、長時間commandの完了通知である。Moshは価値がある一方、UDP、remote binary、端末状態同期、Windows対応、license境界を同時に扱うため、先に小さい改善を積む。
+OSC 133によるcommand境界の受信と、30秒以上かかったcommandのbackground通知まで実装した。Moshは価値がある一方、UDP、remote binary、端末状態同期、Windows対応、license境界を同時に扱うため、独立projectとして検討する。
 
 ## 調査範囲
 
@@ -31,7 +31,7 @@ Termiusの現行planにはSSH、SFTP、port forwarding、Mosh、local vaultが�
 |---|---|---:|---|
 | P0 | Safe Paste | S | 実装済み。改行、末尾Enter、C0／DELを送信前に表示する |
 | P0 | byte cursorによる差分再生 | M | 実装済み。再接続ごとの全scrollback重複を止める |
-| P0 | OSC 133 command zone＋長時間command通知 | M | 次候補。既存OSC 7 parserとagent通知基盤を再利用する |
+| P0 | OSC 133 command zone＋長時間command通知 | M | 実装済み。明示markerを受信したshellでcommand開始位置を示し、30秒以上の完了をbackground通知する |
 | P1 | 実際にnegotiationしたSSH algorithmの表示 | S〜M | `AlgorithmsConnMetadata`から取得し、Diagnosticsへ出す |
 | P1 | opt-inのremote tmux session | L | sshc独自daemonを置かず、利用者が選んだtmuxだけを対象にする |
 | P2 | passive keyword／regex highlight | M | 出力を変更せず、browser内の表示だけに適用する |
@@ -102,6 +102,8 @@ GoのSSH libraryはnegotiation結果を返す`AlgorithmsConnMetadata`を提供�
 
 sshc独自のcommand historyとautocompleteは再導入しない。shellや接続先applicationの編集・履歴・補完と競合するためである。command単位の操作は、推測した入力ではなくOSC 133の明示信号から作る。
 
+OSC 133を送らないremote shellではcommand境界を推測せず、従来どおり通常のterminalとして動作する。
+
 ## 完了条件
 
 Safe Pasteはunit testだけでなく、実browserで「確認前のWebSocket inputが0件」「末尾Enterを除く操作が1 frameだけ送る」を確認する。差分再生はserverのring境界、ticketの単回利用、WebSocket metadata、clientの再接続cursorをそれぞれ回帰testで固定する。
@@ -119,4 +121,3 @@ Safe Pasteはunit testだけでなく、実browserで「確認前のWebSocket in
 | `make generate`、`npm run build --prefix web` | 生成物と埋込みUIは2回連続で同一出力 |
 
 Safe Pasteの受入条件は`web/e2e/terminal.spec.ts`の`reviews a multiline paste before sending any terminal input`で固定した。実Chromiumで、確認dialog表示中にWebSocketへ送られた入力frameが0件であること、「末尾のEnterを除いて貼り付け」が1 frameだけを送り末尾のCRを含まないことを検査する。差分再生はserverのring境界、ticketの単回利用、WebSocket metadata、clientの再接続cursorをそれぞれunit／HTTP testで固定した。
-

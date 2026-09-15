@@ -42,6 +42,7 @@ var (
 	ErrInvalidQuery     = errors.New("search needs something to look for")
 	ErrUnsupportedEntry = errors.New("remote entry type cannot be copied")
 	ErrCompareLimit     = errors.New("directory comparison exceeded its safety limit")
+	ErrTraversalLimit   = errors.New("directory traversal exceeded its safety limit")
 )
 
 type EntryType string
@@ -89,6 +90,17 @@ type SearchResult struct {
 	Query     string
 	Entries   []Entry
 	Truncated bool
+}
+
+// DirectoryStats is a bounded summary of a remote directory tree. Truncated
+// is true when an unreadable branch or the traversal budget prevented a full
+// count, so callers never mistake a partial byte count for an exact one.
+type DirectoryStats struct {
+	Path        string
+	Bytes       int64
+	Files       int
+	Directories int
+	Truncated   bool
 }
 
 type DirectoryDifferenceStatus string
