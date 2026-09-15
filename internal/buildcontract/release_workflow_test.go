@@ -213,7 +213,7 @@ func TestReleaseRequiresVersionControlledNotes(t *testing.T) {
 // 更新」を作れる。だから鍵が無ければ止まり、出来上がったものには
 // apksigner が直接聞く。gradle が成功したことは、署名された証拠ではない。
 func TestReleaseRefusesAnUnsignedAndroidPackage(t *testing.T) {
-	document, _ := readReleaseWorkflow(t)
+	document, source := readReleaseWorkflow(t)
 
 	android, present := document.Jobs["stage-release"]
 	if !present {
@@ -233,6 +233,9 @@ func TestReleaseRefusesAnUnsignedAndroidPackage(t *testing.T) {
 	}
 	if !verifies {
 		t.Error("the protected staging job never verifies the signed APK")
+	}
+	if !strings.Contains(source, `V[0-9]+(\.[0-9]+)* Signer`) {
+		t.Error("the APK signer digest parser does not accept versioned schemes such as V3.0 Signer")
 	}
 }
 
