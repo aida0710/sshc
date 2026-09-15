@@ -219,6 +219,10 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: web/package-lock.json
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
 
       # `npm ci` はロックされたバージョンをそのままインストールし、lockfile と
       # package.json が食い違えば失敗する。このプロジェクトはすべての依存を固定
@@ -246,6 +250,17 @@ jobs:
       # Web sourceと一致することを同じjob内で確認する。
       - name: Verify embedded UI assets
         run: ../scripts/ci/check-ui-dist.sh
+
+      # axe は実際に配布するUIをsshc engineから開いて検査する。全E2Eはローカルに
+      # 残し、主要画面の重大なWCAG違反だけをPRごとに短時間で検出する。
+      - name: Build accessibility test engine
+        run: mkdir -p ../bin && go build -o ../bin/sshc ../cmd/sshc
+
+      - name: Install Chromium for accessibility tests
+        run: npx playwright install --with-deps chromium
+
+      - name: Accessibility tests
+        run: npm run e2e -- --project=chromium --output="$RUNNER_TEMP/playwright-results" e2e/accessibility.spec.ts
 
   pages:
     name: Documentation site
