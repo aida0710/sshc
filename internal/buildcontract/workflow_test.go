@@ -58,9 +58,9 @@ func TestCIWorkflowProvidesNativeGoMatrices(t *testing.T) {
 	}
 }
 
-// E2E は実バイナリをブラウザから操作するため時間がかかる。CI からは外し、
-// Makefile のローカル実行経路を維持する。
-func TestCIWorkflowLeavesTheEndToEndSuiteForLocalRuns(t *testing.T) {
+// 全E2E は実バイナリをブラウザから操作するため時間がかかる。独立jobにはせず、
+// Makefile のローカル実行経路を維持する。主要画面のaxe検査だけはweb jobで走る。
+func TestCIWorkflowLeavesTheFullEndToEndSuiteForLocalRuns(t *testing.T) {
 	document := readWorkflowDocument(t)
 	for _, id := range []string{"e2e", "e2e-windows"} {
 		if _, present := document.Jobs[id]; present {
@@ -74,6 +74,30 @@ func TestCIWorkflowLeavesTheEndToEndSuiteForLocalRuns(t *testing.T) {
 	}
 	if !strings.Contains(string(makefile), "e2e: build\n\tnpm run e2e --prefix web") {
 		t.Error("Makefile does not retain the local E2E target")
+	}
+}
+
+func TestCIWorkflowRunsFocusedAccessibilitySuite(t *testing.T) {
+	document := readWorkflowDocument(t)
+	web, present := document.Jobs["web"]
+	if !present {
+		t.Fatal("jobs.web is missing")
+	}
+
+	wants := map[string]string{
+		"Build accessibility test engine":          "go build -o ../bin/sshc ../cmd/sshc",
+		"Install Chromium for accessibility tests": "playwright install --with-deps chromium",
+		"Accessibility tests":                      "e2e/accessibility.spec.ts",
+	}
+	for name, command := range wants {
+		step, found := namedStep(web, name)
+		if !found {
+			t.Errorf("jobs.web has no %q step", name)
+			continue
+		}
+		if !strings.Contains(step.Run, command) {
+			t.Errorf("jobs.web step %q does not contain %q", name, command)
+		}
 	}
 }
 
