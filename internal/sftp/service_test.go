@@ -165,6 +165,13 @@ func (r *fakeRemote) Create(candidate string) (io.WriteCloser, error) {
 }
 
 func (r *fakeRemote) OpenFile(candidate string, flags int) (sftp.WriteSeekCloser, error) {
+	if flags == os.O_WRONLY|os.O_CREATE|os.O_EXCL {
+		if _, exists := r.nodes[candidate]; exists {
+			return nil, fs.ErrExist
+		}
+		r.nodes[candidate] = node{name: path.Base(candidate), mode: 0o666, modTime: r.now()}
+		return &fakeSeekWriter{remote: r, path: candidate}, nil
+	}
 	if flags != os.O_WRONLY {
 		return nil, fs.ErrInvalid
 	}
@@ -527,6 +534,30 @@ func TestSearchMatchesNamesBelowARootWithoutFollowingSymlinks(t *testing.T) {
 	}
 }
 
+func TestDirectoryStatsTotalsRegularFilesWithoutFollowingSymlinks(t *testing.T) {
+	remote := remoteWith(map[string]node{
+		"/srv":             directory("srv"),
+		"/srv/a.txt":       file("a.txt", "alpha", 0o640),
+		"/srv/cache":       directory("cache"),
+		"/srv/cache/b.bin": file("b.bin", "1234567", 0o600),
+		"/srv/link":        {name: "link", content: []byte("/elsewhere"), mode: fs.ModeSymlink | 0o777, modTime: testTime},
+	})
+	stats, err := serviceFor(remote).DirectoryStats(t.Context(), "edge", "/srv")
+	if err != nil {
+		t.Fatalf("DirectoryStats() = %v", err)
+	}
+	if stats.Path != "/srv" || stats.Bytes != 12 || stats.Files != 2 || stats.Directories != 2 || stats.Truncated {
+		t.Fatalf("DirectoryStats() = %#v", stats)
+	}
+}
+
+func TestDirectoryStatsRejectsARegularFile(t *testing.T) {
+	remote := remoteWith(map[string]node{"/srv.txt": file("srv.txt", "alpha", 0o640)})
+	if _, err := serviceFor(remote).DirectoryStats(t.Context(), "edge", "/srv.txt"); !errors.Is(err, sftp.ErrNotDirectory) {
+		t.Fatalf("DirectoryStats(file) = %v, want %v", err, sftp.ErrNotDirectory)
+	}
+}
+
 func TestSaveTextRequiresCurrentContentRevisionAndAtomicallyReplaces(t *testing.T) {
 	remote := remoteWith(map[string]node{"/config": file("config", "before\n", 0o640)})
 	service := serviceFor(remote)
@@ -719,6 +750,32 @@ func TestDownloadArchiveAndChmod(t *testing.T) {
 	}
 }
 
+func TestChmodRecursiveChangesFilesAndDirectoriesButSkipsSymlinks(t *testing.T) {
+	remote := remoteWith(map[string]node{
+		"/project":       directory("project"),
+		"/project/a":     file("a", "alpha", 0o640),
+		"/project/sub":   directory("sub"),
+		"/project/sub/b": file("b", "beta", 0o600),
+		"/project/link":  {name: "link", content: []byte("sub"), mode: fs.ModeSymlink | 0o777, modTime: testTime},
+	})
+	service := serviceFor(remote)
+	root, err := service.Stat(t.Context(), "edge", "/project")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.ChmodRecursive(t.Context(), "edge", "/project", 0o700, root.Revision); err != nil {
+		t.Fatalf("ChmodRecursive() = %v", err)
+	}
+	for _, candidate := range []string{"/project", "/project/a", "/project/sub", "/project/sub/b"} {
+		if got := remote.nodes[candidate].Mode().Perm(); got != 0o700 {
+			t.Fatalf("mode(%s) = %o, want 700", candidate, got)
+		}
+	}
+	if got := remote.nodes["/project/link"].Mode().Perm(); got != 0o777 {
+		t.Fatalf("symlink mode = %o, want 777", got)
+	}
+}
+
 func TestDownloadArchiveSkipsUnpublishedUploadParts(t *testing.T) {
 	remote := remoteWith(map[string]node{
 		"/project":         directory("project"),
@@ -749,6 +806,25 @@ func TestMkdirTreatsAnExistingDirectoryAsSuccess(t *testing.T) {
 	remote.nodes["/file"] = file("file", "x", 0o600)
 	if _, err := serviceFor(remote).Mkdir(t.Context(), "edge", "/file"); !errors.Is(err, sftp.ErrAlreadyExists) {
 		t.Fatalf("existing file = %v", err)
+	}
+}
+
+func TestCreateEmptyFileNeverReplacesAnExistingPath(t *testing.T) {
+	remote := remoteWith(map[string]node{"/existing.txt": file("existing.txt", "keep", 0o600)})
+	service := serviceFor(remote)
+
+	created, err := service.CreateEmptyFile(t.Context(), "edge", "/empty.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.Type != sftp.EntryFile || created.Size != 0 || len(remote.nodes["/empty.txt"].content) != 0 {
+		t.Fatalf("created = %+v, node = %+v", created, remote.nodes["/empty.txt"])
+	}
+	if _, err := service.CreateEmptyFile(t.Context(), "edge", "/existing.txt"); !errors.Is(err, sftp.ErrAlreadyExists) {
+		t.Fatalf("existing file = %v, want ErrAlreadyExists", err)
+	}
+	if got := string(remote.nodes["/existing.txt"].content); got != "keep" {
+		t.Fatalf("existing contents = %q", got)
 	}
 }
 
@@ -786,6 +862,7 @@ func TestUnsafeInputsFailBeforeOpeningAConnection(t *testing.T) {
 		{name: "relative list", run: func() error { _, err := service.List(context.Background(), "edge", "tmp"); return err }, want: sftp.ErrInvalidPath},
 		{name: "root delete", run: func() error { return service.Delete(context.Background(), "edge", "/") }, want: sftp.ErrRootOperation},
 		{name: "root mkdir", run: func() error { _, err := service.Mkdir(context.Background(), "edge", "/"); return err }, want: sftp.ErrRootOperation},
+		{name: "root empty file", run: func() error { _, err := service.CreateEmptyFile(context.Background(), "edge", "/"); return err }, want: sftp.ErrRootOperation},
 		{name: "empty alias", run: func() error { _, err := service.Stat(context.Background(), " ", "/"); return err }, want: sftp.ErrInvalidAlias},
 		{name: "hostile alias", run: func() error { _, err := service.List(context.Background(), "$(touch-pwned)", "/"); return err }, want: validate.ErrUnsafeAlias},
 		{name: "missing revision", run: func() error { _, err := service.SaveText(context.Background(), "edge", "/file", "x", ""); return err }, want: sftp.ErrRevisionRequired},

@@ -142,7 +142,7 @@ describe("SettingsPanel", () => {
     expect(delivered).toEqual([{
       title: "sshc",
       options: {
-        body: "Agent notifications are ready.",
+        body: "Agent and transfer notifications are ready.",
         tag: "sshc-notification-permission",
       },
     }]);

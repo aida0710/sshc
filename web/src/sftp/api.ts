@@ -22,6 +22,7 @@ export type TransferJobList = components["schemas"]["SFTPTransferJobList"];
 
 export type RemoteSearchResult = components["schemas"]["SFTPSearchResult"];
 export type DirectoryComparison = components["schemas"]["SFTPDirectoryComparison"];
+export type RemoteDirectoryStats = components["schemas"]["SFTPDirectoryStats"];
 
 export type RemotePreview = {
   contentType: string;
@@ -147,6 +148,11 @@ export const sftpApi = {
       locallyHandledCodes: ["sftp_failed", "sftp_not_found", "invalid_request"],
     }));
   },
+  async directoryStats(alias: string, remotePath: string): Promise<RemoteDirectoryStats> {
+    return validateOpenAPISchema<RemoteDirectoryStats>("SFTPDirectoryStats", await apiClient.read(pathFor(alias, "stats", remotePath), {
+      locallyHandledCodes: ["sftp_failed", "sftp_not_found", "sftp_wrong_type"],
+    }));
+  },
   async previewFile(alias: string, remotePath: string): Promise<RemotePreview> {
     const endpoint = pathFor(alias, "preview", remotePath);
     const response = await apiClient.send(endpoint, { method: "GET" }, { locallyHandledCodes: previewProblems });
@@ -177,6 +183,13 @@ export const sftpApi = {
       headers: jsonHeaders,
       body: JSON.stringify({ path: remotePath, type: "directory" }),
     }));
+  },
+  async createEmptyFile(alias: string, remotePath: string): Promise<RemoteEntry> {
+    return entry(await apiClient.mutate<unknown>(`/api/v1/sftp/${encodeURIComponent(alias)}/entries`, {
+      method: "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify({ path: remotePath, type: "file" }),
+    }, { locallyHandledCodes: ["sftp_exists", "sftp_failed"] }));
   },
   async rename(alias: string, from: string, to: string): Promise<RemoteEntry> {
     return entry(await apiClient.mutate<unknown>(`/api/v1/sftp/${encodeURIComponent(alias)}/entry`, {
@@ -277,13 +290,13 @@ export const sftpApi = {
     // WebView/Safari may consume the object URL after click() returns.
     globalThis.setTimeout(() => URL.revokeObjectURL(url), 30_000);
   },
-  async chmod(alias: string, remotePath: string, mode: string, expectedRevision: string): Promise<RemoteEntry> {
-    const target = `${alias}:${remotePath}:${mode}`;
+  async chmod(alias: string, remotePath: string, mode: string, expectedRevision: string, recursive = false): Promise<RemoteEntry> {
+    const target = `${alias}:${remotePath}:${mode}${recursive ? ":recursive" : ""}`;
     const token = await issueAction("sftp.chmod", target);
     return entry(await apiClient.mutate<unknown>(`/api/v1/sftp/${encodeURIComponent(alias)}/mode`, {
       method: "PATCH",
       headers: { ...jsonHeaders, "X-SSHC-Action": token },
-      body: JSON.stringify({ path: remotePath, mode, expectedRevision }),
+      body: JSON.stringify({ path: remotePath, mode, expectedRevision, recursive }),
     }));
   },
 };
