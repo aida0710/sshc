@@ -5,7 +5,7 @@ import type { MessageKey } from "../i18n/messages";
 import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
 import { ModalShell } from "../ui/ModalShell";
 import { Button } from "../ui/surface";
-import { sftpApi, type RemoteEntry } from "./api";
+import { sftpApi, type RemoteDirectoryStats, type RemoteEntry } from "./api";
 import { formatBytes } from "./format";
 import { symbolicModeToOctal } from "./transfers";
 
@@ -19,6 +19,12 @@ type PreviewState =
   | { kind: "image"; url: string }
   | { kind: "text"; contents: string; truncated: boolean }
   | { kind: "unavailable"; reason: MessageKey };
+
+type DirectoryStatsState =
+  | { kind: "idle" }
+  | { kind: "loading" }
+  | { kind: "loaded"; stats: RemoteDirectoryStats }
+  | { kind: "unavailable" };
 
 // A data: URL keeps the image inside the policy the app already ships;
 // img-src allows data: and nothing here needs a Blob URL.
@@ -76,8 +82,10 @@ export function SFTPDetailsDialog({
   const headingId = useId();
   const mobileViewport = useMediaQuery(mobileViewportQuery);
   const [preview, setPreview] = useState<PreviewState>({ kind: "idle" });
+  const [directoryStats, setDirectoryStats] = useState<DirectoryStatsState>({ kind: "idle" });
   const entry = entries.length === 1 ? entries[0] ?? null : null;
   const previewPath = entry !== null && entry.type === "file" ? entry.path : null;
+  const directoryPath = entry !== null && entry.type === "directory" ? entry.path : null;
   const totalBytes = entries.reduce((sum, item) => sum + (item.type === "file" ? item.size : 0), 0);
   const heading = entry === null ? t("sftp.detailsForCount", { count: entries.length }) : t("sftp.detailsFor", { name: entry.name });
 
@@ -120,6 +128,20 @@ export function SFTPDetailsDialog({
     return () => { active = false; };
   }, [alias, previewPath]);
 
+  useEffect(() => {
+    if (directoryPath === null) {
+      setDirectoryStats({ kind: "idle" });
+      return;
+    }
+    let active = true;
+    setDirectoryStats({ kind: "loading" });
+    void sftpApi.directoryStats(alias, directoryPath).then(
+      (stats) => { if (active) setDirectoryStats({ kind: "loaded", stats }); },
+      () => { if (active) setDirectoryStats({ kind: "unavailable" }); },
+    );
+    return () => { active = false; };
+  }, [alias, directoryPath]);
+
   const properties = (
         <dl role="group" className="min-h-0 overflow-auto border-t border-line px-3 py-2 md:border-l md:border-t-0" aria-label={t("sftp.properties")}>
           {entry === null ? (
@@ -132,8 +154,20 @@ export function SFTPDetailsDialog({
               <Property label={t("sftp.path")}>{entry.path}</Property>
               <Property label={t("sftp.type")}>{t(`sftp.type.${entry.type}`)}</Property>
               <Property label={t("sftp.size")}>
-                {entry.type === "file" ? `${entry.size.toLocaleString()} (${formatBytes(entry.size)})` : "—"}
+                {entry.type === "file"
+                  ? `${entry.size.toLocaleString()} (${formatBytes(entry.size)})`
+                  : directoryStats.kind === "loading"
+                    ? t("sftp.calculating")
+                    : directoryStats.kind === "loaded"
+                      ? `${directoryStats.stats.truncated ? t("sftp.partialSizePrefix") : ""}${directoryStats.stats.bytes.toLocaleString()} (${formatBytes(directoryStats.stats.bytes)})`
+                      : t("sftp.sizeUnavailable")}
               </Property>
+              {entry.type === "directory" && directoryStats.kind === "loaded" ? (
+                <>
+                  <Property label={t("sftp.containedFiles")}>{directoryStats.stats.files.toLocaleString()}</Property>
+                  <Property label={t("sftp.containedDirectories")}>{Math.max(0, directoryStats.stats.directories - 1).toLocaleString()}</Property>
+                </>
+              ) : null}
               <Property label={t("sftp.modified")}>
                 <time dateTime={entry.modifiedAt}>{new Date(entry.modifiedAt).toLocaleString()}</time>
               </Property>

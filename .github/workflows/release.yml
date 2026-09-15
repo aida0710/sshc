@@ -238,7 +238,6 @@ jobs:
     name: Android
     needs: [verify-source]
     runs-on: ubuntu-24.04
-    environment: release
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -254,24 +253,8 @@ jobs:
           java-version: 21
           cache: gradle
 
-      # 配布用の署名鍵がなければ停止する。debug 鍵へのフォールバックは行わない。
-      - name: Require a signing key
-        env:
-          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-        run: |
-          test -n "$ANDROID_KEYSTORE_BASE64" || {
-            echo "This release has no Android signing key." >&2
-            echo "Create these repository secrets, then re-run:" >&2
-            echo "  ANDROID_KEYSTORE_BASE64   base64 of a JKS/PKCS12 keystore" >&2
-            echo "  ANDROID_KEYSTORE_PASSWORD" >&2
-            echo "  ANDROID_KEY_ALIAS" >&2
-            echo "  ANDROID_KEY_PASSWORD" >&2
-            echo "Keep the same key forever: Android refuses an update signed by another." >&2
-            exit 1
-          }
-
       - name: Install gobind
-        run: go install golang.org/x/mobile/cmd/gobind
+        run: scripts/ci/retry.sh go install golang.org/x/mobile/cmd/gobind
 
       - name: Prepare the pinned Android NDK
         id: android-ndk
@@ -282,51 +265,24 @@ jobs:
           SSHC_ANDROID_NDK_HOME: ${{ steps.android-ndk.outputs.path }}
         run: |
           # APK と組み込み engine に同じバージョンを設定する。
-          make android-bind ANDROID_NDK_HOME="$SSHC_ANDROID_NDK_HOME" \
+          scripts/ci/retry.sh make android-bind ANDROID_NDK_HOME="$SSHC_ANDROID_NDK_HOME" \
             ANDROID_VERSION="${RELEASE_TAG#v}"
 
-      # 署名鍵は runner の一時ディレクトリに置き、成果物へ混入させない。
-      - name: assembleRelease
+      # 保護環境の承認前にAPKを組み立てる。署名は全platformのbuildが成功した後、
+      # stage-release内で行うため、このjobは秘密を必要としない。
+      - name: Assemble the unsigned release APK
         working-directory: android
-        env:
-          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           set -eu
-          keystore="$RUNNER_TEMP/release.keystore"
-          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$keystore"
-          ANDROID_KEYSTORE_PATH="$keystore" \
-            ./gradlew --no-daemon assembleRelease \
-              -PsshcVersionName="${RELEASE_TAG#v}"
-          rm -f "$keystore"
-
-      # Gradle の終了状態だけでなく、apksigner で成果物の署名を検証する。
-      - name: The APK is signed
-        run: |
-          set -eu
-          apk=$(ls android/app/build/outputs/apk/release/*.apk)
-          signer=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | tail -1)
-          verification=$("$signer" verify --print-certs "$apk")
-          printf '%s\n' "$verification"
-          expected=$(tr -d '[:space:]' < .github/android-release-signer.sha256 | tr '[:lower:]' '[:upper:]')
-          actual=$(printf '%s\n' "$verification" |
-            sed -n -E 's/^(Signer #[0-9]+|V[0-9]+ Signer): certificate SHA-256 digest: ([0-9a-fA-F]+)$/\2/p' |
-            tr '[:lower:]' '[:upper:]' | sort -u)
-          count=$(printf '%s\n' "$actual" | sed '/^$/d' | wc -l | tr -d ' ')
-          case "$expected" in
-            ''|*[!0-9A-F]*) echo "the committed Android signer fingerprint is invalid" >&2; exit 1 ;;
-          esac
-          [ "${#expected}" -eq 64 ] || { echo "the committed Android signer fingerprint must be SHA-256" >&2; exit 1; }
-          [ "$count" -eq 1 ] || { echo "the APK must have exactly one signer" >&2; exit 1; }
-          [ "$actual" = "$expected" ] || { echo "the APK was signed by an unexpected certificate" >&2; exit 1; }
-          cp "$apk" "sshc-android-${RELEASE_TAG}.apk"
+          ./gradlew --no-daemon assembleRelease \
+            -PsshcVersionName="${RELEASE_TAG#v}"
+          apk=$(ls app/build/outputs/apk/release/*.apk)
+          cp "$apk" "../sshc-android-${RELEASE_TAG}-unsigned.apk"
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: release-android
-          path: sshc-android-*.apk
+          path: sshc-android-*-unsigned.apk
           if-no-files-found: error
           retention-days: 1
 
@@ -349,9 +305,56 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           ref: ${{ needs.verify-source.outputs.release-sha }}
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: 21
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           path: incoming
+
+      # 保護環境の秘密を使う処理をこのjobへ集約し、releaseごとの承認を1回にする。
+      - name: Sign and verify the Android APK
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -eu
+          test -n "$ANDROID_KEYSTORE_BASE64" || {
+            echo "This release has no Android signing key." >&2
+            exit 1
+          }
+          unsigned=$(find incoming -type f -name "sshc-android-${RELEASE_TAG}-unsigned.apk" -print)
+          [ "$(printf '%s\n' "$unsigned" | sed '/^$/d' | wc -l | tr -d ' ')" -eq 1 ] || {
+            echo "expected exactly one unsigned Android APK" >&2
+            exit 1
+          }
+          keystore="$RUNNER_TEMP/release.keystore"
+          signed="$(dirname "$unsigned")/sshc-android-${RELEASE_TAG}.apk"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$keystore"
+          signer=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | tail -1)
+          "$signer" sign \
+            --ks "$keystore" \
+            --ks-key-alias "$ANDROID_KEY_ALIAS" \
+            --ks-pass env:ANDROID_KEYSTORE_PASSWORD \
+            --key-pass env:ANDROID_KEY_PASSWORD \
+            --out "$signed" "$unsigned"
+          rm -f "$keystore" "$unsigned"
+          verification=$("$signer" verify --print-certs "$signed")
+          printf '%s\n' "$verification"
+          expected=$(tr -d '[:space:]' < .github/android-release-signer.sha256 | tr '[:lower:]' '[:upper:]')
+          actual=$(printf '%s\n' "$verification" |
+            sed -n -E 's/^(Signer #[0-9]+|V[0-9]+ Signer): certificate SHA-256 digest: ([0-9a-fA-F]+)$/\2/p' |
+            tr '[:lower:]' '[:upper:]' | sort -u)
+          count=$(printf '%s\n' "$actual" | sed '/^$/d' | wc -l | tr -d ' ')
+          case "$expected" in
+            ''|*[!0-9A-F]*) echo "the committed Android signer fingerprint is invalid" >&2; exit 1 ;;
+          esac
+          [ "${#expected}" -eq 64 ] || { echo "the committed Android signer fingerprint must be SHA-256" >&2; exit 1; }
+          [ "$count" -eq 1 ] || { echo "the APK must have exactly one signer" >&2; exit 1; }
+          [ "$actual" = "$expected" ] || { echo "the APK was signed by an unexpected certificate" >&2; exit 1; }
 
       # 公開契約の7成果物を各1件だけ受理する。広いglobで同名を上書きすると、
       # job側の重複や欠落を隠したまま部分的なReleaseを作れてしまう。
@@ -485,22 +488,8 @@ jobs:
           release_id=$(printf '%s' "$release" | jq -er '.id')
           printf 'release_id=%s\n' "$release_id" >> "$GITHUB_OUTPUT"
 
-  # packaging/homebrew/sshc.rb を基に、検証済みタグとチェックサムで tap を更新する。
-  # tap もリリース成果物の一部なので、専用 deploy key が無ければ失敗として扱う。
-  homebrew:
-    name: Homebrew tap
-    # 全成果物の build/smoke が済んでから tap を更新する。ただし GitHub Release の
-    # 公開より前に gate し、tap の失敗で公開済み Release が取り残されないようにする。
-    needs: [stage-release, verify-source]
-    runs-on: ubuntu-latest
-    environment: release
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-        with:
-          ref: ${{ needs.verify-source.outputs.release-sha }}
-
-      - name: Update the tap
+      # tapも同じ保護job内で更新し、公開前のfailure gateを維持する。
+      - name: Update the Homebrew tap
         env:
           TAP_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
           SOURCE_REPO: ${{ github.repository }}
@@ -509,7 +498,7 @@ jobs:
         run: |
           set -eu
           if [ "$RELEASE_CHANNEL" != stable ]; then
-            echo "$RELEASE_TAG is not a stable release; leaving the stable Homebrew tap unchanged."
+            echo "$RELEASE_TAG is not a stable release; the stable Homebrew tap is unchanged."
             exit 0
           fi
           if [ -z "${TAP_KEY:-}" ]; then
@@ -517,21 +506,16 @@ jobs:
             exit 1
           fi
 
-          # Formula はタグのソース tarball とその SHA-256 を参照する。
           tarball="https://github.com/$SOURCE_REPO/archive/refs/tags/$RELEASE_TAG.tar.gz"
           curl -fsSL "$tarball" -o source.tar.gz
           sum=$(sha256sum source.tar.gz | cut -d' ' -f1)
           version=${RELEASE_TAG#v}
-
           sed -e "s#^  url .*#  url \"$tarball\"#" \
               -e "s#^  sha256 .*#  sha256 \"$sum\"#" \
               packaging/homebrew/sshc.rb > sshc.rb
-
-          # sed は置換対象がなくても成功するため、結果を明示的に検証する。
           grep -q "$sum" sshc.rb || { echo "the checksum was not written into the formula" >&2; exit 1; }
           grep -q "$RELEASE_TAG" sshc.rb || { echo "the tag was not written into the formula" >&2; exit 1; }
 
-          # deploy key を runner 内の SSH 設定へ一時的に保存する。
           mkdir -p ~/.ssh
           printf '%s\n' "$TAP_KEY" > ~/.ssh/tap
           chmod 600 ~/.ssh/tap
@@ -541,11 +525,8 @@ jobs:
             exit 1
           }
           export GIT_SSH_COMMAND="ssh -i ~/.ssh/tap -o IdentitiesOnly=yes"
-
           git clone --depth 1 "git@github.com:$TAP_REPO.git" tap
 
-          # 手動復旧で古いtagを指定してもstable tapを巻き戻さない。全release runを
-          # concurrencyで直列化したうえで、push直前のtapをもう一度正本として比較する。
           current_tag=$(sed -n -E 's#.*archive/refs/tags/(v[0-9]+\.[0-9]+\.[0-9]+)\.tar\.gz.*#\1#p' tap/Formula/sshc.rb | head -1)
           if [ -n "$current_tag" ]; then
             newest=$(printf '%s\n%s\n' "$current_tag" "$RELEASE_TAG" | sort -V | tail -1)
@@ -559,8 +540,6 @@ jobs:
           cd tap
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          # 新規ファイルも比較対象に含めるため、add 後の staged diff を確認する。
           git add Formula/sshc.rb
           if git diff --cached --quiet; then
             echo "the tap already describes $RELEASE_TAG."
@@ -572,7 +551,7 @@ jobs:
   publish:
     name: Publish
     # 完全なdraftとtap更新が成功した後は、一回のAPI更新だけで公開状態へ移す。
-    needs: [stage-release, homebrew, verify-source]
+    needs: [stage-release, verify-source]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:

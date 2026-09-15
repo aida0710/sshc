@@ -11,8 +11,10 @@ const api = vi.hoisted(() => ({
   readText: vi.fn(),
   upload: vi.fn(),
   mkdir: vi.fn(),
+  createEmptyFile: vi.fn(),
   rename: vi.fn(),
   search: vi.fn(),
+  directoryStats: vi.fn(),
   chmod: vi.fn(),
   remove: vi.fn(),
   download: vi.fn(),
@@ -56,7 +58,9 @@ describe("SFTPPanel uploads", () => {
       revision: "rev",
     });
     api.mkdir.mockResolvedValue(undefined);
+    api.createEmptyFile.mockResolvedValue(undefined);
     api.rename.mockResolvedValue(undefined);
+    api.directoryStats.mockResolvedValue({ path: "/remote/project", bytes: 0, files: 0, directories: 1, truncated: false });
     api.previewFile.mockRejectedValue(new ApiError("sftp_preview_type", 415, null));
     api.remove.mockResolvedValue(undefined);
 	api.startUpload.mockImplementation(async (_alias: string, id: string, path: string, size: number) => ({ id, path, offset: 0, size, expectedRevision: "absent", completedRanges: [], parallelism: 1, chunkBytes: 32 << 20 }));
@@ -258,6 +262,71 @@ describe("SFTPPanel uploads", () => {
     expect(screen.queryByRole("menuitem", { name: "Rename" })).not.toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: "Download" })).toBeEnabled();
     expect(screen.getByRole("menuitem", { name: "Delete" })).toBeEnabled();
+  });
+
+  it("queues a duplicate beside the selected remote entry", async () => {
+    api.list.mockResolvedValue({
+      path: "/remote",
+      entries: [{ name: "notes.txt", path: "/remote/notes.txt", type: "file", size: 12, mode: "0644", modifiedAt: "", revision: "file" }],
+    });
+    const addRemoteTransfers = vi.spyOn(sftpTransferManager, "addRemoteTransfers").mockResolvedValue(["copy-one"]);
+    try {
+      render(<SFTPPanel aliases={["edge"]} />);
+      await chooseHost("edge");
+      await userEvent.click(await screen.findByRole("button", { name: "notes.txt" }));
+      await userEvent.click(screen.getByRole("button", { name: "Actions for notes.txt" }));
+      await userEvent.click(screen.getByRole("menuitem", { name: "Duplicate" }));
+
+      const dialog = screen.getByRole("dialog", { name: "Duplicate" });
+      const name = within(dialog).getByRole("textbox", { name: "New name" });
+      expect(name).toHaveValue("notes.txt.copy");
+      await userEvent.clear(name);
+      await userEvent.type(name, "notes.backup");
+      await userEvent.click(within(dialog).getByRole("button", { name: "Duplicate" }));
+
+      await waitFor(() => expect(addRemoteTransfers).toHaveBeenCalledWith([{
+        sourceAlias: "edge",
+        sourcePath: "/remote/notes.txt",
+        targetAlias: "edge",
+        targetPath: "/remote/notes.backup",
+        kind: "file",
+        name: "notes.txt",
+        totalBytes: 12,
+      }], "copy"));
+    } finally {
+      addRemoteTransfers.mockRestore();
+    }
+  });
+
+  it("queues selected remote entries for a move to an absolute directory", async () => {
+    api.list.mockResolvedValue({
+      path: "/remote",
+      entries: [
+        { name: "project", path: "/remote/project", type: "directory", size: 0, mode: "0755", modifiedAt: "", revision: "dir" },
+        { name: "notes.txt", path: "/remote/notes.txt", type: "file", size: 12, mode: "0644", modifiedAt: "", revision: "file" },
+      ],
+    });
+    const addRemoteTransfers = vi.spyOn(sftpTransferManager, "addRemoteTransfers").mockResolvedValue(["move-one", "move-two"]);
+    try {
+      render(<SFTPPanel aliases={["edge"]} />);
+      await chooseHost("edge");
+      await userEvent.click(await screen.findByRole("checkbox", { name: "Select all entries" }));
+      await userEvent.click(screen.getByRole("button", { name: "Actions for 2 selected items" }));
+      await userEvent.click(screen.getByRole("menuitem", { name: "Move to folder" }));
+
+      const dialog = screen.getByRole("dialog", { name: "Move to folder" });
+      const destination = within(dialog).getByRole("textbox", { name: "Destination folder" });
+      await userEvent.clear(destination);
+      await userEvent.type(destination, "/archive");
+      await userEvent.click(within(dialog).getByRole("button", { name: "Move" }));
+
+      await waitFor(() => expect(addRemoteTransfers).toHaveBeenCalledWith([
+        expect.objectContaining({ sourcePath: "/remote/project", targetPath: "/archive/project", kind: "folder" }),
+        expect.objectContaining({ sourcePath: "/remote/notes.txt", targetPath: "/archive/notes.txt", kind: "file" }),
+      ], "move"));
+    } finally {
+      addRemoteTransfers.mockRestore();
+    }
   });
 
   it("supports range/additive selection and copies selected names or full paths", async () => {
@@ -491,6 +560,21 @@ describe("SFTPPanel uploads", () => {
     expect(within(table).getByText("Folder")).toHaveClass("whitespace-nowrap");
   });
 
+  it("creates an empty file without routing it through an upload picker", async () => {
+    render(<SFTPPanel aliases={["edge"]} />);
+    await chooseHost("edge");
+
+    await userEvent.click(screen.getByRole("button", { name: "Create or upload" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "New empty file" }));
+    const dialog = screen.getByRole("dialog", { name: "New empty file" });
+    await userEvent.type(within(dialog).getByRole("textbox", { name: "File name" }), "ready.txt");
+    await userEvent.click(within(dialog).getByRole("button", { name: "New empty file" }));
+
+    await waitFor(() => expect(api.createEmptyFile).toHaveBeenCalledWith("edge", "/remote/ready.txt"));
+    expect(api.list).toHaveBeenCalledTimes(2);
+    expect(api.startUpload).not.toHaveBeenCalled();
+  });
+
   it("preserves folder paths and creates parent directories before upload", async () => {
     const { container } = render(<SFTPPanel aliases={["edge"]} />);
     await chooseHost("edge");
@@ -700,6 +784,28 @@ describe("SFTPPanel uploads", () => {
     expect(api.previewFile).not.toHaveBeenCalled();
   });
 
+  it("calculates the bounded contents size for a directory in its details", async () => {
+    api.list.mockResolvedValue({
+      path: "/remote",
+      entries: [{ name: "project", path: "/remote/project", type: "directory", size: 0, mode: "0755", modifiedAt: "2026-08-24T10:00:00Z", revision: "dir" }],
+    });
+    api.directoryStats.mockResolvedValue({
+      path: "/remote/project", bytes: 4096, files: 3, directories: 2, truncated: false,
+    });
+    render(<SFTPPanel aliases={["edge"]} />);
+    await chooseHost("edge");
+    await userEvent.click(await screen.findByRole("button", { name: "project" }));
+    await userEvent.click(screen.getByRole("button", { name: "Actions for project" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Details" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Details for project" });
+    const properties = within(dialog).getByRole("group", { name: "Properties" });
+    await waitFor(() => expect(properties).toHaveTextContent("4,096 (4.0 KiB)"));
+    expect(properties).toHaveTextContent("Files inside3");
+    expect(properties).toHaveTextContent("Folders inside1");
+    expect(api.directoryStats).toHaveBeenCalledWith("edge", "/remote/project");
+  });
+
   it("bookmarks the current folder and reopens it from the places menu", async () => {
     api.list.mockImplementation(async (_alias: string, requestedPath: string) => ({
       path: requestedPath === "" ? "/srv/app" : requestedPath,
@@ -855,7 +961,13 @@ describe("SFTPPanel uploads", () => {
     const dialog = screen.getByRole("dialog", { name: "Change permissions" });
     expect(within(dialog).getByRole("textbox", { name: "Permissions (octal, for example 640)" })).toHaveValue("750");
     await userEvent.click(within(dialog).getByRole("button", { name: "Change permissions" }));
-    await waitFor(() => expect(api.chmod).toHaveBeenCalledWith("edge", "/remote/project", "750", "rev"));
+    await waitFor(() => expect(api.chmod).toHaveBeenCalledWith("edge", "/remote/project", "750", "rev", false));
+
+    await userEvent.click(screen.getByRole("button", { name: "Actions for project" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Change permissions recursively" }));
+    const recursiveDialog = screen.getByRole("dialog", { name: "Change permissions recursively" });
+    await userEvent.click(within(recursiveDialog).getByRole("button", { name: "Change permissions" }));
+    await waitFor(() => expect(api.chmod).toHaveBeenLastCalledWith("edge", "/remote/project", "750", "rev", true));
   });
   describe("mobile file browsing", () => {
     beforeEach(() => {

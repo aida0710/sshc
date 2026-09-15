@@ -211,12 +211,12 @@ func TestReleaseRequiresExactSHACIAndAuthenticatedArtifacts(t *testing.T) {
 
 func TestReleaseFailsWhenTheHomebrewDeployKeyIsMissing(t *testing.T) {
 	workflow := readContractFile(t, ".github", "workflows", "release.yml")
-	if count := strings.Count(workflow, "    environment: release"); count != 3 {
-		t.Errorf("Android signing, release staging, and Homebrew must all use the release environment; found %d jobs", count)
+	if count := strings.Count(workflow, "    environment: release"); count != 1 {
+		t.Errorf("Android signing, release staging, and Homebrew must share one protected job; found %d jobs", count)
 	}
-	start := strings.Index(workflow, "  homebrew:")
+	start := strings.Index(workflow, "  stage-release:")
 	if start < 0 {
-		t.Fatal("release workflow has no Homebrew job")
+		t.Fatal("release workflow has no protected staging job")
 	}
 	homebrew := workflow[start:]
 	for _, required := range []string{

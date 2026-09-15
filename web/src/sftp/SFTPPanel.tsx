@@ -63,7 +63,8 @@ function join(parent: string, name: string): string {
   return `${parent === "/" ? "" : parent}/${name}`;
 }
 
-type SFTPSort = "name" | "type" | "size" | "modified";
+export type SFTPSort = "name" | "type" | "size" | "modified";
+export type SFTPSortState = { key: SFTPSort; direction: SortDirection };
 
 // The overflow button and the row context menu open the same list of actions.
 // Anchoring them to one shape keeps a right click from offering less than the
@@ -85,8 +86,11 @@ type SFTPMenuAction = {
 
 type SFTPInputIntent =
   | { kind: "mkdir" }
+  | { kind: "createFile" }
+  | { kind: "duplicate"; entry: RemoteEntry }
+  | { kind: "moveTo"; entries: RemoteEntry[] }
   | { kind: "rename"; entry: RemoteEntry }
-  | { kind: "chmod"; entry: RemoteEntry };
+  | { kind: "chmod"; entry: RemoteEntry; recursive: boolean };
 
 // The parent row keeps its own key so that arrow navigation can land on it
 // without pretending that ".." is a listed entry.
@@ -169,9 +173,11 @@ export function SFTPPanel({
   hosts = noHosts,
   target = null,
   initialLocation = null,
+  initialSort = { key: "name", direction: "ascending" },
   showTransfers = true,
   onTargetHandled = () => undefined,
   onLocationChange = () => undefined,
+  onSortChange = () => undefined,
   onNavigationBlockerChange,
   onDirtyChange,
   onNavigateLocation,
@@ -183,9 +189,11 @@ export function SFTPPanel({
   // Where a restored tab should reopen. Applied once, when the declared
   // aliases have arrived and can vouch for the host.
   initialLocation?: { alias: string; path: string } | null;
+  initialSort?: SFTPSortState;
   showTransfers?: boolean;
   onTargetHandled?: (request: number) => void;
   onLocationChange?: (alias: string, path: string) => void;
+  onSortChange?: (sort: SFTPSortState) => void;
   onNavigationBlockerChange?: ((blocker: NavigationBlocker | null) => void) | undefined;
   onDirtyChange?: ((path: string | null) => void) | undefined;
   onNavigateLocation?: ((url: string) => void) | undefined;
@@ -219,10 +227,7 @@ export function SFTPPanel({
   const [focusedKey, setFocusedKey] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const [remoteDrop, setRemoteDrop] = useState<RemoteDragPayload | null>(null);
-  const [sort, setSort] = useState<{ key: SFTPSort; direction: SortDirection }>({
-    key: "name",
-    direction: "ascending",
-  });
+  const [sort, setSort] = useState<SFTPSortState>(initialSort);
   const upload = useRef<HTMLInputElement>(null);
   const folderUpload = useRef<HTMLInputElement>(null);
   const pathInput = useRef<HTMLInputElement>(null);
@@ -361,7 +366,11 @@ export function SFTPPanel({
   }, [entries]);
 
   function changeSort(key: SFTPSort) {
-    setSort((current) => nextSort(current.key, current.direction, key));
+    setSort((current) => {
+      const next = nextSort(current.key, current.direction, key);
+      onSortChange(next);
+      return next;
+    });
   }
 
   function selectHost(nextAlias: string) {
@@ -562,6 +571,25 @@ export function SFTPPanel({
     }
   }
 
+  async function makeEmptyFile(name: string) {
+    const generation = loadGeneration.current;
+    const targetAlias = alias;
+    const targetPath = path;
+    const createdPath = join(targetPath, name);
+    setBusy(true);
+    setProblem("");
+    try {
+      await sftpApi.createEmptyFile(targetAlias, createdPath);
+      if (generation !== loadGeneration.current) return;
+      pendingFocus.current = createdPath;
+      await load(targetPath, targetAlias);
+    } catch (error) {
+      if (generation !== loadGeneration.current) return;
+      setProblem(failureCode(error) || "sftp_failed");
+      setBusy(false);
+    }
+  }
+
   async function rename(entry: RemoteEntry, name: string) {
     const generation = loadGeneration.current;
     const targetAlias = alias;
@@ -731,7 +759,7 @@ export function SFTPPanel({
     }
   }
 
-  async function chmod(entry: RemoteEntry, mode: string) {
+  async function chmod(entry: RemoteEntry, mode: string, recursive: boolean) {
     if (entry.type === "symlink" || entry.type === "other") return;
     const generation = loadGeneration.current;
     const targetAlias = alias;
@@ -739,13 +767,13 @@ export function SFTPPanel({
     const previous = symbolicModeToOctal(entry.mode);
     setBusy(true);
     try {
-      await sftpApi.chmod(targetAlias, entry.path, mode, entry.revision);
+      await sftpApi.chmod(targetAlias, entry.path, mode, entry.revision, recursive);
       if (generation !== loadGeneration.current) return;
       const reloaded = await load(targetPath, targetAlias, true);
       const current = reloaded?.find((candidate) => candidate.path === entry.path);
-      if (current !== undefined && previous !== mode) {
+      if (!recursive && current !== undefined && previous !== mode) {
         offerUndo(t("sftp.permissionsChanged", { mode }), async () => {
-          await sftpApi.chmod(targetAlias, entry.path, previous, current.revision);
+          await sftpApi.chmod(targetAlias, entry.path, previous, current.revision, false);
           await load(targetPath, targetAlias, true);
         });
       }
@@ -1094,6 +1122,31 @@ export function SFTPPanel({
     }
   }
 
+  async function queueRemoteOperation(
+    entries: RemoteEntry[],
+    operation: "copy" | "move",
+    destination: (entry: RemoteEntry) => string,
+  ) {
+    setBusy(true);
+    setProblem("");
+    try {
+      await sftpTransferManager.addRemoteTransfers(entries.map((entry) => ({
+        sourceAlias: alias,
+        sourcePath: entry.path,
+        targetAlias: alias,
+        targetPath: destination(entry),
+        kind: entry.type === "directory" ? "folder" : "file",
+        name: entry.name,
+        totalBytes: entry.type === "file" ? entry.size : -1,
+      })), operation);
+      setSelectedPaths(new Set());
+    } catch (error) {
+      setProblem(failureCode(error) || (error instanceof Error ? error.message : "sftp_failed"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function navigateHistory(offset: -1 | 1) {
     const nextIndex = navigation.index + offset;
     const destination = navigation.paths[nextIndex];
@@ -1159,11 +1212,35 @@ export function SFTPPanel({
         key: "chmod",
         label: t("sftp.chmod"),
         disabled: busy,
-        run: () => { setMenu(null); setInputIntent({ kind: "chmod", entry: selectedEntry }); },
+        run: () => { setMenu(null); setInputIntent({ kind: "chmod", entry: selectedEntry, recursive: false }); },
+      });
+    }
+    if (selectedEntry !== null && selectedEntry.type === "directory") {
+      actions.push({
+        key: "chmodRecursive",
+        label: t("sftp.chmodRecursive"),
+        disabled: busy,
+        run: () => { setMenu(null); setInputIntent({ kind: "chmod", entry: selectedEntry, recursive: true }); },
       });
     }
     if (selectedEntry !== null) {
       actions.push({ key: "rename", label: t("sftp.rename"), disabled: busy, run: renameSelection });
+    }
+    if (selectedEntry !== null && (selectedEntry.type === "file" || selectedEntry.type === "directory")) {
+      actions.push({
+        key: "duplicate",
+        label: t("sftp.duplicate"),
+        disabled: busy,
+        run: () => { setMenu(null); setInputIntent({ kind: "duplicate", entry: selectedEntry }); },
+      });
+    }
+    if (selectedEntries.length > 0 && selectedEntries.every((entry) => entry.type === "file" || entry.type === "directory")) {
+      actions.push({
+        key: "moveTo",
+        label: t("sftp.moveTo"),
+        disabled: busy,
+        run: () => { setMenu(null); setInputIntent({ kind: "moveTo", entries: selectedEntries }); },
+      });
     }
     actions.push({
       key: "copyName",
@@ -1195,6 +1272,7 @@ export function SFTPPanel({
     const navigate = (destination: string) => { setMenu(null); void load(destination); };
     return [
       { key: "newFolder", label: t("sftp.newFolder"), disabled: busy || !connected, run: () => { setMenu(null); setInputIntent({ kind: "mkdir" }); } },
+      { key: "newFile", label: t("sftp.newFile"), disabled: busy || !connected, run: () => { setMenu(null); setInputIntent({ kind: "createFile" }); } },
       { key: "upload", label: t("sftp.upload"), disabled: busy || !connected, run: () => { setMenu(null); upload.current?.click(); } },
       { key: "uploadFolder", label: t("sftp.uploadFolder"), disabled: busy || !connected, run: () => { setMenu(null); folderUpload.current?.click(); } },
       { key: "places", label: t("sftp.places"), disabled: busy || !connected, run: () => setMenu({ kind: "places" }) },
@@ -1479,6 +1557,7 @@ export function SFTPPanel({
             {!mobileInteraction && menu?.kind === "create" ? (
               <div ref={menuPanel} role="menu" aria-label={t("sftp.createActions")} className="absolute left-2 top-full z-20 mt-1 w-52 rounded-lg border border-control-line bg-card p-1 shadow-lg">
                 <button type="button" role="menuitem" disabled={busy} onClick={() => { setMenu(null); setInputIntent({ kind: "mkdir" }); }} className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-hover focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:min-h-0">{t("sftp.newFolder")}</button>
+                <button type="button" role="menuitem" disabled={busy} onClick={() => { setMenu(null); setInputIntent({ kind: "createFile" }); }} className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-hover focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:min-h-0">{t("sftp.newFile")}</button>
                 <button type="button" role="menuitem" disabled={busy} onClick={() => { setMenu(null); upload.current?.click(); }} className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-hover focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:min-h-0">{t("sftp.upload")}</button>
                 <button type="button" role="menuitem" disabled={busy} onClick={() => { setMenu(null); folderUpload.current?.click(); }} className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-hover focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:min-h-0">{t("sftp.uploadFolder")}</button>
               </div>
@@ -1855,26 +1934,31 @@ export function SFTPPanel({
       {inputIntent === null ? null : (
         <InputDialog
           id={`${headingId}-input`}
-          heading={t(inputIntent.kind === "mkdir" ? "sftp.newFolder" : inputIntent.kind === "rename" ? "sftp.rename" : "sftp.chmod")}
-          label={t(inputIntent.kind === "chmod" ? "sftp.chmodPrompt" : inputIntent.kind === "rename" ? "sftp.renamePrompt" : "sftp.mkdirPrompt")}
-          initialValue={inputIntent.kind === "mkdir" ? "" : inputIntent.kind === "rename" ? inputIntent.entry.name : symbolicModeToOctal(inputIntent.entry.mode)}
+          heading={t(inputIntent.kind === "mkdir" ? "sftp.newFolder" : inputIntent.kind === "createFile" ? "sftp.newFile" : inputIntent.kind === "rename" ? "sftp.rename" : inputIntent.kind === "duplicate" ? "sftp.duplicate" : inputIntent.kind === "moveTo" ? "sftp.moveTo" : inputIntent.recursive ? "sftp.chmodRecursive" : "sftp.chmod")}
+          label={t(inputIntent.kind === "chmod" ? "sftp.chmodPrompt" : inputIntent.kind === "rename" || inputIntent.kind === "duplicate" ? "sftp.renamePrompt" : inputIntent.kind === "createFile" ? "sftp.newFilePrompt" : inputIntent.kind === "moveTo" ? "sftp.moveToPrompt" : "sftp.mkdirPrompt")}
+          initialValue={inputIntent.kind === "mkdir" || inputIntent.kind === "createFile" ? "" : inputIntent.kind === "rename" ? inputIntent.entry.name : inputIntent.kind === "duplicate" ? `${inputIntent.entry.name}.copy` : inputIntent.kind === "moveTo" ? path : symbolicModeToOctal(inputIntent.entry.mode)}
           inputMode={inputIntent.kind === "chmod" ? "numeric" : "text"}
-          submitLabel={t(inputIntent.kind === "mkdir" ? "sftp.newFolder" : inputIntent.kind === "rename" ? "sftp.rename" : "sftp.chmod")}
+          submitLabel={t(inputIntent.kind === "mkdir" ? "sftp.newFolder" : inputIntent.kind === "createFile" ? "sftp.newFile" : inputIntent.kind === "rename" ? "sftp.rename" : inputIntent.kind === "duplicate" ? "sftp.duplicate" : inputIntent.kind === "moveTo" ? "sftp.move" : "sftp.chmod")}
           cancelLabel={t("sftp.cancel")}
           returnFocusRef={activeRow}
           validate={(value) => {
             if (inputIntent.kind === "chmod") return /^0?[0-7]{3}$/.test(value) ? "" : t("sftp.chmodInvalid");
+            if (inputIntent.kind === "moveTo") return value.startsWith("/") ? "" : t("sftp.pathAbsolute");
             if (value === "") return t("sftp.nameRequired");
             if (value.includes("/")) return t("sftp.nameInvalid");
             if (inputIntent.kind === "rename" && value === inputIntent.entry.name) return t("sftp.renameUnchanged");
+            if (inputIntent.kind === "duplicate" && value === inputIntent.entry.name) return t("sftp.renameUnchanged");
             return "";
           }}
           onSubmit={(value) => {
             const intent = inputIntent;
             setInputIntent(null);
             if (intent.kind === "mkdir") void makeDirectory(value);
+            else if (intent.kind === "createFile") void makeEmptyFile(value);
             else if (intent.kind === "rename") void rename(intent.entry, value);
-            else void chmod(intent.entry, value);
+            else if (intent.kind === "duplicate") void queueRemoteOperation([intent.entry], "copy", () => join(parentOf(intent.entry.path), value));
+            else if (intent.kind === "moveTo") void queueRemoteOperation(intent.entries, "move", (entry) => join(value, entry.name));
+            else void chmod(intent.entry, value, intent.recursive);
           }}
           onCancel={() => setInputIntent(null)}
         />
