@@ -1433,7 +1433,7 @@ export interface paths {
         };
         get: operations["listSFTPEntries"];
         put?: never;
-        post: operations["createSFTPDirectory"];
+        post: operations["createSFTPEntry"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1470,6 +1470,24 @@ export interface paths {
         };
         /** @description Names matching a query under one remote directory. Symlinks are not followed and the walk is bounded; truncated says so. */
         get: operations["searchSFTPEntries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sftp/{alias}/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alias: string;
+            };
+            cookie?: never;
+        };
+        get: operations["getSFTPDirectoryStats"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3384,10 +3402,18 @@ export interface components {
             contents: string;
             expectedRevision: string;
         };
-        SFTPMkdirRequest: {
+        SFTPCreateEntryRequest: {
             path: string;
             /** @enum {string} */
-            type: "directory";
+            type: "directory" | "file";
+        };
+        SFTPDirectoryStats: {
+            path: string;
+            /** Format: int64 */
+            bytes: number;
+            files: number;
+            directories: number;
+            truncated: boolean;
         };
         SFTPRenameRequest: {
             from: string;
@@ -3397,6 +3423,7 @@ export interface components {
             path: string;
             mode: string;
             expectedRevision: string;
+            recursive: boolean;
         };
         SFTPTransfer: {
             path: string;
@@ -6504,7 +6531,7 @@ export interface operations {
             502: components["responses"]["Problem"];
         };
     };
-    createSFTPDirectory: {
+    createSFTPEntry: {
         parameters: {
             query?: never;
             header?: never;
@@ -6515,11 +6542,11 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["SFTPMkdirRequest"];
+                "application/json": components["schemas"]["SFTPCreateEntryRequest"];
             };
         };
         responses: {
-            /** @description Directory created */
+            /** @description Empty file or directory created */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -6582,6 +6609,33 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SFTPSearchResult"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+        };
+    };
+    getSFTPDirectoryStats: {
+        parameters: {
+            query: {
+                path: string;
+            };
+            header?: never;
+            path: {
+                alias: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bounded directory tree statistics */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SFTPDirectoryStats"];
                 };
             };
             400: components["responses"]["Problem"];

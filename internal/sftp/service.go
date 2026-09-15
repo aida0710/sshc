@@ -505,6 +505,76 @@ func (s Service) Search(ctx context.Context, alias, remotePath, query string) (S
 	return result, nil
 }
 
+// DirectoryStats totals regular files below a directory without following
+// symlinks. It shares the search traversal budget so a properties dialog can
+// never start an unbounded walk of a remote filesystem.
+func (s Service) DirectoryStats(ctx context.Context, alias, remotePath string) (DirectoryStats, error) {
+	root, err := cleanPublicPath(remotePath, false)
+	if err != nil {
+		return DirectoryStats{}, err
+	}
+	remote, err := s.openRequest(ctx, alias)
+	if err != nil {
+		return DirectoryStats{}, err
+	}
+	defer remote.Close()
+	info, err := remote.Lstat(root)
+	if err != nil {
+		return DirectoryStats{}, err
+	}
+	if !info.IsDir() {
+		return DirectoryStats{}, ErrNotDirectory
+	}
+
+	result := DirectoryStats{Path: root, Directories: 1}
+	visited := 0
+	pending := []string{root}
+	for depth := 0; depth <= maxSearchDepth && len(pending) > 0; depth++ {
+		var next []string
+		for _, directory := range pending {
+			if err := ctx.Err(); err != nil {
+				return DirectoryStats{}, err
+			}
+			infos, err := remote.ReadDir(ctx, directory)
+			if err != nil {
+				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+					return DirectoryStats{}, err
+				}
+				result.Truncated = true
+				continue
+			}
+			for _, child := range infos {
+				if isInternalName(child.Name()) {
+					continue
+				}
+				visited++
+				if visited > maxSearchVisited {
+					result.Truncated = true
+					return result, nil
+				}
+				switch {
+				case child.Mode().IsRegular():
+					result.Files++
+					if child.Size() >= 0 && result.Bytes <= int64(^uint64(0)>>1)-child.Size() {
+						result.Bytes += child.Size()
+					} else {
+						result.Truncated = true
+					}
+				case child.IsDir():
+					result.Directories++
+					next = append(next, path.Join(directory, child.Name()))
+				}
+			}
+		}
+		if depth == maxSearchDepth && len(next) > 0 {
+			result.Truncated = true
+			break
+		}
+		pending = next
+	}
+	return result, nil
+}
+
 func (s Service) List(ctx context.Context, alias, remotePath string) ([]Entry, error) {
 	listing, err := s.ListDirectory(ctx, alias, remotePath)
 	return listing.Entries, err
@@ -852,7 +922,51 @@ func (s Service) Mkdir(ctx context.Context, alias, remotePath string) (Entry, er
 	return entryFrom(path.Dir(cleaned), namedInfo{FileInfo: info, name: path.Base(cleaned)}), nil
 }
 
+// CreateEmptyFile creates a new zero-byte regular file without replacing an
+// existing remote path. O_EXCL closes the race between an existence check and
+// creation on servers that support the standard SFTP open flags.
+func (s Service) CreateEmptyFile(ctx context.Context, alias, remotePath string) (Entry, error) {
+	cleaned, err := cleanPublicPath(remotePath, false)
+	if err != nil {
+		return Entry{}, err
+	}
+	remote, err := s.openRequest(ctx, alias)
+	if err != nil {
+		return Entry{}, err
+	}
+	defer remote.Close()
+	file, err := remote.OpenFile(cleaned, os.O_WRONLY|os.O_CREATE|os.O_EXCL)
+	if err != nil {
+		if errors.Is(err, fs.ErrExist) {
+			return Entry{}, ErrAlreadyExists
+		}
+		return Entry{}, err
+	}
+	if err := file.Close(); err != nil {
+		return Entry{}, err
+	}
+	info, err := remote.Lstat(cleaned)
+	if err != nil {
+		return Entry{}, err
+	}
+	if !info.Mode().IsRegular() {
+		return Entry{}, ErrNotRegularFile
+	}
+	return entryFrom(path.Dir(cleaned), namedInfo{FileInfo: info, name: path.Base(cleaned)}), nil
+}
+
 func (s Service) Chmod(ctx context.Context, alias, remotePath string, mode fs.FileMode, expectedRevision string) (Entry, error) {
+	return s.chmod(ctx, alias, remotePath, mode, expectedRevision, false)
+}
+
+// ChmodRecursive applies one permission mode to a directory and every regular
+// file and directory below it. The complete, bounded tree is inspected before
+// the first mutation and symlinks are never followed or changed.
+func (s Service) ChmodRecursive(ctx context.Context, alias, remotePath string, mode fs.FileMode, expectedRevision string) (Entry, error) {
+	return s.chmod(ctx, alias, remotePath, mode, expectedRevision, true)
+}
+
+func (s Service) chmod(ctx context.Context, alias, remotePath string, mode fs.FileMode, expectedRevision string, recursive bool) (Entry, error) {
 	if expectedRevision == "" {
 		return Entry{}, ErrRevisionRequired
 	}
@@ -875,8 +989,61 @@ func (s Service) Chmod(ctx context.Context, alias, remotePath string, mode fs.Fi
 	if metadataRevision(info) != expectedRevision {
 		return Entry{}, ErrConflict
 	}
-	if err := remote.Chmod(cleaned, mode.Perm()); err != nil {
-		return Entry{}, err
+	targets := []struct {
+		path     string
+		revision string
+	}{{path: cleaned, revision: metadataRevision(info)}}
+	if recursive {
+		if !info.IsDir() {
+			return Entry{}, ErrNotDirectory
+		}
+		pending := []string{cleaned}
+		visited := 0
+		for depth := 0; depth <= maxSearchDepth && len(pending) > 0; depth++ {
+			var next []string
+			for _, directory := range pending {
+				if err := ctx.Err(); err != nil {
+					return Entry{}, err
+				}
+				children, err := remote.ReadDir(ctx, directory)
+				if err != nil {
+					return Entry{}, err
+				}
+				for _, child := range children {
+					if isInternalName(child.Name()) || child.Mode()&fs.ModeSymlink != 0 || (!child.Mode().IsRegular() && !child.IsDir()) {
+						continue
+					}
+					visited++
+					if visited > maxSearchVisited {
+						return Entry{}, ErrTraversalLimit
+					}
+					childPath := path.Join(directory, child.Name())
+					targets = append(targets, struct {
+						path     string
+						revision string
+					}{path: childPath, revision: metadataRevision(child)})
+					if child.IsDir() {
+						next = append(next, childPath)
+					}
+				}
+			}
+			if depth == maxSearchDepth && len(next) > 0 {
+				return Entry{}, ErrTraversalLimit
+			}
+			pending = next
+		}
+	}
+	for index := len(targets) - 1; index >= 0; index-- {
+		current, err := remote.Lstat(targets[index].path)
+		if err != nil {
+			return Entry{}, err
+		}
+		if metadataRevision(current) != targets[index].revision {
+			return Entry{}, ErrConflict
+		}
+		if err := remote.Chmod(targets[index].path, mode.Perm()); err != nil {
+			return Entry{}, err
+		}
 	}
 	updated, err := remote.Lstat(cleaned)
 	if err != nil {

@@ -122,27 +122,33 @@ func TestReleasePublishWaitsForEveryPlatform(t *testing.T) {
 }
 
 func TestReleasePublishesOnlyAfterTheRequiredHomebrewTap(t *testing.T) {
-	document, _ := readReleaseWorkflow(t)
+	document, source := readReleaseWorkflow(t)
 	publish, publishPresent := document.Jobs["publish"]
-	homebrew, homebrewPresent := document.Jobs["homebrew"]
-	_, stagePresent := document.Jobs["stage-release"]
-	if !publishPresent || !homebrewPresent || !stagePresent {
-		t.Fatal("the release requires stage, publish, and homebrew jobs")
-	}
-	if !slices.Contains(publish.Needs, "homebrew") {
-		t.Error("publish does not wait for Homebrew; a tap failure could leave a public partial release")
-	}
-	if !slices.Contains(homebrew.Needs, "stage-release") {
-		t.Error("Homebrew runs before the complete attested release draft exists")
+	stage, stagePresent := document.Jobs["stage-release"]
+	if !publishPresent || !stagePresent {
+		t.Fatal("the release requires stage and publish jobs")
 	}
 	if !slices.Contains(publish.Needs, "stage-release") {
 		t.Error("publish does not refer to the previously verified draft")
+	}
+	stageSource := jobSection(source, "  stage-release:", "  publish:")
+	if !strings.Contains(stageSource, "    environment: release") {
+		t.Error("the job that updates Homebrew is not protected by the release environment")
+	}
+	stagesTap := false
+	for _, step := range stage.Steps {
+		if strings.Contains(step.Run, "HOMEBREW_TAP_DEPLOY_KEY") && strings.Contains(step.Run, "git push") {
+			stagesTap = true
+		}
+	}
+	if !stagesTap {
+		t.Error("stage does not update Homebrew before publish")
 	}
 }
 
 func TestReleaseCollectsTheExactPublicArtifactSet(t *testing.T) {
 	_, source := readReleaseWorkflow(t)
-	stage := jobSection(source, "  stage-release:", "  homebrew:")
+	stage := jobSection(source, "  stage-release:", "  publish:")
 	if stage == "" {
 		t.Fatal("release.yml has no stage-release job")
 	}
@@ -180,7 +186,7 @@ func TestReleaseCollectsTheExactPublicArtifactSet(t *testing.T) {
 // すべてのタグに、バージョン管理されたリリースノートを要求する。
 func TestReleaseRequiresVersionControlledNotes(t *testing.T) {
 	_, source := readReleaseWorkflow(t)
-	stage := jobSection(source, "  stage-release:", "  homebrew:")
+	stage := jobSection(source, "  stage-release:", "  publish:")
 	if stage == "" {
 		t.Fatal("release.yml has no stage-release job")
 	}
@@ -209,9 +215,9 @@ func TestReleaseRequiresVersionControlledNotes(t *testing.T) {
 func TestReleaseRefusesAnUnsignedAndroidPackage(t *testing.T) {
 	document, _ := readReleaseWorkflow(t)
 
-	android, present := document.Jobs["android"]
+	android, present := document.Jobs["stage-release"]
 	if !present {
-		t.Fatal("the release has no android job")
+		t.Fatal("the release has no protected staging job")
 	}
 	demandsKey, verifies := false, false
 	for _, step := range android.Steps {
@@ -223,10 +229,10 @@ func TestReleaseRefusesAnUnsignedAndroidPackage(t *testing.T) {
 		}
 	}
 	if !demandsKey {
-		t.Error("the android job does not stop when no signing key is configured")
+		t.Error("the protected staging job does not stop when no signing key is configured")
 	}
 	if !verifies {
-		t.Error("the android job never asks the APK whether it is signed; gradle succeeding is not that answer")
+		t.Error("the protected staging job never verifies the signed APK")
 	}
 }
 
@@ -295,5 +301,18 @@ func TestTheAndroidEngineCarriesTheReleasedVersion(t *testing.T) {
 	// それを ldflags に載せていなければ、値はどこにも届かない。
 	if !strings.Contains(string(makefile), "-X sshc/mobile.version=$(ANDROID_VERSION)") {
 		t.Error("Makefile の android-bind が ANDROID_VERSION を ldflags に載せていない")
+	}
+}
+
+func TestAndroidReleaseRetriesTransientToolchainDownloads(t *testing.T) {
+	_, source := readReleaseWorkflow(t)
+	android := jobSection(source, "  android:", "  stage-release:")
+	for _, command := range []string{
+		"scripts/ci/retry.sh go install golang.org/x/mobile/cmd/gobind",
+		"scripts/ci/retry.sh make android-bind",
+	} {
+		if !strings.Contains(android, command) {
+			t.Errorf("Android release does not retry %q", command)
+		}
 	}
 }

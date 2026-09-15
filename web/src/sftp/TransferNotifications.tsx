@@ -1,10 +1,37 @@
-import { useSyncExternalStore } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 import { useTranslate } from "../i18n/context";
-import { sftpTransferManager } from "./transferManager";
+import { showBrowserNotification } from "../terminal/agentNotifications";
+import { sftpTransferManager, type TransferNotice } from "./transferManager";
+
+export function notifyBackgroundTransfers(
+  notices: readonly TransferNotice[],
+  delivered: Set<string>,
+  t: ReturnType<typeof useTranslate>,
+  hidden = document.hidden,
+): void {
+  for (const notice of notices) {
+    if (delivered.has(notice.id)) continue;
+    delivered.add(notice.id);
+    if (!hidden) continue;
+    showBrowserNotification({
+      title: "sshc",
+      body: t(notice.status === "completed" ? "sftp.notice.completed" : "sftp.notice.failed", {
+        name: notice.name,
+        direction: t(notice.direction === "upload" ? "sftp.manager.upload" : "sftp.manager.download"),
+        problem: notice.problem,
+      }),
+      tag: `sshc-transfer-${notice.jobId}`,
+    });
+  }
+}
 
 export function TransferNotifications() {
   const t = useTranslate();
   const notices = useSyncExternalStore(sftpTransferManager.subscribeNotices, sftpTransferManager.getNoticeSnapshot);
+  const delivered = useRef(new Set<string>());
+  useEffect(() => {
+    notifyBackgroundTransfers(notices, delivered.current, t);
+  }, [notices, t]);
   if (notices.length === 0) return null;
   return (
     <aside className="pointer-events-none fixed right-4 top-20 z-50 flex w-[min(22rem,calc(100vw-2rem))] flex-col gap-2 md:bottom-4 md:top-auto" aria-label={t("sftp.notice.heading")} aria-live="polite">

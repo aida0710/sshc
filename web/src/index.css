@@ -434,6 +434,22 @@
   background-color: transparent !important;
 }
 
+.sshc-command-marker {
+  pointer-events: none;
+}
+.sshc-command-marker::after {
+  position: absolute;
+  top: 50%;
+  left: 2px;
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--ui-accent);
+  content: "";
+  opacity: 0.7;
+  transform: translateY(-50%);
+}
+
 /* Visible viewport follows browser chrome and the soft keyboard. */
 .sshc-app {
   height: var(--app-viewport-height, 100dvh);
