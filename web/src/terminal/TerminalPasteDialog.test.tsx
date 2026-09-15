@@ -13,8 +13,11 @@ function open(text: string) {
 describe("TerminalPasteDialog", () => {
   it("reviews edited content without sending it and removes only the final edited newline", async () => {
     const { editor, onPaste } = open("echo original\n");
+    const preview = screen.getByText("Paste preview with control characters made visible");
+    expect(preview.closest("details")).not.toHaveAttribute("open");
     fireEvent.change(editor, { target: { value: "echo edited\necho second\n\n" } });
     expect(onPaste).not.toHaveBeenCalled();
+    await userEvent.click(preview);
     expect(screen.getByLabelText("Paste preview with control characters made visible")).toHaveTextContent("echo edited");
     await userEvent.click(screen.getByRole("button", { name: "Paste without final Enter" }));
     expect(onPaste).toHaveBeenCalledExactlyOnceWith("echo edited\necho second\n");
@@ -31,6 +34,7 @@ describe("TerminalPasteDialog", () => {
   it("preserves untouched carriage returns and control characters", async () => {
     const original = "first\r\nsecond\r\u001b";
     const { onPaste } = open(original);
+    await userEvent.click(screen.getByText("Paste preview with control characters made visible"));
     expect(screen.getByLabelText("Paste preview with control characters made visible")).toHaveTextContent("\\x1b");
     await userEvent.click(screen.getByRole("button", { name: "Paste" }));
     expect(onPaste).toHaveBeenCalledExactlyOnceWith(original);
