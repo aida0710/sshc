@@ -235,7 +235,10 @@ describe("ConnectionSummary", () => {
     expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
     expect(screen.getByText(/Save or discard this draft/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
-    await user.click(screen.getByRole("button", { name: "More connection actions" }));
+    const manage = screen.getByRole("button", { name: "Manage connection" });
+    expect(manage).toHaveAttribute("aria-expanded", "false");
+    expect(manage).toHaveAttribute("aria-controls", "connection-management");
+    await user.click(manage);
     expect(onConnect).not.toHaveBeenCalled();
     expect(onToggleManage).toHaveBeenCalledOnce();
   });
