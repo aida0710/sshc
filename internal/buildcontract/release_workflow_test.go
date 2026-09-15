@@ -219,7 +219,7 @@ func TestReleaseRefusesAnUnsignedAndroidPackage(t *testing.T) {
 	if !present {
 		t.Fatal("the release has no protected staging job")
 	}
-	demandsKey, verifies := false, false
+	demandsKey, verifies, disablesV4Sidecar := false, false, false
 	for _, step := range android.Steps {
 		if strings.Contains(step.Run, "ANDROID_KEYSTORE_BASE64") && strings.Contains(step.Run, "exit 1") {
 			demandsKey = true
@@ -227,12 +227,18 @@ func TestReleaseRefusesAnUnsignedAndroidPackage(t *testing.T) {
 		if strings.Contains(step.Run, "apksigner") && strings.Contains(step.Run, "verify") {
 			verifies = true
 		}
+		if strings.Contains(step.Run, "--v4-signing-enabled false") {
+			disablesV4Sidecar = true
+		}
 	}
 	if !demandsKey {
 		t.Error("the protected staging job does not stop when no signing key is configured")
 	}
 	if !verifies {
 		t.Error("the protected staging job never verifies the signed APK")
+	}
+	if !disablesV4Sidecar {
+		t.Error("the protected staging job leaves an undistributed V4 .idsig sidecar")
 	}
 	if !strings.Contains(source, `V[0-9]+(\.[0-9]+)* Signer`) {
 		t.Error("the APK signer digest parser does not accept versioned schemes such as V3.0 Signer")
