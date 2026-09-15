@@ -615,7 +615,7 @@ test("writes a comment into the configuration file above the Host line", async (
   const before = await installation.read("config");
   await openBastion(page, installation.url);
 
-  await page.getByRole("button", { name: "More connection actions" }).click();
+  await page.getByRole("button", { name: "Manage connection" }).click();
   const management = page.getByRole("region", { name: "Manage connection" });
   await management.getByLabel("Comment", { exact: true }).fill("the production bastion\nask infra before changing it");
   expect(await clickAndAwait(page, "Save comment", "/api/v1/config/save")).toBe(200);
@@ -631,7 +631,7 @@ test("removes the comment lines when the comment is cleared", async ({ page, ins
   const before = await installation.read("config");
   await openBastion(page, installation.url);
 
-  await page.getByRole("button", { name: "More connection actions" }).click();
+  await page.getByRole("button", { name: "Manage connection" }).click();
   const management = page.getByRole("region", { name: "Manage connection" });
   await management.getByLabel("Comment", { exact: true }).fill("temporary");
   expect(await clickAndAwait(page, "Save comment", "/api/v1/config/save")).toBe(200);
@@ -655,7 +655,7 @@ test("takes a comment with the connection it describes when the block moves", as
   await openApplication(page, installation);
   await openSection(page, "Connections");
   await page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "nas" }).click();
-  await page.getByRole("button", { name: "More connection actions" }).click();
+  await page.getByRole("button", { name: "Manage connection" }).click();
   const management = page.getByRole("region", { name: "Manage connection" });
   await expect(management.getByLabel("Comment", { exact: true })).toHaveValue("the file server");
 
@@ -680,7 +680,7 @@ test("takes a comment with the connection when the block is deleted", async ({
   await openSection(page, "Connections");
   await page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "nas" }).click();
 
-  await page.getByRole("button", { name: "More connection actions" }).click();
+  await page.getByRole("button", { name: "Manage connection" }).click();
   await page.getByRole("button", { name: "Delete connection" }).click();
   expect(await clickAndAwait(page, "Delete it", "/api/v1/config/save")).toBe(200);
 
@@ -704,7 +704,7 @@ test("shows an empty group in the management tree and moves an ungrouped connect
   await expect(browser.getByRole("button", { name: "work", exact: true })).toBeVisible();
 
   await browser.getByRole("button", { name: "bastion" }).click();
-  await page.getByRole("button", { name: "More connection actions" }).click();
+  await page.getByRole("button", { name: "Manage connection" }).click();
   await page.getByLabel("Primary group").selectOption("work");
   expect(await clickAndAwait(page, "Move to this group", "/api/v1/config/save")).toBe(200);
 

@@ -214,6 +214,7 @@ describe("TerminalView", () => {
 
     expect(await screen.findByRole("dialog", { name: "Review paste to zsh" })).toBeVisible();
     expect(streams[0]!.stream.send).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByText("Paste preview with control characters made visible"));
     expect(screen.getByLabelText("Paste preview with control characters made visible")).toHaveTextContent(
       "printf one\\n printf two\\n",
       { normalizeWhitespace: true },

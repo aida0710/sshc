@@ -86,8 +86,14 @@ export function ConnectionSummary({
             <Icon name="terminal" className="size-4" />
             {connecting ? t("conn.opening") : t("conn.connect")}
           </Button>
-          <Button aria-label={t("conn.manage")} title={t("conn.manage")} aria-expanded={managing} onClick={onToggleManage} className={`flex size-9 items-center justify-center px-2 ${managing ? "border-accent bg-select-fill text-accent" : ""}`}>
-            <Icon name="moreHorizontal" className="size-4" />
+          <Button
+            aria-expanded={managing}
+            aria-controls="connection-management"
+            onClick={onToggleManage}
+            className={`inline-flex items-center gap-2 ${managing ? "border-accent bg-select-fill text-accent" : ""}`}
+          >
+            <span>{t("conn.manageLabel")}</span>
+            <Icon name="chevronRight" className={`size-3.5 transition-transform ${managing ? "rotate-90" : ""}`} />
           </Button>
         </div>
       </header>

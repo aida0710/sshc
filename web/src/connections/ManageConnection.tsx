@@ -57,6 +57,7 @@ export function ManageConnection({
 
   return (
     <Card
+      id="connection-management"
       as="section"
       aria-label={t("conn.manageLabel")}
       aria-disabled={disabled}
