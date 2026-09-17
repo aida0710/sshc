@@ -311,9 +311,9 @@ func TestParseTerminalInvocations(t *testing.T) {
 					t.Fatalf("send = %#v", got)
 				}
 			}},
-		{[]string{"sshc", "terminal", "wait", id, "--for", "agent-ready", "--timeout", "30s"}, terminalWait,
+		{[]string{"sshc", "terminal", "wait", id, "--for", "connected", "--timeout", "30s"}, terminalWait,
 			func(t *testing.T, got terminalInvocation) {
-				if got.WaitFor != "agent-ready" || got.Timeout != 30*time.Second {
+				if got.WaitFor != "connected" || got.Timeout != 30*time.Second {
 					t.Fatalf("wait = %#v", got)
 				}
 			}},

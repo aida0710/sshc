@@ -91,6 +91,7 @@ describe("the catalogue", () => {
         "sync.historyRelation.head",
         "terminal.browserNotificationsHeading",
         "terminal.localhost",
+        "terminal.notificationVolumeHint",
         "terminal.openShell",
         "terminal.rowDetail",
         "terminal.settingsHeading",

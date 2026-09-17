@@ -24,7 +24,7 @@ import { openStream, type TerminalStream } from "./stream";
 import { attachTerminalClipboard, prepareTerminalPaste, type TerminalClipboardSettings } from "./clipboard";
 import { validSearchPattern, type TerminalSearchSettings } from "./search";
 import { terminalProblemKey } from "./sessions";
-import { agentName, agentStatusLabel, terminalDisplayTitle, terminalSubtitle } from "./agentPresentation";
+import { terminalDisplayTitle, terminalSubtitle } from "./terminalPresentation";
 import { recentBufferText } from "./buffer";
 import { attachOsc52Clipboard } from "./osc52";
 import { attachKittyKeyboardProtocol, encodeIntlYen } from "./kittyKeyboard";
@@ -36,7 +36,7 @@ import { TerminalPortForwards } from "./TerminalPortForwards";
 import { attachWebglRenderer } from "./webgl";
 import { attachOSC7Directory } from "./osc7";
 import { attachOSC133Commands } from "./osc133";
-import { showBrowserNotification } from "./agentNotifications";
+import { showBrowserNotification } from "./terminalNotifications";
 import { applyTerminalRuntimeOptions } from "./runtimeOptions";
 import { Icon } from "../ui/icons";
 import { inspectTerminalPaste } from "./pasteGuard";
@@ -50,7 +50,6 @@ type TerminalViewProps = {
   api?: Pick<IntegrationsApi, "terminalStreamTicket">;
   onExit?: () => void;
   onReconnect?: () => Promise<boolean>;
-  onResumeAgent?: (placement: "same-pane" | "new-pane") => Promise<boolean>;
   copyOnSelect?: boolean;
   fontSize?: number;
   rightClickPaste?: boolean;
@@ -83,7 +82,6 @@ export function TerminalView({
   api = integrationsApi,
   onExit,
   onReconnect,
-  onResumeAgent,
   copyOnSelect = true,
   fontSize,
   rightClickPaste = true,
@@ -143,7 +141,7 @@ export function TerminalView({
     raw: string;
   } | null>(null);
   const sendPaste = useRef<(text: string) => void>(() => {});
-  const [currentDirectory, setCurrentDirectory] = useState(session.agent?.cwd ?? "");
+  const [currentDirectory, setCurrentDirectory] = useState("");
 
   const [quickCommandsOpen, setQuickCommandsOpen] = useState(false);
   const [quickCommandSelection, setQuickCommandSelection] = useState("");
@@ -161,9 +159,9 @@ export function TerminalView({
 
   useEffect(() => {
     setOsc52Enabled(initialOsc52Enabled);
-    setCurrentDirectory(session.agent?.cwd ?? "");
+    setCurrentDirectory("");
     setPendingPaste(null);
-  }, [initialOsc52Enabled, session.agent?.cwd, session.id, session.state]);
+  }, [initialOsc52Enabled, session.id, session.state]);
 
   async function reconnectExitedSession() {
     if (onReconnect === undefined || manualReconnectBusy) return;
@@ -175,21 +173,6 @@ export function TerminalView({
         return;
       }
       setProblem(t("terminal.manualReconnectFailed"));
-    } finally {
-      setManualReconnectBusy(false);
-    }
-  }
-
-  async function resumeAgent(placement: "same-pane" | "new-pane") {
-    if (onResumeAgent === undefined || manualReconnectBusy) return;
-    setManualReconnectBusy(true);
-    setProblem("");
-    try {
-      if (await onResumeAgent(placement)) {
-        if (placement === "same-pane") control.current.now();
-        return;
-      }
-      setProblem(t("terminal.agentResumeFailed"));
     } finally {
       setManualReconnectBusy(false);
     }
@@ -638,7 +621,6 @@ export function TerminalView({
       : t("terminal.exitedWith", { code: String(session.exited?.code ?? 0) });
   const displayTitle = terminalDisplayTitle(session);
   const subtitle = terminalSubtitle(session);
-  const agentStatus = agentStatusLabel(t, session);
   const remoteAlias = session.kind === "ssh" ? session.alias : undefined;
 
   return (
@@ -657,15 +639,10 @@ export function TerminalView({
         <div className="min-w-0 flex-1 md:flex md:items-center md:gap-2">
           <div className="flex min-w-0 items-center gap-2 md:shrink-0">
             <p className="min-w-0 flex-1 truncate text-xs font-semibold text-ink md:max-w-48 md:flex-none">{displayTitle}</p>
-            {agentStatus === "" ? null : (
-              <span role="status" className="shrink-0 truncate text-[11px] font-medium text-ink-muted">{agentStatus}</span>
-            )}
           </div>
           <div className="flex min-w-0 items-center gap-2 text-[11px] text-ink-muted md:flex-1">
             <span className="min-w-0 truncate font-mono">{subtitle}</span>
-            {session.state === "connected" && agentStatus !== "" ? null : (
-              <span role="status" className="shrink-0">{connectionStatus}</span>
-            )}
+            <span role="status" className="shrink-0">{connectionStatus}</span>
           </div>
         </div>
         <button
@@ -792,27 +769,6 @@ export function TerminalView({
         </div>
       )}
 
-      {session.agent?.resumable !== true || session.agent.state !== "unknown" || onResumeAgent === undefined ? null : (
-        <div role="status" className="flex shrink-0 flex-wrap items-center gap-2 border-b border-notice-line bg-notice px-3 py-1.5 text-xs text-notice-ink">
-          <p className="min-w-0 grow">{t("terminal.agentResumeAvailable", { agent: agentName(session.agent.kind) })}</p>
-          <button
-            type="button"
-            disabled={manualReconnectBusy}
-            onClick={() => void resumeAgent("same-pane")}
-            className="min-h-8 rounded border border-control-line bg-control px-3 py-1 font-medium text-ink hover:bg-select-fill disabled:opacity-50"
-          >
-            {t("terminal.agentResumeSamePane")}
-          </button>
-          <button
-            type="button"
-            disabled={manualReconnectBusy}
-            onClick={() => void resumeAgent("new-pane")}
-            className="min-h-8 rounded border border-control-line bg-control px-3 py-1 font-medium text-ink hover:bg-select-fill disabled:opacity-50"
-          >
-            {t("terminal.agentResumeNewPane")}
-          </button>
-        </div>
-      )}
       <div className="relative min-h-0 flex-1 overflow-clip bg-term-bg">
         <div
           ref={host}

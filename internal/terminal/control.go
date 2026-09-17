@@ -5,14 +5,10 @@ package terminal
 type ControlState string
 
 const (
-	ControlConnecting     ControlState = "connecting"
-	ControlConnected      ControlState = "connected"
-	ControlReconnecting   ControlState = "reconnecting"
-	ControlExited         ControlState = "exited"
-	ControlAgentWorking   ControlState = "agent-working"
-	ControlAgentAttention ControlState = "agent-attention"
-	ControlAgentReady     ControlState = "agent-ready"
-	ControlAgentEnded     ControlState = "agent-ended"
+	ControlConnecting   ControlState = "connecting"
+	ControlConnected    ControlState = "connected"
+	ControlReconnecting ControlState = "reconnecting"
+	ControlExited       ControlState = "exited"
 )
 
 // ControlSnapshot binds one scrollback read to the exact process generation
@@ -43,19 +39,6 @@ func (s *Session) controlStateLocked() ControlState {
 		return ControlReconnecting
 	case StateExited:
 		return ControlExited
-	}
-	if s.agent != nil {
-		switch s.agent.State {
-		case AgentWorking:
-			return ControlAgentWorking
-		case AgentAttention:
-			return ControlAgentAttention
-		case AgentReady:
-			return ControlAgentReady
-		}
-	}
-	if s.agentEndedGeneration != 0 && s.agentEndedGeneration == s.generation {
-		return ControlAgentEnded
 	}
 	return ControlConnected
 }

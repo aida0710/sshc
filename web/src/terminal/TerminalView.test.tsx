@@ -271,17 +271,20 @@ describe("TerminalView", () => {
     expect(streams[0]!.stream.send).not.toHaveBeenCalled();
   });
 
-  it("opens the current SSH working directory in SFTP", async () => {
+  it("opens the working directory announced through OSC 7 in SFTP", async () => {
     const onOpenRemotePath = vi.fn();
     render(<TerminalView session={{
       ...session,
       kind: "ssh",
       alias: "bastion",
       title: "bastion",
-      agent: { kind: "codex", state: "ready", resumable: true, observationVersion: 1, signalVersion: 0, cwd: "/srv/app" },
     }} onOpenRemotePath={onOpenRemotePath} api={{ terminalStreamTicket: vi.fn(async () => ({ streamTicket: "one-time" })) }} />);
+    await waitFor(() => expect(streams).toHaveLength(1));
+    streams[0]!.handlers.onReplay({ start: 0, next: 0, end: 0, truncated: false });
+    streams[0]!.handlers.onOutput(new TextEncoder().encode("\x1b]7;file://bastion/srv/app\x07"));
 
     await userEvent.click(screen.getByRole("button", { name: "More terminal actions" }));
+    await waitFor(() => expect(screen.getByRole("menuitem", { name: "Open current directory in SFTP" })).toBeEnabled());
     await userEvent.click(screen.getByRole("menuitem", { name: "Open current directory in SFTP" }));
 
     expect(onOpenRemotePath).toHaveBeenCalledWith("bastion", "/srv/app", "browse");
@@ -298,29 +301,16 @@ describe("TerminalView", () => {
     expect(screen.getByText("checking the host key for bastion · 1/2")).toBeVisible();
   });
 
-  it("shows the agent session name, alias, and normalised state without SSH noise", () => {
+  it("shows the title the terminal set together with the alias, without SSH noise", () => {
     render(<TerminalView session={{
-      ...session, kind: "ssh", alias: "osaka", title: "API認証の修正",
-      presentation: { displayTitle: "API認証の修正", titleSource: "agent", titlePinned: false },
-      agent: { kind: "codex", state: "working", resumable: true, observationVersion: 2, signalVersion: 0 },
+      ...session, kind: "ssh", alias: "osaka", title: "vim notes.md",
+      presentation: { displayTitle: "vim notes.md", titleSource: "terminal", titlePinned: false },
     }} api={{ terminalStreamTicket: vi.fn(async () => ({ streamTicket: "one-time" })) }} />);
 
-    expect(screen.getByText("API認証の修正")).toBeVisible();
+    expect(screen.getByText("vim notes.md")).toBeVisible();
     expect(screen.getByText("osaka")).toBeVisible();
-    expect(screen.getByText("Codex · working")).toBeVisible();
+    expect(screen.getByText("connected")).toBeVisible();
     expect(screen.queryByText(/SSH ·/)).toBeNull();
-  });
-
-  it("offers explicit same-pane and new-pane resume for a candidate", async () => {
-    const onResumeAgent = vi.fn().mockResolvedValue(true);
-    render(<TerminalView session={{
-      ...session, kind: "ssh", alias: "osaka", title: "API認証の修正",
-      presentation: { displayTitle: "API認証の修正", titleSource: "candidate", titlePinned: false },
-      agent: { kind: "codex", state: "unknown", resumable: true, observationVersion: 4, signalVersion: 0 },
-    }} api={{ terminalStreamTicket: vi.fn(async () => ({ streamTicket: "one-time" })) }} onResumeAgent={onResumeAgent} />);
-
-    await userEvent.click(screen.getByRole("button", { name: "Resume in new pane" }));
-    expect(onResumeAgent).toHaveBeenCalledWith("new-pane");
   });
 
   it("says that it is retrying, counts down and reattaches on its own", async () => {

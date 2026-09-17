@@ -72,7 +72,7 @@ import { sftpTransferManager } from "./sftp/transferManager";
 import { ErrorDiagnosticNotice } from "./shell/ErrorDiagnosticNotice";
 import { CommandPalette, type PaletteCommand } from "./shell/CommandPalette";
 import { setAndroidAppearance } from "./android/native";
-import { useAgentNotifications } from "./terminal/agentNotifications";
+import { useTerminalNotifications } from "./terminal/terminalNotifications";
 import type { RemotePathAction } from "./terminal/TerminalLinkPopover";
 import type { SFTPTarget } from "./sftp/SFTPPanel";
 import { useAppSession } from "./session/useAppSession";
@@ -472,7 +472,7 @@ export function App({
     return () => globalThis.clearInterval(timer);
   }, [state]);
 
-  const unreadAgentSessions = useAgentNotifications(
+  const unreadSessions = useTerminalNotifications(
     consoles.sessions,
     terminalFace ? activeConsole : null,
     t,
@@ -759,7 +759,7 @@ export function App({
             activeConsole={activeConsole}
             liveWorkspace={liveWorkspace}
             onRenameWorkspace={renameWorkspace}
-            unreadBySession={unreadAgentSessions}
+            unreadBySession={unreadSessions}
             onShowConsole={showConsole}
             onDuplicateConsole={(id) => void duplicateConsole(id)}
             onReorderConsoles={setConsoleOrder}
@@ -994,7 +994,7 @@ export function App({
             hosts={paletteHosts}
             files={configFiles}
             sessions={orderedConsoles}
-            unreadBySession={unreadAgentSessions}
+            unreadBySession={unreadSessions}
             sectionLabels={sectionLabels}
             onClose={() => setCommandPaletteOpen(false)}
             onConnect={async (alias) => {
@@ -1188,17 +1188,6 @@ function TerminalScreen({
               webgl={settings.webgl ?? true}
               onExit={() => consoles.markExited(session.id)}
               onReconnect={() => consoles.reconnect(session.id)}
-              onResumeAgent={async (placement) => {
-                const resumed =
-                  (await consoles.resumeAgent?.(
-                    session.id,
-                    session.agent?.observationVersion ?? 0,
-                    placement,
-                  )) ?? null;
-                if (resumed === null) return false;
-                if (placement === "new-pane") onActive(resumed.id);
-                return true;
-              }}
               onOpenRemotePath={onOpenRemotePath}
             />
           </Suspense>

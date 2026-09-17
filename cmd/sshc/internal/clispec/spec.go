@@ -66,7 +66,7 @@ Print the resolved SSH target without connecting.
 		{Name: "show", Help: "usage:\n  sshc terminal show <session-id> [--json]\n\nShow one terminal. The ID may be a unique lowercase hexadecimal prefix.\n"},
 		{Name: "read", Help: "usage:\n  sshc terminal read <session-id> [--cursor N] [--limit N] [--json]\n\nRead retained terminal output from a byte cursor.\n"},
 		{Name: "send", Help: "usage:\n  sshc terminal send <session-id> --text <text> [--no-enter] [--json]\n\nSend text to the current process generation. A carriage return is appended\nunless --no-enter is set.\n"},
-		{Name: "wait", Help: "usage:\n  sshc terminal wait <session-id> --for <state> [--timeout D] [--json]\n\nStates: connecting, connected, reconnecting, exited, agent-working,\nagent-attention, agent-ready, agent-ended.\n"},
+		{Name: "wait", Help: "usage:\n  sshc terminal wait <session-id> --for <state> [--timeout D] [--json]\n\nStates: connecting, connected, reconnecting, exited.\n"},
 		{Name: "create", Help: "usage:\n  sshc terminal create shell [--json]\n  sshc terminal create ssh <alias> [--json]\n\nCreate a local shell or SSH terminal in the running engine.\n"},
 		{Name: "rename", Help: "usage:\n  sshc terminal rename <session-id> <title> [--json]\n\nSet the title of a terminal owned by the running engine.\n"},
 		{Name: "close", Help: "usage:\n  sshc terminal close <session-id> [--json]\n\nClose a terminal owned by the running engine.\n"},
@@ -155,7 +155,7 @@ from the same ~/.ssh/config and Include files as sshc itself.
 var Values = map[string][]string{
 	"completion-shells":     {"bash", "zsh", "fish"},
 	"encodings":             {"utf-8", "shift_jis", "euc-jp", "iso-2022-jp"},
-	"wait-states":           {"connecting", "connected", "reconnecting", "exited", "agent-working", "agent-attention", "agent-ready", "agent-ended"},
+	"wait-states":           {"connecting", "connected", "reconnecting", "exited"},
 	"serial-options":        {"--json", "--non-interactive", "--require-output", "--encoding", "--baud", "--data-bits", "--parity", "--stop-bits", "--flow", "--dtr", "--rts", "--break", "--expect", "--read-for", "--timeout", "--settle", "--max-bytes", "--line-ending", "--script", "--help"},
 	"telnet-options":        {"--non-interactive", "--require-output", "--encoding", "--connect-timeout", "--terminal-type", "--expect", "--read-for", "--timeout", "--settle", "--max-bytes", "--line-ending", "--script", "--json", "--help"},
 	"sftp-options":          {"-r", "--recursive", "--overwrite", "--skip-existing", "--dry-run", "-j", "--jobs", "--split-size", "--split-jobs", "--chunk-size", "--max-depth", "--max-entries", "--max-total-size", "--json", "-y", "--yes", "--help"},
@@ -187,8 +187,7 @@ const GlobalHelp = `usage:
   sshc terminal read <session-id> [--cursor N] [--limit N] [--json]
   sshc terminal send <session-id> --text <text> [--no-enter] [--json]
   sshc terminal wait <session-id> --for <state> [--timeout D] [--json]
-                       states: connecting, connected, reconnecting, exited,
-                               agent-working, agent-attention, agent-ready, agent-ended
+                       states: connecting, connected, reconnecting, exited
   sshc terminal create shell [--json]
   sshc terminal create ssh <alias> [--json]
   sshc terminal rename <session-id> <title> [--json]

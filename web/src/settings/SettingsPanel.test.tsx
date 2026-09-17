@@ -142,7 +142,7 @@ describe("SettingsPanel", () => {
     expect(delivered).toEqual([{
       title: "sshc",
       options: {
-        body: "Agent and transfer notifications are ready.",
+        body: "Terminal and transfer notifications are ready.",
         tag: "sshc-notification-permission",
       },
     }]);
@@ -161,17 +161,16 @@ describe("SettingsPanel", () => {
     expect(within(region).queryByRole("button", { name: "Enable notifications" })).toBeNull();
   });
 
-  it("stores separate Agent sounds and volume only in this browser", async () => {
+  it("stores the notification sound and volume only in this browser", async () => {
     const user = userEvent.setup();
     render(<SettingsPanel api={buildApi()} />);
     const region = screen.getByRole("region", { name: "Notifications" });
 
-    await user.selectOptions(within(region).getByLabelText("Input-needed sound"), "pulse");
-    await user.selectOptions(within(region).getByLabelText("Completion sound"), "none");
+    await user.selectOptions(within(region).getByLabelText("Notification sound"), "pulse");
     fireEvent.change(within(region).getByLabelText("Notification volume"), { target: { value: "35" } });
 
-    const stored = JSON.parse(window.localStorage.getItem("sshc.agent-notification-sounds.v1") ?? "null");
-    expect(stored).toEqual({ attention: "pulse", completed: "none", volume: 35 });
+    const stored = JSON.parse(window.localStorage.getItem("sshc.terminal-notification-sound.v1") ?? "null");
+    expect(stored).toEqual({ sound: "pulse", volume: 35 });
   });
 
   it("does not accept terminal edits before initial settings finish loading", async () => {

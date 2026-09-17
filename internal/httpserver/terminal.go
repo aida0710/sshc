@@ -42,11 +42,6 @@ type TerminalHandlers struct {
 	// 外部の ssh は起動しない。プロセス内で SSH 接続を行うため、確保する
 	// PTY も無い。nil なら SSH のセッションは開けない。
 	Connect Connector
-	// ConnectAgent starts an adapter-owned resume command on the same alias.
-	ConnectAgent AgentConnector
-	// ConnectionBinding detects alias retargeting before an opaque agent
-	// reference can be tried on a different SSH destination.
-	ConnectionBinding func(alias string) (string, error)
 	// Shell はローカルシェルの絶対パスを解決する。
 	Shell func() (string, error)
 	// ShellProfiles returns only executables detected and validated on this machine.
@@ -88,7 +83,6 @@ func registerTerminalRoutes(engine *echo.Echo, handlers TerminalHandlers) {
 	engine.POST("/api/v1/terminal/sessions/:id/reconnect", handlers.Reconnect)
 	engine.POST("/api/v1/terminal/sessions/:id/forwards", handlers.StartForward)
 	engine.DELETE("/api/v1/terminal/sessions/:id/forwards/:forwardId", handlers.StopForward)
-	engine.POST("/api/v1/terminal/sessions/:id/agent/resume", handlers.ResumeAgent)
 	engine.GET("/api/v1/terminal/sessions/:id/control", handlers.Control)
 	engine.PATCH("/api/v1/terminal/sessions/:id", handlers.Rename)
 	engine.PUT("/api/v1/terminal/sessions/:id/title", handlers.SetTitle)
@@ -113,28 +107,14 @@ func describeSession(view terminal.View) api.TerminalSession {
 			TitlePinned:  view.Presentation.TitlePinned,
 		},
 	}
-	if view.Agent != nil {
-		agent := &api.TerminalAgent{
-			Kind: api.TerminalAgentKind(view.Agent.Kind), State: api.TerminalAgentState(view.Agent.State),
-			Resumable: view.Agent.Resumable, ObservationVersion: int(view.Agent.ObservationVersion),
-			SignalVersion: int(view.Agent.SignalVersion),
+	notificationVersion := int(view.NotificationVersion)
+	described.NotificationVersion = &notificationVersion
+	if view.LastNotification != nil {
+		described.LastNotification = &api.TerminalNotification{
+			Title:      view.LastNotification.Title,
+			Body:       view.LastNotification.Body,
+			OccurredAt: view.LastNotification.OccurredAt.UTC(),
 		}
-		if view.Agent.CWD != "" {
-			agent.Cwd = &view.Agent.CWD
-		}
-		if view.Agent.Model != "" {
-			agent.Model = &view.Agent.Model
-		}
-		if view.Agent.SessionName != "" {
-			agent.SessionName = &view.Agent.SessionName
-		}
-		if view.Agent.LastSignal != nil {
-			agent.LastSignal = &api.TerminalAgentSignal{
-				Kind:       api.TerminalAgentSignalKind(view.Agent.LastSignal.Kind),
-				OccurredAt: view.Agent.LastSignal.OccurredAt.UTC(),
-			}
-		}
-		described.Agent = agent
 	}
 	if view.Reconnect != nil {
 		described.Reconnect = &api.TerminalReconnect{
@@ -337,55 +317,6 @@ func (h TerminalHandlers) SetTitle(c *echo.Context) error {
 	return c.JSON(http.StatusOK, h.list())
 }
 
-// ResumeAgent replaces the process or opens a new pane using only the adapter's
-// fixed argv. The browser supplies neither executable nor native reference.
-func (h TerminalHandlers) ResumeAgent(c *echo.Context) error {
-	id := c.Param("id")
-	if id == "" || len(id) > maxSessionIdentifier {
-		return problem(c, http.StatusNotFound, "terminal_session_not_found")
-	}
-	var request api.ResumeTerminalAgentRequest
-	if err := decodeJSON(c, &request); err != nil || request.ObservationVersion < 1 {
-		return problem(c, http.StatusBadRequest, "invalid_request")
-	}
-	placement := terminal.AgentResumePlacement(request.Placement)
-	if placement != terminal.AgentResumeSamePane && placement != terminal.AgentResumeNewPane {
-		return problem(c, http.StatusBadRequest, "invalid_request")
-	}
-	session, err := h.Registry.ResumeAgent(c.Request().Context(), id, uint64(request.ObservationVersion), placement)
-	switch {
-	case errors.Is(err, terminal.ErrNotFound):
-		return problem(c, http.StatusNotFound, "terminal_session_not_found")
-	case errors.Is(err, terminal.ErrAgentResumeStale):
-		return problem(c, http.StatusConflict, "agent_resume_stale")
-	case errors.Is(err, terminal.ErrAgentResumeSamePaneBusy):
-		return problem(c, http.StatusConflict, "agent_resume_same_pane_busy")
-	case errors.Is(err, terminal.ErrAgentResumeIdentityChanged):
-		return problem(c, http.StatusConflict, "agent_resume_identity_changed")
-	case errors.Is(err, terminal.ErrAgentResumeUnavailable), errors.Is(err, terminal.ErrReconnectUnavailable):
-		return problem(c, http.StatusConflict, "agent_resume_unavailable")
-	case errors.Is(err, terminal.ErrSessionLimit):
-		return problem(c, http.StatusConflict, "terminal_session_limit")
-	case errors.Is(err, terminal.ErrShuttingDown):
-		return problem(c, http.StatusServiceUnavailable, "terminal_start_failed")
-	case err != nil:
-		if code, named := connectProblem(err); named {
-			return problem(c, http.StatusUnprocessableEntity, code)
-		}
-		return problem(c, http.StatusInternalServerError, "terminal_start_failed")
-	}
-	ticket, err := h.Tickets.Issue(session.ID(), 0)
-	if err != nil {
-		if placement == terminal.AgentResumeNewPane {
-			_ = h.Registry.Close(session.ID())
-		}
-		return problem(c, http.StatusInternalServerError, "terminal_start_failed")
-	}
-	return c.JSON(http.StatusCreated, api.OpenTerminalSessionResponse{
-		Session: describeSession(session.View()), StreamTicket: ticket,
-	})
-}
-
 // spec は、開こうとしているセッションひとつ分の起動一式を組み立てる。
 func (h TerminalHandlers) spec(kind terminal.Kind, alias, cwd *string, size terminal.Size) (terminal.Spec, error) {
 	if kind == terminal.KindShell {
@@ -461,39 +392,6 @@ func (h TerminalHandlers) spec(kind terminal.Kind, alias, cwd *string, size term
 			}
 			return true, "reconnect_failed"
 		},
-	}
-	if h.ConnectAgent != nil {
-		binding := ""
-		if h.ConnectionBinding != nil {
-			resolved, err := h.ConnectionBinding(target)
-			if err != nil {
-				return terminal.Spec{}, err
-			}
-			binding = resolved
-		}
-		spec.Resume = func(ctx context.Context, size terminal.Size, kind terminal.AgentKind, reference string) (terminal.Process, error) {
-			if err := ctx.Err(); err != nil {
-				return nil, err
-			}
-			if h.ConnectionBinding != nil {
-				current, err := h.ConnectionBinding(target)
-				if err != nil {
-					return nil, err
-				}
-				if current != binding {
-					return nil, terminal.ErrAgentResumeIdentityChanged
-				}
-			}
-			sessionCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
-			owned, _, _, _, err := ownTerminalProcess(sessionCtx, cancel, func(ctx context.Context) (terminal.Process, error) {
-				return h.ConnectAgent(ctx, target, kind, reference, size)
-			})
-			return owned, err
-		}
-	}
-	if h.Startup != nil {
-		command, ok := h.Startup(target)
-		spec.ReplacementBusy = ok && command != ""
 	}
 	return spec, nil
 }

@@ -3,6 +3,11 @@
 Date: 2026-08-28
 Updated: 2026-08-29
 
+> **Superseded (2026-09-17).** この設計が定めた専用 plugin と OSC 6973 protocol は
+> 廃止した。Terminal は代わりに標準の OSC 0/1/2（title）と OSC 9/99/777（通知）を
+> 解釈する。現行の仕様は `pages/terminal/notifications.md` を参照。以下は経緯の
+> 記録として残す。
+
 ## Summary
 
 sshc の Terminal を、接続先を表示するだけの端末から、そこで動いている coding
