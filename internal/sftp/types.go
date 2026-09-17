@@ -134,8 +134,8 @@ const (
 	RemoteCopy   RemoteTransferOperation = "copy"
 	RemoteMove   RemoteTransferOperation = "move"
 	RemoteDelete RemoteTransferOperation = "delete"
-	RemoteGet RemoteTransferOperation = "get"
-	RemotePut RemoteTransferOperation = "put"
+	RemoteGet    RemoteTransferOperation = "get"
+	RemotePut    RemoteTransferOperation = "put"
 )
 
 type RemoteTransferRequest struct {
