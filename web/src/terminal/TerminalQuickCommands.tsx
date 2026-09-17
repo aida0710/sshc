@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
-import type { TerminalSession } from "../api/integrations";
+import type { TerminalSession } from "../api/terminalSessions";
 import { failureCode } from "../api/client";
 import { useTranslate } from "../i18n/context";
 import { snippetsApi, type Snippet } from "../snippets/api";

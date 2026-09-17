@@ -1,8 +1,9 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import type { EffectiveResponse, IntegrationsApi } from "../api/integrations";
+import type { EffectiveResponse } from "../api/diagnostics";
 import { ConnectionChecks } from "./ConnectionChecks";
+import type { DiagnosticsApi } from "../api/diagnostics";
 
 const safeInspection: EffectiveResponse = {
   alias: "bastion",
@@ -13,7 +14,7 @@ const safeInspection: EffectiveResponse = {
   route: [],
 };
 
-function api(overrides: Partial<Pick<IntegrationsApi, "effective" | "reachability" | "authentication">> = {}) {
+function api(overrides: Partial<Pick<DiagnosticsApi, "effective" | "reachability" | "authentication">> = {}) {
   return {
     effective: vi.fn().mockResolvedValue(safeInspection),
     reachability: vi.fn().mockResolvedValue({
@@ -32,7 +33,7 @@ function api(overrides: Partial<Pick<IntegrationsApi, "effective" | "reachabilit
       elapsedMs: 40,
     }),
     ...overrides,
-  } as Pick<IntegrationsApi, "effective" | "reachability" | "authentication">;
+  } as Pick<DiagnosticsApi, "effective" | "reachability" | "authentication">;
 }
 
 describe("ConnectionChecks", () => {

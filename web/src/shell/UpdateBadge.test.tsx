@@ -1,10 +1,11 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { UpdateBadge } from "./UpdateBadge";
-import type { IntegrationsApi, UpdateStatus } from "../api/integrations";
+import type { UpdateStatus } from "../api/update";
+import type { UpdateApi } from "../api/update";
 
-function buildApi(status: UpdateStatus, overrides: Partial<IntegrationsApi> = {}): IntegrationsApi {
-  return { updateStatus: vi.fn().mockResolvedValue(status), ...overrides } as unknown as IntegrationsApi;
+function buildApi(status: UpdateStatus, overrides: Partial<UpdateApi> = {}): UpdateApi {
+  return { updateStatus: vi.fn().mockResolvedValue(status), ...overrides } as unknown as UpdateApi;
 }
 
 describe("UpdateBadge", () => {

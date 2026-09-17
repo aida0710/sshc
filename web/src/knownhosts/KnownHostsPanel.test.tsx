@@ -3,7 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { KnownHostsPanel } from "./KnownHostsPanel";
 import { ApiError } from "../api/client";
-import type { IntegrationsApi, KnownHostCandidate } from "../api/integrations";
+import type { KnownHostCandidate } from "../api/knownHosts";
+import type { KnownHostsApi } from "../api/knownHosts";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -39,77 +40,17 @@ function scanResult(...candidates: KnownHostCandidate[]) {
   return { notice: scanNotice, candidates };
 }
 
-function buildApi(overrides: Partial<IntegrationsApi> = {}): IntegrationsApi {
+function buildApi(overrides: Partial<KnownHostsApi> = {}): KnownHostsApi {
   return {
-    configCheck: vi.fn().mockResolvedValue({ root: "", files: [], diagnostics: [] }),
-    effective: vi.fn(),
-    reachability: vi.fn(),
-    authentication: vi.fn(),
-    terminalSessions: vi.fn().mockResolvedValue({ sessions: [], maxSessions: 50 }),
-    recentConnections: vi.fn().mockResolvedValue({ connections: [] }),
-    openTerminalSession: vi.fn(),
-    terminalStreamTicket: vi.fn(),
-    reconnectTerminalSession: vi.fn().mockResolvedValue({ sessions: [], maxSessions: 50 }),
-    stopTerminalReconnect: vi.fn().mockResolvedValue({ sessions: [], maxSessions: 50 }),
-    startTerminalForward: vi.fn().mockResolvedValue({ sessions: [], maxSessions: 50 }),
-    stopTerminalForward: vi.fn().mockResolvedValue({ sessions: [], maxSessions: 50 }),
-    closeTerminalSession: vi.fn().mockResolvedValue({ sessions: [], maxSessions: 50 }),
-    renameTerminalSession: vi.fn().mockResolvedValue({ sessions: [], maxSessions: 50 }),
     knownHosts: vi.fn().mockResolvedValue({ path: "~/.ssh/known_hosts", entries: [entry] }),
     deleteKnownHosts: vi.fn().mockResolvedValue({ changed: true, transactionId: "tx-1" }),
     scanKnownHosts: vi.fn().mockResolvedValue(scanResult(candidate)),
     addKnownHost: vi.fn().mockResolvedValue({ changed: true, transactionId: "tx-2" }),
-    passwordVault: vi.fn().mockResolvedValue({ exists: false, unlocked: false, aliases: [], dedicatedKeyPassphrases: [] }),
-    initialiseVault: vi.fn().mockResolvedValue({ exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [] }),
-    unlockVault: vi.fn().mockResolvedValue({ exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [] }),
-    recoverCompatibleVault: vi.fn(),
-    resetUnsupportedVault: vi.fn(),
-    lockVault: vi.fn().mockResolvedValue({ exists: true, unlocked: false, aliases: [], dedicatedKeyPassphrases: [] }),
-    changeMasterPassword: vi.fn(),
-    updateStatus: vi.fn().mockResolvedValue({ current: "dev", available: false, restartRequired: false }),
-    terminalSettings: vi.fn().mockResolvedValue({}),
-    engineSettings: vi.fn().mockResolvedValue({}),
-    setEngineSettings: vi.fn(),
-    terminalBackgrounds: vi.fn().mockResolvedValue({ backgrounds: [], usedBytes: 0, capacityBytes: 16 << 20, remainingBytes: 16 << 20 }),
-    addTerminalBackground: vi.fn(),
-    setTerminalBackgroundCapacity: vi.fn(),
-    renameTerminalBackground: vi.fn(),
-    deleteTerminalBackground: vi.fn(),
-    setTerminalSettings: vi.fn().mockResolvedValue(undefined),
-    credentials: vi.fn().mockResolvedValue({ credentials: [] }),
-    storeCredential: vi.fn().mockResolvedValue({ credentials: [] }),
-    revealCredential: vi.fn(),
-    totpCodes: vi.fn(),
-    updateCredential: vi.fn().mockResolvedValue({ credentials: [], dedicatedKeyPassphrases: [], keyHostUsageComplete: true }),
-    deleteCredential: vi.fn().mockResolvedValue({ credentials: [] }),
-    assignCredential: vi.fn().mockResolvedValue({ credentials: [] }),
-    unassignCredential: vi.fn().mockResolvedValue({ credentials: [] }),
-    passwordEligibility: vi.fn().mockResolvedValue({
-      alias: "bastion", storable: true, blockers: [], warnings: [],
-    }),
-    storePassword: vi.fn().mockResolvedValue({ exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [] }),
-    forgetPassword: vi.fn().mockResolvedValue({ exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [] }),
-    syncStatus: vi.fn().mockResolvedValue({ configured: false, endpoint: "", bucket: "", synced: false }),
-    syncPushDraft: vi.fn().mockResolvedValue({ message: "Record current workspace", added: 0, modified: 0, removed: 0 }),
-    configureSync: vi.fn().mockResolvedValue({ configured: true, endpoint: "", bucket: "", synced: false }),
-    syncExclusions: vi.fn().mockResolvedValue({ document: "", usingDefaults: true, candidates: [] }),
-    saveSyncExclusions: vi.fn().mockResolvedValue({ document: "", usingDefaults: false, candidates: [] }),
-    checkSyncSetup: vi.fn(),
-    completeSyncSetup: vi.fn(),
-    pushSnapshot: vi.fn().mockResolvedValue({ configured: true, endpoint: "", bucket: "", synced: true }),
-    forcePushSnapshot: vi.fn().mockResolvedValue({ configured: true, endpoint: "", bucket: "", synced: true }),
-    syncBucketStatus: vi.fn().mockResolvedValue({ checkedAt: "2026-08-25T00:00:00Z", localIsLive: false, historyTruncated: false, history: [] }),
-    syncHistory: vi.fn().mockResolvedValue({ checkedAt: "2026-08-25T00:00:00Z", headRevision: "a".repeat(64), revisions: [], historyTruncated: false, downloadTruncated: false, downloadedBytes: 0, skipped: 0 }),
-    diffSyncHistory: vi.fn(),
-    setSyncKey: vi.fn().mockResolvedValue({ key: "AB12-CD34-EF56-GH78-JK90-MN12" }),
-    setAutoSync: vi.fn().mockResolvedValue({ configured: true, endpoint: "", bucket: "", synced: true }),
-    syncNow: vi.fn().mockResolvedValue({ configured: true, endpoint: "", bucket: "", synced: true }),
-    pullSnapshot: vi.fn().mockResolvedValue({ applied: false, conflicts: [], written: [], removed: [] }),
     ...overrides,
   };
 }
 
-async function openAddForm(api: IntegrationsApi) {
+async function openAddForm(api: KnownHostsApi) {
   render(<KnownHostsPanel api={api} />);
   await userEvent.type(await screen.findByLabelText("Host to scan"), "new.example.com");
   await userEvent.click(screen.getByRole("button", { name: "Scan" }));

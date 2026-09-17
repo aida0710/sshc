@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { PullResponse } from "../api/integrations";
+import type { PullResponse } from "../api/sync";
 
 type Resolution = "local" | "remote" | undefined;
 

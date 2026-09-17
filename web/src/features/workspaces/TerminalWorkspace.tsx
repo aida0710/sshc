@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
-import type { TerminalSession } from "../../api/integrations";
+import type { TerminalSession } from "../../api/terminalSessions";
 import { failureCode } from "../../api/client";
 import { useTranslate, type Translate } from "../../i18n/context";
 import { Button } from "../../ui/surface";

@@ -5,14 +5,14 @@ import { ApiError } from "../api/client";
 import { LanguageProvider } from "../i18n/context";
 import { ThemeProvider } from "../theme/context";
 import { LockScreen } from "./LockScreen";
-import type { IntegrationsApi } from "../api/integrations";
+import type { VaultApi } from "../api/vault";
 
-function buildApi(overrides: Partial<IntegrationsApi> = {}): IntegrationsApi {
+function buildApi(overrides: Partial<VaultApi> = {}): VaultApi {
   return {
     initialiseVault: vi.fn().mockResolvedValue({ exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [] }),
     unlockVault: vi.fn().mockResolvedValue({ exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [] }),
     ...overrides,
-  } as unknown as IntegrationsApi;
+  } as unknown as VaultApi;
 }
 
 describe("LockScreen", () => {

@@ -1,10 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { failureCode } from "../api/client";
-import type {
-  CredentialKind,
-  CredentialList,
-  IntegrationsApi,
-} from "../api/integrations";
+import type { CredentialKind, CredentialList, CredentialsApi } from "../api/credentials";
 import { useTranslate } from "../i18n/context";
 import { Field, control, hintText } from "../ui/form";
 import { PasswordField } from "../ui/PasswordField";
@@ -14,7 +10,7 @@ import { ModalShell } from "../ui/ModalShell";
 type CredentialEditDialogProps = {
   kind: CredentialKind;
   name: string;
-  api: Pick<IntegrationsApi, "revealCredential" | "updateCredential">;
+  api: Pick<CredentialsApi, "revealCredential" | "updateCredential">;
   onSaved: (list: CredentialList) => void;
   onClose: () => void;
 };

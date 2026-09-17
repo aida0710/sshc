@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import type { HostEntry } from "../api/config";
-import type { RecentConnection } from "../api/integrations";
+import type { RecentConnection } from "../api/recentConnections";
 import { useTranslate } from "../i18n/context";
 import { HostPickerDialog } from "../shell/HostPickerDialog";
 import { Icon } from "../ui/icons";

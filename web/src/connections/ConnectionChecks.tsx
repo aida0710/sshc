@@ -1,15 +1,10 @@
 import { useEffect, useState } from "react";
-import type {
-  AuthenticationResponse,
-  EffectiveResponse,
-  IntegrationsApi,
-  ReachabilityResponse,
-} from "../api/integrations";
+import type { AuthenticationResponse, DiagnosticsApi, EffectiveResponse, ReachabilityResponse } from "../api/diagnostics";
 import { useTranslate } from "../i18n/context";
 import { hintText, sectionHeading } from "../ui/form";
 import { Button, Notice } from "../ui/surface";
 
-type ChecksApi = Pick<IntegrationsApi, "effective" | "reachability" | "authentication">;
+type ChecksApi = Pick<DiagnosticsApi, "effective" | "reachability" | "authentication">;
 
 type ConnectionChecksProps = {
   alias: string;

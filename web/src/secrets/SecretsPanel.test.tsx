@@ -3,9 +3,9 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { SecretsPanel } from "./SecretsPanel";
 import { ApiError } from "../api/client";
-import type { IntegrationsApi } from "../api/integrations";
+import type { SecretsApi } from "./SecretsPanel";
 
-function buildApi(overrides: Partial<IntegrationsApi> = {}): IntegrationsApi {
+function buildApi(overrides: Partial<SecretsApi> = {}): SecretsApi {
   return {
     passwordVault: vi.fn().mockResolvedValue({ exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [] }),
     initialiseVault: vi.fn().mockResolvedValue({ exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [] }),
@@ -54,7 +54,7 @@ function buildApi(overrides: Partial<IntegrationsApi> = {}): IntegrationsApi {
     }),
     updateStatus: vi.fn().mockResolvedValue({ current: "dev", available: false, restartRequired: false }),
     ...overrides,
-  } as unknown as IntegrationsApi;
+  } as unknown as SecretsApi;
 }
 
 describe("SecretsPanel", () => {
