@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type DragEvent, type MouseEvent } from "react";
 import { failureCode } from "../api/client";
 import { useTranslate } from "../i18n/context";
+import { clipboard } from "../ui/clipboard";
 import { Icon } from "../ui/icons";
 import { sftpApi, type LocalListing } from "./api";
 import { formatBytes } from "./format";
@@ -48,6 +49,17 @@ export function LocalSFTPPanel({ remote, onQueueOpen, onDirectoryChange }: {
   const currentPath = useRef("");
   const completed = useRef(new Set(sftpTransferManager.getSnapshot()
     .filter((job) => job.direction === "remote" && job.status === "completed").map((job) => job.id)));
+
+  function editPath() {
+    if (listing === null) return;
+    setPathDraft(listing.path);
+    setPathEditing(true);
+  }
+  async function copyPath() {
+    if (listing === null) return;
+    try { await clipboard.writeText(listing.path); setProblem(""); }
+    catch { setProblem(t("copy.refused")); }
+  }
 
   const navigate = useCallback(async (path: string) => {
     setBusy(true);
@@ -133,7 +145,9 @@ export function LocalSFTPPanel({ remote, onQueueOpen, onDirectoryChange }: {
             if (event.key === "Escape") setPathEditing(false);
             if (event.key === "Enter") { setPathEditing(false); void navigate(pathDraft.trim()); }
           }} className="min-w-0 flex-1 rounded border border-line bg-surface px-2 py-1 text-sm" />
-          : <div className="flex min-w-0 flex-1 items-center overflow-x-auto whitespace-nowrap text-sm">
+          : <div data-testid="sftp-local-path-space" onClick={(event) => { if (event.target === event.currentTarget && !busy) editPath(); }}
+              title={t("sftp.local.editPath")}
+              className="flex min-w-0 flex-1 cursor-text items-center overflow-x-auto whitespace-nowrap text-sm">
           {crumbs(listing.path).map((crumb, index) => <span key={crumb.path} className="inline-flex items-center">
             {index > 0 ? <Icon name="chevronRight" className="mx-1 size-3 text-ink-faint" /> : null}
             {crumb.path === listing.path ? <span className="px-1 font-medium" aria-current="location">{crumb.path === listing.home ? "~" : crumb.label}</span>
@@ -141,8 +155,10 @@ export function LocalSFTPPanel({ remote, onQueueOpen, onDirectoryChange }: {
                   className="rounded px-1 py-1 text-ink-muted hover:bg-hover hover:text-ink">{crumb.path === listing.home ? "~" : crumb.label}</button>}
           </span>)}
         </div>}
+        <button type="button" aria-label={t("sftp.copyPath")} title={t("sftp.copyPath")}
+          onClick={() => { void copyPath(); }} className="rounded p-2 hover:bg-hover"><Icon name="copy" className="size-3.5" /></button>
         <button type="button" aria-label={t("sftp.local.editPath")} title={t("sftp.local.editPath")}
-          onClick={() => { setPathDraft(listing.path); setPathEditing((current) => !current); }}
+          onClick={() => { if (pathEditing) setPathEditing(false); else editPath(); }}
           className="rounded p-2 hover:bg-hover"><Icon name="edit" className="size-3.5" /></button>
       </nav>
       <div className="flex items-center gap-2 border-b border-line px-3 py-2">

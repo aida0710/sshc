@@ -1148,6 +1148,11 @@ export function SFTPPanel({
     }
   }
 
+  async function copyCurrentPath() {
+    try { await clipboard.writeText(path); setProblem(""); }
+    catch { setProblem(t("copy.refused")); }
+  }
+
   async function queueRemoteOperation(
     entries: RemoteEntry[],
     operation: "copy" | "move",
@@ -1297,6 +1302,7 @@ export function SFTPPanel({
   function folderMenuActions(): SFTPMenuAction[] {
     const navigate = (destination: string) => { setMenu(null); void load(destination); };
     return [
+      { key: "copyCurrentPath", label: t("sftp.copyPath"), disabled: !connected, run: () => { setMenu(null); void copyCurrentPath(); } },
       { key: "newFolder", label: t("sftp.newFolder"), disabled: busy || !connected, run: () => { setMenu(null); setInputIntent({ kind: "mkdir" }); } },
       { key: "newFile", label: t("sftp.newFile"), disabled: busy || !connected, run: () => { setMenu(null); setInputIntent({ kind: "createFile" }); } },
       { key: "upload", label: t("sftp.upload"), disabled: busy || !connected, run: () => { setMenu(null); upload.current?.click(); } },
@@ -1394,7 +1400,8 @@ export function SFTPPanel({
           </>
         ) : (
           <div className="flex min-w-44 grow items-center rounded-md bg-control/60 px-1" data-testid="sftp-current-path" data-path={path}>
-            <nav aria-label={t("sftp.path")} className="flex min-w-0 grow items-center overflow-x-auto whitespace-nowrap font-mono text-sm">
+            <nav aria-label={t("sftp.path")} onClick={(event) => { if (event.target === event.currentTarget && !busy && !dirty && connected) setPathEditing(true); }}
+              title={t("sftp.editPath")} className="flex min-w-0 grow cursor-text items-center overflow-x-auto whitespace-nowrap font-mono text-sm">
               <button type="button" disabled={busy || dirty || !connected || path === "/"} onClick={() => void load("/")} className="rounded px-1.5 py-1.5 text-ink-muted hover:bg-hover hover:text-ink disabled:text-ink-faint md:py-1">/</button>
               {pathPieces.map((piece, index) => (
                 <span key={breadcrumbPaths[index]} className="flex min-w-0 items-center">
@@ -1407,6 +1414,11 @@ export function SFTPPanel({
                 </span>
               ))}
             </nav>
+            <button type="button" aria-label={t("sftp.copyPath")} title={t("sftp.copyPath")}
+              disabled={!connected} onClick={() => { void copyCurrentPath(); }}
+              className="flex size-8 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover hover:text-ink disabled:text-ink-faint">
+              <Icon name="copy" className="size-3.5" />
+            </button>
             <button type="button" aria-label={t("sftp.editPath")} disabled={busy || dirty || !connected} onClick={() => setPathEditing(true)} className="flex size-8 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover hover:text-ink disabled:text-ink-faint">
               <Icon name="edit" className="size-3.5" />
             </button>

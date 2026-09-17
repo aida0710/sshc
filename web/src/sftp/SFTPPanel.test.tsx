@@ -356,6 +356,19 @@ describe("SFTPPanel uploads", () => {
     expect(clipboard.writeText).toHaveBeenLastCalledWith("/remote/alpha.txt\n/remote/gamma.txt");
   });
 
+  it("copies the current directory and edits it from the empty breadcrumb area", async () => {
+    render(<SFTPPanel aliases={["edge"]} />);
+    await chooseHost("edge");
+    await userEvent.click(screen.getByRole("button", { name: "Copy full path" }));
+    expect(clipboard.writeText).toHaveBeenLastCalledWith("/remote");
+    fireEvent.click(screen.getByRole("navigation", { name: "Remote path" }));
+    const input = screen.getByRole("textbox", { name: "Remote path" });
+    expect(input).toHaveValue("/remote");
+    await userEvent.clear(input);
+    await userEvent.type(input, "/other{Enter}");
+    await waitFor(() => expect(api.list).toHaveBeenCalledWith("edge", "/other"));
+  });
+
   it("queues multiple selected entries after one confirmation and opens the queue", async () => {
     const addRemoteTransfers = vi.spyOn(sftpTransferManager, "addRemoteTransfers").mockResolvedValue(["delete-one", "delete-two"]);
     api.list.mockResolvedValue({

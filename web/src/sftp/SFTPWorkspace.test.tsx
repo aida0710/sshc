@@ -12,8 +12,10 @@ const api = vi.hoisted(() => ({
   listLocal: vi.fn(),
   clearFinishedTransfers: vi.fn(),
 }));
+const clipboard = vi.hoisted(() => ({ writeText: vi.fn(async () => undefined) }));
 
 vi.mock("./api", () => ({ sftpApi: api }));
+vi.mock("../ui/clipboard", () => ({ clipboard: { readText: vi.fn(), writeText: clipboard.writeText } }));
 vi.mock("../api/integrations", () => ({
   integrationsApi: { recentConnections: vi.fn(async () => ({ connections: [] })) },
 }));
@@ -257,6 +259,12 @@ describe("SFTP tabs", () => {
       const local = screen.getByRole("region", { name: "Local files" });
       await waitFor(() => expect(within(local).getByRole("button", { name: /notes.txt/ })).toBeVisible());
       expect(within(local).getByRole("navigation", { name: "Local folder path" })).toHaveTextContent("~");
+      await userEvent.click(within(local).getByRole("button", { name: "Copy full path" }));
+      expect(clipboard.writeText).toHaveBeenLastCalledWith("/home/edge");
+      fireEvent.click(within(local).getByTestId("sftp-local-path-space"));
+      const directPath = within(local).getByRole("textbox", { name: "Engine filesystem path" });
+      expect(directPath).toHaveValue("/home/edge");
+      fireEvent.keyDown(directPath, { key: "Escape" });
       await chooseHost("edge", screen.getByRole("tabpanel"));
       await userEvent.click(within(local).getByRole("button", { name: /notes.txt/ }));
       await userEvent.click(within(local).getByRole("button", { name: "Upload selection" }));
