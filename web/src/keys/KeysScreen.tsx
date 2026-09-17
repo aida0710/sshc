@@ -3,7 +3,6 @@ import { credentialsApi, type CredentialsApi } from "../api/credentials";
 import { useCallback, useEffect, useState, type DragEvent } from "react";
 import {
   useAgentForm,
-  useGenerationForm,
   useOrganiser,
   usePassphraseForm,
   useRelocateForm,
@@ -20,25 +19,16 @@ import {
   StoredPassphrasePanel,
   TrashConfirmation,
 } from "./KeyForms";
-import { rowAction, rowDanger } from "./labels";
+import { AgentSection } from "./AgentSection";
+import { KeyTrashSection } from "./KeyTrashSection";
+import { KeyGenerationSection } from "./KeyGenerationSection";
 import { CopyButton } from "../ui/CopyButton";
 import { useTranslate } from "../i18n/context";
-import {
-  CheckboxField,
-  control,
-  hintText,
-  primaryAction,
-  sectionCard,
-  sectionHeading,
-  tableHeadCell,
-  tableHeadRow,
-} from "../ui/form";
-import { Button, Card, Row } from "../ui/surface";
+import { control, primaryAction, sectionHeading } from "../ui/form";
+import { Button, Card } from "../ui/surface";
 import { MetricCard, MetricGrid, PageHeader } from "../ui/page";
 import { Icon } from "../ui/icons";
 import { PanelState } from "../ui/PanelState";
-import { ConfirmDialog } from "../ui/ConfirmDialog";
-import { PasswordInput } from "../ui/PasswordField";
 import {
   keysApi,
   type KeyInventoryResponse,
@@ -55,13 +45,6 @@ import type {
 import { FolderPane } from "./FolderPane";
 import type { InspectorContent } from "../ui/Inspector";
 import { KeyInspector } from "./KeyInspector";
-import {
-  compareText,
-  nextSort,
-  ordered,
-  SortableTableHeader,
-  type SortDirection,
-} from "../ui/tableSort";
 import {
   folderRows,
   groupOfKeyPath,
@@ -89,8 +72,6 @@ type KeysScreenProps = {
 };
 
 type ScreenState = "loading" | "ready" | "error";
-type TrashSort = "files" | "age" | "status";
-type AgentSort = "algorithm" | "fingerprint" | "comment";
 
 function relocateStem(item: KeyItem): string {
   const base = item.relativePath.split("/").pop() ?? item.relativePath;
@@ -115,19 +96,6 @@ export function KeysScreen({
   const [inventory, setInventory] = useState<KeyInventoryResponse | null>(null);
   const [trash, setTrash] = useState<TrashListResponse | null>(null);
   const [variants, setVariants] = useState<KeyVariant[]>([]);
-  const {
-    algorithm,
-    setAlgorithm,
-    fileName,
-    setFileName,
-    comment,
-    setComment,
-    passphrase,
-    setPassphrase,
-    unencrypted,
-    setUnencrypted,
-  } = useGenerationForm();
-  const [terminalCommand, setTerminalCommand] = useState<string[] | null>(null);
   const [revealing, setRevealing] = useState<KeyItem | null>(null);
   const storedPhrases = useStoredPhrases();
   const {
@@ -176,26 +144,9 @@ export function KeysScreen({
     setNewName,
     newGroup,
     setNewGroup,
-    createGroup,
-    setCreateGroup,
     close: closeRelocateForm,
   } = relocateForm;
-  const [pendingPurge, setPendingPurge] = useState("");
   const [pendingTrash, setPendingTrash] = useState<KeyItem | null>(null);
-  const [trashSort, setTrashSort] = useState<{
-    key: TrashSort;
-    direction: SortDirection;
-  }>({
-    key: "files",
-    direction: "ascending",
-  });
-  const [agentSort, setAgentSort] = useState<{
-    key: AgentSort;
-    direction: SortDirection;
-  }>({
-    key: "algorithm",
-    direction: "ascending",
-  });
   const [failure, setFailure] = useState("");
   const {
     folder,
@@ -217,10 +168,6 @@ export function KeysScreen({
     selectedKey,
     setSelectedKey,
   } = useOrganiser();
-  const [generated, setGenerated] = useState<{
-    private: GeneratedPrivateKeyHandoff;
-    public: GeneratedPublicKeyHandoff;
-  } | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -242,8 +189,6 @@ export function KeysScreen({
     void refresh();
   }, [refresh]);
 
-  const selected = variants.find((variant) => variant.algorithm === algorithm);
-  const inProcess = selected === undefined || selected.inProcess;
   const now = Date.now();
 
   function closeAllForms() {
@@ -321,46 +266,6 @@ export function KeysScreen({
       body: <KeyInspector item={item} now={now} />,
     });
   }, [selectedKey, inventory, onInspector, t, now]);
-
-  async function submitGeneration() {
-    setFailure("");
-    setTerminalCommand(null);
-    setGenerated(null);
-    try {
-      if (selected !== undefined && !selected.inProcess) {
-        const response = await api.hardwareCommand({
-          algorithm,
-          fileName,
-          group: createGroup,
-          comment,
-        });
-        setTerminalCommand(response.command);
-        return;
-      }
-      const response = await api.generate({
-        algorithm,
-        bits: selected?.bits ?? 0,
-        fileName,
-        group: createGroup,
-        comment,
-        passphrase,
-        unencrypted,
-      });
-      setGenerated({
-        private: {
-          privateKeyId: response.id,
-          privateRelativePath: response.relativePath,
-        },
-        public: { publicRelativePath: response.publicRelativePath },
-      });
-      setPassphrase("");
-      setFileName("");
-      await refresh();
-    } catch {
-      setPassphrase("");
-      setFailure(t("keys.createFailed"));
-    }
-  }
 
   async function submitPassphrase(item: KeyItem) {
     setFailure("");
@@ -593,14 +498,15 @@ export function KeysScreen({
     }
   }
 
-  async function purge(entryId: string) {
+  async function purge(entryId: string): Promise<boolean> {
     setFailure("");
     try {
       await api.purge(entryId);
-      setPendingPurge("");
       await refresh();
+      return true;
     } catch {
       setFailure(t("keys.purgeFailed"));
+      return false;
     }
   }
 
@@ -825,147 +731,11 @@ export function KeysScreen({
             </div>
           </div>
 
-          <details className="border-t border-line bg-surface-subtle p-4">
-            <summary className="cursor-pointer text-sm font-medium text-ink">
-              {t("keys.trashSummary", { count: trash.entries.length })}
-            </summary>
-            <div className="mt-3 flex flex-col gap-2 border-t border-line pt-3">
-              <h3 className={sectionHeading}>{t("keys.trashHeading")}</h3>
-              <p className="text-sm text-ink-muted">{t("keys.trashNote")}</p>
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[40rem] text-left text-sm">
-                  <caption className="sr-only">
-                    {t("keys.trashCaption")}
-                  </caption>
-                  <thead>
-                    <tr className={tableHeadRow}>
-                      <SortableTableHeader
-                        column="files"
-                        activeColumn={trashSort.key}
-                        direction={trashSort.direction}
-                        onSort={(key) =>
-                          setTrashSort((current) =>
-                            nextSort(current.key, current.direction, key),
-                          )
-                        }
-                        className={`${tableHeadCell} whitespace-nowrap`}
-                      >
-                        {t("keys.colFiles")}
-                      </SortableTableHeader>
-                      <SortableTableHeader
-                        column="age"
-                        activeColumn={trashSort.key}
-                        direction={trashSort.direction}
-                        onSort={(key) =>
-                          setTrashSort((current) =>
-                            nextSort(current.key, current.direction, key),
-                          )
-                        }
-                        className={`${tableHeadCell} whitespace-nowrap`}
-                      >
-                        {t("keys.colAge")}
-                      </SortableTableHeader>
-                      <SortableTableHeader
-                        column="status"
-                        activeColumn={trashSort.key}
-                        direction={trashSort.direction}
-                        onSort={(key) =>
-                          setTrashSort((current) =>
-                            nextSort(current.key, current.direction, key),
-                          )
-                        }
-                        className={`${tableHeadCell} whitespace-nowrap`}
-                      >
-                        {t("keys.colStatus")}
-                      </SortableTableHeader>
-                      <th
-                        scope="col"
-                        className={`${tableHeadCell} whitespace-nowrap`}
-                      >
-                        {t("keys.colActions")}
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {ordered(
-                      trash.entries,
-                      (left, right) => {
-                        if (trashSort.key === "age")
-                          return left.ageDays - right.ageDays;
-                        if (trashSort.key === "status")
-                          return compareText(
-                            left.restorable
-                              ? t("keys.restorable")
-                              : left.blockers.join(", "),
-                            right.restorable
-                              ? t("keys.restorable")
-                              : right.blockers.join(", "),
-                          );
-                        return compareText(
-                          left.files
-                            .map((file) => file.originalRelativePath)
-                            .join(", "),
-                          right.files
-                            .map((file) => file.originalRelativePath)
-                            .join(", "),
-                        );
-                      },
-                      trashSort.direction,
-                    ).map((entry) => (
-                      <tr
-                        key={entry.id}
-                        className="border-b border-line align-top"
-                      >
-                        <td className="py-2 pr-3 font-mono text-xs">
-                          {entry.files
-                            .map((file) => file.originalRelativePath)
-                            .join(", ")}
-                        </td>
-                        <td className="py-2 pr-3">
-                          {entry.stale
-                            ? t("keys.ageStale", {
-                                days: entry.ageDays,
-                                retention: trash.retentionDays,
-                              })
-                            : t("keys.age", { days: entry.ageDays })}
-                        </td>
-                        <td className="py-2 pr-3">
-                          {entry.restorable
-                            ? t("keys.restorable")
-                            : entry.blockers.join(", ")}
-                        </td>
-                        <td className="py-2">
-                          <div className="flex flex-wrap items-center gap-1">
-                            <button
-                              type="button"
-                              className={rowAction}
-                              onClick={() => void restore(entry.id)}
-                            >
-                              {t("keys.restore")}
-                            </button>
-                            <button
-                              type="button"
-                              className={rowDanger}
-                              onClick={() => setPendingPurge(entry.id)}
-                            >
-                              {t("keys.purge")}
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                    {trash.entries.length === 0 && (
-                      <tr>
-                        <td colSpan={4} className="py-3 text-sm text-ink-muted">
-                          {t("keys.trashEmpty")}
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </details>
+          <KeyTrashSection
+            trash={trash}
+            onRestore={restore}
+            onPurge={purge}
+          />
         </Card>
       </section>
 
@@ -1038,122 +808,7 @@ export function KeysScreen({
         </section>
       )}
 
-      <section aria-labelledby="agent-heading" className="flex flex-col gap-2">
-        <h3 id="agent-heading" className={sectionHeading}>
-          {t("keys.agentHeading")}
-        </h3>
-        {inventory.agentAvailable ? (
-          inventory.agentIdentities.length === 0 ? (
-            <p className="text-sm text-ink-muted">{t("keys.agentEmpty")}</p>
-          ) : (
-            <table className="w-full min-w-[32rem] text-left text-sm">
-              <caption className="sr-only">
-                {t("keys.agentIdentitiesCaption")}
-              </caption>
-              <thead>
-                <tr className={tableHeadRow}>
-                  <SortableTableHeader
-                    column="algorithm"
-                    activeColumn={agentSort.key}
-                    direction={agentSort.direction}
-                    onSort={(key) =>
-                      setAgentSort((current) =>
-                        nextSort(current.key, current.direction, key),
-                      )
-                    }
-                    className={`${tableHeadCell} whitespace-nowrap`}
-                  >
-                    {t("keys.colAlgorithm")}
-                  </SortableTableHeader>
-                  <SortableTableHeader
-                    column="fingerprint"
-                    activeColumn={agentSort.key}
-                    direction={agentSort.direction}
-                    onSort={(key) =>
-                      setAgentSort((current) =>
-                        nextSort(current.key, current.direction, key),
-                      )
-                    }
-                    className={`${tableHeadCell} whitespace-nowrap`}
-                  >
-                    {t("keys.colFingerprint")}
-                  </SortableTableHeader>
-                  <SortableTableHeader
-                    column="comment"
-                    activeColumn={agentSort.key}
-                    direction={agentSort.direction}
-                    onSort={(key) =>
-                      setAgentSort((current) =>
-                        nextSort(current.key, current.direction, key),
-                      )
-                    }
-                    className={`${tableHeadCell} whitespace-nowrap`}
-                  >
-                    {t("keys.colComment")}
-                  </SortableTableHeader>
-                </tr>
-              </thead>
-              <tbody>
-                {ordered(
-                  inventory.agentIdentities,
-                  (left, right) => {
-                    if (agentSort.key === "fingerprint")
-                      return compareText(left.fingerprint, right.fingerprint);
-                    if (agentSort.key === "comment")
-                      return compareText(left.comment, right.comment);
-                    return compareText(
-                      `${left.algorithm}\u0000${left.bits}`,
-                      `${right.algorithm}\u0000${right.bits}`,
-                    );
-                  },
-                  agentSort.direction,
-                ).map((identity) => (
-                  <tr
-                    key={identity.fingerprint}
-                    className="border-b border-line"
-                  >
-                    <td className="py-2 pr-3">
-                      {identity.bits > 0
-                        ? `${identity.algorithm} · ${identity.bits}`
-                        : identity.algorithm}
-                    </td>
-                    <td className="py-2 pr-3 font-mono text-xs break-all">
-                      {identity.fingerprint}
-                    </td>
-                    <td className="py-2">{identity.comment}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )
-        ) : (
-          <p className="text-sm text-notice-ink">
-            {t("keys.agentUnavailable")}
-          </p>
-        )}
-        {inventory.agentDelegations.length > 0 && (
-          <>
-            <p className="text-sm text-ink-muted">
-              {t("keys.agentDelegationsNote")}
-            </p>
-            <ul className="text-sm text-ink-muted">
-              {inventory.agentDelegations.map((reference) => (
-                <li key={`${reference.configPath}:${reference.line}`}>
-                  {t("keys.reference", {
-                    directive: reference.directive,
-                    value: reference.value,
-                    path: reference.configPath,
-                    line: reference.line,
-                  })}
-                  {reference.hostPatterns.length > 0
-                    ? ` (${reference.hostPatterns.join(" ")})`
-                    : ""}
-                </li>
-              ))}
-            </ul>
-          </>
-        )}
-      </section>
+      <AgentSection inventory={inventory} />
 
       <AgentForm
         form={agentForm}
@@ -1175,139 +830,15 @@ export function KeysScreen({
         onSubmit={(item) => void submitPassphrase(item)}
       />
 
-      <form
-        aria-labelledby="create-key-heading"
-        className="flex flex-col gap-3"
-        onSubmit={(event) => {
-          event.preventDefault();
-          void submitGeneration();
-        }}
-      >
-        <h3 id="create-key-heading" className={sectionHeading}>
-          {t("keys.createHeading")}
-        </h3>
-        <Card>
-          <Row label={t("keys.algorithm")} stackOnNarrow>
-            <select
-              className={`${control} min-h-10 sm:min-h-0`}
-              value={algorithm}
-              onChange={(event) => setAlgorithm(event.target.value)}
-            >
-              {variants.map((variant) => (
-                <option
-                  key={`${variant.algorithm}-${variant.bits}`}
-                  value={variant.algorithm}
-                >
-                  {variant.label}
-                </option>
-              ))}
-            </select>
-          </Row>
-          <Row label={t("keys.createGroup")} stackOnNarrow>
-            <select
-              className={`${control} min-h-10 sm:min-h-0`}
-              value={createGroup}
-              onChange={(event) => setCreateGroup(event.target.value)}
-            >
-              <option value="">{t("keys.groupNone")}</option>
-              {groups.map((group) => (
-                <option key={group} value={group}>
-                  {group}
-                </option>
-              ))}
-            </select>
-          </Row>
-          <Row label={t("keys.fileName")} stackOnNarrow>
-            <input
-              className={`${control} min-h-10 sm:min-h-0`}
-              value={fileName}
-              onChange={(event) => setFileName(event.target.value)}
-            />
-          </Row>
-          <Row label={t("keys.comment")} stackOnNarrow>
-            <input
-              className={`${control} min-h-10 sm:min-h-0`}
-              value={comment}
-              onChange={(event) => setComment(event.target.value)}
-            />
-          </Row>
-          {inProcess && (
-            <Row label={t("keys.passphrase")} stackOnNarrow interactiveChildren>
-              <PasswordInput
-                label={t("keys.passphrase")}
-                className={`${control} min-h-10 sm:min-h-0`}
-                value={passphrase}
-                onChange={setPassphrase}
-                disabled={unencrypted}
-              />
-            </Row>
-          )}
-        </Card>
-        {inProcess && (
-          <CheckboxField
-            label={t("keys.createUnencrypted")}
-            checked={unencrypted}
-            onChange={(checked) => {
-              setUnencrypted(checked);
-              setPassphrase("");
-            }}
-          />
-        )}
-        <Button kind="primary" type="submit" className="self-start">
-          {inProcess ? t("keys.createSubmit") : t("keys.showTerminalCommand")}
-        </Button>
-      </form>
-
-      {generated === null ? null : (
-        <section aria-live="polite" className={sectionCard}>
-          <h3 className={sectionHeading}>{t("keys.generatedHeading")}</h3>
-          <p className={hintText}>
-            {t("keys.generatedNext", {
-              path: generated.private.privateRelativePath,
-            })}
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              kind="primary"
-              onClick={() => onAssignGeneratedKey?.(generated.private)}
-            >
-              {t("keys.assignGenerated")}
-            </Button>
-            <Button onClick={() => onInstallGeneratedKey?.(generated.public)}>
-              {t("keys.installGenerated")}
-            </Button>
-          </div>
-        </section>
-      )}
-
-      {terminalCommand !== null && (
-        <div>
-          <p className="text-sm text-ink-muted">{t("keys.hardwareNote")}</p>
-          <pre
-            aria-label={t("copy.terminalCommand")}
-            className="overflow-x-auto rounded-md bg-canvas p-4 text-xs"
-          >
-            {terminalCommand.join(" ")}
-          </pre>
-          <div className="mt-2">
-            <CopyButton
-              value={terminalCommand.join(" ")}
-              label="copy.terminalCommand"
-            />
-          </div>
-        </div>
-      )}
-      {pendingPurge === "" ? null : (
-        <ConfirmDialog
-          id="key-purge-heading"
-          heading={t("keys.purge")}
-          body={<p className="text-sm text-danger">{t("keys.purgeWarning")}</p>}
-          confirmLabel={t("keys.confirmPurge")}
-          cancelLabel={t("keys.cancel")}
-          onConfirm={() => void purge(pendingPurge)}
-          onCancel={() => setPendingPurge("")}
-        />
-      )}
+      <KeyGenerationSection
+        api={api}
+        variants={variants}
+        groups={groups}
+        onGenerated={refresh}
+        onFailure={setFailure}
+        onAssignGeneratedKey={onAssignGeneratedKey}
+        onInstallGeneratedKey={onInstallGeneratedKey}
+      />
     </section>
   );
 }
