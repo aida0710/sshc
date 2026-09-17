@@ -48,6 +48,24 @@ func TestTransferTooLargeUsesAFileTransferProblemCode(t *testing.T) {
 	}
 }
 
+func TestQueuedRemoteDeleteRequiresActionToken(t *testing.T) {
+	manager := sshcSFTP.NewTransferManager(nil)
+	engine := echo.New()
+	registerSFTPRoutes(engine, SFTPHandlers{Transfers: manager})
+	body := []byte(`{"id":"delete_http_01","batchId":"delete_batch_01","batchName":"old","batchKind":"folder","alias":"edge","sourceAlias":"edge","sourcePath":"/old","operation":"delete","overwrite":false,"direction":"remote","kind":"folder","name":"old","remotePath":"/old","totalBytes":-1,"lastModified":0}`)
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/sftp/transfers", bytes.NewReader(body))
+	request.Header.Set("Content-Type", "application/json")
+	engine.ServeHTTP(response, request)
+	if response.Code != http.StatusForbidden || !bytes.Contains(response.Body.Bytes(), []byte(`"code":"action_token_required"`)) {
+		t.Fatalf("delete without action token = %d: %s", response.Code, response.Body.String())
+	}
+	jobs, err := manager.ListJobs()
+	if err != nil || len(jobs) != 0 {
+		t.Fatalf("delete without token was queued: %+v, %v", jobs, err)
+	}
+}
+
 func TestTransferManagerHTTPContractAndSharedLimit(t *testing.T) {
 	manager := sshcSFTP.NewTransferManager(nil)
 	manager.ConfigureJobs(1, nil)

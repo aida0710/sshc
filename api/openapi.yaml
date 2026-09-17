@@ -4562,7 +4562,7 @@ components:
         alias: { type: string, minLength: 1, maxLength: 255 }
         sourceAlias: { type: string, maxLength: 255 }
         sourcePath: { type: string }
-        operation: { type: string, enum: ["", copy, move] }
+        operation: { type: string, enum: ["", copy, move, delete] }
         direction: { type: string, enum: [upload, download, remote] }
         kind: { type: string, enum: [file, folder] }
         name: { type: string, minLength: 1, maxLength: 1024 }
@@ -4669,7 +4669,7 @@ components:
         alias: { type: string, minLength: 1, maxLength: 255 }
         sourceAlias: { type: string, maxLength: 255 }
         sourcePath: { type: string }
-        operation: { type: string, enum: ["", copy, move] }
+        operation: { type: string, enum: ["", copy, move, delete] }
         overwrite: { type: boolean }
         direction: { type: string, enum: [upload, download, remote] }
         kind: { type: string, enum: [file, folder] }

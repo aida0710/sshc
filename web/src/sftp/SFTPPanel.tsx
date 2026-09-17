@@ -182,6 +182,7 @@ export function SFTPPanel({
   onDirtyChange,
   onNavigateLocation,
   onOpenTerminal,
+  onQueueOpen,
 }: {
   aliases: string[];
   hosts?: HostEntry[];
@@ -198,6 +199,7 @@ export function SFTPPanel({
   onDirtyChange?: ((path: string | null) => void) | undefined;
   onNavigateLocation?: ((url: string) => void) | undefined;
   onOpenTerminal?: ((alias: string, path: string) => void | Promise<void>) | undefined;
+  onQueueOpen?: () => void;
 }) {
   const t = useTranslate();
   const [alias, setAlias] = useState("");
@@ -280,6 +282,8 @@ export function SFTPPanel({
   const transferJobs = useSyncExternalStore(sftpTransferManager.subscribe, sftpTransferManager.getSnapshot);
   useSyncExternalStore(sftpPlaces.subscribe, sftpPlaces.getSnapshot);
   const refreshedUploads = useRef(new Set<string>());
+  const refreshedDeletes = useRef(new Set<string>());
+  const [openQueueRequest, setOpenQueueRequest] = useState(0);
   const dirty = opened !== null && contents !== opened.contents;
   const listedEntries = search === null ? entries : search.entries;
   const sortedEntries = ordered(
@@ -507,6 +511,17 @@ export function SFTPPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [transferJobs, alias, path, connected]);
 
+  useEffect(() => {
+    if (!connected || dirty) return;
+    const completed = transferJobs.filter((job) => job.direction === "remote" && job.operation === "delete" && job.status === "completed" && job.alias === alias &&
+      (search !== null ? search.root === "/" || job.remotePath === search.root || job.remotePath.startsWith(`${search.root}/`) : parentOf(job.remotePath) === path) &&
+      !refreshedDeletes.current.has(job.id));
+    if (completed.length === 0) return;
+    for (const job of completed) refreshedDeletes.current.add(job.id);
+    void refreshAfterChange(path, alias);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [transferJobs, alias, path, connected, dirty, search]);
+
   async function openText(entry: RemoteEntry, targetAlias = alias) {
     if (dirty) {
       setProblem(t("sftp.unsavedBlocked"));
@@ -615,26 +630,30 @@ export function SFTPPanel({
 
   async function remove() {
     if (deleting === null) return;
-    const generation = loadGeneration.current;
-    const targetAlias = alias;
-    const targetPath = path;
+    const existingJobIds = new Set(sftpTransferManager.getSnapshot().map((job) => job.id));
     setBusy(true);
-    const failures: unknown[] = [];
-    for (const entry of deleting) {
-      try {
-        await sftpApi.remove(targetAlias, entry.path);
-      } catch (error) {
-        failures.push(error);
+    setProblem("");
+    try {
+      await sftpTransferManager.addRemoteTransfers(deleting.map((entry) => ({
+        sourceAlias: alias, sourcePath: entry.path,
+        targetAlias: alias, targetPath: entry.path,
+        kind: entry.type === "directory" ? "folder" : "file",
+        name: entry.name, totalBytes: -1,
+      })), "delete");
+      setDeleting(null);
+      setSelectedPaths(new Set());
+      setOpenQueueRequest((current) => current + 1);
+      onQueueOpen?.();
+    } catch (error) {
+      if (sftpTransferManager.getSnapshot().some((job) => !existingJobIds.has(job.id) && job.operation === "delete")) {
+        setDeleting(null);
+        setSelectedPaths(new Set());
+        setOpenQueueRequest((current) => current + 1);
+        onQueueOpen?.();
       }
-    }
-    if (generation !== loadGeneration.current) return;
-    setDeleting(null);
-    await refreshAfterChange(targetPath, targetAlias);
-    if (failures.length > 0) {
-      const first = failures[0];
-      setProblem(deleting.length === 1
-        ? failureCode(first) || (first instanceof Error ? first.message : "delete_failed")
-        : t("sftp.deleteFailedCount", { count: failures.length }));
+      setProblem(failureCode(error) || (error instanceof Error ? error.message : "delete_failed"));
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -823,6 +842,11 @@ export function SFTPPanel({
   function refreshAfterChange(targetPath: string, targetAlias: string): Promise<unknown> {
     if (search !== null) return runSearch(search.query, search.root);
     return load(targetPath, targetAlias);
+  }
+
+  function refreshCurrentDirectory() {
+    if (busy || dirty || !connected) return;
+    void (search !== null ? runSearch(search.query, search.root) : load(path, alias, true, false));
   }
 
   // The offer stands until the next thing happens. A timer would take it away
@@ -1310,6 +1334,7 @@ export function SFTPPanel({
             </button>
           )}
           {pathEditing ? <button type="button" aria-label={t("sftp.cancel")} onClick={() => { setPathDraft(path); setPathEditing(false); }} className="flex size-11 shrink-0 items-center justify-center rounded text-ink-muted"><Icon name="close" className="size-4" /></button> : <>
+            <button type="button" aria-label={t("sftp.refreshDirectory")} disabled={busy || dirty || !connected} onClick={refreshCurrentDirectory} className="flex size-11 shrink-0 items-center justify-center rounded text-ink-muted active:bg-select-fill disabled:text-ink-faint"><Icon name="sync" className="size-4" /></button>
             <button type="button" aria-label={t("sftp.mobile.search")} aria-expanded={mobileSearchOpen} disabled={busy || !connected} onClick={() => setMobileSearchOpen((value) => !value)} className={`flex size-11 shrink-0 items-center justify-center rounded active:bg-select-fill ${mobileSearchOpen || filter !== "" ? "text-accent" : "text-ink-muted"}`}><Icon name="search" className="size-4" /></button>
             <button type="button" aria-label={t("sftp.mobile.actions")} aria-haspopup="dialog" aria-expanded={menu?.kind === "folder"} onClick={(event) => toggleMenu("folder", event.currentTarget)} className="flex size-11 shrink-0 items-center justify-center rounded text-ink-muted active:bg-select-fill"><Icon name="moreHorizontal" className="size-4" /></button>
           </>}
@@ -1343,6 +1368,7 @@ export function SFTPPanel({
             /
           </button>
         </div>
+        <button type="button" aria-label={t("sftp.refreshDirectory")} title={t("sftp.refreshDirectory")} disabled={busy || dirty || !connected} onClick={refreshCurrentDirectory} className="flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover hover:text-ink disabled:text-ink-faint md:size-8"><Icon name="sync" className="size-4" /></button>
         {pathEditing ? (
           <>
             <input
@@ -1825,7 +1851,7 @@ export function SFTPPanel({
             </table>
             )}
           </div>
-          {showTransfers ? <TransferManagerList /> : null}
+          {showTransfers ? <TransferManagerList openRequest={openQueueRequest} /> : null}
         </div>
 
       </div>
@@ -1921,9 +1947,12 @@ export function SFTPPanel({
         <ConfirmDialog
           id={`${headingId}-delete`}
           heading={deleting.length === 1 ? t("sftp.deleteHeading") : t("sftp.deleteHeadingCount", { count: deleting.length })}
-          body={<ul className="max-h-48 space-y-1 overflow-auto text-sm text-ink-muted">
-            {deleting.map((entry) => <li key={entry.path} className="break-all font-mono">{entry.path}</li>)}
-          </ul>}
+          body={<div className="space-y-2 text-sm text-ink-muted">
+            {deleting.some((entry) => entry.type === "directory") ? <p>{t("sftp.deleteContentsWarning")}</p> : null}
+            <ul className="max-h-48 space-y-1 overflow-auto">
+              {deleting.map((entry) => <li key={entry.path} className="break-all font-mono">{entry.path}</li>)}
+            </ul>
+          </div>}
           confirmLabel={t("sftp.delete")}
           cancelLabel={t("sftp.cancel")}
           returnFocusRef={activeRow}

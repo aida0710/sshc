@@ -704,11 +704,15 @@ func (m *TransferManager) CreateJob(input CreateTransferJob) (TransferJob, error
 		if err := validateAlias(input.SourceAlias); err != nil {
 			return TransferJob{}, err
 		}
-		if input.Operation != RemoteCopy && input.Operation != RemoteMove {
+		if input.Operation != RemoteCopy && input.Operation != RemoteMove && input.Operation != RemoteDelete {
 			return TransferJob{}, ErrInvalidTransfer
 		}
-		if _, err := cleanPublicPath(input.SourcePath, false); err != nil {
+		source, err := cleanPublicPath(input.SourcePath, false)
+		if err != nil {
 			return TransferJob{}, err
+		}
+		if input.Operation == RemoteDelete && (input.SourceAlias != input.Alias || source != input.SourcePath || input.SourcePath != input.RemotePath || input.Overwrite) {
+			return TransferJob{}, ErrInvalidTransfer
 		}
 	} else if input.SourceAlias != "" || input.SourcePath != "" || input.Operation != "" {
 		return TransferJob{}, ErrInvalidTransfer
