@@ -30,15 +30,15 @@ sshcのSFTPは、安全なアップロード／ダウンロード、フォルダ
 | WinSCP機能 | 状態 | sshcの現状 | 実装方針 |
 |---|---|---|---|
 | Explorer型の単一remote panel | 対応 | SFTP画面が相当 | 維持 |
-| Commander型のlocal／remote 2 panel | 部分対応 | 接続先メニューに固定表示した「ローカル」で、左右どちらのペインにもsshcエンジン側のファイルを表示する。初期位置はエンジンユーザーのホーム。上階層を含めOS権限の範囲で移動でき、file／directoryをengine queue経由で直接転送する。ブラウザのフォルダ権限は不要 | ローカル／リモートの同期・比較は未対応 |
+| Commander型のlocal／remote 2 panel | 部分対応 | 接続先メニューに固定表示した「ローカル」で、左右どちらのペインにもsshcエンジン側のファイルを表示する。ペインはリモートと同じ`SFTPPanel`で、`SFTPSource`の`can`（connect／edit／createEntries／rename／chmod／delete／search／details／browserUpload／download／dragOut／terminal）に応じて操作を出し分ける。ツールバー、絞り込み、名前・更新日時・サイズ・種別・権限の列、sort、全選択、Shift／Ctrl範囲選択、キーボード操作、右クリック／長押しメニュー、狭幅時の2行リストを共有し、行をリモートへドラッグするとput、リモートの行をローカルへ落とすとgetになる。初期位置はエンジンユーザーのホーム。上階層を含めOS権限の範囲で移動でき、file／directoryをengine queue経由で直接転送する。ブラウザのフォルダ権限は不要 | ローカル／リモートの同期・比較は未対応 |
 | remote／remote 2 panel | 対応 | desktopで2つのhost／directoryを並べる。左右が独立したtab列を持ち、表示中のtab間でfile／directoryをDrag & Dropしてcopy／moveできる | 維持 |
 | `..`による親directory移動 | 対応 | リモート・ローカルとも一覧先頭の`..`行で移動する。ローカルもOSルートまで移動でき、ルートでは`..`を表示しない | 維持 |
 | path breadcrumb／直接入力 | 部分対応 | リモート・ローカルとも階層をクリックでき、パスバーの空白クリックまたは編集ボタンで絶対pathを直接入力できる。ローカルは`~/`から始まるpathも受け付ける。現在のpathはコピーボタンで取得できる | 維持 |
 | Back／Forward履歴 | 対応 | リモート・ローカルともhostを切り替えるまでpath履歴を保持する。ローカルは別tab表示中も履歴と一覧を保持する | 維持 |
 | Home directoryへ移動 | 対応 | serverのworking directoryを再解決して移動 | 維持 |
 | Root directoryへ移動 | 対応 | navigation buttonまたは`/`の直接入力 | 維持 |
-| directory bookmark | 対応 | 場所menuでhost単位のbookmarkを追加／解除し、選ぶと移動する | 共通bookmarkは必要になった時点で検討 |
-| 最近開いたdirectory | 対応 | 場所menuにhost単位で直近10件を新しい順に表示する | 維持 |
+| directory bookmark | 未対応 | 2026-09-17に場所menuごと削除。Back／Forward履歴とpath直接入力で代替する | 持たない |
+| 最近開いたdirectory | 未対応 | bookmarkと同時に削除。tabごとのBack／Forward履歴だけを持つ | 持たない |
 | directory tree | 未対応 | 一覧だけ | desktopの任意表示として検討 |
 | remote検索 | 対応 | 絞り込み欄のEnterまたは虫眼鏡で、開いているディレクトリ配下を再帰検索する。symlinkは辿らず、200件・20,000項目・深さ32で打ち切って`truncated`を返す | 更新日時やサイズでの条件は未対応 |
 | synchronized browsing | 未対応 | local panelはあるが連動操作は未実装 | 2 panel導入後 |
@@ -260,7 +260,7 @@ sshcのSFTPは、安全なアップロード／ダウンロード、フォルダ
 - 空fileとsymbolic linkの作成
 - propertiesの複数変更、owner/group/link target
 - symbolic link作成／編集、directory picker
-- remote search、bookmark、context menu、preview
+- remote search、context menu、preview
 - timestamp／permission／mask／speed limitを含むtransfer option
 
 ### P2 — Commander相当の転送workflow

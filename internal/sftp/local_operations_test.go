@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -29,6 +30,17 @@ func TestLocalListingStartsAtEngineHomeAndCanNavigateAboveIt(t *testing.T) {
 	}
 	if listing.Path != filepath.ToSlash(home) || listing.Home != filepath.ToSlash(home) || len(listing.Entries) != 1 || listing.Entries[0].Name != "note.txt" {
 		t.Fatalf("listing = %+v", listing)
+	}
+	// The local list shows the same columns as a remote one, so every entry
+	// carries the metadata the shared table renders.
+	note := listing.Entries[0]
+	info, err := os.Stat(filepath.Join(home, "note.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if note.Type != sftp.EntryFile || note.Size != 5 || note.Mode != info.Mode() || !note.ModifiedAt.Equal(info.ModTime()) ||
+		note.ModifiedAt.Location() != time.UTC || !strings.HasPrefix(note.Revision, "meta-sha256:") {
+		t.Fatalf("note entry = %+v (stat %v %v)", note, info.Mode(), info.ModTime())
 	}
 	above, err := sftp.ListLocal(parent)
 	if err != nil {
