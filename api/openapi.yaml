@@ -4464,15 +4464,6 @@ components:
       properties:
         path: { type: string }
         entries: { type: array, items: { $ref: "#/components/schemas/SFTPEntry" } }
-    SFTPLocalEntry:
-      type: object
-      additionalProperties: false
-      required: [name, path, type, size]
-      properties:
-        name: { type: string }
-        path: { type: string }
-        type: { type: string, enum: [file, directory] }
-        size: { type: integer, format: int64, minimum: 0 }
     SFTPLocalListing:
       type: object
       additionalProperties: false
@@ -4480,7 +4471,7 @@ components:
       properties:
         path: { type: string }
         home: { type: string }
-        entries: { type: array, items: { $ref: "#/components/schemas/SFTPLocalEntry" } }
+        entries: { type: array, items: { $ref: "#/components/schemas/SFTPEntry" } }
     SFTPTextFile:
       type: object
       additionalProperties: false

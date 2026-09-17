@@ -120,11 +120,9 @@ func (h SFTPHandlers) ListLocal(c *echo.Context) error {
 	if err != nil {
 		return sftpProblem(c, err)
 	}
-	entries := make([]api.SFTPLocalEntry, 0, len(listing.Entries))
+	entries := make([]api.SFTPEntry, 0, len(listing.Entries))
 	for _, entry := range listing.Entries {
-		entries = append(entries, api.SFTPLocalEntry{
-			Name: entry.Name, Path: entry.Path, Type: api.SFTPLocalEntryType(entry.Type), Size: entry.Size,
-		})
+		entries = append(entries, describeSFTPAPIEntry(entry))
 	}
 	return c.JSON(http.StatusOK, api.SFTPLocalListing{Path: listing.Path, Home: listing.Home, Entries: entries})
 }

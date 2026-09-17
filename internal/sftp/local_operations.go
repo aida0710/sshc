@@ -13,17 +13,13 @@ import (
 	"strings"
 )
 
-// Local paths name the engine filesystem, never the browser filesystem.
-type LocalEntry struct {
-	Name string    `json:"name"`
-	Path string    `json:"path"`
-	Type EntryType `json:"type"`
-	Size int64     `json:"size"`
-}
+// Local paths name the engine filesystem, never the browser filesystem. The
+// entries share Entry with remote listings so that one file list can show
+// either side with the same columns.
 type LocalListing struct {
-	Path    string       `json:"path"`
-	Home    string       `json:"home"`
-	Entries []LocalEntry `json:"entries"`
+	Path    string  `json:"path"`
+	Home    string  `json:"home"`
+	Entries []Entry `json:"entries"`
 }
 
 func localRelative(value string) (string, error) {
@@ -122,7 +118,7 @@ func ListLocal(value string) (LocalListing, error) {
 	if err != nil {
 		return LocalListing{}, err
 	}
-	entries := make([]LocalEntry, 0, len(infos))
+	entries := make([]Entry, 0, len(infos))
 	for _, item := range infos {
 		name := item.Name()
 		if item.Mode()&fs.ModeSymlink != 0 {
@@ -135,11 +131,10 @@ func ListLocal(value string) (LocalListing, error) {
 		if !item.Mode().IsRegular() && !item.IsDir() {
 			continue
 		}
-		kind := EntryFile
-		if item.IsDir() {
-			kind = EntryDirectory
-		}
-		entries = append(entries, LocalEntry{Name: name, Path: localPublic(path.Join(relative, name), root), Type: kind, Size: item.Size()})
+		entry := entryFrom("", item)
+		entry.Name = name
+		entry.Path = localPublic(path.Join(relative, name), root)
+		entries = append(entries, entry)
 	}
 	sort.Slice(entries, func(i, j int) bool {
 		if entries[i].Type != entries[j].Type {
