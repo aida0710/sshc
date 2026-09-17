@@ -30,11 +30,11 @@ sshcのSFTPは、安全なアップロード／ダウンロード、フォルダ
 | WinSCP機能 | 状態 | sshcの現状 | 実装方針 |
 |---|---|---|---|
 | Explorer型の単一remote panel | 対応 | SFTP画面が相当 | 維持 |
-| Commander型のlocal／remote 2 panel | 部分対応 | 右ペインにsshcエンジン側のファイルを表示する。初期位置はエンジンユーザーのホーム。上階層を含めOS権限の範囲で移動でき、file／directoryをengine queue経由で直接転送する。ブラウザのフォルダ権限は不要 | ローカル／リモートの同期・比較は未対応 |
+| Commander型のlocal／remote 2 panel | 部分対応 | 接続先メニューに固定表示した「ローカル」で、左右どちらのペインにもsshcエンジン側のファイルを表示する。初期位置はエンジンユーザーのホーム。上階層を含めOS権限の範囲で移動でき、file／directoryをengine queue経由で直接転送する。ブラウザのフォルダ権限は不要 | ローカル／リモートの同期・比較は未対応 |
 | remote／remote 2 panel | 対応 | desktopで2つのhost／directoryを並べる。左右が独立したtab列を持ち、表示中のtab間でfile／directoryをDrag & Dropしてcopy／moveできる | 維持 |
-| `..`による親directory移動 | 対応 | リモートは一覧先頭、ローカルはパスバーの上階層ボタンで移動する。ローカルもOSルートまで移動できる | 維持 |
-| path breadcrumb／直接入力 | 部分対応 | リモートは階層をクリックでき、編集操作で絶対pathを入力できる。ローカルは階層をクリックするほか、編集ボタンから`~/`または絶対pathを入力して移動できる | 維持 |
-| Back／Forward履歴 | 対応 | hostを切り替えるまでpath履歴を保持 | 維持 |
+| `..`による親directory移動 | 対応 | リモート・ローカルとも一覧先頭の`..`行で移動する。ローカルもOSルートまで移動でき、ルートでは`..`を表示しない | 維持 |
+| path breadcrumb／直接入力 | 部分対応 | リモート・ローカルとも階層をクリックでき、パスバーの空白クリックまたは編集ボタンで絶対pathを直接入力できる。ローカルは`~/`から始まるpathも受け付ける。現在のpathはコピーボタンで取得できる | 維持 |
+| Back／Forward履歴 | 対応 | リモート・ローカルともhostを切り替えるまでpath履歴を保持する。ローカルは別tab表示中も履歴と一覧を保持する | 維持 |
 | Home directoryへ移動 | 対応 | serverのworking directoryを再解決して移動 | 維持 |
 | Root directoryへ移動 | 対応 | navigation buttonまたは`/`の直接入力 | 維持 |
 | directory bookmark | 対応 | 場所menuでhost単位のbookmarkを追加／解除し、選ぶと移動する | 共通bookmarkは必要になった時点で検討 |
