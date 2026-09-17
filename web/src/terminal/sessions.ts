@@ -1,15 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { failureCode } from "../api/client";
-import {
-  type IntegrationsApi,
-  type OpenTerminalSessionRequest,
-  type TerminalSession,
-} from "../api/integrations";
+import type { OpenTerminalSessionRequest, TerminalSession, TerminalSessionsApi as SessionsApi } from "../api/terminalSessions";
 import type { Translate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 
 export type TerminalSessionsApi = Pick<
-  IntegrationsApi,
+  SessionsApi,
   "terminalSessions" | "openTerminalSession" | "reconnectTerminalSession" | "closeTerminalSession" | "renameTerminalSession"
 >;
 

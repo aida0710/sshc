@@ -1,4 +1,4 @@
-import type { PullResponse, SyncDirection } from "../api/integrations";
+import type { PullResponse, SyncDirection } from "../api/sync";
 import type { Translate } from "../i18n/context";
 import { CheckboxField, hintText, sectionHeading } from "../ui/form";
 import { Icon } from "../ui/icons";

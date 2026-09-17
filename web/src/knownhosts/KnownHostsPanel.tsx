@@ -1,13 +1,7 @@
 import { useEffect, useState } from "react";
 import { useTranslate } from "../i18n/context";
 import { failureCode } from "../api/client";
-import {
-  integrationsApi,
-  type IntegrationsApi,
-  type KnownHostCandidate,
-  type KnownHostEntry,
-  type KnownHostsResponse,
-} from "../api/integrations";
+import { knownHostsApi, type KnownHostCandidate, type KnownHostEntry, type KnownHostsApi, type KnownHostsResponse } from "../api/knownHosts";
 import {
   CheckboxField,
   Field,
@@ -27,11 +21,11 @@ import {
 } from "../ui/tableSort";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 
-type KnownHostsPanelProps = { api?: IntegrationsApi };
+type KnownHostsPanelProps = { api?: KnownHostsApi };
 type CandidateSort = "host" | "type" | "fingerprint" | "trust";
 type TrustedSort = Exclude<CandidateSort, "trust">;
 
-export function KnownHostsPanel({ api = integrationsApi }: KnownHostsPanelProps) {
+export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
   const t = useTranslate();
   const [query, setQuery] = useState("");
   const [listing, setListing] = useState<KnownHostsResponse | null>(null);

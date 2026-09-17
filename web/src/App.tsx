@@ -12,12 +12,9 @@ import {
   type MouseEvent,
 } from "react";
 import { type HealthResponse } from "./api/client";
-import {
-  integrationsApi,
-  type PasswordVaultStatus,
-  type TerminalAppearance,
-  type TerminalSettings,
-} from "./api/integrations";
+import { terminalSessionsApi, type TerminalSession } from "./api/terminalSessions";
+import { settingsApi, type TerminalAppearance, type TerminalSettings } from "./api/settings";
+import { vaultApi, type PasswordVaultStatus } from "./api/vault";
 import { resolveAppearance } from "./terminal/appearance";
 import { configApi, type FileNode, type HostEntry } from "./api/config";
 import type { SessionState } from "./session/bootstrap";
@@ -279,7 +276,7 @@ const navigationId = "primary-navigation";
 export function App({
   bootstrap,
   health,
-  vault = integrationsApi.passwordVault,
+  vault = vaultApi.passwordVault,
 }: AppProps) {
   const { t } = useLanguage();
   useAppViewport();
@@ -392,10 +389,10 @@ export function App({
     setDesktopNavigationWidth(nextWidth);
     rememberNavigationWidth(nextWidth);
   }
-  const consoles = useTerminalSessions(integrationsApi, t, state === "ready");
+  const consoles = useTerminalSessions(terminalSessionsApi, t, state === "ready");
   const closeNavigation = useCallback(() => setNavigationOpen(false), []);
   const terminalWorkspace = useTerminalWorkspaceController({
-    api: integrationsApi,
+    api: settingsApi,
     consoles,
     enabled: state === "ready",
     section,
@@ -534,7 +531,7 @@ export function App({
       detail: t("palette.lockVaultDetail"),
       search: "lock vault secure ロック 保管庫 施錠",
       run: () => {
-        void integrationsApi.lockVault().then((status) => {
+        void vaultApi.lockVault().then((status) => {
           if (status.unlocked) session.openVault(status);
           else session.lock();
         }).catch(() => undefined);
@@ -844,7 +841,7 @@ export function App({
                           const next = { ...terminalSettings };
                           if (enabled) next.osc52 = true;
                           else delete next.osc52;
-                          await integrationsApi.setTerminalSettings(next);
+                          await settingsApi.setTerminalSettings(next);
                           setTerminalSettings(next);
                           return;
                         }
@@ -1113,9 +1110,9 @@ function TerminalScreen({
   onLiveWorkspaceChange: (workspace: LiveWorkspaceSummary | null) => void;
   onOpenAlias: (
     alias: string,
-  ) => Promise<import("./api/integrations").TerminalSession | null>;
+  ) => Promise<TerminalSession | null>;
   onOpenShell: () => Promise<
-    import("./api/integrations").TerminalSession | null
+    TerminalSession | null
   >;
   restoreRequest: WorkspaceRestoreRequest | null;
   onRestoreConsumed: (sequence: number) => void;
@@ -1127,7 +1124,7 @@ function TerminalScreen({
     action: RemotePathAction,
   ) => void;
   onOSC52Change: (
-    session: import("./api/integrations").TerminalSession,
+    session: TerminalSession,
     enabled: boolean,
   ) => Promise<void>;
 }) {

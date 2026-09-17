@@ -5,7 +5,9 @@ import { ConnectionsPage } from "./ConnectionsPage";
 import { ApiError } from "../api/client";
 import { configApi } from "../api/config";
 import { dragMimeType, type DragPayload } from "./dragdrop";
-import { integrationsApi } from "../api/integrations";
+import { credentialsApi } from "../api/credentials";
+import { terminalSessionsApi } from "../api/terminalSessions";
+import { vaultApi } from "../api/vault";
 import { keysApi } from "../keys/api";
 
 vi.mock("../api/config", async () => {
@@ -19,13 +21,19 @@ vi.mock("../api/config", async () => {
   };
 });
 
-vi.mock("../api/integrations", () => ({
-  integrationsApi: {
+vi.mock("../api/terminalSessions", () => ({
+  terminalSessionsApi: {
     terminalSessions: vi.fn(), openTerminalSession: vi.fn(), terminalStreamTicket: vi.fn(),
     reconnectTerminalSession: vi.fn(), closeTerminalSession: vi.fn(), renameTerminalSession: vi.fn(),
-    passwordVault: vi.fn(), credentials: vi.fn(),
-    passwordEligibility: vi.fn(), initialiseVault: vi.fn(), unlockVault: vi.fn(),
   },
+}));
+
+vi.mock("../api/vault", () => ({
+  vaultApi: { passwordVault: vi.fn(), passwordEligibility: vi.fn(), initialiseVault: vi.fn(), unlockVault: vi.fn() },
+}));
+
+vi.mock("../api/credentials", () => ({
+  credentialsApi: { credentials: vi.fn() },
 }));
 
 vi.mock("../keys/api", async () => {
@@ -76,17 +84,17 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(configApi.overview).mockResolvedValue(overview as never);
   vi.mocked(configApi.host).mockResolvedValue(detail as never);
-  vi.mocked(integrationsApi.terminalSessions).mockResolvedValue({ sessions: [], maxSessions: 50 } as never);
-  vi.mocked(integrationsApi.closeTerminalSession).mockResolvedValue({ sessions: [], maxSessions: 50 } as never);
-  vi.mocked(integrationsApi.openTerminalSession).mockResolvedValue({
+  vi.mocked(terminalSessionsApi.terminalSessions).mockResolvedValue({ sessions: [], maxSessions: 50 } as never);
+  vi.mocked(terminalSessionsApi.closeTerminalSession).mockResolvedValue({ sessions: [], maxSessions: 50 } as never);
+  vi.mocked(terminalSessionsApi.openTerminalSession).mockResolvedValue({
     session: { id: "console-1", kind: "ssh", alias: "bastion", title: "bastion", startedAt: "2026-08-13T09:00:00Z", state: "connected", problem: "" },
     streamTicket: "one-time",
   } as never);
-  vi.mocked(integrationsApi.passwordVault).mockResolvedValue({
+  vi.mocked(vaultApi.passwordVault).mockResolvedValue({
     exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [], minPassphraseLength: 12,
   } as never);
-  vi.mocked(integrationsApi.credentials).mockResolvedValue({ credentials: [] } as never);
-  vi.mocked(integrationsApi.passwordEligibility).mockResolvedValue({
+  vi.mocked(credentialsApi.credentials).mockResolvedValue({ credentials: [] } as never);
+  vi.mocked(vaultApi.passwordEligibility).mockResolvedValue({
     alias: "bastion", storable: true, blockers: [], warnings: [],
   } as never);
   vi.mocked(keysApi.inventory).mockResolvedValue({
@@ -337,9 +345,9 @@ describe("ConnectionsPage", () => {
     await user.click(await screen.findByRole("button", { name: /bastion/ }));
     expect(await screen.findByText("bastion:22")).toBeInTheDocument();
     expect(keysApi.inventory).toHaveBeenCalledTimes(1);
-    expect(integrationsApi.passwordVault).toHaveBeenCalledTimes(1);
-    expect(integrationsApi.credentials).toHaveBeenCalledTimes(1);
-    expect(integrationsApi.passwordEligibility).toHaveBeenCalledTimes(1);
+    expect(vaultApi.passwordVault).toHaveBeenCalledTimes(1);
+    expect(credentialsApi.credentials).toHaveBeenCalledTimes(1);
+    expect(vaultApi.passwordEligibility).toHaveBeenCalledTimes(1);
 
     const port = screen.getByLabelText("Port");
     await user.clear(port);

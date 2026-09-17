@@ -2,13 +2,13 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CreateConnectionRequest, CreateConnectionResponse, Overview } from "../api/config";
-import type { IntegrationsApi } from "../api/integrations";
 import type { KeyInventoryResponse, KeysApi } from "../keys/api";
 import {
   CreateConnectionModal,
   type CreateConnectionDraft,
   type CreationPrerequisite,
 } from "./CreateConnectionModal";
+import type { ConnectionSecretsApi } from "./secretsApi";
 
 const privateKey = {
   id: "0123456789abcdef0123456789abcdef",
@@ -60,10 +60,10 @@ const created: CreateConnectionResponse = {
 type ModalOverrides = {
   createConnection?: (request: CreateConnectionRequest) => Promise<CreateConnectionResponse>;
   inventory?: KeysApi["inventory"];
-  passwordVault?: IntegrationsApi["passwordVault"];
-  credentials?: IntegrationsApi["credentials"];
-  initialiseVault?: IntegrationsApi["initialiseVault"];
-  unlockVault?: IntegrationsApi["unlockVault"];
+  passwordVault?: ConnectionSecretsApi["passwordVault"];
+  credentials?: ConnectionSecretsApi["credentials"];
+  initialiseVault?: ConnectionSecretsApi["initialiseVault"];
+  unlockVault?: ConnectionSecretsApi["unlockVault"];
   groups?: Overview["groups"];
   initialDraft?: CreateConnectionDraft;
   onOpenPrerequisite?: (section: CreationPrerequisite, draft: CreateConnectionDraft) => void;
@@ -100,7 +100,7 @@ function renderModal(overrides: ModalOverrides = {}) {
       config={{ createConnection } as never}
       keys={{ inventory: keyInventory } as Pick<KeysApi, "inventory">}
       secrets={{ passwordVault, credentials, initialiseVault, unlockVault } as Pick<
-        IntegrationsApi,
+        ConnectionSecretsApi,
         "passwordVault" | "credentials" | "initialiseVault" | "unlockVault"
       >}
       onClose={onClose}

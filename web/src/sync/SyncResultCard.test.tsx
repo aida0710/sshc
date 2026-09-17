@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { LanguageProvider } from "../i18n/context";
-import type { PullResponse, PushResult, SyncOperation } from "../api/integrations";
+import type { PullResponse, PushResult, SyncOperation } from "../api/sync";
 import { SyncResultCard, formatBytes } from "./SyncResultCard";
 
 const summary = {

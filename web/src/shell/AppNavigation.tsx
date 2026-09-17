@@ -17,7 +17,8 @@ import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import { sectionPath, type Section } from "../routing/sectionRoute";
 import type { TerminalSessionsState } from "../terminal/sessions";
-import type { LocalShellProfile, TerminalSession } from "../api/integrations";
+import type { LocalShellProfile } from "../api/settings";
+import type { TerminalSession } from "../api/terminalSessions";
 import type { LiveWorkspaceSummary } from "../features/workspaces/live";
 import type { UnreadSessions } from "../terminal/terminalNotifications";
 import {

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { HostEntry } from "../api/config";
-import { integrationsApi, type RecentConnection } from "../api/integrations";
+import { recentConnectionsApi, type RecentConnection } from "../api/recentConnections";
 import { useTranslate } from "../i18n/context";
 import { Icon } from "../ui/icons";
 import { ModalShell } from "../ui/ModalShell";
@@ -8,7 +8,7 @@ import { activateTabFromKeyboard } from "../ui/tabKeyboard";
 import { localHostAlias } from "./localHost";
 
 type HostChoice = { alias: string; group: string; hostName: string; user: string };
-const loadDefaultRecent = () => integrationsApi.recentConnections();
+const loadDefaultRecent = () => recentConnectionsApi.recentConnections();
 const noHosts: HostEntry[] = [];
 
 function hostChoices(aliases: string[], hosts: HostEntry[]): HostChoice[] {

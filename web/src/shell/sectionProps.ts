@@ -5,7 +5,8 @@ import type { FileTarget } from "../explorer/ConfigExplorer";
 import type { Section } from "../routing/sectionRoute";
 import type { InspectorContent } from "../ui/Inspector";
 import type { TerminalSessionsState } from "../terminal/sessions";
-import type { TerminalSettings, PasswordVaultStatus } from "../api/integrations";
+import type { TerminalSettings } from "../api/settings";
+import type { PasswordVaultStatus } from "../api/vault";
 import type { HostEntry } from "../api/config";
 
 
