@@ -6,8 +6,8 @@ import { Icon } from "../ui/icons";
 import { terminalProblemKey } from "./sessions";
 import { consoleDragMimeType, type LiveWorkspaceSummary } from "../features/workspaces/live";
 import { connectionProgressText } from "./progress";
-import { agentStatusLabel, terminalDisplayTitle } from "./agentPresentation";
-import type { AgentUnreadBySession } from "./agentNotifications";
+import { terminalDisplayTitle } from "./terminalPresentation";
+import type { UnreadSessions } from "./terminalNotifications";
 import { useDismissibleLayer } from "../ui/useDismissibleLayer";
 import { useMenuKeyboard } from "../ui/useMenuKeyboard";
 
@@ -18,7 +18,7 @@ type ConsoleListProps = {
   busy: boolean;
   problem: string;
   workspace?: LiveWorkspaceSummary | null;
-  unreadBySession?: AgentUnreadBySession;
+  unreadBySession?: UnreadSessions;
   onSelect: (id: string) => void;
   onClose: (id: string) => void;
   onRename: (id: string, title: string) => Promise<boolean>;
@@ -48,7 +48,7 @@ export function ConsoleList({
   busy,
   problem,
   workspace = null,
-  unreadBySession = new Map(),
+  unreadBySession = new Set(),
   onSelect,
   onClose,
   onRename,
@@ -271,7 +271,7 @@ export function ConsoleList({
             const running = session.state !== "exited";
             const destination = session.kind === "ssh" ? session.alias ?? "" : t("terminal.localhost");
             const displayTitle = terminalDisplayTitle(session);
-            const unread = unreadBySession.get(session.id);
+            const unread = unreadBySession.has(session.id);
             const status = session.problem !== ""
               ? t(terminalProblemKey(session.problem))
               : session.state === "reconnecting"
@@ -282,7 +282,7 @@ export function ConsoleList({
               : running
                 ? session.state === "connecting"
                   ? connectionProgressText(t, session)
-                  : session.agent === undefined ? t("terminal.connected") : agentStatusLabel(t, session)
+                  : t("terminal.connected")
                 : t("terminal.exitedWith", { code: String(session.exited?.code ?? 0) });
             const marker = (
               <span
@@ -378,13 +378,13 @@ export function ConsoleList({
                       </span>
                     </button>
                   )}
-                  {unread === undefined ? null : (
+                  {unread ? (
                     <span
-                      aria-label={t(unread === "attention" ? "terminal.unreadAttention" : "terminal.unreadCompleted")}
-                      title={t(unread === "attention" ? "terminal.unreadAttention" : "terminal.unreadCompleted")}
-                      className={`mt-2 size-2 shrink-0 rounded-full ${unread === "attention" ? "bg-notice-ink" : "bg-accent"}`}
+                      aria-label={t("terminal.unreadNotification")}
+                      title={t("terminal.unreadNotification")}
+                      className="mt-2 size-2 shrink-0 rounded-full bg-accent"
                     />
-                  )}
+                  ) : null}
                   <button
                     type="button"
                     aria-label={t("terminal.rowMenu", { title: session.title })}

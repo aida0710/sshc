@@ -42,7 +42,7 @@ function renderPalette(overrides: Partial<ComponentProps<typeof CommandPalette>>
     ],
     files: [{ file: { path: "config", absolute: "/home/tester/.ssh/config" }, editable: true, loads: 1 }],
     sessions: [],
-    unreadBySession: new Map(),
+    unreadBySession: new Set(),
     sectionLabels: labels,
     onClose: vi.fn(),
     onConnect: vi.fn(),
@@ -147,22 +147,22 @@ describe("CommandPalette", () => {
     expect(onConnect).not.toHaveBeenCalled();
   });
 
-  it("jumps to a live session and filters unread attention without changing its order", async () => {
+  it("jumps to a live session and filters unread notifications without changing its order", async () => {
     const user = userEvent.setup();
     const onOpenSession = vi.fn();
     renderPalette({
       sessions: [
         { id: "first", kind: "ssh", alias: "osaka", title: "First", startedAt: "2026-08-29T00:00:00Z", state: "connected", problem: "" },
-        { id: "second", kind: "ssh", alias: "tokyo", title: "Fix login", startedAt: "2026-08-29T00:01:00Z", state: "connected", problem: "", agent: { kind: "codex", state: "attention", resumable: true, observationVersion: 2, signalVersion: 1, lastSignal: { kind: "attention", occurredAt: "2026-08-29T00:02:00Z" } } },
+        { id: "second", kind: "ssh", alias: "tokyo", title: "Fix login", startedAt: "2026-08-29T00:01:00Z", state: "connected", problem: "", notificationVersion: 1, lastNotification: { title: "", body: "waiting for input", occurredAt: "2026-08-29T00:02:00Z" } },
       ],
-      unreadBySession: new Map([["second", "attention"]]),
+      unreadBySession: new Set(["second"]),
       onOpenSession,
     });
 
     const options = screen.getAllByRole("option");
     expect(options[0]).toHaveTextContent("First");
     expect(options[1]).toHaveTextContent("Fix login");
-    await user.type(screen.getByRole("searchbox"), "@attention{Enter}");
+    await user.type(screen.getByRole("searchbox"), "@unread{Enter}");
 
     expect(onOpenSession).toHaveBeenCalledWith("second");
   });

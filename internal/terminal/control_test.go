@@ -14,20 +14,15 @@ func TestControlStateUsesOnlyExplicitLifecycleState(t *testing.T) {
 	if got, _ := session.ReadControl(0, 0); got.State != ControlConnected {
 		t.Fatalf("initial state = %q", got.State)
 	}
-	session.acceptAgentEvent(1, agentEvent{
-		Version: 1, Agent: AgentCodex, Event: "working", Session: "thread-1", Seq: 1,
-	}, now)
-	if got, _ := session.ReadControl(0, 0); got.State != ControlAgentWorking {
-		t.Fatalf("working state = %q", got.State)
-	}
-	session.acceptAgentEvent(1, agentEvent{
-		Version: 1, Agent: AgentCodex, Event: "ended", Session: "thread-1", Seq: 2,
-	}, now.Add(time.Second))
-	if got, _ := session.ReadControl(0, 0); got.State != ControlAgentEnded {
-		t.Fatalf("ended state = %q", got.State)
-	}
-	session.generation++
+	// Titles and notifications are presentation only; they never change the
+	// machine-readable lifecycle state automation waits on.
+	session.acceptTitle(1, "claude — working")
+	session.acceptNotification(1, "", "waiting for input", now)
 	if got, _ := session.ReadControl(0, 0); got.State != ControlConnected {
-		t.Fatalf("old ended event leaked into generation 2: %q", got.State)
+		t.Fatalf("state after title/notification = %q", got.State)
+	}
+	session.state = StateReconnecting
+	if got, _ := session.ReadControl(0, 0); got.State != ControlReconnecting {
+		t.Fatalf("reconnecting state = %q", got.State)
 	}
 }

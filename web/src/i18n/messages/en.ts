@@ -456,45 +456,37 @@ export const en = {
   "terminal.running": "connected",
   "terminal.connecting": "connecting",
   "terminal.connected": "connected",
-  "terminal.agentWorking": "working",
-  "terminal.agentAttention": "input needed",
-  "terminal.agentReady": "ready",
-  "terminal.agentUnknown": "state unavailable",
-  "terminal.agentNotificationAttention": "{subject} is waiting for input",
-  "terminal.agentNotificationCompleted": "{subject} has finished",
   "terminal.longCommandCompleted": "A command in {subject} finished after {seconds} seconds.",
-  "terminal.unreadAttention": "Unread: input needed",
-  "terminal.unreadCompleted": "Unread: completed",
-  "terminal.unreadWorkspace": "This workspace has unread Agent activity",
+  "terminal.unreadNotification": "Unread notification",
+  "terminal.notificationFallback": "A program in this terminal sent a notification.",
+  "terminal.unreadWorkspace": "This workspace has an unread terminal notification",
   "terminal.browserNotificationsHeading": "Notifications",
   "terminal.browserNotificationsDefault":
-    "Allow sshc to notify you when an Agent finishes, needs input, or a file transfer completes while this tab is in the background.",
+    "Allow sshc to notify you when a program in a terminal asks for attention (for example a coding agent waiting for input) or a file transfer completes while this tab is in the background.",
   "terminal.browserNotificationsGranted":
     "Browser notifications are allowed. sshc only sends them while this tab is in the background.",
   "terminal.browserNotificationsDenied":
-    "Notifications are blocked for sshc. Allow them in this site's browser settings to enable Agent and file transfer notifications.",
+    "Notifications are blocked for sshc. Allow them in this site's browser settings to enable terminal and file transfer notifications.",
   "terminal.browserNotificationsUnsupported":
     "This browser does not support web notifications.",
   "terminal.browserNotificationsEnable": "Enable notifications",
   "terminal.browserNotificationsTest": "Send test notification",
   "terminal.browserNotificationsEnabled": "Notifications enabled",
-  "terminal.browserNotificationsReady": "Agent and transfer notifications are ready.",
+  "terminal.browserNotificationsReady": "Terminal and transfer notifications are ready.",
   "terminal.browserNotificationsRequestFailed":
     "Notification permission could not be requested.",
   "terminal.browserNotificationsDeliveryFailed":
     "The browser allowed notifications but could not display one.",
-  "terminal.notificationAttentionSound": "Input-needed sound",
-  "terminal.notificationCompletedSound": "Completion sound",
-  "terminal.notificationSoundHint": "Stored only in this browser.",
+  "terminal.notificationSound": "Notification sound",
+  "terminal.notificationSoundHint": "Played when a terminal program sends a notification (OSC 9, 99 or 777) while this tab is in the background. Stored only in this browser.",
+  "terminal.notificationPreviewSound": "Play the notification sound",
   "terminal.notificationSound.none": "No sound",
   "terminal.notificationSound.gentle": "Gentle",
   "terminal.notificationSound.bell": "Bell",
   "terminal.notificationSound.pulse": "Pulse",
   "terminal.notificationPreview": "Play",
-  "terminal.notificationPreviewAttention": "Play the input-needed sound",
-  "terminal.notificationPreviewCompleted": "Play the completion sound",
   "terminal.notificationVolume": "Notification volume",
-  "terminal.notificationVolumeHint": "{volume}% · applies to both Agent sounds",
+  "terminal.notificationVolumeHint": "{volume}%",
   "terminal.quickCommands": "Quick Commands",
   "terminal.quickCommandsClose": "Close Quick Commands",
   "terminal.quickCommandInsert": "Insert",
@@ -519,18 +511,6 @@ export const en = {
   "sftp.linkTargetInvalid": "This terminal link is no longer available.",
   "sftp.linkTargetNotFound": "The remote path no longer exists.",
   "sftp.linkTargetNotFile": "The remote path is not a file.",
-  "terminal.agentResumeAvailable": "A {agent} session can be resumed.",
-  "terminal.agentResumeSamePane": "Resume here",
-  "terminal.agentResumeNewPane": "Resume in new pane",
-  "terminal.agentResumeFailed": "The agent session could not be resumed.",
-  "terminal.agentResumeStale":
-    "The agent session changed. Review it and try again.",
-  "terminal.agentResumeSamePaneBusy":
-    "This shell has already received input. Resume in a new pane instead.",
-  "terminal.agentResumeUnavailable":
-    "This agent session is no longer available.",
-  "terminal.agentResumeIdentityChanged":
-    "This alias now points to a different SSH destination, so the agent session was not resumed.",
   "terminal.progressDialing": "connecting to {target} · {position}",
   "terminal.progressHostKey": "checking the host key for {target} · {position}",
   "terminal.progressAuthenticating":
@@ -905,7 +885,7 @@ export const en = {
   "settings.terminalDescription":
     "Configure the behavior, appearance, and controls used by new terminals.",
   "settings.notificationsDescription":
-    "Configure browser notifications and sounds for agent status changes.",
+    "Configure browser notifications and the sound for notifications sent by terminal programs.",
   "settings.connectionsDescription":
     "Review the connections open in this browser and close them together.",
   "settings.passwordDescription":

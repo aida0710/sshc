@@ -137,24 +137,6 @@ func (e PullRequestResolve) Valid() bool {
 	}
 }
 
-// Defines values for ResumeTerminalAgentRequestPlacement.
-const (
-	NewPane  ResumeTerminalAgentRequestPlacement = "new-pane"
-	SamePane ResumeTerminalAgentRequestPlacement = "same-pane"
-)
-
-// Valid indicates whether the value is a known member of the ResumeTerminalAgentRequestPlacement enum.
-func (e ResumeTerminalAgentRequestPlacement) Valid() bool {
-	switch e {
-	case NewPane:
-		return true
-	case SamePane:
-		return true
-	default:
-		return false
-	}
-}
-
 // Defines values for SFTPCreateEntryRequestType.
 const (
 	SFTPCreateEntryRequestTypeDirectory SFTPCreateEntryRequestType = "directory"
@@ -323,69 +305,6 @@ func (e SyncSetupTargetState) Valid() bool {
 	}
 }
 
-// Defines values for TerminalAgentKind.
-const (
-	Claude   TerminalAgentKind = "claude"
-	Codex    TerminalAgentKind = "codex"
-	Opencode TerminalAgentKind = "opencode"
-)
-
-// Valid indicates whether the value is a known member of the TerminalAgentKind enum.
-func (e TerminalAgentKind) Valid() bool {
-	switch e {
-	case Claude:
-		return true
-	case Codex:
-		return true
-	case Opencode:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for TerminalAgentState.
-const (
-	TerminalAgentStateAttention TerminalAgentState = "attention"
-	TerminalAgentStateReady     TerminalAgentState = "ready"
-	TerminalAgentStateUnknown   TerminalAgentState = "unknown"
-	TerminalAgentStateWorking   TerminalAgentState = "working"
-)
-
-// Valid indicates whether the value is a known member of the TerminalAgentState enum.
-func (e TerminalAgentState) Valid() bool {
-	switch e {
-	case TerminalAgentStateAttention:
-		return true
-	case TerminalAgentStateReady:
-		return true
-	case TerminalAgentStateUnknown:
-		return true
-	case TerminalAgentStateWorking:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for TerminalAgentSignalKind.
-const (
-	TerminalAgentSignalKindAttention TerminalAgentSignalKind = "attention"
-	TerminalAgentSignalKindCompleted TerminalAgentSignalKind = "completed"
-)
-
-// Valid indicates whether the value is a known member of the TerminalAgentSignalKind enum.
-func (e TerminalAgentSignalKind) Valid() bool {
-	switch e {
-	case TerminalAgentSignalKindAttention:
-		return true
-	case TerminalAgentSignalKindCompleted:
-		return true
-	default:
-		return false
-	}
-}
-
 // Defines values for TerminalCommandResultStatus.
 const (
 	TerminalCommandResultStatusDelivered TerminalCommandResultStatus = "delivered"
@@ -433,27 +352,15 @@ func (e TerminalConnectionProgressPhase) Valid() bool {
 
 // Defines values for TerminalControlResponseState.
 const (
-	TerminalControlResponseStateAgentAttention TerminalControlResponseState = "agent-attention"
-	TerminalControlResponseStateAgentEnded     TerminalControlResponseState = "agent-ended"
-	TerminalControlResponseStateAgentReady     TerminalControlResponseState = "agent-ready"
-	TerminalControlResponseStateAgentWorking   TerminalControlResponseState = "agent-working"
-	TerminalControlResponseStateConnected      TerminalControlResponseState = "connected"
-	TerminalControlResponseStateConnecting     TerminalControlResponseState = "connecting"
-	TerminalControlResponseStateExited         TerminalControlResponseState = "exited"
-	TerminalControlResponseStateReconnecting   TerminalControlResponseState = "reconnecting"
+	TerminalControlResponseStateConnected    TerminalControlResponseState = "connected"
+	TerminalControlResponseStateConnecting   TerminalControlResponseState = "connecting"
+	TerminalControlResponseStateExited       TerminalControlResponseState = "exited"
+	TerminalControlResponseStateReconnecting TerminalControlResponseState = "reconnecting"
 )
 
 // Valid indicates whether the value is a known member of the TerminalControlResponseState enum.
 func (e TerminalControlResponseState) Valid() bool {
 	switch e {
-	case TerminalControlResponseStateAgentAttention:
-		return true
-	case TerminalControlResponseStateAgentEnded:
-		return true
-	case TerminalControlResponseStateAgentReady:
-		return true
-	case TerminalControlResponseStateAgentWorking:
-		return true
 	case TerminalControlResponseStateConnected:
 		return true
 	case TerminalControlResponseStateConnecting:
@@ -469,23 +376,20 @@ func (e TerminalControlResponseState) Valid() bool {
 
 // Defines values for TerminalPresentationTitleSource.
 const (
-	Agent      TerminalPresentationTitleSource = "agent"
-	Candidate  TerminalPresentationTitleSource = "candidate"
 	Connection TerminalPresentationTitleSource = "connection"
 	Fallback   TerminalPresentationTitleSource = "fallback"
+	Terminal   TerminalPresentationTitleSource = "terminal"
 	User       TerminalPresentationTitleSource = "user"
 )
 
 // Valid indicates whether the value is a known member of the TerminalPresentationTitleSource enum.
 func (e TerminalPresentationTitleSource) Valid() bool {
 	switch e {
-	case Agent:
-		return true
-	case Candidate:
-		return true
 	case Connection:
 		return true
 	case Fallback:
+		return true
+	case Terminal:
 		return true
 	case User:
 		return true
@@ -1371,15 +1275,6 @@ type RestoreTrashResponse struct {
 	TransactionId string   `json:"transactionId"`
 }
 
-// ResumeTerminalAgentRequest defines model for ResumeTerminalAgentRequest.
-type ResumeTerminalAgentRequest struct {
-	ObservationVersion int                                 `json:"observationVersion"`
-	Placement          ResumeTerminalAgentRequestPlacement `json:"placement"`
-}
-
-// ResumeTerminalAgentRequestPlacement defines model for ResumeTerminalAgentRequest.Placement.
-type ResumeTerminalAgentRequestPlacement string
-
 // RevealCredentialResponse defines model for RevealCredentialResponse.
 type RevealCredentialResponse struct {
 	Kind   string `json:"kind"`
@@ -1723,34 +1618,6 @@ type TOTPCodeSet struct {
 	RemainingSeconds int    `json:"remainingSeconds"`
 }
 
-// TerminalAgent defines model for TerminalAgent.
-type TerminalAgent struct {
-	Cwd                *string              `json:"cwd,omitempty"`
-	Kind               TerminalAgentKind    `json:"kind"`
-	LastSignal         *TerminalAgentSignal `json:"lastSignal,omitempty"`
-	Model              *string              `json:"model,omitempty"`
-	ObservationVersion int                  `json:"observationVersion"`
-	Resumable          bool                 `json:"resumable"`
-	SessionName        *string              `json:"sessionName,omitempty"`
-	SignalVersion      int                  `json:"signalVersion"`
-	State              TerminalAgentState   `json:"state"`
-}
-
-// TerminalAgentKind defines model for TerminalAgent.Kind.
-type TerminalAgentKind string
-
-// TerminalAgentState defines model for TerminalAgent.State.
-type TerminalAgentState string
-
-// TerminalAgentSignal defines model for TerminalAgentSignal.
-type TerminalAgentSignal struct {
-	Kind       TerminalAgentSignalKind `json:"kind"`
-	OccurredAt time.Time               `json:"occurredAt"`
-}
-
-// TerminalAgentSignalKind defines model for TerminalAgentSignal.Kind.
-type TerminalAgentSignalKind string
-
 // TerminalAppearance defines model for TerminalAppearance.
 type TerminalAppearance struct {
 	Background     *string `json:"background,omitempty"`
@@ -1897,6 +1764,13 @@ type TerminalForward struct {
 	To        string `json:"to"`
 }
 
+// TerminalNotification defines model for TerminalNotification.
+type TerminalNotification struct {
+	Body       string    `json:"body"`
+	OccurredAt time.Time `json:"occurredAt"`
+	Title      string    `json:"title"`
+}
+
 // TerminalPresentation defines model for TerminalPresentation.
 type TerminalPresentation struct {
 	DisplayTitle string                          `json:"displayTitle"`
@@ -1917,19 +1791,20 @@ type TerminalReconnect struct {
 
 // TerminalSession defines model for TerminalSession.
 type TerminalSession struct {
-	Agent        *TerminalAgent              `json:"agent,omitempty"`
-	Alias        *string                     `json:"alias,omitempty"`
-	Exited       *TerminalExit               `json:"exited,omitempty"`
-	Forwards     *[]TerminalForward          `json:"forwards,omitempty"`
-	Id           string                      `json:"id"`
-	Kind         TerminalSessionKind         `json:"kind"`
-	Presentation *TerminalPresentation       `json:"presentation,omitempty"`
-	Problem      string                      `json:"problem"`
-	Progress     *TerminalConnectionProgress `json:"progress,omitempty"`
-	Reconnect    *TerminalReconnect          `json:"reconnect,omitempty"`
-	StartedAt    string                      `json:"startedAt"`
-	State        TerminalSessionState        `json:"state"`
-	Title        string                      `json:"title"`
+	Alias               *string                     `json:"alias,omitempty"`
+	Exited              *TerminalExit               `json:"exited,omitempty"`
+	Forwards            *[]TerminalForward          `json:"forwards,omitempty"`
+	Id                  string                      `json:"id"`
+	Kind                TerminalSessionKind         `json:"kind"`
+	LastNotification    *TerminalNotification       `json:"lastNotification,omitempty"`
+	NotificationVersion *int                        `json:"notificationVersion,omitempty"`
+	Presentation        *TerminalPresentation       `json:"presentation,omitempty"`
+	Problem             string                      `json:"problem"`
+	Progress            *TerminalConnectionProgress `json:"progress,omitempty"`
+	Reconnect           *TerminalReconnect          `json:"reconnect,omitempty"`
+	StartedAt           string                      `json:"startedAt"`
+	State               TerminalSessionState        `json:"state"`
+	Title               string                      `json:"title"`
 }
 
 // TerminalSessionKind defines model for TerminalSession.Kind.

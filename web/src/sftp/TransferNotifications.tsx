@@ -1,6 +1,6 @@
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import { useTranslate } from "../i18n/context";
-import { showBrowserNotification } from "../terminal/agentNotifications";
+import { showBrowserNotification } from "../terminal/terminalNotifications";
 import { sftpTransferManager, type TransferNotice } from "./transferManager";
 
 export function notifyBackgroundTransfers(
