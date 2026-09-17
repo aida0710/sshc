@@ -36,6 +36,8 @@ export function LocalSFTPPanel({ remote, onQueueOpen, onDirectoryChange }: {
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState("");
   const [dragging, setDragging] = useState(false);
+  const [pathEditing, setPathEditing] = useState(false);
+  const [pathDraft, setPathDraft] = useState("");
   const currentPath = useRef("");
   const completed = useRef(new Set(sftpTransferManager.getSnapshot()
     .filter((job) => job.direction === "remote" && job.status === "completed").map((job) => job.id)));
@@ -118,14 +120,23 @@ export function LocalSFTPPanel({ remote, onQueueOpen, onDirectoryChange }: {
         <button type="button" aria-label={t("sftp.local.parent")} title={t("sftp.local.parent")}
           onClick={() => { void navigate(parentPath(listing.path)); }} disabled={parentPath(listing.path) === listing.path || busy}
           className="rounded p-2 hover:bg-hover disabled:text-ink-faint"><Icon name="chevronRight" className="size-3 -rotate-90" /></button>
-        <div className="flex min-w-0 flex-1 items-center overflow-x-auto whitespace-nowrap text-sm">
+        {pathEditing ? <input autoFocus aria-label={t("sftp.local.pathInput")} value={pathDraft}
+          onChange={(event) => setPathDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") setPathEditing(false);
+            if (event.key === "Enter") { setPathEditing(false); void navigate(pathDraft.trim()); }
+          }} className="min-w-0 flex-1 rounded border border-line bg-surface px-2 py-1 text-sm" />
+          : <div className="flex min-w-0 flex-1 items-center overflow-x-auto whitespace-nowrap text-sm">
           {crumbs(listing.path).map((crumb, index) => <span key={crumb.path} className="inline-flex items-center">
             {index > 0 ? <Icon name="chevronRight" className="mx-1 size-3 text-ink-faint" /> : null}
             {crumb.path === listing.path ? <span className="px-1 font-medium" aria-current="location">{crumb.path === listing.home ? "~" : crumb.label}</span>
               : <button type="button" onClick={() => { void navigate(crumb.path); }} disabled={busy}
                   className="rounded px-1 py-1 text-ink-muted hover:bg-hover hover:text-ink">{crumb.path === listing.home ? "~" : crumb.label}</button>}
           </span>)}
-        </div>
+        </div>}
+        <button type="button" aria-label={t("sftp.local.editPath")} title={t("sftp.local.editPath")}
+          onClick={() => { setPathDraft(listing.path); setPathEditing((current) => !current); }}
+          className="rounded p-2 hover:bg-hover"><Icon name="edit" className="size-3.5" /></button>
       </nav>
       <div className="flex items-center gap-2 border-b border-line px-3 py-2">
         <button type="button" onClick={() => { void upload(); }} disabled={busy || selected.size === 0 || !remote?.alias || !remote?.path}

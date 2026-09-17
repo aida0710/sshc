@@ -33,7 +33,7 @@ sshcのSFTPは、安全なアップロード／ダウンロード、フォルダ
 | Commander型のlocal／remote 2 panel | 部分対応 | 右ペインにsshcエンジン側のファイルを表示する。初期位置はエンジンユーザーのホーム。上階層を含めOS権限の範囲で移動でき、file／directoryをengine queue経由で直接転送する。ブラウザのフォルダ権限は不要 | ローカル／リモートの同期・比較は未対応 |
 | remote／remote 2 panel | 対応 | desktopで2つのhost／directoryを並べる。左右が独立したtab列を持ち、表示中のtab間でfile／directoryをDrag & Dropしてcopy／moveできる | 維持 |
 | `..`による親directory移動 | 対応 | リモートは一覧先頭、ローカルはパスバーの上階層ボタンで移動する。ローカルもOSルートまで移動できる | 維持 |
-| path breadcrumb／直接入力 | 部分対応 | リモートは階層をクリックでき、編集操作で絶対pathを入力できる。ローカルは階層をクリックして移動できる。パスの直接入力は未実装 | 維持 |
+| path breadcrumb／直接入力 | 部分対応 | リモートは階層をクリックでき、編集操作で絶対pathを入力できる。ローカルは階層をクリックするほか、編集ボタンから`~/`または絶対pathを入力して移動できる | 維持 |
 | Back／Forward履歴 | 対応 | hostを切り替えるまでpath履歴を保持 | 維持 |
 | Home directoryへ移動 | 対応 | serverのworking directoryを再解決して移動 | 維持 |
 | Root directoryへ移動 | 対応 | navigation buttonまたは`/`の直接入力 | 維持 |
@@ -265,7 +265,7 @@ sshcのSFTPは、安全なアップロード／ダウンロード、フォルダ
 
 ### P2 — Commander相当の転送workflow
 
-- engine-local panelの直接パス入力と同期・比較
+- engine-local panelの同期・比較
 - local↔remote directory compare／sync、mirror、preview
 - Keep remote directory up to date
 - SFTP CLI／JSON automation

@@ -108,6 +108,8 @@ export const en = {
   "sftp.local.engine": "sshc engine",
   "sftp.local.refresh": "Refresh local folder",
   "sftp.local.path": "Local folder path",
+  "sftp.local.editPath": "Edit local path",
+  "sftp.local.pathInput": "Engine filesystem path",
   "sftp.local.parent": "Parent local folder",
   "sftp.local.openFolder": "Double-click or press Enter to open this folder",
   "sftp.local.upload": "Upload selection",

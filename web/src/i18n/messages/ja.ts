@@ -111,6 +111,8 @@ export const ja = {
   "sftp.local.engine": "sshcエンジン側",
   "sftp.local.refresh": "ローカルフォルダを更新",
   "sftp.local.path": "ローカルフォルダのパス",
+  "sftp.local.editPath": "ローカルパスを編集",
+  "sftp.local.pathInput": "エンジン側のファイルパス",
   "sftp.local.parent": "一つ上のローカルフォルダ",
   "sftp.local.openFolder": "ダブルクリックまたはEnterでフォルダを開く",
   "sftp.local.upload": "選択項目をアップロード",
