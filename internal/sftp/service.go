@@ -1085,25 +1085,9 @@ func (s Service) Rename(ctx context.Context, alias, from, to string) (Entry, err
 	return entryFrom(path.Dir(target), namedInfo{FileInfo: info, name: path.Base(target)}), nil
 }
 
-// Delete はファイル、symlink、空ディレクトリだけを削除する。再帰削除は提供しない。
+// Delete は選択された項目を配下ごと削除する。
 func (s Service) Delete(ctx context.Context, alias, remotePath string) error {
-	cleaned, err := cleanPublicPath(remotePath, false)
-	if err != nil {
-		return err
-	}
-	remote, err := s.openRequest(ctx, alias)
-	if err != nil {
-		return err
-	}
-	defer remote.Close()
-	info, err := remote.Lstat(cleaned)
-	if err != nil {
-		return err
-	}
-	if info.IsDir() {
-		return remote.RemoveDirectory(cleaned)
-	}
-	return remote.Remove(cleaned)
+	return s.DeleteWithProgress(ctx, alias, remotePath, -1, nil)
 }
 
 func (s Service) open(ctx context.Context, alias string) (Remote, error) {

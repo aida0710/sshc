@@ -5,9 +5,87 @@ import (
 	"errors"
 	"io/fs"
 	"testing"
+	"time"
 
 	"sshc/internal/sftp"
 )
+
+func TestDeleteDirectoryRecursivelyWithoutFollowingSymlinks(t *testing.T) {
+	remote := remoteWith(map[string]node{
+		"/work":                 {name: "work", mode: fs.ModeDir | 0o755},
+		"/work/nested":          {name: "nested", mode: fs.ModeDir | 0o755},
+		"/work/nested/file.txt": file("file.txt", "payload", 0o644),
+		"/work/link":            {name: "link", mode: fs.ModeSymlink | 0o777},
+		"/outside":              file("outside", "keep", 0o644),
+	})
+	service := sftp.Service{Open: func(context.Context, string) (sftp.Remote, error) { return remote, nil }}
+	if err := service.Delete(context.Background(), "edge", "/work"); err != nil {
+		t.Fatal(err)
+	}
+	for _, candidate := range []string{"/work", "/work/nested", "/work/nested/file.txt", "/work/link"} {
+		if _, exists := remote.nodes[candidate]; exists {
+			t.Errorf("%s was not removed", candidate)
+		}
+	}
+	if _, exists := remote.nodes["/outside"]; !exists {
+		t.Fatal("symlink target was removed")
+	}
+	if err := service.Delete(context.Background(), "edge", "/"); !errors.Is(err, sftp.ErrRootOperation) {
+		t.Fatalf("root deletion = %v", err)
+	}
+}
+
+func TestDeleteDirectoryRejectsActiveInternalEntryBeforeRemovingAnything(t *testing.T) {
+	remote := remoteWith(map[string]node{
+		"/work":                                 {name: "work", mode: fs.ModeDir | 0o755},
+		"/work/a.txt":                           file("a.txt", "keep", 0o644),
+		"/work/.file.sshc-upload-12345678.part": file(".file.sshc-upload-12345678.part", "in progress", 0o600),
+	})
+	service := sftp.Service{Open: func(context.Context, string) (sftp.Remote, error) { return remote, nil }}
+	if err := service.Delete(context.Background(), "edge", "/work"); !errors.Is(err, sftp.ErrConflict) {
+		t.Fatalf("delete with active internal entry = %v", err)
+	}
+	if len(remote.removals) != 0 {
+		t.Fatalf("deleted entries before validating the tree: %v", remote.removals)
+	}
+}
+
+func TestQueuedDirectoryDeleteCompletes(t *testing.T) {
+	remote := remoteWith(map[string]node{
+		"/work":          {name: "work", mode: fs.ModeDir | 0o755},
+		"/work/file.txt": file("file.txt", "payload", 0o644),
+	})
+	service := &sftp.Service{Open: func(context.Context, string) (sftp.Remote, error) { return remote, nil }}
+	manager := sftp.NewTransferManager(service)
+	defer manager.Close()
+	job, err := manager.CreateJob(sftp.CreateTransferJob{
+		ID: "delete_remote_01", BatchID: "delete_batch_01", Alias: "edge", RemotePath: "/work",
+		SourceAlias: "edge", SourcePath: "/work", Operation: sftp.RemoteDelete,
+		Direction: sftp.TransferRemote, Kind: sftp.TransferFolder, Name: "work", TotalBytes: -1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager.ScheduleRemoteJob(job.ID)
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		jobs, err := manager.ListJobs()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(jobs) == 1 && jobs[0].Status == sftp.TransferCompleted {
+			if jobs[0].TotalBytes != 2 || jobs[0].TransferredBytes != 2 {
+				t.Fatalf("delete progress = %+v", jobs[0])
+			}
+			if _, exists := remote.nodes["/work"]; exists {
+				t.Fatal("directory remained")
+			}
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatal("queued delete did not complete")
+}
 
 func TestCopyRemoteStreamsFileWithoutLocalSpool(t *testing.T) {
 	t.Parallel()

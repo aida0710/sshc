@@ -356,7 +356,8 @@ describe("SFTPPanel uploads", () => {
     expect(clipboard.writeText).toHaveBeenLastCalledWith("/remote/alpha.txt\n/remote/gamma.txt");
   });
 
-  it("deletes multiple selected entries after one confirmation", async () => {
+  it("queues multiple selected entries after one confirmation and opens the queue", async () => {
+    const addRemoteTransfers = vi.spyOn(sftpTransferManager, "addRemoteTransfers").mockResolvedValue(["delete-one", "delete-two"]);
     api.list.mockResolvedValue({
       path: "/remote",
       entries: [
@@ -374,11 +375,21 @@ describe("SFTPPanel uploads", () => {
     expect(dialog).toHaveTextContent("/remote/first.txt");
     expect(dialog).toHaveTextContent("/remote/second.txt");
     await userEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
-    await waitFor(() => expect(api.remove).toHaveBeenCalledTimes(2));
-    expect(api.remove.mock.calls).toEqual([
-      ["edge", "/remote/first.txt"],
-      ["edge", "/remote/second.txt"],
-    ]);
+    await waitFor(() => expect(addRemoteTransfers).toHaveBeenCalledWith([
+      expect.objectContaining({ sourceAlias: "edge", sourcePath: "/remote/first.txt", targetPath: "/remote/first.txt" }),
+      expect.objectContaining({ sourceAlias: "edge", sourcePath: "/remote/second.txt", targetPath: "/remote/second.txt" }),
+    ], "delete"));
+    expect(api.remove).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Collapse Transfer Manager" })).toBeInTheDocument();
+    addRemoteTransfers.mockRestore();
+  });
+
+  it("refreshes the current directory on demand", async () => {
+    render(<SFTPPanel aliases={["edge"]} />);
+    await chooseHost("edge");
+    api.list.mockClear();
+    await userEvent.click(screen.getByRole("button", { name: "Refresh directory" }));
+    await waitFor(() => expect(api.list).toHaveBeenCalledWith("edge", "/remote"));
   });
 
   it("opens the text editor as a modal without resizing the file list", async () => {

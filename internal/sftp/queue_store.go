@@ -178,7 +178,10 @@ func validPersistedJob(job TransferJob) error {
 		if _, err := cleanPublicPath(job.SourcePath, false); err != nil {
 			return err
 		}
-		if job.Operation != RemoteCopy && job.Operation != RemoteMove {
+		if job.Operation != RemoteCopy && job.Operation != RemoteMove && job.Operation != RemoteDelete {
+			return ErrInvalidTransfer
+		}
+		if job.Operation == RemoteDelete && (job.SourceAlias != job.Alias || job.SourcePath != job.RemotePath || job.Overwrite) {
 			return ErrInvalidTransfer
 		}
 	} else if job.SourceAlias != "" || job.SourcePath != "" || job.Operation != "" {

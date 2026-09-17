@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SFTPWorkspace } from "./SFTPWorkspace";
+import { sftpTransferManager } from "./transferManager";
 
 const api = vi.hoisted(() => ({
   list: vi.fn(),
@@ -47,6 +48,27 @@ describe("SFTP tabs", () => {
       maxConcurrent: 2, clearCompletedAfterSeconds: 0, processingStopped: false,
       largeFileThresholdBytes: 100 << 20, largeFileParallelism: 4, largeFileChunkBytes: 32 << 20, jobs: [],
     });
+  });
+
+  it("opens the shared transfer queue after queuing a deletion", async () => {
+    const addRemoteTransfers = vi.spyOn(sftpTransferManager, "addRemoteTransfers").mockResolvedValue(["delete-one"]);
+    api.list.mockResolvedValue({
+      path: "/home/edge",
+      entries: [{ name: "old", path: "/home/edge/old", type: "directory", size: 0, mode: "0755", modifiedAt: "", revision: "old" }],
+    });
+    render(<SFTPWorkspace aliases={["edge"]} />);
+    await chooseHost("edge");
+    const row = await within(screen.getByRole("tabpanel")).findByRole("button", { name: "old" });
+    await userEvent.click(row);
+    fireEvent.keyDown(row, { key: "Delete" });
+    const dialog = await screen.findByRole("dialog", { name: "Delete this remote entry?" });
+    expect(dialog).toHaveTextContent("Folders and everything inside them will be deleted.");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
+    await waitFor(() => expect(addRemoteTransfers).toHaveBeenCalledWith([
+      expect.objectContaining({ sourcePath: "/home/edge/old", targetPath: "/home/edge/old" }),
+    ], "delete"));
+    expect(screen.getByRole("button", { name: "Collapse Transfer Manager" })).toBeInTheDocument();
+    addRemoteTransfers.mockRestore();
   });
 
   it("keeps each tab on its own host and directory", async () => {
