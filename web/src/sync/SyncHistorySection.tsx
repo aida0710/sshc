@@ -1,4 +1,4 @@
-import type { SyncDirection, SyncHistoryDiff } from "../api/integrations";
+import type { SyncDirection, SyncHistoryDiff } from "../api/sync";
 import type { Translate } from "../i18n/context";
 import type { Locale } from "../i18n/locale";
 import type { MessageKey } from "../i18n/messages";

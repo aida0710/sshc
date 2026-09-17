@@ -1,13 +1,8 @@
 import { KeyConfig } from "../keyconfig/KeyConfig";
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { failureCode } from "../api/client";
-import {
-  integrationsApi,
-  type IntegrationsApi,
-  type PasswordVaultStatus,
-  type LocalShellProfile,
-  type TerminalSettings,
-} from "../api/integrations";
+import { settingsApi, type SettingsApi, type LocalShellProfile, type TerminalSettings } from "../api/settings";
+import { vaultApi, type PasswordVaultStatus, type VaultApi } from "../api/vault";
 import { useTranslate } from "../i18n/context";
 import { AppearancePicker } from "../terminal/AppearancePicker";
 import { BackgroundPicker } from "../terminal/BackgroundPicker";
@@ -37,6 +32,10 @@ import {
   settingsPageMeta,
   type SettingsPage,
 } from "./settingsRoute";
+
+// Settings also change the master password, which belongs to the vault.
+export type SettingsPanelApi = SettingsApi & Pick<VaultApi, "passwordVault" | "changeMasterPassword">;
+export const settingsPanelApi: SettingsPanelApi = { ...settingsApi, ...vaultApi };
 
 const mobileTouchTargets =
   "[&_button]:min-h-10 [&_a]:inline-flex [&_a]:min-h-10 [&_a]:items-center " +
@@ -148,14 +147,14 @@ function TerminalPreview({
 
 type SettingsPanelProps = {
   onVaultChanged?: ((status: PasswordVaultStatus) => void) | undefined;
-  api?: IntegrationsApi;
+  api?: SettingsPanelApi;
   page?: SettingsPage | "All";
   onTerminalSettingsChange?: (settings: TerminalSettings) => void | Promise<void>;
   consoles?: Pick<TerminalSessionsState, "sessions" | "busy" | "closeAll">;
 };
 
 export function SettingsPanel({
-  api = integrationsApi,
+  api = settingsPanelApi,
   page = "All",
   consoles,
   onVaultChanged,

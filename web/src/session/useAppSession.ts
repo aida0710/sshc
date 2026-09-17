@@ -8,7 +8,7 @@ import {
   type HealthResponse,
   type RequestFailureDiagnostic,
 } from "../api/client";
-import type { PasswordVaultStatus } from "../api/integrations";
+import type { PasswordVaultStatus } from "../api/vault";
 import type { SessionState } from "./bootstrap";
 import {
   announceVaultLocked,

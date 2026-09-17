@@ -3,11 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/client";
 import { SyncPanel } from "./SyncPanel";
-import type {
-  IntegrationsApi,
-  PullResponse,
-  SyncStatus,
-} from "../api/integrations";
+import type { PullResponse, SyncStatus } from "../api/sync";
+import type { SyncPanelApi } from "./SyncPanel";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -79,8 +76,8 @@ const historyStatus = {
 function buildApi(
   status: SyncStatus,
   pull: PullResponse,
-  overrides: Partial<IntegrationsApi> = {},
-): IntegrationsApi {
+  overrides: Partial<SyncPanelApi> = {},
+): SyncPanelApi {
   return {
     syncStatus: vi.fn().mockResolvedValue(status),
     checkSyncSetup: vi.fn().mockResolvedValue({
@@ -142,7 +139,7 @@ function buildApi(
       },
     }),
     ...overrides,
-  } as unknown as IntegrationsApi;
+  } as unknown as SyncPanelApi;
 }
 
 const measuredSummary = {

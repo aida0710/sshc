@@ -1,8 +1,8 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import type { IntegrationsApi } from "../api/integrations";
 import { BackgroundPicker } from "./BackgroundPicker";
+import type { SettingsApi } from "../api/settings";
 
 vi.mock("./backgroundImage", () => ({ useBackgroundImage: () => "" }));
 
@@ -23,7 +23,7 @@ describe("BackgroundPicker", () => {
         name: "night-sky.png", bytes: 12, type: "image/png",
       }),
       deleteTerminalBackground: vi.fn(),
-    } satisfies Pick<IntegrationsApi, "terminalBackgrounds" | "addTerminalBackground" | "setTerminalBackgroundCapacity" | "renameTerminalBackground" | "deleteTerminalBackground">;
+    } satisfies Pick<SettingsApi, "terminalBackgrounds" | "addTerminalBackground" | "setTerminalBackgroundCapacity" | "renameTerminalBackground" | "deleteTerminalBackground">;
 
     render(
       <BackgroundPicker

@@ -1,5 +1,5 @@
 import { useTranslate } from "../i18n/context";
-import type { Credential } from "../api/integrations";
+import type { Credential } from "../api/credentials";
 import type { KeyItem, RelocateKeyResponse } from "./api";
 import {
   CheckboxField,

@@ -7,13 +7,9 @@ import {
   type UpdateConnectionRequest,
   type UpdateConnectionTOTP,
 } from "../api/config";
-import {
-  integrationsApi,
-  type Credential,
-  type IntegrationsApi,
-  type PasswordEligibility,
-  type PasswordVaultStatus,
-} from "../api/integrations";
+import type { Credential } from "../api/credentials";
+import type { PasswordEligibility, PasswordVaultStatus } from "../api/vault";
+import { connectionSecretsApi, type ConnectionSecretsApi } from "./secretsApi";
 import { useTranslate } from "../i18n/context";
 import { keysApi, selectablePrivateKeys, type KeyItem, type KeysApi } from "../keys/api";
 import { eligibilityText } from "./eligibilityText";
@@ -37,10 +33,7 @@ type ConnectionBasicFormProps = {
   problem: Problem | null;
   onSave: (request: UpdateConnectionRequest) => Promise<void>;
   keys?: Pick<KeysApi, "inventory">;
-  secrets?: Pick<
-    IntegrationsApi,
-    "passwordVault" | "credentials" | "passwordEligibility" | "initialiseVault" | "unlockVault"
-  >;
+  secrets?: ConnectionSecretsApi;
   preferredKey?: GeneratedPrivateKeyHandoff | null | undefined;
   onPreferredKeyApplied?: (() => void) | undefined;
   savedState?: ConnectionSavedState | undefined;
@@ -116,7 +109,7 @@ export function ConnectionBasicForm({
   problem,
   onSave,
   keys = keysApi,
-  secrets = integrationsApi,
+  secrets = connectionSecretsApi,
   preferredKey = null,
   onPreferredKeyApplied,
   savedState,

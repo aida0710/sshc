@@ -2,7 +2,7 @@ import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { Overview } from "../api/config";
-import type { SyncStatus } from "../api/integrations";
+import type { SyncStatus } from "../api/sync";
 import { OverviewPanel } from "./OverviewPanel";
 
 const overview = {

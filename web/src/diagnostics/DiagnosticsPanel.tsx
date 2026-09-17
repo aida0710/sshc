@@ -1,12 +1,5 @@
 import { useEffect, useState } from "react";
-import {
-  integrationsApi,
-  type AuthenticationResponse,
-  type ConfigCheckResponse,
-  type EffectiveResponse,
-  type IntegrationsApi,
-  type ReachabilityResponse,
-} from "../api/integrations";
+import { diagnosticsApi, type AuthenticationResponse, type ConfigCheckResponse, type DiagnosticsApi, type EffectiveResponse, type ReachabilityResponse } from "../api/diagnostics";
 import {
   Field,
   control,
@@ -23,12 +16,12 @@ import { Icon } from "../ui/icons";
 const mobileTouchTargets = "[&_button]:min-h-10 md:[&_button]:min-h-0";
 
 type DiagnosticsPanelProps = {
-  api?: IntegrationsApi;
+  api?: DiagnosticsApi;
   hosts?: string[];
   host?: string;
 };
 
-export function DiagnosticsPanel({ api = integrationsApi, host, hosts = [] }: DiagnosticsPanelProps) {
+export function DiagnosticsPanel({ api = diagnosticsApi, host, hosts = [] }: DiagnosticsPanelProps) {
   const t = useTranslate();
   const embedded = host !== undefined;
   const [typedAlias, setTypedAlias] = useState("");

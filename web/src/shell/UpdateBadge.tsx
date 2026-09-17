@@ -1,14 +1,14 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { integrationsApi, type IntegrationsApi, type UpdateStatus } from "../api/integrations";
+import { updateApi, type UpdateApi, type UpdateStatus } from "../api/update";
 import { useTranslate } from "../i18n/context";
 
 type UpdateBadgeProps = {
-  api?: IntegrationsApi;
+  api?: UpdateApi;
   current?: string;
   indicator?: ReactNode;
 };
 
-export function UpdateBadge({ api = integrationsApi, current = "", indicator }: UpdateBadgeProps) {
+export function UpdateBadge({ api = updateApi, current = "", indicator }: UpdateBadgeProps) {
   const t = useTranslate();
   const [status, setStatus] = useState<UpdateStatus | null>(null);
 
