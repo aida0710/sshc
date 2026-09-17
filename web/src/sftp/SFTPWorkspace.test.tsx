@@ -286,6 +286,24 @@ describe("SFTP tabs", () => {
     } finally { queue.mockRestore(); }
   });
 
+  it("keeps a Windows network share as one local root", async () => {
+    api.listLocal.mockImplementation(async (requestedPath: string) => ({
+      path: requestedPath || "//server/share/Users/Me",
+      home: "//server/share/Users/Me",
+      entries: [],
+    }));
+    render(<SFTPWorkspace aliases={["edge"]} />);
+    await userEvent.click(screen.getByRole("button", { name: "Local files" }));
+    const local = screen.getByRole("region", { name: "Local files" });
+    await waitFor(() => expect(within(local).getByRole("navigation", { name: "Local folder path" })).toHaveTextContent("//server/share/"));
+    await userEvent.click(within(local).getByRole("button", { name: "Parent local folder" }));
+    await waitFor(() => expect(api.listLocal).toHaveBeenCalledWith("//server/share/Users"));
+    await userEvent.click(within(local).getByRole("button", { name: "Parent local folder" }));
+    await waitFor(() => expect(api.listLocal).toHaveBeenCalledWith("//server/share/"));
+    expect(within(local).getByRole("button", { name: "Parent local folder" })).toBeDisabled();
+    expect(within(local).getByRole("navigation", { name: "Local folder path" })).toHaveTextContent("//server/share/");
+  });
+
   it("keeps an unsaved edit mounted while the second pane is hidden", async () => {
     api.list.mockResolvedValue({
       path: "/remote",

@@ -40,6 +40,10 @@ func TestLocalListingStartsAtEngineHomeAndCanNavigateAboveIt(t *testing.T) {
 	if _, err := sftp.ListLocal("relative/path"); !errors.Is(err, sftp.ErrInvalidPath) {
 		t.Fatalf("relative path error = %v", err)
 	}
+	withTrailingSlash, err := sftp.ListLocal(filepath.ToSlash(home) + "/")
+	if err != nil || withTrailingSlash.Path != filepath.ToSlash(home) {
+		t.Fatalf("trailing slash listing = %+v, %v", withTrailingSlash, err)
+	}
 }
 
 func TestEngineLocalTransferStreamsBothDirections(t *testing.T) {
@@ -77,6 +81,17 @@ func TestEngineLocalTransferStreamsBothDirections(t *testing.T) {
 	}
 	if err := service.CopyLocal(context.Background(), get, nil); !errors.Is(err, sftp.ErrAlreadyExists) {
 		t.Fatalf("overwrite protection = %v", err)
+	}
+	if err := os.WriteFile(target, []byte("old payload"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	get.Overwrite = true
+	if err := service.CopyLocal(context.Background(), get, nil); err != nil {
+		t.Fatalf("overwrite = %v", err)
+	}
+	contents, err = os.ReadFile(target)
+	if err != nil || string(contents) != "remote payload" {
+		t.Fatalf("overwrite contents = %q, %v", contents, err)
 	}
 }
 
@@ -135,5 +150,22 @@ func TestLocalDownloadRejectsRemoteTraversalName(t *testing.T) {
 	}, nil)
 	if !errors.Is(err, sftp.ErrInvalidPath) {
 		t.Fatalf("traversal = %v", err)
+	}
+}
+
+func TestLocalDownloadRejectsEmptyRemoteName(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	remote := remoteWith(map[string]node{
+		"/remote":       {name: "remote", mode: fs.ModeDir | 0755, modTime: testTime},
+		"/remote/empty": {name: "", mode: fs.ModeDir | 0755, modTime: testTime},
+	})
+	service := sftp.Service{Open: func(context.Context, string) (sftp.Remote, error) { return remote, nil }}
+	err := service.CopyLocal(context.Background(), sftp.RemoteTransferRequest{
+		SourceAlias: "edge", SourcePath: "/remote", TargetAlias: "edge", TargetPath: filepath.Join(home, "download"), Operation: sftp.RemoteGet,
+	}, nil)
+	if !errors.Is(err, sftp.ErrInvalidPath) {
+		t.Fatalf("empty remote name = %v", err)
 	}
 }

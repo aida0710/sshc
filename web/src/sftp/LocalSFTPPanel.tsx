@@ -7,21 +7,27 @@ import { formatBytes } from "./format";
 import { remoteEntriesMime, type RemoteDragPayload } from "./transfers";
 import { sftpTransferManager } from "./transferManager";
 
+function localRoot(value: string): string {
+  const unc = /^\/\/[^/]+\/[^/]+(?:\/|$)/.exec(value);
+  if (unc) return `${unc[0].replace(/\/$/, "")}/`;
+  return /^[A-Za-z]:\//.test(value) ? value.slice(0, 3) : "/";
+}
 function parentPath(value: string): string {
-  if (value === "/" || /^[A-Za-z]:\/$/.test(value)) return value;
-  const normalized = value.replace(/\\/g, "/").replace(/\/$/, "");
-  const index = normalized.lastIndexOf("/");
-  if (index < 0) return normalized;
-  if (index === 2 && /^[A-Za-z]:\//.test(normalized)) return normalized.slice(0, 3);
-  return index === 0 ? "/" : normalized.slice(0, index);
+  const normalized = value.replace(/\\/g, "/");
+  const root = localRoot(normalized);
+  if (normalized === root || normalized === root.replace(/\/$/, "")) return value;
+  const withoutTrailingSlash = normalized.replace(/\/$/, "");
+  const index = withoutTrailingSlash.lastIndexOf("/");
+  if (index < root.length) return root;
+  return withoutTrailingSlash.slice(0, index);
 }
 function joinPath(parent: string, name: string): string {
   return `${parent.replace(/\/$/, "")}/${name}`;
 }
 function crumbs(value: string): { label: string; path: string }[] {
   const normalized = value.replace(/\\/g, "/");
-  if (normalized === "/") return [{ label: "/", path: "/" }];
-  const root = normalized.startsWith("/") ? "/" : normalized.slice(0, normalized.indexOf("/") + 1);
+  const root = localRoot(normalized);
+  if (normalized === root) return [{ label: root, path: root }];
   const parts = normalized.slice(root.length).split("/").filter(Boolean);
   return [{ label: root, path: root }, ...parts.map((part, index) => ({ label: part, path: `${root}${parts.slice(0, index + 1).join("/")}` }))];
 }

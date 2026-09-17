@@ -40,7 +40,9 @@ func localRelative(value string) (string, error) {
 		return "", ErrInvalidPath
 	}
 	cleaned := filepath.Clean(value)
-	if cleaned != value && value != filepath.ToSlash(cleaned) {
+	withoutTrailingSlash := strings.TrimSuffix(strings.TrimSuffix(value, "/"), string(filepath.Separator))
+	if cleaned != value && value != filepath.ToSlash(cleaned) &&
+		withoutTrailingSlash != cleaned && withoutTrailingSlash != filepath.ToSlash(cleaned) {
 		return "", ErrInvalidPath
 	}
 	return filepath.ToSlash(cleaned), nil
@@ -389,7 +391,7 @@ func (s Service) getLocal(ctx context.Context, remote Remote, root *os.Root, sou
 			if isInternalName(child.Name()) {
 				continue
 			}
-			if child.Name() == "." || child.Name() == ".." || strings.ContainsAny(child.Name(), "/\\") || strings.ContainsRune(child.Name(), 0) {
+			if child.Name() == "" || child.Name() == "." || child.Name() == ".." || strings.ContainsAny(child.Name(), "/\\") || strings.ContainsRune(child.Name(), 0) {
 				return ErrInvalidPath
 			}
 			if err := s.getLocal(ctx, remote, root, path.Join(source, child.Name()), path.Join(target, child.Name()), child, overwrite, report); err != nil {
