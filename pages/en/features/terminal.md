@@ -17,7 +17,7 @@ When SSH needs an unsaved password, key passphrase, or hidden keyboard-interacti
 
 **Settings → Terminal → Connection log** can show connection stages, attempted authentication methods, whether a saved TOTP was available, jump hosts and timing for newly opened connections. **Everything (-vvv)** prints the active log level first. Passwords, generated TOTP codes and setup keys are never logged. `sshc run` uses the same setting.
 
-Reconnect an exited SSH session in the same pane while retaining its scrollback. Closing an SSH or local shell explicitly stops it immediately and removes it from the list.
+A dropped SSH session retries automatically with a growing delay. While it waits, **Stop reconnecting** at the top of the pane abandons the loop; the session stays listed as exited so you can reconnect by hand or close it. Reconnect an exited SSH session in the same pane while retaining its scrollback. Closing an SSH or local shell explicitly stops it immediately and removes it from the list.
 
 ## Terminal controls
 
@@ -45,7 +45,7 @@ Kitty keyboard mode follows requests from the remote application. A JIS option s
 
 OSC 8 links and detected URLs open in the system browser. A detected remote path or the current working directory reported through OSC 7 can open SFTP at the same host and directory. SFTP can also open a new SSH Terminal at its displayed directory.
 
-Local shells use the same subsystem as SSH: search, Quick Commands, workspaces, and broadcast commands all apply. On macOS and Linux, sshc supplies the terminal information needed by line editors such as zsh and fish even when the engine was started as a background service.
+**New session** in the session list opens the same picker SFTP uses for its destination: **Local shell** at the top (one row per detected shell profile), then search, recent connections and groups for SSH hosts. Local shells use the same subsystem as SSH: search, Quick Commands, workspaces, and broadcast commands all apply. On macOS and Linux, sshc supplies the terminal information needed by line editors such as zsh and fish even when the engine was started as a background service.
 
 ## Titles and notifications
 

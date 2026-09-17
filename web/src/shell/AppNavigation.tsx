@@ -1,11 +1,7 @@
 import { useBindings } from "../keyconfig/bindings";
 import {
-  useEffect,
-  useRef,
   useSyncExternalStore,
-  type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent,
-  type PointerEvent as ReactPointerEvent,
   type ReactNode,
   type RefObject,
 } from "react";
@@ -14,10 +10,12 @@ import { UpdateBadge } from "./UpdateBadge";
 import { Icon, type IconName } from "../ui/icons";
 import { BrandMark } from "../ui/BrandMark";
 import { useTranslate } from "../i18n/context";
+import { ColumnResizeHandle } from "../ui/ColumnResizeHandle";
 import type { MessageKey } from "../i18n/messages";
 import { sectionPath, type Section } from "../routing/sectionRoute";
 import type { TerminalSessionsState } from "../terminal/sessions";
 import type { LocalShellProfile, TerminalSession } from "../api/integrations";
+import type { HostEntry } from "../api/config";
 import type { LiveWorkspaceSummary } from "../features/workspaces/live";
 import type { UnreadSessions } from "../terminal/terminalNotifications";
 import {
@@ -52,6 +50,9 @@ export function AppNavigation({
   onReorderConsoles,
   localShellProfiles = [],
   onOpenShell,
+  aliases = [],
+  hosts = [],
+  onConnect,
   onOpenCommandPalette,
 }: {
   navigationRef?: RefObject<HTMLElement | null>;
@@ -78,6 +79,9 @@ export function AppNavigation({
   onReorderConsoles: (order: string[]) => void;
   localShellProfiles?: LocalShellProfile[];
   onOpenShell: (profileId?: string) => void;
+  aliases?: string[];
+  hosts?: HostEntry[];
+  onConnect?: (alias: string) => void;
   onOpenCommandPalette: () => void;
 }) {
   const t = useTranslate();
@@ -166,6 +170,9 @@ export function AppNavigation({
           onReorder={onReorderConsoles}
           localShellProfiles={localShellProfiles}
           onOpenShell={onOpenShell}
+          aliases={aliases}
+          hosts={hosts}
+          {...(onConnect === undefined ? {} : { onConnect })}
         />
       </div>
 
@@ -201,90 +208,14 @@ export function NavigationResizeHandle({
   onWidthChange: (width: number) => void;
 }) {
   const t = useTranslate();
-  const drag = useRef<{ pointerId: number; startX: number; startWidth: number } | null>(null);
-  const queuedWidth = useRef(width);
-  const animationFrame = useRef<number | null>(null);
-  const previousUserSelect = useRef("");
-
-  useEffect(() => {
-    queuedWidth.current = width;
-  }, [width]);
-
-  useEffect(() => () => {
-    if (animationFrame.current !== null) window.cancelAnimationFrame(animationFrame.current);
-    if (drag.current !== null) document.body.style.userSelect = previousUserSelect.current;
-  }, []);
-
-  function publish(nextWidth: number) {
-    queuedWidth.current = clampNavigationWidth(nextWidth);
-    if (animationFrame.current !== null) return;
-    animationFrame.current = window.requestAnimationFrame(() => {
-      animationFrame.current = null;
-      onWidthChange(queuedWidth.current);
-    });
-  }
-
-  function finish(pointerId: number) {
-    if (drag.current?.pointerId !== pointerId) return;
-    drag.current = null;
-    document.body.style.userSelect = previousUserSelect.current;
-    if (animationFrame.current !== null) {
-      window.cancelAnimationFrame(animationFrame.current);
-      animationFrame.current = null;
-      onWidthChange(queuedWidth.current);
-    }
-  }
-
-  function start(event: ReactPointerEvent<HTMLDivElement>) {
-    if (event.button !== 0 || drag.current !== null) return;
-    event.preventDefault();
-    drag.current = { pointerId: event.pointerId, startX: event.clientX, startWidth: width };
-    queuedWidth.current = width;
-    previousUserSelect.current = document.body.style.userSelect;
-    document.body.style.userSelect = "none";
-    event.currentTarget.setPointerCapture(event.pointerId);
-  }
-
-  function move(event: ReactPointerEvent<HTMLDivElement>) {
-    const active = drag.current;
-    if (active === null || active.pointerId !== event.pointerId) return;
-    publish(active.startWidth + event.clientX - active.startX);
-  }
-
-  function useKeyboard(event: ReactKeyboardEvent<HTMLDivElement>) {
-    let nextWidth: number | null = null;
-    const step = event.shiftKey ? 32 : 8;
-    if (event.key === "ArrowLeft") nextWidth = width - step;
-    if (event.key === "ArrowRight") nextWidth = width + step;
-    if (event.key === "Home") nextWidth = minimumNavigationWidth;
-    if (event.key === "End") nextWidth = maximumNavigationWidth;
-    if (nextWidth === null) return;
-    event.preventDefault();
-    onWidthChange(clampNavigationWidth(nextWidth));
-  }
-
   return (
-    <div
-      role="separator"
-      aria-label={t("shell.navigationResize")}
-      aria-orientation="vertical"
-      aria-valuemin={minimumNavigationWidth}
-      aria-valuemax={maximumNavigationWidth}
-      aria-valuenow={width}
-      tabIndex={0}
-      onPointerDown={start}
-      onPointerMove={move}
-      onPointerUp={(event) => finish(event.pointerId)}
-      onPointerCancel={(event) => finish(event.pointerId)}
-      onLostPointerCapture={(event) => finish(event.pointerId)}
-      onKeyDown={useKeyboard}
-      className="group absolute inset-y-0 right-0 hidden w-2 cursor-col-resize touch-none items-center justify-center outline-none md:flex"
-    >
-      <span
-        aria-hidden="true"
-        className="h-full w-px bg-transparent transition-colors group-hover:bg-accent group-focus-visible:w-0.5 group-focus-visible:bg-accent"
-      />
-    </div>
+    <ColumnResizeHandle
+      label={t("shell.navigationResize")}
+      width={width}
+      minimum={minimumNavigationWidth}
+      maximum={maximumNavigationWidth}
+      onWidthChange={(next) => onWidthChange(clampNavigationWidth(next))}
+    />
   );
 }
 

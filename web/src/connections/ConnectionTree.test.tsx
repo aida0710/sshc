@@ -76,6 +76,21 @@ describe("ConnectionTree", () => {
     expect(within(tree).getByRole("region", { name: "Ungrouped group, 1 connections" })).toBeInTheDocument();
   });
 
+  it("lets the groups column be resized from the keyboard and remembers the width", () => {
+    window.localStorage.removeItem("sshc.connections.groups-width.v1");
+    render(
+      <ConnectionTree overview={overview} selected={null} onSelect={vi.fn()} onDrop={vi.fn()} />,
+    );
+
+    const handle = screen.getByRole("separator", { name: "Resize the groups column" });
+    expect(handle).toHaveAttribute("aria-valuenow", "144");
+    fireEvent.keyDown(handle, { key: "ArrowRight", shiftKey: true });
+    expect(handle).toHaveAttribute("aria-valuenow", "176");
+    expect(window.localStorage.getItem("sshc.connections.groups-width.v1")).toBe("176");
+    fireEvent.keyDown(handle, { key: "Home" });
+    expect(handle).toHaveAttribute("aria-valuenow", "112");
+  });
+
   it("keeps pattern rules out of Connections", () => {
     render(
       <ConnectionTree overview={overview} selected={null} onSelect={vi.fn()} onDrop={vi.fn()} />,

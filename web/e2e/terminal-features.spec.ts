@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { expect, openApplication, openSection, openSettingsPage, test } from "./support/environment";
+import { expect, openApplication, openSection, openSettingsPage, test, openLocalShell } from "./support/environment";
 import { terminalKeyboard, terminalScrollbarSlider } from "./support/terminal";
 
 const visualDirectory = process.env.SSHC_VISUAL_DIR;
@@ -61,7 +61,7 @@ test("renders the documented non-interactive CLI example", async ({ page, instal
 test("uses a thin rounded scrollbar for terminal scrollback", async ({ page, installation }) => {
   await openApplication(page, installation);
   await openSection(page, "Terminal");
-  await page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Local shell" }).click();
+  await openLocalShell(page);
 
   const terminal = page.getByRole("region", { name: /^Console for / });
   await expect(terminal).toContainText(/[$#%>]/, { timeout: 20_000 });

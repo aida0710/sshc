@@ -765,6 +765,12 @@ export function App({
             onReorderConsoles={setConsoleOrder}
             localShellProfiles={localShellProfiles}
             onOpenShell={(profileId) => void openLocalShell(profileId)}
+            aliases={knownAliases}
+            hosts={paletteHosts}
+            onConnect={(alias) => void (async () => {
+              const opened = await consoles.open({ kind: "ssh", alias });
+              if (opened !== null) showConsole(opened.id);
+            })()}
             onOpenCommandPalette={() => {
               commandPaletteReturnFocusRef.current = navigationTriggerRef.current;
               setNavigationOpen(false);
@@ -1188,6 +1194,7 @@ function TerminalScreen({
               webgl={settings.webgl ?? true}
               onExit={() => consoles.markExited(session.id)}
               onReconnect={() => consoles.reconnect(session.id)}
+              onStopReconnect={() => consoles.stopReconnect(session.id)}
               onOpenRemotePath={onOpenRemotePath}
             />
           </Suspense>

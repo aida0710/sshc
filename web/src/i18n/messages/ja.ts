@@ -1,7 +1,7 @@
 import type { MessageKey } from "./en";
 
 export const ja = {
-  "shortcuts.heading": "キーコンフィグ",
+  "shortcuts.heading": "Keyboard shortcuts",
   "shortcuts.description": "ショートカットのプリセットを共有し、このブラウザーで使うものを選びます。",
   "shortcuts.confirmDelete": "同期中のすべての端末からこのプリセットを削除しますか？",
   "shortcuts.deleteEverywhere": "すべての端末から削除",
@@ -448,6 +448,7 @@ export const ja = {
   "terminal.consoleList": "開いているセッション",
   "terminal.noSessions": "開いているセッションはありません。",
   "terminal.openShell": "Local shell",
+  "terminal.newSession": "新しいセッション",
   "terminal.openShellOnce": "別の Local shell を今回だけ開く",
   "terminal.rowDetail": "{status} · {destination}",
   "terminal.running": "接続中",
@@ -570,6 +571,9 @@ export const ja = {
   "terminal.reconnectExhausted":
     "再接続の上限に達しました。ネットワーク復旧後に新しい接続を開いてください。",
   "terminal.manualReconnect": "再接続",
+  "terminal.stopReconnect": "再接続を止める",
+  "terminal.reconnectStopped": "自動再接続を停止しました。必要なときに再接続してください。",
+  "terminal.notReconnecting": "このセッションは再接続待ちではありません。",
   "terminal.manualReconnecting": "接続中…",
   "terminal.manualReconnectFailed":
     "SSH セッションへ再接続できませんでした。接続設定とネットワークを確認して、もう一度試してください。",
@@ -1929,6 +1933,8 @@ export const ja = {
   "conn.heading": "Connections",
   "conn.count": "接続先 {count} 件",
   "conn.new": "新しい接続",
+  "conn.resizeGroups": "グループ列の幅を変更",
+  "conn.resizeList": "接続一覧の幅を変更",
   "conn.allConnections": "接続一覧",
   "conn.createAnother": "接続を追加",
   "conn.cancelCreate": "キャンセル",

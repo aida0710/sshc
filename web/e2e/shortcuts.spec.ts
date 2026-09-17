@@ -1,5 +1,5 @@
 import { mkdir } from "node:fs/promises";
-import { expect, openApplication, openSection, test } from "./support/environment";
+import { expect, openApplication, openSection, test, openLocalShell } from "./support/environment";
 import { terminalKeyboard } from "./support/terminal";
 
 test("edits shortcuts, keeps them after reload and uses them in a live terminal", async ({ page, context, installation }) => {
@@ -30,8 +30,7 @@ test("edits shortcuts, keeps them after reload and uses them in a live terminal"
     await mkdir(process.env.SSHC_SHORTCUTS_VISUAL_DIR, { recursive: true });
     await page.screenshot({ path: `${process.env.SSHC_SHORTCUTS_VISUAL_DIR}/shortcuts.png`, fullPage: true });
   }
-  const nav = page.getByRole("navigation", { name: "Primary" });
-  await nav.getByRole("button", { name: "Local shell", exact: true }).click();
+  await openLocalShell(page);
   await expect(page.getByRole("region", { name: /^Console for / })).toContainText(/[$#%>]/);
   await terminalKeyboard(page).focus();
   const beforePalette = frames.length;
@@ -56,7 +55,7 @@ test("edits shortcuts, keeps them after reload and uses them in a live terminal"
   await expect(page).toHaveURL(/\/$/);
   await page.keyboard.press("Alt+PageDown");
   await expect(page).toHaveURL(/\/terminal$/);
-  await nav.getByRole("button", { name: "Local shell", exact: true }).click();
+  await openLocalShell(page);
   const rows = page.getByRole("list", { name: "Open consoles" }).getByRole("listitem");
   await expect(rows).toHaveCount(2);
   await page.keyboard.press("Alt+PageUp");
@@ -77,7 +76,7 @@ test("keeps Ctrl+F inside Terminal and leaves browser Find available on other pa
   });
   await openApplication(page, installation);
   const nav = page.getByRole("navigation", { name: "Primary" });
-  await nav.getByRole("button", { name: "Local shell", exact: true }).click();
+  await openLocalShell(page);
   await expect(page.getByRole("region", { name: /^Console for / })).toContainText(/[$#%>]/);
   async function pressFind(prevented: boolean) {
     await page.evaluate(() => document.documentElement.removeAttribute("data-test-find-prevented"));

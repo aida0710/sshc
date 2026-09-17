@@ -1,4 +1,4 @@
-import { clickAndAwait, expect, masterPassword, test, openApplication, sessionStatus } from "./support/environment";
+import { clickAndAwait, expect, masterPassword, test, openApplication, sessionStatus, openLocalShell } from "./support/environment";
 import { drawnRowFont, drawnRows, outsideTerminal, screenRect, terminalKeyboard } from "./support/terminal";
 
 
@@ -378,7 +378,7 @@ test("draws one separator above the version in the mobile drawer", async ({ page
   }
 
   const menu = navigation.getByRole("link", { name: "Menu", exact: true });
-  const localShell = navigation.getByRole("button", { name: "Local shell", exact: true });
+  const localShell = navigation.getByRole("button", { name: "New session", exact: true });
   const [menuBox, shellBox] = await Promise.all([menu.boundingBox(), localShell.boundingBox()]);
   expect(menuBox).not.toBeNull();
   expect(shellBox).not.toBeNull();
@@ -410,7 +410,7 @@ test("uses established product names in the Japanese navigation", async ({ page,
     await expect(navigation.getByRole("link", { name: section, exact: true })).toBeVisible();
   }
   await expect(navigation.getByText("Sessions", { exact: true })).toBeVisible();
-  await expect(navigation.getByRole("button", { name: "Local shell", exact: true })).toBeVisible();
+  await expect(navigation.getByRole("button", { name: "新しいセッション", exact: true })).toBeVisible();
   await expect(navigation.getByRole("tab")).toHaveCount(0);
   await navigation.getByRole("link", { name: "Menu", exact: true }).click();
 
@@ -836,8 +836,7 @@ test("sends a real control character from the on-screen keys", async ({ page, in
   await openApplication(page, installation);
 
   await page.getByRole("button", { name: "Navigation", exact: true }).click();
-  const nav = page.getByRole("navigation", { name: "Primary" });
-  await nav.getByRole("button", { name: "Local shell" }).click();
+  await openLocalShell(page);
 
   const screen = page.getByRole("region", { name: /^Console for / });
   await expect(screen).toBeVisible();
@@ -878,8 +877,7 @@ test("lays a selectable layer over the terminal, outside the element that blocks
   await openApplication(page, installation);
 
   await page.getByRole("button", { name: "Navigation", exact: true }).click();
-  const nav = page.getByRole("navigation", { name: "Primary" });
-  await nav.getByRole("button", { name: "Local shell" }).click();
+  await openLocalShell(page);
 
   const rows = drawnRows(page);
   await expect(rows).toContainText(/[$#%>]/, { timeout: 20_000 });
@@ -944,7 +942,7 @@ test("asks before closing a live console, in the middle of the screen and not in
 
   await page.getByRole("button", { name: "Navigation", exact: true }).click();
   const nav = page.getByRole("navigation", { name: "Primary" });
-  await nav.getByRole("button", { name: "Local shell" }).click();
+  await openLocalShell(page);
   await expect(drawnRows(page)).toContainText(/[$#%>]/, { timeout: 20_000 });
 
   await page.getByRole("button", { name: "Navigation", exact: true }).click();

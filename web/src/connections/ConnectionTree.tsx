@@ -1,6 +1,7 @@
 import { Fragment, useId, useMemo, useState, type CSSProperties, type DragEvent, type ReactNode } from "react";
 import type { HostEntry, HostMetadata, Overview } from "../api/config";
 import { useTranslate } from "../i18n/context";
+import { ColumnResizeHandle, useStoredColumnWidth } from "../ui/ColumnResizeHandle";
 import { control } from "../ui/form";
 import { Icon } from "../ui/icons";
 import { OperatingSystemIcon } from "../ui/OperatingSystemIcon";
@@ -97,6 +98,13 @@ function hostBlockIdentity(host: HostEntry): string {
   ]);
 }
 
+// Column widths are browser-local conveniences; the layout still works at
+// the defaults when storage is unavailable.
+export const connectionGroupsWidthKey = "sshc.connections.groups-width.v1";
+export const defaultConnectionGroupsWidth = 144;
+export const minimumConnectionGroupsWidth = 112;
+export const maximumConnectionGroupsWidth = 400;
+
 export function ConnectionTree({
   overview,
   selected,
@@ -105,6 +113,9 @@ export function ConnectionTree({
   movesDisabled = false,
 }: ConnectionTreeProps) {
   const t = useTranslate();
+  const [groupsWidth, setGroupsWidth] = useStoredColumnWidth(
+    connectionGroupsWidthKey, defaultConnectionGroupsWidth, minimumConnectionGroupsWidth, maximumConnectionGroupsWidth,
+  );
   const descriptionIdPrefix = useId();
   const [scope, setScope] = useState<Scope>({ kind: "all" });
   const [query, setQuery] = useState("");
@@ -397,14 +408,26 @@ export function ConnectionTree({
   }
 
   return (
-    <nav aria-label={t("tree.navLabel")} className="grid h-full min-h-0 grid-cols-1 grid-rows-[minmax(0,1fr)] lg:grid-cols-[9rem_minmax(0,1fr)] md:grid-rows-1">
-      <aside className="hidden min-h-0 flex-col border-r border-line bg-tree lg:flex">
+    <nav
+      aria-label={t("tree.navLabel")}
+      style={{ "--groups-width": `${groupsWidth}px` } as CSSProperties}
+      className="grid h-full min-h-0 grid-cols-1 grid-rows-[minmax(0,1fr)] lg:grid-cols-[var(--groups-width)_minmax(0,1fr)] md:grid-rows-1"
+    >
+      <aside className="relative hidden min-h-0 flex-col border-r border-line bg-tree lg:flex">
         <p className="shrink-0 px-3 pb-1 pt-3 text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-ink-faint">
           {t("tree.byGroups")}
         </p>
         <div data-connection-facets className="flex min-h-0 min-w-0 flex-1 flex-col gap-1 overflow-x-hidden overflow-y-auto px-3 pb-3">
           {renderFacets()}
         </div>
+        <ColumnResizeHandle
+          label={t("conn.resizeGroups")}
+          width={groupsWidth}
+          minimum={minimumConnectionGroupsWidth}
+          maximum={maximumConnectionGroupsWidth}
+          onWidthChange={setGroupsWidth}
+          className="hidden lg:flex"
+        />
       </aside>
 
       <section className="flex min-h-0 flex-col bg-card" aria-label={t("tree.resultsLabel")}>

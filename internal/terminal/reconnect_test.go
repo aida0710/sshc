@@ -261,6 +261,51 @@ func TestReconnectStateIsVisibleWhileWaiting(t *testing.T) {
 	waitFor(t, func() bool { return !session.Live() })
 }
 
+func TestStoppingTheReconnectWaitLeavesAnExitedPaneToReconnectByHand(t *testing.T) {
+	spy := &openSpy{}
+	registry, _ := newRegistry(terminal.DefaultLimits())
+	registry.ReconnectDelay = func(int) time.Duration { return time.Hour }
+	session, err := registry.Open(context.Background(), terminal.Spec{
+		Kind: terminal.KindSSH, Alias: "gateway", Title: "gateway", Open: spy.open,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := registry.StopReconnecting(session.ID()); !errors.Is(err, terminal.ErrNotReconnecting) {
+		t.Fatalf("stopping a live session = %v, want ErrNotReconnecting", err)
+	}
+	spy.at(0).exit(terminal.ExitInfo{Code: terminal.TransportLost})
+	waitFor(t, func() bool { return session.View().State == terminal.StateReconnecting })
+
+	if err := registry.StopReconnecting(session.ID()); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, func() bool { return session.View().State == terminal.StateExited })
+	view := session.View()
+	if view.Problem != "reconnect_stopped" || view.Reconnect != nil || view.Exited == nil {
+		t.Fatalf("view after stop = state=%s problem=%q reconnect=%v exited=%v", view.State, view.Problem, view.Reconnect, view.Exited)
+	}
+	if !strings.Contains(string(session.Snapshot()), "再接続を停止しました") {
+		t.Fatalf("stop was not announced: %q", session.Snapshot())
+	}
+	if spy.count() != 1 {
+		t.Fatalf("stop still dialled again: %d opens", spy.count())
+	}
+	if err := registry.StopReconnecting(session.ID()); !errors.Is(err, terminal.ErrNotReconnecting) {
+		t.Fatalf("second stop = %v, want ErrNotReconnecting", err)
+	}
+
+	// The pane is still there and can be reconnected by hand afterwards.
+	if _, err := registry.Reconnect(context.Background(), session.ID()); err != nil {
+		t.Fatalf("manual reconnect after stop: %v", err)
+	}
+	waitFor(t, func() bool { return session.View().State == terminal.StateConnected && spy.count() == 2 })
+	if err := registry.Close(session.ID()); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, func() bool { return !session.Live() })
+}
+
 func TestReconnectStopsWhenTheFailureNeedsUserAction(t *testing.T) {
 	spy := &openSpy{failUpTo: 1 + terminal.MaxReconnects}
 	registry, _ := newFastRegistry()
