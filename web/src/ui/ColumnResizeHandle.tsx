@@ -69,7 +69,7 @@ export function ColumnResizeHandle({
     publish(active.startWidth + event.clientX - active.startX);
   }
 
-  function useKeyboard(event: ReactKeyboardEvent<HTMLDivElement>) {
+  function resizeWithKeyboard(event: ReactKeyboardEvent<HTMLDivElement>) {
     let nextWidth: number | null = null;
     const step = event.shiftKey ? 32 : 8;
     if (event.key === "ArrowLeft") nextWidth = width - step;
@@ -95,7 +95,7 @@ export function ColumnResizeHandle({
       onPointerUp={(event) => finish(event.pointerId)}
       onPointerCancel={(event) => finish(event.pointerId)}
       onLostPointerCapture={(event) => finish(event.pointerId)}
-      onKeyDown={useKeyboard}
+      onKeyDown={resizeWithKeyboard}
       className={`group absolute inset-y-0 right-0 z-10 w-2 cursor-col-resize touch-none items-center justify-center outline-none ${className}`}
     >
       <span

@@ -734,7 +734,7 @@ func (h TerminalHandlers) StopReconnecting(c *echo.Context) error {
 	if id == "" || len(id) > maxSessionIdentifier {
 		return problem(c, http.StatusNotFound, "terminal_session_not_found")
 	}
-	err := h.Registry.StopReconnecting(id)
+	err := h.Registry.StopReconnecting(c.Request().Context(), id)
 	switch {
 	case errors.Is(err, terminal.ErrNotFound):
 		return problem(c, http.StatusNotFound, "terminal_session_not_found")
@@ -742,15 +742,6 @@ func (h TerminalHandlers) StopReconnecting(c *echo.Context) error {
 		return problem(c, http.StatusConflict, "terminal_not_reconnecting")
 	case err != nil:
 		return problem(c, http.StatusInternalServerError, "terminal_reconnect_stop_failed")
-	}
-	// The pump finishes asynchronously; wait briefly so the listing already
-	// reports the exited state to the caller that pressed the button.
-	if session, ok := h.Registry.Lookup(id); ok {
-		select {
-		case <-session.Done():
-		case <-time.After(2 * time.Second):
-		case <-c.Request().Context().Done():
-		}
 	}
 	return c.JSON(http.StatusOK, h.list())
 }

@@ -442,7 +442,6 @@ export const en = {
   "terminal.noSessions": "No console is open.",
   "terminal.openShell": "Local shell",
   "terminal.newSession": "New session",
-  "terminal.openShellOnce": "Open another local shell once",
   "terminal.rowDetail": "{status} · {destination}",
   "terminal.running": "connected",
   "terminal.connecting": "connecting",

@@ -271,13 +271,13 @@ func TestStoppingTheReconnectWaitLeavesAnExitedPaneToReconnectByHand(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := registry.StopReconnecting(session.ID()); !errors.Is(err, terminal.ErrNotReconnecting) {
+	if err := registry.StopReconnecting(context.Background(), session.ID()); !errors.Is(err, terminal.ErrNotReconnecting) {
 		t.Fatalf("stopping a live session = %v, want ErrNotReconnecting", err)
 	}
 	spy.at(0).exit(terminal.ExitInfo{Code: terminal.TransportLost})
 	waitFor(t, func() bool { return session.View().State == terminal.StateReconnecting })
 
-	if err := registry.StopReconnecting(session.ID()); err != nil {
+	if err := registry.StopReconnecting(context.Background(), session.ID()); err != nil {
 		t.Fatal(err)
 	}
 	waitFor(t, func() bool { return session.View().State == terminal.StateExited })
@@ -291,7 +291,7 @@ func TestStoppingTheReconnectWaitLeavesAnExitedPaneToReconnectByHand(t *testing.
 	if spy.count() != 1 {
 		t.Fatalf("stop still dialled again: %d opens", spy.count())
 	}
-	if err := registry.StopReconnecting(session.ID()); !errors.Is(err, terminal.ErrNotReconnecting) {
+	if err := registry.StopReconnecting(context.Background(), session.ID()); !errors.Is(err, terminal.ErrNotReconnecting) {
 		t.Fatalf("second stop = %v, want ErrNotReconnecting", err)
 	}
 
