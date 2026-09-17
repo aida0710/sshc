@@ -1,6 +1,4 @@
 import {
-  Suspense,
-  lazy,
   useEffect,
   useId,
   useRef,
@@ -10,7 +8,7 @@ import {
 } from "react";
 import { failureCode } from "../api/client";
 import type { HostEntry } from "../api/config";
-import type { BrowserLocation, NavigationBlocker } from "../routing/useSectionRoute";
+import type { NavigationBlocker } from "../routing/useSectionRoute";
 import { useTranslate } from "../i18n/context";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { clipboard } from "../ui/clipboard";
@@ -23,7 +21,7 @@ import { nextSort } from "../ui/tableSort";
 import { useDismissibleLayer } from "../ui/useDismissibleLayer";
 import { useMenuKeyboard } from "../ui/useMenuKeyboard";
 import { mobileViewportQuery, useCompactViewport, useMediaQuery } from "../ui/useMediaQuery";
-import { sftpApi, type RemoteEntry, type RemoteTextFile } from "./api";
+import { sftpApi, type RemoteEntry } from "./api";
 import { formatBytes } from "./format";
 import { SFTPDetailsDialog } from "./SFTPDetailsDialog";
 import { parentRowKey, SFTPEntryList, sortEntries, useSFTPEntryList, type SFTPSort, type SFTPSortState } from "./SFTPEntryList";
@@ -32,10 +30,8 @@ import { TransferManagerList } from "./TransferManagerList";
 import { sftpTransferManager } from "./transferManager";
 import { SFTPHostPicker } from "./SFTPHostPicker";
 import { SFTPNavigationControls } from "./SFTPNavigationControls";
+import { SFTPTextEditor, useSFTPTextEditor } from "./SFTPTextEditor";
 
-const MonacoEditor = lazy(() =>
-  import("./MonacoEditor").then(({ MonacoEditor }) => ({ default: MonacoEditor })),
-);
 const noHosts: HostEntry[] = [];
 function parentOf(remotePath: string): string {
   if (remotePath === "/") return "/";
@@ -187,16 +183,13 @@ export function SFTPPanel({
   const [pathDraft, setPathDraft] = useState("");
   const [pathEditing, setPathEditing] = useState(false);
   const [entries, setEntries] = useState<RemoteEntry[]>([]);
-  const [opened, setOpened] = useState<RemoteTextFile | null>(null);
-  const [contents, setContents] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [browsing, setBusy] = useState(false);
   const [problem, setProblem] = useState("");
   const [deleting, setDeleting] = useState<RemoteEntry[] | null>(null);
   const [details, setDetails] = useState<RemoteEntry[] | null>(null);
   // While a search is showing, the list is its results rather than one
   // directory. Everything downstream reads listedEntries, not entries.
   const [search, setSearch] = useState<{ root: string; query: string; entries: RemoteEntry[]; truncated: boolean } | null>(null);
-  const [leaving, setLeaving] = useState<BrowserLocation | null>(null);
   // What the last change was, and how to put it back. Delete is absent on
   // purpose: SFTP has no trash, so an "undo" there would be a lie.
   const [undo, setUndo] = useState<{ label: string; run: () => Promise<void> } | null>(null);
@@ -248,7 +241,16 @@ export function SFTPPanel({
   const refreshedUploads = useRef(new Set<string>());
   const refreshedDeletes = useRef(new Set<string>());
   const [openQueueRequest, setOpenQueueRequest] = useState(0);
-  const dirty = opened !== null && contents !== opened.contents;
+  const editor = useSFTPTextEditor({
+    onProblem: setProblem,
+    // The saved revision is what the listing must show next.
+    onSaved: async (targetAlias, saved) => (await load(parentOf(saved.entry.path), targetAlias, true)) !== null,
+    onNavigationBlockerChange,
+    onDirtyChange,
+    onNavigateLocation,
+  });
+  const dirty = editor.dirty;
+  const busy = browsing || editor.busy;
   const listedEntries = search === null ? entries : search.entries;
   const sortedEntries = sortEntries(listedEntries, sort);
   const normalizedFilter = filter.trim().toLocaleLowerCase();
@@ -288,31 +290,6 @@ export function SFTPPanel({
   // for one fact.
   const listingFailed = problem !== "" && alias !== "" && entries.length === 0;
 
-  useEffect(() => {
-    onDirtyChange?.(dirty ? opened?.entry.path ?? "" : null);
-    return () => onDirtyChange?.(null);
-  }, [dirty, onDirtyChange, opened?.entry.path]);
-
-  useEffect(() => {
-    if (!dirty) {
-      onNavigationBlockerChange?.(null);
-      return;
-    }
-    onNavigationBlockerChange?.((next) => {
-      setLeaving(next);
-      return false;
-    });
-    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-      event.returnValue = "";
-    };
-    window.addEventListener("beforeunload", warnBeforeUnload);
-    return () => {
-      onNavigationBlockerChange?.(null);
-      window.removeEventListener("beforeunload", warnBeforeUnload);
-    };
-  }, [dirty, onNavigationBlockerChange]);
-
   function changeSort(key: SFTPSort) {
     setSort((current) => {
       const next = nextSort(current.key, current.direction, key);
@@ -332,8 +309,7 @@ export function SFTPPanel({
     setPath("");
     setPathDraft("");
     setEntries([]);
-    setOpened(null);
-    setContents("");
+    editor.close();
     setDeleting(null);
     setDetails(null);
     setSelectedPaths(new Set());
@@ -379,10 +355,7 @@ export function SFTPPanel({
       setMenu(null);
       setSearch(null);
       if (nextPath !== path || nextAlias !== alias) setUndo(null);
-      if (!preserveEditor) {
-        setOpened(null);
-        setContents("");
-      }
+      if (!preserveEditor) editor.close();
       return listing.entries;
     } catch (error) {
       if (generation !== loadGeneration.current) return null;
@@ -421,7 +394,7 @@ export function SFTPPanel({
           setProblem(t("sftp.linkTargetNotFile"));
           return;
         }
-        await openText(entry, target.alias);
+        await editor.open(target.alias, entry);
         return;
       }
       await download(entry, target.alias);
@@ -464,53 +437,6 @@ export function SFTPPanel({
     void refreshAfterChange(path, alias);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [transferJobs, alias, path, connected, dirty, search]);
-
-  async function openText(entry: RemoteEntry, targetAlias = alias) {
-    if (dirty) {
-      setProblem(t("sftp.unsavedBlocked"));
-      return;
-    }
-    const generation = ++loadGeneration.current;
-    setBusy(true);
-    setProblem("");
-    try {
-      const file = await sftpApi.readText(targetAlias, entry.path);
-      if (generation !== loadGeneration.current) return;
-      setOpened(file);
-      setContents(file.contents);
-    } catch (error) {
-      if (generation !== loadGeneration.current) return;
-      const code = failureCode(error);
-      if (code === "sftp_not_utf8" || code === "sftp_text_too_large") {
-        setProblem(t(code === "sftp_not_utf8" ? "sftp.binaryHint" : "sftp.tooLargeHint"));
-      } else {
-        setProblem(code || (error instanceof Error ? error.message : "sftp_failed"));
-      }
-    } finally {
-      if (generation === loadGeneration.current) setBusy(false);
-    }
-  }
-
-  async function save() {
-    if (opened === null) return;
-    const generation = loadGeneration.current;
-    const targetAlias = alias;
-    setBusy(true);
-    setProblem("");
-    try {
-      const saved = await sftpApi.saveText(targetAlias, opened.entry.path, contents, opened.revision);
-      if (generation !== loadGeneration.current) return;
-      const loaded = await load(parentOf(saved.entry.path), targetAlias, true);
-      if (loaded === null) return;
-      setOpened(saved);
-      setContents(saved.contents);
-    } catch (error) {
-      if (generation !== loadGeneration.current) return;
-      setProblem(failureCode(error) === "sftp_conflict" ? t("sftp.conflict") : failureCode(error) || "sftp_failed");
-    } finally {
-      if (generation === loadGeneration.current) setBusy(false);
-    }
-  }
 
   async function makeDirectory(name: string) {
     const generation = loadGeneration.current;
@@ -921,7 +847,7 @@ export function SFTPPanel({
         key: "edit",
         label: t("sftp.editFile"),
         disabled: busy || dirty,
-        run: () => { setMenu(null); void openText(selectedEntry); },
+        run: () => { setMenu(null); void editor.open(alias, selectedEntry); },
       });
     }
     if (selectedEntries.some((entry) => entry.type === "file" || entry.type === "directory")) {
@@ -1387,28 +1313,7 @@ export function SFTPPanel({
         </ModalShell>
       )}
 
-      {opened === null ? null : (
-        <ModalShell
-          labelledBy={`${headingId}-editor`}
-          onDismiss={() => {
-            if (dirty) setProblem(t("sftp.unsavedBlocked"));
-            else setOpened(null);
-          }}
-          panelClassName="flex h-[min(52rem,calc(100dvh-2rem))] w-full max-w-6xl flex-col overflow-hidden rounded-lg"
-        >
-          <div className="flex items-center gap-2 border-b border-line bg-toolbar px-3 py-2">
-            <h2 id={`${headingId}-editor`} className="min-w-0 grow truncate font-mono text-xs">{opened.entry.path}</h2>
-            {dirty ? <span className="text-xs text-notice-ink">{t("sftp.unsaved")}</span> : null}
-            <Button disabled={busy || !dirty} onClick={() => void save()}>{t("sftp.save")}</Button>
-            <button type="button" disabled={dirty} className="text-xs text-ink-muted disabled:text-ink-faint" onClick={() => setOpened(null)}>{t("sftp.close")}</button>
-          </div>
-          <div className="min-h-0 flex-1">
-            <Suspense fallback={<div className="p-4 text-sm text-ink-muted">{t("sftp.editorLoading")}</div>}>
-              <MonacoEditor path={opened.entry.path} value={contents} onChange={setContents} />
-            </Suspense>
-          </div>
-        </ModalShell>
-      )}
+      <SFTPTextEditor editor={editor} busy={browsing} />
 
       {details === null ? null : (
         <SFTPDetailsDialog
@@ -1417,28 +1322,9 @@ export function SFTPPanel({
           busy={busy}
           returnFocusRef={activeRow}
           onClose={() => setDetails(null)}
-          onEdit={(entry) => { setDetails(null); void openText(entry); }}
+          onEdit={(entry) => { setDetails(null); void editor.open(alias, entry); }}
           onDownload={(targets) => { setDetails(null); void downloadEntries(targets); }}
           onRename={(entry) => { setDetails(null); setInputIntent({ kind: "rename", entry }); }}
-        />
-      )}
-
-      {leaving === null ? null : (
-        <ConfirmDialog
-          id={`${headingId}-leave`}
-          heading={t("sftp.leaveHeading")}
-          body={<p className="text-sm text-ink-muted">{t("sftp.leaveBody", { path: opened?.entry.path ?? "" })}</p>}
-          confirmLabel={t("sftp.leaveDiscard")}
-          cancelLabel={t("sftp.leaveStay")}
-          onConfirm={() => {
-            const destination = leaving;
-            setLeaving(null);
-            setOpened(null);
-            setContents("");
-            onNavigationBlockerChange?.(null);
-            onNavigateLocation?.(`${destination.pathname}${destination.search}`);
-          }}
-          onCancel={() => setLeaving(null)}
         />
       )}
 
