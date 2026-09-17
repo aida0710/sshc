@@ -141,7 +141,6 @@ export class SFTPTransferManager {
   getLargeFileParallelism = (): number => this.largeFileParallelism;
   getLargeFileChunkBytes = (): number => this.largeFileChunkBytes;
   hasUploadSource = (id: string): boolean => this.files.has(id);
-
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
@@ -261,7 +260,8 @@ export class SFTPTransferManager {
     const id = identifier("transfer");
     const name = baseName(remotePath);
     const job = await this.api.createTransfer({
-      id, batchId: identifier("batch"), batchName: name, batchKind: kind, alias,
+      id, batchId: identifier("batch"),
+      batchName: name, batchKind: kind, alias,
       direction: "download", kind, name, remotePath, totalBytes, lastModified: 0,
     });
     this.downloadChunks.set(id, []);
@@ -270,12 +270,12 @@ export class SFTPTransferManager {
     return id;
   }
 
-  async addRemoteTransfers(selections: RemoteTransferSelection[], operation: "copy" | "move" | "delete"): Promise<string[]> {
+  async addRemoteTransfers(selections: RemoteTransferSelection[], operation: "copy" | "move" | "delete" | "get" | "put"): Promise<string[]> {
     if (selections.length === 0) return [];
     const reserved = [...this.uploadAdmissions].reduce((sum, admission) => sum + admission.count, 0);
     if (this.jobs.length + reserved + selections.length > maxTransferJobs) throw new Error("sftp_transfer_limit");
     const batchId = identifier("remote_batch");
-    const batchName = selections.length === 1 ? selections[0]!.name : `${selections.length} remote items`;
+    const batchName = selections.length === 1 ? selections[0]!.name : `${selections.length} items`;
     const batchKind: TransferKind = selections.length === 1 ? selections[0]!.kind : "folder";
     const ids: string[] = [];
     for (const selection of selections) {
@@ -407,7 +407,9 @@ export class SFTPTransferManager {
     const removed = this.jobs.filter((job) => job.status === "completed" || job.status === "cancelled").map((job) => job.id);
     await this.api.clearFinishedTransfers();
     this.commit(this.jobs.filter((job) => job.status !== "completed" && job.status !== "cancelled"));
-    for (const id of removed) void this.cleanupDownload(id);
+    for (const id of removed) {
+      void this.cleanupDownload(id);
+    }
   }
 
   async remove(id: string): Promise<void> {
@@ -713,7 +715,8 @@ export class SFTPTransferManager {
     if (sink !== null) {
       await sink.writer.close();
       this.downloadSinks.delete(id);
-      await this.api.saveDownload(job.remotePath, job.kind === "folder", [await sink.handle.getFile()]);
+      const file = await sink.handle.getFile();
+      await this.api.saveDownload(job.remotePath, job.kind === "folder", [file]);
       globalThis.setTimeout(() => { void sink.root.removeEntry(sink.name).catch(() => undefined); }, 30_000);
     } else {
       await this.api.saveDownload(job.remotePath, job.kind === "folder", chunks.map((chunk) => new Uint8Array(chunk)));

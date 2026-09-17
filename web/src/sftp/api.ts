@@ -5,6 +5,7 @@ import { validateOpenAPISchema } from "../api/validators.generated";
 import { saveWithAndroid } from "../android/native";
 
 export type RemoteEntry = components["schemas"]["SFTPEntry"];
+export type LocalListing = components["schemas"]["SFTPLocalListing"];
 export type RemoteTextFile = components["schemas"]["SFTPTextFile"];
 export type ResumableUpload = components["schemas"]["SFTPResumableUpload"];
 export type TransferJob = components["schemas"]["SFTPTransferJob"];
@@ -84,6 +85,10 @@ function transferJob(value: unknown): TransferJob {
 }
 
 export const sftpApi = {
+  async listLocal(path = ""): Promise<LocalListing> {
+    const query = path === "" ? "" : `?path=${encodeURIComponent(path)}`;
+    return validateOpenAPISchema<LocalListing>("SFTPLocalListing", await apiClient.read(`/api/v1/sftp/local/entries${query}`));
+  },
   async listTransfers(): Promise<TransferJobList> {
     return validateOpenAPISchema<TransferJobList>("SFTPTransferJobList", await apiClient.read("/api/v1/sftp/transfers"));
   },

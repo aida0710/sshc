@@ -1831,6 +1831,16 @@ paths:
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
+  /api/v1/sftp/local/entries:
+    get:
+      operationId: listLocalSFTPEntries
+      description: Lists the sshc engine user's filesystem, starting at the home directory when path is omitted.
+      parameters:
+        - { name: path, in: query, required: false, schema: { type: string } }
+      responses:
+        "200": { description: Engine-local directory listing, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPLocalListing" } } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
   /api/v1/sftp/{alias}/entries:
     parameters: &sftpAlias
       - { name: alias, in: path, required: true, schema: { type: string, minLength: 1, maxLength: 255 } }
@@ -4496,6 +4506,23 @@ components:
       properties:
         path: { type: string }
         entries: { type: array, items: { $ref: "#/components/schemas/SFTPEntry" } }
+    SFTPLocalEntry:
+      type: object
+      additionalProperties: false
+      required: [name, path, type, size]
+      properties:
+        name: { type: string }
+        path: { type: string }
+        type: { type: string, enum: [file, directory] }
+        size: { type: integer, format: int64, minimum: 0 }
+    SFTPLocalListing:
+      type: object
+      additionalProperties: false
+      required: [path, home, entries]
+      properties:
+        path: { type: string }
+        home: { type: string }
+        entries: { type: array, items: { $ref: "#/components/schemas/SFTPLocalEntry" } }
     SFTPTextFile:
       type: object
       additionalProperties: false
@@ -4562,7 +4589,7 @@ components:
         alias: { type: string, minLength: 1, maxLength: 255 }
         sourceAlias: { type: string, maxLength: 255 }
         sourcePath: { type: string }
-        operation: { type: string, enum: ["", copy, move, delete] }
+        operation: { type: string, enum: ["", copy, move, delete, get, put] }
         direction: { type: string, enum: [upload, download, remote] }
         kind: { type: string, enum: [file, folder] }
         name: { type: string, minLength: 1, maxLength: 1024 }
@@ -4669,7 +4696,7 @@ components:
         alias: { type: string, minLength: 1, maxLength: 255 }
         sourceAlias: { type: string, maxLength: 255 }
         sourcePath: { type: string }
-        operation: { type: string, enum: ["", copy, move, delete] }
+        operation: { type: string, enum: ["", copy, move, delete, get, put] }
         overwrite: { type: boolean }
         direction: { type: string, enum: [upload, download, remote] }
         kind: { type: string, enum: [file, folder] }

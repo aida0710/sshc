@@ -96,6 +96,7 @@ func registerSFTPRoutes(engine *echo.Echo, handlers SFTPHandlers) {
 	engine.POST("/api/v1/sftp/transfers/:id/actions", handlers.UpdateTransfer)
 	engine.POST("/api/v1/sftp/transfers/:id/download-checkpoint", handlers.CheckpointDownload)
 	engine.GET("/api/v1/sftp/compare", handlers.CompareDirectories)
+	engine.GET("/api/v1/sftp/local/entries", handlers.ListLocal)
 	engine.GET("/api/v1/sftp/:alias/entries", handlers.List)
 	engine.POST("/api/v1/sftp/:alias/entries", handlers.CreateEntry)
 	engine.GET("/api/v1/sftp/:alias/stats", handlers.DirectoryStats)
@@ -112,6 +113,20 @@ func registerSFTPRoutes(engine *echo.Echo, handlers SFTPHandlers) {
 	engine.PATCH("/api/v1/sftp/:alias/entry", handlers.Rename)
 	engine.DELETE("/api/v1/sftp/:alias/entry", handlers.Delete)
 	engine.PATCH("/api/v1/sftp/:alias/mode", handlers.Chmod)
+}
+
+func (h SFTPHandlers) ListLocal(c *echo.Context) error {
+	listing, err := sshcSFTP.ListLocal(c.QueryParam("path"))
+	if err != nil {
+		return sftpProblem(c, err)
+	}
+	entries := make([]api.SFTPLocalEntry, 0, len(listing.Entries))
+	for _, entry := range listing.Entries {
+		entries = append(entries, api.SFTPLocalEntry{
+			Name: entry.Name, Path: entry.Path, Type: api.SFTPLocalEntryType(entry.Type), Size: entry.Size,
+		})
+	}
+	return c.JSON(http.StatusOK, api.SFTPLocalListing{Path: listing.Path, Home: listing.Home, Entries: entries})
 }
 
 func describeSFTPEntry(entry sshcSFTP.Entry) sftpEntry {
@@ -134,6 +149,8 @@ func sftpProblem(c *echo.Context, err error) error {
 		return problem(c, http.StatusBadRequest, "unsafe_alias")
 	case errors.Is(err, fs.ErrNotExist):
 		return problem(c, http.StatusNotFound, "sftp_not_found")
+	case errors.Is(err, fs.ErrPermission):
+		return problem(c, http.StatusForbidden, "sftp_permission_denied")
 	case errors.Is(err, sshcSFTP.ErrTransferNotFound):
 		return problem(c, http.StatusNotFound, "sftp_transfer_not_found")
 	case errors.Is(err, sshcSFTP.ErrInvalidAlias), errors.Is(err, sshcSFTP.ErrInvalidPath), errors.Is(err, sshcSFTP.ErrRootOperation), errors.Is(err, sshcSFTP.ErrRevisionRequired), errors.Is(err, sshcSFTP.ErrInvalidTransfer), errors.Is(err, sshcSFTP.ErrInvalidQuery):
