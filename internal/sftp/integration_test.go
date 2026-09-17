@@ -158,6 +158,12 @@ func TestRemoteCopyMoveAndCompareAgainstOpenSSHSFTP(t *testing.T) {
 	if downloaded.String() != "moved directly\n" {
 		t.Fatalf("moved contents = %q", downloaded.String())
 	}
+	if err := service.Delete(t.Context(), "integration", targetRoot); err != nil {
+		t.Fatalf("delete non-empty directory: %v", err)
+	}
+	if _, err := service.Stat(t.Context(), "integration", targetRoot); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("deleted directory still exists: %v", err)
+	}
 }
 
 func integrationUpload(t *testing.T, service *sftp.Service, target string, payload []byte, overwrite bool) {
