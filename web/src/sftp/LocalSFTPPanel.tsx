@@ -12,6 +12,7 @@ function parentPath(value: string): string {
   const normalized = value.replace(/\\/g, "/").replace(/\/$/, "");
   const index = normalized.lastIndexOf("/");
   if (index < 0) return normalized;
+  if (index === 2 && /^[A-Za-z]:\//.test(normalized)) return normalized.slice(0, 3);
   return index === 0 ? "/" : normalized.slice(0, index);
 }
 function joinPath(parent: string, name: string): string {

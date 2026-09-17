@@ -274,6 +274,13 @@ describe("SFTP tabs", () => {
       await userEvent.clear(pathInput);
       await userEvent.type(pathInput, "/other{Enter}");
       await waitFor(() => expect(api.listLocal).toHaveBeenCalledWith("/other"));
+      await userEvent.click(within(local).getByRole("button", { name: "Edit local path" }));
+      const windowsPathInput = within(local).getByRole("textbox", { name: "Engine filesystem path" });
+      await userEvent.clear(windowsPathInput);
+      await userEvent.type(windowsPathInput, "C:/Users{Enter}");
+      await waitFor(() => expect(api.listLocal).toHaveBeenCalledWith("C:/Users"));
+      await userEvent.click(within(local).getByRole("button", { name: "Parent local folder" }));
+      await waitFor(() => expect(api.listLocal).toHaveBeenCalledWith("C:/"));
       await userEvent.click(screen.getByRole("button", { name: "Remote files" }));
       expect(screen.getByRole("tablist", { name: "Right pane tabs" })).toBeVisible();
     } finally { queue.mockRestore(); }
