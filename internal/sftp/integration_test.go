@@ -460,6 +460,7 @@ func TestEngineLocalRoundTripAgainstOpenSSHSFTP(t *testing.T) {
 	service := integrationService(t)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	localTree := filepath.Join(home, "source")
 	if err := os.MkdirAll(filepath.Join(localTree, "nested"), 0700); err != nil {
 		t.Fatal(err)
@@ -469,7 +470,7 @@ func TestEngineLocalRoundTripAgainstOpenSSHSFTP(t *testing.T) {
 		t.Fatal(err)
 	}
 	listing, err := sftp.ListLocal("")
-	if err != nil || listing.Path != home {
+	if err != nil || listing.Path != filepath.ToSlash(home) {
 		t.Fatalf("local home listing = %+v, %v", listing, err)
 	}
 	remoteRoot := fmt.Sprintf("/tmp/sshc-sftp-local-%d", time.Now().UnixNano())

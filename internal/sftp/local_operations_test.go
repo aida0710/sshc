@@ -19,6 +19,7 @@ func TestLocalListingStartsAtEngineHomeAndCanNavigateAboveIt(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	if err := os.WriteFile(filepath.Join(home, "note.txt"), []byte("local"), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -26,14 +27,14 @@ func TestLocalListingStartsAtEngineHomeAndCanNavigateAboveIt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if listing.Path != home || listing.Home != home || len(listing.Entries) != 1 || listing.Entries[0].Name != "note.txt" {
+	if listing.Path != filepath.ToSlash(home) || listing.Home != filepath.ToSlash(home) || len(listing.Entries) != 1 || listing.Entries[0].Name != "note.txt" {
 		t.Fatalf("listing = %+v", listing)
 	}
 	above, err := sftp.ListLocal(parent)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if above.Path != parent || len(above.Entries) != 1 || above.Entries[0].Name != "home" {
+	if above.Path != filepath.ToSlash(parent) || len(above.Entries) != 1 || above.Entries[0].Name != "home" {
 		t.Fatalf("parent listing = %+v", above)
 	}
 	if _, err := sftp.ListLocal("relative/path"); !errors.Is(err, sftp.ErrInvalidPath) {
@@ -44,6 +45,7 @@ func TestLocalListingStartsAtEngineHomeAndCanNavigateAboveIt(t *testing.T) {
 func TestEngineLocalTransferStreamsBothDirections(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	source := filepath.Join(home, "local.txt")
 	if err := os.WriteFile(source, []byte("local payload"), 0600); err != nil {
 		t.Fatal(err)
@@ -81,6 +83,7 @@ func TestEngineLocalTransferStreamsBothDirections(t *testing.T) {
 func TestQueuedEngineLocalDownloadCompletes(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	remote := remoteWith(map[string]node{
 		"/remote":            {name: "remote", mode: fs.ModeDir | 0755, modTime: testTime},
 		"/remote/queued.txt": file("queued.txt", "queued payload", 0644),
@@ -121,6 +124,7 @@ func TestQueuedEngineLocalDownloadCompletes(t *testing.T) {
 func TestLocalDownloadRejectsRemoteTraversalName(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	remote := remoteWith(map[string]node{
 		"/remote":    {name: "remote", mode: fs.ModeDir | 0755, modTime: testTime},
 		"/remote/..": {name: "..", mode: fs.ModeDir | 0755, modTime: testTime},
