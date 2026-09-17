@@ -21,11 +21,13 @@ async function put(base: Preset[], presets: Preset[]) {
     method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ base, presets }),
   });
 }
-function activate(id: string, presets: Preset[]) {
+// `remember` is false only while nothing has ever been chosen: a browser that
+// is merely showing the defaults must not gain a stored preference for it.
+function activate(id: string, presets: Preset[], remember = true) {
   const preset = presets.find((item) => item.id === id);
   const selected = preset ? id : "default";
   const bindings = preset?.bindings ?? defaultBindings;
-  window.localStorage.setItem(selectionKey, selected);
+  if (remember) window.localStorage.setItem(selectionKey, selected);
   if (JSON.stringify(loadBindings()) !== JSON.stringify(bindings)) saveBindings(bindings);
   publish({ selected });
 }
@@ -43,10 +45,11 @@ export async function refreshPresets() {
     if (currentGeneration !== generation || currentRevision !== revision) return;
     let presets: Preset[] = metadata.shortcutPresets ?? [];
     let selected = window.localStorage.getItem(selectionKey);
+    const remembered = selected !== null || window.localStorage.getItem(storageKey) !== null;
     // Persist the migration ID before writing so retries never create duplicates.
     if (selected === null) {
-      selected = window.localStorage.getItem(storageKey) === null ? "default" : `pending:${crypto.randomUUID()}`;
-      window.localStorage.setItem(selectionKey, selected);
+      selected = remembered ? `pending:${crypto.randomUUID()}` : "default";
+      if (remembered) window.localStorage.setItem(selectionKey, selected);
     }
     if (selected.startsWith("pending:")) {
       const id = selected.slice(8);
@@ -58,7 +61,7 @@ export async function refreshPresets() {
       }
       selected = id;
     }
-    activate(selected, presets);
+    activate(selected, presets, remembered);
     publish({ presets, loading: false, error: false });
   } catch { if (currentGeneration === generation) publish({ loading: false, error: true }); }
   finally { refreshing = false; }
