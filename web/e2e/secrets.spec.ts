@@ -173,7 +173,8 @@ test("opens a named password masked and reveals it only on request", async ({ pa
   await passwords.getByLabel("New account password value", { exact: true }).fill("original-test-password");
   await passwords.getByRole("button", { name: "Store account password" }).click();
   await passwords.getByRole("button", { name: "Actions for office-vm" }).click();
-  await passwords.getByRole("menuitem", { name: "Edit office-vm" }).click();
+  // The actions menu is portalled to the document body, outside the region.
+  await page.getByRole("menuitem", { name: "Edit office-vm" }).click();
 
   const dialog = page.getByRole("dialog", { name: "Edit account password" });
   const password = dialog.getByLabel("Password", { exact: true });
@@ -228,7 +229,7 @@ test("keeps application controls in Settings and changes the master password the
   );
   await master.getByRole("button", { name: "Change the master password" }).click();
   expect((await changed).status()).toBe(200);
-  await expect(master.getByRole("status")).toContainText("local vault, snippets, sync settings, and local backups");
+  await expect(master.getByRole("status")).toContainText("Local vault protection was updated, including snippets, sync settings, and backups.");
   await expect(master.getByLabel("Current master password", { exact: true })).toHaveValue("");
   await expect(master.getByLabel("New master password", { exact: true })).toHaveValue("");
   await expect(master.getByLabel("Confirm new master password", { exact: true })).toHaveValue("");
