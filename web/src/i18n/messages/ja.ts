@@ -115,7 +115,6 @@ export const ja = {
   "sftp.local.loading": "ローカルのディレクトリを読み込み中…",
   "sftp.local.dropZone": "ローカルのファイル一覧とドロップ先",
   "sftp.local.connectRemote": "アップロードするにはリモート側を接続してください。",
-  "sftp.local.dropHint": "リモートのファイルをここへドロップすると、sshcエンジン側へ直接転送します。",
   "sftp.host": "ホスト",
   "sftp.noHosts": "保存済みホストなし",
   "sftp.chooseHost": "ホストを選択",
@@ -192,8 +191,6 @@ export const ja = {
   "sftp.move": "移動",
   "sftp.upload": "アップロード",
   "sftp.uploadFolder": "フォルダをアップロード",
-  "sftp.dropHint": "またはファイル・フォルダをドロップ",
-  "sftp.dropNow": "ドロップしてフォルダごとアップロード",
   "sftp.dropZone":
     "現在のリモートディレクトリへファイル・フォルダをアップロード",
   "sftp.uploads": "ファイルのアップロード",

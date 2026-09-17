@@ -391,9 +391,6 @@ export function SFTPPanel({
       className="h-8 w-full rounded-md border border-control-line/60 bg-control/70 py-1 pl-7 pr-2 text-xs outline-none focus:border-accent md:h-7"
     />
   );
-  const dropHint = local
-    ? t(transfers.canTransferOut ? (transfers.dragging ? "sftp.dropNow" : "sftp.local.dropHint") : "sftp.local.connectRemote")
-    : t(transfers.dragging ? "sftp.dropNow" : "sftp.dropHint");
   const loadingLabel = t(local ? "sftp.local.loading" : "sftp.loading");
 
   return (
@@ -534,7 +531,6 @@ export function SFTPPanel({
                 <Icon name="search" className="size-4" />
               </button>
             ) : null}
-            <span className="hidden min-w-0 grow truncate text-xs text-ink-muted lg:block">{dropHint}</span>
             </>
             )}
             {can?.browserUpload ? (
