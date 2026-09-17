@@ -270,7 +270,7 @@ export class SFTPTransferManager {
     return id;
   }
 
-  async addRemoteTransfers(selections: RemoteTransferSelection[], operation: "copy" | "move"): Promise<string[]> {
+  async addRemoteTransfers(selections: RemoteTransferSelection[], operation: "copy" | "move" | "delete"): Promise<string[]> {
     if (selections.length === 0) return [];
     const reserved = [...this.uploadAdmissions].reduce((sum, admission) => sum + admission.count, 0);
     if (this.jobs.length + reserved + selections.length > maxTransferJobs) throw new Error("sftp_transfer_limit");

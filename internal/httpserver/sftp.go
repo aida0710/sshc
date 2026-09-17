@@ -366,6 +366,11 @@ func (h SFTPHandlers) CreateTransfer(c *echo.Context) error {
 	if err := decodeJSON(c, &body); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
+	if body.Direction == sshcSFTP.TransferRemote && body.Operation == sshcSFTP.RemoteDelete {
+		if allowed, response := h.Actions.consume(c, session.ActionSFTPDelete, body.Alias+":"+body.RemotePath); !allowed {
+			return response
+		}
+	}
 	job, err := h.Transfers.CreateJob(sshcSFTP.CreateTransferJob{
 		ID: body.ID, BatchID: body.BatchID, BatchName: body.BatchName, BatchKind: body.BatchKind, Alias: body.Alias,
 		SourceAlias: body.SourceAlias, SourcePath: body.SourcePath, Operation: body.Operation,
