@@ -329,7 +329,7 @@ describe("SFTP tabs", () => {
       expect(within(local).getByRole("navigation", { name: "Local folder path" })).toHaveTextContent("~");
       await userEvent.click(within(local).getByRole("button", { name: "Copy full path" }));
       expect(clipboard.writeText).toHaveBeenLastCalledWith("/home/edge");
-      fireEvent.click(within(local).getByTestId("sftp-local-path-space"));
+      fireEvent.click(within(local).getByRole("navigation", { name: "Local folder path" }));
       const directPath = within(local).getByRole("textbox", { name: "Engine filesystem path" });
       expect(directPath).toHaveValue("/home/edge");
       fireEvent.keyDown(directPath, { key: "Escape" });

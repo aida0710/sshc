@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
+import { localHostAlias } from "./localHost";
 import { SFTPPanel } from "./SFTPPanel";
 import { mobileViewportQuery } from "../ui/useMediaQuery";
 import { ApiError } from "../api/client";
@@ -537,7 +538,7 @@ describe("SFTPPanel uploads", () => {
     });
     const queue = vi.spyOn(sftpTransferManager, "addRemoteTransfers").mockResolvedValue(["get-one"]);
     try {
-      render(<SFTPPanel aliases={["edge"]} downloadLocalPath="/home/edge" target={{ alias: "edge", path: "/var/log/app.log", action: "download", request: 3 }} />);
+      render(<SFTPPanel aliases={["edge"]} counterpart={{ alias: localHostAlias, path: "/home/edge" }} target={{ alias: "edge", path: "/var/log/app.log", action: "download", request: 3 }} />);
       await waitFor(() => expect(queue).toHaveBeenCalledWith([
         expect.objectContaining({ sourcePath: "/var/log/app.log", targetPath: "/home/edge/app.log" }),
       ], "get"));
