@@ -223,6 +223,31 @@ describe("SFTP tabs", () => {
     await waitFor(() => expect(api.listLocal).toHaveBeenLastCalledWith("/"));
   });
 
+  it("keeps the Local pane mounted with its history while another tab is selected", async () => {
+    api.listLocal.mockImplementation(async (requestedPath: string) => ({
+      path: requestedPath || "/home/edge", home: "/home/edge", entries: [],
+    }));
+    render(<SFTPWorkspace aliases={[]} />);
+    await userEvent.click(within(screen.getByRole("tabpanel")).getByRole("button", { name: "Host" }));
+    await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /Local.*sshc engine/ }));
+    const local = screen.getByRole("region", { name: "Local files" });
+    await waitFor(() => expect(api.listLocal).toHaveBeenCalledWith(""));
+    await userEvent.click(within(local).getByRole("button", { name: "Edit local path" }));
+    const input = within(local).getByRole("textbox", { name: "Engine filesystem path" });
+    await userEvent.clear(input);
+    await userEvent.type(input, "/srv/projects{Enter}");
+    await waitFor(() => expect(within(local).getByRole("button", { name: "Back" })).toBeEnabled());
+    const requests = api.listLocal.mock.calls.length;
+
+    await userEvent.click(screen.getByRole("button", { name: "New tab" }));
+    expect(screen.queryByRole("region", { name: "Local files" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("tab", { name: "Local:projects" }));
+
+    expect(screen.getByRole("region", { name: "Local files" })).toBe(local);
+    expect(api.listLocal.mock.calls.length).toBe(requests);
+    expect(within(local).getByRole("button", { name: "Back" })).toBeEnabled();
+  });
+
   it("restores the sort order for each tab", async () => {
     api.list.mockResolvedValue({
       path: "/home/edge",

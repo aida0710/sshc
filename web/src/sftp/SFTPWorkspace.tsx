@@ -473,7 +473,7 @@ export function SFTPWorkspace({
               hidden={!selected}
               className={selected ? "flex min-h-0 min-w-0 flex-1 flex-col" : ""}
             >
-              {tab.alias === localHostAlias ? selected ? <LocalSFTPPanel
+              {tab.alias === localHostAlias ? <LocalSFTPPanel
                 aliases={aliases}
                 {...(hosts === undefined ? {} : { hosts })}
                 initialPath={tab.path}
@@ -486,7 +486,7 @@ export function SFTPWorkspace({
                 }}
                 onQueueOpen={() => setOpenQueueRequest((value) => value + 1)}
                 onDirectoryChange={(path) => { if (path !== null) relocate(pane, tab.id, localHostAlias, path); }}
-              /> : null : <SFTPPanel
+              /> : <SFTPPanel
                 aliases={aliases}
                 {...(hosts === undefined ? {} : { hosts })}
                 target={ownsTarget ? target : null}
