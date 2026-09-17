@@ -441,6 +441,7 @@ export const en = {
   "terminal.consoleList": "Open consoles",
   "terminal.noSessions": "No console is open.",
   "terminal.openShell": "Local shell",
+  "terminal.newSession": "New session",
   "terminal.openShellOnce": "Open another local shell once",
   "terminal.rowDetail": "{status} · {destination}",
   "terminal.running": "connected",
@@ -564,6 +565,9 @@ export const en = {
   "terminal.reconnectExhausted":
     "The reconnect limit was reached. Open a new connection when the network is ready.",
   "terminal.manualReconnect": "Reconnect",
+  "terminal.stopReconnect": "Stop reconnecting",
+  "terminal.reconnectStopped": "Automatic reconnection was stopped. Reconnect when you are ready.",
+  "terminal.notReconnecting": "This session is not waiting to reconnect.",
   "terminal.manualReconnecting": "Connecting…",
   "terminal.manualReconnectFailed":
     "The SSH session could not be reconnected. Check the connection settings and network, then try again.",
@@ -1922,6 +1926,8 @@ export const en = {
   "conn.heading": "Connections",
   "conn.count": "{count} available",
   "conn.new": "New connection",
+  "conn.resizeGroups": "Resize the groups column",
+  "conn.resizeList": "Resize the connection list",
   "conn.allConnections": "All connections",
   "conn.createAnother": "Create another connection",
   "conn.cancelCreate": "Cancel",

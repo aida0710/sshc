@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type DragEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import type { LocalShellProfile, TerminalForward, TerminalSession } from "../api/integrations";
 import { useTranslate, type Translate } from "../i18n/context";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
@@ -8,6 +8,8 @@ import { consoleDragMimeType, type LiveWorkspaceSummary } from "../features/work
 import { connectionProgressText } from "./progress";
 import { terminalDisplayTitle } from "./terminalPresentation";
 import type { UnreadSessions } from "./terminalNotifications";
+import { HostPickerDialog, type LocalChoice } from "../shell/HostPickerDialog";
+import type { HostEntry } from "../api/config";
 import { useDismissibleLayer } from "../ui/useDismissibleLayer";
 import { useMenuKeyboard } from "../ui/useMenuKeyboard";
 
@@ -28,6 +30,11 @@ type ConsoleListProps = {
   onReorder: (order: string[]) => void;
   localShellProfiles?: LocalShellProfile[];
   onOpenShell: (profileId?: string) => void;
+  // aliases/hosts feed the same picker SFTP uses, so a new console starts
+  // from one dialog whether it is a local shell or an SSH host.
+  aliases?: string[];
+  hosts?: HostEntry[];
+  onConnect?: (alias: string) => void;
 };
 
 function describeForward(t: Translate, forward: TerminalForward): string {
@@ -58,8 +65,20 @@ export function ConsoleList({
   onReorder,
   localShellProfiles = [],
   onOpenShell,
+  aliases = [],
+  hosts = [],
+  onConnect,
 }: ConsoleListProps) {
   const t = useTranslate();
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const newSessionTrigger = useRef<HTMLButtonElement>(null);
+  const localChoices = useMemo<LocalChoice[]>(() => {
+    const profiles = localShellProfiles.filter((profile) => profile.id !== "default");
+    return [
+      { id: "default", label: t("terminal.openShell"), detail: t("terminal.localhost") },
+      ...profiles.map((profile) => ({ id: profile.id, label: `${t("terminal.openShell")} · ${profile.label}`, detail: t("terminal.openShellOnce") })),
+    ];
+  }, [localShellProfiles, t]);
   const [menuFor, setMenuFor] = useState<string | null>(null);
   const [menuPlacement, setMenuPlacement] = useState<"up" | "down">("down");
   const [closing, setClosing] = useState<TerminalSession | null>(null);
@@ -494,33 +513,27 @@ export function ConsoleList({
           })}
         </ul>
       )}
-      <div className="flex items-center gap-1">
-        <button
-          type="button"
-          disabled={busy || full}
-          onClick={() => onOpenShell()}
-          className="flex min-w-0 grow items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-ink hover:bg-hover disabled:text-ink-faint"
-        >
-          <Icon name="plus" className="size-3.5" aria-hidden="true" />
-          {t("terminal.openShell")}
-        </button>
-        {localShellProfiles.filter((profile) => profile.id !== "default").length === 0 ? null : (
-          <select
-            aria-label={t("terminal.openShellOnce")}
-            value=""
-            disabled={busy || full}
-            onChange={(event) => {
-              if (event.target.value !== "") onOpenShell(event.target.value);
-            }}
-            className="h-8 w-10 cursor-pointer rounded-md border-0 bg-transparent px-1 text-xs text-ink-muted hover:bg-hover disabled:cursor-default"
-          >
-            <option value="">…</option>
-            {localShellProfiles.filter((profile) => profile.id !== "default").map((profile) => (
-              <option key={profile.id} value={profile.id}>{profile.label}</option>
-            ))}
-          </select>
-        )}
-      </div>
+      <button
+        ref={newSessionTrigger}
+        type="button"
+        disabled={busy || full}
+        onClick={() => setPickerOpen(true)}
+        className="flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-ink hover:bg-hover disabled:text-ink-faint"
+      >
+        <Icon name="plus" className="size-3.5" aria-hidden="true" />
+        {t("terminal.newSession")}
+      </button>
+      <HostPickerDialog
+        open={pickerOpen}
+        heading={t("terminal.newSession")}
+        aliases={aliases}
+        hosts={hosts}
+        local={localChoices}
+        returnFocusRef={newSessionTrigger}
+        onChoose={(alias) => { setPickerOpen(false); onConnect?.(alias); }}
+        onChooseLocal={(id) => { setPickerOpen(false); onOpenShell(id === "default" ? undefined : id); }}
+        onClose={() => setPickerOpen(false)}
+      />
       {full ? <p className="px-2 text-xs text-ink-muted">{t("terminal.limitReached", { max: maxSessions })}</p> : null}
       {closing === null ? null : (
         <CloseConfirmation

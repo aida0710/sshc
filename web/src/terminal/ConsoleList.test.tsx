@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { ConsoleList } from "./ConsoleList";
@@ -320,13 +320,35 @@ describe("ConsoleList", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("is the only way in to a local shell", async () => {
+  it("opens a local shell from the same picker SFTP uses", async () => {
     const user = userEvent.setup();
     const props = renderList();
 
-    await user.click(screen.getByRole("button", { name: "Local shell" }));
+    await user.click(screen.getByRole("button", { name: "New session" }));
+    const dialog = screen.getByRole("dialog", { name: "New session" });
+    await user.click(within(dialog).getByRole("button", { name: /Local shell, localhost/ }));
 
-    expect(props.onOpenShell).toHaveBeenCalledOnce();
+    expect(props.onOpenShell).toHaveBeenCalledWith(undefined);
+    expect(screen.queryByRole("dialog", { name: "New session" })).not.toBeInTheDocument();
+  });
+
+  it("connects to an SSH host chosen in the picker", async () => {
+    const user = userEvent.setup();
+    const onConnect = vi.fn();
+    renderList({
+      aliases: ["bastion", "nas"],
+      hosts: [
+        { identity: { path: "config", alias: "bastion" }, file: { path: "config", absolute: "/home/tester/.ssh/config" }, line: 1, patterns: ["bastion"], editable: true, group: "prod", hostName: "10.0.0.1" },
+      ] as never,
+      onConnect,
+    });
+
+    await user.click(screen.getByRole("button", { name: "New session" }));
+    const dialog = screen.getByRole("dialog", { name: "New session" });
+    await user.type(within(dialog).getByRole("searchbox", { name: "Search connections" }), "bast");
+    await user.click(within(dialog).getByRole("button", { name: /bastion/ }));
+
+    expect(onConnect).toHaveBeenCalledWith("bastion");
   });
 
   it("opens a detected shell profile once without changing the default", async () => {
@@ -338,7 +360,9 @@ describe("ConsoleList", () => {
       ],
     });
 
-    await user.selectOptions(screen.getByLabelText("Open another local shell once"), "fish");
+    await user.click(screen.getByRole("button", { name: "New session" }));
+    const dialog = screen.getByRole("dialog", { name: "New session" });
+    await user.click(within(dialog).getByRole("button", { name: /Local shell · fish/ }));
 
     expect(props.onOpenShell).toHaveBeenCalledWith("fish");
   });
@@ -346,20 +370,20 @@ describe("ConsoleList", () => {
   it("stops offering a new shell once the live limit is reached", () => {
     renderList({ sessions: [live, shell], maxSessions: 2 });
 
-    expect(screen.getByRole("button", { name: "Local shell" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "New session" })).toBeDisabled();
     expect(screen.getByText(/limit of 2 open consoles/)).toBeInTheDocument();
   });
 
   it("does not count an exited session against the limit", () => {
     renderList({ sessions: [live, dead], maxSessions: 2 });
 
-    expect(screen.getByRole("button", { name: "Local shell" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "New session" })).toBeEnabled();
   });
 
   it("does not call itself full before the limit is known", () => {
     renderList({ sessions: [], maxSessions: 0 });
 
-    expect(screen.getByRole("button", { name: "Local shell" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "New session" })).toBeEnabled();
     expect(screen.queryByText(/limit of/)).not.toBeInTheDocument();
   });
 
@@ -368,7 +392,7 @@ describe("ConsoleList", () => {
 
     expect(screen.getByText("No console is open.")).toBeInTheDocument();
     expect(screen.queryByRole("list")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Local shell" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "New session" })).toBeEnabled();
   });
 
   it("reports a refusal where the action was taken", () => {

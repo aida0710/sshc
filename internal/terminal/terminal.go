@@ -192,6 +192,9 @@ var (
 	// ErrReconnectUnavailable は、実行中または開き方を保持しないセッションの
 	// 明示再接続を拒否したことを報告する。
 	ErrReconnectUnavailable = errors.New("the terminal session cannot be reconnected")
+	// ErrNotReconnecting は、自動再接続の待機中でないセッションを止めようとした
+	// ことを報告する。
+	ErrNotReconnecting = errors.New("the terminal session is not reconnecting")
 	// ErrNoStarter は、PTY を確保する手段が配線されていないことを報告する。
 	ErrNoStarter = errors.New("no pseudo-terminal is available")
 	// ErrInvalidSize は、TIOCSWINSZ へ渡せない大きさを拒否する。

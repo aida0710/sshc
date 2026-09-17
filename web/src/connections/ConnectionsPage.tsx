@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { toProblem } from "../api/guards";
 import {
   configApi,
@@ -14,6 +14,7 @@ import {
 } from "../api/config";
 import { type HostSelection } from "./ConnectionTree";
 import { ConnectionListPane } from "./ConnectionListPane";
+import { ColumnResizeHandle, useStoredColumnWidth } from "../ui/ColumnResizeHandle";
 import { MissingConnection, NoConnectionSelected } from "./DetailPlaceholders";
 import { useOverlays, useSaveFeedback, useSelectionState } from "./pageState";
 import type { DragPayload } from "./dragdrop";
@@ -50,6 +51,13 @@ import { ManageConnection } from "./ManageConnection";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { PanelState } from "../ui/PanelState";
 import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
+
+// Column widths are browser-local conveniences; the layout still works at
+// the defaults when storage is unavailable.
+const connectionListWidthKey = "sshc.connections.list-width.v1";
+const defaultConnectionListWidth = 400;
+const minimumConnectionListWidth = 256;
+const maximumConnectionListWidth = 720;
 
 const groupNoticeCodes = new Set([
   "group_not_declared",
@@ -120,6 +128,9 @@ export function ConnectionsPage({
   } = useSelectionState(initialTarget, initialRoute.kind === "invalid");
   const selectionRef = useRef<HostSelection | null>(selection);
   const [detail, setDetail] = useState<HostDetail | null>(null);
+  const [listWidth, setListWidth] = useStoredColumnWidth(
+    connectionListWidthKey, defaultConnectionListWidth, minimumConnectionListWidth, maximumConnectionListWidth,
+  );
   const [savedState, setSavedState] = useState<ConnectionSavedState | null>(null);
   const [refreshState, setRefreshState] = useState<"idle" | "refreshing" | "failed">("idle");
   const [savedRevision, setSavedRevision] = useState(0);
@@ -798,9 +809,21 @@ export function ConnectionsPage({
           {t("conn.new")}
         </Button>
       </header>
-      <div className={`grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)] ${compact ? "" : "md:grid-cols-[minmax(16rem,0.7fr)_minmax(0,1.3fr)] xl:grid-cols-[minmax(25rem,0.8fr)_minmax(0,1.2fr)]"}`}>
+      <div
+        style={{ "--list-width": `${listWidth}px` } as CSSProperties}
+        className={`grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)] ${compact ? "" : "md:grid-cols-[minmax(16rem,var(--list-width))_minmax(0,1fr)]"}`}
+      >
         <ConnectionListPane
           compact={compact}
+          resizeHandle={compact ? null : (
+            <ColumnResizeHandle
+              label={t("conn.resizeList")}
+              width={listWidth}
+              minimum={minimumConnectionListWidth}
+              maximum={maximumConnectionListWidth}
+              onWidthChange={setListWidth}
+            />
+          )}
           overview={overview}
           selection={selection}
           invalidLocation={invalidLocation}

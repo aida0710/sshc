@@ -11,6 +11,7 @@ import type { MessageKey } from "../i18n/messages";
 export type TerminalSessionsApi = Pick<
   IntegrationsApi,
   "terminalSessions" | "openTerminalSession" | "reconnectTerminalSession" | "closeTerminalSession" | "renameTerminalSession"
+  | "stopTerminalReconnect"
 >;
 
 export type TerminalSessionsState = {
@@ -23,6 +24,7 @@ export type TerminalSessionsState = {
   unpinTitle?: (id: string) => Promise<boolean>;
   open: (request: OpenTerminalSessionRequest) => Promise<TerminalSession | null>;
   reconnect: (id: string) => Promise<boolean>;
+  stopReconnect: (id: string) => Promise<boolean>;
   close: (id: string) => Promise<void>;
   closeAll: () => Promise<void>;
   refresh: () => Promise<void>;
@@ -168,6 +170,26 @@ export function useTerminalSessions(
     [adoptMutationListing, api, beginMutation, beginOperation, finishOperation, refresh, translate],
   );
 
+  const stopReconnect = useCallback(
+    async (id: string): Promise<boolean> => {
+      beginOperation();
+      setProblem("");
+      const generation = beginMutation();
+      try {
+        const listed = await api.stopTerminalReconnect(id);
+        if (!adoptMutationListing(listed, generation)) await refresh();
+        return true;
+      } catch (error) {
+        setProblem(translate(terminalProblemKey(failureCode(error))));
+        await refresh();
+        return false;
+      } finally {
+        finishOperation();
+      }
+    },
+    [adoptMutationListing, api, beginMutation, beginOperation, finishOperation, refresh, translate],
+  );
+
   const closeAll = useCallback(async () => {
     beginOperation();
     let failed = false;
@@ -245,7 +267,7 @@ export function useTerminalSessions(
     );
   }, []);
 
-  return { sessions, maxSessions, busy, problem, loaded, rename, unpinTitle, open, reconnect, close, closeAll, refresh, markExited };
+  return { sessions, maxSessions, busy, problem, loaded, rename, unpinTitle, open, reconnect, stopReconnect, close, closeAll, refresh, markExited };
 }
 
 export function terminalProblemKey(code: string): MessageKey {
@@ -276,6 +298,10 @@ export function terminalProblemKey(code: string): MessageKey {
       return "terminal.reconnectFailed";
     case "reconnect_exhausted":
       return "terminal.reconnectExhausted";
+    case "reconnect_stopped":
+      return "terminal.reconnectStopped";
+    case "terminal_not_reconnecting":
+      return "terminal.notReconnecting";
     default:
       return "terminal.openFailed";
   }
