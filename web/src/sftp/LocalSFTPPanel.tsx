@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useRef, useState, type DragEvent, type MouseEvent } from "react";
 import { failureCode } from "../api/client";
+import type { HostEntry } from "../api/config";
 import { useTranslate } from "../i18n/context";
 import { clipboard } from "../ui/clipboard";
 import { Icon } from "../ui/icons";
+import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
 import { sftpApi, type LocalListing } from "./api";
 import { formatBytes } from "./format";
+import { SFTPHostPicker } from "./SFTPHostPicker";
+import { localHostAlias } from "./localHost";
 import { remoteEntriesMime, type RemoteDragPayload } from "./transfers";
 import { sftpTransferManager } from "./transferManager";
 
@@ -33,12 +37,17 @@ function crumbs(value: string): { label: string; path: string }[] {
   return [{ label: root, path: root }, ...parts.map((part, index) => ({ label: part, path: `${root}${parts.slice(0, index + 1).join("/")}` }))];
 }
 
-export function LocalSFTPPanel({ remote, onQueueOpen, onDirectoryChange }: {
+export function LocalSFTPPanel({ aliases, hosts, initialPath, remote, onHostChange, onQueueOpen, onDirectoryChange }: {
+  aliases: string[];
+  hosts?: HostEntry[];
+  initialPath: string;
   remote: { alias: string; path: string } | null;
+  onHostChange: (alias: string) => void;
   onQueueOpen: () => void;
   onDirectoryChange: (path: string | null) => void;
 }) {
   const t = useTranslate();
+  const mobileInteraction = useMediaQuery(mobileViewportQuery);
   const [listing, setListing] = useState<LocalListing | null>(null);
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [busy, setBusy] = useState(false);
@@ -47,6 +56,9 @@ export function LocalSFTPPanel({ remote, onQueueOpen, onDirectoryChange }: {
   const [pathEditing, setPathEditing] = useState(false);
   const [pathDraft, setPathDraft] = useState("");
   const currentPath = useRef("");
+  const startingPath = useRef(initialPath);
+  const reportDirectory = useRef(onDirectoryChange);
+  reportDirectory.current = onDirectoryChange;
   const completed = useRef(new Set(sftpTransferManager.getSnapshot()
     .filter((job) => job.direction === "remote" && job.status === "completed").map((job) => job.id)));
 
@@ -68,16 +80,16 @@ export function LocalSFTPPanel({ remote, onQueueOpen, onDirectoryChange }: {
       currentPath.current = next.path;
       setListing(next);
       setSelected(new Set());
-      onDirectoryChange(next.path);
+      reportDirectory.current(next.path);
       setProblem("");
     } catch (error) {
       setProblem(failureCode(error) || (error instanceof Error ? error.message : "sftp_failed"));
     } finally {
       setBusy(false);
     }
-  }, [onDirectoryChange]);
+  }, []);
 
-  useEffect(() => { void navigate(""); }, [navigate]);
+  useEffect(() => { void navigate(startingPath.current); }, [navigate]);
   useEffect(() => sftpTransferManager.subscribe(() => {
     for (const job of sftpTransferManager.getSnapshot()) {
       if (job.direction !== "remote" || job.operation !== "get" ||
@@ -127,8 +139,8 @@ export function LocalSFTPPanel({ remote, onQueueOpen, onDirectoryChange }: {
     onDragOver={(event) => { if (event.dataTransfer.types.includes(remoteEntriesMime)) { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; setDragging(true); } }}
     onDragLeave={() => setDragging(false)} onDrop={(event) => { void acceptRemoteDrop(event); }}>
     <div className="flex min-h-12 items-center gap-2 border-b border-line px-3">
-      <span className="font-medium">{t("sftp.local.heading")}</span>
-      <span className="text-xs text-ink-muted">{t("sftp.local.engine")}</span>
+      <SFTPHostPicker aliases={aliases} {...(hosts === undefined ? {} : { hosts })} value={localHostAlias}
+        onChange={onHostChange} compact={mobileInteraction} includeLocal />
       <span className="min-w-0 flex-1" />
       <button type="button" className="rounded p-2 hover:bg-hover disabled:text-ink-faint" aria-label={t("sftp.local.refresh")}
         disabled={listing === null || busy} onClick={() => { void navigate(listing?.path ?? ""); }}><Icon name="sync" className="size-4" /></button>

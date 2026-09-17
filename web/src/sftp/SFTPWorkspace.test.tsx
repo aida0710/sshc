@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SFTPWorkspace } from "./SFTPWorkspace";
+import { localHostAlias } from "./localHost";
 import { sftpTransferManager } from "./transferManager";
 
 const api = vi.hoisted(() => ({
@@ -184,6 +185,18 @@ describe("SFTP tabs", () => {
     expect(api.list).not.toHaveBeenCalledWith("miyabi", "/srv");
   });
 
+  it("restores a local tab and opens its remembered Windows directory without SSH hosts", async () => {
+    window.localStorage.setItem("sshc.sftp.tabs", JSON.stringify([{ alias: localHostAlias, path: "C:/Users" }]));
+    api.listLocal.mockResolvedValue({ path: "C:/Users", home: "C:/Users", entries: [] });
+    render(<SFTPWorkspace aliases={[]} />);
+
+    expect(screen.getByRole("tab", { name: "Local:Users" })).toBeVisible();
+    await waitFor(() => expect(api.listLocal).toHaveBeenCalledWith("C:/Users"));
+    expect(api.list).not.toHaveBeenCalled();
+    expect(within(screen.getByRole("region", { name: "Local files" })).getByRole("button", { name: "Host" }))
+      .toHaveAttribute("data-value", localHostAlias);
+  });
+
   it("restores the sort order for each tab", async () => {
     api.list.mockResolvedValue({
       path: "/home/edge",
@@ -255,7 +268,11 @@ describe("SFTP tabs", () => {
     const queue = vi.spyOn(sftpTransferManager, "addRemoteTransfers").mockResolvedValue(["local-job"]);
     try {
       render(<SFTPWorkspace aliases={["edge"]} />);
-      await userEvent.click(screen.getByRole("button", { name: "Local files" }));
+      await chooseHost("edge");
+      await userEvent.click(screen.getByRole("button", { name: "Two panes" }));
+      const second = screen.getByLabelText("Second remote pane");
+      await userEvent.click(within(second).getByRole("button", { name: "Host" }));
+      await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /Local.*sshc engine/ }));
       const local = screen.getByRole("region", { name: "Local files" });
       await waitFor(() => expect(within(local).getByRole("button", { name: /notes.txt/ })).toBeVisible());
       expect(within(local).getByRole("navigation", { name: "Local folder path" })).toHaveTextContent("~");
@@ -265,7 +282,6 @@ describe("SFTP tabs", () => {
       const directPath = within(local).getByRole("textbox", { name: "Engine filesystem path" });
       expect(directPath).toHaveValue("/home/edge");
       fireEvent.keyDown(directPath, { key: "Escape" });
-      await chooseHost("edge", screen.getByRole("tabpanel"));
       await userEvent.click(within(local).getByRole("button", { name: /notes.txt/ }));
       await userEvent.click(within(local).getByRole("button", { name: "Upload selection" }));
       await waitFor(() => expect(queue).toHaveBeenCalledWith([
@@ -289,8 +305,9 @@ describe("SFTP tabs", () => {
       await waitFor(() => expect(api.listLocal).toHaveBeenCalledWith("C:/Users"));
       await userEvent.click(within(local).getByRole("button", { name: "Parent local folder" }));
       await waitFor(() => expect(api.listLocal).toHaveBeenCalledWith("C:/"));
-      await userEvent.click(screen.getByRole("button", { name: "Remote files" }));
-      expect(screen.getByRole("tablist", { name: "Right pane tabs" })).toBeVisible();
+      await userEvent.click(within(local).getByRole("button", { name: "Host" }));
+      await userEvent.click(within(screen.getByRole("dialog")).getByText("edge", { exact: true }));
+      expect(within(second).getByRole("button", { name: "Host" })).toHaveAttribute("data-value", "edge");
     } finally { queue.mockRestore(); }
   });
 
@@ -301,7 +318,8 @@ describe("SFTP tabs", () => {
       entries: [],
     }));
     render(<SFTPWorkspace aliases={["edge"]} />);
-    await userEvent.click(screen.getByRole("button", { name: "Local files" }));
+    await userEvent.click(within(screen.getByRole("tabpanel")).getByRole("button", { name: "Host" }));
+    await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /Local.*sshc engine/ }));
     const local = screen.getByRole("region", { name: "Local files" });
     await waitFor(() => expect(within(local).getByRole("navigation", { name: "Local folder path" })).toHaveTextContent("//server/share/"));
     await userEvent.click(within(local).getByRole("button", { name: "Parent local folder" }));
@@ -419,5 +437,20 @@ describe("SFTP tabs", () => {
 
     await waitFor(() => expect(handled).toHaveBeenCalledWith(1));
     expect(within(screen.getByRole("tabpanel")).getByRole("button", { name: "Host" })).toHaveAttribute("data-value", "edge");
+  });
+
+  it("opens an external remote target after the visible tab was switched to Local", async () => {
+    api.listLocal.mockResolvedValue({ path: "/home/edge", home: "/home/edge", entries: [] });
+    const handled = vi.fn();
+    const { rerender } = render(<SFTPWorkspace aliases={["edge"]} onTargetHandled={handled} />);
+    await userEvent.click(within(screen.getByRole("tabpanel")).getByRole("button", { name: "Host" }));
+    await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /Local.*sshc engine/ }));
+    await waitFor(() => expect(api.listLocal).toHaveBeenCalledWith(""));
+
+    rerender(<SFTPWorkspace aliases={["edge"]}
+      target={{ alias: "edge", path: "/var/log", action: "browse", request: 7 }} onTargetHandled={handled} />);
+    await waitFor(() => expect(handled).toHaveBeenCalledWith(7));
+    expect(within(screen.getByRole("tabpanel")).getByRole("button", { name: "Host" })).toHaveAttribute("data-value", "edge");
+    expect(api.list).toHaveBeenCalledWith("edge", "/var");
   });
 });

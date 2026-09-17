@@ -259,7 +259,7 @@ test("keeps a chunked SFTP upload visible while another section is open", async 
     await page.getByRole("button", { name: "project", exact: true }).click();
     await page.screenshot({ path: `${visualDirectory}/sshc-v0.16.1-transfer-manager-desktop.png`, fullPage: true });
     await page.locator("button[data-value]").first().click();
-    await expect(page.getByRole("dialog", { name: "Choose a remote host" })).toBeVisible();
+    await expect(page.getByRole("dialog", { name: "Choose a connection" })).toBeVisible();
     await page.screenshot({ path: `${visualDirectory}/sshc-v0.16.1-sftp-host-picker-desktop.png`, fullPage: true });
     await page.keyboard.press("Escape");
     const primaryFileArea = page.getByLabel("Upload files or folders to the current remote directory").first();
@@ -318,7 +318,7 @@ test("keeps a chunked SFTP upload visible while another section is open", async 
     await mobileTransferManager.getByRole("button", { name: "転送マネージャーを閉じる" }).click();
     await changeDisplayLanguage(page, "en");
     await page.locator("button[data-value]").first().click();
-    await expect(page.getByRole("dialog", { name: "Choose a remote host" })).toBeVisible();
+    await expect(page.getByRole("dialog", { name: "Choose a connection" })).toBeVisible();
     await page.screenshot({ path: `${visualDirectory}/sshc-v0.16.1-sftp-host-picker-mobile.png`, fullPage: true });
     await page.keyboard.press("Escape");
   }

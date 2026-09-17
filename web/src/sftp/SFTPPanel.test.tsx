@@ -899,7 +899,7 @@ describe("SFTPPanel uploads", () => {
     api.list.mockResolvedValue({ path: "/", entries: [] });
     render(<SFTPPanel aliases={["edge"]} />);
 
-    expect(await screen.findByText("Pick a saved SSH host, then connect.")).toBeVisible();
+    expect(await screen.findByText("Choose Local or a saved SSH host. Connect after choosing an SSH host.")).toBeVisible();
     await chooseHost("edge");
 
     expect(await screen.findByText("This directory is empty.")).toBeVisible();

@@ -5,6 +5,7 @@ import { useTranslate } from "../i18n/context";
 import { Icon } from "../ui/icons";
 import { ModalShell } from "../ui/ModalShell";
 import { activateTabFromKeyboard } from "../ui/tabKeyboard";
+import { localHostAlias } from "./localHost";
 
 type HostChoice = { alias: string; group: string; hostName: string; user: string };
 const loadDefaultRecent = () => integrationsApi.recentConnections();
@@ -24,6 +25,7 @@ export function SFTPHostPicker({
   value,
   disabled = false,
   compact = false,
+  includeLocal = false,
   loadRecent = loadDefaultRecent,
   onChange,
 }: {
@@ -32,6 +34,7 @@ export function SFTPHostPicker({
   value: string;
   disabled?: boolean;
   compact?: boolean;
+  includeLocal?: boolean;
   loadRecent?: () => Promise<{ connections: RecentConnection[] }>;
   onChange: (alias: string) => void;
 }) {
@@ -46,6 +49,9 @@ export function SFTPHostPicker({
   const available = useMemo(() => hostChoices(aliases, hosts), [aliases, hosts]);
   const byAlias = useMemo(() => new Map(available.map((host) => [host.alias, host])), [available]);
   const normalized = query.trim().toLocaleLowerCase();
+  const localName = t("sftp.local.connection");
+  const localMatches = includeLocal && (normalized === "" ||
+    [localName, "local", t("sftp.local.engine")].some((field) => field.toLocaleLowerCase().includes(normalized)));
   const matches = normalized === "" ? available : available.filter((host) =>
     [host.alias, host.group, host.hostName, host.user].some((field) => field.toLocaleLowerCase().includes(normalized)),
   );
@@ -78,10 +84,12 @@ export function SFTPHostPicker({
   }
 
   const row = (host: HostChoice, detail: string) => (
-    <button key={host.alias} type="button" onClick={() => choose(host.alias)} className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-left hover:bg-select-fill focus:bg-select-fill focus:outline-none ${host.alias === value ? "bg-select-fill" : ""}`}>
-      <Icon name="terminal" className="size-4 shrink-0 text-accent" />
+    <button key={host.alias} type="button" onClick={() => choose(host.alias)}
+      aria-label={host.alias === localHostAlias ? `${localName}, ${t("sftp.local.engine")}` : undefined}
+      className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-left hover:bg-select-fill focus:bg-select-fill focus:outline-none ${host.alias === value ? "bg-select-fill" : ""}`}>
+      <Icon name={host.alias === localHostAlias ? "home" : "terminal"} className="size-4 shrink-0 text-accent" />
       <span className="min-w-0 grow">
-        <span className="block truncate font-medium text-ink">{host.alias}</span>
+        <span className="block truncate font-medium text-ink">{host.alias === localHostAlias ? localName : host.alias}</span>
         <span className="block truncate text-xs text-ink-muted">{detail || host.hostName || t("sftp.hostNoDetails")}</span>
       </span>
       {host.alias === value ? <span className="text-xs text-accent">{t("sftp.hostCurrent")}</span> : null}
@@ -90,8 +98,8 @@ export function SFTPHostPicker({
 
   return (
     <>
-      <button ref={trigger} type="button" aria-label={t("sftp.host")} data-value={value} disabled={disabled || aliases.length === 0} onClick={() => setOpen(true)} title={value || t("sftp.chooseHost")} className={compact ? "flex size-11 shrink-0 items-center justify-center rounded-md border border-control-line bg-control text-ink-muted active:bg-select-fill disabled:text-ink-faint" : "flex min-h-9 min-w-0 max-w-full items-center justify-between gap-2 rounded-md border border-control-line bg-control px-3 py-1.5 text-left text-sm disabled:text-ink-faint md:min-h-8 md:py-1"}>
-        {compact ? <Icon name="terminal" className="size-4" /> : <><span className="truncate">{value || t(aliases.length === 0 ? "sftp.noHosts" : "sftp.chooseHost")}</span><Icon name="chevronRight" className="size-3 rotate-90 text-ink-muted" /></>}
+      <button ref={trigger} type="button" aria-label={t("sftp.host")} data-value={value} disabled={disabled || (aliases.length === 0 && !includeLocal)} onClick={() => setOpen(true)} title={value === localHostAlias ? localName : value || t("sftp.chooseHost")} className={compact ? "flex size-11 shrink-0 items-center justify-center rounded-md border border-control-line bg-control text-ink-muted active:bg-select-fill disabled:text-ink-faint" : "flex min-h-9 min-w-0 max-w-full items-center justify-between gap-2 rounded-md border border-control-line bg-control px-3 py-1.5 text-left text-sm disabled:text-ink-faint md:min-h-8 md:py-1"}>
+        {compact ? <Icon name={value === localHostAlias ? "home" : "terminal"} className="size-4" /> : <><span className="truncate">{value === localHostAlias ? localName : value || t(aliases.length === 0 && !includeLocal ? "sftp.noHosts" : "sftp.chooseHost")}</span><Icon name="chevronRight" className="size-3 rotate-90 text-ink-muted" /></>}
       </button>
       <ModalShell open={open} labelledBy="sftp-host-picker-heading" onDismiss={() => setOpen(false)} closeOnOutside initialFocusRef={compact ? closeButton : search} returnFocusRef={trigger} placement="palette" panelClassName="flex max-h-[76vh] w-full max-w-xl flex-col overflow-hidden rounded-xl">
         <div className="border-b border-line p-3">
@@ -110,8 +118,9 @@ export function SFTPHostPicker({
           </div> : null}
         </div>
         <div className="min-h-0 overflow-y-auto p-2">
+          {localMatches ? <div className="mb-2 border-b border-line pb-2">{row({ alias: localHostAlias, group: "", hostName: t("sftp.local.engine"), user: "" }, t("sftp.local.engine"))}</div> : null}
           {normalized !== "" ? (
-            matches.length === 0 ? <p className="p-4 text-center text-sm text-ink-muted">{t("sftp.noHostMatches")}</p> : matches.map((host) => row(host, host.group || host.hostName))
+            matches.length === 0 && !localMatches ? <p className="p-4 text-center text-sm text-ink-muted">{t("sftp.noHostMatches")}</p> : matches.map((host) => row(host, host.group || host.hostName))
           ) : view === "recent" && recentChoices.length > 0 ? (
             <section aria-labelledby="sftp-recent-hosts-heading">
               <h3 id="sftp-recent-hosts-heading" className="px-3 py-2 text-xs font-medium uppercase tracking-wide text-ink-muted">{t("sftp.recentHosts")}</h3>

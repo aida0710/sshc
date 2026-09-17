@@ -484,7 +484,7 @@ export function SFTPPanel({
 
   useEffect(() => {
     if (initialLocation === null || openedInitialLocation.current) return;
-    if (!aliases.includes(initialLocation.alias) || !initialLocation.path.startsWith("/")) return;
+    if (!aliases.includes(initialLocation.alias) || (initialLocation.path !== "" && !initialLocation.path.startsWith("/"))) return;
     openedInitialLocation.current = true;
     loadGeneration.current += 1;
     setAlias(initialLocation.alias);
@@ -1329,7 +1329,7 @@ export function SFTPPanel({
       <h2 id={headingId} className="sr-only">{t("sftp.heading")}</h2>
       {mobileInteraction ? (
         <div className="flex min-h-11 shrink-0 items-center gap-1 border-b border-line/50 pb-1">
-          <SFTPHostPicker aliases={aliases} hosts={hosts} value={alias} disabled={dirty} onChange={selectHost} compact />
+          <SFTPHostPicker aliases={aliases} hosts={hosts} value={alias} disabled={dirty} onChange={selectHost} compact includeLocal />
           <button type="button" aria-label={t("sftp.back")} disabled={busy || dirty || navigation.index <= 0} onClick={() => void navigateHistory(-1)} className="flex size-11 shrink-0 items-center justify-center rounded text-ink-muted active:bg-select-fill disabled:text-ink-faint">←</button>
           {pathEditing ? (
             <form className="flex min-w-0 flex-1 items-center gap-1" onSubmit={(event) => { event.preventDefault(); if (!busy && !dirty) void load(pathDraft); }}>
@@ -1349,7 +1349,7 @@ export function SFTPPanel({
         </div>
       ) : (
       <div className="flex flex-wrap items-center gap-1.5 border-b border-line/50 pb-1.5 md:pb-1">
-        <SFTPHostPicker aliases={aliases} hosts={hosts} value={alias} disabled={dirty} onChange={selectHost} />
+        <SFTPHostPicker aliases={aliases} hosts={hosts} value={alias} disabled={dirty} onChange={selectHost} includeLocal />
         {onOpenTerminal === undefined ? null : (
           <button
             type="button"
