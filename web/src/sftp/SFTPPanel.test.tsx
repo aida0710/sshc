@@ -214,12 +214,12 @@ describe("SFTPPanel uploads", () => {
     await chooseHost("edge");
     await screen.findByRole("button", { name: "alpha.txt" });
 
-    await userEvent.type(screen.getByRole("searchbox", { name: "Filter remote entries" }), "alpha");
+    await userEvent.type(screen.getByRole("searchbox", { name: "Filter entries" }), "alpha");
     expect(screen.getByRole("button", { name: "alpha.txt" })).toBeVisible();
     expect(screen.queryByRole("button", { name: "beta.txt" })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("checkbox", { name: "Select all entries" }));
 
-    await userEvent.clear(screen.getByRole("searchbox", { name: "Filter remote entries" }));
+    await userEvent.clear(screen.getByRole("searchbox", { name: "Filter entries" }));
     expect(screen.getByRole("checkbox", { name: "Select alpha.txt" })).toBeChecked();
     expect(screen.getByRole("checkbox", { name: "Select beta.txt" })).not.toBeChecked();
   });
@@ -911,7 +911,7 @@ describe("SFTPPanel uploads", () => {
     await chooseHost("edge");
     await screen.findByRole("button", { name: "app" });
 
-    await userEvent.type(screen.getByRole("searchbox", { name: "Filter remote entries" }), "log{Enter}");
+    await userEvent.type(screen.getByRole("searchbox", { name: "Filter entries" }), "log{Enter}");
     await waitFor(() => expect(api.search).toHaveBeenCalledWith("edge", "/srv", "log"));
 
     expect(await screen.findByText("2 matches for “log” under /srv")).toBeVisible();
@@ -938,7 +938,7 @@ describe("SFTPPanel uploads", () => {
     });
     render(<SFTPPanel aliases={["edge"]} />);
     await chooseHost("edge");
-    await userEvent.type(screen.getByRole("searchbox", { name: "Filter remote entries" }), "log{Enter}");
+    await userEvent.type(screen.getByRole("searchbox", { name: "Filter entries" }), "log{Enter}");
     await userEvent.click(await screen.findByRole("button", { name: "report.log" }));
 
     await userEvent.click(screen.getByRole("button", { name: "Actions for report.log" }));
@@ -1033,7 +1033,7 @@ describe("SFTPPanel uploads", () => {
     it("keeps creation, navigation, selection and sorting in the folder sheet", async () => {
       render(<SFTPPanel aliases={["edge"]} />);
       await chooseHost("edge");
-      expect(screen.queryByRole("searchbox", { name: "Filter remote entries" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("searchbox", { name: "Filter entries" })).not.toBeInTheDocument();
       await userEvent.click(screen.getByRole("button", { name: "Folder actions" }));
       const sheet = screen.getByRole("dialog", { name: "Folder actions" });
       expect(within(sheet).getByRole("menuitem", { name: "New folder" })).toBeEnabled();

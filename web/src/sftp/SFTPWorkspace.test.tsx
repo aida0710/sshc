@@ -421,6 +421,77 @@ describe("SFTP tabs", () => {
     } finally { queue.mockRestore(); }
   });
 
+  it("offers the Local pane only what the engine's disk can do", async () => {
+    api.listLocal.mockResolvedValue({
+      path: "/home/edge", home: "/home/edge",
+      entries: [{ name: "notes.txt", path: "/home/edge/notes.txt", type: "file", size: 5, mode: "-rw-------", modifiedAt: "2026-09-17T08:00:00Z", revision: "notes" }],
+    });
+    render(<SFTPWorkspace aliases={["edge"]} onOpenTerminal={vi.fn()} />);
+    await chooseHost("edge");
+    const remote = screen.getByRole("region", { name: "Remote files" });
+    expect(within(remote).getByRole("button", { name: "Create or upload" })).toBeInTheDocument();
+    expect(within(remote).getByRole("button", { name: "Search everything under this directory" })).toBeInTheDocument();
+    expect(within(remote).getByRole("button", { name: "Open Terminal here" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Two panes" }));
+    const second = screen.getByLabelText("Second remote pane");
+    await userEvent.click(within(second).getByRole("button", { name: "Host" }));
+    await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /Local.*sshc engine/ }));
+    const local = screen.getByRole("region", { name: "Local files" });
+    await waitFor(() => expect(within(local).getByRole("button", { name: "notes.txt" })).toBeVisible());
+    // The same toolbar and filter, without the operations the engine has no API for.
+    expect(within(local).getByRole("button", { name: "Refresh directory" })).toBeInTheDocument();
+    expect(within(local).getByRole("searchbox", { name: "Filter entries" })).toBeInTheDocument();
+    expect(within(local).queryByRole("button", { name: "Create or upload" })).not.toBeInTheDocument();
+    expect(within(local).queryByRole("button", { name: "Search everything under this directory" })).not.toBeInTheDocument();
+    expect(within(local).queryByRole("button", { name: "Open Terminal here" })).not.toBeInTheDocument();
+    fireEvent.contextMenu(within(local).getByRole("button", { name: "notes.txt" }));
+    const contextMenu = await within(local).findByRole("menu", { name: "Actions for notes.txt" });
+    const items = within(contextMenu).getAllByRole("menuitem").map((item) => item.textContent);
+    expect(items).toContain("Upload selection");
+    expect(items).toContain("Copy full path");
+    for (const missing of ["Delete", "Rename", "Details", "Edit file", "Download"]) expect(items).not.toContain(missing);
+  });
+
+  it("puts rows dragged from Local onto a host and gets rows dragged from a host onto Local", async () => {
+    api.list.mockResolvedValue({
+      path: "/srv",
+      entries: [{ name: "remote.log", path: "/srv/remote.log", type: "file", size: 8, mode: "0644", modifiedAt: "2026-09-17T08:00:00Z", revision: "remote" }],
+    });
+    api.listLocal.mockResolvedValue({
+      path: "/home/edge", home: "/home/edge",
+      entries: [{ name: "notes.txt", path: "/home/edge/notes.txt", type: "file", size: 5, mode: "-rw-------", modifiedAt: "2026-09-17T08:00:00Z", revision: "notes" }],
+    });
+    const queue = vi.spyOn(sftpTransferManager, "addRemoteTransfers").mockResolvedValue(["job"]);
+    try {
+      render(<SFTPWorkspace aliases={["edge"]} />);
+      await chooseHost("edge");
+      await userEvent.click(screen.getByRole("button", { name: "Two panes" }));
+      const second = screen.getByLabelText("Second remote pane");
+      await userEvent.click(within(second).getByRole("button", { name: "Host" }));
+      await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /Local.*sshc engine/ }));
+      const local = screen.getByRole("region", { name: "Local files" });
+      const remote = screen.getByRole("region", { name: "Remote files" });
+      await waitFor(() => expect(within(local).getByRole("button", { name: "notes.txt" })).toBeVisible());
+      const carried = new Map<string, string>();
+      const dataTransfer = {
+        effectAllowed: "", dropEffect: "", types: ["application/x-sshc-sftp-entries"], files: [],
+        setData: (type: string, value: string) => { carried.set(type, value); },
+        getData: (type: string) => carried.get(type) ?? "",
+      };
+      fireEvent.dragStart(within(local).getByRole("row", { name: /notes.txt/ }), { dataTransfer });
+      fireEvent.drop(within(remote).getByLabelText("Upload files or folders to the current remote directory"), { dataTransfer });
+      await waitFor(() => expect(queue).toHaveBeenLastCalledWith([
+        expect.objectContaining({ sourceAlias: "edge", sourcePath: "/home/edge/notes.txt", targetAlias: "edge", targetPath: "/srv/notes.txt" }),
+      ], "put"));
+      carried.clear();
+      fireEvent.dragStart(within(remote).getByRole("row", { name: /remote.log/ }), { dataTransfer });
+      fireEvent.drop(within(local).getByLabelText("Local file list and drop zone"), { dataTransfer });
+      await waitFor(() => expect(queue).toHaveBeenLastCalledWith([
+        expect.objectContaining({ sourceAlias: "edge", sourcePath: "/srv/remote.log", targetAlias: "edge", targetPath: "/home/edge/remote.log" }),
+      ], "get"));
+    } finally { queue.mockRestore(); }
+  });
+
   it("keeps a Windows network share as one local root", async () => {
     api.listLocal.mockImplementation(async (requestedPath: string) => ({
       path: requestedPath || "//server/share/Users/Me",

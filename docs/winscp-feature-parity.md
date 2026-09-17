@@ -30,7 +30,7 @@ sshcのSFTPは、安全なアップロード／ダウンロード、フォルダ
 | WinSCP機能 | 状態 | sshcの現状 | 実装方針 |
 |---|---|---|---|
 | Explorer型の単一remote panel | 対応 | SFTP画面が相当 | 維持 |
-| Commander型のlocal／remote 2 panel | 部分対応 | 接続先メニューに固定表示した「ローカル」で、左右どちらのペインにもsshcエンジン側のファイルを表示する。一覧はリモートと同じコンポーネントで、名前・更新日時・サイズ・種別・権限の列、sort、全選択、Shift／Ctrl範囲選択、キーボード操作、狭幅時の2行リストを共有する。初期位置はエンジンユーザーのホーム。上階層を含めOS権限の範囲で移動でき、file／directoryをengine queue経由で直接転送する。ブラウザのフォルダ権限は不要 | ローカル／リモートの同期・比較は未対応 |
+| Commander型のlocal／remote 2 panel | 部分対応 | 接続先メニューに固定表示した「ローカル」で、左右どちらのペインにもsshcエンジン側のファイルを表示する。ペインはリモートと同じ`SFTPPanel`で、`SFTPSource`の`can`（connect／edit／createEntries／rename／chmod／delete／search／details／browserUpload／download／dragOut／terminal）に応じて操作を出し分ける。ツールバー、絞り込み、名前・更新日時・サイズ・種別・権限の列、sort、全選択、Shift／Ctrl範囲選択、キーボード操作、右クリック／長押しメニュー、狭幅時の2行リストを共有し、行をリモートへドラッグするとput、リモートの行をローカルへ落とすとgetになる。初期位置はエンジンユーザーのホーム。上階層を含めOS権限の範囲で移動でき、file／directoryをengine queue経由で直接転送する。ブラウザのフォルダ権限は不要 | ローカル／リモートの同期・比較は未対応 |
 | remote／remote 2 panel | 対応 | desktopで2つのhost／directoryを並べる。左右が独立したtab列を持ち、表示中のtab間でfile／directoryをDrag & Dropしてcopy／moveできる | 維持 |
 | `..`による親directory移動 | 対応 | リモート・ローカルとも一覧先頭の`..`行で移動する。ローカルもOSルートまで移動でき、ルートでは`..`を表示しない | 維持 |
 | path breadcrumb／直接入力 | 部分対応 | リモート・ローカルとも階層をクリックでき、パスバーの空白クリックまたは編集ボタンで絶対pathを直接入力できる。ローカルは`~/`から始まるpathも受け付ける。現在のpathはコピーボタンで取得できる | 維持 |

@@ -158,7 +158,7 @@ export const ja = {
   "sftp.forward": "進む",
   "sftp.homeDirectory": "ホームディレクトリ",
   "sftp.rootDirectory": "ルートディレクトリ",
-  "sftp.filter": "リモート項目を絞り込み",
+  "sftp.filter": "項目を絞り込み",
   "sftp.filterPlaceholder": "絞り込み",
   "sftp.searchBelow": "このディレクトリ配下を検索する",
   "sftp.searchResults": "{path} 配下で「{query}」に一致: {count}件",

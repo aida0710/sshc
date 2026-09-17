@@ -155,7 +155,7 @@ export const en = {
   "sftp.forward": "Forward",
   "sftp.homeDirectory": "Home directory",
   "sftp.rootDirectory": "Root directory",
-  "sftp.filter": "Filter remote entries",
+  "sftp.filter": "Filter entries",
   "sftp.filterPlaceholder": "Filter",
   "sftp.searchBelow": "Search everything under this directory",
   "sftp.searchResults": "{count} matches for \u201c{query}\u201d under {path}",
