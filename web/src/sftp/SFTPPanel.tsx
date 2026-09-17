@@ -22,27 +22,18 @@ import { useDismissibleLayer } from "../ui/useDismissibleLayer";
 import { useMenuKeyboard } from "../ui/useMenuKeyboard";
 import { mobileViewportQuery, useCompactViewport, useMediaQuery } from "../ui/useMediaQuery";
 import { sftpApi, type RemoteEntry } from "./api";
+import { remoteJoin as join, remoteParentOf as parentOf } from "./sftpSource";
+import { useSFTPBrowser } from "./useSFTPBrowser";
 import { formatBytes } from "./format";
 import { SFTPDetailsDialog } from "./SFTPDetailsDialog";
 import { parentRowKey, SFTPEntryList, sortEntries, useSFTPEntryList, type SFTPSort, type SFTPSortState } from "./SFTPEntryList";
 import { directoryPaths, remoteEntriesMime, safeRelativePath, symbolicModeToOctal, type LocalTransferFile, type RemoteDragPayload } from "./transfers";
 import { TransferManagerList } from "./TransferManagerList";
 import { sftpTransferManager } from "./transferManager";
-import { SFTPHostPicker } from "./SFTPHostPicker";
-import { SFTPNavigationControls } from "./SFTPNavigationControls";
 import { SFTPTextEditor, useSFTPTextEditor } from "./SFTPTextEditor";
+import { SFTPToolbar } from "./SFTPToolbar";
 
 const noHosts: HostEntry[] = [];
-function parentOf(remotePath: string): string {
-  if (remotePath === "/") return "/";
-  const pieces = remotePath.split("/").filter(Boolean);
-  pieces.pop();
-  return `/${pieces.join("/")}` || "/";
-}
-
-function join(parent: string, name: string): string {
-  return `${parent === "/" ? "" : parent}/${name}`;
-}
 
 export type { SFTPSort, SFTPSortState } from "./SFTPEntryList";
 
@@ -177,14 +168,7 @@ export function SFTPPanel({
   downloadLocalPath?: string | null;
 }) {
   const t = useTranslate();
-  const [alias, setAlias] = useState("");
-  const [path, setPath] = useState("");
-  const [connected, setConnected] = useState(false);
-  const [pathDraft, setPathDraft] = useState("");
-  const [pathEditing, setPathEditing] = useState(false);
-  const [entries, setEntries] = useState<RemoteEntry[]>([]);
-  const [browsing, setBusy] = useState(false);
-  const [problem, setProblem] = useState("");
+  const [acting, setBusy] = useState(false);
   const [deleting, setDeleting] = useState<RemoteEntry[] | null>(null);
   const [details, setDetails] = useState<RemoteEntry[] | null>(null);
   // While a search is showing, the list is its results rather than one
@@ -194,7 +178,6 @@ export function SFTPPanel({
   // purpose: SFTP has no trash, so an "undo" there would be a lie.
   const [undo, setUndo] = useState<{ label: string; run: () => Promise<void> } | null>(null);
   const [inputIntent, setInputIntent] = useState<SFTPInputIntent | null>(null);
-  const [navigation, setNavigation] = useState<{ paths: string[]; index: number }>({ paths: [], index: -1 });
   const [filter, setFilter] = useState("");
   const [menu, setMenu] = useState<SFTPMenu | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -202,20 +185,14 @@ export function SFTPPanel({
   const [sort, setSort] = useState<SFTPSortState>(initialSort);
   const upload = useRef<HTMLInputElement>(null);
   const folderUpload = useRef<HTMLInputElement>(null);
-  const pathInput = useRef<HTMLInputElement>(null);
   const panelRoot = useRef<HTMLElement>(null);
   const compactViewport = useCompactViewport(panelRoot);
   const mobileInteraction = useMediaQuery(mobileViewportQuery);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const searchInput = useRef<HTMLInputElement>(null);
-  const [pendingPath, setPendingPath] = useState<string | null>(null);
   const headingId = useId();
   const openingTarget = useRef(false);
   const handledTarget = useRef(0);
-  const openedInitialLocation = useRef(false);
-  const reportLocation = useRef(onLocationChange);
-  reportLocation.current = onLocationChange;
-  const loadGeneration = useRef(0);
   const menuRoot = useRef<HTMLDivElement>(null);
   const menuPanel = useRef<HTMLDivElement>(null);
   const menuTrigger = useRef<HTMLButtonElement>(null);
@@ -229,11 +206,6 @@ export function SFTPPanel({
   useMenuKeyboard({ open: menu !== null && !mobileInteraction, menuRef: menuPanel, onClose: () => setMenu(null) });
 
   useEffect(() => {
-    if (!pathEditing) return;
-    pathInput.current?.focus();
-    pathInput.current?.select();
-  }, [pathEditing]);
-  useEffect(() => {
     if (mobileSearchOpen) searchInput.current?.focus();
   }, [mobileSearchOpen]);
 
@@ -241,16 +213,43 @@ export function SFTPPanel({
   const refreshedUploads = useRef(new Set<string>());
   const refreshedDeletes = useRef(new Set<string>());
   const [openQueueRequest, setOpenQueueRequest] = useState(0);
+  const browser = useSFTPBrowser({
+    aliases,
+    initialLocation,
+    onLocationChange,
+    onLoaded: (listing, { refresh, changed }) => {
+      setSelectedPaths((current) => new Set(listing.entries.filter((entry) => current.has(entry.path)).map((entry) => entry.path)));
+      setMenu(null);
+      setSearch(null);
+      if (changed) setUndo(null);
+      if (!refresh) editor.close();
+    },
+    onReset: () => {
+      editor.close();
+      setDeleting(null);
+      setDetails(null);
+      setSelectedPaths(new Set());
+      setFilter("");
+      setSearch(null);
+      setMenu(null);
+      setFocusedKey(null);
+      setUndo(null);
+      setBusy(false);
+      setMobileSearchOpen(false);
+    },
+  });
+  const { alias, path, connected, entries, problem, setProblem, pendingPath, listingFailed, selectHost } = browser;
+  const loadGeneration = browser.generation;
   const editor = useSFTPTextEditor({
     onProblem: setProblem,
     // The saved revision is what the listing must show next.
-    onSaved: async (targetAlias, saved) => (await load(parentOf(saved.entry.path), targetAlias, true)) !== null,
+    onSaved: async (targetAlias, saved) => (await browser.load(parentOf(saved.entry.path), { alias: targetAlias, refresh: true })) !== null,
     onNavigationBlockerChange,
     onDirtyChange,
     onNavigateLocation,
   });
   const dirty = editor.dirty;
-  const busy = browsing || editor.busy;
+  const busy = browser.busy || acting || editor.busy;
   const listedEntries = search === null ? entries : search.entries;
   const sortedEntries = sortEntries(listedEntries, sort);
   const normalizedFilter = filter.trim().toLocaleLowerCase();
@@ -259,7 +258,7 @@ export function SFTPPanel({
   const displayedEntries = normalizedFilter === "" || search !== null
     ? sortedEntries
     : sortedEntries.filter((entry) => entry.name.toLocaleLowerCase().includes(normalizedFilter));
-  const parentRowVisible = search === null && path !== "" && path !== "/";
+  const parentRowVisible = search === null && !browser.atRoot;
   const list = useSFTPEntryList({
     entries: displayedEntries,
     loadedEntries: listedEntries,
@@ -271,7 +270,7 @@ export function SFTPPanel({
       if (entry.type === "directory") void load(entry.path);
       else setDetails([entry]);
     },
-    onOpenParent: () => { void load(parentOf(path)); },
+    onOpenParent: () => { void browser.openParent(); },
     onInteract: () => setMenu(null),
     onContextMenu: (_entry, x, y) => {
       menuTrigger.current = null;
@@ -285,11 +284,6 @@ export function SFTPPanel({
     selectedPaths, setSelectedPaths, selectedEntries, selectedEntry, rowKeys, setFocusedKey,
     pendingFocus, selectionAnchor, activeRow, activate, openParent, invertDisplayedSelection, selectAllDisplayed,
   } = list;
-  // A listing that failed says so where the rows would be, with the retry next
-  // to it. Repeating the same sentence in the banner above would be two voices
-  // for one fact.
-  const listingFailed = problem !== "" && alias !== "" && entries.length === 0;
-
   function changeSort(key: SFTPSort) {
     setSort((current) => {
       const next = nextSort(current.key, current.direction, key);
@@ -298,73 +292,11 @@ export function SFTPPanel({
     });
   }
 
-  function selectHost(nextAlias: string) {
-    // Invalidate every request started for the previous host before React runs
-    // the alias effect. Keeping its rows visible would also let an action for
-    // host A be submitted with host B's alias during the hand-off render.
-    loadGeneration.current += 1;
-    reportLocation.current(nextAlias, "");
-    setAlias(nextAlias);
-    setConnected(false);
-    setPath("");
-    setPathDraft("");
-    setEntries([]);
-    editor.close();
-    setDeleting(null);
-    setDetails(null);
-    setSelectedPaths(new Set());
-    setNavigation({ paths: [], index: -1 });
-    setFilter("");
-    setSearch(null);
+  // Every listing from the pane closes an open menu first: the rows it acted
+  // on are about to be replaced.
+  function load(nextPath?: string, options?: Parameters<typeof browser.load>[1]) {
     setMenu(null);
-    setFocusedKey(null);
-    setProblem("");
-    setUndo(null);
-    setBusy(false);
-    setPendingPath(null);
-    setMobileSearchOpen(false);
-  }
-
-  async function load(nextPath = path, nextAlias = alias, preserveEditor = false, recordNavigation = true): Promise<RemoteEntry[] | null> {
-    const generation = ++loadGeneration.current;
-    if (nextAlias === "") {
-      setBusy(false);
-      return null;
-    }
-    setBusy(true);
-    setPendingPath(nextPath);
-    setMenu(null);
-    setProblem("");
-    try {
-      const listing = await sftpApi.list(nextAlias, nextPath);
-      if (generation !== loadGeneration.current) return null;
-      setPath(listing.path);
-      setConnected(true);
-      setPathDraft(listing.path);
-      setPathEditing(false);
-      setEntries(listing.entries);
-      reportLocation.current(nextAlias, listing.path);
-      if (recordNavigation) {
-        setNavigation((current) => {
-          if (current.paths[current.index] === listing.path) return current;
-          const paths = [...current.paths.slice(0, current.index + 1), listing.path];
-          return { paths, index: paths.length - 1 };
-        });
-      }
-      setSelectedPaths((current) => new Set(listing.entries.filter((entry) => current.has(entry.path)).map((entry) => entry.path)));
-      setMenu(null);
-      setSearch(null);
-      if (nextPath !== path || nextAlias !== alias) setUndo(null);
-      if (!preserveEditor) editor.close();
-      return listing.entries;
-    } catch (error) {
-      if (generation !== loadGeneration.current) return null;
-      const code = failureCode(error);
-      setProblem(code === "sftp_failed" ? t("sftp.connectionFailed") : code || (error instanceof Error ? error.message : t("sftp.connectionFailed")));
-      return null;
-    } finally {
-      if (generation === loadGeneration.current) { setBusy(false); setPendingPath(null); }
-    }
+    return browser.load(nextPath, options);
   }
 
   useEffect(() => {
@@ -378,11 +310,11 @@ export function SFTPPanel({
     openingTarget.current = true;
     selectHost(target.alias);
     const directory = parentOf(target.path);
-    void load(directory, target.alias).then(async (loaded) => {
+    void load(directory, { alias: target.alias }).then(async (loaded) => {
       if (loaded === null) return;
       const entry = loaded.find((candidate) => candidate.path === target.path);
       if (target.action === "browse") {
-        if (entry?.type === "directory") await load(entry.path, target.alias);
+        if (entry?.type === "directory") await load(entry.path, { alias: target.alias });
         return;
       }
       if (entry === undefined) {
@@ -404,25 +336,11 @@ export function SFTPPanel({
   }, [target?.request]);
 
   useEffect(() => {
-    if (initialLocation === null || openedInitialLocation.current) return;
-    if (!aliases.includes(initialLocation.alias) || (initialLocation.path !== "" && !initialLocation.path.startsWith("/"))) return;
-    openedInitialLocation.current = true;
-    loadGeneration.current += 1;
-    setAlias(initialLocation.alias);
-    setPath(initialLocation.path);
-    setPathDraft(initialLocation.path);
-    setConnected(false);
-    // Restored tabs remember where they were, but never open an SSH connection
-    // until the user explicitly presses Connect.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [aliases, initialLocation?.alias, initialLocation?.path]);
-
-  useEffect(() => {
     if (!connected) return;
     const completed = transferJobs.filter((job) => (job.direction === "upload" || job.operation === "put") && job.status === "completed" && job.alias === alias && parentOf(job.remotePath) === path && !refreshedUploads.current.has(job.id));
     if (completed.length === 0) return;
     for (const job of completed) refreshedUploads.current.add(job.id);
-    void load(path, alias, true);
+    void browser.refresh();
     // load intentionally follows the current alias/path snapshot for each completed job.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [transferJobs, alias, path, connected]);
@@ -447,10 +365,11 @@ export function SFTPPanel({
       await sftpApi.mkdir(targetAlias, join(targetPath, name));
       if (generation !== loadGeneration.current) return;
       pendingFocus.current = join(targetPath, name);
-      await load(targetPath, targetAlias);
+      await load(targetPath, { alias: targetAlias });
     } catch (error) {
       if (generation !== loadGeneration.current) return;
       setProblem(failureCode(error) || "sftp_failed");
+    } finally {
       setBusy(false);
     }
   }
@@ -466,10 +385,11 @@ export function SFTPPanel({
       await sftpApi.createEmptyFile(targetAlias, createdPath);
       if (generation !== loadGeneration.current) return;
       pendingFocus.current = createdPath;
-      await load(targetPath, targetAlias);
+      await load(targetPath, { alias: targetAlias });
     } catch (error) {
       if (generation !== loadGeneration.current) return;
       setProblem(failureCode(error) || "sftp_failed");
+    } finally {
       setBusy(false);
     }
   }
@@ -493,6 +413,7 @@ export function SFTPPanel({
     } catch (error) {
       if (generation !== loadGeneration.current) return;
       setProblem(failureCode(error) || "sftp_failed");
+    } finally {
       setBusy(false);
     }
   }
@@ -664,17 +585,18 @@ export function SFTPPanel({
     try {
       await sftpApi.chmod(targetAlias, entry.path, mode, entry.revision, recursive);
       if (generation !== loadGeneration.current) return;
-      const reloaded = await load(targetPath, targetAlias, true);
+      const reloaded = await load(targetPath, { alias: targetAlias, refresh: true });
       const current = reloaded?.find((candidate) => candidate.path === entry.path);
       if (!recursive && current !== undefined && previous !== mode) {
         offerUndo(t("sftp.permissionsChanged", { mode }), async () => {
           await sftpApi.chmod(targetAlias, entry.path, previous, current.revision, false);
-          await load(targetPath, targetAlias, true);
+          await load(targetPath, { alias: targetAlias, refresh: true });
         });
       }
     } catch (error) {
       if (generation !== loadGeneration.current) return;
       setProblem(failureCode(error) === "sftp_conflict" ? t("sftp.conflict") : failureCode(error) || "sftp_failed");
+    } finally {
       setBusy(false);
     }
   }
@@ -684,25 +606,14 @@ export function SFTPPanel({
   async function runSearch(query = filter, root = search?.root ?? path) {
     const needle = query.trim();
     if (alias === "" || needle === "" || root === "") return;
-    const generation = ++loadGeneration.current;
-    setBusy(true);
-    setPendingPath(root);
-    setProblem("");
-    try {
-      const found = await sftpApi.search(alias, root, needle);
-      if (generation !== loadGeneration.current) return;
-      setSearch({ root: found.path, query: found.query, entries: found.entries, truncated: found.truncated });
-      setSelectedPaths(new Set());
-      selectionAnchor.current = null;
-      setFocusedKey(null);
-      setMenu(null);
-      setUndo(null);
-    } catch (error) {
-      if (generation !== loadGeneration.current) return;
-      setProblem(failureCode(error) || (error instanceof Error ? error.message : "sftp_failed"));
-    } finally {
-      if (generation === loadGeneration.current) { setBusy(false); setPendingPath(null); }
-    }
+    const found = await browser.track(root, () => sftpApi.search(alias, root, needle));
+    if (found === null) return;
+    setSearch({ root: found.path, query: found.query, entries: found.entries, truncated: found.truncated });
+    setSelectedPaths(new Set());
+    selectionAnchor.current = null;
+    setFocusedKey(null);
+    setMenu(null);
+    setUndo(null);
   }
 
   function endSearch() {
@@ -717,12 +628,12 @@ export function SFTPPanel({
   // reloading the directory the user is not looking at would be no answer.
   function refreshAfterChange(targetPath: string, targetAlias: string): Promise<unknown> {
     if (search !== null) return runSearch(search.query, search.root);
-    return load(targetPath, targetAlias);
+    return load(targetPath, { alias: targetAlias });
   }
 
   function refreshCurrentDirectory() {
     if (busy || dirty || !connected) return;
-    void (search !== null ? runSearch(search.query, search.root) : load(path, alias, true, false));
+    void (search !== null ? runSearch(search.query, search.root) : browser.refresh());
   }
 
   // The offer stands until the next thing happens. A timer would take it away
@@ -801,17 +712,6 @@ export function SFTPPanel({
     } finally {
       setBusy(false);
     }
-  }
-
-  async function navigateHistory(offset: -1 | 1) {
-    const nextIndex = navigation.index + offset;
-    const destination = navigation.paths[nextIndex];
-    if (destination === undefined) return;
-    const loaded = await load(destination, alias, false, false);
-    if (loaded === null) return;
-    setNavigation((current) => current.paths[nextIndex] === destination
-      ? { ...current, index: nextIndex }
-      : current);
   }
 
   function toggleMenu(kind: "folder" | "create" | "selected", trigger: HTMLButtonElement) {
@@ -920,16 +820,15 @@ export function SFTPPanel({
   }
 
   function folderMenuActions(): SFTPMenuAction[] {
-    const navigate = (destination: string) => { setMenu(null); void load(destination); };
     return [
       { key: "copyCurrentPath", label: t("sftp.copyPath"), disabled: !connected, run: () => { setMenu(null); void copyCurrentPath(); } },
       { key: "newFolder", label: t("sftp.newFolder"), disabled: busy || !connected, run: () => { setMenu(null); setInputIntent({ kind: "mkdir" }); } },
       { key: "newFile", label: t("sftp.newFile"), disabled: busy || !connected, run: () => { setMenu(null); setInputIntent({ kind: "createFile" }); } },
       { key: "upload", label: t("sftp.upload"), disabled: busy || !connected, run: () => { setMenu(null); upload.current?.click(); } },
       { key: "uploadFolder", label: t("sftp.uploadFolder"), disabled: busy || !connected, run: () => { setMenu(null); folderUpload.current?.click(); } },
-      { key: "forward", label: t("sftp.forward"), disabled: busy || dirty || navigation.index < 0 || navigation.index >= navigation.paths.length - 1, run: () => { setMenu(null); void navigateHistory(1); } },
-      { key: "home", label: t("sftp.homeDirectory"), disabled: busy || dirty || !connected, run: () => navigate("") },
-      { key: "root", label: t("sftp.rootDirectory"), disabled: busy || dirty || !connected || path === "/", run: () => navigate("/") },
+      { key: "forward", label: t("sftp.forward"), disabled: busy || dirty || !browser.canForward, run: () => { setMenu(null); void browser.forward(); } },
+      { key: "home", label: t("sftp.homeDirectory"), disabled: busy || dirty || !connected, run: () => { void load(""); } },
+      { key: "root", label: t("sftp.rootDirectory"), disabled: busy || dirty || !connected || browser.atRoot, run: () => { setMenu(null); void browser.goRoot(); } },
       ...(onOpenTerminal === undefined ? [] : [{ key: "terminal", label: t("sftp.openTerminalHere"), disabled: busy || dirty || !connected, run: () => { setMenu(null); void onOpenTerminal(alias, path); } }]),
       { key: "selectAll", label: t("sftp.selectAll"), disabled: busy || displayedEntries.length === 0, run: selectAllDisplayed },
       ...(["name", "type", "size", "modified"] as const).map((key) => ({
@@ -940,36 +839,20 @@ export function SFTPPanel({
     ];
   }
 
-  const pathPieces = path.split("/").filter(Boolean);
-  const breadcrumbPaths = pathPieces.map((_, index) => `/${pathPieces.slice(0, index + 1).join("/")}`);
-
   return (
     <section ref={panelRoot} className="flex h-full min-h-0 min-w-0 flex-col gap-1.5 md:gap-1" aria-labelledby={headingId}>
       <h2 id={headingId} className="sr-only">{t("sftp.heading")}</h2>
-      {mobileInteraction ? (
-        <div className="flex min-h-11 shrink-0 items-center gap-1 border-b border-line/50 pb-1">
-          <SFTPHostPicker aliases={aliases} hosts={hosts} value={alias} disabled={dirty} onChange={selectHost} compact includeLocal />
-          <button type="button" aria-label={t("sftp.back")} disabled={busy || dirty || navigation.index <= 0} onClick={() => void navigateHistory(-1)} className="flex size-11 shrink-0 items-center justify-center rounded text-ink-muted active:bg-select-fill disabled:text-ink-faint">←</button>
-          {pathEditing ? (
-            <form className="flex min-w-0 flex-1 items-center gap-1" onSubmit={(event) => { event.preventDefault(); if (!busy && !dirty) void load(pathDraft); }}>
-              <input ref={pathInput} aria-label={t("sftp.path")} value={pathDraft} onChange={(event) => setPathDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") { setPathDraft(path); setPathEditing(false); } }} className="h-11 min-w-0 w-full rounded border border-control-line bg-control px-2 font-mono text-base" />
-              <Button type="submit" disabled={busy || dirty || !connected}>{t("sftp.go")}</Button>
-            </form>
-          ) : (
-            <button type="button" data-testid="sftp-current-path" data-path={path} aria-label={t("sftp.editPath")} title={path} disabled={busy || dirty || !connected} onClick={() => setPathEditing(true)} className="flex h-11 min-w-0 flex-1 items-center gap-1 rounded px-2 text-left active:bg-select-fill disabled:text-ink-faint">
-              <span className="truncate font-mono text-sm font-medium">{pathPieces.at(-1) || "/"}</span><Icon name="chevronRight" className="size-3 shrink-0 rotate-90 text-ink-muted" />
-            </button>
-          )}
-          {pathEditing ? <button type="button" aria-label={t("sftp.cancel")} onClick={() => { setPathDraft(path); setPathEditing(false); }} className="flex size-11 shrink-0 items-center justify-center rounded text-ink-muted"><Icon name="close" className="size-4" /></button> : <>
-            <button type="button" aria-label={t("sftp.refreshDirectory")} disabled={busy || dirty || !connected} onClick={refreshCurrentDirectory} className="flex size-11 shrink-0 items-center justify-center rounded text-ink-muted active:bg-select-fill disabled:text-ink-faint"><Icon name="sync" className="size-4" /></button>
-            <button type="button" aria-label={t("sftp.mobile.search")} aria-expanded={mobileSearchOpen} disabled={busy || !connected} onClick={() => setMobileSearchOpen((value) => !value)} className={`flex size-11 shrink-0 items-center justify-center rounded active:bg-select-fill ${mobileSearchOpen || filter !== "" ? "text-accent" : "text-ink-muted"}`}><Icon name="search" className="size-4" /></button>
-            <button type="button" aria-label={t("sftp.mobile.actions")} aria-haspopup="dialog" aria-expanded={menu?.kind === "folder"} onClick={(event) => toggleMenu("folder", event.currentTarget)} className="flex size-11 shrink-0 items-center justify-center rounded text-ink-muted active:bg-select-fill"><Icon name="moreHorizontal" className="size-4" /></button>
-          </>}
-        </div>
-      ) : (
-      <div className="flex flex-wrap items-center gap-1.5 border-b border-line/50 pb-1.5 md:pb-1">
-        <SFTPHostPicker aliases={aliases} hosts={hosts} value={alias} disabled={dirty} onChange={selectHost} includeLocal />
-        {onOpenTerminal === undefined ? null : (
+      <SFTPToolbar
+        browser={browser}
+        aliases={aliases}
+        hosts={hosts}
+        onHostChange={selectHost}
+        onRefresh={refreshCurrentDirectory}
+        busy={busy}
+        locked={dirty}
+        mobile={mobileInteraction}
+        labels={{ path: t("sftp.path"), editPath: t("sftp.editPath"), input: t("sftp.path") }}
+        leading={onOpenTerminal === undefined ? null : (
           <button
             type="button"
             aria-label={t("sftp.openTerminalHere")}
@@ -981,61 +864,11 @@ export function SFTPPanel({
             <Icon name="terminal" className="size-4" />
           </button>
         )}
-        <SFTPNavigationControls busy={busy || dirty} canBack={navigation.index > 0}
-          canForward={navigation.index >= 0 && navigation.index < navigation.paths.length - 1}
-          canHome={connected} canRoot={connected && path !== "/"}
-          onBack={() => void navigateHistory(-1)} onForward={() => void navigateHistory(1)}
-          onHome={() => void load("")} onRoot={() => void load("/")} />
-        <button type="button" aria-label={t("sftp.refreshDirectory")} title={t("sftp.refreshDirectory")} disabled={busy || dirty || !connected} onClick={refreshCurrentDirectory} className="flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover hover:text-ink disabled:text-ink-faint md:size-8"><Icon name="sync" className="size-4" /></button>
-        {pathEditing ? (
-          <>
-            <input
-              ref={pathInput}
-              aria-label={t("sftp.path")}
-              value={pathDraft}
-              onChange={(event) => setPathDraft(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Escape") {
-                  event.preventDefault();
-                  setPathDraft(path);
-                  setPathEditing(false);
-                } else if (event.key === "Enter" && !dirty) {
-                  event.preventDefault();
-                  void load(pathDraft);
-                }
-              }}
-              className="min-w-44 grow rounded-md border border-control-line/70 bg-control px-2 py-1.5 font-mono text-sm outline-none focus:border-accent md:py-1"
-            />
-            <Button disabled={busy || dirty || !connected} onClick={() => void load(pathDraft)}>{t("sftp.go")}</Button>
-          </>
-        ) : (
-          <div className="flex min-w-44 grow items-center rounded-md bg-control/60 px-1" data-testid="sftp-current-path" data-path={path}>
-            <nav aria-label={t("sftp.path")} onClick={(event) => { if (event.target === event.currentTarget && !busy && !dirty && connected) setPathEditing(true); }}
-              title={t("sftp.editPath")} className="flex min-w-0 grow cursor-text items-center overflow-x-auto whitespace-nowrap font-mono text-sm">
-              <button type="button" disabled={busy || dirty || !connected || path === "/"} onClick={() => void load("/")} className="rounded px-1.5 py-1.5 text-ink-muted hover:bg-hover hover:text-ink disabled:text-ink-faint md:py-1">/</button>
-              {pathPieces.map((piece, index) => (
-                <span key={breadcrumbPaths[index]} className="flex min-w-0 items-center">
-                  {index > 0 || path !== "/" ? <Icon name="chevronRight" className="size-3 text-ink-faint" /> : null}
-                  {index === pathPieces.length - 1 ? (
-                    <span className="max-w-48 truncate px-1.5 py-1.5 font-medium text-ink md:py-1" title={piece}>{piece}</span>
-                  ) : (
-                    <button type="button" disabled={busy || dirty || !connected} onClick={() => void load(breadcrumbPaths[index])} className="max-w-40 truncate rounded px-1.5 py-1.5 text-ink-muted hover:bg-hover hover:text-ink disabled:text-ink-faint md:py-1" title={piece}>{piece}</button>
-                  )}
-                </span>
-              ))}
-            </nav>
-            <button type="button" aria-label={t("sftp.copyPath")} title={t("sftp.copyPath")}
-              disabled={!connected} onClick={() => { void copyCurrentPath(); }}
-              className="flex size-8 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover hover:text-ink disabled:text-ink-faint">
-              <Icon name="copy" className="size-3.5" />
-            </button>
-            <button type="button" aria-label={t("sftp.editPath")} disabled={busy || dirty || !connected} onClick={() => setPathEditing(true)} className="flex size-8 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover hover:text-ink disabled:text-ink-faint">
-              <Icon name="edit" className="size-3.5" />
-            </button>
-          </div>
-        )}
-      </div>
-      )}
+        mobileActions={<>
+          <button type="button" aria-label={t("sftp.mobile.search")} aria-expanded={mobileSearchOpen} disabled={busy || !connected} onClick={() => setMobileSearchOpen((value) => !value)} className={`flex size-11 shrink-0 items-center justify-center rounded active:bg-select-fill ${mobileSearchOpen || filter !== "" ? "text-accent" : "text-ink-muted"}`}><Icon name="search" className="size-4" /></button>
+          <button type="button" aria-label={t("sftp.mobile.actions")} aria-haspopup="dialog" aria-expanded={menu?.kind === "folder"} onClick={(event) => toggleMenu("folder", event.currentTarget)} className="flex size-11 shrink-0 items-center justify-center rounded text-ink-muted active:bg-select-fill"><Icon name="moreHorizontal" className="size-4" /></button>
+        </>}
+      />
 
       {problem === "" || listingFailed ? null : <p role="alert" className="rounded-md border border-notice-line bg-notice px-3 py-2 text-sm text-notice-ink">{problem}</p>}
       {search === null ? null : (
@@ -1231,14 +1064,14 @@ export function SFTPPanel({
               <PanelState
                 tone="failed"
                 title={problem}
-                action={<Button onClick={() => void load(path, alias)}>{t("sftp.retry")}</Button>}
+                action={<Button onClick={() => void browser.retry()}>{t("sftp.retry")}</Button>}
               />
             ) : !connected ? (
               <PanelState
                 tone="empty"
                 title={t("sftp.readyToConnect", { alias })}
                 detail={t("sftp.connectHint")}
-                action={<Button kind="primary" onClick={() => void load(path, alias)}>{t("sftp.connect")}</Button>}
+                action={<Button kind="primary" onClick={() => void browser.connect()}>{t("sftp.connect")}</Button>}
               />
             ) : busy && entries.length === 0 && problem === "" ? (
               <PanelState tone="loading" title={t("sftp.loading")} />
@@ -1246,7 +1079,7 @@ export function SFTPPanel({
               <PanelState
                 tone="failed"
                 title={problem}
-                action={<Button onClick={() => void load(path)}>{t("sftp.retry")}</Button>}
+                action={<Button onClick={() => void browser.retry()}>{t("sftp.retry")}</Button>}
               />
             ) : search !== null && displayedEntries.length === 0 ? (
               <PanelState
@@ -1313,7 +1146,7 @@ export function SFTPPanel({
         </ModalShell>
       )}
 
-      <SFTPTextEditor editor={editor} busy={browsing} />
+      <SFTPTextEditor editor={editor} busy={browser.busy || acting} />
 
       {details === null ? null : (
         <SFTPDetailsDialog
