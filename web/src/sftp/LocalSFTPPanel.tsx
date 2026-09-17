@@ -1,13 +1,15 @@
-import { useCallback, useEffect, useRef, useState, type DragEvent, type MouseEvent } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type DragEvent, type MouseEvent } from "react";
 import { failureCode } from "../api/client";
 import type { HostEntry } from "../api/config";
 import { useTranslate } from "../i18n/context";
 import { clipboard } from "../ui/clipboard";
 import { Icon } from "../ui/icons";
+import { ModalShell } from "../ui/ModalShell";
 import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
 import { sftpApi, type LocalListing } from "./api";
 import { formatBytes } from "./format";
 import { SFTPHostPicker } from "./SFTPHostPicker";
+import { SFTPNavigationControls } from "./SFTPNavigationControls";
 import { localHostAlias } from "./localHost";
 import { remoteEntriesMime, type RemoteDragPayload } from "./transfers";
 import { sftpTransferManager } from "./transferManager";
@@ -47,6 +49,7 @@ export function LocalSFTPPanel({ aliases, hosts, initialPath, remote, onHostChan
   onDirectoryChange: (path: string | null) => void;
 }) {
   const t = useTranslate();
+  const actionsHeadingId = useId();
   const mobileInteraction = useMediaQuery(mobileViewportQuery);
   const [listing, setListing] = useState<LocalListing | null>(null);
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
@@ -55,7 +58,10 @@ export function LocalSFTPPanel({ aliases, hosts, initialPath, remote, onHostChan
   const [dragging, setDragging] = useState(false);
   const [pathEditing, setPathEditing] = useState(false);
   const [pathDraft, setPathDraft] = useState("");
+  const [history, setHistory] = useState<{ paths: string[]; index: number }>({ paths: [], index: -1 });
+  const [mobileActionsOpen, setMobileActionsOpen] = useState(false);
   const currentPath = useRef("");
+  const loadGeneration = useRef(0);
   const startingPath = useRef(initialPath);
   const reportDirectory = useRef(onDirectoryChange);
   reportDirectory.current = onDirectoryChange;
@@ -73,21 +79,37 @@ export function LocalSFTPPanel({ aliases, hosts, initialPath, remote, onHostChan
     catch { setProblem(t("copy.refused")); }
   }
 
-  const navigate = useCallback(async (path: string) => {
+  const navigate = useCallback(async (path: string, recordHistory = true) => {
+    const generation = ++loadGeneration.current;
     setBusy(true);
     try {
       const next = await sftpApi.listLocal(path);
+      if (generation !== loadGeneration.current) return;
       currentPath.current = next.path;
       setListing(next);
       setSelected(new Set());
       reportDirectory.current(next.path);
       setProblem("");
+      if (recordHistory) setHistory((current) => {
+        if (current.paths[current.index] === next.path) return current;
+        const paths = [...current.paths.slice(0, current.index + 1), next.path];
+        return { paths, index: paths.length - 1 };
+      });
     } catch (error) {
+      if (generation !== loadGeneration.current) return;
       setProblem(failureCode(error) || (error instanceof Error ? error.message : "sftp_failed"));
     } finally {
-      setBusy(false);
+      if (generation === loadGeneration.current) setBusy(false);
     }
   }, []);
+
+  async function navigateHistory(delta: number) {
+    const index = history.index + delta;
+    const path = history.paths[index];
+    if (path === undefined) return;
+    await navigate(path, false);
+    if (currentPath.current === path) setHistory((current) => ({ ...current, index }));
+  }
 
   useEffect(() => { void navigate(startingPath.current); }, [navigate]);
   useEffect(() => sftpTransferManager.subscribe(() => {
@@ -95,7 +117,7 @@ export function LocalSFTPPanel({ aliases, hosts, initialPath, remote, onHostChan
       if (job.direction !== "remote" || job.operation !== "get" ||
           job.status !== "completed" || completed.current.has(job.id)) continue;
       completed.current.add(job.id);
-      if (currentPath.current !== "") void navigate(currentPath.current);
+      if (currentPath.current !== "") void navigate(currentPath.current, false);
     }
   }), [navigate]);
 
@@ -135,22 +157,34 @@ export function LocalSFTPPanel({ aliases, hosts, initialPath, remote, onHostChan
       onQueueOpen();
     } catch (error) { setProblem(failureCode(error) || (error instanceof Error ? error.message : "sftp_local_drop_invalid")); }
   }
-  return <section className="flex min-h-0 min-w-0 flex-1 flex-col rounded-lg border border-line bg-card" aria-label={t("sftp.local.heading")}
+  return <section className="flex h-full min-h-0 min-w-0 flex-col gap-1.5 md:gap-1" aria-label={t("sftp.local.heading")}
     onDragOver={(event) => { if (event.dataTransfer.types.includes(remoteEntriesMime)) { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; setDragging(true); } }}
     onDragLeave={() => setDragging(false)} onDrop={(event) => { void acceptRemoteDrop(event); }}>
-    <div className="flex min-h-12 items-center gap-2 border-b border-line px-3">
+    <div className="flex min-h-10 shrink-0 items-center gap-1.5 border-b border-line/50 pb-1.5 md:pb-1">
       <SFTPHostPicker aliases={aliases} {...(hosts === undefined ? {} : { hosts })} value={localHostAlias}
         onChange={onHostChange} compact={mobileInteraction} includeLocal />
-      <span className="min-w-0 flex-1" />
-      <button type="button" className="rounded p-2 hover:bg-hover disabled:text-ink-faint" aria-label={t("sftp.local.refresh")}
-        disabled={listing === null || busy} onClick={() => { void navigate(listing?.path ?? ""); }}><Icon name="sync" className="size-4" /></button>
-    </div>
-    {problem !== "" ? <p role="alert" className="px-3 py-2 text-sm text-danger">{problem}</p> : null}
-    {listing !== null ? <>
-      <nav aria-label={t("sftp.local.path")} className="flex min-h-10 items-center gap-1 border-b border-line px-2">
-        <button type="button" aria-label={t("sftp.local.parent")} title={t("sftp.local.parent")}
-          onClick={() => { void navigate(parentPath(listing.path)); }} disabled={parentPath(listing.path) === listing.path || busy}
-          className="rounded p-2 hover:bg-hover disabled:text-ink-faint"><Icon name="chevronRight" className="size-3 -rotate-90" /></button>
+      {mobileInteraction ? <button type="button" aria-label={t("sftp.back")}
+        disabled={busy || history.index <= 0} onClick={() => void navigateHistory(-1)}
+        className="flex size-11 shrink-0 items-center justify-center rounded text-ink-muted active:bg-select-fill disabled:text-ink-faint">←</button>
+        : <SFTPNavigationControls busy={busy} canBack={history.index > 0}
+          canForward={history.index >= 0 && history.index < history.paths.length - 1}
+          canHome={listing !== null} canRoot={listing !== null && listing.path !== localRoot(listing.path)}
+          onBack={() => void navigateHistory(-1)} onForward={() => void navigateHistory(1)}
+          onHome={() => void navigate("")} onRoot={() => { if (listing !== null) void navigate(localRoot(listing.path)); }} />}
+      {listing === null ? <span className="min-w-0 flex-1" /> : mobileInteraction ? (
+        pathEditing ? <input autoFocus aria-label={t("sftp.local.pathInput")} value={pathDraft}
+          onChange={(event) => setPathDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") setPathEditing(false);
+            if (event.key === "Enter") { setPathEditing(false); void navigate(pathDraft.trim()); }
+          }} className="h-11 min-w-0 flex-1 rounded border border-control-line bg-control px-2 font-mono text-base" />
+          : <button type="button" aria-label={t("sftp.local.editPath")} title={listing.path} onClick={editPath}
+              className="flex h-11 min-w-0 flex-1 items-center gap-1 rounded px-2 text-left active:bg-select-fill">
+            <span className="truncate font-mono text-sm font-medium">{listing.path === listing.home ? "~" : crumbs(listing.path).at(-1)?.label}</span>
+            <Icon name="chevronRight" className="size-3 shrink-0 rotate-90 text-ink-muted" />
+          </button>
+      ) : (
+      <nav aria-label={t("sftp.local.path")} className="flex min-h-9 min-w-0 flex-1 items-center gap-1 overflow-hidden rounded-md bg-control/60 px-1">
         {pathEditing ? <input autoFocus aria-label={t("sftp.local.pathInput")} value={pathDraft}
           onChange={(event) => setPathDraft(event.target.value)}
           onKeyDown={(event) => {
@@ -173,24 +207,67 @@ export function LocalSFTPPanel({ aliases, hosts, initialPath, remote, onHostChan
           onClick={() => { if (pathEditing) setPathEditing(false); else editPath(); }}
           className="rounded p-2 hover:bg-hover"><Icon name="edit" className="size-3.5" /></button>
       </nav>
-      <div className="flex items-center gap-2 border-b border-line px-3 py-2">
+      )}
+      <button type="button" className="flex size-11 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover disabled:text-ink-faint md:size-8" aria-label={t("sftp.refreshDirectory")}
+        disabled={listing === null || busy} onClick={() => { void navigate(listing?.path ?? "", false); }}><Icon name="sync" className="size-4" /></button>
+      {mobileInteraction ? <button type="button" aria-label={t("sftp.mobile.actions")} onClick={() => setMobileActionsOpen(true)}
+        className="flex size-11 shrink-0 items-center justify-center rounded text-ink-muted active:bg-select-fill"><Icon name="moreHorizontal" className="size-4" /></button> : null}
+    </div>
+    {problem !== "" ? <p role="alert" className="rounded-md border border-notice-line bg-notice px-3 py-2 text-sm text-notice-ink">{problem}</p> : null}
+    {listing !== null ? <>
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-md border border-line/60 bg-card">
+      <div className={`${mobileInteraction && selected.size === 0 ? "hidden" : "flex"} min-h-10 items-center gap-2 border-b border-line/50 bg-toolbar/45 px-2 py-1 md:min-h-8 md:py-0.5`}>
         <button type="button" onClick={() => { void upload(); }} disabled={busy || selected.size === 0 || !remote?.alias || !remote?.path}
-          className="rounded bg-accent px-3 py-1.5 text-sm text-white disabled:opacity-40">{t("sftp.local.upload")}</button>
+          className="rounded px-2 py-1 text-xs text-ink-muted hover:bg-hover hover:text-ink disabled:text-ink-faint">{t("sftp.local.upload")}</button>
         <span className="min-w-0 truncate text-xs text-ink-muted">{remote?.alias ? `${remote.alias}:${remote.path}` : t("sftp.local.connectRemote")}</span>
       </div>
       <div className={`min-h-0 flex-1 overflow-auto ${dragging ? "bg-select-fill" : ""}`}>
-        {listing.entries.map((entry) => <button key={entry.path} type="button" onClick={(event) => select(event, entry.name)}
-          onDoubleClick={() => { if (entry.type === "directory") void navigate(entry.path); }} aria-pressed={selected.has(entry.name)}
-          onKeyDown={(event) => { if (event.key === "Enter" && entry.type === "directory") { event.preventDefault(); void navigate(entry.path); } }}
-          title={entry.type === "directory" ? t("sftp.local.openFolder") : undefined}
-          className={`flex min-h-10 w-full items-center gap-3 px-3 text-left text-sm hover:bg-hover ${selected.has(entry.name) ? "bg-select-fill" : ""}`}>
-          <Icon name={entry.type === "directory" ? "groups" : "config"} className="size-4 shrink-0 text-ink-muted" />
-          <span className="min-w-0 flex-1 truncate">{entry.name}</span>
-          <span className="shrink-0 text-xs text-ink-muted">{entry.type === "directory" ? "" : formatBytes(entry.size)}</span>
-          {entry.type === "directory" ? <Icon name="chevronRight" className="size-3 text-ink-faint" /> : null}
-        </button>)}
+        {parentPath(listing.path) !== listing.path ? <button type="button" aria-label={t("sftp.local.parent")}
+          onClick={() => { void navigate(parentPath(listing.path)); }} disabled={busy}
+          className="flex min-h-10 w-full items-center gap-2 border-b border-line/40 px-3 text-left text-sm hover:bg-hover disabled:text-ink-faint">
+          <Icon name="groups" className="size-4 text-ink-muted" /><span aria-hidden="true" className="font-mono">..</span>
+        </button> : null}
+        {listing.entries.map((entry) => <div key={entry.path}
+          className={`flex items-center border-t border-line/40 transition-colors ${selected.has(entry.name) ? "bg-select-fill/75" : "hover:bg-hover/55"}`}>
+          <label className="flex size-11 shrink-0 items-center justify-center md:size-8">
+            <input type="checkbox" aria-label={t("sftp.selectEntry", { name: entry.name })}
+              checked={selected.has(entry.name)} disabled={busy}
+              onChange={() => setSelected((current) => {
+                const next = new Set(current);
+                if (next.has(entry.name)) next.delete(entry.name); else next.add(entry.name);
+                return next;
+              })} className="size-4 accent-accent" />
+          </label>
+          <button type="button" aria-label={entry.name} onClick={(event) => select(event, entry.name)}
+            onDoubleClick={() => { if (entry.type === "directory") void navigate(entry.path); }} aria-pressed={selected.has(entry.name)}
+            onKeyDown={(event) => { if (event.key === "Enter" && entry.type === "directory") { event.preventDefault(); void navigate(entry.path); } }}
+            title={entry.type === "directory" ? t("sftp.local.openFolder") : undefined}
+            className="flex min-h-12 min-w-0 flex-1 items-center gap-2 px-2 py-2 text-left text-sm hover:bg-hover active:bg-select-fill">
+            <Icon name={entry.type === "directory" ? "groups" : "config"} className="size-4 shrink-0 text-ink-muted" />
+            <span className="min-w-0 flex-1"><span className="block truncate">{entry.name}</span>
+              {entry.type === "file" ? <span className="block text-xs text-ink-muted">{formatBytes(entry.size)}</span> : null}</span>
+            {entry.type === "directory" ? <Icon name="chevronRight" className="size-3 text-ink-faint" /> : null}
+          </button>
+        </div>)}
       </div>
-      <p className="border-t border-line px-3 py-2 text-xs text-ink-muted">{t("sftp.local.dropHint")}</p>
+      {mobileInteraction ? null : <p className="border-t border-line px-3 py-2 text-xs text-ink-muted">{t("sftp.local.dropHint")}</p>}
+      </div>
     </> : null}
+    <ModalShell open={mobileActionsOpen} labelledBy={actionsHeadingId} onDismiss={() => setMobileActionsOpen(false)} placement="sheet" panelClassName="w-full max-w-md rounded-xl p-3">
+      <h2 id={actionsHeadingId} className="mb-2 font-semibold">{t("sftp.mobile.actions")}</h2>
+      <div className="grid gap-1">
+        <button type="button" disabled={busy || history.index < 0 || history.index >= history.paths.length - 1}
+          onClick={() => { setMobileActionsOpen(false); void navigateHistory(1); }} className="rounded px-3 py-3 text-left hover:bg-hover disabled:text-ink-faint">{t("sftp.forward")}</button>
+        <button type="button" disabled={busy || listing === null}
+          onClick={() => { setMobileActionsOpen(false); void navigate(""); }} className="rounded px-3 py-3 text-left hover:bg-hover disabled:text-ink-faint">{t("sftp.homeDirectory")}</button>
+        <button type="button" disabled={busy || listing === null || listing.path === localRoot(listing.path)}
+          onClick={() => { setMobileActionsOpen(false); if (listing !== null) void navigate(localRoot(listing.path)); }} className="rounded px-3 py-3 text-left hover:bg-hover disabled:text-ink-faint">{t("sftp.rootDirectory")}</button>
+        <button type="button" disabled={listing === null}
+          onClick={() => { setMobileActionsOpen(false); void copyPath(); }} className="rounded px-3 py-3 text-left hover:bg-hover disabled:text-ink-faint">{t("sftp.copyPath")}</button>
+        <button type="button" disabled={listing === null}
+          onClick={() => { setMobileActionsOpen(false); editPath(); }} className="rounded px-3 py-3 text-left hover:bg-hover disabled:text-ink-faint">{t("sftp.local.editPath")}</button>
+      </div>
+      <button type="button" onClick={() => setMobileActionsOpen(false)} className="mt-2 w-full rounded border border-line px-3 py-2 text-sm">{t("sftp.cancel")}</button>
+    </ModalShell>
   </section>;
 }

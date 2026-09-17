@@ -40,6 +40,7 @@ import { directoryPaths, remoteEntriesMime, safeRelativePath, symbolicModeToOcta
 import { TransferManagerList } from "./TransferManagerList";
 import { sftpTransferManager } from "./transferManager";
 import { SFTPHostPicker } from "./SFTPHostPicker";
+import { SFTPNavigationControls } from "./SFTPNavigationControls";
 
 const MonacoEditor = lazy(() =>
   import("./MonacoEditor").then(({ MonacoEditor }) => ({ default: MonacoEditor })),
@@ -1362,20 +1363,11 @@ export function SFTPPanel({
             <Icon name="terminal" className="size-4" />
           </button>
         )}
-        <div role="group" aria-label={t("sftp.navigation")} className="flex shrink-0 overflow-hidden rounded-md bg-toolbar/70">
-          <button type="button" aria-label={t("sftp.back")} disabled={busy || dirty || navigation.index <= 0} onClick={() => void navigateHistory(-1)} className="flex size-9 items-center justify-center text-ink-muted hover:bg-hover disabled:text-ink-faint md:size-8">
-            <span aria-hidden="true">←</span>
-          </button>
-          <button type="button" aria-label={t("sftp.forward")} disabled={busy || dirty || navigation.index < 0 || navigation.index >= navigation.paths.length - 1} onClick={() => void navigateHistory(1)} className="flex size-9 items-center justify-center text-ink-muted hover:bg-hover disabled:text-ink-faint md:size-8">
-            <span aria-hidden="true">→</span>
-          </button>
-          <button type="button" aria-label={t("sftp.homeDirectory")} disabled={busy || dirty || !connected} onClick={() => void load("")} className="flex size-9 items-center justify-center text-ink-muted hover:bg-hover disabled:text-ink-faint md:size-8">
-            <Icon name="home" className="size-4" />
-          </button>
-          <button type="button" aria-label={t("sftp.rootDirectory")} disabled={busy || dirty || !connected || path === "/"} onClick={() => void load("/")} className="flex size-9 items-center justify-center font-mono text-sm text-ink-muted hover:bg-hover disabled:text-ink-faint md:size-8">
-            /
-          </button>
-        </div>
+        <SFTPNavigationControls busy={busy || dirty} canBack={navigation.index > 0}
+          canForward={navigation.index >= 0 && navigation.index < navigation.paths.length - 1}
+          canHome={connected} canRoot={connected && path !== "/"}
+          onBack={() => void navigateHistory(-1)} onForward={() => void navigateHistory(1)}
+          onHome={() => void load("")} onRoot={() => void load("/")} />
         <button type="button" aria-label={t("sftp.refreshDirectory")} title={t("sftp.refreshDirectory")} disabled={busy || dirty || !connected} onClick={refreshCurrentDirectory} className="flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover hover:text-ink disabled:text-ink-faint md:size-8"><Icon name="sync" className="size-4" /></button>
         {pathEditing ? (
           <>

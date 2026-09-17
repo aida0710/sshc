@@ -32,6 +32,17 @@ test("selects the pinned Local destination beside an SSH host", async ({ page, i
   await expect(picker.getByRole("button", { name: /ローカル.*sshc/ })).toBeVisible();
   await picker.getByRole("button", { name: /ローカル.*sshc/ }).click();
   await expect(second.getByRole("button", { name: "draft.txt" })).toBeVisible();
+  if (process.env.SSHC_VISUAL_DIR) await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/local-shared-toolbar-ja.png`, fullPage: true });
   await second.getByRole("button", { name: "ローカルパスを編集" }).click();
   await expect(second.getByRole("textbox", { name: "エンジン側のファイルパス" })).toHaveValue("/home/engine/projects");
+  if (process.env.SSHC_VISUAL_DIR) await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/local-shared-toolbar-path-ja.png`, fullPage: true });
+  await page.setViewportSize({ width: 390, height: 800 });
+  await first.getByRole("button", { name: "ホスト" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: /ローカル.*sshc/ }).click();
+  await expect(first.getByRole("button", { name: "draft.txt" })).toBeVisible();
+  if (process.env.SSHC_VISUAL_DIR) await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/local-shared-mobile-pane-ja.png`, fullPage: true });
+  await first.getByRole("button", { name: "フォルダ操作" }).click();
+  await expect(page.getByRole("dialog", { name: "フォルダ操作" }).getByRole("button", { name: "ホームディレクトリ" })).toBeVisible();
+  if (process.env.SSHC_VISUAL_DIR) await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/local-shared-mobile-ja.png`, fullPage: true });
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
 });
