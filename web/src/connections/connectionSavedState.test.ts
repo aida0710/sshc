@@ -1,17 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 import type { HostDetail } from "../api/config";
-import type {
-  Credential,
-  IntegrationsApi,
-  PasswordEligibility,
-  PasswordVaultStatus,
-} from "../api/integrations";
+import type { Credential } from "../api/credentials";
+import type { PasswordEligibility, PasswordVaultStatus } from "../api/vault";
 import type { KeyInventoryResponse, KeyItem, KeysApi } from "../keys/api";
 import {
   loadConnectionSavedState,
   summarizeConnection,
   type ConnectionSavedState,
 } from "./connectionSavedState";
+import type { SavedStateSecrets } from "./connectionSavedState";
 
 const privateKey: KeyItem = {
   id: "0123456789abcdef0123456789abcdef",
@@ -109,9 +106,9 @@ function detailWithIdentityFile(): HostDetail {
 
 function apis(overrides: {
   inventory?: KeysApi["inventory"];
-  passwordVault?: IntegrationsApi["passwordVault"];
-  credentials?: IntegrationsApi["credentials"];
-  passwordEligibility?: IntegrationsApi["passwordEligibility"];
+  passwordVault?: SavedStateSecrets["passwordVault"];
+  credentials?: SavedStateSecrets["credentials"];
+  passwordEligibility?: SavedStateSecrets["passwordEligibility"];
 } = {}) {
   return {
     keys: {
@@ -125,7 +122,7 @@ function apis(overrides: {
         keyHostUsageComplete: true,
       }),
       passwordEligibility: overrides.passwordEligibility ?? vi.fn().mockResolvedValue(eligibility),
-    } as Pick<IntegrationsApi, "passwordVault" | "credentials" | "passwordEligibility">,
+    } as Pick<SavedStateSecrets, "passwordVault" | "credentials" | "passwordEligibility">,
   };
 }
 

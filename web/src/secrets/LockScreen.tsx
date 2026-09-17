@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ApiError, type RequestFailureDiagnostic } from "../api/client";
-import { integrationsApi, type IntegrationsApi, type PasswordVaultStatus } from "../api/integrations";
+import { vaultApi, type PasswordVaultStatus, type VaultApi } from "../api/vault";
 import { useLanguage } from "../i18n/context";
 import { locales, type Locale } from "../i18n/locale";
 import type { MessageKey } from "../i18n/messages";
@@ -17,7 +17,7 @@ type LockScreenProps = {
   onOpen: (status?: PasswordVaultStatus) => void;
   onExists?: () => void;
   version?: string;
-  api?: IntegrationsApi;
+  api?: Pick<VaultApi, "passwordVault" | "initialiseVault" | "unlockVault" | "recoverCompatibleVault" | "resetUnsupportedVault">;
 };
 
 const themeLabels: Record<Theme, MessageKey> = {
@@ -32,7 +32,7 @@ export function LockScreen({
   onOpen,
   onExists = () => undefined,
   version = "",
-  api = integrationsApi,
+  api = vaultApi,
 }: LockScreenProps) {
   const { locale, setLocale, t } = useLanguage();
   const { theme, setTheme } = useTheme();

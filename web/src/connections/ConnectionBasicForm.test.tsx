@@ -3,10 +3,10 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { HostDetail, UpdateConnectionRequest } from "../api/config";
 import type { Problem } from "../api/client";
-import type { IntegrationsApi } from "../api/integrations";
 import type { KeyInventoryResponse, KeysApi } from "../keys/api";
 import { ConnectionBasicForm } from "./ConnectionBasicForm";
 import type { ConnectionSavedState } from "./connectionSavedState";
+import type { ConnectionSecretsApi } from "./secretsApi";
 
 const privateKey = {
   id: "0123456789abcdef0123456789abcdef",
@@ -87,11 +87,11 @@ function buildDetail(fields: HostDetail["form"]["fields"] = []): HostDetail {
 type HarnessOverrides = {
   detail?: HostDetail;
   onSave?: (request: UpdateConnectionRequest) => Promise<void>;
-  passwordVault?: IntegrationsApi["passwordVault"];
-  credentials?: IntegrationsApi["credentials"];
-  passwordEligibility?: IntegrationsApi["passwordEligibility"];
-  initialiseVault?: IntegrationsApi["initialiseVault"];
-  unlockVault?: IntegrationsApi["unlockVault"];
+  passwordVault?: ConnectionSecretsApi["passwordVault"];
+  credentials?: ConnectionSecretsApi["credentials"];
+  passwordEligibility?: ConnectionSecretsApi["passwordEligibility"];
+  initialiseVault?: ConnectionSecretsApi["initialiseVault"];
+  unlockVault?: ConnectionSecretsApi["unlockVault"];
   inventory?: KeysApi["inventory"];
   problem?: Problem | null;
   preferredKey?: { privateKeyId: string; privateRelativePath: string } | null;
@@ -133,7 +133,7 @@ function renderForm(overrides: HarnessOverrides = {}) {
       secrets={{
         passwordVault, credentials, passwordEligibility, initialiseVault, unlockVault,
       } as Pick<
-        IntegrationsApi,
+        ConnectionSecretsApi,
         "passwordVault" | "credentials" | "passwordEligibility" | "initialiseVault" | "unlockVault"
       >}
       preferredKey={overrides.preferredKey}

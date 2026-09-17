@@ -7,12 +7,9 @@ import {
   type CreateConnectionResponse,
   type Overview,
 } from "../api/config";
-import {
-  integrationsApi,
-  type Credential,
-  type IntegrationsApi,
-  type PasswordVaultStatus,
-} from "../api/integrations";
+import type { Credential } from "../api/credentials";
+import type { PasswordVaultStatus } from "../api/vault";
+import { connectionSecretsApi, type ConnectionSecretsApi } from "./secretsApi";
 import { useTranslate } from "../i18n/context";
 import { keysApi, selectablePrivateKeys, type KeyItem, type KeysApi } from "../keys/api";
 import { control, Field, fieldLabel, hintText, sectionHeading } from "../ui/form";
@@ -42,10 +39,7 @@ type CreateConnectionModalProps = {
   groups: Overview["groups"];
   config?: Pick<typeof configApi, "createConnection">;
   keys?: Pick<KeysApi, "inventory">;
-  secrets?: Pick<
-    IntegrationsApi,
-    "passwordVault" | "credentials" | "initialiseVault" | "unlockVault"
-  >;
+  secrets?: Pick<ConnectionSecretsApi, "passwordVault" | "credentials" | "initialiseVault" | "unlockVault">;
   initialDraft?: CreateConnectionDraft | undefined;
   onOpenPrerequisite?: (section: CreationPrerequisite, draft: CreateConnectionDraft) => void;
   onClose: () => void;
@@ -63,7 +57,7 @@ export function CreateConnectionModal({
   groups,
   config = configApi,
   keys = keysApi,
-  secrets = integrationsApi,
+  secrets = connectionSecretsApi,
   initialDraft,
   onOpenPrerequisite,
   onClose,

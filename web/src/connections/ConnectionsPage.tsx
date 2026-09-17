@@ -30,7 +30,6 @@ import { useTranslate } from "../i18n/context";
 import type { InspectorContent } from "../ui/Inspector";
 import { Button, Notice } from "../ui/surface";
 import { removeHostBlock } from "./blocks";
-import { integrationsApi } from "../api/integrations";
 import type { TerminalSessionsState } from "../terminal/sessions";
 import type {
   BrowserLocation,
@@ -51,6 +50,8 @@ import { ManageConnection } from "./ManageConnection";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { PanelState } from "../ui/PanelState";
 import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
+import { hostDetailApi } from "./HostDetail";
+import { connectionSecretsApi } from "./secretsApi";
 
 // Column widths are browser-local conveniences; the layout still works at
 // the defaults when storage is unavailable.
@@ -377,7 +378,7 @@ export function ConnectionsPage({
       .host(selectedPath, selectedAlias)
       .then(async (loaded) => ({
         detail: loaded,
-        saved: await loadConnectionSavedState(loaded, keysApi, integrationsApi),
+        saved: await loadConnectionSavedState(loaded, keysApi, connectionSecretsApi),
       }))
       .then(({ detail: loaded, saved }) => {
         if (active) {
@@ -433,7 +434,7 @@ export function ConnectionsPage({
     if (reselect && selectedBeforeSave !== null && renamedSelection === null) {
       try {
         const loaded = await configApi.host(selectedBeforeSave.path, selectedBeforeSave.alias);
-        const saved = await loadConnectionSavedState(loaded, keysApi, integrationsApi);
+        const saved = await loadConnectionSavedState(loaded, keysApi, connectionSecretsApi);
         const currentSelection = selectionRef.current;
         if (currentSelection?.path === selectedBeforeSave.path && currentSelection.alias === selectedBeforeSave.alias) {
           setDetail(loaded);
@@ -484,7 +485,7 @@ export function ConnectionsPage({
         configApi.overview(),
         configApi.host(identity.path, identity.alias),
       ]);
-      const nextSaved = await loadConnectionSavedState(nextDetail, keysApi, integrationsApi);
+      const nextSaved = await loadConnectionSavedState(nextDetail, keysApi, connectionSecretsApi);
       if (!savedResourcesConfirmed(nextSaved)) throw new Error("saved_state_refresh_failed");
       const currentSelection = selectionRef.current;
       if (currentSelection?.path !== identity.path || currentSelection.alias !== identity.alias) return;
@@ -900,7 +901,7 @@ export function ConnectionsPage({
               onBlockRaw={onBlockRaw}
               onBasicSave={onBasicSave}
               onMetadata={onMetadata}
-              integrations={integrationsApi}
+              integrations={hostDetailApi}
               panel={activePanel}
               advanced={activeAdvanced}
               onLocationChange={(panel, advanced) => {

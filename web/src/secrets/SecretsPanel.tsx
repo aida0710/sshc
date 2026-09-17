@@ -3,14 +3,8 @@ import { createPortal } from "react-dom";
 import { useAnchoredMenu } from "../ui/useAnchoredMenu";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { failureCode } from "../api/client";
-import {
-  integrationsApi,
-  type CredentialList,
-  type CredentialKind,
-  type IntegrationsApi,
-  type PasswordVaultStatus,
-  type TOTPCodeSet,
-} from "../api/integrations";
+import { credentialsApi, type CredentialList, type CredentialKind, type CredentialsApi, type TOTPCodeSet } from "../api/credentials";
+import { vaultApi, type PasswordVaultStatus, type VaultApi } from "../api/vault";
 import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import { PasswordField } from "../ui/PasswordField";
@@ -23,10 +17,15 @@ import { PanelState } from "../ui/PanelState";
 import { useDismissibleLayer } from "../ui/useDismissibleLayer";
 import { useMenuKeyboard } from "../ui/useMenuKeyboard";
 
+// The secrets screen edits credentials, and opens, locks and re-keys the
+// vault that holds them.
+export type SecretsApi = CredentialsApi & VaultApi;
+export const secretsApi: SecretsApi = { ...credentialsApi, ...vaultApi };
+
 const mobileTouchTargets = "[&_button]:min-h-10 md:[&_button]:min-h-0";
 
 type SecretsPanelProps = {
-  api?: IntegrationsApi;
+  api?: SecretsApi;
   onLock?: () => void;
   kind?: CredentialKind;
 };
@@ -71,7 +70,7 @@ function readableCode(code: string): string {
   return code.length === 6 ? `${code.slice(0, 3)} ${code.slice(3)}` : code;
 }
 
-function TOTPCodeCard({ name, api }: { name: string; api: IntegrationsApi }) {
+function TOTPCodeCard({ name, api }: { name: string; api: Pick<CredentialsApi, "totpCodes"> }) {
   const t = useTranslate();
   const [codes, setCodes] = useState<TOTPCodeSet | null>(null);
   const [remaining, setRemaining] = useState(0);
@@ -273,7 +272,7 @@ function keyBasename(key: string): string {
 }
 
 export function SecretsPanel({
-  api = integrationsApi,
+  api = secretsApi,
   onLock,
   kind,
 }: SecretsPanelProps) {

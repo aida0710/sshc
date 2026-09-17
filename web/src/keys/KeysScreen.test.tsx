@@ -3,9 +3,9 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { KeysScreen } from "./KeysScreen";
 import type { KeyInventoryResponse, KeysApi } from "./api";
-import type { IntegrationsApi } from "../api/integrations";
+import type { KeySecretsApi } from "./KeysScreen";
 
-function buildSecrets(overrides: Partial<IntegrationsApi> = {}): IntegrationsApi {
+function buildSecrets(overrides: Partial<KeySecretsApi> = {}): KeySecretsApi {
   const listed = {
     credentials: [
       { kind: "key_passphrase", name: "build-key", uses: [] },
@@ -25,7 +25,7 @@ function buildSecrets(overrides: Partial<IntegrationsApi> = {}): IntegrationsApi
     assignCredential: vi.fn().mockResolvedValue(listed),
     unassignCredential: vi.fn().mockResolvedValue(listed),
     ...overrides,
-  } as unknown as IntegrationsApi;
+  } as unknown as KeySecretsApi;
 }
 
 afterEach(() => {

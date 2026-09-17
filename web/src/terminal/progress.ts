@@ -1,4 +1,4 @@
-import type { TerminalSession } from "../api/integrations";
+import type { TerminalSession } from "../api/terminalSessions";
 import type { Translate } from "../i18n/context";
 
 export function connectionProgressText(t: Translate, session: TerminalSession): string {

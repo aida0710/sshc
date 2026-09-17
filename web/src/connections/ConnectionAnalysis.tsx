@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { HostDetail } from "../api/config";
-import type { EffectiveResponse, IntegrationsApi } from "../api/integrations";
+import type { DiagnosticsApi, EffectiveResponse } from "../api/diagnostics";
 import { useTranslate } from "../i18n/context";
 import { hintText, sectionHeading, tableHeadCell, tableHeadRow } from "../ui/form";
 import { Button, Card, Notice } from "../ui/surface";
@@ -9,7 +9,7 @@ import { NoticeList } from "./SavePreview";
 type ConnectionAnalysisProps = {
   detail: HostDetail;
   alias: string;
-  api: Pick<IntegrationsApi, "effective">;
+  api: Pick<DiagnosticsApi, "effective">;
   disabled?: boolean;
 };
 
