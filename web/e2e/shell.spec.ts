@@ -161,7 +161,7 @@ test("keeps start links fixed and sessions reachable when the viewport is short"
   await expect(navigation.getByRole("link", { name: "Home", exact: true })).toBeInViewport();
   await expect(navigation.getByRole("link", { name: "Menu", exact: true })).toBeInViewport();
   await sections.evaluate((element) => element.scrollTo(0, element.scrollHeight));
-  await expect(navigation.getByRole("button", { name: "Local shell", exact: true })).toBeInViewport();
+  await expect(navigation.getByRole("button", { name: "New session", exact: true })).toBeInViewport();
   await expect(page.locator("[data-navigation-heading]")).toBeInViewport();
   expect(await sections.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
 });

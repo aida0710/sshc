@@ -11,6 +11,7 @@ function api(overrides: Partial<TerminalSessionsApi> = {}): TerminalSessionsApi 
     terminalSessions: vi.fn().mockResolvedValue(list),
     openTerminalSession: vi.fn(),
     reconnectTerminalSession: vi.fn().mockResolvedValue(list),
+    stopTerminalReconnect: vi.fn().mockResolvedValue(list),
     closeTerminalSession: vi.fn().mockResolvedValue(list),
     renameTerminalSession: vi.fn().mockResolvedValue(list),
     ...overrides,

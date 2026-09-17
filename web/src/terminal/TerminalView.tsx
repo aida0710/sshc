@@ -50,6 +50,7 @@ type TerminalViewProps = {
   api?: Pick<IntegrationsApi, "terminalStreamTicket">;
   onExit?: () => void;
   onReconnect?: () => Promise<boolean>;
+  onStopReconnect?: () => Promise<boolean>;
   copyOnSelect?: boolean;
   fontSize?: number;
   rightClickPaste?: boolean;
@@ -82,6 +83,7 @@ export function TerminalView({
   api = integrationsApi,
   onExit,
   onReconnect,
+  onStopReconnect,
   copyOnSelect = true,
   fontSize,
   rightClickPaste = true,
@@ -115,6 +117,7 @@ export function TerminalView({
   clipboardSettings.current = { copyOnSelect, rightClickPaste };
   const [problem, setProblem] = useState("");
   const [manualReconnectBusy, setManualReconnectBusy] = useState(false);
+  const [stopReconnectBusy, setStopReconnectBusy] = useState(false);
   const [link, setLink] = useState<Link>({ phase: "connecting", attempt: 1 });
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -162,6 +165,16 @@ export function TerminalView({
     setCurrentDirectory("");
     setPendingPaste(null);
   }, [initialOsc52Enabled, session.id, session.state]);
+
+  async function stopReconnecting() {
+    if (onStopReconnect === undefined || stopReconnectBusy) return;
+    setStopReconnectBusy(true);
+    try {
+      await onStopReconnect();
+    } finally {
+      setStopReconnectBusy(false);
+    }
+  }
 
   async function reconnectExitedSession() {
     if (onReconnect === undefined || manualReconnectBusy) return;
@@ -698,12 +711,24 @@ export function TerminalView({
       )}
 
       {session.state !== "reconnecting" ? null : (
-        <p role="status" className="shrink-0 border-b border-notice-line bg-notice px-3 py-1.5 text-xs text-notice-ink">
-          {t("terminal.reconnectingAttempt", {
-            attempt: String(session.reconnect?.attempt ?? 1),
-            limit: String(session.reconnect?.limit ?? 1),
-          })}
-        </p>
+        <div role="status" className="flex shrink-0 flex-wrap items-center gap-2 border-b border-notice-line bg-notice px-3 py-1.5 text-xs text-notice-ink">
+          <p className="min-w-0 grow">
+            {t("terminal.reconnectingAttempt", {
+              attempt: String(session.reconnect?.attempt ?? 1),
+              limit: String(session.reconnect?.limit ?? 1),
+            })}
+          </p>
+          {onStopReconnect === undefined ? null : (
+            <button
+              type="button"
+              disabled={stopReconnectBusy}
+              onClick={() => void stopReconnecting()}
+              className="min-h-8 shrink-0 rounded border border-notice-line px-3 py-1 font-medium text-notice-ink hover:bg-select-fill disabled:opacity-50"
+            >
+              {t("terminal.stopReconnect")}
+            </button>
+          )}
+        </div>
       )}
 
       {session.problem === "" ? null : (

@@ -726,6 +726,49 @@ func TestExitedSSHSessionCanBeExplicitlyReconnectedInPlace(t *testing.T) {
 	second.exit(terminal.ExitInfo{})
 }
 
+func TestAutomaticReconnectCanBeStoppedFromTheAPI(t *testing.T) {
+	fixture := newTerminalFixture(t, terminal.Limits{MaxSessions: 4, Scrollback: 1 << 12})
+	fixture.registry.ReconnectDelay = func(int) time.Duration { return time.Hour }
+	response, body := fixture.do(t, http.MethodPost, "/api/v1/terminal/sessions", `{"kind":"ssh","alias":"bastion"}`)
+	if response.StatusCode != http.StatusCreated {
+		t.Fatalf("open = %d: %s", response.StatusCode, body)
+	}
+	var opened api.OpenTerminalSessionResponse
+	if err := json.Unmarshal([]byte(body), &opened); err != nil {
+		t.Fatal(err)
+	}
+	path := "/api/v1/terminal/sessions/" + opened.Session.Id + "/reconnect/stop"
+	response, body = fixture.do(t, http.MethodPost, path, "")
+	if response.StatusCode != http.StatusConflict || !strings.Contains(body, "terminal_not_reconnecting") {
+		t.Fatalf("stop while connected = %d: %s", response.StatusCode, body)
+	}
+	fixture.mutex.Lock()
+	first := fixture.ssh[0]
+	fixture.mutex.Unlock()
+	first.exit(terminal.ExitInfo{Code: terminal.TransportLost})
+	waitUntil(t, func() bool {
+		session, ok := fixture.registry.Lookup(opened.Session.Id)
+		return ok && session.View().State == terminal.StateReconnecting
+	})
+
+	response, body = fixture.do(t, http.MethodPost, path, "")
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("stop = %d: %s", response.StatusCode, body)
+	}
+	var listed api.TerminalSessionList
+	if err := json.Unmarshal([]byte(body), &listed); err != nil {
+		t.Fatal(err)
+	}
+	if len(listed.Sessions) != 1 || listed.Sessions[0].State != api.TerminalSessionState("exited") ||
+		listed.Sessions[0].Problem != "reconnect_stopped" || listed.Sessions[0].Reconnect != nil {
+		t.Fatalf("sessions after stop = %#v", listed.Sessions)
+	}
+	response, _ = fixture.do(t, http.MethodPost, "/api/v1/terminal/sessions/absent/reconnect/stop", "")
+	if response.StatusCode != http.StatusNotFound {
+		t.Fatalf("stop of an unknown session = %d", response.StatusCode)
+	}
+}
+
 func TestExplicitReconnectRefusesALocalShell(t *testing.T) {
 	fixture := newTerminalFixture(t, terminal.Limits{MaxSessions: 4, Scrollback: 1 << 12})
 	id, _ := fixture.openShell(t)

@@ -1,4 +1,4 @@
-import { expect, openApplication, test } from "./support/environment";
+import { expect, openApplication, test, openLocalShell } from "./support/environment";
 import { terminalHostBottomOverflow } from "./support/terminal";
 
 const sessions = [
@@ -248,8 +248,7 @@ test("selects the whole local console row and docks local shells", async ({ page
 test("broadcasts one command to two live local shells", async ({ page, installation }) => {
   await openApplication(page, installation);
   const navigation = page.getByRole("navigation", { name: "Primary" });
-  const openShell = navigation.getByRole("button", { name: "Local shell" });
-  await openShell.click();
+  await openLocalShell(page);
   await expect(page.locator("[data-desktop-workspace-controls]")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Find" })).toBeVisible();
   await expect(page.getByRole("region", { name: /^Console for / })).toBeVisible();
@@ -259,7 +258,7 @@ test("broadcasts one command to two live local shells", async ({ page, installat
       fullPage: true,
     });
   }
-  await openShell.click();
+  await openLocalShell(page);
 
   const consoleList = navigation.getByRole("list", { name: "Open consoles" });
   const rows = consoleList.getByRole("listitem");

@@ -128,6 +128,7 @@ export type IntegrationsApi = {
   ): Promise<OpenTerminalSessionResponse>;
   terminalStreamTicket(id: string, cursor?: number): Promise<TerminalStreamTicket>;
   reconnectTerminalSession(id: string): Promise<TerminalSessionList>;
+  stopTerminalReconnect(id: string): Promise<TerminalSessionList>;
   startTerminalForward(
     id: string,
     request: StartTerminalForwardRequest,
@@ -452,6 +453,13 @@ export const integrationsApi: IntegrationsApi = {
     return validateTerminalSessionList(
       await postEmpty<unknown>(
         `/api/v1/terminal/sessions/${encodeURIComponent(id)}/reconnect`,
+      ),
+    );
+  },
+  async stopTerminalReconnect(id) {
+    return validateTerminalSessionList(
+      await postEmpty<unknown>(
+        `/api/v1/terminal/sessions/${encodeURIComponent(id)}/reconnect/stop`,
       ),
     );
   },

@@ -22,7 +22,7 @@ vi.mock("../api/config", async () => {
 vi.mock("../api/integrations", () => ({
   integrationsApi: {
     terminalSessions: vi.fn(), openTerminalSession: vi.fn(), terminalStreamTicket: vi.fn(),
-    reconnectTerminalSession: vi.fn(), closeTerminalSession: vi.fn(), renameTerminalSession: vi.fn(),
+    reconnectTerminalSession: vi.fn(), stopTerminalReconnect: vi.fn(), closeTerminalSession: vi.fn(), renameTerminalSession: vi.fn(),
     passwordVault: vi.fn(), credentials: vi.fn(),
     passwordEligibility: vi.fn(), initialiseVault: vi.fn(), unlockVault: vi.fn(),
   },
@@ -66,6 +66,7 @@ const consoleProps = {
     sessions: [], maxSessions: 50, busy: false, problem: "", loaded: true,
     rename: vi.fn(async () => true), open: vi.fn(async () => null), close: vi.fn(async () => undefined),
     reconnect: vi.fn(async () => false),
+    stopReconnect: vi.fn(async () => false),
     closeAll: vi.fn(async () => undefined),
     refresh: vi.fn(async () => undefined), markExited: vi.fn(),
   },
@@ -139,6 +140,25 @@ describe("ConnectionsPage", () => {
     await waitFor(() => expect(configApi.overview).toHaveBeenCalled());
     expect(onNavigateLocation).toHaveBeenCalledWith("/connections/servers", { replace: true });
     expect(configApi.host).not.toHaveBeenCalled();
+  });
+
+  it("offers a resizable divider between the connection list and the detail pane", async () => {
+    window.localStorage.removeItem("sshc.connections.list-width.v1");
+    render(
+      <ConnectionsPage
+        {...consoleProps}
+        onInspector={() => undefined}
+        location={{ pathname: "/connections/servers", search: "" }}
+      />,
+    );
+    const handle = await screen.findByRole("separator", { name: "Resize the connection list" });
+    expect(handle).toHaveAttribute("aria-valuenow", "400");
+    Object.defineProperty(handle, "setPointerCapture", { value: vi.fn(), configurable: true });
+    fireEvent.pointerDown(handle, { button: 0, pointerId: 3, clientX: 400 });
+    fireEvent.pointerMove(handle, { pointerId: 3, clientX: 460 });
+    fireEvent.pointerUp(handle, { pointerId: 3, clientX: 460 });
+    await waitFor(() => expect(handle).toHaveAttribute("aria-valuenow", "460"));
+    expect(window.localStorage.getItem("sshc.connections.list-width.v1")).toBe("460");
   });
 
   it("opens a connection and tab from the URL", async () => {

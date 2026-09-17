@@ -476,6 +476,26 @@ paths:
         "422": { $ref: "#/components/responses/Problem" }
         "500": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
+  /api/v1/terminal/sessions/{id}/reconnect/stop:
+    post:
+      operationId: stopTerminalReconnect
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 64 }
+      responses:
+        "200":
+          # 自動再接続の待機を打ち切る。セッションは終了状態で一覧に残り、
+          # 手動の再接続と閉じる操作だけができる。
+          description: The session list after the automatic reconnect was stopped
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TerminalSessionList" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "500": { $ref: "#/components/responses/Problem" }
   /api/v1/terminal/sessions/{id}:
     patch:
       operationId: renameTerminalSession

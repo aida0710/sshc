@@ -679,6 +679,22 @@ func (s *Session) recomputeTitleLocked() {
 }
 
 // reconnect は、落ちた輸送を繋ぎ直せたなら真を返す。
+// StopReconnecting abandons the automatic reconnect loop while it is waiting
+// or dialing. The pane stays open in the exited state so the user can decide
+// later whether to reconnect by hand or close it.
+func (s *Session) StopReconnecting() error {
+	s.mutex.Lock()
+	if s.state != StateReconnecting || s.exited != nil {
+		s.mutex.Unlock()
+		return ErrNotReconnecting
+	}
+	s.problem = "reconnect_stopped"
+	s.mutex.Unlock()
+	s.stopReconnecting()
+	s.publish([]byte("\r\n[sshc] 再接続を停止しました。\r\n"))
+	return nil
+}
+
 func (s *Session) stopReconnecting() {
 	s.mutex.Lock()
 	cancel := s.reconnectCancel
