@@ -206,24 +206,6 @@ func (e SFTPEntryType) Valid() bool {
 	}
 }
 
-// Defines values for SFTPLocalEntryType.
-const (
-	Directory SFTPLocalEntryType = "directory"
-	File      SFTPLocalEntryType = "file"
-)
-
-// Valid indicates whether the value is a known member of the SFTPLocalEntryType enum.
-func (e SFTPLocalEntryType) Valid() bool {
-	switch e {
-	case Directory:
-		return true
-	case File:
-		return true
-	default:
-		return false
-	}
-}
-
 // Defines values for SyncDirection.
 const (
 	SyncDirectionBoth SyncDirection = "both"
@@ -1351,22 +1333,11 @@ type SFTPEntry struct {
 // SFTPEntryType defines model for SFTPEntry.Type.
 type SFTPEntryType string
 
-// SFTPLocalEntry defines model for SFTPLocalEntry.
-type SFTPLocalEntry struct {
-	Name string             `json:"name"`
-	Path string             `json:"path"`
-	Size int64              `json:"size"`
-	Type SFTPLocalEntryType `json:"type"`
-}
-
-// SFTPLocalEntryType defines model for SFTPLocalEntry.Type.
-type SFTPLocalEntryType string
-
 // SFTPLocalListing defines model for SFTPLocalListing.
 type SFTPLocalListing struct {
-	Entries []SFTPLocalEntry `json:"entries"`
-	Home    string           `json:"home"`
-	Path    string           `json:"path"`
+	Entries []SFTPEntry `json:"entries"`
+	Home    string      `json:"home"`
+	Path    string      `json:"path"`
 }
 
 // SetTerminalSessionTitleRequest defines model for SetTerminalSessionTitleRequest.

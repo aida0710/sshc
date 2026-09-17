@@ -289,7 +289,7 @@ test("keeps a chunked SFTP upload visible while another section is open", async 
     await expect(page.getByRole("button", { name: "Two panes" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "One pane" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Compare directories", exact: true })).toHaveCount(0);
-    await expect(page.getByRole("list", { name: "Remote entries" })).toBeVisible();
+    await expect(page.getByRole("list", { name: "File list" })).toBeVisible();
     await page.getByRole("button", { name: "Actions for project" }).click();
     await expect(page.getByRole("menuitem", { name: "Download" })).toBeInViewport();
     await page.keyboard.press("Escape");

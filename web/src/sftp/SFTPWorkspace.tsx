@@ -7,7 +7,6 @@ import { activateTabFromKeyboard } from "../ui/tabKeyboard";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { useCompactViewport } from "../ui/useMediaQuery";
 import { SFTPPanel, type SFTPSort, type SFTPSortState, type SFTPTarget } from "./SFTPPanel";
-import { LocalSFTPPanel } from "./LocalSFTPPanel";
 import { isLocalPath, localHostAlias } from "./localHost";
 import { SFTPCompareDialog } from "./SFTPCompareDialog";
 import { TransferManagerList } from "./TransferManagerList";
@@ -473,27 +472,14 @@ export function SFTPWorkspace({
               hidden={!selected}
               className={selected ? "flex min-h-0 min-w-0 flex-1 flex-col" : ""}
             >
-              {tab.alias === localHostAlias ? <LocalSFTPPanel
-                aliases={aliases}
-                {...(hosts === undefined ? {} : { hosts })}
-                initialPath={tab.path}
-                remote={otherVisible?.alias && otherVisible.alias !== localHostAlias && otherVisible.path
-                  ? { alias: otherVisible.alias, path: otherVisible.path } : null}
-                onHostChange={(alias) => {
-                  if (alias === localHostAlias) return;
-                  relocate(pane, tab.id, alias, "");
-                  restoring.current[pane].set(tab.id, { alias, path: "" });
-                }}
-                onQueueOpen={() => setOpenQueueRequest((value) => value + 1)}
-                onDirectoryChange={(path) => { if (path !== null) relocate(pane, tab.id, localHostAlias, path); }}
-              /> : <SFTPPanel
+              <SFTPPanel
                 aliases={aliases}
                 {...(hosts === undefined ? {} : { hosts })}
                 target={ownsTarget ? target : null}
                 initialLocation={restored === undefined || restored.alias === "" ? null : restored}
                 initialSort={tab.sort}
                 showTransfers={false}
-                downloadLocalPath={otherVisible?.alias === localHostAlias ? otherVisible.path : null}
+                counterpart={otherVisible?.alias && otherVisible.path ? { alias: otherVisible.alias, path: otherVisible.path } : null}
                 onQueueOpen={() => setOpenQueueRequest((current) => current + 1)}
                 {...(selected ? { onNavigationBlockerChange: blocker } : {})}
                 onDirtyChange={dirtyReporter(pane, tab.id)}
@@ -502,7 +488,7 @@ export function SFTPWorkspace({
                 {...(ownsTarget ? { onTargetHandled } : {})}
                 onLocationChange={(alias, path) => relocate(pane, tab.id, alias, path)}
                 onSortChange={(sort) => resort(pane, tab.id, sort)}
-              />}
+              />
             </div>
           );
         })}

@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
+import { localHostAlias } from "./localHost";
 import { SFTPPanel } from "./SFTPPanel";
 import { mobileViewportQuery } from "../ui/useMediaQuery";
 import { ApiError } from "../api/client";
@@ -213,12 +214,12 @@ describe("SFTPPanel uploads", () => {
     await chooseHost("edge");
     await screen.findByRole("button", { name: "alpha.txt" });
 
-    await userEvent.type(screen.getByRole("searchbox", { name: "Filter remote entries" }), "alpha");
+    await userEvent.type(screen.getByRole("searchbox", { name: "Filter entries" }), "alpha");
     expect(screen.getByRole("button", { name: "alpha.txt" })).toBeVisible();
     expect(screen.queryByRole("button", { name: "beta.txt" })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("checkbox", { name: "Select all entries" }));
 
-    await userEvent.clear(screen.getByRole("searchbox", { name: "Filter remote entries" }));
+    await userEvent.clear(screen.getByRole("searchbox", { name: "Filter entries" }));
     expect(screen.getByRole("checkbox", { name: "Select alpha.txt" })).toBeChecked();
     expect(screen.getByRole("checkbox", { name: "Select beta.txt" })).not.toBeChecked();
   });
@@ -537,7 +538,7 @@ describe("SFTPPanel uploads", () => {
     });
     const queue = vi.spyOn(sftpTransferManager, "addRemoteTransfers").mockResolvedValue(["get-one"]);
     try {
-      render(<SFTPPanel aliases={["edge"]} downloadLocalPath="/home/edge" target={{ alias: "edge", path: "/var/log/app.log", action: "download", request: 3 }} />);
+      render(<SFTPPanel aliases={["edge"]} counterpart={{ alias: localHostAlias, path: "/home/edge" }} target={{ alias: "edge", path: "/var/log/app.log", action: "download", request: 3 }} />);
       await waitFor(() => expect(queue).toHaveBeenCalledWith([
         expect.objectContaining({ sourcePath: "/var/log/app.log", targetPath: "/home/edge/app.log" }),
       ], "get"));
@@ -844,34 +845,6 @@ describe("SFTPPanel uploads", () => {
     expect(api.directoryStats).toHaveBeenCalledWith("edge", "/remote/project");
   });
 
-  it("bookmarks the current folder and reopens it from the places menu", async () => {
-    api.list.mockImplementation(async (_alias: string, requestedPath: string) => ({
-      path: requestedPath === "" ? "/srv/app" : requestedPath,
-      entries: [],
-    }));
-    // A host of its own: the place book is a singleton shared by the suite.
-    render(<SFTPPanel aliases={["placebook"]} />);
-    await chooseHost("placebook");
-    await waitFor(() => expect(screen.getByTestId("sftp-current-path")).toHaveAttribute("data-path", "/srv/app"));
-
-    await userEvent.click(screen.getByRole("button", { name: "Bookmarks and recent paths" }));
-    await userEvent.click(screen.getByRole("menuitem", { name: "Bookmark this folder" }));
-
-    // The menu stays open so the toggle can report what it just did.
-    const menu = screen.getByRole("menu", { name: "Bookmarks and recent paths" });
-    expect(within(menu).getByRole("menuitem", { name: "Remove this bookmark" })).toBeVisible();
-    expect(within(menu).getByRole("menuitem", { name: "/srv/app" })).toBeVisible();
-    await userEvent.keyboard("{Escape}");
-
-    await userEvent.click(screen.getByRole("button", { name: "Root directory" }));
-    await waitFor(() => expect(screen.getByTestId("sftp-current-path")).toHaveAttribute("data-path", "/"));
-
-    await userEvent.click(screen.getByRole("button", { name: "Bookmarks and recent paths" }));
-    await userEvent.click(within(screen.getByRole("menu", { name: "Bookmarks and recent paths" }))
-      .getByRole("menuitem", { name: "/srv/app" }));
-    await waitFor(() => expect(screen.getByTestId("sftp-current-path")).toHaveAttribute("data-path", "/srv/app"));
-  });
-
   it("offers to undo a rename and puts the old name back", async () => {
     api.list.mockResolvedValue({
       path: "/remote",
@@ -938,7 +911,7 @@ describe("SFTPPanel uploads", () => {
     await chooseHost("edge");
     await screen.findByRole("button", { name: "app" });
 
-    await userEvent.type(screen.getByRole("searchbox", { name: "Filter remote entries" }), "log{Enter}");
+    await userEvent.type(screen.getByRole("searchbox", { name: "Filter entries" }), "log{Enter}");
     await waitFor(() => expect(api.search).toHaveBeenCalledWith("edge", "/srv", "log"));
 
     expect(await screen.findByText("2 matches for “log” under /srv")).toBeVisible();
@@ -965,7 +938,7 @@ describe("SFTPPanel uploads", () => {
     });
     render(<SFTPPanel aliases={["edge"]} />);
     await chooseHost("edge");
-    await userEvent.type(screen.getByRole("searchbox", { name: "Filter remote entries" }), "log{Enter}");
+    await userEvent.type(screen.getByRole("searchbox", { name: "Filter entries" }), "log{Enter}");
     await userEvent.click(await screen.findByRole("button", { name: "report.log" }));
 
     await userEvent.click(screen.getByRole("button", { name: "Actions for report.log" }));
@@ -1060,7 +1033,7 @@ describe("SFTPPanel uploads", () => {
     it("keeps creation, navigation, selection and sorting in the folder sheet", async () => {
       render(<SFTPPanel aliases={["edge"]} />);
       await chooseHost("edge");
-      expect(screen.queryByRole("searchbox", { name: "Filter remote entries" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("searchbox", { name: "Filter entries" })).not.toBeInTheDocument();
       await userEvent.click(screen.getByRole("button", { name: "Folder actions" }));
       const sheet = screen.getByRole("dialog", { name: "Folder actions" });
       expect(within(sheet).getByRole("menuitem", { name: "New folder" })).toBeEnabled();
