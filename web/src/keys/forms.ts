@@ -81,7 +81,6 @@ export function useRelocateForm() {
   const [relocating, setRelocating] = useState<KeyItem | null>(null);
   const [newName, setNewName] = useState("");
   const [newGroup, setNewGroup] = useState("");
-  const [createGroup, setCreateGroup] = useState("");
   const close = useCallback(() => {
     setNewName("");
     setNewGroup("");
@@ -91,7 +90,6 @@ export function useRelocateForm() {
     relocating, setRelocating,
     newName, setNewName,
     newGroup, setNewGroup,
-    createGroup, setCreateGroup,
     close,
   };
 }
@@ -102,8 +100,10 @@ export function useGenerationForm() {
   const [comment, setComment] = useState("");
   const [passphrase, setPassphrase] = useState("");
   const [unencrypted, setUnencrypted] = useState(false);
+  const [createGroup, setCreateGroup] = useState("");
   return {
     algorithm, setAlgorithm,
+    createGroup, setCreateGroup,
     fileName, setFileName,
     comment, setComment,
     passphrase, setPassphrase,

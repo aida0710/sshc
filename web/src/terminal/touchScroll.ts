@@ -93,3 +93,43 @@ export function newTouchScroll(view: Scroller, cellHeight: () => number, options
     cancel,
   };
 }
+
+// Drives the scroller from single-finger touches on the container. A
+// selection held inside the container wins over scrolling.
+export function attachTouchScroll(
+  container: HTMLElement,
+  view: Scroller,
+  cellHeight: () => number,
+  options: TouchScrollOptions & { selectionHeld: () => boolean },
+): () => void {
+  const scroll = newTouchScroll(view, cellHeight, { ...options, canScroll: () => !options.selectionHeld() });
+  const single = (event: TouchEvent): Touch | null =>
+    event.touches.length === 1 ? (event.touches[0] ?? null) : null;
+  const touchStart = (event: TouchEvent) => {
+    const finger = single(event);
+    if (finger !== null) scroll.start(finger.clientY);
+    else scroll.cancel();
+  };
+  const touchMove = (event: TouchEvent) => {
+    const finger = single(event);
+    if (finger !== null) scroll.move(finger.clientY);
+    else scroll.cancel();
+  };
+  const touchEnd = () => scroll.end();
+  const selectionChanged = () => {
+    if (options.selectionHeld()) scroll.cancel();
+  };
+  container.addEventListener("touchstart", touchStart, { passive: true });
+  container.addEventListener("touchmove", touchMove, { passive: true });
+  container.addEventListener("touchend", touchEnd, { passive: true });
+  container.addEventListener("touchcancel", scroll.cancel, { passive: true });
+  container.ownerDocument.addEventListener("selectionchange", selectionChanged);
+  return () => {
+    container.removeEventListener("touchstart", touchStart);
+    container.removeEventListener("touchmove", touchMove);
+    container.removeEventListener("touchend", touchEnd);
+    container.removeEventListener("touchcancel", scroll.cancel);
+    container.ownerDocument.removeEventListener("selectionchange", selectionChanged);
+    scroll.cancel();
+  };
+}
