@@ -238,6 +238,34 @@ describe("SFTP tabs", () => {
     expect(rightTabs[1]).toHaveAttribute("aria-selected", "true");
   });
 
+  it("opens the local folder beside the remote pane and restores remote mode", async () => {
+    const localFile = { kind: "file", name: "notes.txt", getFile: vi.fn(async () => new File(["hello"], "notes.txt")) };
+    const localFolder = { kind: "directory", name: "Downloads", values: async function* () { yield localFile; } };
+    const picker = vi.fn(async () => localFolder);
+    Object.defineProperty(window, "showDirectoryPicker", { configurable: true, value: picker });
+    try {
+      render(<SFTPWorkspace aliases={["edge"]} />);
+      await userEvent.click(screen.getByRole("button", { name: "Local files" }));
+      expect(window.localStorage.getItem("sshc.sftp.split")).toBe("true");
+      const local = screen.getByRole("region", { name: "Local files" });
+      await userEvent.click(within(local).getByRole("button", { name: "Choose folder" }));
+      await waitFor(() => expect(within(local).getByRole("button", { name: /notes.txt/ })).toBeVisible());
+      expect(picker).toHaveBeenCalledWith({ id: "sshc-sftp-local", mode: "readwrite" });
+      await chooseHost("edge", screen.getByRole("tabpanel"));
+      const queueUpload = vi.spyOn(sftpTransferManager, "addUploads").mockResolvedValue("local-batch");
+      await userEvent.click(within(local).getByRole("button", { name: /notes.txt/ }));
+      await userEvent.click(within(local).getByRole("button", { name: "Upload selection" }));
+      await waitFor(() => expect(queueUpload).toHaveBeenCalledWith([
+        expect.objectContaining({ alias: "edge", remotePath: "/home/edge/notes.txt", localName: "notes.txt" }),
+      ], expect.objectContaining({ kind: "file" }), expect.anything()));
+      queueUpload.mockRestore();
+      await userEvent.click(screen.getByRole("button", { name: "Remote files" }));
+      expect(screen.getByRole("tablist", { name: "Right pane tabs" })).toBeVisible();
+    } finally {
+      Reflect.deleteProperty(window, "showDirectoryPicker");
+    }
+  });
+
   it("keeps an unsaved edit mounted while the second pane is hidden", async () => {
     api.list.mockResolvedValue({
       path: "/remote",

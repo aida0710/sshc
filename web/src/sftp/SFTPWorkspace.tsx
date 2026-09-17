@@ -7,6 +7,7 @@ import { activateTabFromKeyboard } from "../ui/tabKeyboard";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { useCompactViewport } from "../ui/useMediaQuery";
 import { SFTPPanel, type SFTPSort, type SFTPSortState, type SFTPTarget } from "./SFTPPanel";
+import { LocalSFTPPanel } from "./LocalSFTPPanel";
 import { SFTPCompareDialog } from "./SFTPCompareDialog";
 import { TransferManagerList } from "./TransferManagerList";
 
@@ -16,6 +17,7 @@ const splitStorageKey = "sshc.sftp.split";
 const secondaryStorageKey = "sshc.sftp.secondary";
 const secondaryTabsStorageKey = "sshc.sftp.secondaryTabs";
 const secondaryActiveStorageKey = "sshc.sftp.secondaryActiveTab";
+const secondaryModeStorageKey = "sshc.sftp.secondaryMode";
 const maxTabs = 8;
 
 type SFTPTab = { id: string; alias: string; path: string; sort: SFTPSortState };
@@ -175,9 +177,17 @@ export function SFTPWorkspace({
     return [{ ...source, id: identifier() }];
   });
   const [secondaryActiveId, setSecondaryActiveId] = useState(() => restoreActive(secondaryActiveStorageKey, secondaryTabs));
+  const [secondaryMode, setSecondaryMode] = useState<"local" | "remote">(() => {
+    try {
+      const saved = window.localStorage.getItem(secondaryModeStorageKey);
+      if (saved === "local" || saved === "remote") return saved;
+    } catch { /* Browser storage is optional. */ }
+    return "remote";
+  });
   const [focusedPane, setFocusedPane] = useState<SFTPPane>("primary");
   const [compareOpen, setCompareOpen] = useState(false);
   const [openQueueRequest, setOpenQueueRequest] = useState(0);
+  const [localDirectory, setLocalDirectory] = useState<FileSystemDirectoryHandle | null>(null);
   const [dirtyTabs, setDirtyTabs] = useState<Map<string, string>>(() => new Map());
   const [closeTabIntent, setCloseTabIntent] = useState<CloseTabIntent | null>(null);
   const workspaceRoot = useRef<HTMLElement | null>(null);
@@ -442,7 +452,7 @@ export function SFTPWorkspace({
         {current.map((tab) => {
           const selected = tab.id === currentActive;
           const restored = restoring.current[pane].get(tab.id);
-          const ownsTarget = selected && (compactViewport ? pane === "primary" : focusedPane === pane);
+          const ownsTarget = selected && (compactViewport || secondaryMode === "local" ? pane === "primary" : focusedPane === pane);
           return (
             <div
               key={tab.id}
@@ -459,6 +469,7 @@ export function SFTPWorkspace({
                 initialLocation={restored === undefined || restored.alias === "" || restored.path === "" ? null : restored}
                 initialSort={tab.sort}
                 showTransfers={false}
+                downloadDirectory={pane === "primary" && secondaryMode === "local" && visibleSplit ? localDirectory : null}
                 onQueueOpen={() => setOpenQueueRequest((current) => current + 1)}
                 {...(selected ? { onNavigationBlockerChange: blocker } : {})}
                 onDirtyChange={dirtyReporter(pane, tab.id)}
@@ -478,11 +489,22 @@ export function SFTPWorkspace({
   function renderPaneActions() {
     return (
       <>
+        <button type="button" aria-label={t(secondaryMode === "local" ? "sftp.local.remoteMode" : "sftp.local.mode")}
+          title={t(secondaryMode === "local" ? "sftp.local.remoteMode" : "sftp.local.mode")}
+          onClick={() => {
+            const next = secondaryMode === "local" ? "remote" : "local";
+            if (next === "local" && !split) toggleSplit();
+            setSecondaryMode(next);
+            try { window.localStorage.setItem(secondaryModeStorageKey, next); } catch { /* Storage is optional. */ }
+          }}
+          className="mr-1 flex h-9 shrink-0 self-center items-center rounded-md px-3 text-sm text-ink-muted hover:bg-toolbar hover:text-ink">
+          {t(secondaryMode === "local" ? "sftp.local.remoteMode" : "sftp.local.mode")}
+        </button>
         <button
           type="button"
           aria-label={t("sftp.compare.heading")}
           title={t("sftp.compare.heading")}
-          disabled={!visibleSplit || primaryLocation?.alias === "" || secondaryLocation?.alias === ""}
+          disabled={!visibleSplit || secondaryMode === "local" || primaryLocation?.alias === "" || secondaryLocation?.alias === ""}
           onClick={() => setCompareOpen(true)}
           className="mr-1 hidden h-9 shrink-0 self-center items-center gap-1.5 rounded-md px-3 text-sm text-ink-muted hover:bg-toolbar hover:text-ink disabled:text-ink-faint lg:flex"
         >
@@ -513,7 +535,7 @@ export function SFTPWorkspace({
         {secondaryTabs.length > 0 ? (
           <div hidden={!visibleSplit} className="w-1/2 min-w-0 flex-none border-l border-line/60">
             <div className="flex min-w-0">
-              {renderTabs("secondary")}
+              {secondaryMode === "local" ? <span className="flex min-h-12 min-w-0 flex-1 items-center px-4 text-sm font-medium">{t("sftp.local.heading")}</span> : renderTabs("secondary")}
               {visibleSplit ? renderPaneActions() : null}
             </div>
           </div>
@@ -523,7 +545,11 @@ export function SFTPWorkspace({
 
       <div className={`grid min-h-0 min-w-0 flex-1 gap-2 pt-2 ${visibleSplit ? "grid-cols-2" : "grid-cols-1"}`}>
         {renderPane("primary")}
-        {secondaryTabs.length > 0 ? renderPane("secondary", !visibleSplit) : null}
+        {secondaryTabs.length > 0 ? renderPane("secondary", !visibleSplit || secondaryMode === "local") : null}
+        {secondaryTabs.length > 0 ? <div hidden={!visibleSplit || secondaryMode !== "local"} className="flex min-h-0 min-w-0 flex-col">
+          <LocalSFTPPanel remote={primaryLocation?.alias ? { alias: primaryLocation.alias, path: primaryLocation.path } : null}
+            onQueueOpen={() => setOpenQueueRequest((current) => current + 1)} onDirectoryChange={setLocalDirectory} />
+        </div> : null}
       </div>
       <TransferManagerList openRequest={openQueueRequest} />
       {closeTabIntent === null ? null : (
@@ -541,7 +567,7 @@ export function SFTPWorkspace({
           onCancel={() => setCloseTabIntent(null)}
         />
       )}
-      {visibleSplit && compareOpen ? (
+      {visibleSplit && secondaryMode === "remote" && compareOpen ? (
         <SFTPCompareDialog
           left={{ alias: primaryLocation?.alias ?? "", path: primaryLocation?.path || "/" }}
           right={{ alias: secondaryLocation?.alias ?? "", path: secondaryLocation?.path || "/" }}

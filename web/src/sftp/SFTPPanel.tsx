@@ -36,7 +36,7 @@ import { sftpApi, type RemoteEntry, type RemoteTextFile } from "./api";
 import { formatBytes } from "./format";
 import { sftpPlaces } from "./places";
 import { SFTPDetailsDialog } from "./SFTPDetailsDialog";
-import { directoryPaths, safeRelativePath, symbolicModeToOctal, type LocalTransferFile } from "./transfers";
+import { directoryPaths, remoteEntriesMime, safeRelativePath, symbolicModeToOctal, type LocalTransferFile, type RemoteDragPayload } from "./transfers";
 import { TransferManagerList } from "./TransferManagerList";
 import { sftpTransferManager } from "./transferManager";
 import { SFTPHostPicker } from "./SFTPHostPicker";
@@ -45,13 +45,6 @@ const MonacoEditor = lazy(() =>
   import("./MonacoEditor").then(({ MonacoEditor }) => ({ default: MonacoEditor })),
 );
 const noHosts: HostEntry[] = [];
-const remoteEntriesMime = "application/x-sshc-sftp-entries";
-
-type RemoteDragPayload = {
-  alias: string;
-  entries: Array<Pick<RemoteEntry, "name" | "path" | "type" | "size">>;
-};
-
 function parentOf(remotePath: string): string {
   if (remotePath === "/") return "/";
   const pieces = remotePath.split("/").filter(Boolean);
@@ -183,6 +176,7 @@ export function SFTPPanel({
   onNavigateLocation,
   onOpenTerminal,
   onQueueOpen,
+  downloadDirectory,
 }: {
   aliases: string[];
   hosts?: HostEntry[];
@@ -200,6 +194,7 @@ export function SFTPPanel({
   onNavigateLocation?: ((url: string) => void) | undefined;
   onOpenTerminal?: ((alias: string, path: string) => void | Promise<void>) | undefined;
   onQueueOpen?: () => void;
+  downloadDirectory?: FileSystemDirectoryHandle | null;
 }) {
   const t = useTranslate();
   const [alias, setAlias] = useState("");
@@ -771,7 +766,13 @@ export function SFTPPanel({
     setProblem("");
     const results = await Promise.allSettled(targets
       .filter((entry) => entry.type === "file" || entry.type === "directory")
-      .map((entry) => sftpTransferManager.addDownload(targetAlias, entry.path, entry.type === "directory" ? "folder" : "file", entry.type === "file" ? entry.size : -1)));
+      .map((entry) => {
+        const kind = entry.type === "directory" ? "folder" : "file";
+        const size = entry.type === "file" ? entry.size : -1;
+        return downloadDirectory === null || downloadDirectory === undefined
+          ? sftpTransferManager.addDownload(targetAlias, entry.path, kind, size)
+          : sftpTransferManager.addDownload(targetAlias, entry.path, kind, size, { directory: downloadDirectory });
+      }));
     const failed = results.find((result) => result.status === "rejected");
     if (failed?.status === "rejected") {
       setProblem(failureCode(failed.reason) || (failed.reason instanceof Error ? failed.reason.message : "sftp_failed"));

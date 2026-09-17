@@ -80,7 +80,10 @@ type DownloadSink = {
   writer: FileSystemWritableFileStream;
   position: number;
   reset: boolean;
+  direct: boolean;
 };
+
+export type DownloadTarget = { directory: FileSystemDirectoryHandle };
 
 function identifier(prefix: string): string {
   return globalThis.crypto?.randomUUID?.() ?? `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2)}`;
@@ -108,6 +111,7 @@ export class SFTPTransferManager {
   private readonly files = new Map<string, File>();
   private readonly downloadChunks = new Map<string, Uint8Array[]>();
   private readonly downloadSinks = new Map<string, DownloadSink>();
+  private readonly downloadTargets = new Map<string, DownloadTarget>();
   private readonly controllers = new Map<string, AbortController>();
   private readonly inFlight = new Set<string>();
   private readonly uploadAdmissions = new Set<UploadAdmission>();
@@ -255,7 +259,7 @@ export class SFTPTransferManager {
     return batchId;
   }
 
-  async addDownload(alias: string, remotePath: string, kind: TransferKind, totalBytes: number): Promise<string> {
+  async addDownload(alias: string, remotePath: string, kind: TransferKind, totalBytes: number, target?: DownloadTarget): Promise<string> {
     const reserved = [...this.uploadAdmissions].reduce((sum, admission) => sum + admission.count, 0);
     if (this.jobs.length + reserved >= maxTransferJobs) throw new Error("sftp_transfer_limit");
     const id = identifier("transfer");
@@ -265,6 +269,7 @@ export class SFTPTransferManager {
       direction: "download", kind, name, remotePath, totalBytes, lastModified: 0,
     });
     this.downloadChunks.set(id, []);
+    if (target !== undefined) this.downloadTargets.set(id, target);
     this.commit([...this.jobs, job]);
     this.kick();
     return id;
@@ -398,6 +403,7 @@ export class SFTPTransferManager {
         if (!missingServerTransfer(error)) throw error;
       }
       this.downloadChunks.delete(id);
+      this.downloadTargets.delete(id);
       await this.cleanupDownload(id);
     }
     await this.reconcile();
@@ -407,7 +413,10 @@ export class SFTPTransferManager {
     const removed = this.jobs.filter((job) => job.status === "completed" || job.status === "cancelled").map((job) => job.id);
     await this.api.clearFinishedTransfers();
     this.commit(this.jobs.filter((job) => job.status !== "completed" && job.status !== "cancelled"));
-    for (const id of removed) void this.cleanupDownload(id);
+    for (const id of removed) {
+      this.downloadTargets.delete(id);
+      void this.cleanupDownload(id);
+    }
   }
 
   async remove(id: string): Promise<void> {
@@ -416,6 +425,7 @@ export class SFTPTransferManager {
     await this.api.removeTransfer(id);
     this.files.delete(id);
     this.downloadChunks.delete(id);
+    this.downloadTargets.delete(id);
     await this.cleanupDownload(id);
     this.commit(this.jobs.filter((candidate) => candidate.id !== id));
   }
@@ -713,8 +723,11 @@ export class SFTPTransferManager {
     if (sink !== null) {
       await sink.writer.close();
       this.downloadSinks.delete(id);
-      await this.api.saveDownload(job.remotePath, job.kind === "folder", [await sink.handle.getFile()]);
-      globalThis.setTimeout(() => { void sink.root.removeEntry(sink.name).catch(() => undefined); }, 30_000);
+      if (!sink.direct) {
+        const file = await sink.handle.getFile();
+        await this.api.saveDownload(job.remotePath, job.kind === "folder", [file]);
+        globalThis.setTimeout(() => { void sink.root.removeEntry(sink.name).catch(() => undefined); }, 30_000);
+      }
     } else {
       await this.api.saveDownload(job.remotePath, job.kind === "folder", chunks.map((chunk) => new Uint8Array(chunk)));
       if (job.downloadRevision === "") throw new Error("download_revision_missing");
@@ -723,6 +736,7 @@ export class SFTPTransferManager {
       job = this.find(id)!;
     }
     const completed = await this.api.updateTransfer(id, "complete");
+    this.downloadTargets.delete(id);
     this.downloadChunks.delete(id);
     this.replaceServer(completed);
     this.notify(completed);
@@ -746,9 +760,37 @@ export class SFTPTransferManager {
     this.replace(id, { transferredBytes, totalBytes: resolvedTotal, bytesPerSecond, remainingSeconds });
   }
 
+  private async availableDownloadName(directory: FileSystemDirectoryHandle, job: ManagedTransferJob): Promise<string> {
+    const filename = `${baseName(job.remotePath)}${job.kind === "folder" ? ".zip" : ""}`;
+    const dot = filename.lastIndexOf(".");
+    const stem = dot > 0 ? filename.slice(0, dot) : filename;
+    const extension = dot > 0 ? filename.slice(dot) : "";
+    for (let copy = 0; copy < 1000; copy += 1) {
+      const name = copy === 0 ? filename : `${stem} (${copy})${extension}`;
+      try {
+        await directory.getFileHandle(name);
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "NotFoundError") return name;
+        if (error instanceof DOMException && error.name === "TypeMismatchError") continue;
+        throw error;
+      }
+    }
+    throw new Error("sftp_local_name_limit");
+  }
+
   private async openDownloadSink(job: ManagedTransferJob): Promise<DownloadSink | null> {
     const existing = this.downloadSinks.get(job.id);
     if (existing !== undefined) return existing;
+    const target = this.downloadTargets.get(job.id);
+    if (target !== undefined) {
+      const name = await this.availableDownloadName(target.directory, job);
+      const handle = await target.directory.getFileHandle(name, { create: true });
+      const writer = await handle.createWritable({ keepExistingData: true });
+      await writer.seek(0);
+      const sink = { root: target.directory, name, handle, writer, reset: true, position: 0, direct: true };
+      this.downloadSinks.set(job.id, sink);
+      return sink;
+    }
     try {
       if (typeof globalThis.navigator?.storage?.getDirectory !== "function") return null;
       const root = await globalThis.navigator.storage.getDirectory();
@@ -761,7 +803,7 @@ export class SFTPTransferManager {
       if (reset) await writer.truncate(0);
       const position = reset ? 0 : storedSize;
       await writer.seek(position);
-      const sink = { root, name, handle, writer, reset, position };
+      const sink = { root, name, handle, writer, reset, position, direct: false };
       this.downloadSinks.set(job.id, sink);
       return sink;
     } catch {

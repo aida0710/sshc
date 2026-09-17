@@ -19,7 +19,7 @@ WinSCPに存在する機能を漏れなく分類し、sshcで同じ利用目的�
 
 sshcのSFTPは、安全なアップロード／ダウンロード、フォルダー転送、複数選択、リモート編集、競合検出、バックグラウンドキューという中核を既に持つ。一方、日常のファイルマネージャーとして使う際の不足は大きく、特に次がWinSCPとの差になっている。
 
-1. ディレクトリツリー、local／remote 2 panel
+1. ディレクトリツリー、対応ブラウザ以外でのlocal／remote 2 panel
 2. 空ファイル／リンク作成、複製、任意の移動先選択、プロパティの一括変更
 3. 帯域制限
 4. 転送前オプション、timestamp／permission保持、mask、プリセット
@@ -30,7 +30,7 @@ sshcのSFTPは、安全なアップロード／ダウンロード、フォルダ
 | WinSCP機能 | 状態 | sshcの現状 | 実装方針 |
 |---|---|---|---|
 | Explorer型の単一remote panel | 対応 | SFTP画面が相当 | 維持 |
-| Commander型のlocal／remote 2 panel | 未対応 | desktopではremote／remoteの2ペイン表示に対応。local filesystemは表示しない | desktop向けlocal panelを設計。mobileは単一panelを維持 |
+| Commander型のlocal／remote 2 panel | 部分対応 | desktopの対応ブラウザでは右ペインでPCのフォルダを開き、選択項目をリモートへアップロードできる。リモートのダウンロードは選択したフォルダへ直接ストリーム保存する。リモートフォルダはZIPとして保存する | File System Access API非対応ブラウザ、モバイル、ローカル／リモートの同期は未対応 |
 | remote／remote 2 panel | 対応 | desktopで2つのhost／directoryを並べる。左右が独立したtab列を持ち、表示中のtab間でfile／directoryをDrag & Dropしてcopy／moveできる | 維持 |
 | `..`による親directory移動 | 対応 | 一覧先頭に表示 | 維持 |
 | path breadcrumb／直接入力 | 対応 | 通常は各階層をクリックできるbreadcrumbとして表示し、編集操作で絶対path入力へ切り替える | 維持 |

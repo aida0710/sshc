@@ -1,4 +1,12 @@
+import type { RemoteEntry } from "./api";
+
 export type LocalTransferFile = { file: File; relativePath: string };
+
+export const remoteEntriesMime = "application/x-sshc-sftp-entries";
+export type RemoteDragPayload = {
+  alias: string;
+  entries: Array<Pick<RemoteEntry, "name" | "path" | "type" | "size">>;
+};
 
 export function safeRelativePath(candidate: string): string | null {
   if (candidate.includes("\\")) return null;
