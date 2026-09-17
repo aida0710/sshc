@@ -1133,11 +1133,11 @@ func TestSyncConnectionFailuresHaveSpecificSafeCodes(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			engine, service, secrets := syncEngineWithVault(t)
+			_, service, secrets := syncEngineWithVault(t)
 			if err := secrets.Initialise(syncTestPassphrase); err != nil {
 				t.Fatal(err)
 			}
-			engine = echo.New()
+			engine := echo.New()
 			registerSyncRoutes(engine, SyncHandlers{
 				Service: service, Secrets: secrets,
 				Reach: func(context.Context, *objectstore.Client, string) error { return test.err },

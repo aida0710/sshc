@@ -22,10 +22,6 @@ import (
 	"sshc/internal/storage"
 )
 
-type stubToolchain struct{}
-
-func (stubToolchain) KeyGen() (string, error) { return "/usr/bin/ssh-keygen", nil }
-
 type dialerStub func(ctx context.Context, network, address string) (net.Conn, error)
 
 func (dial dialerStub) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
