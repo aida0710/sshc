@@ -1,14 +1,14 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import type { IntegrationsApi } from "../api/integrations";
 import { LanguageProvider } from "../i18n/context";
 import { SyncExclusionsPanel } from "./SyncExclusionsPanel";
+import type { SyncApi } from "../api/sync";
 
-function renderPanel(api: Partial<IntegrationsApi>) {
+function renderPanel(api: Partial<SyncApi>) {
   render(
     <LanguageProvider initial="ja">
-      <SyncExclusionsPanel api={api as IntegrationsApi} />
+      <SyncExclusionsPanel api={api as SyncApi} />
     </LanguageProvider>,
   );
 }

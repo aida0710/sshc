@@ -2,15 +2,15 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/client";
-import type { IntegrationsApi } from "../api/integrations";
 import { SettingsPanel } from "./SettingsPanel";
+import type { SettingsPanelApi } from "./SettingsPanel";
 
 afterEach(() => {
   vi.unstubAllGlobals();
   window.localStorage.clear();
 });
 
-function buildApi(overrides: Partial<IntegrationsApi> = {}): IntegrationsApi {
+function buildApi(overrides: Partial<SettingsPanelApi> = {}): SettingsPanelApi {
   return {
     passwordVault: vi.fn().mockResolvedValue({ exists: true, unlocked: true, passwordless: false, aliases: [], dedicatedKeyPassphrases: [] }),
     terminalSettings: vi.fn().mockResolvedValue({}),
@@ -33,7 +33,7 @@ function buildApi(overrides: Partial<IntegrationsApi> = {}): IntegrationsApi {
       },
     }),
     ...overrides,
-  } as unknown as IntegrationsApi;
+  } as unknown as SettingsPanelApi;
 }
 
 async function fillMasterPassword(user: ReturnType<typeof userEvent.setup>) {

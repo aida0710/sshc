@@ -5,7 +5,7 @@ import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import type { Section } from "../routing/sectionRoute";
 import { Icon } from "../ui/icons";
-import type { TerminalSession } from "../api/integrations";
+import type { TerminalSession } from "../api/terminalSessions";
 import { terminalDisplayTitle } from "../terminal/terminalPresentation";
 import type { UnreadSessions } from "../terminal/terminalNotifications";
 import { ModalShell } from "../ui/ModalShell";

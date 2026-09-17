@@ -1,24 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
 import { ApiError } from "../api/client";
 import { configApi } from "../api/config";
-import {
-  integrationsApi,
-  type IntegrationsApi,
-  type TerminalForward,
-  type TerminalSession,
-} from "../api/integrations";
+import { terminalSessionsApi, type TerminalForward, type TerminalSession, type TerminalSessionsApi } from "../api/terminalSessions";
 import { useTranslate } from "../i18n/context";
 import { clipboard } from "../ui/clipboard";
 import { CheckboxField, Field, control, hintText } from "../ui/form";
 import { Button, Card, Notice } from "../ui/surface";
 import { ModalShell } from "../ui/ModalShell";
 
-type ForwardApi = Pick<IntegrationsApi, "startTerminalForward" | "stopTerminalForward">;
+type ForwardApi = Pick<TerminalSessionsApi, "startTerminalForward" | "stopTerminalForward">;
 type SaveApi = Pick<typeof configApi, "overview" | "host" | "save">;
 
 export function TerminalPortForwards({
   session,
-  api = integrationsApi,
+  api = terminalSessionsApi,
   saveApi = configApi,
   onChanged,
   onClose,

@@ -2,7 +2,7 @@ import { act, createEvent, fireEvent, render, screen, waitFor } from "@testing-l
 import userEvent from "@testing-library/user-event";
 import { useState, type ComponentProps } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { TerminalSession } from "../../api/integrations";
+import type { TerminalSession } from "../../api/terminalSessions";
 import { TerminalWorkspace as ProductionTerminalWorkspace } from "./TerminalWorkspace";
 import { liveWorkspaceStorageKey } from "./livePersistence";
 

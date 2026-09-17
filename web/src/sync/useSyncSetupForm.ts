@@ -1,9 +1,5 @@
 import { useEffect, useState } from "react";
-import type {
-  SyncDirection,
-  SyncSetupCheckResponse,
-  SyncStatus,
-} from "../api/integrations";
+import type { SyncDirection, SyncSetupCheckResponse, SyncStatus } from "../api/sync";
 
 type SetupFormState = {
   endpoint: string;

@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { failureCode } from "../api/client";
 import { configApi, type Overview } from "../api/config";
-import { integrationsApi, type RecentConnectionList, type SyncStatus } from "../api/integrations";
+import { recentConnectionsApi, type RecentConnectionList } from "../api/recentConnections";
+import { syncApi, type SyncStatus } from "../api/sync";
+import { terminalSessionsApi } from "../api/terminalSessions";
 import { useTranslate } from "../i18n/context";
 import { Icon } from "../ui/icons";
 import { Button, Card, Notice } from "../ui/surface";
@@ -25,10 +27,10 @@ type OverviewPanelProps = {
 };
 
 const loadDefaultOverview = () => configApi.overview();
-const loadDefaultSync = () => integrationsApi.syncStatus();
-const loadDefaultRecent = () => integrationsApi.recentConnections();
+const loadDefaultSync = () => syncApi.syncStatus();
+const loadDefaultRecent = () => recentConnectionsApi.recentConnections();
 const loadDefaultWorkspaces = () => workspaceApi.list();
-const launchDefault = (alias: string) => integrationsApi.openTerminalSession({ kind: "ssh", alias });
+const launchDefault = (alias: string) => terminalSessionsApi.openTerminalSession({ kind: "ssh", alias });
 const informationalNoticeCodes = new Set(["group_empty"]);
 
 export function OverviewPanel({

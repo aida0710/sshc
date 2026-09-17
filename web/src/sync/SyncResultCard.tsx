@@ -1,9 +1,4 @@
-import type {
-  PullResponse,
-  PushResult,
-  SnapshotSummary,
-  SyncOperation,
-} from "../api/integrations";
+import type { PullResponse, PushResult, SnapshotSummary, SyncOperation } from "../api/sync";
 import { useLanguage } from "../i18n/context";
 import type { Locale } from "../i18n/locale";
 import { Icon } from "../ui/icons";

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { TerminalSession } from "../api/integrations";
+import type { TerminalSession } from "../api/terminalSessions";
 import type { Translate } from "../i18n/context";
 import { terminalDisplayTitle } from "./terminalPresentation";
 

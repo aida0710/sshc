@@ -2,8 +2,9 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { HostDetail } from "../api/config";
-import type { EffectiveResponse, IntegrationsApi } from "../api/integrations";
+import type { EffectiveResponse } from "../api/diagnostics";
 import { ConnectionAnalysis } from "./ConnectionAnalysis";
+import type { DiagnosticsApi } from "../api/diagnostics";
 
 const detail: HostDetail = {
   form: {
@@ -54,14 +55,14 @@ const effective: EffectiveResponse = {
 
 describe("ConnectionAnalysis", () => {
   it("keeps the sources view disabled while another editor is dirty", () => {
-    const api = { effective: vi.fn() } as Pick<IntegrationsApi, "effective">;
+    const api = { effective: vi.fn() } as Pick<DiagnosticsApi, "effective">;
     render(<ConnectionAnalysis detail={detail} alias="bastion" api={api} disabled />);
 
     expect(screen.getByRole("button", { name: "Show the sources" })).toBeDisabled();
   });
 
   it("shows the resolved saved values without running anything", () => {
-    const api = { effective: vi.fn() } as Pick<IntegrationsApi, "effective">;
+    const api = { effective: vi.fn() } as Pick<DiagnosticsApi, "effective">;
     render(<ConnectionAnalysis detail={detail} alias="bastion" api={api} />);
 
     expect(screen.getByText("HostName 203.0.113.10")).toBeInTheDocument();

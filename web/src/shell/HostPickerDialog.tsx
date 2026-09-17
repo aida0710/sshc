@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import type { HostEntry } from "../api/config";
-import { integrationsApi, type RecentConnection } from "../api/integrations";
+import { recentConnectionsApi, type RecentConnection } from "../api/recentConnections";
 import { useTranslate } from "../i18n/context";
 import { localHostAlias } from "../sftp/localHost";
 import { Icon } from "../ui/icons";
@@ -13,7 +13,7 @@ type HostChoice = { alias: string; group: string; hostName: string; user: string
 // file system; the console list offers local shells, one per profile.
 export type LocalChoice = { id: string; label: string; detail: string };
 
-const loadDefaultRecent = () => integrationsApi.recentConnections();
+const loadDefaultRecent = () => recentConnectionsApi.recentConnections();
 const noHosts: HostEntry[] = [];
 const noLocal: LocalChoice[] = [];
 
