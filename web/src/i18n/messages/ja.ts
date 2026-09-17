@@ -449,7 +449,6 @@ export const ja = {
   "terminal.noSessions": "開いているセッションはありません。",
   "terminal.openShell": "Local shell",
   "terminal.newSession": "新しいセッション",
-  "terminal.openShellOnce": "別の Local shell を今回だけ開く",
   "terminal.rowDetail": "{status} · {destination}",
   "terminal.running": "接続中",
   "terminal.connecting": "接続を開始中",

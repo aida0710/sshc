@@ -384,12 +384,22 @@ func (r *Registry) StopForward(id, forwardID string) error {
 }
 
 // StopReconnecting は自動再接続の待機を打ち切り、セッションを終了状態のまま残す。
-func (r *Registry) StopReconnecting(id string) error {
+// pump が終了状態を確定するまで待つので、戻った時点の一覧は既に exited を示す。
+func (r *Registry) StopReconnecting(ctx context.Context, id string) error {
 	session, ok := r.Lookup(id)
 	if !ok {
 		return ErrNotFound
 	}
-	return session.StopReconnecting()
+	done := session.Done()
+	if err := session.StopReconnecting(); err != nil {
+		return err
+	}
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // Reconnect は終了済みのSSHセッションを同じIDとscrollbackのまま開き直す。
