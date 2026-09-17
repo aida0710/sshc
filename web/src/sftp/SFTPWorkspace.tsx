@@ -177,6 +177,7 @@ export function SFTPWorkspace({
   const [secondaryActiveId, setSecondaryActiveId] = useState(() => restoreActive(secondaryActiveStorageKey, secondaryTabs));
   const [focusedPane, setFocusedPane] = useState<SFTPPane>("primary");
   const [compareOpen, setCompareOpen] = useState(false);
+  const [openQueueRequest, setOpenQueueRequest] = useState(0);
   const [dirtyTabs, setDirtyTabs] = useState<Map<string, string>>(() => new Map());
   const [closeTabIntent, setCloseTabIntent] = useState<CloseTabIntent | null>(null);
   const workspaceRoot = useRef<HTMLElement | null>(null);
@@ -458,6 +459,7 @@ export function SFTPWorkspace({
                 initialLocation={restored === undefined || restored.alias === "" || restored.path === "" ? null : restored}
                 initialSort={tab.sort}
                 showTransfers={false}
+                onQueueOpen={() => setOpenQueueRequest((current) => current + 1)}
                 {...(selected ? { onNavigationBlockerChange: blocker } : {})}
                 onDirtyChange={dirtyReporter(pane, tab.id)}
                 {...(onNavigateLocation === undefined ? {} : { onNavigateLocation })}
@@ -523,7 +525,7 @@ export function SFTPWorkspace({
         {renderPane("primary")}
         {secondaryTabs.length > 0 ? renderPane("secondary", !visibleSplit) : null}
       </div>
-      <TransferManagerList />
+      <TransferManagerList openRequest={openQueueRequest} />
       {closeTabIntent === null ? null : (
         <ConfirmDialog
           id="sftp-close-dirty-tab"

@@ -3441,7 +3441,7 @@ export interface components {
             sourceAlias: string;
             sourcePath: string;
             /** @enum {string} */
-            operation: "" | "copy" | "move";
+            operation: "" | "copy" | "move" | "delete";
             /** @enum {string} */
             direction: "upload" | "download" | "remote";
             /** @enum {string} */
@@ -3533,7 +3533,7 @@ export interface components {
             sourceAlias: string;
             sourcePath: string;
             /** @enum {string} */
-            operation: "" | "copy" | "move";
+            operation: "" | "copy" | "move" | "delete";
             overwrite: boolean;
             /** @enum {string} */
             direction: "upload" | "download" | "remote";

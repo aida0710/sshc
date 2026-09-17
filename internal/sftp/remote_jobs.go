@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// ScheduleRemoteJob starts an engine-owned Remote-to-Remote transfer. Repeated
+// ScheduleRemoteJob starts an engine-owned remote operation. Repeated
 // calls are harmless; only one worker may own a job at a time.
 func (m *TransferManager) ScheduleRemoteJob(id string) {
 	if m == nil || m.Service == nil || !transferIDPattern.MatchString(id) {
@@ -74,40 +74,53 @@ func (m *TransferManager) runRemoteJob(ctx context.Context, id string) {
 		case <-timer.C:
 		}
 	}
-	plan, err := m.Service.PlanRemoteTransfer(ctx, RemoteTransferRequest{
-		SourceAlias: job.SourceAlias, SourcePath: job.SourcePath,
-		TargetAlias: job.Alias, TargetPath: job.RemotePath,
-		Operation: job.Operation, Overwrite: job.Overwrite,
-	})
+	var totalBytes int64
+	var err error
+	if job.Operation == RemoteDelete {
+		totalBytes, err = m.Service.PlanDelete(ctx, job.Alias, job.RemotePath)
+	} else {
+		var plan RemoteTransferPlan
+		plan, err = m.Service.PlanRemoteTransfer(ctx, RemoteTransferRequest{
+			SourceAlias: job.SourceAlias, SourcePath: job.SourcePath,
+			TargetAlias: job.Alias, TargetPath: job.RemotePath,
+			Operation: job.Operation, Overwrite: job.Overwrite,
+		})
+		totalBytes = plan.TotalBytes
+	}
 	if err == nil {
 		zero := int64(0)
-		total := plan.TotalBytes
+		total := totalBytes
 		_, err = m.UpdateJob(id, UpdateTransferJob{Action: TransferProgressAction, TransferredBytes: &zero, TotalBytes: &total, ResetProgress: true})
 	}
 	if err != nil {
 		m.finishRemoteJobWithError(id, err, false)
 		return
 	}
-	// Persist an explicit intent before the copy/move can publish target data or
-	// remove a source. If the terminal queue commit later fails, restart restores
+	// Persist an explicit intent before the operation can publish target data or
+	// remove an entry. If the terminal queue commit later fails, restart restores
 	// this job as reconciliation-required instead of automatically repeating it.
 	if err = m.markRemoteCommitPending(id); err != nil {
-		// The intent could not be recorded, so the copy has not started and no
+		// The intent could not be recorded, so the operation has not started and no
 		// external state changed. Report it like any other pre-transfer failure
 		// instead of leaving a running row for the stale sweep to reap.
 		m.finishRemoteJobWithError(id, err, false)
 		return
 	}
-	err = m.Service.CopyRemote(ctx, RemoteTransferRequest{
-		SourceAlias: job.SourceAlias, SourcePath: job.SourcePath,
-		TargetAlias: job.Alias, TargetPath: job.RemotePath,
-		Operation: job.Operation, Overwrite: job.Overwrite,
-	}, func(transferred int64) error {
+	report := func(transferred int64) error {
 		_, progressErr := m.UpdateJob(id, UpdateTransferJob{Action: TransferProgressAction, TransferredBytes: &transferred})
 		return progressErr
-	})
+	}
+	if job.Operation == RemoteDelete {
+		err = m.Service.DeleteWithProgress(ctx, job.Alias, job.RemotePath, totalBytes, report)
+	} else {
+		err = m.Service.CopyRemote(ctx, RemoteTransferRequest{
+			SourceAlias: job.SourceAlias, SourcePath: job.SourcePath,
+			TargetAlias: job.Alias, TargetPath: job.RemotePath,
+			Operation: job.Operation, Overwrite: job.Overwrite,
+		}, report)
+	}
 	if err == nil {
-		completed := plan.TotalBytes
+		completed := totalBytes
 		if _, commitErr := m.UpdateJob(id, UpdateTransferJob{Action: TransferCompleteAction, TransferredBytes: &completed}); commitErr != nil {
 			m.markRemoteReconciliationRequired(id, completed)
 		}
