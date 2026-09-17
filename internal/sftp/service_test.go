@@ -48,6 +48,40 @@ type sizeReportingRemote struct {
 	size int64
 }
 
+type pipelinedReadRemote struct {
+	*fakeRemote
+	usedWriteTo  bool
+	reportedSize *int64
+}
+
+type pipelinedReadFile struct {
+	*bytes.Reader
+	usedWriteTo *bool
+}
+
+func (file *pipelinedReadFile) Close() error { return nil }
+
+func (file *pipelinedReadFile) WriteTo(destination io.Writer) (int64, error) {
+	*file.usedWriteTo = true
+	return file.Reader.WriteTo(destination)
+}
+
+func (remote *pipelinedReadRemote) Open(candidate string) (io.ReadCloser, error) {
+	node, ok := remote.nodes[candidate]
+	if !ok {
+		return nil, fs.ErrNotExist
+	}
+	return &pipelinedReadFile{Reader: bytes.NewReader(node.content), usedWriteTo: &remote.usedWriteTo}, nil
+}
+
+func (remote *pipelinedReadRemote) Lstat(candidate string) (fs.FileInfo, error) {
+	info, err := remote.fakeRemote.Lstat(candidate)
+	if err != nil || remote.reportedSize == nil {
+		return info, err
+	}
+	return fileInfoWithSize{FileInfo: info, size: *remote.reportedSize}, nil
+}
+
 func (remote *sizeReportingRemote) Lstat(candidate string) (fs.FileInfo, error) {
 	info, err := remote.fakeRemote.Lstat(candidate)
 	if err != nil {
@@ -631,6 +665,46 @@ func TestDownloadMkdirRenameAndDelete(t *testing.T) {
 	}
 	if _, ok := remote.nodes["/home/b"]; ok {
 		t.Fatal("renamed file remained after delete")
+	}
+}
+
+func TestPrepareDownloadUsesPipelinedSFTPRead(t *testing.T) {
+	contents := bytes.Repeat([]byte("data"), 2<<20)
+	remote := &pipelinedReadRemote{fakeRemote: remoteWith(map[string]node{
+		"/sample.bin": {name: "sample.bin", mode: 0o600, content: contents, modTime: testTime},
+	})}
+	service := sftp.Service{Open: func(context.Context, string) (sftp.Remote, error) { return remote, nil }}
+	prepared, err := service.PrepareDownload(t.Context(), "edge", "/sample.bin")
+	if err != nil {
+		t.Fatalf("PrepareDownload() = %v", err)
+	}
+	defer prepared.Close()
+	if !remote.usedWriteTo {
+		t.Fatal("SFTP WriterTo was bypassed; remote reads would be serialized")
+	}
+	var saved bytes.Buffer
+	if _, err := prepared.WriteFrom(t.Context(), 0, &saved); err != nil {
+		t.Fatalf("WriteFrom() = %v", err)
+	}
+	if !bytes.Equal(saved.Bytes(), contents) {
+		t.Fatal("downloaded content differs from remote content")
+	}
+}
+
+func TestPrepareDownloadPipelinedReadStaysWithinAdvertisedSize(t *testing.T) {
+	reportedSize := int64(4)
+	remote := &pipelinedReadRemote{
+		fakeRemote: remoteWith(map[string]node{
+			"/growing.bin": file("growing.bin", "more than four bytes", 0o600),
+		}),
+		reportedSize: &reportedSize,
+	}
+	service := sftp.Service{Open: func(context.Context, string) (sftp.Remote, error) { return remote, nil }}
+	if _, err := service.PrepareDownload(t.Context(), "edge", "/growing.bin"); !errors.Is(err, sftp.ErrConflict) {
+		t.Fatalf("PrepareDownload(growing file) = %v, want ErrConflict", err)
+	}
+	if !remote.usedWriteTo {
+		t.Fatal("SFTP WriterTo was bypassed")
 	}
 }
 

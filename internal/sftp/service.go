@@ -233,7 +233,15 @@ func copyDownloadSequential(
 			progress(DownloadPartProgress{Index: 0, TransferredBytes: written, TotalBytes: size})
 		}}
 	}
-	written, err := copyContext(ctx, output, io.LimitReader(source, size), 0)
+	var written int64
+	if fastSource, ok := source.(io.WriterTo); ok {
+		// pkg/sftp pipelines reads only through File.WriteTo. Wrapping the
+		// source in LimitReader/copyContext forces one 32 KiB request per RTT.
+		// Bound the writer instead so the pipelined path remains available.
+		written, err = fastSource.WriteTo(&boundedContextWriter{ctx: ctx, destination: output, remaining: size})
+	} else {
+		written, err = copyContext(ctx, output, io.LimitReader(source, size), 0)
+	}
 	if err != nil {
 		return 0, err
 	}
@@ -246,6 +254,24 @@ func copyDownloadSequential(
 		return 0, extraErr
 	}
 	return written, nil
+}
+
+type boundedContextWriter struct {
+	ctx         context.Context
+	destination io.Writer
+	remaining   int64
+}
+
+func (w *boundedContextWriter) Write(contents []byte) (int, error) {
+	if err := w.ctx.Err(); err != nil {
+		return 0, err
+	}
+	if int64(len(contents)) > w.remaining {
+		return 0, ErrConflict
+	}
+	n, err := w.destination.Write(contents)
+	w.remaining -= int64(n)
+	return n, err
 }
 
 type downloadRange struct {
