@@ -9,6 +9,7 @@ const api = vi.hoisted(() => ({
   readText: vi.fn(),
   previewFile: vi.fn(),
   listTransfers: vi.fn(),
+  listLocal: vi.fn(),
   clearFinishedTransfers: vi.fn(),
 }));
 
@@ -238,32 +239,39 @@ describe("SFTP tabs", () => {
     expect(rightTabs[1]).toHaveAttribute("aria-selected", "true");
   });
 
-  it("opens the local folder beside the remote pane and restores remote mode", async () => {
-    const localFile = { kind: "file", name: "notes.txt", getFile: vi.fn(async () => new File(["hello"], "notes.txt")) };
-    const localFolder = { kind: "directory", name: "Downloads", values: async function* () { yield localFile; } };
-    const picker = vi.fn(async () => localFolder);
-    Object.defineProperty(window, "showDirectoryPicker", { configurable: true, value: picker });
+  it("starts in the engine home, navigates above it, and queues engine-side upload", async () => {
+    api.listLocal.mockImplementation(async (requestedPath: string) => {
+      const path = requestedPath || "/home/edge";
+      const entries = path === "/home/edge" ? [
+        { name: "notes.txt", path: "/home/edge/notes.txt", type: "file", size: 5 },
+        { name: "reports", path: "/home/edge/reports", type: "directory", size: 0 },
+      ] : path === "/home/edge/reports" ? [
+        { name: "report.txt", path: "/home/edge/reports/report.txt", type: "file", size: 6 },
+      ] : [{ name: "edge", path: "/home/edge", type: "directory", size: 0 }];
+      return { path, home: "/home/edge", entries };
+    });
+    const queue = vi.spyOn(sftpTransferManager, "addRemoteTransfers").mockResolvedValue(["local-job"]);
     try {
       render(<SFTPWorkspace aliases={["edge"]} />);
       await userEvent.click(screen.getByRole("button", { name: "Local files" }));
-      expect(window.localStorage.getItem("sshc.sftp.split")).toBe("true");
       const local = screen.getByRole("region", { name: "Local files" });
-      await userEvent.click(within(local).getByRole("button", { name: "Choose folder" }));
       await waitFor(() => expect(within(local).getByRole("button", { name: /notes.txt/ })).toBeVisible());
-      expect(picker).toHaveBeenCalledWith({ id: "sshc-sftp-local", mode: "readwrite" });
+      expect(within(local).getByRole("navigation", { name: "Local folder path" })).toHaveTextContent("~");
       await chooseHost("edge", screen.getByRole("tabpanel"));
-      const queueUpload = vi.spyOn(sftpTransferManager, "addUploads").mockResolvedValue("local-batch");
       await userEvent.click(within(local).getByRole("button", { name: /notes.txt/ }));
       await userEvent.click(within(local).getByRole("button", { name: "Upload selection" }));
-      await waitFor(() => expect(queueUpload).toHaveBeenCalledWith([
-        expect.objectContaining({ alias: "edge", remotePath: "/home/edge/notes.txt", localName: "notes.txt" }),
-      ], expect.objectContaining({ kind: "file" }), expect.anything()));
-      queueUpload.mockRestore();
+      await waitFor(() => expect(queue).toHaveBeenCalledWith([
+        expect.objectContaining({ sourcePath: "/home/edge/notes.txt", targetPath: "/home/edge/notes.txt" }),
+      ], "put"));
+      await userEvent.dblClick(within(local).getByRole("button", { name: "reports" }));
+      await waitFor(() => expect(within(local).getByRole("button", { name: /report.txt/ })).toBeVisible());
+      await userEvent.click(within(local).getByRole("button", { name: "Parent local folder" }));
+      await waitFor(() => expect(within(local).getByRole("button", { name: /notes.txt/ })).toBeVisible());
+      await userEvent.click(within(local).getByRole("button", { name: "Parent local folder" }));
+      await waitFor(() => expect(api.listLocal).toHaveBeenCalledWith("/home"));
       await userEvent.click(screen.getByRole("button", { name: "Remote files" }));
       expect(screen.getByRole("tablist", { name: "Right pane tabs" })).toBeVisible();
-    } finally {
-      Reflect.deleteProperty(window, "showDirectoryPicker");
-    }
+    } finally { queue.mockRestore(); }
   });
 
   it("keeps an unsaved edit mounted while the second pane is hidden", async () => {

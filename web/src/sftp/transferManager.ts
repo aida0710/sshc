@@ -19,7 +19,6 @@ const maxTransferJobs = 200;
 const defaultLargeFileThreshold = 100 << 20;
 const defaultLargeFileParallelism = 4;
 const defaultLargeFileChunkBytes = 32 << 20;
-const localDownloadBatchPrefix = "local_download_";
 
 export type ManagedTransferJob = TransferJob;
 
@@ -81,10 +80,7 @@ type DownloadSink = {
   writer: FileSystemWritableFileStream;
   position: number;
   reset: boolean;
-  direct: boolean;
 };
-
-export type DownloadTarget = { directory: FileSystemDirectoryHandle };
 
 function identifier(prefix: string): string {
   return globalThis.crypto?.randomUUID?.() ?? `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2)}`;
@@ -95,8 +91,7 @@ function baseName(remotePath: string): string {
   return components[components.length - 1] ?? remotePath;
 }
 
-function networkReady(job: ManagedTransferJob, files: Map<string, File>, targets: Map<string, DownloadTarget>): boolean {
-  if (job.direction === "download" && job.batchId.startsWith(localDownloadBatchPrefix)) return targets.has(job.id);
+function networkReady(job: ManagedTransferJob, files: Map<string, File>): boolean {
   return job.direction === "remote" || job.direction === "download" || files.has(job.id);
 }
 
@@ -113,7 +108,6 @@ export class SFTPTransferManager {
   private readonly files = new Map<string, File>();
   private readonly downloadChunks = new Map<string, Uint8Array[]>();
   private readonly downloadSinks = new Map<string, DownloadSink>();
-  private readonly downloadTargets = new Map<string, DownloadTarget>();
   private readonly controllers = new Map<string, AbortController>();
   private readonly inFlight = new Set<string>();
   private readonly uploadAdmissions = new Set<UploadAdmission>();
@@ -147,26 +141,6 @@ export class SFTPTransferManager {
   getLargeFileParallelism = (): number => this.largeFileParallelism;
   getLargeFileChunkBytes = (): number => this.largeFileChunkBytes;
   hasUploadSource = (id: string): boolean => this.files.has(id);
-  getUnattachedLocalDownloadCount = (): number => this.jobs.filter((job) =>
-    job.direction === "download" && job.batchId.startsWith(localDownloadBatchPrefix) &&
-    ["queued", "paused", "failed"].includes(job.status) && !this.downloadTargets.has(job.id)).length;
-
-  async attachLocalDownloadDirectory(directory: FileSystemDirectoryHandle): Promise<number> {
-    const pending = this.jobs.filter((job) => job.direction === "download" &&
-      job.batchId.startsWith(localDownloadBatchPrefix) && ["queued", "paused", "failed"].includes(job.status) &&
-      !this.downloadTargets.has(job.id));
-    for (const job of pending) this.downloadTargets.set(job.id, { directory });
-    try {
-      await Promise.all(pending.map(async (job) => {
-        if (job.status === "paused") await this.resume(job.id);
-        else if (job.status === "failed") await this.retry(job.id);
-      }));
-    } finally {
-      this.kick();
-    }
-    return pending.length;
-  }
-
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
@@ -280,29 +254,28 @@ export class SFTPTransferManager {
     return batchId;
   }
 
-  async addDownload(alias: string, remotePath: string, kind: TransferKind, totalBytes: number, target?: DownloadTarget): Promise<string> {
+  async addDownload(alias: string, remotePath: string, kind: TransferKind, totalBytes: number): Promise<string> {
     const reserved = [...this.uploadAdmissions].reduce((sum, admission) => sum + admission.count, 0);
     if (this.jobs.length + reserved >= maxTransferJobs) throw new Error("sftp_transfer_limit");
     const id = identifier("transfer");
     const name = baseName(remotePath);
     const job = await this.api.createTransfer({
-      id, batchId: target === undefined ? identifier("batch") : `${localDownloadBatchPrefix}${identifier("batch")}`,
+      id, batchId: identifier("batch"),
       batchName: name, batchKind: kind, alias,
       direction: "download", kind, name, remotePath, totalBytes, lastModified: 0,
     });
     this.downloadChunks.set(id, []);
-    if (target !== undefined) this.downloadTargets.set(id, target);
     this.commit([...this.jobs, job]);
     this.kick();
     return id;
   }
 
-  async addRemoteTransfers(selections: RemoteTransferSelection[], operation: "copy" | "move" | "delete"): Promise<string[]> {
+  async addRemoteTransfers(selections: RemoteTransferSelection[], operation: "copy" | "move" | "delete" | "get" | "put"): Promise<string[]> {
     if (selections.length === 0) return [];
     const reserved = [...this.uploadAdmissions].reduce((sum, admission) => sum + admission.count, 0);
     if (this.jobs.length + reserved + selections.length > maxTransferJobs) throw new Error("sftp_transfer_limit");
     const batchId = identifier("remote_batch");
-    const batchName = selections.length === 1 ? selections[0]!.name : `${selections.length} remote items`;
+    const batchName = selections.length === 1 ? selections[0]!.name : `${selections.length} items`;
     const batchKind: TransferKind = selections.length === 1 ? selections[0]!.kind : "folder";
     const ids: string[] = [];
     for (const selection of selections) {
@@ -339,7 +312,7 @@ export class SFTPTransferManager {
 
   async resume(id: string): Promise<void> {
     const job = this.find(id);
-    if (job === undefined || !job.allowedActions.includes("resume") || !networkReady(job, this.files, this.downloadTargets)) return;
+    if (job === undefined || !job.allowedActions.includes("resume") || !networkReady(job, this.files)) return;
     if (job.direction === "download" && job.kind === "folder") {
       this.downloadChunks.set(id, []);
       const sink = this.downloadSinks.get(id);
@@ -353,7 +326,7 @@ export class SFTPTransferManager {
 
   async retry(id: string): Promise<void> {
     const job = this.find(id);
-    if (job === undefined || !job.allowedActions.includes("retry") || !networkReady(job, this.files, this.downloadTargets)) return;
+    if (job === undefined || !job.allowedActions.includes("retry") || !networkReady(job, this.files)) return;
     const reset = job.direction === "download" && job.kind === "folder";
     if (reset) {
       this.downloadChunks.set(id, []);
@@ -425,7 +398,6 @@ export class SFTPTransferManager {
         if (!missingServerTransfer(error)) throw error;
       }
       this.downloadChunks.delete(id);
-      this.downloadTargets.delete(id);
       await this.cleanupDownload(id);
     }
     await this.reconcile();
@@ -436,7 +408,6 @@ export class SFTPTransferManager {
     await this.api.clearFinishedTransfers();
     this.commit(this.jobs.filter((job) => job.status !== "completed" && job.status !== "cancelled"));
     for (const id of removed) {
-      this.downloadTargets.delete(id);
       void this.cleanupDownload(id);
     }
   }
@@ -447,7 +418,6 @@ export class SFTPTransferManager {
     await this.api.removeTransfer(id);
     this.files.delete(id);
     this.downloadChunks.delete(id);
-    this.downloadTargets.delete(id);
     await this.cleanupDownload(id);
     this.commit(this.jobs.filter((candidate) => candidate.id !== id));
   }
@@ -487,7 +457,7 @@ export class SFTPTransferManager {
       const job = this.jobs.find((candidate) => candidate.status === "queued" &&
         candidate.direction !== "remote" &&
         !this.inFlight.has(candidate.id) && (this.retryAfter.get(candidate.id) ?? 0) <= this.now() &&
-        networkReady(candidate, this.files, this.downloadTargets));
+        networkReady(candidate, this.files));
       if (job === undefined) return;
       this.active += 1;
       this.inFlight.add(job.id);
@@ -745,11 +715,9 @@ export class SFTPTransferManager {
     if (sink !== null) {
       await sink.writer.close();
       this.downloadSinks.delete(id);
-      if (!sink.direct) {
-        const file = await sink.handle.getFile();
-        await this.api.saveDownload(job.remotePath, job.kind === "folder", [file]);
-        globalThis.setTimeout(() => { void sink.root.removeEntry(sink.name).catch(() => undefined); }, 30_000);
-      }
+      const file = await sink.handle.getFile();
+      await this.api.saveDownload(job.remotePath, job.kind === "folder", [file]);
+      globalThis.setTimeout(() => { void sink.root.removeEntry(sink.name).catch(() => undefined); }, 30_000);
     } else {
       await this.api.saveDownload(job.remotePath, job.kind === "folder", chunks.map((chunk) => new Uint8Array(chunk)));
       if (job.downloadRevision === "") throw new Error("download_revision_missing");
@@ -758,7 +726,6 @@ export class SFTPTransferManager {
       job = this.find(id)!;
     }
     const completed = await this.api.updateTransfer(id, "complete");
-    this.downloadTargets.delete(id);
     this.downloadChunks.delete(id);
     this.replaceServer(completed);
     this.notify(completed);
@@ -782,40 +749,9 @@ export class SFTPTransferManager {
     this.replace(id, { transferredBytes, totalBytes: resolvedTotal, bytesPerSecond, remainingSeconds });
   }
 
-  private async availableDownloadName(directory: FileSystemDirectoryHandle, job: ManagedTransferJob): Promise<string> {
-    const filename = `${baseName(job.remotePath)}${job.kind === "folder" ? ".zip" : ""}`;
-    const dot = filename.lastIndexOf(".");
-    const stem = dot > 0 ? filename.slice(0, dot) : filename;
-    const extension = dot > 0 ? filename.slice(dot) : "";
-    for (let copy = 0; copy < 1000; copy += 1) {
-      const name = copy === 0 ? filename : `${stem} (${copy})${extension}`;
-      try {
-        await directory.getFileHandle(name);
-      } catch (error) {
-        if (error instanceof DOMException && error.name === "NotFoundError") return name;
-        if (error instanceof DOMException && error.name === "TypeMismatchError") continue;
-        throw error;
-      }
-    }
-    throw new Error("sftp_local_name_limit");
-  }
-
   private async openDownloadSink(job: ManagedTransferJob): Promise<DownloadSink | null> {
     const existing = this.downloadSinks.get(job.id);
     if (existing !== undefined) return existing;
-    const target = this.downloadTargets.get(job.id);
-    if (target === undefined && job.batchId.startsWith(localDownloadBatchPrefix)) {
-      throw new Error("sftp_local_target_missing");
-    }
-    if (target !== undefined) {
-      const name = await this.availableDownloadName(target.directory, job);
-      const handle = await target.directory.getFileHandle(name, { create: true });
-      const writer = await handle.createWritable({ keepExistingData: true });
-      await writer.seek(0);
-      const sink = { root: target.directory, name, handle, writer, reset: true, position: 0, direct: true };
-      this.downloadSinks.set(job.id, sink);
-      return sink;
-    }
     try {
       if (typeof globalThis.navigator?.storage?.getDirectory !== "function") return null;
       const root = await globalThis.navigator.storage.getDirectory();
@@ -828,7 +764,7 @@ export class SFTPTransferManager {
       if (reset) await writer.truncate(0);
       const position = reset ? 0 : storedSize;
       await writer.seek(position);
-      const sink = { root, name, handle, writer, reset, position, direct: false };
+      const sink = { root, name, handle, writer, reset, position };
       this.downloadSinks.set(job.id, sink);
       return sink;
     } catch {

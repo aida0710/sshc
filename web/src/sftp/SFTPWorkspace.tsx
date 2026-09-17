@@ -187,7 +187,7 @@ export function SFTPWorkspace({
   const [focusedPane, setFocusedPane] = useState<SFTPPane>("primary");
   const [compareOpen, setCompareOpen] = useState(false);
   const [openQueueRequest, setOpenQueueRequest] = useState(0);
-  const [localDirectory, setLocalDirectory] = useState<FileSystemDirectoryHandle | null>(null);
+  const [localPath, setLocalPath] = useState<string | null>(null);
   const [dirtyTabs, setDirtyTabs] = useState<Map<string, string>>(() => new Map());
   const [closeTabIntent, setCloseTabIntent] = useState<CloseTabIntent | null>(null);
   const workspaceRoot = useRef<HTMLElement | null>(null);
@@ -469,7 +469,7 @@ export function SFTPWorkspace({
                 initialLocation={restored === undefined || restored.alias === "" || restored.path === "" ? null : restored}
                 initialSort={tab.sort}
                 showTransfers={false}
-                downloadDirectory={pane === "primary" && secondaryMode === "local" && visibleSplit ? localDirectory : null}
+                downloadLocalPath={pane === "primary" && secondaryMode === "local" && visibleSplit ? localPath : null}
                 onQueueOpen={() => setOpenQueueRequest((current) => current + 1)}
                 {...(selected ? { onNavigationBlockerChange: blocker } : {})}
                 onDirtyChange={dirtyReporter(pane, tab.id)}
@@ -548,7 +548,7 @@ export function SFTPWorkspace({
         {secondaryTabs.length > 0 ? renderPane("secondary", !visibleSplit || secondaryMode === "local") : null}
         {secondaryTabs.length > 0 ? <div hidden={!visibleSplit || secondaryMode !== "local"} className="flex min-h-0 min-w-0 flex-col">
           <LocalSFTPPanel remote={primaryLocation?.alias ? { alias: primaryLocation.alias, path: primaryLocation.path } : null}
-            onQueueOpen={() => setOpenQueueRequest((current) => current + 1)} onDirectoryChange={setLocalDirectory} />
+            onQueueOpen={() => setOpenQueueRequest((current) => current + 1)} onDirectoryChange={setLocalPath} />
         </div> : null}
       </div>
       <TransferManagerList openRequest={openQueueRequest} />

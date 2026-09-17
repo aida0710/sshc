@@ -176,7 +176,7 @@ export function SFTPPanel({
   onNavigateLocation,
   onOpenTerminal,
   onQueueOpen,
-  downloadDirectory,
+  downloadLocalPath,
 }: {
   aliases: string[];
   hosts?: HostEntry[];
@@ -194,7 +194,7 @@ export function SFTPPanel({
   onNavigateLocation?: ((url: string) => void) | undefined;
   onOpenTerminal?: ((alias: string, path: string) => void | Promise<void>) | undefined;
   onQueueOpen?: () => void;
-  downloadDirectory?: FileSystemDirectoryHandle | null;
+  downloadLocalPath?: string | null;
 }) {
   const t = useTranslate();
   const [alias, setAlias] = useState("");
@@ -498,7 +498,7 @@ export function SFTPPanel({
 
   useEffect(() => {
     if (!connected) return;
-    const completed = transferJobs.filter((job) => job.direction === "upload" && job.status === "completed" && job.alias === alias && parentOf(job.remotePath) === path && !refreshedUploads.current.has(job.id));
+    const completed = transferJobs.filter((job) => (job.direction === "upload" || job.operation === "put") && job.status === "completed" && job.alias === alias && parentOf(job.remotePath) === path && !refreshedUploads.current.has(job.id));
     if (completed.length === 0) return;
     for (const job of completed) refreshedUploads.current.add(job.id);
     void load(path, alias, true);
@@ -769,9 +769,10 @@ export function SFTPPanel({
       .map((entry) => {
         const kind = entry.type === "directory" ? "folder" : "file";
         const size = entry.type === "file" ? entry.size : -1;
-        return downloadDirectory === null || downloadDirectory === undefined
+        return downloadLocalPath === null || downloadLocalPath === undefined
           ? sftpTransferManager.addDownload(targetAlias, entry.path, kind, size)
-          : sftpTransferManager.addDownload(targetAlias, entry.path, kind, size, { directory: downloadDirectory });
+          : sftpTransferManager.addRemoteTransfers([{ sourceAlias: targetAlias, sourcePath: entry.path, targetAlias,
+              targetPath: `${downloadLocalPath.replace(/\/$/, "")}/${entry.name}`, name: entry.name, kind, totalBytes: size }], "get");
       }));
     const failed = results.find((result) => result.status === "rejected");
     if (failed?.status === "rejected") {

@@ -2,255 +2,149 @@ import { useCallback, useEffect, useRef, useState, type DragEvent, type MouseEve
 import { failureCode } from "../api/client";
 import { useTranslate } from "../i18n/context";
 import { Icon } from "../ui/icons";
-import { sftpApi } from "./api";
+import { sftpApi, type LocalListing } from "./api";
 import { formatBytes } from "./format";
-import { directoryPaths, remoteEntriesMime, safeRelativePath, type LocalTransferFile, type RemoteDragPayload } from "./transfers";
+import { remoteEntriesMime, type RemoteDragPayload } from "./transfers";
 import { sftpTransferManager } from "./transferManager";
 
-type LocalEntry = { handle: FileSystemHandle; size: number | null };
-type WritablePicker = Window & {
-  showDirectoryPicker?: (options: { id: string; mode: "readwrite" }) => Promise<FileSystemDirectoryHandle>;
-};
-
-function childHandles(directory: FileSystemDirectoryHandle): AsyncIterable<FileSystemHandle> {
-  return (directory as FileSystemDirectoryHandle & { values(): AsyncIterable<FileSystemHandle> }).values();
+function parentPath(value: string): string {
+  if (value === "/" || /^[A-Za-z]:\/$/.test(value)) return value;
+  const normalized = value.replace(/\\/g, "/").replace(/\/$/, "");
+  const index = normalized.lastIndexOf("/");
+  if (index < 0) return normalized;
+  return index === 0 ? "/" : normalized.slice(0, index);
 }
-
-async function collectLocal(handle: FileSystemHandle, relativePath: string, files: LocalTransferFile[], folders: string[]): Promise<void> {
-  const safe = safeRelativePath(relativePath);
-  if (safe === null || files.length + folders.length >= 20000) throw new Error("sftp_local_selection_limit");
-  if (handle.kind === "file") {
-    files.push({ file: await (handle as FileSystemFileHandle).getFile(), relativePath: safe });
-    return;
-  }
-  folders.push(safe);
-  for await (const child of childHandles(handle as FileSystemDirectoryHandle)) {
-    await collectLocal(child, `${safe}/${child.name}`, files, folders);
-  }
+function joinPath(parent: string, name: string): string {
+  return `${parent.replace(/\/$/, "")}/${name}`;
+}
+function crumbs(value: string): { label: string; path: string }[] {
+  const normalized = value.replace(/\\/g, "/");
+  if (normalized === "/") return [{ label: "/", path: "/" }];
+  const root = normalized.startsWith("/") ? "/" : normalized.slice(0, normalized.indexOf("/") + 1);
+  const parts = normalized.slice(root.length).split("/").filter(Boolean);
+  return [{ label: root, path: root }, ...parts.map((part, index) => ({ label: part, path: `${root}${parts.slice(0, index + 1).join("/")}` }))];
 }
 
 export function LocalSFTPPanel({ remote, onQueueOpen, onDirectoryChange }: {
   remote: { alias: string; path: string } | null;
   onQueueOpen: () => void;
-  onDirectoryChange: (directory: FileSystemDirectoryHandle | null) => void;
+  onDirectoryChange: (path: string | null) => void;
 }) {
   const t = useTranslate();
-  const [stack, setStack] = useState<FileSystemDirectoryHandle[]>([]);
-  const [entries, setEntries] = useState<LocalEntry[]>([]);
+  const [listing, setListing] = useState<LocalListing | null>(null);
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState("");
   const [dragging, setDragging] = useState(false);
-  const [pendingDownloads, setPendingDownloads] = useState(sftpTransferManager.getUnattachedLocalDownloadCount);
+  const currentPath = useRef("");
   const completed = useRef(new Set(sftpTransferManager.getSnapshot()
-    .filter((job) => job.direction === "download" && job.status === "completed").map((job) => job.id)));
-  const directory = stack.at(-1);
-  const supported = typeof (window as WritablePicker).showDirectoryPicker === "function";
+    .filter((job) => job.direction === "remote" && job.status === "completed").map((job) => job.id)));
 
-  const refresh = useCallback(async (current: FileSystemDirectoryHandle) => {
-    const listed: LocalEntry[] = [];
-    for await (const handle of childHandles(current)) {
-      const size = handle.kind === "file" ? (await (handle as FileSystemFileHandle).getFile()).size : null;
-      listed.push({ handle, size });
-    }
-    listed.sort((left, right) => left.handle.kind === right.handle.kind
-      ? left.handle.name.localeCompare(right.handle.name) : left.handle.kind === "directory" ? -1 : 1);
-    setEntries(listed);
-    setSelected(new Set());
-  }, []);
-
-  useEffect(() => {
-    return sftpTransferManager.subscribe(() => setPendingDownloads(sftpTransferManager.getUnattachedLocalDownloadCount()));
-  }, []);
-
-  useEffect(() => {
-    if (directory === undefined) return;
-    return sftpTransferManager.subscribe(() => {
-      for (const job of sftpTransferManager.getSnapshot()) {
-        if (job.direction !== "download" || job.status !== "completed" || completed.current.has(job.id)) continue;
-        completed.current.add(job.id);
-        void refresh(directory).catch(() => undefined);
-      }
-    });
-  }, [directory, refresh]);
-
-  async function chooseFolder() {
-    const picker = (window as WritablePicker).showDirectoryPicker;
-    if (picker === undefined) return;
-    setProblem("");
-    try {
-      const root = await picker.call(window, { id: "sshc-sftp-local", mode: "readwrite" });
-      await refresh(root);
-      setStack([root]);
-      onDirectoryChange(root);
-    } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") return;
-      setProblem(error instanceof Error ? error.message : "sftp_local_access_failed");
-    }
-  }
-
-  async function enter(entry: LocalEntry) {
-    if (entry.handle.kind !== "directory") return;
-    const next = entry.handle as FileSystemDirectoryHandle;
+  const navigate = useCallback(async (path: string) => {
     setBusy(true);
     try {
-      await refresh(next);
-      setStack((current) => [...current, next]);
-      onDirectoryChange(next);
+      const next = await sftpApi.listLocal(path);
+      currentPath.current = next.path;
+      setListing(next);
+      setSelected(new Set());
+      onDirectoryChange(next.path);
       setProblem("");
     } catch (error) {
-      setProblem(error instanceof Error ? error.message : "sftp_local_access_failed");
+      setProblem(failureCode(error) || (error instanceof Error ? error.message : "sftp_failed"));
     } finally {
       setBusy(false);
     }
-  }
+  }, [onDirectoryChange]);
 
-  async function goUp() {
-    if (stack.length < 2) return;
-    const parent = stack.at(-2)!;
-    setBusy(true);
-    try {
-      await refresh(parent);
-      setStack((current) => current.slice(0, -1));
-      onDirectoryChange(parent);
-      setProblem("");
-    } catch (error) {
-      setProblem(error instanceof Error ? error.message : "sftp_local_access_failed");
-    } finally {
-      setBusy(false);
+  useEffect(() => { void navigate(""); }, [navigate]);
+  useEffect(() => sftpTransferManager.subscribe(() => {
+    for (const job of sftpTransferManager.getSnapshot()) {
+      if (job.direction !== "remote" || job.operation !== "get" ||
+          job.status !== "completed" || completed.current.has(job.id)) continue;
+      completed.current.add(job.id);
+      if (currentPath.current !== "") void navigate(currentPath.current);
     }
-  }
+  }), [navigate]);
 
   function select(event: MouseEvent<HTMLButtonElement>, name: string) {
     if (event.ctrlKey || event.metaKey) {
-      setSelected((current) => {
-        const next = new Set(current);
-        if (next.has(name)) next.delete(name);
-        else next.add(name);
-        return next;
-      });
-      return;
-    }
-    setSelected(new Set([name]));
+      setSelected((current) => { const next = new Set(current); if (next.has(name)) next.delete(name); else next.add(name); return next; });
+    } else setSelected(new Set([name]));
   }
-
   async function upload() {
-    if (remote === null || remote.alias === "" || remote.path === "" || selected.size === 0) return;
+    if (listing === null || remote === null || !remote.alias || !remote.path) return;
+    const entries = listing.entries.filter((entry) => selected.has(entry.name));
+    if (entries.length === 0) return;
     setBusy(true);
-    setProblem("");
-    let admission: ReturnType<typeof sftpTransferManager.reserveUploads> | undefined;
     try {
-      const files: LocalTransferFile[] = [];
-      const folders: string[] = [];
-      for (const entry of entries) {
-        if (selected.has(entry.handle.name)) await collectLocal(entry.handle, entry.handle.name, files, folders);
-      }
-      const selections = files.map(({ file, relativePath }) => ({
-        alias: remote.alias, remotePath: `${remote.path.replace(/\/$/, "")}/${relativePath}`, localName: relativePath, file,
-      }));
-      admission = sftpTransferManager.reserveUploads(selections);
-      const allFolders = [...new Set([...folders, ...directoryPaths(files)])]
-        .sort((left, right) => left.split("/").length - right.split("/").length || left.localeCompare(right));
-      for (const folder of allFolders) {
-        try {
-          await sftpApi.mkdir(remote.alias, `${remote.path.replace(/\/$/, "")}/${folder}`);
-        } catch (error) {
-          if (failureCode(error) !== "sftp_exists") throw error;
-        }
-      }
-      if (selections.length > 0) {
-        await sftpTransferManager.addUploads(selections, {
-          name: [...selected][0] ?? t("sftp.local.heading"),
-          kind: folders.length > 0 || selections.length > 1 ? "folder" : "file",
-        }, admission);
-        admission = undefined;
-        onQueueOpen();
-      }
-    } catch (error) {
-      setProblem(failureCode(error) || (error instanceof Error ? error.message : "sftp_failed"));
-    } finally {
-      admission?.release();
-      setBusy(false);
-    }
+      await sftpTransferManager.addRemoteTransfers(entries.map((entry) => ({
+        sourceAlias: remote.alias, sourcePath: entry.path,
+        targetAlias: remote.alias, targetPath: joinPath(remote.path, entry.name),
+        name: entry.name, kind: entry.type === "directory" ? "folder" : "file", totalBytes: entry.size,
+      })), "put");
+      onQueueOpen();
+      setProblem("");
+    } catch (error) { setProblem(failureCode(error) || (error instanceof Error ? error.message : "sftp_failed")); }
+    finally { setBusy(false); }
   }
-
   async function acceptRemoteDrop(event: DragEvent<HTMLElement>) {
-    event.preventDefault();
-    setDragging(false);
-    if (directory === undefined || busy) return;
+    event.preventDefault(); setDragging(false);
+    if (listing === null || busy) return;
     try {
       const payload = JSON.parse(event.dataTransfer.getData(remoteEntriesMime)) as RemoteDragPayload;
-      if (typeof payload.alias !== "string" || payload.alias === "" || !Array.isArray(payload.entries) ||
-          payload.entries.some((entry) => typeof entry.path !== "string" ||
-            (entry.type !== "file" && entry.type !== "directory") || typeof entry.size !== "number")) {
-        throw new Error("sftp_local_drop_invalid");
-      }
-      for (const entry of payload.entries) {
-        await sftpTransferManager.addDownload(payload.alias, entry.path,
-          entry.type === "directory" ? "folder" : "file", entry.type === "file" ? entry.size : -1,
-          { directory });
-      }
+      if (typeof payload.alias !== "string" || !Array.isArray(payload.entries) || payload.entries.some((entry) =>
+        typeof entry.path !== "string" || (entry.type !== "file" && entry.type !== "directory"))) throw new Error("sftp_local_drop_invalid");
+      await sftpTransferManager.addRemoteTransfers(payload.entries.map((entry) => ({
+        sourceAlias: payload.alias, sourcePath: entry.path,
+        targetAlias: payload.alias, targetPath: joinPath(listing.path, entry.path.split("/").at(-1) ?? ""),
+        name: entry.path.split("/").at(-1) ?? "", kind: entry.type === "directory" ? "folder" : "file", totalBytes: entry.size,
+      })), "get");
       onQueueOpen();
-    } catch (error) {
-      setProblem(failureCode(error) || (error instanceof Error ? error.message : "sftp_local_drop_invalid"));
-    }
+    } catch (error) { setProblem(failureCode(error) || (error instanceof Error ? error.message : "sftp_local_drop_invalid")); }
   }
-
-  async function resumeLocalDownloads() {
-    if (directory === undefined) return;
-    setBusy(true);
-    setProblem("");
-    try {
-      await sftpTransferManager.attachLocalDownloadDirectory(directory);
-      setPendingDownloads(sftpTransferManager.getUnattachedLocalDownloadCount());
-      onQueueOpen();
-    } catch (error) {
-      setProblem(failureCode(error) || (error instanceof Error ? error.message : "sftp_failed"));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <section className="flex min-h-0 min-w-0 flex-1 flex-col rounded-lg border border-line bg-card" aria-label={t("sftp.local.heading")}
-      onDragOver={(event) => { if (event.dataTransfer.types.includes(remoteEntriesMime)) { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; setDragging(true); } }}
-      onDragLeave={() => setDragging(false)} onDrop={(event) => { void acceptRemoteDrop(event); }}>
-      <div className="flex min-h-12 items-center gap-2 border-b border-line px-3">
-        <span className="font-medium">{t("sftp.local.heading")}</span>
-        <span className="min-w-0 flex-1 truncate text-xs text-ink-muted" title={stack.map((handle) => handle.name).join("/")}>{stack.map((handle) => handle.name).join("/")}</span>
-        <button type="button" className="rounded px-2 py-1 text-sm hover:bg-hover" onClick={() => { void chooseFolder(); }} disabled={!supported}>{t("sftp.local.choose")}</button>
-        <button type="button" className="rounded p-2 hover:bg-hover disabled:text-ink-faint" aria-label={t("sftp.local.refresh")}
-          disabled={directory === undefined || busy} onClick={() => { if (directory) void refresh(directory).catch((error: unknown) => setProblem(String(error))); }}>
-          <Icon name="sync" className="size-4" />
-        </button>
+  return <section className="flex min-h-0 min-w-0 flex-1 flex-col rounded-lg border border-line bg-card" aria-label={t("sftp.local.heading")}
+    onDragOver={(event) => { if (event.dataTransfer.types.includes(remoteEntriesMime)) { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; setDragging(true); } }}
+    onDragLeave={() => setDragging(false)} onDrop={(event) => { void acceptRemoteDrop(event); }}>
+    <div className="flex min-h-12 items-center gap-2 border-b border-line px-3">
+      <span className="font-medium">{t("sftp.local.heading")}</span>
+      <span className="text-xs text-ink-muted">{t("sftp.local.engine")}</span>
+      <span className="min-w-0 flex-1" />
+      <button type="button" className="rounded p-2 hover:bg-hover disabled:text-ink-faint" aria-label={t("sftp.local.refresh")}
+        disabled={listing === null || busy} onClick={() => { void navigate(listing?.path ?? ""); }}><Icon name="sync" className="size-4" /></button>
+    </div>
+    {problem !== "" ? <p role="alert" className="px-3 py-2 text-sm text-danger">{problem}</p> : null}
+    {listing !== null ? <>
+      <nav aria-label={t("sftp.local.path")} className="flex min-h-10 items-center gap-1 border-b border-line px-2">
+        <button type="button" aria-label={t("sftp.local.parent")} title={t("sftp.local.parent")}
+          onClick={() => { void navigate(parentPath(listing.path)); }} disabled={parentPath(listing.path) === listing.path || busy}
+          className="rounded p-2 hover:bg-hover disabled:text-ink-faint"><Icon name="chevronRight" className="size-3 -rotate-90" /></button>
+        <div className="flex min-w-0 flex-1 items-center overflow-x-auto whitespace-nowrap text-sm">
+          {crumbs(listing.path).map((crumb, index) => <span key={crumb.path} className="inline-flex items-center">
+            {index > 0 ? <Icon name="chevronRight" className="mx-1 size-3 text-ink-faint" /> : null}
+            {crumb.path === listing.path ? <span className="px-1 font-medium" aria-current="location">{crumb.path === listing.home ? "~" : crumb.label}</span>
+              : <button type="button" onClick={() => { void navigate(crumb.path); }} disabled={busy}
+                  className="rounded px-1 py-1 text-ink-muted hover:bg-hover hover:text-ink">{crumb.path === listing.home ? "~" : crumb.label}</button>}
+          </span>)}
+        </div>
+      </nav>
+      <div className="flex items-center gap-2 border-b border-line px-3 py-2">
+        <button type="button" onClick={() => { void upload(); }} disabled={busy || selected.size === 0 || !remote?.alias || !remote?.path}
+          className="rounded bg-accent px-3 py-1.5 text-sm text-white disabled:opacity-40">{t("sftp.local.upload")}</button>
+        <span className="min-w-0 truncate text-xs text-ink-muted">{remote?.alias ? `${remote.alias}:${remote.path}` : t("sftp.local.connectRemote")}</span>
       </div>
-      {problem !== "" ? <p role="alert" className="px-3 py-2 text-sm text-danger">{problem}</p> : null}
-      {!supported ? <p className="p-4 text-sm text-ink-muted">{t("sftp.local.unsupported")}</p> : null}
-      {supported && directory === undefined ? <p className="p-4 text-sm text-ink-muted">{t("sftp.local.chooseHint")}</p> : null}
-      {directory !== undefined ? <>
-        <div className="flex items-center gap-2 border-b border-line px-3 py-2">
-          <button type="button" onClick={() => { void goUp(); }} disabled={stack.length < 2 || busy} className="rounded px-2 py-1 text-sm hover:bg-hover disabled:text-ink-faint">..</button>
-          <button type="button" onClick={() => { void upload(); }} disabled={busy || selected.size === 0 || remote?.alias === "" || !remote?.path}
-            className="rounded bg-accent px-3 py-1.5 text-sm text-white disabled:opacity-40">{t("sftp.local.upload")}</button>
-          <span className="min-w-0 truncate text-xs text-ink-muted">{remote?.alias ? `${remote.alias}:${remote.path}` : t("sftp.local.connectRemote")}</span>
-        </div>
-        {pendingDownloads > 0 ? <button type="button" onClick={() => { void resumeLocalDownloads(); }} disabled={busy}
-          className="border-b border-line px-3 py-2 text-left text-sm text-accent hover:bg-hover disabled:opacity-40">
-          {t("sftp.local.resumeDownloads", { count: pendingDownloads })}
-        </button> : null}
-        <div className={`min-h-0 flex-1 overflow-auto ${dragging ? "bg-select-fill" : ""}`}>
-          {entries.map((entry) => (
-            <button key={entry.handle.name} type="button" onClick={(event) => select(event, entry.handle.name)}
-              onDoubleClick={() => { void enter(entry); }} aria-pressed={selected.has(entry.handle.name)}
-              className={`flex min-h-10 w-full items-center gap-3 px-3 text-left text-sm hover:bg-hover ${selected.has(entry.handle.name) ? "bg-select-fill" : ""}`}>
-              <Icon name={entry.handle.kind === "directory" ? "groups" : "config"} className="size-4 shrink-0 text-ink-muted" />
-              <span className="min-w-0 flex-1 truncate">{entry.handle.name}</span>
-              <span className="shrink-0 text-xs text-ink-muted">{entry.size === null ? "" : formatBytes(entry.size)}</span>
-            </button>
-          ))}
-        </div>
-        <p className="border-t border-line px-3 py-2 text-xs text-ink-muted">{t("sftp.local.dropHint")}</p>
-      </> : null}
-    </section>
-  );
+      <div className={`min-h-0 flex-1 overflow-auto ${dragging ? "bg-select-fill" : ""}`}>
+        {listing.entries.map((entry) => <button key={entry.path} type="button" onClick={(event) => select(event, entry.name)}
+          onDoubleClick={() => { if (entry.type === "directory") void navigate(entry.path); }} aria-pressed={selected.has(entry.name)}
+          onKeyDown={(event) => { if (event.key === "Enter" && entry.type === "directory") { event.preventDefault(); void navigate(entry.path); } }}
+          title={entry.type === "directory" ? t("sftp.local.openFolder") : undefined}
+          className={`flex min-h-10 w-full items-center gap-3 px-3 text-left text-sm hover:bg-hover ${selected.has(entry.name) ? "bg-select-fill" : ""}`}>
+          <Icon name={entry.type === "directory" ? "groups" : "config"} className="size-4 shrink-0 text-ink-muted" />
+          <span className="min-w-0 flex-1 truncate">{entry.name}</span>
+          <span className="shrink-0 text-xs text-ink-muted">{entry.type === "directory" ? "" : formatBytes(entry.size)}</span>
+          {entry.type === "directory" ? <Icon name="chevronRight" className="size-3 text-ink-faint" /> : null}
+        </button>)}
+      </div>
+      <p className="border-t border-line px-3 py-2 text-xs text-ink-muted">{t("sftp.local.dropHint")}</p>
+    </> : null}
+  </section>;
 }

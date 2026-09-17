@@ -517,6 +517,20 @@ describe("SFTPPanel uploads", () => {
     addDownload.mockRestore();
   });
 
+  it("queues an engine-side get when the local pane supplies its path", async () => {
+    api.list.mockResolvedValue({
+      path: "/var/log",
+      entries: [{ name: "app.log", path: "/var/log/app.log", type: "file", size: 12, mode: "0644", modifiedAt: "", revision: "rev" }],
+    });
+    const queue = vi.spyOn(sftpTransferManager, "addRemoteTransfers").mockResolvedValue(["get-one"]);
+    try {
+      render(<SFTPPanel aliases={["edge"]} downloadLocalPath="/home/edge" target={{ alias: "edge", path: "/var/log/app.log", action: "download", request: 3 }} />);
+      await waitFor(() => expect(queue).toHaveBeenCalledWith([
+        expect.objectContaining({ sourcePath: "/var/log/app.log", targetPath: "/home/edge/app.log" }),
+      ], "get"));
+    } finally { queue.mockRestore(); }
+  });
+
   it("rejects a terminal path action for an unknown host before connecting", async () => {
     render(<SFTPPanel aliases={["edge"]} target={{ alias: "missing", path: "/etc/hosts", action: "browse", request: 4 }} />);
 

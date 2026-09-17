@@ -1,8 +1,8 @@
 # WinSCP機能差分台帳
 
-更新日: 2026-09-15
+更新日: 2026-09-17
 
-比較対象: sshc `main`（2026-09-15時点） / WinSCP 6.5.6
+比較対象: sshc `agent/sftp-local-pane`（2026-09-17時点） / WinSCP 6.5.6
 
 ## 目的
 
@@ -19,7 +19,7 @@ WinSCPに存在する機能を漏れなく分類し、sshcで同じ利用目的�
 
 sshcのSFTPは、安全なアップロード／ダウンロード、フォルダー転送、複数選択、リモート編集、競合検出、バックグラウンドキューという中核を既に持つ。一方、日常のファイルマネージャーとして使う際の不足は大きく、特に次がWinSCPとの差になっている。
 
-1. ディレクトリツリー、対応ブラウザ以外でのlocal／remote 2 panel
+1. ディレクトリツリー、local／remoteの同期・比較
 2. 空ファイル／リンク作成、複製、任意の移動先選択、プロパティの一括変更
 3. 帯域制限
 4. 転送前オプション、timestamp／permission保持、mask、プリセット
@@ -30,10 +30,10 @@ sshcのSFTPは、安全なアップロード／ダウンロード、フォルダ
 | WinSCP機能 | 状態 | sshcの現状 | 実装方針 |
 |---|---|---|---|
 | Explorer型の単一remote panel | 対応 | SFTP画面が相当 | 維持 |
-| Commander型のlocal／remote 2 panel | 部分対応 | desktopの対応ブラウザでは右ペインでPCのフォルダを開き、選択項目をリモートへアップロードできる。リモートのダウンロードは選択したフォルダへ直接ストリーム保存する。再読み込み後はフォルダを選び直し、保留中ジョブの保存先を再指定できる。リモートフォルダはZIPとして保存する | File System Access API非対応ブラウザ、モバイル、ローカル／リモートの同期は未対応 |
+| Commander型のlocal／remote 2 panel | 部分対応 | 右ペインにsshcエンジン側のファイルを表示する。初期位置はエンジンユーザーのホーム。上階層を含めOS権限の範囲で移動でき、file／directoryをengine queue経由で直接転送する。ブラウザのフォルダ権限は不要 | ローカル／リモートの同期・比較は未対応 |
 | remote／remote 2 panel | 対応 | desktopで2つのhost／directoryを並べる。左右が独立したtab列を持ち、表示中のtab間でfile／directoryをDrag & Dropしてcopy／moveできる | 維持 |
-| `..`による親directory移動 | 対応 | 一覧先頭に表示 | 維持 |
-| path breadcrumb／直接入力 | 対応 | 通常は各階層をクリックできるbreadcrumbとして表示し、編集操作で絶対path入力へ切り替える | 維持 |
+| `..`による親directory移動 | 対応 | リモートは一覧先頭、ローカルはパスバーの上階層ボタンで移動する。ローカルもOSルートまで移動できる | 維持 |
+| path breadcrumb／直接入力 | 部分対応 | リモートは階層をクリックでき、編集操作で絶対pathを入力できる。ローカルは階層をクリックして移動できる。パスの直接入力は未実装 | 維持 |
 | Back／Forward履歴 | 対応 | hostを切り替えるまでpath履歴を保持 | 維持 |
 | Home directoryへ移動 | 対応 | serverのworking directoryを再解決して移動 | 維持 |
 | Root directoryへ移動 | 対応 | navigation buttonまたは`/`の直接入力 | 維持 |
@@ -41,9 +41,9 @@ sshcのSFTPは、安全なアップロード／ダウンロード、フォルダ
 | 最近開いたdirectory | 対応 | 場所menuにhost単位で直近10件を新しい順に表示する | 維持 |
 | directory tree | 未対応 | 一覧だけ | desktopの任意表示として検討 |
 | remote検索 | 対応 | 絞り込み欄のEnterまたは虫眼鏡で、開いているディレクトリ配下を再帰検索する。symlinkは辿らず、200件・20,000項目・深さ32で打ち切って`truncated`を返す | 更新日時やサイズでの条件は未対応 |
-| synchronized browsing | 未対応 | local panelがない | 2 panel導入後 |
+| synchronized browsing | 未対応 | local panelはあるが連動操作は未実装 | 2 panel導入後 |
 | pathをclipboardへcopy | 対応 | 現在directoryと選択項目のfull pathをcopy可能 | 維持 |
-| opposite panelのpathへ移動 | 未対応 | local panelがない | 2 panel導入後 |
+| opposite panelのpathへ移動 | 未対応 | local panelはあるが連動操作は未実装 | 2 panel導入後 |
 | directory stateのsession別記憶 | 部分 | URLへalias/pathを反映し、左右の全tabのalias/pathとsortを端末に保存する。1ペインへ戻した間も右tabを保持する | selectionとhistoryの再読み込み後復元は未対応 |
 | 複数SFTP tab | 対応 | 左右それぞれ最大8tab。幅を超えたtab列は横scrollし、固定した追加操作と選択tabの自動追従を持つ。各tabが自分のhost、履歴、選択を持ち、開いていた場所を再読み込み後も復元する | 維持 |
 | panel内の名前filter | 対応 | 現在directoryを名前の部分一致で絞り込み | mask式は後続 |
@@ -138,7 +138,7 @@ sshcのSFTPは、安全なアップロード／ダウンロード、フォルダ
 | queue file listの展開 | 部分 | batch配下へfile jobを常時表示 | 折りたたみ可能にする |
 | prompt／errorの保留表示 | 部分 | overwriteは開始前確認、errorはjob表示 | queue内で再確認待ちを扱えるようにする |
 | 完了時action（disconnect/sleep/shutdown） | 未対応 | なし | browser製品では通知／engine停止までを候補とする |
-| 再読み込み後のqueue復元 | 部分 | engine authoritative queueを2秒ごとに再取得する。Remote→Remote jobはブラウザーを閉じても継続するが、uploadのlocal sourceは再選択が必要 | desktop local bridge導入時にupload sourceも自動復旧 |
+| 再読み込み後のqueue復元 | 部分 | engine authoritative queueを2秒ごとに再取得する。engineが処理するremote↔engine-local jobはブラウザを閉じても継続する。ブラウザから選択した従来のuploadは再選択が必要 | ブラウザ選択ファイルの再接続は別途検討 |
 | process再起動後のqueue復元 | 対応 | `~/.ssh/sshc/transfers.json`へ0600・atomic保存し、待機・一時停止・再開可能jobを復元する。端末固有stateとして同期しない | 永続形式のmigrationが必要になった時点でschema versionを更新 |
 | transfer中の自動再接続 | 部分 | chunk通信は最大3回の短いbackoffで自動再試行し、file downloadはrevision固定のoffset resumeにも対応。job全体の失敗後はmanual retry | job全体のbounded retryを追加 |
 | browser通知 | 対応 | tabがbackgroundの時、許可済みのWeb通知で完了／失敗を知らせる。Androidはnative通知を使う | 維持 |
@@ -265,7 +265,7 @@ sshcのSFTPは、安全なアップロード／ダウンロード、フォルダ
 
 ### P2 — Commander相当の転送workflow
 
-- desktop local panelと安全なlocal filesystem bridge
+- engine-local panelの直接パス入力と同期・比較
 - local↔remote directory compare／sync、mirror、preview
 - Keep remote directory up to date
 - SFTP CLI／JSON automation

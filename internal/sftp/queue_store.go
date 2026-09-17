@@ -153,7 +153,13 @@ func validPersistedJob(job TransferJob) error {
 	if err := validateAlias(job.Alias); err != nil {
 		return err
 	}
-	if _, err := cleanPublicPath(job.RemotePath, false); err != nil {
+	var pathErr error
+	if job.Operation == RemoteGet {
+		_, pathErr = localRelative(job.RemotePath)
+	} else {
+		_, pathErr = cleanPublicPath(job.RemotePath, false)
+	}
+	if err := pathErr; err != nil {
 		return err
 	}
 	if (job.LargeFileThresholdBytes != 0 &&
@@ -175,10 +181,19 @@ func validPersistedJob(job TransferJob) error {
 		if err := validateAlias(job.SourceAlias); err != nil {
 			return err
 		}
-		if _, err := cleanPublicPath(job.SourcePath, false); err != nil {
+		var sourceErr error
+		if job.Operation == RemotePut {
+			_, sourceErr = localRelative(job.SourcePath)
+		} else {
+			_, sourceErr = cleanPublicPath(job.SourcePath, false)
+		}
+		if err := sourceErr; err != nil {
 			return err
 		}
-		if job.Operation != RemoteCopy && job.Operation != RemoteMove && job.Operation != RemoteDelete {
+		if job.Operation != RemoteCopy && job.Operation != RemoteMove && job.Operation != RemoteDelete && job.Operation != RemoteGet && job.Operation != RemotePut {
+			return ErrInvalidTransfer
+		}
+		if (job.Operation == RemoteGet || job.Operation == RemotePut) && job.SourceAlias != job.Alias {
 			return ErrInvalidTransfer
 		}
 		if job.Operation == RemoteDelete && (job.SourceAlias != job.Alias || job.SourcePath != job.RemotePath || job.Overwrite) {

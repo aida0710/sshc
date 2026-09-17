@@ -172,63 +172,6 @@ describe("SFTPTransferManager engine ownership", () => {
     expect(api.saveDownload).toHaveBeenCalledOnce();
   });
 
-  it("streams a download directly into the selected local folder without browser download", async () => {
-    const api = engineAPI();
-    api.streamDownload.mockImplementation(async (_alias, _id, _path, _directory, _offset, options) => {
-      options.onRevision?.('"revision"');
-      await options.onChunk(new TextEncoder().encode("data"), 8);
-      await options.onChunk(new TextEncoder().encode("more"), 8);
-      return { bytes: 8, total: 8 };
-    });
-    const written: Uint8Array[] = [];
-    let stored = new File([], "remote.bin");
-    const writer = {
-      write: vi.fn(async (chunk: Uint8Array) => { written.push(chunk); }),
-      seek: vi.fn(async () => undefined),
-      truncate: vi.fn(async () => { written.length = 0; }),
-      close: vi.fn(async () => { stored = new File(written.map((part) => new Uint8Array(part)), "remote.bin"); }),
-    };
-    const fileHandle = {
-      kind: "file", name: "remote.bin",
-      getFile: vi.fn(async () => stored),
-      createWritable: vi.fn(async () => writer),
-    };
-    const directory = {
-      getFileHandle: vi.fn(async (_name: string, options?: { create: boolean }) => {
-        if (options?.create) return fileHandle;
-        if (_name === "remote.bin") return fileHandle;
-        throw new DOMException("Missing", "NotFoundError");
-      }),
-      removeEntry: vi.fn(async () => undefined),
-    };
-    const manager = new SFTPTransferManager(api);
-    await manager.addDownload("edge", "/remote.bin", "file", 8, {
-      directory: directory as unknown as FileSystemDirectoryHandle,
-    });
-    await vi.waitFor(() => expect(manager.getSnapshot()[0]?.status).toBe("completed"));
-    expect(directory.getFileHandle).toHaveBeenCalledWith("remote (1).bin", { create: true });
-    expect(written.map((chunk) => Array.from(chunk))).toEqual([[100, 97, 116, 97], [109, 111, 114, 101]]);
-    expect(fileHandle.createWritable).toHaveBeenCalled();
-    expect(api.saveDownload).not.toHaveBeenCalled();
-    expect(await stored.text()).toBe("datamore");
-  });
-
-  it("does not redirect a local-folder job to browser downloads after reload", async () => {
-    const api = engineAPI();
-    const initial = new SFTPTransferManager(api, 0);
-    await initial.addDownload("edge", "/remote.bin", "file", 4, {
-      directory: {} as FileSystemDirectoryHandle,
-    });
-    const restored = new SFTPTransferManager(api, 0);
-    await restored.reconcile();
-    expect(restored.getSnapshot()[0]?.status).toBe("queued");
-    expect(restored.getUnattachedLocalDownloadCount()).toBe(1);
-    expect(api.streamDownload).not.toHaveBeenCalled();
-    expect(api.saveDownload).not.toHaveBeenCalled();
-    expect(await restored.attachLocalDownloadDirectory({} as FileSystemDirectoryHandle)).toBe(1);
-    expect(restored.getUnattachedLocalDownloadCount()).toBe(0);
-  });
-
   it("resumes a file download after a transient disconnect", async () => {
     let calls = 0;
     const api = engineAPI();

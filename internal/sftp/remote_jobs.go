@@ -78,6 +78,14 @@ func (m *TransferManager) runRemoteJob(ctx context.Context, id string) {
 	var err error
 	if job.Operation == RemoteDelete {
 		totalBytes, err = m.Service.PlanDelete(ctx, job.Alias, job.RemotePath)
+	} else if job.Operation == RemoteGet || job.Operation == RemotePut {
+		var plan RemoteTransferPlan
+		plan, err = m.Service.PlanLocalTransfer(ctx, RemoteTransferRequest{
+			SourceAlias: job.SourceAlias, SourcePath: job.SourcePath,
+			TargetAlias: job.Alias, TargetPath: job.RemotePath,
+			Operation: job.Operation, Overwrite: job.Overwrite,
+		})
+		totalBytes = plan.TotalBytes
 	} else {
 		var plan RemoteTransferPlan
 		plan, err = m.Service.PlanRemoteTransfer(ctx, RemoteTransferRequest{
@@ -112,6 +120,12 @@ func (m *TransferManager) runRemoteJob(ctx context.Context, id string) {
 	}
 	if job.Operation == RemoteDelete {
 		err = m.Service.DeleteWithProgress(ctx, job.Alias, job.RemotePath, totalBytes, report)
+	} else if job.Operation == RemoteGet || job.Operation == RemotePut {
+		err = m.Service.CopyLocal(ctx, RemoteTransferRequest{
+			SourceAlias: job.SourceAlias, SourcePath: job.SourcePath,
+			TargetAlias: job.Alias, TargetPath: job.RemotePath,
+			Operation: job.Operation, Overwrite: job.Overwrite,
+		}, report)
 	} else {
 		err = m.Service.CopyRemote(ctx, RemoteTransferRequest{
 			SourceAlias: job.SourceAlias, SourcePath: job.SourcePath,
