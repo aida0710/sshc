@@ -1422,6 +1422,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sftp/local/entries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Lists the sshc engine user's filesystem, starting at the home directory when path is omitted. */
+        get: operations["listLocalSFTPEntries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sftp/{alias}/entries": {
         parameters: {
             query?: never;
@@ -3393,6 +3410,19 @@ export interface components {
             path: string;
             entries: components["schemas"]["SFTPEntry"][];
         };
+        SFTPLocalEntry: {
+            name: string;
+            path: string;
+            /** @enum {string} */
+            type: "file" | "directory";
+            /** Format: int64 */
+            size: number;
+        };
+        SFTPLocalListing: {
+            path: string;
+            home: string;
+            entries: components["schemas"]["SFTPLocalEntry"][];
+        };
         SFTPTextFile: {
             entry: components["schemas"]["SFTPEntry"];
             contents: string;
@@ -3441,7 +3471,7 @@ export interface components {
             sourceAlias: string;
             sourcePath: string;
             /** @enum {string} */
-            operation: "" | "copy" | "move" | "delete";
+            operation: "" | "copy" | "move" | "delete" | "get" | "put";
             /** @enum {string} */
             direction: "upload" | "download" | "remote";
             /** @enum {string} */
@@ -3533,7 +3563,7 @@ export interface components {
             sourceAlias: string;
             sourcePath: string;
             /** @enum {string} */
-            operation: "" | "copy" | "move" | "delete";
+            operation: "" | "copy" | "move" | "delete" | "get" | "put";
             overwrite: boolean;
             /** @enum {string} */
             direction: "upload" | "download" | "remote";
@@ -6501,6 +6531,30 @@ export interface operations {
             };
             400: components["responses"]["Problem"];
             401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+        };
+    };
+    listLocalSFTPEntries: {
+        parameters: {
+            query?: {
+                path?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Engine-local directory listing */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SFTPLocalListing"];
+                };
+            };
+            400: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
         };
     };

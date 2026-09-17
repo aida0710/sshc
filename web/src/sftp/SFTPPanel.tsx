@@ -36,22 +36,16 @@ import { sftpApi, type RemoteEntry, type RemoteTextFile } from "./api";
 import { formatBytes } from "./format";
 import { sftpPlaces } from "./places";
 import { SFTPDetailsDialog } from "./SFTPDetailsDialog";
-import { directoryPaths, safeRelativePath, symbolicModeToOctal, type LocalTransferFile } from "./transfers";
+import { directoryPaths, remoteEntriesMime, safeRelativePath, symbolicModeToOctal, type LocalTransferFile, type RemoteDragPayload } from "./transfers";
 import { TransferManagerList } from "./TransferManagerList";
 import { sftpTransferManager } from "./transferManager";
 import { SFTPHostPicker } from "./SFTPHostPicker";
+import { SFTPNavigationControls } from "./SFTPNavigationControls";
 
 const MonacoEditor = lazy(() =>
   import("./MonacoEditor").then(({ MonacoEditor }) => ({ default: MonacoEditor })),
 );
 const noHosts: HostEntry[] = [];
-const remoteEntriesMime = "application/x-sshc-sftp-entries";
-
-type RemoteDragPayload = {
-  alias: string;
-  entries: Array<Pick<RemoteEntry, "name" | "path" | "type" | "size">>;
-};
-
 function parentOf(remotePath: string): string {
   if (remotePath === "/") return "/";
   const pieces = remotePath.split("/").filter(Boolean);
@@ -183,6 +177,7 @@ export function SFTPPanel({
   onNavigateLocation,
   onOpenTerminal,
   onQueueOpen,
+  downloadLocalPath,
 }: {
   aliases: string[];
   hosts?: HostEntry[];
@@ -200,6 +195,7 @@ export function SFTPPanel({
   onNavigateLocation?: ((url: string) => void) | undefined;
   onOpenTerminal?: ((alias: string, path: string) => void | Promise<void>) | undefined;
   onQueueOpen?: () => void;
+  downloadLocalPath?: string | null;
 }) {
   const t = useTranslate();
   const [alias, setAlias] = useState("");
@@ -489,7 +485,7 @@ export function SFTPPanel({
 
   useEffect(() => {
     if (initialLocation === null || openedInitialLocation.current) return;
-    if (!aliases.includes(initialLocation.alias) || !initialLocation.path.startsWith("/")) return;
+    if (!aliases.includes(initialLocation.alias) || (initialLocation.path !== "" && !initialLocation.path.startsWith("/"))) return;
     openedInitialLocation.current = true;
     loadGeneration.current += 1;
     setAlias(initialLocation.alias);
@@ -503,7 +499,7 @@ export function SFTPPanel({
 
   useEffect(() => {
     if (!connected) return;
-    const completed = transferJobs.filter((job) => job.direction === "upload" && job.status === "completed" && job.alias === alias && parentOf(job.remotePath) === path && !refreshedUploads.current.has(job.id));
+    const completed = transferJobs.filter((job) => (job.direction === "upload" || job.operation === "put") && job.status === "completed" && job.alias === alias && parentOf(job.remotePath) === path && !refreshedUploads.current.has(job.id));
     if (completed.length === 0) return;
     for (const job of completed) refreshedUploads.current.add(job.id);
     void load(path, alias, true);
@@ -771,7 +767,14 @@ export function SFTPPanel({
     setProblem("");
     const results = await Promise.allSettled(targets
       .filter((entry) => entry.type === "file" || entry.type === "directory")
-      .map((entry) => sftpTransferManager.addDownload(targetAlias, entry.path, entry.type === "directory" ? "folder" : "file", entry.type === "file" ? entry.size : -1)));
+      .map((entry) => {
+        const kind = entry.type === "directory" ? "folder" : "file";
+        const size = entry.type === "file" ? entry.size : -1;
+        return downloadLocalPath === null || downloadLocalPath === undefined
+          ? sftpTransferManager.addDownload(targetAlias, entry.path, kind, size)
+          : sftpTransferManager.addRemoteTransfers([{ sourceAlias: targetAlias, sourcePath: entry.path, targetAlias,
+              targetPath: `${downloadLocalPath.replace(/\/$/, "")}/${entry.name}`, name: entry.name, kind, totalBytes: size }], "get");
+      }));
     const failed = results.find((result) => result.status === "rejected");
     if (failed?.status === "rejected") {
       setProblem(failureCode(failed.reason) || (failed.reason instanceof Error ? failed.reason.message : "sftp_failed"));
@@ -1146,6 +1149,11 @@ export function SFTPPanel({
     }
   }
 
+  async function copyCurrentPath() {
+    try { await clipboard.writeText(path); setProblem(""); }
+    catch { setProblem(t("copy.refused")); }
+  }
+
   async function queueRemoteOperation(
     entries: RemoteEntry[],
     operation: "copy" | "move",
@@ -1295,6 +1303,7 @@ export function SFTPPanel({
   function folderMenuActions(): SFTPMenuAction[] {
     const navigate = (destination: string) => { setMenu(null); void load(destination); };
     return [
+      { key: "copyCurrentPath", label: t("sftp.copyPath"), disabled: !connected, run: () => { setMenu(null); void copyCurrentPath(); } },
       { key: "newFolder", label: t("sftp.newFolder"), disabled: busy || !connected, run: () => { setMenu(null); setInputIntent({ kind: "mkdir" }); } },
       { key: "newFile", label: t("sftp.newFile"), disabled: busy || !connected, run: () => { setMenu(null); setInputIntent({ kind: "createFile" }); } },
       { key: "upload", label: t("sftp.upload"), disabled: busy || !connected, run: () => { setMenu(null); upload.current?.click(); } },
@@ -1321,7 +1330,7 @@ export function SFTPPanel({
       <h2 id={headingId} className="sr-only">{t("sftp.heading")}</h2>
       {mobileInteraction ? (
         <div className="flex min-h-11 shrink-0 items-center gap-1 border-b border-line/50 pb-1">
-          <SFTPHostPicker aliases={aliases} hosts={hosts} value={alias} disabled={dirty} onChange={selectHost} compact />
+          <SFTPHostPicker aliases={aliases} hosts={hosts} value={alias} disabled={dirty} onChange={selectHost} compact includeLocal />
           <button type="button" aria-label={t("sftp.back")} disabled={busy || dirty || navigation.index <= 0} onClick={() => void navigateHistory(-1)} className="flex size-11 shrink-0 items-center justify-center rounded text-ink-muted active:bg-select-fill disabled:text-ink-faint">←</button>
           {pathEditing ? (
             <form className="flex min-w-0 flex-1 items-center gap-1" onSubmit={(event) => { event.preventDefault(); if (!busy && !dirty) void load(pathDraft); }}>
@@ -1341,7 +1350,7 @@ export function SFTPPanel({
         </div>
       ) : (
       <div className="flex flex-wrap items-center gap-1.5 border-b border-line/50 pb-1.5 md:pb-1">
-        <SFTPHostPicker aliases={aliases} hosts={hosts} value={alias} disabled={dirty} onChange={selectHost} />
+        <SFTPHostPicker aliases={aliases} hosts={hosts} value={alias} disabled={dirty} onChange={selectHost} includeLocal />
         {onOpenTerminal === undefined ? null : (
           <button
             type="button"
@@ -1354,20 +1363,11 @@ export function SFTPPanel({
             <Icon name="terminal" className="size-4" />
           </button>
         )}
-        <div role="group" aria-label={t("sftp.navigation")} className="flex shrink-0 overflow-hidden rounded-md bg-toolbar/70">
-          <button type="button" aria-label={t("sftp.back")} disabled={busy || dirty || navigation.index <= 0} onClick={() => void navigateHistory(-1)} className="flex size-9 items-center justify-center text-ink-muted hover:bg-hover disabled:text-ink-faint md:size-8">
-            <span aria-hidden="true">←</span>
-          </button>
-          <button type="button" aria-label={t("sftp.forward")} disabled={busy || dirty || navigation.index < 0 || navigation.index >= navigation.paths.length - 1} onClick={() => void navigateHistory(1)} className="flex size-9 items-center justify-center text-ink-muted hover:bg-hover disabled:text-ink-faint md:size-8">
-            <span aria-hidden="true">→</span>
-          </button>
-          <button type="button" aria-label={t("sftp.homeDirectory")} disabled={busy || dirty || !connected} onClick={() => void load("")} className="flex size-9 items-center justify-center text-ink-muted hover:bg-hover disabled:text-ink-faint md:size-8">
-            <Icon name="home" className="size-4" />
-          </button>
-          <button type="button" aria-label={t("sftp.rootDirectory")} disabled={busy || dirty || !connected || path === "/"} onClick={() => void load("/")} className="flex size-9 items-center justify-center font-mono text-sm text-ink-muted hover:bg-hover disabled:text-ink-faint md:size-8">
-            /
-          </button>
-        </div>
+        <SFTPNavigationControls busy={busy || dirty} canBack={navigation.index > 0}
+          canForward={navigation.index >= 0 && navigation.index < navigation.paths.length - 1}
+          canHome={connected} canRoot={connected && path !== "/"}
+          onBack={() => void navigateHistory(-1)} onForward={() => void navigateHistory(1)}
+          onHome={() => void load("")} onRoot={() => void load("/")} />
         <button type="button" aria-label={t("sftp.refreshDirectory")} title={t("sftp.refreshDirectory")} disabled={busy || dirty || !connected} onClick={refreshCurrentDirectory} className="flex size-9 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover hover:text-ink disabled:text-ink-faint md:size-8"><Icon name="sync" className="size-4" /></button>
         {pathEditing ? (
           <>
@@ -1392,7 +1392,8 @@ export function SFTPPanel({
           </>
         ) : (
           <div className="flex min-w-44 grow items-center rounded-md bg-control/60 px-1" data-testid="sftp-current-path" data-path={path}>
-            <nav aria-label={t("sftp.path")} className="flex min-w-0 grow items-center overflow-x-auto whitespace-nowrap font-mono text-sm">
+            <nav aria-label={t("sftp.path")} onClick={(event) => { if (event.target === event.currentTarget && !busy && !dirty && connected) setPathEditing(true); }}
+              title={t("sftp.editPath")} className="flex min-w-0 grow cursor-text items-center overflow-x-auto whitespace-nowrap font-mono text-sm">
               <button type="button" disabled={busy || dirty || !connected || path === "/"} onClick={() => void load("/")} className="rounded px-1.5 py-1.5 text-ink-muted hover:bg-hover hover:text-ink disabled:text-ink-faint md:py-1">/</button>
               {pathPieces.map((piece, index) => (
                 <span key={breadcrumbPaths[index]} className="flex min-w-0 items-center">
@@ -1405,6 +1406,11 @@ export function SFTPPanel({
                 </span>
               ))}
             </nav>
+            <button type="button" aria-label={t("sftp.copyPath")} title={t("sftp.copyPath")}
+              disabled={!connected} onClick={() => { void copyCurrentPath(); }}
+              className="flex size-8 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover hover:text-ink disabled:text-ink-faint">
+              <Icon name="copy" className="size-3.5" />
+            </button>
             <button type="button" aria-label={t("sftp.editPath")} disabled={busy || dirty || !connected} onClick={() => setPathEditing(true)} className="flex size-8 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover hover:text-ink disabled:text-ink-faint">
               <Icon name="edit" className="size-3.5" />
             </button>

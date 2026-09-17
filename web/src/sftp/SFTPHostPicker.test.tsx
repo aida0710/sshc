@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { HostEntry } from "../api/config";
 import { SFTPHostPicker } from "./SFTPHostPicker";
+import { localHostAlias } from "./localHost";
 
 const hosts = [
   { identity: { alias: "edge", path: "edge.conf" }, group: "work", hostName: "edge.example.com", user: "deploy" },
@@ -28,7 +29,7 @@ describe("SFTPHostPicker", () => {
     expect(screen.getByRole("region", { name: "home" })).toBeVisible();
     expect(screen.getByRole("region", { name: "work" })).toBeVisible();
 
-    await userEvent.type(screen.getByRole("searchbox", { name: "Search remote hosts" }), "deploy");
+    await userEvent.type(screen.getByRole("searchbox", { name: "Search connections" }), "deploy");
     expect(screen.getByRole("button", { name: /edge/ })).toBeVisible();
     expect(screen.queryByRole("button", { name: /miyabi/ })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /edge/ }));
@@ -58,10 +59,24 @@ describe("SFTPHostPicker", () => {
     const onChange = vi.fn();
     render(<SFTPHostPicker aliases={["edge", "miyabi"]} hosts={hosts} value="" compact loadRecent={async () => ({ connections: [] })} onChange={onChange} />);
     await userEvent.click(screen.getByRole("button", { name: "Host" }));
-    expect(screen.getByRole("searchbox", { name: "Search remote hosts" })).not.toHaveFocus();
+    expect(screen.getByRole("searchbox", { name: "Search connections" })).not.toHaveFocus();
     expect(screen.getByRole("button", { name: "Close host picker" })).toHaveFocus();
     await userEvent.click(screen.getByRole("button", { name: /edge/ }));
     expect(onChange).toHaveBeenCalledWith("edge");
+  });
+
+  it("keeps the engine local choice available without configured SSH hosts", async () => {
+    const onChange = vi.fn();
+    render(<SFTPHostPicker aliases={[]} value="" includeLocal loadRecent={async () => ({ connections: [] })} onChange={onChange} />);
+    const trigger = screen.getByRole("button", { name: "Host" });
+    expect(trigger).toBeEnabled();
+    await userEvent.click(trigger);
+    const local = screen.getByRole("button", { name: /Local.*sshc engine/ });
+    expect(local).toBeVisible();
+    await userEvent.type(screen.getByRole("searchbox", { name: "Search connections" }), "local");
+    expect(local).toBeVisible();
+    await userEvent.click(local);
+    expect(onChange).toHaveBeenCalledWith(localHostAlias);
   });
 
 });

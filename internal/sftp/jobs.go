@@ -704,10 +704,19 @@ func (m *TransferManager) CreateJob(input CreateTransferJob) (TransferJob, error
 		if err := validateAlias(input.SourceAlias); err != nil {
 			return TransferJob{}, err
 		}
-		if input.Operation != RemoteCopy && input.Operation != RemoteMove && input.Operation != RemoteDelete {
+		if input.Operation != RemoteCopy && input.Operation != RemoteMove && input.Operation != RemoteDelete && input.Operation != RemoteGet && input.Operation != RemotePut {
 			return TransferJob{}, ErrInvalidTransfer
 		}
-		source, err := cleanPublicPath(input.SourcePath, false)
+		if (input.Operation == RemoteGet || input.Operation == RemotePut) && input.SourceAlias != input.Alias {
+			return TransferJob{}, ErrInvalidTransfer
+		}
+		var source string
+		var err error
+		if input.Operation == RemotePut {
+			source, err = localRelative(input.SourcePath)
+		} else {
+			source, err = cleanPublicPath(input.SourcePath, false)
+		}
 		if err != nil {
 			return TransferJob{}, err
 		}
@@ -717,7 +726,13 @@ func (m *TransferManager) CreateJob(input CreateTransferJob) (TransferJob, error
 	} else if input.SourceAlias != "" || input.SourcePath != "" || input.Operation != "" {
 		return TransferJob{}, ErrInvalidTransfer
 	}
-	cleaned, err := cleanPublicPath(input.RemotePath, false)
+	var cleaned string
+	var err error
+	if input.Operation == RemoteGet {
+		cleaned, err = localRelative(input.RemotePath)
+	} else {
+		cleaned, err = cleanPublicPath(input.RemotePath, false)
+	}
 	if err != nil {
 		return TransferJob{}, err
 	}

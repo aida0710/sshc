@@ -12,6 +12,7 @@ import (
 	"net"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -454,3 +455,44 @@ func TestConcurrentFilesAgainstOpenSSHSFTP(t *testing.T) {
 
 var _ io.Closer = (*integrationRemote)(nil)
 var _ sftp.RangeRemote = (*integrationRemote)(nil)
+
+func TestEngineLocalRoundTripAgainstOpenSSHSFTP(t *testing.T) {
+	service := integrationService(t)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	localTree := filepath.Join(home, "source")
+	if err := os.MkdirAll(filepath.Join(localTree, "nested"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	payload := []byte("engine-local direct transfer\n")
+	if err := os.WriteFile(filepath.Join(localTree, "nested", "example.txt"), payload, 0600); err != nil {
+		t.Fatal(err)
+	}
+	listing, err := sftp.ListLocal("")
+	if err != nil || listing.Path != filepath.ToSlash(home) {
+		t.Fatalf("local home listing = %+v, %v", listing, err)
+	}
+	remoteRoot := fmt.Sprintf("/tmp/sshc-sftp-local-%d", time.Now().UnixNano())
+	t.Cleanup(func() { _ = service.Delete(context.Background(), "integration", remoteRoot) })
+	if _, err := service.Mkdir(t.Context(), "integration", remoteRoot); err != nil {
+		t.Fatal(err)
+	}
+	remoteTree := path.Join(remoteRoot, "source")
+	put := sftp.RemoteTransferRequest{SourceAlias: "integration", SourcePath: localTree, TargetAlias: "integration", TargetPath: remoteTree, Operation: sftp.RemotePut}
+	if err := service.CopyLocal(t.Context(), put, nil); err != nil {
+		t.Fatalf("put directory: %v", err)
+	}
+	downloaded := filepath.Join(home, "downloaded")
+	get := sftp.RemoteTransferRequest{SourceAlias: "integration", SourcePath: remoteTree, TargetAlias: "integration", TargetPath: downloaded, Operation: sftp.RemoteGet}
+	if err := service.CopyLocal(t.Context(), get, nil); err != nil {
+		t.Fatalf("get directory: %v", err)
+	}
+	contents, err := os.ReadFile(filepath.Join(downloaded, "nested", "example.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(contents, payload) {
+		t.Fatalf("round trip = %q", contents)
+	}
+}

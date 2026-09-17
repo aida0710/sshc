@@ -356,6 +356,19 @@ describe("SFTPPanel uploads", () => {
     expect(clipboard.writeText).toHaveBeenLastCalledWith("/remote/alpha.txt\n/remote/gamma.txt");
   });
 
+  it("copies the current directory and edits it from the empty breadcrumb area", async () => {
+    render(<SFTPPanel aliases={["edge"]} />);
+    await chooseHost("edge");
+    await userEvent.click(screen.getByRole("button", { name: "Copy full path" }));
+    expect(clipboard.writeText).toHaveBeenLastCalledWith("/remote");
+    fireEvent.click(screen.getByRole("navigation", { name: "Remote path" }));
+    const input = screen.getByRole("textbox", { name: "Remote path" });
+    expect(input).toHaveValue("/remote");
+    await userEvent.clear(input);
+    await userEvent.type(input, "/other{Enter}");
+    await waitFor(() => expect(api.list).toHaveBeenCalledWith("edge", "/other"));
+  });
+
   it("queues multiple selected entries after one confirmation and opens the queue", async () => {
     const addRemoteTransfers = vi.spyOn(sftpTransferManager, "addRemoteTransfers").mockResolvedValue(["delete-one", "delete-two"]);
     api.list.mockResolvedValue({
@@ -515,6 +528,20 @@ describe("SFTPPanel uploads", () => {
 
     await waitFor(() => expect(addDownload).toHaveBeenCalledWith("edge", "/var/log/app.log", "file", 12));
     addDownload.mockRestore();
+  });
+
+  it("queues an engine-side get when the local pane supplies its path", async () => {
+    api.list.mockResolvedValue({
+      path: "/var/log",
+      entries: [{ name: "app.log", path: "/var/log/app.log", type: "file", size: 12, mode: "0644", modifiedAt: "", revision: "rev" }],
+    });
+    const queue = vi.spyOn(sftpTransferManager, "addRemoteTransfers").mockResolvedValue(["get-one"]);
+    try {
+      render(<SFTPPanel aliases={["edge"]} downloadLocalPath="/home/edge" target={{ alias: "edge", path: "/var/log/app.log", action: "download", request: 3 }} />);
+      await waitFor(() => expect(queue).toHaveBeenCalledWith([
+        expect.objectContaining({ sourcePath: "/var/log/app.log", targetPath: "/home/edge/app.log" }),
+      ], "get"));
+    } finally { queue.mockRestore(); }
   });
 
   it("rejects a terminal path action for an unknown host before connecting", async () => {
@@ -872,7 +899,7 @@ describe("SFTPPanel uploads", () => {
     api.list.mockResolvedValue({ path: "/", entries: [] });
     render(<SFTPPanel aliases={["edge"]} />);
 
-    expect(await screen.findByText("Pick a saved SSH host, then connect.")).toBeVisible();
+    expect(await screen.findByText("Choose Local or a saved SSH host. Connect after choosing an SSH host.")).toBeVisible();
     await chooseHost("edge");
 
     expect(await screen.findByText("This directory is empty.")).toBeVisible();
