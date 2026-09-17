@@ -143,6 +143,8 @@ test("stores an encrypted key passphrase from the key row and shows only its nam
   await openSection(page, "Key passphrases");
   const passphrases = page.getByRole("region", { name: "Key passphrases" });
   await expect(passphrases).toContainText("saved-e2e-key");
+  // The keys a passphrase belongs to sit behind a disclosure; open it to see the name.
+  await passphrases.getByRole("button", { name: "Show keys for saved-e2e-key" }).click();
   await expect(passphrases).toContainText("id_saved_phrase");
   await expect(page.locator("body")).not.toContainText(passphrase);
 
@@ -154,6 +156,7 @@ test("stores an encrypted key passphrase from the key row and shows only its nam
   expect(await clickAndAwait(page, "Rename or move the key", "/api/v1/keys/")).toBe(200);
 
   await openSection(page, "Key passphrases");
+  await passphrases.getByRole("button", { name: "Show keys for saved-e2e-key" }).click();
   await expect(passphrases).toContainText("id_saved_phrase_renamed");
   await expect(passphrases).not.toContainText(/\bid_saved_phrase\b(?!_renamed)/);
 });

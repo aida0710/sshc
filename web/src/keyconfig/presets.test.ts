@@ -15,6 +15,15 @@ beforeEach(async () => {
   await refreshPresets();
 });
 afterEach(() => { localStorage.clear(); vi.restoreAllMocks(); });
+it("stores nothing while the browser only shows the default shortcuts", async () => {
+  expect(localStorage.length).toBe(0);
+  remote = [{ id: "work", name: "Work", bindings: { ...defaultBindings, home: ["Alt+H"] } }];
+  await refreshPresets();
+  expect(localStorage.length).toBe(0);
+  expect(loadBindings()).toEqual(defaultBindings);
+  selectPreset("work");
+  expect(localStorage.getItem(selectionKey)).toBe("work");
+});
 it("migrates legacy bindings once and preserves the migration identity after a lost response", async () => {
   localStorage.removeItem(selectionKey);
   localStorage.setItem(storageKey, JSON.stringify({ ...defaultBindings, home: ["Alt+H"] }));
