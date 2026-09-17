@@ -844,34 +844,6 @@ describe("SFTPPanel uploads", () => {
     expect(api.directoryStats).toHaveBeenCalledWith("edge", "/remote/project");
   });
 
-  it("bookmarks the current folder and reopens it from the places menu", async () => {
-    api.list.mockImplementation(async (_alias: string, requestedPath: string) => ({
-      path: requestedPath === "" ? "/srv/app" : requestedPath,
-      entries: [],
-    }));
-    // A host of its own: the place book is a singleton shared by the suite.
-    render(<SFTPPanel aliases={["placebook"]} />);
-    await chooseHost("placebook");
-    await waitFor(() => expect(screen.getByTestId("sftp-current-path")).toHaveAttribute("data-path", "/srv/app"));
-
-    await userEvent.click(screen.getByRole("button", { name: "Bookmarks and recent paths" }));
-    await userEvent.click(screen.getByRole("menuitem", { name: "Bookmark this folder" }));
-
-    // The menu stays open so the toggle can report what it just did.
-    const menu = screen.getByRole("menu", { name: "Bookmarks and recent paths" });
-    expect(within(menu).getByRole("menuitem", { name: "Remove this bookmark" })).toBeVisible();
-    expect(within(menu).getByRole("menuitem", { name: "/srv/app" })).toBeVisible();
-    await userEvent.keyboard("{Escape}");
-
-    await userEvent.click(screen.getByRole("button", { name: "Root directory" }));
-    await waitFor(() => expect(screen.getByTestId("sftp-current-path")).toHaveAttribute("data-path", "/"));
-
-    await userEvent.click(screen.getByRole("button", { name: "Bookmarks and recent paths" }));
-    await userEvent.click(within(screen.getByRole("menu", { name: "Bookmarks and recent paths" }))
-      .getByRole("menuitem", { name: "/srv/app" }));
-    await waitFor(() => expect(screen.getByTestId("sftp-current-path")).toHaveAttribute("data-path", "/srv/app"));
-  });
-
   it("offers to undo a rename and puts the old name back", async () => {
     api.list.mockResolvedValue({
       path: "/remote",

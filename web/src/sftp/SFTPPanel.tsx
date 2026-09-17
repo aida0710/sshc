@@ -25,7 +25,6 @@ import { useMenuKeyboard } from "../ui/useMenuKeyboard";
 import { mobileViewportQuery, useCompactViewport, useMediaQuery } from "../ui/useMediaQuery";
 import { sftpApi, type RemoteEntry, type RemoteTextFile } from "./api";
 import { formatBytes } from "./format";
-import { sftpPlaces } from "./places";
 import { SFTPDetailsDialog } from "./SFTPDetailsDialog";
 import { parentRowKey, SFTPEntryList, sortEntries, useSFTPEntryList, type SFTPSort, type SFTPSortState } from "./SFTPEntryList";
 import { directoryPaths, remoteEntriesMime, safeRelativePath, symbolicModeToOctal, type LocalTransferFile, type RemoteDragPayload } from "./transfers";
@@ -57,7 +56,6 @@ export type { SFTPSort, SFTPSortState } from "./SFTPEntryList";
 type SFTPMenu =
   | { kind: "folder" }
   | { kind: "create" }
-  | { kind: "places" }
   | { kind: "selected" }
   | { kind: "context"; x: number; y: number };
 
@@ -247,7 +245,6 @@ export function SFTPPanel({
   }, [mobileSearchOpen]);
 
   const transferJobs = useSyncExternalStore(sftpTransferManager.subscribe, sftpTransferManager.getSnapshot);
-  useSyncExternalStore(sftpPlaces.subscribe, sftpPlaces.getSnapshot);
   const refreshedUploads = useRef(new Set<string>());
   const refreshedDeletes = useRef(new Set<string>());
   const [openQueueRequest, setOpenQueueRequest] = useState(0);
@@ -286,12 +283,6 @@ export function SFTPPanel({
     selectedPaths, setSelectedPaths, selectedEntries, selectedEntry, rowKeys, setFocusedKey,
     pendingFocus, selectionAnchor, activeRow, activate, openParent, invertDisplayedSelection, selectAllDisplayed,
   } = list;
-  const bookmarkedPaths = sftpPlaces.bookmarks(alias);
-  // A bookmarked path is already one click away; repeating it under "recent"
-  // only makes the menu longer and the two lists ambiguous.
-  const recentPaths = sftpPlaces.recent(alias)
-    .filter((candidate) => candidate !== path && !bookmarkedPaths.includes(candidate));
-  const bookmarkedHere = path !== "" && sftpPlaces.bookmarked(alias, path);
   // A listing that failed says so where the rows would be, with the retry next
   // to it. Repeating the same sentence in the banner above would be two voices
   // for one fact.
@@ -376,7 +367,6 @@ export function SFTPPanel({
       setPathDraft(listing.path);
       setPathEditing(false);
       setEntries(listing.entries);
-      sftpPlaces.remember(nextAlias, listing.path);
       reportLocation.current(nextAlias, listing.path);
       if (recordNavigation) {
         setNavigation((current) => {
@@ -898,12 +888,7 @@ export function SFTPPanel({
       : current);
   }
 
-  function goTo(remotePath: string) {
-    setMenu(null);
-    void load(remotePath);
-  }
-
-  function toggleMenu(kind: "folder" | "create" | "places" | "selected", trigger: HTMLButtonElement) {
+  function toggleMenu(kind: "folder" | "create" | "selected", trigger: HTMLButtonElement) {
     menuTrigger.current = trigger;
     setMenu((current) => current?.kind === kind ? null : { kind });
   }
@@ -1016,7 +1001,6 @@ export function SFTPPanel({
       { key: "newFile", label: t("sftp.newFile"), disabled: busy || !connected, run: () => { setMenu(null); setInputIntent({ kind: "createFile" }); } },
       { key: "upload", label: t("sftp.upload"), disabled: busy || !connected, run: () => { setMenu(null); upload.current?.click(); } },
       { key: "uploadFolder", label: t("sftp.uploadFolder"), disabled: busy || !connected, run: () => { setMenu(null); folderUpload.current?.click(); } },
-      { key: "places", label: t("sftp.places"), disabled: busy || !connected, run: () => setMenu({ kind: "places" }) },
       { key: "forward", label: t("sftp.forward"), disabled: busy || dirty || navigation.index < 0 || navigation.index >= navigation.paths.length - 1, run: () => { setMenu(null); void navigateHistory(1); } },
       { key: "home", label: t("sftp.homeDirectory"), disabled: busy || dirty || !connected, run: () => navigate("") },
       { key: "root", label: t("sftp.rootDirectory"), disabled: busy || dirty || !connected || path === "/", run: () => navigate("/") },
@@ -1225,17 +1209,6 @@ export function SFTPPanel({
             >
               <Icon name="plus" className="size-4" />
             </button>
-            <button
-              type="button"
-              aria-label={t("sftp.places")}
-              aria-haspopup="menu"
-              aria-expanded={!mobileInteraction && menu?.kind === "places"}
-              disabled={busy || !connected}
-              onClick={(event) => toggleMenu("places", event.currentTarget)}
-              className={`flex size-10 shrink-0 items-center justify-center rounded hover:bg-hover focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:size-7 ${bookmarkedHere ? "text-accent" : "text-ink-muted"}`}
-            >
-              <Icon name="star" className="size-4" />
-            </button>
             <label className="relative min-w-24 max-w-52 grow">
               <span className="sr-only">{t("sftp.filter")}</span>
               <Icon name="search" className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-ink-muted" />
@@ -1300,43 +1273,6 @@ export function SFTPPanel({
                 <button type="button" role="menuitem" disabled={busy} onClick={() => { setMenu(null); setInputIntent({ kind: "createFile" }); }} className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-hover focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:min-h-0">{t("sftp.newFile")}</button>
                 <button type="button" role="menuitem" disabled={busy} onClick={() => { setMenu(null); upload.current?.click(); }} className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-hover focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:min-h-0">{t("sftp.upload")}</button>
                 <button type="button" role="menuitem" disabled={busy} onClick={() => { setMenu(null); folderUpload.current?.click(); }} className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-hover focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:min-h-0">{t("sftp.uploadFolder")}</button>
-              </div>
-            ) : null}
-            {!mobileInteraction && menu?.kind === "places" ? (
-              <div ref={menuPanel} role="menu" aria-label={t("sftp.places")} className="absolute left-2 top-full z-20 mt-1 max-h-80 w-72 overflow-auto rounded-lg border border-control-line bg-card p-1 shadow-lg">
-                <button
-                  type="button"
-                  role="menuitem"
-                  disabled={path === ""}
-                  onClick={() => sftpPlaces.toggleBookmark(alias, path)}
-                  className="block min-h-10 w-full rounded px-2.5 py-2 text-left text-sm hover:bg-hover focus:bg-select-fill focus:outline-none disabled:text-ink-faint md:min-h-0"
-                >
-                  {t(bookmarkedHere ? "sftp.removeBookmark" : "sftp.addBookmark")}
-                </button>
-                {bookmarkedPaths.length === 0 ? null : (
-                  <>
-                    <p className="px-2.5 pt-2 text-[11px] uppercase tracking-wide text-ink-faint">{t("sftp.bookmarks")}</p>
-                    {bookmarkedPaths.map((bookmark) => (
-                      <span key={bookmark} className="flex items-center gap-1">
-                        <button type="button" role="menuitem" onClick={() => goTo(bookmark)} className="block min-h-10 min-w-0 grow truncate rounded px-2.5 py-2 text-left font-mono text-xs hover:bg-hover focus:bg-select-fill focus:outline-none md:min-h-0">{bookmark}</button>
-                        <button type="button" role="menuitem" aria-label={t("sftp.removeBookmarkFor", { path: bookmark })} onClick={() => sftpPlaces.removeBookmark(alias, bookmark)} className="flex size-8 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover hover:text-danger focus:bg-select-fill focus:outline-none">
-                          <Icon name="close" className="size-3" />
-                        </button>
-                      </span>
-                    ))}
-                  </>
-                )}
-                {recentPaths.length === 0 ? null : (
-                  <>
-                    <p className="px-2.5 pt-2 text-[11px] uppercase tracking-wide text-ink-faint">{t("sftp.recentPaths")}</p>
-                    {recentPaths.map((recent) => (
-                      <button key={recent} type="button" role="menuitem" onClick={() => goTo(recent)} className="block min-h-10 w-full truncate rounded px-2.5 py-2 text-left font-mono text-xs hover:bg-hover focus:bg-select-fill focus:outline-none md:min-h-0">{recent}</button>
-                    ))}
-                  </>
-                )}
-                {bookmarkedPaths.length === 0 && recentPaths.length === 0 ? (
-                  <p className="px-2.5 py-2 text-xs text-ink-muted">{t("sftp.noPlaces")}</p>
-                ) : null}
               </div>
             ) : null}
             {!mobileInteraction && menu?.kind === "selected" && selectedEntries.length > 0 ? (
@@ -1428,17 +1364,11 @@ export function SFTPPanel({
       {mobileInteraction && menu !== null ? (
         <ModalShell labelledBy={`${headingId}-mobile-actions`} onDismiss={() => setMenu(null)} closeOnOutside returnFocusRef={menuTrigger} placement="sheet" panelClassName="flex max-h-[80dvh] w-full max-w-lg flex-col overflow-hidden rounded-xl">
           <div className="flex shrink-0 items-center justify-between gap-2 border-b border-line px-4 py-1">
-            <h3 id={`${headingId}-mobile-actions`} className="min-w-0 truncate font-medium">{menu.kind === "selected" || menu.kind === "context" ? selectionMenuLabel() : menu.kind === "places" ? t("sftp.places") : t("sftp.mobile.actions")}</h3>
+            <h3 id={`${headingId}-mobile-actions`} className="min-w-0 truncate font-medium">{menu.kind === "selected" || menu.kind === "context" ? selectionMenuLabel() : t("sftp.mobile.actions")}</h3>
             <button type="button" aria-label={t("sftp.close")} onClick={() => setMenu(null)} className="flex size-11 shrink-0 items-center justify-center rounded text-ink-muted"><Icon name="close" className="size-4" /></button>
           </div>
           <div role="menu" className="min-h-0 overflow-y-auto overscroll-contain p-2">
-            {menu.kind === "selected" || menu.kind === "context" ? <MenuActionList actions={selectedMenuActions()} /> : menu.kind === "places" ? <>
-              <MenuActionList actions={[{ key: "bookmark", label: t(bookmarkedHere ? "sftp.removeBookmark" : "sftp.addBookmark"), disabled: path === "", run: () => sftpPlaces.toggleBookmark(alias, path) }]} />
-              {bookmarkedPaths.length > 0 ? <h4 className="px-2.5 pt-3 text-xs text-ink-muted">{t("sftp.bookmarks")}</h4> : null}
-              {bookmarkedPaths.map((bookmark) => <div key={bookmark} className="flex items-center"><button type="button" role="menuitem" onClick={() => goTo(bookmark)} className="min-h-11 min-w-0 flex-1 truncate rounded px-2.5 text-left font-mono text-sm active:bg-select-fill">{bookmark}</button><button type="button" role="menuitem" aria-label={t("sftp.removeBookmarkFor", { path: bookmark })} onClick={() => sftpPlaces.removeBookmark(alias, bookmark)} className="flex size-11 shrink-0 items-center justify-center text-ink-muted"><Icon name="close" className="size-4" /></button></div>)}
-              {recentPaths.length > 0 ? <h4 className="px-2.5 pt-3 text-xs text-ink-muted">{t("sftp.recentPaths")}</h4> : null}
-              {recentPaths.map((recent) => <button key={recent} type="button" role="menuitem" onClick={() => goTo(recent)} className="block min-h-11 w-full truncate rounded px-2.5 text-left font-mono text-sm active:bg-select-fill">{recent}</button>)}
-            </> : <MenuActionList actions={folderMenuActions()} />}
+            {menu.kind === "selected" || menu.kind === "context" ? <MenuActionList actions={selectedMenuActions()} /> : <MenuActionList actions={folderMenuActions()} />}
           </div>
         </ModalShell>
       ) : null}

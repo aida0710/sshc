@@ -37,8 +37,8 @@ sshcのSFTPは、安全なアップロード／ダウンロード、フォルダ
 | Back／Forward履歴 | 対応 | リモート・ローカルともhostを切り替えるまでpath履歴を保持する。ローカルは別tab表示中も履歴と一覧を保持する | 維持 |
 | Home directoryへ移動 | 対応 | serverのworking directoryを再解決して移動 | 維持 |
 | Root directoryへ移動 | 対応 | navigation buttonまたは`/`の直接入力 | 維持 |
-| directory bookmark | 対応 | 場所menuでhost単位のbookmarkを追加／解除し、選ぶと移動する | 共通bookmarkは必要になった時点で検討 |
-| 最近開いたdirectory | 対応 | 場所menuにhost単位で直近10件を新しい順に表示する | 維持 |
+| directory bookmark | 未対応 | 2026-09-17に場所menuごと削除。Back／Forward履歴とpath直接入力で代替する | 持たない |
+| 最近開いたdirectory | 未対応 | bookmarkと同時に削除。tabごとのBack／Forward履歴だけを持つ | 持たない |
 | directory tree | 未対応 | 一覧だけ | desktopの任意表示として検討 |
 | remote検索 | 対応 | 絞り込み欄のEnterまたは虫眼鏡で、開いているディレクトリ配下を再帰検索する。symlinkは辿らず、200件・20,000項目・深さ32で打ち切って`truncated`を返す | 更新日時やサイズでの条件は未対応 |
 | synchronized browsing | 未対応 | local panelはあるが連動操作は未実装 | 2 panel導入後 |
@@ -260,7 +260,7 @@ sshcのSFTPは、安全なアップロード／ダウンロード、フォルダ
 - 空fileとsymbolic linkの作成
 - propertiesの複数変更、owner/group/link target
 - symbolic link作成／編集、directory picker
-- remote search、bookmark、context menu、preview
+- remote search、context menu、preview
 - timestamp／permission／mask／speed limitを含むtransfer option
 
 ### P2 — Commander相当の転送workflow

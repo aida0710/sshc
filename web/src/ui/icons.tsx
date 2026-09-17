@@ -24,7 +24,6 @@ export const iconNames = [
   "menu",
   "search",
   "chevronRight",
-  "star",
   "edit",
   "copy",
 ] as const;
@@ -143,7 +142,6 @@ const shapes: Record<IconName, ReactNode> = {
     </>
   ),
   chevronRight: <path d="M9 5l7 7-7 7" />,
-  star: <path d="M12 3.6l2.6 5.3 5.9.9-4.2 4.1 1 5.8-5.3-2.8-5.3 2.8 1-5.8-4.2-4.1 5.9-.9z" />,
   edit: (
     <>
       <path d="M4 20h4l11-11a2.8 2.8 0 0 0-4-4L4 16z" />
