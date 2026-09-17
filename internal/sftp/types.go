@@ -131,8 +131,9 @@ type DirectoryComparison struct {
 type RemoteTransferOperation string
 
 const (
-	RemoteCopy RemoteTransferOperation = "copy"
-	RemoteMove RemoteTransferOperation = "move"
+	RemoteCopy   RemoteTransferOperation = "copy"
+	RemoteMove   RemoteTransferOperation = "move"
+	RemoteDelete RemoteTransferOperation = "delete"
 )
 
 type RemoteTransferRequest struct {

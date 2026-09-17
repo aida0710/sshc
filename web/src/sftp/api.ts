@@ -98,8 +98,11 @@ export const sftpApi = {
     }, { locallyHandledCodes: transferProblems }));
   },
   async createTransfer(input: CreateTransferJob): Promise<TransferJob> {
+    const actionToken = input.direction === "remote" && input.operation === "delete"
+      ? await issueAction("sftp.delete", `${input.alias}:${input.remotePath}`)
+      : null;
     return transferJob(await apiClient.mutate<unknown>("/api/v1/sftp/transfers", {
-      method: "POST", headers: jsonHeaders,
+      method: "POST", headers: actionToken === null ? jsonHeaders : { ...jsonHeaders, "X-SSHC-Action": actionToken },
       body: JSON.stringify({ sourceAlias: "", sourcePath: "", operation: "", overwrite: false, ...input }),
     }));
   },

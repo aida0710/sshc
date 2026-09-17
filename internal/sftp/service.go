@@ -233,7 +233,15 @@ func copyDownloadSequential(
 			progress(DownloadPartProgress{Index: 0, TransferredBytes: written, TotalBytes: size})
 		}}
 	}
-	written, err := copyContext(ctx, output, io.LimitReader(source, size), 0)
+	var written int64
+	if fastSource, ok := source.(io.WriterTo); ok {
+		// pkg/sftp pipelines reads only through File.WriteTo. Wrapping the
+		// source in LimitReader/copyContext forces one 32 KiB request per RTT.
+		// Bound the writer instead so the pipelined path remains available.
+		written, err = fastSource.WriteTo(&boundedContextWriter{ctx: ctx, destination: output, remaining: size})
+	} else {
+		written, err = copyContext(ctx, output, io.LimitReader(source, size), 0)
+	}
 	if err != nil {
 		return 0, err
 	}
@@ -246,6 +254,24 @@ func copyDownloadSequential(
 		return 0, extraErr
 	}
 	return written, nil
+}
+
+type boundedContextWriter struct {
+	ctx         context.Context
+	destination io.Writer
+	remaining   int64
+}
+
+func (w *boundedContextWriter) Write(contents []byte) (int, error) {
+	if err := w.ctx.Err(); err != nil {
+		return 0, err
+	}
+	if int64(len(contents)) > w.remaining {
+		return 0, ErrConflict
+	}
+	n, err := w.destination.Write(contents)
+	w.remaining -= int64(n)
+	return n, err
 }
 
 type downloadRange struct {
@@ -1085,25 +1111,9 @@ func (s Service) Rename(ctx context.Context, alias, from, to string) (Entry, err
 	return entryFrom(path.Dir(target), namedInfo{FileInfo: info, name: path.Base(target)}), nil
 }
 
-// Delete はファイル、symlink、空ディレクトリだけを削除する。再帰削除は提供しない。
+// Delete は選択された項目を配下ごと削除する。
 func (s Service) Delete(ctx context.Context, alias, remotePath string) error {
-	cleaned, err := cleanPublicPath(remotePath, false)
-	if err != nil {
-		return err
-	}
-	remote, err := s.openRequest(ctx, alias)
-	if err != nil {
-		return err
-	}
-	defer remote.Close()
-	info, err := remote.Lstat(cleaned)
-	if err != nil {
-		return err
-	}
-	if info.IsDir() {
-		return remote.RemoveDirectory(cleaned)
-	}
-	return remote.Remove(cleaned)
+	return s.DeleteWithProgress(ctx, alias, remotePath, -1, nil)
 }
 
 func (s Service) open(ctx context.Context, alias string) (Remote, error) {

@@ -159,11 +159,22 @@ function needsReconciliation(job: ManagedTransferJob): boolean {
     job.problem === "sftp_reconciliation_required";
 }
 
-export function TransferManagerList() {
+export function TransferManagerList({ openRequest = 0 }: { openRequest?: number }) {
   const t = useTranslate();
   const [view, setView] = useState<QueueView>(restoreView);
   const compactViewport = useMediaQuery(mobileViewportQuery);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const handledOpenRequest = useRef(0);
+  useEffect(() => {
+    if (openRequest === 0 || handledOpenRequest.current === openRequest) return;
+    handledOpenRequest.current = openRequest;
+    setView((current) => {
+      const updated = { ...current, collapsed: false };
+      rememberView(updated);
+      return updated;
+    });
+    if (compactViewport) setSheetOpen(true);
+  }, [openRequest, compactViewport]);
   const dockTrigger = useRef<HTMLButtonElement>(null);
   const closeSheet = useRef<HTMLButtonElement>(null);
   const headingId = useId();
@@ -414,7 +425,7 @@ export function TransferManagerList() {
           return (
             <section key={batchId} className="rounded-md bg-surface-subtle/70 p-2" aria-label={first.batchName}>
               <div className="mb-1 flex flex-wrap items-center gap-2">
-                <span aria-hidden="true">{first.direction === "upload" ? "↑" : first.direction === "download" ? "↓" : "⇄"}</span>
+                <span aria-hidden="true">{first.operation === "delete" ? "×" : first.direction === "upload" ? "↑" : first.direction === "download" ? "↓" : "⇄"}</span>
                 <span className="min-w-0 grow truncate font-medium" title={first.batchName}>{first.batchName}</span>
                 <span className="text-ink-muted">{t(first.batchKind === "folder" ? "sftp.manager.folder" : "sftp.manager.file")}</span>
                 <span className="tabular-nums text-ink-muted">{completed}/{items.length}</span>
@@ -434,9 +445,9 @@ export function TransferManagerList() {
                       <span className="truncate font-mono" title={`${item.alias}:${item.remotePath}`}>{item.name}</span>
                       <span className="flex items-center justify-self-end gap-1">
                         <progress className="w-14" max={Math.max(total, 1)} value={item.transferredBytes} />
-                        <span className="tabular-nums text-ink-muted">{item.totalBytes < 0 ? bytes(item.transferredBytes) : `${bytes(item.transferredBytes)}/${bytes(item.totalBytes)}`}</span>
+                        <span className="tabular-nums text-ink-muted">{item.operation === "delete" ? `${item.transferredBytes}/${Math.max(item.totalBytes, 0)}` : item.totalBytes < 0 ? bytes(item.transferredBytes) : `${bytes(item.transferredBytes)}/${bytes(item.totalBytes)}`}</span>
                       </span>
-                      <span className="tabular-nums text-ink-muted">{item.bytesPerSecond > 0 ? `${bytes(item.bytesPerSecond)}/s` : "—"}</span>
+                      <span className="tabular-nums text-ink-muted">{item.operation === "delete" ? t("sftp.manager.delete") : item.bytesPerSecond > 0 ? `${bytes(item.bytesPerSecond)}/s` : "—"}</span>
                       <span className="tabular-nums text-ink-muted">{item.remainingSeconds >= 0 && item.status === "running" ? t("sftp.manager.remaining", { duration: duration(item.remainingSeconds) }) : "—"}</span>
                       <span className="col-span-2 flex flex-wrap items-center justify-end gap-2 whitespace-nowrap">
                         <span className={statusClass(displayedStatus)}>
