@@ -19,6 +19,7 @@ const maxTransferJobs = 200;
 const defaultLargeFileThreshold = 100 << 20;
 const defaultLargeFileParallelism = 4;
 const defaultLargeFileChunkBytes = 32 << 20;
+const localDownloadBatchPrefix = "local_download_";
 
 export type ManagedTransferJob = TransferJob;
 
@@ -94,7 +95,8 @@ function baseName(remotePath: string): string {
   return components[components.length - 1] ?? remotePath;
 }
 
-function networkReady(job: ManagedTransferJob, files: Map<string, File>): boolean {
+function networkReady(job: ManagedTransferJob, files: Map<string, File>, targets: Map<string, DownloadTarget>): boolean {
+  if (job.direction === "download" && job.batchId.startsWith(localDownloadBatchPrefix)) return targets.has(job.id);
   return job.direction === "remote" || job.direction === "download" || files.has(job.id);
 }
 
@@ -145,6 +147,25 @@ export class SFTPTransferManager {
   getLargeFileParallelism = (): number => this.largeFileParallelism;
   getLargeFileChunkBytes = (): number => this.largeFileChunkBytes;
   hasUploadSource = (id: string): boolean => this.files.has(id);
+  getUnattachedLocalDownloadCount = (): number => this.jobs.filter((job) =>
+    job.direction === "download" && job.batchId.startsWith(localDownloadBatchPrefix) &&
+    ["queued", "paused", "failed"].includes(job.status) && !this.downloadTargets.has(job.id)).length;
+
+  async attachLocalDownloadDirectory(directory: FileSystemDirectoryHandle): Promise<number> {
+    const pending = this.jobs.filter((job) => job.direction === "download" &&
+      job.batchId.startsWith(localDownloadBatchPrefix) && ["queued", "paused", "failed"].includes(job.status) &&
+      !this.downloadTargets.has(job.id));
+    for (const job of pending) this.downloadTargets.set(job.id, { directory });
+    try {
+      await Promise.all(pending.map(async (job) => {
+        if (job.status === "paused") await this.resume(job.id);
+        else if (job.status === "failed") await this.retry(job.id);
+      }));
+    } finally {
+      this.kick();
+    }
+    return pending.length;
+  }
 
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);
@@ -265,7 +286,8 @@ export class SFTPTransferManager {
     const id = identifier("transfer");
     const name = baseName(remotePath);
     const job = await this.api.createTransfer({
-      id, batchId: identifier("batch"), batchName: name, batchKind: kind, alias,
+      id, batchId: target === undefined ? identifier("batch") : `${localDownloadBatchPrefix}${identifier("batch")}`,
+      batchName: name, batchKind: kind, alias,
       direction: "download", kind, name, remotePath, totalBytes, lastModified: 0,
     });
     this.downloadChunks.set(id, []);
@@ -317,7 +339,7 @@ export class SFTPTransferManager {
 
   async resume(id: string): Promise<void> {
     const job = this.find(id);
-    if (job === undefined || !job.allowedActions.includes("resume") || !networkReady(job, this.files)) return;
+    if (job === undefined || !job.allowedActions.includes("resume") || !networkReady(job, this.files, this.downloadTargets)) return;
     if (job.direction === "download" && job.kind === "folder") {
       this.downloadChunks.set(id, []);
       const sink = this.downloadSinks.get(id);
@@ -331,7 +353,7 @@ export class SFTPTransferManager {
 
   async retry(id: string): Promise<void> {
     const job = this.find(id);
-    if (job === undefined || !job.allowedActions.includes("retry") || !networkReady(job, this.files)) return;
+    if (job === undefined || !job.allowedActions.includes("retry") || !networkReady(job, this.files, this.downloadTargets)) return;
     const reset = job.direction === "download" && job.kind === "folder";
     if (reset) {
       this.downloadChunks.set(id, []);
@@ -465,7 +487,7 @@ export class SFTPTransferManager {
       const job = this.jobs.find((candidate) => candidate.status === "queued" &&
         candidate.direction !== "remote" &&
         !this.inFlight.has(candidate.id) && (this.retryAfter.get(candidate.id) ?? 0) <= this.now() &&
-        networkReady(candidate, this.files));
+        networkReady(candidate, this.files, this.downloadTargets));
       if (job === undefined) return;
       this.active += 1;
       this.inFlight.add(job.id);
@@ -782,6 +804,9 @@ export class SFTPTransferManager {
     const existing = this.downloadSinks.get(job.id);
     if (existing !== undefined) return existing;
     const target = this.downloadTargets.get(job.id);
+    if (target === undefined && job.batchId.startsWith(localDownloadBatchPrefix)) {
+      throw new Error("sftp_local_target_missing");
+    }
     if (target !== undefined) {
       const name = await this.availableDownloadName(target.directory, job);
       const handle = await target.directory.getFileHandle(name, { create: true });

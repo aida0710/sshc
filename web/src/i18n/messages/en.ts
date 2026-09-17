@@ -112,6 +112,7 @@ export const en = {
   "sftp.local.upload": "Upload selection",
   "sftp.local.connectRemote": "Connect the remote pane to upload files.",
   "sftp.local.dropHint": "Drop remote files here to save them in this folder. Folders are saved as ZIP files.",
+  "sftp.local.resumeDownloads": "Save {count} pending downloads to this folder",
   "sftp.host": "Host",
   "sftp.noHosts": "No saved hosts",
   "sftp.chooseHost": "Select a host",

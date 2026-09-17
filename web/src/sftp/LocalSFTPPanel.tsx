@@ -41,6 +41,7 @@ export function LocalSFTPPanel({ remote, onQueueOpen, onDirectoryChange }: {
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState("");
   const [dragging, setDragging] = useState(false);
+  const [pendingDownloads, setPendingDownloads] = useState(sftpTransferManager.getUnattachedLocalDownloadCount);
   const completed = useRef(new Set(sftpTransferManager.getSnapshot()
     .filter((job) => job.direction === "download" && job.status === "completed").map((job) => job.id)));
   const directory = stack.at(-1);
@@ -56,6 +57,10 @@ export function LocalSFTPPanel({ remote, onQueueOpen, onDirectoryChange }: {
       ? left.handle.name.localeCompare(right.handle.name) : left.handle.kind === "directory" ? -1 : 1);
     setEntries(listed);
     setSelected(new Set());
+  }, []);
+
+  useEffect(() => {
+    return sftpTransferManager.subscribe(() => setPendingDownloads(sftpTransferManager.getUnattachedLocalDownloadCount()));
   }, []);
 
   useEffect(() => {
@@ -191,6 +196,21 @@ export function LocalSFTPPanel({ remote, onQueueOpen, onDirectoryChange }: {
     }
   }
 
+  async function resumeLocalDownloads() {
+    if (directory === undefined) return;
+    setBusy(true);
+    setProblem("");
+    try {
+      await sftpTransferManager.attachLocalDownloadDirectory(directory);
+      setPendingDownloads(sftpTransferManager.getUnattachedLocalDownloadCount());
+      onQueueOpen();
+    } catch (error) {
+      setProblem(failureCode(error) || (error instanceof Error ? error.message : "sftp_failed"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col rounded-lg border border-line bg-card" aria-label={t("sftp.local.heading")}
       onDragOver={(event) => { if (event.dataTransfer.types.includes(remoteEntriesMime)) { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; setDragging(true); } }}
@@ -214,6 +234,10 @@ export function LocalSFTPPanel({ remote, onQueueOpen, onDirectoryChange }: {
             className="rounded bg-accent px-3 py-1.5 text-sm text-white disabled:opacity-40">{t("sftp.local.upload")}</button>
           <span className="min-w-0 truncate text-xs text-ink-muted">{remote?.alias ? `${remote.alias}:${remote.path}` : t("sftp.local.connectRemote")}</span>
         </div>
+        {pendingDownloads > 0 ? <button type="button" onClick={() => { void resumeLocalDownloads(); }} disabled={busy}
+          className="border-b border-line px-3 py-2 text-left text-sm text-accent hover:bg-hover disabled:opacity-40">
+          {t("sftp.local.resumeDownloads", { count: pendingDownloads })}
+        </button> : null}
         <div className={`min-h-0 flex-1 overflow-auto ${dragging ? "bg-select-fill" : ""}`}>
           {entries.map((entry) => (
             <button key={entry.handle.name} type="button" onClick={(event) => select(event, entry.handle.name)}

@@ -213,6 +213,22 @@ describe("SFTPTransferManager engine ownership", () => {
     expect(await stored.text()).toBe("datamore");
   });
 
+  it("does not redirect a local-folder job to browser downloads after reload", async () => {
+    const api = engineAPI();
+    const initial = new SFTPTransferManager(api, 0);
+    await initial.addDownload("edge", "/remote.bin", "file", 4, {
+      directory: {} as FileSystemDirectoryHandle,
+    });
+    const restored = new SFTPTransferManager(api, 0);
+    await restored.reconcile();
+    expect(restored.getSnapshot()[0]?.status).toBe("queued");
+    expect(restored.getUnattachedLocalDownloadCount()).toBe(1);
+    expect(api.streamDownload).not.toHaveBeenCalled();
+    expect(api.saveDownload).not.toHaveBeenCalled();
+    expect(await restored.attachLocalDownloadDirectory({} as FileSystemDirectoryHandle)).toBe(1);
+    expect(restored.getUnattachedLocalDownloadCount()).toBe(0);
+  });
+
   it("resumes a file download after a transient disconnect", async () => {
     let calls = 0;
     const api = engineAPI();

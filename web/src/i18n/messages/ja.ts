@@ -115,6 +115,7 @@ export const ja = {
   "sftp.local.upload": "選択項目をアップロード",
   "sftp.local.connectRemote": "アップロードするにはリモート側を接続してください。",
   "sftp.local.dropHint": "リモートのファイルをここへドロップすると、このフォルダに保存します。フォルダはZIPになります。",
+  "sftp.local.resumeDownloads": "保留中のダウンロード{count}件をこのフォルダに保存",
   "sftp.host": "ホスト",
   "sftp.noHosts": "保存済みホストなし",
   "sftp.chooseHost": "ホストを選択",

@@ -30,7 +30,7 @@ sshcのSFTPは、安全なアップロード／ダウンロード、フォルダ
 | WinSCP機能 | 状態 | sshcの現状 | 実装方針 |
 |---|---|---|---|
 | Explorer型の単一remote panel | 対応 | SFTP画面が相当 | 維持 |
-| Commander型のlocal／remote 2 panel | 部分対応 | desktopの対応ブラウザでは右ペインでPCのフォルダを開き、選択項目をリモートへアップロードできる。リモートのダウンロードは選択したフォルダへ直接ストリーム保存する。リモートフォルダはZIPとして保存する | File System Access API非対応ブラウザ、モバイル、ローカル／リモートの同期は未対応 |
+| Commander型のlocal／remote 2 panel | 部分対応 | desktopの対応ブラウザでは右ペインでPCのフォルダを開き、選択項目をリモートへアップロードできる。リモートのダウンロードは選択したフォルダへ直接ストリーム保存する。再読み込み後はフォルダを選び直し、保留中ジョブの保存先を再指定できる。リモートフォルダはZIPとして保存する | File System Access API非対応ブラウザ、モバイル、ローカル／リモートの同期は未対応 |
 | remote／remote 2 panel | 対応 | desktopで2つのhost／directoryを並べる。左右が独立したtab列を持ち、表示中のtab間でfile／directoryをDrag & Dropしてcopy／moveできる | 維持 |
 | `..`による親directory移動 | 対応 | 一覧先頭に表示 | 維持 |
 | path breadcrumb／直接入力 | 対応 | 通常は各階層をクリックできるbreadcrumbとして表示し、編集操作で絶対path入力へ切り替える | 維持 |
