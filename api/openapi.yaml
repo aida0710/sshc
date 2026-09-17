@@ -476,32 +476,6 @@ paths:
         "422": { $ref: "#/components/responses/Problem" }
         "500": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
-  /api/v1/terminal/sessions/{id}/agent/resume:
-    post:
-      operationId: resumeTerminalAgent
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string, minLength: 1, maxLength: 64 }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/ResumeTerminalAgentRequest" }
-      responses:
-        "201":
-          description: The resumed agent session and a one-time stream ticket
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/OpenTerminalSessionResponse" }
-        "400": { $ref: "#/components/responses/Problem" }
-        "401": { $ref: "#/components/responses/Problem" }
-        "404": { $ref: "#/components/responses/Problem" }
-        "409": { $ref: "#/components/responses/Problem" }
-        "422": { $ref: "#/components/responses/Problem" }
-        "500": { $ref: "#/components/responses/Problem" }
-        "503": { $ref: "#/components/responses/Problem" }
   /api/v1/terminal/sessions/{id}:
     patch:
       operationId: renameTerminalSession
@@ -2813,35 +2787,26 @@ components:
         # 現在開いている転送。
         forwards: { type: array, items: { $ref: "#/components/schemas/TerminalForward" } }
         presentation: { $ref: "#/components/schemas/TerminalPresentation" }
-        agent: { $ref: "#/components/schemas/TerminalAgent" }
+        # notificationVersion は、端末内のプログラムが OSC 9／99／777 で通知を
+        # 求めるたびに増える。画面はこれを前回と比べて新しい通知を知る。
+        notificationVersion: { type: integer, minimum: 0 }
+        lastNotification: { $ref: "#/components/schemas/TerminalNotification" }
     TerminalPresentation:
       type: object
       additionalProperties: false
       required: [displayTitle, titleSource, titlePinned]
       properties:
         displayTitle: { type: string }
-        titleSource: { type: string, enum: [user, agent, candidate, connection, fallback] }
+        # terminal は、シェルやプログラムが OSC 0／1／2 で設定した名前である。
+        titleSource: { type: string, enum: [user, terminal, connection, fallback] }
         titlePinned: { type: boolean }
-    TerminalAgent:
+    TerminalNotification:
       type: object
       additionalProperties: false
-      required: [kind, state, resumable, observationVersion, signalVersion]
+      required: [title, body, occurredAt]
       properties:
-        kind: { type: string, enum: [claude, codex, opencode] }
-        state: { type: string, enum: [working, attention, ready, unknown] }
-        cwd: { type: string }
-        model: { type: string }
-        sessionName: { type: string }
-        resumable: { type: boolean }
-        observationVersion: { type: integer, minimum: 0 }
-        signalVersion: { type: integer, minimum: 0 }
-        lastSignal: { $ref: "#/components/schemas/TerminalAgentSignal" }
-    TerminalAgentSignal:
-      type: object
-      additionalProperties: false
-      required: [kind, occurredAt]
-      properties:
-        kind: { type: string, enum: [attention, completed] }
+        title: { type: string }
+        body: { type: string }
         occurredAt: { type: string, format: date-time }
     TerminalConnectionProgress:
       type: object
@@ -2907,7 +2872,7 @@ components:
         generation: { type: integer, format: uint64, minimum: 1 }
         state:
           type: string
-          enum: [connecting, connected, reconnecting, exited, agent-working, agent-attention, agent-ready, agent-ended]
+          enum: [connecting, connected, reconnecting, exited]
         cursor: { $ref: "#/components/schemas/TerminalControlCursor" }
         output:
           type: string
@@ -2960,13 +2925,6 @@ components:
           nullable: true
           minLength: 1
           maxLength: 64
-    ResumeTerminalAgentRequest:
-      type: object
-      additionalProperties: false
-      required: [observationVersion, placement]
-      properties:
-        observationVersion: { type: integer, minimum: 1 }
-        placement: { type: string, enum: [same-pane, new-pane] }
     # streamTicket は使い捨てで、このセッション ID に束縛され、10 秒で失効する。
     # ブラウザは WebSocket のハンドシェイクにカスタムヘッダを付けられないので、
     # これがそのアップグレードを認可する唯一のものである。

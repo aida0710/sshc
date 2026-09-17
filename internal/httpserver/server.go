@@ -67,12 +67,10 @@ type Options struct {
 	Config          *application.Service
 	Keys            KeyService
 	// Connect は、alias ひとつ分の対話セッションを開く。合成の根が組み立てる。
-	Connect           Connector
-	ConnectAgent      AgentConnector
-	ConnectionBinding func(alias string) (string, error)
-	Diagnostics       *diagnostics.Service
-	KnownHosts        *knownhosts.Service
-	RemoteKeys        *remotekey.Service
+	Connect     Connector
+	Diagnostics *diagnostics.Service
+	KnownHosts  *knownhosts.Service
+	RemoteKeys  *remotekey.Service
 	// Recent は、この端末で成功した接続を現在の設定へ解決する。
 	Recent *recent.Service
 	SFTP   *sshcSFTP.Service
@@ -497,8 +495,6 @@ func New(options Options) (*Server, error) {
 			Snippets:            options.Snippets,
 			Actions:             actions,
 			Connect:             options.Connect,
-			ConnectAgent:        options.ConnectAgent,
-			ConnectionBinding:   options.ConnectionBinding,
 			Shell:               options.LoginShell,
 			ShellProfiles:       options.LocalShellProfiles,
 			DefaultShellProfile: options.TerminalLocalShellProfile,

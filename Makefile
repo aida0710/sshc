@@ -11,7 +11,7 @@ FUZZ_TARGETS = \
 	internal/config:FuzzExpandIncludePattern \
 	internal/effective:FuzzParseValues \
 	internal/effective:FuzzResolve \
-	internal/terminal:FuzzAgentDecoderPreservesOrdinaryText \
+	internal/terminal:FuzzOSCObserverChunkingIsInvariant \
 	internal/knownhosts:FuzzParseKnownHostsRoundTrip \
 	internal/acceptance:FuzzAPIRequestBodies \
 	internal/remotesync:FuzzReadSnapshot

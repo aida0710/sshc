@@ -34,8 +34,6 @@ export type OpenTerminalSessionResponse =
   components["schemas"]["OpenTerminalSessionResponse"];
 export type StartTerminalForwardRequest =
   components["schemas"]["StartTerminalForwardRequest"];
-export type ResumeTerminalAgentRequest =
-  components["schemas"]["ResumeTerminalAgentRequest"];
 export type TerminalStreamTicket =
   components["schemas"]["TerminalStreamTicket"];
 export type RecentConnection = components["schemas"]["RecentConnection"];
@@ -138,10 +136,6 @@ export type IntegrationsApi = {
     id: string,
     forwardId: string,
   ): Promise<TerminalSessionList>;
-  resumeTerminalAgent?(
-    id: string,
-    request: ResumeTerminalAgentRequest,
-  ): Promise<OpenTerminalSessionResponse>;
   renameTerminalSession(
     id: string,
     title: string | null,
@@ -476,14 +470,6 @@ export const integrationsApi: IntegrationsApi = {
         {
           method: "DELETE",
         },
-      ),
-    );
-  },
-  async resumeTerminalAgent(id, request) {
-    return validateOpenTerminalSession(
-      await postJSON<unknown>(
-        `/api/v1/terminal/sessions/${encodeURIComponent(id)}/agent/resume`,
-        request,
       ),
     );
   },

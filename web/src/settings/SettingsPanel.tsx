@@ -17,15 +17,15 @@ import { fontStack, fonts } from "../terminal/fonts";
 import { palettes } from "../terminal/palettes";
 import {
   browserNotificationPermission,
-  agentSoundPresets,
-  loadAgentSoundPreferences,
-  playAgentSound,
+  loadNotificationSoundPreferences,
+  notificationSoundPresets,
+  playNotificationSound,
   requestBrowserNotificationPermission,
-  saveAgentSoundPreferences,
+  saveNotificationSoundPreferences,
   showBrowserNotification,
-  type AgentSoundPreferences,
   type BrowserNotificationPermission,
-} from "../terminal/agentNotifications";
+  type NotificationSoundPreferences,
+} from "../terminal/terminalNotifications";
 import type { TerminalSessionsState } from "../terminal/sessions";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { PasswordField } from "../ui/PasswordField";
@@ -207,13 +207,13 @@ export function SettingsPanel({
   );
   const [notificationBusy, setNotificationBusy] = useState(false);
   const [notificationError, setNotificationError] = useState("");
-  const [notificationSounds, setNotificationSounds] = useState<AgentSoundPreferences>(() =>
-    loadAgentSoundPreferences()
+  const [notificationSounds, setNotificationSounds] = useState<NotificationSoundPreferences>(() =>
+    loadNotificationSoundPreferences()
   );
 
-  function changeNotificationSounds(next: AgentSoundPreferences) {
+  function changeNotificationSounds(next: NotificationSoundPreferences) {
     setNotificationSounds(next);
-    saveAgentSoundPreferences(next);
+    saveNotificationSoundPreferences(next);
   }
 
   useEffect(() => {
@@ -843,45 +843,23 @@ export function SettingsPanel({
               </ActionArea>
             ) : null}
             <div className="grid gap-4 border-t border-line pt-5 sm:grid-cols-2">
-              <Field label={t("terminal.notificationAttentionSound")} hint={t("terminal.notificationSoundHint")}>
+              <Field label={t("terminal.notificationSound")} hint={t("terminal.notificationSoundHint")}>
                 <div className="flex gap-2">
                   <select
                     className={control}
-                    value={notificationSounds.attention}
+                    value={notificationSounds.sound}
                     onChange={(event) => changeNotificationSounds({
                       ...notificationSounds,
-                      attention: event.target.value as AgentSoundPreferences["attention"],
+                      sound: event.target.value as NotificationSoundPreferences["sound"],
                     })}
                   >
-                    {agentSoundPresets.map((preset) => (
+                    {notificationSoundPresets.map((preset) => (
                       <option key={preset} value={preset}>{t(`terminal.notificationSound.${preset}`)}</option>
                     ))}
                   </select>
                   <Button
-                    aria-label={t("terminal.notificationPreviewAttention")}
-                    onClick={() => playAgentSound("attention", notificationSounds)}
-                  >
-                    {t("terminal.notificationPreview")}
-                  </Button>
-                </div>
-              </Field>
-              <Field label={t("terminal.notificationCompletedSound")} hint={t("terminal.notificationSoundHint")}>
-                <div className="flex gap-2">
-                  <select
-                    className={control}
-                    value={notificationSounds.completed}
-                    onChange={(event) => changeNotificationSounds({
-                      ...notificationSounds,
-                      completed: event.target.value as AgentSoundPreferences["completed"],
-                    })}
-                  >
-                    {agentSoundPresets.map((preset) => (
-                      <option key={preset} value={preset}>{t(`terminal.notificationSound.${preset}`)}</option>
-                    ))}
-                  </select>
-                  <Button
-                    aria-label={t("terminal.notificationPreviewCompleted")}
-                    onClick={() => playAgentSound("completed", notificationSounds)}
+                    aria-label={t("terminal.notificationPreviewSound")}
+                    onClick={() => playNotificationSound(notificationSounds)}
                   >
                     {t("terminal.notificationPreview")}
                   </Button>
