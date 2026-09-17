@@ -1,4 +1,3 @@
-import { matchesShortcut, shortcutsBlocked } from "../keyconfig/bindings";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
@@ -18,27 +17,30 @@ import { attachImeKeys } from "./imeKeys";
 import { attachSelectionOverlay, selectionHeldIn } from "./selectionOverlay";
 import { prefersNativeSelection } from "./nativeSelection";
 import { cellHeight, observeTerminalSize, syncTerminalInputPosition } from "./metrics";
-import { newTouchScroll } from "./touchScroll";
+import { attachTouchScroll } from "./touchScroll";
 import { KeyBar, applyModifiers, encodeKey, type Modifiers } from "./KeyBar";
 import { openStream, type TerminalStream } from "./stream";
 import { attachTerminalClipboard, prepareTerminalPaste, type TerminalClipboardSettings } from "./clipboard";
-import { validSearchPattern, type TerminalSearchSettings } from "./search";
-import { terminalProblemKey } from "./sessions";
 import { terminalDisplayTitle, terminalSubtitle } from "./terminalPresentation";
 import { recentBufferText } from "./buffer";
 import { attachOsc52Clipboard } from "./osc52";
 import { attachKittyKeyboardProtocol, encodeIntlYen } from "./kittyKeyboard";
-import { findTerminalLinks, modifierOpensLink, osc8Link } from "./links";
+import { modifierOpensLink, osc8Link } from "./links";
+import { attachLinkProvider } from "./linkProvider";
 import { openTerminalURL, TerminalLinkPopover, type RemotePathAction, type TerminalLinkSelection } from "./TerminalLinkPopover";
 import { TerminalQuickCommands } from "./TerminalQuickCommands";
 import { TerminalOverflowMenu } from "./TerminalOverflowMenu";
 import { TerminalPortForwards } from "./TerminalPortForwards";
 import { attachWebglRenderer } from "./webgl";
 import { attachOSC7Directory } from "./osc7";
-import { attachOSC133Commands } from "./osc133";
+import { attachCommandMarkers } from "./commandMarkers";
 import { showBrowserNotification } from "./terminalNotifications";
 import { applyTerminalRuntimeOptions } from "./runtimeOptions";
 import { Icon } from "../ui/icons";
+import { useTerminalSearch } from "./useTerminalSearch";
+import { TerminalSearchBar } from "./TerminalSearchBar";
+import { TerminalStatusBanners } from "./TerminalStatusBanners";
+import type { StreamLink } from "./streamLink";
 import { inspectTerminalPaste } from "./pasteGuard";
 import { TerminalPasteDialog } from "./TerminalPasteDialog";
 import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
@@ -66,12 +68,6 @@ type TerminalViewProps = {
   onForwardsChanged?: () => void | Promise<void>;
   jisYenBackslash?: boolean;
 };
-
-type Link =
-  | { phase: "live" }
-  | { phase: "connecting"; attempt: number }
-  | { phase: "waiting"; attempt: number; seconds: number }
-  | { phase: "stopped"; gone: boolean };
 
 const backoff = [1, 2, 4, 8, 15];
 
@@ -107,7 +103,6 @@ export function TerminalView({
   reducedMotionRef.current = reducedMotion;
   const host = useRef<HTMLDivElement>(null);
   const region = useRef<HTMLElement>(null);
-  const searchInput = useRef<HTMLInputElement>(null);
   const backgroundURL = useBackgroundImage(background ?? "");
   const backgroundConfigured = (background ?? "") !== "";
   const hasBackground = backgroundURL !== "";
@@ -116,22 +111,8 @@ export function TerminalView({
   const clipboardSettings = useRef<TerminalClipboardSettings>({ copyOnSelect, rightClickPaste });
   clipboardSettings.current = { copyOnSelect, rightClickPaste };
   const [problem, setProblem] = useState("");
-  const [manualReconnectBusy, setManualReconnectBusy] = useState(false);
-  const [stopReconnectBusy, setStopReconnectBusy] = useState(false);
-  const [link, setLink] = useState<Link>({ phase: "connecting", attempt: 1 });
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchCaseSensitive, setSearchCaseSensitive] = useState(false);
-  const [searchRegex, setSearchRegex] = useState(false);
-  const [searchInvalid, setSearchInvalid] = useState(false);
-  const [searchResult, setSearchResult] = useState({ index: -1, total: 0 });
-  const searchQueryRef = useRef("");
-  searchQueryRef.current = searchQuery;
-  const searchSettingsRef = useRef<TerminalSearchSettings>({ caseSensitive: false, regex: false });
-  searchSettingsRef.current = { caseSensitive: searchCaseSensitive, regex: searchRegex };
-  const searchStep = useRef<(direction: 1 | -1) => void>(() => {});
-  const searchRefresh = useRef<() => void>(() => {});
-  const searchClear = useRef<() => void>(() => {});
+  const [link, setLink] = useState<StreamLink>({ phase: "connecting", attempt: 1 });
+  const search = useTerminalSearch({ shortcutActive: searchShortcutActive, region });
   const copyContext = useRef<() => void>(() => {});
   const [osc52Enabled, setOsc52Enabled] = useState(initialOsc52Enabled);
   const osc52EnabledRef = useRef(initialOsc52Enabled);
@@ -165,52 +146,6 @@ export function TerminalView({
     setCurrentDirectory("");
     setPendingPaste(null);
   }, [initialOsc52Enabled, session.id, session.state]);
-
-  async function stopReconnecting() {
-    if (onStopReconnect === undefined || stopReconnectBusy) return;
-    setStopReconnectBusy(true);
-    try {
-      await onStopReconnect();
-    } finally {
-      setStopReconnectBusy(false);
-    }
-  }
-
-  async function reconnectExitedSession() {
-    if (onReconnect === undefined || manualReconnectBusy) return;
-    setManualReconnectBusy(true);
-    setProblem("");
-    try {
-      if (await onReconnect()) {
-        control.current.now();
-        return;
-      }
-      setProblem(t("terminal.manualReconnectFailed"));
-    } finally {
-      setManualReconnectBusy(false);
-    }
-  }
-
-  useEffect(() => {
-    const openSearch = (event: KeyboardEvent) => {
-      if (!(searchShortcutActive ?? region.current?.contains(document.activeElement))) return;
-      if (!matchesShortcut(event, "terminalSearch") || shortcutsBlocked(event)) return;
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      if (!event.repeat) {
-        setSearchOpen(true);
-        searchInput.current?.focus();
-        searchInput.current?.select();
-      }
-    };
-    window.addEventListener("keydown", openSearch, true);
-    return () => window.removeEventListener("keydown", openSearch, true);
-  }, [searchShortcutActive]);
-
-  useEffect(() => {
-    if (searchOpen) searchRefresh.current();
-    else searchClear.current();
-  }, [searchOpen, searchQuery, searchCaseSensitive, searchRegex]);
 
   useEffect(() => {
     if (terminalNotice === "") return;
@@ -251,9 +186,9 @@ export function TerminalView({
       },
     });
     const fit = new FitAddon();
-    const search = new SearchAddon({ highlightLimit: 1000 });
+    const searchAddon = new SearchAddon({ highlightLimit: 1000 });
     view.loadAddon(fit);
-    view.loadAddon(search);
+    view.loadAddon(searchAddon);
     view.open(container);
     let webgl: { dispose(): void } | null = null;
     let terminalDisposed = false;
@@ -266,54 +201,7 @@ export function TerminalView({
     });
     terminal.current = view;
 
-    const searchResultSubscription = search.onDidChangeResults((result) => {
-      setSearchResult({ index: result.resultIndex, total: result.resultCount });
-    });
-
-    const searchOptions = (incremental: boolean) => {
-      const style = getComputedStyle(container);
-      const match = style.getPropertyValue("--ui-term-yellow").trim();
-      const active = style.getPropertyValue("--ui-term-bright-yellow").trim();
-      return {
-        ...searchSettingsRef.current,
-        incremental,
-        decorations: {
-          matchBackground: match,
-          matchBorder: active,
-          matchOverviewRuler: active,
-          activeMatchBackground: active,
-          activeMatchBorder: match,
-          activeMatchColorOverviewRuler: match,
-        },
-      };
-    };
-    const runSearch = (direction: 1 | -1, incremental: boolean) => {
-      const query = searchQueryRef.current;
-      if (!validSearchPattern(query, searchSettingsRef.current)) {
-        search.clearDecorations();
-        view.clearSelection();
-        setSearchInvalid(true);
-        setSearchResult({ index: -1, total: 0 });
-        return;
-      }
-      setSearchInvalid(false);
-      if (query === "") {
-        search.clearDecorations();
-        view.clearSelection();
-        setSearchResult({ index: -1, total: 0 });
-        return;
-      }
-      if (direction === 1) search.findNext(query, searchOptions(incremental));
-      else search.findPrevious(query, searchOptions(false));
-    };
-    searchStep.current = (direction) => runSearch(direction, false);
-    searchRefresh.current = () => runSearch(1, true);
-    searchClear.current = () => {
-      search.clearDecorations();
-      view.clearSelection();
-      setSearchResult({ index: -1, total: 0 });
-      setSearchInvalid(false);
-    };
+    const unbindSearch = search.bind(view, searchAddon, container);
     copyContext.current = () => {
       const text = recentBufferText(view.buffer.active);
       if (text === "") {
@@ -334,51 +222,21 @@ export function TerminalView({
       refused: () => setProblem(t("terminal.clipboardRefused")),
     });
     const osc7Directory = attachOSC7Directory(view.parser, setCurrentDirectory);
-    const commandDecorations = new Set<{ dispose(): void }>();
-    const osc133Commands = attachOSC133Commands(view.parser, {
-      onCommandStarted: () => {
-        const marker = view.registerMarker();
-        const decoration = view.registerDecoration({ marker, width: 1, layer: "top" });
-        if (decoration === undefined) return;
-        commandDecorations.add(decoration);
-        decoration.onRender((element) => element.classList.add("sshc-command-marker"));
-        decoration.onDispose(() => commandDecorations.delete(decoration));
-      },
-      onCommandCompleted: ({ durationMilliseconds }) => {
-        if (durationMilliseconds < 30_000 || !document.hidden) return;
-        showBrowserNotification({
-          title: "sshc",
-          body: t("terminal.longCommandCompleted", {
-            subject: terminalDisplayTitle(session),
-            seconds: String(Math.round(durationMilliseconds / 1000)),
-          }),
-          tag: `sshc-command-${session.id}`,
-        });
-      },
+    const commandMarkers = attachCommandMarkers(view, ({ durationMilliseconds }) => {
+      if (durationMilliseconds < 30_000 || !document.hidden) return;
+      showBrowserNotification({
+        title: "sshc",
+        body: t("terminal.longCommandCompleted", {
+          subject: terminalDisplayTitle(session),
+          seconds: String(Math.round(durationMilliseconds / 1000)),
+        }),
+        tag: `sshc-command-${session.id}`,
+      });
     });
-    const terminalLinks = view.registerLinkProvider({
-      provideLinks: (bufferLineNumber, callback) => {
-        const line = view.buffer.active.getLine(bufferLineNumber - 1)?.translateToString(true) ?? "";
-        const matches = findTerminalLinks(line, session.kind === "ssh");
-        callback(matches.length === 0 ? undefined : matches.map((match) => ({
-          text: match.text,
-          range: {
-            start: { x: match.start + 1, y: bufferLineNumber },
-            end: { x: match.end, y: bufferLineNumber },
-          },
-          activate: (event: MouseEvent) => {
-            if (match.kind === "url" && modifierOpensLink(event)) {
-              openTerminalURL(match.target);
-              return;
-            }
-            setLinkSelection({
-              link: match,
-              x: event.clientX + 8,
-              y: event.clientY + 8,
-            });
-          },
-        })));
-      },
+    const terminalLinks = attachLinkProvider(view, {
+      remote: session.kind === "ssh",
+      open: openTerminalURL,
+      select: (link, event) => setLinkSelection({ link, x: event.clientX + 8, y: event.clientY + 8 }),
     });
 
     let stream: TerminalStream | null = null;
@@ -415,32 +273,10 @@ export function TerminalView({
     measure();
     refit.current = fitAndSync;
 
-    const scroll = newTouchScroll(view, () => cellHeight(view, container), {
-      canScroll: () => !selectionHeldIn(container),
+    const detachTouchScroll = attachTouchScroll(container, view, () => cellHeight(view, container), {
+      selectionHeld: () => selectionHeldIn(container),
       reducedMotion: () => reducedMotionRef.current,
     });
-    const single = (event: TouchEvent): Touch | null =>
-      event.touches.length === 1 ? (event.touches[0] ?? null) : null;
-    const touchStart = (event: TouchEvent) => {
-      const finger = single(event);
-      if (finger !== null) scroll.start(finger.clientY);
-      else scroll.cancel();
-    };
-    const touchMove = (event: TouchEvent) => {
-      const finger = single(event);
-      if (finger !== null) scroll.move(finger.clientY);
-      else scroll.cancel();
-    };
-    const touchEnd = () => scroll.end();
-    const selectionChanged = () => {
-      if (selectionHeldIn(container)) scroll.cancel();
-    };
-    container.addEventListener("touchstart", touchStart, { passive: true });
-    container.addEventListener("touchmove", touchMove, { passive: true });
-    container.addEventListener("touchend", touchEnd, { passive: true });
-    container.addEventListener("touchcancel", scroll.cancel, { passive: true });
-    container.ownerDocument.addEventListener("selectionchange", selectionChanged);
-
 
     const releaseImeKeys = coarse
       ? attachImeKeys({ container, textarea: view.textarea ?? container })
@@ -508,7 +344,7 @@ export function TerminalView({
             },
           });
           setLink({ phase: "live" });
-          if (!coarse && session.state !== "exited" && !searchInput.current?.parentElement?.contains(document.activeElement)) {
+          if (!coarse && session.state !== "exited" && !search.hasFocus()) {
             view.focus();
           }
           syncSize();
@@ -576,31 +412,22 @@ export function TerminalView({
       terminalDisposed = true;
       clearInterval(timer);
       stopObservingSize();
-      container.removeEventListener("touchstart", touchStart);
-      container.removeEventListener("touchmove", touchMove);
-      container.removeEventListener("touchend", touchEnd);
-      container.removeEventListener("touchcancel", scroll.cancel);
-      container.ownerDocument.removeEventListener("selectionchange", selectionChanged);
-      scroll.cancel();
+      detachTouchScroll();
       releaseImeKeys();
       detachOverlay();
       detachClipboard();
       detachOsc52();
       osc7Directory.dispose();
-      osc133Commands.dispose();
-      for (const decoration of commandDecorations) decoration.dispose();
+      commandMarkers.dispose();
       kittyKeyboard.dispose();
       terminalLinks.dispose();
       webgl?.dispose();
-      searchResultSubscription.dispose();
+      unbindSearch();
       stream?.close();
       view.dispose();
       terminal.current = null;
       sendInput.current = () => {};
       sendPaste.current = () => {};
-      searchStep.current = () => {};
-      searchRefresh.current = () => {};
-      searchClear.current = () => {};
       copyContext.current = () => {};
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -663,7 +490,7 @@ export function TerminalView({
           aria-label={t("terminal.search")}
           title={t("terminal.search")}
           className={`flex shrink-0 items-center justify-center rounded border border-control-line text-xs text-ink-muted hover:bg-select-fill active:bg-select-fill focus:bg-select-fill focus:outline-none ${mobile ? "size-11" : "size-6"}`}
-          onClick={() => setSearchOpen((current) => !current)}
+          onClick={search.toggle}
         >
           <Icon name="search" className="size-3.5" />
         </button>
@@ -704,95 +531,15 @@ export function TerminalView({
           />
         ) : null}
       </div>
-      {problem === "" ? null : (
-        <p role="status" className="shrink-0 border-b border-notice-line bg-notice px-3 py-1.5 text-xs text-notice-ink">
-          {problem}
-        </p>
-      )}
-
-      {session.state !== "reconnecting" ? null : (
-        <div role="status" className="flex shrink-0 flex-wrap items-center gap-2 border-b border-notice-line bg-notice px-3 py-1.5 text-xs text-notice-ink">
-          <p className="min-w-0 grow">
-            {t("terminal.reconnectingAttempt", {
-              attempt: String(session.reconnect?.attempt ?? 1),
-              limit: String(session.reconnect?.limit ?? 1),
-            })}
-          </p>
-          {onStopReconnect === undefined ? null : (
-            <button
-              type="button"
-              disabled={stopReconnectBusy}
-              onClick={() => void stopReconnecting()}
-              className="min-h-8 shrink-0 rounded border border-notice-line px-3 py-1 font-medium text-notice-ink hover:bg-select-fill disabled:opacity-50"
-            >
-              {t("terminal.stopReconnect")}
-            </button>
-          )}
-        </div>
-      )}
-
-      {session.problem === "" ? null : (
-        <p role="alert" className="shrink-0 border-b border-notice-line bg-notice px-3 py-1.5 text-xs text-notice-ink">
-          {t(terminalProblemKey(session.problem))}
-        </p>
-      )}
-
-      {link.phase === "live" ? null : (
-        <div
-          role="status"
-          className="flex shrink-0 items-center gap-2 border-b border-notice-line bg-notice px-3 py-1.5 text-xs text-notice-ink"
-        >
-          <p className="min-w-0 grow">
-            {link.phase === "connecting"
-              ? link.attempt === 1
-                ? t("terminal.linkConnecting")
-                : t("terminal.linkRetrying", { attempt: String(link.attempt) })
-              : link.phase === "waiting"
-                ? t("terminal.linkWaiting", { seconds: String(link.seconds), attempt: String(link.attempt) })
-                : link.gone
-                  ? t("terminal.linkGone")
-                  : t("terminal.linkStopped")}
-          </p>
-          {link.phase === "stopped" && link.gone ? null : (
-            <button
-              type="button"
-              disabled={link.phase === "connecting"}
-              onClick={() => control.current.now()}
-              className="shrink-0 rounded border border-notice-line px-2 py-0.5 text-notice-ink disabled:opacity-50"
-            >
-              {t("terminal.linkNow")}
-            </button>
-          )}
-          {link.phase === "stopped" ? null : (
-            <button
-              type="button"
-              onClick={() => control.current.stop()}
-              className="shrink-0 rounded border border-notice-line px-2 py-0.5 text-notice-ink"
-            >
-              {t("terminal.linkStop")}
-            </button>
-          )}
-        </div>
-      )}
-      {session.exited === undefined ? null : (
-        <div role="status" className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line bg-card px-3 py-1.5 text-xs text-ink-muted">
-          <p className="min-w-0 grow">
-            {session.exited.signal === ""
-              ? t("terminal.exitedWithCode", { code: String(session.exited.code) })
-              : t("terminal.exitedWithSignal", { signal: session.exited.signal })}
-          </p>
-          {session.kind !== "ssh" || session.alias === undefined || onReconnect === undefined ? null : (
-            <button
-              type="button"
-              disabled={manualReconnectBusy}
-              onClick={() => void reconnectExitedSession()}
-              className="min-h-8 shrink-0 rounded border border-control-line bg-control px-3 py-1 font-medium text-ink hover:bg-select-fill disabled:opacity-50"
-            >
-              {t(manualReconnectBusy ? "terminal.manualReconnecting" : "terminal.manualReconnect")}
-            </button>
-          )}
-        </div>
-      )}
+      <TerminalStatusBanners
+        session={session}
+        problem={problem}
+        link={link}
+        onLinkNow={() => control.current.now()}
+        onLinkStop={() => control.current.stop()}
+        {...(onStopReconnect === undefined ? {} : { onStopReconnect })}
+        {...(onReconnect === undefined ? {} : { onReconnect })}
+      />
 
       <div className="relative min-h-0 flex-1 overflow-clip bg-term-bg">
         <div
@@ -811,51 +558,7 @@ export function TerminalView({
           }
           className="absolute inset-0 bg-term-bg"
         />
-        {searchOpen ? (
-          <div className={`absolute inset-x-2 top-2 z-20 items-center gap-1.5 rounded-lg border border-line bg-toolbar/95 p-1.5 shadow-lg backdrop-blur ${mobile ? "grid grid-cols-6" : "left-auto flex w-[34rem]"}`}>
-            <input
-              ref={searchInput}
-              autoFocus
-              aria-label={t("terminal.searchInput")}
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Escape") setSearchOpen(false);
-                else if (event.key === "Enter") searchStep.current(event.shiftKey ? -1 : 1);
-              }}
-              className={`min-w-0 flex-1 rounded border border-control-line bg-control px-2 py-1 ${mobile ? "col-span-6 min-h-11 text-base" : "text-xs"}`}
-              placeholder={t("terminal.searchPlaceholder")}
-            />
-            <button
-              type="button"
-              aria-label={t("terminal.searchCaseSensitive")}
-              aria-pressed={searchCaseSensitive}
-              className={`rounded border px-1.5 py-1 text-xs ${searchCaseSensitive ? "border-accent bg-accent/10 text-accent" : "border-control-line text-ink-muted"}`}
-              onClick={() => setSearchCaseSensitive((current) => !current)}
-            >
-              Aa
-            </button>
-            <button
-              type="button"
-              aria-label={t("terminal.searchRegex")}
-              aria-pressed={searchRegex}
-              className={`rounded border px-1.5 py-1 font-mono text-xs ${searchRegex ? "border-accent bg-accent/10 text-accent" : "border-control-line text-ink-muted"}`}
-              onClick={() => setSearchRegex((current) => !current)}
-            >
-              .*
-            </button>
-            <span role="status" className={`${mobile ? "min-w-0" : "w-14"} text-center text-[11px] ${searchInvalid ? "text-danger" : "text-ink-muted"}`}>
-              {searchInvalid
-                ? t("terminal.searchInvalidRegex")
-                : searchResult.total === 0
-                  ? t("terminal.searchNoResults")
-                  : `${searchResult.index + 1}/${searchResult.total}`}
-            </span>
-            <button type="button" aria-label={t("terminal.searchPrevious")} className="rounded border border-control-line px-2 py-0.5 text-sm" onClick={() => searchStep.current(-1)}>↑</button>
-            <button type="button" aria-label={t("terminal.searchNext")} className="rounded border border-control-line px-2 py-0.5 text-sm" onClick={() => searchStep.current(1)}>↓</button>
-            <button type="button" aria-label={t("terminal.searchClose")} className="rounded px-2 py-0.5 text-sm" onClick={() => setSearchOpen(false)}>×</button>
-          </div>
-        ) : null}
+        {search.open ? <TerminalSearchBar search={search} mobile={mobile} /> : null}
         {terminalNotice === "" ? null : (
           <p role="status" className="absolute bottom-3 right-3 z-20 max-w-[min(24rem,calc(100%-1.5rem))] rounded border border-line bg-toolbar/95 px-3 py-2 text-xs text-ink shadow-lg">
             {terminalNotice}
