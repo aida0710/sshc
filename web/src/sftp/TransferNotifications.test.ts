@@ -3,7 +3,7 @@ import type { Translate } from "../i18n/context";
 import type { TransferNotice } from "./transferManager";
 
 const showBrowserNotification = vi.hoisted(() => vi.fn());
-vi.mock("../terminal/agentNotifications", () => ({ showBrowserNotification }));
+vi.mock("../terminal/terminalNotifications", () => ({ showBrowserNotification }));
 
 const { notifyBackgroundTransfers } = await import("./TransferNotifications");
 

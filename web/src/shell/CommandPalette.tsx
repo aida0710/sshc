@@ -6,8 +6,8 @@ import type { MessageKey } from "../i18n/messages";
 import type { Section } from "../routing/sectionRoute";
 import { Icon } from "../ui/icons";
 import type { TerminalSession } from "../api/integrations";
-import { agentStatusLabel, terminalDisplayTitle } from "../terminal/agentPresentation";
-import type { AgentUnreadBySession } from "../terminal/agentNotifications";
+import { terminalDisplayTitle } from "../terminal/terminalPresentation";
+import type { UnreadSessions } from "../terminal/terminalNotifications";
 import { ModalShell } from "../ui/ModalShell";
 import { PanelState } from "../ui/PanelState";
 
@@ -64,7 +64,7 @@ export function CommandPalette({
   hosts: HostEntry[];
   files: FileNode[];
   sessions: TerminalSession[];
-  unreadBySession: AgentUnreadBySession;
+  unreadBySession: UnreadSessions;
   sectionLabels: Record<Section, MessageKey>;
   onClose: () => void;
   onConnect: (alias: string) => Promise<void> | void;
@@ -114,15 +114,15 @@ export function CommandPalette({
       action: command.run,
     })),
     ...sessions.filter((session) => session.exited === undefined).map((session) => {
-      const unread = unreadBySession.get(session.id);
-      const status = session.agent === undefined ? t("terminal.connected") : agentStatusLabel(t, session);
+      const unread = unreadBySession.has(session.id);
+      const status = t("terminal.connected");
       const destination = session.kind === "ssh" ? session.alias ?? "" : t("terminal.localhost");
       return {
         id: `session:${session.id}`,
         kind: "session" as const,
         label: terminalDisplayTitle(session),
         detail: t("terminal.rowDetail", { status, destination }),
-        search: `session terminal console pane セッション ターミナル ${unread === "attention" ? "@attention attention input 入力待ち" : ""} ${unread === "completed" ? "@completed completed unread 完了 未読" : ""}`,
+        search: `session terminal console pane セッション ターミナル ${unread ? "@unread unread notification 未読 通知" : ""}`,
         action: () => onOpenSession(session.id),
       };
     }),

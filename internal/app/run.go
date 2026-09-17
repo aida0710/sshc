@@ -219,8 +219,6 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 		Snippets:              services.snippets,
 		Passwords:             passwordService,
 		Connect:               ssh.connector(),
-		ConnectAgent:          ssh.agentConnector(),
-		ConnectionBinding:     ssh.connectionBinding,
 		ConnectionOpened: func(alias string) {
 			if err := services.recentStore.Record(alias); err != nil && dependencies.Logger != nil {
 				dependencies.Logger.Warn("record recent SSH connection", "alias", alias, "error", err)

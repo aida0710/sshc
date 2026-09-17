@@ -67,6 +67,6 @@ When an image is renamed, its extension follows the detected format and overall 
 
 Choose a default shell profile and start directory. Detected choices include PowerShell variants on Windows and available zsh, fish, bash, and similar shells on Unix systems.
 
-Browser notification permission is requested only after an explicit click. Configure Coding Agent attention/completion sounds, volume, and test delivery.
+Browser notification permission is requested only after an explicit click. Configure the sound and volume used when a terminal program sends a notification through OSC 9/99/777, and test delivery. See [Titles and notifications](/en/terminal/notifications) for details.
 
 The application theme, display language, notification sounds, and browser registration use browser local storage. Terminal settings, including the terminal color scheme, font, background, and tint, are stored in workspace metadata together with connection-specific settings. The browser registration token is not stored in the workspace or sync snapshots; the device keeps only its verification hash. Vault secrets and sync credentials are never written to plaintext settings.

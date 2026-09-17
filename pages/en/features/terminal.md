@@ -47,11 +47,11 @@ OSC 8 links and detected URLs open in the system browser. A detected remote path
 
 Local shells use the same subsystem as SSH: search, Quick Commands, workspaces, and broadcast commands all apply. On macOS and Linux, sshc supplies the terminal information needed by line editors such as zsh and fish even when the engine was started as a background service.
 
-## Coding Agent integration
+## Titles and notifications
 
-After explicitly installing [sshc-agent-bridge](/en/terminal/agent-bridge), pane headers can show working, attention, and completion states from Claude Code, Codex, and OpenCode. Background attention/completion may trigger notifications. In an SSH pane, you can explicitly resume the agent in the same or a new pane when it provides its own session ID.
+Titles set by shells and programs through OSC 0/1/2 become the pane header and the session list name. Notifications sent through OSC 9/99/777 become unread marks, and browser notifications with a sound while the sshc tab is in the background. See [Titles and notifications](/en/terminal/notifications) for details, including the Claude Code and Codex settings.
 
-The integration is opt-in. Without it, sshc does not infer agent state from ordinary shell output or automatically rerun arbitrary commands.
+sshc never infers program state from ordinary shell output or reruns arbitrary commands on its own.
 
 ## Port forwarding
 

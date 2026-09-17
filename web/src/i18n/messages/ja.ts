@@ -463,46 +463,37 @@ export const ja = {
   "terminal.running": "接続中",
   "terminal.connecting": "接続を開始中",
   "terminal.connected": "接続済み",
-  "terminal.agentWorking": "作業中",
-  "terminal.agentAttention": "入力待ち",
-  "terminal.agentReady": "待機中",
-  "terminal.agentUnknown": "状態不明",
-  "terminal.agentNotificationAttention": "{subject}が入力を待っています",
-  "terminal.agentNotificationCompleted": "{subject}が完了しました",
   "terminal.longCommandCompleted": "{subject} のコマンドが {seconds} 秒で完了しました。",
-  "terminal.unreadAttention": "未読：入力待ち",
-  "terminal.unreadCompleted": "未読：完了",
-  "terminal.unreadWorkspace": "このワークスペースに未読のAgent通知があります",
+  "terminal.unreadNotification": "未読の通知",
+  "terminal.notificationFallback": "このターミナルのプログラムから通知がありました。",
+  "terminal.unreadWorkspace": "このワークスペースに未読のターミナル通知があります",
   "terminal.browserNotificationsHeading": "Notifications",
   "terminal.browserNotificationsDefault":
-    "このタブがバックグラウンドにあるとき、Coding Agent の完了・入力待ちやファイル転送の完了を sshc から通知できます。",
+    "このタブがバックグラウンドにあるとき、ターミナル内のプログラムからの通知（コーディングエージェントの入力待ちなど）やファイル転送の完了を sshc から通知できます。",
   "terminal.browserNotificationsGranted":
     "ブラウザ通知は許可されています。このタブがバックグラウンドにあるときだけ通知します。",
   "terminal.browserNotificationsDenied":
-    "sshc の通知がブロックされています。Coding Agent とファイル転送の通知を使うには、ブラウザのサイト設定で通知を許可してください。",
+    "sshc の通知がブロックされています。ターミナルとファイル転送の通知を使うには、ブラウザのサイト設定で通知を許可してください。",
   "terminal.browserNotificationsUnsupported":
     "このブラウザはWeb通知に対応していません。",
   "terminal.browserNotificationsEnable": "通知を有効にする",
   "terminal.browserNotificationsTest": "テスト通知を送る",
   "terminal.browserNotificationsEnabled": "通知は有効です",
-  "terminal.browserNotificationsReady": "Coding Agent とファイル転送の通知を利用できます。",
+  "terminal.browserNotificationsReady": "ターミナルとファイル転送の通知を利用できます。",
   "terminal.browserNotificationsRequestFailed":
     "通知の許可をリクエストできませんでした。",
   "terminal.browserNotificationsDeliveryFailed":
     "通知は許可されていますが、ブラウザで表示できませんでした。",
-  "terminal.notificationAttentionSound": "入力待ちの通知音",
-  "terminal.notificationCompletedSound": "完了の通知音",
-  "terminal.notificationSoundHint": "このブラウザにだけ保存されます。",
+  "terminal.notificationSound": "通知音",
+  "terminal.notificationSoundHint": "このタブがバックグラウンドにあるとき、ターミナル内のプログラムが通知（OSC 9／99／777）を送ると鳴ります。このブラウザにだけ保存されます。",
+  "terminal.notificationPreviewSound": "通知音を再生",
   "terminal.notificationSound.none": "音なし",
   "terminal.notificationSound.gentle": "やさしい音",
   "terminal.notificationSound.bell": "ベル",
   "terminal.notificationSound.pulse": "パルス",
   "terminal.notificationPreview": "再生",
-  "terminal.notificationPreviewAttention": "入力待ちの通知音を再生",
-  "terminal.notificationPreviewCompleted": "完了の通知音を再生",
   "terminal.notificationVolume": "通知音量",
-  "terminal.notificationVolumeHint":
-    "{volume}% · 両方のAgent通知音に適用されます",
+  "terminal.notificationVolumeHint": "{volume}%",
   "terminal.quickCommands": "クイックコマンド",
   "terminal.quickCommandsClose": "クイックコマンドを閉じる",
   "terminal.quickCommandInsert": "ペインに挿入",
@@ -527,19 +518,6 @@ export const ja = {
   "sftp.linkTargetInvalid": "このターミナルリンクは利用できなくなりました。",
   "sftp.linkTargetNotFound": "リモートパスが見つかりません。",
   "sftp.linkTargetNotFile": "リモートパスはファイルではありません。",
-  "terminal.agentResumeAvailable": "{agent} のセッションを再開できます。",
-  "terminal.agentResumeSamePane": "このペインで再開",
-  "terminal.agentResumeNewPane": "新しいペインで再開",
-  "terminal.agentResumeFailed":
-    "Coding Agent のセッションを再開できませんでした。",
-  "terminal.agentResumeStale":
-    "Coding Agent セッションの状態が変わりました。確認してからもう一度お試しください。",
-  "terminal.agentResumeSamePaneBusy":
-    "このシェルにはすでに入力があります。新しいペインで再開してください。",
-  "terminal.agentResumeUnavailable":
-    "この Coding Agent セッションは再開できません。",
-  "terminal.agentResumeIdentityChanged":
-    "この alias の SSH 接続先が変わったため、Coding Agent セッションを再開しませんでした。",
   "terminal.progressDialing": "{target} へ接続中 · {position}",
   "terminal.progressHostKey": "{target} のホスト鍵を確認中 · {position}",
   "terminal.progressAuthenticating": "{target} で認証中 · {position}",
@@ -909,7 +887,7 @@ export const ja = {
   "settings.terminalDescription":
     "新しいターミナルに適用する動作、表示、操作方法を設定します。",
   "settings.notificationsDescription":
-    "ブラウザ通知と、エージェントの状態変化を知らせる音を設定します。",
+    "ブラウザ通知と、ターミナル内のプログラムからの通知を知らせる音を設定します。",
   "settings.connectionsDescription":
     "このブラウザで開いている接続を確認し、まとめて終了します。",
   "settings.passwordDescription":

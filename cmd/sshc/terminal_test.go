@@ -116,9 +116,9 @@ func TestTerminalWaitPollsOnlyExplicitLifecycleState(t *testing.T) {
 		case "/api/v1/terminal/sessions":
 			_ = json.NewEncoder(response).Encode(api.TerminalSessionList{Sessions: []api.TerminalSession{terminalTestSession("connected")}})
 		case "/api/v1/terminal/sessions/" + terminalTestID + "/control":
-			state := "agent-working"
+			state := "connecting"
 			if reads.Add(1) >= 2 {
-				state = "agent-ready"
+				state = "connected"
 			}
 			_ = json.NewEncoder(response).Encode(map[string]any{
 				"session": terminalTestSession("connected"), "generation": 1, "state": state,
@@ -129,12 +129,12 @@ func TestTerminalWaitPollsOnlyExplicitLifecycleState(t *testing.T) {
 		}
 	}))
 	result, err := executeTerminal(context.Background(), engine, terminalInvocation{
-		Action: terminalWait, Selector: terminalTestID, WaitFor: "agent-ready", Timeout: time.Second,
+		Action: terminalWait, Selector: terminalTestID, WaitFor: "connected", Timeout: time.Second,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.(terminalControlWire).State != "agent-ready" || reads.Load() != 2 {
+	if result.(terminalControlWire).State != "connected" || reads.Load() != 2 {
 		t.Fatalf("result = %#v, reads=%d", result, reads.Load())
 	}
 }

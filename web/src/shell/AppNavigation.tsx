@@ -19,7 +19,7 @@ import { sectionPath, type Section } from "../routing/sectionRoute";
 import type { TerminalSessionsState } from "../terminal/sessions";
 import type { LocalShellProfile, TerminalSession } from "../api/integrations";
 import type { LiveWorkspaceSummary } from "../features/workspaces/live";
-import type { AgentUnreadBySession } from "../terminal/agentNotifications";
+import type { UnreadSessions } from "../terminal/terminalNotifications";
 import {
   clampNavigationWidth,
   maximumNavigationWidth,
@@ -72,7 +72,7 @@ export function AppNavigation({
   activeConsole: string | null;
   liveWorkspace: LiveWorkspaceSummary | null;
   onRenameWorkspace: (name: string) => void;
-  unreadBySession: AgentUnreadBySession;
+  unreadBySession: UnreadSessions;
   onShowConsole: (id: string) => void;
   onDuplicateConsole: (id: string) => void;
   onReorderConsoles: (order: string[]) => void;
