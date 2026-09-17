@@ -477,6 +477,7 @@ export function SFTPWorkspace({
                 aliases={aliases}
                 {...(hosts === undefined ? {} : { hosts })}
                 initialPath={tab.path}
+                initialSort={tab.sort}
                 remote={otherVisible?.alias && otherVisible.alias !== localHostAlias && otherVisible.path
                   ? { alias: otherVisible.alias, path: otherVisible.path } : null}
                 onHostChange={(alias) => {
@@ -486,6 +487,7 @@ export function SFTPWorkspace({
                 }}
                 onQueueOpen={() => setOpenQueueRequest((value) => value + 1)}
                 onDirectoryChange={(path) => { if (path !== null) relocate(pane, tab.id, localHostAlias, path); }}
+                onSortChange={(sort) => resort(pane, tab.id, sort)}
               /> : <SFTPPanel
                 aliases={aliases}
                 {...(hosts === undefined ? {} : { hosts })}

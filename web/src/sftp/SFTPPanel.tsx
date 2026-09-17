@@ -7,9 +7,6 @@ import {
   useState,
   useSyncExternalStore,
   type DragEvent as ReactDragEvent,
-  type KeyboardEvent as ReactKeyboardEvent,
-  type MouseEvent as ReactMouseEvent,
-  type PointerEvent as ReactPointerEvent,
 } from "react";
 import { failureCode } from "../api/client";
 import type { HostEntry } from "../api/config";
@@ -22,13 +19,7 @@ import { Icon } from "../ui/icons";
 import { ModalShell } from "../ui/ModalShell";
 import { PanelState } from "../ui/PanelState";
 import { Button } from "../ui/surface";
-import {
-  compareText,
-  nextSort,
-  ordered,
-  SortableTableHeader,
-  type SortDirection,
-} from "../ui/tableSort";
+import { nextSort } from "../ui/tableSort";
 import { useDismissibleLayer } from "../ui/useDismissibleLayer";
 import { useMenuKeyboard } from "../ui/useMenuKeyboard";
 import { mobileViewportQuery, useCompactViewport, useMediaQuery } from "../ui/useMediaQuery";
@@ -36,6 +27,7 @@ import { sftpApi, type RemoteEntry, type RemoteTextFile } from "./api";
 import { formatBytes } from "./format";
 import { sftpPlaces } from "./places";
 import { SFTPDetailsDialog } from "./SFTPDetailsDialog";
+import { parentRowKey, SFTPEntryList, sortEntries, useSFTPEntryList, type SFTPSort, type SFTPSortState } from "./SFTPEntryList";
 import { directoryPaths, remoteEntriesMime, safeRelativePath, symbolicModeToOctal, type LocalTransferFile, type RemoteDragPayload } from "./transfers";
 import { TransferManagerList } from "./TransferManagerList";
 import { sftpTransferManager } from "./transferManager";
@@ -57,8 +49,7 @@ function join(parent: string, name: string): string {
   return `${parent === "/" ? "" : parent}/${name}`;
 }
 
-export type SFTPSort = "name" | "type" | "size" | "modified";
-export type SFTPSortState = { key: SFTPSort; direction: SortDirection };
+export type { SFTPSort, SFTPSortState } from "./SFTPEntryList";
 
 // The overflow button and the row context menu open the same list of actions.
 // Anchoring them to one shape keeps a right click from offering less than the
@@ -86,14 +77,8 @@ type SFTPInputIntent =
   | { kind: "rename"; entry: RemoteEntry }
   | { kind: "chmod"; entry: RemoteEntry; recursive: boolean };
 
-// The parent row keeps its own key so that arrow navigation can land on it
-// without pretending that ".." is a listed entry.
-const parentRowKey = "..";
-
 const contextMenuWidth = 224;
 const contextMenuItemHeight = 40;
-const longPressDelay = 500;
-const longPressSlack = 12;
 
 function MenuActionList({ actions }: { actions: SFTPMenuAction[] }) {
   return (
@@ -218,11 +203,9 @@ export function SFTPPanel({
   // purpose: SFTP has no trash, so an "undo" there would be a lie.
   const [undo, setUndo] = useState<{ label: string; run: () => Promise<void> } | null>(null);
   const [inputIntent, setInputIntent] = useState<SFTPInputIntent | null>(null);
-  const [selectedPaths, setSelectedPaths] = useState<Set<string>>(() => new Set());
   const [navigation, setNavigation] = useState<{ paths: string[]; index: number }>({ paths: [], index: -1 });
   const [filter, setFilter] = useState("");
   const [menu, setMenu] = useState<SFTPMenu | null>(null);
-  const [focusedKey, setFocusedKey] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const [remoteDrop, setRemoteDrop] = useState<RemoteDragPayload | null>(null);
   const [sort, setSort] = useState<SFTPSortState>(initialSort);
@@ -245,15 +228,6 @@ export function SFTPPanel({
   const menuRoot = useRef<HTMLDivElement>(null);
   const menuPanel = useRef<HTMLDivElement>(null);
   const menuTrigger = useRef<HTMLButtonElement>(null);
-  const selectAll = useRef<HTMLInputElement>(null);
-  const selectionAnchor = useRef<string | null>(null);
-  const rowNodes = useRef(new Map<string, HTMLElement>());
-  // Dialogs opened from a menu outlive their trigger, so they are handed the
-  // row itself as the element that takes focus back.
-  const activeRow = useRef<HTMLElement | null>(null);
-  const pendingFocus = useRef<string | null>(null);
-  const longPress = useRef<{ timer: ReturnType<typeof globalThis.setTimeout>; x: number; y: number } | null>(null);
-  const suppressNextClick = useRef(false);
 
   useDismissibleLayer({
     open: menu !== null && !mobileInteraction,
@@ -271,9 +245,6 @@ export function SFTPPanel({
   useEffect(() => {
     if (mobileSearchOpen) searchInput.current?.focus();
   }, [mobileSearchOpen]);
-  useEffect(() => () => {
-    if (longPress.current !== null) globalThis.clearTimeout(longPress.current.timer);
-  }, []);
 
   const transferJobs = useSyncExternalStore(sftpTransferManager.subscribe, sftpTransferManager.getSnapshot);
   useSyncExternalStore(sftpPlaces.subscribe, sftpPlaces.getSnapshot);
@@ -282,33 +253,39 @@ export function SFTPPanel({
   const [openQueueRequest, setOpenQueueRequest] = useState(0);
   const dirty = opened !== null && contents !== opened.contents;
   const listedEntries = search === null ? entries : search.entries;
-  const sortedEntries = ordered(
-    listedEntries,
-    (left, right) => {
-      switch (sort.key) {
-        case "type": return compareText(left.type, right.type);
-        case "size": return left.size - right.size;
-        case "modified": return Date.parse(left.modifiedAt) - Date.parse(right.modifiedAt);
-        case "name": return compareText(left.name, right.name);
-      }
-    },
-    sort.direction,
-  );
+  const sortedEntries = sortEntries(listedEntries, sort);
   const normalizedFilter = filter.trim().toLocaleLowerCase();
   // The filter box is the query in search mode; matching again locally would
   // hide results whose match is in a parent directory's name.
   const displayedEntries = normalizedFilter === "" || search !== null
     ? sortedEntries
     : sortedEntries.filter((entry) => entry.name.toLocaleLowerCase().includes(normalizedFilter));
-  const selectedEntries = listedEntries.filter((entry) => selectedPaths.has(entry.path));
-  const selectedEntry = selectedEntries.length === 1 ? selectedEntries[0] ?? null : null;
-  const allDisplayedSelected = displayedEntries.length > 0 && displayedEntries.every((entry) => selectedPaths.has(entry.path));
   const parentRowVisible = search === null && path !== "" && path !== "/";
-  const rowKeys = [...(parentRowVisible ? [parentRowKey] : []), ...displayedEntries.map((entry) => entry.path)];
-  // Exactly one row owns the tab stop. A filter or a reload can drop the
-  // remembered row, so fall back to the first one instead of stranding the
-  // keyboard outside the list.
-  const activeRowKey = focusedKey !== null && rowKeys.includes(focusedKey) ? focusedKey : rowKeys[0] ?? null;
+  const list = useSFTPEntryList({
+    entries: displayedEntries,
+    loadedEntries: listedEntries,
+    parentRowVisible,
+    busy,
+    locked: dirty,
+    mobileInteraction,
+    onActivate: (entry) => {
+      if (entry.type === "directory") void load(entry.path);
+      else setDetails([entry]);
+    },
+    onOpenParent: () => { void load(parentOf(path)); },
+    onInteract: () => setMenu(null),
+    onContextMenu: (_entry, x, y) => {
+      menuTrigger.current = null;
+      setMenu({ kind: "context", x, y });
+    },
+    onRenameKey: renameSelection,
+    onDeleteKey: deleteSelection,
+    onEscape: search === null ? undefined : endSearch,
+  });
+  const {
+    selectedPaths, setSelectedPaths, selectedEntries, selectedEntry, rowKeys, setFocusedKey,
+    pendingFocus, selectionAnchor, activeRow, activate, openParent, invertDisplayedSelection, selectAllDisplayed,
+  } = list;
   const bookmarkedPaths = sftpPlaces.bookmarks(alias);
   // A bookmarked path is already one click away; repeating it under "recent"
   // only makes the menu longer and the two lists ambiguous.
@@ -344,26 +321,6 @@ export function SFTPPanel({
       window.removeEventListener("beforeunload", warnBeforeUnload);
     };
   }, [dirty, onNavigationBlockerChange]);
-
-  useEffect(() => {
-    if (selectAll.current !== null) {
-      selectAll.current.indeterminate = selectedEntries.length > 0 && !allDisplayedSelected;
-    }
-  }, [allDisplayedSelected, selectedEntries.length]);
-
-  useEffect(() => {
-    activeRow.current = activeRowKey === null ? null : rowNodes.current.get(activeRowKey) ?? null;
-  });
-
-  useEffect(() => {
-    const key = pendingFocus.current;
-    if (key === null) return;
-    pendingFocus.current = null;
-    const node = rowNodes.current.get(key);
-    if (node === undefined) return;
-    setFocusedKey(key);
-    node.focus();
-  }, [entries]);
 
   function changeSort(key: SFTPSort) {
     setSort((current) => {
@@ -868,103 +825,10 @@ export function SFTPPanel({
     });
   }
 
-  function activate(entry: RemoteEntry) {
-    if (busy || dirty) return;
-    setMenu(null);
-    if (entry.type === "directory") void load(entry.path);
-    else setDetails([entry]);
-  }
-
   function showDetails() {
     if (selectedEntries.length === 0) return;
     setMenu(null);
     setDetails(selectedEntries);
-  }
-
-  function selectEntry(entry: RemoteEntry, modifiers: { shift?: boolean; additive?: boolean } = {}) {
-    const anchorIndex = selectionAnchor.current === null
-      ? -1
-      : displayedEntries.findIndex((candidate) => candidate.path === selectionAnchor.current);
-    const entryIndex = displayedEntries.findIndex((candidate) => candidate.path === entry.path);
-    if (modifiers.shift === true && anchorIndex >= 0 && entryIndex >= 0) {
-      const start = Math.min(anchorIndex, entryIndex);
-      const end = Math.max(anchorIndex, entryIndex);
-      setSelectedPaths((current) => {
-        const next = modifiers.additive === true ? new Set(current) : new Set<string>();
-        for (const candidate of displayedEntries.slice(start, end + 1)) next.add(candidate.path);
-        return next;
-      });
-    } else if (modifiers.additive === true) {
-      toggleSelection(entry);
-      selectionAnchor.current = entry.path;
-      return;
-    } else {
-      setSelectedPaths(new Set([entry.path]));
-      selectionAnchor.current = entry.path;
-    }
-    setMenu(null);
-  }
-
-  function clickEntry(entry: RemoteEntry, event: ReactMouseEvent<HTMLButtonElement>) {
-    // A long press already opened the context menu for this row. The synthetic
-    // click that follows the touch must not close it again.
-    if (suppressNextClick.current) {
-      suppressNextClick.current = false;
-      return;
-    }
-    if (busy || dirty) return;
-    setFocusedKey(entry.path);
-    if (mobileInteraction && !event.shiftKey && !event.metaKey && !event.ctrlKey) {
-      if (selectedPaths.size > 0) toggleSelection(entry);
-      else activate(entry);
-      return;
-    }
-    selectEntry(entry, { shift: event.shiftKey, additive: event.metaKey || event.ctrlKey });
-  }
-
-  function focusRow(key: string) {
-    setFocusedKey(key);
-    const node = rowNodes.current.get(key);
-    node?.focus();
-    node?.scrollIntoView?.({ block: "nearest" });
-  }
-
-  function registerRow(key: string, node: HTMLElement | null): void {
-    if (node === null) rowNodes.current.delete(key);
-    else rowNodes.current.set(key, node);
-  }
-
-  // The row that owns the keystroke is read from the DOM rather than from
-  // state, so that tabbing or clicking into a row is honoured even before the
-  // focus event has been reduced into React state.
-  function currentRowKey(target: EventTarget | null): string | null {
-    const element = target instanceof Element ? target.closest("[data-row-key]") : null;
-    return element?.getAttribute("data-row-key") ?? activeRowKey;
-  }
-
-  function moveRowFocus(event: ReactKeyboardEvent<HTMLDivElement>, from: string | null) {
-    if (rowKeys.length === 0) return;
-    const current = from === null ? -1 : rowKeys.indexOf(from);
-    const last = rowKeys.length - 1;
-    const next = event.key === "Home"
-      ? 0
-      : event.key === "End"
-        ? last
-        : event.key === "ArrowDown"
-          ? current < 0 ? 0 : Math.min(last, current + 1)
-          : current < 0 ? last : Math.max(0, current - 1);
-    const destination = rowKeys[next];
-    if (destination === undefined) return;
-    focusRow(destination);
-    const entry = displayedEntries.find((candidate) => candidate.path === destination);
-    // Ctrl moves the cursor without disturbing a multi-row selection, and the
-    // parent row is a destination rather than something selectable.
-    if (entry === undefined || event.ctrlKey || event.metaKey) return;
-    selectEntry(entry, { shift: event.shiftKey, additive: false });
-  }
-
-  function entryForKey(key: string | null): RemoteEntry | null {
-    return displayedEntries.find((candidate) => candidate.path === key) ?? null;
   }
 
   function deleteSelection() {
@@ -982,162 +846,6 @@ export function SFTPPanel({
     if (selectedEntry === null || busy) return;
     setMenu(null);
     setInputIntent({ kind: "rename", entry: selectedEntry });
-  }
-
-  function handleListKeys(event: ReactKeyboardEvent<HTMLDivElement>) {
-    if (busy) return;
-    if ((event.metaKey || event.ctrlKey) && event.key.toLocaleLowerCase() === "a") {
-      event.preventDefault();
-      selectAllDisplayed();
-      return;
-    }
-    // A checkbox owns Space, and the browser owns typing inside inputs.
-    const withinInput = event.target instanceof HTMLInputElement;
-    const rowKey = currentRowKey(event.target);
-    switch (event.key) {
-      case "ArrowDown":
-      case "ArrowUp":
-      case "Home":
-      case "End":
-        event.preventDefault();
-        moveRowFocus(event, rowKey);
-        return;
-      case " ": {
-        if (withinInput) return;
-        const entry = entryForKey(rowKey);
-        if (entry === null) return;
-        event.preventDefault();
-        toggleSelection(entry);
-        return;
-      }
-      case "Enter": {
-        if (withinInput || busy || dirty) return;
-        if (rowKey === parentRowKey) {
-          event.preventDefault();
-          pendingFocus.current = parentRowKey;
-          void load(parentOf(path));
-          return;
-        }
-        const entry = entryForKey(rowKey);
-        if (entry === null) return;
-        event.preventDefault();
-        activate(entry);
-        return;
-      }
-      case "F2":
-        event.preventDefault();
-        renameSelection();
-        return;
-      case "Delete":
-        event.preventDefault();
-        deleteSelection();
-        return;
-      case "Escape":
-        if (selectedPaths.size > 0) {
-          event.preventDefault();
-          setSelectedPaths(new Set());
-          selectionAnchor.current = null;
-          return;
-        }
-        if (search === null) return;
-        event.preventDefault();
-        endSearch();
-        return;
-      default:
-    }
-  }
-
-  // A right click on a row outside the selection acts on that row alone, the
-  // way every file manager does; inside it, the whole selection is kept.
-  function openContextMenu(entry: RemoteEntry, x: number, y: number) {
-    if (busy || dirty) return;
-    if (!selectedPaths.has(entry.path)) {
-      setSelectedPaths(new Set([entry.path]));
-      selectionAnchor.current = entry.path;
-    }
-    focusRow(entry.path);
-    menuTrigger.current = null;
-    setMenu({ kind: "context", x, y });
-  }
-
-  function rowContextMenu(event: ReactMouseEvent<HTMLElement>, entry: RemoteEntry) {
-    event.preventDefault();
-    openContextMenu(entry, event.clientX, event.clientY);
-  }
-
-  function cancelLongPress() {
-    if (longPress.current === null) return;
-    globalThis.clearTimeout(longPress.current.timer);
-    longPress.current = null;
-  }
-
-  function beginLongPress(event: ReactPointerEvent<HTMLElement>, entry: RemoteEntry) {
-    if (event.pointerType === "mouse" || busy || dirty) return;
-    cancelLongPress();
-    // A long press that opened a menu but was never followed by a click must
-    // not swallow the first tap on some other row.
-    suppressNextClick.current = false;
-    const { clientX, clientY } = event;
-    const timer = globalThis.setTimeout(() => {
-      longPress.current = null;
-      suppressNextClick.current = true;
-      openContextMenu(entry, clientX, clientY);
-    }, longPressDelay);
-    longPress.current = { timer, x: clientX, y: clientY };
-  }
-
-  function trackLongPress(event: ReactPointerEvent<HTMLElement>) {
-    const pending = longPress.current;
-    if (pending === null) return;
-    if (Math.abs(event.clientX - pending.x) > longPressSlack || Math.abs(event.clientY - pending.y) > longPressSlack) {
-      cancelLongPress();
-    }
-  }
-
-  function toggleSelection(entry: RemoteEntry) {
-    if (busy) return;
-    setSelectedPaths((current) => {
-      const next = new Set(current);
-      if (next.has(entry.path)) next.delete(entry.path);
-      else next.add(entry.path);
-      return next;
-    });
-    selectionAnchor.current = entry.path;
-    setMenu(null);
-  }
-
-  function toggleAllDisplayed() {
-    setSelectedPaths((current) => {
-      const next = new Set(current);
-      for (const entry of displayedEntries) {
-        if (allDisplayedSelected) next.delete(entry.path);
-        else next.add(entry.path);
-      }
-      return next;
-    });
-    setMenu(null);
-  }
-
-  function selectAllDisplayed() {
-    setSelectedPaths((current) => {
-      const next = new Set(current);
-      for (const entry of displayedEntries) next.add(entry.path);
-      return next;
-    });
-    selectionAnchor.current = displayedEntries[0]?.path ?? null;
-    setMenu(null);
-  }
-
-  function invertDisplayedSelection() {
-    setSelectedPaths((current) => {
-      const next = new Set(current);
-      for (const entry of displayedEntries) {
-        if (next.has(entry.path)) next.delete(entry.path);
-        else next.add(entry.path);
-      }
-      return next;
-    });
-    setMenu(null);
   }
 
   async function copySelected(kind: "name" | "path") {
@@ -1652,7 +1360,7 @@ export function SFTPPanel({
             ) : null}
           </div>
           {connected && pendingPath !== null ? <div role="status" className="absolute inset-0 z-10 flex items-center justify-center rounded-md bg-card/80 p-4 backdrop-blur-[1px]"><span className="flex min-w-0 items-center gap-3 rounded-lg bg-toolbar px-4 py-3 text-sm"><span aria-hidden="true" className="size-4 shrink-0 animate-spin rounded-full border-2 border-accent border-t-transparent motion-reduce:animate-none" /><span className="min-w-0"><span className="block">{t("sftp.loading")}</span><span className="block truncate font-mono text-xs text-ink-muted">{pendingPath || t("sftp.homeDirectory")}</span></span></span></div> : null}
-          <div data-testid="sftp-file-list" className="min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain" inert={connected && busy} onKeyDown={handleListKeys}>
+          <div data-testid="sftp-file-list" className="min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain" inert={connected && busy} onKeyDown={list.handleListKeys}>
             {alias === "" ? (
               <PanelState tone="empty" title={t("sftp.chooseHost")} detail={t("sftp.chooseHostHint")} />
             ) : !connected && busy ? (
@@ -1690,171 +1398,26 @@ export function SFTPPanel({
                 title={t(normalizedFilter === "" ? "sftp.emptyDirectory" : "sftp.noFilterMatches")}
                 {...(normalizedFilter === "" ? {} : { detail: t("sftp.clearFilterHint") })}
                 action={parentRowVisible ? (
-                  <Button disabled={busy || dirty} onClick={() => { pendingFocus.current = parentRowKey; void load(parentOf(path)); }}>
+                  <Button disabled={busy || dirty} onClick={openParent}>
                     {t("sftp.parentDirectory")}
                   </Button>
                 ) : undefined}
               />
-            ) : compactViewport ? (
-              <ul aria-label={t("sftp.entries")} className="divide-y divide-line/40">
-                {parentRowVisible ? (
-                  <li data-row-key={parentRowKey}>
-                    <button
-                      type="button"
-                      ref={(node) => { registerRow(parentRowKey, node); }}
-                      tabIndex={activeRowKey === parentRowKey ? 0 : -1}
-                      disabled={busy || dirty}
-                      onFocus={() => setFocusedKey(parentRowKey)}
-                      onClick={() => { pendingFocus.current = parentRowKey; void load(parentOf(path)); }}
-                      className="flex min-h-11 w-full items-center gap-2 px-2 py-1.5 text-left text-sm hover:bg-hover disabled:text-ink-faint md:min-h-8 md:py-0.5"
-                    >
-                      <Icon name="groups" className="size-4 text-ink-muted" />
-                      <span aria-hidden="true" className="font-mono">..</span>
-                      <span className="sr-only">{t("sftp.parentDirectory")}</span>
-                    </button>
-                  </li>
-                ) : null}
-                {displayedEntries.map((entry) => (
-                  <li
-                    key={entry.path}
-                    data-row-key={entry.path}
-                    className={`flex items-center transition-colors ${selectedPaths.has(entry.path) ? "bg-select-fill/75" : ""}`}
-                    onContextMenu={(event) => rowContextMenu(event, entry)}
-                    draggable={!mobileInteraction && (entry.type === "file" || entry.type === "directory")}
-                    onDragStart={(event) => beginRemoteDrag(event, entry)}
-                  >
-                    <label className="flex size-11 shrink-0 items-center justify-center md:size-8">
-                      <input
-                        type="checkbox"
-                        aria-label={t("sftp.selectEntry", { name: entry.name })}
-                        checked={selectedPaths.has(entry.path)}
-                        tabIndex={activeRowKey === entry.path ? 0 : -1}
-                        disabled={busy}
-                        onChange={() => toggleSelection(entry)}
-                        className="size-4 accent-accent"
-                      />
-                    </label>
-                    <button
-                      type="button"
-                      ref={(node) => { registerRow(entry.path, node); }}
-                      aria-label={entry.name}
-                      aria-pressed={selectedPaths.has(entry.path)}
-                      tabIndex={activeRowKey === entry.path ? 0 : -1}
-                      className="flex min-h-12 min-w-0 grow touch-pan-y select-none items-center gap-2 px-2 py-2 text-left hover:bg-hover active:bg-select-fill disabled:text-ink-faint"
-                      onFocus={() => setFocusedKey(entry.path)}
-                      onClick={(event) => clickEntry(entry, event)}
-                      onDoubleClick={mobileInteraction ? undefined : () => activate(entry)}
-                      disabled={busy || dirty}
-                      onPointerDown={(event) => beginLongPress(event, entry)}
-                      onPointerMove={trackLongPress}
-                      onPointerUp={cancelLongPress}
-                      onPointerCancel={cancelLongPress}
-                    >
-                      <Icon name={entry.type === "directory" ? "groups" : entry.type === "symlink" ? "chevronRight" : "config"} className="size-4 text-ink-muted" />
-                      <span className="min-w-0 grow">
-                        <span className="block truncate font-mono text-sm font-medium leading-4 text-ink">{entry.name}</span>
-                        <span className="mt-0.5 flex min-w-0 gap-2 text-[11px] leading-3 text-ink-muted">
-                          <span className="truncate font-mono">{search === null ? entry.mode : parentOf(entry.path)}</span>
-                          <span>{entry.type === "file" ? entry.size.toLocaleString() : "—"}</span>
-                          <time className="truncate" dateTime={entry.modifiedAt}>{new Date(entry.modifiedAt).toLocaleString()}</time>
-                        </span>
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
             ) : (
-            <table className="w-full min-w-[44rem] text-left text-sm">
-              <thead className="sticky top-0 bg-toolbar/75 text-xs text-ink-muted"><tr>
-                <th scope="col" className="w-9 px-2 py-1.5 md:py-1">
-                  <input
-                    ref={selectAll}
-                    type="checkbox"
-                    aria-label={t("sftp.selectAll")}
-                    checked={allDisplayedSelected}
-                    onChange={toggleAllDisplayed}
-                    className="size-4 accent-accent"
-                  />
-                </th>
-                <SortableTableHeader column="name" activeColumn={sort.key} direction={sort.direction} onSort={changeSort} className="px-2 py-1.5 md:py-1">{t("sftp.name")}</SortableTableHeader>
-                <SortableTableHeader column="modified" activeColumn={sort.key} direction={sort.direction} onSort={changeSort} className="px-2 py-1.5 md:py-1">{t("sftp.modified")}</SortableTableHeader>
-                <SortableTableHeader column="size" activeColumn={sort.key} direction={sort.direction} onSort={changeSort} className="px-2 py-1.5 text-right md:py-1" buttonClassName="justify-end">{t("sftp.size")}</SortableTableHeader>
-                <SortableTableHeader column="type" activeColumn={sort.key} direction={sort.direction} onSort={changeSort} className="w-24 whitespace-nowrap px-2 py-1.5 md:py-1">{t("sftp.type")}</SortableTableHeader>
-                <th scope="col" className="w-28 whitespace-nowrap px-2 py-1.5 md:py-1">{t("sftp.permissions")}</th>
-              </tr></thead>
-              <tbody>
-                {parentRowVisible ? (
-                  <tr data-row-key={parentRowKey} className="border-t border-line/40 hover:bg-hover/60">
-                    <td className="px-2 py-1 md:py-0.5" colSpan={6}>
-                      <button
-                        type="button"
-                        ref={(node) => { registerRow(parentRowKey, node); }}
-                        tabIndex={activeRowKey === parentRowKey ? 0 : -1}
-                        disabled={busy || dirty}
-                        onFocus={() => setFocusedKey(parentRowKey)}
-                        onClick={() => { pendingFocus.current = parentRowKey; void load(parentOf(path)); }}
-                        className="flex w-full items-center gap-2 rounded py-0.5 text-left text-sm focus:outline-none focus-visible:ring-1 focus-visible:ring-accent disabled:text-ink-faint"
-                      >
-                        <Icon name="groups" className="size-4 text-ink-muted" />
-                        <span aria-hidden="true" className="font-mono">..</span>
-                        <span className="sr-only">{t("sftp.parentDirectory")}</span>
-                      </button>
-                    </td>
-                  </tr>
-                ) : null}
-                {displayedEntries.map((entry) => (
-                  <tr
-                    key={entry.path}
-                    data-row-key={entry.path}
-                    aria-selected={selectedPaths.has(entry.path)}
-                    onDoubleClick={() => activate(entry)}
-                    onContextMenu={(event) => rowContextMenu(event, entry)}
-                    draggable={!mobileInteraction && (entry.type === "file" || entry.type === "directory")}
-                    onDragStart={(event) => beginRemoteDrag(event, entry)}
-                    className={`cursor-default border-t border-line/40 transition-colors ${selectedPaths.has(entry.path) ? "bg-select-fill/75" : "hover:bg-hover/55"}`}
-                  >
-                    <td className="w-9 px-2 py-1 md:py-0.5">
-                      <input
-                        type="checkbox"
-                        aria-label={t("sftp.selectEntry", { name: entry.name })}
-                        checked={selectedPaths.has(entry.path)}
-                        tabIndex={activeRowKey === entry.path ? 0 : -1}
-                        disabled={busy}
-                        onChange={() => toggleSelection(entry)}
-                        onDoubleClick={(event) => event.stopPropagation()}
-                        className="size-4 accent-accent"
-                      />
-                    </td>
-                    <td className="max-w-64 px-2 py-1 md:py-0.5">
-                      <button
-                        type="button"
-                        ref={(node) => { registerRow(entry.path, node); }}
-                        aria-label={entry.name}
-                        aria-pressed={selectedPaths.has(entry.path)}
-                        tabIndex={activeRowKey === entry.path ? 0 : -1}
-                        onFocus={() => setFocusedKey(entry.path)}
-                        onClick={(event) => clickEntry(entry, event)}
-                        onPointerDown={(event) => beginLongPress(event, entry)}
-                        onPointerMove={trackLongPress}
-                        onPointerUp={cancelLongPress}
-                        onPointerCancel={cancelLongPress}
-                        className="flex w-full min-w-0 items-center gap-2 rounded text-left focus:outline-none focus-visible:ring-1 focus-visible:ring-accent"
-                      >
-                        <Icon name={entry.type === "directory" ? "groups" : entry.type === "symlink" ? "chevronRight" : "config"} className="size-4 text-ink-muted" />
-                        <span className="min-w-0 grow">
-                          <span className="block truncate font-mono text-sm font-medium leading-4 text-ink">{entry.name}</span>
-                          {search === null ? null : <span className="block truncate font-mono text-[10px] leading-3 text-ink-muted">{parentOf(entry.path)}</span>}
-                        </span>
-                      </button>
-                    </td>
-                    <td className="whitespace-nowrap px-2 py-1 text-xs text-ink-muted md:py-0.5">{new Date(entry.modifiedAt).toLocaleString()}</td>
-                    <td className="px-2 py-1 text-right text-xs text-ink-muted md:py-0.5">{entry.type === "file" ? entry.size.toLocaleString() : "—"}</td>
-                    <td className="w-24 whitespace-nowrap px-2 py-1 text-xs text-ink-muted md:py-0.5">{t(`sftp.type.${entry.type}`)}</td>
-                    <td className="w-28 whitespace-nowrap px-2 py-1 font-mono text-xs text-ink-muted md:py-0.5">{entry.mode}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+              <SFTPEntryList
+                model={list}
+                entries={displayedEntries}
+                sort={sort}
+                onSort={changeSort}
+                compact={compactViewport}
+                mobileInteraction={mobileInteraction}
+                busy={busy}
+                locked={dirty}
+                parentRowVisible={parentRowVisible}
+                draggable={(entry) => entry.type === "file" || entry.type === "directory"}
+                onDragStart={beginRemoteDrag}
+                entryContext={search === null ? undefined : (entry) => parentOf(entry.path)}
+              />
             )}
           </div>
           {showTransfers ? <TransferManagerList openRequest={openQueueRequest} /> : null}

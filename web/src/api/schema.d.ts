@@ -3377,18 +3377,10 @@ export interface components {
             path: string;
             entries: components["schemas"]["SFTPEntry"][];
         };
-        SFTPLocalEntry: {
-            name: string;
-            path: string;
-            /** @enum {string} */
-            type: "file" | "directory";
-            /** Format: int64 */
-            size: number;
-        };
         SFTPLocalListing: {
             path: string;
             home: string;
-            entries: components["schemas"]["SFTPLocalEntry"][];
+            entries: components["schemas"]["SFTPEntry"][];
         };
         SFTPTextFile: {
             entry: components["schemas"]["SFTPEntry"];
