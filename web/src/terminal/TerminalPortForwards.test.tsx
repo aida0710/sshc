@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/client";
-import type { TerminalSession } from "../api/integrations";
+import type { TerminalSession } from "../api/terminalSessions";
 import { LanguageProvider } from "../i18n/context";
 import { TerminalPortForwards } from "./TerminalPortForwards";
 

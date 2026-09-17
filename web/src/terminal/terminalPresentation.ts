@@ -1,4 +1,4 @@
-import type { TerminalSession } from "../api/integrations";
+import type { TerminalSession } from "../api/terminalSessions";
 
 export function terminalDisplayTitle(session: TerminalSession): string {
   return session.presentation?.displayTitle ?? session.title;

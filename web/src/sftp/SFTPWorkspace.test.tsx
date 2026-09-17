@@ -17,8 +17,8 @@ const clipboard = vi.hoisted(() => ({ writeText: vi.fn(async () => undefined) })
 
 vi.mock("./api", () => ({ sftpApi: api }));
 vi.mock("../ui/clipboard", () => ({ clipboard: { readText: vi.fn(), writeText: clipboard.writeText } }));
-vi.mock("../api/integrations", () => ({
-  integrationsApi: { recentConnections: vi.fn(async () => ({ connections: [] })) },
+vi.mock("../api/recentConnections", () => ({
+  recentConnectionsApi: { recentConnections: vi.fn(async () => ({ connections: [] })) },
 }));
 vi.mock("./MonacoEditor", () => ({
   MonacoEditor: ({ value, onChange }: { value: string; onChange: (value: string) => void }) => (

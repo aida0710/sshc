@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import type { FieldEdit, HostDetail, HostMetadata, SavePreview, UpdateConnectionRequest } from "../api/config";
 import type { Problem } from "../api/client";
-import { integrationsApi, type IntegrationsApi } from "../api/integrations";
+import { diagnosticsApi, type DiagnosticsApi } from "../api/diagnostics";
+import { connectionSecretsApi, type ConnectionSecretsApi } from "./secretsApi";
 import { useTranslate } from "../i18n/context";
 import type { GeneratedPrivateKeyHandoff } from "../keys/workflow";
 import {
@@ -18,6 +19,10 @@ import { identityKey } from "./connectionBrowser";
 import { HostInspector } from "./HostInspector";
 import { activateTabFromKeyboard } from "../ui/tabKeyboard";
 
+// The detail view checks a host and edits its secrets, so it is handed both.
+export type HostDetailApi = DiagnosticsApi & ConnectionSecretsApi;
+export const hostDetailApi: HostDetailApi = { ...diagnosticsApi, ...connectionSecretsApi };
+
 type HostDetailPanelProps = {
   detail: HostDetail;
   savedState: ConnectionSavedState;
@@ -27,7 +32,7 @@ type HostDetailPanelProps = {
   onBlockRaw: (raw: string) => void;
   onBasicSave: (request: UpdateConnectionRequest) => Promise<void>;
   onMetadata: (metadata: HostMetadata) => void;
-  integrations?: IntegrationsApi;
+  integrations?: HostDetailApi;
   panel?: ConnectionPanel;
   advanced?: AdvancedArea;
   onLocationChange?: (panel: ConnectionPanel, advanced: AdvancedArea) => void;
@@ -57,7 +62,7 @@ export function HostDetailPanel({
   onBlockRaw,
   onBasicSave,
   onMetadata,
-  integrations = integrationsApi,
+  integrations = hostDetailApi,
   panel: controlledPanel,
   advanced: controlledAdvanced,
   onLocationChange,

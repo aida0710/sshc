@@ -1,11 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import {
-  integrationsApi,
-  type IntegrationsApi,
-  type SyncDirection,
-  type SyncHistoryDiff,
-  type SyncStatus,
-} from "../api/integrations";
+import { vaultApi, type VaultApi } from "../api/vault";
+import { syncApi, type SyncApi, type SyncDirection, type SyncHistoryDiff, type SyncStatus } from "../api/sync";
 import { useLanguage } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import { CheckboxField, control, hintText, sectionHeading } from "../ui/form";
@@ -24,7 +19,11 @@ import { SyncPullPreviewDialog } from "./SyncPullPreviewDialog";
 import { SyncHistorySection } from "./SyncHistorySection";
 import { PasswordField, PasswordInput } from "../ui/PasswordField";
 
-type SyncPanelProps = { api?: IntegrationsApi };
+// Setting the shared key needs the vault open; everything else is sync.
+export type SyncPanelApi = SyncApi & Pick<VaultApi, "unlockVault">;
+export const syncPanelApi: SyncPanelApi = { ...syncApi, ...vaultApi };
+
+type SyncPanelProps = { api?: SyncPanelApi };
 
 const mobileTouchTargets = "[&_button]:min-h-10 md:[&_button]:min-h-0";
 
@@ -125,7 +124,7 @@ const refusals: Record<string, MessageKey> = {
   sync_workspace_busy: "sync.workspaceBusy",
 };
 
-export function SyncPanel({ api = integrationsApi }: SyncPanelProps) {
+export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
   const { locale, t } = useLanguage();
   const [statusState, setStatusState] = useState<SyncStatusState>({
     phase: "loading",

@@ -2,7 +2,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Overview } from "../api/config";
-import type { RecentConnection } from "../api/integrations";
+import type { RecentConnection } from "../api/recentConnections";
 import { QuickConnectBrowser } from "./QuickConnectBrowser";
 
 const overview = {

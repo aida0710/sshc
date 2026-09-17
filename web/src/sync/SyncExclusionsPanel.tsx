@@ -1,15 +1,12 @@
 import { useMemo, useState } from "react";
 import { failureCode } from "../api/client";
-import type {
-  IntegrationsApi,
-  SyncExclusions,
-} from "../api/integrations";
+import type { SyncApi, SyncExclusions } from "../api/sync";
 import { useLanguage } from "../i18n/context";
 import { control, hintText } from "../ui/form";
 import { Button, Notice } from "../ui/surface";
 
 type Props = {
-  api: IntegrationsApi;
+  api: Pick<SyncApi, "syncExclusions" | "saveSyncExclusions">;
   initial?: SyncExclusions;
   onSaved?: (value: SyncExclusions) => void;
 };

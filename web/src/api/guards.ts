@@ -44,3 +44,22 @@ export async function issueAction(kind: string, target: string): Promise<string>
   });
   return asString(asRecord(response).token);
 }
+
+export async function postJSON<T>(
+  path: string,
+  body: unknown,
+  actionToken?: string,
+  locallyHandledCodes?: readonly string[],
+): Promise<T> {
+  const headers: Record<string, string> = { ...jsonHeaders };
+  if (actionToken) headers["X-SSHC-Action"] = actionToken;
+  return apiClient.mutate<T>(
+    path,
+    { method: "POST", headers, body: JSON.stringify(body) },
+    locallyHandledCodes === undefined ? {} : { locallyHandledCodes },
+  );
+}
+
+export async function postEmpty<T>(path: string): Promise<T> {
+  return apiClient.mutate<T>(path, { method: "POST" });
+}

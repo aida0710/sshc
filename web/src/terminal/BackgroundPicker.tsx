@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { failureCode } from "../api/client";
-import { integrationsApi, type IntegrationsApi, type TerminalBackground } from "../api/integrations";
+import { settingsApi, type SettingsApi, type TerminalBackground } from "../api/settings";
 import { useTranslate } from "../i18n/context";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { control } from "../ui/form";
@@ -10,7 +10,7 @@ import { ModalShell } from "../ui/ModalShell";
 import { Button } from "../ui/surface";
 import { useBackgroundImage } from "./backgroundImage";
 
-type BackgroundApi = Pick<IntegrationsApi, "terminalBackgrounds" | "addTerminalBackground" | "setTerminalBackgroundCapacity" | "renameTerminalBackground" | "deleteTerminalBackground">;
+type BackgroundApi = Pick<SettingsApi, "terminalBackgrounds" | "addTerminalBackground" | "setTerminalBackgroundCapacity" | "renameTerminalBackground" | "deleteTerminalBackground">;
 
 type BackgroundPickerProps = {
   value: string;
@@ -23,7 +23,7 @@ type BackgroundPickerProps = {
 
 const MiB = 1 << 20;
 
-export function BackgroundPicker({ value, onChange, tint, onTintChange, unchosen, api = integrationsApi }: BackgroundPickerProps) {
+export function BackgroundPicker({ value, onChange, tint, onTintChange, unchosen, api = settingsApi }: BackgroundPickerProps) {
   const t = useTranslate();
   const [stored, setStored] = useState<TerminalBackground[]>([]);
   const [used, setUsed] = useState(0);

@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { IntegrationsApi, TerminalSettings } from "../api/integrations";
+import type { LocalShellProfileList, SettingsApi, TerminalSettings } from "../api/settings";
 import type { Section } from "../routing/sectionRoute";
 import type { WorkspaceRenameRequest, WorkspaceRestoreRequest } from "../features/workspaces/TerminalWorkspace";
 import type { LiveWorkspaceSummary } from "../features/workspaces/live";
 import type { TerminalSessionsState } from "./sessions";
 
 type TerminalWorkspaceControllerOptions = {
-  api: IntegrationsApi;
+  api: Pick<SettingsApi, "terminalSettings" | "localShellProfiles">;
   consoles: TerminalSessionsState;
   enabled: boolean;
   section: Section | null;
@@ -23,11 +23,7 @@ export function useTerminalWorkspaceController({
   closeNavigation,
 }: TerminalWorkspaceControllerOptions) {
   const [settings, setSettings] = useState<TerminalSettings>({});
-  const [localShellProfiles, setLocalShellProfiles] = useState<
-    Awaited<
-      ReturnType<NonNullable<IntegrationsApi["localShellProfiles"]>>
-    >["profiles"]
-  >([]);
+  const [localShellProfiles, setLocalShellProfiles] = useState<LocalShellProfileList["profiles"]>([]);
   const [activeConsole, setActiveConsole] = useState<string | null>(null);
   const [liveWorkspace, setLiveWorkspace] =
     useState<LiveWorkspaceSummary | null>(null);

@@ -1,6 +1,6 @@
 import { renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { TerminalSession } from "../api/integrations";
+import type { TerminalSession } from "../api/terminalSessions";
 import { en, ja, type MessageKey } from "../i18n/messages";
 import type { Translate } from "../i18n/context";
 import {

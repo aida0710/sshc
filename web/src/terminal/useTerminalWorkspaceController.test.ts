@@ -1,8 +1,9 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import type { IntegrationsApi, TerminalSession } from "../api/integrations";
+import type { TerminalSession } from "../api/terminalSessions";
 import type { TerminalSessionsState } from "./sessions";
 import { useTerminalWorkspaceController } from "./useTerminalWorkspaceController";
+import type { SettingsApi } from "../api/settings";
 
 function session(id: string): TerminalSession {
   return {
@@ -18,7 +19,7 @@ function session(id: string): TerminalSession {
 
 const api = {
   terminalSettings: vi.fn().mockResolvedValue({}),
-} as unknown as IntegrationsApi;
+} as unknown as SettingsApi;
 
 function useController(list: TerminalSession[], refresh: () => Promise<void>) {
   return useTerminalWorkspaceController({

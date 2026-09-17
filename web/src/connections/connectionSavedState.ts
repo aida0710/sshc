@@ -1,10 +1,6 @@
 import type { HostDetail } from "../api/config";
-import type {
-  Credential,
-  IntegrationsApi,
-  PasswordEligibility,
-  PasswordVaultStatus,
-} from "../api/integrations";
+import type { Credential, CredentialsApi } from "../api/credentials";
+import type { PasswordEligibility, PasswordVaultStatus, VaultApi } from "../api/vault";
 import { selectablePrivateKeys, type KeyItem, type KeysApi } from "../keys/api";
 import { deriveBasicField } from "./basicFields";
 import { directIdentityFields, isConcreteIdentityValue } from "./authenticationPolicy";
@@ -43,10 +39,7 @@ export type ConnectionSummaryView = {
     | { state: "named"; name: string };
 };
 
-type SavedStateSecrets = Pick<
-  IntegrationsApi,
-  "passwordVault" | "credentials" | "passwordEligibility"
->;
+export type SavedStateSecrets = Pick<VaultApi, "passwordVault" | "passwordEligibility"> & Pick<CredentialsApi, "credentials">;
 
 function loaded<T>(result: PromiseSettledResult<T>): Loadable<T> {
   return result.status === "fulfilled"

@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import type { Credential } from "../api/integrations";
+import type { Credential } from "../api/credentials";
 import type { KeyItem } from "./api";
 import type { Folder, ListFilter, MoveOutcome } from "./organizer";
 

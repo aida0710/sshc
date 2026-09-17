@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Overview } from "../api/config";
-import type { RecentConnection } from "../api/integrations";
+import type { RecentConnection } from "../api/recentConnections";
 import {
   buildConnectionBrowserIndex,
   identityKey,

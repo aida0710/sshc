@@ -1,46 +1,39 @@
 import { useCallback, useEffect, useMemo, useState, useId, type FormEvent } from "react";
 import type { Problem } from "../api/client";
-import {
-  type HostDetail,
-  type UpdateConnectionKeyPassphrase,
-  type UpdateConnectionPassword,
-  type UpdateConnectionRequest,
-  type UpdateConnectionTOTP,
-} from "../api/config";
-import {
-  integrationsApi,
-  type Credential,
-  type IntegrationsApi,
-  type PasswordEligibility,
-  type PasswordVaultStatus,
-} from "../api/integrations";
+import type { HostDetail, UpdateConnectionRequest } from "../api/config";
+import { connectionSecretsApi, type ConnectionSecretsApi } from "./secretsApi";
 import { useTranslate } from "../i18n/context";
-import { keysApi, selectablePrivateKeys, type KeyItem, type KeysApi } from "../keys/api";
-import { eligibilityText } from "./eligibilityText";
-import { directIdentityFields, isConcreteIdentityValue } from "./authenticationPolicy";
-import { CheckboxField, control, hintText, sectionHeading } from "../ui/form";
-import { PasswordField } from "../ui/PasswordField";
-import { Button, Notice, Row } from "../ui/surface";
+import { keysApi, type KeysApi } from "../keys/api";
+import { control, hintText, sectionHeading } from "../ui/form";
+import { Button, Notice } from "../ui/surface";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
-import { deriveBasicField, type BasicFieldState, type BasicKeyword } from "./basicFields";
-import { formatValues, isValidHostName } from "../rules/rules";
-
+import type { BasicFieldState } from "./basicFields";
 import type { GeneratedPrivateKeyHandoff } from "../keys/workflow";
 import type { ConnectionSavedState } from "./connectionSavedState";
 import { identityKey } from "./connectionBrowser";
-
-type PasswordAction = UpdateConnectionPassword["kind"];
-type TOTPAction = UpdateConnectionTOTP["kind"];
+import { BasicPasswordSection } from "./BasicPasswordSection";
+import { BasicPrivateKeyField } from "./BasicPrivateKeyField";
+import { BasicTOTPSection } from "./BasicTOTPSection";
+import {
+  clearedKeyPassphrase,
+  clearedPasswordChoice,
+  clearedPasswordSecrets,
+  clearedSecrets,
+  deriveBasicForm,
+  initialDraft,
+  keySelectionOf,
+  type BasicDraft,
+  type DraftField,
+  type PasswordAction,
+} from "./basicFormDraft";
+import { useConnectionSecrets } from "./useConnectionSecrets";
 
 type ConnectionBasicFormProps = {
   detail: HostDetail;
   problem: Problem | null;
   onSave: (request: UpdateConnectionRequest) => Promise<void>;
   keys?: Pick<KeysApi, "inventory">;
-  secrets?: Pick<
-    IntegrationsApi,
-    "passwordVault" | "credentials" | "passwordEligibility" | "initialiseVault" | "unlockVault"
-  >;
+  secrets?: ConnectionSecretsApi;
   preferredKey?: GeneratedPrivateKeyHandoff | null | undefined;
   onPreferredKeyApplied?: (() => void) | undefined;
   savedState?: ConnectionSavedState | undefined;
@@ -49,21 +42,6 @@ type ConnectionBasicFormProps = {
   onRequestRefresh?: (() => Promise<void>) | undefined;
   disabled?: boolean | undefined;
 };
-
-type DraftField = {
-  state: BasicFieldState;
-  value: string;
-  inherit: boolean;
-};
-
-function initialDraft(detail: HostDetail, keyword: BasicKeyword): DraftField {
-  const state = deriveBasicField(detail, keyword);
-  return { state, value: state.value, inherit: false };
-}
-
-function keyConfigValue(key: KeyItem): string {
-  return `~/.ssh/${key.relativePath}`;
-}
 
 function sourceText(field: BasicFieldState, t: ReturnType<typeof useTranslate>): string {
   if (field.origin === "direct") return t("conn.basicThisConnection");
@@ -111,12 +89,15 @@ function ConnectionField({ field, label, error, inheritLabel, onChange, onInheri
   );
 }
 
+// The basic view of one connection: host, user and port, which key it uses,
+// and what the vault keeps for it. The draft is one object; what it means
+// against the vault is worked out by deriveBasicForm on every render.
 export function ConnectionBasicForm({
   detail,
   problem,
   onSave,
   keys = keysApi,
-  secrets = integrationsApi,
+  secrets: secretsApi = connectionSecretsApi,
   preferredKey = null,
   onPreferredKeyApplied,
   savedState,
@@ -128,453 +109,105 @@ export function ConnectionBasicForm({
   const t = useTranslate();
   const identity = detail.form.entry.identity;
   const resetKey = `${identityKey(identity)}\u0000${detail.file.contents}`;
-  const initial = useMemo(() => ({
-    hostName: initialDraft(detail, "HostName"),
-    user: initialDraft(detail, "User"),
-    port: initialDraft(detail, "Port"),
-  }), [detail]);
-  const [hostName, setHostName] = useState(initial.hostName);
-  const [user, setUser] = useState(initial.user);
-  const [port, setPort] = useState(initial.port);
-  const [privateKeys, setPrivateKeys] = useState<KeyItem[]>([]);
-  const [selectedKey, setSelectedKey] = useState("");
-  const [initialKey, setInitialKey] = useState("");
+  const secrets = useConnectionSecrets({ detail, resetKey, keys, secrets: secretsApi, savedState });
+  const keySelection = useMemo(
+    () => keySelectionOf(detail, secrets.privateKeys, secrets.keyOptionsStatus === "ready", preferredKey),
+    [detail, secrets.privateKeys, secrets.keyOptionsStatus, preferredKey],
+  );
+  const [draft, setDraft] = useState<BasicDraft>(() => initialDraft(detail));
   const [preferredSuperseded, setPreferredSuperseded] = useState(false);
-  const [keyState, setKeyState] = useState<"loading" | "editable" | "custom" | "complex">("loading");
-  const [customKey, setCustomKey] = useState("");
-  const [vault, setVault] = useState<PasswordVaultStatus | null>(null);
-  const [eligibility, setEligibility] = useState<PasswordEligibility | null>(null);
-  const [credentials, setCredentials] = useState<Credential[]>([]);
-  const [keyCredentials, setKeyCredentials] = useState<Credential[]>([]);
-  const [totpCredentials, setTOTPCredentials] = useState<Credential[]>([]);
-  const [assigned, setAssigned] = useState(false);
-  const [assignedCredential, setAssignedCredential] = useState("");
-  const [assignedTOTP, setAssignedTOTP] = useState("");
-  const [passwordAction, setPasswordAction] = useState<PasswordAction>("unchanged");
-  const [password, setPassword] = useState("");
-  const [savedCredential, setSavedCredential] = useState("");
-  const [newCredential, setNewCredential] = useState("");
-  const [newSharedPassword, setNewSharedPassword] = useState("");
-  const [totpAction, setTOTPAction] = useState<TOTPAction>("unchanged");
-  const [savedTOTP, setSavedTOTP] = useState("");
-  const [keyPassphrase, setKeyPassphrase] = useState("");
-  const [keyPassphraseConfirmation, setKeyPassphraseConfirmation] = useState("");
   const [keyPassphraseOpen, setKeyPassphraseOpen] = useState(false);
-  const [confirmRemove, setConfirmRemove] = useState(false);
-  const [masterPassword, setMasterPassword] = useState("");
-  const [masterConfirmation, setMasterConfirmation] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [keyOptionsStatus, setKeyOptionsStatus] = useState<"loading" | "ready" | "failed">("loading");
-  const [credentialOptionsStatus, setCredentialOptionsStatus] = useState<"loading" | "ready" | "locked" | "failed">("loading");
   const [busy, setBusy] = useState(false);
-  const [vaultBusy, setVaultBusy] = useState(false);
-  const [localError, setLocalError] = useState("");
   const [routeConfirmationOpen, setRouteConfirmationOpen] = useState(false);
+  const derived = deriveBasicForm(detail, draft, keySelection, secrets, t);
+  const { setError } = secrets;
 
-  function clearKeyPassphrase() {
-    setKeyPassphrase("");
-    setKeyPassphraseConfirmation("");
+  function edit(patch: Partial<BasicDraft>, clearError = false) {
+    setDraft((current) => ({ ...current, ...patch }));
+    if (clearError) setError("");
   }
 
-  function clearPasswordSecrets() {
-    setPassword("");
-    setNewSharedPassword("");
-    setMasterPassword("");
-    setMasterConfirmation("");
-  }
-
-  function clearSecrets() {
-    clearPasswordSecrets();
-    clearKeyPassphrase();
-  }
-
-  function applyCredentialState(status: PasswordVaultStatus, listed: Credential[]) {
-    const passwordCredentials = listed.filter((credential) => credential.kind === "password");
-    setKeyCredentials(listed.filter((credential) => credential.kind === "key_passphrase"));
-    const oneTimePasswords = listed.filter((credential) => credential.kind === "totp");
-    const reusable = passwordCredentials.find((credential) => credential.uses.includes(identity.alias));
-    setCredentials(passwordCredentials);
-    setTOTPCredentials(oneTimePasswords);
-    setSavedCredential((current) =>
-      passwordCredentials.some((credential) => credential.name === current)
-        ? current
-        : passwordCredentials[0]?.name ?? "",
-    );
-    setAssigned(status.aliases.includes(identity.alias));
-    setAssignedCredential(reusable?.name ?? "");
-    const assignedOneTimePassword = oneTimePasswords.find((credential) =>
-      credential.uses.includes(identity.alias));
-    setAssignedTOTP(assignedOneTimePassword?.name ?? "");
-    setSavedTOTP((current) =>
-      oneTimePasswords.some((credential) => credential.name === current)
-        ? current
-        : oneTimePasswords[0]?.name ?? "",
-    );
-  }
-
+  // A different host, file revision or handed-off key starts the form over.
   useEffect(() => {
-    setHostName(initial.hostName);
-    setUser(initial.user);
-    setPort(initial.port);
-    setPasswordAction("unchanged");
-    setTOTPAction("unchanged");
-    setConfirmRemove(false);
-    setNewCredential("");
-    clearSecrets();
-    setLocalError("");
+    setDraft(initialDraft(detail));
     setRouteConfirmationOpen(false);
-    setLoading(true);
-    setKeyOptionsStatus("loading");
-    setCredentialOptionsStatus("loading");
-    setKeyState("loading");
     setPreferredSuperseded(false);
-
-    let active = true;
-    const applyKeys = (identities: KeyItem[], available: boolean) => {
-      const preferred = preferredKey === null
-        ? undefined
-        : identities.find(
-            (candidate) =>
-              candidate.id === preferredKey.privateKeyId &&
-              candidate.relativePath === preferredKey.privateRelativePath,
-          );
-      const direct = directIdentityFields(detail).filter((field) =>
-        field.values.some(isConcreteIdentityValue),
-      );
-      setPrivateKeys(identities);
-      let preferredAlreadyApplied = false;
-      if (direct.length > 1) {
-        setKeyState("complex");
-        setSelectedKey("");
-        setInitialKey("");
-      } else if (direct.length === 1) {
-        const configured = formatValues(direct[0]!.values) ?? "";
-        const matched = identities.find((candidate) => keyConfigValue(candidate) === configured);
-        if (!available || matched === undefined) {
-          setKeyState("custom");
-          setCustomKey(configured);
-          setSelectedKey("__custom__");
-          setInitialKey("__custom__");
-        } else {
-          setKeyState("editable");
-          setSelectedKey(preferred?.id ?? matched.id);
-          setInitialKey(matched.id);
-          preferredAlreadyApplied = preferred?.id === matched.id;
-        }
-      } else {
-        setKeyState(available ? "editable" : "loading");
-        setSelectedKey(available ? preferred?.id ?? "" : "");
-        setInitialKey("");
-      }
-      if (preferredAlreadyApplied) onPreferredKeyApplied?.();
-    };
-
-    if (savedState !== undefined) {
-      const keysReady = savedState.keys.status === "ready";
-      const identities = savedState.keys.status === "ready" ? savedState.keys.value : [];
-      applyKeys(identities, keysReady);
-      setKeyOptionsStatus(keysReady ? "ready" : "failed");
-      const status = savedState.vault.status === "ready" ? savedState.vault.value : null;
-      setVault(status);
-      setEligibility(savedState.eligibility.status === "ready" ? savedState.eligibility.value : null);
-      if (status !== null && savedState.credentials.status === "ready") {
-        applyCredentialState(status, savedState.credentials.value);
-        setCredentialOptionsStatus("ready");
-      } else {
-        setCredentials([]);
-        setKeyCredentials([]);
-        setTOTPCredentials([]);
-        setAssigned(status?.aliases.includes(identity.alias) ?? false);
-        setAssignedCredential("");
-        setAssignedTOTP("");
-        setCredentialOptionsStatus(savedState.credentials.status === "locked" ? "locked" : "failed");
-      }
-      setLoading(false);
-      return () => {
-        active = false;
-        clearSecrets();
-      };
-    }
-
-    void Promise.all([
-      keys.inventory(),
-      secrets.passwordVault(),
-      secrets.passwordEligibility(identity.alias),
-    ]).then(async ([inventory, status, nextEligibility]) => {
-      const listed = status.unlocked ? (await secrets.credentials()).credentials : [];
-      if (!active) return;
-
-      applyKeys(selectablePrivateKeys(inventory), true);
-      setKeyOptionsStatus("ready");
-      setVault(status);
-      setEligibility(nextEligibility);
-      applyCredentialState(status, listed);
-      setCredentialOptionsStatus(status.unlocked ? "ready" : "locked");
-      setLoading(false);
-    }).catch(() => {
-      if (!active) return;
-      clearSecrets();
-      setLocalError(t("conn.basicOptionsFailed"));
-      setKeyOptionsStatus("failed");
-      setCredentialOptionsStatus("failed");
-      setLoading(false);
-    });
-    return () => {
-      active = false;
-      clearSecrets();
-    };
+    return () => { setDraft((current) => ({ ...current, ...clearedSecrets })); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resetKey, keys, secrets, t, preferredKey, savedState]);
+  }, [resetKey, keys, secretsApi, t, preferredKey, savedState]);
 
-  function updateField(setter: (value: DraftField) => void, current: DraftField, value: string) {
-    setter({ ...current, value, inherit: false });
-    setLocalError("");
-  }
+  // The key list arrives after the rest of the draft; the select follows it.
+  useEffect(() => {
+    setDraft((current) => ({ ...current, selectedKey: keySelection.initialSelected }));
+    if (keySelection.preferredAlreadyApplied) onPreferredKeyApplied?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [keySelection]);
 
-  function stringChange(field: DraftField, allowEmpty: boolean) {
-    if (!field.state.editable || field.state.origin === "complex") return undefined;
-    if (field.inherit || (allowEmpty && field.value === "" && field.state.origin === "direct")) {
-      return field.state.origin === "direct" ? { action: "inherit" as const } : undefined;
-    }
-    if (field.value === field.state.value) return undefined;
-    return { action: "set" as const, value: field.value };
-  }
+  const keyPassphraseDisclosureSubject = derived.selectedPrivateKey?.encrypted === true ? derived.selectedPrivateKey.id : "";
+  useEffect(() => {
+    if (secrets.credentialOptionsStatus !== "ready" || keyPassphraseDisclosureSubject === "") return;
+    setKeyPassphraseOpen(derived.keyPassphraseStorageState === "none");
+  }, [secrets.credentialOptionsStatus, keyPassphraseDisclosureSubject, derived.keyPassphraseStorageState]);
 
-  const hostNameChange = stringChange(hostName, false);
-  const userChange = stringChange(user, true);
-  const portChange = port.inherit
-    ? port.state.origin === "direct" ? { action: "inherit" as const } : undefined
-    : port.value === port.state.value
-      ? undefined
-      : { action: "set" as const, value: Number(port.value) };
-  const identityFileChange = keyState !== "editable" || selectedKey === initialKey
-    ? undefined
-    : selectedKey === ""
-      ? { action: "inherit" as const }
-      : { action: "set" as const, keyId: selectedKey };
-  const selectedPrivateKey = privateKeys.find((key) => key.id === selectedKey);
-  const draftHasExplicitKey = keyState === "custom" || keyState === "complex" ||
-    (keyState === "editable" && selectedKey !== "");
-  const passwordCleanup = assigned && draftHasExplicitKey;
-  const authenticationRouteChanged = hostNameChange !== undefined || userChange !== undefined || portChange !== undefined;
-  const confirmPasswordRoute = assigned && !draftHasExplicitKey && passwordAction === "unchanged" &&
-    (authenticationRouteChanged || eligibility?.passwordBinding === "stale");
-  const confirmTOTPRoute = assignedTOTP !== "" && totpAction === "unchanged" &&
-    (authenticationRouteChanged || eligibility?.totpBinding === "stale");
-  const namedKeyPassphrase = selectedPrivateKey === undefined
-    ? undefined
-    : keyCredentials.find((credential) => credential.uses.includes(selectedPrivateKey.relativePath));
-  const dedicatedKeyPassphrase = selectedPrivateKey !== undefined &&
-    (vault?.dedicatedKeyPassphrases ?? []).includes(selectedPrivateKey.relativePath);
-  const keyPassphraseStorageState = dedicatedKeyPassphrase
-    ? "dedicated"
-    : namedKeyPassphrase === undefined
-      ? "none"
-      : `named:${namedKeyPassphrase.name}`;
-  const keyPassphraseDisclosureSubject = selectedPrivateKey?.encrypted === true
-    ? selectedPrivateKey.id
-    : "";
-  const otherNamedKeyUses = namedKeyPassphrase === undefined || selectedPrivateKey === undefined
-    ? []
-    : namedKeyPassphrase.uses.filter((subject) => subject !== selectedPrivateKey.relativePath);
-
-  const hostError = hostName.inherit
-    ? ""
-    : hostName.value === ""
-      ? t("conn.createHostRequired")
-      : isValidHostName(hostName.value)
-        ? ""
-        : t("conn.createHostInvalid");
-  const userError = user.value !== "" && /[\s\p{Cc}]/u.test(user.value) ? t("conn.createUserInvalid") : "";
-  const parsedPort = Number(port.value);
-  const portError = port.inherit || (/^\d+$/.test(port.value) && parsedPort >= 1 && parsedPort <= 65535)
-    ? ""
-    : t("conn.createPortInvalid");
-
-  function effectivePassword(): UpdateConnectionPassword {
-    if (passwordCleanup) return { kind: "remove" };
-    switch (passwordAction) {
-      case "dedicated_password":
-        return password === "" ? { kind: "unchanged" } : { kind: "dedicated_password", password };
-      case "saved_password":
-        return savedCredential === "" ? { kind: "unchanged" } : { kind: "saved_password", credential: savedCredential };
-      case "new_shared_password":
-        return newCredential === "" || newSharedPassword === ""
-          ? { kind: "unchanged" }
-          : { kind: "new_shared_password", credential: newCredential, password: newSharedPassword };
-      case "remove":
-        return confirmRemove && assigned ? { kind: "remove" } : { kind: "unchanged" };
-      case "confirm_route":
-        return { kind: "confirm_route" };
-      case "unchanged":
-        return confirmPasswordRoute ? { kind: "confirm_route" } : { kind: "unchanged" };
-    }
-  }
-
-  const passwordChange = effectivePassword();
-  const keyPassphraseChange: UpdateConnectionKeyPassphrase =
-    selectedPrivateKey !== undefined && selectedPrivateKey.encrypted && keyPassphrase !== ""
-      ? { kind: "set_dedicated", keyId: selectedPrivateKey.id, passphrase: keyPassphrase }
-      : { kind: "unchanged" };
-  const totpChange: UpdateConnectionTOTP = totpAction === "saved_totp"
-    ? savedTOTP === ""
-      ? { kind: "unchanged" }
-      : { kind: "saved_totp", credential: savedTOTP }
-    : totpAction === "remove"
-      ? { kind: "remove" }
-      : totpAction === "confirm_route" || confirmTOTPRoute
-        ? { kind: "confirm_route" }
-        : { kind: "unchanged" };
-  const changesPassword = passwordChange.kind !== "unchanged";
-  const changesTOTP = totpChange.kind !== "unchanged";
-  const hasKeyPassphraseDraft = keyPassphrase !== "" || keyPassphraseConfirmation !== "";
-  const keyPassphraseMatches = keyPassphrase === keyPassphraseConfirmation;
-  const keyPassphraseValid = !hasKeyPassphraseDraft || (keyPassphrase !== "" && keyPassphraseMatches);
-  const nonIdentityBlockers = (eligibility?.blockers ?? []).filter((notice) => notice.code !== "identity_file_configured");
-  const passwordAllowed = passwordChange.kind === "remove" || passwordChange.kind === "unchanged" ||
-    (!draftHasExplicitKey && nonIdentityBlockers.length === 0);
-  const dirty = hostNameChange !== undefined || userChange !== undefined || portChange !== undefined ||
-    identityFileChange !== undefined || changesPassword || hasKeyPassphraseDraft || changesTOTP;
-  const passwordResourcesReady = vault?.unlocked === true && credentialOptionsStatus === "ready" && eligibility !== null;
-  const keyPassphraseResourcesReady = vault?.unlocked === true && credentialOptionsStatus === "ready" && keyOptionsStatus === "ready";
-  const totpResourcesReady = vault?.unlocked === true && credentialOptionsStatus === "ready";
-  const vaultAllowsConfig = vault === null || vault.unlocked;
-  const canSave = !disabled && !loading && !busy && vaultAllowsConfig && dirty &&
-    hostError === "" && userError === "" && portError === "" && passwordAllowed &&
-    keyPassphraseValid && (!changesPassword || passwordResourcesReady) &&
-    (!hasKeyPassphraseDraft || keyPassphraseResourcesReady) &&
-    (!changesTOTP || totpResourcesReady);
+  // A key and a stored password cannot both apply; choosing a key drops the
+  // password change the user had started.
+  useEffect(() => {
+    if (!derived.draftHasExplicitKey) return;
+    setDraft((current) => ({ ...current, ...clearedPasswordSecrets, ...clearedPasswordChoice }));
+  }, [derived.draftHasExplicitKey]);
 
   useEffect(() => {
-    if (credentialOptionsStatus !== "ready" || keyPassphraseDisclosureSubject === "") {
-      return;
-    }
-    setKeyPassphraseOpen(keyPassphraseStorageState === "none");
-  }, [credentialOptionsStatus, keyPassphraseDisclosureSubject, keyPassphraseStorageState]);
-
-  useEffect(() => {
-    if (!draftHasExplicitKey) return;
-    clearPasswordSecrets();
-    setPasswordAction("unchanged");
-    setConfirmRemove(false);
-    setNewCredential("");
-  }, [draftHasExplicitKey]);
-
-  useEffect(() => {
-    onDirtyChange?.(dirty);
-  }, [dirty, onDirtyChange]);
+    onDirtyChange?.(derived.dirty);
+  }, [derived.dirty, onDirtyChange]);
 
   const discardDraft = useCallback(() => {
-    setHostName(initial.hostName);
-    setUser(initial.user);
-    setPort(initial.port);
-    setSelectedKey(initialKey);
-    setPasswordAction("unchanged");
-    setTOTPAction("unchanged");
-    setConfirmRemove(false);
-    setNewCredential("");
-    setPassword("");
-    setNewSharedPassword("");
-    setMasterPassword("");
-    setMasterConfirmation("");
-    setKeyPassphrase("");
-    setKeyPassphraseConfirmation("");
-    setLocalError("");
+    setDraft(initialDraft(detail, keySelection.initialKey));
+    setError("");
     setRouteConfirmationOpen(false);
-  }, [initial, initialKey]);
+  }, [detail, keySelection.initialKey, setError]);
 
   useEffect(() => {
     onDiscardReady?.(discardDraft);
     return () => onDiscardReady?.(null);
   }, [discardDraft, onDiscardReady]);
 
+  function selectKey(value: string) {
+    edit({ selectedKey: value, ...clearedKeyPassphrase });
+    const superseded = preferredKey !== null && value !== preferredKey.privateKeyId;
+    setPreferredSuperseded(superseded);
+    if (superseded && value === keySelection.initialKey) onPreferredKeyApplied?.();
+  }
+
   function choosePasswordAction(action: PasswordAction) {
-    clearPasswordSecrets();
-    setConfirmRemove(false);
-    setPasswordAction(action);
-    setLocalError("");
+    edit({ ...clearedPasswordSecrets, confirmRemove: false, passwordAction: action }, true);
   }
 
   async function openVault() {
-    if (vault === null) return;
-    setVaultBusy(true);
-    setLocalError("");
-    try {
-      const status = vault.exists
-        ? await secrets.unlockVault(masterPassword)
-        : await secrets.initialiseVault(masterPassword);
-      const [listed, nextEligibility] = status.unlocked
-        ? await Promise.all([
-            secrets.credentials().then((response) => response.credentials),
-            secrets.passwordEligibility(identity.alias),
-          ])
-        : [[], eligibility];
-      setVault(status);
-      applyCredentialState(status, listed);
-      setEligibility(nextEligibility);
-      setCredentialOptionsStatus(status.unlocked ? "ready" : "locked");
-      clearSecrets();
-    } catch {
-      clearSecrets();
-      setLocalError(t(vault.exists ? "conn.createUnlockFailed" : "conn.createVaultFailed"));
-    } finally {
-      setVaultBusy(false);
-    }
-  }
-
-  function updateRequest(): UpdateConnectionRequest {
-    const request: UpdateConnectionRequest = {
-      identity,
-      base: detail.file.contents,
-      password: passwordChange,
-      keyPassphrase: keyPassphraseChange,
-      totp: totpChange,
-    };
-    if (hostNameChange !== undefined) request.hostName = hostNameChange;
-    if (userChange !== undefined) request.user = userChange;
-    if (portChange !== undefined) request.port = portChange;
-    if (identityFileChange !== undefined) request.identityFile = identityFileChange;
-    return request;
+    await secrets.openVault(draft.masterPassword);
+    edit(clearedSecrets);
   }
 
   async function save() {
     if (!canSave) return;
-    const request = updateRequest();
+    const request = derived.request();
+    const { identityFileChange, keyPassphraseChange } = derived;
     setBusy(true);
-    setLocalError("");
+    setError("");
     try {
       await onSave(request);
-      if (keyPassphraseChange.kind !== "unchanged") {
-        setKeyPassphraseOpen(false);
-      }
+      if (keyPassphraseChange.kind !== "unchanged") setKeyPassphraseOpen(false);
       if (preferredKey !== null && (
         preferredSuperseded ||
         (identityFileChange?.action === "set" && identityFileChange.keyId === preferredKey.privateKeyId)
       )) {
         onPreferredKeyApplied?.();
       }
-      clearSecrets();
-      setPasswordAction("unchanged");
-      setTOTPAction("unchanged");
-      setConfirmRemove(false);
-      setNewCredential("");
-      if (onRequestRefresh !== undefined) {
-        await onRequestRefresh();
-      } else if (savedState === undefined) {
-        try {
-          const status = await secrets.passwordVault();
-          const listed = status.unlocked ? (await secrets.credentials()).credentials : [];
-          setVault(status);
-          applyCredentialState(status, listed);
-          setCredentialOptionsStatus(status.unlocked ? "ready" : "locked");
-        } catch {
-          setCredentialOptionsStatus("failed");
-          setLocalError(t("conn.basicRefreshFailed"));
-        }
-      }
+      edit({ ...clearedSecrets, ...clearedPasswordChoice, totpAction: "unchanged" });
+      if (onRequestRefresh !== undefined) await onRequestRefresh();
+      else if (savedState === undefined) await secrets.refreshCredentials();
     } catch {
-      clearSecrets();
-      setLocalError(t("conn.basicSaveFailed"));
+      edit(clearedSecrets);
+      setError(t("conn.basicSaveFailed"));
     } finally {
       setBusy(false);
     }
@@ -583,20 +216,14 @@ export function ConnectionBasicForm({
   function submit(event: FormEvent) {
     event.preventDefault();
     if (!canSave) return;
-    if (confirmPasswordRoute || confirmTOTPRoute) {
+    if (derived.confirmPasswordRoute || derived.confirmTOTPRoute) {
       setRouteConfirmationOpen(true);
       return;
     }
     void save();
   }
 
-  const minimum = vault?.minPassphraseLength ?? 12;
-  const canOpenVault = vault !== null && masterPassword.length >= minimum &&
-    (vault.exists || masterConfirmation === masterPassword);
-  const passwordBlockers = nonIdentityBlockers;
-  const passwordWarnings = (eligibility?.warnings ?? []).filter(
-    (notice) => notice.code !== "identity_file_configured",
-  );
+  const canSave = !disabled && !secrets.loading && !busy && derived.vaultAllowsConfig && derived.dirty && derived.valid;
   const serverHostError = problem?.code === "connection_hostname_invalid" ? t("conn.createHostInvalid") : "";
   const serverUserError = problem?.code === "connection_user_invalid" ? t("conn.createUserInvalid") : "";
   const serverPortError = problem?.code === "connection_port_invalid" ? t("conn.createPortInvalid") : "";
@@ -618,308 +245,67 @@ export function ConnectionBasicForm({
             ? t("conn.createNeedConnectionPassword")
             : "";
 
+  const field = (name: "hostName" | "user" | "port") => ({
+    field: draft[name],
+    onChange: (value: string) => edit({ [name]: { ...draft[name], value, inherit: false } }, true),
+    onInherit: () => edit({ [name]: { ...draft[name], inherit: !draft[name].inherit } }),
+  });
+
   return (
     <form className="flex flex-col gap-4" onSubmit={submit}>
-      {localError === "" || problem !== null ? null : <Notice tone="danger">{localError}</Notice>}
+      {secrets.error === "" || problem !== null ? null : <Notice tone="danger">{secrets.error}</Notice>}
 
       <fieldset disabled={disabled} className="contents">
       <section className="flex flex-col gap-2" aria-labelledby="basic-connection-heading">
         <h3 id="basic-connection-heading" className={sectionHeading}>{t("conn.basicConnection")}</h3>
         <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2">
           <div className="sm:col-span-2">
-            <ConnectionField field={hostName} label={t("conn.basicHostName")} error={hostError || serverHostError} inheritLabel={t("conn.basicUseInheritedHost")} onChange={(value) => updateField(setHostName, hostName, value)} onInherit={() => setHostName({ ...hostName, inherit: !hostName.inherit })} />
+            <ConnectionField {...field("hostName")} label={t("conn.basicHostName")} error={derived.hostError || serverHostError} inheritLabel={t("conn.basicUseInheritedHost")} />
           </div>
-          <ConnectionField field={user} label={t("conn.basicUser")} error={userError || serverUserError} inheritLabel={t("conn.basicUseInheritedUser")} onChange={(value) => updateField(setUser, user, value)} onInherit={() => setUser({ ...user, inherit: !user.inherit })} />
-          <ConnectionField field={port} label={t("conn.basicPort")} error={portError || serverPortError} inheritLabel={t("conn.basicUseInheritedPort")} onChange={(value) => updateField(setPort, port, value)} onInherit={() => setPort({ ...port, inherit: !port.inherit })} numeric />
+          <ConnectionField {...field("user")} label={t("conn.basicUser")} error={derived.userError || serverUserError} inheritLabel={t("conn.basicUseInheritedUser")} />
+          <ConnectionField {...field("port")} label={t("conn.basicPort")} error={derived.portError || serverPortError} inheritLabel={t("conn.basicUseInheritedPort")} numeric />
         </div>
       </section>
 
       <section className="flex flex-col gap-3 border-t border-line pt-4" aria-labelledby="basic-auth-heading">
         <h3 id="basic-auth-heading" className={sectionHeading}>{t("conn.basicAuthentication")}</h3>
         <div>
-          <Row
-            label={t("conn.basicPrivateKey")}
-            warning={serverKeyError || undefined}
-            hint={keyState === "custom"
-              ? t("conn.basicCustomKey", { path: customKey })
-              : keyState === "complex"
-                ? t("conn.basicComplexKey")
-                : undefined}
-          >
-            <select
-              aria-label={t("conn.basicPrivateKey")}
-              value={selectedKey}
-              disabled={loading || keyOptionsStatus !== "ready" || keyState === "custom" || keyState === "complex"}
-              onChange={(event) => {
-                const value = event.target.value;
-                clearKeyPassphrase();
-                setSelectedKey(value);
-                const superseded = preferredKey !== null && value !== preferredKey.privateKeyId;
-                setPreferredSuperseded(superseded);
-                if (superseded && value === initialKey) onPreferredKeyApplied?.();
-              }}
-              className={control}
-            >
-              <option value="">{t("conn.basicAgentOrInherited")}</option>
-              {keyState === "custom" ? <option value="__custom__">{customKey}</option> : null}
-              {privateKeys.map((key) => (
-                <option key={key.id} value={key.id}>
-                  {key.relativePath}{key.fingerprint === "" ? "" : ` · ${key.fingerprint}`}
-                </option>
-              ))}
-            </select>
-          </Row>
-          {preferredKey !== null && identityFileChange?.action === "set" &&
-          identityFileChange.keyId === preferredKey.privateKeyId ? (
-            <p className="border-t border-hairline px-3 py-2 text-xs text-notice-ink">
-              {t("conn.basicGeneratedKeyStaged", { path: preferredKey.privateRelativePath })}
-            </p>
-          ) : null}
-
-          {vault?.unlocked === true && credentialOptionsStatus === "ready" &&
-          keyState === "editable" && selectedPrivateKey !== undefined && selectedPrivateKey.encrypted ? (
-            <details
-              open={keyPassphraseOpen}
-              onToggle={(event) => setKeyPassphraseOpen(event.currentTarget.open)}
-              className="border-t border-hairline"
-            >
-              <summary className="cursor-pointer px-3 py-3 text-sm font-medium text-ink">
-                {t("conn.basicManageKeyPassphrase")}
-              </summary>
-              <div className="flex flex-col gap-3 border-t border-hairline py-3">
-                <div>
-                  <p className="text-sm text-ink-muted">{t("conn.basicKeyPassphraseHeading")}</p>
-                  <p className={hintText}>
-                    {dedicatedKeyPassphrase
-                        ? t("conn.basicKeyPassphraseDedicated")
-                        : namedKeyPassphrase !== undefined
-                          ? t("conn.basicKeyPassphraseShared", { name: namedKeyPassphrase.name })
-                          : t("conn.basicKeyPassphraseNone")}
-                  </p>
-                  {namedKeyPassphrase !== undefined && otherNamedKeyUses.length > 0 ? (
-                    <p className={hintText}>
-                      {t("conn.basicKeyPassphraseSharedOthers", { count: otherNamedKeyUses.length })}
-                    </p>
-                  ) : null}
-                  {namedKeyPassphrase !== undefined ? (
-                    <p className={hintText}>{t("conn.basicKeyPassphraseDetach")}</p>
-                  ) : null}
-                </div>
-
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <PasswordField
-                    label={t("conn.basicNewKeyPassphrase")}
-                    value={keyPassphrase}
-                    onChange={(value) => {
-                      setKeyPassphrase(value);
-                      setLocalError("");
-                    }}
-                  />
-                  <PasswordField
-                    label={t("conn.basicConfirmKeyPassphrase")}
-                    value={keyPassphraseConfirmation}
-                    onChange={(value) => {
-                      setKeyPassphraseConfirmation(value);
-                      setLocalError("");
-                    }}
-                  />
-                </div>
-                {hasKeyPassphraseDraft && !keyPassphraseValid ? (
-                  <Notice tone="danger">{t("conn.basicKeyPassphraseMismatch")}</Notice>
-                ) : null}
-                <p className={hintText}>{t("conn.basicKeyPassphraseStoredNote")}</p>
-                {serverKeyPassphraseError === "" ? null : (
-                  <Notice tone="danger">{serverKeyPassphraseError}</Notice>
-                )}
-              </div>
-            </details>
-          ) : null}
-
-          {selectedPrivateKey !== undefined && !selectedPrivateKey.encrypted ? (
-            <p className={`border-t border-hairline py-3 ${hintText}`}>
-              {t("conn.basicKeyPassphraseUnencrypted")}
-            </p>
-          ) : null}
-
-          {draftHasExplicitKey ? (
-            passwordCleanup ? (
-              <div className="border-t border-hairline py-3">
-                <Notice>{t("conn.basicPasswordCleanup")}</Notice>
-              </div>
-            ) : null
-          ) : <div className="border-t border-hairline py-3">
-            <div className="flex flex-col gap-3">
-              <div>
-                <p className="text-sm text-ink-muted">{t("conn.basicStoredPassword")}</p>
-                {loading || credentialOptionsStatus === "loading" ? <p className={hintText}>{t("conn.createLoadingOptions")}</p> : null}
-                {credentialOptionsStatus === "failed" ? (
-                  <p className={hintText}>{t("conn.basicCredentialOptionsFailed")}</p>
-                ) : null}
-                {vault?.unlocked === true && credentialOptionsStatus === "ready" ? (
-                  <p className={hintText}>
-                    {assigned
-                      ? assignedCredential === ""
-                        ? t("conn.basicAssignedDedicated")
-                        : t("conn.basicAssignedNamed", { name: assignedCredential })
-                      : t("conn.basicNoPassword")}
-                  </p>
-                ) : null}
-              </div>
-
-              {vault !== null && !vault.unlocked ? (
-                <div className="flex flex-col gap-3 rounded-lg border border-notice-line bg-notice p-3">
-                  <p className="text-sm text-notice-ink">
-                    {t(vault.exists ? "conn.basicVaultLocked" : "conn.basicVaultMissing")}
-                  </p>
-                  <PasswordField label={t("conn.createMasterPassword")} value={masterPassword} onChange={setMasterPassword} />
-                  {vault.exists ? null : (
-                    <PasswordField
-                      label={t("conn.createConfirmMaster")}
-                      value={masterConfirmation}
-                      onChange={setMasterConfirmation}
-                    />
-                  )}
-                  <Button kind="primary" disabled={vaultBusy || !canOpenVault} onClick={() => void openVault()}>
-                    {t(vault.exists ? "conn.createUnlockVault" : "conn.createInitialiseVault")}
-                  </Button>
-                </div>
-              ) : null}
-
-              {vault?.unlocked === true && credentialOptionsStatus === "ready" ? (
-                <>
-                  <label className="flex flex-col gap-1">
-                    <span className="text-xs font-medium tracking-wide text-ink-muted">{t("conn.basicPasswordAction")}</span>
-                    <select
-                      aria-label={t("conn.basicPasswordAction")}
-                      value={passwordAction}
-                      onChange={(event) => choosePasswordAction(event.target.value as PasswordAction)}
-                      className={control}
-                    >
-                      <option value="unchanged">{t("conn.basicPasswordUnchanged")}</option>
-                      <option value="dedicated_password">{t(assigned ? "conn.basicReplaceDedicated" : "conn.createDedicatedPassword")}</option>
-                      <option value="saved_password">{t("conn.createSavedPassword")}</option>
-                      <option value="new_shared_password">{t("conn.createNewSharedPassword")}</option>
-                      {assigned ? <option value="remove">{t("conn.basicRemovePassword")}</option> : null}
-                    </select>
-                  </label>
-
-                  {passwordAction === "dedicated_password" ? (
-                    <PasswordField
-                      label={t("conn.createConnectionPassword")}
-                      value={password}
-                      onChange={setPassword}
-                      hint={t("conn.basicEmptyPasswordUnchanged")}
-                    />
-                  ) : passwordAction === "saved_password" ? (
-                    <label className="flex flex-col gap-1">
-                      <span className="text-xs font-medium tracking-wide text-ink-muted">{t("conn.createChooseSavedPassword")}</span>
-                      <select value={savedCredential} onChange={(event) => setSavedCredential(event.target.value)} className={control}>
-                        {credentials.length === 0 ? <option value="">{t("conn.createNoSavedPasswords")}</option> : null}
-                        {credentials.map((credential) => <option key={credential.name} value={credential.name}>{credential.name}</option>)}
-                      </select>
-                    </label>
-                  ) : passwordAction === "new_shared_password" ? (
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <label className="flex flex-col gap-1">
-                        <span className="text-xs font-medium tracking-wide text-ink-muted">{t("conn.createSavedPasswordName")}</span>
-                        <input value={newCredential} onChange={(event) => setNewCredential(event.target.value)} className={control} />
-                      </label>
-                      <PasswordField label={t("conn.createNewPassword")} value={newSharedPassword} onChange={setNewSharedPassword} />
-                    </div>
-                  ) : passwordAction === "remove" ? (
-                    <CheckboxField label={t("conn.basicConfirmRemove")} checked={confirmRemove} onChange={setConfirmRemove} tone="danger" />
-                  ) : null}
-
-                  {passwordBlockers.map((blocker, index) => (
-                    <Notice key={`${blocker.code}-${index}`} tone="danger">{eligibilityText(t, blocker.code)}</Notice>
-                  ))}
-                  {passwordWarnings.map((warning, index) => (
-                    <Notice key={`${warning.code}-${index}`}>{eligibilityText(t, warning.code)}</Notice>
-                  ))}
-                  {serverPasswordError === "" ? null : <Notice tone="danger">{serverPasswordError}</Notice>}
-                </>
-              ) : null}
-            </div>
-          </div>}
-
-          <div className="border-t border-hairline py-3">
-            <div className="flex flex-col gap-3">
-              <div>
-                <p className="text-sm text-ink-muted">{t("conn.basicStoredTOTP")}</p>
-                {loading || credentialOptionsStatus === "loading" ? (
-                  <p className={hintText}>{t("conn.createLoadingOptions")}</p>
-                ) : null}
-                {credentialOptionsStatus === "failed" ? (
-                  <p className={hintText}>{t("conn.basicCredentialOptionsFailed")}</p>
-                ) : null}
-                {vault?.unlocked === true && credentialOptionsStatus === "ready" ? (
-                  <p className={hintText}>
-                    {assignedTOTP === ""
-                      ? t("conn.basicNoTOTP")
-                      : t("conn.basicAssignedTOTP", { name: assignedTOTP })}
-                  </p>
-                ) : null}
-              </div>
-
-              {vault?.unlocked === true && credentialOptionsStatus === "ready" ? (
-                <>
-                  <label className="flex flex-col gap-1">
-                    <span className="text-xs font-medium tracking-wide text-ink-muted">
-                      {t("conn.basicTOTPAction")}
-                    </span>
-                    <select
-                      aria-label={t("conn.basicTOTPAction")}
-                      value={totpAction}
-                      onChange={(event) => {
-                        setTOTPAction(event.target.value as TOTPAction);
-                        setLocalError("");
-                      }}
-                      className={control}
-                    >
-                      <option value="unchanged">{t("conn.basicTOTPUnchanged")}</option>
-                      <option value="saved_totp">{t("conn.basicUseSavedTOTP")}</option>
-                      {assignedTOTP === "" ? null : (
-                        <option value="remove">{t("conn.basicRemoveTOTP")}</option>
-                      )}
-                    </select>
-                  </label>
-
-                  {totpAction === "saved_totp" ? (
-                    <label className="flex flex-col gap-1">
-                      <span className="text-xs font-medium tracking-wide text-ink-muted">
-                        {t("conn.basicChooseSavedTOTP")}
-                      </span>
-                      <select
-                        value={savedTOTP}
-                        onChange={(event) => setSavedTOTP(event.target.value)}
-                        className={control}
-                      >
-                        {totpCredentials.length === 0 ? (
-                          <option value="">{t("conn.basicNoSavedTOTPs")}</option>
-                        ) : null}
-                        {totpCredentials.map((credential) => (
-                          <option key={credential.name} value={credential.name}>
-                            {credential.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  ) : null}
-                  <p className={hintText}>{t("conn.basicTOTPNote")}</p>
-                </>
-              ) : null}
-            </div>
-          </div>
+          <BasicPrivateKeyField
+            draft={draft}
+            derived={derived}
+            keySelection={keySelection}
+            secrets={secrets}
+            preferredKey={preferredKey}
+            serverKeyError={serverKeyError}
+            serverKeyPassphraseError={serverKeyPassphraseError}
+            passphraseOpen={keyPassphraseOpen}
+            onPassphraseOpenChange={setKeyPassphraseOpen}
+            onSelectKey={selectKey}
+            onEdit={(patch) => edit(patch, true)}
+          />
+          <BasicPasswordSection
+            draft={draft}
+            derived={derived}
+            secrets={secrets}
+            serverPasswordError={serverPasswordError}
+            onEdit={(patch) => edit(patch)}
+            onChooseAction={choosePasswordAction}
+            onOpenVault={() => void openVault()}
+          />
+          <BasicTOTPSection
+            draft={draft}
+            derived={derived}
+            secrets={secrets}
+            onEdit={(patch) => edit(patch, "totpAction" in patch)}
+          />
         </div>
       </section>
 
-      {dirty ? <div className="flex flex-wrap items-center justify-end gap-3 border-t border-line py-3">
-        {(changesPassword && !passwordResourcesReady) ||
-        (hasKeyPassphraseDraft && !keyPassphraseResourcesReady) ||
-        (changesTOTP && !totpResourcesReady) ?
-            <p className={`grow ${hintText}`}>{t("conn.basicNeedVault")}</p> :
-            !passwordAllowed ? <p className={`grow ${hintText}`}>{t("conn.basicPasswordBlocked")}</p> : <span className="grow" />}
-        <Button type="button" disabled={!dirty || busy} onClick={discardDraft}>
+      {derived.dirty ? <div className="flex flex-wrap items-center justify-end gap-3 border-t border-line py-3">
+        {derived.needsVault
+          ? <p className={`grow ${hintText}`}>{t("conn.basicNeedVault")}</p>
+          : !derived.passwordAllowed ? <p className={`grow ${hintText}`}>{t("conn.basicPasswordBlocked")}</p> : <span className="grow" />}
+        <Button type="button" disabled={!derived.dirty || busy} onClick={discardDraft}>
           {t("conn.discardChanges")}
         </Button>
         <Button type="submit" kind="primary" disabled={!canSave}>

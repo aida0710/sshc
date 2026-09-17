@@ -2,9 +2,9 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { HostDetail } from "../api/config";
-import type { IntegrationsApi } from "../api/integrations";
 import { HostDetailPanel } from "./HostDetail";
 import type { ConnectionSavedState } from "./connectionSavedState";
+import type { HostDetailApi } from "./HostDetail";
 
 const detail: HostDetail = {
   form: {
@@ -52,7 +52,7 @@ function savedState(): ConnectionSavedState {
   };
 }
 
-function integrations(): IntegrationsApi {
+function integrations(): HostDetailApi {
   return {
     effective: vi.fn().mockResolvedValue({
       alias: "bastion", tokenWarning: "", executableDirectives: [], sources: [],
@@ -64,7 +64,7 @@ function integrations(): IntegrationsApi {
     passwordEligibility: vi.fn(),
     initialiseVault: vi.fn(),
     unlockVault: vi.fn(),
-  } as unknown as IntegrationsApi;
+  } as unknown as HostDetailApi;
 }
 
 function renderPanel(overrides: Partial<Parameters<typeof HostDetailPanel>[0]> = {}) {

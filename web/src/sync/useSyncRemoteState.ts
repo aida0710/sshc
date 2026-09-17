@@ -1,10 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import type {
-  IntegrationsApi,
-  SyncBucketStatus,
-  SyncHistory,
-  SyncPushDraft,
-} from "../api/integrations";
+import type { SyncApi, SyncBucketStatus, SyncHistory, SyncPushDraft } from "../api/sync";
 import type { Translate } from "../i18n/context";
 
 export type BucketStatusState =
@@ -19,7 +14,7 @@ export type HistoryState =
   | { phase: "error"; message: string }
   | { phase: "ready"; value: SyncHistory };
 
-export function useSyncRemoteState(api: IntegrationsApi, t: Translate) {
+export function useSyncRemoteState(api: Pick<SyncApi, "syncPushDraft" | "syncBucketStatus" | "syncHistory">, t: Translate) {
   const [bucketState, setBucketState] = useState<BucketStatusState>({
     phase: "idle",
   });

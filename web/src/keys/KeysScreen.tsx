@@ -1,3 +1,5 @@
+import { vaultApi, type VaultApi } from "../api/vault";
+import { credentialsApi, type CredentialsApi } from "../api/credentials";
 import { useCallback, useEffect, useState, type DragEvent } from "react";
 import {
   useAgentForm,
@@ -37,7 +39,6 @@ import { Icon } from "../ui/icons";
 import { PanelState } from "../ui/PanelState";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { PasswordInput } from "../ui/PasswordField";
-import { integrationsApi, type IntegrationsApi } from "../api/integrations";
 import {
   keysApi,
   type KeyInventoryResponse,
@@ -72,11 +73,17 @@ import {
   type MoveTarget,
 } from "./organizer";
 
+// The key list stores passphrases as credentials and assigns them to keys,
+// which needs the vault open.
+export type KeySecretsApi = Pick<VaultApi, "passwordVault"> &
+  Pick<CredentialsApi, "credentials" | "storeCredential" | "assignCredential" | "unassignCredential">;
+export const keySecretsApi: KeySecretsApi = { ...vaultApi, ...credentialsApi };
+
 type KeysScreenProps = {
   api?: KeysApi;
   onInspector?: (content: InspectorContent) => void;
   groups?: string[];
-  secrets?: IntegrationsApi;
+  secrets?: KeySecretsApi;
   onAssignGeneratedKey?: (key: GeneratedPrivateKeyHandoff) => void;
   onInstallGeneratedKey?: (key: GeneratedPublicKeyHandoff) => void;
 };
@@ -99,7 +106,7 @@ export function KeysScreen({
   onInspector,
   api = keysApi,
   groups = [],
-  secrets = integrationsApi,
+  secrets = keySecretsApi,
   onAssignGeneratedKey,
   onInstallGeneratedKey,
 }: KeysScreenProps) {

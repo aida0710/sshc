@@ -5,7 +5,7 @@ import { SearchAddon } from "@xterm/addon-search";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { failureCode } from "../api/client";
-import { integrationsApi, type IntegrationsApi, type TerminalSession } from "../api/integrations";
+import { terminalSessionsApi, type TerminalSession, type TerminalSessionsApi } from "../api/terminalSessions";
 import { useTranslate } from "../i18n/context";
 import { useTheme } from "../theme/context";
 import { terminalTheme } from "./theme";
@@ -47,7 +47,7 @@ import { cursorAnimationEnabled, reducedMotionQuery } from "../ui/reducedMotion"
 type TerminalViewProps = {
   session: TerminalSession;
   searchShortcutActive?: boolean;
-  api?: Pick<IntegrationsApi, "terminalStreamTicket">;
+  api?: Pick<TerminalSessionsApi, "terminalStreamTicket">;
   onExit?: () => void;
   onReconnect?: () => Promise<boolean>;
   onStopReconnect?: () => Promise<boolean>;
@@ -80,7 +80,7 @@ const settled = 10_000;
 export function TerminalView({
   session,
   searchShortcutActive,
-  api = integrationsApi,
+  api = terminalSessionsApi,
   onExit,
   onReconnect,
   onStopReconnect,

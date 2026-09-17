@@ -4,7 +4,7 @@ import { Terminal } from "@xterm/xterm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { StreamHandlers, TerminalStream } from "./stream";
 import { ApiError } from "../api/client";
-import type { TerminalSession } from "../api/integrations";
+import type { TerminalSession } from "../api/terminalSessions";
 import { reducedMotionQuery } from "../ui/reducedMotion";
 
 const streams: { handlers: StreamHandlers; stream: TerminalStream }[] = [];
