@@ -113,6 +113,17 @@ export function CommandPalette({
       search: `${command.search} command action 実行 コマンド 操作`,
       action: command.run,
     })),
+    // Hosts come before open sessions: the palette is mostly used to start a
+    // connection, and a session to a host is reachable from the console list.
+    ...hosts.map((host) => ({
+      id: `host:${host.identity.path}:${host.identity.alias}`,
+      kind: "host" as const,
+      label: t("palette.connectHost", { alias: host.identity.alias }),
+      detail: host.file.path ?? host.file.absolute,
+      search: `${host.identity.alias} ${host.identity.path} host connect ssh 接続 ホスト`,
+      action: () => onConnect(host.identity.alias),
+      host: host.identity,
+    })),
     ...sessions.filter((session) => session.exited === undefined).map((session) => {
       const unread = unreadBySession.has(session.id);
       const status = t("terminal.connected");
@@ -126,15 +137,6 @@ export function CommandPalette({
         action: () => onOpenSession(session.id),
       };
     }),
-    ...hosts.map((host) => ({
-      id: `host:${host.identity.path}:${host.identity.alias}`,
-      kind: "host" as const,
-      label: t("palette.connectHost", { alias: host.identity.alias }),
-      detail: host.file.path ?? host.file.absolute,
-      search: `${host.identity.alias} ${host.identity.path} host connect ssh 接続 ホスト`,
-      action: () => onConnect(host.identity.alias),
-      host: host.identity,
-    })),
     ...files.map((node) => ({
       id: `file:${node.file.path ?? node.file.absolute}`,
       kind: "file" as const,

@@ -7,7 +7,7 @@ description: Search, organize, and edit a large SSH inventory.
 
 ![Three-column connection management](/images/connections-management.png)
 
-Connections uses a group tree, a host list, and a detail pane. Narrow screens show one level at a time and respect browser or Android back navigation.
+Connections uses a group tree, a host list, and a detail pane. Drag the column dividers, or focus one and use the arrow keys (Shift for larger steps, Home for the minimum, End for the maximum), to change the widths; they are remembered per browser. Narrow screens show one level at a time and respect browser or Android back navigation.
 
 ## Find a connection
 

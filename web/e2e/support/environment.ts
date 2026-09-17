@@ -239,6 +239,16 @@ export function sessionStatus(page: Page) {
   return page.locator("[data-session-status]");
 }
 
+// openLocalShell starts a local shell through the "New session" picker
+// in the primary navigation, the same dialog SFTP uses to choose a host.
+export async function openLocalShell(page: Page): Promise<void> {
+  const navigation = page.getByRole("navigation", { name: "Primary" });
+  await navigation.getByRole("button", { name: "New session", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "New session" });
+  await dialog.getByRole("button", { name: /^Local shell, localhost/ }).click();
+  await expect(dialog).toBeHidden();
+}
+
 export async function openSection(page: Page, name: string): Promise<void> {
   await expect(sessionStatus(page)).toContainText("Local session active");
   if (name === "Terminal") {

@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { expect, openApplication, test, windowsShell } from "./support/environment";
+import { expect, openApplication, test, windowsShell, openLocalShell } from "./support/environment";
 import {
   drawnRowCount,
   loseTerminalWebGLContext,
@@ -43,7 +43,7 @@ async function expectDrawingFits(page: Page) {
 }
 
 async function openWebGLShell(page: Page) {
-  await page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Local shell" }).click();
+  await openLocalShell(page);
   await expect(terminalKeyboard(page)).toBeAttached();
   await expect.poll(() => terminalCanvasCount(page)).toBeGreaterThan(0);
   await page.evaluate(async () => {

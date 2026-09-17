@@ -147,6 +147,20 @@ describe("CommandPalette", () => {
     expect(onConnect).not.toHaveBeenCalled();
   });
 
+  it("lists hosts to connect before sessions that are already open", () => {
+    renderPalette({
+      sessions: [
+        { id: "first", kind: "ssh", alias: "r540", title: "r540", startedAt: "2026-08-29T00:00:00Z", state: "connected", problem: "" },
+      ],
+    });
+
+    const labels = screen.getAllByRole("option").map((option) => option.textContent ?? "");
+    const host = labels.findIndex((label) => label.includes("Connect to r540"));
+    const session = labels.findIndex((label) => label.includes("connected · r540"));
+    expect(host).toBeGreaterThanOrEqual(0);
+    expect(session).toBeGreaterThan(host);
+  });
+
   it("jumps to a live session and filters unread notifications without changing its order", async () => {
     const user = userEvent.setup();
     const onOpenSession = vi.fn();
@@ -159,9 +173,9 @@ describe("CommandPalette", () => {
       onOpenSession,
     });
 
-    const options = screen.getAllByRole("option");
-    expect(options[0]).toHaveTextContent("First");
-    expect(options[1]).toHaveTextContent("Fix login");
+    const sessions = screen.getAllByRole("option").filter((option) => /connected · /.test(option.textContent ?? ""));
+    expect(sessions[0]).toHaveTextContent("First");
+    expect(sessions[1]).toHaveTextContent("Fix login");
     await user.type(screen.getByRole("searchbox"), "@unread{Enter}");
 
     expect(onOpenSession).toHaveBeenCalledWith("second");

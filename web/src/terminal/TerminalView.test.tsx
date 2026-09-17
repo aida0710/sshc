@@ -301,6 +301,18 @@ describe("TerminalView", () => {
     expect(screen.getByText("checking the host key for bastion · 1/2")).toBeVisible();
   });
 
+  it("lets the user stop the automatic reconnect while it is waiting", async () => {
+    const onStopReconnect = vi.fn().mockResolvedValue(true);
+    render(<TerminalView session={{
+      ...session, kind: "ssh", alias: "tv", title: "tv", state: "reconnecting",
+      reconnect: { attempt: 2, limit: 5, retryAt: "2026-09-18T00:00:10Z", problem: "reconnect_failed" },
+    }} api={{ terminalStreamTicket: vi.fn(async () => ({ streamTicket: "one-time" })) }} onStopReconnect={onStopReconnect} />);
+
+    expect(screen.getByText("reconnecting 2/5")).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "Stop reconnecting" }));
+    expect(onStopReconnect).toHaveBeenCalledOnce();
+  });
+
   it("shows the title the terminal set together with the alias, without SSH noise", () => {
     render(<TerminalView session={{
       ...session, kind: "ssh", alias: "osaka", title: "vim notes.md",

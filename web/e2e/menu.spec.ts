@@ -1,4 +1,4 @@
-import { expect, openApplication, test } from "./support/environment";
+import { expect, openApplication, test, openLocalShell } from "./support/environment";
 
 test("keeps sessions in the sidebar and moves product navigation to the Menu page", async ({
   page,
@@ -65,7 +65,7 @@ test("keeps sessions in the sidebar and moves product navigation to the Menu pag
   if (visualDirectory !== undefined) {
     await page.screenshot({ path: `${visualDirectory}/sshc-sessions-drawer-mobile.png`, fullPage: true });
   }
-  await navigation.getByRole("button", { name: "Local shell", exact: true }).click();
+  await openLocalShell(page);
   await expect(page).toHaveURL(/\/terminal$/);
   await expect(page.getByRole("region", { name: /^Console for / })).toBeVisible();
 });

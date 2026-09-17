@@ -1,5 +1,5 @@
 import { mkdir } from "node:fs/promises";
-import { expect, openApplication, openSection, test } from "./support/environment";
+import { expect, openApplication, openSection, test, openLocalShell } from "./support/environment";
 import { terminalKeyboard } from "./support/terminal";
 
 test("shows OS icons and editable paste and close dialogs with synthetic connections", async ({ page, context, installation }) => {
@@ -31,7 +31,7 @@ test("shows OS icons and editable paste and close dialogs with synthetic connect
     await mkdir(connectionsDir, { recursive: true });
     await page.screenshot({ path: `${connectionsDir}/connections-os-icons.png`, fullPage: true });
   }
-  await page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Local shell" }).click();
+  await openLocalShell(page);
   await expect(page.getByRole("region", { name: /^Console for / })).toContainText(/[$#%>]/);
   await page.evaluate(() => navigator.clipboard.writeText("echo example-one\necho example-two\n"));
   await terminalKeyboard(page).focus();

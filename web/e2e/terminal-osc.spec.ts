@@ -1,4 +1,4 @@
-import { expect, openApplication, openSection, test } from "./support/environment";
+import { expect, openApplication, openSection, test, openLocalShell } from "./support/environment";
 import { terminalKeyboard } from "./support/terminal";
 
 // Programs rename panes with OSC 0/1/2 and raise notifications with
@@ -12,7 +12,7 @@ test("applies terminal titles to the pane and marks notifications unread", async
   await openApplication(page, installation);
   await openSection(page, "Terminal");
   const nav = page.getByRole("navigation", { name: "Primary" });
-  await nav.getByRole("button", { name: "Local shell" }).click();
+  await openLocalShell(page);
   const screen = page.getByRole("region", { name: /^Console for / });
   await expect(screen).toContainText(/[$#%>]/, { timeout: 20_000 });
   await terminalKeyboard(page).focus();
@@ -33,7 +33,7 @@ test("applies terminal titles to the pane and marks notifications unread", async
   // mark must appear on the pane we are no longer looking at.
   await page.keyboard.type("sleep 3; printf '\\033]777;notify;Build finished;main.go compiled\\a'");
   await page.keyboard.press("Enter");
-  await nav.getByRole("button", { name: "Local shell" }).click();
+  await openLocalShell(page);
   await expect(consoles.getByRole("listitem")).toHaveCount(2);
   const first = consoles.getByRole("listitem").first();
   await expect(first.getByLabel("Unread notification")).toBeVisible({ timeout: 20_000 });

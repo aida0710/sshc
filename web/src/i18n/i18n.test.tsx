@@ -87,6 +87,7 @@ describe("the catalogue", () => {
         "shell.navVault",
         "shell.sessions",
         "shell.title",
+        "shortcuts.heading",
         "snippets.heading",
         "sync.historyRelation.head",
         "terminal.browserNotificationsHeading",

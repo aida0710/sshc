@@ -383,6 +383,15 @@ func (r *Registry) StopForward(id, forwardID string) error {
 	return session.StopForward(forwardID)
 }
 
+// StopReconnecting は自動再接続の待機を打ち切り、セッションを終了状態のまま残す。
+func (r *Registry) StopReconnecting(id string) error {
+	session, ok := r.Lookup(id)
+	if !ok {
+		return ErrNotFound
+	}
+	return session.StopReconnecting()
+}
+
 // Reconnect は終了済みのSSHセッションを同じIDとscrollbackのまま開き直す。
 // 新規Openと同じ上限に数え、closeやengine停止が先行したProcessは公開しない。
 func (r *Registry) Reconnect(ctx context.Context, id string) (*Session, error) {

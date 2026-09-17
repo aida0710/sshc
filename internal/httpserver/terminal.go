@@ -81,6 +81,7 @@ func registerTerminalRoutes(engine *echo.Echo, handlers TerminalHandlers) {
 	}
 	engine.POST("/api/v1/terminal/sessions/:id/stream", handlers.Ticket)
 	engine.POST("/api/v1/terminal/sessions/:id/reconnect", handlers.Reconnect)
+	engine.POST("/api/v1/terminal/sessions/:id/reconnect/stop", handlers.StopReconnecting)
 	engine.POST("/api/v1/terminal/sessions/:id/forwards", handlers.StartForward)
 	engine.DELETE("/api/v1/terminal/sessions/:id/forwards/:forwardId", handlers.StopForward)
 	engine.GET("/api/v1/terminal/sessions/:id/control", handlers.Control)
@@ -723,6 +724,34 @@ func (h TerminalHandlers) Reconnect(c *echo.Context) error {
 		return problem(c, http.StatusServiceUnavailable, "terminal_start_failed")
 	case err != nil:
 		return h.startProblem(c, err)
+	}
+	return c.JSON(http.StatusOK, h.list())
+}
+
+// StopReconnecting は自動再接続の待機を止める。プロセスは既に無いので、
+// セッションは終了として一覧に残り、手動の再接続と閉じる操作だけが残る。
+func (h TerminalHandlers) StopReconnecting(c *echo.Context) error {
+	id := c.Param("id")
+	if id == "" || len(id) > maxSessionIdentifier {
+		return problem(c, http.StatusNotFound, "terminal_session_not_found")
+	}
+	err := h.Registry.StopReconnecting(id)
+	switch {
+	case errors.Is(err, terminal.ErrNotFound):
+		return problem(c, http.StatusNotFound, "terminal_session_not_found")
+	case errors.Is(err, terminal.ErrNotReconnecting):
+		return problem(c, http.StatusConflict, "terminal_not_reconnecting")
+	case err != nil:
+		return problem(c, http.StatusInternalServerError, "terminal_reconnect_stop_failed")
+	}
+	// The pump finishes asynchronously; wait briefly so the listing already
+	// reports the exited state to the caller that pressed the button.
+	if session, ok := h.Registry.Lookup(id); ok {
+		select {
+		case <-session.Done():
+		case <-time.After(2 * time.Second):
+		case <-c.Request().Context().Done():
+		}
 	}
 	return c.JSON(http.StatusOK, h.list())
 }

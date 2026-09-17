@@ -46,6 +46,7 @@ function buildApi(overrides: Partial<IntegrationsApi> = {}): IntegrationsApi {
     openTerminalSession: vi.fn(),
     terminalStreamTicket: vi.fn(),
     reconnectTerminalSession: vi.fn().mockResolvedValue({ sessions: [], maxSessions: 50 }),
+    stopTerminalReconnect: vi.fn().mockResolvedValue({ sessions: [], maxSessions: 50 }),
     startTerminalForward: vi.fn().mockResolvedValue({ sessions: [], maxSessions: 50 }),
     stopTerminalForward: vi.fn().mockResolvedValue({ sessions: [], maxSessions: 50 }),
     closeTerminalSession: vi.fn().mockResolvedValue({ sessions: [], maxSessions: 50 }),
