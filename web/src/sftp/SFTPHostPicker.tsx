@@ -33,7 +33,9 @@ export function SFTPHostPicker({
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
   const localName = t("sftp.local.connection");
-  const local = includeLocal ? [{ id: "engine", label: localName, detail: t("sftp.local.engine") }] : [];
+  const local = includeLocal
+    ? [{ id: "engine", label: localName, detail: t("sftp.local.engine"), current: value === localHostAlias }]
+    : [];
 
   function choose(alias: string) {
     onChange(alias);

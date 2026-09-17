@@ -77,7 +77,7 @@ export function ConsoleList({
     const profiles = localShellProfiles.filter((profile) => profile.id !== "default");
     return [
       { id: "default", label: t("terminal.openShell"), detail: t("terminal.localhost") },
-      ...profiles.map((profile) => ({ id: profile.id, label: `${t("terminal.openShell")} · ${profile.label}`, detail: t("terminal.openShellOnce") })),
+      ...profiles.map((profile) => ({ id: profile.id, label: `${t("terminal.openShell")} · ${profile.label}`, detail: profile.path })),
     ];
   }, [localShellProfiles, t]);
   const [menuFor, setMenuFor] = useState<string | null>(null);

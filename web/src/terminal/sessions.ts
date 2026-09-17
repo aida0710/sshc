@@ -89,6 +89,34 @@ export function useTerminalSessions(
     }
   }, [api, enabled]);
 
+  // applyMutation runs one request whose response is the listing after the
+  // change. A response that lost the race to a newer mutation is discarded in
+  // favour of a fresh list. Callers only say what to show when it fails.
+  const applyMutation = useCallback(async (
+    request: () => Promise<{ sessions: TerminalSession[]; maxSessions: number }>,
+    reportFailure: (error: unknown) => Promise<void> | void,
+  ): Promise<boolean> => {
+    beginOperation();
+    const generation = beginMutation();
+    try {
+      const listed = await request();
+      if (!adoptMutationListing(listed, generation)) await refresh();
+      return true;
+    } catch (error) {
+      await reportFailure(error);
+      return false;
+    } finally {
+      finishOperation();
+    }
+  }, [adoptMutationListing, beginMutation, beginOperation, finishOperation, refresh]);
+
+  // Connection problems carry a fixed code the catalogue can translate; the
+  // list is refreshed as well because the session state changed underneath.
+  const reportConnectionFailure = useCallback(async (error: unknown) => {
+    setProblem(translate(terminalProblemKey(failureCode(error))));
+    await refresh();
+  }, [refresh, translate]);
+
   useEffect(() => {
     void refresh();
     return () => {
@@ -132,58 +160,25 @@ export function useTerminalSessions(
 
   const close = useCallback(
     async (id: string) => {
-      beginOperation();
-      const generation = beginMutation();
-      try {
-        const listed = await api.closeTerminalSession(id);
-        if (!adoptMutationListing(listed, generation)) await refresh();
-      } catch {
-        setProblem(translate("terminal.closeFailed"));
-      } finally {
-        finishOperation();
-      }
+      await applyMutation(() => api.closeTerminalSession(id), () => setProblem(translate("terminal.closeFailed")));
     },
-    [adoptMutationListing, api, beginMutation, beginOperation, finishOperation, refresh, translate],
+    [api, applyMutation, translate],
   );
 
   const reconnect = useCallback(
     async (id: string): Promise<boolean> => {
-      beginOperation();
       setProblem("");
-      const generation = beginMutation();
-      try {
-        const listed = await api.reconnectTerminalSession(id);
-        if (!adoptMutationListing(listed, generation)) await refresh();
-        return true;
-      } catch (error) {
-        setProblem(translate(terminalProblemKey(failureCode(error))));
-        await refresh();
-        return false;
-      } finally {
-        finishOperation();
-      }
+      return applyMutation(() => api.reconnectTerminalSession(id), reportConnectionFailure);
     },
-    [adoptMutationListing, api, beginMutation, beginOperation, finishOperation, refresh, translate],
+    [api, applyMutation, reportConnectionFailure],
   );
 
   const stopReconnect = useCallback(
     async (id: string): Promise<boolean> => {
-      beginOperation();
       setProblem("");
-      const generation = beginMutation();
-      try {
-        const listed = await api.stopTerminalReconnect(id);
-        if (!adoptMutationListing(listed, generation)) await refresh();
-        return true;
-      } catch (error) {
-        setProblem(translate(terminalProblemKey(failureCode(error))));
-        await refresh();
-        return false;
-      } finally {
-        finishOperation();
-      }
+      return applyMutation(() => api.stopTerminalReconnect(id), reportConnectionFailure);
     },
-    [adoptMutationListing, api, beginMutation, beginOperation, finishOperation, refresh, translate],
+    [api, applyMutation, reportConnectionFailure],
   );
 
   const closeAll = useCallback(async () => {
@@ -216,39 +211,15 @@ export function useTerminalSessions(
   }, [adoptMutationListing, api, beginMutation, beginOperation, finishOperation, refresh, sessions, translate]);
 
   const rename = useCallback(
-    async (id: string, title: string): Promise<boolean> => {
-      beginOperation();
-      const generation = beginMutation();
-      try {
-        const listed = await api.renameTerminalSession(id, title);
-        if (!adoptMutationListing(listed, generation)) await refresh();
-        return true;
-      } catch {
-        setProblem(translate("terminal.renameFailed"));
-        return false;
-      } finally {
-        finishOperation();
-      }
-    },
-    [adoptMutationListing, api, beginMutation, beginOperation, finishOperation, refresh, translate],
+    (id: string, title: string): Promise<boolean> =>
+      applyMutation(() => api.renameTerminalSession(id, title), () => setProblem(translate("terminal.renameFailed"))),
+    [api, applyMutation, translate],
   );
 
   const unpinTitle = useCallback(
-    async (id: string): Promise<boolean> => {
-      beginOperation();
-      const generation = beginMutation();
-      try {
-        const listed = await api.renameTerminalSession(id, null);
-        if (!adoptMutationListing(listed, generation)) await refresh();
-        return true;
-      } catch {
-        setProblem(translate("terminal.renameFailed"));
-        return false;
-      } finally {
-        finishOperation();
-      }
-    },
-    [adoptMutationListing, api, beginMutation, beginOperation, finishOperation, refresh, translate],
+    (id: string): Promise<boolean> =>
+      applyMutation(() => api.renameTerminalSession(id, null), () => setProblem(translate("terminal.renameFailed"))),
+    [api, applyMutation, translate],
   );
 
   const markExited = useCallback((id: string) => {

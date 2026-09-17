@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import type { HostEntry } from "../api/config";
 import { recentConnectionsApi, type RecentConnection } from "../api/recentConnections";
 import { useTranslate } from "../i18n/context";
-import { localHostAlias } from "../sftp/localHost";
 import { Icon } from "../ui/icons";
 import { ModalShell } from "../ui/ModalShell";
 import { activateTabFromKeyboard } from "../ui/tabKeyboard";
@@ -11,7 +10,18 @@ type HostChoice = { alias: string; group: string; hostName: string; user: string
 
 // A LocalChoice is pinned above the SSH hosts. SFTP offers the engine's own
 // file system; the console list offers local shells, one per profile.
-export type LocalChoice = { id: string; label: string; detail: string };
+// `current` marks the choice the pane already shows.
+export type LocalChoice = { id: string; label: string; detail: string; current?: boolean };
+
+type RowProps = {
+  key: string;
+  name: string;
+  detail: string;
+  icon: "home" | "terminal";
+  current: boolean;
+  label?: string;
+  choose: () => void;
+};
 
 const loadDefaultRecent = () => recentConnectionsApi.recentConnections();
 const noHosts: HostEntry[] = [];
@@ -96,7 +106,7 @@ export function HostPickerDialog({
     setQuery("");
   }
 
-  const row = (key: string, name: string, detail: string, icon: "home" | "terminal", current: boolean, choose: () => void, label?: string) => (
+  const row = ({ key, name, detail, icon, current, label, choose }: RowProps) => (
     <button key={key} type="button" onClick={() => { choose(); setQuery(""); }}
       aria-label={label}
       className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-left hover:bg-select-fill focus:bg-select-fill focus:outline-none ${current ? "bg-select-fill" : ""}`}>
@@ -108,8 +118,15 @@ export function HostPickerDialog({
       {current ? <span className="text-xs text-accent">{t("sftp.hostCurrent")}</span> : null}
     </button>
   );
-  const hostRow = (host: HostChoice, detail: string) =>
-    row(host.alias, host.alias, detail || host.hostName, "terminal", host.alias === value, () => onChoose(host.alias));
+  const hostRow = (host: HostChoice, detail: string) => row({
+    key: host.alias, name: host.alias, detail: detail || host.hostName, icon: "terminal",
+    current: host.alias === value, choose: () => onChoose(host.alias),
+  });
+  const localRow = (choice: LocalChoice) => row({
+    key: `local:${choice.id}`, name: choice.label, detail: choice.detail, icon: "home",
+    current: choice.current === true, label: `${choice.label}, ${choice.detail}`,
+    choose: () => onChooseLocal?.(choice.id),
+  });
 
   return (
     <ModalShell open={open} labelledBy="host-picker-heading" onDismiss={close} closeOnOutside initialFocusRef={initialFocus === "close" ? closeButton : search} {...(returnFocusRef === undefined ? {} : { returnFocusRef })} placement="palette" panelClassName="flex max-h-[76vh] w-full max-w-xl flex-col overflow-hidden rounded-xl">
@@ -129,10 +146,7 @@ export function HostPickerDialog({
         </div> : null}
       </div>
       <div className="min-h-0 overflow-y-auto p-2">
-        {localMatches.length > 0 ? <div className="mb-2 border-b border-line pb-2">
-          {localMatches.map((choice) => row(`local:${choice.id}`, choice.label, choice.detail, "home",
-            value === localHostAlias && choice.id === localMatches[0]?.id, () => onChooseLocal?.(choice.id), `${choice.label}, ${choice.detail}`))}
-        </div> : null}
+        {localMatches.length > 0 ? <div className="mb-2 border-b border-line pb-2">{localMatches.map(localRow)}</div> : null}
         {normalized !== "" ? (
           matches.length === 0 && localMatches.length === 0 ? <p className="p-4 text-center text-sm text-ink-muted">{t("sftp.noHostMatches")}</p> : matches.map((host) => hostRow(host, host.group || host.hostName))
         ) : view === "recent" && recentChoices.length > 0 ? (
