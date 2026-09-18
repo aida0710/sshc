@@ -116,7 +116,7 @@ func (h ConnectionHandlers) Update(c *echo.Context) error {
 
 func updateConnectionRequestFromAPI(wire api.UpdateConnectionRequest) (application.UpdateConnectionRequest, bool, error) {
 	if wire.Identity.Path == "" || len(wire.Identity.Path) > 1024 ||
-		wire.Identity.Alias == "" || len(wire.Identity.Alias) > 64 || len(wire.Base) > 1<<20 {
+		wire.Identity.Alias == "" || len(wire.Identity.Alias) > validate.MaxAliasLength || len(wire.Base) > 1<<20 {
 		return application.UpdateConnectionRequest{}, false, errInvalidEdit
 	}
 	request := application.UpdateConnectionRequest{
@@ -383,7 +383,7 @@ func decodeUpdateConnectionTOTP(value api.UpdateConnectionTOTP) (application.Upd
 }
 
 func connectionRequestFromAPI(wire api.CreateConnectionRequest) (application.CreateConnectionRequest, error) {
-	if len(wire.Alias) == 0 || len(wire.Alias) > 64 ||
+	if len(wire.Alias) == 0 || len(wire.Alias) > validate.MaxAliasLength ||
 		len(wire.HostName) == 0 || len(wire.HostName) > validate.MaxHostnameLength ||
 		wire.Group != nil && len(*wire.Group) > 400 ||
 		wire.User != nil && len(*wire.User) > 255 {

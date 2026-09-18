@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sshc/internal/streamrun"
 	"sync"
 
 	"golang.org/x/term"
@@ -88,13 +89,13 @@ func copyTransportInput(destination io.Writer, source io.Reader) error {
 			payload := buffer[:count]
 			if escapeAt := bytesIndex(payload, transportEscapeByte); escapeAt >= 0 {
 				if escapeAt > 0 {
-					if writeErr := writeTransportAll(destination, payload[:escapeAt]); writeErr != nil {
+					if writeErr := streamrun.WriteAll(destination, payload[:escapeAt]); writeErr != nil {
 						return writeErr
 					}
 				}
 				return errLocalEscape
 			}
-			if writeErr := writeTransportAll(destination, payload); writeErr != nil {
+			if writeErr := streamrun.WriteAll(destination, payload); writeErr != nil {
 				return writeErr
 			}
 		}
@@ -114,24 +115,4 @@ func bytesIndex(payload []byte, wanted byte) int {
 		}
 	}
 	return -1
-}
-
-func writeTransportAll(writer io.Writer, payload []byte) error {
-	for len(payload) > 0 {
-		count, err := writer.Write(payload)
-		if count < 0 || count > len(payload) {
-			return io.ErrShortWrite
-		}
-		payload = payload[count:]
-		if err != nil {
-			return err
-		}
-		if count == 0 {
-			return io.ErrShortWrite
-		}
-	}
-	if flusher, ok := writer.(interface{ Flush() error }); ok {
-		return flusher.Flush()
-	}
-	return nil
 }

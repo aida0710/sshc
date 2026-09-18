@@ -27,7 +27,10 @@ func TestEngineStatusReadsUnlockedAndSessions(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"vault": true, "unlocked": true, "sessions": 3})
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"owner": handoff.OwnerEngine, "version": "test", "protocolVersion": handoff.ProtocolVersion,
+			"vault": true, "unlocked": true, "sessions": 3,
+		})
 	}))
 	defer server.Close()
 
@@ -155,7 +158,11 @@ func TestStatusPrintsATableAndStillSpeaksJSON(t *testing.T) {
 	defer server.Close()
 
 	stateDir := t.TempDir()
-	writeTestHandoff(t, stateDir, server.URL)
+	document := testHandoff(server.URL)
+	document.Version = "v9-test"
+	if err := handoff.Write(stateDir, document); err != nil {
+		t.Fatal(err)
+	}
 	client := &http.Client{Timeout: 5 * time.Second}
 
 	var table, errOut strings.Builder

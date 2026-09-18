@@ -16,6 +16,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"sshc/internal/api"
 	"sshc/internal/application"
 	"sshc/internal/sftp"
 	"sshc/internal/snippets"
@@ -34,7 +35,6 @@ func TestHandwrittenHTTPWireTypesMatchOpenAPIRecursively(t *testing.T) {
 		"TerminalBackground":              application.Background{},
 		"TerminalBackgroundList":          backgroundListResponse{},
 		"ChangedResponse":                 changedResponse{},
-		"SFTPEntry":                       sftpEntry{},
 		"SFTPListing":                     sftpListingResponse{},
 		"SFTPTextFile":                    sftpTextFileResponse{},
 		"SFTPSearchResult":                sftpSearchResponse{},
@@ -451,6 +451,14 @@ var wireEnumValues = map[reflect.Type][]string{
 	},
 	reflect.TypeOf(sftp.EntryType("")): {
 		string(sftp.EntryFile), string(sftp.EntryDirectory), string(sftp.EntrySymlink), string(sftp.EntryOther),
+	},
+	// The generated SFTPEntry is embedded in hand-written listings; its enum is
+	// the generated one.
+	reflect.TypeOf(api.SFTPEntryType("")): {
+		string(api.File), string(api.Directory), string(api.Symlink), string(api.Other),
+	},
+	reflect.TypeOf(api.SFTPEntryTargetType("")): {
+		string(api.SFTPEntryTargetTypeFile), string(api.SFTPEntryTargetTypeDirectory), string(api.SFTPEntryTargetTypeOther),
 	},
 	reflect.TypeOf(sftp.TransferDirection("")): {
 		string(sftp.TransferUpload), string(sftp.TransferDownload), string(sftp.TransferRemote),

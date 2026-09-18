@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"net"
+	"os"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -109,7 +111,9 @@ func TestAuthenticationTestClassifiesFailuresByType(t *testing.T) {
 		{"denied", errors.New("ssh: unable to authenticate, attempted methods [none publickey]"), diagnostics.OutcomeDenied},
 		{"dns", &net.DNSError{Err: "no such host", Name: "nowhere.invalid"}, diagnostics.OutcomeDNSFailure},
 		{"deadline", context.DeadlineExceeded, diagnostics.OutcomeTimeout},
-		{"refused", errors.New("dial tcp 127.0.0.1:1: connect: connection refused"), diagnostics.OutcomeRefused},
+		// net reports a refused port as an OpError wrapping the OS errno; the
+		// classifier matches the errno, not the English wording.
+		{"refused", &net.OpError{Op: "dial", Net: "tcp", Err: &os.SyscallError{Syscall: "connect", Err: syscall.ECONNREFUSED}}, diagnostics.OutcomeRefused},
 		{"anything else", errors.New("something nobody has seen"), diagnostics.OutcomeFailed},
 	} {
 		probe := &scriptedProbe{err: test.err, result: sshclient.Probe{Tried: []string{"publickey"}}}

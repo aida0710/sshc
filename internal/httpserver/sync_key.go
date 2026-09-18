@@ -20,7 +20,7 @@ import (
 func (h SyncHandlers) sealingKey(c *echo.Context) (string, bool, error) {
 	key, err := h.currentSyncKey()
 	switch {
-	case errors.Is(err, secret.ErrLocked), errors.Is(err, secret.ErrNoVault):
+	case vaultUnavailable(err):
 		return "", false, problem(c, http.StatusConflict, "vault_locked")
 	case errors.Is(err, errSyncKeyMissing):
 		return "", false, problem(c, http.StatusConflict, "sync_key_missing")
@@ -52,7 +52,7 @@ func syncKeyProblem(c *echo.Context, err error) error {
 	switch {
 	case errors.Is(err, errSyncKeyMissing):
 		return problem(c, http.StatusConflict, "sync_key_missing")
-	case errors.Is(err, secret.ErrLocked), errors.Is(err, secret.ErrNoVault):
+	case vaultUnavailable(err):
 		return problem(c, http.StatusConflict, "vault_locked")
 	default:
 		return syncProblem(c, err)
@@ -111,7 +111,7 @@ func (h SyncHandlers) SetKey(c *echo.Context) error {
 		}
 		return settings.Key, commit, nil
 	}); err != nil {
-		if errors.Is(err, secret.ErrLocked) || errors.Is(err, secret.ErrNoVault) {
+		if vaultUnavailable(err) {
 			return problem(c, http.StatusConflict, "vault_locked")
 		}
 		if errors.Is(err, remotesync.ErrRemoteMoved) || errors.Is(err, remotesync.ErrWrongPassphrase) ||

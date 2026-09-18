@@ -1,7 +1,9 @@
-# 3 OS すべてで到達不能でも、消してはならないもの。
+# 建てられるすべての OS で到達不能でも、消してはならないもの。
 #
 # 各行に具体的な理由を記載する。
 #
 # 書式: <ファイル><TAB><シンボル><TAB><理由>
 
 mobile/sshc.go	Version	gomobile が Java 側に生やす。呼び手は JNI の向こう (EngineService の通知) に居るので、Go からは到達不能に見える。
+third_party/go-serial/unixutils/select.go	FDResultSets.IsError	upstream（bugst/go-serial）の公開 API をフォークでもそのまま残す。差分を最小に保つため消さない。
+third_party/go-serial/unixutils/select.go	FDResultSets.IsWritable	同上。

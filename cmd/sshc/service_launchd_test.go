@@ -20,31 +20,31 @@ import (
 
 type fakeLaunchdCommandRunner struct {
 	calls   [][]string
-	results []launchdCommandResult
+	results []serviceCommandResult
 	err     error
 }
 
-func (runner *fakeLaunchdCommandRunner) Run(_ context.Context, arguments ...string) (launchdCommandResult, error) {
+func (runner *fakeLaunchdCommandRunner) Run(_ context.Context, arguments ...string) (serviceCommandResult, error) {
 	runner.calls = append(runner.calls, append([]string(nil), arguments...))
 	if runner.err != nil {
-		return launchdCommandResult{}, runner.err
+		return serviceCommandResult{}, runner.err
 	}
 	if len(runner.results) == 0 {
-		return launchdCommandResult{}, nil
+		return serviceCommandResult{}, nil
 	}
 	result := runner.results[0]
 	runner.results = runner.results[1:]
 	return result, nil
 }
 
-func testLaunchdServiceManager(t *testing.T, runner launchdCommandRunner) *launchdServiceManager {
+func testLaunchdServiceManager(t *testing.T, runner serviceCommandRunner) *launchdServiceManager {
 	t.Helper()
 	return &launchdServiceManager{
 		home:   t.TempDir(),
 		uid:    501,
 		runner: runner,
 		files:  storage.OSFileSystem{},
-		waitReady: func(context.Context, string, int, launchdCommandRunner) error {
+		waitReady: func(context.Context, string, int, serviceCommandRunner) error {
 			return nil
 		},
 		lock: func() (func() error, error) {
@@ -54,7 +54,7 @@ func testLaunchdServiceManager(t *testing.T, runner launchdCommandRunner) *launc
 }
 
 func TestLaunchdServiceInstallWritesAPlistAndBootstrapsIt(t *testing.T) {
-	runner := &fakeLaunchdCommandRunner{results: []launchdCommandResult{{ExitCode: 113, Output: []byte("Could not find service")}}}
+	runner := &fakeLaunchdCommandRunner{results: []serviceCommandResult{{ExitCode: 113, Output: []byte("Could not find service")}}}
 	manager := testLaunchdServiceManager(t, runner)
 	executable := "/opt/sshc & tools/bin/sshc"
 	if err := manager.Install(context.Background(), executable); err != nil {
@@ -104,7 +104,7 @@ func TestLaunchdServiceDoesNotTouchAnUnmanagedPlist(t *testing.T) {
 }
 
 func TestLaunchdServiceStatusDistinguishesManagedStates(t *testing.T) {
-	runner := &fakeLaunchdCommandRunner{results: []launchdCommandResult{{ExitCode: 0, Output: []byte("pid = 4242\n")}, {ExitCode: 113, Output: []byte("Could not find service")}}}
+	runner := &fakeLaunchdCommandRunner{results: []serviceCommandResult{{ExitCode: 0, Output: []byte("pid = 4242\n")}, {ExitCode: 113, Output: []byte("Could not find service")}}}
 	manager := testLaunchdServiceManager(t, runner)
 	if state, err := manager.Status(context.Background()); err != nil || state != serviceAbsent {
 		t.Fatalf("absent status = %v, %v", state, err)
@@ -128,7 +128,10 @@ func TestLaunchdServiceStatusDistinguishesManagedStates(t *testing.T) {
 }
 
 func TestLaunchdServiceRestartAndDisableTouchOnlyTheManagedAgent(t *testing.T) {
-	runner := &fakeLaunchdCommandRunner{results: []launchdCommandResult{{ExitCode: 0, Output: []byte("pid = 4242\n")}}}
+	// print (active), kickstart, print again (still active after the restart).
+	runner := &fakeLaunchdCommandRunner{results: []serviceCommandResult{
+		{ExitCode: 0, Output: []byte("pid = 4242\n")}, {ExitCode: 0}, {ExitCode: 0, Output: []byte("pid = 4243\n")},
+	}}
 	manager := testLaunchdServiceManager(t, runner)
 	plist, err := launchdPlist("/opt/sshc/bin/sshc", manager.home)
 	if err != nil {
@@ -149,7 +152,7 @@ func TestLaunchdServiceRestartAndDisableTouchOnlyTheManagedAgent(t *testing.T) {
 	}
 
 	runner.calls = nil
-	runner.results = []launchdCommandResult{{ExitCode: 0}}
+	runner.results = []serviceCommandResult{{ExitCode: 0}}
 	removed, err := manager.Disable(context.Background())
 	if err != nil || !removed {
 		t.Fatalf("disable = %v, %v", removed, err)
@@ -181,7 +184,7 @@ func TestLaunchdReadinessRequiresTheLaunchdPIDAndStatusAPI(t *testing.T) {
 	if err := handoff.Write(app.HandoffDir(home), document); err != nil {
 		t.Fatal(err)
 	}
-	runner := &fakeLaunchdCommandRunner{results: []launchdCommandResult{{Output: []byte("state = running\n\tpid = 4242\n")}}}
+	runner := &fakeLaunchdCommandRunner{results: []serviceCommandResult{{Output: []byte("state = running\n\tpid = 4242\n")}}}
 	if err := waitForLaunchdServiceReady(context.Background(), home, 501, runner); err != nil {
 		t.Fatal(err)
 	}

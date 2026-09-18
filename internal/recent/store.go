@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"sshc/internal/storage"
+	"sshc/internal/validate"
 )
 
 const (
@@ -70,7 +71,7 @@ func (s *Store) List() ([]Entry, error) {
 // Record は、成功した接続を先頭へ移し、上限を超えた古い履歴を捨てる。
 func (s *Store) Record(alias string) error {
 	alias = strings.TrimSpace(alias)
-	if alias == "" || len(alias) > 64 {
+	if alias == "" || len(alias) > validate.MaxAliasLength {
 		return ErrInvalidDocument
 	}
 
@@ -114,7 +115,7 @@ func (s *Store) load() ([]Entry, error) {
 	seen := make(map[string]bool, len(stored.Entries))
 	entries := append([]Entry(nil), stored.Entries...)
 	for _, entry := range entries {
-		if strings.TrimSpace(entry.Alias) != entry.Alias || entry.Alias == "" || len(entry.Alias) > 64 || seen[entry.Alias] {
+		if strings.TrimSpace(entry.Alias) != entry.Alias || entry.Alias == "" || len(entry.Alias) > validate.MaxAliasLength || seen[entry.Alias] {
 			return nil, ErrInvalidDocument
 		}
 		seen[entry.Alias] = true

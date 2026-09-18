@@ -124,12 +124,6 @@ func readUnixPasswordWithFeedback(
 	return password, nil
 }
 
-func readUnixPasswordBytes(
-	ctx context.Context, terminalFD, wakeFD int, operations unixPasswordOperations,
-) ([]byte, error) {
-	return readUnixPasswordBytesWithFeedback(ctx, terminalFD, wakeFD, operations, nil)
-}
-
 func readUnixPasswordBytesWithFeedback(
 	ctx context.Context,
 	terminalFD, wakeFD int,
