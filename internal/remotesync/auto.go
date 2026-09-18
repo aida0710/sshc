@@ -2,10 +2,7 @@ package remotesync
 
 import (
 	"context"
-	"crypto/x509"
 	"errors"
-	"io"
-	"net"
 	"sync"
 	"time"
 )
@@ -592,71 +589,5 @@ func (a *Auto) enter(phase AutoPhase, detail string) {
 }
 
 // failureDetail は、機密情報を含みうるエラー文を返さず、画面用の安定した code に変換する。
-func failureDetail(err error) string {
-	switch {
-	case errors.Is(err, ErrNotConfigured):
-		return "not_configured"
-	case errors.Is(err, ErrRemoteMoved):
-		return "remote_moved"
-	case errors.Is(err, ErrRemoteDeleted):
-		return "remote_deleted"
-	case errors.Is(err, ErrConflicts):
-		return "conflicts"
-	case errors.Is(err, ErrWrongPassphrase):
-		return "wrong_passphrase"
-	case errors.Is(err, ErrCostRefused):
-		return "snapshot_cost_refused"
-	case errors.Is(err, ErrObjectTooLarge), errors.Is(err, ErrSnapshotTooLarge):
-		return "snapshot_too_large"
-	case errors.Is(err, ErrUnsupportedEnvelopeVersion), errors.Is(err, ErrUnsupportedVersion):
-		return "snapshot_schema_unsupported"
-	case errors.Is(err, ErrUnsafePath), errors.Is(err, ErrUnsafeMode),
-		errors.Is(err, ErrManifestMismatch), errors.Is(err, ErrNotASnapshot):
-		return "snapshot_rejected"
-	case errors.Is(err, ErrInvalidIgnoreRules):
-		return "sync_ignore_invalid"
-	case errors.Is(err, ErrAuthenticationFailed):
-		return "bucket_authentication_failed"
-	case errors.Is(err, ErrAccessDenied):
-		return "bucket_access_denied"
-	case errors.Is(err, ErrRateLimited):
-		return "bucket_rate_limited"
-	case errors.Is(err, ErrServiceUnavailable):
-		return "bucket_unavailable"
-	case errors.Is(err, ErrRefused), errors.Is(err, ErrInsecureEndpoint):
-		return "bucket_refused"
-	case errors.Is(err, context.DeadlineExceeded):
-		return "bucket_timeout"
-	case isAutoDNSError(err):
-		return "bucket_dns_failed"
-	case isAutoTLSError(err):
-		return "bucket_tls_failed"
-	case errors.Is(err, io.ErrUnexpectedEOF):
-		return "snapshot_download_incomplete"
-	case isAutoNetworkError(err):
-		return "bucket_unreachable"
-	}
-	return "sync_internal_failed"
-}
-
-// FailureCode returns the same secret-free stable code exposed by AutoView.
-// Engine diagnostics may pair it with a local-only error without changing the
-// HTTP contract or exposing implementation text to the browser.
-func FailureCode(err error) string { return failureDetail(err) }
-
-func isAutoDNSError(err error) bool {
-	var dns *net.DNSError
-	return errors.As(err, &dns)
-}
-
-func isAutoTLSError(err error) bool {
-	var unknownAuthority x509.UnknownAuthorityError
-	var hostname x509.HostnameError
-	var invalid x509.CertificateInvalidError
-	return errors.As(err, &unknownAuthority) || errors.As(err, &hostname) || errors.As(err, &invalid)
-}
-
-func isAutoNetworkError(err error) bool {
-	var network net.Error
-	return errors.As(err, &network)
-}
+// HTTP の問題応答と同じ表（Classify）を使う。
+func failureDetail(err error) string { return Classify(err).Code }

@@ -8,18 +8,12 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
-	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
-	"unicode"
 
-	"sshc/internal/app"
-	"sshc/internal/handoff"
 	"sshc/internal/storage"
 )
 
@@ -31,39 +25,12 @@ const (
 
 var launchdPIDPattern = regexp.MustCompile(`(?m)^\s*pid\s*=\s*([0-9]+)\s*$`)
 
-type launchdCommandResult struct {
-	ExitCode int
-	Output   []byte
-}
-
-type launchdCommandRunner interface {
-	Run(context.Context, ...string) (launchdCommandResult, error)
-}
-
-type osLaunchdCommandRunner struct{ path string }
-
-func (runner osLaunchdCommandRunner) Run(ctx context.Context, arguments ...string) (launchdCommandResult, error) {
-	command := exec.CommandContext(ctx, runner.path, arguments...)
-	output, err := command.CombinedOutput()
-	if err == nil {
-		return launchdCommandResult{Output: output}, nil
-	}
-	if ctx.Err() != nil {
-		return launchdCommandResult{}, ctx.Err()
-	}
-	var exitError *exec.ExitError
-	if errors.As(err, &exitError) {
-		return launchdCommandResult{ExitCode: exitError.ExitCode(), Output: output}, nil
-	}
-	return launchdCommandResult{}, err
-}
-
 type launchdServiceManager struct {
 	home      string
 	uid       int
-	runner    launchdCommandRunner
+	runner    serviceCommandRunner
 	files     storage.FileSystem
-	waitReady func(context.Context, string, int, launchdCommandRunner) error
+	waitReady func(context.Context, string, int, serviceCommandRunner) error
 	lock      func() (func() error, error)
 }
 
@@ -181,6 +148,15 @@ func (manager *launchdServiceManager) RestartIfActive(ctx context.Context, execu
 	}
 	if err := manager.run(ctx, "kickstart", "-k", manager.target()); err != nil {
 		return false, err
+	}
+	// kickstart は job が消えていても成功する。systemd 側と同じく、再起動後も
+	// 動いていることを確かめてから準備完了を待つ。
+	state, err = manager.Status(ctx)
+	if err != nil {
+		return false, err
+	}
+	if state != serviceActive {
+		return false, nil
 	}
 	if err := manager.waitUntilReady(ctx); err != nil {
 		return false, fmt.Errorf("restarted service did not become ready: %w", err)
@@ -306,7 +282,7 @@ func (manager *launchdServiceManager) inspectJob(ctx context.Context) (bool, int
 	return false, 0, launchctlExitError([]string{"print", manager.target()}, result)
 }
 
-func launchdServiceNotFound(result launchdCommandResult) bool {
+func launchdServiceNotFound(result serviceCommandResult) bool {
 	detail := strings.ToLower(string(result.Output))
 	return result.ExitCode == 113 || strings.Contains(detail, "could not find service") || strings.Contains(detail, "service not found")
 }
@@ -322,12 +298,8 @@ func (manager *launchdServiceManager) run(ctx context.Context, arguments ...stri
 	return nil
 }
 
-func launchctlExitError(arguments []string, result launchdCommandResult) error {
-	detail := strings.TrimSpace(string(result.Output))
-	if detail == "" {
-		return fmt.Errorf("launchctl %s exited with status %d", strings.Join(arguments, " "), result.ExitCode)
-	}
-	return fmt.Errorf("launchctl %s exited with status %d: %s", strings.Join(arguments, " "), result.ExitCode, detail)
+func launchctlExitError(arguments []string, result serviceCommandResult) error {
+	return serviceToolExitError("launchctl", arguments, result)
 }
 
 func launchdPlist(executable, home string) (string, error) {
@@ -360,57 +332,29 @@ func xmlText(value string) string {
 	return output.String()
 }
 
-func containsControl(value string) bool {
-	for _, character := range value {
-		if unicode.IsControl(character) {
-			return true
-		}
-	}
-	return false
-}
-
-func waitForLaunchdServiceReady(ctx context.Context, home string, uid int, runner launchdCommandRunner) error {
-	readyCtx, cancel := context.WithTimeout(ctx, serviceReadyTimeout)
-	defer cancel()
-	ticker := time.NewTicker(50 * time.Millisecond)
-	defer ticker.Stop()
-	client := &http.Client{Timeout: 250 * time.Millisecond}
+func waitForLaunchdServiceReady(ctx context.Context, home string, uid int, runner serviceCommandRunner) error {
 	target := fmt.Sprintf("gui/%d/%s", uid, launchdServiceLabel)
-
-	for {
-		result, err := runner.Run(readyCtx, "print", target)
-		if err == nil && result.ExitCode == 0 {
+	return waitForEngineReady(ctx, home, engineReadiness{
+		mainPID: func(ctx context.Context) int {
+			result, err := runner.Run(ctx, "print", target)
+			if err != nil || result.ExitCode != 0 {
+				return 0
+			}
 			match := launchdPIDPattern.FindSubmatch(result.Output)
-			if len(match) == 2 {
-				pid, parseErr := strconv.Atoi(string(match[1]))
-				if parseErr == nil && pid > 0 {
-					document, readErr := handoff.Read(app.HandoffDir(home))
-					if readErr == nil && document.PID == pid {
-						answer, statusErr := requestStatus(readyCtx, document, client)
-						if statusErr == nil && answer.Owner == document.Owner && answer.Version == document.Version &&
-							answer.ProtocolVersion == document.ProtocolVersion {
-							return nil
-						}
-					}
-				}
+			if len(match) != 2 {
+				return 0
 			}
-		}
-
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-readyCtx.Done():
-			detail := launchdFailureDetail(ctx, runner, target)
-			if detail == "" {
-				detail = "engine readiness was not published"
+			pid, parseErr := strconv.Atoi(string(match[1]))
+			if parseErr != nil {
+				return 0
 			}
-			return fmt.Errorf("%s; stop any manually running `sshc engine` and retry", detail)
-		case <-ticker.C:
-		}
-	}
+			return pid
+		},
+		failureDetail: func(ctx context.Context) string { return launchdFailureDetail(ctx, runner, target) },
+	})
 }
 
-func launchdFailureDetail(ctx context.Context, runner launchdCommandRunner, target string) string {
+func launchdFailureDetail(ctx context.Context, runner serviceCommandRunner, target string) string {
 	result, err := runner.Run(ctx, "print", target)
 	if err != nil || result.ExitCode != 0 {
 		return ""

@@ -56,6 +56,20 @@ func Contains(root, candidate string) bool {
 	return relative == "." || relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))
 }
 
+// RelativeSlash は、root の下にある absolute を root からの slash 区切りの相対パスに
+// する。root の外（root 自身を含む）なら偽を返す。鍵の絶対パスを vault の保存値へ
+// 対応づける経路が使うもので、`..foo` のような名前を親への参照と取り違えない。
+func RelativeSlash(root, absolute string) (string, bool) {
+	if !Contains(root, absolute) {
+		return "", false
+	}
+	relative, err := filepath.Rel(filepath.Clean(root), filepath.Clean(absolute))
+	if err != nil || relative == "." {
+		return "", false
+	}
+	return filepath.ToSlash(relative), true
+}
+
 // Identity は、同じファイルを指す二つの表記が等しくなる鍵を返す。
 //
 // Include の重複と循環を数えるために要る。Windows では `C:\Users\A\.ssh\config`

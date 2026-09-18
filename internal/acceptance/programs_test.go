@@ -47,15 +47,13 @@ var allowedToStartPrograms = []string{
 	// だけを固定argvで呼ぶか、digest付きreceiptが一致したinstall.sh版だけを公開済み
 	// tagのscriptへ委ねる。どちらにも該当しない実行ファイルからは起動しない。
 	"cmd/sshc/update.go",
-	// Linuxのservice commandはsshc管理marker付きunitだけを作成、確認、削除する。
-	// systemctlは既知のpathまたはPATHから実行可能な絶対pathへ一度解決し、固定argvで
-	// 呼ぶ。利用者の入力をprogramや引数へ渡さず、update連携も実行pathが一致する
-	// activeな管理unitのtry-restartだけに限定する。
-	"cmd/sshc/service_linux.go",
-	// macOSのservice commandはsshc管理marker付きplistだけを作成、確認、削除する。
-	// launchctlは検証済みの絶対pathから固定argvで呼び、現在のGUI user domainにある
-	// 管理agentだけをbootstrap、bootout、kickstartする。
-	"cmd/sshc/service_launchd_unix.go",
+	// service command（Linux は systemctl、macOS は launchctl）はここの runner だけから
+	// 起動する。tool は既知のpathまたはPATHから実行可能な絶対pathへ一度解決し、
+	// 固定argvで呼ぶ。利用者の入力をprogramや引数へ渡さず、sshc管理marker付きの
+	// unit／plistだけを作成、確認、削除し、update連携も実行pathが一致するactiveな
+	// 管理unitの再起動だけに限定する。argv を組むのは service_linux.go と
+	// service_launchd_unix.go である。
+	"cmd/sshc/service_unix.go",
 	// ローカルシェルには擬似端末が要る。インターフェースは出力を集めて返すものなので、
 	// PTY を握って対話し続けるこれは、そもそもあそこを通れない。
 	"internal/terminal/pty_unix.go",

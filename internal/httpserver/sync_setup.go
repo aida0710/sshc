@@ -80,7 +80,7 @@ func (h SyncHandlers) setupCredentials(
 }
 
 func setupCredentialsProblem(c *echo.Context, err error) error {
-	if errors.Is(err, secret.ErrLocked) || errors.Is(err, secret.ErrNoVault) {
+	if vaultUnavailable(err) {
 		return problem(c, http.StatusConflict, "vault_locked")
 	}
 	if errors.Is(err, errSyncSetupInvalidRequest) {
@@ -194,7 +194,7 @@ func (h SyncHandlers) CompleteSetup(c *echo.Context) error {
 		})
 	})
 	if err != nil {
-		if errors.Is(err, secret.ErrLocked) || errors.Is(err, secret.ErrNoVault) {
+		if vaultUnavailable(err) {
 			return problem(c, http.StatusConflict, "vault_locked")
 		}
 		return syncProblem(c, err)
@@ -257,7 +257,7 @@ func (h SyncHandlers) Configure(c *echo.Context) error {
 			return syncProblem(c, err)
 		}
 		if h.Secrets != nil {
-			if errors.Is(err, secret.ErrLocked) {
+			if vaultUnavailable(err) {
 				return problem(c, http.StatusConflict, "vault_locked")
 			}
 			return problem(c, http.StatusInternalServerError, "vault_failed")

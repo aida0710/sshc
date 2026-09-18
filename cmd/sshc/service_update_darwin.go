@@ -26,7 +26,7 @@ func restartManagedServiceAfterUpdate(ctx context.Context, executable string) (b
 		uid:       os.Getuid(),
 		files:     storage.OSFileSystem{},
 		waitReady: waitForLaunchdServiceReady,
-		lock:      launchdOperationLock(cleanHome),
+		lock:      serviceOperationLock(cleanHome),
 	}
 	matches, err := manager.plistMatches(executable)
 	if err != nil || !matches {
@@ -36,6 +36,6 @@ func restartManagedServiceAfterUpdate(ctx context.Context, executable string) (b
 	if err != nil {
 		return false, err
 	}
-	manager.runner = osLaunchdCommandRunner{path: launchctl}
+	manager.runner = osServiceCommandRunner{path: launchctl}
 	return manager.RestartIfActive(ctx, executable)
 }

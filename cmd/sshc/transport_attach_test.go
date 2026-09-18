@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"sshc/internal/streamrun"
 	"testing"
 )
 
@@ -38,7 +39,7 @@ func TestCopyTransportInputStopsAtLocalEscapeWithoutSendingIt(t *testing.T) {
 }
 
 func TestWriteTransportAllRejectsZeroProgress(t *testing.T) {
-	err := writeTransportAll(writerFunc(func([]byte) (int, error) { return 0, nil }), []byte("x"))
+	err := streamrun.WriteAll(writerFunc(func([]byte) (int, error) { return 0, nil }), []byte("x"))
 	if !errors.Is(err, io.ErrShortWrite) {
 		t.Fatalf("error = %v", err)
 	}

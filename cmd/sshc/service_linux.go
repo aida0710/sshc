@@ -7,18 +7,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
 	"unicode"
 
-	"sshc/internal/app"
-	"sshc/internal/enginelock"
-	"sshc/internal/handoff"
 	"sshc/internal/storage"
 )
 
@@ -28,35 +23,6 @@ const (
 )
 
 var defaultSystemctlCandidates = []string{"/usr/bin/systemctl", "/bin/systemctl"}
-
-type serviceCommandResult struct {
-	ExitCode int
-	Output   []byte
-}
-
-type serviceCommandRunner interface {
-	Run(context.Context, ...string) (serviceCommandResult, error)
-}
-
-type osServiceCommandRunner struct {
-	path string
-}
-
-func (runner osServiceCommandRunner) Run(ctx context.Context, arguments ...string) (serviceCommandResult, error) {
-	command := exec.CommandContext(ctx, runner.path, arguments...)
-	output, err := command.CombinedOutput()
-	if err == nil {
-		return serviceCommandResult{ExitCode: 0, Output: output}, nil
-	}
-	if ctx.Err() != nil {
-		return serviceCommandResult{}, ctx.Err()
-	}
-	var exitError *exec.ExitError
-	if errors.As(err, &exitError) {
-		return serviceCommandResult{ExitCode: exitError.ExitCode(), Output: output}, nil
-	}
-	return serviceCommandResult{}, err
-}
 
 type linuxServiceManager struct {
 	home      string
@@ -88,51 +54,12 @@ func newPlatformServiceManager(home string) (engineServiceManager, error) {
 	}, nil
 }
 
-func serviceOperationLock(home string) func() (func() error, error) {
-	path := filepath.Join(home, ".config", "sshc", "service.mutation.lock")
-	return func() (func() error, error) {
-		release, err := enginelock.Acquire(path)
-		if errors.Is(err, enginelock.ErrRunning) {
-			return nil, errors.New("another sshc service operation is in progress")
-		}
-		return release, err
-	}
-}
-
 func resolveSystemctl(
 	candidates []string,
 	lookPath func(string) (string, error),
 	stat func(string) (os.FileInfo, error),
 ) (string, error) {
-	paths := append([]string(nil), candidates...)
-	if found, err := lookPath("systemctl"); err == nil {
-		if !filepath.IsAbs(found) {
-			found, err = filepath.Abs(found)
-			if err != nil {
-				return "", fmt.Errorf("resolve systemctl path: %w", err)
-			}
-		}
-		paths = append(paths, filepath.Clean(found))
-	}
-	seen := make(map[string]struct{}, len(paths))
-	for _, path := range paths {
-		if !filepath.IsAbs(path) || strings.ContainsAny(path, "\r\n\x00") {
-			continue
-		}
-		path = filepath.Clean(path)
-		if _, exists := seen[path]; exists {
-			continue
-		}
-		seen[path] = struct{}{}
-		info, err := stat(path)
-		if err != nil {
-			continue
-		}
-		if info.Mode().IsRegular() && info.Mode()&0o111 != 0 {
-			return path, nil
-		}
-	}
-	return "", errors.New("cannot find an executable systemctl")
+	return resolveServiceTool("systemctl", candidates, lookPath, stat)
 }
 
 func (manager *linuxServiceManager) unitPath() string {
@@ -167,8 +94,7 @@ func (manager *linuxServiceManager) Install(ctx context.Context, executable stri
 	if err != nil {
 		return err
 	}
-	directory := filepath.Dir(manager.unitPath())
-	if err := os.MkdirAll(directory, 0o700); err != nil {
+	if err := manager.files.MkdirAll(filepath.Dir(manager.unitPath()), 0o700); err != nil {
 		return fmt.Errorf("create systemd user directory: %w", err)
 	}
 	if err := manager.ensureUnitUnchanged(snapshot); err != nil {
@@ -281,40 +207,20 @@ func (manager *linuxServiceManager) waitUntilReady(ctx context.Context) error {
 }
 
 func waitForServiceReady(ctx context.Context, home string, runner serviceCommandRunner) error {
-	readyCtx, cancel := context.WithTimeout(ctx, serviceReadyTimeout)
-	defer cancel()
-	ticker := time.NewTicker(50 * time.Millisecond)
-	defer ticker.Stop()
-	client := &http.Client{Timeout: 250 * time.Millisecond}
-
-	for {
-		result, err := runner.Run(readyCtx, "--user", "show", "--property=MainPID", "--value", serviceUnitName)
-		if err == nil && result.ExitCode == 0 {
+	return waitForEngineReady(ctx, home, engineReadiness{
+		mainPID: func(ctx context.Context) int {
+			result, err := runner.Run(ctx, "--user", "show", "--property=MainPID", "--value", serviceUnitName)
+			if err != nil || result.ExitCode != 0 {
+				return 0
+			}
 			pid, parseErr := strconv.Atoi(strings.TrimSpace(string(result.Output)))
-			if parseErr == nil && pid > 0 {
-				document, readErr := handoff.Read(app.HandoffDir(home))
-				if readErr == nil && document.PID == pid {
-					answer, statusErr := requestStatus(readyCtx, document, client)
-					if statusErr == nil && answer.Owner == document.Owner && answer.Version == document.Version &&
-						answer.ProtocolVersion == document.ProtocolVersion {
-						return nil
-					}
-				}
+			if parseErr != nil {
+				return 0
 			}
-		}
-
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-readyCtx.Done():
-			detail := serviceFailureDetail(ctx, runner)
-			if detail == "" {
-				detail = "engine readiness was not published"
-			}
-			return fmt.Errorf("%s; stop any manually running `sshc engine` and retry", detail)
-		case <-ticker.C:
-		}
-	}
+			return pid
+		},
+		failureDetail: func(ctx context.Context) string { return serviceFailureDetail(ctx, runner) },
+	})
 }
 
 func serviceFailureDetail(ctx context.Context, runner serviceCommandRunner) string {
@@ -419,11 +325,7 @@ func (manager *linuxServiceManager) run(ctx context.Context, arguments ...string
 }
 
 func systemctlExitError(arguments []string, result serviceCommandResult) error {
-	detail := strings.TrimSpace(string(result.Output))
-	if detail == "" {
-		return fmt.Errorf("systemctl %s exited with status %d", strings.Join(arguments, " "), result.ExitCode)
-	}
-	return fmt.Errorf("systemctl %s exited with status %d: %s", strings.Join(arguments, " "), result.ExitCode, detail)
+	return serviceToolExitError("systemctl", arguments, result)
 }
 
 func systemdUnit(executable string) (string, error) {

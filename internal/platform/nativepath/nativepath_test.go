@@ -68,3 +68,25 @@ func TestIdentityCleansBeforeComparing(t *testing.T) {
 		t.Fatalf("Identity(%q) did not match its cleaned form", messy)
 	}
 }
+
+// A key named `..something` sits inside the root; only a real parent reference
+// leaves it. The workspace-relative form is what the vault keys passphrases by.
+func TestRelativeSlashKeepsDotDotPrefixedNamesInsideTheRoot(t *testing.T) {
+	root := filepath.Join(string(filepath.Separator), "home", "aida", ".ssh")
+	for _, test := range []struct {
+		absolute string
+		want     string
+		inside   bool
+	}{
+		{filepath.Join(root, "..key"), "..key", true},
+		{filepath.Join(root, "keys", "work", "id_ed25519"), "keys/work/id_ed25519", true},
+		{filepath.Join(root, "..", "elsewhere"), "", false},
+		{root, "", false},
+		{filepath.Join(string(filepath.Separator), "home", "aida", ".ssh-other", "id"), "", false},
+	} {
+		got, inside := RelativeSlash(root, test.absolute)
+		if got != test.want || inside != test.inside {
+			t.Errorf("RelativeSlash(%q) = (%q, %v), want (%q, %v)", test.absolute, got, inside, test.want, test.inside)
+		}
+	}
+}
