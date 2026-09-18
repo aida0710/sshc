@@ -1,6 +1,6 @@
 # API コードの生成
 
-API 仕様は [`openapi.yaml`](openapi.yaml) で管理しています。仕様のバージョンは、固定して使用している `oapi-codegen v2.7.0` が正式に対応する OpenAPI 3.0.3 です。
+API 仕様は [`openapi.yaml`](openapi.yaml) で管理しています。仕様のバージョンは、固定して使用している `oapi-codegen v2.7.1` が正式に対応する OpenAPI 3.0.3 です。
 
 以前は OpenAPI 3.1.0 を指定していましたが、実際にはジェネレータが対応する基本的な機能だけを使用していました。`const` を単一要素の `enum` に変更し、生成される Go と TypeScript の型を維持したまま、仕様とジェネレータの対応範囲を一致させています。
 

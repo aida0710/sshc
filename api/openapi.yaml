@@ -123,6 +123,11 @@ paths:
   /api/v1/diagnostics/reachability:
     post:
       operationId: checkReachability
+      parameters:
+        - name: X-SSHC-Action
+          in: header
+          required: true
+          schema: { type: string, minLength: 43, maxLength: 43 }
       requestBody:
         required: true
         content:
@@ -140,6 +145,11 @@ paths:
   /api/v1/diagnostics/authentication:
     post:
       operationId: testAuthentication
+      parameters:
+        - name: X-SSHC-Action
+          in: header
+          required: true
+          schema: { type: string, minLength: 43, maxLength: 43 }
       requestBody:
         required: true
         content:
@@ -213,6 +223,11 @@ paths:
   /api/v1/known-hosts/delete:
     post:
       operationId: deleteKnownHosts
+      parameters:
+        - name: X-SSHC-Action
+          in: header
+          required: true
+          schema: { type: string, minLength: 43, maxLength: 43 }
       requestBody:
         required: true
         content:
@@ -231,6 +246,11 @@ paths:
   /api/v1/known-hosts/scan:
     post:
       operationId: scanKnownHosts
+      parameters:
+        - name: X-SSHC-Action
+          in: header
+          required: true
+          schema: { type: string, minLength: 43, maxLength: 43 }
       requestBody:
         required: true
         content:
@@ -248,6 +268,11 @@ paths:
   /api/v1/known-hosts/add:
     post:
       operationId: addKnownHost
+      parameters:
+        - name: X-SSHC-Action
+          in: header
+          required: true
+          schema: { type: string, minLength: 43, maxLength: 43 }
       requestBody:
         required: true
         content:
@@ -661,7 +686,7 @@ paths:
     post:
       operationId: pushSnapshot
       requestBody:
-        required: false
+        required: true
         content:
           application/json:
             schema: { $ref: "#/components/schemas/SyncPushRequest" }
@@ -681,9 +706,9 @@ paths:
       # 現在のbinding世代・target digest・ETagへ結び付いた一度限りの確認が必要。
       # 実行lock内で同じbindingとtargetを再検証し、そのETagをIf-Matchに使う。
       parameters:
-        - { name: X-SSHC-Action, in: header, required: true, schema: { type: string } }
+        - { name: X-SSHC-Action, in: header, required: true, schema: { type: string, minLength: 43, maxLength: 43 } }
       requestBody:
-        required: false
+        required: true
         content:
           application/json:
             schema: { $ref: "#/components/schemas/SyncPushRequest" }
@@ -1837,7 +1862,7 @@ paths:
         "404": { $ref: "#/components/responses/Problem" }
   /api/v1/sftp/{alias}/entries:
     parameters: &sftpAlias
-      - { name: alias, in: path, required: true, schema: { type: string, minLength: 1, maxLength: 255 } }
+      - { name: alias, in: path, required: true, schema: { type: string, minLength: 1, maxLength: 64 } }
     get:
       operationId: listSFTPEntries
       parameters:
@@ -1953,18 +1978,25 @@ paths:
         "200": { description: Shared SFTP transfer queue, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPTransferJobList" } } } }
     post:
       operationId: createSFTPTransferJob
+      # operation が delete の job は、表示した stat に紐づく sftp.delete の確認トークンを必要とする。
+      parameters:
+        - name: X-SSHC-Action
+          in: header
+          required: false
+          schema: { type: string, minLength: 43, maxLength: 43 }
       requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPCreateTransferJobRequest" } } } }
       responses:
         "201": { description: Transfer job registered, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPTransferJob" } } } }
         "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
   /api/v1/sftp/compare:
     get:
       operationId: compareSFTPDirectories
       parameters:
-        - { name: leftAlias, in: query, required: true, schema: { type: string, minLength: 1, maxLength: 255 } }
+        - { name: leftAlias, in: query, required: true, schema: { type: string, minLength: 1, maxLength: 64 } }
         - { name: leftPath, in: query, required: true, schema: { type: string } }
-        - { name: rightAlias, in: query, required: true, schema: { type: string, minLength: 1, maxLength: 255 } }
+        - { name: rightAlias, in: query, required: true, schema: { type: string, minLength: 1, maxLength: 64 } }
         - { name: rightPath, in: query, required: true, schema: { type: string } }
       responses:
         "200": { description: Metadata comparison of two remote directory trees, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPDirectoryComparison" } } } }
@@ -2031,7 +2063,7 @@ paths:
         "409": { $ref: "#/components/responses/Problem" }
   /api/v1/sftp/{alias}/uploads/{id}:
     parameters:
-      - { name: alias, in: path, required: true, schema: { type: string, minLength: 1, maxLength: 255 } }
+      - { name: alias, in: path, required: true, schema: { type: string, minLength: 1, maxLength: 64 } }
       - { name: id, in: path, required: true, schema: { type: string, pattern: "^[A-Za-z0-9_-]{8,128}$" } }
     post:
       operationId: startSFTPResumableUpload
@@ -2065,7 +2097,7 @@ paths:
         "502": { $ref: "#/components/responses/Problem" }
   /api/v1/sftp/{alias}/uploads/{id}/complete:
     parameters:
-      - { name: alias, in: path, required: true, schema: { type: string, minLength: 1, maxLength: 255 } }
+      - { name: alias, in: path, required: true, schema: { type: string, minLength: 1, maxLength: 64 } }
       - { name: id, in: path, required: true, schema: { type: string, pattern: "^[A-Za-z0-9_-]{8,128}$" } }
     post:
       operationId: completeSFTPResumableUpload
@@ -2087,7 +2119,7 @@ paths:
       operationId: deleteSFTPEntry
       parameters:
         - { name: path, in: query, required: true, schema: { type: string } }
-        - { name: X-SSHC-Action, in: header, required: true, schema: { type: string } }
+        - { name: X-SSHC-Action, in: header, required: true, schema: { type: string, minLength: 43, maxLength: 43 } }
       responses:
         "200": { description: Entry deleted, content: { application/json: { schema: { $ref: "#/components/schemas/ChangedResponse" } } } }
         "403": { $ref: "#/components/responses/Problem" }
@@ -2097,7 +2129,7 @@ paths:
     patch:
       operationId: chmodSFTPEntry
       parameters:
-        - { name: X-SSHC-Action, in: header, required: true, schema: { type: string } }
+        - { name: X-SSHC-Action, in: header, required: true, schema: { type: string, minLength: 43, maxLength: 43 } }
       requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPChmodRequest" } } } }
       responses:
         "200": { description: Entry permissions changed, content: { application/json: { schema: { $ref: "#/components/schemas/SFTPEntry" } } } }
@@ -2151,7 +2183,7 @@ paths:
   /api/v1/snippets/startup/{alias}:
     put:
       operationId: setStartupSnippet
-      parameters: [ { name: alias, in: path, required: true, schema: { type: string, maxLength: 255 } } ]
+      parameters: [ { name: alias, in: path, required: true, schema: { type: string, maxLength: 64 } } ]
       requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/StartupSnippetRequest" } } } }
       responses: { "200": { description: Startup assignment updated, content: { application/json: { schema: { $ref: "#/components/schemas/SnippetLibrary" } } } }, "400": { $ref: "#/components/responses/Problem" } }
   /api/v1/snippets/preview:
@@ -2162,7 +2194,7 @@ paths:
   /api/v1/snippets/jobs:
     post:
       operationId: executeSnippet
-      parameters: [ { name: X-SSHC-Action, in: header, required: true, schema: { type: string } } ]
+      parameters: [ { name: X-SSHC-Action, in: header, required: true, schema: { type: string, minLength: 43, maxLength: 43 } } ]
       requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SnippetExecuteRequest" } } } }
       responses: { "202": { description: Execution job started, content: { application/json: { schema: { $ref: "#/components/schemas/SnippetJob" } } } }, "403": { $ref: "#/components/responses/Problem" }, "409": { $ref: "#/components/responses/Problem" } }
   /api/v1/snippets/jobs/{id}:
@@ -2498,7 +2530,7 @@ components:
       additionalProperties: false
       required: [alias]
       properties:
-        alias: { type: string, minLength: 1, maxLength: 255 }
+        alias: { type: string, minLength: 1, maxLength: 64 }
     ExecutableDirective:
       type: object
       additionalProperties: false
@@ -2903,11 +2935,11 @@ components:
       required: [kind]
       properties:
         kind: { type: string, enum: [ssh, shell] }
-        alias: { type: string, minLength: 1, maxLength: 255 }
+        alias: { type: string, minLength: 1, maxLength: 64 }
         # ssh kind only. An absolute POSIX directory selected by the SFTP UI.
         cwd: { type: string, minLength: 1, maxLength: 4096 }
-        cols: { type: integer }
-        rows: { type: integer }
+        cols: { type: integer, minimum: 1, maximum: 1000 }
+        rows: { type: integer, minimum: 1, maximum: 1000 }
         # shell kind only. Must match one of LocalShellProfileList; executable
         # paths and command strings are never accepted from the caller.
         profileId: { type: string, pattern: '^[a-z0-9-]{1,64}$' }
@@ -3484,7 +3516,9 @@ components:
       required: [kind, target]
       properties:
         kind: { type: string, minLength: 1, maxLength: 64 }
-        target: { type: string, minLength: 1, maxLength: 128 }
+        # SFTP の kind は `alias:絶対パス(:mode)` を target にするので、path の上限（4096）に
+        # alias と区切りの分を足した長さまで受け付ける。サーバーも同じ上限で拒否する。
+        target: { type: string, minLength: 1, maxLength: 4352 }
     IssueActionResponse:
       type: object
       additionalProperties: false
@@ -4878,7 +4912,7 @@ components:
       required: [targetId, alias]
       properties:
         targetId: { type: string, minLength: 1, maxLength: 255 }
-        alias: { type: string, minLength: 1, maxLength: 255 }
+        alias: { type: string, minLength: 1, maxLength: 64 }
     SnippetPreviewTarget:
       type: object
       additionalProperties: false

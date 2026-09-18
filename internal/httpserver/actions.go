@@ -12,6 +12,10 @@ import (
 	"sshc/internal/session"
 )
 
+// maxActionTargetLength は api/openapi.yaml の IssueActionRequest.target と同じ上限。
+// SFTP の kind は `alias:絶対パス(:mode)` を target にするため path の上限を超える。
+const maxActionTargetLength = 4352
+
 // actionKind は、確認可能な操作 1 個をそれを所有するサブシステムに結び付ける。
 //
 // evidence は確認ダイアログが実際に表示した内容そのもののダイジェストを導出する。
@@ -64,6 +68,9 @@ func (h ActionHandlers) IssueAction(c *echo.Context) error {
 	kind, known := h.Kinds[body.Kind]
 	if !known || body.Target == "" {
 		return problem(c, http.StatusBadRequest, "unknown_action_kind")
+	}
+	if len(body.Target) > maxActionTargetLength {
+		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
 	sessionID := h.sessionID(c)
 	if sessionID == "" {

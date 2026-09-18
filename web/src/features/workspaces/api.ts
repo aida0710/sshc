@@ -46,8 +46,7 @@ export const workspaceApi = {
     }));
   },
   async remove(id: string): Promise<void> {
-    const response = await apiClient.send(`/api/v1/workspaces/${encodeURIComponent(id)}`, { method: "DELETE" });
-    if (!response.ok) throw new Error("workspace_delete_failed");
+    await apiClient.mutate<unknown>(`/api/v1/workspaces/${encodeURIComponent(id)}`, { method: "DELETE" });
   },
   async restore(id: string): Promise<SavedWorkspace> {
     const value = validateOpenAPISchema<WireRestorePlan>("WorkspaceRestorePlan", await apiClient.mutate<unknown>(`/api/v1/workspaces/${encodeURIComponent(id)}/restore`, {
