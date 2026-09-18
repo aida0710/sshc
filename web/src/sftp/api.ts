@@ -209,11 +209,10 @@ export const sftpApi = {
   async remove(alias: string, remotePath: string): Promise<void> {
     const target = `${alias}:${remotePath}`;
     const token = await issueAction("sftp.delete", target);
-    const response = await apiClient.send(pathFor(alias, "entry", remotePath), {
+    await apiClient.mutate<unknown>(pathFor(alias, "entry", remotePath), {
       method: "DELETE",
       headers: { "X-SSHC-Action": token },
     });
-    if (!response.ok) throw new Error("delete_failed");
   },
   async startUpload(alias: string, id: string, remotePath: string, size: number, sourceFingerprint: string): Promise<ResumableUpload> {
     return resumableUpload(await apiClient.mutate<unknown>(`/api/v1/sftp/${encodeURIComponent(alias)}/uploads/${encodeURIComponent(id)}`, {
