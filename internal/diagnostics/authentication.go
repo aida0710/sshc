@@ -122,7 +122,7 @@ func classify(err error) string {
 		return OutcomeDNSFailure
 	case errors.Is(err, context.DeadlineExceeded), isTimeout(err):
 		return OutcomeTimeout
-	case isRefused(err):
+	case isConnectionRefused(err):
 		return OutcomeRefused
 	case strings.Contains(err.Error(), "unable to authenticate"):
 		return OutcomeDenied
@@ -134,11 +134,6 @@ func classify(err error) string {
 func isTimeout(err error) bool {
 	var timeout interface{ Timeout() bool }
 	return errors.As(err, &timeout) && timeout.Timeout()
-}
-
-func isRefused(err error) bool {
-	// syscall の符号を import せずに済ませる。net はこの語で報告する。
-	return strings.Contains(err.Error(), "connection refused")
 }
 
 // describe は、秘密情報を含まないユーザー向け説明を組み立てる。

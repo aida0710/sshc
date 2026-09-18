@@ -1,14 +1,12 @@
 package httpserver
 
 import (
-	"errors"
 	"net/http"
 
 	"github.com/labstack/echo/v5"
 
 	"sshc/internal/api"
 	"sshc/internal/remotesync"
-	"sshc/internal/secret"
 )
 
 // The automatic sync loop: its reported state, the switch and "run now".
@@ -44,7 +42,7 @@ func (h SyncHandlers) SetAuto(c *echo.Context) error {
 		return problem(c, http.StatusConflict, "vault_locked")
 	}
 	if err := h.Secrets.SetSyncAuto(request.Enabled); err != nil {
-		if errors.Is(err, secret.ErrLocked) || errors.Is(err, secret.ErrNoVault) {
+		if vaultUnavailable(err) {
 			return problem(c, http.StatusConflict, "vault_locked")
 		}
 		return problem(c, http.StatusInternalServerError, "vault_failed")

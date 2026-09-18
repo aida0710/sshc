@@ -20,27 +20,42 @@ tool="$(mktemp -d)/deadcode"
 trap 'rm -rf "$(dirname "$tool")"' EXIT
 go build -o "$tool" golang.org/x/tools/cmd/deadcode
 
-found="$(mktemp)"
-trap 'rm -rf "$(dirname "$tool")" "$found"' EXIT
+work="$(mktemp -d)"
+trap 'rm -rf "$(dirname "$tool")" "$work"' EXIT
 
-first=1
+# 各 OS について 2 つの一覧を取る: その OS の build に含まれる Go ファイルと、
+# その OS で到達不能な関数。ある関数が死んでいるのは「それが建てられる
+# すべての OS で到達不能」なときである。3 OS の報告の共通部分を取るだけでは、
+# `_unix.go` や `_windows.go` にしか無い関数が「他の OS の一覧に無い」という
+# 理由で共通部分から落ち、永久に検出されなかった。
 for os in linux darwin windows; do
   # テスト専用の補助や interface 実装を除外するため -test を付ける。
   # node_modules には別のユーザーの Go が入っている。
-  reported="$(mktemp)"
   GOOS="$os" "$tool" -test ./cmd/... ./internal/... ./mobile/... 2>/dev/null \
     | grep -v node_modules \
     | sed 's/:[0-9]*:[0-9]*: unreachable func: /\t/' \
-    | sort > "$reported"
-  if [ "$first" = 1 ]; then
-    cp "$reported" "$found"
-    first=0
-  else
-    comm -12 "$found" "$reported" > "$found.next"
-    mv "$found.next" "$found"
-  fi
-  rm -f "$reported"
+    | sort > "$work/reported.$os"
+  GOOS="$os" go list -f '{{$dir := .Dir}}{{range .GoFiles}}{{$dir}}/{{.}}{{"\n"}}{{end}}{{range .TestGoFiles}}{{$dir}}/{{.}}{{"\n"}}{{end}}{{range .XTestGoFiles}}{{$dir}}/{{.}}{{"\n"}}{{end}}' \
+      ./cmd/... ./internal/... ./mobile/... 2>/dev/null \
+    | sed "s#^$(pwd)/##" \
+    | sort > "$work/built.$os"
 done
+
+found="$work/found"
+: > "$found"
+sort -u "$work"/reported.* | while IFS=$'\t' read -r file symbol; do
+  dead=1
+  for os in linux darwin windows; do
+    if grep -Fxq -- "$file" "$work/built.$os" && ! grep -Fxq -- "$file	$symbol" "$work/reported.$os"; then
+      dead=0
+      break
+    fi
+  done
+  if [ "$dead" = 1 ]; then
+    printf '%s\t%s\n' "$file" "$symbol" >> "$found"
+  fi
+done
+sort -o "$found" "$found"
 
 # 許容する到達不能シンボルには理由の記載を必須とする。
 allowed="$(grep -v '^\s*#' scripts/ci/deadcode-allowed.tsv | grep -v '^\s*$' | cut -f1,2 | sort)"
@@ -50,7 +65,7 @@ vanished="$(comm -13 "$found" <(printf '%s\n' "$allowed"))"
 
 status=0
 if [ -n "$unexpected" ]; then
-  echo "参照ゼロの関数がある（3 OS すべてで到達不能）:" >&2
+  echo "参照ゼロの関数がある（建てられるすべての OS で到達不能）:" >&2
   printf '%s\n' "$unexpected" | sed 's/^/  /' >&2
   echo "消すか、scripts/ci/deadcode-allowed.tsv に理由と一緒に書くこと。" >&2
   status=1

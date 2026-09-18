@@ -455,7 +455,10 @@ func outputLimitError(step int) error {
 	return &Error{Kind: FailureOutputLimit, Step: step, Err: errors.New("stream output exceeded the configured limit")}
 }
 
-func writeAll(writer io.Writer, payload []byte) error {
+// WriteAll は payload を残らず書き、書き手が Flush を持てば最後に flush する。
+// 短い書き込みを進捗として受け取り、0 バイトの書き込みは失敗として扱う。
+// 対話 transport の attach も同じ規則で端末へ書く。
+func WriteAll(writer io.Writer, payload []byte) error {
 	for len(payload) > 0 {
 		count, err := writer.Write(payload)
 		if count < 0 || count > len(payload) {
@@ -477,7 +480,7 @@ func writeAll(writer io.Writer, payload []byte) error {
 
 func writeWithin(ctx context.Context, writer io.Writer, payload []byte) error {
 	written := make(chan error, 1)
-	go func() { written <- writeAll(writer, payload) }()
+	go func() { written <- WriteAll(writer, payload) }()
 	select {
 	case err := <-written:
 		return err

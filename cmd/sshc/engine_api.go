@@ -63,6 +63,8 @@ type engineAPI struct {
 	closed  bool
 }
 
+// engineStatusWire は、engine の状態応答の通信形式である。必須項目は欠落を
+// 見分けるため pointer で受ける。
 type engineStatusWire struct {
 	Owner           handoff.Owner `json:"owner"`
 	Version         string        `json:"version"`
@@ -71,6 +73,27 @@ type engineStatusWire struct {
 	Unlocked        *bool         `json:"unlocked"`
 	Passwordless    bool          `json:"passwordless"`
 	Sessions        *int          `json:"sessions"`
+}
+
+// fetchEngineStatus は、handoff が示す engine に path（/cli/status または
+// /cli/vault/status）で状態を尋ね、応答が handoff と同じ engine のものであることを
+// 確かめてから返す。status、vault、connect、service の全経路がここを通る。
+func fetchEngineStatus(ctx context.Context, client *http.Client, found handoff.Handoff, path string) (statusAnswer, error) {
+	var wire engineStatusWire
+	if err := handoffJSON(ctx, noRedirectClient(client), found, http.MethodGet, path, &wire); err != nil {
+		return statusAnswer{}, err
+	}
+	if wire.Vault == nil || wire.Unlocked == nil || wire.Sessions == nil ||
+		*wire.Sessions < 0 || (!*wire.Vault && *wire.Unlocked) {
+		return statusAnswer{}, errEngineInvalidResponse
+	}
+	if wire.Owner != found.Owner || wire.Version != found.Version || wire.ProtocolVersion != found.ProtocolVersion {
+		return statusAnswer{}, errEngineIdentityMismatch
+	}
+	return statusAnswer{
+		Owner: wire.Owner, Version: wire.Version, ProtocolVersion: wire.ProtocolVersion,
+		Vault: *wire.Vault, Unlocked: *wire.Unlocked, Sessions: *wire.Sessions, Passwordless: wire.Passwordless,
+	}, nil
 }
 
 // openEngineAPI validates one exact handoff and engine before minting a
@@ -85,22 +108,14 @@ func openEngineAPI(ctx context.Context, stateDir string, base *http.Client) (*en
 	}
 	client := engineCommandClient(base)
 
-	var status engineStatusWire
-	if err := handoffJSON(ctx, client, found, http.MethodGet, httpserver.StatusPath, &status); err != nil {
+	status, err := fetchEngineStatus(ctx, client, found, httpserver.StatusPath)
+	if err != nil {
 		return nil, err
 	}
-	if status.Vault == nil || status.Unlocked == nil || status.Sessions == nil ||
-		*status.Sessions < 0 || (!*status.Vault && *status.Unlocked) {
-		return nil, errEngineInvalidResponse
-	}
-	if status.Owner != found.Owner || status.Version != found.Version ||
-		status.ProtocolVersion != found.ProtocolVersion {
-		return nil, errEngineIdentityMismatch
-	}
-	if !*status.Vault {
+	if !status.Vault {
 		return nil, errEngineVaultMissing
 	}
-	if !*status.Unlocked {
+	if !status.Unlocked {
 		return nil, errEngineVaultLocked
 	}
 
@@ -410,14 +425,22 @@ func decodeEngineJSONResponse(response *http.Response, target any) error {
 	if err != nil {
 		return err
 	}
+	if err := decodeStrictJSON(body, target); err != nil {
+		return errEngineInvalidResponse
+	}
+	return nil
+}
+
+// decodeStrictJSON は、未知の項目も末尾の余りも許さずに 1 つの JSON 文書を読む。
+func decodeStrictJSON(body []byte, target any) error {
 	decoder := json.NewDecoder(bytes.NewReader(body))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(target); err != nil {
-		return errEngineInvalidResponse
+		return err
 	}
 	var trailing any
 	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
-		return errEngineInvalidResponse
+		return errors.New("trailing data after the JSON document")
 	}
 	return nil
 }
@@ -435,18 +458,24 @@ func consumeEngineResponse(response *http.Response, mutation bool) error {
 }
 
 func readAndCloseEngineResponse(response *http.Response) ([]byte, error) {
+	return readAndCloseBounded(response, maxEngineAPIResponse, errEngineInvalidResponse, errEngineResponseTooLarge)
+}
+
+// readAndCloseBounded は本文を limit まで読んで閉じる。超過も読めない本文も呼び出し側の
+// 固定 error で返し、読み込んだ bytes は失敗経路で消す。
+func readAndCloseBounded(response *http.Response, limit int, invalid, tooLarge error) ([]byte, error) {
 	if response == nil || response.Body == nil {
-		return nil, errEngineInvalidResponse
+		return nil, invalid
 	}
 	defer func() { _ = response.Body.Close() }()
-	body, err := io.ReadAll(io.LimitReader(response.Body, maxEngineAPIResponse+1))
+	body, err := io.ReadAll(io.LimitReader(response.Body, int64(limit)+1))
 	if err != nil {
 		zeroBytes(body)
-		return nil, errEngineInvalidResponse
+		return nil, invalid
 	}
-	if len(body) > maxEngineAPIResponse {
+	if len(body) > limit {
 		zeroBytes(body)
-		return nil, errEngineResponseTooLarge
+		return nil, tooLarge
 	}
 	return body, nil
 }

@@ -82,24 +82,7 @@ func vaultState(answer statusAnswer) string {
 // requestStatus は取得済みの handoff が示す engine に状態を要求する。
 // 要求中の接続先変更を防ぐため handoff は読み直さない。
 func requestStatus(ctx context.Context, found handoff.Handoff, client *http.Client) (statusAnswer, error) {
-	request, err := newHandoffRequest(ctx, found, http.MethodGet, httpserver.StatusPath, nil)
-	if err != nil {
-		return statusAnswer{}, err
-	}
-
-	response, err := noRedirectClient(client).Do(request)
-	if err != nil {
-		return statusAnswer{}, err
-	}
-	defer func() { _ = response.Body.Close() }()
-	if response.StatusCode != http.StatusOK {
-		return statusAnswer{}, fmt.Errorf("sshc refused the request")
-	}
-	var answer statusAnswer
-	if err := json.NewDecoder(io.LimitReader(response.Body, 64<<10)).Decode(&answer); err != nil {
-		return statusAnswer{}, err
-	}
-	return answer, nil
+	return fetchEngineStatus(ctx, client, found, httpserver.StatusPath)
 }
 
 // statusAnswer は engine の状態応答である。

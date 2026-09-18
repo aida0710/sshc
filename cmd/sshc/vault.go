@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -412,44 +411,7 @@ func writeUncertainVaultResult(path string, stderr io.Writer) {
 func fetchVaultStatus(
 	ctx context.Context, found handoff.Handoff, client *http.Client,
 ) (statusAnswer, error) {
-	request, err := newHandoffRequest(ctx, found, http.MethodGet, httpserver.VaultStatusPath, nil)
-	if err != nil {
-		return statusAnswer{}, err
-	}
-	response, err := vaultClient(client).Do(request)
-	if err != nil {
-		if response != nil {
-			discardAndCloseVaultResponse(response)
-		}
-		return statusAnswer{}, err
-	}
-	body, err := readAndCloseVaultResponse(response)
-	defer zeroBytes(body)
-	if err != nil || response.StatusCode != http.StatusOK {
-		return statusAnswer{}, errInvalidVaultResponse
-	}
-
-	type statusWire struct {
-		Owner           handoff.Owner `json:"owner"`
-		Version         string        `json:"version"`
-		ProtocolVersion int           `json:"protocolVersion"`
-		Vault           *bool         `json:"vault"`
-		Passwordless    bool          `json:"passwordless"`
-		Unlocked        *bool         `json:"unlocked"`
-		Sessions        *int          `json:"sessions"`
-	}
-	var wire statusWire
-	if err := decodeVaultResponseJSON(body, &wire); err != nil || wire.Vault == nil || wire.Unlocked == nil || wire.Sessions == nil {
-		return statusAnswer{}, errInvalidVaultResponse
-	}
-	if wire.Owner != found.Owner || wire.Version != found.Version || wire.ProtocolVersion != found.ProtocolVersion ||
-		*wire.Sessions < 0 || (!*wire.Vault && *wire.Unlocked) {
-		return statusAnswer{}, errInvalidVaultResponse
-	}
-	return statusAnswer{
-		Owner: wire.Owner, Version: wire.Version, ProtocolVersion: wire.ProtocolVersion,
-		Vault: *wire.Vault, Unlocked: *wire.Unlocked, Sessions: *wire.Sessions, Passwordless: wire.Passwordless,
-	}, nil
+	return fetchEngineStatus(ctx, client, found, httpserver.VaultStatusPath)
 }
 
 // sendVaultPOST は payload の所有権を受け取り、Do が戻るすべての経路で消去する。
@@ -491,20 +453,7 @@ func vaultCommandClient(client *http.Client) *http.Client {
 }
 
 func readAndCloseVaultResponse(response *http.Response) ([]byte, error) {
-	if response == nil || response.Body == nil {
-		return nil, errInvalidVaultResponse
-	}
-	defer func() { _ = response.Body.Close() }()
-	body, err := io.ReadAll(io.LimitReader(response.Body, maxVaultResponseBody+1))
-	if err != nil {
-		zeroBytes(body)
-		return nil, err
-	}
-	if len(body) > maxVaultResponseBody {
-		zeroBytes(body)
-		return nil, errVaultResponseTooLarge
-	}
-	return body, nil
+	return readAndCloseBounded(response, maxVaultResponseBody, errInvalidVaultResponse, errVaultResponseTooLarge)
 }
 
 // discardAndCloseVaultResponse は、Do が error と response の両方を返した経路でも
@@ -512,19 +461,6 @@ func readAndCloseVaultResponse(response *http.Response) ([]byte, error) {
 func discardAndCloseVaultResponse(response *http.Response) {
 	body, _ := readAndCloseVaultResponse(response)
 	zeroBytes(body)
-}
-
-func decodeVaultResponseJSON(body []byte, target any) error {
-	decoder := json.NewDecoder(bytes.NewReader(body))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(target); err != nil {
-		return err
-	}
-	var trailing any
-	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
-		return errInvalidVaultResponse
-	}
-	return nil
 }
 
 func vaultPassphrasePayload(password []byte) ([]byte, error) {
