@@ -100,9 +100,11 @@ export function localJoin(parent: string, name: string): string {
   return `${parent.replace(/\/$/, "")}/${name}`;
 }
 
+// The engine's disk offers no editing and takes no files from the browser,
+// but its rows can be dragged onto a host: that drop is the engine-side put.
 const localCapabilities: SFTPCapabilities = {
   connect: false, edit: false, createEntries: false, rename: false, chmod: false, delete: false, search: false,
-  details: false, browserUpload: false, download: false, dragOut: false, terminal: false,
+  details: false, browserUpload: false, download: false, dragOut: true, terminal: false,
 };
 
 export const localSource: SFTPSource = {
