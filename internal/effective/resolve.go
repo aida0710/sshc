@@ -263,10 +263,13 @@ func Resolve(graph *config.Graph, alias string, facts LocalFacts) Resolution {
 }
 
 // proxyDirectiveIgnored は、ProxyCommand と ProxyJump のうち後から来た方を OpenSSH が
-// 黙って捨てる規則を再現する。OpenSSH 10.2 の `ssh -G` で確かめた:
-// ProxyJump（none 以外）の後の ProxyCommand は無視、ProxyCommand（none を含む）の
-// 後の ProxyJump は無視、`ProxyJump none` の後の ProxyCommand は有効。ここで捨てた
-// 行は Notes に残し、書いた本人が「効いていない」ことを見られるようにする。
+// 黙って捨てる規則を再現する。`ssh -G` で確かめた: ProxyJump（none 以外）の後の
+// ProxyCommand は無視、ProxyCommand（none を含む）の後の ProxyJump は無視。
+// `ProxyJump none` の後の ProxyCommand だけは版で違う。readconf.c の
+// CVE-2026-35386 対応（parse_jump の書き直し）より前の OpenSSH は "none" を
+// 「ProxyJump 設定済み」と数えて後の ProxyCommand を捨て、対応後（Ubuntu の
+// 10.2p1 パッチ版、上流はそれ以降）は有効にする。ここは新しい方に合わせる。
+// 捨てた行は Notes に残し、書いた本人が「効いていない」ことを見られるようにする。
 func proxyDirectiveIgnored(keyword string, values Values) (bool, string) {
 	switch strings.ToLower(keyword) {
 	case "proxycommand":

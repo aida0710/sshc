@@ -170,7 +170,7 @@
   - 接続時に、実行する ProxyCommand を端末へ 1 行表示します
   - 利用者の `~/.ssh/config` に書かれたコマンドだけを実行します。`%h`、`%p`、`%r`、`%n` を展開し、POSIX では `/bin/sh -c "exec ..."`、Windows では `cmd.exe /c` を使用します
   - `$SHELL` は使用しません。engine の起動元である tmux や systemd の環境変数に接続動作が依存しないよう、POSIX では常に `/bin/sh` を使用します
-  - `ProxyJump` と `ProxyCommand` の両方が書かれた設定は、OpenSSH（10.2 で確認）と同じく先に受理した方だけを使い、後から来た行を無視します。無視した行は解決結果の `proxy_ignored` として Analysis に出します。`ProxyJump none` の後の `ProxyCommand` は有効で、`ProxyCommand none` の後の `ProxyJump` は無視されます
+  - `ProxyJump` と `ProxyCommand` の両方が書かれた設定は、OpenSSH（10.2 で確認）と同じく先に受理した方だけを使い、後から来た行を無視します。無視した行は解決結果の `proxy_ignored` として Analysis に出します。`ProxyCommand none` の後の `ProxyJump` は無視されます。`ProxyJump none` の後の `ProxyCommand` は OpenSSH の版で結果が割れ（readconf.c の CVE-2026-35386 対応より前は無視、以後は有効）、この解決器は新しい方に合わせて有効にします
   - jump host 経由で到達する先では `ProxyCommand` を使用できません。コマンドはローカルマシンで実行され、jump host 内では実行されないためです
   - 接続失敗時は、コマンドの標準エラー出力を理由に含めます
   - 接続終了時にパイプを閉じ、2 秒以内に終了しない場合はプロセスを強制終了します

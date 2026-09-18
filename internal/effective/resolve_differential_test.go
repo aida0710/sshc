@@ -134,13 +134,9 @@ func TestResolveMatchesInstalledOpenSSH(t *testing.T) {
 			alias:    "a",
 			keywords: []string{"proxyjump", "proxycommand"},
 		},
-		{
-			// `ssh -G` は ProxyJump none を表示しないので、比べるのは proxycommand だけ。
-			name:     "proxyjump none does not hide a later proxycommand",
-			contents: "Host a\n\tHostName 198.51.100.9\n\tProxyJump none\n\tProxyCommand /usr/bin/nc %h %p\n",
-			alias:    "a",
-			keywords: []string{"proxycommand"},
-		},
+		// `ProxyJump none` の後の ProxyCommand は OpenSSH の版で結果が割れる
+		// （proxyDirectiveIgnored のコメント参照）ので、ここでは比べない。
+		// 解決器が選んだ側は resolve_test.go が固定している。
 		{
 			name:     "match user uses the resolved user",
 			contents: "Host db\n\tUser ops\nMatch user ops\n\tPort 5432\n",
