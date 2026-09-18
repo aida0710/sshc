@@ -476,7 +476,7 @@ func (s *sessionLifetime) WriteExact(ctx context.Context, input []byte) error {
 func newReadySessionLifetime(lifetime *sessionLifetime, underlying terminal.Readier) *readySessionLifetime {
 	ready := &readySessionLifetime{sessionLifetime: lifetime, done: make(chan struct{})}
 	go func() {
-		err, _ := <-underlying.Ready()
+		err := <-underlying.Ready()
 		ready.mutex.Lock()
 		ready.err = err
 		ready.mutex.Unlock()
@@ -502,8 +502,7 @@ func (s *readySessionLifetime) Ready() <-chan error {
 }
 
 func receiveReady(ready <-chan error) error {
-	err, _ := <-ready
-	return err
+	return <-ready
 }
 
 // Forwards preserves the optional Process capability across the lifetime

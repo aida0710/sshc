@@ -920,9 +920,7 @@ func addSFTPActions(registry actionRegistry, service *sshcSFTP.Service) {
 			if !ok {
 				return "", sshcSFTP.ErrInvalidPath
 			}
-			if strings.HasSuffix(remainder, ":recursive") {
-				remainder = strings.TrimSuffix(remainder, ":recursive")
-			}
+			remainder = strings.TrimSuffix(remainder, ":recursive")
 			separator := strings.LastIndexByte(remainder, ':')
 			if separator <= 0 || separator == len(remainder)-1 {
 				return "", sshcSFTP.ErrInvalidPath

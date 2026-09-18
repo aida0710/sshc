@@ -336,25 +336,7 @@ func New(options Options) (*Server, error) {
 	// 操作を確認するすべてのサブシステムは、自分の evidence resolver を
 	// 1 つの registry に提供する。これにより、単一の POST /api/v1/actions
 	// エンドポイントが、各 service に踏み込まずにそのどれにでもトークンを発行できる。
-	registry := actionRegistry{}
-	if options.Keys != nil {
-		addKeyActions(registry, options.Keys)
-	}
-	if options.Diagnostics != nil {
-		addDiagnosticsActions(registry, options.Diagnostics)
-	}
-	if options.KnownHosts != nil {
-		addKnownHostsActions(registry, options.KnownHosts)
-	}
-	if options.SFTP != nil {
-		addSFTPActions(registry, options.SFTP)
-	}
-	if options.Sync != nil {
-		addSyncActions(registry, options.Sync)
-	}
-	if options.Passwords != nil {
-		addCredentialActions(registry, options.Passwords)
-	}
+	registry := newActionRegistry(options)
 	actions := ActionHandlers{Sessions: options.Sessions, Kinds: registry}
 
 	if options.Keys != nil {
@@ -375,43 +357,11 @@ func New(options Options) (*Server, error) {
 		})
 	}
 	if options.SFTP != nil {
-		transfers := sshcSFTP.NewTransferManager(options.SFTP)
+		transfers, err := newTransferManager(options)
+		if err != nil {
+			return nil, err
+		}
 		server.transfers = transfers
-		if options.Config != nil {
-			// 保存された設定を持って起動する。範囲外の値は握りつぶす。書けた
-			// 時点で範囲内だったものが、次の起動で engine を止めてはならない。
-			stored := options.Config.FileTransferSettings()
-			concurrency := stored.MaxConcurrent
-			if concurrency == 0 {
-				concurrency = sshcSFTP.DefaultTransferConcurrency
-			}
-			threshold := stored.LargeFileThresholdBytes
-			if threshold == 0 {
-				threshold = sshcSFTP.DefaultLargeFileThreshold
-			}
-			parallelism := stored.LargeFileParallelism
-			if parallelism == 0 {
-				parallelism = sshcSFTP.DefaultLargeFileParallelism
-			}
-			chunkBytes := stored.LargeFileChunkBytes
-			if chunkBytes == 0 {
-				chunkBytes = sshcSFTP.DefaultLargeFileChunkBytes
-			}
-			_ = transfers.SetTransferSettings(
-				concurrency,
-				time.Duration(stored.ClearCompletedAfterSeconds)*time.Second,
-				stored.ProcessingStopped,
-				threshold,
-				parallelism,
-				chunkBytes,
-			)
-		}
-		if options.SFTPTransferStatePath != "" {
-			if err := transfers.EnableQueuePersistence(options.SFTPTransferStatePath); err != nil {
-				_ = transfers.Close()
-				return nil, fmt.Errorf("restore SFTP transfer queue: %w", err)
-			}
-		}
 		registerSFTPRoutes(e, SFTPHandlers{
 			Service: options.SFTP, Transfers: transfers, Config: options.Config, Actions: actions,
 		})
@@ -451,7 +401,106 @@ func New(options Options) (*Server, error) {
 	// それがなければこのルートはすべてを拒否する。
 	registerUpdateRoutes(e, &UpdateHandlers{Current: options.Version, Checker: options.Updates})
 
-	registerConnectRoutes(e, ConnectHandlers{
+	registerConnectRoutes(e, newConnectHandlers(options, vault, host))
+	if options.Sync != nil {
+		registerSyncRoutes(e, SyncHandlers{
+			Service: options.Sync, Secrets: options.Passwords, Auto: options.AutoSync,
+			Actions: actions,
+		})
+	}
+	if options.Terminals != nil {
+		registerTerminalRoutes(e, newTerminalHandlers(options, actions, host))
+	}
+	if len(registry) > 0 {
+		registerActionRoutes(e, actions)
+	}
+	static := echo.WrapHandler(spaHandler(options.UI))
+	e.GET("/*", static)
+	e.HEAD("/*", static)
+
+	server.url = "http://" + host
+	server.http = &http.Server{
+		Handler:           e,
+		ReadHeaderTimeout: 5 * time.Second,
+		// 配ったリクエスト用 context は BeginStopping が一斉に取り消す。
+		// これが無いと、停止の合図はハンドラの内側にも WebSocket にも届かない。
+		BaseContext: func(net.Listener) context.Context { return baseCtx },
+	}
+	return server, nil
+}
+
+// newActionRegistry collects the evidence resolvers of every subsystem that
+// confirms an operation, so that POST /api/v1/actions can issue a token for
+// any of them.
+func newActionRegistry(options Options) actionRegistry {
+	registry := actionRegistry{}
+	if options.Keys != nil {
+		addKeyActions(registry, options.Keys)
+	}
+	if options.Diagnostics != nil {
+		addDiagnosticsActions(registry, options.Diagnostics)
+	}
+	if options.KnownHosts != nil {
+		addKnownHostsActions(registry, options.KnownHosts)
+	}
+	if options.SFTP != nil {
+		addSFTPActions(registry, options.SFTP)
+	}
+	if options.Sync != nil {
+		addSyncActions(registry, options.Sync)
+	}
+	if options.Passwords != nil {
+		addCredentialActions(registry, options.Passwords)
+	}
+	return registry
+}
+
+// newTransferManager starts the SFTP queue with the stored settings and,
+// when a state path is given, the jobs left over from the last run.
+func newTransferManager(options Options) (*sshcSFTP.TransferManager, error) {
+	transfers := sshcSFTP.NewTransferManager(options.SFTP)
+	if options.Config != nil {
+		// 保存された設定を持って起動する。範囲外の値は握りつぶす。書けた
+		// 時点で範囲内だったものが、次の起動で engine を止めてはならない。
+		stored := options.Config.FileTransferSettings()
+		concurrency := stored.MaxConcurrent
+		if concurrency == 0 {
+			concurrency = sshcSFTP.DefaultTransferConcurrency
+		}
+		threshold := stored.LargeFileThresholdBytes
+		if threshold == 0 {
+			threshold = sshcSFTP.DefaultLargeFileThreshold
+		}
+		parallelism := stored.LargeFileParallelism
+		if parallelism == 0 {
+			parallelism = sshcSFTP.DefaultLargeFileParallelism
+		}
+		chunkBytes := stored.LargeFileChunkBytes
+		if chunkBytes == 0 {
+			chunkBytes = sshcSFTP.DefaultLargeFileChunkBytes
+		}
+		_ = transfers.SetTransferSettings(
+			concurrency,
+			time.Duration(stored.ClearCompletedAfterSeconds)*time.Second,
+			stored.ProcessingStopped,
+			threshold,
+			parallelism,
+			chunkBytes,
+		)
+	}
+	if options.SFTPTransferStatePath != "" {
+		if err := transfers.EnableQueuePersistence(options.SFTPTransferStatePath); err != nil {
+			_ = transfers.Close()
+			return nil, fmt.Errorf("restore SFTP transfer queue: %w", err)
+		}
+	}
+	return transfers, nil
+}
+
+// newConnectHandlers wires what `sshc ssh <alias>` asks the engine for
+// when it opens one connection.
+func newConnectHandlers(options Options, vault *vaultOperations, host string) ConnectHandlers {
+	return ConnectHandlers{
 		Secret:          options.CLISecret,
 		Passwords:       options.Passwords,
 		vault:           vault,
@@ -481,58 +530,37 @@ func New(options Options) (*Server, error) {
 			}
 			return liveSessions(options.Terminals.Sessions())
 		},
-	})
-	if options.Sync != nil {
-		registerSyncRoutes(e, SyncHandlers{
-			Service: options.Sync, Secrets: options.Passwords, Auto: options.AutoSync,
-			Actions: actions,
-		})
 	}
-	if options.Terminals != nil {
-		registerTerminalRoutes(e, TerminalHandlers{
-			Registry:            options.Terminals,
-			Tickets:             &terminal.Tickets{},
-			Snippets:            options.Snippets,
-			Actions:             actions,
-			Connect:             options.Connect,
-			Shell:               options.LoginShell,
-			ShellProfiles:       options.LocalShellProfiles,
-			DefaultShellProfile: options.TerminalLocalShellProfile,
-			Environment:         options.TerminalEnvironment,
-			StartDirectory:      options.TerminalStartDirectory,
-			Connected:           options.ConnectionOpened,
-			Startup: func(alias string) (string, bool) {
-				if options.Snippets == nil {
-					return "", false
-				}
-				prepared, err := options.Snippets.PrepareStartupCommand(alias)
-				if err != nil {
-					return "", false
-				}
-				return prepared.Command, true
-			},
-			// askpass はここに無い。この経路はもう外部の ssh を起動しない。
-			// パスフレーズは vault から直接読むか、端末で尋ねる。ヘルパーが
-			// 残っているのは、CLI と診断がまだ OpenSSH を起動するからである。
-			ExpectedOrigin: "http://" + host,
-		})
-	}
-	if len(registry) > 0 {
-		registerActionRoutes(e, actions)
-	}
-	static := echo.WrapHandler(spaHandler(options.UI))
-	e.GET("/*", static)
-	e.HEAD("/*", static)
+}
 
-	server.url = "http://" + host
-	server.http = &http.Server{
-		Handler:           e,
-		ReadHeaderTimeout: 5 * time.Second,
-		// 配ったリクエスト用 context は BeginStopping が一斉に取り消す。
-		// これが無いと、停止の合図はハンドラの内側にも WebSocket にも届かない。
-		BaseContext: func(net.Listener) context.Context { return baseCtx },
+func newTerminalHandlers(options Options, actions ActionHandlers, host string) TerminalHandlers {
+	return TerminalHandlers{
+		Registry:            options.Terminals,
+		Tickets:             &terminal.Tickets{},
+		Snippets:            options.Snippets,
+		Actions:             actions,
+		Connect:             options.Connect,
+		Shell:               options.LoginShell,
+		ShellProfiles:       options.LocalShellProfiles,
+		DefaultShellProfile: options.TerminalLocalShellProfile,
+		Environment:         options.TerminalEnvironment,
+		StartDirectory:      options.TerminalStartDirectory,
+		Connected:           options.ConnectionOpened,
+		Startup: func(alias string) (string, bool) {
+			if options.Snippets == nil {
+				return "", false
+			}
+			prepared, err := options.Snippets.PrepareStartupCommand(alias)
+			if err != nil {
+				return "", false
+			}
+			return prepared.Command, true
+		},
+		// askpass はここに無い。この経路はもう外部の ssh を起動しない。
+		// パスフレーズは vault から直接読むか、端末で尋ねる。ヘルパーが
+		// 残っているのは、CLI と診断がまだ OpenSSH を起動するからである。
+		ExpectedOrigin: "http://" + host,
 	}
-	return server, nil
 }
 
 // stoppingGate は、状態を変える要求、Upgrade、SFTP data-plane要求を、
