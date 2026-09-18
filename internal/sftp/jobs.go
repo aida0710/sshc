@@ -344,11 +344,10 @@ func normalizeCreateTransferJob(input CreateTransferJob) (transferJobNaming, err
 func (m *TransferManager) evictForAdmissionLocked() (cleanup *transferJobRecord) {
 	// Prefer records which have no remote partial state. A temporarily
 	// unreachable upload tombstone must not freeze admission while a completed
-	// download can be discarded without network I/O.
+	// transfer can be discarded without network I/O.
 	for index, id := range m.jobOrder {
 		record := m.jobs[id]
-		if record == nil || record.cleanupInFlight || !evictableTransferJob(record.job) ||
-			(record.job.Direction == TransferUpload && record.job.Kind == TransferFile) {
+		if record == nil || record.cleanupInFlight || !evictableTransferJob(record.job) || mayHoldRemotePart(record.job) {
 			continue
 		}
 		delete(m.jobs, id)
@@ -357,8 +356,7 @@ func (m *TransferManager) evictForAdmissionLocked() (cleanup *transferJobRecord)
 	}
 	for _, id := range m.jobOrder {
 		record := m.jobs[id]
-		if record != nil && !record.cleanupInFlight && record.job.Direction == TransferUpload &&
-			record.job.Kind == TransferFile && record.job.Problem == "sftp_cleanup_pending" {
+		if record != nil && !record.cleanupInFlight && mayHoldRemotePart(record.job) && record.job.Problem == "sftp_cleanup_pending" {
 			return record
 		}
 	}
@@ -367,7 +365,7 @@ func (m *TransferManager) evictForAdmissionLocked() (cleanup *transferJobRecord)
 		if record == nil || record.cleanupInFlight || !evictableTransferJob(record.job) {
 			continue
 		}
-		if record.job.Direction == TransferUpload && record.job.Kind == TransferFile {
+		if mayHoldRemotePart(record.job) {
 			return record
 		}
 		delete(m.jobs, id)
@@ -1122,7 +1120,16 @@ func uploadJobHasRemotePart(job TransferJob) bool {
 }
 
 func evictableTransferJob(job TransferJob) bool {
-	return retainedTransferStatus(job.Status) && !(job.Direction == TransferUpload && job.Problem == "sftp_cleanup_pending")
+	return retainedTransferStatus(job.Status) && !(mayHoldRemotePart(job) && job.Problem == "sftp_cleanup_pending")
+}
+
+// mayHoldRemotePart says whether forgetting the job could leave a partial
+// upload behind on the host, so that evicting it must first reach the host to
+// remove the part. A completed upload was renamed into place and holds none;
+// the CLI's finished uploads therefore never block the queue, whether or not
+// their host can still be reached.
+func mayHoldRemotePart(job TransferJob) bool {
+	return job.Direction == TransferUpload && job.Kind == TransferFile && job.Status != TransferCompleted
 }
 
 func boundedTransferProblem(problem string) string {

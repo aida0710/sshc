@@ -785,6 +785,48 @@ func TestTransferQueueHasAHardLimitWhenNothingCanBeEvicted(t *testing.T) {
 	}
 }
 
+func TestAQueueFullOfCompletedUploadsAdmitsANewJobWithoutReachingTheHost(t *testing.T) {
+	// The CLI's `sshc sftp put` leaves one completed upload per file in the
+	// queue. Once two hundred have accumulated, admitting the next job evicts
+	// one of them, and a completed upload holds no part file on the host, so
+	// the eviction must not depend on that host still being reachable.
+	opens := 0
+	manager := sftp.NewTransferManager(&sftp.Service{Open: func(context.Context, string) (sftp.Remote, error) {
+		opens++
+		return nil, errors.New("host unreachable")
+	}})
+	for index := 0; index < 200; index++ {
+		id := fmt.Sprintf("put_%08d", index)
+		if _, err := manager.CreateJob(sftp.CreateTransferJob{
+			ID: id, BatchID: "batch_" + id, Alias: "gone", Direction: sftp.TransferUpload,
+			Kind: sftp.TransferFile, Name: id, RemotePath: "/remote/" + id, TotalBytes: 1,
+		}); err != nil {
+			t.Fatalf("create %d: %v", index, err)
+		}
+		if _, err := manager.UpdateJob(id, sftp.UpdateTransferJob{Action: sftp.TransferStartAction}); err != nil {
+			t.Fatalf("start %d: %v", index, err)
+		}
+		completed := int64(1)
+		if _, err := manager.UpdateJob(id, sftp.UpdateTransferJob{Action: sftp.TransferCompleteAction, TransferredBytes: &completed}); err != nil {
+			t.Fatalf("complete %d: %v", index, err)
+		}
+	}
+	admitted := sftp.CreateTransferJob{
+		ID: "put_next", BatchID: "batch_next", Alias: "edge", Direction: sftp.TransferUpload,
+		Kind: sftp.TransferFile, Name: "next", RemotePath: "/remote/next", TotalBytes: 1,
+	}
+	if _, err := manager.CreateJob(admitted); err != nil {
+		t.Fatalf("a completed upload blocked admission: %v", err)
+	}
+	if opens != 0 {
+		t.Fatalf("evicting a completed upload opened %d connections", opens)
+	}
+	jobs := listJobs(t, manager)
+	if len(jobs) != 200 || jobs[len(jobs)-1].ID != admitted.ID {
+		t.Fatalf("jobs after admission = %d, last %q", len(jobs), jobs[len(jobs)-1].ID)
+	}
+}
+
 func TestEvictingAFailedUploadCleansItsOrphanPart(t *testing.T) {
 	remote := remoteWith(map[string]node{"/remote": directory("remote")})
 	manager := sftp.NewTransferManager(&sftp.Service{Open: func(context.Context, string) (sftp.Remote, error) { return remote, nil }})
