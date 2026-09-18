@@ -19,7 +19,7 @@ import { SFTPToolbar } from "./SFTPToolbar";
 import { TransferManagerList } from "./TransferManagerList";
 import { sftpTransferManager } from "./transferManager";
 import { remoteParentOf } from "./sftpSource";
-import { useSFTPBrowser, type SFTPLocation } from "./useSFTPBrowser";
+import { useSFTPBrowser, type RestoredSFTPLocation } from "./useSFTPBrowser";
 import { SFTPEntryActionDialogs, useSFTPEntryActions } from "./useSFTPEntryActions";
 import { useSFTPSearch } from "./useSFTPSearch";
 import { useSFTPTransfers, type SFTPCounterpart } from "./useSFTPTransfers";
@@ -99,7 +99,7 @@ export function SFTPPanel({
   target?: SFTPTarget | null;
   // Where a restored tab should reopen. Applied once, when the declared
   // aliases have arrived and can vouch for the host.
-  initialLocation?: SFTPLocation | null;
+  initialLocation?: RestoredSFTPLocation | null;
   initialSort?: SFTPSortState;
   showTransfers?: boolean;
   // The other visible pane, so that files can go straight between the two.
