@@ -11,7 +11,10 @@ import { control } from "../ui/form";
 import { Segmented } from "../ui/surface";
 import { Icon } from "../ui/icons";
 import { OperatingSystemIcon } from "../ui/OperatingSystemIcon";
+import { readStoredValue, writeStoredValue } from "../ui/browserStorage";
 import { ConnectionActions } from "./ConnectionActions";
+import { hostMatchesQuery, normalizeHostQuery } from "../connections/hostSearch";
+import { formatDateTime } from "../ui/format";
 
 type QuickConnectBrowserProps = {
   overview: Overview;
@@ -26,19 +29,11 @@ type QuickConnectView = "panel" | "list";
 const viewStorageKey = "sshc.home.quick-connect-view";
 
 function storedView(): QuickConnectView {
-  try {
-    return window.localStorage.getItem(viewStorageKey) === "list" ? "list" : "panel";
-  } catch {
-    return "panel";
-  }
+  return readStoredValue(viewStorageKey) === "list" ? "list" : "panel";
 }
 
 function rememberView(view: QuickConnectView) {
-  try {
-    window.localStorage.setItem(viewStorageKey, view);
-  } catch {
-    // The launcher still works when storage is unavailable.
-  }
+  writeStoredValue(viewStorageKey, view);
 }
 
 function destination(hostName: string, user: string, port: string): string {
@@ -52,16 +47,10 @@ function connectionDestination(server: BrowserServer): string {
 }
 
 function includesQuery(server: BrowserServer, query: string): boolean {
-  const needle = query.trim().toLocaleLowerCase();
-  if (needle === "") return true;
-  return [
-    server.identity.alias,
-    server.identity.path,
-    server.group,
-    connectionDestination(server),
-    ...server.host.patterns,
-    ...server.tags,
-  ].some((candidate) => candidate.toLocaleLowerCase().includes(needle));
+  return hostMatchesQuery({
+    alias: server.identity.alias, path: server.identity.path, group: server.group,
+    destination: connectionDestination(server), patterns: server.host.patterns, tags: server.tags,
+  }, normalizeHostQuery(query));
 }
 
 function belongsToGroup(server: BrowserServer, group: string): boolean {
@@ -123,7 +112,7 @@ export function QuickConnectBrowser({
     const target = connectionDestination(server);
     const lastConnected = recentConnection === undefined
       ? ""
-      : t("home.lastConnected", { at: formatConnectedAt(recentConnection.lastConnectedAt) });
+      : t("home.lastConnected", { at: formatDateTime(recentConnection.lastConnectedAt) });
     const selected = selectedAlias === alias;
     const opening = launching === alias;
     const panel = view === "panel";
@@ -303,10 +292,4 @@ export function QuickConnectBrowser({
       )}
     </div>
   );
-}
-
-function formatConnectedAt(value: string): string {
-  const connectedAt = new Date(value);
-  if (Number.isNaN(connectedAt.valueOf())) return value;
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(connectedAt);
 }

@@ -1,7 +1,7 @@
 import { sectionPath } from "../routing/sectionRoute";
 import type { MouseEvent } from "react";
 import { useLanguage } from "../i18n/context";
-import { locales, type Locale } from "../i18n/locale";
+import { localeLabelKeys, locales, type Locale } from "../i18n/locale";
 import type { MessageKey } from "../i18n/messages";
 import { useTheme } from "../theme/context";
 import { themes, type Theme } from "../theme/theme";
@@ -24,11 +24,6 @@ const themeLabels: Record<Theme, MessageKey> = {
   system: "shell.themeSystem",
   light: "shell.themeLight",
   dark: "shell.themeDark",
-};
-
-const localeLabels: Record<Locale, MessageKey> = {
-  en: "shell.languageEnglish",
-  ja: "shell.languageJapanese",
 };
 
 export function MenuPanel({
@@ -129,7 +124,7 @@ export function MenuPanel({
               >
                 {locales.map((candidate) => (
                   <option key={candidate} value={candidate}>
-                    {t(localeLabels[candidate])}
+                    {t(localeLabelKeys[candidate])}
                   </option>
                 ))}
               </select>

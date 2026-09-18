@@ -1,3 +1,5 @@
+import { readStoredValue, writeStoredValue } from "../ui/browserStorage";
+
 export const themes = ["system", "light", "dark"] as const;
 export type Theme = (typeof themes)[number];
 
@@ -10,19 +12,12 @@ export function isTheme(value: unknown): value is Theme {
 }
 
 export function detectTheme(): Theme {
-  try {
-    const stored = window.localStorage.getItem(themeStorageKey);
-    if (isTheme(stored)) return stored;
-  } catch {
-  }
-  return defaultTheme;
+  const stored = readStoredValue(themeStorageKey);
+  return isTheme(stored) ? stored : defaultTheme;
 }
 
 export function rememberTheme(theme: Theme): void {
-  try {
-    window.localStorage.setItem(themeStorageKey, theme);
-  } catch {
-  }
+  writeStoredValue(themeStorageKey, theme);
 }
 
 export function resolveTheme(theme: Theme, systemPrefersDark: boolean): "light" | "dark" {

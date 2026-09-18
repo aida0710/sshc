@@ -2,8 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { failureCode } from "../api/client";
 import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
-import { Button } from "../ui/surface";
+import { Button, Notice } from "../ui/surface";
 import { PasswordInput } from "../ui/PasswordField";
+import { ConfirmDialog } from "../ui/ConfirmDialog";
+import { usePolling } from "../ui/usePolling";
 import {
   snippetsApi,
   type Job,
@@ -12,6 +14,9 @@ import {
   type SnippetDraft,
   type SnippetVariable,
 } from "./api";
+
+// A command's per-host output should feel live without hammering the engine.
+const snippetJobPollIntervalMs = 600;
 
 function placeholders(command: string): string[] {
   return [
@@ -92,6 +97,7 @@ export function SnippetsPanel({
   const [startupAlias, setStartupAlias] = useState(aliases[0] ?? "");
   const [problem, setProblem] = useState("");
   const [busy, setBusy] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const current = useMemo(
     () => snippets.find((snippet) => snippet.id === selected) ?? null,
     [snippets, selected],
@@ -116,16 +122,10 @@ export function SnippetsPanel({
     if (snippet !== undefined && selected !== snippet.id) edit(snippet);
   }, [selected, selectedSnippetId, snippets]);
 
-  useEffect(() => {
-    if (job?.status !== "running") return;
-    const timer = window.setInterval(() => {
-      void snippetsApi
-        .job(job.id)
-        .then(setJob)
-        .catch(() => undefined);
-    }, 600);
-    return () => window.clearInterval(timer);
-  }, [job]);
+  usePolling(async () => {
+    if (job === null) return;
+    setJob(await snippetsApi.job(job.id));
+  }, { intervalMs: snippetJobPollIntervalMs, enabled: job?.status === "running", whileHidden: true });
 
   function edit(snippet: Snippet | null) {
     setSelected(snippet?.id ?? null);
@@ -279,14 +279,7 @@ export function SnippetsPanel({
       </div>
 
       <div className="flex min-w-0 flex-col gap-3 rounded-lg border border-line bg-card p-4">
-        {problem === "" ? null : (
-          <p
-            role="alert"
-            className="rounded bg-notice px-3 py-2 text-sm text-notice-ink"
-          >
-            {problem}
-          </p>
-        )}
+        {problem === "" ? null : <Notice tone="danger">{problem}</Notice>}
         <label className="text-xs text-ink-muted">
           {t("snippets.name")}
           <input
@@ -405,7 +398,7 @@ export function SnippetsPanel({
             {t("snippets.save")}
           </Button>
           {current === null ? null : (
-            <Button disabled={busy} onClick={() => void removeCurrent()}>
+            <Button disabled={busy} onClick={() => setConfirmingDelete(true)}>
               {t("snippets.delete")}
             </Button>
           )}
@@ -538,6 +531,20 @@ export function SnippetsPanel({
           </button>
         </section>
       </div>
+      {confirmingDelete && current !== null ? (
+        <ConfirmDialog
+          id="snippet-delete-heading"
+          heading={t("snippets.deleteHeading", { name: current.name })}
+          body={<p className="text-sm text-ink-muted">{t("snippets.deleteBody")}</p>}
+          confirmLabel={t("snippets.confirmDelete")}
+          cancelLabel={t("snippets.deleteCancel")}
+          onCancel={() => setConfirmingDelete(false)}
+          onConfirm={() => {
+            setConfirmingDelete(false);
+            void removeCurrent();
+          }}
+        />
+      ) : null}
     </section>
   );
 }

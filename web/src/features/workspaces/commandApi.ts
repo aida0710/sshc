@@ -1,5 +1,4 @@
-import { apiClient } from "../../api/client";
-import { asArray, asRecord, asString, jsonHeaders } from "../../api/guards";
+import { asArray, asRecord, asString, postJSON } from "../../api/guards";
 import type { components } from "../../api/schema";
 
 export type TerminalCommandTarget = components["schemas"]["TerminalCommandTargetRequest"];
@@ -49,18 +48,10 @@ function dispatch(value: unknown): TerminalCommandDispatch {
 
 export const terminalCommandApi = {
   async preview(request: TerminalCommandRequest): Promise<TerminalCommandPreview> {
-    return preview(await apiClient.mutate<unknown>("/api/v1/terminal/commands/preview", {
-      method: "POST",
-      headers: jsonHeaders,
-      body: JSON.stringify(request),
-    }));
+    return preview(await postJSON<unknown>("/api/v1/terminal/commands/preview", request));
   },
 
   async dispatch(prepared: TerminalCommandPreview, request: TerminalCommandRequest, submit = true): Promise<TerminalCommandDispatch> {
-    return dispatch(await apiClient.mutate<unknown>("/api/v1/terminal/commands", {
-      method: "POST",
-      headers: { ...jsonHeaders, "X-SSHC-Action": prepared.actionToken },
-      body: JSON.stringify({ ...request, submit, evidence: prepared.evidence }),
-    }));
+    return dispatch(await postJSON<unknown>("/api/v1/terminal/commands", { ...request, submit, evidence: prepared.evidence }, prepared.actionToken));
   },
 };

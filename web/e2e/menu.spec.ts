@@ -67,5 +67,5 @@ test("keeps sessions in the sidebar and moves product navigation to the Menu pag
   }
   await openLocalShell(page);
   await expect(page).toHaveURL(/\/terminal$/);
-  await expect(page.getByRole("region", { name: /^Console for / })).toBeVisible();
+  await expect(page.getByRole("region", { name: /^Terminal for / })).toBeVisible();
 });

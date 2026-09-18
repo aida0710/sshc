@@ -6,7 +6,7 @@ import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
 import { ModalShell } from "../ui/ModalShell";
 import { Button } from "../ui/surface";
 import { sftpApi, type RemoteDirectoryStats, type RemoteEntry } from "./api";
-import { formatBytes } from "./format";
+import { formatBytes } from "../ui/format";
 import { entryKind } from "./entryKind";
 import { symbolicModeToOctal } from "./transfers";
 

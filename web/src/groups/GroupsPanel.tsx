@@ -20,7 +20,7 @@ import { MetricCard, MetricGrid, PageHeader } from "../ui/page";
 import { PanelState } from "../ui/PanelState";
 
 
-export function depthOf(name: string): number {
+function depthOf(name: string): number {
   return name.split("/").length;
 }
 
@@ -50,7 +50,6 @@ export function treeOrder(groups: GroupMetadata[]): GroupMetadata[] {
   });
 }
 
-export { isValidGroupName } from "../rules/rules";
 import { isValidGroupName } from "../rules/rules";
 
 type GroupsPanelProps = {

@@ -181,7 +181,7 @@ describe("SettingsPanel", () => {
     render(<SettingsPanel api={buildApi({ terminalSettings })} />);
 
     const region = screen.getByRole("region", { name: "Terminal" });
-    const sessions = within(region).getByLabelText("Consoles open at once");
+    const sessions = within(region).getByLabelText("Sessions open at once");
     expect(sessions).toBeDisabled();
     expect(within(region).getByRole("status")).toHaveTextContent("Loading terminal settings");
 
@@ -200,7 +200,7 @@ describe("SettingsPanel", () => {
     render(<SettingsPanel api={buildApi()} onTerminalSettingsChange={onTerminalSettingsChange} />);
 
     const region = await screen.findByRole("region", { name: "Terminal" });
-    const sessions = within(region).getByLabelText("Consoles open at once");
+    const sessions = within(region).getByLabelText("Sessions open at once");
     await waitFor(() => expect(sessions).toBeEnabled());
     await user.type(sessions, "2");
     await user.click(within(region).getByRole("button", { name: "Save" }));
@@ -316,7 +316,7 @@ describe("SettingsPanel", () => {
     render(<SettingsPanel api={buildApi({ setTerminalSettings })} />);
 
     const region = await screen.findByRole("region", { name: "Terminal" });
-    await user.type(within(region).getByLabelText("Consoles open at once"), "4");
+    await user.type(within(region).getByLabelText("Sessions open at once"), "4");
     await user.click(within(region).getByRole("button", { name: "Save" }));
 
     expect(setTerminalSettings).toHaveBeenCalledWith({ maxSessions: 4 });
@@ -356,7 +356,7 @@ describe("SettingsPanel", () => {
       .toHaveAttribute("max", "4194304");
     expect(within(terminal).getByLabelText("Browser scrollback (lines)"))
       .toHaveAttribute("max", "100000");
-    expect(within(terminal).getByLabelText("Consoles open at once"))
+    expect(within(terminal).getByLabelText("Sessions open at once"))
       .toHaveAttribute("max", "200");
     expect(within(terminal).getByLabelText("Connection log")).toBeVisible();
   });
@@ -440,7 +440,7 @@ describe("SettingsPanel", () => {
     })} />);
 
     const region = await screen.findByRole("region", { name: "Terminal" });
-    expect(await within(region).findByLabelText("Consoles open at once")).toHaveValue(4);
+    expect(await within(region).findByLabelText("Sessions open at once")).toHaveValue(4);
     expect(within(region).getByLabelText("Engine replay buffer (bytes)")).toHaveValue(null);
     expect(within(region).getByLabelText("Starting directory")).toHaveValue("");
   });

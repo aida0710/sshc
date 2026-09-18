@@ -14,6 +14,7 @@ import { MetricCard, MetricGrid, PageHeader } from "../ui/page";
 import { Icon } from "../ui/icons";
 import { CredentialEditDialog } from "./CredentialEditDialog";
 import { PanelState } from "../ui/PanelState";
+import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { useDismissibleLayer } from "../ui/useDismissibleLayer";
 import { useMenuKeyboard } from "../ui/useMenuKeyboard";
 
@@ -23,6 +24,10 @@ export type SecretsApi = CredentialsApi & VaultApi;
 export const secretsApi: SecretsApi = { ...credentialsApi, ...vaultApi };
 
 const mobileTouchTargets = "[&_button]:min-h-10 md:[&_button]:min-h-0";
+
+// A deletion the user has asked for but not yet confirmed. The dialog names
+// the credential; confirming runs the call that removes it.
+type PendingDeletion = { name: string; perform: () => Promise<unknown> };
 
 type SecretsPanelProps = {
   api?: SecretsApi;
@@ -288,6 +293,7 @@ export function SecretsPanel({
     kind: CredentialKind;
     name: string;
   } | null>(null);
+  const [pendingDeletion, setPendingDeletion] = useState<PendingDeletion | null>(null);
 
   const reload = useCallback(async () => {
     try {
@@ -490,14 +496,10 @@ export function SecretsPanel({
                           remove={{
                             label: t("secrets.delete", { name: credential.name }),
                             onSelect: () =>
-                            void run(
-                              () =>
-                                api.deleteCredential(
-                                  group.kind,
-                                  credential.name,
-                                ),
-                              t("secrets.deleteFailed"),
-                            ),
+                              setPendingDeletion({
+                                name: credential.name,
+                                perform: () => api.deleteCredential(group.kind, credential.name),
+                              }),
                           }}
                         />
                       </div>
@@ -538,10 +540,10 @@ export function SecretsPanel({
                           remove={{
                             label: t("secrets.removeDedicated", { key: credential.key }),
                             onSelect: () =>
-                              void run(
-                                () => api.unassignCredential("key_passphrase", credential.key),
-                                t("secrets.deleteFailed"),
-                              ),
+                              setPendingDeletion({
+                                name: keyBasename(credential.key),
+                                perform: () => api.unassignCredential("key_passphrase", credential.key),
+                              }),
                           }}
                         />
                       </div>
@@ -615,6 +617,20 @@ export function SecretsPanel({
             setEditing(null);
           }}
           onClose={() => setEditing(null)}
+        />
+      )}
+      {pendingDeletion === null ? null : (
+        <ConfirmDialog
+          id="secrets-delete-heading"
+          heading={t("secrets.deleteHeading", { name: pendingDeletion.name })}
+          body={<p className="text-sm text-ink-muted">{t("secrets.deleteBody")}</p>}
+          confirmLabel={t("secrets.confirmDelete")}
+          cancelLabel={t("secrets.deleteCancel")}
+          onCancel={() => setPendingDeletion(null)}
+          onConfirm={() => {
+            setPendingDeletion(null);
+            void run(pendingDeletion.perform, t("secrets.deleteFailed"));
+          }}
         />
       )}
     </div>

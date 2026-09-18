@@ -25,7 +25,7 @@ import { KeyGenerationSection } from "./KeyGenerationSection";
 import { CopyButton } from "../ui/CopyButton";
 import { useTranslate } from "../i18n/context";
 import { control, primaryAction, sectionHeading } from "../ui/form";
-import { Button, Card } from "../ui/surface";
+import { Button, Card, Notice } from "../ui/surface";
 import { MetricCard, MetricGrid, PageHeader } from "../ui/page";
 import { Icon } from "../ui/icons";
 import { PanelState } from "../ui/PanelState";
@@ -604,14 +604,7 @@ export function KeysScreen({
         <MetricCard label={t("keys.metricPrivate")} value={inventory.items.filter((item) => item.kind === "private_key").length} />
         <MetricCard label={t("keys.metricAttention")} value={keyAttention} attention={keyAttention > 0} />
       </MetricGrid>
-      {failure !== "" && (
-        <p
-          role="alert"
-          className="rounded-md border border-control-line p-3 text-sm text-danger"
-        >
-          {failure}
-        </p>
-      )}
+      {failure !== "" && <Notice tone="danger">{failure}</Notice>}
 
       {chosen.size === 0 ? null : (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-control-line bg-card p-3">

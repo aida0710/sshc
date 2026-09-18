@@ -1,5 +1,5 @@
 import { apiClient } from "./client";
-import { asArray, asNumber, asRecord, asString, jsonHeaders } from "./guards";
+import { asArray, asNumber, asRecord, asString, patchJSON, putJSON } from "./guards";
 import type { components } from "./schema";
 import { validateOpenAPISchema } from "./validators.generated";
 
@@ -102,11 +102,7 @@ export const settingsApi: SettingsApi = {
     };
   },
   async setTerminalSettings(settings) {
-    await apiClient.mutate("/api/v1/metadata/terminal", {
-      method: "PUT",
-      headers: jsonHeaders,
-      body: JSON.stringify(settings),
-    });
+    await putJSON("/api/v1/metadata/terminal", settings);
   },
   async localShellProfiles() {
     return validateLocalShellProfiles(
@@ -135,11 +131,7 @@ export const settingsApi: SettingsApi = {
     return settings;
   },
   async setEngineSettings(settings) {
-    await apiClient.mutate("/api/v1/metadata/engine", {
-      method: "PUT",
-      headers: jsonHeaders,
-      body: JSON.stringify(settings),
-    });
+    await putJSON("/api/v1/metadata/engine", settings);
   },
   async terminalBackgrounds() {
     const record = asRecord(
@@ -165,10 +157,7 @@ export const settingsApi: SettingsApi = {
     );
   },
   async setTerminalBackgroundCapacity(capacityMiB) {
-    const record = asRecord(await apiClient.mutate<unknown>(
-      "/api/v1/terminal/backgrounds/capacity",
-      { method: "PUT", headers: jsonHeaders, body: JSON.stringify({ capacityMiB }) },
-    ));
+    const record = asRecord(await putJSON<unknown>("/api/v1/terminal/backgrounds/capacity", { capacityMiB }));
     return {
       backgrounds: asArray(record.backgrounds).map(validateBackground),
       usedBytes: asNumber(record.usedBytes),
@@ -178,14 +167,7 @@ export const settingsApi: SettingsApi = {
   },
   async renameTerminalBackground(name, nextName) {
     return validateBackground(
-      await apiClient.mutate<unknown>(
-        `/api/v1/terminal/backgrounds/${encodeURIComponent(name)}`,
-        {
-          method: "PATCH",
-          headers: jsonHeaders,
-          body: JSON.stringify({ name: nextName }),
-        },
-      ),
+      await patchJSON<unknown>(`/api/v1/terminal/backgrounds/${encodeURIComponent(name)}`, { name: nextName }),
     );
   },
   async deleteTerminalBackground(name) {

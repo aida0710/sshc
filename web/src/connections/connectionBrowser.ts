@@ -33,7 +33,9 @@ export function identityKey(identity: HostIdentity): string {
   return `${identity.path}\u0000${identity.alias}`;
 }
 
-function nearestDeclaredParent(name: string, declared: ReadonlySet<string>): string {
+// The closest ancestor group that is declared, so an undeclared "a/b/c" hangs
+// under "a" when only "a" exists.
+export function nearestDeclaredParent(name: string, declared: ReadonlySet<string>): string {
   let candidate = name;
   while (true) {
     const cut = candidate.lastIndexOf("/");

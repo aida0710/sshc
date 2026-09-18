@@ -1,8 +1,14 @@
 import { useEffect, useSyncExternalStore } from "react";
+import { usePolling } from "../ui/usePolling";
 import { apiClient } from "../api/client";
 import type { Metadata } from "../api/config";
 import { validateOpenAPISchema } from "../api/validators.generated";
-import { defaultBindings, loadBindings, parseBindings, readStoredShortcutValue, saveBindings, selectionKey, storageKey, rememberStoredShortcutValue, type Bindings } from "./bindings";
+import { defaultBindings, loadBindings, parseBindings, saveBindings, selectionKey, storageKey, type Bindings } from "./bindings";
+import { readStoredValue, writeStoredValue } from "../ui/browserStorage";
+
+// Presets edited on another synced device arrive on the next push; a few
+// seconds keeps the two in step without a request per keystroke.
+const presetPollIntervalMs = 5_000;
 
 export type Preset = { id: string; name: string; bindings: Bindings };
 export { selectionKey };
@@ -27,7 +33,7 @@ function activate(id: string, presets: Preset[], remember = true) {
   const preset = presets.find((item) => item.id === id);
   const selected = preset ? id : "default";
   const bindings = preset?.bindings ?? defaultBindings;
-  if (remember) rememberStoredShortcutValue(selectionKey, selected);
+  if (remember) writeStoredValue(selectionKey, selected);
   if (JSON.stringify(loadBindings()) !== JSON.stringify(bindings)) saveBindings(bindings);
   publish({ selected });
 }
@@ -44,17 +50,17 @@ export async function refreshPresets() {
     const metadata = validateOpenAPISchema<Metadata>("Metadata", await apiClient.read("/api/v1/metadata"));
     if (currentGeneration !== generation || currentRevision !== revision) return;
     let presets: Preset[] = metadata.shortcutPresets ?? [];
-    let selected = readStoredShortcutValue(selectionKey);
-    const remembered = selected !== null || readStoredShortcutValue(storageKey) !== null;
+    let selected = readStoredValue(selectionKey);
+    const remembered = selected !== null || readStoredValue(storageKey) !== null;
     // Persist the migration ID before writing so retries never create duplicates.
     if (selected === null) {
       selected = remembered ? `pending:${crypto.randomUUID()}` : "default";
-      if (remembered) rememberStoredShortcutValue(selectionKey, selected);
+      if (remembered) writeStoredValue(selectionKey, selected);
     }
     if (selected.startsWith("pending:")) {
       const id = selected.slice(8);
       if (!presets.some((item) => item.id === id)) {
-        const next = [...presets, { id, name: "Imported shortcuts", bindings: parseBindings(readStoredShortcutValue(storageKey) ?? "") }];
+        const next = [...presets, { id, name: "Imported shortcuts", bindings: parseBindings(readStoredValue(storageKey) ?? "") }];
         await put(presets, next);
         if (currentGeneration !== generation || currentRevision !== revision) return;
         presets = next;
@@ -90,10 +96,10 @@ export function usePresetSync(ready: boolean) {
     ++generation;
     publish({ loading: true });
     void refreshPresets();
-    const timer = window.setInterval(() => { void refreshPresets(); }, 5000);
     const refresh = () => { void refreshPresets(); };
     window.addEventListener("focus", refresh);
     window.addEventListener("storage", refresh);
-    return () => { ++generation; window.clearInterval(timer); window.removeEventListener("focus", refresh); window.removeEventListener("storage", refresh); };
+    return () => { ++generation; window.removeEventListener("focus", refresh); window.removeEventListener("storage", refresh); };
   }, [ready]);
+  usePolling(refreshPresets, { intervalMs: presetPollIntervalMs, enabled: ready, whileHidden: true });
 }

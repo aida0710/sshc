@@ -32,7 +32,7 @@ test("shows OS icons and editable paste and close dialogs with synthetic connect
     await page.screenshot({ path: `${connectionsDir}/connections-os-icons.png`, fullPage: true });
   }
   await openLocalShell(page);
-  await expect(page.getByRole("region", { name: /^Console for / })).toContainText(/[$#%>]/);
+  await expect(page.getByRole("region", { name: /^Terminal for / })).toContainText(/[$#%>]/);
   await page.evaluate(() => navigator.clipboard.writeText("echo example-one\necho example-two\n"));
   await terminalKeyboard(page).focus();
   await page.keyboard.press("Control+Shift+V");
@@ -40,7 +40,7 @@ test("shows OS icons and editable paste and close dialogs with synthetic connect
   await editor.fill("echo edited-example\necho second-example\n");
   if (dir !== undefined && process.env.SSHC_UI_HOME_ONLY !== "1") await page.screenshot({ path: `${dir}/editable-paste.png`, fullPage: true });
   await page.getByRole("dialog").getByRole("button", { name: "Cancel" }).click();
-  const row = page.getByRole("list", { name: "Open consoles" }).getByRole("listitem").first();
+  const row = page.getByRole("list", { name: "Open sessions" }).getByRole("listitem").first();
   await row.getByRole("button", { name: /^Close / }).click();
   await expect(page.getByRole("button", { name: "Keep it open" })).toBeFocused();
   if (dir !== undefined && process.env.SSHC_UI_HOME_ONLY !== "1") await page.screenshot({ path: `${dir}/close-dialog-focus.png`, fullPage: true });

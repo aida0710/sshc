@@ -21,16 +21,14 @@ import { Icon, IconSprite } from "./ui/icons";
 import { InspectorPane, InspectorToggle, type InspectorContent } from "./ui/Inspector";
 import { useTheme } from "./theme/context";
 import { Button } from "./ui/surface";
+import { usePolling } from "./ui/usePolling";
 import { RouteSkeleton } from "./ui/RouteSkeleton";
 import { sectionPath, type Section } from "./routing/sectionRoute";
 import { connectionLocation } from "./routing/connectionRoute";
 import { AppHeader } from "./shell/AppHeader";
 import { AppNavigation } from "./shell/AppNavigation";
-import {
-  clampNavigationWidth,
-  detectNavigationWidth,
-  rememberNavigationWidth,
-} from "./shell/navigationLayout";
+import { navigationWidth } from "./shell/navigationLayout";
+import { useStoredColumnWidth } from "./ui/useStoredColumnWidth";
 import { useSectionRoute } from "./routing/useSectionRoute";
 import { useTerminalSessions } from "./terminal/sessions";
 import { TransferNotifications } from "./sftp/TransferNotifications";
@@ -52,8 +50,7 @@ import { useOSC52Policy } from "./shell/useOSC52Policy";
 import { useSectionHandoffs } from "./shell/useSectionHandoffs";
 import { useAppShortcuts } from "./shell/useAppShortcuts";
 
-export { vaultStatePollIntervalMs } from "./session/useAppSession";
-export { resolveOSC52 } from "./shell/TerminalScreen";
+const transferReconcileIntervalMs = 2_000;
 
 type AppProps = {
   bootstrap: () => Promise<SessionState>;
@@ -94,9 +91,7 @@ export function App({
   const [navigationOpen, setNavigationOpen] = useState(false);
   const navigationPanelRef = useRef<HTMLElement>(null);
   const navigationTriggerRef = useRef<HTMLButtonElement>(null);
-  const [desktopNavigationWidth, setDesktopNavigationWidth] = useState(
-    detectNavigationWidth,
-  );
+  const [desktopNavigationWidth, resizeDesktopNavigation] = useStoredColumnWidth(navigationWidth);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [inspector, setInspector] = useState<InspectorContent>(null);
   const inspectorPanelRef = useRef<HTMLElement>(null);
@@ -148,11 +143,6 @@ export function App({
       window.removeEventListener("sshc-android-back", closeTransientUi);
   }, [commandPaletteOpen, inspectorOpen, navigationOpen]);
 
-  function resizeDesktopNavigation(width: number) {
-    const nextWidth = clampNavigationWidth(width);
-    setDesktopNavigationWidth(nextWidth);
-    rememberNavigationWidth(nextWidth);
-  }
   const consoles = useTerminalSessions(terminalSessionsApi, t, state === "ready");
   const closeNavigation = useCallback(() => setNavigationOpen(false), []);
   const terminalWorkspace = useTerminalWorkspaceController({
@@ -198,15 +188,12 @@ export function App({
     openPalette,
   });
 
-  useEffect(() => {
-    if (state !== "ready") return;
-    const refresh = () => {
-      void sftpTransferManager.reconcile().catch(() => undefined);
-    };
-    refresh();
-    const timer = globalThis.setInterval(refresh, 2_000);
-    return () => globalThis.clearInterval(timer);
-  }, [state]);
+  // Transfers run in the engine, so the queue keeps up even while this tab is
+  // hidden; a couple of seconds is fast enough for progress and cheap enough
+  // for the engine.
+  usePolling(() => sftpTransferManager.reconcile(), {
+    intervalMs: transferReconcileIntervalMs, enabled: state === "ready", whileHidden: true, immediately: true,
+  });
 
   const unreadSessions = useTerminalNotifications(
     consoles.sessions,

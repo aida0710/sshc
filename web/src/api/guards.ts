@@ -45,19 +45,46 @@ export async function issueAction(kind: string, target: string): Promise<string>
   return asString(asRecord(response).token);
 }
 
-export async function postJSON<T>(
+export type JSONRequest = {
+  method: "POST" | "PUT" | "PATCH";
+  body: unknown;
+  // A confirmation token from issueAction, for operations the engine gates.
+  actionToken?: string;
+  // Problem codes the caller explains itself instead of the shared handler.
+  locallyHandledCodes?: readonly string[];
+};
+
+// Every JSON mutation goes through here so the content type, the action
+// header and the local-handling option are spelled once.
+export function sendJSON<T>(path: string, request: JSONRequest): Promise<T> {
+  const headers: Record<string, string> = { ...jsonHeaders };
+  if (request.actionToken) headers["X-SSHC-Action"] = request.actionToken;
+  return apiClient.mutate<T>(
+    path,
+    { method: request.method, headers, body: JSON.stringify(request.body) },
+    request.locallyHandledCodes === undefined ? {} : { locallyHandledCodes: request.locallyHandledCodes },
+  );
+}
+
+export function postJSON<T>(
   path: string,
   body: unknown,
   actionToken?: string,
   locallyHandledCodes?: readonly string[],
 ): Promise<T> {
-  const headers: Record<string, string> = { ...jsonHeaders };
-  if (actionToken) headers["X-SSHC-Action"] = actionToken;
-  return apiClient.mutate<T>(
-    path,
-    { method: "POST", headers, body: JSON.stringify(body) },
-    locallyHandledCodes === undefined ? {} : { locallyHandledCodes },
-  );
+  return sendJSON<T>(path, {
+    method: "POST", body,
+    ...(actionToken === undefined ? {} : { actionToken }),
+    ...(locallyHandledCodes === undefined ? {} : { locallyHandledCodes }),
+  });
+}
+
+export function putJSON<T>(path: string, body: unknown, locallyHandledCodes?: readonly string[]): Promise<T> {
+  return sendJSON<T>(path, { method: "PUT", body, ...(locallyHandledCodes === undefined ? {} : { locallyHandledCodes }) });
+}
+
+export function patchJSON<T>(path: string, body: unknown, actionToken?: string): Promise<T> {
+  return sendJSON<T>(path, { method: "PATCH", body, ...(actionToken === undefined ? {} : { actionToken }) });
 }
 
 export async function postEmpty<T>(path: string): Promise<T> {

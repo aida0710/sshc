@@ -7,6 +7,7 @@ import { clipboard } from "../ui/clipboard";
 import { terminalCommandApi } from "../features/workspaces/commandApi";
 import { useDismissibleLayer } from "../ui/useDismissibleLayer";
 import { PasswordInput } from "../ui/PasswordField";
+import { Notice } from "../ui/surface";
 
 type Prepared = {
   command: string;
@@ -261,14 +262,7 @@ export function TerminalQuickCommands({
           ×
         </button>
       </div>
-      {problem === "" ? null : (
-        <p
-          role="alert"
-          className="rounded bg-notice px-2 py-1.5 text-xs text-notice-ink"
-        >
-          {problem}
-        </p>
-      )}
+      {problem === "" ? null : <Notice tone="danger" compact>{problem}</Notice>}
       {terminalSelectionSaved ? (
         <p
           role="status"
