@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"sshc/internal/remoteos"
+	"sshc/internal/sshclient"
 	"sshc/internal/storage"
 	"sshc/internal/terminal"
 	"sshc/internal/textencoding"
@@ -119,6 +120,32 @@ type TerminalAppearance struct {
 
 // Empty は、何も選ばれていないことを返す。
 func (appearance TerminalAppearance) Empty() bool { return appearance == TerminalAppearance{} }
+
+// api/openapi.yaml の TerminalAppearance・TerminalSettings と同じ上限。契約は読み取り
+// 応答にも掛かるので、範囲外を書き込ませると GET /api/v1/metadata が契約違反になる。
+const (
+	maxAppearanceNameLength = 64
+	maxBackgroundNameLength = 128
+	maxBackgroundTint       = 100
+	maxTerminalVerbosity    = 3
+	maxStartDirectoryLength = 4096
+)
+
+func validateAppearance(appearance *TerminalAppearance) error {
+	if appearance == nil {
+		return nil
+	}
+	if len(appearance.Palette) > maxAppearanceNameLength || len(appearance.Font) > maxAppearanceNameLength {
+		return fmt.Errorf("%w: appearance name", ErrMetadataTerminal)
+	}
+	if len(appearance.Background) > maxBackgroundNameLength {
+		return fmt.Errorf("%w: appearance background", ErrMetadataTerminal)
+	}
+	if tint := appearance.BackgroundTint; tint != nil && (*tint < 0 || *tint > maxBackgroundTint) {
+		return fmt.Errorf("%w: backgroundTint %d", ErrMetadataTerminal, *tint)
+	}
+	return nil
+}
 
 func (host HostMetadata) Alias() string { return host.Identity.Alias }
 
@@ -326,6 +353,18 @@ func ValidateMetadata(metadata Metadata) error {
 		if settings.LocalShellProfile != "" && !validShellProfileID(settings.LocalShellProfile) {
 			return fmt.Errorf("%w: localShellProfile", ErrMetadataTerminal)
 		}
+		if settings.Verbosity < 0 || settings.Verbosity > sshclient.MaxVerbosity {
+			return fmt.Errorf("%w: verbosity %d", ErrMetadataTerminal, settings.Verbosity)
+		}
+		if settings.Reconnect != nil && (*settings.Reconnect < 0 || *settings.Reconnect > terminal.MaxReconnects) {
+			return fmt.Errorf("%w: reconnect %d", ErrMetadataTerminal, *settings.Reconnect)
+		}
+		if len(settings.StartDirectory) > maxStartDirectoryLength {
+			return fmt.Errorf("%w: startDirectory", ErrMetadataTerminal)
+		}
+		if err := validateAppearance(settings.Appearance); err != nil {
+			return err
+		}
 	}
 	if settings := metadata.Backgrounds; settings != nil {
 		if settings.CapacityMiB < MinBackgroundCapacityMiB || settings.CapacityMiB > MaxBackgroundCapacityMiB {
@@ -370,6 +409,9 @@ func ValidateMetadata(metadata Metadata) error {
 		}
 		if host.OSC52 != "" && host.OSC52 != "allow" && host.OSC52 != "deny" {
 			return ErrMetadataOSC52
+		}
+		if err := validateAppearance(host.Appearance); err != nil {
+			return err
 		}
 		for _, text := range append([]string{host.Note, host.Colour}, host.Tags...) {
 			if containsSecretMarker(text) {

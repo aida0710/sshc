@@ -3970,7 +3970,9 @@ export interface operations {
     checkReachability: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                "X-SSHC-Action": string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -3997,7 +3999,9 @@ export interface operations {
     testAuthentication: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                "X-SSHC-Action": string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -4105,7 +4109,9 @@ export interface operations {
     deleteKnownHosts: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                "X-SSHC-Action": string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -4133,7 +4139,9 @@ export interface operations {
     scanKnownHosts: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                "X-SSHC-Action": string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -4160,7 +4168,9 @@ export interface operations {
     addKnownHost: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                "X-SSHC-Action": string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -4772,7 +4782,7 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: {
+        requestBody: {
             content: {
                 "application/json": components["schemas"]["SyncPushRequest"];
             };
@@ -4802,7 +4812,7 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: {
+        requestBody: {
             content: {
                 "application/json": components["schemas"]["SyncPushRequest"];
             };
@@ -6826,7 +6836,9 @@ export interface operations {
     createSFTPTransferJob: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-SSHC-Action"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -6846,6 +6858,7 @@ export interface operations {
                 };
             };
             400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
         };
     };

@@ -614,3 +614,27 @@ func TestDeregisterReportsAnAgentThatIsNotThere(t *testing.T) {
 		t.Fatalf("deregister with no agent = 200, want a refusal: %s", response.Body.String())
 	}
 }
+
+// 確認トークンの target は、OpenAPI の上限と同じ長さまでサーバーも受け付ける。SFTP の
+// 削除と権限変更は `alias:絶対パス` を target にするので、旧上限 128 では深いパスの
+// 操作がブラウザから出せなかった。長さで断るのは上限を超えたときだけである。
+func TestActionTargetLengthMatchesTheContract(t *testing.T) {
+	engine, _, credentials := newKeyServer(t, newRevealService())
+	for name, length := range map[string]int{
+		"deep path":      300,
+		"at the limit":   maxActionTargetLength,
+		"past the limit": maxActionTargetLength + 1,
+	} {
+		t.Run(name, func(t *testing.T) {
+			body, err := json.Marshal(api.IssueActionRequest{Kind: "private_key.reveal", Target: strings.Repeat("k", length)})
+			if err != nil {
+				t.Fatal(err)
+			}
+			response := sendKeyRequest(t, engine, credentials, http.MethodPost, "/api/v1/actions", body, "")
+			refusedForLength := response.Code == http.StatusBadRequest && strings.Contains(response.Body.String(), "invalid_request")
+			if refusedForLength != (length > maxActionTargetLength) {
+				t.Fatalf("length %d: status = %d body = %s", length, response.Code, response.Body.String())
+			}
+		})
+	}
+}

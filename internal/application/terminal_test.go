@@ -316,11 +316,27 @@ func TestAnUnsetReconnectFallsBackToTheDefault(t *testing.T) {
 		t.Fatalf("TerminalReconnects = %d, want %d", attempts, terminal.MaxReconnects)
 	}
 
+	// The contract rejects out-of-range values on write; a value that still
+	// reaches the file (an older engine, a hand edit) is normalised on read.
 	tooMany := 99
-	if _, err := service.SetTerminalSettings(TerminalSettings{Reconnect: &tooMany}); err != nil {
-		t.Fatal(err)
+	if _, err := service.SetTerminalSettings(TerminalSettings{Reconnect: &tooMany}); !errors.Is(err, ErrMetadataTerminal) {
+		t.Fatalf("SetTerminalSettings(reconnect 99) = %v, want ErrMetadataTerminal", err)
 	}
 	if attempts := service.TerminalReconnects(); attempts != terminal.MaxReconnects {
-		t.Fatalf("out of range = %d, want %d", attempts, terminal.MaxReconnects)
+		t.Fatalf("after a refused write = %d, want %d", attempts, terminal.MaxReconnects)
+	}
+}
+
+func TestTerminalSettingsRejectTheRangesTheContractDeclares(t *testing.T) {
+	service, _ := newTerminalService(t)
+	tint := 500
+	for name, settings := range map[string]TerminalSettings{
+		"verbosity":      {Verbosity: 9},
+		"backgroundTint": {Appearance: TerminalAppearance{BackgroundTint: &tint}},
+		"palette":        {Appearance: TerminalAppearance{Palette: strings.Repeat("p", 65)}},
+	} {
+		if _, err := service.SetTerminalSettings(settings); !errors.Is(err, ErrMetadataTerminal) {
+			t.Errorf("%s out of range was accepted: %v", name, err)
+		}
 	}
 }

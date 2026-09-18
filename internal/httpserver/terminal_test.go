@@ -1174,3 +1174,23 @@ func TestTitleEndpointPinsAndUnpins(t *testing.T) {
 		}
 	}
 }
+
+func TestOpeningASessionRefusesSizesThatOverflowTheTerminal(t *testing.T) {
+	fixture := newTerminalFixture(t, terminal.Limits{MaxSessions: 4, Scrollback: 1 << 12})
+	// 65616 truncated to uint16 is 80, so a cast-then-check would accept it.
+	for name, body := range map[string]string{
+		"overflowing cols": `{"kind":"shell","cols":65616,"rows":24}`,
+		"past the maximum": `{"kind":"shell","cols":1001,"rows":24}`,
+		"negative rows":    `{"kind":"shell","cols":80,"rows":-1}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			response, contents := fixture.do(t, http.MethodPost, "/api/v1/terminal/sessions", body)
+			if response.StatusCode != http.StatusBadRequest || !strings.Contains(contents, "invalid_terminal_size") {
+				t.Fatalf("status = %d: %s", response.StatusCode, contents)
+			}
+		})
+	}
+	if opened := fixture.starter.opened(); len(opened) != 0 {
+		t.Fatalf("a refused size still opened %#v", opened)
+	}
+}

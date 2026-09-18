@@ -214,7 +214,6 @@ export const syncApi: SyncApi = {
     return validatePullResponse(
       await postJSON<unknown>("/api/v1/sync/pull", request, undefined, [
         ...locallyExplainedSyncFailures,
-        "sync_failed",
         "sync_local_changed",
         "sync_workspace_busy",
       ]),
