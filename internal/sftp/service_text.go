@@ -3,8 +3,6 @@ package sftp
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"io"
 	"io/fs"
@@ -99,7 +97,7 @@ func (s Service) ReadPreview(ctx context.Context, alias, remotePath string) (Pre
 		return Preview{}, ErrConflict
 	}
 	entry := entryFrom(path.Dir(file.shown), namedInfo{FileInfo: after, name: path.Base(file.shown)})
-	return Preview{Entry: entry, ContentType: contentType, Contents: contents, Revision: contentRevision(after, contents)}, nil
+	return Preview{Entry: entry, ContentType: contentType, Contents: contents, Revision: contentRevision(contents)}, nil
 }
 
 func readPreviewBytes(ctx context.Context, remote Remote, cleaned string) ([]byte, string, error) {
@@ -223,15 +221,7 @@ func readText(ctx context.Context, remote Remote, file fileLocation) (TextFile, 
 		return TextFile{}, ErrConflict
 	}
 	entry := entryFrom(path.Dir(file.shown), namedInfo{FileInfo: after, name: path.Base(file.shown)})
-	return TextFile{Entry: entry, Contents: string(contents), Revision: contentRevision(after, contents)}, nil
-}
-
-func contentRevision(info fs.FileInfo, contents []byte) string {
-	hash := sha256.New()
-	_, _ = io.WriteString(hash, metadataRevision(info))
-	_, _ = hash.Write([]byte{0})
-	_, _ = hash.Write(contents)
-	return "content-sha256:" + hex.EncodeToString(hash.Sum(nil))
+	return TextFile{Entry: entry, Contents: string(contents), Revision: contentRevision(contents)}, nil
 }
 
 func validText(contents []byte) bool {

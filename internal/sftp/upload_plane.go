@@ -737,11 +737,11 @@ func (m *TransferManager) Complete(ctx context.Context, alias, id, remotePath st
 	if !publishedInfo.Mode().IsRegular() || publishedInfo.Size() != total {
 		return Transfer{}, ErrConflict
 	}
-	if err := remote.Replace(part, cleaned); err != nil {
+	if err := publishUploadPart(remote, part, cleaned, expectedRevision); err != nil {
 		return Transfer{}, err
 	}
-	// Replace is the publication commit point. A diagnostic Lstat failure after
-	// it must not turn an already-visible target into a failed, un-retryable job.
+	// Publication is the commit point. A diagnostic Lstat failure after it must
+	// not turn an already-visible target into a failed, un-retryable job.
 	revision := metadataRevision(publishedInfo)
 	updated, err := remote.Lstat(cleaned)
 	if err == nil {
@@ -863,6 +863,16 @@ func verifyTargetRevision(ctx context.Context, remote Remote, target, expected s
 	return info.Mode().Perm(), nil
 }
 
+// publishUploadPart は part を target 名へ動かす。新規 file（expected が absent）は
+// put／copy と同じく標準 rename を使い、verifyTargetRevision の後に別 client が同名を
+// 作っていれば OpenSSH がその場で拒否する。上書きだけが posix-rename で置換する。
+func publishUploadPart(remote Remote, part, target, expectedRevision string) error {
+	if expectedRevision == AbsentRevision {
+		return remote.Rename(part, target)
+	}
+	return remote.Replace(part, target)
+}
+
 func targetContentRevision(ctx context.Context, remote Remote, target string, before fs.FileInfo) (string, error) {
 	source, err := remote.Open(target)
 	if err != nil {
@@ -884,7 +894,7 @@ func targetContentRevision(ctx context.Context, remote Remote, target string, be
 	if written != before.Size() || metadataRevision(before) != metadataRevision(after) {
 		return "", ErrConflict
 	}
-	return "content-sha256:" + hex.EncodeToString(hash.Sum(nil)), nil
+	return contentRevisionOf(hash), nil
 }
 
 func resumablePath(id, remotePath string) (string, error) {
@@ -896,14 +906,6 @@ func resumablePath(id, remotePath string) (string, error) {
 
 func uploadPartPath(target, id string) string {
 	return path.Join(path.Dir(target), "."+path.Base(target)+".sshc-upload-"+id+".part")
-}
-
-func isUploadPartName(name string) bool {
-	return uploadPartNamePattern.MatchString(name)
-}
-
-func isInternalName(name string) bool {
-	return isUploadPartName(name) || editorTemporaryNamePattern.MatchString(name)
 }
 
 // AuthorizeUpload binds the data-plane upload endpoints to the queue record

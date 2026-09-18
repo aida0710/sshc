@@ -113,7 +113,7 @@ func (s Service) readTree(ctx context.Context, alias, root string) (map[string]E
 		}
 		directory := pending[0]
 		pending = pending[1:]
-		infos, err := remote.ReadDir(ctx, directory)
+		infos, err := readChildren(ctx, remote, directory)
 		if err != nil {
 			return nil, err
 		}
@@ -179,7 +179,7 @@ func treeBytes(ctx context.Context, remote Remote, root string) (int64, error) {
 		}
 		directory := pending[0]
 		pending = pending[1:]
-		infos, err := remote.ReadDir(ctx, directory)
+		infos, err := readChildren(ctx, remote, directory)
 		if err != nil {
 			return 0, err
 		}
@@ -250,18 +250,14 @@ func (s Service) CopyRemote(ctx context.Context, request RemoteTransferRequest, 
 			return err
 		}
 	}
-	var transferred int64
-	report := func(delta int64) error {
-		transferred += delta
-		if progress == nil {
-			return nil
-		}
-		return progress(transferred)
+	copier := &remoteCopy{
+		service: s, source: source, target: target, overwrite: request.Overwrite, progress: progress,
+		copied: make(map[string]string),
 	}
 	if info.IsDir() {
-		err = s.copyDirectory(ctx, source, target, sourcePath, targetPath, info.Mode(), request.Overwrite, report)
+		err = copier.copyDirectory(ctx, sourcePath, targetPath, info.Mode())
 	} else if info.Mode().IsRegular() {
-		err = s.copyRemoteFile(ctx, source, target, sourcePath, targetPath, info, request.Overwrite, report)
+		err = copier.copyFile(ctx, sourcePath, targetPath, info)
 	} else {
 		err = ErrUnsupportedEntry
 	}
@@ -269,13 +265,7 @@ func (s Service) CopyRemote(ctx context.Context, request RemoteTransferRequest, 
 		return err
 	}
 	if request.Operation == RemoteMove {
-		// Recheck immediately before deletion. This catches a source tree that was
-		// changed while a long copy was running and prevents deleting uncopied
-		// symlinks or sshc temporary files.
-		if err := validateMovableTree(ctx, source, sourcePath); err != nil {
-			return ErrConflict
-		}
-		return removeTree(ctx, source, sourcePath)
+		return copier.removeCopiedTree(ctx, sourcePath)
 	}
 	return nil
 }
@@ -305,25 +295,63 @@ func isDescendant(parent, candidate string) bool {
 	return strings.HasPrefix(candidate, parent+"/")
 }
 
-func (s Service) copyDirectory(ctx context.Context, source, target Remote, sourcePath, targetPath string, mode fs.FileMode, overwrite bool, progress func(int64) error) error {
-	if targetInfo, err := target.Lstat(targetPath); err == nil {
+// remoteCopy は 1 回の remote→remote copy／move を実行する。source が返す名前や
+// listing は信用せず、entry 数を plan と同じ予算で数え、copy 済み file の revision を
+// 覚えて move の削除前に照合する。
+type remoteCopy struct {
+	service   Service
+	source    Remote
+	target    Remote
+	overwrite bool
+	progress  func(int64) error
+
+	transferred int64
+	visited     int
+	// copied は copy 済み regular file の source path と、copy 直後に確認した
+	// metadata revision。move はこれと一致した file だけを削除する。
+	copied map[string]string
+}
+
+func (c *remoteCopy) report(delta int64) error {
+	c.transferred += delta
+	if c.progress == nil {
+		return nil
+	}
+	return c.progress(c.transferred)
+}
+
+// visit は plan（treeBytes）と同じ予算で entry を数える。plan と copy の間に source が
+// listing を差し替えても、copy が際限なく続くことはない。
+func (c *remoteCopy) visit() error {
+	c.visited++
+	if c.visited > maxComparedEntries {
+		return ErrCompareLimit
+	}
+	return nil
+}
+
+func (c *remoteCopy) copyDirectory(ctx context.Context, sourcePath, targetPath string, mode fs.FileMode) error {
+	if err := c.visit(); err != nil {
+		return err
+	}
+	if targetInfo, err := c.target.Lstat(targetPath); err == nil {
 		if !targetInfo.IsDir() {
 			return ErrAlreadyExists
 		}
-		if !overwrite {
+		if !c.overwrite {
 			return ErrAlreadyExists
 		}
 	} else if errors.Is(err, fs.ErrNotExist) {
-		if err := target.Mkdir(targetPath); err != nil {
+		if err := c.target.Mkdir(targetPath); err != nil {
 			return err
 		}
-		if err := target.Chmod(targetPath, mode.Perm()); err != nil {
+		if err := c.target.Chmod(targetPath, mode.Perm()); err != nil {
 			return err
 		}
 	} else {
 		return err
 	}
-	infos, err := source.ReadDir(ctx, sourcePath)
+	infos, err := readChildren(ctx, c.source, sourcePath)
 	if err != nil {
 		return err
 	}
@@ -339,11 +367,11 @@ func (s Service) copyDirectory(ctx context.Context, source, target Remote, sourc
 		targetChild := path.Join(targetPath, info.Name())
 		switch {
 		case info.IsDir():
-			if err := s.copyDirectory(ctx, source, target, sourceChild, targetChild, info.Mode(), overwrite, progress); err != nil {
+			if err := c.copyDirectory(ctx, sourceChild, targetChild, info.Mode()); err != nil {
 				return err
 			}
 		case info.Mode().IsRegular():
-			if err := s.copyRemoteFile(ctx, source, target, sourceChild, targetChild, info, overwrite, progress); err != nil {
+			if err := c.copyFile(ctx, sourceChild, targetChild, info); err != nil {
 				return err
 			}
 		default:
@@ -353,22 +381,25 @@ func (s Service) copyDirectory(ctx context.Context, source, target Remote, sourc
 	return nil
 }
 
-func (s Service) copyRemoteFile(ctx context.Context, source, target Remote, sourcePath, targetPath string, before fs.FileInfo, overwrite bool, progress func(int64) error) (resultErr error) {
-	if _, err := target.Lstat(targetPath); err == nil && !overwrite {
+func (c *remoteCopy) copyFile(ctx context.Context, sourcePath, targetPath string, before fs.FileInfo) (resultErr error) {
+	if err := c.visit(); err != nil {
+		return err
+	}
+	if _, err := c.target.Lstat(targetPath); err == nil && !c.overwrite {
 		return ErrAlreadyExists
 	} else if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
-	input, err := source.Open(sourcePath)
+	input, err := c.source.Open(sourcePath)
 	if err != nil {
 		return err
 	}
 	defer input.Close()
-	temporary, err := s.temporaryPath(targetPath)
+	temporary, err := c.service.temporaryPath(targetPath)
 	if err != nil {
 		return err
 	}
-	output, err := target.Create(temporary)
+	output, err := c.target.Create(temporary)
 	if err != nil {
 		return err
 	}
@@ -378,10 +409,10 @@ func (s Service) copyRemoteFile(ctx context.Context, source, target Remote, sour
 			resultErr = closeErr
 		}
 		if cleanup {
-			_ = target.Remove(temporary)
+			_ = c.target.Remove(temporary)
 		}
 	}()
-	written, err := copyContext(ctx, &progressWriter{Writer: output, report: progress}, input, before.Size())
+	written, err := copyContext(ctx, &progressWriter{Writer: output, report: c.report}, input, before.Size())
 	if err != nil {
 		return err
 	}
@@ -392,23 +423,59 @@ func (s Service) copyRemoteFile(ctx context.Context, source, target Remote, sour
 		return err
 	}
 	output = closedWriter{}
-	if err := target.Chmod(temporary, before.Mode().Perm()); err != nil {
+	if err := c.target.Chmod(temporary, before.Mode().Perm()); err != nil {
 		return err
 	}
-	after, err := source.Lstat(sourcePath)
+	after, err := c.source.Lstat(sourcePath)
 	if err != nil || metadataRevision(before) != metadataRevision(after) {
 		return ErrConflict
 	}
-	if overwrite {
-		err = target.Replace(temporary, targetPath)
+	if c.overwrite {
+		err = c.target.Replace(temporary, targetPath)
 	} else {
-		err = target.Rename(temporary, targetPath)
+		err = c.target.Rename(temporary, targetPath)
 	}
 	if err != nil {
 		return err
 	}
 	cleanup = false
+	c.copied[sourcePath] = metadataRevision(after)
 	return nil
+}
+
+// removeCopiedTree は move の後半として source を消す。各 file は削除の直前に copy 時の
+// revision と照合し、copy 後に変わった file や copy していない entry があれば
+// ErrConflict で止まる。止まるまでに消した file は target に同じ内容が公開済みである。
+func (c *remoteCopy) removeCopiedTree(ctx context.Context, target string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	info, err := c.source.Lstat(target)
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() {
+		if !info.Mode().IsRegular() {
+			return ErrConflict
+		}
+		if revision, copied := c.copied[target]; !copied || revision != metadataRevision(info) {
+			return ErrConflict
+		}
+		return c.source.Remove(target)
+	}
+	infos, err := readChildren(ctx, c.source, target)
+	if err != nil {
+		return err
+	}
+	for _, child := range infos {
+		if isInternalName(child.Name()) {
+			return ErrConflict
+		}
+		if err := c.removeCopiedTree(ctx, path.Join(target, child.Name())); err != nil {
+			return err
+		}
+	}
+	return c.source.RemoveDirectory(target)
 }
 
 type progressWriter struct {
@@ -422,35 +489,6 @@ func (writer *progressWriter) Write(contents []byte) (int, error) {
 		err = writer.report(int64(written))
 	}
 	return written, err
-}
-
-func removeTree(ctx context.Context, remote Remote, target string) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	info, err := remote.Lstat(target)
-	if err != nil {
-		return err
-	}
-	if !info.IsDir() {
-		if !info.Mode().IsRegular() {
-			return ErrUnsupportedEntry
-		}
-		return remote.Remove(target)
-	}
-	infos, err := remote.ReadDir(ctx, target)
-	if err != nil {
-		return err
-	}
-	for _, child := range infos {
-		if isInternalName(child.Name()) {
-			return ErrConflict
-		}
-		if err := removeTree(ctx, remote, path.Join(target, child.Name())); err != nil {
-			return err
-		}
-	}
-	return remote.RemoveDirectory(target)
 }
 
 func validateMovableTree(ctx context.Context, remote Remote, root string) error {
@@ -476,7 +514,7 @@ func validateMovableTree(ctx context.Context, remote Remote, root string) error 
 		if !info.IsDir() {
 			return ErrUnsupportedEntry
 		}
-		children, err := remote.ReadDir(ctx, current)
+		children, err := readChildren(ctx, remote, current)
 		if err != nil {
 			return err
 		}

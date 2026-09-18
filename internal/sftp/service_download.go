@@ -3,7 +3,6 @@ package sftp
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"io"
 	"os"
@@ -88,7 +87,7 @@ func (s Service) prepareArchive(ctx context.Context, alias, remotePath, temporar
 		return nil, err
 	}
 	prepared.Size = info.Size()
-	prepared.Revision = "content-sha256:" + hex.EncodeToString(hash.Sum(nil))
+	prepared.Revision = contentRevisionOf(hash)
 	return prepared, nil
 }
 
@@ -184,7 +183,7 @@ func (s Service) prepareDownload(
 		return nil, ErrConflict
 	}
 	prepared.Size = written
-	prepared.Revision = "content-sha256:" + hex.EncodeToString(hash.Sum(nil))
+	prepared.Revision = contentRevisionOf(hash)
 	return prepared, nil
 }
 
