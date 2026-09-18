@@ -23,7 +23,7 @@ The top-left menu button opens a drawer with running terminals and Command Palet
 
 ## SFTP on a phone
 
-The file list gets most of the screen. Its toolbar contains the host picker, Back, current folder, Search, and “…”. Tap the folder name to edit its path. Open “…” for folder creation, uploads, bookmarks, sorting, and other actions.
+The file list gets most of the screen. Its toolbar contains the host picker, Back, current folder, Search, and “…”. Tap the folder name to edit its path. Open “…” for folder creation, uploads, opening a terminal here, sorting, and other actions.
 
 Tap a name once to open a folder or preview a file. Use a checkbox or long press to select items and reveal their actions. While selection is active, tapping another name adds or removes it from the selection. Directory navigation and remote search show progress and temporarily prevent actions on the old listing.
 
@@ -37,10 +37,17 @@ The development build installs as **sshc Dev** (`com.github.aida0710.sshc.dev`) 
 
 Device testing with real keyboards and gestures is still required for these changes. The repository's `docs/mobile-ux-review.md` records the verification checklist and development build commands.
 
+
+## Engine service and backups
+
+The engine runs as a foreground service with a persistent "sshc is running" notification. Tapping **Stop** in the notification, or swiping the app away from recent tasks, ends the engine and every SSH session. Android 15 and later cap how long a data-sync service may run; the engine stops when that cap is reached. The notification permission is requested once, when the first transfer finishes, and never again after it is declined.
+
+App data (the vault, keys, settings, and browser registrations) is excluded entirely from Android Auto Backup and device-to-device transfer. To move to a new device, use encrypted Sync or set up the configuration and keys again there.
+
 ## Local shell
 
 The local shell runs in the app's private directory with Android sandbox permissions. It is not a full desktop Linux environment; aliases such as `ll` and tools such as `dir` may not exist.
 
 ## Startup failure
 
-On startup failure, open **Diagnostic details** and record Version, Code, Detail, Android SDK, device, and ABI. Reports exclude private keys, passwords, tokens, and bucket secrets.
+The failure screen lists six items: Version, Code, Detail, Android SDK, device, and ABI. **Copy diagnostics** copies them together and **Try again** restarts the launch. The workspace path or the local port result appears inside Code and Detail when it is relevant. Reports exclude private keys, passwords, tokens, and bucket secrets.

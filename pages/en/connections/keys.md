@@ -1,17 +1,21 @@
 ---
 title: Keys and known hosts
-description: Generate, import, edit, and register SSH keys; inspect server identities.
+description: Generate, organise, edit, and register SSH keys; inspect server identities.
 ---
 
 # Keys and known hosts
 
-The Keys screen shows private and public keys, fingerprints, algorithms, and paths. It supports generation, import, rename, passphrase editing, public-key copy, and ssh-agent loading.
+The Keys screen shows private and public keys under `~/.ssh`, with fingerprints, algorithms, and paths. It supports generation, rename, moving between groups, passphrase editing, public-key copy, and ssh-agent loading. To bring in an existing key, place the file under `~/.ssh` (or `~/.ssh/keys/<group>/`); the screen lists it on the next scan.
 
-Managed keys may live under `~/.ssh/keys/...` following the group structure. Make sure `IdentityFile` points to the resolved existing path. Private keys under `~/.ssh` are included in encrypted sync snapshots.
+Keys generated with a group selected are saved under `~/.ssh/keys/<group>/`; without a group they go directly under `~/.ssh`. Moving a key into a group relocates it the same way. An `IdentityFile` that points to a missing path fails when the key is loaded before connecting.
+
+::: warning
+Encrypted sync does not pick only the keys referenced by `IdentityFile`: every regular file under `~/.ssh` that is not excluded is included. The private keys in scope are encrypted on this device together with the rest of the snapshot before upload. Check the actual scope under **Sync → Synced files** or in `.sshcignore`.
+:::
 
 ## Install a public key
 
-Search and select multiple remote keys, then install them on a target server. sshc resolves only that target, so warnings from an unrelated alias-specific `ProxyCommand` are not mixed into the operation.
+Under **Remote Keys**, pick one public key from `~/.ssh` and add it to the `authorized_keys` of one or more hosts. Before connecting, sshc shows the public key, the login user, and the destination file for each host, and resolves only those targets, so warnings from an unrelated alias-specific `ProxyCommand` are not mixed into the operation.
 
 ## Known hosts
 

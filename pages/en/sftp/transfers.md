@@ -19,6 +19,9 @@ Each job shows per-file progress, transferred and total bytes, current speed, re
 - Cancel ends the job.
 - Clear finished removes completed and canceled entries from the view.
 - Remove from list dismisses one completed, canceled, or failed entry. Clear failed dismisses failed entries without clearing successful history.
+- **Auto-clear finished** set to anything but Keep (30 seconds, 5 minutes, 1 hour) removes completed entries that long after they finish. The setting is stored by the engine and shared by every screen.
+- **Stop starting new transfers** lets running transfers finish while queued entries show as Held and do not start; **Resume processing the queue** reverts it.
+- Queued entries can be reordered with the ↑↓ controls on their rows; running and finished entries stay where they are.
 
 The overflow menu only appears when at least one bulk action is currently available. A cancel request that races with completion is idempotent and keeps the completed result. If sshc cannot remove an upload's remote temporary file, it keeps the failed entry visible with an explanation so that you can retry cancel or removal after restoring the connection.
 

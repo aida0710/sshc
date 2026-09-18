@@ -29,7 +29,7 @@ description: sshcのローカル境界、Vault、ホスト鍵、同期、Telnet�
 
 ## SSHホスト鍵
 
-未知のホスト鍵は利用者の確認後に保存できます。保存済みの鍵が変わっていた場合は接続できません。非対話SSH、SFTP、公開鍵登録では、最終接続先とすべてのProxyJump踏み台が既知である必要があります。
+未知のホスト鍵は、対話的なTerminalでは利用者の確認後に保存します。`StrictHostKeyChecking`を`no`または`accept-new`にした接続先では、OpenSSHと同じく確認なしで保存します。保存済みの鍵が変わっていた場合は、この設定に関係なく接続できません。非対話SSH、SFTP、公開鍵登録では、最終接続先とすべてのProxyJump踏み台が既知である必要があります。
 
 ## ProxyCommand
 
