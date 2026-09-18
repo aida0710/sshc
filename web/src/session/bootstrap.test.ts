@@ -148,12 +148,13 @@ describe("a reload", () => {
     expect(fetcher).not.toHaveBeenCalled();
   });
 
-  it("recovers a new tab from the enrolled browser without a terminal URL", async () => {
+  it("recovers a new tab from the enrolled browser and keeps the rotated registration", async () => {
     const browserToken = "r".repeat(43);
+    const rotatedToken = "s".repeat(43);
     const csrfToken = "d".repeat(43);
     window.localStorage.setItem("sshc.browser.registration.v1", browserToken);
     const fetcher = vi.fn().mockResolvedValue(new Response(
-      JSON.stringify({ csrfToken }),
+      JSON.stringify({ csrfToken, browserToken: rotatedToken }),
       { status: 200, headers: { "Content-Type": "application/json" } },
     ));
 
@@ -165,9 +166,12 @@ describe("a reload", () => {
       headers: { "X-SSHC-Browser": browserToken },
     }));
     expect(state.csrfToken).toBe(csrfToken);
+    // The engine retires the presented token shortly after; only the replacement
+    // recovers the next reload.
+    expect(window.localStorage.getItem("sshc.browser.registration.v1")).toBe(rotatedToken);
   });
 
-  it("refuses recovery after the server invalidates the previous-port registration", async () => {
+  it("drops a registration the engine refuses so the next reload asks for a fresh entrance", async () => {
     const browserToken = "r".repeat(43);
     window.localStorage.setItem("sshc.browser.registration.v1", browserToken);
     const fetcher = vi.fn().mockResolvedValue(new Response("", { status: 401 }));
@@ -179,6 +183,7 @@ describe("a reload", () => {
     expect(fetcher).toHaveBeenCalledWith("/api/v1/session/recover", expect.objectContaining({
       headers: { "X-SSHC-Browser": browserToken },
     }));
+    expect(window.localStorage.getItem("sshc.browser.registration.v1")).toBeNull();
   });
 
   it("falls back to browser recovery after an engine restart invalidates the cookie", async () => {

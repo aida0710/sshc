@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -86,7 +85,7 @@ func TestReplacingObeysTheFlagWithoutAsking(t *testing.T) {
 
 func TestReplacingStopsWaitingForTheEngineLockWhenCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
+	server := engineTestServer(http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
 		response.WriteHeader(http.StatusAccepted)
 	}))
 	defer server.Close()

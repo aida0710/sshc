@@ -103,7 +103,7 @@ func TestSFTPDownloadProgressAcceptsEverySupportedConnection(t *testing.T) {
 
 func TestSFTPDownloadPollsConnectionProgressWhileEnginePreparesFile(t *testing.T) {
 	var progressRequests atomic.Int32
-	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+	server := engineTestServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		switch request.URL.Path {
 		case "/api/v1/sftp/transfers":
 			progressRequests.Add(1)
@@ -161,7 +161,7 @@ func TestSFTPSettingsShowsAndPersistsSplitDefaults(t *testing.T) {
 		Jobs: []json.RawMessage{},
 	}
 	var updates int
-	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+	server := engineTestServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		switch {
 		case request.Method == http.MethodGet && request.URL.Path == "/api/v1/sftp/transfers":
 			writeTestJSON(response, http.StatusOK, settings)
@@ -207,7 +207,7 @@ func TestSFTPDownloadUsesRemotePathAndPublishesAtomically(t *testing.T) {
 	var createdRemotePath string
 	var checkpointOffset float64
 	var splitThreshold, splitJobs, chunkBytes float64
-	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+	server := engineTestServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		switch {
 		case request.Method == http.MethodPost && request.URL.Path == "/api/v1/sftp/transfers":
 			var body map[string]any
@@ -259,7 +259,7 @@ func TestSFTPDownloadUsesRemotePathAndPublishesAtomically(t *testing.T) {
 }
 
 func TestSFTPDownloadRefusesAFileThatGrewAfterPlanning(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+	server := engineTestServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		switch {
 		case request.Method == http.MethodPost && request.URL.Path == "/api/v1/sftp/transfers":
 			writeTestJSON(response, http.StatusCreated, map[string]any{})
@@ -334,7 +334,7 @@ func TestSFTPRecursiveGetPlanHonorsTreeBudgets(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			var calls atomic.Int32
-			server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+			server := engineTestServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 				calls.Add(1)
 				remotePath := request.URL.Query().Get("path")
 				entries, exists := test.listings[remotePath]
@@ -367,7 +367,7 @@ func TestSFTPRecursiveGetPlanRejectsInvalidSizeAndPath(t *testing.T) {
 	}
 	for _, entry := range tests {
 		t.Run(entry.Name, func(t *testing.T) {
-			server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+			server := engineTestServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 				writeTestJSON(response, http.StatusOK, sftpCLIListing{Path: "/root", Entries: []sftpCLIEntry{entry}})
 			}))
 			defer server.Close()
@@ -385,7 +385,7 @@ func TestSFTPRecursiveGetPlanRejectsInvalidSizeAndPath(t *testing.T) {
 func TestSFTPUploadStreamsChunksAndCarriesOverwritePolicy(t *testing.T) {
 	var uploaded strings.Builder
 	var overwrite bool
-	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+	server := engineTestServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		switch {
 		case request.Method == http.MethodPost && request.URL.Path == "/api/v1/sftp/transfers":
 			var body map[string]any

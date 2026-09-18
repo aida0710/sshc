@@ -24,6 +24,8 @@ const (
 
 var (
 	errEngineIdentityMismatch = errors.New("running engine identity does not match its handoff")
+	errEngineUnproven         = errors.New("the process at the engine address did not prove it holds the handoff secret; " +
+		"if an sshc engine was killed without exiting, remove the stale handoff under ~/.ssh/sshc/cli and start it again")
 	errEngineVaultMissing     = errors.New("the running engine has no vault")
 	errEngineVaultLocked      = errors.New("the running engine vault is locked")
 	errEngineInvalidResponse  = errors.New("the running engine returned an invalid response")
@@ -77,7 +79,7 @@ func openEngineAPI(ctx context.Context, stateDir string, base *http.Client) (*en
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	found, err := readHandoff(stateDir)
+	found, err := verifiedHandoff(ctx, stateDir, base)
 	if err != nil {
 		return nil, err
 	}

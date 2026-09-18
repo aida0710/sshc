@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"net/http/httptest"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -18,7 +17,7 @@ const terminalTestID = "0123456789abcdef0123456789abcdef"
 
 func testTerminalEngine(t *testing.T, handler http.Handler) *engineAPI {
 	t.Helper()
-	server := httptest.NewServer(handler)
+	server := engineTestServer(handler)
 	t.Cleanup(server.Close)
 	return &engineAPI{
 		origin: server.URL, cookie: http.Cookie{Name: "session", Value: "test"}, csrf: "csrf",

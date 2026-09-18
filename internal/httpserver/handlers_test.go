@@ -2,6 +2,7 @@ package httpserver
 
 import (
 	"bytes"
+	"crypto/rand"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -78,7 +79,9 @@ func TestRegisteredBrowserRecoversWithoutReplacingAValidSessionCookie(t *testing
 		t.Fatal(err)
 	}
 	random := bytes.NewReader(bytes.Repeat([]byte{0x74}, 512))
-	registrations := browserauth.NewStore(workspace, random)
+	// The store needs distinct bytes per mint: a recovery must hand out a token
+	// that differs from the one it retires.
+	registrations := browserauth.NewStore(workspace, rand.Reader)
 	if err := registrations.SetPort(43123); err != nil {
 		t.Fatal(err)
 	}
@@ -138,6 +141,15 @@ func TestRegisteredBrowserRecoversWithoutReplacingAValidSessionCookie(t *testing
 	if recovered.Code != http.StatusOK || len(recovered.Result().Cookies()) != 1 || recovered.Result().Cookies()[0].Value == cookie.Value {
 		t.Fatalf("recovered status=%d cookies=%#v", recovered.Code, recovered.Result().Cookies())
 	}
+	// Every recovery hands out a replacement registration. The browser stores it
+	// and the presented one retires once the grace for other tabs has passed.
+	var rotated api.BootstrapResponse
+	if err := json.NewDecoder(recovered.Body).Decode(&rotated); err != nil {
+		t.Fatal(err)
+	}
+	if rotated.BrowserToken == nil || len(*rotated.BrowserToken) != 43 || *rotated.BrowserToken == *established.BrowserToken {
+		t.Fatalf("rotated browser token = %#v", rotated.BrowserToken)
+	}
 	denied := call(engine(restarted), "/api/v1/session/recover", nil, map[string]string{"X-SSHC-Browser": "x"})
 	if denied.Code != http.StatusUnauthorized || len(denied.Result().Cookies()) != 0 {
 		t.Fatalf("invalid registration status=%d cookies=%#v", denied.Code, denied.Result().Cookies())
@@ -145,7 +157,7 @@ func TestRegisteredBrowserRecoversWithoutReplacingAValidSessionCookie(t *testing
 	if err := registrations.SetPort(44123); err != nil {
 		t.Fatal(err)
 	}
-	moved := call(engine(restarted), "/api/v1/session/recover", nil, map[string]string{"X-SSHC-Browser": *established.BrowserToken})
+	moved := call(engine(restarted), "/api/v1/session/recover", nil, map[string]string{"X-SSHC-Browser": *rotated.BrowserToken})
 	if moved.Code != http.StatusUnauthorized || len(moved.Result().Cookies()) != 0 {
 		t.Fatalf("previous-port registration status=%d cookies=%#v", moved.Code, moved.Result().Cookies())
 	}

@@ -140,7 +140,7 @@ func newSyncSetupServer(t *testing.T, state api.SyncSetupTargetState) (*syncSetu
 		},
 		checkResponse: check, completeResponse: result,
 	}
-	httpServer := httptest.NewServer(http.HandlerFunc(script.handler))
+	httpServer := engineTestServer(http.HandlerFunc(script.handler))
 	stateDir := t.TempDir()
 	writeTestHandoff(t, stateDir, httpServer.URL)
 	return script, httpServer, stateDir
@@ -220,7 +220,7 @@ func standardHiddenSetup(existing bool) [][]byte {
 
 func TestSyncSetupRequiresTTYBeforeContactingTheEngine(t *testing.T) {
 	requests := 0
-	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { requests++ }))
+	server := engineTestServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { requests++ }))
 	defer server.Close()
 	stateDir := t.TempDir()
 	writeTestHandoff(t, stateDir, server.URL)
