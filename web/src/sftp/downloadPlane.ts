@@ -5,6 +5,10 @@ type DownloadAPI = Pick<TransferManagerAPI, "updateTransfer" | "checkpointDownlo
 
 // Downloads buffered in memory stop here; beyond that only a sink can hold them.
 const fallbackDownloadLimit = 64 << 20;
+// How many received bytes may wait before the part file is committed and the
+// engine told about them. Larger batches cost at most this much re-download
+// after a crash; smaller ones cost a file copy and a request each.
+const downloadCheckpointBytes = 8 << 20;
 
 // Streams remote files into the browser and hands them to the save dialog.
 // Bytes go to a durable sink when the browser offers one, otherwise to an
@@ -100,9 +104,6 @@ export class DownloadPlane {
       globalThis.setTimeout(() => { void sink.root.removeEntry(sink.name).catch(() => undefined); }, 30_000);
     } else {
       await this.api.saveDownload(job.remotePath, job.kind === "folder", chunks.map((chunk) => new Uint8Array(chunk)));
-      if (job.downloadRevision === "") throw new Error("download_revision_missing");
-      const acknowledged = await this.api.checkpointDownload(id, bufferedBytes, job.downloadRevision);
-      this.context.progress(id, bufferedBytes, acknowledged.totalBytes >= 0 ? acknowledged.totalBytes : bufferedBytes);
     }
     const completed = await this.api.updateTransfer(id, "complete");
     this.chunks.delete(id);
@@ -114,11 +115,33 @@ export class DownloadPlane {
   // how much the in-memory buffer holds afterwards. A file download gets two
   // more tries after a dropped connection; a folder archive cannot be
   // resumed and fails at once.
+  //
+  // Received bytes are checkpointed in batches. A checkpoint commits the part
+  // file and tells the engine the offset the browser now holds durably, and
+  // committing an OPFS writable copies the whole file so far; doing that for
+  // every chunk made a download take time proportional to the square of its
+  // size. The final and the pre-retry checkpoint keep the engine's offset in
+  // step with the bytes actually kept.
   private async stream(id: string, sink: DownloadSink | null, chunks: Uint8Array[], buffered: number): Promise<number> {
     const { ledger } = this.context;
     let bufferedBytes = buffered;
     let failures = 0;
     let responseRevision = ledger.find(id)?.downloadRevision ?? "";
+    let position = sink === null ? bufferedBytes : sink.position;
+    let uncheckpointedBytes = 0;
+    let knownTotal: number | null = null;
+
+    const totalFor = (total: number | null) => total ?? knownTotal ?? ledger.find(id)?.totalBytes ?? -1;
+    const checkpoint = async (total: number | null) => {
+      if (responseRevision === "") throw new Error("download_revision_missing");
+      if (sink !== null) await this.sinks.checkpoint(sink);
+      const acknowledged = await this.api.checkpointDownload(id, position, responseRevision);
+      uncheckpointedBytes = 0;
+      if (ledger.find(id) !== undefined) {
+        this.context.progress(id, position, total ?? (acknowledged.totalBytes >= 0 ? acknowledged.totalBytes : totalFor(null)));
+      }
+    };
+
     while (true) {
       const job = ledger.find(id);
       if (job === undefined || job.status !== "running") return bufferedBytes;
@@ -134,6 +157,8 @@ export class DownloadPlane {
           onReset: async (total) => {
             chunks.length = 0;
             bufferedBytes = 0;
+            position = 0;
+            uncheckpointedBytes = 0;
             if (sink !== null) {
               await sink.writer.truncate(0);
               await sink.writer.seek(0);
@@ -145,11 +170,10 @@ export class DownloadPlane {
           },
           onChunk: async (chunk, total) => {
             if (responseRevision === "") throw new Error("download_revision_missing");
-            let position: number;
+            knownTotal = total;
             if (sink !== null) {
               await sink.writer.write(new Uint8Array(chunk));
               sink.position += chunk.byteLength;
-              await this.sinks.checkpoint(sink);
               position = sink.position;
             } else {
               if (bufferedBytes + chunk.byteLength > fallbackDownloadLimit) {
@@ -159,17 +183,23 @@ export class DownloadPlane {
               bufferedBytes += chunk.byteLength;
               position = bufferedBytes;
             }
-            const acknowledged = await this.api.checkpointDownload(id, position, responseRevision);
-            if (ledger.find(id) !== undefined) {
-              this.context.progress(id, position, total ?? acknowledged.totalBytes);
+            uncheckpointedBytes += chunk.byteLength;
+            if (uncheckpointedBytes >= downloadCheckpointBytes) {
+              await checkpoint(total);
+              return;
             }
+            if (ledger.find(id) !== undefined) this.context.progress(id, position, totalFor(total));
           },
         });
+        if (uncheckpointedBytes > 0) await checkpoint(knownTotal);
         return bufferedBytes;
       } catch (error) {
         const current = ledger.find(id);
         if (current === undefined || current.status !== "running" || controller.signal.aborted) throw error;
         if (current.kind === "folder" || failures >= 2) throw error;
+        // The retry asks the engine to continue from the bytes held here, so
+        // the engine must have been told about them first.
+        if (uncheckpointedBytes > 0) await checkpoint(knownTotal);
         failures += 1;
       }
     }

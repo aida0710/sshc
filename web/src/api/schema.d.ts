@@ -3388,6 +3388,9 @@ export interface components {
             /** Format: date-time */
             modifiedAt: string;
             revision: string;
+            linkTarget?: string;
+            /** @enum {string} */
+            targetType?: "file" | "directory" | "other";
         };
         SFTPListing: {
             path: string;

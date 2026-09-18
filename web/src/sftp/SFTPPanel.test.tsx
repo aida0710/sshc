@@ -432,6 +432,45 @@ describe("SFTPPanel uploads", () => {
     expect(screen.queryByRole("dialog", { name: "/remote/notes.txt" })).not.toBeInTheDocument();
   });
 
+  it("opens a symlink as what it points to and names the target beside it", async () => {
+    api.list.mockImplementation(async (_alias: string, requestedPath: string) => ({
+      path: requestedPath === "" ? "/srv" : requestedPath,
+      entries: requestedPath === "" || requestedPath === "/srv" ? [
+        { name: "data-link", path: "/srv/data-link", type: "symlink", size: 4, mode: "lrwxrwxrwx", modifiedAt: "", revision: "l1", linkTarget: "data", targetType: "directory" },
+        { name: "notes-link", path: "/srv/notes-link", type: "symlink", size: 2048, mode: "lrwxrwxrwx", modifiedAt: "", revision: "l2", linkTarget: "/srv/notes.txt", targetType: "file" },
+        { name: "broken", path: "/srv/broken", type: "symlink", size: 7, mode: "lrwxrwxrwx", modifiedAt: "", revision: "l3", linkTarget: "missing" },
+      ] : [],
+    }));
+    render(<SFTPPanel aliases={["edge"]} />);
+    await chooseHost("edge");
+    const table = await screen.findByRole("table");
+    expect(within(table).getByRole("row", { name: /data-link/ })).toHaveTextContent("data-link → data");
+    expect(within(table).getByRole("row", { name: /notes-link/ })).toHaveTextContent("notes-link → /srv/notes.txt");
+    expect(within(table).getByRole("row", { name: /notes-link/ })).toHaveTextContent("2.0 KiB");
+    expect(within(table).getByRole("row", { name: /broken/ })).toHaveTextContent("broken → missing (not found)");
+
+    // A link to a file opens like a file, with the target named and the edit action offered.
+    await userEvent.dblClick(within(table).getByRole("button", { name: "notes-link" }));
+    const details = await screen.findByRole("dialog", { name: "Details for notes-link" });
+    expect(within(details).getByText("/srv/notes.txt")).toBeVisible();
+    expect(within(details).getByRole("button", { name: "Edit file" })).toBeVisible();
+    expect(within(details).getByRole("button", { name: "Download" })).toBeVisible();
+    await userEvent.click(within(details).getByRole("button", { name: "Close" }));
+
+    // A broken link can be inspected but neither edited nor downloaded.
+    await userEvent.dblClick(within(table).getByRole("button", { name: "broken" }));
+    const brokenDetails = await screen.findByRole("dialog", { name: "Details for broken" });
+    expect(within(brokenDetails).getByText("missing (not found)")).toBeVisible();
+    expect(within(brokenDetails).queryByRole("button", { name: "Edit file" })).not.toBeInTheDocument();
+    expect(within(brokenDetails).queryByRole("button", { name: "Download" })).not.toBeInTheDocument();
+    await userEvent.click(within(brokenDetails).getByRole("button", { name: "Close" }));
+
+    // A link to a directory opens as that directory.
+    await userEvent.dblClick(within(table).getByRole("button", { name: "data-link" }));
+    await waitFor(() => expect(api.list).toHaveBeenCalledWith("edge", "/srv/data-link"));
+    expect(screen.getByTestId("sftp-current-path")).toHaveAttribute("data-path", "/srv/data-link");
+  });
+
   it("ignores a stale host listing that resolves after the current host", async () => {
     let resolveEdge: ((listing: { path: string; entries: never[] }) => void) | undefined;
     api.list.mockImplementation((alias: string) => {
@@ -576,9 +615,9 @@ describe("SFTPPanel uploads", () => {
 
     const table = screen.getByRole("table");
     expect(within(table).getAllByRole("row")[2]).toHaveTextContent("alpha");
-    await userEvent.click(within(table).getByRole("button", { name: /Bytes.*sort ascending/ }));
+    await userEvent.click(within(table).getByRole("button", { name: /Size.*sort ascending/ }));
     expect(within(table).getAllByRole("row")[2]).toHaveTextContent("zeta");
-    await userEvent.click(within(table).getByRole("button", { name: /Bytes.*sort descending/ }));
+    await userEvent.click(within(table).getByRole("button", { name: /Size.*sort descending/ }));
     expect(within(table).getAllByRole("row")[2]).toHaveTextContent("alpha");
   });
 
@@ -1000,7 +1039,7 @@ describe("SFTPPanel uploads", () => {
       const row = await screen.findByRole("button", { name: "notes.txt" });
       expect(row.className).toContain("min-h-8");
       expect(row.className).not.toContain("min-h-12");
-      expect(within(row).getByText("12")).toBeInTheDocument();
+      expect(within(row).getByText("12 B")).toBeInTheDocument();
       expect(within(row).queryByText("0644")).not.toBeInTheDocument();
       expect(screen.queryByRole("table")).not.toBeInTheDocument();
     });
@@ -1065,7 +1104,7 @@ describe("SFTPPanel uploads", () => {
       expect(within(sheet).getByRole("menuitem", { name: "New folder" })).toBeEnabled();
       expect(within(sheet).getByRole("menuitem", { name: "Upload" })).toBeEnabled();
       expect(within(sheet).getByRole("menuitem", { name: "Home directory" })).toBeEnabled();
-      expect(within(sheet).getByRole("menuitem", { name: "Bytes, sort ascending" })).toBeEnabled();
+      expect(within(sheet).getByRole("menuitem", { name: "Size, sort ascending" })).toBeEnabled();
       await userEvent.click(within(sheet).getByRole("menuitem", { name: "Select all entries" }));
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
       expect(screen.getByRole("checkbox", { name: "Select project" })).toBeChecked();

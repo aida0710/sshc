@@ -301,9 +301,12 @@ export class SFTPTransferManager {
     if (firstFailure !== undefined) throw firstFailure;
   }
 
+  // Overwriting is a resume: the engine marks a job resumed from
+  // needs_overwrite as allowed to replace the target. A browser upload also
+  // needs its File still in memory, which networkReady checks.
   async overwrite(id: string): Promise<void> {
     const job = this.ledger.find(id);
-    if (job === undefined || job.status !== "needs_overwrite" || !this.uploads.has(id)) return;
+    if (job === undefined || job.status !== "needs_overwrite") return;
     await this.resume(id);
   }
 

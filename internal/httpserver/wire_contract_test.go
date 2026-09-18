@@ -446,6 +446,9 @@ func verifyEnum(t *testing.T, schema map[string]any, typeID reflect.Type) {
 }
 
 var wireEnumValues = map[reflect.Type][]string{
+	reflect.TypeOf(sftp.LinkTargetType("")): {
+		string(sftp.LinkTargetFile), string(sftp.LinkTargetDirectory), string(sftp.LinkTargetOther),
+	},
 	reflect.TypeOf(sftp.EntryType("")): {
 		string(sftp.EntryFile), string(sftp.EntryDirectory), string(sftp.EntrySymlink), string(sftp.EntryOther),
 	},

@@ -182,24 +182,45 @@ func (e SFTPDirectoryDifferenceStatus) Valid() bool {
 	}
 }
 
+// Defines values for SFTPEntryTargetType.
+const (
+	SFTPEntryTargetTypeDirectory SFTPEntryTargetType = "directory"
+	SFTPEntryTargetTypeFile      SFTPEntryTargetType = "file"
+	SFTPEntryTargetTypeOther     SFTPEntryTargetType = "other"
+)
+
+// Valid indicates whether the value is a known member of the SFTPEntryTargetType enum.
+func (e SFTPEntryTargetType) Valid() bool {
+	switch e {
+	case SFTPEntryTargetTypeDirectory:
+		return true
+	case SFTPEntryTargetTypeFile:
+		return true
+	case SFTPEntryTargetTypeOther:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SFTPEntryType.
 const (
-	SFTPEntryTypeDirectory SFTPEntryType = "directory"
-	SFTPEntryTypeFile      SFTPEntryType = "file"
-	SFTPEntryTypeOther     SFTPEntryType = "other"
-	SFTPEntryTypeSymlink   SFTPEntryType = "symlink"
+	Directory SFTPEntryType = "directory"
+	File      SFTPEntryType = "file"
+	Other     SFTPEntryType = "other"
+	Symlink   SFTPEntryType = "symlink"
 )
 
 // Valid indicates whether the value is a known member of the SFTPEntryType enum.
 func (e SFTPEntryType) Valid() bool {
 	switch e {
-	case SFTPEntryTypeDirectory:
+	case Directory:
 		return true
-	case SFTPEntryTypeFile:
+	case File:
 		return true
-	case SFTPEntryTypeOther:
+	case Other:
 		return true
-	case SFTPEntryTypeSymlink:
+	case Symlink:
 		return true
 	default:
 		return false
@@ -1321,14 +1342,19 @@ type SFTPDirectoryStats struct {
 
 // SFTPEntry defines model for SFTPEntry.
 type SFTPEntry struct {
-	Mode       string        `json:"mode"`
-	ModifiedAt time.Time     `json:"modifiedAt"`
-	Name       string        `json:"name"`
-	Path       string        `json:"path"`
-	Revision   string        `json:"revision"`
-	Size       int64         `json:"size"`
-	Type       SFTPEntryType `json:"type"`
+	LinkTarget *string              `json:"linkTarget,omitempty"`
+	Mode       string               `json:"mode"`
+	ModifiedAt time.Time            `json:"modifiedAt"`
+	Name       string               `json:"name"`
+	Path       string               `json:"path"`
+	Revision   string               `json:"revision"`
+	Size       int64                `json:"size"`
+	TargetType *SFTPEntryTargetType `json:"targetType,omitempty"`
+	Type       SFTPEntryType        `json:"type"`
 }
+
+// SFTPEntryTargetType defines model for SFTPEntry.TargetType.
+type SFTPEntryTargetType string
 
 // SFTPEntryType defines model for SFTPEntry.Type.
 type SFTPEntryType string

@@ -141,20 +141,23 @@ func (remote *contextRemote) Close() error {
 	return remote.closeErr
 }
 
-func entryFrom(parent string, info fs.FileInfo) Entry {
-	typeOf := EntryOther
+func entryTypeOf(info fs.FileInfo) EntryType {
 	switch {
 	case info.IsDir():
-		typeOf = EntryDirectory
+		return EntryDirectory
 	case info.Mode().IsRegular():
-		typeOf = EntryFile
+		return EntryFile
 	case info.Mode()&fs.ModeSymlink != 0:
-		typeOf = EntrySymlink
+		return EntrySymlink
 	}
+	return EntryOther
+}
+
+func entryFrom(parent string, info fs.FileInfo) Entry {
 	return Entry{
 		Name:       info.Name(),
 		Path:       path.Join(parent, info.Name()),
-		Type:       typeOf,
+		Type:       entryTypeOf(info),
 		Size:       info.Size(),
 		Mode:       info.Mode(),
 		ModifiedAt: info.ModTime().UTC(),

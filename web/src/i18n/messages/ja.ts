@@ -267,6 +267,8 @@ export const ja = {
   "sftp.download.cancelled": "キャンセル済み",
   "sftp.name": "名前",
   "sftp.size": "サイズ",
+  "sftp.linkTarget": "リンク先",
+  "sftp.brokenLink": "{target}（見つかりません）",
   "sftp.calculating": "計算中…",
   "sftp.partialSizePrefix": "少なくとも ",
   "sftp.sizeUnavailable": "取得できません",

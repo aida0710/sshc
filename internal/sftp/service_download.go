@@ -119,6 +119,12 @@ func (s Service) prepareDownload(
 		return nil, err
 	}
 	defer remote.Close()
+	// A symlink downloads the file it points to, under the link's own name.
+	file, err := locateFile(remote, cleaned)
+	if err != nil {
+		return nil, err
+	}
+	cleaned = file.stored
 	before, err := remote.Lstat(cleaned)
 	if err != nil {
 		return nil, err
