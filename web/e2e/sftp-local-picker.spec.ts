@@ -49,6 +49,15 @@ test("selects the pinned Local destination beside an SSH host", async ({ page, i
   await expect(second.getByRole("button", { name: "選択項目をアップロード" })).toBeEnabled();
   if (process.env.SSHC_VISUAL_DIR) await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/local-shared-selection-ja.png`, fullPage: true });
   await second.getByRole("button", { name: "選択を解除" }).click();
+  // A local row dragged onto the host pane becomes an engine-side put. The
+  // row must carry the draggable attribute, or the mouse selects text instead.
+  const localRow = second.getByRole("row", { name: /draft.txt/ });
+  await expect(localRow).toHaveAttribute("draggable", "true");
+  const putRequest = page.waitForRequest((request) =>
+    request.method() === "POST" && request.url().includes("/api/v1/sftp/transfers") && (request.postData() ?? "").includes('"operation":"put"'));
+  await second.getByRole("button", { name: "draft.txt" }).dragTo(first.getByLabel(/現在のリモートディレクトリへ/));
+  const queued = JSON.parse((await putRequest).postData() ?? "{}") as { sourcePath?: string; remotePath?: string; direction?: string };
+  expect(queued).toMatchObject({ direction: "remote", sourcePath: "/home/engine/projects/draft.txt", remotePath: "/srv/projects/draft.txt" });
   await second.getByRole("button", { name: "ローカルパスを編集" }).click();
   await expect(second.getByRole("textbox", { name: "エンジン側のファイルパス" })).toHaveValue("/home/engine/projects");
   if (process.env.SSHC_VISUAL_DIR) await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/local-shared-toolbar-path-ja.png`, fullPage: true });
