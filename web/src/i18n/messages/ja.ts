@@ -443,7 +443,7 @@ export const ja = {
   "snippets.cancel": "中止",
   "snippets.startup": "接続時の自動実行",
   "snippets.startupHint":
-    "選択したホストのシェル準備後に実行します。シークレット変数は使用できません。",
+    "選択したホストのシェル準備後に実行します。初回接続と自動再接続のたびに送るため、シークレット変数の値も暗号化した設定に保存され、リモートのシェル履歴や画面に残ることがあります。",
   "snippets.setStartup": "接続時に自動実行",
   "snippets.clearStartup": "解除",
   "host.duplicateKeyword":
