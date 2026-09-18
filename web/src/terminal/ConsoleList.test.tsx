@@ -371,7 +371,7 @@ describe("ConsoleList", () => {
     renderList({ sessions: [live, shell], maxSessions: 2 });
 
     expect(screen.getByRole("button", { name: "New session" })).toBeDisabled();
-    expect(screen.getByText(/limit of 2 open consoles/)).toBeInTheDocument();
+    expect(screen.getByText(/limit of 2 open sessions/)).toBeInTheDocument();
   });
 
   it("does not count an exited session against the limit", () => {
@@ -390,15 +390,15 @@ describe("ConsoleList", () => {
   it("shows nothing to open and no list when there is no session", () => {
     renderList({ sessions: [] });
 
-    expect(screen.getByText("No console is open.")).toBeInTheDocument();
+    expect(screen.getByText("No session is open.")).toBeInTheDocument();
     expect(screen.queryByRole("list")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "New session" })).toBeEnabled();
   });
 
   it("reports a refusal where the action was taken", () => {
-    renderList({ problem: "No more consoles can be opened. Close one first." });
+    renderList({ problem: "No more sessions can be opened. Close one first." });
 
-    expect(screen.getByRole("alert")).toHaveTextContent("No more consoles can be opened");
+    expect(screen.getByRole("alert")).toHaveTextContent("No more sessions can be opened");
   });
   it("shows the forwards a console has open", () => {
     renderList({

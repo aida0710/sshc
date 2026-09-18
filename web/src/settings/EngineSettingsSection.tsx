@@ -4,7 +4,7 @@ import { useTranslate } from "../i18n/context";
 import { Field, control } from "../ui/form";
 import { Button, Notice } from "../ui/surface";
 import { ActionArea, SettingsSection } from "./SettingsSection";
-import { useSaveState } from "./useSaveState";
+import { useAsyncOperation } from "../ui/useAsyncOperation";
 
 export type EngineSettingsApi = Pick<SettingsApi, "engineSettings" | "setEngineSettings">;
 
@@ -22,7 +22,7 @@ export function EngineSettingsSection({ api, showHeading }: { api: EngineSetting
   const t = useTranslate();
   const [draft, setDraft] = useState<EngineDraft>(initialDraft);
   const [loaded, setLoaded] = useState(false);
-  const save = useSaveState();
+  const save = useAsyncOperation();
 
   useEffect(() => {
     let active = true;
@@ -64,7 +64,7 @@ export function EngineSettingsSection({ api, showHeading }: { api: EngineSetting
       vaultAutoLock: draft.vaultAutoLockMode === "restart"
         ? { mode: "restart" }
         : { mode: "idle", value: idleValue, unit: draft.vaultAutoLockUnit },
-    }), () => t("engine.saveFailed"));
+    }), { describe: () => t("engine.saveFailed") });
   }
 
   const disabled = !loaded || save.busy;

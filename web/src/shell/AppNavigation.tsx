@@ -19,11 +19,7 @@ import type { TerminalSession } from "../api/terminalSessions";
 import type { HostEntry } from "../api/config";
 import type { LiveWorkspaceSummary } from "../features/workspaces/live";
 import type { UnreadSessions } from "../terminal/terminalNotifications";
-import {
-  clampNavigationWidth,
-  maximumNavigationWidth,
-  minimumNavigationWidth,
-} from "./navigationLayout";
+import { navigationWidth } from "./navigationLayout";
 import { sftpTransferManager } from "../sftp/transferManager";
 
 export function AppNavigation({
@@ -213,9 +209,9 @@ export function NavigationResizeHandle({
     <ColumnResizeHandle
       label={t("shell.navigationResize")}
       width={width}
-      minimum={minimumNavigationWidth}
-      maximum={maximumNavigationWidth}
-      onWidthChange={(next) => onWidthChange(clampNavigationWidth(next))}
+      minimum={navigationWidth.minimum}
+      maximum={navigationWidth.maximum}
+      onWidthChange={onWidthChange}
     />
   );
 }

@@ -363,4 +363,3 @@ export function useSFTPTransfers({
   };
 }
 
-export type SFTPTransfersModel = ReturnType<typeof useSFTPTransfers>;

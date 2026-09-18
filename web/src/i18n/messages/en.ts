@@ -2,6 +2,7 @@ export const en = {
   "shortcuts.heading": "Keyboard shortcuts",
   "shortcuts.description": "Share shortcut presets and choose one for this browser.",
   "shortcuts.confirmDelete": "Delete this preset on all synced devices?",
+  "shortcuts.deleteBody": "{name} is removed from every synced device and cannot be recovered.",
   "shortcuts.deleteEverywhere": "Delete everywhere",
   "shortcuts.cancelDelete": "Cancel",
   "shortcuts.preset": "Preset for this browser",
@@ -348,6 +349,9 @@ export const en = {
   "workspace.save": "Save with a name",
   "workspace.reopen": "Open this layout",
   "workspace.delete": "Delete",
+  "workspace.deleteHeading": "Delete {name}?",
+  "workspace.deleteBody": "The saved layout cannot be recovered. Open sessions stay open.",
+  "workspace.confirmDelete": "Delete it",
   "workspace.detachPane": "Remove from workspace",
   "workspace.live": "Live workspace",
   "workspace.mobilePaneSwitcher": "Workspace terminals",
@@ -421,6 +425,10 @@ export const en = {
   "snippets.value": "Value",
   "snippets.save": "Save",
   "snippets.delete": "Delete",
+  "snippets.deleteHeading": "Delete {name}?",
+  "snippets.deleteBody": "The snippet is removed for every target host and cannot be recovered.",
+  "snippets.confirmDelete": "Delete it",
+  "snippets.deleteCancel": "Cancel",
   "snippets.targets": "Target hosts",
   "snippets.preview": "Preview execution",
   "snippets.confirm": "Review exact commands",
@@ -442,12 +450,11 @@ export const en = {
   "host.duplicateKeyword":
     "A previous line in this block uses the same keyword. OpenSSH keeps the first one.",
 
-  "terminal.consoleList": "Open consoles",
-  "terminal.noSessions": "No console is open.",
+  "terminal.consoleList": "Open sessions",
+  "terminal.noSessions": "No session is open.",
   "terminal.openShell": "Local shell",
   "terminal.newSession": "New session",
   "terminal.rowDetail": "{status} · {destination}",
-  "terminal.running": "connected",
   "terminal.connecting": "connecting",
   "terminal.connected": "connected",
   "terminal.longCommandCompleted": "A command in {subject} finished after {seconds} seconds.",
@@ -514,7 +521,7 @@ export const en = {
   "terminal.reconnectingAttempt": "reconnecting {attempt}/{limit}",
   "terminal.exitedWith": "exited {code}",
   "terminal.localhost": "localhost",
-  "terminal.emptyHeading": "No console is open",
+  "terminal.emptyHeading": "No session is open",
   "terminal.emptyHint":
     "Open one from the list on the left, or press Connect on a host.",
   "terminal.forwardLocal": "forwarding {listen} → {to}",
@@ -524,7 +531,7 @@ export const en = {
   "terminal.rename": "Rename",
   "terminal.unpinTitle": "Use automatic name",
   "terminal.renameLabel": "New name for {title}",
-  "terminal.renameFailed": "The console could not be renamed.",
+  "terminal.renameFailed": "The session could not be renamed.",
   "terminal.duplicate": "Duplicate this connection",
   "terminal.moveUp": "Move up",
   "terminal.moveDown": "Move down",
@@ -533,17 +540,17 @@ export const en = {
   "terminal.closeBody":
     "This ends the connection. Running processes and visible output will be lost.",
   "terminal.closeForwards":
-    "This also closes {count} port forward(s) for the console.",
+    "This also closes {count} port forward(s) for the session.",
   "terminal.closeConfirm": "Close",
   "terminal.closeCancel": "Keep it open",
-  "desktop.closeAllHeading2": "Close {count} running console(s)?",
+  "desktop.closeAllHeading2": "Close {count} open session(s)?",
   "desktop.closeAllBody":
     "This ends every connection. Running processes and visible output will be lost.",
   "desktop.closeAllConfirm": "Close them all",
   "desktop.closeAllCancel": "Keep them open",
   "terminal.limitReached":
-    "The limit of {max} open consoles has been reached. Close one to open another.",
-  "terminal.limitRefused": "No more consoles can be opened. Close one first.",
+    "The limit of {max} open sessions has been reached. Close one to open another.",
+  "terminal.limitRefused": "No more sessions can be opened. Close one first.",
   "terminal.unresolvable":
     "The settings for this connection could not be resolved. Open Analysis to see why.",
   "terminal.jumpDepthExceeded":
@@ -572,7 +579,7 @@ export const en = {
   "terminal.manualReconnecting": "Connecting…",
   "terminal.manualReconnectFailed":
     "The SSH session could not be reconnected. Check the connection settings and network, then try again.",
-  "terminal.openFailed": "The console could not be opened.",
+  "terminal.openFailed": "The terminal could not be opened.",
   "terminal.keyBar": "On-screen keys",
   "terminal.extraKeys": "Extra keys",
   "shell.mobileNavigation": "Quick navigation",
@@ -580,7 +587,7 @@ export const en = {
   "sftp.mobile.search": "Search files",
   "sftp.manager.settings": "Transfer settings",
   "sftp.manager.close": "Close Transfer Manager",
-  "terminal.closeFailed": "The console could not be closed.",
+  "terminal.closeFailed": "The session could not be closed.",
   "terminal.linkConnecting": "Connecting…",
   "terminal.linkRetrying": "Connecting… (attempt {attempt})",
   "terminal.linkWaiting":
@@ -678,9 +685,9 @@ export const en = {
   "terminal.settingsLoading": "Loading terminal settings…",
   "terminal.settingsStorageHint":
     "These settings, including terminal appearance, are stored in workspace metadata and included in backups and sync. Theme, language and notification sounds are stored only in this browser.",
-  "terminal.maxSessionsLabel": "Consoles open at once",
+  "terminal.maxSessionsLabel": "Sessions open at once",
   "terminal.maxSessionsHint":
-    "Enter a value from 1 to 200. Leave it empty to use 50. When the limit is reached, no new console can be opened; existing consoles remain open.",
+    "Enter a value from 1 to 200. Leave it empty to use 50. When the limit is reached, no new session can be opened; existing sessions remain open.",
   "terminal.scrollbackLabel": "Engine replay buffer (bytes)",
   "terminal.scrollbackHint":
     "Output retained by the engine for browser reconnects. Enter 16384–4194304; blank uses 262144 bytes (256 KiB). It stays in memory and is not written to disk.",
@@ -708,7 +715,7 @@ export const en = {
   "terminal.verbosityFull": "Everything (-vvv)",
   "terminal.reconnectLabel": "Reconnect after a dropped connection",
   "terminal.reconnectHint":
-    "Number of reconnection attempts after an unexpected disconnect. Retries use 1, 2, 5, 10, and 15 second base delays with jitter, so five attempts take up to 40 seconds. A console you close manually is not reconnected.",
+    "Number of reconnection attempts after an unexpected disconnect. Retries use 1, 2, 5, 10, and 15 second base delays with jitter, so five attempts take up to 40 seconds. A session you close manually is not reconnected.",
   "terminal.reconnectDefault": "Default (5 attempts, up to 40 seconds)",
   "terminal.reconnectNever": "Do not reconnect",
   "terminal.reconnectOnce": "Once (up to 2 seconds)",
@@ -764,7 +771,6 @@ export const en = {
   "terminal.backgroundCapacityHint": "1–1024 MiB; the default is 16 MiB. Lowering the limit does not delete existing images. You are responsible for storage and sync costs.",
   "terminal.backgroundCapacityInvalid": "Enter a whole number from 1 to 1024 MiB.",
   "terminal.backgroundCapacityFailed": "The storage capacity could not be changed.",
-  "terminal.backgroundRename": "Rename {name}",
   "terminal.backgroundRenameHeading": "Rename background image",
   "terminal.backgroundRenameHint": "The extension is selected from the image type. Saved Terminal settings are updated to use the new name.",
   "terminal.backgroundRenameLabel": "New file name",
@@ -773,8 +779,6 @@ export const en = {
   "terminal.backgroundRenameRequired": "Enter a file name.",
   "terminal.backgroundRenameExists": "A background image with that name already exists.",
   "terminal.backgroundRenameFailed": "The background image could not be renamed.",
-  "terminal.backgroundRemove": "Remove {name}",
-  "terminal.backgroundRoom": "{megabytes} MB left",
   "terminal.backgroundTooLarge": "The image exceeds the maximum file size.",
   "terminal.backgroundsFull": "There is no room left for another image.",
   "terminal.backgroundNotAnImage":
@@ -783,18 +787,18 @@ export const en = {
   "terminal.tintLabel": "Image overlay opacity",
   "terminal.tintHint":
     "Increase the opacity to darken the image and improve text readability.",
-  "connection.backgroundLabel": "Console background image",
-  "connection.backgroundHint": "Only this connection's consoles use it.",
+  "connection.backgroundLabel": "Terminal background image",
+  "connection.backgroundHint": "Only this connection's terminals use it.",
   "terminal.fontHint": "JetBrains Mono ships with the application.",
   "terminal.fontFollowsSystem": "Use the device's monospace font",
   "terminal.fontFollowsOverall": "Use the overall setting",
-  "connection.fontLabel": "Console font family",
-  "connection.fontHint": "Only this connection's consoles use it.",
+  "connection.fontLabel": "Terminal font family",
+  "connection.fontHint": "Only this connection's terminals use it.",
   "terminal.paletteHint": "Applies to terminals without a custom colour scheme.",
   "terminal.paletteFollowsTheme": "Follow the application theme",
   "terminal.paletteFollowsOverall": "Use the overall setting",
-  "connection.paletteLabel": "Console colour scheme",
-  "connection.paletteHint": "Only this connection's consoles use it.",
+  "connection.paletteLabel": "Terminal colour scheme",
+  "connection.paletteHint": "Only this connection's terminals use it.",
   "connection.encodingLabel": "Remote text encoding",
   "connection.encodingHint":
     "Used by this connection in the browser terminal and by sshc on the command line.",
@@ -830,11 +834,11 @@ export const en = {
   "terminal.startUnusable":
     "Write the path as ~/something or as an absolute path.",
   "terminal.settingsSaveFailed": "The terminal settings could not be saved.",
-  "terminal.screenLabel": "Console for {title}",
+  "terminal.screenLabel": "Terminal for {title}",
   "terminal.exitedWithCode":
-    "The program exited with status {code}. The output above is kept until you close this console.",
+    "The program exited with status {code}. The output above is kept until you close this session.",
   "terminal.exitedWithSignal":
-    "The program was ended by {signal}. The output above is kept until you close this console.",
+    "The program was ended by {signal}. The output above is kept until you close this session.",
   "inspector.appOnly": "sshc-only settings",
   "inspector.groupLabel": "Group display settings",
   "inspector.hostSavesImmediately": "Changes here are saved immediately.",
@@ -899,17 +903,9 @@ export const en = {
   "secrets.metricTOTP": "One-time passwords",
   "secrets.metricAssignments": "Assignments",
   "secrets.loading": "Reading the vault…",
-  "secrets.explainNew":
-    "One master password encrypts account passwords, key passphrases, object-storage credentials, and snippets. The master password is not stored and cannot be recovered. If you lose it, this encrypted data cannot be recovered; files read directly by OpenSSH are unaffected.",
-  "secrets.explainLocked":
-    "The vault is locked. Enter the master password to access it.",
   "secrets.master": "Master password",
-  "secrets.create": "Create the vault",
   "secrets.unlock": "Unlock",
   "secrets.lock": "Lock sshc",
-  "secrets.createFailed":
-    "The vault could not be created. A master password must be at least 4 characters.",
-  "secrets.unlockFailed": "The master password is incorrect.",
   "secrets.failed": "The vault could not be read.",
   "secrets.storeFailed": "The credential could not be saved.",
   "secrets.deleteFailed": "The credential could not be deleted.",
@@ -926,6 +922,10 @@ export const en = {
     "Key host assignments could not be fully confirmed from SSH configuration. Check Config diagnostics.",
   "secrets.keyHostsUnavailable": "Could not confirm assigned hosts",
   "secrets.delete": "Delete {name}",
+  "secrets.deleteHeading": "Delete {name}?",
+  "secrets.deleteBody": "The credential leaves the vault and cannot be recovered.",
+  "secrets.confirmDelete": "Delete it",
+  "secrets.deleteCancel": "Cancel",
   "secrets.edit": "Edit {name}",
   "secrets.actions": "Actions for {name}",
   "secrets.usageExpand": "Show {label} for {name}",
@@ -974,7 +974,7 @@ export const en = {
   "update.available": "{version} is available — read what changed",
   "desktop.closeAllHeading": "Open connections",
   "desktop.closeAllNote":
-    "This closes every console, port forward, and SSH agent forwarding session. The engine keeps running.",
+    "This closes every session, port forward, and SSH agent forwarding. The engine keeps running.",
   "desktop.openCount": "{count} open",
   "desktop.closeAll": "Close every connection",
   "secrets.changeHeading": "Master password",
@@ -1050,11 +1050,6 @@ export const en = {
   "home.groups": "Groups",
   "home.attention": "Needs attention",
   "home.quickConnect": "Quick connect",
-  "home.quickConnectHint":
-    "Recently used hosts stay first; unused hosts follow in name order.",
-  "home.recentConnections": "Recent connections",
-  "home.recentConnectionsHint": "Successful SSH connections on this device.",
-  "home.recentConnectionList": "Recently used connections",
   "home.savedWorkspaces": "Saved layouts",
   "home.savedWorkspacesHint":
     "Recreate saved connection targets and pane placement in one action.",
@@ -1071,30 +1066,20 @@ export const en = {
   "home.listView": "List",
   "home.groupFilter": "Filter connections by group",
   "home.allGroups": "All",
-  "home.groupCount": "Groups {count}",
   "home.connectionCount": "Connections {count}",
   "home.groupBreadcrumb": "Selected group",
   "home.openGroup": "Open {name}, {count} connections",
-  "home.noChildGroups": "No groups at this level.",
   "home.connectGesture":
     "Connect to {alias}. Double-click with a mouse or tap once on a touch screen.",
-  "home.neverConnected": "Not connected yet",
   "home.loading": "Reading your SSH configuration…",
   "home.noConnections": "No concrete Host alias is configured yet.",
   "home.noMatches": "No connection matches this search.",
-  "home.groupMissingDetail": "The selected group {name} no longer exists.",
-  "home.ungrouped": "No group",
-  "home.tagsFor": "Tags for {alias}",
   "home.connectionActions": "Actions for {alias}",
   "home.openConnectionSettings": "Open connection settings",
   "home.connect": "Connect",
   "home.openingConnection": "Opening {alias}…",
   "home.opening": "Opening…",
   "home.loadFailed": "The SSH configuration could not be read.",
-  "home.workspace": "Workspace",
-  "home.workspaceUnavailable": "Workspace status is unavailable.",
-  "home.workspaceClean":
-    "No configuration problem or interrupted change needs attention.",
   "home.workspaceAttention":
     "{count} configuration or recovery item(s) need attention.",
   "home.openConfig": "Review configuration",
@@ -1308,9 +1293,6 @@ export const en = {
   "sync.exclusions.invalid": "The exclusion rules are not valid.",
   "sync.exclusions.loadFailed": "Could not load the synchronization files.",
   "sync.exclusions.saveFailed": "Could not save the exclusion rules.",
-  "sync.receiveRemote": "Receive from remote",
-  "sync.autoBlockedReason": "Sync is paused. Reason: {reason}",
-  "sync.autoFailedReason": "The previous sync failed. Reason: {reason}",
   "sync.setup.check": "Check connection",
   "sync.setup.empty": "Connected. This path has no sync data.",
   "sync.setup.existing": "Existing sync data was found.",
@@ -1370,7 +1352,6 @@ export const en = {
     "This machine only sends changes. Changes from other machines are not applied, but you can still preview them.",
   "sync.direction.pull.hint":
     "This machine only receives changes. Local changes are not sent to the bucket or other machines.",
-  "sync.configure": "Use this bucket",
   "sync.editSettings": "Edit bucket settings",
   "sync.cancelSettings": "Cancel editing",
   "sync.configureFailed": "The bucket could not be configured.",
@@ -1438,7 +1419,6 @@ export const en = {
     "Another operation is updating settings on this machine. Try again after it finishes.",
   "sync.endpointPath":
     "The endpoint is the account address only — no bucket name and no path. Put the bucket name in the field below.",
-  "sync.auto": "Automatic sync",
   "sync.autoHint.both":
     "While the Vault is unlocked, sshc checks the remote once a minute. After a local setting changes, it waits until five seconds pass without another change and pushes once. Conflicts and changes that remove files are not applied automatically; automatic sync stops and reports them.",
   "sync.autoHint.pull":
@@ -1473,7 +1453,6 @@ export const en = {
   "sync.autoFailedSchema":
     "The remote snapshot uses an unsupported format. The same generation will not be downloaded again automatically.",
   "sync.autoFailed": "The setting could not be saved.",
-  "sync.autoNow": "Sync now",
   "sync.autoNow.both": "Sync now",
   "sync.autoNow.pull": "Receive now",
   "sync.autoNow.push": "Send now",
@@ -1881,13 +1860,10 @@ export const en = {
 
   "tree.navLabel": "Connections",
   "tree.ungrouped": "Ungrouped",
-  "tree.arrangeBy": "Arrange connections by",
   "tree.byGroups": "Groups",
-  "tree.byFiles": "Files",
   "tree.groupFilter": "Filter by group",
   "tree.groupSection": "{name} group, {count} connections",
   "tree.filter": "Filter connections",
-  "tree.filterPlaceholder": "alias, pattern, group or tag",
   "tree.filterPlaceholderExpanded":
     "Search name, destination, user, group or tag",
   "tree.allConnections": "All",
@@ -1896,31 +1872,12 @@ export const en = {
   "tree.sortLabel": "Connection order",
   "tree.sortConfigured": "Configured order",
   "tree.sortName": "Name",
-  "tree.sortGroup": "Group",
   "tree.noMatch": "No connection matches this filter.",
-  "tree.groupEmpty": "No connection is in this group.",
   "tree.collapse": "Collapse {name}",
   "tree.expand": "Expand {name}",
-  "tree.patternRuleExternal":
-    "Pattern rule in {path}, a file this editor only reads.",
-  "tree.patternRuleOpen":
-    "Pattern rule — open it in the Config file view ({path}:{line})",
   "tree.duplicateAlias": "duplicate alias",
-  "tree.patternRule": "pattern rule",
   "tree.dragGroupHint": "Drag a group to nest or reorder it.",
 
-  "browser.modeLabel": "Browse connections by",
-  "browser.servers": "Servers",
-  "browser.groups": "Groups",
-  "browser.groupPath": "Group path",
-  "browser.ungrouped": "Ungrouped",
-  "browser.groupCountOne": "1 server",
-  "browser.groupCountMany": "{count} servers",
-  "browser.noMatches": "No servers match the current filters.",
-  "browser.emptyGroup": "No servers are directly in this group.",
-  "browser.emptyGroups": "No groups are declared yet.",
-  "browser.groupMissing": "Group not found.",
-  "browser.backToGroupRoot": "Back to group root",
   "browser.invalidUrl": "This connection URL is not recognised.",
   "browser.backToServers": "Back to servers",
   "browser.duplicateAlias": "duplicate alias",
@@ -2106,7 +2063,6 @@ export const en = {
   "conn.basicNeedVault": "Unlock the encrypted vault to save this draft.",
   "conn.basicPasswordBlocked":
     "The current SSH settings block adding or replacing a stored password.",
-  "conn.basicNothingChanged": "No Basic setting has changed.",
   "conn.basicOptionsFailed": "Keys and password options could not be loaded.",
   "conn.basicCredentialOptionsFailed":
     "Saved password options could not be loaded.",
@@ -2131,11 +2087,8 @@ export const en = {
   "conn.missingHint":
     "It may have been renamed, moved or deleted since this link was created.",
   "conn.backToList": "Back to connections",
-  "conn.summarySaved": "Saved connection",
-  "conn.summarySavedState": "Saved",
   "conn.summaryUnsaved": "Unsaved changes",
   "conn.summaryGroup": "Group",
-  "conn.summaryNoGroup": "No group",
   "conn.summaryPrivateKey": "SSH private key",
   "conn.summaryKeyNone": "SSH agent or inherited keys",
   "conn.summaryKeyComplex": "Multiple IdentityFile directives",
@@ -2216,7 +2169,6 @@ export const en = {
   "conn.connect": "Connect",
   "conn.opening": "Opening…",
   "conn.duplicate": "Duplicate connection",
-  "conn.manage": "More connection actions",
   "conn.manageLabel": "Manage connection",
   "conn.manageIndependent":
     "Each action is saved independently of Basic and Advanced settings.",
@@ -2331,7 +2283,6 @@ export const en = {
   "keys.relatedPublicFiles": "Public key files ({count})",
   "keys.showPrivateKey": "Show private key",
   "keys.changePassphrase": "Change passphrase",
-  "keys.moreActions": "More actions",
   "keys.manageStoredPassphrase": "Save passphrase",
   "keys.storedPassphraseHeading": "Saved passphrase: {path}",
   "keys.storedPassphraseNote":

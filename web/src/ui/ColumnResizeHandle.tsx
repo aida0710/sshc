@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 
 // ColumnResizeHandle is the thin vertical grip on the right edge of a column.
 // The parent positions it (usually `relative`) and owns the width; the handle
@@ -104,34 +104,4 @@ export function ColumnResizeHandle({
       />
     </div>
   );
-}
-
-// useStoredColumnWidth keeps one column width per browser. Layout preferences
-// are conveniences, so a blocked localStorage silently falls back to the default.
-export function useStoredColumnWidth(
-  key: string,
-  fallback: number,
-  minimum: number,
-  maximum: number,
-): [number, (width: number) => void] {
-  const clamp = (value: number) => Number.isFinite(value) ? Math.min(maximum, Math.max(minimum, Math.round(value))) : fallback;
-  const [width, setWidth] = useState(() => {
-    try {
-      const stored = window.localStorage.getItem(key);
-      if (stored !== null && stored.trim() !== "") return clamp(Number(stored));
-    } catch {
-      // Private browsing policies may disable localStorage.
-    }
-    return fallback;
-  });
-  const change = (next: number) => {
-    const clamped = clamp(next);
-    setWidth(clamped);
-    try {
-      window.localStorage.setItem(key, String(clamped));
-    } catch {
-      // Losing the preference is acceptable; the width still applies now.
-    }
-  };
-  return [width, change];
 }

@@ -12,6 +12,7 @@ import { useTranslate } from "../i18n/context";
 import { Button, Card, Notice } from "../ui/surface";
 import { PageHeader } from "../ui/page";
 import { Icon } from "../ui/icons";
+import { useAsyncOperation } from "../ui/useAsyncOperation";
 
 const mobileTouchTargets = "[&_button]:min-h-10 md:[&_button]:min-h-0";
 
@@ -30,8 +31,8 @@ export function DiagnosticsPanel({ api = diagnosticsApi, host, hosts = [] }: Dia
   const [effective, setEffective] = useState<EffectiveResponse | null>(null);
   const [reach, setReach] = useState<ReachabilityResponse | null>(null);
   const [auth, setAuth] = useState<AuthenticationResponse | null>(null);
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
+  const check = useAsyncOperation();
+  const { fail: reportFailure, clearError } = check;
 
   useEffect(() => {
     if (embedded) return;
@@ -42,30 +43,22 @@ export function DiagnosticsPanel({ api = diagnosticsApi, host, hosts = [] }: Dia
         if (active) setConfig(result);
       })
       .catch(() => {
-        if (active) setError(t("diag.configUnreadable"));
+        if (active) reportFailure(t("diag.configUnreadable"));
       });
     return () => {
       active = false;
     };
-  }, [api, embedded, t]);
+  }, [api, embedded, t, reportFailure]);
 
   useEffect(() => {
     setEffective(null);
     setReach(null);
     setAuth(null);
-    setError("");
-  }, [alias]);
+    clearError();
+  }, [alias, clearError]);
 
-  async function run<T>(operation: () => Promise<T>, apply: (value: T) => void, failure: string) {
-    setError("");
-    setBusy(true);
-    try {
-      apply(await operation());
-    } catch {
-      setError(failure);
-    } finally {
-      setBusy(false);
-    }
+  function run<T>(operation: () => Promise<T>, apply: (value: T) => void, failure: string) {
+    return check.run(operation, { apply, describe: () => failure });
   }
 
   const directives = effective?.executableDirectives ?? [];
@@ -89,7 +82,7 @@ export function DiagnosticsPanel({ api = diagnosticsApi, host, hosts = [] }: Dia
         ),
     },
   ];
-  const blocked = busy || alias === "";
+  const blocked = check.busy || alias === "";
   const hasResults = effective !== null || reach !== null || auth !== null;
 
   return (
@@ -101,8 +94,8 @@ export function DiagnosticsPanel({ api = diagnosticsApi, host, hosts = [] }: Dia
         <PageHeader title={t("diag.heading")} description={t("diag.pageDescription")} />
       )}
 
-      {error ? (
-        <Notice tone="danger">{error}</Notice>
+      {check.error ? (
+        <Notice tone="danger">{check.error}</Notice>
       ) : null}
 
       <Card as="section" radius="md" aria-label={t("diag.heading")}>
@@ -143,8 +136,8 @@ export function DiagnosticsPanel({ api = diagnosticsApi, host, hosts = [] }: Dia
             </div>
           </div>
           <p aria-live="polite" className="flex items-center gap-2 text-xs text-ink-muted">
-            <span className={`h-2 w-2 rounded-full ${busy ? "bg-notice-ink" : alias === "" ? "bg-ink-faint" : "bg-live"}`} />
-            {busy ? t("diag.running") : alias === "" ? t("diag.needsAlias") : t("diag.idle")}
+            <span className={`h-2 w-2 rounded-full ${check.busy ? "bg-notice-ink" : alias === "" ? "bg-ink-faint" : "bg-live"}`} />
+            {check.busy ? t("diag.running") : alias === "" ? t("diag.needsAlias") : t("diag.idle")}
           </p>
         </div>
       </Card>

@@ -5,13 +5,13 @@ import { useTranslate } from "../i18n/context";
 import { Icon } from "../ui/icons";
 import { ModalShell } from "../ui/ModalShell";
 import { PanelState } from "../ui/PanelState";
-import { Button } from "../ui/surface";
+import { Button, Notice } from "../ui/surface";
 import { nextSort } from "../ui/tableSort";
 import { useDismissibleLayer } from "../ui/useDismissibleLayer";
 import { useMenuKeyboard } from "../ui/useMenuKeyboard";
 import { mobileViewportQuery, useCompactViewport, useMediaQuery } from "../ui/useMediaQuery";
 import type { RemoteEntry } from "./api";
-import { formatBytes } from "./format";
+import { formatBytes } from "../ui/format";
 import { entryKind, movable } from "./entryKind";
 import { SFTPDetailsDialog } from "./SFTPDetailsDialog";
 import { SFTPEntryList, sortEntries, useSFTPEntryList, type SFTPSort, type SFTPSortState } from "./SFTPEntryList";
@@ -437,7 +437,7 @@ export function SFTPPanel({
         </>}
       />
 
-      {problem === "" || listingFailed ? null : <p role="alert" className="rounded-md border border-notice-line bg-notice px-3 py-2 text-sm text-notice-ink">{problem}</p>}
+      {problem === "" || listingFailed ? null : <Notice tone="danger">{problem}</Notice>}
       {search.search === null ? null : (
         <p role="status" className="flex items-center gap-3 rounded-md border border-line bg-surface-subtle px-3 py-2 text-sm text-ink-muted">
           <span className="min-w-0 grow truncate">

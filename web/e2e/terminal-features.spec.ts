@@ -49,7 +49,7 @@ test("renders the documented non-interactive CLI example", async ({ page, instal
 
   await openApplication(page, installation);
   await openSection(page, "Terminal");
-  const terminal = page.getByRole("region", { name: "Console for production" });
+  const terminal = page.getByRole("region", { name: "Terminal for production" });
   await expect(terminal).toContainText("sshc ssh production --non-interactive -- uname -n");
   await expect(terminal).toContainText("production");
 
@@ -63,7 +63,7 @@ test("uses a thin rounded scrollbar for terminal scrollback", async ({ page, ins
   await openSection(page, "Terminal");
   await openLocalShell(page);
 
-  const terminal = page.getByRole("region", { name: /^Console for / });
+  const terminal = page.getByRole("region", { name: /^Terminal for / });
   await expect(terminal).toContainText(/[$#%>]/, { timeout: 20_000 });
   await terminalKeyboard(page).focus();
   await page.keyboard.type("i=1; while [ \"$i\" -le 120 ]; do printf 'scrollback-line-%03d\\n' \"$i\"; i=$((i+1)); done");
@@ -109,7 +109,7 @@ test("keeps terminal actions compact and exposes terminal settings", async ({ pa
   await openApplication(page, installation);
   await openSection(page, "Terminal");
 
-  const terminal = page.getByRole("region", { name: "Console for docs-shell" });
+  const terminal = page.getByRole("region", { name: "Terminal for docs-shell" });
   await expect(terminal).toBeVisible();
   await expect(terminal.getByRole("button", { name: "Find" })).toBeVisible();
   await terminal.getByRole("button", { name: "More terminal actions" }).click();
@@ -177,7 +177,7 @@ test("opens forwarding management only for an SSH terminal", async ({ page, inst
   });
   await openApplication(page, installation);
   await openSection(page, "Terminal");
-  const terminal = page.getByRole("region", { name: "Console for bastion" });
+  const terminal = page.getByRole("region", { name: "Terminal for bastion" });
   await expect(terminal).toBeVisible();
   await terminal.getByRole("button", { name: "More terminal actions" }).click();
   await terminal.getByRole("menuitem", { name: "Port forwarding" }).click();

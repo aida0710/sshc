@@ -1,5 +1,4 @@
-import { apiClient } from "../api/client";
-import { jsonHeaders } from "../api/guards";
+import { postJSON } from "../api/guards";
 import type { components } from "../api/schema";
 import { validateOpenAPISchema } from "../api/validators.generated";
 
@@ -40,25 +39,17 @@ function validateRegistration(value: unknown): RemoteKeyRegisterResponse {
 export const remoteKeysApi: RemoteKeysApi = {
   async plan(input) {
     return validatePlan(
-      await apiClient.mutate<unknown>("/api/v1/remote-keys/plan", {
-        method: "POST",
-        headers: jsonHeaders,
-        body: JSON.stringify({ alias: input.alias, keyPath: input.keyPath, publicKey: input.publicKey }),
-      }),
+      await postJSON<unknown>("/api/v1/remote-keys/plan", { alias: input.alias, keyPath: input.keyPath, publicKey: input.publicKey }),
     );
   },
   async register(input) {
     return validateRegistration(
-      await apiClient.mutate<unknown>("/api/v1/remote-keys/register", {
-        method: "POST",
-        headers: { ...jsonHeaders, "X-SSHC-Action": input.actionToken },
-        body: JSON.stringify({
-          alias: input.alias,
-          keyPath: input.keyPath,
-          publicKey: input.publicKey,
-          acknowledgeExecutable: input.acknowledgeExecutable,
-        }),
-      }),
+      await postJSON<unknown>("/api/v1/remote-keys/register", {
+        alias: input.alias,
+        keyPath: input.keyPath,
+        publicKey: input.publicKey,
+        acknowledgeExecutable: input.acknowledgeExecutable,
+      }, input.actionToken),
     );
   },
 };

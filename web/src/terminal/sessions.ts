@@ -1,8 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { usePolling } from "../ui/usePolling";
 import { failureCode } from "../api/client";
 import type { OpenTerminalSessionRequest, TerminalSession, TerminalSessionsApi as SessionsApi } from "../api/terminalSessions";
 import type { Translate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
+
+// A hop or an authentication prompt should appear as soon as a person can
+// notice it; a settled list only needs to catch exits and notifications.
+const connectingPollIntervalMs = 500;
+const sessionListPollIntervalMs = 2_000;
 
 export type TerminalSessionsApi = Pick<
   SessionsApi,
@@ -128,16 +134,15 @@ export function useTerminalSessions(
     (session) => session.state === "connecting" || session.state === "reconnecting",
   );
 
-  useEffect(() => {
-    if (!enabled || sessions.length === 0) return;
-    // 接続中だけ細かく確認する。通常稼働中の一覧は従来どおり低頻度に保ち、
-    // ProxyJumpのホップや認証待ちだけを人が追える速さで更新する。
-    // Terminal notifications must still be observed while the app is in the
-    // background; that is precisely when delivering them is useful. Keep the
-    // normal low-frequency poll while connection progress remains responsive.
-    const timer = window.setInterval(() => void refresh(), connectionInProgress ? 500 : 2_000);
-    return () => window.clearInterval(timer);
-  }, [connectionInProgress, enabled, refresh, sessions.length]);
+  // 接続中だけ細かく確認する。通常稼働中の一覧は従来どおり低頻度に保ち、
+  // ProxyJumpのホップや認証待ちだけを人が追える速さで更新する。
+  // Terminal notifications must still be observed while the app is in the
+  // background; that is precisely when delivering them is useful.
+  usePolling(refresh, {
+    intervalMs: connectionInProgress ? connectingPollIntervalMs : sessionListPollIntervalMs,
+    enabled: enabled && sessions.length > 0,
+    whileHidden: true,
+  });
 
   const open = useCallback(
     async (request: OpenTerminalSessionRequest): Promise<TerminalSession | null> => {

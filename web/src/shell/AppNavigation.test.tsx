@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LanguageProvider } from "../i18n/context";
 import { NavigationResizeHandle } from "./AppNavigation";
-import { maximumNavigationWidth, minimumNavigationWidth } from "./navigationLayout";
+import { navigationWidth } from "./navigationLayout";
 
 beforeEach(() => {
   vi.spyOn(window, "requestAnimationFrame").mockReturnValue(42);
@@ -31,8 +31,8 @@ describe("NavigationResizeHandle", () => {
   it("exposes its orientation and supported range", () => {
     const { handle } = renderHandle(240);
     expect(handle).toHaveAttribute("aria-orientation", "vertical");
-    expect(handle).toHaveAttribute("aria-valuemin", String(minimumNavigationWidth));
-    expect(handle).toHaveAttribute("aria-valuemax", String(maximumNavigationWidth));
+    expect(handle).toHaveAttribute("aria-valuemin", String(navigationWidth.minimum));
+    expect(handle).toHaveAttribute("aria-valuemax", String(navigationWidth.maximum));
     expect(handle).toHaveAttribute("aria-valuenow", "240");
   });
 
@@ -41,8 +41,8 @@ describe("NavigationResizeHandle", () => {
     ["ArrowRight", false, 248],
     ["ArrowLeft", true, 208],
     ["ArrowRight", true, 272],
-    ["Home", false, minimumNavigationWidth],
-    ["End", false, maximumNavigationWidth],
+    ["Home", false, navigationWidth.minimum],
+    ["End", false, navigationWidth.maximum],
   ])("handles %s with shift=%s", (key, shiftKey, expected) => {
     const { handle, onWidthChange } = renderHandle(240);
     fireEvent.keyDown(handle, { key, shiftKey });
@@ -50,8 +50,8 @@ describe("NavigationResizeHandle", () => {
   });
 
   it.each([
-    [minimumNavigationWidth, "ArrowLeft", minimumNavigationWidth],
-    [maximumNavigationWidth, "ArrowRight", maximumNavigationWidth],
+    [navigationWidth.minimum, "ArrowLeft", navigationWidth.minimum],
+    [navigationWidth.maximum, "ArrowRight", navigationWidth.maximum],
   ])("clamps a width of %s after %s", (width, key, expected) => {
     const { handle, onWidthChange } = renderHandle(width);
     fireEvent.keyDown(handle, { key });

@@ -5,6 +5,7 @@ import { useTranslate } from "../i18n/context";
 import { hintText, sectionHeading, tableHeadCell, tableHeadRow } from "../ui/form";
 import { Button, Card, Notice } from "../ui/surface";
 import { NoticeList } from "./SavePreview";
+import { useAsyncOperation } from "../ui/useAsyncOperation";
 
 type ConnectionAnalysisProps = {
   detail: HostDetail;
@@ -16,26 +17,17 @@ type ConnectionAnalysisProps = {
 export function ConnectionAnalysis({ detail, alias, api, disabled = false }: ConnectionAnalysisProps) {
   const t = useTranslate();
   const [effective, setEffective] = useState<EffectiveResponse | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const inspection = useAsyncOperation();
+  const { clearError } = inspection;
 
   useEffect(() => {
     setEffective(null);
-    setError("");
-    setBusy(false);
-  }, [alias, detail.file.contents]);
+    clearError();
+  }, [alias, detail.file.contents, clearError]);
 
   async function inspect() {
-    if (busy || disabled) return;
-    setBusy(true);
-    setError("");
-    try {
-      setEffective(await api.effective(alias));
-    } catch {
-      setError(t("diag.explainFailed"));
-    } finally {
-      setBusy(false);
-    }
+    if (inspection.busy || disabled) return;
+    await inspection.run(() => api.effective(alias), { apply: setEffective, describe: () => t("diag.explainFailed") });
   }
 
   return (
@@ -62,11 +54,11 @@ export function ConnectionAnalysis({ detail, alias, api, disabled = false }: Con
           <h3 className={sectionHeading}>{t("conn.analysisAuthoritative")}</h3>
           <p className={`mt-1 ${hintText}`}>{t("conn.analysisAuthoritativeHint")}</p>
           </div>
-          <Button disabled={busy || disabled} onClick={() => void inspect()}>
-            {busy ? t("conn.analysisRunning") : t("conn.analysisRun")}
+          <Button disabled={inspection.busy || disabled} onClick={() => void inspect()}>
+            {inspection.busy ? t("conn.analysisRunning") : t("conn.analysisRun")}
           </Button>
         </div>
-        {error === "" ? null : <Notice tone="danger">{error}</Notice>}
+        {inspection.error === "" ? null : <Notice tone="danger">{inspection.error}</Notice>}
 
         {effective !== null && effective.executableDirectives.length > 0 ? (
           <div className="rounded border border-notice-line bg-notice p-3 text-sm">

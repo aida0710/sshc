@@ -204,7 +204,7 @@ test("quick navigation and terminal keys remain available in portrait and touch 
   await expect(page).toHaveURL(/\/terminal$/);
   const keys = page.getByLabel("On-screen keys", { exact: true });
   await expect(keys).toBeVisible();
-  await expect(page.getByRole("region", { name: "Console for Demo shell" })).toContainText("Mobile terminal demo");
+  await expect(page.getByRole("region", { name: "Terminal for Demo shell" })).toContainText("Mobile terminal demo");
   await capture(page, "mobile-terminal-390x640");
   for (const viewport of [{ width: 390, height: 640 }, { width: 844, height: 390 }]) {
     await page.setViewportSize(viewport);

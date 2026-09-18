@@ -1,4 +1,5 @@
 import type { TerminalSession } from "../../api/terminalSessions";
+import { terminalSubtitle } from "../../terminal/terminalPresentation";
 import { paneIDs, type LayoutState } from "./layout";
 import { findPane } from "./panes";
 import type { WorkspaceCommandTarget } from "./WorkspaceCommandCenter";
@@ -29,7 +30,7 @@ export function commandTargetsFor(
   return [{
     targetId: active.id,
     sessionId: active.id,
-    alias: active.kind === "ssh" ? active.alias ?? active.title : "localhost",
+    alias: terminalSubtitle(active),
     title: active.title,
     paneNumber: 1,
     connected: active.state === "connected",
