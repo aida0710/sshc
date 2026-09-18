@@ -1,5 +1,5 @@
 import { apiClient } from "../../api/client";
-import { jsonHeaders } from "../../api/guards";
+import { postJSON, putJSON } from "../../api/guards";
 import type { components } from "../../api/schema";
 import { validateOpenAPISchema } from "../../api/validators.generated";
 import type { StoredNode } from "./layout";
@@ -36,14 +36,10 @@ export const workspaceApi = {
     return value.workspaces.map(workspace);
   },
   async create(definition: WorkspaceDefinition): Promise<SavedWorkspace> {
-    return workspace(await apiClient.mutate<unknown>("/api/v1/workspaces", {
-      method: "POST", headers: jsonHeaders, body: JSON.stringify(definition),
-    }));
+    return workspace(await postJSON<unknown>("/api/v1/workspaces", definition));
   },
   async update(id: string, definition: WorkspaceDefinition): Promise<SavedWorkspace> {
-    return workspace(await apiClient.mutate<unknown>(`/api/v1/workspaces/${encodeURIComponent(id)}`, {
-      method: "PUT", headers: jsonHeaders, body: JSON.stringify(definition),
-    }));
+    return workspace(await putJSON<unknown>(`/api/v1/workspaces/${encodeURIComponent(id)}`, definition));
   },
   async remove(id: string): Promise<void> {
     await apiClient.mutate<unknown>(`/api/v1/workspaces/${encodeURIComponent(id)}`, { method: "DELETE" });

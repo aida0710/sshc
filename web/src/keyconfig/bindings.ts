@@ -1,4 +1,5 @@
 import { useMemo, useSyncExternalStore } from "react";
+import { readStoredValue } from "../ui/browserStorage";
 
 export const defaultBindings = {
   palette: ["Ctrl+K", "Meta+K"],
@@ -37,7 +38,7 @@ function validShortcut(value: unknown): value is string {
 }
 
 function snapshot(): string {
-  return readStoredShortcutValue(storageKey) ?? "";
+  return readStoredValue(storageKey) ?? "";
 }
 
 export function parseBindings(raw: string, upgradeLegacy = true): Bindings {
@@ -60,22 +61,14 @@ export function parseBindings(raw: string, upgradeLegacy = true): Bindings {
   } catch { return defaultBindings; }
 }
 
-// Browser storage can be disabled or full. Reading then yields nothing, and
-// remembering which preset is selected becomes a per-session preference.
-// saveBindings is different: it answers an explicit edit, so its failure is
-// shown to the user rather than swallowed.
-export function readStoredShortcutValue(key: string): string | null {
-  try { return window.localStorage.getItem(key); } catch { return null; }
-}
-export function rememberStoredShortcutValue(key: string, value: string): void {
-  try { window.localStorage.setItem(key, value); } catch { /* keep the in-memory value only */ }
-}
 export const selectionKey = "sshc.shortcuts.selected.v1";
 
 function isLegacyStorage(): boolean {
-  return readStoredShortcutValue(selectionKey) === null;
+  return readStoredValue(selectionKey) === null;
 }
 export function loadBindings(): Bindings { return parseBindings(snapshot(), isLegacyStorage()); }
+// saveBindings answers an explicit edit, so a refused storage is shown to the
+// user rather than swallowed like the preferences in ui/browserStorage.
 export function saveBindings(value: Bindings): void {
   window.localStorage.setItem(storageKey, JSON.stringify(value));
   window.dispatchEvent(new Event(changedEvent));
