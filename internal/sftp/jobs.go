@@ -247,16 +247,25 @@ const (
 	transferUpdateUploadData
 )
 
-func (m *TransferManager) CreateJob(input CreateTransferJob) (TransferJob, error) {
-	if m.isClosed() {
-		return TransferJob{}, ErrUnavailable
-	}
-	m.sweepPreparedDownloads()
+// transferJobNaming is what CreateJob derives from a request before it
+// touches the queue: the cleaned target path and the names that fall back
+// to it when the request left them blank.
+type transferJobNaming struct {
+	cleaned   string
+	name      string
+	batchName string
+	batchKind TransferKind
+}
+
+// normalizeCreateTransferJob checks every field of a create request and
+// derives the names. It is side-effect free so that the checks run before
+// jobsMutex is taken.
+func normalizeCreateTransferJob(input CreateTransferJob) (transferJobNaming, error) {
 	if !transferIDPattern.MatchString(input.ID) || !transferIDPattern.MatchString(input.BatchID) ||
 		strings.TrimSpace(input.Alias) == "" || len(input.Alias) > 255 || input.TotalBytes < -1 ||
 		(input.Direction != TransferUpload && input.Direction != TransferDownload && input.Direction != TransferRemote) ||
 		(input.Kind != TransferFile && input.Kind != TransferFolder) || input.LastModified < 0 {
-		return TransferJob{}, ErrInvalidTransfer
+		return transferJobNaming{}, ErrInvalidTransfer
 	}
 	if (input.LargeFileThresholdBytes != 0 &&
 		(input.LargeFileThresholdBytes < MinLargeFileThreshold || input.LargeFileThresholdBytes > MaxLargeFileThreshold)) ||
@@ -266,20 +275,20 @@ func (m *TransferManager) CreateJob(input CreateTransferJob) (TransferJob, error
 			(input.LargeFileChunkBytes < MinLargeFileChunkBytes || input.LargeFileChunkBytes > MaxLargeFileChunkBytes)) ||
 		(((input.Direction != TransferDownload && input.Direction != TransferUpload) || input.Kind != TransferFile) &&
 			(input.LargeFileThresholdBytes != 0 || input.LargeFileParallelism != 0 || input.LargeFileChunkBytes != 0)) {
-		return TransferJob{}, ErrInvalidTransfer
+		return transferJobNaming{}, ErrInvalidTransfer
 	}
 	if err := validateAlias(input.Alias); err != nil {
-		return TransferJob{}, err
+		return transferJobNaming{}, err
 	}
 	if input.Direction == TransferRemote {
 		if err := validateAlias(input.SourceAlias); err != nil {
-			return TransferJob{}, err
+			return transferJobNaming{}, err
 		}
 		if input.Operation != RemoteCopy && input.Operation != RemoteMove && input.Operation != RemoteDelete && input.Operation != RemoteGet && input.Operation != RemotePut {
-			return TransferJob{}, ErrInvalidTransfer
+			return transferJobNaming{}, ErrInvalidTransfer
 		}
 		if (input.Operation == RemoteGet || input.Operation == RemotePut) && input.SourceAlias != input.Alias {
-			return TransferJob{}, ErrInvalidTransfer
+			return transferJobNaming{}, ErrInvalidTransfer
 		}
 		var source string
 		var err error
@@ -289,13 +298,13 @@ func (m *TransferManager) CreateJob(input CreateTransferJob) (TransferJob, error
 			source, err = cleanPublicPath(input.SourcePath, false)
 		}
 		if err != nil {
-			return TransferJob{}, err
+			return transferJobNaming{}, err
 		}
 		if input.Operation == RemoteDelete && (input.SourceAlias != input.Alias || source != input.SourcePath || input.SourcePath != input.RemotePath || input.Overwrite) {
-			return TransferJob{}, ErrInvalidTransfer
+			return transferJobNaming{}, ErrInvalidTransfer
 		}
 	} else if input.SourceAlias != "" || input.SourcePath != "" || input.Operation != "" {
-		return TransferJob{}, ErrInvalidTransfer
+		return transferJobNaming{}, ErrInvalidTransfer
 	}
 	var cleaned string
 	var err error
@@ -305,14 +314,14 @@ func (m *TransferManager) CreateJob(input CreateTransferJob) (TransferJob, error
 		cleaned, err = cleanPublicPath(input.RemotePath, false)
 	}
 	if err != nil {
-		return TransferJob{}, err
+		return transferJobNaming{}, err
 	}
 	name := strings.TrimSpace(input.Name)
 	if name == "" {
 		name = path.Base(cleaned)
 	}
 	if len(name) > 1024 {
-		return TransferJob{}, ErrInvalidTransfer
+		return transferJobNaming{}, ErrInvalidTransfer
 	}
 	batchName := strings.TrimSpace(input.BatchName)
 	if batchName == "" {
@@ -323,8 +332,61 @@ func (m *TransferManager) CreateJob(input CreateTransferJob) (TransferJob, error
 		batchKind = input.Kind
 	}
 	if len(batchName) > 1024 || (batchKind != TransferFile && batchKind != TransferFolder) {
-		return TransferJob{}, ErrInvalidTransfer
+		return transferJobNaming{}, ErrInvalidTransfer
 	}
+	return transferJobNaming{cleaned: cleaned, name: name, batchName: batchName, batchKind: batchKind}, nil
+}
+
+// evictForAdmissionLocked makes room for one more job once the retained
+// queue is full. A finished job that left nothing on the remote is removed
+// in place. Otherwise the returned upload must have its remote part file
+// cleaned up before it can go, and nil means nothing can go.
+func (m *TransferManager) evictForAdmissionLocked() (cleanup *transferJobRecord) {
+	// Prefer records which have no remote partial state. A temporarily
+	// unreachable upload tombstone must not freeze admission while a completed
+	// download can be discarded without network I/O.
+	for index, id := range m.jobOrder {
+		record := m.jobs[id]
+		if record == nil || record.cleanupInFlight || !evictableTransferJob(record.job) ||
+			(record.job.Direction == TransferUpload && record.job.Kind == TransferFile) {
+			continue
+		}
+		delete(m.jobs, id)
+		m.jobOrder = append(m.jobOrder[:index], m.jobOrder[index+1:]...)
+		return nil
+	}
+	for _, id := range m.jobOrder {
+		record := m.jobs[id]
+		if record != nil && !record.cleanupInFlight && record.job.Direction == TransferUpload &&
+			record.job.Kind == TransferFile && record.job.Problem == "sftp_cleanup_pending" {
+			return record
+		}
+	}
+	for index, id := range m.jobOrder {
+		record := m.jobs[id]
+		if record == nil || record.cleanupInFlight || !evictableTransferJob(record.job) {
+			continue
+		}
+		if record.job.Direction == TransferUpload && record.job.Kind == TransferFile {
+			return record
+		}
+		delete(m.jobs, id)
+		m.jobOrder = append(m.jobOrder[:index], m.jobOrder[index+1:]...)
+		return nil
+	}
+	return nil
+}
+
+func (m *TransferManager) CreateJob(input CreateTransferJob) (TransferJob, error) {
+	if m.isClosed() {
+		return TransferJob{}, ErrUnavailable
+	}
+	m.sweepPreparedDownloads()
+	naming, err := normalizeCreateTransferJob(input)
+	if err != nil {
+		return TransferJob{}, err
+	}
+	cleaned, name, batchName, batchKind := naming.cleaned, naming.name, naming.batchName, naming.batchKind
 
 	m.jobsMutex.Lock()
 	m.initializeJobsLocked()
@@ -352,48 +414,7 @@ func (m *TransferManager) CreateJob(input CreateTransferJob) (TransferJob, error
 	}
 	admissionSnapshot := m.snapshotTransferQueueLocked()
 	if len(m.jobOrder) >= maxRetainedTransferJobs {
-		var cleanup *transferJobRecord
-		removedWithoutNetwork := false
-		// Prefer records which have no remote partial state. A temporarily
-		// unreachable upload tombstone must not freeze admission while a completed
-		// download can be discarded without network I/O.
-		for index, id := range m.jobOrder {
-			record := m.jobs[id]
-			if record == nil || record.cleanupInFlight || !evictableTransferJob(record.job) ||
-				(record.job.Direction == TransferUpload && record.job.Kind == TransferFile) {
-				continue
-			}
-			delete(m.jobs, id)
-			m.jobOrder = append(m.jobOrder[:index], m.jobOrder[index+1:]...)
-			removedWithoutNetwork = true
-			break
-		}
-		if !removedWithoutNetwork {
-			for _, id := range m.jobOrder {
-				record := m.jobs[id]
-				if record != nil && !record.cleanupInFlight && record.job.Direction == TransferUpload &&
-					record.job.Kind == TransferFile && record.job.Problem == "sftp_cleanup_pending" {
-					cleanup = record
-					break
-				}
-			}
-		}
-		if !removedWithoutNetwork && cleanup == nil {
-			for index, id := range m.jobOrder {
-				record := m.jobs[id]
-				if record == nil || record.cleanupInFlight || !evictableTransferJob(record.job) {
-					continue
-				}
-				if record.job.Direction == TransferUpload && record.job.Kind == TransferFile {
-					cleanup = record
-					break
-				}
-				delete(m.jobs, id)
-				m.jobOrder = append(m.jobOrder[:index], m.jobOrder[index+1:]...)
-				break
-			}
-		}
-		if cleanup != nil {
+		if cleanup := m.evictForAdmissionLocked(); cleanup != nil {
 			originalCleanup := cloneTransferJobRecord(cleanup)
 			cleanup.cleanupInFlight = true
 			cleanup.cleanupTombstone = true
@@ -721,31 +742,56 @@ func (m *TransferManager) updateJob(id string, update UpdateTransferJob, origin 
 	}
 	now := m.now().UTC()
 
+	settled, err := m.applyTransferActionLocked(record, update, now)
+	if err != nil {
+		return TransferJob{}, err
+	}
+	if settled {
+		committed = true
+		return *job, nil
+	}
+	job.UpdatedAt = now
+	if err := m.persistJobsLocked(update.Action != TransferProgressAction); err != nil {
+		return TransferJob{}, err
+	}
+	if job.Status != TransferRunning && job.Status != TransferQueued {
+		terminalRemote = m.detachRemote(job.Alias, job.ID, job.RemotePath)
+	}
+	committed = true
+	return *job, nil
+}
+
+// applyTransferActionLocked moves a job through one queue action. It edits
+// the record in place; updateJob restores the clone it took when anything
+// after this fails. settled reports an action that found its work already
+// done (cancel or complete on a finished job), which commits as is.
+func (m *TransferManager) applyTransferActionLocked(record *transferJobRecord, update UpdateTransferJob, now time.Time) (settled bool, err error) {
+	job := &record.job
 	switch update.Action {
 	case TransferStartAction:
 		if job.Status != TransferQueued {
-			return TransferJob{}, ErrTransferState
+			return false, ErrTransferState
 		}
 		// 停止中は待機のまま置く。実行中のものは止めない。止めたければ
 		// pause がある。
 		if m.processingStopped {
-			return TransferJob{}, ErrTransferLimit
+			return false, ErrTransferLimit
 		}
 		if m.activeJobs >= m.maxConcurrent {
-			return TransferJob{}, ErrTransferLimit
+			return false, ErrTransferLimit
 		}
 		job.Status = TransferRunning
 		m.activeJobs++
 		record.sampleAt, record.sampleBytes = now, job.TransferredBytes
 	case TransferPauseAction:
 		if job.Status != TransferQueued && job.Status != TransferRunning {
-			return TransferJob{}, ErrTransferState
+			return false, ErrTransferState
 		}
 		m.releaseJobLocked(job.Status)
 		job.Status = TransferPaused
 	case TransferResumeAction:
 		if job.Status != TransferPaused && job.Status != TransferReattach && job.Status != TransferNeedsOverwrite {
-			return TransferJob{}, ErrTransferState
+			return false, ErrTransferState
 		}
 		if update.ResetProgress {
 			job.TransferredBytes = 0
@@ -766,7 +812,7 @@ func (m *TransferManager) updateJob(id string, update UpdateTransferJob, origin 
 		job.Problem = ""
 	case TransferRetryAction:
 		if job.Status != TransferFailed {
-			return TransferJob{}, ErrTransferState
+			return false, ErrTransferState
 		}
 		if update.ResetProgress {
 			job.TransferredBytes = 0
@@ -786,8 +832,7 @@ func (m *TransferManager) updateJob(id string, update UpdateTransferJob, origin 
 		if terminalTransferStatus(job.Status) {
 			// Cancel is idempotent across a completion race. A completed transfer
 			// stays completed; callers only asked that no work remain active.
-			committed = true
-			return *job, nil
+			return true, nil
 		}
 		m.releaseJobLocked(job.Status)
 		job.Status, job.Problem = TransferCancelled, ""
@@ -809,8 +854,7 @@ func (m *TransferManager) updateJob(id string, update UpdateTransferJob, origin 
 		m.updateRateLocked(record, now)
 	case TransferCompleteAction:
 		if job.Status == TransferCompleted {
-			committed = true
-			return *job, nil
+			return true, nil
 		}
 		if update.TransferredBytes != nil {
 			job.TransferredBytes = *update.TransferredBytes
@@ -820,28 +864,20 @@ func (m *TransferManager) updateJob(id string, update UpdateTransferJob, origin 
 		job.RemainingSeconds = 0
 	case TransferFailAction:
 		if job.Status != TransferRunning && job.Status != TransferQueued {
-			return TransferJob{}, ErrTransferState
+			return false, ErrTransferState
 		}
 		m.releaseJobLocked(job.Status)
 		job.Status, job.Problem = TransferFailed, boundedTransferProblem(update.Problem)
 	case TransferNeedsOverwriteAction:
 		if job.Status != TransferRunning && job.Status != TransferQueued {
-			return TransferJob{}, ErrTransferState
+			return false, ErrTransferState
 		}
 		m.releaseJobLocked(job.Status)
 		job.Status, job.Problem = TransferNeedsOverwrite, "sftp_exists"
 	default:
-		return TransferJob{}, ErrInvalidTransfer
+		return false, ErrInvalidTransfer
 	}
-	job.UpdatedAt = now
-	if err := m.persistJobsLocked(update.Action != TransferProgressAction); err != nil {
-		return TransferJob{}, err
-	}
-	if job.Status != TransferRunning && job.Status != TransferQueued {
-		terminalRemote = m.detachRemote(job.Alias, job.ID, job.RemotePath)
-	}
-	committed = true
-	return *job, nil
+	return false, nil
 }
 
 // validateTransferUpdate is deliberately side-effect free. Browser fields are

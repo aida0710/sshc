@@ -4,5 +4,4 @@
 #
 # 書式: <ファイル><TAB><シンボル><TAB><理由>
 
-internal/httpserver/diagnostics_test.go	stubToolchain.KeyGen	interface を満たすためだけに在る。消すとコンパイルが通らない。
 mobile/sshc.go	Version	gomobile が Java 側に生やす。呼び手は JNI の向こう (EngineService の通知) に居るので、Go からは到達不能に見える。
