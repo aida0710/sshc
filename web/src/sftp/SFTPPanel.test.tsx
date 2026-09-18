@@ -980,6 +980,32 @@ describe("SFTPPanel uploads", () => {
     await userEvent.click(within(recursiveDialog).getByRole("button", { name: "Change permissions" }));
     await waitFor(() => expect(api.chmod).toHaveBeenLastCalledWith("edge", "/remote/project", "750", "rev", true));
   });
+  describe("narrow desktop pane", () => {
+    // Two panes side by side leave each one under 680px, but the pointer is
+    // still a mouse: the list must stay one dense line per entry.
+    const clientWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientWidth");
+    beforeEach(() => {
+      Object.defineProperty(HTMLElement.prototype, "clientWidth", { configurable: true, get: () => 600 });
+      api.list.mockResolvedValue({ path: "/remote", entries: [
+        { name: "notes.txt", path: "/remote/notes.txt", type: "file", size: 12, mode: "0644", modifiedAt: "2026-08-24T11:00:00Z", revision: "notes" },
+      ] });
+    });
+    afterEach(() => {
+      if (clientWidth !== undefined) Object.defineProperty(HTMLElement.prototype, "clientWidth", clientWidth);
+    });
+
+    it("lists entries on one dense line with size instead of the tall touch rows", async () => {
+      render(<SFTPPanel aliases={["edge"]} />);
+      await chooseHost("edge");
+      const row = await screen.findByRole("button", { name: "notes.txt" });
+      expect(row.className).toContain("min-h-8");
+      expect(row.className).not.toContain("min-h-12");
+      expect(within(row).getByText("12")).toBeInTheDocument();
+      expect(within(row).queryByText("0644")).not.toBeInTheDocument();
+      expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    });
+  });
+
   describe("mobile file browsing", () => {
     beforeEach(() => {
       vi.stubGlobal("matchMedia", vi.fn((query: string) => ({

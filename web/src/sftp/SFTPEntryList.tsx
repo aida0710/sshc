@@ -459,6 +459,10 @@ export function SFTPEntryList({
   const rowDraggable = (entry: RemoteEntry) => !mobileInteraction && draggable(entry);
 
   if (compact) {
+    // A narrow pane on a desktop (two panes side by side) still has a mouse:
+    // one dense line per entry is enough. Touch devices keep the tall rows
+    // and the second line so the targets stay at least 44px.
+    const dense = !mobileInteraction;
     return (
       <ul aria-label={t("sftp.entries")} className="divide-y divide-line/40">
         {parentRowVisible ? (
@@ -487,7 +491,7 @@ export function SFTPEntryList({
             draggable={rowDraggable(entry)}
             onDragStart={(event) => onDragStart?.(event, entry)}
           >
-            <label className="flex size-11 shrink-0 items-center justify-center md:size-8">
+            <label className={`flex shrink-0 items-center justify-center ${dense ? "size-8" : "size-11 md:size-8"}`}>
               <input
                 type="checkbox"
                 aria-label={t("sftp.selectEntry", { name: entry.name })}
@@ -504,7 +508,7 @@ export function SFTPEntryList({
               aria-label={entry.name}
               aria-pressed={selectedPaths.has(entry.path)}
               tabIndex={activeRowKey === entry.path ? 0 : -1}
-              className="flex min-h-12 min-w-0 grow touch-pan-y select-none items-center gap-2 px-2 py-2 text-left hover:bg-hover active:bg-select-fill disabled:text-ink-faint"
+              className={`flex min-w-0 grow touch-pan-y select-none items-center gap-2 px-2 text-left hover:bg-hover active:bg-select-fill disabled:text-ink-faint ${dense ? "min-h-8 py-0.5" : "min-h-12 py-2"}`}
               onFocus={() => setFocusedKey(entry.path)}
               onClick={(event) => clickEntry(entry, event)}
               onDoubleClick={mobileInteraction ? undefined : () => activate(entry)}
@@ -514,15 +518,26 @@ export function SFTPEntryList({
               onPointerUp={cancelLongPress}
               onPointerCancel={cancelLongPress}
             >
-              <Icon name={entryIcon(entry)} className="size-4 text-ink-muted" />
-              <span className="min-w-0 grow">
-                <span className="block truncate font-mono text-sm font-medium leading-4 text-ink">{entry.name}</span>
-                <span className="mt-0.5 flex min-w-0 gap-2 text-[11px] leading-3 text-ink-muted">
-                  <span className="truncate font-mono">{entryContext === undefined ? entry.mode : entryContext(entry)}</span>
-                  <span>{entry.type === "file" ? entry.size.toLocaleString() : "—"}</span>
-                  <time className="truncate" dateTime={entry.modifiedAt}>{new Date(entry.modifiedAt).toLocaleString()}</time>
+              <Icon name={entryIcon(entry)} className="size-4 shrink-0 text-ink-muted" />
+              {dense ? (
+                <>
+                  <span className="min-w-0 grow">
+                    <span className="block truncate font-mono text-sm font-medium leading-4 text-ink">{entry.name}</span>
+                    {entryContext === undefined ? null : <span className="block truncate font-mono text-[10px] leading-3 text-ink-muted">{entryContext(entry)}</span>}
+                  </span>
+                  <span className="shrink-0 whitespace-nowrap text-[11px] text-ink-muted">{entry.type === "file" ? entry.size.toLocaleString() : "—"}</span>
+                  <time className="hidden shrink-0 whitespace-nowrap text-[11px] text-ink-muted sm:inline" dateTime={entry.modifiedAt}>{new Date(entry.modifiedAt).toLocaleDateString()}</time>
+                </>
+              ) : (
+                <span className="min-w-0 grow">
+                  <span className="block truncate font-mono text-sm font-medium leading-4 text-ink">{entry.name}</span>
+                  <span className="mt-0.5 flex min-w-0 gap-2 text-[11px] leading-3 text-ink-muted">
+                    <span className="truncate font-mono">{entryContext === undefined ? entry.mode : entryContext(entry)}</span>
+                    <span>{entry.type === "file" ? entry.size.toLocaleString() : "—"}</span>
+                    <time className="truncate" dateTime={entry.modifiedAt}>{new Date(entry.modifiedAt).toLocaleString()}</time>
+                  </span>
                 </span>
-              </span>
+              )}
             </button>
           </li>
         ))}
