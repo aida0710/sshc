@@ -412,12 +412,19 @@ func (s *Session) WriteCommandInput(ctx context.Context, generation uint64, comm
 }
 
 // Resize は TIOCSWINSZ を発行する。
+// Resize は PTY の大きさを変え、その大きさを覚える。再接続や置き換えで開く
+// 新しい PTY はこの最新の大きさで始まる。開始時の大きさのままだと、ブラウザは
+// 自分の表示と同じ大きさだと思い込んだままなので、リモートのプログラムが
+// 見えない行へ描く。
 func (s *Session) Resize(size Size) error {
 	if !size.Valid() {
 		return ErrInvalidSize
 	}
 	s.mutex.Lock()
 	process, exited := s.process, s.exited
+	if exited == nil && process != nil {
+		s.size = size
+	}
 	s.mutex.Unlock()
 	if exited != nil || process == nil {
 		return ErrExited

@@ -62,13 +62,15 @@ func (s *readyOpenSpy) count() int {
 type openSpy struct {
 	mutex     sync.Mutex
 	processes []*fakeProcess
+	sizes     []terminal.Size
 	calls     int
 	failUpTo  int
 }
 
-func (s *openSpy) open(_ context.Context, _ terminal.Size) (terminal.Process, error) {
+func (s *openSpy) open(_ context.Context, size terminal.Size) (terminal.Process, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
+	s.sizes = append(s.sizes, size)
 	s.calls++
 	if s.calls > 1 && s.calls <= s.failUpTo {
 		return nil, context.DeadlineExceeded
@@ -91,6 +93,48 @@ func (s *openSpy) count() int {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	return s.calls
+}
+
+func (s *openSpy) sizeAt(index int) terminal.Size {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	if index >= len(s.sizes) {
+		return terminal.Size{}
+	}
+	return s.sizes[index]
+}
+
+func TestAReconnectedShellStartsAtTheLatestTerminalSize(t *testing.T) {
+	spy := &openSpy{}
+	registry, _ := newFastRegistry()
+	session, err := registry.Open(context.Background(), terminal.Spec{
+		Kind: terminal.KindSSH, Alias: "gateway", Title: "gateway", Open: spy.open,
+		Size: terminal.Size{Cols: 80, Rows: 24},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The browser window grew after the session opened.
+	if err := session.Resize(terminal.Size{Cols: 200, Rows: 50}); err != nil {
+		t.Fatal(err)
+	}
+
+	spy.at(0).exit(terminal.ExitInfo{Code: terminal.TransportLost})
+	waitFor(t, func() bool { return spy.count() >= 2 })
+	if got := spy.sizeAt(1); got != (terminal.Size{Cols: 200, Rows: 50}) {
+		t.Fatalf("automatic reconnect opened with %+v, want the latest 200x50", got)
+	}
+
+	// A manual reconnect after an ordinary exit must use it too.
+	spy.at(1).exit(terminal.ExitInfo{Code: 0})
+	waitFor(t, func() bool { return !session.Live() })
+	if _, err := registry.Reconnect(context.Background(), session.ID()); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, func() bool { return spy.count() >= 3 })
+	if got := spy.sizeAt(2); got != (terminal.Size{Cols: 200, Rows: 50}) {
+		t.Fatalf("manual reconnect opened with %+v, want the latest 200x50", got)
+	}
 }
 
 func TestALostTransportIsDialledAgain(t *testing.T) {
