@@ -195,3 +195,20 @@ func TestCumulativeNamesOnlyTheKeywordsOpenSSHAccumulates(t *testing.T) {
 		}
 	}
 }
+
+func TestProjectCountsOnlyBlocksThatNameTheAliasAsDuplicates(t *testing.T) {
+	graph := graphFor(t, map[string]string{
+		testConfig: "Host db\n\tUser ops\nHost *\n\tPort 2022\n",
+	})
+	// `Host *` also applies to db, but it does not claim the name. Resolve
+	// already reports it this way; the diagnostics projection must agree.
+	if _, duplicated := codesOf(effective.Project(graph, "db").Complexities)[effective.ComplexityDuplicateAlias]; duplicated {
+		t.Fatal("a catch-all block was reported as a duplicate alias")
+	}
+	duplicated := graphFor(t, map[string]string{
+		testConfig: "Host db\n\tUser ops\nHost db\n\tPort 2200\n",
+	})
+	if _, reported := codesOf(effective.Project(duplicated, "db").Complexities)[effective.ComplexityDuplicateAlias]; !reported {
+		t.Fatal("two blocks naming the alias were not reported")
+	}
+}

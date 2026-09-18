@@ -26,6 +26,6 @@ Progress and diagnostics identify the exact hop and phase that failed.
 
 For a host configured with `ProxyCommand`, sshc runs the command on the local machine and uses its standard input and output as the SSH transport. It starts through `/bin/sh` on Unix systems or the command interpreter on Windows. The connection log shows the command before it runs.
 
-sshc rejects a host that specifies both `ProxyJump` and `ProxyCommand`. It also rejects `ProxyCommand` on a hop reached through an earlier jump because the command would run locally rather than on that jump host.
+When a host specifies both `ProxyJump` and `ProxyCommand`, sshc keeps whichever one OpenSSH reads first and ignores the later line, exactly as `ssh` does; the ignored line is shown in the host's Analysis. sshc also rejects `ProxyCommand` on a hop reached through an earlier jump because the command would run locally rather than on that jump host.
 
 `ProxyCommand` makes SSH configuration executable. Use it only with configuration that you have inspected and trust.

@@ -98,6 +98,50 @@ func TestResolveMatchesInstalledOpenSSH(t *testing.T) {
 			keywords: []string{"user", "port"},
 		},
 		{
+			// `Match host` は alias ではなく、そこまでに解決した HostName と比べる。
+			// alias 名にだけ一致する書き方は、HostName を持つ alias には効かない。
+			name: "match host compares the resolved hostname",
+			contents: "Host web\n\tHostName web.internal.example.com\n" +
+				"Match host *.internal.example.com\n\tPort 2222\n\tProxyJump bastion\n" +
+				"Match host web\n\tPort 9999\n",
+			alias:    "web",
+			keywords: []string{"hostname", "port", "proxyjump"},
+		},
+		{
+			// `Match originalhost` だけが利用者の打った名前を見る。
+			name:     "match originalhost keeps the alias",
+			contents: "Host web\n\tHostName web.internal.example.com\nMatch originalhost web\n\tPort 2222\n",
+			alias:    "web",
+			keywords: []string{"hostname", "port"},
+		},
+		{
+			// HostName 自身の %h は alias を指し、Match host はその展開後と比べる。
+			name:     "match host sees the expanded hostname token",
+			contents: "Host web\n\tHostName %h.internal.example.com\nMatch host web.internal.example.com\n\tPort 2222\n",
+			alias:    "web",
+			keywords: []string{"hostname", "port"},
+		},
+		{
+			// ProxyCommand と ProxyJump は先に受理した方だけが残る。
+			name:     "proxyjump first hides a later proxycommand",
+			contents: "Host a\n\tHostName 198.51.100.9\n\tProxyJump gateway\nHost *\n\tProxyCommand /usr/bin/nc %h %p\nHost gateway\n\tHostName 198.51.100.1\n",
+			alias:    "a",
+			keywords: []string{"proxyjump", "proxycommand"},
+		},
+		{
+			name:     "proxycommand first hides a later proxyjump",
+			contents: "Host a\n\tHostName 198.51.100.9\n\tProxyCommand /usr/bin/nc %h %p\n\tProxyJump gateway\nHost gateway\n\tHostName 198.51.100.1\n",
+			alias:    "a",
+			keywords: []string{"proxyjump", "proxycommand"},
+		},
+		{
+			// `ssh -G` は ProxyJump none を表示しないので、比べるのは proxycommand だけ。
+			name:     "proxyjump none does not hide a later proxycommand",
+			contents: "Host a\n\tHostName 198.51.100.9\n\tProxyJump none\n\tProxyCommand /usr/bin/nc %h %p\n",
+			alias:    "a",
+			keywords: []string{"proxycommand"},
+		},
+		{
 			name:     "match user uses the resolved user",
 			contents: "Host db\n\tUser ops\nMatch user ops\n\tPort 5432\n",
 			alias:    "db",

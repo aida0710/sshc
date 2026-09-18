@@ -41,7 +41,7 @@ Host edge
   ServerAliveCountMax 4
   ForwardAgent yes
 
-Match host edge user operator
+Match host edge.internal user operator
   Port 2200
 
 Host secret-route

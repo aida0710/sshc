@@ -129,8 +129,8 @@ func Resolve(graph *config.Graph, alias string, facts LocalFacts) Resolution {
 	context := func() MatchContext {
 		user := valueOr(values, "user", facts.User)
 		return MatchContext{
-			Alias: alias, OriginalAlias: alias, User: user, LocalUser: facts.User,
-			Tags: values.Entries["tag"],
+			Alias: alias, OriginalAlias: alias, HostName: matchHostName(values, alias),
+			User: user, LocalUser: facts.User, Tags: values.Entries["tag"],
 		}
 	}
 
@@ -149,7 +149,7 @@ func Resolve(graph *config.Graph, alias string, facts LocalFacts) Resolution {
 			// 数えるのは alias を指定しているブロックだけである。たまたま
 			// 一致した catch-all は「二つのブロックがこの名前を主張している」
 			// ではない。それはワイルドカードで一致したという別の話である。
-			if declaresExactly(block.Patterns, alias) {
+			if DeclaresExactly(block.Patterns, alias) {
 				matchedHostBlocks++
 				if matchedHostBlocks > 1 {
 					notes = append(notes, Complexity{
@@ -215,6 +215,13 @@ func Resolve(graph *config.Graph, alias string, facts LocalFacts) Resolution {
 			})
 			return
 		}
+		if ignored, reason := proxyDirectiveIgnored(line.Keyword, values); ignored {
+			notes = append(notes, Complexity{
+				Code: ComplexityProxyIgnored, Path: filePath, Line: index + 1,
+				Condition: condition, Detail: reason,
+			})
+			return
+		}
 		if set(line.Keyword, argumentText(line)) {
 			accepted = append(accepted, Accepted{
 				Keyword: line.Keyword, Values: line.Values(),
@@ -255,6 +262,25 @@ func Resolve(graph *config.Graph, alias string, facts LocalFacts) Resolution {
 	return Resolution{Values: values, Accepted: accepted, Notes: notes}
 }
 
+// proxyDirectiveIgnored は、ProxyCommand と ProxyJump のうち後から来た方を OpenSSH が
+// 黙って捨てる規則を再現する。OpenSSH 10.2 の `ssh -G` で確かめた:
+// ProxyJump（none 以外）の後の ProxyCommand は無視、ProxyCommand（none を含む）の
+// 後の ProxyJump は無視、`ProxyJump none` の後の ProxyCommand は有効。ここで捨てた
+// 行は Notes に残し、書いた本人が「効いていない」ことを見られるようにする。
+func proxyDirectiveIgnored(keyword string, values Values) (bool, string) {
+	switch strings.ToLower(keyword) {
+	case "proxycommand":
+		if jump := values.First("proxyjump"); jump != "" && !strings.EqualFold(jump, "none") {
+			return true, "ProxyCommand is ignored because ProxyJump was already set"
+		}
+	case "proxyjump":
+		if values.First("proxycommand") != "" {
+			return true, "ProxyJump is ignored because ProxyCommand was already set"
+		}
+	}
+	return false, ""
+}
+
 // applyDefaults は、この解決器が既定値を持つ 5 つだけを埋める。
 //
 // 書かれていない他のキーワードには触れない。OpenSSH の既定値表を丸ごと持つのは、
@@ -275,6 +301,19 @@ func applyDefaults(values *Values, alias string, facts LocalFacts) {
 	fill("hostname", alias)
 	fill("user", facts.User)
 	fill("port", defaultPort)
+}
+
+// matchHostName は、`Match host` が比較する「ここまでに解決した HostName」を返す。
+// OpenSSH は match_cfg_line で options->hostname の %h を alias で展開して比べる。
+// HostName が未確定なら alias そのものである。展開できない値はそのまま比べる。
+// 走査の後で expandAll が同じ値を拒むので、ここで refusal を重ねない。
+func matchHostName(values Values, alias string) string {
+	hostName := valueOr(values, "hostname", alias)
+	expanded, err := ExpandTokens(hostName, LocalFacts{}, TokenTarget{Alias: alias, HostName: alias})
+	if err != nil {
+		return hostName
+	}
+	return expanded
 }
 
 // expandAll は、トークンを受け取るキーワードの値を展開する。
@@ -357,7 +396,10 @@ func valueOr(values Values, keyword, fallback string) string {
 
 // declaresExactly は、Host 行がパターンによる一致ではなくこの alias を指定して
 // いるかを報告する。catch-all は全 alias に一致し、何も宣言しない。
-func declaresExactly(patterns []config.Pattern, alias string) bool {
+// DeclaresExactly は、Host ブロックのパターンが alias をそのまま名指ししているかを
+// 返す。ワイルドカードや否定でたまたま一致するブロックは「この alias を主張する
+// ブロック」には数えない。
+func DeclaresExactly(patterns []config.Pattern, alias string) bool {
 	for _, pattern := range patterns {
 		if pattern.Negated || pattern.Wildcard {
 			continue

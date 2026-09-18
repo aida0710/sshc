@@ -327,7 +327,7 @@ describe("useTerminalSessions", () => {
   });
   it("names why a connection the configuration does not allow was refused", async () => {
     const openTerminalSession = vi.fn().mockRejectedValue(
-      new ApiError("proxy_command_with_jump", 422, { code: "proxy_command_with_jump", message: "no" }),
+      new ApiError("jump_depth_exceeded", 422, { code: "jump_depth_exceeded", message: "no" }),
     );
     const { result } = renderHook(() => useTerminalSessions(api({ openTerminalSession }), translate));
     await waitFor(() => expect(result.current.loaded).toBe(true));
@@ -335,7 +335,7 @@ describe("useTerminalSessions", () => {
     await act(async () => {
       await result.current.open({ kind: "ssh", alias: "jump" });
     });
-    expect(result.current.problem).toBe("terminal.proxyCommandWithJump");
+    expect(result.current.problem).toBe("terminal.jumpDepthExceeded");
   });
 
   it("falls back to the plain refusal for a code it does not know", async () => {
