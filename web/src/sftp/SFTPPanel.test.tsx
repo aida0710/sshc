@@ -1021,7 +1021,7 @@ describe("SFTPPanel uploads", () => {
   });
   describe("narrow desktop pane", () => {
     // Two panes side by side leave each one under 680px, but the pointer is
-    // still a mouse: the list must stay one dense line per entry.
+    // still a mouse: every column stays and the table scrolls sideways.
     const clientWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientWidth");
     beforeEach(() => {
       Object.defineProperty(HTMLElement.prototype, "clientWidth", { configurable: true, get: () => 600 });
@@ -1033,15 +1033,18 @@ describe("SFTPPanel uploads", () => {
       if (clientWidth !== undefined) Object.defineProperty(HTMLElement.prototype, "clientWidth", clientWidth);
     });
 
-    it("lists entries on one dense line with size instead of the tall touch rows", async () => {
+    it("keeps every column in a table that scrolls sideways instead of dropping columns", async () => {
       render(<SFTPPanel aliases={["edge"]} />);
       await chooseHost("edge");
-      const row = await screen.findByRole("button", { name: "notes.txt" });
-      expect(row.className).toContain("min-h-8");
-      expect(row.className).not.toContain("min-h-12");
-      expect(within(row).getByText("12 B")).toBeInTheDocument();
-      expect(within(row).queryByText("0644")).not.toBeInTheDocument();
-      expect(screen.queryByRole("table")).not.toBeInTheDocument();
+      const table = await screen.findByRole("table");
+      for (const column of [/Name/, /Modified/, /Size/, /Type/, "Permissions"]) {
+        expect(within(table).getByRole("columnheader", { name: column })).toBeInTheDocument();
+      }
+      expect(within(table).getByRole("row", { name: /notes.txt/ })).toHaveTextContent("0644");
+      // The table keeps its natural width and the list box scrolls it.
+      expect(table.className).toContain("min-w-[44rem]");
+      expect(screen.getByTestId("sftp-file-list").className).toContain("overflow-auto");
+      expect(screen.queryByRole("list", { name: "File list" })).not.toBeInTheDocument();
     });
   });
 

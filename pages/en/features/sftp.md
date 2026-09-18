@@ -38,7 +38,7 @@ Use **Compare** to recursively inspect the directories in the currently selected
 
 The pane action menu can open an SSH Terminal at the displayed directory. In the other direction, a remote directory reported by OSC 7 can be opened in SFTP from the Terminal action menu.
 
-Narrow panes emphasize the filename and place permissions, size, and modified time on one metadata line. Phones show one horizontally scrollable tab strip and the left pane only; tab dragging, the right pane's connection and comparison stay inactive. Returning to desktop brings the right pane and its tabs back.
+On desktop a narrow pane keeps every column and scrolls the table sideways rather than dropping columns. Phones emphasize the filename, place permissions, size and modified time on one metadata line, and show one horizontally scrollable tab strip and the left pane only; tab dragging, the right pane's connection and comparison stay inactive. Returning to desktop brings the right pane and its tabs back.
 
 ## Transfer Manager
 
