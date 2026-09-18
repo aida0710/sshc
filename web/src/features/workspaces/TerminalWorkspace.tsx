@@ -1,15 +1,16 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
 import type { TerminalSession } from "../../api/terminalSessions";
 import { failureCode } from "../../api/client";
 import { useTranslate } from "../../i18n/context";
 import { Icon } from "../../ui/icons";
-import { MAX_WORKSPACE_PANES, paneIDs, paneSessionIDs, reduceLayout, storeLayout, type DockEdge, type LayoutAction, type LayoutState, type RuntimeNode, type RuntimePane, type SplitDirection } from "./layout";
+import { MAX_WORKSPACE_PANES, paneIDs, paneSessionIDs, reduceLayout, storeLayout, type DockEdge, type LayoutAction, type LayoutState, type RuntimeNode, type RuntimePane } from "./layout";
 import { workspaceApi, type SavedWorkspace } from "./api";
 import { WorkspaceCommandCenter } from "./WorkspaceCommandCenter";
 import { consoleDragMimeType, type LiveWorkspaceSummary } from "./live";
 import { browserSessionStorage, loadLiveWorkspace, saveLiveWorkspace } from "./livePersistence";
 import { InputDialog } from "../../ui/InputDialog";
 import { useMediaQuery } from "../../ui/useMediaQuery";
+import { SplitResizeHandle } from "../../ui/SplitResizeHandle";
 import { automaticWorkspaceName, findPane, findPaneBySession, paneForSession, paneID, restoreLiveNode, singlePaneLayout } from "./panes";
 import { commandTargetsFor } from "./commandTargets";
 import { DockPreview, dockEdge } from "./DockPreview";
@@ -279,30 +280,6 @@ export function TerminalWorkspace({
     update({ type: "close", paneId });
   }
 
-  function beginResize(event: ReactPointerEvent<HTMLDivElement>, path: ("first" | "second")[], direction: SplitDirection) {
-    event.preventDefault();
-    event.stopPropagation();
-    const container = event.currentTarget.parentElement;
-    if (container === null) return;
-    const pointerId = event.pointerId;
-    event.currentTarget.setPointerCapture(pointerId);
-    const move = (next: PointerEvent) => {
-      const bounds = container.getBoundingClientRect();
-      const extent = direction === "horizontal" ? bounds.width : bounds.height;
-      if (extent <= 0) return;
-      const offset = direction === "horizontal" ? next.clientX - bounds.left : next.clientY - bounds.top;
-      update({ type: "resize-split", path, ratio: offset / extent * 100 });
-    };
-    const stop = () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", stop);
-      window.removeEventListener("pointercancel", stop);
-    };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", stop, { once: true });
-    window.addEventListener("pointercancel", stop, { once: true });
-  }
-
   async function saveWorkspace(name: string) {
     const effective = visibleLayout ?? (active === null ? null : singlePaneLayout(active));
     if (effective === null) return;
@@ -378,14 +355,7 @@ export function TerminalWorkspace({
       );
     }
     const row = node.split.direction === "horizontal";
-    const resizeStep = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-      const decrease = event.key === (row ? "ArrowLeft" : "ArrowUp");
-      const increase = event.key === (row ? "ArrowRight" : "ArrowDown");
-      if (!decrease && !increase) return;
-      event.preventDefault();
-      update({ type: "resize-split", path, ratio: node.split.ratio + (decrease ? -5 : 5) });
-    };
-    return <div className={`flex h-full min-h-0 min-w-0 flex-1 ${row ? "flex-row" : "flex-col"}`}><div style={{ flexBasis: `${node.split.ratio}%` }} className="flex min-h-0 min-w-0">{renderNode(node.split.first, [...path, "first"])}</div><div role="separator" tabIndex={0} aria-label={t("workspace.resizeSplit")} aria-orientation={row ? "vertical" : "horizontal"} aria-valuemin={10} aria-valuemax={90} aria-valuenow={node.split.ratio} onPointerDown={(event) => beginResize(event, path, node.split.direction)} onKeyDown={resizeStep} className={`shrink-0 touch-none bg-line transition-colors hover:bg-accent focus:bg-accent focus:outline-none ${row ? "w-1 cursor-col-resize" : "h-1 cursor-row-resize"}`} /><div style={{ flexBasis: `${100 - node.split.ratio}%` }} className="flex min-h-0 min-w-0">{renderNode(node.split.second, [...path, "second"])}</div></div>;
+    return <div className={`flex h-full min-h-0 min-w-0 flex-1 ${row ? "flex-row" : "flex-col"}`}><div style={{ flexBasis: `${node.split.ratio}%` }} className="flex min-h-0 min-w-0">{renderNode(node.split.first, [...path, "first"])}</div><SplitResizeHandle direction={node.split.direction} ratio={node.split.ratio} label={t("workspace.resizeSplit")} onRatioChange={(ratio) => update({ type: "resize-split", path, ratio })} /><div style={{ flexBasis: `${100 - node.split.ratio}%` }} className="flex min-h-0 min-w-0">{renderNode(node.split.second, [...path, "second"])}</div></div>;
   }
 
   const empty = active === null && visibleLayout === null;

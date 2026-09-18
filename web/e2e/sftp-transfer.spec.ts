@@ -1,4 +1,5 @@
 import { changeDisplayLanguage, expect, openApplication, openSection, test } from "./support/environment";
+import { moveRightSFTPTabLeft, openSecondSFTPPane } from "./support/sftp";
 
 test("keeps a chunked SFTP upload visible while another section is open", async ({ page, installation }) => {
   test.setTimeout(process.env.SSHC_VISUAL_DIR === undefined ? 30_000 : 180_000);
@@ -214,15 +215,14 @@ test("keeps a chunked SFTP upload visible while another section is open", async 
     await japaneseTransferManager.getByRole("button", { name: "転送マネージャーを展開" }).click();
     await page.screenshot({ path: `${visualDirectory}/transfer-manager-ja.png`, fullPage: true });
     await japaneseTransferManager.getByRole("button", { name: "転送マネージャーを折りたたむ" }).click();
-    await page.getByRole("button", { name: "2ペイン" }).click();
+    await openSecondSFTPPane(page, "新しいタブ");
     const secondTabs = page.getByRole("tablist", { name: "右ペインのタブ" });
     await expect(secondTabs.getByRole("tab")).toHaveCount(1);
-    await page.locator('[data-sftp-pane-tabs="secondary"]').getByRole("button", { name: "新しいタブ" }).click();
+    await expect(secondTabs.getByRole("tab", { name: "新しいタブ" })).toHaveAttribute("aria-selected", "true");
     const secondPane = page.getByLabel("2つ目のリモートペイン");
     await chooseHost("nas", secondPane);
-    await expect(secondTabs.getByRole("tab")).toHaveCount(2);
-    await expect(page.locator('[data-sftp-pane-tabs="secondary"]').getByRole("button", { name: "新しいタブ" })).toBeVisible();
-    expect(await secondTabs.evaluate((node) => node.scrollWidth > node.clientWidth)).toBe(true);
+    await expect(secondTabs.getByRole("tab", { name: /^nas:/ })).toBeVisible();
+    await expect(page.locator("[data-sftp-pane-tabs]").nth(1).getByRole("button", { name: "新しいタブ" })).toBeVisible();
     await expect(secondPane.getByRole("button", { name: "backups" })).toBeVisible();
     await expect(page.getByRole("button", { name: "ここでTerminalを開く" })).toHaveCount(2);
     await page.screenshot({ path: `${visualDirectory}/sftp-two-pane-desktop.png`, fullPage: true });
@@ -254,11 +254,12 @@ test("keeps a chunked SFTP upload visible while another section is open", async 
     await page.screenshot({ path: `${visualDirectory}/sftp-compare-en.png`, fullPage: true });
     await englishCompareDialog.getByRole("button", { name: "Cancel" }).click();
     await page.screenshot({ path: `${visualDirectory}/sftp-two-pane-desktop-en.png`, fullPage: true });
-    await page.getByRole("button", { name: "One pane" }).click();
+    await moveRightSFTPTabLeft(page);
+    await expect(page.getByLabel("Second remote pane")).toHaveCount(0);
     await reloadBastion();
     await page.getByRole("button", { name: "project", exact: true }).click();
     await page.screenshot({ path: `${visualDirectory}/sshc-v0.16.1-transfer-manager-desktop.png`, fullPage: true });
-    await page.locator("button[data-value]").first().click();
+    await page.locator("button[data-value]:visible").first().click();
     await expect(page.getByRole("dialog", { name: "Choose a connection" })).toBeVisible();
     await page.screenshot({ path: `${visualDirectory}/sshc-v0.16.1-sftp-host-picker-desktop.png`, fullPage: true });
     await page.keyboard.press("Escape");
@@ -279,15 +280,14 @@ test("keeps a chunked SFTP upload visible while another section is open", async 
     await page.screenshot({ path: `${visualDirectory}/sftp-details-desktop.png`, fullPage: true });
     await detailsDialog.getByRole("button", { name: "Close" }).click();
     await page.getByRole("button", { name: "project", exact: true }).click();
-    await page.getByRole("button", { name: "Two panes" }).click();
+    await openSecondSFTPPane(page, "New tab");
     await page.setViewportSize({ width: 360, height: 800 });
     await page.waitForTimeout(400);
     await expect(page.getByRole("tablist", { name: "Left pane tabs" })).toBeVisible();
     await expect(page.getByRole("tablist", { name: "Right pane tabs" })).toHaveCount(0);
     await expect(page.locator('[aria-label="First remote pane"]')).toBeVisible();
     await expect(page.locator('[aria-label="Second remote pane"]')).toBeHidden();
-    await expect(page.getByRole("button", { name: "Two panes" })).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "One pane" })).toHaveCount(0);
+    await expect(page.getByRole("separator", { name: "Resize the panes" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Compare directories", exact: true })).toHaveCount(0);
     await expect(page.getByRole("list", { name: "File list" })).toBeVisible();
     await page.getByRole("button", { name: "Actions for project" }).click();
@@ -317,7 +317,7 @@ test("keeps a chunked SFTP upload visible while another section is open", async 
     await expect(mobileTransferManager.getByText("broken.bin", { exact: true })).toHaveCount(0);
     await mobileTransferManager.getByRole("button", { name: "転送マネージャーを閉じる" }).click();
     await changeDisplayLanguage(page, "en");
-    await page.locator("button[data-value]").first().click();
+    await page.locator("button[data-value]:visible").first().click();
     await expect(page.getByRole("dialog", { name: "Choose a connection" })).toBeVisible();
     await page.screenshot({ path: `${visualDirectory}/sshc-v0.16.1-sftp-host-picker-mobile.png`, fullPage: true });
     await page.keyboard.press("Escape");

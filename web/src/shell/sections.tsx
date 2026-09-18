@@ -216,7 +216,7 @@ export function SectionView(props: SectionViewProps) {
   }
   return (
     <div className={props.section === "Files"
-      ? "h-full overflow-hidden px-2 pb-2 md:px-5 md:pb-5"
+      ? "h-full overflow-hidden p-2 md:px-5 md:pb-5 md:pt-3"
       : "h-full overflow-y-auto p-4 md:p-5"}
     >
       {<PaddedSection {...props} />}
