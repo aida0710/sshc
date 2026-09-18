@@ -11,6 +11,8 @@ import { useTranslate } from "../i18n/context";
 import { Icon } from "../ui/icons";
 import { compareText, ordered, SortableTableHeader, type SortDirection } from "../ui/tableSort";
 import type { RemoteEntry } from "./api";
+import { formatBytes } from "./format";
+import { entryKind } from "./entryKind";
 
 export type SFTPSort = "name" | "type" | "size" | "modified";
 export type SFTPSortState = { key: SFTPSort; direction: SortDirection };
@@ -415,8 +417,22 @@ export function useSFTPEntryList({
 
 export type SFTPEntryListModel = ReturnType<typeof useSFTPEntryList>;
 
+// The list shows sizes in units people read at a glance; the exact byte
+// count stays in the details dialog.
+function entrySize(entry: RemoteEntry): string {
+  return entryKind(entry) === "file" ? formatBytes(entry.size) : "—";
+}
+
 function entryIcon(entry: RemoteEntry) {
-  return entry.type === "directory" ? "groups" : entry.type === "symlink" ? "chevronRight" : "config";
+  return entryKind(entry) === "directory" ? "groups" : "config";
+}
+
+// A symlink is named with where it points, as `ls -l` does.
+function EntryName({ entry }: { entry: RemoteEntry }) {
+  const t = useTranslate();
+  if (entry.type !== "symlink") return <>{entry.name}</>;
+  const target = entry.targetType === undefined ? t("sftp.brokenLink", { target: entry.linkTarget ?? "" }) : entry.linkTarget ?? "";
+  return <>{entry.name}<span className="font-normal text-ink-muted">{` → ${target}`}</span></>;
 }
 
 // The rows themselves: a table with sortable columns where there is room, and
@@ -522,18 +538,18 @@ export function SFTPEntryList({
               {dense ? (
                 <>
                   <span className="min-w-0 grow">
-                    <span className="block truncate font-mono text-sm font-medium leading-4 text-ink">{entry.name}</span>
+                    <span className="block truncate font-mono text-sm font-medium leading-4 text-ink"><EntryName entry={entry} /></span>
                     {entryContext === undefined ? null : <span className="block truncate font-mono text-[10px] leading-3 text-ink-muted">{entryContext(entry)}</span>}
                   </span>
-                  <span className="shrink-0 whitespace-nowrap text-[11px] text-ink-muted">{entry.type === "file" ? entry.size.toLocaleString() : "—"}</span>
+                  <span className="shrink-0 whitespace-nowrap text-[11px] text-ink-muted">{entrySize(entry)}</span>
                   <time className="hidden shrink-0 whitespace-nowrap text-[11px] text-ink-muted sm:inline" dateTime={entry.modifiedAt}>{new Date(entry.modifiedAt).toLocaleDateString()}</time>
                 </>
               ) : (
                 <span className="min-w-0 grow">
-                  <span className="block truncate font-mono text-sm font-medium leading-4 text-ink">{entry.name}</span>
+                  <span className="block truncate font-mono text-sm font-medium leading-4 text-ink"><EntryName entry={entry} /></span>
                   <span className="mt-0.5 flex min-w-0 gap-2 text-[11px] leading-3 text-ink-muted">
                     <span className="truncate font-mono">{entryContext === undefined ? entry.mode : entryContext(entry)}</span>
-                    <span>{entry.type === "file" ? entry.size.toLocaleString() : "—"}</span>
+                    <span>{entrySize(entry)}</span>
                     <time className="truncate" dateTime={entry.modifiedAt}>{new Date(entry.modifiedAt).toLocaleString()}</time>
                   </span>
                 </span>
@@ -624,13 +640,13 @@ export function SFTPEntryList({
               >
                 <Icon name={entryIcon(entry)} className="size-4 text-ink-muted" />
                 <span className="min-w-0 grow">
-                  <span className="block truncate font-mono text-sm font-medium leading-4 text-ink">{entry.name}</span>
+                  <span className="block truncate font-mono text-sm font-medium leading-4 text-ink"><EntryName entry={entry} /></span>
                   {entryContext === undefined ? null : <span className="block truncate font-mono text-[10px] leading-3 text-ink-muted">{entryContext(entry)}</span>}
                 </span>
               </button>
             </td>
             <td className="whitespace-nowrap px-2 py-1 text-xs text-ink-muted md:py-0.5">{new Date(entry.modifiedAt).toLocaleString()}</td>
-            <td className="px-2 py-1 text-right text-xs text-ink-muted md:py-0.5">{entry.type === "file" ? entry.size.toLocaleString() : "—"}</td>
+            <td className="px-2 py-1 text-right text-xs text-ink-muted md:py-0.5">{entrySize(entry)}</td>
             <td className="w-24 whitespace-nowrap px-2 py-1 text-xs text-ink-muted md:py-0.5">{t(`sftp.type.${entry.type}`)}</td>
             <td className="w-28 whitespace-nowrap px-2 py-1 font-mono text-xs text-ink-muted md:py-0.5">{entry.mode}</td>
           </tr>

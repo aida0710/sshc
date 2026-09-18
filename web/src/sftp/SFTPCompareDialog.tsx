@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { failureCode } from "../api/client";
 import { useTranslate } from "../i18n/context";
+import { formatBytes } from "./format";
 import { ModalShell } from "../ui/ModalShell";
 import { Button } from "../ui/surface";
 import { sftpApi, type DirectoryComparison } from "./api";
@@ -110,8 +111,8 @@ export function SFTPCompareDialog({ left, right, onDismiss }: { left: Location; 
               <td className="px-3 py-2"><input type="checkbox" checked={selected.has(difference.relativePath)} onChange={() => toggle(difference.relativePath)} className="size-4 accent-accent" /></td>
               <td className="px-2 py-2 font-mono text-ink">{difference.relativePath}</td>
               <td className="px-2 py-2 text-xs text-ink-muted">{t(`sftp.compare.${difference.status}`)}</td>
-              <td className="px-2 py-2 text-right text-xs text-ink-muted">{difference.left?.type === "file" ? difference.left.size.toLocaleString() : difference.left === undefined ? "—" : t(`sftp.type.${difference.left.type}`)}</td>
-              <td className="px-2 py-2 text-right text-xs text-ink-muted">{difference.right?.type === "file" ? difference.right.size.toLocaleString() : difference.right === undefined ? "—" : t(`sftp.type.${difference.right.type}`)}</td>
+              <td className="px-2 py-2 text-right text-xs text-ink-muted">{difference.left?.type === "file" ? formatBytes(difference.left.size) : difference.left === undefined ? "—" : t(`sftp.type.${difference.left.type}`)}</td>
+              <td className="px-2 py-2 text-right text-xs text-ink-muted">{difference.right?.type === "file" ? formatBytes(difference.right.size) : difference.right === undefined ? "—" : t(`sftp.type.${difference.right.type}`)}</td>
             </tr>
           ))}</tbody>
         </table>}

@@ -4,6 +4,7 @@ import { useTranslate } from "../i18n/context";
 import { sftpApi, type RemoteEntry } from "./api";
 import { localHostAlias } from "./localHost";
 import { localJoin, localParentOf, remoteParentOf } from "./sftpSource";
+import { entryKind, movable } from "./entryKind";
 import { sftpTransferManager } from "./transferManager";
 import { directoryPaths, remoteEntriesMime, safeRelativePath, type LocalTransferFile, type RemoteDragPayload } from "./transfers";
 import type { SFTPBrowserModel } from "./useSFTPBrowser";
@@ -58,8 +59,8 @@ function validPayload(value: unknown): value is RemoteDragPayload {
       (entry.type === "file" || entry.type === "directory") && typeof entry.size === "number");
 }
 
-function transferable<T extends { type: string }>(entries: T[]): T[] {
-  return entries.filter((entry) => entry.type === "file" || entry.type === "directory");
+function transferable<T extends { type: RemoteEntry["type"] }>(entries: T[]): T[] {
+  return entries.filter(movable);
 }
 
 export type SFTPCounterpart = { alias: string; path: string };
@@ -190,7 +191,9 @@ export function useSFTPTransfers({
   }
 
   // Rows dropped from another pane. Between two hosts the user still chooses
-  // copy or move; to or from the engine's disk there is only one meaning.
+  // copy or move; to or from the engine's disk there is only one meaning, and
+  // within one host a drop moves, as it does in a desktop file manager. Rows
+  // dropped back into the directory they came from are left alone.
   async function acceptPayload(payload: RemoteDragPayload) {
     if (source === null || path === "") return;
     if (local) {
@@ -208,6 +211,11 @@ export function useSFTPTransfers({
         targetAlias: alias, targetPath: source.join(path, entry.name),
         name: entry.name, kind: entry.type === "directory" ? "folder" : "file", totalBytes: entry.size,
       })));
+      return;
+    }
+    if (payload.alias === alias) {
+      const fromElsewhere = payload.entries.filter((entry) => remoteParentOf(entry.path) !== path);
+      if (fromElsewhere.length > 0) await queueRemoteTransfers({ alias: payload.alias, entries: fromElsewhere }, "move");
       return;
     }
     setRemoteDrop(payload);
@@ -270,7 +278,13 @@ export function useSFTPTransfers({
   async function acceptRemoteDrop(operation: "copy" | "move") {
     const payload = remoteDrop;
     setRemoteDrop(null);
-    if (payload === null || source === null || alias === "" || path === "") return;
+    if (payload !== null) await queueRemoteTransfers(payload, operation);
+  }
+
+  // Copies or moves rows from another host, or from another directory of
+  // this host, into the directory shown here.
+  async function queueRemoteTransfers(payload: RemoteDragPayload, operation: "copy" | "move") {
+    if (source === null || alias === "" || path === "") return;
     setProblem("");
     try {
       await sftpTransferManager.addRemoteTransfers(payload.entries.map((entry) => ({
@@ -287,10 +301,17 @@ export function useSFTPTransfers({
     }
   }
 
+  // Whether "send it over" can take this entry: the browser receives what a
+  // symlink points to, while the engine's own transfers take only files and
+  // directories named directly.
+  function sendable(entry: RemoteEntry): boolean {
+    return local || counterpartLocal ? movable(entry) : entryKind(entry) !== "other";
+  }
+
   // From a host: to the browser, or straight to the engine's disk when the
   // other pane shows it. From the engine's disk: to the host in the other pane.
   async function transferOut(targets: RemoteEntry[], targetAlias = alias) {
-    const entries = transferable(targets);
+    const entries = targets.filter(sendable);
     if (busy || entries.length === 0) return;
     setProblem("");
     if (local) {
@@ -303,8 +324,8 @@ export function useSFTPTransfers({
       return;
     }
     const results = await Promise.allSettled(entries.map((entry) => {
-      const kind = entry.type === "directory" ? "folder" : "file";
-      const size = entry.type === "file" ? entry.size : -1;
+      const kind = entryKind(entry) === "directory" ? "folder" : "file";
+      const size = entryKind(entry) === "file" ? entry.size : -1;
       return counterpartLocal && counterpart !== null
         ? sftpTransferManager.addRemoteTransfers([{ sourceAlias: targetAlias, sourcePath: entry.path, targetAlias,
             targetPath: localJoin(counterpart.path, entry.name), name: entry.name, kind, totalBytes: size }], "get")
@@ -316,6 +337,7 @@ export function useSFTPTransfers({
 
   return {
     dragging,
+    sendable,
     dragEnter,
     dragOver,
     dragLeave,

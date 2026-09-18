@@ -32,13 +32,15 @@ type SFTPHandlers struct {
 }
 
 type sftpEntry struct {
-	Name       string             `json:"name"`
-	Path       string             `json:"path"`
-	Type       sshcSFTP.EntryType `json:"type"`
-	Size       int64              `json:"size"`
-	Mode       string             `json:"mode"`
-	ModifiedAt string             `json:"modifiedAt"`
-	Revision   string             `json:"revision"`
+	Name       string                  `json:"name"`
+	Path       string                  `json:"path"`
+	Type       sshcSFTP.EntryType      `json:"type"`
+	Size       int64                   `json:"size"`
+	Mode       string                  `json:"mode"`
+	ModifiedAt string                  `json:"modifiedAt"`
+	Revision   string                  `json:"revision"`
+	LinkTarget string                  `json:"linkTarget,omitempty"`
+	TargetType sshcSFTP.LinkTargetType `json:"targetType,omitempty"`
 }
 
 type sftpListingResponse struct {
@@ -131,21 +133,30 @@ func describeSFTPEntry(entry sshcSFTP.Entry) sftpEntry {
 	return sftpEntry{
 		Name: entry.Name, Path: entry.Path, Type: entry.Type, Size: entry.Size,
 		Mode: entry.Mode.String(), ModifiedAt: entry.ModifiedAt.UTC().Format(time.RFC3339Nano), Revision: entry.Revision,
+		LinkTarget: entry.LinkTarget, TargetType: entry.TargetType,
 	}
 }
 
 func describeSFTPAPIEntry(entry sshcSFTP.Entry) api.SFTPEntry {
-	return api.SFTPEntry{
+	described := api.SFTPEntry{
 		Name: entry.Name, Path: entry.Path, Type: api.SFTPEntryType(entry.Type), Size: entry.Size,
 		Mode: entry.Mode.String(), ModifiedAt: entry.ModifiedAt.UTC(), Revision: entry.Revision,
 	}
+	if entry.LinkTarget != "" {
+		described.LinkTarget = &entry.LinkTarget
+	}
+	if entry.TargetType != "" {
+		targetType := api.SFTPEntryTargetType(entry.TargetType)
+		described.TargetType = &targetType
+	}
+	return described
 }
 
 func sftpProblem(c *echo.Context, err error) error {
 	switch {
 	case errors.Is(err, validate.ErrUnsafeAlias):
 		return problem(c, http.StatusBadRequest, "unsafe_alias")
-	case errors.Is(err, fs.ErrNotExist):
+	case errors.Is(err, fs.ErrNotExist), errors.Is(err, sshcSFTP.ErrLinkLoop):
 		return problem(c, http.StatusNotFound, "sftp_not_found")
 	case errors.Is(err, fs.ErrPermission):
 		return problem(c, http.StatusForbidden, "sftp_permission_denied")

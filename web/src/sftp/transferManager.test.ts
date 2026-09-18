@@ -172,6 +172,23 @@ describe("SFTPTransferManager engine ownership", () => {
     expect(api.saveDownload).toHaveBeenCalledOnce();
   });
 
+  it("checkpoints a download once its chunks add up, not after every chunk", async () => {
+    const api = engineAPI();
+    api.streamDownload.mockImplementation(async (_alias, _id, _path, _directory, _offset, options) => {
+      options.onRevision?.('"revision-batched"');
+      for (const part of ["ab", "cd", "ef"]) await options.onChunk(new TextEncoder().encode(part), 6);
+      return { bytes: 6, total: 6 };
+    });
+    const manager = new SFTPTransferManager(api);
+    await manager.addDownload("edge", "/batched.bin", "file", 6);
+    await vi.waitFor(() => expect(manager.getSnapshot()[0]?.status).toBe("completed"));
+    // Three small chunks fit in one batch: the engine hears about them once, at the end.
+    const offsets = api.checkpointDownload.mock.calls.map((call) => call[1]);
+    expect(offsets).toEqual([6]);
+    const parts = api.saveDownload.mock.calls[0]![2];
+    await expect(new Blob(parts).text()).resolves.toBe("abcdef");
+  });
+
   it("resumes a file download after a transient disconnect", async () => {
     let calls = 0;
     const api = engineAPI();
@@ -243,6 +260,25 @@ describe("SFTPTransferManager engine ownership", () => {
     await vi.waitFor(() => expect(releases.length).toBeGreaterThan(0));
     while (releases.length > 0) releases.shift()?.();
     await vi.waitFor(() => expect(manager.getSnapshot().every((job) => job.status === "completed")).toBe(true));
+  });
+
+  it("lets an engine-side copy that met an existing target be overwritten", async () => {
+    const api = engineAPI();
+    const manager = new SFTPTransferManager(api, 0);
+    const [id] = await manager.addRemoteTransfers([{
+      sourceAlias: "edge", sourcePath: "/srv/report.txt", targetAlias: "nas", targetPath: "/backup/report.txt",
+      name: "report.txt", kind: "file", totalBytes: 12,
+    }], "copy");
+    // The engine stopped the copy because the target exists.
+    const stopped = await api.updateTransfer(id!, "needs_overwrite");
+    expect(stopped.status).toBe("needs_overwrite");
+    await manager.reconcile();
+
+    await manager.overwrite(id!);
+
+    expect(api.updateTransfer).toHaveBeenLastCalledWith(id, "resume", { resetProgress: false });
+    expect(api.jobs.get(id!)?.overwrite).toBe(true);
+    expect(manager.getSnapshot()[0]?.status).toBe("queued");
   });
 
   it("applies pause, resume, cancel, and clear through engine APIs", async () => {

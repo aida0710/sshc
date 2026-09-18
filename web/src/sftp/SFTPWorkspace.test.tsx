@@ -265,9 +265,9 @@ describe("SFTP tabs", () => {
     const first = render(<SFTPWorkspace aliases={["edge"]} />);
     await chooseHost("edge");
     const table = await screen.findByRole("table");
-    await userEvent.click(within(table).getByRole("button", { name: /Bytes.*sort ascending/ }));
-    await userEvent.click(within(table).getByRole("button", { name: /Bytes.*sort descending/ }));
-    expect(within(table).getByRole("columnheader", { name: /Bytes/ })).toHaveAttribute("aria-sort", "descending");
+    await userEvent.click(within(table).getByRole("button", { name: /Size.*sort ascending/ }));
+    await userEvent.click(within(table).getByRole("button", { name: /Size.*sort descending/ }));
+    expect(within(table).getByRole("columnheader", { name: /Size/ })).toHaveAttribute("aria-sort", "descending");
     expect(window.localStorage.getItem("sshc.sftp.tabs")).toContain('"sortKey":"size"');
     expect(window.localStorage.getItem("sshc.sftp.tabs")).toContain('"sortDirection":"descending"');
 
@@ -275,7 +275,7 @@ describe("SFTP tabs", () => {
     render(<SFTPWorkspace aliases={["edge"]} />);
     await userEvent.click(within(screen.getByRole("tabpanel")).getByRole("button", { name: "Connect" }));
     const restored = await screen.findByRole("table");
-    expect(within(restored).getByRole("columnheader", { name: /Bytes/ })).toHaveAttribute("aria-sort", "descending");
+    expect(within(restored).getByRole("columnheader", { name: /Size/ })).toHaveAttribute("aria-sort", "descending");
   });
 
   it("ignores remembered tabs whose host is no longer declared", async () => {
@@ -450,14 +450,14 @@ describe("SFTP tabs", () => {
       const local = screen.getByRole("region", { name: "Local files" });
       const table = await within(local).findByRole("table");
       // Same columns, same permissions and timestamps as the remote side.
-      for (const column of [/Name/, /Modified/, /Bytes/, /Type/]) {
+      for (const column of [/Name/, /Modified/, /Size/, /Type/]) {
         expect(within(table).getByRole("columnheader", { name: column })).toBeVisible();
       }
       expect(within(table).getByRole("columnheader", { name: "Permissions" })).toBeVisible();
       expect(within(table).getByRole("row", { name: /alpha.txt/ })).toHaveTextContent("-rw-------");
       expect(within(table).getAllByRole("row")[1]).toHaveTextContent("..");
       expect(within(table).getAllByRole("row")[2]).toHaveTextContent("alpha.txt");
-      await userEvent.click(within(table).getByRole("button", { name: /Bytes.*sort ascending/ }));
+      await userEvent.click(within(table).getByRole("button", { name: /Size.*sort ascending/ }));
       expect(within(table).getAllByRole("row")[2]).toHaveTextContent("docs");
       expect(within(table).getAllByRole("row")[4]).toHaveTextContent("beta.txt");
       expect(window.localStorage.getItem("sshc.sftp.secondaryTabs")).toContain('"sortKey":"size"');
@@ -484,7 +484,7 @@ describe("SFTP tabs", () => {
       render(<SFTPWorkspace aliases={["edge"]} />);
       const restoredLocal = await screen.findByRole("region", { name: "Local files" });
       const restoredTable = await within(restoredLocal).findByRole("table");
-      expect(within(restoredTable).getByRole("columnheader", { name: /Bytes/ })).toHaveAttribute("aria-sort", "ascending");
+      expect(within(restoredTable).getByRole("columnheader", { name: /Size/ })).toHaveAttribute("aria-sort", "ascending");
     } finally { queue.mockRestore(); }
   });
 
@@ -516,6 +516,53 @@ describe("SFTP tabs", () => {
     expect(items).toContain("Upload selection");
     expect(items).toContain("Copy full path");
     for (const missing of ["Delete", "Rename", "Details", "Edit file", "Download"]) expect(items).not.toContain(missing);
+  });
+
+  it("moves rows dropped on another directory of the same host and ignores rows dropped where they came from", async () => {
+    api.list.mockImplementation(async (_alias: string, requestedPath: string) => {
+      const path = requestedPath === "" ? "/srv" : requestedPath;
+      return {
+        path,
+        entries: path === "/srv"
+          ? [{ name: "remote.log", path: "/srv/remote.log", type: "file", size: 8, mode: "0644", modifiedAt: "2026-09-17T08:00:00Z", revision: "remote" }]
+          : [],
+      };
+    });
+    const queue = vi.spyOn(sftpTransferManager, "addRemoteTransfers").mockResolvedValue(["job"]);
+    try {
+      render(<SFTPWorkspace aliases={["edge"]} />);
+      await chooseHost("edge");
+      const second = await openSecondPane();
+      await chooseHost("edge", second);
+      await userEvent.click(within(second).getByRole("button", { name: "Edit path" }));
+      const remotePath = within(second).getByRole("textbox", { name: "Remote path" });
+      await userEvent.clear(remotePath);
+      await userEvent.type(remotePath, "/var/log{Enter}");
+      await waitFor(() => expect(api.list).toHaveBeenCalledWith("edge", "/var/log"));
+      const first = screen.getByLabelText("First remote pane");
+      const carried = new Map<string, string>();
+      const dataTransfer = {
+        effectAllowed: "", dropEffect: "", types: ["application/x-sshc-sftp-entries"], files: [],
+        setData: (type: string, value: string) => { carried.set(type, value); },
+        getData: (type: string) => carried.get(type) ?? "",
+      };
+      const row = within(first).getByRole("row", { name: /remote.log/ });
+
+      // Back into /srv: nothing happens, no dialog asks anything.
+      fireEvent.dragStart(row, { dataTransfer });
+      fireEvent.drop(within(first).getByLabelText("Upload files or folders to the current remote directory"), { dataTransfer });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(queue).not.toHaveBeenCalled();
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+      // Into /var/log on the same host: a move, without asking copy or move.
+      fireEvent.dragStart(row, { dataTransfer });
+      fireEvent.drop(within(second).getByLabelText("Upload files or folders to the current remote directory"), { dataTransfer });
+      await waitFor(() => expect(queue).toHaveBeenLastCalledWith([
+        expect.objectContaining({ sourceAlias: "edge", sourcePath: "/srv/remote.log", targetAlias: "edge", targetPath: "/var/log/remote.log" }),
+      ], "move"));
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    } finally { queue.mockRestore(); }
   });
 
   it("puts rows dragged from Local onto a host and gets rows dragged from a host onto Local", async () => {

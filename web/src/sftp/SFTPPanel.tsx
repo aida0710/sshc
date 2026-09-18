@@ -12,6 +12,7 @@ import { useMenuKeyboard } from "../ui/useMenuKeyboard";
 import { mobileViewportQuery, useCompactViewport, useMediaQuery } from "../ui/useMediaQuery";
 import type { RemoteEntry } from "./api";
 import { formatBytes } from "./format";
+import { entryKind, movable } from "./entryKind";
 import { SFTPDetailsDialog } from "./SFTPDetailsDialog";
 import { SFTPEntryList, sortEntries, useSFTPEntryList, type SFTPSort, type SFTPSortState } from "./SFTPEntryList";
 import { SFTPTextEditor, useSFTPTextEditor } from "./SFTPTextEditor";
@@ -191,7 +192,7 @@ export function SFTPPanel({
     locked: dirty,
     mobileInteraction,
     onActivate: (entry) => {
-      if (entry.type === "directory") void load(entry.path);
+      if (entryKind(entry) === "directory") void load(entry.path);
       else if (can?.details) setDetails([entry]);
     },
     onOpenParent: () => { void browser.openParent(); },
@@ -294,14 +295,14 @@ export function SFTPPanel({
     setMenu((current) => current?.kind === kind ? null : { kind });
   }
 
-  const transferableSelection = selectedEntries.some((entry) => entry.type === "file" || entry.type === "directory");
+  const transferableSelection = selectedEntries.some(transfers.sendable);
   // What "send it over" is called depends on where it goes: a host's files
   // download, the engine's files upload to the host in the other pane.
   const transferOutLabel = t(local ? "sftp.local.upload" : "sftp.download");
 
   function selectedMenuActions(): SFTPMenuAction[] {
     const items: SFTPMenuAction[] = [];
-    if (selectedEntry !== null && selectedEntry.type === "directory") {
+    if (selectedEntry !== null && entryKind(selectedEntry) === "directory") {
       items.push({ key: "open", label: t("sftp.openFolder"), disabled: busy || dirty, run: () => activate(selectedEntry) });
     }
     if (search.search !== null && selectedEntry !== null) {
@@ -317,7 +318,7 @@ export function SFTPPanel({
       });
     }
     if (can?.details) items.push({ key: "details", label: t("sftp.details"), disabled: busy, run: showDetails });
-    if (can?.edit && selectedEntry !== null && selectedEntry.type !== "directory") {
+    if (can?.edit && selectedEntry !== null && entryKind(selectedEntry) === "file") {
       items.push({ key: "edit", label: t("sftp.editFile"), disabled: busy || dirty, run: () => { setMenu(null); void editor.open(alias, selectedEntry); } });
     }
     if (transferableSelection && transfers.canTransferOut) {
@@ -638,7 +639,7 @@ export function SFTPPanel({
                 busy={busy}
                 locked={dirty}
                 parentRowVisible={parentRowVisible}
-                draggable={(entry) => can.dragOut && (entry.type === "file" || entry.type === "directory")}
+                draggable={(entry) => can.dragOut && movable(entry)}
                 onDragStart={(event, entry) => transfers.beginDrag(event, entry, selectedPaths)}
                 entryContext={search.search === null ? undefined : (entry) => remoteParentOf(entry.path)}
               />
@@ -685,6 +686,7 @@ export function SFTPPanel({
           onClose={() => setDetails(null)}
           onEdit={(entry) => { setDetails(null); void editor.open(alias, entry); }}
           onDownload={(targets) => { setDetails(null); void transfers.transferOut(targets); }}
+          canDownload={transfers.sendable}
           onRename={(entry) => { setDetails(null); actions.ask({ kind: "rename", entry }); }}
         />
       )}

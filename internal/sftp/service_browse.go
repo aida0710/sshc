@@ -47,11 +47,12 @@ func (s Service) ListDirectory(ctx context.Context, alias, remotePath string) (L
 		}
 		entries = append(entries, entryFrom(cleaned, info))
 	}
+	describeLinks(remote, entries)
 	sort.Slice(entries, func(left, right int) bool {
-		if entries[left].Type == EntryDirectory && entries[right].Type != EntryDirectory {
+		if entries[left].opensAsDirectory() && !entries[right].opensAsDirectory() {
 			return true
 		}
-		if entries[left].Type != EntryDirectory && entries[right].Type == EntryDirectory {
+		if !entries[left].opensAsDirectory() && entries[right].opensAsDirectory() {
 			return false
 		}
 		leftName, rightName := strings.ToLower(entries[left].Name), strings.ToLower(entries[right].Name)
@@ -220,5 +221,7 @@ func (s Service) Stat(ctx context.Context, alias, remotePath string) (Entry, err
 	if err != nil {
 		return Entry{}, err
 	}
-	return entryFrom(path.Dir(cleaned), namedInfo{FileInfo: info, name: path.Base(cleaned)}), nil
+	entries := []Entry{entryFrom(path.Dir(cleaned), namedInfo{FileInfo: info, name: path.Base(cleaned)})}
+	describeLinks(remote, entries)
+	return entries[0], nil
 }
