@@ -31,34 +31,22 @@ type SFTPHandlers struct {
 	Actions ActionHandlers
 }
 
-type sftpEntry struct {
-	Name       string                  `json:"name"`
-	Path       string                  `json:"path"`
-	Type       sshcSFTP.EntryType      `json:"type"`
-	Size       int64                   `json:"size"`
-	Mode       string                  `json:"mode"`
-	ModifiedAt string                  `json:"modifiedAt"`
-	Revision   string                  `json:"revision"`
-	LinkTarget string                  `json:"linkTarget,omitempty"`
-	TargetType sshcSFTP.LinkTargetType `json:"targetType,omitempty"`
-}
-
 type sftpListingResponse struct {
-	Path    string      `json:"path"`
-	Entries []sftpEntry `json:"entries"`
+	Path    string          `json:"path"`
+	Entries []api.SFTPEntry `json:"entries"`
 }
 
 type sftpSearchResponse struct {
-	Path      string      `json:"path"`
-	Query     string      `json:"query"`
-	Truncated bool        `json:"truncated"`
-	Entries   []sftpEntry `json:"entries"`
+	Path      string          `json:"path"`
+	Query     string          `json:"query"`
+	Truncated bool            `json:"truncated"`
+	Entries   []api.SFTPEntry `json:"entries"`
 }
 
 type sftpTextFileResponse struct {
-	Entry    sftpEntry `json:"entry"`
-	Contents string    `json:"contents"`
-	Revision string    `json:"revision"`
+	Entry    api.SFTPEntry `json:"entry"`
+	Contents string        `json:"contents"`
+	Revision string        `json:"revision"`
 }
 
 type sftpSaveTextRequest struct {
@@ -124,20 +112,14 @@ func (h SFTPHandlers) ListLocal(c *echo.Context) error {
 	}
 	entries := make([]api.SFTPEntry, 0, len(listing.Entries))
 	for _, entry := range listing.Entries {
-		entries = append(entries, describeSFTPAPIEntry(entry))
+		entries = append(entries, describeSFTPEntry(entry))
 	}
 	return c.JSON(http.StatusOK, api.SFTPLocalListing{Path: listing.Path, Home: listing.Home, Entries: entries})
 }
 
-func describeSFTPEntry(entry sshcSFTP.Entry) sftpEntry {
-	return sftpEntry{
-		Name: entry.Name, Path: entry.Path, Type: entry.Type, Size: entry.Size,
-		Mode: entry.Mode.String(), ModifiedAt: entry.ModifiedAt.UTC().Format(time.RFC3339Nano), Revision: entry.Revision,
-		LinkTarget: entry.LinkTarget, TargetType: entry.TargetType,
-	}
-}
-
-func describeSFTPAPIEntry(entry sshcSFTP.Entry) api.SFTPEntry {
+// describeSFTPEntry は engine の Entry を契約の SFTPEntry にする。一覧、検索、
+// text、比較のすべてがこの 1 つを使う。
+func describeSFTPEntry(entry sshcSFTP.Entry) api.SFTPEntry {
 	described := api.SFTPEntry{
 		Name: entry.Name, Path: entry.Path, Type: api.SFTPEntryType(entry.Type), Size: entry.Size,
 		Mode: entry.Mode.String(), ModifiedAt: entry.ModifiedAt.UTC(), Revision: entry.Revision,
@@ -430,11 +412,11 @@ func (h SFTPHandlers) CompareDirectories(c *echo.Context) error {
 			Status:       api.SFTPDirectoryDifferenceStatus(difference.Status),
 		}
 		if difference.Left != nil {
-			described := describeSFTPAPIEntry(*difference.Left)
+			described := describeSFTPEntry(*difference.Left)
 			entry.Left = &described
 		}
 		if difference.Right != nil {
-			described := describeSFTPAPIEntry(*difference.Right)
+			described := describeSFTPEntry(*difference.Right)
 			entry.Right = &described
 		}
 		entries = append(entries, entry)
@@ -491,7 +473,7 @@ func (h SFTPHandlers) List(c *echo.Context) error {
 	if err != nil {
 		return sftpProblem(c, err)
 	}
-	described := make([]sftpEntry, 0, len(listing.Entries))
+	described := make([]api.SFTPEntry, 0, len(listing.Entries))
 	for _, entry := range listing.Entries {
 		described = append(described, describeSFTPEntry(entry))
 	}
@@ -505,7 +487,7 @@ func (h SFTPHandlers) Search(c *echo.Context) error {
 	if err != nil {
 		return sftpProblem(c, err)
 	}
-	described := make([]sftpEntry, 0, len(found.Entries))
+	described := make([]api.SFTPEntry, 0, len(found.Entries))
 	for _, entry := range found.Entries {
 		described = append(described, describeSFTPEntry(entry))
 	}

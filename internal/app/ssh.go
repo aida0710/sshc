@@ -6,7 +6,6 @@ import (
 	"errors"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -16,6 +15,7 @@ import (
 	"sshc/internal/effective"
 	"sshc/internal/httpserver"
 	"sshc/internal/knownhosts"
+	"sshc/internal/platform/nativepath"
 	"sshc/internal/secret"
 	sshcSFTP "sshc/internal/sftp"
 	"sshc/internal/sshclient"
@@ -189,11 +189,11 @@ func storedPassphrase(passwords *secret.Service, root string) func(string) (stri
 		return nil
 	}
 	return func(absolute string) (string, bool) {
-		relative, err := filepath.Rel(root, absolute)
-		if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		relative, inside := nativepath.RelativeSlash(root, absolute)
+		if !inside {
 			return "", false
 		}
-		return passwords.KeyPassphraseFor(filepath.ToSlash(relative))
+		return passwords.KeyPassphraseFor(relative)
 	}
 }
 
@@ -283,11 +283,11 @@ func NewCLIConnection(
 		if passphrase == nil {
 			return "", false
 		}
-		relative, err := filepath.Rel(workspace.Root(), absolute)
-		if err != nil || strings.HasPrefix(relative, "..") {
+		relative, inside := nativepath.RelativeSlash(workspace.Root(), absolute)
+		if !inside {
 			return "", false
 		}
-		return passphrase(filepath.ToSlash(relative))
+		return passphrase(relative)
 	}
 
 	parts := newSSHParts(config, hosts, workspace.Home(), stored, password, oneTimeCode)

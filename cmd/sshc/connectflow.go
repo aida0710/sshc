@@ -19,9 +19,6 @@ type engineProbe interface {
 // errInterrupted は Ctrl-C による中断を表し、終了コード 130 に変換される。
 var errInterrupted = errors.New("interrupted")
 
-// errEngineChanged は待機中に engine の識別情報が変わったことを表す。
-var errEngineChanged = errors.New("the running sshc changed while waiting; run the command again")
-
 // httpProbe は生成時に取得した handoff の engine だけに要求を送る。
 type httpProbe struct {
 	found  handoff.Handoff
