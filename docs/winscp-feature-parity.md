@@ -226,7 +226,7 @@ sshcのSFTPは、安全なアップロード／ダウンロード、フォルダ
 | command-line interface | 対応 | 接続、run、sync、管理、SFTP転送CLIあり | 維持 |
 | SFTP upload/download CLI | 対応 | `sshc sftp get/put`。recursive、上書き確認、skip、dry-run、JSON、file並列と大容量file分割を備える | 維持 |
 | file operation scripting | 対応 | `--yes --json`で非対話実行でき、終了codeで失敗を返す | operation mask等は未対応 |
-| script file／batch automation | 部分 | Snippetsと`sshc run`はremote command用 | file transfer planは未対応 |
+| script file／batch automation | 部分 | Snippetsと`sshc ssh --non-interactive`はremote command用 | file transfer planは未対応 |
 | .NET assembly／COM API | 判断 | なし | cross-platform REST/CLIを正本とし導入しない候補 |
 | operation code生成 | 未対応 | なし | SFTP CLI実装後 |
 | custom file commands | 部分 | Snippetsはあるがselected path連携なし | 安全なpath変数を追加 |

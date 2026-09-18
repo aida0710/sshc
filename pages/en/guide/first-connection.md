@@ -7,7 +7,7 @@ description: Create the vault and open an existing or new SSH connection.
 
 ## 1. Create the vault
 
-Enter a master password twice. The vault encrypts saved account passwords, key passphrases, secret Snippet values, and sync credentials.
+On first launch you can set a vault master password (or run passwordless). The vault encrypts saved account passwords, key passphrases, secret Snippet values, and sync credentials.
 
 ::: warning
 The master password cannot be recovered. It is not the sync encryption key, and may differ on each device.

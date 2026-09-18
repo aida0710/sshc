@@ -34,7 +34,7 @@ The Vault is split into **Account passwords**, **Key passphrases**, and **OTP** 
 
 sshc generates a current code only for a keyboard-interactive question that explicitly says `OTP`, `TOTP`, `Verification code`, or an equivalent phrase. For example, `Verification code:` is recognised. Some servers mark this input as visible; sshc supports that flag without printing the automatically supplied code in the Terminal. It does not send the seed or a code to an ambiguous `Code` prompt or an ordinary password prompt.
 
-The assignment applies to Terminal, SFTP, `sshc ssh`, `sshc run`, and each ProxyJump hop. If the resolved host, user, port, or jump route changes, sshc stops releasing the token so that it cannot be sent to an unintended peer. Select the TOTP again under Basic settings to confirm the new authentication destination.
+The assignment applies to Terminal, SFTP, `sshc ssh` (interactive or `--non-interactive`), and each ProxyJump hop. If the resolved host, user, port, or jump route changes, sshc stops releasing the token so that it cannot be sent to an unintended peer. Select the TOTP again under Basic settings to confirm the new authentication destination.
 
 ::: warning Factor separation
 Keeping an account password and a TOTP seed in the same device vault is convenient, but a compromised device may expose both factors. Use this only when your organisation's security policy allows it.
@@ -46,4 +46,4 @@ sshc vault lock
 sshc vault change-password
 ```
 
-Locking the Vault does not close existing SSH sessions, but blocks new secret operations. It locks after 12 hours of inactivity by default; Settings can change the duration or disable automatic locking.
+Locking the Vault does not close existing SSH sessions, but blocks new secret operations. A password-protected Vault locks after 12 hours of inactivity by default; Settings can change the duration or disable automatic locking. A passwordless Vault is never auto-locked.

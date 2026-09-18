@@ -27,7 +27,9 @@ sshc serial /dev/ttyUSB0 --non-interactive \
   --expect 'login:' --timeout 20s -- 'admin'
 
 sshc telnet 192.0.2.20:23 --non-interactive \
-  --script ./steps.json --json -- ''
+  --script ./steps.json --json
 ```
 
-Set an expected pattern or a fixed read duration, along with the timeout, settle time, maximum bytes, line endings, and required output. JSON mode returns the result and any warnings in one object.
+`--script` cannot be combined with `-- <text>`, `--expect`, or `--read-for`: each step in the script file carries its own text and completion condition.
+
+Non-interactive runs need exactly one completion condition: `--expect` succeeds when the regular expression matches, `--read-for` after reading for the given duration. Combine either with the overall `--timeout`, settle time, maximum bytes, line endings, and required output. JSON mode returns the result and any warnings in one object. Exit codes: 124 when the overall timeout elapses, 2 for invalid arguments, 1 for any other failure such as a transport error, and 130 when interrupted.
