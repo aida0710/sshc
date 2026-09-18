@@ -170,7 +170,7 @@ func (s *Service) Startup() ([]Startup, error) {
 // assignment. Resolving the alias prevents a stale or pattern-only Host entry
 // from becoming connection automation.
 func (s *Service) SetStartup(alias, snippetID string, inputs map[string]string) error {
-	if err := validate.Alias(alias); err != nil || len(alias) > 255 {
+	if err := validate.Alias(alias); err != nil {
 		return ErrInvalidTarget
 	}
 	if snippetID != "" {
@@ -332,7 +332,7 @@ func (s *Service) planExpanded(request PreviewRequest, source planSource, expand
 	public := make([]TargetPreview, 0, len(requested))
 	for _, requestedTarget := range requested {
 		alias := requestedTarget.Alias
-		if err := validate.Alias(alias); err != nil || len(alias) > 255 {
+		if err := validate.Alias(alias); err != nil {
 			return Preview{}, nil, ErrInvalidTarget
 		}
 		resolution, err := s.resolve(alias)

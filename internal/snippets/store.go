@@ -298,7 +298,7 @@ func validateLibrary(library Library) error {
 	}
 	aliases := make(map[string]bool, len(library.Startup))
 	for _, startup := range library.Startup {
-		if err := validate.Alias(startup.Alias); err != nil || len(startup.Alias) > 255 {
+		if err := validate.Alias(startup.Alias); err != nil {
 			return ErrInvalidTarget
 		}
 		if aliases[startup.Alias] {

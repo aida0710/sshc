@@ -1,4 +1,4 @@
-import { ApiError, apiClient } from "./client";
+import { apiClient } from "./client";
 import { asArray, asNumber, asRecord, asString, jsonHeaders } from "./guards";
 import type { components } from "./schema";
 import { validateOpenAPISchema } from "./validators.generated";
@@ -189,13 +189,9 @@ export const settingsApi: SettingsApi = {
     );
   },
   async deleteTerminalBackground(name) {
-    const response = await apiClient.send(
+    await apiClient.mutate<unknown>(
       `/api/v1/terminal/backgrounds/${encodeURIComponent(name)}`,
-      {
-        method: "DELETE",
-      },
+      { method: "DELETE" },
     );
-    if (!response.ok)
-      throw new ApiError("background_not_removed", response.status, null);
   },
 };
