@@ -378,7 +378,7 @@ func (s Service) getLocal(ctx context.Context, remote Remote, root *os.Root, sou
 		} else if err := root.Mkdir(target, info.Mode().Perm()); err != nil {
 			return err
 		}
-		children, err := remote.ReadDir(ctx, source)
+		children, err := readChildren(ctx, remote, source)
 		if err != nil {
 			return err
 		}
@@ -386,7 +386,7 @@ func (s Service) getLocal(ctx context.Context, remote Remote, root *os.Root, sou
 			if isInternalName(child.Name()) {
 				continue
 			}
-			if child.Name() == "" || child.Name() == "." || child.Name() == ".." || strings.ContainsAny(child.Name(), "/\\") || strings.ContainsRune(child.Name(), 0) {
+			if !validLocalChildName(child.Name()) {
 				return ErrInvalidPath
 			}
 			if err := s.getLocal(ctx, remote, root, path.Join(source, child.Name()), path.Join(target, child.Name()), child, overwrite, report); err != nil {

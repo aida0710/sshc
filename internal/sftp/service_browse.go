@@ -36,7 +36,7 @@ func (s Service) ListDirectory(ctx context.Context, alias, remotePath string) (L
 		}
 	}
 
-	infos, err := remote.ReadDir(ctx, cleaned)
+	infos, err := readChildren(ctx, remote, cleaned)
 	if err != nil {
 		return Listing{}, err
 	}
@@ -91,7 +91,7 @@ func (s Service) Search(ctx context.Context, alias, remotePath, query string) (S
 			if err := ctx.Err(); err != nil {
 				return SearchResult{}, err
 			}
-			infos, err := remote.ReadDir(ctx, directory)
+			infos, err := readChildren(ctx, remote, directory)
 			if err != nil {
 				// 読めない枝は飛ばす。権限のない一つのディレクトリで検索
 				// 全体を落とすほうが、利用者にとって役に立たない。
@@ -162,7 +162,7 @@ func (s Service) DirectoryStats(ctx context.Context, alias, remotePath string) (
 			if err := ctx.Err(); err != nil {
 				return DirectoryStats{}, err
 			}
-			infos, err := remote.ReadDir(ctx, directory)
+			infos, err := readChildren(ctx, remote, directory)
 			if err != nil {
 				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 					return DirectoryStats{}, err

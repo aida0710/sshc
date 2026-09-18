@@ -74,8 +74,15 @@ func (m *TransferManager) runRemoteJob(ctx context.Context, id string) {
 		case <-timer.C:
 		}
 	}
+	// Planning and the operation itself can walk a large tree for longer than
+	// the stale-running sweep tolerates without reporting progress. Holding the
+	// data-plane count keeps the sweep from failing a job whose worker is alive.
+	release, err := m.KeepJobActive(id)
+	if err != nil {
+		return
+	}
+	defer release()
 	var totalBytes int64
-	var err error
 	if job.Operation == RemoteDelete {
 		totalBytes, err = m.Service.PlanDelete(ctx, job.Alias, job.RemotePath)
 	} else if job.Operation == RemoteGet || job.Operation == RemotePut {

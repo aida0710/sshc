@@ -3,7 +3,6 @@ package sftp
 import (
 	"context"
 	"path"
-	"strings"
 )
 
 type deleteEntry struct {
@@ -33,16 +32,15 @@ func collectDeleteTree(ctx context.Context, remote Remote, root string) ([]delet
 			return err
 		}
 		if info.IsDir() {
-			children, err := remote.ReadDir(ctx, candidate)
+			children, err := readChildren(ctx, remote, candidate)
 			if err != nil {
 				return err
 			}
 			for _, child := range children {
-				name := child.Name()
-				if name == "" || name == "." || name == ".." || strings.Contains(name, "/") || isInternalName(name) {
+				if isInternalName(child.Name()) {
 					return ErrConflict
 				}
-				if err := walk(path.Join(candidate, name), depth+1); err != nil {
+				if err := walk(path.Join(candidate, child.Name()), depth+1); err != nil {
 					return err
 				}
 			}

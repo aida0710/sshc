@@ -95,9 +95,11 @@ type fakeRemote struct {
 	workingDir   string
 	closed       bool
 	replacements [][2]string
+	renames      [][2]string
 	removals     []string
 	replaceErr   error
 	replaceHook  func()
+	renameHook   func()
 	closeHook    func()
 	removeErr    error
 	removeHook   func(string)
@@ -245,7 +247,17 @@ func (r *fakeRemote) Replace(from, to string) error {
 	return r.move(from, to)
 }
 
-func (r *fakeRemote) Rename(from, to string) error { return r.move(from, to) }
+// Rename は OpenSSH の sftp-server と同じく、既存の移動先を上書きしない。
+func (r *fakeRemote) Rename(from, to string) error {
+	r.renames = append(r.renames, [2]string{from, to})
+	if r.renameHook != nil {
+		r.renameHook()
+	}
+	if _, exists := r.nodes[to]; exists {
+		return fs.ErrExist
+	}
+	return r.move(from, to)
+}
 
 func (r *fakeRemote) move(from, to string) error {
 	info, ok := r.nodes[from]
@@ -1083,4 +1095,33 @@ func TestSaveTextRechecksRevisionAfterStagingTheReplacement(t *testing.T) {
 func withTime(info node, modTime time.Time) node {
 	info.modTime = modTime
 	return info
+}
+
+func TestContentRevisionDependsOnlyOnTheContents(t *testing.T) {
+	t.Parallel()
+	remote := remoteWith(map[string]node{"/notes.txt": file("notes.txt", "same\n", 0o644)})
+	service := sftp.Service{Open: func(context.Context, string) (sftp.Remote, error) { return remote, nil }}
+	first, err := service.ReadText(context.Background(), "edge", "/notes.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A touched file with identical contents is still the file the editor saw.
+	// Download and upload derive the same revision from the bytes alone, so the
+	// editor's revision must not depend on metadata either.
+	remote.nodes["/notes.txt"] = withTime(remote.nodes["/notes.txt"], testTime.Add(time.Hour))
+	second, err := service.ReadText(context.Background(), "edge", "/notes.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Revision != second.Revision {
+		t.Fatalf("revision changed with mtime only: %q != %q", first.Revision, second.Revision)
+	}
+	remote.nodes["/notes.txt"] = file("notes.txt", "different\n", 0o644)
+	third, err := service.ReadText(context.Background(), "edge", "/notes.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if third.Revision == first.Revision {
+		t.Fatal("revision did not change with the contents")
+	}
 }
