@@ -1,8 +1,13 @@
 import { useEffect, useSyncExternalStore } from "react";
+import { usePolling } from "../ui/usePolling";
 import { apiClient } from "../api/client";
 import type { Metadata } from "../api/config";
 import { validateOpenAPISchema } from "../api/validators.generated";
 import { defaultBindings, loadBindings, parseBindings, readStoredShortcutValue, saveBindings, selectionKey, storageKey, rememberStoredShortcutValue, type Bindings } from "./bindings";
+
+// Presets edited on another synced device arrive on the next push; a few
+// seconds keeps the two in step without a request per keystroke.
+const presetPollIntervalMs = 5_000;
 
 export type Preset = { id: string; name: string; bindings: Bindings };
 export { selectionKey };
@@ -90,10 +95,10 @@ export function usePresetSync(ready: boolean) {
     ++generation;
     publish({ loading: true });
     void refreshPresets();
-    const timer = window.setInterval(() => { void refreshPresets(); }, 5000);
     const refresh = () => { void refreshPresets(); };
     window.addEventListener("focus", refresh);
     window.addEventListener("storage", refresh);
-    return () => { ++generation; window.clearInterval(timer); window.removeEventListener("focus", refresh); window.removeEventListener("storage", refresh); };
+    return () => { ++generation; window.removeEventListener("focus", refresh); window.removeEventListener("storage", refresh); };
   }, [ready]);
+  usePolling(refreshPresets, { intervalMs: presetPollIntervalMs, enabled: ready, whileHidden: true });
 }

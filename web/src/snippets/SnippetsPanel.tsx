@@ -5,6 +5,7 @@ import type { MessageKey } from "../i18n/messages";
 import { Button } from "../ui/surface";
 import { PasswordInput } from "../ui/PasswordField";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
+import { usePolling } from "../ui/usePolling";
 import {
   snippetsApi,
   type Job,
@@ -13,6 +14,9 @@ import {
   type SnippetDraft,
   type SnippetVariable,
 } from "./api";
+
+// A command's per-host output should feel live without hammering the engine.
+const snippetJobPollIntervalMs = 600;
 
 function placeholders(command: string): string[] {
   return [
@@ -118,16 +122,10 @@ export function SnippetsPanel({
     if (snippet !== undefined && selected !== snippet.id) edit(snippet);
   }, [selected, selectedSnippetId, snippets]);
 
-  useEffect(() => {
-    if (job?.status !== "running") return;
-    const timer = window.setInterval(() => {
-      void snippetsApi
-        .job(job.id)
-        .then(setJob)
-        .catch(() => undefined);
-    }, 600);
-    return () => window.clearInterval(timer);
-  }, [job]);
+  usePolling(async () => {
+    if (job === null) return;
+    setJob(await snippetsApi.job(job.id));
+  }, { intervalMs: snippetJobPollIntervalMs, enabled: job?.status === "running", whileHidden: true });
 
   function edit(snippet: Snippet | null) {
     setSelected(snippet?.id ?? null);

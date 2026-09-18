@@ -21,6 +21,7 @@ import { Icon, IconSprite } from "./ui/icons";
 import { InspectorPane, InspectorToggle, type InspectorContent } from "./ui/Inspector";
 import { useTheme } from "./theme/context";
 import { Button } from "./ui/surface";
+import { usePolling } from "./ui/usePolling";
 import { RouteSkeleton } from "./ui/RouteSkeleton";
 import { sectionPath, type Section } from "./routing/sectionRoute";
 import { connectionLocation } from "./routing/connectionRoute";
@@ -48,6 +49,8 @@ import { useDeclaredConfig } from "./shell/useDeclaredConfig";
 import { useOSC52Policy } from "./shell/useOSC52Policy";
 import { useSectionHandoffs } from "./shell/useSectionHandoffs";
 import { useAppShortcuts } from "./shell/useAppShortcuts";
+
+const transferReconcileIntervalMs = 2_000;
 
 export { vaultStatePollIntervalMs } from "./session/useAppSession";
 export { resolveOSC52 } from "./shell/TerminalScreen";
@@ -188,15 +191,12 @@ export function App({
     openPalette,
   });
 
-  useEffect(() => {
-    if (state !== "ready") return;
-    const refresh = () => {
-      void sftpTransferManager.reconcile().catch(() => undefined);
-    };
-    refresh();
-    const timer = globalThis.setInterval(refresh, 2_000);
-    return () => globalThis.clearInterval(timer);
-  }, [state]);
+  // Transfers run in the engine, so the queue keeps up even while this tab is
+  // hidden; a couple of seconds is fast enough for progress and cheap enough
+  // for the engine.
+  usePolling(() => sftpTransferManager.reconcile(), {
+    intervalMs: transferReconcileIntervalMs, enabled: state === "ready", whileHidden: true, immediately: true,
+  });
 
   const unreadSessions = useTerminalNotifications(
     consoles.sessions,
