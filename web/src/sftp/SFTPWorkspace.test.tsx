@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { createEvent, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SFTPWorkspace } from "./SFTPWorkspace";
@@ -38,6 +38,15 @@ async function chooseHost(alias: string, scope: HTMLElement = screen.getByRole("
 
 function currentPath(): HTMLElement {
   return within(screen.getByRole("tabpanel")).getByTestId("sftp-current-path");
+}
+
+// Opens a blank tab and moves it into a new pane on the right. Shift+Arrow is
+// the keyboard route to what a drag onto the right half of the pane does.
+async function openSecondPane(): Promise<HTMLElement> {
+  await userEvent.click(screen.getByRole("button", { name: "New tab" }));
+  within(screen.getByRole("tablist", { name: "Left pane tabs" })).getByRole("tab", { selected: true }).focus();
+  await userEvent.keyboard("{Shift>}{ArrowRight}{/Shift}");
+  return screen.getByLabelText("Second remote pane");
 }
 
 describe("SFTP tabs", () => {
@@ -279,30 +288,90 @@ describe("SFTP tabs", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
-  it("opens a persistent second remote pane on desktop", async () => {
+  it("opens a second pane with a moved tab and closes it when its last tab leaves", async () => {
     render(<SFTPWorkspace aliases={["edge", "miyabi"]} />);
 
     await chooseHost("edge");
     await waitFor(() => expect(currentPath()).toHaveAttribute("data-path", "/home/edge"));
-    await userEvent.click(screen.getByRole("button", { name: "Two panes" }));
-    const second = screen.getByLabelText("Second remote pane");
-    expect(second).toBeInTheDocument();
+    const second = await openSecondPane();
     expect(window.localStorage.getItem("sshc.sftp.split")).toBe("true");
-    expect(within(screen.getByRole("tablist", { name: "Right pane tabs" })).getByRole("tab", { name: "edge:edge" })).toBeVisible();
-    expect(within(second).getByRole("button", { name: "Host" })).toHaveAttribute("data-value", "edge");
+    const leftTabs = screen.getByRole("tablist", { name: "Left pane tabs" });
+    const rightTabs = screen.getByRole("tablist", { name: "Right pane tabs" });
+    expect(within(leftTabs).getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["edge:edge"]);
+    expect(within(rightTabs).getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["New tab"]);
+    // The lone tab of a pane can be closed now that another pane exists.
+    expect(within(second).getByRole("button", { name: "Close the New tab tab" })).toBeVisible();
+    expect(within(screen.getByLabelText("First remote pane")).getByRole("button", { name: "Close the edge:edge tab" })).toBeVisible();
 
-    await userEvent.click(within(screen.getByRole("tablist", { name: "Right pane tabs" }).parentElement!).getByRole("button", { name: "New tab" }));
     await chooseHost("miyabi", second);
     await waitFor(() => expect(api.list).toHaveBeenCalledWith("miyabi", ""));
     expect(window.localStorage.getItem("sshc.sftp.secondaryTabs")).toContain("miyabi");
 
-    await userEvent.click(screen.getByRole("button", { name: "One pane" }));
+    (await within(rightTabs).findByRole("tab", { name: "miyabi:edge" })).focus();
+    await userEvent.keyboard("{Shift>}{ArrowLeft}{/Shift}");
     expect(screen.queryByRole("tablist", { name: "Right pane tabs" })).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Two panes" }));
-    const restoredRightTabs = screen.getByRole("tablist", { name: "Right pane tabs" });
-    const rightTabs = within(restoredRightTabs).getAllByRole("tab");
-    expect(rightTabs).toHaveLength(2);
-    expect(rightTabs[1]).toHaveAttribute("aria-selected", "true");
+    expect(screen.queryByLabelText("Second remote pane")).not.toBeInTheDocument();
+    expect(within(leftTabs).getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["edge:edge", "miyabi:edge"]);
+    expect(within(leftTabs).getByRole("tab", { name: "miyabi:edge" })).toHaveAttribute("aria-selected", "true");
+    expect(window.localStorage.getItem("sshc.sftp.split")).toBe("false");
+    expect(window.localStorage.getItem("sshc.sftp.tabs")).toContain("miyabi");
+    // The moved tab reopens where it was without another host round trip.
+    expect(within(screen.getByRole("tabpanel")).getByRole("button", { name: "Host" })).toHaveAttribute("data-value", "miyabi");
+  });
+
+  it("splits the pane by dragging a tab onto its right half and rejoins it by dropping on the other pane", async () => {
+    render(<SFTPWorkspace aliases={["edge", "miyabi"]} />);
+    await chooseHost("edge");
+    await waitFor(() => expect(currentPath()).toHaveAttribute("data-path", "/home/edge"));
+    const carried = new Map<string, string>();
+    const dataTransfer = {
+      effectAllowed: "", dropEffect: "", types: ["application/x-sshc-sftp-tab"], files: [],
+      setData: (type: string, value: string) => { carried.set(type, value); },
+      getData: (type: string) => carried.get(type) ?? "",
+    };
+    const dragOverAt = (target: HTMLElement, clientX: number) => {
+      const event = createEvent.dragOver(target, { dataTransfer });
+      Object.defineProperty(event, "clientX", { value: clientX });
+      fireEvent(target, event);
+    };
+    const dropAt = (target: HTMLElement, clientX: number) => {
+      const event = createEvent.drop(target, { dataTransfer });
+      Object.defineProperty(event, "clientX", { value: clientX });
+      fireEvent(target, event);
+    };
+
+    // Nothing to drop on until a tab is picked up; then the lone pane offers both halves.
+    expect(document.querySelector("[data-sftp-tab-drop-target]")).toBeNull();
+    fireEvent.dragStart(screen.getByRole("tab", { name: "edge:edge" }), { dataTransfer });
+    expect(carried.get("application/x-sshc-sftp-tab")).not.toBe("");
+    const halves = document.querySelector<HTMLElement>('[data-sftp-tab-drop-target="halves"]')!;
+    vi.spyOn(halves, "getBoundingClientRect").mockReturnValue({ left: 0, width: 800, top: 0, height: 600, right: 800, bottom: 600, x: 0, y: 0, toJSON: () => ({}) });
+    dragOverAt(halves, 100);
+    expect(screen.getByText("Open in a new left pane")).toBeVisible();
+    dragOverAt(halves, 700);
+    expect(screen.getByText("Open in a new right pane")).toBeVisible();
+    dropAt(halves, 700);
+
+    const second = screen.getByLabelText("Second remote pane");
+    expect(within(screen.getByRole("tablist", { name: "Right pane tabs" })).getByRole("tab", { name: "edge:edge" })).toBeVisible();
+    expect(within(screen.getByRole("tablist", { name: "Left pane tabs" })).getByRole("tab", { name: "New tab" })).toBeVisible();
+    expect(within(second).getByRole("button", { name: "Host" })).toHaveAttribute("data-value", "edge");
+    expect(document.querySelector("[data-sftp-tab-drop-target]")).toBeNull();
+    // The tab was connected when it moved, so it reopens its directory at once.
+    await waitFor(() => expect(within(second).getByTestId("sftp-current-path")).toHaveAttribute("data-path", "/home/edge"));
+    expect(within(second).queryByText("edge is disconnected")).not.toBeInTheDocument();
+
+    // With two panes the other pane is one target; the source pane offers none.
+    fireEvent.dragStart(within(second).getByRole("tab", { name: "edge:edge" }), { dataTransfer });
+    expect(within(second).queryByRole("tab", { name: "edge:edge" })).toBeInTheDocument();
+    expect(document.querySelectorAll("[data-sftp-tab-drop-target]")).toHaveLength(1);
+    const whole = screen.getByLabelText("First remote pane").querySelector<HTMLElement>('[data-sftp-tab-drop-target="whole"]')!;
+    dragOverAt(whole, 100);
+    expect(screen.getByText("Move to this pane")).toBeVisible();
+    dropAt(whole, 100);
+
+    expect(screen.queryByLabelText("Second remote pane")).not.toBeInTheDocument();
+    expect(within(screen.getByRole("tablist", { name: "Left pane tabs" })).getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["New tab", "edge:edge"]);
   });
 
   it("starts in the engine home, navigates above it, and queues engine-side upload", async () => {
@@ -320,8 +389,7 @@ describe("SFTP tabs", () => {
     try {
       render(<SFTPWorkspace aliases={["edge"]} />);
       await chooseHost("edge");
-      await userEvent.click(screen.getByRole("button", { name: "Two panes" }));
-      const second = screen.getByLabelText("Second remote pane");
+      const second = await openSecondPane();
       await userEvent.click(within(second).getByRole("button", { name: "Host" }));
       await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /Local.*sshc engine/ }));
       const local = screen.getByRole("region", { name: "Local files" });
@@ -376,8 +444,7 @@ describe("SFTP tabs", () => {
     try {
       const first = render(<SFTPWorkspace aliases={["edge"]} />);
       await chooseHost("edge");
-      await userEvent.click(screen.getByRole("button", { name: "Two panes" }));
-      const second = screen.getByLabelText("Second remote pane");
+      const second = await openSecondPane();
       await userEvent.click(within(second).getByRole("button", { name: "Host" }));
       await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /Local.*sshc engine/ }));
       const local = screen.getByRole("region", { name: "Local files" });
@@ -432,8 +499,7 @@ describe("SFTP tabs", () => {
     expect(within(remote).getByRole("button", { name: "Create or upload" })).toBeInTheDocument();
     expect(within(remote).getByRole("button", { name: "Search everything under this directory" })).toBeInTheDocument();
     expect(within(remote).getByRole("button", { name: "Open Terminal here" })).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Two panes" }));
-    const second = screen.getByLabelText("Second remote pane");
+    const second = await openSecondPane();
     await userEvent.click(within(second).getByRole("button", { name: "Host" }));
     await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /Local.*sshc engine/ }));
     const local = screen.getByRole("region", { name: "Local files" });
@@ -465,8 +531,7 @@ describe("SFTP tabs", () => {
     try {
       render(<SFTPWorkspace aliases={["edge"]} />);
       await chooseHost("edge");
-      await userEvent.click(screen.getByRole("button", { name: "Two panes" }));
-      const second = screen.getByLabelText("Second remote pane");
+      const second = await openSecondPane();
       await userEvent.click(within(second).getByRole("button", { name: "Host" }));
       await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /Local.*sshc engine/ }));
       const local = screen.getByRole("region", { name: "Local files" });
@@ -511,7 +576,7 @@ describe("SFTP tabs", () => {
     expect(within(local).getByRole("navigation", { name: "Local folder path" })).toHaveTextContent("//server/share/");
   });
 
-  it("keeps an unsaved edit mounted while the second pane is hidden", async () => {
+  it("keeps a tab with an unsaved edit in its pane", async () => {
     api.list.mockResolvedValue({
       path: "/remote",
       entries: [{ name: "notes.txt", path: "/remote/notes.txt", type: "file", size: 6, mode: "0644", modifiedAt: "", revision: "rev" }],
@@ -534,12 +599,15 @@ describe("SFTP tabs", () => {
     await userEvent.click(within(details).getByRole("button", { name: "Edit file" }));
     const editor = await screen.findByRole("textbox", { name: "Remote file contents" });
     await userEvent.type(editor, "changed");
+    await screen.findByText("Unsaved");
 
-    await userEvent.click(screen.getByRole("button", { name: "One pane" }));
-    expect(second).not.toBeVisible();
-    await userEvent.click(screen.getByRole("button", { name: "Two panes" }));
-
-    expect(second).toBeVisible();
+    // Moving would remount the panel and lose the edit, so the tab stays put.
+    const tab = within(second).getByRole("tab", { name: "edge:remote" });
+    expect(tab.closest("[draggable]")).toHaveAttribute("draggable", "false");
+    tab.focus();
+    await userEvent.keyboard("{Shift>}{ArrowLeft}{/Shift}");
+    expect(screen.getByLabelText("Second remote pane")).toBe(second);
+    expect(within(second).getByRole("tab", { name: "edge:remote" })).toBe(tab);
     expect(screen.getByRole("textbox", { name: "Remote file contents" })).toHaveValue("hello\nchanged");
   });
 
@@ -591,7 +659,7 @@ describe("SFTP tabs", () => {
       expect(screen.queryByRole("tablist", { name: "Right pane tabs" })).not.toBeInTheDocument();
       expect(screen.getByLabelText("First remote pane")).toBeVisible();
       expect(screen.getByLabelText("Second remote pane")).not.toBeVisible();
-      expect(screen.queryByRole("button", { name: "One pane" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("separator", { name: "Resize the panes" })).not.toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Compare directories" })).not.toBeInTheDocument();
       expect(window.localStorage.getItem("sshc.sftp.split")).toBe("true");
     } finally {
@@ -599,15 +667,17 @@ describe("SFTP tabs", () => {
     }
   });
 
-  it("sends an external target to the visible pane after leaving two-pane mode", async () => {
+  it("sends an external target to the remaining pane after the panes are rejoined", async () => {
     const handled = vi.fn();
     const { rerender } = render(
       <SFTPWorkspace aliases={["edge"]} onTargetHandled={handled} />,
     );
 
-    await userEvent.click(screen.getByRole("button", { name: "Two panes" }));
-    fireEvent.pointerDown(screen.getByLabelText("Second remote pane"));
-    await userEvent.click(screen.getByRole("button", { name: "One pane" }));
+    const second = await openSecondPane();
+    fireEvent.pointerDown(second);
+    within(second).getByRole("tab", { selected: true }).focus();
+    await userEvent.keyboard("{Shift>}{ArrowLeft}{/Shift}");
+    expect(screen.queryByLabelText("Second remote pane")).not.toBeInTheDocument();
     rerender(
       <SFTPWorkspace
         aliases={["edge"]}

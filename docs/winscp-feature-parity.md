@@ -44,7 +44,7 @@ sshcのSFTPは、安全なアップロード／ダウンロード、フォルダ
 | synchronized browsing | 未対応 | local panelはあるが連動操作は未実装 | 2 panel導入後 |
 | pathをclipboardへcopy | 対応 | 現在directoryと選択項目のfull pathをcopy可能 | 維持 |
 | opposite panelのpathへ移動 | 未対応 | local panelはあるが連動操作は未実装 | 2 panel導入後 |
-| directory stateのsession別記憶 | 部分 | URLへalias/pathを反映し、左右の全tabのalias/pathとsortを端末に保存する。1ペインへ戻した間も右tabを保持する | selectionとhistoryの再読み込み後復元は未対応 |
+| directory stateのsession別記憶 | 部分 | URLへalias/pathを反映し、左右の全tabのalias/pathとsort、ペインの分割を端末に保存する | selectionとhistoryの再読み込み後復元は未対応 |
 | 複数SFTP tab | 対応 | 左右それぞれ最大8tab。幅を超えたtab列は横scrollし、固定した追加操作と選択tabの自動追従を持つ。各tabが自分のhost、履歴、選択を持ち、開いていた場所を再読み込み後も復元する | 維持 |
 | panel内の名前filter | 対応 | 現在directoryを名前の部分一致で絞り込み | mask式は後続 |
 | remote配下の再帰file検索 | 対応 | symlinkを辿らないserver側上限付き検索を実装済み | 更新日時やサイズ条件は未対応 |

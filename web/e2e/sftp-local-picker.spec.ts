@@ -1,4 +1,5 @@
 import { changeDisplayLanguage, expect, openApplication, openSection, test } from "./support/environment";
+import { openSecondSFTPPane } from "./support/sftp";
 
 test("selects the pinned Local destination beside an SSH host", async ({ page, installation }) => {
   test.setTimeout(60_000);
@@ -26,7 +27,7 @@ test("selects the pinned Local destination beside an SSH host", async ({ page, i
   await page.getByRole("dialog").getByText("bastion", { exact: true }).click();
   await first.getByRole("button", { name: "接続" }).click();
   await expect(first.getByRole("button", { name: "README.md" })).toBeVisible();
-  await page.getByRole("button", { name: "2ペイン" }).click();
+  await openSecondSFTPPane(page, "新しいタブ");
   const second = page.getByLabel("2つ目のリモートペイン");
   await second.getByRole("button", { name: "ホスト" }).click();
   const picker = page.getByRole("dialog");

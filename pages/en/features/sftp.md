@@ -24,7 +24,7 @@ Select one row, or use the checkboxes to select multiple entries, to reveal down
 
 Sort by name, type, bytes or modified time. Permissions appear below the entry name. The selected host and directory are reflected in navigation state, so a terminal remote-path action can open the same location.
 
-On desktop, switch to `2 panes` to keep two remote hosts or directories open side by side. The current tab is copied into the right pane when it is opened for the first time. Both panes have their own tab strip and `+` action, with up to eight independent tabs per side. When the tabs exceed the pane width, only the tab strip scrolls horizontally; `+` stays available at the right edge, and the selected or newly opened tab scrolls into view. Each tab remembers its selected host and location on the device, and the right-side tabs remain available after returning to one pane.
+On desktop, drag a tab onto the file list to split the view into two panes. With one pane, dropping on the left or right half moves that tab into a new pane on that side and leaves a blank tab behind. With two panes, dropping on the other pane moves the tab there, and a pane whose last tab leaves closes. There are at most two panes, and the handle between them resizes the split. With the keyboard, select a tab and press `Shift`+`←` or `Shift`+`→` for the same moves. Both panes have their own tab strip and `+` action, with up to eight independent tabs per side. Tabs share one width whatever the host name; when they exceed the pane width they shrink and then scroll, and `+` stays at the right edge. Each tab remembers its host and location on the device, as does the split.
 
 Drag files or folders from the currently visible tab on one side to the visible tab on the other, then choose copy or move. Data streams directly between the two SFTP connections without a plaintext local spool file. A move within the same connection uses a server-side rename when possible.
 
@@ -36,7 +36,7 @@ Use **Compare** to recursively inspect the directories in the currently selected
 
 The pane action menu can open an SSH Terminal at the displayed directory. In the other direction, a remote directory reported by OSC 7 can be opened in SFTP from the Terminal action menu.
 
-Narrow panes emphasize the filename and place permissions, size, and modified time on one metadata line. Phones show one horizontally scrollable tab strip and one pane; the second connection and comparison stay inactive. Returning to desktop restores the saved right-side tabs.
+Narrow panes emphasize the filename and place permissions, size, and modified time on one metadata line. Phones show one horizontally scrollable tab strip and the left pane only; tab dragging, the right pane's connection and comparison stay inactive. Returning to desktop brings the right pane and its tabs back.
 
 ## Transfer Manager
 

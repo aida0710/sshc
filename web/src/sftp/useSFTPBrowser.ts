@@ -6,6 +6,9 @@ import { localHostAlias } from "./localHost";
 import { sourceFor, type SFTPListing } from "./sftpSource";
 
 export type SFTPLocation = { alias: string; path: string };
+// A restored location, plus whether it was live when the tab was put away. A
+// tab moved between panes was connected a moment ago and reopens at once.
+export type RestoredSFTPLocation = SFTPLocation & { connect?: boolean };
 
 type LoadOptions = {
   // Which host to list. Defaults to the current one; a target link names it
@@ -35,7 +38,7 @@ export function useSFTPBrowser({
   // Where a restored tab should reopen. Applied once, when the declared
   // aliases have arrived and can vouch for the host. A source that needs no
   // connection is read right away; one that does waits for connect().
-  initialLocation?: SFTPLocation | null;
+  initialLocation?: RestoredSFTPLocation | null;
   onLocationChange?: (alias: string, path: string) => void;
   // After every successful listing. `changed` says whether it is a different
   // directory (or host) from the one shown before.
@@ -170,10 +173,11 @@ export function useSFTPBrowser({
     setPath(initialLocation.path);
     setConnected(false);
     latest.current = { alias: initialLocation.alias, path: initialLocation.path };
-    // Restored tabs remember where they were, but never open an SSH connection
-    // until the user explicitly presses Connect. The engine's own disk needs
-    // no connection, so it is read at once.
-    if (!restored.can.connect) void load(initialLocation.path, { alias: initialLocation.alias });
+    // Tabs restored from storage remember where they were, but never open an
+    // SSH connection until the user explicitly presses Connect. The engine's
+    // own disk needs no connection, and a tab that was connected when it moved
+    // between panes reopens at once.
+    if (!restored.can.connect || initialLocation.connect === true) void load(initialLocation.path, { alias: initialLocation.alias });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aliases, initialLocation?.alias, initialLocation?.path]);
 

@@ -1,155 +1,44 @@
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import type { HostEntry } from "../api/config";
 import type { NavigationBlocker } from "../routing/useSectionRoute";
 import { useTranslate } from "../i18n/context";
-import { Icon } from "../ui/icons";
-import { activateTabFromKeyboard } from "../ui/tabKeyboard";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
+import { SplitResizeHandle } from "../ui/SplitResizeHandle";
 import { useCompactViewport } from "../ui/useMediaQuery";
-import { SFTPPanel, type SFTPSort, type SFTPSortState, type SFTPTarget } from "./SFTPPanel";
-import { isLocalPath, localHostAlias } from "./localHost";
+import { SFTPPanel, type SFTPTarget } from "./SFTPPanel";
+import type { RestoredSFTPLocation } from "./useSFTPBrowser";
+import { localHostAlias } from "./localHost";
 import { SFTPCompareDialog } from "./SFTPCompareDialog";
+import { SFTPTabDropTarget } from "./SFTPTabDropTarget";
+import { SFTPTabStrip, tabElementId, tabPanelElementId } from "./SFTPTabStrip";
 import { TransferManagerList } from "./TransferManagerList";
+import { rememberPanes, rememberSplitRatio, restorePanes, restoreSplitRatio } from "./sftpPaneStorage";
+import {
+  activeTab, addTab, allTabs, blankTab, canSplit, closeTab, findTab, moveTab, relocateTab, resortTab, selectTab,
+  type PaneSide, type SFTPPane, type SFTPTab, type TabDestination,
+} from "./sftpPanes";
 
-const storageKey = "sshc.sftp.tabs";
-const activeStorageKey = "sshc.sftp.activeTab";
-const splitStorageKey = "sshc.sftp.split";
-const secondaryStorageKey = "sshc.sftp.secondary";
-const secondaryTabsStorageKey = "sshc.sftp.secondaryTabs";
-const secondaryActiveStorageKey = "sshc.sftp.secondaryActiveTab";
-const maxTabs = 8;
-
-type SFTPTab = { id: string; alias: string; path: string; sort: SFTPSortState };
-type SFTPLocation = { alias: string; path: string };
-type SFTPPane = "primary" | "secondary";
-type CloseTabIntent = { pane: SFTPPane; id: string; path: string };
-
-function tabStateKey(pane: SFTPPane, id: string): string {
-  return `${pane}:${id}`;
+// One stable callback per tab, so a panel's effect that depends on it does not
+// re-run on every render of the workspace.
+function useCallbackPerTab<T>(handle: (tabId: string, value: T) => void) {
+  const callbacks = useRef(new Map<string, (value: T) => void>());
+  const latest = useRef(handle);
+  latest.current = handle;
+  const forTab = useCallback((tabId: string) => {
+    const existing = callbacks.current.get(tabId);
+    if (existing !== undefined) return existing;
+    const created = (value: T) => latest.current(tabId, value);
+    callbacks.current.set(tabId, created);
+    return created;
+  }, []);
+  const forget = useCallback((tabId: string) => { callbacks.current.delete(tabId); }, []);
+  return { forTab, forget };
 }
 
-function identifier(): string {
-  return globalThis.crypto?.randomUUID?.() ?? `tab_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-}
-
-function blankTab(): SFTPTab {
-  return { id: identifier(), alias: "", path: "", sort: { key: "name", direction: "ascending" } };
-}
-
-function restoredSort(value: Record<string, unknown>): SFTPSortState {
-  const keys: readonly SFTPSort[] = ["name", "type", "size", "modified"];
-  const key = typeof value.sortKey === "string" && keys.includes(value.sortKey as SFTPSort)
-    ? value.sortKey as SFTPSort
-    : "name";
-  const direction = value.sortDirection === "descending" ? "descending" : "ascending";
-  return { key, direction };
-}
-
-function restoreTabs(key: string, blankWhenEmpty: boolean): SFTPTab[] {
-  try {
-    const raw: unknown = JSON.parse(window.localStorage.getItem(key) ?? "[]");
-    if (!Array.isArray(raw)) return blankWhenEmpty ? [blankTab()] : [];
-    const tabs = raw.flatMap((value): SFTPTab[] => {
-      if (typeof value !== "object" || value === null) return [];
-      const tab = value as Record<string, unknown>;
-      const alias = typeof tab.alias === "string" ? tab.alias : "";
-      const path = typeof tab.path === "string" &&
-        (alias === localHostAlias ? isLocalPath(tab.path) : tab.path.startsWith("/")) ? tab.path : "";
-      return [{ id: identifier(), alias, path, sort: restoredSort(tab) }];
-    }).slice(0, maxTabs);
-    return tabs.length === 0 && blankWhenEmpty ? [blankTab()] : tabs;
-  } catch {
-    return blankWhenEmpty ? [blankTab()] : [];
-  }
-}
-
-function restorePrimaryTabs(): SFTPTab[] {
-  return restoreTabs(storageKey, true);
-}
-
-function restoreSecondaryTabs(): SFTPTab[] {
-  const tabs = restoreTabs(secondaryTabsStorageKey, false);
-  if (tabs.length > 0) return tabs;
-  const legacy = restoreSecondary();
-  return legacy.alias === "" && legacy.path === "" ? [] : [{ id: identifier(), ...legacy, sort: { key: "name", direction: "ascending" } }];
-}
-
-function rememberTabs(key: string, tabs: SFTPTab[]): void {
-  try {
-    window.localStorage.setItem(key, JSON.stringify(tabs.map(({ alias, path, sort }) => ({
-      alias,
-      path,
-      sortKey: sort.key,
-      sortDirection: sort.direction,
-    }))));
-  } catch {
-    // A browser that refuses storage still keeps the tabs for this session.
-  }
-}
-
-function restoreActive(key: string, tabs: SFTPTab[]): string {
-  try {
-    const index = Number.parseInt(window.localStorage.getItem(key) ?? "0", 10);
-    return tabs[Number.isInteger(index) && index >= 0 && index < tabs.length ? index : 0]?.id ?? "";
-  } catch {
-    return tabs[0]?.id ?? "";
-  }
-}
-
-function rememberActive(key: string, id: string, tabs: SFTPTab[]): void {
-  try {
-    const index = tabs.findIndex((tab) => tab.id === id);
-    window.localStorage.setItem(key, String(index < 0 ? 0 : index));
-  } catch {
-    // Storage is a convenience. The selected tab still works for this session.
-  }
-}
-
-function restoreSplit(): boolean {
-  try {
-    return window.localStorage.getItem(splitStorageKey) === "true";
-  } catch {
-    return false;
-  }
-}
-
-function restoreSecondary(): SFTPLocation {
-  try {
-    const raw: unknown = JSON.parse(window.localStorage.getItem(secondaryStorageKey) ?? "{}");
-    if (typeof raw !== "object" || raw === null) return { alias: "", path: "" };
-    const value = raw as Record<string, unknown>;
-    return {
-      alias: typeof value.alias === "string" ? value.alias : "",
-      path: typeof value.path === "string" && value.path.startsWith("/") ? value.path : "",
-    };
-  } catch {
-    return { alias: "", path: "" };
-  }
-}
-
-function rememberSplit(split: boolean): void {
-  try {
-    window.localStorage.setItem(splitStorageKey, String(split));
-  } catch {
-    // Storage is a convenience. The open panes still work for this session.
-  }
-}
-
-function tabLabel(tab: SFTPTab, unnamed: string, localName: string): string {
-  if (tab.alias === "") return unnamed;
-  const name = tab.alias === localHostAlias ? localName : tab.alias;
-  if (tab.path === "" || tab.path === "/") return name;
-  const directory = tab.path.split("/").filter(Boolean).pop() ?? tab.path;
-  return `${name}:${directory}`;
-}
-
-function activeTab(tabs: SFTPTab[], activeId: string): SFTPTab | undefined {
-  return tabs.find((tab) => tab.id === activeId) ?? tabs[0];
-}
-
-// Both panes own the same tab model. Each visible tab keeps its own host,
-// history and selection, while the transfer queue remains global to the
-// engine and is drawn only once below the panes.
+// The workspace lays one or two panes side by side. Each pane has its own tab
+// strip; a tab dragged onto a pane moves there, and a tab dragged beside the
+// only pane opens the second one. The transfer queue is global to the engine
+// and is drawn once below the panes.
 export function SFTPWorkspace({
   aliases,
   hosts,
@@ -168,384 +57,249 @@ export function SFTPWorkspace({
   onOpenTerminal?: (alias: string, path: string) => void | Promise<void>;
 }) {
   const t = useTranslate();
-  const [tabs, setTabs] = useState<SFTPTab[]>(restorePrimaryTabs);
-  const [activeId, setActiveId] = useState(() => restoreActive(activeStorageKey, tabs));
-  const [split, setSplit] = useState(restoreSplit);
-  const [secondaryTabs, setSecondaryTabs] = useState<SFTPTab[]>(() => {
-    const restored = restoreSecondaryTabs();
-    if (restored.length > 0 || !restoreSplit()) return restored;
-    const source = activeTab(tabs, activeId) ?? blankTab();
-    return [{ ...source, id: identifier() }];
-  });
-  const [secondaryActiveId, setSecondaryActiveId] = useState(() => restoreActive(secondaryActiveStorageKey, secondaryTabs));
-  const [focusedPane, setFocusedPane] = useState<SFTPPane>("primary");
+  const [panes, setPanes] = useState<SFTPPane[]>(restorePanes);
+  const [splitRatio, setSplitRatio] = useState(restoreSplitRatio);
+  const [focusedPaneId, setFocusedPaneId] = useState(() => panes[0]?.id ?? "");
+  const [draggedTabId, setDraggedTabId] = useState<string | null>(null);
   const [compareOpen, setCompareOpen] = useState(false);
   const [openQueueRequest, setOpenQueueRequest] = useState(0);
   const [dirtyTabs, setDirtyTabs] = useState<Map<string, string>>(() => new Map());
-  const [closeTabIntent, setCloseTabIntent] = useState<CloseTabIntent | null>(null);
+  const [closeTabIntent, setCloseTabIntent] = useState<{ tabId: string; path: string } | null>(null);
   const workspaceRoot = useRef<HTMLElement | null>(null);
   const compactViewport = useCompactViewport(workspaceRoot);
   // Restoring is a one-shot per tab: once a panel has opened its remembered
   // directory, later navigation inside it must not be pulled back.
-  const restoring = useRef<Record<SFTPPane, Map<string, SFTPLocation>>>({
-    primary: new Map(tabs.map((tab) => [tab.id, { alias: tab.alias, path: tab.path }])),
-    secondary: new Map(secondaryTabs.map((tab) => [tab.id, { alias: tab.alias, path: tab.path }])),
-  });
-  const tabScrollers = useRef<Record<SFTPPane, HTMLDivElement | null>>({ primary: null, secondary: null });
-  const blockers = useRef<{ primary: NavigationBlocker | null; secondary: NavigationBlocker | null }>({ primary: null, secondary: null });
-  const dirtyReporters = useRef(new Map<string, (path: string | null) => void>());
-  const active = tabs.some((tab) => tab.id === activeId) ? activeId : tabs[0]?.id ?? "";
-  const secondaryActive = secondaryTabs.some((tab) => tab.id === secondaryActiveId)
-    ? secondaryActiveId
-    : secondaryTabs[0]?.id ?? "";
-  const visibleSplit = split && !compactViewport;
+  const restoring = useRef(new Map<string, RestoredSFTPLocation>(allTabs(panes).map((tab) => [tab.id, { alias: tab.alias, path: tab.path }])));
+  const blockers = useRef(new Map<string, NavigationBlocker>());
+  const visibleSplit = panes.length > 1 && !compactViewport;
+  const leftPane = panes[0] ?? null;
+  const rightPane = panes[1] ?? null;
+  const focusedPane = panes.find((pane) => pane.id === focusedPaneId) ?? leftPane;
+
+  useEffect(() => { rememberPanes(panes); }, [panes]);
 
   useEffect(() => {
-    for (const pane of (["primary", "secondary"] as const)) {
-      if (pane === "secondary" && !visibleSplit) continue;
-      const selected = tabScrollers.current[pane]?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');
-      selected?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
-    }
-  }, [active, secondaryActive, visibleSplit]);
-
-  useEffect(() => {
-    if (!compactViewport) return;
-    setFocusedPane("primary");
+    if (!compactViewport || leftPane === null) return;
+    setFocusedPaneId(leftPane.id);
     setCompareOpen(false);
-  }, [compactViewport]);
+  }, [compactViewport, leftPane]);
 
-  function commit(pane: SFTPPane, next: SFTPTab[]) {
-    if (pane === "primary") {
-      setTabs(next);
-      rememberTabs(storageKey, next);
-      return;
-    }
-    setSecondaryTabs(next);
-    rememberTabs(secondaryTabsStorageKey, next);
-  }
+  useEffect(() => {
+    if (draggedTabId !== null && findTab(panes, draggedTabId) === null) setDraggedTabId(null);
+  }, [draggedTabId, panes]);
 
-  function relocate(pane: SFTPPane, id: string, alias: string, path: string) {
-    restoring.current[pane].delete(id);
-    const update = (current: SFTPTab[]) => {
-      const next = current.map((tab) => tab.id === id ? { ...tab, alias, path } : tab);
-      if (next.every((tab, index) => tab.alias === current[index]?.alias && tab.path === current[index]?.path)) {
-        return current;
-      }
-      rememberTabs(pane === "primary" ? storageKey : secondaryTabsStorageKey, next);
-      return next;
-    };
-    if (pane === "primary") setTabs(update);
-    else setSecondaryTabs(update);
-  }
-
-  function resort(pane: SFTPPane, id: string, sort: SFTPSortState) {
-    const update = (current: SFTPTab[]) => {
-      const next = current.map((tab) => tab.id === id ? { ...tab, sort } : tab);
-      rememberTabs(pane === "primary" ? storageKey : secondaryTabsStorageKey, next);
-      return next;
-    };
-    if (pane === "primary") setTabs(update);
-    else setSecondaryTabs(update);
-  }
-
-  function addTab(pane: SFTPPane) {
-    const current = pane === "primary" ? tabs : secondaryTabs;
-    if (current.length >= maxTabs) return;
-    const opened = blankTab();
-    const next = [...current, opened];
-    commit(pane, next);
-    if (pane === "primary") setActiveId(opened.id);
-    else setSecondaryActiveId(opened.id);
-    rememberActive(pane === "primary" ? activeStorageKey : secondaryActiveStorageKey, opened.id, next);
-    setFocusedPane(pane);
-  }
-
-  function closeTab(pane: SFTPPane, id: string) {
-    const current = pane === "primary" ? tabs : secondaryTabs;
-    const currentActive = pane === "primary" ? active : secondaryActive;
-    const index = current.findIndex((tab) => tab.id === id);
-    if (index < 0) return;
-    const stateKey = tabStateKey(pane, id);
-    setDirtyTabs((current) => {
-      if (!current.has(stateKey)) return current;
-      const next = new Map(current);
-      next.delete(stateKey);
-      return next;
-    });
-    dirtyReporters.current.delete(stateKey);
-    restoring.current[pane].delete(id);
-    const remaining = current.filter((tab) => tab.id !== id);
-    const next = remaining.length === 0 ? [blankTab()] : remaining;
-    commit(pane, next);
-    const activeKey = pane === "primary" ? activeStorageKey : secondaryActiveStorageKey;
-    if (id !== currentActive) {
-      rememberActive(activeKey, currentActive, next);
-      return;
-    }
-    const nextActive = (next[Math.min(index, next.length - 1)] ?? next[0])?.id ?? "";
-    if (pane === "primary") setActiveId(nextActive);
-    else setSecondaryActiveId(nextActive);
-    rememberActive(activeKey, nextActive, next);
-  }
-
-  const updateDirtyTab = useCallback((key: string, path: string | null) => {
-    setDirtyTabs((current) => {
-      if (path === null) {
-        if (!current.has(key)) return current;
-        const next = new Map(current);
-        next.delete(key);
-        return next;
-      }
-      if (current.get(key) === path) return current;
-      return new Map(current).set(key, path);
-    });
-  }, []);
-
-  const dirtyReporter = useCallback((pane: SFTPPane, id: string) => {
-    const key = tabStateKey(pane, id);
-    const existing = dirtyReporters.current.get(key);
-    if (existing !== undefined) return existing;
-    const created = (path: string | null) => updateDirtyTab(key, path);
-    dirtyReporters.current.set(key, created);
-    return created;
-  }, [updateDirtyTab]);
-
-  function requestCloseTab(pane: SFTPPane, tab: SFTPTab) {
-    const dirtyPath = dirtyTabs.get(tabStateKey(pane, tab.id));
-    if (dirtyPath !== undefined) {
-      setCloseTabIntent({ pane, id: tab.id, path: dirtyPath });
-      return;
-    }
-    closeTab(pane, tab.id);
-  }
-
-  function switchTab(pane: SFTPPane, id: string) {
-    if (pane === "primary") setActiveId(id);
-    else setSecondaryActiveId(id);
-    rememberActive(pane === "primary" ? activeStorageKey : secondaryActiveStorageKey, id, pane === "primary" ? tabs : secondaryTabs);
-    setFocusedPane(pane);
-  }
-
-  function moveWithKeyboard(pane: SFTPPane, event: ReactKeyboardEvent<HTMLButtonElement>, index: number) {
-    const current = pane === "primary" ? tabs : secondaryTabs;
-    activateTabFromKeyboard(event, index, current, (tab) => switchTab(pane, tab.id));
-  }
-
-  function toggleSplit() {
-    const next = !split;
-    if (next && secondaryTabs.length === 0) {
-      const source = activeTab(tabs, active) ?? blankTab();
-      const copy = { ...source, id: identifier() };
-      restoring.current.secondary.set(copy.id, { alias: copy.alias, path: copy.path });
-      setSecondaryTabs([copy]);
-      setSecondaryActiveId(copy.id);
-      rememberTabs(secondaryTabsStorageKey, [copy]);
-      rememberActive(secondaryActiveStorageKey, copy.id, [copy]);
-    }
-    if (!next) setFocusedPane("primary");
-    setSplit(next);
-    rememberSplit(next);
-  }
-
-  const updateBlocker = useCallback((pane: "primary" | "secondary", blocker: NavigationBlocker | null) => {
-    blockers.current[pane] = blocker;
-    const current = blockers.current;
-    if (current.primary === null && current.secondary === null) {
-      onNavigationBlockerChange?.(null);
-      return;
-    }
-    onNavigationBlockerChange?.((next) => {
-      if (current.primary !== null && !current.primary(next)) return false;
-      if (current.secondary !== null && !current.secondary(next)) return false;
-      return true;
-    });
+  const publishBlockers = useCallback(() => {
+    const active = [...blockers.current.values()];
+    onNavigationBlockerChange?.(active.length === 0 ? null : (next) => active.every((blocker) => blocker(next)));
   }, [onNavigationBlockerChange]);
 
-  const updatePrimaryBlocker = useCallback((blocker: NavigationBlocker | null) => {
-    updateBlocker("primary", blocker);
-  }, [updateBlocker]);
-  const updateSecondaryBlocker = useCallback((blocker: NavigationBlocker | null) => {
-    updateBlocker("secondary", blocker);
-  }, [updateBlocker]);
+  const blockerReporter = useCallbackPerTab<NavigationBlocker | null>((tabId, blocker) => {
+    if (blocker === null) blockers.current.delete(tabId);
+    else blockers.current.set(tabId, blocker);
+    publishBlockers();
+  });
 
-  const primaryLocation = activeTab(tabs, active);
-  const secondaryLocation = activeTab(secondaryTabs, secondaryActive);
+  const dirtyReporter = useCallbackPerTab<string | null>((tabId, path) => {
+    setDirtyTabs((current) => {
+      if (path === null) {
+        if (!current.has(tabId)) return current;
+        const next = new Map(current);
+        next.delete(tabId);
+        return next;
+      }
+      if (current.get(tabId) === path) return current;
+      return new Map(current).set(tabId, path);
+    });
+  });
 
-  useEffect(() => {
-    if (target === null || primaryLocation?.alias !== localHostAlias ||
-      (visibleSplit && secondaryLocation?.alias !== localHostAlias)) return;
-    const id = primaryLocation.id;
-    const alias = aliases.includes(target.alias) ? target.alias : "";
-    restoring.current.primary.set(id, { alias, path: "" });
-    setTabs((current) => {
-      const next = current.map((tab) => tab.id === id ? { ...tab, alias, path: "" } : tab);
-      rememberTabs(storageKey, next);
+  function forgetTab(tabId: string) {
+    restoring.current.delete(tabId);
+    blockers.current.delete(tabId);
+    blockerReporter.forget(tabId);
+    dirtyReporter.forget(tabId);
+    setDirtyTabs((current) => {
+      if (!current.has(tabId)) return current;
+      const next = new Map(current);
+      next.delete(tabId);
       return next;
     });
-    setFocusedPane("primary");
-  }, [target, primaryLocation?.id, primaryLocation?.alias, secondaryLocation?.alias, visibleSplit, aliases]);
+  }
 
-  function renderTabs(pane: SFTPPane) {
-    const current = pane === "primary" ? tabs : secondaryTabs;
-    const currentActive = pane === "primary" ? active : secondaryActive;
+  function openTab(pane: SFTPPane) {
+    const opened = blankTab();
+    setPanes((current) => addTab(current, pane.id, opened));
+    setFocusedPaneId(pane.id);
+  }
+
+  function removeTab(tabId: string) {
+    forgetTab(tabId);
+    setPanes((current) => closeTab(current, tabId));
+  }
+
+  function requestCloseTab(tab: SFTPTab) {
+    const dirtyPath = dirtyTabs.get(tab.id);
+    if (dirtyPath !== undefined) {
+      setCloseTabIntent({ tabId: tab.id, path: dirtyPath });
+      return;
+    }
+    removeTab(tab.id);
+  }
+
+  function chooseTab(pane: SFTPPane, tabId: string) {
+    setPanes((current) => selectTab(current, tabId));
+    setFocusedPaneId(pane.id);
+  }
+
+  // A moved tab is unmounted from one pane and mounted in the other, so the
+  // new panel reopens the directory the tab was showing. A tab still waiting
+  // for Connect since it was restored keeps waiting.
+  function placeTab(tabId: string, destination: TabDestination) {
+    const found = findTab(panes, tabId);
+    if (found === null) return;
+    const next = moveTab(panes, tabId, destination);
+    if (next === panes) return;
+    const live = !restoring.current.has(tabId);
+    restoring.current.set(tabId, { alias: found.tab.alias, path: found.tab.path, connect: live });
+    setPanes(next);
+    setFocusedPaneId(findTab(next, tabId)?.pane.id ?? next[0]?.id ?? "");
+  }
+
+  function moveTabWithKeyboard(tabId: string, side: PaneSide) {
+    const found = findTab(panes, tabId);
+    if (found === null) return;
+    const neighbour = side === "left" ? panes[panes.indexOf(found.pane) - 1] : panes[panes.indexOf(found.pane) + 1];
+    if (neighbour !== undefined) placeTab(tabId, { paneId: neighbour.id });
+    else if (panes.length === 1) placeTab(tabId, { side });
+  }
+
+  function dropTab(pane: SFTPPane, side: PaneSide | null) {
+    const tabId = draggedTabId;
+    setDraggedTabId(null);
+    if (tabId === null) return;
+    placeTab(tabId, side === null ? { paneId: pane.id } : { side });
+  }
+
+  const changeSplitRatio = (ratio: number) => {
+    setSplitRatio(ratio);
+    rememberSplitRatio(ratio);
+  };
+
+  const leftLocation = leftPane === null ? null : activeTab(leftPane);
+  const rightLocation = rightPane === null ? null : activeTab(rightPane);
+
+  // A request from another screen names a host. When the visible tabs all show
+  // the engine's own disk, the left tab switches to that host first.
+  useEffect(() => {
+    if (target === null || leftLocation === null || leftLocation.alias !== localHostAlias ||
+      (visibleSplit && rightLocation?.alias !== localHostAlias)) return;
+    const alias = aliases.includes(target.alias) ? target.alias : "";
+    restoring.current.set(leftLocation.id, { alias, path: "" });
+    setPanes((current) => relocateTab(current, leftLocation.id, alias, ""));
+    if (leftPane !== null) setFocusedPaneId(leftPane.id);
+  }, [target, leftPane, leftLocation, rightLocation?.alias, visibleSplit, aliases]);
+
+  const compareEnabled = visibleSplit && leftLocation !== null && rightLocation !== null &&
+    leftLocation.alias !== "" && rightLocation.alias !== "" &&
+    leftLocation.alias !== localHostAlias && rightLocation.alias !== localHostAlias;
+
+  function renderPane(pane: SFTPPane, index: number) {
+    const concealed = index > 0 && !visibleSplit;
+    const other = index === 0 ? rightLocation : leftLocation;
+    const otherVisible = visibleSplit ? other : null;
+    const last = index === panes.length - 1;
+    const closable = pane.tabs.length > 1 || panes.length > 1;
+    const dropPlacement = draggedTabId === null || compactViewport ? null
+      : panes.length > 1 ? (findTab(panes, draggedTabId)?.pane.id === pane.id ? null : "whole" as const)
+        : canSplit(panes) ? "halves" as const : null;
     return (
-      <div data-sftp-pane-tabs={pane} className="flex min-w-0 flex-1 items-stretch">
+      <Fragment key={pane.id}>
+        {index > 0 && visibleSplit ? (
+          <SplitResizeHandle direction="horizontal" ratio={splitRatio} label={t("sftp.resizePanes")} onRatioChange={changeSplitRatio} />
+        ) : null}
         <div
-          ref={(node) => { tabScrollers.current[pane] = node; }}
-          role="tablist"
-          aria-label={t(pane === "primary" ? "sftp.primaryTabs" : "sftp.secondaryTabs")}
-          className="flex min-w-0 flex-1 items-stretch overflow-x-auto overscroll-x-contain"
+          className="flex min-h-0 min-w-0 flex-col"
+          style={{ flexBasis: visibleSplit ? `${index === 0 ? splitRatio : 100 - splitRatio}%` : "100%" }}
+          hidden={concealed}
+          aria-label={t(index === 0 ? "sftp.firstPane" : "sftp.secondPane")}
+          onPointerDown={() => setFocusedPaneId(pane.id)}
+          onFocusCapture={() => setFocusedPaneId(pane.id)}
         >
-          {current.map((tab, index) => {
-            const label = tabLabel(tab, t("sftp.newTab"), t("sftp.local.connection"));
-            const selected = tab.id === currentActive;
-            return (
-              <span
-                key={tab.id}
-                className={`group relative flex shrink-0 items-center border-b-2 ${selected ? "border-accent bg-select-fill/40" : "border-transparent hover:bg-toolbar/60"}`}
+          <SFTPTabStrip
+            pane={pane}
+            label={t(index === 0 ? "sftp.primaryTabs" : "sftp.secondaryTabs")}
+            closable={closable}
+            movable={(tab) => !compactViewport && !dirtyTabs.has(tab.id)}
+            trailing={last && visibleSplit ? (
+              <button
+                type="button"
+                aria-label={t("sftp.compare.heading")}
+                title={t("sftp.compare.heading")}
+                disabled={!compareEnabled}
+                onClick={() => setCompareOpen(true)}
+                className="flex shrink-0 items-center gap-1.5 rounded px-2.5 text-sm text-ink-muted hover:bg-card/50 hover:text-ink disabled:text-ink-faint"
               >
-                <button
-                  type="button"
-                  role="tab"
-                  id={`sftp-${pane}-tab-${tab.id}`}
-                  aria-selected={selected}
-                  aria-controls={`sftp-${pane}-tabpanel-${tab.id}`}
-                  tabIndex={selected ? 0 : -1}
-                  onClick={() => switchTab(pane, tab.id)}
-                  onKeyDown={(event) => moveWithKeyboard(pane, event, index)}
-                  className={`min-h-12 max-w-64 truncate px-4 py-3 text-left text-sm ${selected ? "font-medium text-ink" : "text-ink-muted"}`}
+                <span aria-hidden="true">⇄</span>
+                {t("sftp.compare.action")}
+              </button>
+            ) : null}
+            onSelect={(tabId) => chooseTab(pane, tabId)}
+            onClose={requestCloseTab}
+            onAdd={() => openTab(pane)}
+            onDragStart={setDraggedTabId}
+            onDragEnd={() => setDraggedTabId(null)}
+            onMove={moveTabWithKeyboard}
+          />
+          <div data-sftp-pane-content={pane.id} className="relative flex min-h-0 min-w-0 flex-1 flex-col pt-2">
+            {pane.tabs.map((tab) => {
+              const selected = tab.id === pane.activeId;
+              const restored = restoring.current.get(tab.id);
+              const ownsTarget = selected && tab.alias !== localHostAlias &&
+                (compactViewport ? index === 0 : otherVisible?.alias === localHostAlias || focusedPane?.id === pane.id);
+              return (
+                <div
+                  key={tab.id}
+                  id={tabPanelElementId(tab.id)}
+                  role="tabpanel"
+                  aria-labelledby={tabElementId(tab.id)}
+                  hidden={!selected}
+                  className={selected ? "flex min-h-0 min-w-0 flex-1 flex-col" : ""}
                 >
-                  {label}
-                </button>
-                {current.length > 1 ? (
-                  <button
-                    type="button"
-                    aria-label={t("sftp.closeTab", { name: label })}
-                    onClick={() => requestCloseTab(pane, tab)}
-                    className="flex size-12 items-center justify-center text-ink-faint hover:text-danger md:w-9"
-                  >
-                    <Icon name="close" className="size-3" />
-                  </button>
-                ) : null}
-              </span>
-            );
-          })}
+                  <SFTPPanel
+                    aliases={aliases}
+                    {...(hosts === undefined ? {} : { hosts })}
+                    target={ownsTarget ? target : null}
+                    initialLocation={restored === undefined || restored.alias === "" ? null : restored}
+                    initialSort={tab.sort}
+                    showTransfers={false}
+                    counterpart={otherVisible?.alias && otherVisible.path ? { alias: otherVisible.alias, path: otherVisible.path } : null}
+                    onQueueOpen={() => setOpenQueueRequest((current) => current + 1)}
+                    {...(selected ? { onNavigationBlockerChange: blockerReporter.forTab(tab.id) } : {})}
+                    onDirtyChange={dirtyReporter.forTab(tab.id)}
+                    {...(onNavigateLocation === undefined ? {} : { onNavigateLocation })}
+                    {...(onOpenTerminal === undefined ? {} : { onOpenTerminal })}
+                    {...(ownsTarget ? { onTargetHandled } : {})}
+                    onLocationChange={(alias, path) => {
+                      restoring.current.delete(tab.id);
+                      setPanes((current) => relocateTab(current, tab.id, alias, path));
+                    }}
+                    onSortChange={(sort) => setPanes((current) => resortTab(current, tab.id, sort))}
+                  />
+                </div>
+              );
+            })}
+            {dropPlacement === null ? null : (
+              <SFTPTabDropTarget placement={dropPlacement} onDrop={(side) => dropTab(pane, side)} />
+            )}
+          </div>
         </div>
-        <button
-          type="button"
-          aria-label={t("sftp.newTab")}
-          disabled={current.length >= maxTabs}
-          onClick={() => addTab(pane)}
-          className="flex size-12 shrink-0 items-center justify-center text-ink-muted hover:bg-toolbar hover:text-ink disabled:text-ink-faint"
-        >
-          <Icon name="plus" className="size-4" />
-        </button>
-      </div>
-    );
-  }
-
-  function renderPane(pane: SFTPPane, concealed = false) {
-    const current = pane === "primary" ? tabs : secondaryTabs;
-    const currentActive = pane === "primary" ? active : secondaryActive;
-    const blocker = pane === "primary" ? updatePrimaryBlocker : updateSecondaryBlocker;
-    return (
-      <div
-        className="flex min-h-0 min-w-0 flex-col"
-        hidden={concealed}
-        aria-label={t(pane === "primary" ? "sftp.firstPane" : "sftp.secondPane")}
-        onPointerDown={() => setFocusedPane(pane)}
-        onFocusCapture={() => setFocusedPane(pane)}
-      >
-        {current.map((tab) => {
-          const selected = tab.id === currentActive;
-          const restored = restoring.current[pane].get(tab.id);
-          const other = pane === "primary" ? secondaryLocation : primaryLocation;
-          const otherVisible = visibleSplit ? other : undefined;
-          const ownsTarget = selected && tab.alias !== localHostAlias &&
-            (compactViewport ? pane === "primary" : otherVisible?.alias === localHostAlias || focusedPane === pane);
-          return (
-            <div
-              key={tab.id}
-              id={`sftp-${pane}-tabpanel-${tab.id}`}
-              role="tabpanel"
-              aria-labelledby={`sftp-${pane}-tab-${tab.id}`}
-              hidden={!selected}
-              className={selected ? "flex min-h-0 min-w-0 flex-1 flex-col" : ""}
-            >
-              <SFTPPanel
-                aliases={aliases}
-                {...(hosts === undefined ? {} : { hosts })}
-                target={ownsTarget ? target : null}
-                initialLocation={restored === undefined || restored.alias === "" ? null : restored}
-                initialSort={tab.sort}
-                showTransfers={false}
-                counterpart={otherVisible?.alias && otherVisible.path ? { alias: otherVisible.alias, path: otherVisible.path } : null}
-                onQueueOpen={() => setOpenQueueRequest((current) => current + 1)}
-                {...(selected ? { onNavigationBlockerChange: blocker } : {})}
-                onDirtyChange={dirtyReporter(pane, tab.id)}
-                {...(onNavigateLocation === undefined ? {} : { onNavigateLocation })}
-                {...(onOpenTerminal === undefined ? {} : { onOpenTerminal })}
-                {...(ownsTarget ? { onTargetHandled } : {})}
-                onLocationChange={(alias, path) => relocate(pane, tab.id, alias, path)}
-                onSortChange={(sort) => resort(pane, tab.id, sort)}
-              />
-            </div>
-          );
-        })}
-      </div>
-    );
-  }
-
-  function renderPaneActions() {
-    return (
-      <>
-        <button
-          type="button"
-          aria-label={t("sftp.compare.heading")}
-          title={t("sftp.compare.heading")}
-          disabled={!visibleSplit || !primaryLocation?.alias || !secondaryLocation?.alias ||
-            primaryLocation.alias === localHostAlias || secondaryLocation.alias === localHostAlias}
-          onClick={() => setCompareOpen(true)}
-          className="mr-1 hidden h-9 shrink-0 self-center items-center gap-1.5 rounded-md px-3 text-sm text-ink-muted hover:bg-toolbar hover:text-ink disabled:text-ink-faint lg:flex"
-        >
-          <span aria-hidden="true">⇄</span>
-          {t("sftp.compare.action")}
-        </button>
-        <button
-          type="button"
-          aria-pressed={split}
-          aria-label={t(split ? "sftp.singlePane" : "sftp.splitPane")}
-          title={t(split ? "sftp.singlePane" : "sftp.splitPane")}
-          onClick={toggleSplit}
-          className={`mr-1 hidden h-9 shrink-0 self-center items-center gap-1.5 rounded-md px-3 text-sm lg:flex ${split ? "bg-select-fill text-ink" : "text-ink-muted hover:bg-toolbar hover:text-ink"}`}
-        >
-          <Icon name="inspector" className="size-3.5" />
-          {t(split ? "sftp.singlePane" : "sftp.splitPane")}
-        </button>
-      </>
+      </Fragment>
     );
   }
 
   return (
     <section ref={workspaceRoot} className="flex h-full min-h-0 min-w-0 flex-col" aria-label={t("sftp.tabs")}>
-      <div className="flex min-h-12 shrink-0 items-stretch border-b border-line/60">
-        <div className={`flex min-w-0 ${visibleSplit ? "w-1/2 flex-none" : "flex-1"}`}>
-          {renderTabs("primary")}
-        </div>
-        {secondaryTabs.length > 0 ? (
-          <div hidden={!visibleSplit} className="w-1/2 min-w-0 flex-none border-l border-line/60">
-            <div className="flex min-w-0">
-              {renderTabs("secondary")}
-              {visibleSplit ? renderPaneActions() : null}
-            </div>
-          </div>
-        ) : null}
-        {visibleSplit || compactViewport ? null : renderPaneActions()}
-      </div>
-
-      <div className={`grid min-h-0 min-w-0 flex-1 gap-2 pt-2 ${visibleSplit ? "grid-cols-2" : "grid-cols-1"}`}>
-        {renderPane("primary")}
-        {secondaryTabs.length > 0 ? renderPane("secondary", !visibleSplit) : null}
+      <div className="flex min-h-0 min-w-0 flex-1">
+        {panes.map(renderPane)}
       </div>
       <TransferManagerList openRequest={openQueueRequest} />
       {closeTabIntent === null ? null : (
@@ -558,15 +312,15 @@ export function SFTPWorkspace({
           onConfirm={() => {
             const intent = closeTabIntent;
             setCloseTabIntent(null);
-            closeTab(intent.pane, intent.id);
+            removeTab(intent.tabId);
           }}
           onCancel={() => setCloseTabIntent(null)}
         />
       )}
-      {visibleSplit && primaryLocation?.alias !== localHostAlias && secondaryLocation?.alias !== localHostAlias && compareOpen ? (
+      {compareOpen && compareEnabled && leftLocation !== null && rightLocation !== null ? (
         <SFTPCompareDialog
-          left={{ alias: primaryLocation?.alias ?? "", path: primaryLocation?.path || "/" }}
-          right={{ alias: secondaryLocation?.alias ?? "", path: secondaryLocation?.path || "/" }}
+          left={{ alias: leftLocation.alias, path: leftLocation.path || "/" }}
+          right={{ alias: rightLocation.alias, path: rightLocation.path || "/" }}
           onDismiss={() => setCompareOpen(false)}
         />
       ) : null}
