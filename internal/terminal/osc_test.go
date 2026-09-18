@@ -138,6 +138,9 @@ func FuzzOSCObserverChunkingIsInvariant(f *testing.F) {
 		if len(whole.payload) > MaxOSCPayload || len(split.payload) > MaxOSCPayload {
 			t.Fatalf("payload grew past the bound: %d / %d", len(whole.payload), len(split.payload))
 		}
+		if pending := pendingKittyBytes(whole); pending > 2*maxKittyChunkBytes {
+			t.Fatalf("pending kitty chunks grew past the bound: %d", pending)
+		}
 		if strings.Join(wholeSeen.titles, "\x00") != strings.Join(splitSeen.titles, "\x00") {
 			t.Fatalf("titles differ by chunking: %q vs %q", wholeSeen.titles, splitSeen.titles)
 		}
@@ -150,4 +153,31 @@ func FuzzOSCObserverChunkingIsInvariant(f *testing.F) {
 			}
 		}
 	})
+}
+
+func pendingKittyBytes(observer *oscObserver) int {
+	total := 0
+	for _, pending := range observer.chunks {
+		total += len(pending.title) + len(pending.body)
+	}
+	return total
+}
+
+func TestKittyNotificationChunksStopAccumulatingAtTheDeliveredLimit(t *testing.T) {
+	observer, seen := newTestObserver()
+	chunk := "\x1b]99;i=1:d=0:p=body;" + strings.Repeat("x", MaxOSCPayload-24) + "\a"
+	for range 1000 {
+		observer.Observe([]byte(chunk))
+	}
+	pending := observer.chunks["1"]
+	if pending == nil {
+		t.Fatal("no pending chunk")
+	}
+	if len(pending.body) > maxKittyChunkBytes {
+		t.Fatalf("pending body = %d bytes, want at most %d", len(pending.body), maxKittyChunkBytes)
+	}
+	observer.Observe([]byte("\x1b]99;i=1:p=body;end\a"))
+	if len(seen.notifications) != 1 || len([]rune(seen.notifications[0][1])) != MaxNotificationBodyRunes {
+		t.Fatalf("delivered notification = %q", seen.notifications)
+	}
 }

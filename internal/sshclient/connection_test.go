@@ -122,3 +122,35 @@ func TestSubsystemConnectionSendsConfiguredKeepAlivesUntilClose(t *testing.T) {
 		t.Fatalf("keepalives continued after Close: %d -> %d", afterClose, got)
 	}
 }
+
+func TestSubsystemConnectionClosesWhenKeepAlivesGoUnanswered(t *testing.T) {
+	path, contents, public := keyPair(t)
+	server := newTestServer(t, serverOptions{AcceptKeys: []ssh.PublicKey{public}, IgnoreKeepAlives: true})
+	auth := sshclient.Auth{ReadFile: func(string) ([]byte, error) { return contents, nil }}
+	target := targetWith(server, path)
+	target.KeepAlive = 25 * time.Millisecond
+	target.KeepAliveMax = 3
+
+	connection, err := dialerFor(t, server, auth).Connect(context.Background(), target)
+	if err != nil {
+		t.Fatalf("Connect = %v", err)
+	}
+	defer func() { _ = connection.Close() }()
+	// Three unanswered probes at 25 ms each must close the transport well
+	// before the TCP retransmission timeout would notice a dead peer.
+	closed := make(chan struct{})
+	go func() {
+		_ = connection.Client().Wait()
+		close(closed)
+	}()
+	select {
+	case <-closed:
+	case <-time.After(2 * time.Second):
+		t.Fatal("the connection stayed open although the server never answered a keepalive")
+	}
+	// x/crypto/ssh serialises global requests, so the unanswered first probe
+	// keeps the later ones from reaching the wire. Only the timeouts count.
+	if got := server.KeepAlives(); got < 1 {
+		t.Fatalf("the server saw %d keepalives before the close", got)
+	}
+}

@@ -141,18 +141,28 @@ func Fingerprint(encodedKey string) (string, error) {
 // |1|base64(salt)|base64(HMAC-SHA1(salt, host)) を保存するので、同じ計算をすれば
 // 何も明かさずに問いに判定できる。
 func (e *Entry) MatchesHost(host string) bool {
+	matched := false
 	for _, pattern := range e.Hosts {
 		if e.Hashed {
 			if hashedMatch(pattern, host) {
-				return true
+				matched = true
+			}
+			continue
+		}
+		// OpenSSH の match_hostname と同じく、`!` で始まる否定パターンに一致した
+		// host はこのエントリ全体の対象外になる。`*.corp,!special.corp` は
+		// special.corp に鍵を提示しない。
+		if negated, found := strings.CutPrefix(pattern, "!"); found {
+			if matchHostPattern(negated, host) {
+				return false
 			}
 			continue
 		}
 		if matchHostPattern(pattern, host) {
-			return true
+			matched = true
 		}
 	}
-	return false
+	return matched
 }
 
 func hashedMatch(field, host string) bool {

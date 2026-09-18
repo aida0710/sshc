@@ -701,10 +701,40 @@ func (s *Session) StopReconnecting() error {
 		return ErrNotReconnecting
 	}
 	s.problem = "reconnect_stopped"
+	handshaking := s.handshakingProcessLocked()
 	s.mutex.Unlock()
 	s.stopReconnecting()
+	if handshaking != nil {
+		// reopen は握手前に Process を返す。Ready を待つ側は stopping を見て
+		// connected にしないだけで、process 自体は生きて入力を捨て続ける。
+		// 閉じて pump に exited まで進ませ、手動の再接続を使える状態にする。
+		abandonProcess(handshaking)
+	}
 	s.publish([]byte("\r\n[sshc] 再接続を停止しました。\r\n"))
 	return nil
+}
+
+// handshakingProcessLocked は、reopen が返した後で Ready がまだ決まっていない
+// process を返す。待機中や dial 中、または確定後は nil を返す。
+func (s *Session) handshakingProcessLocked() Process {
+	if s.process == nil || s.ready == nil {
+		return nil
+	}
+	select {
+	case <-s.ready.done:
+		return nil
+	default:
+		return s.process
+	}
+}
+
+// abandonProcess は、公開しないと決めた process を強制停止して閉じる。
+// 終了の観測は呼び出し側が行う。
+func abandonProcess(process Process) {
+	if forcer, ok := process.(forceCloser); ok {
+		_ = forcer.ForceClose()
+	}
+	_ = process.Close()
 }
 
 func (s *Session) stopReconnecting() {
@@ -823,10 +853,7 @@ func (s *Session) reconnect(info ExitInfo, connectionErr error, now func() time.
 		s.mutex.Unlock()
 		cancel()
 		if process != nil && stopped {
-			if forcer, ok := process.(forceCloser); ok {
-				_ = forcer.ForceClose()
-			}
-			_ = process.Close()
+			abandonProcess(process)
 			process.Wait()
 			return false
 		}
@@ -864,10 +891,7 @@ func (s *Session) reconnect(info ExitInfo, connectionErr error, now func() time.
 		}
 		s.mutex.Unlock()
 		if stopped {
-			if forcer, ok := process.(forceCloser); ok {
-				_ = forcer.ForceClose()
-			}
-			_ = process.Close()
+			abandonProcess(process)
 			process.Wait()
 			return false
 		}

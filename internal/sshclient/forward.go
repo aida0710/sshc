@@ -120,6 +120,9 @@ type forwards struct {
 type managedForward struct {
 	view     terminal.Forward
 	listener net.Listener
+	// resource は、個別には止められないが接続の終わりに閉じる資源である。
+	// agent 転送がこちらの agent へ開いた unix socket がこれに当たる。
+	resource io.Closer
 }
 
 func (f *forwards) nextID() string {
@@ -152,15 +155,18 @@ func (f *forwards) list() []terminal.Forward {
 func (f *forwards) close() {
 	f.mutex.Lock()
 	f.closed = true
-	listeners := make([]net.Listener, 0, len(f.opened))
+	closers := make([]io.Closer, 0, len(f.opened))
 	for _, entry := range f.opened {
 		if entry.listener != nil {
-			listeners = append(listeners, entry.listener)
+			closers = append(closers, entry.listener)
+		}
+		if entry.resource != nil {
+			closers = append(closers, entry.resource)
 		}
 	}
 	f.mutex.Unlock()
-	for _, listener := range listeners {
-		_ = listener.Close()
+	for _, closer := range closers {
+		_ = closer.Close()
 	}
 }
 
@@ -321,39 +327,73 @@ func serve(local net.Conn, client *ssh.Client, spec ForwardSpec) {
 	}
 	defer func() { _ = remote.Close() }()
 
+	// 片方向が終わっても、もう片方向の残りを届けてから閉じる。書き終えて
+	// から応答を待つクライアント（shutdown(SHUT_WR) する HTTP client など）は、
+	// 片方向の EOF で両方向を切ると応答を失う。
 	done := make(chan struct{}, 2)
-	go func() { _, _ = io.Copy(remote, local); done <- struct{}{} }()
-	go func() { _, _ = io.Copy(local, remote); done <- struct{}{} }()
+	go func() {
+		_, _ = io.Copy(remote, local)
+		closeWrite(remote)
+		done <- struct{}{}
+	}()
+	go func() {
+		_, _ = io.Copy(local, remote)
+		closeWrite(local)
+		done <- struct{}{}
+	}()
 	<-done
+	<-done
+}
+
+// closeWrite は、送信側だけを閉じられる接続ならそうし、できなければ何もしない。
+// 受信側は相手の EOF まで開いたままにする。
+func closeWrite(conn net.Conn) {
+	if half, ok := conn.(interface{ CloseWrite() error }); ok {
+		_ = half.CloseWrite()
+	}
 }
 
 // forwardAgent は、こちらの agent をリモートへ貸す。
 //
 // 鍵そのものは渡らない。渡るのは鍵を使う権利である。リモートのプロセスが
 // 署名を求めると、その要求はこのチャンネルを通ってこちらの agent へ届く。
-func forwardAgent(client *ssh.Client, session *ssh.Session, socket string, report io.Writer) terminal.Forward {
+// agent への unix socket は接続が閉じるまで生かし、forwards.close で閉じる。
+// x/crypto の ForwardToAgent は自分では閉じないので、ここで持たないと漏れる。
+func (f *forwards) forwardAgent(client *ssh.Client, session *ssh.Session, socket string, report io.Writer) {
 	entry := terminal.Forward{Kind: terminal.ForwardAgent}
 	if socket == "" {
 		entry.Problem = "no agent is reachable from this process"
 		_, _ = io.WriteString(report, "sshc: agent forwarding was asked for but no agent is reachable\r\n")
-		return entry
+		f.note(entry)
+		return
 	}
 	conn, err := (&net.Dialer{}).DialContext(context.Background(), "unix", socket)
 	if err != nil {
 		entry.Problem = err.Error()
 		_, _ = io.WriteString(report, "sshc: agent forwarding: "+err.Error()+"\r\n")
-		return entry
+		f.note(entry)
+		return
 	}
 	if err := agent.ForwardToAgent(client, agent.NewClient(conn)); err != nil {
 		entry.Problem = err.Error()
 		_ = conn.Close()
-		return entry
+		f.note(entry)
+		return
 	}
 	if err := agent.RequestAgentForwarding(session); err != nil {
 		entry.Problem = err.Error()
 		_ = conn.Close()
-		return entry
+		f.note(entry)
+		return
 	}
 	_, _ = io.WriteString(report, "sshc: forwarding this agent to the remote\r\n")
-	return entry
+	f.mutex.Lock()
+	if f.closed {
+		f.mutex.Unlock()
+		_ = conn.Close()
+		return
+	}
+	entry.ID = f.nextID()
+	f.opened = append(f.opened, managedForward{view: entry, resource: conn})
+	f.mutex.Unlock()
 }
