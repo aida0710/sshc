@@ -7,6 +7,7 @@ import { Notice as Band } from "../ui/surface";
 const noticeKeys: Record<string, MessageKey> = {
   complex_external_rule: "notice.complex_external_rule",
   duplicate_alias: "notice.duplicate_alias",
+  proxy_ignored: "notice.proxy_ignored",
   wildcard_shadow: "notice.wildcard_shadow",
   negated_pattern: "notice.negated_pattern",
   unnamed_host_block: "notice.unnamed_host_block",

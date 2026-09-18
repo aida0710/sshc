@@ -23,8 +23,6 @@ func connectProblem(err error) (string, bool) {
 	switch {
 	case errors.As(err, &unresolvable):
 		return "alias_unresolvable", true
-	case errors.Is(err, sshclient.ErrProxyCommandWithJump):
-		return "proxy_command_with_jump", true
 	case errors.Is(err, sshclient.ErrJumpDepth):
 		return "jump_depth_exceeded", true
 	case errors.Is(err, sshclient.ErrNoHostName):

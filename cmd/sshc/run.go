@@ -67,8 +67,6 @@ func runAdvice(err error, alias string) error {
 		return fmt.Errorf("%w; connect once with sshc ssh %s to decide about its host key", err, alias)
 	case errors.Is(err, sshclient.ErrPromptUnavailable):
 		return fmt.Errorf("%w; confirm a saved credential for %s in Connections, or use sshc ssh %s without --non-interactive to answer the prompt", err, alias, alias)
-	case errors.Is(err, sshclient.ErrProxyCommandWithJump):
-		return fmt.Errorf("%w; keep whichever one you meant", err)
 	}
 	return err
 }

@@ -90,3 +90,28 @@ func TestMatchAppliesSaysWhenItCannotAnswer(t *testing.T) {
 		t.Errorf("Match localnetwork = %v, want ErrMatchUnsupported", err)
 	}
 }
+
+// OpenSSH の match_cfg_line は `Match host` を「ここまでに解決した HostName」と
+// 比べ、`Match originalhost` だけが利用者の打った alias を見る。
+func TestMatchHostComparesTheResolvedHostNameWhileOriginalHostKeepsTheAlias(t *testing.T) {
+	context := matchContext()
+	context.HostName = "db.internal.example.com"
+	for _, test := range []struct {
+		name     string
+		criteria []config.Criterion
+		want     bool
+	}{
+		{"host sees the HostName", []config.Criterion{{Keyword: "host", Argument: "*.internal.example.com"}}, true},
+		{"host no longer sees the alias", []config.Criterion{{Keyword: "host", Argument: "db"}}, false},
+		{"originalhost still sees the alias", []config.Criterion{{Keyword: "originalhost", Argument: "db"}}, true},
+		{"originalhost ignores the HostName", []config.Criterion{{Keyword: "originalhost", Argument: "*.internal.example.com"}}, false},
+	} {
+		got, err := effective.MatchApplies(test.criteria, context)
+		if err != nil {
+			t.Fatalf("%s: MatchApplies = %v", test.name, err)
+		}
+		if got != test.want {
+			t.Errorf("%s: MatchApplies = %v, want %v", test.name, got, test.want)
+		}
+	}
+}

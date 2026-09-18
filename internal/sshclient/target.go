@@ -225,11 +225,9 @@ func newTarget(alias string, resolve Resolver, home string, depth int, override 
 	if err != nil {
 		return Target{}, err
 	}
+	// ProxyCommand と ProxyJump の両方が書かれた設定は、解決器が OpenSSH と同じく
+	// 先に受理した方だけを残しているので、ここには片方しか届かない。
 	proxyCommand := noneToEmpty(values.First("proxycommand"))
-	if proxyCommand != "" && values.First("proxyjump") != "" &&
-		!strings.EqualFold(values.First("proxyjump"), "none") {
-		return Target{}, ErrProxyCommandWithJump
-	}
 
 	target := Target{
 		Alias:          alias,

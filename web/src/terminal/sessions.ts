@@ -243,8 +243,6 @@ export function terminalProblemKey(code: string): MessageKey {
       return "terminal.limitRefused";
     case "alias_unresolvable":
       return "terminal.unresolvable";
-    case "proxy_command_with_jump":
-      return "terminal.proxyCommandWithJump";
     case "jump_depth_exceeded":
       return "terminal.jumpDepthExceeded";
     case "host_key_unknown":
