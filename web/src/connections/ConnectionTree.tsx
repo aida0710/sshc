@@ -1,6 +1,8 @@
 import { Fragment, useId, useMemo, useState, type CSSProperties, type DragEvent, type ReactNode } from "react";
 import type { HostEntry, HostMetadata, Overview } from "../api/config";
 import { useTranslate } from "../i18n/context";
+import { nearestDeclaredParent } from "./connectionBrowser";
+import { hostMatchesQuery, normalizeHostQuery } from "./hostSearch";
 import { ColumnResizeHandle } from "../ui/ColumnResizeHandle";
 import { useStoredColumnWidth, type StoredColumnWidth } from "../ui/useStoredColumnWidth";
 import { control } from "../ui/form";
@@ -57,26 +59,13 @@ function labelFor(host: HostEntry): string {
   return host.identity.alias === "" ? `Host ${host.patterns.join(" ")}` : host.identity.alias;
 }
 
-function hostMatches(item: DecoratedHost, rawQuery: string): boolean {
-  const query = rawQuery.trim().toLocaleLowerCase();
-  if (query === "") return true;
+function hostMatches(item: DecoratedHost, normalizedQuery: string): boolean {
   const host = item.host;
-  return host.identity.alias.toLocaleLowerCase().includes(query) ||
-    host.patterns.some((pattern) => pattern.toLocaleLowerCase().includes(query)) ||
-    item.group.toLocaleLowerCase().includes(query) ||
-    item.tags.some((tag) => tag.toLocaleLowerCase().includes(query)) ||
-    (host.hostName ?? "").toLocaleLowerCase().includes(query) ||
-    (host.user ?? "").toLocaleLowerCase().includes(query);
-}
-
-function nearestParent(name: string, declared: ReadonlySet<string>): string {
-  let candidate = name;
-  while (true) {
-    const cut = candidate.lastIndexOf("/");
-    if (cut < 0) return "";
-    candidate = candidate.slice(0, cut);
-    if (declared.has(candidate)) return candidate;
-  }
+  return hostMatchesQuery({
+    alias: host.identity.alias, group: item.group, patterns: host.patterns, tags: item.tags,
+    ...(host.hostName === undefined ? {} : { hostName: host.hostName }),
+    ...(host.user === undefined ? {} : { user: host.user }),
+  }, normalizedQuery);
 }
 
 function belongsToGroup(item: DecoratedHost, group: string): boolean {
@@ -167,7 +156,7 @@ export function ConnectionTree({
     });
     const roots: GroupNode[] = [];
     for (const node of nodes.values()) {
-      const parentName = nearestParent(node.name, declared);
+      const parentName = nearestDeclaredParent(node.name, declared);
       const parent = parentName === "" ? undefined : nodes.get(parentName);
       if (parent === undefined) roots.push(node);
       else parent.children.push(node);
@@ -191,8 +180,9 @@ export function ConnectionTree({
   }, [groupTree]);
 
   const visible = useMemo(() => {
+    const normalizedQuery = normalizeHostQuery(query);
     const scoped = decorated.filter((item) => {
-      if (!hostMatches(item, query)) return false;
+      if (!hostMatches(item, normalizedQuery)) return false;
       if (scope.kind === "all") return true;
       if (scope.kind === "ungrouped") return item.group === "";
       return belongsToGroup(item, scope.name);

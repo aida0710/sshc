@@ -13,6 +13,7 @@ import { Icon } from "../ui/icons";
 import { OperatingSystemIcon } from "../ui/OperatingSystemIcon";
 import { readStoredValue, writeStoredValue } from "../ui/browserStorage";
 import { ConnectionActions } from "./ConnectionActions";
+import { hostMatchesQuery, normalizeHostQuery } from "../connections/hostSearch";
 import { formatDateTime } from "../ui/format";
 
 type QuickConnectBrowserProps = {
@@ -46,16 +47,10 @@ function connectionDestination(server: BrowserServer): string {
 }
 
 function includesQuery(server: BrowserServer, query: string): boolean {
-  const needle = query.trim().toLocaleLowerCase();
-  if (needle === "") return true;
-  return [
-    server.identity.alias,
-    server.identity.path,
-    server.group,
-    connectionDestination(server),
-    ...server.host.patterns,
-    ...server.tags,
-  ].some((candidate) => candidate.toLocaleLowerCase().includes(needle));
+  return hostMatchesQuery({
+    alias: server.identity.alias, path: server.identity.path, group: server.group,
+    destination: connectionDestination(server), patterns: server.host.patterns, tags: server.tags,
+  }, normalizeHostQuery(query));
 }
 
 function belongsToGroup(server: BrowserServer, group: string): boolean {

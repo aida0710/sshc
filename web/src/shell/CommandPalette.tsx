@@ -6,7 +6,7 @@ import type { MessageKey } from "../i18n/messages";
 import type { Section } from "../routing/sectionRoute";
 import { Icon } from "../ui/icons";
 import type { TerminalSession } from "../api/terminalSessions";
-import { terminalDisplayTitle } from "../terminal/terminalPresentation";
+import { terminalDisplayTitle, terminalSubtitle } from "../terminal/terminalPresentation";
 import type { UnreadSessions } from "../terminal/terminalNotifications";
 import { ModalShell } from "../ui/ModalShell";
 import { PanelState } from "../ui/PanelState";
@@ -127,7 +127,7 @@ export function CommandPalette({
     ...sessions.filter((session) => session.exited === undefined).map((session) => {
       const unread = unreadBySession.has(session.id);
       const status = t("terminal.connected");
-      const destination = session.kind === "ssh" ? session.alias ?? "" : t("terminal.localhost");
+      const destination = terminalSubtitle(session, t);
       return {
         id: `session:${session.id}`,
         kind: "session" as const,

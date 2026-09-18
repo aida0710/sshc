@@ -7,7 +7,7 @@ import { Icon } from "../ui/icons";
 import { terminalProblemKey } from "./sessions";
 import { consoleDragMimeType, type LiveWorkspaceSummary } from "../features/workspaces/live";
 import { connectionProgressText } from "./progress";
-import { terminalDisplayTitle } from "./terminalPresentation";
+import { terminalDisplayTitle, terminalSubtitle } from "./terminalPresentation";
 import type { UnreadSessions } from "./terminalNotifications";
 import { HostPickerDialog, type LocalChoice } from "../shell/HostPickerDialog";
 import type { HostEntry } from "../api/config";
@@ -286,7 +286,7 @@ export function ConsoleList({
           {displayedSessions.map((session) => {
             const index = sessions.findIndex((candidate) => candidate.id === session.id);
             const running = session.state !== "exited";
-            const destination = session.kind === "ssh" ? session.alias ?? "" : t("terminal.localhost");
+            const destination = terminalSubtitle(session, t);
             const displayTitle = terminalDisplayTitle(session);
             const unread = unreadBySession.has(session.id);
             const status = session.problem !== ""
