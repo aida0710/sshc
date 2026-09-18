@@ -354,6 +354,8 @@ func (b *InputBuffer) Read(p []byte) (int, error) {
 		b.ready.Wait()
 	}
 	read := copy(p, b.data)
+	// 読み終えた分は消す。再スライスだけでは裏配列にパスワードが残る。
+	clear(b.data[:read])
 	b.data = b.data[read:]
 	b.ready.Broadcast()
 	return read, nil

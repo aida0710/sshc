@@ -346,16 +346,38 @@ func keepAliveLoop(client *ssh.Client, interval time.Duration, count int, done <
 			case <-done:
 				return
 			case <-ticker.C:
-				if _, _, err := client.SendRequest("keepalive@openssh.com", true, nil); err != nil {
-					missed++
-					if missed >= count {
-						_ = client.Close()
-						return
-					}
-					continue
-				}
+			}
+			if keepAliveAnswered(client, interval, done) {
 				missed = 0
+				continue
+			}
+			missed++
+			if missed >= count {
+				_ = client.Close()
+				return
 			}
 		}
+	}
+}
+
+// keepAliveAnswered は keepalive を 1 回送り、interval 内に応答があれば真を返す。
+// 無応答の相手（NAT が状態を捨てた接続など）では SendRequest は輸送が切れるまで
+// 戻らないため、OpenSSH の ServerAliveCountMax と同じく「interval 内に応答が
+// ない」ことを 1 回の失敗として数える。遅れて届いた応答は捨てる。
+func keepAliveAnswered(client *ssh.Client, interval time.Duration, done <-chan struct{}) bool {
+	answered := make(chan error, 1)
+	go func() {
+		_, _, err := client.SendRequest("keepalive@openssh.com", true, nil)
+		answered <- err
+	}()
+	timer := time.NewTimer(interval)
+	defer timer.Stop()
+	select {
+	case err := <-answered:
+		return err == nil
+	case <-timer.C:
+		return false
+	case <-done:
+		return false
 	}
 }

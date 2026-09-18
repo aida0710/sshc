@@ -26,6 +26,10 @@ const (
 	// shown in the session list and browser notifications short.
 	MaxNotificationTitleRunes = 160
 	MaxNotificationBodyRunes  = 512
+	// maxKittyChunkBytes bounds what a multi-part kitty notification may
+	// accumulate per field before it is delivered. Anything past the delivered
+	// rune limits is discarded, so a stream of d=0 chunks cannot grow memory.
+	maxKittyChunkBytes = 4 * MaxNotificationBodyRunes
 )
 
 type oscState uint8
@@ -236,15 +240,27 @@ func (o *oscObserver) notifyKitty(payload string) {
 	}
 	switch part {
 	case "title":
-		pending.title += text
+		pending.title = appendBounded(pending.title, text, maxKittyChunkBytes)
 	case "body":
-		pending.body += text
+		pending.body = appendBounded(pending.body, text, maxKittyChunkBytes)
 	}
 	if !done {
 		return
 	}
 	delete(o.chunks, identifier)
 	o.emit(pending.title, pending.body)
+}
+
+// appendBounded は existing に text を足し、limit バイトを超える分を捨てる。
+func appendBounded(existing, text string, limit int) string {
+	room := limit - len(existing)
+	if room <= 0 {
+		return existing
+	}
+	if len(text) > room {
+		text = text[:room]
+	}
+	return existing + text
 }
 
 func looksLikeKittyMetadata(metadata string) bool {
@@ -281,6 +297,14 @@ func isDigits(value string) bool {
 		}
 	}
 	return true
+}
+
+// DisplayText keeps text that came from a remote program safe to show:
+// control and format characters are dropped and the length is bounded.
+// Authentication prompts and OSC titles both pass through here so a server
+// cannot smuggle escape sequences into the pane.
+func DisplayText(value string, maximum int) string {
+	return cleanDisplayText(value, maximum)
 }
 
 // cleanDisplayText keeps text that came from a remote program safe to show:
