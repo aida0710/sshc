@@ -4,6 +4,7 @@ import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import { Button } from "../ui/surface";
 import { PasswordInput } from "../ui/PasswordField";
+import { ConfirmDialog } from "../ui/ConfirmDialog";
 import {
   snippetsApi,
   type Job,
@@ -92,6 +93,7 @@ export function SnippetsPanel({
   const [startupAlias, setStartupAlias] = useState(aliases[0] ?? "");
   const [problem, setProblem] = useState("");
   const [busy, setBusy] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const current = useMemo(
     () => snippets.find((snippet) => snippet.id === selected) ?? null,
     [snippets, selected],
@@ -405,7 +407,7 @@ export function SnippetsPanel({
             {t("snippets.save")}
           </Button>
           {current === null ? null : (
-            <Button disabled={busy} onClick={() => void removeCurrent()}>
+            <Button disabled={busy} onClick={() => setConfirmingDelete(true)}>
               {t("snippets.delete")}
             </Button>
           )}
@@ -538,6 +540,20 @@ export function SnippetsPanel({
           </button>
         </section>
       </div>
+      {confirmingDelete && current !== null ? (
+        <ConfirmDialog
+          id="snippet-delete-heading"
+          heading={t("snippets.deleteHeading", { name: current.name })}
+          body={<p className="text-sm text-ink-muted">{t("snippets.deleteBody")}</p>}
+          confirmLabel={t("snippets.confirmDelete")}
+          cancelLabel={t("snippets.deleteCancel")}
+          onCancel={() => setConfirmingDelete(false)}
+          onConfirm={() => {
+            setConfirmingDelete(false);
+            void removeCurrent();
+          }}
+        />
+      ) : null}
     </section>
   );
 }

@@ -9,6 +9,7 @@ import { WorkspaceCommandCenter } from "./WorkspaceCommandCenter";
 import { consoleDragMimeType, type LiveWorkspaceSummary } from "./live";
 import { browserSessionStorage, loadLiveWorkspace, saveLiveWorkspace } from "./livePersistence";
 import { InputDialog } from "../../ui/InputDialog";
+import { ConfirmDialog } from "../../ui/ConfirmDialog";
 import { useMediaQuery } from "../../ui/useMediaQuery";
 import { SplitResizeHandle } from "../../ui/SplitResizeHandle";
 import { automaticWorkspaceName, findPane, findPaneBySession, paneForSession, paneID, restoreLiveNode, singlePaneLayout } from "./panes";
@@ -52,6 +53,7 @@ export function TerminalWorkspace({
   const [liveRestoreReady, setLiveRestoreReady] = useState(false);
   const [liveWorkspaceName, setLiveWorkspaceName] = useState("");
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [deletingWorkspace, setDeletingWorkspace] = useState<SavedWorkspace | null>(null);
   const consumedRename = useRef(0);
   const liveWorkspaceID = useRef(paneID());
   const liveStorage = useMemo(() => browserSessionStorage(), []);
@@ -290,6 +292,13 @@ export function TerminalWorkspace({
     } catch (error) { setProblem(failureCode(error) || "workspace_failed"); }
   }
 
+  async function deleteWorkspace(id: string) {
+    try {
+      await workspaceApi.remove(id);
+      setSelectedWorkspace(""); setSaved(await workspaceApi.list()); setProblem("");
+    } catch (error) { setProblem(failureCode(error) || "workspace_failed"); }
+  }
+
   useEffect(() => {
     if (renameRequest === null || renameRequest.sequence <= consumedRename.current) return;
     consumedRename.current = renameRequest.sequence;
@@ -381,7 +390,7 @@ export function TerminalWorkspace({
           canSave={visibleLayout !== null || active !== null}
           onSave={() => setSaveDialogOpen(true)}
           onReopen={(id) => void restoreWorkspace(id)}
-          onDelete={(id) => void workspaceApi.remove(id).then(async () => { setSelectedWorkspace(""); setSaved(await workspaceApi.list()); })}
+          onDelete={(id) => setDeletingWorkspace(saved.find((item) => item.id === id) ?? null)}
         />
       ) : null}
       {commandCenter && commandTargets.length > 0 ? <WorkspaceCommandCenter paneTargets={commandTargets} onClose={() => setCommandCenter(false)} /> : null}
@@ -401,6 +410,20 @@ export function TerminalWorkspace({
           onCancel={() => setSaveDialogOpen(false)}
         />
       ) : null}
+      {deletingWorkspace === null ? null : (
+        <ConfirmDialog
+          id="workspace-delete-heading"
+          heading={t("workspace.deleteHeading", { name: deletingWorkspace.name })}
+          body={<p className="text-sm text-ink-muted">{t("workspace.deleteBody")}</p>}
+          confirmLabel={t("workspace.confirmDelete")}
+          cancelLabel={t("workspace.cancel")}
+          onCancel={() => setDeletingWorkspace(null)}
+          onConfirm={() => {
+            setDeletingWorkspace(null);
+            void deleteWorkspace(deletingWorkspace.id);
+          }}
+        />
+      )}
       {problem === "" ? null : <p role="alert" className="bg-notice px-3 py-1 text-xs text-notice-ink">{problem}</p>}
       {compactViewport && compactPanes.length > 1 ? (
         <nav aria-label={t("workspace.mobilePaneSwitcher")} className="flex shrink-0 gap-1 overflow-x-auto border-b border-line bg-toolbar px-2 py-1">

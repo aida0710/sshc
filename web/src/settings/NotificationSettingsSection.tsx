@@ -14,14 +14,14 @@ import {
 import { Field, control } from "../ui/form";
 import { Button, Notice } from "../ui/surface";
 import { ActionArea, SettingsSection } from "./SettingsSection";
+import { useAsyncOperation } from "../ui/useAsyncOperation";
 
 // Browser notifications for finished commands: the permission the browser
 // granted, and the sound this browser plays. Neither reaches the engine.
 export function NotificationSettingsSection({ showHeading }: { showHeading: boolean }) {
   const t = useTranslate();
   const [permission, setPermission] = useState<BrowserNotificationPermission>(() => browserNotificationPermission());
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const request = useAsyncOperation();
   const [sounds, setSounds] = useState<NotificationSoundPreferences>(() => loadNotificationSoundPreferences());
 
   useEffect(() => {
@@ -36,9 +36,7 @@ export function NotificationSettingsSection({ showHeading }: { showHeading: bool
   }
 
   async function enableOrTest() {
-    setBusy(true);
-    setError("");
-    try {
+    await request.run(async () => {
       const granted = await requestBrowserNotificationPermission();
       setPermission(granted);
       if (granted === "granted") {
@@ -47,14 +45,17 @@ export function NotificationSettingsSection({ showHeading }: { showHeading: bool
           body: t("terminal.browserNotificationsReady"),
           tag: "sshc-notification-permission",
         });
-        if (!delivered) setError(t("terminal.browserNotificationsDeliveryFailed"));
+        if (!delivered) throw new Error(t("terminal.browserNotificationsDeliveryFailed"));
       }
-    } catch {
-      setPermission(browserNotificationPermission());
-      setError(t("terminal.browserNotificationsRequestFailed"));
-    } finally {
-      setBusy(false);
-    }
+    }, {
+      describe: (error) => {
+        // A permission request that threw leaves the browser's own answer as
+        // the truth; a delivery failure keeps the granted permission.
+        if (error instanceof Error && error.message === t("terminal.browserNotificationsDeliveryFailed")) return error.message;
+        setPermission(browserNotificationPermission());
+        return t("terminal.browserNotificationsRequestFailed");
+      },
+    });
   }
 
   return (
@@ -76,17 +77,17 @@ export function NotificationSettingsSection({ showHeading }: { showHeading: bool
                   : "terminal.browserNotificationsDefault",
           )}
         </p>
-        {permission === "default" || permission === "granted" || error !== "" ? (
-          <ActionArea status={error === ""
+        {permission === "default" || permission === "granted" || request.error !== "" ? (
+          <ActionArea status={request.error === ""
             ? (permission === "granted"
                 ? <p role="status" className="text-sm text-live">{t("terminal.browserNotificationsEnabled")}</p>
                 : undefined)
-            : <Notice tone="danger">{error}</Notice>}
+            : <Notice tone="danger">{request.error}</Notice>}
           >
             {permission === "default" || permission === "granted" ? (
               <Button
                 kind={permission === "default" ? "primary" : "secondary"}
-                disabled={busy}
+                disabled={request.busy}
                 onClick={() => void enableOrTest()}
               >
                 {t(permission === "granted"
