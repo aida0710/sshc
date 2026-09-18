@@ -436,7 +436,7 @@ export const en = {
   "snippets.cancel": "Cancel",
   "snippets.startup": "Connection startup",
   "snippets.startupHint":
-    "Run this snippet after the selected host's shell is ready. Secret variables are not allowed.",
+    "Run this snippet after the selected host's shell is ready. It is sent on every connection and automatic reconnection, so secret variable values are stored encrypted with the binding and may remain in the remote shell history or on screen.",
   "snippets.setStartup": "Set startup snippet",
   "snippets.clearStartup": "Clear",
   "host.duplicateKeyword":
