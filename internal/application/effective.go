@@ -33,18 +33,6 @@ type Effective struct {
 	Notices []Notice         `json:"notices,omitempty"`
 }
 
-func declaresExactly(patterns []config.Pattern, alias string) bool {
-	for _, pattern := range patterns {
-		if pattern.Negated || pattern.Wildcard {
-			continue
-		}
-		if pattern.Value == alias {
-			return true
-		}
-	}
-	return false
-}
-
 // ComputeEffective は、この alias が受け取る値を返す。
 func ComputeEffective(graph *config.Graph, root, alias string, facts effective.LocalFacts) Effective {
 	computed := Effective{Alias: alias, Entries: []EffectiveEntry{}}
@@ -102,6 +90,7 @@ func LocalFactsFor(home string) effective.LocalFacts {
 // noteNotices は、確定した結果に添える印を画面の用語へ移す。
 var noteNotices = map[string]string{
 	effective.ComplexityDuplicateAlias:    NoticeDuplicateAlias,
+	effective.ComplexityProxyIgnored:      NoticeProxyIgnored,
 	effective.ComplexityWildcardPattern:   NoticeWildcardShadow,
 	effective.ComplexityNegatedPattern:    NoticeNegatedPattern,
 	effective.ComplexityUnresolvedInclude: NoticeExplainedValuesOnly,

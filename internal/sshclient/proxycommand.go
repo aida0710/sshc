@@ -22,11 +22,6 @@ import (
 var ErrProxyCommandThroughJump = errors.New(
 	"a jump host reached through another connection cannot use ProxyCommand; the command would run on this machine")
 
-// ErrProxyCommandWithJump は、ProxyJump と ProxyCommand を同時に書いた設定を断る。
-//
-// 両方とも接続経路を指定するため、sshc は曖昧な設定を拒否する。
-var ErrProxyCommandWithJump = errors.New("ProxyCommand and ProxyJump cannot both decide how to reach one host")
-
 // proxyCommandGrace は、パイプを閉じてからプロセスを強制終了するまでの猶予時間。
 const proxyCommandGrace = 2 * time.Second
 

@@ -669,7 +669,7 @@ func refuseTakenAlias(graph *config.Graph, from, to string) error {
 		if visit.Block.Kind != config.BlockHost || visit.Block.Header != visit.Index {
 			return true
 		}
-		if declaresExactly(visit.Block.Patterns, to) {
+		if effective.DeclaresExactly(visit.Block.Patterns, to) {
 			taken = ErrAliasAlreadyDeclared
 			return false
 		}
