@@ -8,7 +8,11 @@ import (
 	"time"
 )
 
-const concurrencyTestTimeout = 5 * time.Second
+// concurrencyTestTimeout bounds how long a commit may take to finish once it is
+// let through. It only decides when a hang is reported, so it is generous: the
+// Windows CI runner fsyncs slowly enough that a whole commit took over five
+// seconds and failed the v0.36.1 release run.
+const concurrencyTestTimeout = time.Minute
 
 func TestManagersSharingWorkspaceSerializePreconditionAndCommit(t *testing.T) {
 	managerOne, workspace := newTestManager(t)
