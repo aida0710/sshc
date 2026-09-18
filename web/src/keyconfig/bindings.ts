@@ -37,7 +37,7 @@ function validShortcut(value: unknown): value is string {
 }
 
 function snapshot(): string {
-  try { return window.localStorage.getItem(storageKey) ?? ""; } catch { return ""; }
+  return readStoredShortcutValue(storageKey) ?? "";
 }
 
 export function parseBindings(raw: string, upgradeLegacy = true): Bindings {
@@ -60,8 +60,20 @@ export function parseBindings(raw: string, upgradeLegacy = true): Bindings {
   } catch { return defaultBindings; }
 }
 
+// Browser storage can be disabled or full. Reading then yields nothing, and
+// remembering which preset is selected becomes a per-session preference.
+// saveBindings is different: it answers an explicit edit, so its failure is
+// shown to the user rather than swallowed.
+export function readStoredShortcutValue(key: string): string | null {
+  try { return window.localStorage.getItem(key); } catch { return null; }
+}
+export function rememberStoredShortcutValue(key: string, value: string): void {
+  try { window.localStorage.setItem(key, value); } catch { /* keep the in-memory value only */ }
+}
+export const selectionKey = "sshc.shortcuts.selected.v1";
+
 function isLegacyStorage(): boolean {
-  try { return !window.localStorage.getItem("sshc.shortcuts.selected.v1"); } catch { return true; }
+  return readStoredShortcutValue(selectionKey) === null;
 }
 export function loadBindings(): Bindings { return parseBindings(snapshot(), isLegacyStorage()); }
 export function saveBindings(value: Bindings): void {

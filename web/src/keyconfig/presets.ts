@@ -2,10 +2,10 @@ import { useEffect, useSyncExternalStore } from "react";
 import { apiClient } from "../api/client";
 import type { Metadata } from "../api/config";
 import { validateOpenAPISchema } from "../api/validators.generated";
-import { defaultBindings, loadBindings, parseBindings, saveBindings, storageKey, type Bindings } from "./bindings";
+import { defaultBindings, loadBindings, parseBindings, readStoredShortcutValue, saveBindings, selectionKey, storageKey, rememberStoredShortcutValue, type Bindings } from "./bindings";
 
 export type Preset = { id: string; name: string; bindings: Bindings };
-export const selectionKey = "sshc.shortcuts.selected.v1";
+export { selectionKey };
 type State = { presets: Preset[]; selected: string; loading: boolean; busy: boolean; error: boolean };
 let state: State = { presets: [], selected: "default", loading: true, busy: false, error: false };
 const listeners = new Set<() => void>();
@@ -27,7 +27,7 @@ function activate(id: string, presets: Preset[], remember = true) {
   const preset = presets.find((item) => item.id === id);
   const selected = preset ? id : "default";
   const bindings = preset?.bindings ?? defaultBindings;
-  if (remember) window.localStorage.setItem(selectionKey, selected);
+  if (remember) rememberStoredShortcutValue(selectionKey, selected);
   if (JSON.stringify(loadBindings()) !== JSON.stringify(bindings)) saveBindings(bindings);
   publish({ selected });
 }
@@ -44,17 +44,17 @@ export async function refreshPresets() {
     const metadata = validateOpenAPISchema<Metadata>("Metadata", await apiClient.read("/api/v1/metadata"));
     if (currentGeneration !== generation || currentRevision !== revision) return;
     let presets: Preset[] = metadata.shortcutPresets ?? [];
-    let selected = window.localStorage.getItem(selectionKey);
-    const remembered = selected !== null || window.localStorage.getItem(storageKey) !== null;
+    let selected = readStoredShortcutValue(selectionKey);
+    const remembered = selected !== null || readStoredShortcutValue(storageKey) !== null;
     // Persist the migration ID before writing so retries never create duplicates.
     if (selected === null) {
       selected = remembered ? `pending:${crypto.randomUUID()}` : "default";
-      if (remembered) window.localStorage.setItem(selectionKey, selected);
+      if (remembered) rememberStoredShortcutValue(selectionKey, selected);
     }
     if (selected.startsWith("pending:")) {
       const id = selected.slice(8);
       if (!presets.some((item) => item.id === id)) {
-        const next = [...presets, { id, name: "Imported shortcuts", bindings: parseBindings(window.localStorage.getItem(storageKey) ?? "") }];
+        const next = [...presets, { id, name: "Imported shortcuts", bindings: parseBindings(readStoredShortcutValue(storageKey) ?? "") }];
         await put(presets, next);
         if (currentGeneration !== generation || currentRevision !== revision) return;
         presets = next;
