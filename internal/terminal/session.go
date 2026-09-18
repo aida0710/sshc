@@ -413,8 +413,9 @@ func (s *Session) WriteCommandInput(ctx context.Context, generation uint64, comm
 
 // Resize は TIOCSWINSZ を発行する。
 // Resize は PTY の大きさを変え、その大きさを覚える。再接続や置き換えで開く
-// 新しい PTY はこの最新の大きさで始まる。開始時の大きさのままだと、ブラウザは
-// 自分の表示と同じ大きさだと思い込んだままなので、リモートのプログラムが
+// 新しい PTY はこの最新の大きさで始まる。再接続を待っている間（PTY がまだ
+// 無い間）の変更も覚える。ブラウザは一度送った大きさを送り直さないので、
+// ここで捨てると再接続後の PTY が古い大きさになり、リモートのプログラムが
 // 見えない行へ描く。
 func (s *Session) Resize(size Size) error {
 	if !size.Valid() {
@@ -422,12 +423,16 @@ func (s *Session) Resize(size Size) error {
 	}
 	s.mutex.Lock()
 	process, exited := s.process, s.exited
-	if exited == nil && process != nil {
+	if exited == nil {
 		s.size = size
 	}
 	s.mutex.Unlock()
-	if exited != nil || process == nil {
+	if exited != nil {
 		return ErrExited
+	}
+	if process == nil {
+		// 再接続待ち。次の PTY は覚えた大きさで開く。
+		return nil
 	}
 	return process.Resize(size)
 }
@@ -802,6 +807,9 @@ func (s *Session) reconnect(info ExitInfo, connectionErr error, now func() time.
 		default:
 		}
 		s.reconnectCancel = cancel
+		// The browser may have been resized during the wait; the new shell
+		// must start at that size, not the one read before waiting.
+		size = s.size
 		s.mutex.Unlock()
 		process, err := reopen(attemptCtx, size)
 		s.mutex.Lock()

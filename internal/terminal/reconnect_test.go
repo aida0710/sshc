@@ -124,17 +124,52 @@ func TestAReconnectedShellStartsAtTheLatestTerminalSize(t *testing.T) {
 	if got := spy.sizeAt(1); got != (terminal.Size{Cols: 200, Rows: 50}) {
 		t.Fatalf("automatic reconnect opened with %+v, want the latest 200x50", got)
 	}
+	spy.at(1).exit(terminal.ExitInfo{Code: terminal.TransportLost})
+	waitFor(t, func() bool { return spy.count() >= 3 })
+	if got := spy.sizeAt(2); got != (terminal.Size{Cols: 200, Rows: 50}) {
+		t.Fatalf("second automatic reconnect opened with %+v, want 200x50", got)
+	}
 
 	// A manual reconnect after an ordinary exit must use it too.
-	spy.at(1).exit(terminal.ExitInfo{Code: 0})
+	spy.at(2).exit(terminal.ExitInfo{Code: 0})
 	waitFor(t, func() bool { return !session.Live() })
 	if _, err := registry.Reconnect(context.Background(), session.ID()); err != nil {
 		t.Fatal(err)
 	}
-	waitFor(t, func() bool { return spy.count() >= 3 })
-	if got := spy.sizeAt(2); got != (terminal.Size{Cols: 200, Rows: 50}) {
+	waitFor(t, func() bool { return spy.count() >= 4 })
+	if got := spy.sizeAt(3); got != (terminal.Size{Cols: 200, Rows: 50}) {
 		t.Fatalf("manual reconnect opened with %+v, want the latest 200x50", got)
 	}
+}
+
+func TestAResizeWhileWaitingToReconnectShapesTheNextShell(t *testing.T) {
+	spy := &openSpy{}
+	registry, _ := newRegistry(terminal.DefaultLimits())
+	// A long wait keeps the session in the reconnecting state without a PTY.
+	registry.ReconnectDelay = func(int) time.Duration { return 300 * time.Millisecond }
+	session, err := registry.Open(context.Background(), terminal.Spec{
+		Kind: terminal.KindSSH, Alias: "gateway", Title: "gateway", Open: spy.open,
+		Size: terminal.Size{Cols: 80, Rows: 24},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	spy.at(0).exit(terminal.ExitInfo{Code: terminal.TransportLost})
+	waitFor(t, func() bool { return session.View().State == terminal.StateReconnecting })
+
+	// The browser window grows while there is nothing to resize yet. The
+	// request must not be lost: the browser will not send it again.
+	if err := session.Resize(terminal.Size{Cols: 200, Rows: 50}); err != nil {
+		t.Fatalf("resize while reconnecting = %v", err)
+	}
+	waitFor(t, func() bool { return spy.count() >= 2 })
+	if got := spy.sizeAt(1); got != (terminal.Size{Cols: 200, Rows: 50}) {
+		t.Fatalf("reconnect after a resize while waiting opened with %+v, want 200x50", got)
+	}
+	if err := registry.Close(session.ID()); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, func() bool { return !session.Live() })
 }
 
 func TestALostTransportIsDialledAgain(t *testing.T) {
