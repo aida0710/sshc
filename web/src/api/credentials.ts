@@ -1,5 +1,5 @@
 import { apiClient } from "./client";
-import { issueAction, jsonHeaders } from "./guards";
+import { issueAction, patchJSON, putJSON } from "./guards";
 import type { components } from "./schema";
 import { validateOpenAPISchema } from "./validators.generated";
 
@@ -66,11 +66,7 @@ export const credentialsApi: CredentialsApi = {
   },
   async storeCredential(kind, name, secret) {
     return validateCredentialList(
-      await apiClient.mutate<unknown>(credentialPath(kind, name), {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ secret }),
-      }),
+      await putJSON<unknown>(credentialPath(kind, name), { secret }),
     );
   },
   async revealCredential(kind, name) {
@@ -99,11 +95,7 @@ export const credentialsApi: CredentialsApi = {
   },
   async updateCredential(kind, currentName, name, secret) {
     return validateCredentialList(
-      await apiClient.mutate<unknown>(credentialPath(kind, currentName), {
-        method: "PATCH",
-        headers: jsonHeaders,
-        body: JSON.stringify({ name, secret }),
-      }),
+      await patchJSON<unknown>(credentialPath(kind, currentName), { name, secret }),
     );
   },
   async deleteCredential(kind, name) {
@@ -115,11 +107,7 @@ export const credentialsApi: CredentialsApi = {
   },
   async assignCredential(kind, subject, name) {
     return validateCredentialList(
-      await apiClient.mutate<unknown>(`/api/v1/credentials/${kind}/assign`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subject, name }),
-      }),
+      await putJSON<unknown>(`/api/v1/credentials/${kind}/assign`, { subject, name }),
     );
   },
   async unassignCredential(kind, subject) {

@@ -1,5 +1,5 @@
 import { apiClient } from "./client";
-import { asRecord, postEmpty, postJSON } from "./guards";
+import { asRecord, postEmpty, postJSON, putJSON } from "./guards";
 import type { components } from "./schema";
 import { validateOpenAPISchema } from "./validators.generated";
 
@@ -84,14 +84,7 @@ export const vaultApi: VaultApi = {
   },
   async storePassword(alias, password) {
     return validateVaultStatus(
-      await apiClient.mutate<unknown>(
-        `/api/v1/passwords/${encodeURIComponent(alias)}`,
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ password }),
-        },
-      ),
+      await putJSON<unknown>(`/api/v1/passwords/${encodeURIComponent(alias)}`, { password }),
     );
   },
   async forgetPassword(alias) {
