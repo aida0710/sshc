@@ -246,10 +246,12 @@ func TestAnOrdinaryVerifiedHostHasNothingToSay(t *testing.T) {
 
 func TestPasswordAuthenticationOffInsideAMatchBlockStillBlocks(t *testing.T) {
 	service, workspace := newTestService(t)
+	// `Match host` compares the resolved HostName, so the block names the
+	// address rather than the alias (`Match originalhost guarded` would also do).
 	entry := "Host guarded\n" +
 		"\tHostName 198.51.100.30\n" +
 		"\n" +
-		"Match host guarded\n" +
+		"Match host 198.51.100.30\n" +
 		"\tPasswordAuthentication no\n"
 	if err := os.WriteFile(filepath.Join(workspace.Root(), "config"), []byte(entry), 0o600); err != nil {
 		t.Fatal(err)

@@ -546,8 +546,6 @@ export const en = {
   "terminal.limitRefused": "No more consoles can be opened. Close one first.",
   "terminal.unresolvable":
     "The settings for this connection could not be resolved. Open Analysis to see why.",
-  "terminal.proxyCommandWithJump":
-    "sshc cannot use ProxyCommand and ProxyJump together. Remove one of them.",
   "terminal.jumpDepthExceeded":
     "The ProxyJump chain exceeds the supported depth.",
   "terminal.hostKeyUnknown":
@@ -1166,6 +1164,8 @@ export const en = {
     "This value cannot be edited in the simplified view because its source uses a wildcard, negation, Match block, or duplicate alias. The source is shown instead.",
   "notice.duplicate_alias":
     "Another block declares the same alias. For most options, OpenSSH uses the first value it reads.",
+  "notice.proxy_ignored":
+    "Both ProxyCommand and ProxyJump are set. OpenSSH keeps whichever it read first, so this line is ignored.",
   "notice.wildcard_shadow":
     "A catch-all block can override values for this host.",
   "notice.negated_pattern": "A negated pattern applies here.",

@@ -37,6 +37,7 @@ const (
 	ComplexityNegatedPattern    = "negated_pattern"
 	ComplexityMatchBlock        = "match_block"
 	ComplexityDuplicateAlias    = "duplicate_alias"
+	ComplexityProxyIgnored      = "proxy_ignored"
 	ComplexityUnresolvedInclude = "unresolved_include"
 	ComplexityJumpInvalid       = "jump_invalid"
 	ComplexityJumpCycle         = "jump_cycle"
@@ -138,15 +139,19 @@ func Project(graph *config.Graph, alias string) Projection {
 		if !applies || block.Kind != config.BlockHost {
 			return
 		}
-		matchedHostBlocks++
-		if matchedHostBlocks > 1 {
-			projection.Complexities = append(projection.Complexities, Complexity{
-				Code:      ComplexityDuplicateAlias,
-				Path:      filePath,
-				Line:      block.Header + 1,
-				Condition: condition,
-				Detail:    "more than one Host block claims this alias",
-			})
+		// Resolve と同じ基準で数える。`Host *` のような catch-all に当たったことは
+		// 「二つのブロックがこの名前を主張している」ではない。
+		if DeclaresExactly(block.Patterns, alias) {
+			matchedHostBlocks++
+			if matchedHostBlocks > 1 {
+				projection.Complexities = append(projection.Complexities, Complexity{
+					Code:      ComplexityDuplicateAlias,
+					Path:      filePath,
+					Line:      block.Header + 1,
+					Condition: condition,
+					Detail:    "more than one Host block claims this alias",
+				})
+			}
 		}
 		if kind == SourceWildcard {
 			projection.Complexities = append(projection.Complexities, Complexity{

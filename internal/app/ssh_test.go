@@ -29,7 +29,7 @@ Host edge
   IdentityFile ~/.ssh/id_edge
   ProxyJump bastion
 
-Match host edge user operator
+Match host edge.internal user operator
   Port 2200
 `
 	if err := os.WriteFile(filepath.Join(root, "conf.d", "targets.conf"), []byte(configuration), 0o600); err != nil {

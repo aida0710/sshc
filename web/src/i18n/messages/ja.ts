@@ -553,8 +553,6 @@ export const ja = {
     "これ以上セッションを開けません。どれかを閉じてください。",
   "terminal.unresolvable":
     "この接続の設定を解決できませんでした。理由は「Analysis」で確認できます。",
-  "terminal.proxyCommandWithJump":
-    "sshcではProxyCommandとProxyJumpを同時に使用できません。どちらか一方を削除してください。",
   "terminal.jumpDepthExceeded": "ProxyJump の階層が上限を超えています。",
   "terminal.hostKeyUnknown":
     "ホスト鍵をまだ信頼していません。内容を確認してから対話接続してください。",
@@ -1167,6 +1165,8 @@ export const ja = {
     "ワイルドカード、否定、Match ブロック、alias の重複のいずれかが含まれるため、この値を単純な形式では編集できません。値の参照元を表示します。",
   "notice.duplicate_alias":
     "別のブロックも同じaliasを宣言しています。OpenSSHは多くの設定項目で、最初に読み込んだ値を使用します。",
+  "notice.proxy_ignored":
+    "ProxyCommandとProxyJumpの両方が書かれています。OpenSSHは先に読み込んだ方だけを使い、この行は無視されます。",
   "notice.wildcard_shadow":
     "すべてに一致するブロックが、このホストの値に影響する可能性があります。",
   "notice.negated_pattern": "否定パターンがここに適用されます。",

@@ -140,23 +140,6 @@ func TestNewTargetCarriesProxyCommandWithItsTokensExpanded(t *testing.T) {
 	}
 }
 
-// ProxyJump と一緒には書けない。どちらも「どうやって届くか」を決めるので、
-// 両方書いたユーザーは二つの違う結果を書いている。ssh も断る
-// （"inconsistent options: ProxyCommand+ProxyJump"）。
-func TestNewTargetRefusesProxyCommandTogetherWithProxyJump(t *testing.T) {
-	resolve := resolverFor(map[string]map[string][]string{
-		"both": {
-			"hostname":     {"198.51.100.9"},
-			"proxycommand": {"/usr/bin/nc %h %p"},
-			"proxyjump":    {"gateway"},
-		},
-		"gateway": {"hostname": {"198.51.100.1"}},
-	})
-	if _, err := sshclient.NewTarget("both", resolve, testHome); !errors.Is(err, sshclient.ErrProxyCommandWithJump) {
-		t.Fatalf("NewTarget = %v, want ErrProxyCommandWithJump", err)
-	}
-}
-
 // ProxyJump none は「使わない」なので、衝突ではない。
 func TestNewTargetAcceptsProxyCommandWhenProxyJumpIsOff(t *testing.T) {
 	resolve := resolverFor(map[string]map[string][]string{

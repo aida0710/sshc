@@ -12,6 +12,7 @@ type Notice struct {
 const (
 	NoticeComplexExternalRule = "complex_external_rule"
 	NoticeDuplicateAlias      = "duplicate_alias"
+	NoticeProxyIgnored        = "proxy_ignored"
 	NoticeWildcardShadow      = "wildcard_shadow"
 	NoticeNegatedPattern      = "negated_pattern"
 	NoticeUnnamedHostBlock    = "unnamed_host_block"

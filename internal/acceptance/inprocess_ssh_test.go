@@ -42,20 +42,19 @@ func TestOpeningAnSSHSessionStartsNoProcess(t *testing.T) {
 // 設定の問題は接続画面が既に表示できる。端末に理由を書く必要が無いばかりか、
 // 書けば「接続を試みた」という誤りになる。
 //
-// 例は ProxyCommand + ProxyJump である。どちらも「どうやって届くか」を
-// 決めるものなので、両方書いたユーザーは二つの違う結果を書いている。ssh も同じ設定を
-// 断る（"inconsistent options: ProxyCommand+ProxyJump"）。
+// 例は Match exec である。この解決器は何も実行しないので、exec の結果に
+// 依存する設定は値を推測せず「解決できない」と返す。
 //
-// かつてここは ProxyCommand ひとつを例にしていた。あれは解決できないのでは
-// なく、このアプリケーションが断っていただけである。いまは起動するので、
-// 例として成り立たない。
+// かつてここは ProxyCommand ひとつ、次いで ProxyCommand + ProxyJump を例に
+// していた。前者はこのアプリケーションが断っていただけで、後者は OpenSSH が
+// 先に読んだ方を黙って使う設定なので、どちらも「解決できない」例ではない。
 func TestAnUnresolvableAliasOpensNoSession(t *testing.T) {
 	f := newFixture(t)
 	mustWrite(t, f.root+"/config", []byte(""+
 		"Host refused\n"+
 		"\tHostName 203.0.113.10\n"+
-		"\tProxyCommand /usr/bin/nc %h %p\n"+
-		"\tProxyJump gateway\n"), 0o600)
+		"Match exec \"true\"\n"+
+		"\tPort 2222\n"), 0o600)
 
 	response := f.do(http.MethodPost, "/api/v1/terminal/sessions",
 		mustJSON(t, map[string]any{"kind": "ssh", "alias": "refused"}))

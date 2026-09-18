@@ -30,6 +30,10 @@ type MatchContext struct {
 	Alias string
 	// OriginalAlias は、利用者が打った名前。
 	OriginalAlias string
+	// HostName は、ここまでに解決した HostName。OpenSSH の `Match host` は alias
+	// ではなくこれと比較する（`HostName` の %h は alias で展開済み）。まだ
+	// HostName が決まっていなければ alias と同じ値になる。
+	HostName string
 	// User は、ここまでに解決したリモートのアカウント名。
 	User string
 	// LocalUser は、このマシンのアカウント名。
@@ -41,6 +45,15 @@ type MatchContext struct {
 	// Canonical は、ホスト名の canonical 化を経たかどうか。この解決器は
 	// canonical 化しないので常に false である。
 	Canonical bool
+}
+
+// hostForMatch は `Match host` が比べる名前を返す。HostName が空の文脈は
+// まだ HostName を解決していないので、OpenSSH と同じく alias を使う。
+func (context MatchContext) hostForMatch() string {
+	if context.HostName != "" {
+		return context.HostName
+	}
+	return context.Alias
 }
 
 // MatchApplies は、Match ブロックがこの文脈に適用されるかを報告する。
@@ -75,7 +88,7 @@ func criterionApplies(criterion config.Criterion, context MatchContext) (bool, e
 	case "final":
 		return context.Final, nil
 	case "host":
-		return matchesAny(criterion.Argument, context.Alias), nil
+		return matchesAny(criterion.Argument, context.hostForMatch()), nil
 	case "originalhost":
 		return matchesAny(criterion.Argument, context.OriginalAlias), nil
 	case "user":

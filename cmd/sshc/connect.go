@@ -124,7 +124,7 @@ func runConnect(
 	}
 	process, err := connection.Open(ctx, alias, sshclient.DefaultLocalSize)
 	if err != nil {
-		fmt.Fprintf(stderr, "sshc: %v\n", connectAdvice(err))
+		fmt.Fprintf(stderr, "sshc: %v\n", err)
 		return 1
 	}
 	code, err := sshclient.Attach(ctx, process, stdin, stdout)
@@ -146,14 +146,6 @@ func writeConnectionNotices(stderr io.Writer, answer connectAnswer) {
 	for _, stale := range answer.StaleTOTPs {
 		fmt.Fprintf(stderr, "sshc: saved one-time password for %s was not used because its authentication route changed; select it again in Connections to confirm the current route\n", stale)
 	}
-}
-
-// connectAdvice は設定競合の解消方法をエラーに追加する。
-func connectAdvice(err error) error {
-	if errors.Is(err, sshclient.ErrProxyCommandWithJump) {
-		return fmt.Errorf("%w; keep whichever one you meant", err)
-	}
-	return err
 }
 
 // requestConnection は、確かめ済みの一台に接続一回分を要求する。

@@ -55,7 +55,7 @@
 - **この領域は最初の `Host`／`Match` 行より上に置きます。** `Include` も他のディレクティブと同じくそれが書かれたブロックに属し、OpenSSH は取り込んだファイルの値をそのブロックが一致したときにしか適用しません（パース自体は常に行うため `-v` には `Reading configuration data` が出ます）。無条件に読まれるのは最初のブロックヘッダより上の行だけなので、宣言はそこにしか置けません。既存の領域が `Host` ブロックの内側にある場合は、その場で置き換えず上へ移動します。結果として、グループのファイルはエントリファイル自身の Host ブロックより先に読まれます。同じ alias を両方に書いた場合はグループ側が勝ちますが、それは位置から推測せず、解決済みグラフが `duplicate_alias` として双方の行を示します。
 - グループ名は `connections/` からの相対ディレクトリパスで、パスが親子関係を表します（`work/eu` は `work` の子）。`connections/` 配下のディレクトリでも、`Include` 行に宣言がなければグループとして扱いません。この状態は `group_not_declared` として報告します。宣言済みディレクトリが存在しない `group_directory_missing` とともに `/api/v1/config/overview` に含め、Groups 画面に表示します。これらは Connections 画面から修正できないため、同画面には表示しません。宣言済みで空のグループは `group_empty` として報告しますが、警告表示は行いません。作成直後や最後の接続を移動した後には正常に発生し、OpenSSH も一致しない `Include` をエラーにしないためです。Groups 画面では「メンバー: なし」と表示します。グループの共通設定は `groups.sshc.conf` に通常の `Host` ブロックとして生成し、子グループを親より先に配置します。
 - 鍵は `~/.ssh/keys/<group>/` に置けます。鍵の改名・移動、グループの改名では、Include グラフが到達する範囲の `IdentityFile` と `CertificateFile` の行を同一トランザクションで書き換えます。解決できないパス、`~/.ssh` 外の設定ファイルからの参照、Include が設定として読んでしまう移動先、宣言されていないグループは、いずれも半端に適用せず操作そのものを拒否して理由を返します。
-- ワイルドカード、否定パターン、`Match`、alias 重複により単純な継承として表現できない場合も、実効値は計算します。複雑な解決であることを示す印と出所を表示します。
+- ワイルドカード、否定パターン、`Match`、alias 重複により単純な継承として表現できない場合も、実効値は計算します。複雑な解決であることを示す印と出所を表示します。`Match host` は OpenSSH と同じく、利用者が打った alias ではなく「そこまでに解決した `HostName`」（`%h` は alias で展開済み）と比較します。alias 自体と比較するのは `Match originalhost` だけです。
 - Effective タブと Diagnostics タブは、この解決器が決めた値とその出所を出します。`Match exec` と `CanonicalizeHostname` を含む設定については値を出さず、理由を出します。
 - 実効値はこのアプリケーションの解決器が計算し、`ssh -G` には委ねません。これにより、設定の表示時に外部コマンドを実行せず、`ssh` がない環境でも一貫した値を表示できます。一方、OpenSSH 自身の解決結果を UI から直接確認する機能と、`Match exec`、`CanonicalizeHostname`、`Match final` を含む設定の解決には対応しません。`~/.ssh/config` はそのまま保持するため、これらの設定は端末から `ssh` で利用できます。
 - 既定値を持つのは `HostName`（alias 自身）、`User`（ローカルのアカウント名）、`Port`（`22`）の 3 つだけです。OpenSSH の全既定値は、バージョンとビルドによって変わるため複製しません。`IdentityFile` は macOS と Linux で既定値の順序が異なることを差分試験で確認したため、既定値を設定しません。設定にないキーワードは返しません。
@@ -170,7 +170,7 @@
   - 接続時に、実行する ProxyCommand を端末へ 1 行表示します
   - 利用者の `~/.ssh/config` に書かれたコマンドだけを実行します。`%h`、`%p`、`%r`、`%n` を展開し、POSIX では `/bin/sh -c "exec ..."`、Windows では `cmd.exe /c` を使用します
   - `$SHELL` は使用しません。engine の起動元である tmux や systemd の環境変数に接続動作が依存しないよう、POSIX では常に `/bin/sh` を使用します
-  - `ProxyJump` と `ProxyCommand` の同時指定は `inconsistent options: ProxyCommand+ProxyJump` で拒否します
+  - `ProxyJump` と `ProxyCommand` の両方が書かれた設定は、OpenSSH（10.2 で確認）と同じく先に受理した方だけを使い、後から来た行を無視します。無視した行は解決結果の `proxy_ignored` として Analysis に出します。`ProxyCommand none` の後の `ProxyJump` は無視されます。`ProxyJump none` の後の `ProxyCommand` は OpenSSH の版で結果が割れ（readconf.c の CVE-2026-35386 対応より前は無視、以後は有効）、この解決器は新しい方に合わせて有効にします
   - jump host 経由で到達する先では `ProxyCommand` を使用できません。コマンドはローカルマシンで実行され、jump host 内では実行されないためです
   - 接続失敗時は、コマンドの標準エラー出力を理由に含めます
   - 接続終了時にパイプを閉じ、2 秒以内に終了しない場合はプロセスを強制終了します

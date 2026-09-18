@@ -264,3 +264,59 @@ func FuzzResolve(f *testing.F) {
 		}
 	})
 }
+
+// OpenSSH は ProxyCommand と ProxyJump のうち先に受理した方だけを使い、後から来た
+// 方を黙って捨てる。捨てた行は解決の印として残し、書いた本人に見せる。
+func TestResolveKeepsWhicheverOfProxyCommandAndProxyJumpCameFirst(t *testing.T) {
+	for _, test := range []struct {
+		name         string
+		contents     string
+		proxyCommand string
+		proxyJump    string
+		ignored      bool
+	}{
+		{
+			name:      "jump first hides the command",
+			contents:  "Host a\n\tHostName 198.51.100.9\n\tProxyJump gateway\n\tProxyCommand /usr/bin/nc %h %p\n",
+			proxyJump: "gateway", ignored: true,
+		},
+		{
+			name:         "command first hides the jump",
+			contents:     "Host a\n\tHostName 198.51.100.9\n\tProxyCommand /usr/bin/nc %h %p\n\tProxyJump gateway\n",
+			proxyCommand: "/usr/bin/nc %h %p", ignored: true,
+		},
+		{
+			name:      "a catch-all command after a jump is ignored too",
+			contents:  "Host a\n\tHostName 198.51.100.9\n\tProxyJump gateway\nHost *\n\tProxyCommand /usr/bin/nc %h %p\n",
+			proxyJump: "gateway", ignored: true,
+		},
+		{
+			name:         "ProxyJump none does not hide a later command",
+			contents:     "Host a\n\tHostName 198.51.100.9\n\tProxyJump none\n\tProxyCommand /usr/bin/nc %h %p\n",
+			proxyCommand: "/usr/bin/nc %h %p", proxyJump: "none",
+		},
+		{
+			name:         "ProxyCommand none still hides a later jump",
+			contents:     "Host a\n\tHostName 198.51.100.9\n\tProxyCommand none\n\tProxyJump gateway\n",
+			proxyCommand: "none", ignored: true,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			graph := graphFor(t, map[string]string{testConfig: test.contents})
+			resolution := effective.Resolve(graph, "a", effective.LocalFacts{})
+			if len(resolution.Refusals) != 0 {
+				t.Fatalf("refusals = %#v", resolution.Refusals)
+			}
+			if got := resolution.Values.First("proxycommand"); got != test.proxyCommand {
+				t.Errorf("proxycommand = %q, want %q", got, test.proxyCommand)
+			}
+			if got := resolution.Values.First("proxyjump"); got != test.proxyJump {
+				t.Errorf("proxyjump = %q, want %q", got, test.proxyJump)
+			}
+			_, noted := codesOf(resolution.Notes)[effective.ComplexityProxyIgnored]
+			if noted != test.ignored {
+				t.Errorf("proxy_ignored noted = %v, want %v: %#v", noted, test.ignored, resolution.Notes)
+			}
+		})
+	}
+}
