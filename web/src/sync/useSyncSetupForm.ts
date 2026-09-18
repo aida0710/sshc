@@ -102,3 +102,5 @@ export function useSyncSetupForm() {
     setSettingsOpen: (value: boolean) => set("settingsOpen", value),
   };
 }
+
+export type SyncSetupForm = ReturnType<typeof useSyncSetupForm>;
