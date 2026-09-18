@@ -66,8 +66,9 @@ type TerminalHandlers struct {
 	// Connected は、SSH接続とstream ticketの作成が成功したあとに呼ぶ。
 	// 履歴の失敗で接続を失わせないため、エラーは呼び出し側が処理する。
 	Connected func(alias string)
-	// Startup returns an explicitly configured non-secret command. It is sent
-	// only after authentication and remote shell startup have completed.
+	// Startup returns the explicitly configured startup command with its
+	// variables expanded, secret ones included. It is sent only after
+	// authentication and remote shell startup have completed.
 	Startup func(alias string) (string, bool)
 }
 
