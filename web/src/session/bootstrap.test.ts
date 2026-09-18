@@ -96,6 +96,23 @@ describe("bootstrapSession", () => {
     )).rejects.toThrow("bootstrap_rejected");
   });
 
+  it("falls back to the browser registration when a used bootstrap link is reopened", async () => {
+    window.localStorage.setItem("sshc.browser.registration.v1", "r".repeat(43));
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(new Response(null, { status: 409 }))
+      .mockResolvedValueOnce(new Response(
+        JSON.stringify({ csrfToken: "d".repeat(43), browserToken: "s".repeat(43) }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ));
+
+    await expect(bootstrapSession(
+      { hash: `#bootstrap=${"b".repeat(43)}`, pathname: "/", search: "" },
+      { replaceState: vi.fn() },
+      fetcher,
+    )).resolves.toEqual({ csrfToken: "d".repeat(43) });
+    expect(fetcher).toHaveBeenLastCalledWith("/api/v1/session/recover", expect.anything());
+  });
+
   it("rejects a malformed response without persistent storage", async () => {
     const localSet = vi.spyOn(Storage.prototype, "setItem");
     const fetcher = vi.fn().mockResolvedValue(new Response(

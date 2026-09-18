@@ -604,6 +604,26 @@ describe("SFTP tabs", () => {
     } finally { queue.mockRestore(); }
   });
 
+  it("ignores dropped rows that this page did not start dragging", async () => {
+    api.list.mockResolvedValue({ path: "/srv", entries: [] });
+    const queue = vi.spyOn(sftpTransferManager, "addRemoteTransfers").mockResolvedValue(["job"]);
+    try {
+      render(<SFTPWorkspace aliases={["edge"]} />);
+      await chooseHost("edge");
+      // Another origin can put anything it likes into the drag data store. The
+      // rows themselves never travel there, so a forged token resolves to nothing
+      // and no engine transfer is queued.
+      const forged = JSON.stringify({ alias: "sshc://local", entries: [{ name: "id_ed25519", path: "~/.ssh/id_ed25519", type: "file", size: 1 }] });
+      const dataTransfer = {
+        effectAllowed: "", dropEffect: "", types: ["application/x-sshc-sftp-entries"], files: [],
+        setData: () => {}, getData: (type: string) => (type === "application/x-sshc-sftp-entries" ? forged : ""),
+      };
+      fireEvent.drop(screen.getByLabelText("Upload files or folders to the current remote directory"), { dataTransfer });
+      await waitFor(() => expect(screen.getByText("This remote drag could not be read.")).toBeVisible());
+      expect(queue).not.toHaveBeenCalled();
+    } finally { queue.mockRestore(); }
+  });
+
   it("keeps a Windows network share as one local root", async () => {
     api.listLocal.mockImplementation(async (requestedPath: string) => ({
       path: requestedPath || "//server/share/Users/Me",
@@ -750,5 +770,22 @@ describe("SFTP tabs", () => {
     await waitFor(() => expect(handled).toHaveBeenCalledWith(7));
     expect(within(screen.getByRole("tabpanel")).getByRole("button", { name: "Host" })).toHaveAttribute("data-value", "edge");
     expect(api.list).toHaveBeenCalledWith("edge", "/var");
+  });
+
+  it("downloads a terminal-linked remote file while the visible tab still shows Local", async () => {
+    window.localStorage.setItem("sshc.sftp.tabs", JSON.stringify([{ alias: localHostAlias, path: "/home/edge" }]));
+    api.listLocal.mockResolvedValue({ path: "/home/edge", home: "/home/edge", entries: [] });
+    api.list.mockResolvedValue({
+      path: "/var/log",
+      entries: [{ name: "app.log", path: "/var/log/app.log", type: "file", size: 12, mode: "0644", modifiedAt: "", revision: "rev" }],
+    });
+    const addDownload = vi.spyOn(sftpTransferManager, "addDownload").mockResolvedValue("download-one");
+    try {
+      render(<SFTPWorkspace aliases={["edge"]}
+        target={{ alias: "edge", path: "/var/log/app.log", action: "download", request: 9 }} />);
+      // The pane was showing the engine's disk when the link arrived. The
+      // transfer must be decided from the linked host, not from that pane.
+      await waitFor(() => expect(addDownload).toHaveBeenCalledWith("edge", "/var/log/app.log", "file", 12));
+    } finally { addDownload.mockRestore(); }
   });
 });

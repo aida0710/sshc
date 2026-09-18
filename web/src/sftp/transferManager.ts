@@ -109,12 +109,16 @@ export class SFTPTransferManager {
   subscribeNotices = (listener: () => void): (() => void) => this.ledger.subscribeNotices(listener);
 
   async reconcile(): Promise<void> {
+    const requestedAt = this.ledger.generation();
     const listed = await this.api.listTransfers();
     const serverIDs = new Set(listed.jobs.map((job) => job.id));
     if (listed.jobs.length > maxTransferJobs || serverIDs.size !== listed.jobs.length) {
       throw new Error("sftp_transfer_limit");
     }
-    this.adoptQueue(listed);
+    if (!this.adoptQueue(listed, requestedAt)) {
+      // Stale listing; the next poll lists again with the newer state.
+      return;
+    }
     await this.downloads.removeOrphans(new Set(listed.jobs
       .filter((job) => !["completed", "cancelled"].includes(job.status))
       .map((job) => job.id)));
@@ -378,15 +382,22 @@ export class SFTPTransferManager {
     return this.ledger.snapshot();
   }
 
-  // Takes the engine's queue and settings as the new truth.
-  private adoptQueue(listed: TransferJobList): void {
+  // Takes the engine's queue and settings as the new truth. The settings
+  // always apply. The jobs apply unconditionally when the listing answered a
+  // mutation of ours, and only if nothing newer was applied meanwhile when it
+  // came from a poll (requestedAt is the generation seen before that poll).
+  private adoptQueue(listed: TransferJobList, requestedAt?: number): boolean {
     this.maxConcurrent = listed.maxConcurrent;
     this.clearCompletedAfter = listed.clearCompletedAfterSeconds ?? 0;
     this.processingStopped = listed.processingStopped === true;
     this.largeFileThreshold = listed.largeFileThresholdBytes ?? defaultLargeFileThreshold;
     this.largeFileParallelism = listed.largeFileParallelism ?? defaultLargeFileParallelism;
     this.largeFileChunkBytes = listed.largeFileChunkBytes ?? defaultLargeFileChunkBytes;
-    this.ledger.commit(listed.jobs);
+    if (requestedAt === undefined) {
+      this.ledger.replaceAllServer(listed.jobs);
+      return true;
+    }
+    return this.ledger.adoptListing(listed.jobs, requestedAt);
   }
 
   // Whether the browser has what it takes to run the job right now: an
