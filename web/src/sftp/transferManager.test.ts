@@ -120,6 +120,31 @@ describe("SFTPTransferManager engine ownership", () => {
     expect(localStorage.getItem("sshc.sftp.transfer-manager.v3")).toContain("browser-only");
   });
 
+  it("does not let a listing requested before a start put the running job back to queued", async () => {
+    const api = engineAPI();
+    await api.createTransfer({
+      id: "transfer_stale001", batchId: "batch_stale00001", batchName: "remote.bin", batchKind: "file",
+      alias: "edge", direction: "download", kind: "file", name: "remote.bin", remotePath: "/remote.bin",
+      totalBytes: 4, lastModified: 0,
+    });
+    // The engine holds new transfers, so the manager adopts the queue without
+    // starting anything by itself; the start below is the only one.
+    const held = { ...(await api.listTransfers()), processingStopped: true };
+    api.listTransfers.mockResolvedValue(held);
+    const manager = new SFTPTransferManager(api, 0);
+    await manager.reconcile();
+    expect(manager.getSnapshot()[0]?.status).toBe("queued");
+    // A poll captured the listing while the job was still queued, then a start
+    // answered before that listing arrived. The listing is the older fact and
+    // must not win, or the browser would re-start an already running job.
+    const started = await api.updateTransfer("transfer_stale001", "start");
+    expect(started.status).toBe("running");
+    const staleListing = manager.reconcile();
+    manager["ledger"].replaceServer(started);
+    await staleListing;
+    expect(manager.getSnapshot()[0]?.status).toBe("running");
+  });
+
   it("registers an upload in the engine before starting its data plane", async () => {
     const api = engineAPI();
     const manager = new SFTPTransferManager(api);
@@ -210,6 +235,27 @@ describe("SFTPTransferManager engine ownership", () => {
     expect(api.streamDownload).toHaveBeenCalledTimes(2);
     const parts = api.saveDownload.mock.calls[0]![2];
     await expect(new Blob(parts).text()).resolves.toBe("abcdef");
+  });
+
+  it("checkpoints a download by volume and at the end instead of after every chunk", async () => {
+    const api = engineAPI();
+    const chunkCount = 64;
+    api.streamDownload.mockImplementation(async (_alias, _id, _path, _directory, _offset, options) => {
+      options.onRevision?.('"revision-many"');
+      for (let index = 0; index < chunkCount; index += 1) {
+        await options.onChunk(new Uint8Array(1024), chunkCount * 1024);
+      }
+      return { bytes: chunkCount * 1024, total: chunkCount * 1024 };
+    });
+    const manager = new SFTPTransferManager(api);
+    await manager.addDownload("edge", "/many.bin", "file", chunkCount * 1024);
+    await vi.waitFor(() => expect(manager.getSnapshot()[0]?.status).toBe("completed"));
+    // Sixty-four small chunks arrive within the checkpoint interval, so the
+    // engine hears about the position once at the end (plus the final
+    // acknowledgement before saving), not sixty-four times.
+    expect(api.checkpointDownload.mock.calls.length).toBeLessThanOrEqual(2);
+    const parts = api.saveDownload.mock.calls[0]![2];
+    expect(new Blob(parts).size).toBe(chunkCount * 1024);
   });
 
   it("retries only failed uploads in an engine-owned folder batch", async () => {

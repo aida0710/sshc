@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { updateApi, type UpdateApi, type UpdateStatus } from "../api/update";
 import { useTranslate } from "../i18n/context";
+import { isSafeHttpURL } from "../terminal/links";
 
 type UpdateBadgeProps = {
   api?: UpdateApi;
@@ -35,7 +36,7 @@ export function UpdateBadge({ api = updateApi, current = "", indicator }: Update
         {indicator}
         <p>{t("update.version", { version: displayedCurrent })}</p>
       </div>
-      {status === null || !status.available || status.pageUrl === undefined ? null : (
+      {status === null || !status.available || status.pageUrl === undefined || !isSafeHttpURL(status.pageUrl) ? null : (
         <p className={indicator === undefined ? "mt-1" : "mt-1 pl-3.5"}>
           <a
             href={status.pageUrl}

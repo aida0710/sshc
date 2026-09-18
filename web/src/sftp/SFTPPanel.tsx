@@ -221,6 +221,8 @@ export function SFTPPanel({
     onQueueOpen,
   });
   const busy = browser.busy || actions.acting || editor.busy || transfers.queuing;
+  // A terminal link's file, once its directory is listed, waiting for a render in which the pane shows that host and is idle.
+  const [linkedEntry, setLinkedEntry] = useState<{ alias: string; action: "edit" | "download"; entry: RemoteEntry } | null>(null);
 
   function changeSort(key: SFTPSort) {
     setSort((current) => {
@@ -258,19 +260,27 @@ export function SFTPPanel({
         setProblem(t("sftp.linkTargetNotFound"));
         return;
       }
-      if (target.action === "edit") {
-        if (entry.type !== "file") {
-          setProblem(t("sftp.linkTargetNotFile"));
-          return;
-        }
-        await editor.open(target.alias, entry);
+      if (target.action === "edit" && entry.type !== "file") {
+        setProblem(t("sftp.linkTargetNotFile"));
         return;
       }
-      await transfers.transferOut([entry], target.alias);
+      // The action runs from a later render: this closure predates the host
+      // switch, so its editor and transfer helpers still see the previous
+      // pane (possibly the engine's disk, or still busy) and would do nothing.
+      setLinkedEntry({ alias: target.alias, action: target.action, entry });
     });
     // The request number makes an intentional repeat actionable while preventing route rerenders from reopening it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [target?.request]);
+
+  useEffect(() => {
+    if (linkedEntry === null || busy || alias !== linkedEntry.alias) return;
+    setLinkedEntry(null);
+    if (linkedEntry.action === "edit") void editor.open(linkedEntry.alias, linkedEntry.entry);
+    else void transfers.transferOut([linkedEntry.entry], linkedEntry.alias);
+    // The helpers are recreated every render; the effect only needs to run when the pane can act.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [linkedEntry, busy, alias]);
 
   // A deletion that finished under the rows on screen (or under the search
   // root) changes them, unless an unsaved edit is holding the pane still.

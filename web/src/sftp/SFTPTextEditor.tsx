@@ -188,7 +188,7 @@ export function SFTPTextEditor({ editor, busy = false }: {
           </div>
           <div className="min-h-0 flex-1">
             <Suspense fallback={<div className="p-4 text-sm text-ink-muted">{t("sftp.editorLoading")}</div>}>
-              <MonacoEditor path={opened.entry.path} value={contents} onChange={setContents} />
+              <MonacoEditor path={opened.entry.path} value={contents} onChange={setContents} readOnly={editor.busy} />
             </Suspense>
           </div>
         </ModalShell>
