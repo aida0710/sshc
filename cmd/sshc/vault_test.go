@@ -125,7 +125,7 @@ func vaultStatusBody(owner handoff.Owner, vault, unlocked bool) string {
 
 func TestRunVaultStatusIsHumanReadableWithoutATerminal(t *testing.T) {
 	var requests int
-	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+	server := engineTestServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		requests++
 		if request.Method != http.MethodGet || request.URL.Path != httpserver.VaultStatusPath ||
 			request.Header.Get(handoff.HeaderName) != "the secret" {
@@ -162,7 +162,7 @@ func TestRunVaultStatusIsHumanReadableWithoutATerminal(t *testing.T) {
 
 func TestRunVaultCreateChecksStateBeforePrompting(t *testing.T) {
 	var posts int
-	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+	server := engineTestServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if request.Method == http.MethodPost {
 			posts++
 		}
@@ -187,7 +187,7 @@ func TestRunVaultRefusesPasswordActionsWithoutATerminalBeforeAnyRequest(t *testi
 	for _, action := range []string{"create", "change-password"} {
 		t.Run(action, func(t *testing.T) {
 			requests := 0
-			server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { requests++ }))
+			server := engineTestServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { requests++ }))
 			defer server.Close()
 			stateDir := t.TempDir()
 			writeVaultTestHandoff(t, stateDir, server.URL, handoff.OwnerEngine)
@@ -206,7 +206,7 @@ func TestRunVaultConfirmationMismatchSendsNoMutation(t *testing.T) {
 	for _, action := range []string{"create", "change-password"} {
 		t.Run(action, func(t *testing.T) {
 			posts := 0
-			server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+			server := engineTestServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 				if request.URL.Path == httpserver.VaultVerifyPath {
 					response.WriteHeader(http.StatusNoContent)
 					return
@@ -246,7 +246,7 @@ func TestRunVaultConfirmationMismatchSendsNoMutation(t *testing.T) {
 
 func TestRunVaultUnlockSkipsPromptWhenAlreadyUnlocked(t *testing.T) {
 	var posts int
-	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+	server := engineTestServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if request.Method == http.MethodPost {
 			posts++
 		}
@@ -265,7 +265,7 @@ func TestRunVaultUnlockSkipsPromptWhenAlreadyUnlocked(t *testing.T) {
 }
 
 func TestRunVaultLockAuthenticationFailureDoesNotBlameAPassword(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+	server := engineTestServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if request.Method == http.MethodGet && request.URL.Path == httpserver.VaultStatusPath {
 			_, _ = io.WriteString(response, vaultStatusBody(handoff.OwnerEngine, true, true))
 			return
@@ -293,7 +293,7 @@ func TestRunVaultLockAuthenticationFailureDoesNotBlameAPassword(t *testing.T) {
 
 func TestRunVaultLockValidatesLiveIdentityBeforeMutation(t *testing.T) {
 	posts := 0
-	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+	server := engineTestServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if request.Method == http.MethodPost {
 			posts++
 			response.WriteHeader(http.StatusNoContent)
@@ -315,7 +315,7 @@ func TestRunVaultLockValidatesLiveIdentityBeforeMutation(t *testing.T) {
 
 func TestRunVaultLockUsesAuthenticatedSessionPreservingRoute(t *testing.T) {
 	requests := 0
-	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+	server := engineTestServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		requests++
 		if request.Header.Get(handoff.HeaderName) != "the secret" {
 			response.WriteHeader(http.StatusUnauthorized)
@@ -371,6 +371,9 @@ type statusThenErrorTransport struct {
 }
 
 func (t *statusThenErrorTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	if proof := proofResponse(request); proof != nil {
+		return proof, nil
+	}
 	t.requests++
 	if request.Method == http.MethodGet {
 		status := t.status
@@ -490,6 +493,9 @@ func TestRunVaultExplainsHowToCheckUncertainCreateOrUnlock(t *testing.T) {
 }
 
 func (t *requestInspectingTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	if proof := proofResponse(request); proof != nil {
+		return proof, nil
+	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.requests++
@@ -569,7 +575,7 @@ func TestRunVaultDoesNotPrintATransportErrorThatReflectsThePassword(t *testing.T
 
 func TestRunVaultDoesNotPrintANonSuccessBodyThatReflectsThePassword(t *testing.T) {
 	typed := []byte(vaultPasswordCanary)
-	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+	server := engineTestServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if request.Method == http.MethodGet {
 			_, _ = io.WriteString(response, vaultStatusBody(handoff.OwnerEngine, true, false))
 			return
@@ -596,7 +602,7 @@ func TestRunVaultDoesNotPrintANonSuccessBodyThatReflectsThePassword(t *testing.T
 }
 
 func TestRunVaultExplainsAnOversizedPasswordRequest(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+	server := engineTestServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if request.Method == http.MethodGet {
 			_, _ = io.WriteString(response, vaultStatusBody(handoff.OwnerEngine, true, false))
 			return
@@ -679,7 +685,7 @@ func TestRunVaultCreateErasesTerminalBuffersAndSendsAuthenticatedJSON(t *testing
 	first := []byte(vaultPasswordCanary)
 	confirmation := []byte(vaultPasswordCanary)
 	var posts int
-	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+	server := engineTestServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		switch request.Method {
 		case http.MethodGet:
 			_, _ = io.WriteString(response, vaultStatusBody(handoff.OwnerEngine, false, false))
@@ -720,7 +726,7 @@ func TestRunVaultCreateErasesTerminalBuffersAndSendsAuthenticatedJSON(t *testing
 
 func TestRunVaultRejectsInvalidUTF8WithoutSendingASecret(t *testing.T) {
 	posts := 0
-	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+	server := engineTestServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if request.Method == http.MethodPost {
 			posts++
 		}
@@ -742,7 +748,7 @@ func TestRunVaultRejectsInvalidUTF8WithoutSendingASecret(t *testing.T) {
 
 func TestRunVaultCancellationReturns130WithoutARequest(t *testing.T) {
 	requests := 0
-	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { requests++ }))
+	server := engineTestServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { requests++ }))
 	defer server.Close()
 	stateDir := t.TempDir()
 	writeVaultTestHandoff(t, stateDir, server.URL, handoff.OwnerEngine)
@@ -759,7 +765,7 @@ func TestRunVaultCancellationReturns130WithoutARequest(t *testing.T) {
 
 func TestRunVaultReadCancellationSendsNoMutation(t *testing.T) {
 	posts := 0
-	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+	server := engineTestServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if request.Method == http.MethodPost {
 			posts++
 		}
@@ -779,7 +785,7 @@ func TestRunVaultReadCancellationSendsNoMutation(t *testing.T) {
 
 func TestRunVaultErasesPartialPasswordReturnedWithReadError(t *testing.T) {
 	posts := 0
-	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+	server := engineTestServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if request.Method == http.MethodPost {
 			posts++
 		}
@@ -807,7 +813,7 @@ func TestRunVaultErasesPartialPasswordReturnedWithReadError(t *testing.T) {
 
 func TestRunVaultStopsPromptingWhenContextIsCanceledAfterARead(t *testing.T) {
 	posts := 0
-	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+	server := engineTestServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if request.Method == http.MethodPost {
 			posts++
 		}
@@ -860,6 +866,9 @@ type cancelingStatusTransport struct {
 }
 
 func (t *cancelingStatusTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	if proof := proofResponse(request); proof != nil {
+		return proof, nil
+	}
 	t.requests++
 	return &http.Response{
 		StatusCode: http.StatusOK,
@@ -901,7 +910,7 @@ func TestRunVaultDoesNotPromptAfterPreflightCancellation(t *testing.T) {
 }
 
 func TestRunVaultRejectsUnknownLiveOwnerWithoutHumanOutput(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+	server := engineTestServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		_, _ = io.WriteString(response, vaultStatusBody(handoff.Owner("unknown"), true, false))
 	}))
 	defer server.Close()
@@ -931,7 +940,7 @@ func TestRunVaultRejectsMalformedOrIncompatibleStatusBeforeHumanOutput(t *testin
 		{name: "protocol mismatch", body: `{"owner":"headless","version":"v4-test","protocolVersion":2,"vault":true,"unlocked":false,"sessions":0}`},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+			server := engineTestServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 				_, _ = io.WriteString(response, test.body)
 			}))
 			defer server.Close()
@@ -993,6 +1002,9 @@ type staticResponseTransport struct {
 }
 
 func (t staticResponseTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	if proof := proofResponse(request); proof != nil {
+		return proof, nil
+	}
 	return &http.Response{StatusCode: t.status, Header: make(http.Header), Body: t.body, Request: request}, nil
 }
 
@@ -1026,6 +1038,9 @@ type sequencedResponseTransport struct {
 }
 
 func (t *sequencedResponseTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	if proof := proofResponse(request); proof != nil {
+		return proof, nil
+	}
 	if t.requests >= len(t.responses) {
 		return nil, errors.New("unexpected request")
 	}
@@ -1090,7 +1105,7 @@ func TestRunVaultVerifiesCurrentPasswordBeforeAskingForNewPassword(t *testing.T)
 		t.Run(http.StatusText(status), func(t *testing.T) {
 			terminal := &fakePasswordTerminal{terminal: true, answers: [][]byte{[]byte("current"), []byte("1234"), []byte("1234")}}
 			var paths []string
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			server := engineTestServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				paths = append(paths, r.URL.Path)
 				switch r.URL.Path {
 				case httpserver.VaultStatusPath:
@@ -1126,7 +1141,7 @@ func TestRunVaultPasswordlessActionsDoNotAskForCurrentPassword(t *testing.T) {
 	for _, action := range []string{"unlock", "lock", "change-password"} {
 		t.Run(action, func(t *testing.T) {
 			terminal := &fakePasswordTerminal{terminal: action == "change-password", answers: [][]byte{[]byte("1234"), []byte("1234")}}
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			server := engineTestServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if r.Method == http.MethodGet {
 					body := strings.TrimSuffix(vaultStatusBody(handoff.OwnerEngine, true, false), "}") + `,"passwordless":true}`
 					io.WriteString(w, body)
@@ -1157,5 +1172,45 @@ func TestRunVaultPasswordlessActionsDoNotAskForCurrentPassword(t *testing.T) {
 				t.Fatalf("output=%s", out.String())
 			}
 		})
+	}
+}
+
+// engine が終了処理を経ずに消えて handoff だけが残り、同じ port を別の process が
+// 取った状況である。そいつは status に本物らしい答えを返せるが、handoff の秘密は
+// 知らない。CLI は秘密を送らず、password prompt にも進まない。
+func TestRunVaultUnlockSendsNothingToAnEngineThatCannotProveTheHandoffSecret(t *testing.T) {
+	var secretSeen, passwordPrompted bool
+	var requests []string
+	impostor := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		requests = append(requests, request.URL.Path)
+		if request.Header.Get(handoff.HeaderName) != "" {
+			secretSeen = true
+		}
+		if request.URL.Path == httpserver.ChallengePath {
+			// 秘密を知らないので、適当な proof を返す。
+			response.Header().Set(handoff.ProofHeader, handoff.Prove("not the secret", request.Header.Get(handoff.ChallengeHeader)))
+			response.WriteHeader(http.StatusNoContent)
+			return
+		}
+		_, _ = io.WriteString(response, vaultStatusBody(handoff.OwnerEngine, true, false))
+	}))
+	defer impostor.Close()
+	stateDir := t.TempDir()
+	writeVaultTestHandoff(t, stateDir, impostor.URL, handoff.OwnerEngine)
+
+	terminal := &fakePasswordTerminal{terminal: true, answers: [][]byte{[]byte(vaultPasswordCanary)}, afterRead: func(int) { passwordPrompted = true }}
+	var stdout, stderr strings.Builder
+	code := runVault(context.Background(), "unlock", stateDir, impostor.Client(), vaultTestInput(t), &stdout, &stderr, terminal)
+	if code != 1 {
+		t.Fatalf("code = %d, stderr = %q", code, stderr.String())
+	}
+	if secretSeen {
+		t.Fatalf("the handoff secret reached a process that could not prove it: %v", requests)
+	}
+	if passwordPrompted || terminal.reads != 0 {
+		t.Fatal("the CLI asked for the master password before the engine was verified")
+	}
+	if !strings.Contains(stderr.String(), "did not prove") {
+		t.Fatalf("stderr = %q", stderr.String())
 	}
 }

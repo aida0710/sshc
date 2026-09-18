@@ -618,3 +618,38 @@ func TestKeyPassphrasesTravelForEveryHopOfTheConnection(t *testing.T) {
 		t.Errorf("the destination's key passphrase did not travel: %+v", answer)
 	}
 }
+
+// CLI は秘密を送る前に、この engine が handoff の秘密を持つことを確かめる。
+// 答えは challenge ごとに違い、秘密そのものは含まない。
+func TestTheChallengeProvesTheHandoffSecretWithoutRevealingIt(t *testing.T) {
+	const cliSecret = "the secret for this run"
+	engine := connectEngine(t, ConnectHandlers{Secret: cliSecret})
+	challenge, err := handoff.MintChallenge(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	recorder := send(t, engine, http.MethodGet, ChallengePath, "", map[string]string{handoff.ChallengeHeader: challenge})
+	if recorder.Code != http.StatusNoContent {
+		t.Fatalf("status = %d: %s", recorder.Code, recorder.Body.String())
+	}
+	proof := recorder.Header().Get(handoff.ProofHeader)
+	if !handoff.VerifyProof(cliSecret, challenge, proof) {
+		t.Fatalf("proof %q does not verify", proof)
+	}
+	if strings.Contains(proof, cliSecret) || recorder.Body.Len() != 0 {
+		t.Fatal("the answer carried the secret itself")
+	}
+	for name, headers := range map[string]map[string]string{
+		"no challenge":        {},
+		"malformed challenge": {handoff.ChallengeHeader: "short"},
+	} {
+		if refused := send(t, engine, http.MethodGet, ChallengePath, "", headers); refused.Code != http.StatusBadRequest {
+			t.Fatalf("%s: status = %d", name, refused.Code)
+		}
+	}
+	// handoff を書けなかった engine は秘密を持たないので、何も証明しない。
+	unproven := connectEngine(t, ConnectHandlers{})
+	if refused := send(t, unproven, http.MethodGet, ChallengePath, "", map[string]string{handoff.ChallengeHeader: challenge}); refused.Code != http.StatusBadRequest {
+		t.Fatalf("an engine without a secret answered: %d", refused.Code)
+	}
+}

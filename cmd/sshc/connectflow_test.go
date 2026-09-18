@@ -157,10 +157,14 @@ func lockedEngine() statusAnswer {
 }
 
 // stateWithEngine は、handoff だけを置く。応答するのは fakeProbe である。
+// stateWithEngine は、challenge にだけ答える engine を立て、それを指す handoff を書く。
+// 状態そのものは fakeProbe が返すので、engine は証明以外の要求に答えない。
 func stateWithEngine(t *testing.T, owner handoff.Owner) string {
 	t.Helper()
 	stateDir := t.TempDir()
-	document := testHandoff("http://127.0.0.1:1")
+	server := engineTestServer(http.NotFoundHandler())
+	t.Cleanup(server.Close)
+	document := testHandoff(server.URL)
 	document.Owner = owner
 	if err := handoff.Write(stateDir, document); err != nil {
 		t.Fatal(err)

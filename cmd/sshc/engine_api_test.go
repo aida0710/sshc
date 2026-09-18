@@ -130,7 +130,7 @@ func TestEngineAPIAcceptsCurrentServerVaultProtectionStatus(t *testing.T) {
 
 func openTestEngineAPI(t *testing.T, script *engineAPIScript) (*engineAPI, *httptest.Server, string) {
 	t.Helper()
-	server := httptest.NewServer(http.HandlerFunc(script.handler))
+	server := engineTestServer(http.HandlerFunc(script.handler))
 	stateDir := t.TempDir()
 	writeTestHandoff(t, stateDir, server.URL)
 	opened, err := openEngineAPI(context.Background(), stateDir, server.Client())
@@ -143,7 +143,7 @@ func openTestEngineAPI(t *testing.T, script *engineAPIScript) (*engineAPI, *http
 
 func TestEngineAPIAuthenticatesAndClosesTheCommandSession(t *testing.T) {
 	script := &engineAPIScript{t: t, statusBody: validEngineStatus(), syncBody: `{"configured":true}`}
-	server := httptest.NewServer(http.HandlerFunc(script.handler))
+	server := engineTestServer(http.HandlerFunc(script.handler))
 	defer server.Close()
 	stateDir := t.TempDir()
 	writeTestHandoff(t, stateDir, server.URL)
@@ -192,7 +192,7 @@ func TestEngineAPIRejectsIdentityAndVaultMismatchesBeforeIssuingASession(t *test
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			script := &engineAPIScript{t: t, statusBody: test.body}
-			server := httptest.NewServer(http.HandlerFunc(script.handler))
+			server := engineTestServer(http.HandlerFunc(script.handler))
 			defer server.Close()
 			stateDir := t.TempDir()
 			writeTestHandoff(t, stateDir, server.URL)
@@ -209,9 +209,9 @@ func TestEngineAPIRejectsIdentityAndVaultMismatchesBeforeIssuingASession(t *test
 func TestEngineAPIRefusesRedirectsAndInvalidBoundedJSON(t *testing.T) {
 	t.Run("redirect", func(t *testing.T) {
 		var redirected bool
-		target := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { redirected = true }))
+		target := engineTestServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { redirected = true }))
 		defer target.Close()
-		server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		server := engineTestServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 			http.Redirect(response, request, target.URL, http.StatusTemporaryRedirect)
 		}))
 		defer server.Close()
@@ -236,7 +236,7 @@ func TestEngineAPIRefusesRedirectsAndInvalidBoundedJSON(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			script := &engineAPIScript{t: t, statusBody: test.body}
-			server := httptest.NewServer(http.HandlerFunc(script.handler))
+			server := engineTestServer(http.HandlerFunc(script.handler))
 			defer server.Close()
 			stateDir := t.TempDir()
 			writeTestHandoff(t, stateDir, server.URL)
@@ -283,12 +283,15 @@ func TestEngineAPIHonorsCancellationAndDecodesProblemsWithoutLeakingTokens(t *te
 type engineAPIRoundTripFunc func(*http.Request) (*http.Response, error)
 
 func (function engineAPIRoundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
+	if proof := proofResponse(request); proof != nil {
+		return proof, nil
+	}
 	return function(request)
 }
 
 func TestEngineAPIMutationTransportFailureIsOutcomeUnknownAndSecretPayloadIsErased(t *testing.T) {
 	script := &engineAPIScript{t: t, statusBody: validEngineStatus()}
-	server := httptest.NewServer(http.HandlerFunc(script.handler))
+	server := engineTestServer(http.HandlerFunc(script.handler))
 	defer server.Close()
 	baseTransport := server.Client().Transport
 	client := &http.Client{Transport: engineAPIRoundTripFunc(func(request *http.Request) (*http.Response, error) {
@@ -325,7 +328,7 @@ func TestEngineAPIMutationTransportFailureIsOutcomeUnknownAndSecretPayloadIsEras
 
 func TestEngineAPIIssueActionUsesTheTypedEndpoint(t *testing.T) {
 	script := &engineAPIScript{t: t, statusBody: validEngineStatus()}
-	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+	server := engineTestServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if request.URL.Path != "/api/v1/actions" {
 			script.handler(response, request)
 			return
@@ -360,7 +363,7 @@ func TestEngineAPIIssueActionUsesTheTypedEndpoint(t *testing.T) {
 
 func TestEngineAPIDoRawPreservesStreamingBodyAndSecurityHeaders(t *testing.T) {
 	var gotBody string
-	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+	server := engineTestServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if request.Header.Get(httpserver.CSRFHeader) != "csrf" || request.Header.Get("Origin") != serverOrigin(request) {
 			t.Errorf("security headers = %#v", request.Header)
 		}

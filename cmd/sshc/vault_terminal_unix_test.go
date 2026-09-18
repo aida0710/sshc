@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -83,7 +82,7 @@ func TestMaskedCLIPromptEchoesStarsAndBackspaceBeforeEnter(t *testing.T) {
 
 func TestRunVaultPromptCtrlCReturns130WithoutEnterAndRestoresEcho(t *testing.T) {
 	var requests atomic.Int32
-	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+	server := engineTestServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		requests.Add(1)
 		_, _ = io.WriteString(response, vaultStatusBody(handoff.OwnerEngine, false, false))
 	}))

@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -228,7 +227,7 @@ func TestServiceReadinessRequiresTheSystemdPIDAndStatusAPI(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	server := engineTestServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.Header.Get(handoff.HeaderName) != secret {
 			http.Error(writer, "forbidden", http.StatusForbidden)
 			return
