@@ -520,3 +520,27 @@ func TestAStaleStoredPasswordStillLetsTheUserAnswer(t *testing.T) {
 		t.Fatalf("the fallback prompt hid why it asked again: %q", prompt.secretly[0])
 	}
 }
+
+func TestKeyboardInteractiveTextIsShownWithoutControlSequences(t *testing.T) {
+	server := newTestServer(t, serverOptions{
+		Keyboard:            map[string]string{"Code\x1b]0;owned\a: ": "42"},
+		KeyboardName:        "site\x1b[2J",
+		KeyboardInstruction: "type the code\x07",
+	})
+	prompt := &scriptedPrompter{answers: []string{"42"}}
+	if err := connect(t, server, targetWith(server), sshclient.Auth{}, prompt); err != nil {
+		t.Fatalf("connect = %v", err)
+	}
+	if len(prompt.asked) != 1 {
+		t.Fatalf("asked = %#v", prompt.asked)
+	}
+	shown := prompt.asked[0]
+	for _, forbidden := range []string{"\x1b", "\a", "\x07"} {
+		if strings.Contains(shown, forbidden) {
+			t.Fatalf("the prompt carried a control sequence: %q", shown)
+		}
+	}
+	if !strings.Contains(shown, "site") || !strings.Contains(shown, "type the code") || !strings.Contains(shown, "Code") {
+		t.Fatalf("the prompt lost the server's words: %q", shown)
+	}
+}

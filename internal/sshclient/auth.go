@@ -12,6 +12,7 @@ import (
 	"golang.org/x/crypto/ssh/agent"
 
 	"sshc/internal/keys"
+	"sshc/internal/terminal"
 	"sshc/internal/totp"
 )
 
@@ -383,6 +384,10 @@ func (a Auth) read(path string) ([]byte, error) {
 	return os.ReadFile(path)
 }
 
+// maxChallengeTextRunes bounds each keyboard-interactive name, instruction and
+// question before it is written to the terminal.
+const maxChallengeTextRunes = 1024
+
 func answerKeyboardChallenge(
 	prompt Prompter,
 	context, name, instruction string,
@@ -393,8 +398,10 @@ func answerKeyboardChallenge(
 ) ([]string, error) {
 	// name と instruction は、サーバーがユーザーへ向けて書いた文である。捨てると
 	// 「何を応答すればよいか」がそのユーザーに届かない。最初の未回答の問いの前に置く。
+	// ただし端末へそのまま書く文なので、OpenSSH の vis() と同じく制御文字は落とす。
 	preamble := strings.TrimSpace(strings.TrimSpace(context) + "\r\n" +
-		strings.TrimSpace(name) + "\r\n" + strings.TrimSpace(instruction))
+		terminal.DisplayText(name, maxChallengeTextRunes) + "\r\n" +
+		terminal.DisplayText(instruction, maxChallengeTextRunes))
 	preambleShown := false
 	for index, question := range questions {
 		if index < len(answered) && answered[index] {
@@ -404,6 +411,7 @@ func answerKeyboardChallenge(
 		if index < len(echos) && echos[index] {
 			ask = prompt.Line
 		}
+		question = terminal.DisplayText(question, maxChallengeTextRunes)
 		if !preambleShown && preamble != "" {
 			question = preamble + "\r\n" + question
 			preambleShown = true

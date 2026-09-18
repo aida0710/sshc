@@ -763,3 +763,37 @@ func TestTheReconnectWindowIsCountedFromTheGaps(t *testing.T) {
 		t.Error("0 が既定へ戻された。切る道が無くなる")
 	}
 }
+
+func TestStopReconnectingDuringTheHandshakeEndsTheSessionInsteadOfDroppingInput(t *testing.T) {
+	spy := &readyOpenSpy{}
+	registry, _ := newFastRegistry()
+	session, err := registry.Open(context.Background(), terminal.Spec{
+		Kind: terminal.KindSSH, Alias: "gateway", Title: "gateway", Open: spy.open,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	spy.at(0).finishOpen(nil)
+	waitFor(t, func() bool { return session.View().State == terminal.StateConnected })
+
+	spy.at(0).exit(terminal.ExitInfo{Code: terminal.TransportLost})
+	// reopen has returned the replacement process; its handshake (Ready) is
+	// still pending when the user asks to stop.
+	waitFor(t, func() bool { return spy.count() >= 2 })
+	waitFor(t, func() bool { return session.View().State == terminal.StateReconnecting })
+	if err := session.StopReconnecting(); err != nil {
+		t.Fatalf("StopReconnecting during handshake: %v", err)
+	}
+	if spy.at(1).forceCount() == 0 {
+		t.Fatal("the handshaking process was left running")
+	}
+	spy.at(1).finishOpen(nil)
+	waitFor(t, func() bool { return session.View().State == terminal.StateExited })
+	view := session.View()
+	if view.Problem != "reconnect_stopped" || view.Exited == nil {
+		t.Fatalf("view after stop = state %s problem %q exited %v", view.State, view.Problem, view.Exited)
+	}
+	if _, err := session.Write([]byte("ls\r")); !errors.Is(err, terminal.ErrExited) {
+		t.Fatalf("Write after stop = %v, want ErrExited", err)
+	}
+}

@@ -100,7 +100,7 @@ func (d Dialer) connect(ctx context.Context, target Target, session *Session, ob
 	// 端末の一行目に書くためであり、失敗しても接続は続ける。
 	session.forwarded.open(client, target.Forwards, session.writer)
 	if target.AgentForward {
-		session.forwarded.note(forwardAgent(client, remote, d.Auth.AgentSocket, session.writer))
+		session.forwarded.forwardAgent(client, remote, d.Auth.AgentSocket, session.writer)
 	}
 
 	if err := d.start(remote, target, size, session); err != nil {

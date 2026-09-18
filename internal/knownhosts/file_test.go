@@ -111,3 +111,22 @@ func TestSearchFindsHostsKeyTypesAndFingerprints(t *testing.T) {
 		t.Errorf("key type search is case-insensitive: %#v", found)
 	}
 }
+
+func TestMatchesHostHonoursNegatedPatternsLikeOpenSSH(t *testing.T) {
+	file := knownhosts.ParseFile([]byte("*.corp,!special.corp ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGOsSkw6xSsvW0qbp1a1EVJLiuvJf2jn5ITuTaMlBdET\n"))
+	entry := file.Lines[0].Entry
+	if entry == nil {
+		t.Fatal("the negated line did not parse as an entry")
+	}
+	if !entry.MatchesHost("build.corp") {
+		t.Error("the wildcard did not match a host it covers")
+	}
+	// OpenSSH's match_hostname: a negated match excludes the host from the whole
+	// entry even though the wildcard also matches it.
+	if entry.MatchesHost("special.corp") {
+		t.Error("the negated host matched the entry")
+	}
+	if entry.MatchesHost("elsewhere.example") {
+		t.Error("an unrelated host matched")
+	}
+}
