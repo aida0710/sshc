@@ -72,6 +72,9 @@ type serverOptions struct {
 	KeyboardInstruction string
 	// ExitCode はシェルの終了コード。
 	ExitCode int
+	// IgnoreKeepAlives は、keepalive に返事をしない相手を再現する。NAT が状態を
+	// 捨てた接続では書き込みは成功し、応答だけが永久に来ない。
+	IgnoreKeepAlives bool
 	// OmitExitStatus は、transport が終了状態を残さず切れた場合を再現する。
 	OmitExitStatus bool
 	// AllowDirectTCPIP は direct-tcpip チャンネルを通すか。ProxyJump の手前側で要る。
@@ -254,6 +257,9 @@ func (s *testServer) serve(conn net.Conn) {
 				s.mutex.Lock()
 				s.keepAlives++
 				s.mutex.Unlock()
+				if s.options.IgnoreKeepAlives {
+					continue
+				}
 			}
 			if request.WantReply {
 				_ = request.Reply(false, nil)
@@ -311,8 +317,27 @@ func (s *testServer) forward(newChannel ssh.NewChannel) {
 		_ = channel.Close()
 		return
 	}
-	go func() { _, _ = io.Copy(remote, channel); _ = remote.Close() }()
-	go func() { _, _ = io.Copy(channel, remote); _ = channel.Close() }()
+	// sshd と同じく、片方向の EOF は相手側の送信だけを閉じ（half-close）、
+	// 両方向が終わってから接続を閉じる。
+	go func() {
+		done := make(chan struct{}, 2)
+		go func() {
+			_, _ = io.Copy(remote, channel)
+			if half, ok := remote.(interface{ CloseWrite() error }); ok {
+				_ = half.CloseWrite()
+			}
+			done <- struct{}{}
+		}()
+		go func() {
+			_, _ = io.Copy(channel, remote)
+			_ = channel.CloseWrite()
+			done <- struct{}{}
+		}()
+		<-done
+		<-done
+		_ = remote.Close()
+		_ = channel.Close()
+	}()
 }
 
 // channelConn は、SSH のチャンネルを net.Conn として見せる。agent の

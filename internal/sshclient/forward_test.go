@@ -2,10 +2,15 @@ package sshclient_test
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
 	"encoding/binary"
 	"io"
 	"net"
+	"os"
+	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -473,5 +478,148 @@ func TestAgentForwardingWithoutAnAgentStillConnects(t *testing.T) {
 	forwards := process.(terminal.Forwarder).Forwards()
 	if len(forwards) != 1 || forwards[0].Problem == "" {
 		t.Fatalf("forwards = %#v, want the reason recorded", forwards)
+	}
+}
+
+// replyAfterEOFServer は、相手が送信を終える（FIN）まで読み、そのあとで
+// 1 度だけ応答を書く受け口である。書き終えてから答えを待つ HTTP client の形。
+func replyAfterEOFServer(t *testing.T) string {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = listener.Close() })
+	go func() {
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			go func() {
+				defer func() { _ = conn.Close() }()
+				request, _ := io.ReadAll(conn)
+				_, _ = conn.Write(append([]byte("after-eof:"), request...))
+			}()
+		}
+	}()
+	return listener.Addr().String()
+}
+
+func TestALocalForwardDeliversTheReplyThatFollowsAHalfClose(t *testing.T) {
+	destination := replyAfterEOFServer(t)
+	port := freePort(t)
+	process, server := forwardingSession(t, []sshclient.ForwardSpec{{
+		Kind: terminal.ForwardLocal, ListenPort: port, To: destination,
+	}})
+	defer func() { _ = process.Close() }()
+	server.allow(destination)
+
+	conn, err := net.Dial("tcp", "127.0.0.1:"+port)
+	if err != nil {
+		t.Fatalf("the forwarded port is not open: %v", err)
+	}
+	defer func() { _ = conn.Close() }()
+	if _, err := conn.Write([]byte("request")); err != nil {
+		t.Fatal(err)
+	}
+	if err := conn.(*net.TCPConn).CloseWrite(); err != nil {
+		t.Fatal(err)
+	}
+	_ = conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+	answer, err := io.ReadAll(conn)
+	if err != nil {
+		t.Fatalf("the reply after the half-close was lost: %v", err)
+	}
+	if got := string(answer); got != "after-eof:request" {
+		t.Fatalf("the reply after the half-close was %q", got)
+	}
+}
+
+// countingAgent は、開いている agent 接続の数を数える test agent である。
+type countingAgent struct {
+	mutex sync.Mutex
+	open  int
+}
+
+func (a *countingAgent) serve(t *testing.T) string {
+	t.Helper()
+	_, private, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyring := agent.NewKeyring()
+	if err := keyring.Add(agent.AddedKey{PrivateKey: private}); err != nil {
+		t.Fatal(err)
+	}
+	socketDirectory, err := os.MkdirTemp("", "sshc-agent")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(socketDirectory) })
+	socket := filepath.Join(socketDirectory, "s")
+	listener, err := net.Listen("unix", socket)
+	if err != nil {
+		t.Fatalf("listen on %q: %v", socket, err)
+	}
+	t.Cleanup(func() { _ = listener.Close() })
+	go func() {
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			a.mutex.Lock()
+			a.open++
+			a.mutex.Unlock()
+			go func() {
+				_ = agent.ServeAgent(keyring, conn)
+				a.mutex.Lock()
+				a.open--
+				a.mutex.Unlock()
+			}()
+		}
+	}()
+	return socket
+}
+
+func (a *countingAgent) openConnections() int {
+	a.mutex.Lock()
+	defer a.mutex.Unlock()
+	return a.open
+}
+
+func TestClosingTheSessionReleasesTheForwardedAgentSocket(t *testing.T) {
+	agentServer := &countingAgent{}
+	socket := agentServer.serve(t)
+	path, contents, public := keyPair(t)
+	server := newTestServer(t, serverOptions{
+		AcceptKeys: []ssh.PublicKey{public},
+		OnShell: func(channel ssh.Channel) {
+			_, _ = io.WriteString(channel, "ready\r\n")
+			_, _ = io.Copy(io.Discard, channel)
+		},
+	})
+	auth := sshclient.Auth{ReadFile: func(string) ([]byte, error) { return contents, nil }, AgentSocket: socket}
+	target := targetWith(server, path)
+	target.AgentForward = true
+
+	process, err := dialerFor(t, server, auth).Open(context.Background(), target, terminal.Size{Cols: 80, Rows: 24})
+	if err != nil {
+		t.Fatal(err)
+	}
+	readUntil(t, process, "ready")
+	if got := agentServer.openConnections(); got != 1 {
+		t.Fatalf("agent connections while forwarding = %d", got)
+	}
+	if err := process.Close(); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) && agentServer.openConnections() != 0 {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if got := agentServer.openConnections(); got != 0 {
+		t.Fatalf("agent connections after Close = %d, want the socket released", got)
 	}
 }

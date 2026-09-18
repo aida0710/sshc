@@ -428,14 +428,11 @@ func (c *Conn) Write(source []byte) (int, error) {
 	}
 
 	written := 0
-	c.stateMu.Lock()
-	binary := c.localEnabled[optionBinary]
-	c.stateMu.Unlock()
 	for len(source) > 0 {
 		count := min(len(source), writeChunkBytes)
 		chunk := source[:count]
 		c.stateMu.Lock()
-		binary = c.localEnabled[optionBinary]
+		binary := c.localEnabled[optionBinary]
 		c.stateMu.Unlock()
 		application := encodeApplication(chunk, binary, &c.outboundNVTCR)
 		if err := c.writeApplicationLocked(application); err != nil {
