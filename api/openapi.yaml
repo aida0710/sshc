@@ -4477,6 +4477,12 @@ components:
         mode: { type: string }
         modifiedAt: { type: string, format: date-time }
         revision: { type: string }
+        # Symlinks only: the target as the server reports it, and the type of
+        # the entry the link chain ends at. targetType is absent when the target
+        # cannot be read (a broken link or a loop). size is then the target's
+        # size when the target is a file.
+        linkTarget: { type: string }
+        targetType: { type: string, enum: [file, directory, other] }
     SFTPListing:
       type: object
       additionalProperties: false

@@ -26,7 +26,11 @@ func (s Service) ReadText(ctx context.Context, alias, remotePath string) (TextFi
 		return TextFile{}, err
 	}
 	defer remote.Close()
-	return readText(ctx, remote, cleaned)
+	file, err := locateFile(remote, cleaned)
+	if err != nil {
+		return TextFile{}, err
+	}
+	return readText(ctx, remote, file)
 }
 
 // previewContentType は、先頭のバイト列だけからその型を返す。preview で
@@ -68,7 +72,11 @@ func (s Service) ReadPreview(ctx context.Context, alias, remotePath string) (Pre
 		return Preview{}, err
 	}
 	defer remote.Close()
-	before, err := remote.Lstat(cleaned)
+	file, err := locateFile(remote, cleaned)
+	if err != nil {
+		return Preview{}, err
+	}
+	before, err := remote.Lstat(file.stored)
 	if err != nil {
 		return Preview{}, err
 	}
@@ -78,11 +86,11 @@ func (s Service) ReadPreview(ctx context.Context, alias, remotePath string) (Pre
 	if before.Size() > MaxPreviewFileBytes {
 		return Preview{}, ErrPreviewTooLarge
 	}
-	contents, contentType, err := readPreviewBytes(ctx, remote, cleaned)
+	contents, contentType, err := readPreviewBytes(ctx, remote, file.stored)
 	if err != nil {
 		return Preview{}, err
 	}
-	after, err := remote.Lstat(cleaned)
+	after, err := remote.Lstat(file.stored)
 	if err != nil {
 		return Preview{}, err
 	}
@@ -90,7 +98,7 @@ func (s Service) ReadPreview(ctx context.Context, alias, remotePath string) (Pre
 	if metadataRevision(before) != metadataRevision(after) {
 		return Preview{}, ErrConflict
 	}
-	entry := entryFrom(path.Dir(cleaned), namedInfo{FileInfo: after, name: path.Base(cleaned)})
+	entry := entryFrom(path.Dir(file.shown), namedInfo{FileInfo: after, name: path.Base(file.shown)})
 	return Preview{Entry: entry, ContentType: contentType, Contents: contents, Revision: contentRevision(after, contents)}, nil
 }
 
@@ -143,8 +151,14 @@ func (s Service) SaveText(
 		return TextFile{}, err
 	}
 	defer remote.Close()
+	// Saving through a symlink rewrites the file it points to and leaves the
+	// link in place, as editors do.
+	file, err := locateFile(remote, cleaned)
+	if err != nil {
+		return TextFile{}, err
+	}
 
-	current, err := readText(ctx, remote, cleaned)
+	current, err := readText(ctx, remote, file)
 	if err != nil {
 		return TextFile{}, err
 	}
@@ -152,7 +166,7 @@ func (s Service) SaveText(
 		return TextFile{}, ErrConflict
 	}
 	verify := func() error {
-		latest, err := readText(ctx, remote, cleaned)
+		latest, err := readText(ctx, remote, file)
 		if errors.Is(err, fs.ErrNotExist) {
 			return ErrConflict
 		}
@@ -165,15 +179,15 @@ func (s Service) SaveText(
 		return nil
 	}
 	if _, err := s.replace(
-		ctx, remote, cleaned, strings.NewReader(contents), current.Entry.Mode.Perm(), 0, verify,
+		ctx, remote, file.stored, strings.NewReader(contents), current.Entry.Mode.Perm(), 0, verify,
 	); err != nil {
 		return TextFile{}, err
 	}
-	return readText(ctx, remote, cleaned)
+	return readText(ctx, remote, file)
 }
 
-func readText(ctx context.Context, remote Remote, cleaned string) (TextFile, error) {
-	before, err := remote.Lstat(cleaned)
+func readText(ctx context.Context, remote Remote, file fileLocation) (TextFile, error) {
+	before, err := remote.Lstat(file.stored)
 	if err != nil {
 		return TextFile{}, err
 	}
@@ -183,12 +197,12 @@ func readText(ctx context.Context, remote Remote, cleaned string) (TextFile, err
 	if before.Size() > MaxEditableFileBytes {
 		return TextFile{}, ErrTextTooLarge
 	}
-	file, err := remote.Open(cleaned)
+	opened, err := remote.Open(file.stored)
 	if err != nil {
 		return TextFile{}, err
 	}
-	contents, readErr := io.ReadAll(io.LimitReader(&contextReader{ctx: ctx, reader: file}, MaxEditableFileBytes+1))
-	closeErr := file.Close()
+	contents, readErr := io.ReadAll(io.LimitReader(&contextReader{ctx: ctx, reader: opened}, MaxEditableFileBytes+1))
+	closeErr := opened.Close()
 	if readErr != nil {
 		return TextFile{}, readErr
 	}
@@ -201,14 +215,14 @@ func readText(ctx context.Context, remote Remote, cleaned string) (TextFile, err
 	if !validText(contents) {
 		return TextFile{}, ErrNotUTF8
 	}
-	after, err := remote.Lstat(cleaned)
+	after, err := remote.Lstat(file.stored)
 	if err != nil {
 		return TextFile{}, err
 	}
 	if metadataRevision(before) != metadataRevision(after) {
 		return TextFile{}, ErrConflict
 	}
-	entry := entryFrom(path.Dir(cleaned), namedInfo{FileInfo: after, name: path.Base(cleaned)})
+	entry := entryFrom(path.Dir(file.shown), namedInfo{FileInfo: after, name: path.Base(file.shown)})
 	return TextFile{Entry: entry, Contents: string(contents), Revision: contentRevision(after, contents)}, nil
 }
 

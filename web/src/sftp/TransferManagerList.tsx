@@ -435,7 +435,7 @@ export function TransferManagerList({ openRequest = 0 }: { openRequest?: number 
                 {items.map((item) => {
                   const total = item.totalBytes >= 0 ? item.totalBytes : Math.max(item.transferredBytes, 1);
                   const sourceMissing = item.direction === "upload" &&
-                    (item.status === "queued" || item.status === "paused" || item.status === "reattach") &&
+                    (item.status === "queued" || item.status === "paused" || item.status === "reattach" || item.status === "needs_overwrite") &&
                     !sftpTransferManager.hasUploadSource(item.id);
                   const displayedStatus: DisplayedStatus = needsReconciliation(item)
                     ? "reconcile"
@@ -468,7 +468,7 @@ export function TransferManagerList({ openRequest = 0 }: { openRequest?: number 
                         {!sourceMissing && item.allowedActions.includes("pause") ? <button type="button" className="text-accent" onClick={() => runControl(() => sftpTransferManager.pause(item.id))}>{t("sftp.transfer.pause")}</button> : null}
                         {!sourceMissing && item.allowedActions.includes("resume") && item.status !== "needs_overwrite" ? <button type="button" className="text-accent" onClick={() => runControl(() => sftpTransferManager.resume(item.id))}>{t("sftp.transfer.resume")}</button> : null}
                         {item.allowedActions.includes("retry") ? <button type="button" className="text-accent" onClick={() => runControl(() => sftpTransferManager.retry(item.id))}>{t("sftp.manager.retry")}</button> : null}
-                        {item.allowedActions.includes("resume") && item.status === "needs_overwrite" ? <button type="button" className="text-notice-ink" onClick={() => runControl(() => sftpTransferManager.overwrite(item.id))}>{t("sftp.overwrite")}</button> : null}
+                        {!sourceMissing && item.allowedActions.includes("resume") && item.status === "needs_overwrite" ? <button type="button" className="text-notice-ink" onClick={() => runControl(() => sftpTransferManager.overwrite(item.id))}>{t("sftp.overwrite")}</button> : null}
                         {item.allowedActions.includes("cancel") ? <button type="button" className="text-danger" onClick={() => runControl(() => sftpTransferManager.cancel(item.id))}>{t("sftp.cancel")}</button> : null}
                         {item.allowedActions.includes("remove") ? <button type="button" className="text-ink-muted hover:text-ink" onClick={() => runControl(() => sftpTransferManager.remove(item.id))}>{t("sftp.manager.remove")}</button> : null}
                       </span>

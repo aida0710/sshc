@@ -7,6 +7,7 @@ import { ModalShell } from "../ui/ModalShell";
 import { Button } from "../ui/surface";
 import { sftpApi, type RemoteDirectoryStats, type RemoteEntry } from "./api";
 import { formatBytes } from "./format";
+import { entryKind } from "./entryKind";
 import { symbolicModeToOctal } from "./transfers";
 
 // Long text is previewed, not edited. Rendering a whole 2 MiB file into a <pre>
@@ -66,6 +67,7 @@ export function SFTPDetailsDialog({
   onClose,
   onEdit,
   onDownload,
+  canDownload,
   onRename,
   returnFocusRef,
 }: {
@@ -75,6 +77,8 @@ export function SFTPDetailsDialog({
   onClose: () => void;
   onEdit: (entry: RemoteEntry) => void;
   onDownload: (entries: RemoteEntry[]) => void;
+  // Whether "send it over" can take an entry; the pane knows where it goes.
+  canDownload: (entry: RemoteEntry) => boolean;
   onRename: (entry: RemoteEntry) => void;
   returnFocusRef?: RefObject<HTMLElement | null>;
 }) {
@@ -84,9 +88,10 @@ export function SFTPDetailsDialog({
   const [preview, setPreview] = useState<PreviewState>({ kind: "idle" });
   const [directoryStats, setDirectoryStats] = useState<DirectoryStatsState>({ kind: "idle" });
   const entry = entries.length === 1 ? entries[0] ?? null : null;
-  const previewPath = entry !== null && entry.type === "file" ? entry.path : null;
-  const directoryPath = entry !== null && entry.type === "directory" ? entry.path : null;
-  const totalBytes = entries.reduce((sum, item) => sum + (item.type === "file" ? item.size : 0), 0);
+  const kind = entry === null ? null : entryKind(entry);
+  const previewPath = entry !== null && kind === "file" ? entry.path : null;
+  const directoryPath = entry !== null && kind === "directory" ? entry.path : null;
+  const totalBytes = entries.reduce((sum, item) => sum + (entryKind(item) === "file" ? item.size : 0), 0);
   const heading = entry === null ? t("sftp.detailsForCount", { count: entries.length }) : t("sftp.detailsFor", { name: entry.name });
 
   useEffect(() => {
@@ -153,8 +158,13 @@ export function SFTPDetailsDialog({
             <>
               <Property label={t("sftp.path")}>{entry.path}</Property>
               <Property label={t("sftp.type")}>{t(`sftp.type.${entry.type}`)}</Property>
+              {entry.type === "symlink" ? (
+                <Property label={t("sftp.linkTarget")}>
+                  {entry.targetType === undefined ? t("sftp.brokenLink", { target: entry.linkTarget ?? "" }) : entry.linkTarget ?? ""}
+                </Property>
+              ) : null}
               <Property label={t("sftp.size")}>
-                {entry.type === "file"
+                {kind === "file"
                   ? `${entry.size.toLocaleString()} (${formatBytes(entry.size)})`
                   : directoryStats.kind === "loading"
                     ? t("sftp.calculating")
@@ -162,7 +172,7 @@ export function SFTPDetailsDialog({
                       ? `${directoryStats.stats.truncated ? t("sftp.partialSizePrefix") : ""}${directoryStats.stats.bytes.toLocaleString()} (${formatBytes(directoryStats.stats.bytes)})`
                       : t("sftp.sizeUnavailable")}
               </Property>
-              {entry.type === "directory" && directoryStats.kind === "loaded" ? (
+              {kind === "directory" && directoryStats.kind === "loaded" ? (
                 <>
                   <Property label={t("sftp.containedFiles")}>{directoryStats.stats.files.toLocaleString()}</Property>
                   <Property label={t("sftp.containedDirectories")}>{Math.max(0, directoryStats.stats.directories - 1).toLocaleString()}</Property>
@@ -218,10 +228,10 @@ export function SFTPDetailsDialog({
       </div>
 
       <div className="flex flex-wrap justify-end gap-2 border-t border-line px-3 py-2">
-        {entry !== null && entry.type === "file"
+        {entry !== null && kind === "file"
           ? <Button disabled={busy} onClick={() => onEdit(entry)}>{t("sftp.editFile")}</Button>
           : null}
-        {entries.some((item) => item.type === "file" || item.type === "directory")
+        {entries.some(canDownload)
           ? <Button disabled={busy} onClick={() => onDownload(entries)}>{t("sftp.download")}</Button>
           : null}
         {entry === null ? null : <Button disabled={busy} onClick={() => onRename(entry)}>{t("sftp.rename")}</Button>}

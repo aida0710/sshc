@@ -64,7 +64,28 @@ type Entry struct {
 	Mode       fs.FileMode
 	ModifiedAt time.Time
 	Revision   string
+	// For a symlink only: the target as the server reports it, and the type
+	// of the entry the chain ends at. TargetType stays empty when the target
+	// cannot be read. Size is then the target's size when that is a file.
+	LinkTarget string
+	TargetType LinkTargetType
 }
+
+// opensAsDirectory says whether the entry lists as a folder: a directory,
+// or a symlink that ends at one. Listings put those first.
+func (entry Entry) opensAsDirectory() bool {
+	return entry.Type == EntryDirectory || entry.TargetType == LinkTargetDirectory
+}
+
+// LinkTargetType is what a symlink chain ends at. It is never another link,
+// because the chain is followed to its end.
+type LinkTargetType string
+
+const (
+	LinkTargetFile      LinkTargetType = "file"
+	LinkTargetDirectory LinkTargetType = "directory"
+	LinkTargetOther     LinkTargetType = "other"
+)
 
 // Listing は、SFTP serverが正規化した絶対パスと、その直下の項目をまとめる。
 // Pathは初期表示でserverの作業ディレクトリを解決した場合にも絶対パスになる。
