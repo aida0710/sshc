@@ -3,10 +3,11 @@ import { failureCode } from "../api/client";
 import { useTranslate } from "../i18n/context";
 import { sftpApi, type RemoteEntry } from "./api";
 import { localHostAlias } from "./localHost";
-import { localJoin, localParentOf, remoteParentOf } from "./sftpSource";
+import { localJoin, localParentOf, remoteParentOf, sourceFor } from "./sftpSource";
 import { entryKind, movable } from "./entryKind";
 import { sftpTransferManager } from "./transferManager";
 import { directoryPaths, remoteEntriesMime, safeRelativePath, type LocalTransferFile, type RemoteDragPayload } from "./transfers";
+import { payloadFor, registerDrag, releaseDrag } from "./dragRegistry";
 import type { SFTPBrowserModel } from "./useSFTPBrowser";
 
 type DroppedEntry = {
@@ -50,13 +51,10 @@ async function droppedFiles(transfer: DataTransfer): Promise<{ files: LocalTrans
   }), directories: [] };
 }
 
-function validPayload(value: unknown): value is RemoteDragPayload {
-  if (typeof value !== "object" || value === null) return false;
-  const candidate = value as { alias?: unknown; entries?: unknown };
-  return typeof candidate.alias === "string" && candidate.alias !== "" && Array.isArray(candidate.entries) && candidate.entries.length > 0 &&
-    candidate.entries.every((entry: { name?: unknown; path?: unknown; type?: unknown; size?: unknown }) =>
-      typeof entry.name === "string" && typeof entry.path === "string" &&
-      (entry.type === "file" || entry.type === "directory") && typeof entry.size === "number");
+// A dragged row's name becomes the last segment of the target path, so it
+// must be exactly one safe segment.
+function validEntryName(name: string): boolean {
+  return safeRelativePath(name) === name && !name.includes("/");
 }
 
 function transferable<T extends { type: RemoteEntry["type"] }>(entries: T[]): T[] {
@@ -225,16 +223,16 @@ export function useSFTPTransfers({
     event.preventDefault();
     setDragging(false);
     if (busy || alias === "" || !connected) return;
-    const remote = typeof event.dataTransfer.getData === "function"
+    const token = typeof event.dataTransfer.getData === "function"
       ? event.dataTransfer.getData(remoteEntriesMime)
       : "";
-    if (remote !== "") {
-      try {
-        const parsed: unknown = JSON.parse(remote);
-        if (validPayload(parsed)) await acceptPayload(parsed);
-      } catch {
+    if (token !== "") {
+      const payload = payloadFor(token);
+      if (payload === null || !payload.entries.every((entry) => validEntryName(entry.name))) {
         setProblem(t("sftp.remoteDropInvalid"));
+        return;
       }
+      await acceptPayload(payload);
       return;
     }
     if (local) return;
@@ -271,8 +269,10 @@ export function useSFTPTransfers({
       entries: transferable(selected).map((candidate) => ({ name: candidate.name, path: candidate.path, type: candidate.type, size: candidate.size })),
     };
     event.dataTransfer.effectAllowed = "copyMove";
-    event.dataTransfer.setData(remoteEntriesMime, JSON.stringify(payload));
+    const token = registerDrag(payload);
+    event.dataTransfer.setData(remoteEntriesMime, token);
     event.dataTransfer.setData("text/plain", payload.entries.map((candidate) => `${alias}:${candidate.path}`).join("\n"));
+    event.currentTarget.addEventListener("dragend", () => releaseDrag(token), { once: true });
   }
 
   async function acceptRemoteDrop(operation: "copy" | "move") {
@@ -314,7 +314,10 @@ export function useSFTPTransfers({
     const entries = targets.filter(sendable);
     if (busy || entries.length === 0) return;
     setProblem("");
-    if (local) {
+    // Decide from the alias the rows belong to, not from this render's pane:
+    // a terminal link can name a host while the pane still shows the engine's
+    // disk, and the closure that runs then predates the host switch.
+    if (sourceFor(targetAlias)?.local === true) {
       if (!counterpartRemote || counterpart === null) return;
       await queueEngineTransfers("put", entries.map((entry) => ({
         sourceAlias: counterpart.alias, sourcePath: entry.path,

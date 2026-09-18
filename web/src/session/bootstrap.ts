@@ -148,7 +148,15 @@ export async function bootstrapSession(
     credentials: "same-origin",
     headers,
   });
-  if (!response.ok) throw new Error("bootstrap_rejected");
+  if (!response.ok) {
+    // A bootstrap link is single-use, so a reopened one (browser history, a
+    // second click) is rejected. A browser this engine already registered can
+    // still come in through its registration instead of a hard error.
+    if ((response.status === 401 || response.status === 409) && loadBrowserToken() !== "") {
+      return recoverSession(fetcher);
+    }
+    throw new Error("bootstrap_rejected");
+  }
 
   const payload: unknown = await response.json();
   if (!isBootstrapResponse(payload)) throw new Error("invalid_bootstrap_response");

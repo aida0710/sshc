@@ -13,6 +13,16 @@ if (!root) throw new Error("root element missing");
 
 const sessionPromise = bootstrapSession(window.location, window.history, window.fetch.bind(window));
 
+// A file dropped anywhere but an SFTP drop zone (a terminal pane, the
+// navigation) would otherwise make the browser navigate to that file and
+// replace the app, closing every WebSocket. The SFTP zones handle their own
+// drop events before these reach the window, so they are unaffected.
+for (const type of ["dragover", "drop"] as const) {
+  window.addEventListener(type, (event) => {
+    if (event.dataTransfer?.types.includes("Files")) event.preventDefault();
+  });
+}
+
 if ("serviceWorker" in navigator && import.meta.env.PROD) {
   window.addEventListener("load", () => {
     const trustedTypes = (window as typeof window & {
