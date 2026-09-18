@@ -220,3 +220,103 @@ func TestRemoteDirectoryCannotBeCopiedIntoItself(t *testing.T) {
 		t.Fatal("target was created below its own source")
 	}
 }
+
+// hostileListingRemote は、trap directory の最初の ReadDir だけに server が返した
+// 名前として inject を混ぜる。pkg/sftp は "x/.." を path.Base で ".." に縮めるので、
+// 悪性 server はこの形で親 directory の外を指せる。
+type hostileListingRemote struct {
+	*fakeRemote
+	trap      string
+	inject    string
+	triggered bool
+}
+
+func (r *hostileListingRemote) ReadDir(ctx context.Context, directory string) ([]fs.FileInfo, error) {
+	infos, err := r.fakeRemote.ReadDir(ctx, directory)
+	if err != nil {
+		return nil, err
+	}
+	if directory == r.trap && !r.triggered {
+		r.triggered = true
+		infos = append([]fs.FileInfo{node{name: r.inject, mode: fs.ModeDir | 0o755, modTime: testTime}}, infos...)
+	}
+	return infos, nil
+}
+
+func TestCopyRemoteRefusesEntryNamesThatEscapeTheSourceDirectory(t *testing.T) {
+	t.Parallel()
+	source := &hostileListingRemote{fakeRemote: remoteWith(map[string]node{
+		"/src":            directory("src"),
+		"/src/proj":       directory("proj"),
+		"/src/proj/a.txt": file("a.txt", "a", 0o644),
+		"/src/evil":       file("evil", "pwned", 0o644),
+	}), trap: "/src/proj", inject: ".."}
+	target := remoteWith(map[string]node{
+		"/dst":      directory("dst"),
+		"/dst/proj": directory("proj"),
+	})
+	service := sftp.Service{Open: func(_ context.Context, alias string) (sftp.Remote, error) {
+		if alias == "hostile" {
+			return source, nil
+		}
+		return target, nil
+	}}
+	err := service.CopyRemote(context.Background(), sftp.RemoteTransferRequest{
+		SourceAlias: "hostile", SourcePath: "/src/proj",
+		TargetAlias: "trusted", TargetPath: "/dst/proj",
+		Operation: sftp.RemoteCopy, Overwrite: true,
+	}, nil)
+	if !errors.Is(err, sftp.ErrInvalidPath) {
+		t.Fatalf("CopyRemote() = %v, want ErrInvalidPath", err)
+	}
+	if _, escaped := target.nodes["/dst/evil"]; escaped {
+		t.Fatal("hostile source wrote outside the target directory")
+	}
+}
+
+func TestListingRejectsEveryServerNameThatLeavesTheDirectory(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"", ".", "..", "a/b", "nul\x00"} {
+		remote := &hostileListingRemote{fakeRemote: remoteWith(map[string]node{"/work": directory("work")}), trap: "/work", inject: name}
+		service := sftp.Service{Open: func(context.Context, string) (sftp.Remote, error) { return remote, nil }}
+		if _, err := service.List(context.Background(), "edge", "/work"); !errors.Is(err, sftp.ErrInvalidPath) {
+			t.Fatalf("List() with server name %q = %v, want ErrInvalidPath", name, err)
+		}
+	}
+}
+
+func TestRemoteMoveKeepsASourceFileThatChangedAfterItWasCopied(t *testing.T) {
+	t.Parallel()
+	source := remoteWith(map[string]node{
+		"/data":          directory("data"),
+		"/data/keep.txt": file("keep.txt", "before", 0o644),
+	})
+	target := remoteWith(map[string]node{"/inbox": directory("inbox")})
+	// The copy has already verified the source and is publishing its copy when
+	// another client rewrites the source. The move must not delete that rewrite.
+	target.renameHook = func() {
+		source.nodes["/data/keep.txt"] = withTime(file("keep.txt", "after", 0o644), testTime.Add(time.Minute))
+	}
+	service := sftp.Service{
+		Open: func(_ context.Context, alias string) (sftp.Remote, error) {
+			if alias == "source" {
+				return source, nil
+			}
+			return target, nil
+		},
+		TemporaryPath: func(candidate string) (string, error) { return candidate + ".part", nil },
+	}
+	err := service.CopyRemote(context.Background(), sftp.RemoteTransferRequest{
+		SourceAlias: "source", SourcePath: "/data",
+		TargetAlias: "target", TargetPath: "/inbox/data", Operation: sftp.RemoteMove,
+	}, nil)
+	if !errors.Is(err, sftp.ErrConflict) {
+		t.Fatalf("move error = %v, want conflict", err)
+	}
+	if got := string(source.nodes["/data/keep.txt"].content); got != "after" {
+		t.Fatalf("source after move = %q, want the rewrite to survive", got)
+	}
+	if got := string(target.nodes["/inbox/data/keep.txt"].content); got != "before" {
+		t.Fatalf("copied target = %q", got)
+	}
+}

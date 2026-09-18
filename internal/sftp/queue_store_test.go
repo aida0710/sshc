@@ -8,11 +8,13 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
 
 	"sshc/internal/sftp"
+	"sshc/internal/storage"
 )
 
 func TestTransferQueueQuarantinesCorruptSnapshotAndStartsEmpty(t *testing.T) {
@@ -85,7 +87,7 @@ func TestTransferQueueRestoresAfterEngineRestart(t *testing.T) {
 		jobs[0].LargeFileThresholdBytes != 50<<20 || jobs[0].LargeFileParallelism != 6 || jobs[0].LargeFileChunkBytes != 512<<20 {
 		t.Fatalf("restored jobs = %#v", jobs)
 	}
-	info, err := filepath.Glob(filepath.Join(filepath.Dir(filename), ".transfers-*.tmp"))
+	info, err := filepath.Glob(filepath.Join(filepath.Dir(filename), ".sshc-transfers.json.tmp-*"))
 	if err != nil || len(info) != 0 {
 		t.Fatalf("temporary queue files = %v, %v", info, err)
 	}
@@ -468,4 +470,82 @@ func listJobs(t *testing.T, manager *sftp.TransferManager) []sftp.TransferJob {
 		t.Fatal(err)
 	}
 	return jobs
+}
+
+// slowWalkRemote は、directory 走査 1 回ごとに engine の時計を stale sweep の閾値より
+// 進める。大きな tree の plan や削除は進捗を報告せずに 2 分を超えることがある。
+type slowWalkRemote struct {
+	*fakeRemote
+	mu    sync.Mutex
+	clock time.Time
+}
+
+func (r *slowWalkRemote) now() time.Time {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.clock
+}
+
+func (r *slowWalkRemote) ReadDir(ctx context.Context, directory string) ([]fs.FileInfo, error) {
+	r.mu.Lock()
+	r.clock = r.clock.Add(3 * time.Minute)
+	r.mu.Unlock()
+	return r.fakeRemote.ReadDir(ctx, directory)
+}
+
+func TestRemoteJobSurvivesAWalkLongerThanTheStaleSweep(t *testing.T) {
+	remote := &slowWalkRemote{fakeRemote: remoteWith(map[string]node{
+		"/work":          {name: "work", mode: fs.ModeDir | 0o755},
+		"/work/file.txt": file("file.txt", "payload", 0o644),
+	}), clock: testTime}
+	service := &sftp.Service{Open: func(context.Context, string) (sftp.Remote, error) { return remote, nil }}
+	manager := sftp.NewTransferManager(service)
+	manager.ConfigureJobs(2, remote.now)
+	defer manager.Close()
+	job, err := manager.CreateJob(sftp.CreateTransferJob{
+		ID: "delete_remote_01", BatchID: "delete_batch_01", Alias: "edge", RemotePath: "/work",
+		SourceAlias: "edge", SourcePath: "/work", Operation: sftp.RemoteDelete,
+		Direction: sftp.TransferRemote, Kind: sftp.TransferFolder, Name: "work", TotalBytes: -1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager.ScheduleRemoteJob(job.ID)
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		jobs := listJobs(t, manager)
+		if len(jobs) == 1 && (jobs[0].Status == sftp.TransferCompleted || jobs[0].Status == sftp.TransferFailed) {
+			if jobs[0].Status != sftp.TransferCompleted {
+				t.Fatalf("healthy remote delete ended as %s (%s)", jobs[0].Status, jobs[0].Problem)
+			}
+			if _, remained := remote.nodes["/work"]; remained {
+				t.Fatal("completed delete left the tree in place")
+			}
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatal("job did not settle")
+}
+
+func TestTransferQueueRefusesASymlinkedSnapshot(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink creation needs a privilege on Windows")
+	}
+	directory := filepath.Join(t.TempDir(), "sshc")
+	if err := os.MkdirAll(directory, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	elsewhere := filepath.Join(t.TempDir(), "elsewhere.json")
+	if err := os.WriteFile(elsewhere, []byte(`{"schemaVersion":1,"jobs":[]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	filename := filepath.Join(directory, "transfers.json")
+	if err := os.Symlink(elsewhere, filename); err != nil {
+		t.Fatal(err)
+	}
+	manager := sftp.NewTransferManager(nil)
+	if err := manager.EnableQueuePersistence(filename); !errors.Is(err, storage.ErrSymlinkPath) {
+		t.Fatalf("EnableQueuePersistence(symlink) = %v, want ErrSymlinkPath", err)
+	}
 }

@@ -1,12 +1,11 @@
 package sftp
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"io/fs"
-	"os"
 	"path/filepath"
+	"sshc/internal/storage"
 	"time"
 )
 
@@ -24,7 +23,7 @@ func (m *TransferManager) EnableQueuePersistence(filename string) error {
 	if m == nil || filename == "" {
 		return ErrInvalidTransfer
 	}
-	contents, err := os.ReadFile(filename)
+	contents, err := storage.ReadFileLimited(storage.OSFileSystem{}, filename, storage.MaxFileSize)
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
@@ -104,43 +103,19 @@ func (m *TransferManager) EnableQueuePersistence(filename string) error {
 	return nil
 }
 
+// preserveCorruptQueue は壊れた queue を同じ directory の診断用 file へ退避する。
+// The .sshc- prefix is also part of Remote Sync's denylist, keeping this
+// device-local diagnostic snapshot from travelling to another machine.
 func preserveCorruptQueue(filename string, contents []byte) error {
+	fileSystem := storage.OSFileSystem{}
 	directory := filepath.Dir(filename)
-	if err := os.MkdirAll(directory, 0o700); err != nil {
+	if err := fileSystem.MkdirAll(directory, 0o700); err != nil {
 		return err
 	}
-	// The .sshc- prefix is also part of Remote Sync's denylist, keeping this
-	// device-local diagnostic snapshot from travelling to another machine.
-	backup, err := os.CreateTemp(directory, ".sshc-"+filepath.Base(filename)+".corrupt-*")
-	if err != nil {
+	if _, err := fileSystem.WriteTemp(directory, ".sshc-"+filepath.Base(filename)+".corrupt-", storage.FilePermission, contents); err != nil {
 		return err
 	}
-	name := backup.Name()
-	keep := false
-	defer func() {
-		_ = backup.Close()
-		if !keep {
-			_ = os.Remove(name)
-		}
-	}()
-	if err := backup.Chmod(0o600); err != nil {
-		return err
-	}
-	if _, err := backup.ReadFrom(bytes.NewReader(contents)); err != nil {
-		return err
-	}
-	if err := backup.Sync(); err != nil {
-		return err
-	}
-	if err := backup.Close(); err != nil {
-		return err
-	}
-	keep = true
-	if opened, err := os.Open(directory); err == nil {
-		_ = opened.Sync()
-		_ = opened.Close()
-	}
-	return nil
+	return fileSystem.SyncDir(directory)
 }
 
 func validPersistedJob(job TransferJob) error {
@@ -235,42 +210,12 @@ func (m *TransferManager) persistJobsLocked(force bool) error {
 	return err
 }
 
+// writeQueueAtomically は他の状態 file と同じ storage の経路で書く。symlink を辿らず、
+// Windows では所有者だけの ACL と write-through の置換になる。
 func writeQueueAtomically(filename string, contents []byte) error {
-	directory := filepath.Dir(filename)
-	if err := os.MkdirAll(directory, 0o700); err != nil {
+	fileSystem := storage.OSFileSystem{}
+	if err := fileSystem.MkdirAll(filepath.Dir(filename), 0o700); err != nil {
 		return err
 	}
-	temporary, err := os.CreateTemp(directory, ".transfers-*.tmp")
-	if err != nil {
-		return err
-	}
-	name := temporary.Name()
-	cleanup := true
-	defer func() {
-		_ = temporary.Close()
-		if cleanup {
-			_ = os.Remove(name)
-		}
-	}()
-	if err := temporary.Chmod(0o600); err != nil {
-		return err
-	}
-	if _, err := temporary.Write(contents); err != nil {
-		return err
-	}
-	if err := temporary.Sync(); err != nil {
-		return err
-	}
-	if err := temporary.Close(); err != nil {
-		return err
-	}
-	if err := os.Rename(name, filename); err != nil {
-		return err
-	}
-	cleanup = false
-	if opened, err := os.Open(directory); err == nil {
-		_ = opened.Sync()
-		_ = opened.Close()
-	}
-	return nil
+	return storage.WriteAtomicFile(fileSystem, filename, ".sshc-"+filepath.Base(filename)+".tmp-", storage.FilePermission, contents)
 }
