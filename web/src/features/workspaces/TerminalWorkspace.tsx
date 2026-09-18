@@ -18,6 +18,7 @@ import { DockPreview, dockEdge } from "./DockPreview";
 import { WorkspaceEmptyState } from "./WorkspaceEmptyState";
 import { WorkspaceMenu } from "./WorkspaceMenu";
 import { useWorkspaceRestore, type WorkspaceRestoreRequest } from "./useWorkspaceRestore";
+import { Notice } from "../../ui/surface";
 
 export type { WorkspaceRestoreRequest } from "./useWorkspaceRestore";
 export type WorkspaceRenameRequest = { name: string; sequence: number };
@@ -424,7 +425,7 @@ export function TerminalWorkspace({
           }}
         />
       )}
-      {problem === "" ? null : <p role="alert" className="bg-notice px-3 py-1 text-xs text-notice-ink">{problem}</p>}
+      {problem === "" ? null : <Notice tone="danger" compact>{problem}</Notice>}
       {compactViewport && compactPanes.length > 1 ? (
         <nav aria-label={t("workspace.mobilePaneSwitcher")} className="flex shrink-0 gap-1 overflow-x-auto border-b border-line bg-toolbar px-2 py-1">
           {compactPanes.map((pane) => (

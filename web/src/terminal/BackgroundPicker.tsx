@@ -9,6 +9,7 @@ import { InputDialog } from "../ui/InputDialog";
 import { ModalShell } from "../ui/ModalShell";
 import { Button } from "../ui/surface";
 import { useBackgroundImage } from "./backgroundImage";
+import { formatBytes } from "../ui/format";
 
 type BackgroundApi = Pick<SettingsApi, "terminalBackgrounds" | "addTerminalBackground" | "setTerminalBackgroundCapacity" | "renameTerminalBackground" | "deleteTerminalBackground">;
 
@@ -128,13 +129,6 @@ export function BackgroundPicker({ value, onChange, tint, onTintChange, unchosen
       {deleteTarget === null ? null : <ConfirmDialog id="terminal-background-delete" heading={t("terminal.backgroundDeleteHeading")} body={<p className="text-sm text-ink-muted">{t("terminal.backgroundDeleteHint", { name: deleteTarget.name })}</p>} confirmLabel={t("terminal.backgroundDeleteAction")} cancelLabel={t("terminal.backgroundRenameCancel")} onConfirm={() => void drop(deleteTarget.name)} onCancel={() => setDeleteTarget(null)} />}
     </div>
   );
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes >= 1 << 30) return `${(bytes / (1 << 30)).toFixed(1)} GiB`;
-  if (bytes >= MiB) return `${(bytes / MiB).toFixed(bytes >= 10 * MiB ? 0 : 1)} MiB`;
-  if (bytes >= 1024) return `${Math.round(bytes / 1024)} KiB`;
-  return `${bytes} B`;
 }
 
 function Thumbnail({ name, chosen, className = "h-16 w-24 rounded-md" }: { name: string; chosen: boolean; className?: string }) {

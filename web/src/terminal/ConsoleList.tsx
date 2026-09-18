@@ -13,6 +13,7 @@ import { HostPickerDialog, type LocalChoice } from "../shell/HostPickerDialog";
 import type { HostEntry } from "../api/config";
 import { useDismissibleLayer } from "../ui/useDismissibleLayer";
 import { useMenuKeyboard } from "../ui/useMenuKeyboard";
+import { Notice } from "../ui/surface";
 
 type ConsoleListProps = {
   sessions: TerminalSession[];
@@ -194,11 +195,7 @@ export function ConsoleList({
 
   return (
     <div className="flex flex-col gap-2">
-      {problem === "" ? null : (
-        <p role="alert" className="rounded-md border border-notice-line bg-notice px-2 py-1.5 text-xs text-notice-ink">
-          {problem}
-        </p>
-      )}
+      {problem === "" ? null : <Notice tone="danger" compact>{problem}</Notice>}
       {sessions.length === 0 ? (
         <p className="px-2 text-xs text-ink-muted">{t("terminal.noSessions")}</p>
       ) : (

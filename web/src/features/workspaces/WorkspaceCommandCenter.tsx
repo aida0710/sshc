@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { failureCode } from "../../api/client";
 import { useTranslate } from "../../i18n/context";
 import { snippetsApi, type Snippet } from "../../snippets/api";
-import { Button, Segmented } from "../../ui/surface";
+import { Button, Notice, Segmented } from "../../ui/surface";
 import { ModalShell } from "../../ui/ModalShell";
 import { PasswordInput } from "../../ui/PasswordField";
 import {
@@ -195,14 +195,7 @@ export function WorkspaceCommandCenter({
             ×
           </button>
         </div>
-        {problem === "" ? null : (
-          <p
-            role="alert"
-            className="rounded bg-notice px-3 py-2 text-xs text-notice-ink"
-          >
-            {problem}
-          </p>
-        )}
+        {problem === "" ? null : <Notice tone="danger" compact>{problem}</Notice>}
         <div className="grid gap-3 lg:grid-cols-[minmax(18rem,0.9fr)_minmax(20rem,1.1fr)]">
           <div className="flex min-w-0 flex-col gap-3">
             <Segmented

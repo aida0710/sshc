@@ -7,7 +7,7 @@ import { useDismissibleLayer } from "../ui/useDismissibleLayer";
 import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
 import { useMenuKeyboard } from "../ui/useMenuKeyboard";
 import { readStoredJSON, writeStoredJSON } from "../ui/browserStorage";
-import { formatBytes as bytes } from "./format";
+import { formatBytes as bytes } from "../ui/format";
 import { sftpTransferManager, type ManagedTransferJob } from "./transferManager";
 
 function duration(seconds: number): string {

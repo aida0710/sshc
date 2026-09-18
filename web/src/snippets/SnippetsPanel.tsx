@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { failureCode } from "../api/client";
 import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
-import { Button } from "../ui/surface";
+import { Button, Notice } from "../ui/surface";
 import { PasswordInput } from "../ui/PasswordField";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { usePolling } from "../ui/usePolling";
@@ -279,14 +279,7 @@ export function SnippetsPanel({
       </div>
 
       <div className="flex min-w-0 flex-col gap-3 rounded-lg border border-line bg-card p-4">
-        {problem === "" ? null : (
-          <p
-            role="alert"
-            className="rounded bg-notice px-3 py-2 text-sm text-notice-ink"
-          >
-            {problem}
-          </p>
-        )}
+        {problem === "" ? null : <Notice tone="danger">{problem}</Notice>}
         <label className="text-xs text-ink-muted">
           {t("snippets.name")}
           <input

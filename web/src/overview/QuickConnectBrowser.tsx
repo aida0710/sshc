@@ -13,6 +13,7 @@ import { Icon } from "../ui/icons";
 import { OperatingSystemIcon } from "../ui/OperatingSystemIcon";
 import { readStoredValue, writeStoredValue } from "../ui/browserStorage";
 import { ConnectionActions } from "./ConnectionActions";
+import { formatDateTime } from "../ui/format";
 
 type QuickConnectBrowserProps = {
   overview: Overview;
@@ -116,7 +117,7 @@ export function QuickConnectBrowser({
     const target = connectionDestination(server);
     const lastConnected = recentConnection === undefined
       ? ""
-      : t("home.lastConnected", { at: formatConnectedAt(recentConnection.lastConnectedAt) });
+      : t("home.lastConnected", { at: formatDateTime(recentConnection.lastConnectedAt) });
     const selected = selectedAlias === alias;
     const opening = launching === alias;
     const panel = view === "panel";
@@ -296,10 +297,4 @@ export function QuickConnectBrowser({
       )}
     </div>
   );
-}
-
-function formatConnectedAt(value: string): string {
-  const connectedAt = new Date(value);
-  if (Number.isNaN(connectedAt.valueOf())) return value;
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(connectedAt);
 }

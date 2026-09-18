@@ -11,6 +11,7 @@ import { QuickConnectBrowser } from "./QuickConnectBrowser";
 import { workspaceApi, type SavedWorkspace } from "../features/workspaces/api";
 import { storedPaneCount } from "../features/workspaces/layout";
 import { PanelState } from "../ui/PanelState";
+import { formatDateTime } from "../ui/format";
 
 export type OverviewDestination = "Connections" | "Config" | "Sync" | "History";
 
@@ -151,7 +152,7 @@ export function OverviewPanel({
                   <p className="mt-0.5 truncate text-xs text-ink-muted">
                     {t("home.workspacePanes", { count: storedPaneCount(workspace.layout) })}
                     {" · "}
-                    <time dateTime={workspace.updatedAt}>{t("home.workspaceUpdated", { at: formatConnectedAt(workspace.updatedAt) })}</time>
+                    <time dateTime={workspace.updatedAt}>{t("home.workspaceUpdated", { at: formatDateTime(workspace.updatedAt) })}</time>
                   </p>
                 </div>
                 <Button
@@ -175,17 +176,11 @@ export function OverviewPanel({
             : !sync.configured
               ? t("home.syncNotConfigured")
               : sync.synced
-                ? t("home.syncLast", { at: sync.lastSyncedAt === undefined ? "—" : formatConnectedAt(sync.lastSyncedAt), count: sync.fileCount ?? 0 })
+                ? t("home.syncLast", { at: sync.lastSyncedAt === undefined ? "—" : formatDateTime(sync.lastSyncedAt), count: sync.fileCount ?? 0 })
                 : t("home.syncNever")}
         </p>
         <Button onClick={() => onNavigate("Sync")}>{t("home.openSync")}</Button>
       </section>
     </section>
   );
-}
-
-function formatConnectedAt(value: string): string {
-  const connectedAt = new Date(value);
-  if (Number.isNaN(connectedAt.valueOf())) return value;
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(connectedAt);
 }
