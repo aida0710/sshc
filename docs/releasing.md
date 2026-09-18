@@ -6,7 +6,7 @@
 
 - リリース対象を`origin/main`へpush済みで、作業treeがcleanであること
 - `docs/releases/<tag>.md`を追加済みであること
-- stable releaseではREADME、`docs/release-install.md`、`install.sh`の固定版が同じtagであること
+- stable releaseではREADME、`docs/release-install.md`、`install.sh`、`pages/guide/install.md`、`pages/en/guide/install.md`の固定版が同じtagであること（`internal/buildcontract` の契約テストが照合する）
 - `gh auth status`が成功し、repositoryと`release` environmentを操作できること
 - `git`、`gh`、`jq`、`curl`、`unzip`、`sha256sum`または`shasum`が利用できること
 

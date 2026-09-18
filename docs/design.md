@@ -9,7 +9,7 @@
 
 - HTTP サーバーは IPv4 の `127.0.0.1` だけに bind します。LAN、Tailnet、コンテナ外部など、ネットワークへ公開して安全な設計ではありません。
 - このアプリケーションは利用者の `~/.ssh` を読み書きし、鍵を生成し、埋め込みターミナルからリモートホストへ接続します。それぞれの境界は以下の各節で説明します。
-- cookie 単体ではリクエスト元を検証できません。cookie はポートを区別せず、`SameSite` の site 判定にもポートは含まれないため、同じブラウザで `http://127.0.0.1:<別ポート>` を開くと session cookie は別ポートにも送信されます。そのため、読み取りを含むすべての API リクエストに `X-SSHC-CSRF` を要求します。このトークンは port を含む origin ごとの `sessionStorage` に保持され、別ポートには送信されません。例外は 2 つです。`POST /api/v1/session/bootstrap` は最初のトークンを発行するため、代わりに `Origin` の完全一致を要求します。`GET /api/v1/health` も例外です。`POST /api/v1/session/renew` は `sessionStorage` に残った現在のトークンを検証してから新しいトークンを発行します。
+- cookie 単体ではリクエスト元を検証できません。cookie はポートを区別せず、`SameSite` の site 判定にもポートは含まれないため、同じブラウザで `http://127.0.0.1:<別ポート>` を開くと session cookie は別ポートにも送信されます。そのため、読み取りを含むすべての API リクエストに `X-SSHC-CSRF` を要求します。このトークンは port を含む origin ごとの `sessionStorage` に保持され、別ポートには送信されません。例外は 3 つです。`POST /api/v1/session/bootstrap` と `POST /api/v1/session/recover` は最初のトークンを発行するため、代わりに `Origin` の完全一致を要求します。`GET /api/v1/health` も例外です。さらに全 `/api/` 要求に `Sec-Fetch-Site: same-origin` を要求し、`Host` は `127.0.0.1:<port>` との完全一致だけを通します。`POST /api/v1/session/renew` は `sessionStorage` に残った現在のトークンを検証してから新しいトークンを発行します。
 - bootstrap、session、CSRF の値をログへ出してはいけません。bootstrap は URL fragment に置き、ブラウザが直ちに履歴から除去します。
 - 同一マシン上の悪意あるプロセス、侵害されたブラウザ、ブラウザ拡張から秘密を完全には保護できません。将来の秘密鍵 reveal/copy 機能でも、ブラウザ拡張やローカルのクリップボード監視・履歴ツールに対して秘密は脆弱です。
 - UI は埋め込みファイルシステムからのみ配信し、URL を OS ファイルパスへ変換しません。存在しない API は SPA へフォールバックしません。
@@ -34,7 +34,7 @@
 - SerialとTelnetの`--non-interactive`にはremote processの終了statusがありません。終了条件はRE2による`expect`または明示した`readFor`であり、timeout、step数、pattern、送信、transcript、subnegotiationを固定上限で制限します。`readFor`の0 byte成功を許容しつつ、応答必須の呼出元は`--require-output`で`no_output`失敗にできます。送信と受信がblockしてもcontextまたはtimeoutで呼び出し元へ制御を返し、streamを閉じます。
 - AIなどの呼び出し元はversion付きJSON script／結果を利用できます。invalid UTF-8はbase64で返し、環境変数から送ったsecretは完全一致byte列をtranscriptからmaskします。引数やscriptのliteralへ秘密を書いた場合は保護できません。scriptの`onFailure`は明示された送信だけをmain failure後に独立した最大5秒のtimeoutで試み、成功時には送信しません。装置非依存のCtrl+Cやpager解除は定義できないため自動推測せず、結果には送信内容を含めずattempt成否だけを返します。
 - Telnetは平文でserver認証もないため、SSHと同じ安全性を示しません。接続時の警告はこの性質を変えず、信頼できないnetworkで資格情報を送る用途は対象外です。
-- desktopのSerial backendはLinux、macOS、Windowsを対象とします。採用driverがflow control設定を公開しないため現時点ではnoneだけを実装し、RTS/CTSとXON/XOFFは黙って無視せず拒否します。Android USB serialはUSB Host permissionとnative driverが必要なため対象外です。
+- desktopのSerial backendはLinux、macOS、Windowsを対象とします。flow control は `none`、`rtscts`、`xonxoff` の 3 値を `third_party/go-serial`（flow control を公開するよう手を入れたフォーク）へそのまま渡します。DTR／RTS／Break は接続直後に一度だけ適用し、接続中の切り替えは持ちません。Android USB serialはUSB Host permissionとnative driverが必要なため対象外です。
 - 自動検査ではLinux PTYを本番Serial driverで開く仮想routerと、loopback TCP上でIAC交渉する仮想Telnet serverを使います。parserからtransportまでの高速testに加え、build済み`sshc` processのargv、標準出力、終了codeをintegration testで通します。PTYは電気的baud、USB descriptor、DTR／RTS／Break、物理抜線を再現しないため、これらは実機acceptanceから外しません。
 
 ## Connections UI とグループの境界
@@ -77,11 +77,11 @@
 
 ## 見た目の境界
 
-- 外観はライトとダークの2つで、初期値はダークです。MenuのThemeからシステム／ライト／ダークを選べ、選択は`localStorage`の`sshc.theme`に記録します。システムを選んだ場合はOSの外観に従います。ブラウザに保存できる設定は`e2e/bootstrap.spec.ts`のallowlistで検査します。
+- 外観はライトとダークの2つで、初期値はダークです。MenuのThemeからシステム／ライト／ダークを選べ、選択は`localStorage`の`sshc.theme`に記録します。システムを選んだ場合はOSの外観に従います。ブラウザに保存する設定は`e2e/bootstrap.spec.ts`が、テーマや言語を操作した直後の`localStorage`／`sessionStorage`のキー集合を完全一致で検査します。
 - 色は用途別のトークンとして`web/src/index.css`に1テーマにつき1組ずつ置きます。コンポーネントは`bg-card`のようにトークン名で参照し、色値やテーマ分岐を個別に持ちません。
 - 背景・カード・境界線・本文・補助テキストは中立的なグレーを基調にします。accentは主要操作と選択中の場所を示す控えめな青です。同じ強調色を一覧全体へ繰り返しません。選択面には`select-fill`、通常のホバーには色味を抑えた`hover`を使用します。ナビゲーションと選択行にはマーカーや太字、タブには下線も併用し、色だけに頼りません。セッション一覧の選択は背景色とタイトルの太字で示し、左端の縦バーは付けません。琥珀は注意・接続開始、赤は失敗と破壊的操作、緑は有効な接続を示します。OSアイコンは従来どおり小さな単色表示です。
 - カード外周は子要素に隠れるinset shadowではなく、背景との差を抑えた`--ui-line`の実borderで描きます。外周と区切りは面の境界が分かる最小限の強さにし、操作対象の`--ui-control-line`より明確に弱くします。大きなsurface、dialog、選択グループは12px、inputとbuttonは8px、小さな補助要素は6pxを基準にします。表の内部や連続したrowには角を付けず、接続状態badgeなど意味のあるpillだけ`rounded-full`を使用します。分割paneの左右headerは同じ最小高さとpaddingに揃えます。
-- ConnectionsのBasic、Settings analysis、Advanced settingsは、tablistと選択中tabpanelを同じ外枠へ入れます。tabpanelを内側へpaddingし、タブから離れた別ブロックに見せません。各tabの`aria-controls`とtabpanelの`aria-labelledby`を対にします。
+- ConnectionsのBasic、Analysis、Advanced、sshcの各タブは、tablistと選択中tabpanelを同じ外枠へ入れます。tabpanelを内側へpaddingし、タブから離れた別ブロックに見せません。各tabの`aria-controls`とtabpanelの`aria-labelledby`を対にします。
 - 主要操作は対象と動作を明確にし、説明や未設定状態よりも目立たせます。Homeは検索・必要なグループ・接続先を主役にし、未所属や未接続の繰り返しを省きます。PCではカードのクリックで選択、ダブルクリックで接続します。タッチは1タップ、キーボードはEnter／Spaceで接続します。Homeには常設Connectボタンと操作方法の案内文を置かず、開始中の表示とカードの操作メニューを残します。Connectionsの設定画面にはConnectボタンを置きます。
 - フォーカスリングとチェック済みの印にも同じaccentを使います。ターミナルとコードエディターは各自のフォーカス／選択描画を維持します。明暗それぞれで小さな文字・選択中の文字・主要ボタンの文字のコントラストを確認します。
 - パレットの規則は `web/src/ui/palette.test.ts` で検査します。Tailwind のパレット名（`text-red-400` など）、任意値（`text-[#ff0000]`）、inline style の hex 値を走査し、違反箇所をファイル名と行番号付きで報告します。例外は `palette-exempt` を記載した行だけで、現在は native の色入力が独自の既定値を必要とする 2 行に使用しています。
@@ -147,11 +147,11 @@
 - スナップショットは、既定ではバケット直下の `workspace.tar.gz.enc`、`path` 設定時はその配下にある 1 つの固定キーへ条件付きで書き込みます。暗号化前の形式は tar.gz です。初回は `If-None-Match: *`、以降は `If-Match: <前回の ETag>` を使用し、他のマシンによる push の上書きを防ぎます。条件付き書き込みの対象を一意にするため、ライブオブジェクトには日付付きキーを使用しません。
 - push ごとに `snapshots/YYYY-MM-DD-HHMMSS-<origin>-<snapshot>-<sequence>.tar.gz.enc` へ日付付き候補を保存します。同じ秒の複数送信やプロセス再起動でも衝突しないよう、送信元、暗号文のdigest、プロセス内sequenceを含めます。候補を先に書き、その後ライブオブジェクトへ条件付きで書き込むため、ライブオブジェクトが部分更新されることはありません。ライブの条件付き書き込みが競合で拒否された場合は、その試行が作った候補だけを削除します。通信断などでライブ書き込みの成否を確定できない場合は証拠を失わないため候補を残し、次の周期のHEAD確認で再送信を止めます。成功したpushの履歴数にアプリケーション側の上限はなく、古いスナップショットには後から更新・削除した鍵も残ります。必要なら`snapshots/`にバケットのlifecycle ruleを設定してください。
 - S3 の資格情報はマスターパスワードで暗号化し、`~/.ssh/sshc/sync-settings` に保存します。同期は `~/.ssh` 配下の通常ファイルを相対パスのまま再帰的に収集するため、ルート直下に手動配置した秘密鍵も対象です。一方、バケットへのアクセス情報、端末固有の状態、journal・backup・history・trash、一時ファイルは明示的に除外し、symlink・socket・FIFO・device は追跡も転送もしません。`TestASnapshotTravelsBetweenTwoMachines` がルート鍵を含む往復を、`TestASnapshotCarriesTheVaultAndNotTheKeyToItsOwnBucket` が除外を検査します。
-- スナップショットはマスターパスワードではなく同期専用鍵で暗号化します。既定では 120 ビット、Crockford base32 で 24 文字の鍵を生成し、利用者が指定することもできます。鍵は `sync-settings` に保存し、平文では作成時の応答に一度だけ含めます。端末ごとに異なるマスターパスワードを使用できます。過去の暗号化方式を変換する専用操作は提供しません。同期は空の保存先または現行schemaだけの保存先から始め、force pushは現行schemaの別世代を、利用者が確認したETagに対して条件付きで置き換える場合だけに使います。
-- 保管庫は同期元で復号し、スナップショット内の `sshc/secrets.json` として格納し、同期先でその端末のマスターパスワードを使って再暗号化します。保管庫ファイル自体を転送すると、同期先でも同期元のマスターパスワードが必要になるためです。アーカイブ全体は同期専用鍵で暗号化します。空の保管庫は同期せず、2 台目の最初の pull で不要な競合が生じないようにします。マニフェスト v5 は内容から検証できるrevision ID、親revision ID、commit messageを持ち、日付付き暗号化スナップショットをGit風の履歴として辿れます。読み取りはv5だけを受け付け、過去schemaの導出・変換・移行は行いません。
+- スナップショットはマスターパスワードではなく同期専用鍵で暗号化します。既定では 120 ビット、Crockford base32 の 24 文字を 4 文字ごとに区切った 29 文字（`AB12-CD34-EF56-GH78-JK90-MN12`。区切りも鍵の一部）を生成し、利用者が指定することもできます。鍵は `sync-settings` に保存し、平文では作成時の応答に一度だけ含めます。端末ごとに異なるマスターパスワードを使用できます。過去の暗号化方式を変換する専用操作は提供しません。同期は空の保存先または現行schemaだけの保存先から始め、force pushは現行schemaの別世代を、利用者が確認したETagに対して条件付きで置き換える場合だけに使います。
+- 保管庫は同期元で復号し、スナップショット内の `sshc/secrets.json` として格納し、同期先でその端末のマスターパスワードを使って再暗号化します。保管庫ファイル自体を転送すると、同期先でも同期元のマスターパスワードが必要になるためです。アーカイブ全体は同期専用鍵で暗号化します。空の保管庫は同期せず、2 台目の最初の pull で不要な競合が生じないようにします。マニフェスト v6 は内容から検証できるrevision ID、親revision ID、commit message に加え、認証済みの ancestor chain を持ち、日付付き暗号化スナップショットをGit風の履歴として辿れます。読み取りは v6 と、復号・検証後に v6 へ一段変換する v5 だけを受け付け、それより古い schema は受け付けません。受信専用端末は変換結果を S3 へ書き戻さず、送信できる端末の次の push が v6 で保存します。
 - 履歴画面は現在のlive objectと新しい順の履歴50件を端末内で復号し、HEAD、ancestor、branchに分類します。暗号文の取得は合計128 MiBで打ち切り、APIにはファイル内容を返さず、選択版とHEADの追加・変更・削除パスだけを返します。過去版の復元はまず通常のpull previewを表示し、適用後もlive objectのETagを保持します。次のpushは選択したrevisionを親とする新しいHEADを条件付きで作るため、リモートを無条件に巻き戻しません。
 - 自動同期は保管庫が解錠されている間だけ 1 分ごとに実行します。自動同期による読み取りは使用として扱わず、設定した自動施錠時間を延長しません。施錠後は利用者が再度解錠するまで停止します。各周期はまずライブオブジェクトをHEADで確認し、リモートにもローカルにも変更がなければアップロードもダウンロードもしません。リモート変更、競合、削除を伴う適用では自動送信を停止し、利用者の判断を待ちます。送信専用設定でもリモート世代を確認し、動いていれば履歴候補を作る前に停止します。通常の手動pushもローカル差分がなければ拒否します。同期先はendpoint、bucket、region、object keyの組で識別し、同名objectを使う別bucketへ旧ETagを流用しません。自動同期の有効・無効は保管庫に保存するため、次回起動時にも同じ設定を使用します。
-- 受信専用の端末でライブスナップショットが既知のrevision系譜から外れた場合、自動受信は安全のため停止します。利用者は現在のライブスナップショットの作成時刻、送信元、変更パスをプレビューした後に限り、そのHEADを明示的に採用できます。適用時には再取得したETagとrevisionがプレビュー時の値に一致することを検証し、途中で世代が変わっていれば何も書きません。この系譜回避は受信専用に限定し、双方向・送信専用・自動同期には適用しません。
+- 受信専用の端末でライブスナップショットが既知のrevision系譜から外れた場合、自動受信は安全のため停止します。利用者は現在のライブスナップショットの作成時刻、送信元、変更パスをプレビューした後に限り、そのHEADを明示的に採用できます。適用時には再取得したETagとrevisionがプレビュー時の値に一致することを検証し、途中で世代が変わっていれば何も書きません。この系譜回避は API では送信専用だけを拒否し（受信専用と双方向で `acceptRemoteHead` を受け付ける）、自動同期には適用しません。
 - 競合時は「このマシンを残す」または「他のマシンを取る」を選択できます。前者は現在のファイルを維持し、次回 push でリモートを更新します。後者はローカルを置き換えますが、バックアップを残すため History から復元できます。どちらも適用前に同じプレビューを表示します。
 - pull で削除するファイルもバックアップします。削除を含む pull は、バックアップ先を示す確認文への同意がなければ適用しません。
 
@@ -199,7 +199,7 @@
 - `sshc engine` が UI を HTTP で配信し、`sshc` がアクセス URL を 1 件発行してブラウザへ渡します。UI の配信元は engine だけで、別のコピーは持ちません。
 - `sshc engine` は foreground で実行し、自動では detach しません。継続実行には tmux、screen、systemd など OS 上の process supervisor を使用します。起動した端末を閉じると engine も終了します。
 - 引数なしの `sshc` は engine を起動せず、実行中の engine からアクセス URL を取得して表示します。engine が動作していない場合は `sshc engine` の実行方法を表示し、exit code 1 で終了します。`~/.ssh/sshc/engine.lock` を engine の起動から終了まで保持し、2 個目の engine の起動を防ぎます。状態確認後に起動する方式では同時実行時に競合するため、排他 lock を使用します。
-- アクセス URL は要求ごとに新しく発行します。engine 起動時には表示しません。起動時に発行すると、engine の実行中ずっと有効なワンタイム資格情報が端末の scrollback やログに残るためです。
+- アクセス URL は要求ごとに新しく発行します。engine 起動時には表示もログ出力もしません。起動時に発行すると、engine の実行中ずっと有効なワンタイム資格情報が端末の scrollback やログに残るためです。例外として、この端末にブラウザ登録が 1 件も無く、かつ対話端末から起動した場合だけ、engine は起動時の bootstrap URL で既定のブラウザを開きます（URL は表示しません）。2 台目以降のブラウザは `sshc`／`sshc open` で登録します。
 - `sshc` は URL を標準出力に表示した後、GUI が利用できる場合は既定のブラウザで開きます。GUI がない場合も URL の表示には成功します。`sshc open` はブラウザを起動せず URL だけを表示し、スクリプトや文書化した手順から利用できます。
 - 設定画面の「開いている接続」から、すべてのコンソール、ポート転送、リモートへ転送した agent を終了できます。engine 自体は停止しません。再接続できる操作のため、確認ダイアログは表示しません。
 - engine は実行中の端末から Ctrl-C または SIGTERM で停止します。開いているコンソール、転送、vault を終了した後に lock を解放します。
@@ -211,7 +211,7 @@
 
 ## 更新の境界
 
-- 更新確認は、このアプリケーションが SSH 接続先以外の外部ホストへ通信する唯一の機能です。`https://api.github.com/repos/aida0710/sshc/releases/latest`へengine起動直後と画面上の確認時にGETします。起動時はHTTP受付開始を先に通知し、3秒以内のbest-effort確認だけを行います。失敗やoffline状態でengineを停止せず、新しい安定版がある場合だけ`sshc update`を案内します。server sideからリクエストするため、ページの`connect-src`は`'self'`のままです。
+- 更新確認は、利用者が設定した S3 endpoint への Sync と `sshc update` の installer 取得（`raw.githubusercontent.com`）を除き、このアプリケーションが SSH 接続先以外の外部ホストへ通信する唯一の機能です。`https://api.github.com/repos/aida0710/sshc/releases/latest`へengine起動直後と画面上の確認時にGETします。起動時はHTTP受付開始を先に通知し、3秒以内のbest-effort確認だけを行います。失敗やoffline状態でengineを停止せず、新しい安定版がある場合だけ`sshc update`を案内します。server sideからリクエストするため、ページの`connect-src`は`'self'`のままです。
 - `sshc update`は任意の実行ファイルを直接置換しません。Homebrew版は`brew --prefix --installed aida0710/tap/sshc`の管理対象と実行中ファイルを`SameFile`で照合してから、同じ`brew`のformula更新へ委ねます。`install.sh`版は隣接receiptに記録したrepository、安定版、SHA-256が実行中ファイルと一致するときだけ、確認した最新tagに固定したinstallerへ委ねます。変更前に実行ファイル、現在版、更新版、管理元を表示して対話確認を求め、`-y`または`--yes`だけが確認を省略します。Windows、手動配置、source build、変更済みファイル、判定不能な導入は拒否します。
 - 以前削除した自己更新機能は、アプリケーション自身がネットワークからbinaryを取得して直接置換する方式でした。署名鍵をrelease workflowと同じ主体が扱う構成ではrepository侵害への防御が増えず、独自updaterの失敗境界だけが増えるため復活させません。現在の更新入口は既存のHomebrewまたはtag固定`install.sh`を管理元として維持し、後者はReleaseの`checksums.txt`、digest付きreceipt、同一directory内renameを必須にします。
 - リリースでは 6 つの CLI バイナリを生成します（`sshc-darwin-arm64`、`sshc-darwin-amd64`、`sshc-linux-amd64`、`sshc-linux-arm64`、`sshc-windows-amd64.exe`、`sshc-windows-arm64.exe`）。各 OS の runner がその OS 向けの 2 アーキテクチャをビルドします。darwin では `CGO_ENABLED=1` を使用します。設定エンジンは `%u` と `%i` の展開に `os/user.Current()` を使用し、cgo を無効にした Go は `/etc/passwd` を参照するため、macOS の通常ユーザーではこれらの token を解決できない場合があります。Linux と Windows の CLI は `CGO_ENABLED=0` でビルドします。Android は署名済み APK を別ジョブで生成し、6 つの CLI とともにリリースへ添付します。
@@ -226,7 +226,7 @@
 - `sshc ssh --list` は `~/.ssh/config` と到達可能な `Include` を読み、具体的な接続先 alias を辞書順で 1 行ずつ表示します。`Host *`、ワイルドカード、否定パターンは接続先名ではないため表示せず、重複 alias は 1 回だけ表示します。この一覧は shell 補完の候補にもなるため、`validate.Alias` が拒む alias（shell メタ文字、空白、先頭の `-` を含むもの）は stdout に出さず、落とした理由を stderr に引用付きで表示します。設定の読み取り時に `ssh` や `Match exec` は実行しません。
 - 引数なしの `sshc ssh` は現在のターミナルに検索 TUI を表示します。alias、設定から計算した `HostName`・`User`・`Port`、metadata のタグで絞り込み、alias順に表示します。上下キーで選択し、Enter で同じ端末から接続します。Web UI は起動せず、`sshc ssh <接続先>` と同じ保存済み鍵パスフレーズの経路を使用します。設定ファイルが存在するが読み取れない場合は、接続先 0 件として扱わず読み取りエラーを表示します。
 - TUI の入力は端末からの read 単位で解釈します。`Esc` は単独キーであると同時に矢印キー列の先頭でもあるため、read の末尾にある場合だけ単独キーとして扱います。未対応の escape sequence は終端まで読み捨て、`Delete` や `Ctrl-矢印` の後続バイトが検索文字列に入らないようにします。行は端末幅で切り、表示できない件数を `N more` として表示します。
-- サブコマンドの一覧は `sshc -h`、`sshc ssh --help`、`sshc serial --help`、`sshc telnet --help` に出ます。SSH alias は必ず `sshc ssh` の後で解釈するため、`serial`、`telnet`、`status` などのトップレベルコマンド名と同じaliasにも接続できます。transportを省略した `sshc <alias>` は受け付けません。
+- サブコマンドの一覧は `sshc -h` に出ます。`sshc ssh --help`、`sshc serial --help`、`sshc telnet --help` はそのコマンドの使い方だけを出します。SSH alias は必ず `sshc ssh` の後で解釈するため、`serial`、`telnet`、`status` などのトップレベルコマンド名と同じaliasにも接続できます。transportを省略した `sshc <alias>` は受け付けません。
 - `sshc ssh <接続先>` は外部の `ssh` を起動せず、現在のターミナルからプロセス内 SSH client で接続します。engine は `~/.ssh/sshc/cli`（0600）に URL と起動ごとの秘密を保存し、CLI はこの情報を使って保存済み資格情報を取得します。応答には単回トークンではなく、その接続に必要な資格情報を直接含めます。engine は ProxyJump の接続チェーンを解決し、各 alias が使用する鍵パスフレーズ、アカウントパスワード、TOTP provisioning dataだけを返します。CLIはchallengeを受けた時点でTOTPを生成します。`Match exec` や `CanonicalizeHostname` により外部実行または DNS なしでは鍵を決定できない場合は返しません。接続チェーンに含まれない資格情報も返しません。保存値で処理できないプロンプトは端末に表示します。このファイルを読み取れる主体は既にvault暗号文、秘密鍵、任意aliasの保存済み資格情報へアクセスできる同一OSユーザーであり、TOTP追加でlocalhostの信頼境界は広げません。強制終了後にファイルが残っても参照先ポートには接続できず、秘密は次回起動時に再生成されます。
 - engine が動作していない場合は `sshc engine` の起動方法を表示して終了します。CLI 自身は engine を起動しません。保存済み資格情報を使わずに接続する場合は、`ssh <接続先>` を利用できます。
 - vault が施錠中の場合、対話式の `sshc ssh <接続先>` は解錠を待ちます。UI または別端末の `sshc vault unlock` で同じ engine を解錠すると、待機中の接続が続行します。この接続コマンド自体はマスターパスワードを要求しません。`--non-interactive` は待機せずエラーを返します。以前使用していた `/cli/unlock` route は削除済みで、`TestLegacyCLIUnlockRouteIsNotRegistered` が 404 を検査します。desktop は UI を 1 回 foreground にして無期限に待機し、headless は待機しません。
@@ -237,7 +237,7 @@
 
   ネットワーク切り替え、端末の sleep、接続先の再起動による切断は自動再接続の対象です。シェルが `exit` で終了した場合は再接続しません。`sshclient` はネットワーク切断を `TransportLost` として記録し、終了コードと区別します。
 
-  再試行間隔の基準は 1、2、5、10、15 秒です。同時に切れた接続が一斉に再試行しないよう、session IDから計算した安定した±20%のjitterを加えます。既定の5回では、再試行終了まで最大40秒かかります。この間、切断されたコンソールは一覧に残ります。利用者が明示的に閉じた場合は再試行しません。設定画面の「ターミナル」で0〜5回を選択でき、0は再接続なしを意味します。
+  再試行間隔の基準は 1、2、5、10、15 秒です。同時に切れた接続が一斉に再試行しないよう、session IDから計算した安定した±20%のjitterを加えます。既定の5回では、再試行終了まで最大40秒かかります。この間、切断されたコンソールは一覧に残ります。利用者が明示的に閉じた場合は再試行しません。設定画面の「ターミナル」で既定・0・1・2・3・5回から選択でき、0は再接続なしを意味します。
 
   - 再試行回数は試行ごとに設定から読み、実行中に 0 へ変更した場合は次の試行を行いません
   - 0 は明示的な設定値であり、未設定（既定値を使用）と区別するため pointer として保存します
@@ -247,6 +247,8 @@
   - UI の「5 回・最大 40 秒」は最大jitterを含む再試行間隔から計算します。`internal/acceptance` は両言語の表示値を `terminal.ReconnectWindow` と照合します
 
   session APIはSSH processの状態を`connecting`、`connected`、`reconnecting`、`exited`で返します。再接続中は試行回数、上限、次回時刻と固定problem codeを返し、raw transport errorは返しません。WebSocketの接続状態はbrowser attachmentの状態であり、SSH processとは別に表示します。Web UIはsessionが存在するときだけ2秒間隔で一覧を更新し、世代番号が古い応答を捨てます。
+
+  自動再接続の途中で利用者が「再接続を止める」を押すと、`POST /api/v1/terminal/sessions/{id}/reconnect/stop` が待機中・dial 中・握手中の試行を打ち切り、session を problem `reconnect_stopped` の exited にして「[sshc] 再接続を停止しました。」を出力します（reconnecting 以外では 409 `terminal_not_reconnecting`）。握手中の新しい process も閉じるので、入力を捨てる生きた reconnecting には留まりません。その後は手動の「再接続」を使えます。
 
   自動再接続が終了したSSH sessionまたはremote shellが終了したSSH sessionは、終了表示内の「再接続」から同じsession ID、pane、scrollbackのまま新しいshellを開けます。`POST /api/v1/terminal/sessions/{id}/reconnect`は終了済みSSH sessionだけを受け付け、live session、local shell、利用者が一覧から閉じたsessionを拒否します。新しい接続も通常のhost key確認、認証、同時session上限を通り、security checkを迂回しません。開始済みの再接続とcloseまたはengine停止が競合した場合は新processを破棄し、sessionを復活させません。成功後は新しい単回ticketで同じWebSocket表示へattachし直します。
 
@@ -268,10 +270,10 @@
 
 - SFTP はターミナル channel と同じ接続設定、vault、`known_hosts`、`ProxyJump` chain を使いますが、現在の対話ターミナルの transport 自体は共有しません。各 API 操作に専用の非対話 SSH transport と SFTP subsystem を開き、処理後に全 hop を閉じます。未知のホスト鍵は常に拒否するため、最初の確認はターミナル接続で行う必要があります。
 - リモート editor は UTF-8 の通常ファイルだけを扱い、上限は 2 MiB です。バイナリまたは大きなファイルは download を使用します。save は読み込み時の revision と現在の stat を比較して外部変更を検出し、同じ directory の一時ファイルを書いて rename します。既存 mode は維持します。delete は表示した stat に紐づく単回 action token が必要で、directory の再帰削除と symlink の追跡はしません。
-- upload／downloadはOpenAPIで定義した共通Transfer Job APIへ集約し、engineのTransfer Managerを唯一の台帳とします。jobはdirection、file／folder、batch、attempt、status、bytes、速度、残り時間、再開revision、上書き確認を持ち、登録、状態遷移、同時2件の上限、完了済みjobの消去をengineが処理します。Webは2秒ごとに台帳を同期し、別のブラウザ／WebViewによる操作も同じ状態へ収束します。`File`、OPFSの一時データ、保存先handleだけはブラウザ固有のI/O資源であり、job stateを`localStorage`へ保存しません。folder uploadはfile子jobへ展開し、同じbatchの成功済みfileを保ったまま失敗fileだけretryできます。画面移動中も転送workerとApp内通知は生存します。browser reload後のuploadはengine台帳のname・size・lastModifiedと一致するfileを再選択した場合だけ再開します。downloadはengineのrevision／offsetとOPFSの一時データが両方残る場合だけ再開し、OPFSを利用できないfallback受信chunkはreloadをまたぎません。
+- upload／downloadはOpenAPIで定義した共通Transfer Job APIへ集約し、engineのTransfer Managerを唯一の台帳とします。jobはdirection、file／folder、batch、attempt、status、bytes、速度、残り時間、再開revision、上書き確認を持ち、登録、状態遷移、同時実行数の上限（既定2、最大8。設定で変更）、完了済みjobの消去をengineが処理します。Webは2秒ごとに台帳を同期し、別のブラウザ／WebViewによる操作も同じ状態へ収束します。`File`、OPFSの一時データ、保存先handleだけはブラウザ固有のI/O資源であり、job stateを`localStorage`へ保存しません。folder uploadはfile子jobへ展開し、同じbatchの成功済みfileを保ったまま失敗fileだけretryできます。画面移動中も転送workerとApp内通知は生存します。browser reload後のuploadはengine台帳のname・size・lastModifiedと一致するfileを再選択した場合だけ再開します。downloadはengineのrevision／offsetとOPFSの一時データが両方残る場合だけ再開し、OPFSを利用できないfallback受信chunkはreloadをまたぎません。
 - uploadはfile/folder pickerとDrag & Dropを同じ経路へ集約し、relative pathを検査して親directoryを浅い順に作成します。各fileは1 MiB以下のchunkとして送ります。remote側では対象と同じdirectoryの予約part fileへ期待offsetが一致する場合だけ追記し、完了時にtarget revisionを再検証してatomic renameします。pauseはpartを維持し、cancelはpartを削除します。既存ファイルは409を受けた時点で個別に上書き確認し、暗黙には置換しません。file downloadは受信済みbytesを保持してHTTP Rangeで自動再試行します。directory downloadは共通queueへ入るもののresume対象外のsymlink非追跡ZIP streamで、retry時は先頭からやり直します。symlinkはextract先を脱出できないようlink targetを内容とする通常ファイルへ変換します。chmodは現在のmetadata revisionと単回action tokenを必要とし、symlinkには適用しません。
 - SFTP は左ナビの Start 内で Terminal の直前に置きます。画面を開いただけでは接続せず、利用者がhostを選んでConnectを実行した後に初めて一覧を取得します。SFTP、鍵、`known_hosts` の表は操作列を除く各データ列をクライアント側で安定ソートし、現在の方向を `aria-sort` でも公開します。
-- スマホSFTPは通常時のツールバーを接続先／戻る／現在フォルダ／検索／操作シートの1行にまとめます。作成・upload・場所・履歴・並べ替え等はシート内に保持します。名前の1タップでdirectoryへ移動、fileはpreviewを開きます。checkboxまたは長押しで選択し、選択中のタップは追加・解除に使います。長押し後のclickは同じ操作を重ねて実行しません。移動・検索中は行操作を止め、処理中の表示と移動先を出します。失敗した場合は既存のpathと一覧を維持し、失敗を表示します。
+- スマホSFTPは通常時のツールバーを接続先／戻る／現在フォルダ／検索／操作シートの1行にまとめます。作成・upload・移動・並べ替え等はシート内に保持します（ブックマークと最近開いたパスは v0.35.0 で削除）。名前の1タップでdirectoryへ移動、fileはpreviewを開きます。checkboxまたは長押しで選択し、選択中のタップは追加・解除に使います。長押し後のclickは同じ操作を重ねて実行しません。移動・検索中は行操作を止め、処理中の表示と移動先を出します。失敗した場合は既存のpathと一覧を維持し、失敗を表示します。
 - スマホのTransfer Managerは常に1行のdockです。desktopで展開状態を保存していても自動展開せず、詳細は一覧の外にportalのsheetとして開きます。転送設定とpreviewの属性情報は必要時に展開します。desktopは従来の高さ調整と折り畳み状態を保持します。接続先pickerもスマホでは検索欄に自動フォーカスせず、候補を選ぶだけの操作でIMEを開きません。
 - Monaco Editor は SFTP 画面を開いたときだけ読み込みます。editor worker は build に同梱して同一 origin から読み込み、blob URL や CDN は使用しません。従来の `script-src 'self'` と Trusted Types の方針は維持します。
 - 同じ engine 内の Monaco Editor 保存と upload 公開は、SSH alias と正規化済みtarget pathの組ごとに直列化します。これにより両操作が同じrevisionを同時に検証して互いを上書きすることはありません。ただし一般的な SFTP v3 には「revision が一致するときだけ rename」を行うatomic CASがないため、別のSSH clientやremote processが検証とrenameの間に書き換える競合の検出はbest-effortです。
@@ -286,8 +288,8 @@
 
 ## 強化とリリースの境界
 
-- リクエスト本文には二段の上限があります。middleware の `MaxRequestBodyCeiling`（2 MiB）が全 `/api/` 要求の天井で、各ハンドラーはさらに小さい上限を持ちます。宣言された `Content-Length` が天井を超える要求はハンドラーへ届く前に 413 で拒否し、長さを宣言しない chunked 要求は読み取り自体を天井で打ち切ります。本文を読まないルート（`/api/v1/diagnostics/config` や `/api/v1/keys/{keyId}/trash`）にも同じ天井が掛かるのは前者のためです。
-- 外部コマンドの出力は `platform.MaxCapturedOutput`（64 KiB）で打ち切られます。認証テストの stderr は `MaxReportedOutput`（8 KiB）までに制限して表示します。
+- リクエスト本文には二段の上限があります。middleware の `MaxRequestBodyCeiling`（2 MiB）が全 `/api/` 要求の天井で（例外は SFTP の range upload `PATCH …/uploads/{id}?range=true` の 4 GiB だけ）、各ハンドラーはさらに小さい上限を持ちます。宣言された `Content-Length` が天井を超える要求はハンドラーへ届く前に 413 で拒否し、長さを宣言しない chunked 要求は読み取り自体を天井で打ち切ります。本文を読まないルート（`/api/v1/diagnostics/config` や `/api/v1/keys/{keyId}/trash`）にも同じ天井が掛かるのは前者のためです。
+- リモートコマンドの出力は `sshclient.MaxCapturedOutput`（64 KiB）で打ち切られます。認証テストの banner と失敗理由は `diagnostics.MaxReportedOutput`（8 KiB）までに制限して表示します。
 - `make fuzz` は `FUZZ_TARGETS` に列挙した全 target を順に実行します。`go test -fuzz` は一度に 1 target しか動かせないため、1 行で書くと最初の target しか回りません。target を追加して一覧に加え忘れると `TestMakefileFuzzTargetsCoverEveryFuzzFunction` が失敗します。
 - fuzz の対象は、設定パーサーのラウンドトリップ、Include パターン展開、`known_hosts` リーダー、実効値の解決、`ssh -G` 出力パーサー、HTTP リクエストデコーダー、リモートスナップショットのリーダーの 7 つです。いずれも実 fixture を seed にしています。
 - アクセス URL を表示するのは `sshc` と `sshc open` だけで、要求ごとに 1 つ発行します。`sshc engine` はアクセス URL を表示しません。旧版の `--own-engine` と `-open=false` はどちらも未定義であり、alias や互換用 option もありません。

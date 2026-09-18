@@ -46,4 +46,4 @@ sshc sync now --json
 sshc sync auto on
 ```
 
-`sync pull --force` treats the current remote as authoritative, previews it, and applies only after rechecking the same ETag and revision. `sync push --force` replaces the remote and requires an interactive or equivalent explicit confirmation.
+`sync pull --force` treats the current remote as authoritative, previews it, and applies only after rechecking the same ETag and revision. `sync push --force` replaces the remote; passing `--force` is itself the explicit confirmation that you resolved the conflict locally, and no interactive prompt follows. Review the difference under **Review changes** in the web UI before running it.

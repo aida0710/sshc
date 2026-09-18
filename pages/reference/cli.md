@@ -15,9 +15,13 @@ CodexなどのAIエージェントからも直接実行できます。非対話S
 
 ```sh
 sshc engine
+sshc engine --port 60001
 sshc engine --replace
 sshc
+sshc open
 sshc status --json
+sshc version
+sshc vault status
 sshc vault create
 sshc vault unlock
 sshc vault lock
@@ -28,6 +32,8 @@ sshc service disable
 sshc update
 ```
 
+引数なしの`sshc`は起動中のエンジンから1回限りのURLを取得してブラウザーで開き、`sshc open`はURLを表示するだけでブラウザーを起動しません。`sshc engine --port <n>`（1024〜65535）は待ち受けポートを固定します。`sshc version`（`-v`、`--version`）はこのバイナリの版を表示し、`sshc vault status`は`sshc status`と同じ表にVaultの状態を含めて表示します。
+
 Vaultのマスターパスワードなどを対話入力すると、入力した値の代わりに`*`を表示します。入力値がTerminalのスクロールバックへ平文で残ることはありません。
 
 `sshc service`はLinuxではsystemdユーザーサービス、macOSではlaunchdユーザーエージェントを管理します。`install`はHomebrewまたは`install.sh`で導入された安定パスを登録し、`disable`はsshcが作成した定義だけを削除します。`install`、`disable`、`update`は変更内容を表示してから確認を求めます。自動化で確認を省略する場合だけ`-y`または`--yes`を付けてください。
@@ -37,12 +43,12 @@ Vaultのマスターパスワードなどを対話入力すると、入力した
 ## OTP
 
 ```sh
-sshc otp list
+sshc otp list [--json]
 sshc otp <name>
 sshc otp show <name> --json
 sshc otp add <name>
 sshc otp edit <name>
-sshc otp remove <name>
+sshc otp remove <name> [-y|--yes]
 ```
 
 `list`は保存名と割り当て先だけを表示します。`sshc otp <name>`または`show`は、時刻の境界付近でも確認できるよう、ひとつ前・現在・ひとつ後のコードと現在コードの残り秒数を表示します。セットアップキーはエンジン内に留まり、表示結果やJSONには含めません。
@@ -141,12 +147,16 @@ SerialとTelnetの対話接続は`Ctrl+]`で切断できます。Telnetは通信
 ```sh
 sshc terminal list --json
 sshc terminal create ssh bastion --json
+sshc terminal create shell --json
 sshc terminal show <session-id> --json
 sshc terminal read <session-id> --cursor 0 --limit 4096 --json
 sshc terminal send <session-id> --text 'uptime' --json
+sshc terminal send <session-id> --text 'partial input' --no-enter
 sshc terminal wait <session-id> --for connected --timeout 30s --json
 sshc terminal rename <session-id> deploy
 sshc terminal close <session-id>
 ```
+
+`create shell`はエンジン側のローカルシェルを開きます。`send`は既定で末尾にEnter（CR）を付け、`--no-enter`で付けません。
 
 `read`では、保持しているスクロールバックと次回指定する読み取り位置を取得できます。指定した位置の出力がすでに破棄されている場合は、現在残っている先頭から返し、そのことを警告に含めます。`send`は、確認後にセッション内のプロセスが入れ替わっていた場合には何も送信しません。
