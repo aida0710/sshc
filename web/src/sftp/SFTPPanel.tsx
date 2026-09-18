@@ -644,7 +644,6 @@ export function SFTPPanel({
                 entries={displayedEntries}
                 sort={sort}
                 onSort={changeSort}
-                compact={compactViewport}
                 mobileInteraction={mobileInteraction}
                 busy={busy}
                 locked={dirty}
