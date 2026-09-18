@@ -2,7 +2,7 @@ import { useState } from "react";
 import { ApiError, type RequestFailureDiagnostic } from "../api/client";
 import { vaultApi, type PasswordVaultStatus, type VaultApi } from "../api/vault";
 import { useLanguage } from "../i18n/context";
-import { locales, type Locale } from "../i18n/locale";
+import { localeLabelKeys, locales, type Locale } from "../i18n/locale";
 import type { MessageKey } from "../i18n/messages";
 import { useTheme } from "../theme/context";
 import { themes, type Theme } from "../theme/theme";
@@ -209,7 +209,7 @@ export function LockScreen({
               className={`${autoControl} min-h-9`}
             >
               {locales.map((candidate) => (
-                <option key={candidate} value={candidate}>{candidate === "en" ? "English" : "日本語"}</option>
+                <option key={candidate} value={candidate}>{t(localeLabelKeys[candidate])}</option>
               ))}
             </select>
           </label>

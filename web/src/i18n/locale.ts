@@ -1,4 +1,5 @@
 import { readStoredValue, writeStoredValue } from "../ui/browserStorage";
+import type { MessageKey } from "./messages";
 
 export const locales = ["en", "ja"] as const;
 export type Locale = (typeof locales)[number];
@@ -6,6 +7,12 @@ export type Locale = (typeof locales)[number];
 export const defaultLocale: Locale = "en";
 
 export const storageKey = "sshc.language";
+
+// Each language is named in itself, so a person can find their own.
+export const localeLabelKeys: Record<Locale, MessageKey> = {
+  en: "shell.languageEnglish",
+  ja: "shell.languageJapanese",
+};
 
 export function isLocale(value: unknown): value is Locale {
   return typeof value === "string" && (locales as readonly string[]).includes(value);

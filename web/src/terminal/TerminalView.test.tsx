@@ -95,7 +95,7 @@ describe("TerminalView", () => {
   it("keeps its title and search toolbar visible", () => {
     render(<TerminalView session={session} api={{ terminalStreamTicket: vi.fn(async () => ({ streamTicket: "one-time" })) }} />);
 
-    expect(screen.getByRole("region", { name: "Console for zsh" })).toBeVisible();
+    expect(screen.getByRole("region", { name: "Terminal for zsh" })).toBeVisible();
     expect(screen.getByText("zsh", { exact: true })).toBeVisible();
     expect(screen.getByRole("button", { name: "Find" })).toBeVisible();
     expect(screen.getByText("connected", { exact: true })).toBeVisible();

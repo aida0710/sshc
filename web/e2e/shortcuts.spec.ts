@@ -31,7 +31,7 @@ test("edits shortcuts, keeps them after reload and uses them in a live terminal"
     await page.screenshot({ path: `${process.env.SSHC_SHORTCUTS_VISUAL_DIR}/shortcuts.png`, fullPage: true });
   }
   await openLocalShell(page);
-  await expect(page.getByRole("region", { name: /^Console for / })).toContainText(/[$#%>]/);
+  await expect(page.getByRole("region", { name: /^Terminal for / })).toContainText(/[$#%>]/);
   await terminalKeyboard(page).focus();
   const beforePalette = frames.length;
   await page.keyboard.press("Alt+k");
@@ -56,7 +56,7 @@ test("edits shortcuts, keeps them after reload and uses them in a live terminal"
   await page.keyboard.press("Alt+PageDown");
   await expect(page).toHaveURL(/\/terminal$/);
   await openLocalShell(page);
-  const rows = page.getByRole("list", { name: "Open consoles" }).getByRole("listitem");
+  const rows = page.getByRole("list", { name: "Open sessions" }).getByRole("listitem");
   await expect(rows).toHaveCount(2);
   await page.keyboard.press("Alt+PageUp");
   await expect(rows.nth(0).locator('[aria-current="true"]')).toBeVisible();
@@ -77,7 +77,7 @@ test("keeps Ctrl+F inside Terminal and leaves browser Find available on other pa
   await openApplication(page, installation);
   const nav = page.getByRole("navigation", { name: "Primary" });
   await openLocalShell(page);
-  await expect(page.getByRole("region", { name: /^Console for / })).toContainText(/[$#%>]/);
+  await expect(page.getByRole("region", { name: /^Terminal for / })).toContainText(/[$#%>]/);
   async function pressFind(prevented: boolean) {
     await page.evaluate(() => document.documentElement.removeAttribute("data-test-find-prevented"));
     await page.keyboard.press("Control+f");
@@ -94,7 +94,7 @@ test("keeps Ctrl+F inside Terminal and leaves browser Find available on other pa
   await page.getByRole("button", { name: "Match case", exact: true }).focus();
   await pressFind(true);
   await expect(search).toBeFocused();
-  await page.getByRole("list", { name: "Open consoles" }).getByRole("button", { name: /^Close / }).click();
+  await page.getByRole("list", { name: "Open sessions" }).getByRole("button", { name: /^Close / }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
   await pressFind(true);
   await expect(page.getByRole("button", { name: "Keep it open", exact: true })).toBeFocused();

@@ -462,7 +462,6 @@ export const ja = {
   "terminal.openShell": "Local shell",
   "terminal.newSession": "新しいセッション",
   "terminal.rowDetail": "{status} · {destination}",
-  "terminal.running": "接続中",
   "terminal.connecting": "接続を開始中",
   "terminal.connected": "接続済み",
   "terminal.longCommandCompleted": "{subject} のコマンドが {seconds} 秒で完了しました。",
@@ -774,7 +773,6 @@ export const ja = {
   "terminal.backgroundCapacityHint": "1〜1024 MiB。既定は16 MiBです。上限を下げても既存画像は削除されません。容量と同期コストは利用者が管理してください。",
   "terminal.backgroundCapacityInvalid": "保存容量は1〜1024 MiBの整数で指定してください。",
   "terminal.backgroundCapacityFailed": "保存容量を変更できませんでした。",
-  "terminal.backgroundRename": "{name} の名前を変更",
   "terminal.backgroundRenameHeading": "背景画像の名前を変更",
   "terminal.backgroundRenameHint": "拡張子は画像の種類に合わせて自動的に決まります。保存済みのTerminal設定も新しい名前へ更新します。",
   "terminal.backgroundRenameLabel": "新しいファイル名",
@@ -783,8 +781,6 @@ export const ja = {
   "terminal.backgroundRenameRequired": "ファイル名を入力してください。",
   "terminal.backgroundRenameExists": "同じ名前の背景画像がすでにあります。",
   "terminal.backgroundRenameFailed": "背景画像の名前を変更できませんでした。",
-  "terminal.backgroundRemove": "{name} を削除",
-  "terminal.backgroundRoom": "残り {megabytes} MB",
   "terminal.backgroundTooLarge": "この画像は保存できる大きさを超えています。",
   "terminal.backgroundsFull": "これ以上画像を置く余地がありません。",
   "terminal.backgroundNotAnImage":
@@ -909,17 +905,9 @@ export const ja = {
   "secrets.metricTOTP": "ワンタイムパスワード",
   "secrets.metricAssignments": "割り当て",
   "secrets.loading": "Vault を読み込んでいます…",
-  "secrets.explainNew":
-    "1 つのマスターパスワードで、アカウントのパスワード、鍵のパスフレーズ、オブジェクトストレージの認証情報、Snippet を暗号化します。マスターパスワードは保存されず、復旧もできません。紛失すると、これらの暗号化データを復号できなくなります。OpenSSH が直接読み込むファイルには影響しません。",
-  "secrets.explainLocked":
-    "Vault はロックされています。アクセスするにはマスターパスワードを入力してください。",
   "secrets.master": "マスターパスワード",
-  "secrets.create": "Vault を作成",
   "secrets.unlock": "開く",
   "secrets.lock": "sshc をロック",
-  "secrets.createFailed":
-    "Vault を作成できませんでした。マスターパスワードは 4 文字以上必要です。",
-  "secrets.unlockFailed": "マスターパスワードが違います。",
   "secrets.failed": "Vault を読み込めませんでした。",
   "secrets.storeFailed": "保存できませんでした。",
   "secrets.deleteFailed": "削除できませんでした。",
@@ -1064,11 +1052,6 @@ export const ja = {
   "home.groups": "グループ",
   "home.attention": "確認が必要",
   "home.quickConnect": "Quick Connect",
-  "home.quickConnectHint":
-    "最近接続した順に表示し、未接続の接続先は名前順に並べます。",
-  "home.recentConnections": "最近使った接続",
-  "home.recentConnectionsHint": "この端末で接続に成功した SSH 接続です。",
-  "home.recentConnectionList": "最近使った接続先",
   "home.savedWorkspaces": "保存レイアウト",
   "home.savedWorkspacesHint":
     "保存した接続先とペイン配置を、新しいセッションとしてまとめて開きます。",
@@ -1085,30 +1068,21 @@ export const ja = {
   "home.listView": "リスト",
   "home.groupFilter": "グループで接続先を絞り込み",
   "home.allGroups": "すべて",
-  "home.groupCount": "グループ {count} 件",
   "home.connectionCount": "接続先 {count} 件",
   "home.groupBreadcrumb": "選択中のグループ",
   "home.openGroup": "{name} を開く（接続先 {count} 件）",
-  "home.noChildGroups": "この階層にグループはありません。",
   "home.connectGesture":
     "{alias} へ接続します。マウスではダブルクリック、タッチ画面では 1 回タップします。",
-  "home.neverConnected": "接続履歴なし",
   "home.loading": "SSH 設定を読み込んでいます…",
   "home.noConnections":
     "接続先がまだありません。SSH Config に Host を追加してください。",
   "home.noMatches": "検索に一致する接続はありません。",
-  "home.groupMissingDetail": "選択中のグループ {name} は、すでに存在しません。",
-  "home.ungrouped": "グループなし",
-  "home.tagsFor": "{alias} のタグ",
   "home.connectionActions": "{alias} の操作",
   "home.openConnectionSettings": "接続設定を開く",
   "home.connect": "接続",
   "home.openingConnection": "{alias} に接続中…",
   "home.opening": "接続中…",
   "home.loadFailed": "SSH 設定を読み込めませんでした。",
-  "home.workspace": "ワークスペース",
-  "home.workspaceUnavailable": "ワークスペースの状態を取得できません。",
-  "home.workspaceClean": "設定の問題や中断した変更はありません。",
   "home.workspaceAttention":
     "設定または復旧について {count} 件の確認が必要です。",
   "home.openConfig": "設定を確認",
@@ -1325,9 +1299,6 @@ export const ja = {
   "sync.exclusions.invalid": "除外ルールの書式が正しくありません。",
   "sync.exclusions.loadFailed": "同期対象を読み込めませんでした。",
   "sync.exclusions.saveFailed": "除外設定を保存できませんでした。",
-  "sync.receiveRemote": "リモートから受信",
-  "sync.autoBlockedReason": "同期を停止しています。理由：{reason}",
-  "sync.autoFailedReason": "前回の同期に失敗しました。理由：{reason}",
   "sync.setup.check": "接続を確認",
   "sync.setup.empty": "接続できました。このパスには同期データがありません。",
   "sync.setup.existing": "既存の同期データが見つかりました。",
@@ -1387,7 +1358,6 @@ export const ja = {
     "このマシンからの送信のみを行います。他のマシンの変更は適用されませんが、変更内容の確認はできます。",
   "sync.direction.pull.hint":
     "このマシンでは受信のみを行います。ローカルの変更はバケットや他のマシンへ送信されません。",
-  "sync.configure": "このバケットを使う",
   "sync.editSettings": "バケット設定を編集",
   "sync.cancelSettings": "編集をキャンセル",
   "sync.configureFailed": "そのバケットを設定できませんでした。",
@@ -1454,7 +1424,6 @@ export const ja = {
     "別の処理がこのマシンの設定を更新しています。完了してから、もう一度お試しください。",
   "sync.endpointPath":
     "エンドポイントはアカウントのアドレスだけです。バケット名やパスは含めません。バケット名は下の欄に入れてください。",
-  "sync.auto": "自動同期",
   "sync.autoHint.both":
     "Vault が開いている間、1 分ごとにリモートの更新を確認します。このマシンの設定を変更した場合は、最後の変更から 5 秒後に一度だけ送信します。競合は自動解決せず、ファイルを削除する変更も自動適用しません。どちらの場合も自動同期を停止して通知します。",
   "sync.autoHint.pull":
@@ -1489,7 +1458,6 @@ export const ja = {
   "sync.autoFailedSchema":
     "リモートスナップショットの形式に対応していません。同じスナップショットの自動取得は再試行しません。",
   "sync.autoFailed": "設定を保存できませんでした。",
-  "sync.autoNow": "今すぐ同期",
   "sync.autoNow.both": "今すぐ同期",
   "sync.autoNow.pull": "今すぐ受信",
   "sync.autoNow.push": "今すぐ送信",
@@ -1899,13 +1867,10 @@ export const ja = {
 
   "tree.navLabel": "Connections",
   "tree.ungrouped": "未分類",
-  "tree.arrangeBy": "接続の並べ方",
   "tree.byGroups": "グループ",
-  "tree.byFiles": "ファイル",
   "tree.groupFilter": "グループを選択",
   "tree.groupSection": "{name} グループ（接続先 {count} 件）",
   "tree.filter": "接続を絞り込む",
-  "tree.filterPlaceholder": "alias、パターン、グループ、タグ",
   "tree.filterPlaceholderExpanded":
     "名前、接続先、ユーザー、グループ、タグを検索",
   "tree.allConnections": "すべて",
@@ -1914,32 +1879,13 @@ export const ja = {
   "tree.sortLabel": "接続の並び順",
   "tree.sortConfigured": "設定順",
   "tree.sortName": "名前順",
-  "tree.sortGroup": "グループ順",
   "tree.noMatch": "この条件に一致する接続はありません。",
-  "tree.groupEmpty": "このグループに接続はありません。",
   "tree.collapse": "{name} を折りたたむ",
   "tree.expand": "{name} を展開する",
-  "tree.patternRuleExternal":
-    "{path} のパターン規則です。このエディタはこのファイルを読み取るだけです。",
-  "tree.patternRuleOpen":
-    "パターン規則 — 設定ファイル画面で開く（{path}:{line}）",
   "tree.duplicateAlias": "alias 重複",
-  "tree.patternRule": "パターン規則",
   "tree.dragGroupHint":
     "グループをドラッグすると、階層と表示順を変更できます。",
 
-  "browser.modeLabel": "接続の表示方法",
-  "browser.servers": "サーバー",
-  "browser.groups": "グループ",
-  "browser.groupPath": "グループの場所",
-  "browser.ungrouped": "未分類",
-  "browser.groupCountOne": "サーバー 1 台",
-  "browser.groupCountMany": "サーバー {count} 台",
-  "browser.noMatches": "現在の条件に一致するサーバーはありません。",
-  "browser.emptyGroup": "このグループ直下にサーバーはありません。",
-  "browser.emptyGroups": "宣言済みグループはまだありません。",
-  "browser.groupMissing": "グループが見つかりません。",
-  "browser.backToGroupRoot": "グループ一覧へ戻る",
   "browser.invalidUrl": "この接続 URL は認識できません。",
   "browser.backToServers": "サーバー一覧へ戻る",
   "browser.duplicateAlias": "alias 重複",
@@ -2124,7 +2070,6 @@ export const ja = {
     "この下書きを保存するには暗号化 Vault を開いてください。",
   "conn.basicPasswordBlocked":
     "現在の SSH 設定では、保存済みパスワードを追加・置換できません。",
-  "conn.basicNothingChanged": "基本設定はまだ変更されていません。",
   "conn.basicOptionsFailed": "鍵とパスワードの選択肢を読み込めませんでした。",
   "conn.basicCredentialOptionsFailed":
     "保存済みパスワードの選択肢を読み込めませんでした。",
@@ -2149,11 +2094,8 @@ export const ja = {
   "conn.missingHint":
     "このリンクの作成後に、名前変更・移動・削除された可能性があります。",
   "conn.backToList": "接続一覧へ戻る",
-  "conn.summarySaved": "保存済みの接続",
-  "conn.summarySavedState": "保存済み",
   "conn.summaryUnsaved": "未保存の変更あり",
   "conn.summaryGroup": "グループ",
-  "conn.summaryNoGroup": "グループなし",
   "conn.summaryPrivateKey": "SSH 秘密鍵",
   "conn.summaryKeyNone": "ssh-agent または継承した鍵",
   "conn.summaryKeyComplex": "IdentityFile が複数あります",
@@ -2236,7 +2178,6 @@ export const ja = {
   "conn.connect": "接続",
   "conn.opening": "接続中…",
   "conn.duplicate": "接続を複製",
-  "conn.manage": "その他の接続操作",
   "conn.manageLabel": "接続の管理",
   "conn.manageIndependent":
     "ここでの操作は、基本設定・詳細設定の変更とは別に保存されます。",
@@ -2352,7 +2293,6 @@ export const ja = {
   "keys.relatedPublicFiles": "公開鍵ファイル（{count}）",
   "keys.showPrivateKey": "秘密鍵を表示",
   "keys.changePassphrase": "パスフレーズを変更",
-  "keys.moreActions": "その他の操作",
   "keys.manageStoredPassphrase": "保存済みパスフレーズを管理",
   "keys.storedPassphraseHeading": "保存済みパスフレーズ：{path}",
   "keys.storedPassphraseNote":
