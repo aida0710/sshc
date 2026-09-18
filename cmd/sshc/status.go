@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -20,7 +21,7 @@ import (
 func runStatus(
 	ctx context.Context, stateDir string, client *http.Client, asJSON bool, stdout, stderr io.Writer,
 ) int {
-	found, err := readHandoff(stateDir)
+	found, err := verifiedHandoff(ctx, stateDir, client)
 	if err != nil {
 		fmt.Fprintf(stderr, "sshc: %v\n", err)
 		return 1
@@ -119,6 +120,46 @@ type statusAnswer struct {
 //
 // 互換性エラーには現在の実行ファイルを含める。engine と CLI のどちらが古いかは
 // 判定できないため、特定の側の再起動は案内しない。
+// verifiedHandoff は handoff を読み、その URL にいる process が handoff の秘密を持つ
+// engine であることを確かめてから返す。engine が終了処理を経ずに消えると handoff
+// だけが残り、同じ port を別の process が取れる。確かめる前は秘密も資格情報も送らない。
+func verifiedHandoff(ctx context.Context, stateDir string, client *http.Client) (handoff.Handoff, error) {
+	found, err := readHandoff(stateDir)
+	if err != nil {
+		return handoff.Handoff{}, err
+	}
+	if err := proveEngine(ctx, found, engineCommandClient(client)); err != nil {
+		return handoff.Handoff{}, err
+	}
+	return found, nil
+}
+
+// proveEngine は乱数を送り、handoff の秘密で署名した答えが返ることを確かめる。
+func proveEngine(ctx context.Context, found handoff.Handoff, client *http.Client) error {
+	challenge, err := handoff.MintChallenge(rand.Reader)
+	if err != nil {
+		return err
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, found.URL+httpserver.ChallengePath, nil)
+	if err != nil {
+		return err
+	}
+	request.Header.Set(handoff.ChallengeHeader, challenge)
+	response, err := client.Do(request)
+	if err != nil {
+		if response != nil {
+			discardEngineResponse(response)
+		}
+		return transportProblem(err, false)
+	}
+	discardEngineResponse(response)
+	if response.StatusCode != http.StatusNoContent ||
+		!handoff.VerifyProof(found.Secret, challenge, response.Header.Get(handoff.ProofHeader)) {
+		return errEngineUnproven
+	}
+	return nil
+}
+
 func readHandoff(stateDir string) (handoff.Handoff, error) {
 	found, err := handoff.Read(stateDir)
 	if errors.Is(err, handoff.ErrSchemaVersion) || errors.Is(err, handoff.ErrProtocolVersion) {

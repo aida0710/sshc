@@ -12,9 +12,11 @@ import (
 // notifySignals は、この OS で終了を意味するシグナルを理由付きで運ぶ。
 //
 // Ctrl-C と SIGTERM は同じ後始末を通るが、終わり方は違う。前者はユーザーが
-// 止めたので 130、後者は監督者が止めたので 0 である。
+// 止めたので 130、後者は監督者が止めたので 0 である。端末を閉じたときの SIGHUP も
+// 後者と同じ後始末を通す。既定のまま落とすと handoff が残り、次に同じ port を
+// 取った process が CLI から engine に見える。
 func notifySignals(ctx context.Context) (context.Context, func()) {
 	signals := make(chan os.Signal, 2)
-	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
+	signal.Notify(signals, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 	return watchSignals(ctx, signals, func() { signal.Stop(signals) })
 }

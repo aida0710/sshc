@@ -21,7 +21,7 @@ import (
 // 秘密を持たない者には応答しない。本物がそうなので、偽物もそうする
 // 偽物が本物より寛容だと、この検査は製品が壊れていても緑のままになる。
 func TestEngineStatusReadsUnlockedAndSessions(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := engineTestServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get(handoff.HeaderName) != "the secret" || r.URL.Path != httpserver.StatusPath {
 			w.WriteHeader(http.StatusForbidden)
 			return
@@ -141,7 +141,7 @@ func TestAskingAMachineThatHasNeverRunAnEngineGetsAnAnswerItCanAct(t *testing.T)
 //
 // JSON は旗の下に残す。手順の中から読んでいる道を、暗黙に塞がない。
 func TestStatusPrintsATableAndStillSpeaksJSON(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := engineTestServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get(handoff.HeaderName) != "the secret" {
 			w.WriteHeader(http.StatusForbidden)
 			return
@@ -184,4 +184,40 @@ func TestStatusPrintsATableAndStillSpeaksJSON(t *testing.T) {
 	if decoded.Sessions != 2 || decoded.Version != "v9-test" {
 		t.Errorf("--json lost fields: %+v", decoded)
 	}
+}
+
+// engineTestServer は、テスト用 handoff の秘密（testHandoff）を知る偽 engine として
+// CLI の challenge に答え、それ以外の要求を handler へ渡す。CLI は秘密や資格情報を
+// 送る前に必ずこの証明を求めるので、偽 engine を立てる全テストがここを通る。
+func engineTestServer(handler http.Handler) *httptest.Server {
+	secret := testHandoff("").Secret
+	return httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if request.URL.Path == httpserver.ChallengePath {
+			answerChallenge(response, request, secret)
+			return
+		}
+		handler.ServeHTTP(response, request)
+	}))
+}
+
+// answerChallenge は、engine と同じ規則で challenge に署名する。
+func answerChallenge(response http.ResponseWriter, request *http.Request, secret string) {
+	challenge := request.Header.Get(handoff.ChallengeHeader)
+	if !handoff.ValidChallenge(challenge) {
+		response.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	response.Header().Set(handoff.ProofHeader, handoff.Prove(secret, challenge))
+	response.WriteHeader(http.StatusNoContent)
+}
+
+// proofResponse は、RoundTripper を偽 engine にするテストが challenge に返す応答である。
+// 該当しない要求には nil を返す。
+func proofResponse(request *http.Request) *http.Response {
+	if request.URL.Path != httpserver.ChallengePath {
+		return nil
+	}
+	header := make(http.Header)
+	header.Set(handoff.ProofHeader, handoff.Prove(testHandoff("").Secret, request.Header.Get(handoff.ChallengeHeader)))
+	return &http.Response{StatusCode: http.StatusNoContent, Header: header, Body: http.NoBody, Request: request}
 }

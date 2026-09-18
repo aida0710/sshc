@@ -151,16 +151,18 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 	if err != nil {
 		return runtime{}, fmt.Errorf("%w: %w", ErrListen, err)
 	}
-	if persistBrowserPort {
-		tcpAddress, ok := listener.Addr().(*net.TCPAddr)
-		if !ok || tcpAddress.Port < 1 {
-			listener.Close()
-			return runtime{}, fmt.Errorf("%w: browser origin listener has no TCP port", ErrListen)
-		}
-		if err := services.browserAuth.SetPort(tcpAddress.Port); err != nil {
-			listener.Close()
-			return runtime{}, fmt.Errorf("browser origin: %w", err)
-		}
+	// 登録は origin（port）に束縛する。既定 port の fallback だけでなく、--port や
+	// 保存設定で port を固定した場合も同じである。ここを飛ばすと、以前の port で
+	// 発行した登録が別の port の engine でも通り、空いた旧 port を占有した process が
+	// bookmark から token を集められる。
+	tcpAddress, ok := listener.Addr().(*net.TCPAddr)
+	if !ok || tcpAddress.Port < 1 {
+		listener.Close()
+		return runtime{}, fmt.Errorf("%w: browser origin listener has no TCP port", ErrListen)
+	}
+	if err := services.browserAuth.SetPort(tcpAddress.Port); err != nil {
+		listener.Close()
+		return runtime{}, fmt.Errorf("browser origin: %w", err)
 	}
 
 	sessions, bootstrap, err := session.NewManager(dependencies.Random)

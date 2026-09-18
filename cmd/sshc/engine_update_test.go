@@ -7,7 +7,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -16,7 +15,7 @@ import (
 
 func updateCheckerServer(t *testing.T, handler http.HandlerFunc) *selfupdate.Checker {
 	t.Helper()
-	server := httptest.NewServer(handler)
+	server := engineTestServer(handler)
 	t.Cleanup(server.Close)
 	return &selfupdate.Checker{API: server.URL, HTTP: server.Client()}
 }

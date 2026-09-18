@@ -63,7 +63,7 @@ func runSyncTestServer(t *testing.T, syncStatus int, syncBody string) (*httptest
 	script := &engineAPIScript{
 		t: t, statusBody: validEngineStatus(), syncStatus: syncStatus, syncBody: syncBody,
 	}
-	server := httptest.NewServer(http.HandlerFunc(script.handler))
+	server := engineTestServer(http.HandlerFunc(script.handler))
 	stateDir := t.TempDir()
 	writeTestHandoff(t, stateDir, server.URL)
 	return server, stateDir
@@ -350,7 +350,7 @@ func newSyncCommandHarness(
 		},
 		handle: handle,
 	}
-	server := httptest.NewServer(http.HandlerFunc(harness.handler))
+	server := engineTestServer(http.HandlerFunc(harness.handler))
 	stateDir := t.TempDir()
 	writeTestHandoff(t, stateDir, server.URL)
 	return harness, server, stateDir

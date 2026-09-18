@@ -63,7 +63,7 @@ func liveEngineStatus(
 	ctx context.Context, stateDir string, client *http.Client,
 	newProbe func(handoff.Handoff) engineProbe,
 ) (handoff.Handoff, statusAnswer, error) {
-	found, err := readHandoff(stateDir)
+	found, err := verifiedHandoff(ctx, stateDir, client)
 	if err != nil {
 		return handoff.Handoff{}, statusAnswer{}, err
 	}

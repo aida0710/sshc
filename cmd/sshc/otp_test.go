@@ -18,7 +18,7 @@ import (
 func otpCommandServer(t *testing.T) (*httptest.Server, *bool) {
 	t.Helper()
 	closed := false
-	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+	server := engineTestServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		response.Header().Set("Content-Type", "application/json")
 		switch request.URL.Path {
 		case httpserver.StatusPath:

@@ -65,6 +65,14 @@ function storeBrowserToken(value: string, storage: Pick<Storage, "setItem"> = wi
   }
 }
 
+function clearBrowserToken(storage: Pick<Storage, "removeItem"> = window.localStorage): void {
+  try {
+    storage.removeItem(browserStorageKey);
+  } catch {
+    // Nothing persisted, nothing to clear.
+  }
+}
+
 function isBootstrapResponse(value: unknown): value is BootstrapResponse {
   try {
     validateOpenAPISchema<BootstrapResponse>("BootstrapResponse", value);
@@ -82,9 +90,17 @@ async function recoverSession(fetcher: typeof fetch): Promise<SessionState> {
     credentials: "same-origin",
     headers: { "X-SSHC-Browser": browserToken },
   });
-  if (!recovered.ok) throw new Error("session_expired");
+  if (!recovered.ok) {
+    // The engine refused the registration: it was rotated elsewhere, expired, or
+    // revoked. Keeping it would only repeat the refusal on every reload.
+    if (recovered.status === 401) clearBrowserToken();
+    throw new Error("session_expired");
+  }
   const payload: unknown = await recovered.json();
   if (!isBootstrapResponse(payload)) throw new Error("invalid_bootstrap_response");
+  // Every recovery rotates the registration. The old token stops working shortly
+  // after, so the replacement must be persisted before anything else runs.
+  if (payload.browserToken !== undefined) storeBrowserToken(payload.browserToken);
   storeSessionCSRF(payload.csrfToken);
   return { csrfToken: payload.csrfToken };
 }
