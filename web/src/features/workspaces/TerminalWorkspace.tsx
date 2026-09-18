@@ -1,101 +1,24 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import type { TerminalSession } from "../../api/terminalSessions";
 import { failureCode } from "../../api/client";
-import { useTranslate, type Translate } from "../../i18n/context";
-import { Button } from "../../ui/surface";
-import { BrandMark } from "../../ui/BrandMark";
+import { useTranslate } from "../../i18n/context";
 import { Icon } from "../../ui/icons";
-import { MAX_WORKSPACE_PANES, paneIDs, paneSessionIDs, reduceLayout, restoreLayout, storeLayout, type DockEdge, type LayoutAction, type LayoutState, type RuntimeNode, type RuntimePane, type SplitDirection, type StoredNode, type StoredPane } from "./layout";
+import { MAX_WORKSPACE_PANES, paneIDs, paneSessionIDs, reduceLayout, storeLayout, type DockEdge, type LayoutAction, type LayoutState, type RuntimeNode, type RuntimePane, type SplitDirection } from "./layout";
 import { workspaceApi, type SavedWorkspace } from "./api";
-import { WorkspaceCommandCenter, type WorkspaceCommandTarget } from "./WorkspaceCommandCenter";
+import { WorkspaceCommandCenter } from "./WorkspaceCommandCenter";
 import { consoleDragMimeType, type LiveWorkspaceSummary } from "./live";
-import { browserSessionStorage, loadLiveWorkspace, saveLiveWorkspace, type LiveWorkspaceNode } from "./livePersistence";
-import { useDismissibleLayer } from "../../ui/useDismissibleLayer";
+import { browserSessionStorage, loadLiveWorkspace, saveLiveWorkspace } from "./livePersistence";
 import { InputDialog } from "../../ui/InputDialog";
 import { useMediaQuery } from "../../ui/useMediaQuery";
+import { automaticWorkspaceName, findPane, findPaneBySession, paneForSession, paneID, restoreLiveNode, singlePaneLayout } from "./panes";
+import { commandTargetsFor } from "./commandTargets";
+import { DockPreview, dockEdge } from "./DockPreview";
+import { WorkspaceEmptyState } from "./WorkspaceEmptyState";
+import { WorkspaceMenu } from "./WorkspaceMenu";
+import { useWorkspaceRestore, type WorkspaceRestoreRequest } from "./useWorkspaceRestore";
 
-export type WorkspaceRestoreRequest = { id: string; sequence: number };
+export type { WorkspaceRestoreRequest } from "./useWorkspaceRestore";
 export type WorkspaceRenameRequest = { name: string; sequence: number };
-
-type RestoreAttempt = {
-  generation: number;
-  openedSessionIDs: Set<string>;
-  cleanup: Promise<void>;
-};
-
-function paneID(): string {
-  const bytes = new Uint8Array(16);
-  crypto.getRandomValues(bytes);
-  return [...bytes].map((value) => value.toString(16).padStart(2, "0")).join("");
-}
-
-function visit(root: StoredNode, callback: (pane: StoredPane) => void) {
-  if (root.pane !== undefined) { callback(root.pane); return; }
-  visit(root.split.first, callback); visit(root.split.second, callback);
-}
-
-function paneForSession(session: TerminalSession, id = paneID()): RuntimePane {
-  return {
-    id,
-    alias: session.kind === "ssh" ? session.alias ?? session.title : "localhost",
-    ...(session.kind === "shell" ? { kind: "shell" as const } : {}),
-    state: session.state === "connected" ? "connected" : session.state === "exited" ? "failed" : "connecting",
-    sessionId: session.id,
-    ...(session.problem === "" ? {} : { problem: session.problem }),
-  };
-}
-
-function findPane(root: RuntimeNode, id: string): RuntimePane | null {
-  if (root.pane !== undefined) return root.pane.id === id ? root.pane : null;
-  return findPane(root.split.first, id) ?? findPane(root.split.second, id);
-}
-
-function findPaneBySession(root: RuntimeNode, sessionId: string): RuntimePane | null {
-  if (root.pane !== undefined) return root.pane.sessionId === sessionId ? root.pane : null;
-  return findPaneBySession(root.split.first, sessionId) ?? findPaneBySession(root.split.second, sessionId);
-}
-
-function restoreLiveNode(root: LiveWorkspaceNode, sessions: ReadonlyMap<string, TerminalSession>): RuntimeNode | null {
-  if (root.pane !== undefined) {
-    const session = sessions.get(root.pane.sessionId);
-    return session === undefined ? null : { pane: paneForSession(session, root.pane.id) };
-  }
-  const first = restoreLiveNode(root.split.first, sessions);
-  const second = restoreLiveNode(root.split.second, sessions);
-  if (first === null) return second;
-  if (second === null) return first;
-  return { split: { ...root.split, first, second } };
-}
-
-function dockEdge(event: DragEvent<HTMLElement>): DockEdge {
-  const bounds = event.currentTarget.getBoundingClientRect();
-  const distances: [DockEdge, number][] = [
-    ["left", Math.max(0, event.clientX - bounds.left) / Math.max(1, bounds.width)],
-    ["right", Math.max(0, bounds.right - event.clientX) / Math.max(1, bounds.width)],
-    ["top", Math.max(0, event.clientY - bounds.top) / Math.max(1, bounds.height)],
-    ["bottom", Math.max(0, bounds.bottom - event.clientY) / Math.max(1, bounds.height)],
-  ];
-  distances.sort((left, right) => left[1] - right[1]);
-  return distances[0]?.[0] ?? "right";
-}
-
-function dockOverlayClass(edge: DockEdge): string {
-  switch (edge) {
-    case "left": return "inset-y-0 left-0 w-1/2";
-    case "right": return "inset-y-0 right-0 w-1/2";
-    case "top": return "inset-x-0 top-0 h-1/2";
-    case "bottom": return "inset-x-0 bottom-0 h-1/2";
-  }
-}
-
-function dockLabel(t: Translate, edge: DockEdge): string {
-  switch (edge) {
-    case "left": return t("workspace.dock.left");
-    case "right": return t("workspace.dock.right");
-    case "top": return t("workspace.dock.top");
-    case "bottom": return t("workspace.dock.bottom");
-  }
-}
 
 export function TerminalWorkspace({
   sessions, activeSessionId, onActive, onOpenAlias, onOpenShell, onClose, renderTerminal, restoreRequest = null, onRestoreConsumed = () => undefined,
@@ -127,73 +50,25 @@ export function TerminalWorkspace({
   const [problem, setProblem] = useState("");
   const [liveRestoreReady, setLiveRestoreReady] = useState(false);
   const [liveWorkspaceName, setLiveWorkspaceName] = useState("");
-  const [savedMenuOpen, setSavedMenuOpen] = useState(false);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
-  const savedMenuRef = useRef<HTMLDivElement>(null);
-  const consumedRestore = useRef(0);
   const consumedRename = useRef(0);
-  const restoreGeneration = useRef(0);
-  const activeRestore = useRef<RestoreAttempt | null>(null);
-  const onCloseRef = useRef(onClose);
   const liveWorkspaceID = useRef(paneID());
   const liveStorage = useMemo(() => browserSessionStorage(), []);
-  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
-  // A superseded restore no longer owns visible panes, so every session it
-  // created must be retired. Chain closes to keep mutation listings ordered.
-  const retireRestoredSession = useCallback((attempt: RestoreAttempt, id: string): Promise<void> => {
-    if (!attempt.openedSessionIDs.delete(id)) return attempt.cleanup;
-    attempt.cleanup = attempt.cleanup
-      .then(() => onCloseRef.current(id))
-      .catch(() => undefined);
-    return attempt.cleanup;
+  const beginRestore = useCallback((id: string) => {
+    setSelectedWorkspace(id);
+    setLiveWorkspaceName("");
+    setFocusModePaneId(null);
   }, []);
-  const retireRestoreAttempt = useCallback((attempt: RestoreAttempt): Promise<void> => {
-    for (const id of [...attempt.openedSessionIDs]) void retireRestoredSession(attempt, id);
-    return attempt.cleanup;
-  }, [retireRestoredSession]);
-  useEffect(() => () => {
-    restoreGeneration.current += 1;
-    const attempt = activeRestore.current;
-    activeRestore.current = null;
-    if (attempt !== null) void retireRestoreAttempt(attempt);
-  }, [retireRestoreAttempt]);
-  useDismissibleLayer({
-    open: savedMenuOpen,
-    containerRefs: [savedMenuRef],
-    onDismiss: () => setSavedMenuOpen(false),
+  const restoreWorkspace = useWorkspaceRestore({
+    restoreRequest, onRestoreConsumed, onOpenAlias, onOpenShell, onClose, onActive,
+    onBegin: beginRestore, setLayout, report: setProblem,
   });
   const active = sessions.find((session) => session.id === activeSessionId) ?? null;
   const sessionByID = useMemo(() => new Map(sessions.map((session) => [session.id, session])), [sessions]);
   const layoutSessionIDs = useMemo(() => layout === null ? [] : paneSessionIDs(layout.root), [layout]);
   const showingWorkspace = layout !== null && (activeSessionId === null || layoutSessionIDs.includes(activeSessionId));
   const visibleLayout = showingWorkspace ? layout : null;
-  const commandTargets = useMemo<WorkspaceCommandTarget[]>(() => {
-    if (visibleLayout !== null) return paneIDs(visibleLayout.root).map((id, index) => {
-      const pane = findPane(visibleLayout.root, id);
-      if (pane === null) throw new Error("workspace pane disappeared");
-      const session = pane.sessionId === undefined ? undefined : sessionByID.get(pane.sessionId);
-      const connected = session?.state === "connected";
-      return {
-        targetId: pane.id,
-        ...(session === undefined ? {} : { sessionId: session.id }),
-        alias: pane.alias,
-        title: session?.title ?? pane.alias,
-        paneNumber: index + 1,
-        connected,
-        state: session?.state ?? pane.state,
-      };
-    });
-    if (active === null) return [];
-    return [{
-      targetId: active.id,
-      sessionId: active.id,
-      alias: active.kind === "ssh" ? active.alias ?? active.title : "localhost",
-      title: active.title,
-      paneNumber: 1,
-      connected: active.state === "connected",
-      state: active.state,
-    }];
-  }, [active, sessionByID, visibleLayout]);
+  const commandTargets = useMemo(() => commandTargetsFor(visibleLayout, active, sessionByID), [active, sessionByID, visibleLayout]);
   const connectedCommandTargets = commandTargets.filter((target) => target.connected).length;
   const workspacePaneCount = visibleLayout === null ? (active === null ? 0 : 1) : paneIDs(visibleLayout.root).length;
   const workspaceDisplayName = useMemo(() => {
@@ -202,10 +77,7 @@ export function TerminalWorkspace({
     if (liveName !== "") return liveName;
     const selectedName = saved.find((item) => item.id === selectedWorkspace)?.name.trim() ?? "";
     if (selectedName !== "") return selectedName;
-    const aliases: string[] = [];
-    visit(storeLayout(visibleLayout).layout, (pane) => aliases.push(pane.alias));
-    const uniqueAliases = [...new Set(aliases)];
-    return uniqueAliases.slice(0, 2).join(" + ") + (uniqueAliases.length > 2 ? ` +${uniqueAliases.length - 2}` : "") || t("workspace.live");
+    return automaticWorkspaceName(visibleLayout) || t("workspace.live");
   }, [active?.title, liveWorkspaceName, saved, selectedWorkspace, t, visibleLayout]);
 
   useEffect(() => { void workspaceApi.list().then(setSaved).catch(() => undefined); }, []);
@@ -263,11 +135,8 @@ export function TerminalWorkspace({
       onLiveWorkspaceChange(null);
       return;
     }
-    const aliases: string[] = [];
-    visit(storeLayout(layout).layout, (pane) => aliases.push(pane.alias));
     const selectedName = saved.find((item) => item.id === selectedWorkspace)?.name.trim() ?? "";
-    const uniqueAliases = [...new Set(aliases)];
-    const automaticName = uniqueAliases.slice(0, 2).join(" + ") + (uniqueAliases.length > 2 ? ` +${uniqueAliases.length - 2}` : "");
+    const automaticName = automaticWorkspaceName(layout);
     const focusedSessionId = findPane(layout.root, layout.focusedPaneId)?.sessionId ?? memberSessionIds[0] ?? "";
     onLiveWorkspaceChange({
       id: liveWorkspaceID.current,
@@ -345,14 +214,7 @@ export function TerminalWorkspace({
         return;
       }
       const targetPaneId = paneID();
-      const targetPane = paneForSession(targetSession, targetPaneId);
-      let next = restoreLayout({ pane: {
-        id: targetPane.id,
-        alias: targetPane.alias,
-        ...(targetPane.kind === undefined ? {} : { kind: targetPane.kind }),
-      } }, targetPaneId);
-      next = reduceLayout(next, { type: "connection-started", paneId: targetPaneId, sessionId: targetSession.id });
-      next = reduceLayout(next, {
+      const next = reduceLayout(singlePaneLayout(targetSession, targetPaneId), {
         type: "dock-pane",
         targetPaneId,
         edge,
@@ -442,16 +304,7 @@ export function TerminalWorkspace({
   }
 
   async function saveWorkspace(name: string) {
-    let effective = visibleLayout;
-    if (effective === null && active !== null) {
-      const id = paneID();
-      const pane = paneForSession(active, id);
-      effective = reduceLayout(restoreLayout({ pane: {
-        id: pane.id,
-        alias: pane.alias,
-        ...(pane.kind === undefined ? {} : { kind: pane.kind }),
-      } }, id), { type: "connection-started", paneId: id, sessionId: active.id });
-    }
+    const effective = visibleLayout ?? (active === null ? null : singlePaneLayout(active));
     if (effective === null) return;
     try {
       const stored = storeLayout(effective);
@@ -459,73 +312,6 @@ export function TerminalWorkspace({
       setSelectedWorkspace(value.id); setLiveWorkspaceName(value.name); setSaved(await workspaceApi.list()); setProblem("");
     } catch (error) { setProblem(failureCode(error) || "workspace_failed"); }
   }
-
-  const restoreWorkspace = useCallback(async (id: string) => {
-    if (id === "") return;
-    // Increment before the first await so reverse-order restore responses can
-    // never install an older layout over the user's latest choice.
-    const generation = restoreGeneration.current + 1;
-    restoreGeneration.current = generation;
-    const previous = activeRestore.current;
-    const attempt: RestoreAttempt = { generation, openedSessionIDs: new Set(), cleanup: Promise.resolve() };
-    activeRestore.current = attempt;
-    if (previous !== null) void retireRestoreAttempt(previous);
-    try {
-      const stored = await workspaceApi.restore(id);
-      if (attempt.generation !== restoreGeneration.current) return;
-      setSelectedWorkspace(id);
-      setLiveWorkspaceName("");
-      setFocusModePaneId(null);
-      let restored = restoreLayout(stored.layout, stored.focusedPaneId);
-      const panes: { id: string; alias: string; kind?: "shell" }[] = [];
-      visit(stored.layout, (pane) => {
-        panes.push(pane);
-        restored = reduceLayout(restored, { type: "connection-starting", paneId: pane.id });
-      });
-      setLayout(restored);
-      await Promise.all(panes.map(async (pane) => {
-        const session = pane.kind === "shell" ? await onOpenShell() : await onOpenAlias(pane.alias);
-        if (session === null) {
-          if (attempt.generation !== restoreGeneration.current) return;
-          setLayout((current) => current === null ? current : reduceLayout(current, {
-            type: "connection-failed", paneId: pane.id, problem: "open_failed",
-          }));
-          return;
-        }
-        attempt.openedSessionIDs.add(session.id);
-        if (attempt.generation !== restoreGeneration.current) {
-          await retireRestoredSession(attempt, session.id);
-          return;
-        }
-        setLayout((current) => current === null ? current : reduceLayout(current, {
-          type: "connection-started", paneId: pane.id, sessionId: session.id,
-        }));
-        if (pane.id === stored.focusedPaneId) onActive(session.id);
-      }));
-      if (attempt.generation !== restoreGeneration.current) {
-        await retireRestoreAttempt(attempt);
-        return;
-      }
-      if (activeRestore.current === attempt) activeRestore.current = null;
-      attempt.openedSessionIDs.clear();
-      setProblem("");
-    } catch (error) {
-      if (attempt.generation !== restoreGeneration.current) {
-        await retireRestoreAttempt(attempt);
-        return;
-      }
-      if (activeRestore.current === attempt) activeRestore.current = null;
-      attempt.openedSessionIDs.clear();
-      setProblem(failureCode(error) || "workspace_failed");
-    }
-  }, [onActive, onOpenAlias, onOpenShell, retireRestoreAttempt, retireRestoredSession]);
-
-  useEffect(() => {
-    if (restoreRequest === null || restoreRequest.sequence <= consumedRestore.current) return;
-    consumedRestore.current = restoreRequest.sequence;
-    onRestoreConsumed(restoreRequest.sequence);
-    void restoreWorkspace(restoreRequest.id);
-  }, [onRestoreConsumed, restoreRequest, restoreWorkspace]);
 
   useEffect(() => {
     if (renameRequest === null || renameRequest.sequence <= consumedRename.current) return;
@@ -557,7 +343,7 @@ export function TerminalWorkspace({
       onDrop={(event) => dropOnSingle(event, session)}
     >
       {terminal(session)}
-      {docking ? <div data-dock-preview={dockTarget.edge} className={`pointer-events-none absolute z-10 grid place-items-center border-2 border-accent bg-accent/20 ${dockOverlayClass(dockTarget.edge)}`}><span className="rounded bg-toolbar px-3 py-2 text-xs font-medium shadow">{dockLabel(t, dockTarget.edge)}</span></div> : null}
+      {docking ? <DockPreview edge={dockTarget.edge} /> : null}
     </div>;
   }
 
@@ -587,7 +373,7 @@ export function TerminalWorkspace({
             <button type="button" aria-label={t("workspace.detachPane")} title={t("workspace.detachPane")} className="flex size-6 shrink-0 items-center justify-center rounded text-sm text-ink-muted hover:bg-select-fill" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); detachPane(node.pane.id); }}><Icon name="close" className="size-3.5" /></button>
           </div> : null}
           <div className="flex min-h-0 flex-1 flex-col">{session === undefined ? <div className="grid h-full min-h-40 place-items-center text-sm text-ink-muted">{node.pane.state === "failed" ? t("terminal.openFailed") : t("workspace.reconnecting")}</div> : terminal(session)}</div>
-          {docking ? <div data-dock-preview={dockTarget.edge} className={`pointer-events-none absolute z-10 grid place-items-center border-2 border-accent bg-accent/20 ${dockOverlayClass(dockTarget.edge)}`}><span className="rounded bg-toolbar px-3 py-2 text-xs font-medium shadow">{dockLabel(t, dockTarget.edge)}</span></div> : null}
+          {docking ? <DockPreview edge={dockTarget.edge} /> : null}
         </div>
       );
     }
@@ -611,39 +397,23 @@ export function TerminalWorkspace({
   const compactPanes = visibleLayout === null ? [] : paneIDs(visibleLayout.root).map((id) => findPane(visibleLayout.root, id)).filter((pane): pane is RuntimePane => pane !== null);
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {workspacePaneCount !== 1 ? <div data-desktop-workspace-controls className="hidden h-8 shrink-0 items-center gap-2 border-b border-line bg-toolbar px-2 md:flex">
-        {workspacePaneCount > 0 ? (
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="max-w-52 truncate text-[11px] font-semibold text-ink">{workspaceDisplayName}</span>
-            <span className="whitespace-nowrap text-[11px] text-ink-faint">{t("workspace.groupCount", { count: String(workspacePaneCount) })}</span>
-          </div>
-        ) : null}
-        <div
-          ref={savedMenuRef}
-          className="group relative ml-auto"
-        >
-          <button type="button" aria-label={t("workspace.actions")} aria-expanded={savedMenuOpen} title={t("workspace.actions")} onClick={() => setSavedMenuOpen((current) => !current)} className="flex size-6 items-center justify-center rounded text-ink-muted hover:bg-select-fill hover:text-ink">
-            <Icon name="moreHorizontal" className="size-3.5" />
-          </button>
-          {savedMenuOpen ? <div className="absolute right-0 top-[calc(100%+0.35rem)] z-30 w-80 rounded border border-control-line bg-card p-3 shadow-xl">
-            <div className="mb-3 flex flex-wrap gap-2 border-b border-hairline pb-3">
-              <Button disabled={connectedCommandTargets === 0} onClick={() => { setSavedMenuOpen(false); setCommandCenter(true); }}>{t("workspace.broadcastCommand")}</Button>
-              {focusModePaneId === null ? null : <Button onClick={() => { setSavedMenuOpen(false); setFocusModePaneId(null); }}>{t("workspace.exitFocusMode")}</Button>}
-            </div>
-            <h2 className="text-sm font-semibold text-ink">{t("workspace.savedLayouts")}</h2>
-            <p className="mt-1 text-xs leading-5 text-ink-muted">{t("workspace.savedDescription", { count: MAX_WORKSPACE_PANES })}</p>
-            <select aria-label={t("workspace.saved")} value={selectedWorkspace} onChange={(event) => setSelectedWorkspace(event.target.value)} className="mt-3 w-full rounded border border-control-line bg-control px-2 py-1.5 text-xs">
-              <option value="">{t("workspace.new")}</option>
-              {saved.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-            </select>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <Button disabled={visibleLayout === null && active === null} onClick={() => setSaveDialogOpen(true)}>{t("workspace.save")}</Button>
-              <Button disabled={selectedWorkspace === ""} onClick={() => void restoreWorkspace(selectedWorkspace)}>{t("workspace.reopen")}</Button>
-              <button disabled={selectedWorkspace === ""} className="px-2 text-xs text-danger disabled:opacity-40" onClick={() => void workspaceApi.remove(selectedWorkspace).then(async () => { setSelectedWorkspace(""); setSaved(await workspaceApi.list()); })}>{t("workspace.delete")}</button>
-            </div>
-          </div> : null}
-        </div>
-      </div> : null}
+      {workspacePaneCount !== 1 ? (
+        <WorkspaceMenu
+          displayName={workspaceDisplayName}
+          paneCount={workspacePaneCount}
+          canBroadcast={connectedCommandTargets > 0}
+          onBroadcast={() => setCommandCenter(true)}
+          inFocusMode={focusModePaneId !== null}
+          onExitFocusMode={() => setFocusModePaneId(null)}
+          saved={saved}
+          selected={selectedWorkspace}
+          onSelect={setSelectedWorkspace}
+          canSave={visibleLayout !== null || active !== null}
+          onSave={() => setSaveDialogOpen(true)}
+          onReopen={(id) => void restoreWorkspace(id)}
+          onDelete={(id) => void workspaceApi.remove(id).then(async () => { setSelectedWorkspace(""); setSaved(await workspaceApi.list()); })}
+        />
+      ) : null}
       {commandCenter && commandTargets.length > 0 ? <WorkspaceCommandCenter paneTargets={commandTargets} onClose={() => setCommandCenter(false)} /> : null}
       {saveDialogOpen ? (
         <InputDialog
@@ -671,14 +441,7 @@ export function TerminalWorkspace({
       ) : null}
       <div className="flex min-h-0 flex-1 flex-col">
         {empty ? (
-          <div className="flex h-full items-center justify-center p-6">
-            <section className="w-full max-w-md border-y border-line bg-surface-subtle p-6 text-center" role="status">
-              <BrandMark className="mx-auto size-10" />
-              <h2 className="mt-4 text-lg font-semibold tracking-tight text-ink">{t("terminal.emptyHeading")}</h2>
-              <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-ink-muted">{t("terminal.emptyHint")}</p>
-              <div aria-hidden="true" className="mx-auto mt-4 max-w-xs rounded bg-term-bg px-4 py-3 text-left font-mono text-xs text-ink"><span className="text-live">$</span> sshc host<span className="ml-1 inline-block h-3 w-1.5 translate-y-0.5 bg-ink" /></div>
-            </section>
-          </div>
+          <WorkspaceEmptyState />
         ) : visibleLayout === null ? (active === null ? null : singleTerminal(active)) : displayedNode === null ? null : renderNode(displayedNode)}
       </div>
     </div>

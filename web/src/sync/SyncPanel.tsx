@@ -1,14 +1,13 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { vaultApi, type VaultApi } from "../api/vault";
-import { syncApi, type SyncApi, type SyncDirection, type SyncHistoryDiff, type SyncStatus } from "../api/sync";
-import { useLanguage } from "../i18n/context";
+import { syncApi, type SyncApi, type PushResponse, type SyncHistoryDiff, type SyncStatus } from "../api/sync";
+import { useLanguage, useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
-import { CheckboxField, control, hintText, sectionHeading } from "../ui/form";
-import { Button, Card, Notice } from "../ui/surface";
+import { hintText } from "../ui/form";
+import { Button, Notice } from "../ui/surface";
 import { PanelState } from "../ui/PanelState";
 import { PageHeader } from "../ui/page";
-import { Icon } from "../ui/icons";
-import { formatBytes, SyncResultCard } from "./SyncResultCard";
+import { SyncResultCard } from "./SyncResultCard";
 import { SyncExclusionsPanel } from "./SyncExclusionsPanel";
 import { useSyncSetupForm } from "./useSyncSetupForm";
 import { useSyncRemoteState } from "./useSyncRemoteState";
@@ -17,7 +16,13 @@ import { useSyncPullPreview } from "./useSyncPullPreview";
 import { SyncForcePushDialog } from "./SyncForcePushDialog";
 import { SyncPullPreviewDialog } from "./SyncPullPreviewDialog";
 import { SyncHistorySection } from "./SyncHistorySection";
-import { PasswordField, PasswordInput } from "../ui/PasswordField";
+import { SyncBucketStateSection } from "./SyncBucketStateSection";
+import { SyncErrorNotice } from "./SyncErrorNotice";
+import { SyncOverviewCard } from "./SyncOverviewCard";
+import { SyncSettingsSection } from "./SyncSettingsSection";
+import { SyncTransferCard } from "./SyncTransferCard";
+import { SyncUnlockCard } from "./SyncUnlockCard";
+import { syncRefusals } from "./syncRefusals";
 
 // Setting the shared key needs the vault open; everything else is sync.
 export type SyncPanelApi = SyncApi & Pick<VaultApi, "unlockVault">;
@@ -27,56 +32,28 @@ type SyncPanelProps = { api?: SyncPanelApi };
 
 const mobileTouchTargets = "[&_button]:min-h-10 md:[&_button]:min-h-0";
 
-function SyncRow({
-  label,
-  children,
-  hint,
-  interactiveChildren = false,
-}: {
-  label: string;
-  children: ReactNode;
-  hint?: string;
-  interactiveChildren?: boolean;
-}) {
-  const contents = (
-    <>
-      <span className="w-full shrink-0 text-sm text-ink-muted sm:w-32">
-        {label}
-      </span>
-      <span className="flex min-w-0 flex-1 justify-start sm:ml-auto sm:justify-end">
-        {children}
-      </span>
-    </>
-  );
+// The three things to do, in order, before sync is set up.
+function SyncFlowSteps() {
+  const t = useTranslate();
   return (
-    <div className="border-t border-hairline first:border-t-0">
-      {interactiveChildren ? (
-        <div className="flex flex-col items-stretch gap-2 px-3 py-3 sm:flex-row sm:items-center sm:gap-3 sm:py-2">
-          {contents}
-        </div>
-      ) : (
-        <label className="flex flex-col items-stretch gap-2 px-3 py-3 sm:flex-row sm:items-center sm:gap-3 sm:py-2">
-          {contents}
-        </label>
+    <ol
+      aria-label={t("sync.flowHeading")}
+      className="grid overflow-hidden rounded-md border border-line bg-toolbar sm:grid-cols-3"
+    >
+      {["sync.flowBucket", "sync.flowKey", "sync.flowOperate"].map(
+        (key, index) => (
+          <li
+            key={key}
+            className="flex items-center gap-3 border-b border-hairline px-4 py-3 last:border-b-0 sm:border-b-0 sm:border-r sm:last:border-r-0"
+          >
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-select-fill font-mono text-xs font-semibold text-accent">
+              {index + 1}
+            </span>
+            <span className="text-sm text-ink">{t(key as MessageKey)}</span>
+          </li>
+        ),
       )}
-      {hint === undefined ? null : (
-        <p className={`px-3 pb-3 sm:pb-2 ${hintText}`}>{hint}</p>
-      )}
-    </div>
-  );
-}
-
-function SyncErrorNotice({ message, code }: { message: string; code: string }) {
-  if (message === "") return null;
-  return (
-    <Notice tone="danger">
-      <span className="flex min-w-0 flex-col gap-1">
-        <span>{message}</span>
-        {code === "" ? null : (
-          <code className="text-xs text-ink-muted">Code: {code}</code>
-        )}
-      </span>
-    </Notice>
+    </ol>
   );
 }
 
@@ -85,81 +62,14 @@ type SyncStatusState =
   | { phase: "error"; message: string }
   | { phase: "ready"; value: SyncStatus };
 
-const refusals: Record<string, MessageKey> = {
-  not_configured: "sync.notConfigured",
-  wrong_master_password: "sync.wrongMaster",
-  wrong_passphrase: "sync.wrongKey",
-  sync_key_missing: "sync.keyMissing",
-  passphrase_too_short: "sync.keyTooShort",
-  bucket_authentication_failed: "sync.bucketAuthenticationFailed",
-  bucket_access_denied: "sync.bucketAccessDenied",
-  bucket_rate_limited: "sync.bucketRateLimited",
-  bucket_unavailable: "sync.bucketUnavailable",
-  bucket_refused: "sync.unreachable",
-  bucket_timeout: "sync.bucketTimeout",
-  bucket_dns_failed: "sync.bucketDNSFailed",
-  bucket_tls_failed: "sync.bucketTLSFailed",
-  bucket_unreachable: "sync.bucketUnreachable",
-  sync_failed: "sync.failed",
-  sync_internal_failed: "sync.internalFailed",
-  snapshot_download_incomplete: "sync.snapshotDownloadIncomplete",
-  snapshot_cost_refused: "sync.snapshotCostRefused",
-  snapshot_schema_unsupported: "sync.snapshotSchemaUnsupported",
-  snapshot_rejected: "sync.snapshotRejected",
-  snapshot_too_large: "sync.snapshotTooLarge",
-  sync_no_snapshot: "sync.noSnapshot",
-  endpoint_must_have_no_path: "sync.endpointPath",
-  sync_remote_moved: "sync.remoteMoved",
-  sync_remote_deleted: "sync.remoteDeleted",
-  sync_key_recovery_required: "sync.keyRecoveryRequired",
-  sync_key_recovery_target_change: "sync.keyRecoveryTargetChange",
-  sync_history_key_loss_confirmation_required: "sync.keyHistoryLossConfirm",
-  preview_stale: "sync.previewStale",
-  sync_nothing_to_push: "sync.noLocalChanges",
-  sync_commit_message_invalid: "sync.commitMessageInvalid",
-  sync_ignore_invalid: "sync.exclusions.invalid",
-  sync_setup_target_changed: "sync.setup.changed",
-  sync_setup_target_incomplete: "sync.setup.incomplete",
-  sync_local_changed: "sync.localChanged",
-  sync_workspace_busy: "sync.workspaceBusy",
-};
-
 export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
   const { locale, t } = useLanguage();
   const [statusState, setStatusState] = useState<SyncStatusState>({
     phase: "loading",
   });
-  const {
-    endpoint,
-    bucket,
-    path,
-    region,
-    accessKeyId,
-    secretAccessKey,
-    direction,
-    setupCheck,
-    ownKey,
-    chooseOwn,
-    confirmHistoryLoss,
-    editingSettings,
-    settingsOpen,
-    setupInput,
-    editSettings,
-    setEndpoint,
-    setBucket,
-    setPath,
-    setRegion,
-    setAccessKeyId,
-    setSecretAccessKey,
-    setDirection,
-    setSetupCheck,
-    setOwnKey,
-    setChooseOwn,
-    setConfirmHistoryLoss,
-    setEditingSettings,
-    setSettingsOpen,
-  } = useSyncSetupForm();
+  const form = useSyncSetupForm();
   const [master, setMaster] = useState("");
+  // A freshly generated key, shown once and never stored in the browser.
   const [revealed, setRevealed] = useState("");
   const {
     bucketState,
@@ -181,7 +91,7 @@ export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
   } = useSyncRemoteState(api, t);
   const [historyDiff, setHistoryDiff] = useState<SyncHistoryDiff | null>(null);
   const [forcePushOpen, setForcePushOpen] = useState(false);
-  const operation = useSyncOperation(t, refusals);
+  const operation = useSyncOperation(t, syncRefusals);
   const {
     resultView,
     notice,
@@ -350,140 +260,41 @@ export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
           description={t("sync.pageDescription")}
         />
         <SyncErrorNotice message={error} code={errorCode} />
-        <Card as="section" radius="md" className="grid md:grid-cols-[minmax(0,0.9fr)_minmax(18rem,1.1fr)]">
-          <div className="flex flex-col justify-between gap-8 bg-toolbar p-6 md:p-8">
-            <span className="flex h-12 w-12 items-center justify-center rounded-md bg-select-fill text-accent">
-              <Icon name="sync" className="h-6 w-6" />
-            </span>
-            <div>
-              <h3 className="text-lg font-semibold text-ink">
-                {t("sync.bucketHeading")}
-              </h3>
-              <p className="mt-2 text-sm leading-6 text-ink-muted">
-                {t("sync.sealed")}
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-col justify-center gap-4 p-6 md:p-8">
-            <PasswordField
-              label={t("secrets.master")}
-              value={master}
-              onChange={setMaster}
-            />
-            <Button
-              kind="primary"
-              disabled={busy || master === ""}
-              onClick={() =>
-                void run(
-                  () => api.unlockVault(master),
-                  () => {
-                    setMaster("");
-                    void reload();
-                  },
-                  t("sync.unlockFailed"),
-                  (code) => (code === "vault_missing" ? t("sync.noVault") : ""),
-                )
-              }
-              className="self-start"
-            >
-              {t("secrets.unlock")}
-            </Button>
-          </div>
-        </Card>
+        <SyncUnlockCard
+          master={master}
+          busy={busy}
+          onMasterChange={setMaster}
+          onUnlock={() =>
+            void run(
+              () => api.unlockVault(master),
+              () => {
+                setMaster("");
+                void reload();
+              },
+              t("sync.unlockFailed"),
+              (code) => (code === "vault_missing" ? t("sync.noVault") : ""),
+            )
+          }
+        />
       </div>
     );
   }
 
   const remoteHeadBlocked =
     status.auto.phase === "blocked" && status.auto.detail === "remote_moved";
-  const pushChangeCount =
-    pushDraft === null
-      ? null
-      : pushDraft.added + pushDraft.modified + pushDraft.removed;
-  const bucketHistoryItems =
-    bucketState.phase === "ready" ? bucketState.value.history : [];
-  const visibleBucketHistory = bucketHistoryExpanded
-    ? bucketHistoryItems
-    : bucketHistoryItems.slice(0, 5);
-  const transferPanel =
-    status.configured && status.direction !== "pull" ? (
-      <Card
-        as="section"
-        aria-labelledby="sync-transfer-heading"
-        radius="md"
-        className="flex flex-col gap-3 p-4"
-      >
-        <h3 id="sync-transfer-heading" className={sectionHeading}>
-          {t("sync.transferHeading")}
-        </h3>
-        <p className="text-sm leading-6 text-ink-muted">
-          {t(`sync.transferHint.${status.direction}` as MessageKey)}
-        </p>
-        <div className="flex flex-col gap-1 border-t border-line pt-3 text-sm text-ink">
-          <label htmlFor="sync-commit-message" className="font-medium">
-            {t("sync.commitMessage")}
-          </label>
-          <input
-            id="sync-commit-message"
-            aria-describedby="sync-commit-message-hint"
-            value={pushMessage}
-            maxLength={240}
-            onChange={(event) => {
-              editPushMessage(event.target.value);
-            }}
-            className={control}
-            placeholder={t("sync.commitMessagePlaceholder")}
-          />
-          <span id="sync-commit-message-hint" className={hintText}>
-            {pushDraft === null
-              ? t("sync.commitMessageHint")
-              : pushChangeCount === 0
-                ? t("sync.noLocalChanges")
-                : t("sync.commitMessageChanges", {
-                    added: pushDraft.added,
-                    modified: pushDraft.modified,
-                    removed: pushDraft.removed,
-                  })}
-          </span>
-        </div>
-        <div className="flex flex-wrap gap-2 border-t border-line pt-3">
-          <Button
-            kind="primary"
-            disabled={
-              busy ||
-              !status.keyConfigured ||
-              pushMessage.trim() === "" ||
-              pushChangeCount === null ||
-              pushChangeCount === 0
-            }
-            onClick={() =>
-              void run(
-                () => api.pushSnapshot(pushMessage.trim()),
-                (next) => {
-                  setStatusState({ phase: "ready", value: next.status });
-                  pull.close();
-                  setResultView({ kind: "push", result: next.result });
-                  setNotice(t("sync.pushed"));
-                  acceptPushMessage();
-                  void refreshPushDraft();
-                  void refreshBucket();
-                  void refreshHistory();
-                },
-                t("sync.pushFailed"),
-              )
-            }
-          >
-            {t("sync.push")}
-          </Button>
-          <Button
-            disabled={busy || !status.keyConfigured}
-            onClick={() => void previewWith(undefined)}
-          >
-            {t("sync.preview")}
-          </Button>
-        </div>
-      </Card>
-    ) : null;
+
+  // Pushed or force-pushed: the engine's status and result replace what
+  // the screen was showing, and everything derived from the bucket reloads.
+  function adoptPush(next: PushResponse, noticeKey: "sync.pushed" | "sync.forcePushed") {
+    setStatusState({ phase: "ready", value: next.status });
+    pull.close();
+    setResultView({ kind: "push", result: next.result });
+    setNotice(t(noticeKey));
+    acceptPushMessage();
+    void refreshPushDraft();
+    void refreshBucket();
+    void refreshHistory();
+  }
 
   return (
     <div
@@ -494,26 +305,7 @@ export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
         description={t("sync.pageDescription")}
       />
 
-      {status.configured ? null : (
-        <ol
-          aria-label={t("sync.flowHeading")}
-          className="grid overflow-hidden rounded-md border border-line bg-toolbar sm:grid-cols-3"
-        >
-          {["sync.flowBucket", "sync.flowKey", "sync.flowOperate"].map(
-            (key, index) => (
-              <li
-                key={key}
-                className="flex items-center gap-3 border-b border-hairline px-4 py-3 last:border-b-0 sm:border-b-0 sm:border-r sm:last:border-r-0"
-              >
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-select-fill font-mono text-xs font-semibold text-accent">
-                  {index + 1}
-                </span>
-                <span className="text-sm text-ink">{t(key as MessageKey)}</span>
-              </li>
-            ),
-          )}
-        </ol>
-      )}
+      {status.configured ? null : <SyncFlowSteps />}
 
       <SyncErrorNotice message={error} code={errorCode} />
       {notice === "" ? null : (
@@ -531,124 +323,28 @@ export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
       )}
 
       {status.configured ? (
-        <Card as="section" radius="md">
-          <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line bg-toolbar px-4 py-3">
-            <div>
-              <h3 className={sectionHeading}>{t("sync.overviewHeading")}</h3>
-              <p className={`mt-1 ${hintText}`}>
-                {status.synced
-                  ? t("sync.lastSynced", {
-                      at: status.lastSyncedAt ?? "",
-                      count: status.fileCount ?? 0,
-                    })
-                  : t("sync.neverSynced")}
-              </p>
-            </div>
-            <span className="rounded-full bg-select-fill px-2 py-1 text-xs font-medium text-accent">
-              {t(`sync.direction.${status.direction}`)}
-            </span>
-          </header>
-          <div className="flex flex-col gap-4 p-4">
-            <CheckboxField
-                label={t("sync.autoEnable")}
-                hint={t(`sync.autoHint.${status.direction}` as MessageKey)}
-                checked={status.auto.enabled}
-                disabled={busy || !status.keyConfigured}
-                onChange={(checked) =>
-                  void run(
-                    () => api.setAutoSync(checked),
-                    (next) => setStatusState({ phase: "ready", value: next }),
-                    t("sync.autoFailed"),
-                  )
-                }
-            />
-            {remoteHeadBlocked ? (
-              <div className="flex flex-col gap-3">
-                <Notice tone="danger">
-                  {t(
-                    status.direction === "pull"
-                      ? "sync.autoBlockedRemoteMovedPull"
-                      : "sync.autoBlockedRemoteMoved",
-                  )}
-                </Notice>
-                <p className={hintText}>{t("sync.remoteHeadReviewHint")}</p>
-              </div>
-            ) : status.auto.phase === "failed" ? (
-              <SyncErrorNotice
-                message={t(
-                  status.auto.detail === "wrong_passphrase"
-                    ? "sync.autoFailedWrongKey"
-                    : status.auto.detail === "snapshot_schema_unsupported"
-                      ? "sync.autoFailedSchema"
-                      : (refusals[status.auto.detail ?? ""] ??
-                        "sync.autoFailedLast"),
-                )}
-                code={status.auto.detail ?? "sync_failed"}
-              />
-            ) : (
-              <p role="status" className={hintText}>
-                {status.auto.phase === "blocked"
-                  ? t(
-                      status.auto.detail === "conflicts"
-                        ? "sync.autoBlockedConflicts"
-                        : status.auto.detail === "remote_deleted"
-                          ? "sync.autoBlockedRemoteDeleted"
-                          : "sync.autoBlockedRemovals",
-                    )
-                  : status.auto.at === undefined
-                    ? t("sync.autoIdle")
-                    : t("sync.autoLastRan", { at: status.auto.at })}
-              </p>
-            )}
-            <div className="flex flex-wrap gap-2">
-              <Button
-                kind="primary"
-                disabled={busy || !status.keyConfigured}
-                onClick={() =>
-                  void (remoteHeadBlocked
-                    ? previewCurrentRemoteHead()
-                    : run(
-                        () => api.syncNow(),
-                        (next) =>
-                          setStatusState({ phase: "ready", value: next }),
-                        t("sync.autoNowFailed"),
-                      ))
-                }
-              >
-                {t(
-                  remoteHeadBlocked
-                    ? "sync.remoteHeadReview"
-                    : (`sync.autoNow.${status.direction}` as MessageKey),
-                )}
-              </Button>
-              {status.direction === "push" || remoteHeadBlocked ? null : (
-                <Button
-                  disabled={busy || !status.keyConfigured}
-                  onClick={() => void previewWith(undefined)}
-                >
-                  {t("sync.checkRemoteChanges")}
-                </Button>
-              )}
-              {status.direction === "push" ? null : (
-                <Button
-                  disabled={busy || !status.keyConfigured}
-                  onClick={() => void previewCurrentRemoteHead()}
-                >
-                  {t("sync.forcePull")}
-                </Button>
-              )}
-              {status.direction === "pull" ? null : (
-                <Button
-                  kind="danger"
-                  disabled={busy || !status.keyConfigured}
-                  onClick={() => setForcePushOpen(true)}
-                >
-                  {t("sync.forcePushShort")}
-                </Button>
-              )}
-            </div>
-          </div>
-        </Card>
+        <SyncOverviewCard
+          status={status}
+          busy={busy}
+          remoteHeadBlocked={remoteHeadBlocked}
+          onToggleAuto={(checked) =>
+            void run(
+              () => api.setAutoSync(checked),
+              (next) => setStatusState({ phase: "ready", value: next }),
+              t("sync.autoFailed"),
+            )
+          }
+          onSyncNow={() =>
+            void run(
+              () => api.syncNow(),
+              (next) => setStatusState({ phase: "ready", value: next }),
+              t("sync.autoNowFailed"),
+            )
+          }
+          onPreviewRemoteHead={() => void previewCurrentRemoteHead()}
+          onPreview={() => void previewWith(undefined)}
+          onForcePush={() => setForcePushOpen(true)}
+        />
       ) : null}
 
       {status.configured ? (
@@ -660,341 +356,100 @@ export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
         />
       ) : null}
 
-      <details
-        open={!status.configured || settingsOpen}
-        onToggle={(event) => {
-          if (status.configured) setSettingsOpen(event.currentTarget.open);
-        }}
-        className={
-          status.configured
-            ? "group overflow-hidden rounded-md border border-control-line bg-card"
-            : "group"
+      <SyncSettingsSection
+        status={status}
+        busy={busy}
+        form={form}
+        onCheckSetup={() =>
+          void run(
+            () => api.checkSyncSetup(form.setupInput),
+            (next) => {
+              form.setSetupCheck(next);
+              form.setOwnKey("");
+              form.setChooseOwn(false);
+            },
+            t("sync.configureFailed"),
+          )
         }
-      >
-        {status.configured ? (
-          <summary className="flex cursor-pointer list-none items-center gap-3 bg-toolbar px-4 py-3 text-sm font-medium text-ink marker:hidden hover:bg-select-fill">
-            <span
-              aria-hidden="true"
-              className="inline-flex size-5 shrink-0 items-center justify-center text-base text-ink-muted transition-transform group-open:rotate-90"
-            >
-              ›
-            </span>
-            <span>{t("sync.manageSettings")}</span>
-          </summary>
-        ) : null}
-        <div
-          className={
-            status.configured
-              ? "flex flex-col gap-4 border-t border-line bg-surface-subtle p-4"
-              : "flex flex-col gap-6"
+        onCompleteSetup={() => {
+          const { setupCheck, chooseOwn, ownKey } = form;
+          if (setupCheck === null) return;
+          void run(
+            () =>
+              api.completeSyncSetup({
+                ...form.setupInput,
+                direction: form.direction,
+                expectedState: setupCheck.state,
+                ...(setupCheck.etag === undefined
+                  ? {}
+                  : { expectedETag: setupCheck.etag }),
+                historyPresent: setupCheck.historyPresent,
+                reuseKey: false,
+                key:
+                  setupCheck.state === "existing" || chooseOwn
+                    ? ownKey
+                    : "",
+              }),
+            (next) => {
+              setStatusState({
+                phase: "ready",
+                value: next.status,
+              });
+              setRevealed(next.generatedKey ?? "");
+              form.setOwnKey("");
+              form.setAccessKeyId("");
+              form.setSecretAccessKey("");
+              form.setSetupCheck(null);
+              form.setEditingSettings(false);
+              form.setSettingsOpen(false);
+              setNotice(
+                next.generatedKey === undefined
+                  ? t("sync.setup.saved")
+                  : t("sync.keyShownOnce"),
+              );
+            },
+            t("sync.configureFailed"),
+          );
+        }}
+        onSaveKey={() => {
+          const { chooseOwn, ownKey } = form;
+          void run(
+            () =>
+              status.keyConfigured
+                ? api.setSyncKey(
+                    chooseOwn ? ownKey : undefined,
+                    true,
+                  )
+                : api.setSyncKey(chooseOwn ? ownKey : undefined),
+            (next) => {
+              setRevealed(chooseOwn ? "" : next.key);
+              form.setOwnKey("");
+              form.setConfirmHistoryLoss(false);
+              setNotice(t("sync.keySaved"));
+              void reload();
+            },
+            t("sync.keyFailed"),
+          );
+        }}
+      />
+
+      {status.configured && status.direction !== "pull" ? (
+        <SyncTransferCard
+          status={status}
+          busy={busy}
+          pushDraft={pushDraft}
+          pushMessage={pushMessage}
+          onMessageChange={editPushMessage}
+          onPush={() =>
+            void run(
+              () => api.pushSnapshot(pushMessage.trim()),
+              (next) => adoptPush(next, "sync.pushed"),
+              t("sync.pushFailed"),
+            )
           }
-        >
-          <p className={`rounded-md bg-toolbar px-4 py-3 ${hintText}`}>
-            {t("sync.warning")}
-          </p>
-          <section className="overflow-hidden rounded-md border border-line bg-card">
-            <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line bg-toolbar px-4 py-3">
-              <div className="flex items-center gap-2">
-                <Icon name="remoteKeys" className="h-4 w-4 text-ink-muted" />
-                <h3 className={sectionHeading}>{t("sync.bucketHeading")}</h3>
-              </div>
-              {status.configured ? (
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <p className="font-mono text-xs text-ink-muted">
-                    {[status.endpoint, status.bucket, status.path]
-                      .filter((part) => part !== "" && part !== undefined)
-                      .join("/")}
-
-                    {status.region !== undefined && status.region !== ""
-                      ? ` (${status.region})`
-                      : ""}
-                  </p>
-                  {!editingSettings ? (
-                    <Button onClick={() => editSettings(status)}>
-                      {t("sync.editSettings")}
-                    </Button>
-                  ) : null}
-                </div>
-              ) : (
-                <p className="text-xs text-ink-muted">
-                  {t("sync.notConfigured")}
-                </p>
-              )}
-            </header>
-
-            {!status.configured || editingSettings ? (
-              <>
-                <div className="px-1 py-2 sm:px-3">
-                  <SyncRow
-                    label={t("sync.endpoint")}
-                    hint={t("sync.endpointHint")}
-                  >
-                    <input
-                      value={endpoint}
-                      onChange={(event) => setEndpoint(event.target.value)}
-                      placeholder="https://<account>.r2.cloudflarestorage.com"
-                      className={control}
-                    />
-                  </SyncRow>
-                  <SyncRow label={t("sync.bucket")}>
-                    <input
-                      value={bucket}
-                      onChange={(event) => setBucket(event.target.value)}
-                      className={control}
-                    />
-                  </SyncRow>
-
-                  <SyncRow label={t("sync.path")} hint={t("sync.pathHint")}>
-                    <input
-                      value={path}
-                      onChange={(event) => setPath(event.target.value)}
-                      className={control}
-                    />
-                  </SyncRow>
-
-                  <SyncRow label={t("sync.region")} hint={t("sync.regionHint")}>
-                    <input
-                      value={region}
-                      onChange={(event) => setRegion(event.target.value)}
-                      className={control}
-                    />
-                  </SyncRow>
-                  <SyncRow label={t("sync.accessKeyId")}>
-                    <input
-                      value={accessKeyId}
-                      onChange={(event) => setAccessKeyId(event.target.value)}
-                      className={control}
-                    />
-                  </SyncRow>
-
-                  <SyncRow
-                    label={t("sync.secretAccessKey")}
-                    hint={t("sync.credentialsNote")}
-                    interactiveChildren
-                  >
-                    <PasswordInput
-                      label={t("sync.secretAccessKey")}
-                      value={secretAccessKey}
-                      onChange={setSecretAccessKey}
-                    />
-                  </SyncRow>
-
-                  <SyncRow
-                    label={t("sync.direction")}
-                    hint={t(`sync.direction.${direction}.hint`)}
-                  >
-                    <select
-                      value={direction}
-                      onChange={(event) =>
-                        setDirection(event.target.value as SyncDirection)
-                      }
-                      className={control}
-                    >
-                      <option value="both">{t("sync.role.main")}</option>
-                      <option value="pull">{t("sync.role.receive")}</option>
-                      <optgroup label={t("sync.role.advanced")}>
-                        <option value="push">{t("sync.role.send")}</option>
-                      </optgroup>
-                    </select>
-                  </SyncRow>
-                </div>
-                <div className="flex flex-col gap-3 border-t border-line bg-toolbar px-4 py-3">
-                  {setupCheck === null ? null : (
-                    <Notice
-                      tone={
-                        setupCheck.state === "incomplete" ? "danger" : "notice"
-                      }
-                    >
-                      {t(`sync.setup.${setupCheck.state}`)}
-                      {setupCheck.state === "incomplete"
-                        ? ` ${t("sync.setup.useAnotherPath")}`
-                        : ""}
-                    </Notice>
-                  )}
-                  {setupCheck === null ||
-                  setupCheck.state === "incomplete" ? null : (
-                    <div className="flex flex-col gap-3 rounded-lg border border-line bg-surface p-3">
-                      <p className="text-sm text-ink">
-                        {setupCheck.state === "existing"
-                          ? t("sync.setup.existingKey")
-                          : t("sync.setup.emptyKey")}
-                      </p>
-                      {setupCheck.state === "empty" ? (
-                        <CheckboxField label={t("sync.keyChooseOwn")} checked={chooseOwn} onChange={setChooseOwn} />
-                      ) : null}
-                      {setupCheck.state === "existing" || chooseOwn ? (
-                        <PasswordInput
-                          label={t("sync.keyOwnValue")}
-                          value={ownKey}
-                          onChange={setOwnKey}
-                        />
-                      ) : null}
-                      <Button
-                        kind="primary"
-                        disabled={
-                          busy ||
-                          (setupCheck.state === "existing" && ownKey === "") ||
-                          (chooseOwn && ownKey === "")
-                        }
-                        onClick={() =>
-                          void run(
-                            () =>
-                              api.completeSyncSetup({
-                                ...setupInput,
-                                direction,
-                                expectedState: setupCheck.state,
-                                ...(setupCheck.etag === undefined
-                                  ? {}
-                                  : { expectedETag: setupCheck.etag }),
-                                historyPresent: setupCheck.historyPresent,
-                                reuseKey: false,
-                                key:
-                                  setupCheck.state === "existing" || chooseOwn
-                                    ? ownKey
-                                    : "",
-                              }),
-                            (next) => {
-                              setStatusState({
-                                phase: "ready",
-                                value: next.status,
-                              });
-                              setRevealed(next.generatedKey ?? "");
-                              setOwnKey("");
-                              setAccessKeyId("");
-                              setSecretAccessKey("");
-                              setSetupCheck(null);
-                              setEditingSettings(false);
-                              setSettingsOpen(false);
-                              setNotice(
-                                next.generatedKey === undefined
-                                  ? t("sync.setup.saved")
-                                  : t("sync.keyShownOnce"),
-                              );
-                            },
-                            t("sync.configureFailed"),
-                          )
-                        }
-                      >
-                        {t("sync.setup.save")}
-                      </Button>
-                    </div>
-                  )}
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      disabled={
-                        busy ||
-                        endpoint === "" ||
-                        bucket === "" ||
-                        accessKeyId === "" ||
-                        secretAccessKey === ""
-                      }
-                      onClick={() =>
-                        void run(
-                          () => api.checkSyncSetup(setupInput),
-                          (next) => {
-                            setSetupCheck(next);
-                            setOwnKey("");
-                            setChooseOwn(false);
-                          },
-                          t("sync.configureFailed"),
-                        )
-                      }
-                    >
-                      {t("sync.setup.check")}
-                    </Button>
-                    {status.configured ? (
-                      <Button
-                        disabled={busy}
-                        onClick={() => setEditingSettings(false)}
-                      >
-                        {t("sync.cancelSettings")}
-                      </Button>
-                    ) : null}
-                  </div>
-                </div>
-              </>
-            ) : null}
-          </section>
-
-          {status.configured ? (
-            <section
-              aria-labelledby="sync-key-heading"
-              className="overflow-hidden rounded-md border border-line bg-card"
-            >
-              <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line bg-toolbar px-4 py-3">
-                <div className="flex items-center gap-2">
-                  <Icon name="sync" className="h-4 w-4 text-ink-muted" />
-                  <h3 id="sync-key-heading" className={sectionHeading}>
-                    {t("sync.key")}
-                  </h3>
-                </div>
-                <span
-                  className={`rounded-full px-2 py-1 text-xs font-medium ${status.keyConfigured ? "bg-select-fill text-accent" : "bg-notice text-notice-ink"}`}
-                >
-                  {status.keyConfigured
-                    ? t("sync.keyReady")
-                    : t("sync.keyNeeded")}
-                </span>
-              </header>
-              <div className="flex flex-col gap-3 p-4">
-                <p className="text-sm leading-6 text-ink-muted">
-                  {t("sync.keyHint")}
-                </p>
-                <p className="text-sm font-medium text-ink">
-                  {t(status.keyConfigured ? "sync.keySet" : "sync.keyMissing")}
-                </p>
-                <div className="flex flex-col gap-3 border-t border-line pt-3">
-                  <CheckboxField label={t("sync.keyChooseOwn")} checked={chooseOwn} onChange={setChooseOwn} />
-                  {chooseOwn ? (
-                    <PasswordInput
-                      label={t("sync.keyOwnValue")}
-                      value={ownKey}
-                      onChange={setOwnKey}
-                    />
-                  ) : null}
-                  {status.keyConfigured ? (
-                    <CheckboxField label={t("sync.keyHistoryLossConfirm")} checked={confirmHistoryLoss} onChange={setConfirmHistoryLoss} tone="danger" />
-                  ) : null}
-                  <Button
-                    kind="primary"
-                    disabled={
-                      busy ||
-                      (chooseOwn && ownKey === "") ||
-                      (status.keyConfigured && !confirmHistoryLoss)
-                    }
-                    onClick={() =>
-                      void run(
-                        () =>
-                          status.keyConfigured
-                            ? api.setSyncKey(
-                                chooseOwn ? ownKey : undefined,
-                                true,
-                              )
-                            : api.setSyncKey(chooseOwn ? ownKey : undefined),
-                        (next) => {
-                          setRevealed(chooseOwn ? "" : next.key);
-                          setOwnKey("");
-                          setConfirmHistoryLoss(false);
-                          setNotice(t("sync.keySaved"));
-                          void reload();
-                        },
-                        t("sync.keyFailed"),
-                      )
-                    }
-                    className="self-start"
-                  >
-                    {status.keyConfigured
-                      ? t("sync.keyReplace")
-                      : t("sync.keyCreate")}
-                  </Button>
-                </div>
-              </div>
-            </section>
-          ) : null}
-        </div>
-      </details>
-
-      {transferPanel}
+          onPreview={() => void previewWith(undefined)}
+        />
+      ) : null}
 
       {status.configured ? (
         <details className="group overflow-hidden rounded-md border border-control-line bg-card">
@@ -1018,145 +473,14 @@ export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
             </span>
           </summary>
           <div className="grid gap-4 border-t border-line bg-surface-subtle p-4 lg:grid-cols-2">
-            <section
-              aria-labelledby="sync-bucket-state-heading"
-              className="flex flex-col gap-3 rounded-lg border border-line bg-surface-subtle p-4 lg:col-span-2"
-            >
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <h4 id="sync-bucket-state-heading" className={sectionHeading}>
-                    {t("sync.bucketStateHeading")}
-                  </h4>
-                  <p className={`mt-1 ${hintText}`}>
-                    {t("sync.bucketStateHint")}
-                  </p>
-                </div>
-                <Button
-                  disabled={busy || bucketState.phase === "loading"}
-                  onClick={() => void refreshBucket()}
-                >
-                  {t("sync.bucketRefresh")}
-                </Button>
-              </div>
-
-              {bucketState.phase === "idle" ? (
-                <PanelState tone="empty" title={t("sync.bucketNotConfigured")} />
-              ) : bucketState.phase === "loading" ? (
-                <PanelState tone="loading" title={t("sync.bucketLoading")} />
-              ) : bucketState.phase === "error" ? (
-                <PanelState tone="failed" title={bucketState.message} action={<Button onClick={() => void refreshBucket()}>{t("sync.bucketRefresh")}</Button>} />
-              ) : (
-                <div className="grid gap-3 border-t border-line pt-3 lg:grid-cols-2">
-                  <div className="rounded border border-line bg-surface p-3">
-                    <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">
-                      {t("sync.bucketLive")}
-                    </p>
-                    {bucketState.value.live === undefined ? (
-                      <p className="mt-2 text-sm text-ink-muted">
-                        {t("sync.bucketLiveEmpty")}
-                      </p>
-                    ) : (
-                      <div className="mt-2 flex flex-col gap-1">
-                        <p className={hintText}>
-                          {t("sync.bucketObjectMeta", {
-                            size: formatBytes(
-                              bucketState.value.live.size,
-                              locale,
-                            ),
-                            at: bucketState.value.live.lastModified ?? "—",
-                          })}
-                        </p>
-                        <p
-                          className={`text-sm font-medium ${bucketState.value.localIsLive ? "text-success" : "text-notice-ink"}`}
-                        >
-                          {t(
-                            bucketState.value.localIsLive
-                              ? "sync.bucketLocalCurrent"
-                              : "sync.bucketLocalBehind",
-                          )}
-                        </p>
-                        <details className="mt-1 text-xs text-ink-muted">
-                          <summary className="cursor-pointer">
-                            {t("sync.bucketObjectName")}
-                          </summary>
-                          <p className="mt-1 break-all font-mono text-ink">
-                            {bucketState.value.live.key}
-                          </p>
-                        </details>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="rounded border border-line bg-surface p-3">
-                    <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">
-                      {t("sync.bucketHistory", {
-                        count: bucketState.value.history.length,
-                      })}
-                    </p>
-                    {bucketState.value.historyTruncated ? (
-                      <p className="mt-2 text-xs text-notice-ink">
-                        {t("sync.bucketHistoryTruncated")}
-                      </p>
-                    ) : null}
-                    {bucketState.value.history.length === 0 ? (
-                      <p className="mt-2 text-sm text-ink-muted">
-                        {t("sync.bucketHistoryEmpty")}
-                      </p>
-                    ) : (
-                      <div className="mt-2 flex flex-col gap-2">
-                        <p className={hintText}>
-                          {t("sync.bucketHistoryShowing", {
-                            shown: visibleBucketHistory.length,
-                            count: bucketState.value.history.length,
-                          })}
-                        </p>
-                        <ul className="max-h-64 space-y-2 overflow-auto pr-1">
-                          {visibleBucketHistory.map((item) => (
-                            <li
-                              key={item.key}
-                              className="rounded border border-hairline px-2 py-1.5"
-                            >
-                              <p className={hintText}>
-                                {t("sync.bucketObjectMeta", {
-                                  size: formatBytes(item.size, locale),
-                                  at: item.lastModified ?? "—",
-                                })}
-                              </p>
-                              <details className="mt-1 text-xs text-ink-muted">
-                                <summary className="cursor-pointer">
-                                  {t("sync.bucketObjectName")}
-                                </summary>
-                                <p className="mt-1 break-all font-mono text-ink">
-                                  {item.key}
-                                </p>
-                              </details>
-                            </li>
-                          ))}
-                        </ul>
-                        {bucketState.value.history.length <= 5 ? null : (
-                          <Button
-                            onClick={toggleBucketHistory}
-                            className="self-start"
-                          >
-                            {t(
-                              bucketHistoryExpanded
-                                ? "sync.bucketHistoryCollapse"
-                                : "sync.bucketHistoryExpand",
-                            )}
-                          </Button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  <p className={`lg:col-span-2 ${hintText}`}>
-                    {t("sync.bucketCheckedAt", {
-                      at: bucketState.value.checkedAt,
-                    })}
-                  </p>
-                </div>
-              )}
-            </section>
+            <SyncBucketStateSection
+              bucketState={bucketState}
+              locale={locale}
+              busy={busy}
+              historyExpanded={bucketHistoryExpanded}
+              onToggleHistory={toggleBucketHistory}
+              onRefresh={() => void refreshBucket()}
+            />
 
             <SyncHistorySection
               busy={busy}
@@ -1187,15 +511,8 @@ export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
             void run(
               () => api.forcePushSnapshot(pushMessage.trim()),
               (next) => {
-                setStatusState({ phase: "ready", value: next.status });
-                pull.close();
-                setResultView({ kind: "push", result: next.result });
+                adoptPush(next, "sync.forcePushed");
                 setForcePushOpen(false);
-                setNotice(t("sync.forcePushed"));
-                acceptPushMessage();
-                void refreshPushDraft();
-                void refreshBucket();
-                void refreshHistory();
               },
               t("sync.forceFailed"),
             )
