@@ -59,7 +59,7 @@ test("reconnects an exited SSH terminal in the same view", async ({ page, instal
 
   await openApplication(page, installation);
   await openSection(page, "Terminal");
-  const console = page.getByRole("region", { name: "Console for production-api" });
+  const console = page.getByRole("region", { name: "Terminal for production-api" });
   await expect(console).toContainText("before disconnect");
   const reconnect = console.getByRole("button", { name: "Reconnect", exact: true });
   await expect(reconnect).toBeVisible();

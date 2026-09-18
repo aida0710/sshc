@@ -2,6 +2,7 @@ import { refreshPresets, savePresetBindings, selectPreset, updatePresets, usePre
 import { useState } from "react";
 import { useTranslate } from "../i18n/context";
 import { Button } from "../ui/surface";
+import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { defaultBindings, shortcutActions, shortcutKey, useBindings, type Bindings, type ShortcutAction } from "./bindings";
 
 export function KeyConfig() {
@@ -9,8 +10,9 @@ export function KeyConfig() {
   const bindings = useBindings();
   const library = usePresets();
   const [name, setName] = useState("");
-  const [deleteID, setDeleteID] = useState<string | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const unavailable = library.loading || library.busy || library.error;
+  const selectedPreset = library.presets.find((preset) => preset.id === library.selected);
   const [recording, setRecording] = useState<ShortcutAction | null>(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -49,13 +51,17 @@ export function KeyConfig() {
       <label className="text-sm">{t("shortcuts.presetName")}<input className="ml-2 rounded border border-line bg-control p-2" maxLength={80} value={name} onChange={(event) => setName(event.target.value)} /></label>
       <Button disabled={unavailable || !name.trim() || library.presets.length >= 64} onClick={() => { void manage("copy"); }}>{t("shortcuts.duplicate")}</Button>
       <Button disabled={unavailable || !name.trim() || library.selected === "default"} onClick={() => { void manage("rename"); }}>{t("shortcuts.rename")}</Button>
-      <Button disabled={unavailable || library.selected === "default"} onClick={() => setDeleteID(library.selected)}>{t("shortcuts.delete")}</Button>
+      <Button disabled={unavailable || library.selected === "default"} onClick={() => setConfirmingDelete(true)}>{t("shortcuts.delete")}</Button>
     </div>
-    {deleteID === library.selected ? <div className="mb-4" role="group" aria-label={t("shortcuts.confirmDelete")}>
-      <p>{t("shortcuts.confirmDelete")}</p>
-      <Button disabled={unavailable} onClick={() => { setDeleteID(null); void manage("delete"); }}>{t("shortcuts.deleteEverywhere")}</Button>
-      <Button onClick={() => setDeleteID(null)}>{t("shortcuts.cancelDelete")}</Button>
-    </div> : null}
+    {confirmingDelete && selectedPreset !== undefined ? <ConfirmDialog
+      id="shortcut-preset-delete-heading"
+      heading={t("shortcuts.confirmDelete")}
+      body={<p className="text-sm text-ink-muted">{t("shortcuts.deleteBody", { name: selectedPreset.name })}</p>}
+      confirmLabel={t("shortcuts.deleteEverywhere")}
+      cancelLabel={t("shortcuts.cancelDelete")}
+      onCancel={() => setConfirmingDelete(false)}
+      onConfirm={() => { setConfirmingDelete(false); void manage("delete"); }}
+    /> : null}
     {library.error ? <div role="alert"><p>{t("shortcuts.reloadRequired")}</p><Button onClick={() => { void refreshPresets(); }}>{t("shortcuts.reload")}</Button></div> : null}
     {library.loading ? <p role="status">{t("shortcuts.loading")}</p> : null}
     <fieldset disabled={unavailable}>

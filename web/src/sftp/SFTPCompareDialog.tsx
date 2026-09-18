@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { failureCode } from "../api/client";
 import { useTranslate } from "../i18n/context";
-import { formatBytes } from "./format";
+import { formatBytes } from "../ui/format";
 import { ModalShell } from "../ui/ModalShell";
 import { Button } from "../ui/surface";
 import { sftpApi, type DirectoryComparison } from "./api";

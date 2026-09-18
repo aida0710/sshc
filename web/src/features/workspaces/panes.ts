@@ -1,4 +1,5 @@
 import type { TerminalSession } from "../../api/terminalSessions";
+import { terminalSubtitle } from "../../terminal/terminalPresentation";
 import { reduceLayout, restoreLayout, storeLayout, type LayoutState, type RuntimeNode, type RuntimePane, type StoredNode, type StoredPane } from "./layout";
 import type { LiveWorkspaceNode } from "./livePersistence";
 
@@ -16,7 +17,7 @@ export function visit(root: StoredNode, callback: (pane: StoredPane) => void) {
 export function paneForSession(session: TerminalSession, id = paneID()): RuntimePane {
   return {
     id,
-    alias: session.kind === "ssh" ? session.alias ?? session.title : "localhost",
+    alias: terminalSubtitle(session),
     ...(session.kind === "shell" ? { kind: "shell" as const } : {}),
     state: session.state === "connected" ? "connected" : session.state === "exited" ? "failed" : "connecting",
     sessionId: session.id,

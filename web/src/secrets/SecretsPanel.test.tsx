@@ -147,6 +147,8 @@ describe("SecretsPanel", () => {
     const dedicated = await screen.findByRole("article", { name: "keys/id_owned" });
     await user.click(within(dedicated).getByRole("button", { name: "Actions for keys/id_owned" }));
     await user.click(screen.getByRole("menuitem", { name: "Remove saved passphrase for keys/id_owned" }));
+    const confirmation = await screen.findByRole("dialog", { name: "Delete id_owned?" });
+    await user.click(within(confirmation).getByRole("button", { name: "Delete it" }));
 
     await waitFor(() =>
       expect(api.unassignCredential).toHaveBeenCalledWith("key_passphrase", "keys/id_owned"),
@@ -332,6 +334,21 @@ describe("SecretsPanel", () => {
     expect(api.revealCredential).toHaveBeenCalledWith("key_passphrase", "build-key");
   });
 
+  it("keeps a credential whose deletion is cancelled", async () => {
+    const user = userEvent.setup();
+    const api = buildApi();
+    render(<SecretsPanel api={api} />);
+    const passwords = await screen.findByRole("region", { name: "Account passwords" });
+
+    await user.click(within(passwords).getByRole("button", { name: "Actions for office-vm" }));
+    await user.click(screen.getByRole("menuitem", { name: "Delete office-vm" }));
+    const confirmation = await screen.findByRole("dialog", { name: "Delete office-vm?" });
+    await user.click(within(confirmation).getByRole("button", { name: "Cancel" }));
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(api.deleteCredential).not.toHaveBeenCalled();
+  });
+
   it("says what still uses a credential the server refused to delete", async () => {
     const user = userEvent.setup();
     const api = buildApi({
@@ -342,6 +359,8 @@ describe("SecretsPanel", () => {
 
     await user.click(within(passwords).getByRole("button", { name: "Actions for office-vm" }));
     await user.click(screen.getByRole("menuitem", { name: "Delete office-vm" }));
+    const confirmation = await screen.findByRole("dialog", { name: "Delete office-vm?" });
+    await user.click(within(confirmation).getByRole("button", { name: "Delete it" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/still assigned/i);
   });

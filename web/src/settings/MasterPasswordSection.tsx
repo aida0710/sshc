@@ -6,7 +6,7 @@ import { PasswordField } from "../ui/PasswordField";
 import { CheckboxField } from "../ui/form";
 import { Button, Notice } from "../ui/surface";
 import { ActionArea, SettingsSection } from "./SettingsSection";
-import { useSaveState } from "./useSaveState";
+import { useAsyncOperation } from "../ui/useAsyncOperation";
 
 export type MasterPasswordApi = Pick<VaultApi, "passwordVault" | "changeMasterPassword">;
 
@@ -23,18 +23,19 @@ export function MasterPasswordSection({ api, showHeading, onVaultChanged }: {
   // null until the vault has said whether it has a password at all.
   const [passwordless, setPasswordless] = useState<boolean | null>(null);
   const [draft, setDraft] = useState<MasterDraft>(emptyDraft);
-  const save = useSaveState();
+  const save = useAsyncOperation();
 
+  // Only the stable reporter is a dependency: the operation's facts change on
+  // every save and must not re-read the vault state mid-flow.
+  const reportFailure = save.fail;
   useEffect(() => {
     let active = true;
     setPasswordless(null);
     void api.passwordVault().then((status) => {
       if (active) setPasswordless(status.passwordless ?? false);
-    }).catch(() => { if (active) save.fail(t("secrets.failed")); });
+    }).catch(() => { if (active) reportFailure(t("secrets.failed")); });
     return () => { active = false; };
-    // The save state's identity changes every render; only the source matters.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [api, t]);
+  }, [api, t, reportFailure]);
 
   function edit(patch: Partial<MasterDraft>) {
     setDraft((current) => ({ ...current, ...patch }));
@@ -46,7 +47,7 @@ export function MasterPasswordSection({ api, showHeading, onVaultChanged }: {
       const result = await api.changeMasterPassword(passwordless ? "" : current, withoutPassword ? "" : next);
       setPasswordless(result.vault.passwordless ?? false);
       onVaultChanged?.(result.vault);
-    }, (error) => failureCode(error) === "wrong_passphrase" ? t("secrets.wrongCurrent") : t("secrets.changeFailed"));
+    }, { describe: (error) => failureCode(error) === "wrong_passphrase" ? t("secrets.wrongCurrent") : t("secrets.changeFailed") });
     setDraft((state) => ({ ...emptyDraft, withoutPassword: state.withoutPassword }));
   }
 

@@ -11,7 +11,7 @@ import { useTranslate } from "../i18n/context";
 import { Icon } from "../ui/icons";
 import { compareText, ordered, SortableTableHeader, type SortDirection } from "../ui/tableSort";
 import type { RemoteEntry } from "./api";
-import { formatBytes } from "./format";
+import { formatBytes } from "../ui/format";
 import { entryKind } from "./entryKind";
 
 export type SFTPSort = "name" | "type" | "size" | "modified";

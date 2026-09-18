@@ -16,7 +16,7 @@ test("stops the automatic reconnect loop from the pane", async ({ page, installa
   await page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "refused" }).click();
   await page.getByRole("button", { name: "Connect", exact: true }).click();
 
-  const screen = page.getByRole("region", { name: /^Console for / });
+  const screen = page.getByRole("region", { name: /^Terminal for / });
   await expect(screen).toBeVisible();
   // The third wait is six seconds long, enough to act on the banner.
   await expect(screen.getByText("reconnecting 3/5")).toBeVisible({ timeout: 30_000 });
@@ -29,7 +29,7 @@ test("stops the automatic reconnect loop from the pane", async ({ page, installa
   await expect(page.getByRole("button", { name: "Reconnect", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Stop reconnecting" })).toHaveCount(0);
   await expect(screen).toContainText("再接続を停止しました");
-  const list = page.getByRole("navigation", { name: "Primary" }).getByRole("list", { name: "Open consoles" });
+  const list = page.getByRole("navigation", { name: "Primary" }).getByRole("list", { name: "Open sessions" });
   await expect(list.getByRole("listitem")).toHaveCount(1);
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
     await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/reconnect-stopped.png`, fullPage: true });

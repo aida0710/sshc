@@ -4,6 +4,7 @@ import type { SyncApi, SyncExclusions } from "../api/sync";
 import { useLanguage } from "../i18n/context";
 import { control, hintText } from "../ui/form";
 import { Button, Notice } from "../ui/surface";
+import { useAsyncOperation } from "../ui/useAsyncOperation";
 
 type Props = {
   api: Pick<SyncApi, "syncExclusions" | "saveSyncExclusions">;
@@ -28,23 +29,18 @@ export function SyncExclusionsPanel({ api, initial, onSaved }: Props) {
   const [loaded, setLoaded] = useState(initial !== undefined);
   const [search, setSearch] = useState("");
   const [overrides, setOverrides] = useState<Record<string, boolean>>({});
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const operation = useAsyncOperation();
 
   async function load() {
-    if (loaded || busy) return;
-    setBusy(true);
-    setError("");
-    try {
-      const next = await api.syncExclusions();
-      setView(next);
-      setDocument(next.document);
-      setLoaded(true);
-    } catch {
-      setError(t("sync.exclusions.loadFailed"));
-    } finally {
-      setBusy(false);
-    }
+    if (loaded || operation.busy) return;
+    await operation.run(() => api.syncExclusions(), {
+      apply: (next) => {
+        setView(next);
+        setDocument(next.document);
+        setLoaded(true);
+      },
+      describe: () => t("sync.exclusions.loadFailed"),
+    });
   }
 
   const candidates = useMemo(() => {
@@ -97,12 +93,12 @@ export function SyncExclusionsPanel({ api, initial, onSaved }: Props) {
         </span>
       </summary>
       <div className="flex flex-col gap-4 border-t border-line p-4">
-        {busy && !loaded ? (
+        {operation.busy && !loaded ? (
           <p role="status" className={hintText}>
             {t("sync.exclusions.loading")}
           </p>
-        ) : error !== "" ? (
-          <Notice tone="danger">{error}</Notice>
+        ) : operation.error !== "" ? (
+          <Notice tone="danger">{operation.error}</Notice>
         ) : view === null ? null : (
           <>
             <div>
@@ -187,26 +183,20 @@ export function SyncExclusionsPanel({ api, initial, onSaved }: Props) {
             <div className="flex flex-wrap items-center gap-2">
               <Button
                 kind="primary"
-                disabled={busy || document === view.document}
+                disabled={operation.busy || document === view.document}
                 onClick={() => {
-                  setBusy(true);
-                  setError("");
-                  void api
-                    .saveSyncExclusions(document)
-                    .then((next) => {
+                  void operation.run(() => api.saveSyncExclusions(document), {
+                    apply: (next) => {
                       setView(next);
                       setDocument(next.document);
                       setOverrides({});
                       onSaved?.(next);
-                    })
-                    .catch((caught) => {
-                      setError(
-                        failureCode(caught) === "sync_ignore_invalid"
-                          ? t("sync.exclusions.invalid")
-                          : t("sync.exclusions.saveFailed"),
-                      );
-                    })
-                    .finally(() => setBusy(false));
+                    },
+                    describe: (caught) =>
+                      failureCode(caught) === "sync_ignore_invalid"
+                        ? t("sync.exclusions.invalid")
+                        : t("sync.exclusions.saveFailed"),
+                  });
                 }}
               >
                 {t("sync.exclusions.save")}

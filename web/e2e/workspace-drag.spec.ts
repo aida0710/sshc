@@ -58,14 +58,14 @@ test("docks connected terminals into a live workspace", async ({ page, installat
   await navigation.getByRole("button", { name: "edge", exact: true }).click();
 
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
-    await expect(page.getByRole("region", { name: "Console for edge" })).toContainText("connected");
+    await expect(page.getByRole("region", { name: "Terminal for edge" })).toContainText("connected");
     await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/terminal-desktop.png`, fullPage: true });
   }
 
   const target = page.locator("[data-single-terminal-drop-target='workspace-edge']");
   await expect(target).toBeVisible();
   const databaseRow = navigation
-    .getByRole("list", { name: "Open consoles" })
+    .getByRole("list", { name: "Open sessions" })
     .getByRole("listitem")
     .filter({ hasText: "connected · database" });
   const targetBox = await target.boundingBox();
@@ -142,7 +142,7 @@ test("keeps terminal rows inside vertically split panes", async ({ page, install
   const target = page.locator("[data-single-terminal-drop-target='workspace-edge']");
   await expect(target).toBeVisible();
   const databaseRow = navigation
-    .getByRole("list", { name: "Open consoles" })
+    .getByRole("list", { name: "Open sessions" })
     .getByRole("listitem")
     .filter({ hasText: "connected · database" });
   const targetBox = await target.boundingBox();
@@ -205,7 +205,7 @@ test("selects the whole local console row and docks local shells", async ({ page
 
   await openApplication(page, installation);
   const navigation = page.getByRole("navigation", { name: "Primary" });
-  const consoleList = navigation.getByRole("list", { name: "Open consoles" });
+  const consoleList = navigation.getByRole("list", { name: "Open sessions" });
   const zshRow = consoleList.getByRole("listitem").filter({ hasText: "zsh" });
   await zshRow.getByText("connected · localhost").click();
 
@@ -251,7 +251,7 @@ test("broadcasts one command to two live local shells", async ({ page, installat
   await openLocalShell(page);
   await expect(page.locator("[data-desktop-workspace-controls]")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Find" })).toBeVisible();
-  await expect(page.getByRole("region", { name: /^Console for / })).toBeVisible();
+  await expect(page.getByRole("region", { name: /^Terminal for / })).toBeVisible();
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
     await page.screenshot({
       path: `${process.env.SSHC_VISUAL_DIR}/sshc-v0.16.2-single-local-terminal.png`,
@@ -260,7 +260,7 @@ test("broadcasts one command to two live local shells", async ({ page, installat
   }
   await openLocalShell(page);
 
-  const consoleList = navigation.getByRole("list", { name: "Open consoles" });
+  const consoleList = navigation.getByRole("list", { name: "Open sessions" });
   const rows = consoleList.getByRole("listitem");
   await expect(rows).toHaveCount(2);
   const target = page.locator("[data-single-terminal-drop-target]");
@@ -281,7 +281,7 @@ test("broadcasts one command to two live local shells", async ({ page, installat
   await expect(broadcast.getByText(/Pane \d · Sent$/)).toHaveCount(2);
   await broadcast.getByRole("button", { name: "Close command delivery" }).click();
 
-  const terminalRegions = page.getByRole("region", { name: /^Console for / });
+  const terminalRegions = page.getByRole("region", { name: /^Terminal for / });
   await expect(terminalRegions).toHaveCount(2);
   await expect(terminalRegions.nth(0)).toContainText("local-broadcast-canary", { timeout: 20_000 });
   await expect(terminalRegions.nth(1)).toContainText("local-broadcast-canary", { timeout: 20_000 });

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import type { HostEntry } from "../api/config";
 import { recentConnectionsApi, type RecentConnection } from "../api/recentConnections";
 import { useTranslate } from "../i18n/context";
+import { hostMatchesQuery, normalizeHostQuery } from "../connections/hostSearch";
 import { Icon } from "../ui/icons";
 import { ModalShell } from "../ui/ModalShell";
 import { activateTabFromKeyboard } from "../ui/tabKeyboard";
@@ -73,12 +74,10 @@ export function HostPickerDialog({
   const closeButton = useRef<HTMLButtonElement>(null);
   const available = useMemo(() => hostChoices(aliases, hosts), [aliases, hosts]);
   const byAlias = useMemo(() => new Map(available.map((host) => [host.alias, host])), [available]);
-  const normalized = query.trim().toLocaleLowerCase();
+  const normalized = normalizeHostQuery(query);
   const localMatches = local.filter((choice) => normalized === "" ||
     [choice.label, choice.detail, "local"].some((field) => field.toLocaleLowerCase().includes(normalized)));
-  const matches = normalized === "" ? available : available.filter((host) =>
-    [host.alias, host.group, host.hostName, host.user].some((field) => field.toLocaleLowerCase().includes(normalized)),
-  );
+  const matches = available.filter((host) => hostMatchesQuery(host, normalized));
   const recentChoices = recent.flatMap((item) => {
     const host = byAlias.get(item.alias);
     return host === undefined ? [] : [{ ...host, lastConnectedAt: item.lastConnectedAt }];

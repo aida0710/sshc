@@ -1,5 +1,5 @@
 import { apiClient } from "./client";
-import { issueAction, postEmpty, postJSON } from "./guards";
+import { issueAction, postEmpty, postJSON, putJSON } from "./guards";
 import type { components } from "./schema";
 import { validateOpenAPISchema } from "./validators.generated";
 
@@ -128,29 +128,17 @@ export const syncApi: SyncApi = {
   },
   async checkSyncSetup(settings) {
     return validateSyncSetupCheck(
-      await apiClient.mutate<unknown>("/api/v1/sync/setup/check", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(settings),
-      }, { locallyHandledCodes: locallyExplainedSyncFailures }),
+      await postJSON<unknown>("/api/v1/sync/setup/check", settings, undefined, locallyExplainedSyncFailures),
     );
   },
   async completeSyncSetup(settings) {
     return validateSyncSetup(
-      await apiClient.mutate<unknown>("/api/v1/sync/setup", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(settings),
-      }, { locallyHandledCodes: locallyExplainedSyncFailures }),
+      await putJSON<unknown>("/api/v1/sync/setup", settings, locallyExplainedSyncFailures),
     );
   },
   async configureSync(settings) {
     return validateSyncStatus(
-      await apiClient.mutate<unknown>("/api/v1/sync/settings", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(settings),
-      }),
+      await putJSON<unknown>("/api/v1/sync/settings", settings),
     );
   },
   async syncExclusions() {
@@ -160,11 +148,7 @@ export const syncApi: SyncApi = {
   },
   async saveSyncExclusions(document) {
     return validateSyncExclusions(
-      await apiClient.mutate<unknown>("/api/v1/sync/exclusions", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ document }),
-      }, { locallyHandledCodes: ["sync_ignore_invalid"] }),
+      await putJSON<unknown>("/api/v1/sync/exclusions", { document }, ["sync_ignore_invalid"]),
     );
   },
   async syncPushDraft() {
@@ -221,23 +205,15 @@ export const syncApi: SyncApi = {
   },
   async setSyncKey(key, confirmHistoryLoss) {
     return validateSyncKey(
-      await apiClient.mutate<unknown>("/api/v1/sync/key", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...(key === undefined ? {} : { key }),
-          ...(confirmHistoryLoss === undefined ? {} : { confirmHistoryLoss }),
-        }),
+      await putJSON<unknown>("/api/v1/sync/key", {
+        ...(key === undefined ? {} : { key }),
+        ...(confirmHistoryLoss === undefined ? {} : { confirmHistoryLoss }),
       }),
     );
   },
   async setAutoSync(enabled) {
     return validateSyncStatus(
-      await apiClient.mutate<unknown>("/api/v1/sync/auto", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ enabled }),
-      }),
+      await putJSON<unknown>("/api/v1/sync/auto", { enabled }),
     );
   },
   async syncNow() {

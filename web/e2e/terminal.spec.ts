@@ -29,7 +29,7 @@ function watchForPolicyViolations(page: import("@playwright/test").Page): string
 }
 
 async function typeIntoConsole(page: import("@playwright/test").Page, line: string) {
-  const screen = page.getByRole("region", { name: /^Console for / });
+  const screen = page.getByRole("region", { name: /^Terminal for / });
   await expect(screen).toBeVisible();
   await expect(screen).toContainText(/[$#%>]/, { timeout: 20_000 });
   await terminalKeyboard(page).focus();
@@ -46,7 +46,7 @@ async function openConsolePanel(page: import("@playwright/test").Page) {
 
 async function reopenFirstConsole(panel: Locator) {
   await panel
-    .getByRole("list", { name: "Open consoles" })
+    .getByRole("list", { name: "Open sessions" })
     .getByRole("listitem")
     .first()
     .getByRole("button")
@@ -69,7 +69,7 @@ async function openLoadedTerminalSettings(page: Page): Promise<Locator> {
   const region = page.getByRole("region", { name: "Terminal" });
   // The sentinel proves that the Settings effect has applied its metadata GET.
   // Without this gate, a slow initial GET can overwrite a value filled by the test.
-  await expect(region.getByLabel("Consoles open at once")).toHaveValue("2");
+  await expect(region.getByLabel("Sessions open at once")).toHaveValue("2");
   return region;
 }
 
@@ -90,13 +90,13 @@ test("opens a local shell, runs a command and shows its output", async ({ page, 
   const violations = watchForPolicyViolations(page);
   await openApplication(page, installation);
   await openSection(page, "Terminal");
-  const emptyState = page.getByRole("heading", { name: "No console is open" }).locator("..");
+  const emptyState = page.getByRole("heading", { name: "No session is open" }).locator("..");
   await expect(emptyState.locator("[data-sshc-brand-mark]")).toBeVisible();
   await expect(emptyState).not.toContainText(">_");
   await openConsolePanel(page);
   await openLocalShell(page);
 
-  const screen = page.getByRole("region", { name: /^Console for / });
+  const screen = page.getByRole("region", { name: /^Terminal for / });
   await expect(screen).toBeVisible();
 
   await typeIntoConsole(page, "echo embedded-terminal-canary");
@@ -127,7 +127,7 @@ test("keeps image-backed terminal editing free of stale glyphs", async ({ page, 
 
   await openConsolePanel(page);
   await openLocalShell(page);
-  const screen = page.getByRole("region", { name: /^Console for / });
+  const screen = page.getByRole("region", { name: /^Terminal for / });
   await expect(screen).toBeVisible();
   await expect(screen.locator("[data-term-background='terminal-wall.gif']")).toBeVisible();
   await expect.poll(() => terminalCanvasCount(page)).toBe(0);
@@ -156,7 +156,7 @@ test("keeps WebGL disabled when the terminal setting turns it off", async ({ pag
 
   await openConsolePanel(page);
   await openLocalShell(page);
-  const screen = page.getByRole("region", { name: /^Console for / });
+  const screen = page.getByRole("region", { name: /^Terminal for / });
   await expect(screen).toBeVisible();
   await expect.poll(() => terminalCanvasCount(page)).toBe(0);
 
@@ -169,7 +169,7 @@ test("keeps the session and replays its scrollback after a reload", async ({ pag
 
   await openConsolePanel(page);
   await openLocalShell(page);
-  await expect(page.getByRole("region", { name: /^Console for / })).toBeVisible();
+  await expect(page.getByRole("region", { name: /^Terminal for / })).toBeVisible();
 
   const screen = await typeIntoConsole(page, "echo survives-a-reload");
   await expect(screen).toContainText("survives-a-reload", { timeout: 20_000 });
@@ -177,11 +177,11 @@ test("keeps the session and replays its scrollback after a reload", async ({ pag
   await page.reload();
   await expect(page.getByRole("heading", { name: "sshc" })).toBeVisible();
   const reopened = await openConsolePanel(page);
-  const row = reopened.getByRole("list", { name: "Open consoles" }).getByRole("listitem").first();
+  const row = reopened.getByRole("list", { name: "Open sessions" }).getByRole("listitem").first();
   await expect(row).toBeVisible();
   await row.getByRole("button").first().click();
 
-  await expect(page.getByRole("region", { name: /^Console for / }))
+  await expect(page.getByRole("region", { name: /^Terminal for / }))
     .toContainText("survives-a-reload", { timeout: 20_000 });
 });
 
@@ -195,15 +195,15 @@ test("refuses to open more consoles than the configured limit", async ({ page, i
   const panel = await openConsolePanel(page);
   const openShell = panel.getByRole("button", { name: "New session" });
 
-  const rows = panel.getByRole("list", { name: "Open consoles" }).getByRole("listitem");
+  const rows = panel.getByRole("list", { name: "Open sessions" }).getByRole("listitem");
   await openLocalShell(page);
-  await expect(page.getByRole("region", { name: /^Console for / })).toBeVisible();
+  await expect(page.getByRole("region", { name: /^Terminal for / })).toBeVisible();
   await expect(rows).toHaveCount(1);
   await openLocalShell(page);
   await expect(rows).toHaveCount(2);
 
   await expect(openShell).toBeDisabled();
-  await expect(panel).toContainText("limit of 2 open consoles");
+  await expect(panel).toContainText("limit of 2 open sessions");
 });
 
 test("shows an open console again after a reload instead of claiming there are none", async ({
@@ -214,13 +214,13 @@ test("shows an open console again after a reload instead of claiming there are n
 
   await openConsolePanel(page);
   await openLocalShell(page);
-  await expect(page.getByRole("region", { name: /^Console for / })).toBeVisible();
+  await expect(page.getByRole("region", { name: /^Terminal for / })).toBeVisible();
 
   await page.reload();
   await expect(page.getByRole("heading", { name: "sshc" })).toBeVisible();
 
-  await expect(page.getByRole("region", { name: /^Console for / })).toBeVisible();
-  await expect(page.getByText("No console is open")).toBeHidden();
+  await expect(page.getByRole("region", { name: /^Terminal for / })).toBeVisible();
+  await expect(page.getByText("No session is open")).toBeHidden();
 });
 
 test("applies the session limit set from the settings screen", async ({ page, installation }) => {
@@ -228,7 +228,7 @@ test("applies the session limit set from the settings screen", async ({ page, in
   await openApplication(page, installation);
 
   const region = await openLoadedTerminalSettings(page);
-  await region.getByLabel("Consoles open at once").fill("1");
+  await region.getByLabel("Sessions open at once").fill("1");
   const saved = await saveTerminalSettings(page, region);
   expect(saved.request().postDataJSON()).toEqual(expect.objectContaining({ maxSessions: 1 }));
   expect(JSON.parse(await installation.read("sshc/metadata.json"))).toEqual(
@@ -248,11 +248,11 @@ test("applies the session limit set from the settings screen", async ({ page, in
   expect((await created).status()).toBe(201);
   const listed = await refreshed;
   expect((await listed.json()).maxSessions).toBe(1);
-  const consoles = panel.getByRole("list", { name: "Open consoles" }).getByRole("listitem");
+  const consoles = panel.getByRole("list", { name: "Open sessions" }).getByRole("listitem");
   await expect(consoles).toHaveCount(1);
 
   await expect(panel.getByRole("button", { name: "New session" })).toBeDisabled();
-  await expect(panel).toContainText("limit of 1 open consoles");
+  await expect(panel).toContainText("limit of 1 open sessions");
 });
 
 test("starts local shells where the setting says", async ({ page, installation }) => {
@@ -302,7 +302,7 @@ test("pastes the clipboard into the console with right click", async ({ page, co
 
   await openConsolePanel(page);
   await openLocalShell(page);
-  const screen = page.getByRole("region", { name: /^Console for / });
+  const screen = page.getByRole("region", { name: /^Terminal for / });
   await expect(screen).toContainText(/[$#%>]/, { timeout: 20_000 });
   await page.evaluate(() => navigator.clipboard.writeText("echo right-click-paste-canary"));
 
@@ -323,7 +323,7 @@ for (const chord of ["Control+v", "Control+Shift+V"]) {
 
     await openConsolePanel(page);
     await openLocalShell(page);
-    const screen = page.getByRole("region", { name: /^Console for / });
+    const screen = page.getByRole("region", { name: /^Terminal for / });
     await expect(screen).toContainText(/[$#%>]/, { timeout: 20_000 });
     await typeIntoConsole(page, 'rm -f "$HOME/keyboard-paste-data"');
     await page.evaluate(() => navigator.clipboard.writeText('printf x >> "$HOME/keyboard-paste-data"; '));
@@ -353,7 +353,7 @@ test("reviews a multiline paste before sending any terminal input", async ({ pag
 
   await openConsolePanel(page);
   await openLocalShell(page);
-  const screen = page.getByRole("region", { name: /^Console for / });
+  const screen = page.getByRole("region", { name: /^Terminal for / });
   await expect(screen).toContainText(/[$#%>]/, { timeout: 20_000 });
   const risky = "echo safe-paste-first\necho safe-paste-second\n";
   await page.evaluate((text) => navigator.clipboard.writeText(text), risky);
@@ -391,7 +391,7 @@ test("edits a multiline paste before sending the changed text", async ({ page, c
 
   await openConsolePanel(page);
   await openLocalShell(page);
-  const screen = page.getByRole("region", { name: /^Console for / });
+  const screen = page.getByRole("region", { name: /^Terminal for / });
   await expect(screen).toContainText(/[$#%>]/, { timeout: 20_000 });
   const risky = "echo safe-paste-first\necho safe-paste-second\n";
   await page.evaluate((text) => navigator.clipboard.writeText(text), risky);
@@ -426,7 +426,7 @@ test("keeps terminal drawing stable while scrollback search overlays it", async 
 
   await openConsolePanel(page);
   await openLocalShell(page);
-  const console = page.getByRole("region", { name: /^Console for / });
+  const console = page.getByRole("region", { name: /^Terminal for / });
   await expect(console).toContainText(/[$#%>]/, { timeout: 20_000 });
   await typeIntoConsole(page, "echo search-overlay-canary");
   await expect(console).toContainText("search-overlay-canary", { timeout: 20_000 });
@@ -486,7 +486,7 @@ test("fits the terminal inside the space it was given", async ({ page, installat
 
   await openConsolePanel(page);
   await openLocalShell(page);
-  await expect(page.getByRole("region", { name: /^Console for / })).toBeVisible();
+  await expect(page.getByRole("region", { name: /^Terminal for / })).toBeVisible();
 
   const measured = await drawnRows(page).evaluate((node) => {
     const frame = (node as HTMLElement).closest("main");
@@ -510,7 +510,7 @@ test("keeps the top of the navigation still while the console list scrolls", asy
   const before = await anchor.boundingBox();
 
   await page.setViewportSize({ width: 1280, height: 400 });
-  const rows = panel.getByRole("list", { name: "Open consoles" }).getByRole("listitem");
+  const rows = panel.getByRole("list", { name: "Open sessions" }).getByRole("listitem");
   for (let opened = 1; opened <= 6; opened += 1) {
     await openLocalShell(page);
     await expect(rows).toHaveCount(opened);
@@ -532,7 +532,7 @@ test("closes every open connection from the settings screen", async ({ page, ins
   await openApplication(page, installation);
 
   const panel = await openConsolePanel(page);
-  const rows = panel.getByRole("list", { name: "Open consoles" }).getByRole("listitem");
+  const rows = panel.getByRole("list", { name: "Open sessions" }).getByRole("listitem");
   await openLocalShell(page);
   await expect(rows).toHaveCount(1);
   await openLocalShell(page);
@@ -553,7 +553,7 @@ test("force closes a live local shell with one confirmation", async ({ page, ins
   await openApplication(page, installation);
 
   const panel = await openConsolePanel(page);
-  const rows = panel.getByRole("list", { name: "Open consoles" }).getByRole("listitem");
+  const rows = panel.getByRole("list", { name: "Open sessions" }).getByRole("listitem");
   await openLocalShell(page);
   await expect(rows).toHaveCount(1);
 
@@ -576,7 +576,7 @@ test("previews and closes a live connection immediately while Shift is held", as
   await openApplication(page, installation);
 
   const panel = await openConsolePanel(page);
-  const rows = panel.getByRole("list", { name: "Open consoles" }).getByRole("listitem");
+  const rows = panel.getByRole("list", { name: "Open sessions" }).getByRole("listitem");
   await openLocalShell(page);
   await expect(rows).toHaveCount(1);
 
@@ -613,13 +613,13 @@ test("moves to its own screen and leaves the connection detail alone", async ({ 
   await page.getByRole("button", { name: "Connect", exact: true }).click();
 
   await expect(page).toHaveURL(/\/terminal$/);
-  await expect(page.getByRole("region", { name: /^Console for / })).toBeVisible();
+  await expect(page.getByRole("region", { name: /^Terminal for / })).toBeVisible();
   await expect(tree).toBeHidden();
 
   await page.goBack();
   await expect(page).not.toHaveURL(/\/terminal$/);
   await expect(detail).toBeVisible();
-  await expect(page.getByRole("region", { name: /^Console for / })).toBeHidden();
+  await expect(page.getByRole("region", { name: /^Terminal for / })).toBeHidden();
 });
 
 test("shows why a connection failed in the console itself", async ({ page, installation }) => {
@@ -634,7 +634,7 @@ test("shows why a connection failed in the console itself", async ({ page, insta
   await nav.getByRole("button", { name: "refused" }).click();
   await page.getByRole("button", { name: "Connect", exact: true }).click();
 
-  const screen = page.getByRole("region", { name: /^Console for / });
+  const screen = page.getByRole("region", { name: /^Terminal for / });
   await expect(screen).toBeVisible();
   await expect(screen).toContainText(/sshc:.*(refused|connect)/i, { timeout: 20_000 });
 });
@@ -670,7 +670,7 @@ test("keeps the same terminal alive while another screen is shown", async ({ pag
 
   const reopened = await openConsolePanel(page);
   await reopened
-    .getByRole("list", { name: "Open consoles" })
+    .getByRole("list", { name: "Open sessions" })
     .getByRole("listitem")
     .first()
     .getByRole("button")
@@ -728,7 +728,7 @@ test("loads the font it ships and hands it to the console", async ({ page, insta
 
   const panel = await openConsolePanel(page);
   await openLocalShell(page);
-  await expect(page.getByRole("region", { name: /^Console for / })).toBeVisible();
+  await expect(page.getByRole("region", { name: /^Terminal for / })).toBeVisible();
 
   const family = async () => (await drawnRowFont(page)).fontFamily;
   expect(await family()).not.toContain("JetBrains Mono");
@@ -750,7 +750,7 @@ test("wears the image that was brought in, and gets out of its way", async ({ pa
 
   const panel = await openConsolePanel(page);
   await openLocalShell(page);
-  await expect(page.getByRole("region", { name: /^Console for / })).toBeVisible();
+  await expect(page.getByRole("region", { name: /^Terminal for / })).toBeVisible();
 
   const encoded = await page.evaluate(() => {
     const canvas = document.createElement("canvas");
@@ -800,7 +800,7 @@ test("selects only the visible screen and opens a console from row padding", asy
   await openApplication(page, installation);
   const panel = await openConsolePanel(page);
   await openLocalShell(page);
-  const row = panel.getByRole("list", { name: "Open consoles" }).getByRole("listitem").first();
+  const row = panel.getByRole("list", { name: "Open sessions" }).getByRole("listitem").first();
   await expect(row.locator("[aria-current=true]")).toHaveCount(1);
   for (const destination of ["Home", "SFTP"]) {
     await openSection(page, destination);
@@ -810,7 +810,7 @@ test("selects only the visible screen and opens a console from row padding", asy
     if (box === null) throw new Error("missing console row");
     await page.mouse.click(box.x + box.width - 3, box.y + box.height - 3);
     await expect(row.locator("[aria-current=true]")).toHaveCount(1);
-    await expect(page.getByRole("region", { name: /^Console for / })).toBeVisible();
+    await expect(page.getByRole("region", { name: /^Terminal for / })).toBeVisible();
   }
   // The actual close button must remain independently clickable.
   await row.getByRole("button", { name: /^Close / }).click();

@@ -7,6 +7,7 @@ import { hintText } from "../ui/form";
 import { Button, Notice } from "../ui/surface";
 import { PanelState } from "../ui/PanelState";
 import { PageHeader } from "../ui/page";
+import { usePolling } from "../ui/usePolling";
 import { SyncResultCard } from "./SyncResultCard";
 import { SyncExclusionsPanel } from "./SyncExclusionsPanel";
 import { useSyncSetupForm } from "./useSyncSetupForm";
@@ -23,6 +24,10 @@ import { SyncSettingsSection } from "./SyncSettingsSection";
 import { SyncTransferCard } from "./SyncTransferCard";
 import { SyncUnlockCard } from "./SyncUnlockCard";
 import { syncRefusals } from "./syncRefusals";
+
+// Another device's push shows up within half a minute; the bucket listing
+// is a paid request, so the panel does not ask more often.
+const bucketPollIntervalMs = 30_000;
 
 // Setting the shared key needs the vault open; everything else is sync.
 export type SyncPanelApi = SyncApi & Pick<VaultApi, "unlockVault">;
@@ -155,13 +160,7 @@ export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
     statusState.phase === "ready" &&
     statusState.value.configured &&
     !statusState.value.locked;
-  useEffect(() => {
-    if (!shouldPollBucket) return;
-    const timer = window.setInterval(() => {
-      if (document.visibilityState !== "hidden") void refreshBucket();
-    }, 30_000);
-    return () => window.clearInterval(timer);
-  }, [refreshBucket, shouldPollBucket]);
+  usePolling(refreshBucket, { intervalMs: bucketPollIntervalMs, enabled: shouldPollBucket });
 
   async function run<T>(
     operation: () => Promise<T>,

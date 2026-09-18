@@ -55,7 +55,7 @@ const sections = [
   { navigation: "Engine", heading: "Engine" },
   { navigation: "Sync", heading: "Remote sync" },
   { navigation: "History", heading: "History" },
-  { navigation: "Terminal", heading: "No console is open" },
+  { navigation: "Terminal", heading: "No session is open" },
 ] as const;
 
 async function openSectionThroughDrawer(
@@ -487,7 +487,7 @@ test("keeps quick connection actions inside the viewport on mobile", async ({ pa
 
 test("keeps workspace management out of the mobile terminal", async ({ page, installation }) => {
   await openApplication(page, installation);
-  await openSectionThroughDrawer(page, "Terminal", "No console is open");
+  await openSectionThroughDrawer(page, "Terminal", "No session is open");
 
   await expect(page.getByRole("button", { name: "Split right" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Split down" })).toHaveCount(0);
@@ -838,7 +838,7 @@ test("sends a real control character from the on-screen keys", async ({ page, in
   await page.getByRole("button", { name: "Navigation", exact: true }).click();
   await openLocalShell(page);
 
-  const screen = page.getByRole("region", { name: /^Console for / });
+  const screen = page.getByRole("region", { name: /^Terminal for / });
   await expect(screen).toBeVisible();
   await expect(screen).toContainText(/[$#%>]/, { timeout: 20_000 });
 

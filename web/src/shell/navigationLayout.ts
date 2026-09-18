@@ -1,29 +1,5 @@
-export const navigationWidthStorageKey = "sshc.navigation.width";
+import type { StoredColumnWidth } from "../ui/useStoredColumnWidth";
 
-export const defaultNavigationWidth = 240;
-export const minimumNavigationWidth = 192;
-export const maximumNavigationWidth = 384;
-
-export function clampNavigationWidth(width: number): number {
-  if (!Number.isFinite(width)) return defaultNavigationWidth;
-  return Math.min(maximumNavigationWidth, Math.max(minimumNavigationWidth, Math.round(width)));
-}
-
-export function detectNavigationWidth(): number {
-  try {
-    const stored = window.localStorage.getItem(navigationWidthStorageKey);
-    if (stored !== null && stored.trim() !== "") {
-      const width = Number(stored);
-      if (Number.isFinite(width)) return clampNavigationWidth(width);
-    }
-  } catch {
-  }
-  return defaultNavigationWidth;
-}
-
-export function rememberNavigationWidth(width: number): void {
-  try {
-    window.localStorage.setItem(navigationWidthStorageKey, String(clampNavigationWidth(width)));
-  } catch {
-  }
-}
+// The desktop navigation column: wide enough for section names with badges,
+// never so wide that a laptop loses its content area.
+export const navigationWidth: StoredColumnWidth = { key: "sshc.navigation.width", fallback: 240, minimum: 192, maximum: 384 };

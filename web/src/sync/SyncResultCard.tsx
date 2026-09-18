@@ -3,6 +3,7 @@ import { useLanguage } from "../i18n/context";
 import type { Locale } from "../i18n/locale";
 import { Icon } from "../ui/icons";
 import { Card } from "../ui/surface";
+import { formatBytes as formatSize, formatDateTime } from "../ui/format";
 
 export type SyncResultView =
   | { kind: "push"; result: PushResult }
@@ -10,27 +11,9 @@ export type SyncResultView =
   | { kind: "apply"; result: PullResponse }
   | { kind: "previous"; operation: SyncOperation };
 
+// Sizes here are what S3 stores and bills, so they read in decimal units.
 export function formatBytes(bytes: number, locale: Locale): string {
-  const units = ["B", "kB", "MB", "GB", "TB"];
-  let value = bytes;
-  let unit = 0;
-  while (value >= 1000 && unit < units.length - 1) {
-    value /= 1000;
-    unit++;
-  }
-  const formatted = new Intl.NumberFormat(locale, {
-    maximumFractionDigits: unit === 0 ? 0 : 1,
-  }).format(value);
-  return `${formatted} ${units[unit]}`;
-}
-
-function formatMoment(value: string, locale: Locale): string {
-  const moment = new Date(value);
-  if (Number.isNaN(moment.getTime())) return value;
-  return new Intl.DateTimeFormat(locale, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(moment);
+  return formatSize(bytes, { decimal: true, locale });
 }
 
 function SummaryLines({ summary }: { summary: SnapshotSummary }) {
@@ -118,7 +101,7 @@ export function SyncResultCard({ view }: { view: SyncResultView }) {
               })}
             </p>
             <p className="text-xs text-ink-muted">
-              {t("sync.result.created", { at: formatMoment(summary.createdAt, locale) })}
+              {t("sync.result.created", { at: formatDateTime(summary.createdAt, locale) })}
             </p>
           </>
         ) : displayKind === "preview" ? (
@@ -130,7 +113,7 @@ export function SyncResultCard({ view }: { view: SyncResultView }) {
               })}
             </p>
             <p className="text-sm text-ink-muted">
-              {t("sync.result.snapshotAt", { at: formatMoment(summary.createdAt, locale) })}
+              {t("sync.result.snapshotAt", { at: formatDateTime(summary.createdAt, locale) })}
             </p>
             <p className="text-sm text-ink-muted">
               {t("sync.result.changes", { written, removed, conflicts })}
@@ -139,7 +122,7 @@ export function SyncResultCard({ view }: { view: SyncResultView }) {
         ) : (
           <>
             <p className="font-medium text-ink">
-              {t("sync.result.appliedSnapshot", { at: formatMoment(summary.createdAt, locale) })}
+              {t("sync.result.appliedSnapshot", { at: formatDateTime(summary.createdAt, locale) })}
             </p>
             <p className="text-sm text-ink-muted">
               {t("sync.result.changes", { written, removed, conflicts })}
@@ -150,7 +133,7 @@ export function SyncResultCard({ view }: { view: SyncResultView }) {
           </>
         )}
         <p className="text-xs text-ink-muted">
-          {t("sync.result.completed", { at: formatMoment(completedAt, locale) })}
+          {t("sync.result.completed", { at: formatDateTime(completedAt, locale) })}
         </p>
         </div>
         <span className="rounded-lg bg-select-fill px-3 py-2 font-mono text-xs text-ink-muted">

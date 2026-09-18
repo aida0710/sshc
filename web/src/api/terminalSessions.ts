@@ -1,5 +1,5 @@
 import { apiClient } from "./client";
-import { jsonHeaders, postEmpty, postJSON } from "./guards";
+import { postEmpty, postJSON, putJSON } from "./guards";
 import type { components } from "./schema";
 import { validateOpenAPISchema } from "./validators.generated";
 
@@ -103,14 +103,7 @@ export const terminalSessionsApi: TerminalSessionsApi = {
   },
   async renameTerminalSession(id, title) {
     return validateTerminalSessionList(
-      await apiClient.mutate<unknown>(
-        `/api/v1/terminal/sessions/${encodeURIComponent(id)}/title`,
-        {
-          method: "PUT",
-          headers: { ...jsonHeaders },
-          body: JSON.stringify({ title }),
-        },
-      ),
+      await putJSON<unknown>(`/api/v1/terminal/sessions/${encodeURIComponent(id)}/title`, { title }),
     );
   },
   async closeTerminalSession(id) {

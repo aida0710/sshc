@@ -5,7 +5,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 const openVault = () =>
   Promise.resolve({ exists: true, unlocked: true, aliases: [] as string[], dedicatedKeyPassphrases: [], minPassphraseLength: 12 });
-import { App, resolveOSC52, vaultStatePollIntervalMs } from "./App";
+import { App } from "./App";
+import { vaultStatePollIntervalMs } from "./session/useAppSession";
+import { resolveOSC52 } from "./shell/TerminalScreen";
 import type { InspectorContent } from "./ui/Inspector";
 import { LanguageProvider } from "./i18n/context";
 import { ThemeProvider } from "./theme/context";

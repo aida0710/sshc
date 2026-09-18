@@ -1,5 +1,5 @@
 import { apiClient } from "../api/client";
-import { jsonHeaders, issueAction } from "../api/guards";
+import { issueAction, jsonHeaders, postJSON } from "../api/guards";
 import type { components } from "../api/schema";
 import { validateOpenAPISchema } from "../api/validators.generated";
 
@@ -109,31 +109,18 @@ export const keysApi: KeysApi = {
     return validateAlgorithms(await apiClient.read("/api/v1/keys/algorithms"));
   },
   generate: (input) =>
-    apiClient.mutate<GenerateKeyResponse>("/api/v1/keys", {
-      method: "POST",
-      headers: jsonHeaders,
-      body: JSON.stringify({
-        algorithm: input.algorithm,
-        bits: input.bits ?? 0,
-        fileName: input.fileName,
-        group: input.group,
-        comment: input.comment,
-        passphrase: input.passphrase,
-        unencrypted: input.unencrypted,
-      }),
+    postJSON<GenerateKeyResponse>("/api/v1/keys", {
+      algorithm: input.algorithm,
+      bits: input.bits ?? 0,
+      fileName: input.fileName,
+      group: input.group,
+      comment: input.comment,
+      passphrase: input.passphrase,
+      unencrypted: input.unencrypted,
     }),
-  hardwareCommand: (input) =>
-    apiClient.mutate<HardwareCommandResponse>("/api/v1/keys/hardware-command", {
-      method: "POST",
-      headers: jsonHeaders,
-      body: JSON.stringify(input),
-    }),
+  hardwareCommand: (input) => postJSON<HardwareCommandResponse>("/api/v1/keys/hardware-command", input),
   changePassphrase: (keyId, input) =>
-    apiClient.mutate<ChangePassphraseResponse>(`/api/v1/keys/${encodeURIComponent(keyId)}/passphrase`, {
-      method: "POST",
-      headers: jsonHeaders,
-      body: JSON.stringify(input),
-    }),
+    postJSON<ChangePassphraseResponse>(`/api/v1/keys/${encodeURIComponent(keyId)}/passphrase`, input),
   async reveal(keyId) {
     const token = await issueAction(REVEAL_ACTION_KIND, keyId);
     return validateReveal(
@@ -159,11 +146,7 @@ export const keysApi: KeysApi = {
   },
   async registerWithAgent(keyId, input) {
     return validateRegister(
-      await apiClient.mutate<unknown>(`/api/v1/keys/${encodeURIComponent(keyId)}/agent`, {
-        method: "POST",
-        headers: jsonHeaders,
-        body: JSON.stringify(input),
-      }),
+      await postJSON<unknown>(`/api/v1/keys/${encodeURIComponent(keyId)}/agent`, input),
     );
   },
   async deregisterFromAgent(keyId) {

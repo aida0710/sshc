@@ -1,5 +1,5 @@
 import { ApiError, apiClient } from "../api/client";
-import { issueAction, jsonHeaders } from "../api/guards";
+import { issueAction, patchJSON, postJSON, putJSON } from "../api/guards";
 import type { components } from "../api/schema";
 import { validateOpenAPISchema } from "../api/validators.generated";
 import { saveWithAndroid } from "../android/native";
@@ -93,23 +93,20 @@ export const sftpApi = {
     return validateOpenAPISchema<TransferJobList>("SFTPTransferJobList", await apiClient.read("/api/v1/sftp/transfers"));
   },
   async updateTransferSettings(settings: TransferSettings): Promise<TransferJobList> {
-    return validateOpenAPISchema<TransferJobList>("SFTPTransferJobList", await apiClient.mutate<unknown>("/api/v1/sftp/transfers/settings", {
-      method: "PUT", headers: jsonHeaders, body: JSON.stringify(settings),
-    }, { locallyHandledCodes: transferProblems }));
+    return validateOpenAPISchema<TransferJobList>("SFTPTransferJobList", await putJSON<unknown>("/api/v1/sftp/transfers/settings", settings, transferProblems));
   },
   async moveTransfer(id: string, move: TransferQueueMove): Promise<TransferJobList> {
-    return validateOpenAPISchema<TransferJobList>("SFTPTransferJobList", await apiClient.mutate<unknown>(`/api/v1/sftp/transfers/${encodeURIComponent(id)}/queue-position`, {
-      method: "POST", headers: jsonHeaders, body: JSON.stringify({ move }),
-    }, { locallyHandledCodes: transferProblems }));
+    return validateOpenAPISchema<TransferJobList>("SFTPTransferJobList", await postJSON<unknown>(`/api/v1/sftp/transfers/${encodeURIComponent(id)}/queue-position`, { move }, undefined, transferProblems));
   },
   async createTransfer(input: CreateTransferJob): Promise<TransferJob> {
     const actionToken = input.direction === "remote" && input.operation === "delete"
       ? await issueAction("sftp.delete", `${input.alias}:${input.remotePath}`)
       : null;
-    return transferJob(await apiClient.mutate<unknown>("/api/v1/sftp/transfers", {
-      method: "POST", headers: actionToken === null ? jsonHeaders : { ...jsonHeaders, "X-SSHC-Action": actionToken },
-      body: JSON.stringify({ sourceAlias: "", sourcePath: "", operation: "", overwrite: false, ...input }),
-    }));
+    return transferJob(await postJSON<unknown>(
+      "/api/v1/sftp/transfers",
+      { sourceAlias: "", sourcePath: "", operation: "", overwrite: false, ...input },
+      actionToken ?? undefined,
+    ));
   },
   async compareDirectories(leftAlias: string, leftPath: string, rightAlias: string, rightPath: string): Promise<DirectoryComparison> {
     const query = new URLSearchParams({ leftAlias, leftPath, rightAlias, rightPath });
@@ -126,14 +123,10 @@ export const sftpApi = {
     });
   },
   async updateTransfer(id: string, action: TransferJobAction, options: { transferredBytes?: number; totalBytes?: number; problem?: string; resetProgress?: boolean } = {}): Promise<TransferJob> {
-    return transferJob(await apiClient.mutate<unknown>(`/api/v1/sftp/transfers/${encodeURIComponent(id)}/actions`, {
-      method: "POST", headers: jsonHeaders, body: JSON.stringify({ action, ...options }),
-    }, { locallyHandledCodes: transferProblems }));
+    return transferJob(await postJSON<unknown>(`/api/v1/sftp/transfers/${encodeURIComponent(id)}/actions`, { action, ...options }, undefined, transferProblems));
   },
   async checkpointDownload(id: string, offset: number, revision: string): Promise<TransferJob> {
-    return transferJob(await apiClient.mutate<unknown>(`/api/v1/sftp/transfers/${encodeURIComponent(id)}/download-checkpoint`, {
-      method: "POST", headers: jsonHeaders, body: JSON.stringify({ offset, revision }),
-    }, { locallyHandledCodes: transferProblems }));
+    return transferJob(await postJSON<unknown>(`/api/v1/sftp/transfers/${encodeURIComponent(id)}/download-checkpoint`, { offset, revision }, undefined, transferProblems));
   },
   async verifyDownload(alias: string, jobId: string, remotePath: string, revision: string): Promise<void> {
     const endpoint = `${pathFor(alias, "download", remotePath)}&jobId=${encodeURIComponent(jobId)}&verify=true`;
@@ -179,32 +172,16 @@ export const sftpApi = {
     return validateOpenAPISchema<RemoteTextFile>("SFTPTextFile", await apiClient.read(pathFor(alias, "text", remotePath)));
   },
   async saveText(alias: string, remotePath: string, contents: string, expectedRevision: string): Promise<RemoteTextFile> {
-    return validateOpenAPISchema<RemoteTextFile>("SFTPTextFile", await apiClient.mutate<unknown>(pathFor(alias, "text", remotePath), {
-      method: "PUT",
-      headers: jsonHeaders,
-      body: JSON.stringify({ contents, expectedRevision }),
-    }));
+    return validateOpenAPISchema<RemoteTextFile>("SFTPTextFile", await putJSON<unknown>(pathFor(alias, "text", remotePath), { contents, expectedRevision }));
   },
   async mkdir(alias: string, remotePath: string): Promise<RemoteEntry> {
-    return entry(await apiClient.mutate<unknown>(`/api/v1/sftp/${encodeURIComponent(alias)}/entries`, {
-      method: "POST",
-      headers: jsonHeaders,
-      body: JSON.stringify({ path: remotePath, type: "directory" }),
-    }));
+    return entry(await postJSON<unknown>(`/api/v1/sftp/${encodeURIComponent(alias)}/entries`, { path: remotePath, type: "directory" }));
   },
   async createEmptyFile(alias: string, remotePath: string): Promise<RemoteEntry> {
-    return entry(await apiClient.mutate<unknown>(`/api/v1/sftp/${encodeURIComponent(alias)}/entries`, {
-      method: "POST",
-      headers: jsonHeaders,
-      body: JSON.stringify({ path: remotePath, type: "file" }),
-    }, { locallyHandledCodes: ["sftp_exists", "sftp_failed"] }));
+    return entry(await postJSON<unknown>(`/api/v1/sftp/${encodeURIComponent(alias)}/entries`, { path: remotePath, type: "file" }, undefined, ["sftp_exists", "sftp_failed"]));
   },
   async rename(alias: string, from: string, to: string): Promise<RemoteEntry> {
-    return entry(await apiClient.mutate<unknown>(`/api/v1/sftp/${encodeURIComponent(alias)}/entry`, {
-      method: "PATCH",
-      headers: jsonHeaders,
-      body: JSON.stringify({ from, to }),
-    }));
+    return entry(await patchJSON<unknown>(`/api/v1/sftp/${encodeURIComponent(alias)}/entry`, { from, to }));
   },
   async remove(alias: string, remotePath: string): Promise<void> {
     const target = `${alias}:${remotePath}`;
@@ -215,11 +192,7 @@ export const sftpApi = {
     });
   },
   async startUpload(alias: string, id: string, remotePath: string, size: number, sourceFingerprint: string): Promise<ResumableUpload> {
-    return resumableUpload(await apiClient.mutate<unknown>(`/api/v1/sftp/${encodeURIComponent(alias)}/uploads/${encodeURIComponent(id)}`, {
-      method: "POST",
-      headers: jsonHeaders,
-      body: JSON.stringify({ path: remotePath, size, sourceFingerprint }),
-    }, { locallyHandledCodes: transferProblems }));
+    return resumableUpload(await postJSON<unknown>(`/api/v1/sftp/${encodeURIComponent(alias)}/uploads/${encodeURIComponent(id)}`, { path: remotePath, size, sourceFingerprint }, undefined, transferProblems));
   },
   async appendUpload(alias: string, id: string, remotePath: string, offset: number, total: number, chunk: Blob, signal?: AbortSignal): Promise<ResumableUpload> {
     const query = `/api/v1/sftp/${encodeURIComponent(alias)}/uploads/${encodeURIComponent(id)}?path=${encodeURIComponent(remotePath)}&offset=${offset}&total=${total}`;
@@ -240,11 +213,7 @@ export const sftpApi = {
     }, { locallyHandledCodes: transferProblems }));
   },
   async completeUpload(alias: string, id: string, remotePath: string, size: number, expectedRevision: string, sourceFingerprint: string): Promise<void> {
-    await apiClient.mutate<unknown>(`/api/v1/sftp/${encodeURIComponent(alias)}/uploads/${encodeURIComponent(id)}/complete`, {
-      method: "POST",
-      headers: jsonHeaders,
-      body: JSON.stringify({ path: remotePath, size, expectedRevision, sourceFingerprint }),
-    }, { locallyHandledCodes: transferProblems });
+    await postJSON<unknown>(`/api/v1/sftp/${encodeURIComponent(alias)}/uploads/${encodeURIComponent(id)}/complete`, { path: remotePath, size, expectedRevision, sourceFingerprint }, undefined, transferProblems);
   },
   async cancelUpload(alias: string, id: string, remotePath: string): Promise<void> {
     await apiClient.mutate<unknown>(`/api/v1/sftp/${encodeURIComponent(alias)}/uploads/${encodeURIComponent(id)}?path=${encodeURIComponent(remotePath)}`, {
@@ -300,10 +269,6 @@ export const sftpApi = {
   async chmod(alias: string, remotePath: string, mode: string, expectedRevision: string, recursive = false): Promise<RemoteEntry> {
     const target = `${alias}:${remotePath}:${mode}${recursive ? ":recursive" : ""}`;
     const token = await issueAction("sftp.chmod", target);
-    return entry(await apiClient.mutate<unknown>(`/api/v1/sftp/${encodeURIComponent(alias)}/mode`, {
-      method: "PATCH",
-      headers: { ...jsonHeaders, "X-SSHC-Action": token },
-      body: JSON.stringify({ path: remotePath, mode, expectedRevision, recursive }),
-    }));
+    return entry(await patchJSON<unknown>(`/api/v1/sftp/${encodeURIComponent(alias)}/mode`, { path: remotePath, mode, expectedRevision, recursive }, token));
   },
 };

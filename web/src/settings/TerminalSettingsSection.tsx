@@ -11,7 +11,7 @@ import { CheckboxField, Field, control, hintText } from "../ui/form";
 import { Button, Notice } from "../ui/surface";
 import { ActionArea, SettingsSection } from "./SettingsSection";
 import { TerminalPreview } from "./TerminalPreview";
-import { useSaveState } from "./useSaveState";
+import { useAsyncOperation } from "../ui/useAsyncOperation";
 
 export type TerminalSettingsApi = Pick<SettingsApi, "terminalSettings" | "setTerminalSettings" | "localShellProfiles">;
 
@@ -124,7 +124,7 @@ export function TerminalSettingsSection({ api, showHeading, onSettingsChange }: 
   const [draft, setDraft] = useState<TerminalDraft>(initialDraft);
   const [loaded, setLoaded] = useState(false);
   const [profiles, setProfiles] = useState<LocalShellProfile[]>([]);
-  const save = useSaveState();
+  const save = useAsyncOperation();
 
   useEffect(() => {
     let active = true;
@@ -161,7 +161,7 @@ export function TerminalSettingsSection({ api, showHeading, onSettingsChange }: 
       } catch {
         // The normal console poll will reconcile the view shortly.
       }
-    }, (error) => t(saveFailureKey(error)));
+    }, { describe: (error) => t(saveFailureKey(error)) });
   }
 
   const busy = save.busy;

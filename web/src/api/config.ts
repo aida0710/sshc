@@ -1,4 +1,5 @@
 import { apiClient } from "./client";
+import { patchJSON, postJSON } from "./guards";
 import type { components } from "./schema";
 import { validateOpenAPISchema } from "./validators.generated";
 
@@ -64,18 +65,6 @@ function validateHistory(value: unknown): HistoryEntry[] {
   return validateOpenAPISchema<components["schemas"]["HistoryList"]>("HistoryList", value).entries;
 }
 
-function mutateJSON<T>(path: string, method: "POST" | "PATCH", body: unknown): Promise<T> {
-  return apiClient.mutate<T>(path, {
-    method,
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-}
-
-function postJSON<T>(path: string, body: unknown): Promise<T> {
-  return mutateJSON<T>(path, "POST", body);
-}
-
 export const configApi = {
   async overview(): Promise<Overview> {
     return validateOverview(await apiClient.read("/api/v1/config/overview"));
@@ -98,7 +87,7 @@ export const configApi = {
     return validateCreateConnectionResponse(await postJSON<unknown>("/api/v1/connections", request));
   },
   async updateConnection(request: UpdateConnectionRequest): Promise<SaveResult> {
-    return validateSaveResult(await mutateJSON<unknown>("/api/v1/connections", "PATCH", request));
+    return validateSaveResult(await patchJSON<unknown>("/api/v1/connections", request));
   },
   async renameGroup(from: string, to: string): Promise<SaveResult> {
     return validateSaveResult(await postJSON<unknown>("/api/v1/config/groups/rename", { from, to }));

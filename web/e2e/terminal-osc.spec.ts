@@ -13,7 +13,7 @@ test("applies terminal titles to the pane and marks notifications unread", async
   await openSection(page, "Terminal");
   const nav = page.getByRole("navigation", { name: "Primary" });
   await openLocalShell(page);
-  const screen = page.getByRole("region", { name: /^Console for / });
+  const screen = page.getByRole("region", { name: /^Terminal for / });
   await expect(screen).toContainText(/[$#%>]/, { timeout: 20_000 });
   await terminalKeyboard(page).focus();
 
@@ -21,8 +21,8 @@ test("applies terminal titles to the pane and marks notifications unread", async
   // title cannot immediately replace ours.
   await page.keyboard.type("printf '\\033]0;deploy checklist\\a'; read -r _");
   await page.keyboard.press("Enter");
-  const consoles = nav.getByRole("list", { name: "Open consoles" });
-  await expect(page.getByRole("region", { name: "Console for deploy checklist" })).toBeVisible({ timeout: 15_000 });
+  const consoles = nav.getByRole("list", { name: "Open sessions" });
+  await expect(page.getByRole("region", { name: "Terminal for deploy checklist" })).toBeVisible({ timeout: 15_000 });
   await expect(consoles.getByRole("listitem").first()).toContainText("deploy checklist");
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
     await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/terminal-osc-title.png`, fullPage: true });
