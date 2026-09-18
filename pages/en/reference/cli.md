@@ -15,9 +15,13 @@ Codex and other AI agents can call the CLI directly. When the vault is unlocked 
 
 ```sh
 sshc engine
+sshc engine --port 60001
 sshc engine --replace
 sshc
+sshc open
 sshc status --json
+sshc version
+sshc vault status
 sshc vault create
 sshc vault unlock
 sshc vault lock
@@ -28,6 +32,8 @@ sshc service disable
 sshc update
 ```
 
+`sshc` without arguments fetches a one-time URL from the running engine and opens it in the browser; `sshc open` only prints the URL. `sshc engine --port <n>` (1024–65535) pins the listening port. `sshc version` (`-v`, `--version`) prints this binary's version, and `sshc vault status` prints the same table as `sshc status` with the vault state.
+
 Interactive secrets such as the Vault master password display one `*` per typed character instead of the value. Backspace and `Ctrl+U` update the mask, and the plaintext is never written to Terminal scrollback.
 
 `sshc service` manages a systemd user service on Linux or a launchd user agent on macOS. `install` registers a stable Homebrew or `install.sh` path, and `disable` removes only a definition created by sshc. `install`, `disable`, and `update` show the planned changes and ask for confirmation. Use `-y` or `--yes` only when automation must skip the prompt.
@@ -37,12 +43,12 @@ Interactive secrets such as the Vault master password display one `*` per typed 
 ## OTP
 
 ```sh
-sshc otp list
+sshc otp list [--json]
 sshc otp <name>
 sshc otp show <name> --json
 sshc otp add <name>
 sshc otp edit <name>
-sshc otp remove <name>
+sshc otp remove <name> [-y|--yes]
 ```
 
 `list` prints saved names and assignments only. `sshc otp <name>` and `show` print the previous, current, and next code plus the remaining lifetime of the current code, which makes a clock boundary visible. The provisioning secret stays inside the engine and is absent from both human and JSON output.
@@ -95,7 +101,7 @@ sshc sync now [--json]
 sshc sync auto on|off [--json]
 ```
 
-`sshc sync setup` shows the configured endpoint, bucket, path, region, and direction as defaults. Direction accepts `both`, `push`, or `pull`. The Access Key ID is identified only by its masked final five characters; the Secret Access Key and sync key are shown only as configured. Press Enter on blank secret prompts to keep the values already held by the engine. While a new hidden value is typed, each character appears as `*`, and Backspace updates the mask without printing the plaintext.
+`sshc sync setup` shows the configured endpoint, bucket, path, region, and direction as defaults. Direction accepts `both`, `push`, or `pull`. The Access Key ID is shown as `*****` followed by its final five characters; the Secret Access Key and sync key are shown only as configured. Press Enter on blank secret prompts to keep the values already held by the engine. While a new hidden value is typed, each character appears as `*`, and Backspace updates the mask without printing the plaintext.
 
 ## SFTP transfers
 
@@ -141,12 +147,16 @@ Inspect, create, and control terminals owned by the running engine.
 ```sh
 sshc terminal list --json
 sshc terminal create ssh bastion --json
+sshc terminal create shell --json
 sshc terminal show <session-id> --json
 sshc terminal read <session-id> --cursor 0 --limit 4096 --json
 sshc terminal send <session-id> --text 'uptime' --json
+sshc terminal send <session-id> --text 'partial input' --no-enter
 sshc terminal wait <session-id> --for connected --timeout 30s --json
 sshc terminal rename <session-id> deploy
 sshc terminal close <session-id>
 ```
+
+`create shell` opens a local shell on the engine host. `send` appends Enter (CR) by default; `--no-enter` sends the text as is.
 
 `read` returns a scrollback cursor and warns when an older position has already been discarded. `send` checks the current process generation to avoid sending to a replacement process.

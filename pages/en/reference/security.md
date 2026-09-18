@@ -17,7 +17,7 @@ Without a password, a random unlock secret is stored on the device and the vault
 
 ## SSH host keys
 
-Unknown host keys require confirmation, and changed saved keys are rejected. Non-interactive SSH, SFTP and public-key installation require known keys for the final host and every ProxyJump hop.
+In an interactive terminal an unknown host key is saved after you confirm it; hosts configured with `StrictHostKeyChecking no` or `accept-new` save it without confirmation, as OpenSSH does. A changed saved key is rejected regardless of that setting. Non-interactive SSH, SFTP and public-key installation require known keys for the final host and every ProxyJump hop.
 
 ## ProxyCommand
 
@@ -25,7 +25,9 @@ When SSH configuration contains `ProxyCommand`, sshc runs that command locally w
 
 ## Sync
 
-Snapshots are encrypted on-device with a dedicated sync key before upload. Anyone with bucket credentials can obtain the ciphertext and continue offline guessing, so use a sufficiently long key.
+Connection settings, Vault credentials, Snippets, and the SSH keys in scope are encrypted on this device with a dedicated sync key before upload; the storage provider and anyone holding the S3 credentials cannot read them in plaintext. The bucket name, S3 object names, object sizes, and modification times are not encrypted.
+
+Anyone with the ciphertext can try guessing the sync key offline. Use the random key sshc generates rather than a short typed string.
 
 ## Terminal data
 

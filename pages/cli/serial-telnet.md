@@ -12,7 +12,7 @@ sshc serial --json
 sshc serial /dev/ttyUSB0 --baud 115200 --encoding utf-8
 ```
 
-データビット、パリティ、ストップビット、DTR、RTSを接続時に指定できます。フロー制御は`none`、`rtscts`、`xonxoff`に対応しています。接続中は、DTRとRTSの切り替えや、指定した長さのブレーク送信も行えます。これらの操作はフロー制御の設定とは別です。
+データビット、パリティ、ストップビット、フロー制御（`none`、`rtscts`、`xonxoff`）を接続時に指定できます。`--dtr on|off`と`--rts on|off`は接続直後に一度だけ適用し、`--break <期間>`は接続直後に指定した長さのブレークを一度送ります。接続中に切り替える操作はありません。これらの指定はフロー制御の設定とは別です。
 
 デバイス名はOSによって異なります。Linuxでは`/dev/ttyUSB0`、macOSでは`/dev/cu.*`、Windowsでは`COM3`などを指定します。
 
@@ -35,8 +35,10 @@ sshc serial /dev/ttyUSB0 --non-interactive \
   --expect 'login:' --timeout 20s -- 'admin'
 
 sshc telnet 192.0.2.20:23 --non-interactive \
-  --script ./steps.json --json -- ''
+  --script ./steps.json --json
 ```
+
+`--script`は手順ファイルの各ステップが送信文と終了条件を持つため、`-- <text>`や`--expect`／`--read-for`とは併用できません。
 
 対話操作を必要としない自動処理では、終了条件として`--expect`または`--read-for`のどちらか1つを指定します。`--expect`は正規表現に一致した時点、`--read-for`は指定時間の読み取りを終えた時点で成功します。全体の`--timeout`を超えた場合は終了コード124、引数が不正な場合は2、通信などほかの失敗は1、割り込みは130を返します。
 

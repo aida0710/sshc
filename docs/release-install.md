@@ -52,7 +52,7 @@ sshc update
 
 - Homebrew版は、`brew --prefix --installed aida0710/tap/sshc`の`bin/sshc`と実行中ファイルが同一であることを確認し、`brew upgrade --formula --no-ask aida0710/tap/sshc`を実行します。
 - `install.sh`版はdigest付きreceiptを確認し、GitHubの最新安定版tagに固定したinstallerを実行します。installerは公開された`checksums.txt`でバイナリを検証し、同一ディレクトリ内のrenameで置換します。
-- `install.ps1`版は、インストール時と同じPowerShellコマンドを再実行して更新します。
+- Windows（`install.ps1`版を含む）では`sshc update`は使えず、管理元不明として終了コード1で終わります。インストール時と同じPowerShellコマンドを手で再実行して更新します。
 - その他のWindows手動配置、ソースビルド、判定不能な導入は変更せず、元の導入方法で更新するよう表示します。
 
 `sshc service install`で作成したユーザーサービスがactiveで、登録した実行パスが今回の更新対象と一致する場合だけ、更新後に再起動します。Linuxではsystemdの`try-restart`、macOSではlaunchdの`kickstart -k`を使用します。再起動後はvaultがロックされるため、対話端末から`sshc vault unlock`を実行してください。binary更新後の再起動だけに失敗した場合は、表示される`sshc service install`を実行して復旧できます。停止中のサービス、sshc管理外の定義、別のsshc導入を指す定義、サービス管理外のengineは自動で起動、再起動しません。後者は更新後に停止し、新しい`sshc engine`を起動してください。

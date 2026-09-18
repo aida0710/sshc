@@ -90,7 +90,7 @@ Options:
   --chunk-size <MiB> split range size from 8..4096 MiB (engine default 32)
   --max-depth <n>    recursive get depth limit (default 64; maximum 256)
   --max-entries <n>  recursive get item limit (default 10000; maximum 1000000)
-  --max-total-size <MiB> recursive get total size limit (default 1024)
+  --max-total-size <MiB> recursive get total size limit (default 1024; maximum 8388608)
   --json            print one machine-readable result on stdout
   -y, --yes         skip the --overwrite confirmation
 `, Actions: []Action{
@@ -101,7 +101,8 @@ Options:
 	{Name: "serial", Route: "serial", Help: `usage:
   sshc serial [--json]
   sshc serial <device> [options]
-  sshc serial <device> [options] --non-interactive [automation] -- <text>
+  sshc serial <device> [options] --non-interactive --expect REGEX|--read-for D [automation] -- <text>
+  sshc serial <device> [options] --non-interactive --script FILE|- [automation]
 
 Options: --baud N --data-bits 5..8 --parity none|odd|even|mark|space
          --stop-bits 1|1.5|2 --flow none|rtscts|xonxoff
@@ -112,7 +113,8 @@ Automation: --expect REGEX | --read-for D | --script FILE|-
 `},
 	{Name: "telnet", Route: "telnet", Help: `usage:
   sshc telnet <host>[:port] [options]
-  sshc telnet <host>[:port] [options] --non-interactive [automation] -- <text>
+  sshc telnet <host>[:port] [options] --non-interactive --expect REGEX|--read-for D [automation] -- <text>
+  sshc telnet <host>[:port] [options] --non-interactive --script FILE|- [automation]
 
 Options: --connect-timeout D --terminal-type TYPE --encoding NAME
 Automation: --expect REGEX | --read-for D | --script FILE|-
@@ -209,8 +211,10 @@ const GlobalHelp = `usage:
   sshc telnet <host>[:port] [options]
                        connect interactively with unencrypted Telnet
                        options: --connect-timeout D --terminal-type TYPE --encoding NAME
-  sshc serial <device> [options] --non-interactive [automation] -- <text>
-  sshc telnet <host>[:port] [options] --non-interactive [automation] -- <text>
+  sshc serial <device> [options] --non-interactive --expect REGEX|--read-for D [automation] -- <text>
+  sshc serial <device> [options] --non-interactive --script FILE|- [automation]
+  sshc telnet <host>[:port] [options] --non-interactive --expect REGEX|--read-for D [automation] -- <text>
+  sshc telnet <host>[:port] [options] --non-interactive --script FILE|- [automation]
                        send text and wait for --expect or --read-for
                        automation: --expect REGEX | --read-for D | --script FILE|-
                                    --timeout D --settle D --max-bytes N --line-ending MODE

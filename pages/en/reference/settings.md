@@ -38,7 +38,7 @@ By default, the Vault locks after saved passwords and key passphrases have not b
 
 With **Do not auto-lock**, the Vault stays unlocked until you lock it manually or restart sshc. Use this option only on a device you control.
 
-Passwordless Vaults do not offer manual locking. The current-password field is hidden when changing protection; adding a password restores that field and the lock controls.
+A passwordless Vault is neither auto-locked nor lockable by hand: it opens when sshc starts and this setting has no effect. The current-password field is hidden when changing protection; adding a password restores auto-lock, that field, and the lock controls.
 
 ## Terminal
 
@@ -69,4 +69,4 @@ Choose a default shell profile and start directory. Detected choices include Pow
 
 Browser notification permission is requested only after an explicit click. Configure the sound and volume used when a terminal program sends a notification through OSC 9/99/777, and test delivery. See [Titles and notifications](/en/terminal/notifications) for details.
 
-The application theme, display language, notification sounds, and browser registration use browser local storage. Terminal settings, including the terminal color scheme, font, background, and tint, are stored in workspace metadata together with connection-specific settings. The browser registration token is not stored in the workspace or sync snapshots; the device keeps only its verification hash. Vault secrets and sync credentials are never written to plaintext settings.
+The application theme, display language, notification sounds, browser registration, the selected shortcut preset, the navigation and connection-list widths, SFTP tab and split state, and the transfer-manager and Home view modes use browser local storage (per device and per browser; never synced). Terminal settings, including the terminal color scheme, font, background, and tint, are stored in workspace metadata together with connection-specific settings. The browser registration token is not stored in the workspace or sync snapshots; the device keeps only its verification hash. Vault secrets and sync credentials are never written to plaintext settings.

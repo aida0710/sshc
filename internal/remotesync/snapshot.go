@@ -38,7 +38,8 @@ const ManifestName = "manifest.json"
 // SchemaVersion は、マニフェスト文書のバージョン。
 //
 // バージョン 6 は、revision、parent、messageに加えて、認証済みのancestor chainを
-// 必須契約とする。過去形式を読み分ける分岐は持たず、この版が書く形式だけを受け付ける。
+// 必須契約とする。読み取りは v5 だけを registeredSnapshotMigrations で v6 へ
+// 一段変換して受け付け、それより古い形式は受け付けない。
 const SchemaVersion = 6
 
 // MaxCommitMessageRunes は、履歴へ保存する一行メッセージの最大長。

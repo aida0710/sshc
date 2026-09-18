@@ -7,7 +7,7 @@ description: Encrypted snapshots on S3-compatible object storage you provide.
 
 ![Sync direction and automatic sync status](/images/sync-desktop-en.png)
 
-sshc does not provide hosted sync storage or retain your sync data. You choose and configure S3-compatible object storage; sshc encrypts the workspace on your device before storing snapshots there. The storage provider does not receive plaintext.
+sshc does not provide hosted sync storage or retain your sync data. You choose and configure S3-compatible object storage; sshc encrypts connection settings, Vault credentials, Snippets, and the SSH keys in scope on your device as one snapshot before storing it there. The storage provider does not receive plaintext, but the bucket name, S3 object names, object sizes, and modification times are not encrypted.
 
 ## First device
 
