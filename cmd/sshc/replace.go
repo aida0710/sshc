@@ -141,14 +141,17 @@ func replaceRunningEngine(
 	acquire func(string) (func() error, error),
 ) (func() error, error) {
 	stateDir := app.HandoffDir(home)
-	found, err := readHandoff(stateDir)
+	client := &http.Client{Timeout: 10 * time.Second}
+	found, err := verifiedHandoff(ctx, stateDir, client)
+	if errors.Is(err, errEngineUnproven) {
+		return nil, err
+	}
 	if err != nil {
 		// handoff が読めないのに錠は握られている。何が居るのかを言えない以上、
 		// 止めてよいとも言えない。
 		return nil, fmt.Errorf("an sshc engine holds the lock but left no readable handoff; stop it yourself")
 	}
 
-	client := &http.Client{Timeout: 10 * time.Second}
 	sessions := 0
 	// handoff を読み直さない。上で読んだ一台にだけ尋ねる。待っている
 	// あいだに書き換わったものへ乗り換えれば、止める相手が入れ替わる。

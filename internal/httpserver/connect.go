@@ -258,6 +258,11 @@ const StatusPath = "/cli/status"
 // である。
 const StopPath = "/cli/stop"
 
+// ChallengePath は、CLI が秘密を送る前に「この engine は handoff の秘密を持って
+// いるか」を確かめる場所である。認可は要らない。答えは challenge に固有の HMAC で、
+// 秘密そのものは明かさない。
+const ChallengePath = "/cli/challenge"
+
 type CLIStatus struct {
 	Owner           handoff.Owner `json:"owner"`
 	Version         string        `json:"version"`
@@ -297,6 +302,7 @@ func registerConnectRoutes(engine *echo.Echo, handlers ConnectHandlers) {
 	engine.POST(CLISessionPath, handlers.CLISession)
 	engine.DELETE(CLISessionPath, handlers.RevokeCLISession)
 	engine.GET(StatusPath, handlers.Status)
+	engine.GET(ChallengePath, handlers.Challenge)
 	engine.POST(StopPath, handlers.Stop)
 	registerVaultCLIRoutes(engine, handlers)
 }
@@ -367,6 +373,17 @@ func (h ConnectHandlers) Open(c *echo.Context) error {
 // 何も知ることができない。
 func (h ConnectHandlers) authorised(request *http.Request) bool {
 	return cliAuthorised(request, h.Secret)
+}
+
+// Challenge は、CLI の乱数に handoff の秘密で署名して返す。秘密を書けなかった
+// engine（Secret が空）は何も証明できないので断る。
+func (h ConnectHandlers) Challenge(c *echo.Context) error {
+	challenge := c.Request().Header.Get(handoff.ChallengeHeader)
+	if h.Secret == "" || !handoff.ValidChallenge(challenge) {
+		return c.NoContent(http.StatusBadRequest)
+	}
+	c.Response().Header().Set(handoff.ProofHeader, handoff.Prove(h.Secret, challenge))
+	return c.NoContent(http.StatusNoContent)
 }
 
 // Connect は、1 個の接続が必要とするものだけを返し、それより長生きするものは何も返さない。

@@ -133,8 +133,8 @@ func TestDesktopOccupiedBrowserOriginFallsBackRevokesRegistrationAndPersistsNewP
 	if !registrationRequired {
 		t.Fatal("fallback did not require foreground browser registration")
 	}
-	if registrations.Verify(oldToken) {
-		t.Fatal("default-port registration remained valid on the fallback port")
+	if _, accepted, err := registrations.Recover(oldToken); err != nil || accepted {
+		t.Fatalf("default-port registration remained valid on the fallback port: accepted=%t err=%v", accepted, err)
 	}
 }
 

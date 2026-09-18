@@ -82,8 +82,12 @@ func runVault(
 		return 1
 	}
 
-	found, err := readHandoff(stateDir)
+	found, err := verifiedHandoff(ctx, stateDir, client)
 	if err != nil {
+		if errors.Is(err, errEngineUnproven) {
+			fmt.Fprintf(stderr, "sshc: %v\n", err)
+			return 1
+		}
 		fmt.Fprintln(stderr, "sshc: no compatible running engine; start the desktop app or run sshc engine")
 		return 1
 	}

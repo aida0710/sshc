@@ -78,11 +78,17 @@ func (h Handlers) Bootstrap(c *echo.Context) error {
 // Recover restores a browser session from the device-local enrolment capability. It is
 // intentionally separate from cookie authentication: engine restart invalidates every
 // in-memory cookie, while the browser registration remains valid on this fixed origin.
+// Every recovery rotates the registration token; the response carries the replacement
+// and the browser must store it before it recovers again.
 func (h Handlers) Recover(c *echo.Context) error {
 	if h.Sessions == nil || h.BrowserAuth == nil {
 		return problem(c, http.StatusUnauthorized, "browser_registration_required")
 	}
-	if !h.BrowserAuth.Verify(c.Request().Header.Get("X-SSHC-Browser")) {
+	rotated, accepted, err := h.BrowserAuth.Recover(c.Request().Header.Get("X-SSHC-Browser"))
+	if err != nil {
+		return problem(c, http.StatusInternalServerError, "browser_registration_failed")
+	}
+	if !accepted {
 		return problem(c, http.StatusUnauthorized, "invalid_browser_registration")
 	}
 	credentials, setCookie, err := h.Sessions.JoinOrIssue(sessionCookie(c.Request()))
@@ -92,7 +98,7 @@ func (h Handlers) Recover(c *echo.Context) error {
 	if setCookie {
 		setSessionCookie(c, credentials.SessionID)
 	}
-	return c.JSON(http.StatusOK, api.BootstrapResponse{CsrfToken: credentials.CSRFToken})
+	return c.JSON(http.StatusOK, api.BootstrapResponse{CsrfToken: credentials.CSRFToken, BrowserToken: &rotated})
 }
 
 func sessionCookie(request *http.Request) string {

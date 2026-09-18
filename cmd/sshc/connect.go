@@ -41,9 +41,9 @@ type connectAnswer struct {
 func runOpen(
 	ctx context.Context, stateDir string, client *http.Client, stdout, stderr io.Writer, open bool,
 ) int {
-	found, err := readHandoff(stateDir)
+	found, err := verifiedHandoff(ctx, stateDir, client)
 	if err != nil {
-		if errors.Is(err, handoff.ErrSchemaVersion) || errors.Is(err, handoff.ErrProtocolVersion) {
+		if errors.Is(err, handoff.ErrSchemaVersion) || errors.Is(err, handoff.ErrProtocolVersion) || errors.Is(err, errEngineUnproven) {
 			fmt.Fprintf(stderr, "sshc: %v\n", err)
 			return 1
 		}
