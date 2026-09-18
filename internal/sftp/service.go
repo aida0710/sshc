@@ -2,9 +2,6 @@ package sftp
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"fmt"
 	"io"
 	"io/fs"
 	"path"
@@ -163,12 +160,6 @@ func entryFrom(parent string, info fs.FileInfo) Entry {
 		ModifiedAt: info.ModTime().UTC(),
 		Revision:   metadataRevision(info),
 	}
-}
-
-func metadataRevision(info fs.FileInfo) string {
-	hash := sha256.New()
-	_, _ = fmt.Fprintf(hash, "%d\x00%d\x00%d\x00", info.Size(), info.Mode(), info.ModTime().UTC().UnixNano())
-	return "meta-sha256:" + hex.EncodeToString(hash.Sum(nil))
 }
 
 func copyContext(ctx context.Context, destination io.Writer, source io.Reader, maxBytes int64) (int64, error) {

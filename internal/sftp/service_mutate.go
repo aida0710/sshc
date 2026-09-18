@@ -125,7 +125,7 @@ func (s Service) chmod(ctx context.Context, alias, remotePath string, mode fs.Fi
 				if err := ctx.Err(); err != nil {
 					return Entry{}, err
 				}
-				children, err := remote.ReadDir(ctx, directory)
+				children, err := readChildren(ctx, remote, directory)
 				if err != nil {
 					return Entry{}, err
 				}

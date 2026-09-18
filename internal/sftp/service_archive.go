@@ -33,7 +33,7 @@ func (s Service) DownloadArchive(ctx context.Context, alias, remotePath string, 
 		return Transfer{}, ErrNotDirectory
 	}
 	rootName := path.Base(cleaned)
-	if !validArchiveName(rootName) {
+	if !validLocalChildName(rootName) {
 		return Transfer{}, ErrInvalidPath
 	}
 	archive := zip.NewWriter(destination)
@@ -61,7 +61,7 @@ func archiveDirectory(
 	if _, err := archive.CreateHeader(header); err != nil {
 		return err
 	}
-	infos, err := remote.ReadDir(ctx, directory)
+	infos, err := readChildren(ctx, remote, directory)
 	if err != nil {
 		return err
 	}
@@ -73,7 +73,7 @@ func archiveDirectory(
 		if isInternalName(info.Name()) {
 			continue
 		}
-		if !validArchiveName(info.Name()) {
+		if !validLocalChildName(info.Name()) {
 			return ErrInvalidPath
 		}
 		budget.entries++
@@ -149,8 +149,4 @@ func archiveDirectory(
 		}
 	}
 	return nil
-}
-
-func validArchiveName(name string) bool {
-	return name != "" && name != "." && name != ".." && !strings.ContainsAny(name, "/\\\x00")
 }

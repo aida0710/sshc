@@ -775,8 +775,8 @@ func TestCompleteOwnedIsIdempotentAfterResponseLoss(t *testing.T) {
 	if err != nil || replayed.Path != input.RemotePath || replayed.Bytes != 4 {
 		t.Fatalf("replayed complete = %+v, %v", replayed, err)
 	}
-	if len(remote.replacements) != 1 {
-		t.Fatalf("publication count = %d", len(remote.replacements))
+	if len(remote.renames) != 1 {
+		t.Fatalf("publication count = %d", len(remote.renames))
 	}
 }
 
@@ -1007,7 +1007,7 @@ func TestCompleteOwnedCommitsAfterReplaceEvenWhenTargetLstatFails(t *testing.T) 
 		t.Fatal(err)
 	}
 	remote.lstatHook = func(candidate string) error {
-		if candidate == input.RemotePath && len(remote.replacements) > 0 {
+		if candidate == input.RemotePath && len(remote.renames) > 0 {
 			return errors.New("post-publish stat failed")
 		}
 		return nil
@@ -1025,12 +1025,12 @@ func TestCompleteOwnedCommitsAfterReplaceEvenWhenTargetLstatFails(t *testing.T) 
 
 func TestUploadPublicationIsSerializedWithClientControls(t *testing.T) {
 	remote := remoteWith(map[string]node{"/remote": directory("remote")})
-	replaceStarted := make(chan struct{})
-	releaseReplace := make(chan struct{})
+	publishStarted := make(chan struct{})
+	releasePublish := make(chan struct{})
 	var once sync.Once
-	remote.replaceHook = func() {
-		once.Do(func() { close(replaceStarted) })
-		<-releaseReplace
+	remote.renameHook = func() {
+		once.Do(func() { close(publishStarted) })
+		<-releasePublish
 	}
 	manager := sftp.NewTransferManager(&sftp.Service{Open: func(context.Context, string) (sftp.Remote, error) { return remote, nil }})
 	input := sftp.CreateTransferJob{
@@ -1056,7 +1056,7 @@ func TestUploadPublicationIsSerializedWithClientControls(t *testing.T) {
 		_, completeErr := manager.CompleteOwned(t.Context(), input.Alias, input.ID, input.RemotePath, 4, started.ExpectedRevision, fingerprint)
 		completeResult <- completeErr
 	}()
-	<-replaceStarted
+	<-publishStarted
 	pauseResult := make(chan error, 1)
 	go func() {
 		_, pauseErr := manager.UpdateJobFromClient(input.ID, sftp.UpdateTransferJob{Action: sftp.TransferPauseAction})
@@ -1067,7 +1067,7 @@ func TestUploadPublicationIsSerializedWithClientControls(t *testing.T) {
 		t.Fatalf("pause raced publication: %v", err)
 	case <-time.After(25 * time.Millisecond):
 	}
-	close(releaseReplace)
+	close(releasePublish)
 	if err := <-completeResult; err != nil {
 		t.Fatal(err)
 	}
@@ -1183,5 +1183,45 @@ func TestTwoUploadsForTheSameAbsentTargetCannotBothComplete(t *testing.T) {
 	}
 	if _, err := manager.Complete(t.Context(), "edge", second.ID, second.Path, 3, second.ExpectedRevision, transferFingerprint(t, []byte("two"))); !errors.Is(err, sftp.ErrAlreadyExists) {
 		t.Fatalf("second Complete() = %v", err)
+	}
+}
+
+func TestNewUploadIsPublishedWithoutReplacingAFileCreatedMeanwhile(t *testing.T) {
+	remote := remoteWith(map[string]node{"/remote": directory("remote")})
+	manager := sftp.NewTransferManager(&sftp.Service{Open: func(context.Context, string) (sftp.Remote, error) { return remote, nil }})
+	input := sftp.CreateTransferJob{ID: "transfer_racednew1", BatchID: "batch_racednew1", Alias: "edge", Direction: sftp.TransferUpload, Kind: sftp.TransferFile, Name: "file", RemotePath: "/remote/file", TotalBytes: 4}
+	if _, err := manager.CreateJob(input); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.UpdateJob(input.ID, sftp.UpdateTransferJob{Action: sftp.TransferStartAction}); err != nil {
+		t.Fatal(err)
+	}
+	started, err := manager.StartOwned(t.Context(), input.Alias, input.ID, input.RemotePath, sftp.StartUploadOptions{Size: 4})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if started.ExpectedRevision != sftp.AbsentRevision {
+		t.Fatalf("expected revision = %q", started.ExpectedRevision)
+	}
+	if _, err := manager.AppendOwned(t.Context(), input.Alias, input.ID, input.RemotePath, 0, 4, []byte("data")); err != nil {
+		t.Fatal(err)
+	}
+	// Another client creates the same name after the target was verified absent
+	// and before the part is published. A standard rename lets the server refuse
+	// the clobber; posix-rename would silently replace the other client's file.
+	remote.renameHook = func() {
+		if _, exists := remote.nodes[input.RemotePath]; !exists {
+			remote.nodes[input.RemotePath] = file("file", "theirs", 0o644)
+		}
+	}
+	_, err = manager.CompleteOwned(t.Context(), input.Alias, input.ID, input.RemotePath, 4, started.ExpectedRevision, transferFingerprint(t, []byte("data")))
+	if err == nil {
+		t.Fatal("CompleteOwned() succeeded although the target appeared meanwhile")
+	}
+	if got := string(remote.nodes[input.RemotePath].content); got != "theirs" {
+		t.Fatalf("target = %q, want the other client's file to survive", got)
+	}
+	if len(remote.replacements) != 0 {
+		t.Fatalf("new upload used posix-rename: %v", remote.replacements)
 	}
 }
