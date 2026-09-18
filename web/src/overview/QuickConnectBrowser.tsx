@@ -11,6 +11,7 @@ import { control } from "../ui/form";
 import { Segmented } from "../ui/surface";
 import { Icon } from "../ui/icons";
 import { OperatingSystemIcon } from "../ui/OperatingSystemIcon";
+import { readStoredValue, writeStoredValue } from "../ui/browserStorage";
 import { ConnectionActions } from "./ConnectionActions";
 
 type QuickConnectBrowserProps = {
@@ -26,19 +27,11 @@ type QuickConnectView = "panel" | "list";
 const viewStorageKey = "sshc.home.quick-connect-view";
 
 function storedView(): QuickConnectView {
-  try {
-    return window.localStorage.getItem(viewStorageKey) === "list" ? "list" : "panel";
-  } catch {
-    return "panel";
-  }
+  return readStoredValue(viewStorageKey) === "list" ? "list" : "panel";
 }
 
 function rememberView(view: QuickConnectView) {
-  try {
-    window.localStorage.setItem(viewStorageKey, view);
-  } catch {
-    // The launcher still works when storage is unavailable.
-  }
+  writeStoredValue(viewStorageKey, view);
 }
 
 function destination(hostName: string, user: string, port: string): string {

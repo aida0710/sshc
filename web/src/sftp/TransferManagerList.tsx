@@ -6,6 +6,7 @@ import { ModalShell } from "../ui/ModalShell";
 import { useDismissibleLayer } from "../ui/useDismissibleLayer";
 import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
 import { useMenuKeyboard } from "../ui/useMenuKeyboard";
+import { readStoredJSON, writeStoredJSON } from "../ui/browserStorage";
 import { formatBytes as bytes } from "./format";
 import { sftpTransferManager, type ManagedTransferJob } from "./transferManager";
 
@@ -121,25 +122,16 @@ function clampHeight(value: number): number {
 // Desktop size and folded state persist across directories. On mobile, the
 // dock always remains compact and its details open in a separate sheet.
 function restoreView(): QueueView {
-  try {
-    const raw: unknown = JSON.parse(window.localStorage.getItem(viewStorageKey) ?? "{}");
-    const stored = typeof raw === "object" && raw !== null ? raw as Record<string, unknown> : {};
-    const savedHeight = typeof stored.height === "number" ? clampHeight(stored.height) : defaultQueueHeight;
-    return {
-      collapsed: stored.collapsed === undefined ? true : stored.collapsed === true,
-      height: savedHeight,
-    };
-  } catch {
-    return { collapsed: true, height: defaultQueueHeight };
-  }
+  const raw = readStoredJSON(viewStorageKey, {});
+  const stored = typeof raw === "object" && raw !== null ? raw as Record<string, unknown> : {};
+  return {
+    collapsed: stored.collapsed === undefined ? true : stored.collapsed === true,
+    height: typeof stored.height === "number" ? clampHeight(stored.height) : defaultQueueHeight,
+  };
 }
 
 function rememberView(view: QueueView): void {
-  try {
-    window.localStorage.setItem(viewStorageKey, JSON.stringify(view));
-  } catch {
-    // A browser that refuses storage still keeps the size for this session.
-  }
+  writeStoredJSON(viewStorageKey, view);
 }
 
 type DisplayedStatus = ManagedTransferJob["status"] | "reconcile";

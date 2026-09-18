@@ -14,7 +14,8 @@ import {
 } from "../api/config";
 import { type HostSelection } from "./ConnectionTree";
 import { ConnectionListPane } from "./ConnectionListPane";
-import { ColumnResizeHandle, useStoredColumnWidth } from "../ui/ColumnResizeHandle";
+import { ColumnResizeHandle } from "../ui/ColumnResizeHandle";
+import { useStoredColumnWidth, type StoredColumnWidth } from "../ui/useStoredColumnWidth";
 import { MissingConnection, NoConnectionSelected } from "./DetailPlaceholders";
 import { useOverlays, useSaveFeedback, useSelectionState } from "./pageState";
 import type { DragPayload } from "./dragdrop";
@@ -53,12 +54,8 @@ import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
 import { hostDetailApi } from "./HostDetail";
 import { connectionSecretsApi } from "./secretsApi";
 
-// Column widths are browser-local conveniences; the layout still works at
-// the defaults when storage is unavailable.
-const connectionListWidthKey = "sshc.connections.list-width.v1";
-const defaultConnectionListWidth = 400;
-const minimumConnectionListWidth = 256;
-const maximumConnectionListWidth = 720;
+// Wide enough for an alias, host and status on one row; the editor keeps the rest.
+const connectionListWidth: StoredColumnWidth = { key: "sshc.connections.list-width.v1", fallback: 400, minimum: 256, maximum: 720 };
 
 const groupNoticeCodes = new Set([
   "group_not_declared",
@@ -129,9 +126,7 @@ export function ConnectionsPage({
   } = useSelectionState(initialTarget, initialRoute.kind === "invalid");
   const selectionRef = useRef<HostSelection | null>(selection);
   const [detail, setDetail] = useState<HostDetail | null>(null);
-  const [listWidth, setListWidth] = useStoredColumnWidth(
-    connectionListWidthKey, defaultConnectionListWidth, minimumConnectionListWidth, maximumConnectionListWidth,
-  );
+  const [listWidth, setListWidth] = useStoredColumnWidth(connectionListWidth);
   const [savedState, setSavedState] = useState<ConnectionSavedState | null>(null);
   const [refreshState, setRefreshState] = useState<"idle" | "refreshing" | "failed">("idle");
   const [savedRevision, setSavedRevision] = useState(0);
@@ -820,8 +815,8 @@ export function ConnectionsPage({
             <ColumnResizeHandle
               label={t("conn.resizeList")}
               width={listWidth}
-              minimum={minimumConnectionListWidth}
-              maximum={maximumConnectionListWidth}
+              minimum={connectionListWidth.minimum}
+              maximum={connectionListWidth.maximum}
               onWidthChange={setListWidth}
             />
           )}

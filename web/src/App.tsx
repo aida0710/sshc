@@ -26,11 +26,8 @@ import { sectionPath, type Section } from "./routing/sectionRoute";
 import { connectionLocation } from "./routing/connectionRoute";
 import { AppHeader } from "./shell/AppHeader";
 import { AppNavigation } from "./shell/AppNavigation";
-import {
-  clampNavigationWidth,
-  detectNavigationWidth,
-  rememberNavigationWidth,
-} from "./shell/navigationLayout";
+import { navigationWidth } from "./shell/navigationLayout";
+import { useStoredColumnWidth } from "./ui/useStoredColumnWidth";
 import { useSectionRoute } from "./routing/useSectionRoute";
 import { useTerminalSessions } from "./terminal/sessions";
 import { TransferNotifications } from "./sftp/TransferNotifications";
@@ -94,9 +91,7 @@ export function App({
   const [navigationOpen, setNavigationOpen] = useState(false);
   const navigationPanelRef = useRef<HTMLElement>(null);
   const navigationTriggerRef = useRef<HTMLButtonElement>(null);
-  const [desktopNavigationWidth, setDesktopNavigationWidth] = useState(
-    detectNavigationWidth,
-  );
+  const [desktopNavigationWidth, resizeDesktopNavigation] = useStoredColumnWidth(navigationWidth);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [inspector, setInspector] = useState<InspectorContent>(null);
   const inspectorPanelRef = useRef<HTMLElement>(null);
@@ -148,11 +143,6 @@ export function App({
       window.removeEventListener("sshc-android-back", closeTransientUi);
   }, [commandPaletteOpen, inspectorOpen, navigationOpen]);
 
-  function resizeDesktopNavigation(width: number) {
-    const nextWidth = clampNavigationWidth(width);
-    setDesktopNavigationWidth(nextWidth);
-    rememberNavigationWidth(nextWidth);
-  }
   const consoles = useTerminalSessions(terminalSessionsApi, t, state === "ready");
   const closeNavigation = useCallback(() => setNavigationOpen(false), []);
   const terminalWorkspace = useTerminalWorkspaceController({

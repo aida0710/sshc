@@ -1,3 +1,5 @@
+import { readStoredValue, writeStoredValue } from "../ui/browserStorage";
+
 export const locales = ["en", "ja"] as const;
 export type Locale = (typeof locales)[number];
 
@@ -10,11 +12,8 @@ export function isLocale(value: unknown): value is Locale {
 }
 
 export function detectLocale(): Locale {
-  try {
-    const stored = window.localStorage.getItem(storageKey);
-    if (isLocale(stored)) return stored;
-  } catch {
-  }
+  const stored = readStoredValue(storageKey);
+  if (isLocale(stored)) return stored;
   for (const candidate of navigator.languages ?? [navigator.language]) {
     const subtag = candidate.split("-")[0];
     if (isLocale(subtag)) return subtag;
@@ -23,8 +22,5 @@ export function detectLocale(): Locale {
 }
 
 export function rememberLocale(locale: Locale): void {
-  try {
-    window.localStorage.setItem(storageKey, locale);
-  } catch {
-  }
+  writeStoredValue(storageKey, locale);
 }

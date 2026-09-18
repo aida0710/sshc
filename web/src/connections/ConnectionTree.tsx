@@ -1,7 +1,8 @@
 import { Fragment, useId, useMemo, useState, type CSSProperties, type DragEvent, type ReactNode } from "react";
 import type { HostEntry, HostMetadata, Overview } from "../api/config";
 import { useTranslate } from "../i18n/context";
-import { ColumnResizeHandle, useStoredColumnWidth } from "../ui/ColumnResizeHandle";
+import { ColumnResizeHandle } from "../ui/ColumnResizeHandle";
+import { useStoredColumnWidth, type StoredColumnWidth } from "../ui/useStoredColumnWidth";
 import { control } from "../ui/form";
 import { Icon } from "../ui/icons";
 import { OperatingSystemIcon } from "../ui/OperatingSystemIcon";
@@ -98,12 +99,8 @@ function hostBlockIdentity(host: HostEntry): string {
   ]);
 }
 
-// Column widths are browser-local conveniences; the layout still works at
-// the defaults when storage is unavailable.
-export const connectionGroupsWidthKey = "sshc.connections.groups-width.v1";
-export const defaultConnectionGroupsWidth = 144;
-export const minimumConnectionGroupsWidth = 112;
-export const maximumConnectionGroupsWidth = 400;
+// Fits the longest common group name without stealing the list's room.
+const connectionGroupsWidth: StoredColumnWidth = { key: "sshc.connections.groups-width.v1", fallback: 144, minimum: 112, maximum: 400 };
 
 export function ConnectionTree({
   overview,
@@ -113,9 +110,7 @@ export function ConnectionTree({
   movesDisabled = false,
 }: ConnectionTreeProps) {
   const t = useTranslate();
-  const [groupsWidth, setGroupsWidth] = useStoredColumnWidth(
-    connectionGroupsWidthKey, defaultConnectionGroupsWidth, minimumConnectionGroupsWidth, maximumConnectionGroupsWidth,
-  );
+  const [groupsWidth, setGroupsWidth] = useStoredColumnWidth(connectionGroupsWidth);
   const descriptionIdPrefix = useId();
   const [scope, setScope] = useState<Scope>({ kind: "all" });
   const [query, setQuery] = useState("");
@@ -423,8 +418,8 @@ export function ConnectionTree({
         <ColumnResizeHandle
           label={t("conn.resizeGroups")}
           width={groupsWidth}
-          minimum={minimumConnectionGroupsWidth}
-          maximum={maximumConnectionGroupsWidth}
+          minimum={connectionGroupsWidth.minimum}
+          maximum={connectionGroupsWidth.maximum}
           onWidthChange={setGroupsWidth}
           className="hidden lg:flex"
         />
