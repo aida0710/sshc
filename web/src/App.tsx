@@ -52,9 +52,6 @@ import { useAppShortcuts } from "./shell/useAppShortcuts";
 
 const transferReconcileIntervalMs = 2_000;
 
-export { vaultStatePollIntervalMs } from "./session/useAppSession";
-export { resolveOSC52 } from "./shell/TerminalScreen";
-
 type AppProps = {
   bootstrap: () => Promise<SessionState>;
   health: () => Promise<HealthResponse>;

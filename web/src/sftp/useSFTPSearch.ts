@@ -93,4 +93,3 @@ export function useSFTPSearch({
   };
 }
 
-export type SFTPSearchModel = ReturnType<typeof useSFTPSearch>;
