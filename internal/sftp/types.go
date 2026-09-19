@@ -66,7 +66,8 @@ type Entry struct {
 	Revision   string
 	// For a symlink only: the target as the server reports it, and the type
 	// of the entry the chain ends at. TargetType stays empty when the target
-	// cannot be read. Size is then the target's size when that is a file.
+	// cannot be read. Size and ModifiedAt are the target's when it is a file;
+	// Revision stays the link's own, as the mutations that check it do.
 	LinkTarget string
 	TargetType LinkTargetType
 }
@@ -234,6 +235,8 @@ type Remote interface {
 	OpenFile(path string, flags int) (WriteSeekCloser, error)
 	Mkdir(path string) error
 	Chmod(path string, mode fs.FileMode) error
+	// Chtimes sets the modification time, as a transfer keeps the source's.
+	Chtimes(path string, modified time.Time) error
 	Replace(oldPath, newPath string) error
 	Rename(oldPath, newPath string) error
 	Remove(path string) error

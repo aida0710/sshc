@@ -349,7 +349,7 @@ func TestSFTPRecursiveGetPlanHonorsTreeBudgets(t *testing.T) {
 
 			plan := sftpCLIPlan{}
 			budget := test.budget
-			err := walkRemoteGetPlan(t.Context(), testSFTPEngine(server), "server-a", "/root", t.TempDir(), 0, &budget, &plan)
+			err := walkRemoteGetPlan(t.Context(), newRemoteListings(testSFTPEngine(server), "server-a"), "/root", t.TempDir(), 0, &budget, &plan)
 			if !errors.Is(err, errSFTPRecursiveLimit) {
 				t.Fatalf("walk error = %v, want %v", err, errSFTPRecursiveLimit)
 			}
@@ -374,7 +374,7 @@ func TestSFTPRecursiveGetPlanRejectsInvalidSizeAndPath(t *testing.T) {
 
 			plan := sftpCLIPlan{}
 			budget := sftpCLIRecursiveBudget{maxDepth: 64, maxEntries: 10, maxBytes: 100, entries: 1}
-			err := walkRemoteGetPlan(t.Context(), testSFTPEngine(server), "server-a", "/root", t.TempDir(), 0, &budget, &plan)
+			err := walkRemoteGetPlan(t.Context(), newRemoteListings(testSFTPEngine(server), "server-a"), "/root", t.TempDir(), 0, &budget, &plan)
 			if !errors.Is(err, errEngineInvalidResponse) {
 				t.Fatalf("walk error = %v, want %v", err, errEngineInvalidResponse)
 			}

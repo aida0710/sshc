@@ -12,6 +12,7 @@ import (
 	"os"
 	"path"
 	"sort"
+	"time"
 )
 
 // StartOwned chooses sequential or ranged upload from the settings captured by
@@ -733,8 +734,15 @@ func (m *TransferManager) Complete(ctx context.Context, alias, id, remotePath st
 	if err != nil {
 		return Transfer{}, err
 	}
-	if err := remote.Chmod(part, mode); err != nil {
-		return Transfer{}, err
+	if mode.replaceExisting {
+		if err := remote.Chmod(part, mode.perm); err != nil {
+			return Transfer{}, err
+		}
+	}
+	if modified := m.jobLastModified(id); !modified.IsZero() {
+		if err := remote.Chtimes(part, modified); err != nil {
+			return Transfer{}, err
+		}
 	}
 	publishedInfo, err := remote.Lstat(part)
 	if err != nil {
@@ -839,34 +847,54 @@ func expectedTargetRevision(ctx context.Context, remote Remote, target string, o
 	}
 }
 
-func verifyTargetRevision(ctx context.Context, remote Remote, target, expected string) (fs.FileMode, error) {
+// publishedMode is what the published upload's permissions become: those of
+// the file it replaces, or, for a new file, whatever the server gave the part
+// (its umask), as WinSCP leaves it by default.
+type publishedMode struct {
+	replaceExisting bool
+	perm            fs.FileMode
+}
+
+func verifyTargetRevision(ctx context.Context, remote Remote, target, expected string) (publishedMode, error) {
 	info, err := remote.Lstat(target)
 	if expected == AbsentRevision {
 		if errors.Is(err, fs.ErrNotExist) {
-			return 0o600, nil
+			return publishedMode{}, nil
 		}
 		if err != nil {
-			return 0, err
+			return publishedMode{}, err
 		}
-		return 0, ErrAlreadyExists
+		return publishedMode{}, ErrAlreadyExists
 	}
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return 0, ErrConflict
+			return publishedMode{}, ErrConflict
 		}
-		return 0, err
+		return publishedMode{}, err
 	}
 	if !info.Mode().IsRegular() {
-		return 0, ErrConflict
+		return publishedMode{}, ErrConflict
 	}
 	current, revisionErr := targetContentRevision(ctx, remote, target, info)
 	if revisionErr != nil {
-		return 0, revisionErr
+		return publishedMode{}, revisionErr
 	}
 	if current != expected {
-		return 0, ErrConflict
+		return publishedMode{}, ErrConflict
 	}
-	return info.Mode().Perm(), nil
+	return publishedMode{replaceExisting: true, perm: info.Mode().Perm()}, nil
+}
+
+// jobLastModified is the modification time the source had, when the client
+// reported one; the published file is given the same time.
+func (m *TransferManager) jobLastModified(id string) time.Time {
+	m.jobsMutex.Lock()
+	defer m.jobsMutex.Unlock()
+	record := m.jobs[id]
+	if record == nil || record.job.LastModified <= 0 {
+		return time.Time{}
+	}
+	return time.UnixMilli(record.job.LastModified).UTC()
 }
 
 // publishUploadPart は part を target 名へ動かす。新規 file（expected が absent）は
