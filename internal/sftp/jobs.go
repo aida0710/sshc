@@ -9,11 +9,11 @@ import (
 )
 
 const (
-	DefaultTransferConcurrency  = 2
-	MaxTransferConcurrency      = 8
-	DefaultLargeFileThreshold   = int64(100 << 20)
-	MinLargeFileThreshold       = int64(16 << 20)
-	MaxLargeFileThreshold       = int64(1 << 30)
+	DefaultTransferConcurrency = 2
+	MaxTransferConcurrency     = 8
+	DefaultLargeFileThreshold  = int64(100 << 20)
+	MinLargeFileThreshold      = int64(16 << 20)
+	MaxLargeFileThreshold      = int64(1 << 30)
 	// One connection by default: a single pipelined SFTP stream already fills
 	// most links, and a second connection is where hosts with one-time codes,
 	// per-user session caps or slow authentication start to fail. Parallel
