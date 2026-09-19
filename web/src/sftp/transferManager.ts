@@ -11,7 +11,9 @@ export type { ManagedTransferJob, TransferNotice } from "./transferLedger";
 
 const maxTransferJobs = 200;
 const defaultLargeFileThreshold = 100 << 20;
-const defaultLargeFileParallelism = 4;
+// One connection unless the engine settings say otherwise; see the engine's
+// DefaultLargeFileParallelism for why.
+const defaultLargeFileParallelism = 1;
 const defaultLargeFileChunkBytes = 32 << 20;
 // How long a job waits after the engine refused to start it.
 const retryDelayMs = 500;
