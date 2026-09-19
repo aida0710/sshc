@@ -58,8 +58,8 @@ func TestListingSaysWhereEachSymlinkPointsAndWhatItIs(t *testing.T) {
 		if got.Type != sftp.EntrySymlink || got.LinkTarget != want.linkTarget || got.TargetType != want.targetType {
 			t.Errorf("%s = type %q link %q target %q, want symlink to %q of type %q", want.name, got.Type, got.LinkTarget, got.TargetType, want.linkTarget, want.targetType)
 		}
-		if want.size != 0 && got.Size != want.size {
-			t.Errorf("%s size = %d, want %d", want.name, got.Size, want.size)
+		if want.size != 0 && (got.Size != want.size || !got.ModifiedAt.Equal(byName["notes.txt"].ModifiedAt)) {
+			t.Errorf("%s size, modified = %d, %s; want the file's %d, %s", want.name, got.Size, got.ModifiedAt, want.size, byName["notes.txt"].ModifiedAt)
 		}
 	}
 	if got := byName["notes.txt"]; got.LinkTarget != "" || got.TargetType != "" {

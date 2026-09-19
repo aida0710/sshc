@@ -30,6 +30,8 @@ On desktop, drag a tab onto the file list to split the view into two panes. With
 
 Drag files or folders from the currently visible tab on one side to the visible tab on the other. Between two hosts you choose copy or move; a drop into another directory of the same host moves, as it does in a desktop file manager, and a drop back into the directory the rows came from does nothing. Data streams directly between the two SFTP connections without a plaintext local spool file. A move within the same connection uses a server-side rename when possible.
 
+An uploaded file is given the modification time of its source (browser uploads, the CLI's `put`, host-to-host copies and transfers with the engine's disk). A newly created file gets the server's default permissions (its umask); a replaced file keeps its own.
+
 Symlinks are listed as `name → target`. A link to a directory opens as that directory; a link to a file is what details, preview, edit and download act on. Saving an edited file rewrites the file the link points to and leaves the link in place. A link whose target cannot be found is marked `(not found)` and cannot be opened. Copy, move, delete, compare and transfers with the engine's disk take the link itself and never follow it.
 
 ![The two-pane SFTP view with independent tabs on each side](/images/sftp-two-pane-en.png)

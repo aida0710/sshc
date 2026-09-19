@@ -32,10 +32,14 @@ var (
 	errSFTPRecursiveRequired = errors.New("recursive transfer requires --recursive")
 	errSFTPExisting          = errors.New("destination already exists")
 	errSFTPTypeMismatch      = errors.New("source and destination types do not match")
-	errSFTPUnsupportedLocal  = errors.New("local source contains an unsupported file type")
-	errSFTPMissingRevision   = errors.New("download response has no revision")
-	errSFTPRemotePath        = errors.New("remote path must be absolute")
-	errSFTPRecursiveLimit    = errors.New("recursive download safety limit exceeded")
+	errSFTPUnsupportedLocal  = errors.New("the source is neither a file nor a directory")
+	// The remote directory a single file was to be put into does not exist. A
+	// recursive put creates the directories it needs; a single file does not
+	// guess at a directory the person may have mistyped.
+	errSFTPRemoteDirectoryMissing = errors.New("the remote directory does not exist")
+	errSFTPMissingRevision        = errors.New("download response has no revision")
+	errSFTPRemotePath             = errors.New("remote path must be absolute")
+	errSFTPRecursiveLimit         = errors.New("recursive download safety limit exceeded")
 )
 
 type sftpCLIEntry struct {
@@ -46,6 +50,11 @@ type sftpCLIEntry struct {
 	Mode       string `json:"mode"`
 	ModifiedAt string `json:"modifiedAt"`
 	Revision   string `json:"revision"`
+	// Symlinks only: where the link points and what kind of entry that is.
+	// The engine follows the link for reads, so a link to a file transfers
+	// as that file and a link to a directory lists as that directory.
+	LinkTarget string `json:"linkTarget,omitempty"`
+	TargetType string `json:"targetType,omitempty"`
 }
 
 type sftpCLIListing struct {
@@ -294,6 +303,8 @@ func finishSFTPFailure(asJSON bool, err error, stdout, stderr io.Writer) int {
 		failure = commandFailure{Kind: "type_mismatch", Retryable: false}
 	case errors.Is(err, errSFTPUnsupportedLocal):
 		failure = commandFailure{Kind: "unsupported_file_type", Retryable: false}
+	case errors.Is(err, errSFTPRemoteDirectoryMissing):
+		failure = commandFailure{Kind: "remote_directory_missing", Retryable: false}
 	case errors.Is(err, errSFTPRemotePath):
 		failure = commandFailure{Kind: "invalid_remote_path", Retryable: false}
 	case errors.Is(err, errSFTPRecursiveLimit):
@@ -323,7 +334,9 @@ func finishSFTPFailure(asJSON bool, err error, stdout, stderr io.Writer) int {
 	case "type_mismatch":
 		fmt.Fprintln(stderr, "sshc: a file and directory occupy the same destination path")
 	case "unsupported_file_type":
-		fmt.Fprintln(stderr, "sshc: symlinks and special files are not transferred")
+		fmt.Fprintf(stderr, "sshc: %v; only files and directories (and links to them) are transferred\n", err)
+	case "remote_directory_missing":
+		fmt.Fprintf(stderr, "sshc: %v; create it first or put a directory with --recursive\n", err)
 	case "invalid_remote_path":
 		fmt.Fprintln(stderr, "sshc: remote paths must be absolute POSIX paths")
 	case "recursive_limit":

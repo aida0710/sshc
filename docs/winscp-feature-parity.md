@@ -96,6 +96,7 @@ sshcのSFTPは、安全なアップロード／ダウンロード、フォルダ
 | file download | 対応 | revision固定、Range resume | 維持 |
 | folder download | 対応 | symlinkを追わないZIP | ZIP resumeは未対応 |
 | upload/download後にsourceを削除（move transfer） | 未対応 | copy transferのみ | 完了確認後だけsource削除するjobとして追加 |
+| symlinkの転送 | 部分 | CLIのput／getはリンク先として転送し、ディレクトリへのリンクは中身ごと送る。壊れたリンクは飛ばす。Webのhost間copy／engine diskとの転送はリンクを対象外にする | Webの転送でも最上位のリンクだけ辿るかを判断 |
 | remote内copy／duplicate | 対応 | 2ペイン間のcopyに加え、現在directoryで名前を指定した複製に対応 | 維持 |
 | remote内move to | 対応 | rename、2ペイン間のmove、絶対pathを指定した複数項目のmoveに対応 | directory pickerは必要性に応じて追加 |
 | rename | 対応 | 単一選択 | 維持 |
@@ -157,8 +158,8 @@ sshcのSFTPは、安全なアップロード／ダウンロード、フォルダ
 | text／automatic transfer mode | 未対応 | newline／encoding変換なし | 誤変換防止のため明示設定だけ検討 |
 | filename case変換 | 未対応 | 元名を保持 | operation maskと合わせて追加 |
 | invalid filename置換 | 未対応 | 保存先browser/OSに委ねる | local panel導入時 |
-| upload時permission設定 | 未対応 | server default、上書き時は既存modeを維持 | transfer optionへ追加 |
-| timestamp保持 | 未対応 | upload/downloadともmtimeを復元しない | P1 |
+| upload時permission設定 | 部分 | 新規fileはserver default（umask）、上書き時は既存modeを維持。2026-09-19までは新規fileを0600にしていた | 転送optionとしての指定は未対応 |
+| timestamp保持 | 対応 | upload（Web、CLI）、CLIのget、host間copy、engine disk↔hostのput／getで元のmtimeを付ける。browserへのdownloadだけはbrowserの保存に委ねる | 維持 |
 | directory timestamp保持 | 未対応 | なし | file timestamp後 |
 | downloaded read-only保持 | 未対応 | browser保存に委ねる | native local panel導入時 |
 | permission error無視 | 未対応 | job failure | optionとして明示する場合のみ追加 |
