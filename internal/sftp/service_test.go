@@ -104,6 +104,9 @@ type fakeRemote struct {
 	removeErr    error
 	removeHook   func(string)
 	writeErr     error
+	// tornWriteErr makes a seekable write land every byte and still report
+	// failure after half of them, the way a pipelined SFTP write fails.
+	tornWriteErr error
 	createHook   func()
 	openHook     func(string)
 	lstatHook    func(string) error
@@ -330,6 +333,9 @@ func (w *fakeSeekWriter) Write(contents []byte) (int, error) {
 	}
 	copy(w.contents[w.offset:end], contents)
 	w.offset = end
+	if w.remote.tornWriteErr != nil {
+		return len(contents) / 2, w.remote.tornWriteErr
+	}
 	return len(contents), nil
 }
 

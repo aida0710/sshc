@@ -597,6 +597,40 @@ func TestResumableUploadAppendsFromRemoteOffsetAndCompletesAtomically(t *testing
 	}
 }
 
+func TestAFailedAppendCutsThePartBackToTheAcknowledgedOffset(t *testing.T) {
+	remote := remoteWith(map[string]node{"/remote": directory("remote")})
+	manager := sftp.NewTransferManager(&sftp.Service{
+		Open: func(context.Context, string) (sftp.Remote, error) { return remote, nil },
+	})
+	started, err := manager.Start(t.Context(), "edge", "transfer_torn0001", "/remote/torn.bin", sftp.StartUploadOptions{Size: 9})
+	if err != nil {
+		t.Fatalf("Start() = %v", err)
+	}
+	if _, err := manager.Append(t.Context(), "edge", started.ID, started.Path, 0, 9, []byte("large")); err != nil {
+		t.Fatalf("Append(first) = %v", err)
+	}
+	// Pipelined writes can put bytes past the failure on the host. They must
+	// not count: the part ends where the last acknowledged append ended.
+	remote.tornWriteErr = errors.New("connection lost mid-write")
+	if _, err := manager.Append(t.Context(), "edge", started.ID, started.Path, 5, 9, []byte("file")); err == nil {
+		t.Fatal("Append(torn) succeeded")
+	}
+	remote.tornWriteErr = nil
+	resumed, err := manager.Start(t.Context(), "edge", started.ID, started.Path, sftp.StartUploadOptions{Size: 9, ExpectedRevision: sftp.AbsentRevision})
+	if err != nil || resumed.Offset != 5 {
+		t.Fatalf("Start(resume) = %+v, %v", resumed, err)
+	}
+	if _, err := manager.Append(t.Context(), "edge", started.ID, started.Path, 5, 9, []byte("file")); err != nil {
+		t.Fatalf("Append(retry) = %v", err)
+	}
+	if _, err := manager.Complete(t.Context(), "edge", started.ID, started.Path, 9, sftp.AbsentRevision, transferFingerprint(t, []byte("largefile"))); err != nil {
+		t.Fatalf("Complete() = %v", err)
+	}
+	if got := string(remote.nodes["/remote/torn.bin"].content); got != "largefile" {
+		t.Fatalf("target contents = %q", got)
+	}
+}
+
 func TestResumableUploadReusesOneSFTPConnectionAcrossChunks(t *testing.T) {
 	remote := remoteWith(map[string]node{"/remote": directory("remote")})
 	opens := 0
