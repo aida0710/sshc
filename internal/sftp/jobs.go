@@ -14,7 +14,11 @@ const (
 	DefaultLargeFileThreshold   = int64(100 << 20)
 	MinLargeFileThreshold       = int64(16 << 20)
 	MaxLargeFileThreshold       = int64(1 << 30)
-	DefaultLargeFileParallelism = 4
+	// One connection by default: a single pipelined SFTP stream already fills
+	// most links, and a second connection is where hosts with one-time codes,
+	// per-user session caps or slow authentication start to fail. Parallel
+	// ranges are opted into per engine or per CLI run.
+	DefaultLargeFileParallelism = 1
 	MaxLargeFileParallelism     = 128
 	DefaultLargeFileChunkBytes  = int64(32 << 20)
 	MinLargeFileChunkBytes      = int64(8 << 20)
