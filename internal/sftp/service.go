@@ -15,6 +15,23 @@ type Service struct {
 	Open OpenRemote
 	// TemporaryPath はテスト時に差し替える。本番では対象と同じディレクトリへ予測不能な名前を作る。
 	TemporaryPath func(target string) (string, error)
+	// ConnectionLimit says how many SFTP connections may be open to a host at
+	// once, or 0 for no limit. A host that authenticates with a one-time code
+	// allows one: a second connection in the same window presents a code the
+	// server has already accepted, and is refused.
+	ConnectionLimit func(alias string) int
+}
+
+// boundedParallelism trims the parallel connections a transfer asked for to
+// what the host allows.
+func (s Service) boundedParallelism(alias string, requested int) int {
+	if s.ConnectionLimit == nil {
+		return requested
+	}
+	if limit := s.ConnectionLimit(alias); limit > 0 && limit < requested {
+		return limit
+	}
+	return requested
 }
 
 const (
