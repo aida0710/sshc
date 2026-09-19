@@ -357,6 +357,9 @@ func (s Service) putLocal(ctx context.Context, root *os.Root, remote Remote, sou
 	if err != nil || metadataRevision(info) != metadataRevision(after) {
 		return ErrConflict
 	}
+	if err := remote.Chtimes(temporary, info.ModTime()); err != nil {
+		return err
+	}
 	if overwrite {
 		return remote.Replace(temporary, target)
 	}
@@ -437,6 +440,9 @@ func (s Service) getLocal(ctx context.Context, remote Remote, root *os.Root, sou
 	after, err := remote.Lstat(source)
 	if err != nil || metadataRevision(info) != metadataRevision(after) {
 		return ErrConflict
+	}
+	if err := root.Chtimes(temporary, info.ModTime(), info.ModTime()); err != nil {
+		return err
 	}
 	current, err := checkLocal(root, target, true)
 	if err != nil {

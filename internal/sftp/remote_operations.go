@@ -426,6 +426,9 @@ func (c *remoteCopy) copyFile(ctx context.Context, sourcePath, targetPath string
 	if err := c.target.Chmod(temporary, before.Mode().Perm()); err != nil {
 		return err
 	}
+	if err := c.target.Chtimes(temporary, before.ModTime()); err != nil {
+		return err
+	}
 	after, err := c.source.Lstat(sourcePath)
 	if err != nil || metadataRevision(before) != metadataRevision(after) {
 		return ErrConflict

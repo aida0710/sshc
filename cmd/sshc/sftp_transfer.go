@@ -22,7 +22,14 @@ import (
 	sftpcore "sshc/internal/sftp"
 )
 
+func reportSkippedEntries(plan sftpCLIPlan, stderr io.Writer) {
+	for _, skipped := range plan.SkippedPaths {
+		fmt.Fprintf(stderr, "skip %s: %s\n", skipped.Path, skipped.Reason)
+	}
+}
+
 func executeSFTPGet(ctx context.Context, engine *engineAPI, plan sftpCLIPlan, called sftpInvocation, stderr io.Writer) error {
+	reportSkippedEntries(plan, stderr)
 	for _, directory := range plan.Directories {
 		if err := os.MkdirAll(directory, 0o700); err != nil {
 			return err
@@ -43,6 +50,7 @@ func executeSFTPGet(ctx context.Context, engine *engineAPI, plan sftpCLIPlan, ca
 }
 
 func executeSFTPPut(ctx context.Context, engine *engineAPI, plan sftpCLIPlan, called sftpInvocation, stderr io.Writer) error {
+	reportSkippedEntries(plan, stderr)
 	for _, directory := range plan.Directories {
 		if err := sftpEnsureRemoteDirectory(ctx, engine, plan.Alias, directory); err != nil {
 			return err
@@ -187,6 +195,13 @@ func sftpDownloadFile(
 		if _, err := os.Lstat(file.Destination); err == nil {
 			return errSFTPExisting
 		} else if !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+	}
+	// The copy keeps the time the remote file had, as WinSCP does by default.
+	if file.ModifiedUnix > 0 {
+		modified := time.UnixMilli(file.ModifiedUnix)
+		if err := os.Chtimes(temporaryName, modified, modified); err != nil {
 			return err
 		}
 	}

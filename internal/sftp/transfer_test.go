@@ -631,6 +631,44 @@ func TestAFailedAppendCutsThePartBackToTheAcknowledgedOffset(t *testing.T) {
 	}
 }
 
+func TestAPublishedUploadKeepsTheSourceTimeAndTheServerDefaultMode(t *testing.T) {
+	remote := remoteWith(map[string]node{"/remote": directory("remote")})
+	manager := sftp.NewTransferManager(&sftp.Service{
+		Open: func(context.Context, string) (sftp.Remote, error) { return remote, nil },
+	})
+	modified := time.Date(2020, 1, 2, 3, 4, 5, 0, time.UTC)
+	input := sftp.CreateTransferJob{
+		ID: "transfer_stamped01", BatchID: "batch_stamped01", Alias: "edge", Direction: sftp.TransferUpload,
+		Kind: sftp.TransferFile, Name: "stamped.bin", RemotePath: "/remote/stamped.bin", TotalBytes: 4, LastModified: modified.UnixMilli(),
+	}
+	if _, err := manager.CreateJob(input); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.UpdateJob(input.ID, sftp.UpdateTransferJob{Action: sftp.TransferStartAction}); err != nil {
+		t.Fatal(err)
+	}
+	fingerprint := transferFingerprint(t, []byte("data"))
+	started, err := manager.StartOwned(t.Context(), "edge", input.ID, input.RemotePath, sftp.StartUploadOptions{Size: 4, SourceFingerprint: fingerprint})
+	if err != nil {
+		t.Fatalf("StartOwned() = %v", err)
+	}
+	if _, err := manager.AppendOwned(t.Context(), "edge", started.ID, started.Path, 0, 4, []byte("data")); err != nil {
+		t.Fatalf("AppendOwned() = %v", err)
+	}
+	if _, err := manager.CompleteOwned(t.Context(), "edge", started.ID, started.Path, 4, started.ExpectedRevision, fingerprint); err != nil {
+		t.Fatalf("CompleteOwned() = %v", err)
+	}
+	published := remote.nodes["/remote/stamped.bin"]
+	if !published.modTime.Equal(modified) {
+		t.Fatalf("published modified = %s, want the source's %s", published.modTime, modified)
+	}
+	// A new file keeps whatever mode the server gave the part (its umask),
+	// as WinSCP leaves it; only a replaced file inherits the old mode.
+	if published.mode.Perm() != 0o666 {
+		t.Fatalf("published mode = %o, want the server default 0666", published.mode.Perm())
+	}
+}
+
 func TestResumableUploadReusesOneSFTPConnectionAcrossChunks(t *testing.T) {
 	remote := remoteWith(map[string]node{"/remote": directory("remote")})
 	opens := 0

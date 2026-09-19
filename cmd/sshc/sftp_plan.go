@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 )
 
 type sftpCLIRecursiveLimitError struct {
@@ -41,7 +42,90 @@ type sftpCLIPlan struct {
 	Directories []string
 	Files       []sftpCLIFile
 	Skipped     int
-	Bytes       int64
+	// Entries left out of a recursive transfer and why: a link whose target
+	// is missing, or something that is neither a file nor a directory.
+	SkippedPaths []sftpCLISkip
+	Bytes        int64
+}
+
+type sftpCLISkip struct {
+	Path   string
+	Reason string
+}
+
+func (plan *sftpCLIPlan) skip(entryPath, reason string) {
+	plan.Skipped++
+	plan.SkippedPaths = append(plan.SkippedPaths, sftpCLISkip{Path: entryPath, Reason: reason})
+}
+
+// opensAs is what a remote entry behaves as when transferred: a symlink
+// stands in for what it points to, because the engine follows links when it
+// reads. An empty result is something that cannot be transferred.
+func (entry sftpCLIEntry) opensAs() string {
+	switch entry.Type {
+	case "file", "directory":
+		return entry.Type
+	case "symlink":
+		if entry.TargetType == "file" || entry.TargetType == "directory" {
+			return entry.TargetType
+		}
+	}
+	return ""
+}
+
+// remoteListings remembers each remote directory listed while a plan is
+// built, so that a directory of a thousand files is listed once rather than
+// once per file.
+type remoteListings struct {
+	engine      *engineAPI
+	alias       string
+	byDirectory map[string]sftpCLIListing
+	failures    map[string]error
+}
+
+func newRemoteListings(engine *engineAPI, alias string) *remoteListings {
+	return &remoteListings{engine: engine, alias: alias, byDirectory: map[string]sftpCLIListing{}, failures: map[string]error{}}
+}
+
+func (listings *remoteListings) list(ctx context.Context, directory string) (sftpCLIListing, error) {
+	if listing, ok := listings.byDirectory[directory]; ok {
+		return listing, nil
+	}
+	if err, ok := listings.failures[directory]; ok {
+		return sftpCLIListing{}, err
+	}
+	// Nothing exists below a directory that does not exist; a put into a new
+	// tree would otherwise ask about every directory it is about to create.
+	if parent := path.Dir(directory); parent != directory {
+		if err, ok := listings.failures[parent]; ok && sftpIsNotFound(err) {
+			listings.failures[directory] = err
+			return sftpCLIListing{}, err
+		}
+	}
+	listing, err := sftpList(ctx, listings.engine, listings.alias, directory)
+	if err != nil {
+		listings.failures[directory] = err
+		return sftpCLIListing{}, err
+	}
+	listings.byDirectory[directory] = listing
+	return listing, nil
+}
+
+func (listings *remoteListings) stat(ctx context.Context, remotePath string) (sftpCLIEntry, error) {
+	cleaned := path.Clean(remotePath)
+	if cleaned == "/" {
+		return sftpCLIEntry{Name: "/", Path: "/", Type: "directory"}, nil
+	}
+	listing, err := listings.list(ctx, path.Dir(cleaned))
+	if err != nil {
+		return sftpCLIEntry{}, err
+	}
+	for _, entry := range listing.Entries {
+		if entry.Path == cleaned {
+			return entry, nil
+		}
+	}
+	return sftpCLIEntry{}, engineProblem{Status: http.StatusNotFound, Code: "sftp_not_found"}
 }
 
 type sftpCLIRecursiveBudget struct {
@@ -81,7 +165,7 @@ func (budget *sftpCLIRecursiveBudget) include(entry sftpCLIEntry, depth int) err
 		return sftpCLIRecursiveLimitError{resource: "entries", limit: int64(budget.maxEntries)}
 	}
 	budget.entries++
-	if entry.Type != "file" {
+	if entry.opensAs() != "file" {
 		return nil
 	}
 	if entry.Size < 0 {
@@ -112,7 +196,7 @@ func buildSFTPGetPlan(ctx context.Context, engine *engineAPI, called sftpInvocat
 	if localErr != nil && !errors.Is(localErr, fs.ErrNotExist) {
 		return plan, localErr
 	}
-	if source.Type == "file" {
+	if source.opensAs() == "file" {
 		if localExists && info.IsDir() {
 			destination = filepath.Join(destination, source.Name)
 		}
@@ -121,12 +205,12 @@ func buildSFTPGetPlan(ctx context.Context, engine *engineAPI, called sftpInvocat
 			return plan, err
 		}
 		plan.Destination = destination
-		plan.Files = []sftpCLIFile{{Source: source.Path, Destination: destination, Size: source.Size, Exists: exists}}
+		plan.Files = []sftpCLIFile{{Source: source.Path, Destination: destination, Size: source.Size, ModifiedUnix: modifiedUnix(source), Exists: exists}}
 		plan.Bytes = source.Size
 		return plan, nil
 	}
-	if source.Type != "directory" {
-		return plan, errSFTPUnsupportedLocal
+	if source.opensAs() != "directory" {
+		return plan, fmt.Errorf("%w: %s", errSFTPUnsupportedLocal, source.Path)
 	}
 	if !called.Recursive {
 		return plan, errSFTPRecursiveRequired
@@ -141,21 +225,32 @@ func buildSFTPGetPlan(ctx context.Context, engine *engineAPI, called sftpInvocat
 	plan.Destination = root
 	plan.Directories = append(plan.Directories, root)
 	budget := recursiveSFTPCLIBudget(called)
-	if err := walkRemoteGetPlan(ctx, engine, called.Alias, source.Path, root, 0, &budget, &plan); err != nil {
+	listings := newRemoteListings(engine, called.Alias)
+	if err := walkRemoteGetPlan(ctx, listings, source.Path, root, 0, &budget, &plan); err != nil {
 		return plan, err
 	}
 	return plan, nil
 }
 
+// modifiedUnix is the entry's modification time in milliseconds, or 0 when
+// the engine gave none, so the local copy can be given the same time.
+func modifiedUnix(entry sftpCLIEntry) int64 {
+	modified, err := time.Parse(time.RFC3339Nano, entry.ModifiedAt)
+	if err != nil || modified.IsZero() {
+		return 0
+	}
+	return modified.UnixMilli()
+}
+
 func walkRemoteGetPlan(
 	ctx context.Context,
-	engine *engineAPI,
-	alias, remoteRoot, localRoot string,
+	listings *remoteListings,
+	remoteRoot, localRoot string,
 	depth int,
 	budget *sftpCLIRecursiveBudget,
 	plan *sftpCLIPlan,
 ) error {
-	listing, err := sftpList(ctx, engine, alias, remoteRoot)
+	listing, err := listings.list(ctx, remoteRoot)
 	if err != nil {
 		return err
 	}
@@ -167,32 +262,40 @@ func walkRemoteGetPlan(
 		if entry.Path != path.Join(remoteRoot, entry.Name) {
 			return errEngineInvalidResponse
 		}
-		if err := budget.include(entry, depth+1); err != nil {
-			return err
-		}
 		target := filepath.Join(localRoot, entry.Name)
-		switch entry.Type {
+		switch entry.opensAs() {
 		case "directory":
+			if err := budget.include(entry, depth+1); err != nil {
+				return err
+			}
 			if info, err := os.Lstat(target); err == nil && !info.IsDir() {
 				return errSFTPTypeMismatch
 			} else if err != nil && !errors.Is(err, fs.ErrNotExist) {
 				return err
 			}
 			plan.Directories = append(plan.Directories, target)
-			if err := walkRemoteGetPlan(ctx, engine, alias, entry.Path, target, depth+1, budget, plan); err != nil {
+			if err := walkRemoteGetPlan(ctx, listings, entry.Path, target, depth+1, budget, plan); err != nil {
 				return err
 			}
 		case "file":
+			if err := budget.include(entry, depth+1); err != nil {
+				return err
+			}
 			exists, err := localFileConflict(target)
 			if err != nil {
 				return err
 			}
-			plan.Files = append(plan.Files, sftpCLIFile{Source: entry.Path, Destination: target, Size: entry.Size, Exists: exists})
+			plan.Files = append(plan.Files, sftpCLIFile{Source: entry.Path, Destination: target, Size: entry.Size, ModifiedUnix: modifiedUnix(entry), Exists: exists})
 			plan.Bytes += entry.Size
-		case "symlink", "other":
-			return fmt.Errorf("%w: %s", errSFTPUnsupportedLocal, entry.Path)
 		default:
-			return errEngineInvalidResponse
+			switch entry.Type {
+			case "symlink":
+				plan.skip(entry.Path, "the link target cannot be read")
+			case "other":
+				plan.skip(entry.Path, "not a file or a directory")
+			default:
+				return errEngineInvalidResponse
+			}
 		}
 	}
 	return nil
@@ -206,31 +309,40 @@ func buildSFTPPutPlan(ctx context.Context, engine *engineAPI, called sftpInvocat
 	if err != nil {
 		return sftpCLIPlan{}, err
 	}
-	info, err := os.Lstat(source)
+	// A symlink given on the command line is followed, as WinSCP and scp do.
+	info, err := os.Stat(source)
 	if err != nil {
 		return sftpCLIPlan{}, err
 	}
-	if info.Mode()&os.ModeSymlink != 0 || (!info.Mode().IsRegular() && !info.IsDir()) {
-		return sftpCLIPlan{}, errSFTPUnsupportedLocal
+	if !info.Mode().IsRegular() && !info.IsDir() {
+		return sftpCLIPlan{}, fmt.Errorf("%w: %s", errSFTPUnsupportedLocal, source)
 	}
 	destination := path.Clean(called.Destination)
-	remoteDestination, remoteErr := sftpRemoteStat(ctx, engine, called.Alias, destination)
+	listings := newRemoteListings(engine, called.Alias)
+	remoteDestination, remoteErr := listings.stat(ctx, destination)
 	remoteExists := remoteErr == nil
 	if remoteErr != nil && !sftpIsNotFound(remoteErr) {
 		return sftpCLIPlan{}, remoteErr
 	}
 	plan := sftpCLIPlan{Action: "put", Alias: called.Alias, Source: source, Destination: destination}
 	if info.Mode().IsRegular() {
-		if remoteExists && remoteDestination.Type == "directory" {
+		if remoteExists && remoteDestination.opensAs() == "directory" {
 			destination = path.Join(destination, filepath.Base(source))
-			remoteDestination, remoteErr = sftpRemoteStat(ctx, engine, called.Alias, destination)
+			remoteDestination, remoteErr = listings.stat(ctx, destination)
 			remoteExists = remoteErr == nil
 			if remoteErr != nil && !sftpIsNotFound(remoteErr) {
 				return plan, remoteErr
 			}
 		}
-		if remoteExists && remoteDestination.Type != "file" {
+		if remoteExists && remoteDestination.opensAs() != "file" {
 			return plan, errSFTPTypeMismatch
+		}
+		if !remoteExists {
+			if _, err := listings.stat(ctx, path.Dir(destination)); sftpIsNotFound(err) {
+				return plan, fmt.Errorf("%w: %s", errSFTPRemoteDirectoryMissing, path.Dir(destination))
+			} else if err != nil {
+				return plan, err
+			}
 		}
 		plan.Destination = destination
 		plan.Files = []sftpCLIFile{{Source: source, Destination: destination, Size: info.Size(), ModifiedUnix: info.ModTime().UnixMilli(), Exists: remoteExists}}
@@ -242,55 +354,87 @@ func buildSFTPPutPlan(ctx context.Context, engine *engineAPI, called sftpInvocat
 	}
 	root := destination
 	if remoteExists {
-		if remoteDestination.Type != "directory" {
+		if remoteDestination.opensAs() != "directory" {
 			return plan, errSFTPTypeMismatch
 		}
 		root = path.Join(destination, filepath.Base(source))
 	}
 	plan.Destination = root
 	plan.Directories = append(plan.Directories, root)
-	err = filepath.WalkDir(source, func(localPath string, entry fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if localPath == source {
-			return nil
-		}
-		relative, err := filepath.Rel(source, localPath)
+	walk := localPutWalk{ctx: ctx, listings: listings, plan: &plan, ancestors: map[string]bool{}}
+	if err := walk.directory(source, root, 0); err != nil {
+		return plan, err
+	}
+	return plan, nil
+}
+
+// localPutWalk collects a local tree for upload. Symlinks are followed, as
+// WinSCP and scp do, so a linked directory is uploaded under the link's name
+// too; only a link back into a directory being walked is skipped, because it
+// would never end. A link whose target is missing is skipped rather than
+// failing the tree.
+type localPutWalk struct {
+	ctx      context.Context
+	listings *remoteListings
+	plan     *sftpCLIPlan
+	// The resolved paths of the directories above the one being walked.
+	ancestors map[string]bool
+}
+
+func (walk *localPutWalk) directory(localDirectory, remoteDirectory string, depth int) error {
+	if depth > sftpCLIMaxRecursiveDepth {
+		return sftpCLIRecursiveLimitError{resource: "depth", limit: int64(sftpCLIMaxRecursiveDepth)}
+	}
+	resolved, err := filepath.EvalSymlinks(localDirectory)
+	if err != nil {
+		return err
+	}
+	if walk.ancestors[resolved] {
+		walk.plan.skip(localDirectory, "a link back into a directory being uploaded")
+		return nil
+	}
+	walk.ancestors[resolved] = true
+	defer delete(walk.ancestors, resolved)
+	entries, err := os.ReadDir(localDirectory)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		localPath := filepath.Join(localDirectory, entry.Name())
+		remotePath := path.Join(remoteDirectory, entry.Name())
+		info, err := os.Stat(localPath)
 		if err != nil {
+			if entry.Type()&os.ModeSymlink != 0 && errors.Is(err, fs.ErrNotExist) {
+				walk.plan.skip(localPath, "the link target does not exist")
+				continue
+			}
 			return err
 		}
-		remotePath := path.Join(root, filepath.ToSlash(relative))
-		entryInfo, err := entry.Info()
-		if err != nil {
-			return err
-		}
-		if entryInfo.Mode()&os.ModeSymlink != 0 {
-			return fmt.Errorf("%w: %s", errSFTPUnsupportedLocal, localPath)
-		}
-		remoteEntry, statErr := sftpRemoteStat(ctx, engine, called.Alias, remotePath)
+		remoteEntry, statErr := walk.listings.stat(walk.ctx, remotePath)
 		exists := statErr == nil
 		if statErr != nil && !sftpIsNotFound(statErr) {
 			return statErr
 		}
-		if entry.IsDir() {
-			if exists && remoteEntry.Type != "directory" {
+		switch {
+		case info.IsDir():
+			if exists && remoteEntry.opensAs() != "directory" {
 				return errSFTPTypeMismatch
 			}
-			plan.Directories = append(plan.Directories, remotePath)
-			return nil
+			walk.plan.Directories = append(walk.plan.Directories, remotePath)
+			if err := walk.directory(localPath, remotePath, depth+1); err != nil {
+				return err
+			}
+		case info.Mode().IsRegular():
+			if exists && remoteEntry.opensAs() != "file" {
+				return errSFTPTypeMismatch
+			}
+			walk.plan.Files = append(walk.plan.Files, sftpCLIFile{Source: localPath, Destination: remotePath, Size: info.Size(), ModifiedUnix: info.ModTime().UnixMilli(), Exists: exists})
+			walk.plan.Bytes += info.Size()
+		default:
+			walk.plan.skip(localPath, "not a file or a directory")
 		}
-		if !entryInfo.Mode().IsRegular() {
-			return fmt.Errorf("%w: %s", errSFTPUnsupportedLocal, localPath)
-		}
-		if exists && remoteEntry.Type != "file" {
-			return errSFTPTypeMismatch
-		}
-		plan.Files = append(plan.Files, sftpCLIFile{Source: localPath, Destination: remotePath, Size: entryInfo.Size(), ModifiedUnix: entryInfo.ModTime().UnixMilli(), Exists: exists})
-		plan.Bytes += entryInfo.Size()
-		return nil
-	})
-	return plan, err
+	}
+	return nil
 }
 
 func transferableSFTPFiles(files []sftpCLIFile, skipExisting bool) []sftpCLIFile {

@@ -173,6 +173,16 @@ func (r *fakeRemote) Lstat(candidate string) (fs.FileInfo, error) {
 	return info, nil
 }
 
+func (r *fakeRemote) Chtimes(candidate string, modified time.Time) error {
+	info, ok := r.nodes[candidate]
+	if !ok {
+		return fs.ErrNotExist
+	}
+	info.modTime = modified
+	r.nodes[candidate] = info
+	return nil
+}
+
 func (r *fakeRemote) ReadLink(candidate string) (string, error) {
 	info, ok := r.nodes[candidate]
 	if !ok {
@@ -269,7 +279,7 @@ func (r *fakeRemote) move(from, to string) error {
 	}
 	delete(r.nodes, from)
 	info.name = path.Base(to)
-	info.modTime = r.now()
+	// A rename keeps the modification time, as POSIX renames do.
 	r.nodes[to] = info
 	return nil
 }

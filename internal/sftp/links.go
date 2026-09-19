@@ -105,8 +105,11 @@ func describeLinks(remote Remote, entries []Entry) {
 				return
 			}
 			entry.TargetType = linkTargetTypeOf(info)
+			// A link to a file transfers as that file, so the size and time a
+			// person sees, and a copy is given, are the file's own.
 			if info.Mode().IsRegular() {
 				entry.Size = info.Size()
+				entry.ModifiedAt = info.ModTime().UTC()
 			}
 		}(&entries[index])
 	}

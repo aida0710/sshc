@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"io/fs"
+	"time"
 
 	pkgsftp "github.com/pkg/sftp"
 )
@@ -64,6 +65,10 @@ func (c *Client) OpenFile(path string, flags int) (WriteSeekCloser, error) {
 func (c *Client) Mkdir(path string) error { return c.client.Mkdir(path) }
 
 func (c *Client) Chmod(path string, mode fs.FileMode) error { return c.client.Chmod(path, mode) }
+
+func (c *Client) Chtimes(path string, modified time.Time) error {
+	return c.client.Chtimes(path, modified, modified)
+}
 
 // Replace は、OpenSSH の posix-rename 拡張が使える場合はそれを優先する。
 // 拡張がないサーバーでは標準 SFTP rename を使い、置換可否はサーバー実装に従う。
