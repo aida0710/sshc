@@ -42,6 +42,7 @@ type engineServices struct {
 	recentStore  *recent.Store
 	recent       *recent.Service
 	sftp         *sshcSFTP.Service
+	sftpPool     *sshcSFTP.RemotePool
 	workspaces   *terminalworkspace.Service
 	snippets     *snippets.Service
 	terminals    *terminal.Registry
@@ -91,7 +92,8 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 			Alias: target.Alias, HostName: target.HostName, User: target.User, Port: target.Port,
 		}, nil
 	})
-	sftpService := &sshcSFTP.Service{Open: ssh.sftp()}
+	sftpPool := sshcSFTP.NewRemotePool(ssh.sftp())
+	sftpService := &sshcSFTP.Service{Open: sftpPool.Open}
 	workspaceService := terminalworkspace.NewService(terminalworkspace.NewStore(workspace), time.Now, dependencies.Random)
 	probe := dependencies.Probe
 	if probe == nil {
@@ -165,7 +167,7 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 		config:      configService, keys: keyService, diagnostics: diagnosticsService,
 		knownHosts: knownHostsService, passwords: passwordService,
 		remoteKeys: remoteKeyService, recentStore: recentStore, recent: recentService,
-		sftp: sftpService, workspaces: workspaceService, snippets: snippetService, ssh: ssh,
+		sftp: sftpService, sftpPool: sftpPool, workspaces: workspaceService, snippets: snippetService, ssh: ssh,
 	}
 	services.sync, services.autoSync, err = buildSync(workspace, transactions, passwordService, snippetStore, dependencies)
 	if err != nil {
