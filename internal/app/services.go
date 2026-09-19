@@ -93,7 +93,7 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 		}, nil
 	})
 	sftpPool := sshcSFTP.NewRemotePool(ssh.sftp())
-	sftpService := &sshcSFTP.Service{Open: sftpPool.Open}
+	sftpService := &sshcSFTP.Service{Open: sftpPool.Open, ConnectionLimit: sftpConnectionLimit(passwordService, ssh.target)}
 	workspaceService := terminalworkspace.NewService(terminalworkspace.NewStore(workspace), time.Now, dependencies.Random)
 	probe := dependencies.Probe
 	if probe == nil {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"sync"
@@ -152,9 +153,18 @@ func (s Service) prepareDownload(
 		}
 	}()
 	written := int64(0)
+	splitParallelism = s.boundedParallelism(alias, splitParallelism)
 	if before.Size() >= splitThreshold && splitThreshold > 0 && splitParallelism > 1 && splitChunkBytes > 0 {
 		if _, supported := remote.(RangeRemote); supported {
 			written, err = s.copyDownloadRanges(ctx, remote, alias, cleaned, temporary, before.Size(), splitParallelism, splitChunkBytes, progress)
+			// A host that would not take the extra connections still serves
+			// the file over the one that is open.
+			if errors.Is(err, errRangeConnections) {
+				written, err = 0, nil
+				if _, seekErr := temporary.Seek(0, io.SeekStart); seekErr != nil {
+					return nil, seekErr
+				}
+			}
 		}
 	}
 	if written == 0 && before.Size() > 0 && err == nil {
@@ -251,9 +261,15 @@ type downloadRange struct {
 	size   int64
 }
 
+// errRangeConnections says the extra connections a ranged download needs
+// could not all be opened; nothing has been read yet.
+var errRangeConnections = errors.New("could not open the connections for a ranged download")
+
 // copyDownloadRanges reads non-overlapping ranges over independent SFTP
 // connections. The local spool still becomes the single immutable, hashed
-// representation used by HTTP retries and browser checkpoints.
+// representation used by HTTP retries and browser checkpoints. The extra
+// connections are opened before any range is read, so a host that refuses
+// them costs nothing but the attempt.
 func (s Service) copyDownloadRanges(
 	ctx context.Context, firstRemote Remote, alias, remotePath string, destination *os.File, size int64, parallelism int, chunkBytes int64,
 	progress func(DownloadPartProgress),
@@ -265,12 +281,28 @@ func (s Service) copyDownloadRanges(
 	for offset := int64(0); offset < size; offset += chunkBytes {
 		ranges = append(ranges, downloadRange{offset: offset, size: min(chunkBytes, size-offset)})
 	}
-	if err := destination.Truncate(size); err != nil {
-		return 0, err
-	}
 	workerContext, cancel := context.WithCancel(ctx)
 	defer cancel()
 	workerCount := min(parallelism, len(ranges))
+	remotes := []Remote{firstRemote}
+	for len(remotes) < workerCount {
+		extra, err := s.openRequest(workerContext, alias)
+		if err != nil {
+			for _, opened := range remotes[1:] {
+				_ = opened.Close()
+			}
+			return 0, fmt.Errorf("%w: %w", errRangeConnections, err)
+		}
+		remotes = append(remotes, extra)
+	}
+	defer func() {
+		for _, opened := range remotes[1:] {
+			_ = opened.Close()
+		}
+	}()
+	if err := destination.Truncate(size); err != nil {
+		return 0, err
+	}
 	assignments := make([][]downloadRange, workerCount)
 	for index, portion := range ranges {
 		worker := index % workerCount
@@ -297,16 +329,7 @@ func (s Service) copyDownloadRanges(
 		workers.Add(1)
 		go func(workerIndex int, workerTotal int64) {
 			defer workers.Done()
-			remote := firstRemote
-			if workerIndex != 0 {
-				var err error
-				remote, err = s.openRequest(workerContext, alias)
-				if err != nil {
-					fail(err)
-					return
-				}
-				defer remote.Close()
-			}
+			remote := remotes[workerIndex]
 			ranged, ok := remote.(RangeRemote)
 			if !ok {
 				fail(ErrInvalidTransfer)

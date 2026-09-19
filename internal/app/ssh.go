@@ -231,6 +231,29 @@ func storedPassword(passwords *secret.Service) func(sshclient.Target) (string, b
 	}
 }
 
+// sftpConnectionLimit says how many SFTP connections may be open to a host at
+// once. A host, or a ProxyJump hop on the way to it, that is answered with a
+// one-time code allows one: every connection opened in the same window would
+// present the same code, and PAM's TOTP module refuses a code it has already
+// accepted, so a ranged download would fail on its second connection.
+func sftpConnectionLimit(passwords *secret.Service, target func(string) (sshclient.Target, error)) func(alias string) int {
+	return func(alias string) int {
+		if passwords == nil {
+			return 0
+		}
+		resolved, err := target(alias)
+		if err != nil {
+			return 0
+		}
+		for _, hop := range append(resolved.JumpRoute(), resolved) {
+			if passwords.BoundTOTPFor(hop.Alias, hop.AuthenticationBinding()) != "" {
+				return 1
+			}
+		}
+		return 0
+	}
+}
+
 // storedTOTP generates a code only for an explicit one-time-password prompt.
 // The seed remains inside the unlocked vault for embedded sessions.
 func storedTOTP(passwords *secret.Service) func(sshclient.Target, string) (string, bool) {
