@@ -25,6 +25,7 @@ import (
 	"sshc/internal/secret"
 	"sshc/internal/selfupdate"
 	"sshc/internal/session"
+	sshcSFTP "sshc/internal/sftp"
 	"sshc/internal/sshclient"
 	"sshc/internal/storage"
 	"sshc/internal/terminal"
@@ -117,6 +118,7 @@ type runtime struct {
 	autoCancel  context.CancelFunc
 	autoDone    chan struct{}
 	browserAuth *browserauth.Store
+	sftpPool    *sshcSFTP.RemotePool
 }
 
 func build(dependencies Dependencies, version string) (runtime, error) {
@@ -272,6 +274,7 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 		passwords:   passwordService,
 		autoSync:    autoSync,
 		browserAuth: services.browserAuth,
+		sftpPool:    services.sftpPool,
 	}, nil
 }
 
@@ -383,6 +386,13 @@ func (r runtime) unwind(dependencies Dependencies) error {
 		}
 	}
 
+	// The server has drained its requests and closed the transfer manager, so
+	// every SFTP connection is back in the pool or already closed.
+	if r.sftpPool != nil {
+		if err := r.sftpPool.Close(); err != nil {
+			joined = append(joined, fmt.Errorf("close the idle SFTP connections: %w", err))
+		}
+	}
 	if r.passwords != nil {
 		r.passwords.Lock()
 	}

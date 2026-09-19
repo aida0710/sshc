@@ -11,6 +11,8 @@ Selecting a host does not open an SFTP connection. sshc connects only after you 
 
 Switching hosts immediately clears the previous listing and open file. A delayed response from the previous host is discarded instead of being shown under the new selection.
 
+Operations on the same host (listing, details, preview, editing, transfers and the `sshc sftp` CLI) reuse the SFTP connection the previous operation used; a connection that goes unused for 60 seconds is closed. Moving between folders therefore does not repeat the SSH handshake or ask for a one-time code again. As with an open Terminal, locking the vault leaves that recent connection alive for those seconds.
+
 ## File operations
 
 - Navigate, create, rename, chmod and delete remote entries
