@@ -157,7 +157,13 @@ func (p sshParts) sftp() sshcSFTP.OpenRemote {
 		if err != nil {
 			return nil, err
 		}
-		client, err := pkgsftp.NewClient(connection.Client())
+		// Reads are pipelined by pkg/sftp on their own; writes are not unless
+		// asked, and one 32 KiB request per round trip made every upload crawl
+		// on a distant host. A failed pipelined write can leave the file longer
+		// than what arrived, so the upload plane truncates a part back to its
+		// acknowledged offset after an error and verifies the whole part before
+		// publishing it.
+		client, err := pkgsftp.NewClient(connection.Client(), pkgsftp.UseConcurrentWrites(true))
 		if err != nil {
 			_ = connection.Close()
 			return nil, err
