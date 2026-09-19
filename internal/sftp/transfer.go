@@ -291,8 +291,18 @@ func (m *TransferManager) releaseRemoteIf(alias, id, target string, expected Rem
 	}
 	m.mutex.Unlock()
 	if remote != nil {
-		_ = remote.Close()
+		discardRemote(remote)
 	}
+}
+
+// discardRemote closes a connection that must not serve anyone else: one
+// with a request possibly still blocked on it, or one a stale job left.
+func discardRemote(remote Remote) {
+	if discardable, ok := remote.(discardableRemote); ok {
+		_ = discardable.Discard()
+		return
+	}
+	_ = remote.Close()
 }
 
 func (m *TransferManager) detachRemote(alias, id, target string) Remote {

@@ -1079,7 +1079,7 @@ func (m *TransferManager) expireFinishedJobs() error {
 
 func closeRemotes(remotes []Remote) {
 	for _, remote := range remotes {
-		_ = remote.Close()
+		discardRemote(remote)
 	}
 }
 

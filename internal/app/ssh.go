@@ -168,13 +168,30 @@ func (p sshParts) sftp() sshcSFTP.OpenRemote {
 			_ = connection.Close()
 			return nil, err
 		}
-		return &sftpRemote{Remote: sshcSFTP.NewClient(client), transport: connection}, nil
+		remote := &sftpRemote{Remote: sshcSFTP.NewClient(client), transport: connection, dead: make(chan struct{})}
+		// The transport reports its end through Wait; the pool asks before it
+		// hands the connection to the next operation.
+		go func() {
+			_ = connection.Client().Wait()
+			close(remote.dead)
+		}()
+		return remote, nil
 	}
 }
 
 type sftpRemote struct {
 	sshcSFTP.Remote
 	transport *sshclient.Connection
+	dead      chan struct{}
+}
+
+func (remote *sftpRemote) Alive() bool {
+	select {
+	case <-remote.dead:
+		return false
+	default:
+		return true
+	}
 }
 
 func (remote *sftpRemote) OpenRange(candidate string, offset int64) (io.ReadCloser, error) {

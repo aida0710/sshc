@@ -91,6 +91,7 @@ func validateAlias(alias string) error {
 
 type contextRemote struct {
 	Remote
+	ctx      context.Context
 	once     sync.Once
 	mutex    sync.Mutex
 	stop     func() bool
@@ -99,8 +100,8 @@ type contextRemote struct {
 }
 
 func bindRemoteContext(ctx context.Context, remote Remote) Remote {
-	bound := &contextRemote{Remote: remote}
-	stop := context.AfterFunc(ctx, func() { _ = bound.Close() })
+	bound := &contextRemote{Remote: remote, ctx: ctx}
+	stop := context.AfterFunc(ctx, func() { _ = bound.discard() })
 	bound.mutex.Lock()
 	bound.stop = stop
 	closed := bound.closed
@@ -125,6 +126,16 @@ func (remote *contextRangeRemote) OpenRange(candidate string, offset int64) (io.
 }
 
 func (remote *contextRemote) Close() error {
+	return remote.finish(false)
+}
+
+// discard is the cancellation path. A pooled connection must not go back to
+// the pool with a request possibly still in flight on it.
+func (remote *contextRemote) discard() error {
+	return remote.finish(true)
+}
+
+func (remote *contextRemote) finish(cancelled bool) error {
 	remote.once.Do(func() {
 		remote.mutex.Lock()
 		remote.closed = true
@@ -132,6 +143,12 @@ func (remote *contextRemote) Close() error {
 		remote.mutex.Unlock()
 		if stop != nil {
 			stop()
+		}
+		// The AfterFunc and the operation's own Close race once the context is
+		// cancelled; either way the connection is not returned.
+		if discardable, ok := remote.Remote.(discardableRemote); ok && (cancelled || remote.ctx.Err() != nil) {
+			remote.closeErr = discardable.Discard()
+			return
 		}
 		remote.closeErr = remote.Remote.Close()
 	})
