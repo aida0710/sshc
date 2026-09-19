@@ -658,6 +658,12 @@ func (m *TransferManager) Append(ctx context.Context, alias, id, remotePath stri
 			err = io.ErrShortWrite
 		}
 	}
+	if err != nil {
+		// Pipelined writes can land bytes beyond the last one that succeeded.
+		// The part must end at the acknowledged offset for the next append,
+		// and for a resume, to continue from a prefix that really arrived.
+		_ = file.Truncate(offset)
+	}
 	closeErr := file.Close()
 	if err != nil {
 		return ResumableUpload{}, err
