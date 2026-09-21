@@ -440,19 +440,40 @@ func (v *Vault) RemoveDedicatedPassword(alias string) {
 	delete(v.passwordBindings, alias)
 }
 
-// BindPassword records the resolved authentication destination for one alias.
-func (v *Vault) BindPassword(alias, binding string) error {
+// Bind は alias の解決済み接続先を記録する。ホストや ProxyJump の経路が変わると、
+// 利用者が割り当てを確認し直すまで秘密は解放されない。
+func (v *Vault) Bind(kind Kind, alias, binding string) error {
 	if err := validate.Alias(alias); err != nil || !validAuthenticationBinding(binding) {
 		return ErrUnsafeName
 	}
-	if _, ok := v.SecretFor(KindPassword, alias); !ok {
+	if _, ok := v.SecretFor(kind, alias); !ok {
 		return ErrUnknownCredential
 	}
-	if v.passwordBindings == nil {
-		v.passwordBindings = map[string]string{}
+	bindings := v.bindingsOf(kind)
+	if bindings == nil {
+		return ErrUnsafeName
 	}
-	v.passwordBindings[alias] = binding
+	bindings[alias] = binding
 	return nil
+}
+
+// bindingsOf は、経路に束縛される種類（パスワードと TOTP）の束縛表を返す。
+// 他の種類は経路に束縛されないので nil。
+func (v *Vault) bindingsOf(kind Kind) map[string]string {
+	switch kind {
+	case KindPassword:
+		if v.passwordBindings == nil {
+			v.passwordBindings = map[string]string{}
+		}
+		return v.passwordBindings
+	case KindTOTP:
+		if v.totpBindings == nil {
+			v.totpBindings = map[string]string{}
+		}
+		return v.totpBindings
+	default:
+		return nil
+	}
 }
 
 func validAuthenticationBinding(binding string) bool {
@@ -615,12 +636,13 @@ func (v *Vault) Assign(kind Kind, subject, name string) error {
 	if _, ok := v.secrets[kind][name]; !ok {
 		return ErrUnknownCredential
 	}
-	if kind == KindPassword {
+	switch kind {
+	case KindPassword:
 		delete(v.dedicatedPasswords, subject)
 		delete(v.passwordBindings, subject)
-	} else if kind == KindTOTP {
+	case KindTOTP:
 		delete(v.totpBindings, subject)
-	} else {
+	default:
 		delete(v.dedicatedKeyPassphrases, subject)
 	}
 	v.subjects[kind][subject] = name
@@ -630,11 +652,8 @@ func (v *Vault) Assign(kind Kind, subject, name string) error {
 // Unassign は subject の参照を忘れる。subject がなくてもエラーではない。
 func (v *Vault) Unassign(kind Kind, subject string) {
 	delete(v.subjects[kind], subject)
-	if kind == KindPassword {
-		delete(v.passwordBindings, subject)
-	} else if kind == KindTOTP {
-		delete(v.totpBindings, subject)
-	} else if kind == KindKeyPassphrase {
+	delete(v.bindingsOf(kind), subject)
+	if kind == KindKeyPassphrase {
 		delete(v.dedicatedKeyPassphrases, subject)
 	}
 }
@@ -678,41 +697,14 @@ func (v *Vault) SecretFor(kind Kind, subject string) (string, bool) {
 	return v.Secret(kind, name)
 }
 
-// BoundPasswordFor releases an account password only to the destination that
-// was current when its host assignment was confirmed.
-func (v *Vault) BoundPasswordFor(subject, binding string) (string, bool) {
-	stored, ok := v.passwordBindings[subject]
+// BoundFor は、束縛を確認したときの接続先が今も同じ場合だけ秘密を返す。
+// パスワードは接続先へ、TOTP の provisioning data も同じ境界で解放される。
+func (v *Vault) BoundFor(kind Kind, subject, binding string) (string, bool) {
+	stored, ok := v.bindingsOf(kind)[subject]
 	if !ok || stored != binding {
 		return "", false
 	}
-	return v.SecretFor(KindPassword, subject)
-}
-
-// BindTOTP records the resolved authentication destination for one alias.
-// A token is never released after a host or ProxyJump route changes until the
-// user explicitly confirms the assignment again.
-func (v *Vault) BindTOTP(alias, binding string) error {
-	if err := validate.Alias(alias); err != nil || !validAuthenticationBinding(binding) {
-		return ErrUnsafeName
-	}
-	if _, ok := v.SecretFor(KindTOTP, alias); !ok {
-		return ErrUnknownCredential
-	}
-	if v.totpBindings == nil {
-		v.totpBindings = map[string]string{}
-	}
-	v.totpBindings[alias] = binding
-	return nil
-}
-
-// BoundTOTPFor releases provisioning data only to the destination that was
-// current when its host assignment was confirmed.
-func (v *Vault) BoundTOTPFor(subject, binding string) (string, bool) {
-	stored, ok := v.totpBindings[subject]
-	if !ok || stored != binding {
-		return "", false
-	}
-	return v.SecretFor(KindTOTP, subject)
+	return v.SecretFor(kind, subject)
 }
 
 // Rename は、subject の参照を新しい名前へ引き継ぐ。ホストの名前変更はこれを
@@ -727,7 +719,7 @@ func (v *Vault) Rename(kind Kind, from, to string) error {
 			delete(v.dedicatedPasswords, from)
 			delete(v.subjects[kind], to)
 			v.dedicatedPasswords[to] = value
-			v.movePasswordBinding(from, to)
+			v.moveBinding(KindPassword, from, to)
 			return nil
 		}
 	}
@@ -753,29 +745,22 @@ func (v *Vault) Rename(kind Kind, from, to string) error {
 	}
 	delete(v.subjects[kind], from)
 	v.subjects[kind][to] = name
-	if kind == KindPassword {
-		v.movePasswordBinding(from, to)
-	} else if kind == KindTOTP {
-		v.moveTOTPBinding(from, to)
-	}
+	v.moveBinding(kind, from, to)
 	return nil
 }
 
-func (v *Vault) moveTOTPBinding(from, to string) {
-	binding, ok := v.totpBindings[from]
-	delete(v.totpBindings, from)
-	delete(v.totpBindings, to)
-	if ok {
-		v.totpBindings[to] = binding
+// moveBinding は subject の経路束縛を新しい名前へ引き継ぐ。束縛を持たない
+// 種類では何もしない。
+func (v *Vault) moveBinding(kind Kind, from, to string) {
+	bindings := v.bindingsOf(kind)
+	if bindings == nil {
+		return
 	}
-}
-
-func (v *Vault) movePasswordBinding(from, to string) {
-	binding, ok := v.passwordBindings[from]
-	delete(v.passwordBindings, from)
-	delete(v.passwordBindings, to)
+	binding, ok := bindings[from]
+	delete(bindings, from)
+	delete(bindings, to)
 	if ok {
-		v.passwordBindings[to] = binding
+		bindings[to] = binding
 	}
 }
 

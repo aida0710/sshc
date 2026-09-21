@@ -110,7 +110,7 @@ func TestTOTPProvisioningTravelsOnlyForTheBoundJumpChain(t *testing.T) {
 	if err := vault.SetCredential(secret.KindTOTP, "edge-token", "JBSWY3DPEHPK3PXP"); err != nil {
 		t.Fatal(err)
 	}
-	if err := vault.AssignTOTPCredential("edge", "edge-token", testPasswordBinding); err != nil {
+	if err := vault.AssignBoundCredential(secret.BoundAssignment{Kind: secret.KindTOTP, Subject: "edge", Name: "edge-token", Binding: testPasswordBinding}); err != nil {
 		t.Fatal(err)
 	}
 	engine := connectEngine(t, ConnectHandlers{

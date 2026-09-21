@@ -226,7 +226,7 @@ func storedPassword(passwords *secret.Service) func(sshclient.Target) (string, b
 		return nil
 	}
 	return func(target sshclient.Target) (string, bool) {
-		password := passwords.BoundPasswordFor(target.Alias, target.AuthenticationBinding())
+		password := passwords.BoundFor(secret.KindPassword, target.Alias, target.AuthenticationBinding())
 		return password, password != ""
 	}
 }
@@ -246,7 +246,7 @@ func sftpConnectionLimit(passwords *secret.Service, target func(string) (sshclie
 			return 0
 		}
 		for _, hop := range append(resolved.JumpRoute(), resolved) {
-			if passwords.BoundTOTPFor(hop.Alias, hop.AuthenticationBinding()) != "" {
+			if passwords.BoundFor(secret.KindTOTP, hop.Alias, hop.AuthenticationBinding()) != "" {
 				return 1
 			}
 		}
@@ -264,7 +264,7 @@ func storedTOTP(passwords *secret.Service) func(sshclient.Target, string) (strin
 		if !totp.MatchesPrompt(question) {
 			return "", false
 		}
-		provisioning := passwords.BoundTOTPFor(target.Alias, target.AuthenticationBinding())
+		provisioning := passwords.BoundFor(secret.KindTOTP, target.Alias, target.AuthenticationBinding())
 		if provisioning == "" {
 			return "", false
 		}

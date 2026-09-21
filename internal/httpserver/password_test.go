@@ -294,7 +294,7 @@ func TestAssignCredentialRefusesAPasswordForADirectKeyButNotAKeyPassphrase(t *te
 
 	password := send(t, engine, http.MethodPut, credentialPath("password", "/assign"),
 		`{"subject":"bastion","name":"office"}`, nil)
-	if password.Code != http.StatusConflict || service.BoundPasswordFor("bastion", testPasswordBinding) != "" {
+	if password.Code != http.StatusConflict || service.BoundFor(secret.KindPassword, "bastion", testPasswordBinding) != "" {
 		t.Fatalf("password assignment = %d: %s", password.Code, password.Body.String())
 	}
 	keyPhrase := send(t, engine, http.MethodPut, credentialPath("key_passphrase", "/assign"),
@@ -319,11 +319,11 @@ func TestTOTPCredentialCanBeStoredAssignedAndUnassigned(t *testing.T) {
 	}
 	assigned := send(t, engine, http.MethodPut, credentialPath("totp", "/assign"),
 		`{"subject":"bastion","name":"production"}`, nil)
-	if assigned.Code != http.StatusOK || service.BoundTOTPFor("bastion", testPasswordBinding) == "" {
+	if assigned.Code != http.StatusOK || service.BoundFor(secret.KindTOTP, "bastion", testPasswordBinding) == "" {
 		t.Fatalf("assign TOTP = %d: %s", assigned.Code, assigned.Body.String())
 	}
 	removed := send(t, engine, http.MethodDelete, credentialPath("totp", "/assign/bastion"), "", nil)
-	if removed.Code != http.StatusOK || service.HasTOTPFor("bastion") {
+	if removed.Code != http.StatusOK || service.HasAssignmentFor(secret.KindTOTP, "bastion") {
 		t.Fatalf("unassign TOTP = %d: %s", removed.Code, removed.Body.String())
 	}
 }
@@ -543,7 +543,7 @@ func TestCredentialEditUpdatesNameAndValueWithoutReturningTheSecret(t *testing.T
 	if err := service.SetCredential(secret.KindPassword, "office", "saved-password"); err != nil {
 		t.Fatal(err)
 	}
-	if err := service.AssignPasswordCredential("web-1", "office", testPasswordBinding); err != nil {
+	if err := service.AssignBoundCredential(secret.BoundAssignment{Kind: secret.KindPassword, Subject: "web-1", Name: "office", Binding: testPasswordBinding}); err != nil {
 		t.Fatal(err)
 	}
 	body := []byte(`{"name":"shared-office","secret":"rotated-password"}`)
@@ -554,7 +554,7 @@ func TestCredentialEditUpdatesNameAndValueWithoutReturningTheSecret(t *testing.T
 	if strings.Contains(response.Body.String(), "saved-password") || strings.Contains(response.Body.String(), "rotated-password") {
 		t.Fatalf("edit response leaked a secret: %s", response.Body.String())
 	}
-	if got := service.BoundPasswordFor("web-1", testPasswordBinding); got != "rotated-password" {
+	if got := service.BoundFor(secret.KindPassword, "web-1", testPasswordBinding); got != "rotated-password" {
 		t.Fatalf("assigned password = %q", got)
 	}
 }
@@ -585,7 +585,7 @@ func TestCredentialsListIncludesNamedAndDedicatedHostUsage(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := service.AssignPasswordCredential("web-1", "office", testPasswordBinding); err != nil {
+	if err := service.AssignBoundCredential(secret.BoundAssignment{Kind: secret.KindPassword, Subject: "web-1", Name: "office", Binding: testPasswordBinding}); err != nil {
 		t.Fatal(err)
 	}
 	for _, key := range []string{"keys/id_a", "keys/id_b"} {
@@ -788,7 +788,7 @@ func TestOneNamedSecretServesTwoHostsAndTheFileNamesNeither(t *testing.T) {
 		t.Fatalf("Unlock = %v", err)
 	}
 	for _, alias := range []string{"web-1", "web-2"} {
-		if got := reopened.BoundPasswordFor(alias, testPasswordBinding); got != "hunter2" {
+		if got := reopened.BoundFor(secret.KindPassword, alias, testPasswordBinding); got != "hunter2" {
 			t.Errorf("PasswordFor(%q) = %q, want the one secret both point at", alias, got)
 		}
 	}
