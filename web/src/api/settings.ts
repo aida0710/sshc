@@ -1,8 +1,9 @@
 import { apiClient } from "./client";
-import { asArray, asNumber, asRecord, asString, patchJSON, putJSON } from "./guards";
+import { patchJSON, putJSON } from "./guards";
 import type { components } from "./schema";
 import { validateOpenAPISchema } from "./validators.generated";
 
+export type Metadata = components["schemas"]["Metadata"];
 export type TerminalSettings = components["schemas"]["TerminalSettings"];
 export type LocalShellProfile = components["schemas"]["LocalShellProfile"];
 export type LocalShellProfileList = components["schemas"]["LocalShellProfileList"];
@@ -10,20 +11,6 @@ export type EngineSettings = components["schemas"]["EngineSettings"];
 export type TerminalAppearance = components["schemas"]["TerminalAppearance"];
 export type TerminalBackground = components["schemas"]["TerminalBackground"];
 export type TerminalBackgroundList = components["schemas"]["TerminalBackgroundList"];
-
-function readAppearance(value: unknown): TerminalAppearance {
-  const record = asRecord(value);
-  return {
-    ...(typeof record.palette === "string" ? { palette: record.palette } : {}),
-    ...(typeof record.font === "string" ? { font: record.font } : {}),
-    ...(typeof record.background === "string"
-      ? { background: record.background }
-      : {}),
-    ...(typeof record.backgroundTint === "number"
-      ? { backgroundTint: record.backgroundTint }
-      : {}),
-  };
-}
 
 export type SettingsApi = {
   terminalSettings(): Promise<TerminalSettings>;
@@ -41,6 +28,10 @@ export type SettingsApi = {
   deleteTerminalBackground(name: string): Promise<void>;
 };
 
+function validateMetadata(value: unknown): Metadata {
+  return validateOpenAPISchema<Metadata>("Metadata", value);
+}
+
 function validateLocalShellProfiles(value: unknown): LocalShellProfileList {
   return validateOpenAPISchema<LocalShellProfileList>("LocalShellProfileList", value);
 }
@@ -52,54 +43,11 @@ function validateBackground(value: unknown): TerminalBackground {
 // Settings the engine stores for every browser: the embedded terminal, the
 // engine itself, the local shell profiles it found, and the background images.
 export const settingsApi: SettingsApi = {
+  // The engine already clamps stored settings to the contract when it reads
+  // them, so the generated validator is the whole check here.
   async terminalSettings() {
-    const metadata = asRecord(await apiClient.read("/api/v1/metadata"));
-    if (metadata.embeddedTerminal === undefined) return {};
-    const terminal = asRecord(metadata.embeddedTerminal);
-    return {
-      ...(typeof terminal.startDirectory === "string" &&
-      terminal.startDirectory !== ""
-        ? { startDirectory: terminal.startDirectory }
-        : {}),
-      ...(typeof terminal.maxSessions === "number"
-        ? { maxSessions: terminal.maxSessions }
-        : {}),
-      ...(typeof terminal.scrollbackBytes === "number"
-        ? { scrollbackBytes: terminal.scrollbackBytes }
-        : {}),
-      ...(typeof terminal.browserScrollbackLines === "number" &&
-      terminal.browserScrollbackLines >= 1000 &&
-      terminal.browserScrollbackLines <= 100000
-        ? { browserScrollbackLines: terminal.browserScrollbackLines }
-        : {}),
-      ...(typeof terminal.fontSize === "number"
-        ? { fontSize: terminal.fontSize }
-        : {}),
-      ...(typeof terminal.verbosity === "number"
-        ? { verbosity: terminal.verbosity }
-        : {}),
-      ...(typeof terminal.reconnect === "number"
-        ? { reconnect: terminal.reconnect }
-        : {}),
-      ...(typeof terminal.copyOnSelect === "boolean"
-        ? { copyOnSelect: terminal.copyOnSelect }
-        : {}),
-      ...(typeof terminal.rightClickPaste === "boolean"
-        ? { rightClickPaste: terminal.rightClickPaste }
-        : {}),
-      ...(typeof terminal.webgl === "boolean" ? { webgl: terminal.webgl } : {}),
-      ...(typeof terminal.osc52 === "boolean" ? { osc52: terminal.osc52 } : {}),
-      ...(typeof terminal.jisYenBackslash === "boolean"
-        ? { jisYenBackslash: terminal.jisYenBackslash }
-        : {}),
-      ...(typeof terminal.localShellProfile === "string" &&
-      /^[a-z0-9-]{1,64}$/.test(terminal.localShellProfile)
-        ? { localShellProfile: terminal.localShellProfile }
-        : {}),
-      ...(terminal.appearance === undefined
-        ? {}
-        : { appearance: readAppearance(terminal.appearance) }),
-    };
+    const metadata = validateMetadata(await apiClient.read("/api/v1/metadata"));
+    return metadata.embeddedTerminal ?? {};
   },
   async setTerminalSettings(settings) {
     await putJSON("/api/v1/metadata/terminal", settings);
@@ -110,39 +58,17 @@ export const settingsApi: SettingsApi = {
     );
   },
   async engineSettings() {
-    const metadata = asRecord(await apiClient.read("/api/v1/metadata"));
-    if (metadata.engine === undefined) return {};
-    const engine = asRecord(metadata.engine);
-    const settings: EngineSettings = typeof engine.port === "number" ? { port: engine.port } : {};
-    if (engine.vaultAutoLock !== undefined) {
-      const autoLock = asRecord(engine.vaultAutoLock);
-      const mode = asString(autoLock.mode);
-      if (mode === "restart") {
-        settings.vaultAutoLock = { mode };
-      } else if (mode === "idle") {
-        const value = asNumber(autoLock.value);
-        const unit = asString(autoLock.unit);
-        if (Number.isSafeInteger(value) && value >= 1 && value <= 999 &&
-            (unit === "minutes" || unit === "hours")) {
-          settings.vaultAutoLock = { mode, value, unit };
-        }
-      }
-    }
-    return settings;
+    const metadata = validateMetadata(await apiClient.read("/api/v1/metadata"));
+    return metadata.engine ?? {};
   },
   async setEngineSettings(settings) {
     await putJSON("/api/v1/metadata/engine", settings);
   },
   async terminalBackgrounds() {
-    const record = asRecord(
+    return validateOpenAPISchema<TerminalBackgroundList>(
+      "TerminalBackgroundList",
       await apiClient.read("/api/v1/terminal/backgrounds"),
     );
-    return {
-      backgrounds: asArray(record.backgrounds).map(validateBackground),
-      usedBytes: asNumber(record.usedBytes),
-      capacityBytes: asNumber(record.capacityBytes),
-      remainingBytes: asNumber(record.remainingBytes),
-    };
   },
   async addTerminalBackground(suggested, image) {
     return validateBackground(
@@ -157,13 +83,10 @@ export const settingsApi: SettingsApi = {
     );
   },
   async setTerminalBackgroundCapacity(capacityMiB) {
-    const record = asRecord(await putJSON<unknown>("/api/v1/terminal/backgrounds/capacity", { capacityMiB }));
-    return {
-      backgrounds: asArray(record.backgrounds).map(validateBackground),
-      usedBytes: asNumber(record.usedBytes),
-      capacityBytes: asNumber(record.capacityBytes),
-      remainingBytes: asNumber(record.remainingBytes),
-    };
+    return validateOpenAPISchema<TerminalBackgroundList>(
+      "TerminalBackgroundList",
+      await putJSON<unknown>("/api/v1/terminal/backgrounds/capacity", { capacityMiB }),
+    );
   },
   async renameTerminalBackground(name, nextName) {
     return validateBackground(
