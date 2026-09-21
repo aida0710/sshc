@@ -77,56 +77,29 @@ type ConnectionSecretsMutation struct {
 	TOTP          *TOTPMutation
 }
 
-// BoundPasswordFor returns a password only if current resolved destination is
-// identical to the destination confirmed when the password was assigned.
-func (s *Service) BoundPasswordFor(alias, binding string) string {
+// BoundFor は、alias の解決済み接続先が割り当てを確認したときと同じ場合だけ
+// 秘密（パスワードか TOTP の provisioning data）を返す。
+func (s *Service) BoundFor(kind Kind, alias, binding string) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	vault := s.use()
 	if vault == nil {
 		return ""
 	}
-	value, _ := vault.BoundPasswordFor(alias, binding)
+	value, _ := vault.BoundFor(kind, alias, binding)
 	return value
 }
 
-// BoundTOTPFor returns TOTP provisioning data only while the host's resolved
-// authentication destination still matches the assignment confirmation.
-func (s *Service) BoundTOTPFor(alias, binding string) string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	vault := s.use()
-	if vault == nil {
-		return ""
-	}
-	value, _ := vault.BoundTOTPFor(alias, binding)
-	return value
-}
-
-// HasTOTPFor reports whether an unlocked vault has a TOTP assignment without
-// releasing its provisioning data.
-func (s *Service) HasTOTPFor(alias string) bool {
+// HasAssignmentFor は、解錠中の vault に alias の割り当てがあるかを、秘密を
+// 解放せずに返す。呼び手はこれで「割り当てなし」と「束縛が古い」を区別する。
+func (s *Service) HasAssignmentFor(kind Kind, alias string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	vault := s.use()
 	if vault == nil {
 		return false
 	}
-	_, ok := vault.SecretFor(KindTOTP, alias)
-	return ok
-}
-
-// HasPasswordFor reports whether an unlocked vault has an account-password
-// assignment for alias without releasing the secret. Callers use this to tell
-// a missing assignment from one whose authentication binding became stale.
-func (s *Service) HasPasswordFor(alias string) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	vault := s.use()
-	if vault == nil {
-		return false
-	}
-	_, ok := vault.SecretFor(KindPassword, alias)
+	_, ok := vault.SecretFor(kind, alias)
 	return ok
 }
 
@@ -378,7 +351,7 @@ func applyPasswordMutation(vault, clone *Vault, mutation PasswordMutation) (bool
 		if err := clone.SetDedicatedPassword(mutation.Alias, mutation.Password); err != nil {
 			return false, err
 		}
-		if err := clone.BindPassword(mutation.Alias, mutation.Binding); err != nil {
+		if err := clone.Bind(KindPassword, mutation.Alias, mutation.Binding); err != nil {
 			return false, err
 		}
 		return true, nil
@@ -390,7 +363,7 @@ func applyPasswordMutation(vault, clone *Vault, mutation PasswordMutation) (bool
 		if err := clone.Assign(KindPassword, mutation.Alias, mutation.Credential); err != nil {
 			return false, err
 		}
-		if err := clone.BindPassword(mutation.Alias, mutation.Binding); err != nil {
+		if err := clone.Bind(KindPassword, mutation.Alias, mutation.Binding); err != nil {
 			return false, err
 		}
 		return true, nil
@@ -404,7 +377,7 @@ func applyPasswordMutation(vault, clone *Vault, mutation PasswordMutation) (bool
 		if err := clone.Assign(KindPassword, mutation.Alias, mutation.Credential); err != nil {
 			return false, err
 		}
-		if err := clone.BindPassword(mutation.Alias, mutation.Binding); err != nil {
+		if err := clone.Bind(KindPassword, mutation.Alias, mutation.Binding); err != nil {
 			return false, err
 		}
 		return true, nil
@@ -415,7 +388,7 @@ func applyPasswordMutation(vault, clone *Vault, mutation PasswordMutation) (bool
 		if vault.passwordBindings[mutation.Alias] == mutation.Binding {
 			return false, nil
 		}
-		if err := clone.BindPassword(mutation.Alias, mutation.Binding); err != nil {
+		if err := clone.Bind(KindPassword, mutation.Alias, mutation.Binding); err != nil {
 			return false, err
 		}
 		return true, nil
@@ -444,7 +417,7 @@ func applyTOTPMutation(vault, clone *Vault, mutation TOTPMutation) (bool, error)
 		if err := clone.Assign(KindTOTP, mutation.Alias, mutation.Credential); err != nil {
 			return false, err
 		}
-		if err := clone.BindTOTP(mutation.Alias, mutation.Binding); err != nil {
+		if err := clone.Bind(KindTOTP, mutation.Alias, mutation.Binding); err != nil {
 			return false, err
 		}
 		return true, nil
@@ -455,7 +428,7 @@ func applyTOTPMutation(vault, clone *Vault, mutation TOTPMutation) (bool, error)
 		if vault.totpBindings[mutation.Alias] == mutation.Binding {
 			return false, nil
 		}
-		if err := clone.BindTOTP(mutation.Alias, mutation.Binding); err != nil {
+		if err := clone.Bind(KindTOTP, mutation.Alias, mutation.Binding); err != nil {
 			return false, err
 		}
 		return true, nil

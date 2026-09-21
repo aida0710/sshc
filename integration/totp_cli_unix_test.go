@@ -78,7 +78,7 @@ func TestCLIAutomatesPasswordAndTOTPAgainstRealOpenSSH(t *testing.T) {
 	if err := vault.SetCredential(secret.KindTOTP, "integration-token", setupKey); err != nil {
 		t.Fatal(err)
 	}
-	if err := vault.AssignTOTPCredential("totp-integration", "integration-token", binding); err != nil {
+	if err := vault.AssignBoundCredential(secret.BoundAssignment{Kind: secret.KindTOTP, Subject: "totp-integration", Name: "integration-token", Binding: binding}); err != nil {
 		t.Fatal(err)
 	}
 

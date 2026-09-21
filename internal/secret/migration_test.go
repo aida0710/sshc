@@ -41,7 +41,7 @@ func TestSchemaFourFixtureRemainsMigratableAndReadable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, ok := vault.BoundPasswordFor(
+	if got, ok := vault.BoundFor(KindPassword,
 		"bastion",
 		"abababababababababababababababababababababababababababababababab",
 	); !ok || got != "fixture-shared-password" {
