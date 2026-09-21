@@ -3,8 +3,6 @@ package httpserver
 import (
 	"errors"
 	"net/http"
-	"net/url"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -19,37 +17,24 @@ import (
 // anything is stored, and the settings changes on a configured sync.
 
 func syncSetupInput(request api.SyncSetupCheckRequest, credentials remotesync.Credentials) (remotesync.Config, remotesync.Credentials, error) {
-	if len(request.Endpoint) == 0 || len(request.Endpoint) > 2048 ||
-		len(credentials.AccessKeyID) == 0 || len(credentials.AccessKeyID) > 512 ||
-		len(credentials.SecretAccessKey) == 0 || len(credentials.SecretAccessKey) > 512 ||
-		(request.Path != nil && len(*request.Path) > 255) ||
-		(request.Region != nil && len(*request.Region) > 64) {
-		return remotesync.Config{}, remotesync.Credentials{}, errors.New("invalid_request")
+	if len(credentials.AccessKeyID) == 0 || len(credentials.AccessKeyID) > 512 ||
+		len(credentials.SecretAccessKey) == 0 || len(credentials.SecretAccessKey) > 512 {
+		return remotesync.Config{}, remotesync.Credentials{}, remotesync.ErrTargetTooLong
 	}
-	parsed, err := url.Parse(request.Endpoint)
-	if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil || parsed.Opaque != "" {
-		return remotesync.Config{}, remotesync.Credentials{}, errors.New("endpoint_must_be_https")
-	}
-	if (parsed.Path != "" && parsed.Path != "/") || parsed.RawPath != "" || parsed.RawQuery != "" || parsed.ForceQuery || parsed.Fragment != "" {
-		return remotesync.Config{}, remotesync.Credentials{}, errors.New("endpoint_must_have_no_path")
-	}
-	if !safeBucketName(request.Bucket) {
-		return remotesync.Config{}, remotesync.Credentials{}, errors.New("unsafe_bucket_name")
-	}
-	path := ""
+	input := remotesync.TargetInput{Endpoint: request.Endpoint, Bucket: request.Bucket, Region: "auto"}
 	if request.Path != nil {
-		path = strings.Trim(*request.Path, "/")
+		input.Path = *request.Path
 	}
-	if !safeObjectPath(path) {
-		return remotesync.Config{}, remotesync.Credentials{}, errors.New("unsafe_object_path")
-	}
-	region := "auto"
 	if request.Region != nil && *request.Region != "" {
-		region = *request.Region
+		input.Region = *request.Region
+	}
+	target, err := remotesync.ValidateTarget(input)
+	if err != nil {
+		return remotesync.Config{}, remotesync.Credentials{}, err
 	}
 	return remotesync.Config{
-		Endpoint: strings.TrimRight(request.Endpoint, "/"), Bucket: request.Bucket,
-		Path: path, Region: region, Direction: remotesync.DirectionBoth,
+		Endpoint: target.Endpoint, Bucket: target.Bucket, Path: target.Path, Region: target.Region,
+		Direction: remotesync.DirectionBoth,
 	}, credentials, nil
 }
 
@@ -90,12 +75,14 @@ func setupCredentialsProblem(c *echo.Context, err error) error {
 }
 
 func setupInputProblem(c *echo.Context, err error) error {
-	switch err.Error() {
-	case "endpoint_must_be_https", "endpoint_must_have_no_path", "unsafe_bucket_name", "unsafe_object_path":
-		return problem(c, http.StatusBadRequest, err.Error())
-	default:
-		return problem(c, http.StatusBadRequest, "invalid_request")
+	for _, refusal := range []error{
+		remotesync.ErrEndpointNotHTTPS, remotesync.ErrEndpointHasPath, remotesync.ErrUnsafeBucketName, remotesync.ErrUnsafeObjectPath,
+	} {
+		if errors.Is(err, refusal) {
+			return problem(c, http.StatusBadRequest, refusal.Error())
+		}
 	}
+	return problem(c, http.StatusBadRequest, "invalid_request")
 }
 
 // CheckSetup probes an exact destination without persisting credentials.
@@ -268,42 +255,4 @@ func (h SyncHandlers) Configure(c *echo.Context) error {
 		h.Auto.ResetRemoteCache()
 	}
 	return h.status(c)
-}
-
-// safeObjectPath は bucket 名と同じくらい狭く絞ってあり、理由も同じである。
-// パスはこの application が署名する URL のセグメントになるため、
-// 独自のセグメントを足したり上位へ抜け出したりし得るものは、エスケープではなく拒否する。
-func safeObjectPath(path string) bool {
-	if path == "" {
-		return true
-	}
-	if len(path) > 255 || strings.Contains(path, "..") {
-		return false
-	}
-	for _, segment := range strings.Split(path, "/") {
-		if segment == "" || !safeBucketName(segment) {
-			return false
-		}
-	}
-	return true
-}
-
-// safeBucketName はわざと狭く絞ってある。名前はこの application が
-// 署名する URL のパスセグメントになるため、セグメントやクエリを
-// 足し得るものは、エスケープではなく拒否する。
-func safeBucketName(name string) bool {
-	if name == "" || len(name) > 255 || strings.Contains(name, "/") || strings.Contains(name, "..") {
-		return false
-	}
-	for _, character := range name {
-		switch {
-		case character >= 'a' && character <= 'z',
-			character >= 'A' && character <= 'Z',
-			character >= '0' && character <= '9',
-			character == '-', character == '.', character == '_':
-		default:
-			return false
-		}
-	}
-	return filepath.Base(name) == name
 }

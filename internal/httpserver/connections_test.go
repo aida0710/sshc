@@ -58,7 +58,7 @@ func passwordForHTTPConnection(t *testing.T, harness *connectionHTTPHarness, ali
 	if err != nil {
 		return ""
 	}
-	return harness.passwords.BoundPasswordFor(alias, binding)
+	return harness.passwords.BoundFor(secret.KindPassword, alias, binding)
 }
 
 func totpForHTTPConnection(t *testing.T, harness *connectionHTTPHarness, alias string) string {
@@ -67,7 +67,7 @@ func totpForHTTPConnection(t *testing.T, harness *connectionHTTPHarness, alias s
 	if err != nil {
 		return ""
 	}
-	return harness.passwords.BoundTOTPFor(alias, binding)
+	return harness.passwords.BoundFor(secret.KindTOTP, alias, binding)
 }
 
 func newConnectionHTTPHarness(t *testing.T, initialise bool) *connectionHTTPHarness {
@@ -443,7 +443,7 @@ func TestUpdateConnectionEndpointConfirmsTOTPForAChangedRoute(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := harness.passwords.AssignTOTPCredential("existing", "cluster-otp", binding); err != nil {
+	if err := harness.passwords.AssignBoundCredential(secret.BoundAssignment{Kind: secret.KindTOTP, Subject: "existing", Name: "cluster-otp", Binding: binding}); err != nil {
 		t.Fatal(err)
 	}
 	body := connectionUpdateBody(map[string]any{"kind": "unchanged"})

@@ -612,25 +612,18 @@ func (h PasswordHandlers) AssignCredential(c *echo.Context) error {
 	if err := decodeJSON(c, &request); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
-	if kind == secret.KindPassword {
-		if blocked, response := h.ensurePasswordStorable(c, request.Subject); blocked {
-			return response
+	if kind == secret.KindPassword || kind == secret.KindTOTP {
+		if kind == secret.KindPassword {
+			if blocked, response := h.ensurePasswordStorable(c, request.Subject); blocked {
+				return response
+			}
 		}
 		binding, response := h.passwordBinding(c, request.Subject)
 		if response != nil {
 			return response
 		}
-		if err := h.Service.AssignPasswordCredential(request.Subject, request.Name, binding); err != nil {
-			return credentialProblem(c, err, nil)
-		}
-		return h.listCredentials(c)
-	}
-	if kind == secret.KindTOTP {
-		binding, response := h.passwordBinding(c, request.Subject)
-		if response != nil {
-			return response
-		}
-		if err := h.Service.AssignTOTPCredential(request.Subject, request.Name, binding); err != nil {
+		assignment := secret.BoundAssignment{Kind: kind, Subject: request.Subject, Name: request.Name, Binding: binding}
+		if err := h.Service.AssignBoundCredential(assignment); err != nil {
 			return credentialProblem(c, err, nil)
 		}
 		return h.listCredentials(c)

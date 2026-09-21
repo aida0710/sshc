@@ -126,56 +126,22 @@ type connectResponse struct {
 // 増えることは書いておく。境界は動かないが、動かないことは自明ではない。
 // 返すのはこの接続に現れる alias のぶんだけである。保管庫を一覧にはしない
 // 尋ねられた接続に要るものと、要らないものを区別する。
-func savedPasswords(
-	passwords *secret.Service,
-	aliases []string,
-	binding func(alias string) (string, error),
-) (map[string]string, map[string]string, []string) {
-	if passwords == nil || binding == nil {
+func (h ConnectHandlers) savedBoundSecrets(kind secret.Kind, aliases []string) (map[string]string, map[string]string, []string) {
+	if h.Passwords == nil || h.PasswordBinding == nil {
 		return nil, nil, nil
 	}
 	found := map[string]string{}
 	bindings := map[string]string{}
 	var stale []string
 	for _, alias := range aliases {
-		current, err := binding(alias)
+		current, err := h.PasswordBinding(alias)
 		if err != nil {
 			continue
 		}
-		if password := passwords.BoundPasswordFor(alias, current); password != "" {
-			found[alias] = password
+		if value := h.Passwords.BoundFor(kind, alias, current); value != "" {
+			found[alias] = value
 			bindings[alias] = current
-		} else if passwords.HasPasswordFor(alias) {
-			stale = append(stale, alias)
-		}
-	}
-	if len(found) == 0 {
-		found = nil
-		bindings = nil
-	}
-	return found, bindings, stale
-}
-
-func savedTOTPs(
-	passwords *secret.Service,
-	aliases []string,
-	binding func(alias string) (string, error),
-) (map[string]string, map[string]string, []string) {
-	if passwords == nil || binding == nil {
-		return nil, nil, nil
-	}
-	found := map[string]string{}
-	bindings := map[string]string{}
-	var stale []string
-	for _, alias := range aliases {
-		current, err := binding(alias)
-		if err != nil {
-			continue
-		}
-		if provisioning := passwords.BoundTOTPFor(alias, current); provisioning != "" {
-			found[alias] = provisioning
-			bindings[alias] = current
-		} else if passwords.HasTOTPFor(alias) {
+		} else if h.Passwords.HasAssignmentFor(kind, alias) {
 			stale = append(stale, alias)
 		}
 	}
@@ -206,7 +172,7 @@ func (h ConnectHandlers) connectionAliases(alias string) []string {
 //
 // 連鎖ぶんを見る。手前に立つホストが別の鍵を指定していれば、その鍵の結果も
 // 要る。そうでないと、行き先には届く接続が手前で止まって手入力を求める。
-// savedPasswords がしていることと同じである。
+// savedBoundSecrets がしていることと同じである。
 func savedPassphrases(
 	passwords *secret.Service,
 	aliases []string,
@@ -421,8 +387,8 @@ func (h ConnectHandlers) Connect(c *echo.Context) error {
 	aliases := h.connectionAliases(decoded.Alias)
 	answer.Passphrases = savedPassphrases(h.Passwords, aliases, h.WorkspaceKeys)
 	answer.Passwords, answer.PasswordBindings, answer.StalePasswords =
-		savedPasswords(h.Passwords, aliases, h.PasswordBinding)
+		h.savedBoundSecrets(secret.KindPassword, aliases)
 	answer.TOTPs, answer.TOTPBindings, answer.StaleTOTPs =
-		savedTOTPs(h.Passwords, aliases, h.PasswordBinding)
+		h.savedBoundSecrets(secret.KindTOTP, aliases)
 	return c.JSON(http.StatusOK, answer)
 }

@@ -324,7 +324,7 @@ func setTestPassword(service *secret.Service, alias, password string) error {
 }
 
 func testPasswordFor(service *secret.Service, alias string) string {
-	return service.BoundPasswordFor(alias, testAuthenticationBinding)
+	return service.BoundFor(secret.KindPassword, alias, testAuthenticationBinding)
 }
 
 func TestEmptyTravelDocumentUsesTheCurrentUnlockedKeyGeneration(t *testing.T) {
@@ -371,7 +371,7 @@ func TestAdoptTravelDocumentRefusesCiphertextItsBoundedReaderCannotReopen(t *tes
 }
 
 func assignTestPasswordCredential(service *secret.Service, subject, name string) error {
-	return service.AssignPasswordCredential(subject, name, testAuthenticationBinding)
+	return service.AssignBoundCredential(secret.BoundAssignment{Kind: secret.KindPassword, Subject: subject, Name: name, Binding: testAuthenticationBinding})
 }
 
 type syncCASFileSystem struct {
@@ -1008,13 +1008,13 @@ func TestTOTPCredentialRequiresAndPreservesAnAuthenticationBinding(t *testing.T)
 	if err := service.AssignCredential(secret.KindTOTP, "bastion", "production"); !errors.Is(err, secret.ErrPasswordBindingRequired) {
 		t.Fatalf("unbound AssignCredential = %v", err)
 	}
-	if err := service.AssignTOTPCredential("bastion", "production", testAuthenticationBinding); err != nil {
+	if err := service.AssignBoundCredential(secret.BoundAssignment{Kind: secret.KindTOTP, Subject: "bastion", Name: "production", Binding: testAuthenticationBinding}); err != nil {
 		t.Fatal(err)
 	}
-	if got := service.BoundTOTPFor("bastion", testAuthenticationBinding); !strings.Contains(got, "secret=JBSWY3DPEHPK3PXP") {
+	if got := service.BoundFor(secret.KindTOTP, "bastion", testAuthenticationBinding); !strings.Contains(got, "secret=JBSWY3DPEHPK3PXP") {
 		t.Fatalf("BoundTOTPFor = %q", got)
 	}
-	if got := service.BoundTOTPFor("bastion", strings.Repeat("cd", 32)); got != "" {
+	if got := service.BoundFor(secret.KindTOTP, "bastion", strings.Repeat("cd", 32)); got != "" {
 		t.Fatal("TOTP was released to a stale binding")
 	}
 	listed, err := service.Credentials()
@@ -1024,7 +1024,7 @@ func TestTOTPCredentialRequiresAndPreservesAnAuthenticationBinding(t *testing.T)
 	if err := service.Rename("bastion", "edge"); err != nil {
 		t.Fatal(err)
 	}
-	if got := service.BoundTOTPFor("edge", testAuthenticationBinding); got == "" {
+	if got := service.BoundFor(secret.KindTOTP, "edge", testAuthenticationBinding); got == "" {
 		t.Fatal("host rename did not carry its TOTP assignment")
 	}
 }
@@ -1050,7 +1050,7 @@ func TestUpdateCredentialRenamesAndReplacesAccountPasswordWithoutLosingAssignmen
 	if got, err := service.Credential(secret.KindPassword, "shared-office"); err != nil || got != "second-secret" {
 		t.Fatalf("new Credential = %q, %v", got, err)
 	}
-	if got := service.BoundPasswordFor("web-1", testAuthenticationBinding); got != "second-secret" {
+	if got := service.BoundFor(secret.KindPassword, "web-1", testAuthenticationBinding); got != "second-secret" {
 		t.Fatalf("assigned password = %q", got)
 	}
 

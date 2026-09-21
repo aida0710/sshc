@@ -7,9 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
-	"path/filepath"
 	"strings"
 	"unicode/utf8"
 
@@ -19,10 +17,6 @@ import (
 
 const (
 	maxSyncSetupLine       = 4 << 10
-	maxSyncEndpointBytes   = 2048
-	maxSyncBucketBytes     = 255
-	maxSyncPathBytes       = 255
-	maxSyncRegionBytes     = 64
 	maxSyncAccessKeyBytes  = 512
 	maxSyncSecretKeyBytes  = 512
 	maxSyncSnapshotKeySize = 1024
@@ -317,21 +311,8 @@ func readBoundedVisibleLine(ctx context.Context, input *os.File) ([]byte, error)
 }
 
 func validSyncSetupTarget(endpoint, bucket, path, region string) bool {
-	if len(endpoint) == 0 || len(endpoint) > maxSyncEndpointBytes ||
-		len(bucket) == 0 || len(bucket) > maxSyncBucketBytes ||
-		len(path) > maxSyncPathBytes || len(region) == 0 || len(region) > maxSyncRegionBytes {
-		return false
-	}
-	parsed, err := url.Parse(endpoint)
-	if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil || parsed.Opaque != "" ||
-		(parsed.Path != "" && parsed.Path != "/") || parsed.RawPath != "" || parsed.RawQuery != "" ||
-		parsed.ForceQuery || parsed.Fragment != "" {
-		return false
-	}
-	if !safeSyncSetupName(bucket) || !safeSyncSetupPath(strings.Trim(path, "/")) {
-		return false
-	}
-	return true
+	_, err := remotesync.ValidateTarget(remotesync.TargetInput{Endpoint: endpoint, Bucket: bucket, Path: path, Region: region})
+	return err == nil
 }
 
 func safeGeneratedSyncKey(key string) bool {
@@ -344,38 +325,6 @@ func safeGeneratedSyncKey(key string) bool {
 		}
 	}
 	return true
-}
-
-func safeSyncSetupPath(path string) bool {
-	if path == "" {
-		return true
-	}
-	if strings.Contains(path, "..") {
-		return false
-	}
-	for _, segment := range strings.Split(path, "/") {
-		if !safeSyncSetupName(segment) {
-			return false
-		}
-	}
-	return true
-}
-
-func safeSyncSetupName(name string) bool {
-	if name == "" || strings.Contains(name, "/") || strings.Contains(name, "..") {
-		return false
-	}
-	for _, character := range name {
-		switch {
-		case character >= 'a' && character <= 'z',
-			character >= 'A' && character <= 'Z',
-			character >= '0' && character <= '9',
-			character == '-', character == '.', character == '_':
-		default:
-			return false
-		}
-	}
-	return filepath.Base(name) == name
 }
 
 type zeroJSONField struct {

@@ -470,7 +470,7 @@ func TestUpdateConnectionAssignsSavedTOTPToTheResolvedAuthenticationDestination(
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := harness.secrets.BoundTOTPFor("edge", binding); !strings.Contains(got, "secret=JBSWY3DPEHPK3PXP") {
+	if got := harness.secrets.BoundFor(secret.KindTOTP, "edge", binding); !strings.Contains(got, "secret=JBSWY3DPEHPK3PXP") {
 		t.Fatalf("BoundTOTPFor(edge) = %q", got)
 	}
 	listed, err := harness.secrets.Credentials()
@@ -492,7 +492,7 @@ func TestUpdateConnectionRemovesTOTPAssignmentWithoutChangingTheCredential(t *te
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := harness.secrets.AssignTOTPCredential("edge", "cluster-otp", binding); err != nil {
+	if err := harness.secrets.AssignBoundCredential(secret.BoundAssignment{Kind: secret.KindTOTP, Subject: "edge", Name: "cluster-otp", Binding: binding}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -504,7 +504,7 @@ func TestUpdateConnectionRemovesTOTPAssignmentWithoutChangingTheCredential(t *te
 	if err != nil {
 		t.Fatalf("UpdateConnection = %v", err)
 	}
-	if got := harness.secrets.BoundTOTPFor("edge", binding); got != "" {
+	if got := harness.secrets.BoundFor(secret.KindTOTP, "edge", binding); got != "" {
 		t.Fatalf("removed assignment still resolves to %q", got)
 	}
 	if got, credentialErr := harness.secrets.Credential(secret.KindTOTP, "cluster-otp"); credentialErr != nil || got == "" {
@@ -522,7 +522,7 @@ func TestUpdateConnectionSkipsASemanticallyUnchangedPasswordAssignment(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := harness.secrets.AssignPasswordCredential("edge", "office", binding); err != nil {
+	if err := harness.secrets.AssignBoundCredential(secret.BoundAssignment{Kind: secret.KindPassword, Subject: "edge", Name: "office", Binding: binding}); err != nil {
 		t.Fatal(err)
 	}
 	vaultPath := filepath.Join(harness.workspace.Root(), filepath.FromSlash(secret.WorkspacePath))
@@ -555,7 +555,7 @@ func TestUpdateConnectionSkipsASemanticallyUnchangedPasswordAssignment(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := harness.secrets.BoundPasswordFor("edge", updatedBinding); got != "shared" {
+	if got := harness.secrets.BoundFor(secret.KindPassword, "edge", updatedBinding); got != "shared" {
 		t.Fatalf("reconfirmed password = %q, want shared", got)
 	}
 }
@@ -586,10 +586,10 @@ func TestChangingAuthenticationDestinationStopsAutomaticPasswordRelease(t *testi
 	if retargeted == original {
 		t.Fatal("changing HostName did not change the authentication binding")
 	}
-	if got := harness.secrets.BoundPasswordFor("edge", retargeted); got != "" {
+	if got := harness.secrets.BoundFor(secret.KindPassword, "edge", retargeted); got != "" {
 		t.Fatalf("retargeted host received the old password: %q", got)
 	}
-	if got := harness.secrets.BoundPasswordFor("edge", original); got != "must-not-travel" {
+	if got := harness.secrets.BoundFor(secret.KindPassword, "edge", original); got != "must-not-travel" {
 		t.Fatalf("the stored password was destroyed instead of held for reconfirmation: %q", got)
 	}
 }
@@ -607,7 +607,7 @@ func TestWebConfirmationRebindsSavedAuthenticationValuesToTheUpdatedRoute(t *tes
 	if err := harness.secrets.SetCredential(secret.KindTOTP, "edge-code", "JBSWY3DPEHPK3PXP"); err != nil {
 		t.Fatal(err)
 	}
-	if err := harness.secrets.AssignTOTPCredential("edge", "edge-code", original); err != nil {
+	if err := harness.secrets.AssignBoundCredential(secret.BoundAssignment{Kind: secret.KindTOTP, Subject: "edge", Name: "edge-code", Binding: original}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -624,13 +624,13 @@ func TestWebConfirmationRebindsSavedAuthenticationValuesToTheUpdatedRoute(t *tes
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := harness.secrets.BoundPasswordFor("edge", retargeted); got != "must-follow-confirmation" {
+	if got := harness.secrets.BoundFor(secret.KindPassword, "edge", retargeted); got != "must-follow-confirmation" {
 		t.Fatalf("reconfirmed password = %q", got)
 	}
-	if got := harness.secrets.BoundTOTPFor("edge", retargeted); !strings.Contains(got, "secret=JBSWY3DPEHPK3PXP") {
+	if got := harness.secrets.BoundFor(secret.KindTOTP, "edge", retargeted); !strings.Contains(got, "secret=JBSWY3DPEHPK3PXP") {
 		t.Fatalf("reconfirmed TOTP = %q", got)
 	}
-	if got := harness.secrets.BoundPasswordFor("edge", original); got != "" {
+	if got := harness.secrets.BoundFor(secret.KindPassword, "edge", original); got != "" {
 		t.Fatalf("old route still received password %q", got)
 	}
 }

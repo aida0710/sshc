@@ -270,7 +270,7 @@ func TestCreateConnectionBindsASavedCredentialToTheCreatedDestination(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := harness.secrets.BoundPasswordFor("restored", binding); got != "shared-secret" {
+	if got := harness.secrets.BoundFor(secret.KindPassword, "restored", binding); got != "shared-secret" {
 		t.Fatalf("bound password = %q, want shared-secret", got)
 	}
 }
