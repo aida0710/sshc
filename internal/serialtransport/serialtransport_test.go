@@ -15,7 +15,11 @@ import (
 
 func TestConfigDefaultsAndValidation(t *testing.T) {
 	defaults := Config{Device: "/dev/ttyUSB0"}.Normalize()
-	want := DefaultConfig("/dev/ttyUSB0")
+	// 省略した option は、network 機器の console で一般的な 9600 8-N-1 になる。
+	want := Config{
+		Device: "/dev/ttyUSB0", BaudRate: DefaultBaudRate, DataBits: DefaultDataBits,
+		Parity: ParityNone, StopBits: StopBitsOne, FlowControl: FlowControlNone,
+	}
 	if defaults != want {
 		t.Fatalf("Normalize() = %#v, want %#v", defaults, want)
 	}
@@ -39,7 +43,7 @@ func TestConfigDefaultsAndValidation(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			config := DefaultConfig("COM3")
+			config := Config{Device: "COM3"}.Normalize()
 			test.change(&config)
 			if err := config.Validate(); !errors.Is(err, ErrInvalidConfig) {
 				t.Fatalf("Validate() = %v, want ErrInvalidConfig", err)
@@ -122,7 +126,7 @@ func TestContextCancellationClosesPortAndUnblocksRead(t *testing.T) {
 	port.blockRead = true
 	transport := mustTransport(t, &fakeBackend{port: port})
 	ctx, cancel := context.WithCancel(context.Background())
-	stream, err := transport.Open(ctx, DefaultConfig("COM7"))
+	stream, err := transport.Open(ctx, Config{Device: "COM7"}.Normalize())
 	if err != nil {
 		t.Fatalf("Open() = %v", err)
 	}
@@ -165,7 +169,7 @@ func TestClosePreservesBackendErrorAndRunsOnce(t *testing.T) {
 	port := newFakePort()
 	port.closeErr = closeErr
 	transport := mustTransport(t, &fakeBackend{port: port})
-	stream, err := transport.Open(context.Background(), DefaultConfig("COM8"))
+	stream, err := transport.Open(context.Background(), Config{Device: "COM8"}.Normalize())
 	if err != nil {
 		t.Fatalf("Open() = %v", err)
 	}
@@ -184,7 +188,7 @@ func TestOpenClosesPortWhenContextIsCanceledByBackend(t *testing.T) {
 	port := newFakePort()
 	backend := &fakeBackend{port: port, cancelOpen: cancel}
 	transport := mustTransport(t, backend)
-	if stream, err := transport.Open(ctx, DefaultConfig("COM9")); stream != nil || !errors.Is(err, context.Canceled) {
+	if stream, err := transport.Open(ctx, Config{Device: "COM9"}.Normalize()); stream != nil || !errors.Is(err, context.Canceled) {
 		t.Fatalf("Open() = %#v, %v; want nil, context.Canceled", stream, err)
 	}
 	if calls := port.closeCalls(); calls != 1 {
@@ -195,7 +199,7 @@ func TestOpenClosesPortWhenContextIsCanceledByBackend(t *testing.T) {
 func TestDiscardPendingStopsWhenContinuousInputReachesDeadline(t *testing.T) {
 	port := &continuousPort{}
 	transport := mustTransport(t, &fakeBackend{port: port})
-	stream, err := transport.Open(context.Background(), DefaultConfig("COM11"))
+	stream, err := transport.Open(context.Background(), Config{Device: "COM11"}.Normalize())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -235,7 +239,7 @@ func TestStreamClassifiesDriverPortClosedError(t *testing.T) {
 	port := newFakePort()
 	port.readErr = fakePortError{code: serial.PortClosed}
 	transport := mustTransport(t, &fakeBackend{port: port})
-	stream, err := transport.Open(context.Background(), DefaultConfig("COM4"))
+	stream, err := transport.Open(context.Background(), Config{Device: "COM4"}.Normalize())
 	if err != nil {
 		t.Fatalf("Open() = %v", err)
 	}
@@ -254,12 +258,12 @@ func TestNilBackendAndNilPortAreRejected(t *testing.T) {
 		t.Fatalf("NewWithBackend(typed nil) = %v", err)
 	}
 	transport := mustTransport(t, &fakeBackend{})
-	if stream, err := transport.Open(context.Background(), DefaultConfig("COM5")); stream != nil || err == nil {
+	if stream, err := transport.Open(context.Background(), Config{Device: "COM5"}.Normalize()); stream != nil || err == nil {
 		t.Fatalf("Open(nil port) = %#v, %v", stream, err)
 	}
 	var typedNilPort *fakePort
 	transport = mustTransport(t, &fakeBackend{port: typedNilPort})
-	if stream, err := transport.Open(context.Background(), DefaultConfig("COM5")); stream != nil || err == nil {
+	if stream, err := transport.Open(context.Background(), Config{Device: "COM5"}.Normalize()); stream != nil || err == nil {
 		t.Fatalf("Open(typed nil port) = %#v, %v", stream, err)
 	}
 }

@@ -37,7 +37,7 @@ func newTestManager(t *testing.T) (*Manager, string) {
 		t.Fatal(err)
 	}
 	manager.Now = func() time.Time { return testEpoch }
-	credentials, err := manager.Bootstrap(bootstrap)
+	credentials, _, err := manager.BootstrapForSession(bootstrap, "")
 	if err != nil {
 		t.Fatal(err)
 	}

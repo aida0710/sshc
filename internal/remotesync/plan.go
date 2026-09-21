@@ -71,31 +71,6 @@ func preconditionMode(entry LocalEntry) fs.FileMode {
 	return modeBits(entry.Mode)
 }
 
-// Plan は、復号したスナップショットと現在のワークスペースから、このマシンをそれに
-// 一致させるトランザクション、または衝突を導き出す。
-//
-// pull 全体を 1 つの storage.Request にし、再解析、事前条件、ジャーナル、
-// 世代バックアップを通常の書き込みと同じ境界で適用する。
-//
-//   - base は、このマシンが最後に同期したスナップショットのマニフェスト。base が
-//     nil なら、このマシンは一度も同期していないので、何も削除とは呼べず、
-//     ファイルはひとつも取り除かれない。
-//   - local は、ワークスペース相対のパスを、いまこのディスク上のダイジェストへ対応付ける。
-//   - remote は、いま取得したマニフェストで、contents はそのファイル群。
-func Plan(root string, base *Manifest, local map[string]string, remote Manifest, contents map[string][]byte, resolve Resolution) (storage.Request, []Conflict, error) {
-	return PlanWithIgnore(root, base, local, remote, contents, resolve, nil)
-}
-
-// PlanWithIgnore keeps paths selected by the shared exclusion rules outside
-// both writes and removals. The local copy of an excluded path is never touched.
-func PlanWithIgnore(root string, base *Manifest, local map[string]string, remote Manifest, contents map[string][]byte, resolve Resolution, ignored func(string) bool) (storage.Request, []Conflict, error) {
-	entries := make(map[string]LocalEntry, len(local))
-	for path, digest := range local {
-		entries[path] = entryState(digest, "0600")
-	}
-	return PlanEntriesWithIgnore(root, base, entries, remote, contents, resolve, ignored)
-}
-
 // PlanEntriesWithIgnore is the mode-aware planner used by the sync service.
 func PlanEntriesWithIgnore(root string, base *Manifest, local map[string]LocalEntry, remote Manifest, contents map[string][]byte, resolve Resolution, ignored func(string) bool) (storage.Request, []Conflict, error) {
 	isIgnored := func(path string) bool { return ignored != nil && ignored(path) }

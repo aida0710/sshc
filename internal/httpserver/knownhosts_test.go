@@ -71,7 +71,7 @@ func newKnownHostsServer(t *testing.T) (*echo.Echo, session.Credentials, *int, *
 	if err != nil {
 		t.Fatal(err)
 	}
-	credentials, err := sessions.Bootstrap(bootstrap)
+	credentials, _, err := sessions.BootstrapForSession(bootstrap, "")
 	if err != nil {
 		t.Fatal(err)
 	}

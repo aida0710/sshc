@@ -30,7 +30,7 @@ func TestSystemBackendAppliesFlowControl(t *testing.T) {
 			defer master.Close()
 			defer slave.Close()
 
-			config := DefaultConfig(slave.Name())
+			config := Config{Device: slave.Name()}.Normalize()
 			config.FlowControl = test.flow
 			stream, err := New().Open(context.Background(), config)
 			if err != nil {

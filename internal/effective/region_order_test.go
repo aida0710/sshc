@@ -52,7 +52,7 @@ func TestGeneratedRegionFixtureOrdersChildBeforeParent(t *testing.T) {
 	// 入れ子のグループには自前の Include 行が要る。そしてそれがあることで、子自身の
 	// ファイルが先に読まれ、その Port が設定ファイルのものに勝つ。
 	for keyword, want := range map[string]string{"hostname": "203.0.113.11", "port": "2210", "user": "ops"} {
-		source, ok := projection.Value(keyword)
+		source, ok := effective.WinningSource(projection, keyword)
 		if !ok {
 			t.Fatalf("engine did not project %q", keyword)
 		}
@@ -93,7 +93,7 @@ func TestAnIncludeAboveABlockIsReadBeforeIt(t *testing.T) {
 	// が最初の値になり、catch-all のものは覆される。ファイル単位で走査すると 22 を
 	// 報告し、既定値が Include より下にあるあらゆる設定について誤ることになる。そして
 	// それはほとんどの設定である。
-	port, ok := effective.Project(graph, "nas").Value("port")
+	port, ok := effective.WinningSource(effective.Project(graph, "nas"), "port")
 	if !ok || port.Value != "2222" {
 		t.Fatalf("port = %#v, want the included file's 2222", port)
 	}

@@ -150,7 +150,7 @@ func newKeyServer(t *testing.T, service KeyService) (*echo.Echo, *session.Manage
 	if err != nil {
 		t.Fatalf("NewManager error = %v", err)
 	}
-	credentials, err := manager.Bootstrap(bootstrap)
+	credentials, _, err := manager.BootstrapForSession(bootstrap, "")
 	if err != nil {
 		t.Fatalf("Bootstrap error = %v", err)
 	}
@@ -347,7 +347,7 @@ func TestRevealHandlerSetsNoStoreWithoutRelyingOnTheMiddleware(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewManager error = %v", err)
 	}
-	credentials, err := manager.Bootstrap(bootstrap)
+	credentials, _, err := manager.BootstrapForSession(bootstrap, "")
 	if err != nil {
 		t.Fatalf("Bootstrap error = %v", err)
 	}

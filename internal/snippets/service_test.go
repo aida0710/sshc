@@ -244,10 +244,6 @@ func TestStartupStoresEncryptedSecretInputsAndAnEditCannotBreakAnAssignment(t *t
 	if err := service.SetStartup("bastion", secret.ID, map[string]string{"token": "hidden"}); err != nil {
 		t.Fatalf("SetStartup(secret) = %v", err)
 	}
-	secretPreview, err := service.PreviewStartup("bastion")
-	if err != nil || secretPreview.Targets[0].Command != "echo [secret]" {
-		t.Fatalf("PreviewStartup(secret) = %#v, %v", secretPreview, err)
-	}
 	preparedStartup, err := service.PrepareStartupCommand("bastion")
 	if err != nil || preparedStartup.Command != "echo hidden" || preparedStartup.Display != "echo [secret]" {
 		t.Fatalf("PrepareStartupCommand = %#v, %v", preparedStartup, err)
@@ -267,9 +263,9 @@ func TestStartupStoresEncryptedSecretInputsAndAnEditCannotBreakAnAssignment(t *t
 	}); !errors.Is(err, ErrMissingVariable) {
 		t.Fatalf("Update = %v, want ErrMissingVariable", err)
 	}
-	preview, err := service.PreviewStartup("bastion")
-	if err != nil || preview.Targets[0].Command != "echo ok" {
-		t.Fatalf("PreviewStartup = %#v, %v", preview, err)
+	prepared, err := service.PrepareStartupCommand("bastion")
+	if err != nil || prepared.Command != "echo ok" {
+		t.Fatalf("PrepareStartupCommand after the refused update = %#v, %v", prepared, err)
 	}
 }
 
@@ -374,10 +370,7 @@ func TestAdHocCommandPreviewAndExecution(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	finished, err := service.Wait(context.Background(), job.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
+	finished := waitForJob(t, service, job.ID)
 	result := finished.Results[0]
 	if result.TargetID != "pane-a" || result.Alias != "bastion" || result.Stdout != "bastion:uname -a" {
 		t.Fatalf("result = %#v", result)
@@ -494,10 +487,7 @@ func TestMultiExecutionIsBoundedAndKeepsHostResults(t *testing.T) {
 		time.Sleep(time.Millisecond)
 	}
 	close(release)
-	finished, err := service.Wait(context.Background(), job.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
+	finished := waitForJob(t, service, job.ID)
 	if maximum.Load() != 2 || finished.Status != JobCompleted || len(finished.Results) != 4 {
 		t.Fatalf("max=%d job=%#v", maximum.Load(), finished)
 	}
@@ -534,10 +524,7 @@ func TestCancelStopsDispatchAndMarksEveryTarget(t *testing.T) {
 	if err := service.Cancel(job.ID); err != nil {
 		t.Fatal(err)
 	}
-	finished, err := service.Wait(context.Background(), job.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
+	finished := waitForJob(t, service, job.ID)
 	if finished.Status != JobCancelled {
 		t.Fatalf("status = %s", finished.Status)
 	}
@@ -571,10 +558,7 @@ func TestSecretValuesAreRedactedFromRemoteOutputAndErrorsAreStable(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	finished, err := service.Wait(context.Background(), job.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
+	finished := waitForJob(t, service, job.ID)
 	result := finished.Results[0]
 	if result.Stdout != "[secret]" || result.Stderr != "bad [secret]" || result.Problem != "run_failed" {
 		t.Fatalf("result = %#v", result)
@@ -582,4 +566,22 @@ func TestSecretValuesAreRedactedFromRemoteOutputAndErrorsAreStable(t *testing.T)
 	if strings.Contains(result.Stdout+result.Stderr+result.Problem, "top-secret") {
 		t.Fatal("a secret escaped in the public result")
 	}
+}
+
+// waitForJob は、製品の画面と同じく Job を読み直して終わるのを待つ。
+func waitForJob(t *testing.T, service *Service, id string) Job {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		job, err := service.Job(id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if job.Status != JobRunning {
+			return job
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("job %s did not finish", id)
+	return Job{}
 }

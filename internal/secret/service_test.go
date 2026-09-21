@@ -702,7 +702,7 @@ func TestNothingIsReadableUntilTheVaultIsUnlocked(t *testing.T) {
 	if err := service.Remove("bastion"); !errors.Is(err, secret.ErrLocked) {
 		t.Errorf("Remove while locked = %v, want ErrLocked", err)
 	}
-	if service.Has("bastion") {
+	if service.HasAssignmentFor(secret.KindPassword, "bastion") {
 		t.Error("Has reported true while locked")
 	}
 	if service.Aliases() != nil {
@@ -734,7 +734,7 @@ func TestInitialiseWritesASealedFileAndUnlockReadsItBack(t *testing.T) {
 	if err := reopened.Unlock(passphrase); err != nil {
 		t.Fatalf("Unlock = %v", err)
 	}
-	if !reopened.Has("bastion") {
+	if !reopened.HasAssignmentFor(secret.KindPassword, "bastion") {
 		t.Error("the reopened vault has no password for bastion")
 	}
 }
@@ -768,7 +768,7 @@ func TestInitialiseRefusesToReplaceAnExistingVault(t *testing.T) {
 	if err := third.Unlock(passphrase); err != nil {
 		t.Fatalf("the original vault no longer opens: %v", err)
 	}
-	if !third.Has("bastion") {
+	if !third.HasAssignmentFor(secret.KindPassword, "bastion") {
 		t.Error("the stored password is gone")
 	}
 }
@@ -811,7 +811,7 @@ func TestRemoveWritesTheVaultBack(t *testing.T) {
 	if err := reopened.Unlock(passphrase); err != nil {
 		t.Fatal(err)
 	}
-	if reopened.Has("bastion") {
+	if reopened.HasAssignmentFor(secret.KindPassword, "bastion") {
 		t.Error("the password came back after a restart")
 	}
 }
@@ -835,7 +835,7 @@ func TestRenameCarriesThePasswordThroughAWrite(t *testing.T) {
 	if err := reopened.Unlock(passphrase); err != nil {
 		t.Fatal(err)
 	}
-	if reopened.Has("bastion") || !reopened.Has("edge") {
+	if reopened.HasAssignmentFor(secret.KindPassword, "bastion") || !reopened.HasAssignmentFor(secret.KindPassword, "edge") {
 		t.Errorf("aliases after rename = %#v", reopened.Aliases())
 	}
 }
@@ -1245,7 +1245,7 @@ func TestAVaultLeftUntouchedShutsItself(t *testing.T) {
 	if err := service.Unlock(passphrase); err != nil {
 		t.Fatalf("Unlock = %v", err)
 	}
-	if !service.Has("bastion") {
+	if !service.HasAssignmentFor(secret.KindPassword, "bastion") {
 		t.Error("the reopened vault lost what it held")
 	}
 }
@@ -1324,7 +1324,7 @@ func TestReadingTheStatusDoesNotHoldTheVaultOpen(t *testing.T) {
 		}
 		service.Unlocked()
 		service.Aliases()
-		service.Has("bastion")
+		service.HasAssignmentFor(secret.KindPassword, "bastion")
 	}
 	if service.Unlocked() {
 		t.Error("polling the status held the vault open")
@@ -2199,7 +2199,7 @@ func TestAccountPasswordAssignmentsRequireAuthenticationBinding(t *testing.T) {
 	if !errors.Is(err, secret.ErrPasswordBindingRequired) {
 		t.Fatalf("WithPasswordMutation(unbound) = %v, want ErrPasswordBindingRequired", err)
 	}
-	if called || service.Has("edge") {
+	if called || service.HasAssignmentFor(secret.KindPassword, "edge") {
 		t.Fatal("unbound password mutation changed the vault")
 	}
 }
@@ -2762,13 +2762,14 @@ func TestSettingsWithoutAKeyKeepTheKeyThatIsAlreadyStored(t *testing.T) {
 	if err := service.Initialise(passphrase); err != nil {
 		t.Fatal(err)
 	}
-	if err := service.SetSyncSettings(secret.SyncSettings{
+	stored := secret.SyncSettings{
 		Endpoint: "https://s3.example", Bucket: "b", Region: "auto",
 		AccessKeyID: "AKIAEXAMPLE", SecretAccessKey: "s3cret-key", Direction: "both",
-	}); err != nil {
+	}
+	if err := service.SetSyncSettings(stored); err != nil {
 		t.Fatalf("SetSyncSettings = %v", err)
 	}
-	if err := service.SetSyncKey("AB12-CD34-EF56-GH78-JK90-MN12"); err != nil {
+	if err := service.SetSyncKeyIfSettingsMatch(stored, "AB12-CD34-EF56-GH78-JK90-MN12"); err != nil {
 		t.Fatalf("SetSyncKey = %v", err)
 	}
 
@@ -2805,7 +2806,7 @@ func TestSettingTheKeyLeavesEveryOtherSettingAlone(t *testing.T) {
 	if err := service.SetSyncSettings(settings); err != nil {
 		t.Fatalf("SetSyncSettings = %v", err)
 	}
-	if err := service.SetSyncKey("AB12-CD34-EF56-GH78-JK90-MN12"); err != nil {
+	if err := service.SetSyncKeyIfSettingsMatch(settings, "AB12-CD34-EF56-GH78-JK90-MN12"); err != nil {
 		t.Fatalf("SetSyncKey = %v", err)
 	}
 
@@ -2903,7 +2904,7 @@ func TestSettingTheKeyNeedsAnOpenVault(t *testing.T) {
 		t.Fatal(err)
 	}
 	service.Lock()
-	if err := service.SetSyncKey("AB12-CD34-EF56-GH78-JK90-MN12"); !errors.Is(err, secret.ErrLocked) {
+	if err := service.SetSyncKeyIfSettingsMatch(secret.SyncSettings{}, "AB12-CD34-EF56-GH78-JK90-MN12"); !errors.Is(err, secret.ErrLocked) {
 		t.Fatalf("SetSyncKey on a locked vault = %v, want ErrLocked", err)
 	}
 }

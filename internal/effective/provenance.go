@@ -28,9 +28,6 @@ var cumulativeKeywords = map[string]bool{
 	"remoteforward": true, "dynamicforward": true, "sendenv": true,
 }
 
-// Cumulative は、そのキーワードが積み上がるかを報告する。大文字小文字は問わない。
-func Cumulative(keyword string) bool { return cumulativeKeywords[strings.ToLower(keyword)] }
-
 // 射影を、ひとつの整った継承の連鎖として示せない理由。
 const (
 	ComplexityWildcardPattern   = "wildcard_pattern"
@@ -78,20 +75,6 @@ type Projection struct {
 	Alias        string
 	Sources      []Source
 	Complexities []Complexity
-}
-
-// Simple は、すべての値が但し書きなしに帰属できたかを報告する。
-func (p Projection) Simple() bool { return len(p.Complexities) == 0 }
-
-// Value は、keyword について勝った出所を返す。
-func (p Projection) Value(keyword string) (Source, bool) {
-	wanted := strings.ToLower(keyword)
-	for _, source := range p.Sources {
-		if source.Winner && strings.ToLower(source.Keyword) == wanted {
-			return source, true
-		}
-	}
-	return Source{}, false
 }
 
 // Project は設定を読み込み順に走査し、各キーワードを、それを最初に設定した

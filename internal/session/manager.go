@@ -110,11 +110,6 @@ func (m *Manager) Reissue() (string, error) {
 	return fresh, nil
 }
 
-func (m *Manager) Bootstrap(presented string) (Credentials, error) {
-	credentials, _, err := m.BootstrapForSession(presented, "")
-	return credentials, err
-}
-
 // BootstrapForSession はone-time bootstrapを消費し、すでに有効なcookieがあれば
 // そのsessionへ新しいtab用CSRF tokenを追加する。cookieを差し替えないことで、
 // 同じブラウザで開いている別tabを切断しない。

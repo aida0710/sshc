@@ -12,17 +12,6 @@ import (
 	"sshc/internal/objectstore"
 )
 
-// Push は、このワークスペースを暗号化して書き込む。リモートが動いていれば拒否する。
-//
-// 最初の書き込みには If-None-Match: *、以後は最後に確認した ETag を If-Match に
-// 指定し、別端末による更新を上書きしない。
-// messageが空の場合は、自動同期と同じローカル差分の要約を使う。
-func (s *Service) Push(ctx context.Context, passphrase, message string) (PushResult, error) {
-	s.operationMu.Lock()
-	defer s.operationMu.Unlock()
-	return s.push(ctx, passphrase, "", message)
-}
-
 func (s *Service) PushUsing(ctx context.Context, key KeyProvider, message string) (PushResult, error) {
 	s.operationMu.Lock()
 	defer s.operationMu.Unlock()
@@ -36,22 +25,6 @@ func (s *Service) PushUsing(ctx context.Context, key KeyProvider, message string
 		return PushResult{}, err
 	}
 	return s.push(ctx, passphrase, "", message)
-}
-
-// ForcePush replaces the exact remote binding and ETag which the user confirmed.
-// It never performs an unconditional write; a binding or remote generation
-// change after confirmation is reported as ErrRemoteMoved.
-func (s *Service) ForcePush(ctx context.Context, passphrase string, confirmation ForcePushConfirmation, message string) (PushResult, error) {
-	s.operationMu.Lock()
-	defer s.operationMu.Unlock()
-	binding, err := s.validateForcePushBinding(confirmation)
-	if err != nil {
-		return PushResult{}, err
-	}
-	if err := validateForcePushGeneration(ctx, binding, confirmation); err != nil {
-		return PushResult{}, err
-	}
-	return s.push(ctx, passphrase, confirmation.ETag, message)
 }
 
 func (s *Service) ForcePushUsing(ctx context.Context, key KeyProvider, confirmation ForcePushConfirmation, message string) (PushResult, error) {

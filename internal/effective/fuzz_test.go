@@ -42,7 +42,7 @@ func FuzzParseValues(f *testing.F) {
 	}
 
 	f.Fuzz(func(t *testing.T, stdout []byte) {
-		values := ParseValues(stdout)
+		values := parseValues(stdout)
 
 		seen := make(map[string]bool, len(values.Keywords))
 		parsed := 0

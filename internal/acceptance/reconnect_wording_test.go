@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"sshc/internal/terminal"
 )
@@ -39,7 +40,7 @@ func TestTheSettingsScreenSaysTheWindowTheGapsActuallyMakeUp(t *testing.T) {
 
 		for attempts, key := range choices {
 			line := messageFor(t, messages, key)
-			seconds := fmt.Sprintf("%d", int(terminal.ReconnectWindow(attempts).Seconds()))
+			seconds := fmt.Sprintf("%d", int(reconnectWindow(attempts).Seconds()))
 			if !strings.Contains(line, seconds) {
 				t.Errorf("%s の %s が %s 秒を言っていない: %q\n"+
 					"  間隔を変えたなら、この文言も変えること。", language, key, seconds, line)
@@ -48,7 +49,7 @@ func TestTheSettingsScreenSaysTheWindowTheGapsActuallyMakeUp(t *testing.T) {
 
 		// 既定の選択肢も、既定の回数の窓を言う。
 		fallback := messageFor(t, messages, "terminal.reconnectDefault")
-		window := fmt.Sprintf("%d", int(terminal.ReconnectWindow(terminal.MaxReconnects).Seconds()))
+		window := fmt.Sprintf("%d", int(reconnectWindow(terminal.MaxReconnects).Seconds()))
 		if !strings.Contains(fallback, window) {
 			t.Errorf("%s の既定の選択肢が %s 秒を言っていない: %q", language, window, fallback)
 		}
@@ -75,4 +76,16 @@ func messageFor(t *testing.T, messages, key string) string {
 		return rest[:end]
 	}
 	return rest
+}
+
+// reconnectWindow は attempts 回の再接続に最大で掛かる時間（揺らぎ込み、秒に切り上げ）。
+// 文言はこの値を言うので、backoff の表を変えたらここが赤くなる。
+func reconnectWindow(attempts int) time.Duration {
+	attempts = terminal.NormaliseReconnects(attempts)
+	var total time.Duration
+	for attempt := range attempts {
+		total += terminal.ReconnectBackoff[min(attempt, len(terminal.ReconnectBackoff)-1)]
+	}
+	maximum := total * terminal.ReconnectJitterMaxPercent / 100
+	return ((maximum + time.Second - 1) / time.Second) * time.Second
 }

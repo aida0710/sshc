@@ -30,11 +30,11 @@ func TestRingKeepsTheNewestBytesWhenItWraps(t *testing.T) {
 					t.Fatalf("Write(%q) = %d, %v", write, written, err)
 				}
 			}
-			if got := string(ring.Snapshot()); got != test.want {
+			if got := string(ringContents(ring)); got != test.want {
 				t.Fatalf("Snapshot() = %q, want %q", got, test.want)
 			}
-			if ring.Len() != len(test.want) {
-				t.Fatalf("Len() = %d, want %d", ring.Len(), len(test.want))
+			if len(ringContents(ring)) != len(test.want) {
+				t.Fatalf("Len() = %d, want %d", len(ringContents(ring)), len(test.want))
 			}
 		})
 	}
@@ -45,14 +45,14 @@ func TestRingSnapshotDoesNotAliasTheBuffer(t *testing.T) {
 	if _, err := ring.Write([]byte("abcd")); err != nil {
 		t.Fatal(err)
 	}
-	first := ring.Snapshot()
+	first := ringContents(ring)
 	if _, err := ring.Write([]byte("ef")); err != nil {
 		t.Fatal(err)
 	}
 	if !bytes.Equal(first, []byte("abcd")) {
 		t.Fatalf("the earlier snapshot changed to %q", first)
 	}
-	if got := string(ring.Snapshot()); got != "cdef" {
+	if got := string(ringContents(ring)); got != "cdef" {
 		t.Fatalf("Snapshot() = %q", got)
 	}
 }

@@ -654,14 +654,14 @@ func TestDedicatedKeyPassphraseNamedTransitionsRemovalAndRelocation(t *testing.T
 		t.Fatalf("relocated dedicated value = %q, %v", got, ok)
 	}
 
-	vault.RemoveKeyPassphrase("keys/team/id_a")
+	vault.Unassign(secret.KindKeyPassphrase, "keys/team/id_a")
 	if _, ok := vault.SecretFor(secret.KindKeyPassphrase, "keys/team/id_a"); ok {
 		t.Error("RemoveKeyPassphrase left the dedicated value resolvable")
 	}
 	if err := vault.Assign(secret.KindKeyPassphrase, "keys/id_b", "shared"); err != nil {
 		t.Fatal(err)
 	}
-	vault.RemoveKeyPassphrase("keys/id_b")
+	vault.Unassign(secret.KindKeyPassphrase, "keys/id_b")
 	if _, ok := vault.Assigned(secret.KindKeyPassphrase, "keys/id_b"); ok {
 		t.Error("RemoveKeyPassphrase left the named assignment behind")
 	}

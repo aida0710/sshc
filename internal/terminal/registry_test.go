@@ -337,7 +337,7 @@ func TestExitedSessionsAreRetainedUpToTheCap(t *testing.T) {
 		opened = append(opened, session.ID())
 		starter.processes[index].exit(terminal.ExitInfo{Code: 0})
 		waitFor(t, exited(registry, session.ID()))
-		registry.Prune()
+		registry.Sessions()
 	}
 
 	sessions := registry.Sessions()
@@ -380,9 +380,9 @@ func TestAttachReplaysTheBufferAndThenFollowsTheLiveOutput(t *testing.T) {
 	process := starter.last()
 
 	process.feed("before-attach\n")
-	waitFor(t, func() bool { return len(session.Snapshot()) > 0 })
+	waitFor(t, func() bool { return len(snapshotOf(session)) > 0 })
 
-	replay, stream := session.Attach()
+	replay, stream := attach(t, session)
 	if string(replay) != "before-attach\n" {
 		t.Fatalf("replay = %q", replay)
 	}
@@ -397,7 +397,7 @@ func TestAttachReplaysTheBufferAndThenFollowsTheLiveOutput(t *testing.T) {
 		t.Fatal("the live output never arrived")
 	}
 
-	again, _ := session.Attach()
+	again, _ := attach(t, session)
 	if string(again) != "before-attach\nafter-attach\n" {
 		t.Fatalf("second replay = %q", again)
 	}
@@ -410,7 +410,7 @@ func TestAttachFromReplaysOnlyMissingBytesAndReportsARingGap(t *testing.T) {
 
 	process.feed(strings.Repeat("x", terminal.MinScrollback) + "abcdef")
 	waitFor(t, func() bool {
-		snapshot := session.Snapshot()
+		snapshot := snapshotOf(session)
 		return len(snapshot) == terminal.MinScrollback && strings.HasSuffix(string(snapshot), "abcdef")
 	})
 	end := uint64(terminal.MinScrollback + len("abcdef"))
@@ -438,7 +438,7 @@ func TestAnAttachmentThatDoesNotReadIsDroppedAndThePTYKeepsRunning(t *testing.T)
 	session := openShell(t, registry)
 	process := starter.last()
 
-	_, stalled := session.Attach()
+	_, stalled := attach(t, session)
 	for index := 0; index < 2000; index++ {
 		process.feed("x")
 	}
@@ -448,9 +448,9 @@ func TestAnAttachmentThatDoesNotReadIsDroppedAndThePTYKeepsRunning(t *testing.T)
 		t.Fatal("the session died with its slow attachment")
 	}
 	process.feed("still-alive")
-	waitFor(t, func() bool { return strings.Contains(string(session.Snapshot()), "still-alive") })
+	waitFor(t, func() bool { return strings.Contains(string(snapshotOf(session)), "still-alive") })
 
-	_, fresh := session.Attach()
+	_, fresh := attach(t, session)
 	process.feed("!")
 	select {
 	case <-fresh.Output():
@@ -464,7 +464,7 @@ func TestExitLeavesTheSessionReadableAndClosesEveryAttachment(t *testing.T) {
 	session := openShell(t, registry)
 	process := starter.last()
 
-	_, stream := session.Attach()
+	_, stream := attach(t, session)
 	process.feed("ssh: Could not resolve hostname\n")
 	process.exit(terminal.ExitInfo{Code: 255})
 
@@ -482,7 +482,7 @@ func TestExitLeavesTheSessionReadableAndClosesEveryAttachment(t *testing.T) {
 	if stream.Dropped() {
 		t.Fatal("a stream closed by the exit must not be reported as dropped")
 	}
-	replay, closed := session.Attach()
+	replay, closed := attach(t, session)
 	if !strings.Contains(string(replay), "Could not resolve hostname") {
 		t.Fatalf("replay after exit = %q", replay)
 	}
@@ -521,7 +521,7 @@ func TestExitedSSHSessionReconnectsWithTheSameIdentityAndScrollback(t *testing.T
 		t.Fatal(err)
 	}
 	first.feed("before exit\n")
-	waitFor(t, func() bool { return strings.Contains(string(session.Snapshot()), "before exit") })
+	waitFor(t, func() bool { return strings.Contains(string(snapshotOf(session)), "before exit") })
 	first.exit(terminal.ExitInfo{Code: 255})
 	waitFor(t, func() bool { return session.Exit() != nil })
 
@@ -536,7 +536,7 @@ func TestExitedSSHSessionReconnectsWithTheSameIdentityAndScrollback(t *testing.T
 	if view.State != terminal.StateConnected || view.Exited != nil || view.Problem != "" {
 		t.Fatalf("reconnected view = %#v", view)
 	}
-	if snapshot := string(session.Snapshot()); !strings.Contains(snapshot, "before exit") ||
+	if snapshot := string(snapshotOf(session)); !strings.Contains(snapshot, "before exit") ||
 		!strings.Contains(snapshot, "新しいシェル") {
 		t.Fatalf("reconnected scrollback = %q", snapshot)
 	}
@@ -596,7 +596,7 @@ func TestClosingWhileManualReconnectOpensDoesNotResurrectTheSession(t *testing.T
 	if reconnectErr := <-result; !errors.Is(reconnectErr, terminal.ErrReconnectUnavailable) {
 		t.Fatalf("Reconnect after close = %v", reconnectErr)
 	}
-	registry.Prune()
+	registry.Sessions()
 	if _, ok := registry.Lookup(session.ID()); ok {
 		t.Fatal("the manually closed session was resurrected")
 	}
@@ -756,13 +756,13 @@ func TestRenameChangesOnlyTheDisplayedName(t *testing.T) {
 	if err := registry.Rename(session.ID(), "  ログ監視  "); err != nil {
 		t.Fatalf("Rename() = %v", err)
 	}
-	if got := session.Title(); got != "ログ監視" {
+	if got := session.View().Title; got != "ログ監視" {
 		t.Errorf("Title() = %q, want the trimmed name", got)
 	}
 	if got := session.View().Title; got != "ログ監視" {
 		t.Errorf("View().Title = %q", got)
 	}
-	if session.Kind() != terminal.KindShell || !session.Live() {
+	if session.View().Kind != terminal.KindShell || !session.Live() {
 		t.Errorf("rename disturbed the session: %#v", session.View())
 	}
 	if starter.count() != before {
@@ -779,7 +779,7 @@ func TestRenameWorksOnAnExitedSession(t *testing.T) {
 	if err := registry.Rename(session.ID(), "落ちた方"); err != nil {
 		t.Fatalf("Rename() on an exited session = %v", err)
 	}
-	if got := session.Title(); got != "落ちた方" {
+	if got := session.View().Title; got != "落ちた方" {
 		t.Errorf("Title() = %q", got)
 	}
 }
@@ -799,7 +799,7 @@ func TestRenameRefusesNamesTheListCannotShow(t *testing.T) {
 			t.Errorf("Rename(%q) = %v, want ErrInvalidTitle", refused, err)
 		}
 	}
-	if got := session.Title(); got != "zsh" {
+	if got := session.View().Title; got != "zsh" {
 		t.Errorf("a refused rename changed the name to %q", got)
 	}
 	if err := registry.Rename("no-such-session", "name"); !errors.Is(err, terminal.ErrNotFound) {
