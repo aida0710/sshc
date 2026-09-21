@@ -69,15 +69,6 @@ func ObjectKeyFor(config Config) string {
 	return joinKey(config.Path, ObjectName)
 }
 
-// SnapshotKeyFor は、createdAt に作られたスナップショットの日付付きコピーの場所。
-func SnapshotKeyFor(config Config, createdAt string) (string, error) {
-	moment, err := time.Parse(time.RFC3339, createdAt)
-	if err != nil {
-		return "", err
-	}
-	return joinKey(config.Path, SnapshotPrefix+moment.UTC().Format(datedLayout)+"."+archiveSuffix), nil
-}
-
 func snapshotKeyFor(config Config, createdAt, origin string, sealed []byte, sequence uint64) (string, error) {
 	moment, err := time.Parse(time.RFC3339, createdAt)
 	if err != nil {

@@ -25,10 +25,15 @@ func autoFor(t *testing.T, machine installation, enabled bool) *remotesync.Auto 
 	return auto
 }
 
-// once は一巡させ、その結果を返す。
+// once は製品と同じ順で 1 巡させる: Poll で受信し、止まらなければ予約された
+// 送信をその場で流す。Run では受信で止まった巡回は送信の timer を仕掛けない。
 func once(t *testing.T, auto *remotesync.Auto) remotesync.AutoView {
 	t.Helper()
-	return auto.Once(context.Background())
+	view := auto.Poll(context.Background())
+	if view.Phase != remotesync.AutoIdle {
+		return view
+	}
+	return auto.SendScheduled(context.Background())
 }
 
 // UI は engine 起動直後、一巡目のtickerより先にstatusを読む。ゼロ値の空文字は
@@ -47,7 +52,7 @@ func TestAutoDoesNothingWhenItIsNotOn(t *testing.T) {
 	machine := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
 	auto := autoFor(t, machine, false)
 
-	view := auto.Once(context.Background())
+	view := once(t, auto)
 	if view.Phase == remotesync.AutoRunning {
 		t.Fatalf("view = %+v", view)
 	}
@@ -217,7 +222,7 @@ func TestAutomaticOperationsPreparePersistedConfigurationBeforeNetworkUse(t *tes
 func TestSendOnlyAutoStopsBeforeUploadingWhenRemoteMoved(t *testing.T) {
 	bucket := &fakeBucket{}
 	producer := newInstallation(t, bucket, map[string]string{"config": "remote\n"})
-	if _, err := producer.service.Push(context.Background(), syncPassphrase, "Remote setup"); err != nil {
+	if _, err := producer.service.PushUsing(context.Background(), keyOf(syncPassphrase), "Remote setup"); err != nil {
 		t.Fatal(err)
 	}
 	consumer := newInstallation(t, bucket, map[string]string{"config": "local\n"})
@@ -246,7 +251,7 @@ func TestSendOnlyAutoStopsBeforeUploadingWhenRemoteMoved(t *testing.T) {
 func TestAutoAppliesWhatAnotherMachinePushed(t *testing.T) {
 	bucket := &fakeBucket{}
 	producer := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
-	if _, err := producer.service.Push(context.Background(), syncPassphrase, ""); err != nil {
+	if _, err := producer.service.PushUsing(context.Background(), keyOf(syncPassphrase), ""); err != nil {
 		t.Fatal(err)
 	}
 	consumer := newInstallation(t, bucket, map[string]string{})
@@ -263,7 +268,7 @@ func TestAutoAppliesWhatAnotherMachinePushed(t *testing.T) {
 func TestLiveReplayIsBlockedButExplicitHistoryRestoreRemainsAvailable(t *testing.T) {
 	bucket := &fakeBucket{}
 	producer := newInstallation(t, bucket, map[string]string{"config": "Host first\n"})
-	if _, err := producer.service.Push(context.Background(), syncPassphrase, "First"); err != nil {
+	if _, err := producer.service.PushUsing(context.Background(), keyOf(syncPassphrase), "First"); err != nil {
 		t.Fatal(err)
 	}
 	firstCiphertext := append([]byte(nil), bucket.object(remotesync.ObjectName)...)
@@ -275,7 +280,7 @@ func TestLiveReplayIsBlockedButExplicitHistoryRestoreRemainsAvailable(t *testing
 	}
 
 	producer.write(t, "config", "Host second\n")
-	if _, err := producer.service.Push(context.Background(), syncPassphrase, "Second"); err != nil {
+	if _, err := producer.service.PushUsing(context.Background(), keyOf(syncPassphrase), "Second"); err != nil {
 		t.Fatal(err)
 	}
 	if view := once(t, auto); view.Phase != remotesync.AutoIdle {
@@ -328,7 +333,7 @@ func TestLiveReplayIsBlockedButExplicitHistoryRestoreRemainsAvailable(t *testing
 func TestAutoAcceptsAProvenMultiGenerationDescendant(t *testing.T) {
 	bucket := &fakeBucket{}
 	producer := newInstallation(t, bucket, map[string]string{"config": "Host first\n"})
-	if _, err := producer.service.Push(context.Background(), syncPassphrase, "First"); err != nil {
+	if _, err := producer.service.PushUsing(context.Background(), keyOf(syncPassphrase), "First"); err != nil {
 		t.Fatal(err)
 	}
 	consumer := newInstallation(t, bucket, map[string]string{})
@@ -339,7 +344,7 @@ func TestAutoAcceptsAProvenMultiGenerationDescendant(t *testing.T) {
 
 	for _, value := range []string{"Host second\n", "Host third\n"} {
 		producer.write(t, "config", value)
-		if _, err := producer.service.Push(context.Background(), syncPassphrase, strings.TrimSpace(value)); err != nil {
+		if _, err := producer.service.PushUsing(context.Background(), keyOf(syncPassphrase), strings.TrimSpace(value)); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -363,7 +368,7 @@ func TestAutoAcceptsAProvenMultiGenerationDescendant(t *testing.T) {
 func TestAutoLineageProofDecodesRepeatedCiphertextOnlyOnce(t *testing.T) {
 	bucket := &fakeBucket{}
 	producer := newInstallation(t, bucket, map[string]string{"config": "Host first\n"})
-	if _, err := producer.service.Push(context.Background(), syncPassphrase, "First"); err != nil {
+	if _, err := producer.service.PushUsing(context.Background(), keyOf(syncPassphrase), "First"); err != nil {
 		t.Fatal(err)
 	}
 	firstCiphertext := append([]byte(nil), bucket.object(remotesync.ObjectName)...)
@@ -374,7 +379,7 @@ func TestAutoLineageProofDecodesRepeatedCiphertextOnlyOnce(t *testing.T) {
 	}
 	for _, value := range []string{"Host second\n", "Host third\n"} {
 		producer.write(t, "config", value)
-		if _, err := producer.service.Push(context.Background(), syncPassphrase, strings.TrimSpace(value)); err != nil {
+		if _, err := producer.service.PushUsing(context.Background(), keyOf(syncPassphrase), strings.TrimSpace(value)); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -392,7 +397,7 @@ func TestAutoLineageProofDecodesRepeatedCiphertextOnlyOnce(t *testing.T) {
 func TestAutoUsesAuthenticatedAncestorsBeyondLegacyCiphertextBudget(t *testing.T) {
 	bucket := &fakeBucket{}
 	producer := newInstallation(t, bucket, map[string]string{"config": "Host first\n"})
-	if _, err := producer.service.Push(context.Background(), syncPassphrase, "First"); err != nil {
+	if _, err := producer.service.PushUsing(context.Background(), keyOf(syncPassphrase), "First"); err != nil {
 		t.Fatal(err)
 	}
 	firstCiphertext := append([]byte(nil), bucket.object(remotesync.ObjectName)...)
@@ -403,7 +408,7 @@ func TestAutoUsesAuthenticatedAncestorsBeyondLegacyCiphertextBudget(t *testing.T
 	}
 	for _, value := range []string{"Host second\n", "Host third\n"} {
 		producer.write(t, "config", value)
-		if _, err := producer.service.Push(context.Background(), syncPassphrase, strings.TrimSpace(value)); err != nil {
+		if _, err := producer.service.PushUsing(context.Background(), keyOf(syncPassphrase), strings.TrimSpace(value)); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -435,7 +440,7 @@ func TestAutoStopsInsteadOfRemovingFiles(t *testing.T) {
 		"config":               "Host bastion\n",
 		"connections/old.conf": "Host old\n",
 	})
-	if _, err := first.service.Push(context.Background(), syncPassphrase, ""); err != nil {
+	if _, err := first.service.PushUsing(context.Background(), keyOf(syncPassphrase), ""); err != nil {
 		t.Fatal(err)
 	}
 	second := newInstallation(t, bucket, map[string]string{})
@@ -447,7 +452,7 @@ func TestAutoStopsInsteadOfRemovingFiles(t *testing.T) {
 
 	// 1 台目が片方を消して押し出す。
 	first.remove(t, "connections/old.conf")
-	if _, err := first.service.Push(context.Background(), syncPassphrase, ""); err != nil {
+	if _, err := first.service.PushUsing(context.Background(), keyOf(syncPassphrase), ""); err != nil {
 		t.Fatal(err)
 	}
 
@@ -464,7 +469,7 @@ func TestAutoStopsInsteadOfRemovingFiles(t *testing.T) {
 func TestAutoStopsOnAConflict(t *testing.T) {
 	bucket := &fakeBucket{}
 	first := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
-	if _, err := first.service.Push(context.Background(), syncPassphrase, ""); err != nil {
+	if _, err := first.service.PushUsing(context.Background(), keyOf(syncPassphrase), ""); err != nil {
 		t.Fatal(err)
 	}
 	second := newInstallation(t, bucket, map[string]string{"config": "Host something else\n"})
@@ -493,7 +498,7 @@ func TestAutoStopsOnAConflict(t *testing.T) {
 func TestAutoAcknowledgesAnUnchangedRemoteGeneration(t *testing.T) {
 	bucket := &fakeBucket{}
 	producer := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
-	if _, err := producer.service.Push(context.Background(), syncPassphrase, ""); err != nil {
+	if _, err := producer.service.PushUsing(context.Background(), keyOf(syncPassphrase), ""); err != nil {
 		t.Fatal(err)
 	}
 	consumer := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
@@ -514,7 +519,7 @@ func TestAutoAcknowledgesAnUnchangedRemoteGeneration(t *testing.T) {
 func TestAutoBlocksWhenAnAcknowledgedLiveObjectWasDeleted(t *testing.T) {
 	bucket := &fakeBucket{}
 	producer := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
-	if _, err := producer.service.Push(context.Background(), syncPassphrase, ""); err != nil {
+	if _, err := producer.service.PushUsing(context.Background(), keyOf(syncPassphrase), ""); err != nil {
 		t.Fatal(err)
 	}
 	consumer := newInstallation(t, bucket, map[string]string{})
@@ -532,7 +537,7 @@ func TestAutoBlocksWhenAnAcknowledgedLiveObjectWasDeleted(t *testing.T) {
 func TestAutoCachesAnUnreadableRemoteGeneration(t *testing.T) {
 	bucket := &fakeBucket{}
 	producer := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
-	if _, err := producer.service.Push(context.Background(), syncPassphrase, ""); err != nil {
+	if _, err := producer.service.PushUsing(context.Background(), keyOf(syncPassphrase), ""); err != nil {
 		t.Fatal(err)
 	}
 	consumer := newInstallation(t, bucket, map[string]string{})
@@ -564,7 +569,7 @@ func TestAutoCachesAnUnreadableRemoteGeneration(t *testing.T) {
 func TestAutoReportsTheInternalFailureStageWithoutChangingTheSafeView(t *testing.T) {
 	bucket := &fakeBucket{}
 	producer := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
-	if _, err := producer.service.Push(context.Background(), syncPassphrase, ""); err != nil {
+	if _, err := producer.service.PushUsing(context.Background(), keyOf(syncPassphrase), ""); err != nil {
 		t.Fatal(err)
 	}
 	consumer := newInstallation(t, bucket, map[string]string{})
@@ -592,7 +597,7 @@ func TestAutoReportsTheInternalFailureStageWithoutChangingTheSafeView(t *testing
 func TestAutoRetriesATransientFailureAfterBoundedBackoff(t *testing.T) {
 	bucket := &fakeBucket{}
 	producer := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
-	if _, err := producer.service.Push(context.Background(), syncPassphrase, ""); err != nil {
+	if _, err := producer.service.PushUsing(context.Background(), keyOf(syncPassphrase), ""); err != nil {
 		t.Fatal(err)
 	}
 	consumer := newInstallation(t, bucket, map[string]string{})
@@ -624,7 +629,7 @@ func TestAutoRetriesATransientFailureAfterBoundedBackoff(t *testing.T) {
 func TestAutoConfigurationResetClearsFailureEvidence(t *testing.T) {
 	bucket := &fakeBucket{}
 	producer := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
-	if _, err := producer.service.Push(context.Background(), syncPassphrase, ""); err != nil {
+	if _, err := producer.service.PushUsing(context.Background(), keyOf(syncPassphrase), ""); err != nil {
 		t.Fatal(err)
 	}
 	consumer := newInstallation(t, bucket, map[string]string{})
@@ -664,7 +669,7 @@ func TestEveryCycleRunsInsideTheUnattendedFrame(t *testing.T) {
 		return syncPassphrase, true
 	}
 
-	auto.Once(context.Background())
+	once(t, auto)
 	if !sawKey {
 		t.Fatal("the cycle read the key outside the unattended frame")
 	}

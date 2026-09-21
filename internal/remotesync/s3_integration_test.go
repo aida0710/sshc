@@ -119,7 +119,7 @@ func realInstallationAt(t *testing.T, objectPath string, files map[string]string
 		Endpoint: endpoint, Bucket: client.Bucket, Path: objectPath, Region: client.Region,
 		Direction: remotesync.DirectionBoth,
 	}
-	if err := service.Configure(config, client.Creds, &client); err != nil {
+	if err := service.Reconfigure(config, client.Creds, &client, func() error { return nil }); err != nil {
 		t.Fatal(err)
 	}
 	return installation{
@@ -204,7 +204,7 @@ func TestAgainstARealBucketASnapshotTravelsBetweenTwoMachines(t *testing.T) {
 	default:
 		t.Fatalf("Pull before push = %v", err)
 	}
-	if _, err := first.service.Push(context.Background(), syncPassphrase, ""); err != nil {
+	if _, err := first.service.PushUsing(context.Background(), keyOf(syncPassphrase), ""); err != nil {
 		t.Fatalf("Push = %v", err)
 	}
 
@@ -252,7 +252,7 @@ func TestAgainstARealBucketSharedExclusionsProtectReceiverFiles(t *testing.T) {
 		remotesync.IgnorePath: "*.tmp\n",
 		"cache/upload.tmp":    "sender temporary bytes",
 	})
-	if _, err := sender.service.Push(context.Background(), syncPassphrase, "share exclusions"); err != nil {
+	if _, err := sender.service.PushUsing(context.Background(), keyOf(syncPassphrase), "share exclusions"); err != nil {
 		t.Fatalf("Push = %v", err)
 	}
 
@@ -282,7 +282,7 @@ func TestAgainstARealBucketFreshReceiveOnlySetupVerifiesAndPulls(t *testing.T) {
 	sender := realInstallationAt(t, remotePath, map[string]string{
 		"config": "Host receive-only\n\tHostName 192.0.2.10\n",
 	})
-	if _, err := sender.service.Push(context.Background(), syncPassphrase, "Create receive-only fixture"); err != nil {
+	if _, err := sender.service.PushUsing(context.Background(), keyOf(syncPassphrase), "Create receive-only fixture"); err != nil {
 		t.Fatalf("sender Push = %v", err)
 	}
 
@@ -347,7 +347,7 @@ func TestAgainstARealBucketTwoFreshWorkspacesSurviveAFullSyncLifecycle(t *testin
 	})
 	second := realInstallationAt(t, remotePath, map[string]string{})
 
-	if _, err := first.service.Push(ctx, syncPassphrase, ""); err != nil {
+	if _, err := first.service.PushUsing(ctx, keyOf(syncPassphrase), ""); err != nil {
 		t.Fatalf("first workspace initial Push = %v", err)
 	}
 	bucketView, err := first.service.BucketStatus(ctx)
@@ -374,7 +374,7 @@ func TestAgainstARealBucketTwoFreshWorkspacesSurviveAFullSyncLifecycle(t *testin
 
 	// 両方が同じbaseを知ったあと、同じファイルを別々に編集する。
 	writeRealWorkspace(t, first, "config", "Host shared\n  HostName remote-change.example\n")
-	if _, err := first.service.Push(ctx, syncPassphrase, ""); err != nil {
+	if _, err := first.service.PushUsing(ctx, keyOf(syncPassphrase), ""); err != nil {
 		t.Fatalf("first workspace Push after editing = %v", err)
 	}
 	history, err := first.service.History(ctx, syncPassphrase)
@@ -421,7 +421,7 @@ func TestAgainstARealBucketTwoFreshWorkspacesSurviveAFullSyncLifecycle(t *testin
 	if err := second.service.Apply(localChoice); err != nil && !errors.Is(err, remotesync.ErrNothingToApply) {
 		t.Fatalf("Apply local conflict resolution = %v", err)
 	}
-	if _, err := second.service.Push(ctx, syncPassphrase, ""); err != nil {
+	if _, err := second.service.PushUsing(ctx, keyOf(syncPassphrase), ""); err != nil {
 		t.Fatalf("second workspace Push of local conflict choice = %v", err)
 	}
 
@@ -437,7 +437,7 @@ func TestAgainstARealBucketTwoFreshWorkspacesSurviveAFullSyncLifecycle(t *testin
 	}
 
 	writeRealWorkspace(t, first, "config", "Host shared\n  HostName after-recovery.example\n")
-	if _, err := first.service.Push(ctx, syncPassphrase, ""); err != nil {
+	if _, err := first.service.PushUsing(ctx, keyOf(syncPassphrase), ""); err != nil {
 		t.Fatalf("first workspace Push after conflict resolution = %v", err)
 	}
 
@@ -476,7 +476,7 @@ func TestAgainstARealBucketFourMachinesRespectDirectionsAndResolveConflicts(t *t
 	sender := realInstallationAt(t, remotePath, map[string]string{})
 	peer := realInstallationAt(t, remotePath, map[string]string{})
 
-	if _, err := author.service.Push(ctx, syncPassphrase, "initial state"); err != nil {
+	if _, err := author.service.PushUsing(ctx, keyOf(syncPassphrase), "initial state"); err != nil {
 		t.Fatalf("author initial Push = %v", err)
 	}
 	for name, machine := range map[string]installation{
@@ -496,12 +496,12 @@ func TestAgainstARealBucketFourMachinesRespectDirectionsAndResolveConflicts(t *t
 	sender.direct(remotesync.DirectionPush)
 
 	writeRealWorkspace(t, receiver, "receiver-local.conf", "Host receiver-local\n")
-	if _, err := receiver.service.Push(ctx, syncPassphrase, "must not travel"); !errors.Is(err, remotesync.ErrPushRefused) {
+	if _, err := receiver.service.PushUsing(ctx, keyOf(syncPassphrase), "must not travel"); !errors.Is(err, remotesync.ErrPushRefused) {
 		t.Fatalf("receive-only Push = %v, want ErrPushRefused", err)
 	}
 
 	writeRealWorkspace(t, sender, "sender.conf", "Host sender\n  HostName sender.example\n")
-	if _, err := sender.service.Push(ctx, syncPassphrase, "sender update"); err != nil {
+	if _, err := sender.service.PushUsing(ctx, keyOf(syncPassphrase), "sender update"); err != nil {
 		t.Fatalf("send-only Push = %v", err)
 	}
 
@@ -525,7 +525,7 @@ func TestAgainstARealBucketFourMachinesRespectDirectionsAndResolveConflicts(t *t
 	// authorとpeerは同じbaseを持つ。同じfileを別々に変更してpeerだけが送る。
 	writeRealWorkspace(t, author, "config", "Host shared\n  HostName author-choice.example\n")
 	writeRealWorkspace(t, peer, "config", "Host shared\n  HostName peer-choice.example\n")
-	if _, err := peer.service.Push(ctx, syncPassphrase, "peer choice"); err != nil {
+	if _, err := peer.service.PushUsing(ctx, keyOf(syncPassphrase), "peer choice"); err != nil {
 		t.Fatalf("peer Push before conflict = %v", err)
 	}
 
@@ -605,7 +605,7 @@ func TestAgainstARealBucketForcePushUsesTheConfirmedGeneration(t *testing.T) {
 	first := realInstallationAt(t, remotePath, map[string]string{"config": "Host first\n"})
 	replacement := realInstallationAt(t, remotePath, map[string]string{"config": "Host replacement\n"})
 
-	if _, err := first.service.Push(ctx, syncPassphrase, ""); err != nil {
+	if _, err := first.service.PushUsing(ctx, keyOf(syncPassphrase), ""); err != nil {
 		t.Fatalf("initial Push = %v", err)
 	}
 	stale, err := replacement.service.ForcePushConfirmation(ctx, remotesync.ForcePushTarget)
@@ -613,10 +613,10 @@ func TestAgainstARealBucketForcePushUsesTheConfirmedGeneration(t *testing.T) {
 		t.Fatalf("first ForcePushConfirmation = %v", err)
 	}
 	writeRealWorkspace(t, first, "config", "Host newer-generation\n")
-	if _, err := first.service.Push(ctx, syncPassphrase, ""); err != nil {
+	if _, err := first.service.PushUsing(ctx, keyOf(syncPassphrase), ""); err != nil {
 		t.Fatalf("competing Push = %v", err)
 	}
-	if _, err := replacement.service.ForcePush(ctx, syncPassphrase, stale, ""); !errors.Is(err, remotesync.ErrRemoteMoved) {
+	if _, err := replacement.service.ForcePushUsing(ctx, keyOf(syncPassphrase), stale, ""); !errors.Is(err, remotesync.ErrRemoteMoved) {
 		t.Fatalf("ForcePush with stale confirmed generation = %v, want ErrRemoteMoved", err)
 	}
 
@@ -624,7 +624,7 @@ func TestAgainstARealBucketForcePushUsesTheConfirmedGeneration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("second ForcePushConfirmation = %v", err)
 	}
-	if _, err := replacement.service.ForcePush(ctx, syncPassphrase, current, ""); err != nil {
+	if _, err := replacement.service.ForcePushUsing(ctx, keyOf(syncPassphrase), current, ""); err != nil {
 		t.Fatalf("ForcePush with current confirmed generation = %v", err)
 	}
 	view, err := replacement.service.BucketStatus(ctx)
@@ -641,13 +641,13 @@ func TestAgainstARealBucketAStalePushIsRefused(t *testing.T) {
 	// 対して検査する。
 	remotePath := uniqueRealPath(t)
 	first := realInstallationAt(t, remotePath, map[string]string{"config": "first\n"})
-	if _, err := first.service.Push(context.Background(), syncPassphrase, ""); err != nil &&
+	if _, err := first.service.PushUsing(context.Background(), keyOf(syncPassphrase), ""); err != nil &&
 		!errors.Is(err, remotesync.ErrRemoteMoved) {
 		t.Fatalf("Push = %v", err)
 	}
 
 	behind := realInstallationAt(t, remotePath, map[string]string{"config": "second\n"})
-	if _, err := behind.service.Push(context.Background(), syncPassphrase, ""); !errors.Is(err, remotesync.ErrRemoteMoved) {
+	if _, err := behind.service.PushUsing(context.Background(), keyOf(syncPassphrase), ""); !errors.Is(err, remotesync.ErrRemoteMoved) {
 		t.Fatalf("a machine that has never synced pushed anyway: %v", err)
 	}
 }
@@ -658,7 +658,7 @@ func TestAgainstARealBucketTheObjectIsCiphertext(t *testing.T) {
 		"config":               "Host bastion\n\tHostName 203.0.113.10\n",
 		"keys/work/id_ed25519": "PRIVATE KEY MATERIAL",
 	})
-	if _, err := machine.service.Push(context.Background(), syncPassphrase, ""); err != nil &&
+	if _, err := machine.service.PushUsing(context.Background(), keyOf(syncPassphrase), ""); err != nil &&
 		!errors.Is(err, remotesync.ErrRemoteMoved) {
 		t.Fatalf("Push = %v", err)
 	}
@@ -678,7 +678,7 @@ func TestAgainstARealBucketTheObjectIsCiphertext(t *testing.T) {
 func TestAgainstARealBucketTheWrongPassphraseCannotRead(t *testing.T) {
 	remotePath := uniqueRealPath(t)
 	machine := realInstallationAt(t, remotePath, map[string]string{"config": "Host bastion\n"})
-	if _, err := machine.service.Push(context.Background(), syncPassphrase, ""); err != nil &&
+	if _, err := machine.service.PushUsing(context.Background(), keyOf(syncPassphrase), ""); err != nil &&
 		!errors.Is(err, remotesync.ErrRemoteMoved) {
 		t.Fatalf("Push = %v", err)
 	}

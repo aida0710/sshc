@@ -197,16 +197,6 @@ func (s *Service) pullWithRemoteAcceptance(
 	}, err
 }
 
-// PullAndApply downloads, verifies and commits one exact preview generation as
-// a single service operation. The expected values come from the earlier
-// user-visible preview; this method then takes a fresh remote/local snapshot
-// and keeps operationMu through the final workspace commit.
-func (s *Service) PullAndApply(ctx context.Context, passphrase string, resolve Resolution, historyKey, expectedETag, expectedRevision string) (PullResult, error) {
-	s.operationMu.Lock()
-	defer s.operationMu.Unlock()
-	return s.pullAndApply(ctx, passphrase, resolve, historyKey, expectedETag, expectedRevision, false)
-}
-
 func (s *Service) PullAndApplyUsing(ctx context.Context, key KeyProvider, resolve Resolution, historyKey, expectedETag, expectedRevision string) (PullResult, error) {
 	s.operationMu.Lock()
 	defer s.operationMu.Unlock()

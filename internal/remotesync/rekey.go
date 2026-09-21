@@ -30,18 +30,6 @@ type keyRecoveryJournal struct {
 	NewCiphertextSHA256 string `json:"newCiphertextSHA256"`
 }
 
-// ReplaceKey changes the key of an acknowledged live object with compare-and-swap,
-// then commits the local key. If the local commit fails, the remote ciphertext is
-// restored with another CAS so neither side silently advances on its own.
-//
-// A key on a machine which has never acknowledged this target is local setup, not
-// remote rotation: it may be the key needed to open an existing remote snapshot.
-func (s *Service) ReplaceKey(ctx context.Context, oldKey, newKey string, confirmHistoryLoss bool, commit func() error) error {
-	s.operationMu.Lock()
-	defer s.operationMu.Unlock()
-	return s.replaceKey(ctx, oldKey, newKey, confirmHistoryLoss, commit)
-}
-
 func (s *Service) ReplaceKeyUsing(ctx context.Context, newKey string, confirmHistoryLoss bool, provider KeyReplacementProvider) error {
 	s.operationMu.Lock()
 	defer s.operationMu.Unlock()
@@ -171,22 +159,6 @@ func (s *Service) replaceKey(ctx context.Context, oldKey, newKey string, confirm
 		return errors.Join(ErrRecoveryRequired, fmt.Errorf("clear sync key recovery journal: %w", err))
 	}
 	return nil
-}
-
-// ResolveKeyRecovery lets the user re-enter the candidate new key after a
-// process crash. The journal stores only ETags; candidate possession is proven
-// by decrypting and validating the exact advanced live object.
-func (s *Service) ResolveKeyRecovery(ctx context.Context, candidate string, commit func() error) (bool, error) {
-	s.operationMu.Lock()
-	defer s.operationMu.Unlock()
-	if commit == nil {
-		return false, errors.New("sync key commit is not configured")
-	}
-	binding, err := s.configuredBinding()
-	if err != nil {
-		return false, err
-	}
-	return s.resolveKeyRecovery(ctx, binding, candidate, commit)
 }
 
 func (s *Service) resolveKeyRecovery(ctx context.Context, binding remoteBinding, candidate string, commit func() error) (bool, error) {

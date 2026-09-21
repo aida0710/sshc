@@ -83,6 +83,11 @@ const syncTestPassphrase = "a master password for sync"
 // サーバーに対してテストされる。ここではネットワークに問うてはならない。
 func reachable(context.Context, *objectstore.Client, string) error { return nil }
 
+// keyOf は、テストが手に持つ passphrase を製品と同じ KeyProvider の形で渡す。
+func keyOf(passphrase string) remotesync.KeyProvider {
+	return func() (string, error) { return passphrase, nil }
+}
+
 func syncEngineWithVault(t *testing.T) (*echo.Echo, *remotesync.Service, *secret.Service) {
 	t.Helper()
 	home := t.TempDir()
@@ -251,7 +256,7 @@ func newMeasuredSyncInstallation(t *testing.T, bucket *measuredSyncBucket, files
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := service.Configure(config, credentials, client); err != nil {
+	if err := service.Reconfigure(config, credentials, client, func() error { return nil }); err != nil {
 		t.Fatal(err)
 	}
 	engine := echo.New()
@@ -408,7 +413,7 @@ func TestPushRejectsRequestsFromOlderClients(t *testing.T) {
 func TestForcePushRequiresAOneTimeConfirmationForTheCurrentRemoteGeneration(t *testing.T) {
 	bucket := &measuredSyncBucket{}
 	_, service, secrets := measuredSyncEngine(t, bucket, map[string]string{"config": "Host replacement\n"})
-	if _, err := service.Push(context.Background(), measuredSyncKey, ""); err != nil {
+	if _, err := service.PushUsing(context.Background(), keyOf(measuredSyncKey), ""); err != nil {
 		t.Fatalf("initial Push = %v", err)
 	}
 
@@ -451,7 +456,7 @@ func TestPullResponseReportsEachDownloadAndTheAppliedOperation(t *testing.T) {
 	_, producer, _ := measuredSyncEngine(t, bucket, map[string]string{"config": "Host edge\n"})
 	// producer も consumer も、同じ鍵で暗号化して開く。それが「端末をまたいで
 	// 共有される鍵」の意味である。
-	if _, err := producer.Push(context.Background(), measuredSyncKey, ""); err != nil {
+	if _, err := producer.PushUsing(context.Background(), keyOf(measuredSyncKey), ""); err != nil {
 		t.Fatal(err)
 	}
 	engine, _, _ := measuredSyncEngine(t, bucket, map[string]string{})
@@ -578,7 +583,7 @@ func TestSyncConflictResponseIncludesPermissionChanges(t *testing.T) {
 func TestPullCanPreviewAndApplyRemoteWinsForAConflictingWorkspace(t *testing.T) {
 	bucket := &measuredSyncBucket{}
 	_, producer, _ := measuredSyncEngine(t, bucket, map[string]string{"config": "Host remote\n"})
-	if _, err := producer.Push(context.Background(), measuredSyncKey, "Remote workspace"); err != nil {
+	if _, err := producer.PushUsing(context.Background(), keyOf(measuredSyncKey), "Remote workspace"); err != nil {
 		t.Fatal(err)
 	}
 	engine, _, _ := measuredSyncEngine(t, bucket, map[string]string{"config": "Host local\n"})
@@ -621,7 +626,7 @@ func TestPullCanPreviewAndApplyRemoteWinsForAConflictingWorkspace(t *testing.T) 
 func TestReceiveOnlyCanPreviewAndApplyAnExplicitRemoteHead(t *testing.T) {
 	bucket := &measuredSyncBucket{}
 	receiver := newMeasuredSyncInstallation(t, bucket, map[string]string{"config": "Host original\n"})
-	if _, err := receiver.service.Push(context.Background(), measuredSyncKey, "Initial snapshot"); err != nil {
+	if _, err := receiver.service.PushUsing(context.Background(), keyOf(measuredSyncKey), "Initial snapshot"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -630,15 +635,13 @@ func TestReceiveOnlyCanPreviewAndApplyAnExplicitRemoteHead(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := replacement.ForcePush(
-		context.Background(), measuredSyncKey, confirmation, "Replace head",
-	); err != nil {
+	if _, err := replacement.ForcePushUsing(context.Background(), keyOf(measuredSyncKey), confirmation, "Replace head"); err != nil {
 		t.Fatal(err)
 	}
 
 	receiveOnly := receiver.config
 	receiveOnly.Direction = remotesync.DirectionPull
-	if err := receiver.service.Configure(receiveOnly, receiver.credentials, receiver.client); err != nil {
+	if err := receiver.service.Reconfigure(receiveOnly, receiver.credentials, receiver.client, func() error { return nil }); err != nil {
 		t.Fatal(err)
 	}
 	preview := sendSync(t, receiver.engine, http.MethodPost, "/api/v1/sync/pull",
@@ -676,7 +679,7 @@ func TestReceiveOnlyCanPreviewAndApplyAnExplicitRemoteHead(t *testing.T) {
 func TestExplicitRemoteHeadIsAvailableToReceiversAndRefusedForSendOnly(t *testing.T) {
 	bucket := &measuredSyncBucket{}
 	installation := newMeasuredSyncInstallation(t, bucket, map[string]string{"config": "Host one\n"})
-	if _, err := installation.service.Push(context.Background(), measuredSyncKey, "Initial snapshot"); err != nil {
+	if _, err := installation.service.PushUsing(context.Background(), keyOf(measuredSyncKey), "Initial snapshot"); err != nil {
 		t.Fatal(err)
 	}
 	response := sendSync(t, installation.engine, http.MethodPost, "/api/v1/sync/pull",
@@ -686,7 +689,7 @@ func TestExplicitRemoteHeadIsAvailableToReceiversAndRefusedForSendOnly(t *testin
 	}
 	sendOnly := installation.config
 	sendOnly.Direction = remotesync.DirectionPush
-	if err := installation.service.Configure(sendOnly, installation.credentials, installation.client); err != nil {
+	if err := installation.service.Reconfigure(sendOnly, installation.credentials, installation.client, func() error { return nil }); err != nil {
 		t.Fatal(err)
 	}
 	response = sendSync(t, installation.engine, http.MethodPost, "/api/v1/sync/pull",
@@ -721,7 +724,7 @@ func TestSyncProblemClassifiesLocalWorkspaceRaces(t *testing.T) {
 func TestApplyRejectsARemoteGenerationThatChangedAfterPreview(t *testing.T) {
 	bucket := &measuredSyncBucket{}
 	_, producer, _ := measuredSyncEngine(t, bucket, map[string]string{"config": "Host first\n"})
-	if _, err := producer.Push(context.Background(), measuredSyncKey, "Initial snapshot"); err != nil {
+	if _, err := producer.PushUsing(context.Background(), keyOf(measuredSyncKey), "Initial snapshot"); err != nil {
 		t.Fatal(err)
 	}
 	engine, _, _ := measuredSyncEngine(t, bucket, map[string]string{})
@@ -742,7 +745,7 @@ func TestApplyRejectsARemoteGenerationThatChangedAfterPreview(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := replacement.ForcePush(context.Background(), measuredSyncKey, confirmation, "Replacement snapshot"); err != nil {
+	if _, err := replacement.ForcePushUsing(context.Background(), keyOf(measuredSyncKey), confirmation, "Replacement snapshot"); err != nil {
 		t.Fatal(err)
 	}
 	request, err := json.Marshal(map[string]any{
@@ -761,7 +764,7 @@ func TestApplyRejectsARemoteGenerationThatChangedAfterPreview(t *testing.T) {
 func TestApplyWithoutPreviewGenerationIsRefused(t *testing.T) {
 	bucket := &measuredSyncBucket{}
 	_, producer, _ := measuredSyncEngine(t, bucket, map[string]string{"config": "Host first\n"})
-	if _, err := producer.Push(context.Background(), measuredSyncKey, "Initial snapshot"); err != nil {
+	if _, err := producer.PushUsing(context.Background(), keyOf(measuredSyncKey), "Initial snapshot"); err != nil {
 		t.Fatal(err)
 	}
 	engine, _, _ := measuredSyncEngine(t, bucket, map[string]string{})
@@ -1056,7 +1059,7 @@ func TestSyncRuntimeValidationRejectsSchemaBypasses(t *testing.T) {
 func TestReplacingASyncKeyRequiresHistoryLossConfirmation(t *testing.T) {
 	bucket := &measuredSyncBucket{}
 	engine, service, _ := measuredSyncEngine(t, bucket, map[string]string{"config": "Host edge\n"})
-	if _, err := service.Push(context.Background(), measuredSyncKey, "Initial snapshot"); err != nil {
+	if _, err := service.PushUsing(context.Background(), keyOf(measuredSyncKey), "Initial snapshot"); err != nil {
 		t.Fatal(err)
 	}
 	const next = "ZX98-YW76-VU54-TS32-RQ10-PO98"
