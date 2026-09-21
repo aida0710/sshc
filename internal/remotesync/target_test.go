@@ -35,7 +35,10 @@ func TestValidateTargetRefusesWhatWouldChangeTheSignedURL(t *testing.T) {
 		{"path escaping upward", func(i TargetInput) TargetInput { i.Path = "team/../other"; return i }, ErrUnsafeObjectPath},
 		{"path with empty segment", func(i TargetInput) TargetInput { i.Path = "team//alpha"; return i }, ErrUnsafeObjectPath},
 		{"path with query", func(i TargetInput) TargetInput { i.Path = "team?x=1"; return i }, ErrUnsafeObjectPath},
-		{"overlong endpoint", func(i TargetInput) TargetInput { i.Endpoint = "https://" + strings.Repeat("a", MaxEndpointLength); return i }, ErrTargetTooLong},
+		{"overlong endpoint", func(i TargetInput) TargetInput {
+			i.Endpoint = "https://" + strings.Repeat("a", MaxEndpointLength)
+			return i
+		}, ErrTargetTooLong},
 		{"overlong path", func(i TargetInput) TargetInput { i.Path = strings.Repeat("a", MaxPathLength+1); return i }, ErrTargetTooLong},
 		{"empty region", func(i TargetInput) TargetInput { i.Region = ""; return i }, errTargetRegionRequired},
 	}
