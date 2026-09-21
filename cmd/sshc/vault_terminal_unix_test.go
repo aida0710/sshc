@@ -138,8 +138,7 @@ func TestVaultPromptPTYHelperProcess(t *testing.T) {
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
-	code := runVault(ctx, "create", os.Getenv(vaultPTYStateEnvironment), &http.Client{Timeout: 3 * time.Minute},
-		os.Stdin, os.Stdout, os.Stderr, systemPasswordTerminal{})
+	code := runVault(ctx, "create", commandEnvironment{stateDir: os.Getenv(vaultPTYStateEnvironment), client: &http.Client{Timeout: 3 * time.Minute}, stdin: os.Stdin, stdout: os.Stdout, stderr: os.Stderr, terminal: systemPasswordTerminal{}})
 	if code == 130 {
 		fmt.Fprintln(os.Stdout, "vault-helper-returned-130")
 		_, _ = bufio.NewReader(os.Stdin).ReadString('\n')

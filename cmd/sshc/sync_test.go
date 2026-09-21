@@ -78,8 +78,7 @@ func TestSyncStatusHumanOutputNamesSafeOperationalState(t *testing.T) {
 	defer server.Close()
 
 	var stdout, stderr strings.Builder
-	code := runSync(context.Background(), syncInvocation{Action: syncStatus}, stateDir,
-		server.Client(), nil, &stdout, &stderr, nil)
+	code := runSync(context.Background(), syncInvocation{Action: syncStatus}, commandEnvironment{stateDir: stateDir, client: server.Client(), stdout: &stdout, stderr: &stderr})
 	if code != 0 || stderr.Len() != 0 {
 		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
@@ -111,8 +110,7 @@ func TestSyncStatusHumanOutputEscapesTerminalControls(t *testing.T) {
 	defer server.Close()
 
 	var stdout, stderr strings.Builder
-	code := runSync(context.Background(), syncInvocation{Action: syncStatus}, stateDir,
-		server.Client(), nil, &stdout, &stderr, nil)
+	code := runSync(context.Background(), syncInvocation{Action: syncStatus}, commandEnvironment{stateDir: stateDir, client: server.Client(), stdout: &stdout, stderr: &stderr})
 	if code != 0 || stderr.Len() != 0 {
 		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
@@ -133,8 +131,7 @@ func TestSyncStatusJSONUsesOneStableEnvelope(t *testing.T) {
 	defer server.Close()
 
 	var stdout, stderr strings.Builder
-	code := runSync(context.Background(), syncInvocation{Action: syncStatus, JSON: true}, stateDir,
-		server.Client(), nil, &stdout, &stderr, nil)
+	code := runSync(context.Background(), syncInvocation{Action: syncStatus, JSON: true}, commandEnvironment{stateDir: stateDir, client: server.Client(), stdout: &stdout, stderr: &stderr})
 	if code != 0 || stderr.Len() != 0 {
 		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
@@ -155,8 +152,7 @@ func TestSyncStatusJSONUsesOneStableEnvelope(t *testing.T) {
 
 func TestSyncJSONFailureIsOneStdoutObjectAndNoStderr(t *testing.T) {
 	var stdout, stderr strings.Builder
-	code := runSync(context.Background(), syncInvocation{Action: syncStatus, JSON: true}, t.TempDir(),
-		&http.Client{}, nil, &stdout, &stderr, nil)
+	code := runSync(context.Background(), syncInvocation{Action: syncStatus, JSON: true}, commandEnvironment{stateDir: t.TempDir(), client: &http.Client{}, stdout: &stdout, stderr: &stderr})
 	if code != 1 || stderr.Len() != 0 {
 		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
@@ -205,8 +201,7 @@ func TestObjectStoreFailureCodesKeepRetryAndHumanGuidance(t *testing.T) {
 
 func TestSyncStatusHumanFailureIsActionableAndDoesNotUseStdout(t *testing.T) {
 	var stdout, stderr strings.Builder
-	code := runSync(context.Background(), syncInvocation{Action: syncStatus}, t.TempDir(),
-		&http.Client{}, nil, &stdout, &stderr, nil)
+	code := runSync(context.Background(), syncInvocation{Action: syncStatus}, commandEnvironment{stateDir: t.TempDir(), client: &http.Client{}, stdout: &stdout, stderr: &stderr})
 	if code != 1 || stdout.Len() != 0 {
 		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
@@ -219,8 +214,7 @@ func TestRunSyncCanceledReturns130(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	var stdout, stderr strings.Builder
-	code := runSync(ctx, syncInvocation{Action: syncStatus}, t.TempDir(), &http.Client{},
-		nil, &stdout, &stderr, nil)
+	code := runSync(ctx, syncInvocation{Action: syncStatus}, commandEnvironment{stateDir: t.TempDir(), client: &http.Client{}, stdout: &stdout, stderr: &stderr})
 	if code != 130 {
 		t.Fatalf("code=%d, want 130; stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
@@ -292,8 +286,7 @@ func TestSyncStatusFailureNeverPrintsEngineProblemMessage(t *testing.T) {
 
 	for _, asJSON := range []bool{false, true} {
 		var stdout, stderr strings.Builder
-		code := runSync(context.Background(), syncInvocation{Action: syncStatus, JSON: asJSON}, stateDir,
-			server.Client(), nil, &stdout, &stderr, nil)
+		code := runSync(context.Background(), syncInvocation{Action: syncStatus, JSON: asJSON}, commandEnvironment{stateDir: stateDir, client: server.Client(), stdout: &stdout, stderr: &stderr})
 		if code != 1 {
 			t.Fatalf("json=%v code=%d", asJSON, code)
 		}
@@ -391,8 +384,7 @@ func TestSyncPushUsesEngineDraftThenPushesOnce(t *testing.T) {
 			})
 			defer server.Close()
 			var stdout, stderr strings.Builder
-			code := runSync(context.Background(), syncInvocation{Action: syncPush, JSON: asJSON}, stateDir,
-				server.Client(), nil, &stdout, &stderr, nil)
+			code := runSync(context.Background(), syncInvocation{Action: syncPush, JSON: asJSON}, commandEnvironment{stateDir: stateDir, client: server.Client(), stdout: &stdout, stderr: &stderr})
 			if code != 0 || stderr.Len() != 0 || pushBody.Message != "engine-generated draft" {
 				t.Fatalf("code=%d request=%+v stdout=%q stderr=%q", code, pushBody, stdout.String(), stderr.String())
 			}
@@ -427,8 +419,7 @@ func TestSyncPushRemoteMoveIsNotRetried(t *testing.T) {
 	})
 	defer server.Close()
 	var stdout, stderr strings.Builder
-	code := runSync(context.Background(), syncInvocation{Action: syncPush, JSON: true}, stateDir,
-		server.Client(), nil, &stdout, &stderr, nil)
+	code := runSync(context.Background(), syncInvocation{Action: syncPush, JSON: true}, commandEnvironment{stateDir: stateDir, client: server.Client(), stdout: &stdout, stderr: &stderr})
 	if code != 1 || len(harness.paths) != 2 || stderr.Len() != 0 {
 		t.Fatalf("code=%d paths=%v stdout=%q stderr=%q", code, harness.paths, stdout.String(), stderr.String())
 	}
@@ -467,8 +458,7 @@ func TestSyncForcePushUsesDraftThenOneExactActionToken(t *testing.T) {
 	})
 	defer server.Close()
 	var stdout, stderr strings.Builder
-	code := runSync(context.Background(), syncInvocation{Action: syncPush, Force: true}, stateDir,
-		server.Client(), nil, &stdout, &stderr, nil)
+	code := runSync(context.Background(), syncInvocation{Action: syncPush, Force: true}, commandEnvironment{stateDir: stateDir, client: server.Client(), stdout: &stdout, stderr: &stderr})
 	if code != 0 || stderr.Len() != 0 || actionBody.Kind != session.ActionSyncForcePush ||
 		actionBody.Target != remotesync.ForcePushTarget || forceBody.Message != "force engine draft" {
 		t.Fatalf("code=%d action=%+v force=%+v stdout=%q stderr=%q",
@@ -495,8 +485,7 @@ func TestSyncForcePushRemoteMoveDoesNotAcquireAnotherTokenOrRetry(t *testing.T) 
 	})
 	defer server.Close()
 	var stdout, stderr strings.Builder
-	code := runSync(context.Background(), syncInvocation{Action: syncPush, Force: true}, stateDir,
-		server.Client(), nil, &stdout, &stderr, nil)
+	code := runSync(context.Background(), syncInvocation{Action: syncPush, Force: true}, commandEnvironment{stateDir: stateDir, client: server.Client(), stdout: &stdout, stderr: &stderr})
 	if code != 1 || len(harness.paths) != 3 {
 		t.Fatalf("code=%d sequence=%v stdout=%q stderr=%q", code, harness.paths, stdout.String(), stderr.String())
 	}
@@ -531,8 +520,7 @@ func TestSyncPullSafeWritesPreviewThenApplyExactIdentity(t *testing.T) {
 	})
 	defer server.Close()
 	var stdout, stderr strings.Builder
-	code := runSync(context.Background(), syncInvocation{Action: syncPull, JSON: true}, stateDir,
-		server.Client(), nil, &stdout, &stderr, nil)
+	code := runSync(context.Background(), syncInvocation{Action: syncPull, JSON: true}, commandEnvironment{stateDir: stateDir, client: server.Client(), stdout: &stdout, stderr: &stderr})
 	if code != 0 || stderr.Len() != 0 || len(requests) != 2 || len(harness.paths) != 2 {
 		t.Fatalf("code=%d requests=%+v stdout=%q stderr=%q", code, requests, stdout.String(), stderr.String())
 	}
@@ -571,8 +559,7 @@ func TestSyncPullNormalRefusesConflictOrRemovalBeforeApply(t *testing.T) {
 			})
 			defer server.Close()
 			var stdout, stderr strings.Builder
-			code := runSync(context.Background(), syncInvocation{Action: syncPull, JSON: true}, stateDir,
-				server.Client(), nil, &stdout, &stderr, nil)
+			code := runSync(context.Background(), syncInvocation{Action: syncPull, JSON: true}, commandEnvironment{stateDir: stateDir, client: server.Client(), stdout: &stdout, stderr: &stderr})
 			if code != 1 || calls != 1 || len(harness.paths) != 1 || stderr.Len() != 0 {
 				t.Fatalf("code=%d calls=%d paths=%v stdout=%q stderr=%q",
 					code, calls, harness.paths, stdout.String(), stderr.String())
@@ -605,8 +592,7 @@ func TestSyncPullForceUsesRemoteResolutionForPreviewAndExactApply(t *testing.T) 
 	})
 	defer server.Close()
 	var stdout, stderr strings.Builder
-	code := runSync(context.Background(), syncInvocation{Action: syncPull, Force: true}, stateDir,
-		server.Client(), nil, &stdout, &stderr, nil)
+	code := runSync(context.Background(), syncInvocation{Action: syncPull, Force: true}, commandEnvironment{stateDir: stateDir, client: server.Client(), stdout: &stdout, stderr: &stderr})
 	if code != 0 || len(requests) != 2 || stderr.Len() != 0 {
 		t.Fatalf("code=%d requests=%+v stdout=%q stderr=%q", code, requests, stdout.String(), stderr.String())
 	}
@@ -638,8 +624,7 @@ func TestSyncPullStaleApplyDoesNotRepreviewOrRetry(t *testing.T) {
 	})
 	defer server.Close()
 	var stdout, stderr strings.Builder
-	code := runSync(context.Background(), syncInvocation{Action: syncPull, Force: true, JSON: true}, stateDir,
-		server.Client(), nil, &stdout, &stderr, nil)
+	code := runSync(context.Background(), syncInvocation{Action: syncPull, Force: true, JSON: true}, commandEnvironment{stateDir: stateDir, client: server.Client(), stdout: &stdout, stderr: &stderr})
 	if code != 1 || calls != 2 || len(harness.paths) != 2 || stderr.Len() != 0 {
 		t.Fatalf("code=%d calls=%d paths=%v stdout=%q stderr=%q", code, calls, harness.paths, stdout.String(), stderr.String())
 	}
@@ -666,8 +651,7 @@ func TestSyncPullNoChangesStillAcknowledgesTheRemoteGeneration(t *testing.T) {
 	})
 	defer server.Close()
 	var stdout, stderr strings.Builder
-	code := runSync(context.Background(), syncInvocation{Action: syncPull}, stateDir,
-		server.Client(), nil, &stdout, &stderr, nil)
+	code := runSync(context.Background(), syncInvocation{Action: syncPull}, commandEnvironment{stateDir: stateDir, client: server.Client(), stdout: &stdout, stderr: &stderr})
 	if code != 0 || calls != 2 || stderr.Len() != 0 || !strings.Contains(stdout.String(), "applied") {
 		t.Fatalf("code=%d calls=%d stdout=%q stderr=%q", code, calls, stdout.String(), stderr.String())
 	}
@@ -680,8 +664,7 @@ func TestSyncNowCallsExistingEngineOperationOnce(t *testing.T) {
 	})
 	defer server.Close()
 	var stdout, stderr strings.Builder
-	code := runSync(context.Background(), syncInvocation{Action: syncNow}, stateDir,
-		server.Client(), nil, &stdout, &stderr, nil)
+	code := runSync(context.Background(), syncInvocation{Action: syncNow}, commandEnvironment{stateDir: stateDir, client: server.Client(), stdout: &stdout, stderr: &stderr})
 	if code != 0 || stderr.Len() != 0 || len(harness.paths) != 1 ||
 		harness.paths[0] != "/api/v1/sync/now" || harness.methods[0] != http.MethodPost ||
 		string(harness.bodies[0]) != "{}" {
@@ -704,8 +687,7 @@ func TestSyncAutoSendsExactPersistentSettingAndReturnsJSONStatus(t *testing.T) {
 			})
 			defer server.Close()
 			var stdout, stderr strings.Builder
-			code := runSync(context.Background(), syncInvocation{Action: syncAuto, Enabled: enabled, JSON: true}, stateDir,
-				server.Client(), nil, &stdout, &stderr, nil)
+			code := runSync(context.Background(), syncInvocation{Action: syncAuto, Enabled: enabled, JSON: true}, commandEnvironment{stateDir: stateDir, client: server.Client(), stdout: &stdout, stderr: &stderr})
 			wantBody := `{"enabled":false}`
 			if enabled {
 				wantBody = `{"enabled":true}`

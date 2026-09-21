@@ -17,14 +17,17 @@ func (m *TransferManager) PrepareOwnedDownload(ctx context.Context, id, alias, r
 		if err != nil {
 			return nil, 0, err
 		}
-		prepared, err := m.Service.prepareDownload(ctx, alias, remotePath, m.spoolDir, func(size int64) error {
-			if err := reserveProcessSpool(size); err != nil {
-				return err
-			}
-			reserved = size
-			return nil
-		}, threshold, parallelism, chunkBytes, func(part DownloadPartProgress) {
-			m.recordDownloadPart(id, part)
+		prepared, err := m.Service.prepareDownload(ctx, DownloadRequest{
+			Alias: alias, RemotePath: remotePath, TemporaryDirectory: m.spoolDir,
+			Reserve: func(size int64) error {
+				if err := reserveProcessSpool(size); err != nil {
+					return err
+				}
+				reserved = size
+				return nil
+			},
+			SplitThreshold: threshold, SplitParallelism: parallelism, SplitChunkBytes: chunkBytes,
+			Progress: func(part DownloadPartProgress) { m.recordDownloadPart(id, part) },
 		})
 		if err != nil {
 			if reserved > 0 {

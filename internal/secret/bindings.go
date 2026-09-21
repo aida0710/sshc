@@ -165,13 +165,6 @@ func (s *Service) KeyPassphraseFor(relativePath string) (string, bool) {
 	return vault.SecretFor(KindKeyPassphrase, relativePath)
 }
 
-// HasKeyPassphrase reports whether an unlocked vault can resolve the key
-// subject without returning its value across the service boundary.
-func (s *Service) HasKeyPassphrase(relativePath string) bool {
-	_, ok := s.KeyPassphraseFor(relativePath)
-	return ok
-}
-
 // RelocateKeyPassphrases は鍵のパス変更に名前付きパスフレーズの割り当てを
 // 追従させる。秘密の値には触れず、vault 内の subject 参照だけを一度に移す。
 func (s *Service) RelocateKeyPassphrases(relocations map[string]string) error {

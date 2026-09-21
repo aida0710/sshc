@@ -192,8 +192,7 @@ func runSetupFixture(
 	terminal.terminals[prompt.Fd()] = true
 
 	var stdout strings.Builder
-	code := runSync(context.Background(), syncInvocation{Action: syncSetup}, stateDir,
-		client, input, &stdout, prompt, terminal)
+	code := runSync(context.Background(), syncInvocation{Action: syncSetup}, commandEnvironment{stateDir: stateDir, client: client, stdin: input, stdout: &stdout, stderr: prompt, terminal: terminal})
 	if _, err := prompt.Seek(0, io.SeekStart); err != nil {
 		t.Fatal(err)
 	}
@@ -232,8 +231,7 @@ func TestSyncSetupRequiresTTYBeforeContactingTheEngine(t *testing.T) {
 	defer input.Close()
 	var stdout, stderr strings.Builder
 	terminal := &setupPasswordTerminal{terminals: map[uintptr]bool{input.Fd(): false}}
-	code := runSync(context.Background(), syncInvocation{Action: syncSetup}, stateDir,
-		server.Client(), input, &stdout, &stderr, terminal)
+	code := runSync(context.Background(), syncInvocation{Action: syncSetup}, commandEnvironment{stateDir: stateDir, client: server.Client(), stdin: input, stdout: &stdout, stderr: &stderr, terminal: terminal})
 	if code != 1 || requests != 0 || !strings.Contains(stderr.String(), "interactive terminal") {
 		t.Fatalf("code=%d requests=%d stdout=%q stderr=%q", code, requests, stdout.String(), stderr.String())
 	}
@@ -243,8 +241,7 @@ func TestSyncSetupRequiresTTYBeforeContactingTheEngine(t *testing.T) {
 	terminal.terminals[input.Fd()] = true
 	stdout.Reset()
 	stderr.Reset()
-	code = runSync(context.Background(), syncInvocation{Action: syncSetup}, stateDir,
-		server.Client(), input, &stdout, &stderr, terminal)
+	code = runSync(context.Background(), syncInvocation{Action: syncSetup}, commandEnvironment{stateDir: stateDir, client: server.Client(), stdin: input, stdout: &stdout, stderr: &stderr, terminal: terminal})
 	if code != 1 || requests != 0 {
 		t.Fatalf("redirected prompt: code=%d requests=%d", code, requests)
 	}
