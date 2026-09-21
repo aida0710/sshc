@@ -136,7 +136,7 @@ func TestTheBannerIsShownFromBriefUpwardsWithoutControlCharacters(t *testing.T) 
 
 	process := openWithLog(t, dialer, targetWith(server, path), sshclient.Brief)
 	seen := readUntil(t, process, "ready")
-	expectLines(t, seen, "サーバーからの案内：", "[sshc]   Welcome to the fixture", "[sshc]   Authorised users only")
+	expectLines(t, seen, "サーバーからの案内：", "[sshc][debug1]   Welcome to the fixture", "[sshc][debug1]   Authorised users only")
 	if strings.Contains(seen, "\x07") {
 		t.Fatalf("the banner carried a control character to the terminal:\n%q", seen)
 	}
