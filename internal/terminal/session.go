@@ -776,7 +776,7 @@ func (s *Session) reconnect(info ExitInfo, connectionErr error, now func() time.
 	}
 	for {
 		s.mutex.Lock()
-		reopen, size, attempt := s.reopen, s.size, s.retries
+		reopen, attempt := s.reopen, s.retries
 		stopping := s.exited != nil
 		s.mutex.Unlock()
 		select {
@@ -838,8 +838,8 @@ func (s *Session) reconnect(info ExitInfo, connectionErr error, now func() time.
 		}
 		s.reconnectCancel = cancel
 		// The browser may have been resized during the wait; the new shell
-		// must start at that size, not the one read before waiting.
-		size = s.size
+		// must start at that size, so it is read only after waiting.
+		size := s.size
 		s.mutex.Unlock()
 		process, err := reopen(attemptCtx, size)
 		s.mutex.Lock()
