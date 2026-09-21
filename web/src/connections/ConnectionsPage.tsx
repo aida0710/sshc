@@ -53,6 +53,7 @@ import { PanelState } from "../ui/PanelState";
 import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
 import { hostDetailApi } from "./HostDetail";
 import { connectionSecretsApi } from "./secretsApi";
+import { groupAfterRename, movedHostIdentity } from "./connectionMoves";
 
 // Wide enough for an alias, host and status on one row; the editor keeps the rest.
 const connectionListWidth: StoredColumnWidth = { key: "sshc.connections.list-width.v1", fallback: 400, minimum: 256, maximum: 720 };
@@ -88,6 +89,10 @@ type ConnectionsPageProps = {
   consoles: TerminalSessionsState;
   onShowConsole: (id: string) => void;
 };
+
+// A host source for a move: the file it lives in now and that file's
+// contents at the time the move was decided.
+type MoveSource = { path: string; alias: string; base: string };
 
 type SaveAttempt =
   | { saved: false; overview: null }
@@ -560,117 +565,63 @@ export function ConnectionsPage({
     });
   }
 
-  async function onMoveToGroup(group: string) {
-    if (detail === null) return;
-    const path = detail.form.entry.file.path ?? "";
-    const alias = detail.form.entry.identity.alias;
+  // moveHostToGroup moves the host into group, or into the entry file when
+  // group is "" (a host without a group lives there). When follow is set,
+  // the selection follows the host to wherever the engine put it.
+  async function moveHostToGroup(source: MoveSource, group: string, follow: boolean) {
     if (group !== "") {
-      const attempt = await submit(
-        { kind: "move", path, base: detail.file.contents, alias, destinationGroup: group },
-        false,
-      );
-      if (!attempt.saved) return;
-      const moved = attempt.overview?.hosts.find(
-        (host) => host.identity.alias === alias && host.group === group,
-      );
-      if (moved !== undefined) {
-        followCommittedIdentity(moved.identity);
-      } else {
-        leaveCommittedIdentityUnknown();
-      }
+      const attempt = await submit({ kind: "move", ...source, destinationGroup: group }, false);
+      if (!attempt.saved || !follow) return;
+      const moved = movedHostIdentity(attempt.overview, source.alias, group);
+      if (moved !== undefined) followCommittedIdentity(moved);
+      else leaveCommittedIdentityUnknown();
       return;
     }
+    const destination = await configApi.file(entryPath);
+    const attempt = await submit({
+      kind: "move", ...source, destinationPath: entryPath, destinationBase: destination.contents,
+    }, false);
+    if (!attempt.saved || !follow) return;
+    followCommittedIdentity({ path: entryPath, alias: source.alias });
+  }
+
+  async function onMoveToGroup(group: string) {
+    if (detail === null) return;
+    const source = { path: detail.form.entry.file.path ?? "", alias: detail.form.entry.identity.alias, base: detail.file.contents };
     try {
-      const destination = await configApi.file(entryPath);
-      const attempt = await submit({
-        kind: "move",
-        path,
-        base: detail.file.contents,
-        alias,
-        destinationPath: entryPath,
-        destinationBase: destination.contents,
-      }, false);
-      if (!attempt.saved) return;
-      followCommittedIdentity({ path: entryPath, alias });
+      await moveHostToGroup(source, group, true);
     } catch (error) {
       setProblem(toProblem(error));
     }
+  }
+
+  async function onGroupDrop(name: string, target: string) {
+    const base = name.slice(name.lastIndexOf("/") + 1);
+    const destinationName = target === "" ? base : `${target}/${base}`;
+    const selectedHost = overview?.hosts.find(
+      (host) => host.identity.path === selection?.path && host.identity.alias === selection.alias,
+    );
+    const selectedDestinationGroup = groupAfterRename(selectedHost?.group, name, destinationName);
+    const result = await configApi.renameGroup(name, destinationName);
+    setPreview(result.preview);
+    setProblem(null);
+    const nextOverview = await reload();
+    if (selection === null || selectedDestinationGroup === null) return;
+    const moved = movedHostIdentity(nextOverview, selection.alias, selectedDestinationGroup);
+    if (moved !== undefined) followCommittedIdentity(moved);
+    else leaveCommittedIdentityUnknown();
   }
 
   async function onTreeDrop(payload: DragPayload, target: string) {
     if (editorDirty || refreshState !== "idle") return;
     try {
       if (payload.kind === "group") {
-        const base = payload.name.slice(payload.name.lastIndexOf("/") + 1);
-        const destinationName = target === "" ? base : `${target}/${base}`;
-        const selectedHost = overview?.hosts.find(
-          (host) =>
-            host.identity.path === selection?.path && host.identity.alias === selection.alias,
-        );
-        const selectedDestinationGroup =
-          selectedHost?.group === payload.name
-            ? destinationName
-            : selectedHost?.group?.startsWith(`${payload.name}/`)
-              ? `${destinationName}${selectedHost.group.slice(payload.name.length)}`
-              : null;
-        const result = await configApi.renameGroup(payload.name, destinationName);
-        setPreview(result.preview);
-        setProblem(null);
-        const nextOverview = await reload();
-        if (selection !== null && selectedDestinationGroup !== null && nextOverview !== null) {
-          const moved = nextOverview.hosts.find(
-            (host) =>
-              host.identity.alias === selection.alias && host.group === selectedDestinationGroup,
-          );
-          if (moved !== undefined) {
-            followCommittedIdentity(moved.identity);
-          } else {
-            leaveCommittedIdentityUnknown();
-          }
-        } else if (selection !== null && selectedDestinationGroup !== null) {
-          leaveCommittedIdentityUnknown();
-        }
+        await onGroupDrop(payload.name, target);
         return;
       }
       const file = await configApi.file(payload.path);
-      const followsSelection =
-        selection?.path === payload.path && selection.alias === payload.alias;
-      if (target !== "") {
-        const attempt = await submit({
-          kind: "move",
-          path: payload.path,
-          base: file.contents,
-          alias: payload.alias,
-          destinationGroup: target,
-        }, false);
-        if (!attempt.saved) return;
-        if (followsSelection && attempt.overview !== null) {
-          const moved = attempt.overview.hosts.find(
-            (host) => host.identity.alias === payload.alias && host.group === target,
-          );
-          if (moved !== undefined) {
-            followCommittedIdentity(moved.identity);
-          } else {
-            leaveCommittedIdentityUnknown();
-          }
-        } else if (followsSelection) {
-          leaveCommittedIdentityUnknown();
-        }
-        return;
-      }
-      const destination = await configApi.file(entryPath);
-      const attempt = await submit({
-        kind: "move",
-        path: payload.path,
-        base: file.contents,
-        alias: payload.alias,
-        destinationPath: entryPath,
-        destinationBase: destination.contents,
-      }, false);
-      if (!attempt.saved) return;
-      if (followsSelection) {
-        followCommittedIdentity({ path: entryPath, alias: payload.alias });
-      }
+      const followsSelection = selection?.path === payload.path && selection.alias === payload.alias;
+      await moveHostToGroup({ path: payload.path, alias: payload.alias, base: file.contents }, target, followsSelection);
     } catch (error) {
       setPreview(null);
       setProblem(toProblem(error));
