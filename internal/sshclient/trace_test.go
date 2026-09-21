@@ -56,7 +56,7 @@ func TestEveryTracedLineEndsTheWayATerminalNeeds(t *testing.T) {
 	trace.say(Brief, "繋ぎます")
 	trace.say(Brief, "接続完了")
 	written := out.String()
-	want := "[sshc] 繋ぎます\r\n[sshc] 接続完了\r\n"
+	want := "[sshc][debug1] 繋ぎます\r\n[sshc][debug1] 接続完了\r\n"
 	if written != want {
 		t.Errorf("written = %q, want %q", written, want)
 	}
@@ -78,5 +78,24 @@ func TestANilTracerIsSafeToUse(t *testing.T) {
 	}
 	if trace.since(time.Now().Add(-time.Second)) <= 0 {
 		t.Error("nil の tracer が経過を測れなかった")
+	}
+}
+
+// 行の頭には、その行を出した深さが付く。OpenSSH の debug1:／debug2:／debug3:
+// と同じで、読む側はどの設定で出た行かを行だけで判別できる。設定に関係なく
+// 出る行（ProxyCommand の実行）には深さの印が無い。
+func TestEachTracedLineCarriesTheDepthThatProducedIt(t *testing.T) {
+	var out bytes.Buffer
+	trace := newTracer(Full, &out)
+	trace.say(Brief, "繋ぎます")
+	trace.say(Detailed, "鍵を試します")
+	trace.say(Full, "算法は x")
+	trace.announce("ProxyCommand を実行します")
+	want := "[sshc][debug1] 繋ぎます\r\n" +
+		"[sshc][debug2] 鍵を試します\r\n" +
+		"[sshc][debug3] 算法は x\r\n" +
+		"[sshc] ProxyCommand を実行します\r\n"
+	if out.String() != want {
+		t.Errorf("written = %q, want %q", out.String(), want)
 	}
 }
