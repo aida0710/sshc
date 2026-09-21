@@ -319,17 +319,6 @@ func (s *Service) planMetadataEdit(graph *config.Graph, request EditRequest) (pl
 	}
 
 	groupsRelative := reconciled.GroupsPath()
-	groupsAbsolute, err := AbsolutePath(root, groupsRelative)
-	if err != nil {
-		return planned{}, err
-	}
-	if _, err := s.workspace.ResolveForWrite(groupsAbsolute); err != nil {
-		return planned{}, err
-	}
-	previousGroups, groupsExist, err := s.readFile(groupsAbsolute)
-	if err != nil {
-		return planned{}, err
-	}
 	entryContents, entryExists, err := s.readFile(s.entryPath)
 	if err != nil {
 		return planned{}, err
@@ -347,7 +336,6 @@ func (s *Service) planMetadataEdit(graph *config.Graph, request EditRequest) (pl
 	}
 	entryUpdated := entryFile.Render()
 
-	pending := map[string][]byte{}
 	if !bytes.Equal(entryUpdated, entryContents) {
 		entryPrecondition := storage.Precondition{}
 		if entryExists {
@@ -359,28 +347,12 @@ func (s *Service) planMetadataEdit(graph *config.Graph, request EditRequest) (pl
 		prepared.base[filepath.Clean(s.entryPath)] = entryContents
 		prepared.preview.Diffs = append(prepared.preview.Diffs,
 			BuildFileDiff(entryFileName, diskOrNil(entryContents, entryExists), entryUpdated))
-		pending[filepath.Clean(s.entryPath)] = entryUpdated
 	}
 
-	reachable, err := s.resolveWith(pending)
+	after, err := s.refreshGroupSettings(&prepared, reconciled)
 	if err != nil {
 		return planned{}, err
 	}
-	members, _ := ProjectHosts(reachable, root)
-	groupContents, groupNotices := CompileGroups(declared, reconciled, members, dominantEnding(entryFile))
-	prepared.preview.Notices = append(prepared.preview.Notices, groupNotices...)
-
-	groupsPrecondition := storage.Precondition{}
-	if groupsExist {
-		groupsPrecondition = storage.Precondition{Exists: true, Digest: storage.Digest(previousGroups)}
-	}
-	prepared.changes = append(prepared.changes, storage.Change{
-		Path: groupsAbsolute, Contents: groupContents, Precondition: groupsPrecondition,
-	})
-	prepared.base[filepath.Clean(groupsAbsolute)] = previousGroups
-	prepared.preview.Diffs = append(prepared.preview.Diffs,
-		BuildFileDiff(groupsRelative, diskOrNil(previousGroups, groupsExist), groupContents))
-	pending[filepath.Clean(groupsAbsolute)] = groupContents
 	for _, name := range declared {
 		absolute, dirErr := AbsolutePath(root, GroupDirectory(name))
 		if dirErr != nil {
@@ -389,10 +361,6 @@ func (s *Service) planMetadataEdit(graph *config.Graph, request EditRequest) (pl
 		prepared.directories = append(prepared.directories, absolute)
 	}
 
-	after, err := s.resolveWith(pending)
-	if err != nil {
-		return planned{}, err
-	}
 	afterHosts, _ := ProjectHosts(after, root)
 	for _, host := range afterHosts {
 		if host.Group == "" || host.Identity.IsZero() || len(prepared.preview.Effective) >= maxEffectivePreviews {

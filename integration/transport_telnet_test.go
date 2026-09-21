@@ -81,13 +81,20 @@ func serveIntegrationTelnet(listener net.Listener) error {
 	if !bytes.Equal(reply, []byte{iac, do, echo}) {
 		return fmt.Errorf("Telnet negotiation reply = %v", reply)
 	}
-	command, err := bufio.NewReader(connection).ReadString('\n')
+	reader := bufio.NewReader(connection)
+	command, err := reader.ReadString('\n')
 	if err != nil {
 		return err
 	}
 	if command != "show version\r\n" {
 		return fmt.Errorf("Telnet command = %q", command)
 	}
-	_, err = io.WriteString(connection, "virtual telnet version 1\r\nvirtual# ")
+	if _, err := io.WriteString(connection, "virtual telnet version 1\r\nvirtual# "); err != nil {
+		return err
+	}
+	// Keep the prompt available until the client has read it and closed. An
+	// immediate close can reset the TCP connection on Windows while Telnet
+	// negotiation bytes are still arriving, discarding the queued response.
+	_, err = io.Copy(io.Discard, reader)
 	return err
 }
