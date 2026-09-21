@@ -1,6 +1,6 @@
 //go:build !windows && !linux
 
-package storage
+package nofollow
 
 import (
 	"os"
