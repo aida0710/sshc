@@ -9,23 +9,23 @@ import (
 
 func TestPlainTextRemovesTerminalControlsWithoutDamagingText(t *testing.T) {
 	input := []byte("\x1b[31m赤\x1b[0m\r\nplain\ttext\x00\x7f")
-	if got := terminal.PlainText(input); got != "赤\nplain\ttext" {
-		t.Fatalf("PlainText() = %q", got)
+	if got := terminal.PlainTextFrom(input, 0); got != "赤\nplain\ttext" {
+		t.Fatalf("PlainTextFrom() = %q", got)
 	}
 }
 
 func TestPlainTextDoesNotExposeOSCOrControlStringPayloads(t *testing.T) {
 	input := []byte("before\x1b]8;;https://secret.invalid\x1b\\link\x1b]8;;\x1b\\" +
 		"\x1bPprivate terminal data\x1b\\after")
-	got := terminal.PlainText(input)
+	got := terminal.PlainTextFrom(input, 0)
 	if got != "beforelinkafter" || strings.Contains(got, "secret") || strings.ContainsRune(got, '\x1b') {
-		t.Fatalf("PlainText() = %q", got)
+		t.Fatalf("PlainTextFrom() = %q", got)
 	}
 }
 
 func TestPlainTextTurnsStandaloneCarriageReturnsIntoTranscriptLines(t *testing.T) {
-	if got := terminal.PlainText([]byte("10%\r20%\r\nDone")); got != "10%\n20%\nDone" {
-		t.Fatalf("PlainText() = %q", got)
+	if got := terminal.PlainTextFrom([]byte("10%\r20%\r\nDone"), 0); got != "10%\n20%\nDone" {
+		t.Fatalf("PlainTextFrom() = %q", got)
 	}
 }
 

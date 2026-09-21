@@ -33,15 +33,9 @@ type commandEnvelope struct {
 
 var errSyncPullRequiresForce = errors.New("sync pull requires --force")
 
-func runSync(
-	ctx context.Context,
-	called syncInvocation,
-	stateDir string,
-	client *http.Client,
-	stdin *os.File,
-	stdout, stderr io.Writer,
-	terminal passwordTerminal,
-) int {
+func runSync(ctx context.Context, called syncInvocation, environment commandEnvironment) int {
+	stateDir, client, stdin, stdout, stderr, terminal :=
+		environment.stateDir, environment.client, environment.stdin, environment.stdout, environment.stderr, environment.terminal
 	if err := ctx.Err(); err != nil {
 		return finishSyncFailure(called.JSON, err, stdout, stderr)
 	}

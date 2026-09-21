@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
 	"strings"
 	"time"
 
@@ -17,9 +15,9 @@ import (
 )
 
 // runRemote は非対話コマンドを実行し、stdout、stderr、終了コードを保持する。
-func runRemote(
-	ctx context.Context, alias, command, home, stateDir string, client *http.Client, stdin io.Reader, stdout, stderr io.Writer,
-) int {
+func runRemote(ctx context.Context, alias, command string, environment commandEnvironment) int {
+	home, stateDir, client, stdin, stdout, stderr :=
+		environment.home, environment.stateDir, environment.client, environment.stdin, environment.stdout, environment.stderr
 	if err := validate.Alias(alias); err != nil {
 		fmt.Fprintf(stderr, "sshc: %q is not an alias this will connect to\n", alias)
 		return 2

@@ -9,7 +9,6 @@ import (
 	"io/fs"
 	"net/http"
 	"net/url"
-	"os"
 	"sort"
 	"strings"
 
@@ -21,10 +20,9 @@ type otpListEntry struct {
 	Hosts []string `json:"hosts"`
 }
 
-func runOTP(
-	ctx context.Context, called otpInvocation, stateDir string, client *http.Client,
-	stdin *os.File, stdout, stderr io.Writer, terminal passwordTerminal,
-) int {
+func runOTP(ctx context.Context, called otpInvocation, environment commandEnvironment) int {
+	stateDir, client, stdin, stdout, stderr, terminal :=
+		environment.stateDir, environment.client, environment.stdin, environment.stdout, environment.stderr, environment.terminal
 	if err := ctx.Err(); err != nil {
 		return finishOTPFailure(called.JSON, err, stdout, stderr)
 	}

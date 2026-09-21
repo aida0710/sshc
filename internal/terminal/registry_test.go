@@ -213,7 +213,7 @@ func TestCommandWritesToThePreviewedSSHProcessWithoutOpeningAnother(t *testing.T
 	if target.Alias != "production" || target.Generation == 0 {
 		t.Fatalf("target = %#v", target)
 	}
-	if err := registry.WriteCommand(context.Background(), target, "pwd"); err != nil {
+	if err := registry.WriteCommandInput(context.Background(), target, "pwd", true); err != nil {
 		t.Fatal(err)
 	}
 	if got := starter.last().keystrokes(); got != "pwd\r" {
@@ -234,7 +234,7 @@ func TestCommandSupportsLocalAndRefusesChangedSessions(t *testing.T) {
 	if localTarget.Kind != terminal.KindShell || localTarget.Alias != "localhost" {
 		t.Fatalf("local target = %#v", localTarget)
 	}
-	if err := registry.WriteCommand(context.Background(), localTarget, "pwd"); err != nil {
+	if err := registry.WriteCommandInput(context.Background(), localTarget, "pwd", true); err != nil {
 		t.Fatal(err)
 	}
 	if got := starter.last().keystrokes(); got != "pwd\r" {
@@ -280,7 +280,7 @@ func TestCommandSupportsLocalAndRefusesChangedSessions(t *testing.T) {
 		current, targetErr := registry.CommandTarget(session.ID())
 		return targetErr == nil && current.Generation != previewed.Generation
 	})
-	if err := registry.WriteCommand(context.Background(), previewed, "whoami"); !errors.Is(err, terminal.ErrGenerationChanged) {
+	if err := registry.WriteCommandInput(context.Background(), previewed, "whoami", true); !errors.Is(err, terminal.ErrGenerationChanged) {
 		t.Fatalf("WriteCommand after reconnect = %v, want ErrGenerationChanged", err)
 	}
 	if got := processAt(1).keystrokes(); got != "" {

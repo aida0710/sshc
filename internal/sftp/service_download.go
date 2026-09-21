@@ -103,14 +103,41 @@ func (download *PreparedDownload) WriteFrom(ctx context.Context, offset int64, d
 }
 
 func (s Service) PrepareDownload(ctx context.Context, alias, remotePath string) (_ *PreparedDownload, resultErr error) {
-	return s.prepareDownload(ctx, alias, remotePath, "", nil, 0, 1, 0, nil)
+	return s.prepareDownload(ctx, DownloadRequest{Alias: alias, RemotePath: remotePath, SplitParallelism: 1})
 }
 
-func (s Service) prepareDownload(
-	ctx context.Context, alias, remotePath, temporaryDirectory string, reserve func(int64) error,
-	splitThreshold int64, splitParallelism int, splitChunkBytes int64, progress func(DownloadPartProgress),
-) (_ *PreparedDownload, resultErr error) {
-	cleaned, err := cleanPublicPath(remotePath, false)
+// DownloadRequest は、リモートのファイルを spool へ取り込む条件。
+type DownloadRequest struct {
+	Alias      string
+	RemotePath string
+	// TemporaryDirectory が空なら OS の一時領域に spool する。
+	TemporaryDirectory string
+	// Reserve は spool を作る前に既知のサイズ分の容量を確保する。nil なら確保しない。
+	Reserve func(size int64) error
+	// この閾値以上のファイルは、対応するホストなら並列に range で取る。
+	// SplitThreshold か SplitChunkBytes が 0、SplitParallelism が 1 以下なら順次。
+	SplitThreshold   int64
+	SplitParallelism int
+	SplitChunkBytes  int64
+	// Progress は並列取得の各 range の進み具合を受け取る。nil なら報告しない。
+	Progress func(DownloadPartProgress)
+}
+
+// downloadRanges は、並列取得の 1 ファイル分の作業。
+type downloadRanges struct {
+	alias       string
+	remotePath  string
+	destination *os.File
+	size        int64
+	parallelism int
+	chunkBytes  int64
+	progress    func(DownloadPartProgress)
+}
+
+func (s Service) prepareDownload(ctx context.Context, request DownloadRequest) (_ *PreparedDownload, resultErr error) {
+	alias, temporaryDirectory, reserve, progress := request.Alias, request.TemporaryDirectory, request.Reserve, request.Progress
+	splitThreshold, splitParallelism, splitChunkBytes := request.SplitThreshold, request.SplitParallelism, request.SplitChunkBytes
+	cleaned, err := cleanPublicPath(request.RemotePath, false)
 	if err != nil {
 		return nil, err
 	}
@@ -156,7 +183,10 @@ func (s Service) prepareDownload(
 	splitParallelism = s.boundedParallelism(alias, splitParallelism)
 	if before.Size() >= splitThreshold && splitThreshold > 0 && splitParallelism > 1 && splitChunkBytes > 0 {
 		if _, supported := remote.(RangeRemote); supported {
-			written, err = s.copyDownloadRanges(ctx, remote, alias, cleaned, temporary, before.Size(), splitParallelism, splitChunkBytes, progress)
+			written, err = s.copyDownloadRanges(ctx, remote, downloadRanges{
+				alias: alias, remotePath: cleaned, destination: temporary, size: before.Size(),
+				parallelism: splitParallelism, chunkBytes: splitChunkBytes, progress: progress,
+			})
 			// A host that would not take the extra connections still serves
 			// the file over the one that is open.
 			if errors.Is(err, errRangeConnections) {
@@ -270,10 +300,9 @@ var errRangeConnections = errors.New("could not open the connections for a range
 // representation used by HTTP retries and browser checkpoints. The extra
 // connections are opened before any range is read, so a host that refuses
 // them costs nothing but the attempt.
-func (s Service) copyDownloadRanges(
-	ctx context.Context, firstRemote Remote, alias, remotePath string, destination *os.File, size int64, parallelism int, chunkBytes int64,
-	progress func(DownloadPartProgress),
-) (int64, error) {
+func (s Service) copyDownloadRanges(ctx context.Context, firstRemote Remote, work downloadRanges) (int64, error) {
+	alias, remotePath, destination, progress := work.alias, work.remotePath, work.destination, work.progress
+	size, parallelism, chunkBytes := work.size, work.parallelism, work.chunkBytes
 	if size <= 0 || parallelism <= 1 || chunkBytes <= 0 {
 		return 0, ErrInvalidTransfer
 	}
