@@ -12,6 +12,7 @@ import (
 	"golang.org/x/crypto/ssh"
 
 	"sshc/internal/terminal"
+	"sshc/internal/textencoding"
 )
 
 // DefaultTimeout は、ConnectTimeout が書かれていないときの上限である。
@@ -62,6 +63,7 @@ func (d Dialer) connect(ctx context.Context, target Target, session *Session, ob
 	}
 	trace := newTracer(level, session.writer)
 	trace.progress = session.setProgress
+	session.trace = trace
 	started := trace.now()
 	trace.say(Full, "接続ログ：すべて（-vvv）")
 
@@ -117,6 +119,12 @@ func (d Dialer) connect(ctx context.Context, target Target, session *Session, ob
 	}
 	session.markReady(nil)
 	trace.say(Brief, "セッションを開始しました。")
+	if target.KeepAlive > 0 {
+		trace.say(Detailed, "keepalive：%s ごとに送り、%d 回続けて応答が無ければ切断します。",
+			target.KeepAlive, keepAliveCount(target.KeepAliveMax))
+	} else {
+		trace.say(Detailed, "keepalive：送りません（ServerAliveInterval 0）。")
+	}
 	trace.say(Full, "接続完了まで %s かかりました。", trace.since(started).Round(time.Millisecond))
 	session.run(remote, keepAliveLoop(client, target.KeepAlive, target.KeepAliveMax, session.done))
 }
@@ -129,6 +137,9 @@ func (d Dialer) start(remote *ssh.Session, target Target, size terminal.Size, se
 	if err != nil {
 		return err
 	}
+	if target.Encoding != "" && target.Encoding != textencoding.UTF8 {
+		session.trace.say(Detailed, "文字エンコーディング：%s", target.Encoding)
+	}
 	remote.Stdin = streams.In
 	remote.Stdout = streams.Out
 	// stderr を同じ道へ流すのは、端末がひとつだからである。分けて運んでも
@@ -137,24 +148,34 @@ func (d Dialer) start(remote *ssh.Session, target Target, size terminal.Size, se
 
 	for _, variable := range target.SetEnv {
 		// 拒否されても続ける。サーバーが AcceptEnv を絞っているのは普通のことで、
-		// それを理由に接続を諦める必要はない。
-		_ = remote.Setenv(variable.Name, variable.Value)
+		// それを理由に接続を諦める必要はない。断られたことは接続ログにだけ残す。
+		// 値は書かない。SetEnv にトークンを置く人がいる。
+		if err := remote.Setenv(variable.Name, variable.Value); err != nil {
+			session.trace.say(Detailed, "環境変数 %s は受け入れられませんでした（サーバーの AcceptEnv を確認してください）。", variable.Name)
+			continue
+		}
+		session.trace.say(Detailed, "環境変数 %s を送りました。", variable.Name)
 	}
 
-	if !strings.EqualFold(target.RequestTTY, "no") {
+	if strings.EqualFold(target.RequestTTY, "no") {
+		session.trace.say(Detailed, "端末は要求しません（RequestTTY no）。")
+	} else {
 		// xterm.js is not a local TTY, so there is no real input or output baud
 		// rate to forward. Inventing one can leave the remote PTY with a speed
 		// that its termios implementation cannot apply again when programs enter
 		// raw mode. Let the server keep its native PTY speeds and only request the
 		// interactive echo behaviour the browser terminal expects.
 		modes := ssh.TerminalModes{ssh.ECHO: 1}
+		session.trace.say(Detailed, "端末を要求します：%d 列 × %d 行（TERM=%s）。", size.Cols, size.Rows, TermName)
 		if err := remote.RequestPty(TermName, int(size.Rows), int(size.Cols), modes); err != nil {
 			return err
 		}
 	}
 	if target.RemoteCommand != "" {
+		session.trace.say(Detailed, "リモートコマンドを実行します：%s", target.RemoteCommand)
 		return remote.Start(target.RemoteCommand)
 	}
+	session.trace.say(Detailed, "シェルを起動します。")
 	return remote.Shell()
 }
 
@@ -166,6 +187,12 @@ func (d Dialer) chain(ctx context.Context, target Target, prompt Prompter, trace
 	var closers []io.Closer
 	var through *ssh.Client
 	route := target.JumpRoute()
+
+	// 読みはするが従わない設定は、`sshc info` の他にここでしか言えない。
+	// 効かない RemoteForward を書いて繋いだ人が、なぜ効かないかを知る場所である。
+	for _, notice := range target.Notices {
+		trace.say(Detailed, "設定 %s は適用しません：%s", notice.Keyword, notice.Detail)
+	}
 
 	if len(route) > 0 && trace.enabled(Detailed) {
 		hops := make([]string, 0, len(route))
@@ -208,7 +235,7 @@ func (d Dialer) connectOne(
 	defer cancel()
 
 	if through != nil {
-		trace.say(Brief, "%s へ ProxyJump 経由で接続します。", target.Address())
+		trace.say(Brief, "%s へ ProxyJump 経由で接続します（ユーザー：%s）。", target.Address(), target.User)
 	} else {
 		trace.say(Brief, "%s へ接続します（ユーザー：%s）。", target.Address(), target.User)
 	}
@@ -221,16 +248,22 @@ func (d Dialer) connectOne(
 		return nil, err
 	}
 	trace.say(Detailed, "TCP 接続を確立しました（%s）。", trace.since(started).Round(time.Millisecond))
+	if tcp, ok := conn.(*net.TCPConn); ok {
+		// 素の TCP のときだけ言う。ProxyJump の上のチャンネルや ProxyCommand の
+		// パイプが名乗るアドレスは、どこを通ったかを表さない。
+		trace.say(Full, "ローカル %s → リモート %s", tcp.LocalAddr(), tcp.RemoteAddr())
+	}
 
-	auth := d.authWithTrace(trace)
+	auth, lastTriedMethod := d.authWithTrace(trace)
 	authMethods, closeAuth := auth.methodsWithCleanup(target, prompt)
 	defer closeAuth()
-	verifyHostKey := d.HostKeys.Callback(target, prompt)
+	verifyHostKey := d.HostKeys.callback(target, prompt, trace)
 	config := &ssh.ClientConfig{
 		User: target.User,
 		Auth: authMethods,
 		HostKeyCallback: func(hostname string, remote net.Addr, key ssh.PublicKey) error {
 			trace.stage(terminal.ConnectionHostKey, target, hop, hops)
+			trace.say(Full, "鍵交換が終わり、ホスト鍵を受け取りました（%s）。", trace.since(started).Round(time.Millisecond))
 			err := verifyHostKey(hostname, remote, key)
 			if err == nil {
 				trace.stage(terminal.ConnectionAuthenticating, target, hop, hops)
@@ -241,18 +274,22 @@ func (d Dialer) connectOne(
 		// 三種類の鍵を持つホストが known_hosts にある 1 行とは違う種類を出し、
 		// 正しい鍵が「一致しない鍵」として現れる。
 		HostKeyAlgorithms: d.HostKeys.Algorithms(target),
+		BannerCallback:    func(message string) error { trace.banner(message); return nil },
 		Timeout:           timeout,
 	}
-	if trace.enabled(Detailed) {
-		trace.say(Detailed, "利用可能な認証方式：%d 件", len(config.Auth))
-	}
+	trace.say(Full, "名乗るホスト鍵アルゴリズム：%s", strings.Join(config.HostKeyAlgorithms, ", "))
 	connection, channels, requests, err := newClientConn(ctx, conn, target.Address(), config)
 	if err != nil {
 		trace.say(Brief, "%s", connectionFailureMessage("SSH ハンドシェイク", err))
 		return nil, err
 	}
-	trace.say(Full, "サーバーの SSH バージョン：%s", connection.ServerVersion())
+	if method := lastTriedMethod(); method != "" {
+		trace.say(Detailed, "認証方式 %s で認証されました。", method)
+	} else {
+		trace.say(Detailed, "サーバーは認証を求めませんでした。")
+	}
 	trace.say(Detailed, "SSH ハンドシェイクが完了しました（%s）。", trace.since(started).Round(time.Millisecond))
+	trace.say(Full, "サーバーの SSH バージョン：%s", connection.ServerVersion())
 	trace.say(Brief, "%s に接続しました（%d/%d）。", connectionTarget(target), hop, hops)
 	trace.stage(terminal.ConnectionAuthenticated, target, hop, hops)
 	return ssh.NewClient(connection, channels, requests), nil
@@ -260,13 +297,20 @@ func (d Dialer) connectOne(
 
 // authWithTrace は共有DialerのAuthを接続単位で複製し、安全な診断だけを
 // tracerへ流す。共有値を書き換えないため、同時接続でもobserverが混ざらない。
-func (d Dialer) authWithTrace(trace *tracer) Auth {
+//
+// 返す関数は、最後に試した方式の名前である。x/crypto/ssh は通った方式を
+// 教えないが、方式は順に試され、通った瞬間に握手が終わるので、最後に
+// 試したものが通ったものである。
+func (d Dialer) authWithTrace(trace *tracer) (Auth, func() string) {
 	auth := d.Auth
+	auth.trace = trace
+	var lastTried string
 	observeMethod := auth.Observe
 	auth.Observe = func(method string) {
 		if observeMethod != nil {
 			observeMethod(method)
 		}
+		lastTried = method
 		trace.say(Detailed, "認証方式を試します：%s", method)
 	}
 	observeCredential := auth.ObserveCredential
@@ -277,12 +321,11 @@ func (d Dialer) authWithTrace(trace *tracer) Auth {
 		switch event {
 		case CredentialTOTPUsed:
 			trace.say(Detailed, "保存済みTOTPを%sの認証コード質問へ入力しました。", connectionTarget(target))
-			trace.say(Full, "認証コード質問の入力表示：%s", map[bool]string{true: "あり", false: "なし"}[echoed])
 		case CredentialTOTPUnavailable:
 			trace.say(Detailed, "明示的な認証コード質問を検出しましたが、%sに利用できる保存済みTOTPがありません。Connectionsで割り当てを確認してください。", connectionTarget(target))
 		}
 	}
-	return auth
+	return auth, func() string { return lastTried }
 }
 
 func connectionTarget(target Target) string {

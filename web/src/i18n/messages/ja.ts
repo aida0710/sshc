@@ -710,7 +710,7 @@ export const ja = {
   "terminal.paletteLabel": "配色",
   "terminal.verbosityLabel": "接続のログ",
   "terminal.verbosityHint":
-    "接続、認証方式、保存済みTOTPの使用可否など、sshcが取得できる診断をターミナルへ表示します。新しい接続から適用され、秘密値は表示しません。",
+    "接続の経過、ホスト鍵の照合結果、試した鍵と認証方式、保存済みの資格情報を使えたかなど、sshcが取得できる診断をターミナルへ表示します。新しい接続から適用され、秘密値は表示しません。",
   "terminal.verbosityQuiet": "表示しない",
   "terminal.verbosityBrief": "基本情報（-v）",
   "terminal.verbosityDetailed": "鍵・経由地・所要時間（-vv）",

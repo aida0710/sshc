@@ -49,6 +49,9 @@ type Session struct {
 
 	// forwarded は、この接続上の転送。セッション終了時にまとめて閉じる。
 	forwarded forwards
+	// trace は、この接続の接続ログである。端末へ出す先も、進捗を置く先も
+	// このセッションなので、接続処理はここから受け取る。
+	trace *tracer
 
 	exit      terminal.ExitInfo
 	done      chan struct{}
@@ -334,9 +337,7 @@ func keepAliveLoop(client *ssh.Client, interval time.Duration, count int, done <
 	if interval <= 0 {
 		return nil
 	}
-	if count <= 0 {
-		count = 3
-	}
+	count = keepAliveCount(count)
 	return func() {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
@@ -358,6 +359,18 @@ func keepAliveLoop(client *ssh.Client, interval time.Duration, count int, done <
 			}
 		}
 	}
+}
+
+// defaultKeepAliveCount は、ServerAliveCountMax が書かれていないときの回数である。
+// OpenSSH の既定と同じ 3 回。
+const defaultKeepAliveCount = 3
+
+// keepAliveCount は、何回続けて応答が無ければ切断するかを返す。
+func keepAliveCount(configured int) int {
+	if configured <= 0 {
+		return defaultKeepAliveCount
+	}
+	return configured
 }
 
 // keepAliveAnswered は keepalive を 1 回送り、interval 内に応答があれば真を返す。
