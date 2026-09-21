@@ -322,6 +322,9 @@ export function ConnectionsPage({
     setPreview(null);
     setProblem(null);
     setManaging(false);
+    // The URL is the single source for the selection; the state setters and
+    // the current selection ref are read, not watched, so navigating back to
+    // the same location does not reset an open editor.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname, location.search]);
 

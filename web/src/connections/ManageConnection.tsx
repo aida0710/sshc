@@ -48,6 +48,8 @@ export function ManageConnection({
     setComment(initialComment);
     setFile("");
     setConfirmingDelete(false);
+    // The form restarts only for another host (resetKey); the identity, group
+    // and comment it copies are snapshots of that host, not live inputs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resetKey]);
 
