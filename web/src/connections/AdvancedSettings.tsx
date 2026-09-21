@@ -63,6 +63,9 @@ export function AdvancedSettings({
     setNewDestination("");
     setBlockRaw(detail.form.raw);
     setLocalError("");
+    // resetKey already names the identity and file contents this draft is
+    // based on; watching `detail` itself would restart the form on every
+    // refetch of the same revision.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resetKey]);
 
