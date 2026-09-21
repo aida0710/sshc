@@ -220,14 +220,14 @@ type fixture struct {
 	client  *http.Client
 	// anonymous は cookie jar を持たないため、これを通したリクエストは
 	// session なしでサーバーに届く。
-	anonymous    *http.Client
-	server       *httpserver.Server
-	terminal     *recordingTerminal
-	scanner      *recordingScanner
-	clock        *testClock
-	logs         *syncBuffer
-	canaries     fixtureCanaries
-	sessionID    string
+	anonymous *http.Client
+	server    *httpserver.Server
+	terminal  *recordingTerminal
+	scanner   *recordingScanner
+	clock     *testClock
+	logs      *syncBuffer
+	canaries  fixtureCanaries
+	sessionID string
 	// browserToken はブラウザ登録の token。route sweep が sign-out を踏んだ後、
 	// frontend と同じく recover で入り直すために持つ。
 	browserToken string
