@@ -58,8 +58,10 @@ func TestForwardListenerRejectsConnectionsBeyondItsLimitAndReusesSlots(t *testin
 		third := dial()
 		select {
 		case <-started:
-			defer func() { _ = third.Close() }()
-			goto reused
+			t.Cleanup(func() { _ = third.Close() })
+			release <- struct{}{}
+			release <- struct{}{}
+			return
 		case <-time.After(10 * time.Millisecond):
 			_ = third.Close()
 			if time.Now().After(reuseDeadline) {
@@ -67,10 +69,6 @@ func TestForwardListenerRejectsConnectionsBeyondItsLimitAndReusesSlots(t *testin
 			}
 		}
 	}
-
-reused:
-	release <- struct{}{}
-	release <- struct{}{}
 }
 
 type deadlineRecordingConn struct {
