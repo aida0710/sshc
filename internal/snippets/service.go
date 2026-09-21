@@ -262,15 +262,6 @@ func terminalEvidence(source planSource, command string) (string, error) {
 	return hex.EncodeToString(digest[:]), nil
 }
 
-func (s *Service) PreviewStartup(alias string) (Preview, error) {
-	source, expanded, secrets, err := s.startupSource(alias)
-	if err != nil {
-		return Preview{}, err
-	}
-	preview, _, err := s.planExpanded(PreviewRequest{Aliases: []string{alias}}, source, expanded, secrets)
-	return preview, err
-}
-
 // PrepareStartupCommand returns the executable command for the terminal
 // injector. Public startup previews stay redacted; this internal path is the
 // only one that may hand the expanded value to the PTY writer.

@@ -571,7 +571,7 @@ func TestASnapshotTravelsBetweenTwoMachines(t *testing.T) {
 	if len(result.Conflicts) != 0 {
 		t.Fatalf("conflicts = %#v", result.Conflicts)
 	}
-	if err := second.service.Apply(result); err != nil {
+	if err := applyPreview(second.service, remotesync.ResolveNone, "", result); err != nil {
 		t.Fatalf("Apply = %v", err)
 	}
 
@@ -623,7 +623,7 @@ func TestSnippetDocumentIsResealedForTheReceivingMachine(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := second.service.Apply(result); err != nil {
+	if err := applyPreview(second.service, remotesync.ResolveNone, "", result); err != nil {
 		t.Fatal(err)
 	}
 	if got := second.read(t, remotesync.SnippetsPath); got != "ciphertext-from-machine-b" {
@@ -657,13 +657,9 @@ func TestSnippetApplyRejectsALocalEditMadeAfterPreview(t *testing.T) {
 	}
 	localDocument = []byte(`{"schemaVersion":1,"snippets":[{"command":"local edit"}]}`)
 	second.write(t, remotesync.SnippetsPath, "ciphertext-local-edit")
-	if err := second.service.Apply(result); err == nil {
-		t.Fatal("Apply overwrote a snippet edit made after preview")
-	} else {
-		var conflict *storage.ConflictError
-		if !errors.As(err, &conflict) {
-			t.Fatalf("Apply = %v, want storage conflict", err)
-		}
+	// 適用は preview と同じ選択で取り直すので、preview 後の編集は衝突として見える。
+	if err := applyPreview(second.service, remotesync.ResolveNone, "", result); !errors.Is(err, remotesync.ErrConflicts) {
+		t.Fatalf("Apply = %v, want ErrConflicts for a snippet edit made after preview", err)
 	}
 	if got := second.read(t, remotesync.SnippetsPath); got != "ciphertext-local-edit" {
 		t.Fatalf("local snippet file changed to %q", got)
@@ -828,7 +824,7 @@ func TestPullKeepsAFileNewlyExcludedByTheRemoteRules(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := receiver.service.Apply(initial); err != nil {
+	if err := applyPreview(receiver.service, remotesync.ResolveRemote, "", initial); err != nil {
 		t.Fatal(err)
 	}
 	receiver.write(t, "local.cache", "receiver must keep this")
@@ -851,7 +847,7 @@ func TestPullKeepsAFileNewlyExcludedByTheRemoteRules(t *testing.T) {
 			t.Fatalf("excluded path scheduled for removal: %+v", next.Removed)
 		}
 	}
-	if err := receiver.service.Apply(next); err != nil {
+	if err := applyPreview(receiver.service, remotesync.ResolveRemote, "", next); err != nil {
 		t.Fatal(err)
 	}
 	if got := receiver.read(t, "local.cache"); got != "receiver must keep this" {
@@ -1048,7 +1044,7 @@ func TestHistoryApplyRejectsAMissingLiveObjectWithoutWritingFiles(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := consumer.service.Apply(result); !errors.Is(err, remotesync.ErrRemoteDeleted) {
+	if err := applyPreview(consumer.service, remotesync.ResolveRemote, history.Revisions[0].Key, result); !errors.Is(err, remotesync.ErrRemoteDeleted) {
 		t.Fatalf("Apply = %v, want ErrRemoteDeleted", err)
 	}
 	if got := consumer.read(t, "config"); got != "Host local\n" {
@@ -1086,7 +1082,7 @@ func TestARefusedPullLeavesNoDirectoryBehind(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := second.service.Apply(result); err == nil {
+	if err := applyPreview(second.service, remotesync.ResolveNone, "", result); err == nil {
 		t.Fatal("Apply は、拒否するバリデータに対して成功した")
 	}
 	if _, err := os.Stat(filepath.Join(second.home, ".ssh", "connections", "work")); !errors.Is(err, os.ErrNotExist) {
@@ -1110,7 +1106,7 @@ func TestApplyRefusesWhileAnythingIsInConflict(t *testing.T) {
 	if len(result.Conflicts) == 0 {
 		t.Fatal("two machines with different contents produced no conflict")
 	}
-	if err := second.service.Apply(result); !errors.Is(err, remotesync.ErrConflicts) {
+	if err := applyPreview(second.service, remotesync.ResolveNone, "", result); !errors.Is(err, remotesync.ErrConflicts) {
 		t.Fatalf("Apply = %v, want ErrConflicts", err)
 	}
 	if got := second.read(t, "config"); got != "mine\n" {
@@ -1288,7 +1284,7 @@ func TestPullReportsDownloadedAndExpandedBytesWithoutPersistingPreview(t *testin
 		t.Fatalf("preview persisted state: %#v", view)
 	}
 
-	if err := consumer.service.Apply(result); err != nil {
+	if err := applyPreview(consumer.service, remotesync.ResolveNone, "", result); err != nil {
 		t.Fatal(err)
 	}
 	view := consumer.service.SyncState()
@@ -1331,7 +1327,7 @@ func TestPullCommitsSyncStateAsTheTerminalWrite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := consumer.service.Apply(initial); err != nil {
+	if err := applyPreview(consumer.service, remotesync.ResolveNone, "", initial); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1351,7 +1347,7 @@ func TestPullCommitsSyncStateAsTheTerminalWrite(t *testing.T) {
 		}
 		return nil
 	}
-	if err := consumer.service.Apply(next); err != nil {
+	if err := applyPreview(consumer.service, remotesync.ResolveRemote, "", next); err != nil {
 		t.Fatal(err)
 	}
 	statePath := filepath.Join(consumer.workspace.Root(), filepath.FromSlash(remotesync.StatePath))
@@ -1426,7 +1422,7 @@ func TestASecondPushFromTheSameMachineSucceeds(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := other.service.Apply(result); err != nil {
+	if err := applyPreview(other.service, remotesync.ResolveNone, "", result); err != nil {
 		t.Fatal(err)
 	}
 	if got := other.read(t, "config"); got != "two\n" {
@@ -1465,7 +1461,7 @@ func TestPullAcceptsReadOnlyLocalFiles(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := reader.service.Apply(initial); err != nil {
+			if err := applyPreview(reader.service, remotesync.ResolveNone, "", initial); err != nil {
 				t.Fatal(err)
 			}
 			readerPath := filepath.Join(reader.workspace.Root(), "config")
@@ -1484,7 +1480,7 @@ func TestPullAcceptsReadOnlyLocalFiles(t *testing.T) {
 			if len(update.Conflicts) != 0 {
 				t.Fatalf("Pull with local mode %04o reported false conflicts: %+v", test.localMode, update.Conflicts)
 			}
-			if err := reader.service.Apply(update); err != nil {
+			if err := applyPreview(reader.service, remotesync.ResolveNone, "", update); err != nil {
 				t.Fatalf("Apply with local mode %04o = %v", test.localMode, err)
 			}
 			if got := reader.read(t, "config"); got != "new\n" {
@@ -1536,7 +1532,7 @@ func TestASendOnlyMachineWillNotApply(t *testing.T) {
 		t.Fatal("the preview reported no conflict on a file both machines changed")
 	}
 
-	if err := second.service.Apply(result); !errors.Is(err, remotesync.ErrApplyRefused) {
+	if err := applyPreview(second.service, remotesync.ResolveNone, "", result); !errors.Is(err, remotesync.ErrApplyRefused) {
 		t.Fatalf("Apply = %v, want ErrApplyRefused", err)
 	}
 	if got := second.read(t, "config"); got != "what is on this disk\n" {
@@ -1689,7 +1685,6 @@ func TestCheckRefusesABucketThatWillNotAnswer(t *testing.T) {
 		t.Error("Check against an unreachable endpoint returned nil")
 	}
 }
-
 
 // エンドポイントが正規化される前に保存された設定も正しく表示される。サービスは、
 // 与えられたものがどこから来たかを信用せず、自分で切り詰めるからだ。
@@ -1921,7 +1916,7 @@ func TestHistoryDiffRestoreAndBranch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := machine.service.Apply(restored); err != nil {
+	if err := applyPreview(machine.service, remotesync.ResolveNone, rootKey, restored); err != nil {
 		t.Fatal(err)
 	}
 	if got := machine.read(t, "config"); got != "Host one\n" {
@@ -2252,9 +2247,9 @@ func TestReplaceKeyRequiresExplicitHistoryLossConfirmation(t *testing.T) {
 	before := bucket.object(remotesync.ObjectName)
 	committed := false
 	err := machine.service.ReplaceKeyUsing(context.Background(), "a different strong shared synchronization key", false, replacing(syncPassphrase, func() error {
-			committed = true
-			return nil
-		}))
+		committed = true
+		return nil
+	}))
 	if !errors.Is(err, remotesync.ErrHistoryKeyLossConfirmation) {
 		t.Fatalf("ReplaceKey = %v, want ErrHistoryKeyLossConfirmation", err)
 	}
@@ -2602,7 +2597,7 @@ func TestForcePushReplacesOnlyTheConfirmedRemoteGeneration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := reader.service.Apply(pulled); err != nil {
+	if err := applyPreview(reader.service, remotesync.ResolveRemote, "", pulled); err != nil {
 		t.Fatal(err)
 	}
 	if got := reader.read(t, "config"); got != "Host replacement\n" {
@@ -2975,7 +2970,7 @@ func TestPushReadsTheSynchronizationKeyAfterAConcurrentRotation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new head was not sealed by the current key: %v", err)
 	}
-	if err := reader.service.Apply(result); err != nil {
+	if err := applyPreviewWithKey(reader.service, next, pullChoice{resolve: remotesync.ResolveNone}, result); err != nil {
 		t.Fatal(err)
 	}
 	if got := reader.read(t, "config"); got != "Host changed\n" {
@@ -3275,8 +3270,10 @@ func TestApplyRejectsAPreviewFromAReconfiguredBinding(t *testing.T) {
 	if err := consumer.service.Reconfigure(config, consumer.creds, consumer.client, func() error { return nil }); err != nil {
 		t.Fatal(err)
 	}
-	if err := consumer.service.Apply(result); !errors.Is(err, remotesync.ErrRemoteMoved) {
-		t.Fatalf("consumer Apply = %v, want ErrRemoteMoved", err)
+	// 適用は今の接続先で取り直すので、preview を取った接続先とは別の（空の）
+	// 場所を見て止まる。preview の内容が新しい接続先へ書かれることはない。
+	if err := applyPreview(consumer.service, remotesync.ResolveNone, "", result); !errors.Is(err, remotesync.ErrNoSnapshot) {
+		t.Fatalf("consumer Apply = %v, want ErrNoSnapshot from the reconfigured target", err)
 	}
 	if _, err := consumer.service.PushUsing(context.Background(), keyOf(syncPassphrase), ""); err != nil {
 		t.Fatalf("Push after reconfiguration = %v", err)
@@ -3414,7 +3411,7 @@ func TestSavedPasswordsTravelWhileMasterPasswordsStayLocal(t *testing.T) {
 	if err := receiver.ChangeMasterPassword("the second machine's own master", receiverMaster); err != nil {
 		t.Fatalf("ChangeMasterPassword between Pull and Apply = %v", err)
 	}
-	if err := second.service.Apply(result); err != nil {
+	if err := applyPreview(second.service, remotesync.ResolveNone, "", result); err != nil {
 		t.Fatalf("Apply = %v", err)
 	}
 
@@ -3450,7 +3447,7 @@ func TestAnExplicitEmptyVaultClearsCredentialsOnAnotherInstallation(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := second.service.Apply(initial); err != nil {
+	if err := applyPreview(second.service, remotesync.ResolveNone, "", initial); err != nil {
 		t.Fatal(err)
 	}
 	if got := receiver.BoundFor(secret.KindPassword, "bastion", binding); got != "password to revoke" {
@@ -3483,7 +3480,7 @@ func TestAnExplicitEmptyVaultClearsCredentialsOnAnotherInstallation(t *testing.T
 	if len(removal.Conflicts) != 0 || len(removal.Removed) != 0 {
 		t.Fatalf("empty vault preview = conflicts %+v, removals %+v", removal.Conflicts, removal.Removed)
 	}
-	if err := second.service.Apply(removal); err != nil {
+	if err := applyPreview(second.service, remotesync.ResolveNone, "", removal); err != nil {
 		t.Fatal(err)
 	}
 	if got := receiver.BoundFor(secret.KindPassword, "bastion", binding); got != "" {
@@ -3579,7 +3576,7 @@ func TestShortcutPresetsTravelInEncryptedSync(t *testing.T) {
 	if len(result.Conflicts) != 0 {
 		t.Fatal("unexpected sync conflict")
 	}
-	if err := reader.service.Apply(result); err != nil {
+	if err := applyPreview(reader.service, remotesync.ResolveNone, "", result); err != nil {
 		t.Fatal(err)
 	}
 	got, err := os.ReadFile(filepath.Join(reader.home, ".ssh", "sshc", "metadata.json"))

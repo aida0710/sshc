@@ -230,6 +230,11 @@ func (s *Service) pullAndApply(ctx context.Context, passphrase string, resolve R
 	if err != nil && !errors.Is(err, ErrNothingToApply) {
 		return PullResult{}, err
 	}
+	// 生きた object が消えていれば、それは「preview が古い」ではなく「remote が
+	// 消えた」と言う。どちらも適用は止まるが、次に取る行動が違う。
+	if result.liveMissing || result.ETag == "" {
+		return PullResult{}, ErrRemoteDeleted
+	}
 	if expectedETag == "" || expectedRevision == "" ||
 		result.ETag != expectedETag || result.Manifest.Revision != expectedRevision {
 		return PullResult{}, ErrPreviewStale
@@ -241,17 +246,6 @@ func (s *Service) pullAndApply(ctx context.Context, passphrase string, resolve R
 		return PullResult{}, err
 	}
 	return result, nil
-}
-
-// Apply は pull をコミットする。どれかのファイルが衝突しているあいだは拒否する。
-// 半分だけ適用すれば、どちらの側とも一致しないワークスペースになるからだ。
-func (s *Service) Apply(result PullResult) error {
-	s.operationMu.Lock()
-	defer s.operationMu.Unlock()
-	if err := s.validatePullForApply(context.Background(), result); err != nil {
-		return err
-	}
-	return s.apply(result)
 }
 
 func (s *Service) validatePullForApply(ctx context.Context, result PullResult) error {

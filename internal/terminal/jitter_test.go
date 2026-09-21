@@ -6,7 +6,7 @@ import (
 )
 
 func TestReconnectJitterIsStableAndBounded(t *testing.T) {
-	for attempt, base := range reconnectBackoff {
+	for attempt, base := range ReconnectBackoff {
 		got := jitteredReconnectDelay(attempt, "random-session-id")
 		if again := jitteredReconnectDelay(attempt, "random-session-id"); again != got {
 			t.Fatalf("attempt %d changed from %v to %v", attempt, got, again)

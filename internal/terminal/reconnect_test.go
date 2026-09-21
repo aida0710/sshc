@@ -190,9 +190,9 @@ func TestALostTransportIsDialledAgain(t *testing.T) {
 	}
 
 	waitFor(t, func() bool {
-		return strings.Contains(string(session.Snapshot()), "再接続しました")
+		return strings.Contains(string(snapshotOf(session)), "再接続しました")
 	})
-	if !strings.Contains(string(session.Snapshot()), "新しいシェル") {
+	if !strings.Contains(string(snapshotOf(session)), "新しいシェル") {
 		t.Error("新しいシェルであることを言っていない: 前の続きだと思わせてはならない")
 	}
 }
@@ -227,7 +227,7 @@ func TestGivingUpIsSaidOutLoud(t *testing.T) {
 	spy.at(0).exit(terminal.ExitInfo{Code: terminal.TransportLost})
 
 	waitFor(t, func() bool { return !session.Live() }) // 諦めなかった
-	if !strings.Contains(string(session.Snapshot()), "再接続できる回数の上限に達しました") {
+	if !strings.Contains(string(snapshotOf(session)), "再接続できる回数の上限に達しました") {
 		t.Error("諦めたことを言っていない")
 	}
 	view := session.View()
@@ -364,8 +364,8 @@ func TestStoppingTheReconnectWaitLeavesAnExitedPaneToReconnectByHand(t *testing.
 	if view.Problem != "reconnect_stopped" || view.Reconnect != nil || view.Exited == nil {
 		t.Fatalf("view after stop = state=%s problem=%q reconnect=%v exited=%v", view.State, view.Problem, view.Reconnect, view.Exited)
 	}
-	if !strings.Contains(string(session.Snapshot()), "再接続を停止しました") {
-		t.Fatalf("stop was not announced: %q", session.Snapshot())
+	if !strings.Contains(string(snapshotOf(session)), "再接続を停止しました") {
+		t.Fatalf("stop was not announced: %q", snapshotOf(session))
 	}
 	if spy.count() != 1 {
 		t.Fatalf("stop still dialled again: %d opens", spy.count())
@@ -445,7 +445,7 @@ func TestKeystrokesDuringAReconnectAreDropped(t *testing.T) {
 	first.exit(terminal.ExitInfo{Code: terminal.TransportLost})
 
 	waitFor(t, func() bool {
-		return strings.Contains(string(session.Snapshot()), "再接続します")
+		return strings.Contains(string(snapshotOf(session)), "再接続します")
 	})
 	if _, err := session.Write([]byte("rm -rf /tmp/half")); err != nil {
 		t.Fatalf("繋ぎ直しのあいだの打鍵が失敗した: %v", err)
@@ -453,7 +453,7 @@ func TestKeystrokesDuringAReconnectAreDropped(t *testing.T) {
 
 	waitFor(t, func() bool { return spy.count() >= 2 })
 	waitFor(t, func() bool {
-		return strings.Contains(string(session.Snapshot()), "再接続しました")
+		return strings.Contains(string(snapshotOf(session)), "再接続しました")
 	})
 
 	if got := spy.at(1).keystrokes(); got != "" {
@@ -648,8 +648,8 @@ func TestClosingAConsoleDoesNotPromiseToDialAgain(t *testing.T) {
 	}
 
 	waitFor(t, func() bool { return !session.Live() })
-	if strings.Contains(string(session.Snapshot()), "繋ぎ直します") {
-		t.Errorf("closed session announced a reconnect that will not occur:\n%s", session.Snapshot())
+	if strings.Contains(string(snapshotOf(session)), "繋ぎ直します") {
+		t.Errorf("closed session announced a reconnect that will not occur:\n%s", snapshotOf(session))
 	}
 	if spy.count() != 1 {
 		t.Errorf("開き直しに行った回数 = %d, want 1（閉じたのだから行かない）", spy.count())
@@ -710,8 +710,8 @@ func TestChoosingNoReconnectEndsTheSessionAtOnce(t *testing.T) {
 	if spy.count() != 1 {
 		t.Errorf("開き直しを %d 回試みた。0 を選んだのに繋ぎ直している", spy.count())
 	}
-	if strings.Contains(string(session.Snapshot()), "試行上限に達しました") {
-		t.Errorf("繋ぎ直さない設定なのに、諦めたと書いた:\n%s", session.Snapshot())
+	if strings.Contains(string(snapshotOf(session)), "試行上限に達しました") {
+		t.Errorf("繋ぎ直さない設定なのに、諦めたと書いた:\n%s", snapshotOf(session))
 	}
 }
 
@@ -741,20 +741,7 @@ func TestLoweringTheReconnectCountStopsASessionAlreadyTrying(t *testing.T) {
 	waitFor(t, func() bool { return !session.Live() })
 }
 
-func TestTheReconnectWindowIsCountedFromTheGaps(t *testing.T) {
-	if window := terminal.ReconnectWindow(0); window != 0 {
-		t.Errorf("0 回 = %v, want 0", window)
-	}
-	for attempts, want := range map[int]time.Duration{
-		1: 2 * time.Second,
-		2: 4 * time.Second,
-		3: 10 * time.Second,
-		5: 40 * time.Second,
-	} {
-		if window := terminal.ReconnectWindow(attempts); window != want {
-			t.Errorf("%d 回 = %v, want %v", attempts, window, want)
-		}
-	}
+func TestReconnectCountsOutsideTheRangeFallBackToTheCeiling(t *testing.T) {
 	if terminal.NormaliseReconnects(-1) != terminal.MaxReconnects ||
 		terminal.NormaliseReconnects(99) != terminal.MaxReconnects {
 		t.Error("範囲の外が既定へ戻っていない")

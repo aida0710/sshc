@@ -318,7 +318,7 @@ func TestLiveReplayIsBlockedButExplicitHistoryRestoreRemainsAvailable(t *testing
 	if err != nil {
 		t.Fatalf("PullHistory = %v", err)
 	}
-	if err := consumer.service.Apply(preview); err != nil {
+	if err := applyPreview(consumer.service, remotesync.ResolveRemote, firstHistoryKey, preview); err != nil {
 		t.Fatalf("Apply explicit history = %v", err)
 	}
 	auto.ManualApplyCompleted()

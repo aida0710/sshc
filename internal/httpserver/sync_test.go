@@ -55,8 +55,9 @@ func syncEngine(t *testing.T) (*echo.Echo, *remotesync.Service) {
 	if err := secrets.Initialise(syncTestPassphrase); err != nil {
 		t.Fatal(err)
 	}
-	// 暗号化する鍵は保管庫から来る。押したユーザーが打つものではない。
-	if err := secrets.SetSyncKey(measuredSyncKey); err != nil {
+	// 暗号化する鍵は保管庫から来る。押したユーザーが打つものではない。製品は
+	// 接続先の設定と同じ経路で鍵を書くので、テストもそれを通す。
+	if err := secrets.SetSyncKeyIfSettingsMatch(secret.SyncSettings{}, measuredSyncKey); err != nil {
 		t.Fatal(err)
 	}
 	service, err := remotesync.NewIntegratedService(workspace,
@@ -243,7 +244,7 @@ func newMeasuredSyncInstallation(t *testing.T, bucket *measuredSyncBucket, files
 	if err := secrets.Initialise(syncTestPassphrase); err != nil {
 		t.Fatal(err)
 	}
-	if err := secrets.SetSyncKey(measuredSyncKey); err != nil {
+	if err := secrets.SetSyncKeyIfSettingsMatch(secret.SyncSettings{}, measuredSyncKey); err != nil {
 		t.Fatal(err)
 	}
 	service, err := remotesync.NewIntegratedService(
@@ -421,7 +422,7 @@ func TestForcePushRequiresAOneTimeConfirmationForTheCurrentRemoteGeneration(t *t
 	if err != nil {
 		t.Fatal(err)
 	}
-	credentials, err := manager.Bootstrap(bootstrap)
+	credentials, _, err := manager.BootstrapForSession(bootstrap, "")
 	if err != nil {
 		t.Fatal(err)
 	}

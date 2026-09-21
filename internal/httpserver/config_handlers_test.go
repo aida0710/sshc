@@ -51,7 +51,7 @@ func newConfigHarness(t *testing.T) *testHarness {
 	if err != nil {
 		t.Fatal(err)
 	}
-	credentials, err := sessions.Bootstrap(bootstrap)
+	credentials, _, err := sessions.BootstrapForSession(bootstrap, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -616,5 +616,41 @@ func TestMoveAliasConflictHasTheSameStableProblemCode(t *testing.T) {
 	}
 	if payload.Code != "alias_already_declared" {
 		t.Fatalf("payload = %#v", payload)
+	}
+}
+
+func TestRenamingAHostCarriesItsSavedPasswordToTheNewAlias(t *testing.T) {
+	harness := newConfigHarness(t)
+	secrets := secret.NewService(harness.workspace,
+		storage.NewManager(harness.workspace, time.Now, bytes.NewReader(bytes.Repeat([]byte{0x44}, 4096))),
+		time.Now)
+	if err := secrets.Initialise(testPassphrase); err != nil {
+		t.Fatal(err)
+	}
+	if err := secrets.SetBound("bastion", "hunter2", testPasswordBinding); err != nil {
+		t.Fatal(err)
+	}
+	handler := ConfigHandlers{Service: harness.service, Secrets: secrets}
+
+	body, err := json.Marshal(map[string]any{
+		"kind": "rename", "path": "config", "base": handlerConfig, "alias": "bastion", "newAlias": "edge",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/config/save", bytes.NewReader(body))
+	request.Header.Set(echo.HeaderContentType, "application/json")
+	response := httptest.NewRecorder()
+	if err := handler.Save(harness.echo.NewContext(request, response)); err != nil {
+		t.Fatal(err)
+	}
+	if response.Code != http.StatusOK {
+		t.Fatalf("rename = %d, body %s", response.Code, response.Body.String())
+	}
+	if secrets.HasAssignmentFor(secret.KindPassword, "bastion") {
+		t.Error("the old alias still has a password")
+	}
+	if got := secrets.BoundFor(secret.KindPassword, "edge", testPasswordBinding); got != "hunter2" {
+		t.Errorf("password under the new alias = %q, want the one saved for bastion", got)
 	}
 }

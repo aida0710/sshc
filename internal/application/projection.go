@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"sshc/internal/config"
-	"sshc/internal/effective"
 )
 
 var ErrHostNotFound = errors.New("host block not found")
@@ -110,21 +109,6 @@ func PrimaryAlias(patterns []config.Pattern) string {
 		return pattern.Value
 	}
 	return ""
-}
-
-// MatchHostLine は、match する negated pattern が 1 個でもあれば行全体を却下し、positive
-func MatchHostLine(patterns []config.Pattern, candidate string) bool {
-	matched := false
-	for _, pattern := range patterns {
-		if !effective.MatchPattern(pattern.Value, candidate) {
-			continue
-		}
-		if pattern.Negated {
-			return false
-		}
-		matched = true
-	}
-	return matched
 }
 
 func ProjectHosts(graph *config.Graph, root string) ([]HostEntry, []Notice) {

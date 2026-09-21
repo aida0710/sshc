@@ -352,7 +352,7 @@ func newUnconfiguredSyncVaultServer(
 	if err != nil {
 		t.Fatal(err)
 	}
-	credentials, err := sessions.Bootstrap(bootstrap)
+	credentials, _, err := sessions.BootstrapForSession(bootstrap, "")
 	if err != nil {
 		t.Fatal(err)
 	}

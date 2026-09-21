@@ -19,7 +19,7 @@ func TestBootstrapCreatesAuthenticatedSessionOnce(t *testing.T) {
 		t.Fatalf("bootstrap length = %d", len(bootstrap))
 	}
 
-	credentials, err := manager.Bootstrap(bootstrap)
+	credentials, _, err := manager.BootstrapForSession(bootstrap, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -29,7 +29,7 @@ func TestBootstrapCreatesAuthenticatedSessionOnce(t *testing.T) {
 	if !manager.VerifyCSRF(credentials.SessionID, credentials.CSRFToken) {
 		t.Fatal("csrf token was rejected")
 	}
-	if _, err := manager.Bootstrap(bootstrap); !errors.Is(err, ErrBootstrapUsed) {
+	if _, _, err := manager.BootstrapForSession(bootstrap, ""); !errors.Is(err, ErrBootstrapUsed) {
 		t.Fatalf("replay error = %v", err)
 	}
 }
@@ -39,10 +39,10 @@ func TestBootstrapRejectsWrongTokenWithoutConsumingRealToken(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := manager.Bootstrap("wrong"); !errors.Is(err, ErrInvalidBootstrap) {
+	if _, _, err := manager.BootstrapForSession("wrong", ""); !errors.Is(err, ErrInvalidBootstrap) {
 		t.Fatalf("wrong-token error = %v", err)
 	}
-	if _, err := manager.Bootstrap(bootstrap); err != nil {
+	if _, _, err := manager.BootstrapForSession(bootstrap, ""); err != nil {
 		t.Fatalf("valid bootstrap after rejection: %v", err)
 	}
 }
@@ -65,7 +65,7 @@ func TestBootstrapPropagatesSessionRandomFailure(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := manager.Bootstrap(bootstrap); !errors.Is(err, errRandom) {
+	if _, _, err := manager.BootstrapForSession(bootstrap, ""); !errors.Is(err, errRandom) {
 		t.Fatalf("Bootstrap error = %v", err)
 	}
 	if ok := manager.Authenticate(""); ok {
@@ -100,7 +100,7 @@ func TestRenewCSRFIssuesAWorkingTokenWithoutDisconnectingAnotherTab(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	credentials, err := manager.Bootstrap(bootstrap)
+	credentials, _, err := manager.BootstrapForSession(bootstrap, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,7 +136,7 @@ func TestRenewCSRFRequiresAnExistingTokenAndBoundsTabTokens(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	credentials, err := manager.Bootstrap(bootstrap)
+	credentials, _, err := manager.BootstrapForSession(bootstrap, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -168,11 +168,11 @@ func TestReissueMintsAWayInWithoutDisturbingTheSessions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	established, err := manager.Bootstrap(first)
+	established, _, err := manager.BootstrapForSession(first, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := manager.Bootstrap(first); !errors.Is(err, ErrBootstrapUsed) {
+	if _, _, err := manager.BootstrapForSession(first, ""); !errors.Is(err, ErrBootstrapUsed) {
 		t.Fatalf("the first bootstrap is still spendable: %v", err)
 	}
 
@@ -183,10 +183,10 @@ func TestReissueMintsAWayInWithoutDisturbingTheSessions(t *testing.T) {
 	if second == first {
 		t.Error("the reissued bootstrap is the one that was spent")
 	}
-	if _, err := manager.Bootstrap(first); err == nil {
+	if _, _, err := manager.BootstrapForSession(first, ""); err == nil {
 		t.Error("the old bootstrap still works after a reissue")
 	}
-	if _, err := manager.Bootstrap(second); err != nil {
+	if _, _, err := manager.BootstrapForSession(second, ""); err != nil {
 		t.Fatalf("the reissued bootstrap does not work: %v", err)
 	}
 	// すでに存在するセッションには手を触れない。これは、セッションを持たないブラウザ
@@ -271,7 +271,7 @@ func TestIssueExpiringPrunesExpiredCommandSessionsWithoutRemovingBrowserSessions
 	if _, err := manager.IssueExpiring(time.Minute); err != nil {
 		t.Fatal(err)
 	}
-	browser, err := manager.Bootstrap(bootstrap)
+	browser, _, err := manager.BootstrapForSession(bootstrap, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -303,7 +303,7 @@ func TestCommandSessionDoesNotConsumeBrowserBootstrap(t *testing.T) {
 		t.Fatalf("IssueExpiring = %v", err)
 	}
 
-	browser, err := manager.Bootstrap(bootstrap)
+	browser, _, err := manager.BootstrapForSession(bootstrap, "")
 	if err != nil {
 		t.Fatalf("Bootstrap after IssueExpiring = %v", err)
 	}
@@ -324,7 +324,7 @@ func TestBootstrapAndRecoveryJoinAnExistingBrowserSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	first, err := manager.Bootstrap(bootstrap)
+	first, _, err := manager.BootstrapForSession(bootstrap, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -359,7 +359,7 @@ func TestABrowserSessionExpiresWhenIdleAndAfterItsLifetime(t *testing.T) {
 	}
 	now := time.Unix(1_800_000_000, 0).UTC()
 	manager.Now = func() time.Time { return now }
-	browser, err := manager.Bootstrap(bootstrap)
+	browser, _, err := manager.BootstrapForSession(bootstrap, "")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -72,21 +72,6 @@ func (s *Service) Job(id string) (Job, error) {
 	return snapshotJob(state), nil
 }
 
-func (s *Service) Wait(ctx context.Context, id string) (Job, error) {
-	s.jobs.Lock()
-	state := s.active[id]
-	s.jobs.Unlock()
-	if state == nil {
-		return Job{}, ErrUnknownJob
-	}
-	select {
-	case <-ctx.Done():
-		return Job{}, ctx.Err()
-	case <-state.done:
-		return snapshotJob(state), nil
-	}
-}
-
 func (s *Service) Cancel(id string) error {
 	s.jobs.Lock()
 	state := s.active[id]

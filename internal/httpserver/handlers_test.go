@@ -197,7 +197,7 @@ func TestHealthRequiresSessionCookie(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	credentials, err := manager.Bootstrap(bootstrap)
+	credentials, _, err := manager.BootstrapForSession(bootstrap, "")
 	if err != nil {
 		t.Fatal(err)
 	}

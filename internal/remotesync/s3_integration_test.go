@@ -193,7 +193,7 @@ func TestAgainstARealBucketASnapshotTravelsBetweenTwoMachines(t *testing.T) {
 	result, err := first.service.Pull(context.Background(), syncPassphrase, remotesync.ResolveNone)
 	switch {
 	case err == nil, errors.Is(err, remotesync.ErrNothingToApply):
-		if err := first.service.Apply(result); err != nil && !errors.Is(err, remotesync.ErrNothingToApply) {
+		if err := applyPreview(first.service, remotesync.ResolveNone, "", result); err != nil && !errors.Is(err, remotesync.ErrNothingToApply) {
 			t.Fatalf("Apply of the snapshot already in the bucket = %v", err)
 		}
 	case errors.Is(err, remotesync.ErrNoSnapshot), errors.Is(err, objectstore.ErrNotFound):
@@ -216,7 +216,7 @@ func TestAgainstARealBucketASnapshotTravelsBetweenTwoMachines(t *testing.T) {
 	if len(result.Conflicts) != 0 {
 		t.Fatalf("conflicts = %#v", result.Conflicts)
 	}
-	if err := second.service.Apply(result); err != nil {
+	if err := applyPreview(second.service, remotesync.ResolveNone, "", result); err != nil {
 		t.Fatalf("Apply = %v", err)
 	}
 
@@ -263,7 +263,7 @@ func TestAgainstARealBucketSharedExclusionsProtectReceiverFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Pull = %v", err)
 	}
-	if err := receiver.service.Apply(result); err != nil {
+	if err := applyPreview(receiver.service, remotesync.ResolveRemote, "", result); err != nil {
 		t.Fatalf("Apply = %v", err)
 	}
 	if got := receiver.read(t, remotesync.IgnorePath); got != "*.tmp\n" {
@@ -324,7 +324,7 @@ func TestAgainstARealBucketFreshReceiveOnlySetupVerifiesAndPulls(t *testing.T) {
 	if err != nil {
 		t.Fatalf("fresh receive-only Pull = %v", err)
 	}
-	if err := receiver.Apply(result); err != nil {
+	if err := applyPreview(receiver, remotesync.ResolveNone, "", result); err != nil {
 		t.Fatalf("fresh receive-only Apply = %v", err)
 	}
 	contents, err := os.ReadFile(filepath.Join(root, "config"))
@@ -365,7 +365,7 @@ func TestAgainstARealBucketTwoFreshWorkspacesSurviveAFullSyncLifecycle(t *testin
 	if err != nil {
 		t.Fatalf("second workspace initial Pull = %v", err)
 	}
-	if err := second.service.Apply(initial); err != nil {
+	if err := applyPreview(second.service, remotesync.ResolveNone, "", initial); err != nil {
 		t.Fatalf("second workspace initial Apply = %v", err)
 	}
 	if got := second.read(t, "config"); got != "Host shared\n  HostName first.example\n" {
@@ -406,7 +406,7 @@ func TestAgainstARealBucketTwoFreshWorkspacesSurviveAFullSyncLifecycle(t *testin
 	if len(conflicted.Conflicts) == 0 {
 		t.Fatal("two divergent real workspaces produced no conflict")
 	}
-	if err := second.service.Apply(conflicted); !errors.Is(err, remotesync.ErrConflicts) {
+	if err := applyPreview(second.service, remotesync.ResolveNone, "", conflicted); !errors.Is(err, remotesync.ErrConflicts) {
 		t.Fatalf("Apply with unresolved real conflict = %v, want ErrConflicts", err)
 	}
 	if got := second.read(t, "config"); got != "Host shared\n  HostName local-choice.example\n" {
@@ -418,7 +418,7 @@ func TestAgainstARealBucketTwoFreshWorkspacesSurviveAFullSyncLifecycle(t *testin
 	if err != nil && !errors.Is(err, remotesync.ErrNothingToApply) {
 		t.Fatalf("resolve conflict in favour of local = %v", err)
 	}
-	if err := second.service.Apply(localChoice); err != nil && !errors.Is(err, remotesync.ErrNothingToApply) {
+	if err := applyPreview(second.service, remotesync.ResolveLocal, "", localChoice); err != nil && !errors.Is(err, remotesync.ErrNothingToApply) {
 		t.Fatalf("Apply local conflict resolution = %v", err)
 	}
 	if _, err := second.service.PushUsing(ctx, keyOf(syncPassphrase), ""); err != nil {
@@ -429,7 +429,7 @@ func TestAgainstARealBucketTwoFreshWorkspacesSurviveAFullSyncLifecycle(t *testin
 	if err != nil {
 		t.Fatalf("first workspace Pull of the chosen resolution = %v", err)
 	}
-	if err := first.service.Apply(chosen); err != nil {
+	if err := applyPreview(first.service, remotesync.ResolveNone, "", chosen); err != nil {
 		t.Fatalf("first workspace Apply of the chosen resolution = %v", err)
 	}
 	if got := first.read(t, "config"); got != "Host shared\n  HostName local-choice.example\n" {
@@ -456,7 +456,7 @@ func TestAgainstARealBucketTwoFreshWorkspacesSurviveAFullSyncLifecycle(t *testin
 	if err != nil {
 		t.Fatalf("Pull after network recovery = %v", err)
 	}
-	if err := second.service.Apply(recovered); err != nil {
+	if err := applyPreview(second.service, remotesync.ResolveNone, "", recovered); err != nil {
 		t.Fatalf("Apply after network recovery = %v", err)
 	}
 	if got := second.read(t, "config"); got != "Host shared\n  HostName after-recovery.example\n" {
@@ -488,7 +488,7 @@ func TestAgainstARealBucketFourMachinesRespectDirectionsAndResolveConflicts(t *t
 		if err != nil {
 			t.Fatalf("%s initial Pull = %v", name, err)
 		}
-		if err := machine.service.Apply(result); err != nil {
+		if err := applyPreview(machine.service, remotesync.ResolveNone, "", result); err != nil {
 			t.Fatalf("%s initial Apply = %v", name, err)
 		}
 	}
@@ -514,7 +514,7 @@ func TestAgainstARealBucketFourMachinesRespectDirectionsAndResolveConflicts(t *t
 		if err != nil {
 			t.Fatalf("%s Pull of sender update = %v", name, err)
 		}
-		if err := machine.service.Apply(result); err != nil {
+		if err := applyPreview(machine.service, remotesync.ResolveNone, "", result); err != nil {
 			t.Fatalf("%s Apply of sender update = %v", name, err)
 		}
 		if got := machine.read(t, "sender.conf"); !strings.Contains(got, "sender.example") {
@@ -536,7 +536,7 @@ func TestAgainstARealBucketFourMachinesRespectDirectionsAndResolveConflicts(t *t
 	if len(conflicted.Conflicts) != 1 || conflicted.Conflicts[0].Path != "config" {
 		t.Fatalf("author conflicts = %#v, want config", conflicted.Conflicts)
 	}
-	if err := author.service.Apply(conflicted); !errors.Is(err, remotesync.ErrConflicts) {
+	if err := applyPreview(author.service, remotesync.ResolveNone, "", conflicted); !errors.Is(err, remotesync.ErrConflicts) {
 		t.Fatalf("author unresolved Apply = %v, want ErrConflicts", err)
 	}
 	if got := author.read(t, "config"); !strings.Contains(got, "author-choice.example") {
@@ -547,7 +547,7 @@ func TestAgainstARealBucketFourMachinesRespectDirectionsAndResolveConflicts(t *t
 	if err != nil {
 		t.Fatalf("author remote conflict choice = %v", err)
 	}
-	if err := author.service.Apply(remoteChoice); err != nil {
+	if err := applyPreview(author.service, remotesync.ResolveRemote, "", remoteChoice); err != nil {
 		t.Fatalf("author Apply of remote conflict choice = %v", err)
 	}
 	if got := author.read(t, "config"); !strings.Contains(got, "peer-choice.example") {
@@ -567,7 +567,7 @@ func TestAgainstARealBucketFourMachinesRespectDirectionsAndResolveConflicts(t *t
 	if err != nil {
 		t.Fatalf("receive-only remote conflict choice = %v", err)
 	}
-	if err := receiver.service.Apply(receiverChoice); err != nil {
+	if err := applyPreview(receiver.service, remotesync.ResolveRemote, "", receiverChoice); err != nil {
 		t.Fatalf("receive-only Apply of chosen side = %v", err)
 	}
 	if got := receiver.read(t, "config"); !strings.Contains(got, "peer-choice.example") {
@@ -583,7 +583,7 @@ func TestAgainstARealBucketFourMachinesRespectDirectionsAndResolveConflicts(t *t
 	if err != nil {
 		t.Fatalf("send-only preview = %v", err)
 	}
-	if err := sender.service.Apply(preview); !errors.Is(err, remotesync.ErrApplyRefused) {
+	if err := applyPreview(sender.service, remotesync.ResolveNone, "", preview); !errors.Is(err, remotesync.ErrApplyRefused) {
 		t.Fatalf("send-only Apply = %v, want ErrApplyRefused", err)
 	}
 	if got := sender.read(t, "config"); !strings.Contains(got, "initial.example") {

@@ -235,7 +235,7 @@ func TestStoreRefusesAPasswordTheHostWouldNeverBeOffered(t *testing.T) {
 		t.Errorf("blockers = %#v", body.Blockers)
 	}
 	// そして何も保存されなかった。
-	if service.Has("bastion") {
+	if service.HasAssignmentFor(secret.KindPassword, "bastion") {
 		t.Error("the vault holds a password for a host that refused one")
 	}
 }
@@ -265,7 +265,7 @@ func TestPasswordWritesFailClosedWithoutAuthenticationBinding(t *testing.T) {
 			t.Errorf("%s password write = %d: %s", name, response.Code, response.Body.String())
 		}
 	}
-	if service.Has("edge") {
+	if service.HasAssignmentFor(secret.KindPassword, "edge") {
 		t.Fatal("password write without an authentication binding changed the vault")
 	}
 }
@@ -453,7 +453,7 @@ func credentialServerAt(t *testing.T, now func() time.Time) (*echo.Echo, *secret
 	if err != nil {
 		t.Fatal(err)
 	}
-	credentials, err := manager.Bootstrap(bootstrap)
+	credentials, _, err := manager.BootstrapForSession(bootstrap, "")
 	if err != nil {
 		t.Fatal(err)
 	}
