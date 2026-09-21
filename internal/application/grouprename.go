@@ -285,7 +285,7 @@ func (g *groupLayout) rewriteMovedKeyReferences() error {
 			continue
 		}
 		members = append(members, *item)
-		keyRelocations = append(keyRelocations, keyRelocation{from: relocation.from, to: relocation.to})
+		keyRelocations = append(keyRelocations, keyRelocation(relocation))
 	}
 	if blockers := g.service.keyRelocationBlockers(g.graph, g.inventory, members, keyRelocations, "", false); len(blockers) > 0 {
 		return &GroupBlockedError{Blockers: blockers}

@@ -45,7 +45,7 @@ func TestOSCObserverSurvivesChunkBoundaries(t *testing.T) {
 
 func TestOSCObserverCleansAndBoundsTitles(t *testing.T) {
 	observer, seen := newTestObserver()
-	observer.Observe([]byte("\x1b]0;\tsp\x01aced​ title  \a"))
+	observer.Observe([]byte("\x1b]0;\tsp\x01aced\u200b title  \a"))
 	observer.Observe([]byte("\x1b]0;" + strings.Repeat("あ", MaxTitle+10) + "\a"))
 	observer.Observe([]byte("\x1b]0;\a"))
 	if len(seen.titles) != 3 || seen.titles[0] != "spaced title" {
