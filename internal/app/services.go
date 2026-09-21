@@ -127,6 +127,7 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 	}); err != nil {
 		return nil, err
 	}
+	configService.SetStartupRenamer(snippetStore)
 	snippetService := snippets.NewService(snippets.Options{
 		Repository: snippetStore,
 		Resolve: func(alias string) (snippets.Resolution, error) {

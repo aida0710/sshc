@@ -538,12 +538,16 @@ func TestALocalForwardDeliversTheReplyThatFollowsAHalfClose(t *testing.T) {
 
 // countingAgent は、開いている agent 接続の数を数える test agent である。
 type countingAgent struct {
-	mutex sync.Mutex
-	open  int
+	mutex              sync.Mutex
+	open               int
+	connectionsChanged chan struct{}
 }
 
 func (a *countingAgent) serve(t *testing.T) string {
 	t.Helper()
+	// Socket dialing can return before Accept runs. Tests wait for the agent's
+	// own observation instead of treating the SSH shell's readiness as one.
+	a.connectionsChanged = make(chan struct{}, 1)
 	_, private, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatal(err)
@@ -569,24 +573,46 @@ func (a *countingAgent) serve(t *testing.T) string {
 			if err != nil {
 				return
 			}
-			a.mutex.Lock()
-			a.open++
-			a.mutex.Unlock()
+			a.changeOpenConnections(1)
 			go func() {
+				defer conn.Close()
 				_ = agent.ServeAgent(keyring, conn)
-				a.mutex.Lock()
-				a.open--
-				a.mutex.Unlock()
+				a.changeOpenConnections(-1)
 			}()
 		}
 	}()
 	return socket
 }
 
+func (a *countingAgent) changeOpenConnections(delta int) {
+	a.mutex.Lock()
+	a.open += delta
+	a.mutex.Unlock()
+	select {
+	case a.connectionsChanged <- struct{}{}:
+	default:
+	}
+}
+
 func (a *countingAgent) openConnections() int {
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
 	return a.open
+}
+
+func (a *countingAgent) waitForConnections(t *testing.T, want int) {
+	t.Helper()
+	// Bound a broken test without adding a delay to successful transitions.
+	const agentConnectionTestTimeout = 5 * time.Second
+	ctx, cancel := context.WithTimeout(t.Context(), agentConnectionTestTimeout)
+	defer cancel()
+	for a.openConnections() != want {
+		select {
+		case <-a.connectionsChanged:
+		case <-ctx.Done():
+			t.Fatalf("agent connections = %d, want %d: %v", a.openConnections(), want, ctx.Err())
+		}
+	}
 }
 
 func TestClosingTheSessionReleasesTheForwardedAgentSocket(t *testing.T) {
@@ -608,18 +634,11 @@ func TestClosingTheSessionReleasesTheForwardedAgentSocket(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { _ = process.Close() })
 	readUntil(t, process, "ready")
-	if got := agentServer.openConnections(); got != 1 {
-		t.Fatalf("agent connections while forwarding = %d", got)
-	}
+	agentServer.waitForConnections(t, 1)
 	if err := process.Close(); err != nil {
 		t.Fatal(err)
 	}
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) && agentServer.openConnections() != 0 {
-		time.Sleep(10 * time.Millisecond)
-	}
-	if got := agentServer.openConnections(); got != 0 {
-		t.Fatalf("agent connections after Close = %d, want the socket released", got)
-	}
+	agentServer.waitForConnections(t, 0)
 }

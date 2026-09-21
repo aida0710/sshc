@@ -120,6 +120,28 @@ func (s *Service) planFileRename(graph *config.Graph, request EditRequest) (plan
 		prepared.preview.Notices = append(prepared.preview.Notices,
 			Notice{Code: NoticeIncludeNowUnreached, Path: request.DestinationPath})
 	}
+	stored, precondition, err := s.metadata.Load()
+	if err != nil {
+		return planned{}, err
+	}
+	if !precondition.Exists {
+		return prepared, nil
+	}
+	relocated := RelocateHostIdentities(stored, request.Path, request.DestinationPath)
+	change, err := s.metadata.Change(relocated, precondition)
+	if err != nil {
+		return planned{}, err
+	}
+	previous, _, err := s.readFile(change.Path)
+	if err != nil {
+		return planned{}, err
+	}
+	if !bytes.Equal(previous, change.Contents) {
+		prepared.changes = append(prepared.changes, change)
+		prepared.base[filepath.Clean(change.Path)] = previous
+		prepared.preview.Diffs = append(prepared.preview.Diffs,
+			BuildFileDiff(s.displayPath(change.Path), previous, change.Contents))
+	}
 	return prepared, nil
 }
 
@@ -179,6 +201,7 @@ type rewrite struct {
 	display  string
 	previous []byte
 	updated  []byte
+	created  bool
 }
 
 func (s *Service) rewriteIncludes(
@@ -270,12 +293,33 @@ func applyIncludeEdits(file *config.File, lines []int, to string) ([]byte, error
 
 func (s *Service) appendRewrites(prepared *planned, rewrites []rewrite) error {
 	for _, item := range rewrites {
-		prepared.changes = append(prepared.changes, storage.Change{
+		precondition := storage.Precondition{}
+		if !item.created {
+			precondition = storage.Precondition{Exists: true, Digest: storage.Digest(item.previous)}
+		}
+		change := storage.Change{
 			Path:         item.absolute,
 			Contents:     item.updated,
-			Precondition: storage.Precondition{Exists: true, Digest: storage.Digest(item.previous)},
-		})
+			Precondition: precondition,
+		}
+		replaced := false
+		for index, existing := range prepared.changes {
+			if filepath.Clean(existing.Path) == filepath.Clean(item.absolute) {
+				prepared.changes[index] = change
+				replaced = true
+				break
+			}
+		}
+		if !replaced {
+			prepared.changes = append(prepared.changes, change)
+		}
 		prepared.base[filepath.Clean(item.absolute)] = item.previous
+		for index, diff := range prepared.preview.Diffs {
+			if diff.Path == item.display {
+				prepared.preview.Diffs = append(prepared.preview.Diffs[:index], prepared.preview.Diffs[index+1:]...)
+				break
+			}
+		}
 		prepared.preview.Diffs = append(prepared.preview.Diffs,
 			BuildFileDiff(item.display, item.previous, item.updated))
 	}

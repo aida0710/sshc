@@ -253,7 +253,7 @@ func (m *Manager) rollbackRecord(record *journalRecord, journalPath string) erro
 				continue
 			}
 			if entry.sameContentsWrite() && entry.Backup == "" {
-				contents, readErr := fileSystem.ReadFile(entry.Path)
+				contents, readErr := m.workspace.ReadTransactionFile(entry.Path)
 				if readErr != nil {
 					return readErr
 				}
@@ -267,7 +267,7 @@ func (m *Manager) rollbackRecord(record *journalRecord, journalPath string) erro
 			var contents []byte
 			var readErr error
 			if record.DiscardBackups {
-				contents, readErr = fileSystem.ReadFile(entry.Backup)
+				contents, readErr = m.workspace.ReadTransactionFile(entry.Backup)
 			} else {
 				contents, readErr = m.ReadBackup(entry.Backup)
 			}
@@ -305,7 +305,7 @@ func (m *Manager) stagedMatches(entry journalEntry) bool {
 	if err != nil || uint32(info.Mode().Perm()&0o700) != entry.Mode {
 		return false
 	}
-	contents, err := m.workspace.FileSystem().ReadFile(entry.Temp)
+	contents, err := ReadFileLimited(m.workspace.FileSystem(), entry.Temp, m.workspace.TransactionFileLimit(entry.Path))
 	if err != nil {
 		return false
 	}
@@ -552,7 +552,7 @@ func (m *Manager) targetFileState(path string) (string, fs.FileMode, bool, error
 	if err != nil {
 		return "", 0, false, err
 	}
-	contents, err := m.workspace.FileSystem().ReadFile(path)
+	contents, err := m.workspace.ReadTransactionFile(path)
 	if errors.Is(err, fs.ErrNotExist) {
 		return "", 0, false, nil
 	}

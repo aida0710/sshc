@@ -295,7 +295,11 @@ func (s *Service) planCreateConnection(
 		},
 	}
 
-	after, err := s.resolveWith(map[string][]byte{cleaned: updated})
+	metadata, err := s.plannedMetadata(prepared)
+	if err != nil {
+		return planned{}, HostIdentity{}, err
+	}
+	after, err := s.refreshGroupSettings(&prepared, metadata)
 	if err != nil {
 		return planned{}, HostIdentity{}, err
 	}

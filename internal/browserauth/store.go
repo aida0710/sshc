@@ -150,6 +150,7 @@ func (s *Store) Recover(presented string) (string, bool, error) {
 	now := s.now()
 	presentedHash := hashToken(presented)
 	live := s.live(stored.Registrations)
+	s.pruneRotations(live)
 	if index := indexOf(live, presentedHash, currentHash); index >= 0 {
 		token, err := mint(s.random)
 		if err != nil {
@@ -158,11 +159,11 @@ func (s *Store) Recover(presented string) (string, bool, error) {
 		live[index].Previous = live[index].Hash
 		live[index].Hash = hashToken(token)
 		live[index].LastUsedAt = now
-		s.rotations[presentedHash] = rotation{token: token, until: now.Add(rotationGrace)}
 		stored.Registrations = live
 		if err := s.write(stored); err != nil {
 			return "", false, err
 		}
+		s.rotateCachedTokens(presentedHash, token, now.Add(rotationGrace))
 		return token, true, nil
 	}
 	if recent, ok := s.rotations[presentedHash]; ok && now.Before(recent.until) {
@@ -175,6 +176,7 @@ func (s *Store) Recover(presented string) (string, bool, error) {
 		if err := s.write(stored); err != nil {
 			return "", false, err
 		}
+		s.pruneRotations(stored.Registrations)
 	}
 	return "", false, nil
 }
@@ -194,19 +196,24 @@ func (s *Store) Forget(presented string) (bool, error) {
 	}
 	presentedHash := hashToken(presented)
 	live := s.live(stored.Registrations)
+	s.pruneRotations(live)
 	index := indexOf(live, presentedHash, currentHash)
 	if index < 0 {
 		index = indexOf(live, presentedHash, previousHash)
 	}
 	if index < 0 {
+		if recent, ok := s.rotations[presentedHash]; ok {
+			index = indexOf(live, hashToken(recent.token), currentHash)
+		}
+	}
+	if index < 0 {
 		return false, nil
 	}
-	delete(s.rotations, live[index].Previous)
-	delete(s.rotations, presentedHash)
 	stored.Registrations = append(live[:index:index], live[index+1:]...)
 	if err := s.write(stored); err != nil {
 		return false, err
 	}
+	s.pruneRotations(stored.Registrations)
 	return true, nil
 }
 
@@ -220,6 +227,7 @@ func (s *Store) Register(presented string) (string, bool, error) {
 		return "", false, err
 	}
 	live := s.live(stored.Registrations)
+	s.pruneRotations(live)
 	if validToken(presented) && indexOf(live, hashToken(presented), currentHash) >= 0 {
 		return "", false, nil
 	}
@@ -235,6 +243,7 @@ func (s *Store) Register(presented string) (string, bool, error) {
 	if err := s.write(stored); err != nil {
 		return "", false, err
 	}
+	s.pruneRotations(stored.Registrations)
 	return token, true, nil
 }
 

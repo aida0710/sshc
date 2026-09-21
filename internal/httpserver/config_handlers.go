@@ -103,17 +103,9 @@ func (h ConfigHandlers) Save(c *echo.Context) error {
 	if err != nil {
 		return serviceProblem(c, err)
 	}
-	result, err := h.Service.Save(request)
+	result, err := h.Service.SaveWithSecrets(h.Secrets, request)
 	if err != nil {
 		return serviceProblem(c, err)
-	}
-	// alias を変えたら、その alias に割り当てたパスワードと TOTP も付いていく。
-	// 置き去りにすると、二度と誰も尋ねない名前の下に秘密が残る。vault が閉じて
-	// いれば中を見られないので、設定の改名だけで終わる。
-	if request.Kind == application.EditRename && h.Secrets != nil && h.Secrets.Unlocked() {
-		if err := h.Secrets.Rename(request.Alias, request.NewAlias); err != nil {
-			return serviceProblem(c, err)
-		}
 	}
 	return c.JSON(http.StatusOK, result)
 }

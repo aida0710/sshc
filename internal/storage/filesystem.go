@@ -72,15 +72,24 @@ func ReadFileLimited(fileSystem FileSystem, path string, maximum int64) ([]byte,
 	if maximum < 0 {
 		return nil, ErrFileTooLarge
 	}
-	if _, native := fileSystem.(OSFileSystem); !native {
-		contents, err := fileSystem.ReadFile(path)
-		if err != nil {
-			return nil, err
-		}
-		if int64(len(contents)) > maximum {
-			return nil, ErrFileTooLarge
-		}
-		return contents, nil
+	if reader, ok := fileSystem.(interface {
+		ReadFileLimited(string, int64) ([]byte, error)
+	}); ok {
+		return reader.ReadFileLimited(path, maximum)
+	}
+	contents, err := fileSystem.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(contents)) > maximum {
+		return nil, ErrFileTooLarge
+	}
+	return contents, nil
+}
+
+func (OSFileSystem) ReadFileLimited(path string, maximum int64) ([]byte, error) {
+	if maximum < 0 {
+		return nil, ErrFileTooLarge
 	}
 	file, err := openRegularNoFollow(path)
 	if err != nil {
@@ -97,21 +106,31 @@ func ReadFilePrefix(fileSystem FileSystem, path string, maximum int) ([]byte, er
 	if maximum < 0 {
 		return nil, os.ErrInvalid
 	}
-	if _, native := fileSystem.(OSFileSystem); !native {
-		contents, err := fileSystem.ReadFile(path)
-		if err != nil {
-			return nil, err
-		}
-		if len(contents) > maximum {
-			contents = contents[:maximum]
-		}
-		return contents, nil
+	if reader, ok := fileSystem.(interface {
+		ReadFilePrefix(string, int) ([]byte, error)
+	}); ok {
+		return reader.ReadFilePrefix(path, maximum)
 	}
+	contents, err := fileSystem.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	return contents[:min(len(contents), maximum)], nil
+}
+
+func (OSFileSystem) ReadFilePrefix(path string, maximum int) ([]byte, error) {
 	file, err := openRegularNoFollow(path)
 	if err != nil {
 		return nil, err
 	}
 	defer file.Close()
+	return readRegularFilePrefix(file, maximum)
+}
+
+func readRegularFilePrefix(file *os.File, maximum int) ([]byte, error) {
+	if maximum < 0 {
+		return nil, os.ErrInvalid
+	}
 	info, err := file.Stat()
 	if err != nil {
 		return nil, err
