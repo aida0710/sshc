@@ -31,14 +31,29 @@ type Session struct {
 	// Session 値のすべてのコピーで共有されており、それによってアクション用のヘルパー
 	// は、もう一度検索することなくここへ到達できる。
 	actions map[[sha256.Size]byte]actionRecord
-	// expiresAt がゼロ値なら、ブラウザ用の通常セッションとして期限を設けない。
-	// CLI 用セッションだけが絶対時刻の期限を持つ。
+	// expiresAt は絶対期限。ブラウザのセッションは BrowserSessionLifetime、CLI の
+	// 貸し出しは呼び手が決めた短い期間で切れる。
 	expiresAt time.Time
+	// lastUsedAt はブラウザのセッションだけが持つ。BrowserSessionIdleTimeout の
+	// あいだ使われなければ、絶対期限の前でも切れる。CLI のセッションはゼロ値。
+	lastUsedAt time.Time
 }
 
 // MaxCSRFTokensPerSession bounds memory and the lifetime of an abandoned tab
 // token. A ninth renewal evicts the oldest token.
 const MaxCSRFTokensPerSession = 8
+
+// ブラウザのセッションは engine の再起動で消えるが、動き続ける engine では
+// cookie が盗まれた場合の有効期間を区切る。切れたセッションはブラウザ登録から
+// 黙って入り直せるので、利用者の手間は増えない。
+const (
+	// 一晩置いた翌朝は入り直し、席を離れた程度では切らない。
+	BrowserSessionIdleTimeout = 12 * time.Hour
+	// 使い続けていても 1 週間で必ず入り直す。
+	BrowserSessionLifetime = 7 * 24 * time.Hour
+	// lastUsedAt の更新は書き込みロックなので、この間隔より短くは更新しない。
+	lastUsedCoalesce = time.Minute
+)
 
 type Manager struct {
 	mu            sync.RWMutex
@@ -144,8 +159,23 @@ func (m *Manager) joinOrIssueLocked(existingSessionID string) (Credentials, bool
 		m.sessions[key] = existing
 		return Credentials{SessionID: existingSessionID, CSRFToken: csrf}, false, nil
 	}
-	credentials, err := m.issueLocked(time.Time{})
+	credentials, err := m.issueBrowserLocked()
 	return credentials, true, err
+}
+
+// issueBrowserLocked はブラウザ用のセッションを、絶対期限とアイドル期限付きで発行する。
+func (m *Manager) issueBrowserLocked() (Credentials, error) {
+	now := m.clock()
+	m.pruneExpiredLocked(now)
+	credentials, err := m.issueLocked(now.Add(BrowserSessionLifetime))
+	if err != nil {
+		return Credentials{}, err
+	}
+	key := sha256.Sum256([]byte(credentials.SessionID))
+	sessionValue := m.sessions[key]
+	sessionValue.lastUsedAt = now
+	m.sessions[key] = sessionValue
+	return credentials, nil
 }
 
 // IssueExpiring は、ブラウザ用 bootstrap を消費せず、指定した期間だけ有効な
@@ -163,10 +193,17 @@ func (m *Manager) IssueExpiring(lifetime time.Duration) (Credentials, error) {
 
 func (m *Manager) pruneExpiredLocked(now time.Time) {
 	for key, sessionValue := range m.sessions {
-		if !sessionValue.expiresAt.IsZero() && !now.Before(sessionValue.expiresAt) {
+		if sessionValue.expired(now) {
 			delete(m.sessions, key)
 		}
 	}
+}
+
+func (s Session) expired(now time.Time) bool {
+	if !s.expiresAt.IsZero() && !now.Before(s.expiresAt) {
+		return true
+	}
+	return !s.lastUsedAt.IsZero() && now.Sub(s.lastUsedAt) >= BrowserSessionIdleTimeout
 }
 
 func (m *Manager) issueLocked(expiresAt time.Time) (Credentials, error) {
@@ -200,17 +237,23 @@ func (m *Manager) Revoke(sessionID string) bool {
 	return true
 }
 
-// sessionLocked は有効なセッションを返す。呼び出し側は m.mu の書き込みロックを
-// 保持しなければならない。期限に達した CLI セッションは検索時に削除する。
+// sessionLocked は有効なセッションを返し、ブラウザのセッションなら使った時刻を
+// 進める。呼び出し側は m.mu の書き込みロックを保持しなければならない。期限に
+// 達したセッションは検索時に削除する。
 func (m *Manager) sessionLocked(sessionID string) (Session, bool) {
 	key := sha256.Sum256([]byte(sessionID))
 	sessionValue, ok := m.sessions[key]
 	if !ok {
 		return Session{}, false
 	}
-	if !sessionValue.expiresAt.IsZero() && !m.clock().Before(sessionValue.expiresAt) {
+	now := m.clock()
+	if sessionValue.expired(now) {
 		delete(m.sessions, key)
 		return Session{}, false
+	}
+	if !sessionValue.lastUsedAt.IsZero() && now.Sub(sessionValue.lastUsedAt) >= lastUsedCoalesce {
+		sessionValue.lastUsedAt = now
+		m.sessions[key] = sessionValue
 	}
 	return sessionValue, true
 }

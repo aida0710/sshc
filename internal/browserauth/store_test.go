@@ -195,3 +195,33 @@ func randomBytes(t *testing.T, size int) []byte {
 	}
 	return buffer
 }
+
+func TestForgetRemovesTheRegistrationSoItCannotRecoverAgain(t *testing.T) {
+	store, _ := newStore(t, bytes.Repeat([]byte{0x61}, 128))
+	if err := store.SetPort(55447); err != nil {
+		t.Fatal(err)
+	}
+	token, _, err := store.Register("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rotated, accepted := recover(t, store, token)
+	if !accepted {
+		t.Fatal("registered token was not accepted")
+	}
+
+	// The retired token still names the same registration during the grace.
+	forgotten, err := store.Forget(token)
+	if err != nil || !forgotten {
+		t.Fatalf("Forget(retired) = (%t, %v), want (true, nil)", forgotten, err)
+	}
+	if _, accepted := recover(t, store, rotated); accepted {
+		t.Fatal("a forgotten registration recovered a session")
+	}
+	if registered, err := store.HasRegistrations(); err != nil || registered {
+		t.Fatalf("HasRegistrations after Forget = (%t, %v)", registered, err)
+	}
+	if forgotten, err := store.Forget("unknown-token-of-the-right-length-43-chars"); err != nil || forgotten {
+		t.Fatalf("Forget(unknown) = (%t, %v), want (false, nil)", forgotten, err)
+	}
+}

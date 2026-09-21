@@ -1257,8 +1257,9 @@ describe("App", () => {
     await user.click(await screen.findByRole("link", { name: "Menu" }));
     const menu = await screen.findByRole("region", { name: "Menu" });
     const groups = within(menu).getAllByRole("heading", { level: 3 });
-    expect(groups.at(-2)).toHaveTextContent("Preferences");
-    expect(groups.at(-1)).toHaveTextContent("Others");
+    expect(groups.at(-3)).toHaveTextContent("Preferences");
+    expect(groups.at(-2)).toHaveTextContent("Others");
+    expect(groups.at(-1)).toHaveTextContent("Sign out");
     await user.selectOptions(within(menu).getByLabelText("Language"), "ja");
 
     expect(window.location.pathname).toBe("/menu");

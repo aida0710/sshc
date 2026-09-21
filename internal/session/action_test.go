@@ -26,12 +26,17 @@ func (r *distinctReader) Read(destination []byte) (int, error) {
 	return len(destination), nil
 }
 
+// testEpoch は、テストが時計を進める起点。セッションはここで発行されるので、
+// テストが同じ起点から時計を進めても、実時刻との差で先に期限切れにならない。
+var testEpoch = time.Unix(1_800_000_000, 0).UTC()
+
 func newTestManager(t *testing.T) (*Manager, string) {
 	t.Helper()
 	manager, bootstrap, err := NewManager(&distinctReader{})
 	if err != nil {
 		t.Fatal(err)
 	}
+	manager.Now = func() time.Time { return testEpoch }
 	credentials, err := manager.Bootstrap(bootstrap)
 	if err != nil {
 		t.Fatal(err)
@@ -96,7 +101,7 @@ func TestActionTokenIsSingleUseAndBoundToKindTargetAndEvidence(t *testing.T) {
 
 func TestActionTokenExpiresAndIsScopedToOneSession(t *testing.T) {
 	manager, sessionID := newTestManager(t)
-	now := time.Unix(1_800_000_000, 0).UTC()
+	now := testEpoch
 	manager.Now = func() time.Time { return now }
 	request := ActionRequest{Kind: ActionReachability, Target: "bastion", Evidence: "digest"}
 
@@ -225,7 +230,7 @@ func TestActionTokenCapRefusesInsteadOfEvictingAConfirmation(t *testing.T) {
 
 func TestExpiredActionTokensReleaseCapacity(t *testing.T) {
 	manager, sessionID := newTestManager(t)
-	now := time.Unix(1_800_000_000, 0).UTC()
+	now := testEpoch
 	manager.Now = func() time.Time { return now }
 	request := ActionRequest{Kind: ActionKnownHostsScan, Target: "bastion", Evidence: "digest"}
 
