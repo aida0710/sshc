@@ -400,7 +400,8 @@ func validateGoSteps(job workflowJob) []string {
 		{run: "go build ./...", condition: "${{ runner.os != 'Windows' }}", shell: "bash"},
 		{run: "go build ./...", condition: "${{ runner.os == 'Windows' }}", shell: "pwsh"},
 		{run: "go test -count=1 ./...", condition: "${{ runner.os != 'Windows' }}", shell: "bash"},
-		{run: "go test -count=1 -race ./...", condition: "${{ runner.os != 'Windows' }}", shell: "bash"},
+		// race は PR では Linux だけ、main への push ではすべての OS で走る。
+		{run: "go test -count=1 -race ./...", condition: "${{ runner.os != 'Windows' && (github.event_name != 'pull_request' || runner.os == 'Linux') }}", shell: "bash"},
 	} {
 		if !hasRunContract(job, required) {
 			problems = append(problems, fmt.Sprintf("jobs.go lacks run=%q if=%q shell=%q", required.run, required.condition, required.shell))
@@ -429,8 +430,8 @@ func validateGoSteps(job workflowJob) []string {
 	if !ok {
 		return append(problems, "jobs.go lacks the Windows race step")
 	}
-	if windowsRace.If != "${{ runner.os == 'Windows' }}" || windowsRace.Shell != "pwsh" {
-		problems = append(problems, "the Windows race step must be Windows-only PowerShell")
+	if windowsRace.If != "${{ runner.os == 'Windows' && github.event_name != 'pull_request' }}" || windowsRace.Shell != "pwsh" {
+		problems = append(problems, "the Windows race step must be Windows-only PowerShell that skips pull requests")
 	}
 	if windowsRace.ContinueOnError != nil {
 		problems = append(problems, "the Windows race step must not use continue-on-error")
@@ -483,11 +484,13 @@ func validateSeparatedRunShells(id string, job workflowJob) []string {
 			continue
 		}
 		switch step.If {
-		case "${{ runner.os != 'Windows' }}":
+		case "${{ runner.os != 'Windows' }}",
+			// race は PR では Linux だけに絞るが、Unix の command であることは変わらない。
+			"${{ runner.os != 'Windows' && (github.event_name != 'pull_request' || runner.os == 'Linux') }}":
 			if step.Shell != "bash" {
 				problems = append(problems, fmt.Sprintf("%s step %q must use bash for its Unix-only command", id, step.Name))
 			}
-		case "${{ runner.os == 'Windows' }}":
+		case "${{ runner.os == 'Windows' }}", "${{ runner.os == 'Windows' && github.event_name != 'pull_request' }}":
 			// The public installer explicitly supports the inbox Windows PowerShell
 			// 5.1. Its syntax check must use that executable; every build/test step
 			// continues to use the pinned pwsh runtime on the runner.
