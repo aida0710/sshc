@@ -28,6 +28,33 @@ func reportSkippedEntries(plan sftpCLIPlan, stderr io.Writer) {
 	}
 }
 
+// sftpTransferBatch は、1 回の get／put で全ファイルに共通する条件。ファイルごとの
+// worker は、これと自分のファイルだけを受け取る。
+type sftpTransferBatch struct {
+	engine  *engineAPI
+	alias   string
+	batchID string
+	// overwrite は put だけが使う。get は engine 側の既定（上書きしない）のまま。
+	overwrite bool
+	// 大きなファイルの分割は 0 なら engine の設定に任せる。
+	splitSizeMiB int
+	splitJobs    int
+	chunkSizeMiB int
+	// progress は get だけが持つ。nil なら表示しない。
+	progress *sftpCLIProgressDisplay
+}
+
+func newSFTPTransferBatch(engine *engineAPI, plan sftpCLIPlan, called sftpInvocation) (sftpTransferBatch, error) {
+	batchID, err := sftpIdentifier("batch")
+	if err != nil {
+		return sftpTransferBatch{}, err
+	}
+	return sftpTransferBatch{
+		engine: engine, alias: plan.Alias, batchID: batchID,
+		splitSizeMiB: called.SplitSizeMiB, splitJobs: called.SplitJobs, chunkSizeMiB: called.ChunkSizeMiB,
+	}, nil
+}
+
 func executeSFTPGet(ctx context.Context, engine *engineAPI, plan sftpCLIPlan, called sftpInvocation, stderr io.Writer) error {
 	reportSkippedEntries(plan, stderr)
 	for _, directory := range plan.Directories {
@@ -35,7 +62,7 @@ func executeSFTPGet(ctx context.Context, engine *engineAPI, plan sftpCLIPlan, ca
 			return err
 		}
 	}
-	batchID, err := sftpIdentifier("batch")
+	batch, err := newSFTPTransferBatch(engine, plan, called)
 	if err != nil {
 		return err
 	}
@@ -43,9 +70,9 @@ func executeSFTPGet(ctx context.Context, engine *engineAPI, plan sftpCLIPlan, ca
 	for _, file := range files {
 		fmt.Fprintf(stderr, "get  %s:%s -> %s\n", plan.Alias, file.Source, file.Destination)
 	}
-	progress := newSFTPCLIProgressDisplay(engine, stderr, called.JSON)
+	batch.progress = newSFTPCLIProgressDisplay(engine, stderr, called.JSON)
 	return runSFTPFileWorkers(ctx, files, called.Jobs, func(workerContext context.Context, file sftpCLIFile) error {
-		return sftpDownloadFile(workerContext, engine, plan.Alias, batchID, file, called.SplitSizeMiB, called.SplitJobs, called.ChunkSizeMiB, progress)
+		return sftpDownloadFile(workerContext, batch, file)
 	})
 }
 
@@ -56,7 +83,7 @@ func executeSFTPPut(ctx context.Context, engine *engineAPI, plan sftpCLIPlan, ca
 			return err
 		}
 	}
-	batchID, err := sftpIdentifier("batch")
+	batch, err := newSFTPTransferBatch(engine, plan, called)
 	if err != nil {
 		return err
 	}
@@ -64,8 +91,9 @@ func executeSFTPPut(ctx context.Context, engine *engineAPI, plan sftpCLIPlan, ca
 	for _, file := range files {
 		fmt.Fprintf(stderr, "put  %s -> %s:%s\n", file.Source, plan.Alias, file.Destination)
 	}
+	batch.overwrite = called.Overwrite
 	return runSFTPFileWorkers(ctx, files, called.Jobs, func(workerContext context.Context, file sftpCLIFile) error {
-		return sftpUploadFile(workerContext, engine, plan.Alias, batchID, file, called.Overwrite, called.SplitSizeMiB, called.SplitJobs, called.ChunkSizeMiB)
+		return sftpUploadFile(workerContext, batch, file)
 	})
 }
 
@@ -112,15 +140,13 @@ func runSFTPFileWorkers(
 	return context.Cause(workerContext)
 }
 
-func sftpDownloadFile(
-	ctx context.Context, engine *engineAPI, alias, batchID string, file sftpCLIFile, splitSizeMiB, splitJobs, chunkSizeMiB int,
-	progress *sftpCLIProgressDisplay,
-) (returnErr error) {
+func sftpDownloadFile(ctx context.Context, batch sftpTransferBatch, file sftpCLIFile) (returnErr error) {
+	engine, alias, progress := batch.engine, batch.alias, batch.progress
 	jobID, err := sftpIdentifier("get")
 	if err != nil {
 		return err
 	}
-	if err := sftpCreateDownloadJob(ctx, engine, jobID, batchID, alias, file, splitSizeMiB, splitJobs, chunkSizeMiB); err != nil {
+	if err := batch.createJob(ctx, jobID, "download", file); err != nil {
 		return err
 	}
 	if progress != nil {
@@ -270,7 +296,8 @@ func validSFTPDownloadParts(parts []sftpCLIDownloadPart) bool {
 	return true
 }
 
-func sftpUploadFile(ctx context.Context, engine *engineAPI, alias, batchID string, file sftpCLIFile, overwrite bool, splitSizeMiB, splitJobs, chunkSizeMiB int) (returnErr error) {
+func sftpUploadFile(ctx context.Context, batch sftpTransferBatch, file sftpCLIFile) (returnErr error) {
+	engine, alias := batch.engine, batch.alias
 	input, err := os.Open(file.Source)
 	if err != nil {
 		return err
@@ -287,7 +314,7 @@ func sftpUploadFile(ctx context.Context, engine *engineAPI, alias, batchID strin
 	if err != nil {
 		return err
 	}
-	if err := sftpCreateUploadJob(ctx, engine, jobID, batchID, alias, file, overwrite, splitSizeMiB, splitJobs, chunkSizeMiB); err != nil {
+	if err := batch.createJob(ctx, jobID, "upload", file); err != nil {
 		return err
 	}
 	defer func() {
@@ -447,49 +474,31 @@ func sftpUploadFileRanges(ctx context.Context, engine *engineAPI, input *os.File
 	return ctx.Err()
 }
 
-func sftpCreateDownloadJob(
-	ctx context.Context, engine *engineAPI, jobID, batchID, alias string, file sftpCLIFile, splitSizeMiB, splitJobs, chunkSizeMiB int,
-) error {
-	request := sftpCreateJobRequest(jobID, batchID, alias, "download", file, false)
-	if splitSizeMiB > 0 {
-		request["largeFileThresholdBytes"] = int64(splitSizeMiB) << 20
-	}
-	if splitJobs > 0 {
-		request["largeFileParallelism"] = splitJobs
-	}
-	if chunkSizeMiB > 0 {
-		request["largeFileChunkBytes"] = int64(chunkSizeMiB) << 20
-	}
-	var ignored map[string]any
-	return engine.sendJSON(ctx, http.MethodPost, "/api/v1/sftp/transfers", request, &ignored)
-}
-
-func sftpCreateUploadJob(ctx context.Context, engine *engineAPI, jobID, batchID, alias string, file sftpCLIFile, overwrite bool, splitSizeMiB, splitJobs, chunkSizeMiB int) error {
-	request := sftpCreateJobRequest(jobID, batchID, alias, "upload", file, overwrite)
-	if splitSizeMiB > 0 {
-		request["largeFileThresholdBytes"] = int64(splitSizeMiB) << 20
-	}
-	if splitJobs > 0 {
-		request["largeFileParallelism"] = splitJobs
-	}
-	if chunkSizeMiB > 0 {
-		request["largeFileChunkBytes"] = int64(chunkSizeMiB) << 20
-	}
-	var ignored map[string]any
-	return engine.sendJSON(ctx, http.MethodPost, "/api/v1/sftp/transfers", request, &ignored)
-}
-
-func sftpCreateJobRequest(jobID, batchID, alias, direction string, file sftpCLIFile, overwrite bool) map[string]any {
+// createJob は engine の転送キューに 1 ファイルのジョブを登録する。direction は
+// "download" か "upload" で、リモート側のパスはそれに応じて file の Source か
+// Destination になる。
+func (b sftpTransferBatch) createJob(ctx context.Context, jobID, direction string, file sftpCLIFile) error {
 	remotePath := file.Destination
 	if direction == "download" {
 		remotePath = file.Source
 	}
-	return map[string]any{
-		"id": jobID, "batchId": batchID, "batchName": path.Base(remotePath), "batchKind": "file",
-		"alias": alias, "sourceAlias": "", "sourcePath": "", "operation": "", "overwrite": overwrite,
+	request := map[string]any{
+		"id": jobID, "batchId": b.batchID, "batchName": path.Base(remotePath), "batchKind": "file",
+		"alias": b.alias, "sourceAlias": "", "sourcePath": "", "operation": "", "overwrite": b.overwrite,
 		"direction": direction, "kind": "file", "name": path.Base(remotePath),
 		"remotePath": remotePath, "totalBytes": file.Size, "lastModified": file.ModifiedUnix,
 	}
+	if b.splitSizeMiB > 0 {
+		request["largeFileThresholdBytes"] = int64(b.splitSizeMiB) << 20
+	}
+	if b.splitJobs > 0 {
+		request["largeFileParallelism"] = b.splitJobs
+	}
+	if b.chunkSizeMiB > 0 {
+		request["largeFileChunkBytes"] = int64(b.chunkSizeMiB) << 20
+	}
+	var ignored map[string]any
+	return b.engine.sendJSON(ctx, http.MethodPost, "/api/v1/sftp/transfers", request, &ignored)
 }
 
 func sftpJobAction(ctx context.Context, engine *engineAPI, jobID, action string) error {

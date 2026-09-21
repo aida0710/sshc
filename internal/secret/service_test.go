@@ -1238,7 +1238,7 @@ func TestAVaultLeftUntouchedShutsItself(t *testing.T) {
 	if service.Unlocked() {
 		t.Error("the vault is still open after a whole idle day")
 	}
-	if service.HasKeyPassphrase("id_ed25519") {
+	if _, ok := service.KeyPassphraseFor("id_ed25519"); ok {
 		t.Error("a locked vault still answered about a stored key passphrase")
 	}
 	// そして再び開けるのはマスターパスワードであって、単に尋ねることではない。

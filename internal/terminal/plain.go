@@ -6,16 +6,11 @@ import (
 	"unicode/utf8"
 )
 
-// PlainText removes terminal control sequences and control characters from a
-// bounded scrollback fragment. It intentionally produces a readable transcript,
-// not a reconstruction of the terminal screen.
-func PlainText(input []byte) string {
-	return PlainTextFrom(input, 0)
-}
-
-// PlainTextFrom decodes terminal state from the beginning of input but emits
-// only characters whose source begins at or after emitFrom. Callers use this
-// when a cursor lands inside an escape sequence.
+// PlainTextFrom removes terminal control sequences and control characters from
+// a bounded scrollback fragment, producing a readable transcript rather than a
+// reconstruction of the screen. It decodes terminal state from the beginning of
+// input but emits only characters whose source begins at or after emitFrom;
+// callers pass a cursor that may land inside an escape sequence, or 0 for all.
 func PlainTextFrom(input []byte, emitFrom int) string {
 	if emitFrom < 0 {
 		emitFrom = 0

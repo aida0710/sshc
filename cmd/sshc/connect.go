@@ -85,9 +85,9 @@ func runOpen(
 
 // runConnect は engine から保存済み認証情報を取得し、プロセス内で SSH 接続する。
 // engine に接続できない場合は認証情報なしの接続へフォールバックしない。
-func runConnect(
-	ctx context.Context, alias, home, stateDir string, client *http.Client, stdin *os.File, stdout, stderr io.Writer,
-) int {
+func runConnect(ctx context.Context, alias string, environment commandEnvironment) int {
+	home, stateDir, client, stdin, stdout, stderr :=
+		environment.home, environment.stateDir, environment.client, environment.stdin, environment.stdout, environment.stderr
 	if err := validate.Alias(alias); err != nil {
 		fmt.Fprintf(stderr, "sshc: %q is not an alias this will connect to\n", alias)
 		return 2

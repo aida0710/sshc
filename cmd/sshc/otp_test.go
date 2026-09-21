@@ -76,8 +76,7 @@ func TestOTPCLIListsNamesWithoutCodesOrProvisioningData(t *testing.T) {
 	writeTestHandoff(t, stateDir, server.URL)
 	var stdout, stderr bytes.Buffer
 
-	code := runOTP(context.Background(), otpInvocation{Action: otpList}, stateDir,
-		server.Client(), nil, &stdout, &stderr, nil)
+	code := runOTP(context.Background(), otpInvocation{Action: otpList}, commandEnvironment{stateDir: stateDir, client: server.Client(), stdout: &stdout, stderr: &stderr})
 	if code != 0 || stderr.Len() != 0 || !*closed {
 		t.Fatalf("runOTP = %d, stdout %q, stderr %q, closed %v", code, stdout.String(), stderr.String(), *closed)
 	}
@@ -94,8 +93,7 @@ func TestOTPCLIShowsAdjacentCodesWithoutProvisioningData(t *testing.T) {
 	writeTestHandoff(t, stateDir, server.URL)
 	var stdout, stderr bytes.Buffer
 
-	code := runOTP(context.Background(), otpInvocation{Action: otpShow, Name: "production"},
-		stateDir, server.Client(), nil, &stdout, &stderr, nil)
+	code := runOTP(context.Background(), otpInvocation{Action: otpShow, Name: "production"}, commandEnvironment{stateDir: stateDir, client: server.Client(), stdout: &stdout, stderr: &stderr})
 	if code != 0 || stderr.Len() != 0 || !*closed {
 		t.Fatalf("runOTP = %d, stdout %q, stderr %q, closed %v", code, stdout.String(), stderr.String(), *closed)
 	}

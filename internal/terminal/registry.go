@@ -351,11 +351,6 @@ func (r *Registry) CommandTarget(id string) (CommandTarget, error) {
 	return session.CommandTarget()
 }
 
-// WriteCommand writes to the exact generation captured by CommandTarget.
-func (r *Registry) WriteCommand(ctx context.Context, target CommandTarget, command string) error {
-	return r.WriteCommandInput(ctx, target, command, true)
-}
-
 // WriteCommandInput writes to the exact generation and optionally appends Enter.
 func (r *Registry) WriteCommandInput(ctx context.Context, target CommandTarget, command string, submit bool) error {
 	session, ok := r.Lookup(target.ID)

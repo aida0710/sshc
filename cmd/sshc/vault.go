@@ -57,15 +57,9 @@ func (systemPasswordTerminal) IsTerminal(fd int) bool { return term.IsTerminal(f
 
 // runVault は、起動済み engine の Vault operation だけを行う。engine を起動しない
 // のは、desktop と headless の owner をこの補助コマンドが勝手に選ばないためである。
-func runVault(
-	ctx context.Context,
-	action string,
-	stateDir string,
-	client *http.Client,
-	stdin *os.File,
-	stdout, stderr io.Writer,
-	terminal passwordTerminal,
-) int {
+func runVault(ctx context.Context, action string, environment commandEnvironment) int {
+	stateDir, client, stdin, stdout, stderr, terminal :=
+		environment.stateDir, environment.client, environment.stdin, environment.stdout, environment.stderr, environment.terminal
 	if err := ctx.Err(); err != nil {
 		return 130
 	}
@@ -114,7 +108,7 @@ func runVault(
 			fmt.Fprintln(stderr, "sshc: a vault already exists")
 			return 1
 		}
-		return runVaultCreate(ctx, found, client, stdin, stdout, stderr, terminal)
+		return runVaultCreate(ctx, found, environment)
 	case "unlock":
 		if !status.Vault {
 			fmt.Fprintln(stderr, "sshc: no vault exists; run sshc vault create")
@@ -125,18 +119,18 @@ func runVault(
 			return 0
 		}
 		if status.Passwordless {
-			return finishVaultMutation(ctx, client, found, httpserver.VaultUnlockPath, []byte(`{"passphrase":""}`), "vault unlocked", stderr, stdout)
+			return finishVaultMutation(ctx, environment, vaultMutation{found: found, path: httpserver.VaultUnlockPath, payload: []byte(`{"passphrase":""}`), success: "vault unlocked"})
 		}
 		if stdin == nil || terminal == nil || !terminal.IsTerminal(int(stdin.Fd())) {
 			fmt.Fprintln(stderr, "sshc: vault passwords require an interactive terminal")
 			return 1
 		}
-		return runVaultUnlock(ctx, found, client, stdin, stdout, stderr, terminal)
+		return runVaultUnlock(ctx, found, environment)
 	case "lock":
 		if status.Passwordless {
-			return finishVaultMutation(ctx, client, found, httpserver.VaultLockPath, []byte("{}"), "passwordless vault remains unlocked; set a master password to enable locking", stderr, stdout)
+			return finishVaultMutation(ctx, environment, vaultMutation{found: found, path: httpserver.VaultLockPath, payload: []byte("{}"), success: "passwordless vault remains unlocked; set a master password to enable locking"})
 		}
-		return runVaultLock(ctx, found, client, stdout, stderr)
+		return runVaultLock(ctx, found, environment)
 	case "change-password":
 		if !status.Vault {
 			fmt.Fprintln(stderr, "sshc: no vault exists; run sshc vault create")
@@ -146,16 +140,14 @@ func runVault(
 			fmt.Fprintln(stderr, "sshc: the vault is locked; run sshc vault unlock first")
 			return 1
 		}
-		return runVaultChange(ctx, found, client, stdin, stdout, stderr, terminal, status.Passwordless)
+		return runVaultChange(ctx, found, environment, status.Passwordless)
 	default:
 		return 2
 	}
 }
 
-func runVaultCreate(
-	ctx context.Context, found handoff.Handoff, client *http.Client, stdin *os.File,
-	stdout, stderr io.Writer, terminal passwordTerminal,
-) int {
+func runVaultCreate(ctx context.Context, found handoff.Handoff, environment commandEnvironment) int {
+	stdin, stderr, terminal := environment.stdin, environment.stderr, environment.terminal
 	fmt.Fprintln(stderr, "Enter at least 4 characters, or press Enter without typing a new password to use a passwordless vault. Leave the confirmation blank too.")
 	next, err := promptVaultPassword(ctx, stdin, stderr, terminal, "New master password: ")
 	defer zeroBytes(next)
@@ -184,13 +176,11 @@ func runVaultCreate(
 	}
 	zeroBytes(next)
 	zeroBytes(confirmation)
-	return finishVaultMutation(ctx, client, found, httpserver.VaultCreatePath, payload, "vault created and unlocked", stderr, stdout)
+	return finishVaultMutation(ctx, environment, vaultMutation{found: found, path: httpserver.VaultCreatePath, payload: payload, success: "vault created and unlocked"})
 }
 
-func runVaultUnlock(
-	ctx context.Context, found handoff.Handoff, client *http.Client, stdin *os.File,
-	stdout, stderr io.Writer, terminal passwordTerminal,
-) int {
+func runVaultUnlock(ctx context.Context, found handoff.Handoff, environment commandEnvironment) int {
+	stdin, stderr, terminal := environment.stdin, environment.stderr, environment.terminal
 	password, err := promptVaultPassword(ctx, stdin, stderr, terminal, "Master password: ")
 	defer zeroBytes(password)
 	if err != nil {
@@ -205,19 +195,15 @@ func runVaultUnlock(
 		return 1
 	}
 	zeroBytes(password)
-	return finishVaultMutation(ctx, client, found, httpserver.VaultUnlockPath, payload, "vault unlocked", stderr, stdout)
+	return finishVaultMutation(ctx, environment, vaultMutation{found: found, path: httpserver.VaultUnlockPath, payload: payload, success: "vault unlocked"})
 }
 
-func runVaultLock(
-	ctx context.Context, found handoff.Handoff, client *http.Client, stdout, stderr io.Writer,
-) int {
-	return finishVaultMutation(ctx, client, found, httpserver.VaultLockPath, []byte("{}"), "vault locked", stderr, stdout)
+func runVaultLock(ctx context.Context, found handoff.Handoff, environment commandEnvironment) int {
+	return finishVaultMutation(ctx, environment, vaultMutation{found: found, path: httpserver.VaultLockPath, payload: []byte("{}"), success: "vault locked"})
 }
 
-func runVaultChange(
-	ctx context.Context, found handoff.Handoff, client *http.Client, stdin *os.File,
-	stdout, stderr io.Writer, terminal passwordTerminal, passwordless bool,
-) int {
+func runVaultChange(ctx context.Context, found handoff.Handoff, environment commandEnvironment, passwordless bool) int {
+	stdin, stderr, terminal := environment.stdin, environment.stderr, environment.terminal
 	var current []byte
 	var err error
 	if !passwordless {
@@ -235,7 +221,7 @@ func runVaultChange(
 		fmt.Fprintln(stderr, "sshc: the password could not be encoded safely")
 		return 1
 	}
-	if code := finishVaultMutation(ctx, client, found, httpserver.VaultVerifyPath, payload, "", stderr, io.Discard); code != 0 {
+	if code := finishVaultMutation(ctx, environment, vaultMutation{found: found, path: httpserver.VaultVerifyPath, payload: payload, success: ""}); code != 0 {
 		return code
 	}
 	fmt.Fprintln(stderr, "Enter at least 4 characters, or press Enter without typing a new password to use a passwordless vault. Leave the confirmation blank too.")
@@ -267,7 +253,7 @@ func runVaultChange(
 	zeroBytes(current)
 	zeroBytes(next)
 	zeroBytes(confirmation)
-	return finishVaultMutation(ctx, client, found, httpserver.VaultChangePath, payload, "vault password changed", stderr, stdout)
+	return finishVaultMutation(ctx, environment, vaultMutation{found: found, path: httpserver.VaultChangePath, payload: payload, success: "vault password changed"})
 }
 
 func promptVaultPassword(
@@ -337,15 +323,18 @@ func vaultPromptFailure(ctx context.Context, err error, stderr io.Writer) int {
 	return 1
 }
 
-func finishVaultMutation(
-	ctx context.Context,
-	client *http.Client,
-	found handoff.Handoff,
-	path string,
-	payload []byte,
-	success string,
-	stderr, stdout io.Writer,
-) int {
+// vaultMutation は engine の vault へ送る 1 つの変更。success は成功時に stdout へ
+// 出す文で、空なら（verify のように）結果を表示しない。
+type vaultMutation struct {
+	found   handoff.Handoff
+	path    string
+	payload []byte
+	success string
+}
+
+func finishVaultMutation(ctx context.Context, environment commandEnvironment, mutation vaultMutation) int {
+	client, stdout, stderr := environment.client, environment.stdout, environment.stderr
+	found, path, payload, success := mutation.found, mutation.path, mutation.payload, mutation.success
 	if err := ctx.Err(); err != nil {
 		zeroBytes(payload)
 		return 130
@@ -368,7 +357,9 @@ func finishVaultMutation(
 		return 1
 	}
 	if response.StatusCode == http.StatusNoContent {
-		fmt.Fprintln(stdout, success)
+		if success != "" {
+			fmt.Fprintln(stdout, success)
+		}
 		return 0
 	}
 	switch response.StatusCode {

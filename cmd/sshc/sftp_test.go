@@ -239,9 +239,13 @@ func TestSFTPDownloadUsesRemotePathAndPublishesAtomically(t *testing.T) {
 	defer server.Close()
 
 	destination := filepath.Join(t.TempDir(), "file.txt")
-	err := sftpDownloadFile(context.Background(), testSFTPEngine(server), "server-a", "batch_12345678", sftpCLIFile{
+	batch := sftpTransferBatch{
+		engine: testSFTPEngine(server), alias: "server-a", batchID: "batch_12345678",
+		splitSizeMiB: 50, splitJobs: 6, chunkSizeMiB: 512,
+	}
+	err := sftpDownloadFile(context.Background(), batch, sftpCLIFile{
 		Source: "/remote/file.txt", Destination: destination, Size: 3,
-	}, 50, 6, 512, nil)
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -277,9 +281,10 @@ func TestSFTPDownloadRefusesAFileThatGrewAfterPlanning(t *testing.T) {
 
 	directory := t.TempDir()
 	destination := filepath.Join(directory, "file.txt")
-	err := sftpDownloadFile(context.Background(), testSFTPEngine(server), "server-a", "batch_12345678", sftpCLIFile{
+	batch := sftpTransferBatch{engine: testSFTPEngine(server), alias: "server-a", batchID: "batch_12345678"}
+	err := sftpDownloadFile(context.Background(), batch, sftpCLIFile{
 		Source: "/remote/file.txt", Destination: destination, Size: 3,
-	}, 0, 0, 0, nil)
+	})
 	if !errors.Is(err, io.ErrUnexpectedEOF) {
 		t.Fatalf("download error = %v, want %v", err, io.ErrUnexpectedEOF)
 	}
@@ -417,9 +422,10 @@ func TestSFTPUploadStreamsChunksAndCarriesOverwritePolicy(t *testing.T) {
 	if err := os.WriteFile(source, []byte("payload"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	err := sftpUploadFile(context.Background(), testSFTPEngine(server), "server-a", "batch_12345678", sftpCLIFile{
+	batch := sftpTransferBatch{engine: testSFTPEngine(server), alias: "server-a", batchID: "batch_12345678", overwrite: true}
+	err := sftpUploadFile(context.Background(), batch, sftpCLIFile{
 		Source: source, Destination: "/remote/file.txt", Size: 7,
-	}, true, 0, 0, 0)
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
