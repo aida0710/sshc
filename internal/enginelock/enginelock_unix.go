@@ -7,12 +7,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
+	"sshc/internal/platform/nofollow"
 	"syscall"
 
 	"golang.org/x/sys/unix"
-
-	"sshc/internal/platform/nativepath"
 )
 
 var afterLockDirectoryOpen func()
@@ -60,55 +58,13 @@ func acquire(path string) (func() error, error) {
 		func() error { return syscall.Flock(lockedDescriptor, syscall.LOCK_UN) }), nil
 }
 
+// openOrCreateLockDirectory は lock file の親を symlink をたどらずに開く。歩き方は
+// ワークスペースの他の非公開ディレクトリと同じで、途中の symlink や通常ファイルは
+// この engine の state directory として信用しない。
 func openOrCreateLockDirectory(path string) (*os.File, error) {
-	cleaned := filepath.Clean(path)
-	if !filepath.IsAbs(cleaned) {
-		return nil, os.ErrInvalid
+	directory, err := nofollow.OpenOrCreateDirectory(path, 0o700)
+	if errors.Is(err, nofollow.ErrSymlinkPath) || errors.Is(err, unix.ENOTDIR) {
+		return nil, fmt.Errorf("%w: %s", ErrUnsafeStateDirectory, path)
 	}
-	cleaned, err := nativepath.ResolveRootAlias(cleaned)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %s: %v", ErrUnsafeStateDirectory, path, err)
-	}
-	current, err := openLockWalkRoot()
-	if err != nil {
-		return nil, err
-	}
-	components := strings.Split(strings.TrimPrefix(cleaned, string(filepath.Separator)), string(filepath.Separator))
-	for index, component := range components {
-		if component == "" || component == "." || component == ".." {
-			_ = current.Close()
-			return nil, os.ErrInvalid
-		}
-		final := index == len(components)-1
-		fd, openErr := unix.Openat(int(current.Fd()), component, lockWalkDirectoryFlags(final), 0)
-		if errors.Is(openErr, unix.ENOENT) {
-			if mkdirErr := unix.Mkdirat(int(current.Fd()), component, 0o700); mkdirErr != nil && !errors.Is(mkdirErr, unix.EEXIST) {
-				_ = current.Close()
-				return nil, mkdirErr
-			}
-			fd, openErr = unix.Openat(int(current.Fd()), component, lockWalkDirectoryFlags(final), 0)
-		}
-		if openErr != nil {
-			_ = current.Close()
-			if errors.Is(openErr, unix.ELOOP) || errors.Is(openErr, unix.ENOTDIR) {
-				return nil, fmt.Errorf("%w: %s", ErrUnsafeStateDirectory, path)
-			}
-			return nil, openErr
-		}
-		next := os.NewFile(uintptr(fd), component)
-		if next == nil {
-			_ = unix.Close(fd)
-			_ = current.Close()
-			return nil, os.ErrInvalid
-		}
-		_ = current.Close()
-		current = next
-		if index == len(components)-1 {
-			if err := current.Chmod(0o700); err != nil {
-				_ = current.Close()
-				return nil, err
-			}
-		}
-	}
-	return current, nil
+	return directory, err
 }
