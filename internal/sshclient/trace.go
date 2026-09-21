@@ -3,7 +3,10 @@ package sshclient
 import (
 	"fmt"
 	"io"
+	"strings"
 	"time"
+
+	"golang.org/x/crypto/ssh"
 
 	"sshc/internal/terminal"
 )
@@ -23,9 +26,11 @@ const (
 	Quiet Verbosity = 0
 	// Brief は `-v` に相当する。何が起き、どこへ繋いだかだけを言う。
 	Brief Verbosity = 1
-	// Detailed は `-vv` に相当する。試した鍵、通った方式、鍵の指紋、経由地。
+	// Detailed は `-vv` に相当する。試した鍵とその指紋、通った方式、
+	// ホスト鍵の照合結果、経由地、端末と環境変数の要求、掛かった時間。
 	Detailed Verbosity = 2
-	// Full は `-vvv` に相当する。取り決めた算法と、掛かった時間。
+	// Full は `-vvv` に相当する。名乗った算法、agent の鍵の一覧、
+	// keyboard-interactive の質問ごとの扱い、通った経路のアドレス。
 	Full Verbosity = 3
 )
 
@@ -72,6 +77,34 @@ func (t *tracer) announce(format string, args ...any) {
 	_, _ = io.WriteString(t.writer, "[sshc] "+fmt.Sprintf(format, args...)+"\r\n")
 }
 
+// サーバーの banner をどこまで端末に出すか。
+//
+// banner は人が読むための文であり、一画面に収まらないものは案内ではない。
+// 上限が無いと、サーバーが送る任意長の文をそのまま端末へ流すことになる。
+const (
+	maxBannerLines     = 40
+	maxBannerLineRunes = 256
+)
+
+// banner は、認証の前にサーバーが送った文言を Brief から出す。
+//
+// OpenSSH は常に出すが、ここでは接続ログの一部として扱う。既定が無言なのは
+// 接続の途中経過についてであり、それと別の扱いにすると「無言」の意味が二つになる。
+// 文はサーバーが書いたものなので、行ごとに制御文字を落としてから出す。
+func (t *tracer) banner(message string) {
+	if !t.enabled(Brief) {
+		return
+	}
+	lines := strings.Split(strings.TrimRight(message, "\r\n"), "\n")
+	if len(lines) > maxBannerLines {
+		lines = lines[:maxBannerLines]
+	}
+	t.say(Brief, "サーバーからの案内：")
+	for _, line := range lines {
+		t.say(Brief, "  %s", terminal.DisplayText(line, maxBannerLineRunes))
+	}
+}
+
 // since は、始まりからの経過を返す。Full のときだけ意味を持つ。
 func (t *tracer) since(start time.Time) time.Duration { return t.now().Sub(start) }
 
@@ -88,4 +121,12 @@ func (t *tracer) stage(phase string, target Target, hop, hops int) {
 		Phase: phase, Alias: target.Alias, HostName: target.HostName,
 		User: target.User, Hop: hop, Hops: hops,
 	})
+}
+
+// describeKey は、鍵を種類と SHA256 指紋で言う。
+//
+// `ssh -v` が鍵を言うときと同じ形である。指紋があれば、ユーザーは
+// `ssh-keygen -lf` の出力や known_hosts の行と突き合わせられる。
+func describeKey(key ssh.PublicKey) string {
+	return key.Type() + " " + ssh.FingerprintSHA256(key)
 }

@@ -739,8 +739,9 @@ func TestFullConnectionLogExplainsAnAutomaticallyAnsweredEchoedTOTP(t *testing.T
 	for _, want := range []string{
 		"接続ログ：すべて（-vvv）",
 		"認証方式を試します：keyboard-interactive",
+		"keyboard-interactive の質問 1/1：Verification code:（入力表示：あり）",
 		"保存済みTOTPをbastionの認証コード質問へ入力しました。",
-		"認証コード質問の入力表示：あり",
+		"認証方式 keyboard-interactive で認証されました。",
 	} {
 		if !strings.Contains(seen, want) {
 			t.Errorf("full connection log did not contain %q:\n%s", want, seen)

@@ -60,6 +60,12 @@ type Auth struct {
 	// Agent signers keep their socket alive, so the dialer must close it once
 	// authentication has completed or failed.
 	registerAgent func(io.Closer)
+	// trace は、この接続の接続ログである。authWithTrace が接続ごとの複製に
+	// 置く。共有の Auth には無く、nil のまま呼んでも何も書かない。
+	//
+	// 秘密値は書かない。鍵は指紋で、パスフレーズとパスワードは出どころ
+	// （保存済みか、入力か）だけで言う。
+	trace *tracer
 }
 
 // CredentialEvent は、認証中の保存済み資格情報に関する安全な診断である。
@@ -133,22 +139,26 @@ func (a Auth) Methods(target Target, prompt Prompter) []ssh.AuthMethod {
 			prompt = nil
 		}
 	}
-	for _, kind := range target.Methods.Order() {
+	order := target.Methods.Order()
+	a.trace.say(Detailed, "認証方式の候補（試す順）：%s", strings.Join(order, ", "))
+	for _, kind := range order {
 		switch kind {
 		case "publickey":
 			if method, ok := a.publicKey(target, prompt); ok {
 				methods = append(methods, method)
+			} else {
+				a.trace.say(Detailed, "publickey は試しません：IdentityFile が無く、agent も使いません。")
 			}
-		case "keyboard-interactive":
-			if prompt != nil {
-				methods = append(methods, ssh.RetryableAuthMethod(
-					ssh.KeyboardInteractive(a.keyboard(target, prompt, stored)), maxPasswordAttempts))
+		case "keyboard-interactive", "password":
+			if prompt == nil {
+				a.trace.say(Detailed, "%s は試しません：非対話で、保存済みパスワードも TOTP もありません。", kind)
+				continue
 			}
-		case "password":
-			if prompt != nil {
-				methods = append(methods, ssh.RetryableAuthMethod(
-					ssh.PasswordCallback(a.password(target, prompt, stored)), maxPasswordAttempts))
+			method := ssh.KeyboardInteractive(a.keyboard(target, prompt, stored))
+			if kind == "password" {
+				method = ssh.PasswordCallback(a.password(target, prompt, stored))
 			}
+			methods = append(methods, ssh.RetryableAuthMethod(method, maxPasswordAttempts))
 		}
 	}
 	return methods
@@ -167,11 +177,15 @@ func (a Auth) password(target Target, prompt Prompter, stored *passwordOffer) fu
 	return func() (string, error) {
 		a.observe("password")
 		if password, found := stored.take(); found {
+			a.trace.say(Detailed, "保存済みパスワードを送ります。")
 			return password, nil
 		}
 		prefix := ""
 		if stored.wasOffered() {
 			prefix = "Saved password was rejected. "
+			a.trace.say(Detailed, "保存済みパスワードが拒否されました。パスワードの入力を求めます。")
+		} else {
+			a.trace.say(Detailed, "パスワードの入力を求めます。")
 		}
 		return prompt.Secret(prefix + "Password for " + authenticationTarget(target) + ": ")
 	}
@@ -186,6 +200,7 @@ func (a Auth) password(target Target, prompt Prompter, stored *passwordOffer) fu
 func (a Auth) keyboard(target Target, prompt Prompter, stored *passwordOffer) ssh.KeyboardInteractiveChallenge {
 	return func(name, instruction string, questions []string, echos []bool) ([]string, error) {
 		a.observe("keyboard-interactive")
+		a.traceChallenge(name, questions, echos)
 		answers := make([]string, len(questions))
 		answered := make([]bool, len(questions))
 		for index, question := range questions {
@@ -231,6 +246,8 @@ func (a Auth) keyboard(target Target, prompt Prompter, stored *passwordOffer) ss
 				answered[0] = true
 			}
 		}
+		a.trace.say(Detailed, "keyboard-interactive：保存済みの資格情報で %d 件、入力で %d 件に答えます。",
+			countAnswered(answered), len(answered)-countAnswered(answered))
 		if allAnswered(answered) {
 			return answers, nil
 		}
@@ -240,6 +257,36 @@ func (a Auth) keyboard(target Target, prompt Prompter, stored *passwordOffer) ss
 		}
 		return answerKeyboardChallenge(prompt, context, name, instruction, questions, echos, answers, answered)
 	}
+}
+
+// traceChallenge は、サーバーが出した keyboard-interactive の問いを接続ログに書く。
+//
+// 問いの文はサーバーが書いたものなので、端末へ出す前に制御文字を落とす。
+// 保存済みの資格情報で答えた問いはユーザーの画面に出ないため、何を聞かれて
+// いたかを知る手段はこの行だけである。
+func (a Auth) traceChallenge(name string, questions []string, echos []bool) {
+	if !a.trace.enabled(Full) {
+		return
+	}
+	if name != "" {
+		a.trace.say(Full, "keyboard-interactive の名前：%s", terminal.DisplayText(name, maxChallengeTextRunes))
+	}
+	for index, question := range questions {
+		echoed := index < len(echos) && echos[index]
+		a.trace.say(Full, "keyboard-interactive の質問 %d/%d：%s（入力表示：%s）",
+			index+1, len(questions), terminal.DisplayText(question, maxChallengeTextRunes),
+			map[bool]string{true: "あり", false: "なし"}[echoed])
+	}
+}
+
+func countAnswered(answered []bool) int {
+	count := 0
+	for _, ok := range answered {
+		if ok {
+			count++
+		}
+	}
+	return count
 }
 
 func allAnswered(answered []bool) bool {
@@ -291,11 +338,15 @@ func (a Auth) Signers(target Target, prompt Prompter) ([]ssh.Signer, error) {
 	var failures []string
 
 	for _, path := range target.Identities {
-		signer, err := a.signerFor(path, prompt)
+		signer, unlockedBy, err := a.signerFor(path, prompt)
 		if err != nil {
+			// 他の鍵で通れば、この失敗は誰にも報告されない。書けない鍵が
+			// 混ざっていることに気づけるのは接続ログだけである。
+			a.trace.say(Detailed, "鍵 %s は使えません：%v", path, err)
 			failures = append(failures, path+": "+err.Error())
 			continue
 		}
+		a.trace.say(Detailed, "鍵 %s：%s（%s）", path, describeKey(signer.PublicKey()), unlockedBy)
 		signers = append(signers, signer)
 	}
 
@@ -303,9 +354,12 @@ func (a Auth) Signers(target Target, prompt Prompter) ([]ssh.Signer, error) {
 	if !target.IdentitiesOnly && a.AgentSocket != "" {
 		agentSigners, err := a.agentSigners()
 		if err != nil {
+			a.trace.say(Detailed, "agent の鍵は使えません：%v", err)
 			failures = append(failures, "agent: "+err.Error())
 		}
 		signers = append(signers, agentSigners...)
+	} else if target.IdentitiesOnly && a.AgentSocket != "" {
+		a.trace.say(Detailed, "IdentitiesOnly yes のため agent の鍵は使いません。")
 	}
 
 	if len(signers) == 0 {
@@ -314,21 +368,31 @@ func (a Auth) Signers(target Target, prompt Prompter) ([]ssh.Signer, error) {
 		}
 		return nil, fmt.Errorf("%w (%s)", ErrNoIdentity, strings.Join(failures, "; "))
 	}
+	a.trace.say(Detailed, "公開鍵認証で試す鍵：%d 件", len(signers))
 	return signers, nil
 }
 
-func (a Auth) signerFor(path string, prompt Prompter) (ssh.Signer, error) {
+// 鍵をどうやって使える形にしたか。接続ログが鍵ごとに言う。
+const (
+	unlockedWithoutPassphrase = "パスフレーズ無し"
+	unlockedWithStored        = "保存済みパスフレーズで復号"
+	unlockedWithTyped         = "入力したパスフレーズで復号"
+)
+
+// signerFor は、鍵ファイルを読んで署名できる形にし、どう復号したかも返す。
+func (a Auth) signerFor(path string, prompt Prompter) (ssh.Signer, string, error) {
 	contents, err := a.read(path)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	private, err := keys.DecodePrivateKey(contents, nil)
 	if err == nil {
-		return ssh.NewSignerFromKey(private)
+		signer, err := ssh.NewSignerFromKey(private)
+		return signer, unlockedWithoutPassphrase, err
 	}
 	if !errors.Is(err, keys.ErrPassphraseRequired) {
-		return nil, err
+		return nil, "", err
 	}
 
 	// 保存されているパスフレーズを先に試す。ユーザーに尋ねる前に、結果を既に
@@ -337,31 +401,34 @@ func (a Auth) signerFor(path string, prompt Prompter) (ssh.Signer, error) {
 		if passphrase, found := a.Stored(path); found {
 			private, err := keys.DecodePrivateKey(contents, []byte(passphrase))
 			if err == nil {
-				return ssh.NewSignerFromKey(private)
+				signer, err := ssh.NewSignerFromKey(private)
+				return signer, unlockedWithStored, err
 			}
 			if !errors.Is(err, keys.ErrWrongPassphrase) {
-				return nil, err
+				return nil, "", err
 			}
+			a.trace.say(Detailed, "鍵 %s：保存済みパスフレーズが合いません。", path)
 		}
 	}
 	if prompt == nil {
-		return nil, keys.ErrPassphraseRequired
+		return nil, "", keys.ErrPassphraseRequired
 	}
 
 	for attempt := 0; attempt < maxPassphraseAttempts; attempt++ {
 		passphrase, err := prompt.Secret("Enter passphrase for key '" + path + "': ")
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
 		private, err := keys.DecodePrivateKey(contents, []byte(passphrase))
 		if err == nil {
-			return ssh.NewSignerFromKey(private)
+			signer, err := ssh.NewSignerFromKey(private)
+			return signer, unlockedWithTyped, err
 		}
 		if !errors.Is(err, keys.ErrWrongPassphrase) {
-			return nil, err
+			return nil, "", err
 		}
 	}
-	return nil, keys.ErrWrongPassphrase
+	return nil, "", keys.ErrWrongPassphrase
 }
 
 func (a Auth) agentSigners() ([]ssh.Signer, error) {
@@ -374,7 +441,15 @@ func (a Auth) agentSigners() ([]ssh.Signer, error) {
 	}
 	// Signer は認証中にこの接続を使う。methodsWithCleanupを使う接続経路は
 	// handshake終了時に明示的に閉じる。
-	return agent.NewClient(conn).Signers()
+	signers, err := agent.NewClient(conn).Signers()
+	if err != nil {
+		return nil, err
+	}
+	a.trace.say(Detailed, "agent の鍵：%d 件（%s）", len(signers), a.AgentSocket)
+	for _, signer := range signers {
+		a.trace.say(Full, "agent の鍵：%s", describeKey(signer.PublicKey()))
+	}
+	return signers, nil
 }
 
 func (a Auth) read(path string) ([]byte, error) {
