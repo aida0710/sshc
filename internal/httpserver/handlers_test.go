@@ -232,3 +232,73 @@ func TestHealthRequiresSessionCookie(t *testing.T) {
 		t.Fatalf("body = %s", got)
 	}
 }
+
+func TestSignOutRevokesTheSessionAndTheRegistrationItNames(t *testing.T) {
+	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	registrations := browserauth.NewStore(workspace, rand.Reader)
+	if err := registrations.SetPort(43123); err != nil {
+		t.Fatal(err)
+	}
+	manager, bootstrap, err := session.NewManager(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := echo.New()
+	e.Use((Security{
+		ExpectedHost: "127.0.0.1:43123", ExpectedOrigin: "http://127.0.0.1:43123",
+		Sessions: manager, Unlocked: alwaysUnlocked,
+	}).Middleware)
+	handlers := Handlers{Sessions: manager, BrowserAuth: registrations}
+	e.POST("/api/v1/session/bootstrap", handlers.Bootstrap)
+	e.POST("/api/v1/session/recover", handlers.Recover)
+	e.POST("/api/v1/session/sign-out", handlers.SignOut)
+	e.GET("/api/v1/health", handlers.Health)
+	call := func(method, path string, cookie *http.Cookie, headers map[string]string) *httptest.ResponseRecorder {
+		request := httptest.NewRequest(method, path, nil)
+		request.Host = "127.0.0.1:43123"
+		request.Header.Set(echo.HeaderOrigin, "http://127.0.0.1:43123")
+		request.Header.Set("Sec-Fetch-Site", "same-origin")
+		if cookie != nil {
+			request.AddCookie(cookie)
+		}
+		for name, value := range headers {
+			request.Header.Set(name, value)
+		}
+		response := httptest.NewRecorder()
+		e.ServeHTTP(response, request)
+		return response
+	}
+
+	entered := call(http.MethodPost, "/api/v1/session/bootstrap", nil, map[string]string{"X-SSHC-Bootstrap": bootstrap})
+	if entered.Code != http.StatusOK {
+		t.Fatalf("bootstrap status=%d", entered.Code)
+	}
+	var established api.BootstrapResponse
+	if err := json.NewDecoder(entered.Body).Decode(&established); err != nil {
+		t.Fatal(err)
+	}
+	cookie := entered.Result().Cookies()[0]
+	authenticated := map[string]string{CSRFHeader: established.CsrfToken, "X-SSHC-Browser": *established.BrowserToken}
+
+	// Without the CSRF token the request is refused like any other mutation.
+	if refused := call(http.MethodPost, "/api/v1/session/sign-out", cookie, nil); refused.Code != http.StatusForbidden {
+		t.Fatalf("sign-out without CSRF status=%d, want 403", refused.Code)
+	}
+	signedOut := call(http.MethodPost, "/api/v1/session/sign-out", cookie, authenticated)
+	if signedOut.Code != http.StatusNoContent {
+		t.Fatalf("sign-out status=%d body=%s", signedOut.Code, signedOut.Body.String())
+	}
+	cleared := signedOut.Result().Cookies()
+	if len(cleared) != 1 || cleared[0].Name != SessionCookie || cleared[0].MaxAge >= 0 {
+		t.Fatalf("sign-out cookies=%#v, want the session cookie cleared", cleared)
+	}
+	if after := call(http.MethodGet, "/api/v1/health", cookie, map[string]string{CSRFHeader: established.CsrfToken}); after.Code != http.StatusUnauthorized {
+		t.Fatalf("health after sign-out status=%d, want 401", after.Code)
+	}
+	if recovered := call(http.MethodPost, "/api/v1/session/recover", nil, map[string]string{"X-SSHC-Browser": *established.BrowserToken}); recovered.Code != http.StatusUnauthorized {
+		t.Fatalf("recover after sign-out status=%d, want 401", recovered.Code)
+	}
+}

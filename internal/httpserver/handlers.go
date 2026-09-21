@@ -101,6 +101,24 @@ func (h Handlers) Recover(c *echo.Context) error {
 	return c.JSON(http.StatusOK, api.BootstrapResponse{CsrfToken: credentials.CSRFToken, BrowserToken: &rotated})
 }
 
+// SignOut は、このブラウザーのセッションを消し、登録 token が添えられていれば
+// 登録も消す。cookie と CSRF の検査は他の API と同じ経路で済んでいる。
+// 登録を消すと engine を再起動しても入り直せないので、次に入るには `sshc open`
+// の URL が要る。
+func (h Handlers) SignOut(c *echo.Context) error {
+	if h.Sessions == nil {
+		return problem(c, http.StatusInternalServerError, "bootstrap_failed")
+	}
+	if presented := c.Request().Header.Get("X-SSHC-Browser"); presented != "" && h.BrowserAuth != nil {
+		if _, err := h.BrowserAuth.Forget(presented); err != nil {
+			return problem(c, http.StatusInternalServerError, "browser_registration_failed")
+		}
+	}
+	h.Sessions.Revoke(sessionCookie(c.Request()))
+	clearSessionCookie(c)
+	return c.NoContent(http.StatusNoContent)
+}
+
 func sessionCookie(request *http.Request) string {
 	cookie, err := request.Cookie(SessionCookie)
 	if err != nil {
@@ -114,6 +132,17 @@ func setSessionCookie(c *echo.Context, sessionID string) {
 		Name:     SessionCookie,
 		Value:    sessionID,
 		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteStrictMode,
+	})
+}
+
+func clearSessionCookie(c *echo.Context) {
+	c.SetCookie(&http.Cookie{
+		Name:     SessionCookie,
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
 		HttpOnly: true,
 		SameSite: http.SameSiteStrictMode,
 	})
