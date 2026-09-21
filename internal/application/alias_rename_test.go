@@ -26,11 +26,17 @@ func TestFailedAliasRenameRestoresConfigSecretsAndStartup(t *testing.T) {
 				t.Fatal(err)
 			}
 			manager := storage.NewManager(workspace, time.Now, rand.Reader)
-			manager.Seal, manager.Unseal = harness.secrets.SealBackup, harness.secrets.OpenBackup
+			// Reopen every participant on the same workspace: macOS resolves
+			// its temporary directory symlink when the existing root is opened.
+			secrets := secret.NewService(workspace, manager, time.Now)
+			if err := secrets.Unlock(connectionUpdatePassphrase); err != nil {
+				t.Fatal(err)
+			}
+			manager.Seal, manager.Unseal = secrets.SealBackup, secrets.OpenBackup
 			service := NewService(workspace, manager)
 			store := snippets.NewStore(workspace, snippets.Protection{
-				Seal: harness.secrets.SealDocument, Open: harness.secrets.OpenDocument,
-				WithMutation: harness.secrets.WithStableSnapshot,
+				Seal: secrets.SealDocument, Open: secrets.OpenDocument,
+				WithMutation: secrets.WithStableSnapshot,
 			})
 			service.SetStartupRenamer(store)
 			library := snippets.NewService(snippets.Options{
@@ -56,7 +62,7 @@ func TestFailedAliasRenameRestoresConfigSecretsAndStartup(t *testing.T) {
 			}
 			injected := errors.New("injected alias commit failure")
 			fileSystem.path, fileSystem.err = filepath.Join(workspace.Root(), filepath.FromSlash(failedPath)), injected
-			_, err = service.SaveWithSecrets(harness.secrets, EditRequest{
+			_, err = service.SaveWithSecrets(secrets, EditRequest{
 				Kind: EditRename, Path: "config", Base: before, Alias: "edge", NewAlias: "renamed",
 			})
 			if !errors.Is(err, injected) {
@@ -68,7 +74,7 @@ func TestFailedAliasRenameRestoresConfigSecretsAndStartup(t *testing.T) {
 					t.Errorf("failed rename changed %s: %v", filepath.Base(path), err)
 				}
 			}
-			if got := passwordForCurrentTarget(t, service, harness.secrets, "edge"); got != "original-password" {
+			if got := passwordForCurrentTarget(t, service, secrets, "edge"); got != "original-password" {
 				t.Fatal("failed rename published the new vault in memory")
 			}
 			if _, err := library.PrepareStartupCommand("edge"); err != nil {

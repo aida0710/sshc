@@ -3,9 +3,11 @@ package remotesync_test
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"sshc/internal/platform/windowsacl/acltest"
 	"sshc/internal/remotesync"
 )
 
@@ -28,7 +30,7 @@ func TestLargeBackgroundCanBeAppliedAndReplacedBySync(t *testing.T) {
 	writer := newInstallation(t, bucket, nil)
 	receiver := newInstallation(t, bucket, nil)
 	for _, contents := range []string{strings.Repeat("x", 2<<20), strings.Repeat("y", 2<<20)} {
-		writer.write(t, asset, contents)
+		acltest.WritePrivateFile(t, filepath.Join(writer.workspace.Root(), filepath.FromSlash(asset)), []byte(contents))
 		if _, err := writer.service.PushUsing(t.Context(), keyOf(syncPassphrase), ""); err != nil {
 			t.Fatal(err)
 		}
