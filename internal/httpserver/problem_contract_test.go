@@ -111,42 +111,51 @@ func schemaNameFor(gotype string, schemas map[string]map[string]any) string {
 func wireTypesIn(t *testing.T, directory string) map[string][]string {
 	t.Helper()
 	set := token.NewFileSet()
-	packages, err := parser.ParseDir(set, directory, func(info os.FileInfo) bool {
-		return !strings.HasSuffix(info.Name(), "_test.go")
-	}, 0)
+	entries, err := os.ReadDir(directory)
 	if err != nil {
 		t.Fatal(err)
 	}
-	found := map[string][]string{}
-	for _, pkg := range packages {
-		for _, file := range pkg.Files {
-			ast.Inspect(file, func(node ast.Node) bool {
-				spec, ok := node.(*ast.TypeSpec)
-				if !ok {
-					return true
-				}
-				structure, ok := spec.Type.(*ast.StructType)
-				if !ok {
-					return true
-				}
-				var names []string
-				for _, field := range structure.Fields.List {
-					if field.Tag == nil {
-						continue
-					}
-					tag := reflect.StructTag(strings.Trim(field.Tag.Value, "`"))
-					name, _, _ := strings.Cut(tag.Get("json"), ",")
-					if name != "" && name != "-" {
-						names = append(names, name)
-					}
-				}
-				if len(names) != 0 {
-					slices.Sort(names)
-					found[spec.Name.Name] = names
-				}
-				return true
-			})
+	// build tag は見ない: OS 固有ファイルの struct も契約の一部である。
+	var files []*ast.File
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
 		}
+		file, err := parser.ParseFile(set, filepath.Join(directory, name), nil, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		files = append(files, file)
+	}
+	found := map[string][]string{}
+	for _, file := range files {
+		ast.Inspect(file, func(node ast.Node) bool {
+			spec, ok := node.(*ast.TypeSpec)
+			if !ok {
+				return true
+			}
+			structure, ok := spec.Type.(*ast.StructType)
+			if !ok {
+				return true
+			}
+			var names []string
+			for _, field := range structure.Fields.List {
+				if field.Tag == nil {
+					continue
+				}
+				tag := reflect.StructTag(strings.Trim(field.Tag.Value, "`"))
+				name, _, _ := strings.Cut(tag.Get("json"), ",")
+				if name != "" && name != "-" {
+					names = append(names, name)
+				}
+			}
+			if len(names) != 0 {
+				slices.Sort(names)
+				found[spec.Name.Name] = names
+			}
+			return true
+		})
 	}
 	return found
 }
