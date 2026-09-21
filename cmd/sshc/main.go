@@ -76,11 +76,9 @@ func dispatchInvocation(called invocation, home string, client *http.Client) int
 			engineOptions{Port: called.Port, Replace: called.Replace},
 			os.Stdin, os.Stdout, os.Stderr)
 	case invocationConnect:
-		return runConnect(ctx, called.Args[0], home, app.HandoffDir(home), client, os.Stdin, os.Stdout, os.Stderr)
+		return runConnect(ctx, called.Args[0], systemCommandEnvironment(home, client))
 	case invocationRun:
-		return runRemote(ctx, called.Args[0], remoteCommand(called.Args[1:]), home,
-			app.HandoffDir(home), client,
-			os.Stdin, os.Stdout, os.Stderr)
+		return runRemote(ctx, called.Args[0], remoteCommand(called.Args[1:]), systemCommandEnvironment(home, client))
 	case invocationChoose:
 		query := ""
 		if len(called.Args) != 0 {
@@ -94,7 +92,7 @@ func dispatchInvocation(called invocation, home string, client *http.Client) int
 			fmt.Fprintf(os.Stderr, "sshc: %v\n", err)
 			return 1
 		}
-		return runConnect(ctx, alias, home, app.HandoffDir(home), client, os.Stdin, os.Stdout, os.Stderr)
+		return runConnect(ctx, alias, systemCommandEnvironment(home, client))
 	case invocationList:
 		return runList(home, os.Stdout, os.Stderr)
 	case invocationInfo:
@@ -114,18 +112,18 @@ func dispatchInvocation(called invocation, home string, client *http.Client) int
 	case invocationOTP:
 		otpCtx, cancel := signal.NotifyContext(ctx, os.Interrupt)
 		defer cancel()
-		return runOTP(otpCtx, *called.OTP, systemCommandEnvironment(app.HandoffDir(home), client))
+		return runOTP(otpCtx, *called.OTP, systemCommandEnvironment(home, client))
 	case invocationVault:
 		// password 読み取り中と loopback request 中の Ctrl-C を public 130 にする。
 		// engine の ownership signal は runEngine が別に持つため、ここでは利用者が
 		// 起動する短命な Vault command だけを対象にする。
 		vaultCtx, cancel := signal.NotifyContext(ctx, os.Interrupt)
 		defer cancel()
-		return runVault(vaultCtx, called.Args[0], systemCommandEnvironment(app.HandoffDir(home), vaultCommandClient(client)))
+		return runVault(vaultCtx, called.Args[0], systemCommandEnvironment(home, vaultCommandClient(client)))
 	case invocationSync:
 		syncCtx, cancel := signal.NotifyContext(ctx, os.Interrupt)
 		defer cancel()
-		return runSync(syncCtx, *called.Sync, systemCommandEnvironment(app.HandoffDir(home), client))
+		return runSync(syncCtx, *called.Sync, systemCommandEnvironment(home, client))
 	case invocationTerminal:
 		terminalCtx, cancel := signal.NotifyContext(ctx, os.Interrupt)
 		defer cancel()
