@@ -29,7 +29,7 @@ const proxyCommandGrace = 2 * time.Second
 const proxyCommandStderrLimit = 8 << 10
 
 // startProxyCommand は、その表記を起動し、その標準入出力を接続として返す。
-func startProxyCommand(command string) (net.Conn, error) {
+func startProxyCommand(command string, environment []string) (net.Conn, error) {
 	name, arguments, err := interpreter(command)
 	if err != nil {
 		return nil, err
@@ -48,6 +48,7 @@ func startProxyCommand(command string) (net.Conn, error) {
 
 	complaints := &boundedBuffer{limit: proxyCommandStderrLimit}
 	process := exec.Command(name, arguments...)
+	process.Env = environment
 	configureProxyCommandProcess(process, command)
 	process.Stdin = childStdin
 	process.Stdout = childStdout

@@ -76,6 +76,9 @@ var allowedToStartPrograms = []string{
 	// 暗黙に起動しない。起動する表記は接続のたびに端末へ 1 行出る
 	// （tracer.announce）。既定が無言であることの、ただ一つの例外である。
 	"internal/sshclient/proxycommand.go",
+	// 常駐engineのProxyCommandに渡すPATHだけをログインシェルから取得する。
+	// 固定の取得コマンドを使い、ssh_configの本文は渡さない。
+	"internal/platform/proxy_environment_unix.go",
 }
 
 // TestOnlyTheNamedSubsystemsStartAProgram は、プロセスを起動する場所を固定する。

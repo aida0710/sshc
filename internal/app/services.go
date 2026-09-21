@@ -16,6 +16,7 @@ import (
 	"sshc/internal/diagnostics"
 	"sshc/internal/keys"
 	"sshc/internal/knownhosts"
+	"sshc/internal/platform"
 	"sshc/internal/recent"
 	"sshc/internal/remotekey"
 	"sshc/internal/remotesync"
@@ -102,6 +103,11 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 		oneTimeCode: storedTOTP(passwordService),
 		vpnRoute:    vpnRoute(vpnProfiles, vpnSessions),
 	})
+	if dependencies.Environ != nil {
+		ssh.dialer.ProxyEnvironment = func(ctx context.Context) ([]string, error) {
+			return platform.ProxyEnvironment(ctx, dependencies.Environ())
+		}
+	}
 	recentService := recent.NewService(recentStore, func(alias string) (recent.Target, error) {
 		target, err := ssh.target(alias)
 		if err != nil {
