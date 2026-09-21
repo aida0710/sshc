@@ -11,11 +11,12 @@ import (
 
 	"sshc/internal/enginelock"
 	"sshc/internal/platform/nativepath"
+	"sshc/internal/platform/nofollow"
 )
 
 var (
 	ErrOutsideWorkspace = errors.New("path is outside the sshc workspace")
-	ErrSymlinkPath      = errors.New("path contains a symbolic link")
+	ErrSymlinkPath      = nofollow.ErrSymlinkPath
 	ErrMissingDirectory = errors.New("parent directory does not exist")
 	ErrNotDirectory     = errors.New("path component is not a directory")
 	ErrInvalidHome      = errors.New("home directory must be an absolute path")

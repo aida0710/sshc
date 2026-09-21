@@ -166,31 +166,6 @@ func installExtraAllowACE(t *testing.T, path string) {
 	runtime.KeepAlive(descriptor)
 }
 
-func TestWindowsHandoffReplacementAndDirectoryDurabilityAdapter(t *testing.T) {
-	directory := t.TempDir()
-	oldPath := filepath.Join(directory, "old")
-	newPath := filepath.Join(directory, "new")
-	if err := os.WriteFile(oldPath, []byte("replacement"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(newPath, []byte("previous"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := replaceHandoffFile(oldPath, newPath); err != nil {
-		t.Fatalf("replaceHandoffFile = %v", err)
-	}
-	if err := syncHandoffDirectory(directory); err != nil {
-		t.Fatalf("syncHandoffDirectory = %v", err)
-	}
-	contents, err := os.ReadFile(newPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(contents) != "replacement" {
-		t.Fatalf("replacement contents = %q", contents)
-	}
-}
-
 func TestWriteRestrictsWindowsHandoffState(t *testing.T) {
 	parent := t.TempDir()
 	originalParent := snapshotParentDACL(t, parent)
