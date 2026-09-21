@@ -28,6 +28,9 @@ type Dialer struct {
 	HostKeys  HostKeys
 	// Dial は TCP を開く。nil なら net.Dialer。テストと、将来の別の輸送のためにある。
 	Dial func(ctx context.Context, network, address string) (net.Conn, error)
+	// ProxyEnvironmentはProxyCommandを起動するときだけ呼ぶ。nilなら親の環境を使う。
+	// 取得に失敗した場合は返された環境を使い、理由を接続ログへ表示する。
+	ProxyEnvironment func(context.Context) ([]string, error)
 	// Verbosity は、接続の途中経過をどこまで端末へ書くかを、接続のたびに
 	// 返す。nil なら無言である。
 	//
@@ -351,7 +354,18 @@ func (d Dialer) open(ctx context.Context, target Target, through *ssh.Client, tr
 			return nil, ErrProxyCommandThroughJump
 		}
 		trace.announce("ProxyCommand を実行します：%s", target.ProxyCommand)
-		return startProxyCommand(target.ProxyCommand)
+		var environment []string
+		if d.ProxyEnvironment != nil {
+			var err error
+			environment, err = d.ProxyEnvironment(ctx)
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			if err != nil {
+				trace.announce("ログインシェルのPATHを取得できないため、起動元のPATHを使います：%v", err)
+			}
+		}
+		return startProxyCommand(target.ProxyCommand, environment)
 	}
 	if through != nil {
 		return through.DialContext(ctx, "tcp", target.Address())

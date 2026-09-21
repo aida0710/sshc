@@ -14,6 +14,7 @@ import (
 	"sshc/internal/diagnostics"
 	"sshc/internal/keys"
 	"sshc/internal/knownhosts"
+	"sshc/internal/platform"
 	"sshc/internal/recent"
 	"sshc/internal/remotekey"
 	"sshc/internal/remotesync"
@@ -83,6 +84,11 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 	// プロセス内 SSH クライアントの依存関係をここで一度だけ組み立てる。
 	ssh := newSSHParts(configService, knownHostsService, workspace.Home(),
 		storedPassphrase(passwordService, workspace.Root()), storedPassword(passwordService), storedTOTP(passwordService))
+	if dependencies.Environ != nil {
+		ssh.dialer.ProxyEnvironment = func(ctx context.Context) ([]string, error) {
+			return platform.ProxyEnvironment(ctx, dependencies.Environ())
+		}
+	}
 	recentService := recent.NewService(recentStore, func(alias string) (recent.Target, error) {
 		target, err := ssh.target(alias)
 		if err != nil {

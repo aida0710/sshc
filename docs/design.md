@@ -169,20 +169,23 @@
 
   しかし、`cloudflared access ssh`、`aws ssm start-session`、組織固有の bastion helper など、`ProxyCommand` を必要とする設定は一般的です。接続一覧には表示される一方、実際には接続できない状態になるため、方針を変更しました。
 
+  自動起動したengineは、ターミナルのzshなどが設定したPATHを引き継がない場合があります。コマンドの文法を`/bin/sh`へ統一しても、PATHの不足は解消しません。そのため、engineはProxyCommandの起動時にログインシェルからPATHを取得し、コマンドの解釈とは分けて扱います。接続のたびに取得することで、シェルのPATH設定を変えた後の接続にも反映します。
+
   現在は次の条件で実行します。
 
   - 接続時に、実行する ProxyCommand を端末へ 1 行表示します
-  - 利用者の `~/.ssh/config` に書かれたコマンドだけを実行します。`%h`、`%p`、`%r`、`%n` を展開し、POSIX では `/bin/sh -c "exec ..."`、Windows では `cmd.exe /c` を使用します
-  - `$SHELL` は使用しません。engine の起動元である tmux や systemd の環境変数に接続動作が依存しないよう、POSIX では常に `/bin/sh` を使用します
+  - ProxyCommand本体は利用者の`~/.ssh/config`に書かれたコマンドを実行します。`%h`、`%p`、`%r`、`%n`を展開し、POSIXでは`/bin/sh -c "exec ..."`、Windowsでは`cmd.exe /c`を使用します
+  - macOS／Linuxのengineは、ProxyCommandの起動時にログインシェルを対話モードで開き、PATHだけを取得します。これにより、自動起動でも`.zprofile`や`.zshrc`などで追加した`aws`や`session-manager-plugin`を探せます。シェルはローカルTerminalと同じ規則（実行可能な絶対パスの`SHELL`、無ければOS別の候補）で選びます。取得したPATHはそのProxyCommandと子プロセスだけへ渡し、engineの環境は変更しません。CLI接続は呼び出し元の環境をそのまま使います
+  - PATHの取得に渡すのは固定コマンドだけです。起動設定の標準出力・標準エラーはSSH通信へ混ぜず、PATH以外の環境変数・alias・関数も取り込みません。最大5秒、取得出力64 KiBで打ち切り、失敗時は接続ログへ理由を表示して起動元のPATHを使います。接続自体のキャンセル・タイムアウト時にはProxyCommandを起動しません。Windows／Androidではこの取得処理を行いません
   - `ProxyJump` と `ProxyCommand` の両方が書かれた設定は、OpenSSH（10.2 で確認）と同じく先に受理した方だけを使い、後から来た行を無視します。無視した行は解決結果の `proxy_ignored` として Analysis に出します。`ProxyCommand none` の後の `ProxyJump` は無視されます。`ProxyJump none` の後の `ProxyCommand` は OpenSSH の版で結果が割れ（readconf.c の CVE-2026-35386 対応より前は無視、以後は有効）、この解決器は新しい方に合わせて有効にします
   - jump host 経由で到達する先では `ProxyCommand` を使用できません。コマンドはローカルマシンで実行され、jump host 内では実行されないためです
   - 接続失敗時は、コマンドの標準エラー出力を理由に含めます
   - 接続終了時にパイプを閉じ、2 秒以内に終了しない場合はプロセスを強制終了します
 
-  `internal/acceptance` の `TestOnlyTheNamedSubsystemsStartAProgram` は外部プログラムを起動する場所を allowlist で検査します。`internal/sshclient/proxycommand.go` は 4 番目の許可箇所です。
+  `internal/acceptance` の `TestOnlyTheNamedSubsystemsStartAProgram` は外部プログラムを起動する場所をallowlistで検査します。ProxyCommand本体は`internal/sshclient/proxycommand.go`、PATHの取得は`internal/platform/proxy_environment_unix.go`から起動します。
 
-- 接続時にこのアプリケーションが実行する外部コマンドは、利用者が指定した `ProxyCommand` だけです。`ssh-keygen` はハードウェア鍵用のコマンド例として表示しますが、アプリケーションからは実行しません。`Toolchain.KeyGen()` は、その選択肢を表示できるか確認するためだけに使用します。agent への登録は `x/crypto/ssh/agent` で直接行います。
-- 未使用になった外部コマンド実行インターフェース `RunOutput` は削除しました。現在、Go の製品コードから外部プログラムを起動する場所は 4 箇所です。`cmd/sshc/browser.go` はアクセス URL をブラウザへ渡し、`internal/terminal/pty_unix.go` はローカルシェル用の PTY を起動し、`internal/nativebuild/nativebuild.go` は配布物に含まれないビルドコマンドを実行し、`internal/sshclient/proxycommand.go` は利用者が設定した `ProxyCommand` を実行します。いずれも `os/exec` を直接使用します。`TestOnlyTheNamedSubsystemsStartAProgram` は `.go` ファイルを走査し、この allowlist 以外に外部プロセス起動が追加された場合に失敗します。
+- 接続時にこのアプリケーションが実行する外部コマンドは、利用者が指定した`ProxyCommand`と、そのPATHを取得するログインシェルです。`ssh-keygen`はハードウェア鍵用のコマンド例として表示しますが、アプリケーションからは実行しません。`Toolchain.KeyGen()`は、その選択肢を表示できるか確認するためだけに使用します。agentへの登録は`x/crypto/ssh/agent`で直接行います。
+- 外部プログラムの起動箇所は`TestOnlyTheNamedSubsystemsStartAProgram`のallowlistで管理します。ブラウザ起動、更新、自動起動サービスの管理、ローカルTerminal、配布物のビルド、ProxyCommandとそのPATH取得が対象です。検査は`.go`ファイルを走査し、allowlist以外に外部プロセス起動が追加された場合に失敗します。
 - 未対応の設定は無視せず、理由を警告として表示します。対象は `RemoteForward`（リモート側の listen と `AllowTcpForwarding` に依存）、`ForwardX11`（接続先となる X server がない）、`ControlMaster` / `ControlPath`（プロセス内の `ssh.Client` を再利用するため不要）、`SendEnv`（engine の環境変数は利用者の shell 環境と一致しない）、`CertificateFile`、`LocalCommand`（接続後のローカルコマンド実行は未対応）です。
 - ポート転送（`LocalForward` / `DynamicForward`）と agent 転送（`ForwardAgent`）に対応します。有効な転送はコンソール一覧に表示し、設定ファイルから暗黙に開かれたローカルポートを確認できるようにします。
 - 転送用 listener はループバックにだけ bind します。`LocalForward 0.0.0.0:8080` や `GatewayPorts yes` が設定されていても、他のマシンには公開しません。ただしループバックは同一OSユーザーへの隔離ではなく、共有ホストでは別のローカルユーザーから利用される可能性があります。ループバック以外の指定は警告します。ポートを確保できない転送があっても SSH 接続は継続し、失敗理由を一覧に表示します。
