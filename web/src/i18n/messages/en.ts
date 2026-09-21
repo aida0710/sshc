@@ -708,7 +708,7 @@ export const en = {
   "terminal.paletteLabel": "Colour scheme",
   "terminal.verbosityLabel": "Connection log",
   "terminal.verbosityHint":
-    "Displays diagnostics available to sshc, including connection stages, authentication methods and saved-TOTP availability. Applies to new connections and never prints secret values.",
+    "Displays diagnostics available to sshc, including connection stages, the host key check, the keys and authentication methods tried and whether saved credentials could be used. Applies to new connections and never prints secret values.",
   "terminal.verbosityQuiet": "None",
   "terminal.verbosityBrief": "Basic details (-v)",
   "terminal.verbosityDetailed": "Keys, hops and timings (-vv)",

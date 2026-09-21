@@ -42,10 +42,69 @@ type HostKeys struct {
 // のは、その接続を開いた端末でなければならない。別の端末に出た問いは、
 // 誰も判定できないまま接続を止める。
 func (h HostKeys) Callback(target Target, prompt Prompter) ssh.HostKeyCallback {
+	return h.callback(target, prompt, nil)
+}
+
+// callback は、検証の経過を接続ログにも書く Callback である。
+//
+// 鍵の指紋と照合の結果を言うのは、「一致しない鍵」と断られたユーザーが、
+// どの鍵が来て known_hosts のどれと比べたのかを知る手段が他に無いからである。
+func (h HostKeys) callback(target Target, prompt Prompter, trace *tracer) ssh.HostKeyCallback {
 	return func(_ string, _ net.Addr, key ssh.PublicKey) error {
-		return h.verify(target, key, prompt)
+		trace.say(Detailed, "サーバーのホスト鍵：%s", describeKey(key))
+		verdict, err := h.verify(target, key, prompt)
+		for _, conflicting := range verdict.conflicting {
+			trace.say(Detailed, "known_hosts の %d 行目には別の鍵があります：%s", conflicting.number, conflicting.key)
+		}
+		if err != nil {
+			trace.say(Detailed, "ホスト鍵を受け入れませんでした：%v", err)
+			return err
+		}
+		switch verdict.outcome {
+		case hostKeyKnown:
+			trace.say(Detailed, "ホスト鍵は known_hosts の %d 行目と一致しました。", verdict.matchedLine)
+		case hostKeyTrusted:
+			trace.say(Detailed, "known_hosts に無いホストを、StrictHostKeyChecking %s に従って受け入れました。", target.Strict)
+		case hostKeyConfirmed:
+			trace.say(Detailed, "known_hosts に無いホストを、確認のうえ受け入れました。")
+		}
+		if verdict.outcome != hostKeyKnown && h.Add == nil {
+			trace.say(Detailed, "この鍵は known_hosts に書きません。次の接続でも同じ確認になります。")
+		}
+		return nil
 	}
 }
+
+// hostKeyVerdict は、提示された鍵をどう扱ったかである。接続ログが言うためにある。
+//
+// 断った場合にも conflicting は埋まる。「一致しない鍵」と言われたユーザーが
+// 見たいのは、どの行のどの鍵と比べたかである。
+type hostKeyVerdict struct {
+	outcome hostKeyOutcome
+	// matchedLine は、一致した known_hosts の行番号である。outcome が
+	// hostKeyKnown のときだけ意味を持つ。
+	matchedLine int
+	// conflicting は、同じホストについて別の鍵を書いている known_hosts の行である。
+	conflicting []conflictingHostKey
+}
+
+type conflictingHostKey struct {
+	number int
+	// key は種類と指紋である。鍵そのものは書かない。長すぎて突き合わせに向かない。
+	key string
+}
+
+// hostKeyOutcome は、提示された鍵をなぜ受け入れたかである。
+type hostKeyOutcome int
+
+const (
+	// hostKeyKnown は、known_hosts の行と一致した。
+	hostKeyKnown hostKeyOutcome = iota + 1
+	// hostKeyTrusted は、StrictHostKeyChecking が尋ねずに受け入れる設定だった。
+	hostKeyTrusted
+	// hostKeyConfirmed は、ユーザーが問いに yes と答えた。
+	hostKeyConfirmed
+)
 
 // defaultHostKeyAlgorithms は、他に手がかりが無いときに名乗る順である。
 //
@@ -130,15 +189,15 @@ func signatureAlgorithms(keyType string) []string {
 	return []string{keyType}
 }
 
-func (h HostKeys) verify(target Target, key ssh.PublicKey, prompt Prompter) error {
+func (h HostKeys) verify(target Target, key ssh.PublicKey, prompt Prompter) (hostKeyVerdict, error) {
 	field := hostField(target.HostName, target.Port)
 	offered := base64.StdEncoding.EncodeToString(key.Marshal())
 
-	matchedHost := false
+	var verdict hostKeyVerdict
 	if h.Read != nil {
 		contents, err := h.Read()
 		if err != nil {
-			return err
+			return verdict, err
 		}
 		for _, line := range knownhosts.ParseFile(contents).Lines {
 			entry := line.Entry
@@ -147,7 +206,7 @@ func (h HostKeys) verify(target Target, key ssh.PublicKey, prompt Prompter) erro
 			}
 			if strings.EqualFold(entry.Marker, "@revoked") {
 				if entry.Key == offered {
-					return ErrHostKeyRevoked
+					return verdict, ErrHostKeyRevoked
 				}
 				continue
 			}
@@ -157,38 +216,42 @@ func (h HostKeys) verify(target Target, key ssh.PublicKey, prompt Prompter) erro
 			if entry.Marker != "" {
 				continue
 			}
-			matchedHost = true
 			if entry.Key == offered {
-				return nil
+				return hostKeyVerdict{outcome: hostKeyKnown, matchedLine: line.Number}, nil
 			}
+			verdict.conflicting = append(verdict.conflicting, conflictingHostKey{
+				number: line.Number, key: entry.KeyType + " " + entry.Fingerprint,
+			})
 		}
 	}
-	if matchedHost {
-		return ErrHostKeyChanged
+	if len(verdict.conflicting) > 0 {
+		return verdict, ErrHostKeyChanged
 	}
-	return h.accept(target, key, offered, prompt)
+	outcome, err := h.accept(target, key, offered, prompt)
+	verdict.outcome = outcome
+	return verdict, err
 }
 
 // accept は、未知のホストをどう扱うかを StrictHostKeyChecking で決める。
-func (h HostKeys) accept(target Target, key ssh.PublicKey, offered string, prompt Prompter) error {
+func (h HostKeys) accept(target Target, key ssh.PublicKey, offered string, prompt Prompter) (hostKeyOutcome, error) {
 	switch target.Strict {
 	case "yes":
-		return ErrHostKeyUnknown
+		return 0, ErrHostKeyUnknown
 	case "no", "off", "accept-new":
-		return h.remember(target, key, offered)
+		return hostKeyTrusted, h.remember(target, key, offered)
 	}
 
 	if prompt == nil {
-		return ErrHostKeyUnknown
+		return 0, ErrHostKeyUnknown
 	}
 	accepted, err := prompt.Confirm(UnknownHostPrompt(target, key))
 	if err != nil {
-		return err
+		return 0, err
 	}
 	if !accepted {
-		return ErrHostKeyUnknown
+		return 0, ErrHostKeyUnknown
 	}
-	return h.remember(target, key, offered)
+	return hostKeyConfirmed, h.remember(target, key, offered)
 }
 
 func (h HostKeys) remember(target Target, key ssh.PublicKey, offered string) error {
