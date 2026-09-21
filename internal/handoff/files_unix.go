@@ -5,12 +5,7 @@ package handoff
 import "os"
 
 func defaultWriteOperations() writeOperations {
-	return writeOperations{
-		ensureDirectory: ensureHandoffDirectory,
-		createTemp:      os.CreateTemp,
-		replace:         replaceHandoffFile,
-		syncDirectory:   syncHandoffDirectory,
-	}
+	return writeOperations{ensureDirectory: ensureHandoffDirectory}
 }
 
 func defaultHandoffFileOperations() handoffFileOperations {
@@ -30,17 +25,4 @@ func ensureHandoffDirectory(path string) error {
 		return err
 	}
 	return os.Chmod(path, 0o700)
-}
-
-func replaceHandoffFile(oldPath, newPath string) error {
-	return os.Rename(oldPath, newPath)
-}
-
-func syncHandoffDirectory(path string) error {
-	directory, err := os.Open(path)
-	if err != nil {
-		return err
-	}
-	defer directory.Close()
-	return directory.Sync()
 }

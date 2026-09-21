@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sshc/internal/storage"
 )
 
 // FileName は、アプリケーションの状態ディレクトリ内のハンドオフファイル。
@@ -82,11 +83,15 @@ func mint(random io.Reader, encode func([]byte) string) (string, error) {
 	return encode(raw), nil
 }
 
+// temporaryPrefix は、公開前の文書を同じディレクトリに隠す名前の先頭。
+const temporaryPrefix = "." + FileName + ".tmp-"
+
 // Write は検証済みの文書を同じディレクトリ内で原子的に置き換える。
 //
 // 一時ファイルを別の場所に置くと Rename が copy になり、読み手が途中の JSON を
 // 見られる。したがって公開直前まで同じディレクトリに隠し、同期してから名前だけを
-// 差し替える。
+// 差し替える。置き換えそのものはワークスペースの他のファイルと同じ
+// storage.WriteAtomicFile で行う。
 func Write(directory string, document Handoff) error {
 	return write(directory, document, defaultWriteOperations())
 }
@@ -94,9 +99,9 @@ func Write(directory string, document Handoff) error {
 type writeOperations struct {
 	marshal         func(any) ([]byte, error)
 	ensureDirectory func(string) error
-	createTemp      func(string, string) (*os.File, error)
-	replace         func(string, string) error
-	syncDirectory   func(string) error
+	// fileSystem は原子的な置き換えを担う。nil なら OS の実装で、親ディレクトリを
+	// symlink をたどらずに開き、Windows では ACL を絞る。
+	fileSystem storage.FileSystem
 }
 
 type handoffFileOperations struct {
@@ -131,32 +136,11 @@ func write(directory string, document Handoff, operations writeOperations) error
 		return err
 	}
 	defer release()
-	temporary, err := operations.createTemp(directory, "."+FileName+".tmp-")
-	if err != nil {
-		return err
+	fileSystem := operations.fileSystem
+	if fileSystem == nil {
+		fileSystem = storage.OSFileSystem{}
 	}
-	temporaryPath := temporary.Name()
-	defer func() { _ = os.Remove(temporaryPath) }()
-	if err := temporary.Chmod(0o600); err != nil {
-		_ = temporary.Close()
-		return err
-	}
-	if _, err := temporary.Write(body); err != nil {
-		_ = temporary.Close()
-		return err
-	}
-	if err := temporary.Sync(); err != nil {
-		_ = temporary.Close()
-		return err
-	}
-	if err := temporary.Close(); err != nil {
-		return err
-	}
-	finalPath := filepath.Join(directory, FileName)
-	if err := operations.replace(temporaryPath, finalPath); err != nil {
-		return err
-	}
-	return operations.syncDirectory(directory)
+	return storage.WriteAtomicFile(fileSystem, filepath.Join(directory, FileName), temporaryPrefix, storage.FilePermission, body)
 }
 
 // Read は、動作中のアプリケーションが残した検証済みの文書を返す。
