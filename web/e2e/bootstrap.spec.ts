@@ -183,3 +183,20 @@ test("survives a reload", async ({ page, installation }) => {
   expect(await clickAndAwait(page, "Save Basic settings", "/api/v1/connections", "PATCH")).toBe(200);
   expect(await installation.read("config")).toContain("Port 2255");
 });
+
+test("signs out of this browser and does not re-enter on its own", async ({ page, context, installation }) => {
+  await openApplication(page, installation);
+  await openSection(page, "Menu");
+  const menu = page.getByRole("region", { name: "Menu" });
+  await menu.getByRole("button", { name: "Sign out of this browser" }).click();
+  await page.getByRole("dialog", { name: "Sign out of this browser?" })
+    .getByRole("button", { name: "Sign out of this browser" }).click();
+
+  await expect(page.getByRole("heading", { name: "Session ended" })).toBeVisible();
+  expect(await page.evaluate(() => window.localStorage.getItem("sshc.browser.registration.v1"))).toBeNull();
+  expect((await context.cookies()).find((cookie) => cookie.name === "sshc_session")).toBeUndefined();
+
+  // Reloading has nothing to recover from: the registration is gone as well.
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Session ended" })).toBeVisible();
+});
