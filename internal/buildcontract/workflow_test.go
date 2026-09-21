@@ -415,7 +415,7 @@ func validateGoSteps(job workflowJob) []string {
 			problems = append(problems, "the Windows test step must be Windows-only PowerShell")
 		}
 		for _, fragment := range []string{
-			"& go test -v -count=1 ./... 2>&1 | Tee-Object -FilePath",
+			"& go test -v -count=1 -timeout 20m ./... 2>&1 | Tee-Object -FilePath",
 			"$testExit = $LASTEXITCODE",
 			"exit $testExit",
 		} {
@@ -437,7 +437,7 @@ func validateGoSteps(job workflowJob) []string {
 	}
 	for _, fragment := range []string{
 		"$PSNativeCommandUseErrorActionPreference = $false",
-		"@(& go test -v -count=1 -race ./... 2>&1 | Tee-Object -FilePath",
+		"@(& go test -v -count=1 -race -timeout 20m ./... 2>&1 | Tee-Object -FilePath",
 		"$raceExit = $LASTEXITCODE",
 		"if ($raceExit -eq 0)",
 		"$raceOutput -ceq '-race is not supported on windows/amd64'",
