@@ -58,7 +58,7 @@ func TestProtectionModeRoundTripPreservesSecretsAndSettings(t *testing.T) {
 	if err != nil || !state.Unlocked || !state.Passwordless {
 		t.Fatalf("state: %+v, %v", state, err)
 	}
-	if got := restarted.BoundPasswordFor("server", testAuthenticationBinding); got != "credential-canary" {
+	if got := restarted.BoundFor(secret.KindPassword, "server", testAuthenticationBinding); got != "credential-canary" {
 		t.Fatalf("credential lost: %q", got)
 	}
 	if got, err := restarted.SyncSettings(); err != nil || got != settings {

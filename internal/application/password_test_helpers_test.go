@@ -13,11 +13,11 @@ func setTestBoundPassword(service *secret.Service, alias, password string) error
 }
 
 func testBoundPasswordFor(service *secret.Service, alias string) string {
-	return service.BoundPasswordFor(alias, testAuthenticationBinding)
+	return service.BoundFor(secret.KindPassword, alias, testAuthenticationBinding)
 }
 
 func assignTestBoundPassword(service *secret.Service, alias, name string) error {
-	return service.AssignPasswordCredential(alias, name, testAuthenticationBinding)
+	return service.AssignBoundCredential(secret.BoundAssignment{Kind: secret.KindPassword, Subject: alias, Name: name, Binding: testAuthenticationBinding})
 }
 
 func setPasswordForCurrentTarget(t *testing.T, service *Service, secrets *secret.Service, alias, password string) {
@@ -37,5 +37,5 @@ func passwordForCurrentTarget(t *testing.T, service *Service, secrets *secret.Se
 	if err != nil {
 		return ""
 	}
-	return secrets.BoundPasswordFor(alias, binding)
+	return secrets.BoundFor(secret.KindPassword, alias, binding)
 }

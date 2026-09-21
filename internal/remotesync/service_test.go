@@ -3430,7 +3430,7 @@ func TestSavedPasswordsTravelWhileMasterPasswordsStayLocal(t *testing.T) {
 	}
 
 	// 運ばれてきた。そして読み直されている。次のロック解除まで待たされない。
-	if got := receiver.BoundPasswordFor("bastion", binding); got != "the password for bastion" {
+	if got := receiver.BoundFor(secret.KindPassword, "bastion", binding); got != "the password for bastion" {
 		t.Fatalf("the password did not travel: %q", got)
 	}
 	// そして 2 台目は、いまも自分のマスターパスワードで開く。
@@ -3438,7 +3438,7 @@ func TestSavedPasswordsTravelWhileMasterPasswordsStayLocal(t *testing.T) {
 	if err := receiver.Unlock(receiverMaster); err != nil {
 		t.Fatalf("the second machine can no longer open its own vault: %v", err)
 	}
-	if got := receiver.BoundPasswordFor("bastion", binding); got != "the password for bastion" {
+	if got := receiver.BoundFor(secret.KindPassword, "bastion", binding); got != "the password for bastion" {
 		t.Fatalf("after unlocking with its own master password: %q", got)
 	}
 }
@@ -3464,7 +3464,7 @@ func TestAnExplicitEmptyVaultClearsCredentialsOnAnotherInstallation(t *testing.T
 	if err := second.service.Apply(initial); err != nil {
 		t.Fatal(err)
 	}
-	if got := receiver.BoundPasswordFor("bastion", binding); got != "password to revoke" {
+	if got := receiver.BoundFor(secret.KindPassword, "bastion", binding); got != "password to revoke" {
 		t.Fatalf("initial password = %q", got)
 	}
 
@@ -3497,14 +3497,14 @@ func TestAnExplicitEmptyVaultClearsCredentialsOnAnotherInstallation(t *testing.T
 	if err := second.service.Apply(removal); err != nil {
 		t.Fatal(err)
 	}
-	if got := receiver.BoundPasswordFor("bastion", binding); got != "" {
+	if got := receiver.BoundFor(secret.KindPassword, "bastion", binding); got != "" {
 		t.Fatalf("revoked password survived remote tombstone: %q", got)
 	}
 	receiver.Lock()
 	if err := receiver.Unlock("the second machine's master"); err != nil {
 		t.Fatal(err)
 	}
-	if got := receiver.BoundPasswordFor("bastion", binding); got != "" {
+	if got := receiver.BoundFor(secret.KindPassword, "bastion", binding); got != "" {
 		t.Fatalf("revoked password returned after unlock: %q", got)
 	}
 }

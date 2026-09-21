@@ -453,13 +453,13 @@ func TestTOTPIsNormalisedBoundAndRoundTripsThroughTheVault(t *testing.T) {
 		t.Fatal(err)
 	}
 	binding := strings.Repeat("ab", 32)
-	if err := vault.BindTOTP("bastion", binding); err != nil {
+	if err := vault.Bind(secret.KindTOTP, "bastion", binding); err != nil {
 		t.Fatal(err)
 	}
-	if value, ok := vault.BoundTOTPFor("bastion", binding); !ok || !strings.HasPrefix(value, "otpauth://totp/") {
+	if value, ok := vault.BoundFor(secret.KindTOTP, "bastion", binding); !ok || !strings.HasPrefix(value, "otpauth://totp/") {
 		t.Fatalf("BoundTOTPFor = %q, %t", value, ok)
 	}
-	if _, ok := vault.BoundTOTPFor("bastion", strings.Repeat("cd", 32)); ok {
+	if _, ok := vault.BoundFor(secret.KindTOTP, "bastion", strings.Repeat("cd", 32)); ok {
 		t.Fatal("TOTP was released after its authentication route changed")
 	}
 	sealed, err := vault.Seal()
@@ -470,7 +470,7 @@ func TestTOTPIsNormalisedBoundAndRoundTripsThroughTheVault(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if value, ok := reopened.BoundTOTPFor("bastion", binding); !ok || !strings.Contains(value, "secret=JBSWY3DPEHPK3PXP") {
+	if value, ok := reopened.BoundFor(secret.KindTOTP, "bastion", binding); !ok || !strings.Contains(value, "secret=JBSWY3DPEHPK3PXP") {
 		t.Fatalf("reopened TOTP = %q, %t", value, ok)
 	}
 }

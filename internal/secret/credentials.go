@@ -89,7 +89,7 @@ func (s *Service) SetBound(alias, password, binding string) error {
 		if err := vault.SetDedicatedPassword(alias, password); err != nil {
 			return err
 		}
-		return vault.BindPassword(alias, binding)
+		return vault.Bind(KindPassword, alias, binding)
 	})
 }
 
@@ -290,32 +290,26 @@ func (s *Service) AssignCredential(kind Kind, subject, name string) error {
 	return s.mutateVault(func(vault *Vault) error { return vault.Assign(kind, subject, name) })
 }
 
-// AssignTOTPCredential binds a named TOTP seed to the current resolved
-// authentication destination of one alias. It deliberately shares the same
-// route-binding boundary as account passwords.
-func (s *Service) AssignTOTPCredential(subject, name, binding string) error {
-	if !validAuthenticationBinding(binding) {
-		return ErrPasswordBindingRequired
-	}
-	return s.mutateVault(func(vault *Vault) error {
-		if err := vault.Assign(KindTOTP, subject, name); err != nil {
-			return err
-		}
-		return vault.BindTOTP(subject, binding)
-	})
+// BoundAssignment は、経路に束縛される資格情報（パスワード・TOTP）を alias に
+// 割り当てる要求。Binding は割り当てを確認したときの解決済み接続先。
+type BoundAssignment struct {
+	Kind    Kind
+	Subject string
+	Name    string
+	Binding string
 }
 
-// AssignPasswordCredential binds a named account password to the current
-// resolved authentication destination of one alias.
-func (s *Service) AssignPasswordCredential(subject, name, binding string) error {
-	if !validAuthenticationBinding(binding) {
+// AssignBoundCredential は名前付きの資格情報を、alias の現在の解決済み接続先に
+// 束縛して割り当てる。パスワードと TOTP は同じ境界を共有する。
+func (s *Service) AssignBoundCredential(assignment BoundAssignment) error {
+	if !validAuthenticationBinding(assignment.Binding) {
 		return ErrPasswordBindingRequired
 	}
 	return s.mutateVault(func(vault *Vault) error {
-		if err := vault.Assign(KindPassword, subject, name); err != nil {
+		if err := vault.Assign(assignment.Kind, assignment.Subject, assignment.Name); err != nil {
 			return err
 		}
-		return vault.BindPassword(subject, binding)
+		return vault.Bind(assignment.Kind, assignment.Subject, assignment.Binding)
 	})
 }
 
