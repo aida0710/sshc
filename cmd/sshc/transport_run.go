@@ -143,7 +143,7 @@ func describeSerialDevice(device serialtransport.Device) string {
 		}
 		parts = append(parts, "["+usb+"]")
 	}
-	identity := strings.Trim(strings.Join([]string{device.Manufacturer, device.Product}, " / "), " / ")
+	identity := strings.Trim(strings.Join([]string{device.Manufacturer, device.Product}, " / "), " /")
 	if identity != "" {
 		parts = append(parts, identity)
 	}
