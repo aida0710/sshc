@@ -704,6 +704,9 @@ func (v *Vault) BoundFor(kind Kind, subject, binding string) (string, bool) {
 // しなければならず、さもなければ参照は、誰も尋ねない名前の下に暗黙に孤児に
 // なる。
 func (v *Vault) Rename(kind Kind, from, to string) error {
+	if from == to {
+		return nil
+	}
 	if kind == KindPassword {
 		if value, ok := v.dedicatedPasswords[from]; ok {
 			if err := validate.Alias(to); err != nil {
@@ -737,6 +740,13 @@ func (v *Vault) Rename(kind Kind, from, to string) error {
 		}
 	}
 	delete(v.subjects[kind], from)
+	// A retired destination may still own a dedicated value. Its binding must
+	// never be replaced with the source's while that unrelated value survives.
+	if kind == KindPassword {
+		delete(v.dedicatedPasswords, to)
+	} else if kind == KindKeyPassphrase {
+		delete(v.dedicatedKeyPassphrases, to)
+	}
 	v.subjects[kind][to] = name
 	v.moveBinding(kind, from, to)
 	return nil

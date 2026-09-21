@@ -48,40 +48,45 @@ type idleRemote struct {
 }
 
 type RemotePool struct {
-	open  OpenRemote
-	now   func() time.Time
-	after func(time.Duration, func()) *time.Timer
+	resolve ResolveRemote
+	now     func() time.Time
+	after   func(time.Duration, func()) *time.Timer
 
 	mutex  sync.Mutex
 	idle   map[string][]idleRemote
 	closed bool
 }
 
-func NewRemotePool(open OpenRemote) *RemotePool {
-	return &RemotePool{open: open, now: time.Now, after: time.AfterFunc, idle: map[string][]idleRemote{}}
+func NewRemotePool(resolve ResolveRemote) *RemotePool {
+	return &RemotePool{resolve: resolve, now: time.Now, after: time.AfterFunc, idle: map[string][]idleRemote{}}
 }
 
-// Open hands out an idle connection to the host when one is still alive, and
-// dials otherwise.
+// Open resolves the current configuration before reusing a connection. The
+// opener captures that same target, so a concurrent edit cannot change its peer.
 func (p *RemotePool) Open(ctx context.Context, alias string) (Remote, error) {
+	target, err := p.resolve(ctx, alias)
+	if err != nil {
+		return nil, err
+	}
+	key := alias + "\x00" + target.Identity
 	for {
-		remote := p.takeIdle(alias)
+		remote := p.takeIdle(key)
 		if remote == nil {
 			break
 		}
 		if p.alive(ctx, remote) {
-			return p.wrap(alias, remote), nil
+			return p.wrap(key, remote), nil
 		}
 		_ = remote.Close()
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
 	}
-	remote, err := p.open(ctx, alias)
+	remote, err := target.Open(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return p.wrap(alias, remote), nil
+	return p.wrap(key, remote), nil
 }
 
 // Close shuts every idle connection and makes later releases close theirs.
@@ -89,11 +94,11 @@ func (p *RemotePool) Close() error {
 	p.mutex.Lock()
 	p.closed = true
 	var remotes []Remote
-	for alias, entries := range p.idle {
+	for key, entries := range p.idle {
 		for _, entry := range entries {
 			remotes = append(remotes, entry.remote)
 		}
-		delete(p.idle, alias)
+		delete(p.idle, key)
 	}
 	p.mutex.Unlock()
 	var joined []error
@@ -105,17 +110,17 @@ func (p *RemotePool) Close() error {
 	return errors.Join(joined...)
 }
 
-func (p *RemotePool) takeIdle(alias string) Remote {
+func (p *RemotePool) takeIdle(key string) Remote {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
-	entries := p.idle[alias]
+	entries := p.idle[key]
 	if len(entries) == 0 {
 		return nil
 	}
 	// The most recently released connection is the least likely to have been
 	// dropped by the host in the meantime.
 	last := entries[len(entries)-1]
-	p.idle[alias] = entries[:len(entries)-1]
+	p.idle[key] = entries[:len(entries)-1]
 	return last.remote
 }
 
@@ -129,22 +134,22 @@ func (p *RemotePool) alive(ctx context.Context, remote Remote) bool {
 
 // release puts a connection back for the next operation, or closes it when
 // the pool is closed or the host already has enough idle connections.
-func (p *RemotePool) release(alias string, remote Remote) error {
+func (p *RemotePool) release(key string, remote Remote) error {
 	p.mutex.Lock()
 	if p.closed {
 		p.mutex.Unlock()
 		return remote.Close()
 	}
 	var evicted Remote
-	entries := p.idle[alias]
+	entries := p.idle[key]
 	if len(entries) >= maxIdleRemotesPerHost {
 		evicted = entries[0].remote
 		entries = entries[1:]
 	}
 	since := p.now()
-	p.idle[alias] = append(entries, idleRemote{remote: remote, since: since})
+	p.idle[key] = append(entries, idleRemote{remote: remote, since: since})
 	p.mutex.Unlock()
-	p.after(RemoteIdleTimeout, func() { p.expire(alias, remote) })
+	p.after(RemoteIdleTimeout, func() { p.expire(key, remote) })
 	if evicted != nil {
 		return evicted.Close()
 	}
@@ -153,9 +158,9 @@ func (p *RemotePool) release(alias string, remote Remote) error {
 
 // expire closes a connection that has sat idle since it was released. One
 // that was taken and released again in the meantime has a newer timer.
-func (p *RemotePool) expire(alias string, remote Remote) {
+func (p *RemotePool) expire(key string, remote Remote) {
 	p.mutex.Lock()
-	entries := p.idle[alias]
+	entries := p.idle[key]
 	index := -1
 	for candidate, entry := range entries {
 		if entry.remote == remote && !p.now().Before(entry.since.Add(RemoteIdleTimeout)) {
@@ -163,7 +168,7 @@ func (p *RemotePool) expire(alias string, remote Remote) {
 		}
 	}
 	if index >= 0 {
-		p.idle[alias] = append(entries[:index:index], entries[index+1:]...)
+		p.idle[key] = append(entries[:index:index], entries[index+1:]...)
 	}
 	p.mutex.Unlock()
 	if index >= 0 {
@@ -171,8 +176,8 @@ func (p *RemotePool) expire(alias string, remote Remote) {
 	}
 }
 
-func (p *RemotePool) wrap(alias string, remote Remote) Remote {
-	pooled := &pooledRemote{Remote: remote, pool: p, alias: alias}
+func (p *RemotePool) wrap(key string, remote Remote) Remote {
+	pooled := &pooledRemote{Remote: remote, pool: p, key: key}
 	if _, ok := remote.(RangeRemote); ok {
 		return &pooledRangeRemote{pooledRemote: pooled}
 	}
@@ -183,14 +188,14 @@ func (p *RemotePool) wrap(alias string, remote Remote) Remote {
 // the pool, Discard closes it for real.
 type pooledRemote struct {
 	Remote
-	pool  *RemotePool
-	alias string
-	once  sync.Once
-	err   error
+	pool *RemotePool
+	key  string
+	once sync.Once
+	err  error
 }
 
 func (r *pooledRemote) Close() error {
-	r.once.Do(func() { r.err = r.pool.release(r.alias, r.Remote) })
+	r.once.Do(func() { r.err = r.pool.release(r.key, r.Remote) })
 	return r.err
 }
 

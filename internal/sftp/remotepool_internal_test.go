@@ -42,10 +42,12 @@ type poolHarness struct {
 func newPoolHarness(t *testing.T, alive func(*stubRemote) Remote) *poolHarness {
 	t.Helper()
 	harness := &poolHarness{clock: time.Date(2026, 9, 19, 3, 0, 0, 0, time.UTC)}
-	harness.pool = NewRemotePool(func(context.Context, string) (Remote, error) {
-		remote := &stubRemote{alive: true}
-		harness.dialled = append(harness.dialled, remote)
-		return alive(remote), nil
+	harness.pool = NewRemotePool(func(context.Context, string) (RemoteTarget, error) {
+		return RemoteTarget{Identity: "unchanged", Open: func(context.Context) (Remote, error) {
+			remote := &stubRemote{alive: true}
+			harness.dialled = append(harness.dialled, remote)
+			return alive(remote), nil
+		}}, nil
 	})
 	harness.pool.now = func() time.Time { return harness.clock }
 	harness.pool.after = func(_ time.Duration, expire func()) *time.Timer {

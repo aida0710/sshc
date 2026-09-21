@@ -104,7 +104,14 @@ func PlanEntriesWithIgnore(root string, base *Manifest, local map[string]LocalEn
 			continue
 		}
 		baseEntry, hadBase := baseEntries[item.Path]
-		contested := present && (!hadBase || !synchronizedEqual(localEntry, baseEntry))
+		// Absence after a synchronized version is a local deletion, not a new
+		// remote file. Keep unilateral local changes, including deletions.
+		localChanged := present && !hadBase || hadBase && (!present || !synchronizedEqual(localEntry, baseEntry))
+		remoteChanged := !hadBase || !synchronizedEqual(remoteEntry, baseEntry)
+		if localChanged && !remoteChanged && resolve != ResolveRemote {
+			continue
+		}
+		contested := localChanged && remoteChanged
 		if contested && resolve == ResolveNone {
 			// 両側で変更された内容は自動マージせず、digest だけを競合として報告する。
 			conflict := Conflict{

@@ -77,27 +77,41 @@ func (s *Store) Load() (Library, error) {
 	return library, err
 }
 
-func (s *Store) load(migrate bool) (Library, error) {
+type loadedDocument struct {
+	library  Library
+	contents []byte
+	legacy   bool
+}
+
+func (s *Store) readDocument() (loadedDocument, error) {
 	contents, err := s.workspace.FileSystem().ReadFile(s.Path())
 	if errors.Is(err, fs.ErrNotExist) {
-		return Library{Snippets: []Snippet{}, Startup: []Startup{}}, nil
+		return loadedDocument{library: Library{Snippets: []Snippet{}, Startup: []Startup{}}}, nil
 	}
 	if err != nil {
-		return Library{}, err
+		return loadedDocument{}, err
 	}
 	plaintext, openErr := s.protect.Open(contents)
 	legacy := errors.Is(openErr, ErrNotEncrypted)
 	if legacy {
 		plaintext = contents
 	} else if openErr != nil {
-		return Library{}, openErr
+		return loadedDocument{}, openErr
 	}
 	library, err := decodeDocument(plaintext)
 	if err != nil {
+		return loadedDocument{}, err
+	}
+	return loadedDocument{library: library, contents: contents, legacy: legacy}, nil
+}
+
+func (s *Store) load(migrate bool) (Library, error) {
+	loaded, err := s.readDocument()
+	if err != nil {
 		return Library{}, err
 	}
-	if migrate && legacy {
-		sealed, sealErr := s.sealDocument(contents)
+	if migrate && loaded.legacy {
+		sealed, sealErr := s.sealDocument(loaded.contents)
 		if sealErr != nil {
 			return Library{}, sealErr
 		}
@@ -105,7 +119,7 @@ func (s *Store) load(migrate bool) (Library, error) {
 			return Library{}, writeErr
 		}
 	}
-	return library, nil
+	return loaded.library, nil
 }
 
 func decodeDocument(contents []byte) (Library, error) {

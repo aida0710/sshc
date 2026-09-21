@@ -188,7 +188,7 @@ func (m *Manager) ReadBackup(path string) ([]byte, error) {
 	if !m.validBackupReadPath(path) {
 		return nil, invalidJournal("backup path is outside the expected tree")
 	}
-	contents, err := m.workspace.FileSystem().ReadFile(path)
+	contents, err := m.workspace.ReadTransactionFile(path)
 	if err != nil {
 		return nil, err
 	}
@@ -967,7 +967,7 @@ func (m *Manager) currentState(path string) (contents []byte, mode fs.FileMode, 
 	if err != nil {
 		return nil, 0, false, err
 	}
-	contents, err = m.workspace.FileSystem().ReadFile(path)
+	contents, err = m.workspace.ReadTransactionFile(path)
 	if err != nil {
 		return nil, 0, false, err
 	}
@@ -1090,6 +1090,9 @@ func (b *commitBuilder) stageChangeSet(changes []Change) error {
 			return err
 		}
 
+		if int64(len(change.Contents)) > b.manager.workspace.TransactionFileLimit(target) {
+			return ErrFileTooLarge
+		}
 		previous, mode, exists, err := b.manager.currentState(target)
 		if err != nil {
 			return err
@@ -1194,7 +1197,7 @@ func (b *commitBuilder) stageRemovals() error {
 		}
 		var previous []byte
 		if removal.Backup {
-			if previous, err = b.manager.workspace.FileSystem().ReadFile(target); err != nil {
+			if previous, err = b.manager.workspace.ReadTransactionFile(target); err != nil {
 				return err
 			}
 		}

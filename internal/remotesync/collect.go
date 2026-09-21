@@ -317,7 +317,7 @@ func (s *Service) localDigests(remote Manifest, base *Manifest, ignoreRules Igno
 			continue
 		}
 		localPath := filepath.Join(s.workspace.Root(), filepath.FromSlash(path))
-		body, err := s.workspace.FileSystem().ReadFile(localPath)
+		body, err := storage.ReadFileLimited(s.workspace.FileSystem(), localPath, maxEntryBytes(path))
 		if err != nil {
 			if errors.Is(err, fs.ErrNotExist) {
 				continue

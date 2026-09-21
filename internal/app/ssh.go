@@ -3,6 +3,9 @@ package app
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"io"
 	"os"
@@ -145,38 +148,52 @@ func (p sshParts) run() func(ctx context.Context, target sshclient.Target, comma
 	}
 }
 
-// sftp opens a non-interactive SFTP channel using the same target resolution,
-// credentials, known-host policy and ProxyJump transport as terminal sessions.
-func (p sshParts) sftp() sshcSFTP.OpenRemote {
-	return func(ctx context.Context, alias string) (sshcSFTP.Remote, error) {
+// sftp resolves each operation before the pool selects a connection. Identity
+// includes all resolved settings, while Open captures the exact resolved target.
+func (p sshParts) sftp() sshcSFTP.ResolveRemote {
+	return func(_ context.Context, alias string) (sshcSFTP.RemoteTarget, error) {
 		target, err := p.target(alias)
 		if err != nil {
-			return nil, err
+			return sshcSFTP.RemoteTarget{}, err
 		}
-		connection, err := p.dialer.Connect(ctx, target)
+		encoded, err := json.Marshal(target)
 		if err != nil {
-			return nil, err
+			return sshcSFTP.RemoteTarget{}, err
 		}
-		// Reads are pipelined by pkg/sftp on their own; writes are not unless
-		// asked, and one 32 KiB request per round trip made every upload crawl
-		// on a distant host. A failed pipelined write can leave the file longer
-		// than what arrived, so the upload plane truncates a part back to its
-		// acknowledged offset after an error and verifies the whole part before
-		// publishing it.
-		client, err := pkgsftp.NewClient(connection.Client(), pkgsftp.UseConcurrentWrites(true))
-		if err != nil {
-			_ = connection.Close()
-			return nil, err
-		}
-		remote := &sftpRemote{Remote: sshcSFTP.NewClient(client), transport: connection, dead: make(chan struct{})}
-		// The transport reports its end through Wait; the pool asks before it
-		// hands the connection to the next operation.
-		go func() {
-			_ = connection.Client().Wait()
-			close(remote.dead)
-		}()
-		return remote, nil
+		digest := sha256.Sum256(encoded)
+		return sshcSFTP.RemoteTarget{
+			Identity: hex.EncodeToString(digest[:]),
+			Open: func(ctx context.Context) (sshcSFTP.Remote, error) {
+				return p.openSFTP(ctx, target)
+			},
+		}, nil
 	}
+}
+
+func (p sshParts) openSFTP(ctx context.Context, target sshclient.Target) (sshcSFTP.Remote, error) {
+	connection, err := p.dialer.Connect(ctx, target)
+	if err != nil {
+		return nil, err
+	}
+	// Reads are pipelined by pkg/sftp on their own; writes are not unless
+	// asked, and one 32 KiB request per round trip made every upload crawl
+	// on a distant host. A failed pipelined write can leave the file longer
+	// than what arrived, so the upload plane truncates a part back to its
+	// acknowledged offset after an error and verifies the whole part before
+	// publishing it.
+	client, err := pkgsftp.NewClient(connection.Client(), pkgsftp.UseConcurrentWrites(true))
+	if err != nil {
+		_ = connection.Close()
+		return nil, err
+	}
+	remote := &sftpRemote{Remote: sshcSFTP.NewClient(client), transport: connection, dead: make(chan struct{})}
+	// The transport reports its end through Wait; the pool asks before it
+	// hands the connection to the next operation.
+	go func() {
+		_ = connection.Client().Wait()
+		close(remote.dead)
+	}()
+	return remote, nil
 }
 
 type sftpRemote struct {

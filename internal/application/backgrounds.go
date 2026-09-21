@@ -23,7 +23,7 @@ const (
 	DefaultBackgroundCapacityMiB = 16
 	MaxBackgroundCapacityMiB     = 1024
 	// MaxBackgroundBytes は、利用者が明示的に許可できる画像 1 枚の絶対上限である。
-	MaxBackgroundBytes = MaxBackgroundCapacityMiB << 20
+	MaxBackgroundBytes = storage.MaxAssetFileSize
 )
 
 var (
