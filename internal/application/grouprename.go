@@ -337,46 +337,8 @@ func (g *groupLayout) stageEntryRegion() error {
 
 // stageGroupSettings は、groups.sshc.conf を、このトランザクションが生む layout から再生成する。
 func (g *groupLayout) stageGroupSettings() error {
-	pending := map[string][]byte{filepath.Clean(g.service.entryPath): g.entryUpdated}
-	gone := map[string]bool{}
-	for _, move := range g.prepared.moves {
-		pending[filepath.Clean(move.To)] = nil
-		gone[filepath.Clean(move.From)] = true
-	}
-	for _, move := range g.prepared.moves {
-		contents, readErr := g.service.workspace.FileSystem().ReadFile(move.From)
-		if readErr != nil {
-			return readErr
-		}
-		pending[filepath.Clean(move.To)] = contents
-	}
-	after, err := g.service.resolveOverlay(pending, gone)
-	if err != nil {
-		return err
-	}
-	hosts, _ := ProjectHosts(after, g.root)
-	groupsRelative := g.updated.GroupsPath()
-	groupsAbsolute, err := AbsolutePath(g.root, groupsRelative)
-	if err != nil {
-		return err
-	}
-	previousGroups, groupsExist, err := g.service.readFile(groupsAbsolute)
-	if err != nil {
-		return err
-	}
-	groupContents, groupNotices := CompileGroups(g.next, g.updated, hosts, dominantEnding(g.entryFile))
-	g.prepared.preview.Notices = append(g.prepared.preview.Notices, groupNotices...)
-	groupsPrecondition := storage.Precondition{}
-	if groupsExist {
-		groupsPrecondition = storage.Precondition{Exists: true, Digest: storage.Digest(previousGroups)}
-	}
-	g.prepared.changes = append(g.prepared.changes, storage.Change{
-		Path: groupsAbsolute, Contents: groupContents, Precondition: groupsPrecondition,
-	})
-	g.prepared.base[filepath.Clean(groupsAbsolute)] = previousGroups
-	g.prepared.preview.Diffs = append(g.prepared.preview.Diffs,
-		BuildFileDiff(groupsRelative, diskOrNil(previousGroups, groupsExist), groupContents))
-	return nil
+	_, err := g.service.refreshGroupSettings(&g.prepared, g.updated)
+	return err
 }
 
 // stageMetadata は、metadata の変更をトランザクションへ載せる。

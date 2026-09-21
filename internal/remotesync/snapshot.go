@@ -50,11 +50,9 @@ const MaxCommitMessageRunes = 240
 // workspace snapshotで運べるよう、asset分の余地を持つ。
 const MaxSnapshotBytes = (1024 + 64) << 20
 
-const maxBackgroundAssetBytes = 1024 << 20
-
 func maxEntryBytes(relative string) int64 {
 	if strings.HasPrefix(relative, "sshc/backgrounds/") {
-		return maxBackgroundAssetBytes
+		return storage.MaxAssetFileSize
 	}
 	return storage.MaxFileSize
 }

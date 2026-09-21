@@ -160,6 +160,7 @@ type Service struct {
 	pendingBase     map[string][]byte
 	pendingBaseline map[string]bool
 	keyPassphrases  KeyPassphraseVerifier
+	startupRenamer  StartupRenamer
 }
 
 func resolverFor(workspace *storage.Workspace) config.Resolver {
@@ -526,6 +527,32 @@ func (s *Service) plan(request EditRequest) (planned, error) {
 	if err != nil {
 		return planned{}, err
 	}
+	prepared, err := s.planEdit(graph, request)
+	if err != nil || request.Kind == EditGroups || request.Kind == EditMetadata {
+		return prepared, err
+	}
+	metadata, err := s.plannedMetadata(prepared)
+	if err != nil {
+		return planned{}, err
+	}
+	after, err := s.refreshGroupSettings(&prepared, metadata)
+	if err != nil {
+		return planned{}, err
+	}
+	if request.Alias != "" {
+		alias := request.Alias
+		if request.Kind == EditRename || request.Kind == EditDuplicate {
+			alias = request.NewAlias
+		}
+		prepared.preview.Effective = []EffectiveDiff{DiffEffective(
+			ComputeEffective(graph, s.workspace.Root(), request.Alias, s.localFacts()),
+			ComputeEffective(after, s.workspace.Root(), alias, s.localFacts()),
+		)}
+	}
+	return prepared, nil
+}
+
+func (s *Service) planEdit(graph *config.Graph, request EditRequest) (planned, error) {
 	switch request.Kind {
 	case EditHostFields, EditBlockRaw, EditRename, EditDuplicate, EditFileRaw, EditComment:
 		return s.planFileEdit(graph, request)

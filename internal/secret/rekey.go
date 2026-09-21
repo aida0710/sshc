@@ -181,7 +181,7 @@ func (s *Service) reSealKeyBoundArtifacts(vault *Vault, previous envelope.Key, p
 		if entry.IsDir() {
 			return nil
 		}
-		body, readErr := s.workspace.FileSystem().ReadFile(path)
+		body, readErr := s.workspace.ReadTransactionFile(path)
 		if readErr != nil {
 			return readErr
 		}

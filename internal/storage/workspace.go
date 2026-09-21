@@ -117,6 +117,47 @@ func (fileSystem workspaceFileSystem) ReadFile(path string) ([]byte, error) {
 	return fileSystem.FileSystem.ReadFile(path)
 }
 
+func (fileSystem workspaceFileSystem) ReadFileLimited(path string, maximum int64) ([]byte, error) {
+	if maximum < 0 {
+		return nil, ErrFileTooLarge
+	}
+	if !privateStateContains(fileSystem.stateDirectory, path) {
+		return ReadFileLimited(fileSystem.FileSystem, path, maximum)
+	}
+	if reader, ok := fileSystem.privateReader.(interface {
+		ReadPrivateFileLimited(string, int64) ([]byte, error)
+	}); ok {
+		return reader.ReadPrivateFileLimited(path, maximum)
+	}
+	contents, err := fileSystem.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(contents)) > maximum {
+		return nil, ErrFileTooLarge
+	}
+	return contents, nil
+}
+
+func (fileSystem workspaceFileSystem) ReadFilePrefix(path string, maximum int) ([]byte, error) {
+	if maximum < 0 {
+		return nil, fs.ErrInvalid
+	}
+	if !privateStateContains(fileSystem.stateDirectory, path) {
+		return ReadFilePrefix(fileSystem.FileSystem, path, maximum)
+	}
+	if reader, ok := fileSystem.privateReader.(interface {
+		ReadPrivateFilePrefix(string, int) ([]byte, error)
+	}); ok {
+		return reader.ReadPrivateFilePrefix(path, maximum)
+	}
+	contents, err := fileSystem.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	return contents[:min(len(contents), maximum)], nil
+}
+
 func (fileSystem workspaceFileSystem) WriteAtomic(path, prefix string, permission fs.FileMode, contents []byte) error {
 	if writer, ok := fileSystem.FileSystem.(atomicFileWriter); ok {
 		return writer.WriteAtomic(path, prefix, permission, contents)

@@ -5,11 +5,17 @@ import (
 	"errors"
 	"io/fs"
 	"path/filepath"
-	"sshc/internal/storage"
 	"time"
+
+	"sshc/internal/storage"
 )
 
-const transferQueueSchemaVersion = 1
+const (
+	transferQueueSchemaVersion = 1
+	// A queue holds up to 200 jobs, including paths and resumable ranges. Use
+	// one bound for both directions so every accepted snapshot can be restored.
+	maxTransferQueueBytes = 32 << 20
+)
 
 type persistedTransferQueue struct {
 	SchemaVersion int           `json:"schemaVersion"`
@@ -23,7 +29,15 @@ func (m *TransferManager) EnableQueuePersistence(filename string) error {
 	if m == nil || filename == "" {
 		return ErrInvalidTransfer
 	}
-	contents, err := storage.ReadFileLimited(storage.OSFileSystem{}, filename, storage.MaxFileSize)
+	contents, err := storage.ReadFileLimited(storage.OSFileSystem{}, filename, maxTransferQueueBytes)
+	if errors.Is(err, storage.ErrFileTooLarge) {
+		if preserveErr := preserveOversizedQueue(filename); preserveErr != nil {
+			return preserveErr
+		}
+		// Keep oversized files from older writers for diagnosis, while letting
+		// the SSH engine start with a fresh device-local queue.
+		err = fs.ErrNotExist
+	}
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
@@ -213,9 +227,27 @@ func (m *TransferManager) persistJobsLocked(force bool) error {
 // writeQueueAtomically は他の状態 file と同じ storage の経路で書く。symlink を辿らず、
 // Windows では所有者だけの ACL と write-through の置換になる。
 func writeQueueAtomically(filename string, contents []byte) error {
+	if len(contents) > maxTransferQueueBytes {
+		return storage.ErrFileTooLarge
+	}
 	fileSystem := storage.OSFileSystem{}
 	if err := fileSystem.MkdirAll(filepath.Dir(filename), 0o700); err != nil {
 		return err
 	}
 	return storage.WriteAtomicFile(fileSystem, filename, ".sshc-"+filepath.Base(filename)+".tmp-", storage.FilePermission, contents)
+}
+
+// Moving avoids reading an unbounded legacy queue into memory.
+func preserveOversizedQueue(filename string) error {
+	fileSystem := storage.OSFileSystem{}
+	directory := filepath.Dir(filename)
+	preserved, err := fileSystem.WriteTemp(directory, ".sshc-"+filepath.Base(filename)+".corrupt-", storage.FilePermission, nil)
+	if err != nil {
+		return err
+	}
+	if err := fileSystem.MovePrivate(filename, preserved); err != nil {
+		_ = fileSystem.Remove(preserved)
+		return err
+	}
+	return fileSystem.SyncDir(directory)
 }

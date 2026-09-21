@@ -228,12 +228,28 @@ func openRegularNoFollow(path string) (*os.File, error) {
 // ReadPrivateFile は非公開状態を読み出す最終ハンドル自体を検証する。ユーザー管理の
 // SSH ファイルは引き続き ReadFile で読む。
 func (OSFileSystem) ReadPrivateFile(path string) ([]byte, error) {
+	return (OSFileSystem{}).ReadPrivateFileLimited(path, MaxFileSize)
+}
+
+func (OSFileSystem) ReadPrivateFileLimited(path string, maximum int64) ([]byte, error) {
+	if maximum < 0 {
+		return nil, ErrFileTooLarge
+	}
 	file, err := windowsacl.OpenAuthenticatedFileForRead(path)
 	if err != nil {
 		return nil, mapPrivateOpenError(err)
 	}
 	defer file.Close()
-	return readBoundedRegularFile(file, MaxFileSize)
+	return readBoundedRegularFile(file, maximum)
+}
+
+func (OSFileSystem) ReadPrivateFilePrefix(path string, maximum int) ([]byte, error) {
+	file, err := windowsacl.OpenAuthenticatedFileForRead(path)
+	if err != nil {
+		return nil, mapPrivateOpenError(err)
+	}
+	defer file.Close()
+	return readRegularFilePrefix(file, maximum)
 }
 
 func mapPrivateOpenError(err error) error {

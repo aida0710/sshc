@@ -72,6 +72,7 @@ type TOTPMutation struct {
 // ConnectionSecretsMutation groups every vault change made by one connection
 // save so callers can commit one sealed replacement beside the SSH config.
 type ConnectionSecretsMutation struct {
+	Rename        *AliasRename
 	Password      *PasswordMutation
 	KeyPassphrase *KeyPassphraseMutation
 	TOTP          *TOTPMutation
@@ -241,9 +242,9 @@ func (s *Service) WithConnectionSecretsTransaction(
 		}
 		if !exists {
 			passwordOnlyRemoval := mutation.Password != nil && mutation.Password.Kind == PasswordMutationRemove &&
-				mutation.KeyPassphrase == nil && mutation.TOTP == nil
+				mutation.KeyPassphrase == nil && mutation.TOTP == nil && mutation.Rename == nil
 			totpOnlyRemoval := mutation.TOTP != nil && mutation.TOTP.Kind == TOTPMutationRemove &&
-				mutation.Password == nil && mutation.KeyPassphrase == nil
+				mutation.Password == nil && mutation.KeyPassphrase == nil && mutation.Rename == nil
 			if passwordOnlyRemoval || totpOnlyRemoval {
 				return commit(nil)
 			}
@@ -259,6 +260,14 @@ func (s *Service) WithConnectionSecretsTransaction(
 		}
 	}()
 	changed := false
+	if mutation.Rename != nil {
+		var err error
+		changed, err = applyAliasRename(clone, *mutation.Rename)
+		if err != nil {
+			s.mu.Unlock()
+			return storage.Result{}, err
+		}
+	}
 	if mutation.Password != nil {
 		passwordChanged, err := applyPasswordMutation(vault, clone, *mutation.Password)
 		if errors.Is(err, ErrNoPassword) && mutation.Password.Kind == PasswordMutationRemove {
