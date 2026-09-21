@@ -110,6 +110,9 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
         />
       ),
     });
+    // `t` and `updateGroup` change identity with every render of the
+    // provider; the inspector body captures the current ones when the
+    // selected group or its data changes, which is the only time it must.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected, metadata, overview, onInspector]);
 

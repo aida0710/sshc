@@ -116,6 +116,8 @@ export function useSFTPTransfers({
     if (arrived.length === 0) return;
     for (const job of arrived) refreshedJobs.current.add(job.id);
     void browser.refresh();
+    // `browser` is a fresh object each render; only a change in the jobs or
+    // in the directory on screen should trigger a refresh.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [transferJobs, alias, path, connected, local]);
 

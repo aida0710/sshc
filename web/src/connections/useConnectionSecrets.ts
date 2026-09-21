@@ -114,6 +114,7 @@ export function useConnectionSecrets({ detail, resetKey, keys, secrets, savedSta
       setGeneration((current) => current + 1);
     });
     return () => { active = false; };
+    // `alias` is part of resetKey; listing it as well would refetch twice.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resetKey, keys, secrets, t, savedState]);
 
