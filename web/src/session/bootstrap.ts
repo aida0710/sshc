@@ -44,7 +44,7 @@ export function clearSessionCSRF(storage: Pick<Storage, "removeItem"> = window.s
   }
 }
 
-function loadBrowserToken(storage: Pick<Storage, "getItem" | "removeItem"> = window.localStorage): string {
+export function loadBrowserToken(storage: Pick<Storage, "getItem" | "removeItem"> = window.localStorage): string {
   try {
     const value = storage.getItem(browserStorageKey);
     if (csrfToken(value)) return value;
@@ -65,7 +65,7 @@ function storeBrowserToken(value: string, storage: Pick<Storage, "setItem"> = wi
   }
 }
 
-function clearBrowserToken(storage: Pick<Storage, "removeItem"> = window.localStorage): void {
+export function clearBrowserToken(storage: Pick<Storage, "removeItem"> = window.localStorage): void {
   try {
     storage.removeItem(browserStorageKey);
   } catch {

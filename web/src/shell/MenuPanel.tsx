@@ -1,5 +1,5 @@
 import { sectionPath } from "../routing/sectionRoute";
-import type { MouseEvent } from "react";
+import { useState, type MouseEvent } from "react";
 import { useLanguage } from "../i18n/context";
 import { localeLabelKeys, locales, type Locale } from "../i18n/locale";
 import type { MessageKey } from "../i18n/messages";
@@ -7,6 +7,10 @@ import { useTheme } from "../theme/context";
 import { themes, type Theme } from "../theme/theme";
 import { autoControl } from "../ui/form";
 import { Icon, type IconName } from "../ui/icons";
+import { Button } from "../ui/surface";
+import { ConfirmDialog } from "../ui/ConfirmDialog";
+import { useAsyncOperation } from "../ui/useAsyncOperation";
+import { signOut } from "../session/signOut";
 
 export type MenuItem = {
   key: string;
@@ -35,6 +39,16 @@ export function MenuPanel({
 }) {
   const { t, locale, setLocale } = useLanguage();
   const { theme, setTheme } = useTheme();
+  const [confirmingSignOut, setConfirmingSignOut] = useState(false);
+  const signingOut = useAsyncOperation();
+
+  // Leaving is a reload with nothing to recover from: the app then shows how
+  // to enter again from the terminal.
+  async function leave() {
+    setConfirmingSignOut(false);
+    const done = await signingOut.run(signOut, { describe: () => t("menu.signOutFailed") });
+    if (done) window.location.reload();
+  }
 
   function follow(event: MouseEvent<HTMLAnchorElement>, href: string) {
     if (
@@ -143,7 +157,26 @@ export function MenuPanel({
             </a></li>
           </ul>
         </section>
+        <section aria-labelledby="menu-sign-out" className="lg:col-span-2 xl:col-span-3">
+          <h3 id="menu-sign-out" className="px-1 text-[11px] font-bold uppercase tracking-[0.14em] text-ink-faint">{t("menu.signOutHeading")}</h3>
+          <p className="mt-2 text-sm leading-6 text-ink-muted">{t("menu.signOutHint")}</p>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <Button kind="danger" disabled={signingOut.busy} onClick={() => setConfirmingSignOut(true)}>{t("menu.signOut")}</Button>
+            {signingOut.error === "" ? null : <p role="alert" className="text-sm text-danger">{signingOut.error}</p>}
+          </div>
+        </section>
       </div>
+      {confirmingSignOut ? (
+        <ConfirmDialog
+          id="menu-sign-out-heading"
+          heading={t("menu.signOutConfirmHeading")}
+          body={<p className="text-sm text-ink-muted">{t("menu.signOutConfirmBody")}</p>}
+          confirmLabel={t("menu.signOut")}
+          cancelLabel={t("menu.signOutCancel")}
+          onCancel={() => setConfirmingSignOut(false)}
+          onConfirm={() => void leave()}
+        />
+      ) : null}
     </section>
   );
 }

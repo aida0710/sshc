@@ -297,6 +297,8 @@ func TestCommandSessionDoesNotConsumeBrowserBootstrap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	now := testEpoch
+	manager.Now = func() time.Time { return now }
 	if _, err := manager.IssueExpiring(time.Minute); err != nil {
 		t.Fatalf("IssueExpiring = %v", err)
 	}
@@ -309,11 +311,11 @@ func TestCommandSessionDoesNotConsumeBrowserBootstrap(t *testing.T) {
 		t.Fatal("browser session was not authenticated")
 	}
 
-	// Browser sessions deliberately have no deadline. The command-session clock
-	// must not silently impose one on established browser state.
-	manager.Now = func() time.Time { return time.Unix(4_000_000_000, 0).UTC() }
+	// The command session's short deadline is its own; the browser session
+	// keeps the browser lifetime.
+	manager.Now = func() time.Time { return now.Add(BrowserSessionIdleTimeout - time.Minute) }
 	if !manager.Authenticate(browser.SessionID) {
-		t.Fatal("browser session unexpectedly expired")
+		t.Fatal("browser session expired with the command session")
 	}
 }
 
@@ -347,5 +349,47 @@ func TestBootstrapAndRecoveryJoinAnExistingBrowserSession(t *testing.T) {
 	}
 	if !setCookie || recovered.SessionID == first.SessionID || !restarted.Authenticate(recovered.SessionID) {
 		t.Fatalf("recovered = %#v, setCookie=%t", recovered, setCookie)
+	}
+}
+
+func TestABrowserSessionExpiresWhenIdleAndAfterItsLifetime(t *testing.T) {
+	manager, bootstrap, err := NewManager(&countingReader{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Unix(1_800_000_000, 0).UTC()
+	manager.Now = func() time.Time { return now }
+	browser, err := manager.Bootstrap(bootstrap)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Used every few hours, the session outlives the idle timeout.
+	for range 3 {
+		now = now.Add(BrowserSessionIdleTimeout - time.Hour)
+		if !manager.Authenticate(browser.SessionID) {
+			t.Fatalf("session used every %v was rejected", BrowserSessionIdleTimeout-time.Hour)
+		}
+	}
+	// Left alone for the idle timeout, it is gone.
+	now = now.Add(BrowserSessionIdleTimeout)
+	if manager.Authenticate(browser.SessionID) {
+		t.Fatal("session idle for the timeout still authenticated")
+	}
+
+	// A session used constantly still ends at the absolute lifetime.
+	now = time.Unix(1_900_000_000, 0).UTC()
+	renewed, _, err := manager.JoinOrIssue("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for used := time.Duration(0); used < BrowserSessionLifetime; used += time.Hour {
+		now = now.Add(time.Hour)
+		if used+time.Hour < BrowserSessionLifetime && !manager.Authenticate(renewed.SessionID) {
+			t.Fatalf("session used hourly was rejected after %v", used+time.Hour)
+		}
+	}
+	if manager.Authenticate(renewed.SessionID) {
+		t.Fatal("session past its lifetime still authenticated")
 	}
 }
