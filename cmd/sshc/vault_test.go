@@ -141,7 +141,7 @@ func TestRunVaultStatusIsHumanReadableWithoutATerminal(t *testing.T) {
 
 	terminal := &fakePasswordTerminal{terminal: false}
 	var stdout, stderr strings.Builder
-	code := runVault(context.Background(), "status", stateDir, server.Client(), vaultTestInput(t), &stdout, &stderr, terminal)
+	code := runVault(context.Background(), "status", commandEnvironment{stateDir: stateDir, client: server.Client(), stdin: vaultTestInput(t), stdout: &stdout, stderr: &stderr, terminal: terminal})
 	if code != 0 {
 		t.Fatalf("runVault status = %d, stderr = %q", code, stderr.String())
 	}
@@ -174,7 +174,7 @@ func TestRunVaultCreateChecksStateBeforePrompting(t *testing.T) {
 
 	terminal := &fakePasswordTerminal{terminal: true}
 	var stdout, stderr strings.Builder
-	code := runVault(context.Background(), "create", stateDir, server.Client(), vaultTestInput(t), &stdout, &stderr, terminal)
+	code := runVault(context.Background(), "create", commandEnvironment{stateDir: stateDir, client: server.Client(), stdin: vaultTestInput(t), stdout: &stdout, stderr: &stderr, terminal: terminal})
 	if code != 1 || terminal.reads != 0 || posts != 0 {
 		t.Fatalf("code=%d reads=%d posts=%d stderr=%q", code, terminal.reads, posts, stderr.String())
 	}
@@ -193,8 +193,7 @@ func TestRunVaultRefusesPasswordActionsWithoutATerminalBeforeAnyRequest(t *testi
 			writeVaultTestHandoff(t, stateDir, server.URL, handoff.OwnerEngine)
 
 			var stdout, stderr strings.Builder
-			code := runVault(context.Background(), action, stateDir, server.Client(), vaultTestInput(t), &stdout, &stderr,
-				&fakePasswordTerminal{terminal: false})
+			code := runVault(context.Background(), action, commandEnvironment{stateDir: stateDir, client: server.Client(), stdin: vaultTestInput(t), stdout: &stdout, stderr: &stderr, terminal: &fakePasswordTerminal{terminal: false}})
 			if code != 1 || requests != 0 || stdout.String() != "" {
 				t.Fatalf("code=%d requests=%d stdout=%q stderr=%q", code, requests, stdout.String(), stderr.String())
 			}
@@ -228,7 +227,7 @@ func TestRunVaultConfirmationMismatchSendsNoMutation(t *testing.T) {
 			original := append([][]byte(nil), answers...)
 			terminal := &fakePasswordTerminal{terminal: true, answers: answers}
 			var stdout, stderr strings.Builder
-			code := runVault(context.Background(), action, stateDir, server.Client(), vaultTestInput(t), &stdout, &stderr, terminal)
+			code := runVault(context.Background(), action, commandEnvironment{stateDir: stateDir, client: server.Client(), stdin: vaultTestInput(t), stdout: &stdout, stderr: &stderr, terminal: terminal})
 			if code != 1 || posts != 0 {
 				t.Fatalf("code=%d posts=%d stderr=%q", code, posts, stderr.String())
 			}
@@ -258,7 +257,7 @@ func TestRunVaultUnlockSkipsPromptWhenAlreadyUnlocked(t *testing.T) {
 
 	terminal := &fakePasswordTerminal{terminal: true}
 	var stdout, stderr strings.Builder
-	code := runVault(context.Background(), "unlock", stateDir, server.Client(), vaultTestInput(t), &stdout, &stderr, terminal)
+	code := runVault(context.Background(), "unlock", commandEnvironment{stateDir: stateDir, client: server.Client(), stdin: vaultTestInput(t), stdout: &stdout, stderr: &stderr, terminal: terminal})
 	if code != 0 || terminal.reads != 0 || posts != 0 {
 		t.Fatalf("code=%d reads=%d posts=%d stdout=%q stderr=%q", code, terminal.reads, posts, stdout.String(), stderr.String())
 	}
@@ -281,8 +280,7 @@ func TestRunVaultLockAuthenticationFailureDoesNotBlameAPassword(t *testing.T) {
 	writeVaultTestHandoff(t, stateDir, server.URL, handoff.OwnerEngine)
 
 	var stdout, stderr strings.Builder
-	code := runVault(context.Background(), "lock", stateDir, server.Client(), vaultTestInput(t), &stdout, &stderr,
-		&fakePasswordTerminal{terminal: false})
+	code := runVault(context.Background(), "lock", commandEnvironment{stateDir: stateDir, client: server.Client(), stdin: vaultTestInput(t), stdout: &stdout, stderr: &stderr, terminal: &fakePasswordTerminal{terminal: false}})
 	if code != 1 || !strings.Contains(stderr.String(), "engine authentication") {
 		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
@@ -306,8 +304,7 @@ func TestRunVaultLockValidatesLiveIdentityBeforeMutation(t *testing.T) {
 	writeVaultTestHandoff(t, stateDir, server.URL, handoff.OwnerEngine)
 
 	var stdout, stderr strings.Builder
-	code := runVault(context.Background(), "lock", stateDir, server.Client(), vaultTestInput(t), &stdout, &stderr,
-		&fakePasswordTerminal{terminal: false})
+	code := runVault(context.Background(), "lock", commandEnvironment{stateDir: stateDir, client: server.Client(), stdin: vaultTestInput(t), stdout: &stdout, stderr: &stderr, terminal: &fakePasswordTerminal{terminal: false}})
 	if code != 1 || posts != 0 || stdout.String() != "" {
 		t.Fatalf("code=%d posts=%d stdout=%q stderr=%q", code, posts, stdout.String(), stderr.String())
 	}
@@ -342,7 +339,7 @@ func TestRunVaultLockUsesAuthenticatedSessionPreservingRoute(t *testing.T) {
 	terminal := &fakePasswordTerminal{terminal: false}
 
 	var stdout, stderr strings.Builder
-	code := runVault(context.Background(), "lock", stateDir, server.Client(), vaultTestInput(t), &stdout, &stderr, terminal)
+	code := runVault(context.Background(), "lock", commandEnvironment{stateDir: stateDir, client: server.Client(), stdin: vaultTestInput(t), stdout: &stdout, stderr: &stderr, terminal: terminal})
 	if code != 0 || requests != 2 || terminal.reads != 0 || stdout.String() != "vault locked\n" || stderr.String() != "" {
 		t.Fatalf("code=%d requests=%d reads=%d stdout=%q stderr=%q",
 			code, requests, terminal.reads, stdout.String(), stderr.String())
@@ -429,9 +426,7 @@ func TestRunVaultExplainsUncertainPasswordChangeAfterTimeoutOrCancel(t *testing.
 			confirmation := []byte(vaultPasswordCanary)
 
 			var stdout, stderr strings.Builder
-			code := runVault(context.Background(), "change-password", stateDir, &http.Client{Transport: transport},
-				vaultTestInput(t), &stdout, &stderr,
-				&fakePasswordTerminal{terminal: true, answers: [][]byte{current, next, confirmation}})
+			code := runVault(context.Background(), "change-password", commandEnvironment{stateDir: stateDir, client: &http.Client{Transport: transport}, stdin: vaultTestInput(t), stdout: &stdout, stderr: &stderr, terminal: &fakePasswordTerminal{terminal: true, answers: [][]byte{current, next, confirmation}}})
 			if code != test.wantCode || transport.requests != 3 {
 				t.Fatalf("code=%d requests=%d stdout=%q stderr=%q", code, transport.requests, stdout.String(), stderr.String())
 			}
@@ -474,9 +469,7 @@ func TestRunVaultExplainsHowToCheckUncertainCreateOrUnlock(t *testing.T) {
 			}
 
 			var stdout, stderr strings.Builder
-			code := runVault(context.Background(), test.action, stateDir, &http.Client{Transport: transport},
-				vaultTestInput(t), &stdout, &stderr,
-				&fakePasswordTerminal{terminal: true, answers: answers})
+			code := runVault(context.Background(), test.action, commandEnvironment{stateDir: stateDir, client: &http.Client{Transport: transport}, stdin: vaultTestInput(t), stdout: &stdout, stderr: &stderr, terminal: &fakePasswordTerminal{terminal: true, answers: answers}})
 			if code != 1 || transport.requests != 2 || !strings.Contains(stderr.String(), "sshc vault status") {
 				t.Fatalf("code=%d requests=%d stdout=%q stderr=%q", code, transport.requests, stdout.String(), stderr.String())
 			}
@@ -560,8 +553,7 @@ func TestRunVaultDoesNotPrintATransportErrorThatReflectsThePassword(t *testing.T
 	typed := []byte(vaultPasswordCanary)
 
 	var stdout, stderr strings.Builder
-	code := runVault(context.Background(), "unlock", stateDir, client, vaultTestInput(t), &stdout, &stderr,
-		&fakePasswordTerminal{terminal: true, answers: [][]byte{typed}})
+	code := runVault(context.Background(), "unlock", commandEnvironment{stateDir: stateDir, client: client, stdin: vaultTestInput(t), stdout: &stdout, stderr: &stderr, terminal: &fakePasswordTerminal{terminal: true, answers: [][]byte{typed}}})
 	if code != 1 || transport.requests != 2 {
 		t.Fatalf("code=%d requests=%d stdout=%q stderr=%q", code, transport.requests, stdout.String(), stderr.String())
 	}
@@ -588,8 +580,7 @@ func TestRunVaultDoesNotPrintANonSuccessBodyThatReflectsThePassword(t *testing.T
 	writeVaultTestHandoff(t, stateDir, server.URL, handoff.OwnerEngine)
 
 	var stdout, stderr strings.Builder
-	code := runVault(context.Background(), "unlock", stateDir, server.Client(), vaultTestInput(t), &stdout, &stderr,
-		&fakePasswordTerminal{terminal: true, answers: [][]byte{typed}})
+	code := runVault(context.Background(), "unlock", commandEnvironment{stateDir: stateDir, client: server.Client(), stdin: vaultTestInput(t), stdout: &stdout, stderr: &stderr, terminal: &fakePasswordTerminal{terminal: true, answers: [][]byte{typed}}})
 	if code != 1 {
 		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
@@ -615,8 +606,7 @@ func TestRunVaultExplainsAnOversizedPasswordRequest(t *testing.T) {
 	typed := []byte(vaultPasswordCanary)
 
 	var stdout, stderr strings.Builder
-	code := runVault(context.Background(), "unlock", stateDir, server.Client(), vaultTestInput(t), &stdout, &stderr,
-		&fakePasswordTerminal{terminal: true, answers: [][]byte{typed}})
+	code := runVault(context.Background(), "unlock", commandEnvironment{stateDir: stateDir, client: server.Client(), stdin: vaultTestInput(t), stdout: &stdout, stderr: &stderr, terminal: &fakePasswordTerminal{terminal: true, answers: [][]byte{typed}}})
 	if code != 1 || !strings.Contains(stderr.String(), "too large") || !allZero(typed) {
 		t.Fatalf("code=%d typed=%q stdout=%q stderr=%q", code, typed, stdout.String(), stderr.String())
 	}
@@ -712,7 +702,7 @@ func TestRunVaultCreateErasesTerminalBuffersAndSendsAuthenticatedJSON(t *testing
 
 	terminal := &fakePasswordTerminal{terminal: true, answers: [][]byte{first, confirmation}}
 	var stdout, stderr strings.Builder
-	code := runVault(context.Background(), "create", stateDir, server.Client(), vaultTestInput(t), &stdout, &stderr, terminal)
+	code := runVault(context.Background(), "create", commandEnvironment{stateDir: stateDir, client: server.Client(), stdin: vaultTestInput(t), stdout: &stdout, stderr: &stderr, terminal: terminal})
 	if code != 0 || posts != 1 {
 		t.Fatalf("code=%d posts=%d stdout=%q stderr=%q", code, posts, stdout.String(), stderr.String())
 	}
@@ -739,8 +729,7 @@ func TestRunVaultRejectsInvalidUTF8WithoutSendingASecret(t *testing.T) {
 	confirmation := []byte{0xff, 0xfe}
 
 	var stdout, stderr strings.Builder
-	code := runVault(context.Background(), "create", stateDir, server.Client(), vaultTestInput(t), &stdout, &stderr,
-		&fakePasswordTerminal{terminal: true, answers: [][]byte{invalid, confirmation}})
+	code := runVault(context.Background(), "create", commandEnvironment{stateDir: stateDir, client: server.Client(), stdin: vaultTestInput(t), stdout: &stdout, stderr: &stderr, terminal: &fakePasswordTerminal{terminal: true, answers: [][]byte{invalid, confirmation}}})
 	if code != 1 || posts != 0 || !allZero(invalid) || !allZero(confirmation) {
 		t.Fatalf("code=%d posts=%d invalid=%v confirmation=%v stderr=%q", code, posts, invalid, confirmation, stderr.String())
 	}
@@ -756,8 +745,7 @@ func TestRunVaultCancellationReturns130WithoutARequest(t *testing.T) {
 	cancel()
 
 	var stdout, stderr strings.Builder
-	code := runVault(ctx, "unlock", stateDir, server.Client(), vaultTestInput(t), &stdout, &stderr,
-		&fakePasswordTerminal{terminal: true, answers: [][]byte{[]byte(vaultPasswordCanary)}})
+	code := runVault(ctx, "unlock", commandEnvironment{stateDir: stateDir, client: server.Client(), stdin: vaultTestInput(t), stdout: &stdout, stderr: &stderr, terminal: &fakePasswordTerminal{terminal: true, answers: [][]byte{[]byte(vaultPasswordCanary)}}})
 	if code != 130 || requests != 0 {
 		t.Fatalf("code=%d requests=%d stdout=%q stderr=%q", code, requests, stdout.String(), stderr.String())
 	}
@@ -776,8 +764,7 @@ func TestRunVaultReadCancellationSendsNoMutation(t *testing.T) {
 	writeVaultTestHandoff(t, stateDir, server.URL, handoff.OwnerEngine)
 
 	var stdout, stderr strings.Builder
-	code := runVault(context.Background(), "unlock", stateDir, server.Client(), vaultTestInput(t), &stdout, &stderr,
-		&fakePasswordTerminal{terminal: true, errors: []error{context.Canceled}})
+	code := runVault(context.Background(), "unlock", commandEnvironment{stateDir: stateDir, client: server.Client(), stdin: vaultTestInput(t), stdout: &stdout, stderr: &stderr, terminal: &fakePasswordTerminal{terminal: true, errors: []error{context.Canceled}}})
 	if code != 130 || posts != 0 {
 		t.Fatalf("code=%d posts=%d stdout=%q stderr=%q", code, posts, stdout.String(), stderr.String())
 	}
@@ -797,12 +784,11 @@ func TestRunVaultErasesPartialPasswordReturnedWithReadError(t *testing.T) {
 	typed := []byte(vaultPasswordCanary)
 
 	var stdout, stderr strings.Builder
-	code := runVault(context.Background(), "unlock", stateDir, server.Client(), vaultTestInput(t), &stdout, &stderr,
-		&fakePasswordTerminal{
+	code := runVault(context.Background(), "unlock", commandEnvironment{stateDir: stateDir, client: server.Client(), stdin: vaultTestInput(t), stdout: &stdout, stderr: &stderr, terminal: &fakePasswordTerminal{
 			terminal: true,
 			answers:  [][]byte{typed},
 			errors:   []error{vaultTransportError{message: []byte("read reflected " + vaultPasswordCanary)}},
-		})
+		}})
 	if code != 1 || posts != 0 || !allZero(typed) {
 		t.Fatalf("code=%d posts=%d typed=%q stdout=%q stderr=%q", code, posts, typed, stdout.String(), stderr.String())
 	}
@@ -835,7 +821,7 @@ func TestRunVaultStopsPromptingWhenContextIsCanceledAfterARead(t *testing.T) {
 	}
 
 	var stdout, stderr strings.Builder
-	code := runVault(ctx, "create", stateDir, server.Client(), vaultTestInput(t), &stdout, &stderr, terminal)
+	code := runVault(ctx, "create", commandEnvironment{stateDir: stateDir, client: server.Client(), stdin: vaultTestInput(t), stdout: &stdout, stderr: &stderr, terminal: terminal})
 	if code != 130 || terminal.reads != 1 || posts != 0 {
 		t.Fatalf("code=%d reads=%d posts=%d stdout=%q stderr=%q", code, terminal.reads, posts, stdout.String(), stderr.String())
 	}
@@ -899,8 +885,7 @@ func TestRunVaultDoesNotPromptAfterPreflightCancellation(t *testing.T) {
 			terminal := &fakePasswordTerminal{terminal: true}
 
 			var stdout, stderr strings.Builder
-			code := runVault(ctx, test.action, stateDir, &http.Client{Transport: transport}, vaultTestInput(t),
-				&stdout, &stderr, terminal)
+			code := runVault(ctx, test.action, commandEnvironment{stateDir: stateDir, client: &http.Client{Transport: transport}, stdin: vaultTestInput(t), stdout: &stdout, stderr: &stderr, terminal: terminal})
 			if code != 130 || terminal.reads != 0 || transport.requests != 1 {
 				t.Fatalf("code=%d reads=%d requests=%d stdout=%q stderr=%q",
 					code, terminal.reads, transport.requests, stdout.String(), stderr.String())
@@ -918,8 +903,7 @@ func TestRunVaultRejectsUnknownLiveOwnerWithoutHumanOutput(t *testing.T) {
 	writeVaultTestHandoff(t, stateDir, server.URL, handoff.OwnerEngine)
 
 	var stdout, stderr strings.Builder
-	code := runVault(context.Background(), "status", stateDir, server.Client(), vaultTestInput(t), &stdout, &stderr,
-		&fakePasswordTerminal{terminal: false})
+	code := runVault(context.Background(), "status", commandEnvironment{stateDir: stateDir, client: server.Client(), stdin: vaultTestInput(t), stdout: &stdout, stderr: &stderr, terminal: &fakePasswordTerminal{terminal: false}})
 	if code != 1 || stdout.String() != "" {
 		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
@@ -948,8 +932,7 @@ func TestRunVaultRejectsMalformedOrIncompatibleStatusBeforeHumanOutput(t *testin
 			writeVaultTestHandoff(t, stateDir, server.URL, handoff.OwnerEngine)
 
 			var stdout, stderr strings.Builder
-			code := runVault(context.Background(), "status", stateDir, server.Client(), vaultTestInput(t), &stdout, &stderr,
-				&fakePasswordTerminal{terminal: false})
+			code := runVault(context.Background(), "status", commandEnvironment{stateDir: stateDir, client: server.Client(), stdin: vaultTestInput(t), stdout: &stdout, stderr: &stderr, terminal: &fakePasswordTerminal{terminal: false}})
 			if code != 1 || stdout.String() != "" {
 				t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 			}
@@ -1023,8 +1006,7 @@ func TestRunVaultBoundsAndClosesEveryResponseBody(t *testing.T) {
 			stateDir := t.TempDir()
 			writeVaultTestHandoff(t, stateDir, "http://127.0.0.1:42801", handoff.OwnerEngine)
 			var stdout, stderr strings.Builder
-			code := runVault(context.Background(), test.action, stateDir, client, vaultTestInput(t), &stdout, &stderr,
-				&fakePasswordTerminal{terminal: false})
+			code := runVault(context.Background(), test.action, commandEnvironment{stateDir: stateDir, client: client, stdin: vaultTestInput(t), stdout: &stdout, stderr: &stderr, terminal: &fakePasswordTerminal{terminal: false}})
 			if code != 1 || !body.closed {
 				t.Fatalf("code=%d closed=%v stdout=%q stderr=%q", code, body.closed, stdout.String(), stderr.String())
 			}
@@ -1075,8 +1057,7 @@ func TestRunVaultBoundsAndClosesErrorResponseBodies(t *testing.T) {
 			confirmation := []byte(vaultPasswordCanary)
 
 			var stdout, stderr strings.Builder
-			code := runVault(context.Background(), "change-password", stateDir, client, vaultTestInput(t), &stdout, &stderr,
-				&fakePasswordTerminal{terminal: true, answers: [][]byte{current, next, confirmation}})
+			code := runVault(context.Background(), "change-password", commandEnvironment{stateDir: stateDir, client: client, stdin: vaultTestInput(t), stdout: &stdout, stderr: &stderr, terminal: &fakePasswordTerminal{terminal: true, answers: [][]byte{current, next, confirmation}}})
 			if code != 1 || transport.requests != 2 || !statusBody.closed || !mutationBody.closed {
 				t.Fatalf("code=%d requests=%d statusClosed=%v mutationClosed=%v stdout=%q stderr=%q",
 					code, transport.requests, statusBody.closed, mutationBody.closed, stdout.String(), stderr.String())
@@ -1125,7 +1106,7 @@ func TestRunVaultVerifiesCurrentPasswordBeforeAskingForNewPassword(t *testing.T)
 			dir := t.TempDir()
 			writeVaultTestHandoff(t, dir, server.URL, handoff.OwnerEngine)
 			var out, diagnostic strings.Builder
-			code := runVault(context.Background(), "change-password", dir, server.Client(), vaultTestInput(t), &out, &diagnostic, terminal)
+			code := runVault(context.Background(), "change-password", commandEnvironment{stateDir: dir, client: server.Client(), stdin: vaultTestInput(t), stdout: &out, stderr: &diagnostic, terminal: terminal})
 			if status == http.StatusNoContent {
 				if code != 0 || terminal.reads != 3 || len(paths) != 3 {
 					t.Fatalf("code=%d reads=%d paths=%v: %s", code, terminal.reads, paths, diagnostic.String())
@@ -1160,7 +1141,7 @@ func TestRunVaultPasswordlessActionsDoNotAskForCurrentPassword(t *testing.T) {
 			dir := t.TempDir()
 			writeVaultTestHandoff(t, dir, server.URL, handoff.OwnerEngine)
 			var out, diagnostic strings.Builder
-			code := runVault(context.Background(), action, dir, server.Client(), vaultTestInput(t), &out, &diagnostic, terminal)
+			code := runVault(context.Background(), action, commandEnvironment{stateDir: dir, client: server.Client(), stdin: vaultTestInput(t), stdout: &out, stderr: &diagnostic, terminal: terminal})
 			wantReads := 0
 			if action == "change-password" {
 				wantReads = 2
@@ -1200,7 +1181,7 @@ func TestRunVaultUnlockSendsNothingToAnEngineThatCannotProveTheHandoffSecret(t *
 
 	terminal := &fakePasswordTerminal{terminal: true, answers: [][]byte{[]byte(vaultPasswordCanary)}, afterRead: func(int) { passwordPrompted = true }}
 	var stdout, stderr strings.Builder
-	code := runVault(context.Background(), "unlock", stateDir, impostor.Client(), vaultTestInput(t), &stdout, &stderr, terminal)
+	code := runVault(context.Background(), "unlock", commandEnvironment{stateDir: stateDir, client: impostor.Client(), stdin: vaultTestInput(t), stdout: &stdout, stderr: &stderr, terminal: terminal})
 	if code != 1 {
 		t.Fatalf("code = %d, stderr = %q", code, stderr.String())
 	}

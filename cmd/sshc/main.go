@@ -114,21 +114,18 @@ func dispatchInvocation(called invocation, home string, client *http.Client) int
 	case invocationOTP:
 		otpCtx, cancel := signal.NotifyContext(ctx, os.Interrupt)
 		defer cancel()
-		return runOTP(otpCtx, *called.OTP, app.HandoffDir(home), client,
-			os.Stdin, os.Stdout, os.Stderr, systemPasswordTerminal{})
+		return runOTP(otpCtx, *called.OTP, systemCommandEnvironment(app.HandoffDir(home), client))
 	case invocationVault:
 		// password 読み取り中と loopback request 中の Ctrl-C を public 130 にする。
 		// engine の ownership signal は runEngine が別に持つため、ここでは利用者が
 		// 起動する短命な Vault command だけを対象にする。
 		vaultCtx, cancel := signal.NotifyContext(ctx, os.Interrupt)
 		defer cancel()
-		return runVault(vaultCtx, called.Args[0], app.HandoffDir(home), vaultCommandClient(client),
-			os.Stdin, os.Stdout, os.Stderr, systemPasswordTerminal{})
+		return runVault(vaultCtx, called.Args[0], systemCommandEnvironment(app.HandoffDir(home), vaultCommandClient(client)))
 	case invocationSync:
 		syncCtx, cancel := signal.NotifyContext(ctx, os.Interrupt)
 		defer cancel()
-		return runSync(syncCtx, *called.Sync, app.HandoffDir(home), client,
-			os.Stdin, os.Stdout, os.Stderr, systemPasswordTerminal{})
+		return runSync(syncCtx, *called.Sync, systemCommandEnvironment(app.HandoffDir(home), client))
 	case invocationTerminal:
 		terminalCtx, cancel := signal.NotifyContext(ctx, os.Interrupt)
 		defer cancel()
