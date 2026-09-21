@@ -95,7 +95,8 @@ func (s *Service) BoundFor(kind Kind, alias, binding string) string {
 func (s *Service) HasAssignmentFor(kind Kind, alias string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	vault := s.use()
+	// 報告だけなので、アイドルの時計は進めない（use ではなく open）。
+	vault := s.open()
 	if vault == nil {
 		return false
 	}

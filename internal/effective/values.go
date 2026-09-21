@@ -29,22 +29,3 @@ func (v Values) First(keyword string) string {
 
 // All は keyword のすべての値を出力順で返す。
 func (v Values) All(keyword string) []string { return v.Entries[strings.ToLower(keyword)] }
-
-// ParseValues は `ssh -G` の出力を解析する。各行は小文字のキーワード、空白ひとつ、
-// そして行の残りで、残りの部分自体が空白を含みうる。
-func ParseValues(stdout []byte) Values {
-	values := Values{Entries: make(map[string][]string)}
-	for _, raw := range strings.Split(string(stdout), "\n") {
-		line := strings.TrimRight(raw, "\r")
-		if line == "" {
-			continue
-		}
-		keyword, argument, _ := strings.Cut(line, " ")
-		keyword = strings.ToLower(keyword)
-		if _, seen := values.Entries[keyword]; !seen {
-			values.Keywords = append(values.Keywords, keyword)
-		}
-		values.Entries[keyword] = append(values.Entries[keyword], argument)
-	}
-	return values
-}

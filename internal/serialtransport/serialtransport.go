@@ -80,18 +80,6 @@ type Config struct {
 	FlowControl FlowControl
 }
 
-// DefaultConfig は、network機器consoleで一般的な9600 8-N-1で接続する設定を返す。
-func DefaultConfig(device string) Config {
-	return Config{
-		Device:      device,
-		BaudRate:    DefaultBaudRate,
-		DataBits:    DefaultDataBits,
-		Parity:      ParityNone,
-		StopBits:    StopBitsOne,
-		FlowControl: FlowControlNone,
-	}
-}
-
 // Normalize は、省略されたoptionへ既定値を補う。Deviceは利用者が指定した識別子を
 // 変形しない。
 func (config Config) Normalize() Config {

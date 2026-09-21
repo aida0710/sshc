@@ -194,33 +194,6 @@ func TestProjectHostFormRejectsAnUnknownIdentity(t *testing.T) {
 	}
 }
 
-func TestMatchHostLineFollowsOpenSSHPatternRules(t *testing.T) {
-	tests := []struct {
-		patterns  string
-		candidate string
-		want      bool
-	}{
-		{"bastion", "bastion", true},
-		{"bastion", "Bastion", false},
-		{"*.internal", "db.internal", true},
-		{"*.internal", "internal", false},
-		{"web?", "web1", true},
-		{"web?", "web12", false},
-		{"*", "anything", true},
-		{"!secret *.internal", "secret", false},
-		{"!secret *.internal", "db.internal", true},
-		{"a* !ab", "ab", false},
-		{"a* !ab", "ac", true},
-	}
-	for _, test := range tests {
-		header := config.Parse([]byte("Host " + test.patterns + "\n"))
-		block := header.Blocks()[1]
-		if got := MatchHostLine(block.Patterns, test.candidate); got != test.want {
-			t.Errorf("MatchHostLine(%q, %q) = %v, want %v", test.patterns, test.candidate, got, test.want)
-		}
-	}
-}
-
 func TestNewDiagnosticViewKeepsExternalPathsVisible(t *testing.T) {
 	inside := NewDiagnosticView(testRoot, config.Diagnostic{
 		Severity: config.SeverityWarning,

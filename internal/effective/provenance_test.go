@@ -30,7 +30,7 @@ func TestProjectAttributesTheFirstValueOfEachKeyword(t *testing.T) {
 
 	projection := effective.Project(graph, "bastion")
 
-	hostName, ok := projection.Value("hostname")
+	hostName, ok := effective.WinningSource(projection, "hostname")
 	if !ok || hostName.Value != "203.0.113.10" || hostName.Path != testConfig || hostName.Line != 3 {
 		t.Fatalf("hostname source = %#v, ok = %v", hostName, ok)
 	}
@@ -42,11 +42,11 @@ func TestProjectAttributesTheFirstValueOfEachKeyword(t *testing.T) {
 	// たどり着く前に conf.d/10-defaults.conf の全体を読む。最初の値が勝つので 9999 が
 	// 勝者である。ファイル順は読み込み順ではなく、この表明は以前これと逆のことを
 	// 言っていた。
-	port, _ := projection.Value("port")
+	port, _ := effective.WinningSource(projection, "port")
 	if port.Value != "9999" || port.Path != defaults {
 		t.Errorf("OpenSSH keeps the first value it read: %#v", port)
 	}
-	user, ok := projection.Value("user")
+	user, ok := effective.WinningSource(projection, "user")
 	if !ok || user.Value != "ops" || user.Path != defaults {
 		t.Errorf("user source = %#v", user)
 	}
@@ -60,7 +60,7 @@ func TestProjectAttributesTheFirstValueOfEachKeyword(t *testing.T) {
 	if losers != 1 {
 		t.Errorf("the overridden Port must still be listed once: %#v", projection.Sources)
 	}
-	if projection.Simple() {
+	if len(projection.Complexities) == 0 {
 		t.Error("two Host blocks claiming the same alias is not a simple projection")
 	}
 	if _, ok := codesOf(projection.Complexities)[effective.ComplexityDuplicateAlias]; !ok {
@@ -89,18 +89,18 @@ func TestProjectFlagsWildcardNegationAndMatchAsComplexExternalRules(t *testing.T
 			t.Errorf("missing complexity %q in %#v", code, projection.Complexities)
 		}
 	}
-	if user, ok := projection.Value("user"); !ok || user.Kind != effective.SourceWildcard {
+	if user, ok := effective.WinningSource(projection, "user"); !ok || user.Kind != effective.SourceWildcard {
 		t.Errorf("user source = %#v, ok = %v", user, ok)
 	}
-	if _, ok := projection.Value("identityagent"); ok {
+	if _, ok := effective.WinningSource(projection, "identityagent"); ok {
 		t.Error("a Match block must not contribute a projected value")
 	}
-	if interval, ok := projection.Value("serveraliveinterval"); !ok || interval.Value != "30" {
+	if interval, ok := effective.WinningSource(projection, "serveraliveinterval"); !ok || interval.Value != "30" {
 		t.Errorf("Host * still contributes a value: %#v", interval)
 	}
 
 	excluded := effective.Project(graph, "legacy")
-	if _, ok := excluded.Value("user"); ok {
+	if _, ok := effective.WinningSource(excluded, "user"); ok {
 		t.Error("a negated pattern must exclude the block")
 	}
 }
@@ -114,7 +114,7 @@ func TestProjectReportsUnresolvedIncludesInsteadOfInventingValues(t *testing.T) 
 	if _, ok := codesOf(projection.Complexities)[effective.ComplexityUnresolvedInclude]; !ok {
 		t.Fatalf("complexities = %#v", projection.Complexities)
 	}
-	if projection.Simple() {
+	if len(projection.Complexities) == 0 {
 		t.Error("an unresolved Include is not a simple projection")
 	}
 }
@@ -183,14 +183,14 @@ func TestProjectKeepsEveryValueOfACumulativeKeyword(t *testing.T) {
 
 func TestCumulativeNamesOnlyTheKeywordsOpenSSHAccumulates(t *testing.T) {
 	for _, keyword := range []string{"IdentityFile", "certificatefile", "LocalForward", "SendEnv"} {
-		if !effective.Cumulative(keyword) {
+		if !effective.IsCumulative(keyword) {
 			t.Errorf("Cumulative(%q) = false", keyword)
 		}
 	}
 	// SetEnv はここにある。実機の ssh -G は、二行書くと最初の行しか出力しない
 	//複数の変数は `SetEnv ONE=1 TWO=2` と一行に並べる。
 	for _, keyword := range []string{"User", "Port", "HostName", "ProxyJump", "SetEnv"} {
-		if effective.Cumulative(keyword) {
+		if effective.IsCumulative(keyword) {
 			t.Errorf("Cumulative(%q) = true", keyword)
 		}
 	}

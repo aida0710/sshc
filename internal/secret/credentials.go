@@ -10,21 +10,6 @@ import (
 	"sshc/internal/totp"
 )
 
-// Has は、alias にパスワードが保存されているかを報告する。ロック中はエラーでは
-// なく false を返す。「見えない」と「存在しない」は外からは同じに見えるし、
-// インターフェースは、どちらの状態にあるかを別途示している
-// からである。
-func (s *Service) Has(alias string) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	vault := s.open()
-	if vault == nil {
-		return false
-	}
-	_, ok := vault.SecretFor(KindPassword, alias)
-	return ok
-}
-
 // mutateVault prepares a private candidate and publishes it only after the
 // encrypted replacement is durable. The baseline belongs to the vault which
 // was cloned; using it as the precondition also prevents another process from

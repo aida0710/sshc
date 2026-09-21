@@ -39,13 +39,13 @@ func TestARealPseudoTerminalCarriesTheOutputAndTheExitStatus(t *testing.T) {
 
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
-		if strings.Contains(string(session.Snapshot()), "embedded-terminal-canary") {
+		if strings.Contains(string(snapshotOf(session)), "embedded-terminal-canary") {
 			break
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
 
-	if got := string(session.Snapshot()); !strings.Contains(got, "embedded-terminal-canary") {
+	if got := string(snapshotOf(session)); !strings.Contains(got, "embedded-terminal-canary") {
 		t.Fatalf("the scrollback never received the output: %q", got)
 	}
 	if _, err := session.Write([]byte("\n")); err != nil {

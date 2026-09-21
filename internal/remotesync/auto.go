@@ -166,7 +166,7 @@ func (a *Auto) Run(ctx context.Context) {
 				continue
 			}
 			pushTimerC = nil
-			a.sendScheduled(ctx)
+			a.SendScheduled(ctx)
 		}
 	}
 }
@@ -259,7 +259,9 @@ func (a *Auto) poll(ctx context.Context) AutoView {
 	return a.View()
 }
 
-func (a *Auto) sendScheduled(ctx context.Context) AutoView {
+// SendScheduled は、NotifyLocalChange で予約した送信を今行う。Run の timer が
+// 呼ぶほか、テストは Poll と組で 1 巡（受信してから送信）を同期的に進める。
+func (a *Auto) SendScheduled(ctx context.Context) AutoView {
 	a.cycleMu.Lock()
 	defer a.cycleMu.Unlock()
 	if a.Unattended != nil {
@@ -287,18 +289,6 @@ func (a *Auto) sendScheduledEnabled(ctx context.Context) AutoView {
 	return a.View()
 }
 
-// Once は同期を一巡し、その結果を返す。リモート更新の取込後にローカル変更を送信する。
-func (a *Auto) Once(ctx context.Context) AutoView {
-	a.cycleMu.Lock()
-	defer a.cycleMu.Unlock()
-	if a.Unattended != nil {
-		var view AutoView
-		a.Unattended(func() { view = a.run(ctx) })
-		return view
-	}
-	return a.run(ctx)
-}
-
 // Now runs one user-requested cycle even when scheduled automatic sync is off.
 func (a *Auto) Now(ctx context.Context) AutoView {
 	a.cycleMu.Lock()
@@ -315,10 +305,6 @@ func (a *Auto) ManualApplyCompleted() {
 	a.clearBlocked()
 	a.clearFailed()
 	a.enter(AutoIdle, "")
-}
-
-func (a *Auto) run(ctx context.Context) AutoView {
-	return a.runEnabled(ctx, true)
 }
 
 func (a *Auto) runEnabled(ctx context.Context, requireEnabled bool) AutoView {

@@ -81,7 +81,7 @@ func (r *Registry) reconnectDelay(attempt int, sessionID string) time.Duration {
 // ランダムな session ID で集中を避けつつ、同じセッションの表示時刻は純粋計算で
 // 安定させる。
 func jitteredReconnectDelay(attempt int, sessionID string) time.Duration {
-	base := reconnectBackoff[min(attempt, len(reconnectBackoff)-1)]
+	base := ReconnectBackoff[min(attempt, len(ReconnectBackoff)-1)]
 	hash := fnv.New32a()
 	_, _ = hash.Write([]byte(sessionID))
 	_, _ = hash.Write([]byte{byte(attempt), byte(attempt >> 8)})
@@ -306,13 +306,6 @@ func (r *Registry) prune() {
 		}
 		r.sessions = append(r.sessions[:index], r.sessions[index+1:]...)
 	}
-}
-
-// Prune は、終了したセッションが増えたあとに呼ばれる公開の入り口である。
-func (r *Registry) Prune() {
-	r.mutex.Lock()
-	defer r.mutex.Unlock()
-	r.prune()
 }
 
 func (r *Registry) MaxSessions() int { return r.limits().MaxSessions }
