@@ -58,6 +58,16 @@ func newTracer(level Verbosity, writer io.Writer) *tracer {
 	return &tracer{level: level, writer: writer, clock: time.Now}
 }
 
+// linePrefix は、接続ログの各行の頭に置く印である。
+//
+// 深さを行ごとに付けるのは、OpenSSH の debug1:／debug2:／debug3: と同じ
+// 理由である。読む側は、その行がどの設定で出たかを行だけで判別でき、
+// `debug2` で grep すれば深さ 2 の行だけを拾える。深さの印が無い `[sshc]` は、
+// 設定に関係なく出る行（ProxyCommand の実行、再接続の通知）である。
+func linePrefix(level Verbosity) string {
+	return fmt.Sprintf("[sshc][debug%d] ", int(level))
+}
+
 // say は、その level が求められていれば 1 行書く。
 //
 // 端末は行末にCRLFを要る。生の\nだけを送ると、次の行が前の行の右端から
@@ -66,7 +76,7 @@ func (t *tracer) say(level Verbosity, format string, args ...any) {
 	if t == nil || t.writer == nil || level > t.level {
 		return
 	}
-	_, _ = io.WriteString(t.writer, "[sshc] "+fmt.Sprintf(format, args...)+"\r\n")
+	_, _ = io.WriteString(t.writer, linePrefix(level)+fmt.Sprintf(format, args...)+"\r\n")
 }
 
 // announce は verbosity に関係なく ProxyCommand の実行を 1 行表示する。
