@@ -785,10 +785,10 @@ func TestRunVaultErasesPartialPasswordReturnedWithReadError(t *testing.T) {
 
 	var stdout, stderr strings.Builder
 	code := runVault(context.Background(), "unlock", commandEnvironment{stateDir: stateDir, client: server.Client(), stdin: vaultTestInput(t), stdout: &stdout, stderr: &stderr, terminal: &fakePasswordTerminal{
-			terminal: true,
-			answers:  [][]byte{typed},
-			errors:   []error{vaultTransportError{message: []byte("read reflected " + vaultPasswordCanary)}},
-		}})
+		terminal: true,
+		answers:  [][]byte{typed},
+		errors:   []error{vaultTransportError{message: []byte("read reflected " + vaultPasswordCanary)}},
+	}})
 	if code != 1 || posts != 0 || !allZero(typed) {
 		t.Fatalf("code=%d posts=%d typed=%q stdout=%q stderr=%q", code, posts, typed, stdout.String(), stderr.String())
 	}
