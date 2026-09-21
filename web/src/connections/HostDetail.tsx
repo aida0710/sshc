@@ -94,6 +94,9 @@ export function HostDetailPanel({
     setLastAdvanced("Jump");
     setBasicDirty(false);
     setAdvancedDirty(false);
+    // Runs only when the host or file revision behind resetKey changes; the
+    // controlled panel prop is read, not watched, so a parent toggling it
+    // does not wipe the dirty marks.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resetKey]);
 

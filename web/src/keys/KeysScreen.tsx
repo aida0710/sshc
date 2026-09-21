@@ -1,5 +1,3 @@
-import { vaultApi, type VaultApi } from "../api/vault";
-import { credentialsApi, type CredentialsApi } from "../api/credentials";
 import { useCallback, useEffect, useState, type DragEvent } from "react";
 import {
   useAgentForm,
@@ -7,8 +5,9 @@ import {
   usePassphraseForm,
   useRelocateForm,
   useStoredPassphraseForm,
-  useStoredPhrases,
 } from "./forms";
+import { useKeyPassphrases } from "./useKeyPassphrases";
+import { keySecretsApi, type KeySecretsApi } from "./secretsApi";
 import { RevealDialog } from "./RevealDialog";
 import { KeyTable, type KeyRowActions } from "./KeyTable";
 import {
@@ -56,11 +55,7 @@ import {
   type MoveTarget,
 } from "./organizer";
 
-// The key list stores passphrases as credentials and assigns them to keys,
-// which needs the vault open.
-export type KeySecretsApi = Pick<VaultApi, "passwordVault"> &
-  Pick<CredentialsApi, "credentials" | "storeCredential" | "assignCredential" | "unassignCredential">;
-export const keySecretsApi: KeySecretsApi = { ...vaultApi, ...credentialsApi };
+export { keySecretsApi, type KeySecretsApi } from "./secretsApi";
 
 type KeysScreenProps = {
   api?: KeysApi;
@@ -97,14 +92,8 @@ export function KeysScreen({
   const [trash, setTrash] = useState<TrashListResponse | null>(null);
   const [variants, setVariants] = useState<KeyVariant[]>([]);
   const [revealing, setRevealing] = useState<KeyItem | null>(null);
-  const storedPhrases = useStoredPhrases();
-  const {
-    phrases,
-    setPhrases,
-    setDedicatedPhrasePaths,
-    chosenPhrase,
-    setChosenPhrase,
-  } = storedPhrases;
+  const storedPhrases = useKeyPassphrases(secrets);
+  const { chosenPhrase, load: loadPhrases } = storedPhrases;
   const passphraseForm = usePassphraseForm();
   const {
     setChangingPassphrase,
@@ -293,100 +282,27 @@ export function KeysScreen({
     }
   }
 
-  async function loadPhrases() {
-    try {
-      const status = await secrets.passwordVault();
-      setDedicatedPhrasePaths(status.dedicatedKeyPassphrases);
-      if (!status.unlocked) {
-        setPhrases([]);
-        return;
-      }
-      const listed = await secrets.credentials();
-      setPhrases(
-        listed.credentials.filter(
-          (credential) => credential.kind === "key_passphrase",
-        ),
-      );
-    } catch {
-      setPhrases([]);
-      setDedicatedPhrasePaths([]);
-    }
-  }
-
   async function assignPhrase(item: KeyItem) {
-    try {
-      const listed = await secrets.assignCredential(
-        "key_passphrase",
-        item.relativePath,
-        chosenPhrase,
-      );
-      setPhrases(
-        listed.credentials.filter(
-          (credential) => credential.kind === "key_passphrase",
-        ),
-      );
-      setDedicatedPhrasePaths((current) =>
-        current.filter((path) => path !== item.relativePath),
-      );
-      setChosenPhrase("");
-    } catch {
-      setFailure(t("keys.assignPassphraseFailed"));
-    }
+    const failed = await storedPhrases.assign(item, chosenPhrase);
+    if (failed !== null) setFailure(t(failed));
   }
 
   async function storeAndAssignPhrase(item: KeyItem) {
     if (storedPhraseName === "" || storedPhraseSecret === "") return;
     setFailure("");
-    if (phrases.some((credential) => credential.name === storedPhraseName)) {
+    const failed = await storedPhrases.storeAndAssign(item, storedPhraseName, storedPhraseSecret);
+    if (failed !== null) {
       setStoredPhraseSecret("");
-      setFailure(t("keys.storedPassphraseExists"));
+      setFailure(t(failed));
       return;
     }
-    try {
-      await secrets.storeCredential(
-        "key_passphrase",
-        storedPhraseName,
-        storedPhraseSecret,
-      );
-      const listed = await secrets.assignCredential(
-        "key_passphrase",
-        item.relativePath,
-        storedPhraseName,
-      );
-      setPhrases(
-        listed.credentials.filter(
-          (credential) => credential.kind === "key_passphrase",
-        ),
-      );
-      setDedicatedPhrasePaths((current) =>
-        current.filter((path) => path !== item.relativePath),
-      );
-      closeStoredPassphraseForm();
-    } catch {
-      setStoredPhraseSecret("");
-      setFailure(t("keys.storePassphraseFailed"));
-    }
+    closeStoredPassphraseForm();
   }
 
   async function unassignPhrase(item: KeyItem) {
     setFailure("");
-    try {
-      const listed = await secrets.unassignCredential(
-        "key_passphrase",
-        item.relativePath,
-      );
-      setPhrases(
-        listed.credentials.filter(
-          (credential) => credential.kind === "key_passphrase",
-        ),
-      );
-      setDedicatedPhrasePaths((current) =>
-        current.filter((path) => path !== item.relativePath),
-      );
-      setChosenPhrase("");
-    } catch {
-      setFailure(t("keys.unassignPassphraseFailed"));
-    }
+    const failed = await storedPhrases.unassign(item);
+    if (failed !== null) setFailure(t(failed));
   }
 
   async function submitRegistration(item: KeyItem) {
