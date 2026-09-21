@@ -122,8 +122,13 @@ jobs:
           exit $testExit
 
       # 実行時間と失敗種別を区別するため race detector を別ステップにする。
+      #
+      # race は macOS で 13 分、Windows で 6 分かかり（Linux は 4 分）、PR の CI
+      # を律速していた。データ競合は OS にほぼ依存しないので、PR では Linux だけ
+      # で走らせ、main への push と手動実行では 3 OS すべてで走らせる。OS 固有の
+      # 経路にある競合は main 側で遅れて捕まえる。
       - name: go test -race (Unix)
-        if: ${{ runner.os != 'Windows' }}
+        if: ${{ runner.os != 'Windows' && (github.event_name != 'pull_request' || runner.os == 'Linux') }}
         shell: bash
         run: go test -count=1 -race ./...
 
@@ -131,7 +136,7 @@ jobs:
       # platform を unsupported と明言した場合だけ neutral にし、test failure、
       # compile failure、race report は元の終了 code で失敗させる。
       - name: go test -race (Windows)
-        if: ${{ runner.os == 'Windows' }}
+        if: ${{ runner.os == 'Windows' && github.event_name != 'pull_request' }}
         shell: pwsh
         run: |
           $PSNativeCommandUseErrorActionPreference = $false
