@@ -179,6 +179,37 @@ func (s *Store) Recover(presented string) (string, bool, error) {
 	return "", false, nil
 }
 
+// Forget は、提示された token の登録を消す。サインアウトしたブラウザは engine の
+// 再起動後にこの token で入り直せなくなる。差し替え猶予中の旧 token も同じ登録を
+// 指すので受け付ける。知らない token は何もせず false を返す。
+func (s *Store) Forget(presented string) (bool, error) {
+	if !validToken(presented) {
+		return false, nil
+	}
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	stored, err := s.load()
+	if err != nil {
+		return false, err
+	}
+	presentedHash := hashToken(presented)
+	live := s.live(stored.Registrations)
+	index := indexOf(live, presentedHash, currentHash)
+	if index < 0 {
+		index = indexOf(live, presentedHash, previousHash)
+	}
+	if index < 0 {
+		return false, nil
+	}
+	delete(s.rotations, live[index].Previous)
+	delete(s.rotations, presentedHash)
+	stored.Registrations = append(live[:index:index], live[index+1:]...)
+	if err := s.write(stored); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 // Register returns an existing valid registration unchanged. A one-time bootstrap may
 // call it with an empty or stale value to enrol the current browser and receive a new token.
 func (s *Store) Register(presented string) (string, bool, error) {

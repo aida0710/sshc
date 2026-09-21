@@ -1,8 +1,11 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { LanguageProvider } from "../i18n/context";
 import { MenuPanel, type MenuGroup } from "./MenuPanel";
+
+const { signOut } = vi.hoisted(() => ({ signOut: vi.fn() }));
+vi.mock("../session/signOut", () => ({ signOut }));
 
 const groups: MenuGroup[] = [
   {
@@ -52,5 +55,48 @@ describe("MenuPanel", () => {
 
     await userEvent.click(screen.getByRole("link", { name: "Open Sync" }));
     expect(onNavigate).toHaveBeenCalledWith("/sync");
+  });
+
+  it("signs out only after the confirmation and then reloads", async () => {
+    const user = userEvent.setup();
+    const reload = vi.fn();
+    vi.stubGlobal("location", { ...window.location, reload });
+    signOut.mockResolvedValue(undefined);
+    render(
+      <LanguageProvider initial="en">
+        <MenuPanel groups={groups} onNavigate={vi.fn()} />
+      </LanguageProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Sign out of this browser" }));
+    expect(signOut).not.toHaveBeenCalled();
+    const dialog = await screen.findByRole("dialog", { name: "Sign out of this browser?" });
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(dialog).not.toBeInTheDocument();
+    expect(signOut).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Sign out of this browser" }));
+    await user.click(screen.getByRole("dialog").querySelector("button:last-of-type") as HTMLElement);
+    await waitFor(() => expect(signOut).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
+    vi.unstubAllGlobals();
+  });
+
+  it("shows why signing out failed and stays on the page", async () => {
+    const user = userEvent.setup();
+    const reload = vi.fn();
+    vi.stubGlobal("location", { ...window.location, reload });
+    signOut.mockRejectedValue(new Error("offline"));
+    render(
+      <LanguageProvider initial="en">
+        <MenuPanel groups={groups} onNavigate={vi.fn()} />
+      </LanguageProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Sign out of this browser" }));
+    await user.click(screen.getByRole("dialog").querySelector("button:last-of-type") as HTMLElement);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Could not sign out.");
+    expect(reload).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
   });
 });

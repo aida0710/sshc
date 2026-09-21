@@ -220,14 +220,17 @@ type fixture struct {
 	client  *http.Client
 	// anonymous は cookie jar を持たないため、これを通したリクエストは
 	// session なしでサーバーに届く。
-	anonymous    *http.Client
-	server       *httpserver.Server
-	terminal     *recordingTerminal
-	scanner      *recordingScanner
-	clock        *testClock
-	logs         *syncBuffer
-	canaries     fixtureCanaries
-	sessionID    string
+	anonymous *http.Client
+	server    *httpserver.Server
+	terminal  *recordingTerminal
+	scanner   *recordingScanner
+	clock     *testClock
+	logs      *syncBuffer
+	canaries  fixtureCanaries
+	sessionID string
+	// browserToken はブラウザ登録の token。route sweep が sign-out を踏んだ後、
+	// frontend と同じく recover で入り直すために持つ。
+	browserToken string
 	cachedKey    string
 	trashCounter atomic.Int64
 }
@@ -423,13 +426,23 @@ func (f *fixture) bootstrapSession(bootstrap string) {
 	if response.StatusCode != http.StatusOK {
 		f.t.Fatalf("bootstrap = %d", response.StatusCode)
 	}
+	f.adoptSession(f.t, response, "bootstrap")
+}
+
+// adoptSession は bootstrap／recover の応答から cookie・CSRF・登録 token を取り込む。
+func (f *fixture) adoptSession(t testing.TB, response *http.Response, from string) {
+	t.Helper()
 	var payload struct {
-		CsrfToken string `json:"csrfToken"`
+		CsrfToken    string `json:"csrfToken"`
+		BrowserToken string `json:"browserToken"`
 	}
 	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
-		f.t.Fatal(err)
+		t.Fatal(err)
 	}
 	f.canaries.CSRF = payload.CsrfToken
+	if payload.BrowserToken != "" {
+		f.browserToken = payload.BrowserToken
+	}
 	for _, cookie := range response.Cookies() {
 		if cookie.Name == httpserver.SessionCookie {
 			f.sessionID = cookie.Value
@@ -437,8 +450,31 @@ func (f *fixture) bootstrapSession(bootstrap string) {
 		}
 	}
 	if f.sessionID == "" {
-		f.t.Fatal("bootstrap returned no session cookie")
+		t.Fatalf("%s returned no session cookie", from)
 	}
+}
+
+// reenterAfterSignOut は、sweep が sign-out を踏んで失った session を、frontend と
+// 同じ経路（ブラウザ登録からの recover）で取り戻す。
+func (f *fixture) reenterAfterSignOut(t testing.TB, client *http.Client) {
+	t.Helper()
+	request, err := http.NewRequest(http.MethodPost, f.baseURL+"/api/v1/session/recover", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Host = f.host
+	request.Header.Set("Sec-Fetch-Site", "same-origin")
+	request.Header.Set("Origin", f.baseURL)
+	request.Header.Set("X-SSHC-Browser", f.browserToken)
+	response, err := client.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("recover after sign-out = %d", response.StatusCode)
+	}
+	f.adoptSession(t, response, "recover")
 }
 
 // do は、正しい Host、Origin、Fetch Metadata ヘッダーを付けて 1 つのリクエストを発行する。
@@ -477,6 +513,11 @@ func (f *fixture) doAs(t testing.TB, client *http.Client, method, path string, b
 		apply(request)
 	}
 	response, err := client.Do(request)
+	if err == nil && path == "/api/v1/session/sign-out" && response.StatusCode == http.StatusNoContent {
+		// sign-out は session を消す。frontend はその後 reload で登録から入り直す
+		// ので、sweep も同じことをして残りの route を続ける。
+		f.reenterAfterSignOut(t, client)
+	}
 	if err == nil && path == "/api/v1/session/renew" && response.StatusCode == http.StatusOK {
 		// Renewing は token を rotate させ、harness は frontend と
 		// 全く同じようにそれを追わねばならない。route sweep はこれを含む
