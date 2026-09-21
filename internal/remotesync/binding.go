@@ -9,22 +9,6 @@ import (
 	"sshc/internal/objectstore"
 )
 
-// Configure は、この実行のバケットと資格情報を設定する。
-//
-// 資格情報はメモリ上に保持され、ワークスペースへ書かれることは決してない。自分の
-// バケットへの鍵を運ぶスナップショットは、ブートストラップの便宜と引き換えに
-// 爆発半径をはるかに大きくする。
-func (s *Service) Configure(config Config, credentials objectstore.Credentials, client *objectstore.Client) error {
-	s.operationMu.Lock()
-	defer s.operationMu.Unlock()
-	config = normalizeConfig(config)
-	if err := s.validateRecoveryTarget(config); err != nil {
-		return err
-	}
-	s.configure(config, credentials, client)
-	return nil
-}
-
 // ConfigureIfUnconfigured restores a persisted binding without overwriting a
 // binding explicitly configured while the persisted settings were being read.
 // The check and publication share operationMu with Reconfigure.
@@ -140,22 +124,6 @@ func (s *Service) Direction() Direction {
 		return DirectionBoth
 	}
 	return s.binding.config.Direction
-}
-
-// Check は、この設定が機能するかを知るために、バケットに問いをひとつ投げる。
-//
-// これは、打ち間違いと「正しく見えるのに何時間もあとの最初の push で、タイプミスを
-// した画面から遠く離れたところで失敗する設定」とのあいだに立つものである。まだ
-// スナップショットを持たないバケットは「見つからない」と返すが、それは機能して
-// いるバケットである。問いは、このエンドポイント・このバケット名・この資格情報が、
-// 結果を返すストアに届くかどうかであって、そこへ何かが push されたかどうかでは
-// ない。
-func (s *Service) Check(ctx context.Context) error {
-	binding, err := s.configuredBinding()
-	if err != nil {
-		return err
-	}
-	return Check(ctx, binding.client, ObjectKeyFor(binding.config))
 }
 
 // Check は、このサービスが保持していないクライアントに対して同じ問いを投げる。

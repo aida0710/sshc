@@ -499,13 +499,6 @@ func (v *Vault) SetDedicatedKeyPassphrase(relativePath, value string) error {
 	return nil
 }
 
-// RemoveKeyPassphrase forgets either representation attached to one key. It
-// never removes the named credential itself because other keys may still use it.
-func (v *Vault) RemoveKeyPassphrase(relativePath string) {
-	delete(v.subjects[KindKeyPassphrase], relativePath)
-	delete(v.dedicatedKeyPassphrases, relativePath)
-}
-
 // DedicatedKeyPassphraseSubjects lists only the key-owned entries, never their
 // plaintext values.
 func (v *Vault) DedicatedKeyPassphraseSubjects() []string {

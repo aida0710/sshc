@@ -197,16 +197,6 @@ func (s *Service) pullWithRemoteAcceptance(
 	}, err
 }
 
-// PullAndApply downloads, verifies and commits one exact preview generation as
-// a single service operation. The expected values come from the earlier
-// user-visible preview; this method then takes a fresh remote/local snapshot
-// and keeps operationMu through the final workspace commit.
-func (s *Service) PullAndApply(ctx context.Context, passphrase string, resolve Resolution, historyKey, expectedETag, expectedRevision string) (PullResult, error) {
-	s.operationMu.Lock()
-	defer s.operationMu.Unlock()
-	return s.pullAndApply(ctx, passphrase, resolve, historyKey, expectedETag, expectedRevision, false)
-}
-
 func (s *Service) PullAndApplyUsing(ctx context.Context, key KeyProvider, resolve Resolution, historyKey, expectedETag, expectedRevision string) (PullResult, error) {
 	s.operationMu.Lock()
 	defer s.operationMu.Unlock()
@@ -240,6 +230,11 @@ func (s *Service) pullAndApply(ctx context.Context, passphrase string, resolve R
 	if err != nil && !errors.Is(err, ErrNothingToApply) {
 		return PullResult{}, err
 	}
+	// 生きた object が消えていれば、それは「preview が古い」ではなく「remote が
+	// 消えた」と言う。どちらも適用は止まるが、次に取る行動が違う。
+	if result.liveMissing || result.ETag == "" {
+		return PullResult{}, ErrRemoteDeleted
+	}
 	if expectedETag == "" || expectedRevision == "" ||
 		result.ETag != expectedETag || result.Manifest.Revision != expectedRevision {
 		return PullResult{}, ErrPreviewStale
@@ -251,17 +246,6 @@ func (s *Service) pullAndApply(ctx context.Context, passphrase string, resolve R
 		return PullResult{}, err
 	}
 	return result, nil
-}
-
-// Apply は pull をコミットする。どれかのファイルが衝突しているあいだは拒否する。
-// 半分だけ適用すれば、どちらの側とも一致しないワークスペースになるからだ。
-func (s *Service) Apply(result PullResult) error {
-	s.operationMu.Lock()
-	defer s.operationMu.Unlock()
-	if err := s.validatePullForApply(context.Background(), result); err != nil {
-		return err
-	}
-	return s.apply(result)
 }
 
 func (s *Service) validatePullForApply(ctx context.Context, result PullResult) error {

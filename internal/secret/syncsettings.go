@@ -61,14 +61,6 @@ func (s *Service) SetSyncAuto(enabled bool) error {
 	})
 }
 
-// SetSyncKey は、同期の鍵だけを置き換える。他の設定はそのまま残る。
-func (s *Service) SetSyncKey(key string) error {
-	return s.writeSyncSettings(func(stored SyncSettings) (SyncSettings, error) {
-		stored.Key = key
-		return stored, nil
-	})
-}
-
 var ErrSyncSettingsChanged = errors.New("the synchronization settings changed")
 
 // SetSyncKeyIfSettingsMatch commits a rotated key only to the exact remote

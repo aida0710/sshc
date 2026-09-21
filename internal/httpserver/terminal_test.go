@@ -677,7 +677,7 @@ func TestExitedSSHSessionCanBeExplicitlyReconnectedInPlace(t *testing.T) {
 	first.feed("before manual reconnect\r\n")
 	waitUntil(t, func() bool {
 		session, ok := fixture.registry.Lookup(opened.Session.Id)
-		return ok && strings.Contains(string(session.Snapshot()), "before manual reconnect")
+		return ok && strings.Contains(string(snapshotOf(session)), "before manual reconnect")
 	})
 	first.exit(terminal.ExitInfo{Code: 255})
 	waitUntil(t, func() bool {
@@ -992,7 +992,7 @@ func TestReattachingReplaysTheScrollbackAndKeepsTheSessionAlive(t *testing.T) {
 	// scrollback へ格納する前に再接続するとライブ出力として次のフレームへ届く。
 	// このテストは「切断中に蓄えた scrollback の再生」を検査するため、格納を待つ。
 	waitUntil(t, func() bool {
-		return strings.Contains(string(session.Snapshot()), "while detached")
+		return strings.Contains(string(snapshotOf(session)), "while detached")
 	})
 
 	// 新しいチケットで繋ぎ直す。リロードしたページにはチケットが残っていない。
@@ -1150,7 +1150,7 @@ func TestTerminalOSCTitleAndNotificationReachTheSessionList(t *testing.T) {
 	if !ok {
 		t.Fatal("opened session disappeared")
 	}
-	if snapshot := string(core.Snapshot()); snapshot != "before\x1b]0;API認証の修正\x1b\\\x1b]777;notify;Claude Code;入力待ちです\aafter" {
+	if snapshot := string(snapshotOf(core)); snapshot != "before\x1b]0;API認証の修正\x1b\\\x1b]777;notify;Claude Code;入力待ちです\aafter" {
 		t.Fatalf("scrollback was altered: %q", snapshot)
 	}
 }
@@ -1193,4 +1193,14 @@ func TestOpeningASessionRefusesSizesThatOverflowTheTerminal(t *testing.T) {
 	if opened := fixture.starter.opened(); len(opened) != 0 {
 		t.Fatalf("a refused size still opened %#v", opened)
 	}
+}
+
+// snapshotOf は、いまスクロールバックに残っている出力を先頭からの AttachFrom で読む。
+func snapshotOf(session *terminal.Session) []byte {
+	replay, stream, ok := session.AttachFrom(0)
+	if !ok {
+		return nil
+	}
+	session.Detach(stream)
+	return replay.Data
 }

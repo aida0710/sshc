@@ -34,8 +34,6 @@ func NewRing(capacity int) *Ring {
 	return &Ring{data: make([]byte, capacity)}
 }
 
-func (r *Ring) Len() int { return r.size }
-
 func (r *Ring) CanReadFrom(cursor uint64) bool { return cursor <= r.written }
 
 func (r *Ring) Write(p []byte) (int, error) {
@@ -114,15 +112,4 @@ func (r *Ring) readFrom(cursor uint64, limit int, includeContext bool) (RingRead
 		Data: data, Context: context, Emit: int(start - oldest),
 		Start: start, Next: next, End: r.written, Truncated: truncated,
 	}, true
-}
-
-// Snapshot は、いま保持しているバイト列を古い順に返す。
-func (r *Ring) Snapshot() []byte {
-	out := make([]byte, r.size)
-	if r.size == 0 {
-		return out
-	}
-	first := copy(out, r.data[r.start:])
-	copy(out[first:], r.data)
-	return out
 }

@@ -137,7 +137,6 @@ type CommandTarget struct {
 }
 
 func (s *Session) ID() string { return s.id }
-func (s *Session) Kind() Kind { return s.kind }
 
 // WhenConnected registers work which may run once, after an asynchronous SSH
 // Process has actually authenticated and started its remote shell. The caller
@@ -164,13 +163,6 @@ func (s *Session) signalConnected() {
 	if connected && callback != nil {
 		s.connectedOnce.Do(callback)
 	}
-}
-
-// Title は一覧に出す名前である。改名できるので、ロックの中で読む。
-func (s *Session) Title() string {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-	return s.title
 }
 
 // Rename は一覧に出す名前を変える。
@@ -280,19 +272,6 @@ func (s *Session) StopForward(id string) error {
 		return ErrForwardUnavailable
 	}
 	return controller.StopForward(id)
-}
-
-// Snapshot は、いまスクロールバックに残っているバイト列を返す。
-func (s *Session) Snapshot() []byte {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-	return s.buffer.Snapshot()
-}
-
-// Attach は、バッファの内容を先に返し、その後ライブの出力へ継ぐ。
-func (s *Session) Attach() ([]byte, *Stream) {
-	replay, stream, _ := s.AttachFrom(0)
-	return replay.Data, stream
 }
 
 // CanAttachFrom reports whether cursor belongs to the output range written by
@@ -563,21 +542,13 @@ const MaxReconnects = 5
 // 切断を繰り返す接続は有限回で止め、安定していた接続の過去の失敗は持ち越さない。
 const ReconnectSettled = 10 * time.Second
 
-const reconnectJitterMaxPercent = 120
+// ReconnectJitterMaxPercent は、再接続の待ち時間に掛かる揺らぎの上限（%）。
+const ReconnectJitterMaxPercent = 120
 
-// reconnectBackoff は、試みのあいだに置く間隔である。
-var reconnectBackoff = []time.Duration{time.Second, 2 * time.Second, 5 * time.Second, 10 * time.Second, 15 * time.Second}
-
-// ReconnectWindow は指定回数の再接続待機時間の合計を返す。
-func ReconnectWindow(attempts int) time.Duration {
-	attempts = NormaliseReconnects(attempts)
-	var total time.Duration
-	for attempt := range attempts {
-		total += reconnectBackoff[min(attempt, len(reconnectBackoff)-1)]
-	}
-	maximum := total * reconnectJitterMaxPercent / 100
-	return ((maximum + time.Second - 1) / time.Second) * time.Second
-}
+// ReconnectBackoff は、試みのあいだに置く間隔である。
+// ReconnectBackoff は、n 回目の再接続までに待つ基準の秒数。表の末尾以降は最後の
+// 値を繰り返す。設定画面の文言はこの表から総所要時間を言う。
+var ReconnectBackoff = []time.Duration{time.Second, 2 * time.Second, 5 * time.Second, 10 * time.Second, 15 * time.Second}
 
 // NormaliseReconnects は、範囲の外にある回数を天井へ戻す。
 func NormaliseReconnects(attempts int) int {
@@ -799,7 +770,7 @@ func (s *Session) reconnect(info ExitInfo, connectionErr error, now func() time.
 			return false
 		}
 
-		wait := reconnectBackoff[min(attempt, len(reconnectBackoff)-1)]
+		wait := ReconnectBackoff[min(attempt, len(ReconnectBackoff)-1)]
 		if s.delay != nil {
 			wait = s.delay(attempt)
 		}

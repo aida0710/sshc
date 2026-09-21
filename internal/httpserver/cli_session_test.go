@@ -145,7 +145,7 @@ func TestCLISessionDoesNotConsumeBrowserBootstrap(t *testing.T) {
 	engine, manager, bootstrap := newCLISessionEngine(t)
 	issuedCLISession(t, engine)
 
-	credentials, err := manager.Bootstrap(bootstrap)
+	credentials, _, err := manager.BootstrapForSession(bootstrap, "")
 	if err != nil {
 		t.Fatalf("browser Bootstrap after CLI session = %v", err)
 	}
