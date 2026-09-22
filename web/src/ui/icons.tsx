@@ -26,6 +26,7 @@ export const iconNames = [
   "chevronRight",
   "edit",
   "copy",
+  "check",
 ] as const;
 
 export type IconName = (typeof iconNames)[number];
@@ -154,6 +155,7 @@ const shapes: Record<IconName, ReactNode> = {
       <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
     </>
   ),
+  check: <path d="M5 12.5l4.5 4.5L19 7" />,
 };
 
 export function IconSprite() {

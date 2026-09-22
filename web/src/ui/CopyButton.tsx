@@ -1,7 +1,6 @@
-import { useEffect, useState } from "react";
 import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
-import { clipboard } from "./clipboard";
+import { useClipboardCopy } from "./useClipboardCopy";
 
 type CopyButtonProps = {
   value: string;
@@ -9,30 +8,15 @@ type CopyButtonProps = {
   className?: string;
 };
 
-type CopyState = "idle" | "copied" | "failed";
-
 export function CopyButton({ value, label, className }: CopyButtonProps) {
   const t = useTranslate();
-  const [state, setState] = useState<CopyState>("idle");
-
-  useEffect(() => {
-    setState("idle");
-  }, [value]);
-
-  async function copy() {
-    try {
-      await clipboard.writeText(value);
-      setState("copied");
-    } catch {
-      setState("failed");
-    }
-  }
+  const { state, copy } = useClipboardCopy(value);
 
   return (
     <span className="inline-flex items-center gap-2">
       <button
         type="button"
-        onClick={() => void copy()}
+        onClick={copy}
         className={className ?? "rounded border border-control-line px-2 py-1 text-xs"}
       >
         {t("copy.button", { label: t(label) })}
