@@ -3107,6 +3107,7 @@ export interface components {
              * @enum {string}
              */
             osc52?: "allow" | "deny";
+            vpn?: string;
         };
         TerminalAppearance: {
             palette?: string;
@@ -3146,6 +3147,18 @@ export interface components {
             backgrounds?: components["schemas"]["BackgroundSettings"];
             groups?: components["schemas"]["GroupMetadata"][];
             hosts?: components["schemas"]["HostMetadata"][];
+            vpnProfiles?: components["schemas"]["VPNProfile"][];
+        };
+        VPNProfile: {
+            name: string;
+            backend: string;
+            target: string;
+            wireguard?: components["schemas"]["WireGuardProfile"];
+        };
+        WireGuardProfile: {
+            server: string;
+            peerPublicKey: string;
+            address: string;
         };
         BackgroundSettings: {
             capacityMiB?: number;
