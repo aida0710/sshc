@@ -93,6 +93,12 @@ func (profile Profile) Validate() error {
 	return profile.WireGuard.validate()
 }
 
+// ValidateName は、プロファイル名として使えるかを確かめる。
+//
+// 保存する側も同じ規則で確かめる。コンテナ名とディレクトリ名になるので、
+// 区切り文字が混じったものを保存させない。
+func ValidateName(name string) error { return validateProfileName(name) }
+
 // validateProfileName は、コンテナ名とディレクトリ名に入る字だけを通す。
 func validateProfileName(name string) error {
 	if name == "" || len(name) > maxProfileNameLength {

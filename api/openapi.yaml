@@ -4060,6 +4060,9 @@ components:
           type: string
           enum: [allow, deny]
           description: Per-connection OSC 52 override. Omitted inherits the terminal default.
+        # 通る VPN プロファイルの名前。ssh_config には書かない。OpenSSH が解釈する
+        # 語ではなく、sshc だけが持つ紐付けだからである。
+        vpn: { type: string, maxLength: 48 }
     # 端末の表示設定。接続単位と全体設定を項目ごとに解決し、未設定項目はアプリの
     # テーマを使う。配色とフォントは名前で参照し、未知の名前は既定値へ戻す。
     TerminalAppearance:
@@ -4124,6 +4127,30 @@ components:
         backgrounds: { $ref: "#/components/schemas/BackgroundSettings" }
         groups: { type: array, items: { $ref: "#/components/schemas/GroupMetadata" } }
         hosts: { type: array, items: { $ref: "#/components/schemas/HostMetadata" } }
+        vpnProfiles: { type: array, maxItems: 64, items: { $ref: "#/components/schemas/VPNProfile" } }
+    # 接続ごとに通せる VPN 経路の定義。秘密は Vault にあり、この文書には無い。
+    # 接続先はひとつに限る。経路とパケットフィルタが接続先ひとつで閉じる。
+    VPNProfile:
+      type: object
+      additionalProperties: false
+      required: [name, backend, target]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 48 }
+        backend: { type: string, minLength: 1, maxLength: 32 }
+        # この VPN の中にある接続先。`host:port` で書く。
+        target: { type: string, minLength: 3, maxLength: 128 }
+        wireguard: { $ref: "#/components/schemas/WireGuardProfile" }
+    WireGuardProfile:
+      type: object
+      additionalProperties: false
+      required: [server, peerPublicKey, address]
+      properties:
+        # トンネルの相手。`host:port` で書く。
+        server: { type: string, minLength: 3, maxLength: 320 }
+        # 相手の公開鍵。秘密ではない。
+        peerPublicKey: { type: string, minLength: 44, maxLength: 44 }
+        # トンネル側でこの端末が名乗るアドレス（CIDR 表記）。
+        address: { type: string, minLength: 9, maxLength: 43 }
     BackgroundSettings:
       type: object
       additionalProperties: false

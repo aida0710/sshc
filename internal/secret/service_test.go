@@ -336,7 +336,7 @@ func TestEmptyTravelDocumentUsesTheCurrentUnlockedKeyGeneration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Contains(empty, []byte(`"schemaVersion":5`)) {
+	if !bytes.Contains(empty, []byte(`"schemaVersion":6`)) {
 		t.Fatalf("EmptyTravelDocument = %q", empty)
 	}
 	sealed, err := service.AdoptTravelDocument(empty)

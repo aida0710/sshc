@@ -172,3 +172,22 @@ func TestTheImageTagFollowsTheEmbeddedContents(t *testing.T) {
 		t.Fatalf("imageTag = %q", tag)
 	}
 }
+
+// Vault へ保存する記録は、読み書きで同じ値に戻る。
+func TestSecretsSurviveTheirStoredForm(t *testing.T) {
+	document, err := EncodeSecrets(Secrets{WireGuardPrivateKey: testPrivateKey})
+	if err != nil {
+		t.Fatalf("EncodeSecrets = %v", err)
+	}
+	if !strings.Contains(document, testPrivateKey) {
+		t.Fatalf("記録に秘密鍵が入っていない: %q", document)
+	}
+
+	secrets, err := DecodeSecrets(document)
+	if err != nil || secrets.WireGuardPrivateKey != testPrivateKey {
+		t.Fatalf("DecodeSecrets = %+v, %v", secrets, err)
+	}
+	if _, err := DecodeSecrets("{"); !errors.Is(err, ErrSecrets) {
+		t.Fatalf("DecodeSecrets(壊れた記録) = %v, want ErrSecrets", err)
+	}
+}

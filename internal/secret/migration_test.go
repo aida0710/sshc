@@ -52,6 +52,28 @@ func TestSchemaFourFixtureRemainsMigratableAndReadable(t *testing.T) {
 	}
 }
 
+// schema 5 の vault も、そのままの秘密で開ける。
+func TestSchemaFiveFixtureRemainsMigratableAndReadable(t *testing.T) {
+	fixture, err := os.ReadFile("testdata/schema-v5.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	vault, _, err := openDocumentWithMigrations(fixture, envelope.Key{}, registeredDocumentMigrations)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, ok := vault.SecretFor(KindTOTP, "bastion"); !ok || got != "fixture-shared-totp" {
+		t.Fatalf("migrated fixture totp = %q, %v", got, ok)
+	}
+	if got, ok := vault.SecretFor(KindPassword, "bastion"); !ok || got != "fixture-shared-password" {
+		t.Fatalf("migrated fixture password = %q, %v", got, ok)
+	}
+	// 新しい名前空間は空で始まる。移行は既存の秘密に触れない。
+	if names := vault.Names(KindVPN); len(names) != 0 {
+		t.Fatalf("migrated fixture vpn names = %v", names)
+	}
+}
+
 func TestDocumentMigrationsRunOneVersionAtATime(t *testing.T) {
 	seen := []int{}
 	migrated, migration, err := migrateDocument(
@@ -73,6 +95,10 @@ func TestDocumentMigrationsRunOneVersionAtATime(t *testing.T) {
 				seen = append(seen, 4)
 				return initialiseTOTPFields(fields)
 			},
+			5: func(fields map[string]json.RawMessage) error {
+				seen = append(seen, 5)
+				return initialiseVPNFields(fields)
+			},
 		},
 	)
 	if err != nil {
@@ -81,7 +107,7 @@ func TestDocumentMigrationsRunOneVersionAtATime(t *testing.T) {
 	if migration != (Migration{From: 2, To: SchemaVersion}) {
 		t.Fatalf("migration = %+v", migration)
 	}
-	if len(seen) != 3 || seen[0] != 2 || seen[1] != 3 || seen[2] != 4 {
+	if len(seen) != 4 || seen[0] != 2 || seen[1] != 3 || seen[2] != 4 || seen[3] != 5 {
 		t.Fatalf("migration order = %v", seen)
 	}
 	_, version, err := migrationFields(migrated)
@@ -124,6 +150,7 @@ func TestDocumentMigrationClassifiesInvalidFinalShapeAsAMigrationFailure(t *test
 			return nil
 		},
 		4: initialiseTOTPFields,
+		5: initialiseVPNFields,
 	})
 	var migration *MigrationError
 	if !errors.Is(err, ErrMigrationFailed) || !errors.As(err, &migration) ||
@@ -134,7 +161,7 @@ func TestDocumentMigrationClassifiesInvalidFinalShapeAsAMigrationFailure(t *test
 
 func TestUnlockCommitsAMigrationAndKeepsTheEncryptedPreviousGeneration(t *testing.T) {
 	service, _, manager, vaultPath, original := migrationHarness(t, storage.OSFileSystem{})
-	service.migrations = migrationRegistry{3: initialisePasswordBindings, 4: initialiseTOTPFields}
+	service.migrations = migrationRegistry{3: initialisePasswordBindings, 4: initialiseTOTPFields, 5: initialiseVPNFields}
 	manager.Seal = service.SealBackup
 	manager.Unseal = service.OpenBackup
 
@@ -176,7 +203,7 @@ func TestUnlockLeavesTheOriginalVaultAndMemoryLockedWhenMigrationCommitFails(t *
 	injected := errors.New("injected migration commit failure")
 	failing := &migrationRenameFailure{FileSystem: storage.OSFileSystem{}, failure: injected}
 	service, _, manager, vaultPath, original := migrationHarness(t, failing)
-	service.migrations = migrationRegistry{3: initialisePasswordBindings, 4: initialiseTOTPFields}
+	service.migrations = migrationRegistry{3: initialisePasswordBindings, 4: initialiseTOTPFields, 5: initialiseVPNFields}
 	manager.Seal = service.SealBackup
 	failing.enabled = true
 
@@ -200,7 +227,7 @@ func TestUnlockPublishesAMigratedVaultOnlyAfterTheDiskCommitPoint(t *testing.T) 
 	}
 	service, _, manager, vaultPath, _ := migrationHarness(t, blocking)
 	blocking.target = vaultPath
-	service.migrations = migrationRegistry{3: initialisePasswordBindings, 4: initialiseTOTPFields}
+	service.migrations = migrationRegistry{3: initialisePasswordBindings, 4: initialiseTOTPFields, 5: initialiseVPNFields}
 	manager.Seal = service.SealBackup
 
 	result := make(chan error, 1)
