@@ -32,6 +32,19 @@ type VPNProfile struct {
 	Target string `json:"target"`
 	// WireGuard は、backend が wireguard のときの設定である。
 	WireGuard *WireGuardProfile `json:"wireguard,omitempty"`
+	// L2TP は、backend が l2tp_ipsec のときの設定である。
+	L2TP *L2TPProfile `json:"l2tp,omitempty"`
+}
+
+// L2TPProfile は、l2tp_ipsec backend の秘密でない設定である。
+type L2TPProfile struct {
+	// Server は、VPN装置の名前またはアドレスである。名前はコンテナの中で引く。
+	Server string `json:"server"`
+	// Username は、VPNの利用者名である。パスワードは Vault にある。
+	Username string `json:"username"`
+	// IKE と ESP は、古い装置と暗号方式が合わないときだけ書く。
+	IKE string `json:"ike,omitempty"`
+	ESP string `json:"esp,omitempty"`
 }
 
 // WireGuardProfile は、wireguard backend の秘密でない設定である。
@@ -64,6 +77,14 @@ func (stored VPNProfile) Profile() (vpn.Profile, error) {
 			Server:        server,
 			PeerPublicKey: stored.WireGuard.PeerPublicKey,
 			Address:       stored.WireGuard.Address,
+		}
+	}
+	if stored.L2TP != nil {
+		profile.L2TP = &vpn.L2TPSettings{
+			Server:   stored.L2TP.Server,
+			Username: stored.L2TP.Username,
+			IKE:      stored.L2TP.IKE,
+			ESP:      stored.L2TP.ESP,
 		}
 	}
 	if err := profile.Validate(); err != nil {
@@ -103,7 +124,7 @@ func validateVPNProfiles(profiles []VPNProfile) error {
 		if stored.Backend == "" {
 			return fmt.Errorf("%w: %s に backend がありません", ErrMetadataVPN, stored.Name)
 		}
-		if vpn.BackendName(stored.Backend) != vpn.WireGuard {
+		if backend := vpn.BackendName(stored.Backend); backend != vpn.WireGuard && backend != vpn.L2TPIPsec {
 			continue
 		}
 		if _, err := stored.Profile(); err != nil {

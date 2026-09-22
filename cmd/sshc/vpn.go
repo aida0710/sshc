@@ -130,23 +130,8 @@ func addVPNProfile(
 	ctx context.Context, engine *engineAPI, name string,
 	stdin, prompt *os.File, terminal passwordTerminal, overview *vpnOverview,
 ) error {
-	backend, err := promptVisibleSetup(ctx, stdin, prompt, setupVisibleLabel("Backend", "wireguard"), "wireguard")
-	if err != nil {
-		return err
-	}
-	if backend != "wireguard" {
-		return fmt.Errorf("%w: いまは wireguard だけを扱えます", errVPNSetupInput)
-	}
-	server, err := promptVisibleSetup(ctx, stdin, prompt, "VPN server (host:port): ", "")
-	if err != nil {
-		return err
-	}
-	peerKey, err := promptVisibleSetup(ctx, stdin, prompt, "Peer public key: ", "")
-	if err != nil {
-		return err
-	}
-	address, err := promptVisibleSetup(ctx, stdin, prompt,
-		setupVisibleLabel("Tunnel address", defaultTunnelAddress), defaultTunnelAddress)
+	backend, err := promptVisibleSetup(ctx, stdin, prompt,
+		"Backend [wireguard] (wireguard/l2tp_ipsec): ", "wireguard")
 	if err != nil {
 		return err
 	}
@@ -154,60 +139,158 @@ func addVPNProfile(
 	if err != nil {
 		return err
 	}
-	privateKey, err := promptMaskedPassword(ctx, stdin, prompt, terminal, "Private key: ")
+	profile := vpnRequestProfile{Name: name, Backend: backend, Target: target}
+	var secrets []vpnSecretField
+	switch backend {
+	case "wireguard":
+		profile.WireGuard, secrets, err = readWireGuardProfile(ctx, stdin, prompt, terminal)
+	case "l2tp_ipsec":
+		profile.L2TP, secrets, err = readL2TPProfile(ctx, stdin, prompt, terminal)
+	default:
+		err = fmt.Errorf("%w: backend は wireguard か l2tp_ipsec です", errVPNSetupInput)
+	}
+	defer func() {
+		for _, field := range secrets {
+			zeroBytes(field.value)
+		}
+	}()
 	if err != nil {
-		zeroBytes(privateKey)
 		return err
 	}
-	defer zeroBytes(privateKey)
-	if server == "" || peerKey == "" || address == "" || target == "" || len(privateKey) == 0 {
+	if target == "" {
 		return errVPNSetupInput
 	}
-	payload, err := buildVPNProfilePayload(vpnProfileFields{
-		name: name, backend: backend, target: target,
-		server: server, peerPublicKey: peerKey, address: address,
-	}, privateKey)
+	payload, err := buildVPNProfilePayload(profile, secrets)
 	if err != nil {
 		return err
 	}
-	// payload は秘密鍵を含む。sendSecretJSON が送り終えた本文を消す。
+	// payload は秘密を含む。sendSecretJSON が送り終えた本文を消す。
 	return engine.sendSecretJSON(ctx, http.MethodPut, vpnProfilePath(name), payload, overview)
 }
 
-type vpnProfileFields struct {
-	name          string
-	backend       string
-	target        string
-	server        string
-	peerPublicKey string
-	address       string
+// readWireGuardProfile は、wireguard の設定と秘密鍵を読む。
+func readWireGuardProfile(
+	ctx context.Context, stdin, prompt *os.File, terminal passwordTerminal,
+) (*vpnRequestWireGuard, []vpnSecretField, error) {
+	server, err := promptVisibleSetup(ctx, stdin, prompt, "VPN server (host:port): ", "")
+	if err != nil {
+		return nil, nil, err
+	}
+	peerKey, err := promptVisibleSetup(ctx, stdin, prompt, "Peer public key: ", "")
+	if err != nil {
+		return nil, nil, err
+	}
+	address, err := promptVisibleSetup(ctx, stdin, prompt,
+		setupVisibleLabel("Tunnel address", defaultTunnelAddress), defaultTunnelAddress)
+	if err != nil {
+		return nil, nil, err
+	}
+	privateKey, err := promptMaskedPassword(ctx, stdin, prompt, terminal, "Private key: ")
+	if err != nil {
+		zeroBytes(privateKey)
+		return nil, nil, err
+	}
+	secrets := []vpnSecretField{{name: "wireguardPrivateKey", value: privateKey}}
+	if server == "" || peerKey == "" || address == "" {
+		return nil, secrets, errVPNSetupInput
+	}
+	if len(privateKey) > maxVPNKeyBytes || !base64KeyBytes(privateKey) {
+		return nil, secrets, fmt.Errorf("%w: 秘密鍵の形が違います", errVPNSetupInput)
+	}
+	return &vpnRequestWireGuard{Server: server, PeerPublicKey: peerKey, Address: address}, secrets, nil
+}
+
+// readL2TPProfile は、L2TP/IPsec の設定と二つの秘密を読む。
+func readL2TPProfile(
+	ctx context.Context, stdin, prompt *os.File, terminal passwordTerminal,
+) (*vpnRequestL2TP, []vpnSecretField, error) {
+	server, err := promptVisibleSetup(ctx, stdin, prompt, "VPN server (host): ", "")
+	if err != nil {
+		return nil, nil, err
+	}
+	username, err := promptVisibleSetup(ctx, stdin, prompt, "VPN username: ", "")
+	if err != nil {
+		return nil, nil, err
+	}
+	// 暗号方式は、古い装置と合わないときだけ書く。空なら strongSwan の既定に任せる。
+	ike, err := promptVisibleSetup(ctx, stdin, prompt, "IKE proposals (blank for the default): ", "")
+	if err != nil {
+		return nil, nil, err
+	}
+	esp, err := promptVisibleSetup(ctx, stdin, prompt, "ESP proposals (blank for the default): ", "")
+	if err != nil {
+		return nil, nil, err
+	}
+	password, err := promptMaskedPassword(ctx, stdin, prompt, terminal, "VPN password: ")
+	if err != nil {
+		zeroBytes(password)
+		return nil, nil, err
+	}
+	psk, err := promptMaskedPassword(ctx, stdin, prompt, terminal, "IPsec pre-shared key: ")
+	if err != nil {
+		zeroBytes(password)
+		zeroBytes(psk)
+		return nil, nil, err
+	}
+	secrets := []vpnSecretField{
+		{name: "l2tpPassword", value: password},
+		{name: "ipsecPsk", value: psk},
+	}
+	if server == "" || username == "" || len(password) == 0 || len(psk) == 0 {
+		return nil, secrets, errVPNSetupInput
+	}
+	return &vpnRequestL2TP{Server: server, Username: username, IKE: ike, ESP: esp}, secrets, nil
+}
+
+// vpnRequestProfile は、保存要求のうち秘密でない部分である。API の形と揃える。
+type vpnRequestProfile struct {
+	Name      string               `json:"name"`
+	Backend   string               `json:"backend"`
+	Target    string               `json:"target"`
+	WireGuard *vpnRequestWireGuard `json:"wireguard,omitempty"`
+	L2TP      *vpnRequestL2TP      `json:"l2tp,omitempty"`
+}
+
+type vpnRequestWireGuard struct {
+	Server        string `json:"server"`
+	PeerPublicKey string `json:"peerPublicKey"`
+	Address       string `json:"address"`
+}
+
+type vpnRequestL2TP struct {
+	Server   string `json:"server"`
+	Username string `json:"username"`
+	IKE      string `json:"ike,omitempty"`
+	ESP      string `json:"esp,omitempty"`
+}
+
+// vpnSecretField は、本文へ書く秘密ひとつである。値は []byte のまま運び、送った
+// あとに消せるようにする。Go の文字列にすると、消せる場所がなくなる。
+type vpnSecretField struct {
+	name  string
+	value []byte
 }
 
 // buildVPNProfilePayload は、保存要求の本文を組み立てる。
-//
-// 秘密鍵だけは Go の文字列にしない。文字列にすると、送ったあとに消せる場所が
-// なくなる。鍵は base64 の字しか持たないので、その形を先に確かめてから、
-// そのまま本文へ写す。
-func buildVPNProfilePayload(fields vpnProfileFields, privateKey []byte) ([]byte, error) {
-	if len(privateKey) > maxVPNKeyBytes || !base64KeyBytes(privateKey) {
-		return nil, fmt.Errorf("%w: 秘密鍵の形が違います", errVPNSetupInput)
-	}
-	profile := map[string]any{
-		"name": fields.name, "backend": fields.backend, "target": fields.target,
-		"wireguard": map[string]string{
-			"server": fields.server, "peerPublicKey": fields.peerPublicKey, "address": fields.address,
-		},
-	}
+func buildVPNProfilePayload(profile vpnRequestProfile, secrets []vpnSecretField) ([]byte, error) {
 	encoded, err := json.Marshal(profile)
 	if err != nil {
 		return nil, err
 	}
-	prefix := append([]byte(`{"profile":`), encoded...)
-	prefix = append(prefix, []byte(`,"secrets":{"wireguardPrivateKey":"`)...)
-	payload := make([]byte, 0, len(prefix)+len(privateKey)+4)
-	payload = append(payload, prefix...)
-	payload = append(payload, privateKey...)
-	return append(payload, []byte(`"}}`)...), nil
+	payload := append([]byte(`{"profile":`), encoded...)
+	payload = append(payload, []byte(`,"secrets":{`)...)
+	for index, field := range secrets {
+		if index != 0 {
+			payload = append(payload, ',')
+		}
+		payload = append(payload, '"')
+		payload = append(payload, field.name...)
+		payload = append(payload, '"', ':')
+		if payload, err = appendVaultJSONString(payload, field.value); err != nil {
+			return nil, err
+		}
+	}
+	return append(payload, []byte(`}}`)...), nil
 }
 
 // base64KeyBytes は、鍵が base64 の字だけでできているかを報告する。

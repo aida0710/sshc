@@ -3234,6 +3234,8 @@ export interface components {
         };
         VPNSecrets: {
             wireguardPrivateKey?: string;
+            l2tpPassword?: string;
+            ipsecPsk?: string;
         };
         VPNBindingRequest: {
             alias: string;
@@ -3244,6 +3246,13 @@ export interface components {
             backend: string;
             target: string;
             wireguard?: components["schemas"]["WireGuardProfile"];
+            l2tp?: components["schemas"]["L2TPProfile"];
+        };
+        L2TPProfile: {
+            server: string;
+            username: string;
+            ike?: string;
+            esp?: string;
         };
         WireGuardProfile: {
             server: string;

@@ -57,13 +57,12 @@ func New(directory string, owner int) *Manager {
 
 // Available は、この機械でVPN経路を使えるかを返す。
 //
-// 使えない理由は隠さない。Dockerが無いことも、デバイスが無いことも、利用者が
-// 何を用意すればよいかを決める情報である。
+// ここで見るのは Docker だけである。トンネルのデバイスは backend ごとに違うので、
+// そのプロファイルを起こすときに確かめる。使えない理由は隠さない。利用者が何を
+// 用意すればよいかを決める情報である。
 func (manager *Manager) Available(ctx context.Context) error {
-	if _, err := manager.command(ctx); err != nil {
-		return err
-	}
-	return requireTunnelDevice(WireGuard)
+	_, err := manager.command(ctx)
+	return err
 }
 
 // Dial は、このプロファイルの接続先へのTCP接続を返す。

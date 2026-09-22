@@ -61,6 +61,10 @@ func (manager *Manager) start(ctx context.Context, profile Profile, secrets Secr
 	if err := requireTunnelDevice(profile.Backend); err != nil {
 		return err
 	}
+	device, err := tunnelDevice(profile.Backend)
+	if err != nil {
+		return err
+	}
 	image, err := manager.ensureImage(ctx)
 	if err != nil {
 		return err
@@ -70,7 +74,11 @@ func (manager *Manager) start(ctx context.Context, profile Profile, secrets Secr
 		return err
 	}
 	name := containerName(profile.Name, manager.owner)
-	if _, err := manager.docker.output(ctx, runArguments(name, image, profile, manager.owner, directory)...); err != nil {
+	arguments := runArguments(containerRun{
+		name: name, image: image, profile: profile, owner: manager.owner,
+		socketDirectory: directory, device: device,
+	})
+	if _, err := manager.docker.output(ctx, arguments...); err != nil {
 		return fmt.Errorf("%w: %w", ErrSessionFailed, err)
 	}
 	if err := manager.sendDocument(ctx, name, document); err != nil {
@@ -84,16 +92,28 @@ func (manager *Manager) start(ctx context.Context, profile Profile, secrets Secr
 	return nil
 }
 
+// tunnelDevice は、backendが要るデバイスである。
+func tunnelDevice(backend BackendName) (string, error) {
+	switch backend {
+	case WireGuard:
+		return "/dev/net/tun", nil
+	case L2TPIPsec:
+		return "/dev/ppp", nil
+	}
+	return "", fmt.Errorf("%w: %s", ErrBackend, backend)
+}
+
 // requireTunnelDevice は、backendが要るデバイスがこの機械にあるかを見る。
 //
 // 無いまま起動すると、コンテナの中の分かりにくい失敗になる。ここで断る方が、
 // 利用者は何を用意すればよいかを知れる。
 func requireTunnelDevice(backend BackendName) error {
-	if backend != WireGuard {
-		return fmt.Errorf("%w: %s", ErrBackend, backend)
+	device, err := tunnelDevice(backend)
+	if err != nil {
+		return err
 	}
-	if _, err := os.Stat("/dev/net/tun"); err != nil {
-		return fmt.Errorf("%w: /dev/net/tun がありません", ErrTunnelDevice)
+	if _, err := os.Stat(device); err != nil {
+		return fmt.Errorf("%w: %s がありません", ErrTunnelDevice, device)
 	}
 	return nil
 }
@@ -120,11 +140,23 @@ func removeIfPresent(path string) error {
 	return nil
 }
 
+// containerRun は、コンテナひとつを起動するために決まっているものである。
+type containerRun struct {
+	name            string
+	image           string
+	profile         Profile
+	owner           int
+	socketDirectory string
+	// device は、この backend が要るトンネルのデバイスである。
+	device string
+}
+
 // runArguments は、コンテナを起動する引数である。
 //
 // --privileged と --network host は使わない。渡す権限は CAP_NET_ADMIN、渡す
 // デバイスはトンネルのものだけである。秘密は引数に載せない。
-func runArguments(name, image string, profile Profile, owner int, socketDirectory string) []string {
+func runArguments(run containerRun) []string {
+	name, image, profile, owner, socketDirectory := run.name, run.image, run.profile, run.owner, run.socketDirectory
 	return []string{
 		"run", "--detach", "--name", name,
 		"--label", ownerLabel + "=" + strconv.Itoa(owner),
@@ -132,7 +164,7 @@ func runArguments(name, image string, profile Profile, owner int, socketDirector
 		"--label", targetLabel + "=" + profile.Target.Address(),
 		"--network", "bridge",
 		"--cap-add", "NET_ADMIN",
-		"--device", "/dev/net/tun",
+		"--device", run.device,
 		"--security-opt", "no-new-privileges:true",
 		"--restart", "no",
 		// 設定と秘密が触れるのはこのtmpfsだけである。コンテナを止めれば消える。

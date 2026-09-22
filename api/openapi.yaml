@@ -4251,6 +4251,8 @@ components:
       additionalProperties: false
       properties:
         wireguardPrivateKey: { type: string, minLength: 44, maxLength: 44 }
+        l2tpPassword: { type: string, minLength: 1, maxLength: 256 }
+        ipsecPsk: { type: string, minLength: 1, maxLength: 256 }
     VPNBindingRequest:
       type: object
       additionalProperties: false
@@ -4269,6 +4271,18 @@ components:
         # この VPN の中にある接続先。`host:port` で書く。
         target: { type: string, minLength: 3, maxLength: 128 }
         wireguard: { $ref: "#/components/schemas/WireGuardProfile" }
+        l2tp: { $ref: "#/components/schemas/L2TPProfile" }
+    L2TPProfile:
+      type: object
+      additionalProperties: false
+      required: [server, username]
+      properties:
+        # VPN装置の名前またはアドレス。名前はコンテナの中で引く。
+        server: { type: string, minLength: 1, maxLength: 320 }
+        username: { type: string, minLength: 1, maxLength: 256 }
+        # 古い装置と暗号方式が合わないときだけ書く。
+        ike: { type: string, maxLength: 256 }
+        esp: { type: string, maxLength: 256 }
     WireGuardProfile:
       type: object
       additionalProperties: false

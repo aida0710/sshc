@@ -119,7 +119,7 @@ func TestAProfileThatCannotBecomeARouteIsNotSaved(t *testing.T) {
 // metadataを保存できなくしない。
 func TestAProfileForAnUnknownBackendStillSaves(t *testing.T) {
 	metadata := NewMetadata()
-	metadata.VPNProfiles = []VPNProfile{{Name: "future", Backend: "l2tp_ipsec", Target: "10.9.9.1:22"}}
+	metadata.VPNProfiles = []VPNProfile{{Name: "future", Backend: "openvpn", Target: "10.9.9.1:22"}}
 
 	if _, err := EncodeMetadata(metadata); err != nil {
 		t.Fatalf("EncodeMetadata = %v", err)

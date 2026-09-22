@@ -19,6 +19,9 @@ type BackendName string
 const (
 	// WireGuard は userspace の wireguard-go でトンネルを張る。
 	WireGuard BackendName = "wireguard"
+	// L2TPIPsec は strongSwan と xl2tpd と pppd でトンネルを張る。大学や
+	// 会社の装置に多い方式である。
+	L2TPIPsec BackendName = "l2tp_ipsec"
 )
 
 var (
@@ -59,6 +62,7 @@ type Profile struct {
 	// ホストはIPアドレスで指定する。
 	Target    Endpoint
 	WireGuard *WireGuardSettings
+	L2TP      *L2TPSettings
 }
 
 // WireGuardSettings は、wireguard backendの秘密でない設定である。
@@ -71,9 +75,27 @@ type WireGuardSettings struct {
 	Address string
 }
 
+// L2TPSettings は、l2tp_ipsec backendの秘密でない設定である。
+type L2TPSettings struct {
+	// Server は、VPN装置の名前またはアドレスである。名前はコンテナの中で
+	// 引く。IPsecは相手のアドレスを設定に書くので、引く場所が違えば別の装置へ
+	// 繋ぎうる。
+	Server string
+	// Username は、VPNの利用者名である。パスワードはVaultにある。
+	Username string
+	// IKE と ESP は、古い装置と暗号方式が合わないときだけ指定する。空なら
+	// strongSwan の既定に任せる。
+	IKE string
+	ESP string
+}
+
 // Secrets は、プロファイルの秘密である。Vaultから読み、標準入力でコンテナへ渡す。
 type Secrets struct {
 	WireGuardPrivateKey string
+	// L2TPPassword は、VPNの利用者のパスワードである。
+	L2TPPassword string
+	// IPsecPSK は、IPsecの事前共有鍵である。
+	IPsecPSK string
 }
 
 // Validate は、このプロファイルで経路を作れるかを確かめる。
@@ -81,16 +103,22 @@ func (profile Profile) Validate() error {
 	if err := validateProfileName(profile.Name); err != nil {
 		return err
 	}
-	if profile.Backend != WireGuard {
-		return fmt.Errorf("%w: %s", ErrBackend, profile.Backend)
-	}
 	if err := validateTarget(profile.Target); err != nil {
 		return err
 	}
-	if profile.WireGuard == nil {
-		return fmt.Errorf("%w: wireguard settings are absent", ErrSettings)
+	switch profile.Backend {
+	case WireGuard:
+		if profile.WireGuard == nil {
+			return fmt.Errorf("%w: wireguard settings are absent", ErrSettings)
+		}
+		return profile.WireGuard.validate()
+	case L2TPIPsec:
+		if profile.L2TP == nil {
+			return fmt.Errorf("%w: l2tp settings are absent", ErrSettings)
+		}
+		return profile.L2TP.validate()
 	}
-	return profile.WireGuard.validate()
+	return fmt.Errorf("%w: %s", ErrBackend, profile.Backend)
 }
 
 // ValidateName は、プロファイル名として使えるかを確かめる。
@@ -168,11 +196,35 @@ func validateWireGuardKey(key, label string) error {
 
 // ValidateSecrets は、このbackendが要る秘密が揃っているかを確かめる。
 func (profile Profile) ValidateSecrets(secrets Secrets) error {
-	if profile.Backend != WireGuard {
-		return fmt.Errorf("%w: %s", ErrBackend, profile.Backend)
+	switch profile.Backend {
+	case WireGuard:
+		if secrets.WireGuardPrivateKey == "" {
+			return fmt.Errorf("%w: wireguardの秘密鍵がありません", ErrSecrets)
+		}
+		return validateWireGuardKey(secrets.WireGuardPrivateKey, "秘密鍵")
+	case L2TPIPsec:
+		if secrets.L2TPPassword == "" {
+			return fmt.Errorf("%w: VPNのパスワードがありません", ErrSecrets)
+		}
+		if secrets.IPsecPSK == "" {
+			return fmt.Errorf("%w: IPsecの事前共有鍵がありません", ErrSecrets)
+		}
+		return nil
 	}
-	if secrets.WireGuardPrivateKey == "" {
-		return fmt.Errorf("%w: wireguardの秘密鍵がありません", ErrSecrets)
+	return fmt.Errorf("%w: %s", ErrBackend, profile.Backend)
+}
+
+func (settings L2TPSettings) validate() error {
+	if settings.Server == "" || strings.ContainsAny(settings.Server, " \t\n\"") {
+		return fmt.Errorf("%w: VPN装置の指定が使えません", ErrSettings)
 	}
-	return validateWireGuardKey(secrets.WireGuardPrivateKey, "秘密鍵")
+	if settings.Username == "" || strings.ContainsAny(settings.Username, "\n\"\\") {
+		return fmt.Errorf("%w: VPNの利用者名が使えません", ErrSettings)
+	}
+	for name, proposal := range map[string]string{"ike": settings.IKE, "esp": settings.ESP} {
+		if proposal != "" && strings.ContainsAny(proposal, " \n\"\\") {
+			return fmt.Errorf("%w: %s の指定が使えません", ErrSettings, name)
+		}
+	}
+	return nil
 }

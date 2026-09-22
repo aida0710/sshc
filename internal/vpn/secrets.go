@@ -11,11 +11,17 @@ import (
 
 type secretsDocument struct {
 	WireGuardPrivateKey string `json:"wireguardPrivateKey,omitempty"`
+	L2TPPassword        string `json:"l2tpPassword,omitempty"`
+	IPsecPSK            string `json:"ipsecPsk,omitempty"`
 }
 
 // EncodeSecrets は、Vault へ保存する一件ぶんの記録を作る。
 func EncodeSecrets(secrets Secrets) (string, error) {
-	encoded, err := json.Marshal(secretsDocument{WireGuardPrivateKey: secrets.WireGuardPrivateKey})
+	encoded, err := json.Marshal(secretsDocument{
+		WireGuardPrivateKey: secrets.WireGuardPrivateKey,
+		L2TPPassword:        secrets.L2TPPassword,
+		IPsecPSK:            secrets.IPsecPSK,
+	})
 	if err != nil {
 		return "", err
 	}
@@ -28,5 +34,9 @@ func DecodeSecrets(stored string) (Secrets, error) {
 	if err := json.Unmarshal([]byte(stored), &document); err != nil {
 		return Secrets{}, fmt.Errorf("%w: %w", ErrSecrets, err)
 	}
-	return Secrets{WireGuardPrivateKey: document.WireGuardPrivateKey}, nil
+	return Secrets{
+		WireGuardPrivateKey: document.WireGuardPrivateKey,
+		L2TPPassword:        document.L2TPPassword,
+		IPsecPSK:            document.IPsecPSK,
+	}, nil
 }

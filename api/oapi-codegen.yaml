@@ -102,6 +102,7 @@ output-options:
     - HostMetadata
     - VPNProfile
     - WireGuardProfile
+    - L2TPProfile
     - VPNOverview
     - VPNSession
     - VPNProfileRequest

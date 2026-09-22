@@ -42,6 +42,8 @@ type vpnProfileRequest struct {
 
 type vpnSecretsRequest struct {
 	WireGuardPrivateKey string `json:"wireguardPrivateKey,omitempty"`
+	L2TPPassword        string `json:"l2tpPassword,omitempty"`
+	IPsecPSK            string `json:"ipsecPsk,omitempty"`
 }
 
 type vpnBindingRequest struct {
@@ -79,7 +81,11 @@ func (h VPNHandlers) SaveProfile(c *echo.Context) error {
 		return vpnProblem(c, err)
 	}
 	if request.Secrets != nil {
-		document, err := vpn.EncodeSecrets(vpn.Secrets{WireGuardPrivateKey: request.Secrets.WireGuardPrivateKey})
+		document, err := vpn.EncodeSecrets(vpn.Secrets{
+			WireGuardPrivateKey: request.Secrets.WireGuardPrivateKey,
+			L2TPPassword:        request.Secrets.L2TPPassword,
+			IPsecPSK:            request.Secrets.IPsecPSK,
+		})
 		if err != nil {
 			return vpnProblem(c, err)
 		}

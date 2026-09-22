@@ -118,11 +118,13 @@ func TestVPNUnbindSendsAnEmptyProfile(t *testing.T) {
 
 // 保存要求の本文は、設定と秘密鍵をひとつのJSONとして運ぶ。
 func TestTheSavedProfilePayloadCarriesTheKeyExactlyOnce(t *testing.T) {
-	payload, err := buildVPNProfilePayload(vpnProfileFields{
-		name: "lab", backend: "wireguard", target: "10.9.9.1:22",
-		server: "vpn.example.jp:51820", peerPublicKey: "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
-		address: "10.9.9.2/32",
-	}, []byte(testVPNKey))
+	payload, err := buildVPNProfilePayload(vpnRequestProfile{
+		Name: "lab", Backend: "wireguard", Target: "10.9.9.1:22",
+		WireGuard: &vpnRequestWireGuard{
+			Server: "vpn.example.jp:51820", PeerPublicKey: "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
+			Address: "10.9.9.2/32",
+		},
+	}, []vpnSecretField{{name: "wireguardPrivateKey", value: []byte(testVPNKey)}})
 	if err != nil {
 		t.Fatalf("buildVPNProfilePayload = %v", err)
 	}
@@ -155,11 +157,48 @@ func TestTheSavedProfilePayloadCarriesTheKeyExactlyOnce(t *testing.T) {
 }
 
 // 鍵の形が違うものは、engine へ送る前に断る。
-func TestAMalformedKeyNeverReachesTheEngine(t *testing.T) {
+func TestAMalformedKeyIsNotAcceptedAsAWireGuardSecret(t *testing.T) {
 	for _, key := range []string{"", `has"quote`, strings.Repeat("a", maxVPNKeyBytes+1)} {
-		if _, err := buildVPNProfilePayload(vpnProfileFields{name: "lab"}, []byte(key)); err == nil {
-			t.Fatalf("buildVPNProfilePayload accepted %q", key)
+		if base64KeyBytes([]byte(key)) && len(key) <= maxVPNKeyBytes {
+			t.Fatalf("base64KeyBytes accepted %q", key)
 		}
+	}
+}
+
+// 引用符や backslash を含む秘密も、壊れないJSONとして運ぶ。
+func TestSecretsWithQuotesSurviveTheRequestBody(t *testing.T) {
+	password := []byte(`p"a\ss`)
+	payload, err := buildVPNProfilePayload(vpnRequestProfile{
+		Name: "tohoku", Backend: "l2tp_ipsec", Target: "10.9.9.1:22",
+		L2TP: &vpnRequestL2TP{Server: "vpn.example.jp", Username: "user"},
+	}, []vpnSecretField{
+		{name: "l2tpPassword", value: password},
+		{name: "ipsecPsk", value: []byte("shared")},
+	})
+	if err != nil {
+		t.Fatalf("buildVPNProfilePayload = %v", err)
+	}
+
+	var decoded struct {
+		Profile struct {
+			L2TP struct {
+				Server   string `json:"server"`
+				Username string `json:"username"`
+			} `json:"l2tp"`
+		} `json:"profile"`
+		Secrets struct {
+			L2TPPassword string `json:"l2tpPassword"`
+			IPsecPSK     string `json:"ipsecPsk"`
+		} `json:"secrets"`
+	}
+	if err := json.Unmarshal(payload, &decoded); err != nil {
+		t.Fatalf("payload = %s: %v", payload, err)
+	}
+	if decoded.Secrets.L2TPPassword != string(password) || decoded.Secrets.IPsecPSK != "shared" {
+		t.Fatalf("secrets = %+v", decoded.Secrets)
+	}
+	if decoded.Profile.L2TP.Server != "vpn.example.jp" || decoded.Profile.L2TP.Username != "user" {
+		t.Fatalf("l2tp = %+v", decoded.Profile.L2TP)
 	}
 }
 

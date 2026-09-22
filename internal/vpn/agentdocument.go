@@ -1,6 +1,7 @@
 package vpn
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -15,6 +16,16 @@ type agentDocument struct {
 	Target      endpointDocument   `json:"target"`
 	SocketOwner int                `json:"socketOwner"`
 	WireGuard   *wireGuardDocument `json:"wireguard,omitempty"`
+	L2TP        *l2tpDocument      `json:"l2tp,omitempty"`
+}
+
+// l2tpDocument は、agent が置くだけの本文と、agent が自分で引く相手である。
+type l2tpDocument struct {
+	// Server は、VPN装置の名前またはアドレスである。agent がコンテナの中で引き、
+	// 設定の中の印を、引いたアドレスで置き換える。
+	Server string `json:"server"`
+	// Documents は、ファイル名から本文への対応である。
+	Documents map[string]string `json:"documents"`
 }
 
 type endpointDocument struct {
@@ -42,10 +53,18 @@ func newAgentDocument(profile Profile, secrets Secrets, socketOwner int) (string
 		Backend:     string(profile.Backend),
 		Target:      endpointDocument{Host: profile.Target.Host, Port: profile.Target.Port},
 		SocketOwner: socketOwner,
-		WireGuard: &wireGuardDocument{
+	}
+	switch profile.Backend {
+	case WireGuard:
+		document.WireGuard = &wireGuardDocument{
 			Configuration: wireGuardConfiguration(*profile.WireGuard, profile.Target, secrets),
 			Address:       profile.WireGuard.Address,
-		},
+		}
+	case L2TPIPsec:
+		document.L2TP = &l2tpDocument{
+			Server:    profile.L2TP.Server,
+			Documents: l2tpDocuments(*profile.L2TP, secrets),
+		}
 	}
 	encoded, err := json.Marshal(document)
 	if err != nil {
@@ -76,9 +95,22 @@ func wireGuardConfiguration(settings WireGuardSettings, target Endpoint, secrets
 }
 
 // redact は、表示する文字列から秘密を伏せる。docker logs をそのまま見せない。
+//
+// 16 進の表記も伏せる。IPsec の事前共有鍵は設定へ 16 進で書くので、その形のまま
+// ログに現れうる。
 func redact(text string, secrets Secrets) string {
-	if secrets.WireGuardPrivateKey == "" {
+	replacements := make([]string, 0, 8)
+	for _, value := range []string{secrets.WireGuardPrivateKey, secrets.L2TPPassword, secrets.IPsecPSK} {
+		if value == "" {
+			continue
+		}
+		replacements = append(replacements, value, "[REDACTED]")
+		encoded := hex.EncodeToString([]byte(value))
+		replacements = append(replacements,
+			encoded, "[REDACTED]", strings.ToUpper(encoded), "[REDACTED]")
+	}
+	if len(replacements) == 0 {
 		return text
 	}
-	return strings.ReplaceAll(text, secrets.WireGuardPrivateKey, "[REDACTED]")
+	return strings.NewReplacer(replacements...).Replace(text)
 }

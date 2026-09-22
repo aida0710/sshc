@@ -7,6 +7,7 @@ FROM ubuntu:24.04
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
        iproute2 iptables wireguard-tools wireguard-go socat jq \
+       strongswan strongswan-starter xl2tpd ppp \
     && rm -rf /var/lib/apt/lists/*
 
 COPY agent.sh /usr/local/bin/sshc-vpn-agent
