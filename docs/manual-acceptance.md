@@ -168,9 +168,9 @@ CIではLinux PTYの仮想Serial routerとlocalhostの仮想Telnet serverを用�
 1. `Include`、接続先に一致する `Match`、2 段の `ProxyJump`、`IdentityFile`、文字コードを含む設定を作り、engine 停止中の `sshc info <alias> --json` が実際の `sshc ssh <alias>` と同じ宛先・順序・既定 `Port 22` を示すことを確認する。`SetEnv` と `ProxyCommand` に検査用 sentinel を置き、その値が人向け／JSON のどちらにも出ないことも確認する。
 2. engine と vault を起動・解錠し、`sshc sync setup` で誤った endpoint または資格情報を入力する。到達確認が失敗し、`sshc sync` が未設定のままであることを確認する。
 3. incomplete object がある専用 prefix を指定し、setup が complete 保存へ進まないことを確認する。空の prefix では生成 sync key が prompt terminal に一度だけ表示され、stdout、ログ、再表示 API には現れないことを確認して安全な保管先へ保存する。
-4. 2 台の使い捨て workspace で同じ専用 prefix を使う。remote と local の同じファイルを別々に変更して `sshc sync pull` を実行し、conflict が適用されずローカル内容も変わらないことを確認する。remote で削除した場合も通常 pull が removal を適用しないことを確認する。
+4. 2 台の使い捨て workspace で同じ専用 prefix を使う。remote と local の同じファイルを別々に変更して `sshc sync pull` を実行し、conflict が適用されずローカル内容も変わらないことを確認する。remote で削除した場合も通常 pull が removal を適用しないことを確認する。止まったときは、適用しなかった preview が `added`／`modified`／`removed`／`conflict` の区分付きで stderr に出ることを確認する。
 5. 同じ preview に対して `sshc sync pull --force` を実行し、remote authoritative として conflict／removal が適用されることを確認する。preview と apply の間に remote を更新した場合は拒否され、新しい preview を自動取得して適用しないことを確認する。
-6. remote snapshot を別端末から更新した直後に `sshc sync push` を実行し、通常 CAS が拒否することを確認する。`sshc sync push --force` では action token 発行後にもう一度 remote を更新し、exact ETag の不一致として拒否され、二つ目の token や自動再試行が発生しないことを確認する。
+6. 実際に追加・変更・削除したファイルが、`sshc sync push` と適用した `sshc sync pull` の出力の一覧と一致することを確認する。remote snapshot を別端末から更新した直後に `sshc sync push` を実行し、通常 CAS が拒否することを確認する。`sshc sync push --force` では action token 発行後にもう一度 remote を更新し、exact ETag の不一致として拒否され、二つ目の token や自動再試行が発生しないことを確認する。
 7. `sshc sync now` と `sshc sync auto on|off` が engine の status に反映され、engine 再起動後も auto の設定が維持されることを確認する。各 `--json` 出力が一つの object だけで、credential、cookie、CSRF／action token、handoff secret を含まないことを確認する。
 
 ## 記録

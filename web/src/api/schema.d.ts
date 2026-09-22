@@ -2539,6 +2539,9 @@ export interface components {
             /** Format: int64 */
             uploadedBytes: number;
             completedAt: string;
+            added: string[];
+            modified: string[];
+            removed: string[];
         };
         PushResponse: {
             status: components["schemas"]["SyncStatus"];
@@ -2714,6 +2717,7 @@ export interface components {
             completedAt: string;
             conflicts: components["schemas"]["SyncConflict"][];
             written: string[];
+            added: string[];
             removed: string[];
             origin?: string;
             remoteETag: string;

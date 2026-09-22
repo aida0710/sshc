@@ -101,6 +101,8 @@ sshc sync now [--json]
 sshc sync auto on|off [--json]
 ```
 
+`sshc sync push`と`sshc sync pull`は、転送量の要約に続けて、動かしたファイルを1行ずつ`added`、`modified`、`removed`の区分付きで表示します。競合または削除があって通常の`pull`が止まった場合は、適用しなかったプレビューを同じ形で標準エラー出力へ表示します。`--json`では、pullは`written`、`added`、`removed`、`conflicts`を、pushは`added`、`modified`、`removed`をパスの配列として返します。
+
 `sshc sync setup`は、設定済みのエンドポイント、バケット、パス、リージョン、同期方向を既定値として表示します。同期方向は`both`、`push`、`pull`から選びます。Access Key IDは末尾5文字だけを伏せ字付きで表示し、Secret Access Keyと同期キーは値を表示せず「設定済み」と示します。再設定時は秘密値を空のままEnterキーで進むと、エンジンに保存済みの値を維持します。新しい値の入力中は、平文の代わりに`*`を表示します。
 
 ## SFTP転送

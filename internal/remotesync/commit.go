@@ -20,9 +20,12 @@ type manifestChanges struct {
 	removed  []string
 }
 
-func manifestChanged(base *Manifest, next Manifest) bool {
-	changes := diffManifests(base, next)
+func (changes manifestChanges) any() bool {
 	return len(changes.added)+len(changes.modified)+len(changes.removed) > 0
+}
+
+func manifestChanged(base *Manifest, next Manifest) bool {
+	return diffManifests(base, next).any()
 }
 
 func diffManifests(base *Manifest, next Manifest) manifestChanges {
@@ -56,7 +59,10 @@ func diffManifests(base *Manifest, next Manifest) manifestChanges {
 }
 
 func draftFor(base *Manifest, next Manifest) PushDraft {
-	changes := diffManifests(base, next)
+	return draftFrom(diffManifests(base, next))
+}
+
+func draftFrom(changes manifestChanges) PushDraft {
 	draft := PushDraft{Added: len(changes.added), Modified: len(changes.modified), Removed: len(changes.removed)}
 	type namedChange struct{ action, path string }
 	items := make([]namedChange, 0, draft.Added+draft.Modified+draft.Removed)

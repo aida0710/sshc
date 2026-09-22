@@ -153,6 +153,7 @@ const nothingToDo: PullResponse = {
   applied: false,
   conflicts: [],
   written: [],
+  added: [],
   removed: [],
   summary: measuredSummary,
   downloadedBytes: 900,
@@ -1259,6 +1260,7 @@ describe("SyncPanel", () => {
       remoteRevision: historyRevision,
       conflicts: [],
       written: [],
+      added: [],
       removed: ["~/.ssh/connections/old.conf"],
     };
     const api = buildApi(configured, removing);
@@ -1293,6 +1295,7 @@ describe("SyncPanel", () => {
       remoteRevision: historyRevision,
       conflicts: [],
       written: ["~/.ssh/config"],
+      added: [],
       removed: [],
     });
     render(<SyncPanel api={api} />);
@@ -1422,6 +1425,7 @@ describe("SyncPanel", () => {
       remoteRevision: historyRevision,
       conflicts: [{ path: "config", changedHere: true, changedThere: true }],
       written: [],
+      added: [],
       removed: [],
     };
     const resolved = { ...conflicted, conflicts: [], written: ["config"] };

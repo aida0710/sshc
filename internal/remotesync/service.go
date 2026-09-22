@@ -183,6 +183,11 @@ type PushResult struct {
 	ObjectCount   int             `json:"objectCount"`
 	UploadedBytes int64           `json:"uploadedBytes"`
 	CompletedAt   string          `json:"completedAt"`
+	// この push が親スナップショットに対して記録した変更。ワークスペース相対パスで、
+	// 内容は運ばない。
+	Added    []string `json:"added,omitempty"`
+	Modified []string `json:"modified,omitempty"`
+	Removed  []string `json:"removed,omitempty"`
 }
 
 type OperationKind string

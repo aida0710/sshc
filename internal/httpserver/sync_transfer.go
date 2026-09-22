@@ -29,11 +29,20 @@ func (h SyncHandlers) Push(c *echo.Context) error {
 	}
 	return c.JSON(http.StatusOK, api.PushResponse{
 		Status: h.statusResponse(),
-		Result: api.PushResult{
-			Summary: snapshotSummaryResponse(result.Summary), ObjectCount: result.ObjectCount,
-			UploadedBytes: result.UploadedBytes, CompletedAt: result.CompletedAt,
-		},
+		Result: pushResultResponse(result),
 	})
+}
+
+// pushResultResponse は、この push が記録した変更をパスだけで返す。null ではなく
+// 空配列を返すのは、応答の形を呼び出し側の分岐なしで読めるようにするためである。
+func pushResultResponse(result remotesync.PushResult) api.PushResult {
+	return api.PushResult{
+		Summary: snapshotSummaryResponse(result.Summary), ObjectCount: result.ObjectCount,
+		UploadedBytes: result.UploadedBytes, CompletedAt: result.CompletedAt,
+		Added:    append([]string{}, result.Added...),
+		Modified: append([]string{}, result.Modified...),
+		Removed:  append([]string{}, result.Removed...),
+	}
 }
 
 func (h SyncHandlers) PushDraft(c *echo.Context) error {
@@ -71,10 +80,7 @@ func (h SyncHandlers) ForcePush(c *echo.Context) error {
 	}
 	return c.JSON(http.StatusOK, api.PushResponse{
 		Status: h.statusResponse(),
-		Result: api.PushResult{
-			Summary: snapshotSummaryResponse(result.Summary), ObjectCount: result.ObjectCount,
-			UploadedBytes: result.UploadedBytes, CompletedAt: result.CompletedAt,
-		},
+		Result: pushResultResponse(result),
 	})
 }
 
@@ -150,6 +156,7 @@ func (h SyncHandlers) Pull(c *echo.Context) error {
 		DownloadedBytes: result.DownloadedBytes, CompletedAt: result.CompletedAt,
 		Conflicts:  make([]api.SyncConflict, 0, len(result.Conflicts)),
 		Written:    append([]string{}, result.Written...),
+		Added:      append([]string{}, result.Added...),
 		Removed:    append([]string{}, result.Removed...),
 		RemoteETag: result.ETag, RemoteRevision: result.Manifest.Revision,
 	}
