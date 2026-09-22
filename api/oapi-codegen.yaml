@@ -102,5 +102,10 @@ output-options:
     - HostMetadata
     - VPNProfile
     - WireGuardProfile
+    - VPNOverview
+    - VPNSession
+    - VPNProfileRequest
+    - VPNSecrets
+    - VPNBindingRequest
     - Metadata
     - Setting

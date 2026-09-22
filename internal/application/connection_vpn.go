@@ -2,8 +2,10 @@ package application
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
+	"sshc/internal/storage"
 	"sshc/internal/vpn"
 )
 
@@ -67,4 +69,145 @@ func (s *Service) VPNProfiles() ([]VPNProfile, error) {
 	}
 	profiles := append([]VPNProfile(nil), stored.VPNProfiles...)
 	return profiles, nil
+}
+
+// SaveVPNProfile は、プロファイルひとつを保存する。同じ名前があれば置き換える。
+//
+// 秘密はここを通らない。Vault が持つ。
+func (s *Service) SaveVPNProfile(profile VPNProfile) (SaveResult, error) {
+	if _, err := profile.Profile(); err != nil {
+		return SaveResult{}, err
+	}
+	stored, precondition, err := s.metadata.Load()
+	if err != nil {
+		return SaveResult{}, err
+	}
+	replaced := false
+	for index, existing := range stored.VPNProfiles {
+		if existing.Name == profile.Name {
+			stored.VPNProfiles[index] = profile
+			replaced = true
+			break
+		}
+	}
+	if !replaced {
+		stored.VPNProfiles = append(stored.VPNProfiles, profile)
+	}
+	return s.commitMetadata(stored, precondition, "vpn.profile.save")
+}
+
+// RemoveVPNProfile は、プロファイルと、それを指している接続の紐付けを同時に消す。
+//
+// 別々に消すと、消えたプロファイルを指したままの接続が残る。その接続は繋ぐ
+// たびに「そのプロファイルは無い」と断られ、利用者は設定のどこを直せばよいかを
+// 探すことになる。
+func (s *Service) RemoveVPNProfile(name string) (SaveResult, error) {
+	stored, precondition, err := s.metadata.Load()
+	if err != nil {
+		return SaveResult{}, err
+	}
+	profiles := make([]VPNProfile, 0, len(stored.VPNProfiles))
+	found := false
+	for _, existing := range stored.VPNProfiles {
+		if existing.Name == name {
+			found = true
+			continue
+		}
+		profiles = append(profiles, existing)
+	}
+	if !found {
+		return SaveResult{}, fmt.Errorf("%w: %s", ErrUnknownVPNProfile, name)
+	}
+	stored.VPNProfiles = profiles
+	for index, host := range stored.Hosts {
+		if host.VPN == name {
+			stored.Hosts[index].VPN = ""
+		}
+	}
+	return s.commitMetadata(stored, precondition, "vpn.profile.remove")
+}
+
+// SetConnectionVPN は、接続が通るプロファイルを決める。空なら紐付けを外す。
+func (s *Service) SetConnectionVPN(alias, profile string) (SaveResult, error) {
+	stored, precondition, err := s.metadata.Load()
+	if err != nil {
+		return SaveResult{}, err
+	}
+	if profile != "" {
+		known := false
+		for _, existing := range stored.VPNProfiles {
+			if existing.Name == profile {
+				known = true
+				break
+			}
+		}
+		if !known {
+			return SaveResult{}, fmt.Errorf("%w: %s", ErrUnknownVPNProfile, profile)
+		}
+	}
+	identity, err := s.hostIdentity(alias)
+	if err != nil {
+		return SaveResult{}, err
+	}
+	updated := false
+	for index, host := range stored.Hosts {
+		if host.Identity == identity {
+			stored.Hosts[index].VPN = profile
+			updated = true
+			break
+		}
+	}
+	if !updated {
+		stored.Hosts = append(stored.Hosts, HostMetadata{Identity: identity, VPN: profile})
+	}
+	return s.commitMetadata(stored, precondition, "vpn.connection.bind")
+}
+
+// hostIdentity は、alias が指す編集できるホストを返す。
+func (s *Service) hostIdentity(alias string) (HostIdentity, error) {
+	graph, err := s.resolve()
+	if err != nil {
+		return HostIdentity{}, err
+	}
+	hosts, _ := ProjectHosts(graph, s.workspace.Root())
+	for _, host := range hosts {
+		if strings.EqualFold(host.Identity.Alias, alias) {
+			return host.Identity, nil
+		}
+	}
+	return HostIdentity{}, fmt.Errorf("%w: %s", ErrUnknownConnection, alias)
+}
+
+func (s *Service) commitMetadata(stored Metadata, precondition storage.Precondition, operation string) (SaveResult, error) {
+	if err := s.metadata.EnsureDirectory(); err != nil {
+		return SaveResult{}, err
+	}
+	change, err := s.metadata.Change(stored, precondition)
+	if err != nil {
+		return SaveResult{}, err
+	}
+	result, err := s.manager.Commit(storage.Request{Operation: operation, Changes: []storage.Change{change}})
+	if err != nil {
+		return SaveResult{}, err
+	}
+	return SaveResult{TransactionID: result.ID, Written: result.Written}, nil
+}
+
+// VPNBindings は、プロファイル名ごとに、それを通る接続の alias を返す。
+func (s *Service) VPNBindings() (map[string][]string, error) {
+	stored, _, err := s.metadata.Load()
+	if err != nil {
+		return nil, err
+	}
+	bindings := map[string][]string{}
+	for _, host := range stored.Hosts {
+		if host.VPN == "" {
+			continue
+		}
+		bindings[host.VPN] = append(bindings[host.VPN], host.Identity.Alias)
+	}
+	for _, aliases := range bindings {
+		sort.Strings(aliases)
+	}
+	return bindings, nil
 }

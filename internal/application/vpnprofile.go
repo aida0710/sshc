@@ -16,6 +16,9 @@ var (
 	ErrMetadataVPN = errors.New("metadata vpn profile is invalid")
 	// ErrUnknownVPNProfile は、その名前のプロファイルが無いことを表す。
 	ErrUnknownVPNProfile = errors.New("that vpn profile is not configured")
+	// ErrUnknownConnection は、その alias で編集できる接続が無いことを表す。
+	// 外部ファイルやワイルドカードだけの規則は sshc の metadata を持てない。
+	ErrUnknownConnection = errors.New("that connection cannot hold sshc metadata")
 )
 
 // VPNProfile は、metadata.json に保存する VPN 経路ひとつぶんである。

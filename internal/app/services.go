@@ -49,6 +49,7 @@ type engineServices struct {
 	workspaces   *terminalworkspace.Service
 	snippets     *snippets.Service
 	terminals    *terminal.Registry
+	vpn          *vpn.Manager
 	ssh          sshParts
 }
 
@@ -180,7 +181,8 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 		config:      configService, keys: keyService, diagnostics: diagnosticsService,
 		knownHosts: knownHostsService, passwords: passwordService,
 		remoteKeys: remoteKeyService, recentStore: recentStore, recent: recentService,
-		sftp: sftpService, sftpPool: sftpPool, workspaces: workspaceService, snippets: snippetService, ssh: ssh,
+		sftp: sftpService, sftpPool: sftpPool, workspaces: workspaceService, snippets: snippetService,
+		vpn: vpnSessions, ssh: ssh,
 	}
 	services.sync, services.autoSync, err = buildSync(workspace, transactions, passwordService, snippetStore, dependencies)
 	if err != nil {
