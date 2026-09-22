@@ -102,13 +102,42 @@ func waitForPipe(ctx context.Context, name *uint16) error {
 type conn struct {
 	address pipeAddress
 
-	closeOnce sync.Once
-	closed    chan struct{}
+	// state は handle と、その handle を使っている入出力の数を守る。
+	//
+	// 使用中に CloseHandle すると、kernel が触っている最中の handle を無効に
+	// する。その値は同じ process の別の対象へ再利用されうるので、閉じてよい
+	// のは借り手が居なくなってからである。
+	state    sync.Mutex
+	closing  bool
+	inFlight int
+	// quiet は、閉じる途中で最後の入出力が戻ったことを知らせる。
+	quiet  chan struct{}
+	closed chan struct{}
 
 	handle windows.Handle
 
 	read  operation
 	write operation
+}
+
+// borrow は、入出力ひとつが終わるまで handle を借りる。
+func (pipe *conn) borrow(verb string) (windows.Handle, error) {
+	pipe.state.Lock()
+	defer pipe.state.Unlock()
+	if pipe.closing {
+		return 0, pipe.opError(verb, net.ErrClosed)
+	}
+	pipe.inFlight++
+	return pipe.handle, nil
+}
+
+func (pipe *conn) release() {
+	pipe.state.Lock()
+	defer pipe.state.Unlock()
+	pipe.inFlight--
+	if pipe.closing && pipe.inFlight == 0 {
+		close(pipe.quiet)
+	}
 }
 
 // operation は、片方向の重なり合う入出力ひとつぶんの状態である。
@@ -133,6 +162,7 @@ const maxPipeMessage = 32 << 10
 func newConn(handle windows.Handle, path string) (net.Conn, error) {
 	pipe := &conn{
 		address: pipeAddress(path),
+		quiet:   make(chan struct{}),
 		closed:  make(chan struct{}),
 		handle:  handle,
 	}
@@ -183,11 +213,11 @@ func (pipe *conn) Write(buffer []byte) (int, error) {
 // 締切で解けたときは CancelIoEx を投げ、そのうえで結果を回収する。
 // 回収しないまま戻ると、kernel はまだこの構造体へ書き込みうる。
 func (pipe *conn) perform(operation *operation, verb string, buffer []byte, writing bool) (int, error) {
-	select {
-	case <-pipe.closed:
-		return 0, pipe.opError(verb, net.ErrClosed)
-	default:
+	handle, err := pipe.borrow(verb)
+	if err != nil {
+		return 0, err
 	}
+	defer pipe.release()
 
 	operation.mutex.Lock()
 	defer operation.mutex.Unlock()
@@ -204,11 +234,10 @@ func (pipe *conn) perform(operation *operation, verb string, buffer []byte, writ
 		return 0, pipe.opError(verb, err)
 	}
 	var done uint32
-	var err error
 	if writing {
-		err = windows.WriteFile(pipe.handle, operation.buffer[:length], &done, &operation.overlapped)
+		err = windows.WriteFile(handle, operation.buffer[:length], &done, &operation.overlapped)
 	} else {
-		err = windows.ReadFile(pipe.handle, operation.buffer[:length], &done, &operation.overlapped)
+		err = windows.ReadFile(handle, operation.buffer[:length], &done, &operation.overlapped)
 	}
 	if err != nil && !errors.Is(err, windows.ERROR_IO_PENDING) {
 		if errors.Is(err, windows.ERROR_BROKEN_PIPE) || errors.Is(err, windows.ERROR_PIPE_NOT_CONNECTED) {
@@ -217,7 +246,7 @@ func (pipe *conn) perform(operation *operation, verb string, buffer []byte, writ
 		return 0, pipe.opError(verb, err)
 	}
 	if errors.Is(err, windows.ERROR_IO_PENDING) {
-		done, err = pipe.awaitCompletion(operation, verb)
+		done, err = pipe.awaitCompletion(handle, operation, verb)
 		if err != nil {
 			return int(done), err
 		}
@@ -229,22 +258,22 @@ func (pipe *conn) perform(operation *operation, verb string, buffer []byte, writ
 }
 
 // awaitCompletion は、入出力が終わるか、締切か閉鎖が来るまで待つ。
-func (pipe *conn) awaitCompletion(operation *operation, verb string) (uint32, error) {
+func (pipe *conn) awaitCompletion(handle windows.Handle, operation *operation, verb string) (uint32, error) {
 	timeout := operation.remaining()
 	if timeout == 0 {
-		return pipe.cancel(operation, verb, os.ErrDeadlineExceeded)
+		return pipe.cancel(handle, operation, verb, os.ErrDeadlineExceeded)
 	}
 
 	waited, err := windows.WaitForSingleObject(operation.event, timeout)
 	switch {
 	case err != nil:
-		return pipe.cancel(operation, verb, err)
+		return pipe.cancel(handle, operation, verb, err)
 	case waited == uint32(windows.WAIT_TIMEOUT):
-		return pipe.cancel(operation, verb, os.ErrDeadlineExceeded)
+		return pipe.cancel(handle, operation, verb, os.ErrDeadlineExceeded)
 	}
 
 	var done uint32
-	if err := windows.GetOverlappedResult(pipe.handle, &operation.overlapped, &done, false); err != nil {
+	if err := windows.GetOverlappedResult(handle, &operation.overlapped, &done, false); err != nil {
 		if errors.Is(err, windows.ERROR_BROKEN_PIPE) || errors.Is(err, windows.ERROR_PIPE_NOT_CONNECTED) {
 			return done, io.EOF
 		}
@@ -257,12 +286,12 @@ func (pipe *conn) awaitCompletion(operation *operation, verb string) (uint32, er
 }
 
 // cancel は、待つのをやめた入出力を kernel から取り下げ、回収する。
-func (pipe *conn) cancel(operation *operation, verb string, reason error) (uint32, error) {
-	_ = windows.CancelIoEx(pipe.handle, &operation.overlapped)
+func (pipe *conn) cancel(handle windows.Handle, operation *operation, verb string, reason error) (uint32, error) {
+	_ = windows.CancelIoEx(handle, &operation.overlapped)
 	var done uint32
 	// wait=true で回収する。取り下げたことと、kernel が手を引いたことは
 	// 別である。回収せずに戻れば、この構造体はまだ書き換えられうる。
-	_ = windows.GetOverlappedResult(pipe.handle, &operation.overlapped, &done, true)
+	_ = windows.GetOverlappedResult(handle, &operation.overlapped, &done, true)
 	return done, pipe.opError(verb, reason)
 }
 
@@ -283,24 +312,41 @@ func (pipe *conn) opError(verb string, err error) error {
 // Close は、待っている入出力ごと閉じる。
 //
 // CancelIoEx を先に投げる。閉じるだけでは、この handle で待っている読みは
-// 解けない。解けないまま CloseHandle すると、kernel が触っている最中の
-// handle を無効にすることになる。
+// 解けない。取り下げたあとは、その入出力が kernel から戻るまで待つ。待たずに
+// CloseHandle すると、kernel が触っている最中の handle を無効にすることになり、
+// 待っている側はその瞬間に handle と event を読んでいる。
 func (pipe *conn) Close() error {
+	pipe.state.Lock()
+	if pipe.closing {
+		pipe.state.Unlock()
+		return nil
+	}
+	pipe.closing = true
+	close(pipe.closed)
+	if pipe.handle != 0 {
+		_ = windows.CancelIoEx(pipe.handle, nil)
+	}
+	waiting := pipe.inFlight > 0
+	pipe.state.Unlock()
+
+	if waiting {
+		<-pipe.quiet
+	}
+
+	pipe.state.Lock()
+	defer pipe.state.Unlock()
 	var err error
-	pipe.closeOnce.Do(func() {
-		close(pipe.closed)
-		if pipe.handle != 0 {
-			_ = windows.CancelIoEx(pipe.handle, nil)
-			err = windows.CloseHandle(pipe.handle)
-			pipe.handle = 0
+	if pipe.handle != 0 {
+		err = windows.CloseHandle(pipe.handle)
+		pipe.handle = 0
+	}
+	// 借り手はもう居ない。event を閉じても、待っている入出力はそれを読まない。
+	for _, operation := range []*operation{&pipe.read, &pipe.write} {
+		if operation.event != 0 {
+			_ = windows.CloseHandle(operation.event)
+			operation.event = 0
 		}
-		for _, operation := range []*operation{&pipe.read, &pipe.write} {
-			if operation.event != 0 {
-				_ = windows.CloseHandle(operation.event)
-				operation.event = 0
-			}
-		}
-	})
+	}
 	return err
 }
 
