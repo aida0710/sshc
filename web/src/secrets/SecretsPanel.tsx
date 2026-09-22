@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { useAnchoredMenu } from "../ui/useAnchoredMenu";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { failureCode } from "../api/client";
-import { credentialsApi, type CredentialList, type CredentialKind, type CredentialsApi, type TOTPCodeSet } from "../api/credentials";
+import { credentialsApi, type CredentialList, type CredentialKind, type CredentialsApi } from "../api/credentials";
 import { vaultApi, type PasswordVaultStatus, type VaultApi } from "../api/vault";
 import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
@@ -13,6 +13,7 @@ import { Button, Card, Notice } from "../ui/surface";
 import { MetricCard, MetricGrid, PageHeader } from "../ui/page";
 import { Icon } from "../ui/icons";
 import { CredentialEditDialog } from "./CredentialEditDialog";
+import { TOTPCodeCard } from "./TOTPCodeCard";
 import { PanelState } from "../ui/PanelState";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { useDismissibleLayer } from "../ui/useDismissibleLayer";
@@ -70,85 +71,6 @@ const kindDescriptions: Record<CredentialKind, MessageKey> = {
   key_passphrase: "secrets.passphrasesDescription",
   totp: "secrets.totpDescription",
 };
-
-function readableCode(code: string): string {
-  return code.length === 6 ? `${code.slice(0, 3)} ${code.slice(3)}` : code;
-}
-
-function TOTPCodeCard({ name, api }: { name: string; api: Pick<CredentialsApi, "totpCodes"> }) {
-  const t = useTranslate();
-  const [codes, setCodes] = useState<TOTPCodeSet | null>(null);
-  const [remaining, setRemaining] = useState(0);
-  const [expanded, setExpanded] = useState(false);
-  const [failed, setFailed] = useState(false);
-
-  const reload = useCallback(async () => {
-    try {
-      const next = await api.totpCodes(name);
-      setCodes(next);
-      setRemaining(next.remainingSeconds);
-      setFailed(false);
-    } catch {
-      setFailed(true);
-    }
-  }, [api, name]);
-
-  useEffect(() => {
-    void reload();
-  }, [reload]);
-
-  useEffect(() => {
-    if (codes === null) return;
-    const timer = window.setInterval(() => {
-      setRemaining((current) => {
-        if (current > 1) return current - 1;
-        void reload();
-        return 0;
-      });
-    }, 1000);
-    return () => window.clearInterval(timer);
-  }, [codes, reload]);
-
-  if (failed) {
-    return <Button onClick={() => void reload()}>{t("secrets.totpRetry")}</Button>;
-  }
-  if (codes === null) {
-    return <p className={hintText}>{t("secrets.totpLoading")}</p>;
-  }
-  return (
-    <div className="min-w-0 rounded-md bg-surface-subtle px-3 py-2 sm:min-w-72">
-      <div className="flex items-center gap-3">
-        <span className="min-w-0 flex-1 whitespace-nowrap font-mono text-lg font-semibold tracking-wider text-ink">
-          {readableCode(codes.current)}
-        </span>
-        <span className="shrink-0 text-xs tabular-nums text-ink-muted">
-          {t("secrets.totpRemaining", { seconds: remaining })}
-        </span>
-        <button
-          type="button"
-          aria-expanded={expanded}
-          aria-label={t(expanded ? "secrets.totpCollapse" : "secrets.totpExpand", { name })}
-          className="flex size-8 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-select-fill hover:text-ink"
-          onClick={() => setExpanded((current) => !current)}
-        >
-          <Icon name="chevronRight" className={`size-4 transition-transform ${expanded ? "rotate-90" : ""}`} />
-        </button>
-      </div>
-      {expanded ? (
-        <div className="mt-2 grid grid-cols-2 gap-2 border-t border-line pt-2 text-xs">
-          <div>
-            <p className="text-ink-faint">{t("secrets.totpPrevious")}</p>
-            <p className="mt-1 whitespace-nowrap font-mono tracking-wider text-ink-muted">{readableCode(codes.previous)}</p>
-          </div>
-          <div>
-            <p className="text-ink-faint">{t("secrets.totpNext")}</p>
-            <p className="mt-1 whitespace-nowrap font-mono tracking-wider text-ink-muted">{readableCode(codes.next)}</p>
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
-}
 
 function emptyCredentialList(): CredentialList {
   return {
