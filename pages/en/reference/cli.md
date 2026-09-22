@@ -101,6 +101,8 @@ sshc sync now [--json]
 sshc sync auto on|off [--json]
 ```
 
+`sshc sync push` and `sshc sync pull` follow the transfer summary with one line per file, marked `added`, `modified`, or `removed`. When a plain `pull` stops because of a conflict or a removal, it prints the preview it did not apply in the same form on standard error. With `--json`, pull returns `written`, `added`, `removed`, and `conflicts`, and push returns `added`, `modified`, and `removed` as arrays of paths.
+
 `sshc sync setup` shows the configured endpoint, bucket, path, region, and direction as defaults. Direction accepts `both`, `push`, or `pull`. The Access Key ID is shown as `*****` followed by its final five characters; the Secret Access Key and sync key are shown only as configured. Press Enter on blank secret prompts to keep the values already held by the engine. While a new hidden value is typed, each character appears as `*`, and Backspace updates the mask without printing the plaintext.
 
 ## SFTP transfers

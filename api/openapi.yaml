@@ -3165,13 +3165,24 @@ components:
     PushResult:
       type: object
       additionalProperties: false
-      required: [summary, objectCount, uploadedBytes, completedAt]
+      required: [summary, objectCount, uploadedBytes, completedAt, added, modified, removed]
       properties:
         summary: { $ref: "#/components/schemas/SnapshotSummary" }
         objectCount: { type: integer, minimum: 0 }
         # 日付付きコピーとライブオブジェクトへの各 PUT body の合計。
         uploadedBytes: { type: integer, format: int64, minimum: 0 }
         completedAt: { type: string }
+        # この push が親スナップショットに対して記録した変更。パスのみで、内容は
+        # 運ばない。内容を運ぶ応答は、秘密鍵をレスポンス本文に置くことになる。
+        added:
+          type: array
+          items: { type: string }
+        modified:
+          type: array
+          items: { type: string }
+        removed:
+          type: array
+          items: { type: string }
     PushResponse:
       type: object
       additionalProperties: false
@@ -3446,7 +3457,7 @@ components:
     PullResponse:
       type: object
       additionalProperties: false
-      required: [applied, conflicts, written, removed, summary, downloadedBytes, completedAt, remoteETag, remoteRevision]
+      required: [applied, conflicts, written, added, removed, summary, downloadedBytes, completedAt, remoteETag, remoteRevision]
       properties:
         applied: { type: boolean }
         summary: { $ref: "#/components/schemas/SnapshotSummary" }
@@ -3460,6 +3471,12 @@ components:
         # パスのみ。内容を運ぶ pull のレスポンスは、秘密鍵をレスポンス本文に
         # 置くことになる。
         written:
+          type: array
+          items: { type: string }
+        # written のうち、このワークスペースにまだ存在しないファイル。残りの
+        # written は既存のファイルを置き換える。追加と変更を区別して見せるための
+        # 区分であり、written の部分集合である。
+        added:
           type: array
           items: { type: string }
         removed:

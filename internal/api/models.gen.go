@@ -1099,6 +1099,7 @@ type PullRequestResolve string
 
 // PullResponse defines model for PullResponse.
 type PullResponse struct {
+	Added           []string        `json:"added"`
 	Applied         bool            `json:"applied"`
 	CompletedAt     string          `json:"completedAt"`
 	Conflicts       []SyncConflict  `json:"conflicts"`
@@ -1126,8 +1127,11 @@ type PushResponse struct {
 
 // PushResult defines model for PushResult.
 type PushResult struct {
+	Added         []string        `json:"added"`
 	CompletedAt   string          `json:"completedAt"`
+	Modified      []string        `json:"modified"`
 	ObjectCount   int             `json:"objectCount"`
+	Removed       []string        `json:"removed"`
 	Summary       SnapshotSummary `json:"summary"`
 	UploadedBytes int64           `json:"uploadedBytes"`
 }

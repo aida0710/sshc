@@ -286,6 +286,9 @@ test("shows push, preview, apply, persisted success, and a later failure as dist
         objectCount: 2,
         uploadedBytes: 3_800_000,
         completedAt: "2026-08-12T01:30:03Z",
+        added: [],
+        modified: ["config"],
+        removed: [],
       };
       lastOperation = { kind: "push", ...result };
       await route.fulfill({
@@ -323,6 +326,7 @@ test("shows push, preview, apply, persisted success, and a later failure as dist
         remoteRevision: "b".repeat(64),
         conflicts: [],
         written: ["config"],
+        added: [],
         removed: [],
       };
       if (apply) {
@@ -618,6 +622,7 @@ test("reviews and accepts a diverged remote head on a receive-only machine", asy
           origin: "workstation-2",
           conflicts: [],
           written: ["config", "keys/work/server_key"],
+          added: ["keys/work/server_key"],
           removed: [],
         }),
       });

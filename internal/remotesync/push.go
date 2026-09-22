@@ -121,7 +121,10 @@ func (s *Service) push(ctx context.Context, passphrase, forcedETag, message stri
 		current.ETag = ""
 		current.Base = nil
 	}
-	if forcedETag == "" && sameTarget && current.Base != nil && !manifestChanged(current.Base, manifest) {
+	// 親との差分は、保存するかどうかの判断、生成する message、利用者へ見せる
+	// 変更一覧で同じものを指す。ここで一度だけ求める。
+	changes := diffManifests(current.Base, manifest)
+	if forcedETag == "" && sameTarget && current.Base != nil && !changes.any() {
 		return PushResult{}, ErrNothingToPush
 	}
 	parentRevision := ""
@@ -136,7 +139,7 @@ func (s *Service) push(ctx context.Context, passphrase, forcedETag, message stri
 	}
 	manifest.Ancestors = manifestAncestors(current.Base)
 	if strings.TrimSpace(message) == "" {
-		message = draftFor(current.Base, manifest).Message
+		message = draftFrom(changes).Message
 	}
 	manifest.Message = message
 	if err := FinalizeManifest(&manifest, parentRevision); err != nil {
@@ -155,7 +158,10 @@ func (s *Service) push(ctx context.Context, passphrase, forcedETag, message stri
 	if err != nil {
 		return PushResult{}, err
 	}
-	result := PushResult{Summary: snapshotSummary(manifest, contents, len(sealed))}
+	result := PushResult{
+		Summary: snapshotSummary(manifest, contents, len(sealed)),
+		Added:   changes.added, Modified: changes.modified, Removed: changes.removed,
+	}
 
 	ifMatch, ifNoneMatch := forcedETag, ""
 	if ifMatch == "" {
