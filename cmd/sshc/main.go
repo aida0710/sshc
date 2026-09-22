@@ -113,6 +113,10 @@ func dispatchInvocation(called invocation, home string, client *http.Client) int
 		otpCtx, cancel := signal.NotifyContext(ctx, os.Interrupt)
 		defer cancel()
 		return runOTP(otpCtx, *called.OTP, systemCommandEnvironment(home, client))
+	case invocationVPN:
+		vpnCtx, cancel := signal.NotifyContext(ctx, os.Interrupt)
+		defer cancel()
+		return runVPN(vpnCtx, *called.VPN, systemCommandEnvironment(home, client))
 	case invocationVault:
 		// password 読み取り中と loopback request 中の Ctrl-C を public 130 にする。
 		// engine の ownership signal は runEngine が別に持つため、ここでは利用者が
