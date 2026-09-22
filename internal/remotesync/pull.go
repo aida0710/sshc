@@ -15,9 +15,11 @@ import (
 // PullResult は、適用する前の、pull が行うであろう内容。
 //
 // 永続化トランザクションは remotesync の実装詳細であり、transport へ公開しない。
-// Written と Removed は利用者へ表示できるワークスペース相対パスである。
+// Written、Added、Removed は利用者へ表示できるワークスペース相対パスである。
+// Added は Written のうち、このワークスペースにまだ存在しないファイルである。
 type PullResult struct {
 	Written         []string
+	Added           []string
 	Removed         []string
 	Conflicts       []Conflict
 	Manifest        Manifest
@@ -36,16 +38,25 @@ type PullResult struct {
 	request         storage.Request
 }
 
-func (s *Service) pullPaths(request storage.Request) (written, removed []string) {
+// pullPaths は、適用したときに変わるファイルを表示できるパスへ直す。
+//
+// plan がローカルのファイルを置き換えるときだけ precondition に既存を要求する
+// ので、それを持たない変更が、このワークスペースへ新しく現れるファイルである。
+func (s *Service) pullPaths(request storage.Request) (written, added, removed []string) {
 	written = make([]string, 0, len(request.Changes))
+	added = make([]string, 0, len(request.Changes))
 	for _, change := range request.Changes {
-		written = append(written, s.DisplayPath(change.Path))
+		path := s.DisplayPath(change.Path)
+		written = append(written, path)
+		if !change.Precondition.Exists {
+			added = append(added, path)
+		}
 	}
 	removed = make([]string, 0, len(request.Removals))
 	for _, removal := range request.Removals {
 		removed = append(removed, s.DisplayPath(removal.Path))
 	}
-	return written, removed
+	return written, added, removed
 }
 
 // Pull はスナップショットを取得し、それを適用すると何が変わるかを算出する。
@@ -186,9 +197,9 @@ func (s *Service) pullWithRemoteAcceptance(
 	if err != nil && !errors.Is(err, ErrNothingToApply) {
 		return PullResult{}, err
 	}
-	written, removed := s.pullPaths(request)
+	written, added, removed := s.pullPaths(request)
 	return PullResult{
-		Written: written, Removed: removed, Conflicts: conflicts, Manifest: manifest,
+		Written: written, Added: added, Removed: removed, Conflicts: conflicts, Manifest: manifest,
 		Summary:         snapshotSummary(manifest, contents, len(object.Body)),
 		DownloadedBytes: int64(len(object.Body)), CompletedAt: s.now(),
 		ETag: stateETag, Origin: manifest.Origin, objectKey: objectKey, target: targetID(binding.config),

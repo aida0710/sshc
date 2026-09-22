@@ -16,6 +16,9 @@ const push: PushResult = {
   objectCount: 2,
   uploadedBytes: 3_800_000,
   completedAt: "2026-08-12T01:30:03Z",
+  added: ["connections/work/lon.conf"],
+  modified: ["config"],
+  removed: [],
 };
 
 const pull: PullResponse = {
@@ -24,6 +27,7 @@ const pull: PullResponse = {
   downloadedBytes: 1_900_000,
   completedAt: "2026-08-12T01:31:00Z",
   written: ["config", "connections/work/lon.conf", "keys/work/id_ed25519"],
+  added: ["connections/work/lon.conf"],
   removed: ["connections/old.conf"],
   conflicts: [{ path: "config", changedHere: true, changedThere: true }],
   remoteETag: '"generation-1"',

@@ -320,6 +320,11 @@ func TestPushResponseReportsTheMeasuredTransferAndLastSuccessfulOperation(t *tes
 	if body.Result.CompletedAt == "" || body.Result.Summary.CreatedAt == "" {
 		t.Errorf("timestamps are missing: %+v", body.Result)
 	}
+	// 親の無い最初の push なので、集めたファイルはすべて追加として報告される。
+	if len(body.Result.Added) != len(collected.Files) ||
+		len(body.Result.Modified) != 0 || len(body.Result.Removed) != 0 {
+		t.Errorf("recorded changes = %+v, collected %d files", body.Result, len(collected.Files))
+	}
 	if body.Status.LastOperation == nil || body.Status.LastOperation.Kind != remotesync.OperationPush {
 		t.Errorf("push status did not carry its last successful operation: %+v", body.Status.LastOperation)
 	}
@@ -472,6 +477,7 @@ func TestPullResponseReportsEachDownloadAndTheAppliedOperation(t *testing.T) {
 		DownloadedBytes int64                      `json:"downloadedBytes"`
 		CompletedAt     string                     `json:"completedAt"`
 		Written         []string                   `json:"written"`
+		Added           []string                   `json:"added"`
 		RemoteETag      string                     `json:"remoteETag"`
 		RemoteRevision  string                     `json:"remoteRevision"`
 	}
@@ -483,6 +489,10 @@ func TestPullResponseReportsEachDownloadAndTheAppliedOperation(t *testing.T) {
 	}
 	if len(previewBody.Written) != 1 {
 		t.Errorf("preview written = %v", previewBody.Written)
+	}
+	// このワークスペースには何も無いので、書き込むファイルはそのまま追加である。
+	if len(previewBody.Added) != 1 || previewBody.Added[0] != previewBody.Written[0] {
+		t.Errorf("preview added = %v, written = %v", previewBody.Added, previewBody.Written)
 	}
 	if !strings.Contains(preview.Body.String(), `"conflicts":[]`) ||
 		!strings.Contains(preview.Body.String(), `"removed":[]`) {

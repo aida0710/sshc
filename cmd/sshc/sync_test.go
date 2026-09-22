@@ -354,6 +354,9 @@ func pushResponseFixture() api.PushResponse {
 		Status: syncStatusFixture(),
 		Result: api.PushResult{
 			CompletedAt: "2026-08-29T11:00:00Z", ObjectCount: 3, UploadedBytes: 12288,
+			Added:    []string{"connections/work/lon.conf"},
+			Modified: []string{"config"},
+			Removed:  []string{"keys/work/id_ed25519"},
 			Summary: api.SnapshotSummary{
 				CreatedAt: "2026-08-29T10:59:59Z", FileCount: 17,
 				SourceBytes: 16384, SnapshotBytes: 4096,
@@ -495,7 +498,8 @@ func pullResponseFixture() api.PullResponse {
 	return api.PullResponse{
 		Applied: false, CompletedAt: "2026-08-29T12:00:00Z", DownloadedBytes: 4096,
 		RemoteETag: "preview-etag", RemoteRevision: strings.Repeat("a", 64),
-		Conflicts: []api.SyncConflict{}, Written: []string{"config"}, Removed: []string{},
+		Conflicts: []api.SyncConflict{}, Written: []string{"config", "connections/work/lon.conf"},
+		Added: []string{"connections/work/lon.conf"}, Removed: []string{},
 		Summary: api.SnapshotSummary{
 			CreatedAt: "2026-08-29T11:59:59Z", FileCount: 3, SourceBytes: 8192, SnapshotBytes: 2048,
 		},
@@ -535,6 +539,122 @@ func TestSyncPullSafeWritesPreviewThenApplyExactIdentity(t *testing.T) {
 	var envelope commandEnvelope
 	if err := json.Unmarshal([]byte(stdout.String()), &envelope); err != nil || !envelope.Success || envelope.Result == nil {
 		t.Fatalf("pull envelope = %+v, %v", envelope, err)
+	}
+}
+
+func TestSyncPushListsEveryFileItRecorded(t *testing.T) {
+	_, server, stateDir := newSyncCommandHarness(t, func(response http.ResponseWriter, request *http.Request) {
+		response.Header().Set("Content-Type", "application/json")
+		switch {
+		case request.Method == http.MethodGet && request.URL.Path == "/api/v1/sync/push":
+			_ = json.NewEncoder(response).Encode(api.SyncPushDraft{
+				Message: "engine-generated draft", Added: 1, Modified: 1, Removed: 1,
+			})
+		case request.Method == http.MethodPost && request.URL.Path == "/api/v1/sync/push":
+			_ = json.NewEncoder(response).Encode(pushResponseFixture())
+		default:
+			response.WriteHeader(http.StatusNotFound)
+		}
+	})
+	defer server.Close()
+	var stdout, stderr strings.Builder
+	code := runSync(context.Background(), syncInvocation{Action: syncPush}, commandEnvironment{
+		stateDir: stateDir, client: server.Client(), stdout: &stdout, stderr: &stderr,
+	})
+	if code != 0 || stderr.Len() != 0 {
+		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	want := strings.Join([]string{
+		"result          pushed",
+		"completed       2026-08-29T11:00:00Z",
+		"files           17",
+		"added           1",
+		"modified        1",
+		"removed         1",
+		"objects         3",
+		"source bytes    16384 B",
+		"snapshot bytes  4096 B",
+		"uploaded bytes  12288 B",
+		"",
+		"added     connections/work/lon.conf",
+		"modified  config",
+		"removed   keys/work/id_ed25519",
+		"",
+	}, "\n")
+	if stdout.String() != want {
+		t.Errorf("push output =\n%s\nwant\n%s", stdout.String(), want)
+	}
+}
+
+func TestSyncPullListsWhatItAddedAndWhatItReplaced(t *testing.T) {
+	calls := 0
+	_, server, stateDir := newSyncCommandHarness(t, func(response http.ResponseWriter, request *http.Request) {
+		calls++
+		result := pullResponseFixture()
+		result.Applied = calls == 2
+		response.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(response).Encode(result)
+	})
+	defer server.Close()
+	var stdout, stderr strings.Builder
+	code := runSync(context.Background(), syncInvocation{Action: syncPull}, commandEnvironment{
+		stateDir: stateDir, client: server.Client(), stdout: &stdout, stderr: &stderr,
+	})
+	if code != 0 || stderr.Len() != 0 {
+		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	want := strings.Join([]string{
+		"result            applied",
+		"completed         2026-08-29T12:00:00Z",
+		"files             3",
+		"added             1",
+		"modified          1",
+		"removed           0",
+		"conflicts         0",
+		"downloaded bytes  4096 B",
+		"source bytes      8192 B",
+		"snapshot bytes    2048 B",
+		"",
+		"added     connections/work/lon.conf",
+		"modified  config",
+		"",
+	}, "\n")
+	if stdout.String() != want {
+		t.Errorf("pull output =\n%s\nwant\n%s", stdout.String(), want)
+	}
+}
+
+func TestRefusedPullShowsTheChangesItDidNotApply(t *testing.T) {
+	calls := 0
+	_, server, stateDir := newSyncCommandHarness(t, func(response http.ResponseWriter, request *http.Request) {
+		calls++
+		result := pullResponseFixture()
+		result.Written = []string{"connections/work/lon.conf"}
+		result.Added = []string{"connections/work/lon.conf"}
+		result.Removed = []string{"connections/old/hnd.conf"}
+		result.Conflicts = []api.SyncConflict{{Path: "config", ChangedHere: true, ChangedThere: true}}
+		response.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(response).Encode(result)
+	})
+	defer server.Close()
+	var stdout, stderr strings.Builder
+	code := runSync(context.Background(), syncInvocation{Action: syncPull}, commandEnvironment{
+		stateDir: stateDir, client: server.Client(), stdout: &stdout, stderr: &stderr,
+	})
+	// プレビューだけを取って止まる。適用は要求しない。
+	if code != 1 || calls != 1 || stdout.Len() != 0 {
+		t.Fatalf("code=%d calls=%d stdout=%q stderr=%q", code, calls, stdout.String(), stderr.String())
+	}
+	want := strings.Join([]string{
+		"added     connections/work/lon.conf",
+		"removed   connections/old/hnd.conf",
+		"conflict  config",
+		"sshc: pull includes conflicts or removals; nothing above was applied; " +
+			"rerun with sshc sync pull --force to accept remote state",
+		"",
+	}, "\n")
+	if stderr.String() != want {
+		t.Errorf("refusal output =\n%s\nwant\n%s", stderr.String(), want)
 	}
 }
 
