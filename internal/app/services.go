@@ -51,6 +51,7 @@ type engineServices struct {
 	snippets     *snippets.Service
 	terminals    *terminal.Registry
 	vpn          *vpn.Manager
+	vpnProfiles  *vpnprofile.Service
 	ssh          sshParts
 }
 
@@ -88,6 +89,10 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 	// VPN 経路はこの engine が持つ。コンテナも中継のソケットも、この利用者の
 	// ものだけを扱う。
 	vpnSessions := vpn.New(filepath.Join(workspace.Root(), vpnStateDirectory), os.Getuid())
+	// 設定・秘密・経路をひとつの操作として扱う。engine の接続と HTTP API が同じものを使う。
+	vpnProfiles := vpnprofile.New(vpnprofile.Dependencies{
+		Configuration: configService, Vault: passwordService, Routes: vpnSessions,
+	})
 
 	// プロセス内 SSH クライアントの依存関係をここで一度だけ組み立てる。
 	ssh := newSSHParts(sshDependencies{
@@ -95,9 +100,7 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 		passphrase:  storedPassphrase(passwordService, workspace.Root()),
 		password:    storedPassword(passwordService),
 		oneTimeCode: storedTOTP(passwordService),
-		vpnRoute: vpnRoute(vpnprofile.New(vpnprofile.Dependencies{
-			Configuration: configService, Vault: passwordService, Routes: vpnSessions,
-		}), vpnSessions),
+		vpnRoute:    vpnRoute(vpnProfiles, vpnSessions),
 	})
 	recentService := recent.NewService(recentStore, func(alias string) (recent.Target, error) {
 		target, err := ssh.target(alias)
@@ -185,7 +188,7 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 		knownHosts: knownHostsService, passwords: passwordService,
 		remoteKeys: remoteKeyService, recentStore: recentStore, recent: recentService,
 		sftp: sftpService, sftpPool: sftpPool, workspaces: workspaceService, snippets: snippetService,
-		vpn: vpnSessions, ssh: ssh,
+		vpn: vpnSessions, vpnProfiles: vpnProfiles, ssh: ssh,
 	}
 	services.sync, services.autoSync, err = buildSync(workspace, transactions, passwordService, snippetStore, dependencies)
 	if err != nil {

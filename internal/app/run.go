@@ -232,10 +232,11 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 				dependencies.Logger.Warn("record recent SSH connection", "alias", alias, "error", err)
 			}
 		},
-		Sync:      syncService,
-		AutoSync:  autoSync,
-		Terminals: terminals,
-		VPN:       services.vpn,
+		Sync:        syncService,
+		AutoSync:    autoSync,
+		Terminals:   terminals,
+		VPN:         services.vpn,
+		VPNProfiles: services.vpnProfiles,
 		// SSH のプログラムはもう要らない。接続はこのプロセスの中で通信する。
 		TerminalStartDirectory:    configService.TerminalStartDirectory,
 		LoginShell:                func() (string, error) { return platform.LoginShell(dependencies.Lookup) },

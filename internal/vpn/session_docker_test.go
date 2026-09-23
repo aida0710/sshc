@@ -5,8 +5,8 @@ package vpn
 import (
 	"context"
 	"crypto/rand"
-	"errors"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"os"
