@@ -169,6 +169,9 @@ func TestAConnectionReachesTheTargetThroughTheTunnel(t *testing.T) {
 	if err != nil || !status.Running || status.RelaySocket == "" {
 		t.Fatalf("Status = %+v, %v", status, err)
 	}
+	if status.Phase != "" {
+		t.Fatalf("経路が立ったあとも用意中のままだった: %q", status.Phase)
+	}
 }
 
 // トンネルが成立しないとき、接続先へはDockerの通常回線からも届かない。

@@ -4,6 +4,7 @@ import { hintText } from "../ui/form";
 import { formatDateTime } from "../ui/format";
 import { Button, Card } from "../ui/surface";
 import { VPNBindingRow } from "./VPNBindingRow";
+import { vpnPhases } from "./vpnPhases";
 
 // 経路ひとつぶんの札。いまの状態と、コンテナの中のトンネルの様子と、
 // この経路を通る接続を見せ、開始・停止・改名・削除・ログを受け付ける。
@@ -33,12 +34,15 @@ export function VPNSessionCard({
   actions: VPNSessionActions;
 }) {
   const t = useTranslate();
+  const phase = vpnPhases[session.phase ?? ""];
   const state =
     session.relaySocket !== ""
       ? t("vpn.stateUp")
-      : session.running
-        ? t("vpn.stateStarting")
-        : t("vpn.stateStopped");
+      : phase !== undefined
+        ? t(phase)
+        : session.running
+          ? t("vpn.stateStarting")
+          : t("vpn.stateStopped");
   return (
     <Card as="article" padded aria-label={session.profile.name}>
       <div className="flex flex-wrap items-center justify-between gap-2">

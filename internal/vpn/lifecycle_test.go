@@ -54,3 +54,36 @@ func TestARouteThatWasNeverUsedIsNotReportedAsIdle(t *testing.T) {
 		t.Fatalf("使われる前の経路を無操作と数えた: %v", idle)
 	}
 }
+
+// 起動が長引いているあいだでも、いまどこまで進んだかは読める。
+//
+// 段階を state.mutex で守ると、起動が終わるまで状態を読む側が待たされる。
+// 何分かかるか分からない相手を待っているときに、何も答えられなくなる。
+func TestThePhaseIsReadableWhileAStartHoldsTheSessionLock(t *testing.T) {
+	state := &sessionState{}
+	state.mutex.Lock()
+	defer state.mutex.Unlock()
+
+	state.enterPhase(PhaseImage)
+	if phase := state.currentPhase(); phase != PhaseImage {
+		t.Fatalf("phase = %q", phase)
+	}
+	state.enterPhase(PhaseTunnel)
+	if phase := state.currentPhase(); phase != PhaseTunnel {
+		t.Fatalf("phase = %q", phase)
+	}
+}
+
+// 用意していない経路は、どの段階にもいない。
+func TestARouteThatIsNotBeingOpenedReportsNoPhase(t *testing.T) {
+	state := &sessionState{}
+
+	if phase := state.currentPhase(); phase != "" {
+		t.Fatalf("phase = %q", phase)
+	}
+	state.enterPhase(PhaseContainer)
+	state.enterPhase("")
+	if phase := state.currentPhase(); phase != "" {
+		t.Fatalf("起動が終わったあとに段階が残った: %q", phase)
+	}
+}

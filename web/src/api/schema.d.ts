@@ -3264,6 +3264,8 @@ export interface components {
             relaySocket: string;
             connections: string[];
             tunnel?: components["schemas"]["VPNTunnel"];
+            /** @enum {string} */
+            phase?: "image" | "container" | "tunnel";
         };
         VPNTunnel: {
             interface?: string;

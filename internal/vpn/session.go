@@ -58,7 +58,11 @@ func (manager *Manager) socketPath(profileName string) string {
 }
 
 // start は、このプロファイルのコンテナを起動し、中継が開くまで待つ。
-func (manager *Manager) start(ctx context.Context, profile Profile, secrets Secrets) error {
+// start は、コンテナを一台立ち上げて中継が使えるようになるまでを行う。
+//
+// report は、いまどこまで進んだかを呼び出し側へ知らせる。初回はイメージの用意
+// だけで分単位になることがあり、待っている人が何を待っているか分からない。
+func (manager *Manager) start(ctx context.Context, profile Profile, secrets Secrets, report func(StartPhase)) error {
 	document, err := newAgentDocument(profile, secrets, manager.owner)
 	if err != nil {
 		return err
@@ -70,6 +74,7 @@ func (manager *Manager) start(ctx context.Context, profile Profile, secrets Secr
 	if err != nil {
 		return err
 	}
+	report(PhaseImage)
 	image, err := manager.ensureImage(ctx)
 	if err != nil {
 		return err
@@ -78,6 +83,7 @@ func (manager *Manager) start(ctx context.Context, profile Profile, secrets Secr
 	if err := prepareSocketDirectory(directory); err != nil {
 		return err
 	}
+	report(PhaseContainer)
 	name := containerName(profile.Name, manager.owner)
 	arguments := runArguments(containerRun{
 		name: name, image: image, profile: profile, owner: manager.owner,
@@ -90,6 +96,7 @@ func (manager *Manager) start(ctx context.Context, profile Profile, secrets Secr
 		_ = manager.stopContainer(ctx, name)
 		return err
 	}
+	report(PhaseTunnel)
 	if err := manager.waitForRelay(ctx, name, profile, secrets); err != nil {
 		_ = manager.stopContainer(ctx, name)
 		return err

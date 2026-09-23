@@ -40,6 +40,8 @@ type vpnSession struct {
 	RelaySocket string     `json:"relaySocket"`
 	Connections []string   `json:"connections"`
 	Tunnel      *vpnTunnel `json:"tunnel,omitempty"`
+	// Phase は、いま経路を用意している段階である。用意していなければ空。
+	Phase string `json:"phase,omitempty"`
 }
 
 type vpnTunnel struct {
@@ -114,8 +116,18 @@ func runVPN(ctx context.Context, called vpnInvocation, environment commandEnviro
 			return finishSyncFailure(called.JSON, err, stdout, stderr)
 		}
 	case vpnUp:
+		// 経路が立つまで待つあいだ、何も出ないと止まって見える。初回はイメージの
+		// 用意だけで分単位になる。
+		if !called.JSON {
+			fmt.Fprintf(stderr, "%s のVPN経路を用意しています。初回はイメージの作成に数分かかることがあります…\n",
+				safeTerminalCell(called.Name))
+		}
 		if err := engine.sendJSON(ctx, http.MethodPost, vpnProfilePath(called.Name)+"/session", struct{}{}, &overview); err != nil {
-			return finishSyncFailure(called.JSON, err, stdout, stderr)
+			code := finishSyncFailure(called.JSON, err, stdout, stderr)
+			if !called.JSON {
+				fmt.Fprintf(stderr, "コンテナの出力は sshc vpn logs %s で読めます。\n", safeTerminalCell(called.Name))
+			}
+			return code
 		}
 	case vpnDown:
 		if err := engine.sendJSON(ctx, http.MethodDelete, vpnProfilePath(called.Name)+"/session", nil, &overview); err != nil {
@@ -367,6 +379,8 @@ func writeVPNOverview(out io.Writer, overview vpnOverview) {
 		switch {
 		case session.RelaySocket != "":
 			state = "up"
+		case session.Phase != "":
+			state = "starting: " + vpnPhaseWord(session.Phase)
 		case session.Running:
 			state = "starting"
 		}
@@ -385,6 +399,19 @@ func writeVPNOverview(out io.Writer, overview vpnOverview) {
 		}
 	}
 	writeSyncRows(out, rows)
+}
+
+// vpnPhaseWord は、経路を用意している段階を人向けの一語に直す。
+func vpnPhaseWord(phase string) string {
+	switch phase {
+	case "image":
+		return "building the image"
+	case "container":
+		return "starting the container"
+	case "tunnel":
+		return "waiting for the tunnel"
+	}
+	return phase
 }
 
 // errVPNRelayMissing は、engine が経路を差し出さなかったことを表す。

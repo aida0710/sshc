@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/client";
@@ -101,6 +101,35 @@ describe("VPNPanel", () => {
     await user.click(within(route).getByRole("button", { name: "Route through this VPN" }));
 
     expect(setConnectionVPN).toHaveBeenCalledWith("edge", "tohoku");
+  });
+
+  it("says what it is waiting for while a route is being opened, and stops saying it once it is up", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const starting = overview({
+        profiles: [{
+          profile: { name: "tohoku", backend: "l2tp_ipsec", target: "10.9.9.1:22" },
+          running: true,
+          relaySocket: "",
+          connections: [],
+          phase: "image",
+        }],
+      });
+      const vpnOverview = vi.fn().mockResolvedValueOnce(starting).mockResolvedValue(overview());
+      render(<VPNPanel api={buildApi({ vpnOverview })} />);
+
+      expect(await screen.findByText(/building the image/)).toBeVisible();
+
+      await act(async () => {
+        vi.advanceTimersByTime(2000);
+        await Promise.resolve();
+      });
+
+      await waitFor(() => expect(screen.getByText(/route open/)).toBeVisible());
+      expect(screen.queryByText(/building the image/)).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("shows what the tunnel inside the container is carrying", async () => {

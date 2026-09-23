@@ -9,6 +9,7 @@ import { PageHeader } from "../ui/page";
 import { PanelState } from "../ui/PanelState";
 import { Notice } from "../ui/surface";
 import { useAsyncOperation } from "../ui/useAsyncOperation";
+import { usePolling } from "../ui/usePolling";
 import { VPNLogsDialog } from "./VPNLogsDialog";
 import { VPNProfileForm } from "./VPNProfileForm";
 import { vpnRefusals } from "./vpnRefusals";
@@ -17,6 +18,10 @@ import { VPNSessionCard } from "./VPNSessionCard";
 // 接続ごとのVPN経路の画面。トンネルはengineが持つコンテナの中にあり、ここでは
 // 経路の定義と、いまの状態と、どの接続がそれを通るかを扱う。秘密は保存のときに
 // 送るだけで、engineは決して返さない。
+
+// 経路が立つまでのあいだ、状態を読み直す間隔。docker を叩くので、人が段階の
+// 変化に気づける程度に留める。
+const routeProgressIntervalMs = 2000;
 
 type VPNPanelProps = {
   api?: VPNApi;
@@ -53,6 +58,15 @@ export function VPNPanel({ api = vpnApi, aliases = [] }: VPNPanelProps) {
     },
     [describe, operation],
   );
+
+  // 経路が立つまでは分単位になることがある。待っているあいだだけ状態を読み直し、
+  // どこまで進んだかを見せる。止まっているときに docker を叩き続けない。
+  const openingRoute =
+    operation.busy || (overview?.profiles.some((session) => (session.phase ?? "") !== "") ?? false);
+  usePolling(() => api.vpnOverview().then(setOverview).catch(() => undefined), {
+    intervalMs: routeProgressIntervalMs,
+    enabled: openingRoute,
+  });
 
   if (overview === null) {
     return (

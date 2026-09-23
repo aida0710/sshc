@@ -206,6 +206,53 @@ func TestSecretsWithQuotesSurviveTheRequestBody(t *testing.T) {
 	}
 }
 
+// 立ち上がるまで待つあいだ、何を待っているかを言う。失敗したら次に読む場所も言う。
+func TestBringingARouteUpSaysWhatItIsWaitingForAndWhereToLookWhenItFails(t *testing.T) {
+	_, server, stateDir := newSyncCommandHarness(t, func(response http.ResponseWriter, request *http.Request) {
+		response.Header().Set("Content-Type", "application/problem+json")
+		response.WriteHeader(http.StatusConflict)
+		_, _ = response.Write([]byte(`{"code":"vpn_session_failed","message":"the tunnel did not come up"}`))
+	})
+	defer server.Close()
+	var stdout, stderr strings.Builder
+
+	code := runVPN(context.Background(), vpnInvocation{Action: vpnUp, Name: "lab"}, commandEnvironment{
+		stateDir: stateDir, client: server.Client(), stdout: &stdout, stderr: &stderr,
+	})
+
+	if code == 0 {
+		t.Fatalf("code = %d, stderr = %q", code, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "VPN経路を用意しています") {
+		t.Fatalf("待っているあいだの案内が無い: %q", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "sshc vpn logs lab") {
+		t.Fatalf("次に読む場所の案内が無い: %q", stderr.String())
+	}
+}
+
+// 用意している途中の経路は、どこまで進んだかを一覧に出す。
+func TestTheListSaysHowFarAStartingRouteHasGot(t *testing.T) {
+	_, server, stateDir := newSyncCommandHarness(t, func(response http.ResponseWriter, request *http.Request) {
+		response.Header().Set("Content-Type", "application/json")
+		_, _ = response.Write([]byte(`{"available":true,"profiles":[{"profile":{"name":"lab","backend":"wireguard",` +
+			`"target":"10.9.9.1:22"},"running":true,"relaySocket":"","connections":[],"phase":"tunnel"}]}`))
+	})
+	defer server.Close()
+	var stdout, stderr strings.Builder
+
+	code := runVPN(context.Background(), vpnInvocation{Action: vpnList}, commandEnvironment{
+		stateDir: stateDir, client: server.Client(), stdout: &stdout, stderr: &stderr,
+	})
+
+	if code != 0 || stderr.Len() != 0 {
+		t.Fatalf("code=%d stderr=%q", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "starting: waiting for the tunnel") {
+		t.Fatalf("output = %q", stdout.String())
+	}
+}
+
 // ログは engine から取り、そのまま見せる。
 func TestVPNLogsArePrintedAsTheEngineReturnedThem(t *testing.T) {
 	harness, server, stateDir := newSyncCommandHarness(t, func(response http.ResponseWriter, request *http.Request) {

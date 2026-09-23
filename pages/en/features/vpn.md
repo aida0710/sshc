@@ -56,6 +56,10 @@ Which connection takes which route is visible before and after connecting. The t
 
 Removing a profile also removes its secrets and the bindings of every connection that named it. To change a name, do not delete and recreate: use **Rename** on the VPN screen or `sshc vpn rename <old name> <new name>`, which moves the settings, the secrets and the bindings together.
 
+## While a route comes up
+
+`sshc vpn up` and **Connect** on the VPN screen wait until the route is usable. On a machine that has not built the image yet, the first run takes a few minutes. How far it has got is shown in order: building the image, starting the container, waiting for the tunnel.
+
 ## When a route will not come up
 
 While a route is open, the VPN screen and `sshc vpn` show the tunnel's interface, its address inside the VPN and when it opened. If that much is there, the tunnel itself is up.

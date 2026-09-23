@@ -36,6 +36,8 @@ type vpnSessionResponse struct {
 	Connections []string `json:"connections"`
 	// Tunnel は、コンテナの中のトンネルの様子である。経路が無ければ省略する。
 	Tunnel *vpnTunnelResponse `json:"tunnel,omitempty"`
+	// Phase は、いま経路を用意している段階である。用意していなければ空。
+	Phase vpn.StartPhase `json:"phase,omitempty"`
 }
 
 type vpnTunnelResponse struct {
@@ -256,6 +258,7 @@ func (h VPNHandlers) respond(c *echo.Context) error {
 			status, err := h.Sessions.Status(c.Request().Context(), profile.Name)
 			if err == nil {
 				session.Running, session.RelaySocket = status.Running, status.RelaySocket
+				session.Phase = status.Phase
 				if status.Tunnel != (vpn.TunnelStatus{}) {
 					session.Tunnel = &vpnTunnelResponse{
 						Interface: status.Tunnel.Interface, Address: status.Tunnel.Address,

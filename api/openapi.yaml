@@ -4274,6 +4274,11 @@ components:
           items: { type: string }
         # コンテナの中のトンネルの様子。経路が無ければ省略する。
         tunnel: { $ref: "#/components/schemas/VPNTunnel" }
+        # いま経路を用意している段階。用意していなければ省略する。初回は image
+        # だけで分単位になることがあるので、待っている人へ何を待っているかを示す。
+        phase:
+          type: string
+          enum: [image, container, tunnel]
     VPNTunnel:
       type: object
       additionalProperties: false

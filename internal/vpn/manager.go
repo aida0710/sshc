@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -47,6 +48,35 @@ type sessionState struct {
 	use       sync.Mutex
 	open      int
 	idleSince time.Time
+
+	// phase は、経路を用意しているあいだの段階である。起動は分単位になる
+	// ことがあり、その最中に状態を読む側を待たせたくない。mutex は起動が
+	// 終わるまで握られたままなので、段階は鍵を使わずに読み書きする。
+	phase atomic.Value
+}
+
+// StartPhase は、経路がどこまでできたかである。空なら用意していない。
+type StartPhase string
+
+const (
+	// PhaseImage は、コンテナのイメージを用意しているところである。初回は
+	// 取得と構築に分単位でかかる。
+	PhaseImage StartPhase = "image"
+	// PhaseContainer は、コンテナを起こして設定を渡しているところである。
+	PhaseContainer StartPhase = "container"
+	// PhaseTunnel は、トンネルが上がって中継が立つのを待っているところである。
+	PhaseTunnel StartPhase = "tunnel"
+)
+
+// enterPhase は、いまの段階を記録する。空文字列は用意していないことを表す。
+func (state *sessionState) enterPhase(phase StartPhase) {
+	state.phase.Store(phase)
+}
+
+// currentPhase は、いまの段階を返す。
+func (state *sessionState) currentPhase() StartPhase {
+	stored, _ := state.phase.Load().(StartPhase)
+	return stored
 }
 
 // isRunning は、この engine がこの経路を起こしたままかを返す。
@@ -114,6 +144,8 @@ type Status struct {
 	Target string
 	// Tunnel は、コンテナの中のトンネルの様子である。経路が無ければゼロ値。
 	Tunnel TunnelStatus
+	// Phase は、いま経路を用意している段階である。用意していなければ空。
+	Phase StartPhase
 }
 
 // TunnelStatus は、コンテナの agent が書き出したトンネルの様子である。
@@ -250,9 +282,11 @@ func (manager *Manager) Start(ctx context.Context, profile Profile, secrets Secr
 		_ = manager.stopContainer(ctx, name)
 	}
 	state.running = false
-	if err := manager.start(ctx, profile, secrets); err != nil {
+	if err := manager.start(ctx, profile, secrets, state.enterPhase); err != nil {
+		state.enterPhase("")
 		return err
 	}
+	state.enterPhase("")
 	state.started = profile
 	state.running = true
 	return nil
@@ -293,7 +327,7 @@ func (manager *Manager) Status(ctx context.Context, profileName string) (Status,
 		return Status{}, err
 	}
 	name := containerName(profileName, manager.owner)
-	status := Status{Name: profileName}
+	status := Status{Name: profileName, Phase: manager.state(profileName).currentPhase()}
 	if manager.relayPresent(profileName) {
 		status.RelaySocket = manager.socketPath(profileName)
 	}
