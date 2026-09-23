@@ -261,7 +261,7 @@ func TestTheProxyPipesStandardInputAndOutputThroughTheRoute(t *testing.T) {
 	_, server, stateDir := newSyncCommandHarness(t, func(response http.ResponseWriter, request *http.Request) {
 		response.Header().Set("Content-Type", "application/json")
 		_, _ = response.Write([]byte(`{"available":true,"profiles":[{"profile":{"name":"lab","backend":"wireguard",` +
-			`"target":"10.9.9.1:22"},"running":true,"relaySocket":"` + socket + `","connections":[]}]}`))
+			`"target":"10.9.9.1:22"},"running":true,"relaySocket":` + jsonString(t, socket) + `,"connections":[]}]}`))
 	})
 	defer server.Close()
 	stdin := writeTemporaryFile(t, "SSH-2.0-local\r\n")
@@ -474,4 +474,15 @@ func TestVPNInvocationsAreAcceptedOnlyInTheirDocumentedShapes(t *testing.T) {
 			t.Errorf("%v accepted = %v (%v)", test.args, accepted, err)
 		}
 	}
+}
+
+// jsonString は、値を JSON の文字列として書く。Windows のパスの \ をそのまま
+// 埋め込むと、JSON のエスケープとして壊れる。
+func jsonString(t *testing.T, value string) string {
+	t.Helper()
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(encoded)
 }

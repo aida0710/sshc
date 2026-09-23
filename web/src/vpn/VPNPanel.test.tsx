@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/client";
 import type { VPNApi, VPNOverview } from "../api/vpn";
 import { VPNPanel } from "./VPNPanel";
+import { routeProgressIntervalMs } from "./vpnPhases";
 
 function overview(overrides: Partial<VPNOverview> = {}): VPNOverview {
   return {
@@ -255,12 +256,13 @@ describe("VPNPanel", () => {
 
       expect(await screen.findByText(/building the image/)).toBeVisible();
 
+      // 読み直しの間隔を越えるまで時計を進める。遅い機械でも、読み直しが
+      // 始まる前に待ちを打ち切らない。
       await act(async () => {
-        vi.advanceTimersByTime(2000);
-        await Promise.resolve();
+        await vi.advanceTimersByTimeAsync(routeProgressIntervalMs * 2);
       });
 
-      await waitFor(() => expect(screen.getByText(/route open/)).toBeVisible());
+      await waitFor(() => expect(screen.getByText(/route open/)).toBeVisible(), { timeout: 5000 });
       expect(screen.queryByText(/building the image/)).toBeNull();
     } finally {
       vi.useRealTimers();

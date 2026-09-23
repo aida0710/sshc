@@ -7,3 +7,7 @@ export const vpnPhases: Record<string, MessageKey> = {
   tunnel: "vpn.phaseTunnel",
   approval: "vpn.phaseApproval",
 };
+
+// 経路が立つまでのあいだ、状態を読み直す間隔。docker を叩くので、人が段階の
+// 変化に気づける程度に留める。
+export const routeProgressIntervalMs = 2000;

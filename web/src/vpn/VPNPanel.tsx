@@ -15,15 +15,12 @@ import { vpnFieldErrorOf, type VPNFieldError } from "./vpnFieldErrors";
 import { VPNLogsDialog } from "./VPNLogsDialog";
 import { VPNProfileCard } from "./VPNProfileCard";
 import { VPNProfileForm, type VPNProfileSaveResult } from "./VPNProfileForm";
+import { routeProgressIntervalMs } from "./vpnPhases";
 import { vpnRefusals } from "./vpnRefusals";
 
 // 接続ごとのVPN経路の画面。トンネルはengineが持つコンテナの中にあり、ここでは
 // プロファイルの定義と、いまの状態と、どの接続がそれを通るかを扱う。秘密は保存の
 // ときに送るだけで、engineは決して返さない。
-
-// 経路が立つまでのあいだ、状態を読み直す間隔。docker を叩くので、人が段階の
-// 変化に気づける程度に留める。
-const routeProgressIntervalMs = 2000;
 
 type VPNPanelProps = {
   api?: VPNApi;
