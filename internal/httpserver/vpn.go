@@ -159,31 +159,31 @@ func (h VPNHandlers) respond(c *echo.Context) error {
 	if err != nil {
 		return vpnProblem(c, err)
 	}
+	ctx := c.Request().Context()
 	response := VPNOverview{Available: true, Profiles: make([]VPNProfileStatus, 0, len(profiles))}
-	if err := h.Sessions.Available(c.Request().Context()); err != nil {
-		response.Available = false
-		response.Detail = err.Error()
+	var statuses map[string]vpn.Status
+	if err := h.Sessions.Available(ctx); err != nil {
+		response.Available, response.Detail = false, err.Error()
+	} else if statuses, err = h.Sessions.Statuses(ctx); err != nil {
+		// docker は見つかっているが、daemon が応えなくなった。
+		response.Available, response.Detail = false, err.Error()
 	}
 	for _, profile := range profiles {
-		session := VPNProfileStatus{Profile: profile, Connections: bindings[profile.Name]}
-		if session.Connections == nil {
-			session.Connections = []string{}
+		entry := VPNProfileStatus{Profile: profile, Connections: bindings[profile.Name]}
+		if entry.Connections == nil {
+			entry.Connections = []string{}
 		}
-		if response.Available {
-			status, err := h.Sessions.Status(c.Request().Context(), profile.Name)
-			if err == nil {
-				session.Running, session.RelaySocket = status.Running, status.RelaySocket
-				session.Phase = status.Phase
-				if status.Tunnel != (vpn.TunnelStatus{}) {
-					session.Tunnel = &VPNTunnel{
-						Interface: status.Tunnel.Interface, Address: status.Tunnel.Address,
-						Since: status.Tunnel.Since, Backend: status.Tunnel.Backend,
-						TargetAddress: status.Tunnel.TargetAddress,
-					}
+		if status, present := statuses[profile.Name]; present {
+			entry.Running, entry.RelaySocket, entry.Phase = status.Running, status.RelaySocket, status.Phase
+			if status.Tunnel != (vpn.TunnelStatus{}) {
+				entry.Tunnel = &VPNTunnel{
+					Interface: status.Tunnel.Interface, Address: status.Tunnel.Address,
+					Since: status.Tunnel.Since, Backend: status.Tunnel.Backend,
+					TargetAddress: status.Tunnel.TargetAddress,
 				}
 			}
 		}
-		response.Profiles = append(response.Profiles, session)
+		response.Profiles = append(response.Profiles, entry)
 	}
 	return c.JSON(http.StatusOK, response)
 }

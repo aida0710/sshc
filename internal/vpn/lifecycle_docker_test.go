@@ -194,3 +194,47 @@ func TestARouteStopsWithoutWaitingOutTheStopTimeout(t *testing.T) {
 		t.Fatalf("畳むのに %v かかった（上限 %v）", took, stopAllowance)
 	}
 }
+
+// 前の版のイメージは、新しいイメージを作ったあとに消す。
+func TestImagesOfEarlierVersionsAreRemoved(t *testing.T) {
+	manager, ctx := requireDockerTest(t)
+	current, err := manager.ensureImage(ctx)
+	if err != nil {
+		t.Fatalf("イメージを用意できない: %v", err)
+	}
+	stale := imageName + ":stale-test"
+	if _, err := manager.docker.output(ctx, "image", "tag", current, stale); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _, _ = manager.docker.output(context.Background(), "image", "rm", stale) })
+
+	manager.removeOtherImages(ctx, current)
+
+	if _, err := manager.docker.output(ctx, "image", "inspect", stale); err == nil {
+		t.Fatal("前の版のイメージが残った")
+	}
+	if _, err := manager.docker.output(ctx, "image", "inspect", current); err != nil {
+		t.Fatalf("いまのイメージまで消した: %v", err)
+	}
+}
+
+// 一覧は、この engine の経路の状態をまとめて返す。
+func TestStatusesListTheRoutesOfThisEngine(t *testing.T) {
+	manager, ctx := requireDockerTest(t)
+	profile, secrets := wireGuardRoute(t, manager, ctx, "listed")
+	if err := manager.Start(ctx, profile, secrets); err != nil {
+		t.Fatalf("Start = %v", err)
+	}
+
+	statuses, err := manager.Statuses(ctx)
+	if err != nil {
+		t.Fatalf("Statuses = %v", err)
+	}
+	status := statuses[profile.Name]
+	if !status.Running || status.RelaySocket == "" || status.Target != profile.Target.Address() {
+		t.Fatalf("status = %+v", status)
+	}
+	if status.Tunnel.Interface != "wg0" {
+		t.Fatalf("tunnel = %+v", status.Tunnel)
+	}
+}

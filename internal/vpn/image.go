@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 )
 
 // container には、VPNコンテナのイメージを作るものだけを置く。sshcのバイナリも
@@ -86,5 +87,23 @@ func (manager *Manager) ensureImage(ctx context.Context) (string, error) {
 	if _, err := manager.docker.output(ctx, "build", "--tag", tag, directory); err != nil {
 		return "", fmt.Errorf("%w: %w", ErrImageBuild, err)
 	}
+	manager.removeOtherImages(ctx, tag)
 	return tag, nil
+}
+
+// removeOtherImages は、前の版の sshc が作ったイメージを消す。
+//
+// タグは中身から決まるので、sshc を更新するたびに新しいイメージが1つ増える。
+// 古いものは誰も使わないまま、数百 MB ずつ残り続ける。まだ動いている
+// コンテナが使っているイメージは docker が消させないので、その失敗は無視する。
+func (manager *Manager) removeOtherImages(ctx context.Context, current string) {
+	output, err := manager.docker.output(ctx, "image", "ls", imageName, "--format", "{{.Repository}}:{{.Tag}}")
+	if err != nil {
+		return
+	}
+	for _, image := range strings.Fields(output) {
+		if image != current {
+			_, _ = manager.docker.output(ctx, "image", "rm", image)
+		}
+	}
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -49,28 +50,52 @@ func (manager *Manager) Status(ctx context.Context, profileName string) (Status,
 	if err := validateProfileName(profileName); err != nil {
 		return Status{}, err
 	}
-	if _, err := manager.command(ctx); err != nil {
-		return Status{}, err
-	}
-	state := manager.state(profileName)
-	name := manager.containerName(profileName)
-	status := Status{Name: profileName, Phase: state.currentPhase()}
-	ours, err := manager.requireOurContainer(ctx, name, profileName)
+	statuses, err := manager.Statuses(ctx)
 	if err != nil {
 		return Status{}, err
 	}
-	if !ours {
+	if status, present := statuses[profileName]; present {
 		return status, nil
 	}
-	running, err := manager.containerRunning(ctx, name)
+	return Status{Name: profileName, Phase: manager.state(profileName).currentPhase()}, nil
+}
+
+// Statuses は、この engine のコンテナを持つ経路と、用意の途中の経路の状態を、
+// プロファイル名ごとに返す。
+//
+// docker は1回だけ呼ぶ。画面は用意の途中に一覧を読み直すので、経路ごとに
+// docker を呼ぶと、経路の数だけ応答が遅れる。
+func (manager *Manager) Statuses(ctx context.Context) (map[string]Status, error) {
+	if _, err := manager.command(ctx); err != nil {
+		return nil, err
+	}
+	format := "{{.Label \"" + profileLabel + "\"}}\t{{.State}}\t{{.Label \"" + targetLabel + "\"}}"
+	output, err := manager.docker.output(ctx, "ps", "--all", "--format", format,
+		"--filter", "label="+ownerLabel+"="+strconv.Itoa(manager.owner),
+		"--filter", "label="+workspaceLabel+"="+manager.workspace)
 	if err != nil {
-		return Status{}, err
+		return nil, err
 	}
-	status.Running = running
-	format := "{{index .Config.Labels \"" + targetLabel + "\"}}"
-	if output, err := manager.docker.output(ctx, "container", "inspect", "--format", format, name); err == nil {
-		status.Target = strings.TrimSpace(output)
+	statuses := map[string]Status{}
+	for _, name := range manager.names() {
+		if phase := manager.state(name).currentPhase(); phase != "" {
+			statuses[name] = Status{Name: name, Phase: phase}
+		}
 	}
+	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
+		fields := strings.Split(line, "\t")
+		if len(fields) != 3 || validateProfileName(fields[0]) != nil {
+			continue
+		}
+		statuses[fields[0]] = manager.containerStatus(fields[0], fields[1] == "running", fields[2])
+	}
+	return statuses, nil
+}
+
+// containerStatus は、コンテナがあるプロファイルひとつの状態を組み立てる。
+func (manager *Manager) containerStatus(profileName string, running bool, target string) Status {
+	state := manager.state(profileName)
+	status := Status{Name: profileName, Running: running, Target: target, Phase: state.currentPhase()}
 	// コンテナが終わっても、ホスト側にはソケットのファイルが残る。動いている
 	// コンテナと engine の中継が揃っているときだけ、使える経路として見せる。
 	if running {
@@ -79,7 +104,7 @@ func (manager *Manager) Status(ctx context.Context, profileName string) (Status,
 	if status.RelaySocket != "" {
 		status.Tunnel = manager.tunnelStatus(profileName)
 	}
-	return status, nil
+	return status
 }
 
 // tunnelStatus は、agent が書き出した様子を読む。読めなければゼロ値を返す。

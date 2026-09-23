@@ -8,8 +8,18 @@
 # ごとにできる。上げるときは digest を書き換える。
 FROM ubuntu:24.04@sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a2ab987517
 
-RUN apt-get update \
-    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+# パッケージの版も固定する。base の digest だけを固定しても、apt はその日の最新を
+# 入れるので、同じタグのまま機械ごとに中身が変わる。Ubuntu の snapshot の時刻で
+# 取る。上げるときは、base の digest と一緒にこの時刻を書き換える。
+#
+# base のイメージには CA 証明書が無く、snapshot は HTTPS でしか配られていない。
+# そこで取得のときだけ TLS の相手確認を外す。apt は受け取った索引を Ubuntu の
+# archive 鍵の署名で確かめ、パッケージをその索引のハッシュで確かめるので、
+# 通り道の相手が誰であっても、差し替えられた中身は入らない。
+RUN echo 'APT::Snapshot "20260920T000000Z";' > /etc/apt/apt.conf.d/50sshc-snapshot \
+    && apt-get -o Acquire::https::Verify-Peer=false update \
+    && DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::https::Verify-Peer=false \
+       install -y --no-install-recommends \
        iproute2 iptables wireguard-tools wireguard-go socat jq \
        strongswan strongswan-starter xl2tpd ppp \
        openconnect \

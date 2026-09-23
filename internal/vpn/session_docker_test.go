@@ -458,8 +458,10 @@ func startAnyConnectServer(
 	script := strings.Join([]string{
 		"set -eu",
 		"export DEBIAN_FRONTEND=noninteractive",
-		"apt-get update -qq >/dev/null",
-		"apt-get install -y -qq --no-install-recommends ocserv gnutls-bin >/dev/null",
+		// イメージは Ubuntu の snapshot から取る設定を持ち、CA 証明書を持たない。
+		// 取り方は Dockerfile と同じにする（中身は apt が署名で確かめる）。
+		"apt-get -o Acquire::https::Verify-Peer=false update -qq >/dev/null",
+		"apt-get -o Acquire::https::Verify-Peer=false install -y -qq --no-install-recommends ocserv gnutls-bin >/dev/null",
 		"mkdir -p /etc/ocserv",
 		"cat > /tmp/ca.tmpl <<'EOF'",
 		"cn = \"sshc test CA\"",
