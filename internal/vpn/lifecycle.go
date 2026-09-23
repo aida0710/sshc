@@ -12,22 +12,26 @@ import (
 
 // sessionState は、プロファイルひとつぶんの進行中の状態である。
 type sessionState struct {
-	mutex sync.Mutex
+	// transition は、起動と停止を1本にする。起動は分単位になりうるので、
+	// 状態を読むだけの側はこの鍵を使わない。
+	transition sync.Mutex
+
+	// use は、下の値を守る。どれも読み書きが一瞬で終わる。
+	use sync.Mutex
 	// started は、いまコンテナが提供している設定である。設定が変わったら
 	// 作り直す。古い設定のまま繋ぎ続けると、利用者が直した先へ行かない。
 	started Profile
 	running bool
-
-	// use は、この経路を通っている接続の数を数える。起動や停止は時間の
-	// かかる操作なので、数えるのは別の鍵で守る。数えるだけの Close が、
-	// 進行中の起動を待つ理由はない。
-	use       sync.Mutex
+	// open は、この経路を通っている接続と、これから通る予約の数である。
+	// 予約を数えないと、起動が終わってから接続が数えられるまでの隙間に、
+	// 無操作として畳まれうる。
 	open      int
 	idleSince time.Time
+	// relay は、engine が差し出す中継の待ち受けである。経路が無ければ nil。
+	relay *engineRelay
 
-	// phase は、経路を用意しているあいだの段階である。起動は分単位になる
-	// ことがあり、その最中に状態を読む側を待たせたくない。mutex は起動が
-	// 終わるまで握られたままなので、段階は鍵を使わずに読み書きする。
+	// phase は、経路を用意しているあいだの段階である。起動中は transition が
+	// 握られたままなので、段階は鍵を使わずに読み書きする。
 	phase atomic.Value
 }
 
@@ -60,12 +64,49 @@ func (state *sessionState) currentPhase() StartPhase {
 
 // isRunning は、この engine がこの経路を起こしたままかを返す。
 func (state *sessionState) isRunning() bool {
-	state.mutex.Lock()
-	defer state.mutex.Unlock()
+	state.use.Lock()
+	defer state.use.Unlock()
 	return state.running
 }
 
-// borrow は、この経路を通る接続がひとつ増えたことを記録する。
+// serves は、この経路が profile の設定のまま動いていて、中継を差し出しているかを返す。
+func (state *sessionState) serves(profile Profile) bool {
+	state.use.Lock()
+	defer state.use.Unlock()
+	return state.running && state.relay != nil && state.started.sameRouteAs(profile)
+}
+
+// markStarted は、経路が用意できたことを記録する。無操作の長さはここから数える。
+//
+// 起動しただけで一度も使われない経路（`vpn up` など）も、ほかと同じ長さで畳む。
+func (state *sessionState) markStarted(profile Profile, relay *engineRelay, now time.Time) {
+	state.use.Lock()
+	defer state.use.Unlock()
+	state.started, state.running, state.relay = profile, true, relay
+	state.idleSince = now
+}
+
+// markStopped は、経路が無くなったことを記録し、差し出していた中継を返す。
+// 呼び出し側がそれを閉じる。
+func (state *sessionState) markStopped() *engineRelay {
+	state.use.Lock()
+	defer state.use.Unlock()
+	relay := state.relay
+	state.running, state.relay = false, nil
+	return relay
+}
+
+// relaySocket は、engine が差し出している中継の場所を返す。無ければ空。
+func (state *sessionState) relaySocket() string {
+	state.use.Lock()
+	defer state.use.Unlock()
+	if state.relay == nil {
+		return ""
+	}
+	return state.relay.path
+}
+
+// borrow は、この経路を通る接続（または予約）がひとつ増えたことを記録する。
 func (state *sessionState) borrow() {
 	state.use.Lock()
 	defer state.use.Unlock()
@@ -86,7 +127,7 @@ func (state *sessionState) release(now time.Time) {
 }
 
 // idleFor は、接続が一本も無い状態が続いている長さを返す。一本でも通っていれば
-// 0 を返す。
+// 0 を返す。まだ一度も用意していない経路も 0 を返す。
 func (state *sessionState) idleFor(now time.Time) time.Duration {
 	state.use.Lock()
 	defer state.use.Unlock()
@@ -94,6 +135,12 @@ func (state *sessionState) idleFor(now time.Time) time.Duration {
 		return 0
 	}
 	return now.Sub(state.idleSince)
+}
+
+// idleLongerThan は、動いていて、用意の途中でもなく、idle より長く誰も通って
+// いない経路かを返す。
+func (state *sessionState) idleLongerThan(now time.Time, idle time.Duration) bool {
+	return state.currentPhase() == "" && state.isRunning() && state.idleFor(now) >= idle
 }
 
 // countedConnection は、閉じられたことを数える接続である。

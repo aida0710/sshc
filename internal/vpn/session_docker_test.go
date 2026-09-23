@@ -244,7 +244,7 @@ func TestSessionsLeftByAPreviousEngineAreDiscarded(t *testing.T) {
 	}
 
 	// engineが起動し直された状況。前回のセッションのことは何も覚えていない。
-	restarted := New(t.TempDir(), os.Getuid())
+	restarted := New(manager.directory, os.Getuid())
 	if err := restarted.DiscardOrphans(ctx); err != nil {
 		t.Fatalf("DiscardOrphans = %v", err)
 	}

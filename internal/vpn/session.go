@@ -19,9 +19,10 @@ var (
 )
 
 const (
-	ownerLabel   = "io.sshc.vpn.owner"
-	profileLabel = "io.sshc.vpn.profile"
-	targetLabel  = "io.sshc.vpn.target"
+	ownerLabel     = "io.sshc.vpn.owner"
+	workspaceLabel = "io.sshc.vpn.workspace"
+	profileLabel   = "io.sshc.vpn.profile"
+	targetLabel    = "io.sshc.vpn.target"
 
 	// relaySocketName は、コンテナが差し出す中継の名前である。ホスト側では
 	// プロファイルごとのディレクトリの下に現れる。
@@ -49,14 +50,10 @@ const (
 	connectAttemptMargin = 10 * time.Second
 	// stopTimeout は、コンテナへ止まる時間を与える長さである。
 	stopTimeout = 10 * time.Second
+	// cleanupTimeout は、呼び出し側が諦めたあとでも、コンテナを片付けきるまで
+	// 待つ上限である。docker stop の猶予に、docker rm の分を足す。
+	cleanupTimeout = stopTimeout + 5*time.Second
 )
-
-// containerName は、この利用者のこのプロファイルのコンテナ名である。
-//
-// uidを含める。同じ機械の別の利用者のコンテナを、名前だけで掴まないためである。
-func containerName(profileName string, owner int) string {
-	return "sshc-vpn-" + profileName + "-" + strconv.Itoa(owner)
-}
 
 // socketDirectory は、このプロファイルの中継ソケットを置くホスト側の場所である。
 func (manager *Manager) socketDirectory(profileName string) string {
@@ -89,13 +86,16 @@ func (manager *Manager) start(ctx context.Context, profile Profile, secrets Secr
 		return err
 	}
 	directory := manager.socketDirectory(profile.Name)
+	if err := requireSocketPaths(directory); err != nil {
+		return err
+	}
 	if err := prepareSocketDirectory(directory); err != nil {
 		return err
 	}
 	report(PhaseContainer)
-	name := containerName(profile.Name, manager.owner)
+	name := manager.containerName(profile.Name)
 	arguments := runArguments(containerRun{
-		name: name, image: image, profile: profile, owner: manager.owner,
+		name: name, image: image, profile: profile, owner: manager.owner, workspace: manager.workspace,
 		socketDirectory: directory, backend: chosen,
 	})
 	if _, err := manager.docker.output(ctx, arguments...); err != nil {
@@ -103,25 +103,31 @@ func (manager *Manager) start(ctx context.Context, profile Profile, secrets Secr
 	}
 	// 二段目のコードは 30 秒で変わる。イメージを作る時間を挟まないよう、渡す
 	// 直前にこの文書を作る。
+	if err := manager.configureContainer(ctx, name, profile, secrets, report); err != nil {
+		// 呼び出し側が諦めた場合も片付ける。stopContainer は ctx の取り消しに
+		// 引きずられない。
+		manager.stopContainer(ctx, name)
+		return err
+	}
+	return nil
+}
+
+// configureContainer は、起動したコンテナへ設定を渡し、中継が開くまで待つ。
+func (manager *Manager) configureContainer(
+	ctx context.Context, name string, profile Profile, secrets Secrets, report func(StartPhase),
+) error {
 	if err := sleepContext(ctx, secondFactorWait(profile, secrets, manager.now())); err != nil {
-		_ = manager.stopContainer(ctx, name)
 		return err
 	}
 	document, err := newAgentDocument(profile, secrets, manager.owner, manager.now())
 	if err != nil {
-		_ = manager.stopContainer(ctx, name)
 		return err
 	}
 	if err := manager.sendDocument(ctx, name, document); err != nil {
-		_ = manager.stopContainer(ctx, name)
 		return err
 	}
 	report(tunnelPhase(profile))
-	if err := manager.waitForRelay(ctx, name, profile, secrets); err != nil {
-		_ = manager.stopContainer(ctx, name)
-		return err
-	}
-	return nil
+	return manager.waitForRelay(ctx, name, profile, secrets)
 }
 
 // requireTunnelDevice は、backendが要るデバイスがこの機械にあるかを見る。
@@ -182,6 +188,7 @@ type containerRun struct {
 	image           string
 	profile         Profile
 	owner           int
+	workspace       string
 	socketDirectory string
 	// backend は、デバイスと権限を決める。
 	backend backend
@@ -196,6 +203,7 @@ func runArguments(run containerRun) []string {
 	arguments := []string{
 		"run", "--detach", "--name", name,
 		"--label", ownerLabel + "=" + strconv.Itoa(owner),
+		"--label", workspaceLabel + "=" + run.workspace,
 		"--label", profileLabel + "=" + profile.Name,
 		"--label", targetLabel + "=" + profile.Target.Address(),
 		"--network", "bridge",
@@ -303,19 +311,25 @@ func (manager *Manager) containerLogs(ctx context.Context, name string, secrets 
 	return redact(strings.TrimSpace(output), secrets)
 }
 
-func (manager *Manager) stopContainer(ctx context.Context, name string) error {
-	if _, err := manager.docker.output(ctx, "stop", "--time", strconv.Itoa(int(stopTimeout/time.Second)), name); err != nil {
-		// 止められなくても消しに行く。残ったコンテナの方が害が大きい。
-		_, _ = manager.docker.output(ctx, "rm", "--force", name)
-		return nil
+// stopContainer は、コンテナを止めて消す。止められなくても消しに行く。残った
+// コンテナの方が害が大きい。
+//
+// 呼び出し側の ctx が取り消されていても片付けきる。起動を途中でやめたときに
+// 呼ばれるので、ctx をそのまま使うと docker を一度も呼べずに終わる。
+func (manager *Manager) stopContainer(ctx context.Context, name string) {
+	cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), cleanupTimeout)
+	defer cancel()
+	if _, err := manager.docker.output(cleanup, "stop", "--time", strconv.Itoa(int(stopTimeout/time.Second)), name); err != nil {
+		_, _ = manager.docker.output(cleanup, "rm", "--force", name)
+		return
 	}
-	_, _ = manager.docker.output(ctx, "rm", name)
-	return nil
+	_, _ = manager.docker.output(cleanup, "rm", name)
 }
 
 // requireOurContainer は、その名前のコンテナが本当にこのengineのものかを確かめる。
 func (manager *Manager) requireOurContainer(ctx context.Context, name, profileName string) (bool, error) {
-	format := "{{index .Config.Labels \"" + ownerLabel + "\"}} {{index .Config.Labels \"" + profileLabel + "\"}}"
+	format := "{{index .Config.Labels \"" + ownerLabel + "\"}} {{index .Config.Labels \"" + profileLabel +
+		"\"}} {{index .Config.Labels \"" + workspaceLabel + "\"}}"
 	output, err := manager.docker.output(ctx, "container", "inspect", "--format", format, name)
 	if isMissingContainer(err) {
 		return false, nil
@@ -324,7 +338,8 @@ func (manager *Manager) requireOurContainer(ctx context.Context, name, profileNa
 		return false, err
 	}
 	fields := strings.Fields(strings.TrimSpace(output))
-	if len(fields) != 2 || fields[0] != strconv.Itoa(manager.owner) || fields[1] != profileName {
+	if len(fields) != 3 || fields[0] != strconv.Itoa(manager.owner) || fields[1] != profileName ||
+		fields[2] != manager.workspace {
 		return false, fmt.Errorf("%w: %s", ErrSessionForeign, name)
 	}
 	return true, nil

@@ -198,13 +198,25 @@ func TestShownLogsHideThePrivateKey(t *testing.T) {
 	}
 }
 
-// 同じ機械の別の利用者のコンテナを、名前だけで掴まない。
-func TestContainerNamesSeparateProfilesAndUsers(t *testing.T) {
-	if containerName("tohoku", 1000) == containerName("tohoku", 1001) {
-		t.Fatal("two users share one container name")
+// 同じ機械の別の利用者や、同じ利用者の別の workspace のコンテナを、名前だけで掴まない。
+func TestContainerNamesSeparateProfilesUsersAndWorkspaces(t *testing.T) {
+	directory := t.TempDir()
+	mine := New(directory, 1000)
+	names := map[string]string{
+		"同じ設定":        mine.containerName("tohoku"),
+		"別の利用者":       New(directory, 1001).containerName("tohoku"),
+		"別のプロファイル":    mine.containerName("office"),
+		"別のworkspace": New(t.TempDir(), 1000).containerName("tohoku"),
 	}
-	if containerName("tohoku", 1000) == containerName("office", 1000) {
-		t.Fatal("two profiles share one container name")
+	seen := map[string]string{}
+	for label, name := range names {
+		if previous, taken := seen[name]; taken {
+			t.Fatalf("%s と %s が同じコンテナ名 %q になった", previous, label, name)
+		}
+		seen[name] = label
+	}
+	if New(directory, 1000).containerName("tohoku") != names["同じ設定"] {
+		t.Fatal("同じ workspace で起動し直した engine が、前回のコンテナを見つけられない")
 	}
 }
 

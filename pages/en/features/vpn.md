@@ -91,7 +91,9 @@ Removing a profile also removes its secrets and the bindings of every connection
 
 ## How long a route lives
 
-A route opens when it is needed and closes when it is not. Stopping the engine closes every route it opened. A route with no connection running through it is closed after ten idle minutes. A route whose tunnel dropped ends with its container rather than leaving the relay behind.
+A route opens when it is needed and closes when it is not. Stopping the engine closes every route it opened. A route with no connection running through it for ten minutes is closed as well. Connections from Terminal, SFTP, `sshc <target>`, and `sshc vpn proxy` are all counted the same way, so a route in use is never closed. A route that was only brought up with `sshc vpn up` or the Connect button counts from the moment it came up. A route whose tunnel dropped ends with its container rather than leaving the relay behind.
+
+If you interrupt a connection with `Ctrl-C` while it is waiting, or close the page, the container that was being prepared does not remain.
 
 Connecting again reopens the route. One that needs approval on the phone will ask for it again.
 

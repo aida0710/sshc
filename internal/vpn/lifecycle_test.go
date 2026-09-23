@@ -57,12 +57,12 @@ func TestARouteThatWasNeverUsedIsNotReportedAsIdle(t *testing.T) {
 
 // 起動が長引いているあいだでも、いまどこまで進んだかは読める。
 //
-// 段階を state.mutex で守ると、起動が終わるまで状態を読む側が待たされる。
+// 段階を state.transition で守ると、起動が終わるまで状態を読む側が待たされる。
 // 何分かかるか分からない相手を待っているときに、何も答えられなくなる。
 func TestThePhaseIsReadableWhileAStartHoldsTheSessionLock(t *testing.T) {
 	state := &sessionState{}
-	state.mutex.Lock()
-	defer state.mutex.Unlock()
+	state.transition.Lock()
+	defer state.transition.Unlock()
 
 	state.enterPhase(PhaseImage)
 	if phase := state.currentPhase(); phase != PhaseImage {
@@ -85,5 +85,60 @@ func TestARouteThatIsNotBeingOpenedReportsNoPhase(t *testing.T) {
 	state.enterPhase("")
 	if phase := state.currentPhase(); phase != "" {
 		t.Fatalf("起動が終わったあとに段階が残った: %q", phase)
+	}
+}
+
+// 起動しただけで一度も使われない経路も、起動した時刻から無操作を数える。
+//
+// 数えないと、`vpn up` だけの経路が engine の寿命のあいだ残り続ける。
+func TestARouteThatWasOnlyStartedCountsIdleFromItsStart(t *testing.T) {
+	state := &sessionState{}
+	start := time.Date(2026, 9, 23, 12, 0, 0, 0, time.UTC)
+
+	state.markStarted(Profile{Name: "lab"}, nil, start)
+
+	if !state.idleLongerThan(start.Add(11*time.Minute), 10*time.Minute) {
+		t.Fatal("起動から10分を過ぎた経路を無操作と数えなかった")
+	}
+}
+
+// 前に使い終えた時刻が古くても、作り直した経路は作り直した時刻から数える。
+func TestARestartedRouteForgetsTheIdleTimeOfItsPreviousUse(t *testing.T) {
+	state := &sessionState{}
+	long := time.Date(2026, 9, 23, 12, 0, 0, 0, time.UTC)
+	state.borrow()
+	state.release(long)
+
+	restarted := long.Add(time.Hour)
+	state.markStarted(Profile{Name: "lab"}, nil, restarted)
+
+	if state.idleLongerThan(restarted.Add(time.Minute), 10*time.Minute) {
+		t.Fatal("作り直した直後の経路を無操作と数えた")
+	}
+}
+
+// 起動を待っている接続（予約）がある経路は、無操作にならない。
+func TestAReservationKeepsTheRouteFromBeingIdle(t *testing.T) {
+	state := &sessionState{}
+	start := time.Date(2026, 9, 23, 12, 0, 0, 0, time.UTC)
+	state.markStarted(Profile{Name: "lab"}, nil, start)
+
+	state.borrow()
+
+	if state.idleLongerThan(start.Add(time.Hour), 10*time.Minute) {
+		t.Fatal("起動を待つ接続があるのに無操作と数えた")
+	}
+}
+
+// 用意の途中の経路は、無操作として畳まない。
+func TestARouteBeingPreparedIsNotIdle(t *testing.T) {
+	state := &sessionState{}
+	start := time.Date(2026, 9, 23, 12, 0, 0, 0, time.UTC)
+	state.markStarted(Profile{Name: "lab"}, nil, start)
+
+	state.enterPhase(PhaseTunnel)
+
+	if state.idleLongerThan(start.Add(time.Hour), 10*time.Minute) {
+		t.Fatal("用意の途中の経路を無操作と数えた")
 	}
 }

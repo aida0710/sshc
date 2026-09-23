@@ -298,11 +298,14 @@ func Run(ctx context.Context, dependencies Dependencies, version string) error {
 		return err
 	}
 
+	// 経路の監視は HTTP を受け付ける前に始める。前回の engine のコンテナを回収し
+	// 終えるまで経路の起動を待たせる予告を、最初の要求より先に済ませるためである。
+	built.startVPNSupervisor(asked, dependencies.Logger)
+
 	serveErrors := make(chan error, 1)
 	go func() { serveErrors <- built.server.Serve() }()
 
 	built.startAutoSync(asked)
-	built.startVPNSupervisor(asked, dependencies.Logger)
 
 	// すべての経路で HTTP サーバーの停止完了を待つ。
 	stop := func(reason error) error {
@@ -411,6 +414,9 @@ func (r runtime) unwind(dependencies Dependencies) error {
 		if r.vpnDone != nil {
 			<-r.vpnDone
 		}
+		// 用意の途中の経路を打ち切る。打ち切らないと、StopAll がその起動を
+		// 分単位で待つ。
+		r.vpn.Close()
 		stopping, cancel := context.WithTimeout(context.Background(), vpnStopTimeout)
 		r.vpn.StopAll(stopping)
 		cancel()
@@ -426,6 +432,7 @@ func (r *runtime) startVPNSupervisor(parent context.Context, logger *slog.Logger
 	if r.vpn == nil {
 		return
 	}
+	r.vpn.ExpectOrphanDiscard()
 	watching, cancel := context.WithCancel(parent)
 	done := make(chan struct{})
 	r.vpnCancel = cancel
