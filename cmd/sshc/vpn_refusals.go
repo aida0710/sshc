@@ -44,14 +44,14 @@ var vpnFieldReasons = map[vpn.Reason]string{
 // vpnFailureReasons は、経路を用意できなかった理由の語と、その言い方である。
 var vpnFailureReasons = map[vpn.FailureReason]string{
 	vpn.FailureUnknown:           "原因を特定できませんでした。",
-	vpn.FailureTimeout:           "時間内に接続できませんでした。",
+	vpn.FailureTimeout:           "接続がタイムアウトしました。",
 	vpn.FailureServerUnresolved:  "VPNサーバーの名前解決に失敗しました。サーバーの指定を確認してください。",
 	vpn.FailureIPsecNegotiation:  "IPsecのネゴシエーションに失敗しました。事前共有鍵と暗号スイートを確認してください。",
 	vpn.FailurePPPAuthentication: "PPPの認証に失敗しました。ユーザー名とパスワードを確認してください。",
-	vpn.FailureOpenConnect:       "VPNサーバーへの接続に失敗しました。ユーザー名、パスワード、二要素認証、証明書を確認してください。",
+	vpn.FailureOpenConnect:       "ユーザー名、パスワード、二要素認証、証明書を確認してください。",
 	vpn.FailureHandshakeTimeout:  "ハンドシェイクに失敗しました。鍵とサーバーの指定を確認してください。",
 	vpn.FailureTargetUnresolved:  "VPN内で接続先の名前解決に失敗しました。DNSサーバーと接続先を確認してください。",
-	vpn.FailureTunnelLost:        "接続後にVPNが切断されました。",
+	vpn.FailureTunnelLost:        "接続が確立した直後にVPNが切断されました。",
 }
 
 // describeVPNRefusal は、engine の拒否を1文に直す。知らない拒否なら false を返す。
@@ -99,6 +99,11 @@ func describeVPNField(problem engineProblem) string {
 // JSON では共通の失敗の形を使う。人向けには、VPN の拒否を日本語の文で書き、
 // それ以外の失敗（engine が無いなど）は共通の言い方に任せる。
 func finishVPNFailure(called vpnInvocation, err error, environment commandEnvironment) int {
+	var input *vpnInputError
+	if !called.JSON && errors.As(err, &input) {
+		fmt.Fprintln(environment.stderr, "sshc: "+input.sentence)
+		return 1
+	}
 	var problem engineProblem
 	if called.JSON || !errors.As(err, &problem) || problem.OutcomeUnknown {
 		return finishSyncFailure(called.JSON, err, environment.stdout, environment.stderr)
@@ -137,7 +142,7 @@ func describedVPNRouteError(profile string, err error) error {
 		return err
 	}
 	if problem.Code == "vpn_session_failed" {
-		sentence += fmt.Sprintf(" 詳しくは sshc vpn logs %s でログを確認してください。", safeTerminalCell(profile))
+		sentence += fmt.Sprintf("詳しくは sshc vpn logs %s でログを確認してください。", safeTerminalCell(profile))
 	}
 	return &vpnRouteError{sentence: sentence, err: err}
 }

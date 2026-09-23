@@ -33,6 +33,25 @@ const (
 
 var errVPNSetupInput = errors.New("vpn profile input is invalid")
 
+// vpnInputError は、engine へ送る前に CLI が見つけた誤りである。engine の拒否とは
+// 別に、そのまま人向けの文として出す。
+type vpnInputError struct {
+	sentence string
+	// cause は、errors.Is で見分けるための分類である。
+	cause error
+}
+
+func (failure *vpnInputError) Error() string { return failure.sentence }
+
+func (failure *vpnInputError) Unwrap() error { return failure.cause }
+
+// 入力の誤りの文である。
+var (
+	errVPNInputMissing = &vpnInputError{sentence: "必須の項目が入力されていません。", cause: errVPNSetupInput}
+	errVPNInputBackend = &vpnInputError{sentence: "方式には wireguard、l2tp_ipsec、openconnect のいずれかを指定してください。", cause: errVPNSetupInput}
+	errVPNInputKey     = &vpnInputError{sentence: "秘密鍵の形式が正しくありません。", cause: errVPNSetupInput}
+)
+
 func runVPN(ctx context.Context, called vpnInvocation, environment commandEnvironment) int {
 	stateDir, client, stdin, stdout, stderr, terminal :=
 		environment.stateDir, environment.client, environment.stdin, environment.stdout, environment.stderr, environment.terminal
@@ -159,7 +178,7 @@ func addVPNProfile(
 	stdin, prompt *os.File, terminal passwordTerminal, overview *httpserver.VPNOverview,
 ) error {
 	backend, err := promptVisibleSetup(ctx, stdin, prompt,
-		"Backend [wireguard] (wireguard/l2tp_ipsec): ", "wireguard")
+		"Backend [wireguard] (wireguard/l2tp_ipsec/openconnect): ", "wireguard")
 	if err != nil {
 		return err
 	}
@@ -184,7 +203,7 @@ func addVPNProfile(
 	case "openconnect":
 		profile.OpenConnect, secrets, err = readOpenConnectProfile(ctx, stdin, prompt, terminal)
 	default:
-		err = fmt.Errorf("%w: backend には wireguard、l2tp_ipsec、openconnect のいずれかを指定してください", errVPNSetupInput)
+		err = errVPNInputBackend
 	}
 	defer func() {
 		for _, field := range secrets {
@@ -195,7 +214,7 @@ func addVPNProfile(
 		return err
 	}
 	if target == "" {
-		return errVPNSetupInput
+		return errVPNInputMissing
 	}
 	payload, err := buildVPNProfilePayload(profile, secrets)
 	if err != nil {
@@ -236,10 +255,10 @@ func readWireGuardProfile(
 	}
 	secrets := []vpnSecretField{{name: vpn.SecretKeyWireGuardPrivateKey, value: privateKey}}
 	if server == "" || peerKey == "" || address == "" {
-		return nil, secrets, errVPNSetupInput
+		return nil, secrets, errVPNInputMissing
 	}
 	if len(privateKey) > maxVPNKeyBytes || !base64KeyBytes(privateKey) {
-		return nil, secrets, fmt.Errorf("%w: 秘密鍵の形式が正しくありません", errVPNSetupInput)
+		return nil, secrets, errVPNInputKey
 	}
 	return &application.WireGuardProfile{Server: server, PeerPublicKey: peerKey, Address: address}, secrets, nil
 }
@@ -281,7 +300,7 @@ func readL2TPProfile(
 		{name: vpn.SecretKeyIPsecPSK, value: psk},
 	}
 	if server == "" || username == "" || len(password) == 0 || len(psk) == 0 {
-		return nil, secrets, errVPNSetupInput
+		return nil, secrets, errVPNInputMissing
 	}
 	return &application.L2TPProfile{Server: server, Username: username, IKE: ike, ESP: esp}, secrets, nil
 }
@@ -347,11 +366,11 @@ func readOpenConnectProfile(
 		}
 		secrets = append(secrets, vpnSecretField{name: vpn.SecretKeyOpenConnectTOTPSecret, value: seed})
 		if len(seed) == 0 {
-			return nil, secrets, errVPNSetupInput
+			return nil, secrets, errVPNInputMissing
 		}
 	}
 	if server == "" || username == "" || len(password) == 0 {
-		return nil, secrets, errVPNSetupInput
+		return nil, secrets, errVPNInputMissing
 	}
 	return settings, secrets, nil
 }
@@ -510,8 +529,8 @@ func dialVPNRelay(
 			continue
 		}
 		if wantedTarget != "" && !session.Profile.Reaches(wantedTarget) {
-			return nil, fmt.Errorf("%w: %s の接続先は %s です",
-				vpn.ErrTargetMismatch, profile, session.Profile.Target)
+			return nil, &vpnInputError{sentence: fmt.Sprintf("接続先が、VPNプロファイル %s の接続先（%s）と一致しません。",
+				safeTerminalCell(profile), safeTerminalCell(session.Profile.Target)), cause: vpn.ErrTargetMismatch}
 		}
 		if session.RelaySocket == "" {
 			return nil, errVPNRelayMissing

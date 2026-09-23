@@ -127,3 +127,18 @@ func TestAnUnknownRouteFailureIsLeftAsItIs(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+// 入力の誤りは、engine の問題として案内せず、その誤りを文で出す。
+func TestAnInputMistakeIsReportedAsItselfNotAsAnEngineProblem(t *testing.T) {
+	var stderr strings.Builder
+
+	code := finishVPNFailure(vpnInvocation{Action: vpnAdd, Name: "lab"}, errVPNInputBackend,
+		commandEnvironment{stdout: &strings.Builder{}, stderr: &stderr})
+
+	if code != 1 || stderr.String() != "sshc: "+errVPNInputBackend.sentence+"\n" {
+		t.Fatalf("code = %d, stderr = %q", code, stderr.String())
+	}
+	if !errors.Is(errVPNInputBackend, errVPNSetupInput) {
+		t.Fatal("入力の誤りとして見分けられない")
+	}
+}
