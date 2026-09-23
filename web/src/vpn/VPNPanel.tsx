@@ -5,6 +5,7 @@ import { useTranslate } from "../i18n/context";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { Field, control, hintText, sectionHeading } from "../ui/form";
 import { PageHeader } from "../ui/page";
+import { PasswordField } from "../ui/PasswordField";
 import { PanelState } from "../ui/PanelState";
 import { Button, Card, Notice } from "../ui/surface";
 import { useAsyncOperation } from "../ui/useAsyncOperation";
@@ -315,36 +316,30 @@ function ProfileForm({
             <Field label={t("vpn.address")}>
               <input className={control} value={address} onChange={(event) => setAddress(event.target.value)} />
             </Field>
-            <Field label={t("vpn.privateKey")} hint={t("vpn.secretHint")}>
-              <input
-                type="password"
-                className={control}
-                value={secrets.wireguardPrivateKey}
-                onChange={(event) => setSecrets({ ...secrets, wireguardPrivateKey: event.target.value })}
-              />
-            </Field>
+            <PasswordField
+              label={t("vpn.privateKey")}
+              hint={t("vpn.secretHint")}
+              value={secrets.wireguardPrivateKey}
+              onChange={(value) => setSecrets({ ...secrets, wireguardPrivateKey: value })}
+            />
           </>
         ) : (
           <>
             <Field label={t("vpn.username")}>
               <input className={control} value={username} onChange={(event) => setUsername(event.target.value)} />
             </Field>
-            <Field label={t("vpn.password")} hint={t("vpn.secretHint")}>
-              <input
-                type="password"
-                className={control}
-                value={secrets.l2tpPassword}
-                onChange={(event) => setSecrets({ ...secrets, l2tpPassword: event.target.value })}
-              />
-            </Field>
-            <Field label={t("vpn.psk")} hint={t("vpn.secretHint")}>
-              <input
-                type="password"
-                className={control}
-                value={secrets.ipsecPsk}
-                onChange={(event) => setSecrets({ ...secrets, ipsecPsk: event.target.value })}
-              />
-            </Field>
+            <PasswordField
+              label={t("vpn.password")}
+              hint={t("vpn.secretHint")}
+              value={secrets.l2tpPassword}
+              onChange={(value) => setSecrets({ ...secrets, l2tpPassword: value })}
+            />
+            <PasswordField
+              label={t("vpn.psk")}
+              hint={t("vpn.secretHint")}
+              value={secrets.ipsecPsk}
+              onChange={(value) => setSecrets({ ...secrets, ipsecPsk: value })}
+            />
             <Field label={t("vpn.ike")} hint={t("vpn.proposalsHint")}>
               <input className={control} value={ike} onChange={(event) => setIke(event.target.value)} />
             </Field>
