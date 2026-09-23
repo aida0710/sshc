@@ -13,12 +13,17 @@ type DraftSecrets = {
   l2tpPassword: string;
   ipsecPsk: string;
   openconnectPassword: string;
+  openconnectTotpSecret: string;
 };
+
+// 装置がパスワードのあとにもう一問聞くときの答え方。engine と同じ語を使う。
+type SecondFactor = "" | "approve" | "totp";
 
 type Backend = "wireguard" | "l2tp_ipsec" | "openconnect";
 
 const emptySecrets: DraftSecrets = {
-  wireguardPrivateKey: "", l2tpPassword: "", ipsecPsk: "", openconnectPassword: "",
+  wireguardPrivateKey: "", l2tpPassword: "", ipsecPsk: "",
+  openconnectPassword: "", openconnectTotpSecret: "",
 };
 
 // 装置が話す方式。engine と同じ語を使う。
@@ -52,6 +57,8 @@ export function VPNProfileForm({
   const [esp, setEsp] = useState("");
   const [protocol, setProtocol] = useState<string>(openConnectProtocols[0]);
   const [serverCertificate, setServerCertificate] = useState("");
+  const [secondFactor, setSecondFactor] = useState<SecondFactor>("");
+  const [approvalWord, setApprovalWord] = useState("");
   const [secrets, setSecrets] = useState<DraftSecrets>(emptySecrets);
 
   const complete =
@@ -61,7 +68,9 @@ export function VPNProfileForm({
     (backend === "wireguard"
       ? peerPublicKey !== "" && address !== "" && secrets.wireguardPrivateKey !== ""
       : backend === "openconnect"
-        ? username !== "" && secrets.openconnectPassword !== ""
+        ? username !== "" &&
+          secrets.openconnectPassword !== "" &&
+          (secondFactor !== "totp" || secrets.openconnectTotpSecret !== "")
         : username !== "" && secrets.l2tpPassword !== "" && secrets.ipsecPsk !== "");
 
   function save() {
@@ -78,6 +87,8 @@ export function VPNProfileForm({
                 username,
                 protocol,
                 ...(serverCertificate === "" ? {} : { serverCertificate }),
+                ...(secondFactor === "" ? {} : { secondFactor }),
+                ...(secondFactor === "approve" && approvalWord !== "" ? { approvalWord } : {}),
               },
             }
           : {
@@ -93,7 +104,12 @@ export function VPNProfileForm({
       backend === "wireguard"
         ? { wireguardPrivateKey: secrets.wireguardPrivateKey }
         : backend === "openconnect"
-          ? { openconnectPassword: secrets.openconnectPassword }
+          ? {
+              openconnectPassword: secrets.openconnectPassword,
+              ...(secondFactor === "totp"
+                ? { openconnectTotpSecret: secrets.openconnectTotpSecret }
+                : {}),
+            }
           : { l2tpPassword: secrets.l2tpPassword, ipsecPsk: secrets.ipsecPsk };
     onSave(profile, carried);
     setSecrets(emptySecrets);
@@ -173,6 +189,34 @@ export function VPNProfileForm({
               value={secrets.openconnectPassword}
               onChange={(value) => setSecrets({ ...secrets, openconnectPassword: value })}
             />
+            <Field label={t("vpn.secondFactor")} hint={t("vpn.secondFactorHint")}>
+              <select
+                className={control}
+                value={secondFactor}
+                onChange={(event) => setSecondFactor(event.target.value as SecondFactor)}
+              >
+                <option value="">{t("vpn.secondFactorNone")}</option>
+                <option value="approve">{t("vpn.secondFactorApprove")}</option>
+                <option value="totp">{t("vpn.secondFactorTOTP")}</option>
+              </select>
+            </Field>
+            {secondFactor === "approve" ? (
+              <Field label={t("vpn.approvalWord")} hint={t("vpn.approvalWordHint")}>
+                <input
+                  className={control}
+                  value={approvalWord}
+                  onChange={(event) => setApprovalWord(event.target.value)}
+                />
+              </Field>
+            ) : null}
+            {secondFactor === "totp" ? (
+              <PasswordField
+                label={t("vpn.secondFactorSecret")}
+                hint={t("vpn.secretHint")}
+                value={secrets.openconnectTotpSecret}
+                onChange={(value) => setSecrets({ ...secrets, openconnectTotpSecret: value })}
+              />
+            ) : null}
           </>
         ) : (
           <>

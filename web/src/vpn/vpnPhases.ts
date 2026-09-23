@@ -5,4 +5,5 @@ export const vpnPhases: Record<string, MessageKey> = {
   image: "vpn.phaseImage",
   container: "vpn.phaseContainer",
   tunnel: "vpn.phaseTunnel",
+  approval: "vpn.phaseApproval",
 };

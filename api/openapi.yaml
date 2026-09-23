@@ -4278,7 +4278,7 @@ components:
         # だけで分単位になることがあるので、待っている人へ何を待っているかを示す。
         phase:
           type: string
-          enum: [image, container, tunnel]
+          enum: [image, container, tunnel, approval]
     VPNTunnel:
       type: object
       additionalProperties: false
@@ -4320,6 +4320,7 @@ components:
         l2tpPassword: { type: string, minLength: 1, maxLength: 256 }
         ipsecPsk: { type: string, minLength: 1, maxLength: 256 }
         openconnectPassword: { type: string, minLength: 1, maxLength: 256 }
+        openconnectTotpSecret: { type: string, minLength: 1, maxLength: 512 }
     VPNBindingRequest:
       type: object
       additionalProperties: false
@@ -4361,6 +4362,11 @@ components:
         # 相手の証明書を固定する指紋（`sha256:...`）。公的な認証局の証明書を
         # 使う装置では空でよい。
         serverCertificate: { type: string, maxLength: 128 }
+        # 二段目の質問への答え方（`approve` または `totp`）。空なら答えない。
+        # protocol と同じく、ここでは形だけを見る。
+        secondFactor: { type: string, maxLength: 16 }
+        # secondFactor が approve のときに送る語。空なら push。
+        approvalWord: { type: string, maxLength: 32 }
     L2TPProfile:
       type: object
       additionalProperties: false

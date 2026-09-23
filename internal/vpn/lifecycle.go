@@ -42,6 +42,9 @@ const (
 	PhaseContainer StartPhase = "container"
 	// PhaseTunnel は、トンネルが上がって中継が立つのを待っているところである。
 	PhaseTunnel StartPhase = "tunnel"
+	// PhaseApproval は、利用者が電話で承認するのを待っているところである。
+	// 待っているのが機械ではなく人なので、トンネル待ちとは別に見せる。
+	PhaseApproval StartPhase = "approval"
 )
 
 // enterPhase は、いまの段階を記録する。空文字列は用意していないことを表す。

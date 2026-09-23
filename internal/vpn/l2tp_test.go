@@ -90,7 +90,7 @@ func TestOnlyTheGivenProposalsAreWritten(t *testing.T) {
 
 // agent へ渡す文書は、この backend に要る本文だけを運ぶ。
 func TestTheL2TPDocumentCarriesEveryFileTheContainerNeeds(t *testing.T) {
-	document, err := newAgentDocument(l2tpProfile(), l2tpSecrets(), 1000)
+	document, err := newAgentDocument(l2tpProfile(), l2tpSecrets(), 1000, testClock)
 	if err != nil {
 		t.Fatalf("newAgentDocument = %v", err)
 	}

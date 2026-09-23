@@ -3265,7 +3265,7 @@ export interface components {
             connections: string[];
             tunnel?: components["schemas"]["VPNTunnel"];
             /** @enum {string} */
-            phase?: "image" | "container" | "tunnel";
+            phase?: "image" | "container" | "tunnel" | "approval";
         };
         VPNTunnel: {
             interface?: string;
@@ -3289,6 +3289,7 @@ export interface components {
             l2tpPassword?: string;
             ipsecPsk?: string;
             openconnectPassword?: string;
+            openconnectTotpSecret?: string;
         };
         VPNBindingRequest: {
             alias: string;
@@ -3308,6 +3309,8 @@ export interface components {
             username: string;
             protocol?: string;
             serverCertificate?: string;
+            secondFactor?: string;
+            approvalWord?: string;
         };
         L2TPProfile: {
             server: string;

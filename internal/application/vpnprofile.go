@@ -51,6 +51,11 @@ type OpenConnectProfile struct {
 	Protocol string `json:"protocol,omitempty"`
 	// ServerCertificate は、相手の証明書を固定する指紋である（`sha256:...`）。
 	ServerCertificate string `json:"serverCertificate,omitempty"`
+	// SecondFactor は、二段目の質問への答え方である（`approve` または `totp`）。
+	// 空なら答えない。
+	SecondFactor string `json:"secondFactor,omitempty"`
+	// ApprovalWord は、SecondFactor が approve のときに送る語である。空なら push。
+	ApprovalWord string `json:"approvalWord,omitempty"`
 }
 
 // L2TPProfile は、l2tp_ipsec backend の秘密でない設定である。
@@ -103,6 +108,8 @@ func (stored VPNProfile) Profile() (vpn.Profile, error) {
 			Username:          stored.OpenConnect.Username,
 			Protocol:          stored.OpenConnect.Protocol,
 			ServerCertificate: stored.OpenConnect.ServerCertificate,
+			SecondFactor:      stored.OpenConnect.SecondFactor,
+			ApprovalWord:      stored.OpenConnect.ApprovalWord,
 		}
 	}
 	if stored.L2TP != nil {

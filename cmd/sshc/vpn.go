@@ -338,9 +338,32 @@ func readOpenConnectProfile(
 	}
 	// 自己署名の装置では指紋が要る。公的な認証局の証明書なら空でよい。
 	certificate, err := promptVisibleSetup(ctx, stdin, prompt,
-		"Server certificate fingerprint (sha256:..., blank to verify normally): ", "")
+		"Server certificate fingerprint (sha256:... or pin-sha256:..., blank to verify normally): ", "")
 	if err != nil {
 		return nil, nil, err
+	}
+	// パスワードのあとに装置がすること。approve は電話の承認を待ち、totp は
+	// Vault に置いた種からコードを作る。
+	secondFactor, err := promptVisibleSetup(ctx, stdin, prompt,
+		"Second factor (none/approve/totp) [none]: ", "none")
+	if err != nil {
+		return nil, nil, err
+	}
+	settings := &vpnRequestOpenConnect{
+		Server: server, Username: username, Protocol: protocol, ServerCertificate: certificate,
+	}
+	if secondFactor != "none" {
+		settings.SecondFactor = secondFactor
+	}
+	if settings.SecondFactor == vpn.SecondFactorApprove {
+		// 二段目を聞いてくる装置にだけ語を送る。パスワードだけで通知を出す
+		// 装置には何も送らない。
+		word, err := promptVisibleSetup(ctx, stdin, prompt,
+			"Word to send if the device asks a second question (blank to send nothing, Duo often takes push): ", "")
+		if err != nil {
+			return nil, nil, err
+		}
+		settings.ApprovalWord = word
 	}
 	password, err := promptMaskedPassword(ctx, stdin, prompt, terminal, "VPN password: ")
 	if err != nil {
@@ -348,12 +371,22 @@ func readOpenConnectProfile(
 		return nil, nil, err
 	}
 	secrets := []vpnSecretField{{name: "openconnectPassword", value: password}}
+	if settings.SecondFactor == vpn.SecondFactorTOTP {
+		seed, err := promptMaskedPassword(ctx, stdin, prompt, terminal, "Second factor TOTP secret: ")
+		if err != nil {
+			zeroBytes(password)
+			zeroBytes(seed)
+			return nil, nil, err
+		}
+		secrets = append(secrets, vpnSecretField{name: "openconnectTotpSecret", value: seed})
+		if len(seed) == 0 {
+			return nil, secrets, errVPNSetupInput
+		}
+	}
 	if server == "" || username == "" || len(password) == 0 {
 		return nil, secrets, errVPNSetupInput
 	}
-	return &vpnRequestOpenConnect{
-		Server: server, Username: username, Protocol: protocol, ServerCertificate: certificate,
-	}, secrets, nil
+	return settings, secrets, nil
 }
 
 // vpnRequestProfile は、保存要求のうち秘密でない部分である。API の形と揃える。
@@ -372,6 +405,8 @@ type vpnRequestOpenConnect struct {
 	Username          string `json:"username"`
 	Protocol          string `json:"protocol,omitempty"`
 	ServerCertificate string `json:"serverCertificate,omitempty"`
+	SecondFactor      string `json:"secondFactor,omitempty"`
+	ApprovalWord      string `json:"approvalWord,omitempty"`
 }
 
 type vpnRequestWireGuard struct {
@@ -497,6 +532,8 @@ func vpnPhaseWord(phase string) string {
 		return "starting the container"
 	case "tunnel":
 		return "waiting for the tunnel"
+	case "approval":
+		return "waiting for approval on the phone"
 	}
 	return phase
 }

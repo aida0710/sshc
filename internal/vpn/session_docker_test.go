@@ -110,7 +110,7 @@ func startTunnelPeer(t *testing.T, manager *Manager, ctx context.Context, image,
 	}
 	t.Cleanup(func() {
 		if t.Failed() {
-			logs, _ := manager.docker.output(context.Background(), "logs", "--tail", "40", name)
+			logs, _ := manager.docker.combined(context.Background(), "logs", "--tail", "40", name)
 			t.Logf("トンネルの相手のログ:\n%s", logs)
 		}
 		_, _ = manager.docker.output(context.Background(), "rm", "--force", name)
@@ -287,7 +287,9 @@ func TestTheL2TPBranchRunsUntilTheServerRefusesIt(t *testing.T) {
 	if err == nil {
 		t.Fatal("届かない相手に対して経路が成立した")
 	}
-	if !strings.Contains(err.Error(), "IPsec") {
+	// 「成立しませんでした」は agent が標準エラーへ書く。docker logs の標準
+	// 出力だけを読んでいると、この行が落ちる。
+	if !strings.Contains(err.Error(), "IPsecが成立しませんでした") {
 		t.Fatalf("失敗の理由が IPsec の段階を指していない: %v", err)
 	}
 	// 秘密は、利用者へ見せる失敗の文面に現れない。
@@ -326,11 +328,37 @@ func TestTheOpenConnectBranchRunsUntilTheServerRefusesIt(t *testing.T) {
 	if err == nil {
 		t.Fatal("届かない相手に対して経路が成立した")
 	}
-	if !strings.Contains(err.Error(), "openconnect") {
+	// この行は agent が標準エラーへ書く。docker logs の標準出力だけを読んで
+	// いると落ちる。
+	if !strings.Contains(err.Error(), "openconnectが接続できませんでした") {
 		t.Fatalf("失敗の理由が openconnect の段階を指していない: %v", err)
 	}
 	if strings.Contains(err.Error(), secrets.OpenConnectPassword) {
 		t.Fatalf("失敗の文面に秘密が現れた: %v", err)
+	}
+}
+
+// 失敗の理由は、コンテナの標準エラーにある。
+//
+// docker logs は、コンテナの標準出力をこちらの標準出力へ、標準エラーをこちらの
+// 標準エラーへ流す。片方だけを読むと、agent が書いた失敗の理由が落ちる。
+func TestShownLogsCarryWhatTheContainerWroteToStandardError(t *testing.T) {
+	manager, ctx := requireDockerTest(t)
+	image, err := manager.ensureImage(ctx)
+	if err != nil {
+		t.Fatalf("イメージを用意できない: %v", err)
+	}
+
+	shown, err := manager.docker.combined(ctx, "run", "--rm", "--entrypoint", "sh",
+		image, "-c", "echo 出力; echo 理由 >&2")
+
+	if err != nil {
+		t.Fatalf("combined = %v", err)
+	}
+	for _, wanted := range []string{"出力", "理由"} {
+		if !strings.Contains(shown, wanted) {
+			t.Fatalf("combined = %q, %q が無い", shown, wanted)
+		}
 	}
 }
 
@@ -383,5 +411,166 @@ func TestAnIdleRouteIsStoppedAndAUsedOneIsKept(t *testing.T) {
 	}
 	if status.Running {
 		t.Fatal("誰も通っていない経路が残った")
+	}
+}
+
+// anyConnectServerAddress は、テスト用の AnyConnect 互換サーバーがトンネル側で
+// 名乗るアドレスである。ocserv は ipv4-network の最初のアドレスを自分に使う。
+const anyConnectServerAddress = "192.168.99.1"
+
+// anyConnectTOTPSeed は、二段目のコードを作る種である（RFC 6238 の試験鍵）。
+// users.oath へは同じ値を16進で書く。
+const (
+	anyConnectTOTPSeed = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"
+	anyConnectTOTPHex  = "3132333435363738393031323334353637383930"
+)
+
+// startAnyConnectServer は、本物の AnyConnect 互換サーバー（ocserv）を1台立てる。
+//
+// パスワードのあとに OTP を聞く設定にする。openconnect がその二問目に答えられる
+// ことが、この経路の要だからである。ocserv は製品のイメージには入れない。検査の
+// ときだけ、相手側のコンテナへ入れる。
+func startAnyConnectServer(
+	t *testing.T, manager *Manager, ctx context.Context, image string,
+) (bridgeAddress, certificatePin string) {
+	t.Helper()
+	name := fmt.Sprintf("sshc-vpn-test-anyconnect-%d", os.Getpid())
+	script := strings.Join([]string{
+		"set -eu",
+		"export DEBIAN_FRONTEND=noninteractive",
+		"apt-get update -qq >/dev/null",
+		"apt-get install -y -qq --no-install-recommends ocserv gnutls-bin >/dev/null",
+		"mkdir -p /etc/ocserv",
+		"cat > /tmp/ca.tmpl <<'EOF'",
+		"cn = \"sshc test CA\"",
+		"serial = 1",
+		"expiration_days = 1",
+		"ca",
+		"signing_key",
+		"cert_signing_key",
+		"EOF",
+		"cat > /tmp/server.tmpl <<'EOF'",
+		"cn = \"sshc-test-vpn\"",
+		"serial = 2",
+		"expiration_days = 1",
+		"signing_key",
+		"encryption_key",
+		"tls_www_server",
+		"EOF",
+		"certtool --generate-privkey --outfile /etc/ocserv/ca-key.pem",
+		"certtool --generate-self-signed --load-privkey /etc/ocserv/ca-key.pem" +
+			" --template /tmp/ca.tmpl --outfile /etc/ocserv/ca.pem",
+		"certtool --generate-privkey --outfile /etc/ocserv/server-key.pem",
+		"certtool --generate-certificate --load-privkey /etc/ocserv/server-key.pem" +
+			" --load-ca-certificate /etc/ocserv/ca.pem --load-ca-privkey /etc/ocserv/ca-key.pem" +
+			" --template /tmp/server.tmpl --outfile /etc/ocserv/server-cert.pem",
+		"printf 'fixture-password\\nfixture-password\\n' | ocpasswd -c /etc/ocserv/passwd fixture",
+		"printf 'HOTP/T30/6 fixture - " + anyConnectTOTPHex + "\\n' > /etc/ocserv/users.oath",
+		"chmod 600 /etc/ocserv/users.oath",
+		"cat > /etc/ocserv/ocserv.conf <<'EOF'",
+		"auth = \"plain[passwd=/etc/ocserv/passwd,otp=/etc/ocserv/users.oath]\"",
+		"tcp-port = 443",
+		"udp-port = 443",
+		"run-as-user = root",
+		"run-as-group = root",
+		"socket-file = /run/ocserv.socket",
+		"server-cert = /etc/ocserv/server-cert.pem",
+		"server-key = /etc/ocserv/server-key.pem",
+		"max-clients = 4",
+		"max-same-clients = 4",
+		"max-ban-score = 0",
+		"device = vpns",
+		"ipv4-network = 192.168.99.0",
+		"ipv4-netmask = 255.255.255.0",
+		"cisco-client-compat = true",
+		"EOF",
+		// トンネルの中からだけ届く相手。Dockerの通常回線からは届かない
+		// アドレスなので、返事が来ればトンネルを通ったことになる。
+		fmt.Sprintf("socat TCP-LISTEN:%d,fork,reuseaddr SYSTEM:'echo tunnelled' &", echoPort),
+		"exec ocserv --foreground --debug 1",
+	}, "\n")
+	if _, err := manager.docker.output(ctx, "run", "--detach", "--name", name,
+		"--cap-add", "NET_ADMIN", "--device", "/dev/net/tun", "--network", "bridge",
+		"--entrypoint", "sh", image, "-c", script); err != nil {
+		t.Fatalf("AnyConnect互換サーバーを起動できない: %v", err)
+	}
+	t.Cleanup(func() {
+		if t.Failed() {
+			logs, _ := manager.docker.combined(context.Background(), "logs", "--tail", "40", name)
+			t.Logf("AnyConnect互換サーバーのログ:\n%s", logs)
+		}
+		_, _ = manager.docker.output(context.Background(), "rm", "--force", name)
+	})
+	address, err := manager.docker.output(ctx, "container", "inspect", "--format",
+		"{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}", name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 待つのは「証明書ができたこと」ではなく「待ち受けが始まったこと」である。
+	// 証明書は ocserv を起こす前にできるので、そこで先へ進むと、まだ誰も
+	// 聞いていない相手へ繋ぎに行く。apt の取得を含むので長めに待つ。
+	deadline := time.Now().Add(4 * time.Minute)
+	for {
+		logs, err := manager.docker.combined(ctx, "logs", "--tail", "20", name)
+		if err == nil && strings.Contains(logs, "listening (TCP)") {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("AnyConnect互換サーバーが待ち受けを始めない: %v\n%s", err, logs)
+		}
+		time.Sleep(2 * time.Second)
+	}
+	pin, err := manager.docker.output(ctx, "exec", name, "sh", "-c",
+		"certtool --certificate-info --infile /etc/ocserv/server-cert.pem"+
+			" | grep -o 'pin-sha256:[A-Za-z0-9+/=]*' | head -1")
+	if err != nil || !strings.HasPrefix(strings.TrimSpace(pin), "pin-sha256:") {
+		t.Fatalf("AnyConnect互換サーバーの証明書の指紋が読めない: %q, %v", pin, err)
+	}
+	return strings.TrimSpace(address), strings.TrimSpace(pin)
+}
+
+// 本物の AnyConnect 互換サーバーへ、パスワードと二段目のコードで繋ぎ、その
+// トンネルの中にいる相手へ engine が届く。
+//
+// 二段目の答えは標準入力の次の行として送る。承認を待つ設定（Duo の push など）
+// も同じ道を通り、送る語が違うだけである。
+func TestAConnectionReachesTheTargetThroughAnAnyConnectTunnel(t *testing.T) {
+	manager, ctx := requireDockerTest(t)
+	image, err := manager.ensureImage(ctx)
+	if err != nil {
+		t.Fatalf("イメージを用意できない: %v", err)
+	}
+	serverAddress, certificatePin := startAnyConnectServer(t, manager, ctx, image)
+
+	profile := Profile{
+		Name:    "anyconnect-e2e",
+		Backend: OpenConnect,
+		Target:  Endpoint{Host: anyConnectServerAddress, Port: echoPort},
+		OpenConnect: &OpenConnectSettings{
+			Server:            serverAddress,
+			Username:          "fixture",
+			ServerCertificate: certificatePin,
+			SecondFactor:      SecondFactorTOTP,
+		},
+	}
+	secrets := Secrets{
+		OpenConnectPassword:   "fixture-password",
+		OpenConnectTOTPSecret: anyConnectTOTPSeed,
+	}
+	t.Cleanup(func() { _ = manager.Stop(context.Background(), profile.Name) })
+
+	connection, err := manager.Dial(ctx, profile, secrets)
+	if err != nil {
+		t.Fatalf("Dial = %v", err)
+	}
+	defer func() { _ = connection.Close() }()
+
+	_ = connection.SetReadDeadline(time.Now().Add(20 * time.Second))
+	answer, err := io.ReadAll(connection)
+	if err != nil && len(answer) == 0 {
+		t.Fatalf("トンネル越しに読めない: %v", err)
+	}
+	if !strings.Contains(string(answer), "tunnelled") {
+		t.Fatalf("相手からの返事 = %q", answer)
 	}
 }

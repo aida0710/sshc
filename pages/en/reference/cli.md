@@ -122,7 +122,7 @@ sshc vpn bind <alias> <name> [--json]
 sshc vpn unbind <alias> [--json]
 ```
 
-`sshc vpn add` asks for the settings in an interactive terminal, including the DNS servers to resolve the target with when the target is a name. The private key, the VPN password and the IPsec pre-shared key are read without echo and are never taken from command arguments or environment variables. They are stored in the vault.
+`sshc vpn add` asks for the settings in an interactive terminal, including the DNS servers to resolve the target with when the target is a name, and, for OpenConnect, how to answer a device that asks one more question after the password (`none`, `approve` or `totp`). The private key, the VPN password and the IPsec pre-shared key are read without echo and are never taken from command arguments or environment variables. They are stored in the vault.
 
 `sshc vpn` also prints the tunnel's interface, its address inside the VPN and when the route opened, for every route that is up.
 

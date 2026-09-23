@@ -35,6 +35,19 @@ var openConnectProtocols = map[string]bool{
 	"f5": true, "fortinet": true, "array": true,
 }
 
+// パスワードのあとに装置がすることへの備えである。
+const (
+	// SecondFactorApprove は、利用者が電話で承認するのを待つ。Duo Mobile などが
+	// 通知を出し、承認するまで装置は応答を返さない。
+	//
+	// 二段目を聞いてくる装置と、何も聞かずに通知だけ出す装置がある。前者には
+	// ApprovalWord を送り、後者には何も送らない。どちらも、待つ長さが普通の
+	// 接続より長いことは同じである。
+	SecondFactorApprove = "approve"
+	// SecondFactorTOTP は、Vault に置いた種から作ったコードを送る。
+	SecondFactorTOTP = "totp"
+)
+
 var (
 	// ErrProfileName は、プロファイル名が使えないことを表す。
 	ErrProfileName = errors.New("vpn profile name is invalid")
@@ -127,6 +140,12 @@ type OpenConnectSettings struct {
 	// 公的な認証局の証明書を使う装置では空でよい。自己署名の装置では、これが
 	// 無いと openconnect は繋がない。
 	ServerCertificate string
+	// SecondFactor は、パスワードのあとへの備えである。空なら何もしない。
+	SecondFactor string
+	// ApprovalWord は、SecondFactor が approve のときに二段目へ送る語である。
+	// 空なら何も送らない。装置が二段目を聞いてくる場合だけ書く（Duo なら
+	// push、装置によっては phone や sms）。
+	ApprovalWord string
 }
 
 // Secrets は、プロファイルの秘密である。Vaultから読み、標準入力でコンテナへ渡す。
@@ -138,6 +157,9 @@ type Secrets struct {
 	IPsecPSK string
 	// OpenConnectPassword は、openconnect backend の利用者のパスワードである。
 	OpenConnectPassword string
+	// OpenConnectTOTPSecret は、二段目のコードを作る種である（base32 または
+	// otpauth URI）。SecondFactor が totp のときだけ使う。
+	OpenConnectTOTPSecret string
 }
 
 // sameRouteAs は、この設定がもう一方と同じ経路を作るかを返す。
@@ -319,6 +341,10 @@ func (profile Profile) ValidateSecrets(secrets Secrets) error {
 		if secrets.OpenConnectPassword == "" {
 			return fmt.Errorf("%w: VPNのパスワードがありません", ErrSecrets)
 		}
+		if profile.OpenConnect != nil && profile.OpenConnect.SecondFactor == SecondFactorTOTP &&
+			secrets.OpenConnectTOTPSecret == "" {
+			return fmt.Errorf("%w: 二段目のTOTPの種がありません", ErrSecrets)
+		}
 		return nil
 	}
 	return fmt.Errorf("%w: %s", ErrBackend, profile.Backend)
@@ -334,11 +360,24 @@ func (settings OpenConnectSettings) validate() error {
 	if settings.Protocol != "" && !openConnectProtocols[settings.Protocol] {
 		return fmt.Errorf("%w: 方式 %q は openconnect が知りません", ErrSettings, settings.Protocol)
 	}
-	if settings.ServerCertificate != "" && !strings.HasPrefix(settings.ServerCertificate, "sha256:") {
-		return fmt.Errorf("%w: 相手の証明書の指紋は sha256: で始まります", ErrSettings)
+	if settings.ServerCertificate != "" &&
+		!strings.HasPrefix(settings.ServerCertificate, "sha256:") &&
+		!strings.HasPrefix(settings.ServerCertificate, "pin-sha256:") {
+		// openconnect が受け取るのはこの2つの書き方である。証明書そのものの
+		// SHA-256（`sha256:`、16進）と、公開鍵のPIN（`pin-sha256:`、base64）。
+		return fmt.Errorf("%w: 相手の証明書の指紋は sha256: か pin-sha256: で始まります", ErrSettings)
 	}
 	if strings.ContainsAny(settings.ServerCertificate, " \t\n\"\\") {
 		return fmt.Errorf("%w: 相手の証明書の指紋が使えません", ErrSettings)
+	}
+	switch settings.SecondFactor {
+	case "", SecondFactorApprove, SecondFactorTOTP:
+	default:
+		return fmt.Errorf("%w: 二段目の答え方 %q は知りません", ErrSettings, settings.SecondFactor)
+	}
+	// 答えは1行として送る。改行が混じると、装置が受け取る問答がずれる。
+	if strings.ContainsAny(settings.ApprovalWord, " \t\r\n") {
+		return fmt.Errorf("%w: 承認の合図に空白や改行は使えません", ErrSettings)
 	}
 	return nil
 }

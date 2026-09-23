@@ -47,7 +47,25 @@ Secrets are kept in the vault. They are never returned to the screen or the API,
 
 For L2TP/IPsec, set IKE and ESP proposals only when an older device rejects the defaults.
 
-For OpenConnect, choose the protocol the device speaks (`anyconnect`, `nc`, `pulse`, `gp`, `f5`, `fortinet`, `array`); leave `anyconnect` if unsure. A device with a self-signed certificate needs its fingerprint, starting with `sha256:`; without one the certificate is verified normally and the route is refused if it does not verify. OpenConnect routes and DNS handed out by the device are not installed: only the single route to the target is.
+For OpenConnect, choose the protocol the device speaks (`anyconnect`, `nc`, `pulse`, `gp`, `f5`, `fortinet`, `array`); leave `anyconnect` if unsure. A device with a self-signed certificate needs its fingerprint, either `sha256:` (the certificate's own SHA-256, in hex) or `pin-sha256:` (the public key pin, in base64); without one the certificate is verified normally and the route is refused if it does not verify. OpenConnect routes and DNS handed out by the device are not installed: only the single route to the target is.
+
+### The second factor (Duo Mobile and friends)
+
+When the device asks one more question after the password, set the second factor.
+
+| Choice | What is sent | When |
+|---|---|---|
+| None | Nothing | A device that asks once |
+| Wait for approval on the phone | Nothing, or the word you give | Duo Mobile approval |
+| Generate a code from a stored seed | A fresh six-digit code | A device where a TOTP seed can be enrolled |
+
+Duo devices come in two shapes. Some **push the notification as soon as the password is accepted** and hold the response until you approve; others **ask one more question** that takes a word such as `push`. For the first, leave the word blank. Only the second needs it.
+
+Either way the route is given two minutes, which is what noticing a notification, unlocking the phone and approving it takes. While it waits, the VPN screen and `sshc vpn` say it is waiting for approval on the phone.
+
+The TOTP seed is kept in the vault and the code is generated just before it is handed to the container. Neither the seed nor the code appears in `docker logs` or on screen.
+
+A setup that requires a browser-based SAML login, such as Duo's Universal Prompt, is not supported. There is no browser in the container and the engine does not stand in for you.
 
 ### Naming a target inside the VPN
 
@@ -70,6 +88,12 @@ Removing a profile also removes its secrets and the bindings of every connection
 ## While a route comes up
 
 `sshc vpn up` and **Connect** on the VPN screen wait until the route is usable. On a machine that has not built the image yet, the first run takes a few minutes. How far it has got is shown in order: building the image, starting the container, waiting for the tunnel.
+
+## How long a route lives
+
+A route opens when it is needed and closes when it is not. Stopping the engine closes every route it opened. A route with no connection running through it is closed after ten idle minutes. A route whose tunnel dropped ends with its container rather than leaving the relay behind.
+
+Connecting again reopens the route. One that needs approval on the phone will ask for it again.
 
 ## When a route will not come up
 

@@ -63,6 +63,8 @@ type vpnSecretsRequest struct {
 	L2TPPassword        string `json:"l2tpPassword,omitempty"`
 	IPsecPSK            string `json:"ipsecPsk,omitempty"`
 	OpenConnectPassword string `json:"openconnectPassword,omitempty"`
+	// OpenConnectTOTPSecret は、二段目のコードを作る種である。
+	OpenConnectTOTPSecret string `json:"openconnectTotpSecret,omitempty"`
 }
 
 type vpnRenameRequest struct {
@@ -107,10 +109,11 @@ func (h VPNHandlers) SaveProfile(c *echo.Context) error {
 	}
 	if request.Secrets != nil {
 		document, err := vpn.EncodeSecrets(vpn.Secrets{
-			WireGuardPrivateKey: request.Secrets.WireGuardPrivateKey,
-			L2TPPassword:        request.Secrets.L2TPPassword,
-			IPsecPSK:            request.Secrets.IPsecPSK,
-			OpenConnectPassword: request.Secrets.OpenConnectPassword,
+			WireGuardPrivateKey:   request.Secrets.WireGuardPrivateKey,
+			L2TPPassword:          request.Secrets.L2TPPassword,
+			IPsecPSK:              request.Secrets.IPsecPSK,
+			OpenConnectPassword:   request.Secrets.OpenConnectPassword,
+			OpenConnectTOTPSecret: request.Secrets.OpenConnectTOTPSecret,
 		})
 		if err != nil {
 			return vpnProblem(c, err)

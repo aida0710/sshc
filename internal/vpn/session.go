@@ -37,6 +37,16 @@ const (
 	// readyTimeout は、トンネルが成立するまで待つ上限である。IKEやDNSの
 	// 遅い相手でも、この時間を超えるなら利用者へ理由を見せた方がよい。
 	readyTimeout = 45 * time.Second
+	// approvalReadyTimeout は、二段目の承認を電話で操作する経路で待つ上限で
+	// ある。通知に気づいて、電話を開いて、承認するまでを見込む。
+	approvalReadyTimeout = 2 * time.Minute
+	// connectAttemptMargin は、engine が待つのをやめるより先に、コンテナが
+	// 自分で諦めるための余裕である。
+	//
+	// 応えない相手に対して、strongSwan も openconnect も長く粘る。engine が
+	// 先に打ち切ると、利用者が受け取るのは「成立しませんでした」だけで、
+	// どの段階で何を待っていたのかがログに残らない。
+	connectAttemptMargin = 10 * time.Second
 	// stopTimeout は、コンテナへ止まる時間を与える長さである。
 	stopTimeout = 10 * time.Second
 )
@@ -63,8 +73,11 @@ func (manager *Manager) socketPath(profileName string) string {
 // report は、いまどこまで進んだかを呼び出し側へ知らせる。初回はイメージの用意
 // だけで分単位になることがあり、待っている人が何を待っているか分からない。
 func (manager *Manager) start(ctx context.Context, profile Profile, secrets Secrets, report func(StartPhase)) error {
-	document, err := newAgentDocument(profile, secrets, manager.owner)
-	if err != nil {
+	// 形だけは先に見る。イメージを作ってから断るより、作る前に断る方が早い。
+	if err := profile.Validate(); err != nil {
+		return err
+	}
+	if err := profile.ValidateSecrets(secrets); err != nil {
 		return err
 	}
 	if err := requireTunnelDevice(profile.Backend); err != nil {
@@ -92,11 +105,18 @@ func (manager *Manager) start(ctx context.Context, profile Profile, secrets Secr
 	if _, err := manager.docker.output(ctx, arguments...); err != nil {
 		return fmt.Errorf("%w: %w", ErrSessionFailed, err)
 	}
+	// 二段目のコードは 30 秒で変わる。イメージを作る時間を挟まないよう、渡す
+	// 直前にこの文書を作る。
+	document, err := newAgentDocument(profile, secrets, manager.owner, manager.now())
+	if err != nil {
+		_ = manager.stopContainer(ctx, name)
+		return err
+	}
 	if err := manager.sendDocument(ctx, name, document); err != nil {
 		_ = manager.stopContainer(ctx, name)
 		return err
 	}
-	report(PhaseTunnel)
+	report(tunnelPhase(profile))
 	if err := manager.waitForRelay(ctx, name, profile, secrets); err != nil {
 		_ = manager.stopContainer(ctx, name)
 		return err
@@ -234,7 +254,7 @@ func (manager *Manager) sendDocument(ctx context.Context, name, document string)
 // ある。コンテナが先に終わったら、その理由を秘密を伏せて返す。
 func (manager *Manager) waitForRelay(ctx context.Context, name string, profile Profile, secrets Secrets) error {
 	path := manager.socketPath(profile.Name)
-	deadline := time.Now().Add(readyTimeout)
+	deadline := time.Now().Add(relayDeadline(profile))
 	for {
 		if _, err := os.Stat(path); err == nil {
 			return nil
@@ -258,6 +278,39 @@ func (manager *Manager) waitForRelay(ctx context.Context, name string, profile P
 	}
 }
 
+// tunnelPhase は、トンネルを待っているあいだ、何を待っているかを表す。
+//
+// 承認を待つ経路では、待っている相手は装置ではなく人である。「トンネルを
+// 待っています」とだけ出ていると、利用者は電話を見に行かない。
+func tunnelPhase(profile Profile) StartPhase {
+	if waitsForApproval(profile) {
+		return PhaseApproval
+	}
+	return PhaseTunnel
+}
+
+// waitsForApproval は、この経路が人の承認を待つかを返す。
+func waitsForApproval(profile Profile) bool {
+	return profile.OpenConnect != nil && profile.OpenConnect.SecondFactor == SecondFactorApprove
+}
+
+// connectAttemptSeconds は、コンテナが相手を待つ上限である。engine が待つ長さ
+// から余裕を引いて決める。二つが離れると、失敗の理由が残らなくなる。
+func connectAttemptSeconds(profile Profile) int {
+	return int((relayDeadline(profile) - connectAttemptMargin).Seconds())
+}
+
+// relayDeadline は、この経路が立つのを待つ長さである。
+//
+// 人が電話で承認する経路は、機械だけで進む経路より長くかかる。同じ長さで打ち
+// 切ると、承認する前に畳んでしまう。
+func relayDeadline(profile Profile) time.Duration {
+	if waitsForApproval(profile) {
+		return approvalReadyTimeout
+	}
+	return readyTimeout
+}
+
 func (manager *Manager) containerRunning(ctx context.Context, name string) (bool, error) {
 	output, err := manager.docker.output(ctx, "container", "inspect", "--format", "{{.State.Running}}", name)
 	if err != nil {
@@ -268,7 +321,7 @@ func (manager *Manager) containerRunning(ctx context.Context, name string) (bool
 
 // containerLogs は、利用者へ見せられる形で直近のログを返す。
 func (manager *Manager) containerLogs(ctx context.Context, name string, secrets Secrets) string {
-	output, err := manager.docker.output(ctx, "logs", "--tail", "40", name)
+	output, err := manager.docker.combined(ctx, "logs", "--tail", "40", name)
 	if err != nil {
 		return ""
 	}

@@ -248,6 +248,31 @@ func TestAnOpenConnectProfileKeepsItsPasswordOutOfEveryResponse(t *testing.T) {
 	}
 }
 
+// 二段目のTOTPの種も、応答には現れない。
+func TestTheSecondFactorSeedNeverLeavesTheVault(t *testing.T) {
+	engine, secrets, _ := vpnEngine(t)
+	const seed = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"
+	body := `{"profile":{"name":"office","backend":"openconnect","target":"10.9.9.1:22",` +
+		`"openconnect":{"server":"vpn.example.jp","username":"fixture","secondFactor":"totp"}},` +
+		`"secrets":{"openconnectPassword":"a password","openconnectTotpSecret":"` + seed + `"}}`
+
+	saved := send(t, engine, http.MethodPut, "/api/v1/vpn/profiles/office", body, nil)
+	listed := send(t, engine, http.MethodGet, "/api/v1/vpn", "", nil)
+
+	if saved.Code != http.StatusOK {
+		t.Fatalf("save = %d: %s", saved.Code, saved.Body.String())
+	}
+	for _, answer := range []string{saved.Body.String(), listed.Body.String()} {
+		if strings.Contains(answer, seed) {
+			t.Fatalf("応答に二段目の種が現れた: %s", answer)
+		}
+	}
+	stored, err := secrets.VPNSecrets("office")
+	if err != nil || !strings.Contains(stored, seed) {
+		t.Fatalf("VPNSecrets = %q, %v", stored, err)
+	}
+}
+
 // 無いプロファイルのログは無い。
 func TestLogsForAnUnknownProfileAreRefused(t *testing.T) {
 	engine, _, _ := vpnEngine(t)

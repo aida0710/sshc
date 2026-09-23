@@ -14,15 +14,18 @@ type secretsDocument struct {
 	L2TPPassword        string `json:"l2tpPassword,omitempty"`
 	IPsecPSK            string `json:"ipsecPsk,omitempty"`
 	OpenConnectPassword string `json:"openconnectPassword,omitempty"`
+	// OpenConnectTOTPSecret は、二段目のコードを作る種である。
+	OpenConnectTOTPSecret string `json:"openconnectTotpSecret,omitempty"`
 }
 
 // EncodeSecrets は、Vault へ保存する一件ぶんの記録を作る。
 func EncodeSecrets(secrets Secrets) (string, error) {
 	encoded, err := json.Marshal(secretsDocument{
-		WireGuardPrivateKey: secrets.WireGuardPrivateKey,
-		L2TPPassword:        secrets.L2TPPassword,
-		IPsecPSK:            secrets.IPsecPSK,
-		OpenConnectPassword: secrets.OpenConnectPassword,
+		WireGuardPrivateKey:   secrets.WireGuardPrivateKey,
+		L2TPPassword:          secrets.L2TPPassword,
+		IPsecPSK:              secrets.IPsecPSK,
+		OpenConnectPassword:   secrets.OpenConnectPassword,
+		OpenConnectTOTPSecret: secrets.OpenConnectTOTPSecret,
 	})
 	if err != nil {
 		return "", err
@@ -37,9 +40,10 @@ func DecodeSecrets(stored string) (Secrets, error) {
 		return Secrets{}, fmt.Errorf("%w: %w", ErrSecrets, err)
 	}
 	return Secrets{
-		WireGuardPrivateKey: document.WireGuardPrivateKey,
-		L2TPPassword:        document.L2TPPassword,
-		IPsecPSK:            document.IPsecPSK,
-		OpenConnectPassword: document.OpenConnectPassword,
+		WireGuardPrivateKey:   document.WireGuardPrivateKey,
+		L2TPPassword:          document.L2TPPassword,
+		IPsecPSK:              document.IPsecPSK,
+		OpenConnectPassword:   document.OpenConnectPassword,
+		OpenConnectTOTPSecret: document.OpenConnectTOTPSecret,
 	}, nil
 }

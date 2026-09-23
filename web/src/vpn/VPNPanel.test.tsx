@@ -112,6 +112,76 @@ describe("VPNPanel", () => {
     );
   });
 
+  it("waits for approval without sending a second answer when the device asks nothing", async () => {
+    const user = userEvent.setup();
+    const saveVPNProfile = vi.fn().mockResolvedValue(overview());
+    render(<VPNPanel api={buildApi({ saveVPNProfile })} />);
+    const form = await screen.findByRole("region", { name: "Add a VPN profile" });
+
+    await user.selectOptions(within(form).getByLabelText("Type"), "openconnect");
+    await user.type(within(form).getByLabelText("Name"), "office");
+    await user.type(within(form).getByLabelText("Target inside the VPN"), "10.9.9.1:22");
+    await user.type(within(form).getByLabelText("VPN server"), "vpn.example.jp");
+    await user.type(within(form).getByLabelText("VPN username"), "tester");
+    await user.type(within(form).getByLabelText("VPN password"), "a password");
+    await user.selectOptions(within(form).getByLabelText("Second factor"), "approve");
+    await user.click(within(form).getByRole("button", { name: "Save" }));
+
+    const [profile] = saveVPNProfile.mock.calls[0] ?? [];
+    expect(profile.openconnect).toEqual(
+      expect.objectContaining({ secondFactor: "approve" }),
+    );
+    expect(profile.openconnect).not.toHaveProperty("approvalWord");
+  });
+
+  it("sends the word the device asks for when one is given", async () => {
+    const user = userEvent.setup();
+    const saveVPNProfile = vi.fn().mockResolvedValue(overview());
+    render(<VPNPanel api={buildApi({ saveVPNProfile })} />);
+    const form = await screen.findByRole("region", { name: "Add a VPN profile" });
+
+    await user.selectOptions(within(form).getByLabelText("Type"), "openconnect");
+    await user.type(within(form).getByLabelText("Name"), "office");
+    await user.type(within(form).getByLabelText("Target inside the VPN"), "10.9.9.1:22");
+    await user.type(within(form).getByLabelText("VPN server"), "vpn.example.jp");
+    await user.type(within(form).getByLabelText("VPN username"), "tester");
+    await user.type(within(form).getByLabelText("VPN password"), "a password");
+    await user.selectOptions(within(form).getByLabelText("Second factor"), "approve");
+    await user.type(within(form).getByLabelText("Word to send as the second answer"), "push");
+    await user.click(within(form).getByRole("button", { name: "Save" }));
+
+    expect(saveVPNProfile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        openconnect: expect.objectContaining({ secondFactor: "approve", approvalWord: "push" }),
+      }),
+      { openconnectPassword: "a password" },
+    );
+  });
+
+  it("carries the TOTP seed only when the second factor uses one", async () => {
+    const user = userEvent.setup();
+    const saveVPNProfile = vi.fn().mockResolvedValue(overview());
+    render(<VPNPanel api={buildApi({ saveVPNProfile })} />);
+    const form = await screen.findByRole("region", { name: "Add a VPN profile" });
+
+    await user.selectOptions(within(form).getByLabelText("Type"), "openconnect");
+    await user.type(within(form).getByLabelText("Name"), "office");
+    await user.type(within(form).getByLabelText("Target inside the VPN"), "10.9.9.1:22");
+    await user.type(within(form).getByLabelText("VPN server"), "vpn.example.jp");
+    await user.type(within(form).getByLabelText("VPN username"), "tester");
+    await user.type(within(form).getByLabelText("VPN password"), "a password");
+    await user.selectOptions(within(form).getByLabelText("Second factor"), "totp");
+    // 種を入れるまでは保存できない。
+    expect(within(form).getByRole("button", { name: "Save" })).toBeDisabled();
+    await user.type(within(form).getByLabelText("Second factor TOTP seed"), "GEZDGNBVGY3TQOJQ");
+    await user.click(within(form).getByRole("button", { name: "Save" }));
+
+    expect(saveVPNProfile).toHaveBeenCalledWith(
+      expect.objectContaining({ openconnect: expect.objectContaining({ secondFactor: "totp" }) }),
+      { openconnectPassword: "a password", openconnectTotpSecret: "GEZDGNBVGY3TQOJQ" },
+    );
+  });
+
   it("routes a chosen connection through the profile", async () => {
     const user = userEvent.setup();
     const setConnectionVPN = vi.fn().mockResolvedValue(overview());

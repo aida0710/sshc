@@ -1,0 +1,18 @@
+#!/bin/sh
+# openconnect が接続の前後に呼ぶ。
+#
+# 既定の vpnc-script は、装置が配った既定経路とDNSをそのまま入れる。それでは、
+# このコンテナが「接続先ひとつだけを通す」約束を守れない。ここでは interface を
+# 上げてアドレスを付けるところで止め、接続先への経路は agent が作る。
+#
+# 受け取る値は openconnect が環境変数で渡す。reason が connect のときだけ働き、
+# それ以外（pre-init、disconnect、reconnect）では何もしない。
+set -eu
+
+case "${reason:-}" in
+connect)
+	ip link set dev "$TUNDEV" up mtu "${INTERNAL_IP4_MTU:-1400}"
+	ip address add "$INTERNAL_IP4_ADDRESS/32" dev "$TUNDEV"
+	;;
+esac
+exit 0

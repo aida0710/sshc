@@ -101,7 +101,7 @@ func TestATunnelForANamedTargetCarriesOnlyTheResolversUntilTheNameIsResolved(t *
 	profile.Target.Host = "lab.example.jp"
 	profile.DNS = []string{"10.9.9.53", "10.9.9.54"}
 
-	document, err := newAgentDocument(profile, Secrets{WireGuardPrivateKey: testPrivateKey}, 1000)
+	document, err := newAgentDocument(profile, Secrets{WireGuardPrivateKey: testPrivateKey}, 1000, testClock)
 	if err != nil {
 		t.Fatalf("newAgentDocument = %v", err)
 	}
@@ -145,7 +145,7 @@ func TestSecretsAreRefusedWhenTheBackendCannotUseThem(t *testing.T) {
 func TestTheTunnelCarriesOnlyTheConfiguredTarget(t *testing.T) {
 	profile := validProfile()
 
-	document, err := newAgentDocument(profile, Secrets{WireGuardPrivateKey: testPrivateKey}, 1000)
+	document, err := newAgentDocument(profile, Secrets{WireGuardPrivateKey: testPrivateKey}, 1000, testClock)
 	if err != nil {
 		t.Fatalf("newAgentDocument = %v", err)
 	}
@@ -179,7 +179,7 @@ func TestAnInvalidProfileNeverReachesTheContainer(t *testing.T) {
 	profile := validProfile()
 	profile.Target.Host = "example.jp"
 
-	if _, err := newAgentDocument(profile, Secrets{WireGuardPrivateKey: testPrivateKey}, 1000); !errors.Is(err, ErrTarget) {
+	if _, err := newAgentDocument(profile, Secrets{WireGuardPrivateKey: testPrivateKey}, 1000, testClock); !errors.Is(err, ErrTarget) {
 		t.Fatalf("newAgentDocument = %v, want %v", err, ErrTarget)
 	}
 }

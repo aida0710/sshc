@@ -42,6 +42,9 @@ target_port=$(jq -r '.target.port' "$profile")
 socket_owner=$(jq -r '.socketOwner' "$profile")
 # VPNの中で名前を引くDNSサーバー。空なら、接続先はアドレスで書かれている。
 resolvers=$(jq -r 'if .dns then .dns[] else empty end' "$profile" | tr '\n' ' ')
+# 応えない相手を待つ上限。engine が待つのをやめるより先に諦め、どこで止まったか
+# をログへ残す。値は engine が決める。
+attempt_seconds=$(jq -r '.attemptSeconds' "$profile")
 
 case "$backend" in
 wireguard)
@@ -89,8 +92,9 @@ l2tp_ipsec)
 		sleep 1
 		seconds=$((seconds + 1))
 	done
-	if ! ipsec up "$connection" >>"$runtime/ipsec.log" 2>&1; then
+	if ! timeout "$attempt_seconds" ipsec up "$connection" >>"$runtime/ipsec.log" 2>&1; then
 		echo "IPsecが成立しませんでした。事前共有鍵・接続先・暗号方式を確認してください。" >&2
+		sed -n '1,40p' "$runtime/ipsec.log" >&2
 		exit 1
 	fi
 
@@ -123,29 +127,48 @@ openconnect)
 	username=$(jq -r '.openconnect.username' "$profile")
 	protocol=$(jq -r '.openconnect.protocol' "$profile")
 	certificate=$(jq -r '.openconnect.serverCertificate' "$profile")
-	jq -r '.openconnect.script' "$profile" >"$runtime/vpnc-script"
-	chmod 700 "$runtime/vpnc-script"
 	# パスワードは変数にだけ置き、引数にも環境変数にも渡さない。openconnect へは
 	# 標準入力で渡す。
 	password=$(jq -r '.openconnect.password' "$profile")
+	# 装置がもう一問聞いてきたときに送る1行。openconnect は、パスワードの次の
+	# 質問にも標準入力の次の行を使う。中身が何かは engine が決めてある。
+	second_factor=$(jq -r '.openconnect.secondFactor // ""' "$profile")
+	waits_for_approval=$(jq -r '.openconnect.waitsForApproval // false' "$profile")
 	rm -f "$profile"
 	interface=vpn0
 	echo "トンネルを張ります（openconnect）。"
 	set -- --protocol="$protocol" --user="$username" --interface="$interface" \
-		--script="$runtime/vpnc-script" --passwd-on-stdin --non-inter --background \
+		--script=/usr/local/lib/sshc-vpn/vpnc-script --passwd-on-stdin --non-inter --background \
 		--pid-file="$runtime/openconnect.pid"
 	if [ -n "$certificate" ]; then
 		set -- "$@" --servercert="$certificate"
 	fi
+	# 答えは、聞かれるぶんだけ渡す。二段目が無いのに空行を渡すと、二段目を聞く
+	# 装置に対して「空の答え」を送ってしまい、失敗の理由が分からなくなる。
+	send_answers() {
+		printf '%s\n' "$password"
+		if [ -n "$second_factor" ]; then
+			printf '%s\n' "$second_factor"
+		fi
+	}
+	if [ -n "$second_factor" ]; then
+		echo "二段目の質問に答えます。"
+	fi
+	if [ "$waits_for_approval" = "true" ]; then
+		echo "電話の承認を待ちます。通知を承認するまで、装置は応答を返しません。"
+	fi
 	# --background は、繋がったあとに自分を背後へ回す。ここが 0 で返らなければ
 	# 繋がっていない。
-	if ! printf '%s\n' "$password" | openconnect "$@" "$server" >"$runtime/openconnect.log" 2>&1; then
+	if ! send_answers | timeout "$attempt_seconds" openconnect "$@" "$server" \
+		>"$runtime/openconnect.log" 2>&1; then
 		password=
-		echo "openconnectが接続できませんでした。利用者名・パスワード・方式・証明書を確認してください。" >&2
+		second_factor=
+		echo "openconnectが接続できませんでした。利用者名・パスワード・二段目の認証・方式・証明書を確認してください。" >&2
 		sed -n '1,40p' "$runtime/openconnect.log" >&2
 		exit 1
 	fi
 	password=
+	second_factor=
 	seconds=0
 	while ! ip -4 address show dev "$interface" 2>/dev/null | grep -q 'inet '; do
 		if [ "$seconds" -ge 45 ]; then

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/netip"
 	"strings"
+	"time"
 )
 
 // agentDocument は、コンテナのagentへ標準入力で渡す設定である。
@@ -15,11 +16,14 @@ type agentDocument struct {
 	Backend string           `json:"backend"`
 	Target  endpointDocument `json:"target"`
 	// DNS は、接続先の名前をVPNの中で引くためのDNSサーバーである。
-	DNS         []string             `json:"dns,omitempty"`
-	SocketOwner int                  `json:"socketOwner"`
-	WireGuard   *wireGuardDocument   `json:"wireguard,omitempty"`
-	L2TP        *l2tpDocument        `json:"l2tp,omitempty"`
-	OpenConnect *openConnectDocument `json:"openconnect,omitempty"`
+	DNS []string `json:"dns,omitempty"`
+	// AttemptSeconds は、応えない相手を待つ上限である。engine が待つのをやめる
+	// より先に諦めて、どこで止まったかをログへ残す。
+	AttemptSeconds int                  `json:"attemptSeconds"`
+	SocketOwner    int                  `json:"socketOwner"`
+	WireGuard      *wireGuardDocument   `json:"wireguard,omitempty"`
+	L2TP           *l2tpDocument        `json:"l2tp,omitempty"`
+	OpenConnect    *openConnectDocument `json:"openconnect,omitempty"`
 }
 
 // openConnectDocument は、agent が openconnect を呼ぶのに要るものである。
@@ -31,9 +35,14 @@ type openConnectDocument struct {
 	// ServerCertificate は、相手の証明書を固定する指紋である。空なら公的な
 	// 認証局として検証させる。
 	ServerCertificate string `json:"serverCertificate"`
-	// Script は、openconnect が接続の前後に呼ぶ本文である。
-	Script   string `json:"script"`
-	Password string `json:"password"`
+	Password          string `json:"password"`
+	// SecondFactor は、装置が二段目に聞いてきたときに送る1行である。空なら
+	// 何も送らない。agent は中身を解さず、そのまま openconnect へ渡す。
+	SecondFactor string `json:"secondFactor,omitempty"`
+	// WaitsForApproval は、この接続が人の承認を待つかである。agent はこれを
+	// ログへ書く。何も聞いてこない装置では、待っているあいだ出力が止まる。
+	// 理由が書いていないと、止まったのか待っているのかが分からない。
+	WaitsForApproval bool `json:"waitsForApproval,omitempty"`
 }
 
 // l2tpDocument は、agent が置くだけの本文と、agent が自分で引く相手である。
@@ -59,7 +68,10 @@ type wireGuardDocument struct {
 }
 
 // newAgentDocument は、プロファイルと秘密から、コンテナへ渡す設定を作る。
-func newAgentDocument(profile Profile, secrets Secrets, socketOwner int) (string, error) {
+//
+// now は、二段目のコードを作る時刻である。コードは 30 秒で変わるので、この文書は
+// コンテナへ渡す直前に作る。
+func newAgentDocument(profile Profile, secrets Secrets, socketOwner int, now time.Time) (string, error) {
 	if err := profile.Validate(); err != nil {
 		return "", err
 	}
@@ -67,10 +79,11 @@ func newAgentDocument(profile Profile, secrets Secrets, socketOwner int) (string
 		return "", err
 	}
 	document := agentDocument{
-		Backend:     string(profile.Backend),
-		Target:      endpointDocument{Host: profile.Target.Host, Port: profile.Target.Port},
-		DNS:         profile.DNS,
-		SocketOwner: socketOwner,
+		Backend:        string(profile.Backend),
+		Target:         endpointDocument{Host: profile.Target.Host, Port: profile.Target.Port},
+		DNS:            profile.DNS,
+		AttemptSeconds: connectAttemptSeconds(profile),
+		SocketOwner:    socketOwner,
 	}
 	switch profile.Backend {
 	case WireGuard:
@@ -84,13 +97,18 @@ func newAgentDocument(profile Profile, secrets Secrets, socketOwner int) (string
 			Documents: l2tpDocuments(*profile.L2TP, secrets),
 		}
 	case OpenConnect:
+		second, err := secondFactorAnswer(*profile.OpenConnect, secrets, now)
+		if err != nil {
+			return "", err
+		}
 		document.OpenConnect = &openConnectDocument{
 			Server:            profile.OpenConnect.Server,
 			Username:          profile.OpenConnect.Username,
 			Protocol:          openConnectProtocol(*profile.OpenConnect),
 			ServerCertificate: profile.OpenConnect.ServerCertificate,
-			Script:            openConnectScript(),
 			Password:          secrets.OpenConnectPassword,
+			SecondFactor:      second,
+			WaitsForApproval:  waitsForApproval(profile),
 		}
 	}
 	encoded, err := json.Marshal(document)
@@ -144,7 +162,8 @@ func allowedAddresses(profile Profile) []string {
 func redact(text string, secrets Secrets) string {
 	replacements := make([]string, 0, 8)
 	for _, value := range []string{
-		secrets.WireGuardPrivateKey, secrets.L2TPPassword, secrets.IPsecPSK, secrets.OpenConnectPassword,
+		secrets.WireGuardPrivateKey, secrets.L2TPPassword, secrets.IPsecPSK,
+		secrets.OpenConnectPassword, secrets.OpenConnectTOTPSecret,
 	} {
 		if value == "" {
 			continue
