@@ -1192,6 +1192,8 @@ export const en = {
   "vpn.secretsMissing": "No secrets are stored for this profile.",
   "vpn.profileInvalid": "No route can be built from these settings. Check the target and the server.",
   "vpn.profileUnknown": "There is no VPN profile by that name.",
+  "vpn.profileExists": "A VPN profile with that name already exists. Choose another name, or remove the existing profile first.",
+  "vpn.targetMismatch": "This connection's target does not match the target of the chosen VPN profile.",
   "vpn.connectionUnknown": "That connection cannot hold sshc settings.",
   "vpn.vaultLocked": "The vault is locked. Unlock it and try again.",
   "copy.button": "Copy {label}",

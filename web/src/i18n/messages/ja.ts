@@ -1194,6 +1194,8 @@ export const ja = {
   "vpn.secretsMissing": "このプロファイルの秘密が保存されていません。",
   "vpn.profileInvalid": "この設定では経路を作れません。接続先とサーバーの書き方を確認してください。",
   "vpn.profileUnknown": "そのVPNプロファイルはありません。",
+  "vpn.profileExists": "同じ名前のVPNプロファイルがすでにあります。別の名前にするか、既存のプロファイルを削除してから作成してください。",
+  "vpn.targetMismatch": "この接続先は、選んだVPNプロファイルの接続先と一致しません。",
   "vpn.connectionUnknown": "その接続にはsshcの設定を持たせられません。",
   "vpn.vaultLocked": "Vaultが施錠されています。解錠してからやり直してください。",
   "copy.button": "{label}をコピー",

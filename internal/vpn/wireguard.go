@@ -114,6 +114,10 @@ func (wireGuardBackend) secretValues(secrets Secrets) []string {
 
 func (wireGuardBackend) waitsForApproval(Profile) bool { return false }
 
+func (wireGuardBackend) ownSecrets(secrets Secrets) Secrets {
+	return Secrets{WireGuard: secrets.WireGuard}
+}
+
 // wireGuardDocument は、agent が wireguard のトンネルを張るのに要るものである。
 type wireGuardDocument struct {
 	// Configuration は wg setconf がそのまま読む本文である。

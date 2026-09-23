@@ -486,6 +486,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/vpn/profiles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["createVPNProfile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/vpn/profiles/{name}": {
         parameters: {
             query?: never;
@@ -496,7 +512,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        put: operations["saveVPNProfile"];
+        put: operations["updateVPNProfile"];
         post?: never;
         delete: operations["deleteVPNProfile"];
         options?: never;
@@ -2075,6 +2091,9 @@ export interface components {
             blockers?: string[];
             currentVersion?: number;
             requiredVersion?: number;
+            field?: string;
+            reason?: string;
+            limit?: number;
         };
         KeyReference: {
             directive: string;
@@ -4837,7 +4856,34 @@ export interface operations {
             401: components["responses"]["Problem"];
         };
     };
-    saveVPNProfile: {
+    createVPNProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VPNProfileRequest"];
+            };
+        };
+        responses: {
+            /** @description Profile created together with its secrets. A secret left under the same name is replaced, never inherited */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VPNOverview"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+        };
+    };
+    updateVPNProfile: {
         parameters: {
             query?: never;
             header?: never;
@@ -4852,7 +4898,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Profile stored. Secrets are kept in the vault and never returned */
+            /** @description Profile updated. Omitted or empty secret fields keep the stored values; secrets of another backend are dropped */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4863,6 +4909,7 @@ export interface operations {
             };
             400: components["responses"]["Problem"];
             401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
         };
     };
@@ -4877,7 +4924,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Profile, its secrets, and the bindings that named it were removed */
+            /** @description Profile, its secrets, and the bindings that named it were removed in one write. Requires an unlocked vault */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4888,6 +4935,7 @@ export interface operations {
             };
             401: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
         };
     };
     renameVPNProfile: {

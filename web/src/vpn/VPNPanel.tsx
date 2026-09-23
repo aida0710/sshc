@@ -117,7 +117,7 @@ export function VPNPanel({ api = vpnApi, aliases = [] }: VPNPanelProps) {
 
       <VPNProfileForm
         busy={operation.busy}
-        onSave={(profile, secrets) => void act(() => api.saveVPNProfile(profile, secrets))}
+        onSave={(profile, secrets) => void act(() => api.createVPNProfile(profile, secrets))}
       />
 
       {pendingRemoval === "" ? null : (

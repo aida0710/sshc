@@ -10,6 +10,8 @@ export const vpnRefusals: Record<string, MessageKey> = {
   vpn_secrets_missing: "vpn.secretsMissing",
   vpn_profile_invalid: "vpn.profileInvalid",
   vpn_profile_unknown: "vpn.profileUnknown",
+  vpn_profile_exists: "vpn.profileExists",
+  vpn_target_mismatch: "vpn.targetMismatch",
   connection_unknown: "vpn.connectionUnknown",
   vault_locked: "vpn.vaultLocked",
 };

@@ -72,114 +72,14 @@ func (s *Service) VPNProfiles() ([]VPNProfile, error) {
 	return profiles, nil
 }
 
-// SaveVPNProfile は、プロファイルひとつを保存する。同じ名前があれば置き換える。
-//
-// 秘密はここを通らない。Vault が持つ。
-func (s *Service) SaveVPNProfile(profile VPNProfile) (SaveResult, error) {
-	profile = profile.Normalized()
-	if _, err := profile.Profile(); err != nil {
-		return SaveResult{}, err
-	}
-	stored, precondition, err := s.metadata.Load()
-	if err != nil {
-		return SaveResult{}, err
-	}
-	replaced := false
-	for index, existing := range stored.VPNProfiles {
-		if existing.Name == profile.Name {
-			stored.VPNProfiles[index] = profile
-			replaced = true
-			break
-		}
-	}
-	if !replaced {
-		stored.VPNProfiles = append(stored.VPNProfiles, profile)
-	}
-	return s.commitMetadata(stored, precondition, "vpn.profile.save")
-}
-
-// RemoveVPNProfile は、プロファイルと、それを指している接続の紐付けを同時に消す。
-//
-// 別々に消すと、消えたプロファイルを指したままの接続が残る。その接続は繋ぐ
-// たびに「そのプロファイルは無い」と断られ、利用者は設定のどこを直せばよいかを
-// 探すことになる。
-func (s *Service) RemoveVPNProfile(name string) (SaveResult, error) {
-	stored, precondition, err := s.metadata.Load()
-	if err != nil {
-		return SaveResult{}, err
-	}
-	profiles := make([]VPNProfile, 0, len(stored.VPNProfiles))
-	found := false
-	for _, existing := range stored.VPNProfiles {
-		if existing.Name == name {
-			found = true
-			continue
-		}
-		profiles = append(profiles, existing)
-	}
-	if !found {
-		return SaveResult{}, fmt.Errorf("%w: %s", ErrUnknownVPNProfile, name)
-	}
-	stored.VPNProfiles = profiles
-	for index, host := range stored.Hosts {
-		if host.VPN == name {
-			stored.Hosts[index].VPN = ""
-		}
-	}
-	return s.commitMetadata(stored, precondition, "vpn.profile.remove")
-}
-
-// RenameVPNProfile は、プロファイルの名前を変え、それを指している接続の紐付けも
-// 同じ書き込みで追従させる。
-//
-// 別々に直すと、古い名前を指したままの接続が残る。その接続は繋ぐたびに断られ、
-// 利用者は設定のどこを直せばよいかを探すことになる。
-func (s *Service) RenameVPNProfile(from, to string) (SaveResult, error) {
-	if err := vpn.ValidateName(to); err != nil {
-		return SaveResult{}, fmt.Errorf("%w: %w", ErrMetadataVPN, err)
-	}
-	stored, precondition, err := s.metadata.Load()
-	if err != nil {
-		return SaveResult{}, err
-	}
-	found := false
-	for index, existing := range stored.VPNProfiles {
-		if existing.Name == to && from != to {
-			return SaveResult{}, fmt.Errorf("%w: %s はすでにあります", ErrMetadataVPN, to)
-		}
-		if existing.Name == from {
-			stored.VPNProfiles[index].Name = to
-			found = true
-		}
-	}
-	if !found {
-		return SaveResult{}, fmt.Errorf("%w: %s", ErrUnknownVPNProfile, from)
-	}
-	for index, host := range stored.Hosts {
-		if host.VPN == from {
-			stored.Hosts[index].VPN = to
-		}
-	}
-	return s.commitMetadata(stored, precondition, "vpn.profile.rename")
-}
-
 // SetConnectionVPN は、接続が通るプロファイルを決める。空なら紐付けを外す。
 func (s *Service) SetConnectionVPN(alias, profile string) (SaveResult, error) {
 	stored, precondition, err := s.metadata.Load()
 	if err != nil {
 		return SaveResult{}, err
 	}
-	if profile != "" {
-		known := false
-		for _, existing := range stored.VPNProfiles {
-			if existing.Name == profile {
-				known = true
-				break
-			}
-		}
-		if !known {
-			return SaveResult{}, fmt.Errorf("%w: %s", ErrUnknownVPNProfile, profile)
-		}
+	if profile != "" && vpnProfileIndex(stored.VPNProfiles, profile) < 0 {
+		return SaveResult{}, fmt.Errorf("%w: %s", ErrUnknownVPNProfile, profile)
 	}
 	identity, err := s.hostIdentity(alias)
 	if err != nil {
@@ -214,15 +114,33 @@ func (s *Service) hostIdentity(alias string) (HostIdentity, error) {
 	return HostIdentity{}, fmt.Errorf("%w: %s", ErrUnknownConnection, alias)
 }
 
+// commitMetadata は、metadata だけを書く。
 func (s *Service) commitMetadata(stored Metadata, precondition storage.Precondition, operation string) (SaveResult, error) {
+	return s.commitMetadataWith(metadataCommit{operation: operation, metadata: stored, precondition: precondition}, nil)
+}
+
+// metadataCommit は、書く前の metadata と、読んだときの前提である。
+type metadataCommit struct {
+	operation    string
+	metadata     Metadata
+	precondition storage.Precondition
+}
+
+// commitMetadataWith は、metadata と、あれば別の変更（vault など）を、ひとつの
+// storage.Request で書く。どちらかだけが書かれることはない。
+func (s *Service) commitMetadataWith(planned metadataCommit, alongside *storage.Change) (SaveResult, error) {
 	if err := s.metadata.EnsureDirectory(); err != nil {
 		return SaveResult{}, err
 	}
-	change, err := s.metadata.Change(stored, precondition)
+	change, err := s.metadata.Change(planned.metadata, planned.precondition)
 	if err != nil {
 		return SaveResult{}, err
 	}
-	result, err := s.manager.Commit(storage.Request{Operation: operation, Changes: []storage.Change{change}})
+	changes := []storage.Change{change}
+	if alongside != nil {
+		changes = append(changes, *alongside)
+	}
+	result, err := s.manager.Commit(storage.Request{Operation: planned.operation, Changes: changes})
 	if err != nil {
 		return SaveResult{}, err
 	}

@@ -43,7 +43,13 @@ Create one from the VPN screen or with `sshc vpn add <name>`. One profile reache
 | VPN server | `host:port` for WireGuard, a hostname or address for L2TP/IPsec and OpenConnect |
 | Secrets | A private key for WireGuard; the VPN password and IPsec pre-shared key for L2TP/IPsec; the VPN password for OpenConnect |
 
-Secrets are kept in the vault. They are never returned to the screen or the API, and settings can be edited without entering them again.
+Secrets are kept in the vault. They are never returned to the screen or the API.
+
+Creating and editing are separate operations. Creating a profile whose name is already taken is refused and changes nothing: to rebuild a profile, remove it first; to change only its name, rename it. If the vault still holds a secret under the same name, creating replaces it with the secret you entered instead of inheriting it.
+
+When editing a saved profile, a secret left empty keeps its stored value, so settings can be changed without entering the secrets again. Changing the type drops the old type's secrets and asks for the new type's. Settings and secrets are saved in one write; one is never changed without the other.
+
+A value that cannot be accepted is reported with the field and the reason (missing, wrongly written, over a limit and so on), both on the screen and by `sshc vpn add`.
 
 For L2TP/IPsec, set IKE and ESP proposals only when an older device rejects the defaults.
 
@@ -83,7 +89,9 @@ A bound connection takes the same route from the terminal, from SFTP and from `s
 
 Which connection takes which route is visible before and after connecting. The terminal and SFTP headers show **VPN: \<name\>**, and `sshc info <alias>` prints the same name on its `vpn` line.
 
-Removing a profile also removes its secrets and the bindings of every connection that named it. To change a name, do not delete and recreate: use **Rename** on the VPN screen or `sshc vpn rename <old name> <new name>`, which moves the settings, the secrets and the bindings together.
+Removing a profile also removes its secrets and the bindings of every connection that named it, and stops its route if it is running. Removal needs an unlocked vault; while the vault is locked it is refused and nothing changes. Removing the settings but leaving the secrets behind would let a profile recreated under the same name pick up the old secrets.
+
+To change a name, do not delete and recreate: use **Rename** on the VPN screen or `sshc vpn rename <old name> <new name>`, which moves the settings, the secrets and the bindings together. Renaming also needs an unlocked vault. The new name, whether it is taken and the vault are all checked before the route is stopped, so a refused rename leaves a route in use running.
 
 ## While a route comes up
 
@@ -100,6 +108,8 @@ Connecting again reopens the route. One that needs approval on the phone will as
 ## When a route will not come up
 
 While a route is open, the VPN screen and `sshc vpn` show the tunnel's interface, its address inside the VPN and when it opened. If that much is there, the tunnel itself is up.
+
+When a route does not come up, the screen and `sshc vpn up` say why as far as it is known, for example that the WireGuard peer never completed a handshake or that PPP authentication failed.
 
 If it is not there, or the tunnel is up but the target is still unreachable, read the container's output: **Logs** on the VPN screen, or `sshc vpn logs <name>`. The stored secrets are replaced by `[REDACTED]`, so the output can be pasted as it is. You never need to run `docker logs` yourself.
 

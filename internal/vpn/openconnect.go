@@ -163,6 +163,10 @@ func (openConnectBackend) secretValues(secrets Secrets) []string {
 	return []string{secrets.OpenConnect.Password, secrets.OpenConnect.TOTPSecret}
 }
 
+func (openConnectBackend) ownSecrets(secrets Secrets) Secrets {
+	return Secrets{OpenConnect: secrets.OpenConnect}
+}
+
 func (openConnectBackend) waitsForApproval(profile Profile) bool {
 	return profile.OpenConnect != nil && profile.OpenConnect.SecondFactor == SecondFactorApprove
 }
