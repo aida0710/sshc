@@ -179,7 +179,7 @@ Docker が動く Linux で行います。VPN 装置は使い捨ての検証用�
 
 1. `sshc vpn add` で WireGuard のプロファイルを作り、`sshc vpn up` の後に `sshc ssh <alias>` が接続先へ届くことを確認する。`docker logs` に秘密鍵が現れないことも確認する。
 2. トンネルを落とした状態（`sshc vpn down`）で同じ接続を試し、素の回線へ落ちずに拒否されることを確認する。
-3. L2TP/IPsec のプロファイルで同じ 2 つを確認する。パスワードと事前共有鍵が `docker logs` と `sshc vpn` の出力に現れないことも確認する。
+3. L2TP/IPsec のプロファイルで同じ 2 つを確認する。パスワードと事前共有鍵が `docker logs` と `sshc vpn` の出力に現れないことも確認する。OpenConnect のプロファイルでも同じ 2 つを確認する（実際の AnyConnect 系装置に対しては未確認）。装置が配る既定経路と DNS がコンテナの中にも入っていないこと（`docker exec <コンテナ> ip route` と `cat /etc/resolv.conf`）を確認する。
 4. ホスト側が別の VPN へ接続したままでも、1 の接続が成立することを確認する。ホストの `ip route` と `/etc/resolv.conf` が変わらないことも確認する。
 5. プロファイルを削除し、接続の紐付けが同時に外れること、コンテナが残らないこと、Vault から秘密が消えることを確認する。
 6. engine を再起動し、前回のコンテナが引き継がれず停止することを確認する。

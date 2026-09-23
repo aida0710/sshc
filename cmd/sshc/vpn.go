@@ -11,6 +11,8 @@ import (
 	"net/url"
 	"os"
 	"strings"
+
+	"sshc/internal/vpn"
 )
 
 // VPN 経路は engine が持つ。この CLI は入力を集めて engine へ渡し、返ってきた
@@ -502,14 +504,6 @@ func vpnPhaseWord(phase string) string {
 // errVPNRelayMissing は、engine が経路を差し出さなかったことを表す。
 var errVPNRelayMissing = errors.New("the engine did not open a relay for that VPN profile")
 
-// errVPNTargetMismatch は、繋ごうとしている相手と、その経路の接続先が食い違う
-// ことを表す。
-//
-// コンテナはプロファイルの接続先ひとつだけを通す。食い違ったまま繋ぐと、利用者が
-// 設定に書いた相手ではなく、プロファイルに書いた相手へ届く。どちらが正しいかを
-// 推測せず、断る。
-var errVPNTargetMismatch = errors.New("the connection and its VPN profile name different targets")
-
 // vpnRouteThroughEngine は、engine に経路を起こさせ、その中継のソケットへ繋ぐ。
 //
 // CLI は秘密を持たない。コンテナも Vault も engine が持ち、こちらは利用者だけが
@@ -542,7 +536,7 @@ func dialVPNRelay(
 		}
 		if wantedTarget != "" && session.Profile.Target != wantedTarget {
 			return nil, fmt.Errorf("%w: %s は %s へ繋ぐ経路である",
-				errVPNTargetMismatch, profile, session.Profile.Target)
+				vpn.ErrTargetMismatch, profile, session.Profile.Target)
 		}
 		if session.RelaySocket == "" {
 			return nil, errVPNRelayMissing
@@ -562,7 +556,7 @@ func runVPNProxy(ctx context.Context, called vpnInvocation, environment commandE
 	if err != nil {
 		// この2つは engine の拒否ではなく、こちらで分かる食い違いである。
 		// 共通の言い換えに通すと、何が食い違ったのかが消える。
-		if errors.Is(err, errVPNTargetMismatch) || errors.Is(err, errVPNRelayMissing) {
+		if errors.Is(err, vpn.ErrTargetMismatch) || errors.Is(err, errVPNRelayMissing) {
 			fmt.Fprintf(environment.stderr, "sshc: %v\n", err)
 			return 1
 		}

@@ -51,14 +51,6 @@ func superviseVPNSessions(ctx context.Context, sessions *vpn.Manager, logger *sl
 	}
 }
 
-// errVPNTargetMismatch は、接続設定の接続先とプロファイルの接続先が食い違う
-// ことを表す。
-//
-// コンテナはプロファイルの接続先ひとつだけを通す。食い違ったまま繋ぐと、利用者が
-// 設定に書いた相手ではなく、プロファイルに書いた相手へ届く。どちらが正しいかを
-// 推測せず、断る。
-var errVPNTargetMismatch = errors.New("the connection and its VPN profile name different targets")
-
 // vpnRoute は、プロファイル名から設定と秘密を集め、その経路で接続先へ繋ぐ。
 func vpnRoute(
 	config *application.Service,
@@ -71,7 +63,7 @@ func vpnRoute(
 			return nil, err
 		}
 		if profile.Target.Address() != address {
-			return nil, fmt.Errorf("%w: %s は %s へ繋ぐ経路である", errVPNTargetMismatch, name, profile.Target.Address())
+			return nil, fmt.Errorf("%w: %s は %s へ繋ぐ経路である", vpn.ErrTargetMismatch, name, profile.Target.Address())
 		}
 		stored, err := secrets.VPNSecrets(name)
 		if err != nil {

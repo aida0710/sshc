@@ -46,6 +46,13 @@ var (
 	ErrSettings = errors.New("vpn settings are invalid")
 	// ErrSecrets は、backendが要る秘密を受け取れなかったことを表す。
 	ErrSecrets = errors.New("vpn secrets are missing")
+	// ErrTargetMismatch は、繋ごうとしている相手と、その経路の接続先が食い違う
+	// ことを表す。
+	//
+	// コンテナはプロファイルの接続先ひとつだけを通す。食い違ったまま繋ぐと、
+	// 利用者が設定に書いた相手ではなく、プロファイルに書いた相手へ届く。どちらが
+	// 正しいかを推測せず、断る。
+	ErrTargetMismatch = errors.New("the connection and its vpn profile name different targets")
 )
 
 // maxProfileNameLength は、コンテナ名とソケットのパスに入る長さに収める。
