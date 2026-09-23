@@ -1069,9 +1069,12 @@ type Problem struct {
 	CurrentVersion  *int            `json:"currentVersion,omitempty"`
 	Detail          *string         `json:"detail,omitempty"`
 	Diagnostics     *[]Diagnostic   `json:"diagnostics,omitempty"`
+	Field           *string         `json:"field,omitempty"`
+	Limit           *int            `json:"limit,omitempty"`
 	Line            *int            `json:"line,omitempty"`
 	Message         string          `json:"message"`
 	Path            *string         `json:"path,omitempty"`
+	Reason          *string         `json:"reason,omitempty"`
 	RequiredVersion *int            `json:"requiredVersion,omitempty"`
 }
 

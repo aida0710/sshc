@@ -59,7 +59,7 @@ test("selects the pinned Local destination beside an SSH host", async ({ page, i
   const queued = JSON.parse((await putRequest).postData() ?? "{}") as { sourcePath?: string; remotePath?: string; direction?: string };
   expect(queued).toMatchObject({ direction: "remote", sourcePath: "/home/engine/projects/draft.txt", remotePath: "/srv/projects/draft.txt" });
   await second.getByRole("button", { name: "ローカルパスを編集" }).click();
-  await expect(second.getByRole("textbox", { name: "エンジン側のファイルパス" })).toHaveValue("/home/engine/projects");
+  await expect(second.getByRole("textbox", { name: "sshcエンジン側のファイルパス" })).toHaveValue("/home/engine/projects");
   if (process.env.SSHC_VISUAL_DIR) await page.screenshot({ path: `${process.env.SSHC_VISUAL_DIR}/local-shared-toolbar-path-ja.png`, fullPage: true });
   await page.setViewportSize({ width: 390, height: 800 });
   await first.getByRole("button", { name: "ホスト" }).click();

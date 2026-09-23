@@ -46,12 +46,40 @@ func findDocker(ctx context.Context) (dockerCommand, error) {
 }
 
 func (command dockerCommand) output(ctx context.Context, arguments ...string) (string, error) {
-	return command.outputWithInput(ctx, "", arguments...)
+	output, _, err := command.run(ctx, "", arguments...)
+	return output, err
+}
+
+// combined は、標準出力と標準エラーを合わせて返す。
+//
+// docker logs は、コンテナの標準出力をこちらの標準出力へ、標準エラーをこちらの
+// 標準エラーへ流す。agent は失敗の理由を標準エラーへ書くので、片方だけを読むと、
+// いちばん知りたい行が落ちる。
+func (command dockerCommand) combined(ctx context.Context, arguments ...string) (string, error) {
+	output, errorOutput, err := command.run(ctx, "", arguments...)
+	if err != nil {
+		return "", err
+	}
+	if errorOutput == "" {
+		return output, nil
+	}
+	if output == "" {
+		return errorOutput, nil
+	}
+	return output + "\n" + errorOutput, nil
 }
 
 // outputWithInput は、標準入力を渡して docker を実行する。秘密はここを通る。
 // 引数にも環境変数にも秘密を置かない。
 func (command dockerCommand) outputWithInput(ctx context.Context, input string, arguments ...string) (string, error) {
+	output, _, err := command.run(ctx, input, arguments...)
+	return output, err
+}
+
+// run は、docker を1回実行し、標準出力と標準エラーを別々に返す。
+func (command dockerCommand) run(
+	ctx context.Context, input string, arguments ...string,
+) (output, errorOutput string, err error) {
 	process := exec.CommandContext(ctx, command.path, arguments...)
 	var stdout, stderr bytes.Buffer
 	process.Stdout = &limitedWriter{writer: &stdout, remaining: maxDockerOutputBytes}
@@ -62,11 +90,11 @@ func (command dockerCommand) outputWithInput(ctx context.Context, input string, 
 	if err := process.Run(); err != nil {
 		detail := strings.TrimSpace(stderr.String())
 		if detail == "" {
-			return "", err
+			return "", "", err
 		}
-		return "", fmt.Errorf("%s: %w", detail, err)
+		return "", "", fmt.Errorf("%s: %w", detail, err)
 	}
-	return stdout.String(), nil
+	return stdout.String(), strings.TrimSpace(stderr.String()), nil
 }
 
 // limitedWriter は、上限まで書いたら黙って捨てる。

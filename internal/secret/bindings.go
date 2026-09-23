@@ -229,43 +229,28 @@ func (s *Service) WithConnectionSecretsTransaction(
 	mutation ConnectionSecretsMutation,
 	commit func(*storage.Change) (storage.Result, error),
 ) (storage.Result, error) {
-	s.mutationMu.Lock()
-	defer s.mutationMu.Unlock()
+	passwordOnlyRemoval := mutation.Password != nil && mutation.Password.Kind == PasswordMutationRemove &&
+		mutation.KeyPassphrase == nil && mutation.TOTP == nil && mutation.Rename == nil
+	totpOnlyRemoval := mutation.TOTP != nil && mutation.TOTP.Kind == TOTPMutationRemove &&
+		mutation.Password == nil && mutation.KeyPassphrase == nil && mutation.Rename == nil
+	return s.commitVaultTransaction(vaultTransaction{
+		apply: func(vault, clone *Vault) (bool, error) {
+			return applyConnectionSecretsMutation(vault, clone, mutation)
+		},
+		commitsWithoutVault: passwordOnlyRemoval || totpOnlyRemoval,
+		commit:              commit,
+	})
+}
 
-	s.mu.Lock()
-	vault := s.use()
-	if vault == nil {
-		s.mu.Unlock()
-		exists, err := s.exists()
-		if err != nil {
-			return storage.Result{}, err
-		}
-		if !exists {
-			passwordOnlyRemoval := mutation.Password != nil && mutation.Password.Kind == PasswordMutationRemove &&
-				mutation.KeyPassphrase == nil && mutation.TOTP == nil && mutation.Rename == nil
-			totpOnlyRemoval := mutation.TOTP != nil && mutation.TOTP.Kind == TOTPMutationRemove &&
-				mutation.Password == nil && mutation.KeyPassphrase == nil && mutation.Rename == nil
-			if passwordOnlyRemoval || totpOnlyRemoval {
-				return commit(nil)
-			}
-			return storage.Result{}, ErrNoVault
-		}
-		return storage.Result{}, ErrLocked
-	}
-	clone := vault.clone()
-	published := false
-	defer func() {
-		if !published {
-			clone.Destroy()
-		}
-	}()
+// applyConnectionSecretsMutation は、接続の保存ひとつぶんの変更を写しへ加え、
+// 変わったかを返す。
+func applyConnectionSecretsMutation(vault, clone *Vault, mutation ConnectionSecretsMutation) (bool, error) {
 	changed := false
 	if mutation.Rename != nil {
 		var err error
 		changed, err = applyAliasRename(clone, *mutation.Rename)
 		if err != nil {
-			s.mu.Unlock()
-			return storage.Result{}, err
+			return false, err
 		}
 	}
 	if mutation.Password != nil {
@@ -275,8 +260,7 @@ func (s *Service) WithConnectionSecretsTransaction(
 			passwordChanged = false
 		}
 		if err != nil {
-			s.mu.Unlock()
-			return storage.Result{}, err
+			return false, err
 		}
 		changed = changed || passwordChanged
 	}
@@ -287,8 +271,7 @@ func (s *Service) WithConnectionSecretsTransaction(
 			subtle.ConstantTimeCompare([]byte(current), []byte(keyMutation.Passphrase)) != 1
 		if keyChanged {
 			if err := clone.SetDedicatedKeyPassphrase(keyMutation.RelativePath, keyMutation.Passphrase); err != nil {
-				s.mu.Unlock()
-				return storage.Result{}, err
+				return false, err
 			}
 			changed = true
 		}
@@ -296,41 +279,11 @@ func (s *Service) WithConnectionSecretsTransaction(
 	if mutation.TOTP != nil {
 		totpChanged, err := applyTOTPMutation(vault, clone, *mutation.TOTP)
 		if err != nil {
-			s.mu.Unlock()
-			return storage.Result{}, err
+			return false, err
 		}
 		changed = changed || totpChanged
 	}
-	if !changed {
-		s.mu.Unlock()
-		return commit(nil)
-	}
-	sealed, err := clone.Seal()
-	baseline := slices.Clone(s.baseline)
-	s.mu.Unlock()
-	if err != nil {
-		return storage.Result{}, err
-	}
-	if len(baseline) == 0 {
-		return storage.Result{}, ErrNoVault
-	}
-
-	change := storage.Change{
-		Path: s.path(), Contents: sealed,
-		Precondition: storage.Precondition{Exists: true, Digest: storage.Digest(baseline)},
-	}
-	result, err := commit(&change)
-	if err != nil {
-		return storage.Result{}, err
-	}
-	s.mu.Lock()
-	s.vault.Destroy()
-	s.vault = clone
-	published = true
-	s.baseline = slices.Clone(sealed)
-	s.used = s.now()
-	s.mu.Unlock()
-	return result, nil
+	return changed, nil
 }
 
 // WithStableSnapshot prevents vault/settings writers and master-key rotation

@@ -606,11 +606,9 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/VPNOverview" }
         "401": { $ref: "#/components/responses/Problem" }
-  /api/v1/vpn/profiles/{name}:
-    parameters:
-      - { name: name, in: path, required: true, schema: { type: string, minLength: 1, maxLength: 48 } }
-    put:
-      operationId: saveVPNProfile
+  /api/v1/vpn/profiles:
+    post:
+      operationId: createVPNProfile
       requestBody:
         required: true
         content:
@@ -618,23 +616,78 @@ paths:
             schema: { $ref: "#/components/schemas/VPNProfileRequest" }
       responses:
         "200":
-          description: Profile stored. Secrets are kept in the vault and never returned
+          description: Profile created together with its secrets. A secret left under the same name is replaced, never inherited
           content:
             application/json:
               schema: { $ref: "#/components/schemas/VPNOverview" }
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
+  /api/v1/vpn/profiles/{name}:
+    parameters:
+      - { name: name, in: path, required: true, schema: { type: string, minLength: 1, maxLength: 48 } }
+    put:
+      operationId: updateVPNProfile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VPNProfileRequest" }
+      responses:
+        "200":
+          description: Profile updated. Omitted or empty secret fields keep the stored values; secrets of another backend are dropped
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VPNOverview" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
     delete:
       operationId: deleteVPNProfile
       responses:
         "200":
-          description: Profile, its secrets, and the bindings that named it were removed
+          description: Profile, its secrets, and the bindings that named it were removed in one write. Requires an unlocked vault
           content:
             application/json:
               schema: { $ref: "#/components/schemas/VPNOverview" }
         "401": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /api/v1/vpn/profiles/{name}/rename:
+    parameters:
+      - { name: name, in: path, required: true, schema: { type: string, minLength: 1, maxLength: 48 } }
+    post:
+      operationId: renameVPNProfile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VPNRenameRequest" }
+      responses:
+        "200":
+          description: The profile, its secrets and the bindings that named it moved together
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VPNOverview" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /api/v1/vpn/profiles/{name}/logs:
+    parameters:
+      - { name: name, in: path, required: true, schema: { type: string, minLength: 1, maxLength: 48 } }
+    get:
+      operationId: getVPNLogs
+      responses:
+        "200":
+          description: The container's recent output with every stored secret masked
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VPNLogs" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
   /api/v1/vpn/profiles/{name}/session:
     parameters:
       - { name: name, in: path, required: true, schema: { type: string, minLength: 1, maxLength: 48 } }
@@ -2334,6 +2387,12 @@ components:
         currentVersion: { type: integer, minimum: 0 }
         requiredVersion: { type: integer, minimum: 1 }
         # blockers は拒否理由を安定したコードで返す。
+        # field・reason・limit は、入力のどの項目をどの理由で受け取れなかったかを
+        # 決まった語で返す。field は保存形式の JSON のパス、limit は長さや数の上限。
+        # 経路を用意できなかった応答（vpn_session_failed）では reason だけが入る。
+        field: { type: string }
+        reason: { type: string }
+        limit: { type: integer, minimum: 1 }
     KeyReference:
       type: object
       additionalProperties: false
@@ -4222,8 +4281,8 @@ components:
         profiles:
           type: array
           maxItems: 64
-          items: { $ref: "#/components/schemas/VPNSession" }
-    VPNSession:
+          items: { $ref: "#/components/schemas/VPNProfileStatus" }
+    VPNProfileStatus:
       type: object
       additionalProperties: false
       required: [profile, running, relaySocket, connections]
@@ -4238,6 +4297,37 @@ components:
         connections:
           type: array
           items: { type: string }
+        # コンテナの中のトンネルの様子。経路が無ければ省略する。
+        tunnel: { $ref: "#/components/schemas/VPNTunnel" }
+        # いま経路を用意している段階。用意していなければ省略する。初回は image
+        # だけで分単位になることがあるので、待っている人へ何を待っているかを示す。
+        phase:
+          type: string
+          enum: [image, container, tunnel, approval]
+    VPNTunnel:
+      type: object
+      additionalProperties: false
+      properties:
+        interface: { type: string }
+        # トンネル側でこの端末が名乗っているアドレス。L2TPでは相手から受け取る。
+        address: { type: string }
+        since: { type: string }
+        backend: { type: string }
+        # VPNの中で引けた接続先のアドレス。アドレスで書いた場合はその値。
+        targetAddress: { type: string }
+    VPNRenameRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 48 }
+    VPNLogs:
+      type: object
+      additionalProperties: false
+      required: [lines]
+      properties:
+        # 直近の出力。保存済みの秘密とその16進表記は伏せてある。
+        lines: { type: string, maxLength: 65536 }
     VPNProfileRequest:
       type: object
       additionalProperties: false
@@ -4254,6 +4344,8 @@ components:
         wireguardPrivateKey: { type: string, minLength: 44, maxLength: 44 }
         l2tpPassword: { type: string, minLength: 1, maxLength: 256 }
         ipsecPsk: { type: string, minLength: 1, maxLength: 256 }
+        openconnectPassword: { type: string, minLength: 1, maxLength: 256 }
+        openconnectTotpSecret: { type: string, minLength: 1, maxLength: 512 }
     VPNBindingRequest:
       type: object
       additionalProperties: false
@@ -4269,10 +4361,37 @@ components:
       properties:
         name: { type: string, minLength: 1, maxLength: 48 }
         backend: { type: string, minLength: 1, maxLength: 32 }
-        # この VPN の中にある接続先。`host:port` で書く。
+        # この VPN の中にある接続先。`host:port` で書く。host はIPv4アドレスか、
+        # VPNの中のDNSで引ける名前。
         target: { type: string, minLength: 3, maxLength: 128 }
+        # 接続先の名前をVPNの中で引くDNSサーバー（IPv4）。アドレスで書くなら要らない。
+        dns:
+          type: array
+          maxItems: 3
+          items: { type: string, minLength: 7, maxLength: 15 }
         wireguard: { $ref: "#/components/schemas/WireGuardProfile" }
         l2tp: { $ref: "#/components/schemas/L2TPProfile" }
+        openconnect: { $ref: "#/components/schemas/OpenConnectProfile" }
+    OpenConnectProfile:
+      type: object
+      additionalProperties: false
+      required: [server, username]
+      properties:
+        # VPN装置の名前またはアドレス。名前はコンテナの中で引く。
+        server: { type: string, minLength: 1, maxLength: 320 }
+        username: { type: string, minLength: 1, maxLength: 256 }
+        # その装置が話す方式（anyconnect / nc / pulse / gp / f5 / fortinet / array）。
+        # 空なら anyconnect。backend と同じく、ここでは形だけを見る。新しい版が
+        # 書いた方式を古い版が読めなくなると、その機械では metadata を保存できない。
+        protocol: { type: string, maxLength: 32 }
+        # 相手の証明書を固定する指紋（`sha256:...`）。公的な認証局の証明書を
+        # 使う装置では空でよい。
+        serverCertificate: { type: string, maxLength: 128 }
+        # 二段目の質問への答え方（`approve` または `totp`）。空なら答えない。
+        # protocol と同じく、ここでは形だけを見る。
+        secondFactor: { type: string, maxLength: 16 }
+        # secondFactor が approve のときに送る語。空なら push。
+        approvalWord: { type: string, maxLength: 32 }
     L2TPProfile:
       type: object
       additionalProperties: false

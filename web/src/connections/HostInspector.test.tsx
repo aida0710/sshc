@@ -3,6 +3,20 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { HostInspector } from "./HostInspector";
 import type { HostDetail } from "../api/config";
+import type { VPNProfile } from "../api/vpn";
+
+// vpnProfile は、接続先 target へ届く WireGuard のプロファイルである。
+function vpnProfile(name: string, target: string): VPNProfile {
+  return {
+    name,
+    backend: "wireguard",
+    target,
+    wireguard: { server: "vpn.example.jp:51820", peerPublicKey: "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=", address: "10.9.9.2/32" },
+  };
+}
+
+// build() の接続は HostName も Port も持たないので、相手は alias の bastion:22 になる。
+const reachingProfiles = [vpnProfile("tohoku", "bastion:22"), vpnProfile("office", "BASTION.:22")];
 
 function build(): HostDetail {
   return {
@@ -100,6 +114,75 @@ describe("HostInspector", () => {
     rerender(<HostInspector detail={detail} onMetadata={onMetadata} />);
     await user.selectOptions(screen.getByLabelText("OSC 52 clipboard"), "");
     expect(onMetadata).toHaveBeenLastCalledWith(expect.not.objectContaining({ osc52: expect.anything() }));
+  });
+
+  it("routes this connection through a VPN profile and can stop routing it", async () => {
+    const onMetadata = vi.fn();
+    const user = userEvent.setup();
+    const detail = build();
+    const { rerender } = render(
+      <HostInspector detail={detail} onMetadata={onMetadata} vpnProfiles={reachingProfiles} />,
+    );
+
+    await user.selectOptions(screen.getByLabelText("VPN route"), "tohoku");
+    expect(onMetadata).toHaveBeenLastCalledWith(expect.objectContaining({ vpn: "tohoku" }));
+
+    detail.metadata = { ...detail.metadata, vpn: "tohoku" };
+    rerender(<HostInspector detail={detail} onMetadata={onMetadata} vpnProfiles={reachingProfiles} />);
+    await user.selectOptions(screen.getByLabelText("VPN route"), "");
+    expect(onMetadata).toHaveBeenLastCalledWith(expect.not.objectContaining({ vpn: expect.anything() }));
+  });
+
+  it("still names a VPN profile that no longer exists, instead of showing no route", () => {
+    const detail = build();
+    detail.metadata = { ...detail.metadata, vpn: "retired" };
+
+    render(<HostInspector detail={detail} onMetadata={vi.fn()} vpnProfiles={[vpnProfile("tohoku", "bastion:22")]} />);
+
+    expect(screen.getByLabelText("VPN route")).toHaveValue("retired");
+    expect(screen.getByRole("option", { name: "retired (profile is gone)" })).toBeInTheDocument();
+  });
+
+  it("does not offer a VPN profile whose target is another host, and says why", () => {
+    render(
+      <HostInspector
+        detail={build()}
+        onMetadata={vi.fn()}
+        vpnProfiles={[vpnProfile("tohoku", "bastion:22"), vpnProfile("lab", "10.9.9.1:22")]}
+      />,
+    );
+
+    expect(screen.getByRole("option", { name: "tohoku" })).toBeEnabled();
+    expect(screen.getByRole("option", { name: "lab (reaches 10.9.9.1:22, not this connection)" })).toBeDisabled();
+  });
+
+  it("explains a mismatch when the connection already points at a profile for another host", () => {
+    const detail = build();
+    detail.metadata = { ...detail.metadata, vpn: "lab" };
+
+    render(<HostInspector detail={detail} onMetadata={vi.fn()} vpnProfiles={[vpnProfile("lab", "10.9.9.1:22")]} />);
+
+    expect(screen.getByLabelText("VPN route")).toHaveValue("lab");
+    expect(screen.getByRole("alert")).toHaveTextContent("This connection goes to bastion:22, but lab only reaches 10.9.9.1:22.");
+  });
+
+  it("compares against the HostName and Port the connection sets", () => {
+    const detail = build();
+    detail.form.fields = [
+      { keyword: "HostName", values: ["10.9.9.1"], line: 2, category: "basic", editable: true },
+      { keyword: "Port", values: ["2222"], line: 3, category: "basic", editable: true },
+    ];
+
+    render(
+      <HostInspector
+        detail={detail}
+        onMetadata={vi.fn()}
+        vpnProfiles={[vpnProfile("lab", "10.9.9.1:22"), vpnProfile("lab-alt", "10.9.9.1:2222")]}
+      />,
+    );
+
+    expect(screen.getByRole("option", { name: "lab-alt" })).toBeEnabled();
+    expect(screen.getByRole("option", { name: /^lab \(reaches/ })).toBeDisabled();
   });
 
   it("clears a colour rather than leaving the picker's fallback as a real value", async () => {

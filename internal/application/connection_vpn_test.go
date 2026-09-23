@@ -125,3 +125,44 @@ func TestAProfileForAnUnknownBackendStillSaves(t *testing.T) {
 		t.Fatalf("EncodeMetadata = %v", err)
 	}
 }
+
+// 方式と違う節は、保存するときに落とす。使っていない値を残さない。
+func TestSavingAProfileDropsTheSettingsOfOtherBackends(t *testing.T) {
+	service := serviceWithVPNMetadata(t, NewMetadata())
+	profile := labProfile()
+	profile.L2TP = &L2TPProfile{Server: "vpn.example.jp", Username: "user"}
+	profile.DNS = []string{}
+
+	change, err := service.PlanVPNProfileCreate(profile)
+	if err != nil {
+		t.Fatalf("PlanVPNProfileCreate = %v", err)
+	}
+	if _, err := service.CommitVPNProfileChange(change, nil); err != nil {
+		t.Fatalf("CommitVPNProfileChange = %v", err)
+	}
+
+	profiles, err := service.VPNProfiles()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(profiles) != 1 || profiles[0].L2TP != nil || profiles[0].DNS != nil || profiles[0].WireGuard == nil {
+		t.Fatalf("profiles = %+v", profiles)
+	}
+}
+
+// 一覧は名前の順に並ぶ。
+func TestProfilesAreListedByName(t *testing.T) {
+	metadata := NewMetadata()
+	second, first := labProfile(), labProfile()
+	second.Name, first.Name = "zeta", "alpha"
+	metadata.VPNProfiles = []VPNProfile{second, first}
+	service := serviceWithVPNMetadata(t, metadata)
+
+	profiles, err := service.VPNProfiles()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(profiles) != 2 || profiles[0].Name != "alpha" || profiles[1].Name != "zeta" {
+		t.Fatalf("profiles = %+v", profiles)
+	}
+}

@@ -7,12 +7,14 @@ type PasswordFieldProps = {
   value: string;
   onChange: (value: string) => void;
   hint?: string;
+  // error は、この値を受け取れない理由である。空なら何も出さない。
+  error?: string | undefined;
   autoFocus?: boolean;
   disabled?: boolean;
   initialShown?: boolean;
 };
 
-type PasswordInputProps = Omit<PasswordFieldProps, "hint"> & {
+type PasswordInputProps = Omit<PasswordFieldProps, "hint" | "error"> & {
   className?: string;
   placeholder?: string;
 };
@@ -65,6 +67,7 @@ export function PasswordField({
   value,
   onChange,
   hint,
+  error,
   autoFocus,
   disabled = false,
   initialShown = false,
@@ -74,6 +77,7 @@ export function PasswordField({
       label={label}
       interactiveChildren
       {...(hint === undefined ? {} : { hint })}
+      error={error}
     >
       <PasswordInput
         label={label}

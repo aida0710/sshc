@@ -34,6 +34,7 @@ import (
 	"sshc/internal/snippets"
 	"sshc/internal/terminal"
 	"sshc/internal/vpn"
+	"sshc/internal/vpnprofile"
 	"sshc/internal/workspace"
 )
 
@@ -67,8 +68,10 @@ type Options struct {
 	Logger          *slog.Logger
 	Config          *application.Service
 	// VPN は、接続ごとのVPN経路を持つ。nil なら、この engine は経路を扱わない。
-	VPN  *vpn.Manager
-	Keys KeyService
+	VPN *vpn.Manager
+	// VPNProfiles は、VPN の設定・秘密・経路をひとつの操作として扱う。VPN と一緒に渡す。
+	VPNProfiles *vpnprofile.Service
+	Keys        KeyService
 	// Connect は、alias ひとつ分の対話セッションを開く。合成の根が組み立てる。
 	Connect     Connector
 	Diagnostics *diagnostics.Service
@@ -417,7 +420,9 @@ func New(options Options) (*Server, error) {
 	}
 	if options.VPN != nil {
 		registerVPNRoutes(e, VPNHandlers{
-			Config: options.Config, Secrets: options.Passwords, Sessions: options.VPN,
+			Config:   options.Config,
+			Profiles: options.VPNProfiles,
+			Sessions: options.VPN,
 		})
 	}
 	if len(registry) > 0 {

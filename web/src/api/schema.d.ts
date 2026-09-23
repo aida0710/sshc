@@ -486,6 +486,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/vpn/profiles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["createVPNProfile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/vpn/profiles/{name}": {
         parameters: {
             query?: never;
@@ -496,9 +512,45 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        put: operations["saveVPNProfile"];
+        put: operations["updateVPNProfile"];
         post?: never;
         delete: operations["deleteVPNProfile"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/vpn/profiles/{name}/rename": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["renameVPNProfile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/vpn/profiles/{name}/logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        get: operations["getVPNLogs"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -2039,6 +2091,9 @@ export interface components {
             blockers?: string[];
             currentVersion?: number;
             requiredVersion?: number;
+            field?: string;
+            reason?: string;
+            limit?: number;
         };
         KeyReference: {
             directive: string;
@@ -3220,13 +3275,29 @@ export interface components {
         VPNOverview: {
             available: boolean;
             detail?: string;
-            profiles: components["schemas"]["VPNSession"][];
+            profiles: components["schemas"]["VPNProfileStatus"][];
         };
-        VPNSession: {
+        VPNProfileStatus: {
             profile: components["schemas"]["VPNProfile"];
             running: boolean;
             relaySocket: string;
             connections: string[];
+            tunnel?: components["schemas"]["VPNTunnel"];
+            /** @enum {string} */
+            phase?: "image" | "container" | "tunnel" | "approval";
+        };
+        VPNTunnel: {
+            interface?: string;
+            address?: string;
+            since?: string;
+            backend?: string;
+            targetAddress?: string;
+        };
+        VPNRenameRequest: {
+            name: string;
+        };
+        VPNLogs: {
+            lines: string;
         };
         VPNProfileRequest: {
             profile: components["schemas"]["VPNProfile"];
@@ -3236,6 +3307,8 @@ export interface components {
             wireguardPrivateKey?: string;
             l2tpPassword?: string;
             ipsecPsk?: string;
+            openconnectPassword?: string;
+            openconnectTotpSecret?: string;
         };
         VPNBindingRequest: {
             alias: string;
@@ -3245,8 +3318,18 @@ export interface components {
             name: string;
             backend: string;
             target: string;
+            dns?: string[];
             wireguard?: components["schemas"]["WireGuardProfile"];
             l2tp?: components["schemas"]["L2TPProfile"];
+            openconnect?: components["schemas"]["OpenConnectProfile"];
+        };
+        OpenConnectProfile: {
+            server: string;
+            username: string;
+            protocol?: string;
+            serverCertificate?: string;
+            secondFactor?: string;
+            approvalWord?: string;
         };
         L2TPProfile: {
             server: string;
@@ -4773,7 +4856,34 @@ export interface operations {
             401: components["responses"]["Problem"];
         };
     };
-    saveVPNProfile: {
+    createVPNProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VPNProfileRequest"];
+            };
+        };
+        responses: {
+            /** @description Profile created together with its secrets. A secret left under the same name is replaced, never inherited */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VPNOverview"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+        };
+    };
+    updateVPNProfile: {
         parameters: {
             query?: never;
             header?: never;
@@ -4788,7 +4898,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Profile stored. Secrets are kept in the vault and never returned */
+            /** @description Profile updated. Omitted or empty secret fields keep the stored values; secrets of another backend are dropped */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4799,6 +4909,7 @@ export interface operations {
             };
             400: components["responses"]["Problem"];
             401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
         };
     };
@@ -4813,7 +4924,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Profile, its secrets, and the bindings that named it were removed */
+            /** @description Profile, its secrets, and the bindings that named it were removed in one write. Requires an unlocked vault */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4824,6 +4935,62 @@ export interface operations {
             };
             401: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+        };
+    };
+    renameVPNProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VPNRenameRequest"];
+            };
+        };
+        responses: {
+            /** @description The profile, its secrets and the bindings that named it moved together */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VPNOverview"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+        };
+    };
+    getVPNLogs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The container's recent output with every stored secret masked */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VPNLogs"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
         };
     };
     startVPNSession: {

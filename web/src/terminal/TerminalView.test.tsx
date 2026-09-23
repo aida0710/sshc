@@ -52,6 +52,18 @@ afterEach(() => {
 });
 
 describe("TerminalView", () => {
+  it("says which VPN route an SSH connection takes, and says nothing when it takes none", () => {
+    const ssh: TerminalSession = { ...session, kind: "ssh", alias: "tains", title: "tains" };
+    const { rerender } = render(
+      <TerminalView session={ssh} api={{ terminalStreamTicket: vi.fn(async () => ({ streamTicket: "one-time" })) }} vpnProfile="tohoku" />,
+    );
+
+    expect(screen.getByText("VPN: tohoku")).toBeVisible();
+
+    rerender(<TerminalView session={ssh} api={{ terminalStreamTicket: vi.fn(async () => ({ streamTicket: "one-time" })) }} />);
+    expect(screen.queryByText(/^VPN: /)).toBeNull();
+  });
+
   it("retains normal cursor blinking when reduced motion is disabled", () => {
     let cursorBlink: boolean | undefined;
     const originalOpen = Terminal.prototype.open;
