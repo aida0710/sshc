@@ -23,7 +23,17 @@ const (
 	// L2TPIPsec は strongSwan と xl2tpd と pppd でトンネルを張る。大学や
 	// 会社の装置に多い方式である。
 	L2TPIPsec BackendName = "l2tp_ipsec"
+	// OpenConnect は openconnect でトンネルを張る。Cisco AnyConnect と
+	// その仲間（ocserv、GlobalProtect、Pulse など）へ繋ぐ。
+	OpenConnect BackendName = "openconnect"
 )
+
+// openConnectProtocols は、openconnect が話せる方式のうち、このプロファイルで
+// 指定できるものである。openconnect の --protocol にそのまま渡る。
+var openConnectProtocols = map[string]bool{
+	"anyconnect": true, "nc": true, "pulse": true, "gp": true,
+	"f5": true, "fortinet": true, "array": true,
+}
 
 var (
 	// ErrProfileName は、プロファイル名が使えないことを表す。
@@ -64,9 +74,10 @@ type Profile struct {
 	Target Endpoint
 	// DNS は、VPNの中で名前を引くDNSサーバーである（IPv4）。この経路の中
 	// だけで使い、ホストのDNSもコンテナの既定のDNSも変えない。
-	DNS       []string
-	WireGuard *WireGuardSettings
-	L2TP      *L2TPSettings
+	DNS         []string
+	WireGuard   *WireGuardSettings
+	L2TP        *L2TPSettings
+	OpenConnect *OpenConnectSettings
 }
 
 // maxResolvers は、1つの経路が使うDNSサーバーの数の上限である。VPNの中の名前
@@ -97,6 +108,20 @@ type L2TPSettings struct {
 	ESP string
 }
 
+// OpenConnectSettings は、openconnect backendの秘密でない設定である。
+type OpenConnectSettings struct {
+	// Server は、VPN装置の名前またはアドレスである。名前はコンテナの中で引く。
+	Server string
+	// Username は、VPNの利用者名である。パスワードはVaultにある。
+	Username string
+	// Protocol は、その装置が話す方式である。空なら anyconnect。
+	Protocol string
+	// ServerCertificate は、相手の証明書を固定する指紋である（`sha256:...`）。
+	// 公的な認証局の証明書を使う装置では空でよい。自己署名の装置では、これが
+	// 無いと openconnect は繋がない。
+	ServerCertificate string
+}
+
 // Secrets は、プロファイルの秘密である。Vaultから読み、標準入力でコンテナへ渡す。
 type Secrets struct {
 	WireGuardPrivateKey string
@@ -104,6 +129,8 @@ type Secrets struct {
 	L2TPPassword string
 	// IPsecPSK は、IPsecの事前共有鍵である。
 	IPsecPSK string
+	// OpenConnectPassword は、openconnect backend の利用者のパスワードである。
+	OpenConnectPassword string
 }
 
 // sameRouteAs は、この設定がもう一方と同じ経路を作るかを返す。
@@ -136,6 +163,11 @@ func (profile Profile) Validate() error {
 			return fmt.Errorf("%w: l2tp settings are absent", ErrSettings)
 		}
 		return profile.L2TP.validate()
+	case OpenConnect:
+		if profile.OpenConnect == nil {
+			return fmt.Errorf("%w: openconnect settings are absent", ErrSettings)
+		}
+		return profile.OpenConnect.validate()
 	}
 	return fmt.Errorf("%w: %s", ErrBackend, profile.Backend)
 }
@@ -276,8 +308,32 @@ func (profile Profile) ValidateSecrets(secrets Secrets) error {
 			return fmt.Errorf("%w: IPsecの事前共有鍵がありません", ErrSecrets)
 		}
 		return nil
+	case OpenConnect:
+		if secrets.OpenConnectPassword == "" {
+			return fmt.Errorf("%w: VPNのパスワードがありません", ErrSecrets)
+		}
+		return nil
 	}
 	return fmt.Errorf("%w: %s", ErrBackend, profile.Backend)
+}
+
+func (settings OpenConnectSettings) validate() error {
+	if settings.Server == "" || strings.ContainsAny(settings.Server, " \t\n\"\\") {
+		return fmt.Errorf("%w: VPN装置の指定が使えません", ErrSettings)
+	}
+	if settings.Username == "" || strings.ContainsAny(settings.Username, "\n\"\\") {
+		return fmt.Errorf("%w: VPNの利用者名が使えません", ErrSettings)
+	}
+	if settings.Protocol != "" && !openConnectProtocols[settings.Protocol] {
+		return fmt.Errorf("%w: 方式 %q は openconnect が知りません", ErrSettings, settings.Protocol)
+	}
+	if settings.ServerCertificate != "" && !strings.HasPrefix(settings.ServerCertificate, "sha256:") {
+		return fmt.Errorf("%w: 相手の証明書の指紋は sha256: で始まります", ErrSettings)
+	}
+	if strings.ContainsAny(settings.ServerCertificate, " \t\n\"\\") {
+		return fmt.Errorf("%w: 相手の証明書の指紋が使えません", ErrSettings)
+	}
+	return nil
 }
 
 func (settings L2TPSettings) validate() error {

@@ -298,6 +298,42 @@ func TestTheL2TPBranchRunsUntilTheServerRefusesIt(t *testing.T) {
 	}
 }
 
+// openconnect の枝も、相手が応えなければそこで止まり、理由を残す。
+//
+// 実際のVPN装置に対しては確かめられていない。ここで確かめるのは、コンテナが
+// openconnect を起動できること、応えない相手で待ち続けないこと、失敗の文面に
+// パスワードが現れないことである。
+func TestTheOpenConnectBranchRunsUntilTheServerRefusesIt(t *testing.T) {
+	manager, ctx := requireDockerTest(t)
+	if err := requireTunnelDevice(OpenConnect); err != nil {
+		t.Skipf("この機械では openconnect を試せない: %v", err)
+	}
+	profile := Profile{
+		Name:    "openconnect-unreachable",
+		Backend: OpenConnect,
+		Target:  Endpoint{Host: "10.77.1.1", Port: 22},
+		OpenConnect: &OpenConnectSettings{
+			// TEST-NET-1。誰も応答しない。
+			Server:   "192.0.2.1",
+			Username: "fixture",
+		},
+	}
+	secrets := Secrets{OpenConnectPassword: "fixture-password"}
+	t.Cleanup(func() { _ = manager.Stop(context.Background(), profile.Name) })
+
+	err := manager.Start(ctx, profile, secrets)
+
+	if err == nil {
+		t.Fatal("届かない相手に対して経路が成立した")
+	}
+	if !strings.Contains(err.Error(), "openconnect") {
+		t.Fatalf("失敗の理由が openconnect の段階を指していない: %v", err)
+	}
+	if strings.Contains(err.Error(), secrets.OpenConnectPassword) {
+		t.Fatalf("失敗の文面に秘密が現れた: %v", err)
+	}
+}
+
 // 誰も通っていない経路は畳み、通っている経路は残す。
 func TestAnIdleRouteIsStoppedAndAUsedOneIsKept(t *testing.T) {
 	manager, ctx := requireDockerTest(t)

@@ -111,6 +111,8 @@ func tunnelDevice(backend BackendName) (string, error) {
 		return "/dev/net/tun", nil
 	case L2TPIPsec:
 		return "/dev/ppp", nil
+	case OpenConnect:
+		return "/dev/net/tun", nil
 	}
 	return "", fmt.Errorf("%w: %s", ErrBackend, backend)
 }
@@ -173,13 +175,12 @@ type containerRun struct {
 // デバイスはトンネルのものだけである。秘密は引数に載せない。
 func runArguments(run containerRun) []string {
 	name, image, profile, owner, socketDirectory := run.name, run.image, run.profile, run.owner, run.socketDirectory
-	return []string{
+	arguments := []string{
 		"run", "--detach", "--name", name,
 		"--label", ownerLabel + "=" + strconv.Itoa(owner),
 		"--label", profileLabel + "=" + profile.Name,
 		"--label", targetLabel + "=" + profile.Target.Address(),
 		"--network", "bridge",
-		"--cap-add", "NET_ADMIN",
 		"--device", run.device,
 		"--security-opt", "no-new-privileges:true",
 		"--restart", "no",
@@ -187,7 +188,31 @@ func runArguments(run containerRun) []string {
 		"--tmpfs", "/run/sshc-vpn:rw,nosuid,nodev,size=8m,mode=700",
 		"--volume", socketDirectory + ":/run/sshc-vpn-socket",
 		"--log-opt", "max-size=1m", "--log-opt", "max-file=1",
-		image,
+	}
+	arguments = append(arguments, capabilityArguments(profile.Backend)...)
+	return append(arguments, image)
+}
+
+// capabilityArguments は、その backend が要る権限だけを渡す指定である。
+//
+// wireguard では、要るものを実際のコンテナで確かめてある。NET_ADMIN はトンネル
+// と経路のため、NET_RAW は iptables のため、DAC_OVERRIDE は利用者のものである
+// ソケット用ディレクトリへ書くため、CHOWN は中継のソケットを利用者のものにする
+// ためである。既定で付いてくる残り（MKNOD・SYS_CHROOT・SETUID など）は要らない。
+//
+// l2tp_ipsec では既定のままにする。strongSwan・xl2tpd・pppd がどの権限を使うか
+// を、実際のVPN装置に対して確かめられていない。確かめずに削ると、繋がらなく
+// なった理由が権限にあることを利用者が知る手段が無い。
+func capabilityArguments(backend BackendName) []string {
+	if backend != WireGuard {
+		return []string{"--cap-add", "NET_ADMIN"}
+	}
+	return []string{
+		"--cap-drop", "ALL",
+		"--cap-add", "NET_ADMIN",
+		"--cap-add", "NET_RAW",
+		"--cap-add", "DAC_OVERRIDE",
+		"--cap-add", "CHOWN",
 	}
 }
 

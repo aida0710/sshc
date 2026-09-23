@@ -22,6 +22,9 @@ const (
 	maxVPNKeyBytes = 64
 	// defaultTunnelAddress は、トンネル側で名乗るアドレスの初期値である。
 	defaultTunnelAddress = "10.0.0.2/32"
+	// defaultOpenConnectProtocol は、openconnect の方式の初期値である。
+	// internal/vpn の既定と同じ語を使う。
+	defaultOpenConnectProtocol = "anyconnect"
 )
 
 var errVPNSetupInput = errors.New("vpn profile input is invalid")
@@ -63,12 +66,13 @@ type vpnLogs struct {
 // そのまま持つ。表示に使うのは名前と方式と接続先だけだが、持たない項目があると
 // 応答そのものを読めない。
 type vpnStoredProfile struct {
-	Name      string               `json:"name"`
-	Backend   string               `json:"backend"`
-	Target    string               `json:"target"`
-	DNS       []string             `json:"dns,omitempty"`
-	WireGuard *vpnRequestWireGuard `json:"wireguard,omitempty"`
-	L2TP      *vpnRequestL2TP      `json:"l2tp,omitempty"`
+	Name        string                 `json:"name"`
+	Backend     string                 `json:"backend"`
+	Target      string                 `json:"target"`
+	DNS         []string               `json:"dns,omitempty"`
+	WireGuard   *vpnRequestWireGuard   `json:"wireguard,omitempty"`
+	L2TP        *vpnRequestL2TP        `json:"l2tp,omitempty"`
+	OpenConnect *vpnRequestOpenConnect `json:"openconnect,omitempty"`
 }
 
 func runVPN(ctx context.Context, called vpnInvocation, environment commandEnvironment) int {
@@ -215,8 +219,10 @@ func addVPNProfile(
 		profile.WireGuard, secrets, err = readWireGuardProfile(ctx, stdin, prompt, terminal)
 	case "l2tp_ipsec":
 		profile.L2TP, secrets, err = readL2TPProfile(ctx, stdin, prompt, terminal)
+	case "openconnect":
+		profile.OpenConnect, secrets, err = readOpenConnectProfile(ctx, stdin, prompt, terminal)
 	default:
-		err = fmt.Errorf("%w: backend は wireguard か l2tp_ipsec です", errVPNSetupInput)
+		err = fmt.Errorf("%w: backend は wireguard か l2tp_ipsec か openconnect です", errVPNSetupInput)
 	}
 	defer func() {
 		for _, field := range secrets {
@@ -311,14 +317,59 @@ func readL2TPProfile(
 	return &vpnRequestL2TP{Server: server, Username: username, IKE: ike, ESP: esp}, secrets, nil
 }
 
+// readOpenConnectProfile は、openconnect の設定とパスワードを読む。
+func readOpenConnectProfile(
+	ctx context.Context, stdin, prompt *os.File, terminal passwordTerminal,
+) (*vpnRequestOpenConnect, []vpnSecretField, error) {
+	server, err := promptVisibleSetup(ctx, stdin, prompt, "VPN server (host): ", "")
+	if err != nil {
+		return nil, nil, err
+	}
+	username, err := promptVisibleSetup(ctx, stdin, prompt, "VPN username: ", "")
+	if err != nil {
+		return nil, nil, err
+	}
+	protocol, err := promptVisibleSetup(ctx, stdin, prompt,
+		setupVisibleLabel("Protocol", defaultOpenConnectProtocol), defaultOpenConnectProtocol)
+	if err != nil {
+		return nil, nil, err
+	}
+	// 自己署名の装置では指紋が要る。公的な認証局の証明書なら空でよい。
+	certificate, err := promptVisibleSetup(ctx, stdin, prompt,
+		"Server certificate fingerprint (sha256:..., blank to verify normally): ", "")
+	if err != nil {
+		return nil, nil, err
+	}
+	password, err := promptMaskedPassword(ctx, stdin, prompt, terminal, "VPN password: ")
+	if err != nil {
+		zeroBytes(password)
+		return nil, nil, err
+	}
+	secrets := []vpnSecretField{{name: "openconnectPassword", value: password}}
+	if server == "" || username == "" || len(password) == 0 {
+		return nil, secrets, errVPNSetupInput
+	}
+	return &vpnRequestOpenConnect{
+		Server: server, Username: username, Protocol: protocol, ServerCertificate: certificate,
+	}, secrets, nil
+}
+
 // vpnRequestProfile は、保存要求のうち秘密でない部分である。API の形と揃える。
 type vpnRequestProfile struct {
-	Name      string               `json:"name"`
-	Backend   string               `json:"backend"`
-	Target    string               `json:"target"`
-	DNS       []string             `json:"dns,omitempty"`
-	WireGuard *vpnRequestWireGuard `json:"wireguard,omitempty"`
-	L2TP      *vpnRequestL2TP      `json:"l2tp,omitempty"`
+	Name        string                 `json:"name"`
+	Backend     string                 `json:"backend"`
+	Target      string                 `json:"target"`
+	DNS         []string               `json:"dns,omitempty"`
+	WireGuard   *vpnRequestWireGuard   `json:"wireguard,omitempty"`
+	L2TP        *vpnRequestL2TP        `json:"l2tp,omitempty"`
+	OpenConnect *vpnRequestOpenConnect `json:"openconnect,omitempty"`
+}
+
+type vpnRequestOpenConnect struct {
+	Server            string `json:"server"`
+	Username          string `json:"username"`
+	Protocol          string `json:"protocol,omitempty"`
+	ServerCertificate string `json:"serverCertificate,omitempty"`
 }
 
 type vpnRequestWireGuard struct {

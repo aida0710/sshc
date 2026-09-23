@@ -221,6 +221,33 @@ func TestRenamingOntoAnExistingProfileIsRefused(t *testing.T) {
 	}
 }
 
+// openconnect のプロファイルも、設定は metadata へ、パスワードは Vault へ入る。
+func TestAnOpenConnectProfileKeepsItsPasswordOutOfEveryResponse(t *testing.T) {
+	engine, secrets, _ := vpnEngine(t)
+	const password = "an openconnect password"
+	body := `{"profile":{"name":"office","backend":"openconnect","target":"10.9.9.1:22",` +
+		`"openconnect":{"server":"vpn.example.jp","username":"fixture","protocol":"anyconnect"}},` +
+		`"secrets":{"openconnectPassword":"` + password + `"}}`
+
+	saved := send(t, engine, http.MethodPut, "/api/v1/vpn/profiles/office", body, nil)
+
+	if saved.Code != http.StatusOK {
+		t.Fatalf("save = %d: %s", saved.Code, saved.Body.String())
+	}
+	if strings.Contains(saved.Body.String(), password) {
+		t.Fatalf("応答にパスワードが現れた: %s", saved.Body.String())
+	}
+	overview := decodeOverview(t, saved.Body.Bytes())
+	if len(overview.Profiles) != 1 || overview.Profiles[0].Profile.OpenConnect == nil ||
+		overview.Profiles[0].Profile.OpenConnect.Username != "fixture" {
+		t.Fatalf("profiles = %+v", overview.Profiles)
+	}
+	stored, err := secrets.VPNSecrets("office")
+	if err != nil || !strings.Contains(stored, password) {
+		t.Fatalf("VPNSecrets = %q, %v", stored, err)
+	}
+}
+
 // 無いプロファイルのログは無い。
 func TestLogsForAnUnknownProfileAreRefused(t *testing.T) {
 	engine, _, _ := vpnEngine(t)

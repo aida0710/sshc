@@ -12,9 +12,17 @@ type DraftSecrets = {
   wireguardPrivateKey: string;
   l2tpPassword: string;
   ipsecPsk: string;
+  openconnectPassword: string;
 };
 
-const emptySecrets: DraftSecrets = { wireguardPrivateKey: "", l2tpPassword: "", ipsecPsk: "" };
+type Backend = "wireguard" | "l2tp_ipsec" | "openconnect";
+
+const emptySecrets: DraftSecrets = {
+  wireguardPrivateKey: "", l2tpPassword: "", ipsecPsk: "", openconnectPassword: "",
+};
+
+// 装置が話す方式。engine と同じ語を使う。
+const openConnectProtocols = ["anyconnect", "nc", "pulse", "gp", "f5", "fortinet", "array"] as const;
 
 // splitResolvers は、読み取った DNS の並びを一件ずつに分ける。
 function splitResolvers(value: string): string[] {
@@ -33,7 +41,7 @@ export function VPNProfileForm({
 }) {
   const t = useTranslate();
   const [name, setName] = useState("");
-  const [backend, setBackend] = useState<"wireguard" | "l2tp_ipsec">("wireguard");
+  const [backend, setBackend] = useState<Backend>("wireguard");
   const [target, setTarget] = useState("");
   const [resolvers, setResolvers] = useState("");
   const [server, setServer] = useState("");
@@ -42,6 +50,8 @@ export function VPNProfileForm({
   const [username, setUsername] = useState("");
   const [ike, setIke] = useState("");
   const [esp, setEsp] = useState("");
+  const [protocol, setProtocol] = useState<string>(openConnectProtocols[0]);
+  const [serverCertificate, setServerCertificate] = useState("");
   const [secrets, setSecrets] = useState<DraftSecrets>(emptySecrets);
 
   const complete =
@@ -50,7 +60,9 @@ export function VPNProfileForm({
     server !== "" &&
     (backend === "wireguard"
       ? peerPublicKey !== "" && address !== "" && secrets.wireguardPrivateKey !== ""
-      : username !== "" && secrets.l2tpPassword !== "" && secrets.ipsecPsk !== "");
+      : backend === "openconnect"
+        ? username !== "" && secrets.openconnectPassword !== ""
+        : username !== "" && secrets.l2tpPassword !== "" && secrets.ipsecPsk !== "");
 
   function save() {
     const dns = splitResolvers(resolvers);
@@ -58,19 +70,31 @@ export function VPNProfileForm({
     const profile: VPNProfile =
       backend === "wireguard"
         ? { ...common, wireguard: { server, peerPublicKey, address } }
-        : {
-            ...common,
-            l2tp: {
-              server,
-              username,
-              ...(ike === "" ? {} : { ike }),
-              ...(esp === "" ? {} : { esp }),
-            },
-          };
+        : backend === "openconnect"
+          ? {
+              ...common,
+              openconnect: {
+                server,
+                username,
+                protocol,
+                ...(serverCertificate === "" ? {} : { serverCertificate }),
+              },
+            }
+          : {
+              ...common,
+              l2tp: {
+                server,
+                username,
+                ...(ike === "" ? {} : { ike }),
+                ...(esp === "" ? {} : { esp }),
+              },
+            };
     const carried: VPNSecrets =
       backend === "wireguard"
         ? { wireguardPrivateKey: secrets.wireguardPrivateKey }
-        : { l2tpPassword: secrets.l2tpPassword, ipsecPsk: secrets.ipsecPsk };
+        : backend === "openconnect"
+          ? { openconnectPassword: secrets.openconnectPassword }
+          : { l2tpPassword: secrets.l2tpPassword, ipsecPsk: secrets.ipsecPsk };
     onSave(profile, carried);
     setSecrets(emptySecrets);
   }
@@ -87,12 +111,11 @@ export function VPNProfileForm({
           <select
             className={control}
             value={backend}
-            onChange={(event) =>
-              setBackend(event.target.value === "l2tp_ipsec" ? "l2tp_ipsec" : "wireguard")
-            }
+            onChange={(event) => setBackend(event.target.value as Backend)}
           >
             <option value="wireguard">WireGuard</option>
             <option value="l2tp_ipsec">L2TP/IPsec</option>
+            <option value="openconnect">OpenConnect</option>
           </select>
         </Field>
         <Field label={t("vpn.target")} hint={t("vpn.targetHint")}>
@@ -121,6 +144,34 @@ export function VPNProfileForm({
               hint={t("vpn.secretHint")}
               value={secrets.wireguardPrivateKey}
               onChange={(value) => setSecrets({ ...secrets, wireguardPrivateKey: value })}
+            />
+          </>
+        ) : backend === "openconnect" ? (
+          <>
+            <Field label={t("vpn.username")}>
+              <input className={control} value={username} onChange={(event) => setUsername(event.target.value)} />
+            </Field>
+            <Field label={t("vpn.protocol")} hint={t("vpn.protocolHint")}>
+              <select className={control} value={protocol} onChange={(event) => setProtocol(event.target.value)}>
+                {openConnectProtocols.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label={t("vpn.serverCertificate")} hint={t("vpn.serverCertificateHint")}>
+              <input
+                className={control}
+                value={serverCertificate}
+                onChange={(event) => setServerCertificate(event.target.value)}
+              />
+            </Field>
+            <PasswordField
+              label={t("vpn.password")}
+              hint={t("vpn.secretHint")}
+              value={secrets.openconnectPassword}
+              onChange={(value) => setSecrets({ ...secrets, openconnectPassword: value })}
             />
           </>
         ) : (

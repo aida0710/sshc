@@ -103,6 +103,7 @@ output-options:
     - VPNProfile
     - WireGuardProfile
     - L2TPProfile
+    - OpenConnectProfile
     - VPNOverview
     - VPNSession
     - VPNTunnel

@@ -27,7 +27,7 @@ Traffic to the target is fail closed. The container rejects packets to the targe
 
 ## What "does not touch the host" covers
 
-The host default route, DNS, NetworkManager and an already-connected VPN are left alone. Neither `--privileged` nor `--network host` is used. The container gets `CAP_NET_ADMIN` and one tunnel device (`/dev/net/tun` for WireGuard, `/dev/ppp` for L2TP/IPsec).
+The host default route, DNS, NetworkManager and an already-connected VPN are left alone. Neither `--privileged` nor `--network host` is used. The container gets one tunnel device (`/dev/net/tun` for WireGuard and OpenConnect, `/dev/ppp` for L2TP/IPsec) and only the capabilities that backend needs; for WireGuard everything but `CAP_NET_ADMIN`, `CAP_NET_RAW`, `CAP_DAC_OVERRIDE` and `CAP_CHOWN` is dropped.
 
 It is not unrelated to the host: it uses Docker's bridge and the kernel's tunnel support, and anyone who can drive Docker generally holds strong host privileges. What is isolated is the VPN's routes, DNS and connection state, and the application traffic sent into it.
 
@@ -37,15 +37,17 @@ Create one from the VPN screen or with `sshc vpn add <name>`. One profile reache
 
 | Field | Meaning |
 |---|---|
-| Type | WireGuard or L2TP/IPsec |
+| Type | WireGuard, L2TP/IPsec, or OpenConnect (AnyConnect, ocserv, GlobalProtect and friends) |
 | Target inside the VPN | `host:port`. An IPv4 address, or a name the VPN's own DNS can resolve |
 | DNS inside the VPN | Only when the target is a name. Up to three IPv4 addresses |
-| VPN server | `host:port` for WireGuard, a hostname or address for L2TP/IPsec |
-| Secrets | A private key for WireGuard; the VPN password and IPsec pre-shared key for L2TP/IPsec |
+| VPN server | `host:port` for WireGuard, a hostname or address for L2TP/IPsec and OpenConnect |
+| Secrets | A private key for WireGuard; the VPN password and IPsec pre-shared key for L2TP/IPsec; the VPN password for OpenConnect |
 
 Secrets are kept in the vault. They are never returned to the screen or the API, and settings can be edited without entering them again.
 
 For L2TP/IPsec, set IKE and ESP proposals only when an older device rejects the defaults.
+
+For OpenConnect, choose the protocol the device speaks (`anyconnect`, `nc`, `pulse`, `gp`, `f5`, `fortinet`, `array`); leave `anyconnect` if unsure. A device with a self-signed certificate needs its fingerprint, starting with `sha256:`; without one the certificate is verified normally and the route is refused if it does not verify. OpenConnect routes and DNS handed out by the device are not installed: only the single route to the target is.
 
 ### Naming a target inside the VPN
 

@@ -4319,6 +4319,7 @@ components:
         wireguardPrivateKey: { type: string, minLength: 44, maxLength: 44 }
         l2tpPassword: { type: string, minLength: 1, maxLength: 256 }
         ipsecPsk: { type: string, minLength: 1, maxLength: 256 }
+        openconnectPassword: { type: string, minLength: 1, maxLength: 256 }
     VPNBindingRequest:
       type: object
       additionalProperties: false
@@ -4344,6 +4345,22 @@ components:
           items: { type: string, minLength: 7, maxLength: 15 }
         wireguard: { $ref: "#/components/schemas/WireGuardProfile" }
         l2tp: { $ref: "#/components/schemas/L2TPProfile" }
+        openconnect: { $ref: "#/components/schemas/OpenConnectProfile" }
+    OpenConnectProfile:
+      type: object
+      additionalProperties: false
+      required: [server, username]
+      properties:
+        # VPN装置の名前またはアドレス。名前はコンテナの中で引く。
+        server: { type: string, minLength: 1, maxLength: 320 }
+        username: { type: string, minLength: 1, maxLength: 256 }
+        # その装置が話す方式（anyconnect / nc / pulse / gp / f5 / fortinet / array）。
+        # 空なら anyconnect。backend と同じく、ここでは形だけを見る。新しい版が
+        # 書いた方式を古い版が読めなくなると、その機械では metadata を保存できない。
+        protocol: { type: string, maxLength: 32 }
+        # 相手の証明書を固定する指紋（`sha256:...`）。公的な認証局の証明書を
+        # 使う装置では空でよい。
+        serverCertificate: { type: string, maxLength: 128 }
     L2TPProfile:
       type: object
       additionalProperties: false

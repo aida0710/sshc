@@ -204,9 +204,9 @@ func TestBuiltBinaryServesTheEmbeddedUIAndStopsOnSIGTERM(t *testing.T) {
 		t.Fatalf("the binary did not exit within 10s of SIGTERM; stderr:\n%s", stderr.String())
 	}
 
-	// プロセスが終了すればポートは解放されていなければならない。
-	// プロセスより長生きした listener はポートを保持し続け、開いた API を漏洩させる。
-	assertPortIsFree(t, host)
+	// プロセスが終わった engine は、もう応えてはならない。プロセスより長生き
+	// した listener は、開いた API を保持し続ける。
+	assertTheEngineNoLongerAnswers(t, client, base, host, document.Secret)
 
 	// 名簿の秘密は、どこにも書き出されてはならない。
 	if strings.Contains(stderr.String(), document.Secret) || strings.Contains(announced, document.Secret) {
@@ -243,11 +243,31 @@ func assertBoundToLoopbackOnly(t testing.TB, hostPort string) {
 	}
 }
 
-func assertPortIsFree(t testing.TB, hostPort string) {
+// assertTheEngineNoLongerAnswers は、終えた engine がもう応えないことを確かめる。
+//
+// ポートが空いたことそのものは確かめない。解放された直後に、並行して走る別の
+// テストが同じ ephemeral port を取ることがある。その相手はこの engine の名簿の
+// 秘密を知らないので、秘密を付けた要求に 200 では答えない。
+func assertTheEngineNoLongerAnswers(t testing.TB, client *http.Client, base, hostPort, secret string) {
 	t.Helper()
 	connection, err := net.DialTimeout("tcp4", hostPort, 500*time.Millisecond)
-	if err == nil {
-		connection.Close()
-		t.Fatalf("%s still accepts connections after the process exited", hostPort)
+	if err != nil {
+		return
+	}
+	_ = connection.Close()
+	request, err := http.NewRequestWithContext(context.Background(), http.MethodGet, base+httpserver.StatusPath, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Host = hostPort
+	request.Header.Set(handoff.HeaderName, secret)
+	answered, err := client.Do(request)
+	if err != nil {
+		return
+	}
+	code := answered.StatusCode
+	readBody(t, answered)
+	if code == http.StatusOK {
+		t.Fatalf("%s still answers as this engine after the process exited", hostPort)
 	}
 }

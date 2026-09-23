@@ -118,6 +118,45 @@ l2tp_ipsec)
 		seconds=$((seconds + 1))
 	done
 	;;
+openconnect)
+	server=$(jq -r '.openconnect.server' "$profile")
+	username=$(jq -r '.openconnect.username' "$profile")
+	protocol=$(jq -r '.openconnect.protocol' "$profile")
+	certificate=$(jq -r '.openconnect.serverCertificate' "$profile")
+	jq -r '.openconnect.script' "$profile" >"$runtime/vpnc-script"
+	chmod 700 "$runtime/vpnc-script"
+	# パスワードは変数にだけ置き、引数にも環境変数にも渡さない。openconnect へは
+	# 標準入力で渡す。
+	password=$(jq -r '.openconnect.password' "$profile")
+	rm -f "$profile"
+	interface=vpn0
+	echo "トンネルを張ります（openconnect）。"
+	set -- --protocol="$protocol" --user="$username" --interface="$interface" \
+		--script="$runtime/vpnc-script" --passwd-on-stdin --non-inter --background \
+		--pid-file="$runtime/openconnect.pid"
+	if [ -n "$certificate" ]; then
+		set -- "$@" --servercert="$certificate"
+	fi
+	# --background は、繋がったあとに自分を背後へ回す。ここが 0 で返らなければ
+	# 繋がっていない。
+	if ! printf '%s\n' "$password" | openconnect "$@" "$server" >"$runtime/openconnect.log" 2>&1; then
+		password=
+		echo "openconnectが接続できませんでした。利用者名・パスワード・方式・証明書を確認してください。" >&2
+		sed -n '1,40p' "$runtime/openconnect.log" >&2
+		exit 1
+	fi
+	password=
+	seconds=0
+	while ! ip -4 address show dev "$interface" 2>/dev/null | grep -q 'inet '; do
+		if [ "$seconds" -ge 45 ]; then
+			echo "openconnectがトンネルのアドレスを受け取れませんでした。" >&2
+			sed -n '1,40p' "$runtime/openconnect.log" >&2
+			exit 1
+		fi
+		sleep 1
+		seconds=$((seconds + 1))
+	done
+	;;
 *)
 	rm -f "$profile"
 	echo "未対応のbackendです: $backend" >&2

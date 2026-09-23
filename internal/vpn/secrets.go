@@ -13,6 +13,7 @@ type secretsDocument struct {
 	WireGuardPrivateKey string `json:"wireguardPrivateKey,omitempty"`
 	L2TPPassword        string `json:"l2tpPassword,omitempty"`
 	IPsecPSK            string `json:"ipsecPsk,omitempty"`
+	OpenConnectPassword string `json:"openconnectPassword,omitempty"`
 }
 
 // EncodeSecrets は、Vault へ保存する一件ぶんの記録を作る。
@@ -21,6 +22,7 @@ func EncodeSecrets(secrets Secrets) (string, error) {
 		WireGuardPrivateKey: secrets.WireGuardPrivateKey,
 		L2TPPassword:        secrets.L2TPPassword,
 		IPsecPSK:            secrets.IPsecPSK,
+		OpenConnectPassword: secrets.OpenConnectPassword,
 	})
 	if err != nil {
 		return "", err
@@ -38,5 +40,6 @@ func DecodeSecrets(stored string) (Secrets, error) {
 		WireGuardPrivateKey: document.WireGuardPrivateKey,
 		L2TPPassword:        document.L2TPPassword,
 		IPsecPSK:            document.IPsecPSK,
+		OpenConnectPassword: document.OpenConnectPassword,
 	}, nil
 }

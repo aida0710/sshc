@@ -3288,6 +3288,7 @@ export interface components {
             wireguardPrivateKey?: string;
             l2tpPassword?: string;
             ipsecPsk?: string;
+            openconnectPassword?: string;
         };
         VPNBindingRequest: {
             alias: string;
@@ -3300,6 +3301,13 @@ export interface components {
             dns?: string[];
             wireguard?: components["schemas"]["WireGuardProfile"];
             l2tp?: components["schemas"]["L2TPProfile"];
+            openconnect?: components["schemas"]["OpenConnectProfile"];
+        };
+        OpenConnectProfile: {
+            server: string;
+            username: string;
+            protocol?: string;
+            serverCertificate?: string;
         };
         L2TPProfile: {
             server: string;

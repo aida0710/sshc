@@ -37,6 +37,20 @@ type VPNProfile struct {
 	WireGuard *WireGuardProfile `json:"wireguard,omitempty"`
 	// L2TP は、backend が l2tp_ipsec のときの設定である。
 	L2TP *L2TPProfile `json:"l2tp,omitempty"`
+	// OpenConnect は、backend が openconnect のときの設定である。
+	OpenConnect *OpenConnectProfile `json:"openconnect,omitempty"`
+}
+
+// OpenConnectProfile は、openconnect backend の秘密でない設定である。
+type OpenConnectProfile struct {
+	// Server は、VPN装置の名前またはアドレスである。名前はコンテナの中で引く。
+	Server string `json:"server"`
+	// Username は、VPNの利用者名である。パスワードは Vault にある。
+	Username string `json:"username"`
+	// Protocol は、その装置が話す方式である。空なら anyconnect。
+	Protocol string `json:"protocol,omitempty"`
+	// ServerCertificate は、相手の証明書を固定する指紋である（`sha256:...`）。
+	ServerCertificate string `json:"serverCertificate,omitempty"`
 }
 
 // L2TPProfile は、l2tp_ipsec backend の秘密でない設定である。
@@ -81,6 +95,14 @@ func (stored VPNProfile) Profile() (vpn.Profile, error) {
 			Server:        server,
 			PeerPublicKey: stored.WireGuard.PeerPublicKey,
 			Address:       stored.WireGuard.Address,
+		}
+	}
+	if stored.OpenConnect != nil {
+		profile.OpenConnect = &vpn.OpenConnectSettings{
+			Server:            stored.OpenConnect.Server,
+			Username:          stored.OpenConnect.Username,
+			Protocol:          stored.OpenConnect.Protocol,
+			ServerCertificate: stored.OpenConnect.ServerCertificate,
 		}
 	}
 	if stored.L2TP != nil {
@@ -128,7 +150,9 @@ func validateVPNProfiles(profiles []VPNProfile) error {
 		if stored.Backend == "" {
 			return fmt.Errorf("%w: %s に backend がありません", ErrMetadataVPN, stored.Name)
 		}
-		if backend := vpn.BackendName(stored.Backend); backend != vpn.WireGuard && backend != vpn.L2TPIPsec {
+		switch vpn.BackendName(stored.Backend) {
+		case vpn.WireGuard, vpn.L2TPIPsec, vpn.OpenConnect:
+		default:
 			continue
 		}
 		if _, err := stored.Profile(); err != nil {

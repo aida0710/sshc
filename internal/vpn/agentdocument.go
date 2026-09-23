@@ -15,10 +15,25 @@ type agentDocument struct {
 	Backend string           `json:"backend"`
 	Target  endpointDocument `json:"target"`
 	// DNS は、接続先の名前をVPNの中で引くためのDNSサーバーである。
-	DNS         []string           `json:"dns,omitempty"`
-	SocketOwner int                `json:"socketOwner"`
-	WireGuard   *wireGuardDocument `json:"wireguard,omitempty"`
-	L2TP        *l2tpDocument      `json:"l2tp,omitempty"`
+	DNS         []string             `json:"dns,omitempty"`
+	SocketOwner int                  `json:"socketOwner"`
+	WireGuard   *wireGuardDocument   `json:"wireguard,omitempty"`
+	L2TP        *l2tpDocument        `json:"l2tp,omitempty"`
+	OpenConnect *openConnectDocument `json:"openconnect,omitempty"`
+}
+
+// openConnectDocument は、agent が openconnect を呼ぶのに要るものである。
+// パスワードは agent が標準入力で openconnect へ渡し、引数には置かない。
+type openConnectDocument struct {
+	Server   string `json:"server"`
+	Username string `json:"username"`
+	Protocol string `json:"protocol"`
+	// ServerCertificate は、相手の証明書を固定する指紋である。空なら公的な
+	// 認証局として検証させる。
+	ServerCertificate string `json:"serverCertificate"`
+	// Script は、openconnect が接続の前後に呼ぶ本文である。
+	Script   string `json:"script"`
+	Password string `json:"password"`
 }
 
 // l2tpDocument は、agent が置くだけの本文と、agent が自分で引く相手である。
@@ -67,6 +82,15 @@ func newAgentDocument(profile Profile, secrets Secrets, socketOwner int) (string
 		document.L2TP = &l2tpDocument{
 			Server:    profile.L2TP.Server,
 			Documents: l2tpDocuments(*profile.L2TP, secrets),
+		}
+	case OpenConnect:
+		document.OpenConnect = &openConnectDocument{
+			Server:            profile.OpenConnect.Server,
+			Username:          profile.OpenConnect.Username,
+			Protocol:          openConnectProtocol(*profile.OpenConnect),
+			ServerCertificate: profile.OpenConnect.ServerCertificate,
+			Script:            openConnectScript(),
+			Password:          secrets.OpenConnectPassword,
 		}
 	}
 	encoded, err := json.Marshal(document)
@@ -119,7 +143,9 @@ func allowedAddresses(profile Profile) []string {
 // ログに現れうる。
 func redact(text string, secrets Secrets) string {
 	replacements := make([]string, 0, 8)
-	for _, value := range []string{secrets.WireGuardPrivateKey, secrets.L2TPPassword, secrets.IPsecPSK} {
+	for _, value := range []string{
+		secrets.WireGuardPrivateKey, secrets.L2TPPassword, secrets.IPsecPSK, secrets.OpenConnectPassword,
+	} {
 		if value == "" {
 			continue
 		}

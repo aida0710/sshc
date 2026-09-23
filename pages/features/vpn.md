@@ -27,7 +27,7 @@ SSHの握手、認証、ホスト鍵の照合、ssh-agentの利用はengineが�
 
 ## ホストに影響しない範囲
 
-ホストの既定経路、DNS、NetworkManager、既に繋いでいるVPNの設定は変更しません。`--privileged`と`--network host`も使いません。コンテナへ渡す追加権限は`CAP_NET_ADMIN`、渡すデバイスは方式ごとのトンネル用デバイス（WireGuardは`/dev/net/tun`、L2TP/IPsecは`/dev/ppp`）だけです。
+ホストの既定経路、DNS、NetworkManager、既に繋いでいるVPNの設定は変更しません。`--privileged`と`--network host`も使いません。渡すデバイスは方式ごとのトンネル用デバイス（WireGuardとOpenConnectは`/dev/net/tun`、L2TP/IPsecは`/dev/ppp`）だけです。追加権限は方式ごとに要るものだけを渡し、WireGuardでは`CAP_NET_ADMIN`・`CAP_NET_RAW`・`CAP_DAC_OVERRIDE`・`CAP_CHOWN`以外をすべて落とします。
 
 完全に無関係ではありません。Dockerのbridgeとカーネルのトンネル機能を使います。Dockerを操作できる利用者は一般に強いホスト権限を持ちます。隔離するのは、VPNの経路・DNS・接続状態と、VPNへ送るアプリケーション通信です。
 
@@ -37,15 +37,17 @@ VPN画面（または`sshc vpn add <名前>`）から作成します。1つの�
 
 | 項目 | 内容 |
 |---|---|
-| 方式 | WireGuard、またはL2TP/IPsec |
+| 方式 | WireGuard、L2TP/IPsec、またはOpenConnect（AnyConnect、ocserv、GlobalProtectなど） |
 | VPNの中の接続先 | `host:port`。IPv4アドレス、またはVPNの中のDNSで引ける名前 |
 | VPNの中のDNS | 接続先を名前で書くときだけ指定します。IPv4アドレスを3件まで |
-| VPNサーバー | WireGuardは`host:port`、L2TP/IPsecはホスト名またはアドレス |
-| 秘密 | WireGuardは秘密鍵、L2TP/IPsecはVPNのパスワードとIPsecの事前共有鍵 |
+| VPNサーバー | WireGuardは`host:port`、L2TP/IPsecとOpenConnectはホスト名またはアドレス |
+| 秘密 | WireGuardは秘密鍵、L2TP/IPsecはVPNのパスワードとIPsecの事前共有鍵、OpenConnectはVPNのパスワード |
 
 秘密はVaultに保存します。画面にもAPIの応答にも戻りません。保存済みの秘密を残したまま設定だけを直せます。
 
 L2TP/IPsecで古い装置と暗号方式が合わない場合だけ、IKEとESPの候補を指定します。空なら既定に任せます。
+
+OpenConnectでは、装置が話す方式（`anyconnect`、`nc`、`pulse`、`gp`、`f5`、`fortinet`、`array`）を選びます。分からなければ`anyconnect`のままにします。自己署名の証明書を使う装置では、`sha256:`で始まる指紋を指定します。指定しない場合は通常の証明書検証を行い、検証できなければ繋ぎません。OpenConnectでは、装置が配る既定経路とDNSは入れません。経路は接続先ひとつぶんだけを作ります。
 
 ### VPNの中の名前で接続先を書く
 
