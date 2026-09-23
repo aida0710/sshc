@@ -53,7 +53,7 @@ backend_up() {
 	second_factor=
 	if ! wait_for_address; then
 		sed -n '1,40p' "$runtime/openconnect.log" >&2
-		fail openconnect_failed "VPNサーバーからトンネルのアドレスを取得できませんでした。"
+		fail openconnect_failed "VPNサーバーからトンネルのアドレスを取得するのに失敗しました。"
 	fi
 }
 

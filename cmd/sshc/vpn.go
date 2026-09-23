@@ -90,14 +90,14 @@ func runVPN(ctx context.Context, called vpnInvocation, environment commandEnviro
 		}
 	case vpnRemove:
 		confirmed, exit := confirmAction(ctx, called.Yes,
-			fmt.Sprintf("VPNプロファイル %q と、保存済みの秘密、この経路を使う接続の設定を削除しますか？ [y/N] ",
+			fmt.Sprintf("VPNプロファイル %q を削除しますか？保存済みのシークレットと、このプロファイルを使う接続の設定も削除されます。 [y/N] ",
 				safeTerminalCell(called.Name)),
 			systemActionConfirmer, stderr)
 		if exit != 0 {
 			return exit
 		}
 		if !confirmed {
-			fmt.Fprintln(stdout, "何も変更していません。")
+			fmt.Fprintln(stdout, "キャンセルしました。何も変更していません。")
 			return 0
 		}
 		if err := engine.sendJSON(ctx, http.MethodDelete, vpnProfilePath(called.Name), nil, &overview); err != nil {
@@ -107,7 +107,7 @@ func runVPN(ctx context.Context, called vpnInvocation, environment commandEnviro
 		// 経路が立つまで待つあいだ、何も出ないと止まって見える。初回はイメージの
 		// 用意だけで分単位になる。
 		if !called.JSON {
-			fmt.Fprintf(stderr, "%s のVPNに接続しています。初回はイメージの作成に数分かかることがあります…\n",
+			fmt.Fprintf(stderr, "%s のVPNに接続しています。初回はコンテナイメージの作成に数分かかることがあります…\n",
 				safeTerminalCell(called.Name))
 		}
 		if err := engine.sendJSON(ctx, http.MethodPost, vpnProfilePath(called.Name)+"/session", struct{}{}, &overview); err != nil {
@@ -422,7 +422,7 @@ func base64KeyBytes(key []byte) bool {
 // writeVPNOverview は、一覧と状態を人向けに書く。
 func writeVPNOverview(out io.Writer, overview httpserver.VPNOverview) {
 	if !overview.Available {
-		fmt.Fprintf(out, "このマシンではVPN経路を使用できません: %s\n\n", safeTerminalCell(overview.Detail))
+		fmt.Fprintf(out, "このマシンではVPN機能を使用できません: %s\n\n", safeTerminalCell(overview.Detail))
 	}
 	if len(overview.Profiles) == 0 {
 		fmt.Fprintln(out, "VPNプロファイルはありません。sshc vpn add <名前> で作成できます。")
@@ -564,7 +564,7 @@ func runVPNProxy(ctx context.Context, called vpnInvocation, environment commandE
 		fromRelay <- err
 	}()
 	if _, err := io.Copy(relay, environment.stdin); err != nil {
-		fmt.Fprintf(environment.stderr, "sshc: VPN経路への書き込みに失敗しました: %v\n", err)
+		fmt.Fprintf(environment.stderr, "sshc: VPN接続でのデータ送信に失敗しました: %v\n", err)
 		return 1
 	}
 	// 送る側が終わったことを相手へ伝える。伝えないと、相手は入力の終わりを
@@ -573,7 +573,7 @@ func runVPNProxy(ctx context.Context, called vpnInvocation, environment commandE
 		_ = half.CloseWrite()
 	}
 	if err := <-fromRelay; err != nil {
-		fmt.Fprintf(environment.stderr, "sshc: VPN経路からの読み取りに失敗しました: %v\n", err)
+		fmt.Fprintf(environment.stderr, "sshc: VPN接続でのデータ受信に失敗しました: %v\n", err)
 		return 1
 	}
 	return 0

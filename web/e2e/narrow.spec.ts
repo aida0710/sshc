@@ -281,7 +281,7 @@ test("explains an older vault with both schema versions on mobile", async ({ pag
 
   await page.goto(installation.url);
   await page.getByLabel("マスターパスワード", { exact: true }).fill(masterPassword);
-  await page.getByRole("button", { name: "開く" }).click();
+  await page.getByRole("button", { name: "ロックを解除" }).click();
 
   await expect(page.getByRole("alert")).toContainText(
     "Vault のバージョンが古いです（必要なバージョン：4、現在：3）。",
@@ -306,7 +306,7 @@ test("reports a completed vault migration with both versions on mobile", async (
   await expect(page.getByText(/ローカルセッション稼働中/).first()).toBeAttached();
 
   await page.goto(new URL("/vault/passwords", installation.url).toString());
-  await page.getByRole("button", { name: "sshc をロック" }).click();
+  await page.getByRole("button", { name: "Vaultをロック" }).click();
   const unlocked = await page.evaluate(async (passphrase) => {
     const csrf = window.sessionStorage.getItem("sshc.session.csrf") ?? "";
     const response = await fetch("/api/v1/passwords/unlock", {
@@ -326,7 +326,7 @@ test("reports a completed vault migration with both versions on mobile", async (
     });
   });
   await page.getByLabel("マスターパスワード", { exact: true }).fill(masterPassword);
-  await page.getByRole("button", { name: "開く" }).click();
+  await page.getByRole("button", { name: "ロックを解除" }).click();
 
   await expect(page.getByText("Vault をバージョン 4 から 5 へ安全に更新しました。")).toBeVisible();
   await expectNoHorizontalOverflow(page, "vault migration notice");

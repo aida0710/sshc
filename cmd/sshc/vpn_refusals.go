@@ -16,12 +16,12 @@ import (
 // vpnRefusalSentences は、理由の語を持たない拒否のコードと、その言い方である。
 var vpnRefusalSentences = map[string]string{
 	"vpn_profile_unknown":       "指定したVPNプロファイルが見つかりません。sshc vpn list で名前を確認してください。",
-	"vpn_target_mismatch":       "この接続先は、そのVPNプロファイルの接続先と一致しません。",
-	"vpn_docker_missing":        "Dockerを使用できません。Dockerが起動しているか、このユーザーに操作する権限があるかを確認してください。",
+	"vpn_target_mismatch":       "この接続の接続先が、指定したVPNプロファイルの接続先と一致しません。",
+	"vpn_docker_missing":        "Dockerを使用できません。Dockerが起動しているか、現在のユーザーにDockerを操作する権限があるかを確認してください。",
 	"vpn_tunnel_device_missing": "この方式に必要なデバイスがこのマシンにありません。",
-	"vpn_image_build_failed":    "VPNコンテナのイメージを作成できませんでした。ネットワークとDockerを確認してください。",
-	"vpn_container_foreign":     "同じ名前の別のコンテナがあるため、操作を中止しました。",
-	"connection_unknown":        "この接続にはsshcの設定を保存できません。",
+	"vpn_image_build_failed":    "VPNのコンテナイメージの作成に失敗しました。ネットワークとDockerを確認してください。",
+	"vpn_container_foreign":     "sshc以外が作成した同じ名前のコンテナがあるため、操作を中止しました。",
+	"connection_unknown":        "この接続にはVPNプロファイルを設定できません。Includeしたファイルやワイルドカードの Host だけで定義された接続は、sshcで編集できません。",
 	"vault_locked":              "Vaultがロックされています。sshc vault unlock でロックを解除してからやり直してください。",
 	"vault_missing":             "Vaultがまだありません。sshc vault create で作成してからやり直してください。",
 }
@@ -38,7 +38,7 @@ var vpnFieldReasons = map[vpn.Reason]string{
 	vpn.ReasonUnroutable:   "ループバックアドレスなど、使用できないアドレスです。",
 	vpn.ReasonNameNeedsDNS: "ホスト名で指定する場合は、VPN内のDNSサーバーも指定してください。",
 	vpn.ReasonUnsupported:  "このバージョンでは使用できない値です。",
-	vpn.ReasonUnexpected:   "選択した方式とは別の方式の設定です。",
+	vpn.ReasonUnexpected:   "選択した方式では使用しない設定項目です。",
 }
 
 // vpnFailureReasons は、経路を用意できなかった理由の語と、その言い方である。
@@ -63,8 +63,8 @@ func describeVPNRefusal(problem engineProblem, called vpnInvocation) (string, bo
 				safeTerminalCell(called.Rename)), true
 		}
 		name := safeTerminalCell(called.Name)
-		return fmt.Sprintf("%s という名前のVPNプロファイルはすでにあります。作り直すときは sshc vpn remove %s で"+
-			"削除してから追加し、名前を変えるときは sshc vpn rename を使ってください。", name, name), true
+		return fmt.Sprintf("%s という名前のVPNプロファイルはすでにあります。作り直す場合は、sshc vpn remove %s で"+
+			"削除してから追加してください。既存のプロファイルの名前を変更する場合は、sshc vpn rename を使用してください。", name, name), true
 	case "vpn_profile_invalid", "vpn_secrets_missing":
 		return describeVPNField(problem), true
 	case "vpn_session_failed":
@@ -84,9 +84,9 @@ func describeVPNField(problem engineProblem) string {
 	sentence, known := vpnFieldReasons[vpn.Reason(problem.Reason)]
 	if problem.Field == "" || !known {
 		if problem.Code == "vpn_secrets_missing" {
-			return "このプロファイルの秘密が保存されていません。"
+			return "このVPNプロファイルのシークレット（秘密鍵やパスワード）が保存されていません。"
 		}
-		return "この設定ではVPN経路を作成できません。接続先とサーバーの指定を確認してください。"
+		return "VPNプロファイルに使用できない値があります。接続先とVPNサーバーの指定を確認してください。"
 	}
 	if problem.Limit > 0 {
 		sentence = fmt.Sprintf(sentence, problem.Limit)

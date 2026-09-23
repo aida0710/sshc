@@ -98,7 +98,7 @@ backend_down() { :; }
 seconds=0
 while [ ! -f "$profile" ]; do
 	if [ "$seconds" -ge "$profile_wait_seconds" ]; then
-		echo "設定を受け取れないまま時間切れになりました。" >&2
+		echo "設定の受け取りがタイムアウトしました。" >&2
 		exit 1
 	fi
 	pause 1
@@ -155,7 +155,7 @@ case "$target_host" in
 	if [ -z "$target_address" ]; then
 		fail target_unresolved "VPN内で接続先の名前解決に失敗しました: $target_host"
 	fi
-	echo "接続先 $target_host を $target_address に解決しました。"
+	echo "接続先 $target_host のアドレスは $target_address です。"
 	backend_allow "$target_address"
 	;;
 *)

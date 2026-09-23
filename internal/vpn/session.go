@@ -142,7 +142,7 @@ func (manager *Manager) configureContainer(
 // 利用者は何を用意すればよいかを知れる。
 func requireTunnelDevice(device string) error {
 	if _, err := os.Stat(device); err != nil {
-		return fmt.Errorf("%w: %s がこのマシンにありません", ErrTunnelDevice, device)
+		return fmt.Errorf("%w: %s", ErrTunnelDevice, device)
 	}
 	return nil
 }
