@@ -417,3 +417,14 @@ func (s *Service) WithVPNSecretsTransaction(
 | 改名 | 動いている経路を止めてから改名する | 動いたままにし、次に使うときに新しい名前で作り直す（同じ装置へ一時的に2本つながる） |
 | aptのsnapshot固定 | 固定する。セキュリティ更新は、sshcの版を上げるときに日付を上げて取り込む | 固定しない（今の動き。同じタグで中身が機械ごとに違う） |
 | engine側ソケット | 新設する | WebSocketでHTTP APIの上に流す |
+
+## 10. 実装で設計から変えたこと
+
+| 項目 | 設計 | 実装 | 理由 |
+|---|---|---|---|
+| 失敗したときのログ | 生のログは`sshc vpn logs`で読む | 用意できなかったコンテナは片付ける前にログを（秘密を伏せて）engineが覚え、`Logs`はコンテナが無ければそれを返す | 片付けるとコンテナのログも消え、理由を読む手段が無くなるため |
+| agentの分割 | `backend-l2tp.sh` | `backend-l2tp_ipsec.sh` | backend名から機械的にファイルを選び、名前の対応表を持たないため |
+| backend interface | `agentSection(...) (any, error)` | `writeAgentSection(request, *agentDocument) error`、`ownSecrets(Secrets) Secrets` を追加 | agent文書の型を`any`にしないため。更新時に方式の違う秘密を落とすため |
+| 更新 | 送られた秘密を重ねる | 同じ。更新にもVaultの解錠が要る | 重ねた結果を`ValidateSecrets`で確かめるには保存済みの秘密を読む必要があるため |
+| aptの固定 | `apt-get update --snapshot` | `APT::Snapshot`をapt.confに書き、取得時だけTLSの相手確認を外す | baseのイメージにCA証明書が無く、snapshotはHTTPSでしか配られないため。中身はaptが署名で確かめる |
+| テスト用のocserv | — | テスト側のapt取得もDockerfileと同じ方法にした | イメージがsnapshotの設定を持つため |

@@ -103,15 +103,17 @@ A route opens when it is needed and closes when it is not. Stopping the engine c
 
 If you interrupt a connection with `Ctrl-C` while it is waiting, or close the page, the container that was being prepared does not remain.
 
+Closing a route tells the VPN device first. OpenConnect sends a logout, and L2TP/IPsec sends an L2TP disconnect and ends the IPsec session. No session is left behind on the device, so its concurrent-connection slot is freed as well.
+
 Connecting again reopens the route. One that needs approval on the phone will ask for it again.
 
 ## When a route will not come up
 
-While a route is open, the VPN screen and `sshc vpn` show the tunnel's interface, its address inside the VPN and when it opened. If that much is there, the tunnel itself is up.
+While a route is open, the VPN screen and `sshc vpn` show the tunnel's interface, its address inside the VPN and when it opened. If that much is there, the tunnel itself is up. A WireGuard route does not open until the peer has completed a handshake, so a wrong key or server shows a reason instead of an open route.
 
 When a route does not come up, the screen and `sshc vpn up` say why as far as it is known, for example that the WireGuard peer never completed a handshake or that PPP authentication failed.
 
-If it is not there, or the tunnel is up but the target is still unreachable, read the container's output: **Logs** on the VPN screen, or `sshc vpn logs <name>`. The stored secrets are replaced by `[REDACTED]`, so the output can be pasted as it is. You never need to run `docker logs` yourself.
+If it is not there, or the tunnel is up but the target is still unreachable, read the container's output: **Logs** on the VPN screen, or `sshc vpn logs <name>`. A container that failed to come up is cleaned away, but the engine keeps its output, so it can still be read the same way. The stored secrets are replaced by `[REDACTED]`, so the output can be pasted as it is. You never need to run `docker logs` yourself.
 
 ## Using the route from the host's `ssh`, `scp` and `git`
 
