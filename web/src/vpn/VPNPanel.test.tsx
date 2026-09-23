@@ -89,6 +89,27 @@ describe("VPNPanel", () => {
       { wireguardPrivateKey: "aAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAA=" },
     );
     expect(within(form).getByLabelText("Private key")).toHaveValue("");
+    expect(saveVPNProfile.mock.calls[0]?.[0]).not.toHaveProperty("dns");
+  });
+
+  it("sends the VPN's own DNS servers with a profile whose target is a name", async () => {
+    const user = userEvent.setup();
+    const saveVPNProfile = vi.fn().mockResolvedValue(overview());
+    render(<VPNPanel api={buildApi({ saveVPNProfile })} />);
+    const form = await screen.findByRole("region", { name: "Add a VPN profile" });
+
+    await user.type(within(form).getByLabelText("Name"), "lab");
+    await user.type(within(form).getByLabelText("Target inside the VPN"), "lab.example.jp:22");
+    await user.type(within(form).getByLabelText("VPN server"), "vpn.example.jp:51820");
+    await user.type(within(form).getByLabelText("DNS inside the VPN"), "10.9.9.53, 10.9.9.54");
+    await user.type(within(form).getByLabelText("Peer public key"), "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=");
+    await user.type(within(form).getByLabelText("Private key"), "aAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAA=");
+    await user.click(within(form).getByRole("button", { name: "Save" }));
+
+    expect(saveVPNProfile).toHaveBeenCalledWith(
+      expect.objectContaining({ target: "lab.example.jp:22", dns: ["10.9.9.53", "10.9.9.54"] }),
+      expect.anything(),
+    );
   });
 
   it("routes a chosen connection through the profile", async () => {

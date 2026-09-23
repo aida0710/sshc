@@ -40,6 +40,8 @@ backend=$(jq -r '.backend' "$profile")
 target_host=$(jq -r '.target.host' "$profile")
 target_port=$(jq -r '.target.port' "$profile")
 socket_owner=$(jq -r '.socketOwner' "$profile")
+# VPNの中で名前を引くDNSサーバー。空なら、接続先はアドレスで書かれている。
+resolvers=$(jq -r 'if .dns then .dns[] else empty end' "$profile" | tr '\n' ' ')
 
 case "$backend" in
 wireguard)
@@ -65,10 +67,6 @@ l2tp_ipsec)
 	server_address=$(getent ahostsv4 "$server" | awk 'NR==1{print $1}')
 	if [ -z "$server_address" ]; then
 		echo "VPN装置の名前を引けませんでした: $server" >&2
-		exit 1
-	fi
-	if [ "$server_address" = "$target_host" ]; then
-		echo "VPN装置と接続先が同じアドレスです。" >&2
 		exit 1
 	fi
 	sed -i "s|%SERVER_ADDRESS%|$server_address|g" "$runtime/ipsec.conf" "$runtime/xl2tpd.conf"
@@ -127,11 +125,60 @@ l2tp_ipsec)
 	;;
 esac
 
+# VPNの中のDNSは、この経路の中だけで使う。問い合わせもトンネルの中にしか出さ
+# ない。ホストのresolv.confもDockerの既定のDNSも、このコンテナの外では変わらない。
+if [ -n "$resolvers" ]; then
+	for resolver in $resolvers; do
+		ip route replace "$resolver/32" dev "$interface"
+		iptables -A OUTPUT -d "$resolver" ! -o "$interface" -j REJECT
+	done
+	: >"$runtime/resolv.conf"
+	for resolver in $resolvers; do
+		printf 'nameserver %s\n' "$resolver" >>"$runtime/resolv.conf"
+	done
+	# /etc/resolv.conf は Docker の bind mount である。置き換えられないので、
+	# 中身だけを書き換える。
+	cat "$runtime/resolv.conf" >/etc/resolv.conf
+fi
+
+# 接続先が名前なら、VPNの中で引く。ホストで引くと、同じ名前が指す別の機械へ
+# 繋ぎうる。引けたアドレスだけが、この経路が触ってよい相手である。
+case "$target_host" in
+*[!0-9.]*)
+	target_address=$(getent ahostsv4 "$target_host" | awk 'NR==1{print $1}')
+	if [ -z "$target_address" ]; then
+		echo "VPNの中で接続先の名前を引けませんでした: $target_host" >&2
+		exit 1
+	fi
+	echo "接続先 $target_host は $target_address でした。"
+	if [ "$backend" = wireguard ]; then
+		# 名前を引く前は、トンネルが運ぶのはDNSサーバーへの通信だけだった。
+		# 引けた接続先をここで足す。
+		allowed=""
+		for resolver in $resolvers; do
+			allowed="$allowed$resolver/32,"
+		done
+		wg set "$interface" peer "$(wg show "$interface" peers | head -1)" \
+			allowed-ips "$allowed$target_address/32"
+	fi
+	;;
+*)
+	target_address=$target_host
+	;;
+esac
+
+# VPN装置そのものを接続先にしない。トンネルの外側と内側が同じ相手になり、
+# 経路とパケットフィルタが互いを打ち消す。
+if [ "${server_address:-}" = "$target_address" ]; then
+	echo "VPN装置と接続先が同じアドレスです。" >&2
+	exit 1
+fi
+
 # 接続先への経路は、このコンテナのトンネルの中にしか作らない。
-ip route replace "$target_host/32" dev "$interface"
+ip route replace "$target_address/32" dev "$interface"
 # トンネル以外から接続先へ出ようとする通信は拒む。トンネルが落ちているあいだ、
 # 接続先への通信がDockerの通常回線へ流れることはない。
-iptables -A OUTPUT -d "$target_host" ! -o "$interface" -j REJECT
+iptables -A OUTPUT -d "$target_address" ! -o "$interface" -j REJECT
 
 mkdir -p "$socket_directory"
 
@@ -139,17 +186,17 @@ mkdir -p "$socket_directory"
 # docker exec を呼ばずに状態を見せられるので、画面の更新が docker の応答に
 # 引きずられない。秘密は書かない。
 tunnel_address=$(ip -4 -o address show dev "$interface" 2>/dev/null | awk '{print $4}' | head -1)
-printf '{"backend":"%s","interface":"%s","address":"%s","since":"%s"}\n' \
-	"$backend" "$interface" "$tunnel_address" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+printf '{"backend":"%s","interface":"%s","address":"%s","since":"%s","targetAddress":"%s"}\n' \
+	"$backend" "$interface" "$tunnel_address" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$target_address" \
 	>"$socket_directory/status.json"
 chmod 644 "$socket_directory/status.json"
 
-echo "接続先 $target_host:$target_port への中継を開きます。"
+echo "接続先 $target_address:$target_port への中継を開きます。"
 # ソケットが現れることが、トンネル・経路・フィルタまで用意できた合図である。
 # engineはホスト側からこのソケットを待ち、現れたらそこへ繋ぐ。
 socat \
 	"UNIX-LISTEN:$socket_directory/relay.sock,fork,unlink-early,mode=0600,user=$socket_owner" \
-	"TCP:$target_host:$target_port" &
+	"TCP:$target_address:$target_port" &
 relay=$!
 
 # トンネルが落ちたら、中継を畳んでこのコンテナも終える。

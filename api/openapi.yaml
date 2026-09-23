@@ -4288,6 +4288,8 @@ components:
         address: { type: string }
         since: { type: string }
         backend: { type: string }
+        # VPNの中で引けた接続先のアドレス。アドレスで書いた場合はその値。
+        targetAddress: { type: string }
     VPNRenameRequest:
       type: object
       additionalProperties: false
@@ -4332,8 +4334,14 @@ components:
       properties:
         name: { type: string, minLength: 1, maxLength: 48 }
         backend: { type: string, minLength: 1, maxLength: 32 }
-        # この VPN の中にある接続先。`host:port` で書く。
+        # この VPN の中にある接続先。`host:port` で書く。host はIPv4アドレスか、
+        # VPNの中のDNSで引ける名前。
         target: { type: string, minLength: 3, maxLength: 128 }
+        # 接続先の名前をVPNの中で引くDNSサーバー（IPv4）。アドレスで書くなら要らない。
+        dns:
+          type: array
+          maxItems: 3
+          items: { type: string, minLength: 7, maxLength: 15 }
         wireguard: { $ref: "#/components/schemas/WireGuardProfile" }
         l2tp: { $ref: "#/components/schemas/L2TPProfile" }
     L2TPProfile:

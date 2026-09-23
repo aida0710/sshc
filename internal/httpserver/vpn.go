@@ -45,6 +45,8 @@ type vpnTunnelResponse struct {
 	Address   string `json:"address,omitempty"`
 	Since     string `json:"since,omitempty"`
 	Backend   string `json:"backend,omitempty"`
+	// TargetAddress は、VPNの中で引けた接続先のアドレスである。
+	TargetAddress string `json:"targetAddress,omitempty"`
 }
 
 type vpnLogsResponse struct {
@@ -263,6 +265,7 @@ func (h VPNHandlers) respond(c *echo.Context) error {
 					session.Tunnel = &vpnTunnelResponse{
 						Interface: status.Tunnel.Interface, Address: status.Tunnel.Address,
 						Since: status.Tunnel.Since, Backend: status.Tunnel.Backend,
+						TargetAddress: status.Tunnel.TargetAddress,
 					}
 				}
 			}

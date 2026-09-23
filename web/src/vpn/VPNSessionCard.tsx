@@ -97,6 +97,7 @@ function TunnelDetail({ tunnel }: { tunnel: NonNullable<VPNSession["tunnel"]> })
       label: t("vpn.tunnelSince"),
       value: tunnel.since === undefined || tunnel.since === "" ? "" : formatDateTime(tunnel.since, locale),
     },
+    { label: t("vpn.tunnelTargetAddress"), value: tunnel.targetAddress ?? "" },
   ].filter((row) => row.value !== "");
   if (rows.length === 0) return null;
   return (

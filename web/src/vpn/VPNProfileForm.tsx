@@ -16,6 +16,14 @@ type DraftSecrets = {
 
 const emptySecrets: DraftSecrets = { wireguardPrivateKey: "", l2tpPassword: "", ipsecPsk: "" };
 
+// splitResolvers は、読み取った DNS の並びを一件ずつに分ける。
+function splitResolvers(value: string): string[] {
+  return value
+    .split(",")
+    .map((resolver) => resolver.trim())
+    .filter((resolver) => resolver !== "");
+}
+
 export function VPNProfileForm({
   busy,
   onSave,
@@ -27,6 +35,7 @@ export function VPNProfileForm({
   const [name, setName] = useState("");
   const [backend, setBackend] = useState<"wireguard" | "l2tp_ipsec">("wireguard");
   const [target, setTarget] = useState("");
+  const [resolvers, setResolvers] = useState("");
   const [server, setServer] = useState("");
   const [peerPublicKey, setPeerPublicKey] = useState("");
   const [address, setAddress] = useState("10.0.0.2/32");
@@ -44,13 +53,13 @@ export function VPNProfileForm({
       : username !== "" && secrets.l2tpPassword !== "" && secrets.ipsecPsk !== "");
 
   function save() {
+    const dns = splitResolvers(resolvers);
+    const common = { name, backend, target, ...(dns.length === 0 ? {} : { dns }) };
     const profile: VPNProfile =
       backend === "wireguard"
-        ? { name, backend, target, wireguard: { server, peerPublicKey, address } }
+        ? { ...common, wireguard: { server, peerPublicKey, address } }
         : {
-            name,
-            backend,
-            target,
+            ...common,
             l2tp: {
               server,
               username,
@@ -91,6 +100,9 @@ export function VPNProfileForm({
         </Field>
         <Field label={t("vpn.server")}>
           <input className={control} value={server} onChange={(event) => setServer(event.target.value)} />
+        </Field>
+        <Field label={t("vpn.dns")} hint={t("vpn.dnsHint")}>
+          <input className={control} value={resolvers} onChange={(event) => setResolvers(event.target.value)} />
         </Field>
         {backend === "wireguard" ? (
           <>

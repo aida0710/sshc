@@ -1142,6 +1142,7 @@ export const ja = {
   "vpn.tunnelInterface": "インターフェース",
   "vpn.tunnelAddress": "トンネル側のアドレス",
   "vpn.tunnelSince": "経路の開始",
+  "vpn.tunnelTargetAddress": "接続先のアドレス",
   "vpn.removeTitle": "{name}を削除しますか？",
   "vpn.removeBody":
     "このプロファイルと、保存した秘密と、この経路を通る設定になっている接続の紐付けを削除します。動いている経路は止めます。",
@@ -1156,7 +1157,9 @@ export const ja = {
   "vpn.name": "名前",
   "vpn.backend": "方式",
   "vpn.target": "VPNの中の接続先",
-  "vpn.targetHint": "`host:port`で書きます。VPN内のDNSは使わないため、IPv4アドレスを指定します。",
+  "vpn.targetHint": "`host:port`で書きます。IPv4アドレスか、下のDNSで引ける名前を指定します。",
+  "vpn.dns": "VPNの中のDNS",
+  "vpn.dnsHint": "接続先を名前で書くときだけ指定します。IPv4アドレスをカンマ区切りで3件まで。",
   "vpn.server": "VPNサーバー",
   "vpn.peerPublicKey": "相手の公開鍵",
   "vpn.address": "トンネル側のアドレス",

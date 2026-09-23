@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"reflect"
 	"strings"
 )
 
@@ -58,12 +59,19 @@ func (endpoint Endpoint) Address() string {
 type Profile struct {
 	Name    string
 	Backend BackendName
-	// Target は、このVPNの中にある接続先である。VPN内DNSを使わないため、
-	// ホストはIPアドレスで指定する。
-	Target    Endpoint
+	// Target は、このVPNの中にある接続先である。IPv4アドレスか、VPNの中の
+	// DNSで引ける名前を書く。名前で書くときは DNS が要る。
+	Target Endpoint
+	// DNS は、VPNの中で名前を引くDNSサーバーである（IPv4）。この経路の中
+	// だけで使い、ホストのDNSもコンテナの既定のDNSも変えない。
+	DNS       []string
 	WireGuard *WireGuardSettings
 	L2TP      *L2TPSettings
 }
+
+// maxResolvers は、1つの経路が使うDNSサーバーの数の上限である。VPNの中の名前
+// ひとつを引くためのもので、並べるほど引ける名前が増えるわけではない。
+const maxResolvers = 3
 
 // WireGuardSettings は、wireguard backendの秘密でない設定である。
 type WireGuardSettings struct {
@@ -98,12 +106,23 @@ type Secrets struct {
 	IPsecPSK string
 }
 
+// sameRouteAs は、この設定がもう一方と同じ経路を作るかを返す。
+//
+// 設定が変わったコンテナは作り直す。古い設定のまま繋ぎ続けると、利用者が直した
+// 先へ行かない。
+func (profile Profile) sameRouteAs(other Profile) bool {
+	return reflect.DeepEqual(profile, other)
+}
+
 // Validate は、このプロファイルで経路を作れるかを確かめる。
 func (profile Profile) Validate() error {
 	if err := validateProfileName(profile.Name); err != nil {
 		return err
 	}
-	if err := validateTarget(profile.Target); err != nil {
+	if err := validateResolvers(profile.DNS); err != nil {
+		return err
+	}
+	if err := validateTarget(profile.Target, profile.DNS); err != nil {
 		return err
 	}
 	switch profile.Backend {
@@ -142,20 +161,67 @@ func validateProfileName(name string) error {
 	return nil
 }
 
-// validateTarget は、接続先がIPv4アドレスとポートであることを確かめる。
+// validateTarget は、接続先がIPv4アドレスか、引ける名前であることを確かめる。
 //
-// 名前を許すと、どちらの名前空間で引くのかが決まらない。コンテナの中で引けば
-// VPN内DNSの話になり、ホストで引けばVPNの中の名前が引けない。
-func validateTarget(target Endpoint) error {
+// 名前はコンテナの中で、この経路のDNSだけを使って引く。どちらの名前空間で引く
+// のかが決まらないまま名前を許すと、ホストで引いた別の機械へ繋ぎうる。だから
+// 名前で書くときはDNSを必ず添えさせる。
+func validateTarget(target Endpoint, resolvers []string) error {
+	if target.Port <= 0 || target.Port > 65535 {
+		return fmt.Errorf("%w: ポート %d", ErrTarget, target.Port)
+	}
 	address, err := netip.ParseAddr(target.Host)
-	if err != nil || !address.Is4() {
+	if err != nil {
+		if len(resolvers) == 0 {
+			return fmt.Errorf("%w: %q を名前で書くには、VPNの中のDNSサーバーが要ります", ErrTarget, target.Host)
+		}
+		return validateHostName(target.Host)
+	}
+	if !address.Is4() {
 		return fmt.Errorf("%w: %q はIPv4アドレスではありません", ErrTarget, target.Host)
 	}
 	if address.IsUnspecified() || address.IsLoopback() || address.IsMulticast() {
 		return fmt.Errorf("%w: %q へは経路を作れません", ErrTarget, target.Host)
 	}
-	if target.Port <= 0 || target.Port > 65535 {
-		return fmt.Errorf("%w: ポート %d", ErrTarget, target.Port)
+	return nil
+}
+
+// validateHostName は、コンテナの中でそのまま引ける名前だけを通す。
+//
+// この名前は agent が sh の変数として扱う。区切り文字や空白が混じったものを
+// 渡すと、名前を引く以外のことが起こりうる。
+func validateHostName(name string) error {
+	if name == "" || len(name) > 253 {
+		return fmt.Errorf("%w: %q は接続先の名前として使えません", ErrTarget, name)
+	}
+	for _, label := range strings.Split(strings.TrimSuffix(name, "."), ".") {
+		if label == "" || len(label) > 63 || strings.HasPrefix(label, "-") || strings.HasSuffix(label, "-") {
+			return fmt.Errorf("%w: %q は接続先の名前として使えません", ErrTarget, name)
+		}
+		for _, character := range label {
+			letter := character >= 'a' && character <= 'z' || character >= 'A' && character <= 'Z'
+			digit := character >= '0' && character <= '9'
+			if !letter && !digit && character != '-' {
+				return fmt.Errorf("%w: %q は接続先の名前として使えません", ErrTarget, name)
+			}
+		}
+	}
+	return nil
+}
+
+// validateResolvers は、VPNの中のDNSサーバーがIPv4アドレスであることを確かめる。
+func validateResolvers(resolvers []string) error {
+	if len(resolvers) > maxResolvers {
+		return fmt.Errorf("%w: DNSサーバーは%d件までです", ErrTarget, maxResolvers)
+	}
+	for _, resolver := range resolvers {
+		address, err := netip.ParseAddr(resolver)
+		if err != nil || !address.Is4() {
+			return fmt.Errorf("%w: DNSサーバー %q はIPv4アドレスではありません", ErrTarget, resolver)
+		}
+		if address.IsUnspecified() || address.IsLoopback() || address.IsMulticast() {
+			return fmt.Errorf("%w: DNSサーバー %q へは経路を作れません", ErrTarget, resolver)
+		}
 	}
 	return nil
 }

@@ -3,7 +3,7 @@ package vpn
 import (
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
+	"net/netip"
 	"strings"
 )
 
@@ -12,8 +12,10 @@ import (
 // 秘密を含むので、コマンド引数・環境変数・イメージ・bind mountには置かない。
 // agentは読み終えたらこの文書を消す。
 type agentDocument struct {
-	Backend     string             `json:"backend"`
-	Target      endpointDocument   `json:"target"`
+	Backend string           `json:"backend"`
+	Target  endpointDocument `json:"target"`
+	// DNS は、接続先の名前をVPNの中で引くためのDNSサーバーである。
+	DNS         []string           `json:"dns,omitempty"`
 	SocketOwner int                `json:"socketOwner"`
 	WireGuard   *wireGuardDocument `json:"wireguard,omitempty"`
 	L2TP        *l2tpDocument      `json:"l2tp,omitempty"`
@@ -52,12 +54,13 @@ func newAgentDocument(profile Profile, secrets Secrets, socketOwner int) (string
 	document := agentDocument{
 		Backend:     string(profile.Backend),
 		Target:      endpointDocument{Host: profile.Target.Host, Port: profile.Target.Port},
+		DNS:         profile.DNS,
 		SocketOwner: socketOwner,
 	}
 	switch profile.Backend {
 	case WireGuard:
 		document.WireGuard = &wireGuardDocument{
-			Configuration: wireGuardConfiguration(*profile.WireGuard, profile.Target, secrets),
+			Configuration: wireGuardConfiguration(profile, secrets),
 			Address:       profile.WireGuard.Address,
 		}
 	case L2TPIPsec:
@@ -75,9 +78,10 @@ func newAgentDocument(profile Profile, secrets Secrets, socketOwner int) (string
 
 // wireGuardConfiguration は、wg setconf が読む本文を作る。
 //
-// AllowedIPs は接続先ひとつだけにする。トンネルが運ぶのはその接続先への通信に
+// AllowedIPs は接続先とDNSサーバーだけにする。トンネルが運ぶのはその通信に
 // 限られ、VPNの向こうのネットワーク全体を引き込まない。
-func wireGuardConfiguration(settings WireGuardSettings, target Endpoint, secrets Secrets) string {
+func wireGuardConfiguration(profile Profile, secrets Secrets) string {
+	settings := *profile.WireGuard
 	lines := []string{
 		"[Interface]",
 		"PrivateKey = " + secrets.WireGuardPrivateKey,
@@ -85,13 +89,28 @@ func wireGuardConfiguration(settings WireGuardSettings, target Endpoint, secrets
 		"[Peer]",
 		"PublicKey = " + settings.PeerPublicKey,
 		"Endpoint = " + settings.Server.Address(),
-		fmt.Sprintf("AllowedIPs = %s/32", target.Host),
+		"AllowedIPs = " + strings.Join(allowedAddresses(profile), ", "),
 		// NATの内側からでも経路を保つ。相手が先に話しかけてくる構成でも、
 		// こちらの経路が落ちたままにならない。
 		"PersistentKeepalive = 25",
 		"",
 	}
 	return strings.Join(lines, "\n")
+}
+
+// allowedAddresses は、トンネルが運んでよい相手である。
+//
+// 接続先を名前で書いた場合、そのアドレスはこの時点では分からない。まずDNS
+// サーバーまでを通し、agent がVPNの中で名前を引いてから接続先を足す。
+func allowedAddresses(profile Profile) []string {
+	allowed := make([]string, 0, len(profile.DNS)+1)
+	if _, err := netip.ParseAddr(profile.Target.Host); err == nil {
+		allowed = append(allowed, profile.Target.Host+"/32")
+	}
+	for _, resolver := range profile.DNS {
+		allowed = append(allowed, resolver+"/32")
+	}
+	return allowed
 }
 
 // redact は、表示する文字列から秘密を伏せる。docker logs をそのまま見せない。

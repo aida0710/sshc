@@ -41,7 +41,20 @@ func TestAProfileIsRefusedWhenTheRouteCouldNotBeBuiltFromIt(t *testing.T) {
 		{"名前が空", func(profile *Profile) { profile.Name = "" }, ErrProfileName},
 		{"名前にパス区切り", func(profile *Profile) { profile.Name = "../escape" }, ErrProfileName},
 		{"知らないbackend", func(profile *Profile) { profile.Backend = "openvpn" }, ErrBackend},
-		{"接続先が名前", func(profile *Profile) { profile.Target.Host = "host.example.jp" }, ErrTarget},
+		{"接続先が名前なのにDNSが無い", func(profile *Profile) { profile.Target.Host = "host.example.jp" }, ErrTarget},
+		{"接続先の名前に空白", func(profile *Profile) {
+			profile.Target.Host = "host example.jp"
+			profile.DNS = []string{"10.9.9.53"}
+		}, ErrTarget},
+		{"DNSが名前", func(profile *Profile) {
+			profile.DNS = []string{"dns.example.jp"}
+		}, ErrTarget},
+		{"DNSがループバック", func(profile *Profile) {
+			profile.DNS = []string{"127.0.0.53"}
+		}, ErrTarget},
+		{"DNSが多すぎる", func(profile *Profile) {
+			profile.DNS = []string{"10.9.9.1", "10.9.9.2", "10.9.9.3", "10.9.9.4"}
+		}, ErrTarget},
 		{"接続先がIPv6", func(profile *Profile) { profile.Target.Host = "2001:db8::1" }, ErrTarget},
 		{"接続先がループバック", func(profile *Profile) { profile.Target.Host = "127.0.0.1" }, ErrTarget},
 		{"ポートが範囲外", func(profile *Profile) { profile.Target.Port = 70000 }, ErrTarget},
@@ -65,6 +78,46 @@ func TestAProfileIsRefusedWhenTheRouteCouldNotBeBuiltFromIt(t *testing.T) {
 				t.Fatalf("Validate = %v, want %v", err, test.want)
 			}
 		})
+	}
+}
+
+// 名前の接続先は、VPNの中のDNSを添えたときだけ受け取る。
+func TestANamedTargetIsAcceptedOnceTheVPNHasItsOwnDNS(t *testing.T) {
+	profile := validProfile()
+	profile.Target.Host = "lab.example.jp"
+	profile.DNS = []string{"10.9.9.53"}
+
+	if err := profile.Validate(); err != nil {
+		t.Fatalf("Validate = %v", err)
+	}
+}
+
+// 名前を引く前のトンネルが運ぶのは、DNSサーバーへの通信だけである。
+//
+// 接続先のアドレスはまだ分からない。ここで広く開けると、名前が引けなかった
+// あとも余計な相手へ出られるトンネルが残る。
+func TestATunnelForANamedTargetCarriesOnlyTheResolversUntilTheNameIsResolved(t *testing.T) {
+	profile := validProfile()
+	profile.Target.Host = "lab.example.jp"
+	profile.DNS = []string{"10.9.9.53", "10.9.9.54"}
+
+	document, err := newAgentDocument(profile, Secrets{WireGuardPrivateKey: testPrivateKey}, 1000)
+	if err != nil {
+		t.Fatalf("newAgentDocument = %v", err)
+	}
+
+	var decoded agentDocument
+	if err := json.Unmarshal([]byte(document), &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(decoded.WireGuard.Configuration, "AllowedIPs = 10.9.9.53/32, 10.9.9.54/32") {
+		t.Errorf("configuration = %q", decoded.WireGuard.Configuration)
+	}
+	if strings.Contains(decoded.WireGuard.Configuration, "lab.example.jp") {
+		t.Errorf("引けていない名前がトンネルの設定に入った: %q", decoded.WireGuard.Configuration)
+	}
+	if strings.Join(decoded.DNS, ",") != "10.9.9.53,10.9.9.54" {
+		t.Errorf("dns = %v", decoded.DNS)
 	}
 }
 

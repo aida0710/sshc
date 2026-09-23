@@ -161,6 +161,9 @@ type TunnelStatus struct {
 	Since string `json:"since"`
 	// Backend は、そのとき使った方式である。
 	Backend string `json:"backend"`
+	// TargetAddress は、VPNの中で引けた接続先のアドレスである。接続先を
+	// アドレスで書いた場合は、その値がそのまま入る。
+	TargetAddress string `json:"targetAddress"`
 }
 
 // New は、VPNセッションの管理を作る。
@@ -270,7 +273,7 @@ func (manager *Manager) Start(ctx context.Context, profile Profile, secrets Secr
 	if err != nil {
 		return err
 	}
-	if ours && state.running && state.started == profile && manager.relayPresent(profile.Name) {
+	if ours && state.running && state.started.sameRouteAs(profile) && manager.relayPresent(profile.Name) {
 		running, err := manager.containerRunning(ctx, name)
 		if err == nil && running {
 			return nil

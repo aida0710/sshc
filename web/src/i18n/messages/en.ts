@@ -1140,6 +1140,7 @@ export const en = {
   "vpn.tunnelInterface": "Interface",
   "vpn.tunnelAddress": "Tunnel address",
   "vpn.tunnelSince": "Route opened",
+  "vpn.tunnelTargetAddress": "Target address",
   "vpn.removeTitle": "Remove {name}?",
   "vpn.removeBody":
     "This removes the profile, its stored secrets, and the bindings of connections that reach their host through it. A running route is stopped.",
@@ -1154,7 +1155,9 @@ export const en = {
   "vpn.name": "Name",
   "vpn.backend": "Type",
   "vpn.target": "Target inside the VPN",
-  "vpn.targetHint": "Written as `host:port`. VPN DNS is not used, so give an IPv4 address.",
+  "vpn.targetHint": "Written as `host:port`. An IPv4 address, or a name the DNS servers below can resolve.",
+  "vpn.dns": "DNS inside the VPN",
+  "vpn.dnsHint": "Only needed when the target is a name. Up to three IPv4 addresses, comma separated.",
   "vpn.server": "VPN server",
   "vpn.peerPublicKey": "Peer public key",
   "vpn.address": "Tunnel address",

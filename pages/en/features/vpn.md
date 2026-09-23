@@ -38,13 +38,22 @@ Create one from the VPN screen or with `sshc vpn add <name>`. One profile reache
 | Field | Meaning |
 |---|---|
 | Type | WireGuard or L2TP/IPsec |
-| Target inside the VPN | `host:port`. VPN DNS is not used, so give an IPv4 address |
+| Target inside the VPN | `host:port`. An IPv4 address, or a name the VPN's own DNS can resolve |
+| DNS inside the VPN | Only when the target is a name. Up to three IPv4 addresses |
 | VPN server | `host:port` for WireGuard, a hostname or address for L2TP/IPsec |
 | Secrets | A private key for WireGuard; the VPN password and IPsec pre-shared key for L2TP/IPsec |
 
 Secrets are kept in the vault. They are never returned to the screen or the API, and settings can be edited without entering them again.
 
 For L2TP/IPsec, set IKE and ESP proposals only when an older device rejects the defaults.
+
+### Naming a target inside the VPN
+
+When the target is a name, give the profile the DNS servers that can resolve it. The name is resolved inside the container, using those servers alone: not the host's `resolv.conf`, and not Docker's own DNS. That is what keeps a name that means something else on the host from sending the connection to the wrong machine.
+
+Queries to those servers leave only through the tunnel. The address they returned is shown as the target address on the VPN screen and in `sshc vpn`.
+
+The name is resolved once, when the route opens. If it starts pointing somewhere else afterwards, take the route down and bring it up again.
 
 ## Binding a connection
 
@@ -71,6 +80,5 @@ If it is not there, or the tunnel is up but the target is still unreachable, rea
 - One target per profile, IPv4 only.
 - Not available for hops beyond a jump host: those travel inside the first SSH connection, where this machine's VPN cannot apply.
 - Cannot be combined with `ProxyCommand`, which runs on this machine and is therefore outside the VPN.
-- VPN DNS is not used; targets are given as IPv4 addresses.
 - Not available to the host's own `ssh`, `scp` or `git`. Use sshc's terminal, SFTP or CLI.
 - Verified on Linux so far.

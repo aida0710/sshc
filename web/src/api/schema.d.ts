@@ -3272,6 +3272,7 @@ export interface components {
             address?: string;
             since?: string;
             backend?: string;
+            targetAddress?: string;
         };
         VPNRenameRequest: {
             name: string;
@@ -3296,6 +3297,7 @@ export interface components {
             name: string;
             backend: string;
             target: string;
+            dns?: string[];
             wireguard?: components["schemas"]["WireGuardProfile"];
             l2tp?: components["schemas"]["L2TPProfile"];
         };

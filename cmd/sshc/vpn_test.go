@@ -206,6 +206,25 @@ func TestSecretsWithQuotesSurviveTheRequestBody(t *testing.T) {
 	}
 }
 
+// DNSの並びは、空白を挟んでいても一件ずつに分ける。書かなければ無しとして扱う。
+func TestTheResolversAreReadOneAtATime(t *testing.T) {
+	for _, test := range []struct {
+		name, given string
+		want        []string
+	}{
+		{"空なら無し", "", nil},
+		{"空白だけなら無し", "  ,  ", nil},
+		{"空白を挟んだ並び", " 10.9.9.53 , 10.9.9.54 ", []string{"10.9.9.53", "10.9.9.54"}},
+		{"一件だけ", "10.9.9.53", []string{"10.9.9.53"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := splitVPNResolvers(test.given); strings.Join(got, ",") != strings.Join(test.want, ",") {
+				t.Fatalf("splitVPNResolvers(%q) = %v, want %v", test.given, got, test.want)
+			}
+		})
+	}
+}
+
 // 立ち上がるまで待つあいだ、何を待っているかを言う。失敗したら次に読む場所も言う。
 func TestBringingARouteUpSaysWhatItIsWaitingForAndWhereToLookWhenItFails(t *testing.T) {
 	_, server, stateDir := newSyncCommandHarness(t, func(response http.ResponseWriter, request *http.Request) {

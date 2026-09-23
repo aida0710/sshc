@@ -30,6 +30,9 @@ type VPNProfile struct {
 	Backend string `json:"backend"`
 	// Target は、この VPN の中にある接続先である。`host:port` で書く。
 	Target string `json:"target"`
+	// DNS は、接続先の名前を VPN の中で引くための DNS サーバーである。
+	// 接続先をアドレスで書くなら要らない。
+	DNS []string `json:"dns,omitempty"`
 	// WireGuard は、backend が wireguard のときの設定である。
 	WireGuard *WireGuardProfile `json:"wireguard,omitempty"`
 	// L2TP は、backend が l2tp_ipsec のときの設定である。
@@ -67,6 +70,7 @@ func (stored VPNProfile) Profile() (vpn.Profile, error) {
 		Name:    stored.Name,
 		Backend: vpn.BackendName(stored.Backend),
 		Target:  target,
+		DNS:     append([]string(nil), stored.DNS...),
 	}
 	if stored.WireGuard != nil {
 		server, err := parseEndpoint(stored.WireGuard.Server)

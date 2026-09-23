@@ -49,6 +49,8 @@ type vpnTunnel struct {
 	Address   string `json:"address,omitempty"`
 	Since     string `json:"since,omitempty"`
 	Backend   string `json:"backend,omitempty"`
+	// TargetAddress は、VPNの中で引けた接続先のアドレスである。
+	TargetAddress string `json:"targetAddress,omitempty"`
 }
 
 type vpnLogs struct {
@@ -64,6 +66,7 @@ type vpnStoredProfile struct {
 	Name      string               `json:"name"`
 	Backend   string               `json:"backend"`
 	Target    string               `json:"target"`
+	DNS       []string             `json:"dns,omitempty"`
 	WireGuard *vpnRequestWireGuard `json:"wireguard,omitempty"`
 	L2TP      *vpnRequestL2TP      `json:"l2tp,omitempty"`
 }
@@ -195,7 +198,14 @@ func addVPNProfile(
 	if err != nil {
 		return err
 	}
-	profile := vpnRequestProfile{Name: name, Backend: backend, Target: target}
+	// 接続先を名前で書くなら、その名前をVPNの中で引くDNSが要る。アドレスで
+	// 書くなら空のままでよい。
+	resolvers, err := promptVisibleSetup(ctx, stdin, prompt,
+		"DNS servers inside the VPN (comma separated, blank for none): ", "")
+	if err != nil {
+		return err
+	}
+	profile := vpnRequestProfile{Name: name, Backend: backend, Target: target, DNS: splitVPNResolvers(resolvers)}
 	var secrets []vpnSecretField
 	switch backend {
 	case "wireguard":
@@ -303,6 +313,7 @@ type vpnRequestProfile struct {
 	Name      string               `json:"name"`
 	Backend   string               `json:"backend"`
 	Target    string               `json:"target"`
+	DNS       []string             `json:"dns,omitempty"`
 	WireGuard *vpnRequestWireGuard `json:"wireguard,omitempty"`
 	L2TP      *vpnRequestL2TP      `json:"l2tp,omitempty"`
 }
@@ -396,9 +407,29 @@ func writeVPNOverview(out io.Writer, overview vpnOverview) {
 		if session.Tunnel != nil && session.Tunnel.Interface != "" {
 			rows = append(rows, [2]string{"", fmt.Sprintf("tunnel: %s %s since %s",
 				session.Tunnel.Interface, session.Tunnel.Address, session.Tunnel.Since)})
+			if session.Tunnel.TargetAddress != "" && session.Tunnel.TargetAddress != session.Profile.Target {
+				rows = append(rows, [2]string{"", "target address: " + session.Tunnel.TargetAddress})
+			}
+		}
+		if len(session.Profile.DNS) > 0 {
+			rows = append(rows, [2]string{"", "dns: " + strings.Join(session.Profile.DNS, ", ")})
 		}
 	}
 	writeSyncRows(out, rows)
+}
+
+// splitVPNResolvers は、読み取った DNS の並びを一件ずつに分ける。空なら無し。
+func splitVPNResolvers(value string) []string {
+	resolvers := make([]string, 0, 3)
+	for _, part := range strings.Split(value, ",") {
+		if trimmed := strings.TrimSpace(part); trimmed != "" {
+			resolvers = append(resolvers, trimmed)
+		}
+	}
+	if len(resolvers) == 0 {
+		return nil
+	}
+	return resolvers
 }
 
 // vpnPhaseWord は、経路を用意している段階を人向けの一語に直す。
