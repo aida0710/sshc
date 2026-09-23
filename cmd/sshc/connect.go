@@ -116,8 +116,13 @@ func runConnect(ctx context.Context, alias string, environment commandEnvironmen
 
 	writeConnectionNotices(stderr, answer)
 	// engine は ProxyJump を含む接続経路を解決済み。保存値が無い場合は端末で入力する。
-	connection, err := app.NewCLIConnection(home,
-		savedPassphraseFor(answer), savedPasswordFor(answer), savedTOTPFor(answer))
+	connection, err := app.NewCLIConnection(app.CLIConnectionOptions{
+		Home:        home,
+		Passphrase:  savedPassphraseFor(answer),
+		Password:    savedPasswordFor(answer),
+		OneTimeCode: savedTOTPFor(answer),
+		VPNRoute:    vpnRouteThroughEngine(stateDir, client),
+	})
 	if err != nil {
 		fmt.Fprintf(stderr, "sshc: %v\n", err)
 		return 1

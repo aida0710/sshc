@@ -31,6 +31,11 @@ func TestHandwrittenHTTPWireTypesMatchOpenAPIRecursively(t *testing.T) {
 	document := readOpenAPIDocument(t)
 	contracts := map[string]any{
 		"Problem":                         problemPayload{},
+		"VPNOverview":                     vpnOverviewResponse{},
+		"VPNSession":                      vpnSessionResponse{},
+		"VPNProfileRequest":               vpnProfileRequest{},
+		"VPNSecrets":                      vpnSecretsRequest{},
+		"VPNBindingRequest":               vpnBindingRequest{},
 		"HistoryList":                     historyList{},
 		"TerminalBackground":              application.Background{},
 		"TerminalBackgroundList":          backgroundListResponse{},

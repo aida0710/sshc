@@ -51,9 +51,11 @@ const migrationBaseVersion = 4
 // registeredDocumentMigrationsが本番で許可する唯一の経路である。SchemaVersionを
 // 上げる変更は、直前versionをkeyとするstepと旧版fixtureを同じcommitで追加する。
 // 現在はschema 4を出発点とし、TOTP用の独立した名前空間とhost bindingを
-// schema 5で追加した。既存の秘密値には触れず、空のmapだけを初期化する。
+// schema 5で、VPNプロファイルの秘密の名前空間をschema 6で追加した。既存の
+// 秘密値には触れず、空のmapだけを初期化する。
 var registeredDocumentMigrations = migrationRegistry{
 	4: initialiseTOTPFields,
+	5: initialiseVPNFields,
 }
 
 func initialiseTOTPFields(fields map[string]json.RawMessage) error {
@@ -61,6 +63,11 @@ func initialiseTOTPFields(fields map[string]json.RawMessage) error {
 	fields["totps"] = empty
 	fields["totpHosts"] = empty
 	fields["totpBindings"] = empty
+	return nil
+}
+
+func initialiseVPNFields(fields map[string]json.RawMessage) error {
+	fields["vpns"] = json.RawMessage(`{}`)
 	return nil
 }
 

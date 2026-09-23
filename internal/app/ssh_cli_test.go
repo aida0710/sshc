@@ -7,7 +7,7 @@ import (
 )
 
 func TestCLIConnectionAlwaysShowsBasicConnectionProgress(t *testing.T) {
-	connection, err := NewCLIConnection(t.TempDir(), nil, nil, nil)
+	connection, err := NewCLIConnection(CLIConnectionOptions{Home: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -25,6 +25,7 @@ const (
 	invocationUpdate
 	invocationService
 	invocationOTP
+	invocationVPN
 	invocationHelp
 	invocationVersion
 	invocationTransport
@@ -84,6 +85,29 @@ type syncInvocation struct {
 	Enabled bool
 }
 
+type vpnAction uint8
+
+const (
+	vpnInvalid vpnAction = iota
+	vpnList
+	vpnAdd
+	vpnRemove
+	vpnUp
+	vpnDown
+	vpnBind
+	vpnUnbind
+)
+
+type vpnInvocation struct {
+	Action vpnAction
+	// Name は、VPNプロファイルの名前である。unbind では空になる。
+	Name string
+	// Alias は、紐付けを変える接続である。bind と unbind だけが使う。
+	Alias string
+	JSON  bool
+	Yes   bool
+}
+
 type otpAction uint8
 
 const (
@@ -120,6 +144,7 @@ type invocation struct {
 	Terminal  *terminalInvocation
 	SFTP      *sftpInvocation
 	OTP       *otpInvocation
+	VPN       *vpnInvocation
 }
 
 // parseInvocation は、コマンドが誰の責務を求めるかを副作用なしに決める。
@@ -208,6 +233,8 @@ func parseInvocation(argv []string) (invocation, error) {
 		return parsed, nil
 	case cliCommandOtp:
 		return parseOTPInvocation(args)
+	case cliCommandVpn:
+		return parseVPNInvocation(args)
 	case cliCommandVault:
 		if helpRequested(args) {
 			return helpInvocation(canonicalCLICommand(cliCommandVault)), nil
@@ -247,6 +274,100 @@ func parseInvocation(argv []string) (invocation, error) {
 	}
 
 	return invalidInvocation(fmt.Sprintf("unknown command %q", word))
+}
+
+// parseVPNInvocation は、VPN経路の操作を決める。
+//
+// 秘密を引数で受け取らない。追加は対話で no-echo に読む。
+func parseVPNInvocation(args []string) (invocation, error) {
+	if helpRequested(args) {
+		return helpInvocation(canonicalCLICommand(cliCommandVpn)), nil
+	}
+	if len(args) > 1 && validVPNAction(args[0]) && isHelpFlag(args[1]) {
+		return helpInvocation(canonicalCLICommand(cliCommandVpn) + " " + args[0]), nil
+	}
+	if len(args) == 0 {
+		return invocation{Kind: invocationVPN, VPN: &vpnInvocation{Action: vpnList}}, nil
+	}
+	if len(args) == 1 && args[0] == "--json" {
+		return invocation{Kind: invocationVPN, VPN: &vpnInvocation{Action: vpnList, JSON: true}}, nil
+	}
+	switch args[0] {
+	case "add":
+		if len(args) != 2 || args[1] == "" {
+			return invalidInvocation("vpn add requires exactly one profile name")
+		}
+		return invocation{Kind: invocationVPN, VPN: &vpnInvocation{Action: vpnAdd, Name: args[1]}}, nil
+	case "remove":
+		if len(args) < 2 || len(args) > 3 || args[1] == "" {
+			return invalidInvocation("vpn remove requires one profile name and optionally --yes")
+		}
+		yes := false
+		if len(args) == 3 {
+			if args[2] != "-y" && args[2] != "--yes" {
+				return invalidInvocation("vpn remove only accepts -y or --yes")
+			}
+			yes = true
+		}
+		return invocation{Kind: invocationVPN, VPN: &vpnInvocation{Action: vpnRemove, Name: args[1], Yes: yes}}, nil
+	case "up", "down":
+		action := vpnUp
+		if args[0] == "down" {
+			action = vpnDown
+		}
+		called, err := vpnNameWithJSON(args, action)
+		if err != nil {
+			return invalidInvocation("vpn " + args[0] + " requires one profile name and optionally --json")
+		}
+		return called, nil
+	case "bind":
+		if len(args) < 3 || len(args) > 4 || args[1] == "" || args[2] == "" {
+			return invalidInvocation("vpn bind requires an alias and a profile name")
+		}
+		called := &vpnInvocation{Action: vpnBind, Alias: args[1], Name: args[2]}
+		if len(args) == 4 {
+			if args[3] != "--json" {
+				return invalidInvocation("vpn bind only accepts --json")
+			}
+			called.JSON = true
+		}
+		return invocation{Kind: invocationVPN, VPN: called}, nil
+	case "unbind":
+		if len(args) < 2 || len(args) > 3 || args[1] == "" {
+			return invalidInvocation("vpn unbind requires one alias and optionally --json")
+		}
+		called := &vpnInvocation{Action: vpnUnbind, Alias: args[1]}
+		if len(args) == 3 {
+			if args[2] != "--json" {
+				return invalidInvocation("vpn unbind only accepts --json")
+			}
+			called.JSON = true
+		}
+		return invocation{Kind: invocationVPN, VPN: called}, nil
+	}
+	return invalidInvocation("vpn requires add, remove, up, down, bind, or unbind")
+}
+
+func vpnNameWithJSON(args []string, action vpnAction) (invocation, error) {
+	if len(args) < 2 || len(args) > 3 || args[1] == "" {
+		return invalidInvocation("")
+	}
+	called := &vpnInvocation{Action: action, Name: args[1]}
+	if len(args) == 3 {
+		if args[2] != "--json" {
+			return invalidInvocation("")
+		}
+		called.JSON = true
+	}
+	return invocation{Kind: invocationVPN, VPN: called}, nil
+}
+
+func validVPNAction(name string) bool {
+	switch name {
+	case "add", "remove", "up", "down", "bind", "unbind":
+		return true
+	}
+	return false
 }
 
 func parseOTPInvocation(args []string) (invocation, error) {

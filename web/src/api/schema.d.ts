@@ -470,6 +470,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/vpn": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getVPNOverview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/vpn/profiles/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["saveVPNProfile"];
+        post?: never;
+        delete: operations["deleteVPNProfile"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/vpn/profiles/{name}/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["startVPNSession"];
+        delete: operations["stopVPNSession"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/vpn/bindings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["setConnectionVPN"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sync": {
         parameters: {
             query?: never;
@@ -3107,6 +3175,7 @@ export interface components {
              * @enum {string}
              */
             osc52?: "allow" | "deny";
+            vpn?: string;
         };
         TerminalAppearance: {
             palette?: string;
@@ -3146,6 +3215,49 @@ export interface components {
             backgrounds?: components["schemas"]["BackgroundSettings"];
             groups?: components["schemas"]["GroupMetadata"][];
             hosts?: components["schemas"]["HostMetadata"][];
+            vpnProfiles?: components["schemas"]["VPNProfile"][];
+        };
+        VPNOverview: {
+            available: boolean;
+            detail?: string;
+            profiles: components["schemas"]["VPNSession"][];
+        };
+        VPNSession: {
+            profile: components["schemas"]["VPNProfile"];
+            running: boolean;
+            relaySocket: string;
+            connections: string[];
+        };
+        VPNProfileRequest: {
+            profile: components["schemas"]["VPNProfile"];
+            secrets?: components["schemas"]["VPNSecrets"];
+        };
+        VPNSecrets: {
+            wireguardPrivateKey?: string;
+            l2tpPassword?: string;
+            ipsecPsk?: string;
+        };
+        VPNBindingRequest: {
+            alias: string;
+            profile: string;
+        };
+        VPNProfile: {
+            name: string;
+            backend: string;
+            target: string;
+            wireguard?: components["schemas"]["WireGuardProfile"];
+            l2tp?: components["schemas"]["L2TPProfile"];
+        };
+        L2TPProfile: {
+            server: string;
+            username: string;
+            ike?: string;
+            esp?: string;
+        };
+        WireGuardProfile: {
+            server: string;
+            peerPublicKey: string;
+            address: string;
         };
         BackgroundSettings: {
             capacityMiB?: number;
@@ -4633,6 +4745,156 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TerminalSessionList"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+        };
+    };
+    getVPNOverview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Configured VPN profiles, their sessions, and whether this machine can open routes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VPNOverview"];
+                };
+            };
+            401: components["responses"]["Problem"];
+        };
+    };
+    saveVPNProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VPNProfileRequest"];
+            };
+        };
+        responses: {
+            /** @description Profile stored. Secrets are kept in the vault and never returned */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VPNOverview"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+        };
+    };
+    deleteVPNProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Profile, its secrets, and the bindings that named it were removed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VPNOverview"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+        };
+    };
+    startVPNSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The route is up and its relay is listening */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VPNOverview"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+        };
+    };
+    stopVPNSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The container was stopped and its relay socket removed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VPNOverview"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+        };
+    };
+    setConnectionVPN: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VPNBindingRequest"];
+            };
+        };
+        responses: {
+            /** @description The connection now reaches its host through the named profile */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VPNOverview"];
                 };
             };
             400: components["responses"]["Problem"];

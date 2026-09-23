@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net"
 	"os"
 	"strings"
 	"time"
@@ -36,18 +37,31 @@ type sshParts struct {
 	dialer   sshclient.Dialer
 	resolve  sshclient.Resolver
 	encoding func(string) (textencoding.Name, error)
-	home     string
+	// vpnBinding は、この alias が通るVPNプロファイルの名前を返す。
+	vpnBinding func(string) (string, error)
+	home       string
+}
+
+// sshDependencies は、プロセス内 SSH クライアントが要るものである。
+//
+// 数が多いので名前で渡す。位置で渡すと、同じ形の関数がいくつも並ぶ呼び出しに
+// なり、取り違えてもコンパイルが通る。
+type sshDependencies struct {
+	config      *application.Service
+	knownHosts  *knownhosts.Service
+	home        string
+	passphrase  func(absolute string) (string, bool)
+	password    func(target sshclient.Target) (string, bool)
+	oneTimeCode func(target sshclient.Target, question string) (string, bool)
+	// vpnRoute は、名前の付いたVPN経路を通して接続先へ繋ぐ。nil なら、VPNを
+	// 指定した接続は断る。経路を作れない機械で素の回線へ落とさないためである。
+	vpnRoute func(ctx context.Context, profile, address string) (net.Conn, error)
 }
 
 // newSSHParts は、プロセス内 SSH の部品一式を組む。
-func newSSHParts(
-	config *application.Service,
-	hosts *knownhosts.Service,
-	home string,
-	passphrase func(absolute string) (string, bool),
-	password func(target sshclient.Target) (string, bool),
-	oneTimeCode func(target sshclient.Target, question string) (string, bool),
-) sshParts {
+func newSSHParts(dependencies sshDependencies) sshParts {
+	config, hosts, home := dependencies.config, dependencies.knownHosts, dependencies.home
+	passphrase, password, oneTimeCode := dependencies.passphrase, dependencies.password, dependencies.oneTimeCode
 	return sshParts{
 		dialer: sshclient.Dialer{
 			ObserveOS: func(target sshclient.Target) func(string) {
@@ -70,6 +84,7 @@ func newSSHParts(
 				Read: readKnownHosts(hosts),
 				Add:  addKnownHost(hosts),
 			},
+			DialVPN: dependencies.vpnRoute,
 		},
 		resolve: func(alias string) (effective.Values, error) {
 			if config == nil {
@@ -82,6 +97,12 @@ func newSSHParts(
 				return "", errNoConfiguration
 			}
 			return config.ConnectionEncoding(alias)
+		},
+		vpnBinding: func(alias string) (string, error) {
+			if config == nil {
+				return "", errNoConfiguration
+			}
+			return config.ConnectionVPN(alias)
 		},
 		home: home,
 	}
@@ -98,6 +119,11 @@ func (p sshParts) target(alias string) (sshclient.Target, error) {
 		return sshclient.Target{}, err
 	}
 	target.Encoding = encoding
+	profile, err := p.vpnBinding(alias)
+	if err != nil {
+		return sshclient.Target{}, err
+	}
+	target.VPN = profile
 	return target, nil
 }
 
@@ -327,13 +353,24 @@ func addKnownHost(hosts *knownhosts.Service) func(knownhosts.Candidate) error {
 // CLIConnection は、`sshc <接続先>` が使うプロセス内 SSH である。
 type CLIConnection struct{ parts sshParts }
 
+// CLIConnectionOptions は、コマンドライン用の接続が要るものである。
+//
+// 数が多いので名前で渡す。位置で渡すと、同じ形の関数がいくつも並ぶ呼び出しに
+// なり、取り違えてもコンパイルが通る。
+type CLIConnectionOptions struct {
+	Home        string
+	Passphrase  func(relativePath string) (string, bool)
+	Password    func(target sshclient.Target) (string, bool)
+	OneTimeCode func(target sshclient.Target, question string) (string, bool)
+	// VPNRoute は、名前の付いたVPN経路を通して接続先へ繋ぐ。nil なら、VPNを
+	// 指定した接続は素の回線へ落とさずに断る。
+	VPNRoute func(ctx context.Context, profile, address string) (net.Conn, error)
+}
+
 // NewCLIConnection は、ホームディレクトリひとつからコマンドライン用の接続を組む。
-func NewCLIConnection(
-	home string,
-	passphrase func(relativePath string) (string, bool),
-	password func(target sshclient.Target) (string, bool),
-	oneTimeCode func(target sshclient.Target, question string) (string, bool),
-) (CLIConnection, error) {
+func NewCLIConnection(options CLIConnectionOptions) (CLIConnection, error) {
+	home, passphrase := options.Home, options.Passphrase
+	password, oneTimeCode := options.Password, options.OneTimeCode
 	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
 	if err != nil {
 		return CLIConnection{}, err
@@ -353,7 +390,14 @@ func NewCLIConnection(
 		return passphrase(relative)
 	}
 
-	parts := newSSHParts(config, hosts, workspace.Home(), stored, password, oneTimeCode)
+	// コマンドラインの接続は、engine が解決した接続情報を受け取って自分で繋ぐ。
+	// VPN 経路もコンテナも engine が持つので、ここは engine が差し出す中継へ
+	// 繋ぐだけである。渡されていなければ、VPN を指定した接続は断る。
+	parts := newSSHParts(sshDependencies{
+		config: config, knownHosts: hosts, home: workspace.Home(),
+		passphrase: stored, password: password, oneTimeCode: oneTimeCode,
+		vpnRoute: options.VPNRoute,
+	})
 	configuredVerbosity := parts.dialer.Verbosity
 	// `sshc ssh` はブラウザの接続中表示を持たないため、最低限の接続段階を
 	// 常に端末へ残す。詳細度を上げた設定はそのまま尊重する。

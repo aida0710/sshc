@@ -595,6 +595,87 @@ paths:
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
+  # VPN 経路。接続ひとつだけを専用の VPN へ通す。秘密は応答に現れない。
+  /api/v1/vpn:
+    get:
+      operationId: getVPNOverview
+      responses:
+        "200":
+          description: Configured VPN profiles, their sessions, and whether this machine can open routes
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VPNOverview" }
+        "401": { $ref: "#/components/responses/Problem" }
+  /api/v1/vpn/profiles/{name}:
+    parameters:
+      - { name: name, in: path, required: true, schema: { type: string, minLength: 1, maxLength: 48 } }
+    put:
+      operationId: saveVPNProfile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VPNProfileRequest" }
+      responses:
+        "200":
+          description: Profile stored. Secrets are kept in the vault and never returned
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VPNOverview" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: deleteVPNProfile
+      responses:
+        "200":
+          description: Profile, its secrets, and the bindings that named it were removed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VPNOverview" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /api/v1/vpn/profiles/{name}/session:
+    parameters:
+      - { name: name, in: path, required: true, schema: { type: string, minLength: 1, maxLength: 48 } }
+    post:
+      operationId: startVPNSession
+      responses:
+        "200":
+          description: The route is up and its relay is listening
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VPNOverview" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: stopVPNSession
+      responses:
+        "200":
+          description: The container was stopped and its relay socket removed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VPNOverview" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /api/v1/vpn/bindings:
+    put:
+      operationId: setConnectionVPN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VPNBindingRequest" }
+      responses:
+        "200":
+          description: The connection now reaches its host through the named profile
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VPNOverview" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
   /api/v1/sync:
     get:
       operationId: getSyncStatus
@@ -4060,6 +4141,9 @@ components:
           type: string
           enum: [allow, deny]
           description: Per-connection OSC 52 override. Omitted inherits the terminal default.
+        # 通る VPN プロファイルの名前。ssh_config には書かない。OpenSSH が解釈する
+        # 語ではなく、sshc だけが持つ紐付けだからである。
+        vpn: { type: string, maxLength: 48 }
     # 端末の表示設定。接続単位と全体設定を項目ごとに解決し、未設定項目はアプリの
     # テーマを使う。配色とフォントは名前で参照し、未知の名前は既定値へ戻す。
     TerminalAppearance:
@@ -4124,6 +4208,93 @@ components:
         backgrounds: { $ref: "#/components/schemas/BackgroundSettings" }
         groups: { type: array, items: { $ref: "#/components/schemas/GroupMetadata" } }
         hosts: { type: array, items: { $ref: "#/components/schemas/HostMetadata" } }
+        vpnProfiles: { type: array, maxItems: 64, items: { $ref: "#/components/schemas/VPNProfile" } }
+    # 接続ごとに通せる VPN 経路の定義。秘密は Vault にあり、この文書には無い。
+    # 接続先はひとつに限る。経路とパケットフィルタが接続先ひとつで閉じる。
+    VPNOverview:
+      type: object
+      additionalProperties: false
+      required: [available, profiles]
+      properties:
+        # この機械で経路を作れるか。作れない理由は detail に書く。隠さずに返す。
+        available: { type: boolean }
+        detail: { type: string }
+        profiles:
+          type: array
+          maxItems: 64
+          items: { $ref: "#/components/schemas/VPNSession" }
+    VPNSession:
+      type: object
+      additionalProperties: false
+      required: [profile, running, relaySocket, connections]
+      properties:
+        profile: { $ref: "#/components/schemas/VPNProfile" }
+        running: { type: boolean }
+        # 中継のソケットの場所。開いていなければ空になる。値があれば、トンネルと
+        # 経路とパケットフィルタは用意できている。CLI はここへ繋いで、engine が
+        # 持つ経路を通る。
+        relaySocket: { type: string }
+        # このプロファイルを通る接続の alias。
+        connections:
+          type: array
+          items: { type: string }
+    VPNProfileRequest:
+      type: object
+      additionalProperties: false
+      required: [profile]
+      properties:
+        profile: { $ref: "#/components/schemas/VPNProfile" }
+        # 省略すると、保存済みの秘密をそのまま残す。設定だけを直すときに、
+        # 秘密を入れ直させない。
+        secrets: { $ref: "#/components/schemas/VPNSecrets" }
+    VPNSecrets:
+      type: object
+      additionalProperties: false
+      properties:
+        wireguardPrivateKey: { type: string, minLength: 44, maxLength: 44 }
+        l2tpPassword: { type: string, minLength: 1, maxLength: 256 }
+        ipsecPsk: { type: string, minLength: 1, maxLength: 256 }
+    VPNBindingRequest:
+      type: object
+      additionalProperties: false
+      required: [alias, profile]
+      properties:
+        alias: { type: string, minLength: 1, maxLength: 64 }
+        # 空にすると紐付けを外す。
+        profile: { type: string, maxLength: 48 }
+    VPNProfile:
+      type: object
+      additionalProperties: false
+      required: [name, backend, target]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 48 }
+        backend: { type: string, minLength: 1, maxLength: 32 }
+        # この VPN の中にある接続先。`host:port` で書く。
+        target: { type: string, minLength: 3, maxLength: 128 }
+        wireguard: { $ref: "#/components/schemas/WireGuardProfile" }
+        l2tp: { $ref: "#/components/schemas/L2TPProfile" }
+    L2TPProfile:
+      type: object
+      additionalProperties: false
+      required: [server, username]
+      properties:
+        # VPN装置の名前またはアドレス。名前はコンテナの中で引く。
+        server: { type: string, minLength: 1, maxLength: 320 }
+        username: { type: string, minLength: 1, maxLength: 256 }
+        # 古い装置と暗号方式が合わないときだけ書く。
+        ike: { type: string, maxLength: 256 }
+        esp: { type: string, maxLength: 256 }
+    WireGuardProfile:
+      type: object
+      additionalProperties: false
+      required: [server, peerPublicKey, address]
+      properties:
+        # トンネルの相手。`host:port` で書く。
+        server: { type: string, minLength: 3, maxLength: 320 }
+        # 相手の公開鍵。秘密ではない。
+        peerPublicKey: { type: string, minLength: 44, maxLength: 44 }
+        # トンネル側でこの端末が名乗るアドレス（CIDR 表記）。
+        address: { type: string, minLength: 9, maxLength: 43 }
     BackgroundSettings:
       type: object
       additionalProperties: false

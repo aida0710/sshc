@@ -20,6 +20,7 @@ const (
 	cliCommandUpdate
 	cliCommandService
 	cliCommandOtp
+	cliCommandVpn
 	cliCommandVault
 	cliCommandVersion
 	cliCommandHelp
@@ -54,6 +55,8 @@ func generatedCLICommand(word string) cliCommandRoute {
 		return cliCommandService
 	case "otp":
 		return cliCommandOtp
+	case "vpn":
+		return cliCommandVpn
 	case "vault":
 		return cliCommandVault
 	case "version", "-v", "--version":
@@ -97,6 +100,8 @@ func canonicalCLICommand(route cliCommandRoute) string {
 		return "service"
 	case cliCommandOtp:
 		return "otp"
+	case cliCommandVpn:
+		return "vpn"
 	case cliCommandVault:
 		return "vault"
 	case cliCommandVersion:
@@ -160,6 +165,18 @@ func validCLIAction(command, action string) bool {
 		return true
 	case "otp remove":
 		return true
+	case "vpn add":
+		return true
+	case "vpn remove":
+		return true
+	case "vpn up":
+		return true
+	case "vpn down":
+		return true
+	case "vpn bind":
+		return true
+	case "vpn unbind":
+		return true
 	case "vault status":
 		return true
 	case "vault create":
@@ -198,7 +215,7 @@ func generatedStringSet(value string, allowed []string) bool {
 
 func validHelpTopic(topic string) bool { _, ok := generatedCLIHelp[topic]; return ok }
 
-const generatedGlobalHelp = "usage:\n  sshc                 open the UI for the running engine\n  sshc engine          start the engine in the foreground\n                       --port <n>  listen there instead of the preferred port 54447\n                       --replace   stop the running engine first, without asking\n  sshc ssh [<alias>]   choose a host, or connect to one from ~/.ssh/config\n                       --list      print every concrete Host alias\n  sshc ssh <alias> --non-interactive -- <command>\n                       run an SSH command without an interactive terminal\n  sshc completion bash|zsh|fish\n                       print shell completion that includes SSH Host aliases\n  sshc info <alias> [--json]\n                       print the resolved SSH target without connecting\n  sshc sync [--json]   print synchronization status from the running engine\n  sshc sync setup      configure synchronization in an interactive terminal\n  sshc sync push [--force] [--json]\n  sshc sync pull [--force] [--json]\n  sshc sync now [--json]\n  sshc sync auto on|off [--json]\n                       run or configure synchronization through the engine\n  sshc terminal list [--json]\n  sshc terminal show <session-id> [--json]\n  sshc terminal read <session-id> [--cursor N] [--limit N] [--json]\n  sshc terminal send <session-id> --text <text> [--no-enter] [--json]\n  sshc terminal wait <session-id> --for <state> [--timeout D] [--json]\n                       states: connecting, connected, reconnecting, exited\n  sshc terminal create shell [--json]\n  sshc terminal create ssh <alias> [--json]\n  sshc terminal rename <session-id> <title> [--json]\n  sshc terminal close <session-id> [--json]\n                       inspect and control terminals owned by the running engine\n  sshc sftp get <alias> <remote-path> <local-path> [options]\n  sshc sftp put <alias> <local-path> <remote-path> [options]\n  sshc sftp settings [split-options]\n                       transfer files through the running engine\n                       split options: --split-size --split-jobs --chunk-size\n                       transfer options: -r --overwrite --skip-existing --dry-run --json -y\n  sshc serial [--json]\n                       list serial devices\n  sshc serial <device> [options]\n                       connect interactively to a serial device\n                       options: --baud N --data-bits 5..8 --parity none|odd|even|mark|space\n                                --stop-bits 1|1.5|2 --flow none|rtscts|xonxoff\n                                --dtr on|off --rts on|off --break D --encoding NAME\n  sshc telnet <host>[:port] [options]\n                       connect interactively with unencrypted Telnet\n                       options: --connect-timeout D --terminal-type TYPE --encoding NAME\n  sshc serial <device> [options] --non-interactive --expect REGEX|--read-for D [automation] -- <text>\n  sshc serial <device> [options] --non-interactive --script FILE|- [automation]\n  sshc telnet <host>[:port] [options] --non-interactive --expect REGEX|--read-for D [automation] -- <text>\n  sshc telnet <host>[:port] [options] --non-interactive --script FILE|- [automation]\n                       send text and wait for --expect or --read-for\n                       automation: --expect REGEX | --read-for D | --script FILE|-\n                                   --timeout D --settle D --max-bytes N --line-ending MODE\n                                   --require-output --json\n                       encodings: utf-8, shift_jis, euc-jp, iso-2022-jp\n  sshc open            print a one-time UI URL\n  sshc status          print what the running engine is doing\n                       --json      print it as JSON, for the shell\n  sshc update [-y]     update an installation managed by Homebrew or install.sh\n  sshc service install install and start a user service on Linux or macOS\n  sshc service status  print whether the managed service is active\n  sshc service disable stop and remove the managed service\n  sshc otp list        list saved one-time-password credentials\n  sshc otp <name>      print previous, current, and next TOTP codes\n  sshc otp add <name>  store a TOTP setup key in the unlocked vault\n  sshc otp edit <name> replace a saved TOTP setup key\n  sshc otp remove <name>\n                       remove an unused saved TOTP credential\n  sshc vault status    describe the running engine and vault\n  sshc vault create    create and unlock a new vault\n  sshc vault unlock    unlock the vault in the running engine\n  sshc vault lock      lock a password-protected vault; keep SSH sessions\n  sshc vault change-password\n                       change the password of an unlocked vault\n  sshc version         print the version, and what it was built for\n  sshc help [<command> ...]\n                       print all commands or help for one command\n\n"
+const generatedGlobalHelp = "usage:\n  sshc                 open the UI for the running engine\n  sshc engine          start the engine in the foreground\n                       --port <n>  listen there instead of the preferred port 54447\n                       --replace   stop the running engine first, without asking\n  sshc ssh [<alias>]   choose a host, or connect to one from ~/.ssh/config\n                       --list      print every concrete Host alias\n  sshc ssh <alias> --non-interactive -- <command>\n                       run an SSH command without an interactive terminal\n  sshc completion bash|zsh|fish\n                       print shell completion that includes SSH Host aliases\n  sshc info <alias> [--json]\n                       print the resolved SSH target without connecting\n  sshc vpn [--json]    list VPN profiles and their sessions\n  sshc sync [--json]   print synchronization status from the running engine\n  sshc sync setup      configure synchronization in an interactive terminal\n  sshc sync push [--force] [--json]\n  sshc sync pull [--force] [--json]\n  sshc sync now [--json]\n  sshc sync auto on|off [--json]\n                       run or configure synchronization through the engine\n  sshc terminal list [--json]\n  sshc terminal show <session-id> [--json]\n  sshc terminal read <session-id> [--cursor N] [--limit N] [--json]\n  sshc terminal send <session-id> --text <text> [--no-enter] [--json]\n  sshc terminal wait <session-id> --for <state> [--timeout D] [--json]\n                       states: connecting, connected, reconnecting, exited\n  sshc terminal create shell [--json]\n  sshc terminal create ssh <alias> [--json]\n  sshc terminal rename <session-id> <title> [--json]\n  sshc terminal close <session-id> [--json]\n                       inspect and control terminals owned by the running engine\n  sshc sftp get <alias> <remote-path> <local-path> [options]\n  sshc sftp put <alias> <local-path> <remote-path> [options]\n  sshc sftp settings [split-options]\n                       transfer files through the running engine\n                       split options: --split-size --split-jobs --chunk-size\n                       transfer options: -r --overwrite --skip-existing --dry-run --json -y\n  sshc serial [--json]\n                       list serial devices\n  sshc serial <device> [options]\n                       connect interactively to a serial device\n                       options: --baud N --data-bits 5..8 --parity none|odd|even|mark|space\n                                --stop-bits 1|1.5|2 --flow none|rtscts|xonxoff\n                                --dtr on|off --rts on|off --break D --encoding NAME\n  sshc telnet <host>[:port] [options]\n                       connect interactively with unencrypted Telnet\n                       options: --connect-timeout D --terminal-type TYPE --encoding NAME\n  sshc serial <device> [options] --non-interactive --expect REGEX|--read-for D [automation] -- <text>\n  sshc serial <device> [options] --non-interactive --script FILE|- [automation]\n  sshc telnet <host>[:port] [options] --non-interactive --expect REGEX|--read-for D [automation] -- <text>\n  sshc telnet <host>[:port] [options] --non-interactive --script FILE|- [automation]\n                       send text and wait for --expect or --read-for\n                       automation: --expect REGEX | --read-for D | --script FILE|-\n                                   --timeout D --settle D --max-bytes N --line-ending MODE\n                                   --require-output --json\n                       encodings: utf-8, shift_jis, euc-jp, iso-2022-jp\n  sshc open            print a one-time UI URL\n  sshc status          print what the running engine is doing\n                       --json      print it as JSON, for the shell\n  sshc update [-y]     update an installation managed by Homebrew or install.sh\n  sshc service install install and start a user service on Linux or macOS\n  sshc service status  print whether the managed service is active\n  sshc service disable stop and remove the managed service\n  sshc otp list        list saved one-time-password credentials\n  sshc otp <name>      print previous, current, and next TOTP codes\n  sshc otp add <name>  store a TOTP setup key in the unlocked vault\n  sshc otp edit <name> replace a saved TOTP setup key\n  sshc otp remove <name>\n                       remove an unused saved TOTP credential\n  sshc vault status    describe the running engine and vault\n  sshc vault create    create and unlock a new vault\n  sshc vault unlock    unlock the vault in the running engine\n  sshc vault lock      lock a password-protected vault; keep SSH sessions\n  sshc vault change-password\n                       change the password of an unlocked vault\n  sshc version         print the version, and what it was built for\n  sshc help [<command> ...]\n                       print all commands or help for one command\n\n"
 
 var generatedCLIHelp = map[string]string{
 	"completion":            "usage:\n  sshc completion bash|zsh|fish\n\nPrint a shell completion script. Host aliases for sshc ssh are read dynamically\nfrom the same ~/.ssh/config and Include files as sshc itself.\n",
@@ -246,6 +263,13 @@ var generatedCLIHelp = map[string]string{
 	"vault status":          "usage:\n  sshc vault status\n\nDescribe the running engine and Vault.\n",
 	"vault unlock":          "usage:\n  sshc vault unlock\n\nUnlock the Vault in the running engine.\n",
 	"version":               "usage:\n  sshc version\n\nPrint the version and target operating system/architecture.\n",
+	"vpn":                   "usage:\n  sshc vpn [--json]\n  sshc vpn add <name>\n  sshc vpn remove <name> [-y|--yes]\n  sshc vpn up <name> [--json]\n  sshc vpn down <name> [--json]\n  sshc vpn bind <alias> <name> [--json]\n  sshc vpn unbind <alias> [--json]\n\nRoute one SSH connection through a VPN of its own. The tunnel lives in a container, so the host default route, DNS and VPN client are untouched. Requires Docker on this machine. Add reads the private key interactively without echoing it.\n",
+	"vpn add":               "usage:\n  sshc vpn add <name>\n\nCreate a VPN profile. One profile reaches one target. Secrets are read interactively and stored in the vault.\n",
+	"vpn bind":              "usage:\n  sshc vpn bind <alias> <name> [--json]\n\nReach one saved connection through the named profile.\n",
+	"vpn down":              "usage:\n  sshc vpn down <name> [--json]\n\nClose the route.\n",
+	"vpn remove":            "usage:\n  sshc vpn remove <name> [-y|--yes]\n\nRemove a profile, its secrets, its running session, and the bindings that named it.\n",
+	"vpn unbind":            "usage:\n  sshc vpn unbind <alias> [--json]\n\nStop routing that connection through a VPN.\n",
+	"vpn up":                "usage:\n  sshc vpn up <name> [--json]\n\nOpen the route and wait until its relay is listening.\n",
 }
 
 type completionGrammar struct {
@@ -266,8 +290,8 @@ type completionGrammar struct {
 }
 
 var cliCompletionGrammar = completionGrammar{
-	topLevel:            []string{"engine", "ssh", "info", "sync", "terminal", "sftp", "serial", "telnet", "open", "status", "update", "service", "otp", "vault", "version", "help", "completion"},
-	helpTopics:          []string{"engine", "ssh", "info", "sync", "terminal", "sftp", "serial", "telnet", "open", "status", "update", "service", "otp", "vault", "version", "completion"},
+	topLevel:            []string{"engine", "ssh", "info", "sync", "terminal", "sftp", "serial", "telnet", "open", "status", "update", "service", "otp", "vpn", "vault", "version", "help", "completion"},
+	helpTopics:          []string{"engine", "ssh", "info", "sync", "terminal", "sftp", "serial", "telnet", "open", "status", "update", "service", "otp", "vpn", "vault", "version", "completion"},
 	syncActions:         []string{"setup", "push", "pull", "now", "auto"},
 	terminalActions:     []string{"list", "show", "read", "send", "wait", "create", "rename", "close"},
 	sftpActions:         []string{"get", "put", "settings"},

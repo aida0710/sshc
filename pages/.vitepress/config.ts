@@ -28,6 +28,7 @@ const jaSidebar = [
     { text: "転送マネージャー", link: "/sftp/transfers" },
     { text: "暗号化同期", link: "/features/sync" },
     { text: "Push・Pull・履歴", link: "/sync/workflow" },
+    { text: "接続ごとのVPN", link: "/features/vpn" },
   ] },
   { text: "CLIとプラットフォーム", items: [
     { text: "CLI", link: "/reference/cli" },
@@ -66,6 +67,7 @@ const enSidebar = [
     { text: "Transfer Manager", link: "/en/sftp/transfers" },
     { text: "Encrypted sync", link: "/en/features/sync" },
     { text: "Push, pull, and history", link: "/en/sync/workflow" },
+    { text: "Per-connection VPN", link: "/en/features/vpn" },
   ] },
   { text: "CLI and platforms", items: [
     { text: "CLI", link: "/en/reference/cli" },

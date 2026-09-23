@@ -105,6 +105,24 @@ sshc sync auto on|off [--json]
 
 `sshc sync setup`は、設定済みのエンドポイント、バケット、パス、リージョン、同期方向を既定値として表示します。同期方向は`both`、`push`、`pull`から選びます。Access Key IDは末尾5文字だけを伏せ字付きで表示し、Secret Access Keyと同期キーは値を表示せず「設定済み」と示します。再設定時は秘密値を空のままEnterキーで進むと、エンジンに保存済みの値を維持します。新しい値の入力中は、平文の代わりに`*`を表示します。
 
+## VPN
+
+選んだ接続だけを専用のVPNへ通します。Dockerが動いている機械で使えます。詳しくは[接続ごとのVPN](/features/vpn)を参照してください。
+
+```sh
+sshc vpn [--json]
+sshc vpn add <名前>
+sshc vpn remove <名前> [-y|--yes]
+sshc vpn up <名前> [--json]
+sshc vpn down <名前> [--json]
+sshc vpn bind <alias> <名前> [--json]
+sshc vpn unbind <alias> [--json]
+```
+
+`sshc vpn add`は対話端末で設定を尋ねます。秘密鍵、VPNのパスワード、IPsecの事前共有鍵は入力時に表示せず、コマンド引数や環境変数からは受け取りません。保存先はVaultです。
+
+`bind`で結び付けた接続は、Terminal、SFTP、`sshc <接続先>`のいずれからでも同じ経路を通ります。経路が無いときは、素の回線へ落とさずに拒否します。
+
 ## SFTP転送
 
 起動中のエンジンと、Web UIと同じOpenSSH設定、ホスト鍵の検証、Vaultの認証情報を使って転送します。リモートパスは`/var/log/app.log`のような絶対POSIXパスで指定します。
