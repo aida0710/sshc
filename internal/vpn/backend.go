@@ -28,6 +28,8 @@ type backend interface {
 	// validateSettings は、この backend の節を確かめる。節が無いことも断る。
 	validateSettings(profile Profile) error
 	validateSecrets(profile Profile, secrets Secrets) error
+	// ownSecrets は、secrets のうち、この backend の節だけを残した写しである。
+	ownSecrets(secrets Secrets) Secrets
 	// writeAgentSection は、agent へ渡す文書のうち、この backend の節を書く。
 	writeAgentSection(request agentSectionRequest, document *agentDocument) error
 	// secretValues は、ログから伏せる値である。

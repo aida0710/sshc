@@ -55,6 +55,12 @@ type problemPayload struct {
 	// Blockers は group 操作が拒否した理由を示す。これらはコロンの後に
 	// detail を伴う安定した code であり、鍵の relocation が使うのと同じ形である。
 	Blockers []string `json:"blockers,omitempty"`
+	// Field・Reason・Limit は、入力のどの項目を、どの理由で受け取れなかったかである。
+	// Field は保存形式の JSON のパス、Reason は決まった語で、画面と CLI が翻訳する。
+	// 経路を用意できなかったときは、Reason だけにその理由の語が入る。
+	Field  string `json:"field,omitempty"`
+	Reason string `json:"reason,omitempty"`
+	Limit  int    `json:"limit,omitempty"`
 }
 
 // declaredGroup は、拒否された directory 操作が対象としていた group を示す。

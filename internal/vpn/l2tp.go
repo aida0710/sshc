@@ -99,6 +99,8 @@ func (l2tpBackend) secretValues(secrets Secrets) []string {
 
 func (l2tpBackend) waitsForApproval(Profile) bool { return false }
 
+func (l2tpBackend) ownSecrets(secrets Secrets) Secrets { return Secrets{L2TP: secrets.L2TP} }
+
 // l2tpDocument は、agent が置くだけの本文と、agent が自分で引く相手である。
 type l2tpDocument struct {
 	// Server は、VPN装置の名前またはアドレスである。agent がコンテナの中で引き、

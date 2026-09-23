@@ -606,11 +606,9 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/VPNOverview" }
         "401": { $ref: "#/components/responses/Problem" }
-  /api/v1/vpn/profiles/{name}:
-    parameters:
-      - { name: name, in: path, required: true, schema: { type: string, minLength: 1, maxLength: 48 } }
-    put:
-      operationId: saveVPNProfile
+  /api/v1/vpn/profiles:
+    post:
+      operationId: createVPNProfile
       requestBody:
         required: true
         content:
@@ -618,23 +616,44 @@ paths:
             schema: { $ref: "#/components/schemas/VPNProfileRequest" }
       responses:
         "200":
-          description: Profile stored. Secrets are kept in the vault and never returned
+          description: Profile created together with its secrets. A secret left under the same name is replaced, never inherited
           content:
             application/json:
               schema: { $ref: "#/components/schemas/VPNOverview" }
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
+  /api/v1/vpn/profiles/{name}:
+    parameters:
+      - { name: name, in: path, required: true, schema: { type: string, minLength: 1, maxLength: 48 } }
+    put:
+      operationId: updateVPNProfile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VPNProfileRequest" }
+      responses:
+        "200":
+          description: Profile updated. Omitted or empty secret fields keep the stored values; secrets of another backend are dropped
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VPNOverview" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
     delete:
       operationId: deleteVPNProfile
       responses:
         "200":
-          description: Profile, its secrets, and the bindings that named it were removed
+          description: Profile, its secrets, and the bindings that named it were removed in one write. Requires an unlocked vault
           content:
             application/json:
               schema: { $ref: "#/components/schemas/VPNOverview" }
         "401": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
   /api/v1/vpn/profiles/{name}/rename:
     parameters:
       - { name: name, in: path, required: true, schema: { type: string, minLength: 1, maxLength: 48 } }
@@ -2368,6 +2387,12 @@ components:
         currentVersion: { type: integer, minimum: 0 }
         requiredVersion: { type: integer, minimum: 1 }
         # blockers は拒否理由を安定したコードで返す。
+        # field・reason・limit は、入力のどの項目をどの理由で受け取れなかったかを
+        # 決まった語で返す。field は保存形式の JSON のパス、limit は長さや数の上限。
+        # 経路を用意できなかった応答（vpn_session_failed）では reason だけが入る。
+        field: { type: string }
+        reason: { type: string }
+        limit: { type: integer, minimum: 1 }
     KeyReference:
       type: object
       additionalProperties: false

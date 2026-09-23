@@ -131,6 +131,17 @@ func (profile Profile) foreignSection() string {
 	return ""
 }
 
+// OwnSecrets は、secrets のうち、このプロファイルの backend の節だけを残した写しを
+// 返す。方式を切り替えたあとに、使わなくなった方式の秘密を Vault に残さない。
+// この版の知らない backend なら、何も残さない。
+func (profile Profile) OwnSecrets(secrets Secrets) Secrets {
+	chosen, err := backendFor(profile.Backend)
+	if err != nil {
+		return Secrets{}
+	}
+	return chosen.ownSecrets(secrets)
+}
+
 // ValidateSecrets は、このbackendが要る秘密が揃っているかを確かめる。
 func (profile Profile) ValidateSecrets(secrets Secrets) error {
 	chosen, err := backendFor(profile.Backend)

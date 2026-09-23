@@ -40,7 +40,12 @@ type engineProblem struct {
 	Code           string
 	Retryable      bool
 	OutcomeUnknown bool
-	cause          error
+	// Field・Reason・Limit は、engine が決まった語で返す、断った項目と理由である。
+	// 利用者の入力や秘密は含まない。
+	Field  string
+	Reason string
+	Limit  int
+	cause  error
 }
 
 func (problem engineProblem) Error() string {
@@ -492,7 +497,7 @@ func decodeEngineProblem(response *http.Response) error {
 	}
 	body, err := readAndCloseEngineResponse(response)
 	defer zeroBytes(body)
-	code := "http_error"
+	decoded := engineProblem{Status: status, Code: "http_error", Retryable: retryableStatus(status)}
 	if err == nil {
 		var problem api.Problem
 		decoder := json.NewDecoder(bytes.NewReader(body))
@@ -500,13 +505,16 @@ func decodeEngineProblem(response *http.Response) error {
 		if decodeErr := decoder.Decode(&problem); decodeErr == nil && problem.Code != "" {
 			var trailing any
 			if trailingErr := decoder.Decode(&trailing); errors.Is(trailingErr, io.EOF) {
-				code = problem.Code
+				decoded.Code = problem.Code
+				decoded.Field = valueOrZero(problem.Field)
+				decoded.Reason = valueOrZero(problem.Reason)
+				decoded.Limit = valueOrZero(problem.Limit)
 			}
 		}
 	} else if errors.Is(err, errEngineResponseTooLarge) {
-		code = "response_too_large"
+		decoded.Code = "response_too_large"
 	}
-	return engineProblem{Status: status, Code: code, Retryable: retryableStatus(status)}
+	return decoded
 }
 
 func responseProblem(err error, status int, mutation bool) error {
@@ -534,4 +542,13 @@ func transportProblem(err error, mutation bool) error {
 func retryableStatus(status int) bool {
 	return status == http.StatusRequestTimeout || status == http.StatusTooEarly ||
 		status == http.StatusTooManyRequests || status >= http.StatusInternalServerError
+}
+
+// valueOrZero は、省略できる項目を、省略されていればゼロ値として読む。
+func valueOrZero[T any](value *T) T {
+	var zero T
+	if value == nil {
+		return zero
+	}
+	return *value
 }

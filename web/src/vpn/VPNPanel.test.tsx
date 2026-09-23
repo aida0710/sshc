@@ -29,6 +29,7 @@ function overview(overrides: Partial<VPNOverview> = {}): VPNOverview {
 function buildApi(overrides: Partial<VPNApi> = {}): VPNApi {
   return {
     vpnOverview: vi.fn().mockResolvedValue(overview()),
+    createVPNProfile: vi.fn().mockResolvedValue(overview()),
     saveVPNProfile: vi.fn().mockResolvedValue(overview()),
     removeVPNProfile: vi.fn().mockResolvedValue(overview({ profiles: [] })),
     renameVPNProfile: vi.fn().mockResolvedValue(overview()),
@@ -64,8 +65,8 @@ describe("VPNPanel", () => {
 
   it("sends the secrets with the profile and never shows them again", async () => {
     const user = userEvent.setup();
-    const saveVPNProfile = vi.fn().mockResolvedValue(overview());
-    render(<VPNPanel api={buildApi({ saveVPNProfile })} />);
+    const createVPNProfile = vi.fn().mockResolvedValue(overview());
+    render(<VPNPanel api={buildApi({ createVPNProfile })} />);
     const form = await screen.findByRole("region", { name: "Add a VPN profile" });
 
     await user.type(within(form).getByLabelText("Name"), "lab");
@@ -75,7 +76,7 @@ describe("VPNPanel", () => {
     await user.type(within(form).getByLabelText("Private key"), "aAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAA=");
     await user.click(within(form).getByRole("button", { name: "Save" }));
 
-    expect(saveVPNProfile).toHaveBeenCalledWith(
+    expect(createVPNProfile).toHaveBeenCalledWith(
       {
         name: "lab",
         backend: "wireguard",
@@ -89,13 +90,13 @@ describe("VPNPanel", () => {
       { wireguardPrivateKey: "aAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAA=" },
     );
     expect(within(form).getByLabelText("Private key")).toHaveValue("");
-    expect(saveVPNProfile.mock.calls[0]?.[0]).not.toHaveProperty("dns");
+    expect(createVPNProfile.mock.calls[0]?.[0]).not.toHaveProperty("dns");
   });
 
   it("sends the VPN's own DNS servers with a profile whose target is a name", async () => {
     const user = userEvent.setup();
-    const saveVPNProfile = vi.fn().mockResolvedValue(overview());
-    render(<VPNPanel api={buildApi({ saveVPNProfile })} />);
+    const createVPNProfile = vi.fn().mockResolvedValue(overview());
+    render(<VPNPanel api={buildApi({ createVPNProfile })} />);
     const form = await screen.findByRole("region", { name: "Add a VPN profile" });
 
     await user.type(within(form).getByLabelText("Name"), "lab");
@@ -106,7 +107,7 @@ describe("VPNPanel", () => {
     await user.type(within(form).getByLabelText("Private key"), "aAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAA=");
     await user.click(within(form).getByRole("button", { name: "Save" }));
 
-    expect(saveVPNProfile).toHaveBeenCalledWith(
+    expect(createVPNProfile).toHaveBeenCalledWith(
       expect.objectContaining({ target: "lab.example.jp:22", dns: ["10.9.9.53", "10.9.9.54"] }),
       expect.anything(),
     );
@@ -114,8 +115,8 @@ describe("VPNPanel", () => {
 
   it("waits for approval without sending a second answer when the device asks nothing", async () => {
     const user = userEvent.setup();
-    const saveVPNProfile = vi.fn().mockResolvedValue(overview());
-    render(<VPNPanel api={buildApi({ saveVPNProfile })} />);
+    const createVPNProfile = vi.fn().mockResolvedValue(overview());
+    render(<VPNPanel api={buildApi({ createVPNProfile })} />);
     const form = await screen.findByRole("region", { name: "Add a VPN profile" });
 
     await user.selectOptions(within(form).getByLabelText("Type"), "openconnect");
@@ -127,7 +128,7 @@ describe("VPNPanel", () => {
     await user.selectOptions(within(form).getByLabelText("Second factor"), "approve");
     await user.click(within(form).getByRole("button", { name: "Save" }));
 
-    const [profile] = saveVPNProfile.mock.calls[0] ?? [];
+    const [profile] = createVPNProfile.mock.calls[0] ?? [];
     expect(profile.openconnect).toEqual(
       expect.objectContaining({ secondFactor: "approve" }),
     );
@@ -136,8 +137,8 @@ describe("VPNPanel", () => {
 
   it("sends the word the device asks for when one is given", async () => {
     const user = userEvent.setup();
-    const saveVPNProfile = vi.fn().mockResolvedValue(overview());
-    render(<VPNPanel api={buildApi({ saveVPNProfile })} />);
+    const createVPNProfile = vi.fn().mockResolvedValue(overview());
+    render(<VPNPanel api={buildApi({ createVPNProfile })} />);
     const form = await screen.findByRole("region", { name: "Add a VPN profile" });
 
     await user.selectOptions(within(form).getByLabelText("Type"), "openconnect");
@@ -150,7 +151,7 @@ describe("VPNPanel", () => {
     await user.type(within(form).getByLabelText("Word to send as the second answer"), "push");
     await user.click(within(form).getByRole("button", { name: "Save" }));
 
-    expect(saveVPNProfile).toHaveBeenCalledWith(
+    expect(createVPNProfile).toHaveBeenCalledWith(
       expect.objectContaining({
         openconnect: expect.objectContaining({ secondFactor: "approve", approvalWord: "push" }),
       }),
@@ -160,8 +161,8 @@ describe("VPNPanel", () => {
 
   it("carries the TOTP seed only when the second factor uses one", async () => {
     const user = userEvent.setup();
-    const saveVPNProfile = vi.fn().mockResolvedValue(overview());
-    render(<VPNPanel api={buildApi({ saveVPNProfile })} />);
+    const createVPNProfile = vi.fn().mockResolvedValue(overview());
+    render(<VPNPanel api={buildApi({ createVPNProfile })} />);
     const form = await screen.findByRole("region", { name: "Add a VPN profile" });
 
     await user.selectOptions(within(form).getByLabelText("Type"), "openconnect");
@@ -176,7 +177,7 @@ describe("VPNPanel", () => {
     await user.type(within(form).getByLabelText("Second factor TOTP seed"), "GEZDGNBVGY3TQOJQ");
     await user.click(within(form).getByRole("button", { name: "Save" }));
 
-    expect(saveVPNProfile).toHaveBeenCalledWith(
+    expect(createVPNProfile).toHaveBeenCalledWith(
       expect.objectContaining({ openconnect: expect.objectContaining({ secondFactor: "totp" }) }),
       { openconnectPassword: "a password", openconnectTotpSecret: "GEZDGNBVGY3TQOJQ" },
     );

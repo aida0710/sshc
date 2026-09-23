@@ -8,9 +8,8 @@ import (
 	"net"
 	"time"
 
-	"sshc/internal/application"
-	"sshc/internal/secret"
 	"sshc/internal/vpn"
+	"sshc/internal/vpnprofile"
 )
 
 // vpnStateDirectory は、中継のソケットを置く engine 専用ディレクトリである。
@@ -53,26 +52,17 @@ func superviseVPNSessions(ctx context.Context, sessions *vpn.Manager, logger *sl
 
 // vpnRoute は、プロファイル名から設定と秘密を集め、その経路で接続先へ繋ぐ。
 func vpnRoute(
-	config *application.Service,
-	secrets *secret.Service,
+	profiles *vpnprofile.Service,
 	sessions *vpn.Manager,
 ) func(context.Context, string, string) (net.Conn, error) {
 	return func(ctx context.Context, name, address string) (net.Conn, error) {
-		profile, err := config.VPNProfile(name)
+		profile, secrets, err := profiles.Route(name)
 		if err != nil {
 			return nil, err
 		}
 		if !profile.Reaches(address) {
 			return nil, fmt.Errorf("%w: %s は %s へ繋ぐ経路である", vpn.ErrTargetMismatch, name, profile.Target.Address())
 		}
-		stored, err := secrets.VPNSecrets(name)
-		if err != nil {
-			return nil, err
-		}
-		values, err := vpn.DecodeSecrets(stored)
-		if err != nil {
-			return nil, err
-		}
-		return sessions.Dial(ctx, profile, values)
+		return sessions.Dial(ctx, profile, secrets)
 	}
 }

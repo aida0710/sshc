@@ -133,8 +133,12 @@ func TestSavingAProfileDropsTheSettingsOfOtherBackends(t *testing.T) {
 	profile.L2TP = &L2TPProfile{Server: "vpn.example.jp", Username: "user"}
 	profile.DNS = []string{}
 
-	if _, err := service.SaveVPNProfile(profile); err != nil {
-		t.Fatalf("SaveVPNProfile = %v", err)
+	change, err := service.PlanVPNProfileCreate(profile)
+	if err != nil {
+		t.Fatalf("PlanVPNProfileCreate = %v", err)
+	}
+	if _, err := service.CommitVPNProfileChange(change, nil); err != nil {
+		t.Fatalf("CommitVPNProfileChange = %v", err)
 	}
 
 	profiles, err := service.VPNProfiles()

@@ -14,6 +14,9 @@ export type VPNLogs = components["schemas"]["VPNLogs"];
 // 応答には現れない。
 export type VPNApi = {
   vpnOverview(): Promise<VPNOverview>;
+  // createVPNProfile は新しいプロファイルを作る。同じ名前があれば engine が断る。
+  createVPNProfile(profile: VPNProfile, secrets: VPNSecrets): Promise<VPNOverview>;
+  // saveVPNProfile は保存済みのプロファイルを更新する。空の秘密は保存済みの値を残す。
   saveVPNProfile(profile: VPNProfile, secrets?: VPNSecrets): Promise<VPNOverview>;
   removeVPNProfile(name: string): Promise<VPNOverview>;
   renameVPNProfile(from: string, to: string): Promise<VPNOverview>;
@@ -46,12 +49,19 @@ const locallyExplainedVPNFailures = [
   "vpn_secrets_missing",
   "vpn_profile_invalid",
   "vpn_profile_unknown",
+  "vpn_profile_exists",
+  "vpn_target_mismatch",
   "connection_unknown",
 ] as const;
 
 export const vpnApi: VPNApi = {
   async vpnOverview() {
     return validateOverview(await apiClient.read("/api/v1/vpn"));
+  },
+  async createVPNProfile(profile, secrets) {
+    return validateOverview(
+      await postJSON<unknown>("/api/v1/vpn/profiles", { profile, secrets }, undefined, locallyExplainedVPNFailures),
+    );
   },
   async saveVPNProfile(profile, secrets) {
     const body = secrets === undefined ? { profile } : { profile, secrets };

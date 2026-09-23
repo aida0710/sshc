@@ -26,6 +26,7 @@ import (
 	"sshc/internal/storage"
 	"sshc/internal/terminal"
 	"sshc/internal/vpn"
+	"sshc/internal/vpnprofile"
 	terminalworkspace "sshc/internal/workspace"
 )
 
@@ -94,7 +95,9 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 		passphrase:  storedPassphrase(passwordService, workspace.Root()),
 		password:    storedPassword(passwordService),
 		oneTimeCode: storedTOTP(passwordService),
-		vpnRoute:    vpnRoute(configService, passwordService, vpnSessions),
+		vpnRoute: vpnRoute(vpnprofile.New(vpnprofile.Dependencies{
+			Configuration: configService, Vault: passwordService, Routes: vpnSessions,
+		}), vpnSessions),
 	})
 	recentService := recent.NewService(recentStore, func(alias string) (recent.Target, error) {
 		target, err := ssh.target(alias)

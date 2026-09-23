@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"sshc/internal/application"
+	"sshc/internal/httpserver"
 )
 
 const testVPNKey = "aAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAA="
@@ -163,6 +164,30 @@ func TestTheSavedProfilePayloadCarriesTheKeyExactlyOnce(t *testing.T) {
 	}
 	if strings.Count(string(payload), testVPNKey) != 1 {
 		t.Fatalf("鍵が本文に複数回現れた: %s", payload)
+	}
+}
+
+// add は、既存のプロファイルを上書きしないよう、作成の口へ送る。
+func TestAddingAProfileAsksTheEngineToCreateIt(t *testing.T) {
+	harness, server, stateDir := newSyncCommandHarness(t, func(response http.ResponseWriter, request *http.Request) {
+		response.Header().Set("Content-Type", "application/json")
+		_, _ = response.Write([]byte(vpnOverviewFixture()))
+	})
+	defer server.Close()
+	engine, err := openEngineAPI(context.Background(), stateDir, server.Client())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = engine.Close() }()
+	var overview httpserver.VPNOverview
+
+	if err := createVPNProfile(context.Background(), engine, []byte(`{"profile":{}}`), &overview); err != nil {
+		t.Fatalf("createVPNProfile = %v", err)
+	}
+
+	if strings.Join(harness.methods, ",") != http.MethodPost ||
+		strings.Join(harness.paths, ",") != "/api/v1/vpn/profiles" {
+		t.Fatalf("requests = %v %v", harness.methods, harness.paths)
 	}
 }
 

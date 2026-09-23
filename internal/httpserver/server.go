@@ -34,6 +34,7 @@ import (
 	"sshc/internal/snippets"
 	"sshc/internal/terminal"
 	"sshc/internal/vpn"
+	"sshc/internal/vpnprofile"
 	"sshc/internal/workspace"
 )
 
@@ -417,7 +418,11 @@ func New(options Options) (*Server, error) {
 	}
 	if options.VPN != nil {
 		registerVPNRoutes(e, VPNHandlers{
-			Config: options.Config, Secrets: options.Passwords, Sessions: options.VPN,
+			Config: options.Config,
+			Profiles: vpnprofile.New(vpnprofile.Dependencies{
+				Configuration: options.Config, Vault: options.Passwords, Routes: options.VPN,
+			}),
+			Sessions: options.VPN,
 		})
 	}
 	if len(registry) > 0 {

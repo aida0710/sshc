@@ -37,7 +37,7 @@ func runVPN(ctx context.Context, called vpnInvocation, environment commandEnviro
 	stateDir, client, stdin, stdout, stderr, terminal :=
 		environment.stateDir, environment.client, environment.stdin, environment.stdout, environment.stderr, environment.terminal
 	if err := ctx.Err(); err != nil {
-		return finishSyncFailure(called.JSON, err, stdout, stderr)
+		return finishVPNFailure(called, err, environment)
 	}
 	if called.Action == vpnProxy {
 		return runVPNProxy(ctx, called, environment)
@@ -52,7 +52,7 @@ func runVPN(ctx context.Context, called vpnInvocation, environment commandEnviro
 	}
 	engine, err := openEngineAPI(ctx, stateDir, client)
 	if err != nil {
-		return finishSyncFailure(called.JSON, err, stdout, stderr)
+		return finishVPNFailure(called, err, environment)
 	}
 	defer func() { _ = engine.Close() }()
 
@@ -62,11 +62,12 @@ func runVPN(ctx context.Context, called vpnInvocation, environment commandEnviro
 	switch called.Action {
 	case vpnList:
 		if err := engine.getJSON(ctx, "/api/v1/vpn", &overview); err != nil {
-			return finishSyncFailure(called.JSON, err, stdout, stderr)
+			return finishVPNFailure(called, err, environment)
 		}
 	case vpnAdd:
 		if err := addVPNProfile(ctx, engine, called.Name, stdin, prompt, terminal, &overview); err != nil {
-			return finishSyncFailure(false, err, stdout, stderr)
+			// add は対話端末で動くので、--json の有無にかかわらず失敗は人向けに書く。
+			return finishVPNFailure(vpnInvocation{Action: vpnAdd, Name: called.Name}, err, environment)
 		}
 	case vpnRemove:
 		confirmed, exit := confirmAction(ctx, called.Yes,
@@ -81,7 +82,7 @@ func runVPN(ctx context.Context, called vpnInvocation, environment commandEnviro
 			return 0
 		}
 		if err := engine.sendJSON(ctx, http.MethodDelete, vpnProfilePath(called.Name), nil, &overview); err != nil {
-			return finishSyncFailure(called.JSON, err, stdout, stderr)
+			return finishVPNFailure(called, err, environment)
 		}
 	case vpnUp:
 		// 経路が立つまで待つあいだ、何も出ないと止まって見える。初回はイメージの
@@ -91,7 +92,7 @@ func runVPN(ctx context.Context, called vpnInvocation, environment commandEnviro
 				safeTerminalCell(called.Name))
 		}
 		if err := engine.sendJSON(ctx, http.MethodPost, vpnProfilePath(called.Name)+"/session", struct{}{}, &overview); err != nil {
-			code := finishSyncFailure(called.JSON, err, stdout, stderr)
+			code := finishVPNFailure(called, err, environment)
 			if !called.JSON {
 				fmt.Fprintf(stderr, "コンテナの出力は sshc vpn logs %s で読めます。\n", safeTerminalCell(called.Name))
 			}
@@ -99,18 +100,18 @@ func runVPN(ctx context.Context, called vpnInvocation, environment commandEnviro
 		}
 	case vpnDown:
 		if err := engine.sendJSON(ctx, http.MethodDelete, vpnProfilePath(called.Name)+"/session", nil, &overview); err != nil {
-			return finishSyncFailure(called.JSON, err, stdout, stderr)
+			return finishVPNFailure(called, err, environment)
 		}
 	case vpnRename:
 		body := map[string]string{"name": called.Rename}
 		if err := engine.sendJSON(ctx, http.MethodPost,
 			vpnProfilePath(called.Name)+"/rename", body, &overview); err != nil {
-			return finishSyncFailure(called.JSON, err, stdout, stderr)
+			return finishVPNFailure(called, err, environment)
 		}
 	case vpnLogsAction:
 		var logs httpserver.VPNLogs
 		if err := engine.getJSON(ctx, vpnProfilePath(called.Name)+"/logs", &logs); err != nil {
-			return finishSyncFailure(called.JSON, err, stdout, stderr)
+			return finishVPNFailure(called, err, environment)
 		}
 		if called.JSON {
 			if err := writeCommandEnvelope(stdout, commandEnvelope{
@@ -127,7 +128,7 @@ func runVPN(ctx context.Context, called vpnInvocation, environment commandEnviro
 	case vpnBind, vpnUnbind:
 		body := map[string]string{"alias": called.Alias, "profile": called.Name}
 		if err := engine.sendJSON(ctx, http.MethodPut, "/api/v1/vpn/bindings", body, &overview); err != nil {
-			return finishSyncFailure(called.JSON, err, stdout, stderr)
+			return finishVPNFailure(called, err, environment)
 		}
 	}
 	if called.JSON {
@@ -142,8 +143,11 @@ func runVPN(ctx context.Context, called vpnInvocation, environment commandEnviro
 	return 0
 }
 
+// vpnProfilesPath は、VPN プロファイルの一覧の場所である。作成はここへ送る。
+const vpnProfilesPath = "/api/v1/vpn/profiles"
+
 func vpnProfilePath(name string) string {
-	return "/api/v1/vpn/profiles/" + url.PathEscape(name)
+	return vpnProfilesPath + "/" + url.PathEscape(name)
 }
 
 // addVPNProfile は、プロファイルひとつ分の入力を集めて engine へ渡す。
@@ -197,8 +201,15 @@ func addVPNProfile(
 	if err != nil {
 		return err
 	}
-	// payload は秘密を含む。sendSecretJSON が送り終えた本文を消す。
-	return engine.sendSecretJSON(ctx, http.MethodPut, vpnProfilePath(name), payload, overview)
+	return createVPNProfile(ctx, engine, payload, overview)
+}
+
+// createVPNProfile は、新しいプロファイルを作るよう engine へ頼む。同じ名前が
+// あれば engine は断る。add で既存のプロファイルを黙って上書きしない。
+//
+// payload は秘密を含む。sendSecretJSON が送り終えた本文を消す。
+func createVPNProfile(ctx context.Context, engine *engineAPI, payload []byte, overview *httpserver.VPNOverview) error {
+	return engine.sendSecretJSON(ctx, http.MethodPost, vpnProfilesPath, payload, overview)
 }
 
 // readWireGuardProfile は、wireguard の設定と秘密鍵を読む。
@@ -520,7 +531,7 @@ func runVPNProxy(ctx context.Context, called vpnInvocation, environment commandE
 			fmt.Fprintf(environment.stderr, "sshc: %v\n", err)
 			return 1
 		}
-		return finishSyncFailure(false, err, environment.stderr, environment.stderr)
+		return finishVPNFailure(called, err, environment)
 	}
 	defer func() { _ = relay.Close() }()
 
