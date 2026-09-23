@@ -27,7 +27,7 @@ send_answers() {
 }
 
 backend_up() {
-	echo "トンネルを張ります（openconnect）。"
+	echo "VPNに接続します（OpenConnect）。"
 	set -- --protocol="$protocol" --user="$username" --interface="$interface" \
 		--script="$backend_directory/vpnc-script" --passwd-on-stdin --non-inter --background \
 		--pid-file="$openconnect_pid_file"
@@ -35,10 +35,10 @@ backend_up() {
 		set -- "$@" --servercert="$certificate"
 	fi
 	if [ -n "$second_factor" ]; then
-		echo "二段目の質問に答えます。"
+		echo "二要素認証の入力を送ります。"
 	fi
 	if [ "$waits_for_approval" = "true" ]; then
-		echo "電話の承認を待ちます。通知を承認するまで、装置は応答を返しません。"
+		echo "スマートフォンでの承認を待っています。承認するまでサーバーは応答しません。"
 	fi
 	# --background は、繋がったあとに自分を背後へ回す。ここが 0 で返らなければ
 	# 繋がっていない。
@@ -47,13 +47,13 @@ backend_up() {
 		password=
 		second_factor=
 		sed -n '1,40p' "$runtime/openconnect.log" >&2
-		fail openconnect_failed "openconnectが接続できませんでした。利用者名・パスワード・二段目の認証・方式・証明書を確認してください。"
+		fail openconnect_failed "VPNサーバーへの接続に失敗しました。ユーザー名、パスワード、二要素認証、プロトコル、証明書を確認してください。"
 	fi
 	password=
 	second_factor=
 	if ! wait_for_address; then
 		sed -n '1,40p' "$runtime/openconnect.log" >&2
-		fail openconnect_failed "openconnectがトンネルのアドレスを受け取れませんでした。"
+		fail openconnect_failed "VPNサーバーからトンネルのアドレスを取得できませんでした。"
 	fi
 }
 

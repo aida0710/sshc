@@ -287,7 +287,7 @@ func TestTheL2TPBranchRunsUntilTheServerRefusesIt(t *testing.T) {
 	// 「成立しませんでした」は agent が標準エラーへ書く。docker logs の標準
 	// 出力だけを読んでいると、この行が落ちる。
 	logs := requireLogs(t, manager, ctx, profile.Name, secrets)
-	if !strings.Contains(logs, "IPsecが成立しませんでした") {
+	if !strings.Contains(logs, "IPsecのネゴシエーションに失敗しました") {
 		t.Fatalf("ログが IPsec の段階を指していない: %s", logs)
 	}
 	for _, forbidden := range []string{secrets.L2TP.Password, secrets.L2TP.PreSharedKey} {
@@ -345,7 +345,7 @@ func TestTheOpenConnectBranchRunsUntilTheServerRefusesIt(t *testing.T) {
 	// この行は agent が標準エラーへ書く。docker logs の標準出力だけを読んで
 	// いると落ちる。
 	logs := requireLogs(t, manager, ctx, profile.Name, secrets)
-	if !strings.Contains(logs, "openconnectが接続できませんでした") {
+	if !strings.Contains(logs, "VPNサーバーへの接続に失敗しました") {
 		t.Fatalf("ログが openconnect の段階を指していない: %s", logs)
 	}
 	if strings.Contains(err.Error()+logs, secrets.OpenConnect.Password) {

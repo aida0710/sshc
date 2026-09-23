@@ -61,7 +61,7 @@ func vpnRoute(
 			return nil, err
 		}
 		if !profile.Reaches(address) {
-			return nil, fmt.Errorf("%w: %s は %s へ繋ぐ経路である", vpn.ErrTargetMismatch, name, profile.Target.Address())
+			return nil, fmt.Errorf("%w: %s の接続先は %s です", vpn.ErrTargetMismatch, name, profile.Target.Address())
 		}
 		return sessions.Dial(ctx, profile, secrets)
 	}

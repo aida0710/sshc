@@ -98,7 +98,7 @@ backend_down() { :; }
 seconds=0
 while [ ! -f "$profile" ]; do
 	if [ "$seconds" -ge "$profile_wait_seconds" ]; then
-		echo "設定を受け取れませんでした。" >&2
+		echo "設定を受け取れないまま時間切れになりました。" >&2
 		exit 1
 	fi
 	pause 1
@@ -121,7 +121,7 @@ wireguard | l2tp_ipsec | openconnect)
 	;;
 *)
 	rm -f "$profile"
-	echo "未対応のbackendです: $backend" >&2
+	echo "対応していない方式です: $backend" >&2
 	exit 1
 	;;
 esac
@@ -153,9 +153,9 @@ case "$target_host" in
 *[!0-9.]*)
 	target_address=$(getent ahostsv4 "$target_host" | awk 'NR==1{print $1}')
 	if [ -z "$target_address" ]; then
-		fail target_unresolved "VPNの中で接続先の名前を引けませんでした: $target_host"
+		fail target_unresolved "VPN内で接続先の名前解決に失敗しました: $target_host"
 	fi
-	echo "接続先 $target_host は $target_address でした。"
+	echo "接続先 $target_host を $target_address に解決しました。"
 	backend_allow "$target_address"
 	;;
 *)
@@ -166,7 +166,7 @@ esac
 # VPN装置そのものを接続先にしない。トンネルの外側と内側が同じ相手になり、
 # 経路とパケットフィルタが互いを打ち消す。
 if [ "${server_address:-}" = "$target_address" ]; then
-	fail unknown "VPN装置と接続先が同じアドレスです。"
+	fail unknown "VPNサーバーと接続先が同じアドレスです。"
 fi
 
 # 接続先への経路は、このコンテナのトンネルの中にしか作らない。
@@ -186,7 +186,7 @@ printf '{"backend":"%s","interface":"%s","address":"%s","since":"%s","targetAddr
 	>"$socket_directory/status.json"
 chmod 644 "$socket_directory/status.json"
 
-echo "接続先 $target_address:$target_port への中継を開きます。"
+echo "接続先 $target_address:$target_port への中継を開始します。"
 # ソケットが現れることが、トンネル・経路・フィルタまで用意できた合図である。
 # engineはホスト側からこのソケットを待ち、現れたらそこへ繋ぐ。
 socat \
@@ -200,7 +200,7 @@ relay=$!
 # 失敗する。コンテナごと終われば、次に必要になったときに engine が作り直す。
 while kill -0 "$relay" 2>/dev/null; do
 	if ! backend_alive; then
-		fail tunnel_lost "トンネルが落ちました。中継を閉じます。"
+		fail tunnel_lost "VPNが切断されました。中継を終了します。"
 	fi
 	pause "$tunnel_check_seconds"
 done

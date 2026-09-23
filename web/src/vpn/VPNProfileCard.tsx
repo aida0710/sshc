@@ -104,7 +104,7 @@ function TunnelDetail({ tunnel }: { tunnel: NonNullable<VPNProfileStatus["tunnel
   return (
     <dl className="flex flex-wrap gap-x-6 gap-y-1 border-t border-line pt-3 text-sm">
       {rows.map((row) => (
-        <div key={row.label} className="flex gap-2">
+        <div key={row.label} className="flex items-center gap-2">
           <dt className={hintText}>{row.label}</dt>
           <dd className="font-mono text-ink">{row.value}</dd>
         </div>

@@ -357,7 +357,7 @@ func TestBringingARouteUpSaysWhatItIsWaitingForAndWhereToLookWhenItFails(t *test
 	if code == 0 {
 		t.Fatalf("code = %d, stderr = %q", code, stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "VPN経路を用意しています") {
+	if !strings.Contains(stderr.String(), "VPNに接続しています") {
 		t.Fatalf("待っているあいだの案内が無い: %q", stderr.String())
 	}
 	if !strings.Contains(stderr.String(), "sshc vpn logs lab") {

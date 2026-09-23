@@ -71,7 +71,7 @@ func runVPN(ctx context.Context, called vpnInvocation, environment commandEnviro
 		}
 	case vpnRemove:
 		confirmed, exit := confirmAction(ctx, called.Yes,
-			fmt.Sprintf("VPNプロファイル %q と、その秘密と、接続への紐付けを削除しますか？ [y/N] ",
+			fmt.Sprintf("VPNプロファイル %q と、保存済みの秘密、この経路を使う接続の設定を削除しますか？ [y/N] ",
 				safeTerminalCell(called.Name)),
 			systemActionConfirmer, stderr)
 		if exit != 0 {
@@ -88,13 +88,13 @@ func runVPN(ctx context.Context, called vpnInvocation, environment commandEnviro
 		// 経路が立つまで待つあいだ、何も出ないと止まって見える。初回はイメージの
 		// 用意だけで分単位になる。
 		if !called.JSON {
-			fmt.Fprintf(stderr, "%s のVPN経路を用意しています。初回はイメージの作成に数分かかることがあります…\n",
+			fmt.Fprintf(stderr, "%s のVPNに接続しています。初回はイメージの作成に数分かかることがあります…\n",
 				safeTerminalCell(called.Name))
 		}
 		if err := engine.sendJSON(ctx, http.MethodPost, vpnProfilePath(called.Name)+"/session", struct{}{}, &overview); err != nil {
 			code := finishVPNFailure(called, err, environment)
 			if !called.JSON {
-				fmt.Fprintf(stderr, "コンテナの出力は sshc vpn logs %s で読めます。\n", safeTerminalCell(called.Name))
+				fmt.Fprintf(stderr, "詳しくは sshc vpn logs %s でログを確認してください。\n", safeTerminalCell(called.Name))
 			}
 			return code
 		}
@@ -184,7 +184,7 @@ func addVPNProfile(
 	case "openconnect":
 		profile.OpenConnect, secrets, err = readOpenConnectProfile(ctx, stdin, prompt, terminal)
 	default:
-		err = fmt.Errorf("%w: backend は wireguard か l2tp_ipsec か openconnect です", errVPNSetupInput)
+		err = fmt.Errorf("%w: backend には wireguard、l2tp_ipsec、openconnect のいずれかを指定してください", errVPNSetupInput)
 	}
 	defer func() {
 		for _, field := range secrets {
@@ -239,7 +239,7 @@ func readWireGuardProfile(
 		return nil, secrets, errVPNSetupInput
 	}
 	if len(privateKey) > maxVPNKeyBytes || !base64KeyBytes(privateKey) {
-		return nil, secrets, fmt.Errorf("%w: 秘密鍵の形が違います", errVPNSetupInput)
+		return nil, secrets, fmt.Errorf("%w: 秘密鍵の形式が正しくありません", errVPNSetupInput)
 	}
 	return &application.WireGuardProfile{Server: server, PeerPublicKey: peerKey, Address: address}, secrets, nil
 }
@@ -403,10 +403,10 @@ func base64KeyBytes(key []byte) bool {
 // writeVPNOverview は、一覧と状態を人向けに書く。
 func writeVPNOverview(out io.Writer, overview httpserver.VPNOverview) {
 	if !overview.Available {
-		fmt.Fprintf(out, "この機械ではVPN経路を作れません: %s\n\n", safeTerminalCell(overview.Detail))
+		fmt.Fprintf(out, "このマシンではVPN経路を使用できません: %s\n\n", safeTerminalCell(overview.Detail))
 	}
 	if len(overview.Profiles) == 0 {
-		fmt.Fprintln(out, "VPNプロファイルはありません。sshc vpn add <名前> で作成します。")
+		fmt.Fprintln(out, "VPNプロファイルはありません。sshc vpn add <名前> で作成できます。")
 		return
 	}
 	rows := make([][2]string, 0, len(overview.Profiles)*2)
@@ -510,7 +510,7 @@ func dialVPNRelay(
 			continue
 		}
 		if wantedTarget != "" && !session.Profile.Reaches(wantedTarget) {
-			return nil, fmt.Errorf("%w: %s は %s へ繋ぐ経路である",
+			return nil, fmt.Errorf("%w: %s の接続先は %s です",
 				vpn.ErrTargetMismatch, profile, session.Profile.Target)
 		}
 		if session.RelaySocket == "" {
@@ -545,7 +545,7 @@ func runVPNProxy(ctx context.Context, called vpnInvocation, environment commandE
 		fromRelay <- err
 	}()
 	if _, err := io.Copy(relay, environment.stdin); err != nil {
-		fmt.Fprintf(environment.stderr, "sshc: VPN経路への書き込みが止まりました: %v\n", err)
+		fmt.Fprintf(environment.stderr, "sshc: VPN経路への書き込みに失敗しました: %v\n", err)
 		return 1
 	}
 	// 送る側が終わったことを相手へ伝える。伝えないと、相手は入力の終わりを
@@ -554,7 +554,7 @@ func runVPNProxy(ctx context.Context, called vpnInvocation, environment commandE
 		_ = half.CloseWrite()
 	}
 	if err := <-fromRelay; err != nil {
-		fmt.Fprintf(environment.stderr, "sshc: VPN経路からの読み取りが止まりました: %v\n", err)
+		fmt.Fprintf(environment.stderr, "sshc: VPN経路からの読み取りに失敗しました: %v\n", err)
 		return 1
 	}
 	return 0

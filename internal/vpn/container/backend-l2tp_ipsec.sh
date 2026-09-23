@@ -34,7 +34,7 @@ backend_up() {
 	# 引く場所が違えば別の装置へ繋ぎうる。
 	server_address=$(getent ahostsv4 "$server" | awk 'NR==1{print $1}')
 	if [ -z "$server_address" ]; then
-		fail server_unresolved "VPN装置の名前を引けませんでした: $server"
+		fail server_unresolved "VPNサーバーの名前解決に失敗しました: $server"
 	fi
 	sed -i "s|%SERVER_ADDRESS%|$server_address|g" "$runtime/ipsec.conf" "$runtime/xl2tpd.conf"
 	ln -sf "$runtime/ipsec.conf" /etc/ipsec.conf
@@ -45,25 +45,25 @@ backend_up() {
 	iptables -A OUTPUT -p udp --dport 1701 -m policy --dir out --pol ipsec -j ACCEPT
 	iptables -A OUTPUT -p udp --dport 1701 -j REJECT
 
-	echo "IPsecを開始します。"
+	echo "IPsecの接続を開始します。"
 	ipsec start --nofork >"$runtime/ipsec.log" 2>&1 &
 	if ! wait_for_file /run/charon.ctl; then
-		fail unknown "IPsecサービスが起動しませんでした。"
+		fail unknown "IPsecサービスの起動に失敗しました。"
 	fi
 	if ! timeout "$(remaining_seconds)" ipsec up "$connection" >>"$runtime/ipsec.log" 2>&1; then
 		sed -n '1,40p' "$runtime/ipsec.log" >&2
-		fail ipsec_negotiation "IPsecが成立しませんでした。事前共有鍵・接続先・暗号方式を確認してください。"
+		fail ipsec_negotiation "IPsecのネゴシエーションに失敗しました。事前共有鍵、サーバー、暗号スイートを確認してください。"
 	fi
 
-	echo "L2TPとPPPの認証を開始します。"
+	echo "L2TPの接続とPPPの認証を開始します。"
 	xl2tpd -D -c "$runtime/xl2tpd.conf" -p "$runtime/xl2tpd.pid" \
 		-C "$runtime/l2tp-control" >"$runtime/xl2tpd.log" 2>&1 &
 	if ! wait_for_file "$runtime/l2tp-control"; then
-		fail unknown "L2TPサービスが起動しませんでした。"
+		fail unknown "L2TPサービスの起動に失敗しました。"
 	fi
 	printf 'c %s\n' "$connection" >"$runtime/l2tp-control"
 	if ! wait_for_address; then
-		fail ppp_authentication "PPPが成立しませんでした。利用者名とパスワードを確認してください。"
+		fail ppp_authentication "PPPの認証に失敗しました。ユーザー名とパスワードを確認してください。"
 	fi
 }
 

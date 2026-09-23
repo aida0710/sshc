@@ -14,7 +14,7 @@ backend_read() {
 }
 
 backend_up() {
-	echo "トンネルを張ります（wireguard）。"
+	echo "VPNに接続します（WireGuard）。"
 	wireguard-go "$interface"
 	wg setconf "$interface" "$runtime/wireguard.conf"
 	rm -f "$runtime/wireguard.conf"
@@ -34,10 +34,10 @@ latest_handshake() {
 # WireGuard は接続という段階を持たないので、interface が上がっただけでは、鍵や
 # 相手のアドレスが正しいかは分からない。握手できて初めて、相手と話せたと言える。
 backend_ready() {
-	echo "相手との握手を待ちます。"
+	echo "ハンドシェイクの完了を待っています。"
 	while [ "$(latest_handshake)" = "0" ]; do
 		if [ "$(remaining_seconds)" -le 0 ]; then
-			fail handshake_timeout "WireGuardの相手と握手できませんでした。サーバー・鍵を確認してください。"
+			fail handshake_timeout "ハンドシェイクに失敗しました。サーバーと鍵を確認してください。"
 		fi
 		pause 1
 	done

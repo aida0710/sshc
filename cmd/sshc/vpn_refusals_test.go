@@ -34,7 +34,7 @@ func TestVPNRefusalsAreExplainedInASentence(t *testing.T) {
 			name:    "経路を用意できなかった",
 			called:  vpnInvocation{Action: vpnUp, Name: "lab"},
 			problem: `{"code":"vpn_session_failed","message":"request rejected","reason":"handshake_timeout"}`,
-			want:    []string{"WireGuardの相手と握手できませんでした", "sshc vpn logs lab"},
+			want:    []string{"ハンドシェイクに失敗しました", "sshc vpn logs lab"},
 		},
 		{
 			name:    "接続先の食い違い",
