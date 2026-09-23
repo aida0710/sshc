@@ -80,50 +80,83 @@ type WireGuardProfile struct {
 }
 
 // Profile は、保存した設定を internal/vpn が使う形へ直す。
+//
+// backend に合う節だけを移す。古い版や別の画面が残した、使っていない節には
+// 引きずられない。
 func (stored VPNProfile) Profile() (vpn.Profile, error) {
 	target, err := parseEndpoint(stored.Target)
 	if err != nil {
-		return vpn.Profile{}, fmt.Errorf("%w: 接続先 %q: %w", ErrMetadataVPN, stored.Target, err)
+		return vpn.Profile{}, metadataVPNFieldError(vpn.ErrTarget, "target")
 	}
+	normalized := stored.Normalized()
 	profile := vpn.Profile{
-		Name:    stored.Name,
-		Backend: vpn.BackendName(stored.Backend),
+		Name:    normalized.Name,
+		Backend: vpn.BackendName(normalized.Backend),
 		Target:  target,
-		DNS:     append([]string(nil), stored.DNS...),
+		DNS:     append([]string(nil), normalized.DNS...),
 	}
-	if stored.WireGuard != nil {
-		server, err := parseEndpoint(stored.WireGuard.Server)
+	if settings := normalized.WireGuard; settings != nil {
+		server, err := parseEndpoint(settings.Server)
 		if err != nil {
-			return vpn.Profile{}, fmt.Errorf("%w: サーバー %q: %w", ErrMetadataVPN, stored.WireGuard.Server, err)
+			return vpn.Profile{}, metadataVPNFieldError(vpn.ErrSettings, "wireguard.server")
 		}
 		profile.WireGuard = &vpn.WireGuardSettings{
-			Server:        server,
-			PeerPublicKey: stored.WireGuard.PeerPublicKey,
-			Address:       stored.WireGuard.Address,
+			Server: server, PeerPublicKey: settings.PeerPublicKey, Address: settings.Address,
 		}
 	}
-	if stored.OpenConnect != nil {
+	if settings := normalized.OpenConnect; settings != nil {
 		profile.OpenConnect = &vpn.OpenConnectSettings{
-			Server:            stored.OpenConnect.Server,
-			Username:          stored.OpenConnect.Username,
-			Protocol:          stored.OpenConnect.Protocol,
-			ServerCertificate: stored.OpenConnect.ServerCertificate,
-			SecondFactor:      stored.OpenConnect.SecondFactor,
-			ApprovalWord:      stored.OpenConnect.ApprovalWord,
+			Server:            settings.Server,
+			Username:          settings.Username,
+			Protocol:          settings.Protocol,
+			ServerCertificate: settings.ServerCertificate,
+			SecondFactor:      settings.SecondFactor,
+			ApprovalWord:      settings.ApprovalWord,
 		}
 	}
-	if stored.L2TP != nil {
+	if settings := normalized.L2TP; settings != nil {
 		profile.L2TP = &vpn.L2TPSettings{
-			Server:   stored.L2TP.Server,
-			Username: stored.L2TP.Username,
-			IKE:      stored.L2TP.IKE,
-			ESP:      stored.L2TP.ESP,
+			Server: settings.Server, Username: settings.Username, IKE: settings.IKE, ESP: settings.ESP,
 		}
 	}
 	if err := profile.Validate(); err != nil {
 		return vpn.Profile{}, fmt.Errorf("%w: %w", ErrMetadataVPN, err)
 	}
 	return profile, nil
+}
+
+// Reaches は、この経路の接続先が address（`host:port`）を指すかを返す。
+// 比べ方は vpn.Endpoint.Reaches と同じである。
+func (stored VPNProfile) Reaches(address string) bool {
+	target, err := parseEndpoint(stored.Target)
+	return err == nil && target.Reaches(address)
+}
+
+// Normalized は、backend と違う節を落とし、空の DNS を無しに揃えた写しを返す。
+//
+// 画面は方式を切り替えたあとに古い節を送ってくることがある。断らずに落とすのは、
+// 利用者が直せる誤りではないからである。
+func (stored VPNProfile) Normalized() VPNProfile {
+	normalized := stored
+	if len(normalized.DNS) == 0 {
+		normalized.DNS = nil
+	}
+	if normalized.Backend != string(vpn.WireGuard) {
+		normalized.WireGuard = nil
+	}
+	if normalized.Backend != string(vpn.L2TPIPsec) {
+		normalized.L2TP = nil
+	}
+	if normalized.Backend != string(vpn.OpenConnect) {
+		normalized.OpenConnect = nil
+	}
+	return normalized
+}
+
+// metadataVPNFieldError は、保存形式の `host:port` が読めないことを、項目の
+// 誤りとして返す。
+func metadataVPNFieldError(kind error, field string) error {
+	return fmt.Errorf("%w: %w", ErrMetadataVPN, &vpn.FieldError{Kind: kind, Field: field, Reason: vpn.ReasonFormat})
 }
 
 func parseEndpoint(value string) (vpn.Endpoint, error) {
@@ -157,9 +190,7 @@ func validateVPNProfiles(profiles []VPNProfile) error {
 		if stored.Backend == "" {
 			return fmt.Errorf("%w: %s に backend がありません", ErrMetadataVPN, stored.Name)
 		}
-		switch vpn.BackendName(stored.Backend) {
-		case vpn.WireGuard, vpn.L2TPIPsec, vpn.OpenConnect:
-		default:
+		if !vpn.KnownBackend(stored.Backend) {
 			continue
 		}
 		if _, err := stored.Profile(); err != nil {

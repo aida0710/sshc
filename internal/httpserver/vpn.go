@@ -22,60 +22,6 @@ type VPNHandlers struct {
 	Sessions *vpn.Manager
 }
 
-type vpnOverviewResponse struct {
-	Available bool                 `json:"available"`
-	Detail    string               `json:"detail,omitempty"`
-	Profiles  []vpnSessionResponse `json:"profiles"`
-}
-
-type vpnSessionResponse struct {
-	Profile application.VPNProfile `json:"profile"`
-	Running bool                   `json:"running"`
-	// RelaySocket は、中継のソケットの場所である。開いていなければ空になる。
-	RelaySocket string   `json:"relaySocket"`
-	Connections []string `json:"connections"`
-	// Tunnel は、コンテナの中のトンネルの様子である。経路が無ければ省略する。
-	Tunnel *vpnTunnelResponse `json:"tunnel,omitempty"`
-	// Phase は、いま経路を用意している段階である。用意していなければ空。
-	Phase vpn.StartPhase `json:"phase,omitempty"`
-}
-
-type vpnTunnelResponse struct {
-	Interface string `json:"interface,omitempty"`
-	Address   string `json:"address,omitempty"`
-	Since     string `json:"since,omitempty"`
-	Backend   string `json:"backend,omitempty"`
-	// TargetAddress は、VPNの中で引けた接続先のアドレスである。
-	TargetAddress string `json:"targetAddress,omitempty"`
-}
-
-type vpnLogsResponse struct {
-	Lines string `json:"lines"`
-}
-
-type vpnProfileRequest struct {
-	Profile application.VPNProfile `json:"profile"`
-	Secrets *vpnSecretsRequest     `json:"secrets,omitempty"`
-}
-
-type vpnSecretsRequest struct {
-	WireGuardPrivateKey string `json:"wireguardPrivateKey,omitempty"`
-	L2TPPassword        string `json:"l2tpPassword,omitempty"`
-	IPsecPSK            string `json:"ipsecPsk,omitempty"`
-	OpenConnectPassword string `json:"openconnectPassword,omitempty"`
-	// OpenConnectTOTPSecret は、二段目のコードを作る種である。
-	OpenConnectTOTPSecret string `json:"openconnectTotpSecret,omitempty"`
-}
-
-type vpnRenameRequest struct {
-	Name string `json:"name"`
-}
-
-type vpnBindingRequest struct {
-	Alias   string `json:"alias"`
-	Profile string `json:"profile"`
-}
-
 func registerVPNRoutes(engine *echo.Echo, handlers VPNHandlers) {
 	engine.GET("/api/v1/vpn", handlers.Overview)
 	engine.PUT("/api/v1/vpn/profiles/:name", handlers.SaveProfile)
@@ -97,7 +43,7 @@ func (h VPNHandlers) Overview(c *echo.Context) error {
 // 秘密は同じ要求で受け取るが、応答には現れない。省略された場合は保存済みの
 // 秘密を残す。設定だけを直すときに、秘密を入れ直させない。
 func (h VPNHandlers) SaveProfile(c *echo.Context) error {
-	var request vpnProfileRequest
+	var request VPNProfileRequest
 	if err := decodeJSON(c, &request); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
@@ -108,13 +54,7 @@ func (h VPNHandlers) SaveProfile(c *echo.Context) error {
 		return vpnProblem(c, err)
 	}
 	if request.Secrets != nil {
-		document, err := vpn.EncodeSecrets(vpn.Secrets{
-			WireGuardPrivateKey:   request.Secrets.WireGuardPrivateKey,
-			L2TPPassword:          request.Secrets.L2TPPassword,
-			IPsecPSK:              request.Secrets.IPsecPSK,
-			OpenConnectPassword:   request.Secrets.OpenConnectPassword,
-			OpenConnectTOTPSecret: request.Secrets.OpenConnectTOTPSecret,
-		})
+		document, err := vpn.EncodeSecrets(request.Secrets.Secrets())
 		if err != nil {
 			return vpnProblem(c, err)
 		}
@@ -151,7 +91,7 @@ func (h VPNHandlers) DeleteProfile(c *echo.Context) error {
 // 残りが古い名前を指したままになる。動いている経路はコンテナの名前も変わるので、
 // 先に畳む。
 func (h VPNHandlers) RenameProfile(c *echo.Context) error {
-	var request vpnRenameRequest
+	var request VPNRenameRequest
 	if err := decodeJSON(c, &request); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
@@ -188,7 +128,7 @@ func (h VPNHandlers) Logs(c *echo.Context) error {
 	if err != nil {
 		return vpnProblem(c, err)
 	}
-	return c.JSON(http.StatusOK, vpnLogsResponse{Lines: lines})
+	return c.JSON(http.StatusOK, VPNLogs{Lines: lines})
 }
 
 // StartSession は、プロファイルの経路を用意する。
@@ -213,7 +153,7 @@ func (h VPNHandlers) StopSession(c *echo.Context) error {
 
 // SetBinding は、接続が通るプロファイルを決める。空なら紐付けを外す。
 func (h VPNHandlers) SetBinding(c *echo.Context) error {
-	var request vpnBindingRequest
+	var request VPNBindingRequest
 	if err := decodeJSON(c, &request); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
@@ -251,13 +191,13 @@ func (h VPNHandlers) respond(c *echo.Context) error {
 	if err != nil {
 		return vpnProblem(c, err)
 	}
-	response := vpnOverviewResponse{Available: true, Profiles: make([]vpnSessionResponse, 0, len(profiles))}
+	response := VPNOverview{Available: true, Profiles: make([]VPNProfileStatus, 0, len(profiles))}
 	if err := h.Sessions.Available(c.Request().Context()); err != nil {
 		response.Available = false
 		response.Detail = err.Error()
 	}
 	for _, profile := range profiles {
-		session := vpnSessionResponse{Profile: profile, Connections: bindings[profile.Name]}
+		session := VPNProfileStatus{Profile: profile, Connections: bindings[profile.Name]}
 		if session.Connections == nil {
 			session.Connections = []string{}
 		}
@@ -267,7 +207,7 @@ func (h VPNHandlers) respond(c *echo.Context) error {
 				session.Running, session.RelaySocket = status.Running, status.RelaySocket
 				session.Phase = status.Phase
 				if status.Tunnel != (vpn.TunnelStatus{}) {
-					session.Tunnel = &vpnTunnelResponse{
+					session.Tunnel = &VPNTunnel{
 						Interface: status.Tunnel.Interface, Address: status.Tunnel.Address,
 						Since: status.Tunnel.Since, Backend: status.Tunnel.Backend,
 						TargetAddress: status.Tunnel.TargetAddress,

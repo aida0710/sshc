@@ -68,6 +68,7 @@ func (s *Service) VPNProfiles() ([]VPNProfile, error) {
 		return nil, err
 	}
 	profiles := append([]VPNProfile(nil), stored.VPNProfiles...)
+	sort.Slice(profiles, func(left, right int) bool { return profiles[left].Name < profiles[right].Name })
 	return profiles, nil
 }
 
@@ -75,6 +76,7 @@ func (s *Service) VPNProfiles() ([]VPNProfile, error) {
 //
 // 秘密はここを通らない。Vault が持つ。
 func (s *Service) SaveVPNProfile(profile VPNProfile) (SaveResult, error) {
+	profile = profile.Normalized()
 	if _, err := profile.Profile(); err != nil {
 		return SaveResult{}, err
 	}

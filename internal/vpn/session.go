@@ -67,7 +67,6 @@ func (manager *Manager) socketPath(profileName string) string {
 	return filepath.Join(manager.socketDirectory(profileName), relaySocketName)
 }
 
-// start は、このプロファイルのコンテナを起動し、中継が開くまで待つ。
 // start は、コンテナを一台立ち上げて中継が使えるようになるまでを行う。
 //
 // report は、いまどこまで進んだかを呼び出し側へ知らせる。初回はイメージの用意
@@ -80,11 +79,8 @@ func (manager *Manager) start(ctx context.Context, profile Profile, secrets Secr
 	if err := profile.ValidateSecrets(secrets); err != nil {
 		return err
 	}
-	if err := requireTunnelDevice(profile.Backend); err != nil {
-		return err
-	}
-	device, err := tunnelDevice(profile.Backend)
-	if err != nil {
+	chosen := backends[profile.Backend]
+	if err := requireTunnelDevice(chosen.device()); err != nil {
 		return err
 	}
 	report(PhaseImage)
@@ -100,13 +96,17 @@ func (manager *Manager) start(ctx context.Context, profile Profile, secrets Secr
 	name := containerName(profile.Name, manager.owner)
 	arguments := runArguments(containerRun{
 		name: name, image: image, profile: profile, owner: manager.owner,
-		socketDirectory: directory, device: device,
+		socketDirectory: directory, backend: chosen,
 	})
 	if _, err := manager.docker.output(ctx, arguments...); err != nil {
 		return fmt.Errorf("%w: %w", ErrSessionFailed, err)
 	}
 	// 二段目のコードは 30 秒で変わる。イメージを作る時間を挟まないよう、渡す
 	// 直前にこの文書を作る。
+	if err := sleepContext(ctx, secondFactorWait(profile, secrets, manager.now())); err != nil {
+		_ = manager.stopContainer(ctx, name)
+		return err
+	}
 	document, err := newAgentDocument(profile, secrets, manager.owner, manager.now())
 	if err != nil {
 		_ = manager.stopContainer(ctx, name)
@@ -124,32 +124,30 @@ func (manager *Manager) start(ctx context.Context, profile Profile, secrets Secr
 	return nil
 }
 
-// tunnelDevice は、backendが要るデバイスである。
-func tunnelDevice(backend BackendName) (string, error) {
-	switch backend {
-	case WireGuard:
-		return "/dev/net/tun", nil
-	case L2TPIPsec:
-		return "/dev/ppp", nil
-	case OpenConnect:
-		return "/dev/net/tun", nil
-	}
-	return "", fmt.Errorf("%w: %s", ErrBackend, backend)
-}
-
 // requireTunnelDevice は、backendが要るデバイスがこの機械にあるかを見る。
 //
 // 無いまま起動すると、コンテナの中の分かりにくい失敗になる。ここで断る方が、
 // 利用者は何を用意すればよいかを知れる。
-func requireTunnelDevice(backend BackendName) error {
-	device, err := tunnelDevice(backend)
-	if err != nil {
-		return err
-	}
+func requireTunnelDevice(device string) error {
 	if _, err := os.Stat(device); err != nil {
 		return fmt.Errorf("%w: %s がありません", ErrTunnelDevice, device)
 	}
 	return nil
+}
+
+// sleepContext は、ctx が終わるまでのあいだ、長くても wait だけ待つ。
+func sleepContext(ctx context.Context, wait time.Duration) error {
+	if wait <= 0 {
+		return nil
+	}
+	timer := time.NewTimer(wait)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }
 
 // prepareSocketDirectory は、中継ソケットを置く場所を利用者だけのものにする。
@@ -185,13 +183,13 @@ type containerRun struct {
 	profile         Profile
 	owner           int
 	socketDirectory string
-	// device は、この backend が要るトンネルのデバイスである。
-	device string
+	// backend は、デバイスと権限を決める。
+	backend backend
 }
 
 // runArguments は、コンテナを起動する引数である。
 //
-// --privileged と --network host は使わない。渡す権限は CAP_NET_ADMIN、渡す
+// --privileged と --network host は使わない。渡す権限は backend が要るもの、渡す
 // デバイスはトンネルのものだけである。秘密は引数に載せない。
 func runArguments(run containerRun) []string {
 	name, image, profile, owner, socketDirectory := run.name, run.image, run.profile, run.owner, run.socketDirectory
@@ -201,7 +199,7 @@ func runArguments(run containerRun) []string {
 		"--label", profileLabel + "=" + profile.Name,
 		"--label", targetLabel + "=" + profile.Target.Address(),
 		"--network", "bridge",
-		"--device", run.device,
+		"--device", run.backend.device(),
 		"--security-opt", "no-new-privileges:true",
 		"--restart", "no",
 		// 設定と秘密が触れるのはこのtmpfsだけである。コンテナを止めれば消える。
@@ -209,31 +207,8 @@ func runArguments(run containerRun) []string {
 		"--volume", socketDirectory + ":/run/sshc-vpn-socket",
 		"--log-opt", "max-size=1m", "--log-opt", "max-file=1",
 	}
-	arguments = append(arguments, capabilityArguments(profile.Backend)...)
+	arguments = append(arguments, run.backend.capabilities()...)
 	return append(arguments, image)
-}
-
-// capabilityArguments は、その backend が要る権限だけを渡す指定である。
-//
-// wireguard では、要るものを実際のコンテナで確かめてある。NET_ADMIN はトンネル
-// と経路のため、NET_RAW は iptables のため、DAC_OVERRIDE は利用者のものである
-// ソケット用ディレクトリへ書くため、CHOWN は中継のソケットを利用者のものにする
-// ためである。既定で付いてくる残り（MKNOD・SYS_CHROOT・SETUID など）は要らない。
-//
-// l2tp_ipsec では既定のままにする。strongSwan・xl2tpd・pppd がどの権限を使うか
-// を、実際のVPN装置に対して確かめられていない。確かめずに削ると、繋がらなく
-// なった理由が権限にあることを利用者が知る手段が無い。
-func capabilityArguments(backend BackendName) []string {
-	if backend != WireGuard {
-		return []string{"--cap-add", "NET_ADMIN"}
-	}
-	return []string{
-		"--cap-drop", "ALL",
-		"--cap-add", "NET_ADMIN",
-		"--cap-add", "NET_RAW",
-		"--cap-add", "DAC_OVERRIDE",
-		"--cap-add", "CHOWN",
-	}
 }
 
 // sendDocument は、設定と秘密を標準入力でコンテナへ渡す。
@@ -283,15 +258,10 @@ func (manager *Manager) waitForRelay(ctx context.Context, name string, profile P
 // 承認を待つ経路では、待っている相手は装置ではなく人である。「トンネルを
 // 待っています」とだけ出ていると、利用者は電話を見に行かない。
 func tunnelPhase(profile Profile) StartPhase {
-	if waitsForApproval(profile) {
+	if profile.WaitsForApproval() {
 		return PhaseApproval
 	}
 	return PhaseTunnel
-}
-
-// waitsForApproval は、この経路が人の承認を待つかを返す。
-func waitsForApproval(profile Profile) bool {
-	return profile.OpenConnect != nil && profile.OpenConnect.SecondFactor == SecondFactorApprove
 }
 
 // connectAttemptSeconds は、コンテナが相手を待つ上限である。engine が待つ長さ
@@ -305,16 +275,21 @@ func connectAttemptSeconds(profile Profile) int {
 // 人が電話で承認する経路は、機械だけで進む経路より長くかかる。同じ長さで打ち
 // 切ると、承認する前に畳んでしまう。
 func relayDeadline(profile Profile) time.Duration {
-	if waitsForApproval(profile) {
+	if profile.WaitsForApproval() {
 		return approvalReadyTimeout
 	}
 	return readyTimeout
 }
 
+// containerRunning は、コンテナが動いているかを返す。コンテナが無ければ false
+// を返し、docker そのものの失敗は失敗として返す。
 func (manager *Manager) containerRunning(ctx context.Context, name string) (bool, error) {
 	output, err := manager.docker.output(ctx, "container", "inspect", "--format", "{{.State.Running}}", name)
-	if err != nil {
+	if isMissingContainer(err) {
 		return false, nil
+	}
+	if err != nil {
+		return false, err
 	}
 	return strings.TrimSpace(output) == "true", nil
 }
@@ -342,12 +317,27 @@ func (manager *Manager) stopContainer(ctx context.Context, name string) error {
 func (manager *Manager) requireOurContainer(ctx context.Context, name, profileName string) (bool, error) {
 	format := "{{index .Config.Labels \"" + ownerLabel + "\"}} {{index .Config.Labels \"" + profileLabel + "\"}}"
 	output, err := manager.docker.output(ctx, "container", "inspect", "--format", format, name)
-	if err != nil {
+	if isMissingContainer(err) {
 		return false, nil
+	}
+	if err != nil {
+		return false, err
 	}
 	fields := strings.Fields(strings.TrimSpace(output))
 	if len(fields) != 2 || fields[0] != strconv.Itoa(manager.owner) || fields[1] != profileName {
 		return false, fmt.Errorf("%w: %s", ErrSessionForeign, name)
 	}
 	return true, nil
+}
+
+// isMissingContainer は、docker の失敗が「そのコンテナは無い」だったかを返す。
+//
+// それ以外の失敗（daemon が応えない、など）を「無い」と読むと、無いはずの名前で
+// コンテナを作りに行き、名前の衝突という分かりにくい失敗になる。
+func isMissingContainer(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := err.Error()
+	return strings.Contains(message, "No such container") || strings.Contains(message, "No such object")
 }

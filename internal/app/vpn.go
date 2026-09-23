@@ -62,7 +62,7 @@ func vpnRoute(
 		if err != nil {
 			return nil, err
 		}
-		if profile.Target.Address() != address {
+		if !profile.Reaches(address) {
 			return nil, fmt.Errorf("%w: %s は %s へ繋ぐ経路である", vpn.ErrTargetMismatch, name, profile.Target.Address())
 		}
 		stored, err := secrets.VPNSecrets(name)

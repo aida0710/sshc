@@ -21,12 +21,12 @@ func l2tpProfile() Profile {
 }
 
 func l2tpSecrets() Secrets {
-	return Secrets{L2TPPassword: `p"a\ss`, IPsecPSK: "shared-secret"}
+	return Secrets{L2TP: &L2TPSecrets{Password: `p"a\ss`, PreSharedKey: "shared-secret"}}
 }
 
 // 相手のアドレスは設定に書かず、コンテナの中で引いた値で置き換える。
 func TestTheServerAddressIsLeftForTheContainerToResolve(t *testing.T) {
-	documents := l2tpDocuments(*l2tpProfile().L2TP, l2tpSecrets())
+	documents := l2tpDocuments(*l2tpProfile().L2TP, *l2tpSecrets().L2TP)
 
 	for _, name := range []string{"ipsec.conf", "xl2tpd.conf"} {
 		if !strings.Contains(documents[name], serverAddressPlaceholder) {
@@ -40,7 +40,7 @@ func TestTheServerAddressIsLeftForTheContainerToResolve(t *testing.T) {
 
 // トンネルは接続先への経路だけを作る。既定経路を奪わない。
 func TestTheTunnelNeverTakesTheDefaultRoute(t *testing.T) {
-	documents := l2tpDocuments(*l2tpProfile().L2TP, l2tpSecrets())
+	documents := l2tpDocuments(*l2tpProfile().L2TP, *l2tpSecrets().L2TP)
 
 	if !strings.Contains(documents["ppp.options"], "nodefaultroute") {
 		t.Fatalf("ppp.options = %s", documents["ppp.options"])
@@ -54,20 +54,20 @@ func TestTheTunnelNeverTakesTheDefaultRoute(t *testing.T) {
 // 事前共有鍵は16進で書く。引用符や backslash を含んでも構文が壊れない。
 func TestThePreSharedKeyIsWrittenAsHexadecimal(t *testing.T) {
 	secrets := l2tpSecrets()
-	documents := l2tpDocuments(*l2tpProfile().L2TP, secrets)
+	documents := l2tpDocuments(*l2tpProfile().L2TP, *secrets.L2TP)
 
-	want := ": PSK 0x" + hex.EncodeToString([]byte(secrets.IPsecPSK)) + "\n"
+	want := ": PSK 0x" + hex.EncodeToString([]byte(secrets.L2TP.PreSharedKey)) + "\n"
 	if documents["ipsec.secrets"] != want {
 		t.Fatalf("ipsec.secrets = %q, want %q", documents["ipsec.secrets"], want)
 	}
-	if strings.Contains(documents["ipsec.secrets"], secrets.IPsecPSK) {
+	if strings.Contains(documents["ipsec.secrets"], secrets.L2TP.PreSharedKey) {
 		t.Fatalf("ipsec.secrets が素の鍵を含む: %q", documents["ipsec.secrets"])
 	}
 }
 
 // 利用者名とパスワードは pppd の1語として書く。
 func TestTheUserAndPasswordAreQuotedForPPP(t *testing.T) {
-	documents := l2tpDocuments(*l2tpProfile().L2TP, l2tpSecrets())
+	documents := l2tpDocuments(*l2tpProfile().L2TP, *l2tpSecrets().L2TP)
 
 	if !strings.Contains(documents["ppp.options"], `user "vpn-user"`) {
 		t.Errorf("ppp.options = %s", documents["ppp.options"])
@@ -79,7 +79,7 @@ func TestTheUserAndPasswordAreQuotedForPPP(t *testing.T) {
 
 // 指定した暗号方式だけを書き、指定しなければ既定に任せる。
 func TestOnlyTheGivenProposalsAreWritten(t *testing.T) {
-	documents := l2tpDocuments(*l2tpProfile().L2TP, l2tpSecrets())
+	documents := l2tpDocuments(*l2tpProfile().L2TP, *l2tpSecrets().L2TP)
 	if !strings.Contains(documents["ipsec.conf"], "    esp=aes256-sha256,aes128-sha1") {
 		t.Errorf("ipsec.conf = %s", documents["ipsec.conf"])
 	}
@@ -116,17 +116,17 @@ func TestTheL2TPDocumentCarriesEveryFileTheContainerNeeds(t *testing.T) {
 func TestShownLogsHideEveryL2TPSecret(t *testing.T) {
 	secrets := l2tpSecrets()
 	logs := strings.Join([]string{
-		"xl2tpd: password " + secrets.L2TPPassword,
-		"charon: psk " + hex.EncodeToString([]byte(secrets.IPsecPSK)),
-		"charon: PSK " + strings.ToUpper(hex.EncodeToString([]byte(secrets.IPsecPSK))),
+		"xl2tpd: password " + secrets.L2TP.Password,
+		"charon: psk " + hex.EncodeToString([]byte(secrets.L2TP.PreSharedKey)),
+		"charon: PSK " + strings.ToUpper(hex.EncodeToString([]byte(secrets.L2TP.PreSharedKey))),
 	}, "\n")
 
 	shown := redact(logs, secrets)
 
 	for _, forbidden := range []string{
-		secrets.L2TPPassword,
-		hex.EncodeToString([]byte(secrets.IPsecPSK)),
-		strings.ToUpper(hex.EncodeToString([]byte(secrets.IPsecPSK))),
+		secrets.L2TP.Password,
+		hex.EncodeToString([]byte(secrets.L2TP.PreSharedKey)),
+		strings.ToUpper(hex.EncodeToString([]byte(secrets.L2TP.PreSharedKey))),
 	} {
 		if strings.Contains(shown, forbidden) {
 			t.Fatalf("ログに %q が残った: %s", forbidden, shown)
@@ -139,8 +139,8 @@ func TestL2TPSecretsAreRequiredBeforeConnecting(t *testing.T) {
 	profile := l2tpProfile()
 	for _, secrets := range []Secrets{
 		{},
-		{L2TPPassword: "only-password"},
-		{IPsecPSK: "only-psk"},
+		{L2TP: &L2TPSecrets{Password: "only-password"}},
+		{L2TP: &L2TPSecrets{PreSharedKey: "only-psk"}},
 	} {
 		if err := profile.ValidateSecrets(secrets); err == nil {
 			t.Fatalf("ValidateSecrets accepted %+v", secrets)

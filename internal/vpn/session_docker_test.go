@@ -147,7 +147,7 @@ func TestAConnectionReachesTheTargetThroughTheTunnel(t *testing.T) {
 			Address:       tunnelClientAddress,
 		},
 	}
-	secrets := Secrets{WireGuardPrivateKey: clientPrivate}
+	secrets := Secrets{WireGuard: &WireGuardSecrets{PrivateKey: clientPrivate}}
 	t.Cleanup(func() { _ = manager.Stop(context.Background(), profile.Name) })
 
 	connection, err := manager.Dial(ctx, profile, secrets)
@@ -198,7 +198,7 @@ func TestTheTargetIsUnreachableWhileTheTunnelIsNotUp(t *testing.T) {
 			Address:       tunnelClientAddress,
 		},
 	}
-	secrets := Secrets{WireGuardPrivateKey: clientPrivate}
+	secrets := Secrets{WireGuard: &WireGuardSecrets{PrivateKey: clientPrivate}}
 	t.Cleanup(func() { _ = manager.Stop(context.Background(), profile.Name) })
 
 	connection, err := manager.Dial(ctx, profile, secrets)
@@ -239,7 +239,7 @@ func TestSessionsLeftByAPreviousEngineAreDiscarded(t *testing.T) {
 		},
 	}
 	t.Cleanup(func() { _ = manager.Stop(context.Background(), profile.Name) })
-	if err := manager.Start(ctx, profile, Secrets{WireGuardPrivateKey: clientPrivate}); err != nil {
+	if err := manager.Start(ctx, profile, Secrets{WireGuard: &WireGuardSecrets{PrivateKey: clientPrivate}}); err != nil {
 		t.Fatalf("Start = %v", err)
 	}
 
@@ -266,7 +266,7 @@ func TestSessionsLeftByAPreviousEngineAreDiscarded(t *testing.T) {
 // ipsec の起動までは動いている。
 func TestTheL2TPBranchRunsUntilTheServerRefusesIt(t *testing.T) {
 	manager, ctx := requireDockerTest(t)
-	if err := requireTunnelDevice(L2TPIPsec); err != nil {
+	if err := requireTunnelDevice(backends[L2TPIPsec].device()); err != nil {
 		t.Skipf("この機械では l2tp を試せない: %v", err)
 	}
 	profile := Profile{
@@ -279,7 +279,7 @@ func TestTheL2TPBranchRunsUntilTheServerRefusesIt(t *testing.T) {
 			Username: "fixture",
 		},
 	}
-	secrets := Secrets{L2TPPassword: "fixture-password", IPsecPSK: "fixture-psk"}
+	secrets := Secrets{L2TP: &L2TPSecrets{Password: "fixture-password", PreSharedKey: "fixture-psk"}}
 	t.Cleanup(func() { _ = manager.Stop(context.Background(), profile.Name) })
 
 	err := manager.Start(ctx, profile, secrets)
@@ -293,7 +293,7 @@ func TestTheL2TPBranchRunsUntilTheServerRefusesIt(t *testing.T) {
 		t.Fatalf("失敗の理由が IPsec の段階を指していない: %v", err)
 	}
 	// 秘密は、利用者へ見せる失敗の文面に現れない。
-	for _, forbidden := range []string{secrets.L2TPPassword, secrets.IPsecPSK} {
+	for _, forbidden := range []string{secrets.L2TP.Password, secrets.L2TP.PreSharedKey} {
 		if strings.Contains(err.Error(), forbidden) {
 			t.Fatalf("失敗の文面に秘密が現れた: %v", err)
 		}
@@ -307,7 +307,7 @@ func TestTheL2TPBranchRunsUntilTheServerRefusesIt(t *testing.T) {
 // パスワードが現れないことである。
 func TestTheOpenConnectBranchRunsUntilTheServerRefusesIt(t *testing.T) {
 	manager, ctx := requireDockerTest(t)
-	if err := requireTunnelDevice(OpenConnect); err != nil {
+	if err := requireTunnelDevice(backends[OpenConnect].device()); err != nil {
 		t.Skipf("この機械では openconnect を試せない: %v", err)
 	}
 	profile := Profile{
@@ -320,7 +320,7 @@ func TestTheOpenConnectBranchRunsUntilTheServerRefusesIt(t *testing.T) {
 			Username: "fixture",
 		},
 	}
-	secrets := Secrets{OpenConnectPassword: "fixture-password"}
+	secrets := Secrets{OpenConnect: &OpenConnectSecrets{Password: "fixture-password"}}
 	t.Cleanup(func() { _ = manager.Stop(context.Background(), profile.Name) })
 
 	err := manager.Start(ctx, profile, secrets)
@@ -333,7 +333,7 @@ func TestTheOpenConnectBranchRunsUntilTheServerRefusesIt(t *testing.T) {
 	if !strings.Contains(err.Error(), "openconnectが接続できませんでした") {
 		t.Fatalf("失敗の理由が openconnect の段階を指していない: %v", err)
 	}
-	if strings.Contains(err.Error(), secrets.OpenConnectPassword) {
+	if strings.Contains(err.Error(), secrets.OpenConnect.Password) {
 		t.Fatalf("失敗の文面に秘密が現れた: %v", err)
 	}
 }
@@ -388,7 +388,7 @@ func TestAnIdleRouteIsStoppedAndAUsedOneIsKept(t *testing.T) {
 	clock := time.Now()
 	manager.now = func() time.Time { return clock }
 
-	connection, err := manager.Dial(ctx, profile, Secrets{WireGuardPrivateKey: clientPrivate})
+	connection, err := manager.Dial(ctx, profile, Secrets{WireGuard: &WireGuardSecrets{PrivateKey: clientPrivate}})
 	if err != nil {
 		t.Fatalf("Dial = %v", err)
 	}
@@ -553,10 +553,10 @@ func TestAConnectionReachesTheTargetThroughAnAnyConnectTunnel(t *testing.T) {
 			SecondFactor:      SecondFactorTOTP,
 		},
 	}
-	secrets := Secrets{
-		OpenConnectPassword:   "fixture-password",
-		OpenConnectTOTPSecret: anyConnectTOTPSeed,
-	}
+	secrets := Secrets{OpenConnect: &OpenConnectSecrets{
+		Password:   "fixture-password",
+		TOTPSecret: anyConnectTOTPSeed,
+	}}
 	t.Cleanup(func() { _ = manager.Stop(context.Background(), profile.Name) })
 
 	connection, err := manager.Dial(ctx, profile, secrets)

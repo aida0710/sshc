@@ -64,9 +64,9 @@ func labProfileBody(withSecret bool) string {
 	return body + "}"
 }
 
-func decodeOverview(t *testing.T, payload []byte) vpnOverviewResponse {
+func decodeOverview(t *testing.T, payload []byte) VPNOverview {
 	t.Helper()
-	var overview vpnOverviewResponse
+	var overview VPNOverview
 	if err := json.Unmarshal(payload, &overview); err != nil {
 		t.Fatalf("overview = %s: %v", payload, err)
 	}

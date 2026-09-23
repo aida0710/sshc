@@ -26,7 +26,7 @@ func validOpenConnectProfile() Profile {
 func TestAnOpenConnectProfileWithoutAProtocolSpeaksAnyConnect(t *testing.T) {
 	profile := validOpenConnectProfile()
 
-	document := decodeAgentDocument(t, profile, Secrets{OpenConnectPassword: "fixture-password"})
+	document := decodeAgentDocument(t, profile, Secrets{OpenConnect: &OpenConnectSecrets{Password: "fixture-password"}})
 
 	if document.OpenConnect == nil || document.OpenConnect.Protocol != "anyconnect" {
 		t.Fatalf("openconnect = %+v", document.OpenConnect)
@@ -63,7 +63,7 @@ func TestTheApprovalWordIsSentAsTheSecondAnswer(t *testing.T) {
 	profile.OpenConnect.SecondFactor = SecondFactorApprove
 	profile.OpenConnect.ApprovalWord = "push"
 
-	document := decodeAgentDocument(t, profile, Secrets{OpenConnectPassword: "fixture-password"})
+	document := decodeAgentDocument(t, profile, Secrets{OpenConnect: &OpenConnectSecrets{Password: "fixture-password"}})
 
 	if document.OpenConnect.SecondFactor != "push" {
 		t.Fatalf("secondFactor = %q", document.OpenConnect.SecondFactor)
@@ -79,7 +79,7 @@ func TestNothingIsSentWhenTheDeviceOnlyWaitsForApproval(t *testing.T) {
 	profile := validOpenConnectProfile()
 	profile.OpenConnect.SecondFactor = SecondFactorApprove
 
-	document := decodeAgentDocument(t, profile, Secrets{OpenConnectPassword: "fixture-password"})
+	document := decodeAgentDocument(t, profile, Secrets{OpenConnect: &OpenConnectSecrets{Password: "fixture-password"}})
 
 	if document.OpenConnect.SecondFactor != "" {
 		t.Fatalf("secondFactor = %q", document.OpenConnect.SecondFactor)
@@ -94,7 +94,7 @@ func TestTheContainerIsToldThatItWaitsForApproval(t *testing.T) {
 	profile := validOpenConnectProfile()
 	profile.OpenConnect.SecondFactor = SecondFactorApprove
 
-	document := decodeAgentDocument(t, profile, Secrets{OpenConnectPassword: "fixture-password"})
+	document := decodeAgentDocument(t, profile, Secrets{OpenConnect: &OpenConnectSecrets{Password: "fixture-password"}})
 
 	if !document.OpenConnect.WaitsForApproval {
 		t.Fatal("承認を待つことがコンテナへ伝わっていない")
@@ -121,11 +121,11 @@ func TestAnApprovedRouteIsGivenLongerToComeUp(t *testing.T) {
 func TestTheTOTPCodeIsMadeForTheMomentItIsHandedOver(t *testing.T) {
 	profile := validOpenConnectProfile()
 	profile.OpenConnect.SecondFactor = SecondFactorTOTP
-	secrets := Secrets{
-		OpenConnectPassword: "fixture-password",
+	secrets := Secrets{OpenConnect: &OpenConnectSecrets{
+		Password: "fixture-password",
 		// RFC 6238 の試験鍵（"12345678901234567890" の base32）。
-		OpenConnectTOTPSecret: "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
-	}
+		TOTPSecret: "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
+	}}
 
 	document := decodeAgentDocument(t, profile, secrets)
 
@@ -153,7 +153,7 @@ func TestTOTPAsTheSecondFactorNeedsItsSeed(t *testing.T) {
 	profile := validOpenConnectProfile()
 	profile.OpenConnect.SecondFactor = SecondFactorTOTP
 
-	if err := profile.ValidateSecrets(Secrets{OpenConnectPassword: "fixture-password"}); err == nil {
+	if err := profile.ValidateSecrets(Secrets{OpenConnect: &OpenConnectSecrets{Password: "fixture-password"}}); err == nil {
 		t.Fatal("種が無いまま繋ごうとした")
 	}
 }
@@ -163,7 +163,7 @@ func TestTOTPAsTheSecondFactorNeedsItsSeed(t *testing.T) {
 // 空行を送ると、二段目を聞く装置に「空の答え」を渡すことになり、失敗の理由が
 // 分からなくなる。
 func TestNoSecondAnswerIsSentWhenTheDeviceAsksOnlyOnce(t *testing.T) {
-	document := decodeAgentDocument(t, validOpenConnectProfile(), Secrets{OpenConnectPassword: "fixture-password"})
+	document := decodeAgentDocument(t, validOpenConnectProfile(), Secrets{OpenConnect: &OpenConnectSecrets{Password: "fixture-password"}})
 
 	if document.OpenConnect.SecondFactor != "" {
 		t.Fatalf("secondFactor = %q", document.OpenConnect.SecondFactor)
@@ -226,21 +226,21 @@ func TestOpenConnectNeedsItsPasswordBeforeConnecting(t *testing.T) {
 	if err := profile.ValidateSecrets(Secrets{}); err == nil {
 		t.Fatal("パスワード無しで繋ごうとした")
 	}
-	if err := profile.ValidateSecrets(Secrets{OpenConnectPassword: "fixture-password"}); err != nil {
+	if err := profile.ValidateSecrets(Secrets{OpenConnect: &OpenConnectSecrets{Password: "fixture-password"}}); err != nil {
 		t.Fatalf("ValidateSecrets = %v", err)
 	}
 }
 
 // 見せるログには、openconnect のパスワードも二段目の種も現れない。
 func TestShownLogsHideTheOpenConnectPassword(t *testing.T) {
-	secrets := Secrets{
-		OpenConnectPassword:   "fixture-password",
-		OpenConnectTOTPSecret: "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
-	}
+	secrets := Secrets{OpenConnect: &OpenConnectSecrets{
+		Password:   "fixture-password",
+		TOTPSecret: "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
+	}}
 
 	shown := redact("認証に失敗しました: fixture-password / GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", secrets)
 
-	for _, forbidden := range []string{secrets.OpenConnectPassword, secrets.OpenConnectTOTPSecret} {
+	for _, forbidden := range []string{secrets.OpenConnect.Password, secrets.OpenConnect.TOTPSecret} {
 		if strings.Contains(shown, forbidden) {
 			t.Fatalf("redact = %q", shown)
 		}
@@ -289,5 +289,26 @@ func TestTheContainerGivesUpBeforeTheEngineStopsWaiting(t *testing.T) {
 				t.Fatalf("コンテナの上限 = %v", attempt)
 			}
 		})
+	}
+}
+
+// 窓の終わり間際には、次の窓まで待ってからコードを作る。
+func TestTheTOTPCodeIsNotMadeAtTheEndOfItsWindow(t *testing.T) {
+	profile := validOpenConnectProfile()
+	profile.OpenConnect.SecondFactor = SecondFactorTOTP
+	secrets := Secrets{OpenConnect: &OpenConnectSecrets{
+		Password: "fixture-password", TOTPSecret: "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
+	}}
+	windowStart := time.Unix(1_800_000_000-1_800_000_000%30, 0)
+
+	if wait := secondFactorWait(profile, secrets, windowStart.Add(10*time.Second)); wait != 0 {
+		t.Fatalf("窓の中ほどで %v 待った", wait)
+	}
+	if wait := secondFactorWait(profile, secrets, windowStart.Add(28*time.Second)); wait != 2*time.Second {
+		t.Fatalf("窓の終わり間際の待ち = %v", wait)
+	}
+	profile.OpenConnect.SecondFactor = ""
+	if wait := secondFactorWait(profile, secrets, windowStart.Add(28*time.Second)); wait != 0 {
+		t.Fatalf("TOTP を使わない経路で %v 待った", wait)
 	}
 }

@@ -12,6 +12,8 @@ import (
 	"os"
 	"strings"
 
+	"sshc/internal/application"
+	"sshc/internal/httpserver"
 	"sshc/internal/vpn"
 )
 
@@ -30,52 +32,6 @@ const (
 )
 
 var errVPNSetupInput = errors.New("vpn profile input is invalid")
-
-// vpnOverview は、engine が返す一覧のうち、この CLI が読む部分である。
-type vpnOverview struct {
-	Available bool         `json:"available"`
-	Detail    string       `json:"detail"`
-	Profiles  []vpnSession `json:"profiles"`
-}
-
-type vpnSession struct {
-	Profile vpnStoredProfile `json:"profile"`
-	Running bool             `json:"running"`
-	// RelaySocket は、中継のソケットの場所である。開いていなければ空になる。
-	RelaySocket string     `json:"relaySocket"`
-	Connections []string   `json:"connections"`
-	Tunnel      *vpnTunnel `json:"tunnel,omitempty"`
-	// Phase は、いま経路を用意している段階である。用意していなければ空。
-	Phase string `json:"phase,omitempty"`
-}
-
-type vpnTunnel struct {
-	Interface string `json:"interface,omitempty"`
-	Address   string `json:"address,omitempty"`
-	Since     string `json:"since,omitempty"`
-	Backend   string `json:"backend,omitempty"`
-	// TargetAddress は、VPNの中で引けた接続先のアドレスである。
-	TargetAddress string `json:"targetAddress,omitempty"`
-}
-
-type vpnLogs struct {
-	Lines string `json:"lines"`
-}
-
-// vpnStoredProfile は、engine が返すプロファイルである。
-//
-// 応答は未知の項目を許さずに読む。backend ごとの節も含めて、engine が返す形を
-// そのまま持つ。表示に使うのは名前と方式と接続先だけだが、持たない項目があると
-// 応答そのものを読めない。
-type vpnStoredProfile struct {
-	Name        string                 `json:"name"`
-	Backend     string                 `json:"backend"`
-	Target      string                 `json:"target"`
-	DNS         []string               `json:"dns,omitempty"`
-	WireGuard   *vpnRequestWireGuard   `json:"wireguard,omitempty"`
-	L2TP        *vpnRequestL2TP        `json:"l2tp,omitempty"`
-	OpenConnect *vpnRequestOpenConnect `json:"openconnect,omitempty"`
-}
 
 func runVPN(ctx context.Context, called vpnInvocation, environment commandEnvironment) int {
 	stateDir, client, stdin, stdout, stderr, terminal :=
@@ -102,7 +58,7 @@ func runVPN(ctx context.Context, called vpnInvocation, environment commandEnviro
 
 	// どの操作も、engine は変更後の一覧をそのまま返す。呼び出し側が状態を
 	// 取り直す必要はない。
-	var overview vpnOverview
+	var overview httpserver.VPNOverview
 	switch called.Action {
 	case vpnList:
 		if err := engine.getJSON(ctx, "/api/v1/vpn", &overview); err != nil {
@@ -152,7 +108,7 @@ func runVPN(ctx context.Context, called vpnInvocation, environment commandEnviro
 			return finishSyncFailure(called.JSON, err, stdout, stderr)
 		}
 	case vpnLogsAction:
-		var logs vpnLogs
+		var logs httpserver.VPNLogs
 		if err := engine.getJSON(ctx, vpnProfilePath(called.Name)+"/logs", &logs); err != nil {
 			return finishSyncFailure(called.JSON, err, stdout, stderr)
 		}
@@ -196,7 +152,7 @@ func vpnProfilePath(name string) string {
 // その場で消す。
 func addVPNProfile(
 	ctx context.Context, engine *engineAPI, name string,
-	stdin, prompt *os.File, terminal passwordTerminal, overview *vpnOverview,
+	stdin, prompt *os.File, terminal passwordTerminal, overview *httpserver.VPNOverview,
 ) error {
 	backend, err := promptVisibleSetup(ctx, stdin, prompt,
 		"Backend [wireguard] (wireguard/l2tp_ipsec): ", "wireguard")
@@ -214,7 +170,7 @@ func addVPNProfile(
 	if err != nil {
 		return err
 	}
-	profile := vpnRequestProfile{Name: name, Backend: backend, Target: target, DNS: splitVPNResolvers(resolvers)}
+	profile := application.VPNProfile{Name: name, Backend: backend, Target: target, DNS: splitVPNResolvers(resolvers)}
 	var secrets []vpnSecretField
 	switch backend {
 	case "wireguard":
@@ -248,7 +204,7 @@ func addVPNProfile(
 // readWireGuardProfile は、wireguard の設定と秘密鍵を読む。
 func readWireGuardProfile(
 	ctx context.Context, stdin, prompt *os.File, terminal passwordTerminal,
-) (*vpnRequestWireGuard, []vpnSecretField, error) {
+) (*application.WireGuardProfile, []vpnSecretField, error) {
 	server, err := promptVisibleSetup(ctx, stdin, prompt, "VPN server (host:port): ", "")
 	if err != nil {
 		return nil, nil, err
@@ -267,20 +223,20 @@ func readWireGuardProfile(
 		zeroBytes(privateKey)
 		return nil, nil, err
 	}
-	secrets := []vpnSecretField{{name: "wireguardPrivateKey", value: privateKey}}
+	secrets := []vpnSecretField{{name: vpn.SecretKeyWireGuardPrivateKey, value: privateKey}}
 	if server == "" || peerKey == "" || address == "" {
 		return nil, secrets, errVPNSetupInput
 	}
 	if len(privateKey) > maxVPNKeyBytes || !base64KeyBytes(privateKey) {
 		return nil, secrets, fmt.Errorf("%w: 秘密鍵の形が違います", errVPNSetupInput)
 	}
-	return &vpnRequestWireGuard{Server: server, PeerPublicKey: peerKey, Address: address}, secrets, nil
+	return &application.WireGuardProfile{Server: server, PeerPublicKey: peerKey, Address: address}, secrets, nil
 }
 
 // readL2TPProfile は、L2TP/IPsec の設定と二つの秘密を読む。
 func readL2TPProfile(
 	ctx context.Context, stdin, prompt *os.File, terminal passwordTerminal,
-) (*vpnRequestL2TP, []vpnSecretField, error) {
+) (*application.L2TPProfile, []vpnSecretField, error) {
 	server, err := promptVisibleSetup(ctx, stdin, prompt, "VPN server (host): ", "")
 	if err != nil {
 		return nil, nil, err
@@ -310,19 +266,19 @@ func readL2TPProfile(
 		return nil, nil, err
 	}
 	secrets := []vpnSecretField{
-		{name: "l2tpPassword", value: password},
-		{name: "ipsecPsk", value: psk},
+		{name: vpn.SecretKeyL2TPPassword, value: password},
+		{name: vpn.SecretKeyIPsecPSK, value: psk},
 	}
 	if server == "" || username == "" || len(password) == 0 || len(psk) == 0 {
 		return nil, secrets, errVPNSetupInput
 	}
-	return &vpnRequestL2TP{Server: server, Username: username, IKE: ike, ESP: esp}, secrets, nil
+	return &application.L2TPProfile{Server: server, Username: username, IKE: ike, ESP: esp}, secrets, nil
 }
 
 // readOpenConnectProfile は、openconnect の設定とパスワードを読む。
 func readOpenConnectProfile(
 	ctx context.Context, stdin, prompt *os.File, terminal passwordTerminal,
-) (*vpnRequestOpenConnect, []vpnSecretField, error) {
+) (*application.OpenConnectProfile, []vpnSecretField, error) {
 	server, err := promptVisibleSetup(ctx, stdin, prompt, "VPN server (host): ", "")
 	if err != nil {
 		return nil, nil, err
@@ -349,7 +305,7 @@ func readOpenConnectProfile(
 	if err != nil {
 		return nil, nil, err
 	}
-	settings := &vpnRequestOpenConnect{
+	settings := &application.OpenConnectProfile{
 		Server: server, Username: username, Protocol: protocol, ServerCertificate: certificate,
 	}
 	if secondFactor != "none" {
@@ -370,7 +326,7 @@ func readOpenConnectProfile(
 		zeroBytes(password)
 		return nil, nil, err
 	}
-	secrets := []vpnSecretField{{name: "openconnectPassword", value: password}}
+	secrets := []vpnSecretField{{name: vpn.SecretKeyOpenConnectPassword, value: password}}
 	if settings.SecondFactor == vpn.SecondFactorTOTP {
 		seed, err := promptMaskedPassword(ctx, stdin, prompt, terminal, "Second factor TOTP secret: ")
 		if err != nil {
@@ -378,7 +334,7 @@ func readOpenConnectProfile(
 			zeroBytes(seed)
 			return nil, nil, err
 		}
-		secrets = append(secrets, vpnSecretField{name: "openconnectTotpSecret", value: seed})
+		secrets = append(secrets, vpnSecretField{name: vpn.SecretKeyOpenConnectTOTPSecret, value: seed})
 		if len(seed) == 0 {
 			return nil, secrets, errVPNSetupInput
 		}
@@ -389,39 +345,6 @@ func readOpenConnectProfile(
 	return settings, secrets, nil
 }
 
-// vpnRequestProfile は、保存要求のうち秘密でない部分である。API の形と揃える。
-type vpnRequestProfile struct {
-	Name        string                 `json:"name"`
-	Backend     string                 `json:"backend"`
-	Target      string                 `json:"target"`
-	DNS         []string               `json:"dns,omitempty"`
-	WireGuard   *vpnRequestWireGuard   `json:"wireguard,omitempty"`
-	L2TP        *vpnRequestL2TP        `json:"l2tp,omitempty"`
-	OpenConnect *vpnRequestOpenConnect `json:"openconnect,omitempty"`
-}
-
-type vpnRequestOpenConnect struct {
-	Server            string `json:"server"`
-	Username          string `json:"username"`
-	Protocol          string `json:"protocol,omitempty"`
-	ServerCertificate string `json:"serverCertificate,omitempty"`
-	SecondFactor      string `json:"secondFactor,omitempty"`
-	ApprovalWord      string `json:"approvalWord,omitempty"`
-}
-
-type vpnRequestWireGuard struct {
-	Server        string `json:"server"`
-	PeerPublicKey string `json:"peerPublicKey"`
-	Address       string `json:"address"`
-}
-
-type vpnRequestL2TP struct {
-	Server   string `json:"server"`
-	Username string `json:"username"`
-	IKE      string `json:"ike,omitempty"`
-	ESP      string `json:"esp,omitempty"`
-}
-
 // vpnSecretField は、本文へ書く秘密ひとつである。値は []byte のまま運び、送った
 // あとに消せるようにする。Go の文字列にすると、消せる場所がなくなる。
 type vpnSecretField struct {
@@ -430,7 +353,7 @@ type vpnSecretField struct {
 }
 
 // buildVPNProfilePayload は、保存要求の本文を組み立てる。
-func buildVPNProfilePayload(profile vpnRequestProfile, secrets []vpnSecretField) ([]byte, error) {
+func buildVPNProfilePayload(profile application.VPNProfile, secrets []vpnSecretField) ([]byte, error) {
 	encoded, err := json.Marshal(profile)
 	if err != nil {
 		return nil, err
@@ -467,7 +390,7 @@ func base64KeyBytes(key []byte) bool {
 }
 
 // writeVPNOverview は、一覧と状態を人向けに書く。
-func writeVPNOverview(out io.Writer, overview vpnOverview) {
+func writeVPNOverview(out io.Writer, overview httpserver.VPNOverview) {
 	if !overview.Available {
 		fmt.Fprintf(out, "この機械ではVPN経路を作れません: %s\n\n", safeTerminalCell(overview.Detail))
 	}
@@ -524,18 +447,18 @@ func splitVPNResolvers(value string) []string {
 }
 
 // vpnPhaseWord は、経路を用意している段階を人向けの一語に直す。
-func vpnPhaseWord(phase string) string {
+func vpnPhaseWord(phase vpn.StartPhase) string {
 	switch phase {
-	case "image":
+	case vpn.PhaseImage:
 		return "building the image"
-	case "container":
+	case vpn.PhaseContainer:
 		return "starting the container"
-	case "tunnel":
+	case vpn.PhaseTunnel:
 		return "waiting for the tunnel"
-	case "approval":
+	case vpn.PhaseApproval:
 		return "waiting for approval on the phone"
 	}
-	return phase
+	return string(phase)
 }
 
 // errVPNRelayMissing は、engine が経路を差し出さなかったことを表す。
@@ -562,7 +485,7 @@ func dialVPNRelay(
 		return nil, err
 	}
 	defer func() { _ = engine.Close() }()
-	var overview vpnOverview
+	var overview httpserver.VPNOverview
 	if err := engine.sendJSON(ctx, http.MethodPost,
 		vpnProfilePath(profile)+"/session", struct{}{}, &overview); err != nil {
 		return nil, err
@@ -571,7 +494,7 @@ func dialVPNRelay(
 		if session.Profile.Name != profile {
 			continue
 		}
-		if wantedTarget != "" && session.Profile.Target != wantedTarget {
+		if wantedTarget != "" && !session.Profile.Reaches(wantedTarget) {
 			return nil, fmt.Errorf("%w: %s は %s へ繋ぐ経路である",
 				vpn.ErrTargetMismatch, profile, session.Profile.Target)
 		}

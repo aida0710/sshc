@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"sshc/internal/application"
 )
 
 const testVPNKey = "aAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAA="
@@ -126,9 +128,9 @@ func TestVPNUnbindSendsAnEmptyProfile(t *testing.T) {
 
 // 保存要求の本文は、設定と秘密鍵をひとつのJSONとして運ぶ。
 func TestTheSavedProfilePayloadCarriesTheKeyExactlyOnce(t *testing.T) {
-	payload, err := buildVPNProfilePayload(vpnRequestProfile{
+	payload, err := buildVPNProfilePayload(application.VPNProfile{
 		Name: "lab", Backend: "wireguard", Target: "10.9.9.1:22",
-		WireGuard: &vpnRequestWireGuard{
+		WireGuard: &application.WireGuardProfile{
 			Server: "vpn.example.jp:51820", PeerPublicKey: "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
 			Address: "10.9.9.2/32",
 		},
@@ -176,9 +178,9 @@ func TestAMalformedKeyIsNotAcceptedAsAWireGuardSecret(t *testing.T) {
 // 引用符や backslash を含む秘密も、壊れないJSONとして運ぶ。
 func TestSecretsWithQuotesSurviveTheRequestBody(t *testing.T) {
 	password := []byte(`p"a\ss`)
-	payload, err := buildVPNProfilePayload(vpnRequestProfile{
+	payload, err := buildVPNProfilePayload(application.VPNProfile{
 		Name: "tohoku", Backend: "l2tp_ipsec", Target: "10.9.9.1:22",
-		L2TP: &vpnRequestL2TP{Server: "vpn.example.jp", Username: "user"},
+		L2TP: &application.L2TPProfile{Server: "vpn.example.jp", Username: "user"},
 	}, []vpnSecretField{
 		{name: "l2tpPassword", value: password},
 		{name: "ipsecPsk", value: []byte("shared")},
