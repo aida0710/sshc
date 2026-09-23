@@ -96,7 +96,8 @@ func (manager *Manager) tunnelStatus(profileName string) TunnelStatus {
 	return tunnel
 }
 
-// Logs は、そのコンテナの直近のログを、秘密を伏せて返す。
+// Logs は、そのコンテナの直近のログを、秘密を伏せて返す。コンテナが無ければ、
+// 最後に用意できなかったときのログを返す。
 //
 // 繋がらないときに利用者が最初に見る場所である。docker を直接叩かせない。
 func (manager *Manager) Logs(ctx context.Context, profileName string, secrets Secrets) (string, error) {
@@ -107,8 +108,13 @@ func (manager *Manager) Logs(ctx context.Context, profileName string, secrets Se
 		return "", err
 	}
 	name := manager.containerName(profileName)
-	if _, err := manager.requireOurContainer(ctx, name, profileName); err != nil {
+	ours, err := manager.requireOurContainer(ctx, name, profileName)
+	if err != nil {
 		return "", err
+	}
+	if !ours {
+		// 用意できなかったコンテナは片付けてある。そのとき残したログを返す。
+		return manager.state(profileName).lastFailureLogs(), nil
 	}
 	return manager.containerLogs(ctx, name, secrets), nil
 }

@@ -29,6 +29,13 @@ const (
 	FailureTunnelLost FailureReason = "tunnel_lost"
 )
 
+// knownFailureReasons は、agent が書いてよい語である。知らない語は読まない。
+var knownFailureReasons = map[FailureReason]bool{
+	FailureUnknown: true, FailureTimeout: true, FailureServerUnresolved: true,
+	FailureIPsecNegotiation: true, FailurePPPAuthentication: true, FailureOpenConnect: true,
+	FailureHandshakeTimeout: true, FailureTargetUnresolved: true, FailureTunnelLost: true,
+}
+
 // SessionFailure は、経路を用意できなかったことと、その理由である。
 //
 // errors.Is(err, ErrSessionFailed) でも見分けられる。

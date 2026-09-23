@@ -5,6 +5,7 @@ package vpn
 import (
 	"context"
 	"crypto/rand"
+	"errors"
 	"encoding/base64"
 	"fmt"
 	"io"
@@ -202,17 +203,15 @@ func TestTheTargetIsUnreachableWhileTheTunnelIsNotUp(t *testing.T) {
 	t.Cleanup(func() { _ = manager.Stop(context.Background(), profile.Name) })
 
 	connection, err := manager.Dial(ctx, profile, secrets)
-	if err != nil {
-		// 中継が開く前に諦めた場合も、通常回線へは落ちていない。
-		return
+	if err == nil {
+		_ = connection.Close()
+		t.Fatal("相手と握手できないまま、経路が用意できたことになった")
 	}
-	defer func() { _ = connection.Close() }()
-
-	_ = connection.SetReadDeadline(time.Now().Add(10 * time.Second))
-	answer := make([]byte, 32)
-	read, err := connection.Read(answer)
-	if err == nil && read > 0 && strings.Contains(string(answer[:read]), "tunnelled") {
-		t.Fatalf("トンネルが無いまま接続先へ届いた: %q", answer[:read])
+	// 握手できないことを、理由として返す。鍵かサーバーの誤りを利用者が疑える。
+	var failure *SessionFailure
+	if !errors.As(err, &failure) || failure.Reason != FailureHandshakeTimeout {
+		logs, _ := manager.Logs(ctx, profile.Name, secrets)
+		t.Fatalf("Dial = %v, want %s\n%s", err, FailureHandshakeTimeout, logs)
 	}
 }
 
@@ -284,20 +283,37 @@ func TestTheL2TPBranchRunsUntilTheServerRefusesIt(t *testing.T) {
 
 	err := manager.Start(ctx, profile, secrets)
 
-	if err == nil {
-		t.Fatal("届かない相手に対して経路が成立した")
-	}
+	requireFailureReason(t, err, FailureIPsecNegotiation)
 	// 「成立しませんでした」は agent が標準エラーへ書く。docker logs の標準
 	// 出力だけを読んでいると、この行が落ちる。
-	if !strings.Contains(err.Error(), "IPsecが成立しませんでした") {
-		t.Fatalf("失敗の理由が IPsec の段階を指していない: %v", err)
+	logs := requireLogs(t, manager, ctx, profile.Name, secrets)
+	if !strings.Contains(logs, "IPsecが成立しませんでした") {
+		t.Fatalf("ログが IPsec の段階を指していない: %s", logs)
 	}
-	// 秘密は、利用者へ見せる失敗の文面に現れない。
 	for _, forbidden := range []string{secrets.L2TP.Password, secrets.L2TP.PreSharedKey} {
-		if strings.Contains(err.Error(), forbidden) {
-			t.Fatalf("失敗の文面に秘密が現れた: %v", err)
+		if strings.Contains(err.Error()+logs, forbidden) {
+			t.Fatalf("見せる文面に秘密が現れた: %v / %s", err, logs)
 		}
 	}
+}
+
+// requireFailureReason は、経路を用意できなかった理由が want であることを確かめる。
+func requireFailureReason(t *testing.T, err error, want FailureReason) {
+	t.Helper()
+	var failure *SessionFailure
+	if !errors.As(err, &failure) || failure.Reason != want {
+		t.Fatalf("err = %v, want reason %s", err, want)
+	}
+}
+
+// requireLogs は、終わったコンテナのログを、秘密を伏せて読む。
+func requireLogs(t *testing.T, manager *Manager, ctx context.Context, profileName string, secrets Secrets) string {
+	t.Helper()
+	logs, err := manager.Logs(ctx, profileName, secrets)
+	if err != nil {
+		t.Fatalf("Logs = %v", err)
+	}
+	return logs
 }
 
 // openconnect の枝も、相手が応えなければそこで止まり、理由を残す。
@@ -325,16 +341,15 @@ func TestTheOpenConnectBranchRunsUntilTheServerRefusesIt(t *testing.T) {
 
 	err := manager.Start(ctx, profile, secrets)
 
-	if err == nil {
-		t.Fatal("届かない相手に対して経路が成立した")
-	}
+	requireFailureReason(t, err, FailureOpenConnect)
 	// この行は agent が標準エラーへ書く。docker logs の標準出力だけを読んで
 	// いると落ちる。
-	if !strings.Contains(err.Error(), "openconnectが接続できませんでした") {
-		t.Fatalf("失敗の理由が openconnect の段階を指していない: %v", err)
+	logs := requireLogs(t, manager, ctx, profile.Name, secrets)
+	if !strings.Contains(logs, "openconnectが接続できませんでした") {
+		t.Fatalf("ログが openconnect の段階を指していない: %s", logs)
 	}
-	if strings.Contains(err.Error(), secrets.OpenConnect.Password) {
-		t.Fatalf("失敗の文面に秘密が現れた: %v", err)
+	if strings.Contains(err.Error()+logs, secrets.OpenConnect.Password) {
+		t.Fatalf("見せる文面に秘密が現れた: %v / %s", err, logs)
 	}
 }
 
@@ -425,6 +440,11 @@ const (
 	anyConnectTOTPHex  = "3132333435363738393031323334353637383930"
 )
 
+// anyConnectServerName は、テスト用の AnyConnect 互換サーバーのコンテナ名である。
+func anyConnectServerName() string {
+	return fmt.Sprintf("sshc-vpn-test-anyconnect-%d", os.Getpid())
+}
+
 // startAnyConnectServer は、本物の AnyConnect 互換サーバー（ocserv）を1台立てる。
 //
 // パスワードのあとに OTP を聞く設定にする。openconnect がその二問目に答えられる
@@ -434,7 +454,7 @@ func startAnyConnectServer(
 	t *testing.T, manager *Manager, ctx context.Context, image string,
 ) (bridgeAddress, certificatePin string) {
 	t.Helper()
-	name := fmt.Sprintf("sshc-vpn-test-anyconnect-%d", os.Getpid())
+	name := anyConnectServerName()
 	script := strings.Join([]string{
 		"set -eu",
 		"export DEBIAN_FRONTEND=noninteractive",
@@ -474,6 +494,9 @@ func startAnyConnectServer(
 		"run-as-user = root",
 		"run-as-group = root",
 		"socket-file = /run/ocserv.socket",
+		// 畳んだあとにセッションが残っていないかを occtl で確かめる。
+		"use-occtl = true",
+		"occtl-socket-file = /run/occtl.socket",
 		"server-cert = /etc/ocserv/server-cert.pem",
 		"server-key = /etc/ocserv/server-key.pem",
 		"max-clients = 4",
@@ -572,5 +595,20 @@ func TestAConnectionReachesTheTargetThroughAnAnyConnectTunnel(t *testing.T) {
 	}
 	if !strings.Contains(string(answer), "tunnelled") {
 		t.Fatalf("相手からの返事 = %q", answer)
+	}
+
+	// 畳むときは装置へ logout を伝える。伝えずに終わると、装置の側に
+	// セッションが残り、同時接続の枠を使い続ける。
+	_ = connection.Close()
+	if err := manager.Stop(ctx, profile.Name); err != nil {
+		t.Fatalf("Stop = %v", err)
+	}
+	users, err := manager.docker.output(ctx, "exec", anyConnectServerName(),
+		"occtl", "--socket-file", "/run/occtl.socket", "--json", "show", "users")
+	if err != nil {
+		t.Fatalf("装置の利用者の一覧を読めない: %v", err)
+	}
+	if strings.Contains(users, "fixture") {
+		t.Fatalf("畳んだあとも装置にセッションが残った: %s", users)
 	}
 }

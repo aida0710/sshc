@@ -346,3 +346,33 @@ func TestTheStoredSecretsKeepTheirKeys(t *testing.T) {
 		}
 	}
 }
+
+// どの backend の手順も、agent.sh が呼ぶ関数をすべて持つ。
+//
+// 足りない関数があると、その backend だけがコンテナの中で「command not found」で
+// 終わる。イメージを作らずに見つけられるのはここだけである。
+func TestEveryBackendScriptDefinesTheAgentHooks(t *testing.T) {
+	for name := range backends {
+		script, err := container.ReadFile("container/backend-" + string(name) + ".sh")
+		if err != nil {
+			t.Fatalf("%s の手順が無い: %v", name, err)
+		}
+		for _, hook := range []string{"backend_read", "backend_up", "backend_ready", "backend_allow", "backend_alive", "backend_down"} {
+			if !strings.Contains(string(script), hook+"()") {
+				t.Errorf("%s の手順に %s が無い", name, hook)
+			}
+		}
+	}
+}
+
+// コンテナは tini を PID 1 にして起こす。sh が PID 1 だと停止の合図を無視する。
+func TestContainersStartWithAnInitProcess(t *testing.T) {
+	arguments := runArguments(containerRun{
+		name: "sshc-vpn-lab", image: "sshc-vpn:test", profile: validProfile(), owner: 1000,
+		workspace: "000000000000", socketDirectory: "/tmp/lab", backend: backends[WireGuard],
+	})
+
+	if !strings.Contains(strings.Join(arguments, " "), " --init ") {
+		t.Fatalf("arguments = %v", arguments)
+	}
+}

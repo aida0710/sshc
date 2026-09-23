@@ -14,7 +14,7 @@ import (
 // container には、VPNコンテナのイメージを作るものだけを置く。sshcのバイナリも
 // 利用者の設定も入れない。イメージは依存物だけを含む。
 //
-//go:embed container/Dockerfile container/agent.sh container/vpnc-script
+//go:embed container
 var container embed.FS
 
 // imageName は、このイメージの名前である。タグは中身から決まる。

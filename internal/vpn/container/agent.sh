@@ -4,16 +4,20 @@
 # 秘密は引数にも環境変数にもイメージにも置かない。engineが docker exec の標準
 # 入力で設定を書き込み、このスクリプトはそれが現れるのを待つ。読み終えた設定は
 # 消す。設定はtmpfsの上にしか存在しない。
+#
+# backend ごとの違いは backend-<名前>.sh に置き、ここは次の関数だけを呼ぶ。
+#   backend_read   設定から自分の節を読む（このあと設定は消える）
+#   backend_up     トンネルを張り、interface を決める
+#   backend_ready  トンネルの相手と話せたことを確かめる
+#   backend_allow  名前を引いて分かった接続先を、トンネルが運ぶ相手に足す
+#   backend_alive  トンネルが生きているかを返す
+#   backend_down   相手へ切断を伝えて畳む
 set -eu
 
 runtime=/run/sshc-vpn
 socket_directory=/run/sshc-vpn-socket
+backend_directory=/usr/local/lib/sshc-vpn
 profile="$runtime/profile.json"
-# backend ごとにトンネルのI/Fが変わる。経路とパケットフィルタは、そのI/Fに
-# 対して同じように作る。
-interface=wg0
-# connection は、strongSwan と xl2tpd がこの接続を指す名前である。
-connection=sshc-vpn
 
 # engineがコンテナを起動してから設定を書き込むまでの猶予。これを過ぎたら、
 # 書き込む側が落ちたということなので、待ち続けずに終わる。
@@ -23,8 +27,73 @@ profile_wait_seconds=30
 # 既に張られている接続は切れている。
 tunnel_check_seconds=5
 
+# 止める合図を受けてから、backend が相手へ切断を伝え終わるまで待つ上限。docker
+# stop の猶予（10秒）より短くする。
+shutdown_seconds=5
+
 umask 077
 mkdir -p "$runtime"
+
+# pause は、合図を受けたらすぐ起きる sleep である。sh は前面の sleep が終わる
+# まで trap を実行しないので、背後で眠ってそれを待つ。
+pause() {
+	sleep "$1" &
+	wait $! || true
+}
+
+# fail は、理由の語を engine が読める場所へ書き、理由の文を標準エラーへ出して
+# 終わる。語は internal/vpn/failure.go の FailureReason と同じものだけを使う。
+fail() {
+	reason=$1
+	shift
+	echo "$*" >&2
+	printf '{"reason":"%s"}\n' "$reason" >"$socket_directory/failure.json" 2>/dev/null || true
+	chmod 644 "$socket_directory/failure.json" 2>/dev/null || true
+	stop_relay
+	backend_down 2>/dev/null || true
+	exit 1
+}
+
+# remaining_seconds は、engine が決めた締め切りまでの残りの秒数である。
+remaining_seconds() {
+	left=$((deadline - $(date +%s)))
+	if [ "$left" -lt 0 ]; then
+		left=0
+	fi
+	echo "$left"
+}
+
+# wait_for_address は、interface にアドレスが付くまで、締め切りまで待つ。
+wait_for_address() {
+	while ! ip -4 address show dev "$interface" 2>/dev/null | grep -q 'inet '; do
+		if [ "$(remaining_seconds)" -le 0 ]; then
+			return 1
+		fi
+		pause 1
+	done
+}
+
+relay=
+stop_relay() {
+	if [ -n "$relay" ]; then
+		kill "$relay" 2>/dev/null || true
+		wait "$relay" 2>/dev/null || true
+		relay=
+	fi
+}
+
+# 止める合図（docker stop）を受けたら、相手へ切断を伝えてから終わる。伝えずに
+# 終わると、装置の側にセッションが残る。
+shutdown() {
+	trap - TERM INT
+	stop_relay
+	backend_down 2>/dev/null || true
+	exit 0
+}
+trap shutdown TERM INT
+
+# backend を読み込む前に合図を受けても困らないよう、何もしない既定を置く。
+backend_down() { :; }
 
 seconds=0
 while [ ! -f "$profile" ]; do
@@ -32,7 +101,7 @@ while [ ! -f "$profile" ]; do
 		echo "設定を受け取れませんでした。" >&2
 		exit 1
 	fi
-	sleep 1
+	pause 1
 	seconds=$((seconds + 1))
 done
 
@@ -42,143 +111,13 @@ target_port=$(jq -r '.target.port' "$profile")
 socket_owner=$(jq -r '.socketOwner' "$profile")
 # VPNの中で名前を引くDNSサーバー。空なら、接続先はアドレスで書かれている。
 resolvers=$(jq -r 'if .dns then .dns[] else empty end' "$profile" | tr '\n' ' ')
-# 応えない相手を待つ上限。engine が待つのをやめるより先に諦め、どこで止まったか
-# をログへ残す。値は engine が決める。
-attempt_seconds=$(jq -r '.attemptSeconds' "$profile")
+# 応えない相手を待つ締め切り（UNIX 秒）。engine が待つのをやめるより先に諦め、
+# どこで止まったかをログへ残す。値は engine が決める。
+deadline=$(jq -r '.deadline' "$profile")
 
 case "$backend" in
-wireguard)
-	jq -r '.wireguard.configuration' "$profile" >"$runtime/wireguard.conf"
-	address=$(jq -r '.wireguard.address' "$profile")
-	rm -f "$profile"
-	echo "トンネルを張ります（wireguard）。"
-	wireguard-go "$interface"
-	wg setconf "$interface" "$runtime/wireguard.conf"
-	rm -f "$runtime/wireguard.conf"
-	ip address add "$address" dev "$interface"
-	ip link set "$interface" up
-	;;
-l2tp_ipsec)
-	server=$(jq -r '.l2tp.server' "$profile")
-	for name in ipsec.conf ipsec.secrets xl2tpd.conf ppp.options; do
-		jq -r --arg name "$name" '.l2tp.documents[$name]' "$profile" >"$runtime/$name"
-		chmod 600 "$runtime/$name"
-	done
-	rm -f "$profile"
-	# 相手のアドレスはここで引く。IPsec は相手のアドレスを設定へ書くので、
-	# 引く場所が違えば別の装置へ繋ぎうる。
-	server_address=$(getent ahostsv4 "$server" | awk 'NR==1{print $1}')
-	if [ -z "$server_address" ]; then
-		echo "VPN装置の名前を引けませんでした: $server" >&2
-		exit 1
-	fi
-	sed -i "s|%SERVER_ADDRESS%|$server_address|g" "$runtime/ipsec.conf" "$runtime/xl2tpd.conf"
-	ln -sf "$runtime/ipsec.conf" /etc/ipsec.conf
-	ln -sf "$runtime/ipsec.secrets" /etc/ipsec.secrets
-
-	# IPsec のポリシーが無いまま L2TP を出さない。SA が切れた瞬間に、
-	# 中身が平文で出ていくことを防ぐ。
-	iptables -A OUTPUT -p udp --dport 1701 -m policy --dir out --pol ipsec -j ACCEPT
-	iptables -A OUTPUT -p udp --dport 1701 -j REJECT
-
-	echo "IPsecを開始します。"
-	ipsec start --nofork >"$runtime/ipsec.log" 2>&1 &
-	seconds=0
-	while [ ! -e /run/charon.ctl ]; do
-		if [ "$seconds" -ge 15 ]; then
-			echo "IPsecサービスが起動しませんでした。" >&2
-			exit 1
-		fi
-		sleep 1
-		seconds=$((seconds + 1))
-	done
-	if ! timeout "$attempt_seconds" ipsec up "$connection" >>"$runtime/ipsec.log" 2>&1; then
-		echo "IPsecが成立しませんでした。事前共有鍵・接続先・暗号方式を確認してください。" >&2
-		sed -n '1,40p' "$runtime/ipsec.log" >&2
-		exit 1
-	fi
-
-	echo "L2TPとPPPの認証を開始します。"
-	xl2tpd -D -c "$runtime/xl2tpd.conf" -p "$runtime/xl2tpd.pid" \
-		-C "$runtime/l2tp-control" >"$runtime/xl2tpd.log" 2>&1 &
-	seconds=0
-	while [ ! -e "$runtime/l2tp-control" ]; do
-		if [ "$seconds" -ge 15 ]; then
-			echo "L2TPサービスが起動しませんでした。" >&2
-			exit 1
-		fi
-		sleep 1
-		seconds=$((seconds + 1))
-	done
-	printf 'c %s\n' "$connection" >"$runtime/l2tp-control"
-	interface=ppp0
-	seconds=0
-	while ! ip -4 address show dev "$interface" 2>/dev/null | grep -q 'inet '; do
-		if [ "$seconds" -ge 45 ]; then
-			echo "PPPが成立しませんでした。利用者名とパスワードを確認してください。" >&2
-			exit 1
-		fi
-		sleep 1
-		seconds=$((seconds + 1))
-	done
-	;;
-openconnect)
-	server=$(jq -r '.openconnect.server' "$profile")
-	username=$(jq -r '.openconnect.username' "$profile")
-	protocol=$(jq -r '.openconnect.protocol' "$profile")
-	certificate=$(jq -r '.openconnect.serverCertificate' "$profile")
-	# パスワードは変数にだけ置き、引数にも環境変数にも渡さない。openconnect へは
-	# 標準入力で渡す。
-	password=$(jq -r '.openconnect.password' "$profile")
-	# 装置がもう一問聞いてきたときに送る1行。openconnect は、パスワードの次の
-	# 質問にも標準入力の次の行を使う。中身が何かは engine が決めてある。
-	second_factor=$(jq -r '.openconnect.secondFactor // ""' "$profile")
-	waits_for_approval=$(jq -r '.openconnect.waitsForApproval // false' "$profile")
-	rm -f "$profile"
-	interface=vpn0
-	echo "トンネルを張ります（openconnect）。"
-	set -- --protocol="$protocol" --user="$username" --interface="$interface" \
-		--script=/usr/local/lib/sshc-vpn/vpnc-script --passwd-on-stdin --non-inter --background \
-		--pid-file="$runtime/openconnect.pid"
-	if [ -n "$certificate" ]; then
-		set -- "$@" --servercert="$certificate"
-	fi
-	# 答えは、聞かれるぶんだけ渡す。二段目が無いのに空行を渡すと、二段目を聞く
-	# 装置に対して「空の答え」を送ってしまい、失敗の理由が分からなくなる。
-	send_answers() {
-		printf '%s\n' "$password"
-		if [ -n "$second_factor" ]; then
-			printf '%s\n' "$second_factor"
-		fi
-	}
-	if [ -n "$second_factor" ]; then
-		echo "二段目の質問に答えます。"
-	fi
-	if [ "$waits_for_approval" = "true" ]; then
-		echo "電話の承認を待ちます。通知を承認するまで、装置は応答を返しません。"
-	fi
-	# --background は、繋がったあとに自分を背後へ回す。ここが 0 で返らなければ
-	# 繋がっていない。
-	if ! send_answers | timeout "$attempt_seconds" openconnect "$@" "$server" \
-		>"$runtime/openconnect.log" 2>&1; then
-		password=
-		second_factor=
-		echo "openconnectが接続できませんでした。利用者名・パスワード・二段目の認証・方式・証明書を確認してください。" >&2
-		sed -n '1,40p' "$runtime/openconnect.log" >&2
-		exit 1
-	fi
-	password=
-	second_factor=
-	seconds=0
-	while ! ip -4 address show dev "$interface" 2>/dev/null | grep -q 'inet '; do
-		if [ "$seconds" -ge 45 ]; then
-			echo "openconnectがトンネルのアドレスを受け取れませんでした。" >&2
-			sed -n '1,40p' "$runtime/openconnect.log" >&2
-			exit 1
-		fi
-		sleep 1
-		seconds=$((seconds + 1))
-	done
+wireguard | l2tp_ipsec | openconnect)
+	. "$backend_directory/backend-$backend.sh"
 	;;
 *)
 	rm -f "$profile"
@@ -186,6 +125,11 @@ openconnect)
 	exit 1
 	;;
 esac
+
+backend_read
+rm -f "$profile"
+backend_up
+backend_ready
 
 # VPNの中のDNSは、この経路の中だけで使う。問い合わせもトンネルの中にしか出さ
 # ない。ホストのresolv.confもDockerの既定のDNSも、このコンテナの外では変わらない。
@@ -209,20 +153,10 @@ case "$target_host" in
 *[!0-9.]*)
 	target_address=$(getent ahostsv4 "$target_host" | awk 'NR==1{print $1}')
 	if [ -z "$target_address" ]; then
-		echo "VPNの中で接続先の名前を引けませんでした: $target_host" >&2
-		exit 1
+		fail target_unresolved "VPNの中で接続先の名前を引けませんでした: $target_host"
 	fi
 	echo "接続先 $target_host は $target_address でした。"
-	if [ "$backend" = wireguard ]; then
-		# 名前を引く前は、トンネルが運ぶのはDNSサーバーへの通信だけだった。
-		# 引けた接続先をここで足す。
-		allowed=""
-		for resolver in $resolvers; do
-			allowed="$allowed$resolver/32,"
-		done
-		wg set "$interface" peer "$(wg show "$interface" peers | head -1)" \
-			allowed-ips "$allowed$target_address/32"
-	fi
+	backend_allow "$target_address"
 	;;
 *)
 	target_address=$target_host
@@ -232,8 +166,7 @@ esac
 # VPN装置そのものを接続先にしない。トンネルの外側と内側が同じ相手になり、
 # 経路とパケットフィルタが互いを打ち消す。
 if [ "${server_address:-}" = "$target_address" ]; then
-	echo "VPN装置と接続先が同じアドレスです。" >&2
-	exit 1
+	fail unknown "VPN装置と接続先が同じアドレスです。"
 fi
 
 # 接続先への経路は、このコンテナのトンネルの中にしか作らない。
@@ -266,13 +199,12 @@ relay=$!
 # 中継だけが残ると、engine からは経路があるように見えたまま、繋いだ先で必ず
 # 失敗する。コンテナごと終われば、次に必要になったときに engine が作り直す。
 while kill -0 "$relay" 2>/dev/null; do
-	if ! ip -4 address show dev "$interface" 2>/dev/null | grep -q 'inet '; then
-		echo "トンネルが落ちました。中継を閉じます。" >&2
-		kill "$relay" 2>/dev/null || true
-		wait "$relay" 2>/dev/null || true
-		exit 1
+	if ! backend_alive; then
+		fail tunnel_lost "トンネルが落ちました。中継を閉じます。"
 	fi
-	sleep "$tunnel_check_seconds"
+	pause "$tunnel_check_seconds"
 done
+relay=
 echo "中継が終了しました。" >&2
+backend_down 2>/dev/null || true
 exit 1

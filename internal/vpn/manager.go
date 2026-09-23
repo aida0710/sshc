@@ -243,13 +243,7 @@ func (manager *Manager) Stop(ctx context.Context, profileName string) error {
 	}
 	manager.closeRelay(state)
 	manager.stopContainer(ctx, name)
-	directory := manager.socketDirectory(profileName)
-	for _, file := range []string{statusFileName, relaySocketName, engineRelaySocketName} {
-		if err := removeIfPresent(filepath.Join(directory, file)); err != nil {
-			return err
-		}
-	}
-	return nil
+	return removeRouteFiles(manager.socketDirectory(profileName))
 }
 
 // command は、使える docker をひとつだけ探して覚える。

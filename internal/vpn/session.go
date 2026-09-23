@@ -2,6 +2,7 @@ package vpn
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -29,6 +30,8 @@ const (
 	relaySocketName = "relay.sock"
 	// statusFileName は、agent がトンネルの様子を書き出す先である。
 	statusFileName = "status.json"
+	// failureFileName は、agent が経路を用意できなかった理由の語を書き出す先である。
+	failureFileName = "failure.json"
 	// maxStatusBytes は、その様子を読む上限である。壊れたファイルで engine の
 	// memory を埋めない。
 	maxStatusBytes = 4 << 10
@@ -104,6 +107,9 @@ func (manager *Manager) start(ctx context.Context, profile Profile, secrets Secr
 	// 二段目のコードは 30 秒で変わる。イメージを作る時間を挟まないよう、渡す
 	// 直前にこの文書を作る。
 	if err := manager.configureContainer(ctx, name, profile, secrets, report); err != nil {
+		// 片付けるとコンテナのログも消える。失敗の理由を読めるよう、先に
+		// 秘密を伏せて残す。
+		manager.state(profile.Name).keepFailureLogs(manager.containerLogs(context.WithoutCancel(ctx), name, secrets))
 		// 呼び出し側が諦めた場合も片付ける。stopContainer は ctx の取り消しに
 		// 引きずられない。
 		manager.stopContainer(ctx, name)
@@ -127,7 +133,7 @@ func (manager *Manager) configureContainer(
 		return err
 	}
 	report(tunnelPhase(profile))
-	return manager.waitForRelay(ctx, name, profile, secrets)
+	return manager.waitForRelay(ctx, name, profile)
 }
 
 // requireTunnelDevice は、backendが要るデバイスがこの機械にあるかを見る。
@@ -168,11 +174,21 @@ func prepareSocketDirectory(directory string) error {
 		return err
 	}
 	// 前回のソケットと様子が残っていると、socatが掴めないか、止まった経路の
-	// 様子を今のものとして見せてしまう。
-	if err := removeIfPresent(filepath.Join(directory, statusFileName)); err != nil {
-		return err
+	// 様子や失敗の理由を今のものとして見せてしまう。
+	return removeRouteFiles(directory)
+}
+
+// routeFiles は、経路ひとつがホスト側に置くファイルである。
+var routeFiles = []string{statusFileName, failureFileName, relaySocketName, engineRelaySocketName}
+
+// removeRouteFiles は、経路ひとつがホスト側に置いたファイルを消す。
+func removeRouteFiles(directory string) error {
+	for _, file := range routeFiles {
+		if err := removeIfPresent(filepath.Join(directory, file)); err != nil {
+			return err
+		}
 	}
-	return removeIfPresent(filepath.Join(directory, relaySocketName))
+	return nil
 }
 
 func removeIfPresent(path string) error {
@@ -210,6 +226,10 @@ func runArguments(run containerRun) []string {
 		"--device", run.backend.device(),
 		"--security-opt", "no-new-privileges:true",
 		"--restart", "no",
+		// PID 1 を tini にする。sh を PID 1 にすると SIGTERM が既定で無視され、
+		// docker stop は猶予を待ち切ってから SIGKILL で終わらせる。agent が
+		// 合図を受けて、装置へ切断を伝えられない。
+		"--init",
 		// 設定と秘密が触れるのはこのtmpfsだけである。コンテナを止めれば消える。
 		"--tmpfs", "/run/sshc-vpn:rw,nosuid,nodev,size=8m,mode=700",
 		"--volume", socketDirectory + ":/run/sshc-vpn-socket",
@@ -234,8 +254,9 @@ func (manager *Manager) sendDocument(ctx context.Context, name, document string)
 // waitForRelay は、中継のソケットが現れるまで待つ。
 //
 // ソケットが現れることが、トンネル・経路・パケットフィルタまで用意できた合図で
-// ある。コンテナが先に終わったら、その理由を秘密を伏せて返す。
-func (manager *Manager) waitForRelay(ctx context.Context, name string, profile Profile, secrets Secrets) error {
+// ある。コンテナが先に終わったら、agent が書いた理由の語を返す。生のログは
+// 返さない。IP アドレスやパスを含み、利用者へそのまま見せる形ではないからである。
+func (manager *Manager) waitForRelay(ctx context.Context, name string, profile Profile) error {
 	path := manager.socketPath(profile.Name)
 	deadline := time.Now().Add(relayDeadline(profile))
 	for {
@@ -247,18 +268,34 @@ func (manager *Manager) waitForRelay(ctx context.Context, name string, profile P
 			return err
 		}
 		if !running {
-			return fmt.Errorf("%w: %s", ErrSessionFailed, manager.containerLogs(ctx, name, secrets))
+			return manager.sessionFailure(profile.Name, FailureUnknown)
 		}
 		if time.Now().After(deadline) {
-			return fmt.Errorf("%w: %s の中で経路が成立しませんでした。%s",
-				ErrSessionFailed, profile.Name, manager.containerLogs(ctx, name, secrets))
+			return manager.sessionFailure(profile.Name, FailureTimeout)
 		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(readyPollInterval):
+		if err := sleepContext(ctx, readyPollInterval); err != nil {
+			return err
 		}
 	}
+}
+
+// maxFailureBytes は、失敗の理由を読む上限である。
+const maxFailureBytes = 1 << 10
+
+// sessionFailure は、agent が書いた理由の語を読み、読めなければ fallback を使う。
+func (manager *Manager) sessionFailure(profileName string, fallback FailureReason) error {
+	failure := &SessionFailure{Profile: profileName, Reason: fallback}
+	contents, err := os.ReadFile(filepath.Join(manager.socketDirectory(profileName), failureFileName))
+	if err != nil || len(contents) > maxFailureBytes {
+		return failure
+	}
+	var written struct {
+		Reason FailureReason `json:"reason"`
+	}
+	if json.Unmarshal(contents, &written) == nil && knownFailureReasons[written.Reason] {
+		failure.Reason = written.Reason
+	}
+	return failure
 }
 
 // tunnelPhase は、トンネルを待っているあいだ、何を待っているかを表す。
@@ -272,10 +309,10 @@ func tunnelPhase(profile Profile) StartPhase {
 	return PhaseTunnel
 }
 
-// connectAttemptSeconds は、コンテナが相手を待つ上限である。engine が待つ長さ
-// から余裕を引いて決める。二つが離れると、失敗の理由が残らなくなる。
-func connectAttemptSeconds(profile Profile) int {
-	return int((relayDeadline(profile) - connectAttemptMargin).Seconds())
+// agentDeadline は、コンテナが相手を待つのをやめる時刻である。engine が待つ
+// 長さから余裕を引いて決める。二つが離れると、失敗の理由が残らなくなる。
+func agentDeadline(profile Profile, now time.Time) time.Time {
+	return now.Add(relayDeadline(profile) - connectAttemptMargin)
 }
 
 // relayDeadline は、この経路が立つのを待つ長さである。

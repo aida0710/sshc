@@ -280,7 +280,7 @@ func TestTheContainerGivesUpBeforeTheEngineStopsWaiting(t *testing.T) {
 			profile.OpenConnect = &settings
 			test.prepare(&profile)
 
-			attempt := time.Duration(connectAttemptSeconds(profile)) * time.Second
+			attempt := agentDeadline(profile, testClock).Sub(testClock)
 
 			if attempt >= relayDeadline(profile) {
 				t.Fatalf("コンテナの上限 %v が engine の上限 %v より短くない", attempt, relayDeadline(profile))

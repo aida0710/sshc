@@ -172,3 +172,25 @@ func waitUntil(t *testing.T, condition func() bool) {
 		time.Sleep(readyPollInterval)
 	}
 }
+
+// stopAllowance は、経路を畳むのにかかってよい長さである。agent が合図を受けて
+// すぐ終わるなら、docker stop の猶予（10秒）を待ち切ることはない。
+const stopAllowance = 5 * time.Second
+
+// 経路は合図を受けてすぐ畳まれる。docker stop の猶予を待ち切らない。
+func TestARouteStopsWithoutWaitingOutTheStopTimeout(t *testing.T) {
+	manager, ctx := requireDockerTest(t)
+	profile, secrets := wireGuardRoute(t, manager, ctx, "quick-stop")
+	if err := manager.Start(ctx, profile, secrets); err != nil {
+		t.Fatalf("Start = %v", err)
+	}
+
+	started := time.Now()
+	if err := manager.Stop(ctx, profile.Name); err != nil {
+		t.Fatalf("Stop = %v", err)
+	}
+
+	if took := time.Since(started); took > stopAllowance {
+		t.Fatalf("畳むのに %v かかった（上限 %v）", took, stopAllowance)
+	}
+}

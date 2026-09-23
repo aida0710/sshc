@@ -29,6 +29,9 @@ type sessionState struct {
 	idleSince time.Time
 	// relay は、engine が差し出す中継の待ち受けである。経路が無ければ nil。
 	relay *engineRelay
+	// failureLogs は、最後に用意できなかったときのコンテナのログである（秘密は
+	// 伏せてある）。そのコンテナはもう無いので、ここにしか残っていない。
+	failureLogs string
 
 	// phase は、経路を用意しているあいだの段階である。起動中は transition が
 	// 握られたままなので、段階は鍵を使わずに読み書きする。
@@ -104,6 +107,20 @@ func (state *sessionState) relaySocket() string {
 		return ""
 	}
 	return state.relay.path
+}
+
+// keepFailureLogs は、用意できなかったコンテナのログを覚えておく。
+func (state *sessionState) keepFailureLogs(logs string) {
+	state.use.Lock()
+	defer state.use.Unlock()
+	state.failureLogs = logs
+}
+
+// lastFailureLogs は、最後に用意できなかったときのログを返す。
+func (state *sessionState) lastFailureLogs() string {
+	state.use.Lock()
+	defer state.use.Unlock()
+	return state.failureLogs
 }
 
 // borrow は、この経路を通る接続（または予約）がひとつ増えたことを記録する。
