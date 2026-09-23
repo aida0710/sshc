@@ -1032,7 +1032,7 @@ export const ja = {
   "lock.storageFull":
     "空き容量が不足しているため Vault を作成または更新できません。",
   "lock.storageReadOnly":
-    "アプリ専用ストレージが読み取り専用です。マシンを再起動してから再試行してください。",
+    "アプリ専用ストレージが読み取り専用です。デバイスを再起動してから再試行してください。",
   "lock.storageBusy":
     "別の Vault 更新が完了していません。少し待ってから再試行してください。",
   "lock.storageIO":
