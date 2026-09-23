@@ -481,7 +481,11 @@ var errVPNRelayMissing = errors.New("the engine did not open a relay for that VP
 // 開けるソケットへ繋ぐだけである。
 func vpnRouteThroughEngine(stateDir string, client *http.Client) func(context.Context, string, string) (net.Conn, error) {
 	return func(ctx context.Context, profile, address string) (net.Conn, error) {
-		return dialVPNRelay(ctx, stateDir, client, profile, address)
+		connection, err := dialVPNRelay(ctx, stateDir, client, profile, address)
+		if err != nil {
+			return nil, describedVPNRouteError(profile, err)
+		}
+		return connection, nil
 	}
 }
 

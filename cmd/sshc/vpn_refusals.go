@@ -113,3 +113,31 @@ func finishVPNFailure(called vpnInvocation, err error, environment commandEnviro
 	}
 	return 1
 }
+
+// vpnRouteError は、`sshc <接続先>` が VPN 経路を用意できなかったことを、
+// `sshc vpn up` と同じ言い方で表す。元の失敗は Unwrap で辿れる。
+type vpnRouteError struct {
+	sentence string
+	err      error
+}
+
+func (failure *vpnRouteError) Error() string { return failure.sentence }
+
+func (failure *vpnRouteError) Unwrap() error { return failure.err }
+
+// describedVPNRouteError は、engine の拒否を人向けの文にし、経路を用意できなかった
+// ときはログの読み方を添える。知らない失敗はそのまま返す。
+func describedVPNRouteError(profile string, err error) error {
+	var problem engineProblem
+	if !errors.As(err, &problem) || problem.OutcomeUnknown {
+		return err
+	}
+	sentence, known := describeVPNRefusal(problem, vpnInvocation{Action: vpnUp, Name: profile})
+	if !known {
+		return err
+	}
+	if problem.Code == "vpn_session_failed" {
+		sentence += fmt.Sprintf(" コンテナの出力は sshc vpn logs %s で読めます。", safeTerminalCell(profile))
+	}
+	return &vpnRouteError{sentence: sentence, err: err}
+}

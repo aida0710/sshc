@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 	"testing"
@@ -95,5 +96,34 @@ func TestEveryVPNReasonHasACommandLineSentence(t *testing.T) {
 		if _, known := vpnFailureReasons[reason]; !known {
 			t.Errorf("%s has no sentence", reason)
 		}
+	}
+}
+
+// `sshc <接続先>` が経路を用意できなかったときも、`sshc vpn up` と同じ言い方で
+// 理由を出し、ログの読み方を添える。
+func TestAFailedRouteForAConnectionSaysWhyAndWhereTheLogsAre(t *testing.T) {
+	err := describedVPNRouteError("lab", engineProblem{
+		Status: 409, Code: "vpn_session_failed", Reason: string(vpn.FailureHandshakeTimeout),
+	})
+
+	message := err.Error()
+	if !strings.Contains(message, vpnFailureReasons[vpn.FailureHandshakeTimeout]) {
+		t.Fatalf("message = %q", message)
+	}
+	if !strings.Contains(message, "sshc vpn logs lab") {
+		t.Fatalf("ログの読み方が無い: %q", message)
+	}
+	var problem engineProblem
+	if !errors.As(err, &problem) || problem.Code != "vpn_session_failed" {
+		t.Fatalf("元の拒否を辿れない: %v", err)
+	}
+}
+
+// 知らない失敗は、言い換えずにそのまま返す。
+func TestAnUnknownRouteFailureIsLeftAsItIs(t *testing.T) {
+	original := errors.New("dial unix: no such file")
+
+	if err := describedVPNRouteError("lab", original); err != original {
+		t.Fatalf("err = %v", err)
 	}
 }
