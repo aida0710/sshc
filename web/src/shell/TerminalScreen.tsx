@@ -30,6 +30,7 @@ export function TerminalScreen({
   settings,
   hostAppearance,
   hostOSC52,
+  hostVPN,
   onActive,
   onLiveWorkspaceChange,
   onOpenAlias,
@@ -47,6 +48,8 @@ export function TerminalScreen({
   settings: TerminalSettings;
   hostAppearance: Map<string, TerminalAppearance>;
   hostOSC52: Map<string, "allow" | "deny">;
+  // hostVPN は、alias ごとに通るVPN経路の名前である。
+  hostVPN: Map<string, string>;
   onActive: (id: string) => void;
   onLiveWorkspaceChange: (workspace: LiveWorkspaceSummary | null) => void;
   onOpenAlias: (
@@ -95,6 +98,7 @@ export function TerminalScreen({
             ? undefined
             : hostOSC52.get(session.alias);
         const osc52Enabled = resolveOSC52(hostPolicy, settings.osc52 ?? false);
+        const vpnProfile = session.alias === undefined ? "" : hostVPN.get(session.alias) ?? "";
         return (
           <Suspense fallback={<RouteSkeleton kind="terminal" />}>
             <TerminalView
@@ -108,6 +112,7 @@ export function TerminalScreen({
                 ? {}
                 : { scrollbackLines: settings.browserScrollbackLines })}
               osc52Enabled={osc52Enabled}
+              vpnProfile={vpnProfile}
               jisYenBackslash={settings.jisYenBackslash ?? false}
               onOsc52Change={(enabled) => onOSC52Change(session, enabled)}
               onForwardsChanged={consoles.refresh}

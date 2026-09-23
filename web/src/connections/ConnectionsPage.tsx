@@ -864,6 +864,7 @@ export function ConnectionsPage({
               }}
               onRequestRefresh={refreshCommittedConnection}
               savedRevision={savedRevision}
+              vpnProfiles={(overview.metadata.vpnProfiles ?? []).map((profile) => profile.name)}
               disabled={refreshState !== "idle"}
             />
           </>

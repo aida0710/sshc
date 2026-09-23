@@ -41,6 +41,7 @@ function useCallbackPerTab<T>(handle: (tabId: string, value: T) => void) {
 // and is drawn once below the panes.
 export function SFTPWorkspace({
   aliases,
+  hostVPN,
   hosts,
   target = null,
   onTargetHandled = () => undefined,
@@ -49,6 +50,8 @@ export function SFTPWorkspace({
   onOpenTerminal,
 }: {
   aliases: string[];
+  // hostVPN は、alias ごとに通るVPN経路の名前である。
+  hostVPN?: Map<string, string>;
   hosts?: HostEntry[];
   target?: SFTPTarget | null;
   onTargetHandled?: (request: number) => void;
@@ -267,6 +270,7 @@ export function SFTPWorkspace({
                   <SFTPPanel
                     aliases={aliases}
                     {...(hosts === undefined ? {} : { hosts })}
+                    {...(hostVPN === undefined ? {} : { hostVPN })}
                     target={ownsTarget ? target : null}
                     initialLocation={restored === undefined || restored.alias === "" ? null : restored}
                     initialSort={tab.sort}

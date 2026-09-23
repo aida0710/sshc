@@ -277,6 +277,7 @@ function PaddedSection({
       <SFTPWorkspace
         aliases={declared.knownAliases}
         hosts={declared.hosts}
+        hostVPN={declared.hostVPN}
         target={sftpTarget}
         onTargetHandled={onSftpTargetHandled}
         onNavigationBlockerChange={navigation.onNavigationBlockerChange}

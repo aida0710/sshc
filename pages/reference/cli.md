@@ -82,7 +82,7 @@ sshc completion fish | source
 
 Linuxでは、システムのBash補完がHomebrewの補完ディレクトリを探さない場合があります。ファイル名しか出ないときは、現在のシェルで`source <(sshc completion bash)`を実行してください。同じ行を`~/.bashrc`に追加すれば、新しいシェルでも現在のコマンド定義を読み込みます。更新後も古い候補が残る場合は、現在のシェルでも読み込み直してください。
 
-`sshc info`では、エンジンを起動せずに、実際の接続時と同じ規則で`Include`、`Match`、`ProxyJump`、文字コードを読み、最終的に使われる値を確認できます。保存済みの認証情報、`SetEnv`の値、`ProxyCommand`の本文は表示されません。
+`sshc info`では、エンジンを起動せずに、実際の接続時と同じ規則で`Include`、`Match`、`ProxyJump`、文字コード、通すVPN経路を読み、最終的に使われる値を確認できます。保存済みの認証情報、`SetEnv`の値、`ProxyCommand`の本文は表示されません。
 
 非対話コマンドは次の形式です。
 

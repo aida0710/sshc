@@ -43,6 +43,8 @@ type HostDetailPanelProps = {
   onRequestRefresh?: (() => Promise<void>) | undefined;
   disabled?: boolean | undefined;
   savedRevision?: number | undefined;
+  // vpnProfiles は、この接続を通せるVPN経路の名前である。
+  vpnProfiles?: string[] | undefined;
 };
 
 const areas: { area: ConnectionPanel; label: "conn.areaBasic" | "conn.areaAnalysis" | "conn.areaAdvanced" | "conn.areaSshc" }[] = [
@@ -73,6 +75,7 @@ export function HostDetailPanel({
   onRequestRefresh,
   disabled = false,
   savedRevision = 0,
+  vpnProfiles = [],
 }: HostDetailPanelProps) {
   const t = useTranslate();
   const [localPanel, setLocalPanel] = useState<ConnectionPanel>("Basic");
@@ -205,7 +208,7 @@ export function HostDetailPanel({
             aria-labelledby="connection-area-sshc-tab"
             hidden={panel !== "Sshc"}
           >
-            <HostInspector detail={detail} onMetadata={onMetadata} />
+            <HostInspector detail={detail} onMetadata={onMetadata} vpnProfiles={vpnProfiles} />
           </div>
         </div>
       </div>

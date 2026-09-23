@@ -102,6 +102,33 @@ describe("HostInspector", () => {
     expect(onMetadata).toHaveBeenLastCalledWith(expect.not.objectContaining({ osc52: expect.anything() }));
   });
 
+  it("routes this connection through a VPN profile and can stop routing it", async () => {
+    const onMetadata = vi.fn();
+    const user = userEvent.setup();
+    const detail = build();
+    const { rerender } = render(
+      <HostInspector detail={detail} onMetadata={onMetadata} vpnProfiles={["tohoku", "office"]} />,
+    );
+
+    await user.selectOptions(screen.getByLabelText("VPN route"), "tohoku");
+    expect(onMetadata).toHaveBeenLastCalledWith(expect.objectContaining({ vpn: "tohoku" }));
+
+    detail.metadata = { ...detail.metadata, vpn: "tohoku" };
+    rerender(<HostInspector detail={detail} onMetadata={onMetadata} vpnProfiles={["tohoku", "office"]} />);
+    await user.selectOptions(screen.getByLabelText("VPN route"), "");
+    expect(onMetadata).toHaveBeenLastCalledWith(expect.not.objectContaining({ vpn: expect.anything() }));
+  });
+
+  it("still names a VPN profile that no longer exists, instead of showing no route", () => {
+    const detail = build();
+    detail.metadata = { ...detail.metadata, vpn: "retired" };
+
+    render(<HostInspector detail={detail} onMetadata={vi.fn()} vpnProfiles={["tohoku"]} />);
+
+    expect(screen.getByLabelText("VPN route")).toHaveValue("retired");
+    expect(screen.getByRole("option", { name: "retired (profile is gone)" })).toBeInTheDocument();
+  });
+
   it("clears a colour rather than leaving the picker's fallback as a real value", async () => {
     const onMetadata = vi.fn();
     const user = userEvent.setup();

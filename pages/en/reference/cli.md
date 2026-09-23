@@ -82,7 +82,7 @@ sshc completion fish | source
 
 On Linux, the system Bash completion loader may not search Homebrew's completion directory. If only filenames are offered, run `source <(sshc completion bash)` in the current shell. Add that line to `~/.bashrc` to load the current command definitions for each new shell. Reload it after updating sshc if the current shell still offers old commands.
 
-`sshc info` resolves `Include`, `Match`, `ProxyJump` and encoding through the real connection path without an engine. It does not print saved credentials, `SetEnv` values or the `ProxyCommand` body.
+`sshc info` resolves `Include`, `Match`, `ProxyJump`, encoding and the VPN route through the real connection path without an engine. It does not print saved credentials, `SetEnv` values or the `ProxyCommand` body.
 
 ```sh
 sshc ssh bastion --non-interactive -- uname -a

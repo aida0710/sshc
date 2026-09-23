@@ -48,9 +48,11 @@ For L2TP/IPsec, set IKE and ESP proposals only when an older device rejects the 
 
 ## Binding a connection
 
-Choose a connection on the VPN screen and select **Route through this VPN**, or run `sshc vpn bind <alias> <profile>`. The binding is not written to `~/.ssh/config`: it is an sshc setting, not a word OpenSSH reads.
+Choose a connection on the VPN screen and select **Route through this VPN**, pick **VPN route** on the connection's *sshc settings* tab, or run `sshc vpn bind <alias> <profile>`. All three write the same binding. The binding is not written to `~/.ssh/config`: it is an sshc setting, not a word OpenSSH reads.
 
 A bound connection takes the same route from the terminal, from SFTP and from `sshc <alias>`. When the route is not available the connection is refused rather than quietly sent over the ordinary uplink.
+
+Which connection takes which route is visible before and after connecting. The terminal and SFTP headers show **VPN: \<name\>**, and `sshc info <alias>` prints the same name on its `vpn` line.
 
 Removing a profile also removes its secrets and the bindings of every connection that named it. To change a name, do not delete and recreate: use **Rename** on the VPN screen or `sshc vpn rename <old name> <new name>`, which moves the settings, the secrets and the bindings together.
 

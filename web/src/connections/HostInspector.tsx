@@ -18,9 +18,12 @@ function inherited(detail: HostDetail) {
 export function HostInspector({
   detail,
   onMetadata,
+  vpnProfiles = [],
 }: {
   detail: HostDetail;
   onMetadata: (metadata: HostMetadata) => void;
+  // vpnProfiles は、この接続を通せるVPN経路の名前である。
+  vpnProfiles?: string[];
 }) {
   const t = useTranslate();
   const notices = [...(detail.form.notices ?? []), ...(detail.effective.notices ?? [])];
@@ -133,6 +136,33 @@ export function HostInspector({
             <option value="">{t("connection.osc52Inherit")}</option>
             <option value="allow">{t("connection.osc52Allow")}</option>
             <option value="deny">{t("connection.osc52Deny")}</option>
+          </select>
+        </Field>
+
+        <Field label={t("connection.vpnLabel")} hint={t("connection.vpnHint")}>
+          <select
+            value={detail.metadata.vpn ?? ""}
+            onChange={(event) => {
+              const metadata = { ...detail.metadata };
+              const profile = event.target.value;
+              if (profile === "") delete metadata.vpn;
+              else metadata.vpn = profile;
+              onMetadata(metadata);
+            }}
+            className={control}
+          >
+            <option value="">{t("connection.vpnNone")}</option>
+            {vpnProfiles.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+            {/* 消えたプロファイルを指したままでも、いま何を指しているかは見えるようにする。 */}
+            {detail.metadata.vpn === undefined ||
+            detail.metadata.vpn === "" ||
+            vpnProfiles.includes(detail.metadata.vpn) ? null : (
+              <option value={detail.metadata.vpn}>{t("connection.vpnMissing", { name: detail.metadata.vpn })}</option>
+            )}
           </select>
         </Field>
 

@@ -45,4 +45,6 @@ export type Declared = {
   groups: string[];
   knownAliases: string[];
   hosts: HostEntry[];
+  // hostVPN は、alias ごとに通るVPN経路の名前である。
+  hostVPN: Map<string, string>;
 };
