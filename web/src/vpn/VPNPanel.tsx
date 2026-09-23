@@ -1,19 +1,26 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { failureCode } from "../api/client";
 import { vpnApi, type VPNApi, type VPNOverview, type VPNProfile, type VPNSecrets } from "../api/vpn";
 import { useTranslate } from "../i18n/context";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
-import { Field, control, hintText, sectionHeading } from "../ui/form";
+import { hintText } from "../ui/form";
+import { InputDialog } from "../ui/InputDialog";
 import { PageHeader } from "../ui/page";
-import { PasswordField } from "../ui/PasswordField";
 import { PanelState } from "../ui/PanelState";
-import { Button, Card, Notice } from "../ui/surface";
+import { Button, Notice } from "../ui/surface";
 import { useAsyncOperation } from "../ui/useAsyncOperation";
+import { usePolling } from "../ui/usePolling";
+import { vpnFailureReasonMessage } from "./vpnFailureReasons";
+import { vpnFieldErrorOf, type VPNFieldError } from "./vpnFieldErrors";
+import { VPNLogsDialog } from "./VPNLogsDialog";
+import { VPNProfileCard } from "./VPNProfileCard";
+import { VPNProfileForm, type VPNProfileSaveResult } from "./VPNProfileForm";
+import { routeProgressIntervalMs } from "./vpnPhases";
 import { vpnRefusals } from "./vpnRefusals";
 
 // 接続ごとのVPN経路の画面。トンネルはengineが持つコンテナの中にあり、ここでは
-// 経路の定義と、いまの状態と、どの接続がそれを通るかを扱う。秘密は保存のときに
-// 送るだけで、engineは決して返さない。
+// プロファイルの定義と、いまの状態と、どの接続がそれを通るかを扱う。秘密は保存の
+// ときに送るだけで、engineは決して返さない。
 
 type VPNPanelProps = {
   api?: VPNApi;
@@ -21,22 +28,28 @@ type VPNPanelProps = {
   aliases?: string[];
 };
 
-type DraftSecrets = {
-  wireguardPrivateKey: string;
-  l2tpPassword: string;
-  ipsecPsk: string;
-};
-
-const emptySecrets: DraftSecrets = { wireguardPrivateKey: "", l2tpPassword: "", ipsecPsk: "" };
-
 export function VPNPanel({ api = vpnApi, aliases = [] }: VPNPanelProps) {
   const t = useTranslate();
   const operation = useAsyncOperation();
   const [overview, setOverview] = useState<VPNOverview | null>(null);
   const [pendingRemoval, setPendingRemoval] = useState("");
+  const [pendingRename, setPendingRename] = useState("");
+  const [shownLogs, setShownLogs] = useState("");
+  // startingProfile は、いま経路を用意させているプロファイルである。
+  const [startingProfile, setStartingProfile] = useState("");
+  // failedProfile は、直前に経路を用意できなかったプロファイルである。失敗の文の
+  // 横からそのログを開けるようにする。
+  const [failedProfile, setFailedProfile] = useState("");
+
+  // 一覧を書き換えた応答の世代。操作を始めるときと終えるときに進め、読み始めたあとに
+  // 世代が変わった応答は捨てる。遅れて届いたポーリングの応答が、操作の運んだ新しい
+  // 一覧を古い一覧で上書きしないためである。
+  const generation = useRef(0);
 
   const describe = useCallback(
     (error: unknown) => {
+      const failure = vpnFailureReasonMessage(error);
+      if (failure !== null) return t("vpn.sessionFailed", { reason: t(failure) });
       const code = failureCode(error);
       const key = code === undefined ? undefined : vpnRefusals[code];
       return key === undefined ? t("vpn.failed") : t(key);
@@ -45,16 +58,78 @@ export function VPNPanel({ api = vpnApi, aliases = [] }: VPNPanelProps) {
   );
 
   const run = operation.run;
+  // act は、一覧を返す操作を走らせる。応答の一覧は、その間に別の操作が始まって
+  // いなければ採る。失敗の言い方は describeFailure で変えられる。成功したかどうかを返す。
+  const act = useCallback(
+    async (work: () => Promise<VPNOverview>, describeFailure: (error: unknown) => string = describe) => {
+      generation.current += 1;
+      const started = generation.current;
+      setFailedProfile("");
+      const succeeded = await run(work, {
+        apply: (next) => {
+          if (generation.current === started) setOverview(next);
+        },
+        describe: describeFailure,
+      });
+      if (generation.current === started) generation.current += 1;
+      return succeeded;
+    },
+    [describe, run],
+  );
+
   useEffect(() => {
     // 開いたときに一度だけ読む。以降は、操作の応答が最新の一覧を運ぶ。
-    void run(() => api.vpnOverview(), { apply: setOverview, describe });
-  }, [api, run, describe]);
+    void act(() => api.vpnOverview());
+  }, [api, act]);
 
-  const act = useCallback(
-    async (work: () => Promise<VPNOverview>) => {
-      await operation.run(work, { apply: setOverview, describe });
+  const startProfile = useCallback(
+    async (name: string) => {
+      setStartingProfile(name);
+      await act(
+        () => api.startVPNSession(name),
+        (error) => {
+          if (vpnFailureReasonMessage(error) !== null) setFailedProfile(name);
+          return describe(error);
+        },
+      );
+      setStartingProfile("");
     },
-    [describe, operation],
+    [act, api, describe],
+  );
+
+  const createProfile = useCallback(
+    async (profile: VPNProfile, secrets: VPNSecrets): Promise<VPNProfileSaveResult> => {
+      let fieldError: VPNFieldError | null = null;
+      const saved = await act(
+        () => api.createVPNProfile(profile, secrets),
+        (error) => {
+          // 項目の誤りは、その項目の横に理由を出す。ここでは横を見るよう促すだけにする。
+          fieldError = vpnFieldErrorOf(error);
+          return fieldError === null ? describe(error) : t("vpn.fieldRefused");
+        },
+      );
+      return saved ? { saved: true } : { saved: false, fieldError };
+    },
+    [act, api, describe, t],
+  );
+
+  // 経路が立つまでは分単位になることがある。待っているあいだだけ状態を読み直し、
+  // どこまで進んだかを見せる。ほかの操作の最中は読み直さない。その応答が一覧を
+  // 運んでくるからである。経路を用意させている最中だけは、その応答が経路が立つまで
+  // 返らないので、段階を見せるために読み直し続ける。
+  const preparingRoute = overview?.profiles.some((status) => (status.phase ?? "") !== "") ?? false;
+  const pollProgress = startingProfile !== "" || (!operation.busy && preparingRoute);
+  usePolling(
+    () => {
+      const started = generation.current;
+      return api
+        .vpnOverview()
+        .then((next) => {
+          if (generation.current === started) setOverview(next);
+        })
+        .catch(() => undefined);
+    },
+    { intervalMs: routeProgressIntervalMs, enabled: pollProgress },
   );
 
   if (overview === null) {
@@ -73,67 +148,49 @@ export function VPNPanel({ api = vpnApi, aliases = [] }: VPNPanelProps) {
       {overview.available ? null : (
         <Notice>{t("vpn.unavailable", { detail: overview.detail ?? "" })}</Notice>
       )}
-      {operation.error === "" ? null : <Notice tone="danger">{operation.error}</Notice>}
+      {operation.error === "" ? null : (
+        <Notice tone="danger">
+          <span className="grow">{operation.error}</span>
+          {failedProfile === "" ? null : (
+            <Button className="shrink-0" onClick={() => setShownLogs(failedProfile)}>
+              {t("vpn.failureShowLogs")}
+            </Button>
+          )}
+        </Notice>
+      )}
 
       {overview.profiles.length === 0 ? (
         <p className={hintText}>{t("vpn.empty")}</p>
       ) : (
         <ul className="flex flex-col gap-3">
-          {overview.profiles.map((session) => (
-            <li key={session.profile.name}>
-              <Card as="article" padded aria-label={session.profile.name}>
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="font-medium text-ink">{session.profile.name}</p>
-                    <p className={hintText}>
-                      {session.profile.backend} · {session.profile.target} ·{" "}
-                      {session.relaySocket !== ""
-                        ? t("vpn.stateUp")
-                        : session.running
-                          ? t("vpn.stateStarting")
-                          : t("vpn.stateStopped")}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      disabled={operation.busy || !overview.available}
-                      onClick={() => void act(() => api.startVPNSession(session.profile.name))}
-                    >
-                      {t("vpn.connect")}
-                    </Button>
-                    <Button
-                      disabled={operation.busy || !session.running}
-                      onClick={() => void act(() => api.stopVPNSession(session.profile.name))}
-                    >
-                      {t("vpn.disconnect")}
-                    </Button>
-                    <Button
-                      kind="danger"
-                      disabled={operation.busy}
-                      onClick={() => setPendingRemoval(session.profile.name)}
-                    >
-                      {t("vpn.remove")}
-                    </Button>
-                  </div>
-                </div>
-
-                <BindingRow
-                  profile={session.profile.name}
-                  connections={session.connections}
+          {overview.profiles.map((status) => {
+            const name = status.profile.name;
+            return (
+              <li key={name}>
+                <VPNProfileCard
+                  status={status}
                   aliases={aliases}
                   busy={operation.busy}
-                  onBind={(alias) => void act(() => api.setConnectionVPN(alias, session.profile.name))}
-                  onUnbind={(alias) => void act(() => api.setConnectionVPN(alias, ""))}
+                  available={overview.available}
+                  actions={{
+                    onStart: () => void startProfile(name),
+                    onStop: () => void act(() => api.stopVPNSession(name)),
+                    onShowLogs: () => setShownLogs(name),
+                    onRename: () => setPendingRename(name),
+                    onRemove: () => setPendingRemoval(name),
+                    onBind: (alias) => void act(() => api.setConnectionVPN(alias, name)),
+                    onUnbind: (alias) => void act(() => api.setConnectionVPN(alias, "")),
+                  }}
                 />
-              </Card>
-            </li>
-          ))}
+              </li>
+            );
+          })}
         </ul>
       )}
 
-      <ProfileForm
+      <VPNProfileForm
         busy={operation.busy}
-        onSave={(profile, secrets) => void act(() => api.saveVPNProfile(profile, secrets))}
+        onSave={createProfile}
       />
 
       {pendingRemoval === "" ? null : (
@@ -151,209 +208,34 @@ export function VPNPanel({ api = vpnApi, aliases = [] }: VPNPanelProps) {
           }}
         />
       )}
-    </section>
-  );
-}
 
-// BindingRow は、この経路を通る接続を見せ、増やしたり外したりする。
-function BindingRow({
-  profile,
-  connections,
-  aliases,
-  busy,
-  onBind,
-  onUnbind,
-}: {
-  profile: string;
-  connections: string[];
-  aliases: string[];
-  busy: boolean;
-  onBind: (alias: string) => void;
-  onUnbind: (alias: string) => void;
-}) {
-  const t = useTranslate();
-  const [alias, setAlias] = useState("");
-  const available = aliases.filter((name) => !connections.includes(name));
-  return (
-    <div className="flex flex-col gap-2 border-t border-line pt-3">
-      <p className={sectionHeading}>{t("vpn.connections")}</p>
-      {connections.length === 0 ? (
-        <p className={hintText}>{t("vpn.noConnections")}</p>
-      ) : (
-        <ul className="flex flex-wrap gap-2">
-          {connections.map((name) => (
-            <li key={name} className="flex items-center gap-1 rounded bg-surface-subtle px-2 py-1 text-sm">
-              <span>{name}</span>
-              <button
-                type="button"
-                aria-label={t("vpn.unbindAction", { alias: name, name: profile })}
-                className="text-ink-muted hover:text-ink"
-                disabled={busy}
-                onClick={() => onUnbind(name)}
-              >
-                ×
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-      <div className="flex flex-wrap items-end gap-2">
-        <Field label={t("vpn.bindLabel")}>
-          <select
-            className={control.replace("w-full", "w-56")}
-            value={alias}
-            disabled={busy || available.length === 0}
-            onChange={(event) => setAlias(event.target.value)}
-          >
-            <option value="">{t("vpn.bindChoose")}</option>
-            {available.map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Button
-          disabled={busy || alias === ""}
-          onClick={() => {
-            onBind(alias);
-            setAlias("");
+      {pendingRename === "" ? null : (
+        <InputDialog
+          id="vpn-rename"
+          heading={t("vpn.renameTitle", { name: pendingRename })}
+          description={t("vpn.renameHint")}
+          label={t("vpn.renameLabel")}
+          initialValue={pendingRename}
+          submitLabel={t("vpn.renameAction")}
+          cancelLabel={t("vpn.cancel")}
+          validate={(value) => (value === "" ? t("vpn.renameEmpty") : "")}
+          onCancel={() => setPendingRename("")}
+          onSubmit={(value) => {
+            const from = pendingRename;
+            setPendingRename("");
+            void act(() => api.renameVPNProfile(from, value));
           }}
-        >
-          {t("vpn.bindAction")}
-        </Button>
-      </div>
-    </div>
-  );
-}
+        />
+      )}
 
-// ProfileForm は、経路をひとつ作る。接続先はひとつだけ持つ。
-function ProfileForm({
-  busy,
-  onSave,
-}: {
-  busy: boolean;
-  onSave: (profile: VPNProfile, secrets: VPNSecrets) => void;
-}) {
-  const t = useTranslate();
-  const [name, setName] = useState("");
-  const [backend, setBackend] = useState<"wireguard" | "l2tp_ipsec">("wireguard");
-  const [target, setTarget] = useState("");
-  const [server, setServer] = useState("");
-  const [peerPublicKey, setPeerPublicKey] = useState("");
-  const [address, setAddress] = useState("10.0.0.2/32");
-  const [username, setUsername] = useState("");
-  const [ike, setIke] = useState("");
-  const [esp, setEsp] = useState("");
-  const [secrets, setSecrets] = useState<DraftSecrets>(emptySecrets);
-
-  const complete =
-    name !== "" &&
-    target !== "" &&
-    server !== "" &&
-    (backend === "wireguard"
-      ? peerPublicKey !== "" && address !== "" && secrets.wireguardPrivateKey !== ""
-      : username !== "" && secrets.l2tpPassword !== "" && secrets.ipsecPsk !== "");
-
-  function save() {
-    const profile: VPNProfile =
-      backend === "wireguard"
-        ? { name, backend, target, wireguard: { server, peerPublicKey, address } }
-        : {
-            name,
-            backend,
-            target,
-            l2tp: {
-              server,
-              username,
-              ...(ike === "" ? {} : { ike }),
-              ...(esp === "" ? {} : { esp }),
-            },
-          };
-    const carried: VPNSecrets =
-      backend === "wireguard"
-        ? { wireguardPrivateKey: secrets.wireguardPrivateKey }
-        : { l2tpPassword: secrets.l2tpPassword, ipsecPsk: secrets.ipsecPsk };
-    onSave(profile, carried);
-    setSecrets(emptySecrets);
-  }
-
-  return (
-    <Card as="section" padded aria-label={t("vpn.addHeading")}>
-      <p className={sectionHeading}>{t("vpn.addHeading")}</p>
-      <p className={hintText}>{t("vpn.addHint")}</p>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Field label={t("vpn.name")}>
-          <input className={control} value={name} onChange={(event) => setName(event.target.value)} />
-        </Field>
-        <Field label={t("vpn.backend")}>
-          <select
-            className={control}
-            value={backend}
-            onChange={(event) =>
-              setBackend(event.target.value === "l2tp_ipsec" ? "l2tp_ipsec" : "wireguard")
-            }
-          >
-            <option value="wireguard">WireGuard</option>
-            <option value="l2tp_ipsec">L2TP/IPsec</option>
-          </select>
-        </Field>
-        <Field label={t("vpn.target")} hint={t("vpn.targetHint")}>
-          <input className={control} value={target} onChange={(event) => setTarget(event.target.value)} />
-        </Field>
-        <Field label={t("vpn.server")}>
-          <input className={control} value={server} onChange={(event) => setServer(event.target.value)} />
-        </Field>
-        {backend === "wireguard" ? (
-          <>
-            <Field label={t("vpn.peerPublicKey")}>
-              <input
-                className={control}
-                value={peerPublicKey}
-                onChange={(event) => setPeerPublicKey(event.target.value)}
-              />
-            </Field>
-            <Field label={t("vpn.address")}>
-              <input className={control} value={address} onChange={(event) => setAddress(event.target.value)} />
-            </Field>
-            <PasswordField
-              label={t("vpn.privateKey")}
-              hint={t("vpn.secretHint")}
-              value={secrets.wireguardPrivateKey}
-              onChange={(value) => setSecrets({ ...secrets, wireguardPrivateKey: value })}
-            />
-          </>
-        ) : (
-          <>
-            <Field label={t("vpn.username")}>
-              <input className={control} value={username} onChange={(event) => setUsername(event.target.value)} />
-            </Field>
-            <PasswordField
-              label={t("vpn.password")}
-              hint={t("vpn.secretHint")}
-              value={secrets.l2tpPassword}
-              onChange={(value) => setSecrets({ ...secrets, l2tpPassword: value })}
-            />
-            <PasswordField
-              label={t("vpn.psk")}
-              hint={t("vpn.secretHint")}
-              value={secrets.ipsecPsk}
-              onChange={(value) => setSecrets({ ...secrets, ipsecPsk: value })}
-            />
-            <Field label={t("vpn.ike")} hint={t("vpn.proposalsHint")}>
-              <input className={control} value={ike} onChange={(event) => setIke(event.target.value)} />
-            </Field>
-            <Field label={t("vpn.esp")} hint={t("vpn.proposalsHint")}>
-              <input className={control} value={esp} onChange={(event) => setEsp(event.target.value)} />
-            </Field>
-          </>
-        )}
-      </div>
-      <div>
-        <Button kind="primary" disabled={busy || !complete} onClick={save}>
-          {t("vpn.save")}
-        </Button>
-      </div>
-    </Card>
+      {shownLogs === "" ? null : (
+        <VPNLogsDialog
+          name={shownLogs}
+          api={api}
+          describe={describe}
+          onClose={() => setShownLogs("")}
+        />
+      )}
+    </section>
   );
 }

@@ -57,7 +57,7 @@ func TestTheReadmeSaysWhoOwnsTheEngine(t *testing.T) {
 		}
 	}
 
-	if !strings.Contains(readme, "引数なしの `sshc` はエンジンを起動しません") {
+	if !strings.Contains(readme, "引数なしの`sshc`はエンジンを起動しません") {
 		t.Error("README does not say that bare sshc starts no engine")
 	}
 }
@@ -66,7 +66,7 @@ func TestTheReadmeSaysWhoOwnsTheEngine(t *testing.T) {
 func TestTheReadmeStatesTheVaultRules(t *testing.T) {
 	readme := repositoryFile(t, "README.md")
 
-	stated := fmt.Sprintf("%d 時間", int(secret.IdleTimeout.Hours()))
+	stated := fmt.Sprintf("%d時間", int(secret.IdleTimeout.Hours()))
 	if !strings.Contains(readme, stated) {
 		t.Errorf("README does not state the idle timeout %q; internal/secret.IdleTimeout is %v",
 			stated, secret.IdleTimeout)
@@ -75,8 +75,8 @@ func TestTheReadmeStatesTheVaultRules(t *testing.T) {
 		text string
 		why  string
 	}{
-		{"Web UI または `sshc vault`", "the supported master-password entry points"},
-		{"CLI は対話端末からのみ", "the CLI TTY requirement"},
+		{"Web UIまたは`sshc vault`", "the supported master-password entry points"},
+		{"CLIでは対話ターミナルからの入力だけ", "the CLI TTY requirement"},
 		{"引数や環境変数", "the inputs rejected by the CLI"},
 	} {
 		if !strings.Contains(readme, rule.text) {
@@ -89,7 +89,7 @@ func TestTheReadmeStatesTheVaultRules(t *testing.T) {
 func TestTheReadmeSaysHowToKeepTheEngineAlive(t *testing.T) {
 	readme := repositoryFile(t, "README.md")
 
-	if !strings.Contains(readme, "自動起動は OS のプロセス管理機能で設定します") {
+	if !strings.Contains(readme, "自動起動はOSのプロセス管理機能で設定します") {
 		t.Error("README does not say autostart belongs to the operating system")
 	}
 	for _, how := range []string{"tmux", "systemd", "launchd"} {

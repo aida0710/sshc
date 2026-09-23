@@ -55,9 +55,20 @@ Host secret-route
 	metadata := `{
   "schemaVersion": 3,
   "groupsFile": "groups.sshc.conf",
+  "vpnProfiles": [{
+    "name": "tohoku",
+    "backend": "wireguard",
+    "target": "10.9.9.1:2200",
+    "wireguard": {
+      "server": "vpn.example.jp:51820",
+      "peerPublicKey": "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
+      "address": "10.9.9.2/32"
+    }
+  }],
   "hosts": [{
     "identity": {"path": "conf.d/targets.conf", "alias": "edge"},
-    "encoding": "shift_jis"
+    "encoding": "shift_jis",
+    "vpn": "tohoku"
   }]
 }
 `
@@ -103,6 +114,37 @@ func TestInfoJSONUsesTheConnectionTargetWithoutAnEngine(t *testing.T) {
 	if got.IdentityFiles == nil || got.ProxyJump == nil || got.AuthenticationMethods == nil || got.Notices == nil {
 		t.Fatalf("JSON arrays must not be null: %+v", got)
 	}
+}
+
+// どのVPN経路を通るかは、接続する前に読めなければ意味がない。
+func TestInfoNamesTheVPNRouteTheConnectionTakes(t *testing.T) {
+	home := writeInfoFixture(t)
+	var stdout, stderr strings.Builder
+
+	if code := runInfo("edge", home, false, &stdout, &stderr); code != 0 {
+		t.Fatalf("runInfo = %d, stderr = %s", code, stderr.String())
+	}
+
+	if row := infoRow(stdout.String(), "vpn"); row != "tohoku" {
+		t.Fatalf("vpn = %q\n%s", row, stdout.String())
+	}
+	stdout.Reset()
+	if code := runInfo("secret-route", home, false, &stdout, &stderr); code != 0 {
+		t.Fatalf("runInfo = %d, stderr = %s", code, stderr.String())
+	}
+	if row := infoRow(stdout.String(), "vpn"); row != "not configured" {
+		t.Fatalf("VPNを通らない接続の vpn = %q\n%s", row, stdout.String())
+	}
+}
+
+// infoRow は、人向けの表からその名前の値を取り出す。
+func infoRow(output, name string) string {
+	for _, line := range strings.Split(output, "\n") {
+		if strings.HasPrefix(line, name+" ") {
+			return strings.TrimSpace(strings.TrimPrefix(line, name))
+		}
+	}
+	return ""
 }
 
 func TestInfoProxyJumpOrderMatchesTheNestedConnectionRoute(t *testing.T) {

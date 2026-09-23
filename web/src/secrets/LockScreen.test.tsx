@@ -124,7 +124,7 @@ describe("LockScreen", () => {
     );
 
     await userEvent.type(screen.getByLabelText("マスターパスワード"), "a long enough password");
-    await userEvent.click(screen.getByRole("button", { name: "開く" }));
+    await userEvent.click(screen.getByRole("button", { name: "ロックを解除" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Vault のバージョンが古いです（必要なバージョン：4、現在：3）。",
@@ -180,7 +180,7 @@ describe("LockScreen", () => {
     );
 
     await userEvent.type(screen.getByLabelText("マスターパスワード"), "a long enough password");
-    await userEvent.click(screen.getByRole("button", { name: "開く" }));
+    await userEvent.click(screen.getByRole("button", { name: "ロックを解除" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Vault をバージョン 4 から 5 へ更新できませんでした。元の Vault は変更していません。",

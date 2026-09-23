@@ -50,7 +50,9 @@ type infoDocument struct {
 	ServerAliveIntervalSeconds int64           `json:"serverAliveIntervalSeconds"`
 	ServerAliveCountMax        int             `json:"serverAliveCountMax"`
 	AgentForward               bool            `json:"agentForward"`
-	Notices                    []infoNotice    `json:"notices"`
+	// VPN は、この接続が通るVPNプロファイルの名前である。空なら通らない。
+	VPN     string       `json:"vpn"`
+	Notices []infoNotice `json:"notices"`
 }
 
 func runInfo(alias, home string, asJSON bool, stdout, stderr io.Writer) int {
@@ -100,6 +102,7 @@ func describeInfoTarget(target sshclient.Target) infoDocument {
 		ServerAliveIntervalSeconds: int64(target.KeepAlive.Seconds()),
 		ServerAliveCountMax:        target.KeepAliveMax,
 		AgentForward:               target.AgentForward,
+		VPN:                        target.VPN,
 		Notices:                    make([]infoNotice, 0, len(target.Notices)),
 	}
 	for _, jump := range target.JumpRoute() {
@@ -142,6 +145,7 @@ func writeInfo(out io.Writer, document infoDocument) {
 		{"connect timeout", fmt.Sprintf("%ds", document.ConnectTimeoutSeconds)},
 		{"server alive", fmt.Sprintf("%ds × %d", document.ServerAliveIntervalSeconds, document.ServerAliveCountMax)},
 		{"agent forwarding", fmt.Sprintf("%t", document.AgentForward)},
+		{"vpn", vpnWord(document.VPN)},
 	}
 	for _, identity := range document.IdentityFiles {
 		rows = append(rows, [2]string{"identity", identity})
@@ -169,6 +173,14 @@ func configuredWord(configured bool) string {
 		return "configured (value hidden)"
 	}
 	return "not configured"
+}
+
+// vpnWord は、通るVPN経路の名前である。秘密ではないので、そのまま見せる。
+func vpnWord(profile string) string {
+	if profile == "" {
+		return "not configured"
+	}
+	return profile
 }
 
 func defaultWord(value string) string {

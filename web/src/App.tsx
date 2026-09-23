@@ -448,6 +448,7 @@ export function App({
                       settings={terminalSettings}
                       hostAppearance={declared.hostAppearance}
                       hostOSC52={declared.hostOSC52}
+                      hostVPN={declared.hostVPN}
                       onActive={showConsole}
                       onLiveWorkspaceChange={setLiveWorkspace}
                       onOpenAlias={(alias) =>
@@ -500,7 +501,7 @@ export function App({
                           await consoles.refresh();
                         },
                       }}
-                      declared={{ groups: declared.groups, knownAliases: declared.knownAliases, hosts: declared.hosts }}
+                      declared={{ groups: declared.groups, knownAliases: declared.knownAliases, hosts: declared.hosts, hostVPN: declared.hostVPN }}
                       sftpTarget={handoffs.sftpTarget}
                       onSftpTargetHandled={handoffs.handleSftpTarget}
                     />

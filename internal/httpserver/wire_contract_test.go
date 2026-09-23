@@ -20,6 +20,7 @@ import (
 	"sshc/internal/application"
 	"sshc/internal/sftp"
 	"sshc/internal/snippets"
+	"sshc/internal/vpn"
 	"sshc/internal/workspace"
 )
 
@@ -31,11 +32,14 @@ func TestHandwrittenHTTPWireTypesMatchOpenAPIRecursively(t *testing.T) {
 	document := readOpenAPIDocument(t)
 	contracts := map[string]any{
 		"Problem":                         problemPayload{},
-		"VPNOverview":                     vpnOverviewResponse{},
-		"VPNSession":                      vpnSessionResponse{},
-		"VPNProfileRequest":               vpnProfileRequest{},
-		"VPNSecrets":                      vpnSecretsRequest{},
-		"VPNBindingRequest":               vpnBindingRequest{},
+		"VPNOverview":                     VPNOverview{},
+		"VPNProfileStatus":                VPNProfileStatus{},
+		"VPNTunnel":                       VPNTunnel{},
+		"VPNLogs":                         VPNLogs{},
+		"VPNProfileRequest":               VPNProfileRequest{},
+		"VPNSecrets":                      vpn.SecretsDocument{},
+		"VPNBindingRequest":               VPNBindingRequest{},
+		"VPNRenameRequest":                VPNRenameRequest{},
 		"HistoryList":                     historyList{},
 		"TerminalBackground":              application.Background{},
 		"TerminalBackgroundList":          backgroundListResponse{},
@@ -451,6 +455,10 @@ func verifyEnum(t *testing.T, schema map[string]any, typeID reflect.Type) {
 }
 
 var wireEnumValues = map[reflect.Type][]string{
+	reflect.TypeOf(vpn.StartPhase("")): {
+		string(vpn.PhaseImage), string(vpn.PhaseContainer),
+		string(vpn.PhaseTunnel), string(vpn.PhaseApproval),
+	},
 	reflect.TypeOf(sftp.LinkTargetType("")): {
 		string(sftp.LinkTargetFile), string(sftp.LinkTargetDirectory), string(sftp.LinkTargetOther),
 	},

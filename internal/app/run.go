@@ -30,6 +30,7 @@ import (
 	"sshc/internal/storage"
 	"sshc/internal/terminal"
 	"sshc/internal/validate"
+	"sshc/internal/vpn"
 )
 
 type ListenFunc func(network, address string) (net.Listener, error)
@@ -119,6 +120,9 @@ type runtime struct {
 	autoDone    chan struct{}
 	browserAuth *browserauth.Store
 	sftpPool    *sshcSFTP.RemotePool
+	vpn         *vpn.Manager
+	vpnCancel   context.CancelFunc
+	vpnDone     chan struct{}
 }
 
 func build(dependencies Dependencies, version string) (runtime, error) {
@@ -228,10 +232,11 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 				dependencies.Logger.Warn("record recent SSH connection", "alias", alias, "error", err)
 			}
 		},
-		Sync:      syncService,
-		AutoSync:  autoSync,
-		Terminals: terminals,
-		VPN:       services.vpn,
+		Sync:        syncService,
+		AutoSync:    autoSync,
+		Terminals:   terminals,
+		VPN:         services.vpn,
+		VPNProfiles: services.vpnProfiles,
 		// SSH のプログラムはもう要らない。接続はこのプロセスの中で通信する。
 		TerminalStartDirectory:    configService.TerminalStartDirectory,
 		LoginShell:                func() (string, error) { return platform.LoginShell(dependencies.Lookup) },
@@ -276,6 +281,7 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 		autoSync:    autoSync,
 		browserAuth: services.browserAuth,
 		sftpPool:    services.sftpPool,
+		vpn:         services.vpn,
 	}, nil
 }
 
@@ -292,6 +298,10 @@ func Run(ctx context.Context, dependencies Dependencies, version string) error {
 	if err != nil {
 		return err
 	}
+
+	// 経路の監視は HTTP を受け付ける前に始める。前回の engine のコンテナを回収し
+	// 終えるまで経路の起動を待たせる予告を、最初の要求より先に済ませるためである。
+	built.startVPNSupervisor(asked, dependencies.Logger)
 
 	serveErrors := make(chan error, 1)
 	go func() { serveErrors <- built.server.Serve() }()
@@ -394,10 +404,44 @@ func (r runtime) unwind(dependencies Dependencies) error {
 			joined = append(joined, fmt.Errorf("close the idle SFTP connections: %w", err))
 		}
 	}
+	// 経路は engine のものである。engine が終わったあとも動いているコンテナは、
+	// 誰も面倒を見ないまま残り、次の起動で回収されるまでトンネルを張り続ける。
+	if r.vpn != nil {
+		// 監視を先に止める。止める前に終わりを待つと、engine を畳む側と
+		// 待たれる側が互いを待つ。
+		if r.vpnCancel != nil {
+			r.vpnCancel()
+		}
+		if r.vpnDone != nil {
+			<-r.vpnDone
+		}
+		// 用意の途中の経路を打ち切る。打ち切らないと、StopAll がその起動を
+		// 分単位で待つ。
+		r.vpn.Close()
+		stopping, cancel := context.WithTimeout(context.Background(), vpnStopTimeout)
+		r.vpn.StopAll(stopping)
+		cancel()
+	}
 	if r.passwords != nil {
 		r.passwords.Lock()
 	}
 	return errors.Join(joined...)
+}
+
+// startVPNSupervisor は、経路の寿命を見る仕事を engine の寿命に結び付ける。
+func (r *runtime) startVPNSupervisor(parent context.Context, logger *slog.Logger) {
+	if r.vpn == nil {
+		return
+	}
+	r.vpn.ExpectOrphanDiscard()
+	watching, cancel := context.WithCancel(parent)
+	done := make(chan struct{})
+	r.vpnCancel = cancel
+	r.vpnDone = done
+	go func() {
+		defer close(done)
+		superviseVPNSessions(watching, r.vpn, logger)
+	}()
 }
 
 func (r *runtime) startAutoSync(parent context.Context) {

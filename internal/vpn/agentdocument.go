@@ -1,10 +1,9 @@
 package vpn
 
 import (
-	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"strings"
+	"time"
 )
 
 // agentDocument は、コンテナのagentへ標準入力で渡す設定である。
@@ -12,20 +11,20 @@ import (
 // 秘密を含むので、コマンド引数・環境変数・イメージ・bind mountには置かない。
 // agentは読み終えたらこの文書を消す。
 type agentDocument struct {
-	Backend     string             `json:"backend"`
-	Target      endpointDocument   `json:"target"`
-	SocketOwner int                `json:"socketOwner"`
-	WireGuard   *wireGuardDocument `json:"wireguard,omitempty"`
-	L2TP        *l2tpDocument      `json:"l2tp,omitempty"`
-}
-
-// l2tpDocument は、agent が置くだけの本文と、agent が自分で引く相手である。
-type l2tpDocument struct {
-	// Server は、VPN装置の名前またはアドレスである。agent がコンテナの中で引き、
-	// 設定の中の印を、引いたアドレスで置き換える。
-	Server string `json:"server"`
-	// Documents は、ファイル名から本文への対応である。
-	Documents map[string]string `json:"documents"`
+	Backend string           `json:"backend"`
+	Target  endpointDocument `json:"target"`
+	// DNS は、接続先の名前をVPNの中で引くためのDNSサーバーである。
+	DNS []string `json:"dns,omitempty"`
+	// Deadline は、応えない相手を待つのをやめる時刻（UNIX 秒）である。agent の
+	// 待ちはどれも、この時刻までの残りだけ待つ。engine が待つのをやめるより
+	// 先に諦めて、どこで止まったかをログへ残す。
+	//
+	// engine とコンテナは同じカーネルの時計を見るので、時刻で渡してよい。
+	Deadline    int64                `json:"deadline"`
+	SocketOwner int                  `json:"socketOwner"`
+	WireGuard   *wireGuardDocument   `json:"wireguard,omitempty"`
+	L2TP        *l2tpDocument        `json:"l2tp,omitempty"`
+	OpenConnect *openConnectDocument `json:"openconnect,omitempty"`
 }
 
 type endpointDocument struct {
@@ -33,16 +32,11 @@ type endpointDocument struct {
 	Port int    `json:"port"`
 }
 
-type wireGuardDocument struct {
-	// Configuration は wg setconf がそのまま読む本文である。
-	Configuration string `json:"configuration"`
-	// Address は、トンネル側でこの端末が名乗るアドレスである。wg setconf は
-	// これを扱わないので、ip address add へ別に渡す。
-	Address string `json:"address"`
-}
-
 // newAgentDocument は、プロファイルと秘密から、コンテナへ渡す設定を作る。
-func newAgentDocument(profile Profile, secrets Secrets, socketOwner int) (string, error) {
+//
+// now は、二段目のコードを作る時刻であり、締め切りを数え始める時刻である。
+// コードは 30 秒で変わるので、この文書はコンテナへ渡す直前に作る。
+func newAgentDocument(profile Profile, secrets Secrets, socketOwner int, now time.Time) (string, error) {
 	if err := profile.Validate(); err != nil {
 		return "", err
 	}
@@ -52,19 +46,13 @@ func newAgentDocument(profile Profile, secrets Secrets, socketOwner int) (string
 	document := agentDocument{
 		Backend:     string(profile.Backend),
 		Target:      endpointDocument{Host: profile.Target.Host, Port: profile.Target.Port},
+		DNS:         profile.DNS,
+		Deadline:    agentDeadline(profile, now).Unix(),
 		SocketOwner: socketOwner,
 	}
-	switch profile.Backend {
-	case WireGuard:
-		document.WireGuard = &wireGuardDocument{
-			Configuration: wireGuardConfiguration(*profile.WireGuard, profile.Target, secrets),
-			Address:       profile.WireGuard.Address,
-		}
-	case L2TPIPsec:
-		document.L2TP = &l2tpDocument{
-			Server:    profile.L2TP.Server,
-			Documents: l2tpDocuments(*profile.L2TP, secrets),
-		}
+	request := agentSectionRequest{profile: profile, secrets: secrets, now: now}
+	if err := backends[profile.Backend].writeAgentSection(request, &document); err != nil {
+		return "", err
 	}
 	encoded, err := json.Marshal(document)
 	if err != nil {
@@ -73,41 +61,21 @@ func newAgentDocument(profile Profile, secrets Secrets, socketOwner int) (string
 	return string(encoded), nil
 }
 
-// wireGuardConfiguration は、wg setconf が読む本文を作る。
-//
-// AllowedIPs は接続先ひとつだけにする。トンネルが運ぶのはその接続先への通信に
-// 限られ、VPNの向こうのネットワーク全体を引き込まない。
-func wireGuardConfiguration(settings WireGuardSettings, target Endpoint, secrets Secrets) string {
-	lines := []string{
-		"[Interface]",
-		"PrivateKey = " + secrets.WireGuardPrivateKey,
-		"",
-		"[Peer]",
-		"PublicKey = " + settings.PeerPublicKey,
-		"Endpoint = " + settings.Server.Address(),
-		fmt.Sprintf("AllowedIPs = %s/32", target.Host),
-		// NATの内側からでも経路を保つ。相手が先に話しかけてくる構成でも、
-		// こちらの経路が落ちたままにならない。
-		"PersistentKeepalive = 25",
-		"",
-	}
-	return strings.Join(lines, "\n")
-}
+// redactedMark は、伏せた秘密の代わりに出す印である。
+const redactedMark = "[REDACTED]"
 
 // redact は、表示する文字列から秘密を伏せる。docker logs をそのまま見せない。
 //
-// 16 進の表記も伏せる。IPsec の事前共有鍵は設定へ 16 進で書くので、その形のまま
-// ログに現れうる。
+// どの backend の秘密が混じっているかは分からないので、持っている秘密をすべて
+// 伏せる。
 func redact(text string, secrets Secrets) string {
-	replacements := make([]string, 0, 8)
-	for _, value := range []string{secrets.WireGuardPrivateKey, secrets.L2TPPassword, secrets.IPsecPSK} {
-		if value == "" {
-			continue
+	var replacements []string
+	for _, chosen := range backends {
+		for _, value := range chosen.secretValues(secrets) {
+			if value != "" {
+				replacements = append(replacements, value, redactedMark)
+			}
 		}
-		replacements = append(replacements, value, "[REDACTED]")
-		encoded := hex.EncodeToString([]byte(value))
-		replacements = append(replacements,
-			encoded, "[REDACTED]", strings.ToUpper(encoded), "[REDACTED]")
 	}
 	if len(replacements) == 0 {
 		return text

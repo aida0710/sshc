@@ -30,10 +30,32 @@ type VPNProfile struct {
 	Backend string `json:"backend"`
 	// Target は、この VPN の中にある接続先である。`host:port` で書く。
 	Target string `json:"target"`
+	// DNS は、接続先の名前を VPN の中で引くための DNS サーバーである。
+	// 接続先をアドレスで書くなら要らない。
+	DNS []string `json:"dns,omitempty"`
 	// WireGuard は、backend が wireguard のときの設定である。
 	WireGuard *WireGuardProfile `json:"wireguard,omitempty"`
 	// L2TP は、backend が l2tp_ipsec のときの設定である。
 	L2TP *L2TPProfile `json:"l2tp,omitempty"`
+	// OpenConnect は、backend が openconnect のときの設定である。
+	OpenConnect *OpenConnectProfile `json:"openconnect,omitempty"`
+}
+
+// OpenConnectProfile は、openconnect backend の秘密でない設定である。
+type OpenConnectProfile struct {
+	// Server は、VPN装置の名前またはアドレスである。名前はコンテナの中で引く。
+	Server string `json:"server"`
+	// Username は、VPNの利用者名である。パスワードは Vault にある。
+	Username string `json:"username"`
+	// Protocol は、その装置が話す方式である。空なら anyconnect。
+	Protocol string `json:"protocol,omitempty"`
+	// ServerCertificate は、相手の証明書を固定する指紋である（`sha256:...`）。
+	ServerCertificate string `json:"serverCertificate,omitempty"`
+	// SecondFactor は、二段目の質問への答え方である（`approve` または `totp`）。
+	// 空なら答えない。
+	SecondFactor string `json:"secondFactor,omitempty"`
+	// ApprovalWord は、SecondFactor が approve のときに送る語である。空なら push。
+	ApprovalWord string `json:"approvalWord,omitempty"`
 }
 
 // L2TPProfile は、l2tp_ipsec backend の秘密でない設定である。
@@ -58,39 +80,83 @@ type WireGuardProfile struct {
 }
 
 // Profile は、保存した設定を internal/vpn が使う形へ直す。
+//
+// backend に合う節だけを移す。古い版や別の画面が残した、使っていない節には
+// 引きずられない。
 func (stored VPNProfile) Profile() (vpn.Profile, error) {
 	target, err := parseEndpoint(stored.Target)
 	if err != nil {
-		return vpn.Profile{}, fmt.Errorf("%w: 接続先 %q: %w", ErrMetadataVPN, stored.Target, err)
+		return vpn.Profile{}, metadataVPNFieldError(vpn.ErrTarget, "target")
 	}
+	normalized := stored.Normalized()
 	profile := vpn.Profile{
-		Name:    stored.Name,
-		Backend: vpn.BackendName(stored.Backend),
+		Name:    normalized.Name,
+		Backend: vpn.BackendName(normalized.Backend),
 		Target:  target,
+		DNS:     append([]string(nil), normalized.DNS...),
 	}
-	if stored.WireGuard != nil {
-		server, err := parseEndpoint(stored.WireGuard.Server)
+	if settings := normalized.WireGuard; settings != nil {
+		server, err := parseEndpoint(settings.Server)
 		if err != nil {
-			return vpn.Profile{}, fmt.Errorf("%w: サーバー %q: %w", ErrMetadataVPN, stored.WireGuard.Server, err)
+			return vpn.Profile{}, metadataVPNFieldError(vpn.ErrSettings, "wireguard.server")
 		}
 		profile.WireGuard = &vpn.WireGuardSettings{
-			Server:        server,
-			PeerPublicKey: stored.WireGuard.PeerPublicKey,
-			Address:       stored.WireGuard.Address,
+			Server: server, PeerPublicKey: settings.PeerPublicKey, Address: settings.Address,
 		}
 	}
-	if stored.L2TP != nil {
+	if settings := normalized.OpenConnect; settings != nil {
+		profile.OpenConnect = &vpn.OpenConnectSettings{
+			Server:            settings.Server,
+			Username:          settings.Username,
+			Protocol:          settings.Protocol,
+			ServerCertificate: settings.ServerCertificate,
+			SecondFactor:      settings.SecondFactor,
+			ApprovalWord:      settings.ApprovalWord,
+		}
+	}
+	if settings := normalized.L2TP; settings != nil {
 		profile.L2TP = &vpn.L2TPSettings{
-			Server:   stored.L2TP.Server,
-			Username: stored.L2TP.Username,
-			IKE:      stored.L2TP.IKE,
-			ESP:      stored.L2TP.ESP,
+			Server: settings.Server, Username: settings.Username, IKE: settings.IKE, ESP: settings.ESP,
 		}
 	}
 	if err := profile.Validate(); err != nil {
 		return vpn.Profile{}, fmt.Errorf("%w: %w", ErrMetadataVPN, err)
 	}
 	return profile, nil
+}
+
+// Reaches は、この経路の接続先が address（`host:port`）を指すかを返す。
+// 比べ方は vpn.Endpoint.Reaches と同じである。
+func (stored VPNProfile) Reaches(address string) bool {
+	target, err := parseEndpoint(stored.Target)
+	return err == nil && target.Reaches(address)
+}
+
+// Normalized は、backend と違う節を落とし、空の DNS を無しに揃えた写しを返す。
+//
+// 画面は方式を切り替えたあとに古い節を送ってくることがある。断らずに落とすのは、
+// 利用者が直せる誤りではないからである。
+func (stored VPNProfile) Normalized() VPNProfile {
+	normalized := stored
+	if len(normalized.DNS) == 0 {
+		normalized.DNS = nil
+	}
+	if normalized.Backend != string(vpn.WireGuard) {
+		normalized.WireGuard = nil
+	}
+	if normalized.Backend != string(vpn.L2TPIPsec) {
+		normalized.L2TP = nil
+	}
+	if normalized.Backend != string(vpn.OpenConnect) {
+		normalized.OpenConnect = nil
+	}
+	return normalized
+}
+
+// metadataVPNFieldError は、保存形式の `host:port` が読めないことを、項目の
+// 誤りとして返す。
+func metadataVPNFieldError(kind error, field string) error {
+	return fmt.Errorf("%w: %w", ErrMetadataVPN, &vpn.FieldError{Kind: kind, Field: field, Reason: vpn.ReasonFormat})
 }
 
 func parseEndpoint(value string) (vpn.Endpoint, error) {
@@ -124,7 +190,7 @@ func validateVPNProfiles(profiles []VPNProfile) error {
 		if stored.Backend == "" {
 			return fmt.Errorf("%w: %s に backend がありません", ErrMetadataVPN, stored.Name)
 		}
-		if backend := vpn.BackendName(stored.Backend); backend != vpn.WireGuard && backend != vpn.L2TPIPsec {
+		if !vpn.KnownBackend(stored.Backend) {
 			continue
 		}
 		if _, err := stored.Profile(); err != nil {

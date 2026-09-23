@@ -1,6 +1,7 @@
 import type { MessageKey } from "../i18n/messages";
 
-// engine が VPN の操作を断った理由と、その画面での言い方。
+// engine が VPN の操作を断った理由と、その画面での言い方。api/vpn.ts は、ここに
+// 載っているコードを共通の失敗通知へ回さず、この画面に説明させる。
 export const vpnRefusals: Record<string, MessageKey> = {
   vpn_docker_missing: "vpn.dockerMissing",
   vpn_tunnel_device_missing: "vpn.tunnelDeviceMissing",
@@ -10,6 +11,9 @@ export const vpnRefusals: Record<string, MessageKey> = {
   vpn_secrets_missing: "vpn.secretsMissing",
   vpn_profile_invalid: "vpn.profileInvalid",
   vpn_profile_unknown: "vpn.profileUnknown",
+  vpn_profile_exists: "vpn.profileExists",
+  vpn_target_mismatch: "vpn.targetMismatch",
   connection_unknown: "vpn.connectionUnknown",
   vault_locked: "vpn.vaultLocked",
+  vault_missing: "vpn.vaultMissing",
 };

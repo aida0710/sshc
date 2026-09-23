@@ -41,7 +41,20 @@ func TestAProfileIsRefusedWhenTheRouteCouldNotBeBuiltFromIt(t *testing.T) {
 		{"名前が空", func(profile *Profile) { profile.Name = "" }, ErrProfileName},
 		{"名前にパス区切り", func(profile *Profile) { profile.Name = "../escape" }, ErrProfileName},
 		{"知らないbackend", func(profile *Profile) { profile.Backend = "openvpn" }, ErrBackend},
-		{"接続先が名前", func(profile *Profile) { profile.Target.Host = "host.example.jp" }, ErrTarget},
+		{"接続先が名前なのにDNSが無い", func(profile *Profile) { profile.Target.Host = "host.example.jp" }, ErrTarget},
+		{"接続先の名前に空白", func(profile *Profile) {
+			profile.Target.Host = "host example.jp"
+			profile.DNS = []string{"10.9.9.53"}
+		}, ErrTarget},
+		{"DNSが名前", func(profile *Profile) {
+			profile.DNS = []string{"dns.example.jp"}
+		}, ErrSettings},
+		{"DNSがループバック", func(profile *Profile) {
+			profile.DNS = []string{"127.0.0.53"}
+		}, ErrSettings},
+		{"DNSが多すぎる", func(profile *Profile) {
+			profile.DNS = []string{"10.9.9.1", "10.9.9.2", "10.9.9.3", "10.9.9.4"}
+		}, ErrSettings},
 		{"接続先がIPv6", func(profile *Profile) { profile.Target.Host = "2001:db8::1" }, ErrTarget},
 		{"接続先がループバック", func(profile *Profile) { profile.Target.Host = "127.0.0.1" }, ErrTarget},
 		{"ポートが範囲外", func(profile *Profile) { profile.Target.Port = 70000 }, ErrTarget},
@@ -68,6 +81,46 @@ func TestAProfileIsRefusedWhenTheRouteCouldNotBeBuiltFromIt(t *testing.T) {
 	}
 }
 
+// 名前の接続先は、VPNの中のDNSを添えたときだけ受け取る。
+func TestANamedTargetIsAcceptedOnceTheVPNHasItsOwnDNS(t *testing.T) {
+	profile := validProfile()
+	profile.Target.Host = "lab.example.jp"
+	profile.DNS = []string{"10.9.9.53"}
+
+	if err := profile.Validate(); err != nil {
+		t.Fatalf("Validate = %v", err)
+	}
+}
+
+// 名前を引く前のトンネルが運ぶのは、DNSサーバーへの通信だけである。
+//
+// 接続先のアドレスはまだ分からない。ここで広く開けると、名前が引けなかった
+// あとも余計な相手へ出られるトンネルが残る。
+func TestATunnelForANamedTargetCarriesOnlyTheResolversUntilTheNameIsResolved(t *testing.T) {
+	profile := validProfile()
+	profile.Target.Host = "lab.example.jp"
+	profile.DNS = []string{"10.9.9.53", "10.9.9.54"}
+
+	document, err := newAgentDocument(profile, Secrets{WireGuard: &WireGuardSecrets{PrivateKey: testPrivateKey}}, 1000, testClock)
+	if err != nil {
+		t.Fatalf("newAgentDocument = %v", err)
+	}
+
+	var decoded agentDocument
+	if err := json.Unmarshal([]byte(document), &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(decoded.WireGuard.Configuration, "AllowedIPs = 10.9.9.53/32, 10.9.9.54/32") {
+		t.Errorf("configuration = %q", decoded.WireGuard.Configuration)
+	}
+	if strings.Contains(decoded.WireGuard.Configuration, "lab.example.jp") {
+		t.Errorf("引けていない名前がトンネルの設定に入った: %q", decoded.WireGuard.Configuration)
+	}
+	if strings.Join(decoded.DNS, ",") != "10.9.9.53,10.9.9.54" {
+		t.Errorf("dns = %v", decoded.DNS)
+	}
+}
+
 func TestSecretsAreRefusedWhenTheBackendCannotUseThem(t *testing.T) {
 	profile := validProfile()
 	for _, test := range []struct {
@@ -75,7 +128,7 @@ func TestSecretsAreRefusedWhenTheBackendCannotUseThem(t *testing.T) {
 		secrets Secrets
 	}{
 		{"秘密鍵が無い", Secrets{}},
-		{"秘密鍵の形式が違う", Secrets{WireGuardPrivateKey: "not-a-key"}},
+		{"秘密鍵の形式が違う", Secrets{WireGuard: &WireGuardSecrets{PrivateKey: "not-a-key"}}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			if err := profile.ValidateSecrets(test.secrets); err == nil {
@@ -83,7 +136,7 @@ func TestSecretsAreRefusedWhenTheBackendCannotUseThem(t *testing.T) {
 			}
 		})
 	}
-	if err := profile.ValidateSecrets(Secrets{WireGuardPrivateKey: testPrivateKey}); err != nil {
+	if err := profile.ValidateSecrets(Secrets{WireGuard: &WireGuardSecrets{PrivateKey: testPrivateKey}}); err != nil {
 		t.Fatalf("ValidateSecrets = %v", err)
 	}
 }
@@ -92,7 +145,7 @@ func TestSecretsAreRefusedWhenTheBackendCannotUseThem(t *testing.T) {
 func TestTheTunnelCarriesOnlyTheConfiguredTarget(t *testing.T) {
 	profile := validProfile()
 
-	document, err := newAgentDocument(profile, Secrets{WireGuardPrivateKey: testPrivateKey}, 1000)
+	document, err := newAgentDocument(profile, Secrets{WireGuard: &WireGuardSecrets{PrivateKey: testPrivateKey}}, 1000, testClock)
 	if err != nil {
 		t.Fatalf("newAgentDocument = %v", err)
 	}
@@ -126,7 +179,7 @@ func TestAnInvalidProfileNeverReachesTheContainer(t *testing.T) {
 	profile := validProfile()
 	profile.Target.Host = "example.jp"
 
-	if _, err := newAgentDocument(profile, Secrets{WireGuardPrivateKey: testPrivateKey}, 1000); !errors.Is(err, ErrTarget) {
+	if _, err := newAgentDocument(profile, Secrets{WireGuard: &WireGuardSecrets{PrivateKey: testPrivateKey}}, 1000, testClock); !errors.Is(err, ErrTarget) {
 		t.Fatalf("newAgentDocument = %v, want %v", err, ErrTarget)
 	}
 }
@@ -135,7 +188,7 @@ func TestAnInvalidProfileNeverReachesTheContainer(t *testing.T) {
 func TestShownLogsHideThePrivateKey(t *testing.T) {
 	logs := "wireguard-go: failed with key " + testPrivateKey + " again"
 
-	shown := redact(logs, Secrets{WireGuardPrivateKey: testPrivateKey})
+	shown := redact(logs, Secrets{WireGuard: &WireGuardSecrets{PrivateKey: testPrivateKey}})
 
 	if strings.Contains(shown, testPrivateKey) {
 		t.Fatalf("redact kept the key: %q", shown)
@@ -145,13 +198,25 @@ func TestShownLogsHideThePrivateKey(t *testing.T) {
 	}
 }
 
-// 同じ機械の別の利用者のコンテナを、名前だけで掴まない。
-func TestContainerNamesSeparateProfilesAndUsers(t *testing.T) {
-	if containerName("tohoku", 1000) == containerName("tohoku", 1001) {
-		t.Fatal("two users share one container name")
+// 同じ機械の別の利用者や、同じ利用者の別の workspace のコンテナを、名前だけで掴まない。
+func TestContainerNamesSeparateProfilesUsersAndWorkspaces(t *testing.T) {
+	directory := t.TempDir()
+	mine := New(directory, 1000)
+	names := map[string]string{
+		"同じ設定":        mine.containerName("tohoku"),
+		"別の利用者":       New(directory, 1001).containerName("tohoku"),
+		"別のプロファイル":    mine.containerName("office"),
+		"別のworkspace": New(t.TempDir(), 1000).containerName("tohoku"),
 	}
-	if containerName("tohoku", 1000) == containerName("office", 1000) {
-		t.Fatal("two profiles share one container name")
+	seen := map[string]string{}
+	for label, name := range names {
+		if previous, taken := seen[name]; taken {
+			t.Fatalf("%s と %s が同じコンテナ名 %q になった", previous, label, name)
+		}
+		seen[name] = label
+	}
+	if New(directory, 1000).containerName("tohoku") != names["同じ設定"] {
+		t.Fatal("同じ workspace で起動し直した engine が、前回のコンテナを見つけられない")
 	}
 }
 
@@ -175,7 +240,7 @@ func TestTheImageTagFollowsTheEmbeddedContents(t *testing.T) {
 
 // Vault へ保存する記録は、読み書きで同じ値に戻る。
 func TestSecretsSurviveTheirStoredForm(t *testing.T) {
-	document, err := EncodeSecrets(Secrets{WireGuardPrivateKey: testPrivateKey})
+	document, err := EncodeSecrets(Secrets{WireGuard: &WireGuardSecrets{PrivateKey: testPrivateKey}})
 	if err != nil {
 		t.Fatalf("EncodeSecrets = %v", err)
 	}
@@ -184,10 +249,130 @@ func TestSecretsSurviveTheirStoredForm(t *testing.T) {
 	}
 
 	secrets, err := DecodeSecrets(document)
-	if err != nil || secrets.WireGuardPrivateKey != testPrivateKey {
+	if err != nil || secrets.WireGuard.PrivateKey != testPrivateKey {
 		t.Fatalf("DecodeSecrets = %+v, %v", secrets, err)
 	}
 	if _, err := DecodeSecrets("{"); !errors.Is(err, ErrSecrets) {
 		t.Fatalf("DecodeSecrets(壊れた記録) = %v, want ErrSecrets", err)
+	}
+}
+
+// 選んだ backend と違う backend の節は、経路の設定として受け取らない。
+func TestAProfileCarryingAnotherBackendsSettingsIsRefused(t *testing.T) {
+	profile := validProfile()
+	profile.L2TP = &L2TPSettings{Server: "vpn.example.jp", Username: "user"}
+
+	err := profile.Validate()
+
+	var failure *FieldError
+	if !errors.As(err, &failure) || failure.Field != "l2tp" || failure.Reason != ReasonUnexpected {
+		t.Fatalf("Validate = %v", err)
+	}
+}
+
+// 断る理由は、項目と理由の語で返る。画面と CLI はそれを翻訳して見せる。
+func TestARefusalNamesTheFieldAndTheReason(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		change func(*Profile)
+		field  string
+		reason Reason
+		limit  int
+	}{
+		{"DNSが多すぎる", func(profile *Profile) {
+			profile.DNS = []string{"10.9.9.1", "10.9.9.2", "10.9.9.3", "10.9.9.4"}
+		}, "dns", ReasonTooMany, maxResolvers},
+		{"名前の接続先にDNSが無い", func(profile *Profile) { profile.Target.Host = "lab.example.jp" }, "target", ReasonNameNeedsDNS, 0},
+		{"公開鍵が短い", func(profile *Profile) { profile.WireGuard.PeerPublicKey = "short" }, "wireguard.peerPublicKey", ReasonFormat, 0},
+		{"名前が長すぎる", func(profile *Profile) { profile.Name = strings.Repeat("a", maxProfileNameLength+1) }, "name", ReasonTooLong, maxProfileNameLength},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			profile := validProfile()
+			settings := *profile.WireGuard
+			profile.WireGuard = &settings
+			test.change(&profile)
+
+			var failure *FieldError
+			if err := profile.Validate(); !errors.As(err, &failure) {
+				t.Fatalf("Validate = %v", err)
+			}
+			if failure.Field != test.field || failure.Reason != test.reason || failure.Limit != test.limit {
+				t.Fatalf("failure = %+v", failure)
+			}
+		})
+	}
+}
+
+// 名前の書き方の違い（大文字小文字、末尾の点）は食い違いとして扱わない。
+func TestAProfileReachesTheSameNameWrittenDifferently(t *testing.T) {
+	profile := validProfile()
+	profile.Target = Endpoint{Host: "Lab.Example.jp", Port: 22}
+
+	for _, address := range []string{"lab.example.jp:22", "LAB.EXAMPLE.JP.:22", "Lab.Example.jp:22"} {
+		if !profile.Reaches(address) {
+			t.Errorf("Reaches(%q) = false", address)
+		}
+	}
+	for _, address := range []string{"lab.example.jp:2222", "other.example.jp:22", "lab.example.jp"} {
+		if profile.Reaches(address) {
+			t.Errorf("Reaches(%q) = true", address)
+		}
+	}
+}
+
+// DNS を使わない書き方が nil でも空の並びでも、同じ経路として扱う。
+func TestAnEmptyResolverListIsTheSameRouteAsNone(t *testing.T) {
+	withNil := validProfile()
+	withEmpty := validProfile()
+	withEmpty.DNS = []string{}
+
+	if !withNil.sameRouteAs(withEmpty) {
+		t.Fatal("DNS の書き方の違いだけで作り直す")
+	}
+}
+
+// Vault の記録のキーは、同期先の古い版が読めるよう変えない。
+func TestTheStoredSecretsKeepTheirKeys(t *testing.T) {
+	document, err := EncodeSecrets(Secrets{
+		L2TP:        &L2TPSecrets{Password: "p", PreSharedKey: "k"},
+		OpenConnect: &OpenConnectSecrets{Password: "o", TOTPSecret: "t"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{SecretKeyL2TPPassword, SecretKeyIPsecPSK, SecretKeyOpenConnectPassword, SecretKeyOpenConnectTOTPSecret} {
+		if !strings.Contains(document, `"`+key+`"`) {
+			t.Errorf("記録に %q が無い: %s", key, document)
+		}
+	}
+}
+
+// どの backend の手順も、agent.sh が呼ぶ関数をすべて持つ。
+//
+// 足りない関数があると、その backend だけがコンテナの中で「command not found」で
+// 終わる。イメージを作らずに見つけられるのはここだけである。
+func TestEveryBackendScriptDefinesTheAgentHooks(t *testing.T) {
+	for name := range backends {
+		script, err := container.ReadFile("container/backend-" + string(name) + ".sh")
+		if err != nil {
+			t.Fatalf("%s の手順が無い: %v", name, err)
+		}
+		for _, hook := range []string{"backend_read", "backend_up", "backend_ready", "backend_allow", "backend_alive", "backend_down"} {
+			if !strings.Contains(string(script), hook+"()") {
+				t.Errorf("%s の手順に %s が無い", name, hook)
+			}
+		}
+	}
+}
+
+// コンテナは tini を PID 1 にして起こす。sh が PID 1 だと停止の合図を無視する。
+func TestContainersStartWithAnInitProcess(t *testing.T) {
+	arguments := runArguments(containerRun{
+		name: "sshc-vpn-lab", image: "sshc-vpn:test", profile: validProfile(), owner: 1000,
+		workspace: "000000000000", socketDirectory: "/tmp/lab", backend: backends[WireGuard],
+	})
+
+	if !strings.Contains(strings.Join(arguments, " "), " --init ") {
+		t.Fatalf("arguments = %v", arguments)
 	}
 }

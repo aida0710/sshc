@@ -82,7 +82,7 @@ sshc completion fish | source
 
 On Linux, the system Bash completion loader may not search Homebrew's completion directory. If only filenames are offered, run `source <(sshc completion bash)` in the current shell. Add that line to `~/.bashrc` to load the current command definitions for each new shell. Reload it after updating sshc if the current shell still offers old commands.
 
-`sshc info` resolves `Include`, `Match`, `ProxyJump` and encoding through the real connection path without an engine. It does not print saved credentials, `SetEnv` values or the `ProxyCommand` body.
+`sshc info` resolves `Include`, `Match`, `ProxyJump`, encoding and the VPN route through the real connection path without an engine. It does not print saved credentials, `SetEnv` values or the `ProxyCommand` body.
 
 ```sh
 sshc ssh bastion --non-interactive -- uname -a
@@ -113,13 +113,32 @@ Route chosen connections through a VPN of their own. Needs Docker on this machin
 sshc vpn [--json]
 sshc vpn add <name>
 sshc vpn remove <name> [-y|--yes]
+sshc vpn rename <old name> <new name> [--json]
 sshc vpn up <name> [--json]
 sshc vpn down <name> [--json]
+sshc vpn logs <name> [--json]
+sshc vpn proxy <name> [<host> <port>]
 sshc vpn bind <alias> <name> [--json]
 sshc vpn unbind <alias> [--json]
 ```
 
-`sshc vpn add` asks for the settings in an interactive terminal. The private key, the VPN password and the IPsec pre-shared key are read without echo and are never taken from command arguments or environment variables. They are stored in the vault.
+`sshc vpn add` creates a new profile. If the name is already taken it changes nothing and suggests removing the old profile with `sshc vpn remove` first, or renaming it with `sshc vpn rename`. It asks for the settings in an interactive terminal, including the DNS servers to resolve the target with when the target is a name, and, for OpenConnect, how to answer a device that asks one more question after the password (`none`, `approve` or `totp`). The private key, the VPN password and the IPsec pre-shared key are read without echo and are never taken from command arguments or environment variables. They are stored in the vault.
+
+`sshc vpn` also prints the tunnel's interface, its address inside the VPN and when the route opened, for every route that is up.
+
+`sshc vpn remove` and `sshc vpn rename` need an unlocked vault. `sshc vpn rename` moves the settings, the stored secrets and the connection bindings to the new name together. A running route is taken down first, unless the new name is refused.
+
+`sshc vpn logs` prints the recent output of that profile's container, with the stored secrets replaced by `[REDACTED]`. It is the first place to look when a route will not come up.
+
+`sshc vpn proxy` pipes standard input and output through the route, so the host's own `ssh`, `scp` and `git` can use it from `~/.ssh/config`:
+
+```text
+Host lab
+  HostName 10.9.9.1
+  ProxyCommand sshc vpn proxy tohoku %h %p
+```
+
+With `%h %p` it checks that the route reaches that target and refuses rather than falling back to the ordinary uplink when it does not. Without them it does not check. The SSH handshake and the keys stay with `ssh`; sshc only carries the bytes.
 
 A bound connection takes the same route from the terminal, from SFTP and from `sshc <alias>`. When the route is not available the connection is refused rather than quietly sent over the ordinary uplink.
 
