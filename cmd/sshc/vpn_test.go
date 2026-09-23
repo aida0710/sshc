@@ -3,7 +3,11 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"io"
+	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -206,6 +210,90 @@ func TestSecretsWithQuotesSurviveTheRequestBody(t *testing.T) {
 	}
 }
 
+// ProxyCommand は、標準入出力を経路の中継へそのまま流す。
+func TestTheProxyPipesStandardInputAndOutputThroughTheRoute(t *testing.T) {
+	socket := filepath.Join(t.TempDir(), "relay.sock")
+	listener, err := net.Listen("unix", socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = listener.Close() }()
+	served := make(chan []byte, 1)
+	go func() {
+		connection, err := listener.Accept()
+		if err != nil {
+			served <- nil
+			return
+		}
+		defer func() { _ = connection.Close() }()
+		received, _ := io.ReadAll(connection)
+		_, _ = connection.Write([]byte("SSH-2.0-remote\r\n"))
+		served <- received
+	}()
+
+	_, server, stateDir := newSyncCommandHarness(t, func(response http.ResponseWriter, request *http.Request) {
+		response.Header().Set("Content-Type", "application/json")
+		_, _ = response.Write([]byte(`{"available":true,"profiles":[{"profile":{"name":"lab","backend":"wireguard",` +
+			`"target":"10.9.9.1:22"},"running":true,"relaySocket":"` + socket + `","connections":[]}]}`))
+	})
+	defer server.Close()
+	stdin := writeTemporaryFile(t, "SSH-2.0-local\r\n")
+	var stdout, stderr strings.Builder
+
+	code := runVPN(context.Background(), vpnInvocation{Action: vpnProxy, Name: "lab", Target: "10.9.9.1:22"},
+		commandEnvironment{stateDir: stateDir, client: server.Client(), stdin: stdin, stdout: &stdout, stderr: &stderr})
+
+	if code != 0 {
+		t.Fatalf("code = %d, stderr = %q", code, stderr.String())
+	}
+	if sent := string(<-served); sent != "SSH-2.0-local\r\n" {
+		t.Fatalf("中継へ届いた本文 = %q", sent)
+	}
+	if stdout.String() != "SSH-2.0-remote\r\n" {
+		t.Fatalf("標準出力 = %q", stdout.String())
+	}
+}
+
+// 設定に書いた相手と経路の接続先が違えば、通さない。
+func TestTheProxyRefusesAConnectionTheRouteDoesNotReach(t *testing.T) {
+	_, server, stateDir := newSyncCommandHarness(t, func(response http.ResponseWriter, request *http.Request) {
+		response.Header().Set("Content-Type", "application/json")
+		_, _ = response.Write([]byte(`{"available":true,"profiles":[{"profile":{"name":"lab","backend":"wireguard",` +
+			`"target":"10.9.9.1:22"},"running":true,"relaySocket":"/tmp/absent.sock","connections":[]}]}`))
+	})
+	defer server.Close()
+	stdin := writeTemporaryFile(t, "")
+	var stdout, stderr strings.Builder
+
+	code := runVPN(context.Background(), vpnInvocation{Action: vpnProxy, Name: "lab", Target: "10.9.9.9:22"},
+		commandEnvironment{stateDir: stateDir, client: server.Client(), stdin: stdin, stdout: &stdout, stderr: &stderr})
+
+	if code == 0 {
+		t.Fatal("経路が届かない相手へ通した")
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("標準出力に何か書いた: %q", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "10.9.9.1:22") {
+		t.Fatalf("stderr = %q", stderr.String())
+	}
+}
+
+// writeTemporaryFile は、標準入力として渡せるファイルを作る。
+func writeTemporaryFile(t *testing.T, contents string) *os.File {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "stdin")
+	if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = file.Close() })
+	return file
+}
+
 // DNSの並びは、空白を挟んでいても一件ずつに分ける。書かなければ無しとして扱う。
 func TestTheResolversAreReadOneAtATime(t *testing.T) {
 	for _, test := range []struct {
@@ -347,6 +435,10 @@ func TestVPNInvocationsAreAcceptedOnlyInTheirDocumentedShapes(t *testing.T) {
 		{[]string{"vpn", "logs", "lab"}, true},
 		{[]string{"vpn", "logs", "lab", "--json"}, true},
 		{[]string{"vpn", "logs"}, false},
+		{[]string{"vpn", "proxy", "lab"}, true},
+		{[]string{"vpn", "proxy", "lab", "10.9.9.1", "22"}, true},
+		{[]string{"vpn", "proxy", "lab", "10.9.9.1"}, false},
+		{[]string{"vpn", "proxy"}, false},
 		{[]string{"vpn", "wat"}, false},
 	} {
 		called, err := parseInvocation(append([]string{"sshc"}, test.args...))

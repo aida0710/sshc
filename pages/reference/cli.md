@@ -117,6 +117,7 @@ sshc vpn rename <古い名前> <新しい名前> [--json]
 sshc vpn up <名前> [--json]
 sshc vpn down <名前> [--json]
 sshc vpn logs <名前> [--json]
+sshc vpn proxy <名前> [<host> <port>]
 sshc vpn bind <alias> <名前> [--json]
 sshc vpn unbind <alias> [--json]
 ```
@@ -128,6 +129,16 @@ sshc vpn unbind <alias> [--json]
 `sshc vpn rename`は、設定と秘密と接続の紐付けをまとめて新しい名前へ移します。動いている経路はいったん畳みます。
 
 `sshc vpn logs`は、そのプロファイルのコンテナの直近の出力を表示します。保存済みの秘密は`[REDACTED]`に置き換えます。繋がらないときは、まずここを読みます。
+
+`sshc vpn proxy`は、標準入出力をその経路の中継へ流します。ホストの`ssh`・`scp`・`git`から使うための口で、`~/.ssh/config`に次のように書きます。
+
+```text
+Host lab
+  HostName 10.9.9.1
+  ProxyCommand sshc vpn proxy tohoku %h %p
+```
+
+`%h %p`を渡すと、その相手へ届く経路かどうかを確かめてから通します。プロファイルの接続先と違えば、素の回線へ落とさずに拒否します。省略した場合は確かめません。SSHの握手も鍵も`ssh`側にあり、sshcが運ぶのはバイト列だけです。
 
 `bind`で結び付けた接続は、Terminal、SFTP、`sshc <接続先>`のいずれからでも同じ経路を通ります。経路が無いときは、素の回線へ落とさずに拒否します。
 

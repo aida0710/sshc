@@ -75,10 +75,21 @@ VPN画面で接続を選んで「この経路を通す」を押すか、接続�
 
 出ていない場合、またはトンネルはできているのに接続先へ届かない場合は、コンテナの出力を読みます。VPN画面の「ログ」または`sshc vpn logs <名前>`です。保存済みの秘密は`[REDACTED]`に置き換えて表示するので、そのまま貼って共有できます。`docker logs`を直接叩く必要はありません。
 
+## ホストの`ssh`・`scp`・`git`から使う
+
+`ProxyCommand`として`sshc vpn proxy`を呼ぶと、sshc以外のSSHクライアントも同じ経路を通れます。
+
+```text
+Host lab
+  HostName 10.9.9.1
+  ProxyCommand sshc vpn proxy tohoku %h %p
+```
+
+`%h %p`を渡すと、その相手へ届く経路かどうかを確かめます。プロファイルの接続先と違えば、素の回線へ落とさずに拒否します。SSHの握手・鍵・known_hostsは呼び出した側のものを使い、sshcが運ぶのはバイト列だけです。
+
 ## 制約
 
 - 1プロファイルにつき接続先は1つ、IPv4です。
 - 踏み台（ProxyJump）の向こうのホップには使えません。2ホップ目以降は手前のSSH接続の中を通るため、この機械のVPNを通る余地がありません。
-- `ProxyCommand`との併用はできません。`ProxyCommand`はこの機械で走るので、VPNの中にはいません。
-- ホストの`ssh`・`scp`・`git`からは使えません。sshcのTerminal、SFTP、CLIから使います。
+- 紐付けと`ProxyCommand`は併用できません。`ProxyCommand`はこの機械で走るので、VPNの中にはいません。経路を`ProxyCommand`から使う場合は、紐付けずに上の`sshc vpn proxy`を書きます。
 - 現在はLinuxで動作を確認しています。

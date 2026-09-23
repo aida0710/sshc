@@ -75,10 +75,21 @@ While a route is open, the VPN screen and `sshc vpn` show the tunnel's interface
 
 If it is not there, or the tunnel is up but the target is still unreachable, read the container's output: **Logs** on the VPN screen, or `sshc vpn logs <name>`. The stored secrets are replaced by `[REDACTED]`, so the output can be pasted as it is. You never need to run `docker logs` yourself.
 
+## Using the route from the host's `ssh`, `scp` and `git`
+
+Called as a `ProxyCommand`, `sshc vpn proxy` lets any SSH client take the same route.
+
+```text
+Host lab
+  HostName 10.9.9.1
+  ProxyCommand sshc vpn proxy tohoku %h %p
+```
+
+With `%h %p` it checks that the route reaches that target, and refuses rather than falling back to the ordinary uplink when it does not. The handshake, the keys and `known_hosts` stay with whoever called it; sshc only carries the bytes.
+
 ## Limits
 
 - One target per profile, IPv4 only.
 - Not available for hops beyond a jump host: those travel inside the first SSH connection, where this machine's VPN cannot apply.
-- Cannot be combined with `ProxyCommand`, which runs on this machine and is therefore outside the VPN.
-- Not available to the host's own `ssh`, `scp` or `git`. Use sshc's terminal, SFTP or CLI.
+- A binding cannot be combined with `ProxyCommand`, which runs on this machine and is therefore outside the VPN. To reach the route from a `ProxyCommand`, leave the connection unbound and use `sshc vpn proxy` as shown above.
 - Verified on Linux so far.

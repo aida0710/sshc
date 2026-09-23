@@ -117,6 +117,7 @@ sshc vpn rename <old name> <new name> [--json]
 sshc vpn up <name> [--json]
 sshc vpn down <name> [--json]
 sshc vpn logs <name> [--json]
+sshc vpn proxy <name> [<host> <port>]
 sshc vpn bind <alias> <name> [--json]
 sshc vpn unbind <alias> [--json]
 ```
@@ -128,6 +129,16 @@ sshc vpn unbind <alias> [--json]
 `sshc vpn rename` moves the settings, the stored secrets and the connection bindings to the new name together. A running route is taken down first.
 
 `sshc vpn logs` prints the recent output of that profile's container, with the stored secrets replaced by `[REDACTED]`. It is the first place to look when a route will not come up.
+
+`sshc vpn proxy` pipes standard input and output through the route, so the host's own `ssh`, `scp` and `git` can use it from `~/.ssh/config`:
+
+```text
+Host lab
+  HostName 10.9.9.1
+  ProxyCommand sshc vpn proxy tohoku %h %p
+```
+
+With `%h %p` it checks that the route reaches that target and refuses rather than falling back to the ordinary uplink when it does not. Without them it does not check. The SSH handshake and the keys stay with `ssh`; sshc only carries the bytes.
 
 A bound connection takes the same route from the terminal, from SFTP and from `sshc <alias>`. When the route is not available the connection is refused rather than quietly sent over the ordinary uplink.
 

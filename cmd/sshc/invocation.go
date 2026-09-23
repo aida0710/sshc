@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"net"
 	"strconv"
 	"strings"
 
@@ -98,6 +99,7 @@ const (
 	vpnUnbind
 	vpnRename
 	vpnLogsAction
+	vpnProxy
 )
 
 type vpnInvocation struct {
@@ -108,6 +110,9 @@ type vpnInvocation struct {
 	Alias string
 	// Rename は、新しいプロファイル名である。rename だけが使う。
 	Rename string
+	// Target は、繋ごうとしている相手（`host:port`）である。proxy だけが使い、
+	// 空なら確かめない。
+	Target string
 	JSON   bool
 	Yes    bool
 }
@@ -331,6 +336,20 @@ func parseVPNInvocation(args []string) (invocation, error) {
 		return invocation{Kind: invocationVPN, VPN: &vpnInvocation{
 			Action: vpnRename, Name: args[1], Rename: args[2],
 		}}, nil
+	case "proxy":
+		// ProxyCommand から呼ばれる。%h と %p を渡された場合は、その相手へ行く
+		// 経路であることを確かめてから通す。
+		if len(args) != 2 && len(args) != 4 || args[1] == "" {
+			return invalidInvocation("vpn proxy requires one profile name and optionally the host and port")
+		}
+		called := &vpnInvocation{Action: vpnProxy, Name: args[1]}
+		if len(args) == 4 {
+			if args[2] == "" || args[3] == "" {
+				return invalidInvocation("vpn proxy requires one profile name and optionally the host and port")
+			}
+			called.Target = net.JoinHostPort(args[2], args[3])
+		}
+		return invocation{Kind: invocationVPN, VPN: called}, nil
 	case "logs":
 		called, err := vpnNameWithJSON(args, vpnLogsAction)
 		if err != nil {
@@ -362,7 +381,7 @@ func parseVPNInvocation(args []string) (invocation, error) {
 		}
 		return invocation{Kind: invocationVPN, VPN: called}, nil
 	}
-	return invalidInvocation("vpn requires add, remove, rename, up, down, logs, bind, or unbind")
+	return invalidInvocation("vpn requires add, remove, rename, up, down, logs, proxy, bind, or unbind")
 }
 
 func vpnNameWithJSON(args []string, action vpnAction) (invocation, error) {
@@ -381,7 +400,7 @@ func vpnNameWithJSON(args []string, action vpnAction) (invocation, error) {
 
 func validVPNAction(name string) bool {
 	switch name {
-	case "add", "remove", "up", "down", "bind", "unbind", "rename", "logs":
+	case "add", "remove", "up", "down", "bind", "unbind", "rename", "logs", "proxy":
 		return true
 	}
 	return false

@@ -177,6 +177,8 @@ func validCLIAction(command, action string) bool {
 		return true
 	case "vpn down":
 		return true
+	case "vpn proxy":
+		return true
 	case "vpn bind":
 		return true
 	case "vpn unbind":
@@ -267,11 +269,12 @@ var generatedCLIHelp = map[string]string{
 	"vault status":          "usage:\n  sshc vault status\n\nDescribe the running engine and Vault.\n",
 	"vault unlock":          "usage:\n  sshc vault unlock\n\nUnlock the Vault in the running engine.\n",
 	"version":               "usage:\n  sshc version\n\nPrint the version and target operating system/architecture.\n",
-	"vpn":                   "usage:\n  sshc vpn [--json]\n  sshc vpn add <name>\n  sshc vpn remove <name> [-y|--yes]\n  sshc vpn rename <name> <new-name> [--json]\n  sshc vpn up <name> [--json]\n  sshc vpn down <name> [--json]\n  sshc vpn logs <name> [--json]\n  sshc vpn bind <alias> <name> [--json]\n  sshc vpn unbind <alias> [--json]\n\nRoute one SSH connection through a VPN of its own. The tunnel lives in a container, so the host default route, DNS and VPN client are untouched. Requires Docker on this machine. Add reads the private key interactively without echoing it.\n",
+	"vpn":                   "usage:\n  sshc vpn [--json]\n  sshc vpn add <name>\n  sshc vpn remove <name> [-y|--yes]\n  sshc vpn rename <name> <new-name> [--json]\n  sshc vpn up <name> [--json]\n  sshc vpn down <name> [--json]\n  sshc vpn logs <name> [--json]\n  sshc vpn proxy <name> [<host> <port>]\n  sshc vpn bind <alias> <name> [--json]\n  sshc vpn unbind <alias> [--json]\n\nRoute one SSH connection through a VPN of its own. The tunnel lives in a container, so the host default route, DNS and VPN client are untouched. Requires Docker on this machine. Add reads the private key interactively without echoing it.\n",
 	"vpn add":               "usage:\n  sshc vpn add <name>\n\nCreate a VPN profile. One profile reaches one target. Secrets are read interactively and stored in the vault.\n",
 	"vpn bind":              "usage:\n  sshc vpn bind <alias> <name> [--json]\n\nReach one saved connection through the named profile.\n",
 	"vpn down":              "usage:\n  sshc vpn down <name> [--json]\n\nClose the route.\n",
 	"vpn logs":              "usage:\n  sshc vpn logs <name> [--json]\n\nPrint the container's recent output with every stored secret masked. This is where a route that will not come up explains itself.\n",
+	"vpn proxy":             "usage:\n  sshc vpn proxy <name> [<host> <port>]\n\nPipe standard input and output through the route, for use as an OpenSSH ProxyCommand so that the host's own ssh, scp and git can reach the target. Pass %h and %p to refuse a connection whose target is not the one the profile reaches.\n",
 	"vpn remove":            "usage:\n  sshc vpn remove <name> [-y|--yes]\n\nRemove a profile, its secrets, its running session, and the bindings that named it.\n",
 	"vpn rename":            "usage:\n  sshc vpn rename <name> <new-name> [--json]\n\nRename a profile. Its secrets and the bindings that named it move with it, and a running route is closed first.\n",
 	"vpn unbind":            "usage:\n  sshc vpn unbind <alias> [--json]\n\nStop routing that connection through a VPN.\n",

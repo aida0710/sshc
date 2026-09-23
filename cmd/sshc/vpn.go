@@ -77,6 +77,9 @@ func runVPN(ctx context.Context, called vpnInvocation, environment commandEnviro
 	if err := ctx.Err(); err != nil {
 		return finishSyncFailure(called.JSON, err, stdout, stderr)
 	}
+	if called.Action == vpnProxy {
+		return runVPNProxy(ctx, called, environment)
+	}
 	var prompt *os.File
 	if called.Action == vpnAdd {
 		var err error
@@ -448,31 +451,91 @@ func vpnPhaseWord(phase string) string {
 // errVPNRelayMissing は、engine が経路を差し出さなかったことを表す。
 var errVPNRelayMissing = errors.New("the engine did not open a relay for that VPN profile")
 
+// errVPNTargetMismatch は、繋ごうとしている相手と、その経路の接続先が食い違う
+// ことを表す。
+//
+// コンテナはプロファイルの接続先ひとつだけを通す。食い違ったまま繋ぐと、利用者が
+// 設定に書いた相手ではなく、プロファイルに書いた相手へ届く。どちらが正しいかを
+// 推測せず、断る。
+var errVPNTargetMismatch = errors.New("the connection and its VPN profile name different targets")
+
 // vpnRouteThroughEngine は、engine に経路を起こさせ、その中継のソケットへ繋ぐ。
 //
 // CLI は秘密を持たない。コンテナも Vault も engine が持ち、こちらは利用者だけが
 // 開けるソケットへ繋ぐだけである。
 func vpnRouteThroughEngine(stateDir string, client *http.Client) func(context.Context, string, string) (net.Conn, error) {
 	return func(ctx context.Context, profile, address string) (net.Conn, error) {
-		engine, err := openEngineAPI(ctx, stateDir, client)
-		if err != nil {
-			return nil, err
-		}
-		defer func() { _ = engine.Close() }()
-		var overview vpnOverview
-		if err := engine.sendJSON(ctx, http.MethodPost,
-			vpnProfilePath(profile)+"/session", struct{}{}, &overview); err != nil {
-			return nil, err
-		}
-		for _, session := range overview.Profiles {
-			if session.Profile.Name != profile {
-				continue
-			}
-			if session.RelaySocket == "" {
-				return nil, errVPNRelayMissing
-			}
-			return (&net.Dialer{}).DialContext(ctx, "unix", session.RelaySocket)
-		}
-		return nil, errVPNRelayMissing
+		return dialVPNRelay(ctx, stateDir, client, profile, address)
 	}
+}
+
+// dialVPNRelay は、名前の付いた経路を起こし、その中継のソケットへ繋ぐ。
+//
+// wantedTarget が空でなければ、その相手へ行く経路であることを確かめてから繋ぐ。
+func dialVPNRelay(
+	ctx context.Context, stateDir string, client *http.Client, profile, wantedTarget string,
+) (net.Conn, error) {
+	engine, err := openEngineAPI(ctx, stateDir, client)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = engine.Close() }()
+	var overview vpnOverview
+	if err := engine.sendJSON(ctx, http.MethodPost,
+		vpnProfilePath(profile)+"/session", struct{}{}, &overview); err != nil {
+		return nil, err
+	}
+	for _, session := range overview.Profiles {
+		if session.Profile.Name != profile {
+			continue
+		}
+		if wantedTarget != "" && session.Profile.Target != wantedTarget {
+			return nil, fmt.Errorf("%w: %s は %s へ繋ぐ経路である",
+				errVPNTargetMismatch, profile, session.Profile.Target)
+		}
+		if session.RelaySocket == "" {
+			return nil, errVPNRelayMissing
+		}
+		return (&net.Dialer{}).DialContext(ctx, "unix", session.RelaySocket)
+	}
+	return nil, errVPNRelayMissing
+}
+
+// runVPNProxy は、標準入出力をその経路の中継へ繋ぐ。
+//
+// ホストの ssh・scp・git が ProxyCommand として使うための口である。SSH の
+// 握手も鍵もそれらの側にあり、こちらが運ぶのはバイト列だけである。
+func runVPNProxy(ctx context.Context, called vpnInvocation, environment commandEnvironment) int {
+	// 標準出力はデータの通り道である。案内も診断もここへは書かない。
+	relay, err := dialVPNRelay(ctx, environment.stateDir, environment.client, called.Name, called.Target)
+	if err != nil {
+		// この2つは engine の拒否ではなく、こちらで分かる食い違いである。
+		// 共通の言い換えに通すと、何が食い違ったのかが消える。
+		if errors.Is(err, errVPNTargetMismatch) || errors.Is(err, errVPNRelayMissing) {
+			fmt.Fprintf(environment.stderr, "sshc: %v\n", err)
+			return 1
+		}
+		return finishSyncFailure(false, err, environment.stderr, environment.stderr)
+	}
+	defer func() { _ = relay.Close() }()
+
+	fromRelay := make(chan error, 1)
+	go func() {
+		_, err := io.Copy(environment.stdout, relay)
+		fromRelay <- err
+	}()
+	if _, err := io.Copy(relay, environment.stdin); err != nil {
+		fmt.Fprintf(environment.stderr, "sshc: VPN経路への書き込みが止まりました: %v\n", err)
+		return 1
+	}
+	// 送る側が終わったことを相手へ伝える。伝えないと、相手は入力の終わりを
+	// 待ち続ける。
+	if half, ok := relay.(interface{ CloseWrite() error }); ok {
+		_ = half.CloseWrite()
+	}
+	if err := <-fromRelay; err != nil {
+		fmt.Fprintf(environment.stderr, "sshc: VPN経路からの読み取りが止まりました: %v\n", err)
+		return 1
+	}
+	return 0
 }
