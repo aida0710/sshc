@@ -254,3 +254,43 @@ func TestSessionsLeftByAPreviousEngineAreDiscarded(t *testing.T) {
 		t.Fatal("前回のengineのコンテナが動いたまま残った")
 	}
 }
+
+// L2TP/IPsec の枝も、設定の書き出しからトンネルの開始までを実際に走らせる。
+//
+// 本物のVPN装置は用意しない。届かない相手に対して、設定の解釈・経路の準備・
+// strongSwan の起動まで進み、そこで理由を添えて失敗することを確かめる。ここで
+// 止まらなければ、jq の読み出し、ファイルの書き出し、名前の解決、iptables、
+// ipsec の起動までは動いている。
+func TestTheL2TPBranchRunsUntilTheServerRefusesIt(t *testing.T) {
+	manager, ctx := requireDockerTest(t)
+	if err := requireTunnelDevice(L2TPIPsec); err != nil {
+		t.Skipf("この機械では l2tp を試せない: %v", err)
+	}
+	profile := Profile{
+		Name:    "l2tp-unreachable",
+		Backend: L2TPIPsec,
+		Target:  Endpoint{Host: "10.77.1.1", Port: 22},
+		L2TP: &L2TPSettings{
+			// TEST-NET-1。誰も応答しない。
+			Server:   "192.0.2.1",
+			Username: "fixture",
+		},
+	}
+	secrets := Secrets{L2TPPassword: "fixture-password", IPsecPSK: "fixture-psk"}
+	t.Cleanup(func() { _ = manager.Stop(context.Background(), profile.Name) })
+
+	err := manager.Start(ctx, profile, secrets)
+
+	if err == nil {
+		t.Fatal("届かない相手に対して経路が成立した")
+	}
+	if !strings.Contains(err.Error(), "IPsec") {
+		t.Fatalf("失敗の理由が IPsec の段階を指していない: %v", err)
+	}
+	// 秘密は、利用者へ見せる失敗の文面に現れない。
+	for _, forbidden := range []string{secrets.L2TPPassword, secrets.IPsecPSK} {
+		if strings.Contains(err.Error(), forbidden) {
+			t.Fatalf("失敗の文面に秘密が現れた: %v", err)
+		}
+	}
+}
