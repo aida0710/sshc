@@ -46,6 +46,22 @@ sshc sync auto off --json
 
 接続設定だけを調べる `sshc info <alias> [--json]` は engine を必要としません。実接続と同じ `Include`／`Match`／`ProxyJump` 解決を使いますが、保存済み資格情報、`SetEnv` の値、`ProxyCommand` の本文は表示しません。
 
+## VPN 経路
+
+選んだ接続だけを専用の VPN へ通す。Docker が動いている機械でだけ使える。
+
+```sh
+sshc vpn add tohoku
+sshc vpn bind lab tohoku
+sshc vpn up tohoku --json
+sshc ssh lab
+sshc vpn down tohoku
+```
+
+`add` は対話端末を要求する。秘密鍵、VPN のパスワード、IPsec の事前共有鍵は no-echo で読み、argv、環境変数、設定ファイルから渡す option を持たない。engine が Vault へ保存し、応答にも `--json` にも秘密は現れない。
+
+紐付けた接続は Terminal、SFTP、`sshc <接続先>` のいずれからでも同じ経路を通る。経路を作れない機械では、素の回線へ落とさずに拒否する。
+
 ## systemd（ユーザーサービス）
 
 foregroundやtmuxで起動中の`sshc engine`があれば、先にそのprocessを停止します。engine lockを保持したままではsystemd側のengineを起動できません。

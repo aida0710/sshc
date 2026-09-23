@@ -16,6 +16,7 @@ import (
 	"sshc/internal/storage"
 	"sshc/internal/terminal"
 	"sshc/internal/textencoding"
+	"sshc/internal/vpn"
 )
 
 const (
@@ -68,6 +69,11 @@ type HostMetadata struct {
 	Encoding string `json:"encoding,omitempty"`
 	// OSC52 は、このSSH接続だけのclipboard policyである。空は全体設定を継ぐ。
 	OSC52 string `json:"osc52,omitempty"`
+	// VPN は、この接続へ届くために通るVPNプロファイルの名前である。
+	//
+	// 空ならVPNを通らない。ssh_configには書かない。OpenSSHが解釈する語では
+	// なく、sshcだけが持つ紐付けだからである。
+	VPN string `json:"vpn,omitempty"`
 }
 
 // EngineSettings は、engine そのものの設定である。
@@ -218,8 +224,11 @@ type Metadata struct {
 	FileTransfers *FileTransferSettings `json:"fileTransfers,omitempty"`
 	// Backgrounds は端末設定の保存で巻き戻らない独立したライブラリ設定である。
 	Backgrounds *BackgroundSettings `json:"backgrounds,omitempty"`
-	Groups      []GroupMetadata     `json:"groups,omitempty"`
-	Hosts       []HostMetadata      `json:"hosts,omitempty"`
+	// VPNProfiles は、接続ごとに通せるVPN経路の定義である。秘密はVaultにあり、
+	// ここには無い。
+	VPNProfiles []VPNProfile    `json:"vpnProfiles,omitempty"`
+	Groups      []GroupMetadata `json:"groups,omitempty"`
+	Hosts       []HostMetadata  `json:"hosts,omitempty"`
 }
 
 func (metadata Metadata) TerminalStartDirectory() string {
@@ -291,6 +300,10 @@ func EncodeMetadata(metadata Metadata) ([]byte, error) {
 	sorted := metadata
 	sorted.Groups = append([]GroupMetadata(nil), metadata.Groups...)
 	sorted.Hosts = append([]HostMetadata(nil), metadata.Hosts...)
+	sorted.VPNProfiles = append([]VPNProfile(nil), metadata.VPNProfiles...)
+	sort.SliceStable(sorted.VPNProfiles, func(first, second int) bool {
+		return sorted.VPNProfiles[first].Name < sorted.VPNProfiles[second].Name
+	})
 	sort.SliceStable(sorted.Groups, func(first, second int) bool {
 		return sorted.Groups[first].Name < sorted.Groups[second].Name
 	})
@@ -391,9 +404,19 @@ func ValidateMetadata(metadata Metadata) error {
 			}
 		}
 	}
+	if err := validateVPNProfiles(metadata.VPNProfiles); err != nil {
+		return err
+	}
 	for _, host := range metadata.Hosts {
 		if _, err := checkRelative(host.Identity.Path); err != nil {
 			return err
+		}
+		if host.VPN != "" {
+			// 名前の形だけを見る。指している先があるかは、繋ぐときに確かめる。
+			// 参照が外れただけで metadata 全体を保存できなくしない。
+			if err := vpn.ValidateName(host.VPN); err != nil {
+				return fmt.Errorf("%w: %w", ErrMetadataVPN, err)
+			}
 		}
 		if host.Identity.Alias == "" {
 			return ErrMetadataPath

@@ -29,6 +29,7 @@ const labels = {
   OTP: "section.otp",
   Settings: "section.settings",
   Sync: "section.sync",
+  VPN: "section.vpn",
   History: "section.history",
   License: "section.license",
 } as const;

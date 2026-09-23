@@ -61,6 +61,11 @@ var allowedToStartPrograms = []string{
 	// artifact verifier の sh/pwsh だけを allowlist 済み argv で起動し、caller input を
 	// shell command line として組み立てない。
 	"internal/nativebuild/nativebuild.go",
+	// VPN 経路は、この機械にすでにある docker に任せる。engine は docker socket を
+	// 自分で叩かず、PATH から解決した docker だけを固定の argv で起動する。argv へ
+	// 入る利用者由来の値はプロファイル名と接続先だけで、どちらも保存する時点で
+	// 形を確かめてある。秘密は argv にも環境変数にも載せず、標準入力で渡す。
+	"internal/vpn/docker.go",
 	// ProxyCommand は、接続そのものを外部のプログラムに任せる設定である。
 	//
 	// ここだけは、利用者が書いた文字列をシェルに渡す。~/.ssh/config の

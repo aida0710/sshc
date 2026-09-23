@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -23,6 +25,7 @@ import (
 	"sshc/internal/sshclient"
 	"sshc/internal/storage"
 	"sshc/internal/terminal"
+	"sshc/internal/vpn"
 	terminalworkspace "sshc/internal/workspace"
 )
 
@@ -46,6 +49,7 @@ type engineServices struct {
 	workspaces   *terminalworkspace.Service
 	snippets     *snippets.Service
 	terminals    *terminal.Registry
+	vpn          *vpn.Manager
 	ssh          sshParts
 }
 
@@ -80,9 +84,18 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 	passwordService.SetIdleTimeout(configService.EngineSettings().VaultIdleTimeout(secret.IdleTimeout))
 	recentStore := recent.NewStore(workspace, time.Now)
 
+	// VPN 経路はこの engine が持つ。コンテナも中継のソケットも、この利用者の
+	// ものだけを扱う。
+	vpnSessions := vpn.New(filepath.Join(workspace.Root(), vpnStateDirectory), os.Getuid())
+
 	// プロセス内 SSH クライアントの依存関係をここで一度だけ組み立てる。
-	ssh := newSSHParts(configService, knownHostsService, workspace.Home(),
-		storedPassphrase(passwordService, workspace.Root()), storedPassword(passwordService), storedTOTP(passwordService))
+	ssh := newSSHParts(sshDependencies{
+		config: configService, knownHosts: knownHostsService, home: workspace.Home(),
+		passphrase:  storedPassphrase(passwordService, workspace.Root()),
+		password:    storedPassword(passwordService),
+		oneTimeCode: storedTOTP(passwordService),
+		vpnRoute:    vpnRoute(configService, passwordService, vpnSessions),
+	})
 	recentService := recent.NewService(recentStore, func(alias string) (recent.Target, error) {
 		target, err := ssh.target(alias)
 		if err != nil {
@@ -168,7 +181,8 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 		config:      configService, keys: keyService, diagnostics: diagnosticsService,
 		knownHosts: knownHostsService, passwords: passwordService,
 		remoteKeys: remoteKeyService, recentStore: recentStore, recent: recentService,
-		sftp: sftpService, sftpPool: sftpPool, workspaces: workspaceService, snippets: snippetService, ssh: ssh,
+		sftp: sftpService, sftpPool: sftpPool, workspaces: workspaceService, snippets: snippetService,
+		vpn: vpnSessions, ssh: ssh,
 	}
 	services.sync, services.autoSync, err = buildSync(workspace, transactions, passwordService, snippetStore, dependencies)
 	if err != nil {

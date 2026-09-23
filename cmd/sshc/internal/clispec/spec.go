@@ -136,6 +136,14 @@ Automation: --expect REGEX | --read-for D | --script FILE|-
 		{Name: "edit", Help: "usage:\n  sshc otp edit <name>\n\nInteractively replace the setup key of one saved TOTP.\n"},
 		{Name: "remove", Help: "usage:\n  sshc otp remove <name> [-y|--yes]\n\nRemove an unused saved TOTP after confirmation. Assigned credentials must be unassigned from their connections first.\n"},
 	}},
+	{Name: "vpn", Route: "vpn", Help: "usage:\n  sshc vpn [--json]\n  sshc vpn add <name>\n  sshc vpn remove <name> [-y|--yes]\n  sshc vpn up <name> [--json]\n  sshc vpn down <name> [--json]\n  sshc vpn bind <alias> <name> [--json]\n  sshc vpn unbind <alias> [--json]\n\nRoute one SSH connection through a VPN of its own. The tunnel lives in a container, so the host default route, DNS and VPN client are untouched. Requires Docker on this machine. Add reads the private key interactively without echoing it.\n", Actions: []Action{
+		{Name: "add", Help: "usage:\n  sshc vpn add <name>\n\nCreate a VPN profile. One profile reaches one target. Secrets are read interactively and stored in the vault.\n"},
+		{Name: "remove", Help: "usage:\n  sshc vpn remove <name> [-y|--yes]\n\nRemove a profile, its secrets, its running session, and the bindings that named it.\n"},
+		{Name: "up", Help: "usage:\n  sshc vpn up <name> [--json]\n\nOpen the route and wait until its relay is listening.\n"},
+		{Name: "down", Help: "usage:\n  sshc vpn down <name> [--json]\n\nClose the route.\n"},
+		{Name: "bind", Help: "usage:\n  sshc vpn bind <alias> <name> [--json]\n\nReach one saved connection through the named profile.\n"},
+		{Name: "unbind", Help: "usage:\n  sshc vpn unbind <alias> [--json]\n\nStop routing that connection through a VPN.\n"},
+	}},
 	{Name: "vault", Route: "vault", Help: "usage:\n  sshc vault status\n  sshc vault create\n  sshc vault unlock\n  sshc vault lock\n  sshc vault change-password\n", Actions: []Action{
 		{Name: "status", Help: "usage:\n  sshc vault status\n\nDescribe the running engine and Vault.\n"},
 		{Name: "create", Help: "usage:\n  sshc vault create\n\nCreate and unlock a new Vault.\n"},
@@ -177,6 +185,7 @@ const GlobalHelp = `usage:
                        print shell completion that includes SSH Host aliases
   sshc info <alias> [--json]
                        print the resolved SSH target without connecting
+  sshc vpn [--json]    list VPN profiles and their sessions
   sshc sync [--json]   print synchronization status from the running engine
   sshc sync setup      configure synchronization in an interactive terminal
   sshc sync push [--force] [--json]

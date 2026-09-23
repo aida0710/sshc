@@ -32,7 +32,7 @@ type PaletteItem = {
 
 const searchableSections: Section[] = [
   "Connections", "Config", "Groups", "Keys", "Known Hosts", "Remote Keys",
-  "Diagnostics", "Passwords", "Key Passphrases", "OTP", "Snippets", "Settings", "Sync", "History",
+  "Diagnostics", "Passwords", "Key Passphrases", "OTP", "Snippets", "Settings", "Sync", "VPN", "History",
 ];
 
 function matches(item: PaletteItem, query: string): boolean {

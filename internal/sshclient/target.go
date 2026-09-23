@@ -115,6 +115,12 @@ type Target struct {
 	// Jump は ProxyJump の連鎖である。手前から順に繋ぐ。
 	Jump []Target
 
+	// VPN は、この接続先へ届くために通る VPN プロファイルの名前である。
+	//
+	// 空なら VPN を通らない。ssh_config には書かれない。OpenSSH が解釈する
+	// 語ではなく、sshc が metadata に持つ紐付けだからである。
+	VPN string
+
 	// ProxyCommand は、この接続先へ届くために起動するプログラムの表記である。
 	//
 	// トークンは展開済みである。解決器は生のまま返す。`ssh -G` がそう
