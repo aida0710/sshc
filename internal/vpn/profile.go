@@ -9,36 +9,17 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"net/netip"
+	"reflect"
 	"strings"
 )
 
-// BackendName は、トンネルの張り方である。
-type BackendName string
-
-const (
-	// WireGuard は userspace の wireguard-go でトンネルを張る。
-	WireGuard BackendName = "wireguard"
-	// L2TPIPsec は strongSwan と xl2tpd と pppd でトンネルを張る。大学や
-	// 会社の装置に多い方式である。
-	L2TPIPsec BackendName = "l2tp_ipsec"
-)
-
-var (
-	// ErrProfileName は、プロファイル名が使えないことを表す。
-	ErrProfileName = errors.New("vpn profile name is invalid")
-	// ErrBackend は、知らないbackendを拒む。
-	ErrBackend = errors.New("vpn backend is not supported")
-	// ErrTarget は、接続先の指定が使えないことを表す。
-	ErrTarget = errors.New("vpn target is invalid")
-	// ErrSettings は、backend固有の設定が足りないか、形式が違うことを表す。
-	ErrSettings = errors.New("vpn settings are invalid")
-	// ErrSecrets は、backendが要る秘密を受け取れなかったことを表す。
-	ErrSecrets = errors.New("vpn secrets are missing")
-)
-
-// maxProfileNameLength は、コンテナ名とソケットのパスに入る長さに収める。
-const maxProfileNameLength = 48
+// ErrTargetMismatch は、繋ごうとしている相手と、その経路の接続先が食い違う
+// ことを表す。
+//
+// コンテナはプロファイルの接続先ひとつだけを通す。食い違ったまま繋ぐと、
+// 利用者が設定に書いた相手ではなく、プロファイルに書いた相手へ届く。どちらが
+// 正しいかを推測せず、断る。
+var ErrTargetMismatch = errors.New("the connection and its vpn profile name different targets")
 
 // Endpoint は、host と port の組である。
 type Endpoint struct {
@@ -55,47 +36,56 @@ func (endpoint Endpoint) Address() string {
 //
 // 接続先はひとつに限る。VPNの向こうのネットワーク全体を引き込まないので、経路と
 // パケットフィルタが接続先ひとつで閉じ、取り違える余地が残らない。
+//
+// backend ごとの節は、Backend に合うものひとつだけを持つ。
 type Profile struct {
 	Name    string
 	Backend BackendName
-	// Target は、このVPNの中にある接続先である。VPN内DNSを使わないため、
-	// ホストはIPアドレスで指定する。
-	Target    Endpoint
-	WireGuard *WireGuardSettings
-	L2TP      *L2TPSettings
+	// Target は、このVPNの中にある接続先である。IPv4アドレスか、VPNの中の
+	// DNSで引ける名前を書く。名前で書くときは DNS が要る。
+	Target Endpoint
+	// DNS は、VPNの中で名前を引くDNSサーバーである（IPv4）。この経路の中
+	// だけで使い、ホストのDNSもコンテナの既定のDNSも変えない。
+	DNS         []string
+	WireGuard   *WireGuardSettings
+	L2TP        *L2TPSettings
+	OpenConnect *OpenConnectSettings
 }
 
-// WireGuardSettings は、wireguard backendの秘密でない設定である。
-type WireGuardSettings struct {
-	// Server は、トンネルの相手である。ここへはコンテナの通常回線で届く。
-	Server Endpoint
-	// PeerPublicKey は、相手の公開鍵である。秘密ではない。
-	PeerPublicKey string
-	// Address は、トンネル側でこの端末が名乗るアドレスである（CIDR表記）。
-	Address string
+// sameRouteAs は、この設定がもう一方と同じ経路を作るかを返す。
+//
+// 設定が変わったコンテナは作り直す。古い設定のまま繋ぎ続けると、利用者が直した
+// 先へ行かない。
+func (profile Profile) sameRouteAs(other Profile) bool {
+	return reflect.DeepEqual(profile.normalized(), other.normalized())
 }
 
-// L2TPSettings は、l2tp_ipsec backendの秘密でない設定である。
-type L2TPSettings struct {
-	// Server は、VPN装置の名前またはアドレスである。名前はコンテナの中で
-	// 引く。IPsecは相手のアドレスを設定に書くので、引く場所が違えば別の装置へ
-	// 繋ぎうる。
-	Server string
-	// Username は、VPNの利用者名である。パスワードはVaultにある。
-	Username string
-	// IKE と ESP は、古い装置と暗号方式が合わないときだけ指定する。空なら
-	// strongSwan の既定に任せる。
-	IKE string
-	ESP string
+// normalized は、意味の同じ書き方をひとつに揃える。DNS の nil と空の並びは同じ
+// 「DNS を使わない」である。
+func (profile Profile) normalized() Profile {
+	if len(profile.DNS) == 0 {
+		profile.DNS = nil
+	}
+	return profile
 }
 
-// Secrets は、プロファイルの秘密である。Vaultから読み、標準入力でコンテナへ渡す。
-type Secrets struct {
-	WireGuardPrivateKey string
-	// L2TPPassword は、VPNの利用者のパスワードである。
-	L2TPPassword string
-	// IPsecPSK は、IPsecの事前共有鍵である。
-	IPsecPSK string
+// Reaches は、この経路が address（`host:port`）へ繋ぐものかを返す。
+func (profile Profile) Reaches(address string) bool { return profile.Target.Reaches(address) }
+
+// Reaches は、address（`host:port`）がこの接続先を指すかを返す。
+//
+// 名前は大文字と小文字を区別せず、末尾の `.` を無視して比べる。DNS の名前として
+// 同じものを、書き方の違いだけで食い違いとして断らない。
+func (endpoint Endpoint) Reaches(address string) bool {
+	host, port, err := net.SplitHostPort(address)
+	if err != nil || port != fmt.Sprint(endpoint.Port) {
+		return false
+	}
+	return sameHost(host, endpoint.Host)
+}
+
+func sameHost(left, right string) bool {
+	return strings.EqualFold(strings.TrimSuffix(left, "."), strings.TrimSuffix(right, "."))
 }
 
 // Validate は、このプロファイルで経路を作れるかを確かめる。
@@ -103,128 +93,66 @@ func (profile Profile) Validate() error {
 	if err := validateProfileName(profile.Name); err != nil {
 		return err
 	}
-	if err := validateTarget(profile.Target); err != nil {
+	chosen, err := backendFor(profile.Backend)
+	if err != nil {
 		return err
 	}
-	switch profile.Backend {
-	case WireGuard:
-		if profile.WireGuard == nil {
-			return fmt.Errorf("%w: wireguard settings are absent", ErrSettings)
-		}
-		return profile.WireGuard.validate()
-	case L2TPIPsec:
-		if profile.L2TP == nil {
-			return fmt.Errorf("%w: l2tp settings are absent", ErrSettings)
-		}
-		return profile.L2TP.validate()
-	}
-	return fmt.Errorf("%w: %s", ErrBackend, profile.Backend)
-}
-
-// ValidateName は、プロファイル名として使えるかを確かめる。
-//
-// 保存する側も同じ規則で確かめる。コンテナ名とディレクトリ名になるので、
-// 区切り文字が混じったものを保存させない。
-func ValidateName(name string) error { return validateProfileName(name) }
-
-// validateProfileName は、コンテナ名とディレクトリ名に入る字だけを通す。
-func validateProfileName(name string) error {
-	if name == "" || len(name) > maxProfileNameLength {
-		return fmt.Errorf("%w: %q", ErrProfileName, name)
-	}
-	for _, character := range name {
-		letter := character >= 'a' && character <= 'z' || character >= 'A' && character <= 'Z'
-		digit := character >= '0' && character <= '9'
-		if !letter && !digit && character != '-' && character != '_' {
-			return fmt.Errorf("%w: %q", ErrProfileName, name)
-		}
-	}
-	return nil
-}
-
-// validateTarget は、接続先がIPv4アドレスとポートであることを確かめる。
-//
-// 名前を許すと、どちらの名前空間で引くのかが決まらない。コンテナの中で引けば
-// VPN内DNSの話になり、ホストで引けばVPNの中の名前が引けない。
-func validateTarget(target Endpoint) error {
-	address, err := netip.ParseAddr(target.Host)
-	if err != nil || !address.Is4() {
-		return fmt.Errorf("%w: %q はIPv4アドレスではありません", ErrTarget, target.Host)
-	}
-	if address.IsUnspecified() || address.IsLoopback() || address.IsMulticast() {
-		return fmt.Errorf("%w: %q へは経路を作れません", ErrTarget, target.Host)
-	}
-	if target.Port <= 0 || target.Port > 65535 {
-		return fmt.Errorf("%w: ポート %d", ErrTarget, target.Port)
-	}
-	return nil
-}
-
-func (settings WireGuardSettings) validate() error {
-	if settings.Server.Host == "" || strings.ContainsAny(settings.Server.Host, " \t\n") {
-		return fmt.Errorf("%w: wireguardのサーバーが指定されていません", ErrSettings)
-	}
-	if settings.Server.Port <= 0 || settings.Server.Port > 65535 {
-		return fmt.Errorf("%w: wireguardのポート %d", ErrSettings, settings.Server.Port)
-	}
-	if err := validateWireGuardKey(settings.PeerPublicKey, "相手の公開鍵"); err != nil {
+	if err := validateResolvers(profile.DNS); err != nil {
 		return err
 	}
-	prefix, err := netip.ParsePrefix(settings.Address)
-	if err != nil || !prefix.Addr().Is4() {
-		return fmt.Errorf("%w: トンネル側アドレス %q はIPv4のCIDR表記ではありません", ErrSettings, settings.Address)
+	if err := validateTarget(profile.Target, profile.DNS); err != nil {
+		return err
 	}
-	return nil
+	if field := profile.foreignSection(); field != "" {
+		return fieldError(ErrSettings, field, ReasonUnexpected)
+	}
+	return chosen.validateSettings(profile)
 }
 
-// validateWireGuardKey は、鍵がbase64の32バイトであることだけを確かめる。
+// foreignSection は、Backend と違う backend の節があれば、その名前を返す。
 //
-// 設定ファイルへ書く値なので、改行や引用符が混じったまま渡さない。
-func validateWireGuardKey(key, label string) error {
-	if len(key) != 44 || !strings.HasSuffix(key, "=") {
-		return fmt.Errorf("%w: %sの形式が違います", ErrSettings, label)
+// 別の節が残っていると、作り直すかどうかの判断と、画面に出す設定が、使っていない
+// 値に引きずられる。
+func (profile Profile) foreignSection() string {
+	sections := []struct {
+		backend BackendName
+		field   string
+		present bool
+	}{
+		{WireGuard, "wireguard", profile.WireGuard != nil},
+		{L2TPIPsec, "l2tp", profile.L2TP != nil},
+		{OpenConnect, "openconnect", profile.OpenConnect != nil},
 	}
-	for _, character := range key[:len(key)-1] {
-		letter := character >= 'a' && character <= 'z' || character >= 'A' && character <= 'Z'
-		digit := character >= '0' && character <= '9'
-		if !letter && !digit && character != '+' && character != '/' {
-			return fmt.Errorf("%w: %sの形式が違います", ErrSettings, label)
+	for _, section := range sections {
+		if section.present && section.backend != profile.Backend {
+			return section.field
 		}
 	}
-	return nil
+	return ""
+}
+
+// OwnSecrets は、secrets のうち、このプロファイルの backend の節だけを残した写しを
+// 返す。方式を切り替えたあとに、使わなくなった方式の秘密を Vault に残さない。
+// この版の知らない backend なら、何も残さない。
+func (profile Profile) OwnSecrets(secrets Secrets) Secrets {
+	chosen, err := backendFor(profile.Backend)
+	if err != nil {
+		return Secrets{}
+	}
+	return chosen.ownSecrets(secrets)
 }
 
 // ValidateSecrets は、このbackendが要る秘密が揃っているかを確かめる。
 func (profile Profile) ValidateSecrets(secrets Secrets) error {
-	switch profile.Backend {
-	case WireGuard:
-		if secrets.WireGuardPrivateKey == "" {
-			return fmt.Errorf("%w: wireguardの秘密鍵がありません", ErrSecrets)
-		}
-		return validateWireGuardKey(secrets.WireGuardPrivateKey, "秘密鍵")
-	case L2TPIPsec:
-		if secrets.L2TPPassword == "" {
-			return fmt.Errorf("%w: VPNのパスワードがありません", ErrSecrets)
-		}
-		if secrets.IPsecPSK == "" {
-			return fmt.Errorf("%w: IPsecの事前共有鍵がありません", ErrSecrets)
-		}
-		return nil
+	chosen, err := backendFor(profile.Backend)
+	if err != nil {
+		return err
 	}
-	return fmt.Errorf("%w: %s", ErrBackend, profile.Backend)
+	return chosen.validateSecrets(profile, secrets)
 }
 
-func (settings L2TPSettings) validate() error {
-	if settings.Server == "" || strings.ContainsAny(settings.Server, " \t\n\"") {
-		return fmt.Errorf("%w: VPN装置の指定が使えません", ErrSettings)
-	}
-	if settings.Username == "" || strings.ContainsAny(settings.Username, "\n\"\\") {
-		return fmt.Errorf("%w: VPNの利用者名が使えません", ErrSettings)
-	}
-	for name, proposal := range map[string]string{"ike": settings.IKE, "esp": settings.ESP} {
-		if proposal != "" && strings.ContainsAny(proposal, " \n\"\\") {
-			return fmt.Errorf("%w: %s の指定が使えません", ErrSettings, name)
-		}
-	}
-	return nil
+// WaitsForApproval は、この経路が人の承認を待つかを返す。
+func (profile Profile) WaitsForApproval() bool {
+	chosen, err := backendFor(profile.Backend)
+	return err == nil && chosen.waitsForApproval(profile)
 }

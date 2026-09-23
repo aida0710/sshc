@@ -40,6 +40,7 @@ import { Icon } from "../ui/icons";
 import { useTerminalSearch } from "./useTerminalSearch";
 import { TerminalSearchBar } from "./TerminalSearchBar";
 import { TerminalStatusBanners } from "./TerminalStatusBanners";
+import { VPNProfileChip } from "../vpn/VPNProfileChip";
 import type { StreamLink } from "./streamLink";
 import { inspectTerminalPaste } from "./pasteGuard";
 import { TerminalPasteDialog } from "./TerminalPasteDialog";
@@ -63,6 +64,8 @@ type TerminalViewProps = {
   font?: string;
   onOpenRemotePath?: (alias: string, path: string, action: RemotePathAction) => void;
   osc52Enabled?: boolean;
+  // vpnProfile は、この接続が通るVPN経路の名前である。空なら通らない。
+  vpnProfile?: string;
   scrollbackLines?: number;
   onOsc52Change?: (enabled: boolean) => void | Promise<void>;
   onForwardsChanged?: () => void | Promise<void>;
@@ -90,6 +93,7 @@ export function TerminalView({
   tint,
   onOpenRemotePath,
   osc52Enabled: initialOsc52Enabled = false,
+  vpnProfile = "",
   scrollbackLines = 5000,
   onOsc52Change,
   onForwardsChanged,
@@ -486,6 +490,7 @@ export function TerminalView({
           <div className="flex min-w-0 items-center gap-2 text-[11px] text-ink-muted md:flex-1">
             <span className="min-w-0 truncate font-mono">{subtitle}</span>
             <span role="status" className="shrink-0">{connectionStatus}</span>
+            <VPNProfileChip name={vpnProfile} />
           </div>
         </div>
         <button

@@ -1,7 +1,9 @@
 import type { HostDetail, HostMetadata } from "../api/config";
+import type { VPNProfile } from "../api/vpn";
 import { Field, control, fieldLabel, hintText } from "../ui/form";
 import { Button } from "../ui/surface";
 import { useTranslate } from "../i18n/context";
+import { HostVPNProfileField } from "./HostVPNProfileField";
 import { NoticeList } from "./SavePreview";
 import { AppearancePicker } from "../terminal/AppearancePicker";
 import { BackgroundPicker } from "../terminal/BackgroundPicker";
@@ -18,9 +20,12 @@ function inherited(detail: HostDetail) {
 export function HostInspector({
   detail,
   onMetadata,
+  vpnProfiles = [],
 }: {
   detail: HostDetail;
   onMetadata: (metadata: HostMetadata) => void;
+  // vpnProfiles は、この接続を通せるVPNプロファイルである。
+  vpnProfiles?: VPNProfile[];
 }) {
   const t = useTranslate();
   const notices = [...(detail.form.notices ?? []), ...(detail.effective.notices ?? [])];
@@ -135,6 +140,8 @@ export function HostInspector({
             <option value="deny">{t("connection.osc52Deny")}</option>
           </select>
         </Field>
+
+        <HostVPNProfileField detail={detail} profiles={vpnProfiles} onMetadata={onMetadata} />
 
         <Field label={t("host.tags")}>
           <input

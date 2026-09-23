@@ -81,6 +81,7 @@ export type SFTPTarget = {
 export function SFTPPanel({
   aliases,
   hosts = noHosts,
+  hostVPN,
   target = null,
   initialLocation = null,
   initialSort = { key: "name", direction: "ascending" },
@@ -97,6 +98,8 @@ export function SFTPPanel({
 }: {
   aliases: string[];
   hosts?: HostEntry[];
+  // hostVPN は、alias ごとに通るVPN経路の名前である。
+  hostVPN?: Map<string, string>;
   target?: SFTPTarget | null;
   // Where a restored tab should reopen. Applied once, when the declared
   // aliases have arrived and can vouch for the host.
@@ -411,6 +414,7 @@ export function SFTPPanel({
         browser={browser}
         aliases={aliases}
         hosts={hosts}
+        vpnProfile={hostVPN?.get(browser.alias) ?? ""}
         onHostChange={browser.selectHost}
         onRefresh={() => { if (!busy && !dirty && connected) search.refreshCurrent(); }}
         busy={busy}

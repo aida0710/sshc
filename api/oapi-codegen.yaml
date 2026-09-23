@@ -103,8 +103,12 @@ output-options:
     - VPNProfile
     - WireGuardProfile
     - L2TPProfile
+    - OpenConnectProfile
     - VPNOverview
-    - VPNSession
+    - VPNProfileStatus
+    - VPNTunnel
+    - VPNLogs
+    - VPNRenameRequest
     - VPNProfileRequest
     - VPNSecrets
     - VPNBindingRequest

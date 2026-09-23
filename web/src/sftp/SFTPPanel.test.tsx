@@ -128,6 +128,15 @@ describe("SFTPPanel uploads", () => {
     expect(await screen.findByText("Failed · upload_failed")).toBeInTheDocument();
   });
 
+  it("says which VPN route the chosen host is reached through", async () => {
+    render(<SFTPPanel aliases={["edge"]} hostVPN={new Map([["edge", "tundra"]])} />);
+
+    expect(screen.queryByText(/^VPN: /)).toBeNull();
+    await chooseHost("edge");
+
+    expect(await screen.findByText("VPN: tundra")).toBeVisible();
+  });
+
   it("does not connect until the selected host is explicitly connected", async () => {
     render(<SFTPPanel aliases={["edge"]} />);
 
