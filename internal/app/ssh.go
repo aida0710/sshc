@@ -353,13 +353,24 @@ func addKnownHost(hosts *knownhosts.Service) func(knownhosts.Candidate) error {
 // CLIConnection は、`sshc <接続先>` が使うプロセス内 SSH である。
 type CLIConnection struct{ parts sshParts }
 
+// CLIConnectionOptions は、コマンドライン用の接続が要るものである。
+//
+// 数が多いので名前で渡す。位置で渡すと、同じ形の関数がいくつも並ぶ呼び出しに
+// なり、取り違えてもコンパイルが通る。
+type CLIConnectionOptions struct {
+	Home        string
+	Passphrase  func(relativePath string) (string, bool)
+	Password    func(target sshclient.Target) (string, bool)
+	OneTimeCode func(target sshclient.Target, question string) (string, bool)
+	// VPNRoute は、名前の付いたVPN経路を通して接続先へ繋ぐ。nil なら、VPNを
+	// 指定した接続は素の回線へ落とさずに断る。
+	VPNRoute func(ctx context.Context, profile, address string) (net.Conn, error)
+}
+
 // NewCLIConnection は、ホームディレクトリひとつからコマンドライン用の接続を組む。
-func NewCLIConnection(
-	home string,
-	passphrase func(relativePath string) (string, bool),
-	password func(target sshclient.Target) (string, bool),
-	oneTimeCode func(target sshclient.Target, question string) (string, bool),
-) (CLIConnection, error) {
+func NewCLIConnection(options CLIConnectionOptions) (CLIConnection, error) {
+	home, passphrase := options.Home, options.Passphrase
+	password, oneTimeCode := options.Password, options.OneTimeCode
 	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
 	if err != nil {
 		return CLIConnection{}, err
@@ -380,11 +391,12 @@ func NewCLIConnection(
 	}
 
 	// コマンドラインの接続は、engine が解決した接続情報を受け取って自分で繋ぐ。
-	// VPN 経路はまだこの経路へ配線していないので、VPN を指定した接続は
-	// 素の回線へ落とさずに断る。
+	// VPN 経路もコンテナも engine が持つので、ここは engine が差し出す中継へ
+	// 繋ぐだけである。渡されていなければ、VPN を指定した接続は断る。
 	parts := newSSHParts(sshDependencies{
 		config: config, knownHosts: hosts, home: workspace.Home(),
 		passphrase: stored, password: password, oneTimeCode: oneTimeCode,
+		vpnRoute: options.VPNRoute,
 	})
 	configuredVerbosity := parts.dialer.Verbosity
 	// `sshc ssh` はブラウザの接続中表示を持たないため、最低限の接続段階を

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -33,10 +34,11 @@ type vpnOverview struct {
 }
 
 type vpnSession struct {
-	Profile     vpnStoredProfile `json:"profile"`
-	Running     bool             `json:"running"`
-	Relay       bool             `json:"relay"`
-	Connections []string         `json:"connections"`
+	Profile vpnStoredProfile `json:"profile"`
+	Running bool             `json:"running"`
+	// RelaySocket は、中継のソケットの場所である。開いていなければ空になる。
+	RelaySocket string   `json:"relaySocket"`
+	Connections []string `json:"connections"`
 }
 
 type vpnStoredProfile struct {
@@ -321,7 +323,7 @@ func writeVPNOverview(out io.Writer, overview vpnOverview) {
 	for _, session := range overview.Profiles {
 		state := "stopped"
 		switch {
-		case session.Relay:
+		case session.RelaySocket != "":
 			state = "up"
 		case session.Running:
 			state = "starting"
@@ -337,4 +339,36 @@ func writeVPNOverview(out io.Writer, overview vpnOverview) {
 		)
 	}
 	writeSyncRows(out, rows)
+}
+
+// errVPNRelayMissing は、engine が経路を差し出さなかったことを表す。
+var errVPNRelayMissing = errors.New("the engine did not open a relay for that VPN profile")
+
+// vpnRouteThroughEngine は、engine に経路を起こさせ、その中継のソケットへ繋ぐ。
+//
+// CLI は秘密を持たない。コンテナも Vault も engine が持ち、こちらは利用者だけが
+// 開けるソケットへ繋ぐだけである。
+func vpnRouteThroughEngine(stateDir string, client *http.Client) func(context.Context, string, string) (net.Conn, error) {
+	return func(ctx context.Context, profile, address string) (net.Conn, error) {
+		engine, err := openEngineAPI(ctx, stateDir, client)
+		if err != nil {
+			return nil, err
+		}
+		defer func() { _ = engine.Close() }()
+		var overview vpnOverview
+		if err := engine.sendJSON(ctx, http.MethodPost,
+			vpnProfilePath(profile)+"/session", struct{}{}, &overview); err != nil {
+			return nil, err
+		}
+		for _, session := range overview.Profiles {
+			if session.Profile.Name != profile {
+				continue
+			}
+			if session.RelaySocket == "" {
+				return nil, errVPNRelayMissing
+			}
+			return (&net.Dialer{}).DialContext(ctx, "unix", session.RelaySocket)
+		}
+		return nil, errVPNRelayMissing
+	}
 }

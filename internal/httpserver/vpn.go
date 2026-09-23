@@ -29,10 +29,11 @@ type vpnOverviewResponse struct {
 }
 
 type vpnSessionResponse struct {
-	Profile     application.VPNProfile `json:"profile"`
-	Running     bool                   `json:"running"`
-	Relay       bool                   `json:"relay"`
-	Connections []string               `json:"connections"`
+	Profile application.VPNProfile `json:"profile"`
+	Running bool                   `json:"running"`
+	// RelaySocket は、中継のソケットの場所である。開いていなければ空になる。
+	RelaySocket string   `json:"relaySocket"`
+	Connections []string `json:"connections"`
 }
 
 type vpnProfileRequest struct {
@@ -189,7 +190,7 @@ func (h VPNHandlers) respond(c *echo.Context) error {
 		if response.Available {
 			status, err := h.Sessions.Status(c.Request().Context(), profile.Name)
 			if err == nil {
-				session.Running, session.Relay = status.Running, status.Relay
+				session.Running, session.RelaySocket = status.Running, status.RelaySocket
 			}
 		}
 		response.Profiles = append(response.Profiles, session)

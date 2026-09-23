@@ -12,7 +12,8 @@ const testVPNKey = "aAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAA="
 
 func vpnOverviewFixture() string {
 	return `{"available":true,"profiles":[{"profile":{"name":"lab","backend":"wireguard",` +
-		`"target":"10.9.9.1:22"},"running":true,"relay":true,"connections":["lab"]}]}`
+		`"target":"10.9.9.1:22"},"running":true,"relaySocket":"/home/u/.ssh/sshc/vpn/lab/relay.sock",` +
+		`"connections":["lab"]}]}`
 }
 
 // 一覧は、プロファイルと状態と、それを通る接続を見せる。

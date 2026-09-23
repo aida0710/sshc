@@ -41,9 +41,9 @@ type Status struct {
 	Name string
 	// Running は、コンテナが動いていることを表す。
 	Running bool
-	// Relay は、中継のソケットが開いていることを表す。ここまで来ていれば、
-	// トンネルと経路とパケットフィルタは用意できている。
-	Relay bool
+	// RelaySocket は、中継のソケットの場所である。開いていなければ空になる。
+	// 値があれば、トンネルと経路とパケットフィルタは用意できている。
+	RelaySocket string
 	// Target は、このセッションが繋ぐ先である。
 	Target string
 }
@@ -149,7 +149,10 @@ func (manager *Manager) Status(ctx context.Context, profileName string) (Status,
 		return Status{}, err
 	}
 	name := containerName(profileName, manager.owner)
-	status := Status{Name: profileName, Relay: manager.relayPresent(profileName)}
+	status := Status{Name: profileName}
+	if manager.relayPresent(profileName) {
+		status.RelaySocket = manager.socketPath(profileName)
+	}
 	ours, err := manager.requireOurContainer(ctx, name, profileName)
 	if err != nil {
 		return Status{}, err

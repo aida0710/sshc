@@ -4226,13 +4226,14 @@ components:
     VPNSession:
       type: object
       additionalProperties: false
-      required: [profile, running, relay, connections]
+      required: [profile, running, relaySocket, connections]
       properties:
         profile: { $ref: "#/components/schemas/VPNProfile" }
         running: { type: boolean }
-        # 中継が開いていること。ここまで来ていれば、トンネルと経路とパケット
-        # フィルタは用意できている。
-        relay: { type: boolean }
+        # 中継のソケットの場所。開いていなければ空になる。値があれば、トンネルと
+        # 経路とパケットフィルタは用意できている。CLI はここへ繋いで、engine が
+        # 持つ経路を通る。
+        relaySocket: { type: string }
         # このプロファイルを通る接続の alias。
         connections:
           type: array

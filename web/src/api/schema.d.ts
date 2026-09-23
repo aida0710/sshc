@@ -3225,7 +3225,7 @@ export interface components {
         VPNSession: {
             profile: components["schemas"]["VPNProfile"];
             running: boolean;
-            relay: boolean;
+            relaySocket: string;
             connections: string[];
         };
         VPNProfileRequest: {

@@ -166,7 +166,7 @@ func TestAConnectionReachesTheTargetThroughTheTunnel(t *testing.T) {
 	}
 
 	status, err := manager.Status(ctx, profile.Name)
-	if err != nil || !status.Running || !status.Relay {
+	if err != nil || !status.Running || status.RelaySocket == "" {
 		t.Fatalf("Status = %+v, %v", status, err)
 	}
 }
