@@ -105,6 +105,24 @@ sshc sync auto on|off [--json]
 
 `sshc sync setup` shows the configured endpoint, bucket, path, region, and direction as defaults. Direction accepts `both`, `push`, or `pull`. The Access Key ID is shown as `*****` followed by its final five characters; the Secret Access Key and sync key are shown only as configured. Press Enter on blank secret prompts to keep the values already held by the engine. While a new hidden value is typed, each character appears as `*`, and Backspace updates the mask without printing the plaintext.
 
+## VPN
+
+Route chosen connections through a VPN of their own. Needs Docker on this machine. See [Per-connection VPN](/en/features/vpn).
+
+```sh
+sshc vpn [--json]
+sshc vpn add <name>
+sshc vpn remove <name> [-y|--yes]
+sshc vpn up <name> [--json]
+sshc vpn down <name> [--json]
+sshc vpn bind <alias> <name> [--json]
+sshc vpn unbind <alias> [--json]
+```
+
+`sshc vpn add` asks for the settings in an interactive terminal. The private key, the VPN password and the IPsec pre-shared key are read without echo and are never taken from command arguments or environment variables. They are stored in the vault.
+
+A bound connection takes the same route from the terminal, from SFTP and from `sshc <alias>`. When the route is not available the connection is refused rather than quietly sent over the ordinary uplink.
+
 ## SFTP transfers
 
 Transfers use the running engine and the same OpenSSH configuration, host-key checks, and Vault credentials as the Web UI. Specify remote paths as absolute POSIX paths such as `/var/log/app.log`.

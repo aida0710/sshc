@@ -43,7 +43,13 @@ func runRemote(ctx context.Context, alias, command string, environment commandEn
 	}
 	writeConnectionNotices(stderr, answer)
 
-	connection, err := app.NewCLIConnection(home, savedPassphraseFor(answer), savedPasswordFor(answer), savedTOTPFor(answer))
+	connection, err := app.NewCLIConnection(app.CLIConnectionOptions{
+		Home:        home,
+		Passphrase:  savedPassphraseFor(answer),
+		Password:    savedPasswordFor(answer),
+		OneTimeCode: savedTOTPFor(answer),
+		VPNRoute:    vpnRouteThroughEngine(stateDir, client),
+	})
 	if err != nil {
 		fmt.Fprintf(stderr, "sshc: %v\n", err)
 		return sshclient.RemoteFailureExit

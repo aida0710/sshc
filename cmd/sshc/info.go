@@ -58,7 +58,8 @@ func runInfo(alias, home string, asJSON bool, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "sshc: %q is not an alias this can describe\n", alias)
 		return 2
 	}
-	connection, err := app.NewCLIConnection(home, nil, nil, nil)
+	// info は接続しない。解決した設定を見せるだけなので、経路も秘密も要らない。
+	connection, err := app.NewCLIConnection(app.CLIConnectionOptions{Home: home})
 	if err != nil {
 		fmt.Fprintln(stderr, "sshc: could not read the SSH configuration")
 		return 1

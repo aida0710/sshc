@@ -19,6 +19,7 @@ const routes = [
   ["OTP", "/vault/otp"],
   ["Settings", "/settings/engine"],
   ["Sync", "/sync"],
+  ["VPN", "/vpn"],
   ["History", "/history"],
   ["License", "/license"],
 ] as const;

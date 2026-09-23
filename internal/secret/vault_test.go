@@ -385,7 +385,7 @@ func TestUnsupportedVaultDocumentsAreRefused(t *testing.T) {
 	for name, document := range map[string]string{
 		"old v2": `{"schemaVersion":2,"passwords":{},"keyPassphrases":{},"hosts":{},"keys":{}}`,
 		"old v3": `{"schemaVersion":3,"passwords":{},"keyPassphrases":{},"hosts":{},"keys":{}}`,
-		"future": `{"schemaVersion":6,"passwords":{},"keyPassphrases":{},"hosts":{},"keys":{},"totps":{},"totpHosts":{}}`,
+		"future": `{"schemaVersion":7,"passwords":{},"keyPassphrases":{},"hosts":{},"keys":{},"totps":{},"totpHosts":{},"vpns":{}}`,
 	} {
 		sealed, err := key.Seal([]byte(document))
 		if err != nil {
@@ -409,7 +409,7 @@ func TestCurrentVaultDocumentRejectsUnknownCompatibilityFields(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sealed, err := key.Seal([]byte(`{"schemaVersion":5,"passwords":{},"keyPassphrases":{},"hosts":{},"keys":{},"totps":{},"totpHosts":{},"legacyPasswords":{}}`))
+	sealed, err := key.Seal([]byte(`{"schemaVersion":6,"passwords":{},"keyPassphrases":{},"hosts":{},"keys":{},"totps":{},"totpHosts":{},"vpns":{},"legacyPasswords":{}}`))
 	if err != nil {
 		t.Fatal(err)
 	}

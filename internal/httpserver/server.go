@@ -33,6 +33,7 @@ import (
 	sshcSFTP "sshc/internal/sftp"
 	"sshc/internal/snippets"
 	"sshc/internal/terminal"
+	"sshc/internal/vpn"
 	"sshc/internal/workspace"
 )
 
@@ -65,7 +66,9 @@ type Options struct {
 	ProtocolVersion int
 	Logger          *slog.Logger
 	Config          *application.Service
-	Keys            KeyService
+	// VPN は、接続ごとのVPN経路を持つ。nil なら、この engine は経路を扱わない。
+	VPN  *vpn.Manager
+	Keys KeyService
 	// Connect は、alias ひとつ分の対話セッションを開く。合成の根が組み立てる。
 	Connect     Connector
 	Diagnostics *diagnostics.Service
@@ -411,6 +414,11 @@ func New(options Options) (*Server, error) {
 	}
 	if options.Terminals != nil {
 		registerTerminalRoutes(e, newTerminalHandlers(options, actions, host))
+	}
+	if options.VPN != nil {
+		registerVPNRoutes(e, VPNHandlers{
+			Config: options.Config, Secrets: options.Passwords, Sessions: options.VPN,
+		})
 	}
 	if len(registry) > 0 {
 		registerActionRoutes(e, actions)

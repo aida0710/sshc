@@ -29,7 +29,7 @@ const SettingsPath = "sshc/sync-settings"
 
 // SchemaVersion は、暗号化の内側にある平文文書のバージョン。ヘッダーは envelope
 // 用に自前のバージョンを運ぶ。
-const SchemaVersion = 5
+const SchemaVersion = 6
 
 // envelope のエラーは再エクスポートしてある。vault を扱う呼び出し側が、どの
 // パッケージがそれを暗号化したかを知らずに済むようにするためだ。
@@ -104,12 +104,31 @@ const (
 	KindPassword      Kind = "password"
 	KindKeyPassphrase Kind = "key_passphrase"
 	KindTOTP          Kind = "totp"
+	// KindVPN は、VPN プロファイルの秘密である。名前はプロファイル名で、値は
+	// その backend が要る秘密をまとめたものである。
+	//
+	// プロファイルひとつにつき一件にする。秘密は同時に作られ、同時に回し、
+	// 同時に消えるので、分けて持つとプロファイルを作る・改名する・消すたびに
+	// 複数件の整合を取ることになる。
+	//
+	// この名前空間は host にも鍵にも割り当てない。資格情報の画面と API にも
+	// 現れない。VPN 経路の設定の一部であり、接続先へ送る資格情報ではない。
+	KindVPN Kind = "vpn"
 )
 
-// ValidKind は、値が名前空間を表しているかを報告する。この集合が決まる唯一の場所
-// なので、ルートとフォームがそれについて食い違うことはありえない。
+// ValidKind は、資格情報の画面と API が名指してよい名前空間かを報告する。この
+// 集合が決まる唯一の場所なので、ルートとフォームがそれについて食い違うことは
+// ありえない。
 func ValidKind(kind Kind) bool {
 	return kind == KindPassword || kind == KindKeyPassphrase || kind == KindTOTP
+}
+
+// storedKind は、vault が値を保存する名前空間かを報告する。
+//
+// ValidKind より広い。VPN の秘密は vault が保存するが、資格情報として host や
+// 鍵へ割り当てるものではないので、画面と API の集合には入れない。
+func storedKind(kind Kind) bool {
+	return ValidKind(kind) || kind == KindVPN
 }
 
 // SyncSettings は、オブジェクトストアが必要とするもの。
@@ -157,6 +176,9 @@ type document struct {
 	TOTPs                   map[string]string `json:"totps"`
 	TOTPHosts               map[string]string `json:"totpHosts"`
 	TOTPBindings            map[string]string `json:"totpBindings,omitempty"`
+	// VPNs は、VPN プロファイルの秘密である。名前はプロファイル名で、subject を
+	// 持たない。host にも鍵にも割り当てないからである。
+	VPNs map[string]string `json:"vpns"`
 }
 
 // Vault は、開かれた secrets ファイル。
@@ -174,8 +196,12 @@ type Vault struct {
 	dedicatedKeyPassphrases map[string]string
 }
 
+// newMaps は、秘密と subject の名前空間を用意する。
+//
+// KindVPN には subject の map を作らない。割り当てる相手を持たない名前空間に
+// 空の map を置くと、割り当てられるように見えてしまう。
 func newMaps() (map[Kind]map[string]string, map[Kind]map[string]string) {
-	return map[Kind]map[string]string{KindPassword: {}, KindKeyPassphrase: {}, KindTOTP: {}},
+	return map[Kind]map[string]string{KindPassword: {}, KindKeyPassphrase: {}, KindTOTP: {}, KindVPN: {}},
 		map[Kind]map[string]string{KindPassword: {}, KindKeyPassphrase: {}, KindTOTP: {}}
 }
 
@@ -269,6 +295,7 @@ func openDocumentWithMigrations(
 		KindPassword:      parsed.Passwords,
 		KindKeyPassphrase: parsed.KeyPassphrases,
 		KindTOTP:          parsed.TOTPs,
+		KindVPN:           parsed.VPNs,
 	} {
 		for name, value := range stored {
 			secrets[kind][name] = value
@@ -394,6 +421,7 @@ func (v *Vault) Document() ([]byte, error) {
 		TOTPs:                   v.secrets[KindTOTP],
 		TOTPHosts:               v.subjects[KindTOTP],
 		TOTPBindings:            v.totpBindings,
+		VPNs:                    v.secrets[KindVPN],
 	})
 }
 
@@ -535,7 +563,7 @@ func (v *Vault) Destroy() {
 
 // Set は、名前の下に資格情報を保存する。新規作成か、値の置き換えである。
 func (v *Vault) Set(kind Kind, name, value string) error {
-	if !ValidKind(kind) {
+	if !storedKind(kind) {
 		return ErrUnknownKind
 	}
 	if !validCredentialName(name) {
@@ -558,7 +586,7 @@ func (v *Vault) Set(kind Kind, name, value string) error {
 // RenameCredential は名前付き資格情報そのものを改名し、すべての参照を追従させる。
 // subject の Rename とは別の操作であり、既存の別資格情報を暗黙に上書きしない。
 func (v *Vault) RenameCredential(kind Kind, from, to string) error {
-	if !ValidKind(kind) {
+	if !storedKind(kind) {
 		return ErrUnknownKind
 	}
 	if !validCredentialName(from) || !validCredentialName(to) {

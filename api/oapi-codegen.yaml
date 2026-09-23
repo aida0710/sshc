@@ -100,5 +100,13 @@ output-options:
     - HistoryEntry
     - HistoryList
     - HostMetadata
+    - VPNProfile
+    - WireGuardProfile
+    - L2TPProfile
+    - VPNOverview
+    - VPNSession
+    - VPNProfileRequest
+    - VPNSecrets
+    - VPNBindingRequest
     - Metadata
     - Setting

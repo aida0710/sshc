@@ -173,6 +173,17 @@ CIではLinux PTYの仮想Serial routerとlocalhostの仮想Telnet serverを用�
 6. 実際に追加・変更・削除したファイルが、`sshc sync push` と適用した `sshc sync pull` の出力の一覧と一致することを確認する。remote snapshot を別端末から更新した直後に `sshc sync push` を実行し、通常 CAS が拒否することを確認する。`sshc sync push --force` では action token 発行後にもう一度 remote を更新し、exact ETag の不一致として拒否され、二つ目の token や自動再試行が発生しないことを確認する。
 7. `sshc sync now` と `sshc sync auto on|off` が engine の status に反映され、engine 再起動後も auto の設定が維持されることを確認する。各 `--json` 出力が一つの object だけで、credential、cookie、CSRF／action token、handoff secret を含まないことを確認する。
 
+## VPN 経路
+
+Docker が動く Linux で行います。VPN 装置は使い捨ての検証用を使い、本番の資格情報を入れません。
+
+1. `sshc vpn add` で WireGuard のプロファイルを作り、`sshc vpn up` の後に `sshc ssh <alias>` が接続先へ届くことを確認する。`docker logs` に秘密鍵が現れないことも確認する。
+2. トンネルを落とした状態（`sshc vpn down`）で同じ接続を試し、素の回線へ落ちずに拒否されることを確認する。
+3. L2TP/IPsec のプロファイルで同じ 2 つを確認する。パスワードと事前共有鍵が `docker logs` と `sshc vpn` の出力に現れないことも確認する。
+4. ホスト側が別の VPN へ接続したままでも、1 の接続が成立することを確認する。ホストの `ip route` と `/etc/resolv.conf` が変わらないことも確認する。
+5. プロファイルを削除し、接続の紐付けが同時に外れること、コンテナが残らないこと、Vault から秘密が消えることを確認する。
+6. engine を再起動し、前回のコンテナが引き継がれず停止することを確認する。
+
 ## 記録
 
 未実施は空欄のままにせず「未実施」と書きます。空欄は「実施したが記録し忘れた」と区別がつきません。

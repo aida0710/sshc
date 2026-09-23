@@ -28,6 +28,11 @@ type Dialer struct {
 	HostKeys  HostKeys
 	// Dial は TCP を開く。nil なら net.Dialer。テストと、将来の別の輸送のためにある。
 	Dial func(ctx context.Context, network, address string) (net.Conn, error)
+	// DialVPN は、名前の付いた VPN 経路を通して接続先へ繋ぐ。
+	//
+	// nil なら、VPN を指定した接続は断る。Docker が無い機械の engine は、
+	// この輸送を持たない。
+	DialVPN func(ctx context.Context, profile, address string) (net.Conn, error)
 	// Verbosity は、接続の途中経過をどこまで端末へ書くかを、接続のたびに
 	// 返す。nil なら無言である。
 	//
@@ -342,6 +347,21 @@ func connectionTarget(target Target) string {
 func (d Dialer) open(ctx context.Context, target Target, through *ssh.Client, trace *tracer) (net.Conn, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
+	}
+	if target.VPN != "" {
+		// VPN もこの機械から出る経路である。ProxyCommand と同じく、踏み台の
+		// 向こうのホップには効かない。
+		if target.ProxyCommand != "" {
+			return nil, ErrVPNWithProxyCommand
+		}
+		if through != nil {
+			return nil, ErrVPNThroughJump
+		}
+		if d.DialVPN == nil {
+			return nil, ErrVPNUnavailable
+		}
+		trace.announce("VPN %s を通して接続します。", target.VPN)
+		return d.DialVPN(ctx, target.VPN, target.Address())
 	}
 	if target.ProxyCommand != "" {
 		// そのプログラムはこの機械で走る。手前のホップの中ではない。
