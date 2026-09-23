@@ -50,6 +50,9 @@ const SettingsPanel = lazy(() =>
     default: SettingsPanel,
   })),
 );
+const VPNPanel = lazy(() =>
+  import("../vpn/VPNPanel").then(({ VPNPanel }) => ({ default: VPNPanel })),
+);
 const SyncPanel = lazy(() =>
   import("../sync/SyncPanel").then(({ SyncPanel }) => ({ default: SyncPanel })),
 );
@@ -92,6 +95,7 @@ export const sectionLabels: Record<Section, MessageKey> = {
   OTP: "section.otp",
   Settings: "section.settings",
   Sync: "section.sync",
+  VPN: "section.vpn",
   History: "section.history",
   License: "section.license",
 };
@@ -114,6 +118,7 @@ export const sectionIcons: Record<Section, IconName> = {
   OTP: "secrets",
   Settings: "settings",
   Sync: "sync",
+  VPN: "connections",
   History: "history",
   License: "inspector",
 };
@@ -137,6 +142,7 @@ const navGroups: { label: MessageKey; sections: Section[] }[] = [
       "Snippets",
       "Settings",
       "Sync",
+      "VPN",
       "History",
     ],
   },
@@ -175,6 +181,7 @@ const menuGroups: MenuGroup[] = [
       "Diagnostics",
       "Snippets",
       "Sync",
+      "VPN",
       "History",
     ]),
   },
@@ -314,6 +321,9 @@ function PaddedSection({
   }
   if (section === "Sync") {
     return <SyncPanel />;
+  }
+  if (section === "VPN") {
+    return <VPNPanel aliases={declared.knownAliases} />;
   }
   if (section === "History") {
     return <HistoryPanel />;

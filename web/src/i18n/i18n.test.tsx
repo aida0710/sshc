@@ -79,6 +79,7 @@ describe("the catalogue", () => {
         "section.snippets",
         "section.sync",
         "section.terminal",
+        "section.vpn",
         "secrets.changeHeading",
         "settings.heading",
         "shell.language",
@@ -97,6 +98,7 @@ describe("the catalogue", () => {
         "terminal.rowDetail",
         "terminal.settingsHeading",
         "tree.navLabel",
+        "vpn.heading",
         "workspace.groupCount",
       ].sort(),
     );

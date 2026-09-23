@@ -16,6 +16,7 @@ export const sections = [
   "OTP",
   "Settings",
   "Sync",
+  "VPN",
   "History",
   "License",
 ] as const;
@@ -40,6 +41,7 @@ const paths: Record<Section, string> = {
   OTP: "/vault/otp",
   Settings: "/settings/engine",
   Sync: "/sync",
+  VPN: "/vpn",
   History: "/history",
   License: "/license",
 };
