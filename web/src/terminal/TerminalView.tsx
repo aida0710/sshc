@@ -40,7 +40,7 @@ import { Icon } from "../ui/icons";
 import { useTerminalSearch } from "./useTerminalSearch";
 import { TerminalSearchBar } from "./TerminalSearchBar";
 import { TerminalStatusBanners } from "./TerminalStatusBanners";
-import { VPNRouteChip } from "../vpn/VPNRouteChip";
+import { VPNProfileChip } from "../vpn/VPNProfileChip";
 import type { StreamLink } from "./streamLink";
 import { inspectTerminalPaste } from "./pasteGuard";
 import { TerminalPasteDialog } from "./TerminalPasteDialog";
@@ -490,7 +490,7 @@ export function TerminalView({
           <div className="flex min-w-0 items-center gap-2 text-[11px] text-ink-muted md:flex-1">
             <span className="min-w-0 truncate font-mono">{subtitle}</span>
             <span role="status" className="shrink-0">{connectionStatus}</span>
-            <VPNRouteChip name={vpnProfile} />
+            <VPNProfileChip name={vpnProfile} />
           </div>
         </div>
         <button

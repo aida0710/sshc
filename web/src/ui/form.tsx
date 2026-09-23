@@ -1,13 +1,30 @@
 import { cloneElement, isValidElement, useId, type ReactElement, type ReactNode } from "react";
 
-export const control =
-  "w-full rounded-md border border-control-line bg-control px-2 py-1.5 text-sm text-ink " +
+// 入力欄の幅。Tailwind はクラス名を字面で拾うので、幅ごとのクラスをここに書き切る。
+const controlWidthClasses = {
+  full: "w-full",
+  medium: "w-56",
+  narrow: "w-40",
+  auto: "w-auto",
+} as const;
+
+type ControlWidth = keyof typeof controlWidthClasses;
+
+const controlLook =
+  "rounded-md border border-control-line bg-control px-2 py-1.5 text-sm text-ink " +
   "placeholder:text-ink-faint focus:border-accent focus:outline-none " +
   "disabled:border-line disabled:text-ink-faint";
 
-export const narrowControl = control.replace("w-full", "w-40");
+// sizedControl は、共通の入力欄の見た目を、指定の幅で返す。
+export function sizedControl(width: ControlWidth): string {
+  return `${controlWidthClasses[width]} ${controlLook}`;
+}
 
-export const autoControl = control.replace("w-full", "w-auto");
+export const control = sizedControl("full");
+
+export const narrowControl = sizedControl("narrow");
+
+export const autoControl = sizedControl("auto");
 
 export const primaryAction =
   "whitespace-nowrap rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-ink " +
@@ -34,7 +51,7 @@ export const tableHeadCell = "py-2 pr-3 text-left font-medium";
 type FieldProps = {
   label: string;
   hint?: string;
-  error?: string;
+  error?: string | undefined;
   children: ReactNode;
   interactiveChildren?: boolean;
 };

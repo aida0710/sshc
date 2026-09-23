@@ -26,6 +26,47 @@ function overview(overrides: Partial<VPNOverview> = {}): VPNOverview {
   };
 }
 
+const peerPublicKey = "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=";
+const privateKey = "aAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAA=";
+
+// startingOverview は、tohoku の経路を用意している最中の一覧である。
+function startingOverview(): VPNOverview {
+  return overview({
+    profiles: [{
+      profile: { name: "tohoku", backend: "l2tp_ipsec", target: "10.9.9.1:22" },
+      running: true,
+      relaySocket: "",
+      connections: [],
+      phase: "image",
+    }],
+  });
+}
+
+// stoppedOverview は、tohoku が止まっている一覧である。
+function stoppedOverview(): VPNOverview {
+  return overview({
+    profiles: [{
+      profile: { name: "tohoku", backend: "l2tp_ipsec", target: "10.9.9.1:22" },
+      running: false,
+      relaySocket: "",
+      connections: [],
+    }],
+  });
+}
+
+// fillWireGuardProfile は、作成フォームへ WireGuard のプロファイルをひとつ入れる。
+async function fillWireGuardProfile(
+  user: ReturnType<typeof userEvent.setup>,
+  form: HTMLElement,
+  target = "10.9.9.1:22",
+) {
+  await user.type(within(form).getByLabelText("Name"), "lab");
+  await user.type(within(form).getByLabelText("Target inside the VPN"), target);
+  await user.type(within(form).getByLabelText("VPN server"), "vpn.example.jp:51820");
+  await user.type(within(form).getByLabelText("Peer public key"), peerPublicKey);
+  await user.type(within(form).getByLabelText("Private key"), privateKey);
+}
+
 function buildApi(overrides: Partial<VPNApi> = {}): VPNApi {
   return {
     vpnOverview: vi.fn().mockResolvedValue(overview()),
@@ -42,11 +83,11 @@ function buildApi(overrides: Partial<VPNApi> = {}): VPNApi {
 }
 
 describe("VPNPanel", () => {
-  it("shows each route with its state and the connections that use it", async () => {
+  it("shows each profile with its type, state and the connections that use it", async () => {
     render(<VPNPanel api={buildApi()} aliases={["lab", "edge"]} />);
 
     const route = await screen.findByRole("article", { name: "tohoku" });
-    expect(within(route).getByText(/l2tp_ipsec/)).toBeVisible();
+    expect(within(route).getByText(/L2TP\/IPsec/)).toBeVisible();
     expect(within(route).getByText(/10\.9\.9\.1:22/)).toBeVisible();
     expect(within(route).getByText("lab")).toBeVisible();
   });
@@ -89,7 +130,9 @@ describe("VPNPanel", () => {
       },
       { wireguardPrivateKey: "aAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAA=" },
     );
-    expect(within(form).getByLabelText("Private key")).toHaveValue("");
+    await waitFor(() => expect(within(form).getByLabelText("Private key")).toHaveValue(""));
+    expect(within(form).getByLabelText("Name")).toHaveValue("");
+    expect(within(form).getByLabelText("Target inside the VPN")).toHaveValue("");
     expect(createVPNProfile.mock.calls[0]?.[0]).not.toHaveProperty("dns");
   });
 
@@ -279,5 +322,194 @@ describe("VPNPanel", () => {
     await user.click(within(route).getByRole("button", { name: "Stop routing lab through tohoku" }));
 
     expect(setConnectionVPN).toHaveBeenCalledWith("lab", "");
+  });
+
+  it("keeps a newer answer when an older status reading arrives late", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      let answerLateReading: (value: VPNOverview) => void = () => undefined;
+      const lateReading = new Promise<VPNOverview>((resolve) => {
+        answerLateReading = resolve;
+      });
+      const vpnOverview = vi.fn().mockResolvedValueOnce(startingOverview()).mockReturnValueOnce(lateReading);
+      const stopVPNSession = vi.fn().mockResolvedValue(stoppedOverview());
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      render(<VPNPanel api={buildApi({ vpnOverview, stopVPNSession })} />);
+      expect(await screen.findByText(/building the image/)).toBeVisible();
+
+      // 読み直しが始まり、その応答が返る前に、利用者が経路を止める。
+      await act(async () => {
+        vi.advanceTimersByTime(2000);
+        await Promise.resolve();
+      });
+      expect(vpnOverview).toHaveBeenCalledTimes(2);
+      await user.click(screen.getByRole("button", { name: "Disconnect" }));
+      await waitFor(() => expect(screen.getByText(/stopped/)).toBeVisible());
+
+      await act(async () => {
+        answerLateReading(startingOverview());
+        await lateReading;
+      });
+
+      expect(screen.getByText(/stopped/)).toBeVisible();
+      expect(screen.queryByText(/building the image/)).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not read the status again while another operation is still running", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const vpnOverview = vi.fn().mockResolvedValue(startingOverview());
+      const stopVPNSession = vi.fn().mockReturnValue(new Promise<VPNOverview>(() => undefined));
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      render(<VPNPanel api={buildApi({ vpnOverview, stopVPNSession })} />);
+      expect(await screen.findByText(/building the image/)).toBeVisible();
+
+      await user.click(screen.getByRole("button", { name: "Disconnect" }));
+      const readingsBefore = vpnOverview.mock.calls.length;
+      await act(async () => {
+        vi.advanceTimersByTime(6000);
+        await Promise.resolve();
+      });
+
+      expect(vpnOverview).toHaveBeenCalledTimes(readingsBefore);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps reading the status while a route is being opened, to show how far it got", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const vpnOverview = vi.fn().mockResolvedValueOnce(stoppedOverview()).mockResolvedValue(startingOverview());
+      const startVPNSession = vi.fn().mockReturnValue(new Promise<VPNOverview>(() => undefined));
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      render(<VPNPanel api={buildApi({ vpnOverview, startVPNSession })} />);
+      const route = await screen.findByRole("article", { name: "tohoku" });
+
+      await user.click(within(route).getByRole("button", { name: "Connect" }));
+      await act(async () => {
+        vi.advanceTimersByTime(2000);
+        await Promise.resolve();
+      });
+
+      expect(await screen.findByText(/building the image/)).toBeVisible();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps what was typed, secrets included, when the engine refuses to save", async () => {
+    const user = userEvent.setup();
+    const createVPNProfile = vi.fn().mockRejectedValue(
+      new ApiError("vpn_profile_exists", 409, { code: "vpn_profile_exists", message: "request rejected" }),
+    );
+    render(<VPNPanel api={buildApi({ createVPNProfile })} />);
+    const form = await screen.findByRole("region", { name: "Add a VPN profile" });
+
+    await fillWireGuardProfile(user, form);
+    await user.click(within(form).getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByText(/already exists/)).toBeVisible();
+    expect(within(form).getByLabelText("Name")).toHaveValue("lab");
+    expect(within(form).getByLabelText("Private key")).toHaveValue(privateKey);
+    expect(within(form).getByRole("button", { name: "Save" })).toBeEnabled();
+  });
+
+  it("forgets the secrets of the previous type when the type is switched", async () => {
+    const user = userEvent.setup();
+    render(<VPNPanel api={buildApi()} />);
+    const form = await screen.findByRole("region", { name: "Add a VPN profile" });
+
+    await user.type(within(form).getByLabelText("Private key"), privateKey);
+    await user.selectOptions(within(form).getByLabelText("Type"), "l2tp_ipsec");
+    await user.selectOptions(within(form).getByLabelText("Type"), "wireguard");
+
+    expect(within(form).getByLabelText("Private key")).toHaveValue("");
+  });
+
+  it("says which field is wrong before sending, next to that field", async () => {
+    const user = userEvent.setup();
+    const createVPNProfile = vi.fn().mockResolvedValue(overview());
+    render(<VPNPanel api={buildApi({ createVPNProfile })} />);
+    const form = await screen.findByRole("region", { name: "Add a VPN profile" });
+
+    await fillWireGuardProfile(user, form, "lab.example.jp:22");
+    await user.click(within(form).getByRole("button", { name: "Save" }));
+
+    const target = within(form).getByLabelText("Target inside the VPN");
+    expect(target).toHaveAttribute("aria-invalid", "true");
+    expect(target).toHaveAccessibleDescription("A name needs the DNS servers inside the VPN as well.");
+    expect(createVPNProfile).not.toHaveBeenCalled();
+  });
+
+  it("puts the limit into the reason when a value is too long", async () => {
+    const user = userEvent.setup();
+    render(<VPNPanel api={buildApi()} />);
+    const form = await screen.findByRole("region", { name: "Add a VPN profile" });
+
+    await fillWireGuardProfile(user, form);
+    await user.type(within(form).getByLabelText("Name"), "x".repeat(48));
+    await user.click(within(form).getByRole("button", { name: "Save" }));
+
+    expect(within(form).getByLabelText("Name")).toHaveAccessibleDescription("Too long: up to 48 characters.");
+  });
+
+  it("shows the field the engine refused next to that field", async () => {
+    const user = userEvent.setup();
+    const createVPNProfile = vi.fn().mockRejectedValue(
+      new ApiError("vpn_secrets_missing", 400, {
+        code: "vpn_secrets_missing",
+        message: "request rejected",
+        field: "secrets.wireguardPrivateKey",
+        reason: "format",
+      }),
+    );
+    render(<VPNPanel api={buildApi({ createVPNProfile })} />);
+    const form = await screen.findByRole("region", { name: "Add a VPN profile" });
+
+    await fillWireGuardProfile(user, form);
+    await user.click(within(form).getByRole("button", { name: "Save" }));
+
+    expect(await within(form).findByText("This is not written in a form this field accepts.")).toBeVisible();
+    expect(screen.getByText("Some values were not accepted. See the reason next to each field.")).toBeVisible();
+    expect(within(form).getByLabelText("Private key")).toHaveValue(privateKey);
+  });
+
+  it("says why the route did not come up and offers its logs", async () => {
+    const user = userEvent.setup();
+    const startVPNSession = vi.fn().mockRejectedValue(
+      new ApiError("vpn_session_failed", 409, {
+        code: "vpn_session_failed",
+        message: "request rejected",
+        reason: "handshake_timeout",
+      }),
+    );
+    const vpnLogs = vi.fn().mockResolvedValue({ lines: "no handshake" });
+    render(<VPNPanel api={buildApi({ startVPNSession, vpnLogs })} />);
+    const route = await screen.findByRole("article", { name: "tohoku" });
+
+    await user.click(within(route).getByRole("button", { name: "Connect" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The VPN route did not come up. No handshake with the WireGuard peer. Check the keys and the server.",
+    );
+    await user.click(screen.getByRole("button", { name: "Show the logs" }));
+    expect(vpnLogs).toHaveBeenCalledWith("tohoku");
+  });
+
+  it("points to the logs when the engine did not say why the route failed", async () => {
+    const user = userEvent.setup();
+    const startVPNSession = vi.fn().mockRejectedValue(
+      new ApiError("vpn_session_failed", 409, { code: "vpn_session_failed", message: "request rejected" }),
+    );
+    render(<VPNPanel api={buildApi({ startVPNSession })} />);
+    const route = await screen.findByRole("article", { name: "tohoku" });
+
+    await user.click(within(route).getByRole("button", { name: "Connect" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("The reason could not be read. Check the logs.");
   });
 });

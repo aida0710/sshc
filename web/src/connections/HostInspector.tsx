@@ -1,7 +1,9 @@
 import type { HostDetail, HostMetadata } from "../api/config";
+import type { VPNProfile } from "../api/vpn";
 import { Field, control, fieldLabel, hintText } from "../ui/form";
 import { Button } from "../ui/surface";
 import { useTranslate } from "../i18n/context";
+import { HostVPNProfileField } from "./HostVPNProfileField";
 import { NoticeList } from "./SavePreview";
 import { AppearancePicker } from "../terminal/AppearancePicker";
 import { BackgroundPicker } from "../terminal/BackgroundPicker";
@@ -22,8 +24,8 @@ export function HostInspector({
 }: {
   detail: HostDetail;
   onMetadata: (metadata: HostMetadata) => void;
-  // vpnProfiles は、この接続を通せるVPN経路の名前である。
-  vpnProfiles?: string[];
+  // vpnProfiles は、この接続を通せるVPNプロファイルである。
+  vpnProfiles?: VPNProfile[];
 }) {
   const t = useTranslate();
   const notices = [...(detail.form.notices ?? []), ...(detail.effective.notices ?? [])];
@@ -139,32 +141,7 @@ export function HostInspector({
           </select>
         </Field>
 
-        <Field label={t("connection.vpnLabel")} hint={t("connection.vpnHint")}>
-          <select
-            value={detail.metadata.vpn ?? ""}
-            onChange={(event) => {
-              const metadata = { ...detail.metadata };
-              const profile = event.target.value;
-              if (profile === "") delete metadata.vpn;
-              else metadata.vpn = profile;
-              onMetadata(metadata);
-            }}
-            className={control}
-          >
-            <option value="">{t("connection.vpnNone")}</option>
-            {vpnProfiles.map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-            {/* 消えたプロファイルを指したままでも、いま何を指しているかは見えるようにする。 */}
-            {detail.metadata.vpn === undefined ||
-            detail.metadata.vpn === "" ||
-            vpnProfiles.includes(detail.metadata.vpn) ? null : (
-              <option value={detail.metadata.vpn}>{t("connection.vpnMissing", { name: detail.metadata.vpn })}</option>
-            )}
-          </select>
-        </Field>
+        <HostVPNProfileField detail={detail} profiles={vpnProfiles} onMetadata={onMetadata} />
 
         <Field label={t("host.tags")}>
           <input
