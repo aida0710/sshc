@@ -239,7 +239,7 @@ func TestSecretsWithQuotesSurviveTheRequestBody(t *testing.T) {
 
 // ProxyCommand は、標準入出力を経路の中継へそのまま流す。
 func TestTheProxyPipesStandardInputAndOutputThroughTheRoute(t *testing.T) {
-	socket := filepath.Join(t.TempDir(), "relay.sock")
+	socket := filepath.Join(shortSocketDirectory(t), "relay.sock")
 	listener, err := net.Listen("unix", socket)
 	if err != nil {
 		t.Fatal(err)

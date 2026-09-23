@@ -12,7 +12,7 @@ import (
 
 // engine の中継は、受けた接続を経路の接続とつなぎ、両方向へ運ぶ。
 func TestTheEngineRelayCarriesBytesBothWays(t *testing.T) {
-	directory := t.TempDir()
+	directory := shortSocketDirectory(t)
 	route, routeSide := net.Pipe()
 	defer func() { _ = routeSide.Close() }()
 	relay, err := openEngineRelay(filepath.Join(directory, engineRelaySocketName),
@@ -46,7 +46,7 @@ func TestTheEngineRelayCarriesBytesBothWays(t *testing.T) {
 
 // 経路へ繋げなければ、受けた接続はすぐ閉じる。待たせたままにしない。
 func TestTheEngineRelayClosesAClientWhenTheRouteCannotBeReached(t *testing.T) {
-	relay, err := openEngineRelay(filepath.Join(t.TempDir(), engineRelaySocketName),
+	relay, err := openEngineRelay(filepath.Join(shortSocketDirectory(t), engineRelaySocketName),
 		func() (net.Conn, error) { return nil, errors.New("no route") })
 	if err != nil {
 		t.Fatalf("openEngineRelay = %v", err)

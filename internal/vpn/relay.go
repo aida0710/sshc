@@ -19,9 +19,10 @@ import (
 // engineRelaySocketName は、engine が差し出す中継の名前である。
 const engineRelaySocketName = "engine.sock"
 
-// maxSocketPathLength は、Unix ソケットのパスに書ける長さである。Linux の
-// sun_path は 108 バイトで、終わりの NUL に 1 バイト使う。
-const maxSocketPathLength = 107
+// maxSocketPathLength は、Unix ソケットのパスに書ける長さである。sun_path は
+// Linux で 108 バイト、macOS で 104 バイトで、終わりの NUL に 1 バイト使う。短い
+// 方に合わせる。
+const maxSocketPathLength = 103
 
 // ErrSocketPath は、中継のソケットを置く場所のパスが長すぎることを表す。
 var ErrSocketPath = errors.New("the vpn relay socket path is too long")
