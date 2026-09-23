@@ -11,8 +11,11 @@ import (
 const testVPNKey = "aAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAA="
 
 func vpnOverviewFixture() string {
+	// engine が返す形をそのまま使う。backend ごとの節も含む。
 	return `{"available":true,"profiles":[{"profile":{"name":"lab","backend":"wireguard",` +
-		`"target":"10.9.9.1:22"},"running":true,"relaySocket":"/home/u/.ssh/sshc/vpn/lab/relay.sock",` +
+		`"target":"10.9.9.1:22","wireguard":{"server":"vpn.example.jp:51820",` +
+		`"peerPublicKey":"bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=","address":"10.9.9.2/32"}},` +
+		`"running":true,"relaySocket":"/home/u/.ssh/sshc/vpn/lab/relay.sock",` +
 		`"connections":["lab"]}]}`
 }
 

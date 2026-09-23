@@ -41,10 +41,17 @@ type vpnSession struct {
 	Connections []string `json:"connections"`
 }
 
+// vpnStoredProfile は、engine が返すプロファイルである。
+//
+// 応答は未知の項目を許さずに読む。backend ごとの節も含めて、engine が返す形を
+// そのまま持つ。表示に使うのは名前と方式と接続先だけだが、持たない項目があると
+// 応答そのものを読めない。
 type vpnStoredProfile struct {
-	Name    string `json:"name"`
-	Backend string `json:"backend"`
-	Target  string `json:"target"`
+	Name      string               `json:"name"`
+	Backend   string               `json:"backend"`
+	Target    string               `json:"target"`
+	WireGuard *vpnRequestWireGuard `json:"wireguard,omitempty"`
+	L2TP      *vpnRequestL2TP      `json:"l2tp,omitempty"`
 }
 
 func runVPN(ctx context.Context, called vpnInvocation, environment commandEnvironment) int {
