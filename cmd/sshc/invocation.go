@@ -96,6 +96,8 @@ const (
 	vpnDown
 	vpnBind
 	vpnUnbind
+	vpnRename
+	vpnLogsAction
 )
 
 type vpnInvocation struct {
@@ -104,8 +106,10 @@ type vpnInvocation struct {
 	Name string
 	// Alias は、紐付けを変える接続である。bind と unbind だけが使う。
 	Alias string
-	JSON  bool
-	Yes   bool
+	// Rename は、新しいプロファイル名である。rename だけが使う。
+	Rename string
+	JSON   bool
+	Yes    bool
 }
 
 type otpAction uint8
@@ -320,6 +324,19 @@ func parseVPNInvocation(args []string) (invocation, error) {
 			return invalidInvocation("vpn " + args[0] + " requires one profile name and optionally --json")
 		}
 		return called, nil
+	case "rename":
+		if len(args) != 3 || args[1] == "" || args[2] == "" {
+			return invalidInvocation("vpn rename requires the current name and the new name")
+		}
+		return invocation{Kind: invocationVPN, VPN: &vpnInvocation{
+			Action: vpnRename, Name: args[1], Rename: args[2],
+		}}, nil
+	case "logs":
+		called, err := vpnNameWithJSON(args, vpnLogsAction)
+		if err != nil {
+			return invalidInvocation("vpn logs requires one profile name and optionally --json")
+		}
+		return called, nil
 	case "bind":
 		if len(args) < 3 || len(args) > 4 || args[1] == "" || args[2] == "" {
 			return invalidInvocation("vpn bind requires an alias and a profile name")
@@ -345,7 +362,7 @@ func parseVPNInvocation(args []string) (invocation, error) {
 		}
 		return invocation{Kind: invocationVPN, VPN: called}, nil
 	}
-	return invalidInvocation("vpn requires add, remove, up, down, bind, or unbind")
+	return invalidInvocation("vpn requires add, remove, rename, up, down, logs, bind, or unbind")
 }
 
 func vpnNameWithJSON(args []string, action vpnAction) (invocation, error) {
@@ -364,7 +381,7 @@ func vpnNameWithJSON(args []string, action vpnAction) (invocation, error) {
 
 func validVPNAction(name string) bool {
 	switch name {
-	case "add", "remove", "up", "down", "bind", "unbind":
+	case "add", "remove", "up", "down", "bind", "unbind", "rename", "logs":
 		return true
 	}
 	return false

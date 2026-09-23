@@ -28,6 +28,11 @@ func (s *Service) SetVPNSecrets(profile, document string) error {
 	return s.mutateVault(func(vault *Vault) error { return vault.Set(KindVPN, profile, document) })
 }
 
+// RenameVPNSecrets は、プロファイルの改名に秘密を追従させる。
+func (s *Service) RenameVPNSecrets(from, to string) error {
+	return s.mutateVault(func(vault *Vault) error { return vault.RenameCredential(KindVPN, from, to) })
+}
+
 // RemoveVPNSecrets は、プロファイルの秘密を忘れる。
 func (s *Service) RemoveVPNSecrets(profile string) error {
 	return s.mutateVault(func(vault *Vault) error { return vault.Delete(KindVPN, profile) })

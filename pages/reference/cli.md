@@ -113,13 +113,21 @@ sshc sync auto on|off [--json]
 sshc vpn [--json]
 sshc vpn add <名前>
 sshc vpn remove <名前> [-y|--yes]
+sshc vpn rename <古い名前> <新しい名前> [--json]
 sshc vpn up <名前> [--json]
 sshc vpn down <名前> [--json]
+sshc vpn logs <名前> [--json]
 sshc vpn bind <alias> <名前> [--json]
 sshc vpn unbind <alias> [--json]
 ```
 
 `sshc vpn add`は対話端末で設定を尋ねます。秘密鍵、VPNのパスワード、IPsecの事前共有鍵は入力時に表示せず、コマンド引数や環境変数からは受け取りません。保存先はVaultです。
+
+`sshc vpn`の一覧は、経路が開いていればトンネルのインターフェース名、トンネル側のアドレス、開始時刻も表示します。
+
+`sshc vpn rename`は、設定と秘密と接続の紐付けをまとめて新しい名前へ移します。動いている経路はいったん畳みます。
+
+`sshc vpn logs`は、そのプロファイルのコンテナの直近の出力を表示します。保存済みの秘密は`[REDACTED]`に置き換えます。繋がらないときは、まずここを読みます。
 
 `bind`で結び付けた接続は、Terminal、SFTP、`sshc <接続先>`のいずれからでも同じ経路を通ります。経路が無いときは、素の回線へ落とさずに拒否します。
 

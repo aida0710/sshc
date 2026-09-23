@@ -26,6 +26,11 @@ const (
 	// relaySocketName は、コンテナが差し出す中継の名前である。ホスト側では
 	// プロファイルごとのディレクトリの下に現れる。
 	relaySocketName = "relay.sock"
+	// statusFileName は、agent がトンネルの様子を書き出す先である。
+	statusFileName = "status.json"
+	// maxStatusBytes は、その様子を読む上限である。壊れたファイルで engine の
+	// memory を埋めない。
+	maxStatusBytes = 4 << 10
 
 	// readyPollInterval は、中継のソケットが現れたかを見に行く間隔である。
 	readyPollInterval = 200 * time.Millisecond
@@ -129,7 +134,11 @@ func prepareSocketDirectory(directory string) error {
 	if err := os.Chmod(directory, 0o700); err != nil {
 		return err
 	}
-	// 前回のソケットが残っていると、socatが掴めないか、古い方へ繋いでしまう。
+	// 前回のソケットと様子が残っていると、socatが掴めないか、止まった経路の
+	// 様子を今のものとして見せてしまう。
+	if err := removeIfPresent(filepath.Join(directory, statusFileName)); err != nil {
+		return err
+	}
 	return removeIfPresent(filepath.Join(directory, relaySocketName))
 }
 

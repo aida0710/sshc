@@ -206,6 +206,55 @@ func TestSecretsWithQuotesSurviveTheRequestBody(t *testing.T) {
 	}
 }
 
+// ログは engine から取り、そのまま見せる。
+func TestVPNLogsArePrintedAsTheEngineReturnedThem(t *testing.T) {
+	harness, server, stateDir := newSyncCommandHarness(t, func(response http.ResponseWriter, request *http.Request) {
+		response.Header().Set("Content-Type", "application/json")
+		_, _ = response.Write([]byte(`{"lines":"IPsecを開始します。\n[REDACTED] を使いました\n"}`))
+	})
+	defer server.Close()
+	var stdout, stderr strings.Builder
+
+	code := runVPN(context.Background(), vpnInvocation{Action: vpnLogsAction, Name: "lab"}, commandEnvironment{
+		stateDir: stateDir, client: server.Client(), stdout: &stdout, stderr: &stderr,
+	})
+
+	if code != 0 || stderr.Len() != 0 {
+		t.Fatalf("code=%d stderr=%q", code, stderr.String())
+	}
+	if strings.Join(harness.paths, ",") != "/api/v1/vpn/profiles/lab/logs" {
+		t.Fatalf("paths = %v", harness.paths)
+	}
+	if !strings.Contains(stdout.String(), "IPsecを開始します。") || !strings.Contains(stdout.String(), "[REDACTED]") {
+		t.Fatalf("output = %q", stdout.String())
+	}
+}
+
+// 改名は、新しい名前だけを engine へ渡す。
+func TestVPNRenameSendsTheNewName(t *testing.T) {
+	var sent map[string]string
+	harness, server, stateDir := newSyncCommandHarness(t, func(response http.ResponseWriter, request *http.Request) {
+		response.Header().Set("Content-Type", "application/json")
+		if request.Method == http.MethodPost {
+			_ = json.NewDecoder(request.Body).Decode(&sent)
+		}
+		_, _ = response.Write([]byte(vpnOverviewFixture()))
+	})
+	defer server.Close()
+	var stdout, stderr strings.Builder
+
+	code := runVPN(context.Background(), vpnInvocation{Action: vpnRename, Name: "old", Rename: "new"}, commandEnvironment{
+		stateDir: stateDir, client: server.Client(), stdout: &stdout, stderr: &stderr,
+	})
+
+	if code != 0 || sent["name"] != "new" {
+		t.Fatalf("code=%d sent=%v stderr=%q", code, sent, stderr.String())
+	}
+	if strings.Join(harness.paths, ",") != "/api/v1/vpn/profiles/old/rename" {
+		t.Fatalf("paths = %v", harness.paths)
+	}
+}
+
 // 受け取り方を間違えた呼び出しは、engine へ届く前に断る。
 func TestVPNInvocationsAreAcceptedOnlyInTheirDocumentedShapes(t *testing.T) {
 	for _, test := range []struct {
@@ -227,6 +276,11 @@ func TestVPNInvocationsAreAcceptedOnlyInTheirDocumentedShapes(t *testing.T) {
 		{[]string{"vpn", "bind", "host"}, false},
 		{[]string{"vpn", "unbind", "host"}, true},
 		{[]string{"vpn", "unbind"}, false},
+		{[]string{"vpn", "rename", "old", "new"}, true},
+		{[]string{"vpn", "rename", "old"}, false},
+		{[]string{"vpn", "logs", "lab"}, true},
+		{[]string{"vpn", "logs", "lab", "--json"}, true},
+		{[]string{"vpn", "logs"}, false},
 		{[]string{"vpn", "wat"}, false},
 	} {
 		called, err := parseInvocation(append([]string{"sshc"}, test.args...))

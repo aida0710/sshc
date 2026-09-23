@@ -635,6 +635,40 @@ paths:
               schema: { $ref: "#/components/schemas/VPNOverview" }
         "401": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
+  /api/v1/vpn/profiles/{name}/rename:
+    parameters:
+      - { name: name, in: path, required: true, schema: { type: string, minLength: 1, maxLength: 48 } }
+    post:
+      operationId: renameVPNProfile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VPNRenameRequest" }
+      responses:
+        "200":
+          description: The profile, its secrets and the bindings that named it moved together
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VPNOverview" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /api/v1/vpn/profiles/{name}/logs:
+    parameters:
+      - { name: name, in: path, required: true, schema: { type: string, minLength: 1, maxLength: 48 } }
+    get:
+      operationId: getVPNLogs
+      responses:
+        "200":
+          description: The container's recent output with every stored secret masked
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VPNLogs" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
   /api/v1/vpn/profiles/{name}/session:
     parameters:
       - { name: name, in: path, required: true, schema: { type: string, minLength: 1, maxLength: 48 } }
@@ -4238,6 +4272,30 @@ components:
         connections:
           type: array
           items: { type: string }
+        # コンテナの中のトンネルの様子。経路が無ければ省略する。
+        tunnel: { $ref: "#/components/schemas/VPNTunnel" }
+    VPNTunnel:
+      type: object
+      additionalProperties: false
+      properties:
+        interface: { type: string }
+        # トンネル側でこの端末が名乗っているアドレス。L2TPでは相手から受け取る。
+        address: { type: string }
+        since: { type: string }
+        backend: { type: string }
+    VPNRenameRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 48 }
+    VPNLogs:
+      type: object
+      additionalProperties: false
+      required: [lines]
+      properties:
+        # 直近の出力。保存済みの秘密とその16進表記は伏せてある。
+        lines: { type: string, maxLength: 65536 }
     VPNProfileRequest:
       type: object
       additionalProperties: false

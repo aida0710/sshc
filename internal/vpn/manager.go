@@ -2,9 +2,11 @@ package vpn
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -110,6 +112,23 @@ type Status struct {
 	RelaySocket string
 	// Target は、このセッションが繋ぐ先である。
 	Target string
+	// Tunnel は、コンテナの中のトンネルの様子である。経路が無ければゼロ値。
+	Tunnel TunnelStatus
+}
+
+// TunnelStatus は、コンテナの agent が書き出したトンネルの様子である。
+//
+// 秘密は含まない。含めてよいのは、画面へ出して困らないものだけである。
+type TunnelStatus struct {
+	// Interface は、トンネルの network interface の名前である。
+	Interface string `json:"interface"`
+	// Address は、トンネル側でこの端末が名乗っているアドレスである。L2TP では
+	// 相手から受け取った値になる。
+	Address string `json:"address"`
+	// Since は、経路が用意できた時刻である。
+	Since string `json:"since"`
+	// Backend は、そのとき使った方式である。
+	Backend string `json:"backend"`
 }
 
 // New は、VPNセッションの管理を作る。
@@ -259,6 +278,9 @@ func (manager *Manager) Stop(ctx context.Context, profileName string) error {
 		return err
 	}
 	state.running = false
+	if err := removeIfPresent(filepath.Join(manager.socketDirectory(profileName), statusFileName)); err != nil {
+		return err
+	}
 	return removeIfPresent(manager.socketPath(profileName))
 }
 
@@ -291,7 +313,41 @@ func (manager *Manager) Status(ctx context.Context, profileName string) (Status,
 	if output, err := manager.docker.output(ctx, "container", "inspect", "--format", format, name); err == nil {
 		status.Target = strings.TrimSpace(output)
 	}
+	if status.RelaySocket != "" {
+		status.Tunnel = manager.tunnelStatus(profileName)
+	}
 	return status, nil
+}
+
+// tunnelStatus は、agent が書き出した様子を読む。読めなければゼロ値を返す。
+// 状態が読めないことは失敗ではない。経路があることは中継のソケットが示している。
+func (manager *Manager) tunnelStatus(profileName string) TunnelStatus {
+	contents, err := os.ReadFile(filepath.Join(manager.socketDirectory(profileName), statusFileName))
+	if err != nil || len(contents) > maxStatusBytes {
+		return TunnelStatus{}
+	}
+	var tunnel TunnelStatus
+	if err := json.Unmarshal(contents, &tunnel); err != nil {
+		return TunnelStatus{}
+	}
+	return tunnel
+}
+
+// Logs は、そのコンテナの直近のログを、秘密を伏せて返す。
+//
+// 繋がらないときに利用者が最初に見る場所である。docker を直接叩かせない。
+func (manager *Manager) Logs(ctx context.Context, profileName string, secrets Secrets) (string, error) {
+	if err := validateProfileName(profileName); err != nil {
+		return "", err
+	}
+	if _, err := manager.command(ctx); err != nil {
+		return "", err
+	}
+	name := containerName(profileName, manager.owner)
+	if _, err := manager.requireOurContainer(ctx, name, profileName); err != nil {
+		return "", err
+	}
+	return manager.containerLogs(ctx, name, secrets), nil
 }
 
 // DiscardOrphans は、前回のengineが残したコンテナを止める。

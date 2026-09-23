@@ -127,6 +127,40 @@ func (s *Service) RemoveVPNProfile(name string) (SaveResult, error) {
 	return s.commitMetadata(stored, precondition, "vpn.profile.remove")
 }
 
+// RenameVPNProfile は、プロファイルの名前を変え、それを指している接続の紐付けも
+// 同じ書き込みで追従させる。
+//
+// 別々に直すと、古い名前を指したままの接続が残る。その接続は繋ぐたびに断られ、
+// 利用者は設定のどこを直せばよいかを探すことになる。
+func (s *Service) RenameVPNProfile(from, to string) (SaveResult, error) {
+	if err := vpn.ValidateName(to); err != nil {
+		return SaveResult{}, fmt.Errorf("%w: %w", ErrMetadataVPN, err)
+	}
+	stored, precondition, err := s.metadata.Load()
+	if err != nil {
+		return SaveResult{}, err
+	}
+	found := false
+	for index, existing := range stored.VPNProfiles {
+		if existing.Name == to && from != to {
+			return SaveResult{}, fmt.Errorf("%w: %s はすでにあります", ErrMetadataVPN, to)
+		}
+		if existing.Name == from {
+			stored.VPNProfiles[index].Name = to
+			found = true
+		}
+	}
+	if !found {
+		return SaveResult{}, fmt.Errorf("%w: %s", ErrUnknownVPNProfile, from)
+	}
+	for index, host := range stored.Hosts {
+		if host.VPN == from {
+			stored.Hosts[index].VPN = to
+		}
+	}
+	return s.commitMetadata(stored, precondition, "vpn.profile.rename")
+}
+
 // SetConnectionVPN は、接続が通るプロファイルを決める。空なら紐付けを外す。
 func (s *Service) SetConnectionVPN(alias, profile string) (SaveResult, error) {
 	stored, precondition, err := s.metadata.Load()

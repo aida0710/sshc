@@ -37,8 +37,20 @@ type vpnSession struct {
 	Profile vpnStoredProfile `json:"profile"`
 	Running bool             `json:"running"`
 	// RelaySocket は、中継のソケットの場所である。開いていなければ空になる。
-	RelaySocket string   `json:"relaySocket"`
-	Connections []string `json:"connections"`
+	RelaySocket string     `json:"relaySocket"`
+	Connections []string   `json:"connections"`
+	Tunnel      *vpnTunnel `json:"tunnel,omitempty"`
+}
+
+type vpnTunnel struct {
+	Interface string `json:"interface,omitempty"`
+	Address   string `json:"address,omitempty"`
+	Since     string `json:"since,omitempty"`
+	Backend   string `json:"backend,omitempty"`
+}
+
+type vpnLogs struct {
+	Lines string `json:"lines"`
 }
 
 // vpnStoredProfile は、engine が返すプロファイルである。
@@ -109,6 +121,29 @@ func runVPN(ctx context.Context, called vpnInvocation, environment commandEnviro
 		if err := engine.sendJSON(ctx, http.MethodDelete, vpnProfilePath(called.Name)+"/session", nil, &overview); err != nil {
 			return finishSyncFailure(called.JSON, err, stdout, stderr)
 		}
+	case vpnRename:
+		body := map[string]string{"name": called.Rename}
+		if err := engine.sendJSON(ctx, http.MethodPost,
+			vpnProfilePath(called.Name)+"/rename", body, &overview); err != nil {
+			return finishSyncFailure(called.JSON, err, stdout, stderr)
+		}
+	case vpnLogsAction:
+		var logs vpnLogs
+		if err := engine.getJSON(ctx, vpnProfilePath(called.Name)+"/logs", &logs); err != nil {
+			return finishSyncFailure(called.JSON, err, stdout, stderr)
+		}
+		if called.JSON {
+			if err := writeCommandEnvelope(stdout, commandEnvelope{
+				SchemaVersion: 1, Success: true, Result: logs,
+			}); err != nil {
+				return 1
+			}
+			return 0
+		}
+		for _, line := range strings.Split(strings.TrimRight(logs.Lines, "\n"), "\n") {
+			fmt.Fprintln(stdout, safeTerminalCell(line))
+		}
+		return 0
 	case vpnBind, vpnUnbind:
 		body := map[string]string{"alias": called.Alias, "profile": called.Name}
 		if err := engine.sendJSON(ctx, http.MethodPut, "/api/v1/vpn/bindings", body, &overview); err != nil {
@@ -344,6 +379,10 @@ func writeVPNOverview(out io.Writer, overview vpnOverview) {
 				session.Profile.Backend, session.Profile.Target, state)},
 			[2]string{"", "connections: " + connections},
 		)
+		if session.Tunnel != nil && session.Tunnel.Interface != "" {
+			rows = append(rows, [2]string{"", fmt.Sprintf("tunnel: %s %s since %s",
+				session.Tunnel.Interface, session.Tunnel.Address, session.Tunnel.Since)})
+		}
 	}
 	writeSyncRows(out, rows)
 }

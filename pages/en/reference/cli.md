@@ -113,13 +113,21 @@ Route chosen connections through a VPN of their own. Needs Docker on this machin
 sshc vpn [--json]
 sshc vpn add <name>
 sshc vpn remove <name> [-y|--yes]
+sshc vpn rename <old name> <new name> [--json]
 sshc vpn up <name> [--json]
 sshc vpn down <name> [--json]
+sshc vpn logs <name> [--json]
 sshc vpn bind <alias> <name> [--json]
 sshc vpn unbind <alias> [--json]
 ```
 
 `sshc vpn add` asks for the settings in an interactive terminal. The private key, the VPN password and the IPsec pre-shared key are read without echo and are never taken from command arguments or environment variables. They are stored in the vault.
+
+`sshc vpn` also prints the tunnel's interface, its address inside the VPN and when the route opened, for every route that is up.
+
+`sshc vpn rename` moves the settings, the stored secrets and the connection bindings to the new name together. A running route is taken down first.
+
+`sshc vpn logs` prints the recent output of that profile's container, with the stored secrets replaced by `[REDACTED]`. It is the first place to look when a route will not come up.
 
 A bound connection takes the same route from the terminal, from SFTP and from `sshc <alias>`. When the route is not available the connection is refused rather than quietly sent over the ordinary uplink.
 

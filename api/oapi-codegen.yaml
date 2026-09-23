@@ -105,6 +105,9 @@ output-options:
     - L2TPProfile
     - VPNOverview
     - VPNSession
+    - VPNTunnel
+    - VPNLogs
+    - VPNRenameRequest
     - VPNProfileRequest
     - VPNSecrets
     - VPNBindingRequest

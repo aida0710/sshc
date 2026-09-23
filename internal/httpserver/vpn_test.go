@@ -175,3 +175,59 @@ func TestBindingToAnUnknownProfileIsRefused(t *testing.T) {
 		t.Fatalf("bind = %d: %s", refused.Code, refused.Body.String())
 	}
 }
+
+// 改名すると、設定・秘密・接続の紐付けが揃って新しい名前へ移る。
+func TestRenamingAProfileCarriesItsSecretsAndBindings(t *testing.T) {
+	engine, secrets, config := vpnEngine(t)
+	send(t, engine, http.MethodPut, "/api/v1/vpn/profiles/lab", labProfileBody(true), nil)
+	send(t, engine, http.MethodPut, "/api/v1/vpn/bindings", `{"alias":"lab","profile":"lab"}`, nil)
+
+	renamed := send(t, engine, http.MethodPost, "/api/v1/vpn/profiles/lab/rename", `{"name":"tains"}`, nil)
+
+	if renamed.Code != http.StatusOK {
+		t.Fatalf("rename = %d: %s", renamed.Code, renamed.Body.String())
+	}
+	overview := decodeOverview(t, renamed.Body.Bytes())
+	if len(overview.Profiles) != 1 || overview.Profiles[0].Profile.Name != "tains" {
+		t.Fatalf("profiles = %+v", overview.Profiles)
+	}
+	if connections := overview.Profiles[0].Connections; len(connections) != 1 || connections[0] != "lab" {
+		t.Fatalf("connections = %v", connections)
+	}
+	name, err := config.ConnectionVPN("lab")
+	if err != nil || name != "tains" {
+		t.Fatalf("古い名前を指したままの接続が残った: %q, %v", name, err)
+	}
+	stored, err := secrets.VPNSecrets("tains")
+	if err != nil || !strings.Contains(stored, testVPNPrivateKey) {
+		t.Fatalf("VPNSecrets(tains) = %q, %v", stored, err)
+	}
+	if _, err := secrets.VPNSecrets("lab"); err == nil {
+		t.Fatal("古い名前の秘密が残った")
+	}
+}
+
+// すでにある名前へは改名しない。
+func TestRenamingOntoAnExistingProfileIsRefused(t *testing.T) {
+	engine, _, _ := vpnEngine(t)
+	send(t, engine, http.MethodPut, "/api/v1/vpn/profiles/lab", labProfileBody(true), nil)
+	send(t, engine, http.MethodPut, "/api/v1/vpn/profiles/office",
+		strings.ReplaceAll(labProfileBody(true), `"lab"`, `"office"`), nil)
+
+	refused := send(t, engine, http.MethodPost, "/api/v1/vpn/profiles/lab/rename", `{"name":"office"}`, nil)
+
+	if refused.Code != http.StatusBadRequest || !strings.Contains(refused.Body.String(), "vpn_profile_invalid") {
+		t.Fatalf("rename = %d: %s", refused.Code, refused.Body.String())
+	}
+}
+
+// 無いプロファイルのログは無い。
+func TestLogsForAnUnknownProfileAreRefused(t *testing.T) {
+	engine, _, _ := vpnEngine(t)
+
+	refused := send(t, engine, http.MethodGet, "/api/v1/vpn/profiles/absent/logs", "", nil)
+
+	if refused.Code != http.StatusNotFound || !strings.Contains(refused.Body.String(), "vpn_profile_unknown") {
+		t.Fatalf("logs = %d: %s", refused.Code, refused.Body.String())
+	}
+}

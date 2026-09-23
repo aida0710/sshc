@@ -34,6 +34,19 @@ type vpnSessionResponse struct {
 	// RelaySocket は、中継のソケットの場所である。開いていなければ空になる。
 	RelaySocket string   `json:"relaySocket"`
 	Connections []string `json:"connections"`
+	// Tunnel は、コンテナの中のトンネルの様子である。経路が無ければ省略する。
+	Tunnel *vpnTunnelResponse `json:"tunnel,omitempty"`
+}
+
+type vpnTunnelResponse struct {
+	Interface string `json:"interface,omitempty"`
+	Address   string `json:"address,omitempty"`
+	Since     string `json:"since,omitempty"`
+	Backend   string `json:"backend,omitempty"`
+}
+
+type vpnLogsResponse struct {
+	Lines string `json:"lines"`
 }
 
 type vpnProfileRequest struct {
@@ -47,6 +60,10 @@ type vpnSecretsRequest struct {
 	IPsecPSK            string `json:"ipsecPsk,omitempty"`
 }
 
+type vpnRenameRequest struct {
+	Name string `json:"name"`
+}
+
 type vpnBindingRequest struct {
 	Alias   string `json:"alias"`
 	Profile string `json:"profile"`
@@ -56,6 +73,8 @@ func registerVPNRoutes(engine *echo.Echo, handlers VPNHandlers) {
 	engine.GET("/api/v1/vpn", handlers.Overview)
 	engine.PUT("/api/v1/vpn/profiles/:name", handlers.SaveProfile)
 	engine.DELETE("/api/v1/vpn/profiles/:name", handlers.DeleteProfile)
+	engine.POST("/api/v1/vpn/profiles/:name/rename", handlers.RenameProfile)
+	engine.GET("/api/v1/vpn/profiles/:name/logs", handlers.Logs)
 	engine.POST("/api/v1/vpn/profiles/:name/session", handlers.StartSession)
 	engine.DELETE("/api/v1/vpn/profiles/:name/session", handlers.StopSession)
 	engine.PUT("/api/v1/vpn/bindings", handlers.SetBinding)
@@ -115,6 +134,52 @@ func (h VPNHandlers) DeleteProfile(c *echo.Context) error {
 		return vpnProblem(c, err)
 	}
 	return h.respond(c)
+}
+
+// RenameProfile は、プロファイルの名前を変える。
+//
+// 設定・秘密・接続の紐付けは、名前でつながっている。どれか一つだけを直すと、
+// 残りが古い名前を指したままになる。動いている経路はコンテナの名前も変わるので、
+// 先に畳む。
+func (h VPNHandlers) RenameProfile(c *echo.Context) error {
+	var request vpnRenameRequest
+	if err := decodeJSON(c, &request); err != nil {
+		return problem(c, http.StatusBadRequest, "invalid_request")
+	}
+	from := c.Param("name")
+	if err := h.Sessions.Stop(c.Request().Context(), from); err != nil &&
+		!errors.Is(err, vpn.ErrDockerMissing) && !errors.Is(err, vpn.ErrSessionForeign) {
+		return vpnProblem(c, err)
+	}
+	if _, err := h.Config.RenameVPNProfile(from, request.Name); err != nil {
+		return vpnProblem(c, err)
+	}
+	if err := h.Secrets.RenameVPNSecrets(from, request.Name); err != nil &&
+		!errors.Is(err, secret.ErrLocked) && !errors.Is(err, secret.ErrUnknownCredential) {
+		return vpnProblem(c, err)
+	}
+	return h.respond(c)
+}
+
+// Logs は、そのコンテナの直近の出力を、秘密を伏せて返す。
+//
+// 繋がらないときに最初に見る場所である。利用者に docker を直接叩かせない。
+func (h VPNHandlers) Logs(c *echo.Context) error {
+	name := c.Param("name")
+	if _, err := h.Config.VPNProfile(name); err != nil {
+		return vpnProblem(c, err)
+	}
+	// 秘密は伏せるためだけに読む。読めなくてもログは返す。伏せる相手が
+	// 分からないときは、伏せられる範囲で伏せる。
+	var secrets vpn.Secrets
+	if stored, err := h.Secrets.VPNSecrets(name); err == nil {
+		secrets, _ = vpn.DecodeSecrets(stored)
+	}
+	lines, err := h.Sessions.Logs(c.Request().Context(), name, secrets)
+	if err != nil {
+		return vpnProblem(c, err)
+	}
+	return c.JSON(http.StatusOK, vpnLogsResponse{Lines: lines})
 }
 
 // StartSession は、プロファイルの経路を用意する。
@@ -191,6 +256,12 @@ func (h VPNHandlers) respond(c *echo.Context) error {
 			status, err := h.Sessions.Status(c.Request().Context(), profile.Name)
 			if err == nil {
 				session.Running, session.RelaySocket = status.Running, status.RelaySocket
+				if status.Tunnel != (vpn.TunnelStatus{}) {
+					session.Tunnel = &vpnTunnelResponse{
+						Interface: status.Tunnel.Interface, Address: status.Tunnel.Address,
+						Since: status.Tunnel.Since, Backend: status.Tunnel.Backend,
+					}
+				}
 			}
 		}
 		response.Profiles = append(response.Profiles, session)

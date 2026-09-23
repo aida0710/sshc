@@ -134,6 +134,16 @@ ip route replace "$target_host/32" dev "$interface"
 iptables -A OUTPUT -d "$target_host" ! -o "$interface" -j REJECT
 
 mkdir -p "$socket_directory"
+
+# トンネルの実際の様子を書き出す。engine はホスト側からこのファイルを読む。
+# docker exec を呼ばずに状態を見せられるので、画面の更新が docker の応答に
+# 引きずられない。秘密は書かない。
+tunnel_address=$(ip -4 -o address show dev "$interface" 2>/dev/null | awk '{print $4}' | head -1)
+printf '{"backend":"%s","interface":"%s","address":"%s","since":"%s"}\n' \
+	"$backend" "$interface" "$tunnel_address" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+	>"$socket_directory/status.json"
+chmod 644 "$socket_directory/status.json"
+
 echo "接続先 $target_host:$target_port への中継を開きます。"
 # ソケットが現れることが、トンネル・経路・フィルタまで用意できた合図である。
 # engineはホスト側からこのソケットを待ち、現れたらそこへ繋ぐ。

@@ -1,6 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { ApiError } from "../api/client";
 import type { VPNApi, VPNOverview } from "../api/vpn";
 import { VPNPanel } from "./VPNPanel";
 
@@ -13,6 +14,12 @@ function overview(overrides: Partial<VPNOverview> = {}): VPNOverview {
         running: true,
         relaySocket: "/home/tester/.ssh/sshc/vpn/tohoku/relay.sock",
         connections: ["lab"],
+        tunnel: {
+          backend: "l2tp_ipsec",
+          interface: "ppp0",
+          address: "10.20.30.40",
+          since: "2026-09-23T01:02:03Z",
+        },
       },
     ],
     ...overrides,
@@ -24,6 +31,8 @@ function buildApi(overrides: Partial<VPNApi> = {}): VPNApi {
     vpnOverview: vi.fn().mockResolvedValue(overview()),
     saveVPNProfile: vi.fn().mockResolvedValue(overview()),
     removeVPNProfile: vi.fn().mockResolvedValue(overview({ profiles: [] })),
+    renameVPNProfile: vi.fn().mockResolvedValue(overview()),
+    vpnLogs: vi.fn().mockResolvedValue({ lines: "starting IPsec\n" }),
     startVPNSession: vi.fn().mockResolvedValue(overview()),
     stopVPNSession: vi.fn().mockResolvedValue(overview()),
     setConnectionVPN: vi.fn().mockResolvedValue(overview()),
@@ -92,6 +101,52 @@ describe("VPNPanel", () => {
     await user.click(within(route).getByRole("button", { name: "Route through this VPN" }));
 
     expect(setConnectionVPN).toHaveBeenCalledWith("edge", "tohoku");
+  });
+
+  it("shows what the tunnel inside the container is carrying", async () => {
+    render(<VPNPanel api={buildApi()} />);
+
+    const route = await screen.findByRole("article", { name: "tohoku" });
+    expect(within(route).getByText("ppp0")).toBeVisible();
+    expect(within(route).getByText("10.20.30.40")).toBeVisible();
+  });
+
+  it("shows the container's output without sending anyone to docker", async () => {
+    const user = userEvent.setup();
+    const vpnLogs = vi.fn().mockResolvedValue({ lines: "starting IPsec\n" });
+    render(<VPNPanel api={buildApi({ vpnLogs })} />);
+    const route = await screen.findByRole("article", { name: "tohoku" });
+
+    await user.click(within(route).getByRole("button", { name: "Logs" }));
+
+    expect(vpnLogs).toHaveBeenCalledWith("tohoku");
+    expect(await screen.findByText(/starting IPsec/)).toBeVisible();
+  });
+
+  it("explains why the logs could not be read instead of showing nothing", async () => {
+    const user = userEvent.setup();
+    const vpnLogs = vi.fn().mockRejectedValue(new ApiError("vpn_docker_missing", 409, null));
+    render(<VPNPanel api={buildApi({ vpnLogs })} />);
+    const route = await screen.findByRole("article", { name: "tohoku" });
+
+    await user.click(within(route).getByRole("button", { name: "Logs" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/Docker/);
+  });
+
+  it("renames a route to the name that was typed", async () => {
+    const user = userEvent.setup();
+    const renameVPNProfile = vi.fn().mockResolvedValue(overview());
+    render(<VPNPanel api={buildApi({ renameVPNProfile })} />);
+    const route = await screen.findByRole("article", { name: "tohoku" });
+
+    await user.click(within(route).getByRole("button", { name: "Rename" }));
+    const dialog = screen.getByRole("dialog");
+    await user.clear(within(dialog).getByLabelText("New name"));
+    await user.type(within(dialog).getByLabelText("New name"), "tains");
+    await user.click(within(dialog).getByRole("button", { name: "Rename" }));
+
+    expect(renameVPNProfile).toHaveBeenCalledWith("tohoku", "tains");
   });
 
   it("stops routing a connection when its binding is removed", async () => {

@@ -504,6 +504,42 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/vpn/profiles/{name}/rename": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["renameVPNProfile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/vpn/profiles/{name}/logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        get: operations["getVPNLogs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/vpn/profiles/{name}/session": {
         parameters: {
             query?: never;
@@ -3227,6 +3263,19 @@ export interface components {
             running: boolean;
             relaySocket: string;
             connections: string[];
+            tunnel?: components["schemas"]["VPNTunnel"];
+        };
+        VPNTunnel: {
+            interface?: string;
+            address?: string;
+            since?: string;
+            backend?: string;
+        };
+        VPNRenameRequest: {
+            name: string;
+        };
+        VPNLogs: {
+            lines: string;
         };
         VPNProfileRequest: {
             profile: components["schemas"]["VPNProfile"];
@@ -4824,6 +4873,61 @@ export interface operations {
             };
             401: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
+        };
+    };
+    renameVPNProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VPNRenameRequest"];
+            };
+        };
+        responses: {
+            /** @description The profile, its secrets and the bindings that named it moved together */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VPNOverview"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+        };
+    };
+    getVPNLogs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The container's recent output with every stored secret masked */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VPNLogs"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
         };
     };
     startVPNSession: {
