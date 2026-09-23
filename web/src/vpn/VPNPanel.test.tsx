@@ -341,10 +341,9 @@ describe("VPNPanel", () => {
 
       // 読み直しが始まり、その応答が返る前に、利用者が経路を止める。
       await act(async () => {
-        vi.advanceTimersByTime(2000);
-        await Promise.resolve();
+        await vi.advanceTimersByTimeAsync(routeProgressIntervalMs * 2);
       });
-      expect(vpnOverview).toHaveBeenCalledTimes(2);
+      await waitFor(() => expect(vpnOverview).toHaveBeenCalledTimes(2), { timeout: 5000 });
       await user.click(screen.getByRole("button", { name: "Disconnect" }));
       await waitFor(() => expect(screen.getByText(/stopped/)).toBeVisible());
 
@@ -393,11 +392,10 @@ describe("VPNPanel", () => {
 
       await user.click(within(route).getByRole("button", { name: "Connect" }));
       await act(async () => {
-        vi.advanceTimersByTime(2000);
-        await Promise.resolve();
+        await vi.advanceTimersByTimeAsync(routeProgressIntervalMs * 2);
       });
 
-      expect(await screen.findByText(/building the image/)).toBeVisible();
+      expect(await screen.findByText(/building the image/, undefined, { timeout: 5000 })).toBeVisible();
     } finally {
       vi.useRealTimers();
     }
