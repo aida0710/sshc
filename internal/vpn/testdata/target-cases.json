@@ -1,0 +1,23 @@
+{
+  "about": [
+    "VPN プロファイルの接続先（target）と、接続の相手（address、HostName:Port）が同じものかを決める規則を、組と期待する答えで並べた表である。",
+    "Go の照合（保存形式から読む application.VPNProfile.Reaches と、その中の vpn.Endpoint.Reaches）と、画面の照合（web/src/vpn/vpnEndpoint.ts）の両方が、この表に対してテストされる。",
+    "名前は大文字と小文字を区別せず、末尾の点をひとつ無視して比べる。ポートは target を数として読み、address の書き方のまま比べる。"
+  ],
+  "cases": [
+    { "name": "同じアドレスとポート", "target": "10.9.9.1:22", "address": "10.9.9.1:22", "reaches": true },
+    { "name": "ポートが違う", "target": "10.9.9.1:22", "address": "10.9.9.1:2222", "reaches": false },
+    { "name": "アドレスが違う", "target": "10.9.9.1:22", "address": "10.9.9.2:22", "reaches": false },
+    { "name": "名前の大文字と小文字は区別しない", "target": "lab.example.jp:22", "address": "LAB.Example.JP:22", "reaches": true },
+    { "name": "target の末尾の点は無視する", "target": "lab.example.jp.:22", "address": "lab.example.jp:22", "reaches": true },
+    { "name": "address の末尾の点は無視する", "target": "lab.example.jp:22", "address": "lab.example.jp.:22", "reaches": true },
+    { "name": "末尾の点は二つまでは無視しない", "target": "lab.example.jp:22", "address": "lab.example.jp..:22", "reaches": false },
+    { "name": "address にポートが無い", "target": "lab.example.jp:22", "address": "lab.example.jp", "reaches": false },
+    { "name": "address のポートは書き方のまま比べる", "target": "lab.example.jp:22", "address": "lab.example.jp:022", "reaches": false },
+    { "name": "target のポートは数として読む", "target": "lab.example.jp:022", "address": "lab.example.jp:22", "reaches": true },
+    { "name": "角括弧で囲んだ IPv4 も同じ相手", "target": "10.9.9.1:22", "address": "[10.9.9.1]:22", "reaches": true },
+    { "name": "IPv6 も大文字と小文字を区別しない", "target": "[fd00::1]:22", "address": "[FD00::1]:22", "reaches": true },
+    { "name": "名前とアドレスは同じ相手とみなさない", "target": "lab.example.jp:22", "address": "10.9.9.1:22", "reaches": false },
+    { "name": "読めない target はどこへも届かない", "target": "lab.example.jp", "address": "lab.example.jp:22", "reaches": false }
+  ]
+}

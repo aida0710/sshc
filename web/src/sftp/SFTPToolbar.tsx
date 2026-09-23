@@ -6,7 +6,7 @@ import { Icon } from "../ui/icons";
 import { Button } from "../ui/surface";
 import { SFTPHostPicker } from "./SFTPHostPicker";
 import { SFTPNavigationControls } from "./SFTPNavigationControls";
-import { VPNRouteChip } from "../vpn/VPNRouteChip";
+import { VPNProfileChip } from "../vpn/VPNProfileChip";
 import type { SFTPBrowserModel } from "./useSFTPBrowser";
 
 // The row above the file list: which host, where in it, and how to move.
@@ -93,7 +93,7 @@ export function SFTPToolbar({
     return (
       <div className="flex min-h-11 shrink-0 items-center gap-1 border-b border-line/50 pb-1">
         <SFTPHostPicker aliases={aliases} {...(hosts === undefined ? {} : { hosts })} value={alias} disabled={locked} onChange={onHostChange} compact includeLocal />
-        <VPNRouteChip name={vpnProfile} />
+        <VPNProfileChip name={vpnProfile} />
         <button type="button" aria-label={t("sftp.back")} disabled={busy || locked || !browser.canBack} onClick={() => void browser.back()} className="flex size-11 shrink-0 items-center justify-center rounded text-ink-muted active:bg-select-fill disabled:text-ink-faint">←</button>
         {pathEditing ? (
           <form className="flex min-w-0 flex-1 items-center gap-1" onSubmit={(event) => { event.preventDefault(); submitPath(); }}>
@@ -116,7 +116,7 @@ export function SFTPToolbar({
   return (
     <div className="flex flex-wrap items-center gap-1.5 border-b border-line/50 pb-1.5 md:pb-1">
       <SFTPHostPicker aliases={aliases} {...(hosts === undefined ? {} : { hosts })} value={alias} disabled={locked} onChange={onHostChange} includeLocal />
-      <VPNRouteChip name={vpnProfile} />
+      <VPNProfileChip name={vpnProfile} />
       {leading}
       <SFTPNavigationControls busy={busy || locked} canBack={browser.canBack} canForward={browser.canForward}
         canHome={connected} canRoot={connected && !browser.atRoot}

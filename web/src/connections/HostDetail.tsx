@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { FieldEdit, HostDetail, HostMetadata, SavePreview, UpdateConnectionRequest } from "../api/config";
+import type { VPNProfile } from "../api/vpn";
 import type { Problem } from "../api/client";
 import { diagnosticsApi, type DiagnosticsApi } from "../api/diagnostics";
 import { connectionSecretsApi, type ConnectionSecretsApi } from "./secretsApi";
@@ -43,8 +44,8 @@ type HostDetailPanelProps = {
   onRequestRefresh?: (() => Promise<void>) | undefined;
   disabled?: boolean | undefined;
   savedRevision?: number | undefined;
-  // vpnProfiles は、この接続を通せるVPN経路の名前である。
-  vpnProfiles?: string[] | undefined;
+  // vpnProfiles は、この接続を通せるVPNプロファイルである。
+  vpnProfiles?: VPNProfile[] | undefined;
 };
 
 const areas: { area: ConnectionPanel; label: "conn.areaBasic" | "conn.areaAnalysis" | "conn.areaAdvanced" | "conn.areaSshc" }[] = [

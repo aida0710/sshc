@@ -1,15 +1,16 @@
-import type { VPNSession } from "../api/vpn";
+import type { VPNProfileStatus } from "../api/vpn";
 import { useLanguage, useTranslate } from "../i18n/context";
 import { hintText } from "../ui/form";
 import { formatDateTime } from "../ui/format";
 import { Button, Card } from "../ui/surface";
+import { vpnBackendLabel } from "./vpnBackends";
 import { VPNBindingRow } from "./VPNBindingRow";
 import { vpnPhases } from "./vpnPhases";
 
-// 経路ひとつぶんの札。いまの状態と、コンテナの中のトンネルの様子と、
+// VPNプロファイルひとつぶんの札。いまの状態と、コンテナの中のトンネルの様子と、
 // この経路を通る接続を見せ、開始・停止・改名・削除・ログを受け付ける。
 
-export type VPNSessionActions = {
+export type VPNProfileActions = {
   onStart: () => void;
   onStop: () => void;
   onRename: () => void;
@@ -19,44 +20,44 @@ export type VPNSessionActions = {
   onUnbind: (alias: string) => void;
 };
 
-export function VPNSessionCard({
-  session,
+export function VPNProfileCard({
+  status,
   aliases,
   busy,
   available,
   actions,
 }: {
-  session: VPNSession;
+  status: VPNProfileStatus;
   aliases: string[];
   busy: boolean;
   // available は、この機械が経路を作れるかどうかである。
   available: boolean;
-  actions: VPNSessionActions;
+  actions: VPNProfileActions;
 }) {
   const t = useTranslate();
-  const phase = vpnPhases[session.phase ?? ""];
+  const phase = vpnPhases[status.phase ?? ""];
   const state =
-    session.relaySocket !== ""
+    status.relaySocket !== ""
       ? t("vpn.stateUp")
       : phase !== undefined
         ? t(phase)
-        : session.running
+        : status.running
           ? t("vpn.stateStarting")
           : t("vpn.stateStopped");
   return (
-    <Card as="article" padded aria-label={session.profile.name}>
+    <Card as="article" padded aria-label={status.profile.name}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
-          <p className="font-medium text-ink">{session.profile.name}</p>
+          <p className="font-medium text-ink">{status.profile.name}</p>
           <p className={hintText}>
-            {session.profile.backend} · {session.profile.target} · {state}
+            {vpnBackendLabel(status.profile.backend)} · {status.profile.target} · {state}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button disabled={busy || !available} onClick={actions.onStart}>
             {t("vpn.connect")}
           </Button>
-          <Button disabled={busy || !session.running} onClick={actions.onStop}>
+          <Button disabled={busy || !status.running} onClick={actions.onStop}>
             {t("vpn.disconnect")}
           </Button>
           <Button disabled={busy || !available} onClick={actions.onShowLogs}>
@@ -71,11 +72,11 @@ export function VPNSessionCard({
         </div>
       </div>
 
-      {session.tunnel === undefined ? null : <TunnelDetail tunnel={session.tunnel} />}
+      {status.tunnel === undefined ? null : <TunnelDetail tunnel={status.tunnel} />}
 
       <VPNBindingRow
-        profile={session.profile.name}
-        connections={session.connections}
+        profile={status.profile.name}
+        connections={status.connections}
         aliases={aliases}
         busy={busy}
         onBind={actions.onBind}
@@ -87,7 +88,7 @@ export function VPNSessionCard({
 
 // TunnelDetail は、コンテナの中のトンネルが名乗っているものを見せる。繋がらない
 // ときに、経路がどこまでできているかを利用者が自分で読める場所である。
-function TunnelDetail({ tunnel }: { tunnel: NonNullable<VPNSession["tunnel"]> }) {
+function TunnelDetail({ tunnel }: { tunnel: NonNullable<VPNProfileStatus["tunnel"]> }) {
   const t = useTranslate();
   const { locale } = useLanguage();
   const rows: { label: string; value: string }[] = [

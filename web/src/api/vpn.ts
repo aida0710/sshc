@@ -1,10 +1,11 @@
 import { apiClient } from "./client";
-import { jsonHeaders, postJSON, putJSON } from "./guards";
+import { postJSON, putJSON } from "./guards";
 import type { components } from "./schema";
 import { validateOpenAPISchema } from "./validators.generated";
+import { vpnRefusals } from "../vpn/vpnRefusals";
 
 export type VPNOverview = components["schemas"]["VPNOverview"];
-export type VPNSession = components["schemas"]["VPNSession"];
+export type VPNProfileStatus = components["schemas"]["VPNProfileStatus"];
 export type VPNProfile = components["schemas"]["VPNProfile"];
 export type VPNSecrets = components["schemas"]["VPNSecrets"];
 export type VPNLogs = components["schemas"]["VPNLogs"];
@@ -39,20 +40,9 @@ function profilePath(name: string): string {
 }
 
 // 経路の失敗は、この画面が自分で説明する。Dockerが無いことも、トンネルが
-// 成立しないことも、利用者が次に何をするかを決める情報である。
-const locallyExplainedVPNFailures = [
-  "vpn_docker_missing",
-  "vpn_tunnel_device_missing",
-  "vpn_image_build_failed",
-  "vpn_session_failed",
-  "vpn_container_foreign",
-  "vpn_secrets_missing",
-  "vpn_profile_invalid",
-  "vpn_profile_unknown",
-  "vpn_profile_exists",
-  "vpn_target_mismatch",
-  "connection_unknown",
-] as const;
+// 成立しないことも、利用者が次に何をするかを決める情報である。説明できるコードは
+// 画面の言い方の表（vpnRefusals）と同じものなので、そこから作る。
+const locallyExplainedVPNFailures = Object.keys(vpnRefusals);
 
 export const vpnApi: VPNApi = {
   async vpnOverview() {
@@ -90,11 +80,11 @@ export const vpnApi: VPNApi = {
   },
   async startVPNSession(name) {
     return validateOverview(
-      await apiClient.mutate<unknown>(`${profilePath(name)}/session`, {
-        method: "POST",
-        headers: jsonHeaders,
-        body: "{}",
-      }, { locallyHandledCodes: locallyExplainedVPNFailures }),
+      // 本文は送らない。openapi はこの操作に本文を定めておらず、JSON を付けると
+      // 送る前の検査（validateAPIRequest）が断る。
+      await apiClient.mutate<unknown>(`${profilePath(name)}/session`, { method: "POST" }, {
+        locallyHandledCodes: locallyExplainedVPNFailures,
+      }),
     );
   },
   async stopVPNSession(name) {

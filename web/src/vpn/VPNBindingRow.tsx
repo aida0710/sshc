@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useTranslate } from "../i18n/context";
-import { Field, control, hintText, sectionHeading } from "../ui/form";
+import { Field, hintText, sectionHeading, sizedControl } from "../ui/form";
 import { Button } from "../ui/surface";
 
 // この経路を通る接続を見せ、増やしたり外したりする。
@@ -48,7 +48,7 @@ export function VPNBindingRow({
       <div className="flex flex-wrap items-end gap-2">
         <Field label={t("vpn.bindLabel")}>
           <select
-            className={control.replace("w-full", "w-56")}
+            className={sizedControl("medium")}
             value={alias}
             disabled={busy || available.length === 0}
             onChange={(event) => setAlias(event.target.value)}

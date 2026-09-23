@@ -4281,8 +4281,8 @@ components:
         profiles:
           type: array
           maxItems: 64
-          items: { $ref: "#/components/schemas/VPNSession" }
-    VPNSession:
+          items: { $ref: "#/components/schemas/VPNProfileStatus" }
+    VPNProfileStatus:
       type: object
       additionalProperties: false
       required: [profile, running, relaySocket, connections]
