@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 // Manager は、この engine が持つVPNセッションの全体である。
@@ -20,6 +21,9 @@ type Manager struct {
 	// owner は、このengineを動かしている利用者である。コンテナの名前と札、
 	// ソケットの持ち主に使う。
 	owner int
+
+	// now は、無操作の長さを測る時計である。検査が差し替える。
+	now func() time.Time
 
 	mutex    sync.Mutex
 	docker   dockerCommand
@@ -34,6 +38,66 @@ type sessionState struct {
 	// 作り直す。古い設定のまま繋ぎ続けると、利用者が直した先へ行かない。
 	started Profile
 	running bool
+
+	// use は、この経路を通っている接続の数を数える。起動や停止は時間の
+	// かかる操作なので、数えるのは別の鍵で守る。数えるだけの Close が、
+	// 進行中の起動を待つ理由はない。
+	use       sync.Mutex
+	open      int
+	idleSince time.Time
+}
+
+// isRunning は、この engine がこの経路を起こしたままかを返す。
+func (state *sessionState) isRunning() bool {
+	state.mutex.Lock()
+	defer state.mutex.Unlock()
+	return state.running
+}
+
+// borrow は、この経路を通る接続がひとつ増えたことを記録する。
+func (state *sessionState) borrow() {
+	state.use.Lock()
+	defer state.use.Unlock()
+	state.open++
+}
+
+// release は、接続がひとつ終わったことを記録する。最後の一本が終わった時刻を
+// 覚えておき、無操作の長さを測れるようにする。
+func (state *sessionState) release(now time.Time) {
+	state.use.Lock()
+	defer state.use.Unlock()
+	if state.open > 0 {
+		state.open--
+	}
+	if state.open == 0 {
+		state.idleSince = now
+	}
+}
+
+// idleFor は、接続が一本も無い状態が続いている長さを返す。一本でも通っていれば
+// 0 を返す。
+func (state *sessionState) idleFor(now time.Time) time.Duration {
+	state.use.Lock()
+	defer state.use.Unlock()
+	if state.open > 0 || state.idleSince.IsZero() {
+		return 0
+	}
+	return now.Sub(state.idleSince)
+}
+
+// countedConnection は、閉じられたことを数える接続である。
+//
+// 二重に Close されても一度しか数えない。数を間違えると、使っている経路を
+// 無操作と見なして畳んでしまう。
+type countedConnection struct {
+	net.Conn
+	once    sync.Once
+	release func()
+}
+
+func (connection *countedConnection) Close() error {
+	connection.once.Do(connection.release)
+	return connection.Conn.Close()
 }
 
 // Status は、プロファイルひとつの状態である。
@@ -52,7 +116,10 @@ type Status struct {
 //
 // directory は、engineだけが読み書きするディレクトリの下を渡す。
 func New(directory string, owner int) *Manager {
-	return &Manager{directory: directory, owner: owner, sessions: map[string]*sessionState{}}
+	return &Manager{
+		directory: directory, owner: owner, now: time.Now,
+		sessions: map[string]*sessionState{},
+	}
 }
 
 // Available は、この機械でVPN経路を使えるかを返す。
@@ -77,7 +144,62 @@ func (manager *Manager) Dial(ctx context.Context, profile Profile, secrets Secre
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrSessionFailed, err)
 	}
-	return connection, nil
+	state := manager.state(profile.Name)
+	state.borrow()
+	return &countedConnection{
+		Conn:    connection,
+		release: func() { state.release(manager.now()) },
+	}, nil
+}
+
+// StopIdle は、接続が一本も通っていない状態が idle を超えた経路を畳む。
+//
+// 畳まないままにすると、一度使った経路のコンテナが engine の寿命のあいだ
+// 残り続ける。トンネルは使っているあいだだけあればよい。
+func (manager *Manager) StopIdle(ctx context.Context, idle time.Duration) {
+	names := manager.names()
+	if len(names) == 0 {
+		// この engine は経路をひとつも起こしていない。docker を探しに行かない。
+		return
+	}
+	if _, err := manager.command(ctx); err != nil {
+		return
+	}
+	now := manager.now()
+	for _, name := range names {
+		state := manager.state(name)
+		if !state.isRunning() || state.idleFor(now) < idle {
+			continue
+		}
+		_ = manager.Stop(ctx, name)
+	}
+}
+
+// StopAll は、この engine が起こした経路をすべて畳む。engine を終えるときに使う。
+func (manager *Manager) StopAll(ctx context.Context) {
+	names := manager.names()
+	if len(names) == 0 {
+		return
+	}
+	if _, err := manager.command(ctx); err != nil {
+		return
+	}
+	for _, name := range names {
+		if manager.state(name).isRunning() {
+			_ = manager.Stop(ctx, name)
+		}
+	}
+}
+
+// names は、この engine が触ったプロファイルの名前を返す。
+func (manager *Manager) names() []string {
+	manager.mutex.Lock()
+	defer manager.mutex.Unlock()
+	names := make([]string, 0, len(manager.sessions))
+	for name := range manager.sessions {
+		names = append(names, name)
+	}
+	return names
 }
 
 // Start は、このプロファイルのコンテナが経路を提供している状態にする。

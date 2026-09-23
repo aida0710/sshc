@@ -19,6 +19,10 @@ connection=sshc-vpn
 # 書き込む側が落ちたということなので、待ち続けずに終わる。
 profile_wait_seconds=30
 
+# トンネルが生きているかを見に行く間隔。短くしても落ちた瞬間が早く分かるだけで、
+# 既に張られている接続は切れている。
+tunnel_check_seconds=5
+
 umask 077
 mkdir -p "$runtime"
 
@@ -133,6 +137,23 @@ mkdir -p "$socket_directory"
 echo "接続先 $target_host:$target_port への中継を開きます。"
 # ソケットが現れることが、トンネル・経路・フィルタまで用意できた合図である。
 # engineはホスト側からこのソケットを待ち、現れたらそこへ繋ぐ。
-exec socat \
+socat \
 	"UNIX-LISTEN:$socket_directory/relay.sock,fork,unlink-early,mode=0600,user=$socket_owner" \
-	"TCP:$target_host:$target_port"
+	"TCP:$target_host:$target_port" &
+relay=$!
+
+# トンネルが落ちたら、中継を畳んでこのコンテナも終える。
+#
+# 中継だけが残ると、engine からは経路があるように見えたまま、繋いだ先で必ず
+# 失敗する。コンテナごと終われば、次に必要になったときに engine が作り直す。
+while kill -0 "$relay" 2>/dev/null; do
+	if ! ip -4 address show dev "$interface" 2>/dev/null | grep -q 'inet '; then
+		echo "トンネルが落ちました。中継を閉じます。" >&2
+		kill "$relay" 2>/dev/null || true
+		wait "$relay" 2>/dev/null || true
+		exit 1
+	fi
+	sleep "$tunnel_check_seconds"
+done
+echo "中継が終了しました。" >&2
+exit 1

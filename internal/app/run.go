@@ -30,6 +30,7 @@ import (
 	"sshc/internal/storage"
 	"sshc/internal/terminal"
 	"sshc/internal/validate"
+	"sshc/internal/vpn"
 )
 
 type ListenFunc func(network, address string) (net.Listener, error)
@@ -119,6 +120,9 @@ type runtime struct {
 	autoDone    chan struct{}
 	browserAuth *browserauth.Store
 	sftpPool    *sshcSFTP.RemotePool
+	vpn         *vpn.Manager
+	vpnCancel   context.CancelFunc
+	vpnDone     chan struct{}
 }
 
 func build(dependencies Dependencies, version string) (runtime, error) {
@@ -276,6 +280,7 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 		autoSync:    autoSync,
 		browserAuth: services.browserAuth,
 		sftpPool:    services.sftpPool,
+		vpn:         services.vpn,
 	}, nil
 }
 
@@ -297,6 +302,7 @@ func Run(ctx context.Context, dependencies Dependencies, version string) error {
 	go func() { serveErrors <- built.server.Serve() }()
 
 	built.startAutoSync(asked)
+	built.startVPNSupervisor(asked, dependencies.Logger)
 
 	// すべての経路で HTTP サーバーの停止完了を待つ。
 	stop := func(reason error) error {
@@ -394,10 +400,40 @@ func (r runtime) unwind(dependencies Dependencies) error {
 			joined = append(joined, fmt.Errorf("close the idle SFTP connections: %w", err))
 		}
 	}
+	// 経路は engine のものである。engine が終わったあとも動いているコンテナは、
+	// 誰も面倒を見ないまま残り、次の起動で回収されるまでトンネルを張り続ける。
+	if r.vpn != nil {
+		// 監視を先に止める。止める前に終わりを待つと、engine を畳む側と
+		// 待たれる側が互いを待つ。
+		if r.vpnCancel != nil {
+			r.vpnCancel()
+		}
+		if r.vpnDone != nil {
+			<-r.vpnDone
+		}
+		stopping, cancel := context.WithTimeout(context.Background(), vpnStopTimeout)
+		r.vpn.StopAll(stopping)
+		cancel()
+	}
 	if r.passwords != nil {
 		r.passwords.Lock()
 	}
 	return errors.Join(joined...)
+}
+
+// startVPNSupervisor は、経路の寿命を見る仕事を engine の寿命に結び付ける。
+func (r *runtime) startVPNSupervisor(parent context.Context, logger *slog.Logger) {
+	if r.vpn == nil {
+		return
+	}
+	watching, cancel := context.WithCancel(parent)
+	done := make(chan struct{})
+	r.vpnCancel = cancel
+	r.vpnDone = done
+	go func() {
+		defer close(done)
+		superviseVPNSessions(watching, r.vpn, logger)
+	}()
 }
 
 func (r *runtime) startAutoSync(parent context.Context) {

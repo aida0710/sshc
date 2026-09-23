@@ -294,3 +294,55 @@ func TestTheL2TPBranchRunsUntilTheServerRefusesIt(t *testing.T) {
 		}
 	}
 }
+
+// 誰も通っていない経路は畳み、通っている経路は残す。
+func TestAnIdleRouteIsStoppedAndAUsedOneIsKept(t *testing.T) {
+	manager, ctx := requireDockerTest(t)
+	image, err := manager.ensureImage(ctx)
+	if err != nil {
+		t.Fatalf("イメージを用意できない: %v", err)
+	}
+	clientPrivate, clientPublic := keyPair(t)
+	peerPublic, peerAddress := startTunnelPeer(t, manager, ctx, image, clientPublic)
+	profile := Profile{
+		Name:    "idle",
+		Backend: WireGuard,
+		Target:  Endpoint{Host: tunnelServerAddress, Port: echoPort},
+		WireGuard: &WireGuardSettings{
+			Server:        Endpoint{Host: peerAddress, Port: 51820},
+			PeerPublicKey: peerPublic,
+			Address:       tunnelClientAddress,
+		},
+	}
+	t.Cleanup(func() { _ = manager.Stop(context.Background(), profile.Name) })
+
+	// 時計を手で進める。閉じた時刻と掃除の時刻が同じでは、無操作の長さを
+	// 測れない。
+	clock := time.Now()
+	manager.now = func() time.Time { return clock }
+
+	connection, err := manager.Dial(ctx, profile, Secrets{WireGuardPrivateKey: clientPrivate})
+	if err != nil {
+		t.Fatalf("Dial = %v", err)
+	}
+
+	// 接続が開いているあいだは、どれだけ経っても畳まない。
+	clock = clock.Add(time.Hour)
+	manager.StopIdle(ctx, time.Minute)
+	if status, err := manager.Status(ctx, profile.Name); err != nil || !status.Running {
+		t.Fatalf("通っている接続があるのに畳んだ: %+v, %v", status, err)
+	}
+
+	// 閉じてから時間が経てば畳む。
+	_ = connection.Close()
+	clock = clock.Add(time.Hour)
+	manager.StopIdle(ctx, time.Minute)
+
+	status, err := manager.Status(ctx, profile.Name)
+	if err != nil {
+		t.Fatalf("Status = %v", err)
+	}
+	if status.Running {
+		t.Fatal("誰も通っていない経路が残った")
+	}
+}
