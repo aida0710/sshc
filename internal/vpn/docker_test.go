@@ -150,3 +150,40 @@ func TestWaitingForTheTunnelDoesNotLogEachCheck(t *testing.T) {
 		t.Fatalf("状態の確認を書いた:\n%s", text)
 	}
 }
+
+// イメージが作成済みなら、イメージの段階を通らず、知らせも出さない。作るときだけ
+// 段階を知らせ、設定に関係なく出す行で知らせる。
+func TestTheImagePhaseIsReportedOnlyWhenTheImageIsBuilt(t *testing.T) {
+	for _, probe := range []struct {
+		name    string
+		script  string
+		phases  string
+		noticed bool
+	}{
+		{name: "作成済み", script: "exit 0\n", phases: "", noticed: false},
+		{
+			name: "作る",
+			script: "if [ \"$1\" = image ] && [ \"$2\" = inspect ]; then " +
+				"echo 'Error response from daemon: No such image: sshc-vpn' >&2; exit 1; fi\nexit 0\n",
+			phases: "image", noticed: true,
+		},
+	} {
+		t.Run(probe.name, func(t *testing.T) {
+			manager := &Manager{docker: fakeDocker(t, probe.script)}
+			var record attemptRecord
+			ctx := connectionlog.With(context.Background(), &record)
+			var phases []string
+
+			if _, err := manager.ensureImage(ctx, func(phase StartPhase) { phases = append(phases, string(phase)) }); err != nil {
+				t.Fatalf("ensureImage = %v", err)
+			}
+
+			if got := strings.Join(phases, ","); got != probe.phases {
+				t.Errorf("phases = %q, want %q", got, probe.phases)
+			}
+			if noticed := strings.Contains(record.text(), "[sshc] "+PhaseImage.Notice()); noticed != probe.noticed {
+				t.Errorf("知らせ = %v:\n%s", noticed, record.text())
+			}
+		})
+	}
+}

@@ -81,7 +81,8 @@ func (t *tracer) say(level Verbosity, format string, args ...any) {
 	_, _ = io.WriteString(t.writer, linePrefix(level)+fmt.Sprintf(format, args...)+"\r\n")
 }
 
-// announce は verbosity に関係なく ProxyCommand の実行を 1 行表示する。
+// announce は、verbosity に関係なく 1 行表示する（ProxyCommand の実行、VPN 経路の
+// 時間のかかる段階など）。
 func (t *tracer) announce(format string, args ...any) {
 	if t == nil || t.writer == nil {
 		return
@@ -134,6 +135,10 @@ func (writer logWriter) Enabled(level connectionlog.Level) bool {
 }
 
 func (writer logWriter) Write(level connectionlog.Level, message string) {
+	if level == connectionlog.Notice {
+		writer.trace.announce("%s", message)
+		return
+	}
 	writer.trace.say(Verbosity(level), "%s", message)
 }
 

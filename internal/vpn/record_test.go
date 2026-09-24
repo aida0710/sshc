@@ -94,3 +94,15 @@ func TestConnectNotesAndFailureOutputReachTheConnectionLog(t *testing.T) {
 		t.Fatalf("socat の時刻を外していない:\n%s", text)
 	}
 }
+
+// 設定に関係なく出す行は、接続ログと同じく [sshc] の印で記録する。
+func TestNoticesAreRecordedWithTheSshcMark(t *testing.T) {
+	var record attemptRecord
+	ctx := connectionlog.With(context.Background(), &record)
+
+	connectionlog.Say(ctx, connectionlog.Notice, "VPNのコンテナイメージを作成しています。")
+
+	if text := record.text(); !strings.Contains(text, " [sshc] VPNのコンテナイメージを作成しています。") {
+		t.Fatalf("record:\n%s", text)
+	}
+}
