@@ -1137,7 +1137,7 @@ export const en = {
   "vpn.renameAction": "Rename",
   "vpn.logs": "Logs",
   "vpn.logsTitle": "Logs for {name}",
-  "vpn.logsHint": "The container's recent output. Secrets are hidden.",
+  "vpn.logsHint": "What the sshc engine recorded while preparing the route, followed by the container's recent output. Secrets are hidden.",
   "vpn.logsLoading": "Loading the logs…",
   "vpn.logsEmpty": "No output yet.",
   "vpn.close": "Close",

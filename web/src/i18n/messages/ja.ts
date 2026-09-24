@@ -1139,7 +1139,7 @@ export const ja = {
   "vpn.renameAction": "変更",
   "vpn.logs": "ログ",
   "vpn.logsTitle": "{name}のログ",
-  "vpn.logsHint": "コンテナの直近の出力です。シークレットは伏せて表示しています。",
+  "vpn.logsHint": "sshcエンジンがVPN経路を用意した記録と、コンテナの直近の出力です。シークレットは伏せて表示しています。",
   "vpn.logsLoading": "ログを読み込んでいます…",
   "vpn.logsEmpty": "出力はまだありません。",
   "vpn.close": "閉じる",

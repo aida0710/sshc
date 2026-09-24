@@ -4936,7 +4936,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The container's recent output with every stored secret masked */
+            /** @description What the sshc engine recorded while preparing the route, followed by the container's recent output, with every stored secret masked */
             200: {
                 headers: {
                     [name: string]: unknown;

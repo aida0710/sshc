@@ -12,6 +12,7 @@ import (
 	"golang.org/x/crypto/ssh"
 
 	"sshc/internal/commandconn"
+	"sshc/internal/connectionlog"
 	"sshc/internal/terminal"
 	"sshc/internal/textencoding"
 )
@@ -134,7 +135,7 @@ func (d Dialer) connect(ctx context.Context, target Target, session *Session, ob
 	} else {
 		trace.say(Detailed, "keepalive：送りません（ServerAliveInterval 0）。")
 	}
-	trace.say(Full, "接続完了まで %s かかりました。", trace.since(started).Round(time.Millisecond))
+	trace.say(Full, "接続完了まで %s かかりました。", connectionlog.Elapsed(trace.since(started)))
 	session.run(remote, keepAliveLoop(client, target.KeepAlive, target.KeepAliveMax, session.done))
 }
 
@@ -247,15 +248,17 @@ func (d Dialer) connectOne(
 		trace.say(Brief, "%s へ接続します（ユーザー：%s）。", target.Address(), target.User)
 	}
 	trace.say(Detailed, "接続タイムアウト：%s", timeout)
+	describeHop(trace, target)
 
 	trace.stage(terminal.ConnectionDialing, target, hop, hops)
-	conn, ctx, cancel, err := d.openWithTimeout(ctx, hopDial{target: target, through: through, trace: trace}, timeout)
+	conn, ctx, cancel, err := d.openWithTimeout(trace.withLog(ctx), hopDial{target: target, through: through, trace: trace}, timeout)
 	defer cancel()
 	if err != nil {
 		trace.say(Brief, "%s", connectionFailureMessage("接続", err))
+		explainFailure(trace, err)
 		return nil, err
 	}
-	trace.say(Detailed, "TCP 接続を確立しました（%s）。", trace.since(started).Round(time.Millisecond))
+	trace.say(Detailed, "TCP 接続を確立しました（%s）。", connectionlog.Elapsed(trace.since(started)))
 	if tcp, ok := conn.(*net.TCPConn); ok {
 		// 素の TCP のときだけ言う。ProxyJump の上のチャンネルや ProxyCommand の
 		// パイプが名乗るアドレスは、どこを通ったかを表さない。
@@ -271,7 +274,7 @@ func (d Dialer) connectOne(
 		Auth: authMethods,
 		HostKeyCallback: func(hostname string, remote net.Addr, key ssh.PublicKey) error {
 			trace.stage(terminal.ConnectionHostKey, target, hop, hops)
-			trace.say(Full, "鍵交換が終わり、ホスト鍵を受け取りました（%s）。", trace.since(started).Round(time.Millisecond))
+			trace.say(Full, "鍵交換が終わり、ホスト鍵を受け取りました（%s）。", connectionlog.Elapsed(trace.since(started)))
 			err := verifyHostKey(hostname, remote, key)
 			if err == nil {
 				trace.stage(terminal.ConnectionAuthenticating, target, hop, hops)
@@ -296,7 +299,7 @@ func (d Dialer) connectOne(
 	} else {
 		trace.say(Detailed, "サーバーは認証を求めませんでした。")
 	}
-	trace.say(Detailed, "SSH ハンドシェイクが完了しました（%s）。", trace.since(started).Round(time.Millisecond))
+	trace.say(Detailed, "SSH ハンドシェイクが完了しました（%s）。", connectionlog.Elapsed(trace.since(started)))
 	trace.say(Full, "サーバーの SSH バージョン：%s", connection.ServerVersion())
 	trace.say(Brief, "%s に接続しました（%d/%d）。", connectionTarget(target), hop, hops)
 	trace.stage(terminal.ConnectionAuthenticated, target, hop, hops)
@@ -383,17 +386,50 @@ func (d Dialer) open(ctx context.Context, target Target, through *ssh.Client, tr
 			}
 			if err != nil {
 				trace.announce("ログインシェルのPATHを取得できないため、起動元のPATHを使います：%v", err)
+			} else {
+				trace.say(Detailed, "ログインシェルからPATHを取得しました。")
+				trace.say(Full, "PATH：%s", pathOf(environment))
 			}
 		}
 		return startProxyCommand(target.ProxyCommand, environment)
 	}
 	if through != nil {
+		trace.say(Detailed, "%s へ、手前のホップの中から TCP で接続します。", target.Address())
 		return through.DialContext(ctx, "tcp", target.Address())
 	}
 	if d.Dial != nil {
 		return d.Dial(ctx, "tcp", target.Address())
 	}
+	describeResolution(ctx, trace, target.HostName)
 	return (&net.Dialer{}).DialContext(ctx, "tcp", target.Address())
+}
+
+// describeResolution は、HostName の名前解決の結果を debug3 で言う。
+//
+// 接続そのものは net.Dialer がもう一度名前解決する。ここで引くのは、どのアドレス
+// へ繋ぎに行くのかを見せるためだけである。
+func describeResolution(ctx context.Context, trace *tracer, host string) {
+	if !trace.enabled(Full) || net.ParseIP(host) != nil {
+		return
+	}
+	started := trace.now()
+	addresses, err := net.DefaultResolver.LookupHost(ctx, host)
+	if err != nil {
+		trace.say(Full, "%s の名前解決に失敗しました：%v", host, err)
+		return
+	}
+	trace.say(Full, "%s を名前解決しました：%s（%s）", host, strings.Join(addresses, ", "),
+		connectionlog.Elapsed(trace.since(started)))
+}
+
+// pathOf は、環境のうち PATH の値を返す。後に書かれたものが勝つ。
+func pathOf(environment []string) string {
+	for index := len(environment) - 1; index >= 0; index-- {
+		if value, found := strings.CutPrefix(environment[index], "PATH="); found {
+			return value
+		}
+	}
+	return ""
 }
 
 // hopDial は、ホップひとつへ輸送を開くのに要るものである。
@@ -429,12 +465,52 @@ func (d Dialer) openWithTimeout(
 // 英語の実装の言葉で、Terminal の画面にそのまま出すと何を直せばよいか分からない。
 type ExplainedError struct {
 	Sentence string
-	Err      error
+	// Details は、原因を調べるための行（コマンドの出力など）である。接続ログの
+	// debug2 から出す。
+	Details []string
+	Err     error
 }
 
 func (failure *ExplainedError) Error() string { return failure.Sentence }
 
 func (failure *ExplainedError) Unwrap() error { return failure.Err }
+
+// explainFailure は、接続の失敗の詳細を debug2 から出す。元の失敗の文は、利用者
+// 向けの文に置き換えたものでも、原因を調べるために debug2 に残す。
+func explainFailure(trace *tracer, err error) {
+	var explained *ExplainedError
+	if !errors.As(err, &explained) {
+		return
+	}
+	for _, line := range explained.Details {
+		trace.say(Detailed, "  %s", line)
+	}
+	if explained.Err != nil {
+		trace.say(Detailed, "失敗の詳細：%v", explained.Err)
+	}
+}
+
+// describeHop は、このホップで使う設定を debug2 から言う。ssh -G で見るものの
+// うち、接続の成否に関わるものである。
+func describeHop(trace *tracer, target Target) {
+	if !trace.enabled(Detailed) {
+		return
+	}
+	identities := "なし"
+	if len(target.Identities) > 0 {
+		identities = strings.Join(target.Identities, ", ")
+	}
+	trace.say(Detailed, "設定：HostName %s、Port %s、User %s、IdentityFile %s、IdentitiesOnly %t",
+		target.HostName, target.Port, target.User, identities, target.IdentitiesOnly)
+	switch {
+	case target.VPN != "":
+		trace.say(Detailed, "経路：VPNプロファイル %s", target.VPN)
+	case target.ProxyCommand != "":
+		trace.say(Detailed, "経路：ProxyCommand")
+	default:
+		trace.say(Detailed, "経路：直接TCPで接続")
+	}
+}
 
 func connectionFailureMessage(action string, err error) string {
 	var explained *ExplainedError

@@ -1,6 +1,7 @@
 package sshclient
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"strings"
@@ -8,6 +9,7 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
+	"sshc/internal/connectionlog"
 	"sshc/internal/terminal"
 )
 
@@ -121,6 +123,23 @@ func (t *tracer) since(start time.Time) time.Duration { return t.now().Sub(start
 // enabled は、この level の診断が有効かを返す。
 func (t *tracer) enabled(level Verbosity) bool {
 	return t != nil && t.writer != nil && level <= t.level
+}
+
+// logWriter は、この tracer を connectionlog の書き先として見せる。VPN の経路の
+// ように、この package の外で輸送を用意する部品が、同じ接続ログへ書くために使う。
+type logWriter struct{ trace *tracer }
+
+func (writer logWriter) Enabled(level connectionlog.Level) bool {
+	return writer.trace.enabled(Verbosity(level))
+}
+
+func (writer logWriter) Write(level connectionlog.Level, message string) {
+	writer.trace.say(Verbosity(level), "%s", message)
+}
+
+// withLog は、この tracer を書き先に足した ctx を返す。
+func (t *tracer) withLog(ctx context.Context) context.Context {
+	return connectionlog.With(ctx, logWriter{trace: t})
 }
 
 func (t *tracer) stage(phase string, target Target, hop, hops int) {
