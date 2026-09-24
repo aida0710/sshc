@@ -69,6 +69,16 @@ remaining_seconds() {
 	echo "$left"
 }
 
+# timeout_seconds は、timeout に渡す残りの秒数である。GNU timeout は 0 を上限なしと
+# 読むので、締め切りを過ぎていても 1 秒にする。
+timeout_seconds() {
+	left=$(remaining_seconds)
+	if [ "$left" -lt 1 ]; then
+		left=1
+	fi
+	echo "$left"
+}
+
 # wait_for_address は、interface にアドレスが付くまで、締め切りまで待つ。
 wait_for_address() {
 	while ! ip -4 address show dev "$interface" 2>/dev/null | grep -q 'inet '; do

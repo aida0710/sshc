@@ -57,10 +57,27 @@ backend_allow() {
 	wg set "$interface" peer "$(wg show "$interface" peers | head -1)" allowed-ips "$allowed$1/32"
 }
 
+# wireguard_recover_seconds は、最後のハンドシェイクが古くなってから、新しい
+# ハンドシェイクを待つ長さである。スリープから戻ったマシンでは、時計だけが進み、
+# ハンドシェイクは keepalive（25 秒）の次の送信で起こる。その前に切断と
+# 判断しない。
+wireguard_recover_seconds=40
+
+# stale_since は、最後のハンドシェイクが古いと最初に見た時刻である。
+stale_since=
+
 backend_alive() {
 	handshake=$(latest_handshake)
-	[ -n "$handshake" ] && [ "$handshake" != "0" ] &&
-		[ $(($(date +%s) - handshake)) -le "$wireguard_stale_seconds" ]
+	now=$(date +%s)
+	if [ -n "$handshake" ] && [ "$handshake" != "0" ] &&
+		[ $((now - handshake)) -le "$wireguard_stale_seconds" ]; then
+		stale_since=
+		return 0
+	fi
+	if [ -z "$stale_since" ]; then
+		stale_since=$now
+	fi
+	[ $((now - stale_since)) -lt "$wireguard_recover_seconds" ]
 }
 
 # WireGuard は状態を持たない方式なので、相手へ伝える切断は無い。

@@ -45,7 +45,7 @@ backend_up() {
 	fi
 	# --background は、繋がったあとに自分を背後へ回す。ここが 0 で返らなければ
 	# 繋がっていない。
-	if ! send_answers | timeout "$(remaining_seconds)" openconnect "$@" "$server" \
+	if ! send_answers | timeout "$(timeout_seconds)" openconnect "$@" "$server" \
 		>"$runtime/openconnect.log" 2>&1; then
 		password=
 		second_factor=
