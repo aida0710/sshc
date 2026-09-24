@@ -1,5 +1,5 @@
 // Package connectionlog は、接続の途中経過を、接続ログ（Terminal と CLI の
-// [sshc][debug1]〜[debug3]）へ届ける口である。
+// [sshc] と [sshc][debug1]〜[debug3]）へ届ける口である。
 //
 // 接続ログを書くのは sshclient である。VPN の経路のように、sshclient の外で
 // 輸送を用意する部品は、ctx に載った Writer を通してここへ書く。Writer が
@@ -16,6 +16,9 @@ import (
 type Level int
 
 const (
+	// Notice は、接続ログの設定に関係なく出す行である（`[sshc]` で始まる）。
+	// 時間のかかる段階と、利用者が何かをする必要がある段階を知らせる。
+	Notice Level = 0
 	// Brief は `-v` に相当する。何が起き、どこへ繋いだか。
 	Brief Level = 1
 	// Detailed は `-vv` に相当する。使った設定、掛かった時間、失敗の詳細。

@@ -36,10 +36,19 @@ func (record *attemptRecord) Write(level connectionlog.Level, message string) {
 	record.mutex.Lock()
 	defer record.mutex.Unlock()
 	record.lines = append(record.lines,
-		fmt.Sprintf("%s [debug%d] %s", time.Now().Format("15:04:05"), int(level), message))
+		fmt.Sprintf("%s %s %s", time.Now().Format("15:04:05"), levelMark(level), message))
 	if overflow := len(record.lines) - maxRecordLines; overflow > 0 {
 		record.lines = append([]string(nil), record.lines[overflow:]...)
 	}
+}
+
+// levelMark は、記録の行に付ける深さの印である。接続ログと同じく、設定に関係なく
+// 出す行は [sshc]、それ以外は [debugN] とする。
+func levelMark(level connectionlog.Level) string {
+	if level == connectionlog.Notice {
+		return "[sshc]"
+	}
+	return fmt.Sprintf("[debug%d]", int(level))
 }
 
 // text は、記録を 1 つの文字列で返す。
