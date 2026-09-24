@@ -182,7 +182,7 @@
   - 接続失敗時は、コマンドの標準エラー出力を理由に含めます
   - 接続終了時にパイプを閉じ、2 秒以内に終了しない場合はプロセスを強制終了します
 
-  `internal/acceptance` の `TestOnlyTheNamedSubsystemsStartAProgram` は外部プログラムを起動する場所をallowlistで検査します。ProxyCommand本体は`internal/sshclient/proxycommand.go`、PATHの取得は`internal/platform/proxy_environment_unix.go`から起動します。
+  `internal/acceptance` の `TestOnlyTheNamedSubsystemsStartAProgram` は外部プログラムを起動する場所をallowlistで検査します。ProxyCommand本体は`internal/sshclient/proxycommand.go`、PATHの取得は`internal/platform/login_shell_path_unix.go`から起動します。VPN経路のdockerも、同じ仕組みで取得したPATHで探して起動します。
 
 - 接続時にこのアプリケーションが実行する外部コマンドは、利用者が指定した`ProxyCommand`と、そのPATHを取得するログインシェルです。`ssh-keygen`はハードウェア鍵用のコマンド例として表示しますが、アプリケーションからは実行しません。`Toolchain.KeyGen()`は、その選択肢を表示できるか確認するためだけに使用します。agentへの登録は`x/crypto/ssh/agent`で直接行います。
 - 外部プログラムの起動箇所は`TestOnlyTheNamedSubsystemsStartAProgram`のallowlistで管理します。ブラウザ起動、更新、自動起動サービスの管理、ローカルTerminal、配布物のビルド、ProxyCommandとそのPATH取得が対象です。検査は`.go`ファイルを走査し、allowlist以外に外部プロセス起動が追加された場合に失敗します。

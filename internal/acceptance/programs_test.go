@@ -61,10 +61,11 @@ var allowedToStartPrograms = []string{
 	// artifact verifier の sh/pwsh だけを allowlist 済み argv で起動し、caller input を
 	// shell command line として組み立てない。
 	"internal/nativebuild/nativebuild.go",
-	// VPN 経路は、この機械にすでにある docker に任せる。engine は docker socket を
-	// 自分で叩かず、PATH から解決した docker だけを固定の argv で起動する。argv へ
-	// 入る利用者由来の値はプロファイル名と接続先だけで、どちらも保存する時点で
-	// 形を確かめてある。秘密は argv にも環境変数にも載せず、標準入力で渡す。
+	// VPN 経路は、このマシンにすでにある docker に任せる。engine は docker socket を
+	// 自分で叩かず、ログインシェルの PATH で探した docker だけを固定の argv で起動
+	// する。argv へ入る利用者由来の値はプロファイル名と接続先だけで、プロファイル名は
+	// 保存する時点で、接続先は繋ぐ前に（vpn.Profile.Destination）形を確かめてある。
+	// 秘密は argv にも環境変数にも載せず、標準入力で渡す。
 	"internal/vpn/docker.go",
 	// ProxyCommand は、接続そのものを外部のプログラムに任せる設定である。
 	//
@@ -76,9 +77,9 @@ var allowedToStartPrograms = []string{
 	// 暗黙に起動しない。起動する表記は接続のたびに端末へ 1 行出る
 	// （tracer.announce）。既定が無言であることの、ただ一つの例外である。
 	"internal/sshclient/proxycommand.go",
-	// 常駐engineのProxyCommandに渡すPATHだけをログインシェルから取得する。
+	// 常駐engineがProxyCommandとdockerに渡すPATHだけをログインシェルから取得する。
 	// 固定の取得コマンドを使い、ssh_configの本文は渡さない。
-	"internal/platform/proxy_environment_unix.go",
+	"internal/platform/login_shell_path_unix.go",
 }
 
 // TestOnlyTheNamedSubsystemsStartAProgram は、プロセスを起動する場所を固定する。

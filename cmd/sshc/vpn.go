@@ -11,10 +11,12 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"sshc/internal/application"
 	"sshc/internal/httpserver"
 	"sshc/internal/vpn"
+	"sshc/internal/vpnrefusal"
 )
 
 // VPN 経路は engine が持つ。この CLI は入力を集めて engine へ渡し、返ってきた
@@ -110,9 +112,11 @@ func runVPN(ctx context.Context, called vpnInvocation, environment commandEnviro
 			fmt.Fprintf(stderr, "%s のVPNに接続しています。初回はコンテナイメージの作成に数分かかることがあります…\n",
 				safeTerminalCell(called.Name))
 		}
-		if err := engine.sendJSON(ctx, http.MethodPost, vpnProfilePath(called.Name)+"/session", struct{}{}, &overview); err != nil {
+		if err := engine.sendJSON(ctx, http.MethodPost, vpnProfilePath(called.Name)+"/session", nil, &overview); err != nil {
 			code := finishVPNFailure(called, err, environment)
-			if !called.JSON {
+			// ログに理由が残るのは、コンテナが経路を用意できなかったときだけである。
+			var problem engineProblem
+			if !called.JSON && errors.As(err, &problem) && problem.Code == vpnrefusal.CodeSessionFailed {
 				fmt.Fprintf(stderr, "詳しくは sshc vpn logs %s でログを確認してください。\n", safeTerminalCell(called.Name))
 			}
 			return code
@@ -182,18 +186,14 @@ func addVPNProfile(
 	if err != nil {
 		return err
 	}
-	target, err := promptVisibleSetup(ctx, stdin, prompt, "Target through the VPN (host:port): ", "")
-	if err != nil {
-		return err
-	}
-	// 接続先を名前で書くなら、その名前をVPNの中で引くDNSが要る。アドレスで
-	// 書くなら空のままでよい。
+	// 接続先をホスト名で書く接続に使うなら、その名前をVPNの中で名前解決する
+	// DNSサーバーが要る。アドレスで書く接続にしか使わないなら空のままでよい。
 	resolvers, err := promptVisibleSetup(ctx, stdin, prompt,
 		"DNS servers inside the VPN (comma separated, blank for none): ", "")
 	if err != nil {
 		return err
 	}
-	profile := application.VPNProfile{Name: name, Backend: backend, Target: target, DNS: splitVPNResolvers(resolvers)}
+	profile := application.VPNProfile{Name: name, Backend: vpn.BackendName(backend), DNS: splitVPNResolvers(resolvers)}
 	var secrets []vpnSecretField
 	switch backend {
 	case "wireguard":
@@ -212,9 +212,6 @@ func addVPNProfile(
 	}()
 	if err != nil {
 		return err
-	}
-	if target == "" {
-		return errVPNInputMissing
 	}
 	payload, err := buildVPNProfilePayload(profile, secrets)
 	if err != nil {
@@ -422,7 +419,12 @@ func base64KeyBytes(key []byte) bool {
 // writeVPNOverview は、一覧と状態を人向けに書く。
 func writeVPNOverview(out io.Writer, overview httpserver.VPNOverview) {
 	if !overview.Available {
-		fmt.Fprintf(out, "このマシンではVPN機能を使用できません: %s\n\n", safeTerminalCell(overview.Detail))
+		fmt.Fprintf(out, "このマシンではVPN経路を使用できません。%s\n",
+			vpnrefusal.Sentence(vpnrefusal.Refusal{Code: string(overview.Unavailable)}))
+		if overview.Detail != "" {
+			fmt.Fprintf(out, "詳細: %s\n", safeTerminalCell(overview.Detail))
+		}
+		fmt.Fprintln(out)
 	}
 	if len(overview.Profiles) == 0 {
 		fmt.Fprintln(out, "VPNプロファイルはありません。sshc vpn add <名前> で作成できます。")
@@ -444,16 +446,12 @@ func writeVPNOverview(out io.Writer, overview httpserver.VPNOverview) {
 			connections = strings.Join(session.Connections, ", ")
 		}
 		rows = append(rows,
-			[2]string{session.Profile.Name, fmt.Sprintf("%s  %s  %s",
-				session.Profile.Backend, session.Profile.Target, state)},
+			[2]string{session.Profile.Name, fmt.Sprintf("%s  %s", session.Profile.Backend, state)},
 			[2]string{"", "connections: " + connections},
 		)
 		if session.Tunnel != nil && session.Tunnel.Interface != "" {
 			rows = append(rows, [2]string{"", fmt.Sprintf("tunnel: %s %s since %s",
 				session.Tunnel.Interface, session.Tunnel.Address, session.Tunnel.Since)})
-			if session.Tunnel.TargetAddress != "" && session.Tunnel.TargetAddress != session.Profile.Target {
-				rows = append(rows, [2]string{"", "target address: " + session.Tunnel.TargetAddress})
-			}
 		}
 		if len(session.Profile.DNS) > 0 {
 			rows = append(rows, [2]string{"", "dns: " + strings.Join(session.Profile.DNS, ", ")})
@@ -494,13 +492,13 @@ func vpnPhaseWord(phase vpn.StartPhase) string {
 // errVPNRelayMissing は、engine が経路を差し出さなかったことを表す。
 var errVPNRelayMissing = errors.New("the engine did not open a relay for that VPN profile")
 
-// vpnRouteThroughEngine は、engine に経路を起こさせ、その中継のソケットへ繋ぐ。
+// vpnRouteThroughEngine は、engine に経路を起こさせ、その中継から接続先へ繋ぐ。
 //
 // CLI は秘密を持たない。コンテナも Vault も engine が持ち、こちらは利用者だけが
 // 開けるソケットへ繋ぐだけである。
 func vpnRouteThroughEngine(stateDir string, client *http.Client) func(context.Context, string, string) (net.Conn, error) {
 	return func(ctx context.Context, profile, address string) (net.Conn, error) {
-		connection, err := dialVPNRelay(ctx, stateDir, client, profile, address)
+		connection, err := dialVPNRelay(ctx, stateDir, client, vpnRelayRequest{profile: profile, address: address})
 		if err != nil {
 			return nil, describedVPNRouteError(profile, err)
 		}
@@ -508,36 +506,70 @@ func vpnRouteThroughEngine(stateDir string, client *http.Client) func(context.Co
 	}
 }
 
-// dialVPNRelay は、名前の付いた経路を起こし、その中継のソケットへ繋ぐ。
+// vpnRelayRequest は、engine の中継へ頼む経路と接続先である。
+type vpnRelayRequest struct {
+	profile string
+	// address は、接続先（`host:port`）である。
+	address string
+}
+
+// dialVPNRelay は、名前の付いた経路を起こし、その中継から接続先へ繋ぐ。
 //
-// wantedTarget が空でなければ、その相手へ行く経路であることを確かめてから繋ぐ。
-func dialVPNRelay(
-	ctx context.Context, stateDir string, client *http.Client, profile, wantedTarget string,
-) (net.Conn, error) {
-	engine, err := openEngineAPI(ctx, stateDir, client)
+// 中継へは1行目に接続先を送り、engine が繋げたと答えてから、バイト列を運ぶ。
+// 繋げなかったときは、engine が答えた理由を engineProblem として返す。
+func dialVPNRelay(ctx context.Context, stateDir string, client *http.Client, request vpnRelayRequest) (net.Conn, error) {
+	relaySocket, err := startVPNRoute(ctx, stateDir, client, request.profile)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = engine.Close() }()
-	var overview httpserver.VPNOverview
-	if err := engine.sendJSON(ctx, http.MethodPost,
-		vpnProfilePath(profile)+"/session", struct{}{}, &overview); err != nil {
+	connection, err := (&net.Dialer{}).DialContext(ctx, "unix", relaySocket)
+	if err != nil {
 		return nil, err
 	}
-	for _, session := range overview.Profiles {
-		if session.Profile.Name != profile {
-			continue
-		}
-		if wantedTarget != "" && !session.Profile.Reaches(wantedTarget) {
-			return nil, &vpnInputError{sentence: fmt.Sprintf("接続先が、VPNプロファイル %s の接続先（%s）と一致しません。",
-				safeTerminalCell(profile), safeTerminalCell(session.Profile.Target)), cause: vpn.ErrTargetMismatch}
-		}
-		if session.RelaySocket == "" {
-			return nil, errVPNRelayMissing
-		}
-		return (&net.Dialer{}).DialContext(ctx, "unix", session.RelaySocket)
+	reply, err := askVPNRelay(ctx, connection, request.address)
+	if err != nil {
+		_ = connection.Close()
+		return nil, err
 	}
-	return nil, errVPNRelayMissing
+	if reply.Code != "" {
+		_ = connection.Close()
+		return nil, engineProblem{Code: reply.Code, Reason: reply.Reason}
+	}
+	return connection, nil
+}
+
+// startVPNRoute は、engine に経路を起こさせ、その中継のソケットの場所を返す。
+func startVPNRoute(ctx context.Context, stateDir string, client *http.Client, profile string) (string, error) {
+	engine, err := openEngineAPI(ctx, stateDir, client)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = engine.Close() }()
+	var overview httpserver.VPNOverview
+	if err := engine.sendJSON(ctx, http.MethodPost, vpnProfilePath(profile)+"/session", nil, &overview); err != nil {
+		return "", err
+	}
+	for _, session := range overview.Profiles {
+		if session.Profile.Name == profile && session.RelaySocket != "" {
+			return session.RelaySocket, nil
+		}
+	}
+	return "", errVPNRelayMissing
+}
+
+// askVPNRelay は、engine の中継へ接続先を伝え、その答えを読む。ctx が終われば
+// 待つのをやめる。
+func askVPNRelay(ctx context.Context, connection net.Conn, address string) (vpn.RelayReply, error) {
+	stop := context.AfterFunc(ctx, func() { _ = connection.SetDeadline(time.Now()) })
+	defer stop()
+	if err := vpn.WriteRelayRequest(connection, address); err != nil {
+		return vpn.RelayReply{}, err
+	}
+	reply, err := vpn.ReadRelayReply(connection)
+	if cause := ctx.Err(); cause != nil {
+		return vpn.RelayReply{}, cause
+	}
+	return reply, err
 }
 
 // runVPNProxy は、標準入出力をその経路の中継へ繋ぐ。
@@ -546,11 +578,10 @@ func dialVPNRelay(
 // 握手も鍵もそれらの側にあり、こちらが運ぶのはバイト列だけである。
 func runVPNProxy(ctx context.Context, called vpnInvocation, environment commandEnvironment) int {
 	// 標準出力はデータの通り道である。案内も診断もここへは書かない。
-	relay, err := dialVPNRelay(ctx, environment.stateDir, environment.client, called.Name, called.Target)
+	relay, err := dialVPNRelay(ctx, environment.stateDir, environment.client,
+		vpnRelayRequest{profile: called.Name, address: called.Target})
 	if err != nil {
-		// この2つは engine の拒否ではなく、こちらで分かる食い違いである。
-		// 共通の言い換えに通すと、何が食い違ったのかが消える。
-		if errors.Is(err, vpn.ErrTargetMismatch) || errors.Is(err, errVPNRelayMissing) {
+		if errors.Is(err, errVPNRelayMissing) {
 			fmt.Fprintf(environment.stderr, "sshc: %v\n", err)
 			return 1
 		}

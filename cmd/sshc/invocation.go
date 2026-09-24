@@ -330,26 +330,26 @@ func parseVPNInvocation(args []string) (invocation, error) {
 		}
 		return called, nil
 	case "rename":
-		if len(args) != 3 || args[1] == "" || args[2] == "" {
-			return invalidInvocation("vpn rename requires the current name and the new name")
+		if len(args) < 3 || len(args) > 4 || args[1] == "" || args[2] == "" {
+			return invalidInvocation("vpn rename requires the current name, the new name, and optionally --json")
 		}
-		return invocation{Kind: invocationVPN, VPN: &vpnInvocation{
-			Action: vpnRename, Name: args[1], Rename: args[2],
-		}}, nil
-	case "proxy":
-		// ProxyCommand から呼ばれる。%h と %p を渡された場合は、その相手へ行く
-		// 経路であることを確かめてから通す。
-		if len(args) != 2 && len(args) != 4 || args[1] == "" {
-			return invalidInvocation("vpn proxy requires one profile name and optionally the host and port")
-		}
-		called := &vpnInvocation{Action: vpnProxy, Name: args[1]}
+		called := &vpnInvocation{Action: vpnRename, Name: args[1], Rename: args[2]}
 		if len(args) == 4 {
-			if args[2] == "" || args[3] == "" {
-				return invalidInvocation("vpn proxy requires one profile name and optionally the host and port")
+			if args[3] != "--json" {
+				return invalidInvocation("vpn rename only accepts --json")
 			}
-			called.Target = net.JoinHostPort(args[2], args[3])
+			called.JSON = true
 		}
 		return invocation{Kind: invocationVPN, VPN: called}, nil
+	case "proxy":
+		// ProxyCommand から %h と %p を付けて呼ばれる。接続先はプロファイルに
+		// 無いので、省略できない。
+		if len(args) != 4 || args[1] == "" || args[2] == "" || args[3] == "" {
+			return invalidInvocation("vpn proxy requires one profile name, the host, and the port")
+		}
+		return invocation{Kind: invocationVPN, VPN: &vpnInvocation{
+			Action: vpnProxy, Name: args[1], Target: net.JoinHostPort(args[2], args[3]),
+		}}, nil
 	case "logs":
 		called, err := vpnNameWithJSON(args, vpnLogsAction)
 		if err != nil {

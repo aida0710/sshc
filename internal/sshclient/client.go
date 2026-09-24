@@ -240,8 +240,6 @@ func (d Dialer) connectOne(
 	if timeout <= 0 {
 		timeout = DefaultTimeout
 	}
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
 
 	if through != nil {
 		trace.say(Brief, "%s へ ProxyJump 経由で接続します（ユーザー：%s）。", target.Address(), target.User)
@@ -251,7 +249,8 @@ func (d Dialer) connectOne(
 	trace.say(Detailed, "接続タイムアウト：%s", timeout)
 
 	trace.stage(terminal.ConnectionDialing, target, hop, hops)
-	conn, err := d.open(ctx, target, through, trace)
+	conn, ctx, cancel, err := d.openWithTimeout(ctx, hopDial{target: target, through: through, trace: trace}, timeout)
+	defer cancel()
 	if err != nil {
 		trace.say(Brief, "%s", connectionFailureMessage("接続", err))
 		return nil, err
@@ -397,7 +396,51 @@ func (d Dialer) open(ctx context.Context, target Target, through *ssh.Client, tr
 	return (&net.Dialer{}).DialContext(ctx, "tcp", target.Address())
 }
 
+// hopDial は、ホップひとつへ輸送を開くのに要るものである。
+type hopDial struct {
+	target  Target
+	through *ssh.Client
+	trace   *tracer
+}
+
+// openWithTimeout は、ホップへの輸送を開き、そのあとの SSH のやり取りに使う ctx を返す。
+//
+// 接続のタイムアウトは、ふつうは TCP の接続から数える。VPN の経路は、経路の起動
+// （イメージの作成、スマートフォンでの承認）に接続のタイムアウトより長くかかる
+// ことがあり、経路の側が自分の上限で待つ。そこで VPN のときだけ、経路が用意
+// できてから数え始める。
+func (d Dialer) openWithTimeout(
+	ctx context.Context, hop hopDial, timeout time.Duration,
+) (net.Conn, context.Context, context.CancelFunc, error) {
+	if hop.target.VPN == "" {
+		timed, cancel := context.WithTimeout(ctx, timeout)
+		conn, err := d.open(timed, hop.target, hop.through, hop.trace)
+		return conn, timed, cancel, err
+	}
+	conn, err := d.open(ctx, hop.target, hop.through, hop.trace)
+	timed, cancel := context.WithTimeout(ctx, timeout)
+	return conn, timed, cancel, err
+}
+
+// ExplainedError は、利用者向けの文を持つ失敗である。接続ログには、元の失敗の
+// 文ではなくこの文を出す。
+//
+// DialVPN のように、この package の外で輸送を開く部品が使う。元の失敗の文は
+// 英語の実装の言葉で、Terminal の画面にそのまま出すと何を直せばよいか分からない。
+type ExplainedError struct {
+	Sentence string
+	Err      error
+}
+
+func (failure *ExplainedError) Error() string { return failure.Sentence }
+
+func (failure *ExplainedError) Unwrap() error { return failure.Err }
+
 func connectionFailureMessage(action string, err error) string {
+	var explained *ExplainedError
+	if errors.As(err, &explained) {
+		return action + "に失敗しました。" + explained.Sentence
+	}
 	if errors.Is(err, context.DeadlineExceeded) {
 		return action + "がタイムアウトしました。"
 	}

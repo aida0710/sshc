@@ -24,7 +24,7 @@ func proxyTestShell(t *testing.T, script string) []string {
 	return []string{"HOME=" + home, "SHELL=" + shell, "PATH=/usr/bin:/bin"}
 }
 
-func TestProxyEnvironmentUsesShellPathWithoutChangingOtherVariables(t *testing.T) {
+func TestWithLoginShellPathUsesShellPathWithoutChangingOtherVariables(t *testing.T) {
 	environment := proxyTestShell(t, `
 test "$1" = -i || exit 1
 test "$2" = -c || exit 1
@@ -38,7 +38,7 @@ exec /bin/sh -c "$3"
 	path := t.TempDir() + `/bin ' " $(false)` + "\nnext:/usr/bin:/bin"
 	environment = append(environment, "SSHC_TEST_PATH="+path, "SSHC_TEST_SECRET=original")
 	before := slices.Clone(environment)
-	updated, err := ProxyEnvironment(context.Background(), environment)
+	updated, err := WithLoginShellPath(context.Background(), environment)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +50,7 @@ exec /bin/sh -c "$3"
 	}
 }
 
-func TestProxyEnvironmentReadsZshLoginAndInteractiveStartup(t *testing.T) {
+func TestWithLoginShellPathReadsZshLoginAndInteractiveStartup(t *testing.T) {
 	zsh, err := exec.LookPath("zsh")
 	if err != nil {
 		t.Skip("zsh is not installed")
@@ -64,7 +64,7 @@ func TestProxyEnvironmentReadsZshLoginAndInteractiveStartup(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	updated, err := ProxyEnvironment(context.Background(), []string{
+	updated, err := WithLoginShellPath(context.Background(), []string{
 		"HOME=" + home, "ZDOTDIR=" + home, "SHELL=" + zsh, "PATH=/usr/bin:/bin",
 	})
 	if err != nil {
@@ -82,7 +82,7 @@ func TestProxyEnvironmentReadsZshLoginAndInteractiveStartup(t *testing.T) {
 	}
 }
 
-func TestProxyEnvironmentKeepsInheritedPathWhenShellCannotReturnOne(t *testing.T) {
+func TestWithLoginShellPathKeepsInheritedPathWhenShellCannotReturnOne(t *testing.T) {
 	for name, script := range map[string]string{
 		"failed startup":    "printf 'private startup output'; exit 1\n",
 		"missing marker":    "printf 'private startup output'\n",
@@ -92,7 +92,7 @@ func TestProxyEnvironmentKeepsInheritedPathWhenShellCannotReturnOne(t *testing.T
 	} {
 		t.Run(name, func(t *testing.T) {
 			environment := proxyTestShell(t, script)
-			updated, err := ProxyEnvironment(context.Background(), environment)
+			updated, err := WithLoginShellPath(context.Background(), environment)
 			if err == nil || !slices.Equal(updated, environment) {
 				t.Fatalf("environment changed or failure was hidden: %q, %v", updated, err)
 			}
@@ -103,12 +103,12 @@ func TestProxyEnvironmentKeepsInheritedPathWhenShellCannotReturnOne(t *testing.T
 	}
 }
 
-func TestProxyEnvironmentCancelsShellStartupAndItsChild(t *testing.T) {
+func TestWithLoginShellPathCancelsShellStartupAndItsChild(t *testing.T) {
 	environment := proxyTestShell(t, "sleep 60\n")
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
 	started := time.Now()
-	updated, err := ProxyEnvironment(ctx, environment)
+	updated, err := WithLoginShellPath(ctx, environment)
 	if !errors.Is(err, context.DeadlineExceeded) || !slices.Equal(updated, environment) {
 		t.Fatalf("cancel = %q, %v", updated, err)
 	}

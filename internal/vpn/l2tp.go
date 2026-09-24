@@ -57,6 +57,9 @@ func (l2tpBackend) validateSettings(profile Profile) error {
 	for _, proposal := range []struct{ field, value string }{
 		{"l2tp.ike", settings.IKE}, {"l2tp.esp", settings.ESP},
 	} {
+		if err := validateLength(proposal.field, proposal.value, maxProposalLength); err != nil {
+			return err
+		}
 		if strings.ContainsAny(proposal.value, " \t\r\n\"\\") {
 			return fieldError(ErrSettings, proposal.field, ReasonFormat)
 		}

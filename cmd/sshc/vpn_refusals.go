@@ -5,93 +5,32 @@ import (
 	"errors"
 	"fmt"
 
-	"sshc/internal/vpn"
+	"sshc/internal/vpnrefusal"
 )
 
 // engine が VPN の操作を断った理由を、利用者向けの日本語の文に直す。
 //
-// engine は決まった語（コード、項目の JSON パス、理由）だけを返す。文言はここと
-// 画面の i18n カタログに持ち、Go の engine には持たない。
+// engine は決まった語（コード、項目の JSON パス、理由）だけを返す。文は
+// internal/vpnrefusal にあり、engine の Terminal の接続ログと同じ言い方をする。
+// ここは、CLI の引数を使って言い換えるものだけを持つ。
 
-// vpnRefusalSentences は、理由の語を持たない拒否のコードと、その言い方である。
-var vpnRefusalSentences = map[string]string{
-	"vpn_profile_unknown":       "指定したVPNプロファイルが見つかりません。sshc vpn list で名前を確認してください。",
-	"vpn_target_mismatch":       "この接続の接続先が、指定したVPNプロファイルの接続先と一致しません。",
-	"vpn_docker_missing":        "Dockerを使用できません。Dockerが起動しているか、現在のユーザーにDockerを操作する権限があるかを確認してください。",
-	"vpn_tunnel_device_missing": "この方式に必要なデバイスがこのマシンにありません。",
-	"vpn_image_build_failed":    "VPNのコンテナイメージの作成に失敗しました。ネットワークとDockerを確認してください。",
-	"vpn_container_foreign":     "sshc以外が作成した同じ名前のコンテナがあるため、操作を中止しました。",
-	"connection_unknown":        "この接続にはVPNプロファイルを設定できません。Includeしたファイルやワイルドカードの Host だけで定義された接続は、sshcで編集できません。",
-	"vault_locked":              "Vaultがロックされています。sshc vault unlock でロックを解除してからやり直してください。",
-	"vault_missing":             "Vaultがまだありません。sshc vault create で作成してからやり直してください。",
-}
-
-// vpnFieldReasons は、項目を受け取れなかった理由の語と、その言い方である。
-// %d を含むものには上限が入る。
-var vpnFieldReasons = map[vpn.Reason]string{
-	vpn.ReasonRequired:     "入力してください。",
-	vpn.ReasonFormat:       "形式が正しくありません。",
-	vpn.ReasonTooLong:      "長すぎます（%d文字まで）。",
-	vpn.ReasonTooMany:      "多すぎます（%d件まで）。",
-	vpn.ReasonOutOfRange:   "ポート番号は1〜65535で指定してください。",
-	vpn.ReasonNotIPv4:      "IPv4アドレスを指定してください。",
-	vpn.ReasonUnroutable:   "ループバックアドレスなど、使用できないアドレスです。",
-	vpn.ReasonNameNeedsDNS: "ホスト名で指定する場合は、VPN内のDNSサーバーも指定してください。",
-	vpn.ReasonUnsupported:  "このバージョンでは使用できない値です。",
-	vpn.ReasonUnexpected:   "選択した方式では使用しない設定項目です。",
-}
-
-// vpnFailureReasons は、経路を用意できなかった理由の語と、その言い方である。
-var vpnFailureReasons = map[vpn.FailureReason]string{
-	vpn.FailureUnknown:           "原因を特定できませんでした。",
-	vpn.FailureTimeout:           "接続がタイムアウトしました。",
-	vpn.FailureServerUnresolved:  "VPNサーバーの名前解決に失敗しました。サーバーの指定を確認してください。",
-	vpn.FailureIPsecNegotiation:  "IPsecのネゴシエーションに失敗しました。事前共有鍵と暗号スイートを確認してください。",
-	vpn.FailurePPPAuthentication: "PPPの認証に失敗しました。ユーザー名とパスワードを確認してください。",
-	vpn.FailureOpenConnect:       "ユーザー名、パスワード、二要素認証、証明書を確認してください。",
-	vpn.FailureHandshakeTimeout:  "ハンドシェイクに失敗しました。鍵とサーバーの指定を確認してください。",
-	vpn.FailureTargetUnresolved:  "VPN内で接続先の名前解決に失敗しました。DNSサーバーと接続先を確認してください。",
-	vpn.FailureTunnelLost:        "接続が確立した直後にVPNが切断されました。",
-}
-
-// describeVPNRefusal は、engine の拒否を1文に直す。知らない拒否なら false を返す。
+// describeVPNRefusal は、engine の拒否を1文に直す。VPN の拒否でなければ false を返す。
 func describeVPNRefusal(problem engineProblem, called vpnInvocation) (string, bool) {
-	switch problem.Code {
-	case "vpn_profile_exists":
+	if problem.Code == vpnrefusal.CodeProfileExists {
 		if called.Action == vpnRename {
 			return fmt.Sprintf("%s という名前のVPNプロファイルはすでにあります。別の名前を指定してください。",
 				safeTerminalCell(called.Rename)), true
 		}
 		name := safeTerminalCell(called.Name)
-		return fmt.Sprintf("%s という名前のVPNプロファイルはすでにあります。作り直す場合は、sshc vpn remove %s で"+
-			"削除してから追加してください。既存のプロファイルの名前を変更する場合は、sshc vpn rename を使用してください。", name, name), true
-	case "vpn_profile_invalid", "vpn_secrets_missing":
-		return describeVPNField(problem), true
-	case "vpn_session_failed":
-		sentence, known := vpnFailureReasons[vpn.FailureReason(problem.Reason)]
-		if !known {
-			sentence = vpnFailureReasons[vpn.FailureUnknown]
-		}
-		return "VPNの接続に失敗しました。" + sentence, true
+		return fmt.Sprintf("%s という名前のVPNプロファイルはすでにあります。設定を変更する場合は sshc vpn edit %s を、"+
+			"名前を変更する場合は sshc vpn rename を使用してください。", name, name), true
 	}
-	sentence, known := vpnRefusalSentences[problem.Code]
-	return sentence, known
-}
-
-// describeVPNField は、項目の誤りを「項目: 理由」の1文にする。古い engine が
-// 項目を返さなかった場合は、何を確かめればよいかだけを言う。
-func describeVPNField(problem engineProblem) string {
-	sentence, known := vpnFieldReasons[vpn.Reason(problem.Reason)]
-	if problem.Field == "" || !known {
-		if problem.Code == "vpn_secrets_missing" {
-			return "このVPNプロファイルのシークレット（秘密鍵やパスワード）が保存されていません。"
-		}
-		return "VPNプロファイルに使用できない値があります。接続先とVPNサーバーの指定を確認してください。"
+	if !vpnrefusal.Known(problem.Code) {
+		return "", false
 	}
-	if problem.Limit > 0 {
-		sentence = fmt.Sprintf(sentence, problem.Limit)
-	}
-	return safeTerminalCell(problem.Field) + ": " + sentence
+	return vpnrefusal.Sentence(vpnrefusal.Refusal{
+		Code: problem.Code, Field: safeTerminalCell(problem.Field), Reason: problem.Reason, Limit: problem.Limit,
+	}), true
 }
 
 // finishVPNFailure は、VPN の操作の失敗を書き、終了コードを返す。
@@ -141,7 +80,7 @@ func describedVPNRouteError(profile string, err error) error {
 	if !known {
 		return err
 	}
-	if problem.Code == "vpn_session_failed" {
+	if problem.Code == vpnrefusal.CodeSessionFailed {
 		sentence += fmt.Sprintf("詳しくは sshc vpn logs %s でログを確認してください。", safeTerminalCell(profile))
 	}
 	return &vpnRouteError{sentence: sentence, err: err}

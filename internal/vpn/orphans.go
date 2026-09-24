@@ -89,23 +89,18 @@ func (manager *Manager) DiscardOrphans(ctx context.Context) error {
 	if _, err := manager.command(ctx); err != nil {
 		return err
 	}
-	format := "{{.ID}} {{.Label \"" + workspaceLabel + "\"}}"
-	output, err := manager.docker.output(ctx, "ps", "--all", "--format", format,
-		"--filter", "label="+ownerLabel+"="+strconv.Itoa(manager.owner))
+	output, err := manager.docker.output(ctx, "ps", "--all", "--quiet",
+		"--filter", "label="+ownerLabel+"="+strconv.Itoa(manager.owner),
+		"--filter", "label="+workspaceLabel+"="+manager.workspace)
 	if err != nil {
 		return err
 	}
-	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
-		fields := strings.Fields(line)
-		if len(fields) == 0 {
-			continue
-		}
-		// workspace の札が無いのは、札を付ける前の版（v0.38.0）が立てたコンテナ
-		// である。その版はこの利用者に engine を一つしか想定していなかったので、
-		// この利用者のものとして止める。
-		if len(fields) == 1 || fields[1] == manager.workspace {
-			manager.stopContainer(ctx, fields[0])
-		}
+	// 1台ずつ止めると、停止を待つ時間が台数だけ積み重なり、そのあいだ経路の
+	// 起動も待たされる。並べて止める。
+	var stopping sync.WaitGroup
+	for _, container := range strings.Fields(output) {
+		stopping.Go(func() { manager.stopContainer(ctx, container) })
 	}
+	stopping.Wait()
 	return nil
 }

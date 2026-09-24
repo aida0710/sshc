@@ -95,7 +95,10 @@ func (openConnectBackend) validateSettings(profile Profile) error {
 	default:
 		return fieldError(ErrSettings, "openconnect.secondFactor", ReasonUnsupported)
 	}
-	// 答えは1行として送る。改行が混じると、装置が受け取る問答がずれる。
+	if err := validateLength("openconnect.approvalWord", settings.ApprovalWord, maxApprovalWordLength); err != nil {
+		return err
+	}
+	// 答えは1行として送る。改行が混じると、サーバーが受け取る問答がずれる。
 	if strings.ContainsAny(settings.ApprovalWord, " \t\r\n") {
 		return fieldError(ErrSettings, "openconnect.approvalWord", ReasonFormat)
 	}
@@ -105,6 +108,9 @@ func (openConnectBackend) validateSettings(profile Profile) error {
 func validateFingerprint(fingerprint string) error {
 	if fingerprint == "" {
 		return nil
+	}
+	if err := validateLength("openconnect.serverCertificate", fingerprint, maxFingerprintLength); err != nil {
+		return err
 	}
 	known := false
 	for _, prefix := range openConnectFingerprintPrefixes {

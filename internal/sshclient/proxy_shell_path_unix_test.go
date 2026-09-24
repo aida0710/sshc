@@ -40,7 +40,7 @@ func TestSSHConnectsWithShellPathEvenWhenStartupPrintsABanner(t *testing.T) {
 	}
 	dialer := dialerFor(t, server, sshclient.Auth{ReadFile: func(string) ([]byte, error) { return contents, nil }})
 	dialer.ProxyEnvironment = func(ctx context.Context) ([]string, error) {
-		return platform.ProxyEnvironment(ctx, []string{"HOME=" + home, "SHELL=" + shell, "PATH=/usr/bin:/bin"})
+		return platform.WithLoginShellPath(ctx, []string{"HOME=" + home, "SHELL=" + shell, "PATH=/usr/bin:/bin"})
 	}
 	target := targetWith(server, path)
 	target.ProxyCommand = "proxy-relay"

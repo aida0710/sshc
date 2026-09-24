@@ -3,13 +3,14 @@ package app
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"net"
 	"time"
 
+	"sshc/internal/sshclient"
 	"sshc/internal/vpn"
 	"sshc/internal/vpnprofile"
+	"sshc/internal/vpnrefusal"
 )
 
 // vpnStateDirectory は、中継のソケットを置く engine 専用ディレクトリである。
@@ -51,18 +52,29 @@ func superviseVPNSessions(ctx context.Context, sessions *vpn.Manager, logger *sl
 }
 
 // vpnRoute は、プロファイル名から設定と秘密を集め、その経路で接続先へ繋ぐ。
+//
+// address は、プロファイルを付けた接続の HostName と Port である。断った理由は、
+// Terminal の接続ログに日本語の文で出す。
 func vpnRoute(
 	profiles *vpnprofile.Service,
 	sessions *vpn.Manager,
 ) func(context.Context, string, string) (net.Conn, error) {
 	return func(ctx context.Context, name, address string) (net.Conn, error) {
 		profile, secrets, err := profiles.Route(name)
-		if err != nil {
+		if err == nil {
+			var connection net.Conn
+			if connection, err = sessions.Dial(ctx, profile, secrets, address); err == nil {
+				return connection, nil
+			}
+		}
+		refusal, known := vpnrefusal.Of(err)
+		if !known {
 			return nil, err
 		}
-		if !profile.Reaches(address) {
-			return nil, fmt.Errorf("%w: profile %s targets %s", vpn.ErrTargetMismatch, name, profile.Target.Address())
+		sentence := vpnrefusal.Sentence(refusal)
+		if refusal.Code == vpnrefusal.CodeSessionFailed {
+			sentence += "詳しくはVPN画面の「ログ」、または sshc vpn logs " + name + " で確認してください。"
 		}
-		return sessions.Dial(ctx, profile, secrets)
+		return nil, &sshclient.ExplainedError{Sentence: sentence, Err: err}
 	}
 }

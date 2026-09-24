@@ -7,6 +7,7 @@ package commandconn
 import (
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -23,7 +24,8 @@ const complaintsLimit = 8 << 10
 
 // Start は、process を起動し、その標準入出力を接続として返す。
 //
-// process の Stdin、Stdout、Stderr はここで決めるので、呼び出し側は設定しない。
+// process の Stdin と Stdout はここで決めるので、呼び出し側は設定しない。
+// process.Stderr が設定されていれば、標準エラーを Complaints に加えてそこにも写す。
 // name は、接続の相手として見せる表記である（ProxyCommand の行など）。
 func Start(process *exec.Cmd, name string) (*Conn, error) {
 	childStdin, ourWriter, err := os.Pipe()
@@ -40,7 +42,11 @@ func Start(process *exec.Cmd, name string) (*Conn, error) {
 	complaints := &boundedBuffer{limit: complaintsLimit}
 	process.Stdin = childStdin
 	process.Stdout = childStdout
-	process.Stderr = complaints
+	if process.Stderr == nil {
+		process.Stderr = complaints
+	} else {
+		process.Stderr = io.MultiWriter(complaints, process.Stderr)
+	}
 
 	if err := process.Start(); err != nil {
 		for _, file := range []*os.File{childStdin, ourWriter, ourReader, childStdout} {

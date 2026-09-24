@@ -3274,6 +3274,8 @@ export interface components {
         };
         VPNOverview: {
             available: boolean;
+            /** @enum {string} */
+            unavailable?: "vpn_docker_missing" | "vpn_docker_not_running";
             detail?: string;
             profiles: components["schemas"]["VPNProfileStatus"][];
         };
@@ -3291,7 +3293,6 @@ export interface components {
             address?: string;
             since?: string;
             backend?: string;
-            targetAddress?: string;
         };
         VPNRenameRequest: {
             name: string;
@@ -3316,8 +3317,8 @@ export interface components {
         };
         VPNProfile: {
             name: string;
-            backend: string;
-            target: string;
+            /** @enum {string} */
+            backend: "wireguard" | "l2tp_ipsec" | "openconnect";
             dns?: string[];
             wireguard?: components["schemas"]["WireGuardProfile"];
             l2tp?: components["schemas"]["L2TPProfile"];
@@ -4988,6 +4989,7 @@ export interface operations {
                     "application/json": components["schemas"]["VPNLogs"];
                 };
             };
+            400: components["responses"]["Problem"];
             401: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
@@ -5013,6 +5015,7 @@ export interface operations {
                     "application/json": components["schemas"]["VPNOverview"];
                 };
             };
+            400: components["responses"]["Problem"];
             401: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
@@ -5038,8 +5041,10 @@ export interface operations {
                     "application/json": components["schemas"]["VPNOverview"];
                 };
             };
+            400: components["responses"]["Problem"];
             401: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
         };
     };
     setConnectionVPN: {

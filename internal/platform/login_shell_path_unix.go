@@ -16,19 +16,22 @@ import (
 )
 
 // シェル設定の入力待ちや大量出力で接続が止まらないための上限。
-const proxyPathTimeout = 5 * time.Second
-const proxyPathOutputLimit = 64 << 10
-const proxyPathWaitDelay = time.Second
+const loginShellPathTimeout = 5 * time.Second
+const loginShellPathOutputLimit = 64 << 10
+const loginShellPathWaitDelay = time.Second
 
 // PATHは環境変数として/bin/shへ渡す。fishのPATH配列もここで文字列になり、
-// 起動メッセージはNUL区切りの印の外に残る。ProxyCommand本文は渡さない。
-const proxyPathCommand = `exec /bin/sh -c 'printf "\000sshc-path\000%s\000" "$PATH"'`
-const proxyPathMarker = "\x00sshc-path\x00"
+// 起動メッセージはNUL区切りの印の外に残る。実行するコマンドの本文は渡さない。
+const loginShellPathCommand = `exec /bin/sh -c 'printf "\000sshc-path\000%s\000" "$PATH"'`
+const loginShellPathMarker = "\x00sshc-path\x00"
 
-// ProxyEnvironmentはログインシェルのPATHだけをProxyCommandの環境へ移す。
-// shell aliasや関数は移さず、コマンドの解釈は引き続き/bin/shが担当する。
-// 失敗時も起動元の環境を返し、既に使えているProxyCommandを妨げない。
-func ProxyEnvironment(ctx context.Context, environment []string) ([]string, error) {
+// WithLoginShellPathは、ログインシェルのPATHだけを environment へ移した写しを返す。
+//
+// launchd や systemd が起動した engine のPATHは短く、利用者がシェルの設定で足した
+// 場所（Homebrew、Docker Desktop など）を含まない。ProxyCommand と docker を
+// 起動するときに使う。shell aliasや関数は移さない。
+// 失敗時も起動元の環境を返し、既に使えているコマンドを妨げない。
+func WithLoginShellPath(ctx context.Context, environment []string) ([]string, error) {
 	if environment == nil {
 		return nil, nil
 	}
@@ -44,10 +47,10 @@ func ProxyEnvironment(ctx context.Context, environment []string) ([]string, erro
 	if err != nil {
 		return environment, err
 	}
-	ctx, cancel := context.WithTimeout(ctx, proxyPathTimeout)
+	ctx, cancel := context.WithTimeout(ctx, loginShellPathTimeout)
 	defer cancel()
 	// -iは.zshrc、ログイン用argv[0]は.zprofileなどのPATH設定も読むため。
-	process := exec.CommandContext(ctx, shell, "-i", "-c", proxyPathCommand)
+	process := exec.CommandContext(ctx, shell, "-i", "-c", loginShellPathCommand)
 	process.Args[0] = LoginArgv0(shell)
 	process.Env = environment
 	if home, _ := lookup("HOME"); filepath.IsAbs(home) {
@@ -62,8 +65,8 @@ func ProxyEnvironment(ctx context.Context, environment []string) ([]string, erro
 		}
 		return err
 	}
-	process.WaitDelay = proxyPathWaitDelay
-	output := &proxyPathOutput{}
+	process.WaitDelay = loginShellPathWaitDelay
+	output := &loginShellPathOutput{}
 	process.Stdout = output
 	// stdinは/dev/null、stderrは破棄する。起動設定の出力や秘密をSSHへ流さない。
 	if err := process.Run(); err != nil {
@@ -85,14 +88,14 @@ func ProxyEnvironment(ctx context.Context, environment []string) ([]string, erro
 	return append(updated, "PATH="+path), nil
 }
 
-type proxyPathOutput struct {
+type loginShellPathOutput struct {
 	buffer    bytes.Buffer
 	truncated bool
 }
 
-func (output *proxyPathOutput) Write(contents []byte) (int, error) {
+func (output *loginShellPathOutput) Write(contents []byte) (int, error) {
 	length := len(contents)
-	remaining := proxyPathOutputLimit - output.buffer.Len()
+	remaining := loginShellPathOutputLimit - output.buffer.Len()
 	if length > remaining {
 		contents = contents[:remaining]
 		output.truncated = true
@@ -101,11 +104,11 @@ func (output *proxyPathOutput) Write(contents []byte) (int, error) {
 	return length, nil
 }
 
-func (output *proxyPathOutput) path() (string, error) {
+func (output *loginShellPathOutput) path() (string, error) {
 	if output.truncated {
 		return "", errors.New("login shell PATH output exceeded the limit")
 	}
-	_, framed, found := strings.Cut(output.buffer.String(), proxyPathMarker)
+	_, framed, found := strings.Cut(output.buffer.String(), loginShellPathMarker)
 	path, _, terminated := strings.Cut(framed, "\x00")
 	if !found || !terminated || path == "" {
 		return "", errors.New("login shell did not return a PATH")

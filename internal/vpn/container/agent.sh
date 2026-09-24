@@ -1,5 +1,8 @@
 #!/bin/sh
-# ひとつのトンネルを張り、その中にある接続先への中継を差し出す。
+# ひとつのトンネルを張り、接続先への経路を作れる状態にする。
+#
+# 接続先ごとの中継は、engine が接続1本ごとに docker exec で connect を起動して
+# 行う。ここはトンネルを張って見張り、止める合図で相手へ切断を伝える。
 #
 # 秘密は引数にも環境変数にもイメージにも置かない。engineが docker exec の標準
 # 入力で設定を書き込み、このスクリプトはそれが現れるのを待つ。読み終えた設定は
@@ -9,13 +12,15 @@
 #   backend_read   設定から自分の節を読む（このあと設定は消える）
 #   backend_up     トンネルを張り、interface を決める
 #   backend_ready  トンネルの相手と話せたことを確かめる
-#   backend_allow  名前を引いて分かった接続先を、トンネルが運ぶ相手に足す
+#   backend_allow  接続先を、トンネルが運ぶ相手に足す（connect が呼ぶ）
 #   backend_alive  トンネルが生きているかを返す
 #   backend_down   相手へ切断を伝えて畳む
 set -eu
 
 runtime=/run/sshc-vpn
-socket_directory=/run/sshc-vpn-socket
+# shared_directory は、ホストと共有する場所である。engine はここに現れる
+# status.json と failure.json を、docker を呼ばずに読む。
+shared_directory=/run/sshc-vpn-shared
 backend_directory=/usr/local/lib/sshc-vpn
 profile="$runtime/profile.json"
 
@@ -47,9 +52,10 @@ fail() {
 	reason=$1
 	shift
 	echo "$*" >&2
-	printf '{"reason":"%s"}\n' "$reason" >"$socket_directory/failure.json" 2>/dev/null || true
-	chmod 644 "$socket_directory/failure.json" 2>/dev/null || true
-	stop_relay
+	printf '{"reason":"%s"}\n' "$reason" >"$shared_directory/failure.json" 2>/dev/null || true
+	chmod 644 "$shared_directory/failure.json" 2>/dev/null || true
+	# connect が新しい接続を受けないよう、経路の控えを先に消す。
+	rm -f "$runtime/route.env"
 	backend_down 2>/dev/null || true
 	exit 1
 }
@@ -73,20 +79,11 @@ wait_for_address() {
 	done
 }
 
-relay=
-stop_relay() {
-	if [ -n "$relay" ]; then
-		kill "$relay" 2>/dev/null || true
-		wait "$relay" 2>/dev/null || true
-		relay=
-	fi
-}
-
 # 止める合図（docker stop）を受けたら、相手へ切断を伝えてから終わる。伝えずに
 # 終わると、装置の側にセッションが残る。
 shutdown() {
 	trap - TERM INT
-	stop_relay
+	rm -f "$runtime/route.env"
 	backend_down 2>/dev/null || true
 	exit 0
 }
@@ -106,10 +103,7 @@ while [ ! -f "$profile" ]; do
 done
 
 backend=$(jq -r '.backend' "$profile")
-target_host=$(jq -r '.target.host' "$profile")
-target_port=$(jq -r '.target.port' "$profile")
-socket_owner=$(jq -r '.socketOwner' "$profile")
-# VPNの中で名前を引くDNSサーバー。空なら、接続先はアドレスで書かれている。
+# VPNの中で名前解決するDNSサーバー。空なら、接続先はアドレスでしか指定できない。
 resolvers=$(jq -r 'if .dns then .dns[] else empty end' "$profile" | tr '\n' ' ')
 # 応えない相手を待つ締め切り（UNIX 秒）。engine が待つのをやめるより先に諦め、
 # どこで止まったかをログへ残す。値は engine が決める。
@@ -147,64 +141,34 @@ if [ -n "$resolvers" ]; then
 	cat "$runtime/resolv.conf" >/etc/resolv.conf
 fi
 
-# 接続先が名前なら、VPNの中で引く。ホストで引くと、同じ名前が指す別の機械へ
-# 繋ぎうる。引けたアドレスだけが、この経路が触ってよい相手である。
-case "$target_host" in
-*[!0-9.]*)
-	target_address=$(getent ahostsv4 "$target_host" | awk 'NR==1{print $1}')
-	if [ -z "$target_address" ]; then
-		fail target_unresolved "VPN内で接続先の名前解決に失敗しました: $target_host"
-	fi
-	echo "接続先 $target_host のアドレスは $target_address です。"
-	backend_allow "$target_address"
-	;;
-*)
-	target_address=$target_host
-	;;
-esac
-
-# VPN装置そのものを接続先にしない。トンネルの外側と内側が同じ相手になり、
-# 経路とパケットフィルタが互いを打ち消す。
-if [ "${server_address:-}" = "$target_address" ]; then
-	fail unknown "VPNサーバーと接続先が同じアドレスです。"
-fi
-
-# 接続先への経路は、このコンテナのトンネルの中にしか作らない。
-ip route replace "$target_address/32" dev "$interface"
-# トンネル以外から接続先へ出ようとする通信は拒む。トンネルが落ちているあいだ、
-# 接続先への通信がDockerの通常回線へ流れることはない。
-iptables -A OUTPUT -d "$target_address" ! -o "$interface" -j REJECT
-
-mkdir -p "$socket_directory"
+# connect が読む経路の控え。秘密は書かない。値はどれも engine と backend が
+# 形を確かめたもの（方式の名前、interface、IPv4 アドレス）だけである。
+{
+	printf 'backend=%s\n' "$backend"
+	printf 'interface=%s\n' "$interface"
+	printf 'server_address=%s\n' "${server_address:-}"
+	printf "resolvers='%s'\n" "$resolvers"
+} >"$runtime/route.env"
 
 # トンネルの実際の様子を書き出す。engine はホスト側からこのファイルを読む。
 # docker exec を呼ばずに状態を見せられるので、画面の更新が docker の応答に
 # 引きずられない。秘密は書かない。
-tunnel_address=$(ip -4 -o address show dev "$interface" 2>/dev/null | awk '{print $4}' | head -1)
-printf '{"backend":"%s","interface":"%s","address":"%s","since":"%s","targetAddress":"%s"}\n' \
-	"$backend" "$interface" "$tunnel_address" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$target_address" \
-	>"$socket_directory/status.json"
-chmod 644 "$socket_directory/status.json"
-
-echo "接続先 $target_address:$target_port への中継を開始します。"
-# ソケットが現れることが、トンネル・経路・フィルタまで用意できた合図である。
-# engineはホスト側からこのソケットを待ち、現れたらそこへ繋ぐ。
-socat \
-	"UNIX-LISTEN:$socket_directory/relay.sock,fork,unlink-early,mode=0600,user=$socket_owner" \
-	"TCP:$target_address:$target_port" &
-relay=$!
-
-# トンネルが落ちたら、中継を畳んでこのコンテナも終える。
 #
-# 中継だけが残ると、engine からは経路があるように見えたまま、繋いだ先で必ず
-# 失敗する。コンテナごと終われば、次に必要になったときに engine が作り直す。
-while kill -0 "$relay" 2>/dev/null; do
-	if ! backend_alive; then
-		fail tunnel_lost "VPNが切断されました。中継を終了します。"
-	fi
+# このファイルが現れることが、トンネルと DNS まで用意できた合図である。engine は
+# これを待ってから、接続先へ繋ぎ始める。
+tunnel_address=$(ip -4 -o address show dev "$interface" 2>/dev/null | awk '{print $4}' | head -1)
+printf '{"backend":"%s","interface":"%s","address":"%s","since":"%s"}\n' \
+	"$backend" "$interface" "$tunnel_address" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+	>"$shared_directory/status.json.pending"
+chmod 644 "$shared_directory/status.json.pending"
+mv "$shared_directory/status.json.pending" "$shared_directory/status.json"
+echo "VPNの接続が完了しました。"
+
+# トンネルが落ちたら、このコンテナも終える。
+#
+# トンネルの無い経路が残ると、engine からは経路があるように見えたまま、繋いだ先で
+# 必ず失敗する。コンテナごと終われば、次に必要になったときに engine が作り直す。
+while backend_alive; do
 	pause "$tunnel_check_seconds"
 done
-relay=
-echo "中継が終了しました。" >&2
-backend_down 2>/dev/null || true
-exit 1
+fail tunnel_lost "VPNが切断されました。"

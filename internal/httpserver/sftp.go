@@ -20,6 +20,7 @@ import (
 	"sshc/internal/session"
 	sshcSFTP "sshc/internal/sftp"
 	"sshc/internal/validate"
+	"sshc/internal/vpnrefusal"
 )
 
 type SFTPHandlers struct {
@@ -172,9 +173,15 @@ func sftpProblem(c *echo.Context, err error) error {
 		return problem(c, http.StatusRequestEntityTooLarge, "sftp_compare_limit")
 	case errors.Is(err, sshcSFTP.ErrTraversalLimit):
 		return problem(c, http.StatusRequestEntityTooLarge, "sftp_traversal_limit")
-	default:
-		return problem(c, http.StatusBadGateway, "sftp_failed")
 	}
+	// VPN の経路を用意できなかった理由は、VPN の語のまま返す。画面は VPN 画面と
+	// 同じ言い方で見せる。
+	if refusal, known := vpnrefusal.Of(err); known {
+		return problemWith(c, http.StatusBadGateway, problemPayload{
+			Code: refusal.Code, Field: refusal.Field, Reason: refusal.Reason, Limit: refusal.Limit,
+		})
+	}
+	return problem(c, http.StatusBadGateway, "sftp_failed")
 }
 
 type sftpTransferJobResponse struct {

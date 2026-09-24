@@ -69,9 +69,8 @@ func New(dependencies Dependencies) *Service {
 
 // Create は、新しいプロファイルを、秘密と一緒に1回の書き込みで作る。
 //
-// 同じ名前の秘密が Vault に残っていても、必ず送られたもので置き換える。v0.38.0 は
-// ロック中の削除で秘密だけを残すことがあり、それを新しいプロファイルに黙って
-// 引き継がせない。
+// 同じ名前の秘密が Vault に残っていても、必ず送られたもので置き換える。作り直した
+// プロファイルに、前のプロファイルの秘密を黙って引き継がせない。
 func (s *Service) Create(profile application.VPNProfile, secrets vpn.SecretsDocument) error {
 	change, err := s.configuration.PlanVPNProfileCreate(profile)
 	if err != nil {
@@ -103,12 +102,13 @@ func (s *Service) Update(profile application.VPNProfile, sent *vpn.SecretsDocume
 
 // Rename は、プロファイルの名前を変える。設定・秘密・接続の紐付けを1回で書く。
 //
-// 動いている経路はコンテナの名前も変わるので止める。ただし止めるのは、名前の形式、
-// 重複、Vault の解錠をすべて確かめたあとである。断る場合に、使っている経路を
-// 落とさない。
+// 動いている経路はコンテナの名前も変わるので、書いたあとで止める。名前の形式、
+// 重複、Vault のロックの解除を確かめて断る場合は、使っている経路を落とさない。
 func (s *Service) Rename(ctx context.Context, from, to string) error {
 	if from == to {
-		return nil
+		// 名前が変わらなくても、無い名前の改名は成功にしない。
+		_, err := s.configuration.VPNProfile(from)
+		return err
 	}
 	change, err := s.configuration.PlanVPNProfileRename(from, to)
 	if err != nil {
@@ -117,14 +117,13 @@ func (s *Service) Rename(ctx context.Context, from, to string) error {
 	if err := s.requireUnlockedVault(); err != nil {
 		return err
 	}
-	// 別の持ち主のコンテナが同じ名前を使っていても、こちらの設定の改名は妨げない。
-	// そのコンテナはこちらの経路ではない。
-	if err := s.stopRoute(ctx, from); err != nil && !errors.Is(err, vpn.ErrSessionForeign) {
+	if err := s.commitWithVault(change, secret.VPNSecretsMutation{
+		Kind: secret.VPNSecretsRename, Profile: from, NewName: to,
+	}); err != nil {
 		return err
 	}
-	return s.commitWithVault(change, secret.VPNSecretsMutation{
-		Kind: secret.VPNSecretsRename, Profile: from, NewName: to,
-	})
+	s.stopRoute(ctx, from)
+	return nil
 }
 
 // Remove は、プロファイルと、それを指している接続の紐付けと、秘密を1回で消す。
@@ -139,10 +138,11 @@ func (s *Service) Remove(ctx context.Context, name string) error {
 	if err := s.requireUnlockedVault(); err != nil {
 		return err
 	}
-	if err := s.stopRoute(ctx, name); err != nil {
+	if err := s.commitWithVault(change, secret.VPNSecretsMutation{Kind: secret.VPNSecretsRemove, Profile: name}); err != nil {
 		return err
 	}
-	return s.commitWithVault(change, secret.VPNSecretsMutation{Kind: secret.VPNSecretsRemove, Profile: name})
+	s.stopRoute(ctx, name)
+	return nil
 }
 
 // Route は、保存済みの設定と秘密を、経路ひとつぶんとして集める。
@@ -240,10 +240,14 @@ func (s *Service) requireUnlockedVault() error {
 	return nil
 }
 
-// stopRoute は、動いている経路を止める。Docker が無ければ、止める経路も無い。
-func (s *Service) stopRoute(ctx context.Context, name string) error {
-	if err := s.routes.Stop(ctx, name); err != nil && !errors.Is(err, vpn.ErrDockerMissing) {
-		return err
-	}
-	return nil
+// stopRoute は、設定を書き終えたあとで、古い名前の経路を止める。
+//
+// 止めるのは書いたあとである。先に止めると、止めてから書くまでのあいだに、
+// Terminal の再接続が古い設定で経路を起こし直す。書いたあとなら、再接続は
+// 「そのプロファイルは無い」で断られる。
+//
+// 止められなくても失敗にしない。設定はもう書いてある。Docker が止まっていれば
+// コンテナも止まっており、残った経路は、無操作の停止か、次の engine の起動で片付く。
+func (s *Service) stopRoute(ctx context.Context, name string) {
+	_ = s.routes.Stop(ctx, name)
 }
