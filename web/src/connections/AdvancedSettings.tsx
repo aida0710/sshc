@@ -7,6 +7,7 @@ import { Button, Card, Notice, Row } from "../ui/surface";
 import { formatValues, parseValues } from "../rules/rules";
 import { identityKey } from "./connectionBrowser";
 import { activateTabFromKeyboard } from "../ui/tabKeyboard";
+import { DraftSaveBar } from "./DraftSaveBar";
 
 type AdvancedSettingsProps = {
   detail: HostDetail;
@@ -332,12 +333,13 @@ export function AdvancedSettings({
           </Button>
         </Card>
 
-        {fieldDirty ? <div className="flex items-center justify-end gap-2 border-t border-line py-3">
-          <Button disabled={!fieldDirty} onClick={discard}>{t("conn.discardChanges")}</Button>
-          <Button kind="primary" disabled={!fieldDirty || fieldsDisabled} onClick={submitFieldEdits}>
-            {t("host.saveChanges")}
-          </Button>
-        </div> : null}
+        {fieldDirty ? <DraftSaveBar
+          saveLabel={t("host.saveChanges")}
+          saveDisabled={fieldsDisabled}
+          discardDisabled={false}
+          onDiscard={discard}
+          onSave={submitFieldEdits}
+        /> : null}
         </div>
 
         <div hidden={area !== "Raw"} className="flex flex-col gap-2">
@@ -353,12 +355,13 @@ export function AdvancedSettings({
           spellCheck={false}
           className="min-h-80 rounded-lg border border-control-line bg-tree p-4 font-mono text-xs leading-5 text-ink focus:border-accent focus:outline-none"
         />
-        {rawDirty ? <div className="flex items-center justify-end gap-2 border-t border-line py-3">
-          <Button disabled={!rawDirty} onClick={discard}>{t("conn.discardChanges")}</Button>
-          <Button kind="primary" disabled={!rawDirty || rawDisabled} onClick={() => onBlockRaw(blockRaw)}>
-            {t("host.saveBlock")}
-          </Button>
-        </div> : null}
+        {rawDirty ? <DraftSaveBar
+          saveLabel={t("host.saveBlock")}
+          saveDisabled={rawDisabled}
+          discardDisabled={false}
+          onDiscard={discard}
+          onSave={() => onBlockRaw(blockRaw)}
+        /> : null}
         </div>
       </div>
     </section>

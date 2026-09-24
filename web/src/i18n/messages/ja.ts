@@ -2214,7 +2214,7 @@ export const ja = {
   "conn.basicConnectionRefreshFailed":
     "設定は保存されましたが、更新後の接続を読み込めませんでした。この接続を再読み込みしてください。",
   "conn.basicSave": "基本設定を保存",
-  "conn.basicSaving": "保存しています…",
+  "conn.saving": "保存しています…",
   "conn.discardChanges": "変更を破棄",
   "conn.blockMoved":
     "このブロックはディスク上で移動しました。接続を読み込み直してもう一度試してください。",

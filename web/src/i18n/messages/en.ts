@@ -2207,7 +2207,7 @@ export const en = {
   "conn.basicConnectionRefreshFailed":
     "The settings were saved, but the updated connection could not be loaded. Reload this connection.",
   "conn.basicSave": "Save Basic settings",
-  "conn.basicSaving": "Saving…",
+  "conn.saving": "Saving…",
   "conn.discardChanges": "Discard changes",
   "conn.blockMoved":
     "This block moved on disk. Reload the connection and try again.",
