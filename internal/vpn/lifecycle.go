@@ -45,8 +45,8 @@ type sessionState struct {
 type StartPhase string
 
 const (
-	// PhaseImage は、コンテナのイメージを用意しているところである。初回は
-	// 取得と構築に分単位でかかる。
+	// PhaseImage は、コンテナのイメージを作っているところである。初回は取得と
+	// 構築に分単位でかかる。イメージが作成済みなら、この段階は通らない。
 	PhaseImage StartPhase = "image"
 	// PhaseContainer は、コンテナを起こして設定を渡しているところである。
 	PhaseContainer StartPhase = "container"
@@ -56,6 +56,22 @@ const (
 	// 待っているのが機械ではなく人なので、トンネル待ちとは別に見せる。
 	PhaseApproval StartPhase = "approval"
 )
+
+// Notice は、この段階に入ったことを、接続ログの設定に関係なく知らせる文である。
+// 時間がかかる段階と、利用者が何かをする段階だけが文を持ち、それ以外は空を返す。
+//
+// Terminal の接続は sshcエンジンの中でこの文を書き、CLI の接続は sshcエンジンの
+// 段階を見て同じ文を書く。
+func (phase StartPhase) Notice() string {
+	switch phase {
+	case PhaseImage:
+		return "VPNのコンテナイメージを作成しています。初回は数分かかることがあります。"
+	case PhaseApproval:
+		return "スマートフォンでの承認を待っています。"
+	default:
+		return ""
+	}
+}
 
 // enterPhase は、いまの段階を記録する。空文字列は用意していないことを表す。
 func (state *sessionState) enterPhase(phase StartPhase) {

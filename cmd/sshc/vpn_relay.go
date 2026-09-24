@@ -139,8 +139,19 @@ func startVPNRoute(ctx context.Context, stateDir string, client *http.Client, pr
 		return "", err
 	}
 	defer func() { _ = engine.Close() }()
+	// 経路を起こし終えるまで、初回はイメージの作成で数分かかる。待つあいだ、
+	// 時間のかかる段階に入ったことを知らせる。
+	watching, stopWatching := context.WithCancel(ctx)
+	watched := make(chan struct{})
+	go func() {
+		defer close(watched)
+		announcePhases(watching, phaseWatch{engine: engine, profile: profile, interval: phasePollInterval})
+	}()
 	var overview httpserver.VPNOverview
-	if err := engine.sendJSON(ctx, http.MethodPost, vpnProfilePath(profile)+"/session", nil, &overview); err != nil {
+	err = engine.sendJSON(ctx, http.MethodPost, vpnProfilePath(profile)+"/session", nil, &overview)
+	stopWatching()
+	<-watched
+	if err != nil {
 		return "", err
 	}
 	for _, session := range overview.Profiles {

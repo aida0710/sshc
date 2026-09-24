@@ -2,10 +2,13 @@ package sshclient
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"strings"
 	"testing"
 	"time"
+
+	"sshc/internal/connectionlog"
 )
 
 // 既定は無言である。毎回この量が流れると、シェルの最初の一画面が押し流される。
@@ -126,5 +129,20 @@ func TestAnExplainedFailureKeepsItsDetailsAtDetailed(t *testing.T) {
 		if !strings.Contains(out.String(), want) {
 			t.Fatalf("out = %q", out.String())
 		}
+	}
+}
+
+// VPN の経路の知らせ（connectionlog.Notice）は、既定の無言でも [sshc] の行として出す。
+// 深さの印は付けない。
+func TestAConnectionNoticeIsShownEvenWhenQuiet(t *testing.T) {
+	var out bytes.Buffer
+	trace := newTracer(Quiet, &out)
+	ctx := trace.withLog(context.Background())
+
+	connectionlog.Say(ctx, connectionlog.Notice, "VPNのコンテナイメージを作成しています。")
+	connectionlog.Say(ctx, connectionlog.Brief, "書かない")
+
+	if got := out.String(); got != "[sshc] VPNのコンテナイメージを作成しています。\r\n" {
+		t.Fatalf("out = %q", got)
 	}
 }

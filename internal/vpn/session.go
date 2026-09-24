@@ -90,8 +90,7 @@ func (manager *Manager) start(ctx context.Context, profile Profile, secrets Secr
 	if err := requireSocketPath(directory); err != nil {
 		return err
 	}
-	report(PhaseImage)
-	image, err := manager.ensureImage(ctx)
+	image, err := manager.ensureImage(ctx, report)
 	if err != nil {
 		return err
 	}
@@ -145,11 +144,10 @@ func (manager *Manager) configureContainer(
 	}
 	phase := tunnelPhase(profile)
 	report(phase)
-	if phase == PhaseApproval {
-		connectionlog.Say(ctx, connectionlog.Brief, "スマートフォンでの承認を待っています（上限 %s）。", relayDeadline(profile))
-	} else {
-		connectionlog.Say(ctx, connectionlog.Detailed, "設定を渡しました。VPNの接続を待っています（上限 %s）。", relayDeadline(profile))
+	if notice := phase.Notice(); notice != "" {
+		connectionlog.Say(ctx, connectionlog.Notice, "%s", notice)
 	}
+	connectionlog.Say(ctx, connectionlog.Detailed, "設定を渡しました。VPNの接続を待っています（上限 %s）。", relayDeadline(profile))
 	return manager.waitForTunnel(ctx, name, profile)
 }
 

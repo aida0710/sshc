@@ -70,7 +70,7 @@ When the device asks one more question after the password, set the second factor
 
 Duo devices come in two shapes. Some **push the notification as soon as the password is accepted** and hold the response until you approve; others **ask one more question** that takes a word such as `push`. For the first, leave the word blank. Only the second needs it.
 
-Either way the route is given two minutes, which is what noticing a notification, unlocking the phone and approving it takes. While it waits, the VPN screen and `sshc vpn` say it is waiting for approval on the phone.
+Either way the route is given two minutes, which is what noticing a notification, unlocking the phone and approving it takes. While it waits, the VPN screen and `sshc vpn` say it is waiting for approval on the phone. When the route is started by connecting to a host (the terminal, or `sshc <host>` on the command line), the connection also prints an `[sshc]` line saying so, whatever the connection log setting.
 
 The TOTP seed is kept in the vault and the code is generated just before it is handed to the container. Neither the seed nor the code appears in `docker logs` or on screen.
 
@@ -98,7 +98,7 @@ To change a name, do not delete and recreate: use **Rename** on the VPN screen o
 
 ## While a route comes up
 
-`sshc vpn up` and **Connect** on the VPN screen wait until the route is usable. On a machine that has not built the image yet, the first run takes a few minutes. How far it has got is shown in order: building the image, starting the container, waiting for the tunnel.
+`sshc vpn up` and **Connect** on the VPN screen wait until the route is usable. On a machine that has not built the image yet, the first run takes a few minutes. How far it has got is shown in order: building the image, starting the container, waiting for the tunnel. When the route is started by connecting to a host (the terminal, or `sshc <host>` on the command line), the connection prints an `[sshc]` line while the image is being built, whatever the connection log setting.
 
 ## How long a route lives
 
