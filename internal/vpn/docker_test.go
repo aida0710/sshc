@@ -88,13 +88,13 @@ func TestAnAbsentContainerIsAnAnswerNotAFailure(t *testing.T) {
 	var record attemptRecord
 	ctx := connectionlog.With(context.Background(), &record)
 
-	_, present, err := docker.probe(ctx, "container", "inspect", "sshc-vpn-lab")
+	_, present, err := docker.probe(ctx, "コンテナ", "container", "inspect", "sshc-vpn-lab")
 
 	if err != nil || present {
 		t.Fatalf("probe = %v, %v", present, err)
 	}
 	text := record.text()
-	if !strings.Contains(text, "docker container inspect sshc-vpn-lab（") || !strings.Contains(text, "）：ありません") ||
+	if !strings.Contains(text, "docker container inspect sshc-vpn-lab（") || !strings.Contains(text, "）：そのコンテナはありません") ||
 		strings.Contains(text, "失敗") {
 		t.Fatalf("record:\n%s", text)
 	}
@@ -106,7 +106,7 @@ func TestADaemonFailureDuringAProbeIsStillAFailure(t *testing.T) {
 	var record attemptRecord
 	ctx := connectionlog.With(context.Background(), &record)
 
-	_, _, err := docker.probe(ctx, "container", "inspect", "sshc-vpn-lab")
+	_, _, err := docker.probe(ctx, "コンテナ", "container", "inspect", "sshc-vpn-lab")
 
 	if err == nil {
 		t.Fatal("docker の失敗を「無い」と読んだ")

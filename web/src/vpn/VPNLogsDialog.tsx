@@ -62,7 +62,7 @@ export function VPNLogsDialog({
       ) : lines.trim() === "" ? (
         <p className={hintText}>{t("vpn.logsEmpty")}</p>
       ) : (
-        <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-all rounded border border-line bg-surface-subtle p-3 text-xs text-ink">
+        <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded border border-line bg-surface-subtle p-3 text-xs text-ink">
           {lines}
         </pre>
       )}

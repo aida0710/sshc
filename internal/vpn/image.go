@@ -65,7 +65,7 @@ func (manager *Manager) ensureImage(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if _, present, err := manager.docker.probe(ctx, "image", "inspect", tag); err == nil && present {
+	if _, present, err := manager.docker.probe(ctx, "コンテナイメージ", "image", "inspect", tag); err == nil && present {
 		connectionlog.Say(ctx, connectionlog.Detailed, "コンテナイメージ %s は作成済みです。", tag)
 		return tag, nil
 	}

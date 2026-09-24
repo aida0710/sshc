@@ -135,8 +135,12 @@ func (command dockerCommand) outputWithInput(ctx context.Context, input string, 
 
 // probe は、「無い」ことも答えのひとつである問い合わせ（そのコンテナやイメージが
 // あるか）を実行する。無ければ present を false にして、失敗としては返さない。
-func (command dockerCommand) probe(ctx context.Context, arguments ...string) (output string, present bool, err error) {
-	output, err = command.run(ctx, dockerCall{arguments: arguments, absentIsAnswer: true})
+// subject は、問い合わせた相手の種類（「コンテナ」など）で、無かったときに接続ログへ
+// 書く文に使う。
+func (command dockerCommand) probe(
+	ctx context.Context, subject string, arguments ...string,
+) (output string, present bool, err error) {
+	output, err = command.run(ctx, dockerCall{arguments: arguments, absentSubject: subject})
 	if isAbsent(err) {
 		return "", false, nil
 	}
@@ -190,9 +194,9 @@ type dockerCall struct {
 	input string
 	// mergeOutput は、標準エラーを標準出力と同じ所へ、書かれた順に集める。
 	mergeOutput bool
-	// absentIsAnswer は、対象が無いという失敗を問い合わせの答えとして扱い、接続ログに
-	// 失敗と書かない。
-	absentIsAnswer bool
+	// absentSubject は、問い合わせた相手の種類である。空でなければ、相手が無いという
+	// 失敗を問い合わせの答えとして扱い、接続ログに失敗と書かない。
+	absentSubject string
 }
 
 // run は、docker を1回実行し、標準出力を返す。失敗したときは、標準エラーを
@@ -233,8 +237,9 @@ func sayRun(ctx context.Context, call dockerCall, elapsed time.Duration, err err
 	switch {
 	case err == nil:
 		connectionlog.Say(ctx, connectionlog.Full, "docker %s（%s）", described, elapsed)
-	case call.absentIsAnswer && isAbsent(err):
-		connectionlog.Say(ctx, connectionlog.Full, "docker %s（%s）：ありません", described, elapsed)
+	case call.absentSubject != "" && isAbsent(err):
+		connectionlog.Say(ctx, connectionlog.Full, "docker %s（%s）：その%sはありません", described, elapsed,
+			call.absentSubject)
 	default:
 		connectionlog.Say(ctx, connectionlog.Full, "docker %s は失敗しました（%s）：", described, elapsed)
 		sayOutput(ctx, connectionlog.Full, err.Error())

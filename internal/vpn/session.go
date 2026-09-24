@@ -347,7 +347,7 @@ func relayDeadline(profile Profile) time.Duration {
 // containerRunning は、コンテナが動いているかを返す。コンテナが無ければ false
 // を返し、docker そのものの失敗は失敗として返す。
 func (manager *Manager) containerRunning(ctx context.Context, name string) (bool, error) {
-	output, present, err := manager.docker.probe(ctx, "container", "inspect", "--format", "{{.State.Running}}", name)
+	output, present, err := manager.docker.probe(ctx, "コンテナ", "container", "inspect", "--format", "{{.State.Running}}", name)
 	if err != nil || !present {
 		return false, err
 	}
@@ -405,7 +405,7 @@ func (manager *Manager) stopContainer(ctx context.Context, name string) {
 func (manager *Manager) requireOurContainer(ctx context.Context, name, profileName string) (bool, error) {
 	format := "{{index .Config.Labels \"" + ownerLabel + "\"}} {{index .Config.Labels \"" + profileLabel +
 		"\"}} {{index .Config.Labels \"" + workspaceLabel + "\"}}"
-	output, present, err := manager.docker.probe(ctx, "container", "inspect", "--format", format, name)
+	output, present, err := manager.docker.probe(ctx, "コンテナ", "container", "inspect", "--format", format, name)
 	if err != nil || !present {
 		return false, err
 	}
