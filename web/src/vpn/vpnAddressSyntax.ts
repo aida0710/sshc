@@ -1,8 +1,8 @@
-// Go の net.SplitHostPort、strconv.Atoi、netip.ParseAddr、netip.ParsePrefix と同じ規則で、
-// `host:port` と IP アドレスを読む。
+// Go の net.SplitHostPort、net.JoinHostPort、strconv.Atoi、netip.ParseAddr、
+// netip.ParsePrefix と同じ規則で、`host:port` と IP アドレスを読み書きする。
 //
-// VPN プロファイルの検査と接続先の照合は Go に正本があり、画面は同じ入力に同じ答えを
-// 出さなければならない。ブラウザーの URL 解釈はこれと違う答えを出すので使わない。
+// VPN プロファイルの検査と接続先の検査は Go に正本があり、画面は同じ入力に同じ答えを
+// 出さなければならない。ブラウザの URL 解釈はこれと違う答えを出すので使わない。
 
 export type HostPort = { host: string; port: string };
 
@@ -41,6 +41,22 @@ export function parseGoInt(value: string): number | null {
   const parsed = BigInt(value);
   if (parsed < goIntMinimum || parsed > goIntMaximum) return null;
   return Number(parsed);
+}
+
+export type Endpoint = { host: string; port: number };
+
+// parseEndpoint は、`host:port` を net.SplitHostPort と strconv.Atoi で読む。port の範囲は
+// 見ない。読めなければ null を返す。
+export function parseEndpoint(value: string): Endpoint | null {
+  const split = splitHostPort(value);
+  if (split === null) return null;
+  const port = parseGoInt(split.port);
+  return port === null ? null : { host: split.host, port };
+}
+
+// joinHostPort は net.JoinHostPort と同じく、`:` を含む host を角括弧で囲む。
+export function joinHostPort(host: string, port: string | number): string {
+  return host.includes(":") ? `[${host}]:${port}` : `${host}:${port}`;
 }
 
 export type ParsedAddress = { version: 4 | 6; zone: string; octets: number[] };

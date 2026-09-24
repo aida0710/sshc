@@ -50,6 +50,9 @@ func (wireGuardBackend) validateSettings(profile Profile) error {
 	if settings.Server.Host == "" {
 		return fieldError(ErrSettings, "wireguard.server", ReasonRequired)
 	}
+	if err := validateLength("wireguard.server", settings.Server.Address(), maxServerLength); err != nil {
+		return err
+	}
 	if strings.ContainsAny(settings.Server.Host, " \t\r\n") {
 		return fieldError(ErrSettings, "wireguard.server", ReasonFormat)
 	}
@@ -129,8 +132,8 @@ type wireGuardDocument struct {
 
 // wireGuardConfiguration は、wg setconf が読む本文を作る。
 //
-// AllowedIPs は接続先とDNSサーバーだけにする。トンネルが運ぶのはその通信に
-// 限られ、VPNの向こうのネットワーク全体を引き込まない。
+// AllowedIPs は、起動した時点ではDNSサーバーだけにする。接続先は、接続に使われた
+// ものを connect が1つずつ足す。VPNの向こうのネットワーク全体は引き込まない。
 func wireGuardConfiguration(profile Profile, secrets WireGuardSecrets) string {
 	settings := *profile.WireGuard
 	lines := []string{
@@ -140,24 +143,19 @@ func wireGuardConfiguration(profile Profile, secrets WireGuardSecrets) string {
 		"[Peer]",
 		"PublicKey = " + settings.PeerPublicKey,
 		"Endpoint = " + settings.Server.Address(),
-		"AllowedIPs = " + strings.Join(allowedAddresses(profile), ", "),
-		"PersistentKeepalive = " + wireGuardKeepaliveSeconds,
-		"",
 	}
+	if resolvers := resolverPrefixes(profile.DNS); len(resolvers) > 0 {
+		lines = append(lines, "AllowedIPs = "+strings.Join(resolvers, ", "))
+	}
+	lines = append(lines, "PersistentKeepalive = "+wireGuardKeepaliveSeconds, "")
 	return strings.Join(lines, "\n")
 }
 
-// allowedAddresses は、トンネルが運んでよい相手である。
-//
-// 接続先を名前で書いた場合、そのアドレスはこの時点では分からない。まずDNS
-// サーバーまでを通し、agent がVPNの中で名前を引いてから接続先を足す。
-func allowedAddresses(profile Profile) []string {
-	allowed := make([]string, 0, len(profile.DNS)+1)
-	if _, err := netip.ParseAddr(profile.Target.Host); err == nil {
-		allowed = append(allowed, profile.Target.Host+"/32")
+// resolverPrefixes は、DNSサーバーを /32 の並びにする。
+func resolverPrefixes(resolvers []string) []string {
+	prefixes := make([]string, 0, len(resolvers))
+	for _, resolver := range resolvers {
+		prefixes = append(prefixes, resolver+"/32")
 	}
-	for _, resolver := range profile.DNS {
-		allowed = append(allowed, resolver+"/32")
-	}
-	return allowed
+	return prefixes
 }

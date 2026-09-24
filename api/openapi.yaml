@@ -685,6 +685,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/VPNLogs" }
+        "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
@@ -699,6 +700,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/VPNOverview" }
+        "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
@@ -710,8 +712,10 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/VPNOverview" }
+        "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
   /api/v1/vpn/bindings:
     put:
       operationId: setConnectionVPN
@@ -2332,7 +2336,8 @@ components:
         # blockers は拒否理由を安定したコードで返す。
         # field・reason・limit は、入力のどの項目をどの理由で受け取れなかったかを
         # 決まった語で返す。field は保存形式の JSON のパス、limit は長さや数の上限。
-        # 経路を用意できなかった応答（vpn_session_failed）では reason だけが入る。
+        # VPN の経路や接続先へ届かなかった応答（vpn_session_failed、vpn_target_failed、
+        # vpn_destination_invalid）では reason だけが入る。
         field: { type: string }
         reason: { type: string }
         limit: { type: integer, minimum: 1 }
@@ -4194,14 +4199,18 @@ components:
         hosts: { type: array, items: { $ref: "#/components/schemas/HostMetadata" } }
         vpnProfiles: { type: array, maxItems: 64, items: { $ref: "#/components/schemas/VPNProfile" } }
     # 接続ごとに通せる VPN 経路の定義。秘密は Vault にあり、この文書には無い。
-    # 接続先はひとつに限る。経路とパケットフィルタが接続先ひとつで閉じる。
+    # 接続先は持たない。接続先は、プロファイルを付けた接続の HostName と Port で決まる。
     VPNOverview:
       type: object
       additionalProperties: false
       required: [available, profiles]
       properties:
-        # この機械で経路を作れるか。作れない理由は detail に書く。隠さずに返す。
+        # このマシンで経路を作れるか。作れない理由の語は unavailable に入る。
         available: { type: boolean }
+        unavailable:
+          type: string
+          enum: [vpn_docker_missing, vpn_docker_not_running]
+        # 使えないときの docker の生の文。訳さずに添えるだけにする。
         detail: { type: string }
         profiles:
           type: array
@@ -4214,9 +4223,9 @@ components:
       properties:
         profile: { $ref: "#/components/schemas/VPNProfile" }
         running: { type: boolean }
-        # 中継のソケットの場所。開いていなければ空になる。値があれば、トンネルと
-        # 経路とパケットフィルタは用意できている。CLI はここへ繋いで、engine が
-        # 持つ経路を通る。
+        # engine の中継のソケットの場所。開いていなければ空になる。値があれば、
+        # トンネルは用意できている。CLI はここへ繋ぎ、1行目に接続先（`host:port`）を
+        # 送る。engine は1行の JSON で答えてから、その接続先へのバイト列を運ぶ。
         relaySocket: { type: string }
         # このプロファイルを通る接続の alias。
         connections:
@@ -4238,8 +4247,6 @@ components:
         address: { type: string }
         since: { type: string }
         backend: { type: string }
-        # VPNの中で引けた接続先のアドレス。アドレスで書いた場合はその値。
-        targetAddress: { type: string }
     VPNRenameRequest:
       type: object
       additionalProperties: false
@@ -4282,14 +4289,14 @@ components:
     VPNProfile:
       type: object
       additionalProperties: false
-      required: [name, backend, target]
+      required: [name, backend]
       properties:
         name: { type: string, minLength: 1, maxLength: 48 }
-        backend: { type: string, minLength: 1, maxLength: 32 }
-        # この VPN の中にある接続先。`host:port` で書く。host はIPv4アドレスか、
-        # VPNの中のDNSで引ける名前。
-        target: { type: string, minLength: 3, maxLength: 128 }
-        # 接続先の名前をVPNの中で引くDNSサーバー（IPv4）。アドレスで書くなら要らない。
+        backend:
+          type: string
+          enum: [wireguard, l2tp_ipsec, openconnect]
+        # 接続先を VPN の中で名前解決する DNS サーバー（IPv4）。接続先を
+        # アドレスで書く接続にしか使わないなら要らない。
         dns:
           type: array
           maxItems: 3
@@ -4305,15 +4312,14 @@ components:
         # VPN装置の名前またはアドレス。名前はコンテナの中で引く。
         server: { type: string, minLength: 1, maxLength: 320 }
         username: { type: string, minLength: 1, maxLength: 256 }
-        # その装置が話す方式（anyconnect / nc / pulse / gp / f5 / fortinet / array）。
-        # 空なら anyconnect。backend と同じく、ここでは形だけを見る。新しい版が
-        # 書いた方式を古い版が読めなくなると、その機械では metadata を保存できない。
+        # サーバーのプロトコル（anyconnect / nc / pulse / gp / f5 / fortinet / array）。
+        # 空なら anyconnect。値は engine が確かめる。
         protocol: { type: string, maxLength: 32 }
         # 相手の証明書を固定する指紋（`sha256:...`）。公的な認証局の証明書を
         # 使う装置では空でよい。
         serverCertificate: { type: string, maxLength: 128 }
         # 二段目の質問への答え方（`approve` または `totp`）。空なら答えない。
-        # protocol と同じく、ここでは形だけを見る。
+        # 値は engine が確かめる。
         secondFactor: { type: string, maxLength: 16 }
         # secondFactor が approve のときに送る語。空なら push。
         approvalWord: { type: string, maxLength: 32 }

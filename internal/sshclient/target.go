@@ -1,5 +1,5 @@
 // Package sshclient は、解決済みの ssh_config 設定を使ってプロセス内で SSH 接続を実行する。
-// 外部プログラムを起動するのは、利用者が明示した ProxyCommand だけである。
+// 外部プログラムは、利用者が明示したProxyCommandとそのPATHの取得に使う。
 package sshclient
 
 import (

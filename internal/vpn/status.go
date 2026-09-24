@@ -19,8 +19,6 @@ type Status struct {
 	// RelaySocket は、engine が差し出している中継のソケットの場所である。
 	// 経路が使えるときだけ値がある。
 	RelaySocket string
-	// Target は、このセッションが繋ぐ先である。
-	Target string
 	// Tunnel は、コンテナの中のトンネルの様子である。経路が無ければゼロ値。
 	Tunnel TunnelStatus
 	// Phase は、いま経路を用意している段階である。用意していなければ空。
@@ -40,9 +38,6 @@ type TunnelStatus struct {
 	Since string `json:"since"`
 	// Backend は、そのとき使った方式である。
 	Backend string `json:"backend"`
-	// TargetAddress は、VPNの中で引けた接続先のアドレスである。接続先を
-	// アドレスで書いた場合は、その値がそのまま入る。
-	TargetAddress string `json:"targetAddress"`
 }
 
 // Status は、このプロファイルの状態を返す。
@@ -69,7 +64,7 @@ func (manager *Manager) Statuses(ctx context.Context) (map[string]Status, error)
 	if _, err := manager.command(ctx); err != nil {
 		return nil, err
 	}
-	format := "{{.Label \"" + profileLabel + "\"}}\t{{.State}}\t{{.Label \"" + targetLabel + "\"}}"
+	format := "{{.Label \"" + profileLabel + "\"}}\t{{.State}}"
 	output, err := manager.docker.output(ctx, "ps", "--all", "--format", format,
 		"--filter", "label="+ownerLabel+"="+strconv.Itoa(manager.owner),
 		"--filter", "label="+workspaceLabel+"="+manager.workspace)
@@ -84,18 +79,18 @@ func (manager *Manager) Statuses(ctx context.Context) (map[string]Status, error)
 	}
 	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
 		fields := strings.Split(line, "\t")
-		if len(fields) != 3 || validateProfileName(fields[0]) != nil {
+		if len(fields) != 2 || validateProfileName(fields[0]) != nil {
 			continue
 		}
-		statuses[fields[0]] = manager.containerStatus(fields[0], fields[1] == "running", fields[2])
+		statuses[fields[0]] = manager.containerStatus(fields[0], fields[1] == "running")
 	}
 	return statuses, nil
 }
 
 // containerStatus は、コンテナがあるプロファイルひとつの状態を組み立てる。
-func (manager *Manager) containerStatus(profileName string, running bool, target string) Status {
+func (manager *Manager) containerStatus(profileName string, running bool) Status {
 	state := manager.state(profileName)
-	status := Status{Name: profileName, Running: running, Target: target, Phase: state.currentPhase()}
+	status := Status{Name: profileName, Running: running, Phase: state.currentPhase()}
 	// コンテナが終わっても、ホスト側にはソケットのファイルが残る。動いている
 	// コンテナと engine の中継が揃っているときだけ、使える経路として見せる。
 	if running {
@@ -110,7 +105,7 @@ func (manager *Manager) containerStatus(profileName string, running bool, target
 // tunnelStatus は、agent が書き出した様子を読む。読めなければゼロ値を返す。
 // 状態が読めないことは失敗ではない。経路があることは中継のソケットが示している。
 func (manager *Manager) tunnelStatus(profileName string) TunnelStatus {
-	contents, err := os.ReadFile(filepath.Join(manager.socketDirectory(profileName), statusFileName))
+	contents, err := os.ReadFile(filepath.Join(manager.routeDirectory(profileName), statusFileName))
 	if err != nil || len(contents) > maxStatusBytes {
 		return TunnelStatus{}
 	}

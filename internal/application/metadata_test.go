@@ -54,25 +54,25 @@ func TestMetadataMigratesVersionThreeAndRoundTripsVersionFive(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if migrated.SchemaVersion != 5 || migrated.EmbeddedTerminal == nil || migrated.EmbeddedTerminal.ScrollbackBytes != 32768 {
+	if migrated.SchemaVersion != MetadataSchemaVersion || migrated.EmbeddedTerminal == nil || migrated.EmbeddedTerminal.ScrollbackBytes != 32768 {
 		t.Fatalf("migrated = %#v", migrated)
 	}
 	encoded, err := EncodeMetadata(migrated)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(encoded), `"schemaVersion": 5`) {
+	if !strings.Contains(string(encoded), `"schemaVersion": 6`) {
 		t.Fatalf("encoded migration = %s", encoded)
 	}
 	decoded, err := DecodeMetadata(encoded)
-	if err != nil || decoded.SchemaVersion != 5 {
+	if err != nil || decoded.SchemaVersion != MetadataSchemaVersion {
 		t.Fatalf("v5 round trip = %#v, %v", decoded, err)
 	}
 }
 
 func TestMetadataMigratesVersionFourWithoutLosingSettings(t *testing.T) {
 	stored, err := DecodeMetadata([]byte(`{"schemaVersion":4,"embeddedTerminal":{"fontSize":18}}`))
-	if err != nil || stored.SchemaVersion != 5 || stored.EmbeddedTerminal == nil || stored.EmbeddedTerminal.FontSize != 18 {
+	if err != nil || stored.SchemaVersion != MetadataSchemaVersion || stored.EmbeddedTerminal == nil || stored.EmbeddedTerminal.FontSize != 18 {
 		t.Fatalf("migration failed: %v", err)
 	}
 }
@@ -284,7 +284,7 @@ func TestMetadataCarriesOnlyPresentation(t *testing.T) {
 			t.Errorf("encoded metadata still carries %s:\n%s", absent, encoded)
 		}
 	}
-	if !strings.Contains(string(encoded), `"schemaVersion": 5`) {
+	if !strings.Contains(string(encoded), `"schemaVersion": 6`) {
 		t.Errorf("encoded metadata is not version 5:\n%s", encoded)
 	}
 }
@@ -443,5 +443,35 @@ func TestAGroupThatIsNotHiddenWritesNoHiddenKey(t *testing.T) {
 	}
 	if strings.Contains(string(encoded), "hidden") {
 		t.Errorf("encoded metadata carries a hidden key it did not need:\n%s", encoded)
+	}
+}
+
+// v5のVPNプロファイルの接続先は、読んだ時点で捨てる。接続先は、プロファイルを
+// 付けた接続が決める。付けていた接続はそのまま残る。
+func TestVersionFiveVPNProfilesLoseTheirTargetWhenRead(t *testing.T) {
+	stored := `{"schemaVersion":5,` +
+		`"vpnProfiles":[{"name":"lab","backend":"l2tp_ipsec","target":"10.9.9.1:22",` +
+		`"l2tp":{"server":"vpn.example.jp","username":"user"}}],` +
+		`"hosts":[{"identity":{"path":"config","alias":"lab"},"vpn":"lab"}]}`
+
+	migrated, err := DecodeMetadata([]byte(stored))
+	if err != nil {
+		t.Fatalf("DecodeMetadata = %v", err)
+	}
+	if migrated.SchemaVersion != MetadataSchemaVersion || len(migrated.VPNProfiles) != 1 {
+		t.Fatalf("migrated = %+v", migrated)
+	}
+	if _, err := migrated.VPNProfiles[0].Profile(); err != nil {
+		t.Fatalf("Profile = %v", err)
+	}
+	if len(migrated.Hosts) != 1 || migrated.Hosts[0].VPN != "lab" {
+		t.Fatalf("hosts = %+v", migrated.Hosts)
+	}
+	encoded, err := EncodeMetadata(migrated)
+	if err != nil {
+		t.Fatalf("EncodeMetadata = %v", err)
+	}
+	if strings.Contains(string(encoded), "target") {
+		t.Fatalf("書き直した文書に接続先が残った: %s", encoded)
 	}
 }

@@ -28,6 +28,9 @@ send_answers() {
 
 backend_up() {
 	echo "VPNに接続します（OpenConnect）。"
+	# サーバーのアドレスは、接続先がサーバーそのものでないかを connect が確かめる
+	# のに使う。openconnect と同じく、コンテナの既定のDNSで名前解決する。
+	server_address=$(getent ahostsv4 "$server" | awk 'NR==1{print $1}' || true)
 	set -- --protocol="$protocol" --user="$username" --interface="$interface" \
 		--script="$backend_directory/vpnc-script" --passwd-on-stdin --non-inter --background \
 		--pid-file="$openconnect_pid_file"
@@ -42,7 +45,7 @@ backend_up() {
 	fi
 	# --background は、繋がったあとに自分を背後へ回す。ここが 0 で返らなければ
 	# 繋がっていない。
-	if ! send_answers | timeout "$(remaining_seconds)" openconnect "$@" "$server" \
+	if ! send_answers | timeout "$(timeout_seconds)" openconnect "$@" "$server" \
 		>"$runtime/openconnect.log" 2>&1; then
 		password=
 		second_factor=

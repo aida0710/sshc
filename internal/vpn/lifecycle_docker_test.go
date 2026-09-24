@@ -4,6 +4,7 @@ package vpn
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net"
 	"os"
@@ -27,7 +28,6 @@ func wireGuardRoute(t *testing.T, manager *Manager, ctx context.Context, name st
 	profile := Profile{
 		Name:    name,
 		Backend: WireGuard,
-		Target:  Endpoint{Host: tunnelServerAddress, Port: echoPort},
 		WireGuard: &WireGuardSettings{
 			Server:        Endpoint{Host: peerAddress, Port: 51820},
 			PeerPublicKey: peerPublic,
@@ -60,7 +60,13 @@ func TestAConnectionThroughTheEngineRelayKeepsTheRouteUp(t *testing.T) {
 	if err != nil {
 		t.Fatalf("engine の中継へ繋げない: %v", err)
 	}
-	_ = connection.SetReadDeadline(time.Now().Add(20 * time.Second))
+	_ = connection.SetDeadline(time.Now().Add(20 * time.Second))
+	if err := WriteRelayRequest(connection, fmt.Sprintf("%s:%d", tunnelServerAddress, echoPort)); err != nil {
+		t.Fatal(err)
+	}
+	if reply, err := ReadRelayReply(connection); err != nil || reply.Code != "" {
+		t.Fatalf("engine の中継の答え = %+v, %v", reply, err)
+	}
 	answer := make([]byte, 9)
 	if _, err := io.ReadFull(connection, answer); err != nil || string(answer) != "tunnelled" {
 		t.Fatalf("engine の中継越しの返事 = %q, %v", answer, err)
@@ -85,16 +91,13 @@ func TestAConnectionThroughTheEngineRelayKeepsTheRouteUp(t *testing.T) {
 // 起動を途中でやめても、コンテナは残らない。
 func TestACancelledStartLeavesNoContainer(t *testing.T) {
 	manager, ctx := requireDockerTest(t)
-	if err := requireTunnelDevice(backends[L2TPIPsec].device()); err != nil {
-		t.Skipf("この機械では l2tp を試せない: %v", err)
-	}
+	requireHostDevice(t, backends[L2TPIPsec].device())
 	if _, err := manager.ensureImage(ctx); err != nil {
 		t.Fatalf("イメージを用意できない: %v", err)
 	}
 	profile := Profile{
 		Name:    "cancelled",
 		Backend: L2TPIPsec,
-		Target:  Endpoint{Host: "10.77.1.1", Port: 22},
 		// TEST-NET-1。誰も応答しないので、IPsec を待ち続ける。
 		L2TP: &L2TPSettings{Server: "192.0.2.1", Username: "fixture"},
 	}
@@ -111,9 +114,10 @@ func TestACancelledStartLeavesNoContainer(t *testing.T) {
 		t.Fatal("取り消した起動が成功した")
 	}
 
-	running, err := manager.containerRunning(ctx, manager.containerName(profile.Name))
-	if err != nil || running {
-		t.Fatalf("取り消した起動のコンテナが残った: running=%v, %v", running, err)
+	// 止まったまま残ったコンテナも、残ったうちに入る。
+	ours, err := manager.requireOurContainer(ctx, manager.containerName(profile.Name), profile.Name)
+	if err != nil || ours {
+		t.Fatalf("取り消した起動のコンテナが残った: %v, %v", ours, err)
 	}
 }
 
@@ -125,7 +129,7 @@ func TestAnotherWorkspacesRouteIsNotDiscarded(t *testing.T) {
 		t.Fatalf("Start = %v", err)
 	}
 
-	other := New(t.TempDir(), os.Getuid())
+	other := New(t.TempDir(), os.Getuid(), nil)
 	if err := other.DiscardOrphans(ctx); err != nil {
 		t.Fatalf("DiscardOrphans = %v", err)
 	}
@@ -231,7 +235,7 @@ func TestStatusesListTheRoutesOfThisEngine(t *testing.T) {
 		t.Fatalf("Statuses = %v", err)
 	}
 	status := statuses[profile.Name]
-	if !status.Running || status.RelaySocket == "" || status.Target != profile.Target.Address() {
+	if !status.Running || status.RelaySocket == "" {
 		t.Fatalf("status = %+v", status)
 	}
 	if status.Tunnel.Interface != "wg0" {

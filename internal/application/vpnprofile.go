@@ -23,14 +23,12 @@ var (
 
 // VPNProfile は、metadata.json に保存する VPN 経路ひとつぶんである。
 //
-// 接続先はひとつに限る。VPN の向こうのネットワーク全体を引き込まないので、
-// 経路とパケットフィルタが接続先ひとつで閉じる。
+// 接続先は持たない。接続先は、このプロファイルを付けた接続（hosts[].vpn）の
+// HostName と Port で決まる。
 type VPNProfile struct {
-	Name    string `json:"name"`
-	Backend string `json:"backend"`
-	// Target は、この VPN の中にある接続先である。`host:port` で書く。
-	Target string `json:"target"`
-	// DNS は、接続先の名前を VPN の中で引くための DNS サーバーである。
+	Name    string          `json:"name"`
+	Backend vpn.BackendName `json:"backend"`
+	// DNS は、接続先を VPN の中で名前解決するための DNS サーバーである。
 	// 接続先をアドレスで書くなら要らない。
 	DNS []string `json:"dns,omitempty"`
 	// WireGuard は、backend が wireguard のときの設定である。
@@ -84,15 +82,10 @@ type WireGuardProfile struct {
 // backend に合う節だけを移す。古い版や別の画面が残した、使っていない節には
 // 引きずられない。
 func (stored VPNProfile) Profile() (vpn.Profile, error) {
-	target, err := parseEndpoint(stored.Target)
-	if err != nil {
-		return vpn.Profile{}, metadataVPNFieldError(vpn.ErrTarget, "target")
-	}
 	normalized := stored.Normalized()
 	profile := vpn.Profile{
 		Name:    normalized.Name,
-		Backend: vpn.BackendName(normalized.Backend),
-		Target:  target,
+		Backend: normalized.Backend,
 		DNS:     append([]string(nil), normalized.DNS...),
 	}
 	if settings := normalized.WireGuard; settings != nil {
@@ -125,13 +118,6 @@ func (stored VPNProfile) Profile() (vpn.Profile, error) {
 	return profile, nil
 }
 
-// Reaches は、この経路の接続先が address（`host:port`）を指すかを返す。
-// 比べ方は vpn.Endpoint.Reaches と同じである。
-func (stored VPNProfile) Reaches(address string) bool {
-	target, err := parseEndpoint(stored.Target)
-	return err == nil && target.Reaches(address)
-}
-
 // Normalized は、backend と違う節を落とし、空の DNS を無しに揃えた写しを返す。
 //
 // 画面は方式を切り替えたあとに古い節を送ってくることがある。断らずに落とすのは、
@@ -141,13 +127,13 @@ func (stored VPNProfile) Normalized() VPNProfile {
 	if len(normalized.DNS) == 0 {
 		normalized.DNS = nil
 	}
-	if normalized.Backend != string(vpn.WireGuard) {
+	if normalized.Backend != vpn.WireGuard {
 		normalized.WireGuard = nil
 	}
-	if normalized.Backend != string(vpn.L2TPIPsec) {
+	if normalized.Backend != vpn.L2TPIPsec {
 		normalized.L2TP = nil
 	}
-	if normalized.Backend != string(vpn.OpenConnect) {
+	if normalized.Backend != vpn.OpenConnect {
 		normalized.OpenConnect = nil
 	}
 	return normalized
@@ -173,10 +159,8 @@ func parseEndpoint(value string) (vpn.Endpoint, error) {
 
 // validateVPNProfiles は、保存してよい形かを確かめる。
 //
-// この版が知らない backend は、名前の形だけを見て通す。プロファイルは端末の
-// あいだで同期されるので、新しい版が書いたものを古い版が読み書きすることが
-// ある。知らないという理由で文書ごと拒むと、その端末では metadata を保存
-// できなくなる。使えるかどうかは、繋ぐときに改めて確かめる。
+// 形の変わった保存形式は、metadata の schemaVersion を上げて移行する。古い版は
+// 新しい schemaVersion の文書を読まないので、ここは知っている形だけを通す。
 func validateVPNProfiles(profiles []VPNProfile) error {
 	seen := map[string]bool{}
 	for _, stored := range profiles {
@@ -187,12 +171,6 @@ func validateVPNProfiles(profiles []VPNProfile) error {
 			return fmt.Errorf("%w: 同じ名前が二つあります: %s", ErrMetadataVPN, stored.Name)
 		}
 		seen[stored.Name] = true
-		if stored.Backend == "" {
-			return fmt.Errorf("%w: %s に backend がありません", ErrMetadataVPN, stored.Name)
-		}
-		if !vpn.KnownBackend(stored.Backend) {
-			continue
-		}
 		if _, err := stored.Profile(); err != nil {
 			return err
 		}

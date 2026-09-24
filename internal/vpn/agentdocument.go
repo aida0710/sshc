@@ -11,9 +11,8 @@ import (
 // 秘密を含むので、コマンド引数・環境変数・イメージ・bind mountには置かない。
 // agentは読み終えたらこの文書を消す。
 type agentDocument struct {
-	Backend string           `json:"backend"`
-	Target  endpointDocument `json:"target"`
-	// DNS は、接続先の名前をVPNの中で引くためのDNSサーバーである。
+	Backend string `json:"backend"`
+	// DNS は、接続先をVPNの中で名前解決するためのDNSサーバーである。
 	DNS []string `json:"dns,omitempty"`
 	// Deadline は、応えない相手を待つのをやめる時刻（UNIX 秒）である。agent の
 	// 待ちはどれも、この時刻までの残りだけ待つ。engine が待つのをやめるより
@@ -21,22 +20,16 @@ type agentDocument struct {
 	//
 	// engine とコンテナは同じカーネルの時計を見るので、時刻で渡してよい。
 	Deadline    int64                `json:"deadline"`
-	SocketOwner int                  `json:"socketOwner"`
 	WireGuard   *wireGuardDocument   `json:"wireguard,omitempty"`
 	L2TP        *l2tpDocument        `json:"l2tp,omitempty"`
 	OpenConnect *openConnectDocument `json:"openconnect,omitempty"`
-}
-
-type endpointDocument struct {
-	Host string `json:"host"`
-	Port int    `json:"port"`
 }
 
 // newAgentDocument は、プロファイルと秘密から、コンテナへ渡す設定を作る。
 //
 // now は、二段目のコードを作る時刻であり、締め切りを数え始める時刻である。
 // コードは 30 秒で変わるので、この文書はコンテナへ渡す直前に作る。
-func newAgentDocument(profile Profile, secrets Secrets, socketOwner int, now time.Time) (string, error) {
+func newAgentDocument(profile Profile, secrets Secrets, now time.Time) (string, error) {
 	if err := profile.Validate(); err != nil {
 		return "", err
 	}
@@ -44,11 +37,9 @@ func newAgentDocument(profile Profile, secrets Secrets, socketOwner int, now tim
 		return "", err
 	}
 	document := agentDocument{
-		Backend:     string(profile.Backend),
-		Target:      endpointDocument{Host: profile.Target.Host, Port: profile.Target.Port},
-		DNS:         profile.DNS,
-		Deadline:    agentDeadline(profile, now).Unix(),
-		SocketOwner: socketOwner,
+		Backend:  string(profile.Backend),
+		DNS:      profile.DNS,
+		Deadline: agentDeadline(profile, now).Unix(),
 	}
 	request := agentSectionRequest{profile: profile, secrets: secrets, now: now}
 	if err := backends[profile.Backend].writeAgentSection(request, &document); err != nil {

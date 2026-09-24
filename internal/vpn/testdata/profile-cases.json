@@ -11,7 +11,6 @@
       "profile": {
         "name": "lab",
         "backend": "wireguard",
-        "target": "10.9.9.1:22",
         "wireguard": {
           "server": "vpn.example.jp:51820",
           "peerPublicKey": "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
@@ -26,7 +25,6 @@
       "profile": {
         "name": "office",
         "backend": "l2tp_ipsec",
-        "target": "10.9.9.1:22",
         "l2tp": {
           "server": "vpn.example.jp",
           "username": "fixture"
@@ -40,7 +38,6 @@
       "profile": {
         "name": "campus",
         "backend": "openconnect",
-        "target": "10.9.9.1:22",
         "openconnect": {
           "server": "vpn.example.jp",
           "username": "fixture",
@@ -58,7 +55,6 @@
       "profile": {
         "name": "lab",
         "backend": "wireguard",
-        "target": "lab.example.jp:22",
         "wireguard": {
           "server": "vpn.example.jp:51820",
           "peerPublicKey": "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
@@ -76,7 +72,6 @@
       "profile": {
         "name": "lab",
         "backend": "wireguard",
-        "target": "lab.example.jp.:22",
         "wireguard": {
           "server": "vpn.example.jp:51820",
           "peerPublicKey": "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
@@ -94,7 +89,6 @@
       "profile": {
         "name": "lab",
         "backend": "wireguard",
-        "target": "10.9.9.1:22",
         "wireguard": {
           "server": "vpn.example.jp:51820",
           "peerPublicKey": "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
@@ -113,7 +107,6 @@
       "profile": {
         "name": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "backend": "wireguard",
-        "target": "10.9.9.1:22",
         "wireguard": {
           "server": "vpn.example.jp:51820",
           "peerPublicKey": "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
@@ -128,7 +121,6 @@
       "profile": {
         "name": "",
         "backend": "wireguard",
-        "target": "10.9.9.1:22",
         "wireguard": {
           "server": "vpn.example.jp:51820",
           "peerPublicKey": "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
@@ -143,7 +135,6 @@
       "profile": {
         "name": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "backend": "wireguard",
-        "target": "10.9.9.1:22",
         "wireguard": {
           "server": "vpn.example.jp:51820",
           "peerPublicKey": "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
@@ -159,7 +150,6 @@
       "profile": {
         "name": "has space",
         "backend": "wireguard",
-        "target": "10.9.9.1:22",
         "wireguard": {
           "server": "vpn.example.jp:51820",
           "peerPublicKey": "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
@@ -174,7 +164,6 @@
       "profile": {
         "name": "lab",
         "backend": "",
-        "target": "10.9.9.1:22",
         "wireguard": {
           "server": "vpn.example.jp:51820",
           "peerPublicKey": "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
@@ -189,7 +178,6 @@
       "profile": {
         "name": "lab",
         "backend": "openvpn",
-        "target": "10.9.9.1:22",
         "wireguard": {
           "server": "vpn.example.jp:51820",
           "peerPublicKey": "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
@@ -204,7 +192,6 @@
       "profile": {
         "name": "lab",
         "backend": "wireguard",
-        "target": "10.9.9.1:22",
         "wireguard": {
           "server": "vpn.example.jp:51820",
           "peerPublicKey": "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
@@ -226,7 +213,6 @@
       "profile": {
         "name": "lab",
         "backend": "wireguard",
-        "target": "10.9.9.1:22",
         "wireguard": {
           "server": "vpn.example.jp:51820",
           "peerPublicKey": "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
@@ -244,7 +230,6 @@
       "profile": {
         "name": "lab",
         "backend": "wireguard",
-        "target": "10.9.9.1:22",
         "wireguard": {
           "server": "vpn.example.jp:51820",
           "peerPublicKey": "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
@@ -262,7 +247,6 @@
       "profile": {
         "name": "lab",
         "backend": "wireguard",
-        "target": "10.9.9.1:22",
         "wireguard": {
           "server": "vpn.example.jp:51820",
           "peerPublicKey": "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
@@ -276,179 +260,10 @@
       "reason": "unroutable"
     },
     {
-      "name": "接続先にポートが無い",
-      "profile": {
-        "name": "lab",
-        "backend": "wireguard",
-        "target": "10.9.9.1",
-        "wireguard": {
-          "server": "vpn.example.jp:51820",
-          "peerPublicKey": "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
-          "address": "10.9.9.2/32"
-        }
-      },
-      "field": "target",
-      "reason": "format"
-    },
-    {
-      "name": "接続先のポートが数でない",
-      "profile": {
-        "name": "lab",
-        "backend": "wireguard",
-        "target": "10.9.9.1:ssh",
-        "wireguard": {
-          "server": "vpn.example.jp:51820",
-          "peerPublicKey": "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
-          "address": "10.9.9.2/32"
-        }
-      },
-      "field": "target",
-      "reason": "format"
-    },
-    {
-      "name": "接続先のポートが範囲の外",
-      "profile": {
-        "name": "lab",
-        "backend": "wireguard",
-        "target": "10.9.9.1:0",
-        "wireguard": {
-          "server": "vpn.example.jp:51820",
-          "peerPublicKey": "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
-          "address": "10.9.9.2/32"
-        }
-      },
-      "field": "target",
-      "reason": "out_of_range"
-    },
-    {
-      "name": "接続先のポートが大きすぎる",
-      "profile": {
-        "name": "lab",
-        "backend": "wireguard",
-        "target": "10.9.9.1:65536",
-        "wireguard": {
-          "server": "vpn.example.jp:51820",
-          "peerPublicKey": "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
-          "address": "10.9.9.2/32"
-        }
-      },
-      "field": "target",
-      "reason": "out_of_range"
-    },
-    {
-      "name": "接続先の名前が空",
-      "profile": {
-        "name": "lab",
-        "backend": "wireguard",
-        "target": ":22",
-        "wireguard": {
-          "server": "vpn.example.jp:51820",
-          "peerPublicKey": "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
-          "address": "10.9.9.2/32"
-        }
-      },
-      "field": "target",
-      "reason": "required"
-    },
-    {
-      "name": "接続先の名前に使えない字がある",
-      "profile": {
-        "name": "lab",
-        "backend": "wireguard",
-        "target": "lab_host:22",
-        "wireguard": {
-          "server": "vpn.example.jp:51820",
-          "peerPublicKey": "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
-          "address": "10.9.9.2/32"
-        },
-        "dns": [
-          "10.9.9.53"
-        ]
-      },
-      "field": "target",
-      "reason": "format"
-    },
-    {
-      "name": "接続先を名前で書いたのに DNS が無い",
-      "profile": {
-        "name": "lab",
-        "backend": "wireguard",
-        "target": "lab.example.jp:22",
-        "wireguard": {
-          "server": "vpn.example.jp:51820",
-          "peerPublicKey": "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
-          "address": "10.9.9.2/32"
-        }
-      },
-      "field": "target",
-      "reason": "name_needs_dns"
-    },
-    {
-      "name": "接続先が IPv6",
-      "profile": {
-        "name": "lab",
-        "backend": "wireguard",
-        "target": "[fd00::1]:22",
-        "wireguard": {
-          "server": "vpn.example.jp:51820",
-          "peerPublicKey": "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
-          "address": "10.9.9.2/32"
-        }
-      },
-      "field": "target",
-      "reason": "not_ipv4"
-    },
-    {
-      "name": "接続先がループバック",
-      "profile": {
-        "name": "lab",
-        "backend": "wireguard",
-        "target": "127.0.0.1:22",
-        "wireguard": {
-          "server": "vpn.example.jp:51820",
-          "peerPublicKey": "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
-          "address": "10.9.9.2/32"
-        }
-      },
-      "field": "target",
-      "reason": "unroutable"
-    },
-    {
-      "name": "接続先が未指定のアドレス",
-      "profile": {
-        "name": "lab",
-        "backend": "wireguard",
-        "target": "0.0.0.0:22",
-        "wireguard": {
-          "server": "vpn.example.jp:51820",
-          "peerPublicKey": "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
-          "address": "10.9.9.2/32"
-        }
-      },
-      "field": "target",
-      "reason": "unroutable"
-    },
-    {
-      "name": "接続先がマルチキャスト",
-      "profile": {
-        "name": "lab",
-        "backend": "wireguard",
-        "target": "224.0.0.1:22",
-        "wireguard": {
-          "server": "vpn.example.jp:51820",
-          "peerPublicKey": "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
-          "address": "10.9.9.2/32"
-        }
-      },
-      "field": "target",
-      "reason": "unroutable"
-    },
-    {
       "name": "wireguard の節が無い",
       "profile": {
         "name": "lab",
-        "backend": "wireguard",
-        "target": "10.9.9.1:22"
+        "backend": "wireguard"
       },
       "field": "wireguard",
       "reason": "required"
@@ -458,7 +273,6 @@
       "profile": {
         "name": "lab",
         "backend": "wireguard",
-        "target": "10.9.9.1:22",
         "wireguard": {
           "server": "vpn.example.jp",
           "peerPublicKey": "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
@@ -473,7 +287,6 @@
       "profile": {
         "name": "lab",
         "backend": "wireguard",
-        "target": "10.9.9.1:22",
         "wireguard": {
           "server": ":51820",
           "peerPublicKey": "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
@@ -488,7 +301,6 @@
       "profile": {
         "name": "lab",
         "backend": "wireguard",
-        "target": "10.9.9.1:22",
         "wireguard": {
           "server": "vpn example.jp:51820",
           "peerPublicKey": "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
@@ -503,7 +315,6 @@
       "profile": {
         "name": "lab",
         "backend": "wireguard",
-        "target": "10.9.9.1:22",
         "wireguard": {
           "server": "vpn.example.jp:0",
           "peerPublicKey": "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
@@ -518,7 +329,6 @@
       "profile": {
         "name": "lab",
         "backend": "wireguard",
-        "target": "10.9.9.1:22",
         "wireguard": {
           "server": "vpn.example.jp:51820",
           "peerPublicKey": "",
@@ -533,7 +343,6 @@
       "profile": {
         "name": "lab",
         "backend": "wireguard",
-        "target": "10.9.9.1:22",
         "wireguard": {
           "server": "vpn.example.jp:51820",
           "peerPublicKey": "bBbB=",
@@ -548,7 +357,6 @@
       "profile": {
         "name": "lab",
         "backend": "wireguard",
-        "target": "10.9.9.1:22",
         "wireguard": {
           "server": "vpn.example.jp:51820",
           "peerPublicKey": "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBb!A=",
@@ -563,7 +371,6 @@
       "profile": {
         "name": "lab",
         "backend": "wireguard",
-        "target": "10.9.9.1:22",
         "wireguard": {
           "server": "vpn.example.jp:51820",
           "peerPublicKey": "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
@@ -578,7 +385,6 @@
       "profile": {
         "name": "lab",
         "backend": "wireguard",
-        "target": "10.9.9.1:22",
         "wireguard": {
           "server": "vpn.example.jp:51820",
           "peerPublicKey": "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
@@ -593,7 +399,6 @@
       "profile": {
         "name": "lab",
         "backend": "wireguard",
-        "target": "10.9.9.1:22",
         "wireguard": {
           "server": "vpn.example.jp:51820",
           "peerPublicKey": "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
@@ -607,8 +412,7 @@
       "name": "l2tp の節が無い",
       "profile": {
         "name": "office",
-        "backend": "l2tp_ipsec",
-        "target": "10.9.9.1:22"
+        "backend": "l2tp_ipsec"
       },
       "field": "l2tp",
       "reason": "required"
@@ -618,7 +422,6 @@
       "profile": {
         "name": "office",
         "backend": "l2tp_ipsec",
-        "target": "10.9.9.1:22",
         "l2tp": {
           "server": "",
           "username": "fixture"
@@ -632,7 +435,6 @@
       "profile": {
         "name": "office",
         "backend": "l2tp_ipsec",
-        "target": "10.9.9.1:22",
         "l2tp": {
           "server": "vpn example.jp",
           "username": "fixture"
@@ -646,7 +448,6 @@
       "profile": {
         "name": "office",
         "backend": "l2tp_ipsec",
-        "target": "10.9.9.1:22",
         "l2tp": {
           "server": "vpn.example.jp",
           "username": ""
@@ -660,7 +461,6 @@
       "profile": {
         "name": "office",
         "backend": "l2tp_ipsec",
-        "target": "10.9.9.1:22",
         "l2tp": {
           "server": "vpn.example.jp",
           "username": "fix\"ture"
@@ -674,7 +474,6 @@
       "profile": {
         "name": "office",
         "backend": "l2tp_ipsec",
-        "target": "10.9.9.1:22",
         "l2tp": {
           "server": "vpn.example.jp",
           "username": "fixture",
@@ -689,7 +488,6 @@
       "profile": {
         "name": "office",
         "backend": "l2tp_ipsec",
-        "target": "10.9.9.1:22",
         "l2tp": {
           "server": "vpn.example.jp",
           "username": "fixture",
@@ -703,8 +501,7 @@
       "name": "openconnect の節が無い",
       "profile": {
         "name": "campus",
-        "backend": "openconnect",
-        "target": "10.9.9.1:22"
+        "backend": "openconnect"
       },
       "field": "openconnect",
       "reason": "required"
@@ -714,7 +511,6 @@
       "profile": {
         "name": "campus",
         "backend": "openconnect",
-        "target": "10.9.9.1:22",
         "openconnect": {
           "server": "",
           "username": "fixture"
@@ -728,7 +524,6 @@
       "profile": {
         "name": "campus",
         "backend": "openconnect",
-        "target": "10.9.9.1:22",
         "openconnect": {
           "server": "vpn\"example.jp",
           "username": "fixture"
@@ -742,7 +537,6 @@
       "profile": {
         "name": "campus",
         "backend": "openconnect",
-        "target": "10.9.9.1:22",
         "openconnect": {
           "server": "vpn.example.jp",
           "username": ""
@@ -756,7 +550,6 @@
       "profile": {
         "name": "campus",
         "backend": "openconnect",
-        "target": "10.9.9.1:22",
         "openconnect": {
           "server": "vpn.example.jp",
           "username": "fix\nture"
@@ -770,7 +563,6 @@
       "profile": {
         "name": "campus",
         "backend": "openconnect",
-        "target": "10.9.9.1:22",
         "openconnect": {
           "server": "vpn.example.jp",
           "username": "fixture",
@@ -785,7 +577,6 @@
       "profile": {
         "name": "campus",
         "backend": "openconnect",
-        "target": "10.9.9.1:22",
         "openconnect": {
           "server": "vpn.example.jp",
           "username": "fixture",
@@ -800,7 +591,6 @@
       "profile": {
         "name": "campus",
         "backend": "openconnect",
-        "target": "10.9.9.1:22",
         "openconnect": {
           "server": "vpn.example.jp",
           "username": "fixture",
@@ -815,7 +605,6 @@
       "profile": {
         "name": "campus",
         "backend": "openconnect",
-        "target": "10.9.9.1:22",
         "openconnect": {
           "server": "vpn.example.jp",
           "username": "fixture",
@@ -830,7 +619,6 @@
       "profile": {
         "name": "campus",
         "backend": "openconnect",
-        "target": "10.9.9.1:22",
         "openconnect": {
           "server": "vpn.example.jp",
           "username": "fixture",
@@ -840,6 +628,80 @@
       },
       "field": "openconnect.approvalWord",
       "reason": "format"
+    },
+    {
+      "name": "VPNサーバーの名前が長すぎる",
+      "profile": {
+        "name": "office",
+        "backend": "l2tp_ipsec",
+        "l2tp": {
+          "server": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "username": "fixture"
+        }
+      },
+      "field": "l2tp.server",
+      "reason": "too_long",
+      "limit": 320
+    },
+    {
+      "name": "ユーザー名が長すぎる",
+      "profile": {
+        "name": "office",
+        "backend": "l2tp_ipsec",
+        "l2tp": {
+          "server": "vpn.example.jp",
+          "username": "uuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuu"
+        }
+      },
+      "field": "l2tp.username",
+      "reason": "too_long",
+      "limit": 256
+    },
+    {
+      "name": "IKE の暗号スイートが長すぎる",
+      "profile": {
+        "name": "office",
+        "backend": "l2tp_ipsec",
+        "l2tp": {
+          "server": "vpn.example.jp",
+          "username": "fixture",
+          "ike": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "field": "l2tp.ike",
+      "reason": "too_long",
+      "limit": 256
+    },
+    {
+      "name": "二要素認証で送る文字列が長すぎる",
+      "profile": {
+        "name": "campus",
+        "backend": "openconnect",
+        "openconnect": {
+          "server": "vpn.example.jp",
+          "username": "fixture",
+          "secondFactor": "approve",
+          "approvalWord": "ppppppppppppppppppppppppppppppppp"
+        }
+      },
+      "field": "openconnect.approvalWord",
+      "reason": "too_long",
+      "limit": 32
+    },
+    {
+      "name": "証明書のフィンガープリントが長すぎる",
+      "profile": {
+        "name": "campus",
+        "backend": "openconnect",
+        "openconnect": {
+          "server": "vpn.example.jp",
+          "username": "fixture",
+          "serverCertificate": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "field": "openconnect.serverCertificate",
+      "reason": "too_long",
+      "limit": 128
     }
   ]
 }

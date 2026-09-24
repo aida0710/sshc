@@ -23,8 +23,16 @@ const (
 	FailureOpenConnect FailureReason = "openconnect_failed"
 	// FailureHandshakeTimeout は、WireGuard の相手と握手できなかったことを表す（鍵、サーバー）。
 	FailureHandshakeTimeout FailureReason = "handshake_timeout"
-	// FailureTargetUnresolved は、VPN の中で接続先の名前を引けなかったことを表す。
+	// FailureTargetUnresolved は、VPN の中で接続先の名前解決に失敗したことを表す。
 	FailureTargetUnresolved FailureReason = "target_unresolved"
+	// FailureTargetNeedsDNS は、接続先を名前で書いたのに、プロファイルに DNS
+	// サーバーが無いことを表す。
+	FailureTargetNeedsDNS FailureReason = "target_needs_dns"
+	// FailureTargetIsServer は、接続先が VPN サーバーそのものであることを表す。
+	FailureTargetIsServer FailureReason = "target_is_server"
+	// FailureTargetUnreachable は、VPN の中で接続先へ繋げなかったことを表す
+	// （接続の拒否、応答なし、経路なし）。
+	FailureTargetUnreachable FailureReason = "target_unreachable"
 	// FailureTunnelLost は、用意できたあとでトンネルが落ちたことを表す。
 	FailureTunnelLost FailureReason = "tunnel_lost"
 )
@@ -33,7 +41,8 @@ const (
 var knownFailureReasons = map[FailureReason]bool{
 	FailureUnknown: true, FailureTimeout: true, FailureServerUnresolved: true,
 	FailureIPsecNegotiation: true, FailurePPPAuthentication: true, FailureOpenConnect: true,
-	FailureHandshakeTimeout: true, FailureTargetUnresolved: true, FailureTunnelLost: true,
+	FailureHandshakeTimeout: true, FailureTargetUnresolved: true, FailureTargetNeedsDNS: true,
+	FailureTargetIsServer: true, FailureTargetUnreachable: true, FailureTunnelLost: true,
 }
 
 // SessionFailure は、経路を用意できなかったことと、その理由である。

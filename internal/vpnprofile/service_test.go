@@ -26,11 +26,18 @@ const (
 // recordedRoutes は、止めるよう頼まれた経路の名前を覚える。
 type recordedRoutes struct {
 	stopped []string
+	// onStop は、止めるよう頼まれた時点の様子を確かめる。nil なら何もしない。
+	onStop func(name string)
+	// refuse は、止めるのに失敗したことにする。
+	refuse error
 }
 
 func (routes *recordedRoutes) Stop(_ context.Context, name string) error {
 	routes.stopped = append(routes.stopped, name)
-	return nil
+	if routes.onStop != nil {
+		routes.onStop(name)
+	}
+	return routes.refuse
 }
 
 // failingCommit は、metadata の書き込みだけを失敗させる。
@@ -82,7 +89,7 @@ func newFixture(t *testing.T) fixture {
 
 func labProfile() application.VPNProfile {
 	return application.VPNProfile{
-		Name: "lab", Backend: string(vpn.WireGuard), Target: "10.9.9.1:22",
+		Name: "lab", Backend: vpn.WireGuard,
 		WireGuard: &application.WireGuardProfile{
 			Server: "vpn.example.jp:51820", PeerPublicKey: testPublicKey, Address: "10.9.9.2/32",
 		},
@@ -91,7 +98,7 @@ func labProfile() application.VPNProfile {
 
 func officeProfile() application.VPNProfile {
 	return application.VPNProfile{
-		Name: "lab", Backend: string(vpn.OpenConnect), Target: "10.9.9.1:22",
+		Name: "lab", Backend: vpn.OpenConnect,
 		OpenConnect: &application.OpenConnectProfile{Server: "vpn.example.jp", Username: "fixture"},
 	}
 }
@@ -132,8 +139,8 @@ func (f fixture) profileNames(t *testing.T) []string {
 // 作成は、同じ名前で Vault に残っていた秘密を引き継がない。
 func TestCreatingAProfileDoesNotInheritALeftoverSecret(t *testing.T) {
 	f := newFixture(t)
-	// v0.38.0 は、ロック中の削除で秘密だけを Vault に残すことがあった。
-	leftover := `{"openconnectPassword":"a password left by an older version"}`
+	// 同じ名前の秘密だけが Vault に残っている。
+	leftover := `{"openconnectPassword":"a password left behind"}`
 	if _, err := f.vault.WithVPNSecretsTransaction(secret.VPNSecretsMutation{
 		Kind: secret.VPNSecretsSet, Profile: "lab", Document: leftover,
 	}, func(change *storage.Change) (storage.Result, error) {
@@ -191,7 +198,7 @@ func TestChangingTheBackendWithoutItsSecretChangesNothing(t *testing.T) {
 		t.Fatalf("Update = %v, want the missing wireguard key", err)
 	}
 	profiles, _ := f.config.VPNProfiles()
-	if len(profiles) != 1 || profiles[0].Backend != string(vpn.OpenConnect) {
+	if len(profiles) != 1 || profiles[0].Backend != vpn.OpenConnect {
 		t.Fatalf("profiles = %+v", profiles)
 	}
 	if got := f.storedSecrets(t, "lab"); got.OpenConnectPassword != "a password" {
@@ -248,6 +255,9 @@ func TestAFailedCommitChangesNeitherTheProfileNorItsSecrets(t *testing.T) {
 	if err := failing.Remove(context.Background(), "lab"); !errors.Is(err, errCommitRefused) {
 		t.Fatalf("Remove = %v, want the commit failure", err)
 	}
+	if len(f.routes.stopped) != 0 {
+		t.Fatalf("書けなかったのに経路を止めた: %v", f.routes.stopped)
+	}
 
 	if names := f.profileNames(t); len(names) != 1 || names[0] != "lab" {
 		t.Fatalf("profiles = %v", names)
@@ -293,9 +303,54 @@ func TestRenamingToTheSameNameDoesNothing(t *testing.T) {
 	if len(f.routes.stopped) != 0 {
 		t.Fatalf("何もしない改名で経路を止めた: %v", f.routes.stopped)
 	}
+	// 無い名前は、名前が変わらなくても成功にしない。
+	if err := f.profiles.Rename(context.Background(), "ghost", "ghost"); !errors.Is(err, application.ErrUnknownVPNProfile) {
+		t.Fatalf("Rename(ghost) = %v", err)
+	}
 }
 
-// 改名は経路を止めてから、設定・秘密・接続の紐付けを一緒に移す。
+// 経路を止めるのは、設定を書いたあとである。
+//
+// 先に止めると、止めてから書くまでのあいだに、Terminal の再接続が古い設定で経路を
+// 起こし直す。
+func TestTheRouteIsStoppedOnlyAfterTheProfileIsGone(t *testing.T) {
+	f := newFixture(t)
+	f.create(t, labProfile(), vpn.SecretsDocument{WireGuardPrivateKey: testPrivateKey})
+	f.routes.onStop = func(name string) {
+		if _, err := f.config.VPNProfile(name); !errors.Is(err, application.ErrUnknownVPNProfile) {
+			t.Errorf("経路を止めた時点で %s がまだ読めた: %v", name, err)
+		}
+	}
+
+	if err := f.profiles.Rename(context.Background(), "lab", "tains"); err != nil {
+		t.Fatalf("Rename = %v", err)
+	}
+	if err := f.profiles.Remove(context.Background(), "tains"); err != nil {
+		t.Fatalf("Remove = %v", err)
+	}
+	if strings.Join(f.routes.stopped, ",") != "lab,tains" {
+		t.Fatalf("stopped = %v", f.routes.stopped)
+	}
+}
+
+// 設定を書いたあとで経路を止められなくても、削除は成功にする。
+//
+// Docker が止まっていればコンテナも止まっている。書いた設定を失敗として見せると、
+// 利用者は消えたプロファイルをもう一度消そうとする。
+func TestRemovingSucceedsEvenWhenTheRouteCannotBeStopped(t *testing.T) {
+	f := newFixture(t)
+	f.create(t, labProfile(), vpn.SecretsDocument{WireGuardPrivateKey: testPrivateKey})
+	f.routes.refuse = vpn.ErrDockerNotRunning
+
+	if err := f.profiles.Remove(context.Background(), "lab"); err != nil {
+		t.Fatalf("Remove = %v", err)
+	}
+	if names := f.profileNames(t); len(names) != 0 {
+		t.Fatalf("profiles = %v", names)
+	}
+}
+
+// 改名は、設定・秘密・接続の紐付けを一緒に移し、古い名前の経路を止める。
 func TestRenamingStopsTheRouteAndMovesEverythingTogether(t *testing.T) {
 	f := newFixture(t)
 	f.create(t, labProfile(), vpn.SecretsDocument{WireGuardPrivateKey: testPrivateKey})
@@ -318,7 +373,7 @@ func TestRenamingStopsTheRouteAndMovesEverythingTogether(t *testing.T) {
 	}
 }
 
-// 削除は経路を止め、設定・紐付け・秘密を一緒に消す。
+// 削除は、設定・紐付け・秘密を一緒に消し、経路を止める。
 func TestRemovingStopsTheRouteAndForgetsEverything(t *testing.T) {
 	f := newFixture(t)
 	f.create(t, labProfile(), vpn.SecretsDocument{WireGuardPrivateKey: testPrivateKey})

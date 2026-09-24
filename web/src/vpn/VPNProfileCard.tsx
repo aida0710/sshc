@@ -1,36 +1,38 @@
-import type { VPNProfileStatus } from "../api/vpn";
+import type { VPNProfile, VPNProfileStatus } from "../api/vpn";
 import { useLanguage, useTranslate } from "../i18n/context";
-import { hintText } from "../ui/form";
+import { hintText, sectionHeading } from "../ui/form";
 import { formatDateTime } from "../ui/format";
 import { Button, Card } from "../ui/surface";
 import { vpnBackendLabel } from "./vpnBackends";
-import { VPNBindingRow } from "./VPNBindingRow";
 import { vpnPhases } from "./vpnPhases";
 
 // VPNプロファイルひとつぶんの札。いまの状態と、コンテナの中のトンネルの様子と、
-// この経路を通る接続を見せ、開始・停止・改名・削除・ログを受け付ける。
+// このプロファイルを使う接続を見せ、接続・切断・ログ・編集・名前の変更・削除を受け付ける。
+// 接続へプロファイルを付けたり外したりするのは Connections で行い、ここでは見せるだけにする。
 
 export type VPNProfileActions = {
   onStart: () => void;
   onStop: () => void;
-  onRename: () => void;
   onShowLogs: () => void;
+  onEdit: () => void;
+  onRename: () => void;
   onRemove: () => void;
-  onBind: (alias: string) => void;
-  onUnbind: (alias: string) => void;
 };
+
+// serverOf は、プロファイルの VPN サーバーを返す。どのプロファイルかを見分ける手がかりにする。
+function serverOf(profile: VPNProfile): string {
+  return profile.wireguard?.server ?? profile.l2tp?.server ?? profile.openconnect?.server ?? "";
+}
 
 export function VPNProfileCard({
   status,
-  aliases,
   busy,
   available,
   actions,
 }: {
   status: VPNProfileStatus;
-  aliases: string[];
   busy: boolean;
-  // available は、この機械が経路を作れるかどうかである。
+  // available は、このマシンが経路を作れるかどうかである。
   available: boolean;
   actions: VPNProfileActions;
 }) {
@@ -44,14 +46,13 @@ export function VPNProfileCard({
         : status.running
           ? t("vpn.stateStarting")
           : t("vpn.stateStopped");
+  const summary = [vpnBackendLabel(status.profile.backend), serverOf(status.profile), state].filter((part) => part !== "");
   return (
     <Card as="article" padded aria-label={status.profile.name}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
           <p className="font-medium text-ink">{status.profile.name}</p>
-          <p className={hintText}>
-            {vpnBackendLabel(status.profile.backend)} · {status.profile.target} · {state}
-          </p>
+          <p className={hintText}>{summary.join(" · ")}</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button disabled={busy || !available} onClick={actions.onStart}>
@@ -62,6 +63,9 @@ export function VPNProfileCard({
           </Button>
           <Button disabled={busy || !available} onClick={actions.onShowLogs}>
             {t("vpn.logs")}
+          </Button>
+          <Button disabled={busy} onClick={actions.onEdit}>
+            {t("vpn.edit")}
           </Button>
           <Button disabled={busy} onClick={actions.onRename}>
             {t("vpn.rename")}
@@ -74,14 +78,7 @@ export function VPNProfileCard({
 
       {status.tunnel === undefined ? null : <TunnelDetail tunnel={status.tunnel} />}
 
-      <VPNBindingRow
-        profile={status.profile.name}
-        connections={status.connections}
-        aliases={aliases}
-        busy={busy}
-        onBind={actions.onBind}
-        onUnbind={actions.onUnbind}
-      />
+      <ProfileConnections connections={status.connections} />
     </Card>
   );
 }
@@ -98,7 +95,6 @@ function TunnelDetail({ tunnel }: { tunnel: NonNullable<VPNProfileStatus["tunnel
       label: t("vpn.tunnelSince"),
       value: tunnel.since === undefined || tunnel.since === "" ? "" : formatDateTime(tunnel.since, locale),
     },
-    { label: t("vpn.tunnelTargetAddress"), value: tunnel.targetAddress ?? "" },
   ].filter((row) => row.value !== "");
   if (rows.length === 0) return null;
   return (
@@ -110,5 +106,27 @@ function TunnelDetail({ tunnel }: { tunnel: NonNullable<VPNProfileStatus["tunnel
         </div>
       ))}
     </dl>
+  );
+}
+
+// ProfileConnections は、このプロファイルを使う接続の alias を並べる。
+function ProfileConnections({ connections }: { connections: string[] }) {
+  const t = useTranslate();
+  return (
+    <div className="flex flex-col gap-2 border-t border-line pt-3">
+      <p className={sectionHeading}>{t("vpn.connections")}</p>
+      {connections.length === 0 ? (
+        <p className={hintText}>{t("vpn.noConnections")}</p>
+      ) : (
+        <ul className="flex flex-wrap gap-2" aria-label={t("vpn.connections")}>
+          {connections.map((alias) => (
+            <li key={alias} className="rounded bg-surface-subtle px-2 py-1 text-sm text-ink">
+              {alias}
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className={hintText}>{t("vpn.connectionsHint")}</p>
+    </div>
   );
 }

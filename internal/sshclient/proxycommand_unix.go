@@ -9,14 +9,8 @@ import (
 
 // posixShell は、ProxyCommand を解釈させるシェルである。
 //
-// `$SHELL` を読まない。OpenSSH はそれを見てから /bin/sh へ落ちるが、
-// あちらは利用者の端末から起きたプロセスである。この engine は tmux の中にも
-// systemd の下にも居る 。そこの `$SHELL` は、その supervisor がたまたま
-// 持っていた値であって、利用者が選んだものではない。読めば、同じ設定が
-// 「engine をどう起動したか」で違う振る舞いをする。
-//
-// /bin/sh は OpenSSH 自身の落とし先でもあり、ProxyCommand の行はどれも
-// POSIX のシェルで書かれている。
+// コマンドの引用やリダイレクトはPOSIXの規則で解釈する。engineがログイン
+// シェルからPATHを取得した場合も、そのシェルの文法へ切り替えない。
 const posixShell = "/bin/sh"
 
 // ErrNoInterpreter は、ProxyCommand を解釈させる相手が居ないことを報告する。

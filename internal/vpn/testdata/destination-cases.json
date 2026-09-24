@@ -1,0 +1,25 @@
+{
+  "about": [
+    "接続先（VPNプロファイルを付けた接続の HostName:Port）を、そのVPN経由で使えるかの規則を、入力と期待する結果の組で並べた表である。",
+    "Go の検査（internal/vpn の Profile.Destination）と、画面の Connections の注記（web/src/vpn/vpnDestination.ts）の両方が、この表に対してテストされる。",
+    "dns は、プロファイルに VPN 内の DNS サーバーがあるかである。reason が空なら使える接続先、そうでなければ断る理由の語である。"
+  ],
+  "cases": [
+    { "name": "IPv4 アドレス", "address": "10.9.9.1:22", "dns": false, "reason": "" },
+    { "name": "DNS のある名前", "address": "lab.example.jp:22", "dns": true, "reason": "" },
+    { "name": "DNS のある末尾の点付きの名前", "address": "lab.example.jp.:22", "dns": true, "reason": "" },
+    { "name": "DNS の無い名前", "address": "lab.example.jp:22", "dns": false, "reason": "name_needs_dns" },
+    { "name": "名前に空白", "address": "lab example.jp:22", "dns": true, "reason": "format" },
+    { "name": "名前にアンダースコア", "address": "lab_1.example.jp:22", "dns": true, "reason": "format" },
+    { "name": "ラベルがハイフンで始まる", "address": "-lab.example.jp:22", "dns": true, "reason": "format" },
+    { "name": "IPv6 アドレス", "address": "[2001:db8::1]:22", "dns": true, "reason": "not_ipv4" },
+    { "name": "ループバック", "address": "127.0.0.1:22", "dns": false, "reason": "unroutable" },
+    { "name": "未指定のアドレス", "address": "0.0.0.0:22", "dns": false, "reason": "unroutable" },
+    { "name": "マルチキャスト", "address": "224.0.0.1:22", "dns": false, "reason": "unroutable" },
+    { "name": "ポートが範囲の外", "address": "10.9.9.1:70000", "dns": false, "reason": "out_of_range" },
+    { "name": "ポートが 0", "address": "10.9.9.1:0", "dns": false, "reason": "out_of_range" },
+    { "name": "ポートが数でない", "address": "10.9.9.1:ssh", "dns": false, "reason": "out_of_range" },
+    { "name": "ポートが無い", "address": "10.9.9.1", "dns": false, "reason": "format" },
+    { "name": "ホストが空", "address": ":22", "dns": false, "reason": "format" }
+  ]
+}
