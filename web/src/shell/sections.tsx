@@ -324,7 +324,7 @@ function PaddedSection({
     return <SyncPanel />;
   }
   if (section === "VPN") {
-    return <VPNPanel aliases={declared.knownAliases} />;
+    return <VPNPanel />;
   }
   if (section === "History") {
     return <HistoryPanel />;

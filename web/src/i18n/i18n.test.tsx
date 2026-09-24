@@ -98,6 +98,7 @@ describe("the catalogue", () => {
         "terminal.rowDetail",
         "terminal.settingsHeading",
         "tree.navLabel",
+        "vpn.fieldRefusedAt",
         "vpn.heading",
         "workspace.groupCount",
       ].sort(),

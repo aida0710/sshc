@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { VPNProfile, VPNSecrets } from "../api/vpn";
 import { useTranslate } from "../i18n/context";
 import { Field, control, hintText, sectionHeading } from "../ui/form";
@@ -6,163 +6,73 @@ import { PasswordField } from "../ui/PasswordField";
 import { Button, Card } from "../ui/surface";
 import { vpnBackendLabel, vpnBackends, type VPNBackend } from "./vpnBackends";
 import { describeVPNFieldError, type VPNFieldError } from "./vpnFieldErrors";
+import {
+  draftOf,
+  emptyDraft,
+  emptySecrets,
+  hasRequiredValues,
+  profileOf,
+  secretsOf,
+  settingsSection,
+  storedSecretKeys,
+  type SecondFactor,
+  type VPNProfileDraft,
+} from "./vpnProfileDraft";
 import { openConnectProtocols, vpnProfileFieldError } from "./vpnProfileRules";
+import { vpnSecretsFieldError, type VPNSecretKey } from "./vpnSecretRules";
 
-// VPNプロファイルをひとつ作る。接続先はひとつだけ持つ。秘密は保存のときに送るだけで、
-// 保存できればフォームごと空に戻す。断られたときは、入れ直さずに直せるよう秘密も残す。
+// VPNプロファイルを作成する、または保存済みのプロファイルを編集するフォーム。接続先は
+// 持たない（プロファイルを付けた接続の HostName と Port が接続先になる）。
+//
+// シークレットは保存のときに送るだけで、engine は返さない。編集では、空欄のシークレットは
+// 保存済みの値をそのまま使う。作成で保存できればフォームごと空に戻す。断られたときは、
+// 入れ直さずに直せるようシークレットも残す。
 
 // VPNProfileSaveResult は、保存を頼んだ結果である。断られた項目が分かれば、
 // その項目の横に理由を出す。
 export type VPNProfileSaveResult = { saved: true } | { saved: false; fieldError: VPNFieldError | null };
 
-type DraftSecrets = {
-  wireguardPrivateKey: string;
-  l2tpPassword: string;
-  ipsecPsk: string;
-  openconnectPassword: string;
-  openconnectTotpSecret: string;
-};
-
-// 装置がパスワードのあとにもう一問聞くときの答え方。engine と同じ語を使う。
-type SecondFactor = "" | "approve" | "totp";
-
-type Draft = {
-  name: string;
-  backend: VPNBackend;
-  target: string;
-  resolvers: string;
-  server: string;
-  peerPublicKey: string;
-  address: string;
-  username: string;
-  ike: string;
-  esp: string;
-  protocol: string;
-  serverCertificate: string;
-  secondFactor: SecondFactor;
-  approvalWord: string;
-  secrets: DraftSecrets;
-};
-
-const emptySecrets: DraftSecrets = {
-  wireguardPrivateKey: "", l2tpPassword: "", ipsecPsk: "",
-  openconnectPassword: "", openconnectTotpSecret: "",
-};
-
-// トンネル側のアドレスは、1台だけを名乗る /32 がほとんどなので、例として入れておく。
-const suggestedTunnelAddress = "10.0.0.2/32";
-
-const emptyDraft: Draft = {
-  name: "", backend: "wireguard", target: "", resolvers: "", server: "",
-  peerPublicKey: "", address: suggestedTunnelAddress, username: "", ike: "", esp: "",
-  protocol: openConnectProtocols[0], serverCertificate: "", secondFactor: "", approvalWord: "",
-  secrets: emptySecrets,
-};
-
-// 方式ごとの設定の節の名前。engine が返す項目の JSON パスの先頭になる。
-const settingsSection: Record<VPNBackend, string> = {
-  wireguard: "wireguard",
-  l2tp_ipsec: "l2tp",
-  openconnect: "openconnect",
-};
-
-// splitResolvers は、読み取った DNS の並びを一件ずつに分ける。
-function splitResolvers(value: string): string[] {
-  return value
-    .split(",")
-    .map((resolver) => resolver.trim())
-    .filter((resolver) => resolver !== "");
-}
-
-// isComplete は、方式が要る値がすべて入っているかを返す。揃うまでは保存させない。
-function isComplete(draft: Draft): boolean {
-  const { secrets } = draft;
-  if (draft.name === "" || draft.target === "" || draft.server === "") return false;
-  switch (draft.backend) {
-    case "wireguard":
-      return draft.peerPublicKey !== "" && draft.address !== "" && secrets.wireguardPrivateKey !== "";
-    case "openconnect":
-      return draft.username !== "" && secrets.openconnectPassword !== "" &&
-        (draft.secondFactor !== "totp" || secrets.openconnectTotpSecret !== "");
-    case "l2tp_ipsec":
-      return draft.username !== "" && secrets.l2tpPassword !== "" && secrets.ipsecPsk !== "";
-  }
-}
-
-function profileOf(draft: Draft): VPNProfile {
-  const dns = splitResolvers(draft.resolvers);
-  const common = { name: draft.name, backend: draft.backend, target: draft.target, ...(dns.length === 0 ? {} : { dns }) };
-  switch (draft.backend) {
-    case "wireguard":
-      return { ...common, wireguard: { server: draft.server, peerPublicKey: draft.peerPublicKey, address: draft.address } };
-    case "openconnect":
-      return {
-        ...common,
-        openconnect: {
-          server: draft.server,
-          username: draft.username,
-          protocol: draft.protocol,
-          ...(draft.serverCertificate === "" ? {} : { serverCertificate: draft.serverCertificate }),
-          ...(draft.secondFactor === "" ? {} : { secondFactor: draft.secondFactor }),
-          ...(draft.secondFactor === "approve" && draft.approvalWord !== "" ? { approvalWord: draft.approvalWord } : {}),
-        },
-      };
-    case "l2tp_ipsec":
-      return {
-        ...common,
-        l2tp: {
-          server: draft.server,
-          username: draft.username,
-          ...(draft.ike === "" ? {} : { ike: draft.ike }),
-          ...(draft.esp === "" ? {} : { esp: draft.esp }),
-        },
-      };
-  }
-}
-
-// secretsOf は、選んだ方式が使う秘密だけを送る形にする。
-function secretsOf(draft: Draft): VPNSecrets {
-  const { secrets } = draft;
-  switch (draft.backend) {
-    case "wireguard":
-      return { wireguardPrivateKey: secrets.wireguardPrivateKey };
-    case "openconnect":
-      return {
-        openconnectPassword: secrets.openconnectPassword,
-        ...(draft.secondFactor === "totp" ? { openconnectTotpSecret: secrets.openconnectTotpSecret } : {}),
-      };
-    case "l2tp_ipsec":
-      return { l2tpPassword: secrets.l2tpPassword, ipsecPsk: secrets.ipsecPsk };
-  }
-}
+const noStoredSecrets: ReadonlySet<VPNSecretKey> = new Set();
 
 export function VPNProfileForm({
   busy,
+  editing,
   onSave,
+  onCancel,
 }: {
   busy: boolean;
+  // editing は、編集する保存済みのプロファイルである。無ければ新しく作る。
+  editing?: VPNProfile;
   onSave: (profile: VPNProfile, secrets: VPNSecrets) => Promise<VPNProfileSaveResult>;
+  // onCancel は、編集をやめる。作成のフォームには無い。
+  onCancel?: () => void;
 }) {
   const t = useTranslate();
-  const [draft, setDraft] = useState<Draft>(emptyDraft);
+  const [draft, setDraft] = useState<VPNProfileDraft>(() => (editing === undefined ? emptyDraft : draftOf(editing)));
   const [refusal, setRefusal] = useState<VPNFieldError | null>(null);
   const section = settingsSection[draft.backend];
+  // 方式を変えると engine は前の方式のシークレットを捨てるので、保存済みの値は使えない。
+  const stored = useMemo(
+    () => (editing === undefined || editing.backend !== draft.backend ? noStoredSecrets : storedSecretKeys(editing)),
+    [editing, draft.backend],
+  );
+  const heading = editing === undefined ? t("vpn.addHeading") : t("vpn.editHeading", { name: editing.name });
 
-  function edit<K extends keyof Draft>(key: K) {
-    return (value: Draft[K]) => {
+  function edit<K extends keyof VPNProfileDraft>(key: K) {
+    return (value: VPNProfileDraft[K]) => {
       setRefusal(null);
       setDraft((current) => ({ ...current, [key]: value }));
     };
   }
 
-  function editSecret(key: keyof DraftSecrets) {
+  function editSecret(key: VPNSecretKey) {
     return (value: string) => {
       setRefusal(null);
       setDraft((current) => ({ ...current, secrets: { ...current.secrets, [key]: value } }));
     };
   }
 
-  // 方式を変えたら、それまでの方式の秘密を手元にも残さない。
+  // 方式を変えたら、それまでの方式のシークレットを手元にも残さない。
   function chooseBackend(backend: VPNBackend) {
     setRefusal(null);
     setDraft((current) => ({ ...current, backend, secrets: emptySecrets }));
@@ -173,29 +83,54 @@ export function VPNProfileForm({
     return refusal !== null && refusal.field === field ? describeVPNFieldError(t, refusal) : undefined;
   }
 
+  function secretField(key: VPNSecretKey, label: string) {
+    return (
+      <PasswordField
+        label={label}
+        hint={t(stored.has(key) ? "vpn.secretKeepHint" : "vpn.secretHint")}
+        error={errorFor(`secrets.${key}`)}
+        value={draft.secrets[key]}
+        onChange={editSecret(key)}
+      />
+    );
+  }
+
   async function save() {
     const profile = profileOf(draft);
-    const refused = vpnProfileFieldError(profile);
+    // 送る前の検査で断られると、どの項目かが分からない。先に項目ごとに確かめる。
+    const refused = vpnProfileFieldError(profile) ??
+      vpnSecretsFieldError({ backend: draft.backend, secondFactor: draft.secondFactor, secrets: draft.secrets, stored });
     if (refused !== null) {
       setRefusal(refused);
       return;
     }
     const result = await onSave(profile, secretsOf(draft));
-    if (result.saved) {
+    if (!result.saved) {
+      setRefusal(result.fieldError);
+      return;
+    }
+    if (editing === undefined) {
       setDraft(emptyDraft);
       setRefusal(null);
-    } else {
-      setRefusal(result.fieldError);
     }
   }
 
   return (
-    <Card as="section" padded aria-label={t("vpn.addHeading")}>
-      <p className={sectionHeading}>{t("vpn.addHeading")}</p>
-      <p className={hintText}>{t("vpn.addHint")}</p>
+    <Card as="section" padded aria-label={heading}>
+      <p className={sectionHeading}>{heading}</p>
+      <p className={hintText}>{editing === undefined ? t("vpn.addHint") : t("vpn.editHint")}</p>
       <div className="grid gap-3 sm:grid-cols-2">
-        <Field label={t("vpn.name")} error={errorFor("name")}>
-          <input className={control} value={draft.name} onChange={(event) => edit("name")(event.target.value)} />
+        <Field
+          label={t("vpn.name")}
+          {...(editing === undefined ? {} : { hint: t("vpn.nameFixedHint") })}
+          error={errorFor("name")}
+        >
+          <input
+            className={control}
+            value={draft.name}
+            disabled={editing !== undefined}
+            onChange={(event) => edit("name")(event.target.value)}
+          />
         </Field>
         <Field label={t("vpn.backend")} error={errorFor("backend")}>
           <select
@@ -209,9 +144,6 @@ export function VPNProfileForm({
               </option>
             ))}
           </select>
-        </Field>
-        <Field label={t("vpn.target")} hint={t("vpn.targetHint")} error={errorFor("target")}>
-          <input className={control} value={draft.target} onChange={(event) => edit("target")(event.target.value)} />
         </Field>
         <Field label={t("vpn.server")} error={errorFor(`${section}.server`)}>
           <input className={control} value={draft.server} onChange={(event) => edit("server")(event.target.value)} />
@@ -231,13 +163,7 @@ export function VPNProfileForm({
             <Field label={t("vpn.address")} error={errorFor("wireguard.address")}>
               <input className={control} value={draft.address} onChange={(event) => edit("address")(event.target.value)} />
             </Field>
-            <PasswordField
-              label={t("vpn.privateKey")}
-              hint={t("vpn.secretHint")}
-              error={errorFor("secrets.wireguardPrivateKey")}
-              value={draft.secrets.wireguardPrivateKey}
-              onChange={editSecret("wireguardPrivateKey")}
-            />
+            {secretField("wireguardPrivateKey", t("vpn.privateKey"))}
           </>
         ) : draft.backend === "openconnect" ? (
           <>
@@ -264,13 +190,7 @@ export function VPNProfileForm({
                 onChange={(event) => edit("serverCertificate")(event.target.value)}
               />
             </Field>
-            <PasswordField
-              label={t("vpn.password")}
-              hint={t("vpn.secretHint")}
-              error={errorFor("secrets.openconnectPassword")}
-              value={draft.secrets.openconnectPassword}
-              onChange={editSecret("openconnectPassword")}
-            />
+            {secretField("openconnectPassword", t("vpn.password"))}
             <Field label={t("vpn.secondFactor")} hint={t("vpn.secondFactorHint")} error={errorFor("openconnect.secondFactor")}>
               <select
                 className={control}
@@ -291,35 +211,15 @@ export function VPNProfileForm({
                 />
               </Field>
             ) : null}
-            {draft.secondFactor === "totp" ? (
-              <PasswordField
-                label={t("vpn.secondFactorSecret")}
-                hint={t("vpn.secretHint")}
-                error={errorFor("secrets.openconnectTotpSecret")}
-                value={draft.secrets.openconnectTotpSecret}
-                onChange={editSecret("openconnectTotpSecret")}
-              />
-            ) : null}
+            {draft.secondFactor === "totp" ? secretField("openconnectTotpSecret", t("vpn.secondFactorSecret")) : null}
           </>
         ) : (
           <>
             <Field label={t("vpn.username")} error={errorFor("l2tp.username")}>
               <input className={control} value={draft.username} onChange={(event) => edit("username")(event.target.value)} />
             </Field>
-            <PasswordField
-              label={t("vpn.password")}
-              hint={t("vpn.secretHint")}
-              error={errorFor("secrets.l2tpPassword")}
-              value={draft.secrets.l2tpPassword}
-              onChange={editSecret("l2tpPassword")}
-            />
-            <PasswordField
-              label={t("vpn.psk")}
-              hint={t("vpn.secretHint")}
-              error={errorFor("secrets.ipsecPsk")}
-              value={draft.secrets.ipsecPsk}
-              onChange={editSecret("ipsecPsk")}
-            />
+            {secretField("l2tpPassword", t("vpn.password"))}
+            {secretField("ipsecPsk", t("vpn.psk"))}
             <Field label={t("vpn.ike")} hint={t("vpn.proposalsHint")} error={errorFor("l2tp.ike")}>
               <input className={control} value={draft.ike} onChange={(event) => edit("ike")(event.target.value)} />
             </Field>
@@ -329,10 +229,15 @@ export function VPNProfileForm({
           </>
         )}
       </div>
-      <div>
-        <Button kind="primary" disabled={busy || !isComplete(draft)} onClick={() => void save()}>
+      <div className="flex flex-wrap gap-2">
+        <Button kind="primary" disabled={busy || !hasRequiredValues(draft, stored)} onClick={() => void save()}>
           {t("vpn.save")}
         </Button>
+        {onCancel === undefined ? null : (
+          <Button disabled={busy} onClick={onCancel}>
+            {t("vpn.cancel")}
+          </Button>
+        )}
       </div>
     </Card>
   );
