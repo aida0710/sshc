@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-BOsSdQ68.js";import{_ as t}from"./form-Bbh4RhyI.js";var n=e();function r({name:e,className:r=``}){let i=t();return e===``?null:(0,n.jsx)(`span`,{title:i(`vpn.profileChipHint`,{name:e}),className:`shrink-0 rounded border border-line px-1.5 py-0.5 text-[10px] font-medium text-ink-muted ${r}`,children:i(`vpn.profileChip`,{name:e})})}export{r as t};
