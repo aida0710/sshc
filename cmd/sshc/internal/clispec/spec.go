@@ -141,7 +141,7 @@ Automation: --expect REGEX | --read-for D | --script FILE|-
 		{Name: "edit", Help: "usage:\n  sshc vpn edit <name>\n\nChange a VPN profile interactively. Every prompt starts from the saved value; a blank secret keeps the saved one, and - clears an optional setting.\n"},
 		{Name: "remove", Help: "usage:\n  sshc vpn remove <name> [-y|--yes]\n\nRemove a profile, its secrets, its running session, and the bindings that named it.\n"},
 		{Name: "rename", Help: "usage:\n  sshc vpn rename <name> <new-name> [--json]\n\nRename a profile. Its secrets and the bindings that named it move with it, and the running route under the old name is closed.\n"},
-		{Name: "logs", Help: "usage:\n  sshc vpn logs <name> [--json]\n\nPrint the container's recent output with every stored secret masked. This is where a route that will not come up explains itself.\n"},
+		{Name: "logs", Help: "usage:\n  sshc vpn logs <name> [--json]\n\nPrint what the sshc engine recorded while preparing the route, followed by the container's recent output, with every stored secret masked. This is where a route that will not come up explains itself.\n"},
 		{Name: "up", Help: "usage:\n  sshc vpn up <name> [--json]\n\nOpen the route and wait until its relay is listening.\n"},
 		{Name: "down", Help: "usage:\n  sshc vpn down <name> [--json]\n\nClose the route.\n"},
 		{Name: "proxy", Help: "usage:\n  sshc vpn proxy <name> <host> <port>\n\nPipe standard input and output to host:port through the route, for use as an OpenSSH ProxyCommand (sshc vpn proxy <name> %h %p) so that the host's own ssh, scp and git can use it.\n"},

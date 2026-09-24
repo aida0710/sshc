@@ -136,7 +136,7 @@ func (manager *Manager) connectCounted(
 ) (net.Conn, error) {
 	started := time.Now()
 	connection, err := manager.connectTarget(ctx, profileName, destination)
-	elapsed := time.Since(started).Round(time.Millisecond)
+	elapsed := connectionlog.Elapsed(time.Since(started))
 	if err != nil {
 		connectionlog.Say(ctx, connectionlog.Detailed, "VPN経由で %s に接続できませんでした（%s）：%v",
 			destination.Address(), elapsed, err)
@@ -258,12 +258,12 @@ func (manager *Manager) Start(ctx context.Context, profile Profile, secrets Secr
 	started := time.Now()
 	if err := manager.start(ctx, profile, secrets, state.enterPhase); err != nil {
 		connectionlog.Say(ctx, connectionlog.Detailed, "VPN経路の起動に失敗しました（%s）：%v",
-			time.Since(started).Round(time.Millisecond), err)
+			connectionlog.Elapsed(time.Since(started)), err)
 		return err
 	}
 	tunnel := manager.tunnelStatus(profile.Name)
 	connectionlog.Say(ctx, connectionlog.Brief, "VPNに接続しました（%s、インターフェース %s、アドレス %s、%s）。",
-		profile.Backend, tunnel.Interface, tunnel.Address, time.Since(started).Round(time.Millisecond))
+		profile.Backend, tunnel.Interface, tunnel.Address, connectionlog.Elapsed(time.Since(started)))
 	relay, err := openEngineRelay(
 		filepath.Join(manager.routeDirectory(profile.Name), engineRelaySocketName),
 		func(ctx context.Context, address string) (net.Conn, error) {

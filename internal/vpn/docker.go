@@ -115,34 +115,49 @@ func executable(info os.FileInfo) bool {
 }
 
 func (command dockerCommand) output(ctx context.Context, arguments ...string) (string, error) {
-	output, _, err := command.run(ctx, "", arguments...)
-	return output, err
+	return command.run(ctx, dockerCall{arguments: arguments})
 }
 
-// combined は、標準出力と標準エラーを合わせて返す。
+// combined は、標準出力と標準エラーを、書かれた順に合わせて返す。
 //
 // docker logs は、コンテナの標準出力をこちらの標準出力へ、標準エラーをこちらの
 // 標準エラーへ流す。agent は失敗の理由を標準エラーへ書くので、片方だけを読むと、
-// いちばん知りたい行が落ちる。
+// いちばん知りたい行が落ちる。別々に読んでつなぐと、行の前後が入れ替わる。
 func (command dockerCommand) combined(ctx context.Context, arguments ...string) (string, error) {
-	output, errorOutput, err := command.run(ctx, "", arguments...)
-	if err != nil {
-		return "", err
-	}
-	if errorOutput == "" {
-		return output, nil
-	}
-	if output == "" {
-		return errorOutput, nil
-	}
-	return output + "\n" + errorOutput, nil
+	return command.run(ctx, dockerCall{arguments: arguments, mergeOutput: true})
 }
 
 // outputWithInput は、標準入力を渡して docker を実行する。秘密はここを通る。
 // 引数にも環境変数にも秘密を置かない。
 func (command dockerCommand) outputWithInput(ctx context.Context, input string, arguments ...string) (string, error) {
-	output, _, err := command.run(ctx, input, arguments...)
-	return output, err
+	return command.run(ctx, dockerCall{arguments: arguments, input: input})
+}
+
+// probe は、「無い」ことも答えのひとつである問い合わせ（そのコンテナやイメージが
+// あるか）を実行する。無ければ present を false にして、失敗としては返さない。
+func (command dockerCommand) probe(ctx context.Context, arguments ...string) (output string, present bool, err error) {
+	output, err = command.run(ctx, dockerCall{arguments: arguments, absentIsAnswer: true})
+	if isAbsent(err) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	return output, true, nil
+}
+
+// isAbsent は、docker の失敗が「その名前のコンテナ（イメージ）は無い」だったかを
+// 返す。
+//
+// それ以外の失敗（daemon が応えない、など）を「無い」と読むと、無いはずの名前で
+// コンテナを作りに行き、名前の衝突という分かりにくい失敗になる。
+func isAbsent(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := err.Error()
+	return strings.Contains(message, "No such container") || strings.Contains(message, "No such object") ||
+		strings.Contains(message, "No such image")
 }
 
 // stream は、docker を起動し、その標準入出力を接続として返す。
@@ -168,39 +183,62 @@ func describeArguments(arguments []string) string {
 	return described
 }
 
-// run は、docker を1回実行し、標準出力と標準エラーを別々に返す。
-//
-// 実行したコマンドと掛かった時間を、接続ログの debug3 に書く。失敗したときは、
-// docker の標準エラーの最後の行も書く。
-func (command dockerCommand) run(
-	ctx context.Context, input string, arguments ...string,
-) (output, errorOutput string, err error) {
+// dockerCall は、docker を1回実行するときの指定である。
+type dockerCall struct {
+	arguments []string
+	// input は、標準入力に渡す内容である。
+	input string
+	// mergeOutput は、標準エラーを標準出力と同じ所へ、書かれた順に集める。
+	mergeOutput bool
+	// absentIsAnswer は、対象が無いという失敗を問い合わせの答えとして扱い、接続ログに
+	// 失敗と書かない。
+	absentIsAnswer bool
+}
+
+// run は、docker を1回実行し、標準出力を返す。失敗したときは、標準エラーを
+// エラーの文に含める。
+func (command dockerCommand) run(ctx context.Context, call dockerCall) (output string, err error) {
 	started := time.Now()
-	defer func() {
-		elapsed := time.Since(started).Round(time.Millisecond)
-		if err == nil {
-			connectionlog.Say(ctx, connectionlog.Full, "docker %s（%s）", describeArguments(arguments), elapsed)
-			return
-		}
-		connectionlog.Say(ctx, connectionlog.Full, "docker %s は失敗しました（%s）：", describeArguments(arguments), elapsed)
-		sayOutput(ctx, connectionlog.Full, err.Error())
-	}()
-	process := exec.CommandContext(ctx, command.path, arguments...)
+	defer func() { sayRun(ctx, call, time.Since(started), err) }()
+	process := exec.CommandContext(ctx, command.path, call.arguments...)
 	process.Env = command.environment
 	var stdout, stderr bytes.Buffer
 	process.Stdout = &limitedWriter{writer: &stdout, remaining: maxDockerOutputBytes}
 	process.Stderr = &limitedWriter{writer: &stderr, remaining: maxDockerOutputBytes}
-	if input != "" {
-		process.Stdin = strings.NewReader(input)
+	if call.mergeOutput {
+		// 同じ書き先を渡すと、exec は1本のパイプで受けるので、書かれた順が保たれる。
+		process.Stderr = process.Stdout
+	}
+	if call.input != "" {
+		process.Stdin = strings.NewReader(call.input)
 	}
 	if err := process.Run(); err != nil {
 		detail := strings.TrimSpace(stderr.String())
-		if detail == "" {
-			return "", "", err
+		if call.mergeOutput {
+			detail = strings.TrimSpace(stdout.String())
 		}
-		return "", "", fmt.Errorf("%s: %w", detail, err)
+		if detail == "" {
+			return "", err
+		}
+		return "", fmt.Errorf("%s: %w", detail, err)
 	}
-	return stdout.String(), strings.TrimSpace(stderr.String()), nil
+	return stdout.String(), nil
+}
+
+// sayRun は、実行したコマンドと掛かった時間を、接続ログの debug3 に書く。失敗した
+// ときは、docker の出力も書く。
+func sayRun(ctx context.Context, call dockerCall, elapsed time.Duration, err error) {
+	described := describeArguments(call.arguments)
+	elapsed = connectionlog.Elapsed(elapsed)
+	switch {
+	case err == nil:
+		connectionlog.Say(ctx, connectionlog.Full, "docker %s（%s）", described, elapsed)
+	case call.absentIsAnswer && isAbsent(err):
+		connectionlog.Say(ctx, connectionlog.Full, "docker %s（%s）：ありません", described, elapsed)
+	default:
+		connectionlog.Say(ctx, connectionlog.Full, "docker %s は失敗しました（%s）：", described, elapsed)
+		sayOutput(ctx, connectionlog.Full, err.Error())
+	}
 }
 
 // limitedWriter は、上限まで書いたら黙って捨てる。

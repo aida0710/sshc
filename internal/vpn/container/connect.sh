@@ -90,7 +90,7 @@ if ! grep -qx "$address" "$routed" 2>/dev/null; then
 	# あいだ、接続先への通信がDockerの通常のネットワークへ流れることはない。
 	iptables -A OUTPUT -d "$address" ! -o "$interface" -j REJECT
 	echo "$address" >>"$routed"
-	note "接続先 $address への経路とパケットフィルタを追加しました（interface $interface）。"
+	note "接続先 $address への経路とパケットフィルタを追加しました（インターフェース $interface）。"
 else
 	note "接続先 $address への経路は追加済みです。"
 fi

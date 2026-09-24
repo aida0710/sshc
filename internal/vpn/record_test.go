@@ -73,19 +73,24 @@ func TestDescribedArgumentsAreCut(t *testing.T) {
 }
 
 // connect が行ったことは debug2 に写し、繋げなかったときは出力も debug2 に写す。
+// socat の行は時刻を外して写す。コンテナの時計は UTC で、記録の現地時刻と並べると
+// 食い違って見える。
 func TestConnectNotesAndFailureOutputReachTheConnectionLog(t *testing.T) {
 	var record attemptRecord
 	ctx := connectionlog.With(context.Background(), &record)
 	watch := newConnectWatch()
 	_, _ = watch.Write([]byte("sshc-vpn-note: 接続先 db を名前解決しました：10.0.0.5\n"))
-	_, _ = watch.Write([]byte("2026/09/24 socat[7] E connect(): Connection refused\n"))
+	_, _ = watch.Write([]byte("2026/09/24 10:23:31 socat[7] E connect(): Connection refused\n"))
 
 	watch.describe(ctx)
 
 	text := record.text()
-	for _, want := range []string{"[debug2] コンテナの中継：接続先 db を名前解決しました：10.0.0.5", "[debug2]   2026/09/24 socat[7] E connect(): Connection refused"} {
+	for _, want := range []string{"[debug2] コンテナの中継：接続先 db を名前解決しました：10.0.0.5", "[debug2]   socat[7] E connect(): Connection refused"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("record に %q が無い:\n%s", want, text)
 		}
+	}
+	if strings.Contains(text, "10:23:31 socat") {
+		t.Fatalf("socat の時刻を外していない:\n%s", text)
 	}
 }

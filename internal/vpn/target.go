@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -144,7 +145,7 @@ func (watch *connectWatch) readLine(line string) {
 		return
 	}
 	if strings.TrimSpace(line) != "" {
-		watch.lines = appendBounded(watch.lines, strings.TrimSpace(line))
+		watch.lines = appendBounded(watch.lines, withoutSocatTimestamp(strings.TrimSpace(line)))
 	}
 	if reason, found := strings.CutPrefix(strings.TrimSpace(line), connectFailurePrefix); found {
 		watch.spoke = true
@@ -160,6 +161,15 @@ func (watch *connectWatch) readLine(line string) {
 	if strings.Contains(line, connectStartedMark) {
 		watch.startedOnce.Do(func() { close(watch.started) })
 	}
+}
+
+// socatTimestamp は、socat が診断の行の頭に付ける時刻である。コンテナの時計は UTC
+// なので、接続ログと記録の現地時刻と並ぶと食い違って見える。
+var socatTimestamp = regexp.MustCompile(`^\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2} `)
+
+// withoutSocatTimestamp は、socat の行から時刻を外す。
+func withoutSocatTimestamp(line string) string {
+	return socatTimestamp.ReplaceAllString(line, "")
 }
 
 // failureReason は、connect が終わったあとで、繋げなかった理由を返す。

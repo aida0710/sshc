@@ -9,6 +9,7 @@ package connectionlog
 import (
 	"context"
 	"fmt"
+	"time"
 )
 
 // Level は、その行を出す深さである。sshclient.Verbosity と同じ値を使う。
@@ -41,6 +42,12 @@ func With(ctx context.Context, writer Writer) context.Context {
 	return context.WithValue(ctx, writerKey{}, writer)
 }
 
+// Muted は、接続ログへ何も書かない ctx を返す。短い間隔で何度も繰り返す処理
+// （コンテナの状態の確認など）で使う。1回ずつ書くと、接続ログと記録が埋まる。
+func Muted(ctx context.Context) context.Context {
+	return context.WithValue(ctx, writerKey{}, nil)
+}
+
 // Enabled は、ctx の書き先がその深さの行を書くかを返す。書き先が無ければ false。
 func Enabled(ctx context.Context, level Level) bool {
 	writer, present := ctx.Value(writerKey{}).(Writer)
@@ -54,6 +61,15 @@ func Say(ctx context.Context, level Level, format string, args ...any) {
 		return
 	}
 	writer.Write(level, fmt.Sprintf(format, args...))
+}
+
+// Elapsed は、掛かった時間を接続ログに出す細かさへ丸める。ms で丸めると 1ms 未満が
+// 「0s」になり、測っていないように見えるので、そこだけ µs で丸める。
+func Elapsed(duration time.Duration) time.Duration {
+	if duration < time.Millisecond {
+		return duration.Round(time.Microsecond)
+	}
+	return duration.Round(time.Millisecond)
 }
 
 // both は、2 つの書き先へ同じ行を書く。

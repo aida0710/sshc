@@ -126,7 +126,7 @@ When the VPN is up but the target cannot be reached, the terminal and `sshc <ali
 
 When the failure will repeat until a setting is fixed (no VPN secret saved, Docker not running and so on), the terminal does not keep reconnecting.
 
-If it is not there, or the tunnel is up but the target is still unreachable, read the container's output: **Logs** on the VPN screen, or `sshc vpn logs <name>`. A container that failed to come up is cleaned away, but the engine keeps its output, so it can still be read the same way. The stored secrets are replaced by `[REDACTED]`, so the output can be pasted as it is. You never need to run `docker logs` yourself.
+If it is not there, or the tunnel is up but the target is still unreachable, read the logs: **Logs** on the VPN screen, or `sshc vpn logs <name>`. They show the sshc engine's record first and the container's output after it. The engine's record lists how the engine prepared the route (which docker it used, the image build, every docker command it ran and the output of the ones that failed), so it also explains a failure that happened before the container started, such as an image that could not be built. A container that failed to come up is cleaned away, but the engine keeps its output, so it can still be read the same way. The stored secrets are replaced by `[REDACTED]`, so the output can be pasted as it is. You never need to run `docker logs` yourself.
 
 ## Using the route from the host's `ssh`, `scp` and `git`
 

@@ -280,7 +280,8 @@ func (manager *Manager) waitForTunnel(ctx context.Context, name string, profile 
 		if _, err := os.Stat(path); err == nil {
 			return nil
 		}
-		running, err := manager.containerRunning(ctx, name)
+		// readyPollInterval ごとに確かめるので、1回ずつは接続ログに書かない。
+		running, err := manager.containerRunning(connectionlog.Muted(ctx), name)
 		if err != nil {
 			return err
 		}
@@ -346,11 +347,8 @@ func relayDeadline(profile Profile) time.Duration {
 // containerRunning は、コンテナが動いているかを返す。コンテナが無ければ false
 // を返し、docker そのものの失敗は失敗として返す。
 func (manager *Manager) containerRunning(ctx context.Context, name string) (bool, error) {
-	output, err := manager.docker.output(ctx, "container", "inspect", "--format", "{{.State.Running}}", name)
-	if isMissingContainer(err) {
-		return false, nil
-	}
-	if err != nil {
+	output, present, err := manager.docker.probe(ctx, "container", "inspect", "--format", "{{.State.Running}}", name)
+	if err != nil || !present {
 		return false, err
 	}
 	return strings.TrimSpace(output) == "true", nil
@@ -407,11 +405,8 @@ func (manager *Manager) stopContainer(ctx context.Context, name string) {
 func (manager *Manager) requireOurContainer(ctx context.Context, name, profileName string) (bool, error) {
 	format := "{{index .Config.Labels \"" + ownerLabel + "\"}} {{index .Config.Labels \"" + profileLabel +
 		"\"}} {{index .Config.Labels \"" + workspaceLabel + "\"}}"
-	output, err := manager.docker.output(ctx, "container", "inspect", "--format", format, name)
-	if isMissingContainer(err) {
-		return false, nil
-	}
-	if err != nil {
+	output, present, err := manager.docker.probe(ctx, "container", "inspect", "--format", format, name)
+	if err != nil || !present {
 		return false, err
 	}
 	fields := strings.Fields(strings.TrimSpace(output))
@@ -420,16 +415,4 @@ func (manager *Manager) requireOurContainer(ctx context.Context, name, profileNa
 		return false, fmt.Errorf("%w: %s", ErrSessionForeign, name)
 	}
 	return true, nil
-}
-
-// isMissingContainer は、docker の失敗が「そのコンテナは無い」だったかを返す。
-//
-// それ以外の失敗（daemon が応えない、など）を「無い」と読むと、無いはずの名前で
-// コンテナを作りに行き、名前の衝突という分かりにくい失敗になる。
-func isMissingContainer(err error) bool {
-	if err == nil {
-		return false
-	}
-	message := err.Error()
-	return strings.Contains(message, "No such container") || strings.Contains(message, "No such object")
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 )
 
 // recorded は、書かれた行を深さ付きで覚える書き先である。
@@ -63,5 +64,36 @@ func TestStackedWritersBothReceiveTheirLines(t *testing.T) {
 	}
 	if !Enabled(ctx, Full) {
 		t.Fatal("どちらかが書くなら有効と答える")
+	}
+}
+
+// Muted の ctx では、重ねた書き先のどれにも書かない。後から足した書き先には書く。
+func TestMutedContextWritesNothingUntilAWriterIsAddedAgain(t *testing.T) {
+	writer := &recorded{level: Full}
+	muted := Muted(With(context.Background(), writer))
+
+	Say(muted, Brief, "書かない")
+	later := &recorded{level: Full}
+	Say(With(muted, later), Brief, "後の書き先だけ")
+
+	if len(writer.lines) != 0 {
+		t.Fatalf("黙らせた書き先に書いた: %q", writer.lines)
+	}
+	if got := strings.Join(later.lines, "|"); got != "1 後の書き先だけ" {
+		t.Fatalf("later = %q", got)
+	}
+}
+
+// 1ms 未満は µs で、それ以上は ms で丸める。「0s」とは出さない。
+func TestElapsedKeepsSubMillisecondDurationsVisible(t *testing.T) {
+	cases := map[time.Duration]string{
+		312400 * time.Nanosecond:                   "312µs",
+		1234567 * time.Microsecond:                 "1.235s",
+		25*time.Millisecond + 400*time.Microsecond: "25ms",
+	}
+	for duration, want := range cases {
+		if got := Elapsed(duration).String(); got != want {
+			t.Errorf("Elapsed(%v) = %s, want %s", duration, got, want)
+		}
 	}
 }

@@ -12,6 +12,7 @@ import (
 	"golang.org/x/crypto/ssh"
 
 	"sshc/internal/commandconn"
+	"sshc/internal/connectionlog"
 	"sshc/internal/terminal"
 	"sshc/internal/textencoding"
 )
@@ -134,7 +135,7 @@ func (d Dialer) connect(ctx context.Context, target Target, session *Session, ob
 	} else {
 		trace.say(Detailed, "keepalive：送りません（ServerAliveInterval 0）。")
 	}
-	trace.say(Full, "接続完了まで %s かかりました。", trace.since(started).Round(time.Millisecond))
+	trace.say(Full, "接続完了まで %s かかりました。", connectionlog.Elapsed(trace.since(started)))
 	session.run(remote, keepAliveLoop(client, target.KeepAlive, target.KeepAliveMax, session.done))
 }
 
@@ -257,7 +258,7 @@ func (d Dialer) connectOne(
 		explainFailure(trace, err)
 		return nil, err
 	}
-	trace.say(Detailed, "TCP 接続を確立しました（%s）。", trace.since(started).Round(time.Millisecond))
+	trace.say(Detailed, "TCP 接続を確立しました（%s）。", connectionlog.Elapsed(trace.since(started)))
 	if tcp, ok := conn.(*net.TCPConn); ok {
 		// 素の TCP のときだけ言う。ProxyJump の上のチャンネルや ProxyCommand の
 		// パイプが名乗るアドレスは、どこを通ったかを表さない。
@@ -273,7 +274,7 @@ func (d Dialer) connectOne(
 		Auth: authMethods,
 		HostKeyCallback: func(hostname string, remote net.Addr, key ssh.PublicKey) error {
 			trace.stage(terminal.ConnectionHostKey, target, hop, hops)
-			trace.say(Full, "鍵交換が終わり、ホスト鍵を受け取りました（%s）。", trace.since(started).Round(time.Millisecond))
+			trace.say(Full, "鍵交換が終わり、ホスト鍵を受け取りました（%s）。", connectionlog.Elapsed(trace.since(started)))
 			err := verifyHostKey(hostname, remote, key)
 			if err == nil {
 				trace.stage(terminal.ConnectionAuthenticating, target, hop, hops)
@@ -298,7 +299,7 @@ func (d Dialer) connectOne(
 	} else {
 		trace.say(Detailed, "サーバーは認証を求めませんでした。")
 	}
-	trace.say(Detailed, "SSH ハンドシェイクが完了しました（%s）。", trace.since(started).Round(time.Millisecond))
+	trace.say(Detailed, "SSH ハンドシェイクが完了しました（%s）。", connectionlog.Elapsed(trace.since(started)))
 	trace.say(Full, "サーバーの SSH バージョン：%s", connection.ServerVersion())
 	trace.say(Brief, "%s に接続しました（%d/%d）。", connectionTarget(target), hop, hops)
 	trace.stage(terminal.ConnectionAuthenticated, target, hop, hops)
@@ -418,7 +419,7 @@ func describeResolution(ctx context.Context, trace *tracer, host string) {
 		return
 	}
 	trace.say(Full, "%s を名前解決しました：%s（%s）", host, strings.Join(addresses, ", "),
-		trace.since(started).Round(time.Millisecond))
+		connectionlog.Elapsed(trace.since(started)))
 }
 
 // pathOf は、環境のうち PATH の値を返す。後に書かれたものが勝つ。
