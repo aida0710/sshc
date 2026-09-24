@@ -1,25 +1,16 @@
-// Package vpn は、ひとつのSSH接続だけを専用のVPNへ通す経路を用意する。
+// Package vpn は、選んだSSH接続だけを専用のVPNへ通す経路を用意する。
 //
 // ホストの既定経路もDNSも変えない。VPNはプロファイルごとのコンテナの中だけに
-// 存在し、engineはそのコンテナが差し出すUnixソケットへ繋ぐ。SSHの握手・認証・
-// ホスト鍵の照合はengineが行うので、鍵もVaultもコンテナへは渡らない。
+// 存在し、engineは接続1本ごとにそのコンテナの中の中継を起動して繋ぐ。SSHの
+// ハンドシェイク・認証・ホスト鍵の照合はengineが行うので、鍵もVaultもコンテナへは
+// 渡らない。
 package vpn
 
 import (
-	"errors"
 	"fmt"
 	"net"
 	"reflect"
-	"strings"
 )
-
-// ErrTargetMismatch は、繋ごうとしている相手と、その経路の接続先が食い違う
-// ことを表す。
-//
-// コンテナはプロファイルの接続先ひとつだけを通す。食い違ったまま繋ぐと、
-// 利用者が設定に書いた相手ではなく、プロファイルに書いた相手へ届く。どちらが
-// 正しいかを推測せず、断る。
-var ErrTargetMismatch = errors.New("the connection and its vpn profile name different targets")
 
 // Endpoint は、host と port の組である。
 type Endpoint struct {
@@ -34,18 +25,15 @@ func (endpoint Endpoint) Address() string {
 
 // Profile は、ひとつのVPN経路である。
 //
-// 接続先はひとつに限る。VPNの向こうのネットワーク全体を引き込まないので、経路と
-// パケットフィルタが接続先ひとつで閉じ、取り違える余地が残らない。
+// 接続先は持たない。接続先は、このプロファイルを付けた接続の HostName と Port で
+// 決まり、接続のたびに Destination で確かめる。
 //
 // backend ごとの節は、Backend に合うものひとつだけを持つ。
 type Profile struct {
 	Name    string
 	Backend BackendName
-	// Target は、このVPNの中にある接続先である。IPv4アドレスか、VPNの中の
-	// DNSで引ける名前を書く。名前で書くときは DNS が要る。
-	Target Endpoint
-	// DNS は、VPNの中で名前を引くDNSサーバーである（IPv4）。この経路の中
-	// だけで使い、ホストのDNSもコンテナの既定のDNSも変えない。
+	// DNS は、VPNの中で接続先を名前解決するDNSサーバーである（IPv4）。この経路の
+	// 中だけで使い、ホストのDNSもコンテナの既定のDNSも変えない。
 	DNS         []string
 	WireGuard   *WireGuardSettings
 	L2TP        *L2TPSettings
@@ -69,25 +57,6 @@ func (profile Profile) normalized() Profile {
 	return profile
 }
 
-// Reaches は、この経路が address（`host:port`）へ繋ぐものかを返す。
-func (profile Profile) Reaches(address string) bool { return profile.Target.Reaches(address) }
-
-// Reaches は、address（`host:port`）がこの接続先を指すかを返す。
-//
-// 名前は大文字と小文字を区別せず、末尾の `.` を無視して比べる。DNS の名前として
-// 同じものを、書き方の違いだけで食い違いとして断らない。
-func (endpoint Endpoint) Reaches(address string) bool {
-	host, port, err := net.SplitHostPort(address)
-	if err != nil || port != fmt.Sprint(endpoint.Port) {
-		return false
-	}
-	return sameHost(host, endpoint.Host)
-}
-
-func sameHost(left, right string) bool {
-	return strings.EqualFold(strings.TrimSuffix(left, "."), strings.TrimSuffix(right, "."))
-}
-
 // Validate は、このプロファイルで経路を作れるかを確かめる。
 func (profile Profile) Validate() error {
 	if err := validateProfileName(profile.Name); err != nil {
@@ -98,9 +67,6 @@ func (profile Profile) Validate() error {
 		return err
 	}
 	if err := validateResolvers(profile.DNS); err != nil {
-		return err
-	}
-	if err := validateTarget(profile.Target, profile.DNS); err != nil {
 		return err
 	}
 	if field := profile.foreignSection(); field != "" {

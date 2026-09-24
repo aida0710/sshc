@@ -7,13 +7,15 @@ description: Route chosen SSH connections through a VPN of their own without tou
 
 Route a chosen SSH connection through a VPN that belongs to that connection alone. The host default route, DNS and VPN client stay as they are. **The host can stay on one VPN while sshc reaches a host that only exists inside another.**
 
-This needs Docker on the machine. Without it, sshc says so and refuses rather than falling back.
+A VPN profile holds only what it takes to reach the VPN: its settings and secrets. It has no target. Like a password, a profile is attached to connections in Connections, and each connection reaches its own `HostName` and `Port` through it. One profile can serve many connections.
+
+This needs Docker on the machine. When Docker is missing or not running, sshc says so and refuses rather than falling back.
 
 ## What happens
 
 ```text
 sshc engine
-   │ Unix socket (only its owner can open it)
+   │ one docker exec per connection (standard input and output)
    ▼
 relay inside the VPN container
    │ TCP connection to the target
@@ -23,7 +25,9 @@ tunnel ─ VPN ─ Docker's ordinary uplink ─ VPN server
 
 The SSH handshake, authentication, host-key checks and ssh-agent all run in the engine on the host. The container is told where to open a TCP connection and nothing else: no SSH private key and no vault key reach it.
 
-Traffic to the target is fail closed. The container rejects packets to the target that would leave through anything but the tunnel, so while the tunnel is down nothing reaches the target over Docker's ordinary uplink.
+For every connection the engine starts the container's relay with `docker exec` and uses its standard input and output as the connection. No socket is shared between the host and the container, so the same design works on Linux and on Docker Desktop for macOS and Windows.
+
+The container adds a route and a packet filter only for the targets connections actually use; it never pulls in the network behind the VPN. Traffic to a target is fail closed. The container rejects packets to the target that would leave through anything but the tunnel, so while the tunnel is down nothing reaches the target over Docker's ordinary uplink.
 
 ## What "does not touch the host" covers
 
@@ -33,27 +37,26 @@ It is not unrelated to the host: it uses Docker's bridge and the kernel's tunnel
 
 ## Creating a profile
 
-Create one from the VPN screen or with `sshc vpn add <name>`. One profile reaches one target, so its route and packet filter close over a single address instead of pulling in a whole network.
+Create one from the VPN screen or with `sshc vpn add <name>`.
 
 | Field | Meaning |
 |---|---|
 | Type | WireGuard, L2TP/IPsec, or OpenConnect (AnyConnect, ocserv, GlobalProtect and friends) |
-| Target inside the VPN | `host:port`. An IPv4 address, or a name the VPN's own DNS can resolve |
-| DNS inside the VPN | Only when the target is a name. Up to three IPv4 addresses |
+| DNS inside the VPN | Only for connections whose `HostName` is a name. Up to three IPv4 addresses |
 | VPN server | `host:port` for WireGuard, a hostname or address for L2TP/IPsec and OpenConnect |
 | Secrets | A private key for WireGuard; the VPN password and IPsec pre-shared key for L2TP/IPsec; the VPN password for OpenConnect |
 
 Secrets are kept in the vault. They are never returned to the screen or the API.
 
-Creating and editing are separate operations. Creating a profile whose name is already taken is refused and changes nothing: to rebuild a profile, remove it first; to change only its name, rename it. If the vault still holds a secret under the same name, creating replaces it with the secret you entered instead of inheriting it.
+Creating and editing are separate operations. Creating a profile whose name is already taken is refused and changes nothing: to change its settings, use **Edit** on the VPN screen or `sshc vpn edit <name>`; to change only its name, rename it. If the vault still holds a secret under the same name, creating replaces it with the secret you entered instead of inheriting it.
 
-When editing a saved profile, a secret left empty keeps its stored value, so settings can be changed without entering the secrets again. Changing the type drops the old type's secrets and asks for the new type's. Settings and secrets are saved in one write; one is never changed without the other.
+When editing, a secret left empty keeps its stored value, so settings can be changed without entering the secrets again. Changing the type drops the old type's secrets and asks for the new type's. `sshc vpn edit` starts every prompt from the saved value, and `-` clears an optional setting. Settings and secrets are saved in one write; one is never changed without the other.
 
 A value that cannot be accepted is reported with the field and the reason (missing, wrongly written, over a limit and so on), both on the screen and by `sshc vpn add`.
 
 For L2TP/IPsec, set IKE and ESP proposals only when an older device rejects the defaults.
 
-For OpenConnect, choose the protocol the device speaks (`anyconnect`, `nc`, `pulse`, `gp`, `f5`, `fortinet`, `array`); leave `anyconnect` if unsure. A device with a self-signed certificate needs its fingerprint, either `sha256:` (the certificate's own SHA-256, in hex) or `pin-sha256:` (the public key pin, in base64); without one the certificate is verified normally and the route is refused if it does not verify. OpenConnect routes and DNS handed out by the device are not installed: only the single route to the target is.
+For OpenConnect, choose the protocol the device speaks (`anyconnect`, `nc`, `pulse`, `gp`, `f5`, `fortinet`, `array`); leave `anyconnect` if unsure. A device with a self-signed certificate needs its fingerprint, either `sha256:` (the certificate's own SHA-256, in hex) or `pin-sha256:` (the public key pin, in base64); without one the certificate is verified normally and the route is refused if it does not verify. OpenConnect routes and DNS handed out by the device are not installed: only the routes to the targets your connections use are.
 
 ### The second factor (Duo Mobile and friends)
 
@@ -75,23 +78,23 @@ A setup that requires a browser-based SAML login, such as Duo's Universal Prompt
 
 ### Naming a target inside the VPN
 
-When the target is a name, give the profile the DNS servers that can resolve it. The name is resolved inside the container, using those servers alone: not the host's `resolv.conf`, and not Docker's own DNS. That is what keeps a name that means something else on the host from sending the connection to the wrong machine.
+When a connection's `HostName` is a name, give the profile attached to it the DNS servers that can resolve it. The name is resolved inside the container, using those servers alone: not the host's `resolv.conf`, and not Docker's own DNS. That is what keeps a name that means something else on the host from sending the connection to the wrong machine. With no DNS servers in the profile, a named target is refused; Connections points this out when you pick the profile.
 
-Queries to those servers leave only through the tunnel. The address they returned is shown as the target address on the VPN screen and in `sshc vpn`.
+Queries to those servers leave only through the tunnel. The address they returned is written to the container's output (**Logs**, `sshc vpn logs`).
 
-The name is resolved once, when the route opens. If it starts pointing somewhere else afterwards, take the route down and bring it up again.
+A name is resolved once, the first time a connection uses it after the route opens. If it starts pointing somewhere else afterwards, take the route down and bring it up again.
 
-## Binding a connection
+## Attaching a profile to a connection
 
-Choose a connection on the VPN screen and select **Route through this VPN**, pick **VPN route** on the connection's *sshc settings* tab, or run `sshc vpn bind <alias> <profile>`. All three write the same binding. The binding is not written to `~/.ssh/config`: it is an sshc setting, not a word OpenSSH reads.
+As with a password, a profile is attached from the connection's side: pick **VPN profile** on the connection's *sshc settings* tab in Connections, or run `sshc vpn bind <alias> <profile>` (`sshc vpn unbind <alias>` detaches it). Both write the same setting. The VPN screen lists the connections that use each profile. The setting is not written to `~/.ssh/config`: it is an sshc setting, not a word OpenSSH reads.
 
-A bound connection takes the same route from the terminal, from SFTP and from `sshc <alias>`. When the route is not available the connection is refused rather than quietly sent over the ordinary uplink.
+A connection with a profile takes the same route from the terminal, from SFTP and from `sshc <alias>`, and reaches its own `HostName` and `Port`. When the route is not available the connection is refused rather than quietly sent over the ordinary uplink.
 
 Which connection takes which route is visible before and after connecting. The terminal and SFTP headers show **VPN: \<name\>**, and `sshc info <alias>` prints the same name on its `vpn` line.
 
-Removing a profile also removes its secrets and the bindings of every connection that named it, and stops its route if it is running. Removal needs an unlocked vault; while the vault is locked it is refused and nothing changes. Removing the settings but leaving the secrets behind would let a profile recreated under the same name pick up the old secrets.
+Removing a profile also removes its secrets and detaches it from every connection that used it, and stops its route if it is running. Removal needs an unlocked vault; while the vault is locked it is refused and nothing changes. Removing the settings but leaving the secrets behind would let a profile recreated under the same name pick up the old secrets.
 
-To change a name, do not delete and recreate: use **Rename** on the VPN screen or `sshc vpn rename <old name> <new name>`, which moves the settings, the secrets and the bindings together. Renaming also needs an unlocked vault. The new name, whether it is taken and the vault are all checked before the route is stopped, so a refused rename leaves a route in use running.
+To change a name, do not delete and recreate: use **Rename** on the VPN screen or `sshc vpn rename <old name> <new name>`, which moves the settings, the secrets and the connections that use it together. Renaming also needs an unlocked vault. The new name, whether it is taken and the vault are all checked before the route is stopped, so a refused rename leaves a route in use running.
 
 ## While a route comes up
 
@@ -99,7 +102,7 @@ To change a name, do not delete and recreate: use **Rename** on the VPN screen o
 
 ## How long a route lives
 
-A route opens when it is needed and closes when it is not. Stopping the engine closes every route it opened. A route with no connection running through it for ten minutes is closed as well. Connections from Terminal, SFTP, `sshc <target>`, and `sshc vpn proxy` are all counted the same way, so a route in use is never closed. A route that was only brought up with `sshc vpn up` or the Connect button counts from the moment it came up. A route whose tunnel dropped ends with its container rather than leaving the relay behind.
+A route opens when it is needed and closes when it is not. The route and packet filter for a target are added the first time a connection uses it. Stopping the engine closes every route it opened. A route with no connection running through it for ten minutes is closed as well. Connections from Terminal, SFTP, `sshc <target>`, and `sshc vpn proxy` are all counted the same way, so a route in use is never closed. A route that was only brought up with `sshc vpn up` or the Connect button counts from the moment it came up. A route whose tunnel dropped ends with its container rather than leaving the relay behind.
 
 If you interrupt a connection with `Ctrl-C` while it is waiting, or close the page, the container that was being prepared does not remain.
 
@@ -113,11 +116,21 @@ While a route is open, the VPN screen and `sshc vpn` show the tunnel's interface
 
 When a route does not come up, the screen and `sshc vpn up` say why as far as it is known, for example that the WireGuard peer never completed a handshake or that PPP authentication failed.
 
+When the VPN is up but the target cannot be reached, the terminal and `sshc <alias>` say why:
+
+| Message | What to check |
+|---|---|
+| The target's name could not be resolved by the DNS servers inside the VPN | The profile's DNS servers and the connection's `HostName` |
+| The target did not answer or refused the connection | The connection's `HostName` and `Port`, and whether its SSH server is running |
+| The target is the VPN server itself | The VPN server cannot be reached through its own VPN |
+
+When the failure will repeat until a setting is fixed (no VPN secret saved, Docker not running and so on), the terminal does not keep reconnecting.
+
 If it is not there, or the tunnel is up but the target is still unreachable, read the container's output: **Logs** on the VPN screen, or `sshc vpn logs <name>`. A container that failed to come up is cleaned away, but the engine keeps its output, so it can still be read the same way. The stored secrets are replaced by `[REDACTED]`, so the output can be pasted as it is. You never need to run `docker logs` yourself.
 
 ## Using the route from the host's `ssh`, `scp` and `git`
 
-Called as a `ProxyCommand`, `sshc vpn proxy` lets any SSH client take the same route.
+Called as a `ProxyCommand`, `sshc vpn proxy` lets any SSH client take the same route. Pass the target as `%h %p`; it is required.
 
 ```text
 Host lab
@@ -125,11 +138,11 @@ Host lab
   ProxyCommand sshc vpn proxy tohoku %h %p
 ```
 
-With `%h %p` it checks that the route reaches that target, and refuses rather than falling back to the ordinary uplink when it does not. The handshake, the keys and `known_hosts` stay with whoever called it; sshc only carries the bytes.
+When the target cannot be reached, it refuses rather than falling back to the ordinary uplink and says why on standard error. The handshake, the keys and `known_hosts` stay with whoever called it; sshc only carries the bytes.
 
 ## Limits
 
-- One target per profile, IPv4 only.
+- A target is an IPv4 address or a name; IPv6 addresses are not supported. The VPN server itself cannot be a target.
 - Not available for hops beyond a jump host: those travel inside the first SSH connection, where this machine's VPN cannot apply.
-- A binding cannot be combined with `ProxyCommand`, which runs on this machine and is therefore outside the VPN. To reach the route from a `ProxyCommand`, leave the connection unbound and use `sshc vpn proxy` as shown above.
+- A connection with a profile cannot also use `ProxyCommand`, which runs on this machine and is therefore outside the VPN. To reach the route from a `ProxyCommand`, leave the profile off and use `sshc vpn proxy` as shown above.
 - Verified on Linux so far.

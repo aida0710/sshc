@@ -142,3 +142,33 @@ func TestARouteBeingPreparedIsNotIdle(t *testing.T) {
 		t.Fatal("用意の途中の経路を無操作と数えた")
 	}
 }
+
+// 起動を求められた経路は、無操作の起点をいまにする。
+//
+// CLI は起動を求めてから engine の中継へ繋ぐ。そのあいだに、前回の接続から数えた
+// 無操作で停止されないためである。
+func TestAskingForARunningRouteRestartsItsIdleClock(t *testing.T) {
+	state := &sessionState{}
+	start := time.Date(2026, 9, 23, 12, 0, 0, 0, time.UTC)
+	state.borrow()
+	state.release(start)
+
+	state.touch(start.Add(time.Hour))
+
+	if idle := state.idleFor(start.Add(time.Hour + time.Minute)); idle != time.Minute {
+		t.Fatalf("idle = %v", idle)
+	}
+}
+
+// 通っている接続がある経路の起点は動かさない。
+func TestTouchingARouteInUseChangesNothing(t *testing.T) {
+	state := &sessionState{}
+	start := time.Date(2026, 9, 23, 12, 0, 0, 0, time.UTC)
+	state.borrow()
+
+	state.touch(start)
+
+	if idle := state.idleFor(start.Add(time.Hour)); idle != 0 {
+		t.Fatalf("idle = %v", idle)
+	}
+}

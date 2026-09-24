@@ -37,10 +37,10 @@ func TestVPNRefusalsAreExplainedInASentence(t *testing.T) {
 			want:    []string{"ハンドシェイクに失敗しました", "sshc vpn logs lab"},
 		},
 		{
-			name:    "接続先の食い違い",
+			name:    "Dockerが起動していない",
 			called:  vpnInvocation{Action: vpnUp, Name: "lab"},
-			problem: `{"code":"vpn_target_mismatch","message":"request rejected"}`,
-			want:    []string{"接続先と一致しません"},
+			problem: `{"code":"vpn_docker_not_running","message":"request rejected"}`,
+			want:    []string{"Dockerが起動していません"},
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -68,34 +68,13 @@ func TestVPNRefusalsAreExplainedInASentence(t *testing.T) {
 	}
 }
 
-// add で同じ名前があれば、消すか改名するかを案内する。
-func TestAnExistingProfileNameSuggestsRemovingOrRenaming(t *testing.T) {
+// add で同じ名前があれば、編集するか改名するかを案内する。
+func TestAnExistingProfileNameSuggestsEditingOrRenaming(t *testing.T) {
 	sentence, known := describeVPNRefusal(engineProblem{Code: "vpn_profile_exists"},
 		vpnInvocation{Action: vpnAdd, Name: "lab"})
 
-	if !known || !strings.Contains(sentence, "sshc vpn remove lab") || !strings.Contains(sentence, "sshc vpn rename") {
+	if !known || !strings.Contains(sentence, "sshc vpn edit lab") || !strings.Contains(sentence, "sshc vpn rename") {
 		t.Fatalf("sentence = %q, %v", sentence, known)
-	}
-}
-
-// engine が返しうる理由の語は、どれも CLI の言い方を持つ。
-func TestEveryVPNReasonHasACommandLineSentence(t *testing.T) {
-	for _, reason := range []vpn.Reason{
-		vpn.ReasonRequired, vpn.ReasonFormat, vpn.ReasonTooLong, vpn.ReasonTooMany, vpn.ReasonOutOfRange,
-		vpn.ReasonNotIPv4, vpn.ReasonUnroutable, vpn.ReasonNameNeedsDNS, vpn.ReasonUnsupported, vpn.ReasonUnexpected,
-	} {
-		if _, known := vpnFieldReasons[reason]; !known {
-			t.Errorf("%s has no sentence", reason)
-		}
-	}
-	for _, reason := range []vpn.FailureReason{
-		vpn.FailureUnknown, vpn.FailureTimeout, vpn.FailureServerUnresolved, vpn.FailureIPsecNegotiation,
-		vpn.FailurePPPAuthentication, vpn.FailureOpenConnect, vpn.FailureHandshakeTimeout,
-		vpn.FailureTargetUnresolved, vpn.FailureTunnelLost,
-	} {
-		if _, known := vpnFailureReasons[reason]; !known {
-			t.Errorf("%s has no sentence", reason)
-		}
 	}
 }
 
@@ -107,7 +86,7 @@ func TestAFailedRouteForAConnectionSaysWhyAndWhereTheLogsAre(t *testing.T) {
 	})
 
 	message := err.Error()
-	if !strings.Contains(message, vpnFailureReasons[vpn.FailureHandshakeTimeout]) {
+	if !strings.Contains(message, "ハンドシェイクに失敗しました") {
 		t.Fatalf("message = %q", message)
 	}
 	if !strings.Contains(message, "sshc vpn logs lab") {

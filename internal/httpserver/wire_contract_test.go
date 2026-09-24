@@ -455,6 +455,12 @@ func verifyEnum(t *testing.T, schema map[string]any, typeID reflect.Type) {
 }
 
 var wireEnumValues = map[reflect.Type][]string{
+	reflect.TypeOf(vpn.BackendName("")): {
+		string(vpn.WireGuard), string(vpn.L2TPIPsec), string(vpn.OpenConnect),
+	},
+	reflect.TypeOf(VPNUnavailable("")): {
+		string(VPNDockerMissing), string(VPNDockerNotRunning),
+	},
 	reflect.TypeOf(vpn.StartPhase("")): {
 		string(vpn.PhaseImage), string(vpn.PhaseContainer),
 		string(vpn.PhaseTunnel), string(vpn.PhaseApproval),

@@ -1,6 +1,7 @@
 import { useId, useState, type RefObject } from "react";
 import { failureCode } from "../api/client";
 import { useTranslate } from "../i18n/context";
+import { sftpProblemText } from "./sftpProblemText";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { clipboard } from "../ui/clipboard";
 import { InputDialog } from "../ui/InputDialog";
@@ -51,7 +52,7 @@ export function useSFTPEntryActions({
   const [undo, setUndo] = useState<{ label: string; run: () => Promise<void> } | null>(null);
 
   function report(error: unknown, fallback = "sftp_failed") {
-    setProblem(failureCode(error) || (error instanceof Error ? error.message : fallback));
+    setProblem(sftpProblemText(t, error, fallback));
   }
 
   // The offer stands until the next thing happens. A timer would take it away
@@ -152,7 +153,7 @@ export function useSFTPEntryActions({
       }
     } catch (error) {
       if (current !== generation.current) return;
-      setProblem(failureCode(error) === "sftp_conflict" ? t("sftp.conflict") : failureCode(error) || "sftp_failed");
+      setProblem(failureCode(error) === "sftp_conflict" ? t("sftp.conflict") : sftpProblemText(t, error));
     } finally {
       setActing(false);
     }

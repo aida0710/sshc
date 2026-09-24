@@ -5,6 +5,10 @@ interface=ppp0
 # connection は、strongSwan と xl2tpd がこの接続を指す名前である。
 connection=sshc-vpn
 
+# l2tp_disconnect_seconds は、L2TP の切断がサーバーへ届くのを待つ上限である。
+# 止めるときの持ち時間（agent.sh の shutdown_seconds）の中に収める。
+l2tp_disconnect_seconds=2
+
 # daemon_start_seconds は、charon と xl2tpd が制御の口を開くまで待つ上限である。
 # 相手と話す前の、この機械の中だけの準備なので、締め切りとは別に数える。
 daemon_start_seconds=15
@@ -50,7 +54,7 @@ backend_up() {
 	if ! wait_for_file /run/charon.ctl; then
 		fail unknown "IPsecサービスの起動に失敗しました。"
 	fi
-	if ! timeout "$(remaining_seconds)" ipsec up "$connection" >>"$runtime/ipsec.log" 2>&1; then
+	if ! timeout "$(timeout_seconds)" ipsec up "$connection" >>"$runtime/ipsec.log" 2>&1; then
 		sed -n '1,40p' "$runtime/ipsec.log" >&2
 		fail ipsec_negotiation "IPsecのネゴシエーションに失敗しました。事前共有鍵、サーバー、暗号スイートを確認してください。"
 	fi
@@ -80,7 +84,15 @@ backend_alive() {
 # L2TP の切断を送り、IPsec の SA を消してから止める。
 backend_down() {
 	if [ -e "$runtime/l2tp-control" ]; then
-		printf 'd %s\n' "$connection" >"$runtime/l2tp-control" 2>/dev/null || true
+		# 制御の口は FIFO で、xl2tpd が止まっていると書き込みが読み手を待ち続ける。
+		timeout 1 sh -c 'printf "d %s\n" "$1" >"$2"' _ "$connection" "$runtime/l2tp-control" 2>/dev/null || true
+		# 切断は IPsec の中を通ってサーバーへ届く。先に IPsec を消すと、切断は
+		# REJECT の規則で落ちる。PPP のアドレスが消えるまで少し待つ。
+		seconds=0
+		while backend_alive && [ "$seconds" -lt "$l2tp_disconnect_seconds" ]; do
+			sleep 1
+			seconds=$((seconds + 1))
+		done
 	fi
 	timeout "$shutdown_seconds" ipsec down "$connection" >/dev/null 2>&1 || true
 	timeout "$shutdown_seconds" ipsec stop >/dev/null 2>&1 || true

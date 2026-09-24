@@ -3,16 +3,30 @@ package httpserver
 import (
 	"sshc/internal/application"
 	"sshc/internal/vpn"
+	"sshc/internal/vpnrefusal"
 )
 
 // VPN の API の本文の形である。CLI も同じ型で読み書きする。形を二か所に持つと、
 // 片方だけに項目が増えたときに、未知の項目を許さない読み手が壊れる。
 
+// VPNUnavailable は、このマシンで VPN 経路を使えない理由の語である。
+type VPNUnavailable string
+
+const (
+	// VPNDockerMissing は、docker のコマンドが見つからないことを表す。
+	VPNDockerMissing VPNUnavailable = vpnrefusal.CodeDockerMissing
+	// VPNDockerNotRunning は、Docker が動いていないことを表す。
+	VPNDockerNotRunning VPNUnavailable = vpnrefusal.CodeDockerNotRunning
+)
+
 // VPNOverview は、保存済みのプロファイルと、それぞれのいまの状態である。
 type VPNOverview struct {
-	Available bool               `json:"available"`
-	Detail    string             `json:"detail,omitempty"`
-	Profiles  []VPNProfileStatus `json:"profiles"`
+	Available bool `json:"available"`
+	// Unavailable は、使えないときの理由の語である。
+	Unavailable VPNUnavailable `json:"unavailable,omitempty"`
+	// Detail は、使えないときの docker の生の文である。訳さずに添えるだけにする。
+	Detail   string             `json:"detail,omitempty"`
+	Profiles []VPNProfileStatus `json:"profiles"`
 }
 
 // VPNProfileStatus は、プロファイルひとつと、その経路のいまの状態である。
@@ -34,8 +48,6 @@ type VPNTunnel struct {
 	Address   string `json:"address,omitempty"`
 	Since     string `json:"since,omitempty"`
 	Backend   string `json:"backend,omitempty"`
-	// TargetAddress は、VPNの中で引けた接続先のアドレスである。
-	TargetAddress string `json:"targetAddress,omitempty"`
 }
 
 // VPNLogs は、コンテナの直近のログを、秘密を伏せたものである。

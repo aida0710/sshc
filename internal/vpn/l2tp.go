@@ -57,6 +57,9 @@ func (l2tpBackend) validateSettings(profile Profile) error {
 	for _, proposal := range []struct{ field, value string }{
 		{"l2tp.ike", settings.IKE}, {"l2tp.esp", settings.ESP},
 	} {
+		if err := validateLength(proposal.field, proposal.value, maxProposalLength); err != nil {
+			return err
+		}
 		if strings.ContainsAny(proposal.value, " \t\r\n\"\\") {
 			return fieldError(ErrSettings, proposal.field, ReasonFormat)
 		}
@@ -69,10 +72,10 @@ func (l2tpBackend) validateSecrets(_ Profile, secrets Secrets) error {
 	if secrets.L2TP != nil {
 		stored = *secrets.L2TP
 	}
-	if err := requireSecret("secrets."+SecretKeyL2TPPassword, stored.Password); err != nil {
+	if err := requireSecret("secrets."+SecretKeyL2TPPassword, stored.Password, maxSecretLength); err != nil {
 		return err
 	}
-	return requireSecret("secrets."+SecretKeyIPsecPSK, stored.PreSharedKey)
+	return requireSecret("secrets."+SecretKeyIPsecPSK, stored.PreSharedKey, maxSecretLength)
 }
 
 func (l2tpBackend) writeAgentSection(request agentSectionRequest, document *agentDocument) error {

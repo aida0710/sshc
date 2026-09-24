@@ -18,6 +18,9 @@ backend_up() {
 	wireguard-go "$interface"
 	wg setconf "$interface" "$runtime/wireguard.conf"
 	rm -f "$runtime/wireguard.conf"
+	# サーバーのアドレスは、接続先がサーバーそのものでないかを connect が確かめる
+	# のに使う。名前で書いたサーバーは wg が名前解決したものになる。
+	server_address=$(wg show "$interface" endpoints | awk 'NR==1 { sub(/:[0-9]+$/, "", $2); print $2 }')
 	ip address add "$wireguard_address" dev "$interface"
 	# interface を上げると、keepalive の設定に従って wireguard-go が相手へ
 	# 握手を始める。
@@ -43,21 +46,38 @@ backend_ready() {
 	done
 }
 
-# backend_allow は、名前を引いて分かった接続先を、トンネルが運ぶ相手に足す。
+# backend_allow は、接続先を、トンネルが運ぶ相手に足す。connect が呼ぶ。
 #
-# 名前を引く前は、トンネルが運ぶのはDNSサーバーへの通信だけだった。
+# 起動した時点でトンネルが運ぶのは、DNSサーバーへの通信だけである。接続先は、
+# 接続に使われたものから1つずつ足す。wg set は並びを置き換えるので、いまの並びに
+# 足して渡す。
 backend_allow() {
-	allowed=""
-	for resolver in $resolvers; do
-		allowed="$allowed$resolver/32,"
-	done
+	allowed=$(wg show "$interface" allowed-ips |
+		awk '{ for (field = 2; field <= NF; field++) if ($field != "(none)") printf "%s,", $field }')
 	wg set "$interface" peer "$(wg show "$interface" peers | head -1)" allowed-ips "$allowed$1/32"
 }
 
+# wireguard_recover_seconds は、最後のハンドシェイクが古くなってから、新しい
+# ハンドシェイクを待つ長さである。スリープから戻ったマシンでは、時計だけが進み、
+# ハンドシェイクは keepalive（25 秒）の次の送信で起こる。その前に切断と
+# 判断しない。
+wireguard_recover_seconds=40
+
+# stale_since は、最後のハンドシェイクが古いと最初に見た時刻である。
+stale_since=
+
 backend_alive() {
 	handshake=$(latest_handshake)
-	[ -n "$handshake" ] && [ "$handshake" != "0" ] &&
-		[ $(($(date +%s) - handshake)) -le "$wireguard_stale_seconds" ]
+	now=$(date +%s)
+	if [ -n "$handshake" ] && [ "$handshake" != "0" ] &&
+		[ $((now - handshake)) -le "$wireguard_stale_seconds" ]; then
+		stale_since=
+		return 0
+	fi
+	if [ -z "$stale_since" ]; then
+		stale_since=$now
+	fi
+	[ $((now - stale_since)) -lt "$wireguard_recover_seconds" ]
 }
 
 # WireGuard は状態を持たない方式なので、相手へ伝える切断は無い。

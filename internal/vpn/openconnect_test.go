@@ -14,7 +14,6 @@ func validOpenConnectProfile() Profile {
 	return Profile{
 		Name:    "office",
 		Backend: OpenConnect,
-		Target:  Endpoint{Host: "10.9.9.1", Port: 22},
 		OpenConnect: &OpenConnectSettings{
 			Server:   "vpn.example.jp",
 			Username: "fixture",
@@ -139,7 +138,7 @@ func TestTheTOTPCodeIsMadeForTheMomentItIsHandedOver(t *testing.T) {
 		}
 	}
 	// 30 秒後は別のコードになる。固定値を送っていないことを確かめる。
-	later, err := newAgentDocument(profile, secrets, 1000, testClock.Add(30*time.Second))
+	later, err := newAgentDocument(profile, secrets, testClock.Add(30*time.Second))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -249,7 +248,7 @@ func TestShownLogsHideTheOpenConnectPassword(t *testing.T) {
 
 func decodeAgentDocument(t *testing.T, profile Profile, secrets Secrets) agentDocument {
 	t.Helper()
-	encoded, err := newAgentDocument(profile, secrets, 1000, testClock)
+	encoded, err := newAgentDocument(profile, secrets, testClock)
 	if err != nil {
 		t.Fatalf("newAgentDocument = %v", err)
 	}

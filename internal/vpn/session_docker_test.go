@@ -30,6 +30,8 @@ const (
 	tunnelClientAddress = "10.77.0.2/32"
 	// echoPort は、テスト用の相手が待ち受けるポートである。
 	echoPort = 2222
+	// secondEchoPort は、同じ経路で2つ目の接続先として使うポートである。
+	secondEchoPort = 2223
 	// dockerTestTimeout は、イメージ作成を含む一連の操作の上限である。
 	dockerTestTimeout = 6 * time.Minute
 )
@@ -41,9 +43,9 @@ func requireDockerTest(t *testing.T) (*Manager, context.Context) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), dockerTestTimeout)
 	t.Cleanup(cancel)
-	manager := New(t.TempDir(), os.Getuid())
+	manager := New(t.TempDir(), os.Getuid(), nil)
 	if err := manager.Available(ctx); err != nil {
-		t.Skipf("この機械ではVPN経路を作れない: %v", err)
+		t.Skipf("このマシンではVPN経路を作れない: %v", err)
 	}
 	return manager, ctx
 }
@@ -102,6 +104,7 @@ func startTunnelPeer(t *testing.T, manager *Manager, ctx context.Context, image,
 		"ip link set wg0 up",
 		// トンネル側とDockerの通常回線側の両方で待ち受ける。素の回線から
 		// 届いてしまわないことも確かめたいからである。
+		fmt.Sprintf("socat TCP-LISTEN:%d,fork,reuseaddr SYSTEM:'echo second' &", secondEchoPort),
 		fmt.Sprintf("exec socat TCP-LISTEN:%d,fork,reuseaddr SYSTEM:'echo tunnelled'", echoPort),
 	}, "\n")
 	if _, err := manager.docker.output(ctx, "run", "--detach", "--name", name,
@@ -141,7 +144,6 @@ func TestAConnectionReachesTheTargetThroughTheTunnel(t *testing.T) {
 	profile := Profile{
 		Name:    "e2e",
 		Backend: WireGuard,
-		Target:  Endpoint{Host: tunnelServerAddress, Port: echoPort},
 		WireGuard: &WireGuardSettings{
 			Server:        Endpoint{Host: peerAddress, Port: 51820},
 			PeerPublicKey: peerPublic,
@@ -151,20 +153,11 @@ func TestAConnectionReachesTheTargetThroughTheTunnel(t *testing.T) {
 	secrets := Secrets{WireGuard: &WireGuardSecrets{PrivateKey: clientPrivate}}
 	t.Cleanup(func() { _ = manager.Stop(context.Background(), profile.Name) })
 
-	connection, err := manager.Dial(ctx, profile, secrets)
-	if err != nil {
-		t.Fatalf("Dial = %v", err)
-	}
-	defer func() { _ = connection.Close() }()
-
-	_ = connection.SetReadDeadline(time.Now().Add(20 * time.Second))
-	answer, err := io.ReadAll(connection)
-	if err != nil && len(answer) == 0 {
-		t.Fatalf("トンネル越しに読めない: %v", err)
-	}
-	if !strings.Contains(string(answer), "tunnelled") {
-		t.Fatalf("相手からの返事 = %q", answer)
-	}
+	requireAnswer(t, manager, ctx, dialTarget{profile: profile, secrets: secrets,
+		address: fmt.Sprintf("%s:%d", tunnelServerAddress, echoPort)}, "tunnelled")
+	// 同じ経路で、別の接続先へも届く。接続先はプロファイルではなく接続が決める。
+	requireAnswer(t, manager, ctx, dialTarget{profile: profile, secrets: secrets,
+		address: fmt.Sprintf("%s:%d", tunnelServerAddress, secondEchoPort)}, "second")
 
 	status, err := manager.Status(ctx, profile.Name)
 	if err != nil || !status.Running || status.RelaySocket == "" {
@@ -172,6 +165,115 @@ func TestAConnectionReachesTheTargetThroughTheTunnel(t *testing.T) {
 	}
 	if status.Phase != "" {
 		t.Fatalf("経路が立ったあとも用意中のままだった: %q", status.Phase)
+	}
+}
+
+// dialTarget は、経路ひとつと、その先で繋ぐ接続先である。
+type dialTarget struct {
+	profile Profile
+	secrets Secrets
+	address string
+}
+
+// requireAnswer は、経路を通して接続先へ繋ぎ、相手の返事に want が含まれることを確かめる。
+func requireAnswer(t *testing.T, manager *Manager, ctx context.Context, target dialTarget, want string) {
+	t.Helper()
+	connection, err := manager.Dial(ctx, target.profile, target.secrets, target.address)
+	if err != nil {
+		t.Fatalf("Dial(%s) = %v", target.address, err)
+	}
+	defer func() { _ = connection.Close() }()
+	_ = connection.SetReadDeadline(time.Now().Add(20 * time.Second))
+	answer, err := io.ReadAll(connection)
+	if err != nil && len(answer) == 0 {
+		t.Fatalf("トンネル越しに読めない（%s）: %v", target.address, err)
+	}
+	if !strings.Contains(string(answer), want) {
+		t.Fatalf("%s の返事 = %q, want %q", target.address, answer, want)
+	}
+}
+
+// VPNサーバーそのものは接続先にできない。その経路は、トンネルの外側の通信を
+// トンネルの中へ曲げてしまう。
+func TestTheVPNServerItselfIsRefusedAsADestination(t *testing.T) {
+	manager, ctx := requireDockerTest(t)
+	image, err := manager.ensureImage(ctx)
+	if err != nil {
+		t.Fatalf("イメージを用意できない: %v", err)
+	}
+	clientPrivate, clientPublic := keyPair(t)
+	peerPublic, peerAddress := startTunnelPeer(t, manager, ctx, image, clientPublic)
+	profile := Profile{
+		Name:    "e2e-server",
+		Backend: WireGuard,
+		WireGuard: &WireGuardSettings{
+			Server:        Endpoint{Host: peerAddress, Port: 51820},
+			PeerPublicKey: peerPublic,
+			Address:       tunnelClientAddress,
+		},
+	}
+	secrets := Secrets{WireGuard: &WireGuardSecrets{PrivateKey: clientPrivate}}
+	t.Cleanup(func() { _ = manager.Stop(context.Background(), profile.Name) })
+
+	connection, err := manager.Dial(ctx, profile, secrets, fmt.Sprintf("%s:%d", peerAddress, echoPort))
+	if err == nil {
+		_ = connection.Close()
+		t.Fatal("VPNサーバーそのものへの経路を作った")
+	}
+	var failure *TargetFailure
+	if !errors.As(err, &failure) || failure.Reason != FailureTargetIsServer {
+		t.Fatalf("Dial = %v, want %s", err, FailureTargetIsServer)
+	}
+	// 断ったあとも、トンネルは使える。
+	requireAnswer(t, manager, ctx, dialTarget{profile: profile, secrets: secrets,
+		address: fmt.Sprintf("%s:%d", tunnelServerAddress, echoPort)}, "tunnelled")
+}
+
+// 接続先へ届かない理由は、名前解決の失敗と、接続の失敗を分けて返す。
+func TestAnUnreachableDestinationSaysWhy(t *testing.T) {
+	manager, ctx := requireDockerTest(t)
+	image, err := manager.ensureImage(ctx)
+	if err != nil {
+		t.Fatalf("イメージを用意できない: %v", err)
+	}
+	clientPrivate, clientPublic := keyPair(t)
+	peerPublic, peerAddress := startTunnelPeer(t, manager, ctx, image, clientPublic)
+	profile := Profile{
+		Name:    "e2e-unreachable",
+		Backend: WireGuard,
+		// トンネルの相手を DNS サーバーとして書く。相手は DNS に答えないので、
+		// 名前解決は必ず失敗する。
+		DNS: []string{tunnelServerAddress},
+		WireGuard: &WireGuardSettings{
+			Server:        Endpoint{Host: peerAddress, Port: 51820},
+			PeerPublicKey: peerPublic,
+			Address:       tunnelClientAddress,
+		},
+	}
+	secrets := Secrets{WireGuard: &WireGuardSecrets{PrivateKey: clientPrivate}}
+	t.Cleanup(func() { _ = manager.Stop(context.Background(), profile.Name) })
+
+	for _, test := range []struct {
+		address string
+		want    FailureReason
+	}{
+		{"missing.invalid:22", FailureTargetUnresolved},
+		// 相手はこのポートで待ち受けていない。
+		{fmt.Sprintf("%s:%d", tunnelServerAddress, 2299), FailureTargetUnreachable},
+	} {
+		connection, err := manager.Dial(ctx, profile, secrets, test.address)
+		if err == nil {
+			_ = connection.Close()
+			t.Fatalf("Dial(%s) succeeded", test.address)
+		}
+		var failure *TargetFailure
+		if !errors.As(err, &failure) || failure.Reason != test.want {
+			t.Fatalf("Dial(%s) = %v, want %s", test.address, err, test.want)
+		}
+	}
+	// 断った接続は数えない。
+	if open := openConnections(manager.state(profile.Name)); open != 0 {
+		t.Fatalf("断った接続を数えたまま = %d", open)
 	}
 }
 
@@ -192,7 +294,6 @@ func TestTheTargetIsUnreachableWhileTheTunnelIsNotUp(t *testing.T) {
 		Backend: WireGuard,
 		// 接続先は、Dockerの通常回線からも届くアドレスである。トンネルが
 		// 成立していないあいだ、そちらへ落ちないことを確かめる。
-		Target: Endpoint{Host: peerAddress, Port: echoPort},
 		WireGuard: &WireGuardSettings{
 			Server:        Endpoint{Host: peerAddress, Port: 51820},
 			PeerPublicKey: strangerPublic,
@@ -202,10 +303,12 @@ func TestTheTargetIsUnreachableWhileTheTunnelIsNotUp(t *testing.T) {
 	secrets := Secrets{WireGuard: &WireGuardSecrets{PrivateKey: clientPrivate}}
 	t.Cleanup(func() { _ = manager.Stop(context.Background(), profile.Name) })
 
-	connection, err := manager.Dial(ctx, profile, secrets)
+	// 接続先は、Dockerの通常回線からも届くアドレスである。トンネルが成立して
+	// いないあいだ、そちらへ落ちないことを確かめる。
+	connection, err := manager.Dial(ctx, profile, secrets, fmt.Sprintf("%s:%d", peerAddress, echoPort))
 	if err == nil {
 		_ = connection.Close()
-		t.Fatal("相手と握手できないまま、経路が用意できたことになった")
+		t.Fatal("相手とハンドシェイクできないまま、経路が用意できたことになった")
 	}
 	// 握手できないことを、理由として返す。鍵かサーバーの誤りを利用者が疑える。
 	var failure *SessionFailure
@@ -230,7 +333,6 @@ func TestSessionsLeftByAPreviousEngineAreDiscarded(t *testing.T) {
 	profile := Profile{
 		Name:    "orphan",
 		Backend: WireGuard,
-		Target:  Endpoint{Host: tunnelServerAddress, Port: echoPort},
 		WireGuard: &WireGuardSettings{
 			Server:        Endpoint{Host: peerAddress, Port: 51820},
 			PeerPublicKey: peerPublic,
@@ -243,7 +345,7 @@ func TestSessionsLeftByAPreviousEngineAreDiscarded(t *testing.T) {
 	}
 
 	// engineが起動し直された状況。前回のセッションのことは何も覚えていない。
-	restarted := New(manager.directory, os.Getuid())
+	restarted := New(manager.directory, os.Getuid(), nil)
 	if err := restarted.DiscardOrphans(ctx); err != nil {
 		t.Fatalf("DiscardOrphans = %v", err)
 	}
@@ -265,13 +367,10 @@ func TestSessionsLeftByAPreviousEngineAreDiscarded(t *testing.T) {
 // ipsec の起動までは動いている。
 func TestTheL2TPBranchRunsUntilTheServerRefusesIt(t *testing.T) {
 	manager, ctx := requireDockerTest(t)
-	if err := requireTunnelDevice(backends[L2TPIPsec].device()); err != nil {
-		t.Skipf("この機械では l2tp を試せない: %v", err)
-	}
+	requireHostDevice(t, backends[L2TPIPsec].device())
 	profile := Profile{
 		Name:    "l2tp-unreachable",
 		Backend: L2TPIPsec,
-		Target:  Endpoint{Host: "10.77.1.1", Port: 22},
 		L2TP: &L2TPSettings{
 			// TEST-NET-1。誰も応答しない。
 			Server:   "192.0.2.1",
@@ -294,6 +393,15 @@ func TestTheL2TPBranchRunsUntilTheServerRefusesIt(t *testing.T) {
 		if strings.Contains(err.Error()+logs, forbidden) {
 			t.Fatalf("見せる文面に秘密が現れた: %v / %s", err, logs)
 		}
+	}
+}
+
+// requireHostDevice は、トンネルのデバイスがこのマシンに無ければ飛ばす。Docker の
+// テストは Linux でだけ走り、デバイスはホストのものが渡る。
+func requireHostDevice(t *testing.T, device string) {
+	t.Helper()
+	if _, err := os.Stat(device); err != nil {
+		t.Skipf("このマシンには %s が無い: %v", device, err)
 	}
 }
 
@@ -323,13 +431,10 @@ func requireLogs(t *testing.T, manager *Manager, ctx context.Context, profileNam
 // パスワードが現れないことである。
 func TestTheOpenConnectBranchRunsUntilTheServerRefusesIt(t *testing.T) {
 	manager, ctx := requireDockerTest(t)
-	if err := requireTunnelDevice(backends[OpenConnect].device()); err != nil {
-		t.Skipf("この機械では openconnect を試せない: %v", err)
-	}
+	requireHostDevice(t, backends[OpenConnect].device())
 	profile := Profile{
-		Name:    "openconnect-unreachable",
+		Name:    "oc-unreachable",
 		Backend: OpenConnect,
-		Target:  Endpoint{Host: "10.77.1.1", Port: 22},
 		OpenConnect: &OpenConnectSettings{
 			// TEST-NET-1。誰も応答しない。
 			Server:   "192.0.2.1",
@@ -389,7 +494,6 @@ func TestAnIdleRouteIsStoppedAndAUsedOneIsKept(t *testing.T) {
 	profile := Profile{
 		Name:    "idle",
 		Backend: WireGuard,
-		Target:  Endpoint{Host: tunnelServerAddress, Port: echoPort},
 		WireGuard: &WireGuardSettings{
 			Server:        Endpoint{Host: peerAddress, Port: 51820},
 			PeerPublicKey: peerPublic,
@@ -403,7 +507,8 @@ func TestAnIdleRouteIsStoppedAndAUsedOneIsKept(t *testing.T) {
 	clock := time.Now()
 	manager.now = func() time.Time { return clock }
 
-	connection, err := manager.Dial(ctx, profile, Secrets{WireGuard: &WireGuardSecrets{PrivateKey: clientPrivate}})
+	connection, err := manager.Dial(ctx, profile, Secrets{WireGuard: &WireGuardSecrets{PrivateKey: clientPrivate}},
+		fmt.Sprintf("%s:%d", tunnelServerAddress, echoPort))
 	if err != nil {
 		t.Fatalf("Dial = %v", err)
 	}
@@ -570,7 +675,6 @@ func TestAConnectionReachesTheTargetThroughAnAnyConnectTunnel(t *testing.T) {
 	profile := Profile{
 		Name:    "anyconnect-e2e",
 		Backend: OpenConnect,
-		Target:  Endpoint{Host: anyConnectServerAddress, Port: echoPort},
 		OpenConnect: &OpenConnectSettings{
 			Server:            serverAddress,
 			Username:          "fixture",
@@ -584,24 +688,11 @@ func TestAConnectionReachesTheTargetThroughAnAnyConnectTunnel(t *testing.T) {
 	}}
 	t.Cleanup(func() { _ = manager.Stop(context.Background(), profile.Name) })
 
-	connection, err := manager.Dial(ctx, profile, secrets)
-	if err != nil {
-		t.Fatalf("Dial = %v", err)
-	}
-	defer func() { _ = connection.Close() }()
+	requireAnswer(t, manager, ctx, dialTarget{profile: profile, secrets: secrets,
+		address: fmt.Sprintf("%s:%d", anyConnectServerAddress, echoPort)}, "tunnelled")
 
-	_ = connection.SetReadDeadline(time.Now().Add(20 * time.Second))
-	answer, err := io.ReadAll(connection)
-	if err != nil && len(answer) == 0 {
-		t.Fatalf("トンネル越しに読めない: %v", err)
-	}
-	if !strings.Contains(string(answer), "tunnelled") {
-		t.Fatalf("相手からの返事 = %q", answer)
-	}
-
-	// 畳むときは装置へ logout を伝える。伝えずに終わると、装置の側に
+	// 停止するときはVPNサーバーへ logout を伝える。伝えずに終わると、サーバーの側に
 	// セッションが残り、同時接続の枠を使い続ける。
-	_ = connection.Close()
 	if err := manager.Stop(ctx, profile.Name); err != nil {
 		t.Fatalf("Stop = %v", err)
 	}

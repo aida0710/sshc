@@ -17,8 +17,6 @@ var (
 	ErrProfileName = errors.New("vpn profile name is invalid")
 	// ErrBackend は、知らないbackendを拒む。
 	ErrBackend = errors.New("vpn backend is not supported")
-	// ErrTarget は、接続先の指定が使えないことを表す。
-	ErrTarget = errors.New("vpn target is invalid")
 	// ErrSettings は、backend固有の設定が足りないか、形式が違うことを表す。
 	ErrSettings = errors.New("vpn settings are invalid")
 	// ErrSecrets は、backendが要る秘密を受け取れなかったことを表す。
@@ -43,7 +41,8 @@ const (
 	ReasonNotIPv4 Reason = "not_ipv4"
 	// ReasonUnroutable は、経路を作れないアドレス（ループバックなど）であることを表す。
 	ReasonUnroutable Reason = "unroutable"
-	// ReasonNameNeedsDNS は、接続先を名前で書いたのに VPN の中の DNS が無いことを表す。
+	// ReasonNameNeedsDNS は、接続先を名前で書いたのに、プロファイルに DNS サーバーが
+	// 無いことを表す。
 	ReasonNameNeedsDNS Reason = "name_needs_dns"
 	// ReasonUnsupported は、知らない値（backend、方式、二段目の答え方）であることを表す。
 	ReasonUnsupported Reason = "unsupported"
@@ -53,7 +52,7 @@ const (
 
 // FieldError は、ひとつの項目を受け取れない理由である。
 type FieldError struct {
-	// Kind は、errors.Is で見分けるための分類（ErrTarget など）である。
+	// Kind は、errors.Is で見分けるための分類（ErrSettings など）である。
 	Kind error
 	// Field は、保存形式での項目の JSON パスである（例: `wireguard.server`）。
 	Field  string
@@ -84,6 +83,17 @@ const (
 	// maxHostNameLength と maxHostLabelLength は、DNS の名前の上限である（RFC 1035）。
 	maxHostNameLength  = 253
 	maxHostLabelLength = 63
+
+	// 次の上限は、API（api/openapi.yaml の VPNProfile）と同じ値にする。ここより長い
+	// 値を CLI から保存できると、画面が一覧の応答ごと受け取れなくなる。
+	maxServerLength       = 320
+	maxUsernameLength     = 256
+	maxProposalLength     = 256
+	maxFingerprintLength  = 128
+	maxApprovalWordLength = 32
+	// maxSecretLength と maxTOTPSecretLength は、API の VPNSecrets と同じ上限である。
+	maxSecretLength     = 256
+	maxTOTPSecretLength = 512
 )
 
 // ValidateName は、プロファイル名として使えるかを確かめる。
@@ -122,31 +132,6 @@ func validatePort(kind error, field string, port int) error {
 	return nil
 }
 
-// validateTarget は、接続先がIPv4アドレスか、引ける名前であることを確かめる。
-//
-// 名前はコンテナの中で、この経路のDNSだけを使って引く。どちらの名前空間で引く
-// のかが決まらないまま名前を許すと、ホストで引いた別の機械へ繋ぎうる。だから
-// 名前で書くときはDNSを必ず添えさせる。
-func validateTarget(target Endpoint, resolvers []string) error {
-	if err := validatePort(ErrTarget, "target", target.Port); err != nil {
-		return err
-	}
-	if target.Host == "" {
-		return fieldError(ErrTarget, "target", ReasonRequired)
-	}
-	address, err := netip.ParseAddr(target.Host)
-	if err != nil {
-		if !validHostName(target.Host) {
-			return fieldError(ErrTarget, "target", ReasonFormat)
-		}
-		if len(resolvers) == 0 {
-			return fieldError(ErrTarget, "target", ReasonNameNeedsDNS)
-		}
-		return nil
-	}
-	return validateRoutableIPv4(ErrTarget, "target", address)
-}
-
 // validateRoutableIPv4 は、コンテナの中で /32 の経路を作れる IPv4 アドレスかを確かめる。
 func validateRoutableIPv4(kind error, field string, address netip.Addr) error {
 	if !address.Is4() {
@@ -158,10 +143,10 @@ func validateRoutableIPv4(kind error, field string, address netip.Addr) error {
 	return nil
 }
 
-// validHostName は、コンテナの中でそのまま引ける名前かを返す。
+// validHostName は、コンテナの中でそのまま名前解決できる名前かを返す。
 //
-// この名前は agent が sh の変数として扱う。区切り文字や空白が混じったものを
-// 渡すと、名前を引く以外のことが起こりうる。
+// この名前は connect が引数として受け取り、sh の変数として扱う。区切り文字や空白が
+// 混じったものを渡すと、名前解決以外のことが起こりうる。
 func validHostName(name string) bool {
 	if name == "" || len(name) > maxHostNameLength {
 		return false
@@ -196,11 +181,22 @@ func validateResolvers(resolvers []string) error {
 	return nil
 }
 
-// validateServerName は、VPN 装置の名前またはアドレスとして、設定ファイルと
+// validateLength は、value が limit 文字（バイト）以下かを確かめる。
+func validateLength(field, value string, limit int) error {
+	if len(value) > limit {
+		return &FieldError{Kind: ErrSettings, Field: field, Reason: ReasonTooLong, Limit: limit}
+	}
+	return nil
+}
+
+// validateServerName は、VPN サーバーの名前またはアドレスとして、設定ファイルと
 // コマンド引数へそのまま書けるかを確かめる。
 func validateServerName(field, server string) error {
 	if server == "" {
 		return fieldError(ErrSettings, field, ReasonRequired)
+	}
+	if err := validateLength(field, server, maxServerLength); err != nil {
+		return err
 	}
 	if strings.ContainsAny(server, " \t\r\n\"\\") {
 		return fieldError(ErrSettings, field, ReasonFormat)
@@ -208,10 +204,13 @@ func validateServerName(field, server string) error {
 	return nil
 }
 
-// validateUsername は、VPN の利用者名として設定ファイルへ1語で書けるかを確かめる。
+// validateUsername は、VPN のユーザー名として設定ファイルへ1語で書けるかを確かめる。
 func validateUsername(field, username string) error {
 	if username == "" {
 		return fieldError(ErrSettings, field, ReasonRequired)
+	}
+	if err := validateLength(field, username, maxUsernameLength); err != nil {
+		return err
 	}
 	if strings.ContainsAny(username, "\r\n\"\\") {
 		return fieldError(ErrSettings, field, ReasonFormat)
@@ -219,10 +218,12 @@ func validateUsername(field, username string) error {
 	return nil
 }
 
-// requireSecret は、backend が要る秘密があることを確かめる。
-func requireSecret(field, value string) error {
+// requireSecret は、backend が要る秘密があり、上限の長さに収まることを確かめる。
+//
+// 長すぎる値は、足りない秘密ではなく、使えない値として断る。
+func requireSecret(field, value string, limit int) error {
 	if value == "" {
 		return fieldError(ErrSecrets, field, ReasonRequired)
 	}
-	return nil
+	return validateLength(field, value, limit)
 }

@@ -8,6 +8,7 @@ import (
 	"sshc/internal/keys"
 	"sshc/internal/sshclient"
 	"sshc/internal/terminal"
+	"sshc/internal/vpnrefusal"
 )
 
 // Connector は、alias ひとつ分の対話セッションを開く。
@@ -41,6 +42,11 @@ func connectProblem(err error) (string, bool) {
 		return "authentication_cancelled", true
 	case errors.Is(err, keys.ErrPassphraseRequired), errors.Is(err, keys.ErrWrongPassphrase):
 		return "key_passphrase_required", true
+	}
+	// VPN の経路を用意できない理由のうち、設定を直さない限り同じ理由で断られる
+	// ものは、再接続を繰り返さない。理由の文は接続ログに出ている。
+	if refusal, known := vpnrefusal.Of(err); known && refusal.RequiresAction() {
+		return "vpn_route_refused", true
 	}
 	return "", false
 }
