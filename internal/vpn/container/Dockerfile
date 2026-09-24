@@ -12,19 +12,24 @@ FROM ubuntu:24.04@sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a
 # 入れるので、同じタグのまま機械ごとに中身が変わる。Ubuntu の snapshot の時刻で
 # 取る。上げるときは、base の digest と一緒にこの時刻を書き換える。
 #
-# arm64 のイメージは、パッケージを ports.ubuntu.com から取る。apt が snapshot の
-# 場所を知っているのは archive.ubuntu.com と security.ubuntu.com だけで、
-# ports.ubuntu.com のままでは、索引は取れるのにどのパッケージも見つからない。
-# snapshot.ubuntu.com の ubuntu は arm64 の索引とパッケージも配っているので、
-# ports.ubuntu.com の snapshot としてその場所を明示する。
+# 取得先は snapshot だけにする。APT::Snapshot を使うと、apt は snapshot に加えて
+# いつものミラー（archive、security、ports）の索引も取りに行き、ミラーが同期して
+# いる最中だと、イメージの作成ごと失敗する。arm64 の ports.ubuntu.com は、apt が
+# snapshot の場所を知らず、どのパッケージも見つからなかった。snapshot.ubuntu.com
+# の ubuntu は amd64 と arm64 の索引とパッケージを、noble-security も含めて配って
+# いるので、どちらのアーキテクチャも同じ sources で取れる。
 #
 # base のイメージには CA 証明書が無く、snapshot は HTTPS でしか配られていない。
 # そこで取得のときだけ TLS の相手確認を外す。apt は受け取った索引を Ubuntu の
 # archive 鍵の署名で確かめ、パッケージをその索引のハッシュで確かめるので、
 # 通り道の相手が誰であっても、差し替えられた中身は入らない。
-RUN echo 'APT::Snapshot "20260920T000000Z";' > /etc/apt/apt.conf.d/50sshc-snapshot \
-    && echo 'Acquire::Snapshots::URI::Host::ports.ubuntu.com "https://snapshot.ubuntu.com/ubuntu/@SNAPSHOTID@/";' \
-       >> /etc/apt/apt.conf.d/50sshc-snapshot \
+RUN printf '%s\n' \
+       'Types: deb' \
+       'URIs: https://snapshot.ubuntu.com/ubuntu/20260920T000000Z/' \
+       'Suites: noble noble-updates noble-backports noble-security' \
+       'Components: main universe restricted multiverse' \
+       'Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg' \
+       > /etc/apt/sources.list.d/ubuntu.sources \
     && apt-get -o Acquire::https::Verify-Peer=false update \
     && DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::https::Verify-Peer=false \
        install -y --no-install-recommends \
