@@ -1,17 +1,16 @@
 import { mkdir } from "node:fs/promises";
 import { expect, openApplication, openSection, test } from "./support/environment";
 
-test("migrates shortcuts and shares presets while keeping browser choices independent", async ({ page, browser, context, installation }) => {
+test("shares presets while keeping browser choices independent", async ({ page, browser, context, installation }) => {
   await openApplication(page, installation);
-  await page.evaluate(() => {
-    localStorage.setItem("sshc.shortcuts.v1", JSON.stringify({ palette: ["Alt+K"] }));
-    localStorage.removeItem("sshc.shortcuts.selected.v1");
-  });
-  await page.reload();
   await openSection(page, "Menu");
   await page.getByRole("link", { name: "Open Keyboard shortcuts" }).click();
   const selector = page.getByRole("combobox", { name: "Preset for this browser" });
-  await expect(selector.locator("option:checked")).toHaveText("Imported shortcuts");
+  await expect(selector).toHaveValue("default");
+  // Editing Default creates a personal preset and selects it in this browser.
+  await page.getByRole("button", { name: "Assign shortcut: Command search", exact: true }).click();
+  await page.keyboard.press("Alt+k");
+  await expect(selector.locator("option:checked")).toHaveText("My shortcuts");
   await expect(page.getByRole("button", { name: "Assign shortcut: Command search", exact: true })).toHaveText("Alt+K");
   await page.getByRole("textbox", { name: "Preset name", exact: true }).fill("Work laptop");
   await page.getByRole("button", { name: "Rename", exact: true }).click();
