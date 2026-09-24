@@ -72,7 +72,7 @@ func vpnRoute(
 			return nil, err
 		}
 		sentence := vpnrefusal.Sentence(refusal)
-		if refusal.Code == vpnrefusal.CodeSessionFailed {
+		if vpnrefusal.HasLogs(refusal.Code) {
 			sentence += "詳しくはVPN画面の「ログ」、または sshc vpn logs " + name + " で確認してください。"
 		}
 		return nil, &sshclient.ExplainedError{Sentence: sentence, Err: err}

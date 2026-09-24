@@ -10,8 +10,10 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"sshc/internal/commandconn"
+	"sshc/internal/connectionlog"
 )
 
 var (
@@ -37,6 +39,9 @@ const maxDockerOutputBytes = 1 << 20
 // マシンにすでにある docker が使える範囲だけを使う。
 type dockerCommand struct {
 	path string
+	// summary は、docker info で分かった Docker の様子である（OS とアーキテクチャ、
+	// 版、どの製品か）。接続ログに出す。
+	summary string
 	// environment は、docker を起動するときの環境である。PATH はログインシェルの
 	// ものにしてある。docker は認証情報の補助（docker-credential-desktop）や
 	// buildx を PATH から探す。
@@ -64,9 +69,12 @@ func findDocker(ctx context.Context, variables []string) (dockerCommand, error) 
 		return dockerCommand{}, fmt.Errorf("%w: %w", ErrDockerMissing, err)
 	}
 	command := dockerCommand{path: path, environment: variables}
-	if _, err := command.output(ctx, "info", "--format", "{{.OSType}}"); err != nil {
-		return dockerCommand{}, fmt.Errorf("%w: %w", ErrDockerNotRunning, err)
+	summary, err := command.output(ctx, "info", "--format",
+		"{{.OSType}}/{{.Architecture}}、Docker {{.ServerVersion}}、{{.OperatingSystem}}")
+	if err != nil {
+		return dockerCommand{}, fmt.Errorf("%w: %s: %w", ErrDockerNotRunning, path, err)
 	}
+	command.summary = strings.TrimSpace(summary)
 	return command, nil
 }
 
@@ -147,10 +155,36 @@ func (command dockerCommand) stream(watch *connectWatch, arguments ...string) (*
 	return commandconn.Start(process, "docker "+strings.Join(arguments, " "))
 }
 
+// maxDescribedArgumentBytes は、接続ログに出す docker の引数の長さの上限である。
+const maxDescribedArgumentBytes = 400
+
+// describeArguments は、docker の引数を接続ログに出す形にする。秘密は引数に
+// 載せない決まりなので、そのまま出してよい。
+func describeArguments(arguments []string) string {
+	described := strings.Join(arguments, " ")
+	if len(described) > maxDescribedArgumentBytes {
+		described = described[:maxDescribedArgumentBytes] + "…"
+	}
+	return described
+}
+
 // run は、docker を1回実行し、標準出力と標準エラーを別々に返す。
+//
+// 実行したコマンドと掛かった時間を、接続ログの debug3 に書く。失敗したときは、
+// docker の標準エラーの最後の行も書く。
 func (command dockerCommand) run(
 	ctx context.Context, input string, arguments ...string,
 ) (output, errorOutput string, err error) {
+	started := time.Now()
+	defer func() {
+		elapsed := time.Since(started).Round(time.Millisecond)
+		if err == nil {
+			connectionlog.Say(ctx, connectionlog.Full, "docker %s（%s）", describeArguments(arguments), elapsed)
+			return
+		}
+		connectionlog.Say(ctx, connectionlog.Full, "docker %s は失敗しました（%s）：", describeArguments(arguments), elapsed)
+		sayOutput(ctx, connectionlog.Full, err.Error())
+	}()
 	process := exec.CommandContext(ctx, command.path, arguments...)
 	process.Env = command.environment
 	var stdout, stderr bytes.Buffer

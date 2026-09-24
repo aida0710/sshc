@@ -7,8 +7,10 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 
+	"sshc/internal/connectionlog"
 	"sshc/internal/httpserver"
 	"sshc/internal/vpn"
 )
@@ -27,10 +29,75 @@ func vpnRouteThroughEngine(stateDir string, client *http.Client) func(context.Co
 	return func(ctx context.Context, profile, address string) (net.Conn, error) {
 		connection, err := dialVPNRelay(ctx, stateDir, client, vpnRelayRequest{profile: profile, address: address})
 		if err != nil {
+			copyEngineRecord(ctx, engineRecordRequest{stateDir: stateDir, client: client, profile: profile},
+				connectionlog.Detailed)
 			return nil, describedVPNRouteError(profile, err)
 		}
+		copyEngineRecord(ctx, engineRecordRequest{stateDir: stateDir, client: client, profile: profile},
+			connectionlog.Full)
 		return connection, nil
 	}
+}
+
+// maxCopiedRecordLines は、sshcエンジンの記録から CLI の接続ログへ写す行数の上限である。
+// 1回の接続の試みが収まる長さにする。
+const maxCopiedRecordLines = 80
+
+// engineRecordRequest は、sshcエンジンの記録を取り寄せる先である。
+type engineRecordRequest struct {
+	stateDir string
+	client   *http.Client
+	profile  string
+}
+
+// copyEngineRecord は、VPN 経路について sshcエンジンが行ったことの記録を、CLI の
+// 接続ログへ写す。
+//
+// CLI の接続では、経路の準備（docker、イメージ、コンテナ）は sshcエンジンの中で
+// 行われ、CLI の接続ログには何も出ない。失敗したときは debug2 から、成功した
+// ときは debug3 から写す。記録を読めなくても、接続の成否は変えない。
+func copyEngineRecord(ctx context.Context, request engineRecordRequest, level connectionlog.Level) {
+	if !connectionlog.Enabled(ctx, level) {
+		return
+	}
+	engine, err := openEngineAPI(ctx, request.stateDir, request.client)
+	if err != nil {
+		connectionlog.Say(ctx, level, "sshcエンジンの記録を読めませんでした：%v", err)
+		return
+	}
+	defer func() { _ = engine.Close() }()
+	var logs httpserver.VPNLogs
+	if err := engine.getJSON(ctx, vpnProfilePath(request.profile)+"/logs", &logs); err != nil {
+		connectionlog.Say(ctx, level, "sshcエンジンの記録を読めませんでした：%v", err)
+		return
+	}
+	lines := engineRecordLines(logs.Lines)
+	if len(lines) > maxCopiedRecordLines {
+		lines = lines[len(lines)-maxCopiedRecordLines:]
+	}
+	connectionlog.Say(ctx, level, "sshcエンジンの記録（VPNプロファイル %s、最後の%d行まで）：",
+		safeTerminalCell(request.profile), maxCopiedRecordLines)
+	for _, line := range lines {
+		connectionlog.Say(ctx, level, "  %s", safeTerminalCell(line))
+	}
+}
+
+// engineRecordLines は、sshc vpn logs の出力から、sshcエンジンの記録の行だけを
+// 取り出す（internal/vpn の joinLogSections の形）。
+func engineRecordLines(logs string) []string {
+	const recordHeading, containerHeading = "== sshcエンジンの記録 ==", "== コンテナのログ =="
+	_, record, found := strings.Cut(logs, recordHeading)
+	if !found {
+		return nil
+	}
+	record, _, _ = strings.Cut(record, containerHeading)
+	var lines []string
+	for _, line := range strings.Split(strings.TrimSpace(record), "\n") {
+		if strings.TrimSpace(line) != "" {
+			lines = append(lines, line)
+		}
+	}
+	return lines
 }
 
 // vpnRelayRequest は、engine の中継へ頼む経路と接続先である。

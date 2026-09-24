@@ -10,6 +10,9 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
+
+	"sshc/internal/connectionlog"
 )
 
 // container には、VPNコンテナのイメージを作るものだけを置く。sshcのバイナリも
@@ -63,8 +66,10 @@ func (manager *Manager) ensureImage(ctx context.Context) (string, error) {
 		return "", err
 	}
 	if _, err := manager.docker.output(ctx, "image", "inspect", tag); err == nil {
+		connectionlog.Say(ctx, connectionlog.Detailed, "コンテナイメージ %s は作成済みです。", tag)
 		return tag, nil
 	}
+	connectionlog.Say(ctx, connectionlog.Brief, "コンテナイメージ %s を作成します。初回は数分かかることがあります。", tag)
 	directory, err := os.MkdirTemp("", "sshc-vpn-image-")
 	if err != nil {
 		return "", err
@@ -84,9 +89,15 @@ func (manager *Manager) ensureImage(ctx context.Context) (string, error) {
 			return "", err
 		}
 	}
+	started := time.Now()
 	if _, err := manager.docker.output(ctx, "build", "--tag", tag, directory); err != nil {
+		connectionlog.Say(ctx, connectionlog.Brief, "コンテナイメージの作成に失敗しました（%s）。",
+			time.Since(started).Round(time.Second))
+		connectionlog.Say(ctx, connectionlog.Detailed, "docker build の出力（最後の%d行まで）：", maxShownOutputLines)
+		sayOutput(ctx, connectionlog.Detailed, err.Error())
 		return "", fmt.Errorf("%w: %w", ErrImageBuild, err)
 	}
+	connectionlog.Say(ctx, connectionlog.Detailed, "コンテナイメージを作成しました（%s）。", time.Since(started).Round(time.Second))
 	manager.removeOtherImages(ctx, tag)
 	return tag, nil
 }

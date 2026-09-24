@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"sshc/internal/connectionlog"
 )
 
 // 経路の先の接続先へ、接続1本ぶんの中継を開く。
@@ -47,6 +49,10 @@ const (
 
 	// connectFailurePrefix は、connect が繋げなかった理由を書く行の始まりである。
 	connectFailurePrefix = "sshc-vpn-failure: "
+	// connectNotePrefix は、connect が行ったことを書く行の始まりである。
+	connectNotePrefix = "sshc-vpn-note: "
+	// maxConnectLines は、connect の標準エラーを接続ログへ写すために覚える行数の上限である。
+	maxConnectLines = 40
 	// connectStartedMark は、socat が接続先へ繋がり、中継を始めたときに書く文である。
 	// イメージのパッケージは固定してあるので、socat の版とこの文も変わらない。
 	connectStartedMark = "starting data transfer loop"
@@ -60,13 +66,17 @@ const (
 // 書いた理由を TargetFailure で返す。
 func (manager *Manager) connectTarget(ctx context.Context, profileName string, destination Endpoint) (net.Conn, error) {
 	watch := newConnectWatch()
-	conn, err := manager.docker.stream(watch, "exec", "--interactive", manager.containerName(profileName),
-		connectPath, destination.Host, strconv.Itoa(destination.Port))
+	arguments := []string{"exec", "--interactive", manager.containerName(profileName),
+		connectPath, destination.Host, strconv.Itoa(destination.Port)}
+	connectionlog.Say(ctx, connectionlog.Full, "docker %s", describeArguments(arguments))
+	conn, err := manager.docker.stream(watch, arguments...)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrSessionFailed, err)
 	}
 	timer := time.NewTimer(targetConnectTimeout)
 	defer timer.Stop()
+	// connect が書いた行を接続ログへ写す。繋がった場合も、繋げなかった場合も写す。
+	defer watch.describe(ctx)
 	refuse := func(reason FailureReason) error {
 		_ = conn.Close()
 		return &TargetFailure{Profile: profileName, Destination: destination.Address(), Reason: reason}
@@ -94,6 +104,10 @@ type connectWatch struct {
 	mutex   sync.Mutex
 	pending []byte
 	failure FailureReason
+	// notes は connect が行ったこと、lines はそれ以外の標準エラーの行（socat と
+	// docker の出力）である。接続ログへ写す。
+	notes []string
+	lines []string
 	// spoke は、connect が何か書いたことを表す。何も書かずに終わったなら、connect
 	// まで届いていない（コンテナが無い、など）。
 	spoke bool
@@ -124,6 +138,14 @@ func (watch *connectWatch) Write(chunk []byte) (int, error) {
 
 // readLine は、1行を読む。mutex を握って呼ぶこと。
 func (watch *connectWatch) readLine(line string) {
+	if note, found := strings.CutPrefix(strings.TrimSpace(line), connectNotePrefix); found {
+		watch.spoke = true
+		watch.notes = appendBounded(watch.notes, note)
+		return
+	}
+	if strings.TrimSpace(line) != "" {
+		watch.lines = appendBounded(watch.lines, strings.TrimSpace(line))
+	}
 	if reason, found := strings.CutPrefix(strings.TrimSpace(line), connectFailurePrefix); found {
 		watch.spoke = true
 		if knownFailureReasons[FailureReason(reason)] {
@@ -152,5 +174,34 @@ func (watch *connectWatch) failureReason() FailureReason {
 		return FailureTargetUnreachable
 	default:
 		return FailureTunnelLost
+	}
+}
+
+// appendBounded は、上限の行数を超えないように行を足す。
+func appendBounded(lines []string, line string) []string {
+	if len(lines) >= maxConnectLines {
+		return lines
+	}
+	return append(lines, line)
+}
+
+// describe は、connect が行ったことを debug2 に、socat と docker の出力を debug3 に
+// 写す。繋げなかったときは、出力も debug2 に写す（原因はたいていそこにある）。
+func (watch *connectWatch) describe(ctx context.Context) {
+	watch.mutex.Lock()
+	notes := append([]string(nil), watch.notes...)
+	lines := append([]string(nil), watch.lines...)
+	watch.mutex.Unlock()
+	level := connectionlog.Full
+	select {
+	case <-watch.started:
+	default:
+		level = connectionlog.Detailed
+	}
+	for _, note := range notes {
+		connectionlog.Say(ctx, connectionlog.Detailed, "コンテナの中継：%s", note)
+	}
+	for _, line := range lines {
+		connectionlog.Say(ctx, level, "  %s", line)
 	}
 }

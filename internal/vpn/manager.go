@@ -2,10 +2,14 @@ package vpn
 
 import (
 	"context"
+	"fmt"
 	"net"
+	"os"
 	"path/filepath"
 	"sync"
 	"time"
+
+	"sshc/internal/connectionlog"
 )
 
 // Manager は、この engine が持つVPNセッションの全体である。
@@ -43,9 +47,13 @@ type Manager struct {
 	lookup sync.Mutex
 	docker dockerCommand
 	found  bool
-	// variables は、一度読めたログインシェルの環境である。画面は VPN の一覧を
+	// variables は、一度読んだ docker を起動する環境である。画面は VPN の一覧を
 	// 読み直し続けるので、Docker が無いあいだも毎回シェルを起動しない。
+	// loaded は、読み終えたことを表す（読めずに engine の環境を使う場合も含む）。
 	variables []string
+	loaded    bool
+	// pathSource は、docker を探した PATH をどこから取ったかの説明である。
+	pathSource string
 
 	mutex    sync.Mutex
 	sessions map[string]*sessionState
@@ -85,8 +93,15 @@ func (manager *Manager) Available(ctx context.Context) error {
 // コンテナを起こし、経路ができるまで待つ。返るのはコンテナの中の中継の標準入出力で
 // あり、その先のTCPはコンテナのトンネルを通る。
 func (manager *Manager) Dial(ctx context.Context, profile Profile, secrets Secrets, address string) (net.Conn, error) {
+	if err := validateProfileName(profile.Name); err != nil {
+		return nil, err
+	}
+	ctx = manager.recording(ctx, profile.Name)
+	connectionlog.Say(ctx, connectionlog.Detailed, "%s へ、VPNプロファイル %s（%s）の経路で接続します。",
+		address, profile.Name, profile.Backend)
 	destination, err := profile.Destination(address)
 	if err != nil {
+		connectionlog.Say(ctx, connectionlog.Detailed, "接続先をVPN経由で使用できません：%v", err)
 		return nil, err
 	}
 	// 起動より先に借りる。起動が終わってから借りるまでのあいだに、無操作と
@@ -102,8 +117,11 @@ func (manager *Manager) Dial(ctx context.Context, profile Profile, secrets Secre
 
 // dialRelay は、engine の中継が受けた接続のために、起動済みの経路で接続先へ繋ぐ。
 func (manager *Manager) dialRelay(ctx context.Context, profile Profile, address string) (net.Conn, error) {
+	ctx = manager.recording(ctx, profile.Name)
+	connectionlog.Say(ctx, connectionlog.Detailed, "sshcエンジンの中継が、%s への接続を受け付けました。", address)
 	destination, err := profile.Destination(address)
 	if err != nil {
+		connectionlog.Say(ctx, connectionlog.Detailed, "接続先をVPN経由で使用できません：%v", err)
 		return nil, err
 	}
 	state := manager.state(profile.Name)
@@ -116,11 +134,16 @@ func (manager *Manager) dialRelay(ctx context.Context, profile Profile, address 
 func (manager *Manager) connectCounted(
 	ctx context.Context, state *sessionState, profileName string, destination Endpoint,
 ) (net.Conn, error) {
+	started := time.Now()
 	connection, err := manager.connectTarget(ctx, profileName, destination)
+	elapsed := time.Since(started).Round(time.Millisecond)
 	if err != nil {
+		connectionlog.Say(ctx, connectionlog.Detailed, "VPN経由で %s に接続できませんでした（%s）：%v",
+			destination.Address(), elapsed, err)
 		state.release(manager.now())
 		return nil, err
 	}
+	connectionlog.Say(ctx, connectionlog.Brief, "VPN経由で %s に接続しました（%s）。", destination.Address(), elapsed)
 	return &countedConnection{Conn: connection, release: func() { state.release(manager.now()) }}, nil
 }
 
@@ -190,9 +213,11 @@ func (manager *Manager) Start(ctx context.Context, profile Profile, secrets Secr
 	if err := profile.Validate(); err != nil {
 		return err
 	}
+	ctx = manager.recording(ctx, profile.Name)
 	if _, err := manager.command(ctx); err != nil {
 		return err
 	}
+	manager.describeDocker(ctx)
 	ctx, cancel := manager.bound(ctx)
 	defer cancel()
 	if err := manager.orphans.wait(ctx); err != nil {
@@ -217,6 +242,7 @@ func (manager *Manager) Start(ctx context.Context, profile Profile, secrets Secr
 			// engine の中継へ繋ぐので、そのあいだに停止されないよう、無操作の
 			// 起点をいまにする。
 			state.touch(manager.now())
+			connectionlog.Say(ctx, connectionlog.Detailed, "起動済みのVPN経路（コンテナ %s）を使います。", name)
 			return nil
 		}
 	}
@@ -224,12 +250,20 @@ func (manager *Manager) Start(ctx context.Context, profile Profile, secrets Secr
 	// 分かりやすい。
 	manager.closeRelay(state)
 	if ours {
+		connectionlog.Say(ctx, connectionlog.Detailed, "設定が変わったか停止していたため、コンテナ %s を作り直します。", name)
 		manager.stopContainer(ctx, name)
 	}
 	defer state.enterPhase("")
+	connectionlog.Say(ctx, connectionlog.Brief, "VPN経路 %s を起動します（%s）。", profile.Name, profile.Backend)
+	started := time.Now()
 	if err := manager.start(ctx, profile, secrets, state.enterPhase); err != nil {
+		connectionlog.Say(ctx, connectionlog.Detailed, "VPN経路の起動に失敗しました（%s）：%v",
+			time.Since(started).Round(time.Millisecond), err)
 		return err
 	}
+	tunnel := manager.tunnelStatus(profile.Name)
+	connectionlog.Say(ctx, connectionlog.Brief, "VPNに接続しました（%s、インターフェース %s、アドレス %s、%s）。",
+		profile.Backend, tunnel.Interface, tunnel.Address, time.Since(started).Round(time.Millisecond))
 	relay, err := openEngineRelay(
 		filepath.Join(manager.routeDirectory(profile.Name), engineRelaySocketName),
 		func(ctx context.Context, address string) (net.Conn, error) {
@@ -293,28 +327,54 @@ func (manager *Manager) command(ctx context.Context) (dockerCommand, error) {
 	if manager.found {
 		return manager.docker, nil
 	}
-	if manager.variables == nil {
-		manager.variables = manager.loadEnvironment(ctx)
+	if !manager.loaded {
+		manager.variables, manager.pathSource = manager.loadEnvironment(ctx)
+		manager.loaded = true
 	}
 	command, err := findDocker(ctx, manager.variables)
 	if err != nil {
+		connectionlog.Say(ctx, connectionlog.Detailed, "dockerを探したPATHの取得元：%s", manager.pathSource)
+		connectionlog.Say(ctx, connectionlog.Full, "PATH：%s", manager.searchedPath())
+		connectionlog.Say(ctx, connectionlog.Detailed, "Dockerを使用できません：%v", err)
 		return dockerCommand{}, err
 	}
 	manager.docker, manager.found = command, true
 	return command, nil
 }
 
-// loadEnvironment は、docker を探して起動する環境を読む。読めなければ nil を返し、
-// engine の環境で探す。
-func (manager *Manager) loadEnvironment(ctx context.Context) []string {
+// loadEnvironment は、docker を探して起動する環境と、その取得元の説明を返す。
+// 読めなければ nil を返し、engine の環境で探す。
+func (manager *Manager) loadEnvironment(ctx context.Context) ([]string, string) {
 	if manager.environment == nil {
-		return nil
+		return nil, "sshcエンジンの環境"
 	}
 	variables, err := manager.environment(ctx)
 	if err != nil {
-		return nil
+		return nil, fmt.Sprintf("sshcエンジンの環境（ログインシェルから取得できませんでした：%v）", err)
 	}
-	return variables
+	return variables, "ログインシェル"
+}
+
+// searchedPath は、docker を探した PATH である。lookup を握って呼ぶこと。
+func (manager *Manager) searchedPath() string {
+	if manager.variables == nil {
+		return os.Getenv("PATH")
+	}
+	return pathVariable(manager.variables)
+}
+
+// describeDocker は、使う docker を接続ログの debug2 に書く。経路の起動と接続の
+// たびに書く。docker は一度だけ探すので、探したときの ctx には接続ログが無いことがある。
+func (manager *Manager) describeDocker(ctx context.Context) {
+	if !connectionlog.Enabled(ctx, connectionlog.Detailed) {
+		return
+	}
+	manager.lookup.Lock()
+	path, summary, source, searched := manager.docker.path, manager.docker.summary, manager.pathSource, manager.searchedPath()
+	manager.lookup.Unlock()
+	connectionlog.Say(ctx, connectionlog.Detailed, "docker：%s（%s）", path, summary)
+	connectionlog.Say(ctx, connectionlog.Detailed, "dockerを探したPATHの取得元：%s", source)
+	connectionlog.Say(ctx, connectionlog.Full, "PATH：%s", searched)
 }
 
 func (manager *Manager) state(profileName string) *sessionState {

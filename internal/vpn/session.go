@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"sshc/internal/connectionlog"
 )
 
 var (
@@ -98,6 +100,7 @@ func (manager *Manager) start(ctx context.Context, profile Profile, secrets Secr
 	}
 	report(PhaseContainer)
 	name := manager.containerName(profile.Name)
+	connectionlog.Say(ctx, connectionlog.Detailed, "コンテナ %s を起動します（デバイス %s）。", name, chosen.device())
 	arguments := runArguments(containerRun{
 		name: name, image: image, profile: profile, owner: manager.owner, workspace: manager.workspace,
 		routeDirectory: directory, backend: chosen,
@@ -113,8 +116,11 @@ func (manager *Manager) start(ctx context.Context, profile Profile, secrets Secr
 		// 片付けるとコンテナのログも消える。失敗の理由を読めるよう、先に
 		// 秘密を伏せて残す。呼び出し側が諦めていても読む。
 		logs, cancel := context.WithTimeout(context.WithoutCancel(ctx), logsTimeout)
-		manager.state(profile.Name).keepFailureLogs(manager.containerLogs(logs, name, secrets))
+		kept := manager.containerLogs(logs, name, secrets)
 		cancel()
+		manager.state(profile.Name).keepFailureLogs(kept)
+		connectionlog.Say(ctx, connectionlog.Detailed, "コンテナのログ（最後の%d行まで）：", maxShownOutputLines)
+		sayOutput(ctx, connectionlog.Detailed, kept)
 		// 呼び出し側が諦めた場合も片付ける。stopContainer は ctx の取り消しに
 		// 引きずられない。
 		manager.stopContainer(ctx, name)
@@ -137,7 +143,13 @@ func (manager *Manager) configureContainer(
 	if err := manager.sendDocument(ctx, name, document); err != nil {
 		return err
 	}
-	report(tunnelPhase(profile))
+	phase := tunnelPhase(profile)
+	report(phase)
+	if phase == PhaseApproval {
+		connectionlog.Say(ctx, connectionlog.Brief, "スマートフォンでの承認を待っています（上限 %s）。", relayDeadline(profile))
+	} else {
+		connectionlog.Say(ctx, connectionlog.Detailed, "設定を渡しました。VPNの接続を待っています（上限 %s）。", relayDeadline(profile))
+	}
 	return manager.waitForTunnel(ctx, name, profile)
 }
 
