@@ -200,4 +200,3 @@ func vpnPhaseWord(phase vpn.StartPhase) string {
 	}
 	return string(phase)
 }
-
