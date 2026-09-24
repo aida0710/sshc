@@ -325,6 +325,25 @@ jobs:
       - name: make verify-generated
         run: make verify-generated
 
+  # VPN のコンテナイメージは、利用者のマシンの上で作る。arm64（Apple Silicon の
+  # mac など）はパッケージの取得元が amd64 と違うので、両方で作れることを確かめる。
+  vpn-image:
+    name: VPN image (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            name: amd64
+          - os: ubuntu-24.04-arm
+            name: arm64
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Build the VPN container image
+        run: docker build internal/vpn/container
+
   integration:
     name: Integration
     runs-on: ubuntu-latest

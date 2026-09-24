@@ -58,6 +58,34 @@ func TestCIWorkflowProvidesNativeGoMatrices(t *testing.T) {
 	}
 }
 
+// VPN のコンテナイメージは利用者のマシンで作る。arm64 だけ壊れても amd64 の検査
+// では気づけないので、両方のアーキテクチャで作る job を残す。
+func TestCIWorkflowBuildsTheVPNImageOnBothArchitectures(t *testing.T) {
+	document := readWorkflowDocument(t)
+	job, ok := document.Jobs["vpn-image"]
+	if !ok {
+		t.Fatal("jobs.vpn-image is missing")
+	}
+	if job.Strategy == nil {
+		t.Fatal("jobs.vpn-image has no matrix")
+	}
+	runners := map[string]bool{}
+	for _, entry := range job.Strategy.Matrix.Include {
+		runners[entry.OS] = true
+	}
+	for _, runner := range []string{"ubuntu-24.04", "ubuntu-24.04-arm"} {
+		if !runners[runner] {
+			t.Errorf("jobs.vpn-image does not run on %s", runner)
+		}
+	}
+	for _, step := range job.Steps {
+		if step.Run == "docker build internal/vpn/container" {
+			return
+		}
+	}
+	t.Error("jobs.vpn-image does not build internal/vpn/container")
+}
+
 // 全E2E は実バイナリをブラウザから操作するため時間がかかる。独立jobにはせず、
 // Makefile のローカル実行経路を維持する。主要画面のaxe検査だけはweb jobで走る。
 func TestCIWorkflowLeavesTheFullEndToEndSuiteForLocalRuns(t *testing.T) {
