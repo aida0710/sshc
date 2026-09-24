@@ -29,7 +29,7 @@ SSHC_ANDROID_PACKAGE=$(printf '%s\n' "$SSHC_ANDROID_BADGING" | sed -n "s/^packag
 SSHC_ANDROID_ACTIVITY=$(printf '%s\n' "$SSHC_ANDROID_BADGING" | sed -n "s/^launchable-activity: name='\([^']*\)'.*/\1/p")
 SSHC_ANDROID_DEBUGGABLE=$(printf '%s\n' "$SSHC_ANDROID_BADGING" | sed -n '/^application-debuggable$/p')
 case "$SSHC_ANDROID_PACKAGE" in
-  com.github.aida0710.sshc|com.github.aida0710.sshc.dev) ;;
+  com.github.aida0710.sshc.dev) ;;
   *) echo "Refusing an APK with an unexpected package: $SSHC_ANDROID_PACKAGE" >&2; exit 1 ;;
 esac
 if [ "$SSHC_ANDROID_ACTIVITY" != "com.github.aida0710.sshc.MainActivity" ]; then

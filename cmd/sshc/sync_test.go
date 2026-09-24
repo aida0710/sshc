@@ -280,8 +280,8 @@ func TestSyncUnknownMutationOutcomeIsNeverReportedAsRetryable(t *testing.T) {
 }
 
 func TestSyncStatusFailureNeverPrintsEngineProblemMessage(t *testing.T) {
-	body := `{"code":"sync_failed","message":"` + syncOutputSecretCanary + `"}`
-	server, stateDir := runSyncTestServer(t, http.StatusBadGateway, body)
+	body := `{"code":"sync_internal_failed","message":"` + syncOutputSecretCanary + `"}`
+	server, stateDir := runSyncTestServer(t, http.StatusInternalServerError, body)
 	defer server.Close()
 
 	for _, asJSON := range []bool{false, true} {
@@ -664,7 +664,7 @@ func TestSyncPullNormalRefusesConflictOrRemovalBeforeApply(t *testing.T) {
 		conflicts []api.SyncConflict
 		removed   []string
 	}{
-		{name: "conflict with legacy null removal list", conflicts: []api.SyncConflict{{Path: "config", ChangedHere: true, ChangedThere: true}}, removed: nil},
+		{name: "conflict", conflicts: []api.SyncConflict{{Path: "config", ChangedHere: true, ChangedThere: true}}, removed: []string{}},
 		{name: "removal", conflicts: []api.SyncConflict{}, removed: []string{"old.conf"}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -760,11 +760,9 @@ func TestSyncPullNoChangesStillAcknowledgesTheRemoteGeneration(t *testing.T) {
 	_, server, stateDir := newSyncCommandHarness(t, func(response http.ResponseWriter, request *http.Request) {
 		calls++
 		result := pullResponseFixture()
-		// Older engines encoded empty lists as null. The CLI must still treat
-		// that as an empty result rather than claiming the versions mismatch.
-		result.Conflicts = nil
-		result.Written = nil
-		result.Removed = nil
+		result.Conflicts = []api.SyncConflict{}
+		result.Written = []string{}
+		result.Removed = []string{}
 		result.Applied = calls == 2
 		response.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(response).Encode(result)

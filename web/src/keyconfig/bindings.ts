@@ -41,7 +41,7 @@ function snapshot(): string {
   return readStoredValue(storageKey) ?? "";
 }
 
-export function parseBindings(raw: string, upgradeLegacy = true): Bindings {
+export function parseBindings(raw: string): Bindings {
   try {
     const value: unknown = JSON.parse(raw);
     if (value === null || typeof value !== "object") return defaultBindings;
@@ -49,11 +49,6 @@ export function parseBindings(raw: string, upgradeLegacy = true): Bindings {
     for (const action of shortcutActions) {
       const keys = (value as Record<string, unknown>)[action];
       if (Array.isArray(keys) && keys.length <= 3 && keys.every(validShortcut)) result[action] = [...new Set(keys)];
-    }
-    // Upgrade the old default without changing custom bindings or introducing conflicts.
-    if (upgradeLegacy && result.paste.length === 2 && result.paste.includes("Ctrl+Shift+V") && result.paste.includes("Meta+V") &&
-      !shortcutActions.some((action) => action !== "paste" && result[action].includes("Ctrl+V"))) {
-      result.paste = defaultBindings.paste;
     }
     // Reject conflicting storage (including hand edits) as a whole.
     const all = Object.values(result).flat();
@@ -63,10 +58,7 @@ export function parseBindings(raw: string, upgradeLegacy = true): Bindings {
 
 export const selectionKey = "sshc.shortcuts.selected.v1";
 
-function isLegacyStorage(): boolean {
-  return readStoredValue(selectionKey) === null;
-}
-export function loadBindings(): Bindings { return parseBindings(snapshot(), isLegacyStorage()); }
+export function loadBindings(): Bindings { return parseBindings(snapshot()); }
 // saveBindings answers an explicit edit, so a refused storage is shown to the
 // user rather than swallowed like the preferences in ui/browserStorage.
 export function saveBindings(value: Bindings): void {
@@ -80,7 +72,7 @@ function subscribe(listener: () => void): () => void {
 }
 export function useBindings(): Bindings {
   const raw = useSyncExternalStore(subscribe, snapshot, () => "");
-  return useMemo(() => parseBindings(raw, isLegacyStorage()), [raw]);
+  return useMemo(() => parseBindings(raw), [raw]);
 }
 export function matchesShortcut(event: KeyboardEvent, action: ShortcutAction, bindings?: Bindings): boolean {
   const key = shortcutKey(event);

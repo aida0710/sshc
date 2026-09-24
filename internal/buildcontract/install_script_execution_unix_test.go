@@ -89,6 +89,9 @@ esac
 	if err != nil {
 		t.Fatalf("install.sh = %v\n%s", err, output)
 	}
+	if want := "sshc: installed sshc v9.8.7 " + runtime.GOOS + "/" + runtime.GOARCH + "\n"; !strings.Contains(string(output), want) {
+		t.Fatalf("install.sh did not report the installed version %q:\n%s", want, output)
+	}
 	target := filepath.Join(installDirectory, "sshc")
 	installed, err := os.ReadFile(target)
 	if err != nil {

@@ -60,7 +60,7 @@ type Pane struct {
 	Kind  PaneKind `json:"kind,omitempty"`
 }
 
-// EffectiveKind はkindを持たない旧形式のpaneをSSHとして扱う。
+// EffectiveKind はkindを持たないpaneをSSHとして扱う。画面はSSHのpaneにkindを付けない。
 func (pane Pane) EffectiveKind() PaneKind {
 	if pane.Kind == "" {
 		return PaneSSH

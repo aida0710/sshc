@@ -77,7 +77,7 @@ export function SyncOverviewCard({
                   : (syncRefusals[status.auto.detail ?? ""] ??
                     "sync.autoFailedLast"),
             )}
-            code={status.auto.detail ?? "sync_failed"}
+            code={status.auto.detail ?? "sync_internal_failed"}
           />
         ) : (
           <p role="status" className={hintText}>

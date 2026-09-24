@@ -1,8 +1,6 @@
 package remotesync
 
 import (
-	"context"
-	"errors"
 	"path/filepath"
 	"strings"
 
@@ -11,7 +9,7 @@ import (
 
 // ConfigureIfUnconfigured restores a persisted binding without overwriting a
 // binding explicitly configured while the persisted settings were being read.
-// The check and publication share operationMu with Reconfigure.
+// The check and publication share operationMu with CompleteSetup.
 func (s *Service) ConfigureIfUnconfigured(config Config, credentials objectstore.Credentials, client *objectstore.Client) (bool, error) {
 	s.operationMu.Lock()
 	defer s.operationMu.Unlock()
@@ -24,26 +22,6 @@ func (s *Service) ConfigureIfUnconfigured(config Config, credentials objectstore
 	}
 	s.configure(config, credentials, client)
 	return true, nil
-}
-
-// Reconfigure persists credentials and swaps the in-memory binding inside the
-// same operation boundary. No key rotation can observe new secret settings with
-// the previous remote client, or the reverse.
-func (s *Service) Reconfigure(config Config, credentials objectstore.Credentials, client *objectstore.Client, persist func() error) error {
-	s.operationMu.Lock()
-	defer s.operationMu.Unlock()
-	config = normalizeConfig(config)
-	if persist == nil {
-		return errors.New("remote sync settings persistence is not configured")
-	}
-	if err := s.validateRecoveryTarget(config); err != nil {
-		return err
-	}
-	if err := persist(); err != nil {
-		return err
-	}
-	s.configure(config, credentials, client)
-	return nil
 }
 
 // configure applies one complete remote binding while operationMu is held.
@@ -124,16 +102,6 @@ func (s *Service) Direction() Direction {
 		return DirectionBoth
 	}
 	return s.binding.config.Direction
-}
-
-// Check は、このサービスが保持していないクライアントに対して同じ問いを投げる。
-// 設定を保存する前に試せるようにするためだ。試されていない設定を登録することが、
-// 打ち間違いを「正しく見える設定」に変えてしまう。
-func Check(ctx context.Context, client *objectstore.Client, key string) error {
-	if _, err := client.Head(ctx, key); err != nil && !errors.Is(err, objectstore.ErrNotFound) {
-		return err
-	}
-	return nil
 }
 
 // Target は、この実行が指しているエンドポイントとバケットを、表示のために返す。
