@@ -1506,7 +1506,6 @@ export const en = {
     "A key you choose yourself must be at least 12 characters.",
   "sync.wrongKey":
     "The saved key cannot decrypt the snapshot in this bucket. Check that every machine uses the same key, or explicitly replace the remote snapshot from Bucket status.",
-  "sync.wrongMaster": "The master password for this machine is incorrect.",
   "sync.bucketAuthenticationFailed":
     "The object store could not authenticate the request. Nothing was saved. Check the access key and secret.",
   "sync.bucketAccessDenied":
@@ -1539,8 +1538,6 @@ export const en = {
     "There is no current snapshot at the specified bucket and path.",
   "sync.internalFailed":
     "Sync encountered an unclassified internal error. Include the diagnostic code below when reporting it.",
-  "sync.failed":
-    "Sync could not be completed. Nothing was overwritten. Check the connection and try again.",
   "sync.localChanged":
     "Settings on this machine changed after the preview. Nothing was overwritten. Check for changes again.",
   "sync.workspaceBusy":
