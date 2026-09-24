@@ -107,26 +107,29 @@ sshc sync auto on|off [--json]
 
 ## VPN
 
-Route chosen connections through a VPN of their own. Needs Docker on this machine. See [Per-connection VPN](/en/features/vpn).
+Route the connections a VPN profile is attached to through a VPN of their own. A profile has no target: each connection reaches its own `HostName` and `Port`. Needs Docker on this machine. See [Per-connection VPN](/en/features/vpn).
 
 ```sh
 sshc vpn [--json]
 sshc vpn add <name>
+sshc vpn edit <name>
 sshc vpn remove <name> [-y|--yes]
 sshc vpn rename <old name> <new name> [--json]
 sshc vpn up <name> [--json]
 sshc vpn down <name> [--json]
 sshc vpn logs <name> [--json]
-sshc vpn proxy <name> [<host> <port>]
+sshc vpn proxy <name> <host> <port>
 sshc vpn bind <alias> <name> [--json]
 sshc vpn unbind <alias> [--json]
 ```
 
-`sshc vpn add` creates a new profile. If the name is already taken it changes nothing and suggests removing the old profile with `sshc vpn remove` first, or renaming it with `sshc vpn rename`. It asks for the settings in an interactive terminal, including the DNS servers to resolve the target with when the target is a name, and, for OpenConnect, how to answer a device that asks one more question after the password (`none`, `approve` or `totp`). The private key, the VPN password and the IPsec pre-shared key are read without echo and are never taken from command arguments or environment variables. They are stored in the vault.
+`sshc vpn add` creates a new profile. If the name is already taken it changes nothing and suggests editing it with `sshc vpn edit`, or renaming it with `sshc vpn rename`. It asks for the settings in an interactive terminal, including the DNS servers that resolve targets written as names, and, for OpenConnect, how to answer a device that asks one more question after the password (`none`, `approve` or `totp`). The private key, the VPN password and the IPsec pre-shared key are read without echo and are never taken from command arguments or environment variables. They are stored in the vault.
+
+`sshc vpn edit` changes a saved profile. Every prompt starts from the saved value; a blank secret keeps the saved one, and `-` clears an optional setting. New secrets are asked for only when the type changes.
 
 `sshc vpn` also prints the tunnel's interface, its address inside the VPN and when the route opened, for every route that is up.
 
-`sshc vpn remove` and `sshc vpn rename` need an unlocked vault. `sshc vpn rename` moves the settings, the stored secrets and the connection bindings to the new name together. A running route is taken down first, unless the new name is refused.
+`sshc vpn remove` and `sshc vpn rename` need an unlocked vault. `sshc vpn rename` moves the settings, the stored secrets and the connections that use the profile to the new name together. A running route is taken down first, unless the new name is refused.
 
 `sshc vpn logs` prints the recent output of that profile's container, with the stored secrets replaced by `[REDACTED]`. It is the first place to look when a route will not come up.
 
@@ -138,9 +141,9 @@ Host lab
   ProxyCommand sshc vpn proxy tohoku %h %p
 ```
 
-With `%h %p` it checks that the route reaches that target and refuses rather than falling back to the ordinary uplink when it does not. Without them it does not check. The SSH handshake and the keys stay with `ssh`; sshc only carries the bytes.
+The target is passed as `%h %p` and is required. When the target cannot be reached it refuses rather than falling back to the ordinary uplink, and says why on standard error. The SSH handshake and the keys stay with `ssh`; sshc only carries the bytes.
 
-A bound connection takes the same route from the terminal, from SFTP and from `sshc <alias>`. When the route is not available the connection is refused rather than quietly sent over the ordinary uplink.
+A connection with a profile attached takes the same route from the terminal, from SFTP and from `sshc <alias>`. When the route is not available the connection is refused rather than quietly sent over the ordinary uplink.
 
 ## SFTP transfers
 
