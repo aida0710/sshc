@@ -4,8 +4,8 @@ import type { HostDetail, UpdateConnectionRequest } from "../api/config";
 import { connectionSecretsApi, type ConnectionSecretsApi } from "./secretsApi";
 import { useTranslate } from "../i18n/context";
 import { keysApi, type KeysApi } from "../keys/api";
-import { control, hintText, sectionHeading } from "../ui/form";
-import { Button, Notice } from "../ui/surface";
+import { control, sectionHeading } from "../ui/form";
+import { Notice } from "../ui/surface";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import type { BasicFieldState } from "./basicFields";
 import type { GeneratedPrivateKeyHandoff } from "../keys/workflow";
@@ -14,6 +14,7 @@ import { identityKey } from "./connectionBrowser";
 import { BasicPasswordSection } from "./BasicPasswordSection";
 import { BasicPrivateKeyField } from "./BasicPrivateKeyField";
 import { BasicTOTPSection } from "./BasicTOTPSection";
+import { DraftSaveBar } from "./DraftSaveBar";
 import {
   clearedKeyPassphrase,
   clearedPasswordChoice,
@@ -301,17 +302,16 @@ export function ConnectionBasicForm({
         </div>
       </section>
 
-      {derived.dirty ? <div className="flex flex-wrap items-center justify-end gap-3 border-t border-line py-3">
-        {derived.needsVault
-          ? <p className={`grow ${hintText}`}>{t("conn.basicNeedVault")}</p>
-          : !derived.passwordAllowed ? <p className={`grow ${hintText}`}>{t("conn.basicPasswordBlocked")}</p> : <span className="grow" />}
-        <Button type="button" disabled={!derived.dirty || busy} onClick={discardDraft}>
-          {t("conn.discardChanges")}
-        </Button>
-        <Button type="submit" kind="primary" disabled={!canSave}>
-          {busy ? t("conn.basicSaving") : t("conn.basicSave")}
-        </Button>
-      </div> : null}
+      {derived.dirty ? <DraftSaveBar
+        note={derived.needsVault
+          ? t("conn.basicNeedVault")
+          : !derived.passwordAllowed ? t("conn.basicPasswordBlocked") : ""}
+        saveLabel={t("conn.basicSave")}
+        saving={busy}
+        saveDisabled={!canSave}
+        discardDisabled={busy}
+        onDiscard={discardDraft}
+      /> : null}
       </fieldset>
       {routeConfirmationOpen ? (
         <ConfirmDialog

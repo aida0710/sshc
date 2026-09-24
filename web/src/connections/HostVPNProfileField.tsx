@@ -1,4 +1,4 @@
-import type { HostDetail, HostMetadata } from "../api/config";
+import type { HostDetail } from "../api/config";
 import type { VPNProfile } from "../api/vpn";
 import { useTranslate } from "../i18n/context";
 import { Field, control } from "../ui/form";
@@ -23,16 +23,18 @@ function needsDNS(detail: HostDetail, profile: VPNProfile): boolean {
 
 export function HostVPNProfileField({
   detail,
+  value: chosen,
   profiles,
-  onMetadata,
+  onChange,
 }: {
   detail: HostDetail;
+  // value は、下書きで選んでいるプロファイルの名前である。空はVPNを使わない。
+  value: string;
   // profiles は、保存されているVPNプロファイルである。
   profiles: VPNProfile[];
-  onMetadata: (metadata: HostMetadata) => void;
+  onChange: (profile: string) => void;
 }) {
   const t = useTranslate();
-  const chosen = detail.metadata.vpn ?? "";
   const chosenProfile = profiles.find((profile) => profile.name === chosen);
   const note =
     chosenProfile === undefined || !needsDNS(detail, chosenProfile)
@@ -43,13 +45,7 @@ export function HostVPNProfileField({
     <Field label={t("connection.vpnLabel")} hint={t("connection.vpnHint")} error={note}>
       <select
         value={chosen}
-        onChange={(event) => {
-          const metadata = { ...detail.metadata };
-          const profile = event.target.value;
-          if (profile === "") delete metadata.vpn;
-          else metadata.vpn = profile;
-          onMetadata(metadata);
-        }}
+        onChange={(event) => onChange(event.target.value)}
         className={control}
       >
         <option value="">{t("connection.vpnNone")}</option>
