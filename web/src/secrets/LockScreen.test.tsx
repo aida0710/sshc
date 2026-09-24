@@ -29,7 +29,7 @@ describe("LockScreen", () => {
     await waitFor(() => expect(document.documentElement).toHaveAttribute("data-theme", "light"));
     await userEvent.selectOptions(screen.getByLabelText("Lang menu"), "ja");
     expect(screen.getByLabelText("テーマメニュー")).toHaveValue("light");
-    expect(screen.getByRole("button", { name: "Vault を作成" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Vaultを作成" })).toBeInTheDocument();
   });
 
   it("says a new master password cannot be recovered, and asks for it twice", async () => {
@@ -57,7 +57,7 @@ describe("LockScreen", () => {
       </LanguageProvider>,
     );
 
-    expect(screen.getByText("sshc を開くにはマスターパスワードを入力してください。")).toBeInTheDocument();
+    expect(screen.getByText("sshcを開くにはマスターパスワードを入力してください。")).toBeInTheDocument();
     expect(container.querySelector('use[href="#icon-secrets"]')).not.toBeInTheDocument();
   });
 
@@ -127,9 +127,9 @@ describe("LockScreen", () => {
     await userEvent.click(screen.getByRole("button", { name: "ロックを解除" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Vault のバージョンが古いです（必要なバージョン：4、現在：3）。",
+      "Vaultのバージョンが古いです（必要なバージョン：4、現在：3）。",
     );
-    await userEvent.click(screen.getByRole("button", { name: "互換性のある Vault を復元" }));
+    await userEvent.click(screen.getByRole("button", { name: "互換性のあるVaultを復元" }));
     await waitFor(() => expect(api.recoverCompatibleVault).toHaveBeenCalledWith("a long enough password"));
     expect(onOpen).toHaveBeenCalled();
   });
@@ -183,7 +183,7 @@ describe("LockScreen", () => {
     await userEvent.click(screen.getByRole("button", { name: "ロックを解除" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Vault をバージョン 4 から 5 へ更新できませんでした。元の Vault は変更していません。",
+      "Vaultをバージョン4から5へ更新できませんでした。元のVaultは変更していません。",
     );
   });
 

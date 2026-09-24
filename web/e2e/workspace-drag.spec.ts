@@ -125,7 +125,7 @@ test("docks connected terminals into a live workspace", async ({ page, installat
       await page.reload();
       await expect(page.getByRole("navigation", { name: "ワークスペースのターミナル" })).toBeVisible();
       await expect(page.locator("[data-workspace-pane]")).toHaveCount(1);
-      await expect(page.getByRole("region", { name: /^.+ のターミナル$/ })).toBeVisible();
+      await expect(page.getByRole("region", { name: /^.+のターミナル$/ })).toBeVisible();
       await page.screenshot({ path: `${visualDirectory}/terminal-density-mobile-ja.png`, fullPage: true });
     } else {
       await page.screenshot({ path: `${visualDirectory}/sshc-v0.16.0-live-workspace-mobile.png`, fullPage: true });

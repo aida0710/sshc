@@ -150,7 +150,7 @@ test("stores and assigns a TOTP seed without exposing it in the page or vault fi
       path: `${process.env.SSHC_VISUAL_DIR}/totp-vault-current.png`,
       fullPage: true,
     });
-    await page.getByRole("button", { name: "production-otp の前後のコードを表示" }).click();
+    await page.getByRole("button", { name: "production-otpの前後のコードを表示" }).click();
     await expect(page.getByText("ひとつ前")).toBeVisible();
     await page.screenshot({
       path: `${process.env.SSHC_VISUAL_DIR}/totp-vault-expanded.png`,

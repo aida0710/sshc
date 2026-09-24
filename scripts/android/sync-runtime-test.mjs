@@ -143,7 +143,7 @@ const expression = `
 
     const endpointInput = await waitFor(() => input(['Endpoint', 'エンドポイント']), 'the endpoint field');
     const bucketInput = input(['Bucket name', 'バケット名']);
-    const accessInput = input(['Access key ID', 'アクセスキー ID']);
+    const accessInput = input(['Access key ID', 'アクセスキーID']);
     const secretInput = input(['Secret access key', 'シークレットアクセスキー']);
     const direction = byLabel(['Direction', '同期の方向'], 'select');
     if (!bucketInput || !accessInput || !secretInput || !direction) throw new Error('the sync setup form is incomplete');
