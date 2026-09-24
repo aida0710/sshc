@@ -5,18 +5,17 @@ import { HostInspector } from "./HostInspector";
 import type { HostDetail } from "../api/config";
 import type { VPNProfile } from "../api/vpn";
 
-// vpnProfile は、接続先 target へ届く WireGuard のプロファイルである。
-function vpnProfile(name: string, target: string): VPNProfile {
+// vpnProfile は、WireGuard のプロファイルである。dns は VPN 内の DNS サーバーである。
+function vpnProfile(name: string, dns: string[] = []): VPNProfile {
   return {
     name,
     backend: "wireguard",
-    target,
+    ...(dns.length === 0 ? {} : { dns }),
     wireguard: { server: "vpn.example.jp:51820", peerPublicKey: "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=", address: "10.9.9.2/32" },
   };
 }
 
-// build() の接続は HostName も Port も持たないので、相手は alias の bastion:22 になる。
-const reachingProfiles = [vpnProfile("tohoku", "bastion:22"), vpnProfile("office", "BASTION.:22")];
+const profiles = [vpnProfile("tohoku", ["10.9.9.53"]), vpnProfile("office")];
 
 function build(): HostDetail {
   return {
@@ -121,15 +120,15 @@ describe("HostInspector", () => {
     const user = userEvent.setup();
     const detail = build();
     const { rerender } = render(
-      <HostInspector detail={detail} onMetadata={onMetadata} vpnProfiles={reachingProfiles} />,
+      <HostInspector detail={detail} onMetadata={onMetadata} vpnProfiles={profiles} />,
     );
 
-    await user.selectOptions(screen.getByLabelText("VPN route"), "tohoku");
+    await user.selectOptions(screen.getByLabelText("VPN profile"), "tohoku");
     expect(onMetadata).toHaveBeenLastCalledWith(expect.objectContaining({ vpn: "tohoku" }));
 
     detail.metadata = { ...detail.metadata, vpn: "tohoku" };
-    rerender(<HostInspector detail={detail} onMetadata={onMetadata} vpnProfiles={reachingProfiles} />);
-    await user.selectOptions(screen.getByLabelText("VPN route"), "");
+    rerender(<HostInspector detail={detail} onMetadata={onMetadata} vpnProfiles={profiles} />);
+    await user.selectOptions(screen.getByLabelText("VPN profile"), "");
     expect(onMetadata).toHaveBeenLastCalledWith(expect.not.objectContaining({ vpn: expect.anything() }));
   });
 
@@ -137,52 +136,62 @@ describe("HostInspector", () => {
     const detail = build();
     detail.metadata = { ...detail.metadata, vpn: "retired" };
 
-    render(<HostInspector detail={detail} onMetadata={vi.fn()} vpnProfiles={[vpnProfile("tohoku", "bastion:22")]} />);
+    render(<HostInspector detail={detail} onMetadata={vi.fn()} vpnProfiles={[vpnProfile("tohoku")]} />);
 
-    expect(screen.getByLabelText("VPN route")).toHaveValue("retired");
+    expect(screen.getByLabelText("VPN profile")).toHaveValue("retired");
     expect(screen.getByRole("option", { name: "retired (profile is gone)" })).toBeInTheDocument();
   });
 
-  it("does not offer a VPN profile whose target is another host, and says why", () => {
-    render(
-      <HostInspector
-        detail={build()}
-        onMetadata={vi.fn()}
-        vpnProfiles={[vpnProfile("tohoku", "bastion:22"), vpnProfile("lab", "10.9.9.1:22")]}
-      />,
-    );
+  it("offers every VPN profile, whatever host the connection goes to", () => {
+    render(<HostInspector detail={build()} onMetadata={vi.fn()} vpnProfiles={profiles} />);
 
     expect(screen.getByRole("option", { name: "tohoku" })).toBeEnabled();
-    expect(screen.getByRole("option", { name: "lab (reaches 10.9.9.1:22, not this connection)" })).toBeDisabled();
+    expect(screen.getByRole("option", { name: "office" })).toBeEnabled();
   });
 
-  it("explains a mismatch when the connection already points at a profile for another host", () => {
+  // build() の接続は HostName を持たないので、接続先は alias の bastion（ホスト名）になる。
+  it("notes that a host name needs a DNS server inside the VPN when the chosen profile has none", () => {
     const detail = build();
-    detail.metadata = { ...detail.metadata, vpn: "lab" };
+    detail.metadata = { ...detail.metadata, vpn: "office" };
 
-    render(<HostInspector detail={detail} onMetadata={vi.fn()} vpnProfiles={[vpnProfile("lab", "10.9.9.1:22")]} />);
+    render(<HostInspector detail={detail} onMetadata={vi.fn()} vpnProfiles={profiles} />);
 
-    expect(screen.getByLabelText("VPN route")).toHaveValue("lab");
-    expect(screen.getByRole("alert")).toHaveTextContent("This connection goes to bastion:22, but lab only reaches 10.9.9.1:22.");
+    expect(screen.getByLabelText("VPN profile")).toHaveAccessibleDescription(
+      "This HostName is a host name, so office needs a DNS server inside the VPN. Edit office on the VPN screen to add one, or set HostName to an IPv4 address.",
+    );
   });
 
-  it("compares against the HostName and Port the connection sets", () => {
+  it("says nothing more when the chosen profile has a DNS server inside the VPN", () => {
+    const detail = build();
+    detail.metadata = { ...detail.metadata, vpn: "tohoku" };
+
+    render(<HostInspector detail={detail} onMetadata={vi.fn()} vpnProfiles={profiles} />);
+
+    expect(screen.getByLabelText("VPN profile")).not.toHaveAttribute("aria-invalid");
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("says nothing more when HostName is an IPv4 address", () => {
+    const detail = build();
+    detail.form.fields = [{ keyword: "HostName", values: ["10.9.9.1"], line: 2, category: "basic", editable: true }];
+    detail.metadata = { ...detail.metadata, vpn: "office" };
+
+    render(<HostInspector detail={detail} onMetadata={vi.fn()} vpnProfiles={profiles} />);
+
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("does not guess when HostName is set in more than one way", () => {
     const detail = build();
     detail.form.fields = [
-      { keyword: "HostName", values: ["10.9.9.1"], line: 2, category: "basic", editable: true },
-      { keyword: "Port", values: ["2222"], line: 3, category: "basic", editable: true },
+      { keyword: "HostName", values: ["lab.example.jp"], line: 2, category: "basic", editable: true },
+      { keyword: "HostName", values: ["10.9.9.1"], line: 3, category: "basic", editable: true },
     ];
+    detail.metadata = { ...detail.metadata, vpn: "office" };
 
-    render(
-      <HostInspector
-        detail={detail}
-        onMetadata={vi.fn()}
-        vpnProfiles={[vpnProfile("lab", "10.9.9.1:22"), vpnProfile("lab-alt", "10.9.9.1:2222")]}
-      />,
-    );
+    render(<HostInspector detail={detail} onMetadata={vi.fn()} vpnProfiles={profiles} />);
 
-    expect(screen.getByRole("option", { name: "lab-alt" })).toBeEnabled();
-    expect(screen.getByRole("option", { name: /^lab \(reaches/ })).toBeDisabled();
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("clears a colour rather than leaving the picker's fallback as a real value", async () => {

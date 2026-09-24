@@ -610,6 +610,22 @@ describe("SFTPPanel uploads", () => {
     expect(screen.queryByText("sftp_failed")).not.toBeInTheDocument();
   });
 
+  it("says why the VPN route could not reach the host, in the VPN screen's words", async () => {
+    api.list.mockRejectedValueOnce(new ApiError("vpn_target_failed", 502, {
+      code: "vpn_target_failed",
+      message: "request rejected",
+      reason: "target_unreachable",
+    }));
+    render(<SFTPPanel aliases={["miyabi"]} />);
+
+    await chooseHost("miyabi");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The destination could not be reached through the VPN. The destination did not answer or refused the connection. Check HostName and Port.",
+    );
+    expect(screen.queryByText("Could not connect.")).not.toBeInTheDocument();
+  });
+
   it("sorts remote entries by every data column", async () => {
     api.list.mockResolvedValue({
       path: "/remote",

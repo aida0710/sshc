@@ -2,7 +2,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/client";
 import type { OpenTerminalSessionResponse } from "../api/terminalSessions";
-import { useTerminalSessions, type TerminalSessionsApi } from "./sessions";
+import { terminalProblemKey, useTerminalSessions, type TerminalSessionsApi } from "./sessions";
 
 const list = { sessions: [], maxSessions: 50 };
 
@@ -413,5 +413,11 @@ describe("useTerminalSessions", () => {
 
     expect(result.current.problem).toBe("terminal.closeFailed");
     expect(result.current.sessions).toHaveLength(1);
+  });
+});
+
+describe("terminalProblemKey", () => {
+  it("says the VPN route is why reconnecting stopped, not that the terminal failed to open", () => {
+    expect(terminalProblemKey("vpn_route_refused")).toBe("terminal.vpnRouteRefused");
   });
 });

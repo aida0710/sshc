@@ -264,6 +264,8 @@ export function terminalProblemKey(code: string): MessageKey {
       return "terminal.authenticationCancelled";
     case "key_passphrase_required":
       return "terminal.keyPassphraseRequired";
+    case "vpn_route_refused":
+      return "terminal.vpnRouteRefused";
     case "reconnect_failed":
       return "terminal.reconnectFailed";
     case "reconnect_exhausted":

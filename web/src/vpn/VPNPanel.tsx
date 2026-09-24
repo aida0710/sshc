@@ -10,30 +10,32 @@ import { PanelState } from "../ui/PanelState";
 import { Button, Notice } from "../ui/surface";
 import { useAsyncOperation } from "../ui/useAsyncOperation";
 import { usePolling } from "../ui/usePolling";
-import { vpnFailureReasonMessage } from "./vpnFailureReasons";
-import { vpnFieldErrorOf, type VPNFieldError } from "./vpnFieldErrors";
+import { describeVPNFieldError, vpnFieldErrorOf, type VPNFieldError } from "./vpnFieldErrors";
 import { VPNLogsDialog } from "./VPNLogsDialog";
 import { VPNProfileCard } from "./VPNProfileCard";
 import { VPNProfileForm, type VPNProfileSaveResult } from "./VPNProfileForm";
 import { routeProgressIntervalMs } from "./vpnPhases";
-import { vpnRefusals } from "./vpnRefusals";
+import { describeVPNProblem } from "./vpnProblemMessage";
+import { vpnProfileNameError } from "./vpnProfileRules";
+import { VPNUnavailableNotice } from "./VPNUnavailableNotice";
 
 // 接続ごとのVPN経路の画面。トンネルはengineが持つコンテナの中にあり、ここでは
-// プロファイルの定義と、いまの状態と、どの接続がそれを通るかを扱う。秘密は保存の
-// ときに送るだけで、engineは決して返さない。
+// プロファイルの定義と、いまの状態と、どの接続がそれを使うかを扱う。接続へ
+// プロファイルを付けるのは Connections で行う。シークレットは保存のときに送るだけで、
+// engineは決して返さない。
 
 type VPNPanelProps = {
   api?: VPNApi;
-  // aliases は、紐付けの相手に選べる接続である。
-  aliases?: string[];
 };
 
-export function VPNPanel({ api = vpnApi, aliases = [] }: VPNPanelProps) {
+export function VPNPanel({ api = vpnApi }: VPNPanelProps) {
   const t = useTranslate();
   const operation = useAsyncOperation();
   const [overview, setOverview] = useState<VPNOverview | null>(null);
   const [pendingRemoval, setPendingRemoval] = useState("");
   const [pendingRename, setPendingRename] = useState("");
+  // editingProfile は、いま編集のフォームを開いているプロファイルである。
+  const [editingProfile, setEditingProfile] = useState("");
   const [shownLogs, setShownLogs] = useState("");
   // startingProfile は、いま経路を用意させているプロファイルである。
   const [startingProfile, setStartingProfile] = useState("");
@@ -46,16 +48,7 @@ export function VPNPanel({ api = vpnApi, aliases = [] }: VPNPanelProps) {
   // 一覧を古い一覧で上書きしないためである。
   const generation = useRef(0);
 
-  const describe = useCallback(
-    (error: unknown) => {
-      const failure = vpnFailureReasonMessage(error);
-      if (failure !== null) return t("vpn.sessionFailed", { reason: t(failure) });
-      const code = failureCode(error);
-      const key = code === undefined ? undefined : vpnRefusals[code];
-      return key === undefined ? t("vpn.failed") : t(key);
-    },
-    [t],
-  );
+  const describe = useCallback((error: unknown) => describeVPNProblem(t, error) ?? t("vpn.failed"), [t]);
 
   const run = operation.run;
   // act は、一覧を返す操作を走らせる。応答の一覧は、その間に別の操作が始まって
@@ -88,7 +81,7 @@ export function VPNPanel({ api = vpnApi, aliases = [] }: VPNPanelProps) {
       await act(
         () => api.startVPNSession(name),
         (error) => {
-          if (vpnFailureReasonMessage(error) !== null) setFailedProfile(name);
+          if (failureCode(error) === "vpn_session_failed") setFailedProfile(name);
           return describe(error);
         },
       );
@@ -97,20 +90,32 @@ export function VPNPanel({ api = vpnApi, aliases = [] }: VPNPanelProps) {
     [act, api, describe],
   );
 
-  const createProfile = useCallback(
-    async (profile: VPNProfile, secrets: VPNSecrets): Promise<VPNProfileSaveResult> => {
+  // saveProfile は、プロファイルを保存する操作を走らせる。項目の誤りは、フォームの
+  // その項目の横に理由を出す。ここでは横を見るよう促すだけにする。
+  const saveProfile = useCallback(
+    async (work: () => Promise<VPNOverview>): Promise<VPNProfileSaveResult> => {
       let fieldError: VPNFieldError | null = null;
-      const saved = await act(
-        () => api.createVPNProfile(profile, secrets),
-        (error) => {
-          // 項目の誤りは、その項目の横に理由を出す。ここでは横を見るよう促すだけにする。
-          fieldError = vpnFieldErrorOf(error);
-          return fieldError === null ? describe(error) : t("vpn.fieldRefused");
-        },
-      );
+      const saved = await act(work, (error) => {
+        fieldError = vpnFieldErrorOf(error);
+        return fieldError === null ? describe(error) : t("vpn.fieldRefused");
+      });
       return saved ? { saved: true } : { saved: false, fieldError };
     },
-    [act, api, describe, t],
+    [act, describe, t],
+  );
+
+  const createProfile = useCallback(
+    (profile: VPNProfile, secrets: VPNSecrets) => saveProfile(() => api.createVPNProfile(profile, secrets)),
+    [api, saveProfile],
+  );
+
+  const updateProfile = useCallback(
+    async (profile: VPNProfile, secrets: VPNSecrets) => {
+      const result = await saveProfile(() => api.saveVPNProfile(profile, secrets));
+      if (result.saved) setEditingProfile("");
+      return result;
+    },
+    [api, saveProfile],
   );
 
   // 経路が立つまでは分単位になることがある。待っているあいだだけ状態を読み直し、
@@ -145,9 +150,7 @@ export function VPNPanel({ api = vpnApi, aliases = [] }: VPNPanelProps) {
     <section className="mx-auto flex w-full max-w-5xl flex-col gap-6">
       <PageHeader title={t("vpn.heading")} description={t("vpn.description")} />
 
-      {overview.available ? null : (
-        <Notice>{t("vpn.unavailable", { detail: overview.detail ?? "" })}</Notice>
-      )}
+      {overview.available ? null : <VPNUnavailableNotice overview={overview} />}
       {operation.error === "" ? null : (
         <Notice tone="danger">
           <span className="grow">{operation.error}</span>
@@ -167,31 +170,35 @@ export function VPNPanel({ api = vpnApi, aliases = [] }: VPNPanelProps) {
             const name = status.profile.name;
             return (
               <li key={name}>
-                <VPNProfileCard
-                  status={status}
-                  aliases={aliases}
-                  busy={operation.busy}
-                  available={overview.available}
-                  actions={{
-                    onStart: () => void startProfile(name),
-                    onStop: () => void act(() => api.stopVPNSession(name)),
-                    onShowLogs: () => setShownLogs(name),
-                    onRename: () => setPendingRename(name),
-                    onRemove: () => setPendingRemoval(name),
-                    onBind: (alias) => void act(() => api.setConnectionVPN(alias, name)),
-                    onUnbind: (alias) => void act(() => api.setConnectionVPN(alias, "")),
-                  }}
-                />
+                {editingProfile === name ? (
+                  <VPNProfileForm
+                    busy={operation.busy}
+                    editing={status.profile}
+                    onSave={updateProfile}
+                    onCancel={() => setEditingProfile("")}
+                  />
+                ) : (
+                  <VPNProfileCard
+                    status={status}
+                    busy={operation.busy}
+                    available={overview.available}
+                    actions={{
+                      onStart: () => void startProfile(name),
+                      onStop: () => void act(() => api.stopVPNSession(name)),
+                      onShowLogs: () => setShownLogs(name),
+                      onEdit: () => setEditingProfile(name),
+                      onRename: () => setPendingRename(name),
+                      onRemove: () => setPendingRemoval(name),
+                    }}
+                  />
+                )}
               </li>
             );
           })}
         </ul>
       )}
 
-      <VPNProfileForm
-        busy={operation.busy}
-        onSave={createProfile}
-      />
+      <VPNProfileForm busy={operation.busy} onSave={createProfile} />
 
       {pendingRemoval === "" ? null : (
         <ConfirmDialog
@@ -218,7 +225,11 @@ export function VPNPanel({ api = vpnApi, aliases = [] }: VPNPanelProps) {
           initialValue={pendingRename}
           submitLabel={t("vpn.renameAction")}
           cancelLabel={t("vpn.cancel")}
-          validate={(value) => (value === "" ? t("vpn.renameEmpty") : "")}
+          validate={(value) => {
+            // engine と同じ規則で、名前の誤りをこの欄に出す。
+            const refused = vpnProfileNameError(value);
+            return refused === null ? "" : describeVPNFieldError(t, refused);
+          }}
           onCancel={() => setPendingRename("")}
           onSubmit={(value) => {
             const from = pendingRename;
