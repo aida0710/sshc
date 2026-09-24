@@ -80,7 +80,7 @@ func describedVPNRouteError(profile string, err error) error {
 	if !known {
 		return err
 	}
-	if problem.Code == vpnrefusal.CodeSessionFailed {
+	if vpnrefusal.HasLogs(problem.Code) {
 		sentence += fmt.Sprintf("詳しくは sshc vpn logs %s でログを確認してください。", safeTerminalCell(profile))
 	}
 	return &vpnRouteError{sentence: sentence, err: err}

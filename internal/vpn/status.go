@@ -116,14 +116,31 @@ func (manager *Manager) tunnelStatus(profileName string) TunnelStatus {
 	return tunnel
 }
 
-// Logs は、そのコンテナの直近のログを、秘密を伏せて返す。コンテナが無ければ、
-// 最後に用意できなかったときのログを返す。
+// Logs は、この経路について sshcエンジンが行ったことの記録と、コンテナの直近の
+// ログを、秘密を伏せて返す。コンテナが無ければ、最後に用意できなかったときの
+// ログを返す。
 //
 // 繋がらないときに利用者が最初に見る場所である。docker を直接叩かせない。
+// Docker が使えないときも記録は返す。イメージの作成や docker の検出で失敗した
+// 理由は、記録にしか残っていない。
 func (manager *Manager) Logs(ctx context.Context, profileName string, secrets Secrets) (string, error) {
 	if err := validateProfileName(profileName); err != nil {
 		return "", err
 	}
+	record := manager.state(profileName).record.text()
+	containerLogs, err := manager.currentContainerLogs(ctx, profileName, secrets)
+	if err != nil {
+		if record == "" {
+			return "", err
+		}
+		containerLogs = "（読めませんでした：" + err.Error() + "）"
+	}
+	return lastBytes(redact(joinLogSections(record, containerLogs), secrets), maxLogBytes), nil
+}
+
+// currentContainerLogs は、コンテナのログを返す。コンテナが無ければ、最後に
+// 用意できなかったときのログを返す。
+func (manager *Manager) currentContainerLogs(ctx context.Context, profileName string, secrets Secrets) (string, error) {
 	if _, err := manager.command(ctx); err != nil {
 		return "", err
 	}
@@ -137,4 +154,15 @@ func (manager *Manager) Logs(ctx context.Context, profileName string, secrets Se
 		return manager.state(profileName).lastFailureLogs(), nil
 	}
 	return manager.containerLogs(ctx, name, secrets), nil
+}
+
+// joinLogSections は、sshcエンジンの記録とコンテナのログを見出し付きで並べる。
+func joinLogSections(record, containerLogs string) string {
+	if record == "" {
+		record = "（まだありません）"
+	}
+	if strings.TrimSpace(containerLogs) == "" {
+		containerLogs = "（ありません）"
+	}
+	return "== sshcエンジンの記録 ==\n" + record + "\n\n== コンテナのログ ==\n" + containerLogs
 }

@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"sshc/internal/connectionlog"
 )
 
 var (
@@ -98,6 +100,7 @@ func (manager *Manager) start(ctx context.Context, profile Profile, secrets Secr
 	}
 	report(PhaseContainer)
 	name := manager.containerName(profile.Name)
+	connectionlog.Say(ctx, connectionlog.Detailed, "コンテナ %s を起動します（デバイス %s）。", name, chosen.device())
 	arguments := runArguments(containerRun{
 		name: name, image: image, profile: profile, owner: manager.owner, workspace: manager.workspace,
 		routeDirectory: directory, backend: chosen,
@@ -113,8 +116,11 @@ func (manager *Manager) start(ctx context.Context, profile Profile, secrets Secr
 		// 片付けるとコンテナのログも消える。失敗の理由を読めるよう、先に
 		// 秘密を伏せて残す。呼び出し側が諦めていても読む。
 		logs, cancel := context.WithTimeout(context.WithoutCancel(ctx), logsTimeout)
-		manager.state(profile.Name).keepFailureLogs(manager.containerLogs(logs, name, secrets))
+		kept := manager.containerLogs(logs, name, secrets)
 		cancel()
+		manager.state(profile.Name).keepFailureLogs(kept)
+		connectionlog.Say(ctx, connectionlog.Detailed, "コンテナのログ（最後の%d行まで）：", maxShownOutputLines)
+		sayOutput(ctx, connectionlog.Detailed, kept)
 		// 呼び出し側が諦めた場合も片付ける。stopContainer は ctx の取り消しに
 		// 引きずられない。
 		manager.stopContainer(ctx, name)
@@ -137,7 +143,13 @@ func (manager *Manager) configureContainer(
 	if err := manager.sendDocument(ctx, name, document); err != nil {
 		return err
 	}
-	report(tunnelPhase(profile))
+	phase := tunnelPhase(profile)
+	report(phase)
+	if phase == PhaseApproval {
+		connectionlog.Say(ctx, connectionlog.Brief, "スマートフォンでの承認を待っています（上限 %s）。", relayDeadline(profile))
+	} else {
+		connectionlog.Say(ctx, connectionlog.Detailed, "設定を渡しました。VPNの接続を待っています（上限 %s）。", relayDeadline(profile))
+	}
 	return manager.waitForTunnel(ctx, name, profile)
 }
 
@@ -268,7 +280,8 @@ func (manager *Manager) waitForTunnel(ctx context.Context, name string, profile 
 		if _, err := os.Stat(path); err == nil {
 			return nil
 		}
-		running, err := manager.containerRunning(ctx, name)
+		// readyPollInterval ごとに確かめるので、1回ずつは接続ログに書かない。
+		running, err := manager.containerRunning(connectionlog.Muted(ctx), name)
 		if err != nil {
 			return err
 		}
@@ -334,11 +347,8 @@ func relayDeadline(profile Profile) time.Duration {
 // containerRunning は、コンテナが動いているかを返す。コンテナが無ければ false
 // を返し、docker そのものの失敗は失敗として返す。
 func (manager *Manager) containerRunning(ctx context.Context, name string) (bool, error) {
-	output, err := manager.docker.output(ctx, "container", "inspect", "--format", "{{.State.Running}}", name)
-	if isMissingContainer(err) {
-		return false, nil
-	}
-	if err != nil {
+	output, present, err := manager.docker.probe(ctx, "コンテナ", "container", "inspect", "--format", "{{.State.Running}}", name)
+	if err != nil || !present {
 		return false, err
 	}
 	return strings.TrimSpace(output) == "true", nil
@@ -395,11 +405,8 @@ func (manager *Manager) stopContainer(ctx context.Context, name string) {
 func (manager *Manager) requireOurContainer(ctx context.Context, name, profileName string) (bool, error) {
 	format := "{{index .Config.Labels \"" + ownerLabel + "\"}} {{index .Config.Labels \"" + profileLabel +
 		"\"}} {{index .Config.Labels \"" + workspaceLabel + "\"}}"
-	output, err := manager.docker.output(ctx, "container", "inspect", "--format", format, name)
-	if isMissingContainer(err) {
-		return false, nil
-	}
-	if err != nil {
+	output, present, err := manager.docker.probe(ctx, "コンテナ", "container", "inspect", "--format", format, name)
+	if err != nil || !present {
 		return false, err
 	}
 	fields := strings.Fields(strings.TrimSpace(output))
@@ -408,16 +415,4 @@ func (manager *Manager) requireOurContainer(ctx context.Context, name, profileNa
 		return false, fmt.Errorf("%w: %s", ErrSessionForeign, name)
 	}
 	return true, nil
-}
-
-// isMissingContainer は、docker の失敗が「そのコンテナは無い」だったかを返す。
-//
-// それ以外の失敗（daemon が応えない、など）を「無い」と読むと、無いはずの名前で
-// コンテナを作りに行き、名前の衝突という分かりにくい失敗になる。
-func isMissingContainer(err error) bool {
-	if err == nil {
-		return false
-	}
-	message := err.Error()
-	return strings.Contains(message, "No such container") || strings.Contains(message, "No such object")
 }

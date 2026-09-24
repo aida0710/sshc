@@ -10,8 +10,10 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"sshc/internal/commandconn"
+	"sshc/internal/connectionlog"
 )
 
 var (
@@ -37,6 +39,9 @@ const maxDockerOutputBytes = 1 << 20
 // マシンにすでにある docker が使える範囲だけを使う。
 type dockerCommand struct {
 	path string
+	// summary は、docker info で分かった Docker の様子である（OS とアーキテクチャ、
+	// 版、どの製品か）。接続ログに出す。
+	summary string
 	// environment は、docker を起動するときの環境である。PATH はログインシェルの
 	// ものにしてある。docker は認証情報の補助（docker-credential-desktop）や
 	// buildx を PATH から探す。
@@ -64,9 +69,12 @@ func findDocker(ctx context.Context, variables []string) (dockerCommand, error) 
 		return dockerCommand{}, fmt.Errorf("%w: %w", ErrDockerMissing, err)
 	}
 	command := dockerCommand{path: path, environment: variables}
-	if _, err := command.output(ctx, "info", "--format", "{{.OSType}}"); err != nil {
-		return dockerCommand{}, fmt.Errorf("%w: %w", ErrDockerNotRunning, err)
+	summary, err := command.output(ctx, "info", "--format",
+		"{{.OSType}}/{{.Architecture}}、Docker {{.ServerVersion}}、{{.OperatingSystem}}")
+	if err != nil {
+		return dockerCommand{}, fmt.Errorf("%w: %s: %w", ErrDockerNotRunning, path, err)
 	}
+	command.summary = strings.TrimSpace(summary)
 	return command, nil
 }
 
@@ -107,34 +115,53 @@ func executable(info os.FileInfo) bool {
 }
 
 func (command dockerCommand) output(ctx context.Context, arguments ...string) (string, error) {
-	output, _, err := command.run(ctx, "", arguments...)
-	return output, err
+	return command.run(ctx, dockerCall{arguments: arguments})
 }
 
-// combined は、標準出力と標準エラーを合わせて返す。
+// combined は、標準出力と標準エラーを、書かれた順に合わせて返す。
 //
 // docker logs は、コンテナの標準出力をこちらの標準出力へ、標準エラーをこちらの
 // 標準エラーへ流す。agent は失敗の理由を標準エラーへ書くので、片方だけを読むと、
-// いちばん知りたい行が落ちる。
+// いちばん知りたい行が落ちる。別々に読んでつなぐと、行の前後が入れ替わる。
 func (command dockerCommand) combined(ctx context.Context, arguments ...string) (string, error) {
-	output, errorOutput, err := command.run(ctx, "", arguments...)
-	if err != nil {
-		return "", err
-	}
-	if errorOutput == "" {
-		return output, nil
-	}
-	if output == "" {
-		return errorOutput, nil
-	}
-	return output + "\n" + errorOutput, nil
+	return command.run(ctx, dockerCall{arguments: arguments, mergeOutput: true})
 }
 
 // outputWithInput は、標準入力を渡して docker を実行する。秘密はここを通る。
 // 引数にも環境変数にも秘密を置かない。
 func (command dockerCommand) outputWithInput(ctx context.Context, input string, arguments ...string) (string, error) {
-	output, _, err := command.run(ctx, input, arguments...)
-	return output, err
+	return command.run(ctx, dockerCall{arguments: arguments, input: input})
+}
+
+// probe は、「無い」ことも答えのひとつである問い合わせ（そのコンテナやイメージが
+// あるか）を実行する。無ければ present を false にして、失敗としては返さない。
+// subject は、問い合わせた相手の種類（「コンテナ」など）で、無かったときに接続ログへ
+// 書く文に使う。
+func (command dockerCommand) probe(
+	ctx context.Context, subject string, arguments ...string,
+) (output string, present bool, err error) {
+	output, err = command.run(ctx, dockerCall{arguments: arguments, absentSubject: subject})
+	if isAbsent(err) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	return output, true, nil
+}
+
+// isAbsent は、docker の失敗が「その名前のコンテナ（イメージ）は無い」だったかを
+// 返す。
+//
+// それ以外の失敗（daemon が応えない、など）を「無い」と読むと、無いはずの名前で
+// コンテナを作りに行き、名前の衝突という分かりにくい失敗になる。
+func isAbsent(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := err.Error()
+	return strings.Contains(message, "No such container") || strings.Contains(message, "No such object") ||
+		strings.Contains(message, "No such image")
 }
 
 // stream は、docker を起動し、その標準入出力を接続として返す。
@@ -147,26 +174,76 @@ func (command dockerCommand) stream(watch *connectWatch, arguments ...string) (*
 	return commandconn.Start(process, "docker "+strings.Join(arguments, " "))
 }
 
-// run は、docker を1回実行し、標準出力と標準エラーを別々に返す。
-func (command dockerCommand) run(
-	ctx context.Context, input string, arguments ...string,
-) (output, errorOutput string, err error) {
-	process := exec.CommandContext(ctx, command.path, arguments...)
+// maxDescribedArgumentBytes は、接続ログに出す docker の引数の長さの上限である。
+const maxDescribedArgumentBytes = 400
+
+// describeArguments は、docker の引数を接続ログに出す形にする。秘密は引数に
+// 載せない決まりなので、そのまま出してよい。
+func describeArguments(arguments []string) string {
+	described := strings.Join(arguments, " ")
+	if len(described) > maxDescribedArgumentBytes {
+		described = described[:maxDescribedArgumentBytes] + "…"
+	}
+	return described
+}
+
+// dockerCall は、docker を1回実行するときの指定である。
+type dockerCall struct {
+	arguments []string
+	// input は、標準入力に渡す内容である。
+	input string
+	// mergeOutput は、標準エラーを標準出力と同じ所へ、書かれた順に集める。
+	mergeOutput bool
+	// absentSubject は、問い合わせた相手の種類である。空でなければ、相手が無いという
+	// 失敗を問い合わせの答えとして扱い、接続ログに失敗と書かない。
+	absentSubject string
+}
+
+// run は、docker を1回実行し、標準出力を返す。失敗したときは、標準エラーを
+// エラーの文に含める。
+func (command dockerCommand) run(ctx context.Context, call dockerCall) (output string, err error) {
+	started := time.Now()
+	defer func() { sayRun(ctx, call, time.Since(started), err) }()
+	process := exec.CommandContext(ctx, command.path, call.arguments...)
 	process.Env = command.environment
 	var stdout, stderr bytes.Buffer
 	process.Stdout = &limitedWriter{writer: &stdout, remaining: maxDockerOutputBytes}
 	process.Stderr = &limitedWriter{writer: &stderr, remaining: maxDockerOutputBytes}
-	if input != "" {
-		process.Stdin = strings.NewReader(input)
+	if call.mergeOutput {
+		// 同じ書き先を渡すと、exec は1本のパイプで受けるので、書かれた順が保たれる。
+		process.Stderr = process.Stdout
+	}
+	if call.input != "" {
+		process.Stdin = strings.NewReader(call.input)
 	}
 	if err := process.Run(); err != nil {
 		detail := strings.TrimSpace(stderr.String())
-		if detail == "" {
-			return "", "", err
+		if call.mergeOutput {
+			detail = strings.TrimSpace(stdout.String())
 		}
-		return "", "", fmt.Errorf("%s: %w", detail, err)
+		if detail == "" {
+			return "", err
+		}
+		return "", fmt.Errorf("%s: %w", detail, err)
 	}
-	return stdout.String(), strings.TrimSpace(stderr.String()), nil
+	return stdout.String(), nil
+}
+
+// sayRun は、実行したコマンドと掛かった時間を、接続ログの debug3 に書く。失敗した
+// ときは、docker の出力も書く。
+func sayRun(ctx context.Context, call dockerCall, elapsed time.Duration, err error) {
+	described := describeArguments(call.arguments)
+	elapsed = connectionlog.Elapsed(elapsed)
+	switch {
+	case err == nil:
+		connectionlog.Say(ctx, connectionlog.Full, "docker %s（%s）", described, elapsed)
+	case call.absentSubject != "" && isAbsent(err):
+		connectionlog.Say(ctx, connectionlog.Full, "docker %s（%s）：その%sはありません", described, elapsed,
+			call.absentSubject)
+	default:
+		connectionlog.Say(ctx, connectionlog.Full, "docker %s は失敗しました（%s）：", described, elapsed)
+		sayOutput(ctx, connectionlog.Full, err.Error())
+	}
 }
 
 // limitedWriter は、上限まで書いたら黙って捨てる。
