@@ -92,6 +92,7 @@ const (
 	vpnInvalid vpnAction = iota
 	vpnList
 	vpnAdd
+	vpnEdit
 	vpnRemove
 	vpnUp
 	vpnDown
@@ -110,8 +111,7 @@ type vpnInvocation struct {
 	Alias string
 	// Rename は、新しいプロファイル名である。rename だけが使う。
 	Rename string
-	// Target は、繋ごうとしている相手（`host:port`）である。proxy だけが使い、
-	// 空なら確かめない。
+	// Target は、繋ごうとしている相手（`host:port`）である。proxy だけが使う。
 	Target string
 	JSON   bool
 	Yes    bool
@@ -302,11 +302,15 @@ func parseVPNInvocation(args []string) (invocation, error) {
 		return invocation{Kind: invocationVPN, VPN: &vpnInvocation{Action: vpnList, JSON: true}}, nil
 	}
 	switch args[0] {
-	case "add":
+	case "add", "edit":
 		if len(args) != 2 || args[1] == "" {
-			return invalidInvocation("vpn add requires exactly one profile name")
+			return invalidInvocation("vpn " + args[0] + " requires exactly one profile name")
 		}
-		return invocation{Kind: invocationVPN, VPN: &vpnInvocation{Action: vpnAdd, Name: args[1]}}, nil
+		action := vpnAdd
+		if args[0] == "edit" {
+			action = vpnEdit
+		}
+		return invocation{Kind: invocationVPN, VPN: &vpnInvocation{Action: action, Name: args[1]}}, nil
 	case "remove":
 		if len(args) < 2 || len(args) > 3 || args[1] == "" {
 			return invalidInvocation("vpn remove requires one profile name and optionally --yes")
@@ -381,7 +385,7 @@ func parseVPNInvocation(args []string) (invocation, error) {
 		}
 		return invocation{Kind: invocationVPN, VPN: called}, nil
 	}
-	return invalidInvocation("vpn requires add, remove, rename, up, down, logs, proxy, bind, or unbind")
+	return invalidInvocation("vpn requires add, edit, remove, rename, up, down, logs, proxy, bind, or unbind")
 }
 
 func vpnNameWithJSON(args []string, action vpnAction) (invocation, error) {
@@ -400,7 +404,7 @@ func vpnNameWithJSON(args []string, action vpnAction) (invocation, error) {
 
 func validVPNAction(name string) bool {
 	switch name {
-	case "add", "remove", "up", "down", "bind", "unbind", "rename", "logs", "proxy":
+	case "add", "edit", "remove", "up", "down", "bind", "unbind", "rename", "logs", "proxy":
 		return true
 	}
 	return false
