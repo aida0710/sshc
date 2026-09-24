@@ -10,6 +10,7 @@
 # 標準出力はデータの通り道なので、案内も診断も書かない。engine へは標準エラーで
 # 伝える。
 #   sshc-vpn-failure: <語>   中継を始められなかった理由（internal/vpn/failure.go）
+#   sshc-vpn-note: <文>      行ったこと（engine が接続ログの debug2 に写す）
 #   socat の "starting data transfer loop"   接続先へ繋がり、中継を始めた合図
 set -eu
 
@@ -36,6 +37,12 @@ fail() {
 	exit 1
 }
 
+# note は、行ったことを engine の接続ログとコンテナのログの両方へ残す。
+note() {
+	printf 'sshc-vpn-note: %s\n' "$*" >&2
+	echo "$*" >/proc/1/fd/1 2>/dev/null || true
+}
+
 if [ ! -f "$route" ]; then
 	fail tunnel_lost
 fi
@@ -60,8 +67,9 @@ case "$host" in
 			fail target_unresolved
 		fi
 		printf '%s %s\n' "$host" "$address" >>"$names"
-		# docker logs に残す。engine が「ログ」で見せる。
-		echo "接続先 $host のアドレスは $address です。" >/proc/1/fd/1 2>/dev/null || true
+		note "接続先 $host を名前解決しました：$address"
+	else
+		note "接続先 $host は名前解決済みです：$address"
 	fi
 	;;
 *)
@@ -82,8 +90,11 @@ if ! grep -qx "$address" "$routed" 2>/dev/null; then
 	# あいだ、接続先への通信がDockerの通常のネットワークへ流れることはない。
 	iptables -A OUTPUT -d "$address" ! -o "$interface" -j REJECT
 	echo "$address" >>"$routed"
-	echo "接続先 $address への経路を追加しました。" >/proc/1/fd/1 2>/dev/null || true
+	note "接続先 $address への経路とパケットフィルタを追加しました（インターフェース $interface）。"
+else
+	note "接続先 $address への経路は追加済みです。"
 fi
+note "接続先 $address:$port へ TCP で接続します。"
 
 flock -u 9
 exec 9>&-

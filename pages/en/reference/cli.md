@@ -131,7 +131,7 @@ sshc vpn unbind <alias> [--json]
 
 `sshc vpn remove` and `sshc vpn rename` need an unlocked vault. `sshc vpn rename` moves the settings, the stored secrets and the connections that use the profile to the new name together. A running route is taken down first, unless the new name is refused.
 
-`sshc vpn logs` prints the recent output of that profile's container, with the stored secrets replaced by `[REDACTED]`. It is the first place to look when a route will not come up.
+`sshc vpn logs` prints what the sshc engine recorded while preparing that profile's route, followed by the recent output of its container, with the stored secrets replaced by `[REDACTED]`. It is the first place to look when a route will not come up.
 
 `sshc vpn proxy` pipes standard input and output through the route, so the host's own `ssh`, `scp` and `git` can use it from `~/.ssh/config`:
 

@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"golang.org/x/crypto/curve25519"
+
+	"sshc/internal/connectionlog"
 )
 
 // 本物のコンテナと本物のトンネルで、経路が成立することを確かめる。
@@ -153,8 +155,26 @@ func TestAConnectionReachesTheTargetThroughTheTunnel(t *testing.T) {
 	secrets := Secrets{WireGuard: &WireGuardSecrets{PrivateKey: clientPrivate}}
 	t.Cleanup(func() { _ = manager.Stop(context.Background(), profile.Name) })
 
-	requireAnswer(t, manager, ctx, dialTarget{profile: profile, secrets: secrets,
+	// 接続ログ（-vvv）には、経路の準備と接続先への接続の各段階が出る。
+	var connectionLog attemptRecord
+	requireAnswer(t, manager, connectionlog.With(ctx, &connectionLog), dialTarget{profile: profile, secrets: secrets,
 		address: fmt.Sprintf("%s:%d", tunnelServerAddress, echoPort)}, "tunnelled")
+	for _, want := range []string{
+		"VPN経路 e2e を起動します（wireguard）。",
+		"docker：",
+		"VPNに接続しました（wireguard、インターフェース wg0",
+		"コンテナの中継：接続先 " + tunnelServerAddress + " への経路とパケットフィルタを追加しました",
+		fmt.Sprintf("VPN経由で %s:%d に接続しました", tunnelServerAddress, echoPort),
+		"[debug3] docker exec --interactive",
+	} {
+		if !strings.Contains(connectionLog.text(), want) {
+			t.Fatalf("接続ログに %q が無い:\n%s", want, connectionLog.text())
+		}
+	}
+	// 同じ内容は、経路ごとの記録にも残り、ログとして読める。
+	if logs, err := manager.Logs(ctx, profile.Name, secrets); err != nil || !strings.Contains(logs, "VPNに接続しました") {
+		t.Fatalf("Logs = %v\n%s", err, logs)
+	}
 	// 同じ経路で、別の接続先へも届く。接続先はプロファイルではなく接続が決める。
 	requireAnswer(t, manager, ctx, dialTarget{profile: profile, secrets: secrets,
 		address: fmt.Sprintf("%s:%d", tunnelServerAddress, secondEchoPort)}, "second")

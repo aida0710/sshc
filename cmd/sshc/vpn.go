@@ -85,7 +85,7 @@ func runVPN(ctx context.Context, called vpnInvocation, environment commandEnviro
 			code := finishVPNFailure(called, err, environment)
 			// ログに理由が残るのは、コンテナが経路を用意できなかったときだけである。
 			var problem engineProblem
-			if !called.JSON && errors.As(err, &problem) && problem.Code == vpnrefusal.CodeSessionFailed {
+			if !called.JSON && errors.As(err, &problem) && vpnrefusal.HasLogs(problem.Code) {
 				fmt.Fprintf(stderr, "詳しくは sshc vpn logs %s でログを確認してください。\n", safeTerminalCell(called.Name))
 			}
 			return code

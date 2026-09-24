@@ -5,8 +5,9 @@ import { hintText } from "../ui/form";
 import { ModalShell } from "../ui/ModalShell";
 import { Button } from "../ui/surface";
 
-// コンテナの直近の出力を見せる。繋がらないときに最初に見る場所で、利用者に
-// docker を直接叩かせないためにある。秘密は engine の側で伏せてある。
+// engine が経路を用意した記録と、コンテナの直近の出力を見せる。繋がらないときに
+// 最初に見る場所で、利用者に docker を直接叩かせないためにある。秘密は engine の
+// 側で伏せてある。
 export function VPNLogsDialog({
   name,
   api,
@@ -61,7 +62,7 @@ export function VPNLogsDialog({
       ) : lines.trim() === "" ? (
         <p className={hintText}>{t("vpn.logsEmpty")}</p>
       ) : (
-        <pre className="max-h-96 overflow-auto rounded border border-line bg-surface-subtle p-3 text-xs text-ink">
+        <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded border border-line bg-surface-subtle p-3 text-xs text-ink">
           {lines}
         </pre>
       )}

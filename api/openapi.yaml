@@ -681,7 +681,7 @@ paths:
       operationId: getVPNLogs
       responses:
         "200":
-          description: The container's recent output with every stored secret masked
+          description: What the sshc engine recorded while preparing the route, followed by the container's recent output, with every stored secret masked
           content:
             application/json:
               schema: { $ref: "#/components/schemas/VPNLogs" }
