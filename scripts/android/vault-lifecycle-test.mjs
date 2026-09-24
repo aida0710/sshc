@@ -47,7 +47,7 @@ function evaluate(socket, expression) {
 
 const wantedInputs = mode === "create" ? 2 : 1;
 const buttonLabels = mode === "create"
-  ? ["Create the vault", "vault を作成"]
+  ? ["Create the vault", "Vaultを作成"]
   : ["Open", "開く"];
 const expression = `
   (async () => {
