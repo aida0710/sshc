@@ -15,7 +15,7 @@ The editor shows loaded files and their Include relationships. UTF-8 text is wri
 
 - **Basic**: host, user, port, authentication
 - **Analysis**: effective values, sources, warnings
-- **Advanced**: ProxyJump, directives, raw block
+- **Advanced**: ProxyJump, port forwarding, directives, raw block
 - **sshc**: encoding, OSC 52, and other sshc-only behavior
 
 Clearing a value removes its connection-specific directive and restores OpenSSH inheritance.

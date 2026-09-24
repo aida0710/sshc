@@ -847,7 +847,9 @@ export const en = {
     "The program was ended by {signal}. The output above is kept until you close this session.",
   "inspector.appOnly": "sshc-only settings",
   "inspector.groupLabel": "Group display settings",
-  "inspector.hostSavesImmediately": "Changes here are saved immediately.",
+  "inspector.hostSave": "Save sshc-only settings",
+  "inspector.hostSaveFailed":
+    "The sshc-only settings could not be saved. Check the error and save again.",
   "inspector.groupChangesStaged":
     "Changes here are staged until you choose Save groups.",
   "inspector.notices": "Notices",
@@ -2207,7 +2209,7 @@ export const en = {
   "conn.basicConnectionRefreshFailed":
     "The settings were saved, but the updated connection could not be loaded. Reload this connection.",
   "conn.basicSave": "Save Basic settings",
-  "conn.basicSaving": "Saving…",
+  "conn.saving": "Saving…",
   "conn.discardChanges": "Discard changes",
   "conn.blockMoved":
     "This block moved on disk. Reload the connection and try again.",

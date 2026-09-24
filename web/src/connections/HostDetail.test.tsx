@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { HostDetail } from "../api/config";
@@ -76,7 +76,7 @@ function renderPanel(overrides: Partial<Parameters<typeof HostDetailPanel>[0]> =
     onFieldEdits: vi.fn(),
     onBlockRaw: vi.fn(),
     onBasicSave: vi.fn().mockResolvedValue(undefined),
-    onMetadata: vi.fn(),
+    onMetadataSave: vi.fn().mockResolvedValue(undefined),
     integrations: integrations(),
     onDirtyChange: vi.fn(),
     ...overrides,
@@ -160,6 +160,50 @@ describe("HostDetailPanel", () => {
     expect(screen.getByRole("region", { name: "Settings analysis" })).toBeVisible();
     harness.rerender(<HostDetailPanel {...harness.props} panel="Basic" advanced="Jump" />);
     expect(screen.getByLabelText("Host name or IP address")).toHaveValue("198.51.100.7");
+  });
+
+  it("keeps an sshc draft mounted across areas and locks the other editors until it is saved", async () => {
+    const user = userEvent.setup();
+    const harness = renderPanel({ panel: "Sshc", advanced: "Jump" });
+    await user.selectOptions(screen.getByLabelText("Remote text encoding"), "shift_jis");
+
+    expect(harness.props.onDirtyChange).toHaveBeenLastCalledWith(true);
+    expect(harness.props.onMetadataSave).not.toHaveBeenCalled();
+
+    harness.rerender(<HostDetailPanel {...harness.props} panel="Basic" advanced="Jump" />);
+    expect(screen.getByLabelText("Host name or IP address")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Check reachability" })).toBeDisabled();
+    harness.rerender(<HostDetailPanel {...harness.props} panel="Sshc" advanced="Jump" />);
+    expect(screen.getByLabelText("Remote text encoding")).toHaveValue("shift_jis");
+
+    await user.click(screen.getByRole("button", { name: "Save sshc-only settings" }));
+    expect(harness.props.onMetadataSave).toHaveBeenCalledWith(expect.objectContaining({ encoding: "shift_jis" }));
+  });
+
+  it("locks the sshc settings while Basic has a draft", async () => {
+    const user = userEvent.setup();
+    const harness = renderPanel({ panel: "Basic", advanced: "Jump" });
+    await user.type(screen.getByLabelText("Host name or IP address"), "7");
+
+    harness.rerender(<HostDetailPanel {...harness.props} panel="Sshc" advanced="Jump" />);
+    expect(screen.getByLabelText("Remote text encoding")).toBeDisabled();
+  });
+
+  it("hands the page one discard for the drafts of every area", async () => {
+    const user = userEvent.setup();
+    let discard: (() => void) | null = null;
+    const harness = renderPanel({
+      panel: "Sshc",
+      advanced: "Jump",
+      onDiscardReady: (next: (() => void) | null) => { discard = next; },
+    });
+    await user.selectOptions(screen.getByLabelText("Remote text encoding"), "shift_jis");
+    expect(harness.props.onDirtyChange).toHaveBeenLastCalledWith(true);
+
+    act(() => (discard as unknown as () => void)());
+
+    expect(screen.getByLabelText("Remote text encoding")).toHaveValue("");
+    expect(harness.props.onDirtyChange).toHaveBeenLastCalledWith(false);
   });
 
   it("shows the advanced subview named directly by the route", () => {
