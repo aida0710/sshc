@@ -82,13 +82,16 @@ cat "$SSHC_TEST_BADGING"
         calls = self.assert_successful_target("com.github.aida0710.sshc.dev")
         self.assertNotIn("shell pm clear com.github.aida0710.sshc", calls)
 
-    def test_legacy_debug_package_is_read_from_the_apk(self):
-        self.assert_successful_target("com.github.aida0710.sshc")
-
     def test_release_apk_is_rejected_before_any_device_access(self):
-        result, calls = self.run_fixture("com.github.aida0710.sshc", debuggable=False)
+        result, calls = self.run_fixture("com.github.aida0710.sshc.dev", debuggable=False)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("debuggable APK is required", result.stderr)
+        self.assertEqual(calls, [])
+
+    def test_release_package_is_rejected_before_any_device_access(self):
+        result, calls = self.run_fixture("com.github.aida0710.sshc")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("unexpected package", result.stderr)
         self.assertEqual(calls, [])
 
     def test_foreign_package_is_rejected_before_any_device_access(self):
