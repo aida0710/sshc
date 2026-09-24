@@ -173,7 +173,7 @@ func writeHumanSyncFailure(stderr io.Writer, failure commandFailure) {
 		fmt.Fprintln(stderr, "sshc: the object store service is temporarily unavailable; try again later")
 	case "outcome_unknown":
 		fmt.Fprintln(stderr, "sshc: the sync operation outcome is unknown; do not rerun it until you inspect sshc sync status and the remote target")
-	case "transport_error", "sync_failed", "bucket_refused", "engine_unavailable":
+	case "transport_error", "bucket_refused", "engine_unavailable":
 		fmt.Fprintln(stderr, "sshc: the engine or sync target is unavailable; check the engine and network, then try again")
 	case "invalid_engine_response", "response_too_large", "http_error":
 		fmt.Fprintln(stderr, "sshc: the running engine returned an invalid response; check that the CLI and engine versions match")

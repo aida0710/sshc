@@ -23,14 +23,12 @@ var (
 type SyncHandlers struct {
 	Service *remotesync.Service
 	// Secrets は、同期対象外の暗号化ファイルに object store 設定を保存する。
-	// nil の場合、設定はプロセス内だけで有効になる。
+	// nil の場合は設定を保存できないので、/sync/setup は vault_locked で断る。
 	Secrets *secret.Service
-	// Reach は設定が保存される前にそれが機能するかを尋ねる。これが
-	// 注入されているのは、設定を保存するのはこのハンドラの仕事だが
-	// bucket に到達することはそうではないからで、またこのパッケージの
-	// どのテストもネットワークに触れてはならないからだ。nil の場合は
-	// 実際のチェックを意味する。配線し忘れが暗黙に「問題なし」になってはならない。
-	Reach func(ctx context.Context, client *remotesync.Client, key string) error
+	// ObjectStoreHTTP は bucket へ話す HTTP client である。nil なら既定の client を
+	// 使う。このパッケージのテストはネットワークに触れてはならないので、bucket の
+	// 代わりへ要求を渡す client をここへ注入する。
+	ObjectStoreHTTP *http.Client
 	// Auto は自動同期の巡回処理。nil の場合は無効として応答する。
 	Auto *remotesync.Auto
 	// Actions binds a destructive force push to the exact binding generation,
@@ -38,18 +36,16 @@ type SyncHandlers struct {
 	Actions ActionHandlers
 }
 
-func (h SyncHandlers) reach(ctx context.Context, client *remotesync.Client, key string) error {
-	if h.Reach == nil {
-		return remotesync.Check(ctx, client, key)
-	}
-	return h.Reach(ctx, client, key)
+func (h SyncHandlers) objectStoreClient(config remotesync.Config, credentials remotesync.Credentials) *remotesync.Client {
+	client := remotesync.NewClient(config, credentials)
+	client.HTTP = h.ObjectStoreHTTP
+	return client
 }
 
 func registerSyncRoutes(engine *echo.Echo, handlers SyncHandlers) {
 	engine.GET("/api/v1/sync", handlers.Status)
 	engine.POST("/api/v1/sync/setup/check", handlers.CheckSetup)
 	engine.PUT("/api/v1/sync/setup", handlers.CompleteSetup)
-	engine.PUT("/api/v1/sync/settings", handlers.Configure)
 	engine.GET("/api/v1/sync/exclusions", handlers.Exclusions)
 	engine.PUT("/api/v1/sync/exclusions", handlers.SaveExclusions)
 	engine.PUT("/api/v1/sync/key", handlers.SetKey)
@@ -97,7 +93,7 @@ func (h SyncHandlers) restore() {
 		Endpoint: settings.Endpoint, Bucket: settings.Bucket, Path: settings.Path,
 		Region: settings.Region, Direction: direction,
 	}
-	_, _ = h.Service.ConfigureIfUnconfigured(config, credentials, remotesync.NewClient(config, credentials))
+	_, _ = h.Service.ConfigureIfUnconfigured(config, credentials, h.objectStoreClient(config, credentials))
 }
 
 func snapshotSummaryResponse(summary remotesync.SnapshotSummary) api.SnapshotSummary {

@@ -3,6 +3,7 @@ package remotesync
 import (
 	"time"
 
+	"sshc/internal/objectstore"
 	"sshc/internal/storage"
 )
 
@@ -30,4 +31,18 @@ func SnapshotKeyForTest(config Config, createdAt string) (string, error) {
 		return "", err
 	}
 	return joinKey(config.Path, SnapshotPrefix+moment.UTC().Format(datedLayout)+"."+archiveSuffix), nil
+}
+
+// ConfigureForTest は、テストの前準備として、設定を保存せずにこの service を
+// 接続先へ向ける。製品では CompleteSetup が、接続先を確かめて設定を保存してから
+// 同じ切り替えを行う。
+func (s *Service) ConfigureForTest(config Config, credentials objectstore.Credentials, client *objectstore.Client) error {
+	s.operationMu.Lock()
+	defer s.operationMu.Unlock()
+	config = normalizeConfig(config)
+	if err := s.validateRecoveryTarget(config); err != nil {
+		return err
+	}
+	s.configure(config, credentials, client)
+	return nil
 }

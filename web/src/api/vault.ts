@@ -1,5 +1,5 @@
 import { apiClient } from "./client";
-import { asRecord, postEmpty, postJSON, putJSON } from "./guards";
+import { asRecord, postEmpty, postJSON } from "./guards";
 import type { components } from "./schema";
 import { validateOpenAPISchema } from "./validators.generated";
 
@@ -19,8 +19,6 @@ export type VaultApi = {
     next: string,
   ): Promise<ChangeMasterPasswordResult>;
   passwordEligibility(alias: string): Promise<PasswordEligibility>;
-  storePassword(alias: string, password: string): Promise<PasswordVaultStatus>;
-  forgetPassword(alias: string): Promise<PasswordVaultStatus>;
 };
 
 function validateVaultStatus(value: unknown): PasswordVaultStatus {
@@ -31,8 +29,8 @@ function validatePasswordEligibility(value: unknown): PasswordEligibility {
   return validateOpenAPISchema<PasswordEligibility>("PasswordEligibility", value);
 }
 
-// The password vault itself: its lock state, the master password, and the
-// per-host passwords it keeps.
+// The password vault itself: its lock state, the master password, and whether
+// a host may be given a password. Stored values go through the credentials API.
 export const vaultApi: VaultApi = {
   async passwordVault() {
     return validateVaultStatus(await apiClient.read("/api/v1/passwords"));
@@ -79,19 +77,6 @@ export const vaultApi: VaultApi = {
     return validatePasswordEligibility(
       await apiClient.read(
         `/api/v1/passwords/${encodeURIComponent(alias)}/eligibility`,
-      ),
-    );
-  },
-  async storePassword(alias, password) {
-    return validateVaultStatus(
-      await putJSON<unknown>(`/api/v1/passwords/${encodeURIComponent(alias)}`, { password }),
-    );
-  },
-  async forgetPassword(alias) {
-    return validateVaultStatus(
-      await apiClient.mutate<unknown>(
-        `/api/v1/passwords/${encodeURIComponent(alias)}`,
-        { method: "DELETE" },
       ),
     );
   },

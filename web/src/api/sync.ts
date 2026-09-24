@@ -5,7 +5,6 @@ import { validateOpenAPISchema } from "./validators.generated";
 
 export type SyncStatus = components["schemas"]["SyncStatus"];
 export type SyncKeyResponse = components["schemas"]["SyncKeyResponse"];
-export type SyncSettingsRequest = components["schemas"]["SyncSettingsRequest"];
 export type SyncSetupCheckRequest = components["schemas"]["SyncSetupCheckRequest"];
 export type SyncSetupCheckResponse = components["schemas"]["SyncSetupCheckResponse"];
 export type SyncSetupRequest = components["schemas"]["SyncSetupRequest"];
@@ -51,7 +50,6 @@ export type SyncApi = {
     settings: SyncSetupCheckRequest,
   ): Promise<SyncSetupCheckResponse>;
   completeSyncSetup(settings: SyncSetupRequest): Promise<SyncSetupResponse>;
-  configureSync(settings: SyncSettingsRequest): Promise<SyncStatus>;
   syncExclusions(): Promise<SyncExclusions>;
   saveSyncExclusions(document: string): Promise<SyncExclusions>;
   syncPushDraft(): Promise<SyncPushDraft>;
@@ -134,11 +132,6 @@ export const syncApi: SyncApi = {
   async completeSyncSetup(settings) {
     return validateSyncSetup(
       await putJSON<unknown>("/api/v1/sync/setup", settings, locallyExplainedSyncFailures),
-    );
-  },
-  async configureSync(settings) {
-    return validateSyncStatus(
-      await putJSON<unknown>("/api/v1/sync/settings", settings),
     );
   },
   async syncExclusions() {
