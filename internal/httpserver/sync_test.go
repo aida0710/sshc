@@ -1194,21 +1194,6 @@ func TestPushWithoutAKeyRefusesAndRunsNothing(t *testing.T) {
 	}
 }
 
-// vault を一度も作ったことのないマシンは、初めての pull を行う
-// マシンである。打ち込まれるパスワードはアーカイブへの鍵であり、
-// ここでは確認できない。確認できるのはアーカイブ自身だけだ。
-func TestPullOnAMachineWithNoVaultIsNotRefusedForTheWrongReason(t *testing.T) {
-	engine, _ := syncEngine(t)
-	if code := sendSync(t, engine, http.MethodPut, "/api/v1/sync/settings", settings("both")).Code; code != http.StatusOK {
-		t.Fatalf("configure = %d", code)
-	}
-
-	recorder := sendSync(t, engine, http.MethodPost, "/api/v1/sync/pull", `{"passphrase":"a password for a vault that is not here"}`)
-	if recorder.Code == http.StatusForbidden && strings.Contains(recorder.Body.String(), "wrong_master_password") {
-		t.Errorf("a machine with no vault was told its master password was wrong: %s", recorder.Body.String())
-	}
-}
-
 // path は保存され、応答にも返される。そして bucket 名と同じくらい
 // 狭く絞られている。どちらもこの application が署名する URL のセグメントになるからだ。
 func TestTheObjectPathIsStoredAndRefusedWhenItCouldEscape(t *testing.T) {

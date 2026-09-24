@@ -3,7 +3,6 @@ import type { MessageKey } from "../i18n/messages";
 // Engine failure codes that have their own wording in the sync screen.
 export const syncRefusals: Record<string, MessageKey> = {
   sync_not_configured: "sync.notConfigured",
-  wrong_master_password: "sync.wrongMaster",
   wrong_passphrase: "sync.wrongKey",
   sync_key_missing: "sync.keyMissing",
   passphrase_too_short: "sync.keyTooShort",

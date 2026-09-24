@@ -1506,7 +1506,6 @@ export const en = {
     "A key you choose yourself must be at least 12 characters.",
   "sync.wrongKey":
     "The saved key cannot decrypt the snapshot in this bucket. Check that every machine uses the same key, or explicitly replace the remote snapshot from Bucket status.",
-  "sync.wrongMaster": "The master password for this machine is incorrect.",
   "sync.bucketAuthenticationFailed":
     "The object store could not authenticate the request. Nothing was saved. Check the access key and secret.",
   "sync.bucketAccessDenied":
