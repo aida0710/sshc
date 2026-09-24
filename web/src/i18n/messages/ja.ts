@@ -849,7 +849,9 @@ export const ja = {
     "プログラムがシグナル{signal}で終了しました。出力は、このセッションを閉じるまで表示されます。",
   "inspector.appOnly": "sshc固有の設定",
   "inspector.groupLabel": "グループの表示設定",
-  "inspector.hostSavesImmediately": "ここでの変更はすぐに保存されます。",
+  "inspector.hostSave": "sshc固有の設定を保存",
+  "inspector.hostSaveFailed":
+    "sshc固有の設定の保存に失敗しました。エラーを確認して、もう一度保存してください。",
   "inspector.groupChangesStaged":
     "ここでの変更は「グループを保存」を押すまで保存されません。",
   "inspector.notices": "注意",
@@ -2214,7 +2216,7 @@ export const ja = {
   "conn.basicConnectionRefreshFailed":
     "設定は保存されましたが、更新後の接続を読み込めませんでした。この接続を再読み込みしてください。",
   "conn.basicSave": "基本設定を保存",
-  "conn.basicSaving": "保存しています…",
+  "conn.saving": "保存しています…",
   "conn.discardChanges": "変更を破棄",
   "conn.blockMoved":
     "このブロックはディスク上で移動しました。接続を読み込み直してもう一度試してください。",

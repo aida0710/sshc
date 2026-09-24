@@ -23,6 +23,6 @@ The destination may be any host visible from the SSH server. `127.0.0.1` is the 
 
 Open a local SOCKS5 endpoint. Each client request supplies its own destination, so Dynamic settings have no fixed destination field.
 
-Saved forwards live in a connection's sshc tab. A connected terminal can also start and stop temporary forwards on its existing SSH transport.
+Saved forwards live under **Port forwarding** in a connection's Advanced tab. A connected terminal can also start and stop temporary forwards on its existing SSH transport.
 
 Listeners are loopback-only, but are not a strong isolation boundary from other local processes or users. Keep authentication enabled on destination services.

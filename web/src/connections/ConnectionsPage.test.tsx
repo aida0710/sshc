@@ -549,6 +549,77 @@ describe("ConnectionsPage", () => {
     expect(inspector.mock.calls.every(([content]) => content === null)).toBe(true);
   });
 
+  it("saves the sshc settings only when Save is pressed, and holds the connection until then", async () => {
+    const user = userEvent.setup();
+    const savedDetail = { ...detail, metadata: { ...detail.metadata, encoding: "shift_jis" } };
+    vi.mocked(configApi.save).mockResolvedValue({
+      transactionId: "t1", written: ["sshc/metadata.json"], preview: { operation: "config.metadata", diffs: [] },
+    } as never);
+    vi.mocked(configApi.host)
+      .mockResolvedValueOnce(detail as never)
+      .mockResolvedValue(savedDetail as never);
+    render(<ConnectionsPage {...consoleProps} onInspector={() => undefined} />);
+
+    await user.click(await screen.findByRole("button", { name: /bastion/ }));
+    await user.click(await screen.findByRole("tab", { name: "sshc" }));
+    await user.selectOptions(screen.getByLabelText("Remote text encoding"), "shift_jis");
+
+    expect(configApi.save).not.toHaveBeenCalled();
+    expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /^bastion/ })).not.toHaveAttribute("draggable", "true");
+
+    await user.click(screen.getByRole("button", { name: "Save sshc-only settings" }));
+
+    await waitFor(() => expect(configApi.save).toHaveBeenCalledTimes(1));
+    expect(configApi.save).toHaveBeenCalledWith({
+      kind: "metadata",
+      metadata: { schemaVersion: 1, hosts: [{ identity: { path: "config", alias: "bastion" }, encoding: "shift_jis" }] },
+    });
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Save sshc-only settings" })).not.toBeInTheDocument());
+    expect(screen.getByLabelText("Remote text encoding")).toHaveValue("shift_jis");
+    expect(screen.queryByText("Unsaved changes")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Connect" })).toBeEnabled();
+  });
+
+  it("keeps the sshc draft and says why when the save is rejected", async () => {
+    const user = userEvent.setup();
+    vi.mocked(configApi.save).mockRejectedValue(new ApiError("metadata_invalid", 400, {
+      code: "metadata_invalid",
+      message: "request rejected",
+    }));
+    render(<ConnectionsPage {...consoleProps} onInspector={() => undefined} />);
+
+    await user.click(await screen.findByRole("button", { name: /bastion/ }));
+    await user.click(await screen.findByRole("tab", { name: "sshc" }));
+    await user.selectOptions(screen.getByLabelText("OSC 52 clipboard"), "deny");
+    await user.click(screen.getByRole("button", { name: "Save sshc-only settings" }));
+
+    expect(await screen.findByText("The sshc-only settings could not be saved. Check the error and save again."))
+      .toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Save preview" })).toHaveTextContent("metadata_invalid");
+    expect(screen.getByLabelText("OSC 52 clipboard")).toHaveValue("deny");
+    expect(screen.getByRole("button", { name: "Save sshc-only settings" })).toBeEnabled();
+    expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+  });
+
+  it("discards the sshc draft when leaving for another connection is confirmed", async () => {
+    const user = userEvent.setup();
+    const edgeHost = { ...overview.hosts[0], identity: { path: "config", alias: "edge" }, patterns: ["edge"], line: 4 };
+    vi.mocked(configApi.overview).mockResolvedValue({ ...overview, hosts: [...overview.hosts, edgeHost] } as never);
+    render(<ConnectionsPage {...consoleProps} onInspector={() => undefined} />);
+
+    await user.click(await screen.findByRole("button", { name: /^bastion/ }));
+    await user.click(await screen.findByRole("tab", { name: "sshc" }));
+    await user.selectOptions(screen.getByLabelText("Remote text encoding"), "euc-jp");
+    await user.click(screen.getByRole("button", { name: /^edge/ }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Discard changes" });
+    await user.click(within(dialog).getByRole("button", { name: "Discard changes" }));
+    await waitFor(() => expect(configApi.host).toHaveBeenCalledWith("config", "edge"));
+    expect(configApi.save).not.toHaveBeenCalled();
+  });
+
   it("keeps global terminal editing out of connection detail", async () => {
     const user = userEvent.setup();
     render(<ConnectionsPage {...consoleProps} onInspector={() => undefined} />);
