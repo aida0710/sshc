@@ -91,6 +91,9 @@ const (
 	maxProposalLength     = 256
 	maxFingerprintLength  = 128
 	maxApprovalWordLength = 32
+	// maxSecretLength と maxTOTPSecretLength は、API の VPNSecrets と同じ上限である。
+	maxSecretLength     = 256
+	maxTOTPSecretLength = 512
 )
 
 // ValidateName は、プロファイル名として使えるかを確かめる。
@@ -215,10 +218,12 @@ func validateUsername(field, username string) error {
 	return nil
 }
 
-// requireSecret は、backend が要る秘密があることを確かめる。
-func requireSecret(field, value string) error {
+// requireSecret は、backend が要る秘密があり、上限の長さに収まることを確かめる。
+//
+// 長すぎる値は、足りない秘密ではなく、使えない値として断る。
+func requireSecret(field, value string, limit int) error {
 	if value == "" {
 		return fieldError(ErrSecrets, field, ReasonRequired)
 	}
-	return nil
+	return validateLength(field, value, limit)
 }

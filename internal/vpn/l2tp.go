@@ -72,10 +72,10 @@ func (l2tpBackend) validateSecrets(_ Profile, secrets Secrets) error {
 	if secrets.L2TP != nil {
 		stored = *secrets.L2TP
 	}
-	if err := requireSecret("secrets."+SecretKeyL2TPPassword, stored.Password); err != nil {
+	if err := requireSecret("secrets."+SecretKeyL2TPPassword, stored.Password, maxSecretLength); err != nil {
 		return err
 	}
-	return requireSecret("secrets."+SecretKeyIPsecPSK, stored.PreSharedKey)
+	return requireSecret("secrets."+SecretKeyIPsecPSK, stored.PreSharedKey, maxSecretLength)
 }
 
 func (l2tpBackend) writeAgentSection(request agentSectionRequest, document *agentDocument) error {

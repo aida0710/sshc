@@ -14,7 +14,7 @@ import (
 func TestEveryReasonHasASentence(t *testing.T) {
 	for _, reason := range []vpn.Reason{
 		vpn.ReasonRequired, vpn.ReasonFormat, vpn.ReasonTooLong, vpn.ReasonTooMany, vpn.ReasonOutOfRange,
-		vpn.ReasonNotIPv4, vpn.ReasonUnroutable, vpn.ReasonNameNeedsDNS, vpn.ReasonUnsupported, vpn.ReasonUnexpected,
+		vpn.ReasonNotIPv4, vpn.ReasonUnroutable, vpn.ReasonUnsupported, vpn.ReasonUnexpected,
 	} {
 		if _, known := fieldReasons[reason]; !known {
 			t.Errorf("%s has no field sentence", reason)
@@ -87,6 +87,17 @@ func TestOnlyRefusalsThatNeedAFixStopTheReconnect(t *testing.T) {
 	} {
 		if got := test.refusal.RequiresAction(); got != test.want {
 			t.Errorf("RequiresAction(%+v) = %v, want %v", test.refusal, got, test.want)
+		}
+	}
+}
+
+// 接続先の理由の語は、どれも言い方を持つ。
+func TestEveryDestinationReasonHasASentence(t *testing.T) {
+	for _, reason := range []vpn.Reason{
+		vpn.ReasonFormat, vpn.ReasonOutOfRange, vpn.ReasonNotIPv4, vpn.ReasonUnroutable, vpn.ReasonNameNeedsDNS,
+	} {
+		if _, known := destinationReasons[reason]; !known {
+			t.Errorf("%s has no destination sentence", reason)
 		}
 	}
 }

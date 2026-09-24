@@ -173,7 +173,6 @@ var fieldReasons = map[vpn.Reason]string{
 	vpn.ReasonOutOfRange:   "ポート番号は1〜65535で指定してください。",
 	vpn.ReasonNotIPv4:      "IPv4アドレスを指定してください。",
 	vpn.ReasonUnroutable:   "ループバックアドレスなど、使用できないアドレスです。",
-	vpn.ReasonNameNeedsDNS: "ホスト名で指定する場合は、VPN内のDNSサーバーも指定してください。",
 	vpn.ReasonUnsupported:  "使用できない値です。",
 	vpn.ReasonUnexpected:   "選択した方式では使用しない設定項目です。",
 }

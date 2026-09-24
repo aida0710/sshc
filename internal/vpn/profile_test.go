@@ -328,3 +328,19 @@ func TestContainersStartWithAnInitProcess(t *testing.T) {
 		t.Fatalf("arguments = %v", arguments)
 	}
 }
+
+// シークレットの長さは、API と同じ上限で確かめる。長すぎる値は、足りない
+// シークレットではなく、使えない値として断る。
+func TestAnOverlongSecretIsRefusedAsAnInvalidValue(t *testing.T) {
+	profile := Profile{Name: "office", Backend: L2TPIPsec, L2TP: &L2TPSettings{Server: "vpn.example.jp", Username: "user"}}
+
+	err := profile.ValidateSecrets(Secrets{L2TP: &L2TPSecrets{
+		Password: strings.Repeat("p", maxSecretLength+1), PreSharedKey: "psk",
+	}})
+
+	var failure *FieldError
+	if !errors.As(err, &failure) || !errors.Is(err, ErrSettings) || failure.Reason != ReasonTooLong ||
+		failure.Field != "secrets."+SecretKeyL2TPPassword || failure.Limit != maxSecretLength {
+		t.Fatalf("ValidateSecrets = %v", err)
+	}
+}

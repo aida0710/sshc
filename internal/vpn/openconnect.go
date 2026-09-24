@@ -127,14 +127,14 @@ func (openConnectBackend) validateSecrets(profile Profile, secrets Secrets) erro
 	if secrets.OpenConnect != nil {
 		stored = *secrets.OpenConnect
 	}
-	if err := requireSecret("secrets."+SecretKeyOpenConnectPassword, stored.Password); err != nil {
+	if err := requireSecret("secrets."+SecretKeyOpenConnectPassword, stored.Password, maxSecretLength); err != nil {
 		return err
 	}
 	if profile.OpenConnect == nil || profile.OpenConnect.SecondFactor != SecondFactorTOTP {
 		return nil
 	}
 	field := "secrets." + SecretKeyOpenConnectTOTPSecret
-	if err := requireSecret(field, stored.TOTPSecret); err != nil {
+	if err := requireSecret(field, stored.TOTPSecret, maxTOTPSecretLength); err != nil {
 		return err
 	}
 	if _, err := totp.Parse(stored.TOTPSecret); err != nil {
