@@ -1132,46 +1132,6 @@ paths:
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
-  /api/v1/passwords/{alias}:
-    put:
-      operationId: storePassword
-      parameters:
-        - name: alias
-          in: path
-          required: true
-          schema: { type: string, minLength: 1, maxLength: 255 }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/StorePasswordRequest" }
-      responses:
-        "200":
-          description: Password stored
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/PasswordVaultStatus" }
-        "400": { $ref: "#/components/responses/Problem" }
-        "401": { $ref: "#/components/responses/Problem" }
-        "403": { $ref: "#/components/responses/Problem" }
-        "409": { $ref: "#/components/responses/Problem" }
-    delete:
-      operationId: forgetPassword
-      parameters:
-        - name: alias
-          in: path
-          required: true
-          schema: { type: string, minLength: 1, maxLength: 255 }
-      responses:
-        "200":
-          description: Password forgotten
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/PasswordVaultStatus" }
-        "400": { $ref: "#/components/responses/Problem" }
-        "401": { $ref: "#/components/responses/Problem" }
-        "403": { $ref: "#/components/responses/Problem" }
-        "409": { $ref: "#/components/responses/Problem" }
   /api/v1/credentials:
     get:
       operationId: listCredentials
@@ -3676,12 +3636,6 @@ components:
       required: [passphrase]
       properties:
         passphrase: { type: string, maxLength: 1024 }
-    StorePasswordRequest:
-      type: object
-      additionalProperties: false
-      required: [password]
-      properties:
-        password: { type: string, minLength: 1, maxLength: 1024 }
     IssueActionRequest:
       type: object
       additionalProperties: false

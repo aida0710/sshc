@@ -78,19 +78,6 @@ func (s *Service) SetBound(alias, password, binding string) error {
 	})
 }
 
-// Remove はパスワードを忘れ、vault を書き込む。
-func (s *Service) Remove(alias string) error {
-	return s.mutateVault(func(vault *Vault) error {
-		// 参照は消える。他に何かが指していれば資格情報は残り、何も指さなくなれば
-		// 一緒に消える。
-		vault.RemoveDedicatedPassword(alias)
-		vault.Unassign(KindPassword, alias)
-		vault.Unassign(KindTOTP, alias)
-		_ = vault.Delete(KindPassword, alias)
-		return nil
-	})
-}
-
 // Rename は、保存済みのパスワードを新しい alias へ引き継ぐ。ホストの名前変更が
 // それを置き去りにすれば、二度と誰も尋ねない名前の下にパスワードが残る。
 func (s *Service) Rename(from, to string) error {

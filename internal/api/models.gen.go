@@ -1404,11 +1404,6 @@ type StoreCredentialRequest struct {
 	Secret string `json:"secret"`
 }
 
-// StorePasswordRequest defines model for StorePasswordRequest.
-type StorePasswordRequest struct {
-	Password string `json:"password"`
-}
-
 // SyncBucketObject defines model for SyncBucketObject.
 type SyncBucketObject struct {
 	Key          string  `json:"key"`

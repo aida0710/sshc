@@ -3454,7 +3454,13 @@ func TestAnExplicitEmptyVaultClearsCredentialsOnAnotherInstallation(t *testing.T
 		t.Fatalf("initial password = %q", got)
 	}
 
-	if err := sender.Remove("bastion"); err != nil {
+	if _, err := sender.WithPasswordMutation(secret.PasswordMutation{
+		Kind: secret.PasswordMutationRemove, Alias: "bastion",
+	}, func(change storage.Change) (storage.Result, error) {
+		return first.manager.Commit(storage.Request{
+			Operation: "test.password-remove", Changes: []storage.Change{change},
+		})
+	}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := first.service.PushUsing(context.Background(), keyOf(syncPassphrase), "Remove all credentials"); err != nil {
