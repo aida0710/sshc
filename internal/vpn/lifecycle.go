@@ -36,6 +36,9 @@ type sessionState struct {
 	// phase は、経路を用意しているあいだの段階である。起動中は transition が
 	// 握られたままなので、段階は鍵を使わずに読み書きする。
 	phase atomic.Value
+
+	// record は、この経路について sshcエンジンが行ったことの記録である。
+	record attemptRecord
 }
 
 // StartPhase は、経路がどこまでできたかである。空なら用意していない。

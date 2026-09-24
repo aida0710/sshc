@@ -742,6 +742,9 @@ func (s *Session) reconnect(info ExitInfo, connectionErr error, now func() time.
 		}
 		s.mutex.Unlock()
 		if !retry {
+			// 何も書かずに止まると、再接続の途中で止まったのか、もう試さないのかが
+			// 画面から分からない。理由の行は接続ログに出ている。
+			s.publish([]byte("\r\n[sshc] 設定を直さない限り同じ理由で失敗するため、自動再接続を停止しました。\r\n"))
 			return false
 		}
 	}

@@ -15,7 +15,14 @@ backend_read() {
 
 backend_up() {
 	echo "VPNに接続します（WireGuard）。"
-	wireguard-go "$interface"
+	# wireguard-go は、カーネルが WireGuard を持っていると、カーネルの方を勧める
+	# 11 行の案内を標準エラーへ出す。この経路は wireguard-go を使うと決めているので
+	# 利用者には関係がなく、失敗したときに見せるログの行数を食う。出力は、起動に
+	# 失敗したときだけ見せる。
+	if ! wireguard-go "$interface" 2>"$runtime/wireguard-go.log"; then
+		cat "$runtime/wireguard-go.log" >&2
+		return 1
+	fi
 	wg setconf "$interface" "$runtime/wireguard.conf"
 	rm -f "$runtime/wireguard.conf"
 	# サーバーのアドレスは、接続先がサーバーそのものでないかを connect が確かめる

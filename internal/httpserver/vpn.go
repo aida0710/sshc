@@ -101,7 +101,7 @@ func (h VPNHandlers) RenameProfile(c *echo.Context) error {
 	return h.respond(c)
 }
 
-// Logs は、そのコンテナの直近の出力を、秘密を伏せて返す。
+// Logs は、engine がその経路を用意した記録とコンテナの直近の出力を、秘密を伏せて返す。
 //
 // 繋がらないときに最初に見る場所である。利用者に docker を直接叩かせない。
 func (h VPNHandlers) Logs(c *echo.Context) error {

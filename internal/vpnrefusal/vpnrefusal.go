@@ -121,6 +121,16 @@ func Of(err error) (Refusal, bool) {
 	return Refusal{}, false
 }
 
+// HasLogs は、その拒否の原因が sshc vpn logs（画面の「ログ」）に残っているかを返す。
+// 案内の文に「ログを確認してください」を添えるかどうかに使う。
+func HasLogs(code string) bool {
+	switch code {
+	case CodeSessionFailed, CodeImageBuildFailed, CodeTargetFailed, CodeDockerNotRunning:
+		return true
+	}
+	return false
+}
+
 // RequiresAction は、利用者が何かを直さない限り、繰り返しても同じ理由で断られるかを
 // 返す。Terminal はこれが真なら再接続を繰り返さない。
 func (refusal Refusal) RequiresAction() bool {

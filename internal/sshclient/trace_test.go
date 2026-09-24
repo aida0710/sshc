@@ -2,6 +2,7 @@ package sshclient
 
 import (
 	"bytes"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -97,5 +98,33 @@ func TestEachTracedLineCarriesTheDepthThatProducedIt(t *testing.T) {
 		"[sshc] ProxyCommand を実行します\r\n"
 	if out.String() != want {
 		t.Errorf("written = %q, want %q", out.String(), want)
+	}
+}
+
+// debug2 では、ホップで使う設定と経路の種類を言う。
+func TestTheHopSettingsAreDescribedAtDetailed(t *testing.T) {
+	var out strings.Builder
+	trace := newTracer(Detailed, &out)
+
+	describeHop(trace, Target{HostName: "10.0.0.5", Port: "22", User: "aida", Identities: []string{"/home/a/.ssh/id_ed25519"}, VPN: "lab"})
+
+	for _, want := range []string{"HostName 10.0.0.5、Port 22、User aida、IdentityFile /home/a/.ssh/id_ed25519", "経路：VPNプロファイル lab"} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("out = %q", out.String())
+		}
+	}
+}
+
+// 利用者向けの文に置き換えた失敗も、詳細と元の失敗を debug2 に残す。
+func TestAnExplainedFailureKeepsItsDetailsAtDetailed(t *testing.T) {
+	var out strings.Builder
+	trace := newTracer(Detailed, &out)
+
+	explainFailure(trace, &ExplainedError{Sentence: "作れませんでした。", Details: []string{"ERROR: failed"}, Err: errors.New("exit status 1")})
+
+	for _, want := range []string{"[sshc][debug2]   ERROR: failed", "[sshc][debug2] 失敗の詳細：exit status 1"} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("out = %q", out.String())
+		}
 	}
 }
