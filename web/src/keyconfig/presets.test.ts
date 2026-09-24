@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { apiClient } from "../api/client";
-import { defaultBindings, loadBindings, storageKey } from "./bindings";
+import { defaultBindings, loadBindings } from "./bindings";
 import { refreshPresets, savePresetBindings, selectPreset, selectionKey, updatePresets, type Preset } from "./presets";
 let remote: Preset[];
 beforeEach(async () => {
@@ -23,23 +23,6 @@ it("stores nothing while the browser only shows the default shortcuts", async ()
   expect(loadBindings()).toEqual(defaultBindings);
   selectPreset("work");
   expect(localStorage.getItem(selectionKey)).toBe("work");
-});
-it("migrates legacy bindings once and preserves the migration identity after a lost response", async () => {
-  localStorage.removeItem(selectionKey);
-  localStorage.setItem(storageKey, JSON.stringify({ ...defaultBindings, home: ["Alt+H"] }));
-  const original = apiClient.mutate;
-  vi.mocked(apiClient.mutate).mockImplementationOnce(async (_path, options) => {
-    remote = (JSON.parse(options?.body as string) as { presets: Preset[] }).presets;
-    throw new Error("response lost");
-  });
-  await refreshPresets();
-  expect(localStorage.getItem(selectionKey)).toMatch(/^pending:/);
-  expect(remote).toHaveLength(1);
-  await refreshPresets();
-  expect(remote).toHaveLength(1);
-  expect(localStorage.getItem(selectionKey)).toBe(remote[0]!.id);
-  expect(loadBindings().home).toEqual(["Alt+H"]);
-  expect(original).toHaveBeenCalledTimes(1);
 });
 it("keeps selection local while applying remote edits and recovering from deletion", async () => {
   remote = [{ id: "work", name: "Work", bindings: { ...defaultBindings, home: ["Alt+H"] } }];

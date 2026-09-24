@@ -638,22 +638,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/sync/settings": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put: operations["configureSync"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/sync/exclusions": {
         parameters: {
             query?: never;
@@ -953,22 +937,6 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/passwords/{alias}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put: operations["storePassword"];
-        post?: never;
-        delete: operations["forgetPassword"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2573,7 +2541,7 @@ export interface components {
             command?: string;
             /** @description Return the expanded command for an explicit insert, run, or copy action. Normal previews remain redacted. */
             revealCommand?: boolean;
-            /** @description Issue a one-time execution token. Defaults to true for compatibility; passive previews should set false. */
+            /** @description Issue a one-time execution token. Defaults to true; passive previews should set false. */
             issueAction?: boolean;
             /** @description Bind the preview to sending Enter after the command. Defaults to true. */
             submit?: boolean;
@@ -2753,15 +2721,6 @@ export interface components {
             removed?: number;
             completedAt: string;
         };
-        SyncSettingsRequest: {
-            endpoint: string;
-            bucket: string;
-            path?: string;
-            region?: string;
-            accessKeyId: string;
-            secretAccessKey: string;
-            direction: components["schemas"]["SyncDirection"];
-        };
         /** @enum {string} */
         SyncSetupTargetState: "empty" | "existing" | "incomplete";
         SyncSetupCheckRequest: {
@@ -2870,9 +2829,6 @@ export interface components {
         };
         PassphraseRequest: {
             passphrase: string;
-        };
-        StorePasswordRequest: {
-            password: string;
         };
         IssueActionRequest: {
             kind: string;
@@ -3826,7 +3782,7 @@ export interface components {
             id: string;
             alias: string;
             /**
-             * @description Omitted by legacy SSH-only workspaces and interpreted as ssh.
+             * @description Omitted for an SSH pane; an omitted kind means ssh.
              * @enum {string}
              */
             kind?: "ssh" | "shell";
@@ -5153,33 +5109,6 @@ export interface operations {
             502: components["responses"]["Problem"];
         };
     };
-    configureSync: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SyncSettingsRequest"];
-            };
-        };
-        responses: {
-            /** @description Bucket configured for this run */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SyncStatus"];
-                };
-            };
-            400: components["responses"]["Problem"];
-            401: components["responses"]["Problem"];
-            403: components["responses"]["Problem"];
-        };
-    };
     getSyncExclusions: {
         parameters: {
             query?: never;
@@ -5725,62 +5654,6 @@ export interface operations {
             400: components["responses"]["Problem"];
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
-        };
-    };
-    storePassword: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                alias: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["StorePasswordRequest"];
-            };
-        };
-        responses: {
-            /** @description Password stored */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PasswordVaultStatus"];
-                };
-            };
-            400: components["responses"]["Problem"];
-            401: components["responses"]["Problem"];
-            403: components["responses"]["Problem"];
-            409: components["responses"]["Problem"];
-        };
-    };
-    forgetPassword: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                alias: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Password forgotten */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PasswordVaultStatus"];
-                };
-            };
-            400: components["responses"]["Problem"];
-            401: components["responses"]["Problem"];
-            403: components["responses"]["Problem"];
-            409: components["responses"]["Problem"];
         };
     };
     listCredentials: {

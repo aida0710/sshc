@@ -3,7 +3,7 @@ import { usePolling } from "../ui/usePolling";
 import { apiClient } from "../api/client";
 import type { Metadata } from "../api/config";
 import { validateOpenAPISchema } from "../api/validators.generated";
-import { defaultBindings, loadBindings, parseBindings, saveBindings, selectionKey, storageKey, type Bindings } from "./bindings";
+import { defaultBindings, loadBindings, saveBindings, selectionKey, type Bindings } from "./bindings";
 import { readStoredValue, writeStoredValue } from "../ui/browserStorage";
 
 // Presets edited on another synced device arrive on the next push; a few
@@ -49,25 +49,9 @@ export async function refreshPresets() {
   try {
     const metadata = validateOpenAPISchema<Metadata>("Metadata", await apiClient.read("/api/v1/metadata"));
     if (currentGeneration !== generation || currentRevision !== revision) return;
-    let presets: Preset[] = metadata.shortcutPresets ?? [];
-    let selected = readStoredValue(selectionKey);
-    const remembered = selected !== null || readStoredValue(storageKey) !== null;
-    // Persist the migration ID before writing so retries never create duplicates.
-    if (selected === null) {
-      selected = remembered ? `pending:${crypto.randomUUID()}` : "default";
-      if (remembered) writeStoredValue(selectionKey, selected);
-    }
-    if (selected.startsWith("pending:")) {
-      const id = selected.slice(8);
-      if (!presets.some((item) => item.id === id)) {
-        const next = [...presets, { id, name: "Imported shortcuts", bindings: parseBindings(readStoredValue(storageKey) ?? "") }];
-        await put(presets, next);
-        if (currentGeneration !== generation || currentRevision !== revision) return;
-        presets = next;
-      }
-      selected = id;
-    }
-    activate(selected, presets, remembered);
+    const presets: Preset[] = metadata.shortcutPresets ?? [];
+    const selected = readStoredValue(selectionKey);
+    activate(selected ?? "default", presets, selected !== null);
     publish({ presets, loading: false, error: false });
   } catch { if (currentGeneration === generation) publish({ loading: false, error: true }); }
   finally { refreshing = false; }

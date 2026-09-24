@@ -3,7 +3,6 @@ import type { MessageKey } from "../i18n/messages";
 // Engine failure codes that have their own wording in the sync screen.
 export const syncRefusals: Record<string, MessageKey> = {
   sync_not_configured: "sync.notConfigured",
-  wrong_master_password: "sync.wrongMaster",
   wrong_passphrase: "sync.wrongKey",
   sync_key_missing: "sync.keyMissing",
   passphrase_too_short: "sync.keyTooShort",
@@ -16,7 +15,6 @@ export const syncRefusals: Record<string, MessageKey> = {
   bucket_dns_failed: "sync.bucketDNSFailed",
   bucket_tls_failed: "sync.bucketTLSFailed",
   bucket_unreachable: "sync.bucketUnreachable",
-  sync_failed: "sync.failed",
   sync_internal_failed: "sync.internalFailed",
   snapshot_download_incomplete: "sync.snapshotDownloadIncomplete",
   snapshot_cost_refused: "sync.snapshotCostRefused",

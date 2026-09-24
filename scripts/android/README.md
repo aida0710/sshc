@@ -15,9 +15,9 @@ export SSHC_ANDROID_NODE=/path/to/node
 scripts/android/run-vault-lifecycle-test.sh android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
-runnerは入力APKのmanifestからpackageとlauncher Activityを取得します。新しいdebug APKは`com.github.aida0710.sshc.dev`／アプリ名`sshc Dev`として正式版と共存し、データも別になります。Activityのclass名は`com.github.aida0710.sshc.MainActivity`です。旧debug APKの`com.github.aida0710.sshc`も、実際のmanifestに従って扱います。
+runnerは入力APKのmanifestからpackageとlauncher Activityを取得します。debug APKは`com.github.aida0710.sshc.dev`／アプリ名`sshc Dev`として正式版と共存し、データも別になります。Activityのclass名は`com.github.aida0710.sshc.MainActivity`です。
 
-WebViewのDevTools接続が必要なため、debuggableでないrelease APKはインストールやデータ削除の前に拒否します。別アプリのAPKや想定外のlauncherも拒否します。package名を手動で上書きして別アプリのデータを消す操作は用意しません。
+WebViewのDevTools接続が必要なため、debuggableでないrelease APKはインストールやデータ削除の前に拒否します。正式版（`com.github.aida0710.sshc`）を含む別アプリのAPKや想定外のlauncherも拒否します。package名を手動で上書きして別アプリのデータを消す操作は用意しません。
 
 今回の開発版は、Web UIをビルドした後に`make android-bind ANDROID_VERSION=0.33.2-mobile.1-dev`、Androidディレクトリで`./gradlew assembleDebug -PsshcVersionName=0.33.2-mobile.1`により生成できます。詳細は[スマホ操作レビュー](../../docs/mobile-ux-review.md)を参照してください。
 
@@ -29,7 +29,7 @@ WebViewのDevTools接続が必要なため、debuggableでないrelease APKは�
 python3 scripts/android/test-vault-lifecycle-runner.py
 ```
 
-標準ライブラリだけでfake SDK／adbを作り、Devと旧debug APKのpackage選択、release／別アプリ／異なるlauncherの拒否、実機でのインストール・データ削除前の停止を検証します。実際のadbや端末は使用しません。
+標準ライブラリだけでfake SDK／adbを作り、Dev APKのpackage選択、release／別アプリ／異なるlauncherの拒否、実機でのインストール・データ削除前の停止を検証します。実際のadbや端末は使用しません。
 
 ## 実際のS3互換ストレージから受信する
 

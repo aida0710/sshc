@@ -119,10 +119,8 @@ func TestNoPasswordRouteEverReturnsAPassword(t *testing.T) {
 
 	responses := []*httptest.ResponseRecorder{
 		send(t, engine, http.MethodGet, "/api/v1/passwords", "", nil),
-		send(t, engine, http.MethodPut, "/api/v1/passwords/bastion", `{"password":"hunter2"}`, nil),
 		send(t, engine, http.MethodPost, "/api/v1/passwords/unlock", `{"passphrase":"`+testPassphrase+`"}`, nil),
 		send(t, engine, http.MethodPost, "/api/v1/passwords/lock", "", nil),
-		send(t, engine, http.MethodDelete, "/api/v1/passwords/bastion", "", nil),
 	}
 	for index, response := range responses {
 		if strings.Contains(response.Body.String(), "hunter2") {
@@ -176,7 +174,7 @@ func TestPasswordVaultStatusAlwaysIncludesDedicatedKeyPassphrasePaths(t *testing
 func TestStoringRefusesWhileTheVaultIsLocked(t *testing.T) {
 	engine, _ := passwordEngine(t)
 
-	response := send(t, engine, http.MethodPut, "/api/v1/passwords/bastion", `{"password":"hunter2"}`, nil)
+	response := send(t, engine, http.MethodPut, credentialPath("password", "/office"), `{"secret":"hunter2"}`, nil)
 	if response.Code != http.StatusConflict {
 		t.Fatalf("code = %d, want 409", response.Code)
 	}
@@ -195,12 +193,15 @@ func TestInitialiseRefusesAShortPassphraseAndDoesNotCreateAVault(t *testing.T) {
 	}
 }
 
-func TestStoreRefusesAPasswordTheHostWouldNeverBeOffered(t *testing.T) {
+func TestAssignRefusesAPasswordTheHostWouldNeverBeOffered(t *testing.T) {
 	// interface はこのフィールドを無効化するが、interface は差し替え
 	// 可能でもこちら側はそうではない。blocker があれば保存された
 	// パスワードは決して使われず、保存しても無駄に secret をディスクに置くだけになる。
 	engine, service := passwordEngine(t)
 	if err := service.Initialise(testPassphrase); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.SetCredential(secret.KindPassword, "office", "hunter2"); err != nil {
 		t.Fatal(err)
 	}
 	registerPasswordRoutes(engine, PasswordHandlers{
@@ -214,8 +215,8 @@ func TestStoreRefusesAPasswordTheHostWouldNeverBeOffered(t *testing.T) {
 		},
 	})
 
-	recorder := send(t, engine, http.MethodPut, "/api/v1/passwords/bastion",
-		`{"password":"hunter2"}`, nil)
+	recorder := send(t, engine, http.MethodPut, credentialPath("password", "/assign"),
+		`{"subject":"bastion","name":"office"}`, nil)
 	if recorder.Code != http.StatusConflict {
 		t.Fatalf("PUT = %d, want 409: %s", recorder.Code, recorder.Body.String())
 	}
@@ -256,14 +257,10 @@ func TestPasswordWritesFailClosedWithoutAuthenticationBinding(t *testing.T) {
 	engine := echo.New()
 	registerPasswordRoutes(engine, PasswordHandlers{Service: service})
 
-	for name, response := range map[string]*httptest.ResponseRecorder{
-		"dedicated": send(t, engine, http.MethodPut, "/api/v1/passwords/edge", `{"password":"secret"}`, nil),
-		"saved": send(t, engine, http.MethodPut, credentialPath("password", "/assign"),
-			`{"subject":"edge","name":"office"}`, nil),
-	} {
-		if response.Code != http.StatusInternalServerError || !strings.Contains(response.Body.String(), "config_unreadable") {
-			t.Errorf("%s password write = %d: %s", name, response.Code, response.Body.String())
-		}
+	response := send(t, engine, http.MethodPut, credentialPath("password", "/assign"),
+		`{"subject":"edge","name":"office"}`, nil)
+	if response.Code != http.StatusInternalServerError || !strings.Contains(response.Body.String(), "config_unreadable") {
+		t.Errorf("password assignment = %d: %s", response.Code, response.Body.String())
 	}
 	if service.HasAssignmentFor(secret.KindPassword, "edge") {
 		t.Fatal("password write without an authentication binding changed the vault")

@@ -166,15 +166,15 @@ var sentences = map[string]string{
 
 // fieldReasons は、項目を受け取れなかった理由の言い方である。%d を含むものには上限が入る。
 var fieldReasons = map[vpn.Reason]string{
-	vpn.ReasonRequired:     "入力してください。",
-	vpn.ReasonFormat:       "形式が正しくありません。",
-	vpn.ReasonTooLong:      "長すぎます（%d文字まで）。",
-	vpn.ReasonTooMany:      "多すぎます（%d件まで）。",
-	vpn.ReasonOutOfRange:   "ポート番号は1〜65535で指定してください。",
-	vpn.ReasonNotIPv4:      "IPv4アドレスを指定してください。",
-	vpn.ReasonUnroutable:   "ループバックアドレスなど、使用できないアドレスです。",
-	vpn.ReasonUnsupported:  "使用できない値です。",
-	vpn.ReasonUnexpected:   "選択した方式では使用しない設定項目です。",
+	vpn.ReasonRequired:    "入力してください。",
+	vpn.ReasonFormat:      "形式が正しくありません。",
+	vpn.ReasonTooLong:     "長すぎます（%d文字まで）。",
+	vpn.ReasonTooMany:     "多すぎます（%d件まで）。",
+	vpn.ReasonOutOfRange:  "ポート番号は1〜65535で指定してください。",
+	vpn.ReasonNotIPv4:     "IPv4アドレスを指定してください。",
+	vpn.ReasonUnroutable:  "ループバックアドレスなど、使用できないアドレスです。",
+	vpn.ReasonUnsupported: "使用できない値です。",
+	vpn.ReasonUnexpected:  "選択した方式では使用しない設定項目です。",
 }
 
 // destinationReasons は、接続先を VPN 経由で使えない理由の言い方である。
