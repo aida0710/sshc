@@ -116,10 +116,15 @@ func TestSubsystemConnectionSendsConfiguredKeepAlivesUntilClose(t *testing.T) {
 	if err := connection.Close(); err != nil {
 		t.Fatalf("Close = %v", err)
 	}
-	afterClose := server.KeepAlives()
-	time.Sleep(100 * time.Millisecond)
-	if got := server.KeepAlives(); got != afterClose {
-		t.Fatalf("keepalives continued after Close: %d -> %d", afterClose, got)
+	// Close の直前に送った keepalive は、Close が戻ったあとでサーバーに数えられる
+	// ことがある。数が増えないことではなく、サーバーから見て接続が終わることを
+	// 確かめる。終わった接続から keepalive が届くことはない。
+	deadline = time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) && server.Disconnected() < 1 {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if server.Disconnected() < 1 {
+		t.Fatal("the connection stayed open after Close, so keepalives would continue")
 	}
 }
 

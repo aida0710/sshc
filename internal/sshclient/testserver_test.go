@@ -56,6 +56,8 @@ type testServer struct {
 	attempts int
 	// keepAlives は、接続そのものへ届いた keepalive の回数である。
 	keepAlives int
+	// disconnected は、届いた要求を読み終えて終わった接続の数である。
+	disconnected int
 }
 
 type serverOptions struct {
@@ -252,6 +254,11 @@ func (s *testServer) serve(conn net.Conn) {
 	s.mutex.Unlock()
 	defer func() { _ = connection.Close() }()
 	go func() {
+		defer func() {
+			s.mutex.Lock()
+			s.disconnected++
+			s.mutex.Unlock()
+		}()
 		for request := range requests {
 			if request.Type == "keepalive@openssh.com" {
 				s.mutex.Lock()
@@ -479,13 +486,21 @@ func (s *testServer) noteAttempt() {
 	s.attempts++
 }
 
-// Attempts は、認証がこのサーバーへ届いた回数である。
+// KeepAlives は、接続そのものへ届いた keepalive の回数である。
 func (s *testServer) KeepAlives() int {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	return s.keepAlives
 }
 
+// Disconnected は、届いた要求を読み終えて終わった接続の数である。
+func (s *testServer) Disconnected() int {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	return s.disconnected
+}
+
+// Attempts は、認証がこのサーバーへ届いた回数である。
 func (s *testServer) Attempts() int {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
