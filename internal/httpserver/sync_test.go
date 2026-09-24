@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/json"
+	"encoding/xml"
 	"errors"
 	"io"
 	"net"
@@ -70,7 +71,7 @@ func syncEngine(t *testing.T) (*echo.Echo, *remotesync.Service) {
 		t.Fatal(err)
 	}
 	engine := echo.New()
-	registerSyncRoutes(engine, SyncHandlers{Service: service, Secrets: secrets, Reach: reachable})
+	registerSyncRoutes(engine, SyncHandlers{Service: service, Secrets: secrets, ObjectStoreHTTP: inProcessBucket(&measuredSyncBucket{})})
 	return engine, service
 }
 
@@ -79,10 +80,26 @@ const measuredSyncKey = "AB12-CD34-EF56-GH78-JK90-MN12"
 
 const syncTestPassphrase = "a master password for sync"
 
-// reachable は bucket の代わりを務める。「この bucket は応答するか」
-// という問いは remotesync のものであり、そちらでは実物の HTTP
-// サーバーに対してテストされる。ここではネットワークに問うてはならない。
-func reachable(context.Context, *objectstore.Client, string) error { return nil }
+// inProcessBucket は、object store への要求をネットワークへ出さずに bucket の
+// 代わりの handler へ渡す HTTP client を返す。名前解決も TLS も通らないので、
+// テストは利用者が打つのと同じ "https://s3.example.invalid" のような endpoint の
+// まま、画面と同じ /sync/setup の口を通せる。
+func inProcessBucket(bucket http.Handler) *http.Client {
+	return &http.Client{Transport: handlerTransport{handler: bucket}}
+}
+
+type handlerTransport struct{ handler http.Handler }
+
+func (transport handlerTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	if request.Body != nil {
+		defer request.Body.Close()
+	}
+	recorder := httptest.NewRecorder()
+	transport.handler.ServeHTTP(recorder, request)
+	response := recorder.Result()
+	response.Request = request
+	return response, nil
+}
 
 // keyOf は、テストが手に持つ passphrase を製品と同じ KeyProvider の形で渡す。
 func keyOf(passphrase string) remotesync.KeyProvider {
@@ -107,7 +124,7 @@ func syncEngineWithVault(t *testing.T) (*echo.Echo, *remotesync.Service, *secret
 	secrets := secret.NewService(workspace, manager, time.Now)
 
 	engine := echo.New()
-	registerSyncRoutes(engine, SyncHandlers{Service: service, Secrets: secrets, Reach: reachable})
+	registerSyncRoutes(engine, SyncHandlers{Service: service, Secrets: secrets, ObjectStoreHTTP: inProcessBucket(&measuredSyncBucket{})})
 	return engine, service, secrets
 }
 
@@ -116,13 +133,30 @@ func sendSync(t *testing.T, engine *echo.Echo, method, path, body string) *httpt
 	return send(t, engine, method, path, body, nil)
 }
 
-func settings(direction string) string {
-	body := `{"endpoint":"https://example.invalid","bucket":"sshc",` +
-		`"accessKeyId":"AKID","secretAccessKey":"secret"`
-	if direction != "" {
-		body += `,"direction":"` + direction + `"`
+const syncSetupPath = "/api/v1/sync/setup"
+
+// syncSetupBody は、空の bucket へこのマシンを向ける /sync/setup の要求を組み立てる。
+// changes の値で既定の欄を置き換え、値が nil の欄は要求から外す。
+func syncSetupBody(t *testing.T, changes map[string]any) string {
+	t.Helper()
+	request := map[string]any{
+		"endpoint": "https://s3.example.invalid", "bucket": "sshc",
+		"accessKeyId": "AKID", "secretAccessKey": "secret", "direction": "both",
+		"expectedState": "empty", "historyPresent": false, "key": measuredSyncKey,
+		"reuseCredentials": false, "reuseKey": false,
 	}
-	return body + "}"
+	for name, value := range changes {
+		if value == nil {
+			delete(request, name)
+			continue
+		}
+		request[name] = value
+	}
+	body, err := json.Marshal(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(body)
 }
 
 type measuredSyncObject struct {
@@ -140,11 +174,15 @@ type measuredSyncBucket struct {
 	generation int
 }
 
-func (b *measuredSyncBucket) handler(w http.ResponseWriter, request *http.Request) {
+func (b *measuredSyncBucket) ServeHTTP(w http.ResponseWriter, request *http.Request) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.objects == nil {
 		b.objects = map[string]measuredSyncObject{}
+	}
+	if request.Method == http.MethodGet && request.URL.Query().Get("list-type") == "2" {
+		b.writeListing(w, request.URL.Query().Get("prefix"))
+		return
 	}
 	key := strings.TrimPrefix(strings.TrimPrefix(request.URL.Path, "/"), "sshc/")
 	stored, present := b.objects[key]
@@ -180,6 +218,34 @@ func (b *measuredSyncBucket) handler(w http.ResponseWriter, request *http.Reques
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
+}
+
+// writeListing は ListObjectsV2 の応答を返す。/sync/setup の確認が、履歴が
+// 残っているかをこれで数える。呼び出し側が b.mu を持っている。
+func (b *measuredSyncBucket) writeListing(w http.ResponseWriter, prefix string) {
+	type listedObject struct {
+		Key          string `xml:"Key"`
+		LastModified string `xml:"LastModified"`
+		ETag         string `xml:"ETag"`
+		Size         int    `xml:"Size"`
+	}
+	type listing struct {
+		XMLName     xml.Name       `xml:"ListBucketResult"`
+		KeyCount    int            `xml:"KeyCount"`
+		IsTruncated bool           `xml:"IsTruncated"`
+		Contents    []listedObject `xml:"Contents"`
+	}
+	result := listing{}
+	for key, stored := range b.objects {
+		if strings.HasPrefix(key, prefix) {
+			result.Contents = append(result.Contents, listedObject{
+				Key: key, LastModified: "2026-08-12T01:02:03Z", ETag: stored.etag, Size: len(stored.body),
+			})
+		}
+	}
+	result.KeyCount = len(result.Contents)
+	w.Header().Set("Content-Type", "application/xml")
+	_ = xml.NewEncoder(w).Encode(result)
 }
 
 func (b *measuredSyncBucket) liveBytes() int {
@@ -233,7 +299,7 @@ func newMeasuredSyncInstallation(t *testing.T, bucket *measuredSyncBucket, files
 	if err != nil {
 		t.Fatal(err)
 	}
-	server := httptest.NewTLSServer(http.HandlerFunc(bucket.handler))
+	server := httptest.NewTLSServer(bucket)
 	t.Cleanup(server.Close)
 	credentials := objectstore.Credentials{AccessKeyID: "AKID", SecretAccessKey: "secret"}
 	config := remotesync.Config{Endpoint: server.URL, Bucket: "sshc", Region: "auto", Direction: remotesync.DirectionBoth}
@@ -257,14 +323,30 @@ func newMeasuredSyncInstallation(t *testing.T, bucket *measuredSyncBucket, files
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := service.Reconfigure(config, credentials, client, func() error { return nil }); err != nil {
+	if _, err := service.ConfigureIfUnconfigured(config, credentials, client); err != nil {
 		t.Fatal(err)
 	}
 	engine := echo.New()
-	registerSyncRoutes(engine, SyncHandlers{Service: service, Secrets: secrets, Reach: reachable})
+	registerSyncRoutes(engine, SyncHandlers{Service: service, Secrets: secrets})
 	return measuredSyncInstallation{
 		engine: engine, service: service, secrets: secrets,
 		config: config, credentials: credentials, client: client,
+	}
+}
+
+// redirect は、設定画面と同じく接続先と鍵を確かめてから、このインストールを
+// 同じ bucket の別の direction へ向け直す。
+func (installation measuredSyncInstallation) redirect(t *testing.T, direction remotesync.Direction) {
+	t.Helper()
+	config := installation.config
+	config.Direction = direction
+	inspection, err := remotesync.InspectSetupTarget(context.Background(), installation.client, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := installation.service.CompleteSetup(context.Background(), config, installation.credentials,
+		installation.client, inspection, measuredSyncKey, func() error { return nil }); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -437,7 +519,7 @@ func TestForcePushRequiresAOneTimeConfirmationForTheCurrentRemoteGeneration(t *t
 	addSyncActions(registry, service)
 	actions := ActionHandlers{Sessions: manager, Kinds: registry}
 	registerActionRoutes(engine, actions)
-	registerSyncRoutes(engine, SyncHandlers{Service: service, Secrets: secrets, Reach: reachable, Actions: actions})
+	registerSyncRoutes(engine, SyncHandlers{Service: service, Secrets: secrets, Actions: actions})
 
 	before := bucket.liveETag()
 	requestBody := []byte(`{"message":"Replace remote workspace"}`)
@@ -650,11 +732,7 @@ func TestReceiveOnlyCanPreviewAndApplyAnExplicitRemoteHead(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	receiveOnly := receiver.config
-	receiveOnly.Direction = remotesync.DirectionPull
-	if err := receiver.service.Reconfigure(receiveOnly, receiver.credentials, receiver.client, func() error { return nil }); err != nil {
-		t.Fatal(err)
-	}
+	receiver.redirect(t, remotesync.DirectionPull)
 	preview := sendSync(t, receiver.engine, http.MethodPost, "/api/v1/sync/pull",
 		`{"apply":false,"resolve":"remote","acceptRemoteHead":true}`)
 	if preview.Code != http.StatusOK {
@@ -698,16 +776,21 @@ func TestExplicitRemoteHeadIsAvailableToReceiversAndRefusedForSendOnly(t *testin
 	if response.Code != http.StatusOK {
 		t.Fatalf("explicit remote head in bidirectional mode = %d: %s", response.Code, response.Body.String())
 	}
-	sendOnly := installation.config
-	sendOnly.Direction = remotesync.DirectionPush
-	if err := installation.service.Reconfigure(sendOnly, installation.credentials, installation.client, func() error { return nil }); err != nil {
-		t.Fatal(err)
-	}
+	installation.redirect(t, remotesync.DirectionPush)
 	response = sendSync(t, installation.engine, http.MethodPost, "/api/v1/sync/pull",
 		`{"apply":false,"resolve":"remote","acceptRemoteHead":true}`)
 	if response.Code != http.StatusBadRequest {
 		t.Fatalf("explicit remote head in send-only mode = %d, want 400: %s", response.Code, response.Body.String())
 	}
+}
+
+// syncProblemResponse は、handler が err を画面へ返すときの応答を作る。
+func syncProblemResponse(err error) *httptest.ResponseRecorder {
+	engine := echo.New()
+	engine.GET("/problem", func(c *echo.Context) error { return syncProblem(c, err) })
+	recorder := httptest.NewRecorder()
+	engine.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/problem", nil))
+	return recorder
 }
 
 func TestSyncProblemClassifiesLocalWorkspaceRaces(t *testing.T) {
@@ -721,10 +804,7 @@ func TestSyncProblemClassifiesLocalWorkspaceRaces(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			engine := echo.New()
-			engine.GET("/problem", func(c *echo.Context) error { return syncProblem(c, test.err) })
-			recorder := httptest.NewRecorder()
-			engine.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/problem", nil))
+			recorder := syncProblemResponse(test.err)
 			if recorder.Code != http.StatusConflict || !strings.Contains(recorder.Body.String(), `"code":"`+test.code+`"`) {
 				t.Fatalf("problem = %d: %s", recorder.Code, recorder.Body.String())
 			}
@@ -805,51 +885,53 @@ func TestTheDirectionIsReportedAndDefaultsToBoth(t *testing.T) {
 	}
 }
 
-func TestSettingsCarryTheDirectionThroughToTheService(t *testing.T) {
+func TestSetupCarriesTheDirectionThroughToTheService(t *testing.T) {
 	engine, service := syncEngine(t)
 
 	for _, direction := range []string{"push", "pull", "both"} {
-		recorder := send(t, engine, http.MethodPut, "/api/v1/sync/settings", settings(direction), nil)
+		recorder := sendSync(t, engine, http.MethodPut, syncSetupPath, syncSetupBody(t, map[string]any{"direction": direction}))
 		if recorder.Code != http.StatusOK {
-			t.Fatalf("PUT with %q = %d: %s", direction, recorder.Code, recorder.Body.String())
+			t.Fatalf("setup with %q = %d: %s", direction, recorder.Code, recorder.Body.String())
 		}
 		if got := string(service.Direction()); got != direction {
 			t.Errorf("after %q the service reports %q", direction, got)
 		}
-		var status struct {
-			Direction string `json:"direction"`
+		var response struct {
+			Status struct {
+				Direction string `json:"direction"`
+			} `json:"status"`
 		}
-		if err := json.Unmarshal(recorder.Body.Bytes(), &status); err != nil {
+		if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
 			t.Fatal(err)
 		}
-		if status.Direction != direction {
-			t.Errorf("the response reports %q after setting %q", status.Direction, direction)
+		if response.Status.Direction != direction {
+			t.Errorf("the response reports %q after setting %q", response.Status.Direction, direction)
 		}
 	}
 }
 
-func TestSettingsWithoutADirectionAreRefused(t *testing.T) {
+func TestSetupWithoutADirectionIsRefused(t *testing.T) {
 	engine, service := syncEngine(t)
-	if recorder := send(t, engine, http.MethodPut, "/api/v1/sync/settings", settings("pull"), nil); recorder.Code != http.StatusOK {
-		t.Fatalf("PUT = %d", recorder.Code)
+	if recorder := sendSync(t, engine, http.MethodPut, syncSetupPath, syncSetupBody(t, map[string]any{"direction": "pull"})); recorder.Code != http.StatusOK {
+		t.Fatalf("setup = %d: %s", recorder.Code, recorder.Body.String())
 	}
-	if recorder := send(t, engine, http.MethodPut, "/api/v1/sync/settings", settings(""), nil); recorder.Code != http.StatusBadRequest {
-		t.Fatalf("PUT without direction = %d, want 400", recorder.Code)
+	if recorder := sendSync(t, engine, http.MethodPut, syncSetupPath, syncSetupBody(t, map[string]any{"direction": nil})); recorder.Code != http.StatusBadRequest {
+		t.Fatalf("setup without direction = %d, want 400", recorder.Code)
 	}
 	if got := service.Direction(); got != remotesync.DirectionPull {
-		t.Errorf("direction = %q after refused settings, want previous pull", got)
+		t.Errorf("direction = %q after refused setup, want previous pull", got)
 	}
 }
 
 func TestAnUnknownDirectionIsRefusedRatherThanIgnored(t *testing.T) {
 	engine, service := syncEngine(t)
-	if recorder := send(t, engine, http.MethodPut, "/api/v1/sync/settings", settings("pull"), nil); recorder.Code != http.StatusOK {
-		t.Fatalf("PUT = %d", recorder.Code)
+	if recorder := sendSync(t, engine, http.MethodPut, syncSetupPath, syncSetupBody(t, map[string]any{"direction": "pull"})); recorder.Code != http.StatusOK {
+		t.Fatalf("setup = %d: %s", recorder.Code, recorder.Body.String())
 	}
 
-	recorder := send(t, engine, http.MethodPut, "/api/v1/sync/settings", settings("sideways"), nil)
+	recorder := sendSync(t, engine, http.MethodPut, syncSetupPath, syncSetupBody(t, map[string]any{"direction": "sideways"}))
 	if recorder.Code != http.StatusBadRequest {
-		t.Fatalf("PUT with an unknown direction = %d, want 400: %s", recorder.Code, recorder.Body.String())
+		t.Fatalf("setup with an unknown direction = %d, want 400: %s", recorder.Code, recorder.Body.String())
 	}
 	// そして何も変わらなかった。すでに半分だけ適用してしまった拒否済み
 	// リクエストは、全部適用してしまうより始末が悪い。
@@ -860,8 +942,8 @@ func TestAnUnknownDirectionIsRefusedRatherThanIgnored(t *testing.T) {
 
 func TestARefusedDirectionIsAConflictAndNotAGatewayFailure(t *testing.T) {
 	engine, _ := syncEngine(t)
-	if recorder := send(t, engine, http.MethodPut, "/api/v1/sync/settings", settings("pull"), nil); recorder.Code != http.StatusOK {
-		t.Fatalf("PUT = %d", recorder.Code)
+	if recorder := sendSync(t, engine, http.MethodPut, syncSetupPath, syncSetupBody(t, map[string]any{"direction": "pull"})); recorder.Code != http.StatusOK {
+		t.Fatalf("setup = %d: %s", recorder.Code, recorder.Body.String())
 	}
 
 	recorder := send(t, engine, http.MethodPost, "/api/v1/sync/push", `{"message":"Test receive-only mode"}`, nil)
@@ -874,7 +956,7 @@ func TestARefusedDirectionIsAConflictAndNotAGatewayFailure(t *testing.T) {
 	if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}
-	// code は設定を指定しなければならない。"sync_failed" では、
+	// code は設定を指さなければならない。分類できない失敗の code では、
 	// このマシンが行った拒否なのに、ユーザーは自分の bucket を疑ってしまう。
 	if body.Code != "sync_push_refused" {
 		t.Errorf("code = %q, want sync_push_refused", body.Code)
@@ -891,10 +973,11 @@ func TestSyncStatusCarriesOnlyTheAccessKeySuffix(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	configure := `{"endpoint":"https://s3.example.invalid","bucket":"b","region":"auto",` +
-		`"accessKeyId":"AKIAEXAMPLE","secretAccessKey":"s3cret-key","direction":"both"}`
-	if code := sendSync(t, engine, http.MethodPut, "/api/v1/sync/settings", configure).Code; code != http.StatusOK {
-		t.Fatalf("configure = %d", code)
+	configure := syncSetupBody(t, map[string]any{
+		"region": "auto", "accessKeyId": "AKIAEXAMPLE", "secretAccessKey": "s3cret-key",
+	})
+	if recorder := sendSync(t, engine, http.MethodPut, syncSetupPath, configure); recorder.Code != http.StatusOK {
+		t.Fatalf("setup = %d: %s", recorder.Code, recorder.Body.String())
 	}
 
 	response := sendSync(t, engine, http.MethodGet, "/api/v1/sync", "")
@@ -945,10 +1028,9 @@ func TestSyncStatusSaysWhichRegionIsConfigured(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	configure := `{"endpoint":"https://s3.example.invalid","bucket":"b","region":"eu-west-2",` +
-		`"accessKeyId":"AKIAEXAMPLE","secretAccessKey":"s3cret-key","direction":"both"}`
-	if code := sendSync(t, engine, http.MethodPut, "/api/v1/sync/settings", configure).Code; code != http.StatusOK {
-		t.Fatalf("configure = %d", code)
+	configure := syncSetupBody(t, map[string]any{"region": "eu-west-2"})
+	if recorder := sendSync(t, engine, http.MethodPut, syncSetupPath, configure); recorder.Code != http.StatusOK {
+		t.Fatalf("setup = %d: %s", recorder.Code, recorder.Body.String())
 	}
 
 	response := sendSync(t, engine, http.MethodGet, "/api/v1/sync", "")
@@ -972,16 +1054,19 @@ func TestSyncStatusSaysWhenTheVaultIsShut(t *testing.T) {
 	}
 }
 
-func TestConfiguringRefusesAShutVault(t *testing.T) {
-	engine, _, secrets := syncEngineWithVault(t)
+func TestSetupRefusesAShutVault(t *testing.T) {
+	engine, service, secrets := syncEngineWithVault(t)
 	if err := secrets.Initialise(syncTestPassphrase); err != nil {
 		t.Fatal(err)
 	}
 	secrets.Lock()
 
-	configure := `{"endpoint":"https://s3.example.invalid","bucket":"b","accessKeyId":"k","secretAccessKey":"s","direction":"both"}`
-	if code := sendSync(t, engine, http.MethodPut, "/api/v1/sync/settings", configure).Code; code != http.StatusConflict {
-		t.Errorf("configure while locked = %d, want 409", code)
+	recorder := sendSync(t, engine, http.MethodPut, syncSetupPath, syncSetupBody(t, nil))
+	if recorder.Code != http.StatusConflict || !strings.Contains(recorder.Body.String(), `"code":"vault_locked"`) {
+		t.Errorf("setup while locked = %d %s, want 409 vault_locked", recorder.Code, recorder.Body.String())
+	}
+	if service.Configured() {
+		t.Error("the service was configured with settings that could not be stored")
 	}
 }
 
@@ -996,9 +1081,9 @@ func TestATrailingSlashOnTheEndpointIsRemoved(t *testing.T) {
 	if err := secrets.Initialise(syncTestPassphrase); err != nil {
 		t.Fatal(err)
 	}
-	body := `{"endpoint":"https://s3.example.invalid/","bucket":"b","accessKeyId":"k","secretAccessKey":"s","direction":"both"}`
-	if code := sendSync(t, engine, http.MethodPut, "/api/v1/sync/settings", body).Code; code != http.StatusOK {
-		t.Fatalf("configure = %d", code)
+	body := syncSetupBody(t, map[string]any{"endpoint": "https://s3.example.invalid/"})
+	if recorder := sendSync(t, engine, http.MethodPut, syncSetupPath, body); recorder.Code != http.StatusOK {
+		t.Fatalf("setup = %d: %s", recorder.Code, recorder.Body.String())
 	}
 	endpoint, _, _, _ := service.Target()
 	if endpoint != "https://s3.example.invalid" {
@@ -1015,10 +1100,10 @@ func TestAnEndpointWithAPathIsRefused(t *testing.T) {
 	if err := secrets.Initialise(syncTestPassphrase); err != nil {
 		t.Fatal(err)
 	}
-	body := `{"endpoint":"https://s3.example.invalid/my-bucket","bucket":"b","accessKeyId":"k","secretAccessKey":"s","direction":"both"}`
-	recorder := sendSync(t, engine, http.MethodPut, "/api/v1/sync/settings", body)
+	body := syncSetupBody(t, map[string]any{"endpoint": "https://s3.example.invalid/my-bucket"})
+	recorder := sendSync(t, engine, http.MethodPut, syncSetupPath, body)
 	if recorder.Code != http.StatusBadRequest {
-		t.Fatalf("configure with a path = %d, want 400", recorder.Code)
+		t.Fatalf("setup with a path = %d, want 400", recorder.Code)
 	}
 	if !strings.Contains(recorder.Body.String(), "endpoint_must_have_no_path") {
 		t.Errorf("code = %s", recorder.Body.String())
@@ -1034,23 +1119,13 @@ func TestSyncRuntimeValidationRejectsSchemaBypasses(t *testing.T) {
 		"https://example.invalid/%2f",
 		"https:opaque-endpoint",
 	} {
-		body, err := json.Marshal(map[string]any{
-			"endpoint": endpoint, "bucket": "sshc", "accessKeyId": "AKID",
-			"secretAccessKey": "secret", "direction": "both",
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if response := sendSync(t, engine, http.MethodPut, "/api/v1/sync/settings", string(body)); response.Code != http.StatusBadRequest {
+		body := syncSetupBody(t, map[string]any{"endpoint": endpoint})
+		if response := sendSync(t, engine, http.MethodPut, syncSetupPath, body); response.Code != http.StatusBadRequest {
 			t.Errorf("endpoint %q = %d, want 400: %s", endpoint, response.Code, response.Body.String())
 		}
 	}
-	tooLong := strings.Repeat("x", 513)
-	settingsBody, _ := json.Marshal(map[string]any{
-		"endpoint": "https://example.invalid", "bucket": "sshc", "accessKeyId": tooLong,
-		"secretAccessKey": "secret", "direction": "both",
-	})
-	if response := sendSync(t, engine, http.MethodPut, "/api/v1/sync/settings", string(settingsBody)); response.Code != http.StatusBadRequest {
+	setupBody := syncSetupBody(t, map[string]any{"accessKeyId": strings.Repeat("x", 513)})
+	if response := sendSync(t, engine, http.MethodPut, syncSetupPath, setupBody); response.Code != http.StatusBadRequest {
 		t.Errorf("oversized access key = %d, want 400", response.Code)
 	}
 	keyBody, _ := json.Marshal(map[string]string{"key": strings.Repeat("k", 1025)})
@@ -1093,7 +1168,7 @@ func TestReplacingASyncKeyRequiresHistoryLossConfirmation(t *testing.T) {
 // 間違いを保存してしまうと、直せるはずのこの画面ではなく最初の
 // push で失敗が表面化することになる。何も保存されず何も設定
 // されない。中途半端に適用された拒否は、何もしないより始末が悪い。
-func TestSettingsThatCannotReachTheBucketAreNotStored(t *testing.T) {
+func TestSetupThatCannotReachTheBucketIsNotStored(t *testing.T) {
 	home := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
 		t.Fatal(err)
@@ -1110,16 +1185,18 @@ func TestSettingsThatCannotReachTheBucketAreNotStored(t *testing.T) {
 	if err := secrets.Initialise(syncTestPassphrase); err != nil {
 		t.Fatal(err)
 	}
+	// 何を尋ねても断る bucket。資格情報の打ち間違いは、ここからはこう見える。
+	refusing := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	})
 	engine := echo.New()
 	registerSyncRoutes(engine, SyncHandlers{
-		Service: service, Secrets: secrets,
-		Reach: func(context.Context, *objectstore.Client, string) error { return objectstore.ErrRefused },
+		Service: service, Secrets: secrets, ObjectStoreHTTP: inProcessBucket(refusing),
 	})
 
-	body := `{"endpoint":"https://s3.example.invalid","bucket":"b","accessKeyId":"k","secretAccessKey":"s","direction":"both"}`
-	recorder := sendSync(t, engine, http.MethodPut, "/api/v1/sync/settings", body)
-	if recorder.Code != http.StatusBadGateway {
-		t.Fatalf("configure against an unreachable bucket = %d, want 502: %s", recorder.Code, recorder.Body.String())
+	recorder := sendSync(t, engine, http.MethodPut, syncSetupPath, syncSetupBody(t, nil))
+	if recorder.Code != http.StatusBadGateway || !strings.Contains(recorder.Body.String(), `"code":"bucket_access_denied"`) {
+		t.Fatalf("setup against a refusing bucket = %d, want 502 bucket_access_denied: %s", recorder.Code, recorder.Body.String())
 	}
 	if service.Configured() {
 		t.Error("the service was configured with settings that do not work")
@@ -1129,6 +1206,8 @@ func TestSettingsThatCannotReachTheBucketAreNotStored(t *testing.T) {
 	}
 }
 
+// 接続先の確認や同期が bucket に届かなかったとき、画面はその理由ごとに別の案内を
+// 出す。応答には code だけを載せ、ホスト名や内部のエラー文は載せない。
 func TestSyncConnectionFailuresHaveSpecificSafeCodes(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -1147,16 +1226,7 @@ func TestSyncConnectionFailuresHaveSpecificSafeCodes(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			_, service, secrets := syncEngineWithVault(t)
-			if err := secrets.Initialise(syncTestPassphrase); err != nil {
-				t.Fatal(err)
-			}
-			engine := echo.New()
-			registerSyncRoutes(engine, SyncHandlers{
-				Service: service, Secrets: secrets,
-				Reach: func(context.Context, *objectstore.Client, string) error { return test.err },
-			})
-			recorder := sendSync(t, engine, http.MethodPut, "/api/v1/sync/settings", settings("pull"))
+			recorder := syncProblemResponse(test.err)
 			if recorder.Code != test.status || !strings.Contains(recorder.Body.String(), `"code":"`+test.code+`"`) {
 				t.Fatalf("response = %d %s, want %d %s", recorder.Code, recorder.Body.String(), test.status, test.code)
 			}
@@ -1172,12 +1242,18 @@ func TestSyncConnectionFailuresHaveSpecificSafeCodes(t *testing.T) {
 // 決めていないなら、押しても何も起きてはならない。リモートには、誰も
 // 開けられない書庫が残るからだ。
 func TestPushWithoutAKeyRefusesAndRunsNothing(t *testing.T) {
-	engine, _, secrets := syncEngineWithVault(t)
+	engine, service, secrets := syncEngineWithVault(t)
 	if err := secrets.Initialise(syncTestPassphrase); err != nil {
 		t.Fatal(err)
 	}
-	if code := sendSync(t, engine, http.MethodPut, "/api/v1/sync/settings", settings("both")).Code; code != http.StatusOK {
-		t.Fatalf("configure = %d", code)
+	// 鍵を持たない保存済み設定から起動したマシン。設定の画面は鍵を必ず決めるので、
+	// ここでは起動時の復元と同じ口で service を向ける。
+	config := remotesync.Config{Endpoint: "https://s3.example.invalid", Bucket: "sshc", Region: "auto", Direction: remotesync.DirectionBoth}
+	credentials := remotesync.Credentials{AccessKeyID: "AKID", SecretAccessKey: "secret"}
+	client := remotesync.NewClient(config, credentials)
+	client.HTTP = inProcessBucket(&measuredSyncBucket{})
+	if _, err := service.ConfigureIfUnconfigured(config, credentials, client); err != nil {
+		t.Fatal(err)
 	}
 
 	recorder := sendSync(t, engine, http.MethodPost, "/api/v1/sync/push", `{"message":"Test missing key"}`)
@@ -1189,7 +1265,9 @@ func TestPushWithoutAKeyRefusesAndRunsNothing(t *testing.T) {
 	}
 	// そしてそこで止まった。拒否を書き込んでからそれでも実行してしまう
 	// ハンドラは、body に両方の結果を残してしまう。
-	if strings.Contains(recorder.Body.String(), "sync_failed") {
+	decoder := json.NewDecoder(bytes.NewReader(recorder.Body.Bytes()))
+	var refusal map[string]any
+	if err := decoder.Decode(&refusal); err != nil || decoder.More() {
 		t.Errorf("the push ran after being refused: %s", recorder.Body.String())
 	}
 }
@@ -1202,10 +1280,9 @@ func TestTheObjectPathIsStoredAndRefusedWhenItCouldEscape(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	body := `{"endpoint":"https://s3.example.invalid","bucket":"b","path":"/laptops/","accessKeyId":"k","secretAccessKey":"s","direction":"both"}`
-	recorder := sendSync(t, engine, http.MethodPut, "/api/v1/sync/settings", body)
+	recorder := sendSync(t, engine, http.MethodPut, syncSetupPath, syncSetupBody(t, map[string]any{"path": "/laptops/"}))
 	if recorder.Code != http.StatusOK {
-		t.Fatalf("configure = %d: %s", recorder.Code, recorder.Body.String())
+		t.Fatalf("setup = %d: %s", recorder.Code, recorder.Body.String())
 	}
 	if _, _, path, _ := service.Target(); path != "laptops" {
 		t.Errorf("path = %q, want it trimmed to laptops", path)
@@ -1215,10 +1292,9 @@ func TestTheObjectPathIsStoredAndRefusedWhenItCouldEscape(t *testing.T) {
 	}
 
 	for _, unsafe := range []string{"../elsewhere", "a//b", "a b"} {
-		escaping := `{"endpoint":"https://s3.example.invalid","bucket":"b","path":"` + unsafe +
-			`","accessKeyId":"k","secretAccessKey":"s","direction":"both"}`
-		if code := sendSync(t, engine, http.MethodPut, "/api/v1/sync/settings", escaping).Code; code != http.StatusBadRequest {
-			t.Errorf("configure with path %q = %d, want 400", unsafe, code)
+		escaping := syncSetupBody(t, map[string]any{"path": unsafe})
+		if code := sendSync(t, engine, http.MethodPut, syncSetupPath, escaping).Code; code != http.StatusBadRequest {
+			t.Errorf("setup with path %q = %d, want 400", unsafe, code)
 		}
 	}
 	// そして拒否によって何も変わらなかった。
@@ -1280,7 +1356,7 @@ func TestFreshAutoSyncIsReportedAsIdle(t *testing.T) {
 	_, service, secrets := syncEngineWithVault(t)
 	auto := remotesync.NewAuto(service, time.Minute, func() string { return "2026-08-24T00:00:00Z" })
 	engine := echo.New()
-	registerSyncRoutes(engine, SyncHandlers{Service: service, Secrets: secrets, Auto: auto, Reach: reachable})
+	registerSyncRoutes(engine, SyncHandlers{Service: service, Secrets: secrets, Auto: auto})
 
 	status := sendSync(t, engine, http.MethodGet, "/api/v1/sync", "")
 	if status.Code != http.StatusOK {
@@ -1363,7 +1439,7 @@ func TestSyncNowPropagatesAnAutomaticCycleFailure(t *testing.T) {
 	auto := remotesync.NewAuto(service, time.Minute, func() string { return "2026-08-31T00:00:00Z" })
 	auto.Key = func() (string, bool) { return measuredSyncKey, true }
 	engine := echo.New()
-	registerSyncRoutes(engine, SyncHandlers{Service: service, Secrets: secrets, Auto: auto, Reach: reachable})
+	registerSyncRoutes(engine, SyncHandlers{Service: service, Secrets: secrets, Auto: auto})
 	recorder := sendSync(t, engine, http.MethodPost, "/api/v1/sync/now", "")
 	if recorder.Code != http.StatusConflict || !strings.Contains(recorder.Body.String(), "sync_not_configured") {
 		t.Fatalf("POST /now failed cycle = %d: %s", recorder.Code, recorder.Body.String())

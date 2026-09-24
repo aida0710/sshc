@@ -1533,17 +1533,6 @@ type SyncPushRequest struct {
 	Message string `json:"message"`
 }
 
-// SyncSettingsRequest defines model for SyncSettingsRequest.
-type SyncSettingsRequest struct {
-	AccessKeyId     string        `json:"accessKeyId"`
-	Bucket          string        `json:"bucket"`
-	Direction       SyncDirection `json:"direction"`
-	Endpoint        string        `json:"endpoint"`
-	Path            *string       `json:"path,omitempty"`
-	Region          *string       `json:"region,omitempty"`
-	SecretAccessKey string        `json:"secretAccessKey"`
-}
-
 // SyncSetupCheckRequest defines model for SyncSetupCheckRequest.
 type SyncSetupCheckRequest struct {
 	AccessKeyId      *string `json:"accessKeyId,omitempty"`

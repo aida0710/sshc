@@ -777,23 +777,6 @@ paths:
         "403": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
         "502": { $ref: "#/components/responses/Problem" }
-  /api/v1/sync/settings:
-    put:
-      operationId: configureSync
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/SyncSettingsRequest" }
-      responses:
-        "200":
-          description: Bucket configured for this run
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/SyncStatus" }
-        "400": { $ref: "#/components/responses/Problem" }
-        "401": { $ref: "#/components/responses/Problem" }
-        "403": { $ref: "#/components/responses/Problem" }
   /api/v1/sync/exclusions:
     get:
       operationId: getSyncExclusions
@@ -3422,21 +3405,6 @@ components:
         written: { type: integer, minimum: 0 }
         removed: { type: integer, minimum: 0 }
         completedAt: { type: string }
-    SyncSettingsRequest:
-      type: object
-      additionalProperties: false
-      required: [endpoint, bucket, accessKeyId, secretAccessKey, direction]
-      properties:
-        endpoint: { type: string, minLength: 1, maxLength: 2048 }
-        bucket: { type: string, minLength: 1, maxLength: 255 }
-        # バケット内のどこにオブジェクトを置くか。既定の空はそのルートを指す。
-        # バケットはたいていすでにこのアプリケーションにちなんで名付けられており、
-        # その中で同じ名前を繰り返すフォルダは、何もない階層をひとつ増やすだけだ。
-        path: { type: string, maxLength: 255 }
-        region: { type: string, maxLength: 64 }
-        accessKeyId: { type: string, minLength: 1, maxLength: 512 }
-        secretAccessKey: { type: string, minLength: 1, maxLength: 512 }
-        direction: { $ref: "#/components/schemas/SyncDirection" }
     SyncSetupTargetState:
       type: string
       enum: [empty, existing, incomplete]
@@ -3447,6 +3415,9 @@ components:
       properties:
         endpoint: { type: string, minLength: 1, maxLength: 2048 }
         bucket: { type: string, minLength: 1, maxLength: 255 }
+        # バケット内のどこにオブジェクトを置くか。既定の空はそのルートを指す。
+        # バケットはたいていすでにこのアプリケーションにちなんで名付けられており、
+        # その中で同じ名前を繰り返すフォルダは、何もない階層をひとつ増やすだけだ。
         path: { type: string, maxLength: 255 }
         region: { type: string, maxLength: 64 }
         accessKeyId: { type: string, minLength: 1, maxLength: 512 }

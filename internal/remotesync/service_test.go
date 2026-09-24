@@ -335,7 +335,7 @@ func (i *installation) replaceIntegrations(t *testing.T, configure func(*remotes
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := service.Reconfigure(i.config, i.creds, i.client, func() error { return nil }); err != nil {
+	if err := service.ConfigureForTest(i.config, i.creds, i.client); err != nil {
 		t.Fatal(err)
 	}
 	i.service = service
@@ -346,7 +346,7 @@ func (i *installation) replaceIntegrations(t *testing.T, configure func(*remotes
 func (i installation) direct(direction remotesync.Direction) {
 	config := i.config
 	config.Direction = direction
-	if err := i.service.Reconfigure(config, i.creds, i.client, func() error { return nil }); err != nil {
+	if err := i.service.ConfigureForTest(config, i.creds, i.client); err != nil {
 		panic(err)
 	}
 }
@@ -397,7 +397,7 @@ func newInstallation(t *testing.T, bucket *fakeBucket, files map[string]string) 
 		HTTP: server.Client(), Endpoint: server.URL, Bucket: "sshc", Region: "auto",
 		Creds: credentials,
 	}
-	if err := service.Reconfigure(config, credentials, client, func() error { return nil }); err != nil {
+	if err := service.ConfigureForTest(config, credentials, client); err != nil {
 		t.Fatal(err)
 	}
 	return installation{
@@ -1198,7 +1198,7 @@ func TestPushRefusesAWorkspaceWithPendingRecoveryBeforeUploading(t *testing.T) {
 	client := &objectstore.Client{
 		HTTP: server.Client(), Endpoint: server.URL, Bucket: "sshc", Region: "auto", Creds: credentials,
 	}
-	if err := service.Reconfigure(config, credentials, client, func() error { return nil }); err != nil {
+	if err := service.ConfigureForTest(config, credentials, client); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := manager.Commit(storage.Request{
@@ -1650,39 +1650,20 @@ func TestIntegratedServiceRefusesAMissingVaultCodec(t *testing.T) {
 	}
 }
 
-// バケットの登録は、まずそのバケットに尋ねる。
+// 接続先の確認は、応答しない bucket を空の bucket と取り違えない。
 //
 // 試されたことのない設定は、設定済みに見えて何時間もあとの最初の push で失敗する
-// 設定であり、そのときユーザーは、タイプミスをした画面からとうに離れている。まだ
-// スナップショットの入っていないバケットは機能しているバケットだ。404 は、正しくて
-// 空の設定が返す結果である。
-func TestCheckAcceptsAnEmptyBucketAndRefusesABadKey(t *testing.T) {
-	bucket := &fakeBucket{}
-	installation := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
-	check := func() error {
-		return remotesync.Check(context.Background(), installation.client, remotesync.ObjectKeyFor(installation.config))
-	}
-
-	if err := check(); err != nil {
-		t.Errorf("Check against an empty bucket = %v, want nil", err)
-	}
-	if _, err := installation.service.PushUsing(context.Background(), keyOf(syncPassphrase), ""); err != nil {
-		t.Fatalf("Push = %v", err)
-	}
-	if err := check(); err != nil {
-		t.Errorf("Check against a bucket holding a snapshot = %v, want nil", err)
-	}
-}
-
-func TestCheckRefusesABucketThatWillNotAnswer(t *testing.T) {
-	bucket := &fakeBucket{}
-	installation := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
+// 設定であり、そのときユーザーは、タイプミスをした画面からとうに離れている。
+func TestInspectSetupTargetRefusesABucketThatWillNotAnswer(t *testing.T) {
 	// 存在しないホストへ向けられたクライアント。エンドポイントの打ち間違いは、ここから
 	// はこう見える。
 	config := remotesync.Config{Endpoint: "https://127.0.0.1:1", Bucket: "sshc", Region: "auto", Direction: remotesync.DirectionBoth}
-	client := &objectstore.Client{Endpoint: "https://127.0.0.1:1", Bucket: "sshc", Region: "auto", Creds: installation.creds}
-	if err := remotesync.Check(context.Background(), client, remotesync.ObjectKeyFor(config)); err == nil {
-		t.Error("Check against an unreachable endpoint returned nil")
+	client := &objectstore.Client{
+		Endpoint: "https://127.0.0.1:1", Bucket: "sshc", Region: "auto",
+		Creds: objectstore.Credentials{AccessKeyID: "AKID", SecretAccessKey: "secret"},
+	}
+	if _, err := remotesync.InspectSetupTarget(context.Background(), client, config); err == nil {
+		t.Error("InspectSetupTarget against an unreachable endpoint returned nil")
 	}
 }
 
@@ -1690,7 +1671,7 @@ func TestCheckRefusesABucketThatWillNotAnswer(t *testing.T) {
 // 与えられたものがどこから来たかを信用せず、自分で切り詰めるからだ。
 func TestAStoredTrailingSlashIsTrimmedWhenItIsConfigured(t *testing.T) {
 	installation := newInstallation(t, &fakeBucket{}, map[string]string{"config": "Host bastion\n"})
-	if err := installation.service.Reconfigure(remotesync.Config{Endpoint: "https://s3.example.invalid/", Bucket: "b", Region: "auto", Direction: remotesync.DirectionBoth}, installation.creds, installation.client, func() error { return nil }); err != nil {
+	if err := installation.service.ConfigureForTest(remotesync.Config{Endpoint: "https://s3.example.invalid/", Bucket: "b", Region: "auto", Direction: remotesync.DirectionBoth}, installation.creds, installation.client); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1762,7 +1743,7 @@ func TestChangingToAnotherBucketDoesNotReuseThePreviousGeneration(t *testing.T) 
 		HTTP: server.Client(), Endpoint: server.URL, Bucket: config.Bucket, Region: config.Region,
 		Creds: machine.creds,
 	}
-	if err := machine.service.Reconfigure(config, machine.creds, client, func() error { return nil }); err != nil {
+	if err := machine.service.ConfigureForTest(config, machine.creds, client); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := machine.service.PushUsing(context.Background(), keyOf(syncPassphrase), "Start the new bucket"); err != nil {
@@ -2155,7 +2136,7 @@ func TestHistoryDiscardsAResultFromAReconfiguredBinding(t *testing.T) {
 	}()
 	<-started
 	other := newInstallation(t, &fakeBucket{}, map[string]string{})
-	if err := machine.service.Reconfigure(other.config, other.creds, other.client, func() error { return nil }); err != nil {
+	if err := machine.service.ConfigureForTest(other.config, other.creds, other.client); err != nil {
 		t.Fatal(err)
 	}
 	close(release)
@@ -2330,8 +2311,14 @@ func TestInterruptedKeyRotationCanBeRecoveredByReenteringTheNewKey(t *testing.T)
 	}
 	other := machine.config
 	other.Path = "other-target"
-	if err := machine.service.Reconfigure(other, machine.creds, machine.client, func() error { return nil }); !errors.Is(err, remotesync.ErrRecoveryTargetChange) {
-		t.Fatalf("Configure during recovery = %v, want ErrRecoveryTargetChange", err)
+	persisted := false
+	if err := machine.service.CompleteSetup(context.Background(), other, machine.creds, machine.client,
+		remotesync.SetupInspection{State: remotesync.SetupTargetEmpty}, syncPassphrase,
+		func() error { persisted = true; return nil }); !errors.Is(err, remotesync.ErrRecoveryTargetChange) {
+		t.Fatalf("CompleteSetup during recovery = %v, want ErrRecoveryTargetChange", err)
+	}
+	if persisted {
+		t.Fatal("CompleteSetup during recovery persisted the other target")
 	}
 	if err := machine.service.ReplaceKeyUsing(context.Background(), "wrong but sufficiently long candidate key", false, replacing(syncPassphrase, func() error { return nil })); !errors.Is(err, remotesync.ErrWrongPassphrase) {
 		t.Fatalf("wrong recovery key = %v, want ErrWrongPassphrase", err)
@@ -2641,7 +2628,7 @@ func TestForcePushConfirmationCannotCrossConfiguredTargetsWithTheSameETag(t *tes
 	beforeBody := append([]byte(nil), secondBucket.object(remotesync.ObjectName)...)
 	beforeKeys := strings.Join(secondBucket.keys(), "\n")
 
-	if err := actor.service.Reconfigure(second.config, second.creds, second.client, func() error { return nil }); err != nil {
+	if err := actor.service.ConfigureForTest(second.config, second.creds, second.client); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := actor.service.ForcePushUsing(context.Background(), keyOf(syncPassphrase), confirmation, "Wrong target"); !errors.Is(err, remotesync.ErrRemoteMoved) {
@@ -2668,7 +2655,7 @@ func TestForcePushConfirmationBindsTheConfiguredCredentialGeneration(t *testing.
 	nextCredentials := objectstore.Credentials{AccessKeyID: "NEXT", SecretAccessKey: "next-secret"}
 	nextClient := *machine.client
 	nextClient.Creds = nextCredentials
-	if err := machine.service.Reconfigure(machine.config, nextCredentials, &nextClient, func() error { return nil }); err != nil {
+	if err := machine.service.ConfigureForTest(machine.config, nextCredentials, &nextClient); err != nil {
 		t.Fatal(err)
 	}
 	next, err := machine.service.ForcePushConfirmation(context.Background(), remotesync.ForcePushTarget)
@@ -2795,7 +2782,7 @@ func TestStatefulSyncOperationsAreSerializedByTheService(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := service.Reconfigure(machine.config, machine.creds, machine.client, func() error { return nil }); err != nil {
+	if err := service.ConfigureForTest(machine.config, machine.creds, machine.client); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2827,7 +2814,7 @@ func TestStatefulSyncOperationsAreSerializedByTheService(t *testing.T) {
 
 // Configure は実行中の同期が終わるまで成功しない。設定保存の応答後にも旧bucketへの
 // 書き込みが続く状態を作らず、ひとつのoperationはひとつのbindingだけを使う。
-func TestConfigureWaitsForAnInFlightPush(t *testing.T) {
+func TestSetupWaitsForAnInFlightPush(t *testing.T) {
 	home := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
 		t.Fatal(err)
@@ -2867,9 +2854,16 @@ func TestConfigureWaitsForAnInFlightPush(t *testing.T) {
 			Creds: credentials,
 		}
 	}
-	if err := service.Reconfigure(remotesync.Config{
+	if err := service.ConfigureForTest(remotesync.Config{
 		Endpoint: oldServer.URL, Bucket: "sshc", Region: "auto", Path: "old", Direction: remotesync.DirectionBoth,
-	}, credentials, client(oldServer), func() error { return nil }); err != nil {
+	}, credentials, client(oldServer)); err != nil {
+		t.Fatal(err)
+	}
+	newConfig := remotesync.Config{
+		Endpoint: newServer.URL, Bucket: "sshc", Region: "auto", Path: "new", Direction: remotesync.DirectionBoth,
+	}
+	newInspection, err := remotesync.InspectSetupTarget(context.Background(), client(newServer), newConfig)
+	if err != nil {
 		t.Fatal(err)
 	}
 
@@ -2886,9 +2880,8 @@ func TestConfigureWaitsForAnInFlightPush(t *testing.T) {
 	}
 	configured := make(chan struct{})
 	go func() {
-		if err := service.Reconfigure(remotesync.Config{
-			Endpoint: newServer.URL, Bucket: "sshc", Region: "auto", Path: "new", Direction: remotesync.DirectionBoth,
-		}, credentials, client(newServer), func() error { return nil }); err != nil {
+		if err := service.CompleteSetup(context.Background(), newConfig, credentials, client(newServer),
+			newInspection, syncPassphrase, func() error { return nil }); err != nil {
 			panic(err)
 		}
 		close(configured)
@@ -2896,7 +2889,7 @@ func TestConfigureWaitsForAnInFlightPush(t *testing.T) {
 	select {
 	case <-configured:
 		close(resume)
-		t.Fatal("Configure completed while the old binding was still in use")
+		t.Fatal("CompleteSetup completed while the old binding was still in use")
 	case <-time.After(50 * time.Millisecond):
 	}
 	close(resume)
@@ -2912,7 +2905,7 @@ func TestConfigureWaitsForAnInFlightPush(t *testing.T) {
 	select {
 	case <-configured:
 	case <-time.After(30 * time.Second):
-		t.Fatal("Configure did not finish after Push")
+		t.Fatal("CompleteSetup did not finish after Push")
 	}
 	if got := oldBucket.keys(); len(got) != 2 || oldBucket.object("old/"+remotesync.ObjectName) == nil {
 		t.Errorf("old binding holds %v, want its live object and dated copy", got)
@@ -3129,7 +3122,7 @@ func TestAutoReadsTheSynchronizationKeyAfterAConcurrentRotation(t *testing.T) {
 	}
 }
 
-func TestReconfigurePersistsSettingsAndSwapsBindingBeforeAWaitingPush(t *testing.T) {
+func TestCompleteSetupPersistsSettingsAndSwapsBindingBeforeAWaitingPush(t *testing.T) {
 	oldBucket := &fakeBucket{}
 	machine := newInstallation(t, oldBucket, map[string]string{"config": "Host local\n"})
 	if _, err := machine.service.PushUsing(context.Background(), keyOf(syncPassphrase), "Initial setup"); err != nil {
@@ -3143,18 +3136,23 @@ func TestReconfigurePersistsSettingsAndSwapsBindingBeforeAWaitingPush(t *testing
 	config.Endpoint = server.URL
 	config.Path = "new"
 	client := &objectstore.Client{HTTP: server.Client(), Endpoint: server.URL, Bucket: config.Bucket, Region: config.Region, Creds: machine.creds}
+	inspection, err := remotesync.InspectSetupTarget(context.Background(), client, config)
+	if err != nil {
+		t.Fatal(err)
+	}
 	const newTargetKey = "a different strong shared synchronization key"
 	currentKey := syncPassphrase
 	persistEntered := make(chan struct{})
 	releasePersist := make(chan struct{})
-	reconfigureDone := make(chan error, 1)
+	setupDone := make(chan error, 1)
 	go func() {
-		reconfigureDone <- machine.service.Reconfigure(config, machine.creds, client, func() error {
-			currentKey = newTargetKey
-			close(persistEntered)
-			<-releasePersist
-			return nil
-		})
+		setupDone <- machine.service.CompleteSetup(context.Background(), config, machine.creds, client,
+			inspection, newTargetKey, func() error {
+				currentKey = newTargetKey
+				close(persistEntered)
+				<-releasePersist
+				return nil
+			})
 	}()
 	<-persistEntered
 	pushDone := make(chan error, 1)
@@ -3169,19 +3167,19 @@ func TestReconfigurePersistsSettingsAndSwapsBindingBeforeAWaitingPush(t *testing
 	case <-time.After(50 * time.Millisecond):
 	}
 	close(releasePersist)
-	if err := <-reconfigureDone; err != nil {
+	if err := <-setupDone; err != nil {
 		t.Fatal(err)
 	}
 	if err := <-pushDone; err != nil {
 		t.Fatal(err)
 	}
 	if len(oldBucket.keys()) != oldObjects {
-		t.Fatalf("old target changed during Reconfigure: %v", oldBucket.keys())
+		t.Fatalf("old target changed during CompleteSetup: %v", oldBucket.keys())
 	}
 	reader := newInstallation(t, newBucket, map[string]string{})
 	readerConfig := reader.config
 	readerConfig.Path = "new"
-	if err := reader.service.Reconfigure(readerConfig, reader.creds, reader.client, func() error { return nil }); err != nil {
+	if err := reader.service.ConfigureForTest(readerConfig, reader.creds, reader.client); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := reader.service.Pull(context.Background(), newTargetKey, remotesync.ResolveNone); err != nil {
@@ -3189,7 +3187,7 @@ func TestReconfigurePersistsSettingsAndSwapsBindingBeforeAWaitingPush(t *testing
 	}
 }
 
-func TestSetKeyWaitsForReconfigurePersistenceAndReadsTheNewGeneration(t *testing.T) {
+func TestSetKeyWaitsForSetupPersistenceAndReadsTheNewGeneration(t *testing.T) {
 	oldBucket := &fakeBucket{}
 	machine := newInstallation(t, oldBucket, map[string]string{"config": "Host local\n"})
 	if _, err := machine.service.PushUsing(context.Background(), keyOf(syncPassphrase), "Initial setup"); err != nil {
@@ -3202,16 +3200,21 @@ func TestSetKeyWaitsForReconfigurePersistenceAndReadsTheNewGeneration(t *testing
 	config.Endpoint = server.URL
 	config.Path = "new"
 	client := &objectstore.Client{HTTP: server.Client(), Endpoint: server.URL, Bucket: config.Bucket, Region: config.Region, Creds: machine.creds}
+	inspection, err := remotesync.InspectSetupTarget(context.Background(), client, config)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	persistEntered := make(chan struct{})
 	releasePersist := make(chan struct{})
-	reconfigureDone := make(chan error, 1)
+	setupDone := make(chan error, 1)
 	go func() {
-		reconfigureDone <- machine.service.Reconfigure(config, machine.creds, client, func() error {
-			close(persistEntered)
-			<-releasePersist
-			return nil
-		})
+		setupDone <- machine.service.CompleteSetup(context.Background(), config, machine.creds, client,
+			inspection, syncPassphrase, func() error {
+				close(persistEntered)
+				<-releasePersist
+				return nil
+			})
 	}()
 	<-persistEntered
 
@@ -3233,11 +3236,11 @@ func TestSetKeyWaitsForReconfigurePersistenceAndReadsTheNewGeneration(t *testing
 	select {
 	case <-providerCalled:
 		close(releasePersist)
-		t.Fatal("SetKey read the old settings while Reconfigure persist was in progress")
+		t.Fatal("SetKey read the old settings while CompleteSetup persist was in progress")
 	case <-time.After(50 * time.Millisecond):
 	}
 	close(releasePersist)
-	if err := <-reconfigureDone; err != nil {
+	if err := <-setupDone; err != nil {
 		t.Fatal(err)
 	}
 	if err := <-setKeyDone; err != nil {
@@ -3267,7 +3270,7 @@ func TestApplyRejectsAPreviewFromAReconfiguredBinding(t *testing.T) {
 	}
 	config := consumer.config
 	config.Path = "new"
-	if err := consumer.service.Reconfigure(config, consumer.creds, consumer.client, func() error { return nil }); err != nil {
+	if err := consumer.service.ConfigureForTest(config, consumer.creds, consumer.client); err != nil {
 		t.Fatal(err)
 	}
 	// 適用は今の接続先で取り直すので、preview を取った接続先とは別の（空の）
@@ -3337,7 +3340,7 @@ func TestChangingTheObjectKeyDoesNotStrandAMachineThatHasSynced(t *testing.T) {
 	// 設定がパスを指定するようになったので、ライブのオブジェクトは別の場所にある。
 	config := installation.config
 	config.Path = "laptops"
-	if err := installation.service.Reconfigure(config, installation.creds, installation.client, func() error { return nil }); err != nil {
+	if err := installation.service.ConfigureForTest(config, installation.creds, installation.client); err != nil {
 		t.Fatal(err)
 	}
 

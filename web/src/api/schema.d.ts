@@ -638,22 +638,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/sync/settings": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put: operations["configureSync"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/sync/exclusions": {
         parameters: {
             query?: never;
@@ -2736,15 +2720,6 @@ export interface components {
             written?: number;
             removed?: number;
             completedAt: string;
-        };
-        SyncSettingsRequest: {
-            endpoint: string;
-            bucket: string;
-            path?: string;
-            region?: string;
-            accessKeyId: string;
-            secretAccessKey: string;
-            direction: components["schemas"]["SyncDirection"];
         };
         /** @enum {string} */
         SyncSetupTargetState: "empty" | "existing" | "incomplete";
@@ -5127,33 +5102,6 @@ export interface operations {
             403: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
             502: components["responses"]["Problem"];
-        };
-    };
-    configureSync: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SyncSettingsRequest"];
-            };
-        };
-        responses: {
-            /** @description Bucket configured for this run */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SyncStatus"];
-                };
-            };
-            400: components["responses"]["Problem"];
-            401: components["responses"]["Problem"];
-            403: components["responses"]["Problem"];
         };
     };
     getSyncExclusions: {
