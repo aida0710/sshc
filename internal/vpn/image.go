@@ -59,8 +59,8 @@ func containerFileNames() ([]string, error) {
 }
 
 // ensureImage は、このsshcが知っている内容のイメージがあることを確かめ、
-// 無ければ作る。
-func (manager *Manager) ensureImage(ctx context.Context) (string, error) {
+// 無ければ作る。作るときだけ、report に PhaseImage を知らせる。
+func (manager *Manager) ensureImage(ctx context.Context, report func(StartPhase)) (string, error) {
 	tag, err := imageTag()
 	if err != nil {
 		return "", err
@@ -69,7 +69,9 @@ func (manager *Manager) ensureImage(ctx context.Context) (string, error) {
 		connectionlog.Say(ctx, connectionlog.Detailed, "コンテナイメージ %s は作成済みです。", tag)
 		return tag, nil
 	}
-	connectionlog.Say(ctx, connectionlog.Brief, "コンテナイメージ %s を作成します。初回は数分かかることがあります。", tag)
+	report(PhaseImage)
+	connectionlog.Say(ctx, connectionlog.Notice, "%s", PhaseImage.Notice())
+	connectionlog.Say(ctx, connectionlog.Detailed, "作成するコンテナイメージ：%s", tag)
 	directory, err := os.MkdirTemp("", "sshc-vpn-image-")
 	if err != nil {
 		return "", err

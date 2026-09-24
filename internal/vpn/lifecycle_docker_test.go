@@ -19,7 +19,7 @@ import (
 // wireGuardRoute は、テスト用の相手へ繋ぐ wireguard の経路と、その秘密を返す。
 func wireGuardRoute(t *testing.T, manager *Manager, ctx context.Context, name string) (Profile, Secrets) {
 	t.Helper()
-	image, err := manager.ensureImage(ctx)
+	image, err := manager.ensureImage(ctx, ignorePhases)
 	if err != nil {
 		t.Fatalf("イメージを用意できない: %v", err)
 	}
@@ -92,7 +92,7 @@ func TestAConnectionThroughTheEngineRelayKeepsTheRouteUp(t *testing.T) {
 func TestACancelledStartLeavesNoContainer(t *testing.T) {
 	manager, ctx := requireDockerTest(t)
 	requireHostDevice(t, backends[L2TPIPsec].device())
-	if _, err := manager.ensureImage(ctx); err != nil {
+	if _, err := manager.ensureImage(ctx, ignorePhases); err != nil {
 		t.Fatalf("イメージを用意できない: %v", err)
 	}
 	profile := Profile{
@@ -202,7 +202,7 @@ func TestARouteStopsWithoutWaitingOutTheStopTimeout(t *testing.T) {
 // 前の版のイメージは、新しいイメージを作ったあとに消す。
 func TestImagesOfEarlierVersionsAreRemoved(t *testing.T) {
 	manager, ctx := requireDockerTest(t)
-	current, err := manager.ensureImage(ctx)
+	current, err := manager.ensureImage(ctx, ignorePhases)
 	if err != nil {
 		t.Fatalf("イメージを用意できない: %v", err)
 	}

@@ -172,3 +172,14 @@ func TestTouchingARouteInUseChangesNothing(t *testing.T) {
 		t.Fatalf("idle = %v", idle)
 	}
 }
+
+// 知らせる文は、時間のかかる段階と、利用者が何かをする段階だけが持つ。
+func TestOnlyLongOrHumanPhasesHaveANotice(t *testing.T) {
+	for phase, wanted := range map[StartPhase]bool{
+		PhaseImage: true, PhaseApproval: true, PhaseContainer: false, PhaseTunnel: false, "": false,
+	} {
+		if got := phase.Notice() != ""; got != wanted {
+			t.Errorf("%q.Notice() = %q", phase, phase.Notice())
+		}
+	}
+}

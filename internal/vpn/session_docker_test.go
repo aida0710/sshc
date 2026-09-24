@@ -38,6 +38,10 @@ const (
 	dockerTestTimeout = 6 * time.Minute
 )
 
+// ignorePhases は、経路の段階の知らせを受け取らない。イメージだけを用意する検査で
+// 使う。
+func ignorePhases(StartPhase) {}
+
 func requireDockerTest(t *testing.T) (*Manager, context.Context) {
 	t.Helper()
 	if os.Getenv("SSHC_VPN_DOCKER_TEST") != "1" {
@@ -136,7 +140,7 @@ func startTunnelPeer(t *testing.T, manager *Manager, ctx context.Context, image,
 // トンネルの中にいる相手へ、engine が中継越しに繋げる。
 func TestAConnectionReachesTheTargetThroughTheTunnel(t *testing.T) {
 	manager, ctx := requireDockerTest(t)
-	image, err := manager.ensureImage(ctx)
+	image, err := manager.ensureImage(ctx, ignorePhases)
 	if err != nil {
 		t.Fatalf("イメージを用意できない: %v", err)
 	}
@@ -217,7 +221,7 @@ func requireAnswer(t *testing.T, manager *Manager, ctx context.Context, target d
 // トンネルの中へ曲げてしまう。
 func TestTheVPNServerItselfIsRefusedAsADestination(t *testing.T) {
 	manager, ctx := requireDockerTest(t)
-	image, err := manager.ensureImage(ctx)
+	image, err := manager.ensureImage(ctx, ignorePhases)
 	if err != nil {
 		t.Fatalf("イメージを用意できない: %v", err)
 	}
@@ -252,7 +256,7 @@ func TestTheVPNServerItselfIsRefusedAsADestination(t *testing.T) {
 // 接続先へ届かない理由は、名前解決の失敗と、接続の失敗を分けて返す。
 func TestAnUnreachableDestinationSaysWhy(t *testing.T) {
 	manager, ctx := requireDockerTest(t)
-	image, err := manager.ensureImage(ctx)
+	image, err := manager.ensureImage(ctx, ignorePhases)
 	if err != nil {
 		t.Fatalf("イメージを用意できない: %v", err)
 	}
@@ -300,7 +304,7 @@ func TestAnUnreachableDestinationSaysWhy(t *testing.T) {
 // トンネルが成立しないとき、接続先へはDockerの通常回線からも届かない。
 func TestTheTargetIsUnreachableWhileTheTunnelIsNotUp(t *testing.T) {
 	manager, ctx := requireDockerTest(t)
-	image, err := manager.ensureImage(ctx)
+	image, err := manager.ensureImage(ctx, ignorePhases)
 	if err != nil {
 		t.Fatalf("イメージを用意できない: %v", err)
 	}
@@ -344,7 +348,7 @@ func TestTheTargetIsUnreachableWhileTheTunnelIsNotUp(t *testing.T) {
 // 作り直す方が安全である。
 func TestSessionsLeftByAPreviousEngineAreDiscarded(t *testing.T) {
 	manager, ctx := requireDockerTest(t)
-	image, err := manager.ensureImage(ctx)
+	image, err := manager.ensureImage(ctx, ignorePhases)
 	if err != nil {
 		t.Fatalf("イメージを用意できない: %v", err)
 	}
@@ -484,7 +488,7 @@ func TestTheOpenConnectBranchRunsUntilTheServerRefusesIt(t *testing.T) {
 // 標準エラーへ流す。片方だけを読むと、agent が書いた失敗の理由が落ちる。
 func TestShownLogsCarryWhatTheContainerWroteToStandardError(t *testing.T) {
 	manager, ctx := requireDockerTest(t)
-	image, err := manager.ensureImage(ctx)
+	image, err := manager.ensureImage(ctx, ignorePhases)
 	if err != nil {
 		t.Fatalf("イメージを用意できない: %v", err)
 	}
@@ -505,7 +509,7 @@ func TestShownLogsCarryWhatTheContainerWroteToStandardError(t *testing.T) {
 // 誰も通っていない経路は畳み、通っている経路は残す。
 func TestAnIdleRouteIsStoppedAndAUsedOneIsKept(t *testing.T) {
 	manager, ctx := requireDockerTest(t)
-	image, err := manager.ensureImage(ctx)
+	image, err := manager.ensureImage(ctx, ignorePhases)
 	if err != nil {
 		t.Fatalf("イメージを用意できない: %v", err)
 	}
@@ -686,7 +690,7 @@ func startAnyConnectServer(
 // も同じ道を通り、送る語が違うだけである。
 func TestAConnectionReachesTheTargetThroughAnAnyConnectTunnel(t *testing.T) {
 	manager, ctx := requireDockerTest(t)
-	image, err := manager.ensureImage(ctx)
+	image, err := manager.ensureImage(ctx, ignorePhases)
 	if err != nil {
 		t.Fatalf("イメージを用意できない: %v", err)
 	}

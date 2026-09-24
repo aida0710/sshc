@@ -97,3 +97,16 @@ func TestElapsedKeepsSubMillisecondDurationsVisible(t *testing.T) {
 		}
 	}
 }
+
+// Notice の行は、深さを求めない書き先（接続ログの設定が既定）にも書く。
+func TestNoticesAreWrittenWhateverTheDepth(t *testing.T) {
+	writer := &recorded{level: 0}
+	ctx := With(context.Background(), writer)
+
+	Say(ctx, Notice, "イメージを作成しています")
+	Say(ctx, Brief, "書かない")
+
+	if got := strings.Join(writer.lines, "|"); got != "0 イメージを作成しています" {
+		t.Fatalf("lines = %q", got)
+	}
+}
