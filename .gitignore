@@ -1,4 +1,7 @@
 /bin/
+# リポジトリの直下で go build ./cmd/sshc したときの出力。成果物は bin/ に置く。
+/sshc
+/sshc.exe
 /dist/
 /coverage/
 /web/node_modules/
