@@ -41,8 +41,7 @@ func serviceWithVPNMetadata(t *testing.T, metadata Metadata) *Service {
 func labProfile() VPNProfile {
 	return VPNProfile{
 		Name:    "lab",
-		Backend: string(vpn.WireGuard),
-		Target:  "10.9.9.1:22",
+		Backend: vpn.WireGuard,
 		WireGuard: &WireGuardProfile{
 			Server:        "vpn.example.jp:51820",
 			PeerPublicKey: "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
@@ -80,9 +79,6 @@ func TestAStoredProfileBecomesTheRouteDefinition(t *testing.T) {
 	if err != nil {
 		t.Fatalf("VPNProfile = %v", err)
 	}
-	if profile.Target.Host != "10.9.9.1" || profile.Target.Port != 22 {
-		t.Fatalf("target = %+v", profile.Target)
-	}
 	if profile.WireGuard == nil || profile.WireGuard.Server.Port != 51820 {
 		t.Fatalf("wireguard = %+v", profile.WireGuard)
 	}
@@ -105,7 +101,7 @@ func TestAMissingProfileIsRefusedByName(t *testing.T) {
 func TestAProfileThatCannotBecomeARouteIsNotSaved(t *testing.T) {
 	metadata := NewMetadata()
 	broken := labProfile()
-	broken.Target = "example.test:22"
+	broken.DNS = []string{"dns.example.test"}
 	metadata.VPNProfiles = []VPNProfile{broken}
 
 	if _, err := EncodeMetadata(metadata); !errors.Is(err, ErrMetadataVPN) {
@@ -113,16 +109,14 @@ func TestAProfileThatCannotBecomeARouteIsNotSaved(t *testing.T) {
 	}
 }
 
-// この版が知らないbackendのプロファイルは、保存を妨げない。
-//
-// プロファイルは端末のあいだで同期される。新しい版が書いたものを理由に、古い版で
-// metadataを保存できなくしない。
-func TestAProfileForAnUnknownBackendStillSaves(t *testing.T) {
+// この版が知らないbackendのプロファイルは保存しない。保存形式の変更は
+// schemaVersion を上げて移行する。
+func TestAProfileForAnUnknownBackendIsNotSaved(t *testing.T) {
 	metadata := NewMetadata()
-	metadata.VPNProfiles = []VPNProfile{{Name: "future", Backend: "openvpn", Target: "10.9.9.1:22"}}
+	metadata.VPNProfiles = []VPNProfile{{Name: "future", Backend: "openvpn"}}
 
-	if _, err := EncodeMetadata(metadata); err != nil {
-		t.Fatalf("EncodeMetadata = %v", err)
+	if _, err := EncodeMetadata(metadata); !errors.Is(err, ErrMetadataVPN) {
+		t.Fatalf("EncodeMetadata = %v, want ErrMetadataVPN", err)
 	}
 }
 

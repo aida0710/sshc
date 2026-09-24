@@ -16,6 +16,7 @@ import (
 	"sshc/internal/diagnostics"
 	"sshc/internal/keys"
 	"sshc/internal/knownhosts"
+	"sshc/internal/platform"
 	"sshc/internal/recent"
 	"sshc/internal/remotekey"
 	"sshc/internal/remotesync"
@@ -86,9 +87,19 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 	passwordService.SetIdleTimeout(configService.EngineSettings().VaultIdleTimeout(secret.IdleTimeout))
 	recentStore := recent.NewStore(workspace, time.Now)
 
+	// ProxyCommand と docker は、ログインシェルの PATH で起動する。launchd や
+	// systemd が起動した engine の PATH は短く、利用者がシェルの設定で足した場所を
+	// 含まない。nil なら engine の環境をそのまま使う。
+	var loginShellEnvironment func(context.Context) ([]string, error)
+	if dependencies.Environ != nil {
+		loginShellEnvironment = func(ctx context.Context) ([]string, error) {
+			return platform.WithLoginShellPath(ctx, dependencies.Environ())
+		}
+	}
+
 	// VPN 経路はこの engine が持つ。コンテナも中継のソケットも、この利用者の
 	// ものだけを扱う。
-	vpnSessions := vpn.New(filepath.Join(workspace.Root(), vpnStateDirectory), os.Getuid())
+	vpnSessions := vpn.New(filepath.Join(workspace.Root(), vpnStateDirectory), os.Getuid(), loginShellEnvironment)
 	// 設定・秘密・経路をひとつの操作として扱う。engine の接続と HTTP API が同じものを使う。
 	vpnProfiles := vpnprofile.New(vpnprofile.Dependencies{
 		Configuration: configService, Vault: passwordService, Routes: vpnSessions,
@@ -102,6 +113,7 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 		oneTimeCode: storedTOTP(passwordService),
 		vpnRoute:    vpnRoute(vpnProfiles, vpnSessions),
 	})
+	ssh.dialer.ProxyEnvironment = loginShellEnvironment
 	recentService := recent.NewService(recentStore, func(alias string) (recent.Target, error) {
 		target, err := ssh.target(alias)
 		if err != nil {

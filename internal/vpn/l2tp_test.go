@@ -11,7 +11,6 @@ func l2tpProfile() Profile {
 	return Profile{
 		Name:    "tohoku",
 		Backend: L2TPIPsec,
-		Target:  Endpoint{Host: "10.9.9.1", Port: 22},
 		L2TP: &L2TPSettings{
 			Server:   "vpn.example.jp",
 			Username: "vpn-user",
@@ -90,7 +89,7 @@ func TestOnlyTheGivenProposalsAreWritten(t *testing.T) {
 
 // agent へ渡す文書は、この backend に要る本文だけを運ぶ。
 func TestTheL2TPDocumentCarriesEveryFileTheContainerNeeds(t *testing.T) {
-	document, err := newAgentDocument(l2tpProfile(), l2tpSecrets(), 1000, testClock)
+	document, err := newAgentDocument(l2tpProfile(), l2tpSecrets(), testClock)
 	if err != nil {
 		t.Fatalf("newAgentDocument = %v", err)
 	}

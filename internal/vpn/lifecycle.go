@@ -87,6 +87,17 @@ func (state *sessionState) markStarted(profile Profile, relay *engineRelay, now 
 	defer state.use.Unlock()
 	state.started, state.running, state.relay = profile, true, relay
 	state.idleSince = now
+	// 前回用意できなかったときのログは、もういまの経路のものではない。
+	state.failureLogs = ""
+}
+
+// touch は、接続が一本も通っていなければ、無操作の起点を now にする。
+func (state *sessionState) touch(now time.Time) {
+	state.use.Lock()
+	defer state.use.Unlock()
+	if state.open == 0 {
+		state.idleSince = now
+	}
 }
 
 // markStopped は、経路が無くなったことを記録し、差し出していた中継を返す。

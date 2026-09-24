@@ -2,7 +2,6 @@ package vpn
 
 import (
 	"context"
-	"fmt"
 	"net"
 	"path/filepath"
 	"sync"
@@ -14,14 +13,17 @@ import (
 // Dockerが無い機械でも作れる。使えるかどうかは、使う時点で確かめて理由を返す。
 // engineの起動が、入っていないかもしれないものに依存しないためである。
 type Manager struct {
-	// directory は、プロファイルごとの中継ソケットを置く場所である。
+	// directory は、プロファイルごとの経路の置き場所（routeDirectory）を置く場所である。
 	directory string
-	// owner は、このengineを動かしている利用者である。コンテナの名前と札、
-	// ソケットの持ち主に使う。
+	// owner は、このengineを動かしている利用者である。コンテナとイメージの名前と
+	// 札に使う。
 	owner int
 	// workspace は、この engine の workspace を表す短い識別子である。同じ利用者の
 	// 別の workspace の engine が立てたコンテナと取り違えないために使う。
 	workspace string
+
+	// environment は、docker を探して起動する環境を返す。nil なら engine の環境を使う。
+	environment Environment
 
 	// now は、無操作の長さを測る時計である。検査が差し替える。
 	now func() time.Time
@@ -36,20 +38,29 @@ type Manager struct {
 	// 回収が止めてしまわないためである。
 	orphans *orphanGate
 
+	// lookup は、docker を探すのを1本にする。ログインシェルの起動と docker info を
+	// 待つあいだも、経路の状態は mutex で読める。
+	lookup sync.Mutex
+	docker dockerCommand
+	found  bool
+	// variables は、一度読めたログインシェルの環境である。画面は VPN の一覧を
+	// 読み直し続けるので、Docker が無いあいだも毎回シェルを起動しない。
+	variables []string
+
 	mutex    sync.Mutex
-	docker   dockerCommand
-	found    bool
 	sessions map[string]*sessionState
 }
 
 // New は、VPNセッションの管理を作る。
 //
 // directory は、engineだけが読み書きするディレクトリの下を渡す。workspace の
-// 識別子は、この directory から決まる。
-func New(directory string, owner int) *Manager {
+// 識別子は、この directory から決まる。environment は、docker を探して起動する
+// 環境を返す（nil なら engine の環境）。
+func New(directory string, owner int, environment Environment) *Manager {
 	lifetime, cancel := context.WithCancel(context.Background())
 	return &Manager{
-		directory: directory, owner: owner, workspace: workspaceIdentity(directory), now: time.Now,
+		directory: directory, owner: owner, workspace: workspaceIdentity(directory),
+		environment: environment, now: time.Now,
 		lifetime: lifetime, close: cancel, orphans: newOrphanGate(),
 		sessions: map[string]*sessionState{},
 	}
@@ -58,7 +69,7 @@ func New(directory string, owner int) *Manager {
 // Close は、進行中の起動を打ち切る。経路そのものは StopAll で畳む。
 func (manager *Manager) Close() { manager.close() }
 
-// Available は、この機械でVPN経路を使えるかを返す。
+// Available は、このマシンでVPN経路を使えるかを返す。
 //
 // ここで見るのは Docker だけである。トンネルのデバイスは backend ごとに違うので、
 // そのプロファイルを起こすときに確かめる。使えない理由は隠さない。利用者が何を
@@ -68,58 +79,77 @@ func (manager *Manager) Available(ctx context.Context) error {
 	return err
 }
 
-// Dial は、このプロファイルの接続先へのTCP接続を返す。
+// Dial は、このプロファイルの経路を通して、address（`host:port`）へのTCP接続を返す。
 //
-// 必要ならコンテナを起こし、経路ができるまで待つ。返るのはコンテナの中継への
-// Unixソケットであり、その先のTCPはコンテナのトンネルを通る。
-func (manager *Manager) Dial(ctx context.Context, profile Profile, secrets Secrets) (net.Conn, error) {
-	if err := validateProfileName(profile.Name); err != nil {
+// address は、このプロファイルを付けた接続の HostName と Port である。必要なら
+// コンテナを起こし、経路ができるまで待つ。返るのはコンテナの中の中継の標準入出力で
+// あり、その先のTCPはコンテナのトンネルを通る。
+func (manager *Manager) Dial(ctx context.Context, profile Profile, secrets Secrets, address string) (net.Conn, error) {
+	destination, err := profile.Destination(address)
+	if err != nil {
 		return nil, err
 	}
 	// 起動より先に借りる。起動が終わってから借りるまでのあいだに、無操作と
-	// 見なされて畳まれないためである。
+	// 見なされて停止されないためである。
 	state := manager.state(profile.Name)
 	state.borrow()
 	if err := manager.Start(ctx, profile, secrets); err != nil {
 		state.release(manager.now())
 		return nil, err
 	}
-	connection, err := (&net.Dialer{}).DialContext(ctx, "unix", manager.socketPath(profile.Name))
+	return manager.connectCounted(ctx, state, profile.Name, destination)
+}
+
+// dialRelay は、engine の中継が受けた接続のために、起動済みの経路で接続先へ繋ぐ。
+func (manager *Manager) dialRelay(ctx context.Context, profile Profile, address string) (net.Conn, error) {
+	destination, err := profile.Destination(address)
 	if err != nil {
-		state.release(manager.now())
-		return nil, fmt.Errorf("%w: %w", ErrSessionFailed, err)
+		return nil, err
 	}
-	return manager.counted(state, connection), nil
-}
-
-// counted は、閉じたときに借りを返す接続にする。借りは呼び出し側が先に済ませてある。
-func (manager *Manager) counted(state *sessionState, connection net.Conn) net.Conn {
-	return &countedConnection{Conn: connection, release: func() { state.release(manager.now()) }}
-}
-
-// dialRelay は、engine の中継が受けた接続のために、コンテナの中継へ繋ぐ。
-func (manager *Manager) dialRelay(profileName string) (net.Conn, error) {
-	state := manager.state(profileName)
+	state := manager.state(profile.Name)
 	state.borrow()
-	connection, err := net.Dial("unix", manager.socketPath(profileName))
+	return manager.connectCounted(ctx, state, profile.Name, destination)
+}
+
+// connectCounted は、借りを済ませた経路で接続先へ繋ぎ、閉じたときに借りを返す
+// 接続にする。繋げなければ借りを返す。
+func (manager *Manager) connectCounted(
+	ctx context.Context, state *sessionState, profileName string, destination Endpoint,
+) (net.Conn, error) {
+	connection, err := manager.connectTarget(ctx, profileName, destination)
 	if err != nil {
 		state.release(manager.now())
 		return nil, err
 	}
-	return manager.counted(state, connection), nil
+	return &countedConnection{Conn: connection, release: func() { state.release(manager.now()) }}, nil
 }
 
-// StopIdle は、接続が一本も通っていない状態が idle を超えた経路を畳む。
+// StopIdle は、接続が一本も通っていない状態が idle を超えた経路を停止する。
 //
-// 畳まないままにすると、一度使った経路のコンテナが engine の寿命のあいだ
+// 停止しないままにすると、一度使った経路のコンテナが engine の寿命のあいだ
 // 残り続ける。トンネルは使っているあいだだけあればよい。
 func (manager *Manager) StopIdle(ctx context.Context, idle time.Duration) {
-	now := manager.now()
 	for _, name := range manager.names() {
-		if manager.state(name).idleLongerThan(now, idle) {
-			_ = manager.Stop(ctx, name)
+		if manager.state(name).idleLongerThan(manager.now(), idle) {
+			_ = manager.stopIfIdle(ctx, name, idle)
 		}
 	}
+}
+
+// stopIfIdle は、起動と停止の鍵を取ってから無操作かを確かめ直し、そうなら停止する。
+//
+// 確かめてから鍵を取るまでのあいだに、経路を使い始めた接続があるかもしれない。
+func (manager *Manager) stopIfIdle(ctx context.Context, name string, idle time.Duration) error {
+	if _, err := manager.command(ctx); err != nil {
+		return err
+	}
+	state := manager.state(name)
+	state.transition.Lock()
+	defer state.transition.Unlock()
+	if !state.idleLongerThan(manager.now(), idle) {
+		return nil
+	}
+	return manager.stopLocked(ctx, name)
 }
 
 // StopAll は、この engine が起こした経路をすべて、並べて畳む。engine を終える
@@ -183,6 +213,10 @@ func (manager *Manager) Start(ctx context.Context, profile Profile, secrets Secr
 			return err
 		}
 		if running {
+			// 起動を求められた経路は、いまから使われる。CLI は起動を求めてから
+			// engine の中継へ繋ぐので、そのあいだに停止されないよう、無操作の
+			// 起点をいまにする。
+			state.touch(manager.now())
 			return nil
 		}
 	}
@@ -197,8 +231,10 @@ func (manager *Manager) Start(ctx context.Context, profile Profile, secrets Secr
 		return err
 	}
 	relay, err := openEngineRelay(
-		filepath.Join(manager.socketDirectory(profile.Name), engineRelaySocketName),
-		func() (net.Conn, error) { return manager.dialRelay(profile.Name) },
+		filepath.Join(manager.routeDirectory(profile.Name), engineRelaySocketName),
+		func(ctx context.Context, address string) (net.Conn, error) {
+			return manager.dialRelay(ctx, profile, address)
+		},
 	)
 	if err != nil {
 		manager.stopContainer(ctx, name)
@@ -236,29 +272,49 @@ func (manager *Manager) Stop(ctx context.Context, profileName string) error {
 	state := manager.state(profileName)
 	state.transition.Lock()
 	defer state.transition.Unlock()
+	return manager.stopLocked(ctx, profileName)
+}
 
+// stopLocked は、Stop の本体である。起動と停止の鍵を握って呼ぶこと。
+func (manager *Manager) stopLocked(ctx context.Context, profileName string) error {
 	name := manager.containerName(profileName)
 	if _, err := manager.requireOurContainer(ctx, name, profileName); err != nil {
 		return err
 	}
-	manager.closeRelay(state)
+	manager.closeRelay(manager.state(profileName))
 	manager.stopContainer(ctx, name)
-	return removeRouteFiles(manager.socketDirectory(profileName))
+	return removeRouteFiles(manager.routeDirectory(profileName))
 }
 
 // command は、使える docker をひとつだけ探して覚える。
 func (manager *Manager) command(ctx context.Context) (dockerCommand, error) {
-	manager.mutex.Lock()
-	defer manager.mutex.Unlock()
+	manager.lookup.Lock()
+	defer manager.lookup.Unlock()
 	if manager.found {
 		return manager.docker, nil
 	}
-	command, err := findDocker(ctx)
+	if manager.variables == nil {
+		manager.variables = manager.loadEnvironment(ctx)
+	}
+	command, err := findDocker(ctx, manager.variables)
 	if err != nil {
 		return dockerCommand{}, err
 	}
 	manager.docker, manager.found = command, true
 	return command, nil
+}
+
+// loadEnvironment は、docker を探して起動する環境を読む。読めなければ nil を返し、
+// engine の環境で探す。
+func (manager *Manager) loadEnvironment(ctx context.Context) []string {
+	if manager.environment == nil {
+		return nil
+	}
+	variables, err := manager.environment(ctx)
+	if err != nil {
+		return nil
+	}
+	return variables
 }
 
 func (manager *Manager) state(profileName string) *sessionState {

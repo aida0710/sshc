@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type ChangeEvent, type DragEvent as ReactDragEvent } from "react";
 import { failureCode } from "../api/client";
 import { useTranslate } from "../i18n/context";
+import { sftpProblemText } from "./sftpProblemText";
 import { sftpApi, type RemoteEntry } from "./api";
 import { localHostAlias } from "./localHost";
 import { localJoin, localParentOf, remoteParentOf, sourceFor } from "./sftpSource";
@@ -97,7 +98,7 @@ export function useSFTPTransfers({
   const counterpartRemote = counterpart !== null && !counterpartLocal && counterpart.alias !== "";
 
   function report(error: unknown, fallback = "sftp_failed") {
-    setProblem(failureCode(error) || (error instanceof Error ? error.message : fallback));
+    setProblem(sftpProblemText(t, error, fallback));
   }
 
   function openQueue() {

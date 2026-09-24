@@ -1,9 +1,12 @@
-import { ApiError } from "../api/client";
 import type { MessageKey } from "../i18n/messages";
+import type { VPNDestinationReason } from "./vpnDestination";
 
-// コンテナが経路を用意できなかった理由（engine の vpn.FailureReason）と、その画面での
-// 言い方。engine は vpn_session_failed の応答の reason にこの語だけを載せる。
-const vpnFailureReasonMessages: Record<string, MessageKey> = {
+// 理由の語（problem の reason）を持つ VPN の拒否と、その理由の画面での言い方。engine の
+// vpn.FailureReason と vpn.Reason と同じ語を使う。文は Go の internal/vpnrefusal と同じ
+// 言い方に揃える。
+
+// 経路を用意できなかった理由（vpn_session_failed）である。
+const sessionFailureMessages: Record<string, MessageKey> = {
   unknown: "vpn.failure.unknown",
   timeout: "vpn.failure.timeout",
   server_unresolved: "vpn.failure.server_unresolved",
@@ -11,14 +14,40 @@ const vpnFailureReasonMessages: Record<string, MessageKey> = {
   ppp_authentication: "vpn.failure.ppp_authentication",
   openconnect_failed: "vpn.failure.openconnect_failed",
   handshake_timeout: "vpn.failure.handshake_timeout",
-  target_unresolved: "vpn.failure.target_unresolved",
   tunnel_lost: "vpn.failure.tunnel_lost",
 };
 
-// vpnFailureReasonMessage は、経路を用意できなかった理由の言い方を返す。
-// 経路の失敗でなければ null を返す。理由の語を持たない古い engine や、この版の
-// 知らない語は「理由を読み取れなかった」として扱い、ログへ案内する。
-export function vpnFailureReasonMessage(error: unknown): MessageKey | null {
-  if (!(error instanceof ApiError) || error.code !== "vpn_session_failed") return null;
-  return vpnFailureReasonMessages[error.problem?.reason ?? ""] ?? "vpn.failure.unknown";
+// 経路はあるが、VPN 経由で接続先へ接続できなかった理由（vpn_target_failed）である。
+const targetFailureMessages: Record<string, MessageKey> = {
+  target_unresolved: "vpn.targetFailure.target_unresolved",
+  target_needs_dns: "vpn.destination.name_needs_dns",
+  target_is_server: "vpn.targetFailure.target_is_server",
+  target_unreachable: "vpn.targetFailure.target_unreachable",
+  tunnel_lost: "vpn.targetFailure.tunnel_lost",
+  timeout: "vpn.failure.timeout",
+};
+
+// 接続先（HostName と Port）を VPN 経由では使えない理由（vpn_destination_invalid）である。
+const destinationMessages: Record<VPNDestinationReason, MessageKey> = {
+  format: "vpn.destination.format",
+  out_of_range: "vpn.destination.out_of_range",
+  not_ipv4: "vpn.destination.not_ipv4",
+  unroutable: "vpn.destination.unroutable",
+  name_needs_dns: "vpn.destination.name_needs_dns",
+};
+
+// 理由の語が無いか、この画面の知らない語なら、原因を特定できなかったとしてログへ案内する。
+export function vpnSessionFailureMessage(reason: string): MessageKey {
+  return sessionFailureMessages[reason] ?? "vpn.failure.unknown";
+}
+
+export function vpnTargetFailureMessage(reason: string): MessageKey {
+  return targetFailureMessages[reason] ?? "vpn.failure.unknown";
+}
+
+// 知らない語は、Go と同じく形式の誤りとして言う。
+export function vpnDestinationMessage(reason: string): MessageKey {
+  return Object.hasOwn(destinationMessages, reason)
+    ? destinationMessages[reason as VPNDestinationReason]
+    : destinationMessages.format;
 }

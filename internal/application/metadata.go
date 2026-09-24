@@ -21,7 +21,7 @@ import (
 
 const (
 	// MetadataSchemaVersion はこのビルドが書き込むバージョンである。
-	MetadataSchemaVersion = 5
+	MetadataSchemaVersion = 6
 	MetadataFileName      = "metadata.json"
 	DefaultGroupsFile     = "groups.sshc.conf"
 )
@@ -271,7 +271,9 @@ func DecodeMetadata(contents []byte) (Metadata, error) {
 	if err := json.Unmarshal(contents, &version); err != nil {
 		return Metadata{}, err
 	}
-	if version.SchemaVersion != MetadataSchemaVersion && version.SchemaVersion != 4 && version.SchemaVersion != 3 {
+	switch version.SchemaVersion {
+	case MetadataSchemaVersion, 5, 4, 3:
+	default:
 		return Metadata{}, ErrMetadataVersion
 	}
 	var metadata Metadata
@@ -281,6 +283,10 @@ func DecodeMetadata(contents []byte) (Metadata, error) {
 	// v3/v4→v5は追加fieldだけのmigrationである。v5は同期するキー設定を旧版で消さないための境界。
 	// 旧scrollbackBytesはengineの
 	// replay bufferとして意味を変えず、browser側は未設定の既定行数から始める。
+	// v5→v6は、VPNプロファイルの接続先（vpnProfiles[].target）を捨てる。接続先は
+	// プロファイルを付けた接続のHostNameとPortで決まる。知らない項目として読み
+	// 飛ばすので、書き直すと消える。v6はtargetの無いプロファイルを旧版に読ませない
+	// ための境界でもある。
 	metadata.SchemaVersion = MetadataSchemaVersion
 	if metadata.GroupsFile == "" {
 		metadata.GroupsFile = DefaultGroupsFile

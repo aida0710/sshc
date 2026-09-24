@@ -61,15 +61,6 @@ func backendFor(name BackendName) (backend, error) {
 	return chosen, nil
 }
 
-// KnownBackend は、この版が経路を作れる backend かを返す。
-//
-// 保存形式の検査が使う。新しい版が書いた、この版の知らない backend の
-// プロファイルは、形だけを見て残す。
-func KnownBackend(name string) bool {
-	_, known := backends[BackendName(name)]
-	return known
-}
-
 // commonCapabilities は、既定の権限のまま NET_ADMIN だけを足す指定である。
 //
 // 要る権限を実際の装置で確かめられていない backend が使う。確かめずに削ると、

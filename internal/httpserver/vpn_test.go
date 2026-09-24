@@ -49,7 +49,7 @@ func vpnEngine(t *testing.T) (*echo.Echo, *secret.Service, *application.Service)
 		t.Fatal(err)
 	}
 	engine := echo.New()
-	sessions := vpn.New(filepath.Join(root, "sshc", "vpn"), os.Getuid())
+	sessions := vpn.New(filepath.Join(root, "sshc", "vpn"), os.Getuid(), nil)
 	registerVPNRoutes(engine, VPNHandlers{
 		Config: config,
 		Profiles: vpnprofile.New(vpnprofile.Dependencies{
@@ -70,7 +70,7 @@ func decodeProblem(t *testing.T, payload []byte) problemPayload {
 }
 
 func labProfileBody(withSecret bool) string {
-	body := `{"profile":{"name":"lab","backend":"wireguard","target":"10.9.9.1:22",` +
+	body := `{"profile":{"name":"lab","backend":"wireguard",` +
 		`"wireguard":{"server":"vpn.example.jp:51820","peerPublicKey":"` + testVPNPublicKey + `",` +
 		`"address":"10.9.9.2/32"}}`
 	if withSecret {
@@ -106,7 +106,7 @@ func TestASavedProfileIsListedWithTheConnectionsThatUseIt(t *testing.T) {
 		t.Fatalf("profiles = %+v", overview.Profiles)
 	}
 	session := overview.Profiles[0]
-	if session.Profile.Name != "lab" || session.Profile.Target != "10.9.9.1:22" {
+	if session.Profile.Name != "lab" || session.Profile.Backend != "wireguard" {
 		t.Fatalf("profile = %+v", session.Profile)
 	}
 	if len(session.Connections) != 1 || session.Connections[0] != "lab" {
@@ -171,14 +171,14 @@ func TestRemovingAProfileClearsItsBindingsAndSecrets(t *testing.T) {
 // 経路を作れない指定は、保存の時点で断る。
 func TestAProfileThatCannotBecomeARouteIsRefused(t *testing.T) {
 	engine, _, _ := vpnEngine(t)
-	body := strings.Replace(labProfileBody(true), "10.9.9.1:22", "lab.example.jp:22", 1)
+	body := strings.Replace(labProfileBody(true), `"backend":"wireguard",`, `"backend":"wireguard","dns":["dns.example.jp"],`, 1)
 
 	refused := send(t, engine, http.MethodPost, "/api/v1/vpn/profiles", body, nil)
 
 	if refused.Code != http.StatusBadRequest {
 		t.Fatalf("save = %d: %s", refused.Code, refused.Body.String())
 	}
-	want := problemPayload{Code: "vpn_profile_invalid", Message: "request rejected", Field: "target", Reason: "name_needs_dns"}
+	want := problemPayload{Code: "vpn_profile_invalid", Message: "request rejected", Field: "dns", Reason: "not_ipv4"}
 	if got := decodeProblem(t, refused.Body.Bytes()); got.Code != want.Code || got.Field != want.Field || got.Reason != want.Reason {
 		t.Fatalf("problem = %+v, want %+v", got, want)
 	}
@@ -244,7 +244,7 @@ func TestRenamingOntoAnExistingProfileIsRefused(t *testing.T) {
 func TestAnOpenConnectProfileKeepsItsPasswordOutOfEveryResponse(t *testing.T) {
 	engine, secrets, _ := vpnEngine(t)
 	const password = "an openconnect password"
-	body := `{"profile":{"name":"office","backend":"openconnect","target":"10.9.9.1:22",` +
+	body := `{"profile":{"name":"office","backend":"openconnect",` +
 		`"openconnect":{"server":"vpn.example.jp","username":"fixture","protocol":"anyconnect"}},` +
 		`"secrets":{"openconnectPassword":"` + password + `"}}`
 
@@ -271,7 +271,7 @@ func TestAnOpenConnectProfileKeepsItsPasswordOutOfEveryResponse(t *testing.T) {
 func TestTheSecondFactorSeedNeverLeavesTheVault(t *testing.T) {
 	engine, secrets, _ := vpnEngine(t)
 	const seed = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"
-	body := `{"profile":{"name":"office","backend":"openconnect","target":"10.9.9.1:22",` +
+	body := `{"profile":{"name":"office","backend":"openconnect",` +
 		`"openconnect":{"server":"vpn.example.jp","username":"fixture","secondFactor":"totp"}},` +
 		`"secrets":{"openconnectPassword":"a password","openconnectTotpSecret":"` + seed + `"}}`
 
@@ -329,8 +329,8 @@ func TestUpdatingAnUnknownProfileIsRefused(t *testing.T) {
 // 項目の誤りは、項目の JSON パスと理由の語と上限を返す。
 func TestARefusedFieldCarriesItsPathReasonAndLimit(t *testing.T) {
 	engine, _, _ := vpnEngine(t)
-	body := strings.Replace(labProfileBody(true), `"target":"10.9.9.1:22",`,
-		`"target":"10.9.9.1:22","dns":["10.9.9.53","10.9.9.54","10.9.9.55","10.9.9.56"],`, 1)
+	body := strings.Replace(labProfileBody(true), `"backend":"wireguard",`,
+		`"backend":"wireguard","dns":["10.9.9.53","10.9.9.54","10.9.9.55","10.9.9.56"],`, 1)
 
 	refused := send(t, engine, http.MethodPost, "/api/v1/vpn/profiles", body, nil)
 
@@ -382,8 +382,16 @@ func TestVPNRefusalsCarryTheirCodes(t *testing.T) {
 		want   problemPayload
 	}{
 		{
-			name: "接続先の食い違い", err: fmt.Errorf("%w: lab", vpn.ErrTargetMismatch),
-			status: http.StatusBadRequest, want: problemPayload{Code: "vpn_target_mismatch"},
+			name: "接続先の形", err: &vpn.DestinationError{Address: "db:22", Reason: vpn.ReasonNameNeedsDNS},
+			status: http.StatusBadRequest, want: problemPayload{Code: "vpn_destination_invalid", Reason: "name_needs_dns"},
+		},
+		{
+			name: "Dockerが起動していない", err: fmt.Errorf("%w: cannot connect", vpn.ErrDockerNotRunning),
+			status: http.StatusConflict, want: problemPayload{Code: "vpn_docker_not_running"},
+		},
+		{
+			name: "ソケットのパスが長すぎる", err: fmt.Errorf("%w: 106 > 103", vpn.ErrSocketPath),
+			status: http.StatusConflict, want: problemPayload{Code: "vpn_socket_path_too_long"},
 		},
 		{
 			name: "経路を用意できなかった", err: &vpn.SessionFailure{Profile: "lab", Reason: vpn.FailureHandshakeTimeout},

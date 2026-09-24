@@ -20,9 +20,9 @@ const testVPNKey = "aAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAA="
 func vpnOverviewFixture() string {
 	// engine が返す形をそのまま使う。backend ごとの節も含む。
 	return `{"available":true,"profiles":[{"profile":{"name":"lab","backend":"wireguard",` +
-		`"target":"10.9.9.1:22","wireguard":{"server":"vpn.example.jp:51820",` +
+		`"wireguard":{"server":"vpn.example.jp:51820",` +
 		`"peerPublicKey":"bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=","address":"10.9.9.2/32"}},` +
-		`"running":true,"relaySocket":"/home/u/.ssh/sshc/vpn/lab/relay.sock",` +
+		`"running":true,"relaySocket":"/home/u/.ssh/sshc/vpn/lab/engine.sock",` +
 		`"connections":["lab"]}]}`
 }
 
@@ -45,18 +45,19 @@ func TestVPNListShowsEachProfileWithItsSessionAndConnections(t *testing.T) {
 	if strings.Join(harness.paths, ",") != "/api/v1/vpn" {
 		t.Fatalf("paths = %v", harness.paths)
 	}
-	for _, want := range []string{"lab", "wireguard", "10.9.9.1:22", "up", "connections: lab"} {
+	for _, want := range []string{"lab", "wireguard", "up", "connections: lab"} {
 		if !strings.Contains(stdout.String(), want) {
 			t.Errorf("output omitted %q: %s", want, stdout.String())
 		}
 	}
 }
 
-// 経路を作れない機械では、理由をそのまま見せる。
+// 経路を作れないマシンでは、理由を日本語の文で見せ、docker の生の文を添える。
 func TestVPNListSaysWhyTheMachineCannotOpenRoutes(t *testing.T) {
 	_, server, stateDir := newSyncCommandHarness(t, func(response http.ResponseWriter, request *http.Request) {
 		response.Header().Set("Content-Type", "application/json")
-		_, _ = response.Write([]byte(`{"available":false,"detail":"docker is not available","profiles":[]}`))
+		_, _ = response.Write([]byte(`{"available":false,"unavailable":"vpn_docker_missing",` +
+			`"detail":"docker is not installed: executable file not found","profiles":[]}`))
 	})
 	defer server.Close()
 	var stdout, stderr strings.Builder
@@ -68,8 +69,10 @@ func TestVPNListSaysWhyTheMachineCannotOpenRoutes(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("code=%d stderr=%q", code, stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "docker is not available") {
-		t.Fatalf("output = %q", stdout.String())
+	for _, want := range []string{"Dockerが見つかりません", "詳細: docker is not installed"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("output omitted %q: %q", want, stdout.String())
+		}
 	}
 }
 
@@ -130,7 +133,7 @@ func TestVPNUnbindSendsAnEmptyProfile(t *testing.T) {
 // 保存要求の本文は、設定と秘密鍵をひとつのJSONとして運ぶ。
 func TestTheSavedProfilePayloadCarriesTheKeyExactlyOnce(t *testing.T) {
 	payload, err := buildVPNProfilePayload(application.VPNProfile{
-		Name: "lab", Backend: "wireguard", Target: "10.9.9.1:22",
+		Name: "lab", Backend: "wireguard",
 		WireGuard: &application.WireGuardProfile{
 			Server: "vpn.example.jp:51820", PeerPublicKey: "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
 			Address: "10.9.9.2/32",
@@ -143,7 +146,6 @@ func TestTheSavedProfilePayloadCarriesTheKeyExactlyOnce(t *testing.T) {
 	var decoded struct {
 		Profile struct {
 			Name      string `json:"name"`
-			Target    string `json:"target"`
 			WireGuard struct {
 				Server string `json:"server"`
 			} `json:"wireguard"`
@@ -155,8 +157,7 @@ func TestTheSavedProfilePayloadCarriesTheKeyExactlyOnce(t *testing.T) {
 	if err := json.Unmarshal(payload, &decoded); err != nil {
 		t.Fatalf("payload = %s: %v", payload, err)
 	}
-	if decoded.Profile.Name != "lab" || decoded.Profile.Target != "10.9.9.1:22" ||
-		decoded.Profile.WireGuard.Server != "vpn.example.jp:51820" {
+	if decoded.Profile.Name != "lab" || decoded.Profile.WireGuard.Server != "vpn.example.jp:51820" {
 		t.Fatalf("profile = %+v", decoded.Profile)
 	}
 	if decoded.Secrets.WireGuardPrivateKey != testVPNKey {
@@ -204,7 +205,7 @@ func TestAMalformedKeyIsNotAcceptedAsAWireGuardSecret(t *testing.T) {
 func TestSecretsWithQuotesSurviveTheRequestBody(t *testing.T) {
 	password := []byte(`p"a\ss`)
 	payload, err := buildVPNProfilePayload(application.VPNProfile{
-		Name: "tohoku", Backend: "l2tp_ipsec", Target: "10.9.9.1:22",
+		Name: "tohoku", Backend: "l2tp_ipsec",
 		L2TP: &application.L2TPProfile{Server: "vpn.example.jp", Username: "user"},
 	}, []vpnSecretField{
 		{name: "l2tpPassword", value: password},
@@ -237,31 +238,57 @@ func TestSecretsWithQuotesSurviveTheRequestBody(t *testing.T) {
 	}
 }
 
-// ProxyCommand は、標準入出力を経路の中継へそのまま流す。
-func TestTheProxyPipesStandardInputAndOutputThroughTheRoute(t *testing.T) {
-	socket := filepath.Join(shortSocketDirectory(t), "relay.sock")
+// relayStub は、engine の中継の代わりに、1行目の接続先を受け取って reply を答える。
+// 答えが繋がったなら、そのあとに届いたバイト列を served へ渡し、greeting を返す。
+func relayStub(t *testing.T, reply string, greeting string) (socket string, requested <-chan string, served <-chan []byte) {
+	t.Helper()
+	socket = filepath.Join(shortSocketDirectory(t), "engine.sock")
 	listener, err := net.Listen("unix", socket)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func() { _ = listener.Close() }()
-	served := make(chan []byte, 1)
+	t.Cleanup(func() { _ = listener.Close() })
+	addresses := make(chan string, 1)
+	bodies := make(chan []byte, 1)
 	go func() {
 		connection, err := listener.Accept()
 		if err != nil {
-			served <- nil
+			addresses <- ""
 			return
 		}
 		defer func() { _ = connection.Close() }()
+		line := []byte{}
+		one := make([]byte, 1)
+		for {
+			if _, err := io.ReadFull(connection, one); err != nil || one[0] == '\n' {
+				break
+			}
+			line = append(line, one[0])
+		}
+		addresses <- string(line)
+		_, _ = connection.Write([]byte(reply + "\n"))
+		if reply != "{}" {
+			return
+		}
 		received, _ := io.ReadAll(connection)
-		_, _ = connection.Write([]byte("SSH-2.0-remote\r\n"))
-		served <- received
+		_, _ = connection.Write([]byte(greeting))
+		bodies <- received
 	}()
+	return socket, addresses, bodies
+}
 
+// relayOverview は、経路が起動していて、その中継が socket にある一覧である。
+func relayOverview(t *testing.T, socket string) string {
+	return `{"available":true,"profiles":[{"profile":{"name":"lab","backend":"wireguard"},` +
+		`"running":true,"relaySocket":` + jsonString(t, socket) + `,"connections":[]}]}`
+}
+
+// ProxyCommand は、接続先を engine の中継へ伝えてから、標準入出力をそのまま流す。
+func TestTheProxyPipesStandardInputAndOutputThroughTheRoute(t *testing.T) {
+	socket, requested, served := relayStub(t, "{}", "SSH-2.0-remote\r\n")
 	_, server, stateDir := newSyncCommandHarness(t, func(response http.ResponseWriter, request *http.Request) {
 		response.Header().Set("Content-Type", "application/json")
-		_, _ = response.Write([]byte(`{"available":true,"profiles":[{"profile":{"name":"lab","backend":"wireguard",` +
-			`"target":"10.9.9.1:22"},"running":true,"relaySocket":` + jsonString(t, socket) + `,"connections":[]}]}`))
+		_, _ = response.Write([]byte(relayOverview(t, socket)))
 	})
 	defer server.Close()
 	stdin := writeTemporaryFile(t, "SSH-2.0-local\r\n")
@@ -273,6 +300,9 @@ func TestTheProxyPipesStandardInputAndOutputThroughTheRoute(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("code = %d, stderr = %q", code, stderr.String())
 	}
+	if address := <-requested; address != "10.9.9.1:22" {
+		t.Fatalf("中継へ伝えた接続先 = %q", address)
+	}
 	if sent := string(<-served); sent != "SSH-2.0-local\r\n" {
 		t.Fatalf("中継へ届いた本文 = %q", sent)
 	}
@@ -281,27 +311,28 @@ func TestTheProxyPipesStandardInputAndOutputThroughTheRoute(t *testing.T) {
 	}
 }
 
-// 設定に書いた相手と経路の接続先が違えば、通さない。
-func TestTheProxyRefusesAConnectionTheRouteDoesNotReach(t *testing.T) {
+// 接続先へ繋げなかったときは、engine が答えた理由を日本語の文で出し、標準出力には
+// 何も書かない。
+func TestTheProxySaysWhyTheRouteCouldNotReachTheDestination(t *testing.T) {
+	socket, _, _ := relayStub(t, `{"code":"vpn_target_failed","reason":"target_unresolved"}`, "")
 	_, server, stateDir := newSyncCommandHarness(t, func(response http.ResponseWriter, request *http.Request) {
 		response.Header().Set("Content-Type", "application/json")
-		_, _ = response.Write([]byte(`{"available":true,"profiles":[{"profile":{"name":"lab","backend":"wireguard",` +
-			`"target":"10.9.9.1:22"},"running":true,"relaySocket":"/tmp/absent.sock","connections":[]}]}`))
+		_, _ = response.Write([]byte(relayOverview(t, socket)))
 	})
 	defer server.Close()
 	stdin := writeTemporaryFile(t, "")
 	var stdout, stderr strings.Builder
 
-	code := runVPN(context.Background(), vpnInvocation{Action: vpnProxy, Name: "lab", Target: "10.9.9.9:22"},
+	code := runVPN(context.Background(), vpnInvocation{Action: vpnProxy, Name: "lab", Target: "db.internal:22"},
 		commandEnvironment{stateDir: stateDir, client: server.Client(), stdin: stdin, stdout: &stdout, stderr: &stderr})
 
-	if code == 0 {
-		t.Fatal("経路が届かない相手へ通した")
+	if code != 1 {
+		t.Fatalf("code = %d, stderr = %q", code, stderr.String())
 	}
 	if stdout.Len() != 0 {
 		t.Fatalf("標準出力に何か書いた: %q", stdout.String())
 	}
-	if !strings.Contains(stderr.String(), "10.9.9.1:22") {
+	if !strings.Contains(stderr.String(), "名前解決に失敗しました") {
 		t.Fatalf("stderr = %q", stderr.String())
 	}
 }
@@ -369,8 +400,8 @@ func TestBringingARouteUpSaysWhatItIsWaitingForAndWhereToLookWhenItFails(t *test
 func TestTheListSaysHowFarAStartingRouteHasGot(t *testing.T) {
 	_, server, stateDir := newSyncCommandHarness(t, func(response http.ResponseWriter, request *http.Request) {
 		response.Header().Set("Content-Type", "application/json")
-		_, _ = response.Write([]byte(`{"available":true,"profiles":[{"profile":{"name":"lab","backend":"wireguard",` +
-			`"target":"10.9.9.1:22"},"running":true,"relaySocket":"","connections":[],"phase":"tunnel"}]}`))
+		_, _ = response.Write([]byte(`{"available":true,"profiles":[{"profile":{"name":"lab","backend":"wireguard"},` +
+			`"running":true,"relaySocket":"","connections":[],"phase":"tunnel"}]}`))
 	})
 	defer server.Close()
 	var stdout, stderr strings.Builder
@@ -457,12 +488,17 @@ func TestVPNInvocationsAreAcceptedOnlyInTheirDocumentedShapes(t *testing.T) {
 		{[]string{"vpn", "bind", "host"}, false},
 		{[]string{"vpn", "unbind", "host"}, true},
 		{[]string{"vpn", "unbind"}, false},
+		{[]string{"vpn", "edit", "lab"}, true},
+		{[]string{"vpn", "edit"}, false},
+		{[]string{"vpn", "edit", "lab", "--json"}, false},
 		{[]string{"vpn", "rename", "old", "new"}, true},
+		{[]string{"vpn", "rename", "old", "new", "--json"}, true},
+		{[]string{"vpn", "rename", "old", "new", "--yes"}, false},
 		{[]string{"vpn", "rename", "old"}, false},
 		{[]string{"vpn", "logs", "lab"}, true},
 		{[]string{"vpn", "logs", "lab", "--json"}, true},
 		{[]string{"vpn", "logs"}, false},
-		{[]string{"vpn", "proxy", "lab"}, true},
+		{[]string{"vpn", "proxy", "lab"}, false},
 		{[]string{"vpn", "proxy", "lab", "10.9.9.1", "22"}, true},
 		{[]string{"vpn", "proxy", "lab", "10.9.9.1"}, false},
 		{[]string{"vpn", "proxy"}, false},

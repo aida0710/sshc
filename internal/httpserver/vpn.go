@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/labstack/echo/v5"
@@ -162,11 +163,13 @@ func (h VPNHandlers) respond(c *echo.Context) error {
 	ctx := c.Request().Context()
 	response := VPNOverview{Available: true, Profiles: make([]VPNProfileStatus, 0, len(profiles))}
 	var statuses map[string]vpn.Status
-	if err := h.Sessions.Available(ctx); err != nil {
-		response.Available, response.Detail = false, err.Error()
-	} else if statuses, err = h.Sessions.Statuses(ctx); err != nil {
-		// docker は見つかっているが、daemon が応えなくなった。
-		response.Available, response.Detail = false, err.Error()
+	err = h.Sessions.Available(ctx)
+	if err == nil {
+		// docker は見つかっているが、daemon が応えなくなったこともここで分かる。
+		statuses, err = h.Sessions.Statuses(ctx)
+	}
+	if err != nil {
+		response.Available, response.Unavailable, response.Detail = false, unavailableReason(err), err.Error()
 	}
 	for _, profile := range profiles {
 		entry := VPNProfileStatus{Profile: profile, Connections: bindings[profile.Name]}
@@ -179,11 +182,21 @@ func (h VPNHandlers) respond(c *echo.Context) error {
 				entry.Tunnel = &VPNTunnel{
 					Interface: status.Tunnel.Interface, Address: status.Tunnel.Address,
 					Since: status.Tunnel.Since, Backend: status.Tunnel.Backend,
-					TargetAddress: status.Tunnel.TargetAddress,
 				}
 			}
 		}
 		response.Profiles = append(response.Profiles, entry)
 	}
 	return c.JSON(http.StatusOK, response)
+}
+
+// unavailableReason は、VPN 経路を使えない理由の語を返す。画面と CLI はこれを訳して
+// 見せる。Detail の生の文は、訳せない理由を調べるためだけに添える。
+func unavailableReason(err error) VPNUnavailable {
+	if errors.Is(err, vpn.ErrDockerMissing) {
+		return VPNDockerMissing
+	}
+	// docker が動いていない。見つかったあとで一覧の読み取りに失敗した場合も、
+	// daemon が応えなくなったのである。
+	return VPNDockerNotRunning
 }

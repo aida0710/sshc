@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { failureCode } from "../api/client";
 import { useTranslate } from "../i18n/context";
+import { sftpProblemText } from "./sftpProblemText";
 import type { RemoteEntry } from "./api";
 import { localHostAlias } from "./localHost";
 import { sourceFor, type SFTPListing } from "./sftpSource";
@@ -103,11 +104,11 @@ export function useSFTPBrowser({
       return listing.entries;
     } catch (error) {
       if (generation !== loadGeneration.current) return null;
-      const code = failureCode(error);
-      const fallback = error instanceof Error ? error.message : "sftp_failed";
-      setProblem(target.local
-        ? code || fallback
-        : code === "sftp_failed" ? t("sftp.connectionFailed") : code || (error instanceof Error ? error.message : t("sftp.connectionFailed")));
+      if (!target.local && failureCode(error) === "sftp_failed") {
+        setProblem(t("sftp.connectionFailed"));
+      } else {
+        setProblem(sftpProblemText(t, error, target.local ? "sftp_failed" : t("sftp.connectionFailed")));
+      }
       return null;
     } finally {
       if (generation === loadGeneration.current) {
@@ -130,7 +131,7 @@ export function useSFTPBrowser({
       return generation === loadGeneration.current ? result : null;
     } catch (error) {
       if (generation === loadGeneration.current) {
-        setProblem(failureCode(error) || (error instanceof Error ? error.message : "sftp_failed"));
+        setProblem(sftpProblemText(t, error));
       }
       return null;
     } finally {

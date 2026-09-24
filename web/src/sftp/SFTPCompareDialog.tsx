@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { failureCode } from "../api/client";
 import { useTranslate } from "../i18n/context";
+import { sftpProblemText } from "./sftpProblemText";
 import { formatBytes } from "../ui/format";
 import { ModalShell } from "../ui/ModalShell";
 import { Button } from "../ui/surface";
@@ -29,12 +29,12 @@ export function SFTPCompareDialog({ left, right, onDismiss }: { left: Location; 
       setComparison(result);
       setSelected(new Set(result.entries.filter((entry) => entry.status !== "same").map((entry) => entry.relativePath)));
     }).catch((error) => {
-      if (live) setProblem(failureCode(error) || "sftp_failed");
+      if (live) setProblem(sftpProblemText(t, error));
     }).finally(() => {
       if (live) setBusy(false);
     });
     return () => { live = false; };
-  }, [left.alias, left.path, right.alias, right.path]);
+  }, [left.alias, left.path, right.alias, right.path, t]);
 
   const changes = useMemo(() => comparison?.entries.filter((entry) => entry.status !== "same") ?? [], [comparison]);
 
@@ -82,7 +82,7 @@ export function SFTPCompareDialog({ left, right, onDismiss }: { left: Location; 
       await sftpTransferManager.addRemoteTransfers(transfers, "copy");
       onDismiss();
     } catch (error) {
-      setProblem(failureCode(error) || (error instanceof Error ? error.message : "sftp_failed"));
+      setProblem(sftpProblemText(t, error));
       setBusy(false);
     }
   }

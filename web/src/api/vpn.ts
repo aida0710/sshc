@@ -2,7 +2,7 @@ import { apiClient } from "./client";
 import { postJSON, putJSON } from "./guards";
 import type { components } from "./schema";
 import { validateOpenAPISchema } from "./validators.generated";
-import { vpnRefusals } from "../vpn/vpnRefusals";
+import { vpnProblemCodes } from "../vpn/vpnRefusals";
 
 export type VPNOverview = components["schemas"]["VPNOverview"];
 export type VPNProfileStatus = components["schemas"]["VPNProfileStatus"];
@@ -11,20 +11,20 @@ export type VPNSecrets = components["schemas"]["VPNSecrets"];
 export type VPNLogs = components["schemas"]["VPNLogs"];
 
 // ひとつのSSH接続だけを専用のVPNへ通す経路。トンネルはengineが持つコンテナの
-// 中にあり、ブラウザーは設定と状態だけを扱う。秘密は保存のときだけ送り、
-// 応答には現れない。
+// 中にあり、ブラウザは設定と状態だけを扱う。シークレットは保存のときだけ送り、
+// 応答には現れない。接続へプロファイルを付けるのは、接続の設定（Connections）である。
 export type VPNApi = {
   vpnOverview(): Promise<VPNOverview>;
   // createVPNProfile は新しいプロファイルを作る。同じ名前があれば engine が断る。
   createVPNProfile(profile: VPNProfile, secrets: VPNSecrets): Promise<VPNOverview>;
-  // saveVPNProfile は保存済みのプロファイルを更新する。空の秘密は保存済みの値を残す。
-  saveVPNProfile(profile: VPNProfile, secrets?: VPNSecrets): Promise<VPNOverview>;
+  // saveVPNProfile は保存済みのプロファイルを更新する。送らなかったシークレットは
+  // 保存済みの値を残す。方式を変えたときは、新しい方式のシークレットが要る。
+  saveVPNProfile(profile: VPNProfile, secrets: VPNSecrets): Promise<VPNOverview>;
   removeVPNProfile(name: string): Promise<VPNOverview>;
   renameVPNProfile(from: string, to: string): Promise<VPNOverview>;
   vpnLogs(name: string): Promise<VPNLogs>;
   startVPNSession(name: string): Promise<VPNOverview>;
   stopVPNSession(name: string): Promise<VPNOverview>;
-  setConnectionVPN(alias: string, profile: string): Promise<VPNOverview>;
 };
 
 function validateOverview(value: unknown): VPNOverview {
@@ -39,10 +39,9 @@ function profilePath(name: string): string {
   return `/api/v1/vpn/profiles/${encodeURIComponent(name)}`;
 }
 
-// 経路の失敗は、この画面が自分で説明する。Dockerが無いことも、トンネルが
-// 成立しないことも、利用者が次に何をするかを決める情報である。説明できるコードは
-// 画面の言い方の表（vpnRefusals）と同じものなので、そこから作る。
-const locallyExplainedVPNFailures = Object.keys(vpnRefusals);
+// 経路の失敗は、この画面が自分で説明する。Dockerが無いことも、VPNの接続に
+// 失敗したことも、利用者が次に何をするかを決める情報である。
+const locallyExplainedVPNFailures = vpnProblemCodes;
 
 export const vpnApi: VPNApi = {
   async vpnOverview() {
@@ -54,9 +53,8 @@ export const vpnApi: VPNApi = {
     );
   },
   async saveVPNProfile(profile, secrets) {
-    const body = secrets === undefined ? { profile } : { profile, secrets };
     return validateOverview(
-      await putJSON<unknown>(profilePath(profile.name), body, locallyExplainedVPNFailures),
+      await putJSON<unknown>(profilePath(profile.name), { profile, secrets }, locallyExplainedVPNFailures),
     );
   },
   async removeVPNProfile(name) {
@@ -92,11 +90,6 @@ export const vpnApi: VPNApi = {
       await apiClient.mutate<unknown>(`${profilePath(name)}/session`, { method: "DELETE" }, {
         locallyHandledCodes: locallyExplainedVPNFailures,
       }),
-    );
-  },
-  async setConnectionVPN(alias, profile) {
-    return validateOverview(
-      await putJSON<unknown>("/api/v1/vpn/bindings", { alias, profile }, locallyExplainedVPNFailures),
     );
   },
 };

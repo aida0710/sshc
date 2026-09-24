@@ -1,6 +1,7 @@
 import { Suspense, lazy, useEffect, useId, useRef, useState } from "react";
 import { failureCode } from "../api/client";
 import { useTranslate } from "../i18n/context";
+import { sftpProblemText } from "./sftpProblemText";
 import type { BrowserLocation, NavigationBlocker } from "../routing/useSectionRoute";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { ModalShell } from "../ui/ModalShell";
@@ -103,7 +104,7 @@ export function useSFTPTextEditor({
       if (code === "sftp_not_utf8" || code === "sftp_text_too_large") {
         onProblem(t(code === "sftp_not_utf8" ? "sftp.binaryHint" : "sftp.tooLargeHint"));
       } else {
-        onProblem(code || (error instanceof Error ? error.message : "sftp_failed"));
+        onProblem(sftpProblemText(t, error));
       }
     } finally {
       if (current === generation.current) setBusy(false);
@@ -125,7 +126,7 @@ export function useSFTPTextEditor({
       setContents(saved.contents);
     } catch (error) {
       if (current !== generation.current) return;
-      onProblem(failureCode(error) === "sftp_conflict" ? t("sftp.conflict") : failureCode(error) || "sftp_failed");
+      onProblem(failureCode(error) === "sftp_conflict" ? t("sftp.conflict") : sftpProblemText(t, error));
     } finally {
       if (current === generation.current) setBusy(false);
     }

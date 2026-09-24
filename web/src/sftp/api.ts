@@ -3,6 +3,7 @@ import { issueAction, patchJSON, postJSON, putJSON } from "../api/guards";
 import type { components } from "../api/schema";
 import { validateOpenAPISchema } from "../api/validators.generated";
 import { saveWithAndroid } from "../android/native";
+import { vpnProblemCodes } from "../vpn/vpnRefusals";
 
 export type RemoteEntry = components["schemas"]["SFTPEntry"];
 export type LocalListing = components["schemas"]["SFTPLocalListing"];
@@ -134,13 +135,14 @@ export const sftpApi = {
     if (response.status !== 204) throw new Error("download_changed");
   },
   async list(alias: string, remotePath = ""): Promise<{ path: string; entries: RemoteEntry[] }> {
-    // Directory listing also establishes the SFTP connection. An unavailable host is
-    // an expected result handled inline by SFTPPanel, not an application-wide failure.
+    // Directory listing also establishes the SFTP connection. An unavailable host, or a
+    // VPN route that could not reach it, is an expected result handled inline by
+    // SFTPPanel, not an application-wide failure.
     const endpoint = remotePath === ""
       ? `/api/v1/sftp/${encodeURIComponent(alias)}/entries`
       : pathFor(alias, "entries", remotePath);
     return validateOpenAPISchema<components["schemas"]["SFTPListing"]>("SFTPListing", await apiClient.read(endpoint, {
-      locallyHandledCodes: ["sftp_failed"],
+      locallyHandledCodes: ["sftp_failed", ...vpnProblemCodes],
     }));
   },
   async search(alias: string, remotePath: string, query: string): Promise<RemoteSearchResult> {

@@ -2,16 +2,24 @@ import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/client";
-import type { VPNApi, VPNOverview } from "../api/vpn";
+import type { VPNApi, VPNOverview, VPNProfile } from "../api/vpn";
 import { VPNPanel } from "./VPNPanel";
 import { routeProgressIntervalMs } from "./vpnPhases";
+
+// tohokuProfile は、L2TP/IPsec のプロファイルである。接続先は持たない。
+const tohokuProfile: VPNProfile = {
+  name: "tohoku",
+  backend: "l2tp_ipsec",
+  dns: ["10.9.9.53"],
+  l2tp: { server: "vpn.example.jp", username: "tester" },
+};
 
 function overview(overrides: Partial<VPNOverview> = {}): VPNOverview {
   return {
     available: true,
     profiles: [
       {
-        profile: { name: "tohoku", backend: "l2tp_ipsec", target: "10.9.9.1:22" },
+        profile: tohokuProfile,
         running: true,
         relaySocket: "/home/tester/.ssh/sshc/vpn/tohoku/relay.sock",
         connections: ["lab"],
@@ -34,7 +42,7 @@ const privateKey = "aAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAA=";
 function startingOverview(): VPNOverview {
   return overview({
     profiles: [{
-      profile: { name: "tohoku", backend: "l2tp_ipsec", target: "10.9.9.1:22" },
+      profile: tohokuProfile,
       running: true,
       relaySocket: "",
       connections: [],
@@ -47,7 +55,7 @@ function startingOverview(): VPNOverview {
 function stoppedOverview(): VPNOverview {
   return overview({
     profiles: [{
-      profile: { name: "tohoku", backend: "l2tp_ipsec", target: "10.9.9.1:22" },
+      profile: tohokuProfile,
       running: false,
       relaySocket: "",
       connections: [],
@@ -56,13 +64,8 @@ function stoppedOverview(): VPNOverview {
 }
 
 // fillWireGuardProfile は、作成フォームへ WireGuard のプロファイルをひとつ入れる。
-async function fillWireGuardProfile(
-  user: ReturnType<typeof userEvent.setup>,
-  form: HTMLElement,
-  target = "10.9.9.1:22",
-) {
+async function fillWireGuardProfile(user: ReturnType<typeof userEvent.setup>, form: HTMLElement) {
   await user.type(within(form).getByLabelText("Name"), "lab");
-  await user.type(within(form).getByLabelText("Target inside the VPN"), target);
   await user.type(within(form).getByLabelText("VPN server"), "vpn.example.jp:51820");
   await user.type(within(form).getByLabelText("Peer public key"), peerPublicKey);
   await user.type(within(form).getByLabelText("Private key"), privateKey);
@@ -78,31 +81,53 @@ function buildApi(overrides: Partial<VPNApi> = {}): VPNApi {
     vpnLogs: vi.fn().mockResolvedValue({ lines: "starting IPsec\n" }),
     startVPNSession: vi.fn().mockResolvedValue(overview()),
     stopVPNSession: vi.fn().mockResolvedValue(overview()),
-    setConnectionVPN: vi.fn().mockResolvedValue(overview()),
     ...overrides,
   };
 }
 
 describe("VPNPanel", () => {
-  it("shows each profile with its type, state and the connections that use it", async () => {
-    render(<VPNPanel api={buildApi()} aliases={["lab", "edge"]} />);
+  it("shows each profile with its type, server, state and the connections that use it", async () => {
+    render(<VPNPanel api={buildApi()} />);
 
     const route = await screen.findByRole("article", { name: "tohoku" });
-    expect(within(route).getByText(/L2TP\/IPsec/)).toBeVisible();
-    expect(within(route).getByText(/10\.9\.9\.1:22/)).toBeVisible();
-    expect(within(route).getByText("lab")).toBeVisible();
+    expect(within(route).getByText("L2TP/IPsec · vpn.example.jp · route open")).toBeVisible();
+    const connections = within(route).getByRole("list", { name: "Connections using this profile" });
+    expect(within(connections).getByText("lab")).toBeVisible();
   });
 
-  it("says why this machine cannot open routes instead of hiding the screen", async () => {
+  it("only lists the connections, and says the profile is attached to a connection in Connections", async () => {
+    render(<VPNPanel api={buildApi()} />);
+
+    const route = await screen.findByRole("article", { name: "tohoku" });
+    expect(within(route).queryByRole("combobox")).toBeNull();
+    expect(within(route).queryByRole("button", { name: /lab/ })).toBeNull();
+    expect(within(route).getByText(/change "VPN profile" on its sshc tab/)).toBeVisible();
+  });
+
+  it("says in its own words why this machine cannot open routes, and adds Docker's words as details", async () => {
+    const detail = 'docker is not available: exec: "docker": executable file not found in $PATH';
     const api = buildApi({
       vpnOverview: vi.fn().mockResolvedValue(
-        overview({ available: false, detail: "docker is not available", profiles: [] }),
+        overview({ available: false, unavailable: "vpn_docker_missing", detail, profiles: [] }),
       ),
     });
 
     render(<VPNPanel api={api} />);
 
-    expect(await screen.findByText(/docker is not available/)).toBeVisible();
+    expect(await screen.findByText("Docker was not found. VPN routes need Docker. Install Docker Desktop or similar.")).toBeVisible();
+    expect(screen.getByText(`Details: ${detail}`)).toBeVisible();
+  });
+
+  it("tells a stopped Docker apart from a missing one", async () => {
+    const api = buildApi({
+      vpnOverview: vi.fn().mockResolvedValue(
+        overview({ available: false, unavailable: "vpn_docker_not_running", detail: "Cannot connect to the Docker daemon", profiles: [] }),
+      ),
+    });
+
+    render(<VPNPanel api={api} />);
+
+    expect(await screen.findByText(/^Docker is not running\./)).toBeVisible();
   });
 
   it("sends the secrets with the profile and never shows them again", async () => {
@@ -111,18 +136,13 @@ describe("VPNPanel", () => {
     render(<VPNPanel api={buildApi({ createVPNProfile })} />);
     const form = await screen.findByRole("region", { name: "Add a VPN profile" });
 
-    await user.type(within(form).getByLabelText("Name"), "lab");
-    await user.type(within(form).getByLabelText("Target inside the VPN"), "10.9.9.1:22");
-    await user.type(within(form).getByLabelText("VPN server"), "vpn.example.jp:51820");
-    await user.type(within(form).getByLabelText("Peer public key"), "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=");
-    await user.type(within(form).getByLabelText("Private key"), "aAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAA=");
+    await fillWireGuardProfile(user, form);
     await user.click(within(form).getByRole("button", { name: "Save" }));
 
     expect(createVPNProfile).toHaveBeenCalledWith(
       {
         name: "lab",
         backend: "wireguard",
-        target: "10.9.9.1:22",
         wireguard: {
           server: "vpn.example.jp:51820",
           peerPublicKey: "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
@@ -133,28 +153,25 @@ describe("VPNPanel", () => {
     );
     await waitFor(() => expect(within(form).getByLabelText("Private key")).toHaveValue(""));
     expect(within(form).getByLabelText("Name")).toHaveValue("");
-    expect(within(form).getByLabelText("Target inside the VPN")).toHaveValue("");
+    expect(within(form).getByLabelText("VPN server")).toHaveValue("");
     expect(createVPNProfile.mock.calls[0]?.[0]).not.toHaveProperty("dns");
   });
 
-  it("sends the VPN's own DNS servers with a profile whose target is a name", async () => {
+  it("sends the VPN's own DNS servers, for connections whose HostName is a name", async () => {
     const user = userEvent.setup();
     const createVPNProfile = vi.fn().mockResolvedValue(overview());
     render(<VPNPanel api={buildApi({ createVPNProfile })} />);
     const form = await screen.findByRole("region", { name: "Add a VPN profile" });
 
-    await user.type(within(form).getByLabelText("Name"), "lab");
-    await user.type(within(form).getByLabelText("Target inside the VPN"), "lab.example.jp:22");
-    await user.type(within(form).getByLabelText("VPN server"), "vpn.example.jp:51820");
+    await fillWireGuardProfile(user, form);
     await user.type(within(form).getByLabelText("DNS inside the VPN"), "10.9.9.53, 10.9.9.54");
-    await user.type(within(form).getByLabelText("Peer public key"), "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=");
-    await user.type(within(form).getByLabelText("Private key"), "aAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAA=");
     await user.click(within(form).getByRole("button", { name: "Save" }));
 
     expect(createVPNProfile).toHaveBeenCalledWith(
-      expect.objectContaining({ target: "lab.example.jp:22", dns: ["10.9.9.53", "10.9.9.54"] }),
+      expect.objectContaining({ dns: ["10.9.9.53", "10.9.9.54"] }),
       expect.anything(),
     );
+    expect(createVPNProfile.mock.calls[0]?.[0]).not.toHaveProperty("target");
   });
 
   it("waits for approval without sending a second answer when the device asks nothing", async () => {
@@ -165,7 +182,6 @@ describe("VPNPanel", () => {
 
     await user.selectOptions(within(form).getByLabelText("Type"), "openconnect");
     await user.type(within(form).getByLabelText("Name"), "office");
-    await user.type(within(form).getByLabelText("Target inside the VPN"), "10.9.9.1:22");
     await user.type(within(form).getByLabelText("VPN server"), "vpn.example.jp");
     await user.type(within(form).getByLabelText("VPN username"), "tester");
     await user.type(within(form).getByLabelText("VPN password"), "a password");
@@ -187,7 +203,6 @@ describe("VPNPanel", () => {
 
     await user.selectOptions(within(form).getByLabelText("Type"), "openconnect");
     await user.type(within(form).getByLabelText("Name"), "office");
-    await user.type(within(form).getByLabelText("Target inside the VPN"), "10.9.9.1:22");
     await user.type(within(form).getByLabelText("VPN server"), "vpn.example.jp");
     await user.type(within(form).getByLabelText("VPN username"), "tester");
     await user.type(within(form).getByLabelText("VPN password"), "a password");
@@ -211,7 +226,6 @@ describe("VPNPanel", () => {
 
     await user.selectOptions(within(form).getByLabelText("Type"), "openconnect");
     await user.type(within(form).getByLabelText("Name"), "office");
-    await user.type(within(form).getByLabelText("Target inside the VPN"), "10.9.9.1:22");
     await user.type(within(form).getByLabelText("VPN server"), "vpn.example.jp");
     await user.type(within(form).getByLabelText("VPN username"), "tester");
     await user.type(within(form).getByLabelText("VPN password"), "a password");
@@ -227,24 +241,12 @@ describe("VPNPanel", () => {
     );
   });
 
-  it("routes a chosen connection through the profile", async () => {
-    const user = userEvent.setup();
-    const setConnectionVPN = vi.fn().mockResolvedValue(overview());
-    render(<VPNPanel api={buildApi({ setConnectionVPN })} aliases={["lab", "edge"]} />);
-    const route = await screen.findByRole("article", { name: "tohoku" });
-
-    await user.selectOptions(within(route).getByLabelText("Choose a connection"), "edge");
-    await user.click(within(route).getByRole("button", { name: "Route through this VPN" }));
-
-    expect(setConnectionVPN).toHaveBeenCalledWith("edge", "tohoku");
-  });
-
   it("says what it is waiting for while a route is being opened, and stops saying it once it is up", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
       const starting = overview({
         profiles: [{
-          profile: { name: "tohoku", backend: "l2tp_ipsec", target: "10.9.9.1:22" },
+          profile: tohokuProfile,
           running: true,
           relaySocket: "",
           connections: [],
@@ -315,15 +317,41 @@ describe("VPNPanel", () => {
     expect(renameVPNProfile).toHaveBeenCalledWith("tohoku", "tains");
   });
 
-  it("stops routing a connection when its binding is removed", async () => {
+  it("says what is wrong with a new name in the name field, without asking the engine", async () => {
     const user = userEvent.setup();
-    const setConnectionVPN = vi.fn().mockResolvedValue(overview());
-    render(<VPNPanel api={buildApi({ setConnectionVPN })} aliases={["lab"]} />);
+    const renameVPNProfile = vi.fn().mockResolvedValue(overview());
+    render(<VPNPanel api={buildApi({ renameVPNProfile })} />);
     const route = await screen.findByRole("article", { name: "tohoku" });
 
-    await user.click(within(route).getByRole("button", { name: "Stop routing lab through tohoku" }));
+    await user.click(within(route).getByRole("button", { name: "Rename" }));
+    const dialog = screen.getByRole("dialog");
+    await user.clear(within(dialog).getByLabelText("New name"));
+    await user.type(within(dialog).getByLabelText("New name"), "tohoku office");
+    await user.click(within(dialog).getByRole("button", { name: "Rename" }));
 
-    expect(setConnectionVPN).toHaveBeenCalledWith("lab", "");
+    expect(within(dialog).getByLabelText("New name")).toHaveAccessibleDescription(
+      "This is not written in a form this field accepts.",
+    );
+    expect(renameVPNProfile).not.toHaveBeenCalled();
+  });
+
+  it("names the field when the engine refuses a new name", async () => {
+    const user = userEvent.setup();
+    const renameVPNProfile = vi.fn().mockRejectedValue(
+      new ApiError("vpn_profile_invalid", 400, {
+        code: "vpn_profile_invalid", message: "request rejected", field: "name", reason: "format",
+      }),
+    );
+    render(<VPNPanel api={buildApi({ renameVPNProfile })} />);
+    const route = await screen.findByRole("article", { name: "tohoku" });
+
+    await user.click(within(route).getByRole("button", { name: "Rename" }));
+    const dialog = screen.getByRole("dialog");
+    await user.clear(within(dialog).getByLabelText("New name"));
+    await user.type(within(dialog).getByLabelText("New name"), "tains");
+    await user.click(within(dialog).getByRole("button", { name: "Rename" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Name: This is not written in a form this field accepts.");
   });
 
   it("keeps a newer answer when an older status reading arrives late", async () => {
@@ -436,12 +464,71 @@ describe("VPNPanel", () => {
     render(<VPNPanel api={buildApi({ createVPNProfile })} />);
     const form = await screen.findByRole("region", { name: "Add a VPN profile" });
 
-    await fillWireGuardProfile(user, form, "lab.example.jp:22");
+    await fillWireGuardProfile(user, form);
+    await user.type(within(form).getByLabelText("DNS inside the VPN"), "dns.example.jp");
     await user.click(within(form).getByRole("button", { name: "Save" }));
 
-    const target = within(form).getByLabelText("Target inside the VPN");
-    expect(target).toHaveAttribute("aria-invalid", "true");
-    expect(target).toHaveAccessibleDescription("A name needs the DNS servers inside the VPN as well.");
+    const resolvers = within(form).getByLabelText("DNS inside the VPN");
+    expect(resolvers).toHaveAttribute("aria-invalid", "true");
+    expect(resolvers).toHaveAccessibleDescription("Not an IPv4 address.");
+    expect(createVPNProfile).not.toHaveBeenCalled();
+  });
+
+  // 送る前の検査（validateAPIRequest）は、長さや形の違反を項目の名前なしで断る。その前に
+  // フォームが項目ごとに理由を出す。
+  it("names the private key when it is not a WireGuard key, instead of failing without a field", async () => {
+    const user = userEvent.setup();
+    const createVPNProfile = vi.fn().mockResolvedValue(overview());
+    render(<VPNPanel api={buildApi({ createVPNProfile })} />);
+    const form = await screen.findByRole("region", { name: "Add a VPN profile" });
+
+    await user.type(within(form).getByLabelText("Name"), "lab");
+    await user.type(within(form).getByLabelText("VPN server"), "vpn.example.jp:51820");
+    await user.type(within(form).getByLabelText("Peer public key"), peerPublicKey);
+    await user.type(within(form).getByLabelText("Private key"), privateKey.slice(1));
+    await user.click(within(form).getByRole("button", { name: "Save" }));
+
+    expect(within(form).getByRole("alert")).toHaveTextContent("This is not written in a form this field accepts.");
+    expect(createVPNProfile).not.toHaveBeenCalled();
+  });
+
+  it("names the word sent for approval when it is longer than the engine keeps", async () => {
+    const user = userEvent.setup();
+    const createVPNProfile = vi.fn().mockResolvedValue(overview());
+    render(<VPNPanel api={buildApi({ createVPNProfile })} />);
+    const form = await screen.findByRole("region", { name: "Add a VPN profile" });
+
+    await user.selectOptions(within(form).getByLabelText("Type"), "openconnect");
+    await user.type(within(form).getByLabelText("Name"), "office");
+    await user.type(within(form).getByLabelText("VPN server"), "vpn.example.jp");
+    await user.type(within(form).getByLabelText("VPN username"), "tester");
+    await user.type(within(form).getByLabelText("VPN password"), "a password");
+    await user.selectOptions(within(form).getByLabelText("Second factor"), "approve");
+    await user.type(within(form).getByLabelText("Word to send as the second answer"), "p".repeat(33));
+    await user.click(within(form).getByRole("button", { name: "Save" }));
+
+    expect(within(form).getByLabelText("Word to send as the second answer")).toHaveAccessibleDescription(
+      "Too long: up to 32 characters.",
+    );
+    expect(createVPNProfile).not.toHaveBeenCalled();
+  });
+
+  it("names a password longer than the API accepts", async () => {
+    const user = userEvent.setup();
+    const createVPNProfile = vi.fn().mockResolvedValue(overview());
+    render(<VPNPanel api={buildApi({ createVPNProfile })} />);
+    const form = await screen.findByRole("region", { name: "Add a VPN profile" });
+
+    await user.selectOptions(within(form).getByLabelText("Type"), "l2tp_ipsec");
+    await user.type(within(form).getByLabelText("Name"), "office");
+    await user.type(within(form).getByLabelText("VPN server"), "vpn.example.jp");
+    await user.type(within(form).getByLabelText("VPN username"), "tester");
+    await user.click(within(form).getByLabelText("VPN password"));
+    await user.paste("x".repeat(257));
+    await user.type(within(form).getByLabelText("IPsec pre-shared key"), "a key");
+    await user.click(within(form).getByRole("button", { name: "Save" }));
+
+    expect(within(form).getByRole("alert")).toHaveTextContent("Too long: up to 256 characters.");
     expect(createVPNProfile).not.toHaveBeenCalled();
   });
 
@@ -494,7 +581,7 @@ describe("VPNPanel", () => {
     await user.click(within(route).getByRole("button", { name: "Connect" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "The VPN route did not come up. No handshake with the WireGuard peer. Check the keys and the server.",
+      "Connecting to the VPN failed. The handshake failed. Check the keys and the server.",
     );
     await user.click(screen.getByRole("button", { name: "Show the logs" }));
     expect(vpnLogs).toHaveBeenCalledWith("tohoku");
@@ -511,5 +598,102 @@ describe("VPNPanel", () => {
     await user.click(within(route).getByRole("button", { name: "Connect" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("The reason could not be read. Check the logs.");
+  });
+  it("opens the saved values for editing, keeps the name, and keeps the stored secrets when left blank", async () => {
+    const user = userEvent.setup();
+    const saveVPNProfile = vi.fn().mockResolvedValue(overview());
+    render(<VPNPanel api={buildApi({ saveVPNProfile })} />);
+    const route = await screen.findByRole("article", { name: "tohoku" });
+
+    await user.click(within(route).getByRole("button", { name: "Edit" }));
+    const form = screen.getByRole("region", { name: "Edit tohoku" });
+    expect(within(form).getByLabelText("Name")).toHaveValue("tohoku");
+    expect(within(form).getByLabelText("Name")).toBeDisabled();
+    expect(within(form).getByLabelText("VPN server")).toHaveValue("vpn.example.jp");
+    expect(within(form).getByLabelText("DNS inside the VPN")).toHaveValue("10.9.9.53");
+    expect(within(form).getByLabelText("VPN password")).toHaveValue("");
+    expect(within(form).getAllByText("Leave blank to keep the stored value.")).toHaveLength(2);
+
+    await user.clear(within(form).getByLabelText("VPN server"));
+    await user.type(within(form).getByLabelText("VPN server"), "vpn2.example.jp");
+    await user.click(within(form).getByRole("button", { name: "Save" }));
+
+    expect(saveVPNProfile).toHaveBeenCalledWith(
+      { name: "tohoku", backend: "l2tp_ipsec", dns: ["10.9.9.53"], l2tp: { server: "vpn2.example.jp", username: "tester" } },
+      {},
+    );
+    await waitFor(() => expect(screen.queryByRole("region", { name: "Edit tohoku" })).toBeNull());
+    expect(screen.getByRole("article", { name: "tohoku" })).toBeVisible();
+  });
+
+  it("sends only the secrets that were typed while editing", async () => {
+    const user = userEvent.setup();
+    const saveVPNProfile = vi.fn().mockResolvedValue(overview());
+    render(<VPNPanel api={buildApi({ saveVPNProfile })} />);
+    const route = await screen.findByRole("article", { name: "tohoku" });
+
+    await user.click(within(route).getByRole("button", { name: "Edit" }));
+    const form = screen.getByRole("region", { name: "Edit tohoku" });
+    await user.type(within(form).getByLabelText("VPN password"), "a new password");
+    await user.click(within(form).getByRole("button", { name: "Save" }));
+
+    expect(saveVPNProfile).toHaveBeenCalledWith(expect.objectContaining({ name: "tohoku" }), {
+      l2tpPassword: "a new password",
+    });
+  });
+
+  it("asks for the new type's secrets when the type is changed while editing", async () => {
+    const user = userEvent.setup();
+    const saveVPNProfile = vi.fn().mockResolvedValue(overview());
+    render(<VPNPanel api={buildApi({ saveVPNProfile })} />);
+    const route = await screen.findByRole("article", { name: "tohoku" });
+
+    await user.click(within(route).getByRole("button", { name: "Edit" }));
+    const form = screen.getByRole("region", { name: "Edit tohoku" });
+    await user.selectOptions(within(form).getByLabelText("Type"), "openconnect");
+
+    expect(within(form).queryByText("Leave blank to keep the stored value.")).toBeNull();
+    expect(within(form).getByRole("button", { name: "Save" })).toBeDisabled();
+    await user.type(within(form).getByLabelText("VPN password"), "a password");
+    await user.click(within(form).getByRole("button", { name: "Save" }));
+
+    expect(saveVPNProfile).toHaveBeenCalledWith(
+      expect.objectContaining({ backend: "openconnect", openconnect: expect.objectContaining({ server: "vpn.example.jp" }) }),
+      { openconnectPassword: "a password" },
+    );
+  });
+
+  it("puts the edited profile back as it was when editing is cancelled", async () => {
+    const user = userEvent.setup();
+    const saveVPNProfile = vi.fn().mockResolvedValue(overview());
+    render(<VPNPanel api={buildApi({ saveVPNProfile })} />);
+    const route = await screen.findByRole("article", { name: "tohoku" });
+
+    await user.click(within(route).getByRole("button", { name: "Edit" }));
+    await user.click(within(screen.getByRole("region", { name: "Edit tohoku" })).getByRole("button", { name: "Cancel" }));
+
+    expect(screen.getByRole("article", { name: "tohoku" })).toBeVisible();
+    expect(saveVPNProfile).not.toHaveBeenCalled();
+  });
+
+  it("keeps the edit form open and shows the refused field when the engine refuses the change", async () => {
+    const user = userEvent.setup();
+    const saveVPNProfile = vi.fn().mockRejectedValue(
+      new ApiError("vpn_secrets_missing", 409, {
+        code: "vpn_secrets_missing",
+        message: "request rejected",
+        field: "secrets.ipsecPsk",
+        reason: "required",
+      }),
+    );
+    render(<VPNPanel api={buildApi({ saveVPNProfile })} />);
+    const route = await screen.findByRole("article", { name: "tohoku" });
+
+    await user.click(within(route).getByRole("button", { name: "Edit" }));
+    const form = screen.getByRole("region", { name: "Edit tohoku" });
+    await user.click(within(form).getByRole("button", { name: "Save" }));
+
+    expect(await within(form).findByText("Enter a value.")).toBeVisible();
+    expect(screen.getByRole("region", { name: "Edit tohoku" })).toBeVisible();
   });
 });
