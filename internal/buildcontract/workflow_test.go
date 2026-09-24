@@ -429,7 +429,7 @@ func validateGoSteps(job workflowJob) []string {
 		{run: "go build ./...", condition: "${{ runner.os == 'Windows' }}", shell: "pwsh"},
 		{run: "go test -count=1 ./...", condition: "${{ runner.os != 'Windows' }}", shell: "bash"},
 		// race は PR では Linux だけ、main への push ではすべての OS で走る。
-		{run: "go test -count=1 -race ./...", condition: "${{ runner.os != 'Windows' && (github.event_name != 'pull_request' || runner.os == 'Linux') }}", shell: "bash"},
+		{run: "go test -count=1 -race -timeout 20m ./...", condition: "${{ runner.os != 'Windows' && (github.event_name != 'pull_request' || runner.os == 'Linux') }}", shell: "bash"},
 	} {
 		if !hasRunContract(job, required) {
 			problems = append(problems, fmt.Sprintf("jobs.go lacks run=%q if=%q shell=%q", required.run, required.condition, required.shell))
