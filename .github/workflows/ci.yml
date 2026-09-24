@@ -130,7 +130,9 @@ jobs:
       - name: go test -race (Unix)
         if: ${{ runner.os != 'Windows' && (github.event_name != 'pull_request' || runner.os == 'Linux') }}
         shell: bash
-        run: go test -count=1 -race ./...
+        # internal/remotesync は、macOS の -race で 440〜600 秒かかり、既定の 10 分で
+        # 時間切れになることがある。Windows と同じく 20 分にする。
+        run: go test -count=1 -race -timeout 20m ./...
 
       # windows-2025 x64 は通常 race 対応である。もし toolchain 自身がこの
       # platform を unsupported と明言した場合だけ neutral にし、test failure、
