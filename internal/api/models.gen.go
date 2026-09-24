@@ -1658,7 +1658,7 @@ type TerminalCommandPreviewRequest struct {
 	ExpectedReviewEvidence *string           `json:"expectedReviewEvidence,omitempty"`
 	Inputs                 map[string]string `json:"inputs"`
 
-	// IssueAction Issue a one-time execution token. Defaults to true for compatibility; passive previews should set false.
+	// IssueAction Issue a one-time execution token. Defaults to true; passive previews should set false.
 	IssueAction *bool `json:"issueAction,omitempty"`
 
 	// RevealCommand Return the expanded command for an explicit insert, run, or copy action. Normal previews remain redacted.

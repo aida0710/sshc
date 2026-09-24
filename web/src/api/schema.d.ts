@@ -2541,7 +2541,7 @@ export interface components {
             command?: string;
             /** @description Return the expanded command for an explicit insert, run, or copy action. Normal previews remain redacted. */
             revealCommand?: boolean;
-            /** @description Issue a one-time execution token. Defaults to true for compatibility; passive previews should set false. */
+            /** @description Issue a one-time execution token. Defaults to true; passive previews should set false. */
             issueAction?: boolean;
             /** @description Bind the preview to sending Enter after the command. Defaults to true. */
             submit?: boolean;
@@ -3781,7 +3781,7 @@ export interface components {
             id: string;
             alias: string;
             /**
-             * @description Omitted by legacy SSH-only workspaces and interpreted as ssh.
+             * @description Omitted for an SSH pane; an omitted kind means ssh.
              * @enum {string}
              */
             kind?: "ssh" | "shell";
