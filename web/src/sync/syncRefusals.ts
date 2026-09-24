@@ -15,7 +15,6 @@ export const syncRefusals: Record<string, MessageKey> = {
   bucket_dns_failed: "sync.bucketDNSFailed",
   bucket_tls_failed: "sync.bucketTLSFailed",
   bucket_unreachable: "sync.bucketUnreachable",
-  sync_failed: "sync.failed",
   sync_internal_failed: "sync.internalFailed",
   snapshot_download_incomplete: "sync.snapshotDownloadIncomplete",
   snapshot_cost_refused: "sync.snapshotCostRefused",

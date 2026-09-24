@@ -1538,8 +1538,6 @@ export const en = {
     "There is no current snapshot at the specified bucket and path.",
   "sync.internalFailed":
     "Sync encountered an unclassified internal error. Include the diagnostic code below when reporting it.",
-  "sync.failed":
-    "Sync could not be completed. Nothing was overwritten. Check the connection and try again.",
   "sync.localChanged":
     "Settings on this machine changed after the preview. Nothing was overwritten. Check for changes again.",
   "sync.workspaceBusy":
