@@ -11,6 +11,7 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
+	"sshc/internal/commandconn"
 	"sshc/internal/terminal"
 	"sshc/internal/textencoding"
 )
@@ -453,7 +454,7 @@ func newClientConn(
 // "Connection refused" を stderr へ書き、こちらから見えるのは「握手が
 // 通らなかった」だけになる。
 func withComplaints(err error, conn net.Conn) error {
-	command, ok := conn.(*commandConn)
+	command, ok := conn.(*commandconn.Conn)
 	if !ok {
 		return err
 	}
