@@ -119,7 +119,7 @@ func realInstallationAt(t *testing.T, objectPath string, files map[string]string
 		Endpoint: endpoint, Bucket: client.Bucket, Path: objectPath, Region: client.Region,
 		Direction: remotesync.DirectionBoth,
 	}
-	if err := service.Reconfigure(config, client.Creds, &client, func() error { return nil }); err != nil {
+	if err := service.ConfigureForTest(config, client.Creds, &client); err != nil {
 		t.Fatal(err)
 	}
 	return installation{

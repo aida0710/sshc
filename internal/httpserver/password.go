@@ -177,8 +177,6 @@ func registerPasswordRoutes(engine *echo.Echo, handlers PasswordHandlers) {
 	engine.POST("/api/v1/passwords/change", handlers.Change)
 	engine.POST("/api/v1/passwords/lock", handlers.Lock)
 	engine.GET("/api/v1/passwords/:alias/eligibility", handlers.Eligible)
-	engine.PUT("/api/v1/passwords/:alias", handlers.Store)
-	engine.DELETE("/api/v1/passwords/:alias", handlers.Forget)
 	engine.GET("/api/v1/credentials", handlers.ListCredentials)
 	engine.PUT("/api/v1/credentials/:kind/assign", handlers.AssignCredential)
 	engine.DELETE("/api/v1/credentials/:kind/assign/:subject", handlers.UnassignCredential)
@@ -645,28 +643,6 @@ func (h PasswordHandlers) UnassignCredential(c *echo.Context) error {
 	return h.listCredentials(c)
 }
 
-func (h PasswordHandlers) Store(c *echo.Context) error {
-	alias := c.Param("alias")
-	if err := validate.Alias(alias); err != nil {
-		return problem(c, http.StatusBadRequest, "unsafe_alias")
-	}
-	var request api.StorePasswordRequest
-	if err := decodeJSON(c, &request); err != nil {
-		return problem(c, http.StatusBadRequest, "invalid_request")
-	}
-	if blocked, response := h.ensurePasswordStorable(c, alias); blocked {
-		return response
-	}
-	binding, response := h.passwordBinding(c, alias)
-	if response != nil {
-		return response
-	}
-	if err := h.Service.SetBound(alias, request.Password, binding); err != nil {
-		return passwordProblem(c, err)
-	}
-	return h.status(c)
-}
-
 func (h PasswordHandlers) passwordBinding(c *echo.Context, alias string) (string, error) {
 	if h.Binding == nil {
 		return "", problem(c, http.StatusInternalServerError, "config_unreadable")
@@ -698,17 +674,6 @@ func (h PasswordHandlers) ensurePasswordStorable(c *echo.Context, alias string) 
 	return true, problemWith(c, http.StatusConflict, problemPayload{
 		Code: "password_not_storable", Blockers: blockers,
 	})
-}
-
-func (h PasswordHandlers) Forget(c *echo.Context) error {
-	alias := c.Param("alias")
-	if err := validate.Alias(alias); err != nil {
-		return problem(c, http.StatusBadRequest, "unsafe_alias")
-	}
-	if err := h.Service.Remove(alias); err != nil {
-		return passwordProblem(c, err)
-	}
-	return h.status(c)
 }
 
 func passwordProblem(c *echo.Context, err error) error {

@@ -781,23 +781,6 @@ paths:
         "403": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
         "502": { $ref: "#/components/responses/Problem" }
-  /api/v1/sync/settings:
-    put:
-      operationId: configureSync
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/SyncSettingsRequest" }
-      responses:
-        "200":
-          description: Bucket configured for this run
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/SyncStatus" }
-        "400": { $ref: "#/components/responses/Problem" }
-        "401": { $ref: "#/components/responses/Problem" }
-        "403": { $ref: "#/components/responses/Problem" }
   /api/v1/sync/exclusions:
     get:
       operationId: getSyncExclusions
@@ -1136,46 +1119,6 @@ paths:
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
-  /api/v1/passwords/{alias}:
-    put:
-      operationId: storePassword
-      parameters:
-        - name: alias
-          in: path
-          required: true
-          schema: { type: string, minLength: 1, maxLength: 255 }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/StorePasswordRequest" }
-      responses:
-        "200":
-          description: Password stored
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/PasswordVaultStatus" }
-        "400": { $ref: "#/components/responses/Problem" }
-        "401": { $ref: "#/components/responses/Problem" }
-        "403": { $ref: "#/components/responses/Problem" }
-        "409": { $ref: "#/components/responses/Problem" }
-    delete:
-      operationId: forgetPassword
-      parameters:
-        - name: alias
-          in: path
-          required: true
-          schema: { type: string, minLength: 1, maxLength: 255 }
-      responses:
-        "200":
-          description: Password forgotten
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/PasswordVaultStatus" }
-        "400": { $ref: "#/components/responses/Problem" }
-        "401": { $ref: "#/components/responses/Problem" }
-        "403": { $ref: "#/components/responses/Problem" }
-        "409": { $ref: "#/components/responses/Problem" }
   /api/v1/credentials:
     get:
       operationId: listCredentials
@@ -3165,7 +3108,7 @@ components:
           description: Return the expanded command for an explicit insert, run, or copy action. Normal previews remain redacted.
         issueAction:
           type: boolean
-          description: Issue a one-time execution token. Defaults to true for compatibility; passive previews should set false.
+          description: Issue a one-time execution token. Defaults to true; passive previews should set false.
         submit:
           type: boolean
           description: Bind the preview to sending Enter after the command. Defaults to true.
@@ -3467,21 +3410,6 @@ components:
         written: { type: integer, minimum: 0 }
         removed: { type: integer, minimum: 0 }
         completedAt: { type: string }
-    SyncSettingsRequest:
-      type: object
-      additionalProperties: false
-      required: [endpoint, bucket, accessKeyId, secretAccessKey, direction]
-      properties:
-        endpoint: { type: string, minLength: 1, maxLength: 2048 }
-        bucket: { type: string, minLength: 1, maxLength: 255 }
-        # バケット内のどこにオブジェクトを置くか。既定の空はそのルートを指す。
-        # バケットはたいていすでにこのアプリケーションにちなんで名付けられており、
-        # その中で同じ名前を繰り返すフォルダは、何もない階層をひとつ増やすだけだ。
-        path: { type: string, maxLength: 255 }
-        region: { type: string, maxLength: 64 }
-        accessKeyId: { type: string, minLength: 1, maxLength: 512 }
-        secretAccessKey: { type: string, minLength: 1, maxLength: 512 }
-        direction: { $ref: "#/components/schemas/SyncDirection" }
     SyncSetupTargetState:
       type: string
       enum: [empty, existing, incomplete]
@@ -3492,6 +3420,9 @@ components:
       properties:
         endpoint: { type: string, minLength: 1, maxLength: 2048 }
         bucket: { type: string, minLength: 1, maxLength: 255 }
+        # バケット内のどこにオブジェクトを置くか。既定の空はそのルートを指す。
+        # バケットはたいていすでにこのアプリケーションにちなんで名付けられており、
+        # その中で同じ名前を繰り返すフォルダは、何もない階層をひとつ増やすだけだ。
         path: { type: string, maxLength: 255 }
         region: { type: string, maxLength: 64 }
         accessKeyId: { type: string, minLength: 1, maxLength: 512 }
@@ -3681,12 +3612,6 @@ components:
       required: [passphrase]
       properties:
         passphrase: { type: string, maxLength: 1024 }
-    StorePasswordRequest:
-      type: object
-      additionalProperties: false
-      required: [password]
-      properties:
-        password: { type: string, minLength: 1, maxLength: 1024 }
     IssueActionRequest:
       type: object
       additionalProperties: false
@@ -5109,7 +5034,7 @@ components:
       properties:
         id: { type: string }
         alias: { type: string }
-        kind: { type: string, enum: [ssh, shell], description: Omitted by legacy SSH-only workspaces and interpreted as ssh. }
+        kind: { type: string, enum: [ssh, shell], description: Omitted for an SSH pane; an omitted kind means ssh. }
     WorkspaceSplit:
       type: object
       additionalProperties: false

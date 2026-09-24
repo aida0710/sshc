@@ -224,7 +224,7 @@ type SyncStateView struct {
 type KeyProvider func() (string, error)
 
 // KeyReplacementProvider reads the old key and prepares its exact local CAS
-// while operationMu is held. This keeps a concurrent Reconfigure's persisted
+// while operationMu is held. This keeps a concurrent CompleteSetup's persisted
 // settings and in-memory remote binding in one generation.
 type KeyReplacementProvider func() (oldKey string, commit func() error, err error)
 

@@ -1404,11 +1404,6 @@ type StoreCredentialRequest struct {
 	Secret string `json:"secret"`
 }
 
-// StorePasswordRequest defines model for StorePasswordRequest.
-type StorePasswordRequest struct {
-	Password string `json:"password"`
-}
-
 // SyncBucketObject defines model for SyncBucketObject.
 type SyncBucketObject struct {
 	Key          string  `json:"key"`
@@ -1538,17 +1533,6 @@ type SyncPushRequest struct {
 	Message string `json:"message"`
 }
 
-// SyncSettingsRequest defines model for SyncSettingsRequest.
-type SyncSettingsRequest struct {
-	AccessKeyId     string        `json:"accessKeyId"`
-	Bucket          string        `json:"bucket"`
-	Direction       SyncDirection `json:"direction"`
-	Endpoint        string        `json:"endpoint"`
-	Path            *string       `json:"path,omitempty"`
-	Region          *string       `json:"region,omitempty"`
-	SecretAccessKey string        `json:"secretAccessKey"`
-}
-
 // SyncSetupCheckRequest defines model for SyncSetupCheckRequest.
 type SyncSetupCheckRequest struct {
 	AccessKeyId      *string `json:"accessKeyId,omitempty"`
@@ -1674,7 +1658,7 @@ type TerminalCommandPreviewRequest struct {
 	ExpectedReviewEvidence *string           `json:"expectedReviewEvidence,omitempty"`
 	Inputs                 map[string]string `json:"inputs"`
 
-	// IssueAction Issue a one-time execution token. Defaults to true for compatibility; passive previews should set false.
+	// IssueAction Issue a one-time execution token. Defaults to true; passive previews should set false.
 	IssueAction *bool `json:"issueAction,omitempty"`
 
 	// RevealCommand Return the expanded command for an explicit insert, run, or copy action. Normal previews remain redacted.

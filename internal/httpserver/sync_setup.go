@@ -13,8 +13,8 @@ import (
 	"sshc/internal/secret"
 )
 
-// Bucket setup: validating the target, proving it is reachable before
-// anything is stored, and the settings changes on a configured sync.
+// Bucket setup: validating the target and proving it is reachable before
+// anything is stored.
 
 func syncSetupInput(request api.SyncSetupCheckRequest, credentials remotesync.Credentials) (remotesync.Config, remotesync.Credentials, error) {
 	if len(credentials.AccessKeyID) == 0 || len(credentials.AccessKeyID) > 512 ||
@@ -99,7 +99,7 @@ func (h SyncHandlers) CheckSetup(c *echo.Context) error {
 	if err != nil {
 		return setupInputProblem(c, err)
 	}
-	inspection, err := remotesync.InspectSetupTarget(c.Request().Context(), remotesync.NewClient(config, credentials), config)
+	inspection, err := remotesync.InspectSetupTarget(c.Request().Context(), h.objectStoreClient(config, credentials), config)
 	if err != nil {
 		return syncProblem(c, err)
 	}
@@ -172,7 +172,7 @@ func (h SyncHandlers) CompleteSetup(c *echo.Context) error {
 	if request.ExpectedETag != nil {
 		expected.ETag = *request.ExpectedETag
 	}
-	client := remotesync.NewClient(config, credentials)
+	client := h.objectStoreClient(config, credentials)
 	err = h.Service.CompleteSetup(c.Request().Context(), config, credentials, client, expected, key, func() error {
 		return h.Secrets.SetSyncSettings(secret.SyncSettings{
 			Endpoint: config.Endpoint, Bucket: config.Bucket, Path: config.Path, Region: config.Region,
@@ -194,65 +194,4 @@ func (h SyncHandlers) CompleteSetup(c *echo.Context) error {
 		response.GeneratedKey = &key
 	}
 	return c.JSON(http.StatusOK, response)
-}
-
-// Configure はこのマシンをある bucket に向ける。
-//
-// credentials はマスターパスワードで暗号化し、同期対象外の専用ファイルへ保存する。
-// 同期先の資格情報を同期スナップショット自体へ含めない。
-func (h SyncHandlers) Configure(c *echo.Context) error {
-	var request api.SyncSettingsRequest
-	if err := decodeJSON(c, &request); err != nil {
-		return problem(c, http.StatusBadRequest, "invalid_request")
-	}
-	credentials := remotesync.Credentials{
-		AccessKeyID: request.AccessKeyId, SecretAccessKey: request.SecretAccessKey,
-	}
-	config, credentials, err := syncSetupInput(api.SyncSetupCheckRequest{
-		Endpoint: request.Endpoint, Bucket: request.Bucket, Path: request.Path, Region: request.Region,
-	}, credentials)
-	if err != nil {
-		return setupInputProblem(c, err)
-	}
-	direction, ok := remotesync.ParseDirection(string(request.Direction))
-	if !ok {
-		return problem(c, http.StatusBadRequest, "unknown_sync_direction")
-	}
-	config.Direction = direction
-	// 保存する前に試す。一度も試されなかった設定は、typo が最初の
-	// push で何時間も後に別の場所で表面化する設定になってしまう。
-	// ここは、ユーザーが自分の打ったものをまだ見られる唯一の画面である。
-	client := remotesync.NewClient(config, credentials)
-	if err := h.reach(c.Request().Context(), client, remotesync.ObjectKeyFor(config)); err != nil {
-		return syncProblem(c, err)
-	}
-
-	// 使われる前に保存する。これにより、次の実行では消えているはずの
-	// 設定を使ったと応答が主張してしまうことはない。
-	persist := func() error { return nil }
-	if h.Secrets != nil {
-		persist = func() error {
-			return h.Secrets.SetSyncSettings(secret.SyncSettings{
-				Endpoint: config.Endpoint, Bucket: config.Bucket, Path: config.Path, Region: config.Region,
-				AccessKeyID: credentials.AccessKeyID, SecretAccessKey: credentials.SecretAccessKey,
-				Direction: string(direction),
-			})
-		}
-	}
-	if err := h.Service.Reconfigure(config, credentials, client, persist); err != nil {
-		if errors.Is(err, remotesync.ErrRecoveryTargetChange) || errors.Is(err, remotesync.ErrRecoveryRequired) {
-			return syncProblem(c, err)
-		}
-		if h.Secrets != nil {
-			if vaultUnavailable(err) {
-				return problem(c, http.StatusConflict, "vault_locked")
-			}
-			return problem(c, http.StatusInternalServerError, "vault_failed")
-		}
-		return syncProblem(c, err)
-	}
-	if h.Auto != nil {
-		h.Auto.ResetRemoteCache()
-	}
-	return h.status(c)
 }

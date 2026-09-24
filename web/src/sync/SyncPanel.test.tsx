@@ -95,7 +95,6 @@ function buildApi(
       modified: 1,
       removed: 0,
     }),
-    configureSync: vi.fn().mockResolvedValue({ ...status, configured: true }),
     syncExclusions: vi.fn().mockResolvedValue({
       document: "*.tmp\n",
       usingDefaults: true,

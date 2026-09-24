@@ -215,7 +215,7 @@ describe("apiClient", () => {
     const diagnostic = vi.fn();
     whenRequestFailed(diagnostic);
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(
-      JSON.stringify({ code: "sync_failed", message: "request rejected" }),
+      JSON.stringify({ code: "bucket_unreachable", message: "request rejected" }),
       { status: 502, headers: { "Content-Type": "application/problem+json" } },
     )));
     apiClient.setCSRF("c".repeat(43));
@@ -224,8 +224,8 @@ describe("apiClient", () => {
       method: "POST",
       body: JSON.stringify({ apply: true, resolve: "remote" }),
     }, {
-      locallyHandledCodes: ["sync_failed"],
-    })).rejects.toMatchObject({ code: "sync_failed" });
+      locallyHandledCodes: ["bucket_unreachable"],
+    })).rejects.toMatchObject({ code: "bucket_unreachable" });
 
     expect(diagnostic).not.toHaveBeenCalled();
   });

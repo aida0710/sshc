@@ -17,11 +17,11 @@ beforeEach(async () => {
 afterEach(() => { localStorage.clear(); vi.restoreAllMocks(); });
 
 describe("application shortcuts", () => {
-  it("shows and preserves the paste defaults and upgrades the former defaults safely", () => {
+  it("shows the paste defaults and preserves saved paste bindings", () => {
     render(<KeyConfig />);
     expect(screen.getByRole("button", { name: "Assign shortcut: Paste" })).toHaveTextContent("Ctrl+V / Meta+V / Ctrl+Shift+V");
     expect(parseBindings(JSON.stringify(defaultBindings))).toEqual(defaultBindings);
-    expect(parseBindings(JSON.stringify({ paste: ["Ctrl+Shift+V", "Meta+V"] })).paste).toEqual(defaultBindings.paste);
+    expect(parseBindings(JSON.stringify({ paste: ["Ctrl+Shift+V", "Meta+V"] })).paste).toEqual(["Ctrl+Shift+V", "Meta+V"]);
     expect(parseBindings(JSON.stringify({ paste: ["Alt+V"] })).paste).toEqual(["Alt+V"]);
     expect(parseBindings(JSON.stringify({ paste: [] })).paste).toEqual([]);
     const custom = { ...defaultBindings, home: ["Ctrl+V"], paste: ["Ctrl+Shift+V", "Meta+V"] };

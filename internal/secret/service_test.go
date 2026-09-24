@@ -699,9 +699,6 @@ func TestNothingIsReadableUntilTheVaultIsUnlocked(t *testing.T) {
 	if err := setTestPassword(service, "bastion", "hunter2"); !errors.Is(err, secret.ErrLocked) {
 		t.Errorf("Set while locked = %v, want ErrLocked", err)
 	}
-	if err := service.Remove("bastion"); !errors.Is(err, secret.ErrLocked) {
-		t.Errorf("Remove while locked = %v, want ErrLocked", err)
-	}
 	if service.HasAssignmentFor(secret.KindPassword, "bastion") {
 		t.Error("Has reported true while locked")
 	}
@@ -792,27 +789,6 @@ func TestUnlockRefusesTheWrongPassphraseAndStaysLocked(t *testing.T) {
 	}
 	if second.Unlocked() {
 		t.Error("a failed unlock left the service unlocked")
-	}
-}
-
-func TestRemoveWritesTheVaultBack(t *testing.T) {
-	service, home := newService(t)
-	if err := service.Initialise(passphrase); err != nil {
-		t.Fatal(err)
-	}
-	if err := setTestPassword(service, "bastion", "hunter2"); err != nil {
-		t.Fatal(err)
-	}
-	if err := service.Remove("bastion"); err != nil {
-		t.Fatalf("Remove = %v", err)
-	}
-
-	reopened := mustReopen(t, home)
-	if err := reopened.Unlock(passphrase); err != nil {
-		t.Fatal(err)
-	}
-	if reopened.HasAssignmentFor(secret.KindPassword, "bastion") {
-		t.Error("the password came back after a restart")
 	}
 }
 

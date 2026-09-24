@@ -161,13 +161,9 @@ receipt_staged=""
 mv "$staged" "$target" || die "could not install into $target"
 staged=""
 
-# version サブコマンドのない旧バージョンではインストール先だけを表示する。
 installed=$("$target" version 2>/dev/null || true)
-if [ -n "$installed" ]; then
-  say "sshc: installed $installed"
-else
-  say "sshc: installed $target"
-fi
+[ -n "$installed" ] || die "the installed sshc at $target does not report its version"
+say "sshc: installed $installed"
 
 # ── ⑤ PATH の手前に別の sshc が居ないか ───────────────────────
 found=$(command -v sshc 2>/dev/null || true)
