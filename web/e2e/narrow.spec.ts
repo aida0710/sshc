@@ -284,9 +284,9 @@ test("explains an older vault with both schema versions on mobile", async ({ pag
   await page.getByRole("button", { name: "ロックを解除" }).click();
 
   await expect(page.getByRole("alert")).toContainText(
-    "Vault のバージョンが古いです（必要なバージョン：4、現在：3）。",
+    "Vaultのバージョンが古いです（必要なバージョン：4、現在：3）。",
   );
-  await expect(page.getByRole("button", { name: "互換性のある Vault を復元" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "互換性のあるVaultを復元" })).toBeVisible();
   await expectNoHorizontalOverflow(page, "古い vault の復旧画面");
 
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
@@ -302,7 +302,7 @@ test("reports a completed vault migration with both versions on mobile", async (
   await page.goto(installation.url);
   await page.getByLabel("マスターパスワード", { exact: true }).fill(masterPassword);
   await page.getByLabel("マスターパスワード（確認）", { exact: true }).fill(masterPassword);
-  await page.getByRole("button", { name: "Vault を作成" }).click();
+  await page.getByRole("button", { name: "Vaultを作成" }).click();
   await expect(page.getByText(/ローカルセッション稼働中/).first()).toBeAttached();
 
   await page.goto(new URL("/vault/passwords", installation.url).toString());
@@ -328,7 +328,7 @@ test("reports a completed vault migration with both versions on mobile", async (
   await page.getByLabel("マスターパスワード", { exact: true }).fill(masterPassword);
   await page.getByRole("button", { name: "ロックを解除" }).click();
 
-  await expect(page.getByText("Vault をバージョン 4 から 5 へ安全に更新しました。")).toBeVisible();
+  await expect(page.getByText("Vaultをバージョン4から5へ安全に更新しました。")).toBeVisible();
   await expectNoHorizontalOverflow(page, "vault migration notice");
   if (process.env.SSHC_VISUAL_DIR !== undefined) {
     await page.screenshot({
@@ -596,7 +596,7 @@ test("keeps the removed connection view switch absent and Config structure align
   }));
   expect(boundaries.every((width) => width >= 1)).toBe(true);
 
-  await page.getByRole("button", { name: "Include 階層", exact: true }).click();
+  await page.getByRole("button", { name: "Include階層", exact: true }).click();
   const alignment = await page.getByRole("button", { name: "conf.d/20-lab.conf" }).evaluate((button) => {
     const row = button.closest("li")?.firstElementChild;
     const icon = row?.querySelector("[data-config-node-icon]");
