@@ -280,8 +280,8 @@ func TestSyncUnknownMutationOutcomeIsNeverReportedAsRetryable(t *testing.T) {
 }
 
 func TestSyncStatusFailureNeverPrintsEngineProblemMessage(t *testing.T) {
-	body := `{"code":"sync_failed","message":"` + syncOutputSecretCanary + `"}`
-	server, stateDir := runSyncTestServer(t, http.StatusBadGateway, body)
+	body := `{"code":"sync_internal_failed","message":"` + syncOutputSecretCanary + `"}`
+	server, stateDir := runSyncTestServer(t, http.StatusInternalServerError, body)
 	defer server.Close()
 
 	for _, asJSON := range []bool{false, true} {
