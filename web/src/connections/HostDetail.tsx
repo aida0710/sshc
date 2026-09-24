@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { FieldEdit, HostDetail, HostMetadata, SavePreview, UpdateConnectionRequest } from "../api/config";
 import type { VPNProfile } from "../api/vpn";
 import type { Problem } from "../api/client";
@@ -32,7 +32,8 @@ type HostDetailPanelProps = {
   onFieldEdits: (edits: FieldEdit[]) => void;
   onBlockRaw: (raw: string) => void;
   onBasicSave: (request: UpdateConnectionRequest) => Promise<void>;
-  onMetadata: (metadata: HostMetadata) => void;
+  // onMetadataSave は、sshcタブの下書きを保存する。保存できなかったときは reject する。
+  onMetadataSave: (metadata: HostMetadata) => Promise<void>;
   integrations?: HostDetailApi;
   panel?: ConnectionPanel;
   advanced?: AdvancedArea;
@@ -40,7 +41,8 @@ type HostDetailPanelProps = {
   preferredKey?: GeneratedPrivateKeyHandoff | null | undefined;
   onPreferredKeyApplied?: (() => void) | undefined;
   onDirtyChange?: ((dirty: boolean) => void) | undefined;
-  onBasicDiscardReady?: ((discard: (() => void) | null) => void) | undefined;
+  // onDiscardReady は、すべてのタブの下書きを破棄する関数を受け取る。
+  onDiscardReady?: ((discard: (() => void) | null) => void) | undefined;
   onRequestRefresh?: (() => Promise<void>) | undefined;
   disabled?: boolean | undefined;
   savedRevision?: number | undefined;
@@ -56,6 +58,9 @@ const areas: { area: ConnectionPanel; label: "conn.areaBasic" | "conn.areaAnalys
 ];
 const areaNames = areas.map((item) => item.area);
 
+// 下書きを持つタブ。Analysis は読むだけなので下書きを持たない。
+type DraftArea = Exclude<ConnectionPanel, "Analysis">;
+
 export function HostDetailPanel({
   detail,
   savedState,
@@ -64,7 +69,7 @@ export function HostDetailPanel({
   onFieldEdits,
   onBlockRaw,
   onBasicSave,
-  onMetadata,
+  onMetadataSave,
   integrations = hostDetailApi,
   panel: controlledPanel,
   advanced: controlledAdvanced,
@@ -72,7 +77,7 @@ export function HostDetailPanel({
   preferredKey,
   onPreferredKeyApplied,
   onDirtyChange,
-  onBasicDiscardReady,
+  onDiscardReady,
   onRequestRefresh,
   disabled = false,
   savedRevision = 0,
@@ -83,9 +88,11 @@ export function HostDetailPanel({
   const [lastAdvanced, setLastAdvanced] = useState<AdvancedArea>("Jump");
   const [basicDirty, setBasicDirty] = useState(false);
   const [advancedDirty, setAdvancedDirty] = useState(false);
+  const [sshcDirty, setSshcDirty] = useState(false);
+  const draftDiscards = useRef(new Map<DraftArea, () => void>());
   const panel = controlledPanel ?? localPanel;
   const advancedArea = panel === "Advanced" ? (controlledAdvanced ?? lastAdvanced) : lastAdvanced;
-  const dirty = basicDirty || advancedDirty;
+  const dirty = basicDirty || advancedDirty || sshcDirty;
   const identity = detail.form.entry.identity;
   const resetKey = `${identityKey(identity)}\u0000${detail.file.contents}\u0000${savedRevision}`;
 
@@ -100,14 +107,28 @@ export function HostDetailPanel({
     setAdvancedDirty(false);
     // Runs only when the host or file revision behind resetKey changes; the
     // controlled panel prop is read, not watched, so a parent toggling it
-    // does not wipe the dirty marks.
+    // does not wipe the dirty marks. The sshc mark is left alone: HostInspector
+    // starts its draft over only when the saved metadata changes, and reports
+    // the mark itself, so an unrelated reload keeps the draft and its mark.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resetKey]);
 
   useEffect(() => onDirtyChange?.(dirty), [dirty, onDirtyChange]);
 
-  const handleBasicDirty = useCallback((next: boolean) => setBasicDirty(next), []);
-  const handleAdvancedDirty = useCallback((next: boolean) => setAdvancedDirty(next), []);
+  // タブごとに、下書きを破棄する関数を受け取る。どのタブで編集していても、ページが
+  // 「変更を破棄」を確定したときにまとめて破棄できるようにする。
+  const discardReceivers = useMemo(() => {
+    const receiverFor = (area: DraftArea) => (discard: (() => void) | null) => {
+      if (discard === null) draftDiscards.current.delete(area);
+      else draftDiscards.current.set(area, discard);
+    };
+    return { Basic: receiverFor("Basic"), Advanced: receiverFor("Advanced"), Sshc: receiverFor("Sshc") };
+  }, []);
+
+  useEffect(() => {
+    onDiscardReady?.(() => draftDiscards.current.forEach((discard) => discard()));
+    return () => onDiscardReady?.(null);
+  }, [onDiscardReady]);
 
   function selectArea(area: ConnectionPanel) {
     if (onLocationChange !== undefined) onLocationChange(area, advancedArea);
@@ -170,10 +191,10 @@ export function HostDetailPanel({
               secrets={integrations}
               preferredKey={preferredKey}
               onPreferredKeyApplied={onPreferredKeyApplied}
-              onDirtyChange={handleBasicDirty}
-              onDiscardReady={onBasicDiscardReady}
+              onDirtyChange={setBasicDirty}
+              onDiscardReady={discardReceivers.Basic}
               onRequestRefresh={onRequestRefresh}
-              disabled={disabled || advancedDirty}
+              disabled={disabled || advancedDirty || sshcDirty}
             />
           </div>
 
@@ -198,8 +219,9 @@ export function HostDetailPanel({
               onAreaChange={selectAdvanced}
               onFieldEdits={onFieldEdits}
               onBlockRaw={onBlockRaw}
-              disabled={disabled || basicDirty}
-              onDirtyChange={handleAdvancedDirty}
+              disabled={disabled || basicDirty || sshcDirty}
+              onDirtyChange={setAdvancedDirty}
+              onDiscardReady={discardReceivers.Advanced}
             />
           </div>
 
@@ -209,7 +231,14 @@ export function HostDetailPanel({
             aria-labelledby="connection-area-sshc-tab"
             hidden={panel !== "Sshc"}
           >
-            <HostInspector detail={detail} onMetadata={onMetadata} vpnProfiles={vpnProfiles} />
+            <HostInspector
+              detail={detail}
+              onSave={onMetadataSave}
+              vpnProfiles={vpnProfiles}
+              onDirtyChange={setSshcDirty}
+              onDiscardReady={discardReceivers.Sshc}
+              disabled={disabled || basicDirty || advancedDirty}
+            />
           </div>
         </div>
       </div>

@@ -17,6 +17,7 @@ type AdvancedSettingsProps = {
   onBlockRaw: (raw: string) => void;
   disabled: boolean;
   onDirtyChange: (dirty: boolean) => void;
+  onDiscardReady?: ((discard: (() => void) | null) => void) | undefined;
 };
 
 function fieldKey(field: FormField): string {
@@ -39,6 +40,7 @@ export function AdvancedSettings({
   onBlockRaw,
   disabled,
   onDirtyChange,
+  onDiscardReady,
 }: AdvancedSettingsProps) {
   const t = useTranslate();
   const [drafts, setDrafts] = useState<Record<string, string>>({});
@@ -103,6 +105,11 @@ export function AdvancedSettings({
     setBlockRaw(detail.form.raw);
     setLocalError("");
   }, [detail.form.raw]);
+
+  useEffect(() => {
+    onDiscardReady?.(discard);
+    return () => onDiscardReady?.(null);
+  }, [discard, onDiscardReady]);
 
   function draftFor(field: FormField): string {
     return drafts[fieldKey(field)] ?? formatValues(field.values) ?? "";

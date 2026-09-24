@@ -847,7 +847,9 @@ export const en = {
     "The program was ended by {signal}. The output above is kept until you close this session.",
   "inspector.appOnly": "sshc-only settings",
   "inspector.groupLabel": "Group display settings",
-  "inspector.hostSavesImmediately": "Changes here are saved immediately.",
+  "inspector.hostSave": "Save sshc-only settings",
+  "inspector.hostSaveFailed":
+    "The sshc-only settings could not be saved. Check the error and save again.",
   "inspector.groupChangesStaged":
     "Changes here are staged until you choose Save groups.",
   "inspector.notices": "Notices",

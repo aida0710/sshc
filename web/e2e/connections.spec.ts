@@ -543,15 +543,39 @@ test("edits the display order it stores", async ({
   await openBastion(page, installation.url);
   await page.getByRole("tab", { name: "sshc" }).click();
 
-  const [ordered] = await Promise.all([
-    page.waitForResponse(
-      (response) =>
-        response.url().includes("/api/v1/config/save") && response.request().method() === "POST",
-    ),
-    page.getByLabel(/Display order/).fill("-1"),
-  ]);
-  expect(ordered.status()).toBe(200);
+  await page.getByLabel(/Display order/).fill("-1");
+  expect(await clickAndAwait(page, "Save sshc-only settings", "/api/v1/config/save")).toBe(200);
   expect(JSON.parse(await installation.read("sshc/metadata.json")).hosts[0].order).toBe(-1);
+});
+
+test("keeps sshc changes as a draft until they are saved or discarded", async ({
+  page,
+  installation,
+}) => {
+  await openBastion(page, installation.url);
+  await page.getByRole("tab", { name: "sshc" }).click();
+  const saveRequests: string[] = [];
+  page.on("request", (request) => {
+    if (request.url().includes("/api/v1/config/save")) saveRequests.push(request.url());
+  });
+  const save = page.getByRole("button", { name: "Save sshc-only settings" });
+  const osc52 = page.getByLabel("OSC 52 clipboard");
+
+  await expect(save).toHaveCount(0);
+  await osc52.selectOption("deny");
+  await expect(save).toBeVisible();
+  await expect(page.getByText("Unsaved changes")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Connect", exact: true })).toBeDisabled();
+  await page.getByRole("tab", { name: "Basic" }).click();
+  await expect(page.getByLabel("Port", { exact: true })).toBeDisabled();
+  await page.getByRole("tab", { name: "sshc" }).click();
+  await expect(osc52).toHaveValue("deny");
+
+  await page.getByRole("button", { name: "Discard changes" }).click();
+  await expect(save).toHaveCount(0);
+  await expect(osc52).toHaveValue("");
+  await expect(page.getByText("Unsaved changes")).toHaveCount(0);
+  expect(saveRequests).toEqual([]);
 });
 
 test("keeps the saved SSH encoding selected after metadata refresh", async ({
@@ -562,14 +586,9 @@ test("keeps the saved SSH encoding selected after metadata refresh", async ({
   await page.getByRole("tab", { name: "sshc" }).click();
 
   const encoding = page.getByLabel("Remote text encoding");
-  const [saved] = await Promise.all([
-    page.waitForResponse(
-      (response) =>
-        response.url().includes("/api/v1/config/save") && response.request().method() === "POST",
-    ),
-    encoding.selectOption("shift_jis"),
-  ]);
-  expect(saved.status()).toBe(200);
+  await encoding.selectOption("shift_jis");
+  expect(await clickAndAwait(page, "Save sshc-only settings", "/api/v1/config/save")).toBe(200);
+  await expect(page.getByRole("button", { name: "Save sshc-only settings" })).toHaveCount(0);
   await expect(encoding).toHaveValue("shift_jis");
   expect(JSON.parse(await installation.read("sshc/metadata.json")).hosts[0].encoding).toBe("shift_jis");
 });

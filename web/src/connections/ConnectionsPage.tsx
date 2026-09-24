@@ -136,7 +136,7 @@ export function ConnectionsPage({
   const [refreshState, setRefreshState] = useState<"idle" | "refreshing" | "failed">("idle");
   const [savedRevision, setSavedRevision] = useState(0);
   const [discardIntent, setDiscardIntent] = useState<DiscardIntent | null>(null);
-  const basicDiscardRef = useRef<(() => void) | null>(null);
+  const draftDiscardRef = useRef<(() => void) | null>(null);
   const {
     editorDirty, setEditorDirty,
     preview, setPreview,
@@ -221,7 +221,7 @@ export function ConnectionsPage({
     setDiscardIntent(null);
     editorDirtyRef.current = false;
     setEditorDirty(false);
-    basicDiscardRef.current?.();
+    draftDiscardRef.current?.();
     if (intent.kind === "create") {
       onCreationDraftChange?.(null);
       setCreating(true);
@@ -468,7 +468,7 @@ export function ConnectionsPage({
     setPreview(result.preview);
     setProblem(null);
     setLocalError("");
-    basicDiscardRef.current?.();
+    draftDiscardRef.current?.();
     setRefreshState("refreshing");
   }
 
@@ -639,13 +639,15 @@ export function ConnectionsPage({
     });
   }
 
-  function onMetadata(host: HostMetadata) {
+  async function onMetadataSave(host: HostMetadata) {
     if (overview === null) return;
     const others = (overview.metadata.hosts ?? []).filter(
       (entry) => entry.identity.path !== host.identity.path || entry.identity.alias !== host.identity.alias,
     );
     const metadata: Metadata = { ...overview.metadata, hosts: [...others, host] };
-    void submit({ kind: "metadata", metadata });
+    const attempt = await submit({ kind: "metadata", metadata });
+    // 理由は submit が problem として出している。sshcタブには、下書きを残すために失敗だけを伝える。
+    if (!attempt.saved) throw new Error("metadata_not_saved");
   }
 
   async function onConnectionCreated(result: CreateConnectionResponse) {
@@ -849,7 +851,7 @@ export function ConnectionsPage({
               onFieldEdits={onFieldEdits}
               onBlockRaw={onBlockRaw}
               onBasicSave={onBasicSave}
-              onMetadata={onMetadata}
+              onMetadataSave={onMetadataSave}
               integrations={hostDetailApi}
               panel={activePanel}
               advanced={activeAdvanced}
@@ -859,8 +861,8 @@ export function ConnectionsPage({
               preferredKey={preferredKey}
               onPreferredKeyApplied={onPreferredKeyApplied}
               onDirtyChange={setEditorDirty}
-              onBasicDiscardReady={(discard) => {
-                basicDiscardRef.current = discard;
+              onDiscardReady={(discard) => {
+                draftDiscardRef.current = discard;
               }}
               onRequestRefresh={refreshCommittedConnection}
               savedRevision={savedRevision}
