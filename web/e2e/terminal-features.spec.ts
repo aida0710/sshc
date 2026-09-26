@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { expect, openApplication, openSection, openSettingsPage, test, openLocalShell } from "./support/environment";
-import { terminalKeyboard, terminalScrollbarSlider } from "./support/terminal";
+import { drawnRows, terminalKeyboard, terminalScreen, terminalScrollbarSlider } from "./support/terminal";
 
 const visualDirectory = process.env.SSHC_VISUAL_DIR;
 
@@ -46,7 +46,7 @@ test("opens and copies a complete URL from its wrapped continuation", async ({ p
   }, `Open this URL to sign in:\r\n${url}\r\n`);
   await openApplication(page, installation);
   await openSection(page, "Terminal");
-  const continuation = page.locator(".xterm-rows > div").filter({ hasText: /^a{20,}$/ }).first();
+  const continuation = drawnRows(page).locator(":scope > div").filter({ hasText: /^a{20,}$/ }).first();
   await expect(continuation).toBeVisible();
   const rowBounds = await continuation.boundingBox();
   if (rowBounds === null) throw new Error("the wrapped row is not visible");
@@ -64,7 +64,7 @@ test("opens and copies a complete URL from its wrapped continuation", async ({ p
   // Re-enter at another cell so xterm refreshes hover after the popover closes.
   const directClickX = clickPosition.x + 30;
   await page.mouse.move(directClickX, clickPosition.y);
-  await expect(page.locator(".xterm-screen")).toHaveClass(/xterm-cursor-pointer/);
+  await expect(terminalScreen(page)).toHaveClass(/xterm-cursor-pointer/);
   await page.keyboard.down("Control");
   await page.mouse.click(directClickX, clickPosition.y);
   await page.keyboard.up("Control");
