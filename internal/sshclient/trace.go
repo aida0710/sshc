@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/crypto/ssh"
@@ -57,7 +58,23 @@ func (t *tracer) now() time.Time {
 }
 
 func newTracer(level Verbosity, writer io.Writer) *tracer {
+	if writer != nil {
+		writer = &traceOutput{writer: writer}
+	}
 	return &tracer{level: level, writer: writer, clock: time.Now}
+}
+
+// keepalive can write while a remote command is producing stderr. Share this
+// writer at the stream boundary so callers do not need a concurrent io.Writer.
+type traceOutput struct {
+	mutex  sync.Mutex
+	writer io.Writer
+}
+
+func (output *traceOutput) Write(contents []byte) (int, error) {
+	output.mutex.Lock()
+	defer output.mutex.Unlock()
+	return output.writer.Write(contents)
 }
 
 // linePrefix は、接続ログの各行の頭に置く印である。

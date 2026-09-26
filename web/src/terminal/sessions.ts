@@ -260,6 +260,8 @@ export function terminalProblemKey(code: string): MessageKey {
       return "terminal.identityUnavailable";
     case "authentication_unavailable":
       return "terminal.authenticationUnavailable";
+    case "proxy_authentication_required":
+      return "terminal.proxyAuthenticationRequired";
     case "authentication_cancelled":
       return "terminal.authenticationCancelled";
     case "key_passphrase_required":

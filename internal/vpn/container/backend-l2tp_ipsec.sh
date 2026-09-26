@@ -13,6 +13,61 @@ l2tp_disconnect_seconds=2
 # 相手と話す前の、この機械の中だけの準備なので、締め切りとは別に数える。
 daemon_start_seconds=15
 
+# デーモンの通常ログだけを残す。PPPのdebugは認証パケットも出すため有効にしない。
+# 3つのログがdocker logsの取得上限に収まる行数にする。
+diagnostic_tail_lines=60
+
+l2tp_diagnostics() {
+	for log_name in ipsec xl2tpd ppp; do
+		if [ -s "$runtime/$log_name.log" ]; then
+			tail -n "$diagnostic_tail_lines" "$runtime/$log_name.log" | sed "s/^/[$log_name] /"
+		else
+			printf '[%s] ログはまだありません。\n' "$log_name"
+		fi
+	done
+}
+
+l2tp_fail() {
+	# failure.jsonを公開する前に出す。engineはそのファイルを見てログを回収する。
+	l2tp_diagnostics >&2
+	fail "$@"
+}
+
+establish_ipsec() {
+	if ! timeout "$(timeout_seconds)" ipsec up "$connection" >>"$runtime/ipsec.log" 2>&1; then
+		l2tp_fail ipsec_negotiation "IPsecのネゴシエーションに失敗しました。事前共有鍵、サーバー、暗号スイートを確認してください。"
+	fi
+	# ipsec upはQuick Modeの拒否でも終了コード0を返す。IKEだけではL2TPを
+	# 運べないので、この接続のtransport modeのCHILD_SAが入ったことを確かめる。
+	if ! timeout "$(timeout_seconds)" ipsec status "$connection" >"$runtime/ipsec.status" 2>&1; then
+		cat "$runtime/ipsec.status" >>"$runtime/ipsec.log"
+		l2tp_fail ipsec_negotiation "IPsecの接続状態を確認できませんでした。"
+	fi
+	cat "$runtime/ipsec.status" >>"$runtime/ipsec.log"
+	if ! grep -Eq "^[[:space:]]*$connection\{[0-9]+\}:[[:space:]]+INSTALLED, TRANSPORT," "$runtime/ipsec.status"; then
+		l2tp_fail ipsec_negotiation "IPsecのデータ通信用SAが確立していません。ESPの暗号スイートとIPsecのログを確認してください。"
+	fi
+}
+
+ppp_authentication_failed() {
+	grep -Eiq '(PAP|CHAP|MS-CHAP|EAP) authentication failed|CHAP authentication failure|EAP: peer reports authentication failure' "$runtime/ppp.log" 2>/dev/null
+}
+
+wait_for_ppp_address() {
+	while ! backend_alive; do
+		if ppp_authentication_failed; then
+			l2tp_fail ppp_authentication "VPNサーバーがPPPの認証を拒否しました。ユーザー名、パスワード、認証方式を確認してください。"
+		fi
+		if ! kill -0 "$l2tp_pid" 2>/dev/null; then
+			l2tp_fail unknown "L2TPサービスが終了しました。IPsec・L2TP・PPPのログを確認してください。"
+		fi
+		if [ "$(remaining_seconds)" -le 0 ]; then
+			l2tp_fail timeout "L2TP/PPPでIPアドレスを取得できないままタイムアウトしました。認証拒否は確認できていません。"
+		fi
+		pause 1
+	done
+}
+
 backend_read() {
 	server=$(jq -r '.l2tp.server' "$profile")
 	for name in ipsec.conf ipsec.secrets xl2tpd.conf ppp.options; do
@@ -41,6 +96,7 @@ backend_up() {
 		fail server_unresolved "VPNサーバーの名前解決に失敗しました: $server"
 	fi
 	sed -i "s|%SERVER_ADDRESS%|$server_address|g" "$runtime/ipsec.conf" "$runtime/xl2tpd.conf"
+	printf 'VPNサーバーの名前解決: %s → %s\n' "$server" "$server_address"
 	ln -sf "$runtime/ipsec.conf" /etc/ipsec.conf
 	ln -sf "$runtime/ipsec.secrets" /etc/ipsec.secrets
 
@@ -52,23 +108,24 @@ backend_up() {
 	echo "IPsecの接続を開始します。"
 	ipsec start --nofork >"$runtime/ipsec.log" 2>&1 &
 	if ! wait_for_file /run/charon.ctl; then
-		fail unknown "IPsecサービスの起動に失敗しました。"
+		l2tp_fail unknown "IPsecサービスの起動に失敗しました。"
 	fi
-	if ! timeout "$(timeout_seconds)" ipsec up "$connection" >>"$runtime/ipsec.log" 2>&1; then
-		sed -n '1,40p' "$runtime/ipsec.log" >&2
-		fail ipsec_negotiation "IPsecのネゴシエーションに失敗しました。事前共有鍵、サーバー、暗号スイートを確認してください。"
-	fi
+	establish_ipsec
+	echo "IPsecの接続が完了しました。"
 
 	echo "L2TPの接続とPPPの認証を開始します。"
 	xl2tpd -D -c "$runtime/xl2tpd.conf" -p "$runtime/xl2tpd.pid" \
 		-C "$runtime/l2tp-control" >"$runtime/xl2tpd.log" 2>&1 &
+	l2tp_pid=$!
 	if ! wait_for_file "$runtime/l2tp-control"; then
-		fail unknown "L2TPサービスの起動に失敗しました。"
+		l2tp_fail unknown "L2TPサービスの起動に失敗しました。"
 	fi
-	printf 'c %s\n' "$connection" >"$runtime/l2tp-control"
-	if ! wait_for_address; then
-		fail ppp_authentication "PPPの認証に失敗しました。ユーザー名とパスワードを確認してください。"
+	if ! timeout "$(timeout_seconds)" sh -c 'printf "c %s\n" "$1" >"$2"' _ "$connection" "$runtime/l2tp-control"; then
+		l2tp_fail timeout "L2TPサービスへの接続要求がタイムアウトしました。"
 	fi
+	wait_for_ppp_address
+	echo "PPPのIPアドレスを取得しました。"
+	l2tp_diagnostics
 }
 
 # PPP にアドレスが付いたことが、相手の認証を通ったことを示している。

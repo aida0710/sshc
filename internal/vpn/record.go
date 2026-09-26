@@ -72,8 +72,8 @@ func (manager *Manager) recording(ctx context.Context, profileName string) conte
 }
 
 // maxShownOutputLines は、失敗したコマンドの出力を接続ログへ写す行数の上限である。
-// 原因の行はたいてい最後にある。
-const maxShownOutputLines = 30
+// IPsec・L2TP・PPPの各60行と、前後の接続段階を収める。
+const maxShownOutputLines = 240
 
 // sayOutput は、コマンドの出力の最後の行を、字下げして接続ログへ書く。
 func sayOutput(ctx context.Context, level connectionlog.Level, output string) {

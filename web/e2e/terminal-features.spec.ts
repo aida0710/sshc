@@ -30,6 +30,47 @@ async function mockConnectedTerminal(
   });
 }
 
+test("opens and copies a complete URL from its wrapped continuation", async ({ page, installation, context }) => {
+  const url = `https://example.test/authorize?redirect_uri=http%3A%2F%2F127.0.0.1%2Fcallback&state=${"a".repeat(240)}`;
+  await page.setViewportSize({ width: 800, height: 720 });
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.addInitScript(() => {
+    window.open = (target) => {
+      document.documentElement.dataset.openedUrl = String(target);
+      return null;
+    };
+  });
+  await mockConnectedTerminal(page, {
+    id: "wrapped-link", kind: "shell", title: "sso-login", startedAt: "2026-09-26T00:00:00Z",
+    state: "connected", problem: "", forwards: [],
+  }, `Open this URL to sign in:\r\n${url}\r\n`);
+  await openApplication(page, installation);
+  await openSection(page, "Terminal");
+  const continuation = page.locator(".xterm-rows > div").filter({ hasText: /^a{20,}$/ }).first();
+  await expect(continuation).toBeVisible();
+  const rowBounds = await continuation.boundingBox();
+  if (rowBounds === null) throw new Error("the wrapped row is not visible");
+  // xterm's screen receives pointer events above its DOM text rows.
+  const clickPosition = { x: rowBounds.x + 25, y: rowBounds.y + rowBounds.height / 2 };
+  await page.mouse.click(clickPosition.x, clickPosition.y);
+  const actions = page.getByRole("dialog", { name: "Terminal link actions" });
+  await expect(actions.locator("p")).toHaveAttribute("title", url);
+  if (visualDirectory !== undefined) {
+    await page.screenshot({ path: join(visualDirectory, "terminal-wrapped-url.png"), fullPage: true });
+  }
+  await actions.getByRole("button", { name: "Copy link" }).click();
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(url);
+  await expect(actions).toBeHidden();
+  // Re-enter at another cell so xterm refreshes hover after the popover closes.
+  const directClickX = clickPosition.x + 30;
+  await page.mouse.move(directClickX, clickPosition.y);
+  await expect(page.locator(".xterm-screen")).toHaveClass(/xterm-cursor-pointer/);
+  await page.keyboard.down("Control");
+  await page.mouse.click(directClickX, clickPosition.y);
+  await page.keyboard.up("Control");
+  await expect(page.locator("html")).toHaveAttribute("data-opened-url", url);
+});
+
 test("renders the documented non-interactive CLI example", async ({ page, installation }) => {
   const session = {
     id: "cli-production",

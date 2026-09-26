@@ -55,6 +55,7 @@ func (d Dialer) Stream(
 		level = d.Verbosity()
 	}
 	trace := newTracer(level, streams.Err)
+	streams.Err = trace.writer
 	trace.say(Full, "接続ログ：すべて（-vvv）")
 
 	client, closers, err := d.chain(ctx, strict, noPrompt, trace)
@@ -88,14 +89,25 @@ func (d Dialer) Stream(
 	// ctx が終わったらセッションを閉じる。閉じなければ Run は相手が終わる
 	// まで返らず、Ctrl-C を押したユーザーが待たされ続ける。
 	finished := make(chan struct{})
-	defer close(finished)
+	var keepAliveStopped <-chan struct{}
+	defer func() {
+		close(finished)
+		if keepAliveStopped != nil {
+			<-keepAliveStopped
+		}
+	}()
 
 	// 設定された ServerAliveInterval を落とさない。対話セッションはこれを
 	// 尊重していて、こちらだけ無視していた。長く暗黙に走るコマンドこそ、
 	// 途中の機器に接続を捨てられて困る側である。既定を作りはしない（OpenSSH も
 	// 既定では送らない）。設定したユーザーの指示を通すだけである。
-	if keepAlive := keepAliveLoop(client, strict.KeepAlive, strict.KeepAliveMax, finished); keepAlive != nil {
-		go keepAlive()
+	if keepAlive := keepAliveLoop(client, keepAliveSettings{interval: strict.KeepAlive, count: strict.KeepAliveMax, done: finished, trace: trace}); keepAlive != nil {
+		stopped := make(chan struct{})
+		keepAliveStopped = stopped
+		go func() {
+			defer close(stopped)
+			keepAlive()
+		}()
 	}
 	go func() {
 		select {
@@ -105,7 +117,9 @@ func (d Dialer) Stream(
 		}
 	}()
 
+	started := trace.now()
 	runErr := session.Run(command)
+	describeSessionExit(trace, runErr, trace.since(started))
 	encodingErr := closeEncoding()
 	if cause := ctx.Err(); cause != nil {
 		return RemoteFailureExit, cause
