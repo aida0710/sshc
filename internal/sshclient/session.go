@@ -304,10 +304,12 @@ func (s *Session) attachClient(client *ssh.Client) bool {
 
 // run は、シェルが終わるまで待ち、その理由を記録する。
 func (s *Session) run(remote *ssh.Session, keepAlive func()) {
+	started := s.trace.now()
 	if keepAlive != nil {
 		go keepAlive()
 	}
 	err := remote.Wait()
+	describeSessionExit(s.trace, err, s.trace.since(started))
 	info := terminal.ExitInfo{At: time.Now()}
 	switch typed := err.(type) {
 	case nil:
@@ -329,68 +331,5 @@ func (s *Session) run(remote *ssh.Session, keepAlive func()) {
 	s.mutex.Unlock()
 	for index := len(closers) - 1; index >= 0; index-- {
 		_ = closers[index].Close()
-	}
-}
-
-// keepAliveLoop はリモートへ定期的に要求を送り、count 回連続で応答がなければ閉じる。
-func keepAliveLoop(client *ssh.Client, interval time.Duration, count int, done <-chan struct{}) func() {
-	if interval <= 0 {
-		return nil
-	}
-	count = keepAliveCount(count)
-	return func() {
-		ticker := time.NewTicker(interval)
-		defer ticker.Stop()
-		missed := 0
-		for {
-			select {
-			case <-done:
-				return
-			case <-ticker.C:
-			}
-			if keepAliveAnswered(client, interval, done) {
-				missed = 0
-				continue
-			}
-			missed++
-			if missed >= count {
-				_ = client.Close()
-				return
-			}
-		}
-	}
-}
-
-// defaultKeepAliveCount は、ServerAliveCountMax が書かれていないときの回数である。
-// OpenSSH の既定と同じ 3 回。
-const defaultKeepAliveCount = 3
-
-// keepAliveCount は、何回続けて応答が無ければ切断するかを返す。
-func keepAliveCount(configured int) int {
-	if configured <= 0 {
-		return defaultKeepAliveCount
-	}
-	return configured
-}
-
-// keepAliveAnswered は keepalive を 1 回送り、interval 内に応答があれば真を返す。
-// 無応答の相手（NAT が状態を捨てた接続など）では SendRequest は輸送が切れるまで
-// 戻らないため、OpenSSH の ServerAliveCountMax と同じく「interval 内に応答が
-// ない」ことを 1 回の失敗として数える。遅れて届いた応答は捨てる。
-func keepAliveAnswered(client *ssh.Client, interval time.Duration, done <-chan struct{}) bool {
-	answered := make(chan error, 1)
-	go func() {
-		_, _, err := client.SendRequest("keepalive@openssh.com", true, nil)
-		answered <- err
-	}()
-	timer := time.NewTimer(interval)
-	defer timer.Stop()
-	select {
-	case err := <-answered:
-		return err == nil
-	case <-timer.C:
-		return false
-	case <-done:
-		return false
 	}
 }

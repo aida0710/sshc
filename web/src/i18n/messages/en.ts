@@ -566,6 +566,7 @@ export const en = {
   "terminal.authenticationUnavailable":
     "No supported authentication method is available for this connection.",
   "terminal.authenticationCancelled": "Authentication was cancelled.",
+  "terminal.proxyAuthenticationRequired": "The ProxyCommand needs authentication, so automatic reconnection was stopped. Follow the login instructions in the terminal, then reconnect.",
   "terminal.keyPassphraseRequired":
     "The private key needs a passphrase. Unlock the Vault or save the correct passphrase for this key.",
   "terminal.vpnRouteRefused": "The VPN route cannot be prepared, so automatic reconnection was stopped. Check the reason shown in the terminal.",

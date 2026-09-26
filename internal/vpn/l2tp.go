@@ -20,8 +20,8 @@ type L2TPSettings struct {
 	Server string
 	// Username は、VPNの利用者名である。パスワードはVaultにある。
 	Username string
-	// IKE と ESP は、古い装置と暗号方式が合わないときだけ指定する。空なら
-	// strongSwan の既定に任せる。
+	// IKE と ESP は、装置に合わせて暗号方式を指定する。空ならIKEは
+	// strongSwanの既定、ESPはL2TP向けの互換性を持たせた候補を使う。
 	IKE string
 	ESP string
 }
@@ -34,6 +34,10 @@ const connectionName = "sshc-vpn"
 
 // pppMTU は、PPP・L2TP・UDP・IPsec の各ヘッダを載せても 1500 に収まる大きさである。
 const pppMTU = 1280
+
+// IKEv1では1つのproposalに複数の暗号・MACを並べても先頭しか送られない。
+// SHA-256を優先し、L2TP装置で使われるHMAC-SHA1も独立した候補として提示する。
+const defaultL2TPESP = "aes256-sha256,aes128-sha256,aes256-sha1,aes128-sha1"
 
 type l2tpBackend struct{}
 
@@ -115,6 +119,9 @@ type l2tpDocument struct {
 
 // l2tpDocuments は、コンテナへ渡す4つの本文を返す。
 func l2tpDocuments(settings L2TPSettings, secrets L2TPSecrets) map[string]string {
+	if settings.ESP == "" {
+		settings.ESP = defaultL2TPESP
+	}
 	proposals := ""
 	for _, proposal := range []struct{ field, value string }{{"ike", settings.IKE}, {"esp", settings.ESP}} {
 		if proposal.value != "" {

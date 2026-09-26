@@ -18,6 +18,7 @@ func TestConnectProblemNamesFailuresThatNeedUserAction(t *testing.T) {
 		{sshclient.ErrHostKeyRevoked, "host_key_revoked"},
 		{sshclient.ErrNoIdentity, "identity_unavailable"},
 		{sshclient.ErrNoAuthMethod, "authentication_unavailable"},
+		{sshclient.ErrProxyAuthenticationRequired, "proxy_authentication_required"},
 		{sshclient.ErrPromptAborted, "authentication_cancelled"},
 		{keys.ErrPassphraseRequired, "key_passphrase_required"},
 		{keys.ErrWrongPassphrase, "key_passphrase_required"},

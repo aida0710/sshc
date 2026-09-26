@@ -38,6 +38,8 @@ func connectProblem(err error) (string, bool) {
 		return "identity_unavailable", true
 	case errors.Is(err, sshclient.ErrNoAuthMethod):
 		return "authentication_unavailable", true
+	case errors.Is(err, sshclient.ErrProxyAuthenticationRequired):
+		return "proxy_authentication_required", true
 	case errors.Is(err, sshclient.ErrPromptAborted):
 		return "authentication_cancelled", true
 	case errors.Is(err, keys.ErrPassphraseRequired), errors.Is(err, keys.ErrWrongPassphrase):

@@ -572,6 +572,7 @@ export const ja = {
   "terminal.authenticationUnavailable":
     "この接続で利用できる認証方式がありません。",
   "terminal.authenticationCancelled": "認証を中止しました。",
+  "terminal.proxyAuthenticationRequired": "ProxyCommandの認証が必要なため、自動再接続を停止しました。ターミナルの案内に従ってログインし、再接続してください。",
   "terminal.keyPassphraseRequired":
     "秘密鍵のパスフレーズが必要です。Vaultのロックを解除するか、この鍵に正しいパスフレーズを保存してください。",
   "terminal.vpnRouteRefused": "VPN経路を用意できないため、自動再接続を停止しました。ターミナルに表示された理由を確認してください。",
