@@ -358,7 +358,7 @@ const maxLogBytes = 64 << 10
 
 // containerLogs は、利用者へ見せられる形で直近のログを返す。
 func (manager *Manager) containerLogs(ctx context.Context, name string, secrets Secrets) string {
-	output, err := manager.docker.combined(ctx, "logs", "--tail", "40", name)
+	output, err := manager.docker.combined(ctx, "logs", "--tail", strconv.Itoa(maxShownOutputLines), name)
 	if err != nil {
 		return ""
 	}

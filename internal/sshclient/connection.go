@@ -36,7 +36,7 @@ func (d Dialer) Connect(ctx context.Context, target Target) (*Connection, error)
 	connection := &Connection{
 		client: client, closers: append(closers, client), done: make(chan struct{}),
 	}
-	if keepAlive := keepAliveLoop(client, strict.KeepAlive, strict.KeepAliveMax, connection.done); keepAlive != nil {
+	if keepAlive := keepAliveLoop(client, keepAliveSettings{interval: strict.KeepAlive, count: strict.KeepAliveMax, done: connection.done}); keepAlive != nil {
 		go keepAlive()
 	}
 	return connection, nil
