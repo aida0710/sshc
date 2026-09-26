@@ -76,14 +76,22 @@ func TestTheUserAndPasswordAreQuotedForPPP(t *testing.T) {
 	}
 }
 
-// 指定した暗号方式だけを書き、指定しなければ既定に任せる。
-func TestOnlyTheGivenProposalsAreWritten(t *testing.T) {
+func TestExplicitESPProposalsArePreservedAndIKEUsesTheLibraryDefault(t *testing.T) {
 	documents := l2tpDocuments(*l2tpProfile().L2TP, *l2tpSecrets().L2TP)
 	if !strings.Contains(documents["ipsec.conf"], "    esp=aes256-sha256,aes128-sha1") {
 		t.Errorf("ipsec.conf = %s", documents["ipsec.conf"])
 	}
 	if strings.Contains(documents["ipsec.conf"], "    ike=") {
 		t.Errorf("指定していない ike が書かれた: %s", documents["ipsec.conf"])
+	}
+}
+
+func TestAnUnconfiguredESPIncludesSeparateSHA1ProposalsForL2TPServers(t *testing.T) {
+	settings := *l2tpProfile().L2TP
+	settings.ESP = ""
+	documents := l2tpDocuments(settings, *l2tpSecrets().L2TP)
+	if !strings.Contains(documents["ipsec.conf"], "    esp=aes256-sha256,aes128-sha256,aes256-sha1,aes128-sha1\n") {
+		t.Fatalf("default ESP omits IKEv1-compatible proposals: %s", documents["ipsec.conf"])
 	}
 }
 

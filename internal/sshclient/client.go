@@ -96,12 +96,16 @@ func (d Dialer) connect(ctx context.Context, target Target, session *Session, ob
 	trace.stage(terminal.ConnectionOpeningSession, target, hops, hops)
 	trace.say(Brief, "認証に成功しました。セッションを開始します。")
 
+	channelStarted := trace.now()
+	trace.say(Full, "SSHセッションチャンネルを要求します。")
 	remote, err := client.NewSession()
 	if err != nil {
+		trace.say(Detailed, "SSHセッションチャンネルの要求が失敗しました（%s）：%v", connectionlog.Elapsed(trace.since(channelStarted)), err)
 		session.fail(fmt.Errorf("sshc: %w", err))
 		closeAll(closers)
 		return
 	}
+	trace.say(Full, "SSHセッションチャンネルが開きました（%s）。", connectionlog.Elapsed(trace.since(channelStarted)))
 
 	size, attached := session.attach(remote, closers)
 	if !attached {
@@ -136,7 +140,7 @@ func (d Dialer) connect(ctx context.Context, target Target, session *Session, ob
 		trace.say(Detailed, "keepalive：送りません（ServerAliveInterval 0）。")
 	}
 	trace.say(Full, "接続完了まで %s かかりました。", connectionlog.Elapsed(trace.since(started)))
-	session.run(remote, keepAliveLoop(client, target.KeepAlive, target.KeepAliveMax, session.done))
+	session.run(remote, keepAliveLoop(client, keepAliveSettings{interval: target.KeepAlive, count: target.KeepAliveMax, done: session.done, trace: trace}))
 }
 
 // start は、チャンネルの上で端末を要求し、シェルかコマンドを起動する。
@@ -177,16 +181,27 @@ func (d Dialer) start(remote *ssh.Session, target Target, size terminal.Size, se
 		// interactive echo behaviour the browser terminal expects.
 		modes := ssh.TerminalModes{ssh.ECHO: 1}
 		session.trace.say(Detailed, "端末を要求します：%d 列 × %d 行（TERM=%s）。", size.Cols, size.Rows, TermName)
+		started := session.trace.now()
 		if err := remote.RequestPty(TermName, int(size.Rows), int(size.Cols), modes); err != nil {
+			session.trace.say(Detailed, "PTY要求が失敗しました（%s）：%v", connectionlog.Elapsed(session.trace.since(started)), err)
 			return err
 		}
+		session.trace.say(Full, "PTY要求が受け入れられました（%s）。", connectionlog.Elapsed(session.trace.since(started)))
 	}
+	started := session.trace.now()
 	if target.RemoteCommand != "" {
 		session.trace.say(Detailed, "リモートコマンドを実行します：%s", target.RemoteCommand)
-		return remote.Start(target.RemoteCommand)
+		err = remote.Start(target.RemoteCommand)
+	} else {
+		session.trace.say(Detailed, "シェルを起動します。")
+		err = remote.Shell()
 	}
-	session.trace.say(Detailed, "シェルを起動します。")
-	return remote.Shell()
+	if err != nil {
+		session.trace.say(Detailed, "起動要求が失敗しました（%s）：%v", connectionlog.Elapsed(session.trace.since(started)), err)
+		return err
+	}
+	session.trace.say(Full, "起動要求が受け入れられました（%s）。", connectionlog.Elapsed(session.trace.since(started)))
+	return nil
 }
 
 // chain は、ProxyJump を手前から順に繋ぎ、最後の接続を返す。
@@ -258,7 +273,11 @@ func (d Dialer) connectOne(
 		explainFailure(trace, err)
 		return nil, err
 	}
-	trace.say(Detailed, "TCP 接続を確立しました（%s）。", connectionlog.Elapsed(trace.since(started)))
+	if target.ProxyCommand != "" {
+		trace.say(Detailed, "ProxyCommandのプロセスを起動しました（%s）。SSHの応答を待ちます。", connectionlog.Elapsed(trace.since(started)))
+	} else {
+		trace.say(Detailed, "TCP 接続を確立しました（%s）。", connectionlog.Elapsed(trace.since(started)))
+	}
 	if tcp, ok := conn.(*net.TCPConn); ok {
 		// 素の TCP のときだけ言う。ProxyJump の上のチャンネルや ProxyCommand の
 		// パイプが名乗るアドレスは、どこを通ったかを表さない。
@@ -270,8 +289,9 @@ func (d Dialer) connectOne(
 	defer closeAuth()
 	verifyHostKey := d.HostKeys.callback(target, prompt, trace)
 	config := &ssh.ClientConfig{
-		User: target.User,
-		Auth: authMethods,
+		User:         target.User,
+		Auth:         authMethods,
+		AuthCallback: traceAuthentication(trace),
 		HostKeyCallback: func(hostname string, remote net.Addr, key ssh.PublicKey) error {
 			trace.stage(terminal.ConnectionHostKey, target, hop, hops)
 			trace.say(Full, "鍵交換が終わり、ホスト鍵を受け取りました（%s）。", connectionlog.Elapsed(trace.since(started)))
@@ -289,15 +309,24 @@ func (d Dialer) connectOne(
 		Timeout:           timeout,
 	}
 	trace.say(Full, "名乗るホスト鍵アルゴリズム：%s", strings.Join(config.HostKeyAlgorithms, ", "))
+	describeAlgorithmOffers(trace, config)
+	handshakeStarted := trace.now()
+	trace.say(Full, "SSHハンドシェイクを開始します。")
 	connection, channels, requests, err := newClientConn(ctx, conn, target.Address(), config)
 	if err != nil {
+		trace.say(Detailed, "SSHハンドシェイクが停止しました（%s）。", connectionlog.Elapsed(trace.since(handshakeStarted)))
+		describeProxyExit(trace, conn)
 		trace.say(Brief, "%s", connectionFailureMessage("SSH ハンドシェイク", err))
+		explainFailure(trace, err)
 		return nil, err
 	}
 	if method := lastTriedMethod(); method != "" {
 		trace.say(Detailed, "認証方式 %s で認証されました。", method)
 	} else {
 		trace.say(Detailed, "サーバーは認証を求めませんでした。")
+		if metadata, ok := connection.(ssh.AlgorithmsConnMetadata); ok {
+			describeNegotiatedAlgorithms(trace, metadata.Algorithms())
+		}
 	}
 	trace.say(Detailed, "SSH ハンドシェイクが完了しました（%s）。", connectionlog.Elapsed(trace.since(started)))
 	trace.say(Full, "サーバーの SSH バージョン：%s", connection.ServerVersion())
@@ -391,7 +420,7 @@ func (d Dialer) open(ctx context.Context, target Target, through *ssh.Client, tr
 				trace.say(Full, "PATH：%s", pathOf(environment))
 			}
 		}
-		return startProxyCommand(target.ProxyCommand, environment)
+		return startProxyCommand(target.ProxyCommand, environment, trace)
 	}
 	if through != nil {
 		trace.say(Detailed, "%s へ、手前のホップの中から TCP で接続します。", target.Address())
@@ -581,7 +610,7 @@ func withComplaints(err error, conn net.Conn) error {
 	if said == "" {
 		return err
 	}
-	return fmt.Errorf("%w: ProxyCommand said: %s", err, said)
+	return proxyFailure(err, said)
 }
 
 func closeAll(closers []io.Closer) {
