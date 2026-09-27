@@ -110,3 +110,25 @@ func TestNoticesAreWrittenWhateverTheDepth(t *testing.T) {
 		t.Fatalf("lines = %q", got)
 	}
 }
+
+// progressSkipping は、途中の出力を書かない書き先である（経路の記録と同じ）。
+type progressSkipping struct{ recorded }
+
+func (*progressSkipping) SkipsProgress() {}
+
+// 途中の出力は、その場で見ている書き先にだけ書き、記録には書かない。深さでも絞る。
+func TestProgressReachesOnlyTheWritersThatShowIt(t *testing.T) {
+	terminal := &recorded{level: Full}
+	quiet := &recorded{level: Detailed}
+	record := &progressSkipping{recorded{level: Full}}
+	ctx := With(With(With(context.Background(), terminal), record), quiet)
+
+	Progress(ctx, Full, "#6 %s", "Get:1 …")
+
+	if got := strings.Join(terminal.lines, "|"); got != "3 #6 Get:1 …" {
+		t.Fatalf("terminal = %q", got)
+	}
+	if len(record.lines) != 0 || len(quiet.lines) != 0 {
+		t.Fatalf("record = %q, quiet = %q", record.lines, quiet.lines)
+	}
+}

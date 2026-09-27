@@ -66,6 +66,36 @@ func Say(ctx context.Context, level Level, format string, args ...any) {
 	writer.Write(level, fmt.Sprintf(format, args...))
 }
 
+// ProgressSkipper は、途中の出力（Progress）を書かない書き先が満たす。経路ごとの
+// 記録は行数に上限があり、docker build のように数百行になる途中の出力で、ほかの
+// 行を押し出さないために満たす。
+type ProgressSkipper interface {
+	SkipsProgress()
+}
+
+// Progress は、長い処理の途中の出力（docker build の行など）を 1 行書く。書くのは、
+// その場で接続を見ている書き先（Terminal と CLI）だけで、ProgressSkipper を満たす
+// 書き先には書かない。
+func Progress(ctx context.Context, level Level, format string, args ...any) {
+	writer, present := ctx.Value(writerKey{}).(Writer)
+	if !present {
+		return
+	}
+	writeProgress(writer, level, fmt.Sprintf(format, args...))
+}
+
+func writeProgress(writer Writer, level Level, message string) {
+	if pair, isPair := writer.(both); isPair {
+		writeProgress(pair.first, level, message)
+		writeProgress(pair.second, level, message)
+		return
+	}
+	if _, skips := writer.(ProgressSkipper); skips || !writer.Enabled(level) {
+		return
+	}
+	writer.Write(level, message)
+}
+
 // Elapsed は、掛かった時間を接続ログに出す細かさへ丸める。ms で丸めると 1ms 未満が
 // 「0s」になり、測っていないように見えるので、そこだけ µs で丸める。
 func Elapsed(duration time.Duration) time.Duration {
