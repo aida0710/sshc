@@ -171,6 +171,41 @@ func TestARemoteEnvelopeMayNotAskForWhatALocalOneMay(t *testing.T) {
 	}
 }
 
+// DerivationCost はテストが下げるためにある。製品の既定値が remote から受け取って
+// よい上限を下回れば、このインストールが書くすべての envelope が弱くなる。
+func TestDerivationCostDefaultsToTheProductionCost(t *testing.T) {
+	if envelope.DerivationCost != envelope.AcceptedFromRemote {
+		t.Errorf("DerivationCost = %+v, want the production cost %+v", envelope.DerivationCost, envelope.AcceptedFromRemote)
+	}
+}
+
+// 下げたコストはヘッダーに書かれ、開く側はそのコストで開く。ほかのパッケージの
+// テストは、これを頼りに製品と同じ Open を安く通している。
+func TestALoweredDerivationCostIsWrittenToTheHeader(t *testing.T) {
+	lowered := envelope.Limits{Time: 1, MemoryKiB: 64, Threads: 1}
+	previous := envelope.DerivationCost
+	envelope.DerivationCost = lowered
+	t.Cleanup(func() { envelope.DerivationCost = previous })
+
+	key, err := envelope.Derive("a passphrase long enough")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sealed, err := key.Seal([]byte("a snapshot"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 製品のコストでは断られる上限でも開けるなら、ヘッダーは下げたコストを述べている。
+	tiny := envelope.Limits{Time: 1, MemoryKiB: 1024, Threads: 1}
+	plaintext, _, err := envelope.OpenWithin(sealed, "a passphrase long enough", tiny)
+	if err != nil {
+		t.Fatalf("OpenWithin under a ceiling above the lowered cost = %v", err)
+	}
+	if string(plaintext) != "a snapshot" {
+		t.Errorf("plaintext = %q", plaintext)
+	}
+}
+
 func TestRemoteDerivationsAreSerializedWithoutBlockingALocalDerivation(t *testing.T) {
 	key, err := envelope.Derive("a passphrase long enough")
 	if err != nil {
