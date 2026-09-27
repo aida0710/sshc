@@ -106,7 +106,7 @@ export function BackgroundPicker({ value, onChange, tint, onTintChange, unchosen
   return (
     <div className="flex flex-col gap-2">
       <div className="flex min-w-0 flex-wrap items-center gap-3 rounded-md bg-surface-subtle p-2.5 sm:flex-nowrap">
-        {selected === undefined ? <div className="flex size-14 shrink-0 items-center justify-center rounded-md bg-control text-ink-faint"><Icon name="config" className="size-5" /></div> : <Thumbnail name={selected.name} chosen className="size-14 rounded-md" />}
+        {selected === undefined ? <div className="flex size-14 shrink-0 items-center justify-center rounded-md bg-control text-ink-faint"><Icon name="image" className="size-5" /></div> : <Thumbnail name={selected.name} chosen className="size-14 rounded-md" />}
         <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium text-ink">{selected?.name ?? unchosen}</p><p className="mt-0.5 text-xs text-ink-faint">{selected === undefined ? t("terminal.backgroundNotSelected") : formatBytes(selected.bytes)}</p></div>
         <Button ref={openButton} onClick={() => { setDraft(value); setProblem(""); setLibraryOpen(true); }}>{t("terminal.backgroundChoose")}</Button>
         {value === "" ? null : <Button onClick={() => onChange("")}>{t("terminal.backgroundClear")}</Button>}
