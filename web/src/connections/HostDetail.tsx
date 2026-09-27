@@ -147,7 +147,9 @@ export function HostDetailPanel({
     <section className="flex flex-col gap-4">
       <NoticeList notices={detail.form.notices ?? []} />
 
-      {panel === "Basic" && identity.alias !== "" ? (
+      {/* 接続の確認は、保存済みの接続を試すもので、どのタブを開いていても同じである。
+          Basic のときだけ出すと、タブを切り替えるたびに下の編集欄の位置が上下する。 */}
+      {identity.alias !== "" ? (
         <ConnectionChecks
           alias={identity.alias}
           api={integrations}

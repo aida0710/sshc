@@ -162,6 +162,26 @@ describe("HostDetailPanel", () => {
     expect(screen.getByLabelText("Host name or IP address")).toHaveValue("198.51.100.7");
   });
 
+  // タブを切り替えても、接続の確認は同じ場所に出たままにする。Basic のときだけ出すと、
+  // 編集欄の位置がタブごとに上下する。
+  it("shows the connection checks on every area so switching areas does not move the editor", () => {
+    const harness = renderPanel({ panel: "Basic", advanced: "Jump" });
+    for (const panel of ["Basic", "Analysis", "Advanced", "Sshc"] as const) {
+      harness.rerender(<HostDetailPanel {...harness.props} panel={panel} advanced="Jump" />);
+      expect(screen.getByRole("region", { name: "Connection checks" })).toBeVisible();
+      expect(screen.getByRole("button", { name: "Check reachability" })).toBeEnabled();
+    }
+  });
+
+  // sshc タブの項目も、Basic と同じく枠で囲まずに編集欄へ直接並べる。
+  it("lays out the sshc settings without a surrounding panel, like the Basic area", () => {
+    renderPanel({ panel: "Sshc", advanced: "Jump" });
+    const panel = screen.getByRole("tabpanel", { name: "sshc" });
+    for (let element = screen.getByLabelText("Remote text encoding").parentElement; element !== null && element !== panel; element = element.parentElement) {
+      expect(element).not.toHaveClass("bg-tree");
+    }
+  });
+
   it("keeps an sshc draft mounted across areas and locks the other editors until it is saved", async () => {
     const user = userEvent.setup();
     const harness = renderPanel({ panel: "Sshc", advanced: "Jump" });

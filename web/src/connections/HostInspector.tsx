@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { HostDetail, HostMetadata } from "../api/config";
 import type { VPNProfile } from "../api/vpn";
-import { Field, control, fieldLabel, hintText } from "../ui/form";
+import { Field, control, fieldLabel, hintText, sectionHeading } from "../ui/form";
 import { Button, Notice } from "../ui/surface";
 import { useTranslate } from "../i18n/context";
 import { identityKey } from "./connectionBrowser";
@@ -90,10 +90,11 @@ export function HostInspector({
     <div className="flex flex-col gap-6">
 
       <section className="flex flex-col gap-3">
-        <h3 className="text-sm font-semibold text-ink">{t("inspector.appOnly")}</h3>
+        <h3 className={sectionHeading}>{t("inspector.appOnly")}</h3>
 
-        <fieldset disabled={disabled || saving} className="contents">
-        <div className="flex flex-col gap-4 rounded-md bg-tree p-4">
+        {/* 項目は Basic と同じく枠で囲まずに並べる。sshc タブだけ背景の付いた枠に入れると、
+            タブを切り替えたときに見た目と横幅がそろわない。 */}
+        <fieldset disabled={disabled || saving} className="flex min-w-0 flex-col gap-4">
         <div className="flex flex-col gap-2">
           <Field label={t("host.colour")}>
             <input
@@ -207,7 +208,6 @@ export function HostInspector({
             className={control}
           />
         </Field>
-        </div>
         </fieldset>
 
         {saveFailed ? <Notice tone="danger">{t("inspector.hostSaveFailed")}</Notice> : null}
