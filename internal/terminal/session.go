@@ -785,7 +785,7 @@ func (s *Session) reconnect(info ExitInfo, connectionErr error, now func() time.
 		s.mutex.Unlock()
 		seconds := int((wait + time.Second - 1) / time.Second)
 		s.publish([]byte(fmt.Sprintf(
-			"\r\n[sshc] SSH 接続が切れました。%d 秒後に再接続します（%d/%d）。\r\n",
+			"\r\n[sshc] SSH接続が切れました。%d秒後に再接続します（%d/%d）。\r\n",
 			seconds, attempt+1, limit)))
 
 		timer := time.NewTimer(wait)

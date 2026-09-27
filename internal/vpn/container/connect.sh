@@ -67,9 +67,9 @@ case "$host" in
 			fail target_unresolved
 		fi
 		printf '%s %s\n' "$host" "$address" >>"$names"
-		note "接続先 $host を名前解決しました：$address"
+		note "接続先${host}を名前解決しました：${address}"
 	else
-		note "接続先 $host は名前解決済みです：$address"
+		note "接続先${host}は名前解決済みです：${address}"
 	fi
 	;;
 *)
@@ -90,11 +90,11 @@ if ! grep -qx "$address" "$routed" 2>/dev/null; then
 	# あいだ、接続先への通信がDockerの通常のネットワークへ流れることはない。
 	iptables -A OUTPUT -d "$address" ! -o "$interface" -j REJECT
 	echo "$address" >>"$routed"
-	note "接続先 $address への経路とパケットフィルタを追加しました（インターフェース $interface）。"
+	note "接続先${address}への経路とパケットフィルタを追加しました（インターフェース：${interface}）。"
 else
-	note "接続先 $address への経路は追加済みです。"
+	note "接続先${address}への経路は追加済みです。"
 fi
-note "接続先 $address:$port へ TCP で接続します。"
+note "接続先${address}:${port}へTCPで接続します。"
 
 flock -u 9
 exec 9>&-

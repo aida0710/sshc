@@ -147,11 +147,11 @@ func (a Auth) Methods(target Target, prompt Prompter) []ssh.AuthMethod {
 			if method, ok := a.publicKey(target, prompt); ok {
 				methods = append(methods, method)
 			} else {
-				a.trace.say(Detailed, "publickey は試しません：IdentityFile が無く、agent も使いません。")
+				a.trace.say(Detailed, "publickeyは試しません：IdentityFileが無く、agentも使いません。")
 			}
 		case "keyboard-interactive", "password":
 			if prompt == nil {
-				a.trace.say(Detailed, "%s は試しません：非対話で、保存済みパスワードも TOTP もありません。", kind)
+				a.trace.say(Detailed, "%sは試しません：非対話で、保存済みパスワードもTOTPもありません。", kind)
 				continue
 			}
 			method := ssh.KeyboardInteractive(a.keyboard(target, prompt, stored))
@@ -246,7 +246,7 @@ func (a Auth) keyboard(target Target, prompt Prompter, stored *passwordOffer) ss
 				answered[0] = true
 			}
 		}
-		a.trace.say(Detailed, "keyboard-interactive：保存済みの資格情報で %d 件、入力で %d 件に答えます。",
+		a.trace.say(Detailed, "keyboard-interactive：保存済みの認証情報で%d件、入力で%d件に答えます。",
 			countAnswered(answered), len(answered)-countAnswered(answered))
 		if allAnswered(answered) {
 			return answers, nil
@@ -269,11 +269,11 @@ func (a Auth) traceChallenge(name string, questions []string, echos []bool) {
 		return
 	}
 	if name != "" {
-		a.trace.say(Full, "keyboard-interactive の名前：%s", terminal.DisplayText(name, maxChallengeTextRunes))
+		a.trace.say(Full, "keyboard-interactiveの名前：%s", terminal.DisplayText(name, maxChallengeTextRunes))
 	}
 	for index, question := range questions {
 		echoed := index < len(echos) && echos[index]
-		a.trace.say(Full, "keyboard-interactive の質問 %d/%d：%s（入力表示：%s）",
+		a.trace.say(Full, "keyboard-interactiveの質問%d/%d：%s（入力表示：%s）",
 			index+1, len(questions), terminal.DisplayText(question, maxChallengeTextRunes),
 			map[bool]string{true: "あり", false: "なし"}[echoed])
 	}
@@ -342,11 +342,11 @@ func (a Auth) Signers(target Target, prompt Prompter) ([]ssh.Signer, error) {
 		if err != nil {
 			// 他の鍵で通れば、この失敗は誰にも報告されない。書けない鍵が
 			// 混ざっていることに気づけるのは接続ログだけである。
-			a.trace.say(Detailed, "鍵 %s は使えません：%v", path, err)
+			a.trace.say(Detailed, "鍵%sは使えません：%v", path, err)
 			failures = append(failures, path+": "+err.Error())
 			continue
 		}
-		a.trace.say(Detailed, "鍵 %s：%s（%s）", path, describeKey(signer.PublicKey()), unlockedBy)
+		a.trace.say(Detailed, "鍵%s：%s（%s）", path, describeKey(signer.PublicKey()), unlockedBy)
 		signers = append(signers, signer)
 	}
 
@@ -354,12 +354,12 @@ func (a Auth) Signers(target Target, prompt Prompter) ([]ssh.Signer, error) {
 	if !target.IdentitiesOnly && a.AgentSocket != "" {
 		agentSigners, err := a.agentSigners()
 		if err != nil {
-			a.trace.say(Detailed, "agent の鍵は使えません：%v", err)
+			a.trace.say(Detailed, "agentの鍵は使えません：%v", err)
 			failures = append(failures, "agent: "+err.Error())
 		}
 		signers = append(signers, agentSigners...)
 	} else if target.IdentitiesOnly && a.AgentSocket != "" {
-		a.trace.say(Detailed, "IdentitiesOnly yes のため agent の鍵は使いません。")
+		a.trace.say(Detailed, "IdentitiesOnly yesのためagentの鍵は使いません。")
 	}
 
 	if len(signers) == 0 {
@@ -368,7 +368,7 @@ func (a Auth) Signers(target Target, prompt Prompter) ([]ssh.Signer, error) {
 		}
 		return nil, fmt.Errorf("%w (%s)", ErrNoIdentity, strings.Join(failures, "; "))
 	}
-	a.trace.say(Detailed, "公開鍵認証で試す鍵：%d 件", len(signers))
+	a.trace.say(Detailed, "公開鍵認証で試す鍵：%d件", len(signers))
 	return signers, nil
 }
 
@@ -407,7 +407,7 @@ func (a Auth) signerFor(path string, prompt Prompter) (ssh.Signer, string, error
 			if !errors.Is(err, keys.ErrWrongPassphrase) {
 				return nil, "", err
 			}
-			a.trace.say(Detailed, "鍵 %s：保存済みパスフレーズが合いません。", path)
+			a.trace.say(Detailed, "鍵%s：保存済みパスフレーズが合いません。", path)
 		}
 	}
 	if prompt == nil {
@@ -445,9 +445,9 @@ func (a Auth) agentSigners() ([]ssh.Signer, error) {
 	if err != nil {
 		return nil, err
 	}
-	a.trace.say(Detailed, "agent の鍵：%d 件（%s）", len(signers), a.AgentSocket)
+	a.trace.say(Detailed, "agentの鍵：%d件（%s）", len(signers), a.AgentSocket)
 	for _, signer := range signers {
-		a.trace.say(Full, "agent の鍵：%s", describeKey(signer.PublicKey()))
+		a.trace.say(Full, "agentの鍵：%s", describeKey(signer.PublicKey()))
 	}
 	return signers, nil
 }

@@ -133,6 +133,15 @@ func (command dockerCommand) outputWithInput(ctx context.Context, input string, 
 	return command.run(ctx, dockerCall{arguments: arguments, input: input})
 }
 
+// build は、directory からイメージ tag を作る。失敗したときの出力は、呼び出し側が
+// debug2 に写すので、ここでは debug3 に重ねて書かない。
+func (command dockerCommand) build(ctx context.Context, tag, directory string) error {
+	_, err := command.run(ctx, dockerCall{
+		arguments: []string{"build", "--tag", tag, directory}, callerShowsFailure: true,
+	})
+	return err
+}
+
 // probe は、「無い」ことも答えのひとつである問い合わせ（そのコンテナやイメージが
 // あるか）を実行する。無ければ present を false にして、失敗としては返さない。
 // subject は、問い合わせた相手の種類（「コンテナ」など）で、無かったときに接続ログへ
@@ -194,6 +203,9 @@ type dockerCall struct {
 	input string
 	// mergeOutput は、標準エラーを標準出力と同じ所へ、書かれた順に集める。
 	mergeOutput bool
+	// callerShowsFailure は、失敗したときの出力を呼び出し側が接続ログに書くことを
+	// 表す。ここでは失敗したことだけを書き、同じ出力を重ねない。
+	callerShowsFailure bool
 	// absentSubject は、問い合わせた相手の種類である。空でなければ、相手が無いという
 	// 失敗を問い合わせの答えとして扱い、接続ログに失敗と書かない。
 	absentSubject string
@@ -240,6 +252,8 @@ func sayRun(ctx context.Context, call dockerCall, elapsed time.Duration, err err
 	case call.absentSubject != "" && isAbsent(err):
 		connectionlog.Say(ctx, connectionlog.Full, "docker %s（%s）：その%sはありません", described, elapsed,
 			call.absentSubject)
+	case call.callerShowsFailure:
+		connectionlog.Say(ctx, connectionlog.Full, "docker %s は失敗しました（%s）。", described, elapsed)
 	default:
 		connectionlog.Say(ctx, connectionlog.Full, "docker %s は失敗しました（%s）：", described, elapsed)
 		sayOutput(ctx, connectionlog.Full, err.Error())
