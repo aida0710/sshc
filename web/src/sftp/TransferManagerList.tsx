@@ -1,7 +1,9 @@
 import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent } from "react";
+import { DisclosureSummary } from "../ui/DisclosureSummary";
+import { DisclosureChevron } from "../ui/DisclosureChevron";
 import { failureCode } from "../api/client";
 import { useTranslate } from "../i18n/context";
-import { Icon } from "../ui/icons";
+import { Icon, type IconName } from "../ui/icons";
 import { ModalShell } from "../ui/ModalShell";
 import { useDismissibleLayer } from "../ui/useDismissibleLayer";
 import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
@@ -135,6 +137,15 @@ function rememberView(view: QueueView): void {
 }
 
 type DisplayedStatus = ManagedTransferJob["status"] | "reconcile";
+
+// operationIcon は、まとまりの見出しに出す操作の種類の印である。削除、アップロード、
+// ダウンロードのどれでもないものは、リモートからリモートへのコピーと移動である。
+function operationIcon(job: ManagedTransferJob): IconName {
+  if (job.operation === "delete") return "delete";
+  if (job.operation === "put" || job.direction === "upload") return "upload";
+  if (job.operation === "get" || job.direction === "download") return "download";
+  return "arrowLeftRight";
+}
 
 function statusClass(status: DisplayedStatus): string {
   if (status === "failed") return "text-danger";
@@ -363,7 +374,7 @@ export function TransferManagerList({ openRequest = 0 }: { openRequest?: number 
       <div className={`relative flex shrink-0 items-center gap-2 px-3 ${compactViewport ? "min-h-14 border-b border-line py-1" : "min-h-9 flex-wrap py-1.5 md:min-h-8 md:py-1"}`}>
         {compactViewport ? <h3 id={headingId} className="min-w-0 flex-1 truncate font-medium">{t("sftp.manager.heading")}</h3> : (
         <button type="button" aria-label={t(collapsed ? "sftp.manager.expand" : "sftp.manager.collapse")} aria-expanded={!collapsed} aria-controls={`${headingId}-jobs`} onClick={() => changeView({ collapsed: !collapsed })} className={`flex min-w-0 items-center gap-1.5 rounded ${collapsed ? "after:absolute after:inset-0 after:cursor-pointer after:rounded-md" : ""} hover:text-accent focus:outline-none focus-visible:ring-1 focus-visible:ring-accent`}>
-          <Icon name="chevronRight" className={`size-3 transition-transform ${collapsed ? "" : "rotate-90"}`} />
+          <DisclosureChevron expanded={!collapsed} className="size-3" />
           <h3 id={headingId} className={`${collapsed ? "text-ink-muted" : "text-ink"} truncate font-medium`}>{t("sftp.manager.heading")}</h3>
         </button>
         )}
@@ -385,7 +396,7 @@ export function TransferManagerList({ openRequest = 0 }: { openRequest?: number 
           onClick={() => applySettings({ processingStopped: !processingStopped })}
           className={`flex size-9 items-center justify-center rounded md:size-7 ${processingStopped ? "text-notice-ink" : "text-ink-muted"} hover:bg-select-fill focus:bg-select-fill focus:outline-none`}
         >
-          <span aria-hidden="true">{processingStopped ? "▶" : "⏸"}</span>
+          <Icon name={processingStopped ? "play" : "pause"} className="size-4" />
         </button>
         {compactViewport ? null : settings}
         </>
@@ -406,8 +417,8 @@ export function TransferManagerList({ openRequest = 0 }: { openRequest?: number 
         </div>
         {compactViewport ? <button ref={closeSheet} type="button" aria-label={t("sftp.manager.close")} onClick={dismissSheet} className="flex size-11 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-select-fill"><Icon name="close" className="size-4" /></button> : null}
       </div>
-      {compactViewport ? <details className="shrink-0 border-b border-line px-3"><summary className="cursor-pointer py-3 text-sm text-ink-muted">{t("sftp.manager.settings")}</summary><div className="flex max-h-40 flex-wrap items-center gap-3 overflow-y-auto pb-3">{settings}</div></details> : null}
-      {controlProblem !== "" ? <div role="alert" className="mx-2.5 mb-2 flex items-start gap-2 rounded bg-danger/10 px-2.5 py-2 text-danger"><span className="grow">{controlProblem}</span><button type="button" aria-label={t("sftp.manager.dismissError")} onClick={() => setControlProblem("")} className="shrink-0 text-ink-muted hover:text-ink">×</button></div> : null}
+      {compactViewport ? <details className="shrink-0 border-b border-line px-3"><DisclosureSummary className="py-3 text-sm text-ink-muted">{t("sftp.manager.settings")}</DisclosureSummary><div className="flex max-h-40 flex-wrap items-center gap-3 overflow-y-auto pb-3">{settings}</div></details> : null}
+      {controlProblem !== "" ? <div role="alert" className="mx-2.5 mb-2 flex items-start gap-2 rounded bg-danger/10 px-2.5 py-2 text-danger"><span className="grow">{controlProblem}</span><button type="button" aria-label={t("sftp.manager.dismissError")} onClick={() => setControlProblem("")} className="shrink-0 text-ink-muted hover:text-ink"><Icon name="close" className="size-3.5" /></button></div> : null}
       {compactViewport && jobs.length === 0 ? <p className="p-6 text-center text-ink-muted">{t("sftp.manager.summaryIdle", { count: 0 })}</p> : null}
       {collapsed || jobs.length === 0 ? null : <div id={`${headingId}-jobs`} style={compactViewport ? undefined : { height: queueHeight }} className={`space-y-1.5 overflow-auto overscroll-contain px-2.5 pb-2.5 ${compactViewport ? "min-h-0 flex-1 pt-2" : ""}`}>
         {batches.map(([batchId, items]) => {
@@ -417,7 +428,7 @@ export function TransferManagerList({ openRequest = 0 }: { openRequest?: number 
           return (
             <section key={batchId} className="rounded-md bg-surface-subtle/70 p-2" aria-label={first.batchName}>
               <div className="mb-1 flex flex-wrap items-center gap-2">
-                <span aria-hidden="true">{first.operation === "delete" ? "×" : first.operation === "put" || first.direction === "upload" ? "↑" : first.operation === "get" || first.direction === "download" ? "↓" : "⇄"}</span>
+                <Icon name={operationIcon(first)} className="size-3.5 text-ink-muted" />
                 <span className="min-w-0 grow truncate font-medium" title={first.batchName}>{first.batchName}</span>
                 <span className="text-ink-muted">{t(first.batchKind === "folder" ? "sftp.manager.folder" : "sftp.manager.file")}</span>
                 <span className="tabular-nums text-ink-muted">{completed}/{items.length}</span>
@@ -453,8 +464,8 @@ export function TransferManagerList({ openRequest = 0 }: { openRequest?: number 
                         </span>
                         {item.status === "queued" && waiting.length > 1 ? (
                           <>
-                            <button type="button" aria-label={t("sftp.manager.moveUp", { name: item.name })} disabled={waiting[0]?.id === item.id} onClick={() => runControl(() => sftpTransferManager.move(item.id, "up"))} className="flex size-9 items-center justify-center rounded text-accent disabled:text-ink-faint md:size-5">↑</button>
-                            <button type="button" aria-label={t("sftp.manager.moveDown", { name: item.name })} disabled={waiting[waiting.length - 1]?.id === item.id} onClick={() => runControl(() => sftpTransferManager.move(item.id, "down"))} className="flex size-9 items-center justify-center rounded text-accent disabled:text-ink-faint md:size-5">↓</button>
+                            <button type="button" aria-label={t("sftp.manager.moveUp", { name: item.name })} disabled={waiting[0]?.id === item.id} onClick={() => runControl(() => sftpTransferManager.move(item.id, "up"))} className="flex size-9 items-center justify-center rounded text-accent disabled:text-ink-faint md:size-5"><Icon name="arrowUp" className="size-3.5" /></button>
+                            <button type="button" aria-label={t("sftp.manager.moveDown", { name: item.name })} disabled={waiting[waiting.length - 1]?.id === item.id} onClick={() => runControl(() => sftpTransferManager.move(item.id, "down"))} className="flex size-9 items-center justify-center rounded text-accent disabled:text-ink-faint md:size-5"><Icon name="arrowDown" className="size-3.5" /></button>
                           </>
                         ) : null}
                         {!sourceMissing && item.allowedActions.includes("pause") ? <button type="button" className="text-accent" onClick={() => runControl(() => sftpTransferManager.pause(item.id))}>{t("sftp.transfer.pause")}</button> : null}

@@ -1,4 +1,5 @@
 import { useTranslate } from "../i18n/context";
+import { DisclosureSummary } from "../ui/DisclosureSummary";
 import type { Locale } from "../i18n/locale";
 import { hintText, sectionHeading } from "../ui/form";
 import { PanelState } from "../ui/PanelState";
@@ -81,9 +82,9 @@ export function SyncBucketStateSection({ bucketState, locale, busy, historyExpan
                   )}
                 </p>
                 <details className="mt-1 text-xs text-ink-muted">
-                  <summary className="cursor-pointer">
+                  <DisclosureSummary>
                     {t("sync.bucketObjectName")}
-                  </summary>
+                  </DisclosureSummary>
                   <p className="mt-1 break-all font-mono text-ink">
                     {bucketState.value.live.key}
                   </p>
@@ -128,9 +129,9 @@ export function SyncBucketStateSection({ bucketState, locale, busy, historyExpan
                         })}
                       </p>
                       <details className="mt-1 text-xs text-ink-muted">
-                        <summary className="cursor-pointer">
+                        <DisclosureSummary>
                           {t("sync.bucketObjectName")}
-                        </summary>
+                        </DisclosureSummary>
                         <p className="mt-1 break-all font-mono text-ink">
                           {item.key}
                         </p>

@@ -862,7 +862,7 @@ test("sends a real control character from the on-screen keys", async ({ page, in
   await page.keyboard.press("Enter");
   await expect(rows).toContainText("zzq", { timeout: 20_000 });
 
-  await keys.getByRole("button", { name: "↑", exact: true }).click();
+  await keys.getByRole("button", { name: "Up arrow", exact: true }).click();
   await expect
     .poll(async () => (await rows.innerText()).split("zzq").length - 1, {
       timeout: 20_000,

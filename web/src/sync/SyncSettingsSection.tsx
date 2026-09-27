@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { DisclosureChevron } from "../ui/DisclosureChevron";
 import type { SyncDirection, SyncStatus } from "../api/sync";
 import { useTranslate } from "../i18n/context";
 import { CheckboxField, control, hintText, sectionHeading } from "../ui/form";
@@ -93,18 +94,13 @@ export function SyncSettingsSection({ status, busy, form, onCheckSetup, onComple
       }}
       className={
         status.configured
-          ? "group overflow-hidden rounded-md border border-control-line bg-card"
-          : "group"
+          ? "overflow-hidden rounded-md border border-control-line bg-card"
+          : ""
       }
     >
       {status.configured ? (
         <summary className="flex cursor-pointer list-none items-center gap-3 bg-toolbar px-4 py-3 text-sm font-medium text-ink marker:hidden hover:bg-select-fill">
-          <span
-            aria-hidden="true"
-            className="inline-flex size-5 shrink-0 items-center justify-center text-base text-ink-muted transition-transform group-open:rotate-90"
-          >
-            ›
-          </span>
+          <DisclosureChevron className="size-4 text-ink-muted" />
           <span>{t("sync.manageSettings")}</span>
         </summary>
       ) : null}

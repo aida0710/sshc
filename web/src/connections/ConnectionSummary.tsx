@@ -1,4 +1,5 @@
 import { useTranslate } from "../i18n/context";
+import { DisclosureChevron } from "../ui/DisclosureChevron";
 import { Button } from "../ui/surface";
 import { Icon } from "../ui/icons";
 import { OperatingSystemIcon } from "../ui/OperatingSystemIcon";
@@ -102,7 +103,7 @@ export function ConnectionSummary({
             className={`inline-flex items-center gap-2 ${managing ? "border-accent bg-select-fill text-accent" : ""}`}
           >
             <span>{t("conn.manageLabel")}</span>
-            <Icon name="chevronRight" className={`size-3.5 transition-transform ${managing ? "rotate-90" : ""}`} />
+            <DisclosureChevron expanded={managing} className="size-3.5" />
           </Button>
         </div>
       </header>

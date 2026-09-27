@@ -132,7 +132,7 @@ export function HostPickerDialog({
       <div className="border-b border-line p-3">
         <div className="mb-3 flex items-center justify-between gap-3">
           <h2 id="host-picker-heading" className="font-semibold">{heading}</h2>
-          <button ref={closeButton} type="button" aria-label={t("sftp.closeHostPicker")} onClick={close} className="flex size-8 items-center justify-center rounded text-ink-muted hover:bg-select-fill">×</button>
+          <button ref={closeButton} type="button" aria-label={t("sftp.closeHostPicker")} onClick={close} className="flex size-8 items-center justify-center rounded text-ink-muted hover:bg-select-fill"><Icon name="close" className="size-4" /></button>
         </div>
         <label className="relative block">
           <span className="sr-only">{t("sftp.searchHosts")}</span>

@@ -1,4 +1,5 @@
 import { LockScreen } from "./LockScreen";
+import { DisclosureChevron } from "../ui/DisclosureChevron";
 import { createPortal } from "react-dom";
 import { useAnchoredMenu } from "../ui/useAnchoredMenu";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -100,7 +101,7 @@ function UsageDisclosure({ label, values, emptyLabel, onRemove, removeLabel, own
         className="flex min-h-10 w-full items-center gap-2 px-3 py-2 text-left text-sm text-ink-muted hover:bg-select-fill hover:text-ink"
         onClick={() => setExpanded((current) => !current)}
       >
-        <Icon name="chevronRight" className={`size-3.5 shrink-0 transition-transform ${expanded ? "rotate-90" : ""}`} />
+        <DisclosureChevron expanded={expanded} className="size-3.5" />
         <span className="min-w-0 flex-1 font-medium">{label}</span>
         <span className="rounded bg-surface px-1.5 py-0.5 font-mono text-xs tabular-nums text-ink-faint">{values.length}</span>
       </button>
@@ -123,7 +124,7 @@ function UsageDisclosure({ label, values, emptyLabel, onRemove, removeLabel, own
                       aria-label={removeLabel?.(value) ?? value}
                       onClick={() => onRemove(value)}
                     >
-                      ×
+                      <Icon name="close" className="size-3" />
                     </button>
                   )}
                 </li>

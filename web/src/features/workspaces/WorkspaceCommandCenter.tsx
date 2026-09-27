@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Icon } from "../../ui/icons";
 import { failureCode } from "../../api/client";
 import { useTranslate } from "../../i18n/context";
 import { snippetsApi, type Snippet } from "../../snippets/api";
@@ -190,9 +191,9 @@ export function WorkspaceCommandCenter({
             type="button"
             onClick={onClose}
             aria-label={t("workspace.commandClose")}
-            className="flex size-8 shrink-0 items-center justify-center rounded text-lg text-ink-muted hover:bg-select-fill"
+            className="flex size-8 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-select-fill"
           >
-            ×
+            <Icon name="close" className="size-4" />
           </button>
         </div>
         {problem === "" ? null : <Notice tone="danger" compact>{problem}</Notice>}

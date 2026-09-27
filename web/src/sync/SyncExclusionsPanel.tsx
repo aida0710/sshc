@@ -1,4 +1,6 @@
 import { useMemo, useState } from "react";
+import { DisclosureSummary } from "../ui/DisclosureSummary";
+import { DisclosureChevron } from "../ui/DisclosureChevron";
 import { failureCode } from "../api/client";
 import type { SyncApi, SyncExclusions } from "../api/sync";
 import { useLanguage } from "../i18n/context";
@@ -68,19 +70,14 @@ export function SyncExclusionsPanel({ api, initial, onSaved }: Props) {
 
   return (
     <details
-      className="group overflow-hidden rounded-md border border-control-line bg-card"
+      className="overflow-hidden rounded-md border border-control-line bg-card"
       onToggle={(event) => {
         if (event.currentTarget.open) void load();
       }}
     >
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 bg-toolbar px-4 py-3 marker:hidden hover:bg-select-fill">
         <span className="flex min-w-0 items-center gap-3 text-sm font-medium text-ink">
-          <span
-            aria-hidden="true"
-            className="inline-flex size-5 shrink-0 items-center justify-center text-base text-ink-muted transition-transform group-open:rotate-90"
-          >
-            ›
-          </span>
+          <DisclosureChevron className="size-4 text-ink-muted" />
           {t("sync.exclusions.heading")}
         </span>
         <span className={hintText}>
@@ -163,9 +160,9 @@ export function SyncExclusionsPanel({ api, initial, onSaved }: Props) {
               </Notice>
             ) : null}
             <details className="rounded-md border border-hairline bg-surface-subtle">
-              <summary className="cursor-pointer px-3 py-2 text-sm font-medium text-ink">
+              <DisclosureSummary className="px-3 py-2 text-sm font-medium text-ink">
                 {t("sync.exclusions.advanced")}
-              </summary>
+              </DisclosureSummary>
               <div className="border-t border-hairline p-3">
                 <textarea
                   value={document}
