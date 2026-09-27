@@ -281,7 +281,7 @@ func (d Dialer) connectOne(
 	if tcp, ok := conn.(*net.TCPConn); ok {
 		// 素の TCP のときだけ言う。ProxyJump の上のチャンネルや ProxyCommand の
 		// パイプが名乗るアドレスは、どこを通ったかを表さない。
-		trace.say(Full, "ローカル%s → リモート%s", tcp.LocalAddr(), tcp.RemoteAddr())
+		trace.say(Full, "ローカル：%s → リモート：%s", tcp.LocalAddr(), tcp.RemoteAddr())
 	}
 
 	auth, lastTriedMethod := d.authWithTrace(trace)
@@ -395,7 +395,7 @@ func (d Dialer) open(ctx context.Context, target Target, through *ssh.Client, tr
 		if d.DialVPN == nil {
 			return nil, ErrVPNUnavailable
 		}
-		trace.announce("VPN %sを通して接続します。", target.VPN)
+		trace.announce("VPN「%s」を通して接続します。", target.VPN)
 		return d.DialVPN(ctx, target.VPN, target.Address())
 	}
 	if target.ProxyCommand != "" {
@@ -533,7 +533,7 @@ func describeHop(trace *tracer, target Target) {
 		target.HostName, target.Port, target.User, identities, target.IdentitiesOnly)
 	switch {
 	case target.VPN != "":
-		trace.say(Detailed, "経路：VPNプロファイル%s", target.VPN)
+		trace.say(Detailed, "経路：VPNプロファイル「%s」", target.VPN)
 	case target.ProxyCommand != "":
 		trace.say(Detailed, "経路：ProxyCommand")
 	default:

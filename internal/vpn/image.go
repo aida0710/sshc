@@ -66,7 +66,7 @@ func (manager *Manager) ensureImage(ctx context.Context, report func(StartPhase)
 		return "", err
 	}
 	if _, present, err := manager.docker.probe(ctx, "コンテナイメージ", "image", "inspect", tag); err == nil && present {
-		connectionlog.Say(ctx, connectionlog.Detailed, "コンテナイメージ%sは作成済みです。", tag)
+		connectionlog.Say(ctx, connectionlog.Detailed, "コンテナイメージ「%s」は作成済みです。", tag)
 		return tag, nil
 	}
 	report(PhaseImage)

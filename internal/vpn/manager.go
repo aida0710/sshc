@@ -97,7 +97,7 @@ func (manager *Manager) Dial(ctx context.Context, profile Profile, secrets Secre
 		return nil, err
 	}
 	ctx = manager.recording(ctx, profile.Name)
-	connectionlog.Say(ctx, connectionlog.Detailed, "%sへ、VPNプロファイル%s（%s）の経路で接続します。",
+	connectionlog.Say(ctx, connectionlog.Detailed, "%sへ、VPNプロファイル「%s」（%s）の経路で接続します。",
 		address, profile.Name, profile.Backend)
 	destination, err := profile.Destination(address)
 	if err != nil {
@@ -242,7 +242,7 @@ func (manager *Manager) Start(ctx context.Context, profile Profile, secrets Secr
 			// engine の中継へ繋ぐので、そのあいだに停止されないよう、無操作の
 			// 起点をいまにする。
 			state.touch(manager.now())
-			connectionlog.Say(ctx, connectionlog.Detailed, "起動済みのVPN経路（コンテナ%s）を使います。", name)
+			connectionlog.Say(ctx, connectionlog.Detailed, "起動済みのVPN経路（コンテナ「%s」）を使います。", name)
 			return nil
 		}
 	}
@@ -250,11 +250,11 @@ func (manager *Manager) Start(ctx context.Context, profile Profile, secrets Secr
 	// 分かりやすい。
 	manager.closeRelay(state)
 	if ours {
-		connectionlog.Say(ctx, connectionlog.Detailed, "設定が変わったか停止していたため、コンテナ%sを作り直します。", name)
+		connectionlog.Say(ctx, connectionlog.Detailed, "設定が変わったか停止していたため、コンテナ「%s」を作り直します。", name)
 		manager.stopContainer(ctx, name)
 	}
 	defer state.enterPhase("")
-	connectionlog.Say(ctx, connectionlog.Brief, "VPN経路%sを起動します（%s）。", profile.Name, profile.Backend)
+	connectionlog.Say(ctx, connectionlog.Brief, "VPN経路「%s」を起動します（%s）。", profile.Name, profile.Backend)
 	started := time.Now()
 	if err := manager.start(ctx, profile, secrets, state.enterPhase); err != nil {
 		connectionlog.Say(ctx, connectionlog.Detailed, "VPN経路の起動に失敗しました（%s）。",
@@ -265,7 +265,7 @@ func (manager *Manager) Start(ctx context.Context, profile Profile, secrets Secr
 		return err
 	}
 	tunnel := manager.tunnelStatus(profile.Name)
-	connectionlog.Say(ctx, connectionlog.Brief, "VPNに接続しました（%s、インターフェース%s、アドレス%s、%s）。",
+	connectionlog.Say(ctx, connectionlog.Brief, "VPNに接続しました（%s、インターフェース：%s、アドレス：%s、%s）。",
 		profile.Backend, tunnel.Interface, tunnel.Address, connectionlog.Elapsed(time.Since(started)))
 	relay, err := openEngineRelay(
 		filepath.Join(manager.routeDirectory(profile.Name), engineRelaySocketName),

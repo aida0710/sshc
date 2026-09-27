@@ -22,7 +22,7 @@ func TestVPNRefusalsAreExplainedInASentence(t *testing.T) {
 			name:    "改名先の名前がある",
 			called:  vpnInvocation{Action: vpnRename, Name: "old", Rename: "lab"},
 			problem: `{"code":"vpn_profile_exists","message":"request rejected"}`,
-			want:    []string{"labという名前のVPNプロファイルはすでにあります"},
+			want:    []string{"「lab」という名前のVPNプロファイルはすでにあります"},
 		},
 		{
 			name:    "項目の上限",

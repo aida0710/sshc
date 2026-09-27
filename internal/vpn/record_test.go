@@ -19,7 +19,7 @@ func TestAnAttemptIsRecordedEvenWithoutAConnectionLog(t *testing.T) {
 		t.Fatal("DNS の無いプロファイルでホスト名の接続先へ繋いだ")
 	}
 	record := manager.state(profile.Name).record.text()
-	for _, want := range []string{"[debug2] lab.example.jp:22へ、VPNプロファイルtohoku", "接続先をVPN経由で使用できません"} {
+	for _, want := range []string{"[debug2] lab.example.jp:22へ、VPNプロファイル「tohoku」", "接続先をVPN経由で使用できません"} {
 		if !strings.Contains(record, want) {
 			t.Fatalf("記録に %q が無い:\n%s", want, record)
 		}

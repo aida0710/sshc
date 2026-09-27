@@ -111,7 +111,7 @@ func TestTheHopSettingsAreDescribedAtDetailed(t *testing.T) {
 
 	describeHop(trace, Target{HostName: "10.0.0.5", Port: "22", User: "aida", Identities: []string{"/home/a/.ssh/id_ed25519"}, VPN: "lab"})
 
-	for _, want := range []string{"HostName 10.0.0.5、Port 22、User aida、IdentityFile /home/a/.ssh/id_ed25519", "経路：VPNプロファイルlab"} {
+	for _, want := range []string{"HostName 10.0.0.5、Port 22、User aida、IdentityFile /home/a/.ssh/id_ed25519", "経路：VPNプロファイル「lab」"} {
 		if !strings.Contains(out.String(), want) {
 			t.Fatalf("out = %q", out.String())
 		}
