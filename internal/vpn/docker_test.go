@@ -203,7 +203,7 @@ esac
 exit 0
 `)
 	search := filepath.Dir(docker.path)
-	manager := New(t.TempDir(), 1000, func(context.Context) ([]string, error) {
+	manager := New(shortSocketDirectory(t), 1000, func(context.Context) ([]string, error) {
 		return []string{"PATH=" + search}, nil
 	})
 	var connectionLog attemptRecord
