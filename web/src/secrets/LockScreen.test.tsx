@@ -38,7 +38,7 @@ describe("LockScreen", () => {
     const { container } = render(<LockScreen exists={false} onOpen={onOpen} api={api} />);
 
     expect(screen.getByText(/cannot be recovered/i)).toBeInTheDocument();
-    expect(container.querySelector('use[href="#icon-secrets"]')).not.toBeInTheDocument();
+    expect(container.querySelector('[data-icon="secrets"]')).not.toBeInTheDocument();
 
     await userEvent.type(screen.getByLabelText("Master password"), "a long enough password");
     expect(screen.getByRole("button", { name: "Create the vault" })).toBeDisabled();
@@ -58,7 +58,7 @@ describe("LockScreen", () => {
     );
 
     expect(screen.getByText("sshcを開くにはマスターパスワードを入力してください。")).toBeInTheDocument();
-    expect(container.querySelector('use[href="#icon-secrets"]')).not.toBeInTheDocument();
+    expect(container.querySelector('[data-icon="secrets"]')).not.toBeInTheDocument();
   });
 
   it("refuses a password too short to be worth deriving a key from", async () => {
@@ -78,7 +78,7 @@ describe("LockScreen", () => {
     expect(screen.queryByLabelText("Confirm master password")).not.toBeInTheDocument();
     expect(screen.queryByText(/cannot be recovered/i)).not.toBeInTheDocument();
     expect(screen.getByText("Enter your master password to unlock sshc.")).toBeInTheDocument();
-    expect(container.querySelector('use[href="#icon-secrets"]')).not.toBeInTheDocument();
+    expect(container.querySelector('[data-icon="secrets"]')).not.toBeInTheDocument();
 
     await userEvent.type(screen.getByLabelText("Master password"), "a long enough password");
     await userEvent.click(screen.getByRole("button", { name: "Open" }));

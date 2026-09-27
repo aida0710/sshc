@@ -143,7 +143,7 @@ describe("CommandPalette", () => {
 
     const settings = screen.getByRole("button", { name: "Open connection settings for r540" });
     // 設定を開くだけのボタンなので、操作の一覧を出す「…」ではなく歯車で見せる。
-    expect(settings.querySelector("use")).toHaveAttribute("href", "#icon-settings");
+    expect(settings.querySelector("[data-icon]")).toHaveAttribute("data-icon", "settings");
     await user.click(settings);
 
     expect(onClose).toHaveBeenCalledOnce();
