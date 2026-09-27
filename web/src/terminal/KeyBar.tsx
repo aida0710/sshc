@@ -1,15 +1,18 @@
 import { useTranslate } from "../i18n/context";
+import type { MessageKey } from "../i18n/messages";
 import { useRef, useState } from "react";
+import { Icon, type IconName } from "../ui/icons";
 import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
 import { useDismissibleLayer } from "../ui/useDismissibleLayer";
 
+// sequences は、キーの名前から送る制御シーケンスを引く。矢印キーの名前は KeyboardEvent.key に合わせる。
 const sequences: Record<string, string> = {
   Esc: "\x1b",
   Tab: "\t",
-  "↑": "\x1b[A",
-  "↓": "\x1b[B",
-  "→": "\x1b[C",
-  "←": "\x1b[D",
+  ArrowUp: "\x1b[A",
+  ArrowDown: "\x1b[B",
+  ArrowRight: "\x1b[C",
+  ArrowLeft: "\x1b[D",
 };
 export function applyModifiers(data: string, ctrl: boolean, alt: boolean): string {
   if (data.length !== 1) return data;
@@ -21,13 +24,26 @@ export function applyModifiers(data: string, ctrl: boolean, alt: boolean): strin
   }
   return alt ? "\x1b" + body : body;
 }
-export function encodeKey(label: string, ctrl: boolean, alt: boolean): string {
-  const sequence = sequences[label];
+export function encodeKey(name: string, ctrl: boolean, alt: boolean): string {
+  const sequence = sequences[name];
   if (sequence !== undefined) return alt ? "\x1b" + sequence : sequence;
-  return applyModifiers(label, ctrl, alt);
+  return applyModifiers(name, ctrl, alt);
 }
 
-const keys = ["Esc", "Tab", "←", "↑", "↓", "→"];
+// BarKey は、キーバーに常に出すキーである。name は encodeKey に渡す名前である。矢印キーは、
+// フォントによって形や大きさが変わる文字ではなくアイコンで出し、読み上げ用の名前を付ける。
+type BarKey =
+  | { kind: "text"; name: string }
+  | { kind: "arrow"; name: string; icon: IconName; label: MessageKey };
+
+const keys: BarKey[] = [
+  { kind: "text", name: "Esc" },
+  { kind: "text", name: "Tab" },
+  { kind: "arrow", name: "ArrowLeft", icon: "arrowLeft", label: "terminal.keyArrowLeft" },
+  { kind: "arrow", name: "ArrowUp", icon: "arrowUp", label: "terminal.keyArrowUp" },
+  { kind: "arrow", name: "ArrowDown", icon: "arrowDown", label: "terminal.keyArrowDown" },
+  { kind: "arrow", name: "ArrowRight", icon: "arrowRight", label: "terminal.keyArrowRight" },
+];
 const extraKeys = ["|", "-", "~", "/"];
 
 const keyShape =
@@ -45,7 +61,7 @@ export function KeyBar({
 }: {
   modifiers: Modifiers;
   onToggle: (name: keyof Modifiers) => void;
-  onKey: (label: string) => void;
+  onKey: (name: string) => void;
 }) {
   const t = useTranslate();
   const visible = useMediaQuery(mobileViewportQuery);
@@ -54,8 +70,8 @@ export function KeyBar({
   useDismissibleLayer({ open: visible && extraOpen, containerRefs: [root], onDismiss: () => setExtraOpen(false) });
   if (!visible) return null;
 
-  const press = (label: string) => {
-    onKey(label);
+  const press = (name: string) => {
+    onKey(name);
     setExtraOpen(false);
   };
   return (
@@ -75,17 +91,18 @@ export function KeyBar({
       >
         Ctrl
       </button>
-      {keys.map((label) => (
+      {keys.map((key) => (
         <button
-          key={label}
+          key={key.name}
           type="button"
           data-touch-compact
+          aria-label={key.kind === "arrow" ? t(key.label) : undefined}
           onPointerDown={keepFocus}
           onMouseDown={keepFocus}
-          onClick={() => press(label)}
+          onClick={() => press(key.name)}
           className={`${keyShape} bg-card`}
         >
-          {label}
+          {key.kind === "arrow" ? <Icon name={key.icon} className="mx-auto size-4" /> : key.name}
         </button>
       ))}
       <button
@@ -99,7 +116,7 @@ export function KeyBar({
         onClick={() => setExtraOpen((current) => !current)}
         className={`${keyShape} ${extraOpen || modifiers.alt ? "bg-select-fill" : "bg-card"}`}
       >
-        {modifiers.alt ? "Alt" : "…"}
+        {modifiers.alt ? "Alt" : <Icon name="moreHorizontal" className="mx-auto size-4" />}
       </button>
       {extraOpen ? (
         <div className="absolute inset-x-1 bottom-full z-30 mb-1 grid grid-cols-5 gap-1 rounded border border-line bg-toolbar p-1 shadow-lg">

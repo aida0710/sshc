@@ -20,7 +20,7 @@ export const settingsPageMeta: Record<
     path: "/settings/engine",
     label: "engine.heading",
     description: "settings.engineDescription",
-    icon: "settings",
+    icon: "engine",
   },
   Terminal: {
     path: "/settings/terminal",
@@ -32,7 +32,7 @@ export const settingsPageMeta: Record<
     path: "/settings/shortcuts",
     label: "shortcuts.heading",
     description: "shortcuts.description",
-    icon: "settings",
+    icon: "keyboard",
   },
   Notifications: {
     path: "/settings/notifications",
@@ -44,7 +44,7 @@ export const settingsPageMeta: Record<
     path: "/settings/connections",
     label: "desktop.closeAllHeading",
     description: "settings.connectionsDescription",
-    icon: "connections",
+    icon: "disconnect",
   },
   Password: {
     path: "/settings/password",

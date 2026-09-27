@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { DisclosureSummary } from "../ui/DisclosureSummary";
+import { DisclosureChevron } from "../ui/DisclosureChevron";
 import { toProblem } from "../api/guards";
 import { Button, Card } from "../ui/surface";
 import { useTranslate } from "../i18n/context";
@@ -251,7 +253,7 @@ export function ConfigExplorer({ target = null }: ConfigExplorerProps) {
                 className="flex items-center gap-2 text-left text-sm font-semibold text-ink lg:hidden"
               >
                 {t("explorer.hierarchy")}
-                <span aria-hidden="true">{hierarchyOpen ? "▾" : "▸"}</span>
+                <DisclosureChevron expanded={hierarchyOpen} />
               </button>
             </div>
             <span className="rounded-md bg-surface px-2 py-0.5 font-mono text-xs text-ink-muted">{overview.files.length}</span>
@@ -297,7 +299,10 @@ export function ConfigExplorer({ target = null }: ConfigExplorerProps) {
                           )}
                           <ul className="mt-1">
                             {(include.matches ?? []).map((match) => (
-                              <li key={match.absolute} className="truncate font-mono text-ink-faint" title={match.path ?? match.absolute}>{`→ ${match.path ?? match.absolute}`}</li>
+                              <li key={match.absolute} className="flex min-w-0 items-center gap-1 font-mono text-ink-faint" title={match.path ?? match.absolute}>
+                                <Icon name="arrowRight" className="size-3" />
+                                <span className="truncate">{match.path ?? match.absolute}</span>
+                              </li>
                             ))}
                           </ul>
                         </div>
@@ -326,7 +331,7 @@ export function ConfigExplorer({ target = null }: ConfigExplorerProps) {
             </div>
             <p className={hintText}>{t("explorer.newFileNote")}</p>
             <details className="text-xs text-ink-muted">
-              <summary className="cursor-pointer text-ink">{t("explorer.directoryHelp")}</summary>
+              <DisclosureSummary className="text-ink">{t("explorer.directoryHelp")}</DisclosureSummary>
               <p className="mt-2 leading-5">{t("explorer.directoryNote")}</p>
             </details>
           </div>

@@ -1,7 +1,7 @@
 import { useId, useRef, useState } from "react";
+import { DisclosureChevron } from "../ui/DisclosureChevron";
 import { useTranslate } from "../i18n/context";
 import { ModalShell } from "../ui/ModalShell";
-import { Icon } from "../ui/icons";
 import { Button } from "../ui/surface";
 import { inspectTerminalPaste, removeFinalTerminalLineBreak } from "./pasteGuard";
 
@@ -52,9 +52,9 @@ export function TerminalPasteDialog({
           className="w-full resize-y rounded border border-control-line bg-control p-3 font-mono text-xs focus:border-accent focus:outline-none"
         />
       </label>
-      <details className="group overflow-hidden rounded border border-control-line bg-control">
+      <details className="overflow-hidden rounded border border-control-line bg-control">
         <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-sm text-ink-muted hover:text-ink focus:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-accent [&::-webkit-details-marker]:hidden">
-          <Icon name="chevronRight" className="size-3.5 shrink-0 transition-transform group-open:rotate-90" />
+          <DisclosureChevron className="size-3.5" />
           <span>{t("terminal.pastePreview")}</span>
         </summary>
         <pre

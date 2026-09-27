@@ -208,7 +208,7 @@ export function DiagnosticsPanel({ api = diagnosticsApi, host, hosts = [] }: Dia
         <section className="px-4 py-4">
           <p className="mb-2 flex items-center justify-end gap-1 text-xs text-ink-muted md:hidden">
             {t("diag.tableScrollHint")}
-            <span aria-hidden="true">→</span>
+            <Icon name="arrowRight" className="size-3.5" />
           </p>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">

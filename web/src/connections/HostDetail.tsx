@@ -18,6 +18,7 @@ import type { ConnectionSavedState } from "./connectionSavedState";
 import { NoticeList, SavePreviewPanel } from "./SavePreview";
 import { identityKey } from "./connectionBrowser";
 import { HostInspector } from "./HostInspector";
+import { useReportDirty } from "./useReportDirty";
 import { activateTabFromKeyboard } from "../ui/tabKeyboard";
 
 // The detail view checks a host and edits its secrets, so it is handed both.
@@ -29,8 +30,9 @@ type HostDetailPanelProps = {
   savedState: ConnectionSavedState;
   preview: SavePreview | null;
   problem: Problem | null;
-  onFieldEdits: (edits: FieldEdit[]) => void;
-  onBlockRaw: (raw: string) => void;
+  // onFieldEdits と onBlockRaw は、Advancedタブの下書きを保存する。保存できなかったときは reject する。
+  onFieldEdits: (edits: FieldEdit[]) => Promise<void>;
+  onBlockRaw: (raw: string) => Promise<void>;
   onBasicSave: (request: UpdateConnectionRequest) => Promise<void>;
   // onMetadataSave は、sshcタブの下書きを保存する。保存できなかったときは reject する。
   onMetadataSave: (metadata: HostMetadata) => Promise<void>;
@@ -113,7 +115,7 @@ export function HostDetailPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resetKey]);
 
-  useEffect(() => onDirtyChange?.(dirty), [dirty, onDirtyChange]);
+  useReportDirty(dirty, onDirtyChange);
 
   // タブごとに、下書きを破棄する関数を受け取る。どのタブで編集していても、ページが
   // 「変更を破棄」を確定したときにまとめて破棄できるようにする。
@@ -145,7 +147,9 @@ export function HostDetailPanel({
     <section className="flex flex-col gap-4">
       <NoticeList notices={detail.form.notices ?? []} />
 
-      {panel === "Basic" && identity.alias !== "" ? (
+      {/* 接続の確認は、保存済みの接続を試すもので、どのタブを開いていても同じである。
+          Basic のときだけ出すと、タブを切り替えるたびに下の編集欄の位置が上下する。 */}
+      {identity.alias !== "" ? (
         <ConnectionChecks
           alias={identity.alias}
           api={integrations}

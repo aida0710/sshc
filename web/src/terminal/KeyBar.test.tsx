@@ -22,7 +22,7 @@ describe("mobile key bar", () => {
   it("shows common keys in the phone landscape layout and tucks symbols behind extra keys", () => {
     showMobileKeyBar();
     expect(window.matchMedia).toHaveBeenCalledWith(mobileViewportQuery);
-    for (const label of ["Ctrl", "Esc", "Tab", "←", "↑", "↓", "→"]) {
+    for (const label of ["Ctrl", "Esc", "Tab", "Left arrow", "Up arrow", "Down arrow", "Right arrow"]) {
       expect(screen.getByRole("button", { name: label })).toBeVisible();
     }
     expect(screen.queryByRole("button", { name: "|" })).not.toBeInTheDocument();
@@ -59,10 +59,10 @@ describe("encodeKey", () => {
   it("sends the control sequences the keys stand for", () => {
     expect(encodeKey("Esc", false, false)).toBe("\x1b");
     expect(encodeKey("Tab", false, false)).toBe("\t");
-    expect(encodeKey("↑", false, false)).toBe("\x1b[A");
-    expect(encodeKey("↓", false, false)).toBe("\x1b[B");
-    expect(encodeKey("→", false, false)).toBe("\x1b[C");
-    expect(encodeKey("←", false, false)).toBe("\x1b[D");
+    expect(encodeKey("ArrowUp", false, false)).toBe("\x1b[A");
+    expect(encodeKey("ArrowDown", false, false)).toBe("\x1b[B");
+    expect(encodeKey("ArrowRight", false, false)).toBe("\x1b[C");
+    expect(encodeKey("ArrowLeft", false, false)).toBe("\x1b[D");
   });
 
   it("passes literal characters through", () => {
@@ -85,7 +85,7 @@ describe("encodeKey", () => {
   });
 
   it("leaves the special sequences alone when ctrl is held", () => {
-    expect(encodeKey("↑", true, false)).toBe("\x1b[A");
+    expect(encodeKey("ArrowUp", true, false)).toBe("\x1b[A");
   });
 
   it("sends the plain character when ctrl has no meaning for it", () => {
@@ -107,7 +107,7 @@ describe("the two doors are not the same door", () => {
   it("turns a pressed key into its sequence even with no modifier", () => {
     expect(encodeKey("Esc", false, false)).toBe("\x1b");
     expect(encodeKey("Tab", false, false)).toBe("\t");
-    expect(encodeKey("↑", false, false)).toBe("\x1b[A");
+    expect(encodeKey("ArrowUp", false, false)).toBe("\x1b[A");
   });
 
   it("leaves typed text alone even when it spells a key name", () => {

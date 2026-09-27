@@ -206,7 +206,7 @@ test("keeps password setup inside 360 pixels without a decorative icon", async (
   await page.goto(installation.url);
 
   await expect(page.getByText(/cannot be recovered/i)).toBeVisible();
-  await expect(page.locator('use[href="#icon-secrets"]')).toHaveCount(0);
+  await expect(page.locator('[data-icon="secrets"]')).toHaveCount(0);
   await expect(page.getByLabel("Theme menu")).toBeVisible();
   await expect(page.getByLabel("Lang menu")).toBeVisible();
   await expectNoHorizontalOverflow(page, "First-run password setup");
@@ -248,7 +248,7 @@ test("keeps password setup inside 360 pixels without a decorative icon", async (
   await page.getByRole("button", { name: "Lock sshc" }).click();
 
   await expect(page.getByText("Enter your master password to unlock sshc.")).toBeVisible();
-  await expect(page.locator('use[href="#icon-secrets"]')).toHaveCount(0);
+  await expect(page.locator('[data-icon="secrets"]')).toHaveCount(0);
   await expectNoHorizontalOverflow(page, "Existing-vault password screen");
   await expectFullyInsideViewport(page, page.getByRole("button", { name: "Open" }), "Open sshc");
 });
@@ -862,7 +862,7 @@ test("sends a real control character from the on-screen keys", async ({ page, in
   await page.keyboard.press("Enter");
   await expect(rows).toContainText("zzq", { timeout: 20_000 });
 
-  await keys.getByRole("button", { name: "↑", exact: true }).click();
+  await keys.getByRole("button", { name: "Up arrow", exact: true }).click();
   await expect
     .poll(async () => (await rows.innerText()).split("zzq").length - 1, {
       timeout: 20_000,

@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Icon } from "./icons";
 import { useTranslate } from "../i18n/context";
 
 export type SortDirection = "ascending" | "descending";
@@ -54,9 +55,10 @@ export function SortableTableHeader<Key extends string>({
         className={`inline-flex w-full items-center gap-1 text-inherit ${buttonClassName}`}
       >
         <span>{children}</span>
-        <span aria-hidden="true" className={active ? "text-accent" : "text-ink-faint"}>
-          {active ? (direction === "ascending" ? "↑" : "↓") : "↕"}
-        </span>
+        <Icon
+          name={active ? (direction === "ascending" ? "arrowUp" : "arrowDown") : "arrowUpDown"}
+          className={`size-3.5 ${active ? "text-accent" : "text-ink-faint"}`}
+        />
         <span className="sr-only">{t(nextDirection === "ascending" ? "table.sortAscending" : "table.sortDescending")}</span>
       </button>
     </th>
