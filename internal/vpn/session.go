@@ -99,7 +99,7 @@ func (manager *Manager) start(ctx context.Context, profile Profile, secrets Secr
 	}
 	report(PhaseContainer)
 	name := manager.containerName(profile.Name)
-	connectionlog.Say(ctx, connectionlog.Detailed, "コンテナ %s を起動します（デバイス %s）。", name, chosen.device())
+	connectionlog.Say(ctx, connectionlog.Detailed, "コンテナ%sを起動します（デバイス%s）。", name, chosen.device())
 	arguments := runArguments(containerRun{
 		name: name, image: image, profile: profile, owner: manager.owner, workspace: manager.workspace,
 		routeDirectory: directory, backend: chosen,
@@ -147,7 +147,7 @@ func (manager *Manager) configureContainer(
 	if notice := phase.Notice(); notice != "" {
 		connectionlog.Say(ctx, connectionlog.Notice, "%s", notice)
 	}
-	connectionlog.Say(ctx, connectionlog.Detailed, "設定を渡しました。VPNの接続を待っています（上限 %s）。", relayDeadline(profile))
+	connectionlog.Say(ctx, connectionlog.Detailed, "設定を渡しました。VPNの接続を待っています（上限%s）。", relayDeadline(profile))
 	return manager.waitForTunnel(ctx, name, profile)
 }
 

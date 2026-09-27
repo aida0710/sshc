@@ -61,7 +61,7 @@ func runVPN(ctx context.Context, called vpnInvocation, environment commandEnviro
 		}
 	case vpnRemove:
 		confirmed, exit := confirmAction(ctx, called.Yes,
-			fmt.Sprintf("VPNプロファイル %q を削除しますか？保存済みのシークレットと、このプロファイルを使う接続の設定も削除されます。 [y/N] ",
+			fmt.Sprintf("VPNプロファイル%qを削除しますか？保存済みのシークレットと、このプロファイルを使う接続の設定も削除されます。 [y/N] ",
 				safeTerminalCell(called.Name)),
 			systemActionConfirmer, stderr)
 		if exit != 0 {
@@ -78,7 +78,7 @@ func runVPN(ctx context.Context, called vpnInvocation, environment commandEnviro
 		// 経路が立つまで待つあいだ、何も出ないと止まって見える。初回はイメージの
 		// 用意だけで分単位になる。
 		if !called.JSON {
-			fmt.Fprintf(stderr, "%s のVPNに接続しています。初回はコンテナイメージの作成に数分かかることがあります…\n",
+			fmt.Fprintf(stderr, "%sのVPNに接続しています。初回はコンテナイメージの作成に数分かかることがあります…\n",
 				safeTerminalCell(called.Name))
 		}
 		if err := engine.sendJSON(ctx, http.MethodPost, vpnProfilePath(called.Name)+"/session", nil, &overview); err != nil {

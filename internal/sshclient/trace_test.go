@@ -94,11 +94,11 @@ func TestEachTracedLineCarriesTheDepthThatProducedIt(t *testing.T) {
 	trace.say(Brief, "繋ぎます")
 	trace.say(Detailed, "鍵を試します")
 	trace.say(Full, "算法は x")
-	trace.announce("ProxyCommand を実行します")
+	trace.announce("ProxyCommandを実行します")
 	want := "[sshc][debug1] 繋ぎます\r\n" +
 		"[sshc][debug2] 鍵を試します\r\n" +
 		"[sshc][debug3] 算法は x\r\n" +
-		"[sshc] ProxyCommand を実行します\r\n"
+		"[sshc] ProxyCommandを実行します\r\n"
 	if out.String() != want {
 		t.Errorf("written = %q, want %q", out.String(), want)
 	}
@@ -111,7 +111,7 @@ func TestTheHopSettingsAreDescribedAtDetailed(t *testing.T) {
 
 	describeHop(trace, Target{HostName: "10.0.0.5", Port: "22", User: "aida", Identities: []string{"/home/a/.ssh/id_ed25519"}, VPN: "lab"})
 
-	for _, want := range []string{"HostName 10.0.0.5、Port 22、User aida、IdentityFile /home/a/.ssh/id_ed25519", "経路：VPNプロファイル lab"} {
+	for _, want := range []string{"HostName 10.0.0.5、Port 22、User aida、IdentityFile /home/a/.ssh/id_ed25519", "経路：VPNプロファイルlab"} {
 		if !strings.Contains(out.String(), want) {
 			t.Fatalf("out = %q", out.String())
 		}
@@ -144,5 +144,34 @@ func TestAConnectionNoticeIsShownEvenWhenQuiet(t *testing.T) {
 
 	if got := out.String(); got != "[sshc] VPNのコンテナイメージを作成しています。\r\n" {
 		t.Fatalf("out = %q", got)
+	}
+}
+
+// 複数行の文（docker build の出力など）は、行ごとに印を付けて CRLF で書く。LF の
+// ままだと端末で行頭へ戻らず、階段状に崩れる。
+func TestAMultiLineMessageIsWrittenLineByLine(t *testing.T) {
+	var out bytes.Buffer
+	trace := newTracer(Detailed, &out)
+
+	trace.say(Detailed, "失敗の詳細：%s", "一行目\n二行目\r\n")
+
+	if got := out.String(); got != "[sshc][debug2] 失敗の詳細：一行目\r\n[sshc][debug2] 二行目\r\n" {
+		t.Fatalf("out = %q", got)
+	}
+}
+
+// 失敗の行は、どの段階で失敗したかだけを言う。理由は最後の sshc: の行が言う。
+func TestTheFailureLineLeavesTheReasonToTheFinalLine(t *testing.T) {
+	explained := &ExplainedError{Sentence: "Dockerが起動していません。", Err: errors.New("docker is not running")}
+
+	if got := connectionFailureMessage("接続", explained); got != "接続に失敗しました。" {
+		t.Fatalf("connectionFailureMessage = %q", got)
+	}
+}
+
+// 端末へ書く文の改行は CRLF にする。すでに CRLF の改行は二重にしない。
+func TestTerminalNewlinesReturnToTheStartOfTheLine(t *testing.T) {
+	if got := terminalNewlines("a\nb\r\nc"); got != "a\r\nb\r\nc" {
+		t.Fatalf("terminalNewlines = %q", got)
 	}
 }

@@ -75,7 +75,7 @@ func copyEngineRecord(ctx context.Context, request engineRecordRequest, level co
 	if len(lines) > maxCopiedRecordLines {
 		lines = lines[len(lines)-maxCopiedRecordLines:]
 	}
-	connectionlog.Say(ctx, level, "sshcエンジンの記録（VPNプロファイル %s、最後の%d行まで）：",
+	connectionlog.Say(ctx, level, "sshcエンジンの記録（VPNプロファイル%s、最後の%d行まで）：",
 		safeTerminalCell(request.profile), maxCopiedRecordLines)
 	for _, line := range lines {
 		connectionlog.Say(ctx, level, "  %s", safeTerminalCell(line))

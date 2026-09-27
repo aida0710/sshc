@@ -45,7 +45,7 @@ func keepAliveLoop(client *ssh.Client, settings keepAliveSettings) func() {
 				return
 			}
 			missed++
-			settings.trace.say(Detailed, "keepaliveの応答がありません（連続 %d/%d 回、%s）：%v", missed, count, connectionlog.Elapsed(settings.trace.since(started)), err)
+			settings.trace.say(Detailed, "keepaliveの応答がありません（連続%d/%d回、%s）：%v", missed, count, connectionlog.Elapsed(settings.trace.since(started)), err)
 			if missed >= count {
 				settings.trace.say(Brief, "keepaliveの連続失敗が上限に達したため、SSH接続を切断します。")
 				_ = client.Close()

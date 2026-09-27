@@ -97,7 +97,7 @@ func (manager *Manager) Dial(ctx context.Context, profile Profile, secrets Secre
 		return nil, err
 	}
 	ctx = manager.recording(ctx, profile.Name)
-	connectionlog.Say(ctx, connectionlog.Detailed, "%s へ、VPNプロファイル %s（%s）の経路で接続します。",
+	connectionlog.Say(ctx, connectionlog.Detailed, "%sへ、VPNプロファイル%s（%s）の経路で接続します。",
 		address, profile.Name, profile.Backend)
 	destination, err := profile.Destination(address)
 	if err != nil {
@@ -118,7 +118,7 @@ func (manager *Manager) Dial(ctx context.Context, profile Profile, secrets Secre
 // dialRelay は、engine の中継が受けた接続のために、起動済みの経路で接続先へ繋ぐ。
 func (manager *Manager) dialRelay(ctx context.Context, profile Profile, address string) (net.Conn, error) {
 	ctx = manager.recording(ctx, profile.Name)
-	connectionlog.Say(ctx, connectionlog.Detailed, "sshcエンジンの中継が、%s への接続を受け付けました。", address)
+	connectionlog.Say(ctx, connectionlog.Detailed, "sshcエンジンの中継が、%sへの接続を受け付けました。", address)
 	destination, err := profile.Destination(address)
 	if err != nil {
 		connectionlog.Say(ctx, connectionlog.Detailed, "接続先をVPN経由で使用できません：%v", err)
@@ -138,12 +138,12 @@ func (manager *Manager) connectCounted(
 	connection, err := manager.connectTarget(ctx, profileName, destination)
 	elapsed := connectionlog.Elapsed(time.Since(started))
 	if err != nil {
-		connectionlog.Say(ctx, connectionlog.Detailed, "VPN経由で %s に接続できませんでした（%s）：%v",
+		connectionlog.Say(ctx, connectionlog.Detailed, "VPN経由で%sに接続できませんでした（%s）：%v",
 			destination.Address(), elapsed, err)
 		state.release(manager.now())
 		return nil, err
 	}
-	connectionlog.Say(ctx, connectionlog.Brief, "VPN経由で %s に接続しました（%s）。", destination.Address(), elapsed)
+	connectionlog.Say(ctx, connectionlog.Brief, "VPN経由で%sに接続しました（%s）。", destination.Address(), elapsed)
 	return &countedConnection{Conn: connection, release: func() { state.release(manager.now()) }}, nil
 }
 
@@ -242,7 +242,7 @@ func (manager *Manager) Start(ctx context.Context, profile Profile, secrets Secr
 			// engine の中継へ繋ぐので、そのあいだに停止されないよう、無操作の
 			// 起点をいまにする。
 			state.touch(manager.now())
-			connectionlog.Say(ctx, connectionlog.Detailed, "起動済みのVPN経路（コンテナ %s）を使います。", name)
+			connectionlog.Say(ctx, connectionlog.Detailed, "起動済みのVPN経路（コンテナ%s）を使います。", name)
 			return nil
 		}
 	}
@@ -250,19 +250,22 @@ func (manager *Manager) Start(ctx context.Context, profile Profile, secrets Secr
 	// 分かりやすい。
 	manager.closeRelay(state)
 	if ours {
-		connectionlog.Say(ctx, connectionlog.Detailed, "設定が変わったか停止していたため、コンテナ %s を作り直します。", name)
+		connectionlog.Say(ctx, connectionlog.Detailed, "設定が変わったか停止していたため、コンテナ%sを作り直します。", name)
 		manager.stopContainer(ctx, name)
 	}
 	defer state.enterPhase("")
-	connectionlog.Say(ctx, connectionlog.Brief, "VPN経路 %s を起動します（%s）。", profile.Name, profile.Backend)
+	connectionlog.Say(ctx, connectionlog.Brief, "VPN経路%sを起動します（%s）。", profile.Name, profile.Backend)
 	started := time.Now()
 	if err := manager.start(ctx, profile, secrets, state.enterPhase); err != nil {
-		connectionlog.Say(ctx, connectionlog.Detailed, "VPN経路の起動に失敗しました（%s）：%v",
-			connectionlog.Elapsed(time.Since(started)), err)
+		connectionlog.Say(ctx, connectionlog.Detailed, "VPN経路の起動に失敗しました（%s）。",
+			connectionlog.Elapsed(time.Since(started)))
+		// 元のエラーは、接続ログでは接続の側（sshclient の「失敗の詳細」）が書く。
+		// こちらからも書くと同じ文が2回並ぶので、経路の記録にだけ残す。
+		state.record.Write(connectionlog.Detailed, fmt.Sprintf("失敗の詳細：%v", err))
 		return err
 	}
 	tunnel := manager.tunnelStatus(profile.Name)
-	connectionlog.Say(ctx, connectionlog.Brief, "VPNに接続しました（%s、インターフェース %s、アドレス %s、%s）。",
+	connectionlog.Say(ctx, connectionlog.Brief, "VPNに接続しました（%s、インターフェース%s、アドレス%s、%s）。",
 		profile.Backend, tunnel.Interface, tunnel.Address, connectionlog.Elapsed(time.Since(started)))
 	relay, err := openEngineRelay(
 		filepath.Join(manager.routeDirectory(profile.Name), engineRelaySocketName),
