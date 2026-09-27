@@ -111,6 +111,15 @@ var Accepted = Limits{Time: maxKDFTime, MemoryKiB: maxKDFMemoryKiB, Threads: max
 // Derive が書く値を少し上回るところまでで、それ以上はない。
 var AcceptedFromRemote = Limits{Time: defaultTime, MemoryKiB: defaultMemoryKiB, Threads: defaultThreads}
 
+// DerivationCost は、Derive が新しい鍵に使う Argon2id のコスト。
+//
+// 製品では書き換えない。書き換えてよいのは、鍵導出の強さではなく同期などの手順を
+// 確かめるテストだけである。race detector の下では Argon2id の Go 実装
+// （アセンブリの無い arm64 など）が極端に遅く、push と pull のたびに鍵を導出する
+// テストが CI の上限を超える。コストはヘッダーに書かれ、開く側はヘッダーを
+// 読むので、下げたコストで封をしたブロブも同じ Open で開ける。
+var DerivationCost = Limits{Time: defaultTime, MemoryKiB: defaultMemoryKiB, Threads: defaultThreads}
+
 var magic = [magicLength]byte{'s', 's', 'h', '-', 'u', 'i', '-', 'e', 'n', 'v', 'e', 'l', 'o', 'p', 'e', 0}
 
 // Params は、暗号化したブロブひとつ分の鍵導出パラメータ。
@@ -168,7 +177,8 @@ func DeriveWithMinimum(passphrase string, minimum int) (Key, error) {
 	if _, err := rand.Read(salt); err != nil {
 		return Key{}, err
 	}
-	params := Params{Time: defaultTime, Memory: defaultMemoryKiB, Threads: defaultThreads, Salt: salt}
+	cost := DerivationCost
+	params := Params{Time: cost.Time, Memory: cost.MemoryKiB, Threads: cost.Threads, Salt: salt}
 	return Key{material: derive(passphrase, params), params: params}, nil
 }
 
