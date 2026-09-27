@@ -19,7 +19,7 @@ func TestAnAttemptIsRecordedEvenWithoutAConnectionLog(t *testing.T) {
 		t.Fatal("DNS の無いプロファイルでホスト名の接続先へ繋いだ")
 	}
 	record := manager.state(profile.Name).record.text()
-	for _, want := range []string{"[debug2] lab.example.jp:22 へ、VPNプロファイル tohoku", "接続先をVPN経由で使用できません"} {
+	for _, want := range []string{"[debug2] lab.example.jp:22へ、VPNプロファイル「tohoku」", "接続先をVPN経由で使用できません"} {
 		if !strings.Contains(record, want) {
 			t.Fatalf("記録に %q が無い:\n%s", want, record)
 		}
@@ -79,13 +79,13 @@ func TestConnectNotesAndFailureOutputReachTheConnectionLog(t *testing.T) {
 	var record attemptRecord
 	ctx := connectionlog.With(context.Background(), &record)
 	watch := newConnectWatch()
-	_, _ = watch.Write([]byte("sshc-vpn-note: 接続先 db を名前解決しました：10.0.0.5\n"))
+	_, _ = watch.Write([]byte("sshc-vpn-note: 接続先dbを名前解決しました：10.0.0.5\n"))
 	_, _ = watch.Write([]byte("2026/09/24 10:23:31 socat[7] E connect(): Connection refused\n"))
 
 	watch.describe(ctx)
 
 	text := record.text()
-	for _, want := range []string{"[debug2] コンテナの中継：接続先 db を名前解決しました：10.0.0.5", "[debug2]   socat[7] E connect(): Connection refused"} {
+	for _, want := range []string{"[debug2] コンテナの中継：接続先dbを名前解決しました：10.0.0.5", "[debug2]   socat[7] E connect(): Connection refused"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("record に %q が無い:\n%s", want, text)
 		}

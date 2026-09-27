@@ -66,7 +66,7 @@ func (manager *Manager) ensureImage(ctx context.Context, report func(StartPhase)
 		return "", err
 	}
 	if _, present, err := manager.docker.probe(ctx, "コンテナイメージ", "image", "inspect", tag); err == nil && present {
-		connectionlog.Say(ctx, connectionlog.Detailed, "コンテナイメージ %s は作成済みです。", tag)
+		connectionlog.Say(ctx, connectionlog.Detailed, "コンテナイメージ「%s」は作成済みです。", tag)
 		return tag, nil
 	}
 	report(PhaseImage)
@@ -92,16 +92,30 @@ func (manager *Manager) ensureImage(ctx context.Context, report func(StartPhase)
 		}
 	}
 	started := time.Now()
-	if _, err := manager.docker.output(ctx, "build", "--tag", tag, directory); err != nil {
+	if err := manager.docker.build(ctx, tag, directory); err != nil {
 		connectionlog.Say(ctx, connectionlog.Brief, "コンテナイメージの作成に失敗しました（%s）。",
 			time.Since(started).Round(time.Second))
-		connectionlog.Say(ctx, connectionlog.Detailed, "docker build の出力（最後の%d行まで）：", maxShownOutputLines)
+		connectionlog.Say(ctx, connectionlog.Detailed, "docker buildの出力（最後の%d行まで）：", maxShownOutputLines)
 		sayOutput(ctx, connectionlog.Detailed, err.Error())
-		return "", fmt.Errorf("%w: %w", ErrImageBuild, err)
+		// 出力は上で写した。エラーの文には、失敗の要点の1行だけを残す。
+		return "", fmt.Errorf("%w: %s", ErrImageBuild, buildFailureSummary(err.Error()))
 	}
 	connectionlog.Say(ctx, connectionlog.Detailed, "コンテナイメージを作成しました（%s）。", time.Since(started).Round(time.Second))
 	manager.removeOtherImages(ctx, tag)
 	return tag, nil
+}
+
+// buildFailureSummary は、docker build の出力から失敗の要点の1行を選ぶ。BuildKit は
+// 最後に「ERROR: failed to build: …」の行を書くので、ERROR で始まる最後の行を選ぶ。
+// 無ければ、空でない最後の行を選ぶ。
+func buildFailureSummary(output string) string {
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	for index := len(lines) - 1; index >= 0; index-- {
+		if line := strings.TrimSpace(lines[index]); strings.HasPrefix(line, "ERROR") {
+			return line
+		}
+	}
+	return strings.TrimSpace(lines[len(lines)-1])
 }
 
 // removeOtherImages は、前の版の sshc が作ったイメージを消す。

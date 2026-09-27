@@ -39,9 +39,9 @@ func TestTheFullLogExplainsKeyRejectionAndPasswordSuccess(t *testing.T) {
 		"認証前のサーバーのSSHバージョン：SSH-2.0-Go",
 		"採用された鍵交換：", "クライアント → サーバー：暗号", "サーバー → クライアント：暗号",
 		"サーバーが受け付ける認証方式：", "成功しなかった認証方式：none, publickey",
-		"認証方式 password で認証されました。",
+		"認証方式passwordで認証されました。",
 		"SSHセッションチャンネルが開きました", "PTY要求が受け入れられました", "起動要求が受け入れられました",
-		"SSHセッションが終了しました：コード 7",
+		"SSHセッションが終了しました：コード7",
 	)
 	if strings.Contains(seen, password) {
 		t.Fatal("the diagnostic log exposed a password")
@@ -59,7 +59,7 @@ func TestTheKeepAliveLogExplainsWhyAnUnresponsiveConnectionWasClosed(t *testing.
 	target.KeepAlive, target.KeepAliveMax = diagnosticKeepAliveInterval, 2
 	process := openWithLog(t, dialer, target, sshclient.Full)
 	seen := readUntil(t, process, "keepaliveの連続失敗が上限に達したため、SSH接続を切断します。")
-	expectLines(t, seen, "keepaliveを送信します。", "連続 1/2 回", "連続 2/2 回", "context deadline exceeded")
+	expectLines(t, seen, "keepaliveを送信します。", "連続1/2回", "連続2/2回", "context deadline exceeded")
 }
 
 // This writer deliberately relies on Stream to serialize diagnostic and remote
@@ -98,5 +98,5 @@ func TestStreamLogsKeepAliveRepliesAlongsideRemoteStderr(t *testing.T) {
 	if err != nil || code != 0 {
 		t.Fatalf("Stream = %d, %v", code, err)
 	}
-	expectLines(t, log.String(), "remote diagnostic", "keepaliveの応答を受信しました", "SSHセッションが終了しました：コード 0")
+	expectLines(t, log.String(), "remote diagnostic", "keepaliveの応答を受信しました", "SSHセッションが終了しました：コード0")
 }

@@ -77,10 +77,10 @@ func TestTheDetailedLogNamesEachKeyByFingerprintAndHowItWasUnlocked(t *testing.T
 	seen := readUntil(t, process, "ready")
 	expectLines(t, seen,
 		"認証方式の候補（試す順）：publickey, keyboard-interactive, password",
-		"鍵 /keys/id_ed25519："+public.Type()+" "+ssh.FingerprintSHA256(public)+"（保存済みパスフレーズで復号）",
-		"鍵 /keys/missing は使えません：unexpected EOF",
-		"公開鍵認証で試す鍵：1 件",
-		"認証方式 publickey で認証されました。",
+		"鍵/keys/id_ed25519："+public.Type()+" "+ssh.FingerprintSHA256(public)+"（保存済みパスフレーズで復号）",
+		"鍵/keys/missingは使えません：unexpected EOF",
+		"公開鍵認証で試す鍵：1件",
+		"認証方式publickeyで認証されました。",
 	)
 	if strings.Contains(seen, "correct horse") {
 		t.Fatalf("the connection log exposed the passphrase:\n%s", seen)
@@ -105,7 +105,7 @@ func TestTheDetailedLogPointsAtTheKnownHostsLineItComparedWith(t *testing.T) {
 		process := openWithLog(t, dialer, targetWith(server, path), sshclient.Detailed)
 		expectLines(t, readUntil(t, process, "ready"),
 			"サーバーのホスト鍵："+server.HostKey.PublicKey().Type()+" "+ssh.FingerprintSHA256(server.HostKey.PublicKey()),
-			"ホスト鍵は known_hosts の 2 行目と一致しました。",
+			"ホスト鍵はknown_hostsの2行目と一致しました。",
 		)
 	})
 
@@ -117,7 +117,7 @@ func TestTheDetailedLogPointsAtTheKnownHostsLineItComparedWith(t *testing.T) {
 		}}
 		process := openWithLog(t, dialer, targetWith(server, path), sshclient.Detailed)
 		expectLines(t, readUntil(t, process, "ホスト鍵を受け入れませんでした"),
-			"known_hosts の 2 行目には別の鍵があります："+another.Type()+" "+ssh.FingerprintSHA256(another),
+			"known_hostsの2行目には別の鍵があります："+another.Type()+" "+ssh.FingerprintSHA256(another),
 			"ホスト鍵を受け入れませんでした：the host key does not match the one in known_hosts",
 		)
 	})
@@ -165,11 +165,11 @@ func TestTheDetailedLogListsWhatTheSessionAskedFor(t *testing.T) {
 	process := openWithLog(t, dialer, target, sshclient.Detailed)
 	seen := readUntil(t, process, "keepalive")
 	expectLines(t, seen,
-		"設定 RemoteForward は適用しません：sshc does not ask the remote to listen",
-		"環境変数 LANG を送りました。",
-		"端末を要求します：120 列 × 40 行（TERM=xterm-256color）。",
+		"設定RemoteForwardは適用しません：sshc does not ask the remote to listen",
+		"環境変数LANGを送りました。",
+		"PTYを要求します：120列 × 40行（TERM=xterm-256color）。",
 		"シェルを起動します。",
-		"keepalive：15s ごとに送り、2 回続けて応答が無ければ切断します。",
+		"keepalive：15sごとに送り、2回続けて応答が無ければ切断します。",
 	)
 	if strings.Contains(seen, "ja_JP.UTF-8") {
 		t.Fatalf("the connection log wrote an environment value:\n%s", seen)
@@ -188,10 +188,10 @@ func TestTheFullLogListsAgentKeysByFingerprint(t *testing.T) {
 
 	process := openWithLog(t, dialer, targetWith(server), sshclient.Full)
 	expectLines(t, readUntil(t, process, "ready"),
-		"agent の鍵：1 件（"+socket+"）",
-		"agent の鍵："+agentKey.PublicKey().Type()+" "+ssh.FingerprintSHA256(agentKey.PublicKey()),
+		"agentの鍵：1件（"+socket+"）",
+		"agentの鍵："+agentKey.PublicKey().Type()+" "+ssh.FingerprintSHA256(agentKey.PublicKey()),
 		"名乗るホスト鍵アルゴリズム：ssh-ed25519",
-		"サーバーの SSH バージョン：SSH-2.0-Go",
+		"サーバーのSSHバージョン：SSH-2.0-Go",
 	)
 }
 
@@ -209,10 +209,10 @@ func TestTheDetailedLogSaysWhereThePasswordCameFrom(t *testing.T) {
 	process := openWithLog(t, dialer, targetWith(server), sshclient.Detailed)
 	seen := readUntil(t, process, "ready")
 	expectLines(t, seen,
-		"publickey は試しません：IdentityFile が無く、agent も使いません。",
+		"publickeyは試しません：IdentityFileが無く、agentも使いません。",
 		"認証方式を試します：password",
 		"保存済みパスワードを送ります。",
-		"認証方式 password で認証されました。",
+		"認証方式passwordで認証されました。",
 	)
 	if strings.Contains(seen, "hunter2") {
 		t.Fatalf("the connection log exposed the password:\n%s", seen)

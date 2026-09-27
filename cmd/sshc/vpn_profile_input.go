@@ -52,7 +52,7 @@ func (failure *vpnInputError) Unwrap() error { return failure.cause }
 // 入力の誤りの文である。
 var (
 	errVPNInputMissing = &vpnInputError{sentence: "必須の項目が入力されていません。", cause: errVPNSetupInput}
-	errVPNInputBackend = &vpnInputError{sentence: "方式には wireguard、l2tp_ipsec、openconnect のいずれかを指定してください。", cause: errVPNSetupInput}
+	errVPNInputBackend = &vpnInputError{sentence: "方式にはwireguard、l2tp_ipsec、openconnectのいずれかを指定してください。", cause: errVPNSetupInput}
 	errVPNInputKey     = &vpnInputError{sentence: "秘密鍵の形式が正しくありません。", cause: errVPNSetupInput}
 	errVPNInputUnknown = &vpnInputError{sentence: "指定したVPNプロファイルが見つかりません。sshc vpn で名前を確認してください。", cause: errVPNSetupInput}
 )
