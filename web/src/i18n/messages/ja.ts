@@ -2255,6 +2255,7 @@ export const ja = {
     "下書きを保存または破棄してから、保存済みの接続を使用してください。",
   "conn.summaryRefreshing":
     "保存済みの接続を再読み込みしています。完了後に操作できます。",
+  "conn.summaryReloadFirst": "保存済みの接続を再読み込みしてから操作できます。",
   "conn.editorLabel": "接続エディタ",
   "conn.areaBasic": "Basic",
   "conn.areaAnalysis": "Analysis",

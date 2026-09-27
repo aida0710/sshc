@@ -2248,6 +2248,7 @@ export const en = {
     "Save or discard this draft before using the saved connection.",
   "conn.summaryRefreshing":
     "Reloading the saved connection. Actions will be available when it finishes.",
+  "conn.summaryReloadFirst": "Reload the saved connection before using it.",
   "conn.editorLabel": "Connection editor",
   "conn.areaBasic": "Basic",
   "conn.areaAnalysis": "Analysis",

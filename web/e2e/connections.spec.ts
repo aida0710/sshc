@@ -619,6 +619,29 @@ test("moves to another connection right after the sshc settings are saved, witho
   expect(JSON.parse(await installation.read("sshc/metadata.json")).hosts[0].osc52).toBe("deny");
 });
 
+test("brings the reload button into view when the reload after a save at the bottom of the tab fails", async ({
+  page,
+  installation,
+}) => {
+  await openBastion(page, installation.url);
+  await page.getByRole("tab", { name: "sshc" }).click();
+  await page.getByLabel("OSC 52 clipboard").selectOption("deny");
+  const save = page.getByRole("button", { name: "Save sshc-only settings" });
+  await save.scrollIntoViewIfNeeded();
+  await expect(page.getByRole("heading", { name: "bastion" })).not.toBeInViewport();
+
+  await page.route("**/api/v1/config/overview", (route) =>
+    route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ code: "unavailable", message: "unavailable" }) }));
+  expect(await clickAndAwait(page, "Save sshc-only settings", "/api/v1/config/save")).toBe(200);
+
+  const reload = page.getByRole("button", { name: "Reload saved connection" });
+  await expect(reload).toBeFocused();
+  await expect(reload).toBeInViewport();
+  await expect(page.getByText("The settings were saved, but the updated connection could not be loaded.")).toBeInViewport();
+  await expect(page.getByText(/Reloading the saved connection/)).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Connect", exact: true })).toBeDisabled();
+});
+
 test("re-associates a note whose connection is gone, without guessing", async ({
   page,
   installation,

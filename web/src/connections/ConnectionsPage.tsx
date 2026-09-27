@@ -18,7 +18,7 @@ import { ConnectionListPane } from "./ConnectionListPane";
 import { ColumnResizeHandle } from "../ui/ColumnResizeHandle";
 import { useStoredColumnWidth, type StoredColumnWidth } from "../ui/useStoredColumnWidth";
 import { MissingConnection, NoConnectionSelected } from "./DetailPlaceholders";
-import { useOverlays, useSaveFeedback, useSelectionState } from "./pageState";
+import { useOverlays, useSaveFeedback, useSelectionState, type RefreshState } from "./pageState";
 import type { DragPayload } from "./dragdrop";
 import { HostDetailPanel } from "./HostDetail";
 import {
@@ -134,7 +134,7 @@ export function ConnectionsPage({
   const [detail, setDetail] = useState<HostDetail | null>(null);
   const [listWidth, setListWidth] = useStoredColumnWidth(connectionListWidth);
   const [savedState, setSavedState] = useState<ConnectionSavedState | null>(null);
-  const [refreshState, setRefreshState] = useState<"idle" | "refreshing" | "failed">("idle");
+  const [refreshState, setRefreshState] = useState<RefreshState>("idle");
   const [savedRevision, setSavedRevision] = useState(0);
   const [discardIntent, setDiscardIntent] = useState<DiscardIntent | null>(null);
   const draftDiscardRef = useRef<(() => void) | null>(null);
@@ -834,14 +834,17 @@ export function ConnectionsPage({
             <ConnectionSummary
               state={savedState}
               dirty={editorDirty}
-              refreshing={refreshState !== "idle"}
+              refreshState={refreshState}
               onConnect={() => void connectHost()}
               connecting={launching}
               onToggleManage={() => setManaging((current) => !current)}
               managing={managing}
             />
+            {/* 読み直しに失敗したときだけ現れるボタンなので、現れたときにフォーカスを移す。
+                タブの下にある保存のバーで保存すると、失敗の文とこのボタンは画面の外にあるので、
+                フォーカスでここまでスクロールして失敗に気づけるようにする。成功したときは現れない。 */}
             {refreshState === "failed" ? (
-              <Button className="self-start" onClick={() => void refreshCommittedConnection()}>
+              <Button autoFocus className="self-start" onClick={() => void refreshCommittedConnection()}>
                 {t("conn.reloadConnection")}
               </Button>
             ) : null}

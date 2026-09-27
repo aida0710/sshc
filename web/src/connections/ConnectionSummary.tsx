@@ -3,11 +3,12 @@ import { Button } from "../ui/surface";
 import { Icon } from "../ui/icons";
 import { OperatingSystemIcon } from "../ui/OperatingSystemIcon";
 import { summarizeConnection, type ConnectionSavedState } from "./connectionSavedState";
+import type { RefreshState } from "./pageState";
 
 type ConnectionSummaryProps = {
   state: ConnectionSavedState;
   dirty: boolean;
-  refreshing: boolean;
+  refreshState: RefreshState;
   onConnect: () => void;
   connecting: boolean;
   connectAvailable?: boolean;
@@ -18,7 +19,7 @@ type ConnectionSummaryProps = {
 export function ConnectionSummary({
   state,
   dirty,
-  refreshing,
+  refreshState,
   onConnect,
   connecting,
   connectAvailable = true,
@@ -27,7 +28,7 @@ export function ConnectionSummary({
 }: ConnectionSummaryProps) {
   const t = useTranslate();
   const summary = summarizeConnection(state);
-  const blocked = dirty || refreshing;
+  const blocked = dirty || refreshState !== "idle";
   const explicitKey = summary.privateKey.state !== "none";
   const passwordConflict = explicitKey && (
     summary.accountPassword.state === "dedicated" || summary.accountPassword.state === "named" ||
@@ -36,6 +37,14 @@ export function ConnectionSummary({
   const showPassphrase = explicitKey && summary.keyPassphrase.state !== "not_needed";
   const showAccountPassword = !explicitKey && summary.accountPassword.state !== "none";
   const reasonID = `connection-actions-${encodeURIComponent(summary.alias)}`;
+
+  // blockedReason は、接続のボタンを止めている理由である。読み直しに失敗したときは、
+  // 上に出る失敗の文と再読み込みのボタンに合わせ、読み直し中とは書かない。
+  function blockedReason() {
+    if (dirty) return t("conn.summaryDraftBlocksActions");
+    if (refreshState === "refreshing") return t("conn.summaryRefreshing");
+    return t("conn.summaryReloadFirst");
+  }
 
   function privateKeyText() {
     switch (summary.privateKey.state) {
@@ -112,7 +121,7 @@ export function ConnectionSummary({
         </div> : null}
       </dl>
       {passwordConflict ? <p role="status" className="mt-3 rounded border border-notice-line bg-notice px-3 py-2 text-sm text-notice-ink">{t("conn.summaryPasswordCleanup")}</p> : null}
-      {blocked ? <p id={reasonID} className="mt-3 text-xs text-notice-ink">{dirty ? t("conn.summaryDraftBlocksActions") : t("conn.summaryRefreshing")}</p> : null}
+      {blocked ? <p id={reasonID} className="mt-3 text-xs text-notice-ink">{blockedReason()}</p> : null}
     </section>
   );
 }

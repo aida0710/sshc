@@ -637,6 +637,47 @@ describe("ConnectionsPage", () => {
     await act(async () => finishListReload());
   });
 
+  it("moves the focus to the reload button when the reload after a save fails, without saying it is reloading", async () => {
+    const user = userEvent.setup();
+    vi.mocked(configApi.overview)
+      .mockResolvedValueOnce(overview as never)
+      .mockRejectedValue(new Error("reload failed"));
+    vi.mocked(configApi.save).mockResolvedValue({
+      transactionId: "t1", written: ["sshc/metadata.json"], preview: { operation: "config.metadata", diffs: [] },
+    } as never);
+    render(<ConnectionsPage {...consoleProps} onInspector={() => undefined} />);
+
+    await user.click(await screen.findByRole("button", { name: /^bastion/ }));
+    await user.click(await screen.findByRole("tab", { name: "sshc" }));
+    await user.selectOptions(screen.getByLabelText("Remote text encoding"), "shift_jis");
+    await user.click(screen.getByRole("button", { name: "Save sshc-only settings" }));
+
+    const reload = await screen.findByRole("button", { name: "Reload saved connection" });
+    expect(reload).toHaveFocus();
+    expect(screen.getByText("The settings were saved, but the updated connection could not be loaded. Reload this connection."))
+      .toBeInTheDocument();
+    expect(screen.queryByText(/Reloading the saved connection/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
+    expect(screen.getByLabelText("Remote text encoding")).toBeDisabled();
+  });
+
+  it("leaves the focus alone when the reload after a save succeeds", async () => {
+    const user = userEvent.setup();
+    vi.mocked(configApi.save).mockResolvedValue({
+      transactionId: "t1", written: ["sshc/metadata.json"], preview: { operation: "config.metadata", diffs: [] },
+    } as never);
+    render(<ConnectionsPage {...consoleProps} onInspector={() => undefined} />);
+
+    await user.click(await screen.findByRole("button", { name: /^bastion/ }));
+    await user.click(await screen.findByRole("tab", { name: "sshc" }));
+    await user.selectOptions(screen.getByLabelText("Remote text encoding"), "shift_jis");
+    await user.click(screen.getByRole("button", { name: "Save sshc-only settings" }));
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "Connect" })).toBeEnabled());
+    expect(screen.queryByRole("button", { name: "Reload saved connection" })).not.toBeInTheDocument();
+    expect(document.body).toHaveFocus();
+  });
+
   it("keeps the sshc draft and says why when the save is rejected", async () => {
     const user = userEvent.setup();
     vi.mocked(configApi.save).mockRejectedValue(new ApiError("metadata_invalid", 400, {
