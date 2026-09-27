@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 
 	"sshc/internal/connectionlog"
@@ -190,7 +191,8 @@ func TestTheImagePhaseIsReportedOnlyWhenTheImageIsBuilt(t *testing.T) {
 
 // VPN経路の起動に失敗したとき、元のエラーは経路の記録にだけ残す。接続ログには
 // 接続の側（sshclient の「失敗の詳細」）が書くので、ここからも書くと2回並ぶ。
-// docker build の出力は接続ログに1回だけ写し、エラーの文には要点の1行だけを残す。
+// docker build の出力の最後の行は1回だけ写し、エラーの文には要点の1行だけを残す。
+// （-vvv で見ている Terminal には、これとは別に途中の出力も流れる。）
 func TestAFailedImageBuildIsShownOnceAndSummarizedInTheError(t *testing.T) {
 	docker := fakeDocker(t, `case "$1" in
 info) echo 'linux/x86_64、Docker 29、Test'; exit 0 ;;
@@ -226,5 +228,50 @@ exit 0
 	}
 	if record := manager.state("tohoku").record.text(); !strings.Contains(record, "失敗の詳細：the vpn container image could not be built: ERROR: failed to build") {
 		t.Errorf("記録に失敗の詳細が無い:\n%s", record)
+	}
+}
+
+// shownLines は、その場で接続を見ている書き先（Terminal や CLI）の代わりである。
+// 途中の出力も受け取る。
+type shownLines struct {
+	mutex sync.Mutex
+	lines []string
+}
+
+func (shown *shownLines) Enabled(connectionlog.Level) bool { return true }
+
+func (shown *shownLines) Write(_ connectionlog.Level, message string) {
+	shown.mutex.Lock()
+	defer shown.mutex.Unlock()
+	shown.lines = append(shown.lines, message)
+}
+
+// イメージを作るあいだ、docker build の行を書かれるたびに -vvv の接続ログへ流す。
+// 経路の記録には流さない。数百行になり、記録の上限から準備の行を押し出す。
+func TestTheImageBuildIsShownLineByLineButNotRecorded(t *testing.T) {
+	docker := fakeDocker(t, `case "$1" in
+image) echo 'Error response from daemon: No such image: x' >&2; exit 1 ;;
+build) echo '#6 0.676 Get:1 http://archive.example noble InRelease' >&2
+       echo '#6 9.405 Setting up iproute2' >&2
+       printf 'writing image sha256:0123' ;;
+esac
+exit 0
+`)
+	manager := &Manager{docker: docker, sessions: map[string]*sessionState{}}
+	var shown shownLines
+	ctx := manager.recording(connectionlog.With(context.Background(), &shown), "tohoku")
+
+	if _, err := manager.ensureImage(ctx, func(StartPhase) {}); err != nil {
+		t.Fatalf("ensureImage = %v", err)
+	}
+
+	text := strings.Join(shown.lines, "\n")
+	for _, want := range []string{"docker buildの出力：", "  #6 0.676 Get:1 http://archive.example noble InRelease", "  #6 9.405 Setting up iproute2", "  writing image sha256:0123"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("接続ログに %q が無い:\n%s", want, text)
+		}
+	}
+	if record := manager.state("tohoku").record.text(); strings.Contains(record, "Setting up iproute2") {
+		t.Errorf("記録に docker build の行を残した:\n%s", record)
 	}
 }
