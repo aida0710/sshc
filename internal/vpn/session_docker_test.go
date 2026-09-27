@@ -164,11 +164,11 @@ func TestAConnectionReachesTheTargetThroughTheTunnel(t *testing.T) {
 	requireAnswer(t, manager, connectionlog.With(ctx, &connectionLog), dialTarget{profile: profile, secrets: secrets,
 		address: fmt.Sprintf("%s:%d", tunnelServerAddress, echoPort)}, "tunnelled")
 	for _, want := range []string{
-		"VPN経路 e2e を起動します（wireguard）。",
+		"VPN経路「e2e」を起動します（wireguard）。",
 		"docker：",
-		"VPNに接続しました（wireguard、インターフェース wg0",
-		"コンテナの中継：接続先 " + tunnelServerAddress + " への経路とパケットフィルタを追加しました",
-		fmt.Sprintf("VPN経由で %s:%d に接続しました", tunnelServerAddress, echoPort),
+		"VPNに接続しました（wireguard、インターフェース：wg0",
+		"コンテナの中継：接続先" + tunnelServerAddress + "への経路とパケットフィルタを追加しました",
+		fmt.Sprintf("VPN経由で%s:%dに接続しました", tunnelServerAddress, echoPort),
 		"[debug3] docker exec --interactive",
 	} {
 		if !strings.Contains(connectionLog.text(), want) {

@@ -187,3 +187,44 @@ func TestTheImagePhaseIsReportedOnlyWhenTheImageIsBuilt(t *testing.T) {
 		})
 	}
 }
+
+// VPN経路の起動に失敗したとき、元のエラーは経路の記録にだけ残す。接続ログには
+// 接続の側（sshclient の「失敗の詳細」）が書くので、ここからも書くと2回並ぶ。
+// docker build の出力は接続ログに1回だけ写し、エラーの文には要点の1行だけを残す。
+func TestAFailedImageBuildIsShownOnceAndSummarizedInTheError(t *testing.T) {
+	docker := fakeDocker(t, `case "$1" in
+info) echo 'linux/x86_64、Docker 29、Test'; exit 0 ;;
+container) echo 'Error response from daemon: No such container: x' >&2; exit 1 ;;
+image) echo 'Error response from daemon: No such image: x' >&2; exit 1 ;;
+build) echo '#6 9.405 E: Unable to locate package iproute2' >&2
+       echo 'ERROR: failed to build: failed to solve: exit code: 100' >&2
+       echo 'View build details: docker-desktop://dashboard/build' >&2; exit 1 ;;
+esac
+exit 0
+`)
+	search := filepath.Dir(docker.path)
+	manager := New(shortSocketDirectory(t), 1000, func(context.Context) ([]string, error) {
+		return []string{"PATH=" + search}, nil
+	})
+	var connectionLog attemptRecord
+	ctx := connectionlog.With(context.Background(), &connectionLog)
+
+	err := manager.Start(ctx, validProfile(), Secrets{WireGuard: &WireGuardSecrets{PrivateKey: testPrivateKey}})
+
+	if !errors.Is(err, ErrImageBuild) {
+		t.Fatalf("Start = %v", err)
+	}
+	if strings.Contains(err.Error(), "Unable to locate") || !strings.Contains(err.Error(), "ERROR: failed to build") {
+		t.Errorf("エラーの文 = %q", err.Error())
+	}
+	shown := connectionLog.text()
+	if count := strings.Count(shown, "Unable to locate package iproute2"); count != 1 {
+		t.Errorf("docker build の出力を %d 回写した:\n%s", count, shown)
+	}
+	if strings.Contains(shown, "失敗の詳細") {
+		t.Errorf("接続ログに失敗の詳細を書いた:\n%s", shown)
+	}
+	if record := manager.state("tohoku").record.text(); !strings.Contains(record, "失敗の詳細：the vpn container image could not be built: ERROR: failed to build") {
+		t.Errorf("記録に失敗の詳細が無い:\n%s", record)
+	}
+}

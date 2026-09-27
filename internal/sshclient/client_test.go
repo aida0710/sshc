@@ -497,8 +497,8 @@ func TestProxyJumpUsesTheSavedPasswordForEachAlias(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = process.Close() }()
-	readUntil(t, process, "mdx-jamstec-1 に接続しました（1/2）")
-	readUntil(t, process, "destination に接続しました（2/2）")
+	readUntil(t, process, "mdx-jamstec-1に接続しました（1/2）")
+	readUntil(t, process, "destinationに接続しました（2/2）")
 	readUntil(t, process, "ready")
 	if !slices.Equal(requested, []string{"mdx-jamstec-1", "destination"}) {
 		t.Fatalf("passwords requested for %#v", requested)
@@ -714,7 +714,7 @@ func TestTheConnectionLogReachesTheTerminalWhenItIsAsked(t *testing.T) {
 	// 深さ 2 では、接続先とSSHハンドシェイクの完了を表示する。
 	readUntil(t, process, "へ接続します")
 	readUntil(t, process, "認証方式を試します：publickey")
-	readUntil(t, process, "SSH ハンドシェイクが完了しました")
+	readUntil(t, process, "SSHハンドシェイクが完了しました")
 	readUntil(t, process, "ready")
 }
 
@@ -739,9 +739,9 @@ func TestFullConnectionLogExplainsAnAutomaticallyAnsweredEchoedTOTP(t *testing.T
 	for _, want := range []string{
 		"接続ログ：すべて（-vvv）",
 		"認証方式を試します：keyboard-interactive",
-		"keyboard-interactive の質問 1/1：Verification code:（入力表示：あり）",
+		"keyboard-interactiveの質問1/1：Verification code:（入力表示：あり）",
 		"保存済みTOTPをbastionの認証コード質問へ入力しました。",
-		"認証方式 keyboard-interactive で認証されました。",
+		"認証方式keyboard-interactiveで認証されました。",
 	} {
 		if !strings.Contains(seen, want) {
 			t.Errorf("full connection log did not contain %q:\n%s", want, seen)

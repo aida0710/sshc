@@ -48,7 +48,7 @@ func TestAnExpiredSSOProxyStopsTheActualHandshakeWithLoginInstructions(t *testin
 	}
 	var output strings.Builder
 	describeProxyExit(newTracer(Detailed, &output), connection)
-	if !strings.Contains(output.String(), "ProxyCommandの終了：コード 1") {
+	if !strings.Contains(output.String(), "ProxyCommandの終了：コード1") {
 		t.Fatalf("missing proxy exit status: %s", output.String())
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"strings"
 	"sync"
 	"time"
 
@@ -260,7 +261,7 @@ func (s *Session) fail(reason error) {
 		reason = errors.New("ssh connection failed")
 	}
 	s.markReady(reason)
-	_, _ = io.WriteString(s.writer, "\r\n"+reason.Error()+"\r\n")
+	_, _ = io.WriteString(s.writer, "\r\n"+terminalNewlines(reason.Error())+"\r\n")
 	s.finish(terminal.ExitInfo{Code: 255, At: time.Now()})
 	_ = s.writer.Close()
 	_ = s.input.Close()
@@ -271,6 +272,12 @@ func (s *Session) fail(reason error) {
 	for index := len(closers) - 1; index >= 0; index-- {
 		_ = closers[index].Close()
 	}
+}
+
+// terminalNewlines は、文の中の改行を端末の改行（CRLF）にする。LF のままだと、
+// 次の行が行頭へ戻らない。
+func terminalNewlines(text string) string {
+	return strings.ReplaceAll(strings.ReplaceAll(text, "\r\n", "\n"), "\n", "\r\n")
 }
 
 // attach は、開いた輸送と、用意できていればチャンネルをこのセッションへ結び付ける。

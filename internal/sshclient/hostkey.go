@@ -54,7 +54,7 @@ func (h HostKeys) callback(target Target, prompt Prompter, trace *tracer) ssh.Ho
 		trace.say(Detailed, "サーバーのホスト鍵：%s", describeKey(key))
 		verdict, err := h.verify(target, key, prompt)
 		for _, conflicting := range verdict.conflicting {
-			trace.say(Detailed, "known_hosts の %d 行目には別の鍵があります：%s", conflicting.number, conflicting.key)
+			trace.say(Detailed, "known_hostsの%d行目には別の鍵があります：%s", conflicting.number, conflicting.key)
 		}
 		if err != nil {
 			trace.say(Detailed, "ホスト鍵を受け入れませんでした：%v", err)
@@ -62,14 +62,14 @@ func (h HostKeys) callback(target Target, prompt Prompter, trace *tracer) ssh.Ho
 		}
 		switch verdict.outcome {
 		case hostKeyKnown:
-			trace.say(Detailed, "ホスト鍵は known_hosts の %d 行目と一致しました。", verdict.matchedLine)
+			trace.say(Detailed, "ホスト鍵はknown_hostsの%d行目と一致しました。", verdict.matchedLine)
 		case hostKeyTrusted:
-			trace.say(Detailed, "known_hosts に無いホストを、StrictHostKeyChecking %s に従って受け入れました。", target.Strict)
+			trace.say(Detailed, "known_hostsに無いホストを、StrictHostKeyChecking %sに従って受け入れました。", target.Strict)
 		case hostKeyConfirmed:
-			trace.say(Detailed, "known_hosts に無いホストを、確認のうえ受け入れました。")
+			trace.say(Detailed, "known_hostsに無いホストを、確認のうえ受け入れました。")
 		}
 		if verdict.outcome != hostKeyKnown && h.Add == nil {
-			trace.say(Detailed, "この鍵は known_hosts に書きません。次の接続でも同じ確認になります。")
+			trace.say(Detailed, "この鍵はknown_hostsに書きません。次の接続でも同じ確認になります。")
 		}
 		return nil
 	}

@@ -95,7 +95,7 @@ func (t *tracer) say(level Verbosity, format string, args ...any) {
 	if t == nil || t.writer == nil || level > t.level {
 		return
 	}
-	_, _ = io.WriteString(t.writer, linePrefix(level)+fmt.Sprintf(format, args...)+"\r\n")
+	t.writeLines(linePrefix(level), fmt.Sprintf(format, args...))
 }
 
 // announce は、verbosity に関係なく 1 行表示する（ProxyCommand の実行、VPN 経路の
@@ -104,7 +104,18 @@ func (t *tracer) announce(format string, args ...any) {
 	if t == nil || t.writer == nil {
 		return
 	}
-	_, _ = io.WriteString(t.writer, "[sshc] "+fmt.Sprintf(format, args...)+"\r\n")
+	t.writeLines("[sshc] ", fmt.Sprintf(format, args...))
+}
+
+// writeLines は、text を行ごとに、印を付けて CRLF で終えて書く。
+//
+// 失敗の詳細（docker build の出力など）は複数行のことがある。改行を LF のまま
+// 端末へ送ると行頭へ戻らず、次の行が前の行の右端から始まって階段状に崩れる。
+// 行ごとに印も付けるので、どの行も接続ログの行だと分かる。
+func (t *tracer) writeLines(prefix, text string) {
+	for _, line := range strings.Split(strings.TrimRight(text, "\r\n"), "\n") {
+		_, _ = io.WriteString(t.writer, prefix+strings.TrimRight(line, "\r")+"\r\n")
+	}
 }
 
 // サーバーの banner をどこまで端末に出すか。

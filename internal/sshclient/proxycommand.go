@@ -52,13 +52,13 @@ func describeProxyExit(trace *tracer, connection net.Conn) {
 		if err := command.ExitErr(); err != nil {
 			var exit *exec.ExitError
 			if errors.As(err, &exit) {
-				trace.say(Detailed, "ProxyCommandの終了：コード %d（%v）", exit.ExitCode(), err)
+				trace.say(Detailed, "ProxyCommandの終了：コード%d（%v）", exit.ExitCode(), err)
 				return
 			}
 			trace.say(Detailed, "ProxyCommandの終了：%v", err)
 			return
 		}
-		trace.say(Detailed, "ProxyCommandの終了：コード 0")
+		trace.say(Detailed, "ProxyCommandの終了：コード0")
 	default:
 		trace.say(Detailed, "ProxyCommandの終了状態はまだ取得できていません。")
 	}

@@ -18,11 +18,11 @@ import (
 func describeVPNRefusal(problem engineProblem, called vpnInvocation) (string, bool) {
 	if problem.Code == vpnrefusal.CodeProfileExists {
 		if called.Action == vpnRename {
-			return fmt.Sprintf("%s という名前のVPNプロファイルはすでにあります。別の名前を指定してください。",
+			return fmt.Sprintf("「%s」という名前のVPNプロファイルはすでにあります。別の名前を指定してください。",
 				safeTerminalCell(called.Rename)), true
 		}
 		name := safeTerminalCell(called.Name)
-		return fmt.Sprintf("%s という名前のVPNプロファイルはすでにあります。設定を変更する場合は sshc vpn edit %s を、"+
+		return fmt.Sprintf("「%s」という名前のVPNプロファイルはすでにあります。設定を変更する場合は sshc vpn edit %s を、"+
 			"名前を変更する場合は sshc vpn rename を使用してください。", name, name), true
 	}
 	if !vpnrefusal.Known(problem.Code) {
