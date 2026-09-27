@@ -10,6 +10,7 @@ import {
   type HostMetadata,
   type Metadata,
   type Overview,
+  type SaveResult,
   type UpdateConnectionRequest,
 } from "../api/config";
 import { type HostSelection } from "./ConnectionTree";
@@ -17,7 +18,7 @@ import { ConnectionListPane } from "./ConnectionListPane";
 import { ColumnResizeHandle } from "../ui/ColumnResizeHandle";
 import { useStoredColumnWidth, type StoredColumnWidth } from "../ui/useStoredColumnWidth";
 import { MissingConnection, NoConnectionSelected } from "./DetailPlaceholders";
-import { useOverlays, useSaveFeedback, useSelectionState } from "./pageState";
+import { useOverlays, useSaveFeedback, useSelectionState, type RefreshState } from "./pageState";
 import type { DragPayload } from "./dragdrop";
 import { HostDetailPanel } from "./HostDetail";
 import {
@@ -133,7 +134,7 @@ export function ConnectionsPage({
   const [detail, setDetail] = useState<HostDetail | null>(null);
   const [listWidth, setListWidth] = useStoredColumnWidth(connectionListWidth);
   const [savedState, setSavedState] = useState<ConnectionSavedState | null>(null);
-  const [refreshState, setRefreshState] = useState<"idle" | "refreshing" | "failed">("idle");
+  const [refreshState, setRefreshState] = useState<RefreshState>("idle");
   const [savedRevision, setSavedRevision] = useState(0);
   const [discardIntent, setDiscardIntent] = useState<DiscardIntent | null>(null);
   const draftDiscardRef = useRef<(() => void) | null>(null);
@@ -455,10 +456,15 @@ export function ConnectionsPage({
     return { saved: true, overview: nextOverview };
   }
 
-  async function onBasicSave(request: UpdateConnectionRequest) {
-    let result: Awaited<ReturnType<typeof configApi.updateConnection>>;
+  // writeDraft は、接続エディタのタブの下書きを書き込む。書き込めた時点で resolve し、
+  // 保存済みの接続の読み直しは待たない。タブはここで下書きを保存済みとして扱うので、
+  // 読み直しの途中で別の接続を選んでも、破棄の確認は出ない。読み直すあいだは refreshState が
+  // エディタを止めるので、読み直した値で下書きをやり直しても、途中の編集は消えない。
+  // 書き込めなかったときは理由を problem に出して reject し、タブは下書きを残す。
+  async function writeDraft(write: () => Promise<SaveResult>) {
+    let result: SaveResult;
     try {
-      result = await configApi.updateConnection(request);
+      result = await write();
     } catch (error) {
       setPreview(null);
       setProblem(toProblem(error));
@@ -468,8 +474,20 @@ export function ConnectionsPage({
     setPreview(result.preview);
     setProblem(null);
     setLocalError("");
-    draftDiscardRef.current?.();
     setRefreshState("refreshing");
+  }
+
+  // Basicタブは useDraftSave を使わず、書き込めた時点で下書きを破棄して未保存の変更をなくす。
+  // 読み直しは、タブが onRequestRefresh で呼び、終わるまで待つ。
+  async function onBasicSave(request: UpdateConnectionRequest) {
+    await writeDraft(() => configApi.updateConnection(request));
+    draftDiscardRef.current?.();
+  }
+
+  // saveEditorDraft は、Advancedタブと sshcタブの下書きを書き込み、保存済みの接続を読み直す。
+  async function saveEditorDraft(request: EditRequest) {
+    await writeDraft(() => configApi.save(request));
+    void refreshCommittedConnection();
   }
 
   function savedResourcesConfirmed(saved: ConnectionSavedState): boolean {
@@ -503,7 +521,7 @@ export function ConnectionsPage({
       const currentSelection = selectionRef.current;
       if (currentSelection?.path !== identity.path || currentSelection.alias !== identity.alias) return;
       setRefreshState("failed");
-      setLocalError(t("conn.basicConnectionRefreshFailed"));
+      setLocalError(t("conn.connectionRefreshFailed"));
     }
   }
 
@@ -537,9 +555,9 @@ export function ConnectionsPage({
     selectHost(host);
   }
 
-  function onFieldEdits(fields: FieldEdit[]) {
-    if (detail === null || selection === null) return;
-    void submit({
+  async function onFieldEdits(fields: FieldEdit[]) {
+    if (detail === null || selection === null) throw new Error("no_connection_open");
+    await saveEditorDraft({
       kind: "host_fields",
       path: selection.path,
       alias: selection.alias,
@@ -548,9 +566,9 @@ export function ConnectionsPage({
     });
   }
 
-  function onBlockRaw(raw: string) {
-    if (detail === null || selection === null) return;
-    void submit({ kind: "block_raw", path: selection.path, alias: selection.alias, base: detail.file.contents, raw });
+  async function onBlockRaw(raw: string) {
+    if (detail === null || selection === null) throw new Error("no_connection_open");
+    await saveEditorDraft({ kind: "block_raw", path: selection.path, alias: selection.alias, base: detail.file.contents, raw });
   }
 
   function onRename(newName: string) {
@@ -640,14 +658,12 @@ export function ConnectionsPage({
   }
 
   async function onMetadataSave(host: HostMetadata) {
-    if (overview === null) return;
+    if (overview === null) throw new Error("overview_not_loaded");
     const others = (overview.metadata.hosts ?? []).filter(
       (entry) => entry.identity.path !== host.identity.path || entry.identity.alias !== host.identity.alias,
     );
     const metadata: Metadata = { ...overview.metadata, hosts: [...others, host] };
-    const attempt = await submit({ kind: "metadata", metadata });
-    // 理由は submit が problem として出している。sshcタブには、下書きを残すために失敗だけを伝える。
-    if (!attempt.saved) throw new Error("metadata_not_saved");
+    await saveEditorDraft({ kind: "metadata", metadata });
   }
 
   async function onConnectionCreated(result: CreateConnectionResponse) {
@@ -818,14 +834,17 @@ export function ConnectionsPage({
             <ConnectionSummary
               state={savedState}
               dirty={editorDirty}
-              refreshing={refreshState !== "idle"}
+              refreshState={refreshState}
               onConnect={() => void connectHost()}
               connecting={launching}
               onToggleManage={() => setManaging((current) => !current)}
               managing={managing}
             />
+            {/* 読み直しに失敗したときだけ現れるボタンなので、現れたときにフォーカスを移す。
+                タブの下にある保存のバーで保存すると、失敗の文とこのボタンは画面の外にあるので、
+                フォーカスでここまでスクロールして失敗に気づけるようにする。成功したときは現れない。 */}
             {refreshState === "failed" ? (
-              <Button className="self-start" onClick={() => void refreshCommittedConnection()}>
+              <Button autoFocus className="self-start" onClick={() => void refreshCommittedConnection()}>
                 {t("conn.reloadConnection")}
               </Button>
             ) : null}

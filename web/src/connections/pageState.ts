@@ -4,6 +4,9 @@ import type { SavePreview } from "../api/config";
 import type { AdvancedArea, ConnectionPanel, ConnectionTarget } from "../routing/connectionRoute";
 import type { HostSelection } from "./ConnectionTree";
 
+// RefreshState は、保存したあとに保存済みの接続を読み直す状態である。refreshing と failed の
+// あいだは、画面に出ている保存済みの値が古いかもしれないので、接続と編集を止める。
+export type RefreshState = "idle" | "refreshing" | "failed";
 
 export function useSelectionState(target: ConnectionTarget | null, invalid: boolean) {
   const [selection, setSelection] = useState<HostSelection | null>(

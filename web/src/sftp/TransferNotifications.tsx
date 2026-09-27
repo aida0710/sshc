@@ -1,4 +1,5 @@
 import { useEffect, useRef, useSyncExternalStore } from "react";
+import { Icon } from "../ui/icons";
 import { useTranslate } from "../i18n/context";
 import { showBrowserNotification } from "../terminal/terminalNotifications";
 import { sftpTransferManager, type TransferNotice } from "./transferManager";
@@ -39,7 +40,7 @@ export function TransferNotifications() {
         <div key={notice.id} role={notice.status === "failed" ? "alert" : "status"} className={`rounded-lg border p-3 shadow-lg ${notice.status === "failed" ? "border-danger/40 bg-card text-danger" : "border-live/40 bg-card text-ink"}`}>
           <div className="flex items-start gap-2">
             <p className="min-w-0 grow text-sm">{t(notice.status === "completed" ? "sftp.notice.completed" : "sftp.notice.failed", { name: notice.name, direction: t(notice.direction === "upload" ? "sftp.manager.upload" : "sftp.manager.download"), problem: notice.problem })}</p>
-            <button type="button" className="pointer-events-auto text-xs text-ink-muted" aria-label={t("sftp.notice.dismiss")} onClick={() => sftpTransferManager.dismissNotice(notice.id)}>×</button>
+            <button type="button" className="pointer-events-auto text-xs text-ink-muted" aria-label={t("sftp.notice.dismiss")} onClick={() => sftpTransferManager.dismissNotice(notice.id)}><Icon name="close" className="size-3.5" /></button>
           </div>
         </div>
       ))}

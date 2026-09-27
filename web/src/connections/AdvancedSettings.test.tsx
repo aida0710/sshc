@@ -89,6 +89,32 @@ describe("AdvancedSettings", () => {
     expect(harness.props.onBlockRaw).not.toHaveBeenCalled();
   });
 
+  it("counts a Raw draft as saved as soon as the save succeeds, before the host is loaded again", async () => {
+    const user = userEvent.setup();
+    const harness = renderAdvanced();
+    harness.props.onBlockRaw.mockResolvedValue(undefined);
+    await user.type(screen.getByLabelText(/Block text/), "\tPort 2200\n");
+    await user.click(screen.getByRole("button", { name: "Save block" }));
+
+    expect(harness.props.onBlockRaw).toHaveBeenCalledWith(`${detail.form.raw}\tPort 2200\n`);
+    expect(screen.queryByRole("button", { name: "Save block" })).toBeNull();
+    expect(harness.props.onDirtyChange).toHaveBeenLastCalledWith(false);
+    expect(screen.getByLabelText(/Block text/)).toHaveValue(`${detail.form.raw}\tPort 2200\n`);
+  });
+
+  it("keeps a directive draft to save again when the save fails", async () => {
+    const user = userEvent.setup();
+    const harness = renderAdvanced("Jump");
+    harness.props.onFieldEdits.mockRejectedValue(new Error("stale_base"));
+    await user.clear(screen.getByLabelText("ProxyJump"));
+    await user.type(screen.getByLabelText("ProxyJump"), "gateway");
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(screen.getByLabelText("ProxyJump")).toHaveValue("gateway");
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeEnabled();
+    expect(harness.props.onDirtyChange).toHaveBeenLastCalledWith(true);
+  });
+
   it("says which directives a previous line in the block already decided", () => {
     const duplicated: HostDetail = {
       ...detail,

@@ -584,6 +584,10 @@ export const en = {
   "terminal.openFailed": "The terminal could not be opened.",
   "terminal.keyBar": "On-screen keys",
   "terminal.extraKeys": "Extra keys",
+  "terminal.keyArrowLeft": "Left arrow",
+  "terminal.keyArrowUp": "Up arrow",
+  "terminal.keyArrowDown": "Down arrow",
+  "terminal.keyArrowRight": "Right arrow",
   "shell.mobileNavigation": "Quick navigation",
   "sftp.mobile.actions": "Folder actions",
   "sftp.mobile.search": "Search files",
@@ -2207,7 +2211,7 @@ export const en = {
     "Basic settings could not be saved. Nothing was changed; review the error or reload and try again.",
   "conn.basicRefreshFailed":
     "The settings were saved, but their updated password status could not be loaded. Reload this connection.",
-  "conn.basicConnectionRefreshFailed":
+  "conn.connectionRefreshFailed":
     "The settings were saved, but the updated connection could not be loaded. Reload this connection.",
   "conn.basicSave": "Save Basic settings",
   "conn.saving": "Saving…",
@@ -2248,6 +2252,7 @@ export const en = {
     "Save or discard this draft before using the saved connection.",
   "conn.summaryRefreshing":
     "Reloading the saved connection. Actions will be available when it finishes.",
+  "conn.summaryReloadFirst": "Reload the saved connection before using it.",
   "conn.editorLabel": "Connection editor",
   "conn.areaBasic": "Basic",
   "conn.areaAnalysis": "Analysis",

@@ -1,4 +1,5 @@
 import type { KeyItem } from "../keys/api";
+import { DisclosureSummary } from "../ui/DisclosureSummary";
 import type { GeneratedPrivateKeyHandoff } from "../keys/workflow";
 import { useTranslate } from "../i18n/context";
 import { control, hintText } from "../ui/form";
@@ -68,9 +69,9 @@ export function BasicPrivateKeyField({
           onToggle={(event) => onPassphraseOpenChange(event.currentTarget.open)}
           className="border-t border-hairline"
         >
-          <summary className="cursor-pointer px-3 py-3 text-sm font-medium text-ink">
+          <DisclosureSummary className="px-3 py-3 text-sm font-medium text-ink">
             {t("conn.basicManageKeyPassphrase")}
-          </summary>
+          </DisclosureSummary>
           <div className="flex flex-col gap-3 border-t border-hairline py-3">
             <div>
               <p className="text-sm text-ink-muted">{t("conn.basicKeyPassphraseHeading")}</p>

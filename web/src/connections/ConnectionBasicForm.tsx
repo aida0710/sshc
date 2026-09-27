@@ -28,6 +28,7 @@ import {
   type PasswordAction,
 } from "./basicFormDraft";
 import { useConnectionSecrets } from "./useConnectionSecrets";
+import { useReportDirty } from "./useReportDirty";
 
 type ConnectionBasicFormProps = {
   detail: HostDetail;
@@ -157,9 +158,7 @@ export function ConnectionBasicForm({
     setDraft((current) => ({ ...current, ...clearedPasswordSecrets, ...clearedPasswordChoice }));
   }, [derived.draftHasExplicitKey]);
 
-  useEffect(() => {
-    onDirtyChange?.(derived.dirty);
-  }, [derived.dirty, onDirtyChange]);
+  useReportDirty(derived.dirty, onDirtyChange);
 
   const discardDraft = useCallback(() => {
     setDraft(initialDraft(detail, keySelection.initialKey));

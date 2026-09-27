@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { Icon } from "../ui/icons";
 import type { TerminalSession } from "../api/terminalSessions";
 import { failureCode } from "../api/client";
 import { useTranslate } from "../i18n/context";
@@ -256,10 +257,10 @@ export function TerminalQuickCommands({
         <button
           type="button"
           aria-label={t("terminal.quickCommandsClose")}
-          className="rounded px-2 text-ink-muted hover:bg-select-fill"
+          className="rounded px-2 py-1 text-ink-muted hover:bg-select-fill"
           onClick={onClose}
         >
-          ×
+          <Icon name="close" className="size-3.5" />
         </button>
       </div>
       {problem === "" ? null : <Notice tone="danger" compact>{problem}</Notice>}

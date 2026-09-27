@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { DisclosureSummary } from "../ui/DisclosureSummary";
 import type { TrashListResponse } from "./api";
 import { useTranslate } from "../i18n/context";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
@@ -22,9 +23,9 @@ export function KeyTrashSection({ trash, onRestore, onPurge }: {
   return (
     <>
           <details className="border-t border-line bg-surface-subtle p-4">
-            <summary className="cursor-pointer text-sm font-medium text-ink">
+            <DisclosureSummary className="text-sm font-medium text-ink">
               {t("keys.trashSummary", { count: trash.entries.length })}
-            </summary>
+            </DisclosureSummary>
             <div className="mt-3 flex flex-col gap-2 border-t border-line pt-3">
               <h3 className={sectionHeading}>{t("keys.trashHeading")}</h3>
               <p className="text-sm text-ink-muted">{t("keys.trashNote")}</p>

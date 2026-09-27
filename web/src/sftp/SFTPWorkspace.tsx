@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { Icon } from "../ui/icons";
 import type { HostEntry } from "../api/config";
 import type { NavigationBlocker } from "../routing/useSectionRoute";
 import { useTranslate } from "../i18n/context";
@@ -241,7 +242,7 @@ export function SFTPWorkspace({
                 onClick={() => setCompareOpen(true)}
                 className="flex shrink-0 items-center gap-1.5 rounded px-2.5 text-sm text-ink-muted hover:bg-card/50 hover:text-ink disabled:text-ink-faint"
               >
-                <span aria-hidden="true">⇄</span>
+                <Icon name="arrowLeftRight" className="size-4" />
                 {t("sftp.compare.action")}
               </button>
             ) : null}

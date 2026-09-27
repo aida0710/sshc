@@ -160,7 +160,7 @@ export function QuickConnectBrowser({
           <span className="min-w-0 flex-1">
             <span className="flex min-w-0 items-center gap-1.5">
               <span className="truncate text-sm font-semibold text-ink" title={alias}>{alias}</span>
-              {server.duplicateAlias ? <span aria-label={t("browser.duplicateAlias")} className="text-notice-ink">⧉</span> : null}
+              {server.duplicateAlias ? <span role="img" aria-label={t("browser.duplicateAlias")} className="text-notice-ink"><Icon name="warning" className="size-3.5" /></span> : null}
             </span>
             <span className="mt-1 block truncate font-mono text-xs text-ink-muted" title={target}>{target}</span>
             <span aria-live="polite">
@@ -265,7 +265,7 @@ export function QuickConnectBrowser({
                     />
                     <span className="min-w-0 flex-1 truncate text-xs font-medium text-ink">{candidate.label}</span>
                     <span className="shrink-0 font-mono text-xs tabular-nums text-ink-muted">{candidate.descendantCount}</span>
-                    {childCount === 0 ? null : <span aria-hidden="true" className="shrink-0 text-ink-faint">›</span>}
+                    {childCount === 0 ? null : <Icon name="chevronRight" className="size-3.5 text-ink-faint" />}
                   </button>
                 );
               })}

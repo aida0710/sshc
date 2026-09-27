@@ -1,187 +1,125 @@
-import type { ReactNode } from "react";
+import {
+  Activity,
+  ArrowDown,
+  ArrowLeft,
+  ArrowLeftRight,
+  ArrowRight,
+  ArrowUp,
+  ArrowUpDown,
+  Bell,
+  Check,
+  ChevronRight,
+  Clock,
+  CloudUpload,
+  Copy,
+  Cpu,
+  Download,
+  Ellipsis,
+  File,
+  FileCog,
+  Files,
+  Folder,
+  GlobeLock,
+  GripVertical,
+  House,
+  Image,
+  Keyboard,
+  KeyRound,
+  KeySquare,
+  LockKeyhole,
+  Maximize,
+  Menu,
+  Minus,
+  PanelRight,
+  Pause,
+  Pencil,
+  Play,
+  Plus,
+  RectangleEllipsis,
+  RefreshCw,
+  Scale,
+  ScrollText,
+  Search,
+  Server,
+  Settings,
+  ShieldCheck,
+  Smartphone,
+  SquareTerminal,
+  Trash2,
+  TriangleAlert,
+  Unplug,
+  Upload,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 
-export const iconNames = [
-  "home",
-  "connections",
-  "config",
-  "groups",
-  "keys",
-  "knownHosts",
-  "remoteKeys",
-  "diagnostics",
-  "secrets",
-  "settings",
-  "notification",
-  "sync",
-  "history",
-  "inspector",
-  "moreHorizontal",
-  "terminal",
-  "movePane",
-  "focus",
-  "close",
-  "plus",
-  "menu",
-  "search",
-  "chevronRight",
-  "edit",
-  "copy",
-  "check",
-] as const;
+// 画面のアイコンは lucide（https://lucide.dev/icons/）から選び、形を手で描かない。
+// 手で描いた形は、似た別のもの（歯車のつもりが太陽）に見えることがあった。
+// 名前は画面の中での役割で付け、どの lucide のアイコンを使うかはここだけで決める。
+const shapes = {
+  home: House,
+  connections: Server,
+  config: FileCog,
+  groups: Folder,
+  folder: Folder,
+  file: File,
+  image: Image,
+  keys: KeyRound,
+  knownHosts: ShieldCheck,
+  remoteKeys: CloudUpload,
+  diagnostics: Activity,
+  secrets: LockKeyhole,
+  passwords: RectangleEllipsis,
+  passphrases: KeySquare,
+  otp: Smartphone,
+  settings: Settings,
+  engine: Cpu,
+  keyboard: Keyboard,
+  disconnect: Unplug,
+  vpn: GlobeLock,
+  files: Files,
+  snippets: ScrollText,
+  license: Scale,
+  notification: Bell,
+  sync: RefreshCw,
+  history: Clock,
+  inspector: PanelRight,
+  moreHorizontal: Ellipsis,
+  terminal: SquareTerminal,
+  movePane: GripVertical,
+  focus: Maximize,
+  close: X,
+  plus: Plus,
+  minus: Minus,
+  menu: Menu,
+  search: Search,
+  chevronRight: ChevronRight,
+  arrowUp: ArrowUp,
+  arrowDown: ArrowDown,
+  arrowLeft: ArrowLeft,
+  arrowRight: ArrowRight,
+  arrowUpDown: ArrowUpDown,
+  arrowLeftRight: ArrowLeftRight,
+  play: Play,
+  pause: Pause,
+  upload: Upload,
+  download: Download,
+  delete: Trash2,
+  warning: TriangleAlert,
+  edit: Pencil,
+  copy: Copy,
+  check: Check,
+} satisfies Record<string, LucideIcon>;
 
-export type IconName = (typeof iconNames)[number];
+export type IconName = keyof typeof shapes;
 
-const shapes: Record<IconName, ReactNode> = {
-  home: (
-    <>
-      <path d="M3 11.5L12 4l9 7.5" />
-      <path d="M5.5 10v10h13V10M9.5 20v-6h5v6" />
-    </>
-  ),
-  connections: (
-    <>
-      <rect x="3" y="4" width="18" height="7" rx="2" />
-      <rect x="3" y="13" width="18" height="7" rx="2" />
-      <path d="M6.6 7.5h.01M6.6 16.5h.01" />
-    </>
-  ),
-  config: (
-    <>
-      <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
-      <path d="M14 3v5h5" />
-    </>
-  ),
-  groups: <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />,
-  keys: (
-    <>
-      <circle cx="7.5" cy="15.5" r="3.5" />
-      <path d="M10 13L20 3M17 6l2 2M14 9l2 2" />
-    </>
-  ),
-  knownHosts: (
-    <>
-      <path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z" />
-      <path d="M9 12l2 2 4-4" />
-    </>
-  ),
-  remoteKeys: (
-    <>
-      <path d="M7.5 18a4 4 0 1 1 .6-7.95A5.5 5.5 0 0 1 18.6 11 3.5 3.5 0 0 1 18 18" />
-      <path d="M12 21v-7M9.5 16.5L12 14l2.5 2.5" />
-    </>
-  ),
-  diagnostics: <path d="M3 12h4l3 8 4-16 3 8h4" />,
-  secrets: (
-    <>
-      <rect x="4" y="10" width="16" height="11" rx="2" />
-      <path d="M8 10V7a4 4 0 0 1 8 0v3" />
-    </>
-  ),
-  settings: (
-    <>
-      <circle cx="12" cy="12" r="3" />
-      <path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9L7 7M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1" />
-    </>
-  ),
-  notification: (
-    <>
-      <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" />
-      <path d="M10 21h4" />
-    </>
-  ),
-  sync: (
-    <>
-      <path d="M20 11a8 8 0 0 0-13.7-4.6L4 8.5" />
-      <path d="M4 4.5v4h4" />
-      <path d="M4 13a8 8 0 0 0 13.7 4.6L20 15.5" />
-      <path d="M20 19.5v-4h-4" />
-    </>
-  ),
-  history: (
-    <>
-      <circle cx="12" cy="12" r="9" />
-      <path d="M12 7v5l3 2" />
-    </>
-  ),
-  inspector: (
-    <>
-      <rect x="3" y="4" width="18" height="16" rx="2" />
-      <path d="M15 4v16" />
-    </>
-  ),
-  moreHorizontal: (
-    <>
-      <circle cx="5" cy="12" r="1.5" fill="currentColor" stroke="none" />
-      <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" />
-      <circle cx="19" cy="12" r="1.5" fill="currentColor" stroke="none" />
-    </>
-  ),
-  terminal: (
-    <>
-      <rect x="3" y="4" width="18" height="16" rx="2" />
-      <path d="M7 9.5l3 2.5-3 2.5M12.5 15.5h4.5" />
-    </>
-  ),
-  movePane: (
-    <>
-      <circle cx="8" cy="6" r="1" fill="currentColor" stroke="none" />
-      <circle cx="16" cy="6" r="1" fill="currentColor" stroke="none" />
-      <circle cx="8" cy="12" r="1" fill="currentColor" stroke="none" />
-      <circle cx="16" cy="12" r="1" fill="currentColor" stroke="none" />
-      <circle cx="8" cy="18" r="1" fill="currentColor" stroke="none" />
-      <circle cx="16" cy="18" r="1" fill="currentColor" stroke="none" />
-    </>
-  ),
-  focus: <path d="M9 4H4v5M15 4h5v5M20 15v5h-5M9 20H4v-5" />,
-  close: <path d="M6 6l12 12M18 6L6 18" />,
-  plus: <path d="M12 5v14M5 12h14" />,
-  menu: <path d="M4 7h16M4 12h16M4 17h16" />,
-  search: (
-    <>
-      <circle cx="11" cy="11" r="6.5" />
-      <path d="M16 16l4 4" />
-    </>
-  ),
-  chevronRight: <path d="M9 5l7 7-7 7" />,
-  edit: (
-    <>
-      <path d="M4 20h4l11-11a2.8 2.8 0 0 0-4-4L4 16z" />
-      <path d="M13.5 6.5l4 4M4 20l3.8-1" />
-    </>
-  ),
-  copy: (
-    <>
-      <rect x="8" y="8" width="12" height="12" rx="2" />
-      <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
-    </>
-  ),
-  check: <path d="M5 12.5l4.5 4.5L19 7" />,
-};
+export const iconNames = Object.keys(shapes) as IconName[];
 
-export function IconSprite() {
-  return (
-    <svg aria-hidden="true" style={{ display: "none" }}>
-      {iconNames.map((name) => (
-        <symbol key={name} id={`icon-${name}`} viewBox="0 0 24 24">
-          {shapes[name]}
-        </symbol>
-      ))}
-    </svg>
-  );
-}
+// iconStrokeWidth は、手で描いていたころのアイコンと同じ線の太さである。lucide の既定（2）
+// にすると、画面のアイコンがすべて一段太くなる。
+const iconStrokeWidth = 1.7;
 
 export function Icon({ name, className = "h-4 w-4" }: { name: IconName; className?: string }) {
-  return (
-    <svg
-      aria-hidden="true"
-      className={`shrink-0 ${className}`}
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.7}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <use href={`#icon-${name}`} />
-    </svg>
-  );
+  const Shape = shapes[name];
+  return <Shape aria-hidden="true" data-icon={name} className={`shrink-0 ${className}`} strokeWidth={iconStrokeWidth} />;
 }
