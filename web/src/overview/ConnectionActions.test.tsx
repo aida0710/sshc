@@ -44,7 +44,7 @@ describe("ConnectionActions", () => {
     );
 
     const trigger = screen.getByRole("button", { name: "Actions for database" });
-    expect(trigger.querySelector("use")).toHaveAttribute("href", "#icon-moreHorizontal");
+    expect(trigger.querySelector("[data-icon]")).toHaveAttribute("data-icon", "moreHorizontal");
     expect(trigger).not.toHaveTextContent("…");
     await userEvent.click(trigger);
     expect(connect).not.toHaveBeenCalled();

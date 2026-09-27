@@ -81,7 +81,7 @@ describe("ConnectionSummary", () => {
       <ConnectionSummary
         state={state}
         dirty={false}
-        refreshing={false}
+        refreshState="idle"
         onConnect={vi.fn()}
         connecting={false}
         onToggleManage={vi.fn()}
@@ -103,7 +103,7 @@ describe("ConnectionSummary", () => {
       <ConnectionSummary
         state={{ ...state, credentials: { status: "failed" } }}
         dirty={false}
-        refreshing={false}
+        refreshState="idle"
         onConnect={vi.fn()}
         connecting={false}
         onToggleManage={vi.fn()}
@@ -125,7 +125,7 @@ describe("ConnectionSummary", () => {
           } },
         }}
         dirty={false}
-        refreshing={false}
+        refreshState="idle"
         onConnect={vi.fn()}
         connecting={false}
         onToggleManage={vi.fn()}
@@ -154,7 +154,7 @@ describe("ConnectionSummary", () => {
           },
         }}
         dirty={false}
-        refreshing={false}
+        refreshState="idle"
         onConnect={vi.fn()}
         connecting={false}
         onToggleManage={vi.fn()}
@@ -196,7 +196,7 @@ describe("ConnectionSummary", () => {
           },
         }}
         dirty={false}
-        refreshing={false}
+        refreshState="idle"
         onConnect={onConnect}
         connecting={false}
         onToggleManage={vi.fn()}
@@ -223,7 +223,7 @@ describe("ConnectionSummary", () => {
       <ConnectionSummary
         state={state}
         dirty
-        refreshing={false}
+        refreshState="idle"
         onConnect={onConnect}
         connecting={false}
         onToggleManage={onToggleManage}
@@ -248,7 +248,7 @@ describe("ConnectionSummary", () => {
       <ConnectionSummary
         state={state}
         dirty={false}
-        refreshing={false}
+        refreshState="idle"
         connectAvailable={false}
         onConnect={vi.fn()}
         connecting={false}
@@ -258,5 +258,44 @@ describe("ConnectionSummary", () => {
     );
 
     expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
+  });
+
+  it("says it is reloading while the saved connection is being reloaded", () => {
+    render(
+      <ConnectionSummary
+        state={state}
+        dirty={false}
+        refreshState="refreshing"
+        onConnect={vi.fn()}
+        connecting={false}
+        onToggleManage={vi.fn()}
+        managing={false}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Connect" })).toHaveAccessibleDescription(
+      "Reloading the saved connection. Actions will be available when it finishes.",
+    );
+  });
+
+  it("does not say it is reloading once the reload has failed, and keeps Connect unavailable", () => {
+    render(
+      <ConnectionSummary
+        state={state}
+        dirty={false}
+        refreshState="failed"
+        onConnect={vi.fn()}
+        connecting={false}
+        onToggleManage={vi.fn()}
+        managing={false}
+      />,
+    );
+
+    expect(screen.queryByText(/Reloading the saved connection/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Connect" })).toHaveAccessibleDescription(
+      "Reload the saved connection before using it.",
+    );
   });
 });

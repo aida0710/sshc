@@ -459,9 +459,7 @@ describe("SyncPanel", () => {
     expect(summary).not.toBeNull();
     const settings = summary.closest("details");
     expect(settings).not.toHaveAttribute("open");
-    expect(summary.querySelector("[aria-hidden='true']")).toHaveTextContent(
-      "›",
-    );
+    expect(summary.querySelector("[data-icon='chevronRight']")).toHaveAttribute("aria-hidden", "true");
     expect(
       screen.queryByLabelText("Secret access key"),
     ).not.toBeInTheDocument();

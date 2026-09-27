@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { DisclosureSummary } from "../ui/DisclosureSummary";
 import { toProblem } from "../api/guards";
 import type { Problem } from "../api/client";
 import { configApi, type GroupMetadata, type Metadata, type Overview, type SavePreview } from "../api/config";
@@ -275,7 +276,7 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
         ))}
       </MetricGrid>
       <details className="rounded-lg border border-line bg-surface-subtle px-4 py-3">
-        <summary className="cursor-pointer text-sm font-medium text-ink">{t("groups.howItWorks")}</summary>
+        <DisclosureSummary className="text-sm font-medium text-ink">{t("groups.howItWorks")}</DisclosureSummary>
         <div className="mt-3 border-t border-line pt-3">
           <p className="text-sm text-ink-muted">
             {t("groups.directoryNote", { connections: "connections", keys: "keys" })}

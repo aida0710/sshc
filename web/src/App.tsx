@@ -17,7 +17,7 @@ import type { SessionState } from "./session/bootstrap";
 import type { CreationPrerequisite } from "./connections/CreateConnectionModal";
 import { LockScreen } from "./secrets/LockScreen";
 import { useLanguage } from "./i18n/context";
-import { Icon, IconSprite } from "./ui/icons";
+import { Icon } from "./ui/icons";
 import { InspectorPane, InspectorToggle, type InspectorContent } from "./ui/Inspector";
 import { useTheme } from "./theme/context";
 import { Button } from "./ui/surface";
@@ -302,7 +302,6 @@ export function App({
 
   return (
     <div className="sshc-app flex h-screen flex-col bg-canvas text-ink" data-mobile={mobileLayout}>
-      <IconSprite />
       <div
         className="contents"
         inert={state === "ready" && vaultRecheck !== "idle"}

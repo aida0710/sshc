@@ -142,7 +142,7 @@ export function TerminalView({
   const [modifiers, setModifiers] = useState<Modifiers>({ ctrl: false, alt: false });
   const armed = useRef<Modifiers>(modifiers);
   armed.current = modifiers;
-  const send = useRef<(label: string) => void>(() => {});
+  const send = useRef<(name: string) => void>(() => {});
   const sendInput = useRef<(text: string) => void>(() => {});
 
   useEffect(() => {
@@ -295,9 +295,9 @@ export function TerminalView({
       if (ctrl || alt) setModifiers({ ctrl: false, alt: false });
     };
     sendInput.current = (text) => stream?.send(text);
-    send.current = (label: string) => {
+    send.current = (name: string) => {
       const { ctrl, alt } = armed.current;
-      const encoded = encodeKey(label, ctrl, alt);
+      const encoded = encodeKey(name, ctrl, alt);
       stream?.send(encoded);
       if (ctrl || alt) setModifiers({ ctrl: false, alt: false });
     };
@@ -611,7 +611,7 @@ export function TerminalView({
       <KeyBar
         modifiers={modifiers}
         onToggle={(name) => setModifiers((current) => ({ ...current, [name]: !current[name] }))}
-        onKey={(label) => send.current(label)}
+        onKey={(name) => send.current(name)}
       />
     </section>
   );

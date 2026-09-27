@@ -1,4 +1,5 @@
 import { useTranslate } from "../i18n/context";
+import { Icon } from "../ui/icons";
 import type { TerminalSearch } from "./useTerminalSearch";
 
 // The find-in-scrollback bar floating over the terminal.
@@ -44,9 +45,9 @@ export function TerminalSearchBar({ search, mobile }: { search: TerminalSearch; 
             ? t("terminal.searchNoResults")
             : `${search.result.index + 1}/${search.result.total}`}
       </span>
-      <button type="button" aria-label={t("terminal.searchPrevious")} className="rounded border border-control-line px-2 py-0.5 text-sm" onClick={() => search.step(-1)}>↑</button>
-      <button type="button" aria-label={t("terminal.searchNext")} className="rounded border border-control-line px-2 py-0.5 text-sm" onClick={() => search.step(1)}>↓</button>
-      <button type="button" aria-label={t("terminal.searchClose")} className="rounded px-2 py-0.5 text-sm" onClick={search.close}>×</button>
+      <button type="button" aria-label={t("terminal.searchPrevious")} className="rounded border border-control-line px-2 py-1" onClick={() => search.step(-1)}><Icon name="arrowUp" className="size-3.5" /></button>
+      <button type="button" aria-label={t("terminal.searchNext")} className="rounded border border-control-line px-2 py-1" onClick={() => search.step(1)}><Icon name="arrowDown" className="size-3.5" /></button>
+      <button type="button" aria-label={t("terminal.searchClose")} className="rounded px-2 py-1" onClick={search.close}><Icon name="close" className="size-3.5" /></button>
     </div>
   );
 }

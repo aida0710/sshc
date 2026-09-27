@@ -1,4 +1,5 @@
 import { useRef, type RefObject } from "react";
+import { Icon } from "../ui/icons";
 import { useTranslate } from "../i18n/context";
 import { useDismissibleLayer } from "../ui/useDismissibleLayer";
 import { useMenuKeyboard } from "../ui/useMenuKeyboard";
@@ -70,7 +71,7 @@ export function TerminalOverflowMenu({
         onClick={action(onToggleOsc52)}
       >
         <span>OSC 52</span>
-        <span aria-hidden="true" className={osc52Enabled ? "text-live" : "text-ink-faint"}>{osc52Enabled ? "✓" : "—"}</span>
+        <Icon name={osc52Enabled ? "check" : "minus"} className={`size-4 ${osc52Enabled ? "text-live" : "text-ink-faint"}`} />
       </button>
     </div>
   );

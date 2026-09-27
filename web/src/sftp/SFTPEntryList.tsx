@@ -424,7 +424,7 @@ function entrySize(entry: RemoteEntry): string {
 }
 
 function entryIcon(entry: RemoteEntry) {
-  return entryKind(entry) === "directory" ? "groups" : "config";
+  return entryKind(entry) === "directory" ? "folder" : "file";
 }
 
 // A symlink is named with where it points, as `ls -l` does.
