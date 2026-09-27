@@ -248,7 +248,7 @@ export function CommandPalette({
                   }}
                   className="absolute right-1.5 top-1/2 flex size-9 -translate-y-1/2 items-center justify-center rounded text-ink-muted hover:bg-surface hover:text-ink"
                 >
-                  <Icon name="moreHorizontal" className="size-4" />
+                  <Icon name="settings" className="size-4" />
                 </button>
               )}
             </div>

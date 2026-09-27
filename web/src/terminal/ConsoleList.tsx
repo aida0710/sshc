@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import { DisclosureChevron } from "../ui/DisclosureChevron";
 import type { LocalShellProfile } from "../api/settings";
 import type { TerminalForward, TerminalSession } from "../api/terminalSessions";
 import { useTranslate, type Translate } from "../i18n/context";
@@ -217,7 +218,7 @@ export function ConsoleList({
                   onClick={() => setWorkspaceExpanded((current) => !current)}
                   className="flex size-7 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover"
                 >
-                  <span aria-hidden="true" className="text-xs">{workspaceExpanded ? "▾" : "▸"}</span>
+                  <DisclosureChevron expanded={workspaceExpanded} className="size-3.5" />
                 </button>
                 {renamingWorkspace ? (
                   <div className="min-w-0 grow px-1 py-1">

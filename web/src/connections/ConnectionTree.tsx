@@ -1,4 +1,5 @@
 import { Fragment, useId, useMemo, useState, type CSSProperties, type DragEvent, type ReactNode } from "react";
+import { DisclosureChevron } from "../ui/DisclosureChevron";
 import type { HostEntry, HostMetadata, Overview } from "../api/config";
 import { useTranslate } from "../i18n/context";
 import { nearestDeclaredParent } from "./connectionBrowser";
@@ -292,7 +293,7 @@ export function ConnectionTree({
               })}
               className="ms-0 flex size-8 shrink-0 items-center justify-center rounded text-ink-faint hover:text-ink md:ms-[calc(var(--sshc-facet-depth)*0.65rem)] md:size-5"
             >
-              <span aria-hidden="true">{shut ? "▸" : "▾"}</span>
+              <DisclosureChevron expanded={!shut} className="size-3.5" />
             </button>
           )}
           <button
@@ -360,7 +361,7 @@ export function ConnectionTree({
             <span className="min-w-0 flex-1">
               <span className="flex min-w-0 items-center gap-1.5">
                 <span className={`truncate ${active ? "font-semibold" : "font-medium"}`}>{host.identity.alias}</span>
-                {item.duplicateAlias ? <span aria-hidden="true" className="shrink-0 text-notice-ink">⧉</span> : null}
+                {item.duplicateAlias ? <Icon name="warning" className="size-3.5 text-notice-ink" /> : null}
               </span>
               <span className={`mt-0.5 block truncate font-mono text-xs leading-4 ${active ? "text-ink-muted" : "text-ink-faint"}`}>{targetFor(host)}</span>
               {item.tags.length === 0 ? null : (

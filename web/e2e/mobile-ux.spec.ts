@@ -211,7 +211,7 @@ test("quick navigation and terminal keys remain available in portrait and touch 
     await expect(keys).toBeVisible();
     await expectInside(page, keys);
     await expectInside(page, navigation);
-    await keys.getByRole("button", { name: "↑", exact: true }).tap();
+    await keys.getByRole("button", { name: "Up arrow", exact: true }).tap();
     await expect.poll(() => messages.some((message) => message.includes("\u001b[A"))).toBe(true);
     messages.length = 0;
   }

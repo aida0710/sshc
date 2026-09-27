@@ -590,6 +590,10 @@ export const ja = {
   "terminal.openFailed": "ターミナルを開けませんでした。",
   "terminal.keyBar": "画面上のキー",
   "terminal.extraKeys": "追加キー",
+  "terminal.keyArrowLeft": "左矢印",
+  "terminal.keyArrowUp": "上矢印",
+  "terminal.keyArrowDown": "下矢印",
+  "terminal.keyArrowRight": "右矢印",
   "shell.mobileNavigation": "クイックナビゲーション",
   "sftp.mobile.actions": "フォルダ操作",
   "sftp.mobile.search": "ファイルを検索",
@@ -2214,7 +2218,7 @@ export const ja = {
     "基本設定を保存できませんでした。変更は行われていません。エラーを確認するか、再読み込みしてもう一度試してください。",
   "conn.basicRefreshFailed":
     "設定は保存されましたが、更新後のパスワード状態を読み込めませんでした。この接続を再読み込みしてください。",
-  "conn.basicConnectionRefreshFailed":
+  "conn.connectionRefreshFailed":
     "設定は保存されましたが、更新後の接続を読み込めませんでした。この接続を再読み込みしてください。",
   "conn.basicSave": "基本設定を保存",
   "conn.saving": "保存しています…",
@@ -2255,6 +2259,7 @@ export const ja = {
     "下書きを保存または破棄してから、保存済みの接続を使用してください。",
   "conn.summaryRefreshing":
     "保存済みの接続を再読み込みしています。完了後に操作できます。",
+  "conn.summaryReloadFirst": "保存済みの接続を再読み込みしてから操作できます。",
   "conn.editorLabel": "接続エディタ",
   "conn.areaBasic": "Basic",
   "conn.areaAnalysis": "Analysis",

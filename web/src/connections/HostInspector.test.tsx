@@ -186,6 +186,34 @@ describe("HostInspector", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
+  it("counts the draft as saved as soon as the save succeeds, before the saved metadata is loaded again", async () => {
+    const user = userEvent.setup();
+    const onDirtyChange = vi.fn();
+    render(<HostInspector detail={build()} onSave={vi.fn().mockResolvedValue(undefined)} onDirtyChange={onDirtyChange} />);
+
+    await user.selectOptions(screen.getByLabelText("Remote text encoding"), "shift_jis");
+    await user.click(saveButton()!);
+
+    expect(saveButton()).toBeNull();
+    expect(screen.queryByRole("button", { name: "Saving…" })).toBeNull();
+    expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+    expect(screen.getByLabelText("Remote text encoding")).toHaveValue("shift_jis");
+  });
+
+  it("shows the change as unsaved again when the metadata loaded after the save does not have it", async () => {
+    const user = userEvent.setup();
+    const detail = build();
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    const { rerender } = render(<HostInspector detail={detail} onSave={onSave} />);
+
+    await user.selectOptions(screen.getByLabelText("Remote text encoding"), "shift_jis");
+    await user.click(saveButton()!);
+    rerender(<HostInspector detail={{ ...detail, metadata: { ...detail.metadata } }} onSave={onSave} />);
+
+    expect(screen.getByLabelText("Remote text encoding")).toHaveValue("shift_jis");
+    expect(saveButton()).toBeEnabled();
+  });
+
   it("starts over from the saved values once the saved metadata changes", async () => {
     const user = userEvent.setup();
     const detail = build();

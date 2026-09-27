@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { DisclosureChevron } from "../ui/DisclosureChevron";
 import { vaultApi, type VaultApi } from "../api/vault";
 import { syncApi, type SyncApi, type PushResponse, type SyncHistoryDiff, type SyncStatus } from "../api/sync";
 import { useLanguage, useTranslate } from "../i18n/context";
@@ -451,15 +452,10 @@ export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
       ) : null}
 
       {status.configured ? (
-        <details className="group overflow-hidden rounded-md border border-control-line bg-card">
+        <details className="overflow-hidden rounded-md border border-control-line bg-card">
           <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 bg-toolbar px-4 py-3 marker:hidden hover:bg-select-fill">
             <span className="flex items-center gap-3 text-sm font-medium text-ink">
-              <span
-                aria-hidden="true"
-                className="inline-flex size-5 shrink-0 items-center justify-center text-base text-ink-muted transition-transform group-open:rotate-90"
-              >
-                ›
-              </span>
+              <DisclosureChevron className="size-4 text-ink-muted" />
               {t("sync.detailsHeading")}
             </span>
             <span className={hintText}>

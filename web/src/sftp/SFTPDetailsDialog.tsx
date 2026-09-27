@@ -1,4 +1,5 @@
 import { useEffect, useId, useState, type ReactNode, type RefObject } from "react";
+import { DisclosureSummary } from "../ui/DisclosureSummary";
 import { failureCode } from "../api/client";
 import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
@@ -224,7 +225,7 @@ export function SFTPDetailsDialog({
           )}
         </div>
 
-        {mobileViewport ? <details className="min-h-0 shrink-0 overflow-auto border-t border-line"><summary className="cursor-pointer px-3 py-3 text-sm text-ink-muted">{t("sftp.properties")}</summary><div className="max-h-40 overflow-auto">{properties}</div></details> : properties}
+        {mobileViewport ? <details className="min-h-0 shrink-0 overflow-auto border-t border-line"><DisclosureSummary className="px-3 py-3 text-sm text-ink-muted">{t("sftp.properties")}</DisclosureSummary><div className="max-h-40 overflow-auto">{properties}</div></details> : properties}
       </div>
 
       <div className="flex flex-wrap justify-end gap-2 border-t border-line px-3 py-2">

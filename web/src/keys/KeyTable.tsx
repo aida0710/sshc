@@ -1,4 +1,5 @@
 import { Fragment, useState, type DragEvent, type ReactNode } from "react";
+import { DisclosureChevron } from "../ui/DisclosureChevron";
 import { useTranslate, type Translate } from "../i18n/context";
 import type { KeyCertificate, KeyInventoryResponse, KeyItem } from "./api";
 import { tableHeadCell, tableHeadRow } from "../ui/form";
@@ -175,7 +176,7 @@ export function KeyTable({
                     onClick={() => toggleRelated(item)}
                     className="mt-2 inline-flex min-h-10 items-center gap-1.5 rounded-md bg-surface px-2 py-1 text-xs font-medium text-ink-muted hover:text-ink disabled:cursor-default md:min-h-0"
                   >
-                    <span aria-hidden="true" className="font-mono text-ink-faint">{relatedExpanded ? "▾" : "▸"}</span>
+                    <DisclosureChevron expanded={relatedExpanded} className="size-3.5 text-ink-faint" />
                     {t("keys.relatedPublicFiles", { count: relatedCount })}
                   </button>
                 )}
@@ -231,9 +232,7 @@ export function KeyTable({
                   aria-expanded={detailsExpanded}
                   onClick={() => actions.onToggleDetails(item)}
                 >
-                  <span aria-hidden="true" className="mr-1 font-mono text-ink-faint">
-                    {detailsExpanded ? "▾" : "▸"}
-                  </span>
+                  <DisclosureChevron expanded={detailsExpanded} className="mr-1 size-3.5 text-ink-faint" />
                   {t(detailsExpanded ? "keys.hideDetails" : "keys.showDetails")}
                 </button>
               </td>

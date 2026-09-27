@@ -1,4 +1,5 @@
 import { useTranslate } from "../i18n/context";
+import { DisclosureSummary } from "../ui/DisclosureSummary";
 import { CopyButton } from "../ui/CopyButton";
 import type { RequestFailureDiagnostic } from "../api/client";
 
@@ -50,7 +51,7 @@ export function ErrorDiagnosticNotice({
           </button>
         </div>
         <details className="text-xs">
-          <summary className="cursor-pointer text-ink-muted">{t("diagnostic.showDetails")}</summary>
+          <DisclosureSummary className="text-ink-muted">{t("diagnostic.showDetails")}</DisclosureSummary>
           <pre className="mt-2 max-h-36 overflow-auto whitespace-pre-wrap break-words rounded border border-line bg-card p-2 text-ink">
             {report}
           </pre>

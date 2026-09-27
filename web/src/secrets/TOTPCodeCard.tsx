@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { DisclosureChevron } from "../ui/DisclosureChevron";
 import type { CredentialsApi, TOTPCodeSet } from "../api/credentials";
 import { useTranslate } from "../i18n/context";
 import { hintText } from "../ui/form";
@@ -99,7 +100,7 @@ export function TOTPCodeCard({ name, api }: { name: string; api: Pick<Credential
           className="flex size-8 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-select-fill hover:text-ink"
           onClick={() => setExpanded((current) => !current)}
         >
-          <Icon name="chevronRight" className={`size-4 transition-transform ${expanded ? "rotate-90" : ""}`} />
+          <DisclosureChevron expanded={expanded} />
         </button>
       </div>
       {expanded ? (

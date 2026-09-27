@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { DisclosureSummary } from "../ui/DisclosureSummary";
 import catalogue from "./catalogue.generated.json";
 import { useTranslate } from "../i18n/context";
 import { control } from "../ui/form";
@@ -24,11 +25,11 @@ export function LicensePage() {
         {entries.map((entry) => (
           <li key={`${entry.category}:${entry.name}`}>
             <details className="group">
-              <summary className="cursor-pointer px-4 py-3 focus-visible:outline-2 focus-visible:outline-accent">
-                <span className="ml-2 break-words text-sm font-medium text-ink">{entry.name}</span>
-                <span className="ml-2 text-xs text-ink-muted">{entry.version}</span>
-                <span className="ml-3 text-xs text-ink-muted">{entry.license}</span>
-              </summary>
+              <DisclosureSummary className="flex-wrap px-4 py-3 focus-visible:outline-2 focus-visible:outline-accent">
+                <span className="ml-0.5 break-words text-sm font-medium text-ink">{entry.name}</span>
+                <span className="ml-0.5 text-xs text-ink-muted">{entry.version}</span>
+                <span className="ml-1.5 text-xs text-ink-muted">{entry.license}</span>
+              </DisclosureSummary>
               <div className="flex flex-col gap-3 border-t border-line p-4">
                 <a href={entry.url} target="_blank" rel="noopener noreferrer" className="self-start break-all text-sm text-accent underline">{entry.url}</a>
                 {entry.notices.map((notice) => (

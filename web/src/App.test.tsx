@@ -483,7 +483,7 @@ describe("App", () => {
     const settings = within(menu).getByRole("region", { name: "Settings" });
     const engine = within(settings).getByRole("link", { name: "Open Engine" });
     expect(engine).toHaveAttribute("href", "/settings/engine");
-    expect(engine.querySelector("use")).toHaveAttribute("href", "#icon-settings");
+    expect(engine.querySelector("[data-icon]")).toHaveAttribute("data-icon", "engine");
 
     await user.click(engine);
     expect(window.location.pathname).toBe("/settings/engine");

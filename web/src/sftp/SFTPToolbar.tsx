@@ -94,7 +94,7 @@ export function SFTPToolbar({
       <div className="flex min-h-11 shrink-0 items-center gap-1 border-b border-line/50 pb-1">
         <SFTPHostPicker aliases={aliases} {...(hosts === undefined ? {} : { hosts })} value={alias} disabled={locked} onChange={onHostChange} compact includeLocal />
         <VPNProfileChip name={vpnProfile} />
-        <button type="button" aria-label={t("sftp.back")} disabled={busy || locked || !browser.canBack} onClick={() => void browser.back()} className="flex size-11 shrink-0 items-center justify-center rounded text-ink-muted active:bg-select-fill disabled:text-ink-faint">←</button>
+        <button type="button" aria-label={t("sftp.back")} disabled={busy || locked || !browser.canBack} onClick={() => void browser.back()} className="flex size-11 shrink-0 items-center justify-center rounded text-ink-muted active:bg-select-fill disabled:text-ink-faint"><Icon name="arrowLeft" className="size-4" /></button>
         {pathEditing ? (
           <form className="flex min-w-0 flex-1 items-center gap-1" onSubmit={(event) => { event.preventDefault(); submitPath(); }}>
             <input ref={pathInput} aria-label={labels.input} value={pathDraft} onChange={(event) => setPathDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") cancelEdit(); }} className="h-11 min-w-0 w-full rounded border border-control-line bg-control px-2 font-mono text-base" />
