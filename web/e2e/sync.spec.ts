@@ -290,7 +290,16 @@ test("shows push, preview, apply, persisted success, and a later failure as dist
         modified: ["config"],
         removed: [],
       };
-      lastOperation = { kind: "push", ...result };
+      // 状態の lastOperation は SyncOperation の形で返す（engine と同じ）。push の結果の
+      // added・modified・removed（ファイルの一覧）をそのまま入れると、画面は応答を
+      // 不正として断り、push に失敗したように見える。
+      lastOperation = {
+        kind: "push",
+        summary,
+        objectCount: result.objectCount,
+        uploadedBytes: result.uploadedBytes,
+        completedAt: result.completedAt,
+      };
       await route.fulfill({
         status: 200,
         contentType: "application/json",
