@@ -28,6 +28,10 @@ type attemptRecord struct {
 	lines []string
 }
 
+// SkipsProgress は、途中の出力（docker build の行など）を記録しないことを表す。
+// 数百行になり、上限の行数から、経路の準備と失敗の行を押し出すためである。
+func (record *attemptRecord) SkipsProgress() {}
+
 // Enabled は、どの深さの行も記録することを表す。
 func (record *attemptRecord) Enabled(connectionlog.Level) bool { return true }
 

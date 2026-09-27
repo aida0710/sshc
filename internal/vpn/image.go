@@ -92,7 +92,9 @@ func (manager *Manager) ensureImage(ctx context.Context, report func(StartPhase)
 		}
 	}
 	started := time.Now()
-	if err := manager.docker.build(ctx, tag, directory); err != nil {
+	connectionlog.Progress(ctx, connectionlog.Full, "docker buildの出力：")
+	eachLine := func(line string) { connectionlog.Progress(ctx, connectionlog.Full, "  %s", line) }
+	if err := manager.docker.build(ctx, tag, directory, eachLine); err != nil {
 		connectionlog.Say(ctx, connectionlog.Brief, "コンテナイメージの作成に失敗しました（%s）。",
 			time.Since(started).Round(time.Second))
 		connectionlog.Say(ctx, connectionlog.Detailed, "docker buildの出力（最後の%d行まで）：", maxShownOutputLines)

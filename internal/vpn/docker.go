@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -133,11 +134,12 @@ func (command dockerCommand) outputWithInput(ctx context.Context, input string, 
 	return command.run(ctx, dockerCall{arguments: arguments, input: input})
 }
 
-// build は、directory からイメージ tag を作る。失敗したときの出力は、呼び出し側が
-// debug2 に写すので、ここでは debug3 に重ねて書かない。
-func (command dockerCommand) build(ctx context.Context, tag, directory string) error {
+// build は、directory からイメージ tag を作る。eachLine は、docker build が書いた行を
+// 書かれるたびに受け取る。失敗したときの出力は、呼び出し側が debug2 に写すので、
+// ここでは debug3 に重ねて書かない。
+func (command dockerCommand) build(ctx context.Context, tag, directory string, eachLine func(line string)) error {
 	_, err := command.run(ctx, dockerCall{
-		arguments: []string{"build", "--tag", tag, directory}, callerShowsFailure: true,
+		arguments: []string{"build", "--tag", tag, directory}, callerShowsFailure: true, eachLine: eachLine,
 	})
 	return err
 }
@@ -203,6 +205,9 @@ type dockerCall struct {
 	input string
 	// mergeOutput は、標準エラーを標準出力と同じ所へ、書かれた順に集める。
 	mergeOutput bool
+	// eachLine は、docker が標準出力と標準エラーに書いた行を、書かれるたびに受け取る。
+	// nil なら渡さない。
+	eachLine func(line string)
 	// callerShowsFailure は、失敗したときの出力を呼び出し側が接続ログに書くことを
 	// 表す。ここでは失敗したことだけを書き、同じ出力を重ねない。
 	callerShowsFailure bool
@@ -221,6 +226,14 @@ func (command dockerCommand) run(ctx context.Context, call dockerCall) (output s
 	var stdout, stderr bytes.Buffer
 	process.Stdout = &limitedWriter{writer: &stdout, remaining: maxDockerOutputBytes}
 	process.Stderr = &limitedWriter{writer: &stderr, remaining: maxDockerOutputBytes}
+	if call.eachLine != nil {
+		splitter := &lineSplitter{emit: call.eachLine}
+		stdoutLines, stderrLines := splitter.stream(), splitter.stream()
+		process.Stdout = io.MultiWriter(process.Stdout, stdoutLines)
+		process.Stderr = io.MultiWriter(process.Stderr, stderrLines)
+		defer stdoutLines.flush()
+		defer stderrLines.flush()
+	}
 	if call.mergeOutput {
 		// 同じ書き先を渡すと、exec は1本のパイプで受けるので、書かれた順が保たれる。
 		process.Stderr = process.Stdout
