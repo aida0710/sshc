@@ -582,6 +582,61 @@ describe("ConnectionsPage", () => {
     expect(screen.getByRole("button", { name: "Connect" })).toBeEnabled();
   });
 
+  // 書き込みは成功したが、ページがまだ一覧を読み直している途中の状態にする。edge は、
+  // その途中で選ぶ別の接続である。
+  function renderWhileTheListReloads() {
+    const edgeHost = { ...overview.hosts[0], identity: { path: "config", alias: "edge" }, patterns: ["edge"], line: 4 };
+    const listed = { ...overview, hosts: [...overview.hosts, edgeHost] };
+    let finishListReload: () => void = () => undefined;
+    vi.mocked(configApi.overview)
+      .mockResolvedValueOnce(listed as never)
+      .mockImplementation(() => new Promise((resolve) => {
+        finishListReload = () => resolve(listed as never);
+      }));
+    vi.mocked(configApi.save).mockResolvedValue({
+      transactionId: "t1", written: ["config"], preview: { operation: "config.save", diffs: [] },
+    } as never);
+    render(<ConnectionsPage {...consoleProps} onInspector={() => undefined} />);
+    return { finishListReload: () => finishListReload() };
+  }
+
+  async function chooseEdgeRightAfterTheWrite(user: ReturnType<typeof userEvent.setup>) {
+    await waitFor(() => expect(configApi.save).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(configApi.overview).toHaveBeenCalledTimes(2));
+    await user.click(screen.getByRole("button", { name: /^edge/ }));
+  }
+
+  it("asks nothing when another connection is chosen right after the sshc settings are saved", async () => {
+    const user = userEvent.setup();
+    const { finishListReload } = renderWhileTheListReloads();
+
+    await user.click(await screen.findByRole("button", { name: /^bastion/ }));
+    await user.click(await screen.findByRole("tab", { name: "sshc" }));
+    await user.selectOptions(screen.getByLabelText("Remote text encoding"), "shift_jis");
+    await user.click(screen.getByRole("button", { name: "Save sshc-only settings" }));
+    await chooseEdgeRightAfterTheWrite(user);
+
+    expect(screen.queryByRole("dialog", { name: "Discard changes" })).not.toBeInTheDocument();
+    await waitFor(() => expect(configApi.host).toHaveBeenCalledWith("config", "edge"));
+    await act(async () => finishListReload());
+  });
+
+  it("asks nothing when another connection is chosen right after a Raw block is saved", async () => {
+    const user = userEvent.setup();
+    const { finishListReload } = renderWhileTheListReloads();
+
+    await user.click(await screen.findByRole("button", { name: /^bastion/ }));
+    await user.click(await screen.findByRole("tab", { name: "Advanced" }));
+    await user.click(screen.getByRole("tab", { name: "Raw" }));
+    await user.type(screen.getByLabelText(/Block text/), "\tCompression yes\n");
+    await user.click(screen.getByRole("button", { name: "Save block" }));
+    await chooseEdgeRightAfterTheWrite(user);
+
+    expect(screen.queryByRole("dialog", { name: "Discard changes" })).not.toBeInTheDocument();
+    await waitFor(() => expect(configApi.host).toHaveBeenCalledWith("config", "edge"));
+    await act(async () => finishListReload());
+  });
+
   it("keeps the sshc draft and says why when the save is rejected", async () => {
     const user = userEvent.setup();
     vi.mocked(configApi.save).mockRejectedValue(new ApiError("metadata_invalid", 400, {

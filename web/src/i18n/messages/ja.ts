@@ -2214,7 +2214,7 @@ export const ja = {
     "基本設定を保存できませんでした。変更は行われていません。エラーを確認するか、再読み込みしてもう一度試してください。",
   "conn.basicRefreshFailed":
     "設定は保存されましたが、更新後のパスワード状態を読み込めませんでした。この接続を再読み込みしてください。",
-  "conn.basicConnectionRefreshFailed":
+  "conn.connectionRefreshFailed":
     "設定は保存されましたが、更新後の接続を読み込めませんでした。この接続を再読み込みしてください。",
   "conn.basicSave": "基本設定を保存",
   "conn.saving": "保存しています…",

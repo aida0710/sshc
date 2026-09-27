@@ -2207,7 +2207,7 @@ export const en = {
     "Basic settings could not be saved. Nothing was changed; review the error or reload and try again.",
   "conn.basicRefreshFailed":
     "The settings were saved, but their updated password status could not be loaded. Reload this connection.",
-  "conn.basicConnectionRefreshFailed":
+  "conn.connectionRefreshFailed":
     "The settings were saved, but the updated connection could not be loaded. Reload this connection.",
   "conn.basicSave": "Save Basic settings",
   "conn.saving": "Saving…",

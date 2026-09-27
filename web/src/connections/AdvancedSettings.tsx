@@ -8,13 +8,16 @@ import { formatValues, parseValues } from "../rules/rules";
 import { identityKey } from "./connectionBrowser";
 import { activateTabFromKeyboard } from "../ui/tabKeyboard";
 import { DraftSaveBar } from "./DraftSaveBar";
+import { useDraftSave } from "./useDraftSave";
+import { useReportDirty } from "./useReportDirty";
 
 type AdvancedSettingsProps = {
   detail: HostDetail;
   area: AdvancedArea;
   onAreaChange: (area: AdvancedArea) => void;
-  onFieldEdits: (edits: FieldEdit[]) => void;
-  onBlockRaw: (raw: string) => void;
+  // onFieldEdits と onBlockRaw は、下書きを保存する。保存できなかったときは reject する。
+  onFieldEdits: (edits: FieldEdit[]) => Promise<void>;
+  onBlockRaw: (raw: string) => Promise<void>;
   disabled: boolean;
   onDirtyChange: (dirty: boolean) => void;
   onDiscardReady?: ((discard: (() => void) | null) => void) | undefined;
@@ -82,16 +85,20 @@ export function AdvancedSettings({
     ),
     [area, detail.form.fields],
   );
-  const fieldDirty = removed.length > 0 || additions.length > 0 || Object.entries(drafts).some(([key, value]) => {
+  // draft は、保存する下書き（ディレクティブの変更と Raw のブロック）をまとめたものである。
+  // どれかを変えたときだけ別の参照になるので、useDraftSave が保存した下書きかを見分けられる。
+  const draft = useMemo(() => ({ drafts, removed, additions, blockRaw }), [drafts, removed, additions, blockRaw]);
+  const { saving, written, save } = useDraftSave({ draft, saved: detail });
+  const fieldDirty = !written && (removed.length > 0 || additions.length > 0 || Object.entries(drafts).some(([key, value]) => {
     const field = detail.form.fields.find((candidate) => fieldKey(candidate) === key);
     return field !== undefined && value !== formatValues(field.values);
-  });
-  const rawDirty = blockRaw !== detail.form.raw;
+  }));
+  const rawDirty = !written && blockRaw !== detail.form.raw;
   const dirty = fieldDirty || rawDirty;
-  const fieldsDisabled = disabled || rawDirty;
-  const rawDisabled = disabled || fieldDirty;
+  const fieldsDisabled = disabled || saving || rawDirty;
+  const rawDisabled = disabled || saving || fieldDirty;
 
-  useEffect(() => onDirtyChange(dirty), [dirty, onDirtyChange]);
+  useReportDirty(dirty, onDirtyChange);
 
   const discard = useCallback(() => {
     setDrafts({});
@@ -123,9 +130,9 @@ export function AdvancedSettings({
           edits.push({ action: "remove", line: field.line });
           continue;
         }
-        const draft = drafts[fieldKey(field)];
-        if (draft === undefined || draft === formatValues(field.values)) continue;
-        edits.push({ action: "set", line: field.line, values: parseValues(draft) });
+        const fieldDraft = drafts[fieldKey(field)];
+        if (fieldDraft === undefined || fieldDraft === formatValues(field.values)) continue;
+        edits.push({ action: "set", line: field.line, values: parseValues(fieldDraft) });
       }
       edits.push(...additions);
     } catch {
@@ -134,7 +141,7 @@ export function AdvancedSettings({
     }
     if (edits.length === 0) return;
     setLocalError("");
-    onFieldEdits(edits);
+    void save(() => onFieldEdits(edits));
   }
 
   function addDirective() {
@@ -342,8 +349,9 @@ export function AdvancedSettings({
 
         {fieldDirty ? <DraftSaveBar
           saveLabel={t("host.saveChanges")}
+          saving={saving}
           saveDisabled={fieldsDisabled}
-          discardDisabled={false}
+          discardDisabled={saving}
           onDiscard={discard}
           onSave={submitFieldEdits}
         /> : null}
@@ -364,10 +372,11 @@ export function AdvancedSettings({
         />
         {rawDirty ? <DraftSaveBar
           saveLabel={t("host.saveBlock")}
+          saving={saving}
           saveDisabled={rawDisabled}
-          discardDisabled={false}
+          discardDisabled={saving}
           onDiscard={discard}
-          onSave={() => onBlockRaw(blockRaw)}
+          onSave={() => void save(() => onBlockRaw(blockRaw))}
         /> : null}
         </div>
       </div>

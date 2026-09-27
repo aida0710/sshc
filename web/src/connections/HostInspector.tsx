@@ -15,6 +15,8 @@ import {
 } from "./hostMetadataDraft";
 import { HostVPNProfileField } from "./HostVPNProfileField";
 import { NoticeList } from "./SavePreview";
+import { useDraftSave } from "./useDraftSave";
+import { useReportDirty } from "./useReportDirty";
 import { AppearancePicker } from "../terminal/AppearancePicker";
 import { BackgroundPicker } from "../terminal/BackgroundPicker";
 import { chooseAppearance } from "../terminal/appearance";
@@ -54,16 +56,14 @@ export function HostInspector({
   // tagsText は、タグの入力欄の文字列である。入力途中のカンマや空白を消さないよう、
   // 下書きのタグとは別に持つ。
   const [tagsText, setTagsText] = useState(() => formatTags(saved.tags));
-  const [saving, setSaving] = useState(false);
-  const [saveFailed, setSaveFailed] = useState(false);
-  const dirty = !sameHostMetadata(draft, saved);
+  const { saving, written, saveFailed, save: saveDraft } = useDraftSave({ draft, saved });
+  const dirty = !written && !sameHostMetadata(draft, saved);
   const notices = [...(detail.form.notices ?? []), ...(detail.effective.notices ?? [])];
   const fromElsewhere = inherited(detail);
 
   const discard = useCallback(() => {
     setDraft(saved);
     setTagsText(formatTags(saved.tags));
-    setSaveFailed(false);
   }, [saved]);
 
   // 別の接続を開いたとき、または保存済みの値が変わったとき（保存したあとを含む）は、
@@ -74,29 +74,16 @@ export function HostInspector({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resetKey]);
 
-  useEffect(() => onDirtyChange?.(dirty), [dirty, onDirtyChange]);
+  useReportDirty(dirty, onDirtyChange);
 
   useEffect(() => {
     onDiscardReady?.(discard);
     return () => onDiscardReady?.(null);
   }, [discard, onDiscardReady]);
 
-  function edit(next: HostMetadata) {
-    setDraft(next);
-    setSaveFailed(false);
-  }
-
-  async function save() {
+  function save() {
     if (!dirty || saving || disabled) return;
-    setSaving(true);
-    setSaveFailed(false);
-    try {
-      await onSave(draft);
-    } catch {
-      setSaveFailed(true);
-    } finally {
-      setSaving(false);
-    }
+    void saveDraft(() => onSave(draft));
   }
 
   return (
@@ -116,12 +103,12 @@ export function HostInspector({
                   ? "#8e8e93" /* palette-exempt: ネイティブコントロール自身の中立色 */
                   : draft.colour
               }
-              onChange={(event) => edit({ ...draft, colour: event.target.value })}
+              onChange={(event) => setDraft({ ...draft, colour: event.target.value })}
               className="h-8 w-14 rounded border border-control-line bg-control"
             />
           </Field>
           {draft.colour === undefined || draft.colour === "" ? null : (
-            <Button className="self-start" onClick={() => edit({ ...draft, colour: "" })}>
+            <Button className="self-start" onClick={() => setDraft({ ...draft, colour: "" })}>
               {t("host.clearColour")}
             </Button>
           )}
@@ -131,7 +118,7 @@ export function HostInspector({
           <div className="flex items-center gap-2">
             <OperatingSystemIcon os={draft.os || draft.detectedOS || ""} />
             <select aria-label={t("host.os")} value={draft.os ?? ""}
-              onChange={(event) => edit({ ...draft, os: event.target.value as NonNullable<HostMetadata["os"]> })}
+              onChange={(event) => setDraft({ ...draft, os: event.target.value as NonNullable<HostMetadata["os"]> })}
               className={control}>
               <option value="">{t("host.osAutomatic")}</option>
               {operatingSystems.map(([value, label]) => <option key={value} value={value}>{value === "server" ? t("host.osGeneric") : label}</option>)}
@@ -143,7 +130,7 @@ export function HostInspector({
           <AppearancePicker
             choices={palettes}
             value={draft.appearance?.palette ?? ""}
-            onChange={(chosen) => edit(chooseAppearance(draft, { palette: chosen }))}
+            onChange={(chosen) => setDraft(chooseAppearance(draft, { palette: chosen }))}
             unchosen={t("terminal.paletteFollowsOverall")}
           />
         </Field>
@@ -152,7 +139,7 @@ export function HostInspector({
           <AppearancePicker
             choices={fonts}
             value={draft.appearance?.font ?? ""}
-            onChange={(chosen) => edit(chooseAppearance(draft, { font: chosen }))}
+            onChange={(chosen) => setDraft(chooseAppearance(draft, { font: chosen }))}
             unchosen={t("terminal.fontFollowsOverall")}
           />
         </Field>
@@ -160,9 +147,9 @@ export function HostInspector({
         <Field label={t("connection.backgroundLabel")} hint={t("connection.backgroundHint")} interactiveChildren>
           <BackgroundPicker
             value={draft.appearance?.background ?? ""}
-            onChange={(chosen) => edit(chooseAppearance(draft, { background: chosen }))}
+            onChange={(chosen) => setDraft(chooseAppearance(draft, { background: chosen }))}
             tint={draft.appearance?.backgroundTint}
-            onTintChange={(chosen) => edit(chooseAppearance(draft, { backgroundTint: chosen }))}
+            onTintChange={(chosen) => setDraft(chooseAppearance(draft, { backgroundTint: chosen }))}
             unchosen={t("terminal.backgroundFollowsOverall")}
           />
         </Field>
@@ -171,7 +158,7 @@ export function HostInspector({
           <select
             value={draft.encoding ?? ""}
             onChange={(event) =>
-              edit(withOptionalChoice(draft, "encoding", event.target.value as NonNullable<HostMetadata["encoding"]> | ""))}
+              setDraft(withOptionalChoice(draft, "encoding", event.target.value as NonNullable<HostMetadata["encoding"]> | ""))}
             className={control}
           >
             <option value="">{t("connection.encodingUTF8")}</option>
@@ -185,7 +172,7 @@ export function HostInspector({
           <select
             value={draft.osc52 ?? ""}
             onChange={(event) =>
-              edit(withOptionalChoice(draft, "osc52", event.target.value as NonNullable<HostMetadata["osc52"]> | ""))}
+              setDraft(withOptionalChoice(draft, "osc52", event.target.value as NonNullable<HostMetadata["osc52"]> | ""))}
             className={control}
           >
             <option value="">{t("connection.osc52Inherit")}</option>
@@ -198,7 +185,7 @@ export function HostInspector({
           detail={detail}
           value={draft.vpn ?? ""}
           profiles={vpnProfiles}
-          onChange={(profile) => edit(withOptionalChoice(draft, "vpn", profile))}
+          onChange={(profile) => setDraft(withOptionalChoice(draft, "vpn", profile))}
         />
 
         <Field label={t("host.tags")}>
@@ -206,7 +193,7 @@ export function HostInspector({
             value={tagsText}
             onChange={(event) => {
               setTagsText(event.target.value);
-              edit({ ...draft, tags: parseTags(event.target.value) });
+              setDraft({ ...draft, tags: parseTags(event.target.value) });
             }}
             className={control}
           />
@@ -216,7 +203,7 @@ export function HostInspector({
           <input
             type="number"
             value={String(draft.order ?? 0)}
-            onChange={(event) => edit({ ...draft, order: Number(event.target.value) || 0 })}
+            onChange={(event) => setDraft({ ...draft, order: Number(event.target.value) || 0 })}
             className={control}
           />
         </Field>
@@ -230,7 +217,7 @@ export function HostInspector({
           saveDisabled={disabled || saving}
           discardDisabled={saving}
           onDiscard={discard}
-          onSave={() => void save()}
+          onSave={save}
         /> : null}
       </section>
 

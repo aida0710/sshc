@@ -593,6 +593,32 @@ test("keeps the saved SSH encoding selected after metadata refresh", async ({
   expect(JSON.parse(await installation.read("sshc/metadata.json")).hosts[0].encoding).toBe("shift_jis");
 });
 
+test("moves to another connection right after the sshc settings are saved, without asking to discard", async ({
+  page,
+  installation,
+}) => {
+  await openBastion(page, installation.url);
+  await page.getByRole("tab", { name: "sshc" }).click();
+  await page.getByLabel("OSC 52 clipboard").selectOption("deny");
+
+  // 書き込みが済んだあと、ページが保存済みの接続を読み直し終える前に、別の接続を選ぶ。
+  let finishReload: () => void = () => undefined;
+  const reloadHeld = new Promise<void>((resolve) => {
+    finishReload = resolve;
+  });
+  await page.route("**/api/v1/config/overview", async (route) => {
+    await reloadHeld;
+    await route.continue();
+  });
+  expect(await clickAndAwait(page, "Save sshc-only settings", "/api/v1/config/save")).toBe(200);
+  await page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "nas" }).click();
+  finishReload();
+
+  await expect(page.getByRole("heading", { name: "nas" })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Discard changes" })).toHaveCount(0);
+  expect(JSON.parse(await installation.read("sshc/metadata.json")).hosts[0].osc52).toBe("deny");
+});
+
 test("re-associates a note whose connection is gone, without guessing", async ({
   page,
   installation,
