@@ -29,13 +29,13 @@ func TestConnectionFailureMessageTranslatesCommonContextErrors(t *testing.T) {
 		err  error
 		want string
 	}{
-		{name: "timeout", err: context.DeadlineExceeded, want: "SSH ハンドシェイクがタイムアウトしました。"},
-		{name: "cancelled", err: context.Canceled, want: "SSH ハンドシェイクをキャンセルしました。"},
-		{name: "detail", err: errors.New("connection reset"), want: "SSH ハンドシェイクに失敗しました：connection reset"},
+		{name: "timeout", err: context.DeadlineExceeded, want: "SSHハンドシェイクがタイムアウトしました。"},
+		{name: "cancelled", err: context.Canceled, want: "SSHハンドシェイクをキャンセルしました。"},
+		{name: "detail", err: errors.New("connection reset"), want: "SSHハンドシェイクに失敗しました。"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if got := connectionFailureMessage("SSH ハンドシェイク", test.err); got != test.want {
+			if got := connectionFailureMessage("SSHハンドシェイク", test.err); got != test.want {
 				t.Fatalf("connectionFailureMessage() = %q, want %q", got, test.want)
 			}
 		})

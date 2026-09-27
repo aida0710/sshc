@@ -22,8 +22,8 @@ func describeAlgorithmOffers(trace *tracer, config *ssh.ClientConfig) {
 
 func describeNegotiatedAlgorithms(trace *tracer, algorithms ssh.NegotiatedAlgorithms) {
 	trace.say(Detailed, "採用された鍵交換：%s、ホスト鍵：%s", algorithms.KeyExchange, algorithms.HostKey)
-	trace.say(Detailed, "クライアント → サーバー：暗号 %s、MAC %s", algorithms.Write.Cipher, negotiatedMAC(algorithms.Write))
-	trace.say(Detailed, "サーバー → クライアント：暗号 %s、MAC %s", algorithms.Read.Cipher, negotiatedMAC(algorithms.Read))
+	trace.say(Detailed, "クライアント → サーバー：暗号%s、MAC %s", algorithms.Write.Cipher, negotiatedMAC(algorithms.Write))
+	trace.say(Detailed, "サーバー → クライアント：暗号%s、MAC %s", algorithms.Read.Cipher, negotiatedMAC(algorithms.Read))
 }
 
 func negotiatedMAC(algorithms ssh.DirectionAlgorithms) string {
