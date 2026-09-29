@@ -1,7 +1,8 @@
 # sshc のVPNコンテナ。依存物だけを含み、sshc由来のものは何も焼かない。
 #
-# 焼くのは agent.sh と backend ごとの手順と、接続1本ぶんの中継（connect）と、
-# openconnect が呼ぶ vpnc-script だけである。どれも秘密を持たない。設定と秘密は、engineが起動後に標準入力で渡し、tmpfsの上にしか
+# 焼くのは agent.sh と backend ごとの手順（strongSwan を使う backend が共通に使う
+# strongswan.sh を含む）と、接続1本ぶんの中継（connect）と、openconnect が呼ぶ
+# vpnc-script と、OpenVPN が呼ぶ openvpn-up だけである。どれも秘密を持たない。設定と秘密は、engineが起動後に標準入力で渡し、tmpfsの上にしか
 # 置かない。
 # 基のイメージは digest で固定する。イメージのタグは agent.sh と Dockerfile の
 # 内容から作るので、tag を追いかけると、同じタグのまま中身の違うイメージが機械
@@ -23,6 +24,15 @@ FROM ubuntu:24.04@sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a
 # そこで取得のときだけ TLS の相手確認を外す。apt は受け取った索引を Ubuntu の
 # archive 鍵の署名で確かめ、パッケージをその索引のハッシュで確かめるので、
 # 通り道の相手が誰であっても、差し替えられた中身は入らない。
+#
+# IKEv2 のために、次のパッケージを入れる。
+#   strongswan-swanctl: 接続を XFRM インターフェースに結び付ける（stroke の
+#     ipsec.conf は if_id を扱えない）。
+#   libcharon-extauth-plugins: EAP-MSCHAPv2。
+#   libstrongswan-standard-plugins: EAP-MSCHAPv2 が使う MD4 と DES、ECDSA の証明書、
+#     AES-GCM（openssl など）。
+#   ca-certificates: VPN サーバーの証明書を公的な認証局で確かめる。apt と同じ手順の
+#     中で入るので、上の apt の取得の相手確認には使えない。
 RUN printf '%s\n' \
        'Types: deb' \
        'URIs: https://snapshot.ubuntu.com/ubuntu/20260920T000000Z/' \
@@ -37,18 +47,18 @@ RUN printf '%s\n' \
        strongswan strongswan-starter xl2tpd ppp \
        openconnect \
        openvpn \
+       strongswan-swanctl libcharon-extauth-plugins libstrongswan-standard-plugins ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 COPY agent.sh /usr/local/bin/sshc-vpn-agent
-# backend ごとの手順、接続1本ぶんの中継、openconnect が呼ぶ script。どれも秘密を
-# 持たず、プロファイルごとにも変わらない。設定を置く tmpfs は noexec なので、
+# backend ごとの手順、接続1本ぶんの中継、openconnect と OpenVPN が呼ぶ script。どれも
+# 秘密を持たず、プロファイルごとにも変わらない。設定を置く tmpfs は noexec なので、
 # 実行するものはイメージ側に置く。
-COPY backend-wireguard.sh backend-l2tp_ipsec.sh backend-openconnect.sh vpnc-script /usr/local/lib/sshc-vpn/
+COPY backend-wireguard.sh backend-l2tp_ipsec.sh backend-openconnect.sh backend-openvpn.sh backend-ikev2.sh \
+     strongswan.sh vpnc-script openvpn-up /usr/local/lib/sshc-vpn/
 COPY connect.sh /usr/local/lib/sshc-vpn/connect
-RUN chmod 0755 /usr/local/bin/sshc-vpn-agent /usr/local/lib/sshc-vpn/vpnc-script /usr/local/lib/sshc-vpn/connect \
-    && chmod 0644 /usr/local/lib/sshc-vpn/backend-*.sh
-# OpenVPN の手順と、OpenVPN が TUN を開いたあとに呼ぶ script。
-COPY backend-openvpn.sh openvpn-up /usr/local/lib/sshc-vpn/
-RUN chmod 0644 /usr/local/lib/sshc-vpn/backend-openvpn.sh && chmod 0755 /usr/local/lib/sshc-vpn/openvpn-up
+RUN chmod 0755 /usr/local/bin/sshc-vpn-agent /usr/local/lib/sshc-vpn/vpnc-script /usr/local/lib/sshc-vpn/openvpn-up \
+       /usr/local/lib/sshc-vpn/connect \
+    && chmod 0644 /usr/local/lib/sshc-vpn/backend-*.sh /usr/local/lib/sshc-vpn/strongswan.sh
 
 ENTRYPOINT ["/usr/local/bin/sshc-vpn-agent"]

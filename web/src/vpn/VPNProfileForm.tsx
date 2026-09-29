@@ -4,6 +4,7 @@ import { useTranslate } from "../i18n/context";
 import { Field, control, hintText, sectionHeading } from "../ui/form";
 import { PasswordField } from "../ui/PasswordField";
 import { Button, Card } from "../ui/surface";
+import { IKEv2ProfileFields } from "./IKEv2ProfileFields";
 import { vpnBackendLabel, vpnBackends, type VPNBackend } from "./vpnBackends";
 import { describeVPNFieldError, type VPNFieldError } from "./vpnFieldErrors";
 import { OpenVPNProfileFields } from "./OpenVPNProfileFields";
@@ -102,7 +103,12 @@ export function VPNProfileForm({
     // 送る前の検査で断られると、どの項目かが分からない。先に項目ごとに確かめる。
     const refused = vpnProfileFieldError(profile) ??
       vpnSecretsFieldError({
-        backend: draft.backend, secondFactor: draft.secondFactor, secrets: draft.secrets, stored, username: draft.username,
+        backend: draft.backend,
+        secondFactor: draft.secondFactor,
+        username: draft.username,
+        ikev2Authentication: draft.ikev2Authentication,
+        secrets: draft.secrets,
+        stored,
       });
     if (refused !== null) {
       setRefusal(refused);
@@ -236,6 +242,8 @@ export function VPNProfileForm({
             onUsername={edit("username")}
             onPassword={editSecret("openvpnPassword")}
           />
+        ) : draft.backend === "ikev2" ? (
+          <IKEv2ProfileFields draft={draft} errorFor={errorFor} onEdit={edit} secretField={secretField} />
         ) : (
           <>
             <Field label={t("vpn.username")} error={errorFor("l2tp.username")}>

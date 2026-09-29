@@ -20,6 +20,7 @@ type Secrets struct {
 	L2TP        *L2TPSecrets
 	OpenConnect *OpenConnectSecrets
 	OpenVPN     *OpenVPNSecrets
+	IKEv2       *IKEv2Secrets
 }
 
 // WireGuardSecrets は、wireguard backend の秘密である。
@@ -53,6 +54,8 @@ const (
 	SecretKeyOpenConnectTOTPSecret = "openconnectTotpSecret"
 	SecretKeyOpenVPNConfig         = "openvpnConfig"
 	SecretKeyOpenVPNPassword       = "openvpnPassword"
+	SecretKeyIKEv2Password         = "ikev2Password"
+	SecretKeyIKEv2PSK              = "ikev2Psk"
 )
 
 // SecretsDocument は、秘密の JSON の形である。Vault の記録と、保存要求の本文が
@@ -65,6 +68,8 @@ type SecretsDocument struct {
 	OpenConnectTOTPSecret string `json:"openconnectTotpSecret,omitempty"`
 	OpenVPNConfig         string `json:"openvpnConfig,omitempty"`
 	OpenVPNPassword       string `json:"openvpnPassword,omitempty"`
+	IKEv2Password         string `json:"ikev2Password,omitempty"`
+	IKEv2PSK              string `json:"ikev2Psk,omitempty"`
 }
 
 // Secrets は、JSON の形を backend ごとの型へ直す。値のある backend の節だけを作る。
@@ -83,6 +88,9 @@ func (document SecretsDocument) Secrets() Secrets {
 	}
 	if document.OpenVPNConfig != "" || document.OpenVPNPassword != "" {
 		secrets.OpenVPN = &OpenVPNSecrets{Config: document.OpenVPNConfig, Password: document.OpenVPNPassword}
+	}
+	if document.IKEv2Password != "" || document.IKEv2PSK != "" {
+		secrets.IKEv2 = &IKEv2Secrets{Password: document.IKEv2Password, PreSharedKey: document.IKEv2PSK}
 	}
 	return secrets
 }
@@ -104,6 +112,10 @@ func (secrets Secrets) Document() SecretsDocument {
 	if secrets.OpenVPN != nil {
 		document.OpenVPNConfig = secrets.OpenVPN.Config
 		document.OpenVPNPassword = secrets.OpenVPN.Password
+	}
+	if secrets.IKEv2 != nil {
+		document.IKEv2Password = secrets.IKEv2.Password
+		document.IKEv2PSK = secrets.IKEv2.PreSharedKey
 	}
 	return document
 }

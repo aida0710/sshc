@@ -3269,6 +3269,8 @@ export interface components {
             openconnectTotpSecret?: string;
             openvpnConfig?: string;
             openvpnPassword?: string;
+            ikev2Password?: string;
+            ikev2Psk?: string;
         };
         VPNBindingRequest: {
             alias: string;
@@ -3277,12 +3279,13 @@ export interface components {
         VPNProfile: {
             name: string;
             /** @enum {string} */
-            backend: "wireguard" | "l2tp_ipsec" | "openconnect" | "openvpn";
+            backend: "wireguard" | "l2tp_ipsec" | "openconnect" | "openvpn" | "ikev2";
             dns?: string[];
             wireguard?: components["schemas"]["WireGuardProfile"];
             l2tp?: components["schemas"]["L2TPProfile"];
             openconnect?: components["schemas"]["OpenConnectProfile"];
             openvpn?: components["schemas"]["OpenVPNProfile"];
+            ikev2?: components["schemas"]["IKEv2Profile"];
         };
         OpenVPNProfile: {
             servers: string[];
@@ -3295,6 +3298,15 @@ export interface components {
             serverCertificate?: string;
             secondFactor?: string;
             approvalWord?: string;
+        };
+        IKEv2Profile: {
+            server: string;
+            authentication: string;
+            identity: string;
+            serverIdentity?: string;
+            caCertificate?: string;
+            ike?: string;
+            esp?: string;
         };
         L2TPProfile: {
             server: string;

@@ -119,11 +119,10 @@ resolvers=$(jq -r 'if .dns then .dns[] else empty end' "$profile" | tr '\n' ' ')
 # どこで止まったかをログへ残す。値は engine が決める。
 deadline=$(jq -r '.deadline' "$profile")
 
+# 読み込むのは知っている方式の手順だけにする。方式の名前は設定から読むので、そのまま
+# パスに使うと、イメージの中の別のファイルを読み込みうる。
 case "$backend" in
-wireguard | l2tp_ipsec | openconnect)
-	. "$backend_directory/backend-$backend.sh"
-	;;
-openvpn)
+wireguard | l2tp_ipsec | openconnect | openvpn | ikev2)
 	. "$backend_directory/backend-$backend.sh"
 	;;
 *)

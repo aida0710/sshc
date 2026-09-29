@@ -39,6 +39,7 @@ type Profile struct {
 	L2TP        *L2TPSettings
 	OpenConnect *OpenConnectSettings
 	OpenVPN     *OpenVPNSettings
+	IKEv2       *IKEv2Settings
 }
 
 // sameRouteAs は、この設定がもう一方と同じ経路を作るかを返す。
@@ -90,6 +91,7 @@ func (profile Profile) foreignSection() string {
 		{L2TPIPsec, "l2tp", profile.L2TP != nil},
 		{OpenConnect, "openconnect", profile.OpenConnect != nil},
 		{OpenVPN, "openvpn", profile.OpenVPN != nil},
+		{IKEv2, "ikev2", profile.IKEv2 != nil},
 	}
 	for _, section := range sections {
 		if section.present && section.backend != profile.Backend {

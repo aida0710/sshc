@@ -48,6 +48,21 @@ const (
 	FailureOpenVPNConfiguration FailureReason = "openvpn_configuration"
 	// FailureOpenVPN は、OpenVPN がほかの理由で接続できなかったことを表す。
 	FailureOpenVPN FailureReason = "openvpn_failed"
+	// FailureIKEAuthentication は、VPN サーバーがこちらの認証を拒否したことを表す
+	// （IKEv2 のユーザー名とパスワード、事前共有鍵、ID）。
+	FailureIKEAuthentication FailureReason = "ike_authentication"
+	// FailureIKEServerUnverified は、VPN サーバーを確かめられなかったことを表す
+	// （サーバーの証明書を信頼できない、サーバーの ID が違う）。
+	FailureIKEServerUnverified FailureReason = "ike_server_unverified"
+	// FailureIKEProposalMismatch は、IKE または ESP の暗号スイートが VPN サーバーと
+	// 合わなかったことを表す。
+	FailureIKEProposalMismatch FailureReason = "ike_proposal_mismatch"
+	// FailureIKENoResponse は、VPN サーバーが応答しなかったことを表す（サーバーの
+	// 指定、UDP の 500 番と 4500 番の到達性）。
+	FailureIKENoResponse FailureReason = "ike_no_response"
+	// FailureXFRMInterface は、IPsec の XFRM インターフェースを作れなかったことを
+	// 表す。Docker の Linux カーネルが対応していない。
+	FailureXFRMInterface FailureReason = "xfrm_interface_unavailable"
 )
 
 // knownFailureReasons は、agent が書いてよい語である。知らない語は読まない。
@@ -58,6 +73,8 @@ var knownFailureReasons = map[FailureReason]bool{
 	FailureTargetIsServer: true, FailureTargetUnreachable: true, FailureTunnelLost: true,
 	FailureOpenVPNAuthentication: true, FailureOpenVPNTLS: true, FailureOpenVPNNoResponse: true,
 	FailureOpenVPNConfiguration: true, FailureOpenVPN: true,
+	FailureIKEAuthentication: true, FailureIKEServerUnverified: true, FailureIKEProposalMismatch: true,
+	FailureIKENoResponse: true, FailureXFRMInterface: true,
 }
 
 // SessionFailure は、経路を用意できなかったことと、その理由である。
