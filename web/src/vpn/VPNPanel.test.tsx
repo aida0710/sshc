@@ -174,6 +174,29 @@ describe("VPNPanel", () => {
     expect(createVPNProfile.mock.calls[0]?.[0]).not.toHaveProperty("target");
   });
 
+  // 利用者が知っているのは製品の名前なので、プロトコルは製品名で選べる。送るのは
+  // openconnect のプロトコル名のままである。
+  it("offers OpenConnect protocols by product name and sends the protocol name", async () => {
+    const user = userEvent.setup();
+    const createVPNProfile = vi.fn().mockResolvedValue(overview());
+    render(<VPNPanel api={buildApi({ createVPNProfile })} />);
+    const form = await screen.findByRole("region", { name: "Add a VPN profile" });
+
+    await user.selectOptions(within(form).getByLabelText("Type"), "openconnect");
+    const protocol = within(form).getByLabelText("Protocol the device speaks");
+    expect(within(protocol).getByRole("option", { name: "Palo Alto Networks GlobalProtect (gp)" })).toBeInTheDocument();
+    expect(within(protocol).getByRole("option", { name: "Fortinet FortiGate (fortinet)" })).toBeInTheDocument();
+    await user.type(within(form).getByLabelText("Name"), "office");
+    await user.type(within(form).getByLabelText("VPN server"), "vpn.example.jp");
+    await user.type(within(form).getByLabelText("VPN username"), "tester");
+    await user.type(within(form).getByLabelText("VPN password"), "a password");
+    await user.selectOptions(protocol, "Palo Alto Networks GlobalProtect (gp)");
+    await user.click(within(form).getByRole("button", { name: "Save" }));
+
+    const [profile] = createVPNProfile.mock.calls[0] ?? [];
+    expect(profile.openconnect).toEqual(expect.objectContaining({ protocol: "gp" }));
+  });
+
   it("waits for approval without sending a second answer when the device asks nothing", async () => {
     const user = userEvent.setup();
     const createVPNProfile = vi.fn().mockResolvedValue(overview());
