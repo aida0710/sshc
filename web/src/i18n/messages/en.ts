@@ -1173,7 +1173,7 @@ export const en = {
   "vpn.password": "VPN password",
   "vpn.psk": "IPsec pre-shared key",
   "vpn.protocol": "Protocol the device speaks",
-  "vpn.protocolHint": "Leave anyconnect if unsure; ocserv speaks it too.",
+  "vpn.protocolHint": "Choose the product your VPN server runs. Leave Cisco AnyConnect if unsure; ocserv speaks it too.",
   "vpn.serverCertificate": "Server certificate fingerprint",
   "vpn.serverCertificateHint": "Only for a self-signed device (a value starting with `sha256:` or `pin-sha256:`). Blank verifies normally.",
   "vpn.secondFactor": "Second factor",

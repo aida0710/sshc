@@ -1175,7 +1175,7 @@ export const ja = {
   "vpn.password": "VPNのパスワード",
   "vpn.psk": "IPsecの事前共有鍵",
   "vpn.protocol": "プロトコル",
-  "vpn.protocolHint": "分からない場合はanyconnectのままにしてください。サーバーがocservの場合もanyconnectを選択してください。",
+  "vpn.protocolHint": "VPNサーバーの製品を選んでください。分からない場合は、Cisco AnyConnectのままにしてください。サーバーがocservの場合もCisco AnyConnectを選択します。",
   "vpn.serverCertificate": "サーバー証明書のフィンガープリント",
   "vpn.serverCertificateHint": "自己署名証明書を使うサーバーの場合だけ指定します（`sha256:`または`pin-sha256:`で始まる値）。空欄なら通常どおり検証します。",
   "vpn.secondFactor": "二要素認証",
