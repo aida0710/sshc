@@ -13,8 +13,12 @@ export type VPNLogs = components["schemas"]["VPNLogs"];
 // ひとつのSSH接続だけを専用のVPNへ通す経路。トンネルはengineが持つコンテナの
 // 中にあり、ブラウザは設定と状態だけを扱う。シークレットは保存のときだけ送り、
 // 応答には現れない。接続へプロファイルを付けるのは、接続の設定（Connections）である。
+// VPNOverviewOptions は、一覧の読み方である。waitForRoutes が false なら、sshcエンジンは
+// 経路の状態を docker から読むのを待たずに答え、まだ確かめていなければ checking を付ける。
+export type VPNOverviewOptions = { waitForRoutes?: boolean };
+
 export type VPNApi = {
-  vpnOverview(): Promise<VPNOverview>;
+  vpnOverview(options?: VPNOverviewOptions): Promise<VPNOverview>;
   // createVPNProfile は新しいプロファイルを作る。同じ名前があれば engine が断る。
   createVPNProfile(profile: VPNProfile, secrets: VPNSecrets): Promise<VPNOverview>;
   // saveVPNProfile は保存済みのプロファイルを更新する。送らなかったシークレットは
@@ -44,8 +48,9 @@ function profilePath(name: string): string {
 const locallyExplainedVPNFailures = vpnProblemCodes;
 
 export const vpnApi: VPNApi = {
-  async vpnOverview() {
-    return validateOverview(await apiClient.read("/api/v1/vpn"));
+  async vpnOverview(options = {}) {
+    const path = options.waitForRoutes === false ? "/api/v1/vpn?waitForRoutes=false" : "/api/v1/vpn";
+    return validateOverview(await apiClient.read(path));
   },
   async createVPNProfile(profile, secrets) {
     return validateOverview(

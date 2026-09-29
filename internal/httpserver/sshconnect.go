@@ -8,8 +8,22 @@ import (
 	"sshc/internal/keys"
 	"sshc/internal/sshclient"
 	"sshc/internal/terminal"
+	"sshc/internal/vpn"
 	"sshc/internal/vpnrefusal"
 )
+
+// problemVPNRouteDisconnected は、利用者が切断した VPN 経路のために、自動再接続を
+// 止めたことを表す語である。
+const problemVPNRouteDisconnected = "vpn_route_disconnected"
+
+// reconnectStopNotice は、再接続を止めた理由のうち、既定の文（設定を直すよう促す）が
+// 当てはまらないものについて、ターミナルへ書く文を返す。
+func reconnectStopNotice(problem string) string {
+	if problem == problemVPNRouteDisconnected {
+		return "VPN経路が切断されたため、自動再接続を停止しました。"
+	}
+	return ""
+}
 
 // Connector は、alias ひとつ分の対話セッションを開く。
 //
@@ -44,6 +58,10 @@ func connectProblem(err error) (string, bool) {
 		return "authentication_cancelled", true
 	case errors.Is(err, keys.ErrPassphraseRequired), errors.Is(err, keys.ErrWrongPassphrase):
 		return "key_passphrase_required", true
+	}
+	// 利用者が切断した VPN 経路は、自動再接続では起動し直さない。
+	if errors.Is(err, vpn.ErrRouteDisconnected) {
+		return problemVPNRouteDisconnected, true
 	}
 	// VPN の経路を用意できない理由のうち、設定を直さない限り同じ理由で断られる
 	// ものは、再接続を繰り返さない。理由の文は接続ログに出ている。

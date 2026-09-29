@@ -143,7 +143,7 @@ Automation: --expect REGEX | --read-for D | --script FILE|-
 		{Name: "rename", Help: "usage:\n  sshc vpn rename <name> <new-name> [--json]\n\nRename a profile. Its secrets and the bindings that named it move with it, and the running route under the old name is closed.\n"},
 		{Name: "logs", Help: "usage:\n  sshc vpn logs <name> [--json]\n\nPrint what the sshc engine recorded while preparing the route, followed by the container's recent output, with every stored secret masked. This is where a route that will not come up explains itself.\n"},
 		{Name: "up", Help: "usage:\n  sshc vpn up <name> [--json]\n\nOpen the route and wait until its relay is listening.\n"},
-		{Name: "down", Help: "usage:\n  sshc vpn down <name> [--json]\n\nClose the route.\n"},
+		{Name: "down", Help: "usage:\n  sshc vpn down <name> [--json]\n\nDisconnect the route. The connections that use it are closed as well, and Terminal does not reconnect them automatically.\n"},
 		{Name: "proxy", Help: "usage:\n  sshc vpn proxy <name> <host> <port>\n\nPipe standard input and output to host:port through the route, for use as an OpenSSH ProxyCommand (sshc vpn proxy <name> %h %p) so that the host's own ssh, scp and git can use it.\n"},
 		{Name: "bind", Help: "usage:\n  sshc vpn bind <alias> <name> [--json]\n\nReach one saved connection through the named profile.\n"},
 		{Name: "unbind", Help: "usage:\n  sshc vpn unbind <alias> [--json]\n\nStop routing that connection through a VPN.\n"},

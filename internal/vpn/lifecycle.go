@@ -32,6 +32,12 @@ type sessionState struct {
 	// failureLogs は、最後に用意できなかったときのコンテナのログである（秘密は
 	// 伏せてある）。そのコンテナはもう無いので、ここにしか残っていない。
 	failureLogs string
+	// disconnected は、利用者がこの経路を切断し、まだ起動し直していないことを表す。
+	// 切断で切れた接続の自動再接続が、経路を起動し直さないようにするためである。
+	disconnected bool
+	// changedAt は、sshcエンジンがこの経路を最後に起動・停止したときの変更の番号
+	// である（Manager.changes）。これより前に読み始めた docker の状態より新しい。
+	changedAt uint64
 
 	// phase は、経路を用意しているあいだの段階である。起動中は transition が
 	// 握られたままなので、段階は鍵を使わずに読み書きする。
@@ -171,6 +177,42 @@ func (state *sessionState) release(now time.Time) {
 	if state.open == 0 {
 		state.idleSince = now
 	}
+}
+
+// setDisconnected は、利用者がこの経路を切断したままかどうかを記録する。
+func (state *sessionState) setDisconnected(disconnected bool) {
+	state.use.Lock()
+	defer state.use.Unlock()
+	state.disconnected = disconnected
+}
+
+// isDisconnected は、利用者がこの経路を切断し、まだ起動し直していないかを返す。
+func (state *sessionState) isDisconnected() bool {
+	state.use.Lock()
+	defer state.use.Unlock()
+	return state.disconnected
+}
+
+// noteChanged は、sshcエンジンがこの経路を起動・停止したときの変更の番号を記録する。
+func (state *sessionState) noteChanged(change uint64) {
+	state.use.Lock()
+	defer state.use.Unlock()
+	state.changedAt = change
+}
+
+// changedSince は、変更の番号が since より後に、sshcエンジンがこの経路を起動・停止
+// したかを返す。
+func (state *sessionState) changedSince(since uint64) bool {
+	state.use.Lock()
+	defer state.use.Unlock()
+	return state.changedAt > since
+}
+
+// openConnections は、この経路を通っている接続と予約の数を返す。
+func (state *sessionState) openConnections() int {
+	state.use.Lock()
+	defer state.use.Unlock()
+	return state.open
 }
 
 // idleFor は、接続が一本も無い状態が続いている長さを返す。一本でも通っていれば

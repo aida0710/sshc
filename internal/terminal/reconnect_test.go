@@ -63,14 +63,17 @@ type openSpy struct {
 	mutex     sync.Mutex
 	processes []*fakeProcess
 	sizes     []terminal.Size
+	// automatic は、それぞれの呼び出しが自動再接続の試みだったかである。
+	automatic []bool
 	calls     int
 	failUpTo  int
 }
 
-func (s *openSpy) open(_ context.Context, size terminal.Size) (terminal.Process, error) {
+func (s *openSpy) open(ctx context.Context, size terminal.Size) (terminal.Process, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	s.sizes = append(s.sizes, size)
+	s.automatic = append(s.automatic, terminal.IsAutomaticReconnect(ctx))
 	s.calls++
 	if s.calls > 1 && s.calls <= s.failUpTo {
 		return nil, context.DeadlineExceeded
@@ -93,6 +96,12 @@ func (s *openSpy) count() int {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	return s.calls
+}
+
+func (s *openSpy) automaticAt(index int) bool {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	return index < len(s.automatic) && s.automatic[index]
 }
 
 func (s *openSpy) sizeAt(index int) terminal.Size {
@@ -782,5 +791,70 @@ func TestStopReconnectingDuringTheHandshakeEndsTheSessionInsteadOfDroppingInput(
 	}
 	if _, err := session.Write([]byte("ls\r")); !errors.Is(err, terminal.ErrExited) {
 		t.Fatalf("Write after stop = %v, want ErrExited", err)
+	}
+}
+
+// 自動再接続の試みだけに印が付く。最初に開くときと［再接続］の操作は、利用者が
+// いま接続を求めているので印を付けない。接続を開く側は、これを見て、利用者が
+// 止めたもの（切断した VPN 経路など）を自動再接続では起動し直さない。
+func TestOnlyAutomaticReconnectAttemptsAreMarked(t *testing.T) {
+	spy := &openSpy{}
+	registry, _ := newFastRegistry()
+	session, err := registry.Open(context.Background(), terminal.Spec{
+		Kind: terminal.KindSSH, Alias: "gateway", Title: "gateway", Open: spy.open,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	spy.at(0).exit(terminal.ExitInfo{Code: terminal.TransportLost})
+	waitFor(t, func() bool { return spy.count() >= 2 })
+	spy.at(1).exit(terminal.ExitInfo{Code: 0})
+	waitFor(t, func() bool { return !session.Live() })
+	if _, err := registry.Reconnect(context.Background(), session.ID()); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, func() bool { return spy.count() >= 3 })
+
+	for index, want := range []bool{false, true, false} {
+		if got := spy.automaticAt(index); got != want {
+			t.Errorf("open #%d automatic = %v, want %v", index, got, want)
+		}
+	}
+}
+
+// 再接続を止めたときの1行は、理由ごとに差し替えられる。差し替えが無い理由には、
+// 設定を直すよう促す既定の文を書く。
+func TestTheReconnectStopNoticeFollowsTheReason(t *testing.T) {
+	for _, test := range []struct {
+		problem string
+		want    string
+	}{
+		{"vpn_route_disconnected", "VPN経路が切断されたため"},
+		{"host_key_changed", "設定を直さない限り同じ理由で失敗するため"},
+	} {
+		t.Run(test.problem, func(t *testing.T) {
+			spy := &readyOpenSpy{}
+			registry, _ := newFastRegistry()
+			session, err := registry.Open(context.Background(), terminal.Spec{
+				Kind: terminal.KindSSH, Alias: "gateway", Title: "gateway", Open: spy.open,
+				ReconnectError: func(error) (bool, string) { return false, test.problem },
+				ReconnectStopNotice: func(problem string) string {
+					if problem == "vpn_route_disconnected" {
+						return "VPN経路が切断されたため、自動再接続を停止しました。"
+					}
+					return ""
+				},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			spy.at(0).finishOpen(errors.New("refused"))
+			spy.at(0).exit(terminal.ExitInfo{Code: 255})
+
+			waitFor(t, func() bool { return !session.Live() })
+			if output := string(snapshotOf(session)); !strings.Contains(output, test.want) {
+				t.Fatalf("output = %q, want %q", output, test.want)
+			}
+		})
 	}
 }
