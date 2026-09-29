@@ -92,12 +92,13 @@ var androidFieldIntent = map[string]string{
 	"DefaultPort": "default: native WebView は空きポートを使い、desktopの固定originを共有しない",
 
 	// 空で既定に落ちるのが正しいもの。
-	"ScanHostKeys":    "default: internal/sshclient がプロセス内で SSH 通信する",
-	"Probe":           "default: 同上",
-	"RemoteRun":       "default: 同上",
-	"TerminalStarter": "default: 本物の PTY を確保する。Android では /system/bin/sh",
-	"SessionNow":      "default: time.Now",
-	"ShutdownTimeout": "default: app が決める既定値",
+	"ScanHostKeys":      "default: internal/sshclient がプロセス内で SSH 通信する",
+	"Probe":             "default: 同上",
+	"RemoteRun":         "default: 同上",
+	"TerminalStarter":   "default: 本物の PTY を確保する。Android では /system/bin/sh",
+	"DockerEnvironment": "default: Environ から求めた環境。Android に docker は無く、VPN の一覧は「使用できない」を返す",
+	"SessionNow":        "default: time.Now",
+	"ShutdownTimeout":   "default: app が決める既定値",
 }
 
 func TestEveryDependencyOfTheAndroidEngineIsADecision(t *testing.T) {
