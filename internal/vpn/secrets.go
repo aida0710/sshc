@@ -9,8 +9,10 @@ import (
 // 作られ、同時に回し、同時に消えるので、backend ごとに分けて持つと、プロファイルを
 // 作る・改名する・消すたびに複数件の整合を取ることになる。
 //
-// 記録の JSON のキーは v0.38.0 から変えていない。Vault は端末のあいだで同期され、
-// 古い版が同じ記録を読む。Go の型との対応は、この file の Encode と Decode に閉じる。
+// 記録の JSON のキーは、足すことはあっても、意味を変えない。Vault は端末のあいだで同期され、
+// 古い版が同じ記録を読む。v0.40.0 までの WireGuard の秘密鍵（wireguardPrivateKey）は、
+// 設定ファイル（wireguardConfig）の形で保存し直すまで読む。Go の型との対応は、この file の
+// Encode と Decode に閉じる。
 
 // Secrets は、プロファイルの秘密である。Vaultから読み、標準入力でコンテナへ渡す。
 //
@@ -21,11 +23,6 @@ type Secrets struct {
 	OpenConnect *OpenConnectSecrets
 	OpenVPN     *OpenVPNSecrets
 	IKEv2       *IKEv2Secrets
-}
-
-// WireGuardSecrets は、wireguard backend の秘密である。
-type WireGuardSecrets struct {
-	PrivateKey string
 }
 
 // L2TPSecrets は、l2tp_ipsec backend の秘密である。
@@ -47,7 +44,8 @@ type OpenConnectSecrets struct {
 // 記録と API の本文で使う、秘密ひとつずつの JSON のキーである。CLI は秘密を Go の
 // 文字列にせずに本文を組み立てるので、型ではなくキーの名前を共有する。
 const (
-	SecretKeyWireGuardPrivateKey   = "wireguardPrivateKey"
+	// SecretKeyWireGuardConfig は、WireGuard の設定ファイル（鍵を含む本文）である。
+	SecretKeyWireGuardConfig       = "wireguardConfig"
 	SecretKeyL2TPPassword          = "l2tpPassword"
 	SecretKeyIPsecPSK              = "ipsecPsk"
 	SecretKeyOpenConnectPassword   = "openconnectPassword"
@@ -61,7 +59,7 @@ const (
 // SecretsDocument は、秘密の JSON の形である。Vault の記録と、保存要求の本文が
 // この形を使う。空の項目は「値が無い」を表す。
 type SecretsDocument struct {
-	WireGuardPrivateKey   string `json:"wireguardPrivateKey,omitempty"`
+	WireGuardConfig       string `json:"wireguardConfig,omitempty"`
 	L2TPPassword          string `json:"l2tpPassword,omitempty"`
 	IPsecPSK              string `json:"ipsecPsk,omitempty"`
 	OpenConnectPassword   string `json:"openconnectPassword,omitempty"`
@@ -75,8 +73,8 @@ type SecretsDocument struct {
 // Secrets は、JSON の形を backend ごとの型へ直す。値のある backend の節だけを作る。
 func (document SecretsDocument) Secrets() Secrets {
 	var secrets Secrets
-	if document.WireGuardPrivateKey != "" {
-		secrets.WireGuard = &WireGuardSecrets{PrivateKey: document.WireGuardPrivateKey}
+	if document.WireGuardConfig != "" {
+		secrets.WireGuard = &WireGuardSecrets{Config: document.WireGuardConfig}
 	}
 	if document.L2TPPassword != "" || document.IPsecPSK != "" {
 		secrets.L2TP = &L2TPSecrets{Password: document.L2TPPassword, PreSharedKey: document.IPsecPSK}
@@ -99,7 +97,7 @@ func (document SecretsDocument) Secrets() Secrets {
 func (secrets Secrets) Document() SecretsDocument {
 	var document SecretsDocument
 	if secrets.WireGuard != nil {
-		document.WireGuardPrivateKey = secrets.WireGuard.PrivateKey
+		document.WireGuardConfig = secrets.WireGuard.Config
 	}
 	if secrets.L2TP != nil {
 		document.L2TPPassword = secrets.L2TP.Password
@@ -136,4 +134,22 @@ func DecodeSecrets(stored string) (Secrets, error) {
 		return Secrets{}, fmt.Errorf("%w: %w", ErrSecrets, err)
 	}
 	return document.Secrets(), nil
+}
+
+// fieldsRecord は、v0.40.0 までの項目の形の WireGuard のプロファイルの記録のうち、設定ファイルの
+// 形には無い項目である。
+type fieldsRecord struct {
+	WireGuardPrivateKey string `json:"wireguardPrivateKey"`
+}
+
+// DecodeWireGuardFieldsPrivateKey は、v0.40.0 までの項目の形の WireGuard のプロファイルの
+// 記録から、秘密鍵を取り出す。記録に無ければ空を返す。
+//
+// 保存し直すと記録は設定ファイルの形になり、この項目は書かれない。
+func DecodeWireGuardFieldsPrivateKey(stored string) (string, error) {
+	var record fieldsRecord
+	if err := json.Unmarshal([]byte(stored), &record); err != nil {
+		return "", fmt.Errorf("%w: %w", ErrSecrets, err)
+	}
+	return record.WireGuardPrivateKey, nil
 }

@@ -154,11 +154,12 @@ if [ -n "$resolvers" ]; then
 fi
 
 # connect が読む経路の控え。秘密は書かない。値はどれも engine と backend が
-# 形を確かめたもの（方式の名前、interface、IPv4 アドレス）だけである。
+# 形を確かめたもの（方式の名前、interface、IPv4 アドレス）だけである。サーバーの
+# アドレスは、WireGuard の Peer が複数あれば空白で区切って並ぶので、引用符で囲む。
 {
 	printf 'backend=%s\n' "$backend"
 	printf 'interface=%s\n' "$interface"
-	printf 'server_address=%s\n' "${server_address:-}"
+	printf "server_address='%s'\n" "${server_address:-}"
 	printf "resolvers='%s'\n" "$resolvers"
 } >"$runtime/route.env"
 

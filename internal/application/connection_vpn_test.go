@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -40,13 +41,9 @@ func serviceWithVPNMetadata(t *testing.T, metadata Metadata) *Service {
 
 func labProfile() VPNProfile {
 	return VPNProfile{
-		Name:    "lab",
-		Backend: vpn.WireGuard,
-		WireGuard: &WireGuardProfile{
-			Server:        "vpn.example.jp:51820",
-			PeerPublicKey: "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
-			Address:       "10.9.9.2/32",
-		},
+		Name:      "lab",
+		Backend:   vpn.WireGuard,
+		WireGuard: &WireGuardProfile{Servers: []string{"vpn.example.jp"}},
 	}
 }
 
@@ -79,7 +76,7 @@ func TestAStoredProfileBecomesTheRouteDefinition(t *testing.T) {
 	if err != nil {
 		t.Fatalf("VPNProfile = %v", err)
 	}
-	if profile.WireGuard == nil || profile.WireGuard.Server.Port != 51820 {
+	if profile.WireGuard == nil || !slices.Equal(profile.WireGuard.Servers, []string{"vpn.example.jp"}) {
 		t.Fatalf("wireguard = %+v", profile.WireGuard)
 	}
 	listed, err := service.VPNProfiles()

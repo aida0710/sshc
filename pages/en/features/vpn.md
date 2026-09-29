@@ -42,15 +42,15 @@ Create one from the VPN screen or with `sshc vpn add <name>`.
 | Field | Meaning |
 |---|---|
 | Type | WireGuard, L2TP/IPsec, OpenConnect (Cisco AnyConnect, ocserv, GlobalProtect, FortiGate, Ivanti Connect Secure and more), OpenVPN, or IKEv2/IPsec |
-| DNS inside the VPN | Only for connections whose `HostName` is a name. Up to three IPv4 addresses |
-| VPN server | `host:port` for WireGuard, a hostname or address for L2TP/IPsec, OpenConnect and IKEv2/IPsec. OpenVPN reads it from `remote` in the configuration file |
-| Secrets | A private key for WireGuard; the VPN password and IPsec pre-shared key for L2TP/IPsec; the VPN password for OpenConnect; the configuration file (.ovpn) and, when it asks for one, the VPN password for OpenVPN; the VPN password or the IPsec pre-shared key for IKEv2/IPsec |
+| DNS inside the VPN | Only for connections whose `HostName` is a name. Up to three IPv4 addresses. WireGuard takes them from `DNS` in its configuration file |
+| VPN server | A hostname or address for L2TP/IPsec, OpenConnect and IKEv2/IPsec. WireGuard reads it from `Endpoint`, and OpenVPN from `remote`, in the configuration file |
+| Secrets | The whole configuration file for WireGuard; the VPN password and IPsec pre-shared key for L2TP/IPsec; the VPN password for OpenConnect; the configuration file (.ovpn) and, when it asks for one, the VPN password for OpenVPN; the VPN password or the IPsec pre-shared key for IKEv2/IPsec |
 
-Secrets are kept in the vault. They are never returned to the screen or the API.
+Secrets are encrypted and kept in the vault. Opening **Edit** on the VPN screen takes the stored secrets out of the vault and fills them into their fields; passwords and similar fields stay masked until **Show** is pressed. Nothing is taken out while the vault is locked. No other screen or API response, such as the list, a save or the logs, carries a secret.
 
 Creating and editing are separate operations. Creating a profile whose name is already taken is refused and changes nothing: to change its settings, use **Edit** on the VPN screen or `sshc vpn edit <name>`; to change only its name, rename it. If the vault still holds a secret under the same name, creating replaces it with the secret you entered instead of inheriting it.
 
-When editing, a secret left empty keeps its stored value, so settings can be changed without entering the secrets again. Changing the type drops the old type's secrets and asks for the new type's. `sshc vpn edit` starts every prompt from the saved value, and `-` clears an optional setting. Settings and secrets are saved in one write; one is never changed without the other.
+When editing, the VPN screen opens with the stored secrets in their fields, and saving without changing them saves the same values. If they could not be taken out, for example because the vault is locked, the fields are empty, and a secret left empty keeps its stored value. `sshc vpn edit` never shows a stored secret; a secret left empty there keeps its stored value, so settings can be changed without entering the secrets again. Changing the type drops the old type's secrets and asks for the new type's. `sshc vpn edit` starts every prompt from the saved value, and `-` clears an optional setting. Settings and secrets are saved in one write; one is never changed without the other. A route that is already open picks up the change at the next connection: if the settings or the secrets changed, its container is rebuilt then. Rebuilding cuts the connections that went through the old container; as the user did not disconnect the route, the Terminal reconnects them on its own.
 
 A value that cannot be accepted is reported with the field and the reason (missing, wrongly written, over a limit and so on), both on the screen and by `sshc vpn add`.
 
@@ -89,6 +89,32 @@ Either way the route is given two minutes, which is what noticing a notification
 The TOTP seed is kept in the vault and the code is generated just before it is handed to the container. Neither the seed nor the code appears in `docker logs` or on screen.
 
 A setup that requires a browser-based SAML login, such as Duo's Universal Prompt, is not supported. There is no browser in the container and the engine does not stand in for you.
+
+### WireGuard configuration files
+
+WireGuard is set up by editing its configuration file (the wg-quick form, with `[Interface]` and `[Peer]`) directly. On the VPN screen, paste the file or load it with **Choose a file**; `sshc vpn add` asks for its path. Several `[Peer]` sections, `AllowedIPs`, `PresharedKey`, `PersistentKeepalive`, `MTU`, `Endpoint` and the rest can all be written.
+
+The file holds `PrivateKey` and `PresharedKey`, so the whole file, exactly as written, is encrypted and kept in the vault as a secret, the same as an OpenVPN configuration file. Only the `Endpoint` servers and `DNS` are also kept as settings that are not secret, because they are needed while the vault is locked: the servers are shown in the list, and `DNS` decides whether a connection whose `HostName` is a name can use the route. Opening **Edit** on the VPN screen shows the stored file as it is, keys included. `sshc vpn edit` asks for the path of a new file; a blank answer keeps the stored one.
+
+This is how each item is used. sshc does not run wg-quick; WireGuard is given only what `wg setconf` reads.
+
+| Item | Use |
+|---|---|
+| `PrivateKey`, `ListenPort`, `FwMark` | Given to WireGuard |
+| `PublicKey`, `PresharedKey`, `Endpoint`, `AllowedIPs` | Given to WireGuard |
+| `PersistentKeepalive` | Given to WireGuard. A `[Peer]` with an `Endpoint` and no keepalive gets 25 seconds. Values over 120 seconds are refused |
+| `Address` | The tunnel's address. At least one IPv4 address is needed; IPv6 addresses are not used |
+| `DNS` | The DNS servers inside the VPN. Up to three IPv4 addresses, each inside some `[Peer]`'s `AllowedIPs`. IPv6 addresses and search domains are not used |
+| `MTU` | The tunnel's MTU (576 to 65535) |
+| `Table` | Only `off` is accepted; any other value changes routes |
+| `SaveConfig` | Only `false` is accepted; `true` is decided by sshc |
+| `PreUp`, `PostUp`, `PreDown`, `PostDown` | Refused, because they run commands |
+
+An item that cannot be used, or one written in a wrong form, is reported on the screen and by `sshc vpn add` with its line and name.
+
+`AllowedIPs` is how WireGuard chooses the `[Peer]` a packet goes to. sshc installs no routes for it: as with the other types, only the targets your connections use get a route. A target outside the `AllowedIPs` of every `[Peer]` is refused with that reason, because WireGuard would not send its packets anywhere. Writing `AllowedIPs = 0.0.0.0/0` does not change the container's default route.
+
+Profiles created up to v0.40.0 with a server, a peer public key and a tunnel address keep working as they are. When the route starts, and when **Edit** is opened on the VPN screen, a configuration file is built from those fields and the private key in the vault, with `AllowedIPs = 0.0.0.0/0` and `PersistentKeepalive = 25` added so that it reaches the same targets as before. Nothing has to be entered again. Saving the profile again, on the VPN screen or with `sshc vpn edit`, stores the built (or edited) file in the vault and removes the old fields and the old private-key entry. Once sshc is updated, its metadata.json can no longer be read by sshc v0.40.0 or earlier.
 
 ### OpenVPN configuration files
 
@@ -212,6 +238,7 @@ When the VPN is up but the target cannot be reached, the terminal and `sshc <ali
 |---|---|
 | The target's name could not be resolved by the DNS servers inside the VPN | The profile's DNS servers and the connection's `HostName` |
 | The target did not answer or refused the connection | The connection's `HostName` and `Port`, and whether its SSH server is running |
+| The destination is outside the AllowedIPs of every WireGuard [Peer] | `AllowedIPs` in the configuration file, and the connection's `HostName` |
 | The target is the VPN server itself | The VPN server cannot be reached through its own VPN |
 
 When the failure will repeat until a setting is fixed (no VPN secret saved, Docker not running and so on), the terminal does not keep reconnecting.

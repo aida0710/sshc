@@ -124,14 +124,6 @@ func isASCIIAlphanumeric(character rune) bool {
 		character >= '0' && character <= '9'
 }
 
-// validatePort は、TCP/UDP のポート番号として使えるかを確かめる。
-func validatePort(kind error, field string, port int) error {
-	if port <= 0 || port > 65535 {
-		return fieldError(kind, field, ReasonOutOfRange)
-	}
-	return nil
-}
-
 // validateRoutableIPv4 は、コンテナの中で /32 の経路を作れる IPv4 アドレスかを確かめる。
 func validateRoutableIPv4(kind error, field string, address netip.Addr) error {
 	if !address.Is4() {

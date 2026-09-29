@@ -61,6 +61,23 @@ func (s *Service) VPNProfile(name string) (vpn.Profile, error) {
 	return vpn.Profile{}, fmt.Errorf("%w: %s", ErrUnknownVPNProfile, name)
 }
 
+// StoredVPNProfile は、名前で保存済みのVPNプロファイルを、metadata.json に書いた形で返す。
+//
+// WireGuard の v0.40.0 までの項目は、この形にだけある。設定ファイルを組み立てる手順
+// （internal/vpnprofile）が読む。
+func (s *Service) StoredVPNProfile(name string) (VPNProfile, error) {
+	stored, _, err := s.metadata.Load()
+	if err != nil {
+		return VPNProfile{}, err
+	}
+	for _, profile := range stored.VPNProfiles {
+		if profile.Name == name {
+			return profile, nil
+		}
+	}
+	return VPNProfile{}, fmt.Errorf("%w: %s", ErrUnknownVPNProfile, name)
+}
+
 // VPNProfiles は、保存済みのプロファイルを名前順で返す。秘密は含まない。
 func (s *Service) VPNProfiles() ([]VPNProfile, error) {
 	stored, _, err := s.metadata.Load()

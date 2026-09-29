@@ -33,6 +33,9 @@ const (
 	// FailureTargetUnreachable は、VPN の中で接続先へ繋げなかったことを表す
 	// （接続の拒否、応答なし、経路なし）。
 	FailureTargetUnreachable FailureReason = "target_unreachable"
+	// FailureTargetNotAllowed は、接続先が WireGuard のどの Peer の AllowedIPs にも含まれない
+	// ことを表す。WireGuard はその接続先へのパケットをどの Peer にも送らない。
+	FailureTargetNotAllowed FailureReason = "target_not_allowed"
 	// FailureTunnelLost は、用意できたあとでトンネルが落ちたことを表す。
 	FailureTunnelLost FailureReason = "tunnel_lost"
 	// FailureOpenVPNAuthentication は、OpenVPN のサーバーが認証を拒否したこと（AUTH_FAILED）を
@@ -75,6 +78,7 @@ var knownFailureReasons = map[FailureReason]bool{
 	FailureOpenVPNConfiguration: true, FailureOpenVPN: true,
 	FailureIKEAuthentication: true, FailureIKEServerUnverified: true, FailureIKEProposalMismatch: true,
 	FailureIKENoResponse: true, FailureXFRMInterface: true,
+	FailureTargetNotAllowed: true,
 }
 
 // SessionFailure は、経路を用意できなかったことと、その理由である。

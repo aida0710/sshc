@@ -33,6 +33,7 @@ const targetFailureMessages: Record<string, MessageKey> = {
   target_needs_dns: "vpn.destination.name_needs_dns",
   target_is_server: "vpn.targetFailure.target_is_server",
   target_unreachable: "vpn.targetFailure.target_unreachable",
+  target_not_allowed: "vpn.targetFailure.target_not_allowed",
   tunnel_lost: "vpn.targetFailure.tunnel_lost",
   timeout: "vpn.failure.timeout",
 };

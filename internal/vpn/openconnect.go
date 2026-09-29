@@ -169,7 +169,7 @@ func (openConnectBackend) secretValues(secrets Secrets) []string {
 	return []string{secrets.OpenConnect.Password, secrets.OpenConnect.TOTPSecret}
 }
 
-func (openConnectBackend) ownSecrets(secrets Secrets) Secrets {
+func (openConnectBackend) ownSecrets(_ Profile, secrets Secrets) Secrets {
 	return Secrets{OpenConnect: secrets.OpenConnect}
 }
 

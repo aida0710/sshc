@@ -2,8 +2,6 @@ import { describe, expect, it } from "vitest";
 import { emptySecrets } from "./vpnProfileDraft";
 import { vpnSecretsFieldError } from "./vpnSecretRules";
 
-const privateKey = "aAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAA=";
-
 describe("vpnSecretsFieldError", () => {
   it("asks for every secret the type needs when nothing is stored yet", () => {
     expect(vpnSecretsFieldError({
@@ -11,16 +9,20 @@ describe("vpnSecretsFieldError", () => {
     })).toEqual({ field: "secrets.ipsecPsk", reason: "required" });
   });
 
-  it("lets a blank secret keep the stored value", () => {
+  it("sends WireGuard to the rules of its configuration file", () => {
     expect(vpnSecretsFieldError({
-      backend: "wireguard", secondFactor: "", secrets: emptySecrets, stored: new Set(["wireguardPrivateKey"]),
-    })).toBeNull();
+      backend: "wireguard", secondFactor: "", secrets: emptySecrets, stored: new Set(),
+    })).toEqual({ field: "secrets.wireguardConfig", reason: "required" });
+    expect(vpnSecretsFieldError({
+      backend: "wireguard", secondFactor: "", secrets: { ...emptySecrets, wireguardConfig: "[Interface]\nPostUp = echo\n" },
+      stored: new Set(),
+    })).toEqual({ field: "secrets.wireguardConfig", reason: "runs_command", line: 2, directive: "PostUp" });
   });
 
-  it("checks the form of a WireGuard key that was typed", () => {
+  it("keeps a stored WireGuard configuration file when its field was left blank", () => {
     expect(vpnSecretsFieldError({
-      backend: "wireguard", secondFactor: "", secrets: { ...emptySecrets, wireguardPrivateKey: `${privateKey}=` }, stored: new Set(),
-    })).toEqual({ field: "secrets.wireguardPrivateKey", reason: "format" });
+      backend: "wireguard", secondFactor: "", secrets: emptySecrets, stored: new Set(["wireguardConfig"]),
+    })).toBeNull();
   });
 
   it("asks for a TOTP secret once the second factor uses one, even if a password is stored", () => {

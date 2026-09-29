@@ -13,6 +13,7 @@ import (
 
 	"sshc/internal/application"
 	"sshc/internal/httpserver"
+	"sshc/internal/vpn"
 )
 
 const testVPNKey = "aAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAA="
@@ -20,8 +21,7 @@ const testVPNKey = "aAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAA="
 func vpnOverviewFixture() string {
 	// engine が返す形をそのまま使う。backend ごとの節も含む。
 	return `{"available":true,"profiles":[{"profile":{"name":"lab","backend":"wireguard",` +
-		`"wireguard":{"server":"vpn.example.jp:51820",` +
-		`"peerPublicKey":"bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=","address":"10.9.9.2/32"}},` +
+		`"wireguard":{"servers":["vpn.example.jp"]}},` +
 		`"running":true,"relaySocket":"/home/u/.ssh/sshc/vpn/lab/engine.sock",` +
 		`"connections":["lab"]}]}`
 }
@@ -130,38 +130,29 @@ func TestVPNUnbindSendsAnEmptyProfile(t *testing.T) {
 	}
 }
 
-// 保存要求の本文は、設定と秘密鍵をひとつのJSONとして運ぶ。
+// 保存要求の本文は、設定とシークレットの設定ファイルをひとつのJSONとして運ぶ。
 func TestTheSavedProfilePayloadCarriesTheKeyExactlyOnce(t *testing.T) {
+	config := "[Interface]\nPrivateKey = " + testVPNKey + "\n"
 	payload, err := buildVPNProfilePayload(application.VPNProfile{
 		Name: "lab", Backend: "wireguard",
-		WireGuard: &application.WireGuardProfile{
-			Server: "vpn.example.jp:51820", PeerPublicKey: "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
-			Address: "10.9.9.2/32",
-		},
-	}, []vpnSecretField{{name: "wireguardPrivateKey", value: []byte(testVPNKey)}})
+		WireGuard: &application.WireGuardProfile{Servers: []string{"vpn.example.jp"}},
+	}, []vpnSecretField{{name: vpn.SecretKeyWireGuardConfig, value: []byte(config)}})
 	if err != nil {
 		t.Fatalf("buildVPNProfilePayload = %v", err)
 	}
 
 	var decoded struct {
-		Profile struct {
-			Name      string `json:"name"`
-			WireGuard struct {
-				Server string `json:"server"`
-			} `json:"wireguard"`
-		} `json:"profile"`
-		Secrets struct {
-			WireGuardPrivateKey string `json:"wireguardPrivateKey"`
-		} `json:"secrets"`
+		Profile application.VPNProfile `json:"profile"`
+		Secrets vpn.SecretsDocument    `json:"secrets"`
 	}
 	if err := json.Unmarshal(payload, &decoded); err != nil {
 		t.Fatalf("payload = %s: %v", payload, err)
 	}
-	if decoded.Profile.Name != "lab" || decoded.Profile.WireGuard.Server != "vpn.example.jp:51820" {
+	if decoded.Profile.Name != "lab" || decoded.Profile.WireGuard.Servers[0] != "vpn.example.jp" {
 		t.Fatalf("profile = %+v", decoded.Profile)
 	}
-	if decoded.Secrets.WireGuardPrivateKey != testVPNKey {
-		t.Fatalf("secret = %q", decoded.Secrets.WireGuardPrivateKey)
+	if decoded.Secrets.WireGuardConfig != config {
+		t.Fatalf("secret = %q", decoded.Secrets.WireGuardConfig)
 	}
 	if strings.Count(string(payload), testVPNKey) != 1 {
 		t.Fatalf("鍵が本文に複数回現れた: %s", payload)
@@ -189,15 +180,6 @@ func TestAddingAProfileAsksTheEngineToCreateIt(t *testing.T) {
 	if strings.Join(harness.methods, ",") != http.MethodPost ||
 		strings.Join(harness.paths, ",") != "/api/v1/vpn/profiles" {
 		t.Fatalf("requests = %v %v", harness.methods, harness.paths)
-	}
-}
-
-// 鍵の形が違うものは、engine へ送る前に断る。
-func TestAMalformedKeyIsNotAcceptedAsAWireGuardSecret(t *testing.T) {
-	for _, key := range []string{"", `has"quote`, strings.Repeat("a", maxVPNKeyBytes+1)} {
-		if base64KeyBytes([]byte(key)) && len(key) <= maxVPNKeyBytes {
-			t.Fatalf("base64KeyBytes accepted %q", key)
-		}
 	}
 }
 

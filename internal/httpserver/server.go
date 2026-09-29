@@ -423,6 +423,7 @@ func New(options Options) (*Server, error) {
 			Config:   options.Config,
 			Profiles: options.VPNProfiles,
 			Sessions: options.VPN,
+			Actions:  actions,
 		})
 	}
 	if len(registry) > 0 {
@@ -465,6 +466,9 @@ func newActionRegistry(options Options) actionRegistry {
 	}
 	if options.Passwords != nil {
 		addCredentialActions(registry, options.Passwords)
+	}
+	if options.VPN != nil && options.VPNProfiles != nil {
+		addVPNActions(registry, options.VPNProfiles)
 	}
 	return registry
 }

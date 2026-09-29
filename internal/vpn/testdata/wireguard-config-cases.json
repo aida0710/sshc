@@ -1,0 +1,850 @@
+{
+  "about": [
+    "WireGuard の設定ファイル（wg-quick の形）を sshc で使えるかの規則を、入力と期待する結果の組で並べた表である。",
+    "Go の検査（internal/vpn の ParseWireGuardConfig）と、画面の検査（web/src/vpn/wireGuardConfig.ts）の両方が、この表に対してテストされる。",
+    "config は行の並びで、改行でつないで末尾にも改行を付けたものを設定ファイルとする。",
+    "reason が空なら通る入力で、dns と addresses は使う IPv4 の値、servers は Endpoint のサーバー（プロファイルの設定として持つもの）である。",
+    "そうでなければ最初に断る行の番号（1から数える。ファイル全体についての誤りなら 0）、断った項目の名前、理由の語である。limit は上限のある理由のときだけ書く。"
+  ],
+  "cases": [
+    {
+      "name": "プロバイダが配る形の設定ファイルは通る",
+      "config": [
+        "# 配られた設定ファイル",
+        "[Interface]",
+        "PrivateKey = yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=",
+        "Address = 10.64.1.2/32, fc00:bbbb::2/128",
+        "DNS = 10.64.0.1, fc00:bbbb::1",
+        "MTU = 1380",
+        "",
+        "[Peer]",
+        "PublicKey = xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=",
+        "PresharedKey = FpCyhws9cxwWoV4xELtfJvjJN+zQVRPISllRWgeopVE=",
+        "AllowedIPs = 0.0.0.0/0, ::/0",
+        "Endpoint = vpn.example.jp:51820",
+        "PersistentKeepalive = 25"
+      ],
+      "reason": "",
+      "line": 0,
+      "directive": "",
+      "dns": [
+        "10.64.0.1"
+      ],
+      "addresses": [
+        "10.64.1.2/32"
+      ],
+      "servers": [
+        "vpn.example.jp"
+      ]
+    },
+    {
+      "name": "複数の Peer とその Endpoint を読む",
+      "config": [
+        "[Interface]",
+        "PrivateKey = yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=",
+        "Address = 10.64.1.2/32",
+        "",
+        "[Peer]",
+        "PublicKey = xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=",
+        "Endpoint = vpn.example.jp:51820",
+        "AllowedIPs = 10.64.0.0/16",
+        "",
+        "[Peer]",
+        "PublicKey = TrMvSoP4jYQlY6RIzBgbssQqY3vxI2Pi+y71lOWWXX0=",
+        "Endpoint = 192.0.2.10:51820",
+        "AllowedIPs = 10.65.0.0/16",
+        "",
+        "[Peer]",
+        "PublicKey = yTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=",
+        "AllowedIPs = 10.66.0.0/16"
+      ],
+      "reason": "",
+      "line": 0,
+      "directive": "",
+      "dns": [],
+      "addresses": [
+        "10.64.1.2/32"
+      ],
+      "servers": [
+        "vpn.example.jp",
+        "192.0.2.10"
+      ]
+    },
+    {
+      "name": "キーと節の大文字小文字と空白は区別しない",
+      "config": [
+        "[ interface ]",
+        "privatekey=yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=",
+        "  Address = 10.64.1.2 ",
+        "",
+        "[PEER]",
+        "Public Key = xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=",
+        "endpoint = vpn.example.jp:51820",
+        "allowedips = 10.64.0.0/16 , 10.65.0.0/16"
+      ],
+      "reason": "",
+      "line": 0,
+      "directive": "",
+      "dns": [],
+      "addresses": [
+        "10.64.1.2/32"
+      ],
+      "servers": [
+        "vpn.example.jp"
+      ]
+    },
+    {
+      "name": "注釈の中の項目は読まない",
+      "config": [
+        "[Interface]",
+        "PrivateKey = yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=",
+        "Address = 10.64.1.2/32",
+        "# PostUp = iptables -A FORWARD",
+        "Table = off",
+        "SaveConfig = false",
+        "",
+        "[Peer]",
+        "PublicKey = xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=",
+        "Endpoint = vpn.example.jp:51820",
+        "AllowedIPs = 10.64.0.0/16",
+        "# PreDown = echo"
+      ],
+      "reason": "",
+      "line": 0,
+      "directive": "",
+      "dns": [],
+      "addresses": [
+        "10.64.1.2/32"
+      ],
+      "servers": [
+        "vpn.example.jp"
+      ]
+    },
+    {
+      "name": "長さの無いアドレスは /32 として読む",
+      "config": [
+        "[Interface]",
+        "PrivateKey = yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=",
+        "Address = 10.64.1.2",
+        "DNS = 10.64.0.1",
+        "",
+        "[Peer]",
+        "PublicKey = xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=",
+        "Endpoint = vpn.example.jp:51820",
+        "AllowedIPs = 10.64.0.0/16"
+      ],
+      "reason": "",
+      "line": 0,
+      "directive": "",
+      "dns": [
+        "10.64.0.1"
+      ],
+      "addresses": [
+        "10.64.1.2/32"
+      ],
+      "servers": [
+        "vpn.example.jp"
+      ]
+    },
+    {
+      "name": "ListenPort と FwMark と off は wg に渡す",
+      "config": [
+        "[Interface]",
+        "PrivateKey = yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=",
+        "Address = 10.64.1.2/32",
+        "ListenPort = 51820",
+        "FwMark = 0x1234",
+        "",
+        "[Peer]",
+        "PublicKey = xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=",
+        "Endpoint = vpn.example.jp:51820",
+        "AllowedIPs = 10.64.0.0/16",
+        "PersistentKeepalive = off"
+      ],
+      "reason": "",
+      "line": 0,
+      "directive": "",
+      "dns": [],
+      "addresses": [
+        "10.64.1.2/32"
+      ],
+      "servers": [
+        "vpn.example.jp"
+      ]
+    },
+    {
+      "name": "IPv6 の Endpoint と、Endpoint の無い Peer もある",
+      "config": [
+        "[Interface]",
+        "PrivateKey = yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=",
+        "Address = 10.64.1.2/32",
+        "",
+        "[Peer]",
+        "PublicKey = xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=",
+        "Endpoint = vpn.example.jp:51820",
+        "AllowedIPs = 10.64.0.0/16",
+        "",
+        "[Peer]",
+        "PublicKey = TrMvSoP4jYQlY6RIzBgbssQqY3vxI2Pi+y71lOWWXX0=",
+        "Endpoint = [2001:db8::1]:51820",
+        "AllowedIPs = 10.65.0.0/16"
+      ],
+      "reason": "",
+      "line": 0,
+      "directive": "",
+      "dns": [],
+      "addresses": [
+        "10.64.1.2/32"
+      ],
+      "servers": [
+        "vpn.example.jp",
+        "[2001:db8::1]"
+      ]
+    },
+    {
+      "name": "DNS の検索ドメインは使わない",
+      "config": [
+        "[Interface]",
+        "PrivateKey = yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=",
+        "Address = 10.64.1.2/32",
+        "DNS = 10.64.0.1, corp.example.jp",
+        "",
+        "[Peer]",
+        "PublicKey = xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=",
+        "Endpoint = vpn.example.jp:51820",
+        "AllowedIPs = 10.64.0.0/16"
+      ],
+      "reason": "",
+      "line": 0,
+      "directive": "",
+      "dns": [
+        "10.64.0.1"
+      ],
+      "addresses": [
+        "10.64.1.2/32"
+      ],
+      "servers": [
+        "vpn.example.jp"
+      ]
+    },
+    {
+      "name": "CRLF の改行も読む",
+      "config": [
+        "[Interface]\r",
+        "PrivateKey = yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=\r",
+        "Address = 10.64.1.2/32\r",
+        "\r",
+        "[Peer]\r",
+        "PublicKey = xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=\r",
+        "Endpoint = vpn.example.jp:51820\r",
+        "AllowedIPs = 10.64.0.0/16\r"
+      ],
+      "reason": "",
+      "line": 0,
+      "directive": "",
+      "dns": [],
+      "addresses": [
+        "10.64.1.2/32"
+      ],
+      "servers": [
+        "vpn.example.jp"
+      ]
+    },
+    {
+      "name": "PostUp はコマンドを実行するので断る",
+      "config": [
+        "[Interface]",
+        "PrivateKey = yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=",
+        "Address = 10.64.1.2/32",
+        "PostUp = iptables -A FORWARD -i %i -j ACCEPT",
+        "",
+        "[Peer]",
+        "PublicKey = xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=",
+        "Endpoint = vpn.example.jp:51820",
+        "AllowedIPs = 10.64.0.0/16"
+      ],
+      "reason": "runs_command",
+      "line": 4,
+      "directive": "PostUp"
+    },
+    {
+      "name": "PreUp も断る",
+      "config": [
+        "[Interface]",
+        "PrivateKey = yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=",
+        "Address = 10.64.1.2/32",
+        "PreUp = echo up",
+        "",
+        "[Peer]",
+        "PublicKey = xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=",
+        "Endpoint = vpn.example.jp:51820",
+        "AllowedIPs = 10.64.0.0/16"
+      ],
+      "reason": "runs_command",
+      "line": 4,
+      "directive": "PreUp"
+    },
+    {
+      "name": "大文字小文字を変えた PreDown も断る",
+      "config": [
+        "[Interface]",
+        "PrivateKey = yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=",
+        "Address = 10.64.1.2/32",
+        "predown = echo down",
+        "",
+        "[Peer]",
+        "PublicKey = xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=",
+        "Endpoint = vpn.example.jp:51820",
+        "AllowedIPs = 10.64.0.0/16"
+      ],
+      "reason": "runs_command",
+      "line": 4,
+      "directive": "PreDown"
+    },
+    {
+      "name": "空白を挟んだ Post Down も断る",
+      "config": [
+        "[Interface]",
+        "PrivateKey = yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=",
+        "Address = 10.64.1.2/32",
+        "Post Down = echo down",
+        "",
+        "[Peer]",
+        "PublicKey = xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=",
+        "Endpoint = vpn.example.jp:51820",
+        "AllowedIPs = 10.64.0.0/16"
+      ],
+      "reason": "runs_command",
+      "line": 4,
+      "directive": "PostDown"
+    },
+    {
+      "name": "Peer の節に書いた PostUp も断る",
+      "config": [
+        "[Interface]",
+        "PrivateKey = yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=",
+        "Address = 10.64.1.2/32",
+        "",
+        "[Peer]",
+        "PublicKey = xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=",
+        "Endpoint = vpn.example.jp:51820",
+        "AllowedIPs = 10.64.0.0/16",
+        "PostUp = echo"
+      ],
+      "reason": "runs_command",
+      "line": 9,
+      "directive": "PostUp"
+    },
+    {
+      "name": "Table は経路を変えるので断る",
+      "config": [
+        "[Interface]",
+        "PrivateKey = yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=",
+        "Address = 10.64.1.2/32",
+        "Table = 1234",
+        "",
+        "[Peer]",
+        "PublicKey = xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=",
+        "Endpoint = vpn.example.jp:51820",
+        "AllowedIPs = 10.64.0.0/16"
+      ],
+      "reason": "changes_routes",
+      "line": 4,
+      "directive": "Table"
+    },
+    {
+      "name": "SaveConfig = true は断る",
+      "config": [
+        "[Interface]",
+        "PrivateKey = yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=",
+        "Address = 10.64.1.2/32",
+        "SaveConfig = true",
+        "",
+        "[Peer]",
+        "PublicKey = xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=",
+        "Endpoint = vpn.example.jp:51820",
+        "AllowedIPs = 10.64.0.0/16"
+      ],
+      "reason": "decided_by_sshc",
+      "line": 4,
+      "directive": "SaveConfig"
+    },
+    {
+      "name": "知らない項目は断る",
+      "config": [
+        "[Interface]",
+        "PrivateKey = yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=",
+        "Address = 10.64.1.2/32",
+        "Includes = other.conf",
+        "",
+        "[Peer]",
+        "PublicKey = xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=",
+        "Endpoint = vpn.example.jp:51820",
+        "AllowedIPs = 10.64.0.0/16"
+      ],
+      "reason": "unknown_directive",
+      "line": 4,
+      "directive": ""
+    },
+    {
+      "name": "知らない節は断る",
+      "config": [
+        "[Interface]",
+        "PrivateKey = yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=",
+        "Address = 10.64.1.2/32",
+        "",
+        "[Peer]",
+        "PublicKey = xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=",
+        "Endpoint = vpn.example.jp:51820",
+        "AllowedIPs = 10.64.0.0/16",
+        "[Other]"
+      ],
+      "reason": "unknown_directive",
+      "line": 9,
+      "directive": ""
+    },
+    {
+      "name": "= の無い行は断る",
+      "config": [
+        "[Interface]",
+        "PrivateKey = yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=",
+        "Address = 10.64.1.2/32",
+        "Address",
+        "",
+        "[Peer]",
+        "PublicKey = xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=",
+        "Endpoint = vpn.example.jp:51820",
+        "AllowedIPs = 10.64.0.0/16"
+      ],
+      "reason": "format",
+      "line": 4,
+      "directive": ""
+    },
+    {
+      "name": "値の無い項目は断る",
+      "config": [
+        "[Interface]",
+        "PrivateKey = yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=",
+        "Address = 10.64.1.2/32",
+        "MTU =",
+        "",
+        "[Peer]",
+        "PublicKey = xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=",
+        "Endpoint = vpn.example.jp:51820",
+        "AllowedIPs = 10.64.0.0/16"
+      ],
+      "reason": "format",
+      "line": 4,
+      "directive": ""
+    },
+    {
+      "name": "Endpoint を Interface に書くと断る",
+      "config": [
+        "[Interface]",
+        "PrivateKey = yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=",
+        "Address = 10.64.1.2/32",
+        "Endpoint = vpn.example.jp:51820",
+        "",
+        "[Peer]",
+        "PublicKey = xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=",
+        "Endpoint = vpn.example.jp:51820",
+        "AllowedIPs = 10.64.0.0/16"
+      ],
+      "reason": "misplaced_directive",
+      "line": 4,
+      "directive": "Endpoint"
+    },
+    {
+      "name": "節の前の項目は断る",
+      "config": [
+        "PrivateKey = yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=",
+        "[Interface]",
+        "PrivateKey = yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=",
+        "Address = 10.64.1.2/32",
+        "",
+        "[Peer]",
+        "PublicKey = xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=",
+        "Endpoint = vpn.example.jp:51820",
+        "AllowedIPs = 10.64.0.0/16"
+      ],
+      "reason": "misplaced_directive",
+      "line": 1,
+      "directive": "PrivateKey"
+    },
+    {
+      "name": "Address を Peer に書くと断る",
+      "config": [
+        "[Interface]",
+        "PrivateKey = yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=",
+        "Address = 10.64.1.2/32",
+        "",
+        "[Peer]",
+        "PublicKey = xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=",
+        "Endpoint = vpn.example.jp:51820",
+        "AllowedIPs = 10.64.0.0/16",
+        "Address = 10.0.0.2/32"
+      ],
+      "reason": "misplaced_directive",
+      "line": 9,
+      "directive": "Address"
+    },
+    {
+      "name": "Interface が2つあると断る",
+      "config": [
+        "[Interface]",
+        "PrivateKey = yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=",
+        "Address = 10.64.1.2/32",
+        "",
+        "[Peer]",
+        "PublicKey = xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=",
+        "Endpoint = vpn.example.jp:51820",
+        "AllowedIPs = 10.64.0.0/16",
+        "[Interface]"
+      ],
+      "reason": "duplicate",
+      "line": 9,
+      "directive": "[Interface]"
+    },
+    {
+      "name": "PrivateKey が2つあると断る",
+      "config": [
+        "[Interface]",
+        "PrivateKey = yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=",
+        "Address = 10.64.1.2/32",
+        "PrivateKey = yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=",
+        "",
+        "[Peer]",
+        "PublicKey = xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=",
+        "Endpoint = vpn.example.jp:51820",
+        "AllowedIPs = 10.64.0.0/16"
+      ],
+      "reason": "duplicate",
+      "line": 4,
+      "directive": "PrivateKey"
+    },
+    {
+      "name": "同じ公開鍵の Peer は断る",
+      "config": [
+        "[Interface]",
+        "PrivateKey = yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=",
+        "Address = 10.64.1.2/32",
+        "",
+        "[Peer]",
+        "PublicKey = xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=",
+        "Endpoint = vpn.example.jp:51820",
+        "AllowedIPs = 10.64.0.0/16",
+        "[Peer]",
+        "PublicKey = xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg="
+      ],
+      "reason": "duplicate",
+      "line": 10,
+      "directive": "PublicKey"
+    },
+    {
+      "name": "形の違う鍵は断る",
+      "config": [
+        "[Interface]",
+        "PrivateKey = not-a-key",
+        "Address = 10.64.1.2/32",
+        "",
+        "[Peer]",
+        "PublicKey = xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=",
+        "Endpoint = vpn.example.jp:51820",
+        "AllowedIPs = 10.64.0.0/16"
+      ],
+      "reason": "format",
+      "line": 2,
+      "directive": "PrivateKey"
+    },
+    {
+      "name": "形の違う PresharedKey は断る",
+      "config": [
+        "[Interface]",
+        "PrivateKey = yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=",
+        "Address = 10.64.1.2/32",
+        "",
+        "[Peer]",
+        "PublicKey = xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=",
+        "Endpoint = vpn.example.jp:51820",
+        "AllowedIPs = 10.64.0.0/16",
+        "PresharedKey = short="
+      ],
+      "reason": "format",
+      "line": 9,
+      "directive": "PresharedKey"
+    },
+    {
+      "name": "形の違う AllowedIPs は断る",
+      "config": [
+        "[Interface]",
+        "PrivateKey = yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=",
+        "Address = 10.64.1.2/32",
+        "",
+        "[Peer]",
+        "PublicKey = xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=",
+        "Endpoint = vpn.example.jp:51820",
+        "AllowedIPs = 10.64.0.0/16",
+        "AllowedIPs = 10.0.0.0/33"
+      ],
+      "reason": "format",
+      "line": 9,
+      "directive": "AllowedIPs"
+    },
+    {
+      "name": "ポートの無い Endpoint は断る",
+      "config": [
+        "[Interface]",
+        "PrivateKey = yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=",
+        "Address = 10.64.1.2/32",
+        "",
+        "[Peer]",
+        "PublicKey = xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=",
+        "Endpoint = vpn.example.jp",
+        "AllowedIPs = 10.64.0.0/16"
+      ],
+      "reason": "format",
+      "line": 7,
+      "directive": "Endpoint"
+    },
+    {
+      "name": "形の違う Address は断る",
+      "config": [
+        "[Interface]",
+        "PrivateKey = yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=",
+        "Address = 10.64.1.2/32",
+        "Address = 10.64.1.300/32",
+        "",
+        "[Peer]",
+        "PublicKey = xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=",
+        "Endpoint = vpn.example.jp:51820",
+        "AllowedIPs = 10.64.0.0/16"
+      ],
+      "reason": "format",
+      "line": 4,
+      "directive": "Address"
+    },
+    {
+      "name": "IPv6 だけの Address は断る",
+      "config": [
+        "[Interface]",
+        "PrivateKey = yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=",
+        "Address = fc00::2/128",
+        "",
+        "[Peer]",
+        "PublicKey = xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=",
+        "Endpoint = vpn.example.jp:51820",
+        "AllowedIPs = 10.64.0.0/16"
+      ],
+      "reason": "not_ipv4",
+      "line": 3,
+      "directive": "Address"
+    },
+    {
+      "name": "ループバックの Address は断る",
+      "config": [
+        "[Interface]",
+        "PrivateKey = yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=",
+        "Address = 127.0.0.1/32",
+        "",
+        "[Peer]",
+        "PublicKey = xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=",
+        "Endpoint = vpn.example.jp:51820",
+        "AllowedIPs = 10.64.0.0/16"
+      ],
+      "reason": "unroutable",
+      "line": 3,
+      "directive": "Address"
+    },
+    {
+      "name": "DNS が多すぎると断る",
+      "config": [
+        "[Interface]",
+        "PrivateKey = yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=",
+        "Address = 10.64.1.2/32",
+        "DNS = 10.64.0.1, 10.64.0.2, 10.64.0.3, 10.64.0.4",
+        "",
+        "[Peer]",
+        "PublicKey = xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=",
+        "Endpoint = vpn.example.jp:51820",
+        "AllowedIPs = 10.64.0.0/16"
+      ],
+      "reason": "too_many",
+      "line": 4,
+      "directive": "DNS",
+      "limit": 3
+    },
+    {
+      "name": "AllowedIPs の外の DNS は断る",
+      "config": [
+        "[Interface]",
+        "PrivateKey = yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=",
+        "Address = 10.64.1.2/32",
+        "DNS = 10.99.0.1",
+        "",
+        "[Peer]",
+        "PublicKey = xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=",
+        "Endpoint = vpn.example.jp:51820",
+        "AllowedIPs = 10.64.0.0/16"
+      ],
+      "reason": "not_in_allowed_ips",
+      "line": 4,
+      "directive": "DNS"
+    },
+    {
+      "name": "MTU が小さすぎると断る",
+      "config": [
+        "[Interface]",
+        "PrivateKey = yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=",
+        "Address = 10.64.1.2/32",
+        "MTU = 100",
+        "",
+        "[Peer]",
+        "PublicKey = xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=",
+        "Endpoint = vpn.example.jp:51820",
+        "AllowedIPs = 10.64.0.0/16"
+      ],
+      "reason": "mtu_out_of_range",
+      "line": 4,
+      "directive": "MTU"
+    },
+    {
+      "name": "ListenPort が範囲の外なら断る",
+      "config": [
+        "[Interface]",
+        "PrivateKey = yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=",
+        "Address = 10.64.1.2/32",
+        "ListenPort = 70000",
+        "",
+        "[Peer]",
+        "PublicKey = xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=",
+        "Endpoint = vpn.example.jp:51820",
+        "AllowedIPs = 10.64.0.0/16"
+      ],
+      "reason": "out_of_range",
+      "line": 4,
+      "directive": "ListenPort"
+    },
+    {
+      "name": "PersistentKeepalive が長すぎると断る",
+      "config": [
+        "[Interface]",
+        "PrivateKey = yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=",
+        "Address = 10.64.1.2/32",
+        "",
+        "[Peer]",
+        "PublicKey = xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=",
+        "Endpoint = vpn.example.jp:51820",
+        "AllowedIPs = 10.64.0.0/16",
+        "PersistentKeepalive = 300"
+      ],
+      "reason": "keepalive_too_long",
+      "line": 9,
+      "directive": "PersistentKeepalive",
+      "limit": 120
+    },
+    {
+      "name": "Interface が無ければ断る",
+      "config": [
+        "[Peer]",
+        "PublicKey = xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=",
+        "Endpoint = vpn.example.jp:51820",
+        "AllowedIPs = 10.64.0.0/16"
+      ],
+      "reason": "missing_directive",
+      "line": 0,
+      "directive": "[Interface]"
+    },
+    {
+      "name": "PrivateKey が無ければ断る",
+      "config": [
+        "[Interface]",
+        "Address = 10.64.1.2/32",
+        "",
+        "[Peer]",
+        "PublicKey = xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=",
+        "Endpoint = vpn.example.jp:51820",
+        "AllowedIPs = 10.64.0.0/16"
+      ],
+      "reason": "missing_directive",
+      "line": 0,
+      "directive": "PrivateKey"
+    },
+    {
+      "name": "Address が無ければ断る",
+      "config": [
+        "[Interface]",
+        "PrivateKey = yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=",
+        "",
+        "[Peer]",
+        "PublicKey = xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=",
+        "Endpoint = vpn.example.jp:51820",
+        "AllowedIPs = 10.64.0.0/16"
+      ],
+      "reason": "missing_directive",
+      "line": 0,
+      "directive": "Address"
+    },
+    {
+      "name": "Peer が無ければ断る",
+      "config": [
+        "[Interface]",
+        "PrivateKey = yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=",
+        "Address = 10.64.1.2/32"
+      ],
+      "reason": "missing_directive",
+      "line": 0,
+      "directive": "[Peer]"
+    },
+    {
+      "name": "公開鍵の無い Peer は断る",
+      "config": [
+        "[Interface]",
+        "PrivateKey = yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=",
+        "Address = 10.64.1.2/32",
+        "",
+        "[Peer]",
+        "PublicKey = xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=",
+        "Endpoint = vpn.example.jp:51820",
+        "AllowedIPs = 10.64.0.0/16",
+        "",
+        "[Peer]",
+        "AllowedIPs = 10.65.0.0/16"
+      ],
+      "reason": "missing_directive",
+      "line": 10,
+      "directive": "PublicKey"
+    },
+    {
+      "name": "Endpoint がどこにも無ければ断る",
+      "config": [
+        "[Interface]",
+        "PrivateKey = yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=",
+        "Address = 10.64.1.2/32",
+        "",
+        "[Peer]",
+        "PublicKey = xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=",
+        "AllowedIPs = 10.64.0.0/16"
+      ],
+      "reason": "no_endpoint",
+      "line": 0,
+      "directive": ""
+    },
+    {
+      "name": "NUL を含む行は断る",
+      "config": [
+        "[Interface]",
+        "PrivateKey = yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=",
+        "Address = 10.64.1.2/32",
+        "Address = 10.64.1.2/32\u0000",
+        "",
+        "[Peer]",
+        "PublicKey = xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=",
+        "Endpoint = vpn.example.jp:51820",
+        "AllowedIPs = 10.64.0.0/16"
+      ],
+      "reason": "format",
+      "line": 4,
+      "directive": ""
+    }
+  ]
+}

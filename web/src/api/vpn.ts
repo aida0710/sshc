@@ -1,5 +1,5 @@
 import { apiClient } from "./client";
-import { postJSON, putJSON } from "./guards";
+import { issueAction, postJSON, putJSON } from "./guards";
 import type { components } from "./schema";
 import { validateOpenAPISchema } from "./validators.generated";
 import { vpnProblemCodes } from "../vpn/vpnRefusals";
@@ -10,13 +10,17 @@ export type VPNProfile = components["schemas"]["VPNProfile"];
 export type VPNSecrets = components["schemas"]["VPNSecrets"];
 export type VPNLogs = components["schemas"]["VPNLogs"];
 
-// ひとつのSSH接続だけを専用のVPNへ通す経路。トンネルはengineが持つコンテナの
-// 中にあり、ブラウザは設定と状態だけを扱う。シークレットは保存のときだけ送り、
-// 応答には現れない。接続へプロファイルを付けるのは、接続の設定（Connections）である。
+// VPN_REVEAL_ACTION_KIND は、保存済みのシークレットを取り出す確認の種類である（engine と同じ語）。
+export const VPN_REVEAL_ACTION_KIND = "vpn_profile.reveal";
+
 // VPNOverviewOptions は、一覧の読み方である。waitForRoutes が false なら、sshcエンジンは
 // 経路の状態を docker から読むのを待たずに答え、まだ確かめていなければ checking を付ける。
 export type VPNOverviewOptions = { waitForRoutes?: boolean };
 
+// ひとつのSSH接続だけを専用のVPNへ通す経路。トンネルはengineが持つコンテナの
+// 中にあり、ブラウザは設定と状態だけを扱う。シークレットは保存のときに送り、一覧と保存の
+// 応答には現れない。編集で見せるときだけ、確認のトークンを添えて取り出す。接続へ
+// プロファイルを付けるのは、接続の設定（Connections）である。
 export type VPNApi = {
   vpnOverview(options?: VPNOverviewOptions): Promise<VPNOverview>;
   // createVPNProfile は新しいプロファイルを作る。同じ名前があれば engine が断る。
@@ -24,6 +28,9 @@ export type VPNApi = {
   // saveVPNProfile は保存済みのプロファイルを更新する。送らなかったシークレットは
   // 保存済みの値を残す。方式を変えたときは、新しい方式のシークレットが要る。
   saveVPNProfile(profile: VPNProfile, secrets: VPNSecrets): Promise<VPNOverview>;
+  // revealVPNSecrets は、保存済みのシークレットのうち、プロファイルの方式が使うものを返す。
+  // 編集のフォームへ入れるためだけに使い、ほかへ持ち回らない。
+  revealVPNSecrets(name: string): Promise<VPNSecrets>;
   removeVPNProfile(name: string): Promise<VPNOverview>;
   renameVPNProfile(from: string, to: string): Promise<VPNOverview>;
   vpnLogs(name: string): Promise<VPNLogs>;
@@ -33,6 +40,10 @@ export type VPNApi = {
 
 function validateOverview(value: unknown): VPNOverview {
   return validateOpenAPISchema<VPNOverview>("VPNOverview", value);
+}
+
+function validateSecrets(value: unknown): VPNSecrets {
+  return validateOpenAPISchema<VPNSecrets>("VPNSecrets", value);
 }
 
 function validateLogs(value: unknown): VPNLogs {
@@ -60,6 +71,15 @@ export const vpnApi: VPNApi = {
   async saveVPNProfile(profile, secrets) {
     return validateOverview(
       await putJSON<unknown>(profilePath(profile.name), { profile, secrets }, locallyExplainedVPNFailures),
+    );
+  },
+  async revealVPNSecrets(name) {
+    const token = await issueAction(VPN_REVEAL_ACTION_KIND, name);
+    return validateSecrets(
+      await apiClient.mutate<unknown>(`${profilePath(name)}/reveal`, {
+        method: "POST",
+        headers: { "X-SSHC-Action": token },
+      }, { locallyHandledCodes: locallyExplainedVPNFailures }),
     );
   },
   async removeVPNProfile(name) {

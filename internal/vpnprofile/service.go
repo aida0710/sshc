@@ -7,6 +7,8 @@ package vpnprofile
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 
 	"sshc/internal/application"
@@ -18,7 +20,7 @@ import (
 // Configuration は、metadata.json の VPN プロファイルを読み、変更を計画して書く。
 // *application.Service が満たす。
 type Configuration interface {
-	VPNProfile(name string) (vpn.Profile, error)
+	StoredVPNProfile(name string) (application.VPNProfile, error)
 	PlanVPNProfileCreate(profile application.VPNProfile) (application.VPNProfileChange, error)
 	PlanVPNProfileUpdate(profile application.VPNProfile) (application.VPNProfileChange, error)
 	PlanVPNProfileRename(from, to string) (application.VPNProfileChange, error)
@@ -89,7 +91,11 @@ func (s *Service) Update(profile application.VPNProfile, sent *vpn.SecretsDocume
 	if err != nil {
 		return err
 	}
-	stored, err := s.storedSecrets(profile.Name)
+	previous, err := s.configuration.StoredVPNProfile(profile.Name)
+	if err != nil {
+		return err
+	}
+	stored, err := s.storedSecrets(previous)
 	if err != nil {
 		return err
 	}
@@ -107,7 +113,7 @@ func (s *Service) Update(profile application.VPNProfile, sent *vpn.SecretsDocume
 func (s *Service) Rename(ctx context.Context, from, to string) error {
 	if from == to {
 		// 名前が変わらなくても、無い名前の改名は成功にしない。
-		_, err := s.configuration.VPNProfile(from)
+		_, err := s.configuration.StoredVPNProfile(from)
 		return err
 	}
 	change, err := s.configuration.PlanVPNProfileRename(from, to)
@@ -147,19 +153,60 @@ func (s *Service) Remove(ctx context.Context, name string) error {
 
 // Route は、保存済みの設定と秘密を、経路ひとつぶんとして集める。
 func (s *Service) Route(name string) (vpn.Profile, vpn.Secrets, error) {
-	profile, err := s.configuration.VPNProfile(name)
+	stored, err := s.configuration.StoredVPNProfile(name)
 	if err != nil {
 		return vpn.Profile{}, vpn.Secrets{}, err
 	}
-	stored, err := s.vault.VPNSecrets(name)
+	profile, err := stored.Profile()
 	if err != nil {
 		return vpn.Profile{}, vpn.Secrets{}, err
 	}
-	secrets, err := vpn.DecodeSecrets(stored)
+	record, err := s.vault.VPNSecrets(name)
+	if err != nil {
+		return vpn.Profile{}, vpn.Secrets{}, err
+	}
+	secrets, err := readSecrets(stored, record)
 	if err != nil {
 		return vpn.Profile{}, vpn.Secrets{}, err
 	}
 	return profile, secrets, nil
+}
+
+// RevealSecrets は、保存済みの秘密を、プロファイルの方式が使う項目だけ返す。画面は、編集を
+// 開いたときにこれをフォームへ入れる。秘密がまだ無ければ空である。
+//
+// 呼び手（HTTP の handler）は、確認のトークンを消費してから呼ぶ。Vault がロック中なら
+// secret.ErrLocked を返す。
+func (s *Service) RevealSecrets(name string) (vpn.SecretsDocument, error) {
+	stored, err := s.configuration.StoredVPNProfile(name)
+	if err != nil {
+		return vpn.SecretsDocument{}, err
+	}
+	profile, err := stored.Profile()
+	if err != nil {
+		return vpn.SecretsDocument{}, err
+	}
+	secrets, err := s.storedSecrets(stored)
+	if err != nil {
+		return vpn.SecretsDocument{}, err
+	}
+	return profile.OwnSecrets(secrets).Document(), nil
+}
+
+// SecretsEvidence は、秘密を取り出す確認のトークンを、いま保存されている秘密に結び付ける
+// 要約である。トークンを発行したあとに秘密が書き換わっていれば、そのトークンでは取り出せない。
+func (s *Service) SecretsEvidence(name string) (string, error) {
+	if _, err := s.configuration.StoredVPNProfile(name); err != nil {
+		return "", err
+	}
+	record, err := s.vault.VPNSecrets(name)
+	if errors.Is(err, secret.ErrUnknownCredential) {
+		record = ""
+	} else if err != nil {
+		return "", err
+	}
+	digest := sha256.Sum256([]byte(name + "\x00" + record))
+	return hex.EncodeToString(digest[:]), nil
 }
 
 // LogRedactions は、ログから伏せるための秘密を返す。プロファイルが無ければ断る。
@@ -167,12 +214,13 @@ func (s *Service) Route(name string) (vpn.Profile, vpn.Secrets, error) {
 // 秘密は伏せるためだけに読む。Vault がロック中でも、秘密が壊れていても、ログは
 // 返せるように空の秘密を返す。伏せる相手が分からないときは、伏せられる範囲で伏せる。
 func (s *Service) LogRedactions(name string) (vpn.Secrets, error) {
-	if _, err := s.configuration.VPNProfile(name); err != nil {
+	stored, err := s.configuration.StoredVPNProfile(name)
+	if err != nil {
 		return vpn.Secrets{}, err
 	}
 	var secrets vpn.Secrets
-	if stored, err := s.vault.VPNSecrets(name); err == nil {
-		secrets, _ = vpn.DecodeSecrets(stored)
+	if record, err := s.vault.VPNSecrets(name); err == nil {
+		secrets, _ = readSecrets(stored, record)
 	}
 	return secrets, nil
 }
@@ -211,16 +259,16 @@ func (s *Service) commitWithVault(change application.VPNProfileChange, mutation 
 	return err
 }
 
-// storedSecrets は、保存済みの秘密を返す。まだ無ければ空である。
-func (s *Service) storedSecrets(name string) (vpn.Secrets, error) {
-	stored, err := s.vault.VPNSecrets(name)
+// storedSecrets は、保存済みのプロファイルの秘密を返す。まだ無ければ空である。
+func (s *Service) storedSecrets(stored application.VPNProfile) (vpn.Secrets, error) {
+	record, err := s.vault.VPNSecrets(stored.Name)
 	if errors.Is(err, secret.ErrUnknownCredential) {
 		return vpn.Secrets{}, nil
 	}
 	if err != nil {
 		return vpn.Secrets{}, err
 	}
-	return vpn.DecodeSecrets(stored)
+	return readSecrets(stored, record)
 }
 
 // requireUnlockedVault は、Vault がロック中なら ErrLocked を返す。
