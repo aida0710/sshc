@@ -73,9 +73,29 @@ export function VPNPanel({ api = vpnApi }: VPNPanelProps) {
   );
 
   useEffect(() => {
-    // 開いたときに読む。以降は、操作の応答と、下の読み直しが最新の一覧を運ぶ。
-    void act(() => api.vpnOverview());
+    // 開いたときは、経路の状態を docker から読むのを待たずに一覧を読む。docker は
+    // mac では1回に1秒前後かかる。経路の状態は、下の読み直しが埋める。以降は、操作の
+    // 応答と読み直しが最新の一覧を運ぶ。
+    void act(() => api.vpnOverview({ waitForRoutes: false }));
   }, [api, act]);
+
+  // refresh は、一覧を読み直す。読み始めたあとに操作が始まっていれば、その応答の方が
+  // 新しいので、読んだ一覧は捨てる。
+  const refresh = useCallback(() => {
+    const started = generation.current;
+    return api
+      .vpnOverview()
+      .then((next) => {
+        if (generation.current === started) setOverview(next);
+      })
+      .catch(() => undefined);
+  }, [api]);
+
+  // 経路の状態をまだ確かめていない一覧が届いたら、すぐに確かめに行く。
+  const checking = overview?.checking ?? false;
+  useEffect(() => {
+    if (checking) void refresh();
+  }, [checking, refresh]);
 
   const startProfile = useCallback(
     async (name: string) => {
@@ -144,17 +164,9 @@ export function VPNPanel({ api = vpnApi }: VPNPanelProps) {
   // 用意させている最中だけは、その応答が経路が立つまで返らないので、段階を見せる
   // ために読み直し続ける。
   const preparingRoute = overview?.profiles.some((status) => (status.phase ?? "") !== "") ?? false;
-  const showingProgress = startingProfile !== "" || preparingRoute;
+  const showingProgress = startingProfile !== "" || preparingRoute || checking;
   usePolling(
-    () => {
-      const started = generation.current;
-      return api
-        .vpnOverview()
-        .then((next) => {
-          if (generation.current === started) setOverview(next);
-        })
-        .catch(() => undefined);
-    },
+    refresh,
     {
       intervalMs: showingProgress ? routeProgressIntervalMs : overviewRefreshIntervalMs,
       enabled: startingProfile !== "" || !operation.busy,
@@ -174,7 +186,7 @@ export function VPNPanel({ api = vpnApi }: VPNPanelProps) {
     <section className="mx-auto flex w-full max-w-5xl flex-col gap-6">
       <PageHeader title={t("vpn.heading")} description={t("vpn.description")} />
 
-      {overview.available ? null : <VPNUnavailableNotice overview={overview} />}
+      {overview.available || overview.checking ? null : <VPNUnavailableNotice overview={overview} />}
       {operation.error === "" ? null : (
         <Notice tone="danger">
           <span className="grow">{operation.error}</span>
@@ -206,6 +218,7 @@ export function VPNPanel({ api = vpnApi }: VPNPanelProps) {
                     status={status}
                     busy={operation.busy}
                     available={overview.available}
+                    checking={overview.checking}
                     actions={{
                       onStart: () => void startProfile(name),
                       onStop: () => requestDisconnect(name, status.openConnections),

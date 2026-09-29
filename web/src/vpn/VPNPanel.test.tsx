@@ -17,6 +17,7 @@ const tohokuProfile: VPNProfile = {
 function overview(overrides: Partial<VPNOverview> = {}): VPNOverview {
   return {
     available: true,
+    checking: false,
     profiles: [
       {
         profile: tohokuProfile,
@@ -494,6 +495,47 @@ describe("VPNPanel", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("lists the profiles without waiting for the route states, then fills the states in", async () => {
+    let answerRoutes: (value: VPNOverview) => void = () => undefined;
+    const routes = new Promise<VPNOverview>((resolve) => {
+      answerRoutes = resolve;
+    });
+    const vpnOverview = vi.fn((options?: { waitForRoutes?: boolean }) =>
+      options?.waitForRoutes === false ? Promise.resolve(overview({ checking: true })) : routes);
+    render(<VPNPanel api={buildApi({ vpnOverview })} />);
+
+    // 経路の状態を確かめているあいだも、プロファイルは見えていて、状態は言わない。
+    const route = await screen.findByRole("article", { name: "tohoku" });
+    expect(within(route).getByText(/checking/)).toBeVisible();
+    expect(within(route).queryByText(/route open/)).toBeNull();
+    expect(within(route).getByRole("button", { name: "Connect" })).toBeDisabled();
+    expect(within(route).getByRole("button", { name: "Disconnect" })).toBeDisabled();
+    expect(vpnOverview).toHaveBeenNthCalledWith(1, { waitForRoutes: false });
+    await waitFor(() => expect(vpnOverview).toHaveBeenCalledTimes(2));
+    expect(vpnOverview).toHaveBeenNthCalledWith(2);
+
+    await act(async () => {
+      answerRoutes(overview());
+      await routes;
+    });
+
+    await waitFor(() => expect(within(route).getByText(/route open/)).toBeVisible());
+    expect(within(route).getByRole("button", { name: "Disconnect" })).toBeEnabled();
+  });
+
+  it("does not say why routes cannot be opened while it is still checking", async () => {
+    // 確かめる前の一覧の available は、まだ分からない。
+    const vpnOverview = vi.fn((options?: { waitForRoutes?: boolean }) =>
+      options?.waitForRoutes === false
+        ? Promise.resolve(overview({ checking: true, available: false, unavailable: "vpn_docker_missing" }))
+        : new Promise<VPNOverview>(() => undefined));
+    render(<VPNPanel api={buildApi({ vpnOverview })} />);
+
+    await screen.findByRole("article", { name: "tohoku" });
+    expect(screen.queryByText("This machine cannot open VPN routes.")).toBeNull();
+    expect(screen.queryByText(/Docker was not found/)).toBeNull();
   });
 
   it("asks before disconnecting a route that connections are using, and says how many are cut", async () => {

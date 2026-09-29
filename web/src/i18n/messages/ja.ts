@@ -1130,6 +1130,7 @@ export const ja = {
   "vpn.stateUp": "接続済み",
   "vpn.stateStarting": "接続中",
   "vpn.stateStopped": "停止中",
+  "vpn.stateChecking": "確認中",
   "vpn.phaseImage": "コンテナイメージを準備しています",
   "vpn.phaseContainer": "コンテナを起動しています",
   "vpn.phaseTunnel": "VPNの接続を待っています",

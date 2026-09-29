@@ -599,6 +599,14 @@ paths:
   /api/v1/vpn:
     get:
       operationId: getVPNOverview
+      parameters:
+        # false なら、経路の状態を docker から読むのを待たずに答える。まだ確かめて
+        # いなければ checking を真にする。画面はプロファイルの一覧を先に見せ、経路の
+        # 状態はあとから読み直して埋める。
+        - name: waitForRoutes
+          in: query
+          required: false
+          schema: { type: boolean, default: true }
       responses:
         "200":
           description: Configured VPN profiles, their sessions, and whether this machine can open routes
@@ -4206,7 +4214,7 @@ components:
     VPNOverview:
       type: object
       additionalProperties: false
-      required: [available, profiles]
+      required: [available, profiles, checking]
       properties:
         # このマシンで経路を作れるか。作れない理由の語は unavailable に入る。
         available: { type: boolean }
@@ -4219,6 +4227,9 @@ components:
           type: array
           maxItems: 64
           items: { $ref: "#/components/schemas/VPNProfileStatus" }
+        # 経路の状態と、このマシンで経路を作れるかを、まだ確かめていない。
+        # waitForRoutes=false で、確かめるのを待たずに答えたときだけ真になる。
+        checking: { type: boolean }
     VPNProfileStatus:
       type: object
       additionalProperties: false

@@ -3235,6 +3235,7 @@ export interface components {
             unavailable?: "vpn_docker_missing" | "vpn_docker_not_running";
             detail?: string;
             profiles: components["schemas"]["VPNProfileStatus"][];
+            checking: boolean;
         };
         VPNProfileStatus: {
             profile: components["schemas"]["VPNProfile"];
@@ -4815,7 +4816,9 @@ export interface operations {
     };
     getVPNOverview: {
         parameters: {
-            query?: never;
+            query?: {
+                waitForRoutes?: boolean;
+            };
             header?: never;
             path?: never;
             cookie?: never;

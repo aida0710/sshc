@@ -27,6 +27,9 @@ type VPNOverview struct {
 	// Detail は、使えないときの docker の生の文である。訳さずに添えるだけにする。
 	Detail   string             `json:"detail,omitempty"`
 	Profiles []VPNProfileStatus `json:"profiles"`
+	// Checking は、経路の状態（と、このマシンで経路を作れるか）をまだ確かめていない
+	// ことを表す。docker を待たずに答えたときだけ真になる。
+	Checking bool `json:"checking"`
 }
 
 // VPNProfileStatus は、プロファイルひとつと、その経路のいまの状態である。

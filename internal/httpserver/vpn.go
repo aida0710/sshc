@@ -3,6 +3,7 @@ package httpserver
 import (
 	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/labstack/echo/v5"
 
@@ -39,8 +40,20 @@ func registerVPNRoutes(engine *echo.Echo, handlers VPNHandlers) {
 }
 
 // Overview は、保存済みのプロファイルと、それぞれのいまの状態を返す。
+//
+// waitForRoutes=false なら、経路の状態を docker から読むのを待たない。まだ確かめて
+// いなければ checking を付けて返す。画面は、プロファイルの一覧を先に見せ、経路の
+// 状態はあとから読み直して埋める。
 func (h VPNHandlers) Overview(c *echo.Context) error {
-	return h.respond(c)
+	wait := true
+	if raw := c.QueryParam("waitForRoutes"); raw != "" {
+		parsed, err := strconv.ParseBool(raw)
+		if err != nil {
+			return problem(c, http.StatusBadRequest, "invalid_request")
+		}
+		wait = parsed
+	}
+	return h.overview(c, wait)
 }
 
 // CreateProfile は、新しいプロファイルを秘密と一緒に作る。同じ名前があれば断る。
@@ -153,6 +166,12 @@ func (h VPNHandlers) SetBinding(c *echo.Context) error {
 // respond は、いまの一覧と状態を返す。すべての操作がこれを返すので、呼び出し側は
 // 変更のあとに状態を取り直さなくてよい。
 func (h VPNHandlers) respond(c *echo.Context) error {
+	return h.overview(c, true)
+}
+
+// overview は、いまの一覧と状態を返す。waitForRoutes が false なら、docker から
+// 経路の状態を読むのを待たず、まだ確かめていなければ checking を付ける。
+func (h VPNHandlers) overview(c *echo.Context, waitForRoutes bool) error {
 	profiles, err := h.Config.VPNProfiles()
 	if err != nil {
 		return vpnProblem(c, err)
@@ -161,13 +180,15 @@ func (h VPNHandlers) respond(c *echo.Context) error {
 	if err != nil {
 		return vpnProblem(c, err)
 	}
-	ctx := c.Request().Context()
 	response := VPNOverview{Available: true, Profiles: make([]VPNProfileStatus, 0, len(profiles))}
 	var statuses map[string]vpn.Status
-	err = h.Sessions.Available(ctx)
-	if err == nil {
-		// docker は見つかっているが、daemon が応えなくなったこともここで分かる。
-		statuses, err = h.Sessions.Statuses(ctx)
+	if waitForRoutes {
+		// docker が見つからない、daemon が応えない、のどちらもここで分かる。
+		statuses, err = h.Sessions.Statuses(c.Request().Context())
+	} else {
+		var known bool
+		statuses, known, err = h.Sessions.KnownStatuses()
+		response.Checking = !known
 	}
 	if err != nil {
 		response.Available, response.Unavailable, response.Detail = false, unavailableReason(err), err.Error()

@@ -186,7 +186,7 @@ If you interrupt a connection with `Ctrl-C` while it is waiting, or close the pa
 
 Closing a route tells the VPN device first. OpenConnect sends a logout, L2TP/IPsec sends an L2TP disconnect and ends the IPsec session, and IKEv2/IPsec ends the IPsec session. OpenVPN tells the server when the configuration file has `explicit-exit-notify`. No session is left behind on the device, so its concurrent-connection slot is freed as well.
 
-**Disconnect** on the VPN screen closes the route and the connections that use it (Terminal, SFTP, `sshc <target>`). When connections are using the route, the screen shows how many and asks before disconnecting. The VPN screen keeps the state of each route current while it is open, so a route started from another screen or the command line can be disconnected without reopening the screen.
+**Disconnect** on the VPN screen closes the route and the connections that use it (Terminal, SFTP, `sshc <target>`). When connections are using the route, the screen shows how many and asks before disconnecting. The VPN screen keeps the state of each route current while it is open, so a route started from another screen or the command line can be disconnected without reopening the screen. When the screen opens, the profiles are listed right away, and each route shows "checking" until its state has been read from Docker.
 
 Terminal does not reconnect the connections closed by **Disconnect** or `sshc vpn down` automatically. Reconnecting them automatically would start the route again right after it was disconnected. Press **Reconnect** in Terminal, or open the connection again, to start the route and connect.
 

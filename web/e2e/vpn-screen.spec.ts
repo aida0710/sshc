@@ -1,12 +1,19 @@
 import type { Page, Route } from "@playwright/test";
 import { expect, openApplication, test } from "./support/environment";
 
-// VPN画面の「切断」。経路の状態は画面の外でも変わるので、画面は開いているあいだ
-// 読み直す。経路を使っている接続があれば、切断の前に本数を示して確かめる。
+// VPN画面を開いたときと、「切断」。
+//
+// 画面を開いたときは、経路の状態を確かめる（docker を読む）のを待たずにプロファイルの
+// 一覧を見せる。経路の状態は画面の外でも変わるので、開いているあいだは読み直す。
+// 経路を使っている接続があれば、切断の前に本数を示して確かめる。
 //
 // 本物の経路には Docker と VPN サーバーが要るので、VPN の API は固定の値で答える。
 
-type RouteState = { running: boolean; openConnections: number };
+type RouteState = { running: boolean; openConnections: number; checking?: boolean };
+
+// overviewPath は、一覧の API（GET /api/v1/vpn）である。画面は開いたときに
+// waitForRoutes=false を付けて読むので、クエリの有無を問わない。
+const overviewPath = /\/api\/v1\/vpn(\?.*)?$/;
 
 const labProfile = {
   name: "lab",
@@ -21,6 +28,7 @@ const labProfile = {
 function overviewOf(state: RouteState) {
   return {
     available: true,
+    checking: state.checking ?? false,
     profiles: [
       {
         profile: labProfile,
@@ -39,7 +47,7 @@ async function answerVPN(page: Page, state: RouteState): Promise<{ disconnects: 
   const received = { disconnects: 0 };
   const reply = (route: Route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(overviewOf(state)) });
-  await page.route("**/api/v1/vpn", reply);
+  await page.route(overviewPath, reply);
   await page.route("**/api/v1/vpn/profiles/lab/session", (route) => {
     if (route.request().method() === "DELETE") {
       received.disconnects += 1;
@@ -110,4 +118,29 @@ test("disconnecting a route that no connection uses does not ask", async ({ page
   await expect(route).toContainText("stopped");
   await expect(page.getByRole("dialog")).toHaveCount(0);
   expect(received.disconnects).toBe(1);
+});
+
+test("the VPN screen lists the profiles before the route states are checked", async ({ page, installation }) => {
+  let answerRoutes: () => void = () => undefined;
+  const routesChecked = new Promise<void>((resolve) => {
+    answerRoutes = resolve;
+  });
+  await page.route(overviewPath, async (route) => {
+    const waitForRoutes = new URL(route.request().url()).searchParams.get("waitForRoutes") !== "false";
+    // 経路の状態を確かめる読み取りは、検査が許すまで答えない（mac の遅い docker の代わり）。
+    if (waitForRoutes) await routesChecked;
+    const body = overviewOf({ running: true, openConnections: 0, checking: !waitForRoutes });
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+  });
+  await openApplication(page, installation);
+  await openVPN(page);
+
+  const route = page.getByRole("article", { name: "lab" });
+  await expect(route).toContainText("checking");
+  await expect(route.getByRole("button", { name: "Disconnect" })).toBeDisabled();
+
+  answerRoutes();
+
+  await expect(route).toContainText("route open");
+  await expect(route.getByRole("button", { name: "Disconnect" })).toBeEnabled();
 });

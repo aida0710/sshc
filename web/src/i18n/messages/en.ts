@@ -1128,6 +1128,7 @@ export const en = {
   "vpn.stateUp": "route open",
   "vpn.stateStarting": "connecting",
   "vpn.stateStopped": "stopped",
+  "vpn.stateChecking": "checking",
   "vpn.phaseImage": "building the image",
   "vpn.phaseContainer": "starting the container",
   "vpn.phaseTunnel": "waiting for the tunnel",
