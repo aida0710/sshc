@@ -33,6 +33,10 @@ FROM ubuntu:24.04@sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a
 #     AES-GCM（openssl など）。
 #   ca-certificates: VPN サーバーの証明書を公的な認証局で確かめる。apt と同じ手順の
 #     中で入るので、上の apt の取得の相手確認には使えない。
+# snapshot.ubuntu.com は、ときどき数分のあいだ 503 を返したり、とても遅くなったりする。
+# apt は一時的な失敗を既定で3回（待ちは最長30秒）まで試し直すが、それでは足りずに
+# イメージの作成ごと失敗したことがある。8回・最長60秒（1つのファイルで最長3分ほど）
+# まで待つ。
 RUN printf '%s\n' \
        'Types: deb' \
        'URIs: https://snapshot.ubuntu.com/ubuntu/20260920T000000Z/' \
@@ -40,6 +44,8 @@ RUN printf '%s\n' \
        'Components: main universe restricted multiverse' \
        'Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg' \
        > /etc/apt/sources.list.d/ubuntu.sources \
+    && printf '%s\n' 'Acquire::Retries "8";' 'Acquire::Retries::Delay::Maximum "60";' \
+       > /etc/apt/apt.conf.d/80sshc-retries \
     && apt-get -o Acquire::https::Verify-Peer=false update \
     && DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::https::Verify-Peer=false \
        install -y --no-install-recommends \
