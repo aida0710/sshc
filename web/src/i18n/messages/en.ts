@@ -1151,6 +1151,8 @@ export const en = {
   "vpn.tunnelInterface": "Interface",
   "vpn.tunnelAddress": "Tunnel address",
   "vpn.tunnelSince": "Route opened",
+  "vpn.disconnectTitle": "Disconnect {name}?",
+  "vpn.disconnectBody": "The connections using this VPN route ({count}) are disconnected too.",
   "vpn.removeTitle": "Remove {name}?",
   "vpn.removeBody": "This removes the profile and its stored secrets, and detaches it from the connections it is attached to. A running route is disconnected.",
   "vpn.connections": "Connections using this profile",

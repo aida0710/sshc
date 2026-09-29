@@ -178,6 +178,7 @@ func (h VPNHandlers) respond(c *echo.Context) error {
 		}
 		if status, present := statuses[profile.Name]; present {
 			entry.Running, entry.RelaySocket, entry.Phase = status.Running, status.RelaySocket, status.Phase
+			entry.OpenConnections = status.OpenConnections
 			if status.Tunnel != (vpn.TunnelStatus{}) {
 				entry.Tunnel = &VPNTunnel{
 					Interface: status.Tunnel.Interface, Address: status.Tunnel.Address,

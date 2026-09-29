@@ -23,6 +23,9 @@ type Status struct {
 	Tunnel TunnelStatus
 	// Phase は、いま経路を用意している段階である。用意していなければ空。
 	Phase StartPhase
+	// OpenConnections は、この経路を通っている接続（と、経路を待っている接続）の
+	// 数である。経路を止めると、これらの接続も切れる。
+	OpenConnections int
 }
 
 // TunnelStatus は、コンテナの agent が書き出したトンネルの様子である。
@@ -73,8 +76,9 @@ func (manager *Manager) Statuses(ctx context.Context) (map[string]Status, error)
 	}
 	statuses := map[string]Status{}
 	for _, name := range manager.names() {
-		if phase := manager.state(name).currentPhase(); phase != "" {
-			statuses[name] = Status{Name: name, Phase: phase}
+		state := manager.state(name)
+		if phase := state.currentPhase(); phase != "" {
+			statuses[name] = Status{Name: name, Phase: phase, OpenConnections: state.openConnections()}
 		}
 	}
 	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
@@ -90,7 +94,9 @@ func (manager *Manager) Statuses(ctx context.Context) (map[string]Status, error)
 // containerStatus は、コンテナがあるプロファイルひとつの状態を組み立てる。
 func (manager *Manager) containerStatus(profileName string, running bool) Status {
 	state := manager.state(profileName)
-	status := Status{Name: profileName, Running: running, Phase: state.currentPhase()}
+	status := Status{
+		Name: profileName, Running: running, Phase: state.currentPhase(), OpenConnections: state.openConnections(),
+	}
 	// コンテナが終わっても、ホスト側にはソケットのファイルが残る。動いている
 	// コンテナと engine の中継が揃っているときだけ、使える経路として見せる。
 	if running {

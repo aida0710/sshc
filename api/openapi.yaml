@@ -4222,7 +4222,7 @@ components:
     VPNProfileStatus:
       type: object
       additionalProperties: false
-      required: [profile, running, relaySocket, connections]
+      required: [profile, running, relaySocket, connections, openConnections]
       properties:
         profile: { $ref: "#/components/schemas/VPNProfile" }
         running: { type: boolean }
@@ -4241,6 +4241,9 @@ components:
         phase:
           type: string
           enum: [image, container, tunnel, approval]
+        # いまこの経路を通っている接続（Terminal、SFTP、CLI の中継）の数。経路を
+        # 止めると、これらの接続も切れる。画面は切断の前にこれを確かめる。
+        openConnections: { type: integer, minimum: 0 }
     VPNTunnel:
       type: object
       additionalProperties: false

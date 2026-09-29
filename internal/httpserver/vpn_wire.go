@@ -40,6 +40,9 @@ type VPNProfileStatus struct {
 	Tunnel *VPNTunnel `json:"tunnel,omitempty"`
 	// Phase は、いま経路を用意している段階である。用意していなければ空。
 	Phase vpn.StartPhase `json:"phase,omitempty"`
+	// OpenConnections は、いまこの経路を通っている接続の数である。画面は、経路を
+	// 切断する前に、これらの接続も切れることを確かめる。
+	OpenConnections int `json:"openConnections"`
 }
 
 // VPNTunnel は、コンテナの中のトンネルの様子である。

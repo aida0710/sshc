@@ -186,6 +186,8 @@ If you interrupt a connection with `Ctrl-C` while it is waiting, or close the pa
 
 Closing a route tells the VPN device first. OpenConnect sends a logout, L2TP/IPsec sends an L2TP disconnect and ends the IPsec session, and IKEv2/IPsec ends the IPsec session. OpenVPN tells the server when the configuration file has `explicit-exit-notify`. No session is left behind on the device, so its concurrent-connection slot is freed as well.
 
+**Disconnect** on the VPN screen closes the route and the connections that use it (Terminal, SFTP, `sshc <target>`). When connections are using the route, the screen shows how many and asks before disconnecting. The VPN screen keeps the state of each route current while it is open, so a route started from another screen or the command line can be disconnected without reopening the screen.
+
 Connecting again reopens the route. One that needs approval on the phone will ask for it again.
 
 ## When a route will not come up

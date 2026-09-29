@@ -80,7 +80,7 @@ func TestAConnectionThroughTheEngineRelayKeepsTheRouteUp(t *testing.T) {
 
 	_ = connection.Close()
 	// engine の中継は、相手が閉じたことを受けてから借りを返す。
-	waitUntil(t, func() bool { return openConnections(manager.state(profile.Name)) == 0 })
+	waitUntil(t, func() bool { return manager.state(profile.Name).openConnections() == 0 })
 	clock.advance(time.Hour)
 	manager.StopIdle(ctx, time.Minute)
 	if status, err := manager.Status(ctx, profile.Name); err != nil || status.Running || status.RelaySocket != "" {
@@ -155,13 +155,6 @@ func (clock *manualClock) advance(duration time.Duration) {
 	clock.mutex.Lock()
 	defer clock.mutex.Unlock()
 	clock.at = clock.at.Add(duration)
-}
-
-// openConnections は、経路を通っている接続と予約の数を読む。
-func openConnections(state *sessionState) int {
-	state.use.Lock()
-	defer state.use.Unlock()
-	return state.open
 }
 
 // waitUntil は、条件が成り立つまで少しずつ待つ。
@@ -240,5 +233,67 @@ func TestStatusesListTheRoutesOfThisEngine(t *testing.T) {
 	}
 	if status.Tunnel.Interface != "wg0" {
 		t.Fatalf("tunnel = %+v", status.Tunnel)
+	}
+}
+
+// 経路をひとつ止めても、ほかの経路と、それを通っている接続はそのまま残る。
+// 止めた経路を通っていた接続だけが切れる。
+func TestStoppingOneRouteLeavesTheOtherRouteAndItsConnections(t *testing.T) {
+	manager, ctx := requireDockerTest(t)
+	stopped, stoppedSecrets := wireGuardRoute(t, manager, ctx, "stopped")
+	kept, keptSecrets := wireGuardRoute(t, manager, ctx, "kept")
+	holding := fmt.Sprintf("%s:%d", tunnelServerAddress, holdPort)
+	cut := dialHolding(t, manager, ctx, stopped, stoppedSecrets, holding)
+	carried := dialHolding(t, manager, ctx, kept, keptSecrets, holding)
+
+	// 画面は、切断の前に、その経路を通っている接続の数を見せる。
+	statuses, err := manager.Statuses(ctx)
+	if err != nil {
+		t.Fatalf("Statuses = %v", err)
+	}
+	for _, name := range []string{stopped.Name, kept.Name} {
+		if open := statuses[name].OpenConnections; open != 1 {
+			t.Fatalf("%s を通っている接続の数 = %d, want 1", name, open)
+		}
+	}
+
+	if err := manager.Stop(ctx, stopped.Name); err != nil {
+		t.Fatalf("Stop = %v", err)
+	}
+
+	if status, err := manager.Status(ctx, kept.Name); err != nil || !status.Running || status.RelaySocket == "" ||
+		status.OpenConnections != 1 {
+		t.Fatalf("止めていない経路の状態 = %+v, %v", status, err)
+	}
+	requireEcho(t, carried, "still here")
+	_ = cut.SetReadDeadline(time.Now().Add(20 * time.Second))
+	if _, err := cut.Read(make([]byte, 1)); err == nil {
+		t.Fatal("止めた経路を通っていた接続が切れていない")
+	}
+}
+
+// dialHolding は、経路を通して、閉じるまで返事をし続ける相手へ繋ぐ。
+func dialHolding(t *testing.T, manager *Manager, ctx context.Context, profile Profile, secrets Secrets, address string) net.Conn {
+	t.Helper()
+	connection, err := manager.Dial(ctx, profile, secrets, address)
+	if err != nil {
+		t.Fatalf("Dial(%s) = %v", profile.Name, err)
+	}
+	t.Cleanup(func() { _ = connection.Close() })
+	requireEcho(t, connection, "hello "+profile.Name)
+	return connection
+}
+
+// requireEcho は、送った行がそのまま返ってくることを確かめる。
+func requireEcho(t *testing.T, connection net.Conn, line string) {
+	t.Helper()
+	_ = connection.SetDeadline(time.Now().Add(20 * time.Second))
+	defer func() { _ = connection.SetDeadline(time.Time{}) }()
+	if _, err := io.WriteString(connection, line+"\n"); err != nil {
+		t.Fatalf("送れない: %v", err)
+	}
+	answer := make([]byte, len(line)+1)
+	if _, err := io.ReadFull(connection, answer); err != nil || string(answer) != line+"\n" {
+		t.Fatalf("返事 = %q, %v, want %q", answer, err, line+"\n")
 	}
 }

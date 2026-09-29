@@ -173,6 +173,13 @@ func (state *sessionState) release(now time.Time) {
 	}
 }
 
+// openConnections は、この経路を通っている接続と予約の数を返す。
+func (state *sessionState) openConnections() int {
+	state.use.Lock()
+	defer state.use.Unlock()
+	return state.open
+}
+
 // idleFor は、接続が一本も無い状態が続いている長さを返す。一本でも通っていれば
 // 0 を返す。まだ一度も用意していない経路も 0 を返す。
 func (state *sessionState) idleFor(now time.Time) time.Duration {

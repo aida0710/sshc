@@ -14,7 +14,7 @@ import { describeVPNFieldError, vpnFieldErrorOf, type VPNFieldError } from "./vp
 import { VPNLogsDialog } from "./VPNLogsDialog";
 import { VPNProfileCard } from "./VPNProfileCard";
 import { VPNProfileForm, type VPNProfileSaveResult } from "./VPNProfileForm";
-import { routeProgressIntervalMs } from "./vpnPhases";
+import { overviewRefreshIntervalMs, routeProgressIntervalMs } from "./vpnOverviewPolling";
 import { describeVPNProblem } from "./vpnProblemMessage";
 import { vpnProfileNameError } from "./vpnProfileRules";
 import { VPNUnavailableNotice } from "./VPNUnavailableNotice";
@@ -33,6 +33,8 @@ export function VPNPanel({ api = vpnApi }: VPNPanelProps) {
   const operation = useAsyncOperation();
   const [overview, setOverview] = useState<VPNOverview | null>(null);
   const [pendingRemoval, setPendingRemoval] = useState("");
+  // pendingDisconnect は、切断を確かめている経路と、それを使っている接続の数である。
+  const [pendingDisconnect, setPendingDisconnect] = useState<{ name: string; openConnections: number } | null>(null);
   const [pendingRename, setPendingRename] = useState("");
   // editingProfile は、いま編集のフォームを開いているプロファイルである。
   const [editingProfile, setEditingProfile] = useState("");
@@ -71,7 +73,7 @@ export function VPNPanel({ api = vpnApi }: VPNPanelProps) {
   );
 
   useEffect(() => {
-    // 開いたときに一度だけ読む。以降は、操作の応答が最新の一覧を運ぶ。
+    // 開いたときに読む。以降は、操作の応答と、下の読み直しが最新の一覧を運ぶ。
     void act(() => api.vpnOverview());
   }, [api, act]);
 
@@ -104,6 +106,24 @@ export function VPNPanel({ api = vpnApi }: VPNPanelProps) {
     [act, describe, t],
   );
 
+  const disconnectProfile = useCallback(
+    (name: string) => void act(() => api.stopVPNSession(name)),
+    [act, api],
+  );
+
+  // requestDisconnect は、経路を切断する。経路を使っている接続があれば、それらも
+  // 切れることを先に確かめる。
+  const requestDisconnect = useCallback(
+    (name: string, openConnections: number) => {
+      if (openConnections > 0) {
+        setPendingDisconnect({ name, openConnections });
+        return;
+      }
+      disconnectProfile(name);
+    },
+    [disconnectProfile],
+  );
+
   const createProfile = useCallback(
     (profile: VPNProfile, secrets: VPNSecrets) => saveProfile(() => api.createVPNProfile(profile, secrets)),
     [api, saveProfile],
@@ -118,12 +138,13 @@ export function VPNPanel({ api = vpnApi }: VPNPanelProps) {
     [api, saveProfile],
   );
 
-  // 経路が立つまでは分単位になることがある。待っているあいだだけ状態を読み直し、
-  // どこまで進んだかを見せる。ほかの操作の最中は読み直さない。その応答が一覧を
-  // 運んでくるからである。経路を用意させている最中だけは、その応答が経路が立つまで
-  // 返らないので、段階を見せるために読み直し続ける。
+  // 経路の状態は、この画面の外でも変わる。画面を開いているあいだは読み直し、
+  // 経路を用意しているあいだは、どこまで進んだかを見せるために間隔を縮める。
+  // ほかの操作の最中は読み直さない。その応答が一覧を運んでくるからである。経路を
+  // 用意させている最中だけは、その応答が経路が立つまで返らないので、段階を見せる
+  // ために読み直し続ける。
   const preparingRoute = overview?.profiles.some((status) => (status.phase ?? "") !== "") ?? false;
-  const pollProgress = startingProfile !== "" || (!operation.busy && preparingRoute);
+  const showingProgress = startingProfile !== "" || preparingRoute;
   usePolling(
     () => {
       const started = generation.current;
@@ -134,7 +155,10 @@ export function VPNPanel({ api = vpnApi }: VPNPanelProps) {
         })
         .catch(() => undefined);
     },
-    { intervalMs: routeProgressIntervalMs, enabled: pollProgress },
+    {
+      intervalMs: showingProgress ? routeProgressIntervalMs : overviewRefreshIntervalMs,
+      enabled: startingProfile !== "" || !operation.busy,
+    },
   );
 
   if (overview === null) {
@@ -184,7 +208,7 @@ export function VPNPanel({ api = vpnApi }: VPNPanelProps) {
                     available={overview.available}
                     actions={{
                       onStart: () => void startProfile(name),
-                      onStop: () => void act(() => api.stopVPNSession(name)),
+                      onStop: () => requestDisconnect(name, status.openConnections),
                       onShowLogs: () => setShownLogs(name),
                       onEdit: () => setEditingProfile(name),
                       onRename: () => setPendingRename(name),
@@ -199,6 +223,26 @@ export function VPNPanel({ api = vpnApi }: VPNPanelProps) {
       )}
 
       <VPNProfileForm busy={operation.busy} onSave={createProfile} />
+
+      {pendingDisconnect === null ? null : (
+        <ConfirmDialog
+          id="vpn-disconnect"
+          heading={t("vpn.disconnectTitle", { name: pendingDisconnect.name })}
+          body={
+            <p className="text-sm text-ink-muted">
+              {t("vpn.disconnectBody", { count: pendingDisconnect.openConnections })}
+            </p>
+          }
+          confirmLabel={t("vpn.disconnect")}
+          cancelLabel={t("vpn.cancel")}
+          onCancel={() => setPendingDisconnect(null)}
+          onConfirm={() => {
+            const { name } = pendingDisconnect;
+            setPendingDisconnect(null);
+            disconnectProfile(name);
+          }}
+        />
+      )}
 
       {pendingRemoval === "" ? null : (
         <ConfirmDialog

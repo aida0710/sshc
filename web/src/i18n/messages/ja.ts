@@ -1153,6 +1153,8 @@ export const ja = {
   "vpn.tunnelInterface": "インターフェース",
   "vpn.tunnelAddress": "トンネルのアドレス",
   "vpn.tunnelSince": "接続開始時刻",
+  "vpn.disconnectTitle": "{name}を切断しますか？",
+  "vpn.disconnectBody": "このVPN経路を使っている接続（{count}本）も切断されます。",
   "vpn.removeTitle": "{name}を削除しますか？",
   "vpn.removeBody": "このプロファイルと保存済みのシークレットを削除し、このプロファイルを付けた接続からも設定を外します。接続中の経路は切断します。",
   "vpn.connections": "このプロファイルを使う接続",

@@ -3244,6 +3244,7 @@ export interface components {
             tunnel?: components["schemas"]["VPNTunnel"];
             /** @enum {string} */
             phase?: "image" | "container" | "tunnel" | "approval";
+            openConnections: number;
         };
         VPNTunnel: {
             interface?: string;
