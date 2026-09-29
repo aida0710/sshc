@@ -96,10 +96,14 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 			return platform.WithLoginShellPath(ctx, dependencies.Environ())
 		}
 	}
+	dockerEnvironment := dependencies.DockerEnvironment
+	if dockerEnvironment == nil {
+		dockerEnvironment = loginShellEnvironment
+	}
 
 	// VPN 経路はこの engine が持つ。コンテナも中継のソケットも、この利用者の
 	// ものだけを扱う。
-	vpnSessions := vpn.New(filepath.Join(workspace.Root(), vpnStateDirectory), os.Getuid(), loginShellEnvironment)
+	vpnSessions := vpn.New(filepath.Join(workspace.Root(), vpnStateDirectory), os.Getuid(), dockerEnvironment)
 	// 設定・秘密・経路をひとつの操作として扱う。engine の接続と HTTP API が同じものを使う。
 	vpnProfiles := vpnprofile.New(vpnprofile.Dependencies{
 		Configuration: configService, Vault: passwordService, Routes: vpnSessions,
