@@ -576,6 +576,7 @@ export const ja = {
   "terminal.keyPassphraseRequired":
     "秘密鍵のパスフレーズが必要です。Vaultのロックを解除するか、この鍵に正しいパスフレーズを保存してください。",
   "terminal.vpnRouteRefused": "VPN経路を用意できないため、自動再接続を停止しました。ターミナルに表示された理由を確認してください。",
+  "terminal.vpnRouteDisconnected": "VPN経路が切断されたため、自動再接続を停止しました。［再接続］を押すと、VPN経路を起動して接続し直します。",
   "terminal.reconnectFailed":
     "再接続に失敗しました。設定された上限まで再試行します。",
   "terminal.reconnectExhausted":
@@ -1129,6 +1130,7 @@ export const ja = {
   "vpn.stateUp": "接続済み",
   "vpn.stateStarting": "接続中",
   "vpn.stateStopped": "停止中",
+  "vpn.stateChecking": "確認中",
   "vpn.phaseImage": "コンテナイメージを準備しています",
   "vpn.phaseContainer": "コンテナを起動しています",
   "vpn.phaseTunnel": "VPNの接続を待っています",
@@ -1153,6 +1155,8 @@ export const ja = {
   "vpn.tunnelInterface": "インターフェース",
   "vpn.tunnelAddress": "トンネルのアドレス",
   "vpn.tunnelSince": "接続開始時刻",
+  "vpn.disconnectTitle": "{name}を切断しますか？",
+  "vpn.disconnectBody": "このVPN経路を使っている接続（{count}本）も切断されます。切断した接続は自動では再接続しません。",
   "vpn.removeTitle": "{name}を削除しますか？",
   "vpn.removeBody": "このプロファイルと保存済みのシークレットを削除し、このプロファイルを付けた接続からも設定を外します。接続中の経路は切断します。",
   "vpn.connections": "このプロファイルを使う接続",

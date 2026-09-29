@@ -2,15 +2,21 @@ package vpn
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"sshc/internal/connectionlog"
 )
+
+// ErrRouteDisconnected は、利用者が切断した経路を、自動再接続では起動し直さない
+// ことを表す。
+var ErrRouteDisconnected = errors.New("the vpn route was disconnected by the user")
 
 // Manager は、この engine が持つVPNセッションの全体である。
 //
@@ -54,9 +60,22 @@ type Manager struct {
 	loaded    bool
 	// pathSource は、docker を探した PATH をどこから取ったかの説明である。
 	pathSource string
+	// lookupFailure は、最後に docker を探して使えなかった理由と、その時刻である。
+	// 経路の状態を読むときは、routeReadingLifetime のあいだ探し直さずにこれを使う。
+	lookupFailure  error
+	lookupFailedAt time.Time
 
 	mutex    sync.Mutex
 	sessions map[string]*sessionState
+
+	// readings は、docker から読んだ経路の状態を短い時間だけ覚える。
+	readings routeReadings
+	// readContainers は、コンテナがあるプロファイルと、そのコンテナが動いているかを
+	// 読む。既定は listContainers（docker ps）で、検査が差し替える。
+	readContainers func(context.Context) (map[string]bool, error)
+	// changes は、sshcエンジンが経路を起動・停止するたびに増える番号である。
+	// 覚えた状態と、その後の起動・停止のどちらが新しいかを見分ける。
+	changes atomic.Uint64
 }
 
 // New は、VPNセッションの管理を作る。
@@ -66,12 +85,14 @@ type Manager struct {
 // 環境を返す（nil なら engine の環境）。
 func New(directory string, owner int, environment Environment) *Manager {
 	lifetime, cancel := context.WithCancel(context.Background())
-	return &Manager{
+	manager := &Manager{
 		directory: directory, owner: owner, workspace: workspaceIdentity(directory),
 		environment: environment, now: time.Now,
 		lifetime: lifetime, close: cancel, orphans: newOrphanGate(),
 		sessions: map[string]*sessionState{},
 	}
+	manager.readContainers = manager.listContainers
+	return manager
 }
 
 // Close は、進行中の起動を打ち切る。経路そのものは StopAll で畳む。
@@ -226,6 +247,11 @@ func (manager *Manager) Start(ctx context.Context, profile Profile, secrets Secr
 	state := manager.state(profile.Name)
 	state.transition.Lock()
 	defer state.transition.Unlock()
+	// 起動できても、できずにコンテナを片付けても、経路の状態は docker から読んだ
+	// ものより新しくなる。
+	defer manager.noteChange(state)
+	// 起動を求められたので、利用者が切断した経路でも、もう切断したままにはしない。
+	state.setDisconnected(false)
 
 	name := manager.containerName(profile.Name)
 	ours, err := manager.requireOurContainer(ctx, name, profile.Name)
@@ -312,8 +338,39 @@ func (manager *Manager) Stop(ctx context.Context, profileName string) error {
 	return manager.stopLocked(ctx, profileName)
 }
 
+// Disconnect は、利用者の求めで経路を切断する。
+//
+// Stop と違い、利用者が切断したことを覚えておく（Disconnected）。経路を止めると、
+// それを通っていた接続も切れる。その自動再接続で、切断した経路を起動し直さない
+// ためである。停止より先に覚える。停止の途中に切れた接続の再接続が、先に経路を
+// 起動し直さないようにする。
+func (manager *Manager) Disconnect(ctx context.Context, profileName string) error {
+	if err := validateProfileName(profileName); err != nil {
+		return err
+	}
+	if _, err := manager.command(ctx); err != nil {
+		return err
+	}
+	state := manager.state(profileName)
+	state.transition.Lock()
+	defer state.transition.Unlock()
+	state.setDisconnected(true)
+	if err := manager.stopLocked(ctx, profileName); err != nil {
+		// 止められなかった経路は動いているかもしれない。切断したとは覚えない。
+		state.setDisconnected(false)
+		return err
+	}
+	return nil
+}
+
+// Disconnected は、利用者がこの経路を切断し、まだ起動し直していないかを返す。
+func (manager *Manager) Disconnected(profileName string) bool {
+	return manager.state(profileName).isDisconnected()
+}
+
 // stopLocked は、Stop の本体である。起動と停止の鍵を握って呼ぶこと。
 func (manager *Manager) stopLocked(ctx context.Context, profileName string) error {
+	defer manager.noteChange(manager.state(profileName))
 	name := manager.containerName(profileName)
 	if _, err := manager.requireOurContainer(ctx, name, profileName); err != nil {
 		return err
@@ -336,13 +393,30 @@ func (manager *Manager) command(ctx context.Context) (dockerCommand, error) {
 	}
 	command, err := findDocker(ctx, manager.variables)
 	if err != nil {
+		manager.lookupFailure, manager.lookupFailedAt = err, manager.now()
 		connectionlog.Say(ctx, connectionlog.Detailed, "dockerを探したPATHの取得元：%s", manager.pathSource)
 		connectionlog.Say(ctx, connectionlog.Full, "PATH：%s", manager.searchedPath())
 		connectionlog.Say(ctx, connectionlog.Detailed, "Dockerを使用できません：%v", err)
 		return dockerCommand{}, err
 	}
-	manager.docker, manager.found = command, true
+	manager.docker, manager.found, manager.lookupFailure = command, true, nil
 	return command, nil
+}
+
+// commandForReading は、経路の状態を読むための docker を返す。直前に探して使え
+// なかったなら、routeReadingLifetime のあいだは探し直さずに同じ理由を返す。
+//
+// Docker Desktop を起動していない mac では、docker info は失敗するまでに1秒以上
+// かかる。画面の読み直しのたびに探し直すと、そのたびに一覧が遅れる。経路の起動
+// のように利用者が求めた操作は、command でその場で探し直す。
+func (manager *Manager) commandForReading(ctx context.Context) (dockerCommand, error) {
+	manager.lookup.Lock()
+	failure, failedAt := manager.lookupFailure, manager.lookupFailedAt
+	manager.lookup.Unlock()
+	if failure != nil && manager.now().Sub(failedAt) < routeReadingLifetime {
+		return dockerCommand{}, failure
+	}
+	return manager.command(ctx)
 }
 
 // loadEnvironment は、docker を探して起動する環境と、その取得元の説明を返す。

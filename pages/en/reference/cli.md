@@ -129,6 +129,8 @@ sshc vpn unbind <alias> [--json]
 
 `sshc vpn` also prints the tunnel's interface, its address inside the VPN and when the route opened, for every route that is up.
 
+`sshc vpn down` disconnects the route. The connections that use it are closed as well, and Terminal does not reconnect them automatically.
+
 `sshc vpn remove` and `sshc vpn rename` need an unlocked vault. `sshc vpn rename` moves the settings, the stored secrets and the connections that use the profile to the new name together. A running route is taken down first, unless the new name is refused.
 
 `sshc vpn logs` prints what the sshc engine recorded while preparing that profile's route, followed by the recent output of its container, with the stored secrets replaced by `[REDACTED]`. It is the first place to look when a route will not come up.

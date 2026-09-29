@@ -30,24 +30,32 @@ export function VPNProfileCard({
   status,
   busy,
   available,
+  checking,
   actions,
 }: {
   status: VPNProfileStatus;
   busy: boolean;
   // available は、このマシンが経路を作れるかどうかである。
   available: boolean;
+  // checking は、経路の状態をまだ確かめていないことを表す。確かめるまでは、状態を
+  // 見せず、接続と切断も受け付けない。
+  checking: boolean;
   actions: VPNProfileActions;
 }) {
   const t = useTranslate();
   const phase = vpnPhases[status.phase ?? ""];
+  // 確かめる前の状態は、sshcエンジンが覚えているものだけで、コンテナが終わったことは
+  // 分からない。用意の途中の段階を除いて、確かめるまでは状態を言わない。
   const state =
-    status.relaySocket !== ""
-      ? t("vpn.stateUp")
-      : phase !== undefined
-        ? t(phase)
-        : status.running
-          ? t("vpn.stateStarting")
-          : t("vpn.stateStopped");
+    checking && phase === undefined
+      ? t("vpn.stateChecking")
+      : status.relaySocket !== ""
+        ? t("vpn.stateUp")
+        : phase !== undefined
+          ? t(phase)
+          : status.running
+            ? t("vpn.stateStarting")
+            : t("vpn.stateStopped");
   const summary = [vpnBackendLabel(status.profile.backend), serverOf(status.profile), state].filter((part) => part !== "");
   return (
     <Card as="article" padded aria-label={status.profile.name}>
@@ -57,10 +65,10 @@ export function VPNProfileCard({
           <p className={hintText}>{summary.join(" · ")}</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button disabled={busy || !available} onClick={actions.onStart}>
+          <Button disabled={busy || checking || !available} onClick={actions.onStart}>
             {t("vpn.connect")}
           </Button>
-          <Button disabled={busy || !status.running} onClick={actions.onStop}>
+          <Button disabled={busy || checking || !status.running} onClick={actions.onStop}>
             {t("vpn.disconnect")}
           </Button>
           <Button disabled={busy || !available} onClick={actions.onShowLogs}>
@@ -78,7 +86,7 @@ export function VPNProfileCard({
         </div>
       </div>
 
-      {status.tunnel === undefined ? null : <TunnelDetail tunnel={status.tunnel} />}
+      {status.tunnel === undefined || checking ? null : <TunnelDetail tunnel={status.tunnel} />}
 
       <ProfileConnections connections={status.connections} />
     </Card>

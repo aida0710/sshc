@@ -183,3 +183,20 @@ func TestOnlyLongOrHumanPhasesHaveANotice(t *testing.T) {
 		}
 	}
 }
+
+// 経路を止めると切れる接続の数には、経路を待っている接続も入る。画面は切断の前に
+// この数を見せる。
+func TestTheConnectionsAStopWouldCutIncludeThoseWaitingForTheRoute(t *testing.T) {
+	state := &sessionState{}
+	start := time.Date(2026, 9, 29, 12, 0, 0, 0, time.UTC)
+
+	state.borrow() // 通っている接続
+	state.borrow() // 経路が立つのを待っている接続
+	if open := state.openConnections(); open != 2 {
+		t.Fatalf("接続の数 = %d, want 2", open)
+	}
+	state.release(start)
+	if open := state.openConnections(); open != 1 {
+		t.Fatalf("1本閉じたあとの接続の数 = %d, want 1", open)
+	}
+}
