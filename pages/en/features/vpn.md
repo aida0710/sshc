@@ -31,7 +31,7 @@ The container adds a route and a packet filter only for the targets connections 
 
 ## What "does not touch the host" covers
 
-The host default route, DNS, NetworkManager and an already-connected VPN are left alone. Neither `--privileged` nor `--network host` is used. The container gets one tunnel device (`/dev/net/tun` for WireGuard and OpenConnect, `/dev/ppp` for L2TP/IPsec) and only the capabilities that backend needs; for WireGuard everything but `CAP_NET_ADMIN`, `CAP_NET_RAW`, `CAP_DAC_OVERRIDE` and `CAP_CHOWN` is dropped.
+The host default route, DNS, NetworkManager and an already-connected VPN are left alone. Neither `--privileged` nor `--network host` is used. The container gets one tunnel device (`/dev/net/tun` for WireGuard, OpenConnect and OpenVPN, `/dev/ppp` for L2TP/IPsec) and only the capabilities that backend needs; for WireGuard and OpenVPN everything but `CAP_NET_ADMIN`, `CAP_NET_RAW`, `CAP_DAC_OVERRIDE` and `CAP_CHOWN` is dropped.
 
 It is not unrelated to the host: it uses Docker's bridge and the kernel's tunnel support, and anyone who can drive Docker generally holds strong host privileges. What is isolated is the VPN's routes, DNS and connection state, and the application traffic sent into it.
 
@@ -41,10 +41,10 @@ Create one from the VPN screen or with `sshc vpn add <name>`.
 
 | Field | Meaning |
 |---|---|
-| Type | WireGuard, L2TP/IPsec, or OpenConnect (Cisco AnyConnect, ocserv, GlobalProtect, FortiGate, Ivanti Connect Secure and more) |
+| Type | WireGuard, L2TP/IPsec, OpenConnect (Cisco AnyConnect, ocserv, GlobalProtect, FortiGate, Ivanti Connect Secure and more), or OpenVPN |
 | DNS inside the VPN | Only for connections whose `HostName` is a name. Up to three IPv4 addresses |
-| VPN server | `host:port` for WireGuard, a hostname or address for L2TP/IPsec and OpenConnect |
-| Secrets | A private key for WireGuard; the VPN password and IPsec pre-shared key for L2TP/IPsec; the VPN password for OpenConnect |
+| VPN server | `host:port` for WireGuard, a hostname or address for L2TP/IPsec and OpenConnect. OpenVPN reads it from `remote` in the configuration file |
+| Secrets | A private key for WireGuard; the VPN password and IPsec pre-shared key for L2TP/IPsec; the VPN password for OpenConnect; the configuration file (.ovpn) and, when it asks for one, the VPN password for OpenVPN |
 
 Secrets are kept in the vault. They are never returned to the screen or the API.
 
@@ -90,6 +90,47 @@ The TOTP seed is kept in the vault and the code is generated just before it is h
 
 A setup that requires a browser-based SAML login, such as Duo's Universal Prompt, is not supported. There is no browser in the container and the engine does not stand in for you.
 
+### OpenVPN configuration files
+
+OpenVPN uses the client configuration file (.ovpn) that a provider or an organization hands out. On the VPN screen, paste the file or load it with **Choose a file**; `sshc vpn add` asks for its path.
+
+A configuration file usually carries certificates and keys, so its contents are kept in the vault as a secret. The VPN servers shown in the list are read from its `remote` lines.
+
+A configuration file can be used when it:
+
+- has `client` (or `tls-client`) and at least one `remote`
+- embeds its certificates and keys, as in `<ca>`…`</ca>`, `<cert>`, `<key>`, `<tls-auth>` and `<tls-crypt>`
+- uses a `tun` tunnel (`dev tap` is not supported)
+- keeps every line within 254 bytes and the whole file within 64 KiB
+
+A username and password are optional. Enter them when the file has `auth-user-pass`; leave them blank when a certificate alone authenticates. The password reaches OpenVPN through a file in memory (tmpfs) inside the container, never through a command-line argument or an environment variable, and `--auth-nocache` keeps OpenVPN from holding on to it after use.
+
+#### Directives that are refused
+
+For safety, a configuration file with any of the following directives cannot be saved. The screen and `sshc vpn add` name the line and the directive; remove that line and load the file again.
+
+| Kind | Directives | Why |
+|---|---|---|
+| Runs a command or loads a program | `up`, `down`, `route-up`, `route-pre-down`, `ipchange`, `tls-verify`, `client-connect`, `client-disconnect`, `client-crresponse`, `learn-address`, `auth-user-pass-verify`, `tls-crypt-v2-verify`, `iproute`, `plugin`, `engine`, `pkcs11-providers`, `script-security` | Anything could run inside the container and undo the rule that only the target's traffic goes into the tunnel |
+| Changes routes or DNS | `route`, `route-ipv6`, `redirect-gateway`, `redirect-private`, `client-nat` | sshc adds a route for each target itself |
+| Decided by sshc | `dev` and `dev-type` other than `tun`, `dev-node`, `lladdr`, `mktun`, `rmtun`, `daemon`, `log`, `log-append`, `syslog`, `status`, `writepid`, `tmp-dir`, `chroot`, `cd`, `user`, `group`, `setcon`, `askpass`, and every directive starting with `management` | sshc decides the tunnel interface, where the log goes and how OpenVPN runs |
+| Names a file | `ca`, `cert`, `key`, `tls-auth`, `tls-crypt`, `pkcs12`, `auth-user-pass` and the like with a file name, and `config`, `capath`, `tls-export-cert`, `replay-persist`, `genkey` | The file is not in the container. Embedding its contents, as in `<ca>`…`</ca>`, works |
+| For a VPN server | `mode`, `server`, `server-ipv6`, `server-bridge`, `tls-server` | sshc only connects as a client |
+
+A directive behind `setenv opt` is checked as if it were written on its own. The list was checked against the OpenVPN 2.6 manual.
+
+#### What sshc decides
+
+Whatever the file says, sshc uses its own values for these:
+
+- the tunnel interface is `tun0`
+- routes, the default route and DNS handed out by the server (`redirect-gateway`, `route`, `dhcp-option` and so on) are not taken
+- the interface gets its address as a `/32`, and only the targets your connections use get a route
+- a failed authentication is not retried
+- the log level is `verb 3`
+
+Neither `dhcp-option DNS` in the file nor DNS handed out by the server is used. When a connection's `HostName` is a name, give the profile its DNS servers inside the VPN, as with the other types.
+
 ### Naming a target inside the VPN
 
 When a connection's `HostName` is a name, give the profile attached to it the DNS servers that can resolve it. The name is resolved inside the container, using those servers alone: not the host's `resolv.conf`, and not Docker's own DNS. That is what keeps a name that means something else on the host from sending the connection to the wrong machine. With no DNS servers in the profile, a named target is refused; Connections points this out when you pick the profile.
@@ -120,7 +161,7 @@ A route opens when it is needed and closes when it is not. The route and packet 
 
 If you interrupt a connection with `Ctrl-C` while it is waiting, or close the page, the container that was being prepared does not remain.
 
-Closing a route tells the VPN device first. OpenConnect sends a logout, and L2TP/IPsec sends an L2TP disconnect and ends the IPsec session. No session is left behind on the device, so its concurrent-connection slot is freed as well.
+Closing a route tells the VPN device first. OpenConnect sends a logout, and L2TP/IPsec sends an L2TP disconnect and ends the IPsec session. OpenVPN tells the server when the configuration file has `explicit-exit-notify`. No session is left behind on the device, so its concurrent-connection slot is freed as well.
 
 Connecting again reopens the route. One that needs approval on the phone will ask for it again.
 
@@ -128,7 +169,7 @@ Connecting again reopens the route. One that needs approval on the phone will as
 
 While a route is open, the VPN screen and `sshc vpn` show the tunnel's interface, its address inside the VPN and when it opened. If that much is there, the tunnel itself is up. A WireGuard route does not open until the peer has completed a handshake, so a wrong key or server shows a reason instead of an open route.
 
-When a route does not come up, the screen and `sshc vpn up` say why as far as it is known, for example that the WireGuard peer never completed a handshake or that PPP authentication failed.
+When a route does not come up, the screen and `sshc vpn up` say why as far as it is known, for example that the WireGuard peer never completed a handshake or that PPP authentication failed. For OpenVPN they tell apart a server that refused the authentication (`AUTH_FAILED`), a failed TLS handshake, and a server that never answered.
 
 When the VPN is up but the target cannot be reached, the terminal and `sshc <alias>` say why:
 

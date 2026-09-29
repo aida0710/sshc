@@ -19,6 +19,7 @@ type Secrets struct {
 	WireGuard   *WireGuardSecrets
 	L2TP        *L2TPSecrets
 	OpenConnect *OpenConnectSecrets
+	OpenVPN     *OpenVPNSecrets
 }
 
 // WireGuardSecrets は、wireguard backend の秘密である。
@@ -50,6 +51,8 @@ const (
 	SecretKeyIPsecPSK              = "ipsecPsk"
 	SecretKeyOpenConnectPassword   = "openconnectPassword"
 	SecretKeyOpenConnectTOTPSecret = "openconnectTotpSecret"
+	SecretKeyOpenVPNConfig         = "openvpnConfig"
+	SecretKeyOpenVPNPassword       = "openvpnPassword"
 )
 
 // SecretsDocument は、秘密の JSON の形である。Vault の記録と、保存要求の本文が
@@ -60,6 +63,8 @@ type SecretsDocument struct {
 	IPsecPSK              string `json:"ipsecPsk,omitempty"`
 	OpenConnectPassword   string `json:"openconnectPassword,omitempty"`
 	OpenConnectTOTPSecret string `json:"openconnectTotpSecret,omitempty"`
+	OpenVPNConfig         string `json:"openvpnConfig,omitempty"`
+	OpenVPNPassword       string `json:"openvpnPassword,omitempty"`
 }
 
 // Secrets は、JSON の形を backend ごとの型へ直す。値のある backend の節だけを作る。
@@ -75,6 +80,9 @@ func (document SecretsDocument) Secrets() Secrets {
 		secrets.OpenConnect = &OpenConnectSecrets{
 			Password: document.OpenConnectPassword, TOTPSecret: document.OpenConnectTOTPSecret,
 		}
+	}
+	if document.OpenVPNConfig != "" || document.OpenVPNPassword != "" {
+		secrets.OpenVPN = &OpenVPNSecrets{Config: document.OpenVPNConfig, Password: document.OpenVPNPassword}
 	}
 	return secrets
 }
@@ -92,6 +100,10 @@ func (secrets Secrets) Document() SecretsDocument {
 	if secrets.OpenConnect != nil {
 		document.OpenConnectPassword = secrets.OpenConnect.Password
 		document.OpenConnectTOTPSecret = secrets.OpenConnect.TOTPSecret
+	}
+	if secrets.OpenVPN != nil {
+		document.OpenVPNConfig = secrets.OpenVPN.Config
+		document.OpenVPNPassword = secrets.OpenVPN.Password
 	}
 	return document
 }

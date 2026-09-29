@@ -14,6 +14,8 @@ const (
 	// OpenConnect は openconnect でトンネルを張る。Cisco AnyConnect と
 	// その仲間（ocserv、GlobalProtect、Pulse など）へ繋ぐ。
 	OpenConnect BackendName = "openconnect"
+	// OpenVPN は、利用者の設定ファイル（.ovpn）で OpenVPN のトンネルを張る。
+	OpenVPN BackendName = "openvpn"
 )
 
 // backend は、トンネルの張り方ひとつぶんの違いである。
@@ -50,6 +52,7 @@ var backends = map[BackendName]backend{
 	WireGuard:   wireGuardBackend{},
 	L2TPIPsec:   l2tpBackend{},
 	OpenConnect: openConnectBackend{},
+	OpenVPN:     openVPNBackend{},
 }
 
 // backendFor は、名前から backend を引く。

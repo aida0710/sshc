@@ -61,6 +61,9 @@ type problemPayload struct {
 	Field  string `json:"field,omitempty"`
 	Reason string `json:"reason,omitempty"`
 	Limit  int    `json:"limit,omitempty"`
+	// Directive は、設定ファイル（OpenVPN の .ovpn）の中で断った指示の名前である。行番号は
+	// Line に入る。どちらも Go が決めた語と数だけで、設定ファイルの中身は載せない。
+	Directive string `json:"directive,omitempty"`
 }
 
 // declaredGroup は、拒否された directory 操作が対象としていた group を示す。

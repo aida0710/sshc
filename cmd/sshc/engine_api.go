@@ -46,6 +46,10 @@ type engineProblem struct {
 	Reason string
 	Limit  int
 	cause  error
+
+	// Line と Directive は、設定ファイル（OpenVPN の .ovpn）の中で断った行と指示である。
+	Line      int
+	Directive string
 }
 
 func (problem engineProblem) Error() string {
@@ -509,6 +513,8 @@ func decodeEngineProblem(response *http.Response) error {
 				decoded.Field = valueOrZero(problem.Field)
 				decoded.Reason = valueOrZero(problem.Reason)
 				decoded.Limit = valueOrZero(problem.Limit)
+				decoded.Line = valueOrZero(problem.Line)
+				decoded.Directive = valueOrZero(problem.Directive)
 			}
 		}
 	} else if errors.Is(err, errEngineResponseTooLarge) {

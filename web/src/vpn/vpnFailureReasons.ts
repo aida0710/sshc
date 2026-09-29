@@ -15,6 +15,11 @@ const sessionFailureMessages: Record<string, MessageKey> = {
   openconnect_failed: "vpn.failure.openconnect_failed",
   handshake_timeout: "vpn.failure.handshake_timeout",
   tunnel_lost: "vpn.failure.tunnel_lost",
+  openvpn_authentication: "vpn.failure.openvpn_authentication",
+  openvpn_tls: "vpn.failure.openvpn_tls",
+  openvpn_no_response: "vpn.failure.openvpn_no_response",
+  openvpn_configuration: "vpn.failure.openvpn_configuration",
+  openvpn_failed: "vpn.failure.openvpn_failed",
 };
 
 // 経路はあるが、VPN 経由で接続先へ接続できなかった理由（vpn_target_failed）である。

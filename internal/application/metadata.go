@@ -21,7 +21,7 @@ import (
 
 const (
 	// MetadataSchemaVersion はこのビルドが書き込むバージョンである。
-	MetadataSchemaVersion = 6
+	MetadataSchemaVersion = 7
 	MetadataFileName      = "metadata.json"
 	DefaultGroupsFile     = "groups.sshc.conf"
 )
@@ -272,7 +272,7 @@ func DecodeMetadata(contents []byte) (Metadata, error) {
 		return Metadata{}, err
 	}
 	switch version.SchemaVersion {
-	case MetadataSchemaVersion, 5, 4, 3:
+	case MetadataSchemaVersion, 6, 5, 4, 3:
 	default:
 		return Metadata{}, ErrMetadataVersion
 	}
@@ -287,6 +287,9 @@ func DecodeMetadata(contents []byte) (Metadata, error) {
 	// プロファイルを付けた接続のHostNameとPortで決まる。知らない項目として読み
 	// 飛ばすので、書き直すと消える。v6はtargetの無いプロファイルを旧版に読ませない
 	// ための境界でもある。
+	// v6→v7は項目を足すだけである。v7は、v0.39.7までのsshcが知らないVPNの方式
+	// （openvpn）のプロファイルを旧版に読ませないための境界である。旧版は知らない
+	// 方式を断るので、版で先に断る方が、何が起きたかが利用者に分かる。
 	metadata.SchemaVersion = MetadataSchemaVersion
 	if metadata.GroupsFile == "" {
 		metadata.GroupsFile = DefaultGroupsFile

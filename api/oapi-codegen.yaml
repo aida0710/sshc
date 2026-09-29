@@ -104,6 +104,7 @@ output-options:
     - WireGuardProfile
     - L2TPProfile
     - OpenConnectProfile
+    - OpenVPNProfile
     - VPNOverview
     - VPNProfileStatus
     - VPNTunnel

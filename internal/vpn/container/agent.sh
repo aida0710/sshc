@@ -123,6 +123,9 @@ case "$backend" in
 wireguard | l2tp_ipsec | openconnect)
 	. "$backend_directory/backend-$backend.sh"
 	;;
+openvpn)
+	. "$backend_directory/backend-$backend.sh"
+	;;
 *)
 	rm -f "$profile"
 	echo "対応していない方式です: $backend" >&2

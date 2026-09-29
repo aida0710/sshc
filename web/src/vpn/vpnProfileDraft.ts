@@ -1,4 +1,5 @@
 import type { VPNProfile, VPNSecrets } from "../api/vpn";
+import { inspectOpenVPNConfig } from "./openVPNConfig";
 import type { VPNBackend } from "./vpnBackends";
 import { openConnectProtocols } from "./vpnProfileRules";
 import { vpnSecretKeys, type VPNSecretKey } from "./vpnSecretRules";
@@ -24,12 +25,15 @@ export type VPNProfileDraft = {
   serverCertificate: string;
   secondFactor: SecondFactor;
   approvalWord: string;
+  // servers は、OpenVPN の設定ファイルの remote のサーバーである。設定ファイルから読む。
+  servers: string[];
   secrets: Required<VPNSecrets>;
 };
 
 export const emptySecrets: Required<VPNSecrets> = {
   wireguardPrivateKey: "", l2tpPassword: "", ipsecPsk: "",
   openconnectPassword: "", openconnectTotpSecret: "",
+  openvpnConfig: "", openvpnPassword: "",
 };
 
 // トンネル側のアドレスは、1台だけを名乗る /32 がほとんどなので、例として入れておく。
@@ -39,6 +43,7 @@ export const emptyDraft: VPNProfileDraft = {
   name: "", backend: "wireguard", resolvers: "", server: "",
   peerPublicKey: "", address: suggestedTunnelAddress, username: "", ike: "", esp: "",
   protocol: openConnectProtocols[0], serverCertificate: "", secondFactor: "", approvalWord: "",
+  servers: [],
   secrets: emptySecrets,
 };
 
@@ -48,6 +53,7 @@ export const settingsSection: Record<VPNBackend, string> = {
   wireguard: "wireguard",
   l2tp_ipsec: "l2tp",
   openconnect: "openconnect",
+  openvpn: "openvpn",
 };
 
 // splitResolvers は、入力された DNS の並びを一件ずつに分ける。
@@ -93,6 +99,10 @@ export function draftOf(profile: VPNProfile): VPNProfileDraft {
         approvalWord: settings.approvalWord ?? "",
       };
     }
+    case "openvpn": {
+      const settings = profile.openvpn;
+      return settings === undefined ? common : { ...common, servers: settings.servers, username: settings.username ?? "" };
+    }
   }
 }
 
@@ -114,6 +124,11 @@ export function profileOf(draft: VPNProfileDraft): VPNProfile {
           ...(draft.secondFactor === "approve" && draft.approvalWord !== "" ? { approvalWord: draft.approvalWord } : {}),
         },
       };
+    case "openvpn":
+      return {
+        ...common,
+        openvpn: { servers: draft.servers, ...(draft.username === "" ? {} : { username: draft.username }) },
+      };
     case "l2tp_ipsec":
       return {
         ...common,
@@ -130,14 +145,14 @@ export function profileOf(draft: VPNProfileDraft): VPNProfile {
 // storedSecretKeys は、保存済みのプロファイルが Vault に持っているシークレットである。
 // 編集で空欄のまま送ると、engine はこれらの保存済みの値をそのまま使う。
 export function storedSecretKeys(profile: VPNProfile): ReadonlySet<VPNSecretKey> {
-  return new Set(vpnSecretKeys(profile.backend, profile.openconnect?.secondFactor ?? ""));
+  return new Set(vpnSecretKeys(profile.backend, profile.openconnect?.secondFactor ?? "", profile.openvpn?.username ?? ""));
 }
 
 // secretsOf は、選んだ方式が使うシークレットのうち、入力されたものだけを送る形にする。
 // 空欄の項目は送らない。API は空の項目を受け付けず、編集では保存済みの値を残す意味になる。
 export function secretsOf(draft: VPNProfileDraft): VPNSecrets {
   const secrets: VPNSecrets = {};
-  for (const key of vpnSecretKeys(draft.backend, draft.secondFactor)) {
+  for (const key of vpnSecretKeys(draft.backend, draft.secondFactor, draft.username)) {
     if (draft.secrets[key] !== "") secrets[key] = draft.secrets[key];
   }
   return secrets;
@@ -146,6 +161,11 @@ export function secretsOf(draft: VPNProfileDraft): VPNSecrets {
 // hasRequiredValues は、方式が要る値がすべて入っているかを返す。stored にある
 // シークレットは、空欄でも保存済みの値を使うので入っているものとして扱う。
 export function hasRequiredValues(draft: VPNProfileDraft, stored: ReadonlySet<VPNSecretKey>): boolean {
+  if (draft.backend === "openvpn") {
+    // サーバーは設定ファイルから読むので、設定ファイル（と、ユーザー名を書いたならパスワード）があればよい。
+    return draft.name !== "" &&
+      vpnSecretKeys("openvpn", "", draft.username).every((key) => draft.secrets[key] !== "" || stored.has(key));
+  }
   if (draft.name === "" || draft.server === "") return false;
   const settings = draft.backend === "wireguard"
     ? draft.peerPublicKey !== "" && draft.address !== ""
@@ -153,4 +173,14 @@ export function hasRequiredValues(draft: VPNProfileDraft, stored: ReadonlySet<VP
   const secrets = vpnSecretKeys(draft.backend, draft.secondFactor)
     .every((key) => draft.secrets[key] !== "" || stored.has(key));
   return settings && secrets;
+}
+
+// withOpenVPNConfig は、OpenVPN の設定ファイルを入れ替えた下書きを返す。remote のサーバーは
+// 設定ファイルから読む。空欄に戻したら、保存済みの設定ファイルのサーバー（storedServers）に
+// 戻す。読めない設定ファイルは保存の前の検査で断るので、サーバーは前のままにする。
+export function withOpenVPNConfig(draft: VPNProfileDraft, config: string, storedServers: string[]): VPNProfileDraft {
+  const secrets = { ...draft.secrets, openvpnConfig: config };
+  if (config === "") return { ...draft, secrets, servers: storedServers };
+  const inspected = inspectOpenVPNConfig(config);
+  return { ...draft, secrets, servers: "summary" in inspected ? inspected.summary.servers : draft.servers };
 }
