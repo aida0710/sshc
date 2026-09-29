@@ -18,7 +18,7 @@ import {
   type SecondFactor,
   type VPNProfileDraft,
 } from "./vpnProfileDraft";
-import { openConnectProtocols, vpnProfileFieldError } from "./vpnProfileRules";
+import { openConnectProducts, openConnectProtocols, vpnProfileFieldError } from "./vpnProfileRules";
 import { vpnSecretsFieldError, type VPNSecretKey } from "./vpnSecretRules";
 
 // VPNプロファイルを作成する、または保存済みのプロファイルを編集するフォーム。接続先は
@@ -174,7 +174,7 @@ export function VPNProfileForm({
               <select className={control} value={draft.protocol} onChange={(event) => edit("protocol")(event.target.value)}>
                 {openConnectProtocols.map((protocol) => (
                   <option key={protocol} value={protocol}>
-                    {protocol}
+                    {`${openConnectProducts[protocol]} (${protocol})`}
                   </option>
                 ))}
               </select>

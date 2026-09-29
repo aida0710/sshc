@@ -41,7 +41,7 @@ Create one from the VPN screen or with `sshc vpn add <name>`.
 
 | Field | Meaning |
 |---|---|
-| Type | WireGuard, L2TP/IPsec, or OpenConnect (AnyConnect, ocserv, GlobalProtect and friends) |
+| Type | WireGuard, L2TP/IPsec, or OpenConnect (Cisco AnyConnect, ocserv, GlobalProtect, FortiGate, Ivanti Connect Secure and more) |
 | DNS inside the VPN | Only for connections whose `HostName` is a name. Up to three IPv4 addresses |
 | VPN server | `host:port` for WireGuard, a hostname or address for L2TP/IPsec and OpenConnect |
 | Secrets | A private key for WireGuard; the VPN password and IPsec pre-shared key for L2TP/IPsec; the VPN password for OpenConnect |
@@ -56,7 +56,21 @@ A value that cannot be accepted is reported with the field and the reason (missi
 
 For L2TP/IPsec, set IKE and ESP proposals only when an older device rejects the defaults.
 
-For OpenConnect, choose the protocol the device speaks (`anyconnect`, `nc`, `pulse`, `gp`, `f5`, `fortinet`, `array`); leave `anyconnect` if unsure. A device with a self-signed certificate needs its fingerprint, either `sha256:` (the certificate's own SHA-256, in hex) or `pin-sha256:` (the public key pin, in base64); without one the certificate is verified normally and the route is refused if it does not verify. OpenConnect routes and DNS handed out by the device are not installed: only the routes to the targets your connections use are.
+For OpenConnect, choose the product the VPN server runs; leave Cisco AnyConnect if unsure.
+
+| Product | Protocol |
+|---|---|
+| Cisco AnyConnect / Secure Client, ocserv | `anyconnect` |
+| Palo Alto Networks GlobalProtect | `gp` |
+| Fortinet FortiGate | `fortinet` |
+| Ivanti Connect Secure (Pulse Secure) | `pulse` |
+| Juniper Network Connect | `nc` |
+| F5 BIG-IP | `f5` |
+| Array Networks | `array` |
+
+Sign-in through a browser (SAML and other single sign-on) is not supported. Servers that accept a user name and password, optionally with a one-time password or approval on a phone, work.
+
+ A device with a self-signed certificate needs its fingerprint, either `sha256:` (the certificate's own SHA-256, in hex) or `pin-sha256:` (the public key pin, in base64); without one the certificate is verified normally and the route is refused if it does not verify. OpenConnect routes and DNS handed out by the device are not installed: only the routes to the targets your connections use are.
 
 ### The second factor (Duo Mobile and friends)
 
