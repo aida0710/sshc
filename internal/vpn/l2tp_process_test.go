@@ -15,10 +15,6 @@ func TestL2TPFailuresPreserveDaemonLogsAndOnlyBlameExplicitAuthenticationRejecti
 	if runtime.GOOS == "windows" {
 		t.Skip("the container backend requires a POSIX shell")
 	}
-	backend, err := container.ReadFile("container/backend-l2tp_ipsec.sh")
-	if err != nil {
-		t.Fatal(err)
-	}
 	for _, scenario := range []struct {
 		name      string
 		pppLog    string
@@ -34,8 +30,9 @@ func TestL2TPFailuresPreserveDaemonLogsAndOnlyBlameExplicitAuthenticationRejecti
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
 			directory := t.TempDir()
+			stageBackendScript(t, directory, L2TPIPsec)
 			for name, contents := range map[string]string{
-				"backend.sh": string(backend), "ipsec.log": "connection established",
+				"ipsec.log":  "connection established",
 				"xl2tpd.log": "Connecting to host", "ppp.log": scenario.pppLog,
 			} {
 				if err := os.WriteFile(filepath.Join(directory, name), []byte(contents), 0o600); err != nil {
@@ -44,6 +41,7 @@ func TestL2TPFailuresPreserveDaemonLogsAndOnlyBlameExplicitAuthenticationRejecti
 			}
 			// No network commands run: only the production wait/classification logic.
 			script := `runtime=$1
+backend_directory=$runtime
 . "$runtime/backend.sh"
 l2tp_pid=$$
 connected=$2
@@ -84,10 +82,6 @@ func TestL2TPStartsOnlyAfterItsIPsecTransportSAIsInstalled(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("the container backend requires a POSIX shell")
 	}
-	backend, err := container.ReadFile("container/backend-l2tp_ipsec.sh")
-	if err != nil {
-		t.Fatal(err)
-	}
 	for _, scenario := range []struct {
 		name      string
 		status    string
@@ -100,11 +94,10 @@ func TestL2TPStartsOnlyAfterItsIPsecTransportSAIsInstalled(t *testing.T) {
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
 			directory := t.TempDir()
-			if err := os.WriteFile(filepath.Join(directory, "backend.sh"), backend, 0o600); err != nil {
-				t.Fatal(err)
-			}
+			stageBackendScript(t, directory, L2TPIPsec)
 			// Match stroke's successful exit code even when no CHILD_SA was created.
 			script := `runtime=$1
+backend_directory=$runtime
 . "$runtime/backend.sh"
 status=$2
 timeout_seconds() { echo 1; }

@@ -58,6 +58,15 @@ const vpnFieldLabels: Record<string, MessageKey> = {
   "openvpn.username": "vpn.username",
   "secrets.openvpnConfig": "vpn.openVPNConfig",
   "secrets.openvpnPassword": "vpn.password",
+  "ikev2.server": "vpn.server",
+  "ikev2.authentication": "vpn.ikev2Authentication",
+  "ikev2.identity": "vpn.ikev2Identity",
+  "ikev2.serverIdentity": "vpn.serverIdentity",
+  "ikev2.caCertificate": "vpn.caCertificate",
+  "ikev2.ike": "vpn.ike",
+  "ikev2.esp": "vpn.esp",
+  "secrets.ikev2Password": "vpn.password",
+  "secrets.ikev2Psk": "vpn.psk",
 };
 
 export type VPNFieldReason = keyof typeof vpnFieldReasonMessages;

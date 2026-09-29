@@ -16,6 +16,9 @@ const (
 	OpenConnect BackendName = "openconnect"
 	// OpenVPN は、利用者の設定ファイル（.ovpn）で OpenVPN のトンネルを張る。
 	OpenVPN BackendName = "openvpn"
+	// IKEv2 は strongSwan（swanctl）で IKEv2/IPsec のトンネルを張る。Windows、macOS、
+	// スマートフォンの標準の VPN が話す方式である。
+	IKEv2 BackendName = "ikev2"
 )
 
 // backend は、トンネルの張り方ひとつぶんの違いである。
@@ -23,7 +26,7 @@ const (
 // 共通の流れ（コンテナ、中継、経路、fail closed）はここに入れない。backend を
 // 足すときに触るのは、その backend の file と、下の backends の表だけにする。
 type backend interface {
-	// device は、コンテナへ渡すトンネルのデバイスである。
+	// device は、コンテナへ渡すトンネルのデバイスである。空なら何も渡さない。
 	device() string
 	// capabilities は、docker run へ渡す権限の指定である。
 	capabilities() []string
@@ -53,6 +56,7 @@ var backends = map[BackendName]backend{
 	L2TPIPsec:   l2tpBackend{},
 	OpenConnect: openConnectBackend{},
 	OpenVPN:     openVPNBackend{},
+	IKEv2:       ikev2Backend{},
 }
 
 // backendFor は、名前から backend を引く。

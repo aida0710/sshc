@@ -1,7 +1,7 @@
 import type { VPNProfile, VPNSecrets } from "../api/vpn";
 import { inspectOpenVPNConfig } from "./openVPNConfig";
 import type { VPNBackend } from "./vpnBackends";
-import { openConnectProtocols } from "./vpnProfileRules";
+import { openConnectProtocols, type IKEv2Authentication } from "./vpnProfileRules";
 import { vpnSecretKeys, type VPNSecretKey } from "./vpnSecretRules";
 
 // VPN プロファイルのフォームに入力中の値と、API の VPNProfile・VPNSecrets との変換。
@@ -18,7 +18,13 @@ export type VPNProfileDraft = {
   server: string;
   peerPublicKey: string;
   address: string;
+  // username は、L2TP/IPsec、OpenConnect、OpenVPN のユーザー名であり、IKEv2 の ID（EAP
+  // ではユーザー名）である。
   username: string;
+  ikev2Authentication: IKEv2Authentication;
+  serverIdentity: string;
+  // caCertificate は、IKEv2 でサーバーの証明書を確かめる CA の証明書（PEM）である。
+  caCertificate: string;
   ike: string;
   esp: string;
   protocol: string;
@@ -34,6 +40,7 @@ export const emptySecrets: Required<VPNSecrets> = {
   wireguardPrivateKey: "", l2tpPassword: "", ipsecPsk: "",
   openconnectPassword: "", openconnectTotpSecret: "",
   openvpnConfig: "", openvpnPassword: "",
+  ikev2Password: "", ikev2Psk: "",
 };
 
 // トンネル側のアドレスは、1台だけを名乗る /32 がほとんどなので、例として入れておく。
@@ -44,6 +51,7 @@ export const emptyDraft: VPNProfileDraft = {
   peerPublicKey: "", address: suggestedTunnelAddress, username: "", ike: "", esp: "",
   protocol: openConnectProtocols[0], serverCertificate: "", secondFactor: "", approvalWord: "",
   servers: [],
+  ikev2Authentication: "eap-mschapv2", serverIdentity: "", caCertificate: "",
   secrets: emptySecrets,
 };
 
@@ -54,6 +62,7 @@ export const settingsSection: Record<VPNBackend, string> = {
   l2tp_ipsec: "l2tp",
   openconnect: "openconnect",
   openvpn: "openvpn",
+  ikev2: "ikev2",
 };
 
 // splitResolvers は、入力された DNS の並びを一件ずつに分ける。
@@ -103,6 +112,19 @@ export function draftOf(profile: VPNProfile): VPNProfileDraft {
       const settings = profile.openvpn;
       return settings === undefined ? common : { ...common, servers: settings.servers, username: settings.username ?? "" };
     }
+    case "ikev2": {
+      const settings = profile.ikev2;
+      return settings === undefined ? common : {
+        ...common,
+        server: settings.server,
+        username: settings.identity,
+        ikev2Authentication: settings.authentication as IKEv2Authentication,
+        serverIdentity: settings.serverIdentity ?? "",
+        caCertificate: settings.caCertificate ?? "",
+        ike: settings.ike ?? "",
+        esp: settings.esp ?? "",
+      };
+    }
   }
 }
 
@@ -139,20 +161,39 @@ export function profileOf(draft: VPNProfileDraft): VPNProfile {
           ...(draft.esp === "" ? {} : { esp: draft.esp }),
         },
       };
+    case "ikev2":
+      return {
+        ...common,
+        ikev2: {
+          server: draft.server,
+          authentication: draft.ikev2Authentication,
+          identity: draft.username,
+          ...(draft.serverIdentity === "" ? {} : { serverIdentity: draft.serverIdentity }),
+          // 事前共有鍵では、サーバーも事前共有鍵で認証するので、CA の証明書は送らない。
+          ...(draft.ikev2Authentication === "psk" || draft.caCertificate === "" ? {} : { caCertificate: draft.caCertificate }),
+          ...(draft.ike === "" ? {} : { ike: draft.ike }),
+          ...(draft.esp === "" ? {} : { esp: draft.esp }),
+        },
+      };
   }
 }
 
 // storedSecretKeys は、保存済みのプロファイルが Vault に持っているシークレットである。
 // 編集で空欄のまま送ると、engine はこれらの保存済みの値をそのまま使う。
 export function storedSecretKeys(profile: VPNProfile): ReadonlySet<VPNSecretKey> {
-  return new Set(vpnSecretKeys(profile.backend, profile.openconnect?.secondFactor ?? "", profile.openvpn?.username ?? ""));
+  return new Set(vpnSecretKeys({
+    backend: profile.backend,
+    secondFactor: profile.openconnect?.secondFactor ?? "",
+    username: profile.openvpn?.username ?? "",
+    ikev2Authentication: profile.ikev2?.authentication ?? "",
+  }));
 }
 
 // secretsOf は、選んだ方式が使うシークレットのうち、入力されたものだけを送る形にする。
 // 空欄の項目は送らない。API は空の項目を受け付けず、編集では保存済みの値を残す意味になる。
 export function secretsOf(draft: VPNProfileDraft): VPNSecrets {
   const secrets: VPNSecrets = {};
-  for (const key of vpnSecretKeys(draft.backend, draft.secondFactor, draft.username)) {
+  for (const key of vpnSecretKeys(draft)) {
     if (draft.secrets[key] !== "") secrets[key] = draft.secrets[key];
   }
   return secrets;
@@ -164,13 +205,13 @@ export function hasRequiredValues(draft: VPNProfileDraft, stored: ReadonlySet<VP
   if (draft.backend === "openvpn") {
     // サーバーは設定ファイルから読むので、設定ファイル（と、ユーザー名を書いたならパスワード）があればよい。
     return draft.name !== "" &&
-      vpnSecretKeys("openvpn", "", draft.username).every((key) => draft.secrets[key] !== "" || stored.has(key));
+      vpnSecretKeys(draft).every((key) => draft.secrets[key] !== "" || stored.has(key));
   }
   if (draft.name === "" || draft.server === "") return false;
   const settings = draft.backend === "wireguard"
     ? draft.peerPublicKey !== "" && draft.address !== ""
     : draft.username !== "";
-  const secrets = vpnSecretKeys(draft.backend, draft.secondFactor)
+  const secrets = vpnSecretKeys(draft)
     .every((key) => draft.secrets[key] !== "" || stored.has(key));
   return settings && secrets;
 }

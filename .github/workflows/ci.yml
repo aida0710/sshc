@@ -345,6 +345,17 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - name: Build the VPN container image
         run: docker build internal/vpn/container
+      # IKEv2/IPsec は、トンネルをカーネルの XFRM インターフェースに結び付ける。
+      # runner のカーネル（amd64 と arm64）で、テストの中で立てた strongSwan の
+      # サーバーへ実際に接続できることを確かめる。
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - name: Connect through IKEv2/IPsec in the VPN container
+        env:
+          SSHC_VPN_DOCKER_TEST: "1"
+        run: go test ./internal/vpn -run IKEv2 -count=1 -timeout 15m
 
   integration:
     name: Integration
