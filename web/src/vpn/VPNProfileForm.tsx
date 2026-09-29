@@ -3,11 +3,12 @@ import type { VPNProfile, VPNSecrets } from "../api/vpn";
 import { useTranslate } from "../i18n/context";
 import { Field, control, hintText, sectionHeading } from "../ui/form";
 import { PasswordField } from "../ui/PasswordField";
-import { Button, Card } from "../ui/surface";
+import { Button, Card, Notice } from "../ui/surface";
 import { IKEv2ProfileFields } from "./IKEv2ProfileFields";
 import { vpnBackendLabel, vpnBackends, type VPNBackend } from "./vpnBackends";
 import { describeVPNFieldError, type VPNFieldError } from "./vpnFieldErrors";
 import { OpenVPNProfileFields } from "./OpenVPNProfileFields";
+import { WireGuardProfileFields } from "./WireGuardProfileFields";
 import {
   draftOf,
   emptyDraft,
@@ -18,18 +19,23 @@ import {
   settingsSection,
   storedSecretKeys,
   withOpenVPNConfig,
+  withSecrets,
+  withWireGuardConfig,
   type SecondFactor,
+  type StoredConfigFacts,
   type VPNProfileDraft,
 } from "./vpnProfileDraft";
 import { openConnectProducts, openConnectProtocols, vpnProfileFieldError } from "./vpnProfileRules";
 import { vpnSecretsFieldError, type VPNSecretKey } from "./vpnSecretRules";
+import { useVPNSecretsReveal } from "./useVPNSecretsReveal";
 
 // VPNプロファイルを作成する、または保存済みのプロファイルを編集するフォーム。接続先は
 // 持たない（プロファイルを付けた接続の HostName と Port が接続先になる）。
 //
-// シークレットは保存のときに送るだけで、engine は返さない。編集では、空欄のシークレットは
-// 保存済みの値をそのまま使う。作成で保存できればフォームごと空に戻す。断られたときは、
-// 入れ直さずに直せるようシークレットも残す。
+// 編集を開くと、保存済みのシークレットを engine から取り出して欄に入れる（WireGuard では鍵を
+// 含む設定ファイル全体）。取り出せなかったときは欄を空にし、空欄のシークレットは保存済みの値を
+// そのまま使う。取り出した値はこのフォームの中だけに持ち、閉じるときに消す。作成で保存できれば
+// フォームごと空に戻す。断られたときは、入れ直さずに直せるようシークレットも残す。
 
 // VPNProfileSaveResult は、保存を頼んだ結果である。断られた項目が分かれば、
 // その項目の横に理由を出す。
@@ -40,12 +46,15 @@ const noStoredSecrets: ReadonlySet<VPNSecretKey> = new Set();
 export function VPNProfileForm({
   busy,
   editing,
+  revealSecrets,
   onSave,
   onCancel,
 }: {
   busy: boolean;
   // editing は、編集する保存済みのプロファイルである。無ければ新しく作る。
   editing?: VPNProfile;
+  // revealSecrets は、保存済みのプロファイルのシークレットを取り出す。編集のフォームだけが使う。
+  revealSecrets?: (name: string) => Promise<VPNSecrets>;
   onSave: (profile: VPNProfile, secrets: VPNSecrets) => Promise<VPNProfileSaveResult>;
   // onCancel は、編集をやめる。作成のフォームには無い。
   onCancel?: () => void;
@@ -53,13 +62,32 @@ export function VPNProfileForm({
   const t = useTranslate();
   const [draft, setDraft] = useState<VPNProfileDraft>(() => (editing === undefined ? emptyDraft : draftOf(editing)));
   const [refusal, setRefusal] = useState<VPNFieldError | null>(null);
+  const { reveal, forget } = useVPNSecretsReveal({
+    name: editing?.name,
+    revealSecrets,
+    // 取り出すあいだに方式を変えていたら、その方式の欄には入れない。
+    onRevealed: (secrets) => {
+      setDraft((current) => (current.backend === editing?.backend ? withSecrets(current, secrets) : current));
+    },
+  });
   const section = settingsSection[draft.backend];
-  // 方式を変えると engine は前の方式のシークレットを捨てるので、保存済みの値は使えない。
+  const revealed = reveal?.state === "revealed" ? reveal.secrets : null;
+  // 保存済みの値を取り出して欄に入れたなら、空欄は「値が無い」である。取り出せなかったときは、
+  // 空欄なら保存済みの値を使う。方式を変えると engine は前の方式のシークレットを捨てるので、
+  // 保存済みの値は使えない。
   const stored = useMemo(
-    () => (editing === undefined || editing.backend !== draft.backend ? noStoredSecrets : storedSecretKeys(editing)),
-    [editing, draft.backend],
+    () => (editing === undefined || editing.backend !== draft.backend || revealed !== null
+      ? noStoredSecrets
+      : storedSecretKeys(editing)),
+    [editing, draft.backend, revealed],
   );
   const heading = editing === undefined ? t("vpn.addHeading") : t("vpn.editHeading", { name: editing.name });
+
+  // storedConfigFacts は、保存済みの設定ファイルから読んで、プロファイルに持っている値である。
+  // WireGuard の設定ファイルの欄を空欄に戻したときは、これに戻す。
+  const storedConfigFacts: StoredConfigFacts = editing?.backend === "wireguard"
+    ? { servers: editing.wireguard?.servers ?? [], resolvers: (editing.dns ?? []).join(", ") }
+    : { servers: [], resolvers: "" };
 
   function edit<K extends keyof VPNProfileDraft>(key: K) {
     return (value: VPNProfileDraft[K]) => {
@@ -75,10 +103,25 @@ export function VPNProfileForm({
     };
   }
 
-  // 方式を変えたら、それまでの方式のシークレットを手元にも残さない。
+  // 方式を変えたら、それまでの方式のシークレットを欄に残さない。設定ファイルから読んだサーバーも
+  // 消す。保存済みのプロファイルの方式へ戻したときは、保存済みのサーバーと DNS と、取り出した
+  // シークレットに戻す。
   function chooseBackend(backend: VPNBackend) {
     setRefusal(null);
-    setDraft((current) => ({ ...current, backend, secrets: emptySecrets }));
+    setDraft((current) => {
+      const cleared: VPNProfileDraft = { ...current, backend, secrets: emptySecrets, servers: [] };
+      if (editing === undefined || editing.backend !== backend) return cleared;
+      const saved = draftOf(editing);
+      const restored = { ...cleared, servers: saved.servers, resolvers: saved.resolvers };
+      return revealed === null ? restored : withSecrets(restored, revealed);
+    });
+  }
+
+  // close は、編集をやめる。取り出したシークレットを、フォームの状態にも残さない。
+  function close() {
+    setDraft((current) => ({ ...current, secrets: emptySecrets }));
+    forget();
+    onCancel?.();
   }
 
   // errorFor は、その項目が断られていれば理由の1文を返す。
@@ -90,9 +133,10 @@ export function VPNProfileForm({
     return (
       <PasswordField
         label={label}
-        hint={t(stored.has(key) ? "vpn.secretKeepHint" : "vpn.secretHint")}
+        hint={t(stored.has(key) && draft.secrets[key] === "" ? "vpn.secretKeepHint" : "vpn.secretHint")}
         error={errorFor(`secrets.${key}`)}
         value={draft.secrets[key]}
+        disabled={reveal?.state === "revealing"}
         onChange={editSecret(key)}
       />
     );
@@ -122,13 +166,19 @@ export function VPNProfileForm({
     if (editing === undefined) {
       setDraft(emptyDraft);
       setRefusal(null);
+      return;
     }
+    // 保存した編集のフォームは閉じる。取り出したシークレットを残さない。
+    setDraft((current) => ({ ...current, secrets: emptySecrets }));
+    forget();
   }
 
   return (
     <Card as="section" padded aria-label={heading}>
       <p className={sectionHeading}>{heading}</p>
       <p className={hintText}>{editing === undefined ? t("vpn.addHint") : t("vpn.editHint")}</p>
+      {reveal?.state === "revealing" ? <p className={hintText}>{t("vpn.secretsRevealing")}</p> : null}
+      {reveal?.state === "failed" ? <Notice>{t("vpn.secretsRevealFailed", { reason: reveal.reason })}</Notice> : null}
       <div className="grid gap-3 sm:grid-cols-2">
         <Field
           label={t("vpn.name")}
@@ -155,28 +205,29 @@ export function VPNProfileForm({
             ))}
           </select>
         </Field>
-        {draft.backend === "openvpn" ? null : (
+        {draft.backend === "openvpn" || draft.backend === "wireguard" ? null : (
           <Field label={t("vpn.server")} error={errorFor(`${section}.server`)}>
             <input className={control} value={draft.server} onChange={(event) => edit("server")(event.target.value)} />
           </Field>
         )}
-        <Field label={t("vpn.dns")} hint={t("vpn.dnsHint")} error={errorFor("dns")}>
-          <input className={control} value={draft.resolvers} onChange={(event) => edit("resolvers")(event.target.value)} />
-        </Field>
+        {/* WireGuard の DNS は、設定ファイルの DNS の行で書く。 */}
+        {draft.backend === "wireguard" ? null : (
+          <Field label={t("vpn.dns")} hint={t("vpn.dnsHint")} error={errorFor("dns")}>
+            <input className={control} value={draft.resolvers} onChange={(event) => edit("resolvers")(event.target.value)} />
+          </Field>
+        )}
         {draft.backend === "wireguard" ? (
-          <>
-            <Field label={t("vpn.peerPublicKey")} error={errorFor("wireguard.peerPublicKey")}>
-              <input
-                className={control}
-                value={draft.peerPublicKey}
-                onChange={(event) => edit("peerPublicKey")(event.target.value)}
-              />
-            </Field>
-            <Field label={t("vpn.address")} error={errorFor("wireguard.address")}>
-              <input className={control} value={draft.address} onChange={(event) => edit("address")(event.target.value)} />
-            </Field>
-            {secretField("wireguardPrivateKey", t("vpn.privateKey"))}
-          </>
+          // サーバー、鍵、アドレス、DNS はどれも設定ファイルに書くので、ほかの欄は出さない。
+          <WireGuardProfileFields
+            config={draft.secrets.wireguardConfig}
+            servers={draft.servers}
+            keepsConfig={stored.has("wireguardConfig")}
+            errorFor={errorFor}
+            onConfig={(config) => {
+              setRefusal(null);
+              setDraft((current) => withWireGuardConfig(current, config, storedConfigFacts));
+            }}
+          />
         ) : draft.backend === "openconnect" ? (
           <>
             <Field label={t("vpn.username")} error={errorFor("openconnect.username")}>
@@ -261,11 +312,15 @@ export function VPNProfileForm({
         )}
       </div>
       <div className="flex flex-wrap gap-2">
-        <Button kind="primary" disabled={busy || !hasRequiredValues(draft, stored)} onClick={() => void save()}>
+        <Button
+          kind="primary"
+          disabled={busy || reveal?.state === "revealing" || !hasRequiredValues(draft, stored)}
+          onClick={() => void save()}
+        >
           {t("vpn.save")}
         </Button>
         {onCancel === undefined ? null : (
-          <Button disabled={busy} onClick={onCancel}>
+          <Button disabled={busy} onClick={close}>
             {t("vpn.cancel")}
           </Button>
         )}

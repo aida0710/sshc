@@ -84,7 +84,7 @@ func (l2tpBackend) secretValues(secrets Secrets) []string {
 
 func (l2tpBackend) waitsForApproval(Profile) bool { return false }
 
-func (l2tpBackend) ownSecrets(secrets Secrets) Secrets { return Secrets{L2TP: secrets.L2TP} }
+func (l2tpBackend) ownSecrets(_ Profile, secrets Secrets) Secrets { return Secrets{L2TP: secrets.L2TP} }
 
 // l2tpDocuments は、コンテナへ渡す4つの本文を返す。
 func l2tpDocuments(settings L2TPSettings, secrets L2TPSecrets) map[string]string {

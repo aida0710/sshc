@@ -269,7 +269,7 @@ func fieldSentence(refusal Refusal) string {
 	if refusal.Limit > 0 {
 		sentence = fmt.Sprintf(sentence, refusal.Limit)
 	}
-	if refusal.Line > 0 {
+	if refusal.Line > 0 || refusal.Directive != "" {
 		sentence = configLineSentence(refusal, sentence)
 	}
 	return refusal.Field + ": " + sentence

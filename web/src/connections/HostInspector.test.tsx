@@ -11,7 +11,7 @@ function vpnProfile(name: string, dns: string[] = []): VPNProfile {
     name,
     backend: "wireguard",
     ...(dns.length === 0 ? {} : { dns }),
-    wireguard: { server: "vpn.example.jp:51820", peerPublicKey: "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=", address: "10.9.9.2/32" },
+    wireguard: { servers: ["vpn.example.jp"] },
   };
 }
 

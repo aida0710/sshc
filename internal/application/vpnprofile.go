@@ -3,8 +3,6 @@ package application
 import (
 	"errors"
 	"fmt"
-	"net"
-	"strconv"
 
 	"sshc/internal/vpn"
 )
@@ -71,14 +69,39 @@ type L2TPProfile struct {
 	ESP string `json:"esp,omitempty"`
 }
 
-// WireGuardProfile は、wireguard backend の秘密でない設定である。
+// WireGuardProfile は、wireguard backend の秘密でない設定である。設定ファイルは鍵を含むので
+// Vault にある。
 type WireGuardProfile struct {
-	// Server は、トンネルの相手である。`host:port` で書く。
-	Server string `json:"server"`
-	// PeerPublicKey は、相手の公開鍵である。秘密ではない。
-	PeerPublicKey string `json:"peerPublicKey"`
-	// Address は、トンネル側でこの端末が名乗るアドレスである（CIDR 表記）。
-	Address string `json:"address"`
+	// Servers は、設定ファイルの Endpoint のサーバーである。一覧に出す。
+	Servers []string `json:"servers"`
+	// Server、PeerPublicKey、Address は、v0.40.0 までの項目の形で保存したプロファイルだけが
+	// 持つ（秘密鍵は Vault の wireguardPrivateKey）。経路を起動するときと、編集で開くときは、
+	// これと秘密鍵から設定ファイルを組み立てる（internal/vpnprofile）。保存し直すと、設定
+	// ファイルの形になって消える。
+	Server        string `json:"server,omitempty"`
+	PeerPublicKey string `json:"peerPublicKey,omitempty"`
+	Address       string `json:"address,omitempty"`
+}
+
+// WireGuardFields は、v0.40.0 までの項目の形のプロファイルなら、その項目を返す。
+func (stored VPNProfile) WireGuardFields() (vpn.WireGuardFields, bool) {
+	settings := stored.WireGuard
+	if stored.Backend != vpn.WireGuard || settings == nil || settings.Server == "" {
+		return vpn.WireGuardFields{}, false
+	}
+	return vpn.WireGuardFields{
+		Server: settings.Server, PeerPublicKey: settings.PeerPublicKey, Address: settings.Address, DNS: stored.DNS,
+	}, true
+}
+
+// withoutWireGuardFields は、v0.40.0 までの項目を落とした写しを返す。保存し直すプロファイルの設定
+// ファイルは、Vault に書く。
+func (stored VPNProfile) withoutWireGuardFields() VPNProfile {
+	if stored.WireGuard == nil {
+		return stored
+	}
+	stored.WireGuard = &WireGuardProfile{Servers: stored.WireGuard.Servers}
+	return stored
 }
 
 // Profile は、保存した設定を internal/vpn が使う形へ直す。
@@ -93,12 +116,11 @@ func (stored VPNProfile) Profile() (vpn.Profile, error) {
 		DNS:     append([]string(nil), normalized.DNS...),
 	}
 	if settings := normalized.WireGuard; settings != nil {
-		server, err := parseEndpoint(settings.Server)
-		if err != nil {
-			return vpn.Profile{}, metadataVPNFieldError(vpn.ErrSettings, "wireguard.server")
-		}
-		profile.WireGuard = &vpn.WireGuardSettings{
-			Server: server, PeerPublicKey: settings.PeerPublicKey, Address: settings.Address,
+		profile.WireGuard = &vpn.WireGuardSettings{Servers: append([]string(nil), settings.Servers...)}
+	}
+	if fields, found := normalized.WireGuardFields(); found {
+		if err := fields.Validate(); err != nil {
+			return vpn.Profile{}, fmt.Errorf("%w: %w", ErrMetadataVPN, err)
 		}
 	}
 	if settings := normalized.OpenConnect; settings != nil {
@@ -153,24 +175,6 @@ func (stored VPNProfile) Normalized() VPNProfile {
 		normalized.IKEv2 = nil
 	}
 	return normalized
-}
-
-// metadataVPNFieldError は、保存形式の `host:port` が読めないことを、項目の
-// 誤りとして返す。
-func metadataVPNFieldError(kind error, field string) error {
-	return fmt.Errorf("%w: %w", ErrMetadataVPN, &vpn.FieldError{Kind: kind, Field: field, Reason: vpn.ReasonFormat})
-}
-
-func parseEndpoint(value string) (vpn.Endpoint, error) {
-	host, port, err := net.SplitHostPort(value)
-	if err != nil {
-		return vpn.Endpoint{}, err
-	}
-	number, err := strconv.Atoi(port)
-	if err != nil {
-		return vpn.Endpoint{}, err
-	}
-	return vpn.Endpoint{Host: host, Port: number}, nil
 }
 
 // validateVPNProfiles は、保存してよい形かを確かめる。

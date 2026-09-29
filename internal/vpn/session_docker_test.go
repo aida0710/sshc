@@ -38,6 +38,8 @@ const (
 	// holdPort は、閉じられるまで受け取ったものを返し続けるポートである。経路を
 	// 通って開いたままの接続（Terminal の SSH のような）の代わりに使う。
 	holdPort = 2224
+	// wireGuardPeerPort は、テスト用の相手が WireGuard で待ち受ける UDP のポートである。
+	wireGuardPeerPort = 51820
 	// dockerTestTimeout は、イメージ作成を含む一連の操作の上限である。
 	dockerTestTimeout = 6 * time.Minute
 )
@@ -88,18 +90,26 @@ var peerSequence atomic.Int64
 // 通常回線で届くアドレスである。
 func startTunnelPeer(t *testing.T, manager *Manager, ctx context.Context, image, clientPublicKey string) (publicKey, bridgeAddress string) {
 	t.Helper()
+	return startTunnelPeerWithPresharedKey(t, manager, ctx, image, clientPublicKey, "")
+}
+
+// startTunnelPeerWithPresharedKey は、presharedKey（空なら無し）を使うトンネルの相手を1台立てる。
+func startTunnelPeerWithPresharedKey(
+	t *testing.T, manager *Manager, ctx context.Context, image, clientPublicKey, presharedKey string,
+) (publicKey, bridgeAddress string) {
+	t.Helper()
 	private, public := keyPair(t)
 	name := fmt.Sprintf("sshc-vpn-test-peer-%d-%d", os.Getpid(), peerSequence.Add(1))
-	configuration := strings.Join([]string{
+	peerLines := []string{"[Peer]", "PublicKey = " + clientPublicKey, "AllowedIPs = " + tunnelClientAddress}
+	if presharedKey != "" {
+		peerLines = append(peerLines, "PresharedKey = "+presharedKey)
+	}
+	configuration := strings.Join(append([]string{
 		"[Interface]",
 		"PrivateKey = " + private,
 		"ListenPort = 51820",
 		"",
-		"[Peer]",
-		"PublicKey = " + clientPublicKey,
-		"AllowedIPs = " + tunnelClientAddress,
-		"",
-	}, "\n")
+	}, append(peerLines, "")...), "\n")
 	script := strings.Join([]string{
 		"set -eu",
 		"umask 077",
@@ -155,16 +165,9 @@ func TestAConnectionReachesTheTargetThroughTheTunnel(t *testing.T) {
 	clientPrivate, clientPublic := keyPair(t)
 	peerPublic, peerAddress := startTunnelPeer(t, manager, ctx, image, clientPublic)
 
-	profile := Profile{
-		Name:    "e2e",
-		Backend: WireGuard,
-		WireGuard: &WireGuardSettings{
-			Server:        Endpoint{Host: peerAddress, Port: 51820},
-			PeerPublicKey: peerPublic,
-			Address:       tunnelClientAddress,
-		},
-	}
-	secrets := Secrets{WireGuard: &WireGuardSecrets{PrivateKey: clientPrivate}}
+	profile, secrets := testTunnel{
+		peerAddress: peerAddress, peerPublicKey: peerPublic, clientPrivateKey: clientPrivate,
+	}.route("e2e")
 	t.Cleanup(func() { _ = manager.Stop(context.Background(), profile.Name) })
 
 	// 接続ログ（-vvv）には、経路の準備と接続先への接続の各段階が出る。
@@ -198,6 +201,31 @@ func TestAConnectionReachesTheTargetThroughTheTunnel(t *testing.T) {
 	if status.Phase != "" {
 		t.Fatalf("経路が立ったあとも用意中のままだった: %q", status.Phase)
 	}
+}
+
+// testTunnel は、テスト用の相手へ繋ぐ WireGuard の経路の鍵と相手である。
+type testTunnel struct {
+	peerAddress      string
+	peerPublicKey    string
+	clientPrivateKey string
+	// dns は、設定ファイルの DNS である。プロファイルの DNS も同じにする。
+	dns []string
+}
+
+// route は、テスト用の相手へ繋ぐプロファイルと秘密を作る。設定ファイルは、v0.40.0 までの
+// 項目の形のプロファイルから組み立てる本文（WireGuardFields.Config）と同じにし、項目の形の
+// プロファイルがそのまま使えることも確かめる。
+func (tunnel testTunnel) route(name string) (Profile, Secrets) {
+	fields := WireGuardFields{
+		Server:        Endpoint{Host: tunnel.peerAddress, Port: wireGuardPeerPort}.Address(),
+		PeerPublicKey: tunnel.peerPublicKey,
+		Address:       tunnelClientAddress,
+		DNS:           tunnel.dns,
+	}
+	profile := Profile{
+		Name: name, Backend: WireGuard, DNS: tunnel.dns, WireGuard: &WireGuardSettings{Servers: fields.Servers()},
+	}
+	return profile, Secrets{WireGuard: &WireGuardSecrets{Config: fields.Config(tunnel.clientPrivateKey)}}
 }
 
 // dialTarget は、経路ひとつと、その先で繋ぐ接続先である。
@@ -235,16 +263,9 @@ func TestTheVPNServerItselfIsRefusedAsADestination(t *testing.T) {
 	}
 	clientPrivate, clientPublic := keyPair(t)
 	peerPublic, peerAddress := startTunnelPeer(t, manager, ctx, image, clientPublic)
-	profile := Profile{
-		Name:    "e2e-server",
-		Backend: WireGuard,
-		WireGuard: &WireGuardSettings{
-			Server:        Endpoint{Host: peerAddress, Port: 51820},
-			PeerPublicKey: peerPublic,
-			Address:       tunnelClientAddress,
-		},
-	}
-	secrets := Secrets{WireGuard: &WireGuardSecrets{PrivateKey: clientPrivate}}
+	profile, secrets := testTunnel{
+		peerAddress: peerAddress, peerPublicKey: peerPublic, clientPrivateKey: clientPrivate,
+	}.route("e2e-server")
 	t.Cleanup(func() { _ = manager.Stop(context.Background(), profile.Name) })
 
 	connection, err := manager.Dial(ctx, profile, secrets, fmt.Sprintf("%s:%d", peerAddress, echoPort))
@@ -270,19 +291,12 @@ func TestAnUnreachableDestinationSaysWhy(t *testing.T) {
 	}
 	clientPrivate, clientPublic := keyPair(t)
 	peerPublic, peerAddress := startTunnelPeer(t, manager, ctx, image, clientPublic)
-	profile := Profile{
-		Name:    "e2e-unreachable",
-		Backend: WireGuard,
+	profile, secrets := testTunnel{
+		peerAddress: peerAddress, peerPublicKey: peerPublic, clientPrivateKey: clientPrivate,
 		// トンネルの相手を DNS サーバーとして書く。相手は DNS に答えないので、
 		// 名前解決は必ず失敗する。
-		DNS: []string{tunnelServerAddress},
-		WireGuard: &WireGuardSettings{
-			Server:        Endpoint{Host: peerAddress, Port: 51820},
-			PeerPublicKey: peerPublic,
-			Address:       tunnelClientAddress,
-		},
-	}
-	secrets := Secrets{WireGuard: &WireGuardSecrets{PrivateKey: clientPrivate}}
+		dns: []string{tunnelServerAddress},
+	}.route("e2e-unreachable")
 	t.Cleanup(func() { _ = manager.Stop(context.Background(), profile.Name) })
 
 	for _, test := range []struct {
@@ -321,18 +335,9 @@ func TestTheTargetIsUnreachableWhileTheTunnelIsNotUp(t *testing.T) {
 	// 相手の公開鍵として、相手が持っていない鍵を渡す。握手は成立しない。
 	_, strangerPublic := keyPair(t)
 
-	profile := Profile{
-		Name:    "e2e-closed",
-		Backend: WireGuard,
-		// 接続先は、Dockerの通常回線からも届くアドレスである。トンネルが
-		// 成立していないあいだ、そちらへ落ちないことを確かめる。
-		WireGuard: &WireGuardSettings{
-			Server:        Endpoint{Host: peerAddress, Port: 51820},
-			PeerPublicKey: strangerPublic,
-			Address:       tunnelClientAddress,
-		},
-	}
-	secrets := Secrets{WireGuard: &WireGuardSecrets{PrivateKey: clientPrivate}}
+	profile, secrets := testTunnel{
+		peerAddress: peerAddress, peerPublicKey: strangerPublic, clientPrivateKey: clientPrivate,
+	}.route("e2e-closed")
 	t.Cleanup(func() { _ = manager.Stop(context.Background(), profile.Name) })
 
 	// 接続先は、Dockerの通常回線からも届くアドレスである。トンネルが成立して
@@ -362,17 +367,11 @@ func TestSessionsLeftByAPreviousEngineAreDiscarded(t *testing.T) {
 	}
 	clientPrivate, clientPublic := keyPair(t)
 	peerPublic, peerAddress := startTunnelPeer(t, manager, ctx, image, clientPublic)
-	profile := Profile{
-		Name:    "orphan",
-		Backend: WireGuard,
-		WireGuard: &WireGuardSettings{
-			Server:        Endpoint{Host: peerAddress, Port: 51820},
-			PeerPublicKey: peerPublic,
-			Address:       tunnelClientAddress,
-		},
-	}
+	profile, secrets := testTunnel{
+		peerAddress: peerAddress, peerPublicKey: peerPublic, clientPrivateKey: clientPrivate,
+	}.route("orphan")
 	t.Cleanup(func() { _ = manager.Stop(context.Background(), profile.Name) })
-	if err := manager.Start(ctx, profile, Secrets{WireGuard: &WireGuardSecrets{PrivateKey: clientPrivate}}); err != nil {
+	if err := manager.Start(ctx, profile, secrets); err != nil {
 		t.Fatalf("Start = %v", err)
 	}
 
@@ -523,15 +522,9 @@ func TestAnIdleRouteIsStoppedAndAUsedOneIsKept(t *testing.T) {
 	}
 	clientPrivate, clientPublic := keyPair(t)
 	peerPublic, peerAddress := startTunnelPeer(t, manager, ctx, image, clientPublic)
-	profile := Profile{
-		Name:    "idle",
-		Backend: WireGuard,
-		WireGuard: &WireGuardSettings{
-			Server:        Endpoint{Host: peerAddress, Port: 51820},
-			PeerPublicKey: peerPublic,
-			Address:       tunnelClientAddress,
-		},
-	}
+	profile, secrets := testTunnel{
+		peerAddress: peerAddress, peerPublicKey: peerPublic, clientPrivateKey: clientPrivate,
+	}.route("idle")
 	t.Cleanup(func() { _ = manager.Stop(context.Background(), profile.Name) })
 
 	// 時計を手で進める。閉じた時刻と掃除の時刻が同じでは、無操作の長さを
@@ -539,7 +532,7 @@ func TestAnIdleRouteIsStoppedAndAUsedOneIsKept(t *testing.T) {
 	clock := time.Now()
 	manager.now = func() time.Time { return clock }
 
-	connection, err := manager.Dial(ctx, profile, Secrets{WireGuard: &WireGuardSecrets{PrivateKey: clientPrivate}},
+	connection, err := manager.Dial(ctx, profile, secrets,
 		fmt.Sprintf("%s:%d", tunnelServerAddress, echoPort))
 	if err != nil {
 		t.Fatalf("Dial = %v", err)

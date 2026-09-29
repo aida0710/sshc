@@ -26,7 +26,7 @@ type VPNProfileChange struct {
 // PlanVPNProfileCreate は、新しいプロファイルを加える変更を作る。同じ名前が
 // あれば ErrVPNProfileExists を返す。
 func (s *Service) PlanVPNProfileCreate(profile VPNProfile) (VPNProfileChange, error) {
-	profile = profile.Normalized()
+	profile = profile.Normalized().withoutWireGuardFields()
 	if _, err := profile.Profile(); err != nil {
 		return VPNProfileChange{}, err
 	}
@@ -45,8 +45,11 @@ func (s *Service) PlanVPNProfileCreate(profile VPNProfile) (VPNProfileChange, er
 
 // PlanVPNProfileUpdate は、保存済みのプロファイルを置き換える変更を作る。名前が
 // 無ければ ErrUnknownVPNProfile を返す。
+//
+// 作るときも置き換えるときも、WireGuard の v0.40.0 までの項目は書かない。設定ファイルは、
+// 呼び手が同じ書き込みで Vault に置く。
 func (s *Service) PlanVPNProfileUpdate(profile VPNProfile) (VPNProfileChange, error) {
-	profile = profile.Normalized()
+	profile = profile.Normalized().withoutWireGuardFields()
 	if _, err := profile.Profile(); err != nil {
 		return VPNProfileChange{}, err
 	}

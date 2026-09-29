@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/client";
@@ -37,6 +37,9 @@ function overview(overrides: Partial<VPNOverview> = {}): VPNOverview {
   };
 }
 
+// storedTohokuSecrets は、tohoku の Vault にある、取り出せるシークレットである。
+const storedTohokuSecrets = { l2tpPassword: "the stored password", ipsecPsk: "the stored key" };
+
 const peerPublicKey = "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=";
 const privateKey = "aAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAA=";
 
@@ -67,12 +70,24 @@ function stoppedOverview(): VPNOverview {
   });
 }
 
+// wireGuardConfig は、鍵をそのまま書いた WireGuard の設定ファイルである。
+function wireGuardConfig(extra: string[] = []): string {
+  return [
+    "[Interface]", `PrivateKey = ${privateKey}`, "Address = 10.0.0.2/32", ...extra,
+    "", "[Peer]", `PublicKey = ${peerPublicKey}`, "Endpoint = vpn.example.jp:51820", "AllowedIPs = 10.0.0.0/24", "",
+  ].join("\n");
+}
+
+// pasteWireGuardConfig は、設定ファイルの欄へ貼り付ける。user.type は [ と { を特別に読むので、
+// 値を直に入れる。
+function pasteWireGuardConfig(form: HTMLElement, text: string) {
+  fireEvent.change(within(form).getByLabelText("Configuration file"), { target: { value: text } });
+}
+
 // fillWireGuardProfile は、作成フォームへ WireGuard のプロファイルをひとつ入れる。
 async function fillWireGuardProfile(user: ReturnType<typeof userEvent.setup>, form: HTMLElement) {
   await user.type(within(form).getByLabelText("Name"), "lab");
-  await user.type(within(form).getByLabelText("VPN server"), "vpn.example.jp:51820");
-  await user.type(within(form).getByLabelText("Peer public key"), peerPublicKey);
-  await user.type(within(form).getByLabelText("Private key"), privateKey);
+  pasteWireGuardConfig(form, wireGuardConfig());
 }
 
 function buildApi(overrides: Partial<VPNApi> = {}): VPNApi {
@@ -85,6 +100,7 @@ function buildApi(overrides: Partial<VPNApi> = {}): VPNApi {
     vpnLogs: vi.fn().mockResolvedValue({ lines: "starting IPsec\n" }),
     startVPNSession: vi.fn().mockResolvedValue(overview()),
     stopVPNSession: vi.fn().mockResolvedValue(overview()),
+    revealVPNSecrets: vi.fn().mockResolvedValue(storedTohokuSecrets),
     ...overrides,
   };
 }
@@ -134,7 +150,7 @@ describe("VPNPanel", () => {
     expect(await screen.findByText(/^Docker is not running\./)).toBeVisible();
   });
 
-  it("sends the secrets with the profile and never shows them again", async () => {
+  it("sends the configuration file as a secret, with its servers as the profile, and empties the form", async () => {
     const user = userEvent.setup();
     const createVPNProfile = vi.fn().mockResolvedValue(overview());
     render(<VPNPanel api={buildApi({ createVPNProfile })} />);
@@ -144,20 +160,11 @@ describe("VPNPanel", () => {
     await user.click(within(form).getByRole("button", { name: "Save" }));
 
     expect(createVPNProfile).toHaveBeenCalledWith(
-      {
-        name: "lab",
-        backend: "wireguard",
-        wireguard: {
-          server: "vpn.example.jp:51820",
-          peerPublicKey: "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
-          address: "10.0.0.2/32",
-        },
-      },
-      { wireguardPrivateKey: "aAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAA=" },
+      { name: "lab", backend: "wireguard", wireguard: { servers: ["vpn.example.jp"] } },
+      { wireguardConfig: wireGuardConfig() },
     );
-    await waitFor(() => expect(within(form).getByLabelText("Private key")).toHaveValue(""));
+    await waitFor(() => expect(within(form).getByLabelText("Configuration file")).toHaveValue(""));
     expect(within(form).getByLabelText("Name")).toHaveValue("");
-    expect(within(form).getByLabelText("VPN server")).toHaveValue("");
     expect(createVPNProfile.mock.calls[0]?.[0]).not.toHaveProperty("dns");
   });
 
@@ -167,12 +174,14 @@ describe("VPNPanel", () => {
     render(<VPNPanel api={buildApi({ createVPNProfile })} />);
     const form = await screen.findByRole("region", { name: "Add a VPN profile" });
 
-    await fillWireGuardProfile(user, form);
-    await user.type(within(form).getByLabelText("DNS inside the VPN"), "10.9.9.53, 10.9.9.54");
+    // WireGuard の DNS は、設定ファイルの DNS の行で書く。
+    await user.type(within(form).getByLabelText("Name"), "lab");
+    pasteWireGuardConfig(form, wireGuardConfig(["DNS = 10.0.0.53, 10.0.0.54"]));
+    expect(within(form).queryByLabelText("DNS inside the VPN")).toBeNull();
     await user.click(within(form).getByRole("button", { name: "Save" }));
 
     expect(createVPNProfile).toHaveBeenCalledWith(
-      expect.objectContaining({ dns: ["10.9.9.53", "10.9.9.54"] }),
+      expect.objectContaining({ dns: ["10.0.0.53", "10.0.0.54"] }),
       expect.anything(),
     );
     expect(createVPNProfile.mock.calls[0]?.[0]).not.toHaveProperty("target");
@@ -599,7 +608,7 @@ describe("VPNPanel", () => {
 
     expect(await screen.findByText(/already exists/)).toBeVisible();
     expect(within(form).getByLabelText("Name")).toHaveValue("lab");
-    expect(within(form).getByLabelText("Private key")).toHaveValue(privateKey);
+    expect(within(form).getByLabelText("Configuration file")).toHaveValue(wireGuardConfig());
     expect(within(form).getByRole("button", { name: "Save" })).toBeEnabled();
   });
 
@@ -608,11 +617,11 @@ describe("VPNPanel", () => {
     render(<VPNPanel api={buildApi()} />);
     const form = await screen.findByRole("region", { name: "Add a VPN profile" });
 
-    await user.type(within(form).getByLabelText("Private key"), privateKey);
+    pasteWireGuardConfig(form, wireGuardConfig());
     await user.selectOptions(within(form).getByLabelText("Type"), "l2tp_ipsec");
     await user.selectOptions(within(form).getByLabelText("Type"), "wireguard");
 
-    expect(within(form).getByLabelText("Private key")).toHaveValue("");
+    expect(within(form).getByLabelText("Configuration file")).toHaveValue("");
   });
 
   it("says which field is wrong before sending, next to that field", async () => {
@@ -621,7 +630,12 @@ describe("VPNPanel", () => {
     render(<VPNPanel api={buildApi({ createVPNProfile })} />);
     const form = await screen.findByRole("region", { name: "Add a VPN profile" });
 
-    await fillWireGuardProfile(user, form);
+    await user.selectOptions(within(form).getByLabelText("Type"), "l2tp_ipsec");
+    await user.type(within(form).getByLabelText("Name"), "office");
+    await user.type(within(form).getByLabelText("VPN server"), "vpn.example.jp");
+    await user.type(within(form).getByLabelText("VPN username"), "tester");
+    await user.type(within(form).getByLabelText("VPN password"), "a password");
+    await user.type(within(form).getByLabelText("IPsec pre-shared key"), "a key");
     await user.type(within(form).getByLabelText("DNS inside the VPN"), "dns.example.jp");
     await user.click(within(form).getByRole("button", { name: "Save" }));
 
@@ -633,19 +647,17 @@ describe("VPNPanel", () => {
 
   // 送る前の検査（validateAPIRequest）は、長さや形の違反を項目の名前なしで断る。その前に
   // フォームが項目ごとに理由を出す。
-  it("names the private key when it is not a WireGuard key, instead of failing without a field", async () => {
+  it("names the line of the private key when it is not a WireGuard key, instead of failing without a field", async () => {
     const user = userEvent.setup();
     const createVPNProfile = vi.fn().mockResolvedValue(overview());
     render(<VPNPanel api={buildApi({ createVPNProfile })} />);
     const form = await screen.findByRole("region", { name: "Add a VPN profile" });
 
     await user.type(within(form).getByLabelText("Name"), "lab");
-    await user.type(within(form).getByLabelText("VPN server"), "vpn.example.jp:51820");
-    await user.type(within(form).getByLabelText("Peer public key"), peerPublicKey);
-    await user.type(within(form).getByLabelText("Private key"), privateKey.slice(1));
+    pasteWireGuardConfig(form, wireGuardConfig().replace(privateKey, privateKey.slice(1)));
     await user.click(within(form).getByRole("button", { name: "Save" }));
 
-    expect(within(form).getByRole("alert")).toHaveTextContent("This is not written in a form this field accepts.");
+    expect(within(form).getByRole("alert")).toHaveTextContent('Line 2: "PrivateKey" is not written in a form it accepts.');
     expect(createVPNProfile).not.toHaveBeenCalled();
   });
 
@@ -707,7 +719,7 @@ describe("VPNPanel", () => {
       new ApiError("vpn_secrets_missing", 400, {
         code: "vpn_secrets_missing",
         message: "request rejected",
-        field: "secrets.wireguardPrivateKey",
+        field: "secrets.wireguardConfig",
         reason: "format",
       }),
     );
@@ -719,7 +731,7 @@ describe("VPNPanel", () => {
 
     expect(await within(form).findByText("This is not written in a form this field accepts.")).toBeVisible();
     expect(screen.getByText("Some values were not accepted. See the reason next to each field.")).toBeVisible();
-    expect(within(form).getByLabelText("Private key")).toHaveValue(privateKey);
+    expect(within(form).getByLabelText("Configuration file")).toHaveValue(wireGuardConfig());
   });
 
   it("says why the route did not come up and offers its logs", async () => {
@@ -756,10 +768,11 @@ describe("VPNPanel", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("The reason could not be read. Check the logs.");
   });
-  it("opens the saved values for editing, keeps the name, and keeps the stored secrets when left blank", async () => {
+  it("opens the saved values for editing, with the stored secrets taken out of the vault", async () => {
     const user = userEvent.setup();
     const saveVPNProfile = vi.fn().mockResolvedValue(overview());
-    render(<VPNPanel api={buildApi({ saveVPNProfile })} />);
+    const revealVPNSecrets = vi.fn().mockResolvedValue(storedTohokuSecrets);
+    render(<VPNPanel api={buildApi({ saveVPNProfile, revealVPNSecrets })} />);
     const route = await screen.findByRole("article", { name: "tohoku" });
 
     await user.click(within(route).getByRole("button", { name: "Edit" }));
@@ -768,8 +781,10 @@ describe("VPNPanel", () => {
     expect(within(form).getByLabelText("Name")).toBeDisabled();
     expect(within(form).getByLabelText("VPN server")).toHaveValue("vpn.example.jp");
     expect(within(form).getByLabelText("DNS inside the VPN")).toHaveValue("10.9.9.53");
-    expect(within(form).getByLabelText("VPN password")).toHaveValue("");
-    expect(within(form).getAllByText("Leave blank to keep the stored value.")).toHaveLength(2);
+    await waitFor(() => expect(within(form).getByLabelText("VPN password")).toHaveValue("the stored password"));
+    expect(within(form).getByLabelText("IPsec pre-shared key")).toHaveValue("the stored key");
+    expect(revealVPNSecrets).toHaveBeenCalledWith("tohoku");
+    expect(within(form).queryByText("Leave blank to keep the stored value.")).toBeNull();
 
     await user.clear(within(form).getByLabelText("VPN server"));
     await user.type(within(form).getByLabelText("VPN server"), "vpn2.example.jp");
@@ -777,13 +792,28 @@ describe("VPNPanel", () => {
 
     expect(saveVPNProfile).toHaveBeenCalledWith(
       { name: "tohoku", backend: "l2tp_ipsec", dns: ["10.9.9.53"], l2tp: { server: "vpn2.example.jp", username: "tester" } },
-      {},
+      storedTohokuSecrets,
     );
     await waitFor(() => expect(screen.queryByRole("region", { name: "Edit tohoku" })).toBeNull());
     expect(screen.getByRole("article", { name: "tohoku" })).toBeVisible();
   });
 
-  it("sends only the secrets that were typed while editing", async () => {
+  it("hides a stored password until Show is pressed", async () => {
+    const user = userEvent.setup();
+    render(<VPNPanel api={buildApi()} />);
+    const route = await screen.findByRole("article", { name: "tohoku" });
+
+    await user.click(within(route).getByRole("button", { name: "Edit" }));
+    const form = screen.getByRole("region", { name: "Edit tohoku" });
+    const password = within(form).getByLabelText("VPN password");
+    await waitFor(() => expect(password).toHaveValue("the stored password"));
+    expect(password).toHaveAttribute("type", "password");
+    await user.click(within(form).getByRole("button", { name: "Show VPN password" }));
+
+    expect(password).toHaveAttribute("type", "text");
+  });
+
+  it("sends the secrets as they are in the fields after editing", async () => {
     const user = userEvent.setup();
     const saveVPNProfile = vi.fn().mockResolvedValue(overview());
     render(<VPNPanel api={buildApi({ saveVPNProfile })} />);
@@ -791,12 +821,36 @@ describe("VPNPanel", () => {
 
     await user.click(within(route).getByRole("button", { name: "Edit" }));
     const form = screen.getByRole("region", { name: "Edit tohoku" });
-    await user.type(within(form).getByLabelText("VPN password"), "a new password");
+    const password = within(form).getByLabelText("VPN password");
+    await waitFor(() => expect(password).toHaveValue("the stored password"));
+    await user.clear(password);
+    await user.type(password, "a new password");
     await user.click(within(form).getByRole("button", { name: "Save" }));
 
     expect(saveVPNProfile).toHaveBeenCalledWith(expect.objectContaining({ name: "tohoku" }), {
-      l2tpPassword: "a new password",
+      l2tpPassword: "a new password", ipsecPsk: "the stored key",
     });
+  });
+
+  it("says why the stored secrets could not be taken out, and keeps them when the fields are left blank", async () => {
+    const user = userEvent.setup();
+    const saveVPNProfile = vi.fn().mockResolvedValue(overview());
+    const revealVPNSecrets = vi.fn().mockRejectedValue(
+      new ApiError("vault_locked", 409, { code: "vault_locked", message: "request rejected" }),
+    );
+    render(<VPNPanel api={buildApi({ saveVPNProfile, revealVPNSecrets })} />);
+    const route = await screen.findByRole("article", { name: "tohoku" });
+
+    await user.click(within(route).getByRole("button", { name: "Edit" }));
+    const form = screen.getByRole("region", { name: "Edit tohoku" });
+
+    expect(await within(form).findByText(/^The stored secrets could not be taken out of the vault\. The vault is locked/))
+      .toBeVisible();
+    expect(within(form).getByLabelText("VPN password")).toHaveValue("");
+    expect(within(form).getAllByText("Leave blank to keep the stored value.")).toHaveLength(2);
+    await user.click(within(form).getByRole("button", { name: "Save" }));
+
+    expect(saveVPNProfile).toHaveBeenCalledWith(expect.objectContaining({ name: "tohoku" }), {});
   });
 
   it("asks for the new type's secrets when the type is changed while editing", async () => {
@@ -820,17 +874,28 @@ describe("VPNPanel", () => {
     );
   });
 
-  it("puts the edited profile back as it was when editing is cancelled", async () => {
+  it("puts the edited profile back as it was when editing is cancelled, and forgets the secrets it took out", async () => {
     const user = userEvent.setup();
     const saveVPNProfile = vi.fn().mockResolvedValue(overview());
-    render(<VPNPanel api={buildApi({ saveVPNProfile })} />);
+    // 2回目に開いたときは取り出せない。1回目に取り出した値が残っていれば、欄に現れる。
+    const revealVPNSecrets = vi.fn()
+      .mockResolvedValueOnce(storedTohokuSecrets)
+      .mockRejectedValueOnce(new ApiError("vault_locked", 409, { code: "vault_locked", message: "request rejected" }));
+    render(<VPNPanel api={buildApi({ saveVPNProfile, revealVPNSecrets })} />);
     const route = await screen.findByRole("article", { name: "tohoku" });
 
     await user.click(within(route).getByRole("button", { name: "Edit" }));
-    await user.click(within(screen.getByRole("region", { name: "Edit tohoku" })).getByRole("button", { name: "Cancel" }));
+    const form = screen.getByRole("region", { name: "Edit tohoku" });
+    await waitFor(() => expect(within(form).getByLabelText("VPN password")).toHaveValue("the stored password"));
+    await user.click(within(form).getByRole("button", { name: "Cancel" }));
 
     expect(screen.getByRole("article", { name: "tohoku" })).toBeVisible();
     expect(saveVPNProfile).not.toHaveBeenCalled();
+    await user.click(within(screen.getByRole("article", { name: "tohoku" })).getByRole("button", { name: "Edit" }));
+    const reopened = screen.getByRole("region", { name: "Edit tohoku" });
+    expect(await within(reopened).findByText(/^The stored secrets could not be taken out/)).toBeVisible();
+    expect(within(reopened).getByLabelText("VPN password")).toHaveValue("");
+    expect(within(reopened).getByLabelText("IPsec pre-shared key")).toHaveValue("");
   });
 
   it("keeps the edit form open and shows the refused field when the engine refuses the change", async () => {

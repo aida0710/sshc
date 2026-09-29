@@ -18,9 +18,9 @@ type sessionState struct {
 
 	// use は、下の値を守る。どれも読み書きが一瞬で終わる。
 	use sync.Mutex
-	// started は、いまコンテナが提供している設定である。設定が変わったら
-	// 作り直す。古い設定のまま繋ぎ続けると、利用者が直した先へ行かない。
-	started Profile
+	// started は、いまコンテナが提供している経路である。設定かシークレットが
+	// 変わったら作り直す。古いまま繋ぎ続けると、利用者が直した先へ行かない。
+	started routeIdentity
 	running bool
 	// open は、この経路を通っている接続と、これから通る予約の数である。
 	// 予約を数えないと、起動が終わってから接続が数えられるまでの隙間に、
@@ -97,20 +97,21 @@ func (state *sessionState) isRunning() bool {
 	return state.running
 }
 
-// serves は、この経路が profile の設定のまま動いていて、中継を差し出しているかを返す。
-func (state *sessionState) serves(profile Profile) bool {
+// serves は、この経路が route の設定とシークレットのまま動いていて、中継を差し出しているかを
+// 返す。
+func (state *sessionState) serves(route routeIdentity) bool {
 	state.use.Lock()
 	defer state.use.Unlock()
-	return state.running && state.relay != nil && state.started.sameRouteAs(profile)
+	return state.running && state.relay != nil && state.started.same(route)
 }
 
 // markStarted は、経路が用意できたことを記録する。無操作の長さはここから数える。
 //
 // 起動しただけで一度も使われない経路（`vpn up` など）も、ほかと同じ長さで畳む。
-func (state *sessionState) markStarted(profile Profile, relay *engineRelay, now time.Time) {
+func (state *sessionState) markStarted(route routeIdentity, relay *engineRelay, now time.Time) {
 	state.use.Lock()
 	defer state.use.Unlock()
-	state.started, state.running, state.relay = profile, true, relay
+	state.started, state.running, state.relay = route, true, relay
 	state.idleSince = now
 	// 前回用意できなかったときのログは、もういまの経路のものではない。
 	state.failureLogs = ""

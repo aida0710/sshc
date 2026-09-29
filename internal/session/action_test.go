@@ -279,7 +279,7 @@ func TestKnownActionKindListsEveryConfirmedOperation(t *testing.T) {
 	for _, kind := range []string{
 		ActionReachability, ActionAuthentication, ActionKnownHostsScan,
 		ActionKnownHostsDelete, ActionKnownHostsScan, ActionKnownHostsAdd, ActionRemoteKeyRegister,
-		ActionRevealPrivateKey, ActionPurgeTrashEntry,
+		ActionRevealPrivateKey, ActionRevealVPNSecrets, ActionPurgeTrashEntry,
 		ActionSFTPDelete, ActionSFTPChmod, ActionSnippetExecute, ActionTerminalCommand,
 	} {
 		if !KnownActionKind(kind) {

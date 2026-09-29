@@ -152,7 +152,7 @@ func TestShownLogsHideEveryIKEv2Secret(t *testing.T) {
 // 方式を切り替えたあとに、ほかの方式のシークレットを残さない。
 func TestIKEv2KeepsOnlyItsOwnSecrets(t *testing.T) {
 	all := Secrets{
-		WireGuard: &WireGuardSecrets{PrivateKey: testPrivateKey},
+		WireGuard: &WireGuardSecrets{Config: testWireGuardConfig},
 		L2TP:      &L2TPSecrets{Password: "l2tp", PreSharedKey: "l2tp-psk"},
 		IKEv2:     &IKEv2Secrets{Password: "ikev2"},
 	}

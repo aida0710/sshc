@@ -21,8 +21,8 @@ import { VPNUnavailableNotice } from "./VPNUnavailableNotice";
 
 // 接続ごとのVPN経路の画面。トンネルはengineが持つコンテナの中にあり、ここでは
 // プロファイルの定義と、いまの状態と、どの接続がそれを使うかを扱う。接続へ
-// プロファイルを付けるのは Connections で行う。シークレットは保存のときに送るだけで、
-// engineは決して返さない。
+// プロファイルを付けるのは Connections で行う。シークレットは保存のときに送り、編集を
+// 開いたときだけ、確認のトークンを添えてengineから取り出す。
 
 type VPNPanelProps = {
   api?: VPNApi;
@@ -210,6 +210,7 @@ export function VPNPanel({ api = vpnApi }: VPNPanelProps) {
                   <VPNProfileForm
                     busy={operation.busy}
                     editing={status.profile}
+                    revealSecrets={api.revealVPNSecrets}
                     onSave={updateProfile}
                     onCancel={() => setEditingProfile("")}
                   />
