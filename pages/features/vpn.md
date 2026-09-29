@@ -41,7 +41,7 @@ VPN画面、または`sshc vpn add <名前>`で作成します。
 
 | 項目 | 内容 |
 |---|---|
-| 方式 | WireGuard、L2TP/IPsec、OpenConnect（AnyConnect、ocserv、GlobalProtectなど） |
+| 方式 | WireGuard、L2TP/IPsec、OpenConnect（Cisco AnyConnect、ocserv、GlobalProtect、FortiGate、Ivanti Connect Secureなど） |
 | VPN内のDNSサーバー | `HostName`をホスト名で書いた接続に使う場合だけ入力します。IPv4アドレスを3件まで |
 | VPNサーバー | WireGuardは`host:port`、L2TP/IPsecとOpenConnectはホスト名またはIPアドレス |
 | シークレット | WireGuardは秘密鍵、L2TP/IPsecはVPNのパスワードとIPsecの事前共有鍵、OpenConnectはVPNのパスワード |
@@ -56,7 +56,21 @@ VPN画面、または`sshc vpn add <名前>`で作成します。
 
 L2TP/IPsecでは、古いVPN機器と暗号スイートが合わない場合だけ、IKEとESPの暗号スイートを指定します。空欄なら既定値を使います。
 
-OpenConnectでは、サーバーのプロトコル（`anyconnect`、`nc`、`pulse`、`gp`、`f5`、`fortinet`、`array`）を選びます。分からない場合は`anyconnect`のままにしてください。自己署名証明書を使うサーバーでは、証明書のフィンガープリントを指定します。`sha256:`（証明書のSHA-256、16進）と`pin-sha256:`（公開鍵のPIN、base64）のどちらでも指定できます。指定しない場合は通常どおり証明書を検証し、検証できなければ接続しません。OpenConnectでは、サーバーが配布するデフォルトルートとDNSは設定しません。ルーティングは、接続に使った接続先の分だけを作ります。
+OpenConnectでは、VPNサーバーの製品を選びます。分からない場合は、Cisco AnyConnectのままにしてください。
+
+| 製品 | プロトコル |
+|---|---|
+| Cisco AnyConnect / Secure Client、ocserv | `anyconnect` |
+| Palo Alto Networks GlobalProtect | `gp` |
+| Fortinet FortiGate | `fortinet` |
+| Ivanti Connect Secure（Pulse Secure） | `pulse` |
+| Juniper Network Connect | `nc` |
+| F5 BIG-IP | `f5` |
+| Array Networks | `array` |
+
+ブラウザでログインする方式（SAMLなどのシングルサインオン）には対応していません。ユーザー名とパスワード、必要ならワンタイムパスワードまたはスマートフォンでの承認でログインするサーバーに接続できます。
+
+自己署名証明書を使うサーバーでは、証明書のフィンガープリントを指定します。`sha256:`（証明書のSHA-256、16進）と`pin-sha256:`（公開鍵のPIN、base64）のどちらでも指定できます。指定しない場合は通常どおり証明書を検証し、検証できなければ接続しません。OpenConnectでは、サーバーが配布するデフォルトルートとDNSは設定しません。ルーティングは、接続に使った接続先の分だけを作ります。
 
 ### 二要素認証（Duo Mobileなど）
 

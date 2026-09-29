@@ -31,6 +31,19 @@ const maxApprovalWordLength = 32;
 
 // openConnectProtocols は、openconnect の --protocol に渡してよいプロトコルである。
 export const openConnectProtocols = ["anyconnect", "nc", "pulse", "gp", "f5", "fortinet", "array"] as const;
+
+// openConnectProducts は、プロトコルごとに、そのプロトコルを話す製品の名前である。
+// 利用者が知っているのは製品の名前で、openconnect のプロトコル名ではない。
+// 製品名は固有名詞で言語によって変わらないので、i18n の文言にはしない。
+export const openConnectProducts: Record<(typeof openConnectProtocols)[number], string> = {
+  anyconnect: "Cisco AnyConnect / Secure Client, ocserv",
+  nc: "Juniper Network Connect",
+  pulse: "Ivanti Connect Secure (Pulse Secure)",
+  gp: "Palo Alto Networks GlobalProtect",
+  f5: "F5 BIG-IP",
+  fortinet: "Fortinet FortiGate",
+  array: "Array Networks",
+};
 const openConnectFingerprintPrefixes = ["sha256:", "pin-sha256:"];
 const secondFactors = ["", "approve", "totp"];
 

@@ -279,7 +279,10 @@ func readOpenConnectProfile(
 	if err != nil {
 		return nil, nil, err
 	}
-	protocol, err := p.required("Protocol", previous.Protocol)
+	// 利用者が知っているのは製品の名前なので、プロトコル名に製品名を添えて聞く。
+	protocol, err := p.required("Protocol (anyconnect: Cisco AnyConnect/ocserv, gp: GlobalProtect, "+
+		"fortinet: FortiGate, pulse: Ivanti Connect Secure, nc: Juniper, f5: F5 BIG-IP, array: Array Networks)",
+		previous.Protocol)
 	if err != nil {
 		return nil, nil, err
 	}
