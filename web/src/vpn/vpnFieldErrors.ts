@@ -28,6 +28,14 @@ const vpnFieldReasonMessages = {
   no_remote: "vpn.field.no_remote",
   config_mismatch: "vpn.field.config_mismatch",
   required_by_config: "vpn.field.required_by_config",
+  unknown_directive: "vpn.field.unknown_directive",
+  misplaced_directive: "vpn.field.misplaced_directive",
+  missing_directive: "vpn.field.missing_directive",
+  duplicate: "vpn.field.duplicate",
+  no_endpoint: "vpn.field.no_endpoint",
+  not_in_allowed_ips: "vpn.field.not_in_allowed_ips",
+  keepalive_too_long: "vpn.field.keepalive_too_long",
+  mtu_out_of_range: "vpn.field.mtu_out_of_range",
 } as const satisfies Record<string, MessageKey>;
 
 // 項目の JSON のパスと、フォームでのその項目の名前。項目の横に出せないとき（名前を
@@ -36,9 +44,7 @@ const vpnFieldLabels: Record<string, MessageKey> = {
   name: "vpn.name",
   backend: "vpn.backend",
   dns: "vpn.dns",
-  "wireguard.server": "vpn.server",
-  "wireguard.peerPublicKey": "vpn.peerPublicKey",
-  "wireguard.address": "vpn.address",
+  "wireguard.servers": "vpn.server",
   "l2tp.server": "vpn.server",
   "l2tp.username": "vpn.username",
   "l2tp.ike": "vpn.ike",
@@ -49,7 +55,7 @@ const vpnFieldLabels: Record<string, MessageKey> = {
   "openconnect.serverCertificate": "vpn.serverCertificate",
   "openconnect.secondFactor": "vpn.secondFactor",
   "openconnect.approvalWord": "vpn.approvalWord",
-  "secrets.wireguardPrivateKey": "vpn.privateKey",
+  "secrets.wireguardConfig": "vpn.wireGuardConfig",
   "secrets.l2tpPassword": "vpn.password",
   "secrets.ipsecPsk": "vpn.psk",
   "secrets.openconnectPassword": "vpn.password",
@@ -76,8 +82,8 @@ export type VPNFieldError = {
   reason: VPNFieldReason;
   // limit は、too_long と too_many のときの上限である。
   limit?: number;
-  // line と directive は、設定ファイル（OpenVPN の .ovpn）の中の誤りのときの、1から数えた
-  // 行番号と、断った指示の名前である。
+  // line と directive は、設定ファイル（OpenVPN の .ovpn、WireGuard の設定ファイル）の中の誤りの
+  // ときの、1から数えた行番号と、断った指示の名前である。
   line?: number;
   directive?: string;
 };

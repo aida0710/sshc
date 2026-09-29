@@ -1,7 +1,6 @@
 package vpn
 
 import (
-	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -15,14 +14,20 @@ const (
 
 func validProfile() Profile {
 	return Profile{
-		Name:    "tohoku",
-		Backend: WireGuard,
-		WireGuard: &WireGuardSettings{
-			Server:        Endpoint{Host: "vpn.example.jp", Port: 51820},
-			PeerPublicKey: testPublicKey,
-			Address:       "10.9.9.2/32",
-		},
+		Name:      "tohoku",
+		Backend:   WireGuard,
+		WireGuard: &WireGuardSettings{Servers: []string{"vpn.example.jp"}},
 	}
+}
+
+// testWireGuardFields は、validProfile に合う設定ファイルを組み立てる項目である。
+func testWireGuardFields() WireGuardFields {
+	return WireGuardFields{Server: "vpn.example.jp:51820", PeerPublicKey: testPublicKey, Address: "10.9.9.2/32"}
+}
+
+// validSecrets は、validProfile に合う設定ファイルである。
+func validSecrets() Secrets {
+	return Secrets{WireGuard: &WireGuardSecrets{Config: testWireGuardFields().Config(testPrivateKey)}}
 }
 
 func TestAProfileWithAServerAndKeysIsAccepted(t *testing.T) {
@@ -50,12 +55,10 @@ func TestAProfileIsRefusedWhenTheRouteCouldNotBeBuiltFromIt(t *testing.T) {
 			profile.DNS = []string{"10.9.9.1", "10.9.9.2", "10.9.9.3", "10.9.9.4"}
 		}, ErrSettings},
 		{"wireguardの設定が無い", func(profile *Profile) { profile.WireGuard = nil }, ErrSettings},
-		{"相手の公開鍵が短い", func(profile *Profile) { profile.WireGuard.PeerPublicKey = "short" }, ErrSettings},
-		{"公開鍵に改行", func(profile *Profile) {
-			profile.WireGuard.PeerPublicKey = testPublicKey[:43] + "\n"
+		{"サーバーが無い", func(profile *Profile) { profile.WireGuard.Servers = nil }, ErrSettings},
+		{"サーバーに空白がある", func(profile *Profile) {
+			profile.WireGuard.Servers = []string{"vpn example.jp"}
 		}, ErrSettings},
-		{"トンネル側アドレスがCIDRでない", func(profile *Profile) { profile.WireGuard.Address = "10.9.9.2" }, ErrSettings},
-		{"サーバーのポートが無い", func(profile *Profile) { profile.WireGuard.Server.Port = 0 }, ErrSettings},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			profile := validProfile()
@@ -72,76 +75,48 @@ func TestAProfileIsRefusedWhenTheRouteCouldNotBeBuiltFromIt(t *testing.T) {
 	}
 }
 
-// 起動したトンネルが運ぶのは、DNSサーバーへの通信だけである。
-//
-// 接続先は、接続に使われたものを connect が1つずつ足す。起動した時点で広く
-// 開けると、VPNの向こうのネットワーク全体へ出られるトンネルになる。
-func TestAStartedTunnelCarriesOnlyTheResolvers(t *testing.T) {
-	profile := validProfile()
-	profile.DNS = []string{"10.9.9.53", "10.9.9.54"}
-
-	document, err := newAgentDocument(profile, Secrets{WireGuard: &WireGuardSecrets{PrivateKey: testPrivateKey}}, testClock)
-	if err != nil {
-		t.Fatalf("newAgentDocument = %v", err)
-	}
-
-	var decoded agentDocument
-	if err := json.Unmarshal([]byte(document), &decoded); err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(decoded.WireGuard.Configuration, "AllowedIPs = 10.9.9.53/32, 10.9.9.54/32\n") {
-		t.Errorf("configuration = %q", decoded.WireGuard.Configuration)
-	}
-	if strings.Join(decoded.DNS, ",") != "10.9.9.53,10.9.9.54" {
-		t.Errorf("dns = %v", decoded.DNS)
-	}
-}
-
 func TestSecretsAreRefusedWhenTheBackendCannotUseThem(t *testing.T) {
-	profile := validProfile()
+	withConfig := func(fields WireGuardFields) Secrets {
+		return Secrets{WireGuard: &WireGuardSecrets{Config: fields.Config(testPrivateKey)}}
+	}
+	shortPublicKey, missingPort, otherServer := testWireGuardFields(), testWireGuardFields(), testWireGuardFields()
+	shortPublicKey.PeerPublicKey = "short"
+	missingPort.Server = "vpn.example.jp"
+	otherServer.Server = "other.example.jp:51820"
+	withDNS := testWireGuardFields()
+	withDNS.DNS = []string{"10.9.9.53"}
 	for _, test := range []struct {
 		name    string
 		secrets Secrets
+		field   string
+		reason  Reason
 	}{
-		{"秘密鍵が無い", Secrets{}},
-		{"秘密鍵の形式が違う", Secrets{WireGuard: &WireGuardSecrets{PrivateKey: "not-a-key"}}},
+		{"設定ファイルが無い", Secrets{}, "secrets.wireguardConfig", ReasonRequired},
+		{"秘密鍵の形式が違う", Secrets{WireGuard: &WireGuardSecrets{
+			Config: testWireGuardFields().Config("not-a-key"),
+		}}, "secrets.wireguardConfig", ReasonFormat},
+		{"相手の公開鍵が短い", withConfig(shortPublicKey), "secrets.wireguardConfig", ReasonFormat},
+		{"サーバーのポートが無い", withConfig(missingPort), "secrets.wireguardConfig", ReasonFormat},
+		{"設定ファイルのサーバーがプロファイルと違う", withConfig(otherServer), "wireguard.servers", ReasonConfigMismatch},
+		{"設定ファイルの DNS がプロファイルと違う", withConfig(withDNS), "dns", ReasonConfigMismatch},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			if err := profile.ValidateSecrets(test.secrets); err == nil {
-				t.Fatal("ValidateSecrets accepted a secret the backend cannot use")
+			var failure *FieldError
+			if err := validProfile().ValidateSecrets(test.secrets); !errors.As(err, &failure) {
+				t.Fatalf("ValidateSecrets = %v, want a refusal", err)
+			}
+			if failure.Field != test.field || failure.Reason != test.reason {
+				t.Fatalf("failure = %+v, want %s %s", failure, test.field, test.reason)
 			}
 		})
 	}
-	if err := profile.ValidateSecrets(Secrets{WireGuard: &WireGuardSecrets{PrivateKey: testPrivateKey}}); err != nil {
+	if err := validProfile().ValidateSecrets(validSecrets()); err != nil {
 		t.Fatalf("ValidateSecrets = %v", err)
 	}
-}
-
-// DNSサーバーの無い経路は、起動した時点で何も運ばない。
-func TestATunnelWithoutResolversStartsCarryingNothing(t *testing.T) {
 	profile := validProfile()
-
-	document, err := newAgentDocument(profile, Secrets{WireGuard: &WireGuardSecrets{PrivateKey: testPrivateKey}}, testClock)
-	if err != nil {
-		t.Fatalf("newAgentDocument = %v", err)
-	}
-
-	var decoded agentDocument
-	if err := json.Unmarshal([]byte(document), &decoded); err != nil {
-		t.Fatal(err)
-	}
-	if decoded.WireGuard == nil {
-		t.Fatal("the document carries no wireguard configuration")
-	}
-	if strings.Contains(decoded.WireGuard.Configuration, "AllowedIPs") {
-		t.Errorf("configuration = %q", decoded.WireGuard.Configuration)
-	}
-	// wg setconf は Address を読まない。別に渡す。
-	if strings.Contains(decoded.WireGuard.Configuration, "Address") {
-		t.Errorf("configuration carries Address: %q", decoded.WireGuard.Configuration)
-	}
-	if decoded.WireGuard.Address != "10.9.9.2/32" {
-		t.Errorf("address = %q", decoded.WireGuard.Address)
+	profile.DNS = withDNS.DNS
+	if err := profile.ValidateSecrets(withConfig(withDNS)); err != nil {
+		t.Fatalf("設定ファイルと同じ DNS のプロファイル: ValidateSecrets = %v", err)
 	}
 }
 
@@ -149,16 +124,16 @@ func TestAnInvalidProfileNeverReachesTheContainer(t *testing.T) {
 	profile := validProfile()
 	profile.DNS = []string{"dns.example.jp"}
 
-	if _, err := newAgentDocument(profile, Secrets{WireGuard: &WireGuardSecrets{PrivateKey: testPrivateKey}}, testClock); !errors.Is(err, ErrSettings) {
+	if _, err := newAgentDocument(profile, validSecrets(), testClock); !errors.Is(err, ErrSettings) {
 		t.Fatalf("newAgentDocument = %v, want %v", err, ErrSettings)
 	}
 }
 
-// 表示するログに秘密鍵が残らない。
+// 表示するログに、設定ファイルの秘密鍵が残らない。
 func TestShownLogsHideThePrivateKey(t *testing.T) {
 	logs := "wireguard-go: failed with key " + testPrivateKey + " again"
 
-	shown := redact(logs, Secrets{WireGuard: &WireGuardSecrets{PrivateKey: testPrivateKey}})
+	shown := redact(logs, validSecrets())
 
 	if strings.Contains(shown, testPrivateKey) {
 		t.Fatalf("redact kept the key: %q", shown)
@@ -210,7 +185,7 @@ func TestTheImageTagFollowsTheEmbeddedContents(t *testing.T) {
 
 // Vault へ保存する記録は、読み書きで同じ値に戻る。
 func TestSecretsSurviveTheirStoredForm(t *testing.T) {
-	document, err := EncodeSecrets(Secrets{WireGuard: &WireGuardSecrets{PrivateKey: testPrivateKey}})
+	document, err := EncodeSecrets(validSecrets())
 	if err != nil {
 		t.Fatalf("EncodeSecrets = %v", err)
 	}
@@ -219,7 +194,7 @@ func TestSecretsSurviveTheirStoredForm(t *testing.T) {
 	}
 
 	secrets, err := DecodeSecrets(document)
-	if err != nil || secrets.WireGuard.PrivateKey != testPrivateKey {
+	if err != nil || secrets.WireGuard.Config != validSecrets().WireGuard.Config {
 		t.Fatalf("DecodeSecrets = %+v, %v", secrets, err)
 	}
 	if _, err := DecodeSecrets("{"); !errors.Is(err, ErrSecrets) {
@@ -252,7 +227,12 @@ func TestARefusalNamesTheFieldAndTheReason(t *testing.T) {
 		{"DNSが多すぎる", func(profile *Profile) {
 			profile.DNS = []string{"10.9.9.1", "10.9.9.2", "10.9.9.3", "10.9.9.4"}
 		}, "dns", ReasonTooMany, maxResolvers},
-		{"公開鍵が短い", func(profile *Profile) { profile.WireGuard.PeerPublicKey = "short" }, "wireguard.peerPublicKey", ReasonFormat, 0},
+		{"サーバーが多すぎる", func(profile *Profile) {
+			profile.WireGuard.Servers = make([]string, maxWireGuardPeers+1)
+			for index := range profile.WireGuard.Servers {
+				profile.WireGuard.Servers[index] = "vpn.example.jp"
+			}
+		}, "wireguard.servers", ReasonTooMany, maxWireGuardPeers},
 		{"名前が長すぎる", func(profile *Profile) { profile.Name = strings.Repeat("a", maxProfileNameLength+1) }, "name", ReasonTooLong, maxProfileNameLength},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -286,16 +266,35 @@ func TestAnEmptyResolverListIsTheSameRouteAsNone(t *testing.T) {
 // Vault の記録のキーは保存形式の一部である。変えるなら Vault の移行を足す。
 func TestTheStoredSecretsKeepTheirKeys(t *testing.T) {
 	document, err := EncodeSecrets(Secrets{
+		WireGuard:   &WireGuardSecrets{Config: "c"},
 		L2TP:        &L2TPSecrets{Password: "p", PreSharedKey: "k"},
 		OpenConnect: &OpenConnectSecrets{Password: "o", TOTPSecret: "t"},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, key := range []string{SecretKeyL2TPPassword, SecretKeyIPsecPSK, SecretKeyOpenConnectPassword, SecretKeyOpenConnectTOTPSecret} {
+	for _, key := range []string{
+		SecretKeyWireGuardConfig, SecretKeyL2TPPassword, SecretKeyIPsecPSK, SecretKeyOpenConnectPassword,
+		SecretKeyOpenConnectTOTPSecret,
+	} {
 		if !strings.Contains(document, `"`+key+`"`) {
 			t.Errorf("記録に %q が無い: %s", key, document)
 		}
+	}
+}
+
+// v0.40.0 までの項目の形の記録から、秘密鍵を読める。設定ファイルの形の記録には無い。
+func TestTheFieldsPrivateKeyIsReadFromAnOldRecord(t *testing.T) {
+	key, err := DecodeWireGuardFieldsPrivateKey(`{"wireguardPrivateKey":"` + testPrivateKey + `"}`)
+	if err != nil || key != testPrivateKey {
+		t.Fatalf("DecodeWireGuardFieldsPrivateKey = %q, %v", key, err)
+	}
+	record, err := EncodeSecrets(validSecrets())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if key, err := DecodeWireGuardFieldsPrivateKey(record); err != nil || key != "" {
+		t.Fatalf("設定ファイルの形の記録: DecodeWireGuardFieldsPrivateKey = %q, %v", key, err)
 	}
 }
 

@@ -1,6 +1,7 @@
 package vpn
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -95,7 +96,7 @@ func TestARouteThatWasOnlyStartedCountsIdleFromItsStart(t *testing.T) {
 	state := &sessionState{}
 	start := time.Date(2026, 9, 23, 12, 0, 0, 0, time.UTC)
 
-	state.markStarted(Profile{Name: "lab"}, nil, start)
+	state.markStarted(routeIdentity{profile: Profile{Name: "lab"}}, nil, start)
 
 	if !state.idleLongerThan(start.Add(11*time.Minute), 10*time.Minute) {
 		t.Fatal("起動から10分を過ぎた経路を無操作と数えなかった")
@@ -110,7 +111,7 @@ func TestARestartedRouteForgetsTheIdleTimeOfItsPreviousUse(t *testing.T) {
 	state.release(long)
 
 	restarted := long.Add(time.Hour)
-	state.markStarted(Profile{Name: "lab"}, nil, restarted)
+	state.markStarted(routeIdentity{profile: Profile{Name: "lab"}}, nil, restarted)
 
 	if state.idleLongerThan(restarted.Add(time.Minute), 10*time.Minute) {
 		t.Fatal("作り直した直後の経路を無操作と数えた")
@@ -121,7 +122,7 @@ func TestARestartedRouteForgetsTheIdleTimeOfItsPreviousUse(t *testing.T) {
 func TestAReservationKeepsTheRouteFromBeingIdle(t *testing.T) {
 	state := &sessionState{}
 	start := time.Date(2026, 9, 23, 12, 0, 0, 0, time.UTC)
-	state.markStarted(Profile{Name: "lab"}, nil, start)
+	state.markStarted(routeIdentity{profile: Profile{Name: "lab"}}, nil, start)
 
 	state.borrow()
 
@@ -134,7 +135,7 @@ func TestAReservationKeepsTheRouteFromBeingIdle(t *testing.T) {
 func TestARouteBeingPreparedIsNotIdle(t *testing.T) {
 	state := &sessionState{}
 	start := time.Date(2026, 9, 23, 12, 0, 0, 0, time.UTC)
-	state.markStarted(Profile{Name: "lab"}, nil, start)
+	state.markStarted(routeIdentity{profile: Profile{Name: "lab"}}, nil, start)
 
 	state.enterPhase(PhaseTunnel)
 
@@ -198,5 +199,23 @@ func TestTheConnectionsAStopWouldCutIncludeThoseWaitingForTheRoute(t *testing.T)
 	state.release(start)
 	if open := state.openConnections(); open != 1 {
 		t.Fatalf("1本閉じたあとの接続の数 = %d, want 1", open)
+	}
+}
+
+// 設定が同じでも、シークレットが変わった経路は作り直す。WireGuard と OpenVPN では、設定
+// ファイルがシークレットなので、直した設定ファイルがそのまま使われ続けないようにする。
+func TestARouteIsRebuiltWhenOnlyItsSecretsChange(t *testing.T) {
+	state := &sessionState{}
+	started := newRouteIdentity(validProfile(), validSecrets())
+	state.markStarted(started, &engineRelay{}, time.Date(2026, 9, 29, 12, 0, 0, 0, time.UTC))
+	edited := Secrets{WireGuard: &WireGuardSecrets{
+		Config: strings.Replace(validSecrets().WireGuard.Config, "AllowedIPs = 0.0.0.0/0", "AllowedIPs = 10.9.0.0/16", 1),
+	}}
+
+	if !state.serves(newRouteIdentity(validProfile(), validSecrets())) {
+		t.Fatal("同じ設定とシークレットの経路を作り直そうとした")
+	}
+	if state.serves(newRouteIdentity(validProfile(), edited)) {
+		t.Fatal("設定ファイルを直したのに、前の経路を使い続けた")
 	}
 }

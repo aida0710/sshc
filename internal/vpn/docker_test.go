@@ -211,7 +211,7 @@ exit 0
 	var connectionLog attemptRecord
 	ctx := connectionlog.With(context.Background(), &connectionLog)
 
-	err := manager.Start(ctx, validProfile(), Secrets{WireGuard: &WireGuardSecrets{PrivateKey: testPrivateKey}})
+	err := manager.Start(ctx, validProfile(), validSecrets())
 
 	if !errors.Is(err, ErrImageBuild) {
 		t.Fatalf("Start = %v", err)

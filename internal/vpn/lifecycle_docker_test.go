@@ -25,17 +25,11 @@ func wireGuardRoute(t *testing.T, manager *Manager, ctx context.Context, name st
 	}
 	clientPrivate, clientPublic := keyPair(t)
 	peerPublic, peerAddress := startTunnelPeer(t, manager, ctx, image, clientPublic)
-	profile := Profile{
-		Name:    name,
-		Backend: WireGuard,
-		WireGuard: &WireGuardSettings{
-			Server:        Endpoint{Host: peerAddress, Port: 51820},
-			PeerPublicKey: peerPublic,
-			Address:       tunnelClientAddress,
-		},
-	}
+	profile, secrets := testTunnel{
+		peerAddress: peerAddress, peerPublicKey: peerPublic, clientPrivateKey: clientPrivate,
+	}.route(name)
 	t.Cleanup(func() { _ = manager.Stop(context.Background(), profile.Name) })
-	return profile, Secrets{WireGuard: &WireGuardSecrets{PrivateKey: clientPrivate}}
+	return profile, secrets
 }
 
 // CLI とホストの ssh は engine の中継へ繋ぐ。その接続も数え、通っているあいだは畳まない。
@@ -326,4 +320,37 @@ func TestADisconnectedRouteIsRememberedUntilItIsStartedAgain(t *testing.T) {
 	if manager.Disconnected(profile.Name) {
 		t.Fatal("起動し直した経路を、切断したままと覚えている")
 	}
+}
+
+// 設定が同じでも、シークレット（WireGuard では設定ファイル）を変えて経路を求めると、コンテナを
+// 作り直す。作り直しは利用者の切断ではないので、切断したとは覚えず、作り直した経路の状態は
+// docker を読み直すのを待たずに一覧へ出る。同じシークレットのままなら作り直さない。
+func TestChangedSecretsRebuildTheRouteWithoutCountingAsADisconnect(t *testing.T) {
+	manager, ctx := requireDockerTest(t)
+	profile, secrets := wireGuardRoute(t, manager, ctx, "rekeyed")
+	holding := fmt.Sprintf("%s:%d", tunnelServerAddress, holdPort)
+	before := dialHolding(t, manager, ctx, profile, secrets, holding)
+	if statuses, err := manager.Statuses(ctx); err != nil || !statuses[profile.Name].Running {
+		t.Fatalf("Statuses = %+v, %v", statuses, err)
+	}
+	keepalive := fmt.Sprintf("PersistentKeepalive = %d", defaultWireGuardKeepaliveSeconds)
+	edited := Secrets{WireGuard: &WireGuardSecrets{
+		Config: strings.Replace(secrets.WireGuard.Config, keepalive, "PersistentKeepalive = 20", 1),
+	}}
+
+	after := dialHolding(t, manager, ctx, profile, edited, holding)
+
+	_ = before.SetReadDeadline(time.Now().Add(20 * time.Second))
+	if _, err := before.Read(make([]byte, 1)); err == nil {
+		t.Fatal("シークレットを変えたのに、前のコンテナを通る接続が残っている")
+	}
+	if manager.Disconnected(profile.Name) {
+		t.Fatal("シークレットを変えて作り直した経路を、利用者が切断したと覚えた")
+	}
+	if statuses, err := manager.Statuses(ctx); err != nil || !statuses[profile.Name].Running ||
+		statuses[profile.Name].RelaySocket == "" {
+		t.Fatalf("作り直した経路の状態 = %+v, %v", statuses[profile.Name], err)
+	}
+	dialHolding(t, manager, ctx, profile, edited, holding)
+	requireEcho(t, after, "still here")
 }

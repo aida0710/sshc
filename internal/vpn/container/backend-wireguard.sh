@@ -1,16 +1,22 @@
 # wireguard backend。agent.sh が読み込む。userspace の wireguard-go でトンネルを張る。
+#
+# engine は、利用者の設定ファイルを wg setconf が読む形に直して渡す（internal/vpn/wireguard.go）。
+# wg setconf が読まない Address と MTU は、ここで ip に渡す。AllowedIPs の経路は作らない。
+# 接続先への経路は connect が1つずつ作る。
 
 interface=wg0
 
 # wireguard_stale_seconds は、最後の握手からこれを過ぎたらトンネルが死んだと
 # みなす長さである。WireGuard は鍵を 2 分ごとに作り直し、180 秒（REJECT_AFTER_TIME）
-# を過ぎた鍵では何も運ばない。keepalive が 25 秒なので、生きていればこの間に
-# 必ず握手が起こる。
+# を過ぎた鍵では何も運ばない。Endpoint のある Peer の keepalive は 120 秒以下（既定は
+# 25 秒）なので、生きていればこの間に必ず握手が起こる。
 wireguard_stale_seconds=180
 
 backend_read() {
 	jq -r '.wireguard.configuration' "$profile" >"$runtime/wireguard.conf"
-	wireguard_address=$(jq -r '.wireguard.address' "$profile")
+	# どれも engine が形を確かめた値（IPv4 の CIDR と数）である。
+	wireguard_addresses=$(jq -r '.wireguard.addresses[]' "$profile" | tr '\n' ' ')
+	wireguard_mtu=$(jq -r '.wireguard.mtu // 0' "$profile")
 }
 
 backend_up() {
@@ -26,17 +32,24 @@ backend_up() {
 	wg setconf "$interface" "$runtime/wireguard.conf"
 	rm -f "$runtime/wireguard.conf"
 	# サーバーのアドレスは、接続先がサーバーそのものでないかを connect が確かめる
-	# のに使う。名前で書いたサーバーは wg が名前解決したものになる。
-	server_address=$(wg show "$interface" endpoints | awk 'NR==1 { sub(/:[0-9]+$/, "", $2); print $2 }')
-	ip address add "$wireguard_address" dev "$interface"
+	# のに使う。Peer ごとの Endpoint の IPv4 アドレスを空白で区切って並べる。名前で
+	# 書いたサーバーは wg が名前解決したものになる。
+	server_address=$(wg show "$interface" endpoints |
+		awk '{ sub(/:[0-9]+$/, "", $2); if ($2 ~ /^[0-9.]+$/) printf "%s ", $2 }')
+	for address in $wireguard_addresses; do
+		ip address add "$address" dev "$interface"
+	done
+	if [ "$wireguard_mtu" -gt 0 ]; then
+		ip link set "$interface" mtu "$wireguard_mtu"
+	fi
 	# interface を上げると、keepalive の設定に従って wireguard-go が相手へ
 	# 握手を始める。
 	ip link set "$interface" up
 }
 
-# latest_handshake は、相手との最後の握手の時刻（UNIX 秒）である。まだなら 0。
+# latest_handshake は、Peer のうちいちばん新しい握手の時刻（UNIX 秒）である。まだなら 0。
 latest_handshake() {
-	wg show "$interface" latest-handshakes | awk 'NR==1{print $2}'
+	wg show "$interface" latest-handshakes | awk '$2 > latest { latest = $2 } END { print latest + 0 }'
 }
 
 # backend_ready は、相手と握手できるまで待つ。
@@ -53,15 +66,28 @@ backend_ready() {
 	done
 }
 
-# backend_allow は、接続先を、トンネルが運ぶ相手に足す。connect が呼ぶ。
+# backend_allow は、接続先が、どれかの Peer の AllowedIPs に含まれることを確かめる。
+# connect が呼ぶ。
 #
-# 起動した時点でトンネルが運ぶのは、DNSサーバーへの通信だけである。接続先は、
-# 接続に使われたものから1つずつ足す。wg set は並びを置き換えるので、いまの並びに
-# 足して渡す。
+# WireGuard は、AllowedIPs に含まれない宛先へのパケットを、どの Peer にも送らずに捨てる。
+# 経路を作っても届かないので、接続先へ繋ぎに行く前に理由を返す。
 backend_allow() {
-	allowed=$(wg show "$interface" allowed-ips |
-		awk '{ for (field = 2; field <= NF; field++) if ($field != "(none)") printf "%s,", $field }')
-	wg set "$interface" peer "$(wg show "$interface" peers | head -1)" allowed-ips "$allowed$1/32"
+	if ! wg show "$interface" allowed-ips | awk -v target="$1" '
+		function number(address,   parts) {
+			split(address, parts, ".")
+			return ((parts[1] * 256 + parts[2]) * 256 + parts[3]) * 256 + parts[4]
+		}
+		{
+			for (field = 2; field <= NF; field++) {
+				if ($field !~ /^[0-9.]+\/[0-9]+$/) continue
+				split($field, prefix, "/")
+				size = 2 ^ (32 - prefix[2])
+				if (int(number(target) / size) == int(number(prefix[1]) / size)) found = 1
+			}
+		}
+		END { exit !found }'; then
+		fail target_not_allowed
+	fi
 }
 
 # wireguard_recover_seconds は、最後のハンドシェイクが古くなってから、新しい

@@ -14,10 +14,10 @@ import (
 // testOpenVPNConfig は、ユーザー名とパスワードを求める、クライアントの設定ファイルである。
 const testOpenVPNConfig = "client\ndev tun\nremote vpn.example.jp 1194\nremote backup.example.jp 443\nauth-user-pass\n"
 
-// writeOpenVPNConfig は、設定ファイルを一時ディレクトリに置き、そのパスを返す。
-func writeOpenVPNConfig(t *testing.T, contents string) string {
+// writeVPNConfigFile は、設定ファイルを一時ディレクトリに置き、そのパスを返す。
+func writeVPNConfigFile(t *testing.T, contents string) string {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "provider.ovpn")
+	path := filepath.Join(t.TempDir(), "provider.conf")
 	if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -36,7 +36,7 @@ func secretNamed(fields []vpnSecretField, name string) (string, bool) {
 
 // 作成では、設定ファイルを読み、remote のサーバーを設定に、設定ファイルをシークレットにする。
 func TestAddingAnOpenVPNProfileReadsTheConfigFile(t *testing.T) {
-	path := writeOpenVPNConfig(t, testOpenVPNConfig)
+	path := writeVPNConfigFile(t, testOpenVPNConfig)
 	p := profilePrompter(t, "openvpn\n\n"+path+"\nfixture\n", "fixture-password")
 
 	input, err := readVPNProfile(p, "provider", nil)
@@ -58,7 +58,7 @@ func TestAddingAnOpenVPNProfileReadsTheConfigFile(t *testing.T) {
 
 // 証明書だけで認証する設定ファイルでは、ユーザー名を空にでき、パスワードは聞かない。
 func TestAnOpenVPNProfileWithoutAUsernameNeedsNoPassword(t *testing.T) {
-	path := writeOpenVPNConfig(t, "client\nremote vpn.example.jp\n")
+	path := writeVPNConfigFile(t, "client\nremote vpn.example.jp\n")
 	p := profilePrompter(t, "openvpn\n\n"+path+"\n\n")
 
 	input, err := readVPNProfile(p, "provider", nil)
@@ -73,7 +73,7 @@ func TestAnOpenVPNProfileWithoutAUsernameNeedsNoPassword(t *testing.T) {
 
 // 使えない指示を含む設定ファイルは、engine へ送る前に、行と指示を添えて断る。
 func TestAnOpenVPNConfigWithARefusedDirectiveIsNotSent(t *testing.T) {
-	path := writeOpenVPNConfig(t, "client\nremote vpn.example.jp\nup /etc/openvpn/up.sh\n")
+	path := writeVPNConfigFile(t, "client\nremote vpn.example.jp\nup /etc/openvpn/up.sh\n")
 	p := profilePrompter(t, "openvpn\n\n"+path+"\n\n")
 
 	_, err := readVPNProfile(p, "provider", nil)

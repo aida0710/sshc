@@ -1,5 +1,5 @@
 import type { VPNProfile } from "../api/vpn";
-import { isUnroutableIPv4, joinHostPort, parseAddress, parseEndpoint, parsePrefix, type Endpoint } from "./vpnAddressSyntax";
+import { isUnroutableIPv4, parseAddress } from "./vpnAddressSyntax";
 import { isVPNBackend } from "./vpnBackends";
 import { isPEMCertificateList } from "./vpnCertificateSyntax";
 import type { VPNFieldError, VPNFieldReason } from "./vpnFieldErrors";
@@ -19,9 +19,6 @@ import type { VPNFieldError, VPNFieldReason } from "./vpnFieldErrors";
 const maxProfileNameLength = 48;
 // maxResolvers は、1つの経路が使う DNS サーバーの数の上限である。
 const maxResolvers = 3;
-// WireGuard の鍵は32バイトの base64 で、`=` で終わる44文字になる。
-const wireGuardKeyLength = 44;
-const maxPort = 65535;
 // 次の上限は、Go（internal/vpn/validation.go）と API（api/openapi.yaml の VPNProfile）と
 // 同じ値である。
 const maxServerLength = 320;
@@ -29,8 +26,9 @@ const maxUsernameLength = 256;
 const maxProposalLength = 256;
 const maxFingerprintLength = 128;
 const maxApprovalWordLength = 32;
-// maxOpenVPNServers は、OpenVPN のプロファイルに持つサーバーの数の上限である（Go と API と同じ値）。
-const maxOpenVPNServers = 64;
+// maxConfigServers は、設定ファイルから読んだサーバー（OpenVPN の remote、WireGuard の
+// Endpoint）を、プロファイルに持つ数の上限である（Go と API と同じ値）。
+const maxConfigServers = 64;
 // maxCACertificateLength は、IKEv2 の CA の証明書（PEM）の上限である（Go と API と同じ値）。
 const maxCACertificateLength = 16384;
 
@@ -92,10 +90,6 @@ export function vpnProfileNameError(name: string): VPNFieldError | null {
   return null;
 }
 
-function validatePort(field: string, port: number): Outcome {
-  return port <= 0 || port > maxPort ? refuse(field, "out_of_range") : null;
-}
-
 function validateResolvers(resolvers: string[]): Outcome {
   if (resolvers.length > maxResolvers) return { field: "dns", reason: "too_many", limit: maxResolvers };
   for (const resolver of resolvers) {
@@ -117,29 +111,16 @@ function validateUsername(field: string, username: string): Outcome {
     (usernameForbidden.test(username) ? refuse(field, "format") : null);
 }
 
-// vpnWireGuardKeyError は、WireGuard の鍵（相手の公開鍵、自分の秘密鍵）が base64 の
-// 32バイトでなければ、その理由を返す。
-export function vpnWireGuardKeyError(field: string, key: string): VPNFieldError | null {
-  if (key === "") return refuse(field, "required");
-  if (key.length !== wireGuardKeyLength || !key.endsWith("=")) return refuse(field, "format");
-  const body = key.slice(0, -1);
-  const base64 = [...body].every((character) => isASCIIAlphanumeric(character) || character === "+" || character === "/");
-  return base64 ? null : refuse(field, "format");
-}
-
-function validateWireGuard(settings: NonNullable<VPNProfile["wireguard"]>, server: Endpoint): Outcome {
-  if (server.host === "") return refuse("wireguard.server", "required");
-  const tooLong = validateLength("wireguard.server", joinHostPort(server.host, server.port), maxServerLength);
-  if (tooLong !== null) return tooLong;
-  if (whitespace.test(server.host)) return refuse("wireguard.server", "format");
-  const port = validatePort("wireguard.server", server.port);
-  if (port !== null) return port;
-  const key = vpnWireGuardKeyError("wireguard.peerPublicKey", settings.peerPublicKey);
-  if (key !== null) return key;
-  if (settings.address === "") return refuse("wireguard.address", "required");
-  const prefix = parsePrefix(settings.address);
-  if (prefix === null) return refuse("wireguard.address", "format");
-  return prefix.version === 4 ? null : refuse("wireguard.address", "not_ipv4");
+// validateConfigServers は、設定ファイルから読んだサーバーの並びを確かめる。field は項目の
+// JSON パスである（openvpn.servers、wireguard.servers）。
+function validateConfigServers(field: string, servers: string[]): Outcome {
+  if (servers.length === 0) return refuse(field, "required");
+  if (servers.length > maxConfigServers) return { field, reason: "too_many", limit: maxConfigServers };
+  for (const server of servers) {
+    const refused = validateServerName(field, server);
+    if (refused !== null) return refused;
+  }
+  return null;
 }
 
 // validateProposals は、IKE と ESP の暗号スイートを確かめる。section は節の名前である。
@@ -222,25 +203,19 @@ function validateOpenConnect(settings: NonNullable<VPNProfile["openconnect"]>): 
 }
 
 function validateOpenVPN(settings: NonNullable<VPNProfile["openvpn"]>): Outcome {
-  if (settings.servers.length === 0) return refuse("openvpn.servers", "required");
-  if (settings.servers.length > maxOpenVPNServers) {
-    return { field: "openvpn.servers", reason: "too_many", limit: maxOpenVPNServers };
-  }
-  for (const server of settings.servers) {
-    const refused = validateServerName("openvpn.servers", server);
-    if (refused !== null) return refused;
-  }
+  const servers = validateConfigServers("openvpn.servers", settings.servers);
+  if (servers !== null) return servers;
   // ユーザー名は任意である。書いたときだけ形を確かめる。
   const username = settings.username ?? "";
   return username === "" ? null : validateUsername("openvpn.username", username);
 }
 
-function validateBackendSettings(profile: VPNProfile, wireGuardServer: Endpoint | null): Outcome {
+function validateBackendSettings(profile: VPNProfile): Outcome {
   switch (profile.backend) {
     case "wireguard":
-      return profile.wireguard === undefined || wireGuardServer === null
+      return profile.wireguard === undefined
         ? refuse("wireguard", "required")
-        : validateWireGuard(profile.wireguard, wireGuardServer);
+        : validateConfigServers("wireguard.servers", profile.wireguard.servers);
     case "l2tp_ipsec":
       return profile.l2tp === undefined ? refuse("l2tp", "required") : validateL2TP(profile.l2tp);
     case "openconnect":
@@ -256,17 +231,10 @@ function validateBackendSettings(profile: VPNProfile, wireGuardServer: Endpoint 
 // 返す。通るなら null を返す。
 export function vpnProfileFieldError(profile: VPNProfile): VPNFieldError | null {
   // backend と違う節は、保存するときに落とすので見ない（Go の Normalized と同じ）。
-  // WireGuard のサーバーは、ほかの検査より前に `host:port` として読む（Go と同じ）。
-  const wireGuard = profile.backend === "wireguard" ? profile.wireguard : undefined;
-  let wireGuardServer: Endpoint | null = null;
-  if (wireGuard !== undefined) {
-    wireGuardServer = parseEndpoint(wireGuard.server);
-    if (wireGuardServer === null) return refuse("wireguard.server", "format");
-  }
   return (
     vpnProfileNameError(profile.name) ??
     (isVPNBackend(profile.backend) ? null : refuse("backend", "unsupported")) ??
     validateResolvers(profile.dns ?? []) ??
-    validateBackendSettings(profile, wireGuardServer)
+    validateBackendSettings(profile)
   );
 }

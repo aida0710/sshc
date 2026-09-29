@@ -75,7 +75,8 @@ func TestEditingCanClearAnOptionalSetting(t *testing.T) {
 
 // 編集で方式を変えたら、新しい方式のシークレットを求める。前の方式のシークレットは使えない。
 func TestEditingToAnotherBackendNeedsItsSecrets(t *testing.T) {
-	p := profilePrompter(t, "wireguard\n\nvpn.example.jp:51820\nbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=\n\n", "")
+	// WireGuard の設定ファイルのパスを空欄にしても、前の方式の設定は使えない。
+	p := profilePrompter(t, "wireguard\n\n")
 	p.editing = true
 	saved := savedL2TPProfile()
 

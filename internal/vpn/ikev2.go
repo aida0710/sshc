@@ -229,4 +229,6 @@ func (ikev2Backend) secretValues(secrets Secrets) []string {
 
 func (ikev2Backend) waitsForApproval(Profile) bool { return false }
 
-func (ikev2Backend) ownSecrets(secrets Secrets) Secrets { return Secrets{IKEv2: secrets.IKEv2} }
+func (ikev2Backend) ownSecrets(_ Profile, secrets Secrets) Secrets {
+	return Secrets{IKEv2: secrets.IKEv2}
+}

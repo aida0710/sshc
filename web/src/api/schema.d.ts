@@ -538,6 +538,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/vpn/profiles/{name}/reveal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["revealVPNSecrets"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/vpn/profiles/{name}/logs": {
         parameters: {
             query?: never;
@@ -3264,7 +3282,7 @@ export interface components {
             secrets?: components["schemas"]["VPNSecrets"];
         };
         VPNSecrets: {
-            wireguardPrivateKey?: string;
+            wireguardConfig?: string;
             l2tpPassword?: string;
             ipsecPsk?: string;
             openconnectPassword?: string;
@@ -3317,9 +3335,10 @@ export interface components {
             esp?: string;
         };
         WireGuardProfile: {
-            server: string;
-            peerPublicKey: string;
-            address: string;
+            servers: string[];
+            server?: string;
+            peerPublicKey?: string;
+            address?: string;
         };
         BackgroundSettings: {
             capacityMiB?: number;
@@ -4945,6 +4964,36 @@ export interface operations {
             };
             400: components["responses"]["Problem"];
             401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+        };
+    };
+    revealVPNSecrets: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-SSHC-Action": string;
+            };
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The stored secrets of the profile's backend, for the edit form; never cached. Empty when the profile has none yet */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VPNSecrets"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
         };
