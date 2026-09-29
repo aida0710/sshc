@@ -129,9 +129,10 @@ func (h VPNHandlers) StartSession(c *echo.Context) error {
 	return h.respond(c)
 }
 
-// StopSession は、経路を畳む。
+// StopSession は、利用者の求めで経路を切断する。切断で切れた接続は、自動再接続では
+// 経路を起動し直さない。
 func (h VPNHandlers) StopSession(c *echo.Context) error {
-	if err := h.Sessions.Stop(c.Request().Context(), c.Param("name")); err != nil {
+	if err := h.Sessions.Disconnect(c.Request().Context(), c.Param("name")); err != nil {
 		return vpnProblem(c, err)
 	}
 	return h.respond(c)

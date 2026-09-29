@@ -297,3 +297,33 @@ func requireEcho(t *testing.T, connection net.Conn, line string) {
 		t.Fatalf("返事 = %q, %v, want %q", answer, err, line+"\n")
 	}
 }
+
+// 利用者が切断した経路は、もう一度起動するまで、切断したままと覚えておく。
+// 覚えているあいだ、切断で切れた接続の自動再接続は経路を起動し直さない。
+func TestADisconnectedRouteIsRememberedUntilItIsStartedAgain(t *testing.T) {
+	manager, ctx := requireDockerTest(t)
+	profile, secrets := wireGuardRoute(t, manager, ctx, "disconnected")
+	if err := manager.Start(ctx, profile, secrets); err != nil {
+		t.Fatalf("Start = %v", err)
+	}
+	if manager.Disconnected(profile.Name) {
+		t.Fatal("起動しただけの経路を、切断したと覚えた")
+	}
+
+	if err := manager.Disconnect(ctx, profile.Name); err != nil {
+		t.Fatalf("Disconnect = %v", err)
+	}
+	if !manager.Disconnected(profile.Name) {
+		t.Fatal("切断した経路を覚えていない")
+	}
+	if status, err := manager.Status(ctx, profile.Name); err != nil || status.Running || status.RelaySocket != "" {
+		t.Fatalf("切断した経路の状態 = %+v, %v", status, err)
+	}
+
+	if err := manager.Start(ctx, profile, secrets); err != nil {
+		t.Fatalf("Start = %v", err)
+	}
+	if manager.Disconnected(profile.Name) {
+		t.Fatal("起動し直した経路を、切断したままと覚えている")
+	}
+}

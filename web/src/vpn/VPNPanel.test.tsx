@@ -507,7 +507,9 @@ describe("VPNPanel", () => {
     await user.click(within(route).getByRole("button", { name: "Disconnect" }));
 
     const dialog = screen.getByRole("dialog", { name: "Disconnect tohoku?" });
-    expect(dialog).toHaveTextContent("The connections using this VPN route (2) are disconnected too.");
+    expect(dialog).toHaveTextContent(
+      "The connections using this VPN route (2) are disconnected too, and do not reconnect automatically.",
+    );
     expect(stopVPNSession).not.toHaveBeenCalled();
     await user.click(within(dialog).getByRole("button", { name: "Disconnect" }));
     expect(stopVPNSession).toHaveBeenCalledWith("tohoku");

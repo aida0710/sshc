@@ -3,11 +3,13 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net"
 	"time"
 
 	"sshc/internal/sshclient"
+	"sshc/internal/terminal"
 	"sshc/internal/vpn"
 	"sshc/internal/vpnprofile"
 	"sshc/internal/vpnrefusal"
@@ -60,6 +62,9 @@ func vpnRoute(
 	sessions *vpn.Manager,
 ) func(context.Context, string, string) (net.Conn, error) {
 	return func(ctx context.Context, name, address string) (net.Conn, error) {
+		if err := refuseRestartAfterDisconnect(ctx, name, sessions.Disconnected(name)); err != nil {
+			return nil, err
+		}
 		profile, secrets, err := profiles.Route(name)
 		if err == nil {
 			var connection net.Conn
@@ -76,5 +81,22 @@ func vpnRoute(
 			sentence += "詳しくはVPN画面の「ログ」、または sshc vpn logs " + name + " で確認してください。"
 		}
 		return nil, &sshclient.ExplainedError{Sentence: sentence, Err: err}
+	}
+}
+
+// refuseRestartAfterDisconnect は、利用者が切断した経路を、自動再接続の試みでは
+// 起動し直さない。
+//
+// VPN画面の「切断」や `sshc vpn down` で経路を止めると、それを通っていた接続も
+// 切れる。その自動再接続が経路を起動し直すと、切断が数秒で取り消されてしまう。
+// ［再接続］の操作や新しく開いた接続は、利用者がいま接続を求めているので、経路を
+// 起動する。
+func refuseRestartAfterDisconnect(ctx context.Context, name string, disconnected bool) error {
+	if !disconnected || !terminal.IsAutomaticReconnect(ctx) {
+		return nil
+	}
+	return &sshclient.ExplainedError{
+		Sentence: fmt.Sprintf("VPN経路「%s」は切断されています。［再接続］を押すと、VPN経路を起動して接続し直します。", name),
+		Err:      vpn.ErrRouteDisconnected,
 	}
 }

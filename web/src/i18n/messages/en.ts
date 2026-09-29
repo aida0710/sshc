@@ -570,6 +570,7 @@ export const en = {
   "terminal.keyPassphraseRequired":
     "The private key needs a passphrase. Unlock the Vault or save the correct passphrase for this key.",
   "terminal.vpnRouteRefused": "The VPN route cannot be prepared, so automatic reconnection was stopped. Check the reason shown in the terminal.",
+  "terminal.vpnRouteDisconnected": "The VPN route was disconnected, so automatic reconnection was stopped. Reconnect to start the VPN route and connect again.",
   "terminal.reconnectFailed":
     "The reconnect attempt failed. sshc will retry within the configured limit.",
   "terminal.reconnectExhausted":
@@ -1152,7 +1153,7 @@ export const en = {
   "vpn.tunnelAddress": "Tunnel address",
   "vpn.tunnelSince": "Route opened",
   "vpn.disconnectTitle": "Disconnect {name}?",
-  "vpn.disconnectBody": "The connections using this VPN route ({count}) are disconnected too.",
+  "vpn.disconnectBody": "The connections using this VPN route ({count}) are disconnected too, and do not reconnect automatically.",
   "vpn.removeTitle": "Remove {name}?",
   "vpn.removeBody": "This removes the profile and its stored secrets, and detaches it from the connections it is attached to. A running route is disconnected.",
   "vpn.connections": "Connections using this profile",

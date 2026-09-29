@@ -2,6 +2,7 @@ package vpn
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -11,6 +12,10 @@ import (
 
 	"sshc/internal/connectionlog"
 )
+
+// ErrRouteDisconnected は、利用者が切断した経路を、自動再接続では起動し直さない
+// ことを表す。
+var ErrRouteDisconnected = errors.New("the vpn route was disconnected by the user")
 
 // Manager は、この engine が持つVPNセッションの全体である。
 //
@@ -226,6 +231,8 @@ func (manager *Manager) Start(ctx context.Context, profile Profile, secrets Secr
 	state := manager.state(profile.Name)
 	state.transition.Lock()
 	defer state.transition.Unlock()
+	// 起動を求められたので、利用者が切断した経路でも、もう切断したままにはしない。
+	state.setDisconnected(false)
 
 	name := manager.containerName(profile.Name)
 	ours, err := manager.requireOurContainer(ctx, name, profile.Name)
@@ -310,6 +317,36 @@ func (manager *Manager) Stop(ctx context.Context, profileName string) error {
 	state.transition.Lock()
 	defer state.transition.Unlock()
 	return manager.stopLocked(ctx, profileName)
+}
+
+// Disconnect は、利用者の求めで経路を切断する。
+//
+// Stop と違い、利用者が切断したことを覚えておく（Disconnected）。経路を止めると、
+// それを通っていた接続も切れる。その自動再接続で、切断した経路を起動し直さない
+// ためである。停止より先に覚える。停止の途中に切れた接続の再接続が、先に経路を
+// 起動し直さないようにする。
+func (manager *Manager) Disconnect(ctx context.Context, profileName string) error {
+	if err := validateProfileName(profileName); err != nil {
+		return err
+	}
+	if _, err := manager.command(ctx); err != nil {
+		return err
+	}
+	state := manager.state(profileName)
+	state.transition.Lock()
+	defer state.transition.Unlock()
+	state.setDisconnected(true)
+	if err := manager.stopLocked(ctx, profileName); err != nil {
+		// 止められなかった経路は動いているかもしれない。切断したとは覚えない。
+		state.setDisconnected(false)
+		return err
+	}
+	return nil
+}
+
+// Disconnected は、利用者がこの経路を切断し、まだ起動し直していないかを返す。
+func (manager *Manager) Disconnected(profileName string) bool {
+	return manager.state(profileName).isDisconnected()
 }
 
 // stopLocked は、Stop の本体である。起動と停止の鍵を握って呼ぶこと。

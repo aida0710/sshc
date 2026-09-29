@@ -188,6 +188,8 @@ Closing a route tells the VPN device first. OpenConnect sends a logout, L2TP/IPs
 
 **Disconnect** on the VPN screen closes the route and the connections that use it (Terminal, SFTP, `sshc <target>`). When connections are using the route, the screen shows how many and asks before disconnecting. The VPN screen keeps the state of each route current while it is open, so a route started from another screen or the command line can be disconnected without reopening the screen.
 
+Terminal does not reconnect the connections closed by **Disconnect** or `sshc vpn down` automatically. Reconnecting them automatically would start the route again right after it was disconnected. Press **Reconnect** in Terminal, or open the connection again, to start the route and connect.
+
 Connecting again reopens the route. One that needs approval on the phone will ask for it again.
 
 ## When a route will not come up

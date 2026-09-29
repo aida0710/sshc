@@ -32,6 +32,9 @@ type sessionState struct {
 	// failureLogs は、最後に用意できなかったときのコンテナのログである（秘密は
 	// 伏せてある）。そのコンテナはもう無いので、ここにしか残っていない。
 	failureLogs string
+	// disconnected は、利用者がこの経路を切断し、まだ起動し直していないことを表す。
+	// 切断で切れた接続の自動再接続が、経路を起動し直さないようにするためである。
+	disconnected bool
 
 	// phase は、経路を用意しているあいだの段階である。起動中は transition が
 	// 握られたままなので、段階は鍵を使わずに読み書きする。
@@ -171,6 +174,20 @@ func (state *sessionState) release(now time.Time) {
 	if state.open == 0 {
 		state.idleSince = now
 	}
+}
+
+// setDisconnected は、利用者がこの経路を切断したままかどうかを記録する。
+func (state *sessionState) setDisconnected(disconnected bool) {
+	state.use.Lock()
+	defer state.use.Unlock()
+	state.disconnected = disconnected
+}
+
+// isDisconnected は、利用者がこの経路を切断し、まだ起動し直していないかを返す。
+func (state *sessionState) isDisconnected() bool {
+	state.use.Lock()
+	defer state.use.Unlock()
+	return state.disconnected
 }
 
 // openConnections は、この経路を通っている接続と予約の数を返す。

@@ -420,4 +420,8 @@ describe("terminalProblemKey", () => {
   it("says the VPN route is why reconnecting stopped, not that the terminal failed to open", () => {
     expect(terminalProblemKey("vpn_route_refused")).toBe("terminal.vpnRouteRefused");
   });
+
+  it("says that the VPN route was disconnected when that is why reconnecting stopped", () => {
+    expect(terminalProblemKey("vpn_route_disconnected")).toBe("terminal.vpnRouteDisconnected");
+  });
 });
