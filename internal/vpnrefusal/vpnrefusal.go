@@ -24,6 +24,10 @@ type Refusal struct {
 	Reason string
 	// Limit は、長さや件数の上限である。無ければ 0。
 	Limit int
+	// Line と Directive は、設定ファイル（OpenVPN の .ovpn）の中の誤りのときの、1から
+	// 数えた行番号と、断った指示の名前である。無ければ 0 と空。
+	Line      int
+	Directive string
 }
 
 // 断った種類の語である。
@@ -103,6 +107,10 @@ func Of(err error) (Refusal, bool) {
 		var field *vpn.FieldError
 		if errors.As(err, &field) {
 			refusal.Field, refusal.Reason, refusal.Limit = field.Field, string(field.Reason), field.Limit
+		}
+		var line *vpn.ConfigLineError
+		if errors.As(err, &line) {
+			refusal.Line, refusal.Directive = line.Line, line.Directive
 		}
 		var destination *vpn.DestinationError
 		if errors.As(err, &destination) {
@@ -260,6 +268,9 @@ func fieldSentence(refusal Refusal) string {
 	}
 	if refusal.Limit > 0 {
 		sentence = fmt.Sprintf(sentence, refusal.Limit)
+	}
+	if refusal.Line > 0 {
+		sentence = configLineSentence(refusal, sentence)
 	}
 	return refusal.Field + ": " + sentence
 }

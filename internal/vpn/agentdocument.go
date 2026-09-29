@@ -23,6 +23,7 @@ type agentDocument struct {
 	WireGuard   *wireGuardDocument   `json:"wireguard,omitempty"`
 	L2TP        *l2tpDocument        `json:"l2tp,omitempty"`
 	OpenConnect *openConnectDocument `json:"openconnect,omitempty"`
+	OpenVPN     *openVPNDocument     `json:"openvpn,omitempty"`
 }
 
 // newAgentDocument は、プロファイルと秘密から、コンテナへ渡す設定を作る。

@@ -28,6 +28,8 @@ const maxUsernameLength = 256;
 const maxProposalLength = 256;
 const maxFingerprintLength = 128;
 const maxApprovalWordLength = 32;
+// maxOpenVPNServers は、OpenVPN のプロファイルに持つサーバーの数の上限である（Go と API と同じ値）。
+const maxOpenVPNServers = 64;
 
 // openConnectProtocols は、openconnect の --protocol に渡してよいプロトコルである。
 export const openConnectProtocols = ["anyconnect", "nc", "pulse", "gp", "f5", "fortinet", "array"] as const;
@@ -175,6 +177,20 @@ function validateOpenConnect(settings: NonNullable<VPNProfile["openconnect"]>): 
   return whitespace.test(approvalWord) ? refuse("openconnect.approvalWord", "format") : null;
 }
 
+function validateOpenVPN(settings: NonNullable<VPNProfile["openvpn"]>): Outcome {
+  if (settings.servers.length === 0) return refuse("openvpn.servers", "required");
+  if (settings.servers.length > maxOpenVPNServers) {
+    return { field: "openvpn.servers", reason: "too_many", limit: maxOpenVPNServers };
+  }
+  for (const server of settings.servers) {
+    const refused = validateServerName("openvpn.servers", server);
+    if (refused !== null) return refused;
+  }
+  // ユーザー名は任意である。書いたときだけ形を確かめる。
+  const username = settings.username ?? "";
+  return username === "" ? null : validateUsername("openvpn.username", username);
+}
+
 function validateBackendSettings(profile: VPNProfile, wireGuardServer: Endpoint | null): Outcome {
   switch (profile.backend) {
     case "wireguard":
@@ -185,6 +201,8 @@ function validateBackendSettings(profile: VPNProfile, wireGuardServer: Endpoint 
       return profile.l2tp === undefined ? refuse("l2tp", "required") : validateL2TP(profile.l2tp);
     case "openconnect":
       return profile.openconnect === undefined ? refuse("openconnect", "required") : validateOpenConnect(profile.openconnect);
+    case "openvpn":
+      return profile.openvpn === undefined ? refuse("openvpn", "required") : validateOpenVPN(profile.openvpn);
   }
 }
 

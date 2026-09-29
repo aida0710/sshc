@@ -9,6 +9,7 @@ const vpnBackendLabels: Record<VPNBackend, string> = {
   wireguard: "WireGuard",
   l2tp_ipsec: "L2TP/IPsec",
   openconnect: "OpenConnect",
+  openvpn: "OpenVPN",
 };
 
 export const vpnBackends = Object.keys(vpnBackendLabels) as VPNBackend[];

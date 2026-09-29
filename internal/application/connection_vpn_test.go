@@ -113,7 +113,7 @@ func TestAProfileThatCannotBecomeARouteIsNotSaved(t *testing.T) {
 // schemaVersion を上げて移行する。
 func TestAProfileForAnUnknownBackendIsNotSaved(t *testing.T) {
 	metadata := NewMetadata()
-	metadata.VPNProfiles = []VPNProfile{{Name: "future", Backend: "openvpn"}}
+	metadata.VPNProfiles = []VPNProfile{{Name: "future", Backend: "sstp"}}
 
 	if _, err := EncodeMetadata(metadata); !errors.Is(err, ErrMetadataVPN) {
 		t.Fatalf("EncodeMetadata = %v, want ErrMetadataVPN", err)
