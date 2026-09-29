@@ -1,16 +1,8 @@
 package main
 
 import (
-	"errors"
-	"fmt"
-	"io"
-	"os"
-	"path/filepath"
-	"strings"
-
 	"sshc/internal/application"
 	"sshc/internal/vpn"
-	"sshc/internal/vpnrefusal"
 )
 
 // OpenVPN のプロファイルの入力（sshc vpn add と edit）を読む。
@@ -38,13 +30,16 @@ func readOpenVPNProfile(
 	settings := &application.OpenVPNProfile{Servers: previous.Servers}
 	var config []byte
 	if path != "" {
-		if config, err = readOpenVPNConfigFile(path); err != nil {
+		if config, err = readVPNConfigFile(vpnConfigFile{
+			path: path, limit: vpn.MaxOpenVPNConfigLength, kind: vpn.ErrSecrets,
+			field: "secrets." + vpn.SecretKeyOpenVPNConfig,
+		}); err != nil {
 			return nil, nil, err
 		}
 		summary, err := vpn.InspectOpenVPNConfig(config)
 		if err != nil {
 			zeroBytes(config)
-			return nil, nil, openVPNConfigInputError(err)
+			return nil, nil, vpnConfigInputError(err)
 		}
 		settings.Servers = summary.Servers
 	} else if !keeps {
@@ -71,59 +66,4 @@ func readOpenVPNProfile(
 		}
 	}
 	return settings, sentSecrets(fields...), nil
-}
-
-// readOpenVPNConfigFile は、設定ファイルを上限の長さまで読む。先頭の ~/ はホーム
-// ディレクトリとして読む。ターミナルの入力はシェルを通らないので、~ は展開されない。
-func readOpenVPNConfigFile(path string) ([]byte, error) {
-	if rest, found := strings.CutPrefix(path, "~/"); found {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return nil, err
-		}
-		path = filepath.Join(home, rest)
-	}
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, &vpnInputError{
-			sentence: fmt.Sprintf("設定ファイル「%s」を読み込めませんでした。%s",
-				safeTerminalCell(path), safeTerminalCell(openVPNFileProblem(err))),
-			cause: errVPNSetupInput,
-		}
-	}
-	defer func() { _ = file.Close() }()
-	// 上限より1バイト多く読み、上限を超えたかどうかを知る。
-	config, err := io.ReadAll(io.LimitReader(file, vpn.MaxOpenVPNConfigLength+1))
-	if err != nil {
-		zeroBytes(config)
-		return nil, err
-	}
-	if len(config) > vpn.MaxOpenVPNConfigLength {
-		zeroBytes(config)
-		return nil, openVPNConfigInputError(&vpn.FieldError{
-			Kind: vpn.ErrSecrets, Field: "secrets." + vpn.SecretKeyOpenVPNConfig,
-			Reason: vpn.ReasonTooLong, Limit: vpn.MaxOpenVPNConfigLength,
-		})
-	}
-	return config, nil
-}
-
-// openVPNFileProblem は、設定ファイルを開けなかった理由を短く言う。
-func openVPNFileProblem(err error) string {
-	switch {
-	case errors.Is(err, os.ErrNotExist):
-		return "ファイルが見つかりません。"
-	case errors.Is(err, os.ErrPermission):
-		return "ファイルを読む権限がありません。"
-	}
-	return err.Error()
-}
-
-// openVPNConfigInputError は、設定ファイルを断った理由を、engine が断ったときと同じ文にする。
-func openVPNConfigInputError(err error) error {
-	refusal, known := vpnrefusal.Of(err)
-	if !known {
-		return err
-	}
-	return &vpnInputError{sentence: vpnrefusal.Sentence(refusal), cause: errVPNSetupInput}
 }

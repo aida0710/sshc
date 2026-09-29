@@ -109,7 +109,7 @@ func (profile Profile) OwnSecrets(secrets Secrets) Secrets {
 	if err != nil {
 		return Secrets{}
 	}
-	return chosen.ownSecrets(secrets)
+	return chosen.ownSecrets(profile, secrets)
 }
 
 // ValidateSecrets は、このbackendが要る秘密が揃っているかを確かめる。

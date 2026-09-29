@@ -258,7 +258,8 @@ func (manager *Manager) Start(ctx context.Context, profile Profile, secrets Secr
 	if err != nil {
 		return err
 	}
-	if ours && state.serves(profile) {
+	route := newRouteIdentity(profile, secrets)
+	if ours && state.serves(route) {
 		running, err := manager.containerRunning(ctx, name)
 		if err != nil {
 			return err
@@ -272,11 +273,11 @@ func (manager *Manager) Start(ctx context.Context, profile Profile, secrets Secr
 			return nil
 		}
 	}
-	// 設定が変わった、または止まっている。作り直す方が、半端な状態を残すより
-	// 分かりやすい。
+	// 設定かシークレットが変わった、または止まっている。作り直す方が、半端な状態を
+	// 残すより分かりやすい。
 	manager.closeRelay(state)
 	if ours {
-		connectionlog.Say(ctx, connectionlog.Detailed, "設定が変わったか停止していたため、コンテナ「%s」を作り直します。", name)
+		connectionlog.Say(ctx, connectionlog.Detailed, "設定やシークレットが変わったか、停止していたため、コンテナ「%s」を作り直します。", name)
 		manager.stopContainer(ctx, name)
 	}
 	defer state.enterPhase("")
@@ -303,7 +304,7 @@ func (manager *Manager) Start(ctx context.Context, profile Profile, secrets Secr
 		manager.stopContainer(ctx, name)
 		return err
 	}
-	state.markStarted(profile, relay, manager.now())
+	state.markStarted(route, relay, manager.now())
 	return nil
 }
 

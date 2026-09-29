@@ -20,11 +20,6 @@ import (
 // その場で消す。
 
 const (
-	// maxVPNKeyBytes は、受け取る鍵の長さの上限である。base64 の 32 バイト鍵は
-	// 44 文字であり、それを超えるものは形が違う。
-	maxVPNKeyBytes = 64
-	// defaultTunnelAddress は、トンネル側で名乗るアドレスの初期値である。
-	defaultTunnelAddress = "10.0.0.2/32"
 	// defaultOpenConnectProtocol は、openconnect のプロトコルの初期値である。
 	// internal/vpn の既定と同じ語を使う。
 	defaultOpenConnectProtocol = "anyconnect"
@@ -53,7 +48,6 @@ func (failure *vpnInputError) Unwrap() error { return failure.cause }
 var (
 	errVPNInputMissing = &vpnInputError{sentence: "必須の項目が入力されていません。", cause: errVPNSetupInput}
 	errVPNInputBackend = &vpnInputError{sentence: "方式にはwireguard、l2tp_ipsec、openconnect、openvpn、ikev2のいずれかを指定してください。", cause: errVPNSetupInput}
-	errVPNInputKey     = &vpnInputError{sentence: "秘密鍵の形式が正しくありません。", cause: errVPNSetupInput}
 	errVPNInputUnknown = &vpnInputError{sentence: "指定したVPNプロファイルが見つかりません。sshc vpn で名前を確認してください。", cause: errVPNSetupInput}
 )
 
@@ -131,20 +125,25 @@ func readVPNProfile(p vpnProfilePrompter, name string, current *application.VPNP
 	if err != nil {
 		return vpnProfileInput{}, err
 	}
+	input := vpnProfileInput{profile: application.VPNProfile{Name: name, Backend: vpn.BackendName(backend)}}
 	// 接続先をホスト名で書く接続に使うなら、その名前をVPNの中で名前解決する
 	// DNSサーバーが要る。アドレスで書く接続にしか使わないなら空のままでよい。
-	resolvers, err := p.optional("DNS servers inside the VPN (comma separated)", strings.Join(previous.DNS, ","))
-	if err != nil {
-		return vpnProfileInput{}, err
+	// WireGuard では、設定ファイルの DNS を使うので聞かない。
+	if input.profile.Backend != vpn.WireGuard {
+		resolvers, err := p.optional("DNS servers inside the VPN (comma separated)", strings.Join(previous.DNS, ","))
+		if err != nil {
+			return vpnProfileInput{}, err
+		}
+		input.profile.DNS = splitVPNResolvers(resolvers)
 	}
-	input := vpnProfileInput{profile: application.VPNProfile{
-		Name: name, Backend: vpn.BackendName(backend), DNS: splitVPNResolvers(resolvers),
-	}}
 	// 方式を変えたら、前の方式のシークレットは使えない。新しい方式のものを入力させる。
 	keeps := p.editing && previous.Backend == input.profile.Backend
 	switch input.profile.Backend {
 	case vpn.WireGuard:
-		input.profile.WireGuard, input.secrets, err = readWireGuardProfile(p, previous.WireGuard, keeps)
+		var configured wireGuardInput
+		configured, err = readWireGuardProfile(p, previous, keeps)
+		input.profile.WireGuard, input.profile.DNS, input.secrets =
+			configured.settings, configured.resolvers, configured.secrets
 	case vpn.L2TPIPsec:
 		input.profile.L2TP, input.secrets, err = readL2TPProfile(p, previous.L2TP, keeps)
 	case vpn.OpenConnect:
@@ -181,43 +180,6 @@ func sentSecrets(fields ...vpnSecretField) []vpnSecretField {
 		}
 	}
 	return sent
-}
-
-// readWireGuardProfile は、wireguard の設定と秘密鍵を読む。
-func readWireGuardProfile(
-	p vpnProfilePrompter, current *application.WireGuardProfile, keeps bool,
-) (*application.WireGuardProfile, []vpnSecretField, error) {
-	previous := application.WireGuardProfile{Address: defaultTunnelAddress}
-	if current != nil {
-		previous = *current
-	}
-	server, err := p.required("VPN server (host:port)", previous.Server)
-	if err != nil {
-		return nil, nil, err
-	}
-	peerKey, err := p.required("Peer public key", previous.PeerPublicKey)
-	if err != nil {
-		return nil, nil, err
-	}
-	address, err := p.required("Tunnel address", previous.Address)
-	if err != nil {
-		return nil, nil, err
-	}
-	privateKey, err := p.secret("Private key", keeps)
-	if err != nil {
-		return nil, nil, err
-	}
-	secrets := sentSecrets(vpnSecretField{name: vpn.SecretKeyWireGuardPrivateKey, value: privateKey})
-	if server == "" || peerKey == "" || address == "" {
-		return nil, secrets, errVPNInputMissing
-	}
-	if err := requireSecret(privateKey, keeps); err != nil {
-		return nil, secrets, err
-	}
-	if len(privateKey) != 0 && (len(privateKey) > maxVPNKeyBytes || !base64KeyBytes(privateKey)) {
-		return nil, secrets, errVPNInputKey
-	}
-	return &application.WireGuardProfile{Server: server, PeerPublicKey: peerKey, Address: address}, secrets, nil
 }
 
 // readL2TPProfile は、L2TP/IPsec の設定と二つのシークレットを読む。
@@ -377,21 +339,6 @@ func buildVPNProfilePayload(profile application.VPNProfile, secrets []vpnSecretF
 		}
 	}
 	return append(payload, []byte(`}}`)...), nil
-}
-
-// base64KeyBytes は、鍵が base64 の字だけでできているかを報告する。
-func base64KeyBytes(key []byte) bool {
-	if len(key) == 0 {
-		return false
-	}
-	for _, character := range key {
-		letter := character >= 'a' && character <= 'z' || character >= 'A' && character <= 'Z'
-		digit := character >= '0' && character <= '9'
-		if !letter && !digit && character != '+' && character != '/' && character != '=' {
-			return false
-		}
-	}
-	return true
 }
 
 // splitVPNResolvers は、読み取った DNS の並びを一件ずつに分ける。空なら無し。

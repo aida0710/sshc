@@ -3,6 +3,7 @@ package acceptance_test
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io/fs"
 	"net/http"
 	"os"
@@ -62,6 +63,31 @@ func (f *fixture) editableCredentialTarget(t testing.TB) string {
 	return "password\nacceptance-edit"
 }
 
+// vpnProfileTarget は、取り出す秘密を持つ VPN のプロファイルを1つ作り、その名前を返す。
+// 拒否の行ごとに別のプロファイルを使うので、呼ぶたびに名前を変える。
+func (f *fixture) vpnProfileTarget(t testing.TB) string {
+	t.Helper()
+	listed := f.do(http.MethodGet, "/api/v1/vpn", nil)
+	var overview struct {
+		Profiles []json.RawMessage `json:"profiles"`
+	}
+	if err := json.Unmarshal([]byte(readBody(t, listed)), &overview); err != nil {
+		t.Fatalf("vpn overview: %v", err)
+	}
+	name := fmt.Sprintf("acceptance-%d", len(overview.Profiles)+1)
+	response := f.do(http.MethodPost, "/api/v1/vpn/profiles", mustJSON(t, map[string]any{
+		"profile": map[string]any{
+			"name": name, "backend": "openconnect",
+			"openconnect": map[string]any{"server": "vpn.example.jp", "username": "acceptance"},
+		},
+		"secrets": map[string]any{"openconnectPassword": "acceptance-vpn-secret"},
+	}))
+	if body := readBody(t, response); response.StatusCode != http.StatusOK {
+		t.Fatalf("create vpn profile = %d: %s", response.StatusCode, body)
+	}
+	return name
+}
+
 func guardedRoutes(f *fixture) []guardedRoute {
 	keyID := f.keyID()
 	knownHostsPath := f.knownHostsPath()
@@ -118,6 +144,9 @@ func guardedRoutes(f *fixture) []guardedRoute {
 			func(target string) string {
 				return "/api/v1/credentials/password/" + strings.TrimPrefix(target, "password\n") + "/reveal"
 			}, nil, nil},
+		{http.MethodPost, "/api/v1/vpn/profiles/:name/reveal", session.ActionRevealVPNSecrets,
+			f.vpnProfileTarget,
+			func(target string) string { return "/api/v1/vpn/profiles/" + target + "/reveal" }, nil, nil},
 		{http.MethodDelete, "/api/v1/trash/:entryId", session.ActionPurgeTrashEntry,
 			func(t testing.TB) string { return f.newTrashEntry(t) },
 			func(target string) string { return "/api/v1/trash/" + target }, nil, nil},

@@ -79,10 +79,12 @@ esac
 
 if ! grep -qx "$address" "$routed" 2>/dev/null; then
 	# VPNサーバーそのものを接続先にしない。トンネルの外側と内側が同じ相手になり、
-	# 経路とパケットフィルタが互いを打ち消す。
-	if [ "$address" = "${server_address:-}" ]; then
+	# 経路とパケットフィルタが互いを打ち消す。サーバーが複数あれば空白で区切って並ぶ。
+	case " ${server_address:-} " in
+	*" $address "*)
 		fail target_is_server
-	fi
+		;;
+	esac
 	backend_allow "$address"
 	# 接続先への経路は、このコンテナのトンネルの中にしか作らない。
 	ip route replace "$address/32" dev "$interface"

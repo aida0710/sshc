@@ -165,7 +165,9 @@ func openVPNInlineLines(config string) []string {
 	return lines
 }
 
-func (openVPNBackend) ownSecrets(secrets Secrets) Secrets { return Secrets{OpenVPN: secrets.OpenVPN} }
+func (openVPNBackend) ownSecrets(_ Profile, secrets Secrets) Secrets {
+	return Secrets{OpenVPN: secrets.OpenVPN}
+}
 
 func (openVPNBackend) waitsForApproval(Profile) bool { return false }
 

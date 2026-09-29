@@ -1,6 +1,6 @@
-import type { VPNSecrets } from "../api/vpn";
 import { inspectOpenVPNConfig } from "./openVPNConfig";
 import type { VPNFieldError } from "./vpnFieldErrors";
+import type { VPNSecretKey } from "./vpnSecretRules";
 
 // OpenVPN のシークレット（設定ファイルとパスワード）を、送る前に engine と同じ順番で確かめる。
 //
@@ -16,9 +16,9 @@ const maxPasswordLength = 256;
 const credentialForbidden = /[\r\n\0]/;
 
 export type OpenVPNSecretsDraft = {
-  secrets: Required<VPNSecrets>;
+  secrets: Record<VPNSecretKey, string>;
   // stored は、保存済みで、空欄なら engine がそのまま使うシークレットである。
-  stored: ReadonlySet<keyof VPNSecrets>;
+  stored: ReadonlySet<VPNSecretKey>;
   username: string;
 };
 

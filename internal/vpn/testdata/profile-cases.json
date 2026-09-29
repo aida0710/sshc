@@ -12,9 +12,9 @@
         "name": "lab",
         "backend": "wireguard",
         "wireguard": {
-          "server": "vpn.example.jp:51820",
-          "peerPublicKey": "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
-          "address": "10.9.9.2/32"
+          "servers": [
+            "vpn.example.jp"
+          ]
         }
       },
       "field": "",
@@ -56,9 +56,9 @@
         "name": "lab",
         "backend": "wireguard",
         "wireguard": {
-          "server": "vpn.example.jp:51820",
-          "peerPublicKey": "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
-          "address": "10.9.9.2/32"
+          "servers": [
+            "vpn.example.jp"
+          ]
         },
         "dns": [
           "10.9.9.53"
@@ -73,9 +73,9 @@
         "name": "lab",
         "backend": "wireguard",
         "wireguard": {
-          "server": "vpn.example.jp:51820",
-          "peerPublicKey": "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
-          "address": "10.9.9.2/32"
+          "servers": [
+            "vpn.example.jp"
+          ]
         },
         "dns": [
           "10.9.9.53"
@@ -90,9 +90,9 @@
         "name": "lab",
         "backend": "wireguard",
         "wireguard": {
-          "server": "vpn.example.jp:51820",
-          "peerPublicKey": "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
-          "address": "10.9.9.2/32"
+          "servers": [
+            "vpn.example.jp"
+          ]
         },
         "l2tp": {
           "server": "vpn.example.jp",
@@ -108,9 +108,9 @@
         "name": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "backend": "wireguard",
         "wireguard": {
-          "server": "vpn.example.jp:51820",
-          "peerPublicKey": "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
-          "address": "10.9.9.2/32"
+          "servers": [
+            "vpn.example.jp"
+          ]
         }
       },
       "field": "",
@@ -122,9 +122,9 @@
         "name": "",
         "backend": "wireguard",
         "wireguard": {
-          "server": "vpn.example.jp:51820",
-          "peerPublicKey": "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
-          "address": "10.9.9.2/32"
+          "servers": [
+            "vpn.example.jp"
+          ]
         }
       },
       "field": "name",
@@ -136,9 +136,9 @@
         "name": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "backend": "wireguard",
         "wireguard": {
-          "server": "vpn.example.jp:51820",
-          "peerPublicKey": "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
-          "address": "10.9.9.2/32"
+          "servers": [
+            "vpn.example.jp"
+          ]
         }
       },
       "field": "name",
@@ -151,9 +151,9 @@
         "name": "has space",
         "backend": "wireguard",
         "wireguard": {
-          "server": "vpn.example.jp:51820",
-          "peerPublicKey": "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
-          "address": "10.9.9.2/32"
+          "servers": [
+            "vpn.example.jp"
+          ]
         }
       },
       "field": "name",
@@ -165,9 +165,9 @@
         "name": "lab",
         "backend": "",
         "wireguard": {
-          "server": "vpn.example.jp:51820",
-          "peerPublicKey": "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
-          "address": "10.9.9.2/32"
+          "servers": [
+            "vpn.example.jp"
+          ]
         }
       },
       "field": "backend",
@@ -179,9 +179,9 @@
         "name": "lab",
         "backend": "sstp",
         "wireguard": {
-          "server": "vpn.example.jp:51820",
-          "peerPublicKey": "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
-          "address": "10.9.9.2/32"
+          "servers": [
+            "vpn.example.jp"
+          ]
         }
       },
       "field": "backend",
@@ -193,9 +193,9 @@
         "name": "lab",
         "backend": "wireguard",
         "wireguard": {
-          "server": "vpn.example.jp:51820",
-          "peerPublicKey": "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
-          "address": "10.9.9.2/32"
+          "servers": [
+            "vpn.example.jp"
+          ]
         },
         "dns": [
           "10.9.9.53",
@@ -214,9 +214,9 @@
         "name": "lab",
         "backend": "wireguard",
         "wireguard": {
-          "server": "vpn.example.jp:51820",
-          "peerPublicKey": "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
-          "address": "10.9.9.2/32"
+          "servers": [
+            "vpn.example.jp"
+          ]
         },
         "dns": [
           "dns.example.jp"
@@ -231,9 +231,9 @@
         "name": "lab",
         "backend": "wireguard",
         "wireguard": {
-          "server": "vpn.example.jp:51820",
-          "peerPublicKey": "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
-          "address": "10.9.9.2/32"
+          "servers": [
+            "vpn.example.jp"
+          ]
         },
         "dns": [
           "fd00::53"
@@ -248,9 +248,9 @@
         "name": "lab",
         "backend": "wireguard",
         "wireguard": {
-          "server": "vpn.example.jp:51820",
-          "peerPublicKey": "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
-          "address": "10.9.9.2/32"
+          "servers": [
+            "vpn.example.jp"
+          ]
         },
         "dns": [
           "127.0.0.1"
@@ -269,31 +269,15 @@
       "reason": "required"
     },
     {
-      "name": "wireguard のサーバーにポートが無い",
+      "name": "wireguard のサーバーが無い",
       "profile": {
         "name": "lab",
         "backend": "wireguard",
         "wireguard": {
-          "server": "vpn.example.jp",
-          "peerPublicKey": "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
-          "address": "10.9.9.2/32"
+          "servers": []
         }
       },
-      "field": "wireguard.server",
-      "reason": "format"
-    },
-    {
-      "name": "wireguard のサーバーの名前が空",
-      "profile": {
-        "name": "lab",
-        "backend": "wireguard",
-        "wireguard": {
-          "server": ":51820",
-          "peerPublicKey": "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
-          "address": "10.9.9.2/32"
-        }
-      },
-      "field": "wireguard.server",
+      "field": "wireguard.servers",
       "reason": "required"
     },
     {
@@ -302,111 +286,92 @@
         "name": "lab",
         "backend": "wireguard",
         "wireguard": {
-          "server": "vpn example.jp:51820",
-          "peerPublicKey": "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
-          "address": "10.9.9.2/32"
+          "servers": [
+            "vpn example.jp"
+          ]
         }
       },
-      "field": "wireguard.server",
+      "field": "wireguard.servers",
       "reason": "format"
     },
     {
-      "name": "wireguard のサーバーのポートが範囲の外",
+      "name": "wireguard のサーバーが多すぎる",
       "profile": {
         "name": "lab",
         "backend": "wireguard",
         "wireguard": {
-          "server": "vpn.example.jp:0",
-          "peerPublicKey": "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
-          "address": "10.9.9.2/32"
+          "servers": [
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp",
+            "vpn.example.jp"
+          ]
         }
       },
-      "field": "wireguard.server",
-      "reason": "out_of_range"
-    },
-    {
-      "name": "wireguard の相手の公開鍵が空",
-      "profile": {
-        "name": "lab",
-        "backend": "wireguard",
-        "wireguard": {
-          "server": "vpn.example.jp:51820",
-          "peerPublicKey": "",
-          "address": "10.9.9.2/32"
-        }
-      },
-      "field": "wireguard.peerPublicKey",
-      "reason": "required"
-    },
-    {
-      "name": "wireguard の相手の公開鍵が短い",
-      "profile": {
-        "name": "lab",
-        "backend": "wireguard",
-        "wireguard": {
-          "server": "vpn.example.jp:51820",
-          "peerPublicKey": "bBbB=",
-          "address": "10.9.9.2/32"
-        }
-      },
-      "field": "wireguard.peerPublicKey",
-      "reason": "format"
-    },
-    {
-      "name": "wireguard の相手の公開鍵に base64 でない字がある",
-      "profile": {
-        "name": "lab",
-        "backend": "wireguard",
-        "wireguard": {
-          "server": "vpn.example.jp:51820",
-          "peerPublicKey": "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBb!A=",
-          "address": "10.9.9.2/32"
-        }
-      },
-      "field": "wireguard.peerPublicKey",
-      "reason": "format"
-    },
-    {
-      "name": "wireguard のトンネルのアドレスが空",
-      "profile": {
-        "name": "lab",
-        "backend": "wireguard",
-        "wireguard": {
-          "server": "vpn.example.jp:51820",
-          "peerPublicKey": "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
-          "address": ""
-        }
-      },
-      "field": "wireguard.address",
-      "reason": "required"
-    },
-    {
-      "name": "wireguard のトンネルのアドレスに長さが無い",
-      "profile": {
-        "name": "lab",
-        "backend": "wireguard",
-        "wireguard": {
-          "server": "vpn.example.jp:51820",
-          "peerPublicKey": "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
-          "address": "10.9.9.2"
-        }
-      },
-      "field": "wireguard.address",
-      "reason": "format"
-    },
-    {
-      "name": "wireguard のトンネルのアドレスが IPv6",
-      "profile": {
-        "name": "lab",
-        "backend": "wireguard",
-        "wireguard": {
-          "server": "vpn.example.jp:51820",
-          "peerPublicKey": "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
-          "address": "fd00::2/128"
-        }
-      },
-      "field": "wireguard.address",
-      "reason": "not_ipv4"
+      "field": "wireguard.servers",
+      "reason": "too_many",
+      "limit": 64
     },
     {
       "name": "l2tp の節が無い",

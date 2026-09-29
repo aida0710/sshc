@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -58,6 +59,8 @@ type fixture struct {
 	routes   *recordedRoutes
 	// transactions は、metadata を通さずに Vault だけを書くときに使う。
 	transactions *storage.Manager
+	// workspace は、v0.40.0 までの形の metadata をそのまま書くときに使う。
+	workspace *storage.Workspace
 }
 
 func newFixture(t *testing.T) fixture {
@@ -83,17 +86,21 @@ func newFixture(t *testing.T) fixture {
 	routes := &recordedRoutes{}
 	return fixture{
 		profiles: vpnprofile.New(vpnprofile.Dependencies{Configuration: config, Vault: vault, Routes: routes}),
-		config:   config, vault: vault, routes: routes, transactions: transactions,
+		config:   config, vault: vault, routes: routes, transactions: transactions, workspace: workspace,
 	}
 }
 
 func labProfile() application.VPNProfile {
 	return application.VPNProfile{
 		Name: "lab", Backend: vpn.WireGuard,
-		WireGuard: &application.WireGuardProfile{
-			Server: "vpn.example.jp:51820", PeerPublicKey: testPublicKey, Address: "10.9.9.2/32",
-		},
+		WireGuard: &application.WireGuardProfile{Servers: []string{"vpn.example.jp"}},
 	}
+}
+
+// labSecrets は、labProfile の設定ファイルである。
+func labSecrets() vpn.SecretsDocument {
+	fields := vpn.WireGuardFields{Server: "vpn.example.jp:51820", PeerPublicKey: testPublicKey, Address: "10.9.9.2/32"}
+	return vpn.SecretsDocument{WireGuardConfig: fields.Config(testPrivateKey)}
 }
 
 func officeProfile() application.VPNProfile {
@@ -102,6 +109,9 @@ func officeProfile() application.VPNProfile {
 		OpenConnect: &application.OpenConnectProfile{Server: "vpn.example.jp", Username: "fixture"},
 	}
 }
+
+// sentSecrets は、Update へ送る秘密である。
+func sentSecrets(secrets vpn.SecretsDocument) *vpn.SecretsDocument { return &secrets }
 
 func (f fixture) create(t *testing.T, profile application.VPNProfile, secrets vpn.SecretsDocument) {
 	t.Helper()
@@ -149,9 +159,9 @@ func TestCreatingAProfileDoesNotInheritALeftoverSecret(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	f.create(t, labProfile(), vpn.SecretsDocument{WireGuardPrivateKey: testPrivateKey})
+	f.create(t, labProfile(), labSecrets())
 
-	if got := f.storedSecrets(t, "lab"); got != (vpn.SecretsDocument{WireGuardPrivateKey: testPrivateKey}) {
+	if got := f.storedSecrets(t, "lab"); !reflect.DeepEqual(got, labSecrets()) {
 		t.Fatalf("stored = %+v, want only the sent key", got)
 	}
 }
@@ -177,11 +187,11 @@ func TestChangingTheBackendDropsTheSecretsOfTheOldBackend(t *testing.T) {
 	f := newFixture(t)
 	f.create(t, officeProfile(), vpn.SecretsDocument{OpenConnectPassword: "a password"})
 
-	if err := f.profiles.Update(labProfile(), &vpn.SecretsDocument{WireGuardPrivateKey: testPrivateKey}); err != nil {
+	if err := f.profiles.Update(labProfile(), sentSecrets(labSecrets())); err != nil {
 		t.Fatalf("Update = %v", err)
 	}
 
-	if got := f.storedSecrets(t, "lab"); got != (vpn.SecretsDocument{WireGuardPrivateKey: testPrivateKey}) {
+	if got := f.storedSecrets(t, "lab"); !reflect.DeepEqual(got, labSecrets()) {
 		t.Fatalf("stored = %+v, want only the wireguard key", got)
 	}
 }
@@ -194,7 +204,7 @@ func TestChangingTheBackendWithoutItsSecretChangesNothing(t *testing.T) {
 	err := f.profiles.Update(labProfile(), nil)
 
 	var fieldError *vpn.FieldError
-	if !errors.As(err, &fieldError) || fieldError.Field != "secrets."+vpn.SecretKeyWireGuardPrivateKey {
+	if !errors.As(err, &fieldError) || fieldError.Field != "secrets."+vpn.SecretKeyWireGuardConfig {
 		t.Fatalf("Update = %v, want the missing wireguard key", err)
 	}
 	profiles, _ := f.config.VPNProfiles()
@@ -210,7 +220,7 @@ func TestChangingTheBackendWithoutItsSecretChangesNothing(t *testing.T) {
 func TestUpdatingAnUnknownProfileIsRefused(t *testing.T) {
 	f := newFixture(t)
 
-	err := f.profiles.Update(labProfile(), &vpn.SecretsDocument{WireGuardPrivateKey: testPrivateKey})
+	err := f.profiles.Update(labProfile(), sentSecrets(labSecrets()))
 
 	if !errors.Is(err, application.ErrUnknownVPNProfile) {
 		t.Fatalf("Update = %v, want ErrUnknownVPNProfile", err)
@@ -220,7 +230,7 @@ func TestUpdatingAnUnknownProfileIsRefused(t *testing.T) {
 // ロック中の削除と改名は断り、経路も止めず、設定も秘密も変えない。
 func TestALockedVaultRefusesRemovalAndRenameWithoutStoppingTheRoute(t *testing.T) {
 	f := newFixture(t)
-	f.create(t, labProfile(), vpn.SecretsDocument{WireGuardPrivateKey: testPrivateKey})
+	f.create(t, labProfile(), labSecrets())
 	f.vault.Lock()
 
 	if err := f.profiles.Remove(context.Background(), "lab"); !errors.Is(err, secret.ErrLocked) {
@@ -239,7 +249,7 @@ func TestALockedVaultRefusesRemovalAndRenameWithoutStoppingTheRoute(t *testing.T
 	if err := f.vault.Unlock(vaultPassphrase); err != nil {
 		t.Fatal(err)
 	}
-	if got := f.storedSecrets(t, "lab"); got.WireGuardPrivateKey != testPrivateKey {
+	if got := f.storedSecrets(t, "lab"); got.WireGuardConfig != labSecrets().WireGuardConfig {
 		t.Fatalf("stored = %+v", got)
 	}
 }
@@ -247,7 +257,7 @@ func TestALockedVaultRefusesRemovalAndRenameWithoutStoppingTheRoute(t *testing.T
 // 書き込みが失敗したら、設定も秘密も変わらない。
 func TestAFailedCommitChangesNeitherTheProfileNorItsSecrets(t *testing.T) {
 	f := newFixture(t)
-	f.create(t, labProfile(), vpn.SecretsDocument{WireGuardPrivateKey: testPrivateKey})
+	f.create(t, labProfile(), labSecrets())
 	failing := vpnprofile.New(vpnprofile.Dependencies{
 		Configuration: failingCommit{f.config}, Vault: f.vault, Routes: f.routes,
 	})
@@ -262,7 +272,7 @@ func TestAFailedCommitChangesNeitherTheProfileNorItsSecrets(t *testing.T) {
 	if names := f.profileNames(t); len(names) != 1 || names[0] != "lab" {
 		t.Fatalf("profiles = %v", names)
 	}
-	if got := f.storedSecrets(t, "lab"); got.WireGuardPrivateKey != testPrivateKey {
+	if got := f.storedSecrets(t, "lab"); got.WireGuardConfig != labSecrets().WireGuardConfig {
 		t.Fatalf("stored = %+v", got)
 	}
 }
@@ -270,10 +280,10 @@ func TestAFailedCommitChangesNeitherTheProfileNorItsSecrets(t *testing.T) {
 // 改名の検査で断る場合は、使っている経路を止めない。
 func TestARefusedRenameDoesNotStopTheRoute(t *testing.T) {
 	f := newFixture(t)
-	f.create(t, labProfile(), vpn.SecretsDocument{WireGuardPrivateKey: testPrivateKey})
+	f.create(t, labProfile(), labSecrets())
 	other := labProfile()
 	other.Name = "office"
-	f.create(t, other, vpn.SecretsDocument{WireGuardPrivateKey: testPrivateKey})
+	f.create(t, other, labSecrets())
 
 	for _, test := range []struct {
 		to   string
@@ -295,7 +305,7 @@ func TestARefusedRenameDoesNotStopTheRoute(t *testing.T) {
 // 同じ名前への改名は何もしない。
 func TestRenamingToTheSameNameDoesNothing(t *testing.T) {
 	f := newFixture(t)
-	f.create(t, labProfile(), vpn.SecretsDocument{WireGuardPrivateKey: testPrivateKey})
+	f.create(t, labProfile(), labSecrets())
 
 	if err := f.profiles.Rename(context.Background(), "lab", "lab"); err != nil {
 		t.Fatalf("Rename = %v", err)
@@ -315,7 +325,7 @@ func TestRenamingToTheSameNameDoesNothing(t *testing.T) {
 // 起こし直す。
 func TestTheRouteIsStoppedOnlyAfterTheProfileIsGone(t *testing.T) {
 	f := newFixture(t)
-	f.create(t, labProfile(), vpn.SecretsDocument{WireGuardPrivateKey: testPrivateKey})
+	f.create(t, labProfile(), labSecrets())
 	f.routes.onStop = func(name string) {
 		if _, err := f.config.VPNProfile(name); !errors.Is(err, application.ErrUnknownVPNProfile) {
 			t.Errorf("経路を止めた時点で %s がまだ読めた: %v", name, err)
@@ -339,7 +349,7 @@ func TestTheRouteIsStoppedOnlyAfterTheProfileIsGone(t *testing.T) {
 // 利用者は消えたプロファイルをもう一度消そうとする。
 func TestRemovingSucceedsEvenWhenTheRouteCannotBeStopped(t *testing.T) {
 	f := newFixture(t)
-	f.create(t, labProfile(), vpn.SecretsDocument{WireGuardPrivateKey: testPrivateKey})
+	f.create(t, labProfile(), labSecrets())
 	f.routes.refuse = vpn.ErrDockerNotRunning
 
 	if err := f.profiles.Remove(context.Background(), "lab"); err != nil {
@@ -353,7 +363,7 @@ func TestRemovingSucceedsEvenWhenTheRouteCannotBeStopped(t *testing.T) {
 // 改名は、設定・秘密・接続の紐付けを一緒に移し、古い名前の経路を止める。
 func TestRenamingStopsTheRouteAndMovesEverythingTogether(t *testing.T) {
 	f := newFixture(t)
-	f.create(t, labProfile(), vpn.SecretsDocument{WireGuardPrivateKey: testPrivateKey})
+	f.create(t, labProfile(), labSecrets())
 	if _, err := f.config.SetConnectionVPN("lab", "lab"); err != nil {
 		t.Fatal(err)
 	}
@@ -368,7 +378,7 @@ func TestRenamingStopsTheRouteAndMovesEverythingTogether(t *testing.T) {
 	if bound, err := f.config.ConnectionVPN("lab"); err != nil || bound != "tains" {
 		t.Fatalf("ConnectionVPN = %q, %v", bound, err)
 	}
-	if got := f.storedSecrets(t, "tains"); got.WireGuardPrivateKey != testPrivateKey {
+	if got := f.storedSecrets(t, "tains"); got.WireGuardConfig != labSecrets().WireGuardConfig {
 		t.Fatalf("stored = %+v", got)
 	}
 }
@@ -376,7 +386,7 @@ func TestRenamingStopsTheRouteAndMovesEverythingTogether(t *testing.T) {
 // 削除は、設定・紐付け・秘密を一緒に消し、経路を止める。
 func TestRemovingStopsTheRouteAndForgetsEverything(t *testing.T) {
 	f := newFixture(t)
-	f.create(t, labProfile(), vpn.SecretsDocument{WireGuardPrivateKey: testPrivateKey})
+	f.create(t, labProfile(), labSecrets())
 	if _, err := f.config.SetConnectionVPN("lab", "lab"); err != nil {
 		t.Fatal(err)
 	}

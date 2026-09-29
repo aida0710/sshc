@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strconv"
@@ -8,13 +9,15 @@ import (
 	"github.com/labstack/echo/v5"
 
 	"sshc/internal/application"
+	"sshc/internal/session"
 	"sshc/internal/vpn"
 	"sshc/internal/vpnprofile"
 )
 
 // VPN 経路の設定と、いまの状態を扱う。
 //
-// 秘密は応答に現れない。保存のときだけ受け取り、Vault へ渡す。
+// 秘密は、一覧と保存の応答には現れない。保存のときに受け取って Vault へ渡し、取り出すのは
+// 確認のトークンを添えた RevealSecrets だけにする。
 
 // VPNHandlers は、プロファイルの保存と、経路の開始・停止を提供する。
 //
@@ -25,6 +28,8 @@ type VPNHandlers struct {
 	Config   *application.Service
 	Profiles *vpnprofile.Service
 	Sessions *vpn.Manager
+	// Actions は、秘密を取り出す確認のトークンを消費する。
+	Actions ActionHandlers
 }
 
 func registerVPNRoutes(engine *echo.Echo, handlers VPNHandlers) {
@@ -33,6 +38,7 @@ func registerVPNRoutes(engine *echo.Echo, handlers VPNHandlers) {
 	engine.PUT("/api/v1/vpn/profiles/:name", handlers.UpdateProfile)
 	engine.DELETE("/api/v1/vpn/profiles/:name", handlers.DeleteProfile)
 	engine.POST("/api/v1/vpn/profiles/:name/rename", handlers.RenameProfile)
+	engine.POST("/api/v1/vpn/profiles/:name/reveal", handlers.RevealSecrets)
 	engine.GET("/api/v1/vpn/profiles/:name/logs", handlers.Logs)
 	engine.POST("/api/v1/vpn/profiles/:name/session", handlers.StartSession)
 	engine.DELETE("/api/v1/vpn/profiles/:name/session", handlers.StopSession)
@@ -112,6 +118,31 @@ func (h VPNHandlers) RenameProfile(c *echo.Context) error {
 		return vpnProblem(c, err)
 	}
 	return h.respond(c)
+}
+
+// RevealSecrets は、保存済みの秘密を返す。画面は、編集を開いたときにこれをフォームへ入れる。
+//
+// 確認のトークン（kind は vpn_profile.reveal、target はプロファイルの名前）が要る。Vault が
+// ロック中なら、ほかの取り出しと同じく vault_locked で断る。
+func (h VPNHandlers) RevealSecrets(c *echo.Context) error {
+	name := c.Param("name")
+	if allowed, response := h.Actions.consume(c, session.ActionRevealVPNSecrets, name); !allowed {
+		return response
+	}
+	secrets, err := h.Profiles.RevealSecrets(name)
+	if err != nil {
+		return vpnProblem(c, err)
+	}
+	c.Response().Header().Set("Cache-Control", "no-store")
+	return c.JSON(http.StatusOK, secrets)
+}
+
+// addVPNActions は、VPN の秘密を取り出す確認を、いま保存されている秘密に結び付ける。
+func addVPNActions(registry actionRegistry, profiles *vpnprofile.Service) {
+	registry[session.ActionRevealVPNSecrets] = actionKind{
+		evidence: func(_ context.Context, name string) (string, error) { return profiles.SecretsEvidence(name) },
+		fail:     vpnProblem,
+	}
 }
 
 // Logs は、engine がその経路を用意した記録とコンテナの直近の出力を、秘密を伏せて返す。

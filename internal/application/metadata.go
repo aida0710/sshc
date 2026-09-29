@@ -21,7 +21,7 @@ import (
 
 const (
 	// MetadataSchemaVersion はこのビルドが書き込むバージョンである。
-	MetadataSchemaVersion = 7
+	MetadataSchemaVersion = 8
 	MetadataFileName      = "metadata.json"
 	DefaultGroupsFile     = "groups.sshc.conf"
 )
@@ -272,7 +272,7 @@ func DecodeMetadata(contents []byte) (Metadata, error) {
 		return Metadata{}, err
 	}
 	switch version.SchemaVersion {
-	case MetadataSchemaVersion, 6, 5, 4, 3:
+	case MetadataSchemaVersion, 7, 6, 5, 4, 3:
 	default:
 		return Metadata{}, ErrMetadataVersion
 	}
@@ -280,6 +280,7 @@ func DecodeMetadata(contents []byte) (Metadata, error) {
 	if err := json.Unmarshal(contents, &metadata); err != nil {
 		return Metadata{}, err
 	}
+	fillWireGuardServers(&metadata)
 	// v3/v4→v5は追加fieldだけのmigrationである。v5は同期するキー設定を旧版で消さないための境界。
 	// 旧scrollbackBytesはengineの
 	// replay bufferとして意味を変えず、browser側は未設定の既定行数から始める。
@@ -290,6 +291,10 @@ func DecodeMetadata(contents []byte) (Metadata, error) {
 	// v6→v7は項目を足すだけである。v7は、v0.39.7までのsshcが知らないVPNの方式
 	// （openvpn、ikev2）のプロファイルを旧版に読ませないための境界である。旧版は知らない
 	// 方式を断るので、版で先に断る方が、何が起きたかが利用者に分かる。
+	// v7→v8は、WireGuardのプロファイルに、Endpointのサーバー（wireguard.servers）を足す。
+	// 設定ファイルはVaultにあり、項目の形（server、peerPublicKey、address）のプロファイルは
+	// 保存し直すまで項目のまま読む（metadata_wireguard.go）。v8は、項目の無い設定ファイルの
+	// 形のプロファイルを旧版に読ませないための境界である。
 	metadata.SchemaVersion = MetadataSchemaVersion
 	if metadata.GroupsFile == "" {
 		metadata.GroupsFile = DefaultGroupsFile

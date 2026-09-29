@@ -25,6 +25,7 @@ const (
 	ActionRemoteKeyRegister = "remote_key.register"
 	ActionRevealPrivateKey  = "private_key.reveal"
 	ActionRevealCredential  = "credential.reveal"
+	ActionRevealVPNSecrets  = "vpn_profile.reveal"
 	ActionPurgeTrashEntry   = "trash.purge"
 	ActionSFTPDelete        = "sftp.delete"
 	ActionSFTPChmod         = "sftp.chmod"
@@ -49,6 +50,7 @@ var knownActionKinds = map[string]bool{
 	ActionRemoteKeyRegister: true,
 	ActionRevealPrivateKey:  true,
 	ActionRevealCredential:  true,
+	ActionRevealVPNSecrets:  true,
 	ActionPurgeTrashEntry:   true,
 	ActionSFTPDelete:        true,
 	ActionSFTPChmod:         true,

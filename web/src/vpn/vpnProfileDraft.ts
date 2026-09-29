@@ -1,6 +1,7 @@
 import type { VPNProfile, VPNSecrets } from "../api/vpn";
 import { inspectOpenVPNConfig } from "./openVPNConfig";
 import type { VPNBackend } from "./vpnBackends";
+import { inspectWireGuardConfig, wireGuardServers } from "./wireGuardConfig";
 import { openConnectProtocols, type IKEv2Authentication } from "./vpnProfileRules";
 import { vpnSecretKeys, type VPNSecretKey } from "./vpnSecretRules";
 
@@ -16,8 +17,6 @@ export type VPNProfileDraft = {
   // resolvers は、VPN 内の DNS サーバーをカンマで区切った入力である。
   resolvers: string;
   server: string;
-  peerPublicKey: string;
-  address: string;
   // username は、L2TP/IPsec、OpenConnect、OpenVPN のユーザー名であり、IKEv2 の ID（EAP
   // ではユーザー名）である。
   username: string;
@@ -31,24 +30,20 @@ export type VPNProfileDraft = {
   serverCertificate: string;
   secondFactor: SecondFactor;
   approvalWord: string;
-  // servers は、OpenVPN の設定ファイルの remote のサーバーである。設定ファイルから読む。
+  // servers は、設定ファイルから読むサーバーである（OpenVPN の remote、WireGuard の Endpoint）。
   servers: string[];
-  secrets: Required<VPNSecrets>;
+  secrets: Record<VPNSecretKey, string>;
 };
 
-export const emptySecrets: Required<VPNSecrets> = {
-  wireguardPrivateKey: "", l2tpPassword: "", ipsecPsk: "",
+export const emptySecrets: Record<VPNSecretKey, string> = {
+  wireguardConfig: "", l2tpPassword: "", ipsecPsk: "",
   openconnectPassword: "", openconnectTotpSecret: "",
   openvpnConfig: "", openvpnPassword: "",
   ikev2Password: "", ikev2Psk: "",
 };
 
-// トンネル側のアドレスは、1台だけを名乗る /32 がほとんどなので、例として入れておく。
-const suggestedTunnelAddress = "10.0.0.2/32";
-
 export const emptyDraft: VPNProfileDraft = {
-  name: "", backend: "wireguard", resolvers: "", server: "",
-  peerPublicKey: "", address: suggestedTunnelAddress, username: "", ike: "", esp: "",
+  name: "", backend: "wireguard", resolvers: "", server: "", username: "", ike: "", esp: "",
   protocol: openConnectProtocols[0], serverCertificate: "", secondFactor: "", approvalWord: "",
   servers: [],
   ikev2Authentication: "eap-mschapv2", serverIdentity: "", caCertificate: "",
@@ -73,8 +68,8 @@ function splitResolvers(value: string): string[] {
     .filter((resolver) => resolver !== "");
 }
 
-// draftOf は、保存済みのプロファイルを編集用の下書きにする。シークレットは engine が
-// 返さないので空にする。
+// draftOf は、保存済みのプロファイルを編集用の下書きにする。シークレットは一覧の応答に
+// 無いので空にする。フォームは、別に取り出した保存済みのシークレットを withSecrets で入れる。
 export function draftOf(profile: VPNProfile): VPNProfileDraft {
   const common: VPNProfileDraft = {
     ...emptyDraft,
@@ -85,9 +80,7 @@ export function draftOf(profile: VPNProfile): VPNProfileDraft {
   switch (profile.backend) {
     case "wireguard": {
       const settings = profile.wireguard;
-      return settings === undefined ? common : {
-        ...common, server: settings.server, peerPublicKey: settings.peerPublicKey, address: settings.address,
-      };
+      return settings === undefined ? common : { ...common, servers: settings.servers };
     }
     case "l2tp_ipsec": {
       const settings = profile.l2tp;
@@ -133,7 +126,8 @@ export function profileOf(draft: VPNProfileDraft): VPNProfile {
   const common = { name: draft.name, backend: draft.backend, ...(dns.length === 0 ? {} : { dns }) };
   switch (draft.backend) {
     case "wireguard":
-      return { ...common, wireguard: { server: draft.server, peerPublicKey: draft.peerPublicKey, address: draft.address } };
+      // DNS は設定ファイルの DNS で、withWireGuardConfig が resolvers に入れてある。
+      return { ...common, wireguard: { servers: draft.servers } };
     case "openconnect":
       return {
         ...common,
@@ -179,7 +173,8 @@ export function profileOf(draft: VPNProfileDraft): VPNProfile {
 }
 
 // storedSecretKeys は、保存済みのプロファイルが Vault に持っているシークレットである。
-// 編集で空欄のまま送ると、engine はこれらの保存済みの値をそのまま使う。
+// 編集で空欄のまま送ると、engine はこれらの保存済みの値をそのまま使う。保存済みの値を
+// 取り出せなかったときに使う。
 export function storedSecretKeys(profile: VPNProfile): ReadonlySet<VPNSecretKey> {
   return new Set(vpnSecretKeys({
     backend: profile.backend,
@@ -202,18 +197,14 @@ export function secretsOf(draft: VPNProfileDraft): VPNSecrets {
 // hasRequiredValues は、方式が要る値がすべて入っているかを返す。stored にある
 // シークレットは、空欄でも保存済みの値を使うので入っているものとして扱う。
 export function hasRequiredValues(draft: VPNProfileDraft, stored: ReadonlySet<VPNSecretKey>): boolean {
-  if (draft.backend === "openvpn") {
-    // サーバーは設定ファイルから読むので、設定ファイル（と、ユーザー名を書いたならパスワード）があればよい。
+  if (draft.backend === "openvpn" || draft.backend === "wireguard") {
+    // サーバーは設定ファイルから読むので、設定ファイル（と、OpenVPN でユーザー名を書いたなら
+    // パスワード）があればよい。
     return draft.name !== "" &&
       vpnSecretKeys(draft).every((key) => draft.secrets[key] !== "" || stored.has(key));
   }
-  if (draft.name === "" || draft.server === "") return false;
-  const settings = draft.backend === "wireguard"
-    ? draft.peerPublicKey !== "" && draft.address !== ""
-    : draft.username !== "";
-  const secrets = vpnSecretKeys(draft)
-    .every((key) => draft.secrets[key] !== "" || stored.has(key));
-  return settings && secrets;
+  if (draft.name === "" || draft.server === "" || draft.username === "") return false;
+  return vpnSecretKeys(draft).every((key) => draft.secrets[key] !== "" || stored.has(key));
 }
 
 // withOpenVPNConfig は、OpenVPN の設定ファイルを入れ替えた下書きを返す。remote のサーバーは
@@ -224,4 +215,35 @@ export function withOpenVPNConfig(draft: VPNProfileDraft, config: string, stored
   if (config === "") return { ...draft, secrets, servers: storedServers };
   const inspected = inspectOpenVPNConfig(config);
   return { ...draft, secrets, servers: "summary" in inspected ? inspected.summary.servers : draft.servers };
+}
+
+// StoredConfigFacts は、保存済みの設定ファイルから読んで、プロファイルに持っている値である。
+// 設定ファイルの欄を空欄に戻したときは、これに戻す（engine が保存済みの設定ファイルを使う）。
+export type StoredConfigFacts = { servers: string[]; resolvers: string };
+
+// withWireGuardConfig は、WireGuard の設定ファイルを入れ替えた下書きを返す。Endpoint のサーバーと
+// DNS は設定ファイルから読む。読めない設定ファイルは保存の前の検査で断るので、前のままにする。
+export function withWireGuardConfig(draft: VPNProfileDraft, config: string, stored: StoredConfigFacts): VPNProfileDraft {
+  const secrets = { ...draft.secrets, wireguardConfig: config };
+  if (config === "") return { ...draft, secrets, servers: stored.servers, resolvers: stored.resolvers };
+  const inspected = inspectWireGuardConfig(config);
+  if (!("config" in inspected)) return { ...draft, secrets };
+  return {
+    ...draft, secrets, servers: wireGuardServers(inspected.config), resolvers: inspected.config.dns.join(", "),
+  };
+}
+
+// withSecrets は、取り出した保存済みのシークレットを、下書きのシークレットの欄に入れる。
+// 設定ファイルからは、サーバー（WireGuard では DNS も）を読み直す。
+export function withSecrets(draft: VPNProfileDraft, revealed: VPNSecrets): VPNProfileDraft {
+  const secrets = { ...emptySecrets };
+  for (const key of Object.keys(emptySecrets) as VPNSecretKey[]) secrets[key] = revealed[key] ?? "";
+  const filled = { ...draft, secrets };
+  if (draft.backend === "openvpn" && secrets.openvpnConfig !== "") {
+    return withOpenVPNConfig(filled, secrets.openvpnConfig, draft.servers);
+  }
+  if (draft.backend === "wireguard" && secrets.wireguardConfig !== "") {
+    return withWireGuardConfig(filled, secrets.wireguardConfig, { servers: draft.servers, resolvers: draft.resolvers });
+  }
+  return filled;
 }

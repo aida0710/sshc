@@ -86,4 +86,27 @@ describe("VPNProfileForm with OpenVPN", () => {
 
     await waitFor(() => expect(onSave).toHaveBeenCalledWith(savedProfile, {}));
   });
+
+  it("fills the stored file and password when editing opens, and shows the password only on request", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn().mockResolvedValue({ saved: true });
+    const revealSecrets = vi.fn().mockResolvedValue({ openvpnConfig: config, openvpnPassword: "the stored password" });
+    render(
+      <VPNProfileForm busy={false} editing={savedProfile} revealSecrets={revealSecrets} onSave={onSave} onCancel={() => {}} />,
+    );
+    const form = screen.getByRole("region", { name: "Edit provider" });
+
+    await waitFor(() => expect(within(form).getByLabelText("Configuration file (.ovpn)")).toHaveValue(config));
+    const password = within(form).getByLabelText("VPN password");
+    expect(password).toHaveValue("the stored password");
+    expect(password).toHaveAttribute("type", "password");
+    await user.click(within(form).getByRole("button", { name: "Show VPN password" }));
+    expect(password).toHaveAttribute("type", "text");
+    await user.click(within(form).getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(onSave).toHaveBeenCalledWith(
+      { ...savedProfile, openvpn: { servers: ["vpn.example.jp", "backup.example.jp"], username: "fixture" } },
+      { openvpnConfig: config, openvpnPassword: "the stored password" },
+    ));
+  });
 });

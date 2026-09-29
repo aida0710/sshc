@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
@@ -15,6 +16,7 @@ import (
 
 	"sshc/internal/application"
 	"sshc/internal/secret"
+	"sshc/internal/session"
 	"sshc/internal/storage"
 	"sshc/internal/vpn"
 	"sshc/internal/vpnprofile"
@@ -26,9 +28,16 @@ const (
 	vaultPassphrase   = "a vpn handler test passphrase"
 )
 
-// vpnEngine は、VPN の経路を扱う engine を一台組む。Docker は使わない。
+// vpnServices は、VPN の経路を扱う engine の持ち主である。Docker は使わない。
 // ここで確かめるのは、設定と秘密の扱いと、応答の形だからである。
-func vpnEngine(t *testing.T) (*echo.Echo, *secret.Service, *application.Service) {
+type vpnServices struct {
+	config   *application.Service
+	secrets  *secret.Service
+	profiles *vpnprofile.Service
+	sessions *vpn.Manager
+}
+
+func newVPNServices(t *testing.T) vpnServices {
 	t.Helper()
 	home := t.TempDir()
 	root := filepath.Join(home, ".ssh")
@@ -48,16 +57,46 @@ func vpnEngine(t *testing.T) (*echo.Echo, *secret.Service, *application.Service)
 	if err := secrets.Initialise(vaultPassphrase); err != nil {
 		t.Fatal(err)
 	}
-	engine := echo.New()
 	sessions := vpn.New(filepath.Join(root, "sshc", "vpn"), os.Getuid(), nil)
+	profiles := vpnprofile.New(vpnprofile.Dependencies{Configuration: config, Vault: secrets, Routes: sessions})
+	return vpnServices{config: config, secrets: secrets, profiles: profiles, sessions: sessions}
+}
+
+// vpnEngine は、VPN の経路を扱う engine を一台組む。
+func vpnEngine(t *testing.T) (*echo.Echo, *secret.Service, *application.Service) {
+	t.Helper()
+	services := newVPNServices(t)
+	engine := echo.New()
 	registerVPNRoutes(engine, VPNHandlers{
-		Config: config,
-		Profiles: vpnprofile.New(vpnprofile.Dependencies{
-			Configuration: config, Vault: secrets, Routes: sessions,
-		}),
-		Sessions: sessions,
+		Config: services.config, Profiles: services.profiles, Sessions: services.sessions,
 	})
-	return engine, secrets, config
+	return engine, services.secrets, services.config
+}
+
+// vpnRevealEngine は、秘密を取り出す確認のトークンまで扱う engine を、New と同じ組み方で組む。
+func vpnRevealEngine(t *testing.T) (*echo.Echo, *secret.Service, session.Credentials) {
+	t.Helper()
+	services := newVPNServices(t)
+	manager, bootstrap, err := session.NewManager(bytes.NewReader(bytes.Repeat([]byte{0x76}, 4096)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	credentials, _, err := manager.BootstrapForSession(bootstrap, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine := echo.New()
+	engine.Use((Security{
+		ExpectedHost: keyTestHost, ExpectedOrigin: "http://" + keyTestHost, Sessions: manager, Unlocked: alwaysUnlocked,
+	}).Middleware)
+	registry := actionRegistry{}
+	addVPNActions(registry, services.profiles)
+	actions := ActionHandlers{Sessions: manager, Kinds: registry}
+	registerActionRoutes(engine, actions)
+	registerVPNRoutes(engine, VPNHandlers{
+		Config: services.config, Profiles: services.profiles, Sessions: services.sessions, Actions: actions,
+	})
+	return engine, services.secrets, credentials
 }
 
 func decodeProblem(t *testing.T, payload []byte) problemPayload {
@@ -69,12 +108,20 @@ func decodeProblem(t *testing.T, payload []byte) problemPayload {
 	return refused
 }
 
+// labConfig は、lab のプロファイルの設定ファイルである。
+func labConfig() string {
+	fields := vpn.WireGuardFields{Server: "vpn.example.jp:51820", PeerPublicKey: testVPNPublicKey, Address: "10.9.9.2/32"}
+	return fields.Config(testVPNPrivateKey)
+}
+
 func labProfileBody(withSecret bool) string {
-	body := `{"profile":{"name":"lab","backend":"wireguard",` +
-		`"wireguard":{"server":"vpn.example.jp:51820","peerPublicKey":"` + testVPNPublicKey + `",` +
-		`"address":"10.9.9.2/32"}}`
+	body := `{"profile":{"name":"lab","backend":"wireguard","wireguard":{"servers":["vpn.example.jp"]}}`
 	if withSecret {
-		body += `,"secrets":{"wireguardPrivateKey":"` + testVPNPrivateKey + `"}`
+		config, err := json.Marshal(labConfig())
+		if err != nil {
+			panic(err)
+		}
+		body += `,"secrets":{"wireguardConfig":` + string(config) + `}`
 	}
 	return body + "}"
 }
@@ -118,7 +165,7 @@ func TestASavedProfileIsListedWithTheConnectionsThatUseIt(t *testing.T) {
 	}
 }
 
-// 応答にもログにも秘密鍵は現れない。
+// 確認のトークンを添えた取り出しのほかは、応答にもログにも秘密鍵は現れない。
 func TestNoVPNRouteEverReturnsTheStoredSecret(t *testing.T) {
 	engine, secrets, _ := vpnEngine(t)
 	if body := send(t, engine, http.MethodPost, "/api/v1/vpn/profiles", labProfileBody(true), nil); body.Code != http.StatusOK {
@@ -131,6 +178,7 @@ func TestNoVPNRouteEverReturnsTheStoredSecret(t *testing.T) {
 		{http.MethodGet, "/api/v1/vpn", ""},
 		{http.MethodPut, "/api/v1/vpn/profiles/lab", labProfileBody(false)},
 		{http.MethodPut, "/api/v1/vpn/bindings", `{"alias":"lab","profile":"lab"}`},
+		{http.MethodPost, "/api/v1/vpn/profiles/lab/reveal", ""},
 	} {
 		answer := send(t, engine, route.method, route.path, route.body, nil)
 		if strings.Contains(answer.Body.String(), testVPNPrivateKey) {
@@ -349,7 +397,7 @@ func TestCreatingWithoutTheRequiredSecretNamesTheMissingSecret(t *testing.T) {
 
 	got := decodeProblem(t, refused.Body.Bytes())
 	if refused.Code != http.StatusConflict || got.Code != "vpn_secrets_missing" ||
-		got.Field != "secrets."+vpn.SecretKeyWireGuardPrivateKey || got.Reason != "required" {
+		got.Field != "secrets."+vpn.SecretKeyWireGuardConfig || got.Reason != "required" {
 		t.Fatalf("create = %d: %+v", refused.Code, got)
 	}
 	if profiles, err := config.VPNProfiles(); err != nil || len(profiles) != 0 {
@@ -436,5 +484,72 @@ func TestTheOverviewCanAnswerBeforeTheRoutesAreChecked(t *testing.T) {
 	}
 	if refused := send(t, engine, http.MethodGet, "/api/v1/vpn?waitForRoutes=soon", "", nil); refused.Code != http.StatusBadRequest {
 		t.Fatalf("waitForRoutes=soon = %d", refused.Code)
+	}
+}
+
+// 保存済みの秘密は、確認のトークンを添えたときだけ取り出せる。応答は残さない。トークンは
+// 一度しか使えず、別のプロファイルのトークンでは取り出せない。
+func TestRevealingVPNSecretsRequiresAOneTimeTokenAndIsNeverCached(t *testing.T) {
+	engine, _, credentials := vpnRevealEngine(t)
+	for _, body := range []string{labProfileBody(true), strings.ReplaceAll(labProfileBody(true), `"lab"`, `"office"`)} {
+		if saved := sendKeyRequest(t, engine, credentials, http.MethodPost, "/api/v1/vpn/profiles", []byte(body), ""); saved.Code != http.StatusOK {
+			t.Fatalf("save = %d: %s", saved.Code, saved.Body.String())
+		}
+	}
+	path := "/api/v1/vpn/profiles/lab/reveal"
+
+	withoutToken := sendKeyRequest(t, engine, credentials, http.MethodPost, path, nil, "")
+	if withoutToken.Code != http.StatusForbidden || decodeProblem(t, withoutToken.Body.Bytes()).Code != "action_token_required" {
+		t.Fatalf("reveal without token = %d: %s", withoutToken.Code, withoutToken.Body.String())
+	}
+	otherToken := issueToken(t, engine, credentials, session.ActionRevealVPNSecrets, "office")
+	if got := sendKeyRequest(t, engine, credentials, http.MethodPost, path, nil, otherToken).Code; got != http.StatusForbidden {
+		t.Fatalf("reveal with another profile's token = %d", got)
+	}
+	token := issueToken(t, engine, credentials, session.ActionRevealVPNSecrets, "lab")
+	response := sendKeyRequest(t, engine, credentials, http.MethodPost, path, nil, token)
+	if response.Code != http.StatusOK {
+		t.Fatalf("reveal = %d: %s", response.Code, response.Body.String())
+	}
+	if got := response.Header().Get("Cache-Control"); got != "no-store" {
+		t.Fatalf("Cache-Control = %q", got)
+	}
+	var revealed vpn.SecretsDocument
+	if err := json.Unmarshal(response.Body.Bytes(), &revealed); err != nil {
+		t.Fatal(err)
+	}
+	if revealed != (vpn.SecretsDocument{WireGuardConfig: labConfig()}) {
+		t.Fatalf("revealed = %+v", revealed)
+	}
+	if got := sendKeyRequest(t, engine, credentials, http.MethodPost, path, nil, token).Code; got != http.StatusForbidden {
+		t.Fatalf("replayed token = %d", got)
+	}
+}
+
+// Vault がロック中なら、ほかの取り出しと同じく vault_locked で断る。トークンも発行しない。
+func TestRevealingVPNSecretsIsRefusedWhileTheVaultIsLocked(t *testing.T) {
+	engine, secrets, credentials := vpnRevealEngine(t)
+	body := []byte(labProfileBody(true))
+	if saved := sendKeyRequest(t, engine, credentials, http.MethodPost, "/api/v1/vpn/profiles", body, ""); saved.Code != http.StatusOK {
+		t.Fatalf("save = %d: %s", saved.Code, saved.Body.String())
+	}
+	token := issueToken(t, engine, credentials, session.ActionRevealVPNSecrets, "lab")
+	secrets.Lock()
+
+	response := sendKeyRequest(t, engine, credentials, http.MethodPost, "/api/v1/vpn/profiles/lab/reveal", nil, token)
+
+	if response.Code != http.StatusConflict || decodeProblem(t, response.Body.Bytes()).Code != "vault_locked" {
+		t.Fatalf("reveal = %d: %s", response.Code, response.Body.String())
+	}
+	if strings.Contains(response.Body.String(), testVPNPrivateKey) {
+		t.Fatalf("断った応答に秘密鍵が現れた: %s", response.Body.String())
+	}
+	request, err := json.Marshal(map[string]string{"kind": session.ActionRevealVPNSecrets, "target": "lab"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	issued := sendKeyRequest(t, engine, credentials, http.MethodPost, "/api/v1/actions", request, "")
+	if issued.Code != http.StatusConflict || decodeProblem(t, issued.Body.Bytes()).Code != "vault_locked" {
+		t.Fatalf("issue action = %d: %s", issued.Code, issued.Body.String())
 	}
 }

@@ -20,9 +20,9 @@ export type VPNProfileActions = {
 };
 
 // serverOf は、プロファイルの VPN サーバーを返す。どのプロファイルかを見分ける手がかりにする。
-// OpenVPN は設定ファイルの remote が複数ありうるので、並べて見せる。
+// OpenVPN と WireGuard は設定ファイルのサーバーが複数ありうるので、並べて見せる。
 function serverOf(profile: VPNProfile): string {
-  return profile.wireguard?.server ?? profile.l2tp?.server ?? profile.openconnect?.server ??
+  return profile.wireguard?.servers.join(", ") ?? profile.l2tp?.server ?? profile.openconnect?.server ??
     profile.openvpn?.servers.join(", ") ?? profile.ikev2?.server ?? "";
 }
 
