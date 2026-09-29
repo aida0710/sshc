@@ -415,3 +415,26 @@ func TestVPNRefusalsCarryTheirCodes(t *testing.T) {
 		})
 	}
 }
+
+// waitForRoutes=false なら、経路の状態を docker から読むのを待たずに答える。まだ
+// 確かめていなければ checking を付ける。付けなければ待って確かめ、確かめた状態は
+// しばらく使い回す。
+func TestTheOverviewCanAnswerBeforeTheRoutesAreChecked(t *testing.T) {
+	engine, _, _ := vpnEngine(t)
+
+	early := send(t, engine, http.MethodGet, "/api/v1/vpn?waitForRoutes=false", "", nil)
+	if early.Code != http.StatusOK || !decodeOverview(t, early.Body.Bytes()).Checking {
+		t.Fatalf("確かめる前の一覧 = %d: %s", early.Code, early.Body.String())
+	}
+	waited := send(t, engine, http.MethodGet, "/api/v1/vpn", "", nil)
+	if waited.Code != http.StatusOK || decodeOverview(t, waited.Body.Bytes()).Checking {
+		t.Fatalf("待って確かめた一覧 = %d: %s", waited.Code, waited.Body.String())
+	}
+	again := send(t, engine, http.MethodGet, "/api/v1/vpn?waitForRoutes=false", "", nil)
+	if again.Code != http.StatusOK || decodeOverview(t, again.Body.Bytes()).Checking {
+		t.Fatalf("確かめたあとの一覧 = %d: %s", again.Code, again.Body.String())
+	}
+	if refused := send(t, engine, http.MethodGet, "/api/v1/vpn?waitForRoutes=soon", "", nil); refused.Code != http.StatusBadRequest {
+		t.Fatalf("waitForRoutes=soon = %d", refused.Code)
+	}
+}

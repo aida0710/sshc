@@ -396,6 +396,7 @@ func (h TerminalHandlers) spec(kind terminal.Kind, alias, cwd *string, size term
 			}
 			return true, "reconnect_failed"
 		},
+		ReconnectStopNotice: reconnectStopNotice,
 	}
 	return spec, nil
 }

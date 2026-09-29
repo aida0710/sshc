@@ -26,7 +26,10 @@ type Spec struct {
 	// ReconnectError は再接続失敗を分類する。retry=false なら即座に停止する。
 	// problem は公開用の固定コードであり、raw error を含めない。
 	ReconnectError func(error) (retry bool, problem string)
-	Cleanup        func()
+	// ReconnectStopNotice は、ReconnectError が止めた再接続について、ターミナルへ
+	// 書く1行を返す。nil か空なら、設定を直すよう促す既定の文を書く。
+	ReconnectStopNotice func(problem string) string
+	Cleanup             func()
 }
 
 // Registry は、開いているセッションと、終了して残しているセッションを持つ。
@@ -204,6 +207,7 @@ func (r *Registry) Open(ctx context.Context, spec Spec) (*Session, error) {
 		// 繋ぎ直せるのは、開き方を知っているセッションだけである。
 		reopen:         spec.Reopen,
 		reconnectError: spec.ReconnectError,
+		stopNotice:     spec.ReconnectStopNotice,
 		size:           size,
 		stopping:       make(chan struct{}),
 		state:          StateConnecting,

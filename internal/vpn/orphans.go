@@ -102,5 +102,7 @@ func (manager *Manager) DiscardOrphans(ctx context.Context) error {
 		stopping.Go(func() { manager.stopContainer(ctx, container) })
 	}
 	stopping.Wait()
+	// 止める前に読んだ状態には、止めたコンテナが残っている。
+	manager.forgetRoutes()
 	return nil
 }

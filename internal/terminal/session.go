@@ -63,6 +63,7 @@ type Session struct {
 
 	reopen          func(ctx context.Context, size Size) (Process, error)
 	reconnectError  func(error) (retry bool, problem string)
+	stopNotice      func(problem string) string
 	size            Size
 	retries         int
 	reconnectCancel context.CancelFunc
@@ -744,7 +745,7 @@ func (s *Session) reconnect(info ExitInfo, connectionErr error, now func() time.
 		if !retry {
 			// 何も書かずに止まると、再接続の途中で止まったのか、もう試さないのかが
 			// 画面から分からない。理由の行は接続ログに出ている。
-			s.publish([]byte("\r\n[sshc] 設定を直さない限り同じ理由で失敗するため、自動再接続を停止しました。\r\n"))
+			s.publish([]byte("\r\n[sshc] " + s.reconnectStopNotice(problem) + "\r\n"))
 			return false
 		}
 	}
@@ -801,7 +802,7 @@ func (s *Session) reconnect(info ExitInfo, connectionErr error, now func() time.
 			return false
 		}
 
-		attemptCtx, cancel := context.WithCancel(context.Background())
+		attemptCtx, cancel := context.WithCancel(WithAutomaticReconnect(context.Background()))
 		s.mutex.Lock()
 		select {
 		case <-s.stopping:
@@ -935,6 +936,19 @@ func (s *Session) prepareManualReconnect() (func(context.Context, Size) (Process
 	s.stopping = make(chan struct{})
 	s.done = make(chan struct{})
 	return s.reopen, s.size, previous, nil
+}
+
+// defaultReconnectStopNotice は、再接続を止めた理由に専用の文が無いときに書く文である。
+const defaultReconnectStopNotice = "設定を直さない限り同じ理由で失敗するため、自動再接続を停止しました。"
+
+// reconnectStopNotice は、再接続を止めたときにターミナルへ書く文を返す。
+func (s *Session) reconnectStopNotice(problem string) string {
+	if s.stopNotice != nil {
+		if notice := s.stopNotice(problem); notice != "" {
+			return notice
+		}
+	}
+	return defaultReconnectStopNotice
 }
 
 func (s *Session) manualReconnectProblem(err error) string {

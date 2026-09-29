@@ -6,6 +6,7 @@ import (
 
 	"sshc/internal/keys"
 	"sshc/internal/sshclient"
+	"sshc/internal/vpn"
 )
 
 func TestConnectProblemNamesFailuresThatNeedUserAction(t *testing.T) {
@@ -22,6 +23,7 @@ func TestConnectProblemNamesFailuresThatNeedUserAction(t *testing.T) {
 		{sshclient.ErrPromptAborted, "authentication_cancelled"},
 		{keys.ErrPassphraseRequired, "key_passphrase_required"},
 		{keys.ErrWrongPassphrase, "key_passphrase_required"},
+		{&sshclient.ExplainedError{Sentence: "切断されています。", Err: vpn.ErrRouteDisconnected}, "vpn_route_disconnected"},
 	} {
 		t.Run(test.code, func(t *testing.T) {
 			code, named := connectProblem(fmt.Errorf("wrapped: %w", test.err))
@@ -29,5 +31,16 @@ func TestConnectProblemNamesFailuresThatNeedUserAction(t *testing.T) {
 				t.Fatalf("connectProblem = %q/%v, want %q/true", code, named, test.code)
 			}
 		})
+	}
+}
+
+// 利用者が切断した VPN 経路で再接続を止めたときは、設定を直すよう促す既定の文では
+// なく、切断されたことを書く。
+func TestTheReconnectStopNoticeSaysTheVPNRouteWasDisconnected(t *testing.T) {
+	if notice := reconnectStopNotice("vpn_route_disconnected"); notice != "VPN経路が切断されたため、自動再接続を停止しました。" {
+		t.Fatalf("notice = %q", notice)
+	}
+	if notice := reconnectStopNotice("host_key_changed"); notice != "" {
+		t.Fatalf("既定の文を使う理由に、専用の文を返した: %q", notice)
 	}
 }

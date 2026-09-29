@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/client";
 import type { VPNApi, VPNOverview, VPNProfile } from "../api/vpn";
 import { VPNPanel } from "./VPNPanel";
-import { routeProgressIntervalMs } from "./vpnPhases";
+import { overviewRefreshIntervalMs, routeProgressIntervalMs } from "./vpnOverviewPolling";
 
 // tohokuProfile は、L2TP/IPsec のプロファイルである。接続先は持たない。
 const tohokuProfile: VPNProfile = {
@@ -17,12 +17,14 @@ const tohokuProfile: VPNProfile = {
 function overview(overrides: Partial<VPNOverview> = {}): VPNOverview {
   return {
     available: true,
+    checking: false,
     profiles: [
       {
         profile: tohokuProfile,
         running: true,
         relaySocket: "/home/tester/.ssh/sshc/vpn/tohoku/relay.sock",
         connections: ["lab"],
+        openConnections: 0,
         tunnel: {
           backend: "l2tp_ipsec",
           interface: "ppp0",
@@ -46,6 +48,7 @@ function startingOverview(): VPNOverview {
       running: true,
       relaySocket: "",
       connections: [],
+      openConnections: 0,
       phase: "image",
     }],
   });
@@ -59,6 +62,7 @@ function stoppedOverview(): VPNOverview {
       running: false,
       relaySocket: "",
       connections: [],
+      openConnections: 0,
     }],
   });
 }
@@ -273,6 +277,7 @@ describe("VPNPanel", () => {
           running: true,
           relaySocket: "",
           connections: [],
+          openConnections: 0,
           phase: "image",
         }],
       });
@@ -450,6 +455,135 @@ describe("VPNPanel", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("shows a route that was started from somewhere else, and lets it be disconnected without reopening the screen", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      // 画面を開いたときは止まっていた経路を、ほかの画面の接続が起動する。
+      const vpnOverview = vi.fn().mockResolvedValueOnce(stoppedOverview()).mockResolvedValue(overview());
+      render(<VPNPanel api={buildApi({ vpnOverview })} />);
+      const route = await screen.findByRole("article", { name: "tohoku" });
+      expect(within(route).getByRole("button", { name: "Disconnect" })).toBeDisabled();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(overviewRefreshIntervalMs * 2);
+      });
+
+      await waitFor(() => expect(within(route).getByText(/route open/)).toBeVisible(), { timeout: 5000 });
+      expect(within(route).getByRole("button", { name: "Disconnect" })).toBeEnabled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("shows a route that was stopped from somewhere else as stopped without reopening the screen", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      // 誰も使わなくなった経路は、sshcエンジンが停止する。
+      const vpnOverview = vi.fn().mockResolvedValueOnce(overview()).mockResolvedValue(stoppedOverview());
+      render(<VPNPanel api={buildApi({ vpnOverview })} />);
+      const route = await screen.findByRole("article", { name: "tohoku" });
+      expect(within(route).getByText(/route open/)).toBeVisible();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(overviewRefreshIntervalMs * 2);
+      });
+
+      await waitFor(() => expect(within(route).getByText(/stopped/)).toBeVisible(), { timeout: 5000 });
+      expect(within(route).getByRole("button", { name: "Disconnect" })).toBeDisabled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("lists the profiles without waiting for the route states, then fills the states in", async () => {
+    let answerRoutes: (value: VPNOverview) => void = () => undefined;
+    const routes = new Promise<VPNOverview>((resolve) => {
+      answerRoutes = resolve;
+    });
+    const vpnOverview = vi.fn((options?: { waitForRoutes?: boolean }) =>
+      options?.waitForRoutes === false ? Promise.resolve(overview({ checking: true })) : routes);
+    render(<VPNPanel api={buildApi({ vpnOverview })} />);
+
+    // 経路の状態を確かめているあいだも、プロファイルは見えていて、状態は言わない。
+    const route = await screen.findByRole("article", { name: "tohoku" });
+    expect(within(route).getByText(/checking/)).toBeVisible();
+    expect(within(route).queryByText(/route open/)).toBeNull();
+    expect(within(route).getByRole("button", { name: "Connect" })).toBeDisabled();
+    expect(within(route).getByRole("button", { name: "Disconnect" })).toBeDisabled();
+    expect(vpnOverview).toHaveBeenNthCalledWith(1, { waitForRoutes: false });
+    await waitFor(() => expect(vpnOverview).toHaveBeenCalledTimes(2));
+    expect(vpnOverview).toHaveBeenNthCalledWith(2);
+
+    await act(async () => {
+      answerRoutes(overview());
+      await routes;
+    });
+
+    await waitFor(() => expect(within(route).getByText(/route open/)).toBeVisible());
+    expect(within(route).getByRole("button", { name: "Disconnect" })).toBeEnabled();
+  });
+
+  it("does not say why routes cannot be opened while it is still checking", async () => {
+    // 確かめる前の一覧の available は、まだ分からない。
+    const vpnOverview = vi.fn((options?: { waitForRoutes?: boolean }) =>
+      options?.waitForRoutes === false
+        ? Promise.resolve(overview({ checking: true, available: false, unavailable: "vpn_docker_missing" }))
+        : new Promise<VPNOverview>(() => undefined));
+    render(<VPNPanel api={buildApi({ vpnOverview })} />);
+
+    await screen.findByRole("article", { name: "tohoku" });
+    expect(screen.queryByText("This machine cannot open VPN routes.")).toBeNull();
+    expect(screen.queryByText(/Docker was not found/)).toBeNull();
+  });
+
+  it("asks before disconnecting a route that connections are using, and says how many are cut", async () => {
+    const user = userEvent.setup();
+    const stopVPNSession = vi.fn().mockResolvedValue(stoppedOverview());
+    const inUse = overview();
+    inUse.profiles[0]!.openConnections = 2;
+    render(<VPNPanel api={buildApi({ vpnOverview: vi.fn().mockResolvedValue(inUse), stopVPNSession })} />);
+    const route = await screen.findByRole("article", { name: "tohoku" });
+
+    await user.click(within(route).getByRole("button", { name: "Disconnect" }));
+
+    const dialog = screen.getByRole("dialog", { name: "Disconnect tohoku?" });
+    expect(dialog).toHaveTextContent(
+      "The connections using this VPN route (2) are disconnected too, and do not reconnect automatically.",
+    );
+    expect(stopVPNSession).not.toHaveBeenCalled();
+    await user.click(within(dialog).getByRole("button", { name: "Disconnect" }));
+    expect(stopVPNSession).toHaveBeenCalledWith("tohoku");
+    await waitFor(() => expect(within(route).getByText(/stopped/)).toBeVisible());
+  });
+
+  it("keeps the route when disconnecting is cancelled", async () => {
+    const user = userEvent.setup();
+    const stopVPNSession = vi.fn().mockResolvedValue(stoppedOverview());
+    const inUse = overview();
+    inUse.profiles[0]!.openConnections = 1;
+    render(<VPNPanel api={buildApi({ vpnOverview: vi.fn().mockResolvedValue(inUse), stopVPNSession })} />);
+    const route = await screen.findByRole("article", { name: "tohoku" });
+
+    await user.click(within(route).getByRole("button", { name: "Disconnect" }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Cancel" }));
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(stopVPNSession).not.toHaveBeenCalled();
+    expect(within(route).getByText(/route open/)).toBeVisible();
+  });
+
+  it("disconnects a route that no connection is using without asking", async () => {
+    const user = userEvent.setup();
+    const stopVPNSession = vi.fn().mockResolvedValue(stoppedOverview());
+    render(<VPNPanel api={buildApi({ stopVPNSession })} />);
+    const route = await screen.findByRole("article", { name: "tohoku" });
+
+    await user.click(within(route).getByRole("button", { name: "Disconnect" }));
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(stopVPNSession).toHaveBeenCalledWith("tohoku");
   });
 
   it("keeps what was typed, secrets included, when the engine refuses to save", async () => {

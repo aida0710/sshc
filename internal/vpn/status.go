@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 )
 
@@ -23,6 +22,9 @@ type Status struct {
 	Tunnel TunnelStatus
 	// Phase は、いま経路を用意している段階である。用意していなければ空。
 	Phase StartPhase
+	// OpenConnections は、この経路を通っている接続（と、経路を待っている接続）の
+	// 数である。経路を止めると、これらの接続も切れる。
+	OpenConnections int
 }
 
 // TunnelStatus は、コンテナの agent が書き出したトンネルの様子である。
@@ -58,39 +60,70 @@ func (manager *Manager) Status(ctx context.Context, profileName string) (Status,
 // Statuses は、この engine のコンテナを持つ経路と、用意の途中の経路の状態を、
 // プロファイル名ごとに返す。
 //
-// docker は1回だけ呼ぶ。画面は用意の途中に一覧を読み直すので、経路ごとに
-// docker を呼ぶと、経路の数だけ応答が遅れる。
+// docker から読んだ状態は routeReadingLifetime のあいだ使い回す。画面は開いている
+// あいだ一覧を読み直し、CLI も経路の段階を読みに来るので、読み取りのたびに docker を
+// 呼ぶと、その数だけ応答が遅れる。Docker が使えなければ、その理由を返す。
 func (manager *Manager) Statuses(ctx context.Context) (map[string]Status, error) {
-	if _, err := manager.command(ctx); err != nil {
-		return nil, err
-	}
-	format := "{{.Label \"" + profileLabel + "\"}}\t{{.State}}"
-	output, err := manager.docker.output(ctx, "ps", "--all", "--format", format,
-		"--filter", "label="+ownerLabel+"="+strconv.Itoa(manager.owner),
-		"--filter", "label="+workspaceLabel+"="+manager.workspace)
+	reading, err := manager.readRoutes(ctx)
 	if err != nil {
 		return nil, err
 	}
-	statuses := map[string]Status{}
-	for _, name := range manager.names() {
-		if phase := manager.state(name).currentPhase(); phase != "" {
-			statuses[name] = Status{Name: name, Phase: phase}
-		}
+	if reading.err != nil {
+		return nil, reading.err
 	}
-	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
-		fields := strings.Split(line, "\t")
-		if len(fields) != 2 || validateProfileName(fields[0]) != nil {
+	return manager.composeStatuses(reading), nil
+}
+
+// KnownStatuses は、docker を待たずに分かる経路の状態を返す。known が false なら、
+// 経路の状態をまだ確かめていない。そのときは docker から読み始め、sshcエンジンが
+// 自分で起動・停止した経路の状態だけを返す。
+//
+// 画面を開いたときに、プロファイルの一覧を docker を待たずに見せるために使う。
+func (manager *Manager) KnownStatuses() (statuses map[string]Status, known bool, err error) {
+	reading, known := manager.knownRoutes()
+	if !known {
+		// since が 0 の読み取りは、sshcエンジンが一度でも起動・停止した経路を
+		// すべて、docker より新しいものとして扱う。
+		return manager.composeStatuses(&routeReading{}), false, nil
+	}
+	if reading.err != nil {
+		return nil, true, reading.err
+	}
+	return manager.composeStatuses(reading), true, nil
+}
+
+// composeStatuses は、docker から読んだ状態に、sshcエンジンがその後に起動・停止した
+// 経路と、用意の途中の経路を重ねる。
+func (manager *Manager) composeStatuses(reading *routeReading) map[string]Status {
+	statuses := map[string]Status{}
+	for name, running := range reading.containers {
+		statuses[name] = manager.containerStatus(name, running)
+	}
+	for _, name := range manager.names() {
+		state := manager.state(name)
+		if state.changedSince(reading.since) {
+			if state.isRunning() {
+				statuses[name] = manager.containerStatus(name, true)
+			} else {
+				delete(statuses, name)
+			}
+		}
+		if _, present := statuses[name]; present {
 			continue
 		}
-		statuses[fields[0]] = manager.containerStatus(fields[0], fields[1] == "running")
+		if phase := state.currentPhase(); phase != "" {
+			statuses[name] = Status{Name: name, Phase: phase, OpenConnections: state.openConnections()}
+		}
 	}
-	return statuses, nil
+	return statuses
 }
 
 // containerStatus は、コンテナがあるプロファイルひとつの状態を組み立てる。
 func (manager *Manager) containerStatus(profileName string, running bool) Status {
 	state := manager.state(profileName)
-	status := Status{Name: profileName, Running: running, Phase: state.currentPhase()}
+	status := Status{
+		Name: profileName, Running: running, Phase: state.currentPhase(), OpenConnections: state.openConnections(),
+	}
 	// コンテナが終わっても、ホスト側にはソケットのファイルが残る。動いている
 	// コンテナと engine の中継が揃っているときだけ、使える経路として見せる。
 	if running {

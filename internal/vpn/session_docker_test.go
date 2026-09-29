@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -34,6 +35,9 @@ const (
 	echoPort = 2222
 	// secondEchoPort は、同じ経路で2つ目の接続先として使うポートである。
 	secondEchoPort = 2223
+	// holdPort は、閉じられるまで受け取ったものを返し続けるポートである。経路を
+	// 通って開いたままの接続（Terminal の SSH のような）の代わりに使う。
+	holdPort = 2224
 	// dockerTestTimeout は、イメージ作成を含む一連の操作の上限である。
 	dockerTestTimeout = 6 * time.Minute
 )
@@ -74,6 +78,9 @@ func keyPair(t *testing.T) (private, public string) {
 	return base64.StdEncoding.EncodeToString(secret[:]), base64.StdEncoding.EncodeToString(shared)
 }
 
+// peerSequence は、ひとつの検査で相手を2台以上立てるときに、名前を分けるための番号である。
+var peerSequence atomic.Int64
+
 // startTunnelPeer は、トンネルの相手を1台立てる。
 //
 // 同じイメージを使うが、entrypoint を差し替えて、待ち受ける側の wireguard と
@@ -82,7 +89,7 @@ func keyPair(t *testing.T) (private, public string) {
 func startTunnelPeer(t *testing.T, manager *Manager, ctx context.Context, image, clientPublicKey string) (publicKey, bridgeAddress string) {
 	t.Helper()
 	private, public := keyPair(t)
-	name := fmt.Sprintf("sshc-vpn-test-peer-%d", os.Getpid())
+	name := fmt.Sprintf("sshc-vpn-test-peer-%d-%d", os.Getpid(), peerSequence.Add(1))
 	configuration := strings.Join([]string{
 		"[Interface]",
 		"PrivateKey = " + private,
@@ -111,6 +118,7 @@ func startTunnelPeer(t *testing.T, manager *Manager, ctx context.Context, image,
 		// トンネル側とDockerの通常回線側の両方で待ち受ける。素の回線から
 		// 届いてしまわないことも確かめたいからである。
 		fmt.Sprintf("socat TCP-LISTEN:%d,fork,reuseaddr SYSTEM:'echo second' &", secondEchoPort),
+		fmt.Sprintf("socat TCP-LISTEN:%d,fork,reuseaddr EXEC:cat &", holdPort),
 		fmt.Sprintf("exec socat TCP-LISTEN:%d,fork,reuseaddr SYSTEM:'echo tunnelled'", echoPort),
 	}, "\n")
 	if _, err := manager.docker.output(ctx, "run", "--detach", "--name", name,
@@ -296,7 +304,7 @@ func TestAnUnreachableDestinationSaysWhy(t *testing.T) {
 		}
 	}
 	// 断った接続は数えない。
-	if open := openConnections(manager.state(profile.Name)); open != 0 {
+	if open := manager.state(profile.Name).openConnections(); open != 0 {
 		t.Fatalf("断った接続を数えたまま = %d", open)
 	}
 }
