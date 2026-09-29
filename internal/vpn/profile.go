@@ -38,6 +38,7 @@ type Profile struct {
 	WireGuard   *WireGuardSettings
 	L2TP        *L2TPSettings
 	OpenConnect *OpenConnectSettings
+	OpenVPN     *OpenVPNSettings
 }
 
 // sameRouteAs は、この設定がもう一方と同じ経路を作るかを返す。
@@ -88,6 +89,7 @@ func (profile Profile) foreignSection() string {
 		{WireGuard, "wireguard", profile.WireGuard != nil},
 		{L2TPIPsec, "l2tp", profile.L2TP != nil},
 		{OpenConnect, "openconnect", profile.OpenConnect != nil},
+		{OpenVPN, "openvpn", profile.OpenVPN != nil},
 	}
 	for _, section := range sections {
 		if section.present && section.backend != profile.Backend {

@@ -6,6 +6,7 @@ import { PasswordField } from "../ui/PasswordField";
 import { Button, Card } from "../ui/surface";
 import { vpnBackendLabel, vpnBackends, type VPNBackend } from "./vpnBackends";
 import { describeVPNFieldError, type VPNFieldError } from "./vpnFieldErrors";
+import { OpenVPNProfileFields } from "./OpenVPNProfileFields";
 import {
   draftOf,
   emptyDraft,
@@ -15,6 +16,7 @@ import {
   secretsOf,
   settingsSection,
   storedSecretKeys,
+  withOpenVPNConfig,
   type SecondFactor,
   type VPNProfileDraft,
 } from "./vpnProfileDraft";
@@ -99,7 +101,9 @@ export function VPNProfileForm({
     const profile = profileOf(draft);
     // 送る前の検査で断られると、どの項目かが分からない。先に項目ごとに確かめる。
     const refused = vpnProfileFieldError(profile) ??
-      vpnSecretsFieldError({ backend: draft.backend, secondFactor: draft.secondFactor, secrets: draft.secrets, stored });
+      vpnSecretsFieldError({
+        backend: draft.backend, secondFactor: draft.secondFactor, secrets: draft.secrets, stored, username: draft.username,
+      });
     if (refused !== null) {
       setRefusal(refused);
       return;
@@ -145,9 +149,11 @@ export function VPNProfileForm({
             ))}
           </select>
         </Field>
-        <Field label={t("vpn.server")} error={errorFor(`${section}.server`)}>
-          <input className={control} value={draft.server} onChange={(event) => edit("server")(event.target.value)} />
-        </Field>
+        {draft.backend === "openvpn" ? null : (
+          <Field label={t("vpn.server")} error={errorFor(`${section}.server`)}>
+            <input className={control} value={draft.server} onChange={(event) => edit("server")(event.target.value)} />
+          </Field>
+        )}
         <Field label={t("vpn.dns")} hint={t("vpn.dnsHint")} error={errorFor("dns")}>
           <input className={control} value={draft.resolvers} onChange={(event) => edit("resolvers")(event.target.value)} />
         </Field>
@@ -213,6 +219,23 @@ export function VPNProfileForm({
             ) : null}
             {draft.secondFactor === "totp" ? secretField("openconnectTotpSecret", t("vpn.secondFactorSecret")) : null}
           </>
+        ) : draft.backend === "openvpn" ? (
+          // サーバーは設定ファイルの remote から読むので、サーバーの欄は出さない。
+          <OpenVPNProfileFields
+            config={draft.secrets.openvpnConfig}
+            servers={draft.servers}
+            username={draft.username}
+            password={draft.secrets.openvpnPassword}
+            keepsConfig={stored.has("openvpnConfig")}
+            keepsPassword={stored.has("openvpnPassword")}
+            errorFor={errorFor}
+            onConfig={(config) => {
+              setRefusal(null);
+              setDraft((current) => withOpenVPNConfig(current, config, editing?.openvpn?.servers ?? []));
+            }}
+            onUsername={edit("username")}
+            onPassword={editSecret("openvpnPassword")}
+          />
         ) : (
           <>
             <Field label={t("vpn.username")} error={errorFor("l2tp.username")}>

@@ -31,7 +31,7 @@ engineは、接続を1本開くたびに`docker exec`でコンテナの中継を
 
 ## ホストへの影響
 
-ホストのルーティング、DNS、NetworkManager、接続中のVPNの設定は変更しません。`--privileged`と`--network host`も使いません。コンテナへ渡すデバイスは方式ごとのトンネル用デバイス（WireGuardとOpenConnectは`/dev/net/tun`、L2TP/IPsecは`/dev/ppp`）だけです。権限も方式ごとに必要なものだけを渡し、WireGuardでは`CAP_NET_ADMIN`・`CAP_NET_RAW`・`CAP_DAC_OVERRIDE`・`CAP_CHOWN`以外をすべて外します。
+ホストのルーティング、DNS、NetworkManager、接続中のVPNの設定は変更しません。`--privileged`と`--network host`も使いません。コンテナへ渡すデバイスは方式ごとのトンネル用デバイス（WireGuard、OpenConnect、OpenVPNは`/dev/net/tun`、L2TP/IPsecは`/dev/ppp`）だけです。権限も方式ごとに必要なものだけを渡し、WireGuardとOpenVPNでは`CAP_NET_ADMIN`・`CAP_NET_RAW`・`CAP_DAC_OVERRIDE`・`CAP_CHOWN`以外をすべて外します。
 
 ただし、ホストとまったく無関係ではありません。Dockerのbridgeとカーネルのトンネル機能を使います。また、Dockerを操作できるユーザーは、一般に強いホスト権限を持ちます。分離されるのは、VPNのルーティング・DNS・接続状態と、VPNへ送るアプリケーションの通信です。
 
@@ -41,10 +41,10 @@ VPN画面、または`sshc vpn add <名前>`で作成します。
 
 | 項目 | 内容 |
 |---|---|
-| 方式 | WireGuard、L2TP/IPsec、OpenConnect（Cisco AnyConnect、ocserv、GlobalProtect、FortiGate、Ivanti Connect Secureなど） |
+| 方式 | WireGuard、L2TP/IPsec、OpenConnect（Cisco AnyConnect、ocserv、GlobalProtect、FortiGate、Ivanti Connect Secureなど）、OpenVPN |
 | VPN内のDNSサーバー | `HostName`をホスト名で書いた接続に使う場合だけ入力します。IPv4アドレスを3件まで |
-| VPNサーバー | WireGuardは`host:port`、L2TP/IPsecとOpenConnectはホスト名またはIPアドレス |
-| シークレット | WireGuardは秘密鍵、L2TP/IPsecはVPNのパスワードとIPsecの事前共有鍵、OpenConnectはVPNのパスワード |
+| VPNサーバー | WireGuardは`host:port`、L2TP/IPsecとOpenConnectはホスト名またはIPアドレス。OpenVPNは設定ファイルの`remote`から読み取ります |
+| シークレット | WireGuardは秘密鍵、L2TP/IPsecはVPNのパスワードとIPsecの事前共有鍵、OpenConnectはVPNのパスワード、OpenVPNは設定ファイル（.ovpn）と、必要な場合はVPNのパスワード |
 
 シークレットはVaultに保存します。保存後は、画面にもAPIの応答にも表示されません。
 
@@ -90,6 +90,47 @@ TOTPのシークレットはVaultに保存し、コードはコンテナへ渡�
 
 Duoの「Universal Prompt」のように、ブラウザでのSAMLログインを求める構成には対応していません。コンテナの中にはブラウザが無く、engineがその操作を代わりに行うこともありません。
 
+### OpenVPNの設定ファイル
+
+OpenVPNでは、プロバイダや組織が配るクライアント用の設定ファイル（.ovpn）を使います。VPN画面では、設定ファイルを貼り付けるか、［ファイルを選択］で読み込みます。`sshc vpn add`では、設定ファイルのパスを入力します。
+
+設定ファイルは証明書や鍵を含むことが多いため、中身をシークレットとしてVaultに保存します。一覧に表示するVPNサーバーは、設定ファイルの`remote`の行から読み取ったものです。
+
+使用できる設定ファイルの条件は次のとおりです。
+
+- `client`（または`tls-client`）と、1つ以上の`remote`を含む
+- 証明書と鍵を、`<ca>`〜`</ca>`、`<cert>`、`<key>`、`<tls-auth>`、`<tls-crypt>`のように埋め込んでいる
+- トンネルの種類が`tun`である（`dev tap`には対応していません）
+- 1行が254バイト以内で、ファイル全体が64KiB以内
+
+ユーザー名とパスワードは任意です。設定ファイルに`auth-user-pass`がある場合は、ユーザー名とパスワードを入力します。証明書だけで認証する場合は空欄のままにします。パスワードは、コンテナの中のメモリ上のファイル（tmpfs）からOpenVPNへ渡し、コマンドの引数や環境変数には置きません。OpenVPNは`--auth-nocache`で、使い終わったパスワードをメモリに残しません。
+
+#### 使用できない指示
+
+安全のため、次の指示を含む設定ファイルは保存できません。画面と`sshc vpn add`に、何行目のどの指示かを表示します。該当する行を削除してから、設定ファイルを読み込み直してください。
+
+| 種類 | 指示 | 理由 |
+|---|---|---|
+| コマンドやプログラムを実行する | `up`、`down`、`route-up`、`route-pre-down`、`ipchange`、`tls-verify`、`client-connect`、`client-disconnect`、`client-crresponse`、`learn-address`、`auth-user-pass-verify`、`tls-crypt-v2-verify`、`iproute`、`plugin`、`engine`、`pkcs11-providers`、`script-security` | コンテナの中で任意のコマンドが動き、接続先への通信だけをトンネルへ通す仕組みを壊せるため |
+| 経路やDNSを変更する | `route`、`route-ipv6`、`redirect-gateway`、`redirect-private`、`client-nat` | 経路はsshcが接続先ごとに追加するため |
+| sshcが決める設定 | `dev`と`dev-type`（`tun`以外）、`dev-node`、`lladdr`、`mktun`、`rmtun`、`daemon`、`log`、`log-append`、`syslog`、`status`、`writepid`、`tmp-dir`、`chroot`、`cd`、`user`、`group`、`setcon`、`askpass`、`management`で始まる指示 | トンネルのインターフェース、ログの出力先、OpenVPNを動かす環境はsshcが決めるため |
+| ファイルを指定する | `ca`、`cert`、`key`、`tls-auth`、`tls-crypt`、`pkcs12`、`auth-user-pass`などのファイル名の指定、`config`、`capath`、`tls-export-cert`、`replay-persist`、`genkey` | コンテナの中にそのファイルは無いため。中身を`<ca>`〜`</ca>`の形で埋め込めば使用できます |
+| VPNサーバー用 | `mode`、`server`、`server-ipv6`、`server-bridge`、`tls-server` | sshcはクライアントとしてだけ接続するため |
+
+`setenv opt`を付けた指示も、付けていない指示と同じように確認します。断る指示は、OpenVPN 2.6のマニュアルで確認して決めています。
+
+#### sshcが決める指定
+
+次の指定は、設定ファイルの内容に関係なくsshcの値を使います。
+
+- トンネルのインターフェースは`tun0`
+- サーバーが配る経路、既定経路、DNS（`redirect-gateway`、`route`、`dhcp-option`など）は受け取らない
+- インターフェースのアドレスは`/32`で付け、接続に使った接続先への経路だけを作る
+- 認証に失敗したら再試行しない
+- ログの詳しさは`verb 3`
+
+設定ファイルの`dhcp-option DNS`と、サーバーが配るDNSは使いません。接続の`HostName`をホスト名で書く場合は、ほかの方式と同じく、プロファイルの「VPN内のDNSサーバー」に指定します。
+
 ### 接続先をVPN内のホスト名で指定する
 
 接続の`HostName`をホスト名で書いた場合は、そのホスト名の名前解決に使うDNSサーバーを、付けるVPNプロファイルに指定します。名前解決はコンテナの中で、指定したDNSサーバーだけを使って行います。ホストのresolv.confも、コンテナ既定のDNSも使いません。同じ名前がホスト側では別のマシンを指す環境で、接続先を取り違えないためです。DNSサーバーを指定していないプロファイルでは、ホスト名の接続先はエラーになります。Connectionsでプロファイルを選んだときにも注記が表示されます。
@@ -127,7 +168,7 @@ VPN画面では、そのプロファイルを使っている接続の一覧を�
 
 接続を待っているあいだに`Ctrl-C`で中断した場合や、画面を閉じた場合も、準備中だったコンテナは残りません。
 
-経路を停止するときは、VPNサーバーへ切断を通知してから終了します。OpenConnectではサーバーへログアウトを送り、L2TP/IPsecではL2TPの切断とIPsecの終了を送ります。サーバー側にセッションが残らないため、同時接続数の枠も解放されます。
+経路を停止するときは、VPNサーバーへ切断を通知してから終了します。OpenConnectではサーバーへログアウトを送り、L2TP/IPsecではL2TPの切断とIPsecの終了を送ります。OpenVPNでは、設定ファイルに`explicit-exit-notify`があれば、サーバーへ切断を送ります。サーバー側にセッションが残らないため、同時接続数の枠も解放されます。
 
 停止したあとに同じ接続を開くと、経路は自動で再起動します。スマートフォンでの承認が必要な経路では、そのときにもう一度承認を求められます。
 
@@ -135,7 +176,7 @@ VPN画面では、そのプロファイルを使っている接続の一覧を�
 
 経路が起動していれば、VPN画面と`sshc vpn`の一覧に、トンネルのインターフェース名、トンネルのアドレス、接続開始時刻が表示されます。ここまで表示されていれば、VPNの接続は確立しています。WireGuardでは、サーバーとのハンドシェイクが完了するまで経路を開きません。鍵やサーバーの指定が間違っている場合は、経路を開かずに原因を表示します。
 
-VPNの接続に失敗した場合は、分かる範囲で原因（ハンドシェイクに失敗した、PPPの認証に失敗したなど）を画面と`sshc vpn up`に表示します。
+VPNの接続に失敗した場合は、分かる範囲で原因（ハンドシェイクに失敗した、PPPの認証に失敗したなど）を画面と`sshc vpn up`に表示します。OpenVPNでは、サーバーが認証を拒否した（`AUTH_FAILED`）、TLSのハンドシェイクに失敗した、サーバーから応答が無い、を区別して表示します。
 
 VPNには接続できたが接続先へ届かない場合は、原因をTerminalと`sshc <接続先>`に表示します。
 

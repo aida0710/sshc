@@ -1,0 +1,855 @@
+{
+  "about": [
+    "OpenVPN の設定ファイル（.ovpn）を sshc で使えるかの規則を、入力と期待する結果の組で並べた表である。",
+    "Go の検査（internal/vpn の InspectOpenVPNConfig）と、画面の検査（web/src/vpn/openVPNConfig.ts）の両方が、この表に対してテストされる。",
+    "config は行の並びで、改行でつないで末尾にも改行を付けたものを設定ファイルとする。",
+    "reason が空なら通る入力で、servers と asksCredentials が読み取れる値である。そうでなければ最初に断る行の番号（1から数える。ファイル全体についての誤りなら 0）、断った指示の名前、理由の語である。",
+    "limit は reason が too_long のときの上限で、それ以外では書かない。"
+  ],
+  "cases": [
+    {
+      "name": "プロバイダが配る形の設定ファイルは通る",
+      "config": [
+        "# 配られた設定ファイル",
+        "client",
+        "dev tun",
+        "proto udp",
+        "remote vpn.example.jp 1194",
+        "resolv-retry infinite",
+        "nobind",
+        "persist-key",
+        "persist-tun",
+        "remote-cert-tls server",
+        "cipher AES-256-GCM",
+        "verb 3",
+        "mute 20",
+        "<ca>",
+        "-----BEGIN CERTIFICATE-----",
+        "MIIBfixtureCAcertificateLineAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "-----END CERTIFICATE-----",
+        "</ca>",
+        "<cert>",
+        "-----BEGIN CERTIFICATE-----",
+        "MIIBfixtureClientCertificateLineBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+        "-----END CERTIFICATE-----",
+        "</cert>",
+        "<key>",
+        "-----BEGIN PRIVATE KEY-----",
+        "MIGHfixturePrivateKeyLineCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+        "-----END PRIVATE KEY-----",
+        "</key>",
+        "<tls-crypt>",
+        "-----BEGIN OpenVPN Static key V1-----",
+        "0123456789abcdef0123456789abcdef",
+        "-----END OpenVPN Static key V1-----",
+        "</tls-crypt>"
+      ],
+      "servers": [
+        "vpn.example.jp"
+      ],
+      "asksCredentials": false,
+      "reason": "",
+      "line": 0,
+      "directive": ""
+    },
+    {
+      "name": "引数の無い auth-user-pass は、ユーザー名とパスワードを求める",
+      "config": [
+        "client",
+        "dev tun",
+        "proto udp",
+        "remote vpn.example.jp 1194",
+        "nobind",
+        "auth-user-pass",
+        "<ca>",
+        "-----BEGIN CERTIFICATE-----",
+        "MIIBfixtureCAcertificateLineAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "-----END CERTIFICATE-----",
+        "</ca>"
+      ],
+      "servers": [
+        "vpn.example.jp"
+      ],
+      "asksCredentials": true,
+      "reason": "",
+      "line": 0,
+      "directive": ""
+    },
+    {
+      "name": "インラインの auth-user-pass は、ユーザー名とパスワードを求めない",
+      "config": [
+        "client",
+        "dev tun",
+        "proto udp",
+        "remote vpn.example.jp 1194",
+        "nobind",
+        "<auth-user-pass>",
+        "fixture",
+        "fixture-password",
+        "</auth-user-pass>"
+      ],
+      "servers": [
+        "vpn.example.jp"
+      ],
+      "asksCredentials": false,
+      "reason": "",
+      "line": 0,
+      "directive": ""
+    },
+    {
+      "name": "後に書いたインラインの auth-user-pass が使われる",
+      "config": [
+        "client",
+        "dev tun",
+        "proto udp",
+        "remote vpn.example.jp 1194",
+        "nobind",
+        "auth-user-pass",
+        "<auth-user-pass>",
+        "fixture",
+        "</auth-user-pass>"
+      ],
+      "servers": [
+        "vpn.example.jp"
+      ],
+      "asksCredentials": false,
+      "reason": "",
+      "line": 0,
+      "directive": ""
+    },
+    {
+      "name": "remote のサーバーは、書いた順に重複を除いて並べる",
+      "config": [
+        "client",
+        "dev tun",
+        "remote b.example.jp 1194 udp",
+        "remote a.example.jp 443 tcp",
+        "remote b.example.jp 443 tcp",
+        "remote 192.0.2.10",
+        "remote-random"
+      ],
+      "servers": [
+        "b.example.jp",
+        "a.example.jp",
+        "192.0.2.10"
+      ],
+      "asksCredentials": false,
+      "reason": "",
+      "line": 0,
+      "directive": ""
+    },
+    {
+      "name": "connection のブロックの remote も読む",
+      "config": [
+        "client",
+        "dev tun",
+        "<connection>",
+        "remote first.example.jp 1194 udp",
+        "</connection>",
+        "<connection>",
+        "remote second.example.jp 443 tcp",
+        "http-proxy proxy.example.jp 8080 auto",
+        "</connection>"
+      ],
+      "servers": [
+        "first.example.jp",
+        "second.example.jp"
+      ],
+      "asksCredentials": false,
+      "reason": "",
+      "line": 0,
+      "directive": ""
+    },
+    {
+      "name": "tls-client と pull の組み合わせもクライアントの設定である",
+      "config": [
+        "tls-client",
+        "pull",
+        "dev tun",
+        "remote vpn.example.jp"
+      ],
+      "servers": [
+        "vpn.example.jp"
+      ],
+      "asksCredentials": false,
+      "reason": "",
+      "line": 0,
+      "directive": ""
+    },
+    {
+      "name": "dev は sshc と同じ tun なら通る",
+      "config": [
+        "client",
+        "dev tun0",
+        "dev-type tun",
+        "remote vpn.example.jp"
+      ],
+      "servers": [
+        "vpn.example.jp"
+      ],
+      "asksCredentials": false,
+      "reason": "",
+      "line": 0,
+      "directive": ""
+    },
+    {
+      "name": "注釈の中の指示は読まない",
+      "config": [
+        "client",
+        "dev tun",
+        "proto udp",
+        "remote vpn.example.jp 1194",
+        "nobind",
+        "# up /etc/openvpn/up.sh",
+        "; route 10.0.0.0 255.0.0.0",
+        "   # redirect-gateway def1",
+        "verb 3 # up /bin/sh"
+      ],
+      "servers": [
+        "vpn.example.jp"
+      ],
+      "asksCredentials": false,
+      "reason": "",
+      "line": 0,
+      "directive": ""
+    },
+    {
+      "name": "setenv opt を付けた Windows 用の指示は通る",
+      "config": [
+        "client",
+        "dev tun",
+        "proto udp",
+        "remote vpn.example.jp 1194",
+        "nobind",
+        "setenv opt block-outside-dns",
+        "setenv CLIENT_CERT 0",
+        "dhcp-option DNS 10.8.0.1"
+      ],
+      "servers": [
+        "vpn.example.jp"
+      ],
+      "asksCredentials": false,
+      "reason": "",
+      "line": 0,
+      "directive": ""
+    },
+    {
+      "name": "ファイル名でない値を取る peer-fingerprint と verify-hash は通る",
+      "config": [
+        "client",
+        "dev tun",
+        "proto udp",
+        "remote vpn.example.jp 1194",
+        "nobind",
+        "peer-fingerprint AB:CD",
+        "verify-hash 00:11 SHA256"
+      ],
+      "servers": [
+        "vpn.example.jp"
+      ],
+      "asksCredentials": false,
+      "reason": "",
+      "line": 0,
+      "directive": ""
+    },
+    {
+      "name": "経路を作らせない指示は通る",
+      "config": [
+        "client",
+        "dev tun",
+        "proto udp",
+        "remote vpn.example.jp 1194",
+        "nobind",
+        "route-nopull",
+        "route-noexec",
+        "ifconfig-noexec",
+        "route-gateway 10.8.0.1",
+        "route-metric 50",
+        "pull-filter ignore redirect-gateway"
+      ],
+      "servers": [
+        "vpn.example.jp"
+      ],
+      "asksCredentials": false,
+      "reason": "",
+      "line": 0,
+      "directive": ""
+    },
+    {
+      "name": "http-proxy の自動の認証は通る",
+      "config": [
+        "client",
+        "dev tun",
+        "proto udp",
+        "remote vpn.example.jp 1194",
+        "nobind",
+        "http-proxy proxy.example.jp 8080 auto-nct"
+      ],
+      "servers": [
+        "vpn.example.jp"
+      ],
+      "asksCredentials": false,
+      "reason": "",
+      "line": 0,
+      "directive": ""
+    },
+    {
+      "name": "インラインのブロックの中身は指示として読まない",
+      "config": [
+        "client",
+        "dev tun",
+        "proto udp",
+        "remote vpn.example.jp 1194",
+        "nobind",
+        "<ca>",
+        "up /bin/sh",
+        "route 0.0.0.0 0.0.0.0",
+        "</ca>"
+      ],
+      "servers": [
+        "vpn.example.jp"
+      ],
+      "asksCredentials": false,
+      "reason": "",
+      "line": 0,
+      "directive": ""
+    },
+    {
+      "name": "閉じる行の頭の空白は許す",
+      "config": [
+        "client",
+        "dev tun",
+        "proto udp",
+        "remote vpn.example.jp 1194",
+        "nobind",
+        "<ca>",
+        "-----BEGIN CERTIFICATE-----",
+        "  </ca>"
+      ],
+      "servers": [
+        "vpn.example.jp"
+      ],
+      "asksCredentials": false,
+      "reason": "",
+      "line": 0,
+      "directive": ""
+    },
+    {
+      "name": "先頭の BOM と、行の終わりの CR は読み飛ばす",
+      "config": [
+        "﻿client\r",
+        "dev tun\r",
+        "remote vpn.example.jp 1194\r"
+      ],
+      "servers": [
+        "vpn.example.jp"
+      ],
+      "asksCredentials": false,
+      "reason": "",
+      "line": 0,
+      "directive": ""
+    },
+    {
+      "name": "引用符とバックスラッシュで書いた語も読む",
+      "config": [
+        "client",
+        "\"dev\" 'tun'",
+        "remote \"vpn.example.jp\" 1194",
+        "setenv NAME a\\ b"
+      ],
+      "servers": [
+        "vpn.example.jp"
+      ],
+      "asksCredentials": false,
+      "reason": "",
+      "line": 0,
+      "directive": ""
+    },
+    {
+      "name": "up はコマンドを実行するので断る",
+      "config": [
+        "client",
+        "dev tun",
+        "proto udp",
+        "remote vpn.example.jp 1194",
+        "nobind",
+        "up /etc/openvpn/update-resolv-conf"
+      ],
+      "reason": "runs_command",
+      "line": 6,
+      "directive": "up"
+    },
+    {
+      "name": "-- を付けた指示も断る",
+      "config": [
+        "client",
+        "dev tun",
+        "proto udp",
+        "remote vpn.example.jp 1194",
+        "nobind",
+        "--route-up /bin/true"
+      ],
+      "reason": "runs_command",
+      "line": 6,
+      "directive": "route-up"
+    },
+    {
+      "name": "setenv opt の後ろの指示も確かめる",
+      "config": [
+        "client",
+        "dev tun",
+        "proto udp",
+        "remote vpn.example.jp 1194",
+        "nobind",
+        "setenv opt up /bin/true"
+      ],
+      "reason": "runs_command",
+      "line": 6,
+      "directive": "up"
+    },
+    {
+      "name": "setenv opt を重ねても確かめる",
+      "config": [
+        "client",
+        "dev tun",
+        "proto udp",
+        "remote vpn.example.jp 1194",
+        "nobind",
+        "setenv opt setenv opt --down /bin/true"
+      ],
+      "reason": "runs_command",
+      "line": 6,
+      "directive": "down"
+    },
+    {
+      "name": "引用符で書いた指示も断る",
+      "config": [
+        "client",
+        "dev tun",
+        "proto udp",
+        "remote vpn.example.jp 1194",
+        "nobind",
+        "\"tls-verify\" /bin/true"
+      ],
+      "reason": "runs_command",
+      "line": 6,
+      "directive": "tls-verify"
+    },
+    {
+      "name": "script-security は断る",
+      "config": [
+        "client",
+        "dev tun",
+        "proto udp",
+        "remote vpn.example.jp 1194",
+        "nobind",
+        "script-security 2"
+      ],
+      "reason": "runs_command",
+      "line": 6,
+      "directive": "script-security"
+    },
+    {
+      "name": "plugin は共有ライブラリを読み込むので断る",
+      "config": [
+        "client",
+        "dev tun",
+        "proto udp",
+        "remote vpn.example.jp 1194",
+        "nobind",
+        "plugin /usr/lib/openvpn/plugin.so"
+      ],
+      "reason": "runs_command",
+      "line": 6,
+      "directive": "plugin"
+    },
+    {
+      "name": "インラインで書いた up も断る",
+      "config": [
+        "client",
+        "dev tun",
+        "proto udp",
+        "remote vpn.example.jp 1194",
+        "nobind",
+        "<up>",
+        "/bin/true",
+        "</up>"
+      ],
+      "reason": "runs_command",
+      "line": 6,
+      "directive": "up"
+    },
+    {
+      "name": "redirect-gateway は経路を変えるので断る",
+      "config": [
+        "client",
+        "dev tun",
+        "proto udp",
+        "remote vpn.example.jp 1194",
+        "nobind",
+        "redirect-gateway def1"
+      ],
+      "reason": "changes_routes",
+      "line": 6,
+      "directive": "redirect-gateway"
+    },
+    {
+      "name": "route は経路を変えるので断る",
+      "config": [
+        "client",
+        "dev tun",
+        "proto udp",
+        "remote vpn.example.jp 1194",
+        "nobind",
+        "route 10.0.0.0 255.0.0.0"
+      ],
+      "reason": "changes_routes",
+      "line": 6,
+      "directive": "route"
+    },
+    {
+      "name": "route-ipv6 は経路を変えるので断る",
+      "config": [
+        "client",
+        "dev tun",
+        "proto udp",
+        "remote vpn.example.jp 1194",
+        "nobind",
+        "route-ipv6 2001:db8::/32"
+      ],
+      "reason": "changes_routes",
+      "line": 6,
+      "directive": "route-ipv6"
+    },
+    {
+      "name": "tap は sshc の tun と違うので断る",
+      "config": [
+        "client",
+        "dev tap",
+        "remote vpn.example.jp"
+      ],
+      "reason": "decided_by_sshc",
+      "line": 2,
+      "directive": "dev"
+    },
+    {
+      "name": "dev-type tap は断る",
+      "config": [
+        "client",
+        "dev-type tap",
+        "remote vpn.example.jp"
+      ],
+      "reason": "decided_by_sshc",
+      "line": 2,
+      "directive": "dev-type"
+    },
+    {
+      "name": "daemon は断る",
+      "config": [
+        "client",
+        "dev tun",
+        "proto udp",
+        "remote vpn.example.jp 1194",
+        "nobind",
+        "daemon"
+      ],
+      "reason": "decided_by_sshc",
+      "line": 6,
+      "directive": "daemon"
+    },
+    {
+      "name": "log は断る",
+      "config": [
+        "client",
+        "dev tun",
+        "proto udp",
+        "remote vpn.example.jp 1194",
+        "nobind",
+        "log /var/log/openvpn.log"
+      ],
+      "reason": "decided_by_sshc",
+      "line": 6,
+      "directive": "log"
+    },
+    {
+      "name": "status は断る",
+      "config": [
+        "client",
+        "dev tun",
+        "proto udp",
+        "remote vpn.example.jp 1194",
+        "nobind",
+        "status /tmp/status.log"
+      ],
+      "reason": "decided_by_sshc",
+      "line": 6,
+      "directive": "status"
+    },
+    {
+      "name": "management の仲間は断る",
+      "config": [
+        "client",
+        "dev tun",
+        "proto udp",
+        "remote vpn.example.jp 1194",
+        "nobind",
+        "management-hold"
+      ],
+      "reason": "decided_by_sshc",
+      "line": 6,
+      "directive": "management-hold"
+    },
+    {
+      "name": "user は断る",
+      "config": [
+        "client",
+        "dev tun",
+        "proto udp",
+        "remote vpn.example.jp 1194",
+        "nobind",
+        "user nobody"
+      ],
+      "reason": "decided_by_sshc",
+      "line": 6,
+      "directive": "user"
+    },
+    {
+      "name": "ファイル名で書いた ca は断る",
+      "config": [
+        "client",
+        "dev tun",
+        "proto udp",
+        "remote vpn.example.jp 1194",
+        "nobind",
+        "ca ca.crt"
+      ],
+      "reason": "file_reference",
+      "line": 6,
+      "directive": "ca"
+    },
+    {
+      "name": "ファイル名で書いた tls-auth は断る",
+      "config": [
+        "client",
+        "dev tun",
+        "proto udp",
+        "remote vpn.example.jp 1194",
+        "nobind",
+        "tls-auth ta.key 1"
+      ],
+      "reason": "file_reference",
+      "line": 6,
+      "directive": "tls-auth"
+    },
+    {
+      "name": "ファイル名で書いた auth-user-pass は断る",
+      "config": [
+        "client",
+        "dev tun",
+        "proto udp",
+        "remote vpn.example.jp 1194",
+        "nobind",
+        "auth-user-pass /etc/openvpn/credentials"
+      ],
+      "reason": "file_reference",
+      "line": 6,
+      "directive": "auth-user-pass"
+    },
+    {
+      "name": "http-proxy の認証のファイルは断る",
+      "config": [
+        "client",
+        "dev tun",
+        "proto udp",
+        "remote vpn.example.jp 1194",
+        "nobind",
+        "http-proxy proxy.example.jp 8080 /etc/proxy-credentials"
+      ],
+      "reason": "file_reference",
+      "line": 6,
+      "directive": "http-proxy"
+    },
+    {
+      "name": "connection の中の指示も確かめる",
+      "config": [
+        "client",
+        "dev tun",
+        "<connection>",
+        "remote vpn.example.jp 1194",
+        "socks-proxy proxy.example.jp 1080 /etc/socks",
+        "</connection>"
+      ],
+      "reason": "file_reference",
+      "line": 5,
+      "directive": "socks-proxy"
+    },
+    {
+      "name": "config は別のファイルを読むので断る",
+      "config": [
+        "client",
+        "dev tun",
+        "proto udp",
+        "remote vpn.example.jp 1194",
+        "nobind",
+        "config other.ovpn"
+      ],
+      "reason": "file_reference",
+      "line": 6,
+      "directive": "config"
+    },
+    {
+      "name": "server は VPN サーバー用なので断る",
+      "config": [
+        "client",
+        "server 10.8.0.0 255.255.255.0",
+        "remote vpn.example.jp"
+      ],
+      "reason": "server_mode",
+      "line": 2,
+      "directive": "server"
+    },
+    {
+      "name": "インラインにできない指示のブロックは断る",
+      "config": [
+        "client",
+        "dev tun",
+        "proto udp",
+        "remote vpn.example.jp 1194",
+        "nobind",
+        "<cipher>",
+        "AES-256-GCM",
+        "</cipher>"
+      ],
+      "reason": "unsupported_inline",
+      "line": 6,
+      "directive": ""
+    },
+    {
+      "name": "connection の中の connection は、閉じていないブロックになる",
+      "config": [
+        "client",
+        "<connection>",
+        "remote vpn.example.jp",
+        "<connection>",
+        "remote other.example.jp",
+        "</connection>"
+      ],
+      "reason": "unclosed_inline",
+      "line": 4,
+      "directive": ""
+    },
+    {
+      "name": "閉じていないブロックは断る",
+      "config": [
+        "client",
+        "dev tun",
+        "proto udp",
+        "remote vpn.example.jp 1194",
+        "nobind",
+        "<key>",
+        "-----BEGIN PRIVATE KEY-----"
+      ],
+      "reason": "unclosed_inline",
+      "line": 6,
+      "directive": ""
+    },
+    {
+      "name": "client も tls-client も無ければ断る",
+      "config": [
+        "dev tun",
+        "remote vpn.example.jp"
+      ],
+      "reason": "not_client",
+      "line": 0,
+      "directive": ""
+    },
+    {
+      "name": "remote が無ければ断る",
+      "config": [
+        "client",
+        "dev tun"
+      ],
+      "reason": "no_remote",
+      "line": 0,
+      "directive": ""
+    },
+    {
+      "name": "サーバーの無い remote は断る",
+      "config": [
+        "client",
+        "remote"
+      ],
+      "reason": "format",
+      "line": 2,
+      "directive": "remote"
+    },
+    {
+      "name": "空白を含むサーバーは断る",
+      "config": [
+        "client",
+        "remote \"vpn example\" 1194"
+      ],
+      "reason": "format",
+      "line": 2,
+      "directive": "remote"
+    },
+    {
+      "name": "閉じていない引用符は断る",
+      "config": [
+        "client",
+        "remote \"vpn.example.jp 1194"
+      ],
+      "reason": "format",
+      "line": 2,
+      "directive": ""
+    },
+    {
+      "name": "決まった字の前にないバックスラッシュは断る",
+      "config": [
+        "client",
+        "remote vpn\\x.example.jp"
+      ],
+      "reason": "format",
+      "line": 2,
+      "directive": ""
+    },
+    {
+      "name": "NUL を含む行は断る",
+      "config": [
+        "client",
+        "remote vpn.example.jp\u0000up /bin/true"
+      ],
+      "reason": "format",
+      "line": 2,
+      "directive": ""
+    },
+    {
+      "name": "OpenVPN が途中で切る長さの行は断る",
+      "config": [
+        "client",
+        "setenv PADDING aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      ],
+      "reason": "too_long",
+      "line": 2,
+      "directive": "",
+      "limit": 254
+    },
+    {
+      "name": "インラインのブロックの中の長い行も断る",
+      "config": [
+        "client",
+        "dev tun",
+        "proto udp",
+        "remote vpn.example.jp 1194",
+        "nobind",
+        "<ca>",
+        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "</ca>"
+      ],
+      "reason": "too_long",
+      "line": 7,
+      "directive": "",
+      "limit": 254
+    }
+  ]
+}

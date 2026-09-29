@@ -2341,6 +2341,9 @@ components:
         field: { type: string }
         reason: { type: string }
         limit: { type: integer, minimum: 1 }
+        # 設定ファイル（OpenVPN の .ovpn）の中の誤りでは、断った指示の名前が入る。行番号は
+        # line に入る。どちらも engine が決めた語と数だけで、設定ファイルの中身は載せない。
+        directive: { type: string }
     KeyReference:
       type: object
       additionalProperties: false
@@ -4278,6 +4281,9 @@ components:
         ipsecPsk: { type: string, minLength: 1, maxLength: 256 }
         openconnectPassword: { type: string, minLength: 1, maxLength: 256 }
         openconnectTotpSecret: { type: string, minLength: 1, maxLength: 512 }
+        # OpenVPN の設定ファイル（.ovpn）の中身。鍵を含むことが多いので Vault に置く。
+        openvpnConfig: { type: string, minLength: 1, maxLength: 65536 }
+        openvpnPassword: { type: string, minLength: 1, maxLength: 256 }
     VPNBindingRequest:
       type: object
       additionalProperties: false
@@ -4294,7 +4300,7 @@ components:
         name: { type: string, minLength: 1, maxLength: 48 }
         backend:
           type: string
-          enum: [wireguard, l2tp_ipsec, openconnect]
+          enum: [wireguard, l2tp_ipsec, openconnect, openvpn]
         # 接続先を VPN の中で名前解決する DNS サーバー（IPv4）。接続先を
         # アドレスで書く接続にしか使わないなら要らない。
         dns:
@@ -4304,6 +4310,21 @@ components:
         wireguard: { $ref: "#/components/schemas/WireGuardProfile" }
         l2tp: { $ref: "#/components/schemas/L2TPProfile" }
         openconnect: { $ref: "#/components/schemas/OpenConnectProfile" }
+        openvpn: { $ref: "#/components/schemas/OpenVPNProfile" }
+    OpenVPNProfile:
+      type: object
+      additionalProperties: false
+      required: [servers]
+      properties:
+        # 設定ファイル（Vault にある）の remote のサーバーを、書かれた順に重複を除いて
+        # 並べたもの。engine は保存するときに設定ファイルと合うことを確かめる。
+        servers:
+          type: array
+          minItems: 1
+          maxItems: 64
+          items: { type: string, minLength: 1, maxLength: 320 }
+        # auth-user-pass で送るユーザー名。空ならユーザー名とパスワードを送らない。
+        username: { type: string, maxLength: 256 }
     OpenConnectProfile:
       type: object
       additionalProperties: false

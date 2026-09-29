@@ -177,7 +177,7 @@
       "name": "知らない backend",
       "profile": {
         "name": "lab",
-        "backend": "openvpn",
+        "backend": "sstp",
         "wireguard": {
           "server": "vpn.example.jp:51820",
           "peerPublicKey": "bBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBA=",
@@ -702,6 +702,86 @@
       "field": "openconnect.serverCertificate",
       "reason": "too_long",
       "limit": 128
+    },
+    {
+      "name": "openvpn の設定が揃っている",
+      "profile": {
+        "name": "provider",
+        "backend": "openvpn",
+        "openvpn": {
+          "servers": [
+            "vpn.example.jp",
+            "backup.example.jp"
+          ]
+        }
+      },
+      "field": "",
+      "reason": ""
+    },
+    {
+      "name": "openvpn のユーザー名は任意で、書くなら形を確かめる",
+      "profile": {
+        "name": "provider",
+        "backend": "openvpn",
+        "openvpn": {
+          "servers": [
+            "vpn.example.jp"
+          ],
+          "username": "fixture"
+        }
+      },
+      "field": "",
+      "reason": ""
+    },
+    {
+      "name": "openvpn の設定が無い",
+      "profile": {
+        "name": "provider",
+        "backend": "openvpn"
+      },
+      "field": "openvpn",
+      "reason": "required"
+    },
+    {
+      "name": "openvpn のサーバーが無い",
+      "profile": {
+        "name": "provider",
+        "backend": "openvpn",
+        "openvpn": {
+          "servers": []
+        }
+      },
+      "field": "openvpn.servers",
+      "reason": "required"
+    },
+    {
+      "name": "openvpn のサーバーが空白を含む",
+      "profile": {
+        "name": "provider",
+        "backend": "openvpn",
+        "openvpn": {
+          "servers": [
+            "vpn example.jp"
+          ]
+        }
+      },
+      "field": "openvpn.servers",
+      "reason": "format"
+    },
+    {
+      "name": "openvpn のユーザー名が改行を含む",
+      "profile": {
+        "name": "provider",
+        "backend": "openvpn",
+        "openvpn": {
+          "servers": [
+            "vpn.example.jp"
+          ],
+          "username": "fix\nture"
+        }
+      },
+      "field": "openvpn.username",
+      "reason": "format"
     }
   ]
 }

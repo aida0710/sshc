@@ -39,7 +39,7 @@ func TestAProfileIsRefusedWhenTheRouteCouldNotBeBuiltFromIt(t *testing.T) {
 	}{
 		{"名前が空", func(profile *Profile) { profile.Name = "" }, ErrProfileName},
 		{"名前にパス区切り", func(profile *Profile) { profile.Name = "../escape" }, ErrProfileName},
-		{"知らないbackend", func(profile *Profile) { profile.Backend = "openvpn" }, ErrBackend},
+		{"知らないbackend", func(profile *Profile) { profile.Backend = "sstp" }, ErrBackend},
 		{"DNSが名前", func(profile *Profile) {
 			profile.DNS = []string{"dns.example.jp"}
 		}, ErrSettings},

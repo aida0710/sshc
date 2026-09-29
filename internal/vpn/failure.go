@@ -35,6 +35,19 @@ const (
 	FailureTargetUnreachable FailureReason = "target_unreachable"
 	// FailureTunnelLost は、用意できたあとでトンネルが落ちたことを表す。
 	FailureTunnelLost FailureReason = "tunnel_lost"
+	// FailureOpenVPNAuthentication は、OpenVPN のサーバーが認証を拒否したこと（AUTH_FAILED）を
+	// 表す（ユーザー名、パスワード）。
+	FailureOpenVPNAuthentication FailureReason = "openvpn_authentication"
+	// FailureOpenVPNTLS は、OpenVPN の TLS のハンドシェイクに失敗したことを表す（証明書の
+	// 検証、鍵）。
+	FailureOpenVPNTLS FailureReason = "openvpn_tls"
+	// FailureOpenVPNNoResponse は、OpenVPN のサーバーから応答が無かったことを表す（サーバーの
+	// 指定、ネットワーク、tls-auth と tls-crypt の鍵）。
+	FailureOpenVPNNoResponse FailureReason = "openvpn_no_response"
+	// FailureOpenVPNConfiguration は、OpenVPN が設定ファイルを読み込めなかったことを表す。
+	FailureOpenVPNConfiguration FailureReason = "openvpn_configuration"
+	// FailureOpenVPN は、OpenVPN がほかの理由で接続できなかったことを表す。
+	FailureOpenVPN FailureReason = "openvpn_failed"
 )
 
 // knownFailureReasons は、agent が書いてよい語である。知らない語は読まない。
@@ -43,6 +56,8 @@ var knownFailureReasons = map[FailureReason]bool{
 	FailureIPsecNegotiation: true, FailurePPPAuthentication: true, FailureOpenConnect: true,
 	FailureHandshakeTimeout: true, FailureTargetUnresolved: true, FailureTargetNeedsDNS: true,
 	FailureTargetIsServer: true, FailureTargetUnreachable: true, FailureTunnelLost: true,
+	FailureOpenVPNAuthentication: true, FailureOpenVPNTLS: true, FailureOpenVPNNoResponse: true,
+	FailureOpenVPNConfiguration: true, FailureOpenVPN: true,
 }
 
 // SessionFailure は、経路を用意できなかったことと、その理由である。

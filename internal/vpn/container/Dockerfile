@@ -36,6 +36,7 @@ RUN printf '%s\n' \
        iproute2 iptables wireguard-tools wireguard-go socat jq \
        strongswan strongswan-starter xl2tpd ppp \
        openconnect \
+       openvpn \
     && rm -rf /var/lib/apt/lists/*
 
 COPY agent.sh /usr/local/bin/sshc-vpn-agent
@@ -46,5 +47,8 @@ COPY backend-wireguard.sh backend-l2tp_ipsec.sh backend-openconnect.sh vpnc-scri
 COPY connect.sh /usr/local/lib/sshc-vpn/connect
 RUN chmod 0755 /usr/local/bin/sshc-vpn-agent /usr/local/lib/sshc-vpn/vpnc-script /usr/local/lib/sshc-vpn/connect \
     && chmod 0644 /usr/local/lib/sshc-vpn/backend-*.sh
+# OpenVPN の手順と、OpenVPN が TUN を開いたあとに呼ぶ script。
+COPY backend-openvpn.sh openvpn-up /usr/local/lib/sshc-vpn/
+RUN chmod 0644 /usr/local/lib/sshc-vpn/backend-openvpn.sh && chmod 0755 /usr/local/lib/sshc-vpn/openvpn-up
 
 ENTRYPOINT ["/usr/local/bin/sshc-vpn-agent"]
