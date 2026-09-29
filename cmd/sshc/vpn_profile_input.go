@@ -52,7 +52,7 @@ func (failure *vpnInputError) Unwrap() error { return failure.cause }
 // 入力の誤りの文である。
 var (
 	errVPNInputMissing = &vpnInputError{sentence: "必須の項目が入力されていません。", cause: errVPNSetupInput}
-	errVPNInputBackend = &vpnInputError{sentence: "方式にはwireguard、l2tp_ipsec、openconnect、openvpnのいずれかを指定してください。", cause: errVPNSetupInput}
+	errVPNInputBackend = &vpnInputError{sentence: "方式にはwireguard、l2tp_ipsec、openconnect、openvpn、ikev2のいずれかを指定してください。", cause: errVPNSetupInput}
 	errVPNInputKey     = &vpnInputError{sentence: "秘密鍵の形式が正しくありません。", cause: errVPNSetupInput}
 	errVPNInputUnknown = &vpnInputError{sentence: "指定したVPNプロファイルが見つかりません。sshc vpn で名前を確認してください。", cause: errVPNSetupInput}
 )
@@ -127,7 +127,7 @@ func readVPNProfile(p vpnProfilePrompter, name string, current *application.VPNP
 	if current != nil {
 		previous = *current
 	}
-	backend, err := p.required("Backend (wireguard/l2tp_ipsec/openconnect/openvpn)", string(previous.Backend))
+	backend, err := p.required("Backend (wireguard/l2tp_ipsec/openconnect/openvpn/ikev2)", string(previous.Backend))
 	if err != nil {
 		return vpnProfileInput{}, err
 	}
@@ -151,6 +151,8 @@ func readVPNProfile(p vpnProfilePrompter, name string, current *application.VPNP
 		input.profile.OpenConnect, input.secrets, err = readOpenConnectProfile(p, previous.OpenConnect, keeps)
 	case vpn.OpenVPN:
 		input.profile.OpenVPN, input.secrets, err = readOpenVPNProfile(p, previous.OpenVPN, keeps)
+	case vpn.IKEv2:
+		input.profile.IKEv2, input.secrets, err = readIKEv2Profile(p, previous.IKEv2, keeps)
 	default:
 		err = errVPNInputBackend
 	}

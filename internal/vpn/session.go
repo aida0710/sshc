@@ -99,7 +99,11 @@ func (manager *Manager) start(ctx context.Context, profile Profile, secrets Secr
 	}
 	report(PhaseContainer)
 	name := manager.containerName(profile.Name)
-	connectionlog.Say(ctx, connectionlog.Detailed, "コンテナ「%s」を起動します（デバイス：%s）。", name, chosen.device())
+	if device := chosen.device(); device != "" {
+		connectionlog.Say(ctx, connectionlog.Detailed, "コンテナ「%s」を起動します（デバイス：%s）。", name, device)
+	} else {
+		connectionlog.Say(ctx, connectionlog.Detailed, "コンテナ「%s」を起動します。", name)
+	}
 	arguments := runArguments(containerRun{
 		name: name, image: image, profile: profile, owner: manager.owner, workspace: manager.workspace,
 		routeDirectory: directory, backend: chosen,
@@ -230,7 +234,8 @@ type containerRun struct {
 // runArguments は、コンテナを起動する引数である。
 //
 // --privileged と --network host は使わない。渡す権限は backend が要るもの、渡す
-// デバイスはトンネルのものだけである。秘密は引数に載せない。
+// デバイスはトンネルのものだけである（要らない backend には渡さない）。秘密は引数に
+// 載せない。
 func runArguments(run containerRun) []string {
 	arguments := []string{
 		"run", "--detach", "--name", run.name,
@@ -238,7 +243,6 @@ func runArguments(run containerRun) []string {
 		"--label", workspaceLabel + "=" + run.workspace,
 		"--label", profileLabel + "=" + run.profile.Name,
 		"--network", "bridge",
-		"--device", run.backend.device(),
 		"--security-opt", "no-new-privileges:true",
 		"--restart", "no",
 		// PID 1 を tini にする。sh を PID 1 にすると SIGTERM が既定で無視され、
@@ -249,6 +253,10 @@ func runArguments(run containerRun) []string {
 		"--tmpfs", "/run/sshc-vpn:rw,nosuid,nodev,size=8m,mode=700",
 		"--volume", run.routeDirectory + ":" + sharedMountPath,
 		"--log-opt", "max-size=1m", "--log-opt", "max-file=1",
+	}
+	// デバイスを要らない backend（ikev2）には何も渡さない。
+	if device := run.backend.device(); device != "" {
+		arguments = append(arguments, "--device", device)
 	}
 	arguments = append(arguments, run.backend.capabilities()...)
 	return append(arguments, run.image)

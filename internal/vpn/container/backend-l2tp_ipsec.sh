@@ -1,5 +1,7 @@
 # l2tp_ipsec backend。agent.sh が読み込む。strongSwan、xl2tpd、pppd でトンネルを張る。
 
+. "$backend_directory/strongswan.sh"
+
 interface=ppp0
 
 # connection は、strongSwan と xl2tpd がこの接続を指す名前である。
@@ -9,22 +11,8 @@ connection=sshc-vpn
 # 止めるときの持ち時間（agent.sh の shutdown_seconds）の中に収める。
 l2tp_disconnect_seconds=2
 
-# daemon_start_seconds は、charon と xl2tpd が制御の口を開くまで待つ上限である。
-# 相手と話す前の、この機械の中だけの準備なので、締め切りとは別に数える。
-daemon_start_seconds=15
-
-# デーモンの通常ログだけを残す。PPPのdebugは認証パケットも出すため有効にしない。
-# 3つのログがdocker logsの取得上限に収まる行数にする。
-diagnostic_tail_lines=60
-
 l2tp_diagnostics() {
-	for log_name in ipsec xl2tpd ppp; do
-		if [ -s "$runtime/$log_name.log" ]; then
-			tail -n "$diagnostic_tail_lines" "$runtime/$log_name.log" | sed "s/^/[$log_name] /"
-		else
-			printf '[%s] ログはまだありません。\n' "$log_name"
-		fi
-	done
+	print_daemon_logs ipsec xl2tpd ppp
 }
 
 l2tp_fail() {
@@ -69,34 +57,11 @@ wait_for_ppp_address() {
 }
 
 backend_read() {
-	server=$(jq -r '.l2tp.server' "$profile")
-	for name in ipsec.conf ipsec.secrets xl2tpd.conf ppp.options; do
-		jq -r --arg name "$name" '.l2tp.documents[$name]' "$profile" >"$runtime/$name"
-		chmod 600 "$runtime/$name"
-	done
-}
-
-# wait_for_file は、デーモンが制御の口を開くまで待つ。
-wait_for_file() {
-	seconds=0
-	while [ ! -e "$1" ]; do
-		if [ "$seconds" -ge "$daemon_start_seconds" ]; then
-			return 1
-		fi
-		pause 1
-		seconds=$((seconds + 1))
-	done
+	read_strongswan_documents l2tp
 }
 
 backend_up() {
-	# 相手のアドレスはここで引く。IPsec は相手のアドレスを設定へ書くので、
-	# 引く場所が違えば別の装置へ繋ぎうる。
-	server_address=$(getent ahostsv4 "$server" | awk 'NR==1{print $1}')
-	if [ -z "$server_address" ]; then
-		fail server_unresolved "VPNサーバーの名前解決に失敗しました: $server"
-	fi
-	sed -i "s|%SERVER_ADDRESS%|$server_address|g" "$runtime/ipsec.conf" "$runtime/xl2tpd.conf"
-	printf 'VPNサーバーの名前解決: %s → %s\n' "$server" "$server_address"
+	resolve_server_address "$runtime/ipsec.conf" "$runtime/xl2tpd.conf"
 	ln -sf "$runtime/ipsec.conf" /etc/ipsec.conf
 	ln -sf "$runtime/ipsec.secrets" /etc/ipsec.secrets
 

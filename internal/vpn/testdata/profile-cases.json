@@ -782,6 +782,194 @@
       },
       "field": "openvpn.username",
       "reason": "format"
+    },
+    {
+      "name": "ikev2 の EAP の設定が揃っている",
+      "profile": {
+        "name": "office",
+        "backend": "ikev2",
+        "ikev2": {
+          "server": "vpn.example.jp",
+          "authentication": "eap-mschapv2",
+          "identity": "fixture",
+          "serverIdentity": "vpn.example.jp",
+          "caCertificate": "-----BEGIN CERTIFICATE-----\nMIIBcTCCARegAwIBAgIBATAKBggqhkjOPQQDAjAgMR4wHAYDVQQDExVzc2hjIHBy\nb2ZpbGUtY2FzZXMgQ0EwHhcNMjYwMTAxMDAwMDAwWhcNNDYwMTAxMDAwMDAwWjAg\nMR4wHAYDVQQDExVzc2hjIHByb2ZpbGUtY2FzZXMgQ0EwWTATBgcqhkjOPQIBBggq\nhkjOPQMBBwNCAATajFx3uKTs5d7z41UtXRajG9HZsYtZtnjYN5jpziF/uZgpVIpE\nDg5JKt0vQFi0aN32F6wlK+0b3SlCkoP33syCo0IwQDAOBgNVHQ8BAf8EBAMCAgQw\nDwYDVR0TAQH/BAUwAwEB/zAdBgNVHQ4EFgQUBar5tXzzRzcwGIz0VPZ87SMzDX0w\nCgYIKoZIzj0EAwIDSAAwRQIhAK3JLlag3T0Ne13Q90CLwAnUf5ZCVnVgnaQLC0lD\nG8ZXAiBnw0/6F7Vc11YOe84XkQK0K5RZpdEMNcpJM4LnPM0dXg==\n-----END CERTIFICATE-----\n",
+          "ike": "aes256-sha256-modp2048!",
+          "esp": "aes256gcm16"
+        }
+      },
+      "field": "",
+      "reason": ""
+    },
+    {
+      "name": "ikev2 の事前共有鍵の設定が揃っている",
+      "profile": {
+        "name": "office",
+        "backend": "ikev2",
+        "ikev2": {
+          "server": "vpn.example.jp",
+          "authentication": "psk",
+          "identity": "branch@example.jp"
+        }
+      },
+      "field": "",
+      "reason": ""
+    },
+    {
+      "name": "ikev2 の節が無い",
+      "profile": {
+        "name": "office",
+        "backend": "ikev2"
+      },
+      "field": "ikev2",
+      "reason": "required"
+    },
+    {
+      "name": "ikev2 の認証の方式が無い",
+      "profile": {
+        "name": "office",
+        "backend": "ikev2",
+        "ikev2": {
+          "server": "vpn.example.jp",
+          "authentication": "",
+          "identity": "fixture"
+        }
+      },
+      "field": "ikev2.authentication",
+      "reason": "required"
+    },
+    {
+      "name": "ikev2 の知らない認証の方式",
+      "profile": {
+        "name": "office",
+        "backend": "ikev2",
+        "ikev2": {
+          "server": "vpn.example.jp",
+          "authentication": "eap-tls",
+          "identity": "fixture"
+        }
+      },
+      "field": "ikev2.authentication",
+      "reason": "unsupported"
+    },
+    {
+      "name": "ikev2 の ID が無い",
+      "profile": {
+        "name": "office",
+        "backend": "ikev2",
+        "ikev2": {
+          "server": "vpn.example.jp",
+          "authentication": "eap-mschapv2",
+          "identity": ""
+        }
+      },
+      "field": "ikev2.identity",
+      "reason": "required"
+    },
+    {
+      "name": "ikev2 のサーバーの ID を %any にしない",
+      "profile": {
+        "name": "office",
+        "backend": "ikev2",
+        "ikev2": {
+          "server": "vpn.example.jp",
+          "authentication": "eap-mschapv2",
+          "identity": "fixture",
+          "serverIdentity": "%any"
+        }
+      },
+      "field": "ikev2.serverIdentity",
+      "reason": "format"
+    },
+    {
+      "name": "ikev2 の事前共有鍵では CA の証明書を使わない",
+      "profile": {
+        "name": "office",
+        "backend": "ikev2",
+        "ikev2": {
+          "server": "vpn.example.jp",
+          "authentication": "psk",
+          "identity": "branch@example.jp",
+          "caCertificate": "-----BEGIN CERTIFICATE-----\nMIIBcTCCARegAwIBAgIBATAKBggqhkjOPQQDAjAgMR4wHAYDVQQDExVzc2hjIHBy\nb2ZpbGUtY2FzZXMgQ0EwHhcNMjYwMTAxMDAwMDAwWhcNNDYwMTAxMDAwMDAwWjAg\nMR4wHAYDVQQDExVzc2hjIHByb2ZpbGUtY2FzZXMgQ0EwWTATBgcqhkjOPQIBBggq\nhkjOPQMBBwNCAATajFx3uKTs5d7z41UtXRajG9HZsYtZtnjYN5jpziF/uZgpVIpE\nDg5JKt0vQFi0aN32F6wlK+0b3SlCkoP33syCo0IwQDAOBgNVHQ8BAf8EBAMCAgQw\nDwYDVR0TAQH/BAUwAwEB/zAdBgNVHQ4EFgQUBar5tXzzRzcwGIz0VPZ87SMzDX0w\nCgYIKoZIzj0EAwIDSAAwRQIhAK3JLlag3T0Ne13Q90CLwAnUf5ZCVnVgnaQLC0lD\nG8ZXAiBnw0/6F7Vc11YOe84XkQK0K5RZpdEMNcpJM4LnPM0dXg==\n-----END CERTIFICATE-----\n"
+        }
+      },
+      "field": "ikev2.caCertificate",
+      "reason": "unexpected"
+    },
+    {
+      "name": "ikev2 の CA の証明書が PEM でない",
+      "profile": {
+        "name": "office",
+        "backend": "ikev2",
+        "ikev2": {
+          "server": "vpn.example.jp",
+          "authentication": "eap-mschapv2",
+          "identity": "fixture",
+          "caCertificate": "certificate"
+        }
+      },
+      "field": "ikev2.caCertificate",
+      "reason": "format"
+    },
+    {
+      "name": "ikev2 の CA の証明書の代わりに秘密鍵",
+      "profile": {
+        "name": "office",
+        "backend": "ikev2",
+        "ikev2": {
+          "server": "vpn.example.jp",
+          "authentication": "eap-mschapv2",
+          "identity": "fixture",
+          "caCertificate": "-----BEGIN PRIVATE KEY-----\nMAMCAQE=\n-----END PRIVATE KEY-----\n"
+        }
+      },
+      "field": "ikev2.caCertificate",
+      "reason": "format"
+    },
+    {
+      "name": "ikev2 の CA の証明書の前に文字",
+      "profile": {
+        "name": "office",
+        "backend": "ikev2",
+        "ikev2": {
+          "server": "vpn.example.jp",
+          "authentication": "eap-mschapv2",
+          "identity": "fixture",
+          "caCertificate": "CA:\n-----BEGIN CERTIFICATE-----\nMIIBcTCCARegAwIBAgIBATAKBggqhkjOPQQDAjAgMR4wHAYDVQQDExVzc2hjIHBy\nb2ZpbGUtY2FzZXMgQ0EwHhcNMjYwMTAxMDAwMDAwWhcNNDYwMTAxMDAwMDAwWjAg\nMR4wHAYDVQQDExVzc2hjIHByb2ZpbGUtY2FzZXMgQ0EwWTATBgcqhkjOPQIBBggq\nhkjOPQMBBwNCAATajFx3uKTs5d7z41UtXRajG9HZsYtZtnjYN5jpziF/uZgpVIpE\nDg5JKt0vQFi0aN32F6wlK+0b3SlCkoP33syCo0IwQDAOBgNVHQ8BAf8EBAMCAgQw\nDwYDVR0TAQH/BAUwAwEB/zAdBgNVHQ4EFgQUBar5tXzzRzcwGIz0VPZ87SMzDX0w\nCgYIKoZIzj0EAwIDSAAwRQIhAK3JLlag3T0Ne13Q90CLwAnUf5ZCVnVgnaQLC0lD\nG8ZXAiBnw0/6F7Vc11YOe84XkQK0K5RZpdEMNcpJM4LnPM0dXg==\n-----END CERTIFICATE-----\n"
+        }
+      },
+      "field": "ikev2.caCertificate",
+      "reason": "format"
+    },
+    {
+      "name": "ikev2 の CA の証明書の中身が DER でない",
+      "profile": {
+        "name": "office",
+        "backend": "ikev2",
+        "ikev2": {
+          "server": "vpn.example.jp",
+          "authentication": "eap-mschapv2",
+          "identity": "fixture",
+          "caCertificate": "-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE-----\n"
+        }
+      },
+      "field": "ikev2.caCertificate",
+      "reason": "format"
+    },
+    {
+      "name": "ikev2 の IKE の暗号スイートに空白",
+      "profile": {
+        "name": "office",
+        "backend": "ikev2",
+        "ikev2": {
+          "server": "vpn.example.jp",
+          "authentication": "eap-mschapv2",
+          "identity": "fixture",
+          "ike": "aes256 sha256"
+        }
+      },
+      "field": "ikev2.ike",
+      "reason": "format"
     }
   ]
 }

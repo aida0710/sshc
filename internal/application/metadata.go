@@ -288,7 +288,7 @@ func DecodeMetadata(contents []byte) (Metadata, error) {
 	// 飛ばすので、書き直すと消える。v6はtargetの無いプロファイルを旧版に読ませない
 	// ための境界でもある。
 	// v6→v7は項目を足すだけである。v7は、v0.39.7までのsshcが知らないVPNの方式
-	// （openvpn）のプロファイルを旧版に読ませないための境界である。旧版は知らない
+	// （openvpn、ikev2）のプロファイルを旧版に読ませないための境界である。旧版は知らない
 	// 方式を断るので、版で先に断る方が、何が起きたかが利用者に分かる。
 	metadata.SchemaVersion = MetadataSchemaVersion
 	if metadata.GroupsFile == "" {

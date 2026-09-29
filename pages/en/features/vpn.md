@@ -31,7 +31,7 @@ The container adds a route and a packet filter only for the targets connections 
 
 ## What "does not touch the host" covers
 
-The host default route, DNS, NetworkManager and an already-connected VPN are left alone. Neither `--privileged` nor `--network host` is used. The container gets one tunnel device (`/dev/net/tun` for WireGuard, OpenConnect and OpenVPN, `/dev/ppp` for L2TP/IPsec) and only the capabilities that backend needs; for WireGuard and OpenVPN everything but `CAP_NET_ADMIN`, `CAP_NET_RAW`, `CAP_DAC_OVERRIDE` and `CAP_CHOWN` is dropped.
+The host default route, DNS, NetworkManager and an already-connected VPN are left alone. Neither `--privileged` nor `--network host` is used. The container gets one tunnel device (`/dev/net/tun` for WireGuard, OpenConnect and OpenVPN, `/dev/ppp` for L2TP/IPsec; none for IKEv2/IPsec, which uses the kernel's XFRM interface) and only the capabilities that backend needs; for WireGuard and OpenVPN everything but `CAP_NET_ADMIN`, `CAP_NET_RAW`, `CAP_DAC_OVERRIDE` and `CAP_CHOWN` is dropped.
 
 It is not unrelated to the host: it uses Docker's bridge and the kernel's tunnel support, and anyone who can drive Docker generally holds strong host privileges. What is isolated is the VPN's routes, DNS and connection state, and the application traffic sent into it.
 
@@ -41,10 +41,10 @@ Create one from the VPN screen or with `sshc vpn add <name>`.
 
 | Field | Meaning |
 |---|---|
-| Type | WireGuard, L2TP/IPsec, OpenConnect (Cisco AnyConnect, ocserv, GlobalProtect, FortiGate, Ivanti Connect Secure and more), or OpenVPN |
+| Type | WireGuard, L2TP/IPsec, OpenConnect (Cisco AnyConnect, ocserv, GlobalProtect, FortiGate, Ivanti Connect Secure and more), OpenVPN, or IKEv2/IPsec |
 | DNS inside the VPN | Only for connections whose `HostName` is a name. Up to three IPv4 addresses |
-| VPN server | `host:port` for WireGuard, a hostname or address for L2TP/IPsec and OpenConnect. OpenVPN reads it from `remote` in the configuration file |
-| Secrets | A private key for WireGuard; the VPN password and IPsec pre-shared key for L2TP/IPsec; the VPN password for OpenConnect; the configuration file (.ovpn) and, when it asks for one, the VPN password for OpenVPN |
+| VPN server | `host:port` for WireGuard, a hostname or address for L2TP/IPsec, OpenConnect and IKEv2/IPsec. OpenVPN reads it from `remote` in the configuration file |
+| Secrets | A private key for WireGuard; the VPN password and IPsec pre-shared key for L2TP/IPsec; the VPN password for OpenConnect; the configuration file (.ovpn) and, when it asks for one, the VPN password for OpenVPN; the VPN password or the IPsec pre-shared key for IKEv2/IPsec |
 
 Secrets are kept in the vault. They are never returned to the screen or the API.
 
@@ -131,6 +131,29 @@ Whatever the file says, sshc uses its own values for these:
 
 Neither `dhcp-option DNS` in the file nor DNS handed out by the server is used. When a connection's `HostName` is a name, give the profile its DNS servers inside the VPN, as with the other types.
 
+### IKEv2/IPsec
+
+sshc reaches the IKEv2/IPsec servers that the built-in VPN of Windows, macOS and phones connects to. Choose one of two ways to authenticate.
+
+| Authentication | What you enter | How the server is checked |
+|---|---|---|
+| Username and password (EAP-MSCHAPv2) | The VPN username and the VPN password | Its certificate |
+| Pre-shared key (PSK) | The local ID and the IPsec pre-shared key | The pre-shared key |
+
+With a username and password, the server's certificate is verified before the password is sent.
+
+- Paste a PEM certificate into **CA certificate** to trust only certificates that CA issued. Several certificates, intermediate CAs included, can be pasted one after another.
+- Leave it blank to verify against the public certificate authorities (those in Ubuntu's `ca-certificates`).
+- A server that cannot be verified is never connected to, and the password is never sent to it.
+
+The name in the certificate is checked against **Server ID (remote ID)**, which defaults to the VPN server field. When the VPN server is given as an address but the certificate carries a hostname, give that hostname as the server ID. Values starting with `%`, such as `%any`, are refused.
+
+With a pre-shared key, the server authenticates with the same key. The local ID is the ID the VPN server knows this machine by. No CA certificate is used.
+
+Set IKE and ESP proposals only when the VPN server does not accept the defaults. They are written as for L2TP/IPsec: the given proposals are offered first and the defaults after them, and a trailing `!` offers only the given ones.
+
+The virtual IP address the server hands out is taken, but the routes and DNS servers it hands out are not installed. The tunnel is bound to an IPsec XFRM interface, so even a server that asks for every destination (`0.0.0.0/0`) to go through the tunnel leaves the container's default route alone. As with the other types, only the routes to the targets your connections use are added. A destination the server does not allow is not reached through the tunnel either.
+
 ### Naming a target inside the VPN
 
 When a connection's `HostName` is a name, give the profile attached to it the DNS servers that can resolve it. The name is resolved inside the container, using those servers alone: not the host's `resolv.conf`, and not Docker's own DNS. That is what keeps a name that means something else on the host from sending the connection to the wrong machine. With no DNS servers in the profile, a named target is refused; Connections points this out when you pick the profile.
@@ -161,7 +184,7 @@ A route opens when it is needed and closes when it is not. The route and packet 
 
 If you interrupt a connection with `Ctrl-C` while it is waiting, or close the page, the container that was being prepared does not remain.
 
-Closing a route tells the VPN device first. OpenConnect sends a logout, and L2TP/IPsec sends an L2TP disconnect and ends the IPsec session. OpenVPN tells the server when the configuration file has `explicit-exit-notify`. No session is left behind on the device, so its concurrent-connection slot is freed as well.
+Closing a route tells the VPN device first. OpenConnect sends a logout, L2TP/IPsec sends an L2TP disconnect and ends the IPsec session, and IKEv2/IPsec ends the IPsec session. OpenVPN tells the server when the configuration file has `explicit-exit-notify`. No session is left behind on the device, so its concurrent-connection slot is freed as well.
 
 Connecting again reopens the route. One that needs approval on the phone will ask for it again.
 
@@ -169,7 +192,15 @@ Connecting again reopens the route. One that needs approval on the phone will as
 
 While a route is open, the VPN screen and `sshc vpn` show the tunnel's interface, its address inside the VPN and when it opened. If that much is there, the tunnel itself is up. A WireGuard route does not open until the peer has completed a handshake, so a wrong key or server shows a reason instead of an open route.
 
-When a route does not come up, the screen and `sshc vpn up` say why as far as it is known, for example that the WireGuard peer never completed a handshake or that PPP authentication failed. For OpenVPN they tell apart a server that refused the authentication (`AUTH_FAILED`), a failed TLS handshake, and a server that never answered.
+When a route does not come up, the screen and `sshc vpn up` say why as far as it is known, for example that the WireGuard peer never completed a handshake or that PPP authentication failed. For OpenVPN they tell apart a server that refused the authentication (`AUTH_FAILED`), a failed TLS handshake, and a server that never answered. IKEv2/IPsec tells these apart:
+
+| Message | What to check |
+|---|---|
+| IKEv2 authentication failed | The username, the password, the pre-shared key and the local ID |
+| The VPN server's certificate could not be verified | The server ID and the CA certificate |
+| The cipher suite negotiation failed | The IKE and ESP proposals |
+| The VPN server does not answer | The VPN server, and that UDP ports 500 and 4500 reach it |
+| The IPsec XFRM interface could not be created | Whether Docker's Linux kernel supports XFRM interfaces |
 
 When the VPN is up but the target cannot be reached, the terminal and `sshc <alias>` say why:
 
@@ -200,4 +231,4 @@ When the target cannot be reached, it refuses rather than falling back to the or
 - A target is an IPv4 address or a name; IPv6 addresses are not supported. The VPN server itself cannot be a target.
 - Not available for hops beyond a jump host: those travel inside the first SSH connection, where this machine's VPN cannot apply.
 - A connection with a profile cannot also use `ProxyCommand`, which runs on this machine and is therefore outside the VPN. To reach the route from a `ProxyCommand`, leave the profile off and use `sshc vpn proxy` as shown above.
-- Verified on Linux so far.
+- Verified on Linux so far. IKEv2/IPsec uses the XFRM interface of Docker's Linux kernel (Linux 4.19 or later).

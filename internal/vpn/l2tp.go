@@ -1,7 +1,6 @@
 package vpn
 
 import (
-	"encoding/hex"
 	"strconv"
 	"strings"
 )
@@ -25,12 +24,6 @@ type L2TPSettings struct {
 	IKE string
 	ESP string
 }
-
-// serverAddressPlaceholder は、agent が解決したアドレスで置き換える印である。
-const serverAddressPlaceholder = "%SERVER_ADDRESS%"
-
-// connectionName は、strongSwan と xl2tpd が使うこの接続の名前である。
-const connectionName = "sshc-vpn"
 
 // pppMTU は、PPP・L2TP・UDP・IPsec の各ヘッダを載せても 1500 に収まる大きさである。
 const pppMTU = 1280
@@ -58,17 +51,7 @@ func (l2tpBackend) validateSettings(profile Profile) error {
 	if err := validateUsername("l2tp.username", settings.Username); err != nil {
 		return err
 	}
-	for _, proposal := range []struct{ field, value string }{
-		{"l2tp.ike", settings.IKE}, {"l2tp.esp", settings.ESP},
-	} {
-		if err := validateLength(proposal.field, proposal.value, maxProposalLength); err != nil {
-			return err
-		}
-		if strings.ContainsAny(proposal.value, " \t\r\n\"\\") {
-			return fieldError(ErrSettings, proposal.field, ReasonFormat)
-		}
-	}
-	return nil
+	return validateProposals("l2tp", settings.IKE, settings.ESP)
 }
 
 func (l2tpBackend) validateSecrets(_ Profile, secrets Secrets) error {
@@ -83,7 +66,7 @@ func (l2tpBackend) validateSecrets(_ Profile, secrets Secrets) error {
 }
 
 func (l2tpBackend) writeAgentSection(request agentSectionRequest, document *agentDocument) error {
-	document.L2TP = &l2tpDocument{
+	document.L2TP = &strongSwanDocument{
 		Server:    request.profile.L2TP.Server,
 		Documents: l2tpDocuments(*request.profile.L2TP, *request.secrets.L2TP),
 	}
@@ -96,26 +79,12 @@ func (l2tpBackend) secretValues(secrets Secrets) []string {
 	if secrets.L2TP == nil {
 		return nil
 	}
-	values := []string{secrets.L2TP.Password}
-	if key := secrets.L2TP.PreSharedKey; key != "" {
-		encoded := hex.EncodeToString([]byte(key))
-		values = append(values, key, encoded, strings.ToUpper(encoded))
-	}
-	return values
+	return append([]string{secrets.L2TP.Password}, secretAndHexForms(secrets.L2TP.PreSharedKey)...)
 }
 
 func (l2tpBackend) waitsForApproval(Profile) bool { return false }
 
 func (l2tpBackend) ownSecrets(secrets Secrets) Secrets { return Secrets{L2TP: secrets.L2TP} }
-
-// l2tpDocument は、agent が置くだけの本文と、agent が自分で引く相手である。
-type l2tpDocument struct {
-	// Server は、VPN装置の名前またはアドレスである。agent がコンテナの中で引き、
-	// 設定の中の印を、引いたアドレスで置き換える。
-	Server string `json:"server"`
-	// Documents は、ファイル名から本文への対応である。
-	Documents map[string]string `json:"documents"`
-}
 
 // l2tpDocuments は、コンテナへ渡す4つの本文を返す。
 func l2tpDocuments(settings L2TPSettings, secrets L2TPSecrets) map[string]string {
@@ -175,7 +144,7 @@ func l2tpDocuments(settings L2TPSettings, secrets L2TPSecrets) map[string]string
 		"ipsec.conf": ipsec,
 		// 16 進で書く。事前共有鍵に引用符や backslash があっても、strongSwan の
 		// 構文として解釈されない。
-		"ipsec.secrets": ": PSK 0x" + hex.EncodeToString([]byte(secrets.PreSharedKey)) + "\n",
+		"ipsec.secrets": ": PSK " + strongSwanSecret(secrets.PreSharedKey) + "\n",
 		"xl2tpd.conf": strings.Join([]string{
 			"[global]",
 			"port = 1701",

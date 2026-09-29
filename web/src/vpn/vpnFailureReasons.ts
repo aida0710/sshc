@@ -20,6 +20,11 @@ const sessionFailureMessages: Record<string, MessageKey> = {
   openvpn_no_response: "vpn.failure.openvpn_no_response",
   openvpn_configuration: "vpn.failure.openvpn_configuration",
   openvpn_failed: "vpn.failure.openvpn_failed",
+  ike_authentication: "vpn.failure.ike_authentication",
+  ike_server_unverified: "vpn.failure.ike_server_unverified",
+  ike_proposal_mismatch: "vpn.failure.ike_proposal_mismatch",
+  ike_no_response: "vpn.failure.ike_no_response",
+  xfrm_interface_unavailable: "vpn.failure.xfrm_interface_unavailable",
 };
 
 // 経路はあるが、VPN 経由で接続先へ接続できなかった理由（vpn_target_failed）である。
