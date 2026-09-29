@@ -65,11 +65,9 @@ func (f *fixture) editableCredentialTarget(t testing.TB) string {
 
 // vpnProfileTarget は、取り出す秘密を持つ VPN のプロファイルを1つ作り、その名前を返す。
 // 拒否の行ごとに別のプロファイルを使うので、呼ぶたびに名前を変える。
-// 名前を決めるにはプロファイルの数だけが要るので、経路の状態を docker から読むのを
-// 待たない。docker の応答が遅い CI の Windows では、待つとクライアントの時間切れになる。
 func (f *fixture) vpnProfileTarget(t testing.TB) string {
 	t.Helper()
-	listed := f.do(http.MethodGet, "/api/v1/vpn?waitForRoutes=false", nil)
+	listed := f.do(http.MethodGet, "/api/v1/vpn", nil)
 	var overview struct {
 		Profiles []json.RawMessage `json:"profiles"`
 	}

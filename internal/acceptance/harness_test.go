@@ -264,7 +264,10 @@ func newFixture(t testing.TB) *fixture {
 		ScanHostKeys: scanner.collect,
 		Probe:        scanner.probe,
 		RemoteRun:    scanner.remoteRun,
-		SessionNow:   clock.now,
+		// VPN の docker も、このマシンのものを使わない。PATH が空なので docker は
+		// 見つからず、VPN の一覧は docker を待たずに「使用できない」を返す。
+		DockerEnvironment: func(context.Context) ([]string, error) { return []string{"PATH="}, nil },
+		SessionNow:        clock.now,
 	}, "acceptance")
 	if err != nil {
 		t.Fatalf("app.Build() = %v", err)

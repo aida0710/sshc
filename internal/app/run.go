@@ -70,6 +70,10 @@ type Dependencies struct {
 	// TerminalStarter は PTY を確保する。nil の場合は既定実装を使用する。
 	TerminalStarter terminal.Starter
 	Environ         func() []string
+	// DockerEnvironment は、VPN 経路の docker を探して起動する環境を返す。nil なら、
+	// Environ から求めたログインシェルの環境を使う。受け入れテストは docker の無い
+	// 環境を渡し、テストを動かすマシンの docker に触れない。
+	DockerEnvironment vpn.Environment
 	// SessionNow は、セッションマネージャがアクショントークンの失効に使う時計。
 	SessionNow      func() time.Time
 	ShutdownTimeout time.Duration
