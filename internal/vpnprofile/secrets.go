@@ -19,6 +19,8 @@ func overlaySecrets(stored, sent vpn.SecretsDocument) vpn.SecretsDocument {
 		{&merged.OpenConnectTOTPSecret, sent.OpenConnectTOTPSecret},
 		{&merged.OpenVPNConfig, sent.OpenVPNConfig},
 		{&merged.OpenVPNPassword, sent.OpenVPNPassword},
+		{&merged.IKEv2Password, sent.IKEv2Password},
+		{&merged.IKEv2PSK, sent.IKEv2PSK},
 	} {
 		if field.value != "" {
 			*field.target = field.value

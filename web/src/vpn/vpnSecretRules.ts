@@ -23,11 +23,24 @@ const secretLimits: Partial<Record<VPNSecretKey, number>> = {
   ipsecPsk: maxPasswordLength,
   openconnectPassword: maxPasswordLength,
   openconnectTotpSecret: maxTOTPSecretLength,
+  ikev2Password: maxPasswordLength,
+  ikev2Psk: maxPasswordLength,
 };
 
-// vpnSecretKeys は、その方式が要るシークレットを、engine が確かめる順に返す。要るものは、
-// OpenConnect では二要素認証の答え方で、OpenVPN ではユーザー名の有無で変わる。
-export function vpnSecretKeys(backend: VPNBackend, secondFactor: string, username = ""): VPNSecretKey[] {
+// VPNSecretChoice は、どのシークレットが要るかを決める設定である。方式のほかに、
+// OpenConnect では二要素認証の答え方、OpenVPN ではユーザー名の有無、IKEv2 では認証の
+// 方式で変わる。
+export type VPNSecretChoice = {
+  backend: VPNBackend;
+  secondFactor: string;
+  // username は、OpenVPN で auth-user-pass に送るユーザー名である。ほかの方式では使わない。
+  username?: string;
+  // ikev2Authentication は、IKEv2 の認証の方式である。無ければ EAP として扱う。
+  ikev2Authentication?: string;
+};
+
+// vpnSecretKeys は、選んだ設定が要るシークレットを、engine が確かめる順に返す。
+export function vpnSecretKeys({ backend, secondFactor, username = "", ikev2Authentication }: VPNSecretChoice): VPNSecretKey[] {
   switch (backend) {
     case "wireguard":
       return ["wireguardPrivateKey"];
@@ -38,25 +51,23 @@ export function vpnSecretKeys(backend: VPNBackend, secondFactor: string, usernam
     case "openvpn":
       // パスワードは、ユーザー名を送るときだけ使う。
       return username === "" ? ["openvpnConfig"] : ["openvpnConfig", "openvpnPassword"];
+    case "ikev2":
+      return ikev2Authentication === "psk" ? ["ikev2Psk"] : ["ikev2Password"];
   }
 }
 
-export type VPNSecretsDraft = {
-  backend: VPNBackend;
-  secondFactor: string;
+export type VPNSecretsDraft = VPNSecretChoice & {
   secrets: Required<VPNSecrets>;
   // stored は、保存済みで、空欄なら engine がそのまま使うシークレットである。新しく
   // 作るときは空である。
   stored: ReadonlySet<VPNSecretKey>;
-  // username は、OpenVPN で auth-user-pass に送るユーザー名である。ほかの方式では使わない。
-  username?: string;
 };
 
 // vpnSecretsFieldError は、送れないシークレットがあれば、最初の項目と理由を返す。
-export function vpnSecretsFieldError({ backend, secondFactor, secrets, stored, username }: VPNSecretsDraft): VPNFieldError | null {
+export function vpnSecretsFieldError({ secrets, stored, ...choice }: VPNSecretsDraft): VPNFieldError | null {
   // OpenVPN の設定ファイルは、中身の指示まで確かめる。
-  if (backend === "openvpn") return openVPNSecretsFieldError({ secrets, stored, username: username ?? "" });
-  for (const key of vpnSecretKeys(backend, secondFactor)) {
+  if (choice.backend === "openvpn") return openVPNSecretsFieldError({ secrets, stored, username: choice.username ?? "" });
+  for (const key of vpnSecretKeys(choice)) {
     const field = `secrets.${key}`;
     const value = secrets[key];
     if (value === "") {

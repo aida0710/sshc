@@ -1,6 +1,7 @@
 import type { VPNProfile } from "../api/vpn";
 import { isUnroutableIPv4, joinHostPort, parseAddress, parseEndpoint, parsePrefix, type Endpoint } from "./vpnAddressSyntax";
 import { isVPNBackend } from "./vpnBackends";
+import { isPEMCertificateList } from "./vpnCertificateSyntax";
 import type { VPNFieldError, VPNFieldReason } from "./vpnFieldErrors";
 
 // VPN プロファイルの設定（シークレットを除く）を送る前に、engine と同じ規則で確かめる。
@@ -30,6 +31,8 @@ const maxFingerprintLength = 128;
 const maxApprovalWordLength = 32;
 // maxOpenVPNServers は、OpenVPN のプロファイルに持つサーバーの数の上限である（Go と API と同じ値）。
 const maxOpenVPNServers = 64;
+// maxCACertificateLength は、IKEv2 の CA の証明書（PEM）の上限である（Go と API と同じ値）。
+const maxCACertificateLength = 16384;
 
 // openConnectProtocols は、openconnect の --protocol に渡してよいプロトコルである。
 export const openConnectProtocols = ["anyconnect", "nc", "pulse", "gp", "f5", "fortinet", "array"] as const;
@@ -48,6 +51,9 @@ export const openConnectProducts: Record<(typeof openConnectProtocols)[number], 
 };
 const openConnectFingerprintPrefixes = ["sha256:", "pin-sha256:"];
 const secondFactors = ["", "approve", "totp"];
+// ikev2Authentications は、IKEv2 でこちらを認証する方式である（engine と同じ語）。
+export const ikev2Authentications = ["eap-mschapv2", "psk"] as const;
+export type IKEv2Authentication = (typeof ikev2Authentications)[number];
 
 // 設定ファイルとコマンド引数へそのまま書けない字である。
 const serverForbidden = /[ \t\r\n"\\]/;
@@ -136,17 +142,55 @@ function validateWireGuard(settings: NonNullable<VPNProfile["wireguard"]>, serve
   return prefix.version === 4 ? null : refuse("wireguard.address", "not_ipv4");
 }
 
-function validateL2TP(settings: NonNullable<VPNProfile["l2tp"]>): Outcome {
-  const server = validateServerName("l2tp.server", settings.server);
-  if (server !== null) return server;
-  const username = validateUsername("l2tp.username", settings.username);
-  if (username !== null) return username;
-  for (const [field, value] of [["l2tp.ike", settings.ike ?? ""], ["l2tp.esp", settings.esp ?? ""]] as const) {
+// validateProposals は、IKE と ESP の暗号スイートを確かめる。section は節の名前である。
+function validateProposals(section: string, ike: string, esp: string): Outcome {
+  for (const [field, value] of [[`${section}.ike`, ike], [`${section}.esp`, esp]] as const) {
     const refused = validateLength(field, value, maxProposalLength) ??
       (serverForbidden.test(value) ? refuse(field, "format") : null);
     if (refused !== null) return refused;
   }
   return null;
+}
+
+function validateL2TP(settings: NonNullable<VPNProfile["l2tp"]>): Outcome {
+  const server = validateServerName("l2tp.server", settings.server);
+  if (server !== null) return server;
+  const username = validateUsername("l2tp.username", settings.username);
+  if (username !== null) return username;
+  return validateProposals("l2tp", settings.ike ?? "", settings.esp ?? "");
+}
+
+// validateServerIdentity は、サーバーの ID を確かめる。`%` で始まる値（`%any` など）は
+// strongSwan が「どの ID でもよい」などと読むので断る。
+function validateServerIdentity(identity: string): Outcome {
+  if (identity === "") return null;
+  const field = "ikev2.serverIdentity";
+  return validateLength(field, identity, maxUsernameLength) ??
+    (usernameForbidden.test(identity) || identity.startsWith("%") ? refuse(field, "format") : null);
+}
+
+function validateCACertificate(settings: NonNullable<VPNProfile["ikev2"]>): Outcome {
+  const certificate = settings.caCertificate ?? "";
+  if (certificate === "") return null;
+  const field = "ikev2.caCertificate";
+  if (settings.authentication === "psk") return refuse(field, "unexpected");
+  return validateLength(field, certificate, maxCACertificateLength) ??
+    (isPEMCertificateList(certificate) ? null : refuse(field, "format"));
+}
+
+function validateIKEv2(settings: NonNullable<VPNProfile["ikev2"]>): Outcome {
+  const server = validateServerName("ikev2.server", settings.server);
+  if (server !== null) return server;
+  if (settings.authentication === "") return refuse("ikev2.authentication", "required");
+  if (!(ikev2Authentications as readonly string[]).includes(settings.authentication)) {
+    return refuse("ikev2.authentication", "unsupported");
+  }
+  return (
+    validateUsername("ikev2.identity", settings.identity) ??
+    validateServerIdentity(settings.serverIdentity ?? "") ??
+    validateCACertificate(settings) ??
+    validateProposals("ikev2", settings.ike ?? "", settings.esp ?? "")
+  );
 }
 
 function validateFingerprint(fingerprint: string): Outcome {
@@ -203,6 +247,8 @@ function validateBackendSettings(profile: VPNProfile, wireGuardServer: Endpoint 
       return profile.openconnect === undefined ? refuse("openconnect", "required") : validateOpenConnect(profile.openconnect);
     case "openvpn":
       return profile.openvpn === undefined ? refuse("openvpn", "required") : validateOpenVPN(profile.openvpn);
+    case "ikev2":
+      return profile.ikev2 === undefined ? refuse("ikev2", "required") : validateIKEv2(profile.ikev2);
   }
 }
 

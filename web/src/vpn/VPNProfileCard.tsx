@@ -23,7 +23,7 @@ export type VPNProfileActions = {
 // OpenVPN は設定ファイルの remote が複数ありうるので、並べて見せる。
 function serverOf(profile: VPNProfile): string {
   return profile.wireguard?.server ?? profile.l2tp?.server ?? profile.openconnect?.server ??
-    profile.openvpn?.servers.join(", ") ?? "";
+    profile.openvpn?.servers.join(", ") ?? profile.ikev2?.server ?? "";
 }
 
 export function VPNProfileCard({

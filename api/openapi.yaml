@@ -4284,6 +4284,8 @@ components:
         # OpenVPN の設定ファイル（.ovpn）の中身。鍵を含むことが多いので Vault に置く。
         openvpnConfig: { type: string, minLength: 1, maxLength: 65536 }
         openvpnPassword: { type: string, minLength: 1, maxLength: 256 }
+        ikev2Password: { type: string, minLength: 1, maxLength: 256 }
+        ikev2Psk: { type: string, minLength: 1, maxLength: 256 }
     VPNBindingRequest:
       type: object
       additionalProperties: false
@@ -4300,7 +4302,7 @@ components:
         name: { type: string, minLength: 1, maxLength: 48 }
         backend:
           type: string
-          enum: [wireguard, l2tp_ipsec, openconnect, openvpn]
+          enum: [wireguard, l2tp_ipsec, openconnect, openvpn, ikev2]
         # 接続先を VPN の中で名前解決する DNS サーバー（IPv4）。接続先を
         # アドレスで書く接続にしか使わないなら要らない。
         dns:
@@ -4311,6 +4313,7 @@ components:
         l2tp: { $ref: "#/components/schemas/L2TPProfile" }
         openconnect: { $ref: "#/components/schemas/OpenConnectProfile" }
         openvpn: { $ref: "#/components/schemas/OpenVPNProfile" }
+        ikev2: { $ref: "#/components/schemas/IKEv2Profile" }
     OpenVPNProfile:
       type: object
       additionalProperties: false
@@ -4344,6 +4347,25 @@ components:
         secondFactor: { type: string, maxLength: 16 }
         # secondFactor が approve のときに送る語。空なら push。
         approvalWord: { type: string, maxLength: 32 }
+    IKEv2Profile:
+      type: object
+      additionalProperties: false
+      required: [server, authentication, identity]
+      properties:
+        # VPNサーバーの名前またはアドレス。名前はコンテナの中で名前解決する。
+        server: { type: string, minLength: 1, maxLength: 320 }
+        # こちらを認証する方式（`eap-mschapv2` または `psk`）。値は engine が確かめる。
+        authentication: { type: string, maxLength: 16 }
+        # こちらの ID。EAP ではユーザー名。
+        identity: { type: string, minLength: 1, maxLength: 256 }
+        # サーバーの ID。空ならサーバーの名前を使う。
+        serverIdentity: { type: string, maxLength: 256 }
+        # サーバーの証明書を確かめる CA の証明書（PEM）。空なら公的な認証局で確かめる。
+        # EAP のときだけ使う。
+        caCertificate: { type: string, maxLength: 16384 }
+        # サーバーと暗号スイートが合わないときだけ書く。L2TPProfile と同じ書き方。
+        ike: { type: string, maxLength: 256 }
+        esp: { type: string, maxLength: 256 }
     L2TPProfile:
       type: object
       additionalProperties: false

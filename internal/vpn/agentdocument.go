@@ -21,9 +21,10 @@ type agentDocument struct {
 	// engine とコンテナは同じカーネルの時計を見るので、時刻で渡してよい。
 	Deadline    int64                `json:"deadline"`
 	WireGuard   *wireGuardDocument   `json:"wireguard,omitempty"`
-	L2TP        *l2tpDocument        `json:"l2tp,omitempty"`
+	L2TP        *strongSwanDocument  `json:"l2tp,omitempty"`
 	OpenConnect *openConnectDocument `json:"openconnect,omitempty"`
 	OpenVPN     *openVPNDocument     `json:"openvpn,omitempty"`
+	IKEv2       *ikev2Document       `json:"ikev2,omitempty"`
 }
 
 // newAgentDocument は、プロファイルと秘密から、コンテナへ渡す設定を作る。
