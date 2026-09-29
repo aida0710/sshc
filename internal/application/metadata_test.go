@@ -61,7 +61,7 @@ func TestMetadataMigratesVersionThreeAndRoundTripsVersionFive(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(encoded), `"schemaVersion": 6`) {
+	if !strings.Contains(string(encoded), `"schemaVersion": 7`) {
 		t.Fatalf("encoded migration = %s", encoded)
 	}
 	decoded, err := DecodeMetadata(encoded)
@@ -284,8 +284,8 @@ func TestMetadataCarriesOnlyPresentation(t *testing.T) {
 			t.Errorf("encoded metadata still carries %s:\n%s", absent, encoded)
 		}
 	}
-	if !strings.Contains(string(encoded), `"schemaVersion": 6`) {
-		t.Errorf("encoded metadata is not version 5:\n%s", encoded)
+	if !strings.Contains(string(encoded), `"schemaVersion": 7`) {
+		t.Errorf("encoded metadata is not the current version:\n%s", encoded)
 	}
 }
 
@@ -473,5 +473,32 @@ func TestVersionFiveVPNProfilesLoseTheirTargetWhenRead(t *testing.T) {
 	}
 	if strings.Contains(string(encoded), "target") {
 		t.Fatalf("書き直した文書に接続先が残った: %s", encoded)
+	}
+}
+
+// v6のファイルはそのまま読み、書くときはv7になる。v7は、新しいVPNの方式の
+// プロファイルを旧版に読ませない境界である。
+func TestVersionSixMetadataIsReadAndWrittenAsVersionSeven(t *testing.T) {
+	stored := `{"schemaVersion":6,` +
+		`"vpnProfiles":[{"name":"lab","backend":"l2tp_ipsec","l2tp":{"server":"vpn.example.jp","username":"user"}}],` +
+		`"hosts":[{"identity":{"path":"config","alias":"lab"},"vpn":"lab"}]}`
+
+	migrated, err := DecodeMetadata([]byte(stored))
+	if err != nil {
+		t.Fatalf("DecodeMetadata = %v", err)
+	}
+	encoded, err := EncodeMetadata(migrated)
+	if err != nil {
+		t.Fatalf("EncodeMetadata = %v", err)
+	}
+	if !strings.Contains(string(encoded), `"schemaVersion": 7`) || len(migrated.VPNProfiles) != 1 {
+		t.Fatalf("encoded = %s", encoded)
+	}
+}
+
+// これより新しい版のファイルは読まない。知らない項目を読み飛ばして書き直すと消える。
+func TestMetadataFromANewerSshcIsRefused(t *testing.T) {
+	if _, err := DecodeMetadata([]byte(`{"schemaVersion":8}`)); !errors.Is(err, ErrMetadataVersion) {
+		t.Fatalf("DecodeMetadata = %v", err)
 	}
 }

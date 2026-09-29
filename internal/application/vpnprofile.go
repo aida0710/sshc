@@ -37,6 +37,8 @@ type VPNProfile struct {
 	L2TP *L2TPProfile `json:"l2tp,omitempty"`
 	// OpenConnect は、backend が openconnect のときの設定である。
 	OpenConnect *OpenConnectProfile `json:"openconnect,omitempty"`
+	// OpenVPN は、backend が openvpn のときの設定である。
+	OpenVPN *OpenVPNProfile `json:"openvpn,omitempty"`
 }
 
 // OpenConnectProfile は、openconnect backend の秘密でない設定である。
@@ -112,6 +114,9 @@ func (stored VPNProfile) Profile() (vpn.Profile, error) {
 			Server: settings.Server, Username: settings.Username, IKE: settings.IKE, ESP: settings.ESP,
 		}
 	}
+	if settings := normalized.OpenVPN; settings != nil {
+		profile.OpenVPN = settings.openVPNSettings()
+	}
 	if err := profile.Validate(); err != nil {
 		return vpn.Profile{}, fmt.Errorf("%w: %w", ErrMetadataVPN, err)
 	}
@@ -135,6 +140,9 @@ func (stored VPNProfile) Normalized() VPNProfile {
 	}
 	if normalized.Backend != vpn.OpenConnect {
 		normalized.OpenConnect = nil
+	}
+	if normalized.Backend != vpn.OpenVPN {
+		normalized.OpenVPN = nil
 	}
 	return normalized
 }

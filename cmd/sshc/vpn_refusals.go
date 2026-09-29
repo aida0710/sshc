@@ -30,6 +30,7 @@ func describeVPNRefusal(problem engineProblem, called vpnInvocation) (string, bo
 	}
 	return vpnrefusal.Sentence(vpnrefusal.Refusal{
 		Code: problem.Code, Field: safeTerminalCell(problem.Field), Reason: problem.Reason, Limit: problem.Limit,
+		Line: problem.Line, Directive: safeTerminalCell(problem.Directive),
 	}), true
 }
 

@@ -2062,6 +2062,7 @@ export interface components {
             field?: string;
             reason?: string;
             limit?: number;
+            directive?: string;
         };
         KeyReference: {
             directive: string;
@@ -3266,6 +3267,8 @@ export interface components {
             ipsecPsk?: string;
             openconnectPassword?: string;
             openconnectTotpSecret?: string;
+            openvpnConfig?: string;
+            openvpnPassword?: string;
         };
         VPNBindingRequest: {
             alias: string;
@@ -3274,11 +3277,16 @@ export interface components {
         VPNProfile: {
             name: string;
             /** @enum {string} */
-            backend: "wireguard" | "l2tp_ipsec" | "openconnect";
+            backend: "wireguard" | "l2tp_ipsec" | "openconnect" | "openvpn";
             dns?: string[];
             wireguard?: components["schemas"]["WireGuardProfile"];
             l2tp?: components["schemas"]["L2TPProfile"];
             openconnect?: components["schemas"]["OpenConnectProfile"];
+            openvpn?: components["schemas"]["OpenVPNProfile"];
+        };
+        OpenVPNProfile: {
+            servers: string[];
+            username?: string;
         };
         OpenConnectProfile: {
             server: string;

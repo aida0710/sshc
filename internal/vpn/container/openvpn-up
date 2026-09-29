@@ -1,0 +1,18 @@
+#!/bin/sh
+# OpenVPN が TUN を開いたあとに呼ぶ（--up）。
+#
+# OpenVPN にアドレスを付けさせると、サーバーが配ったネットマスクのぶん、VPN のサブネット
+# 全体への経路が入る。ここでは interface を上げ、アドレスを /32 で付けるところで止める。
+# 接続先への経路は connect が1つずつ作る。openconnect の vpnc-script と同じ考え方である。
+#
+# 値は OpenVPN が環境変数で渡す（dev、tun_mtu、ifconfig_local）。環境変数は設定ファイルの
+# setenv でも増やせるので、PATH はここで決め直す。
+set -eu
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+
+ip link set dev "$dev" up mtu "${tun_mtu:-1500}"
+# IPv4 のアドレスを配らないサーバーでは付けない。agent がアドレスの無いことに気づき、理由を
+# 添えて失敗する。
+if [ -n "${ifconfig_local:-}" ]; then
+	ip address replace "$ifconfig_local/32" dev "$dev"
+fi

@@ -33,5 +33,6 @@ func vpnProblem(c *echo.Context, err error) error {
 	}
 	return problemWith(c, status, problemPayload{
 		Code: refusal.Code, Field: refusal.Field, Reason: refusal.Reason, Limit: refusal.Limit,
+		Line: refusal.Line, Directive: refusal.Directive,
 	})
 }
