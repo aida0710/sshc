@@ -107,6 +107,10 @@ sshc vault unlock
 
 `service install`は`~/Library/LaunchAgents/io.github.aida0710.sshc.plist`を作成し、現在のGUIユーザーへ登録してから、エンジンが起動できたことを確認します。同じパスに手作業で作成したplistがある場合は上書きしません。削除は`sshc service disable`で行い、sshcが作成したplistだけを対象にします。
 
+launchdがエンジンを再起動するのは、エンジンが異常終了した場合だけです。`sshc engine --replace`で置き換えた場合など、エンジンが正常に終了した場合は再起動しません。サービスに戻すには`sshc service install`を再実行してください。
+
+以前の版のsshcで登録したplistは、`sshc service install`を再実行するまで、エンジンが正常に終了しても再起動する以前の定義のままです。`sshc service status`と`sshc update`は、この場合に`sshc service install`の再実行を案内します。
+
 ## 更新
 
 - Homebrew／`install.sh`: `sshc update`

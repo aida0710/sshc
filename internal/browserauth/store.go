@@ -80,7 +80,10 @@ func NewStore(workspace *storage.Workspace, random io.Reader) *Store {
 	return &Store{workspace: workspace, random: random, now: time.Now, rotations: map[string]rotation{}}
 }
 
-// WithClock は、期限と猶予の判定に使う時計を差し替える。
+// WithClock は、期限と猶予の判定に使う時計を差し替える。httpserver と
+// browserauth のテストが時計を差し替えるために使い、製品は NewStore の
+// time.Now のまま使う。別パッケージ（httpserver）のテストからも呼ぶので、
+// export_test.go ではなくここに置く。
 func (s *Store) WithClock(now func() time.Time) *Store {
 	s.now = now
 	return s

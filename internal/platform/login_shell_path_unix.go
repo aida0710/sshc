@@ -56,9 +56,13 @@ func WithLoginShellPath(ctx context.Context, environment []string) ([]string, er
 	if home, _ := lookup("HOME"); filepath.IsAbs(home) {
 		process.Dir = home
 	}
-	process.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	// 新しいsessionで起動し、engineの制御端末を継がせない。前面やtmuxで動くengineの
+	// 端末を継ぐと、対話シェルはjob controlのために端末を取りに行き、背景のprocess
+	// groupとしてSIGTTOU／SIGTTINで止まり、上限まで待たされる。
+	process.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	process.Cancel = func() error {
-		// 起動設定が待っている子プロセスもキャンセルする。
+		// session leaderはprocess group leaderでもあるので、起動設定が待っている
+		// 子プロセスもまとめてキャンセルできる。
 		err := syscall.Kill(-process.Process.Pid, syscall.SIGKILL)
 		if errors.Is(err, syscall.ESRCH) {
 			return os.ErrProcessDone

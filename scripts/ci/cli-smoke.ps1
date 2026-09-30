@@ -42,9 +42,10 @@ $engine = $null
 try {
     # ② info が engine なしで実効接続先を安定した JSON として返すことを確認する。
     $info = (& $binary info smoke-info --json | ConvertFrom-Json)
-    if ($info.schemaVersion -ne 1 -or $info.alias -ne "smoke-info" -or `
-        $info.destination.hostName -ne "192.0.2.10" -or `
-        $info.destination.user -ne "smoke-user" -or $info.destination.port -ne "22") {
+    if ($info.schemaVersion -ne 1 -or $info.success -ne $true -or `
+        $info.result.schemaVersion -ne 1 -or $info.result.alias -ne "smoke-info" -or `
+        $info.result.destination.hostName -ne "192.0.2.10" -or `
+        $info.result.destination.user -ne "smoke-user" -or $info.result.destination.port -ne "22") {
         throw "info returned an unexpected target: $($info | ConvertTo-Json -Compress)"
     }
     Write-Host "  info resolved smoke-info without an engine"

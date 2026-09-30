@@ -227,9 +227,9 @@ func (s *Service) Reach(ctx context.Context, alias string) (ReachabilityResult, 
 
 // Authenticate は、alias に対する認証テストを実行する。
 //
-// 取り込んだ stderr はユーザーに表示されるので、先にホームディレクトリを "~" に
-// 書き換える。冗長な OpenSSH の出力は、読んだファイルをすべて絶対パスで指定する
-// ため、そうしないとアカウント名がレスポンスの本文へ運ばれてしまう。
+// 結果の Detail はユーザーに表示されるので、先にホームディレクトリを "~" に
+// 書き換える。鍵を読めなかった理由には IdentityFile の絶対パスが入るため、
+// そうしないとアカウント名がレスポンスの本文へ運ばれてしまう。
 func (s *Service) Authenticate(ctx context.Context, alias string, acknowledged bool) (AuthenticationResult, error) {
 	if err := validate.Alias(alias); err != nil {
 		return AuthenticationResult{}, err

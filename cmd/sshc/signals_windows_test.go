@@ -7,8 +7,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
-	"log/slog"
 	"os"
 	"os/exec"
 	"strings"
@@ -35,7 +33,7 @@ func TestWindowsCtrlBreakEndsWithTheInterruptCode(t *testing.T) {
 		// なく NT の状態値になる。
 		fmt.Println("ready")
 		<-ctx.Done()
-		os.Exit(exitForCause(context.Cause(ctx), slog.New(slog.NewTextHandler(io.Discard, nil))))
+		os.Exit(exitForCause(context.Cause(ctx)))
 	}
 	executable, err := os.Executable()
 	if err != nil {

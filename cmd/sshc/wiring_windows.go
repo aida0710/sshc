@@ -12,10 +12,12 @@ import (
 // newPlatformParts は、この OS の部品を組み立てる。
 //
 // Toolchain は Windows 自身が置いた OpenSSH だけを指す。PATH は渡さない。
-// Windows の PATH には利用者が書き込めるディレクトリが並び、その一本が鍵の生成を
-// 引き受ければ、生成された鍵はもう利用者のものではない。信頼の起点は %SystemRoot%
-// であり、それを読むのはこの配線の仕事である。internal/platform/windows は環境変数
-// を知らないままでいる。
+// Windows の PATH には利用者が書き込めるディレクトリが並び、その並びを決めているのは
+// このアプリケーションではない。Toolchain が答えるのは、ハードウェア鍵の項目を出して
+// よいかだけで、見つけたパスで鍵を生成することはない。画面に出す ssh-keygen の
+// コマンドは、利用者のシェルが PATH で解決する。信頼の起点は %SystemRoot% であり、
+// それを読むのはこの配線の仕事である。internal/platform/windows は環境変数を
+// 知らないままでいる。
 //
 // KeyAgent は Windows の OpenSSH エージェントが待つ固定の named pipe へ接続する。
 // lookup を渡すのは Unix と同じ signature を保つためだけで、あちらはそれを

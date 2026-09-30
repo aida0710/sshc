@@ -99,6 +99,30 @@ func TestLinuxServiceInstallWritesAManagedUnitAndRestartsIt(t *testing.T) {
 	}
 }
 
+func TestLinuxServiceFindsAUnitThatDiffersFromTheCurrentDefinition(t *testing.T) {
+	manager := testLinuxServiceManager(t, &fakeServiceCommandRunner{})
+	unit, err := systemdUnit("/opt/sshc $HOME/100%/bin/sshc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(manager.unitPath()), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(manager.unitPath(), []byte(unit), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if outdated, err := manager.IsDefinitionOutdated(); err != nil || outdated {
+		t.Fatalf("current unit outdated=%v err=%v", outdated, err)
+	}
+	older := strings.Replace(unit, "SuccessExitStatus=130\n", "", 1)
+	if err := os.WriteFile(manager.unitPath(), []byte(older), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if outdated, err := manager.IsDefinitionOutdated(); err != nil || !outdated {
+		t.Fatalf("older unit outdated=%v err=%v", outdated, err)
+	}
+}
+
 func TestLinuxServiceDoesNotOverwriteOrRemoveAnUnmanagedUnit(t *testing.T) {
 	runner := &fakeServiceCommandRunner{}
 	manager := testLinuxServiceManager(t, runner)
@@ -223,10 +247,8 @@ func TestLinuxServiceInstallFailsWhenTheEngineNeverBecomesReady(t *testing.T) {
 }
 
 func TestServiceReadinessRequiresTheSystemdPIDAndStatusAPI(t *testing.T) {
-	secret, err := handoff.Mint(bytes.NewReader(make([]byte, 32)))
-	if err != nil {
-		t.Fatal(err)
-	}
+	// engineTestServer は testHandoff の秘密で challenge に答える。handoff の PID は 4242 である。
+	secret := testHandoff("").Secret
 	server := engineTestServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.Header.Get(handoff.HeaderName) != secret {
 			http.Error(writer, "forbidden", http.StatusForbidden)
@@ -237,13 +259,7 @@ func TestServiceReadinessRequiresTheSystemdPIDAndStatusAPI(t *testing.T) {
 	}))
 	defer server.Close()
 	home := t.TempDir()
-	document := handoff.Handoff{
-		SchemaVersion: handoff.SchemaVersion, URL: server.URL, Secret: secret,
-		Owner: handoff.OwnerEngine, PID: 4242, Version: "test", ProtocolVersion: handoff.ProtocolVersion,
-	}
-	if err := handoff.Write(app.HandoffDir(home), document); err != nil {
-		t.Fatal(err)
-	}
+	writeTestHandoff(t, app.HandoffDir(home), server.URL)
 	runner := &fakeServiceCommandRunner{results: []serviceCommandResult{{ExitCode: 0, Output: []byte("4242\n")}}}
 	if err := waitForServiceReady(context.Background(), home, runner); err != nil {
 		t.Fatal(err)

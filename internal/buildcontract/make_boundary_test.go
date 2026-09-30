@@ -112,8 +112,7 @@ func main() {
 	hostileNames := []string{
 		"gOeNv", "gOoS", "GoArCh", "cGo_EnAbLeD",
 		"sshc_native_version", "Sshc_Native_Goos", "sshc_native_goarch", "Sshc_Native_Cgo",
-		"sshc_native_output", "sshc_native_mac_bundles", "Sshc_Native_Linux_Bundles",
-		"sshc_native_windows_bundles", "Sshc_Native_Release_Targets",
+		"sshc_native_output", "Sshc_Native_Release_Targets",
 		"sshc_native_release_arches", "Sshc_Native_Release_Dir",
 	}
 	if runtime.GOOS == "windows" {
@@ -124,8 +123,7 @@ func main() {
 	hostileValues := []string{
 		filepath.Join(temporary, "mixed-hostile-goenv"), "windows", "386", "1",
 		"inherited-version-alias", "windows", "386", "1",
-		"must-not-override-public-output", "inherited-mac-alias", "inherited-linux-alias",
-		"inherited-windows-alias", "inherited-target-alias",
+		"must-not-override-public-output", "inherited-target-alias",
 		"inherited-arches-alias", "inherited-dir-alias",
 	}
 	command.Env = append(os.Environ(),

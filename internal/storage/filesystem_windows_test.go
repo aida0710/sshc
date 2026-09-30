@@ -15,6 +15,7 @@ import (
 	"golang.org/x/sys/windows"
 
 	"sshc/internal/platform/windowsacl"
+	"sshc/internal/platform/windowsacl/acltest"
 )
 
 func TestOSFileSystemTightensExistingWindowsPrivateState(t *testing.T) {
@@ -172,12 +173,7 @@ func TestMovePrivateAcceptsAnAlreadyRestrictedSource(t *testing.T) {
 		t.Fatal(err)
 	}
 	source := filepath.Join(directory, "source")
-	if err := os.WriteFile(source, []byte("already restricted"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := windowsacl.RestrictFile(source); err != nil {
-		t.Fatal(err)
-	}
+	acltest.WritePrivateFile(t, source, []byte("already restricted"))
 	destination := filepath.Join(destinationDirectory, "moved")
 
 	if err := (OSFileSystem{}).MovePrivate(source, destination); err != nil {

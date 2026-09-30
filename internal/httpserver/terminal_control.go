@@ -10,9 +10,12 @@ import (
 	"sshc/internal/terminal"
 )
 
+// DefaultTerminalControlReadBytes と MaxTerminalControlReadBytes は、
+// /control の limit の既定と上限である。CLI の `sshc terminal read --limit` も
+// この値から範囲を作る。
 const (
-	defaultTerminalControlReadBytes = 32 << 10
-	maxTerminalControlReadBytes     = 64 << 10
+	DefaultTerminalControlReadBytes = 32 << 10
+	MaxTerminalControlReadBytes     = 64 << 10
 )
 
 // Control returns explicit lifecycle state and a cursor-addressed, bounded
@@ -54,10 +57,10 @@ func terminalControlRange(c *echo.Context) (uint64, int, bool) {
 		}
 		cursor = parsed
 	}
-	limit := defaultTerminalControlReadBytes
+	limit := DefaultTerminalControlReadBytes
 	if raw := c.QueryParam("limit"); raw != "" {
 		parsed, err := strconv.Atoi(raw)
-		if err != nil || parsed < 0 || parsed > maxTerminalControlReadBytes {
+		if err != nil || parsed < 0 || parsed > MaxTerminalControlReadBytes {
 			return 0, 0, false
 		}
 		limit = parsed

@@ -9,8 +9,17 @@ import (
 
 	"sshc/internal/app"
 	"sshc/internal/handoff"
+	"sshc/internal/terminal"
 	"sshc/internal/ui"
 )
+
+// mobileDefaultPort は、WebView の origin（http://127.0.0.1:<port>）を engine の起動を
+// またいで保つための既定の port である。origin が変わると WebView は別のサイトとして
+// localStorage と OPFS を空から始めるので、テーマなどの設定が起動のたびに既定値へ戻り、
+// 途中で止まったダウンロードの一時データも同じ origin から片付けられなくなる。
+// desktop の app.DefaultPort とは別の値にし、同じデバイスで動く desktop 版とは origin を
+// 共有しない。埋まっていれば、engine が代わりの port を 1 度選んで保存する。
+const mobileDefaultPort = 54448
 
 // newDependencies はモバイル環境用の依存を組み立てる。自己更新、ssh-keygen、
 // ssh-agent など利用できない機能は nil とする。goos はテスト可能にするため引数で受ける。
@@ -24,14 +33,15 @@ func newDependencies(
 		return app.Dependencies{}, err
 	}
 	return app.Dependencies{
-		Random:   rand.Reader,
-		Announce: announce,
-		Listen:   net.Listen,
-		UI:       assets,
-		Logger:   logger,
-		Home:     home,
-		Owner:    handoff.OwnerEngine,
-		PID:      os.Getpid(),
+		Random:      rand.Reader,
+		Announce:    announce,
+		Listen:      net.Listen,
+		DefaultPort: mobileDefaultPort,
+		UI:          assets,
+		Logger:      logger,
+		Home:        home,
+		Owner:       handoff.OwnerEngine,
+		PID:         os.Getpid(),
 		// モバイルには ssh-keygen と ssh-agent がない。
 		Toolchain: nil,
 		KeyAgent:  nil,
@@ -59,7 +69,7 @@ func mobileEnvironment(goos, home, cache string) func() []string {
 		environ = append(environ, "PATH=/system/bin:/system/xbin")
 	}
 	environ = append(environ,
-		"TERM=xterm-256color",
+		"TERM="+terminal.DefaultTerminalType,
 		// 対象端末内のパスなので、ビルドホスト依存の filepath ではなく path を使う。
 		"TMPDIR="+path.Clean(cache),
 	)

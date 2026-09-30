@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -326,7 +327,7 @@ func (s *Service) RenameBackground(current, suggested string) (Background, error
 	return Background{Name: next, Bytes: found.Bytes, Type: mediaType}, nil
 }
 
-// RemoveBackground は、その画像を捨てる。
+// RemoveBackground は、その画像を捨てる。その画像を指している外観の指定も外す。
 func (s *Service) RemoveBackground(name string) error {
 	s.saveMutex.Lock()
 	defer s.saveMutex.Unlock()
@@ -335,58 +336,63 @@ func (s *Service) RemoveBackground(name string) error {
 	if err != nil {
 		return err
 	}
-	for _, background := range existing {
-		if background.Name == name {
-			target, err := s.workspace.ResolveForWrite(filepath.Join(s.backgroundsRoot(), name))
-			if err != nil {
-				return err
-			}
-			contents, err := storage.ReadFileLimited(s.workspace.FileSystem(), target, int64(MaxBackgroundBytes))
-			if err != nil {
-				return err
-			}
-			request := storage.Request{
-				Operation: "remove terminal background",
-				Removals: []storage.Removal{{
-					Path: target,
-					Precondition: storage.Precondition{
-						Exists: true,
-						Digest: storage.Digest(contents),
-					},
-				}},
-			}
-			metadata, precondition, err := s.metadata.Load()
-			if err != nil {
-				return err
-			}
-			referenced := false
-			if terminal := metadata.EmbeddedTerminal; terminal != nil && terminal.Appearance != nil && terminal.Appearance.Background == name {
-				terminal.Appearance.Background = ""
-				if terminal.Appearance.Empty() {
-					terminal.Appearance = nil
-				}
-				referenced = true
-			}
-			for index := range metadata.Hosts {
-				appearance := metadata.Hosts[index].Appearance
-				if appearance != nil && appearance.Background == name {
-					appearance.Background = ""
-					if appearance.Empty() {
-						metadata.Hosts[index].Appearance = nil
-					}
-					referenced = true
-				}
-			}
-			if referenced {
-				change, err := s.metadata.Change(metadata, precondition)
-				if err != nil {
-					return err
-				}
-				request.Changes = append(request.Changes, change)
-			}
-			_, err = s.manager.Commit(request)
+	if !slices.ContainsFunc(existing, func(background Background) bool { return background.Name == name }) {
+		return ErrUnknownBackground
+	}
+	target, err := s.workspace.ResolveForWrite(filepath.Join(s.backgroundsRoot(), name))
+	if err != nil {
+		return err
+	}
+	contents, err := storage.ReadFileLimited(s.workspace.FileSystem(), target, int64(MaxBackgroundBytes))
+	if err != nil {
+		return err
+	}
+	request := storage.Request{
+		Operation: "remove terminal background",
+		Removals: []storage.Removal{{
+			Path: target,
+			Precondition: storage.Precondition{
+				Exists: true,
+				Digest: storage.Digest(contents),
+			},
+		}},
+	}
+	metadata, precondition, err := s.metadata.Load()
+	if err != nil {
+		return err
+	}
+	if forgetBackground(&metadata, name) {
+		change, err := s.metadata.Change(metadata, precondition)
+		if err != nil {
 			return err
 		}
+		request.Changes = append(request.Changes, change)
 	}
-	return ErrUnknownBackground
+	_, err = s.manager.Commit(request)
+	return err
+}
+
+// forgetBackground は、埋め込みターミナルと各接続の外観から、背景画像 name の指定を
+// 外す。外したものがあれば true を返す。外して空になった外観は、指定ごと消す。
+func forgetBackground(metadata *Metadata, name string) bool {
+	forgotten := false
+	if terminal := metadata.EmbeddedTerminal; terminal != nil && terminal.Appearance != nil && terminal.Appearance.Background == name {
+		terminal.Appearance.Background = ""
+		if terminal.Appearance.Empty() {
+			terminal.Appearance = nil
+		}
+		forgotten = true
+	}
+	for index := range metadata.Hosts {
+		appearance := metadata.Hosts[index].Appearance
+		if appearance == nil || appearance.Background != name {
+			continue
+		}
+		appearance.Background = ""
+		if appearance.Empty() {
+			metadata.Hosts[index].Appearance = nil
+		}
+		forgotten = true
+	}
+	return forgotten
 }

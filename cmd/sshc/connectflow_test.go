@@ -3,13 +3,18 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
+	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 
 	"sshc/internal/handoff"
+	"sshc/internal/platform/windowsacl/acltest"
 	"sshc/internal/sshclient"
 )
 
@@ -172,10 +177,10 @@ func stateWithEngine(t *testing.T, owner handoff.Owner) string {
 	return stateDir
 }
 
-func reach(t *testing.T, stateDir string, probe engineProbe, stderr *bytes.Buffer) (engineProbe, error) {
+func reach(t *testing.T, stateDir string, probe engineProbe) (engineProbe, error) {
 	t.Helper()
 	return reachUnlockedEngine(context.Background(), stateDir, &http.Client{},
-		func(handoff.Handoff) engineProbe { return probe }, stderr)
+		func(handoff.Handoff) engineProbe { return probe })
 }
 
 // reachUnlockedEngine は engine を起動せず、各状態に対応する復旧手順を返す。
@@ -214,9 +219,8 @@ func TestReachUnlockedEngineExplainsInsteadOfStartingOne(t *testing.T) {
 				stateDir = stateWithEngine(t, handoff.OwnerEngine)
 			}
 			probe := &fakeProbe{answers: test.answers}
-			var stderr bytes.Buffer
 
-			session, err := reach(t, stateDir, probe, &stderr)
+			session, err := reach(t, stateDir, probe)
 
 			if test.wantErr == "" {
 				if err != nil {
@@ -239,7 +243,7 @@ func TestReachUnlockedEngineExplainsInsteadOfStartingOne(t *testing.T) {
 
 // engine が停止中の場合は、通常の ssh を代替手段として明示する。
 func TestTheMissingEngineMessageNamesTheWayThroughWithoutIt(t *testing.T) {
-	_, err := reach(t, t.TempDir(), &fakeProbe{}, &bytes.Buffer{})
+	_, err := reach(t, t.TempDir(), &fakeProbe{})
 	if err == nil {
 		t.Fatal("err = nil, want it to explain")
 	}
@@ -248,12 +252,90 @@ func TestTheMissingEngineMessageNamesTheWayThroughWithoutIt(t *testing.T) {
 	}
 }
 
+// engine に届かない理由ごとに、利用者が次にすることを案内する。
+// どれも「動いていない」とまとめると、`sshc engine` を打っても直らない。
+func TestReachUnlockedEngineKeepsTheReasonTheEngineCouldNotBeReached(t *testing.T) {
+	unanswered := func(ctx context.Context, stateDir string, client *http.Client) error {
+		_, err := reachUnlockedEngine(ctx, stateDir, client,
+			func(handoff.Handoff) engineProbe { return &fakeProbe{answers: []statusAnswer{unlockedEngine()}} })
+		return err
+	}
+	handoffTo := func(t *testing.T, target string) string {
+		stateDir := t.TempDir()
+		writeTestHandoff(t, stateDir, target)
+		return stateDir
+	}
+
+	t.Run("Ctrl-C while checking the engine is an interruption", func(t *testing.T) {
+		cancelled, cancel := context.WithCancel(context.Background())
+		cancel()
+		err := unanswered(cancelled, stateWithEngine(t, handoff.OwnerEngine), &http.Client{})
+		if !errors.Is(err, errInterrupted) {
+			t.Fatalf("err = %v, want errInterrupted", err)
+		}
+	})
+
+	t.Run("a handoff from another version asks to update", func(t *testing.T) {
+		document := testHandoff("http://127.0.0.1:1")
+		document.ProtocolVersion++
+		body, err := json.Marshal(document)
+		if err != nil {
+			t.Fatal(err)
+		}
+		stateDir := filepath.Join(t.TempDir(), "state")
+		acltest.WritePrivateFile(t, filepath.Join(stateDir, handoff.FileName), body)
+
+		err = unanswered(context.Background(), stateDir, &http.Client{})
+		if !errors.Is(err, handoff.ErrProtocolVersion) || !strings.Contains(err.Error(), "update whichever is older") {
+			t.Fatalf("err = %v, want the version advice", err)
+		}
+	})
+
+	t.Run("a process without the handoff secret is reported as unproven", func(t *testing.T) {
+		impostor := httptest.NewServer(http.NotFoundHandler())
+		defer impostor.Close()
+
+		err := unanswered(context.Background(), handoffTo(t, impostor.URL), &http.Client{})
+		if !errors.Is(err, errEngineUnproven) {
+			t.Fatalf("err = %v, want errEngineUnproven", err)
+		}
+	})
+
+	t.Run("an engine that accepts but never answers is reported as not responding", func(t *testing.T) {
+		silent, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = silent.Close() }()
+
+		err = unanswered(context.Background(), handoffTo(t, "http://"+silent.Addr().String()),
+			&http.Client{Timeout: silentEngineClientTimeout})
+		if !errors.Is(err, errEngineNotResponding) {
+			t.Fatalf("err = %v, want errEngineNotResponding", err)
+		}
+	})
+
+	t.Run("nothing listening at the handoff port is not running", func(t *testing.T) {
+		closed, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		target := "http://" + closed.Addr().String()
+		_ = closed.Close()
+
+		err = unanswered(context.Background(), handoffTo(t, target), &http.Client{})
+		if err == nil || !strings.Contains(err.Error(), "sshc is not running") {
+			t.Fatalf("err = %v, want the not-running advice", err)
+		}
+	})
+}
+
 // 指定された alias の接続情報を一度だけ要求する。
 func TestConnectionIsRequestedOnceForTheOriginalAlias(t *testing.T) {
 	stateDir := stateWithEngine(t, handoff.OwnerEngine)
 	probe := &fakeProbe{answers: []statusAnswer{unlockedEngine()}}
 
-	session, err := reach(t, stateDir, probe, &bytes.Buffer{})
+	session, err := reach(t, stateDir, probe)
 	if err != nil {
 		t.Fatalf("reach: %v", err)
 	}

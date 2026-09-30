@@ -19,6 +19,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"sshc/internal/terminal"
 )
 
 const (
@@ -26,8 +28,6 @@ const (
 	DefaultPort = "23"
 	// DefaultDialTimeout bounds a TCP connection attempt when no timeout is set.
 	DefaultDialTimeout = 30 * time.Second
-	// DefaultTerminalType is offered when a server requests TERMINAL-TYPE.
-	DefaultTerminalType = "xterm-256color"
 	// DefaultMaxSubnegotiationBytes bounds one incoming Telnet subnegotiation.
 	DefaultMaxSubnegotiationBytes = 4 << 10
 	// HardMaxSubnegotiationBytes prevents callers from disabling the allocation
@@ -59,9 +59,10 @@ type Config struct {
 	// connection and closes it when cancelled.
 	DialTimeout time.Duration
 	// TerminalType is printable ASCII sent in TERMINAL-TYPE subnegotiation.
+	// Empty selects terminal.DefaultTerminalType.
 	TerminalType string
 	// WindowWidth and WindowHeight are sent through NAWS. Zero values select
-	// the conventional 80 by 24 default.
+	// terminal.DefaultSize().
 	WindowWidth  uint16
 	WindowHeight uint16
 	// MaxSubnegotiationBytes bounds a peer-controlled subnegotiation payload.
@@ -155,7 +156,7 @@ func validate(config Config) (normalizedConfig, error) {
 
 	terminalType := config.TerminalType
 	if terminalType == "" {
-		terminalType = DefaultTerminalType
+		terminalType = terminal.DefaultTerminalType
 	}
 	if len(terminalType) > maxTerminalTypeBytes {
 		return normalizedConfig{}, ErrInvalidTerminalType
@@ -168,10 +169,10 @@ func validate(config Config) (normalizedConfig, error) {
 
 	width, height := config.WindowWidth, config.WindowHeight
 	if width == 0 {
-		width = 80
+		width = terminal.DefaultSize().Cols
 	}
 	if height == 0 {
-		height = 24
+		height = terminal.DefaultSize().Rows
 	}
 	limit := config.MaxSubnegotiationBytes
 	if limit == 0 {

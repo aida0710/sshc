@@ -150,7 +150,7 @@ func TestRunVaultStatusIsHumanReadableWithoutATerminal(t *testing.T) {
 	//
 	// 表記を丸ごと比べない。address は毎回違う番号を持つ。
 	printed := stdout.String()
-	for _, want := range []string{"version   v4-test", "vault     locked", "consoles  2", "address   " + server.URL} {
+	for _, want := range []string{"version    v4-test", "vault      locked", "terminals  2 open", "address    " + server.URL} {
 		if !strings.Contains(printed, want) {
 			t.Errorf("stdout does not contain %q:\n%s", want, printed)
 		}
@@ -967,10 +967,11 @@ func (b *destinationCapturingBody) Read(destination []byte) (int, error) {
 
 func (b *destinationCapturingBody) Close() error { b.closed = true; return nil }
 
-func TestDiscardVaultResponseErasesTheReadBuffer(t *testing.T) {
+// 送れなかった要求の応答は、サーバーが映した秘密を heap に残さないよう、読んだ bytes を消してから捨てる。
+func TestDiscardingAResponseErasesTheReadBuffer(t *testing.T) {
 	body := &destinationCapturingBody{contents: []byte("server reflected " + vaultPasswordCanary)}
 	response := &http.Response{StatusCode: http.StatusInternalServerError, Body: body, Header: make(http.Header)}
-	discardAndCloseVaultResponse(response)
+	discardEngineResponse(response)
 	if !body.closed {
 		t.Fatal("discarded response body was not closed")
 	}

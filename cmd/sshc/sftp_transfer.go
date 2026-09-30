@@ -248,6 +248,19 @@ type sftpRawResponse struct {
 	err      error
 }
 
+const (
+	// sftpProgressRefreshInterval は、ダウンロードの進捗の表示を更新する間隔である。
+	// 1 秒に 8 回で、数字が滑らかに動いて見え、engine へ尋ねる回数も抑えられる。
+	sftpProgressRefreshInterval = 125 * time.Millisecond
+	// sftpUploadCancelTimeout は、失敗したアップロードの取り消しを engine へ頼む
+	// 上限である。呼び出し側の ctx は止まっていることがあるので新しい ctx で送る。
+	// 後始末の短い要求なので、CLI のセッションを閉じる要求と同じ上限にする。
+	sftpUploadCancelTimeout = engineCloseTimeout
+	// sftpStartRetryInterval は、転送の同時数の上限に当たったときに開始を頼み
+	// 直す間隔である。前の転送が終われば、この間隔以内に次が始まる。
+	sftpStartRetryInterval = 250 * time.Millisecond
+)
+
 func waitForSFTPDownloadResponse(
 	ctx context.Context, engine *engineAPI, requestPath string, progress *sftpCLIProgressDisplay,
 ) (*http.Response, error) {
@@ -259,7 +272,7 @@ func waitForSFTPDownloadResponse(
 		response, err := engine.doRaw(ctx, http.MethodGet, requestPath, "", nil)
 		result <- sftpRawResponse{response: response, err: err}
 	}()
-	ticker := time.NewTicker(125 * time.Millisecond)
+	ticker := time.NewTicker(sftpProgressRefreshInterval)
 	defer ticker.Stop()
 	progress.refresh(ctx)
 	for {
@@ -320,7 +333,7 @@ func sftpUploadFile(ctx context.Context, batch sftpTransferBatch, file sftpCLIFi
 	defer func() {
 		if returnErr != nil {
 			cancelPath := "/api/v1/sftp/" + url.PathEscape(alias) + "/uploads/" + url.PathEscape(jobID) + "?" + url.Values{"path": {file.Destination}}.Encode()
-			cancelCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			cancelCtx, cancel := context.WithTimeout(context.Background(), sftpUploadCancelTimeout)
 			defer cancel()
 			response, cancelErr := engine.doRaw(cancelCtx, http.MethodDelete, cancelPath, "", nil)
 			if cancelErr == nil {
@@ -512,7 +525,7 @@ func sftpStartJob(ctx context.Context, engine *engineAPI, jobID string) error {
 		if !sftpIsTransferLimit(err) {
 			return err
 		}
-		timer := time.NewTimer(250 * time.Millisecond)
+		timer := time.NewTimer(sftpStartRetryInterval)
 		select {
 		case <-ctx.Done():
 			timer.Stop()

@@ -3,27 +3,56 @@ package main
 import (
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 )
 
-func renderCompletion(template string) string {
+// completionShell は、補完の雛形と、`sshc help <command> <Tab>` の候補を出す1行の書き方。
+type completionShell struct {
+	template       string
+	helpActionLine func(command, actions string) string
+}
+
+var (
+	bashCompletionShell = completionShell{template: bashCompletionTemplate, helpActionLine: func(command, actions string) string {
+		return fmt.Sprintf("          %s) _sshc_complete_words %q ;;", command, actions)
+	}}
+	zshCompletionShell = completionShell{template: zshCompletionTemplate, helpActionLine: func(command, actions string) string {
+		return fmt.Sprintf("          %s) _sshc_values '%s' ;;", command, actions)
+	}}
+	fishCompletionShell = completionShell{template: fishCompletionTemplate, helpActionLine: func(command, actions string) string {
+		return fmt.Sprintf("complete -c sshc -f -n '__sshc_prefix help %s' -a '%s'", command, actions)
+	}}
+)
+
+// renderCompletion は雛形の {{ACTIONS:<command>}} と {{HELP_ACTIONS}} を、clispec から
+// 集めたアクション（cliActions）で埋める。アクションを持つコマンドを足せば、help の枝は
+// 雛形を直さなくても増える。
+func renderCompletion(shell completionShell) string {
 	grammar := cliCompletionGrammar
-	return strings.NewReplacer(
+	commands := make([]string, 0, len(cliActions))
+	for command := range cliActions {
+		commands = append(commands, command)
+	}
+	sort.Strings(commands)
+	helpActionLines := make([]string, 0, len(commands))
+	replacements := []string{
 		"{{TOP_LEVEL}}", strings.Join(grammar.topLevel, " "),
 		"{{HELP_TOPICS}}", strings.Join(grammar.helpTopics, " "),
-		"{{SYNC_ACTIONS}}", strings.Join(grammar.syncActions, " "),
-		"{{TERMINAL_ACTIONS}}", strings.Join(grammar.terminalActions, " "),
-		"{{SFTP_ACTIONS}}", strings.Join(grammar.sftpActions, " "),
-		"{{SERVICE_ACTIONS}}", strings.Join(grammar.serviceActions, " "),
-		"{{OTP_ACTIONS}}", strings.Join(grammar.otpActions, " "),
-		"{{VAULT_ACTIONS}}", strings.Join(grammar.vaultActions, " "),
 		"{{ENCODINGS}}", strings.Join(grammar.encodings, " "),
 		"{{WAIT_STATES}}", strings.Join(grammar.waitStates, " "),
 		"{{SERIAL_OPTIONS}}", strings.Join(grammar.serialOptions, " "),
 		"{{TELNET_OPTIONS}}", strings.Join(grammar.telnetOptions, " "),
 		"{{SFTP_OPTIONS}}", strings.Join(grammar.sftpOptions, " "),
 		"{{SFTP_SETTINGS_OPTIONS}}", strings.Join(grammar.sftpSettingsOptions, " "),
-	).Replace(template)
+	}
+	for _, command := range commands {
+		actions := strings.Join(cliActions[command], " ")
+		replacements = append(replacements, "{{ACTIONS:"+command+"}}", actions)
+		helpActionLines = append(helpActionLines, shell.helpActionLine(command, actions))
+	}
+	replacements = append(replacements, "{{HELP_ACTIONS}}", strings.Join(helpActionLines, "\n"))
+	return strings.NewReplacer(replacements...).Replace(shell.template)
 }
 
 // 補完候補は生成時に設定へ焼き込まず、Tabを押した時点の `sshc ssh --list` を使う。
@@ -38,9 +67,10 @@ _sshc_completion() {
   fi
   command="${COMP_WORDS[1]}"
 
-  # compgen -W は語リストの各語をシェルとして展開する。コマンド置換もそこに含ま
-  # れるため、ssh_config 由来で信用できない alias を渡してはならない。静的な
-  # 語彙にだけ compgen -W を使い、alias は展開せず1行ずつ読んで前方一致で絞る。
+  # compgen -W expands each word of its list as the shell would, command
+  # substitution included, so aliases from ssh_config must never reach it.
+  # Only the fixed words go through compgen -W; aliases are read one line at
+  # a time without expansion and matched by prefix.
   _sshc_complete_words() {
     COMPREPLY=( $(compgen -W "$1" -- "$current") )
   }
@@ -97,7 +127,7 @@ _sshc_completion() {
       ;;
     sync)
       if (( COMP_CWORD == 2 )); then
-        _sshc_complete_words "{{SYNC_ACTIONS}} --json --help"
+        _sshc_complete_words "{{ACTIONS:sync}} --json --help"
       else
         case "${COMP_WORDS[2]}" in
           push|pull) _sshc_complete_words "--force --json --help" ;;
@@ -110,7 +140,7 @@ _sshc_completion() {
       ;;
     terminal)
       if (( COMP_CWORD == 2 )); then
-        _sshc_complete_words "{{TERMINAL_ACTIONS}} --help"
+        _sshc_complete_words "{{ACTIONS:terminal}} --help"
       elif [[ "${COMP_WORDS[2]}" == "create" && "$COMP_CWORD" -eq 3 ]]; then
         _sshc_complete_words "shell ssh --help"
       elif [[ "${COMP_WORDS[2]}" == "create" && "${COMP_WORDS[3]}" == "ssh" && "$COMP_CWORD" -eq 4 ]]; then
@@ -131,7 +161,7 @@ _sshc_completion() {
       ;;
     sftp)
       if (( COMP_CWORD == 2 )); then
-        _sshc_complete_words "{{SFTP_ACTIONS}} --help"
+        _sshc_complete_words "{{ACTIONS:sftp}} --help"
       elif (( COMP_CWORD == 3 )) && [[ "${COMP_WORDS[2]}" == "get" || "${COMP_WORDS[2]}" == "put" ]]; then
         _sshc_complete_aliases "--help"
 	  elif [[ "${COMP_WORDS[2]}" == "put" && "$COMP_CWORD" -eq 4 || "${COMP_WORDS[2]}" == "get" && "$COMP_CWORD" -eq 5 ]]; then
@@ -155,14 +185,14 @@ _sshc_completion() {
       ;;
     service)
       if (( COMP_CWORD == 2 )); then
-        _sshc_complete_words "{{SERVICE_ACTIONS}} --help"
+        _sshc_complete_words "{{ACTIONS:service}} --help"
       elif (( COMP_CWORD == 3 )); then
         case "${COMP_WORDS[2]}" in install|disable) _sshc_complete_words "-y --yes --help" ;; *) _sshc_complete_words "--help" ;; esac
       fi
       ;;
     otp)
       if (( COMP_CWORD == 2 )); then
-        _sshc_complete_words "{{OTP_ACTIONS}} --help"
+        _sshc_complete_words "{{ACTIONS:otp}} --help"
       elif (( COMP_CWORD >= 3 )); then
         case "${COMP_WORDS[2]}" in
           list|show) _sshc_complete_words "--json --help" ;;
@@ -172,23 +202,27 @@ _sshc_completion() {
       fi
       ;;
     vault)
-      if (( COMP_CWORD == 2 )); then _sshc_complete_words "{{VAULT_ACTIONS}} --help"; elif (( COMP_CWORD == 3 )); then _sshc_complete_words "--help"; fi
+      if (( COMP_CWORD == 2 )); then _sshc_complete_words "{{ACTIONS:vault}} --help"; elif (( COMP_CWORD == 3 )); then _sshc_complete_words "--help"; fi
+      ;;
+    vpn)
+      if (( COMP_CWORD == 2 )); then
+        _sshc_complete_words "{{ACTIONS:vpn}} --json --help"
+      elif (( COMP_CWORD == 3 )); then
+        case "${COMP_WORDS[2]}" in bind|unbind) _sshc_complete_aliases "--help" ;; *) _sshc_complete_words "--help" ;; esac
+      else
+        case "${COMP_WORDS[2]}" in
+          remove) _sshc_complete_words "-y --yes" ;;
+          rename|up|down|logs|bind|unbind) _sshc_complete_words "--json" ;;
+        esac
+      fi
       ;;
     help)
       if (( COMP_CWORD == 2 )); then
         _sshc_complete_words "{{HELP_TOPICS}}"
-      elif [[ "${COMP_WORDS[2]}" == "sync" ]]; then
-        _sshc_complete_words "{{SYNC_ACTIONS}}"
-      elif [[ "${COMP_WORDS[2]}" == "terminal" ]]; then
-        _sshc_complete_words "{{TERMINAL_ACTIONS}}"
-	  elif [[ "${COMP_WORDS[2]}" == "sftp" ]]; then
-		_sshc_complete_words "{{SFTP_ACTIONS}}"
-      elif [[ "${COMP_WORDS[2]}" == "service" ]]; then
-        _sshc_complete_words "{{SERVICE_ACTIONS}}"
-      elif [[ "${COMP_WORDS[2]}" == "otp" ]]; then
-        _sshc_complete_words "{{OTP_ACTIONS}}"
-      elif [[ "${COMP_WORDS[2]}" == "vault" ]]; then
-        _sshc_complete_words "{{VAULT_ACTIONS}}"
+      elif (( COMP_CWORD == 3 )); then
+        case "${COMP_WORDS[2]}" in
+{{HELP_ACTIONS}}
+        esac
       fi
       ;;
   esac
@@ -248,7 +282,7 @@ _sshc() {
       ;;
     sync)
       if (( CURRENT == 3 )); then
-        _sshc_values '{{SYNC_ACTIONS}} --json --help'
+        _sshc_values '{{ACTIONS:sync}} --json --help'
       else
         case "${words[3]}" in
           push|pull) _sshc_values '--force --json --help' ;;
@@ -259,7 +293,7 @@ _sshc() {
       ;;
     terminal)
       if (( CURRENT == 3 )); then
-        _sshc_values '{{TERMINAL_ACTIONS}} --help'
+        _sshc_values '{{ACTIONS:terminal}} --help'
       elif [[ "${words[3]}" == 'create' && "$CURRENT" -eq 4 ]]; then
         _sshc_values 'shell ssh --help'
       elif [[ "${words[3]}" == 'create' && "${words[4]}" == 'ssh' && "$CURRENT" -eq 5 ]]; then
@@ -280,7 +314,7 @@ _sshc() {
       ;;
     sftp)
       if (( CURRENT == 3 )); then
-        _sshc_values '{{SFTP_ACTIONS}} --help'
+        _sshc_values '{{ACTIONS:sftp}} --help'
       elif (( CURRENT == 4 )) && [[ "${words[3]}" == 'get' || "${words[3]}" == 'put' ]]; then
         _sshc_aliases
 	  elif [[ "${words[3]}" == 'put' && "$CURRENT" -eq 5 || "${words[3]}" == 'get' && "$CURRENT" -eq 6 ]]; then
@@ -295,14 +329,14 @@ _sshc() {
     update) _sshc_values '-y --yes --help' ;;
     service)
       if (( CURRENT == 3 )); then
-        _sshc_values '{{SERVICE_ACTIONS}} --help'
+        _sshc_values '{{ACTIONS:service}} --help'
       elif (( CURRENT == 4 )); then
         case "${words[3]}" in install|disable) _sshc_values '-y --yes --help' ;; *) _sshc_values '--help' ;; esac
       fi
       ;;
     otp)
       if (( CURRENT == 3 )); then
-        _sshc_values '{{OTP_ACTIONS}} --help'
+        _sshc_values '{{ACTIONS:otp}} --help'
       elif (( CURRENT >= 4 )); then
         case "${words[3]}" in
           list|show) _sshc_values '--json --help' ;;
@@ -311,18 +345,25 @@ _sshc() {
         esac
       fi
       ;;
-    vault) if (( CURRENT == 3 )); then _sshc_values '{{VAULT_ACTIONS}} --help'; elif (( CURRENT == 4 )); then _sshc_values '--help'; fi ;;
+    vault) if (( CURRENT == 3 )); then _sshc_values '{{ACTIONS:vault}} --help'; elif (( CURRENT == 4 )); then _sshc_values '--help'; fi ;;
+    vpn)
+      if (( CURRENT == 3 )); then
+        _sshc_values '{{ACTIONS:vpn}} --json --help'
+      elif (( CURRENT == 4 )); then
+        case "${words[3]}" in bind|unbind) _sshc_aliases ;; *) _sshc_values '--help' ;; esac
+      else
+        case "${words[3]}" in
+          remove) _sshc_values '-y --yes' ;;
+          rename|up|down|logs|bind|unbind) _sshc_values '--json' ;;
+        esac
+      fi
+      ;;
     help)
       if (( CURRENT == 3 )); then
         _sshc_values '{{HELP_TOPICS}}'
       else
         case "${words[3]}" in
-          sync) _sshc_values '{{SYNC_ACTIONS}}' ;;
-          terminal) _sshc_values '{{TERMINAL_ACTIONS}}' ;;
-		  sftp) _sshc_values '{{SFTP_ACTIONS}}' ;;
-          service) _sshc_values '{{SERVICE_ACTIONS}}' ;;
-          otp) _sshc_values '{{OTP_ACTIONS}}' ;;
-          vault) _sshc_values '{{VAULT_ACTIONS}}' ;;
+{{HELP_ACTIONS}}
         esac
       fi
       ;;
@@ -376,6 +417,14 @@ function __sshc_sync_json
     __sshc_action sync auto; and __sshc_min_words 4
 end
 
+function __sshc_vpn_json
+    set -l words (commandline -opc)
+    if test (count $words) -lt 4; or test "$words[2]" != vpn
+        return 1
+    end
+    contains -- "$words[3]" rename up down logs bind unbind
+end
+
 function __sshc_sftp_local_path
 	set -l words (commandline -opc)
 	if test (count $words) -eq 4; and test "$words[2]" = sftp; and test "$words[3]" = put
@@ -418,29 +467,29 @@ complete -c sshc -f -n '__sshc_prefix terminal create' -a 'shell ssh'
 complete -c sshc -f -n '__sshc_prefix terminal create ssh' -a '(command sshc ssh --list 2>/dev/null)'
 complete -c sshc -f -n '__sshc_prefix terminal list; or __sshc_prefix terminal show; or __sshc_prefix terminal read; or __sshc_prefix terminal send; or __sshc_prefix terminal wait; or __sshc_prefix terminal rename; or __sshc_prefix terminal close' -a '--help'
 
-complete -c sshc -f -n '__sshc_prefix sync' -a '{{SYNC_ACTIONS}}'
+complete -c sshc -f -n '__sshc_prefix sync' -a '{{ACTIONS:sync}}'
 complete -c sshc -f -n '__sshc_prefix sync auto' -a 'on off'
 complete -c sshc -f -n '__sshc_prefix sync setup; or __sshc_prefix sync push; or __sshc_prefix sync pull; or __sshc_prefix sync now; or __sshc_prefix sync auto' -a '--help'
-complete -c sshc -f -n '__sshc_prefix terminal' -a '{{TERMINAL_ACTIONS}}'
-complete -c sshc -f -n '__sshc_prefix sftp' -a '{{SFTP_ACTIONS}}'
+complete -c sshc -f -n '__sshc_prefix terminal' -a '{{ACTIONS:terminal}}'
+complete -c sshc -f -n '__sshc_prefix sftp' -a '{{ACTIONS:sftp}}'
 complete -c sshc -f -n '__sshc_prefix sftp get; or __sshc_prefix sftp put' -a '(command sshc ssh --list 2>/dev/null)'
 complete -c sshc -F -n '__sshc_sftp_local_path'
-complete -c sshc -f -n '__sshc_prefix service' -a '{{SERVICE_ACTIONS}} --help'
-complete -c sshc -f -n '__sshc_prefix otp' -a '{{OTP_ACTIONS}} --help'
-complete -c sshc -f -n '__sshc_prefix vault' -a '{{VAULT_ACTIONS}} --help'
+complete -c sshc -f -n '__sshc_prefix service' -a '{{ACTIONS:service}} --help'
+complete -c sshc -f -n '__sshc_prefix otp' -a '{{ACTIONS:otp}} --help'
+complete -c sshc -f -n '__sshc_prefix vault' -a '{{ACTIONS:vault}} --help'
+complete -c sshc -f -n '__sshc_prefix vpn' -a '{{ACTIONS:vpn}} --json --help'
+complete -c sshc -f -n '__sshc_prefix vpn bind; or __sshc_prefix vpn unbind' -a '(command sshc ssh --list 2>/dev/null)'
+complete -c sshc -f -n '__sshc_action vpn remove; and __sshc_min_words 4' -a '-y --yes'
+complete -c sshc -f -n '__sshc_vpn_json' -a '--json'
 complete -c sshc -f -n '__sshc_prefix service install; or __sshc_prefix service disable' -a '-y --yes --help'
 complete -c sshc -f -n '__sshc_prefix service status' -a '--help'
 complete -c sshc -f -n '__sshc_prefix otp list; or __sshc_prefix otp show' -a '--json --help'
 complete -c sshc -f -n '__sshc_prefix otp add; or __sshc_prefix otp edit' -a '--help'
 complete -c sshc -f -n '__sshc_prefix otp remove' -a '-y --yes --help'
 complete -c sshc -f -n '__sshc_prefix vault status; or __sshc_prefix vault create; or __sshc_prefix vault unlock; or __sshc_prefix vault lock; or __sshc_prefix vault change-password' -a '--help'
+complete -c sshc -f -n '__sshc_command vpn; and test (count (commandline -opc)) -eq 3' -a '--help'
 complete -c sshc -f -n '__sshc_prefix help' -a '{{HELP_TOPICS}}'
-complete -c sshc -f -n '__sshc_prefix help sync' -a '{{SYNC_ACTIONS}}'
-complete -c sshc -f -n '__sshc_prefix help terminal' -a '{{TERMINAL_ACTIONS}}'
-complete -c sshc -f -n '__sshc_prefix help sftp' -a '{{SFTP_ACTIONS}}'
-complete -c sshc -f -n '__sshc_prefix help service' -a '{{SERVICE_ACTIONS}}'
-complete -c sshc -f -n '__sshc_prefix help otp' -a '{{OTP_ACTIONS}}'
-complete -c sshc -f -n '__sshc_prefix help vault' -a '{{VAULT_ACTIONS}}'
+{{HELP_ACTIONS}}
 
 complete -c sshc -f -n '__sshc_command engine' -a '--port --replace --help'
 complete -c sshc -f -n '__sshc_command info; and __sshc_min_words 3' -a '--json'
@@ -469,9 +518,9 @@ complete -c sshc -F -n '__sshc_previous --script'
 `
 
 var (
-	bashCompletion = renderCompletion(bashCompletionTemplate)
-	zshCompletion  = renderCompletion(zshCompletionTemplate)
-	fishCompletion = renderCompletion(fishCompletionTemplate)
+	bashCompletion = renderCompletion(bashCompletionShell)
+	zshCompletion  = renderCompletion(zshCompletionShell)
+	fishCompletion = renderCompletion(fishCompletionShell)
 )
 
 func writeCompletion(output io.Writer, shell string) error {

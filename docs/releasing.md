@@ -7,8 +7,25 @@
 - リリース対象を`origin/main`へpush済みで、作業treeがcleanであること
 - `docs/releases/<tag>.md`を追加済みであること
 - stable releaseではREADME、`docs/release-install.md`、`install.sh`、`pages/guide/install.md`、`pages/en/guide/install.md`で固定したバージョンが同じtagであること（`internal/buildcontract` の契約テストが照合する）
+- 公開するcommitで、`release-ui-check.yml`の3つのjobが成功していること（次の「公開の前に埋め込みUIの照合を試す」）
 - `gh auth status`が成功し、repositoryと`release` environmentを操作できること
 - `git`、`gh`、`jq`、`curl`、`unzip`、`sha256sum`または`shasum`が利用できること
+
+## 公開の前に埋め込みUIの照合を試す
+
+Release workflowのmacOS・Linux・Windowsのjobは、runner上で埋め込みUI（`internal/ui/dist`）を作り直し、コミット済みのものと違えばバイナリを作らずに失敗します。UIのビルドの出力がOSによって違うと、公開の当日にReleaseが止まります。
+
+`release-ui-check.yml`は、同じrunnerでこの照合だけを行うworkflowです。バイナリは作らず、公開・署名・tagの権限も持ちません。公開するcommitを`origin/main`へpushしたら、公開の前に次を実行してください。
+
+```sh
+gh workflow run release-ui-check.yml --ref main
+gh run list --workflow release-ui-check.yml --branch main --limit 1 --json databaseId,headSha,status
+gh run watch <databaseId> --exit-status
+```
+
+`gh run list`に新しいrunが出るまで、数秒かかることがあります。`headSha`が公開するcommitと同じであることを確認してください。
+
+3つのjobがすべて成功したら、公開へ進んでください。失敗したjobのログには、コミット済みのものと違ったファイルが`git status --porcelain`の形式で表示されます。その場合は公開せず、差分の原因を調べてください。
 
 ## 公開
 

@@ -25,6 +25,9 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/BootstrapResponse" }
         "401": { $ref: "#/components/responses/Problem" }
+        # Linux で、接続が同じマシンの別 OS ユーザーのものかもしれないときの
+        # bootstrap_forbidden。bootstrap は消費しない。
+        "403": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
   /api/v1/session/recover:
     post:

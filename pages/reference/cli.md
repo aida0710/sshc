@@ -7,9 +7,24 @@ description: sshc CLIの主なコマンドと、自動化で使うときの注�
 
 利用できるオプションはバージョンによって異なります。インストール済みの`sshc help`で全体の一覧を、`sshc <command...> --help`または`sshc help <command...>`で各コマンドの正確な引数を確認できます。例: `sshc sync push --help`、`sshc help terminal send`
 
+値を取るオプションは、`--jobs 4`と`--jobs=4`のどちらの形でも指定できます。`-j`のような短い名前は`-j 4`の形だけです。同じオプションを2回指定するとエラーになります。
+
 SSH接続、SFTP転送、同期、Terminal操作の各コマンドは、起動中のエンジンと、そのエンジンが管理するOpenSSH設定、Vault、セッションを使います。`sshc info`や`sshc completion`など、情報をローカルで読み取るだけのコマンドはエンジンを必要としません。自動化では、人向けの表示文を解析せず、対応するコマンドの`--json`を利用できます。
 
 CodexなどのAIエージェントからも直接実行できます。非対話SSHでは、Vaultのロックが解除され、接続経路にあるすべてのホスト鍵と必要な認証情報が保存済みである必要があります。サーバーがOTPの入力を明示的に求めるプロンプトには、接続先に割り当てたTOTPを自動入力します。未登録のホスト鍵や未保存の認証情報など、利用者の入力や判断が必要な接続は実行できません。条件を満たす場合はsshcが認証するため、AIエージェントへ認証情報そのものを渡す必要はありません。
+
+## `--json`の出力
+
+`--json`を付けたコマンドは、成功しても失敗しても、標準出力へ次の形のJSONを1つだけ出します。
+
+```json
+{"schemaVersion":1,"success":true,"result":{}}
+{"schemaVersion":1,"success":false,"failure":{"kind":"engine_not_running","retryable":true}}
+```
+
+`success`が`true`なら`result`にコマンドの結果が入ります。`false`なら`failure`に失敗の種類（`kind`）と、時間をおいて同じ操作をやり直せば成功する見込みがあるか（`retryable`）が入り、終了コードは0以外になります。人向けの表示文は解析せず、`success`と`kind`で判断してください。Serial／Telnetの非対話の自動処理（`--non-interactive`）の結果だけは、送受信の記録を含む独自の形で出します。
+
+引数を解釈できずにコマンドを始められない場合（必要な引数が無い、値の形が合わない、同じオプションを2回指定したなど）は、`--json`を付けていてもJSONを出しません。理由と使い方を標準エラー出力へ出し、終了コード2で終わります。このとき標準出力は空なので、JSONとして読む前に終了コードを確認してください。
 
 ## エンジンとVault
 
@@ -65,7 +80,7 @@ sshc ssh <alias> --non-interactive -- <command...>
 sshc info <alias> --json
 ```
 
-Homebrew版ではbash、zsh、fishの補完が一緒に導入されます。その他の導入方法では、利用中のシェルに合わせて次のいずれかをシェルの初期化ファイルへ追加してください。サブコマンド、オプション、列挙値に加え、`sshc ssh`、`sshc info`、`sshc terminal create ssh`、`sshc sftp`では接続先も補完します。接続先候補は、Tabを押した時点の`~/.ssh/config`と到達可能な`Include`から取得されます。シェル展開やコマンド連結につながるメタ文字、空白、先頭の`-`などを含むエイリアスは、`sshc ssh --list`と補完候補から除外し、理由を標準エラー出力へ表示します。
+Homebrew版ではbash、zsh、fishの補完が一緒に導入されます。その他の導入方法では、利用中のシェルに合わせて次のいずれかをシェルの初期化ファイルへ追加してください。サブコマンド、オプション、列挙値に加え、`sshc ssh`、`sshc info`、`sshc terminal create ssh`、`sshc sftp`、`sshc vpn bind`／`unbind`では接続先も補完します。接続先候補は、Tabを押した時点の`~/.ssh/config`と到達可能な`Include`から取得されます。シェル展開やコマンド連結につながるメタ文字、空白、先頭の`-`などを含むエイリアスは、`sshc ssh --list`と補完候補から除外し、理由を標準エラー出力へ表示します。
 
 コマンドの解釈、個別ヘルプ、bash／zsh／fishの補完は、同じコマンド定義から作られています。補完に表示される名前や選択肢は、そのバージョンの`sshc help`と一致します。
 
@@ -103,7 +118,7 @@ sshc sync auto on|off [--json]
 
 `sshc sync push`と`sshc sync pull`は、転送量の要約に続けて、転送したファイルを1行ずつ`added`、`modified`、`removed`の区分付きで表示します。競合または削除があって通常の`pull`が止まった場合は、適用されなかった変更のプレビューを同じ形で標準エラー出力へ表示します。`--json`では、pullは`written`、`added`、`removed`、`conflicts`を、pushは`added`、`modified`、`removed`をパスの配列として返します。
 
-`sshc sync setup`は、設定済みのエンドポイント、バケット、パス、リージョン、同期方向を既定値として表示します。同期方向は`both`、`push`、`pull`から選びます。Access Key IDは末尾5文字以外を伏せ字にして表示し、Secret Access Keyと同期キーは値を表示せず「設定済み」と示します。再設定時にシークレットの入力欄を空のままEnterキーを押すと、エンジンに保存済みの値を維持します。新しい値の入力中は、平文の代わりに`*`を表示します。
+`sshc sync setup`は、設定済みのエンドポイント、バケット、パス、リージョン、同期方向を既定値として表示します。同期方向は`both`、`push`、`pull`から選びます。Access Key IDは末尾5文字以外を伏せ字にして表示し、Secret Access Keyと同期キーは値を表示せず`configured`と示します。再設定時にシークレットの入力欄を空のままEnterキーを押すと、エンジンに保存済みの値を維持します。新しい値の入力中は、平文の代わりに`*`を表示します。
 
 ## VPN
 

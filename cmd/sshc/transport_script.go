@@ -232,8 +232,8 @@ func newTransportRunReport(called transportInvocation, result streamrun.Result, 
 			report.Failure.Step = failure.Step + 1
 		}
 		if errors.Is(runErr, context.Canceled) {
-			report.Failure.Kind = "interrupted"
-			report.Failure.Message = "operation was interrupted"
+			report.Failure.Kind = transportInterruptedKind
+			report.Failure.Message = errTransportInterrupted.Error()
 		}
 	}
 	return report

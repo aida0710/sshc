@@ -12,12 +12,6 @@ import (
 	"sshc/internal/terminal"
 )
 
-// DefaultLocalSize は、端末の大きさを問い合わせられないときに使う値である。
-//
-// パイプの中で走っているときがそれである。80x24 は、それでも読める既定として
-// 長く使われてきた寸法であり、ここで別の数を選ぶ理由が無い。
-var DefaultLocalSize = terminal.Size{Cols: 80, Rows: 24}
-
 // Attach は、このプロセスの端末を SSH のセッションへ繋ぐ。
 //
 // 戻るのはセッションが終わったときで、返すのはリモートの終了コードである。
@@ -26,7 +20,7 @@ var DefaultLocalSize = terminal.Size{Cols: 80, Rows: 24}
 // シェルがエコーも改行も失ったままになる。だから復元は defer に置く。
 // 途中でどう抜けても通る道に置くしかない。
 func Attach(ctx context.Context, process terminal.Process, in *os.File, out io.Writer) (int, error) {
-	size := DefaultLocalSize
+	size := terminal.DefaultSize()
 	descriptor := int(in.Fd())
 
 	// テレタイプでなければ raw にしない。大きさも問い合わせない。

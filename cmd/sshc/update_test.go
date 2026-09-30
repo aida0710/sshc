@@ -9,10 +9,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"sshc/internal/selfupdate"
@@ -21,7 +23,7 @@ import (
 func TestRunUpdateRefusesAnUnmanagedExecutableBeforeNetworkAccess(t *testing.T) {
 	latestCalled := false
 	var stderr bytes.Buffer
-	code := runUpdate(context.Background(), "dev", true, io.Discard, &stderr, updateDependencies{
+	code := runUpdate(context.Background(), updateRun{current: "dev", yes: true, stdout: io.Discard, stderr: &stderr, dependencies: updateDependencies{
 		executable: func() (string, error) { return "/tmp/sshc", nil },
 		detect: func(string) (installation, error) {
 			return installation{manager: managerUnknown}, nil
@@ -30,7 +32,7 @@ func TestRunUpdateRefusesAnUnmanagedExecutableBeforeNetworkAccess(t *testing.T) 
 			latestCalled = true
 			return selfupdate.Release{}, nil
 		},
-	})
+	}})
 	if code != 1 || latestCalled || !strings.Contains(stderr.String(), "cannot be updated automatically") {
 		t.Fatalf("code=%d latest=%v stderr=%q", code, latestCalled, stderr.String())
 	}
@@ -39,7 +41,7 @@ func TestRunUpdateRefusesAnUnmanagedExecutableBeforeNetworkAccess(t *testing.T) 
 func TestRunUpdateSkipsTheInstallerWhenAlreadyCurrent(t *testing.T) {
 	installed := false
 	var stdout bytes.Buffer
-	code := runUpdate(context.Background(), "0.14.0", true, &stdout, io.Discard, updateDependencies{
+	code := runUpdate(context.Background(), updateRun{current: "0.14.0", yes: true, stdout: &stdout, stderr: io.Discard, dependencies: updateDependencies{
 		executable: func() (string, error) { return "/managed/sshc", nil },
 		detect: func(string) (installation, error) {
 			return installation{manager: managerHomebrew}, nil
@@ -51,7 +53,7 @@ func TestRunUpdateSkipsTheInstallerWhenAlreadyCurrent(t *testing.T) {
 			installed = true
 			return nil
 		},
-	})
+	}})
 	if code != 0 || installed || !strings.Contains(stdout.String(), "already the latest") {
 		t.Fatalf("code=%d installed=%v stdout=%q", code, installed, stdout.String())
 	}
@@ -60,7 +62,7 @@ func TestRunUpdateSkipsTheInstallerWhenAlreadyCurrent(t *testing.T) {
 func TestRunUpdateDelegatesANewerStableRelease(t *testing.T) {
 	var got selfupdate.Release
 	var stdout bytes.Buffer
-	code := runUpdate(context.Background(), "v0.13.6", true, &stdout, io.Discard, updateDependencies{
+	code := runUpdate(context.Background(), updateRun{current: "v0.13.6", yes: true, stdout: &stdout, stderr: io.Discard, dependencies: updateDependencies{
 		executable: func() (string, error) { return "/managed/sshc", nil },
 		detect: func(string) (installation, error) {
 			return installation{manager: managerShell}, nil
@@ -72,7 +74,7 @@ func TestRunUpdateDelegatesANewerStableRelease(t *testing.T) {
 			got = release
 			return nil
 		},
-	})
+	}})
 	if code != 0 || got.Version != "v0.14.0" || !strings.Contains(stdout.String(), "restart any running") {
 		t.Fatalf("code=%d release=%#v stdout=%q", code, got, stdout.String())
 	}
@@ -81,7 +83,7 @@ func TestRunUpdateDelegatesANewerStableRelease(t *testing.T) {
 func TestRunUpdateRestartsAnActiveManagedService(t *testing.T) {
 	restarted := false
 	var stdout bytes.Buffer
-	code := runUpdate(context.Background(), "v0.13.6", true, &stdout, io.Discard, updateDependencies{
+	code := runUpdate(context.Background(), updateRun{current: "v0.13.6", yes: true, stdout: &stdout, stderr: io.Discard, dependencies: updateDependencies{
 		executable: func() (string, error) { return "/managed/sshc", nil },
 		detect: func(string) (installation, error) {
 			return installation{manager: managerShell}, nil
@@ -102,8 +104,10 @@ func TestRunUpdateRestartsAnActiveManagedService(t *testing.T) {
 			restarted = true
 			return true, nil
 		},
-	})
+		engineStatus: (&fixedEngineStatus{answer: lockedVault}).read,
+	}})
 	if code != 0 || !restarted || !strings.Contains(stdout.String(), "managed service restarted") ||
+		!strings.Contains(stdout.String(), "sshc: "+vaultLockedAdvice+"\n") ||
 		strings.Contains(stdout.String(), "restart any running") {
 		t.Fatalf("code=%d restarted=%v stdout=%q", code, restarted, stdout.String())
 	}
@@ -111,7 +115,7 @@ func TestRunUpdateRestartsAnActiveManagedService(t *testing.T) {
 
 func TestRunUpdateReportsAPartialSuccessWhenManagedServiceRestartFails(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	code := runUpdate(context.Background(), "v0.13.6", true, &stdout, &stderr, updateDependencies{
+	code := runUpdate(context.Background(), updateRun{current: "v0.13.6", yes: true, stdout: &stdout, stderr: &stderr, dependencies: updateDependencies{
 		executable: func() (string, error) { return "/managed/sshc", nil },
 		detect: func(string) (installation, error) {
 			return installation{manager: managerShell}, nil
@@ -128,7 +132,7 @@ func TestRunUpdateReportsAPartialSuccessWhenManagedServiceRestartFails(t *testin
 		restartService: func(context.Context, string) (bool, error) {
 			return false, errors.New("systemctl failed")
 		},
-	})
+	}})
 	if code != 1 || !strings.Contains(stdout.String(), "updated to v0.14.0") ||
 		!strings.Contains(stderr.String(), "update succeeded") ||
 		!strings.Contains(stderr.String(), "sshc service install") {
@@ -136,9 +140,48 @@ func TestRunUpdateReportsAPartialSuccessWhenManagedServiceRestartFails(t *testin
 	}
 }
 
+func TestRunUpdateTellsToReinstallAServiceDefinitionFromAnOlderVersion(t *testing.T) {
+	var stdout bytes.Buffer
+	code := runUpdate(context.Background(), updateRun{current: "v0.13.6", yes: true, stdout: &stdout, stderr: io.Discard, dependencies: updateDependencies{
+		executable: func() (string, error) { return "/managed/sshc", nil },
+		detect:     func(string) (installation, error) { return installation{manager: managerShell}, nil },
+		latest: func(context.Context) (selfupdate.Release, error) {
+			return selfupdate.Release{Version: "v0.14.0"}, nil
+		},
+		install: func(context.Context, installation, selfupdate.Release, io.Writer, io.Writer) error { return nil },
+		serviceExecutable: func(context.Context, installation) (string, error) {
+			return "/managed/sshc", nil
+		},
+		restartService: func(context.Context, string) (bool, error) { return false, errOutdatedServiceDefinition },
+	}})
+	if code != 0 || !strings.HasSuffix(stdout.String(), "sshc: "+outdatedServiceDefinitionAdvice+"\n") ||
+		strings.Contains(stdout.String(), "restart any running") {
+		t.Fatalf("code=%d stdout=%q", code, stdout.String())
+	}
+}
+
+func TestRunUpdateTellsHomebrewUsersToRefreshTheTapWhenTheOldVersionStays(t *testing.T) {
+	var stderr bytes.Buffer
+	code := runUpdate(context.Background(), updateRun{current: "v0.13.6", yes: true, stdout: io.Discard, stderr: &stderr, dependencies: updateDependencies{
+		executable: func() (string, error) { return "/managed/sshc", nil },
+		detect: func(string) (installation, error) {
+			return installation{manager: managerHomebrew}, nil
+		},
+		latest: func(context.Context) (selfupdate.Release, error) {
+			return selfupdate.Release{Version: "v0.14.0"}, nil
+		},
+		install: func(context.Context, installation, selfupdate.Release, io.Writer, io.Writer) error {
+			return fmt.Errorf("verify the upgraded Homebrew executable: %w", errHomebrewTapNotRefreshed)
+		},
+	}})
+	if code != 1 || !strings.Contains(stderr.String(), "run `brew update`, then `sshc update` again") {
+		t.Fatalf("code=%d stderr=%q", code, stderr.String())
+	}
+}
+
 func TestRunUpdateRejectsAnInvalidRemoteTag(t *testing.T) {
 	var stderr bytes.Buffer
-	code := runUpdate(context.Background(), "v0.13.6", true, io.Discard, &stderr, updateDependencies{
+	code := runUpdate(context.Background(), updateRun{current: "v0.13.6", yes: true, stdout: io.Discard, stderr: &stderr, dependencies: updateDependencies{
 		executable: func() (string, error) { return "/managed/sshc", nil },
 		detect: func(string) (installation, error) {
 			return installation{manager: managerShell}, nil
@@ -146,7 +189,7 @@ func TestRunUpdateRejectsAnInvalidRemoteTag(t *testing.T) {
 		latest: func(context.Context) (selfupdate.Release, error) {
 			return selfupdate.Release{Version: "../../main"}, nil
 		},
-	})
+	}})
 	if code != 1 || !strings.Contains(stderr.String(), "invalid version") {
 		t.Fatalf("code=%d stderr=%q", code, stderr.String())
 	}
@@ -156,7 +199,7 @@ func TestRunUpdateConfirmsBeforeInstallingANewerRelease(t *testing.T) {
 	installed := false
 	confirmed := 0
 	var stdout bytes.Buffer
-	code := runUpdate(context.Background(), "v0.13.6", false, &stdout, io.Discard, updateDependencies{
+	code := runUpdate(context.Background(), updateRun{current: "v0.13.6", yes: false, stdout: &stdout, stderr: io.Discard, dependencies: updateDependencies{
 		executable: func() (string, error) { return "/managed/sshc", nil },
 		detect: func(string) (installation, error) {
 			return installation{manager: managerShell, executable: "/managed/sshc"}, nil
@@ -172,94 +215,9 @@ func TestRunUpdateConfirmsBeforeInstallingANewerRelease(t *testing.T) {
 			confirmed++
 			return false, nil
 		},
-	})
+	}})
 	if code != 0 || installed || confirmed != 1 || !strings.Contains(stdout.String(), "canceled") {
 		t.Fatalf("code=%d installed=%v confirmed=%d stdout=%q", code, installed, confirmed, stdout.String())
-	}
-}
-
-func TestShellReceiptBindsTheExecutableDigest(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("install.shのreceiptはWindowsでは更新対象にしない")
-	}
-	directory := t.TempDir()
-	executable := filepath.Join(directory, "sshc")
-	contents := []byte("a published sshc binary")
-	if err := os.WriteFile(executable, contents, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	digest := sha256.Sum256(contents)
-	receipt := fmt.Sprintf(`{"schemaVersion":1,"manager":"install.sh","repository":"aida0710/sshc","version":"v0.13.6","sha256":"%s"}`,
-		hex.EncodeToString(digest[:]))
-	if err := os.WriteFile(filepath.Join(directory, receiptFileName), []byte(receipt), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	found, err := detectInstallation(executable)
-	if err != nil || found.manager != managerShell {
-		t.Fatalf("detect = %#v, %v", found, err)
-	}
-	if err := os.WriteFile(executable, []byte("manually replaced"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := detectInstallation(executable); err == nil || !strings.Contains(err.Error(), "does not match") {
-		t.Fatalf("modified receipt error = %v", err)
-	}
-}
-
-func TestShellReceiptDoesNotFollowASymlink(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("symlink creation is not generally available on Windows")
-	}
-	directory := t.TempDir()
-	executable := filepath.Join(directory, "sshc")
-	if err := os.WriteFile(executable, []byte("binary"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	realReceipt := filepath.Join(directory, "elsewhere.json")
-	if err := os.WriteFile(realReceipt, []byte(`{"schemaVersion":1}`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Symlink(realReceipt, filepath.Join(directory, receiptFileName)); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := detectInstallation(executable); err == nil || !strings.Contains(err.Error(), "regular install receipt") {
-		t.Fatalf("symlink receipt error = %v", err)
-	}
-}
-
-func TestHomebrewCandidateRequiresItsOwnExecutable(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Homebrew is not supported on Windows")
-	}
-	prefix := t.TempDir()
-	kegBinary := filepath.Join(prefix, "Cellar", "sshc", "0.13.6", "bin", "sshc")
-	if err := os.MkdirAll(filepath.Dir(kegBinary), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(kegBinary, []byte("brew sshc"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(filepath.Join(prefix, "bin"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	brew := filepath.Join(prefix, "bin", "brew")
-	if err := os.WriteFile(brew, []byte("#!/bin/sh\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	found, err := detectInstallation(kegBinary)
-	if err != nil || found.manager != managerHomebrew {
-		t.Fatalf("detect = %#v, %v", found, err)
-	}
-	foundInfo, err := os.Stat(found.brew)
-	if err != nil {
-		t.Fatal(err)
-	}
-	wantInfo, err := os.Stat(brew)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !os.SameFile(foundInfo, wantInfo) {
-		t.Fatalf("detected brew %q is not the fixture %q", found.brew, brew)
 	}
 }
 
@@ -268,31 +226,38 @@ type recordedCommand struct {
 	args []string
 }
 
-type fakeUpdateCommands struct {
+type fakeInstallationCommands struct {
 	output func(context.Context, string, ...string) ([]byte, error)
-	run    func(context.Context, string, []string, []string, io.Reader, io.Writer, io.Writer) error
+	run    func(context.Context, installationProcess) error
 }
 
-func (fake fakeUpdateCommands) Output(ctx context.Context, name string, args ...string) ([]byte, error) {
+func (fake fakeInstallationCommands) Output(ctx context.Context, name string, args ...string) ([]byte, error) {
 	return fake.output(ctx, name, args...)
 }
 
-func (fake fakeUpdateCommands) Run(ctx context.Context, name string, args []string, environment []string, stdin io.Reader, stdout, stderr io.Writer) error {
-	return fake.run(ctx, name, args, environment, stdin, stdout, stderr)
+func (fake fakeInstallationCommands) Run(ctx context.Context, process installationProcess) error {
+	return fake.run(ctx, process)
 }
 
-func TestHomebrewUpgradeVerifiesOwnershipAndUsesFixedArguments(t *testing.T) {
-	directory := t.TempDir()
-	prefix := filepath.Join(directory, "opt", "sshc")
-	managed := filepath.Join(prefix, "bin", "sshc")
+// homebrewFormulaFixture は、brew --prefix が返す formula の prefix と、その下の
+// 実行ファイルを一時ディレクトリに作る。
+func homebrewFormulaFixture(t *testing.T) (prefix, managed string) {
+	t.Helper()
+	prefix = filepath.Join(t.TempDir(), "opt", "sshc")
+	managed = filepath.Join(prefix, "bin", "sshc")
 	if err := os.MkdirAll(filepath.Dir(managed), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(managed, []byte("same inode"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	return prefix, managed
+}
+
+func TestHomebrewUpgradeVerifiesOwnershipAndUsesFixedArguments(t *testing.T) {
+	prefix, managed := homebrewFormulaFixture(t)
 	var ran recordedCommand
-	commands := fakeUpdateCommands{
+	commands := fakeInstallationCommands{
 		output: func(_ context.Context, name string, args ...string) ([]byte, error) {
 			if name == "/brew" {
 				return []byte(prefix + "\n"), nil
@@ -302,19 +267,65 @@ func TestHomebrewUpgradeVerifiesOwnershipAndUsesFixedArguments(t *testing.T) {
 			}
 			return nil, fmt.Errorf("unexpected output command %s %#v", name, args)
 		},
-		run: func(_ context.Context, name string, args []string, _ []string, _ io.Reader, _, _ io.Writer) error {
-			ran = recordedCommand{name: name, args: append([]string(nil), args...)}
+		run: func(_ context.Context, process installationProcess) error {
+			ran = recordedCommand{name: process.name, args: append([]string(nil), process.args...)}
 			return nil
 		},
 	}
-	err := upgradeHomebrew(context.Background(), installation{
+	installer := updateInstaller{commands: commands, stdout: io.Discard, stderr: io.Discard}
+	err := installer.upgradeHomebrew(context.Background(), installation{
 		manager: managerHomebrew, executable: managed, brew: "/brew",
-	}, "v0.14.0", commands, io.Discard, io.Discard)
+	}, "v0.14.0")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if ran.name != "/brew" || strings.Join(ran.args, " ") != "upgrade --formula --no-ask aida0710/tap/sshc" {
 		t.Fatalf("brew command = %s %#v", ran.name, ran.args)
+	}
+}
+
+func TestHomebrewUpgradeBlamesTheTapOnlyWhenTheOldVersionStays(t *testing.T) {
+	for _, test := range []struct {
+		name         string
+		version      func() ([]byte, error)
+		blamesTheTap bool
+	}{
+		{
+			name:         "brew upgrade kept the old version",
+			version:      func() ([]byte, error) { return []byte("sshc v0.13.6 darwin/arm64\n"), nil },
+			blamesTheTap: true,
+		},
+		{
+			name:         "the upgraded executable does not run",
+			version:      func() ([]byte, error) { return nil, errors.New("exec format error") },
+			blamesTheTap: false,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			prefix, managed := homebrewFormulaFixture(t)
+			commands := fakeInstallationCommands{
+				output: func(_ context.Context, name string, args ...string) ([]byte, error) {
+					switch name {
+					case "/brew":
+						return []byte(prefix + "\n"), nil
+					case managed:
+						return test.version()
+					}
+					return nil, fmt.Errorf("unexpected output command %s %#v", name, args)
+				},
+				run: func(context.Context, installationProcess) error { return nil },
+			}
+			installer := updateInstaller{commands: commands, stdout: io.Discard, stderr: io.Discard}
+			err := installer.upgradeHomebrew(context.Background(), installation{
+				manager: managerHomebrew, executable: managed, brew: "/brew",
+			}, "v0.14.0")
+			if err == nil {
+				t.Fatal("upgradeHomebrew succeeded without the new version")
+			}
+			if blamed := errors.Is(err, errHomebrewTapNotRefreshed); blamed != test.blamesTheTap {
+				t.Fatalf("upgradeHomebrew() = %v; blames the tap = %t, want %t", err, blamed, test.blamesTheTap)
+			}
+		})
 	}
 }
 
@@ -339,15 +350,15 @@ func TestTaggedInstallerUsesTheExactReleaseAndInstallDirectory(t *testing.T) {
 		}
 		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader("#!/bin/sh\n")), Header: make(http.Header)}, nil
 	})}
-	commands := fakeUpdateCommands{
+	commands := fakeInstallationCommands{
 		output: func(_ context.Context, name string, _ ...string) ([]byte, error) {
 			if name == executable {
 				return []byte("sshc v0.14.0 linux/amd64\n"), nil
 			}
 			return nil, fmt.Errorf("unexpected output command %s", name)
 		},
-		run: func(_ context.Context, _ string, _ []string, environment []string, _ io.Reader, _, _ io.Writer) error {
-			joined := strings.Join(environment, "\n")
+		run: func(_ context.Context, process installationProcess) error {
+			joined := strings.Join(process.environment, "\n")
 			if !strings.Contains(joined, "SSHC_VERSION=v0.14.0") || !strings.Contains(joined, "SSHC_INSTALL_DIR="+directory) {
 				t.Fatalf("installer environment lacks fixed version/directory")
 			}
@@ -361,8 +372,78 @@ func TestTaggedInstallerUsesTheExactReleaseAndInstallDirectory(t *testing.T) {
 			return os.WriteFile(filepath.Join(directory, receiptFileName), []byte(receipt), 0o644)
 		},
 	}
-	if err := runTaggedInstaller(context.Background(), installation{manager: managerShell, executable: executable},
-		"v0.14.0", client, commands, io.Discard, io.Discard); err != nil {
+	installer := updateInstaller{client: client, commands: commands, stdout: io.Discard, stderr: io.Discard}
+	if err := installer.runTaggedInstaller(context.Background(),
+		installation{manager: managerShell, executable: executable}, "v0.14.0"); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestTaggedInstallerRedirectStaysOnHTTPSRawGitHub(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		target  string
+		allowed bool
+	}{
+		{name: "https to the same host", target: "https://raw.githubusercontent.com/aida0710/sshc/v0.14.0/install.sh", allowed: true},
+		{name: "another host", target: "https://example.com/install.sh", allowed: false},
+		{name: "downgrade to http", target: "http://raw.githubusercontent.com/aida0710/sshc/v0.14.0/install.sh", allowed: false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			request, err := http.NewRequest(http.MethodGet, test.target, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = allowTaggedInstallerRedirect(request, nil)
+			if allowed := err == nil; allowed != test.allowed {
+				t.Fatalf("allowTaggedInstallerRedirect(%s) = %v, want allowed=%t", test.target, err, test.allowed)
+			}
+		})
+	}
+}
+
+func TestTaggedInstallerClientDoesNotFollowARedirectOffRawGitHub(t *testing.T) {
+	// redirect 先に届いたことは handler の goroutine が書くので、atomic で受け渡す。
+	var reached atomic.Bool
+	destination := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		reached.Store(true)
+	}))
+	defer destination.Close()
+	origin := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		http.Redirect(writer, request, destination.URL+"/install.sh", http.StatusFound)
+	}))
+	defer origin.Close()
+
+	response, err := taggedInstallerHTTPClient().Get(origin.URL + "/install.sh")
+	if err == nil {
+		response.Body.Close()
+		t.Fatal("the installer client followed a redirect off https://raw.githubusercontent.com")
+	}
+	if reached.Load() {
+		t.Fatal("the redirect destination received a request")
+	}
+}
+
+func TestUpdateDoesNotAskToUnlockAPasswordlessVaultAfterRestartingTheService(t *testing.T) {
+	status := &fixedEngineStatus{answer: passwordlessVault}
+	var stdout bytes.Buffer
+	code := runUpdate(context.Background(), updateRun{current: "v0.13.6", yes: true, home: "/home/test", stdout: &stdout, stderr: io.Discard, dependencies: updateDependencies{
+		executable: func() (string, error) { return "/managed/sshc", nil },
+		detect:     func(string) (installation, error) { return installation{manager: managerShell}, nil },
+		latest: func(context.Context) (selfupdate.Release, error) {
+			return selfupdate.Release{Version: "v0.14.0"}, nil
+		},
+		install: func(context.Context, installation, selfupdate.Release, io.Writer, io.Writer) error { return nil },
+		serviceExecutable: func(context.Context, installation) (string, error) {
+			return "/managed/sshc", nil
+		},
+		restartService: func(context.Context, string) (bool, error) { return true, nil },
+		engineStatus:   status.read,
+	}})
+	if code != 0 || !strings.HasSuffix(stdout.String(), "sshc: managed service restarted\n") {
+		t.Fatalf("code=%d stdout=%q", code, stdout.String())
+	}
+	if len(status.asked) != 1 || status.asked[0] != "/home/test" {
+		t.Fatalf("asked homes = %q, want the update's home once", status.asked)
 	}
 }

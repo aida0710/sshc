@@ -23,6 +23,7 @@ import (
 	"sshc/internal/diagnostics"
 	"sshc/internal/handoff"
 	"sshc/internal/knownhosts"
+	"sshc/internal/loopbackpeer"
 	"sshc/internal/platform"
 	"sshc/internal/recent"
 	"sshc/internal/remotekey"
@@ -327,7 +328,10 @@ func New(options Options) (*Server, error) {
 	// 固定する。
 	e.Use(server.stoppingGate)
 
-	handlers := Handlers{Sessions: options.Sessions, BrowserAuth: options.BrowserAuth, Version: options.Version}
+	handlers := Handlers{
+		Sessions: options.Sessions, BrowserAuth: options.BrowserAuth, Version: options.Version,
+		PeerMayBelongToAnotherUser: loopbackpeer.MayBelongToAnotherUser,
+	}
 	e.POST("/api/v1/session/bootstrap", handlers.Bootstrap)
 	e.POST("/api/v1/session/recover", handlers.Recover)
 	e.POST("/api/v1/session/renew", handlers.Renew)
@@ -403,9 +407,6 @@ func New(options Options) (*Server, error) {
 			Binding:     passwordBinding,
 		})
 	}
-	// `sshc ssh <alias>` は、1 つの接続に必要なものをここに求める。secret は
-	// 呼び出し元が state directory から読み出しているはずのものであり、
-	// それがなければこのルートはすべてを拒否する。
 	registerUpdateRoutes(e, &UpdateHandlers{Current: options.Version, Checker: options.Updates})
 
 	registerConnectRoutes(e, newConnectHandlers(options, vault, host))

@@ -95,6 +95,7 @@ build-cli:
 	go run ./internal/nativebuild/cmd/nativebuild build
 
 # UI を一度ビルドし、埋め込んだ Go バイナリを各ターゲット向けに生成する。
+# 作り直した UI がコミット済みの internal/ui/dist と違えば、バイナリを作らずに止まる。
 #
 # macOS では `%u` と `%i` の展開に os/user.Current() を使うため cgo を有効にする。
 # Linux では /etc/passwd を参照できるため CGO_ENABLED=0 とする。
@@ -141,7 +142,8 @@ release-binaries:
 	go run ./internal/nativebuild/cmd/nativebuild matrix
 
 # release-cli-current は runner 自身の OS についてだけ standalone artifact を
-# 作る。package job はこの後に同じ OS で smoke し、別 job が publish を集約する。
+# 作る。UI の照合は release-binaries と同じである。package job はこの後に同じ
+# OS で smoke し、別 job が publish を集約する。
 release-cli-current:
 	go run ./internal/nativebuild/cmd/nativebuild release-current
 
