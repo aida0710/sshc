@@ -356,7 +356,7 @@ func New(options Options) (*Server, error) {
 	e.POST("/api/v1/session/sign-out", handlers.SignOut)
 	e.GET("/api/v1/health", handlers.Health)
 	if options.Config != nil {
-		registerConfigRoutes(e, ConfigHandlers{Service: options.Config, Keys: options.Keys, Vault: options.Vault})
+		registerConfigRoutes(e, ConfigHandlers{Service: options.Config, Keys: options.Keys})
 		registerConnectionRoutes(e, ConnectionHandlers{
 			Service: options.Config, Keys: options.Keys, Recent: options.Recent,
 		})

@@ -184,12 +184,19 @@ func (s *Service) validate(request storage.Request) error {
 	edit, planned := request.Validation.(configurationEdit)
 
 	metadataPath := filepath.Clean(s.metadata.Path())
+	engineSettingsPath := filepath.Clean(s.engineSettingsPath())
 	stateDir := filepath.Clean(s.workspace.StateDir())
 	for _, changes := range [][]storage.Change{request.Changes, request.FinalChanges} {
 		for _, change := range changes {
 			cleaned := filepath.Clean(change.Path)
 			if cleaned == metadataPath {
 				if _, err := DecodeMetadata(change.Contents); err != nil {
+					return err
+				}
+				continue
+			}
+			if cleaned == engineSettingsPath {
+				if _, err := decodeEngineSettings(change.Contents); err != nil {
 					return err
 				}
 				continue

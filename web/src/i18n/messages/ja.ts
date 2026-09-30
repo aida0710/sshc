@@ -966,7 +966,7 @@ export const ja = {
   "settings.pageDescription":
     "ターミナルの動作、sshcの起動設定、このマシンに保存するデータの暗号化を設定します。",
   "settings.engineDescription":
-    "sshcエンジンの待受ポートとVaultの自動ロックを設定します。",
+    "このマシンのsshcエンジンの待受ポートとVaultの自動ロックを設定します。この設定は同期されません。",
   "settings.terminalDescription":
     "新しいターミナルに適用する動作、表示、操作方法を設定します。",
   "settings.notificationsDescription":

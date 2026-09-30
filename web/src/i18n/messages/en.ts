@@ -964,7 +964,7 @@ export const en = {
   "settings.pageDescription":
     "Configure embedded terminals, sshc's lifecycle, and protection for this machine's encrypted data.",
   "settings.engineDescription":
-    "Configure the sshc engine port and automatic vault locking.",
+    "Configure this machine's sshc engine port and automatic vault locking. These settings are not synced.",
   "settings.terminalDescription":
     "Configure the behavior, appearance, and controls used by new terminals.",
   "settings.notificationsDescription":

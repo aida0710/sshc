@@ -217,49 +217,6 @@ func (s *Service) SetFileTransferSettings(settings FileTransferSettings) (SaveRe
 	return SaveResult{TransactionID: result.ID, Written: result.Written}, nil
 }
 
-// EngineSettings は、保存されている engine の設定をそのまま返す。
-func (s *Service) EngineSettings() EngineSettings {
-	stored, _, err := s.metadata.Load()
-	if err != nil || stored.Engine == nil {
-		return EngineSettings{}
-	}
-	return *stored.Engine
-}
-
-// SetEngineSettings は、節をまるごと置き換える。範囲の外は
-// ErrMetadataEnginePort か ErrMetadataVaultAutoLock で、何も書かずに断る。
-func (s *Service) SetEngineSettings(settings EngineSettings) (SaveResult, error) {
-	// metadata.json の保存でも同じ検査を通るが、ディレクトリを作る前に断る。
-	if err := validateEngineSettings(settings); err != nil {
-		return SaveResult{}, err
-	}
-	stored, precondition, err := s.metadata.Load()
-	if err != nil {
-		return SaveResult{}, err
-	}
-	if settings == (EngineSettings{}) {
-		// 何も設定されていないなら節ごと消す。空の節を残さない。
-		stored.Engine = nil
-	} else {
-		stored.Engine = &settings
-	}
-	if err := s.metadata.EnsureDirectory(); err != nil {
-		return SaveResult{}, err
-	}
-	change, err := s.metadata.Change(stored, precondition)
-	if err != nil {
-		return SaveResult{}, err
-	}
-	result, err := s.manager.Commit(storage.Request{
-		Operation: "engine.settings",
-		Changes:   []storage.Change{change},
-	})
-	if err != nil {
-		return SaveResult{}, err
-	}
-	return SaveResult{TransactionID: result.ID, Written: result.Written}, nil
-}
-
 // TerminalReconnects は、繋ぎ直しを何回まで試みるかを返す。
 func (s *Service) TerminalReconnects() int {
 	settings := s.TerminalSettings()

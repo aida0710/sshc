@@ -9,7 +9,6 @@ import (
 	"sshc/internal/api"
 	"sshc/internal/application"
 	"sshc/internal/platform"
-	"sshc/internal/secret"
 )
 
 // ConfigHandlers は、configuration・metadata・history の各エンドポイントを提供する。
@@ -17,7 +16,6 @@ import (
 // 変更操作については Security.Middleware が強制する CSRF ヘッダーの背後にある。
 type ConfigHandlers struct {
 	Service *application.Service
-	Vault   *secret.Service
 	// Keys は group 操作が必要とするインベントリを供給する。group の rename は
 	// その鍵を移動させることを意味し、それらを指す IdentityFile をすべて書き換える。
 	Keys KeyService
@@ -43,6 +41,7 @@ func registerConfigRoutes(engine *echo.Echo, handlers ConfigHandlers) {
 	engine.GET("/api/v1/metadata", handlers.Metadata)
 	engine.PUT("/api/v1/metadata/shortcuts", handlers.SetShortcuts)
 	engine.PUT("/api/v1/metadata/terminal", handlers.SetTerminal)
+	engine.GET("/api/v1/metadata/engine", handlers.Engine)
 	engine.PUT("/api/v1/metadata/engine", handlers.SetEngine)
 	registerBackgroundRoutes(engine, handlers)
 	engine.GET("/api/v1/history", handlers.History)
@@ -297,29 +296,31 @@ func (h ConfigHandlers) Recover(c *echo.Context) error {
 	return c.JSON(http.StatusOK, api.RecoverResponse{Status: "ok"})
 }
 
-// SetEngine は、engine そのものの設定を書き戻す。
+// Engine は、このマシンの sshc エンジンの設定を返す。同期する metadata.json には無いので、
+// GET /api/v1/metadata とは別に読む。
+func (h ConfigHandlers) Engine(c *echo.Context) error {
+	return c.JSON(http.StatusOK, h.Service.EngineSettings())
+}
+
+// SetEngine は、このマシンの sshc エンジンの設定を書き戻す。
 //
 // 受け口の番号は起動時にしか読まれない。変えても、次に engine を起動するまで
-// 効かない。画面はそう言う。
+// 効かない。画面はそう言う。自動ロックの時間は application がすぐに Vault へ移す。
 func (h ConfigHandlers) SetEngine(c *echo.Context) error {
 	var request api.EngineSettings
 	if err := decodeJSON(c, &request); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
-	settings := engineSettingsFromRequest(request)
-	result, err := h.Service.SetEngineSettings(settings)
+	result, err := h.Service.SetEngineSettings(engineSettingsFromRequest(request))
 	switch {
 	// 範囲の外は保存で断る。通せば、断るのは次の起動の bind であり、
 	// そのとき画面はもう閉じている。
-	case errors.Is(err, application.ErrMetadataEnginePort):
+	case errors.Is(err, application.ErrEnginePort):
 		return problem(c, http.StatusBadRequest, "port_out_of_range")
-	case errors.Is(err, application.ErrMetadataVaultAutoLock):
+	case errors.Is(err, application.ErrVaultAutoLock):
 		return problem(c, http.StatusBadRequest, "invalid_vault_auto_lock")
 	case err != nil:
 		return serviceProblem(c, err)
-	}
-	if h.Vault != nil {
-		h.Vault.SetIdleTimeout(settings.VaultIdleTimeout(secret.IdleTimeout))
 	}
 	return c.JSON(http.StatusOK, api.SettingsSaveResult{
 		TransactionId: result.TransactionID,

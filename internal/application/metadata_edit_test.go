@@ -38,11 +38,11 @@ func loadMetadata(t *testing.T, service *Service) Metadata {
 	return stored
 }
 
-// changeEnginePortElsewhere は、画面が読み込んだあとにほかの書き手が別の節を変えた状態を作る。
-func changeEnginePortElsewhere(t *testing.T, service *Service) {
+// changeTransferSettingsElsewhere は、画面が読み込んだあとにほかの書き手が別の節を変えた状態を作る。
+func changeTransferSettingsElsewhere(t *testing.T, service *Service) {
 	t.Helper()
 	stored := loadMetadata(t, service)
-	stored.Engine = &EngineSettings{Port: 18422}
+	stored.FileTransfers = &FileTransferSettings{MaxConcurrent: 3}
 	seedMetadata(t, service, stored)
 }
 
@@ -50,7 +50,7 @@ var bastion = HostIdentity{Path: "config", Alias: "bastion"}
 
 func TestSavingOneHostsMetadataKeepsSectionsChangedElsewhere(t *testing.T) {
 	service, _ := newTestService(t)
-	changeEnginePortElsewhere(t, service)
+	changeTransferSettingsElsewhere(t, service)
 
 	if _, err := service.Save(EditRequest{
 		Kind: EditMetadata, Path: bastion.Path, Alias: bastion.Alias,
@@ -60,8 +60,8 @@ func TestSavingOneHostsMetadataKeepsSectionsChangedElsewhere(t *testing.T) {
 	}
 
 	stored := loadMetadata(t, service)
-	if stored.Engine == nil || stored.Engine.Port != 18422 {
-		t.Fatalf("engine settings = %#v, want the port written elsewhere", stored.Engine)
+	if stored.FileTransfers == nil || stored.FileTransfers.MaxConcurrent != 3 {
+		t.Fatalf("transfer settings = %#v, want the value written elsewhere", stored.FileTransfers)
 	}
 	if len(stored.Hosts) != 1 || stored.Hosts[0].Tags[0] != "prod" {
 		t.Fatalf("hosts = %#v", stored.Hosts)

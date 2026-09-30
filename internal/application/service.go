@@ -59,14 +59,17 @@ func NewService(workspace *storage.Workspace, manager *storage.Manager) *Service
 // Vault を書く変更は secret.ErrNoVault で、鍵のパス変更は ErrKeyPassphraseVaultMissing
 // で断り、alias の改名は設定だけを書く。
 //
-// 生成時ではなく setter で受けるのは、Vault の側がこの service の engine 設定
-// （アイドルでロックするまでの時間）を読んでから作られるからである。鍵の検証
-// （SetKeyPassphraseVerifier）と起動スニペットの改名・削除（SetStartupRenamer・
-// SetStartupRemover）も同じ理由で
-// setter で受ける。鍵の一覧（keys.Inventory）は、要求のたびにディスクから読む
-// スナップショットなので、呼び出しごとの引数で受ける。
+// 渡した Vault には、このマシンの自動ロックの時間を移す。以後は、sshc エンジンの設定を
+// 変える操作のたびに移し直す（applyVaultAutoLock）。
+//
+// 生成時ではなく setter で受けるのは、engine の組み立てで Vault がこの service のあとに
+// 作られるからである。鍵の検証（SetKeyPassphraseVerifier）と起動スニペットの改名・削除
+// （SetStartupRenamer・SetStartupRemover）も同じ理由で setter で受ける。鍵の一覧
+// （keys.Inventory）は、要求のたびにディスクから読むスナップショットなので、呼び出しごとの
+// 引数で受ける。
 func (s *Service) SetVault(vault *secret.Service) {
 	s.vault = vault
+	s.applyVaultAutoLock()
 }
 
 func (s *Service) displayPath(absolute string) string {

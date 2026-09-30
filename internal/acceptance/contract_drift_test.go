@@ -41,6 +41,7 @@ var servedTypes = []struct {
 	{"EffectiveDiff", application.EffectiveDiff{}},
 	{"EffectiveEntry", application.EffectiveEntry{}},
 	{"EmbeddedTerminal", application.EmbeddedTerminal{}},
+	{"EngineSettings", application.EngineSettings{}},
 	{"FieldEdit", application.FieldEdit{}},
 	{"FileContents", application.FileContents{}},
 	{"FileDiff", application.FileDiff{}},

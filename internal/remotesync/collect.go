@@ -55,6 +55,10 @@ var neverTravels = slices.Concat([]string{
 	// Transfer jobs, resume checkpoints and device-local paths belong to one
 	// engine and must never be copied to another machine.
 	"sshc/transfers.json",
+	// このマシンの sshc エンジンの設定（受け口のポートと Vault の自動ロック）。運ぶと、
+	// 別のマシンの受け口とブラウザの登録、自動ロックを変える。持ち主は application で、
+	// remotesync より上の層なので参照しない。app のテストが持ち主の定数と照合する。
+	"sshc/engine-settings.json",
 	// vault の暗号文は端末固有のマスターパスワードで封印される。同期では復号済み文書を
 	// スナップショット全体の暗号化内に一度だけ載せ、受信側で再封印する。
 	VaultPath,
