@@ -2,6 +2,7 @@ package application
 
 import (
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -61,7 +62,7 @@ func TestMetadataMigratesVersionThreeAndRoundTripsVersionFive(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(encoded), `"schemaVersion": 8`) {
+	if !strings.Contains(string(encoded), `"schemaVersion": 9`) {
 		t.Fatalf("encoded migration = %s", encoded)
 	}
 	decoded, err := DecodeMetadata(encoded)
@@ -296,7 +297,7 @@ func TestMetadataCarriesOnlyPresentation(t *testing.T) {
 			t.Errorf("encoded metadata still carries %s:\n%s", absent, encoded)
 		}
 	}
-	if !strings.Contains(string(encoded), `"schemaVersion": 8`) {
+	if !strings.Contains(string(encoded), `"schemaVersion": 9`) {
 		t.Errorf("encoded metadata is not the current version:\n%s", encoded)
 	}
 }
@@ -503,14 +504,15 @@ func TestVersionSixMetadataIsReadAndWrittenAsTheCurrentVersion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EncodeMetadata = %v", err)
 	}
-	if !strings.Contains(string(encoded), `"schemaVersion": 8`) || len(migrated.VPNProfiles) != 1 {
+	if !strings.Contains(string(encoded), `"schemaVersion": 9`) || len(migrated.VPNProfiles) != 1 {
 		t.Fatalf("encoded = %s", encoded)
 	}
 }
 
 // これより新しいバージョンのファイルは読まない。知らない項目を読み飛ばして書き直すと消える。
 func TestMetadataFromANewerSshcIsRefused(t *testing.T) {
-	if _, err := DecodeMetadata([]byte(`{"schemaVersion":9}`)); !errors.Is(err, ErrMetadataVersion) {
+	newer := fmt.Sprintf(`{"schemaVersion":%d}`, MetadataSchemaVersion+1)
+	if _, err := DecodeMetadata([]byte(newer)); !errors.Is(err, ErrMetadataVersion) {
 		t.Fatalf("DecodeMetadata = %v", err)
 	}
 }

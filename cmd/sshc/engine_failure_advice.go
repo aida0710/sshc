@@ -12,6 +12,9 @@ const (
 	vaultMissingAdvice       = "no vault exists; run sshc vault create"
 	vaultLockedAdvice        = "the vault is locked; run sshc vault unlock"
 	engineIncompatibleAdvice = "the CLI and running engine are incompatible; update whichever is older and restart it"
+	// engineInvalidResponseAdvice は、engine の応答を読めなかったときの案内。engineFailureAdvice
+	// には入れず、この案内を出すコマンド（sync、vpn）が自分の switch から使う。
+	engineInvalidResponseAdvice = "the running engine returned an invalid response; check that the CLI and engine versions match"
 )
 
 // engineFailureAdvice は、classifyCommandFailure が付けた種別のうち、どのコマンドでも

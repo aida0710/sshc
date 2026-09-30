@@ -1,6 +1,8 @@
 package vpnrefusal
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -62,5 +64,18 @@ func TestATargetOutsideTheAllowedIPsSaysWhere(t *testing.T) {
 	}
 	if !refusal.RequiresAction() {
 		t.Fatal("AllowedIPs を直さない限り同じ理由で断られるのに、再接続を繰り返す")
+	}
+}
+
+// WireGuard のハンドシェイクの失敗は、コンテナのログ（agent の文）と画面・CLI で同じ文を
+// 使う。「ログ」で2通りの言い方が並ばない。
+func TestTheHandshakeFailureReadsTheSameInTheContainerLog(t *testing.T) {
+	script, err := os.ReadFile(filepath.Join("..", "vpn", "container", "backend-wireguard.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `fail handshake_timeout "` + routeReasons[vpn.FailureHandshakeTimeout] + `"`
+	if !strings.Contains(string(script), want) {
+		t.Fatalf("backend-wireguard.sh に %s が無い", want)
 	}
 }

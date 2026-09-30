@@ -34,8 +34,10 @@ export type VPNApi = {
   removeVPNProfile(name: string): Promise<VPNOverview>;
   renameVPNProfile(from: string, to: string): Promise<VPNOverview>;
   vpnLogs(name: string): Promise<VPNLogs>;
-  startVPNSession(name: string): Promise<VPNOverview>;
-  stopVPNSession(name: string): Promise<VPNOverview>;
+  startVPNRoute(name: string): Promise<VPNOverview>;
+  // disconnectVPNRoute は、利用者の求めで経路を切断する。sshcエンジンは切断したことを
+  // 覚え、その経路を通っていた接続の自動再接続では経路を起動し直さない。
+  disconnectVPNRoute(name: string): Promise<VPNOverview>;
 };
 
 function validateOverview(value: unknown): VPNOverview {
@@ -101,18 +103,18 @@ export const vpnApi: VPNApi = {
       }),
     );
   },
-  async startVPNSession(name) {
+  async startVPNRoute(name) {
     return validateOverview(
       // 本文は送らない。openapi はこの操作に本文を定めておらず、JSON を付けると
       // 送る前の検査（validateAPIRequest）が断る。
-      await apiClient.mutate<unknown>(`${profilePath(name)}/session`, { method: "POST" }, {
+      await apiClient.mutate<unknown>(`${profilePath(name)}/route`, { method: "POST" }, {
         locallyHandledCodes: locallyExplainedVPNFailures,
       }),
     );
   },
-  async stopVPNSession(name) {
+  async disconnectVPNRoute(name) {
     return validateOverview(
-      await apiClient.mutate<unknown>(`${profilePath(name)}/session`, { method: "DELETE" }, {
+      await apiClient.mutate<unknown>(`${profilePath(name)}/route`, { method: "DELETE" }, {
         locallyHandledCodes: locallyExplainedVPNFailures,
       }),
     );

@@ -8,7 +8,8 @@ interface=ppp0
 connection=sshc-vpn
 
 # l2tp_disconnect_seconds は、L2TP の切断がサーバーへ届くのを待つ上限である。
-# 止めるときの持ち時間（agent.sh の shutdown_seconds）の中に収める。
+# 止めるときの持ち時間（agent.sh の shutdown_seconds）の残りのうち、IPsec の SA を
+# 消す時間を残して使う。
 l2tp_disconnect_seconds=2
 
 l2tp_diagnostics() {
@@ -22,7 +23,10 @@ l2tp_fail() {
 }
 
 establish_ipsec() {
-	if ! timeout "$(timeout_seconds)" ipsec up "$connection" >>"$runtime/ipsec.log" 2>&1; then
+	# 応えない相手には締め切りまで IKE を送り直すので、止める合図を受けられるよう背後で
+	# 待つ（wait_for_step）。
+	timeout "$(timeout_seconds)" ipsec up "$connection" >>"$runtime/ipsec.log" 2>&1 &
+	if ! wait_for_step $!; then
 		l2tp_fail ipsec_negotiation "IPsecのネゴシエーションに失敗しました。事前共有鍵、サーバー、暗号スイートを確認してください。"
 	fi
 	# ipsec upはQuick Modeの拒否でも終了コード0を返す。IKEだけではL2TPを
@@ -103,19 +107,26 @@ backend_alive() {
 	ip -4 address show dev "$interface" 2>/dev/null | grep -q 'inet '
 }
 
-# L2TP の切断を送り、IPsec の SA を消してから止める。
+# L2TP の切断を送り、IPsec の SA を消してから止める。どの段も、止める手順の持ち時間
+# （shutdown_seconds_left）の中で待つ。
 backend_down() {
 	if [ -e "$runtime/l2tp-control" ]; then
 		# 制御の口は FIFO で、xl2tpd が止まっていると書き込みが読み手を待ち続ける。
 		timeout 1 sh -c 'printf "d %s\n" "$1" >"$2"' _ "$connection" "$runtime/l2tp-control" 2>/dev/null || true
 		# 切断は IPsec の中を通ってサーバーへ届く。先に IPsec を消すと、切断は
-		# REJECT の規則で落ちる。PPP のアドレスが消えるまで少し待つ。
+		# REJECT の規則で落ちる。PPP のアドレスが消えるまで少し待つ。IPsec の SA を消す
+		# 1秒は残す。
 		seconds=0
-		while backend_alive && [ "$seconds" -lt "$l2tp_disconnect_seconds" ]; do
+		while backend_alive && [ "$seconds" -lt "$l2tp_disconnect_seconds" ] &&
+			[ "$(shutdown_seconds_left)" -gt 1 ]; do
 			sleep 1
 			seconds=$((seconds + 1))
 		done
 	fi
-	timeout "$shutdown_seconds" ipsec down "$connection" >/dev/null 2>&1 || true
-	timeout "$shutdown_seconds" ipsec stop >/dev/null 2>&1 || true
+	timeout "$(shutdown_timeout_seconds)" ipsec down "$connection" >/dev/null 2>&1 || true
+	# charon を止めるのは後始末だけなので、持ち時間が残っているときだけ行う。コンテナが
+	# 終われば charon も終わる。
+	if [ "$(shutdown_seconds_left)" -gt 0 ]; then
+		timeout "$(shutdown_seconds_left)" ipsec stop >/dev/null 2>&1 || true
+	fi
 }

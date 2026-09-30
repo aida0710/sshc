@@ -1,8 +1,11 @@
 package vpnrefusal
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"slices"
 	"strings"
 	"testing"
 
@@ -24,8 +27,8 @@ func TestEveryReasonHasASentence(t *testing.T) {
 		vpn.FailureUnknown, vpn.FailureTimeout, vpn.FailureServerUnresolved, vpn.FailureIPsecNegotiation,
 		vpn.FailurePPPAuthentication, vpn.FailureOpenConnect, vpn.FailureHandshakeTimeout, vpn.FailureTunnelLost,
 	} {
-		if _, known := sessionReasons[reason]; !known {
-			t.Errorf("%s has no session sentence", reason)
+		if _, known := routeReasons[reason]; !known {
+			t.Errorf("%s has no route sentence", reason)
 		}
 	}
 	for _, reason := range []vpn.FailureReason{
@@ -57,8 +60,10 @@ func TestFailuresBecomeTheirWords(t *testing.T) {
 			Refusal{Code: CodeTargetFailed, Reason: string(vpn.FailureTargetUnresolved)}},
 		{"DNSの無い名前", &vpn.DestinationError{Address: "db:22", Reason: vpn.ReasonNameNeedsDNS},
 			Refusal{Code: CodeDestinationInvalid, Reason: string(vpn.ReasonNameNeedsDNS)}},
-		{"ハンドシェイク", &vpn.SessionFailure{Profile: "lab", Reason: vpn.FailureHandshakeTimeout},
-			Refusal{Code: CodeSessionFailed, Reason: string(vpn.FailureHandshakeTimeout)}},
+		{"ハンドシェイク", &vpn.RouteFailure{Profile: "lab", Reason: vpn.FailureHandshakeTimeout},
+			Refusal{Code: CodeRouteFailed, Reason: string(vpn.FailureHandshakeTimeout)}},
+		{"起動の途中の切断", vpn.ErrRouteDisconnected, Refusal{Code: CodeRouteDisconnected}},
+		{"起動の途中の停止", vpn.ErrRouteStopped, Refusal{Code: CodeRouteStopped}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			refusal, known := Of(test.err)
@@ -80,8 +85,8 @@ func TestOnlyRefusalsThatNeedAFixStopTheReconnect(t *testing.T) {
 	}{
 		{Refusal{Code: CodeSecretsMissing}, true},
 		{Refusal{Code: CodeDockerNotRunning}, true},
-		{Refusal{Code: CodeSessionFailed, Reason: string(vpn.FailureHandshakeTimeout)}, true},
-		{Refusal{Code: CodeSessionFailed, Reason: string(vpn.FailureTunnelLost)}, false},
+		{Refusal{Code: CodeRouteFailed, Reason: string(vpn.FailureHandshakeTimeout)}, true},
+		{Refusal{Code: CodeRouteFailed, Reason: string(vpn.FailureTunnelLost)}, false},
 		{Refusal{Code: CodeTargetFailed, Reason: string(vpn.FailureTargetUnresolved)}, true},
 		{Refusal{Code: CodeTargetFailed, Reason: string(vpn.FailureTargetUnreachable)}, false},
 	} {
@@ -108,5 +113,51 @@ func TestATargetFailureSaysWhatFailedFirst(t *testing.T) {
 	if !strings.HasPrefix(sentence, "VPN経由で接続先に接続できませんでした。") ||
 		!strings.Contains(sentence, "名前解決に失敗しました") {
 		t.Fatalf("sentence = %q", sentence)
+	}
+}
+
+// agent が書いてよい理由の語は、どれも経路か接続先の言い方を持つ。足し忘れると、
+// 「原因を特定できませんでした」の文が出る。
+func TestEveryFailureReasonOfTheEngineHasASentence(t *testing.T) {
+	for _, reason := range vpn.FailureReasons() {
+		_, route := routeReasons[reason]
+		_, target := targetReasons[reason]
+		if !route && !target {
+			t.Errorf("%s has no route or target sentence", reason)
+		}
+	}
+}
+
+// 画面と共有する理由の語の表（testdata/failure-reasons.json）は、Go の言い方の表と
+// 同じ語を並べる。画面のテストがこの表で画面の言い方を確かめる。
+func TestTheSharedFailureReasonTableMatchesTheSentences(t *testing.T) {
+	contents, err := os.ReadFile("testdata/failure-reasons.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var table struct {
+		Route  []string `json:"route"`
+		Target []string `json:"target"`
+	}
+	if err := json.Unmarshal(contents, &table); err != nil {
+		t.Fatal(err)
+	}
+	for _, compared := range []struct {
+		name      string
+		shared    []string
+		sentences map[vpn.FailureReason]string
+	}{
+		{"route", table.Route, routeReasons},
+		{"target", table.Target, targetReasons},
+	} {
+		var reasons []string
+		for reason := range compared.sentences {
+			reasons = append(reasons, string(reason))
+		}
+		slices.Sort(reasons)
+		shared := slices.Sorted(slices.Values(compared.shared))
+		if !slices.Equal(shared, reasons) {
+			t.Errorf("%s: failure-reasons.json = %v, Go の言い方の表 = %v", compared.name, shared, reasons)
+		}
 	}
 }

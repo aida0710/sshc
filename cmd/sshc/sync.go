@@ -32,7 +32,7 @@ func runSync(ctx context.Context, called syncInvocation, environment commandEnvi
 	var setupPrompt *os.File
 	if called.Action == syncSetup {
 		var err error
-		setupPrompt, err = requireSyncSetupTerminal(stdin, stderr, terminal)
+		setupPrompt, err = requireInteractivePrompt(stdin, stderr, terminal)
 		if err != nil {
 			return finishSyncFailure(called.JSON, err, stdout, stderr)
 		}
@@ -196,7 +196,27 @@ func runSyncPush(ctx context.Context, engine *engineAPI, force bool) (api.PushRe
 
 func finishSyncFailure(asJSON bool, err error, stdout, stderr io.Writer) int {
 	return finishCommandFailure(commandFailureReport{
-		cause: err, failure: classifyCommandFailure(err),
+		cause: err, failure: classifySyncFailure(err),
 		asJSON: asJSON, stdout: stdout, stderr: stderr, writeHuman: writeHumanSyncFailure,
 	})
+}
+
+// classifySyncFailure は、sync に固有の失敗を見分け、それ以外は共通の種類に分ける。
+func classifySyncFailure(err error) commandFailure {
+	switch {
+	case errors.Is(err, errSyncSetupInput):
+		return commandFailure{Kind: "invalid_setup_input", Retryable: false}
+	case errors.Is(err, errSyncSetupIncomplete):
+		return commandFailure{Kind: "sync_setup_target_incomplete", Retryable: false}
+	case errors.Is(err, errSyncPullRequiresForce):
+		return commandFailure{Kind: "sync_pull_requires_force", Retryable: false}
+	}
+	failure := classifyCommandFailure(err)
+	switch failure.Kind {
+	case "sync_remote_moved", "sync_remote_deleted", "preview_stale", "sync_setup_target_changed":
+		failure.Retryable = true
+	case "bucket_authentication_failed", "bucket_access_denied":
+		failure.Retryable = false
+	}
+	return failure
 }

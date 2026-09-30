@@ -191,10 +191,8 @@ func (s *Service) pullWithRemoteAcceptance(
 		return PullResult{}, err
 	}
 
-	request, conflicts, err := PlanEntriesWithIgnore(s.workspace.Root(), base, local, manifest, contents, resolve, ignoreRules.Match)
-	if exchangeErr := s.stageVault(&request); exchangeErr != nil {
-		return PullResult{}, exchangeErr
-	}
+	request, conflicts, err := PlanEntries(s.workspace.Root(), base, local, manifest, contents, resolve, ignoreRules.Match)
+	s.stageVault(&request)
 	if err != nil && !errors.Is(err, ErrNothingToApply) {
 		return PullResult{}, err
 	}
@@ -448,7 +446,7 @@ func (s *Service) requireSnippetPrecondition(path string, expected storage.Preco
 // stageVault maps the travelling logical path to the local vault path while
 // retaining plaintext and its logical precondition in the PullResult. Sealing
 // is deliberately deferred until apply holds SecretMutation.
-func (s *Service) stageVault(request *storage.Request) error {
+func (s *Service) stageVault(request *storage.Request) {
 	travelled := filepath.Join(s.workspace.Root(), filepath.FromSlash(TravelPath))
 	local := filepath.Join(s.workspace.Root(), filepath.FromSlash(VaultPath))
 	for index := range request.Changes {
@@ -465,7 +463,6 @@ func (s *Service) stageVault(request *storage.Request) error {
 	}
 	request.Removals = slices.DeleteFunc(request.Removals, func(removal storage.Removal) bool { return removal.Path == travelled })
 	sort.Slice(request.Changes, func(i, j int) bool { return request.Changes[i].Path < request.Changes[j].Path })
-	return nil
 }
 
 // exchangeVault validates the logical preview against the current unlocked

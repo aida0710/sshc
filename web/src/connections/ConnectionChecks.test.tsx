@@ -57,6 +57,26 @@ describe("ConnectionChecks", () => {
     expect(integrations.authentication).not.toHaveBeenCalled();
   });
 
+  it("shows why a connection with a VPN profile was not dialled", async () => {
+    const notice =
+      "This connection goes through a VPN profile, so the check did not dial the destination: a direct dial from this machine does not use the VPN route. The authentication test connects through the VPN.";
+    const integrations = api({
+      reachability: vi.fn().mockResolvedValue({
+        address: "10.9.9.1:22",
+        outcome: "not_checked",
+        elapsedMs: 0,
+        detail: "",
+        notice,
+      }),
+    });
+    render(<ConnectionChecks alias="lab" api={integrations} disabled={false} resetKey={0} />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Check reachability" }));
+
+    expect(await screen.findByText("not_checked")).toBeInTheDocument();
+    expect(screen.getByText(notice)).toBeInTheDocument();
+  });
+
   it("preflights saved settings and authenticates directly when no directive can execute", async () => {
     const integrations = api();
     render(<ConnectionChecks alias="bastion" api={integrations} disabled={false} resetKey={0} />);

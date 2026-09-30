@@ -44,7 +44,7 @@ async function answerVPN(page: Page, state: RouteState): Promise<{ disconnects: 
   const reply = (route: Route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(overviewOf(state)) });
   await page.route(overviewPath, reply);
-  await page.route("**/api/v1/vpn/profiles/lab/session", (route) => {
+  await page.route("**/api/v1/vpn/profiles/lab/route", (route) => {
     if (route.request().method() === "DELETE") {
       received.disconnects += 1;
       state.running = false;

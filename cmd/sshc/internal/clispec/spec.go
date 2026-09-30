@@ -123,7 +123,7 @@ Automation: --expect REGEX | --read-for D | --script FILE|-
 	{Name: "vpn", Route: "vpn", Help: "usage:\n  sshc vpn [--json]\n  sshc vpn add <name>\n  sshc vpn edit <name>\n  sshc vpn remove <name> [-y|--yes]\n  sshc vpn rename <name> <new-name> [--json]\n  sshc vpn up <name> [--json]\n  sshc vpn down <name> [--json]\n  sshc vpn logs <name> [--json]\n  sshc vpn proxy <name> <host> <port>\n  sshc vpn bind <alias> <name> [--json]\n  sshc vpn unbind <alias> [--json]\n\nRoute the SSH connections a profile is bound to through a VPN of their own, over WireGuard, L2TP/IPsec, OpenConnect, OpenVPN or IKEv2/IPsec. A profile holds the VPN settings only; each connection reaches its own HostName and Port through it. The tunnel lives in a container, so the host default route, DNS and VPN client are untouched. Requires Docker on this machine. Add reads the secrets interactively without echoing them.\n", Actions: []Action{
 		{Name: "add", Help: "usage:\n  sshc vpn add <name>\n\nCreate a VPN profile. Secrets are read interactively and stored in the vault. Bind it to connections with sshc vpn bind.\n"},
 		{Name: "edit", Help: "usage:\n  sshc vpn edit <name>\n\nChange a VPN profile interactively. Every prompt starts from the saved value; a blank secret keeps the saved one, and - clears an optional setting.\n"},
-		{Name: "remove", Help: "usage:\n  sshc vpn remove <name> [-y|--yes]\n\nRemove a profile, its secrets, its running session, and the bindings that named it.\n"},
+		{Name: "remove", Help: "usage:\n  sshc vpn remove <name> [-y|--yes]\n\nRemove a profile, its secrets, its running route, and the bindings that named it.\n"},
 		{Name: "rename", Help: "usage:\n  sshc vpn rename <name> <new-name> [--json]\n\nRename a profile. Its secrets and the bindings that named it move with it, and the running route under the old name is closed.\n"},
 		{Name: "logs", Help: "usage:\n  sshc vpn logs <name> [--json]\n\nPrint what the sshc engine recorded while preparing the route, followed by the container's recent output, with every stored secret masked. This is where a route that will not come up explains itself.\n"},
 		{Name: "up", Help: "usage:\n  sshc vpn up <name> [--json]\n\nOpen the route and wait until its relay is listening.\n"},
@@ -173,7 +173,7 @@ const GlobalHelp = `usage:
                        print shell completion that includes SSH Host aliases
   sshc info <alias> [--json]
                        print the resolved SSH target without connecting
-  sshc vpn [--json]    list VPN profiles and their sessions
+  sshc vpn [--json]    list VPN profiles and their routes
   sshc sync [--json]   print synchronization status from the running engine
   sshc sync setup      configure synchronization in an interactive terminal
   sshc sync push [--force] [--json]

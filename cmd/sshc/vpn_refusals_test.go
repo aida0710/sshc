@@ -10,7 +10,7 @@ import (
 	"sshc/internal/vpn"
 )
 
-// engine の拒否は、理由の語を日本語の文にして見せる。
+// engine の拒否は、理由の語を英語の文にして見せる。
 func TestVPNRefusalsAreExplainedInASentence(t *testing.T) {
 	for _, test := range []struct {
 		name    string
@@ -22,25 +22,25 @@ func TestVPNRefusalsAreExplainedInASentence(t *testing.T) {
 			name:    "改名先の名前がある",
 			called:  vpnInvocation{Action: vpnRename, Name: "old", Rename: "lab"},
 			problem: `{"code":"vpn_profile_exists","message":"request rejected"}`,
-			want:    []string{"「lab」という名前のVPNプロファイルはすでにあります"},
+			want:    []string{`A VPN profile named "lab" already exists. Choose another name.`},
 		},
 		{
 			name:    "項目の上限",
 			called:  vpnInvocation{Action: vpnRename, Name: "old", Rename: "lab"},
 			problem: `{"code":"vpn_profile_invalid","message":"request rejected","field":"name","reason":"too_long","limit":48}`,
-			want:    []string{"name: 長すぎます（48文字まで）。"},
+			want:    []string{"name: Too long: up to 48 characters."},
 		},
 		{
 			name:    "経路を用意できなかった",
 			called:  vpnInvocation{Action: vpnUp, Name: "lab"},
-			problem: `{"code":"vpn_session_failed","message":"request rejected","reason":"handshake_timeout"}`,
-			want:    []string{"ハンドシェイクに失敗しました", "sshc vpn logs lab"},
+			problem: `{"code":"vpn_route_failed","message":"request rejected","reason":"handshake_timeout"}`,
+			want:    []string{"The handshake failed.", "sshc vpn logs lab"},
 		},
 		{
 			name:    "Dockerが起動していない",
 			called:  vpnInvocation{Action: vpnUp, Name: "lab"},
 			problem: `{"code":"vpn_docker_not_running","message":"request rejected"}`,
-			want:    []string{"Dockerが起動していません"},
+			want:    []string{"Docker is not running."},
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -82,18 +82,18 @@ func TestAnExistingProfileNameSuggestsEditingOrRenaming(t *testing.T) {
 // 理由を出し、ログの読み方を添える。
 func TestAFailedRouteForAConnectionSaysWhyAndWhereTheLogsAre(t *testing.T) {
 	err := describedVPNRouteError("lab", engineProblem{
-		Status: 409, Code: "vpn_session_failed", Reason: string(vpn.FailureHandshakeTimeout),
+		Status: 409, Code: "vpn_route_failed", Reason: string(vpn.FailureHandshakeTimeout),
 	})
 
 	message := err.Error()
-	if !strings.Contains(message, "ハンドシェイクに失敗しました") {
+	if !strings.Contains(message, "The handshake failed.") {
 		t.Fatalf("message = %q", message)
 	}
 	if !strings.Contains(message, "sshc vpn logs lab") {
 		t.Fatalf("ログの読み方が無い: %q", message)
 	}
 	var problem engineProblem
-	if !errors.As(err, &problem) || problem.Code != "vpn_session_failed" {
+	if !errors.As(err, &problem) || problem.Code != "vpn_route_failed" {
 		t.Fatalf("元の拒否を辿れない: %v", err)
 	}
 }

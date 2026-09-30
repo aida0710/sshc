@@ -39,8 +39,12 @@ export function VPNPanel({ api = vpnApi }: VPNPanelProps) {
   // editingProfile は、いま編集のフォームを開いているプロファイルである。
   const [editingProfile, setEditingProfile] = useState("");
   const [shownLogs, setShownLogs] = useState("");
-  // startingProfile は、いま経路を用意させているプロファイルである。
-  const [startingProfile, setStartingProfile] = useState("");
+  // startingProfiles は、この画面がいま経路を用意させているプロファイルである。用意は
+  // 初回のイメージの作成で分単位になるので、ほかのプロファイルの操作は止めない。
+  const [startingProfiles, setStartingProfiles] = useState<ReadonlySet<string>>(() => new Set());
+  // abandonedStarts は、用意の途中で利用者が切断したプロファイルである。sshcエンジンは
+  // その用意を打ち切るので、打ち切られた失敗は知らせない。
+  const abandonedStarts = useRef(new Set<string>());
   // failedProfile は、直前に経路を用意できなかったプロファイルである。失敗の文の
   // 横からそのログを開けるようにする。
   const [failedProfile, setFailedProfile] = useState("");
@@ -52,24 +56,32 @@ export function VPNPanel({ api = vpnApi }: VPNPanelProps) {
 
   const describe = useCallback((error: unknown) => describeVPNProblem(t, error) ?? t("vpn.failed"), [t]);
 
-  const run = operation.run;
-  // act は、一覧を返す操作を走らせる。応答の一覧は、その間に別の操作が始まって
-  // いなければ採る。失敗の言い方は describeFailure で変えられる。成功したかどうかを返す。
-  const act = useCallback(
-    async (work: () => Promise<VPNOverview>, describeFailure: (error: unknown) => string = describe) => {
+  const { run, fail, clearError } = operation;
+  // runWithGeneration は、一覧を返す操作 work を、世代を進めてから走らせ、終わったら
+  // もう一度進める。work が受け取る adoptIfLatest は、応答の一覧を、その間に別の操作が
+  // 始まっていなければ採る。
+  const runWithGeneration = useCallback(
+    async <T,>(work: (adoptIfLatest: (next: VPNOverview) => void) => Promise<T>): Promise<T> => {
       generation.current += 1;
       const started = generation.current;
       setFailedProfile("");
-      const succeeded = await run(work, {
-        apply: (next) => {
+      try {
+        return await work((next) => {
           if (generation.current === started) setOverview(next);
-        },
-        describe: describeFailure,
-      });
-      if (generation.current === started) generation.current += 1;
-      return succeeded;
+        });
+      } finally {
+        if (generation.current === started) generation.current += 1;
+      }
     },
-    [describe, run],
+    [],
+  );
+
+  // act は、一覧を返す操作を、画面全体を待たせて走らせる。失敗の言い方は describeFailure で
+  // 変えられる。成功したかどうかを返す。
+  const act = useCallback(
+    (work: () => Promise<VPNOverview>, describeFailure: (error: unknown) => string = describe) =>
+      runWithGeneration((adoptIfLatest) => run(work, { apply: adoptIfLatest, describe: describeFailure })),
+    [describe, run, runWithGeneration],
   );
 
   useEffect(() => {
@@ -97,19 +109,32 @@ export function VPNPanel({ api = vpnApi }: VPNPanelProps) {
     if (checking) void refresh();
   }, [checking, refresh]);
 
+  // startProfile は、経路を用意させる。ほかの操作と違い、画面全体を待たせない。
   const startProfile = useCallback(
     async (name: string) => {
-      setStartingProfile(name);
-      await act(
-        () => api.startVPNSession(name),
-        (error) => {
-          if (failureCode(error) === "vpn_session_failed") setFailedProfile(name);
-          return describe(error);
-        },
-      );
-      setStartingProfile("");
+      setStartingProfiles((current) => new Set(current).add(name));
+      abandonedStarts.current.delete(name);
+      clearError();
+      try {
+        await runWithGeneration(async (adoptIfLatest) => {
+          try {
+            adoptIfLatest(await api.startVPNRoute(name));
+          } catch (error) {
+            if (abandonedStarts.current.has(name)) return;
+            if (failureCode(error) === "vpn_route_failed") setFailedProfile(name);
+            fail(describe(error));
+          }
+        });
+      } finally {
+        abandonedStarts.current.delete(name);
+        setStartingProfiles((current) => {
+          const next = new Set(current);
+          next.delete(name);
+          return next;
+        });
+      }
     },
-    [act, api, describe],
+    [api, clearError, describe, fail, runWithGeneration],
   );
 
   // saveProfile は、プロファイルを保存する操作を走らせる。項目の誤りは、フォームの
@@ -127,8 +152,11 @@ export function VPNPanel({ api = vpnApi }: VPNPanelProps) {
   );
 
   const disconnectProfile = useCallback(
-    (name: string) => void act(() => api.stopVPNSession(name)),
-    [act, api],
+    (name: string) => {
+      if (startingProfiles.has(name)) abandonedStarts.current.add(name);
+      void act(() => api.disconnectVPNRoute(name));
+    },
+    [act, api, startingProfiles],
   );
 
   // requestDisconnect は、経路を切断する。経路を使っている接続があれば、それらも
@@ -164,12 +192,13 @@ export function VPNPanel({ api = vpnApi }: VPNPanelProps) {
   // 用意させている最中だけは、その応答が経路が立つまで返らないので、段階を見せる
   // ために読み直し続ける。
   const preparingRoute = overview?.profiles.some((status) => (status.phase ?? "") !== "") ?? false;
-  const showingProgress = startingProfile !== "" || preparingRoute || checking;
+  const startingAny = startingProfiles.size > 0;
+  const showingProgress = startingAny || preparingRoute || checking;
   usePolling(
     refresh,
     {
       intervalMs: showingProgress ? routeProgressIntervalMs : overviewRefreshIntervalMs,
-      enabled: startingProfile !== "" || !operation.busy,
+      enabled: startingAny || !operation.busy,
     },
   );
 
@@ -218,6 +247,7 @@ export function VPNPanel({ api = vpnApi }: VPNPanelProps) {
                   <VPNProfileCard
                     status={status}
                     busy={operation.busy}
+                    starting={startingProfiles.has(name)}
                     available={overview.available}
                     checking={overview.checking}
                     actions={{

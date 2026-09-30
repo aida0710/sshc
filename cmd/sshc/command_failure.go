@@ -59,26 +59,13 @@ func classifyCommandFailure(err error) commandFailure {
 		return commandFailure{Kind: "vault_missing", Retryable: false}
 	case errors.Is(err, errEngineVaultLocked):
 		return commandFailure{Kind: "vault_locked", Retryable: false}
-	case errors.Is(err, errSyncSetupTTY):
+	case errors.Is(err, errInteractivePromptRequired):
 		return commandFailure{Kind: "interactive_terminal_required", Retryable: false}
-	case errors.Is(err, errSyncSetupInput):
-		return commandFailure{Kind: "invalid_setup_input", Retryable: false}
-	case errors.Is(err, errSyncSetupIncomplete):
-		return commandFailure{Kind: "sync_setup_target_incomplete", Retryable: false}
-	case errors.Is(err, errSyncPullRequiresForce):
-		return commandFailure{Kind: "sync_pull_requires_force", Retryable: false}
 	case errors.Is(err, errEngineInvalidResponse), errors.Is(err, errEngineResponseTooLarge):
 		return commandFailure{Kind: "invalid_engine_response", Retryable: false}
 	}
 	if errors.As(err, &problem) {
-		retryable := problem.Retryable
-		switch problem.Code {
-		case "sync_remote_moved", "sync_remote_deleted", "preview_stale", "sync_setup_target_changed":
-			retryable = true
-		case "bucket_authentication_failed", "bucket_access_denied":
-			retryable = false
-		}
-		return commandFailure{Kind: problem.Code, Retryable: retryable}
+		return commandFailure{Kind: problem.Code, Retryable: problem.Retryable}
 	}
 	return commandFailure{Kind: "engine_unavailable", Retryable: true}
 }

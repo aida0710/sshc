@@ -574,7 +574,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/vpn/profiles/{name}/session": {
+    "/api/v1/vpn/profiles/{name}/route": {
         parameters: {
             query?: never;
             header?: never;
@@ -585,8 +585,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["startVPNSession"];
-        delete: operations["stopVPNSession"];
+        post: operations["startVPNRoute"];
+        delete: operations["disconnectVPNRoute"];
         options?: never;
         head?: never;
         patch?: never;
@@ -4214,7 +4214,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Direct TCP reachability, ignoring ProxyJump */
+            /** @description Direct TCP reachability, ignoring ProxyJump and ProxyCommand. A connection with a VPN profile is not dialled and its outcome is not_checked. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4815,7 +4815,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Configured VPN profiles, their sessions, and whether this machine can open routes */
+            /** @description Configured VPN profiles, their routes, and whether this machine can open routes */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4995,7 +4995,7 @@ export interface operations {
             409: components["responses"]["Problem"];
         };
     };
-    startVPNSession: {
+    startVPNRoute: {
         parameters: {
             query?: never;
             header?: never;
@@ -5021,7 +5021,7 @@ export interface operations {
             409: components["responses"]["Problem"];
         };
     };
-    stopVPNSession: {
+    disconnectVPNRoute: {
         parameters: {
             query?: never;
             header?: never;
@@ -5032,7 +5032,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The container was stopped and its relay socket removed */
+            /** @description The route was disconnected; its container was stopped and its relay socket removed */
             200: {
                 headers: {
                     [name: string]: unknown;

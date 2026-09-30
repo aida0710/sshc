@@ -60,10 +60,10 @@ func TestAFieldsProfileStartsWithAConfigBuiltFromItsFields(t *testing.T) {
 	f := newFixture(t)
 	f.saveFieldsProfile(t)
 
-	profile, secrets, err := f.profiles.Route("lab")
+	profile, secrets, err := f.profiles.LoadProfileAndSecrets("lab")
 
 	if err != nil {
-		t.Fatalf("Route = %v", err)
+		t.Fatalf("LoadProfileAndSecrets = %v", err)
 	}
 	if secrets.WireGuard == nil || secrets.WireGuard.Config != fieldsConfig() {
 		t.Fatalf("secrets = %+v", secrets.WireGuard)
@@ -116,8 +116,8 @@ func TestSavingAFieldsProfileMovesItToAConfig(t *testing.T) {
 		t.Fatalf("stored = %+v", got)
 	}
 	// 移したあとも、同じ設定ファイルで経路を起こせる。
-	if _, secrets, err := f.profiles.Route("lab"); err != nil || secrets.WireGuard.Config != fieldsConfig() {
-		t.Fatalf("Route = %+v, %v", secrets.WireGuard, err)
+	if _, secrets, err := f.profiles.LoadProfileAndSecrets("lab"); err != nil || secrets.WireGuard.Config != fieldsConfig() {
+		t.Fatalf("LoadProfileAndSecrets = %+v, %v", secrets.WireGuard, err)
 	}
 }
 

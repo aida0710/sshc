@@ -9,6 +9,7 @@ import (
 
 	"sshc/internal/application"
 	"sshc/internal/vpn"
+	"sshc/internal/vpnrefusal"
 )
 
 // testCACertificate は、ファイルから読む値として使う PEM である。形は engine が確かめる。
@@ -113,12 +114,71 @@ func TestEditingToAnotherAuthenticationNeedsItsSecret(t *testing.T) {
 	}
 }
 
-// 送っても断られる大きさのファイルは、送る前に断る。
-func TestAnOversizedCACertificateFileIsRefused(t *testing.T) {
-	path := writeCACertificate(t, strings.Repeat("A", maxCACertificateFileBytes+1))
+// 送っても断られる大きさのファイルは、engine が断るときと同じ文で、送る前に断る。
+func TestAnOversizedCACertificateFileIsRefusedWithTheEngineSentence(t *testing.T) {
+	path := writeCACertificate(t, strings.Repeat("A", vpn.MaxCACertificateLength+1))
 	p := profilePrompter(t, "ikev2\n\nvpn.example.jp\n\nfixture\n\n"+path+"\n\n\n", "password")
 
-	if _, err := readVPNProfile(p, "office", nil); !errors.Is(err, errVPNInputCACertificateTooLarge) {
-		t.Fatalf("readVPNProfile = %v, want errVPNInputCACertificateTooLarge", err)
+	_, err := readVPNProfile(p, "office", nil)
+
+	refusal, _ := vpnrefusal.Of(&vpn.FieldError{
+		Kind: vpn.ErrSettings, Field: vpn.IKEv2CACertificateField, Reason: vpn.ReasonTooLong,
+		Limit: vpn.MaxCACertificateLength,
+	})
+	var input *vpnInputError
+	if !errors.As(err, &input) || input.sentence != vpnrefusal.EnglishSentence(refusal) {
+		t.Fatalf("readVPNProfile = %v, want %q", err, vpnrefusal.EnglishSentence(refusal))
+	}
+}
+
+// ターミナルの入力はシェルを通らないので、先頭の ~/ は sshc がホームディレクトリとして
+// 読む。OpenVPN と WireGuard の設定ファイルと同じ書き方で通る。
+func TestACACertificateFileUnderTheHomeDirectoryIsReadFromATildePath(t *testing.T) {
+	home := t.TempDir()
+	// os.UserHomeDir が読むのは、Windows では USERPROFILE、ほかでは HOME である。
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	if err := os.WriteFile(filepath.Join(home, "ca.pem"), []byte(testCACertificate), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	p := profilePrompter(t, "ikev2\n\nvpn.example.jp\n\nfixture\n\n~/ca.pem\n\n\n", "password")
+
+	input, err := readVPNProfile(p, "office", nil)
+
+	if err != nil {
+		t.Fatalf("readVPNProfile = %v", err)
+	}
+	if input.profile.IKEv2.CACertificate != testCACertificate {
+		t.Fatalf("caCertificate = %q", input.profile.IKEv2.CACertificate)
+	}
+}
+
+// 読めない CA の証明書のファイルは、どのファイルがなぜ読めないかを添えて断る。
+func TestAMissingCACertificateFileIsNamedWithItsReason(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "missing.pem")
+	p := profilePrompter(t, "ikev2\n\nvpn.example.jp\n\nfixture\n\n"+missing+"\n\n\n", "password")
+
+	_, err := readVPNProfile(p, "office", nil)
+
+	var input *vpnInputError
+	if !errors.As(err, &input) || !strings.Contains(input.sentence, "CA certificate file") ||
+		!strings.Contains(input.sentence, missing) || !strings.Contains(input.sentence, "The file does not exist.") {
+		t.Fatalf("readVPNProfile = %v", err)
+	}
+}
+
+// ディレクトリのパスを入れたときは、engine の不調ではなく、どのパスがなぜ読めないかを伝える。
+func TestADirectoryGivenAsTheCACertificateFileIsNamedAsUnreadable(t *testing.T) {
+	directory := t.TempDir()
+	p := profilePrompter(t, "ikev2\n\nvpn.example.jp\n\nfixture\n\n"+directory+"\n\n\n", "password")
+
+	_, err := readVPNProfile(p, "office", nil)
+
+	want := "sshc: The CA certificate file \"" + directory + "\" could not be read. The path is a directory, not a file."
+	if got := humanVPNFailure(vpnInvocation{Action: vpnAdd, Name: "office"}, err); got != want {
+		t.Fatalf("humanVPNFailure = %q, want %q", got, want)
+	}
+	if !errors.Is(err, errVPNSetupInput) {
+		t.Fatalf("readVPNProfile = %v, want errVPNSetupInput", err)
 	}
 }

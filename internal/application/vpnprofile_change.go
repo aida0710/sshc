@@ -26,7 +26,7 @@ type VPNProfileChange struct {
 // PlanVPNProfileCreate は、新しいプロファイルを加える変更を作る。同じ名前が
 // あれば ErrVPNProfileExists を返す。
 func (s *Service) PlanVPNProfileCreate(profile VPNProfile) (VPNProfileChange, error) {
-	profile = profile.Normalized().withoutWireGuardFields()
+	profile = profile.withoutWireGuardFields()
 	if _, err := profile.Profile(); err != nil {
 		return VPNProfileChange{}, err
 	}
@@ -49,7 +49,7 @@ func (s *Service) PlanVPNProfileCreate(profile VPNProfile) (VPNProfileChange, er
 // 作るときも置き換えるときも、WireGuard の v0.40.0 までの項目は書かない。設定ファイルは、
 // 呼び手が同じ書き込みで Vault に置く。
 func (s *Service) PlanVPNProfileUpdate(profile VPNProfile) (VPNProfileChange, error) {
-	profile = profile.Normalized().withoutWireGuardFields()
+	profile = profile.withoutWireGuardFields()
 	if _, err := profile.Profile(); err != nil {
 		return VPNProfileChange{}, err
 	}
@@ -124,7 +124,8 @@ func (s *Service) PlanVPNProfileRemove(name string) (VPNProfileChange, error) {
 }
 
 // CommitVPNProfileChange は、計画した metadata の変更と Vault の変更を、ひとつの
-// storage.Request で書く。vaultChange が nil なら metadata だけを書く。
+// storage.Request で書く。途中で失敗すれば両方を巻き戻す。vaultChange が nil なら
+// metadata だけを書く。
 //
 // 計画のあとに metadata が書き換えられていれば、読んだときの前提が崩れているので
 // 何も書かずに断る。

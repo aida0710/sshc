@@ -1,10 +1,6 @@
 package application
 
-import (
-	"strings"
-
-	"sshc/internal/textencoding"
-)
+import "sshc/internal/textencoding"
 
 // ConnectionEncoding returns the text encoding attached to the concrete Host
 // block that wins for alias. The default is UTF-8 and is intentionally not
@@ -14,14 +10,7 @@ func (s *Service) ConnectionEncoding(alias string) (textencoding.Name, error) {
 	if err != nil {
 		return "", err
 	}
-	hosts, _ := ProjectHosts(graph, s.workspace.Root())
-	var identity HostIdentity
-	for _, host := range hosts {
-		if strings.EqualFold(host.Identity.Alias, alias) {
-			identity = host.Identity
-			break
-		}
-	}
+	identity := s.connectionIdentity(graph, alias)
 	// External and wildcard-only rules have no editable identity, so they cannot
 	// own sshc metadata. Do not borrow a same-named internal host's setting.
 	if identity.IsZero() {

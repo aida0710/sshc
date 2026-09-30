@@ -247,3 +247,27 @@ func TestTheOpenVPNPasswordNeverReachesTheCommandLine(t *testing.T) {
 		t.Fatal("パスワードをシェルの変数に置いている")
 	}
 }
+
+// 設定ファイルに直接書いたパスワード（<auth-user-pass>、<http-proxy-user-pass> の2行目）は、
+// Vault のパスワードと同じく、短くてもログから伏せる。
+func TestShownLogsHideShortInlinePasswords(t *testing.T) {
+	secrets := validOpenVPNSecrets()
+	secrets.OpenVPN.Config = strings.Join([]string{
+		"client", "remote vpn.example.jp 1194",
+		"<auth-user-pass>", "alice", "short-pass", "</auth-user-pass>",
+		"<http-proxy-user-pass>", "bob", "hunter2", "</http-proxy-user-pass>",
+	}, "\n") + "\n"
+	logs := "AUTH: short-pass\nproxy hunter2\nuser alice"
+
+	shown := redactLogs(logs, secrets)
+
+	for _, hidden := range []string{"short-pass", "hunter2"} {
+		if strings.Contains(shown, hidden) {
+			t.Fatalf("%q が伏せられていない: %s", hidden, shown)
+		}
+	}
+	// ユーザー名はシークレットではない。伏せると、誰で認証したかが読めない。
+	if !strings.Contains(shown, "user alice") {
+		t.Fatalf("ユーザー名まで伏せた: %s", shown)
+	}
+}

@@ -75,8 +75,6 @@ func fieldError(kind error, field string, reason Reason) *FieldError {
 }
 
 const (
-	// maxProfileNameLength は、コンテナ名とソケットのパスに入る長さに収める。
-	maxProfileNameLength = 48
 	// maxResolvers は、1つの経路が使うDNSサーバーの数の上限である。VPNの中の名前
 	// ひとつを引くためのもので、並べるほど引ける名前が増えるわけではない。
 	maxResolvers = 3
@@ -96,29 +94,7 @@ const (
 	maxTOTPSecretLength = 512
 )
 
-// ValidateName は、プロファイル名として使えるかを確かめる。
-//
-// 保存する側も同じ規則で確かめる。コンテナ名とディレクトリ名になるので、
-// 区切り文字が混じったものを保存させない。
-func ValidateName(name string) error { return validateProfileName(name) }
-
-// validateProfileName は、コンテナ名とディレクトリ名に入る字だけを通す。
-func validateProfileName(name string) error {
-	if name == "" {
-		return fieldError(ErrProfileName, "name", ReasonRequired)
-	}
-	if len(name) > maxProfileNameLength {
-		return &FieldError{Kind: ErrProfileName, Field: "name", Reason: ReasonTooLong, Limit: maxProfileNameLength}
-	}
-	for _, character := range name {
-		if !isASCIIAlphanumeric(character) && character != '-' && character != '_' {
-			return fieldError(ErrProfileName, "name", ReasonFormat)
-		}
-	}
-	return nil
-}
-
-// isASCIIAlphanumeric は、英字か数字かを返す。名前・鍵・DNSの名前の検査が使う。
+// isASCIIAlphanumeric は、英字か数字かを返す。鍵と DNS の名前の検査が使う。
 func isASCIIAlphanumeric(character rune) bool {
 	return character >= 'a' && character <= 'z' || character >= 'A' && character <= 'Z' ||
 		character >= '0' && character <= '9'

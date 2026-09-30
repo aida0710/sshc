@@ -25,9 +25,19 @@ routed="$runtime/routed"
 # 途中で別のアドレスへ変わると、足した経路とパケットフィルタが合わなくなる。
 names="$runtime/names"
 
-# 接続先へ繋ぐのを待つ上限（秒）。応えない相手でも、SSH の接続のタイムアウトより
-# 先に理由を返す。
-connect_timeout_seconds=20
+# connect が待つ上限（秒）。3つの合計に、docker exec の起動などの余裕
+# （internal/vpn/target.go の connectStartAllowance）を足しても、engine が待つ上限
+# （targetConnectTimeout）より短くし、engine が打ち切る前に理由を返す。
+#
+# route_lock_seconds は、経路とパケットフィルタを足す鍵を待つ上限である。鍵の中では
+# 名前解決しないので、同時に来たほかの接続が足し終えるのを待つだけである。
+route_lock_seconds=3
+# resolve_timeout_seconds は、接続先の名前解決を待つ上限である。agent.sh の resolv.conf
+# は、DNS サーバー1台を2秒・1回だけ待つので、3台（上限）がどれも応えなくても6秒で終わる。
+resolve_timeout_seconds=6
+# connect_timeout_seconds は、接続先へ繋ぐのを待つ上限である。応えない相手でも、SSH の
+# 接続のタイムアウトより先に理由を返す。
+connect_timeout_seconds=17
 
 host=$1
 port=$2
@@ -49,10 +59,13 @@ fi
 . "$route"
 . "$backend_directory/backend-$backend.sh"
 
-# 同時に2本来ても、経路とパケットフィルタは1回だけ足す。
-exec 9>"$runtime/route.lock"
-flock 9
+# named_address は、名前解決した接続先の控えから、$1 のアドレスを返す。無ければ空。
+named_address() {
+	awk -v name="$1" '$1 == name { print $2; exit }' "$names" 2>/dev/null || true
+}
 
+# resolved_now は、この接続で名前解決したか（控えに無かったか）である。
+resolved_now=false
 case "$host" in
 *[!0-9.]*)
 	# 名前は、この経路のDNSサーバーだけで名前解決する。ホストで名前解決すると、
@@ -60,22 +73,49 @@ case "$host" in
 	if [ -z "$resolvers" ]; then
 		fail target_needs_dns
 	fi
-	address=$(awk -v name="$host" '$1 == name { print $2; exit }' "$names" 2>/dev/null || true)
+	address=$(named_address "$host")
 	if [ -z "$address" ]; then
-		address=$(getent ahostsv4 "$host" | awk 'NR==1{print $1}')
+		# 名前解決は鍵の外で行う。鍵の中で待つと、IPアドレスの接続先や別の名前の
+		# 接続まで、応えないDNSサーバーの後ろに並ぶ。
+		note "接続先${host}をVPN内のDNSサーバーで名前解決します。"
+		address=$(timeout "$resolve_timeout_seconds" getent ahostsv4 -- "$host" | awk 'NR==1{print $1}')
 		if [ -z "$address" ]; then
 			fail target_unresolved
 		fi
-		printf '%s %s\n' "$host" "$address" >>"$names"
-		note "接続先${host}を名前解決しました：${address}"
+		resolved_now=true
 	else
 		note "接続先${host}は名前解決済みです：${address}"
 	fi
 	;;
 *)
-	address=$host
+	# engine は4つの10進数で書いたアドレスだけを渡す。それでも略記（10.1）が届いた
+	# ときに経路・パケットフィルタ・socat で読み方が割れないよう、socat と同じ
+	# getaddrinfo で読んだ値を3つとも使う。
+	address=$(getent ahostsv4 "$host" | awk 'NR==1{print $1}')
+	if [ -z "$address" ]; then
+		fail target_unresolved
+	fi
 	;;
 esac
+
+# 同時に2本来ても、名前の控えと、経路とパケットフィルタは1回だけ足す。
+exec 9>"$runtime/route.lock"
+if ! flock -w "$route_lock_seconds" 9; then
+	fail timeout
+fi
+
+if [ "$resolved_now" = true ]; then
+	# 鍵を待つあいだに、ほかの接続が同じ名前を控えたかもしれない。同じ経路の中では同じ
+	# アドレスを使うので、控えがあればそちらを使う。
+	recorded=$(named_address "$host")
+	if [ -z "$recorded" ]; then
+		printf '%s %s\n' "$host" "$address" >>"$names"
+		note "接続先${host}を名前解決しました：${address}"
+	else
+		address=$recorded
+		note "接続先${host}は名前解決済みです：${address}"
+	fi
+fi
 
 if ! grep -qx "$address" "$routed" 2>/dev/null; then
 	# VPNサーバーそのものを接続先にしない。トンネルの外側と内側が同じ相手になり、

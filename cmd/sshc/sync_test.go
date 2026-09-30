@@ -166,7 +166,7 @@ func TestObjectStoreFailureCodesKeepRetryAndHumanGuidance(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.code, func(t *testing.T) {
-			failure := classifyCommandFailure(engineProblem{Status: test.status, Code: test.code, Retryable: retryableStatus(test.status)})
+			failure := classifySyncFailure(engineProblem{Status: test.status, Code: test.code, Retryable: retryableStatus(test.status)})
 			if failure.Kind != test.code || failure.Retryable != test.retryable {
 				t.Fatalf("failure = %+v, want kind %q retryable %t", failure, test.code, test.retryable)
 			}

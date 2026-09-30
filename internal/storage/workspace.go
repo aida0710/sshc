@@ -32,13 +32,13 @@ var (
 // ErrPendingTransaction before ErrWorkspaceBusy and point to recovery instead.
 var ErrPendingTransaction = fmt.Errorf("%w: a pending transaction must be recovered first", ErrWorkspaceBusy)
 
-const (
-	mutationLockName = "mutation.lock"
-	// mutationLockWait は、別プロセスの書き込みが終わるのを待つ上限である。
-	// 同期の取り込みのような大きいトランザクションは待ち、止まったプロセスが
-	// 握り続けるロックでは書き込みを永久には止めない。
-	mutationLockWait = 30 * time.Second
-)
+const mutationLockName = "mutation.lock"
+
+// MutationLockWait は、別の process の workspace 更新が終わるのを待つ上限である。越えると
+// ErrWorkspaceBusy を返す。同期の取り込みのような大きいトランザクションは待ち、止まった
+// process が握り続けるロックでは書き込みを永久には止めない。利用者へ待ち時間を伝える文も
+// この値から組み立てる。
+const MutationLockWait = 30 * time.Second
 
 var workspaceMutationLockDirectory = func(workspace *Workspace) (string, error) {
 	// The lock belongs to the workspace identity, not to process environment.
@@ -81,7 +81,7 @@ func (w *Workspace) lockMutation() (func(), error) {
 		}
 	}
 
-	release, err := filelock.AcquireWithin(filepath.Join(lockDirectory, mutationLockName), mutationLockWait)
+	release, err := filelock.AcquireWithin(filepath.Join(lockDirectory, mutationLockName), MutationLockWait)
 	if err != nil {
 		w.mutation.Unlock()
 		if errors.Is(err, filelock.ErrHeld) {

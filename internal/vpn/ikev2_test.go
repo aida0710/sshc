@@ -76,7 +76,7 @@ func TestIKEv2SettingsAreRefusedWithTheFieldAndTheReason(t *testing.T) {
 			settings.CACertificate = "-----BEGIN CERTIFICATE-----\nMAMCAQE=\n-----END CERTIFICATE-----\n"
 		}, "ikev2.caCertificate", ReasonFormat},
 		{"CA の証明書が長すぎる", func(settings *IKEv2Settings) {
-			settings.CACertificate = strings.Repeat(authority.PEM, maxCACertificateLength/len(authority.PEM)+1)
+			settings.CACertificate = strings.Repeat(authority.PEM, MaxCACertificateLength/len(authority.PEM)+1)
 		}, "ikev2.caCertificate", ReasonTooLong},
 		{"事前共有鍵なのに CA の証明書", func(settings *IKEv2Settings) {
 			settings.Authentication = IKEv2AuthenticationPSK

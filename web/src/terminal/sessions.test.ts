@@ -421,7 +421,7 @@ describe("terminalProblemKey", () => {
     expect(terminalProblemKey("vpn_route_refused")).toBe("terminal.vpnRouteRefused");
   });
 
-  it("says that the VPN route was disconnected when that is why reconnecting stopped", () => {
+  it("says that the VPN route was disconnected when that cancelled the connection", () => {
     expect(terminalProblemKey("vpn_route_disconnected")).toBe("terminal.vpnRouteDisconnected");
   });
 

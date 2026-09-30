@@ -1,48 +1,22 @@
-// Go の net.SplitHostPort、net.JoinHostPort、strconv.Atoi、netip.ParseAddr、
-// netip.ParsePrefix と同じ規則で、`host:port` と IP アドレスを読み書きする。
+// Go の strconv.Atoi、netip.ParseAddr、netip.ParsePrefix と同じ規則で、数と IP アドレスを
+// 読む。
 //
 // VPN プロファイルの検査と接続先の検査は Go に正本があり、画面は同じ入力に同じ答えを
 // 出さなければならない。ブラウザの URL 解釈はこれと違う答えを出すので使わない。
-
-export type HostPort = { host: string; port: string };
-
-// splitHostPort は net.SplitHostPort と同じく、`host:port` と `[host]:port` を分ける。
-// 読めなければ null を返す。port が数かどうかは見ない。
-export function splitHostPort(value: string): HostPort | null {
-  const lastColon = value.lastIndexOf(":");
-  if (lastColon < 0) return null;
-  let host: string;
-  let hostStart = 0;
-  let portSearchStart = 0;
-  if (value.startsWith("[")) {
-    const closing = value.indexOf("]");
-    if (closing < 0 || closing + 1 !== lastColon) return null;
-    host = value.slice(1, closing);
-    hostStart = 1;
-    portSearchStart = closing + 1;
-  } else {
-    host = value.slice(0, lastColon);
-    if (host.includes(":")) return null;
-  }
-  if (value.indexOf("[", hostStart) >= 0) return null;
-  if (value.indexOf("]", portSearchStart) >= 0) return null;
-  return { host, port: value.slice(lastColon + 1) };
-}
 
 // Go の int は 64 ビットで、strconv.Atoi はその外を誤りにする。
 const goIntMinimum = -(2n ** 63n);
 const goIntMaximum = 2n ** 63n - 1n;
 
 // parseGoInt は strconv.Atoi と同じく、符号付きの10進を読む。読めなければ null を返す。
-// Number の安全な範囲を超える値は丸まるが、そうした値はポートとして範囲の外なので、
-// 答え（out_of_range）は変わらない。
+// Number の安全な範囲を超える値は丸まるが、そうした値は使う側（ポート、MTU、
+// PersistentKeepalive）の上限より大きいので、範囲の外という答えは変わらない。
 export function parseGoInt(value: string): number | null {
   if (!/^[+-]?[0-9]+$/.test(value)) return null;
   const parsed = BigInt(value);
   if (parsed < goIntMinimum || parsed > goIntMaximum) return null;
   return Number(parsed);
 }
-
 
 export type ParsedAddress = { version: 4 | 6; zone: string; octets: number[] };
 

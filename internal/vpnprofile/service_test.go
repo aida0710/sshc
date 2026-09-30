@@ -33,7 +33,7 @@ type recordedRoutes struct {
 	refuse error
 }
 
-func (routes *recordedRoutes) Stop(_ context.Context, name string) error {
+func (routes *recordedRoutes) Forget(_ context.Context, name string) error {
 	routes.stopped = append(routes.stopped, name)
 	if routes.onStop != nil {
 		routes.onStop(name)
@@ -65,6 +65,24 @@ type fixture struct {
 
 func newFixture(t *testing.T) fixture {
 	t.Helper()
+	return newFixtureOn(t, storage.OSFileSystem{})
+}
+
+// newFixtureOn は、fileSystem の上に newFixture と同じものを組む。書き込みの途中で失敗
+// させる検査が使う。
+func newFixtureOn(t *testing.T, fileSystem storage.FileSystem) fixture {
+	t.Helper()
+	f := newFixtureWithoutVault(t, fileSystem)
+	if err := f.vault.Initialise(vaultPassphrase); err != nil {
+		t.Fatal(err)
+	}
+	return f
+}
+
+// newFixtureWithoutVault は、Vault をまだ作っていないマシンを組む。metadata だけがほかの
+// マシンから同期されてきた場合にあたる。
+func newFixtureWithoutVault(t *testing.T, fileSystem storage.FileSystem) fixture {
+	t.Helper()
 	home := t.TempDir()
 	root := filepath.Join(home, ".ssh")
 	if err := os.MkdirAll(root, 0o700); err != nil {
@@ -73,16 +91,15 @@ func newFixture(t *testing.T) fixture {
 	if err := os.WriteFile(filepath.Join(root, "config"), []byte("Host lab\n  HostName 10.9.9.1\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
+	workspace, err := storage.NewWorkspace(fileSystem, home)
 	if err != nil {
 		t.Fatal(err)
 	}
 	transactions := storage.NewManager(workspace, time.Now, rand.Reader)
 	config := application.NewService(workspace, transactions)
 	vault := secret.NewService(workspace, transactions, time.Now)
-	if err := vault.Initialise(vaultPassphrase); err != nil {
-		t.Fatal(err)
-	}
+	// engine と同じく、巻き戻し用の控えを Vault の鍵で封じる。
+	transactions.Seal, transactions.Unseal = vault.SealBackup, vault.OpenBackup
 	routes := &recordedRoutes{}
 	return fixture{
 		profiles: vpnprofile.New(vpnprofile.Dependencies{Configuration: config, Vault: vault, Routes: routes}),
@@ -227,6 +244,35 @@ func TestUpdatingAnUnknownProfileIsRefused(t *testing.T) {
 	}
 }
 
+// Vault の無いマシンでは、シークレットを送った更新を断り、metadata も変えない。送った
+// シークレットを捨てて、設定だけを保存したように見せない。
+func TestUpdatingWithoutAVaultIsRefusedAndChangesNothing(t *testing.T) {
+	f := newFixtureWithoutVault(t, storage.OSFileSystem{})
+	// metadata だけがほかのマシンから届いている。
+	change, err := f.config.PlanVPNProfileCreate(officeProfile())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.config.CommitVPNProfileChange(change, nil); err != nil {
+		t.Fatal(err)
+	}
+	updated := officeProfile()
+	updated.OpenConnect.Username = "renamed-user"
+
+	err = f.profiles.Update(updated, sentSecrets(vpn.SecretsDocument{OpenConnectPassword: "a new password"}))
+
+	if !errors.Is(err, secret.ErrNoVault) {
+		t.Fatalf("Update = %v, want ErrNoVault", err)
+	}
+	stored, err := f.config.StoredVPNProfile("lab")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.OpenConnect.Username != officeProfile().OpenConnect.Username {
+		t.Fatalf("stored = %+v, want the profile as it was", stored)
+	}
+}
+
 // ロック中の削除と改名は断り、経路も止めず、設定も秘密も変えない。
 func TestALockedVaultRefusesRemovalAndRenameWithoutStoppingTheRoute(t *testing.T) {
 	f := newFixture(t)
@@ -289,7 +335,7 @@ func TestARefusedRenameDoesNotStopTheRoute(t *testing.T) {
 		to   string
 		want error
 	}{
-		{"has space", vpn.ErrProfileName},
+		{"lab/vpn", vpn.ErrProfileName},
 		{strings.Repeat("a", 49), vpn.ErrProfileName},
 		{"office", application.ErrVPNProfileExists},
 	} {
@@ -379,6 +425,30 @@ func TestRenamingStopsTheRouteAndMovesEverythingTogether(t *testing.T) {
 		t.Fatalf("ConnectionVPN = %q, %v", bound, err)
 	}
 	if got := f.storedSecrets(t, "tains"); got.WireGuardConfig != labSecrets().WireGuardConfig {
+		t.Fatalf("stored = %+v", got)
+	}
+}
+
+// 空白と日本語を含む名前でも、設定・シークレット・接続の紐付けが一緒に作られ、一緒に
+// 移る。上限の長さの名前が 4 バイトの字だけでできていても、Vault に置ける。
+func TestANameWithSpacesAndJapaneseKeepsItsSecretsAndBindings(t *testing.T) {
+	f := newFixture(t)
+	profile := labProfile()
+	profile.Name = "研究室 VPN（本郷）"
+	f.create(t, profile, labSecrets())
+	if _, err := f.config.SetConnectionVPN("lab", profile.Name); err != nil {
+		t.Fatal(err)
+	}
+	longest := strings.Repeat("🔒", 48)
+
+	if err := f.profiles.Rename(context.Background(), profile.Name, longest); err != nil {
+		t.Fatalf("Rename = %v", err)
+	}
+
+	if bound, err := f.config.ConnectionVPN("lab"); err != nil || bound != longest {
+		t.Fatalf("ConnectionVPN = %q, %v", bound, err)
+	}
+	if got := f.storedSecrets(t, longest); got.WireGuardConfig != labSecrets().WireGuardConfig {
 		t.Fatalf("stored = %+v", got)
 	}
 }

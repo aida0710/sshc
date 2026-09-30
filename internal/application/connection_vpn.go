@@ -3,7 +3,6 @@ package application
 import (
 	"fmt"
 	"sort"
-	"strings"
 
 	"sshc/internal/storage"
 	"sshc/internal/vpn"
@@ -19,14 +18,7 @@ func (s *Service) ConnectionVPN(alias string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	hosts, _ := ProjectHosts(graph, s.workspace.Root())
-	var identity HostIdentity
-	for _, host := range hosts {
-		if strings.EqualFold(host.Identity.Alias, alias) {
-			identity = host.Identity
-			break
-		}
-	}
+	identity := s.connectionIdentity(graph, alias)
 	// 外部ファイルやワイルドカードだけの規則は編集できる identity を持たない。
 	// 同じ名前の内部ホストの設定を借りない。
 	if identity.IsZero() {
@@ -122,13 +114,11 @@ func (s *Service) hostIdentity(alias string) (HostIdentity, error) {
 	if err != nil {
 		return HostIdentity{}, err
 	}
-	hosts, _ := ProjectHosts(graph, s.workspace.Root())
-	for _, host := range hosts {
-		if strings.EqualFold(host.Identity.Alias, alias) {
-			return host.Identity, nil
-		}
+	identity := s.connectionIdentity(graph, alias)
+	if identity.IsZero() {
+		return HostIdentity{}, fmt.Errorf("%w: %s", ErrUnknownConnection, alias)
 	}
-	return HostIdentity{}, fmt.Errorf("%w: %s", ErrUnknownConnection, alias)
+	return identity, nil
 }
 
 // commitMetadata は、metadata だけを書く。
@@ -145,6 +135,10 @@ type metadataCommit struct {
 
 // commitMetadataWith は、metadata と、あれば別の変更（vault など）を、ひとつの
 // storage.Request で書く。どちらかだけが書かれることはない。
+//
+// 別の変更があれば、接続の作成と同じく CommitAtomic で書き、書き込みの途中で失敗
+// したときに両方をその場で巻き戻す。metadata だけを書いて vault が古いまま残ると、
+// 改名したプロファイルのシークレットが見つからず、保留の記録がほかの保存も止める。
 func (s *Service) commitMetadataWith(planned metadataCommit, alongside *storage.Change) (SaveResult, error) {
 	if err := s.metadata.EnsureDirectory(); err != nil {
 		return SaveResult{}, err
@@ -156,9 +150,6 @@ func (s *Service) commitMetadataWith(planned metadataCommit, alongside *storage.
 	request := storage.Request{Operation: planned.operation, Changes: []storage.Change{change}}
 	commit := s.manager.Commit
 	if alongside != nil {
-		// vault を一緒に書くときは、接続の作成と同じく CommitAtomic で書く。失敗が
-		// その場で巻き戻るので、ディスクの vault だけが先に進み、メモリ上の vault が
-		// 古いまま残る保留記録を作らない。
 		request.Changes = append(request.Changes, *alongside)
 		commit = s.manager.CommitAtomic
 	}

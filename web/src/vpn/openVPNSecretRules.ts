@@ -1,12 +1,12 @@
 import { inspectOpenVPNConfig } from "./openVPNConfig";
+import { utf8Length } from "./utf8Length";
 import type { VPNFieldError } from "./vpnFieldErrors";
 import type { VPNSecretKey } from "./vpnSecretRules";
 
 // OpenVPN のシークレット（設定ファイルとパスワード）を、送る前に engine と同じ順番で確かめる。
 //
-// 規則の正本は Go（internal/vpn/openvpn.go の validateSecrets）にある。長さの上限は API
-// （api/openapi.yaml の VPNSecrets）の写しで、UTF-16 の長さで数える。UTF-16 の長さは
-// engine の数える UTF-8 のバイト数を超えないので、engine が通す値をここで断ることはない。
+// 規則の正本は Go（internal/vpn/openvpn.go の validateSecrets）にある。長さの上限は engine と
+// API（api/openapi.yaml の VPNSecrets）と同じ値で、engine と同じく UTF-8 のバイト数で数える。
 
 // maxConfigLength は、設定ファイルの長さの上限である（API と同じ値）。
 const maxConfigLength = 65536;
@@ -30,7 +30,7 @@ export function openVPNSecretsFieldError({ secrets, stored, username }: OpenVPNS
   if (config === "") {
     if (!stored.has("openvpnConfig")) return { field: "secrets.openvpnConfig", reason: "required" };
   } else {
-    if (config.length > maxConfigLength) {
+    if (utf8Length(config) > maxConfigLength) {
       return { field: "secrets.openvpnConfig", reason: "too_long", limit: maxConfigLength };
     }
     const inspected = inspectOpenVPNConfig(config);
@@ -44,7 +44,7 @@ export function openVPNSecretsFieldError({ secrets, stored, username }: OpenVPNS
   if (password === "") {
     return stored.has("openvpnPassword") ? null : { field: "secrets.openvpnPassword", reason: "required" };
   }
-  if (password.length > maxPasswordLength) {
+  if (utf8Length(password) > maxPasswordLength) {
     return { field: "secrets.openvpnPassword", reason: "too_long", limit: maxPasswordLength };
   }
   return credentialForbidden.test(password) ? { field: "secrets.openvpnPassword", reason: "format" } : null;

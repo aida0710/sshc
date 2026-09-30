@@ -13,7 +13,10 @@ func TestAnAttemptIsRecordedEvenWithoutAConnectionLog(t *testing.T) {
 	manager := New(t.TempDir(), 1000, nil)
 	profile := validProfile()
 
-	_, err := manager.Dial(context.Background(), profile, Secrets{}, "lab.example.jp:22")
+	_, err := manager.Dial(context.Background(), DialRequest{
+		Profile: profile.Name, Source: fixedRoute(profile, Secrets{}),
+		Address: "lab.example.jp:22",
+	})
 
 	if err == nil {
 		t.Fatal("DNS の無いプロファイルでホスト名の接続先へ繋いだ")
@@ -104,5 +107,30 @@ func TestNoticesAreRecordedWithTheSshcMark(t *testing.T) {
 
 	if text := record.text(); !strings.Contains(text, " [sshc] VPNのコンテナイメージを作成しています。") {
 		t.Fatalf("record:\n%s", text)
+	}
+}
+
+// terminalLog は、その場で接続を見ている書き先（Terminal）の代わりである。
+type terminalLog struct{ lines []string }
+
+func (log *terminalLog) Enabled(connectionlog.Level) bool { return true }
+
+func (log *terminalLog) Write(_ connectionlog.Level, message string) {
+	log.lines = append(log.lines, message)
+}
+
+// 記録とは別に残したコンテナのログは、経路の記録に重ねず、見ているターミナルにだけ写す。
+func TestKeptContainerLogsAreShownOutsideTheRecord(t *testing.T) {
+	var record attemptRecord
+	terminal := &terminalLog{}
+	ctx := connectionlog.With(connectionlog.With(context.Background(), &record), terminal)
+
+	showOutputOutsideTheRecord(ctx, connectionlog.Detailed, "IPsecの接続を開始します。\n\nIPsecのネゴシエーションに失敗しました。\n")
+
+	if text := record.text(); text != "" {
+		t.Fatalf("記録に書いた:\n%s", text)
+	}
+	if got := strings.Join(terminal.lines, "|"); got != "  IPsecの接続を開始します。|  IPsecのネゴシエーションに失敗しました。" {
+		t.Fatalf("ターミナルへ写した行 = %q", got)
 	}
 }

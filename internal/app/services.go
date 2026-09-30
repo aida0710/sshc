@@ -80,6 +80,7 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 	configService.SetKeyPassphraseVerifier(keyService)
 	diagnosticsService := diagnostics.NewService(workspace, nil, application.LocalFactsFor(dependencies.Home))
 	diagnosticsService.Resolver.GeneratedRegion = application.GeneratedRegion
+	diagnosticsService.VPNBinding = configService.ConnectionVPN
 	collectHostKeys := dependencies.ScanHostKeys
 	if collectHostKeys == nil {
 		collectHostKeys = func(ctx context.Context, address string, timeout time.Duration) ([]ssh.PublicKey, error) {
@@ -112,10 +113,10 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 
 	// VPN 経路はこの engine が持つ。コンテナも中継のソケットも、この利用者の
 	// ものだけを扱う。
-	vpnManager := vpn.New(filepath.Join(workspace.Root(), vpnStateDirectory), os.Getuid(), dockerEnvironment)
+	vpnRoutes := vpn.New(filepath.Join(workspace.Root(), vpnStateDirectory), os.Getuid(), dockerEnvironment)
 	// 設定・秘密・経路をひとつの操作として扱う。engine の接続と HTTP API が同じものを使う。
 	vpnProfiles := vpnprofile.New(vpnprofile.Dependencies{
-		Configuration: configService, Vault: vault, Routes: vpnManager,
+		Configuration: configService, Vault: vault, Routes: vpnRoutes,
 	})
 
 	// プロセス内 SSH クライアントの依存関係をここで一度だけ組み立てる。
@@ -124,7 +125,7 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 		passphrase:  storedPassphrase(vault, workspace.Root()),
 		password:    storedPassword(vault),
 		oneTimeCode: storedTOTP(vault),
-		vpnRoute:    vpnRoute(vpnProfiles, vpnManager),
+		vpnRoute:    vpnRoute(vpnProfiles, vpnRoutes),
 	})
 	inProcessSSH.dialer.ProxyEnvironment = loginShellEnvironment
 	recentService := recent.NewService(recentStore, func(alias string) (recent.Target, error) {
@@ -230,7 +231,7 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 		knownHosts: knownHostsService, vault: vault,
 		remoteKeys: remoteKeyService, recentStore: recentStore, recent: recentService,
 		sftp: sftpService, sftpPool: sftpPool, workspaces: workspaceService, snippets: snippetService,
-		vpn: vpnManager, vpnProfiles: vpnProfiles, ssh: inProcessSSH,
+		vpn: vpnRoutes, vpnProfiles: vpnProfiles, ssh: inProcessSSH,
 	}
 	services.sync, services.autoSync, err = buildSync(workspace, transactions, vault, snippetStore, dependencies)
 	if err != nil {

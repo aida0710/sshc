@@ -4,10 +4,10 @@ package vpn
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
-	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -40,7 +40,7 @@ func TestAConnectionThroughTheEngineRelayKeepsTheRouteUp(t *testing.T) {
 	manager.now = clock.now
 
 	// `vpn up` と同じく、起こすだけで接続はしない。
-	if err := manager.Start(ctx, profile, secrets); err != nil {
+	if err := manager.Start(ctx, profile.Name, fixedRoute(profile, secrets)); err != nil {
 		t.Fatalf("Start = %v", err)
 	}
 	status, err := manager.Status(ctx, profile.Name)
@@ -99,13 +99,31 @@ func TestACancelledStartLeavesNoContainer(t *testing.T) {
 	t.Cleanup(func() { _ = manager.Stop(context.Background(), profile.Name) })
 
 	starting, cancel := context.WithCancel(ctx)
-	go func() {
-		// トンネルを待つ段まで進んでから取り消す。
-		waitUntil(t, func() bool { return manager.state(profile.Name).currentPhase() == PhaseTunnel })
-		cancel()
-	}()
-	if err := manager.Start(starting, profile, secrets); err == nil {
-		t.Fatal("取り消した起動が成功した")
+	defer cancel()
+	ended := make(chan error, 1)
+	go func() { ended <- manager.Start(starting, profile.Name, fixedRoute(profile, secrets)) }()
+
+	// トンネルを待つ段まで進んでから取り消す。その前にほかの理由で終わった起動では、
+	// 取り消した起動のコンテナが残らないことを確かめられない。
+	deadline := time.Now().Add(dockerTestTimeout)
+	for manager.state(profile.Name).currentPhase() != PhaseTunnel {
+		select {
+		case err := <-ended:
+			t.Fatalf("トンネルを待つ段まで進まずに起動が終わった: %v", err)
+		case <-time.After(readyPollInterval):
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("起動がトンネルを待つ段まで進まない")
+		}
+	}
+	cancel()
+	select {
+	case err := <-ended:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("取り消した起動の結果 = %v, want context.Canceled", err)
+		}
+	case <-time.After(dockerTestTimeout):
+		t.Fatal("取り消した起動が戻らない")
 	}
 
 	// 止まったまま残ったコンテナも、残ったうちに入る。
@@ -119,11 +137,11 @@ func TestACancelledStartLeavesNoContainer(t *testing.T) {
 func TestAnotherWorkspacesRouteIsNotDiscarded(t *testing.T) {
 	manager, ctx := requireDockerTest(t)
 	profile, secrets := wireGuardRoute(t, manager, ctx, "neighbour")
-	if err := manager.Start(ctx, profile, secrets); err != nil {
+	if err := manager.Start(ctx, profile.Name, fixedRoute(profile, secrets)); err != nil {
 		t.Fatalf("Start = %v", err)
 	}
 
-	other := New(t.TempDir(), os.Getuid(), nil)
+	other := newDockerTestManager(t)
 	if err := other.DiscardOrphans(ctx); err != nil {
 		t.Fatalf("DiscardOrphans = %v", err)
 	}
@@ -172,7 +190,7 @@ const stopAllowance = 5 * time.Second
 func TestARouteStopsWithoutWaitingOutTheStopTimeout(t *testing.T) {
 	manager, ctx := requireDockerTest(t)
 	profile, secrets := wireGuardRoute(t, manager, ctx, "quick-stop")
-	if err := manager.Start(ctx, profile, secrets); err != nil {
+	if err := manager.Start(ctx, profile.Name, fixedRoute(profile, secrets)); err != nil {
 		t.Fatalf("Start = %v", err)
 	}
 
@@ -193,7 +211,7 @@ func TestImagesOfEarlierVersionsAreRemoved(t *testing.T) {
 	if err != nil {
 		t.Fatalf("イメージを用意できない: %v", err)
 	}
-	stale := imageName + ":stale-test"
+	stale := manager.imageName + ":stale-test"
 	if _, err := manager.docker.output(ctx, "image", "tag", current, stale); err != nil {
 		t.Fatal(err)
 	}
@@ -213,7 +231,7 @@ func TestImagesOfEarlierVersionsAreRemoved(t *testing.T) {
 func TestStatusesListTheRoutesOfThisEngine(t *testing.T) {
 	manager, ctx := requireDockerTest(t)
 	profile, secrets := wireGuardRoute(t, manager, ctx, "listed")
-	if err := manager.Start(ctx, profile, secrets); err != nil {
+	if err := manager.Start(ctx, profile.Name, fixedRoute(profile, secrets)); err != nil {
 		t.Fatalf("Start = %v", err)
 	}
 
@@ -269,7 +287,7 @@ func TestStoppingOneRouteLeavesTheOtherRouteAndItsConnections(t *testing.T) {
 // dialHolding は、経路を通して、閉じるまで返事をし続ける相手へ繋ぐ。
 func dialHolding(t *testing.T, manager *Manager, ctx context.Context, profile Profile, secrets Secrets, address string) net.Conn {
 	t.Helper()
-	connection, err := manager.Dial(ctx, profile, secrets, address)
+	connection, err := manager.Dial(ctx, DialRequest{Profile: profile.Name, Source: fixedRoute(profile, secrets), Address: address})
 	if err != nil {
 		t.Fatalf("Dial(%s) = %v", profile.Name, err)
 	}
@@ -297,7 +315,7 @@ func requireEcho(t *testing.T, connection net.Conn, line string) {
 func TestADisconnectedRouteIsRememberedUntilItIsStartedAgain(t *testing.T) {
 	manager, ctx := requireDockerTest(t)
 	profile, secrets := wireGuardRoute(t, manager, ctx, "disconnected")
-	if err := manager.Start(ctx, profile, secrets); err != nil {
+	if err := manager.Start(ctx, profile.Name, fixedRoute(profile, secrets)); err != nil {
 		t.Fatalf("Start = %v", err)
 	}
 	if manager.Disconnected(profile.Name) {
@@ -314,7 +332,7 @@ func TestADisconnectedRouteIsRememberedUntilItIsStartedAgain(t *testing.T) {
 		t.Fatalf("切断した経路の状態 = %+v, %v", status, err)
 	}
 
-	if err := manager.Start(ctx, profile, secrets); err != nil {
+	if err := manager.Start(ctx, profile.Name, fixedRoute(profile, secrets)); err != nil {
 		t.Fatalf("Start = %v", err)
 	}
 	if manager.Disconnected(profile.Name) {

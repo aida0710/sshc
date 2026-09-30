@@ -81,8 +81,8 @@ func preconditionMode(entry LocalEntry) fs.FileMode {
 	return modeBits(entry.Mode)
 }
 
-// PlanEntriesWithIgnore is the mode-aware planner used by the sync service.
-func PlanEntriesWithIgnore(root string, base *Manifest, local map[string]LocalEntry, remote Manifest, contents map[string][]byte, resolve Resolution, ignored func(string) bool) (storage.Request, []Conflict, error) {
+// PlanEntries is the mode-aware planner used by the sync service.
+func PlanEntries(root string, base *Manifest, local map[string]LocalEntry, remote Manifest, contents map[string][]byte, resolve Resolution, ignored func(string) bool) (storage.Request, []Conflict, error) {
 	isIgnored := func(path string) bool { return ignored != nil && ignored(path) }
 	baseEntries := map[string]LocalEntry{}
 	if base != nil {

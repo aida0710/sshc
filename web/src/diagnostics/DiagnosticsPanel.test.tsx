@@ -31,7 +31,7 @@ function buildApi(overrides: Partial<DiagnosticsApi> = {}): DiagnosticsApi {
       outcome: "reached",
       elapsedMs: 12,
       detail: "",
-      notice: "This check dialled the destination directly. ProxyJump, ProxyCommand and any jump-host firewall were not used.",
+      notice: "This check dialled the destination directly. ProxyJump, ProxyCommand, VPN profiles and any jump-host firewall were not used.",
     }),
     authentication: vi.fn().mockResolvedValue({
       outcome: "authenticated",
@@ -142,7 +142,7 @@ describe("DiagnosticsPanel", () => {
     await userEvent.type(screen.getByLabelText("Host alias"), "bastion");
     await userEvent.click(screen.getByRole("button", { name: "Check reachability" }));
 
-    expect(await screen.findByText(/ProxyJump, ProxyCommand and any jump-host firewall were not used/)).toBeInTheDocument();
+    expect(await screen.findByText(/ProxyJump, ProxyCommand, VPN profiles and any jump-host firewall were not used/)).toBeInTheDocument();
   });
 
   it("reports a failed check without claiming success", async () => {

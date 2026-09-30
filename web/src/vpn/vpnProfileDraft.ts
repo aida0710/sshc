@@ -50,16 +50,6 @@ export const emptyDraft: VPNProfileDraft = {
   secrets: emptySecrets,
 };
 
-// settingsSection は、方式ごとの設定の節の名前である。engine が返す項目の JSON パスの
-// 先頭になる。
-export const settingsSection: Record<VPNBackend, string> = {
-  wireguard: "wireguard",
-  l2tp_ipsec: "l2tp",
-  openconnect: "openconnect",
-  openvpn: "openvpn",
-  ikev2: "ikev2",
-};
-
 // splitResolvers は、入力された DNS の並びを一件ずつに分ける。
 function splitResolvers(value: string): string[] {
   return value
