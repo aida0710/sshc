@@ -1,7 +1,7 @@
 ---
 layout: home
 title: sshc
-description: A terminal app that uses your existing OpenSSH configuration, with SFTP, reusable credentials, an AI-friendly CLI, and encrypted sync.
+description: A terminal app that uses your existing OpenSSH configuration, with SFTP, reusable credentials, an AI-friendly CLI, per-connection VPN, and encrypted sync.
 sidebar: false
 outline: false
 ---
@@ -10,7 +10,7 @@ outline: false
   <section class="sshc-hero">
     <div>
       <h1 class="sshc-title">sshc</h1>
-      <p class="sshc-lead">sshc is a terminal app that uses your existing OpenSSH configuration. It combines SSH and local shells with SFTP, reusable credentials, a CLI for AI agents, and encrypted sync across devices through S3-compatible storage you provide.</p>
+      <p class="sshc-lead">sshc is a terminal app that uses your existing OpenSSH configuration. It combines SSH and local shells with SFTP, reusable credentials, a CLI for AI agents, per-connection VPN, and encrypted sync across devices through S3-compatible storage you provide.</p>
       <p class="sshc-platforms"><span>Platforms</span>macOS / Windows / Linux / Android</p>
       <div class="sshc-actions">
         <a class="sshc-action primary" href="./guide/install">Install</a>
@@ -26,7 +26,7 @@ outline: false
   <section class="sshc-home-section">
     <div class="sshc-section-heading">
       <h2>Features</h2>
-      <p>Open SSH sessions and local shells in multiple panes, then use SFTP and port forwarding with the same connections. Connection settings remain in OpenSSH format.</p>
+      <p>Open SSH sessions and local shells in multiple panes, then use SFTP and port forwarding with the same connections. Connection settings remain in OpenSSH format. Chosen connections can also go through <a href="./features/vpn">a VPN of their own</a>.</p>
     </div>
     <div class="sshc-feature-grid">
       <article class="sshc-feature"><img class="sshc-feature-image" src="/images/workspace-desktop.png" alt="A Workspace with multiple SSH connections open" width="1280" height="720"><div class="sshc-feature-body"><span class="index">01</span><h3>SSH and local shells</h3><p>Reconnect, search, forward ports, and arrange up to four panes in one terminal.</p></div></article>

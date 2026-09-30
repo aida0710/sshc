@@ -1264,6 +1264,33 @@ describe("SyncPanel", () => {
       /no bucket name and no path/i,
     );
   });
+
+  it("explains that the endpoint needs HTTPS instead of just refusing it", async () => {
+    const api = buildApi(unconfigured, nothingToDo, {
+      checkSyncSetup: vi
+        .fn()
+        .mockRejectedValue(new ApiError("endpoint_must_be_https", 400, null)),
+    });
+    render(<SyncPanel api={api} />);
+
+    await userEvent.type(
+      await screen.findByLabelText("Endpoint"),
+      "http://acc.r2.cloudflarestorage.com",
+    );
+    await userEvent.type(screen.getByLabelText("Bucket name"), "sshc");
+    await userEvent.type(screen.getByLabelText("Access key ID"), "AKID");
+    await userEvent.type(
+      screen.getByLabelText("Secret access key"),
+      "the-secret",
+    );
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Check connection" }),
+    );
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(/starts with https:\/\//i);
+    expect(alert).toHaveTextContent("Code: endpoint_must_be_https");
+  });
   it("will not apply a pull that removes files until it is told to go ahead", async () => {
     const removing = {
       applied: false,

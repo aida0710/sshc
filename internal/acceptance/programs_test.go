@@ -8,16 +8,22 @@ import (
 	"testing"
 )
 
-// startsAProcess は、プログラムを起動する書き方である。
+// startsAProcess は、プログラムを起動する関数の書き方である。
 //
-// インターフェースの名前だけを探していた。かつてここには `RunOutput(ctx` も並んでいた。
-// それだけを見ていたころ、os/exec を直接呼ぶ新しい起動はこの監視処理の外を素通り
-// した。実際に 1 つ増えたのに緑のままだった。インターフェースを通らない起動し方こそ、
-// 気づきたいものである。
-//
-// そのインターフェース自体は、本番のどこからも呼ばれないまま残っていたので消した。残った
-// 一つで足りる。プログラムを起動する道は os/exec しかない。
-var startsAProcess = []string{"exec.Command"}
+// 起動をまとめるインターフェースの名前ではなく、起動する関数そのものを探す。
+// インターフェースを通らない起動こそ、気づきたいものだからである。os/exec のほかに、
+// プロセスを直接作る関数も並べる。Windows のローカルシェルは、擬似コンソールを
+// 属性リストで渡すために、os/exec を使わず windows.CreateProcess で起動する。
+var startsAProcess = []string{
+	"exec.Command",
+	"os.StartProcess",
+	"syscall.StartProcess",
+	"syscall.ForkExec",
+	"syscall.Exec(",
+	"unix.Exec(",
+	"windows.CreateProcess",
+	"windows.ShellExecute",
+}
 
 // allowedToStartPrograms は、そこからプログラムを起動してよいファイルである。
 //
@@ -33,7 +39,7 @@ var startsAProcess = []string{"exec.Command"}
 //
 // 自動起動するprocessの所有はOSへ任せる。LinuxとmacOSでは明示commandでuser
 // service定義を作成し、その状態遷移に固定argvのOS管理commandを使用する。ここに並ぶものは
-// いずれもos/execを直接呼んでおり、そうしてよい理由がそれぞれ違う。
+// いずれもプロセスを直接起動しており、そうしてよい理由がそれぞれ違う。
 //
 // 一覧を持つ形にしてあるのは、増えたときに気づくためである。「OpenSSH が
 // 無いこと」を検査すると、OpenSSH でない何かが増えても緑のままになる。
@@ -60,6 +66,11 @@ var allowedToStartPrograms = []string{
 	// ローカルシェルには擬似端末が要る。インターフェースは出力を集めて返すものなので、
 	// PTY を握って対話し続けるこれは、そもそもあそこを通れない。
 	"internal/terminal/pty_unix.go",
+	// Windows のローカルシェルも同じ理由で擬似コンソール（ConPTY）を握る。擬似コンソールは
+	// os/exec では渡せないので windows.CreateProcess で起動する。起動するのは
+	// internal/platform/shell_windows.go の固定の候補（pwsh.exe、powershell.exe、
+	// %ComSpec% の cmd.exe）だけで、絶対パスでなければ起動しない。
+	"internal/terminal/pty_windows.go",
 	// native build helper は配布される sshc runtime ではない。固定された go/git/npm と
 	// artifact verifier の sh/pwsh だけを allowlist 済み argv で起動し、caller input を
 	// shell command line として組み立てない。

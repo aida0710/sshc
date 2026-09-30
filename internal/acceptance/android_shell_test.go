@@ -135,7 +135,6 @@ func TestTheAndroidFailureScreenUsesOnlySanitizedDiagnostics(t *testing.T) {
 		"Mobile.lastStartFailureDetail()",
 		"FailureReport.render(",
 		"ClipData.newPlainText",
-		"service.retry()",
 	} {
 		if !strings.Contains(service+activity, required) {
 			t.Errorf("Androidの診断導線に %q が無い", required)

@@ -1,11 +1,11 @@
 ---
 title: Features
-description: SSH and local shells, SFTP, OpenSSH connection management, reusable credentials, an AI-friendly CLI, and encrypted sync.
+description: SSH and local shells, SFTP, OpenSSH connection management, reusable credentials, per-connection VPN, an AI-friendly CLI, and encrypted sync.
 ---
 
 # Features
 
-sshc is a local terminal application for SSH and local shells. It combines SFTP, port forwarding, and multiple panes with OpenSSH connection management, reusable credentials, a CLI, and encrypted sync.
+sshc is a local terminal application for SSH and local shells. It combines SFTP, port forwarding, and multiple panes with OpenSSH connection management, reusable credentials, per-connection VPN, a CLI, and encrypted sync.
 
 ## Terminal
 
@@ -25,7 +25,11 @@ sshc is a local terminal application for SSH and local shells. It combines SFTP,
 
 ## Credentials
 
-Passwords and key passphrases are encrypted in the vault and assigned to connections or keys. Save them once, then reuse them from the terminal, SFTP, ProxyJump routes, and CLI.
+Passwords, key passphrases, and TOTP setup keys are encrypted in the vault and assigned to connections or keys. Save them once, then reuse them from the terminal, SFTP, ProxyJump routes, and CLI. When the server explicitly asks for a one-time password, sshc fills in the code from the TOTP assigned to that connection.
+
+## VPN
+
+[Per-connection VPN](./vpn) routes only the SSH connections you choose through a VPN of their own. The routes and DNS of this machine stay unchanged. It supports WireGuard, L2TP/IPsec, OpenConnect, OpenVPN, and IKEv2/IPsec, and needs Docker running on the machine. VPN secrets are kept in the vault.
 
 ## SFTP
 

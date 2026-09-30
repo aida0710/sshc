@@ -32,7 +32,7 @@ Force Push issues a short-lived confirmation token bound to the configured bindi
 
 Force Pull previews conflicts and removals with the remote selected as authoritative. Apply verifies the same ETag and revision again and writes nothing locally if the remote changed.
 
-Bucket history is read directly from S3. The screen initially shows the latest five entries. Expand the list or reveal long S3 object names only when needed. Listing encrypted objects does not require decryption; content diffs and restoration require the sync key.
+Bucket history is read directly from S3. The screen initially shows the latest five entries. Expand the list or reveal long S3 object names only when needed. Listing encrypted objects does not require decryption; content diffs and restoration require the encryption key.
 
 Remote snapshots are read only in schema v6. Schema v5 snapshots written by sshc before v0.24.0 are not read. If a v5 snapshot is still the live snapshot of a target, overwrite it with Force Push from a device allowed to send. v5 snapshots left in history can be neither shown nor restored.
 

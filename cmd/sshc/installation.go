@@ -144,7 +144,7 @@ func shellReceiptMatches(executable string) (bool, error) {
 		return false, err
 	}
 	if !strings.EqualFold(receipt.SHA256, digest) {
-		return false, fmt.Errorf("%s does not match the installed executable", path)
+		return false, fmt.Errorf("%s does not match the installed executable; install sshc again with install.sh, or remove the receipt if you replaced the executable yourself", path)
 	}
 	return true, nil
 }

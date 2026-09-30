@@ -248,7 +248,7 @@ func (run updateRun) restartAfterInstall(ctx context.Context, plan updatePlan) i
 			return 0
 		}
 	}
-	fmt.Fprintln(run.stdout, "sshc: restart any running `sshc engine` to use the new version")
+	fmt.Fprintln(run.stdout, "sshc: to use the new version, restart any engine outside the managed service with `sshc engine --replace`")
 	return 0
 }
 
@@ -351,11 +351,13 @@ func (installer updateInstaller) downloadTaggedInstaller(ctx context.Context, ta
 }
 
 // taggedInstallerEnvironment は、install.sh が入れる版と置き場所を、見つけた
-// installation に固定した環境を作る。
+// installation に固定した環境を作る。SSHC_INSTALL_CALLER は、engine の再起動の案内を
+// こちらが出すことを install.sh に伝える。
 func taggedInstallerEnvironment(found installation, tag string) []string {
 	return replaceEnvironment(os.Environ(), map[string]string{
-		"SSHC_VERSION":     tag,
-		"SSHC_INSTALL_DIR": filepath.Dir(found.executable),
+		"SSHC_VERSION":        tag,
+		"SSHC_INSTALL_DIR":    filepath.Dir(found.executable),
+		"SSHC_INSTALL_CALLER": "update",
 	})
 }
 

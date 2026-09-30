@@ -108,24 +108,27 @@ var fuzzFunctionPattern = regexp.MustCompile(`(?m)^func (Fuzz[A-Za-z0-9_]*)\(f \
 // 含め、FUZZ_TARGETS の代入を抽出する。
 var makefileTargetsPattern = regexp.MustCompile(`(?s)FUZZ_TARGETS\s*=\s*(.*?)\n\n`)
 
-func TestMakefileFuzzTargetsCoverEveryFuzzFunction(t *testing.T) {
-	root := filepath.Join("..", "..")
-
-	makefile, err := os.ReadFile(filepath.Join(root, "Makefile"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	match := makefileTargetsPattern.FindSubmatch(makefile)
+// makefileFuzzTargets は、Makefile の FUZZ_TARGETS に並ぶ package:Target の集合を返す。
+func makefileFuzzTargets(t *testing.T) map[string]bool {
+	t.Helper()
+	makefile := mustReadText(t, filepath.Join("..", "..", "Makefile"))
+	match := makefileTargetsPattern.FindStringSubmatch(makefile)
 	if match == nil {
 		t.Fatal("the Makefile has no FUZZ_TARGETS list")
 	}
 	declared := map[string]bool{}
-	for _, field := range strings.Fields(strings.ReplaceAll(string(match[1]), "\\", " ")) {
+	for _, field := range strings.Fields(strings.ReplaceAll(match[1], "\\", " ")) {
 		declared[field] = true
 	}
+	return declared
+}
+
+func TestMakefileFuzzTargetsCoverEveryFuzzFunction(t *testing.T) {
+	root := filepath.Join("..", "..")
+	declared := makefileFuzzTargets(t)
 
 	found := map[string]bool{}
-	err = filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
@@ -167,6 +170,39 @@ func TestMakefileFuzzTargetsCoverEveryFuzzFunction(t *testing.T) {
 	for target := range declared {
 		if !found[target] {
 			t.Errorf("`make fuzz` names %s but no such fuzz target exists", target)
+		}
+	}
+}
+
+// documentedFuzzTargetPattern は、docs/design.md がインラインコードで書く fuzz target の名前にマッチする。
+var documentedFuzzTargetPattern = regexp.MustCompile("`(Fuzz[A-Za-z0-9_]*)`")
+
+// docs/design.md の fuzz の対象の一覧から target が抜けると、読んだ人はその入力
+// （たとえば SSH サーバーが送る OSC 列）が fuzz されていないと誤解して範囲を判断する。
+func TestDesignDocumentNamesEveryFuzzTarget(t *testing.T) {
+	namesRunByMake := map[string]bool{}
+	for target := range makefileFuzzTargets(t) {
+		_, name, ok := strings.Cut(target, ":")
+		if !ok {
+			t.Fatalf("FUZZ_TARGETS entry %q is not package:Target", target)
+		}
+		namesRunByMake[name] = true
+	}
+
+	design := mustReadText(t, filepath.Join("..", "..", "docs", "design.md"))
+	documentedNames := map[string]bool{}
+	for _, match := range documentedFuzzTargetPattern.FindAllStringSubmatch(design, -1) {
+		documentedNames[match[1]] = true
+	}
+
+	for name := range namesRunByMake {
+		if !documentedNames[name] {
+			t.Errorf("`make fuzz` runs %s but docs/design.md does not list it among the fuzz targets", name)
+		}
+	}
+	for name := range documentedNames {
+		if !namesRunByMake[name] {
+			t.Errorf("docs/design.md lists %s as a fuzz target but FUZZ_TARGETS does not run it", name)
 		}
 	}
 }

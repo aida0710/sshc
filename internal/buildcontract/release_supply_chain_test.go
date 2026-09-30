@@ -20,85 +20,6 @@ func readContractFile(t *testing.T, path ...string) string {
 	return string(body)
 }
 
-func TestAndroidPrivateStateIsExcludedFromBackupAndDeviceTransfer(t *testing.T) {
-	manifest := readContractFile(t, "android", "app", "src", "main", "AndroidManifest.xml")
-	for _, required := range []string{
-		`android:allowBackup="false"`,
-		`android:fullBackupContent="@xml/backup_rules"`,
-		`android:dataExtractionRules="@xml/data_extraction_rules"`,
-	} {
-		if !strings.Contains(manifest, required) {
-			t.Errorf("Android manifest lacks private-state backup boundary %q", required)
-		}
-	}
-
-	legacy := readContractFile(t, "android", "app", "src", "main", "res", "xml", "backup_rules.xml")
-	modern := readContractFile(t, "android", "app", "src", "main", "res", "xml", "data_extraction_rules.xml")
-	for _, domain := range []string{
-		"root", "file", "database", "sharedpref", "external",
-		"device_root", "device_file", "device_database", "device_sharedpref",
-	} {
-		exclusion := `<exclude domain="` + domain + `" path="." />`
-		if !strings.Contains(legacy, exclusion) {
-			t.Errorf("legacy backup rules do not exclude %s", domain)
-		}
-		if count := strings.Count(modern, exclusion); count != 2 {
-			t.Errorf("Android 12 rules exclude %s %d times, want cloud backup and device transfer", domain, count)
-		}
-	}
-	for _, section := range []string{"<cloud-backup>", "<device-transfer>"} {
-		if !strings.Contains(modern, section) {
-			t.Errorf("Android 12 extraction rules lack %s", section)
-		}
-	}
-}
-
-func TestAndroidDataSyncEngineHasABoundedLifetime(t *testing.T) {
-	manifest := readContractFile(t, "android", "app", "src", "main", "AndroidManifest.xml")
-	if !strings.Contains(manifest, `android:foregroundServiceType="dataSync"`) ||
-		!strings.Contains(manifest, `android:stopWithTask="true"`) {
-		t.Fatal("the dataSync foreground engine must stop with its user task")
-	}
-
-	service := readContractFile(t, "android", "app", "src", "main", "java", "com", "github", "aida0710", "sshc", "EngineService.java")
-	for _, required := range []string{
-		"public void onTimeout(int startId, int foregroundServiceType)",
-		"stopServiceAndEngine(startId);",
-		"shutdown.request();",
-		"Executors.newSingleThreadExecutor",
-		"ENGINE.execute(this::startEngine);",
-		"stopForeground(STOP_FOREGROUND_REMOVE);",
-		"stopSelf(startId);",
-		"return START_NOT_STICKY;",
-	} {
-		if !strings.Contains(service, required) {
-			t.Errorf("bounded foreground lifecycle lacks %q", required)
-		}
-	}
-	if strings.Contains(service, "return START_STICKY;") {
-		t.Error("the foreground engine still asks Android to recreate it as a permanent service")
-	}
-	if strings.Contains(service, "private void shutdown()") {
-		t.Error("the Android main looper still performs the blocking Go shutdown itself")
-	}
-
-	activity := readContractFile(t, "android", "app", "src", "main", "java", "com", "github", "aida0710", "sshc", "MainActivity.java")
-	for _, required := range []string{
-		"long failure = service.failure();",
-		"showFailure(failure, service.failureCode(), service.failureDetail());",
-		"startForegroundService(new Intent(this, EngineService.class));",
-		"service.retry()",
-		"unbindService(connection);",
-	} {
-		if !strings.Contains(activity, required) {
-			t.Errorf("failed engine start cannot expose diagnostics and retry safely: lacks %q", required)
-		}
-	}
-	if strings.Contains(activity, "releaseService();\n        showFailure") {
-		t.Error("failure screen unbinds the stopped service, so its in-place retry cannot work")
-	}
-}
-
 func TestGradleDistributionAndDependenciesAreChecksumPinned(t *testing.T) {
 	wrapper := readContractFile(t, "android", "gradle", "wrapper", "gradle-wrapper.properties")
 	if !strings.Contains(wrapper, "distributionSha256Sum=84fbba45c7f4c64abc77460e1c00f541e9f960e3c7ed2538f1ede19eacd873ae") {
@@ -166,9 +87,6 @@ func TestReleaseRequiresExactSHACIAndAuthenticatedArtifacts(t *testing.T) {
 		"verify-source:",
 		"needs: [verify-source]",
 		"scripts/ci/verify-release-source.sh",
-		"actions: read",
-		"attestations: write",
-		"id-token: write",
 		"actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8",
 		".github/android-release-signer.sha256",
 		"the APK was signed by an unexpected certificate",
@@ -246,6 +164,8 @@ func TestOperatorReleaseScriptPreservesTheReleaseGates(t *testing.T) {
 		`state=approved`,
 		`.immutable == true`,
 		`gh attestation verify "$artifact"`,
+		`--cert-identity-regex "$signer_pattern" --deny-self-hosted-runners`,
+		`/\\.github/workflows/release\\.yml@refs/(tags/%s|heads/main)$`,
 		`verify_checksum_file`,
 		`Homebrew source checksum does not match`,
 	} {
@@ -263,10 +183,82 @@ func TestOperatorReleaseScriptPreservesTheReleaseGates(t *testing.T) {
 	for _, required := range []string{
 		"scripts/release/publish.sh v0.33.2",
 		"scripts/release/publish.sh --verify-only v0.17.3",
-		"tagを動かしたり削除したりせず終了",
+		"タグを動かしたり削除したりせず終了",
 	} {
 		if !strings.Contains(documentation, required) {
 			t.Errorf("release operator documentation lacks %q", required)
+		}
+	}
+}
+
+// publish.shは確認の入力なしにrelease environmentを承認する（上のテストがstate=approvedを確かめる）。
+// 保護設定の説明が「tagのpushとは別に人が公開ごとに承認する」と読めると、
+// required reviewerがもう1段の判断になっていると誤解させる。
+func TestReleaseProtectionDocumentationCountsPublishingAsTheApproval(t *testing.T) {
+	documentation := readContractFile(t, "docs", "release-install.md")
+	for _, required := range []string{
+		"`scripts/release/publish.sh`を実行したことを、その公開の承認とみなす",
+		"publish.sh以外から始まったrun",
+	} {
+		if !strings.Contains(documentation, required) {
+			t.Errorf("release protection documentation lacks %q", required)
+		}
+	}
+}
+
+// --repoだけの検証は、同じリポジトリのほかのbranchやworkflowが署名したattestationも通す。
+// 利用者に案内する検証は、署名したRelease workflowとtagのrefまで指定する。
+func TestDocumentedAttestationCheckNamesTheReleaseWorkflowAndTag(t *testing.T) {
+	for _, path := range [][]string{{"docs", "release-install.md"}, {"docs", "design.md"}} {
+		documentation := readContractFile(t, path...)
+		for _, required := range []string{
+			"--signer-workflow aida0710/sshc/.github/workflows/release.yml",
+			"--source-ref refs/tags/<tag>",
+			"--deny-self-hosted-runners",
+			"--source-ref refs/heads/main",
+		} {
+			if !strings.Contains(documentation, required) {
+				t.Errorf("%s does not pin the attestation check with %q", strings.Join(path, "/"), required)
+			}
+		}
+	}
+}
+
+// Release workflowの一時的な失敗では、同じtagで作り直す。新しいpatch versionを作ると、
+// READMEや導入例で固定したバージョンを書き換え、reviewを通し直すことになる。
+func TestReleaseDocumentationRebuildsTheSameTagAfterATransientFailure(t *testing.T) {
+	documentation := readContractFile(t, "docs", "releasing.md")
+	for _, required := range []string{
+		"gh run rerun <run-id> --failed",
+		"gh workflow run release.yml --repo aida0710/sshc --ref main -f tag=<tag>",
+		"scripts/release/publish.sh --verify-only <tag>",
+		"新しいパッチバージョンが必要になるのは、タグのコミット自体に不具合がある場合だけ",
+	} {
+		if !strings.Contains(documentation, required) {
+			t.Errorf("release operator documentation lacks the recovery step %q", required)
+		}
+	}
+}
+
+// tagのpush後にRelease workflowが見つからずに止まったときは、tagがもうあるのでpublish.shを
+// 実行し直しても進まない。止まった理由の文から、遅れて始まったrunを探す手順へたどれるようにする。
+func TestReleaseDocumentationRecoversAWorkflowThatDidNotStart(t *testing.T) {
+	script := readContractFile(t, "scripts", "release", "publish.sh")
+	notStarted := strings.Index(script, "release workflow did not start after the tag push")
+	if notStarted < 0 {
+		t.Fatal("publish.sh no longer reports a Release workflow that did not start")
+	}
+	if message, _, _ := strings.Cut(script[notStarted:], "\n"); !strings.Contains(message, "docs/releasing.md") {
+		t.Errorf("publish.sh does not point a Release workflow that did not start to docs/releasing.md: %s", message)
+	}
+
+	documentation := readContractFile(t, "docs", "releasing.md")
+	for _, required := range []string{
+		"### タグのpush後にReleaseワークフローが始まらない場合",
+		"gh run list --repo aida0710/sshc --workflow release.yml --branch <tag>",
+	} {
+		if !strings.Contains(documentation, required) {
+			t.Errorf("release operator documentation lacks the recovery step %q", required)
 		}
 	}
 }

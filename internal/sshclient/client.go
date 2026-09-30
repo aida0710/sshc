@@ -416,7 +416,7 @@ func (d Dialer) open(ctx context.Context, target Target, through *ssh.Client, tr
 		if d.DialVPN == nil {
 			return nil, ErrVPNUnavailable
 		}
-		trace.announce("VPN「%s」を通して接続します。", target.VPN)
+		trace.announce("VPNプロファイル「%s」の経路で接続します。", target.VPN)
 		return d.DialVPN(ctx, target.VPN, target.Address())
 	}
 	if target.ProxyCommand != "" {

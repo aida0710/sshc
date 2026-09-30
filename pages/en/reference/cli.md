@@ -105,6 +105,22 @@ sshc ssh bastion --non-interactive -- uname -a
 
 Non-interactive SSH fails when it would need a question, such as an unknown host key, 2FA, or an unsaved password.
 
+### Exit status
+
+`sshc ssh <alias>`, and an interactive connection started from the `sshc ssh` picker, exit with:
+
+- the remote shell's exit status once connected
+- 2 for invalid arguments
+- 1 when sshc fails before it starts the SSH connection, for example because the engine is unreachable, the vault is not unlocked, the engine refused the request, or the SSH configuration cannot be read
+- 255, like OpenSSH's `ssh`, when the SSH connection fails (VPN route, name resolution, TCP connection, handshake, or authentication). Pressing `Ctrl+C` at a question during the connection (host key, password) also returns 255
+- 130 when `Ctrl+C` is pressed while sshc checks that the engine is running and the vault is unlocked, or in the picker. Once connected, `Ctrl+C` goes to the remote host
+- 0 when stopped by SIGTERM or SIGHUP (for example, when the terminal window is closed). On Windows, closing the window, signing out, and shutting down count as this
+- 0 when the picker is closed without choosing a host
+
+Serial and Telnet interactive sessions and `sshc engine` follow the same rule for SIGTERM and SIGHUP. An interactive connection stopped by a signal was stopped by the person closing the terminal or by whatever supervises the process, so it is not reported as a failure.
+
+Runs meant for automation never return 0 when a signal stops them. `sshc ssh --non-interactive` returns the remote command's exit status, 2 for invalid arguments, and 255, like OpenSSH's `ssh`, when it could not connect. A signal ends it directly, so the shell sees 130 (`Ctrl+C`), 143 (SIGTERM), or 129 (SIGHUP). Serial and Telnet non-interactive runs return 130 (see [Serial and Telnet](/en/cli/serial-telnet)).
+
 ## Sync
 
 ```sh
@@ -118,7 +134,7 @@ sshc sync auto on|off [--json]
 
 `sshc sync push` and `sshc sync pull` follow the transfer summary with one line per file, marked `added`, `modified`, or `removed`. When a plain `pull` stops because of a conflict or a removal, it prints the preview it did not apply in the same form on standard error. With `--json`, pull returns `written`, `added`, `removed`, and `conflicts`, and push returns `added`, `modified`, and `removed` as arrays of paths.
 
-`sshc sync setup` shows the configured endpoint, bucket, path, region, and direction as defaults. Direction accepts `both`, `push`, or `pull`. The Access Key ID is shown as `*****` followed by its final five characters; the Secret Access Key and sync key are shown only as configured. Press Enter on blank secret prompts to keep the values already held by the engine. While a new hidden value is typed, each character appears as `*`, and Backspace updates the mask without printing the plaintext.
+`sshc sync setup` shows the configured endpoint, bucket, path, region, and direction as defaults. Direction accepts `both`, `push`, or `pull`. The Access Key ID is shown as `*****` followed by its final five characters; the Secret Access Key and the sync encryption key (the `Sync key` prompt) are shown only as configured. Press Enter on blank secret prompts to keep the values already held by the engine. While a new hidden value is typed, each character appears as `*`, and Backspace updates the mask without printing the plaintext.
 
 ## VPN
 
@@ -160,7 +176,7 @@ Host lab
 
 The target is passed as `%h %p` and is required. When the target cannot be reached it refuses rather than falling back to the ordinary uplink, and says why on standard error. The SSH handshake and the keys stay with `ssh`; sshc only carries the bytes.
 
-A connection with a profile attached takes the same route from the terminal, from SFTP and from `sshc <alias>`. When the route is not available the connection is refused rather than quietly sent over the ordinary uplink.
+A connection with a profile attached takes the same route from the terminal, from SFTP and from `sshc ssh <alias>`. When the route is not available the connection is refused rather than quietly sent over the ordinary uplink.
 
 ## SFTP transfers
 

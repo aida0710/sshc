@@ -3,26 +3,36 @@ package buildcontract
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
 )
 
 func releaseWorkflowPath() string {
-	return filepath.Join("..", "..", ".github", "workflows", "release.yml")
+	return filepath.Join(workflowsDirectory(), "release.yml")
 }
 
 func readReleaseWorkflow(t *testing.T) (workflowDocument, string) {
 	t.Helper()
-	source, err := os.ReadFile(releaseWorkflowPath())
-	if err != nil {
-		t.Fatalf("read %s: %v", releaseWorkflowPath(), err)
+	return readWorkflowFile(t, releaseWorkflowPath())
+}
+
+// ビルドの job は、タグの時点のコードと依存を実行する。そこに書き込み権限やOIDC tokenが
+// あると、ビルド中に動いたコードがreleaseやattestationを書き換えられる。書き込み権限は、
+// attestationを作ってdraftを用意するstage-releaseと、draftを公開するpublishだけに渡す。
+// verify-sourceはCIの結果を読むので、workflow全体にactions: readを置く。
+func TestReleaseWorkflowGrantsWritePermissionsOnlyToThePublishingJobs(t *testing.T) {
+	workflow, _ := readReleaseWorkflow(t)
+	for _, problem := range validateWorkflowPermissions(workflow, workflowPermissionContract{
+		workflow: map[string]string{"actions": "read", "contents": "read"},
+		writers: map[string]map[string]string{
+			"stage-release": {"attestations": "write", "contents": "write", "id-token": "write"},
+			"publish":       {"contents": "write"},
+		},
+	}) {
+		t.Error(problem)
 	}
-	document, err := decodeWorkflowDocument(source)
-	if err != nil {
-		t.Fatalf("decode %s: %v", releaseWorkflowPath(), err)
-	}
-	return document, string(source)
 }
 
 // 自動公開はタグだけで、手動復旧も既存タグを必須入力にする。
@@ -75,6 +85,34 @@ func TestReleaseWorkflowSerializesEveryVersionAndNeverPromotesBackwards(t *testi
 		if !strings.Contains(source, required) {
 			t.Errorf("release monotonicity contract lacks %q", required)
 		}
+	}
+}
+
+// gh apiをjqへパイプで渡す手順は、pipefailを付けて動かす。
+//
+// Linuxのrun手順の既定shellは`bash -e`で、pipefailを含まない。gh apiが何も出力せずに
+// 失敗すると、パイプの終了コードはjqの成功になり、空の一覧を「releaseなし」と読む。
+// 旧stableの復旧では、公開済みの最大stableが見えなくなり、latestを後退させる。
+func TestReleaseStepsStopWhenAPipedGitHubAPICallFails(t *testing.T) {
+	document, _ := readReleaseWorkflow(t)
+	// 行末の`\`で続く引数を含めて、gh apiの呼び出しがパイプへ出力を渡す形。
+	pipedGitHubAPICall := regexp.MustCompile(`gh api(?:[^|\n]|\\\n)*\|`)
+
+	checked := 0
+	for id, job := range document.Jobs {
+		for _, step := range job.Steps {
+			if !pipedGitHubAPICall.MatchString(step.Run) {
+				continue
+			}
+			checked++
+			if !strings.Contains(step.Run, "set -euo pipefail") {
+				t.Errorf("jobs.%s step %q pipes gh api without pipefail; an API failure with no output would read as no releases",
+					id, step.Name)
+			}
+		}
+	}
+	if checked == 0 {
+		t.Fatal("no release step pipes gh api; this contract no longer matches the workflow")
 	}
 }
 
@@ -322,6 +360,26 @@ func TestAndroidReleaseRetriesTransientToolchainDownloads(t *testing.T) {
 	} {
 		if !strings.Contains(android, command) {
 			t.Errorf("Android release does not retry %q", command)
+		}
+	}
+}
+
+// gobindはgo.modのgolang.org/x/mobileと同じバージョンで入れる。gomobileはPATH上のgobindを
+// バージョンを確かめずに使うので、@latestのgobindがgo.modで固定したgomobileやbind/seqと
+// 組み合わさると、手元とCIでAARが変わりうる。
+func TestEveryGobindInstallUsesTheVersionPinnedInGoMod(t *testing.T) {
+	for _, path := range [][]string{
+		{"Makefile"},
+		{"docs", "manual-acceptance.md"},
+		{".github", "workflows", "ci.yml"},
+		{".github", "workflows", "release.yml"},
+	} {
+		body := readContractFile(t, path...)
+		if !strings.Contains(body, "go install golang.org/x/mobile/cmd/gobind") {
+			t.Errorf("%s no longer explains how to install gobind", filepath.Join(path...))
+		}
+		if strings.Contains(body, "cmd/gobind@") {
+			t.Errorf("%s installs gobind at a version other than the one go.mod pins", filepath.Join(path...))
 		}
 	}
 }

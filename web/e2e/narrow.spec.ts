@@ -831,7 +831,7 @@ test("lets the connection detail replace the list and hands back a way out", asy
 test("sends a real control character from the on-screen keys", async ({ page, installation }) => {
   test.skip(
     process.platform === "win32",
-    "on-screen keys are a touch affordance; Linux CI covers this path",
+    "on-screen keys are a touch affordance; make e2e on Linux or macOS covers this path",
   );
   await openApplication(page, installation);
 

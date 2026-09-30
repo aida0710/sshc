@@ -6,14 +6,10 @@ export type RemoteKeyPlan = components["schemas"]["RemoteKeyPlan"];
 export type RemoteKeyRegisterResponse = components["schemas"]["RemoteKeyRegisterResponse"];
 export type ExecutableDirective = components["schemas"]["ExecutableDirective"];
 
-export type RemoteKeyInput = {
-  alias: string;
-  keyPath: string;
-  publicKey: string;
-};
+export type RemoteKeyInput = components["schemas"]["RemoteKeyPlanRequest"];
 
-export type RemoteKeyRegisterInput = RemoteKeyInput & {
-  acknowledgeExecutable: boolean;
+// actionToken は本文ではなく X-SSHC-Action ヘッダーで送る。
+export type RemoteKeyRegisterInput = components["schemas"]["RemoteKeyRegisterRequest"] & {
   actionToken: string;
 };
 

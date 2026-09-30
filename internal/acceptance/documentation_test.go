@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -22,23 +23,88 @@ func repositoryFile(t *testing.T, parts ...string) string {
 	return string(contents)
 }
 
+// currentUsageDocuments は、いまのCLIの使い方を案内する文書である。
+//
+// docs/superpowers、docs/releases、監査の記録は、何を消したか・その時点で何を公開したかを
+// 書いた記録であり、ここには入れない。歴史を書いた文書から歴史の語を消させない。
+// docs/design.md は「受け付けない書き方」を名指しで書くので、これも入れない。
+func currentUsageDocuments(t *testing.T) [][]string {
+	t.Helper()
+	documents := [][]string{
+		{"README.md"},
+		{"docs", "manual-acceptance.md"},
+		{"docs", "headless-examples.md"},
+	}
+	pagesRoot := filepath.Join("..", "..", "pages")
+	err := filepath.WalkDir(pagesRoot, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() && (entry.Name() == "node_modules" || strings.HasPrefix(entry.Name(), ".")) && path != pagesRoot {
+			return filepath.SkipDir
+		}
+		if entry.IsDir() || filepath.Ext(path) != ".md" {
+			return nil
+		}
+		relative, err := filepath.Rel(filepath.Join("..", ".."), path)
+		if err != nil {
+			return err
+		}
+		documents = append(documents, strings.Split(filepath.ToSlash(relative), "/"))
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk pages: %v", err)
+	}
+	return documents
+}
+
 // 削除済みのコマンドを現行手順として案内していないことを検証する。
 func TestNoDocumentationTeachesTheRemovedEntryPoints(t *testing.T) {
-	// docs/superpowers は設計と計画の記録であり、そこには「何を消したか」が
-	// 書かれている。歴史を書いた文書から歴史の語を消させない。
-	for _, path := range [][]string{{"README.md"}, {"docs", "manual-acceptance.md"}} {
+	removedEntryPoints := []string{
+		"--own-engine", "-open=false", "sshc engine start", "make desktop-dist",
+		// SSH接続はtransportの`ssh`を必ず書く。省略した形は unknown command で断られる。
+		"sshc <接続先>", "sshc <alias>", "sshc <host>", "sshc <target>",
+	}
+	for _, path := range currentUsageDocuments(t) {
 		name := filepath.Join(path...)
 		contents, err := os.ReadFile(filepath.Join(append([]string{"..", ".."}, path...)...))
 		if err != nil {
 			continue
 		}
-		for _, removed := range []string{"--own-engine", "-open=false", "sshc engine start", "make desktop-dist"} {
-			if strings.Contains(string(contents), removed) &&
-				!strings.Contains(string(contents), removed+"` は未定義") &&
-				!strings.Contains(string(contents), "旧バージョン") {
-				t.Errorf("%s still teaches %q", name, removed)
-			}
+		for _, taught := range removedEntryPointsTaughtIn(string(contents), removedEntryPoints) {
+			t.Errorf("%s still teaches %s", name, taught)
 		}
+	}
+}
+
+// removedEntryPointsTaughtIn は、文書の中で削除済みのコマンドを案内している行を返す。
+// 未定義であることや旧バージョンのこととして同じ行で書いたものは除く。除外を文書全体では
+// なく行に限るのは、「旧バージョン」をどこかに書いたページのほかの行の案内を見逃さないため。
+func removedEntryPointsTaughtIn(contents string, removedEntryPoints []string) []string {
+	var taught []string
+	lineNumber := 0
+	for line := range strings.Lines(contents) {
+		lineNumber++
+		for _, removed := range removedEntryPoints {
+			if !strings.Contains(line, removed) ||
+				strings.Contains(line, removed+"` は未定義") ||
+				strings.Contains(line, "旧バージョン") {
+				continue
+			}
+			taught = append(taught, fmt.Sprintf("%q on line %d", removed, lineNumber))
+		}
+	}
+	return taught
+}
+
+// 「旧バージョン」を書いたページでも、ほかの行で削除済みのコマンドを案内していれば見つける。
+func TestARemovedEntryPointIsExcusedOnlyOnTheLineThatCallsItOld(t *testing.T) {
+	page := "旧バージョンの`sshc <接続先>`は使えません。\n\n接続するには`sshc <接続先>`を実行します。\n"
+	taught := removedEntryPointsTaughtIn(page, []string{"sshc <接続先>"})
+	want := []string{`"sshc <接続先>" on line 3`}
+	if !slices.Equal(taught, want) {
+		t.Errorf("removedEntryPointsTaughtIn = %q, want %q", taught, want)
 	}
 }
 
@@ -57,7 +123,7 @@ func TestTheReadmeSaysWhoOwnsTheEngine(t *testing.T) {
 		}
 	}
 
-	if !strings.Contains(readme, "引数なしの`sshc`はエンジンを起動しません") {
+	if !strings.Contains(readme, "引数なしの`sshc`はsshcエンジンを起動しません") {
 		t.Error("README does not say that bare sshc starts no engine")
 	}
 }

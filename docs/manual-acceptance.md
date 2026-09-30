@@ -13,13 +13,13 @@
 ## M1. 実リモートホストへの接続テスト
 
 1. 使い捨て `HOME` に、自分が管理する検証用ホストの `Host` ブロックを作る。
-2. Diagnostics タブで「到達性」を実行し、`ProxyJump は使用していない` という注記が出ることを確認する。
+2. Diagnostics タブで「疎通を確認」を実行し、`ProxyJump は使用していない` という注記が出ることを確認する。
 3. 「認証テスト」を実行する。
 4. 期待結果: 認証成功と、成功した認証方式（`publickey` など）が表示される。説明は 8 KiB 以内に切り詰められ、鍵本文とパスフレーズは表示されない。
 5. 実行可能ディレクティブを持つ設定では、確認ダイアログに実際のコマンド文字列が表示され、確認するまで開始しないことを確認する。
 6. Known Hosts パネルで「Scan」を実行し、候補が「unverified」と表示されること、別経路で得た fingerprint を入力するか明示的に承認するまで「Add to known_hosts」が押せないことを確認する。この操作は実際に対象アドレスへ接続するため、自動テストには含めていません。
 7. 接続を開いて実際に操作する。`vim` を開いてウィンドウを広げ、`window-change` によって描画が追随することを確認する。`LocalForward` を設定して接続し、転送が一覧に表示されること、そのポート経由で接続先に到達できること、コンソールを閉じるとポートが解放されることを確認する。
-8. 未知のホストへ接続し、fingerprint を含む確認プロンプトが端末に表示されることを確認する。`yes` では接続されて `known_hosts` に 1 行追加され、`no` では接続されずファイルも変更されないことを確認する。次に、既知のホストの鍵を変更して接続し、確認プロンプトを表示せず接続を拒否することを確認する。
+8. 未知のホストへ接続し、fingerprint を含む確認プロンプトがターミナルに表示されることを確認する。`yes` では接続されて `known_hosts` に 1 行追加され、`no` では接続されずファイルも変更されないことを確認する。次に、既知のホストの鍵を変更して接続し、確認プロンプトを表示せず接続を拒否することを確認する。
 9. remote shellを`exit`で終了し、終了表示内の「再接続」を押す。同じpaneで新しいshellが開き、終了前のscrollbackが境界メッセージより上に残ることを確認する。再び終了させ、再接続を押した直後にconsoleを閉じた場合は、接続完了後にsessionが復活しないことを確認する。
 
 ## M2. 実 `authorized_keys` への公開鍵登録
@@ -46,12 +46,12 @@
 アクセス URL の発行、2 個目のエンジンの拒否、`.xterm` の描画は E2E テストで確認します。
 この項目では、`xdg-open` / `open` が起動するブラウザ、ブラウザによる loopback origin の扱い、GUI のない環境でブラウザを起動しないことを実環境で確認します。
 
-1. 端末で `sshc engine` を起動し、アクセス URL が表示されず、次に実行できる `sshc vault ...` の案内だけが表示されることを確認する。
-2. 別の端末で `sshc` を実行し、URL が表示されて既定のブラウザで開かれることを確認する。再度実行し、前回とは異なる URL が表示されることを確認する。
+1. ターミナルで `sshc engine` を起動し、アクセス URL が表示されず、次に実行できる `sshc vault ...` の案内だけが表示されることを確認する。
+2. 別のターミナルで `sshc` を実行し、URL が表示されて既定のブラウザで開かれることを確認する。再度実行し、前回とは異なる URL が表示されることを確認する。
 3. `sshc engine` を再度実行し、2 個目のエンジンが起動せず、アクセス URL の取得方法が表示されることを確認する。
 4. `DISPLAY` と `WAYLAND_DISPLAY` がない状態で `sshc` を実行し、エラーにならず URL だけが表示され、ブラウザは起動しないことを確認する。
-5. Ctrl-C でエンジンを停止し、`sshc` がエンジン停止中であることと起動方法を表示することを確認する。開いていたコンソールと解錠済みの保管庫も終了することを確認する。
-6. `tmux new -d -s sshc 'sshc engine'` で起動し、端末を閉じてもエンジンが動作し続け、`tmux kill-session -t sshc` で終了することを確認する。
+5. Ctrl-C でエンジンを停止し、`sshc` がエンジン停止中であることと起動方法を表示することを確認する。開いていたコンソールが終了し、ロックを解除していたVaultもロックされることを確認する。
+6. `tmux new -d -s sshc 'sshc engine'` で起動し、ターミナルを閉じてもエンジンが動作し続け、`tmux kill-session -t sshc` で終了することを確認する。
 
 ## M5. 実 `~/.ssh` での読み取り専用リハーサル
 
@@ -67,7 +67,7 @@
 準備:
 
 ```sh
-go install golang.org/x/mobile/cmd/gobind@latest   # 一度だけ
+go install golang.org/x/mobile/cmd/gobind   # 一度だけ。リポジトリの中で実行し、go.modのgolang.org/x/mobileと同じバージョンを入れる
 make android-bind
 cd android && ./gradlew assembleDebug
 adb install -r app/build/outputs/apk/debug/app-debug.apk
@@ -77,12 +77,12 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
    - `probe dns: OK: …`: 名前解決に成功している。`FAIL` の場合、Android では SSH 接続できない。Android には `/etc/resolv.conf` がないため、cgo リゾルバが netd を利用できることを確認する。
    - `probe shell: OK: /system/bin/sh`: 使用可能なログインシェルがある。
 2. WebView に UI が表示されることを確認する。これにより、埋め込み UI と CSP が Android WebView で機能することを確認できる。
-3. 保管庫を作成し、接続を 1 件追加してターミナルを開く。WebSocket が CSP の `connect-src 'self'` を満たし、リモートセッションに接続できることを確認する。
+3. Vaultを作成し、接続を 1 件追加してターミナルを開く。WebSocket が CSP の `connect-src 'self'` を満たし、リモートセッションに接続できることを確認する。
 4. ローカルシェルを開く。`/system/bin/sh` が起動し、`ls` でアプリ専用ディレクトリが表示されることを確認する。これは `creack/pty` が Android の `/dev/ptmx` で動作することの確認であり、失敗してもリモートセッションには影響しない。
 5. ホーム画面に移動して 30 秒待ち、アプリに戻った後もセッションが維持されていることを確認する。別アプリへの切り替え時にセッションが終了することも確認対象とする。
 6. 画面を回転し、`configChanges` によって Activity が再作成されず、セッションと WebView の状態が維持されることを確認する。
-7. Keys 画面に `ecdsa-sk` / `ed25519-sk` が表示されず、「エージェントに追加」が無効であることを確認する。Android で利用できない機能を UI に表示しないことの確認である。
-8. UI のどこにも CLI の利用を案内する文言が表示されないことを確認する。Android にはコマンドを入力できる端末がないためである。
+7. Keys 画面に `ecdsa-sk` / `ed25519-sk` が表示されず、「ssh-agentに追加」が無効であることを確認する。Android で利用できない機能を UI に表示しないことの確認である。
+8. UI のどこにも CLI の利用を案内する文言が表示されないことを確認する。Android にはコマンドを入力できるターミナルがないためである。
 9. Android 13以降で初回起動、強制停止後の起動、taskから除去してすぐ再起動を試し、毎回Web UIへ到達することを確認する。Service再生成などで同一processの起動要求が重複しても、古いengineを置き換えて通常画面へ収束し、二重起動エラー画面を表示しないことをlogcatでも確認する。private storageを開けない場合はstorage errorになることも確認する。
 
 ## M7. 実ホストでのSFTP
@@ -93,19 +93,19 @@ OpenSSHコンテナに対するプロトコル往復は`make integration`で自�
 2. nested directory、空directory、小さいtext／binaryを含むフォルダをDrag & Dropし、階層と空directoryが維持され、進捗とfile別結果が表示されることを確認する。
 3. 別のフォルダをアップロードし、既存名へ衝突させる。上書き確認で1件を上書きし、別の1件をskipして、残りが続行されることを確認する。別の転送では取消し、未開始fileが送られないことを確認する。
 4. textをMonacoで開き、別のSSH sessionから内容を変更した後に保存して、競合として拒否されることを確認する。
-5. file download、directoryのZIP download、rename、空directoryの作成と削除を確認する。非空directoryが再帰削除されないことも確認する。
+5. file download、directoryのZIP download、rename、空directoryの作成と削除を確認する。非空directoryを削除すると、確認dialogに「フォルダ内の項目もすべて削除されます。」と表示され、配下ごと削除されることも確認する。
 6. upload／file download／folder downloadを3件以上追加し、Transfer Managerが同時2件だけを実行すること、fileごとにbytes、速度、残り時間、attempt、statusを表示することを確認する。
 7. 2 MiBを超えるfileをuploadし、転送中にpauseしてからresumeする。別画面へ移動して戻っても同じjobとbytes進捗が残り、完了前はtarget名のfileが見えず、完了後だけ一覧へ現れ、別画面でも完了通知が出ることを確認する。
-8. folder uploadのうち1 fileだけを失敗させ、batchの「失敗のみ再試行」で成功済みfileを再送せず失敗fileだけattemptが増えることを確認する。
+8. folder uploadのうち1 fileだけを失敗させ、batchの「失敗した1件を再実行」で成功済みfileを再送せず失敗fileだけattemptが増えることを確認する。
 9. 転送中にnetworkを一時的に切り、uploadがremote part sizeから、file downloadがHTTP Rangeから再開することを確認する。folder ZIPはretry時に先頭からやり直すことも確認する。
 10. pause／resume／retry／cancelをuploadとfile downloadで試し、cancelしたuploadのpart fileが削除されること、失敗通知を閉じられることを確認する。
 11. fileとdirectoryの権限をchmodで変更し、一覧で名前の下に権限が表示されること、名前・更新日時・サイズ・種別でsortできることを確認する。symlinkにはchmodが表示されないことを確認する。
 12. checkboxでfileとdirectoryを複数選択し、一括downloadと削除確認を実行できることを確認する。1件だけ選んだ場合に限り、renameとchmodが操作menuへ表示されることも確認する。
 13. text fileを開いたとき、一覧の横幅が変わらずmodal editorが表示されることを確認する。未保存の変更がある間は意図せず閉じないことも確認する。
-14. desktopでtabをファイル一覧の右半分へdragし、そのtabが右の新しいペインへ移って左に空のtabが残ることを確認する。接続済みのtabを移した場合は、Connectを押さずに同じdirectoryが開き直ることを確認する。左右で複数tabを追加・切替し、各tabのhost/pathが独立すること、右ペインの最後のtabを左へdragすると1ペインへ戻ること、再読み込み後も両側のtabと分割幅が復元されることを確認する。tabを選んで`Shift`+`←`／`→`でも同じ移動ができることを確認する。異なるhostを左右に開き、fileとdirectoryを片方からもう片方へDrag & Dropする。copyではsourceが残り、moveではtargetの完了後だけsourceが消えること、local端末に平文の一時fileが作られないことも確認する。2ペインを開いたままmobile幅へ縮めると、左tab列と1ペインだけになり、右ペイン、比較、tabのdragが動作しないことを確認する。desktop幅へ戻したときは右ペインが復元されることを確認する。
+14. desktopでtabをファイル一覧の右半分へdragし、そのtabが右の新しいペインへ移って左に空のtabが残ることを確認する。接続済みのtabを移した場合は、Connectを押さずに同じdirectoryが開き直ることを確認する。左右で複数tabを追加・切替し、各tabのhost/pathが独立すること、右ペインの最後のtabを左へdragすると1ペインへ戻ること、再読み込み後も両側のtabと分割幅が復元されることを確認する。tabを選んで`Shift`+`←`／`→`でも同じ移動ができることを確認する。異なるhostを左右に開き、fileとdirectoryを片方からもう片方へDrag & Dropする。copyではsourceが残り、moveではtargetの完了後だけsourceが消えること、ローカルのマシンに平文の一時fileが作られないことも確認する。2ペインを開いたままmobile幅へ縮めると、左tab列と1ペインだけになり、右ペイン、比較、tabのdragが動作しないことを確認する。desktop幅へ戻したときは右ペインが復元されることを確認する。
 15. 同じhostの別directoryを2ペインに開き、moveがserver-side renameで完了することを確認する。directoryを自分自身の配下へcopy／moveしようとした場合は、targetを作らず拒否されることも確認する。
 16. 2ペインの「比較」を開き、同一・左のみ・右のみ・差分・種別違いがsize、mtime、permission、種別を基準に表示されることを確認する。項目を選んで左右へcopyし、相手側だけのfileが自動削除されないことを確認する。
-17. SFTPから「この場所でTerminalを開く」を実行し、同じhostのshellが現在directoryから始まることを確認する。TerminalでOSC 7を出すshellからは、現在directoryを同じhostのSFTPで開けることを確認する。
+17. SFTPから「ここでTerminalを開く」を実行し、同じhostのshellが現在directoryから始まることを確認する。TerminalでOSC 7を出すshellからは、現在directoryを同じhostのSFTPで開けることを確認する。
 18. 待機中・一時停止中・転送中のjobを作ってengineを再起動し、queueが復元されることを確認する。Remote→Remoteの転送中jobは待機へ戻って再実行され、`~/.ssh/sshc/transfers.json`が0600で、Remote Syncのsnapshotに含まれないことを確認する。
 19. 作成したfileとdirectoryを削除して原状復帰する。
 
@@ -153,10 +153,10 @@ CIではLinux PTYの仮想Serial routerとlocalhostの仮想Telnet serverを用�
 2. deviceに合うbaud、data bits、parity、stop bitsを指定して対話接続し、双方向に操作でき、`Ctrl+]`で直ちに切断して別processからdeviceを再度openできることを確認する。
 3. `sshc serial ... --non-interactive --expect ... --json -- <text>`を実行し、送信終端、受信transcript、matched、stepsCompleted、`bytesReceived`、終了code 0を確認する。一致しないpatternでは指定timeout後にcode 124となることを確認する。
 4. 応答しない検証endpointへ`--non-interactive --require-output --read-for 500ms --json`で送信し、終了code 1、`failure.kind`が`no_output`、`bytesReceived`が0になることを確認する。
-5. timeoutするscriptに、対象装置で安全と確認した復旧文字を`onFailure`で指定する。失敗時だけそのbyte列が送信され、JSONの`failureCleanup.attempted`と`success`がtrueになること、main step成功時には復旧文字も`failureCleanup`も現れないことを確認する。
+5. timeoutするscriptに、対象の機器で安全と確認した復旧文字を`onFailure`で指定する。失敗時だけそのbyte列が送信され、JSONの`failureCleanup.attempted`と`success`がtrueになること、main step成功時には復旧文字も`failureCleanup`も現れないことを確認する。
 6. 16 MiBを越えて出力し続ける検証endpointでは、`--max-bytes`到達時にcode 1で停止し、deviceが解放されることを確認する。
-7. 自分で管理するTelnet serverへ接続し、平文警告、IAC option交渉、端末size、literal 0xffの送受信、`Ctrl+]`切断を確認する。packet captureでも内容が暗号化されないことを確認し、実資格情報は使用しない。
-8. `sendEnv`を含むscriptでserverが秘密値をechoする構成を試し、text／JSON transcriptの双方に値が残らず`[REDACTED]`になることを確認する。command引数とscript fileには秘密を書かない。
+7. 自分で管理するTelnet serverへ接続し、平文警告、IAC option交渉、ターミナルのsize、literal 0xffの送受信、`Ctrl+]`切断を確認する。packet captureでも内容が暗号化されないことを確認し、実際の認証情報は使用しない。
+8. `sendEnv`を含むscriptでserverがシークレットをechoする構成を試し、text／JSON transcriptの双方に値が残らず`[REDACTED]`になることを確認する。command引数とscript fileにはシークレットを書かない。
 9. Shift_JISの検証endpointへ`--encoding shift_jis`で接続し、対話表示、送信、`--expect`、UTF-8のJSON transcriptがすべて正しく、TelnetのIAC交渉にも文字コード変換が混ざらないことを確認する。EUC-JPとISO-2022-JPも同様に確認する。
 10. SSH接続詳細で文字コードを保存し、ブラウザのターミナル、`sshc ssh <alias>`、`sshc ssh <alias> --non-interactive -- <command>`が同じ設定を使うことを確認する。
 11. WindowsのCOM portとmacOS／Linuxのdevice pathでそれぞれ少なくとも一度確認する。Androidはunsupported errorとなり、Linuxの`/dev`を探索しないことを確認する。
@@ -166,33 +166,38 @@ CIではLinux PTYの仮想Serial routerとlocalhostの仮想Telnet serverを用�
 同期試験は、削除してよい専用 bucket／prefix と使い捨て `HOME` だけで実施します。本番 bucket や本番 `~/.ssh` を対象にしません。
 
 1. `Include`、接続先に一致する `Match`、2 段の `ProxyJump`、`IdentityFile`、文字コードを含む設定を作り、engine 停止中の `sshc info <alias> --json` が実際の `sshc ssh <alias>` と同じ宛先・順序・既定 `Port 22` を示すことを確認する。`SetEnv` と `ProxyCommand` に検査用 sentinel を置き、その値が人向け／JSON のどちらにも出ないことも確認する。
-2. engine と vault を起動・解錠し、`sshc sync setup` で誤った endpoint または資格情報を入力する。到達確認が失敗し、`sshc sync` が未設定のままであることを確認する。
+2. engine を起動して vault のロックを解除し、`sshc sync setup` で誤った endpoint または認証情報を入力する。到達確認が失敗し、`sshc sync` が未設定のままであることを確認する。
 3. incomplete object がある専用 prefix を指定し、setup が complete 保存へ進まないことを確認する。空の prefix では生成 sync key が prompt terminal に一度だけ表示され、stdout、ログ、再表示 API には現れないことを確認して安全な保管先へ保存する。
 4. 2 台の使い捨て workspace で同じ専用 prefix を使う。remote と local の同じファイルを別々に変更して `sshc sync pull` を実行し、conflict が適用されずローカル内容も変わらないことを確認する。remote で削除した場合も通常 pull が removal を適用しないことを確認する。止まったときは、適用しなかった preview が `added`／`modified`／`removed`／`conflict` の区分付きで stderr に出ることを確認する。
 5. 同じ preview に対して `sshc sync pull --force` を実行し、remote authoritative として conflict／removal が適用されることを確認する。preview と apply の間に remote を更新した場合は拒否され、新しい preview を自動取得して適用しないことを確認する。
-6. 実際に追加・変更・削除したファイルが、`sshc sync push` と適用した `sshc sync pull` の出力の一覧と一致することを確認する。remote snapshot を別端末から更新した直後に `sshc sync push` を実行し、通常 CAS が拒否することを確認する。`sshc sync push --force` では action token 発行後にもう一度 remote を更新し、exact ETag の不一致として拒否され、二つ目の token や自動再試行が発生しないことを確認する。
+6. 実際に追加・変更・削除したファイルが、`sshc sync push` と適用した `sshc sync pull` の出力の一覧と一致することを確認する。remote snapshot を別のマシンから更新した直後に `sshc sync push` を実行し、通常 CAS が拒否することを確認する。`sshc sync push --force` では action token 発行後にもう一度 remote を更新し、exact ETag の不一致として拒否され、二つ目の token や自動再試行が発生しないことを確認する。
 7. `sshc sync now` と `sshc sync auto on|off` が engine の status に反映され、engine 再起動後も auto の設定が維持されることを確認する。各 `--json` 出力が一つの object だけで、credential、cookie、CSRF／action token、handoff secret を含まないことを確認する。
 
-## VPN 経路
+## M14. VPN経路
 
-Docker が動く Linux と macOS（Docker Desktop、OrbStack、colima のどれか）で行います。VPN サーバーは使い捨ての検証用を使い、本番の認証情報を入れません。
+Dockerが動くLinuxとmacOS（Docker Desktop、OrbStack、colimaのどれか）で行います。VPNサーバーは使い捨ての検証用を使い、本番の認証情報を入れません。
 
-1. `sshc vpn add` で WireGuard のプロファイルを作り、接続に付けて（Connections、または `sshc vpn bind`）、`sshc <alias>` がその接続の `HostName` と `Port` へ届くことを確認する。`docker logs` に秘密鍵が現れないことも確認する。
-2. トンネルを落とした状態（`sshc vpn down`）で同じ接続を試し、素の回線へ落ちずに拒否されることを確認する。
-3. L2TP/IPsec のプロファイルで同じ 2 つを確認する。パスワードと事前共有鍵が `docker logs` と `sshc vpn` の出力に現れないことも確認する。OpenConnect のプロファイルでも同じ 2 つを確認する（実際の AnyConnect 系のVPNサーバーに対しては未確認）。サーバーが配る既定経路と DNS がコンテナの中にも入っていないこと（`docker exec <コンテナ> ip route` と `cat /etc/resolv.conf`）を確認する。
-4. ホスト側が別の VPN へ接続したままでも、1 の接続が成立することを確認する。ホストの `ip route` と `/etc/resolv.conf` が変わらないことも確認する。
-5. 1つのプロファイルを、`HostName` の違う2つの接続に付け、両方へ同時に届くことを確認する。コンテナの中の経路（`docker exec <コンテナ> ip route`）に、使った接続先の分だけ `/32` の経路があり、それ以外が無いことを確認する。
-6. `ProxyCommand sshc vpn proxy <名前> %h %p` を書いた Host へ、ホストの `ssh` で接続できることを確認する。
-7. Duo など二要素認証のサーバーで、OpenConnect のプロファイルに「スマートフォンで承認する」を指定して繋ぐ。パスワードだけで通知が出るサーバーでは「二要素認証で送る文字列」を空にし、もう一問求めるサーバーでは `push` を入れる。承認を待つあいだ、VPN 画面と `sshc vpn` に「スマートフォンでの承認を待っています」と出ること、承認すると経路が立つこと、承認しなければ 2 分で理由付きで止まることを確認する。Terminal から開いた場合も、30 秒の接続タイムアウトで止まらないことを確認する。
-8. 接続の `HostName` を VPN の中の名前で書き、その名前を名前解決できる DNS サーバーをプロファイルに指定して繋ぐ。VPN 画面の「ログ」に期待したアドレスが出ること、ホストの `/etc/resolv.conf` が変わらないこと、同じ名前をホストで名前解決すると別のアドレス（または名前解決できない）であっても VPN の中のアドレスへ繋がることを確認する。DNS サーバーの無いプロファイルでは、Connections に注記が出て、接続が理由付きで断られることも確認する。
-9. WireGuard のプロファイルで相手の公開鍵をわざと違う値にし、`sshc vpn up` と Terminal が「ハンドシェイクに失敗しました」で止まり、経路が開かず、Terminal が再接続を繰り返さないことを確認する。
-10. OpenConnect の経路を開いたまま `sshc vpn down` し、数秒で終わること、サーバーの管理画面（または `occtl show users`）にセッションが残らないことを確認する。実際の AnyConnect 系のVPNサーバーに対しては未確認。
-11. `sshc <alias>` で VPN 経由の接続を開いたまま 10 分以上待ち、経路が停止されないことを確認する。接続を閉じてから 10 分後に停止されることも確認する。
-12. `sshc vpn up` の承認待ちのあいだに `Ctrl-C` で止め、`docker ps -a` に `sshc-vpn-` のコンテナが残らないことを確認する。
-13. プロファイルを削除し、接続に付けた設定が同時に外れること、コンテナが残らないこと、Vault からシークレットが消えることを確認する。
-14. engine を再起動し、前回のコンテナが引き継がれず停止することを確認する。
-15. macOS で、launchd から起動した engine が Docker を見つけられること（VPN 画面に「Dockerが見つかりません」が出ないこと）と、1 の接続が成立することを確認する。
-16. IKEv2/IPsec のプロファイルで、1 と 2 を EAP（ユーザー名とパスワード）と事前共有鍵のそれぞれで確認する。公的な認証局の証明書を使うサーバーでは CA の証明書を空欄にして繋がること、自前の CA のサーバーでは CA の証明書を貼り付けたときだけ繋がることを確認する。サーバーが `0.0.0.0/0` を配っても、コンテナの既定経路（`docker exec <コンテナ> ip route get 1.1.1.1`）が `eth0` のままであることを確認する。macOS（Docker Desktop）では、XFRM インターフェースを作れずに「IPsecのXFRMインターフェースを作成できませんでした」で止まらないかを確認する（未確認）。
+1. `sshc vpn add`でWireGuardのプロファイルを作成し、接続に付けて（Connections、または`sshc vpn bind`）、`sshc ssh <alias>`がその接続の`HostName`と`Port`へ届くことを確認する。`docker logs`に秘密鍵が現れないことも確認する。
+2. 経路を停止した状態（`sshc vpn down`）で同じ接続を試し、VPNを通らない回線へ落ちずに拒否されることを確認する。
+3. L2TP/IPsecのプロファイルで1と2を確認する。パスワードと事前共有鍵が`docker logs`と`sshc vpn`の出力に現れないことも確認する。OpenConnectのプロファイルでも1と2を確認する（実際のAnyConnect系のVPNサーバーに対しては未確認）。サーバーが配るデフォルトルートとDNSがコンテナの中にも入っていないこと（`docker exec <コンテナ> ip route`と`cat /etc/resolv.conf`）を確認する。
+4. このマシンが別のVPNへ接続したままでも、1の接続が確立することを確認する。このマシンの`ip route`と`/etc/resolv.conf`が変わらないことも確認する。
+5. 1つのプロファイルを、`HostName`の違う2つの接続に付け、両方へ同時に届くことを確認する。コンテナの中のルート（`docker exec <コンテナ> ip route`）に、使った接続先の分だけ`/32`のルートがあり、それ以外が無いことを確認する。
+6. `ProxyCommand sshc vpn proxy <名前> %h %p`を書いたHostへ、このマシンの`ssh`で接続できることを確認する。
+7. Duoなど二要素認証のサーバーで、OpenConnectのプロファイルに「スマートフォンで承認する」を指定して接続する。パスワードだけで通知が出るサーバーでは「二要素認証で送る文字列」を空にし、もう一問求めるサーバーでは`push`を入れる。承認を待つあいだ、VPN画面に「スマートフォンでの承認を待っています」、`sshc vpn`の一覧に`starting: waiting for approval on the phone`と出ること、承認すると経路が起動すること、承認しなければ2分で理由付きで止まることを確認する。Terminalから開いた場合も、30秒の接続タイムアウトで止まらないことを確認する。
+8. 接続の`HostName`をVPNの中の名前で書き、その名前を名前解決できるDNSサーバーをプロファイルに指定して接続する。VPN画面の「ログ」に期待したアドレスが出ること、このマシンの`/etc/resolv.conf`が変わらないこと、同じ名前をこのマシンで名前解決すると別のアドレス（または名前解決できない）であってもVPNの中のアドレスへ接続されることを確認する。DNSサーバーの無いプロファイルでは、Connectionsに注記が出て、接続が理由付きで断られることも確認する。
+9. WireGuardのプロファイルでピアの公開鍵をわざと違う値にし、`sshc vpn up`とTerminalが「ハンドシェイクに失敗しました」で止まり、経路が開かず、Terminalが再接続を繰り返さないことを確認する。
+10. OpenConnectの経路を開いたまま`sshc vpn down`し、数秒で終わること、サーバーの管理画面（または`occtl show users`）にセッションが残らないことを確認する。実際のAnyConnect系のVPNサーバーに対しては未確認。
+11. `sshc ssh <alias>`でVPN経由の接続を開いたまま10分以上待ち、経路が停止されないことを確認する。接続を閉じてから10分後に停止されることも確認する。
+12. `sshc vpn up`の承認待ちのあいだに`Ctrl-C`で止め、`docker ps -a`に`sshc-vpn-`のコンテナが残らないことを確認する。
+13. プロファイルを削除し、接続に付けた設定が同時に外れること、コンテナが残らないこと、Vaultからシークレットが消えることを確認する。
+14. エンジンを再起動し、前回のコンテナが引き継がれず停止することを確認する。
+15. macOSで、launchdから起動したエンジンがDockerを見つけられること（VPN画面に「Dockerが見つかりません」が出ないこと）と、1の接続が確立することを確認する。
+16. IKEv2/IPsecのプロファイルで、1と2をEAP（ユーザー名とパスワード）と事前共有鍵のそれぞれで確認する。公的な認証局の証明書を使うサーバーではCAの証明書を空欄にして接続できること、自前のCAのサーバーではCAの証明書を貼り付けたときだけ接続できることを確認する。サーバーが`0.0.0.0/0`を配っても、コンテナのデフォルトルート（`docker exec <コンテナ> ip route get 1.1.1.1`）が`eth0`のままであることを確認する。macOS（Docker Desktop）では、XFRMインターフェースを作れずに「IPsecのXFRMインターフェースを作成できませんでした」で止まらないかを確認する（未確認）。
+17. OpenVPNで、証明書と鍵を埋め込み、`auth-user-pass`を含まない設定ファイル（.ovpn）からプロファイルを作成する。ユーザー名とパスワードを空欄のまま1と2を確認する。サーバーが`redirect-gateway`、`route`、`dhcp-option DNS`を配っても、コンテナの中のルートが接続先の`/32`だけで、コンテナの`/etc/resolv.conf`も変わらないことを確認する。`docker logs`とVPN画面の「ログ」に、埋め込んだ秘密鍵が現れないことも確認する。
+18. `auth-user-pass`を含むOpenVPNの設定ファイルで、ユーザー名とパスワードを入力して1と2を確認する。パスワードが`docker logs`、VPN画面の「ログ」、`sshc vpn`の出力に現れないこと、`docker inspect <コンテナ>`のコマンドの引数（`Args`）と環境変数（`Env`）にも現れないことを確認する。パスワードをわざと違う値にし、VPN画面に「VPNサーバーが認証を拒否しました」と表示され、再試行せずに止まることを確認する。
+19. OpenVPNの使用できない指示（`up /bin/sh`、`route 10.0.0.0 255.0.0.0`、ファイル名で書いた`ca ca.crt`、`setenv opt`を付けた`setenv opt up /bin/sh`）を1つずつ足した設定ファイルを、VPN画面と`sshc vpn add`の両方で読み込む。どちらでも保存されず、何行目のどの指示かが表示されることを確認する。
+20. OpenVPNの設定ファイルの`<ca>`を別のCAの証明書に差し替えると「TLSのハンドシェイクに失敗しました」、`remote`を応答しないアドレスにすると「VPNサーバーから応答がありません」と、VPN画面に区別して表示されることを確認する。
+21. UDPで待ち受けるOpenVPNサーバーに、`explicit-exit-notify`を含む設定ファイルで接続し、`sshc vpn down`する。サーバーの`status`ファイル（または管理インターフェースの`status`コマンド）で、そのクライアントがすぐに消えることを確認する。
 
 ## 記録
 
@@ -210,8 +215,10 @@ Docker が動く Linux と macOS（Docker Desktop、OrbStack、colima のどれ�
 | 未記録 | M8 | 未記録 | 未記録 | 未実施 | 複数paneで接続できる検証用ホストが必要 |
 | 未記録 | M9 | 未記録 | 未記録 | 未実施 | 複数paneで接続できる検証用ホストが必要 |
 | 未記録 | M10 | 未記録 | 未記録 | 未実施 | 長い出力とSFTP可能な検証用ホストが必要 |
+| 未記録 | M11 | 未記録 | 対象外 | 未実施 | Includeを含むconfigと保存済みの接続が必要 |
 | 未記録 | M12 | 未記録 | 対象外 | 未実施 | 検証用Serial deviceとTelnet serverが必要 |
 | 未記録 | M13 | 未記録 | 対象外 | 未実施 | 削除してよい専用S3互換bucket／prefixが必要 |
+| 未記録 | M14 | 未記録 | 未記録 | 未実施 | Dockerと、方式ごとの使い捨ての検証用VPNサーバーが必要 |
 
 ## Android エミュレータで WebView を調査する
 
@@ -246,7 +253,7 @@ CDP の `Runtime.evaluate` を使用すると、ページ内で任意の JavaScr
 Node 22 は WebSocket を内蔵しているため追加依存は不要です。Playwright の
 `connectOverCDP` は、browser context 管理を持たない Android WebView には接続できません。
 
-デバイスの座標と CSS の座標は次で対応が取れる。倍率は端末ごとに違うので、
+デバイスの座標と CSS の座標は次で対応が取れる。倍率はデバイスごとに違うので、
 決め打ちにせず毎回測ること。
 
 ```js
@@ -256,4 +263,4 @@ document.addEventListener("touchstart", (e) => {
 ```
 
 リリースビルドでは DevTools を有効にしません。`MainActivity` は
-`FLAG_DEBUGGABLE` を確認してから有効にします。DevTools が有効な場合、同じ端末から画面の内容と session cookie を読み取れるためです。
+`FLAG_DEBUGGABLE` を確認してから有効にします。DevTools が有効な場合、同じデバイスから画面の内容と session cookie を読み取れるためです。

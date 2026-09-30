@@ -75,7 +75,7 @@ func TestRunUpdateDelegatesANewerStableRelease(t *testing.T) {
 			return nil
 		},
 	}})
-	if code != 0 || got.Version != "v0.14.0" || !strings.Contains(stdout.String(), "restart any running") {
+	if code != 0 || got.Version != "v0.14.0" || !strings.Contains(stdout.String(), "sshc engine --replace") {
 		t.Fatalf("code=%d release=%#v stdout=%q", code, got, stdout.String())
 	}
 }
@@ -108,7 +108,7 @@ func TestRunUpdateRestartsAnActiveManagedService(t *testing.T) {
 	}})
 	if code != 0 || !restarted || !strings.Contains(stdout.String(), "managed service restarted") ||
 		!strings.Contains(stdout.String(), "sshc: "+vaultLockedAdvice+"\n") ||
-		strings.Contains(stdout.String(), "restart any running") {
+		strings.Contains(stdout.String(), "sshc engine --replace") {
 		t.Fatalf("code=%d restarted=%v stdout=%q", code, restarted, stdout.String())
 	}
 }
@@ -155,7 +155,7 @@ func TestRunUpdateTellsToReinstallAServiceDefinitionFromAnOlderVersion(t *testin
 		restartService: func(context.Context, string) (bool, error) { return false, errOutdatedServiceDefinition },
 	}})
 	if code != 0 || !strings.HasSuffix(stdout.String(), "sshc: "+outdatedServiceDefinitionAdvice+"\n") ||
-		strings.Contains(stdout.String(), "restart any running") {
+		strings.Contains(stdout.String(), "sshc engine --replace") {
 		t.Fatalf("code=%d stdout=%q", code, stdout.String())
 	}
 }
@@ -361,6 +361,10 @@ func TestTaggedInstallerUsesTheExactReleaseAndInstallDirectory(t *testing.T) {
 			joined := strings.Join(process.environment, "\n")
 			if !strings.Contains(joined, "SSHC_VERSION=v0.14.0") || !strings.Contains(joined, "SSHC_INSTALL_DIR="+directory) {
 				t.Fatalf("installer environment lacks fixed version/directory")
+			}
+			// 再起動の案内は sshc update が出すので、install.sh には自分の案内を出させない。
+			if !strings.Contains(joined, "SSHC_INSTALL_CALLER=update") {
+				t.Fatalf("installer environment does not tell install.sh that sshc update runs it")
 			}
 			contents := []byte("new")
 			if err := os.WriteFile(executable, contents, 0o755); err != nil {

@@ -59,8 +59,9 @@ func TestGeneratedStringLengthChecksCountCodePoints(t *testing.T) {
 		}
 	}
 	for _, check := range []string{
-		"characterCount(value) < schema.minLength",
-		"characterCount(value) > schema.maxLength",
+		"const length = characterLength(value);",
+		"length < minLength",
+		"length > maxLength",
 	} {
 		if !strings.Contains(runtimeTemplate, check) {
 			t.Errorf("the generated validator does not contain %q", check)

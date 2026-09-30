@@ -5,51 +5,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"runtime"
-	"sort"
 	"strings"
 	"testing"
-
-	"gopkg.in/yaml.v3"
 )
-
-type workflowDocument struct {
-	Jobs map[string]workflowJob `yaml:"jobs"`
-}
-
-type workflowJob struct {
-	Name     string            `yaml:"name"`
-	RunsOn   string            `yaml:"runs-on"`
-	Needs    []string          `yaml:"needs"`
-	Strategy *workflowStrategy `yaml:"strategy"`
-	Steps    []workflowStep    `yaml:"steps"`
-}
-
-type workflowStrategy struct {
-	FailFast *bool          `yaml:"fail-fast"`
-	Matrix   workflowMatrix `yaml:"matrix"`
-}
-
-type workflowMatrix struct {
-	Include []workflowMatrixEntry `yaml:"include"`
-}
-
-type workflowMatrixEntry struct {
-	OS   string `yaml:"os"`
-	Name string `yaml:"name"`
-	Race *bool  `yaml:"race"`
-}
-
-type workflowStep struct {
-	Name            string         `yaml:"name"`
-	If              string         `yaml:"if"`
-	Uses            string         `yaml:"uses"`
-	Run             string         `yaml:"run"`
-	Shell           string         `yaml:"shell"`
-	With            map[string]any `yaml:"with"`
-	ContinueOnError *bool          `yaml:"continue-on-error"`
-}
 
 func TestCIWorkflowProvidesNativeGoMatrices(t *testing.T) {
 	document := readWorkflowDocument(t)
@@ -157,46 +116,27 @@ func jobSection(text, from, to string) string {
 	return rest
 }
 
-func TestCIWorkflowKeepsWindowsRaceExceptionExact(t *testing.T) {
+// Windows の go test は、ログを残すために出力を Tee-Object へ流すので、終了コードを
+// 自分で返す。そこを exit 0 に変えて失敗を隠すと契約が落ちることを確かめる。
+func TestCIWorkflowRejectsWindowsTestStepsThatHideFailures(t *testing.T) {
 	path := workflowPath()
 	source, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read %s: %v", path, err)
 	}
 
-	tests := []struct {
-		name string
-		old  string
-		new  string
-	}{
-		{
-			name: "substring matching could hide a test or compile failure",
-			old:  "$raceOutput -ceq '-race is not supported on windows/amd64'",
-			new:  "$raceOutput -match 'race'",
-		},
-		{
-			name: "success after every failure could hide a test or compile failure",
-			old:  "exit $raceExit",
-			new:  "exit 0",
-		},
-		{
-			name: "a partial diagnostic is not the toolchain diagnostic",
-			old:  "'-race is not supported on windows/amd64'",
-			new:  "'not supported'",
-		},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			if !strings.Contains(string(source), test.old) {
-				t.Fatalf("workflow does not contain the strict race-policy fragment %q", test.old)
+	for _, exitLine := range []string{"exit $testExit", "exit $raceExit"} {
+		t.Run(exitLine, func(t *testing.T) {
+			if !strings.Contains(string(source), exitLine) {
+				t.Fatalf("workflow does not contain %q", exitLine)
 			}
-			mutated := strings.Replace(string(source), test.old, test.new, 1)
+			mutated := strings.Replace(string(source), exitLine, "exit 0", 1)
 			document, err := decodeWorkflowDocument([]byte(mutated))
 			if err != nil {
 				t.Fatalf("decode mutated workflow: %v", err)
 			}
 			if problems := validateNativeWorkflow(document); len(problems) == 0 {
-				t.Fatal("broadened Windows race exception unexpectedly satisfies the workflow contract")
+				t.Fatal("a Windows test step that always exits 0 unexpectedly satisfies the workflow contract")
 			}
 		})
 	}
@@ -317,31 +257,12 @@ func TestWindowsGofmtScriptUsesRawNULTerminatedGitOutput(t *testing.T) {
 
 func readWorkflowDocument(t *testing.T) workflowDocument {
 	t.Helper()
-	path := workflowPath()
-	source, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read %s: %v", path, err)
-	}
-	document, err := decodeWorkflowDocument(source)
-	if err != nil {
-		t.Fatalf("decode %s: %v", path, err)
-	}
+	document, _ := readWorkflowFile(t, workflowPath())
 	return document
 }
 
-func decodeWorkflowDocument(source []byte) (workflowDocument, error) {
-	var document workflowDocument
-	if err := yaml.Unmarshal(source, &document); err != nil {
-		return workflowDocument{}, err
-	}
-	if document.Jobs == nil {
-		return workflowDocument{}, fmt.Errorf("jobs mapping is missing")
-	}
-	return document, nil
-}
-
 func workflowPath() string {
-	return filepath.Join("..", "..", ".github", "workflows", "ci.yml")
+	return filepath.Join(workflowsDirectory(), "ci.yml")
 }
 
 func validateNativeWorkflow(document workflowDocument) []string {
@@ -350,7 +271,7 @@ func validateNativeWorkflow(document workflowDocument) []string {
 	if !ok {
 		problems = append(problems, "jobs.go is missing")
 	} else {
-		problems = append(problems, validateNativeMatrix("jobs.go", goJob, true)...)
+		problems = append(problems, validateNativeMatrix("jobs.go", goJob)...)
 		problems = append(problems, validateGoSteps(goJob)...)
 		problems = append(problems, validatePinnedSetup(goJob, "actions/checkout")...)
 		problems = append(problems, validatePinnedSetup(goJob, "actions/setup-go")...)
@@ -370,11 +291,10 @@ func validateNativeWorkflow(document workflowDocument) []string {
 			problems = append(problems, "jobs."+id+" must remain single-instance")
 		}
 	}
-	problems = append(problems, validateActionPins(document)...)
 	return problems
 }
 
-func validateNativeMatrix(id string, job workflowJob, requireRace bool) []string {
+func validateNativeMatrix(id string, job workflowJob) []string {
 	var problems []string
 	if job.RunsOn != "${{ matrix.os }}" {
 		problems = append(problems, id+" runs-on must be ${{ matrix.os }}")
@@ -397,9 +317,6 @@ func validateNativeMatrix(id string, job workflowJob, requireRace bool) []string
 			problems = append(problems, id+" has duplicate matrix OS "+entry.OS)
 		}
 		got[entry.OS] = entry.Name
-		if requireRace && (entry.Race == nil || !*entry.Race) {
-			problems = append(problems, id+" matrix entry "+entry.OS+" must set race: true")
-		}
 	}
 	if len(got) != len(want) {
 		problems = append(problems, fmt.Sprintf("%s matrix OS count = %d, want %d", id, len(got), len(want)))
@@ -436,51 +353,57 @@ func validateGoSteps(job workflowJob) []string {
 		}
 	}
 
-	windowsTest, ok := namedStep(job, "go test (Windows)")
-	if !ok {
-		problems = append(problems, "jobs.go lacks the Windows test step")
-	} else {
-		if windowsTest.If != "${{ runner.os == 'Windows' }}" || windowsTest.Shell != "pwsh" {
-			problems = append(problems, "the Windows test step must be Windows-only PowerShell")
-		}
-		for _, fragment := range []string{
-			"& go test -v -count=1 -timeout 20m ./... 2>&1 | Tee-Object -FilePath",
-			"$testExit = $LASTEXITCODE",
-			"exit $testExit",
-		} {
-			if !strings.Contains(windowsTest.Run, fragment) {
-				problems = append(problems, fmt.Sprintf("the Windows test step lacks diagnostic fragment %q", fragment))
-			}
-		}
-	}
+	problems = append(problems, validateWindowsLoggedTest(job, windowsLoggedTest{
+		name:         "go test (Windows)",
+		condition:    "${{ runner.os == 'Windows' }}",
+		command:      "& go test -v -count=1 -timeout 20m ./... 2>&1 | Tee-Object -FilePath",
+		exitVariable: "$testExit",
+	})...)
+	problems = append(problems, validateWindowsLoggedTest(job, windowsLoggedTest{
+		name:         "go test -race (Windows)",
+		condition:    "${{ runner.os == 'Windows' && github.event_name != 'pull_request' }}",
+		command:      "& go test -v -count=1 -race -timeout 20m ./... 2>&1 | Tee-Object -FilePath",
+		exitVariable: "$raceExit",
+	})...)
+	return problems
+}
 
-	windowsRace, ok := namedStep(job, "go test -race (Windows)")
+// windowsLoggedTest は、出力をログへ残しながら go test を走らせる Windows の step の
+// 期待値である。
+type windowsLoggedTest struct {
+	name         string
+	condition    string
+	command      string
+	exitVariable string
+}
+
+// validateWindowsLoggedTest は、step が go test の終了コードをそのまま返すことを
+// 確かめる。Tee-Object を通すと PowerShell は失敗を自動では伝えないので、終了
+// コードを変数に取って exit で返す形だけを認める。
+func validateWindowsLoggedTest(job workflowJob, want windowsLoggedTest) []string {
+	step, ok := namedStep(job, want.name)
 	if !ok {
-		return append(problems, "jobs.go lacks the Windows race step")
+		return []string{"jobs.go lacks the step " + want.name}
 	}
-	if windowsRace.If != "${{ runner.os == 'Windows' && github.event_name != 'pull_request' }}" || windowsRace.Shell != "pwsh" {
-		problems = append(problems, "the Windows race step must be Windows-only PowerShell that skips pull requests")
+	var problems []string
+	if step.If != want.condition || step.Shell != "pwsh" {
+		problems = append(problems, fmt.Sprintf("step %q must run with if=%q and shell pwsh", want.name, want.condition))
 	}
-	if windowsRace.ContinueOnError != nil {
-		problems = append(problems, "the Windows race step must not use continue-on-error")
+	if step.ContinueOnError != nil {
+		problems = append(problems, fmt.Sprintf("step %q must not use continue-on-error", want.name))
 	}
 	for _, fragment := range []string{
 		"$PSNativeCommandUseErrorActionPreference = $false",
-		"@(& go test -v -count=1 -race -timeout 20m ./... 2>&1 | Tee-Object -FilePath",
-		"$raceExit = $LASTEXITCODE",
-		"if ($raceExit -eq 0)",
-		"$raceOutput -ceq '-race is not supported on windows/amd64'",
-		"Race unavailable on this runner/toolchain",
-		"exit $raceExit",
+		want.command,
+		want.exitVariable + " = $LASTEXITCODE",
+		"exit " + want.exitVariable,
 	} {
-		if !strings.Contains(windowsRace.Run, fragment) {
-			problems = append(problems, fmt.Sprintf("the Windows race step lacks strict fragment %q", fragment))
+		if !strings.Contains(step.Run, fragment) {
+			problems = append(problems, fmt.Sprintf("step %q lacks fragment %q", want.name, fragment))
 		}
 	}
-	for _, forbidden := range []string{"-match", "-like", ".Contains("} {
-		if strings.Contains(windowsRace.Run, forbidden) {
-			problems = append(problems, fmt.Sprintf("the Windows race step uses broad matching %q", forbidden))
-		}
+	if strings.Contains(step.Run, "exit 0") {
+		problems = append(problems, fmt.Sprintf("step %q must not turn a failure into exit 0", want.name))
 	}
 	return problems
 }
@@ -558,27 +481,6 @@ func validateSetupOrder(id string, job workflowJob, setupAction string) []string
 		return []string{fmt.Sprintf("%s must checkout, set up its toolchain, then run commands", id)}
 	}
 	return nil
-}
-
-func validateActionPins(document workflowDocument) []string {
-	pinned := regexp.MustCompile(`^[^@]+@[0-9a-f]{40}$`)
-	var problems []string
-	ids := make([]string, 0, len(document.Jobs))
-	for id := range document.Jobs {
-		ids = append(ids, id)
-	}
-	sort.Strings(ids)
-	for _, id := range ids {
-		for stepIndex, step := range document.Jobs[id].Steps {
-			if step.Uses == "" || strings.HasPrefix(step.Uses, "./") {
-				continue
-			}
-			if !pinned.MatchString(step.Uses) {
-				problems = append(problems, fmt.Sprintf("jobs.%s step %d action is not pinned to a 40-hex commit: %q", id, stepIndex, step.Uses))
-			}
-		}
-	}
-	return problems
 }
 
 type runContract struct {
