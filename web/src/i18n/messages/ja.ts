@@ -448,6 +448,9 @@ export const ja = {
   "snippets.status.succeeded": "成功",
   "snippets.status.failed": "失敗",
   "snippets.status.unknown": "状態を確認できません",
+  "snippets.problem.timedOut": "タイムアウトしました",
+  "snippets.problem.cancelled": "キャンセルで停止しました",
+  "snippets.problem.runFailed": "コマンドを実行できませんでした",
   "snippets.cancel": "中止",
   "snippets.startup": "接続時の自動実行",
   "snippets.startupHint":
@@ -560,6 +563,8 @@ export const ja = {
     "これ以上セッションを開けません。どれかを閉じてください。",
   "terminal.unresolvable":
     "この接続の設定を読み込めませんでした。理由は「Analysis」で確認できます。",
+  "terminal.remoteWorkingDirectoryUnsupported":
+    "このフォルダではターミナルを開けません。フォルダのパスに制御文字が含まれています。",
   "terminal.jumpDepthExceeded": "ProxyJumpの階層が上限を超えています。",
   "terminal.hostKeyUnknown":
     "このホスト鍵はまだ信頼済みとして登録されていません。フィンガープリントを確認してから、対話モードで接続してください。",
@@ -572,11 +577,17 @@ export const ja = {
   "terminal.authenticationUnavailable":
     "この接続で利用できる認証方式がありません。",
   "terminal.authenticationCancelled": "認証を中止しました。",
+  "terminal.authenticationRejected":
+    "サーバーが認証を拒否しました。鍵やパスワードを確認してから、もう一度接続してください。",
+  "terminal.routeMisconfigured":
+    "経路の設定が矛盾しているため接続できません。VPNプロファイル、ProxyJump、ProxyCommandの組み合わせを確認してください。",
   "terminal.proxyAuthenticationRequired": "ProxyCommandの認証が必要なため、自動再接続を停止しました。ターミナルの案内に従ってログインし、再接続してください。",
   "terminal.keyPassphraseRequired":
     "秘密鍵のパスフレーズが必要です。Vaultのロックを解除するか、この鍵に正しいパスフレーズを保存してください。",
   "terminal.vpnRouteRefused": "VPN経路を用意できないため、自動再接続を停止しました。ターミナルに表示された理由を確認してください。",
   "terminal.vpnRouteDisconnected": "VPN経路が切断されたため、自動再接続を停止しました。［再接続］を押すと、VPN経路を起動して接続し直します。",
+  "terminal.connectFailed":
+    "接続できませんでした。理由はターミナルに表示されています。設定とネットワークを確認してから再接続してください。",
   "terminal.reconnectFailed":
     "再接続に失敗しました。設定された上限まで再試行します。",
   "terminal.reconnectExhausted":

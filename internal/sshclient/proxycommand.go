@@ -7,6 +7,7 @@ import (
 	"os/exec"
 
 	"sshc/internal/commandconn"
+	"sshc/internal/connectionlog"
 )
 
 // ProxyCommand は、ssh_config に記載された外部コマンドの標準入出力を SSH 接続に使う。
@@ -30,15 +31,15 @@ func startProxyCommand(command string, environment []string, trace *tracer) (net
 	process := exec.Command(name, arguments...)
 	process.Env = environment
 	configureProxyCommandProcess(process, command)
-	trace.say(Full, "ProxyCommandの実行シェル：%s", process.Path)
+	trace.say(connectionlog.Full, "ProxyCommandの実行シェル：%s", process.Path)
 	if environment == nil {
-		trace.say(Full, "ProxyCommandの環境：sshcの起動元から継承")
+		trace.say(connectionlog.Full, "ProxyCommandの環境：sshcの起動元から継承")
 	}
 	conn, err := commandconn.Start(process, command)
 	if err != nil {
 		return nil, fmt.Errorf("ProxyCommand did not start: %w", err)
 	}
-	trace.say(Full, "ProxyCommandを起動しました：PID %d", process.Process.Pid)
+	trace.say(connectionlog.Full, "ProxyCommandを起動しました：PID %d", process.Process.Pid)
 	return conn, nil
 }
 
@@ -52,14 +53,14 @@ func describeProxyExit(trace *tracer, connection net.Conn) {
 		if err := command.ExitErr(); err != nil {
 			var exit *exec.ExitError
 			if errors.As(err, &exit) {
-				trace.say(Detailed, "ProxyCommandの終了：コード%d（%v）", exit.ExitCode(), err)
+				trace.say(connectionlog.Detailed, "ProxyCommandの終了：コード%d（%v）", exit.ExitCode(), err)
 				return
 			}
-			trace.say(Detailed, "ProxyCommandの終了：%v", err)
+			trace.say(connectionlog.Detailed, "ProxyCommandの終了：%v", err)
 			return
 		}
-		trace.say(Detailed, "ProxyCommandの終了：コード0")
+		trace.say(connectionlog.Detailed, "ProxyCommandの終了：コード0")
 	default:
-		trace.say(Detailed, "ProxyCommandの終了状態はまだ取得できていません。")
+		trace.say(connectionlog.Detailed, "ProxyCommandの終了状態はまだ取得できていません。")
 	}
 }

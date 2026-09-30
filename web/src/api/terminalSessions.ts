@@ -27,7 +27,7 @@ export type TerminalSessionsApi = {
     id: string,
     forwardId: string,
   ): Promise<TerminalSessionList>;
-  renameTerminalSession(
+  setTerminalSessionTitle(
     id: string,
     title: string | null,
   ): Promise<TerminalSessionList>;
@@ -101,7 +101,7 @@ export const terminalSessionsApi: TerminalSessionsApi = {
       ),
     );
   },
-  async renameTerminalSession(id, title) {
+  async setTerminalSessionTitle(id, title) {
     return validateTerminalSessionList(
       await putJSON<unknown>(`/api/v1/terminal/sessions/${encodeURIComponent(id)}/title`, { title }),
     );

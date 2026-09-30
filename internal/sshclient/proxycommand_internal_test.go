@@ -6,6 +6,8 @@ import (
 	"io"
 	"net"
 	"testing"
+
+	"sshc/internal/connectionlog"
 )
 
 func TestDirectConnectionsDoNotReadTheProxyShellEnvironment(t *testing.T) {
@@ -17,7 +19,7 @@ func TestDirectConnectionsDoNotReadTheProxyShellEnvironment(t *testing.T) {
 			return nil, nil
 		},
 	}
-	_, err := dialer.open(context.Background(), Target{HostName: "unused", Port: "22"}, nil, newTracer(Quiet, io.Discard))
+	_, err := dialer.open(context.Background(), Target{HostName: "unused", Port: "22"}, nil, newTracer(connectionlog.Notice, io.Discard))
 	if !errors.Is(err, dialed) {
 		t.Fatalf("direct connection = %v", err)
 	}

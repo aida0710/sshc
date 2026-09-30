@@ -10,7 +10,9 @@ import (
 	"testing"
 	"time"
 
+	"sshc/internal/randomid"
 	"sshc/internal/terminal"
+	"sshc/internal/testwait"
 )
 
 type fakeProcess struct {
@@ -274,9 +276,9 @@ func TestCommandSupportsLocalAndRefusesChangedSessions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	processAt(0).exit(terminal.ExitInfo{Code: terminal.TransportLost})
-	waitFor(t, func() bool { return processCount() == 2 })
-	waitFor(t, func() bool {
+	processAt(0).exit(transportLost)
+	testwait.Until(t, func() bool { return processCount() == 2 })
+	testwait.Until(t, func() bool {
 		current, targetErr := registry.CommandTarget(session.ID())
 		return targetErr == nil && current.Generation != previewed.Generation
 	})
@@ -288,16 +290,21 @@ func TestCommandSupportsLocalAndRefusesChangedSessions(t *testing.T) {
 	}
 }
 
-func waitFor(t testing.TB, condition func() bool) {
-	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		if condition() {
-			return
-		}
-		time.Sleep(time.Millisecond)
+// 乱数源が同じ識別子を返し続けるのは、セッション数の上限に達したのとは別の失敗である。
+func TestOpenReportsARepeatingRandomSourceRatherThanTheSessionLimit(t *testing.T) {
+	registry, starter := newRegistry(terminal.Limits{MaxSessions: 4, Scrollback: 1 << 10})
+	registry.Random = bytes.NewReader(bytes.Repeat([]byte{0x42}, 1<<10))
+	openShell(t, registry)
+
+	_, err := registry.Open(context.Background(), terminal.Spec{
+		Kind: terminal.KindShell, Command: terminal.Command{Path: "/bin/zsh"},
+	})
+	if !errors.Is(err, randomid.ErrExhausted) || errors.Is(err, terminal.ErrSessionLimit) {
+		t.Fatalf("Open() with a repeating random source = %v, want only randomid.ErrExhausted", err)
 	}
-	t.Fatal("the condition never became true")
+	if starter.count() != 1 {
+		t.Fatalf("the refused request started %d process(es)", starter.count()-1)
+	}
 }
 
 func TestOpenRefusesOnceTheLiveLimitIsReached(t *testing.T) {
@@ -336,7 +343,7 @@ func TestExitedSessionsAreRetainedUpToTheCap(t *testing.T) {
 		session := openShell(t, registry)
 		opened = append(opened, session.ID())
 		starter.processes[index].exit(terminal.ExitInfo{Code: 0})
-		waitFor(t, exited(registry, session.ID()))
+		testwait.Until(t, exited(registry, session.ID()))
 		registry.Sessions()
 	}
 
@@ -380,7 +387,7 @@ func TestAttachReplaysTheBufferAndThenFollowsTheLiveOutput(t *testing.T) {
 	process := starter.last()
 
 	process.feed("before-attach\n")
-	waitFor(t, func() bool { return len(snapshotOf(session)) > 0 })
+	testwait.Until(t, func() bool { return len(snapshotOf(session)) > 0 })
 
 	replay, stream := attach(t, session)
 	if string(replay) != "before-attach\n" {
@@ -409,7 +416,7 @@ func TestAttachFromReplaysOnlyMissingBytesAndReportsARingGap(t *testing.T) {
 	process := starter.last()
 
 	process.feed(strings.Repeat("x", terminal.MinScrollback) + "abcdef")
-	waitFor(t, func() bool {
+	testwait.Until(t, func() bool {
 		snapshot := snapshotOf(session)
 		return len(snapshot) == terminal.MinScrollback && strings.HasSuffix(string(snapshot), "abcdef")
 	})
@@ -442,13 +449,13 @@ func TestAnAttachmentThatDoesNotReadIsDroppedAndThePTYKeepsRunning(t *testing.T)
 	for index := 0; index < 2000; index++ {
 		process.feed("x")
 	}
-	waitFor(t, func() bool { return stalled.Dropped() })
+	testwait.Until(t, func() bool { return stalled.Dropped() })
 
 	if session.Exit() != nil {
 		t.Fatal("the session died with its slow attachment")
 	}
 	process.feed("still-alive")
-	waitFor(t, func() bool { return strings.Contains(string(snapshotOf(session)), "still-alive") })
+	testwait.Until(t, func() bool { return strings.Contains(string(snapshotOf(session)), "still-alive") })
 
 	_, fresh := attach(t, session)
 	process.feed("!")
@@ -473,7 +480,7 @@ func TestExitLeavesTheSessionReadableAndClosesEveryAttachment(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("the queued output never arrived")
 	}
-	waitFor(t, exited(registry, session.ID()))
+	testwait.Until(t, exited(registry, session.ID()))
 
 	info := session.Exit()
 	if info == nil || info.Code != 255 {
@@ -521,9 +528,9 @@ func TestExitedSSHSessionReconnectsWithTheSameIdentityAndScrollback(t *testing.T
 		t.Fatal(err)
 	}
 	first.feed("before exit\n")
-	waitFor(t, func() bool { return strings.Contains(string(snapshotOf(session)), "before exit") })
+	testwait.Until(t, func() bool { return strings.Contains(string(snapshotOf(session)), "before exit") })
 	first.exit(terminal.ExitInfo{Code: 255})
-	waitFor(t, func() bool { return session.Exit() != nil })
+	testwait.Until(t, func() bool { return session.Exit() != nil })
 
 	reconnected, err := registry.Reconnect(context.Background(), session.ID())
 	if err != nil {
@@ -541,7 +548,7 @@ func TestExitedSSHSessionReconnectsWithTheSameIdentityAndScrollback(t *testing.T
 		t.Fatalf("reconnected scrollback = %q", snapshot)
 	}
 	second.exit(terminal.ExitInfo{})
-	waitFor(t, func() bool { return session.Exit() != nil })
+	testwait.Until(t, func() bool { return session.Exit() != nil })
 }
 
 func TestManualReconnectRefusesLiveAndLocalSessions(t *testing.T) {
@@ -551,7 +558,7 @@ func TestManualReconnectRefusesLiveAndLocalSessions(t *testing.T) {
 		t.Fatalf("Reconnect(live) = %v", err)
 	}
 	starter.last().exit(terminal.ExitInfo{})
-	waitFor(t, func() bool { return live.Exit() != nil })
+	testwait.Until(t, func() bool { return live.Exit() != nil })
 	if _, err := registry.Reconnect(context.Background(), live.ID()); !errors.Is(err, terminal.ErrReconnectUnavailable) {
 		t.Fatalf("Reconnect(local shell) = %v", err)
 	}
@@ -580,7 +587,7 @@ func TestClosingWhileManualReconnectOpensDoesNotResurrectTheSession(t *testing.T
 		t.Fatal(err)
 	}
 	first.exit(terminal.ExitInfo{Code: 255})
-	waitFor(t, func() bool { return session.Exit() != nil })
+	testwait.Until(t, func() bool { return session.Exit() != nil })
 
 	result := make(chan error, 1)
 	go func() {
@@ -625,7 +632,7 @@ func TestPendingManualReconnectCountsAsOneSession(t *testing.T) {
 		t.Fatal(err)
 	}
 	first.exit(terminal.ExitInfo{Code: 255})
-	waitFor(t, func() bool { return session.Exit() != nil })
+	testwait.Until(t, func() bool { return session.Exit() != nil })
 
 	result := make(chan error, 1)
 	go func() {
@@ -774,7 +781,7 @@ func TestRenameWorksOnAnExitedSession(t *testing.T) {
 	registry, _ := newRegistry(terminal.Limits{MaxSessions: 4, Scrollback: 1 << 10})
 	session := openShell(t, registry)
 	session.Hangup()
-	waitFor(t, func() bool { return !session.Live() })
+	testwait.Until(t, func() bool { return !session.Live() })
 
 	if err := registry.Rename(session.ID(), "落ちた方"); err != nil {
 		t.Fatalf("Rename() on an exited session = %v", err)
@@ -860,5 +867,22 @@ func TestARegistryWithNeitherAStarterNorAnOpenerRefuses(t *testing.T) {
 	registry := &terminal.Registry{Limits: terminal.DefaultLimits}
 	if _, err := registry.Open(context.Background(), terminal.Spec{Kind: terminal.KindShell}); !errors.Is(err, terminal.ErrNoStarter) {
 		t.Fatalf("Open() = %v, want ErrNoStarter", err)
+	}
+}
+
+func TestASessionOpenedWithoutASizeStartsAtTheDefaultSize(t *testing.T) {
+	spy := &openSpy{}
+	registry, _ := newRegistry(terminal.DefaultLimits())
+	session, err := registry.Open(context.Background(), terminal.Spec{
+		Kind: terminal.KindSSH, Alias: "gateway", Title: "gateway", Open: spy.open,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := spy.sizeAt(0); got != terminal.DefaultSize() {
+		t.Fatalf("opened with %+v, want the default %+v", got, terminal.DefaultSize())
+	}
+	if err := registry.Close(session.ID()); err != nil {
+		t.Fatal(err)
 	}
 }

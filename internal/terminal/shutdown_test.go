@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"sshc/internal/terminal"
+	"sshc/internal/testwait"
 )
 
 type stubbornProcess struct {
@@ -97,10 +98,7 @@ func TestForceCloseReachesEveryProcessWhileOneHangupIsBlocked(t *testing.T) {
 	for name, process := range map[string]*stubbornProcess{
 		"blocking Hangup": blocking, "ignored Hangup": ignoring, "never closing done": broken,
 	} {
-		deadline := time.Now().Add(2 * time.Second)
-		for process.forceCount() == 0 && time.Now().Before(deadline) {
-			time.Sleep(time.Millisecond)
-		}
+		testwait.Reached(func() bool { return process.forceCount() > 0 })
 		if got := process.forceCount(); got != 1 {
 			t.Fatalf("%s force hook ran %d times, want exactly 1", name, got)
 		}
@@ -199,6 +197,75 @@ func TestALateProcessIsForcedAndNeverPublished(t *testing.T) {
 	}
 	if late.forceCount() == 0 {
 		t.Fatal("the late process was published or dropped without being forced")
+	}
+	if err := registry.Wait(); err != nil {
+		t.Fatalf("Wait = %v", err)
+	}
+}
+
+func TestAShutdownThatBeginsWhileOpenBuildsTheSessionKeepsItUnpublished(t *testing.T) {
+	registry := &terminal.Registry{Limits: func() terminal.Limits { return terminal.DefaultLimits() }}
+	process := newStubbornProcess(true)
+	var processReturned atomic.Bool
+	var shutdown sync.Once
+	// Open reads the clock while it builds the session, after the Process has
+	// returned. Beginning the shutdown there puts it between the creation and
+	// the publication.
+	registry.Now = func() time.Time {
+		if processReturned.Load() {
+			shutdown.Do(registry.BeginShutdown)
+		}
+		return time.Now()
+	}
+
+	_, err := registry.Open(context.Background(), terminal.Spec{
+		Kind: terminal.KindSSH, Alias: "racing",
+		Open: func(context.Context, terminal.Size) (terminal.Process, error) {
+			processReturned.Store(true)
+			return process, nil
+		},
+	})
+	if !errors.Is(err, terminal.ErrShuttingDown) {
+		t.Fatalf("Open = %v, want ErrShuttingDown", err)
+	}
+	if sessions := registry.Sessions(); len(sessions) != 0 {
+		t.Fatalf("sessions = %#v, want none", sessions)
+	}
+	if process.forceCount() == 0 {
+		t.Fatal("the process of the unpublished session was not forced")
+	}
+	waited := make(chan error, 1)
+	go func() { waited <- registry.Wait() }()
+	select {
+	case err := <-waited:
+		if err != nil {
+			t.Fatalf("Wait = %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Wait waited for a session that shutdown never reached")
+	}
+}
+
+func TestAnOpenThatFailsDuringShutdownReturnsItsOwnError(t *testing.T) {
+	registry := &terminal.Registry{Limits: func() terminal.Limits { return terminal.DefaultLimits() }}
+	entered := make(chan struct{})
+	opened := make(chan error, 1)
+	go func() {
+		_, err := registry.Open(context.Background(), terminal.Spec{
+			Kind: terminal.KindSSH, Alias: "cancelled",
+			Open: func(ctx context.Context, _ terminal.Size) (terminal.Process, error) {
+				close(entered)
+				<-ctx.Done()
+				return nil, ctx.Err()
+			},
+		})
+		opened <- err
+	}()
+	<-entered
+	registry.BeginShutdown()
+
+	if err := <-opened; !errors.Is(err, context.Canceled) {
+		t.Fatalf("Open = %v, want the cancellation the creation returned", err)
 	}
 	if err := registry.Wait(); err != nil {
 		t.Fatalf("Wait = %v", err)

@@ -208,3 +208,55 @@ func TestLoginArgumentsSilenceOnlyTheBanner(t *testing.T) {
 		})
 	}
 }
+
+// ProxyCommand の行も Command Prompt のプロファイルも cmd.exe の文法で書かれて
+// いる。%ComSpec% が信頼できる表記の cmd.exe なら、それが結果である。
+func TestTheCommandProcessorIsComSpecWhenItIsATrustedCmdExe(t *testing.T) {
+	comSpec := `C:\Windows\System32\cmd.exe`
+	processor, err := windows.CommandProcessor(
+		lookupOf(map[string]string{"ComSpec": comSpec, "WINDIR": `D:\Other`}), existing(comSpec),
+	)
+	if err != nil || processor != comSpec {
+		t.Fatalf("CommandProcessor() = %q, %v; want %q", processor, err, comSpec)
+	}
+}
+
+// %ComSpec% を信頼できないとき、置かれていないとき、cmd.exe でないときは、
+// Windows ディレクトリの cmd.exe を使う。ログインシェルが拒む表記は、ここでも拒む。
+func TestTheCommandProcessorFallsBackToTheWindowsDirectory(t *testing.T) {
+	windowsDirectory := `C:\Windows`
+	fallback := filepath.Join(windowsDirectory, "System32", "cmd.exe")
+	for name, comSpec := range map[string]string{
+		"unset":            "",
+		"relative":         `cmd.exe`,
+		"unc share":        `\\attacker\share\cmd.exe`,
+		"parent traversal": `C:\Windows\..\Users\someone\cmd.exe`,
+		"another program":  `C:\Tools\other.exe`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			environment := map[string]string{"WINDIR": windowsDirectory}
+			if comSpec != "" {
+				environment["ComSpec"] = comSpec
+			}
+			processor, err := windows.CommandProcessor(lookupOf(environment), existing(comSpec, fallback))
+			if err != nil || processor != fallback {
+				t.Fatalf("CommandProcessor(ComSpec=%q) = %q, %v; want %q", comSpec, processor, err, fallback)
+			}
+		})
+	}
+}
+
+// PATH の cmd.exe は決して選ばない。信頼できる場所に無いなら、無いと言う。
+func TestTheCommandProcessorFindsNothingOutsideTrustedPlaces(t *testing.T) {
+	for name, lookup := range map[string]func(string) (string, bool){
+		"nil":     nil,
+		"path":    lookupOf(map[string]string{"PATH": `C:\Users\someone\bin`}),
+		"missing": lookupOf(map[string]string{"ComSpec": `C:\Windows\System32\cmd.exe`, "WINDIR": `C:\Windows`}),
+	} {
+		t.Run(name, func(t *testing.T) {
+			if processor, err := windows.CommandProcessor(lookup, existing()); !errors.Is(err, windows.ErrNoCommandProcessor) {
+				t.Fatalf("CommandProcessor() = %q, %v; want ErrNoCommandProcessor", processor, err)
+			}
+		})
+	}
+}

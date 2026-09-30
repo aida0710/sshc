@@ -158,7 +158,7 @@ func TestRunAuthenticatesWithAKeyAgainstRealSshd(t *testing.T) {
 	var observed []string
 	dialer := remote.keyDialer(t, &observed)
 
-	output, err := dialer.Run(t.Context(), remote.keyTarget(), "echo integration-canary", nil)
+	output, err := dialer.Run(t.Context(), remote.keyTarget(), sshclient.Command{Line: "echo integration-canary"})
 	if err != nil {
 		t.Fatalf("running a command over the real sshd: %v", err)
 	}
@@ -178,7 +178,7 @@ func TestRunCarriesTheRemoteExitCode(t *testing.T) {
 	remote := integrationServer(t)
 	dialer := remote.keyDialer(t, nil)
 
-	output, err := dialer.Run(t.Context(), remote.keyTarget(), "exit 17", nil)
+	output, err := dialer.Run(t.Context(), remote.keyTarget(), sshclient.Command{Line: "exit 17"})
 	if err != nil {
 		t.Fatalf("running a command that exits non-zero: %v", err)
 	}
@@ -199,7 +199,7 @@ func TestConcurrentCommandsAgainstRealOpenSSH(t *testing.T) {
 		go func() {
 			defer group.Done()
 			want := fmt.Sprintf("concurrent-%02d", index)
-			output, err := dialer.Run(t.Context(), target, "printf "+want, nil)
+			output, err := dialer.Run(t.Context(), target, sshclient.Command{Line: "printf " + want})
 			if err != nil {
 				errorsFound <- fmt.Errorf("session %d: %w", index, err)
 				return
@@ -223,7 +223,7 @@ func TestRunRefusesAHostThatIsNotInKnownHosts(t *testing.T) {
 	dialer := remote.keyDialer(t, nil)
 	dialer.HostKeys = sshclient.HostKeys{}
 
-	_, err := dialer.Run(t.Context(), remote.keyTarget(), "echo never", nil)
+	_, err := dialer.Run(t.Context(), remote.keyTarget(), sshclient.Command{Line: "echo never"})
 	if !errors.Is(err, sshclient.ErrHostKeyUnknown) {
 		t.Fatalf("error = %v, want %v", err, sshclient.ErrHostKeyUnknown)
 	}

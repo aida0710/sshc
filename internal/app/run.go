@@ -63,7 +63,7 @@ type Dependencies struct {
 	KeyAgent     platform.KeyAgent
 	ScanHostKeys func(ctx context.Context, address string, timeout time.Duration) ([]ssh.PublicKey, error)
 	Probe        func(ctx context.Context, alias string) (sshclient.Probe, error)
-	RemoteRun    func(ctx context.Context, target sshclient.Target, command string, stdin []byte) (sshclient.Output, error)
+	RemoteRun    func(ctx context.Context, target sshclient.Target, command sshclient.Command) (sshclient.Output, error)
 	Updates      *selfupdate.Checker
 	// Lookup は親の環境を読み、利用者のログインシェルを見つけるために使う。
 	Lookup func(string) (string, bool)

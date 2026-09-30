@@ -250,8 +250,13 @@ func (transport *Transport) List(ctx context.Context) ([]Device, error) {
 	return devices, nil
 }
 
+// maxMetadataBytes bounds each device field (VID, PID, serial number, product
+// and manufacturer) shown in the device list. Real values are a few dozen bytes,
+// so a longer one is dropped instead of shown.
+const maxMetadataBytes = 1024
+
 func safeMetadata(value string) string {
-	if len(value) > 1024 || !utf8.ValidString(value) {
+	if len(value) > maxMetadataBytes || !utf8.ValidString(value) {
 		return ""
 	}
 	for _, character := range value {
@@ -366,10 +371,15 @@ func (stream *Stream) SetReadTimeout(timeout time.Duration) error {
 	return setter.SetReadTimeout(timeout)
 }
 
+// pendingReadBytes is the chunk DiscardPending reads per call. The bytes are
+// thrown away, so the size only sets how many reads an old prompt takes.
+const pendingReadBytes = 4096
+
 // DiscardPending removes stale input before a scripted send. Real serial ports
 // can buffer an old prompt before the command is written; accepting that prompt
-// as the command result would be a false success.
-func (stream *Stream) DiscardPending(ctx context.Context) error {
+// as the command result would be a false success. It stops once no input
+// arrives for quiet.
+func (stream *Stream) DiscardPending(ctx context.Context, quiet time.Duration) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -380,11 +390,11 @@ func (stream *Stream) DiscardPending(ctx context.Context) error {
 	if !ok {
 		return nil
 	}
-	if err := setter.SetReadTimeout(20 * time.Millisecond); err != nil {
+	if err := setter.SetReadTimeout(quiet); err != nil {
 		return err
 	}
 	defer func() { _ = setter.SetReadTimeout(serial.NoTimeout) }()
-	buffer := make([]byte, 4096)
+	buffer := make([]byte, pendingReadBytes)
 	for {
 		if err := ctx.Err(); err != nil {
 			return err

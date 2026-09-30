@@ -9,6 +9,7 @@ import (
 
 	"sshc/internal/api"
 	"sshc/internal/terminal"
+	"sshc/internal/testwait"
 )
 
 func TestTerminalControlReadsBoundedPlainTextWithACursor(t *testing.T) {
@@ -17,7 +18,7 @@ func TestTerminalControlReadsBoundedPlainTextWithACursor(t *testing.T) {
 	process := fixture.starter.last()
 	process.feed("\x1b[31mfirst\x1b[0m\r\nsecond")
 	session, _ := fixture.registry.Lookup(id)
-	waitUntil(t, func() bool { return strings.Contains(string(snapshotOf(session)), "second") })
+	testwait.Until(t, func() bool { return strings.Contains(string(snapshotOf(session)), "second") })
 
 	response, body := fixture.do(t, http.MethodGet,
 		"/api/v1/terminal/sessions/"+id+"/control?cursor=0&limit=5", "")
@@ -71,7 +72,7 @@ func TestTerminalControlCarriesCSIAndOSCAcrossCursorBoundaries(t *testing.T) {
 	raw := "prefix\x1b[31mred\x1b[0m\x1b]8;;https://secret.invalid\x1b\\link\x1b]8;;\x1b\\after"
 	process.feed(raw)
 	session, _ := fixture.registry.Lookup(id)
-	waitUntil(t, func() bool { return len(snapshotOf(session)) == len(raw) })
+	testwait.Until(t, func() bool { return len(snapshotOf(session)) == len(raw) })
 
 	// This cursor is in the OSC payload. The response must decode from retained
 	// context, rather than exposing the remaining URL as ordinary text.

@@ -45,7 +45,7 @@ func TestScanHostKeysNeverAuthenticates(t *testing.T) {
 // サーバーが持たない種別は失敗ではない。持っている種別が取れていれば足りる。
 func TestScanHostKeysSkipsTheTypesTheServerDoesNotHave(t *testing.T) {
 	server := newTestServer(t, serverOptions{Password: "never offered"})
-	// ed25519 の鍵しか無いサーバーである。ScanAlgorithms は 7 種別を尋ねる。
+	// ed25519 の鍵しか無いサーバーである。ScanHostKeys はほかの種別も尋ねる。
 	keys, err := sshclient.ScanHostKeys(context.Background(), nil, server.Address(), 5*time.Second)
 	if err != nil {
 		t.Fatalf("ScanHostKeys = %v", err)

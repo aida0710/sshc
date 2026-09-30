@@ -9,6 +9,8 @@ import (
 	"time"
 	"unicode"
 	"unicode/utf8"
+
+	"sshc/internal/iowrite"
 )
 
 // Kind はセッションの種類を表す。
@@ -57,7 +59,13 @@ type ForwardController interface {
 // connection work which makes it usable. A Process without this capability is
 // ready when Open returns; SSH sessions implement it because authentication
 // prompts must be streamed before the handshake has completed.
-type Readier interface{ Ready() <-chan error }
+//
+// Ready は、準備が終わると閉じる。値は送らないので、何人でも待てる。結果は
+// ReadyErr で読む（nil なら使える状態になった）。Ready が閉じる前の ReadyErr は nil。
+type Readier interface {
+	Ready() <-chan struct{}
+	ReadyErr() error
+}
 
 // Promptingは、Ready前でも利用者の入力を認証promptへの回答として受け取れる
 // Processである。これを実装しない非同期Processへの先行入力は捨てる。
@@ -137,6 +145,15 @@ type ExitInfo struct {
 	Code   int
 	Signal string
 	At     time.Time
+	// TransportLost は、シェルが終わったのではなく、その下の輸送（SSH の接続）が
+	// 落ちたことを表す。自動再接続はこれを見て繋ぎ直す。終了コードの値には
+	// この意味を載せない。
+	TransportLost bool
+	// Notice は、終わり方について sshc がターミナルへ書く文である（輸送が落ちた理由、
+	// 接続ログの深さを上げたときの keepalive の上限や終了状態の行など）。
+	// Process はこれを出力へ書かずに返す。出力の終わりに書くと、終わったプログラムの
+	// 代替画面に書かれ、engine がモードを戻したときに見えなくなる。
+	Notice string
 }
 
 // State は、SSH process の接続ライフサイクルである。WebSocket の接続状態とは
@@ -159,11 +176,9 @@ type ReconnectView struct {
 	Problem string
 }
 
-// TransportLost は、シェルが終わったのではなく輸送が落ちたことを表す終了コード。
-const TransportLost = -1
-
-// Lost は、この終わり方が輸送の断絶かどうかを返す。
-func (info ExitInfo) Lost() bool { return info.Code == TransportLost }
+// ExitCodeUnknown は、終了コードを得られなかったときの Code である。輸送が
+// 落ちたのか、プロセスの待ち方が失敗したのかは TransportLost で区別する。
+const ExitCodeUnknown = -1
 
 // Command は、PTY の中で起動するプログラムひとつである。
 type Command struct {
@@ -185,6 +200,9 @@ type Process interface {
 	Resize(Size) error
 	// Hangup は、このセッションの木に終わってほしいという意思である。
 	Hangup() error
+	// ForceClose は、相手の応答を待たずにこのセッションの木を止めて閉じる。
+	// 利用者が閉じたときと engine の停止は、Hangup ではなくこれで止める。
+	ForceClose() error
 	// Wait は子プロセスの終了を待ち、その理由を返す。
 	Wait() ExitInfo
 	// Close は PTY を解放する。
@@ -194,10 +212,6 @@ type Process interface {
 // Starter は PTY を確保して子プロセスを起動する。
 type Starter interface {
 	Start(ctx context.Context, command Command, size Size) (Process, error)
-}
-
-type forceCloser interface {
-	ForceClose() error
 }
 
 var (
@@ -230,23 +244,13 @@ var (
 	ErrShuttingDown          = errors.New("the terminal registry is shutting down")
 )
 
+// writeExact は、取り消されていなければ input を残らず PTY へ書く。PTY の *os.File は
+// 1 回の Write で書き切るか失敗するので、書いている途中で ctx を見直す必要はない。
 func writeExact(ctx context.Context, writer io.Writer, input []byte) error {
-	for len(input) > 0 {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		written, err := writer.Write(input)
-		if written > 0 {
-			input = input[written:]
-		}
-		if err != nil {
-			return err
-		}
-		if written == 0 {
-			return io.ErrShortWrite
-		}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
-	return nil
+	return iowrite.WriteAll(writer, input)
 }
 
 // MaxCommandBytes leaves one byte for the carriage return which executes the

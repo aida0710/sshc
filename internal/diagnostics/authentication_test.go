@@ -3,6 +3,7 @@ package diagnostics_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"os"
 	"strings"
@@ -108,7 +109,10 @@ func TestAuthenticationTestClassifiesFailuresByType(t *testing.T) {
 		{"host key unknown", sshclient.ErrHostKeyUnknown, diagnostics.OutcomeHostKeyUnknown},
 		{"host key revoked", sshclient.ErrHostKeyRevoked, diagnostics.OutcomeHostKeyUnknown},
 		{"nothing to offer", sshclient.ErrNoAuthMethod, diagnostics.OutcomeDenied},
-		{"denied", errors.New("ssh: unable to authenticate, attempted methods [none publickey]"), diagnostics.OutcomeDenied},
+		{"denied", fmt.Errorf("ssh: handshake failed: %w", sshclient.ErrAuthenticationRejected), diagnostics.OutcomeDenied},
+		// 保存済みの値が拒否され、非対話なので代わりを尋ねられなかった。
+		{"saved value denied without a prompt", fmt.Errorf("ssh: handshake failed: %w",
+			errors.Join(sshclient.ErrAuthenticationRejected, sshclient.ErrPromptUnavailable)), diagnostics.OutcomeDenied},
 		{"dns", &net.DNSError{Err: "no such host", Name: "nowhere.invalid"}, diagnostics.OutcomeDNSFailure},
 		{"deadline", context.DeadlineExceeded, diagnostics.OutcomeTimeout},
 		// net reports a refused port as an OpError wrapping the OS errno; the

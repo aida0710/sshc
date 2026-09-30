@@ -21,28 +21,13 @@ import (
 // 既定は無言である。毎回この量が流れると、シェルの最初の一画面が
 // 押し流されるため、必要な場合だけ verbosity を上げる。
 
-// Verbosity は、どこまで言うかである。
-type Verbosity int
-
-const (
-	// Quiet は、接続の途中を何も言わない。既定である。
-	Quiet Verbosity = 0
-	// Brief は `-v` に相当する。何が起き、どこへ繋いだかだけを言う。
-	Brief Verbosity = 1
-	// Detailed は `-vv` に相当する。試した鍵とその指紋、通った方式、
-	// ホスト鍵の照合結果、経由地、端末と環境変数の要求、掛かった時間。
-	Detailed Verbosity = 2
-	// Full は `-vvv` に相当する。名乗った算法、agent の鍵の一覧、
-	// keyboard-interactive の質問ごとの扱い、通った経路のアドレス。
-	Full Verbosity = 3
-)
-
-// MaxVerbosity は、受け付ける上限である。設定の検証はここを見る。
-const MaxVerbosity = int(Full)
+// MaxVerbosity は、接続ログの設定（Dialer.Verbosity）で受け付ける上限である。
+// 設定の検証はここを見る。
+const MaxVerbosity = int(connectionlog.Full)
 
 // tracer は、設定された level 以下の診断だけを書き出す。ゼロ値は出力しない。
 type tracer struct {
-	level  Verbosity
+	level  connectionlog.Level
 	writer io.Writer
 	// clock は掛かった時間を測る。テストが時計を止められるようにしてある。
 	clock    func() time.Time
@@ -57,11 +42,21 @@ func (t *tracer) now() time.Time {
 	return t.clock()
 }
 
-func newTracer(level Verbosity, writer io.Writer) *tracer {
+func newTracer(level connectionlog.Level, writer io.Writer) *tracer {
 	if writer != nil {
 		writer = &traceOutput{writer: writer}
 	}
 	return &tracer{level: level, writer: writer, clock: time.Now}
+}
+
+// writingTo は、同じ深さの行を writer へ書く tracer を返す。
+func (t *tracer) writingTo(writer io.Writer) *tracer {
+	if t == nil {
+		return nil
+	}
+	redirected := *t
+	redirected.writer = writer
+	return &redirected
 }
 
 // keepalive can write while a remote command is producing stderr. Share this
@@ -83,7 +78,7 @@ func (output *traceOutput) Write(contents []byte) (int, error) {
 // 理由である。読む側は、その行がどの設定で出たかを行だけで判別でき、
 // `debug2` で grep すれば深さ 2 の行だけを拾える。深さの印が無い `[sshc]` は、
 // 設定に関係なく出る行（ProxyCommand の実行、再接続の通知）である。
-func linePrefix(level Verbosity) string {
+func linePrefix(level connectionlog.Level) string {
 	return fmt.Sprintf("[sshc][debug%d] ", int(level))
 }
 
@@ -91,7 +86,7 @@ func linePrefix(level Verbosity) string {
 //
 // 端末は行末にCRLFを要る。生の\nだけを送ると、次の行が前の行の右端から
 // 始まる。先頭にもCRLFを置くと、連続する診断の間が毎回空行になる。
-func (t *tracer) say(level Verbosity, format string, args ...any) {
+func (t *tracer) say(level connectionlog.Level, format string, args ...any) {
 	if t == nil || t.writer == nil || level > t.level {
 		return
 	}
@@ -133,16 +128,16 @@ const (
 // 接続の途中経過についてであり、それと別の扱いにすると「無言」の意味が二つになる。
 // 文はサーバーが書いたものなので、行ごとに制御文字を落としてから出す。
 func (t *tracer) banner(message string) {
-	if !t.enabled(Brief) {
+	if !t.enabled(connectionlog.Brief) {
 		return
 	}
 	lines := strings.Split(strings.TrimRight(message, "\r\n"), "\n")
 	if len(lines) > maxBannerLines {
 		lines = lines[:maxBannerLines]
 	}
-	t.say(Brief, "サーバーからの案内：")
+	t.say(connectionlog.Brief, "サーバーのバナー：")
 	for _, line := range lines {
-		t.say(Brief, "  %s", terminal.DisplayText(line, maxBannerLineRunes))
+		t.say(connectionlog.Brief, "  %s", terminal.DisplayText(line, maxBannerLineRunes))
 	}
 }
 
@@ -150,7 +145,7 @@ func (t *tracer) banner(message string) {
 func (t *tracer) since(start time.Time) time.Duration { return t.now().Sub(start) }
 
 // enabled は、この level の診断が有効かを返す。
-func (t *tracer) enabled(level Verbosity) bool {
+func (t *tracer) enabled(level connectionlog.Level) bool {
 	return t != nil && t.writer != nil && level <= t.level
 }
 
@@ -159,7 +154,7 @@ func (t *tracer) enabled(level Verbosity) bool {
 type logWriter struct{ trace *tracer }
 
 func (writer logWriter) Enabled(level connectionlog.Level) bool {
-	return writer.trace.enabled(Verbosity(level))
+	return writer.trace.enabled(level)
 }
 
 func (writer logWriter) Write(level connectionlog.Level, message string) {
@@ -167,7 +162,7 @@ func (writer logWriter) Write(level connectionlog.Level, message string) {
 		writer.trace.announce("%s", message)
 		return
 	}
-	writer.trace.say(Verbosity(level), "%s", message)
+	writer.trace.say(level, "%s", message)
 }
 
 // withLog は、この tracer を書き先に足した ctx を返す。

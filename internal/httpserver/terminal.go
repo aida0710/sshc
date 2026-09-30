@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/labstack/echo/v5"
@@ -86,7 +85,6 @@ func registerTerminalRoutes(engine *echo.Echo, handlers TerminalHandlers) {
 	engine.POST("/api/v1/terminal/sessions/:id/forwards", handlers.StartForward)
 	engine.DELETE("/api/v1/terminal/sessions/:id/forwards/:forwardId", handlers.StopForward)
 	engine.GET("/api/v1/terminal/sessions/:id/control", handlers.Control)
-	engine.PATCH("/api/v1/terminal/sessions/:id", handlers.Rename)
 	engine.PUT("/api/v1/terminal/sessions/:id/title", handlers.SetTitle)
 	engine.DELETE("/api/v1/terminal/sessions/:id", handlers.Close)
 	engine.GET(StreamPath, handlers.Stream)
@@ -242,7 +240,8 @@ func (h TerminalHandlers) Open(c *echo.Context) error {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
 
-	size := terminal.DefaultSize()
+	// 寸法が送られなければゼロのまま渡し、terminal.Registry の既定の寸法に任せる。
+	var size terminal.Size
 	if request.Cols != nil && request.Rows != nil {
 		// uint16 へ切り詰める前に検査する。65616 を uint16 にすると 80 になり、
 		// 範囲外の値が別の寸法として通ってしまう。
@@ -280,8 +279,14 @@ func (h TerminalHandlers) Open(c *echo.Context) error {
 	})
 }
 
-// SetTitle pins a user-selected display title, or unpins it when title is null.
-// It changes only in-memory presentation state.
+// SetTitle は、利用者が付けた名前で一覧とペインの表示名を固定する。title が null なら
+// 固定を外し、プログラムが OSC で付けた名前か接続先の名前へ戻す。
+//
+// 変わるのは表示だけである。走っているプロセスにも、ssh の相手にも、この
+// セッションの識別子にも触れない。名前が要るのは、同じ相手へ複数本開いたときに
+// 行が見分けられなくなるからである。
+//
+// 名前は metadata へ保存しない。セッションは現在のプロセス内でだけ有効である。
 func (h TerminalHandlers) SetTitle(c *echo.Context) error {
 	id := c.Param("id")
 	if id == "" || len(id) > maxSessionIdentifier {
@@ -359,17 +364,13 @@ func (h TerminalHandlers) spec(kind terminal.Kind, alias, cwd *string, size term
 			// 成功したセッションの寿命は、要求から切り離す。Dialer.Open は
 			// すぐ返り、渡された context を非同期の接続のあいだ持ち続けるので、
 			// 要求の context をそのまま渡すと、開いた HTTP ハンドラが返った瞬間に
-			// SSH セッションが終了する。取り消す権利は Process.Close が持つ。
-			sessionCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
-			owned, lifetime, readier, asynchronous, err := ownTerminalProcess(sessionCtx, cancel, func(ctx context.Context) (terminal.Process, error) {
-				return h.Connect(ctx, target, size)
-			})
-			if err != nil {
-				return nil, err
-			}
-			// Open is also called by the registry when a disconnected transport is
-			// re-established. Resolve and inject the startup snippet here so every
-			// successful connection gets the same explicit startup automation.
+			// SSH セッションが終了する。取り消す権利は Process.Close と ForceClose が
+			// 持つ（sshclient.Session は自分で派生させた context をそこで取り消す）。
+			return h.Connect(context.WithoutCancel(ctx), target, size)
+		},
+		// 起動時のコマンドは、terminal.Session が Ready の後に世代ごとに送る。
+		// 再接続のたびに解決し直すので、割り当ての変更と停止がすぐ効く。
+		Startup: func() []string {
 			commands := make([]string, 0, 2)
 			if initialDirectory != "" {
 				commands = append(commands, "cd -- "+quotePOSIXShell(initialDirectory))
@@ -379,22 +380,13 @@ func (h TerminalHandlers) spec(kind terminal.Kind, alias, cwd *string, size term
 					commands = append(commands, command)
 				}
 			}
-			if len(commands) > 0 {
-				go func() {
-					if !asynchronous || receiveReady(readier.Ready()) == nil {
-						for _, command := range commands {
-							_, _ = lifetime.Write([]byte(command + "\r"))
-						}
-					}
-				}()
-			}
-			return owned, nil
+			return commands
 		},
 		ReconnectError: func(err error) (bool, string) {
 			if code, requiresAction := connectProblem(err); requiresAction {
 				return false, code
 			}
-			return true, "reconnect_failed"
+			return true, terminal.ProblemReconnectFailed
 		},
 		ReconnectStopNotice: reconnectStopNotice,
 	}
@@ -402,7 +394,7 @@ func (h TerminalHandlers) spec(kind terminal.Kind, alias, cwd *string, size term
 }
 
 func remoteWorkingDirectory(candidate string) (string, error) {
-	if candidate == "" || len(candidate) > 4096 || !strings.HasPrefix(candidate, "/") || strings.ContainsAny(candidate, "\x00\r\n") {
+	if candidate == "" || len(candidate) > 4096 || !strings.HasPrefix(candidate, "/") || containsControlCharacter(candidate) {
 		return "", errInvalidRemoteWorkingDirectory
 	}
 	cleaned := path.Clean(candidate)
@@ -429,140 +421,6 @@ func (h TerminalHandlers) shellSpec(requested *string, size terminal.Size) (term
 			Dir: h.startDirectory(),
 		},
 	}, nil
-}
-
-func ownTerminalProcess(
-	ctx context.Context,
-	cancel context.CancelFunc,
-	open func(context.Context) (terminal.Process, error),
-) (terminal.Process, *sessionLifetime, terminal.Readier, bool, error) {
-	process, err := open(ctx)
-	if err != nil {
-		cancel()
-		return nil, nil, nil, false, err
-	}
-	lifetime := &sessionLifetime{Process: process, cancel: cancel}
-	var owned terminal.Process = lifetime
-	underlyingReady, asynchronous := process.(terminal.Readier)
-	var readier terminal.Readier
-	if asynchronous {
-		readyLifetime := newReadySessionLifetime(lifetime, underlyingReady)
-		owned, readier = readyLifetime, readyLifetime
-	}
-	return owned, lifetime, readier, asynchronous, nil
-}
-
-// sessionLifetime は、セッションが実行中あいだだけ続く context を Process に
-// 結び付ける。
-type sessionLifetime struct {
-	terminal.Process
-	cancel context.CancelFunc
-}
-
-type readySessionLifetime struct {
-	*sessionLifetime
-	done  chan struct{}
-	mutex sync.Mutex
-	err   error
-}
-
-// WriteExact preserves the lossless input capability of the in-process SSH
-// session through the lifetime wrapper. Broadcast must fail closed when the
-// underlying Process does not provide it.
-func (s *sessionLifetime) WriteExact(ctx context.Context, input []byte) error {
-	writer, ok := s.Process.(terminal.ExactInput)
-	if !ok {
-		return terminal.ErrExactInputUnavailable
-	}
-	return writer.WriteExact(ctx, input)
-}
-
-func newReadySessionLifetime(lifetime *sessionLifetime, underlying terminal.Readier) *readySessionLifetime {
-	ready := &readySessionLifetime{sessionLifetime: lifetime, done: make(chan struct{})}
-	go func() {
-		err := <-underlying.Ready()
-		ready.mutex.Lock()
-		ready.err = err
-		ready.mutex.Unlock()
-		close(ready.done)
-	}()
-	return ready
-}
-
-// Ready gives every observer its own one-result channel. The underlying SSH
-// session emits one value, while both the registry and startup automation need
-// to observe it without racing to consume that single value.
-func (s *readySessionLifetime) Ready() <-chan error {
-	result := make(chan error, 1)
-	go func() {
-		<-s.done
-		s.mutex.Lock()
-		err := s.err
-		s.mutex.Unlock()
-		result <- err
-		close(result)
-	}()
-	return result
-}
-
-func receiveReady(ready <-chan error) error {
-	return <-ready
-}
-
-// Forwards preserves the optional Process capability across the lifetime
-// wrapper. Without this adapter an active SSH forward disappears from the
-// terminal session API even though the underlying listener remains open.
-func (s *sessionLifetime) Forwards() []terminal.Forward {
-	if forwarder, ok := s.Process.(terminal.Forwarder); ok {
-		return forwarder.Forwards()
-	}
-	return nil
-}
-
-// StartForward と StopForward も寿命wrapperを越えて同じ接続へ届ける。
-// 一覧だけを透過して操作能力を落とすと、表示はできても管理APIは必ず失敗する。
-func (s *sessionLifetime) StartForward(kind, listenPort, destination string) (terminal.Forward, error) {
-	controller, ok := s.Process.(terminal.ForwardController)
-	if !ok {
-		return terminal.Forward{}, terminal.ErrForwardUnavailable
-	}
-	return controller.StartForward(kind, listenPort, destination)
-}
-
-func (s *sessionLifetime) StopForward(id string) error {
-	controller, ok := s.Process.(terminal.ForwardController)
-	if !ok {
-		return terminal.ErrForwardUnavailable
-	}
-	return controller.StopForward(id)
-}
-
-// AwaitingPrompt preserves the optional pre-Ready input capability across the
-// lifetime wrapper. Without it the registry would discard password and host-key answers.
-func (s *sessionLifetime) AwaitingPrompt() bool {
-	if prompting, ok := s.Process.(terminal.Prompting); ok {
-		return prompting.AwaitingPrompt()
-	}
-	return false
-}
-
-func (s *sessionLifetime) Close() error {
-	err := s.Process.Close()
-	s.cancel()
-	return err
-}
-
-// ForceClose は、包んだ Process の強制停止を素通しする。
-//
-// ここで落としてはならない。落とせば、レジストリからは強制停止を持たない
-// Process に見え、締切に達しても輸送が切れなくなる。
-func (s *sessionLifetime) ForceClose() error {
-	var err error
-	if forcer, ok := s.Process.(interface{ ForceClose() error }); ok {
-		err = forcer.ForceClose()
-	}
-	s.cancel()
-	return err
 }
 
 var errMissingAlias = errors.New("an ssh session needs an alias")
@@ -658,7 +516,9 @@ func (h TerminalHandlers) startProblem(c *echo.Context, err error) error {
 	case errors.Is(err, validate.ErrUnsafeAlias), errors.Is(err, errMissingAlias):
 		return problem(c, http.StatusBadRequest, "unsafe_alias")
 	case errors.Is(err, errInvalidRemoteWorkingDirectory):
-		return problem(c, http.StatusBadRequest, "invalid_request")
+		// SFTP で開いているフォルダの名前は接続先が決める。制御文字を含む名前は
+		// cd の行に書けないので、そのフォルダでは開けないと伝える。
+		return problem(c, http.StatusBadRequest, "remote_working_directory_unsupported")
 	case errors.Is(err, platform.ErrUnknownShellProfile):
 		return problem(c, http.StatusBadRequest, "local_shell_profile_unavailable")
 	}
@@ -750,34 +610,8 @@ func (h TerminalHandlers) StopReconnecting(c *echo.Context) error {
 	return c.JSON(http.StatusOK, h.list())
 }
 
-// Close は、生存中なら子プロセスに SIGHUP、終了済みなら一覧から消す。
-// Rename は、一覧に出す名前を変える。
-//
-// 変わるのは表示だけである。走っているプロセスにも、ssh の相手にも、この
-// セッションの識別子にも触れない。名前が要るのは、同じ相手へ複数本開いたときに
-// 行が見分けられなくなるからである。
-//
-// 名前は metadata へ保存しない。セッションは現在のプロセス内でだけ有効である。
-func (h TerminalHandlers) Rename(c *echo.Context) error {
-	id := c.Param("id")
-	if id == "" || len(id) > maxSessionIdentifier {
-		return problem(c, http.StatusNotFound, "terminal_session_not_found")
-	}
-	var request api.RenameTerminalSessionRequest
-	if err := decodeJSON(c, &request); err != nil {
-		return problem(c, http.StatusBadRequest, "invalid_request")
-	}
-	switch err := h.Registry.Rename(id, request.Title); {
-	case errors.Is(err, terminal.ErrNotFound):
-		return problem(c, http.StatusNotFound, "terminal_session_not_found")
-	case errors.Is(err, terminal.ErrInvalidTitle):
-		return problem(c, http.StatusBadRequest, "invalid_terminal_title")
-	case err != nil:
-		return problem(c, http.StatusBadRequest, "invalid_request")
-	}
-	return c.JSON(http.StatusOK, h.list())
-}
-
+// Close は、利用者が閉じたセッションを一覧から消す。生きていれば、終わるのを
+// 待たずに強制停止する。止められなければ一覧に残して terminal_close_failed を返す。
 func (h TerminalHandlers) Close(c *echo.Context) error {
 	id := c.Param("id")
 	if id == "" || len(id) > maxSessionIdentifier {

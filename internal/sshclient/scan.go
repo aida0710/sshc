@@ -9,23 +9,10 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-// ScanAlgorithms は、ホスト鍵を尋ねる種別の並びである。
-//
-// `ssh-keyscan` の既定と同じ顔ぶれにしてある。サーバーが持っていない種別は
-// 暗黙に飛ばす。持っていないことは失敗ではない。
-var ScanAlgorithms = []string{
-	ssh.KeyAlgoED25519,
-	ssh.KeyAlgoECDSA256,
-	ssh.KeyAlgoECDSA384,
-	ssh.KeyAlgoECDSA521,
-	ssh.KeyAlgoRSASHA512,
-	ssh.KeyAlgoRSASHA256,
-}
-
 // DefaultScanTimeout は、ひとつのアドレスを尋ねるのに掛ける上限である。
 //
 // 種別ごとではなく全体の予算である。種別ごとにすると、届かないアドレスに
-// 対して上限が種別の数だけ掛かる。7 倍待たされる。
+// 対して上限が種別の数だけ掛かる。
 const DefaultScanTimeout = 15 * time.Second
 
 // errKeyCollected は、鍵を受け取ったので握手を止めるという合図である。
@@ -58,7 +45,9 @@ func ScanHostKeys(
 	var collected []ssh.PublicKey
 	seen := map[string]bool{}
 	var lastErr error
-	for _, algorithm := range ScanAlgorithms {
+	// 尋ねる種別は、接続で提示する既定の並びと同じにする。`ssh-keyscan` も ssh の
+	// 既定と同じ顔ぶれを尋ねる。サーバーが持っていない種別は失敗とせずに飛ばす。
+	for _, algorithm := range defaultHostKeyAlgorithms {
 		key, reached, err := scanOne(ctx, dial, address, algorithm)
 		if err != nil {
 			lastErr = err

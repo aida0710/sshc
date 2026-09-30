@@ -160,6 +160,15 @@ type Target struct {
 // Address は、dial する宛先である。
 func (t Target) Address() string { return net.JoinHostPort(t.HostName, t.Port) }
 
+// connectTimeout は、このホップの接続と鍵交換に掛ける上限である。
+// ConnectTimeout が書かれていなければ DefaultTimeout を使う。
+func (t Target) connectTimeout() time.Duration {
+	if t.Timeout <= 0 {
+		return DefaultTimeout
+	}
+	return t.Timeout
+}
+
 // JumpRoute returns every ProxyJump hop in the order the TCP chain must open.
 // A hop may resolve another ProxyJump of its own, so the innermost prerequisite
 // comes before the hop which names it. Dialing and diagnostics share this route

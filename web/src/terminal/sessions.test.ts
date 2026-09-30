@@ -13,7 +13,7 @@ function api(overrides: Partial<TerminalSessionsApi> = {}): TerminalSessionsApi 
     reconnectTerminalSession: vi.fn().mockResolvedValue(list),
     stopTerminalReconnect: vi.fn().mockResolvedValue(list),
     closeTerminalSession: vi.fn().mockResolvedValue(list),
-    renameTerminalSession: vi.fn().mockResolvedValue(list),
+    setTerminalSessionTitle: vi.fn().mockResolvedValue(list),
     ...overrides,
   } as TerminalSessionsApi;
 }
@@ -272,10 +272,10 @@ describe("useTerminalSessions", () => {
   });
 
   it("says so when a rename is refused and keeps the list it had", async () => {
-    const renameTerminalSession = vi.fn().mockRejectedValue(
+    const setTerminalSessionTitle = vi.fn().mockRejectedValue(
       new ApiError("invalid_terminal_title", 400, { code: "invalid_terminal_title", message: "no" }),
     );
-    const { result } = renderHook(() => useTerminalSessions(api({ renameTerminalSession }), translate));
+    const { result } = renderHook(() => useTerminalSessions(api({ setTerminalSessionTitle }), translate));
     await waitFor(() => expect(result.current.loaded).toBe(true));
 
     let outcome = true;
@@ -423,5 +423,23 @@ describe("terminalProblemKey", () => {
 
   it("says that the VPN route was disconnected when that is why reconnecting stopped", () => {
     expect(terminalProblemKey("vpn_route_disconnected")).toBe("terminal.vpnRouteDisconnected");
+  });
+
+  it("says a connection that never connected failed, not that it is reconnecting", () => {
+    expect(terminalProblemKey("connect_failed")).toBe("terminal.connectFailed");
+  });
+
+  it("says the server rejected authentication, not that the terminal failed to open", () => {
+    expect(terminalProblemKey("authentication_rejected")).toBe("terminal.authenticationRejected");
+  });
+
+  it("says the route settings conflict when the VPN, ProxyJump and ProxyCommand cannot be combined", () => {
+    expect(terminalProblemKey("route_misconfigured")).toBe("terminal.routeMisconfigured");
+  });
+
+  it("says the folder cannot be opened in a terminal when its name has control characters", () => {
+    expect(terminalProblemKey("remote_working_directory_unsupported")).toBe(
+      "terminal.remoteWorkingDirectoryUnsupported",
+    );
   });
 });

@@ -2,7 +2,7 @@ package remoteos
 
 import "testing"
 
-func TestParse(t *testing.T) {
+func TestParseNamesTheDistributionFromIDThenIDLikeThenKernelOrNothing(t *testing.T) {
 	for _, test := range []struct{ input, want string }{
 		{"Linux\nID=amzn\nID_LIKE=fedora\nVERSION_ID=2023", "amazonlinux"},
 		{"Linux\nID=\"amzn\"\nID_LIKE=\"centos rhel fedora\"\nVERSION_ID=2", "amazonlinux"},

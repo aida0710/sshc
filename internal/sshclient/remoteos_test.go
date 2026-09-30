@@ -40,8 +40,8 @@ func TestOSDetectionUsesASeparateAuthenticatedChannel(t *testing.T) {
 	defer process.Close()
 	go func() { _, _ = io.Copy(io.Discard, process) }()
 	select {
-	case err := <-process.(terminal.Readier).Ready():
-		if err != nil {
+	case <-process.(terminal.Readier).Ready():
+		if err := process.(terminal.Readier).ReadyErr(); err != nil {
 			t.Fatal(err)
 		}
 	case <-time.After(2 * time.Second):
@@ -87,8 +87,8 @@ func TestOSDetectionDoesNotDelayAConnectionWhenProbeStalls(t *testing.T) {
 	defer process.Close()
 	go func() { _, _ = io.Copy(io.Discard, process) }()
 	select {
-	case err := <-process.(terminal.Readier).Ready():
-		if err != nil {
+	case <-process.(terminal.Readier).Ready():
+		if err := process.(terminal.Readier).ReadyErr(); err != nil {
 			t.Fatal(err)
 		}
 	case <-time.After(2 * time.Second):

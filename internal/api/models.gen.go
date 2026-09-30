@@ -1261,11 +1261,6 @@ type RenameTerminalBackgroundRequest struct {
 	Name string `json:"name"`
 }
 
-// RenameTerminalSessionRequest defines model for RenameTerminalSessionRequest.
-type RenameTerminalSessionRequest struct {
-	Title string `json:"title"`
-}
-
 // ResetUnsupportedVaultRequest defines model for ResetUnsupportedVaultRequest.
 type ResetUnsupportedVaultRequest struct {
 	Acknowledged bool   `json:"acknowledged"`

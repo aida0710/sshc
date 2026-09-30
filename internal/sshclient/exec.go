@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"io"
+	"fmt"
 	"time"
 
 	"golang.org/x/crypto/ssh"
+
+	"sshc/internal/iowrite"
 )
 
 // MaxCapturedOutput は、リモートのコマンドから取り込む量の上限である。
@@ -25,18 +27,33 @@ type Output struct {
 	Elapsed   time.Duration
 }
 
+// Command は、Run がリモートで走らせるコマンドひとつである。
+type Command struct {
+	// Line は、リモートのシェルが 1 本の文字列として受け取るコマンドである。
+	Line string
+	// Stdin は、コマンドの標準入力へ渡す内容である。空なら何も渡さない。
+	Stdin []byte
+	// Limit は、コマンドを走らせてから終わるまでの上限である。0 なら上限を置かず、
+	// ctx の取り消しだけで止まる。接続の確立には、ホップごとに ConnectTimeout が掛かる。
+	Limit time.Duration
+}
+
+// ErrCommandTimedOut は、コマンドが Command.Limit までに終わらなかったことを表す。
+// 呼び出し側が期限切れとして扱えるよう、context.DeadlineExceeded として判定できる。
+var ErrCommandTimedOut = fmt.Errorf("the remote command did not finish within its time limit: %w", context.DeadlineExceeded)
+
 // Run は、リモートで 1 つのコマンドを走らせる。
 //
 // 端末は要求しない。引数も無い。コマンドはリモートのシェルが 1 本の
-// 文字列として受け取る。これは OpenSSH の `ssh host 'command'` と同じであり、
-// 呼び出し側が組み立てるのは自分が書いた定数だけである。
+// 文字列として受け取る。これは OpenSSH の `ssh host 'command'` と同じである。
 //
 // 保存済み資格情報は対話接続と同じ認証経路で使用するが、追加質問は拒否する。
 // 保存済みの結果で通らない接続はそこで失敗し、ユーザー入力を待たない。
 //
-// 制限時間内で終わる管理操作を対象とするため keepalive は送らない。結果の解析が
-// ロケールに依存しないよう、ssh_config の SetEnv も送らない。
-func (d Dialer) Run(ctx context.Context, target Target, command string, stdin []byte) (Output, error) {
+// keepalive は ServerAliveInterval を設定した接続にだけ送る。上限を置かずに長く
+// 走るコマンドこそ、途中の機器に接続を捨てられて困るからである。結果の解析が
+// ロケールに依存しないよう、ssh_config の SetEnv は送らない。
+func (d Dialer) Run(ctx context.Context, target Target, command Command) (Output, error) {
 	started := time.Now()
 	failed := func() Output {
 		return Output{ExitCode: RemoteFailureExit, Elapsed: time.Since(started)}
@@ -45,13 +62,8 @@ func (d Dialer) Run(ctx context.Context, target Target, command string, stdin []
 	// 非対話処理では未知のホストを信頼済みに変更しない。
 	strict := requireKnownHosts(target)
 
-	timeout := strict.Timeout
-	if timeout <= 0 {
-		timeout = DefaultTimeout
-	}
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
+	// ConnectTimeout は接続の確立だけに掛ける。chain がホップごとに掛けている。
+	// ここで Run 全体に掛けると、接続の速い相手でも長いコマンドが途中で切られる。
 	client, closers, err := d.chain(ctx, strict, noPrompt, nil)
 	if err != nil {
 		return failed(), err
@@ -67,10 +79,12 @@ func (d Dialer) Run(ctx context.Context, target Target, command string, stdin []
 	}
 	defer func() { _ = session.Close() }()
 
-	var stdout, stderr cappedBuffer
-	streams := Streams{Out: &stdout, Err: &stderr}
-	if len(stdin) > 0 {
-		streams.In = bytes.NewReader(stdin)
+	// 上限を超えた分は捨て、書き手にはエラーを返さない。返せば、上限に達したことが
+	// コマンドの失敗として伝わる。切り詰めたという事実は Output.Truncated が運ぶ。
+	stdout, stderr := iowrite.NewCappedBuffer(MaxCapturedOutput), iowrite.NewCappedBuffer(MaxCapturedOutput)
+	streams := Streams{Out: stdout, Err: stderr}
+	if len(command.Stdin) > 0 {
+		streams.In = bytes.NewReader(command.Stdin)
 	}
 	encoded, closeEncoding, err := encodeStreams(streams, strict.Encoding)
 	if err != nil {
@@ -80,13 +94,22 @@ func (d Dialer) Run(ctx context.Context, target Target, command string, stdin []
 	session.Stdout = encoded.Out
 	session.Stderr = encoded.Err
 
+	running, stop := ctx, context.CancelFunc(func() {})
+	if command.Limit > 0 {
+		running, stop = context.WithTimeout(ctx, command.Limit)
+	}
+	defer stop()
+
 	// Run は session.Run の最中にも ctx の所有下にある。チャンネルだけでなく
 	// 輸送も閉じるのは、応答しない相手の Close を待たずに解除するためである。
 	finished := make(chan struct{})
 	defer close(finished)
+	if keepAlive := keepAliveLoop(client, keepAliveSettings{interval: strict.KeepAlive, count: strict.KeepAliveMax, done: finished}); keepAlive != nil {
+		go keepAlive()
+	}
 	go func() {
 		select {
-		case <-ctx.Done():
+		case <-running.Done():
 			_ = client.Close()
 			closeAll(closers)
 			_ = session.Close()
@@ -95,13 +118,16 @@ func (d Dialer) Run(ctx context.Context, target Target, command string, stdin []
 	}()
 
 	output := Output{ExitCode: RemoteFailureExit}
-	runErr := session.Run(command)
+	runErr := session.Run(command.Line)
 	encodingErr := closeEncoding()
 	output.Stdout, output.Stderr = stdout.Bytes(), stderr.Bytes()
-	output.Truncated = stdout.truncated || stderr.truncated
+	output.Truncated = stdout.Truncated() || stderr.Truncated()
 	output.Elapsed = time.Since(started)
 	if cause := ctx.Err(); cause != nil {
 		return output, cause
+	}
+	if running.Err() != nil {
+		return output, ErrCommandTimedOut
 	}
 	if runErr == nil && encodingErr != nil {
 		return output, encodingErr
@@ -120,29 +146,3 @@ func (d Dialer) Run(ctx context.Context, target Target, command string, stdin []
 	}
 	return output, nil
 }
-
-// cappedBuffer は、上限まで書き込みを受け、それ以降は捨てる。
-//
-// 書き手にエラーを返さない。返せば、上限に達したことがコマンドの失敗として
-// 伝わってしまう。切り詰めたという事実は truncated が運ぶ。
-type cappedBuffer struct {
-	buffer    bytes.Buffer
-	truncated bool
-}
-
-func (b *cappedBuffer) Write(p []byte) (int, error) {
-	if room := MaxCapturedOutput - b.buffer.Len(); room > 0 {
-		if len(p) <= room {
-			return b.buffer.Write(p)
-		}
-		if _, err := b.buffer.Write(p[:room]); err != nil {
-			return 0, err
-		}
-	}
-	b.truncated = true
-	return len(p), nil
-}
-
-func (b *cappedBuffer) Bytes() []byte { return b.buffer.Bytes() }
-
-var _ io.Writer = (*cappedBuffer)(nil)

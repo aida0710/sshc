@@ -2,10 +2,11 @@ package workspace
 
 import (
 	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"io"
 	"time"
+
+	"sshc/internal/randomid"
 )
 
 // Definition は、作成または更新時にクライアントが指定する内容である。
@@ -55,28 +56,27 @@ func (service *Service) Get(id string) (Workspace, error) { return service.store
 
 func (service *Service) Create(definition Definition) (Workspace, error) {
 	now := service.now().UTC().Format(time.RFC3339Nano)
-	for range 8 {
-		id, err := service.mintID()
-		if err != nil {
-			return Workspace{}, err
-		}
-		_, err = service.store.Get(id)
-		if err == nil {
-			continue
-		}
-		if !errors.Is(err, ErrNotFound) {
-			return Workspace{}, err
-		}
-		created := Workspace{
-			ID: id, Name: definition.Name, Layout: cloneNode(definition.Layout),
-			FocusedPaneID: definition.FocusedPaneID, CreatedAt: now, UpdatedAt: now,
-		}
-		if err := service.store.Save(created); err != nil {
-			return Workspace{}, err
-		}
-		return clone(created), nil
+	id, err := randomid.UnusedID(service.random, service.isStored)
+	if err != nil {
+		return Workspace{}, err
 	}
-	return Workspace{}, ErrLimit
+	created := Workspace{
+		ID: id, Name: definition.Name, Layout: cloneNode(definition.Layout),
+		FocusedPaneID: definition.FocusedPaneID, CreatedAt: now, UpdatedAt: now,
+	}
+	if err := service.store.Save(created); err != nil {
+		return Workspace{}, err
+	}
+	return clone(created), nil
+}
+
+// isStored は、その識別子のワークスペースがすでに保存されているかを返す。
+func (service *Service) isStored(id string) (bool, error) {
+	_, err := service.store.Get(id)
+	if errors.Is(err, ErrNotFound) {
+		return false, nil
+	}
+	return err == nil, err
 }
 
 func (service *Service) Update(id string, definition Definition) (Workspace, error) {
@@ -108,12 +108,4 @@ func (service *Service) Restore(id string) (RestorePlan, error) {
 		})
 	})
 	return plan, nil
-}
-
-func (service *Service) mintID() (string, error) {
-	bytes := make([]byte, 16)
-	if _, err := io.ReadFull(service.random, bytes); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(bytes), nil
 }
