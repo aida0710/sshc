@@ -70,6 +70,21 @@ Connection settings, Vault credentials, Snippets, and the SSH keys in scope are 
 
 Anyone with the ciphertext can try guessing the encryption key offline. Use the random key sshc generates rather than a short typed string.
 
+### What remains after replacing the sync key
+
+Replacing the sync key re-encrypts only the latest snapshot with the new key. The history already in the bucket stays encrypted with the previous key: sshc can no longer read it, but anyone who knows the previous key still can. Snapshots pushed after the replacement are encrypted with the new key.
+
+### If the sync key or the S3 credentials may have leaked
+
+Replacing the sync key alone does not protect the history. Take these steps in order:
+
+1. Replace the sync key under Manage sync settings.
+2. Issue a new S3 access key, disable the old one, and save the new one in the sync settings.
+3. Change the SSH keys and passwords that the snapshots contained on the servers that use them.
+4. If needed, delete the older history under `snapshots/` in the bucket path. If the bucket keeps object versions, delete the older versions too.
+
+sshc has no command to delete older history. Delete it with the S3 console or tools. History that someone has already downloaded stays exposed even after it is deleted from the bucket.
+
 ## Terminal data
 
 Scrollback stays in memory and is not persisted or synced. OSC 52 clipboard access is configurable. A secret sent to a remote shell can still reach remote history, TTY echo or terminal output.

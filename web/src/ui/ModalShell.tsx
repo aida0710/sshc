@@ -16,6 +16,7 @@ export function ModalShell({
   describedBy,
   children,
   onDismiss,
+  dismissible = true,
   closeOnOutside = false,
   initialFocusRef,
   returnFocusRef,
@@ -29,6 +30,7 @@ export function ModalShell({
   describedBy?: string;
   children: ReactNode;
   onDismiss: (reason: DismissReason) => void;
+  dismissible?: boolean;
   closeOnOutside?: boolean;
   initialFocusRef?: RefObject<HTMLElement | null>;
   returnFocusRef?: RefObject<HTMLElement | null>;
@@ -43,6 +45,7 @@ export function ModalShell({
     open,
     containerRefs: [panelRef],
     onDismiss,
+    dismissible,
     closeOnOutside,
     ...(initialFocusRef === undefined ? {} : { initialFocusRef }),
     ...(returnFocusRef === undefined ? {} : { returnFocusRef }),

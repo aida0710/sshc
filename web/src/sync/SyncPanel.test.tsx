@@ -2,6 +2,8 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/client";
+import { vaultStatus } from "../testing/vaultStatus";
+import { formatDateTime } from "../ui/format";
 import { SyncPanel } from "./SyncPanel";
 import type { PullResponse, SyncStatus } from "../api/sync";
 import type { SyncPanelApi } from "./SyncPanel";
@@ -232,6 +234,17 @@ describe("SyncPanel", () => {
     await waitFor(() => expect(api.syncBucketStatus).toHaveBeenCalledTimes(2));
   });
 
+  it("shows sync, bucket and history times as local dates instead of the engine's timestamps", async () => {
+    const api = buildApi(configured, nothingToDo);
+    render(<SyncPanel api={api} />);
+
+    const lastSynced = `Last synced ${formatDateTime("2026-08-05T00:00:00Z", "en")}, 7 files.`;
+    expect(await screen.findAllByText(lastSynced)).toHaveLength(2);
+    expect(await screen.findByText(`Bucket checked at ${formatDateTime("2026-08-25T01:55:00Z", "en")}.`)).toBeInTheDocument();
+    expect(await screen.findByText(new RegExp(`^${formatDateTime("2026-08-25T01:54:00Z", "en")} · 7 files`))).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/);
+  });
+
   it("shows only the five newest bucket objects until history is expanded", async () => {
     const history = Array.from({ length: 8 }, (_, index) => ({
       key: `snapshots/history-${index}.tar.gz.enc`,
@@ -269,7 +282,7 @@ describe("SyncPanel", () => {
       await screen.findByText("There are no local changes to push."),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Push this workspace" }),
+      screen.getByRole("button", { name: "Push this machine's settings" }),
     ).toBeDisabled();
   });
 
@@ -347,6 +360,22 @@ describe("SyncPanel", () => {
     );
   });
 
+  it("shows a failed force send once, inside the dialog it was confirmed in", async () => {
+    const api = buildApi(configured, nothingToDo, {
+      forcePushSnapshot: vi.fn().mockRejectedValue(new Error("sync_test_failure")),
+    });
+    render(<SyncPanel api={api} />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Force send" }));
+    const dialog = screen.getByRole("dialog");
+    await userEvent.click(within(dialog).getByRole("checkbox", { name: /current remote snapshot/i }));
+    await userEvent.click(within(dialog).getByRole("button", { name: "Replace the remote snapshot" }));
+
+    expect(await within(dialog).findByText(/could not be replaced/)).toBeInTheDocument();
+    expect(screen.getAllByText(/could not be replaced/)).toHaveLength(1);
+    expect(screen.getByRole("dialog")).toBe(dialog);
+  });
+
   it("traps focus in the force-send dialog and restores it after Escape", async () => {
     const user = userEvent.setup();
     const api = buildApi(configured, nothingToDo);
@@ -386,14 +415,14 @@ describe("SyncPanel", () => {
     expect(message).toHaveValue("Update config");
     await userEvent.clear(message);
     expect(
-      screen.getByRole("button", { name: "Push this workspace" }),
+      screen.getByRole("button", { name: "Push this machine's settings" }),
     ).toBeDisabled();
     await userEvent.type(message, "Refresh production hosts");
     expect(
-      screen.getByRole("button", { name: "Push this workspace" }),
+      screen.getByRole("button", { name: "Push this machine's settings" }),
     ).toBeEnabled();
     await userEvent.click(
-      screen.getByRole("button", { name: "Push this workspace" }),
+      screen.getByRole("button", { name: "Push this machine's settings" }),
     );
     await waitFor(() =>
       expect(pushSnapshot).toHaveBeenCalledWith("Refresh production hosts"),
@@ -520,7 +549,7 @@ describe("SyncPanel", () => {
       await screen.findByRole("button", { name: "Check connection" }),
     ).toBeDisabled();
     expect(
-      screen.queryByRole("button", { name: "Push this workspace" }),
+      screen.queryByRole("button", { name: "Push this machine's settings" }),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Check for changes" }),
@@ -642,7 +671,7 @@ describe("SyncPanel", () => {
     );
 
     expect(
-      await screen.findByText(/already matches the snapshot/),
+      await screen.findByText(/settings already match the snapshot/),
     ).toBeInTheDocument();
   });
 
@@ -651,7 +680,7 @@ describe("SyncPanel", () => {
     render(<SyncPanel api={api} />);
 
     await userEvent.click(
-      await screen.findByRole("button", { name: "Push this workspace" }),
+      await screen.findByRole("button", { name: "Push this machine's settings" }),
     );
 
     expect(
@@ -740,7 +769,7 @@ describe("SyncPanel", () => {
       await screen.findByRole("heading", { name: "Previous success" }),
     ).toBeInTheDocument();
     await userEvent.click(
-      await screen.findByRole("button", { name: "Push this workspace" }),
+      await screen.findByRole("button", { name: "Push this machine's settings" }),
     );
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
@@ -797,7 +826,7 @@ describe("SyncPanel", () => {
       screen.getByRole("button", { name: "Review remote changes" }),
     ).toBeEnabled();
     expect(
-      screen.queryByRole("button", { name: "Push this workspace" }),
+      screen.queryByRole("button", { name: "Push this machine's settings" }),
     ).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Commit message")).not.toBeInTheDocument();
     expect(
@@ -944,7 +973,7 @@ describe("SyncPanel", () => {
       screen.getByRole("button", { name: "Apply the snapshot" }),
     ).toBeDisabled();
     expect(
-      screen.getByRole("button", { name: "Push this workspace" }),
+      screen.getByRole("button", { name: "Push this machine's settings" }),
     ).toBeEnabled();
   });
 
@@ -961,7 +990,7 @@ describe("SyncPanel", () => {
     render(<SyncPanel api={api} />);
 
     await userEvent.click(
-      await screen.findByRole("button", { name: "Push this workspace" }),
+      await screen.findByRole("button", { name: "Push this machine's settings" }),
     );
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
@@ -977,7 +1006,7 @@ describe("SyncPanel", () => {
     render(<SyncPanel api={api} />);
 
     await userEvent.click(
-      await screen.findByRole("button", { name: "Push this workspace" }),
+      await screen.findByRole("button", { name: "Push this machine's settings" }),
     );
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
@@ -1002,12 +1031,7 @@ describe("SyncPanel", () => {
       .mockResolvedValue(configured);
     const api = buildApi(unconfigured, nothingToDo, {
       syncStatus,
-      unlockVault: vi.fn().mockResolvedValue({
-        exists: true,
-        unlocked: true,
-        aliases: [],
-        dedicatedKeyPassphrases: [],
-      }),
+      unlockVault: vi.fn().mockResolvedValue(vaultStatus()),
     });
     render(<SyncPanel api={api} />);
 
@@ -1035,7 +1059,7 @@ describe("SyncPanel", () => {
     render(<SyncPanel api={api} />);
 
     await userEvent.click(
-      await screen.findByRole("button", { name: "Push this workspace" }),
+      await screen.findByRole("button", { name: "Push this machine's settings" }),
     );
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
@@ -1107,7 +1131,7 @@ describe("SyncPanel", () => {
     const replace = screen.getByRole("button", { name: "Replace the key" });
     expect(replace).toBeDisabled();
     await userEvent.click(
-      screen.getByLabelText(/older history snapshots will remain encrypted/i),
+      screen.getByLabelText(/anyone who knows the previous key can still decrypt them/i),
     );
     await userEvent.click(replace);
 
@@ -1127,7 +1151,7 @@ describe("SyncPanel", () => {
     render(<SyncPanel api={api} />);
 
     expect(
-      await screen.findByRole("button", { name: "Push this workspace" }),
+      await screen.findByRole("button", { name: "Push this machine's settings" }),
     ).toBeDisabled();
     expect(
       screen.getByRole("button", { name: "Check for changes" }),
@@ -1355,6 +1379,23 @@ describe("SyncPanel", () => {
     expect(
       screen.queryByRole("checkbox", { name: /overwrites files/i }),
     ).not.toBeInTheDocument();
+  });
+
+  it("shows a failed apply once, inside the pull preview, and keeps the preview open", async () => {
+    const writesConfig: PullResponse = { ...nothingToDo, written: ["~/.ssh/config"] };
+    const api = buildApi(configured, writesConfig, {
+      pullSnapshot: vi.fn().mockImplementation((apply: boolean) =>
+        apply ? Promise.reject(new Error("sync_test_failure")) : Promise.resolve(writesConfig)),
+    });
+    render(<SyncPanel api={api} />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Check for changes" }));
+    const dialog = await screen.findByRole("dialog");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Apply the snapshot" }));
+
+    expect(await within(dialog).findByText("The snapshot could not be applied.")).toBeInTheDocument();
+    expect(screen.getAllByText("The snapshot could not be applied.")).toHaveLength(1);
+    expect(screen.getByRole("dialog")).toBe(dialog);
   });
 
   it("says what the loop is waiting for instead of only that it stopped", async () => {

@@ -1,4 +1,4 @@
-import { ApiError, apiClient, type Problem } from "./client";
+import { ApiError, apiClient, type MutationOptions, type Problem } from "./client";
 
 
 export function asRecord(value: unknown): Record<string, unknown> {
@@ -52,18 +52,20 @@ export type JSONRequest = {
   actionToken?: string;
   // Problem codes the caller explains itself instead of the shared handler.
   locallyHandledCodes?: readonly string[];
+  // See MutationOptions: a refusal the endpoint explains in its own body.
+  refusalStatus?: number;
 };
 
 // Every JSON mutation goes through here so the content type, the action
-// header and the local-handling option are spelled once.
+// header and the local-handling options are spelled once.
 export function sendJSON<T>(path: string, request: JSONRequest): Promise<T> {
   const headers: Record<string, string> = { ...jsonHeaders };
   if (request.actionToken) headers["X-SSHC-Action"] = request.actionToken;
-  return apiClient.mutate<T>(
-    path,
-    { method: request.method, headers, body: JSON.stringify(request.body) },
-    request.locallyHandledCodes === undefined ? {} : { locallyHandledCodes: request.locallyHandledCodes },
-  );
+  const options: MutationOptions = {
+    ...(request.locallyHandledCodes === undefined ? {} : { locallyHandledCodes: request.locallyHandledCodes }),
+    ...(request.refusalStatus === undefined ? {} : { refusalStatus: request.refusalStatus }),
+  };
+  return apiClient.mutate<T>(path, { method: request.method, headers, body: JSON.stringify(request.body) }, options);
 }
 
 export function postJSON<T>(

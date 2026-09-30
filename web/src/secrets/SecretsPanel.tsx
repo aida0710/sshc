@@ -1,8 +1,6 @@
 import { LockScreen } from "./LockScreen";
 import { DisclosureChevron } from "../ui/DisclosureChevron";
-import { createPortal } from "react-dom";
-import { useAnchoredMenu } from "../ui/useAnchoredMenu";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { failureCode } from "../api/client";
 import { credentialsApi, type CredentialList, type CredentialKind, type CredentialsApi } from "../api/credentials";
 import { vaultApi, type PasswordVaultStatus, type VaultApi } from "../api/vault";
@@ -17,8 +15,7 @@ import { CredentialEditDialog } from "./CredentialEditDialog";
 import { TOTPCodeCard } from "./TOTPCodeCard";
 import { PanelState } from "../ui/PanelState";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
-import { useDismissibleLayer } from "../ui/useDismissibleLayer";
-import { useMenuKeyboard } from "../ui/useMenuKeyboard";
+import { ActionMenu } from "../ui/ActionMenu";
 
 // The secrets screen edits credentials, and opens, locks and re-keys the
 // vault that holds them.
@@ -145,52 +142,13 @@ type CredentialActionsProps = {
 
 function CredentialActions({ name, edit, remove }: CredentialActionsProps) {
   const t = useTranslate();
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  useDismissibleLayer({
-    open,
-    containerRefs: [rootRef, menuRef],
-    onDismiss: () => setOpen(false),
-    returnFocusRef: triggerRef,
-  });
-  useMenuKeyboard({ open, menuRef, onClose: () => setOpen(false) });
-  useAnchoredMenu({ open, anchorRef: triggerRef, menuRef });
-
-  function select(action: () => void) {
-    setOpen(false);
-    action();
-  }
-
   return (
-    <div ref={rootRef} className="relative shrink-0">
-      <button
-        ref={triggerRef}
-        type="button"
-        aria-label={t("secrets.actions", { name })}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        onClick={() => setOpen((current) => !current)}
-        className="flex size-9 items-center justify-center rounded-md text-ink-muted hover:bg-select-fill hover:text-ink"
-      >
-        <Icon name="moreHorizontal" className="size-5" />
-      </button>
-      {open ? createPortal(
-        <div ref={menuRef} role="menu" className="fixed z-50 w-56 overflow-y-auto rounded-md border border-line bg-card p-1 shadow-lg">
-          {edit === undefined ? null : (
-            <button type="button" role="menuitem" className="block w-full rounded px-3 py-2 text-left text-sm text-ink hover:bg-select-fill focus:bg-select-fill focus:outline-none" onClick={() => select(edit.onSelect)}>
-              {edit.label}
-            </button>
-          )}
-          <button type="button" role="menuitem" className="block w-full rounded px-3 py-2 text-left text-sm text-danger hover:bg-select-fill focus:bg-select-fill focus:outline-none" onClick={() => select(remove.onSelect)}>
-            {remove.label}
-          </button>
-        </div>,
-        document.body,
-      ) : null}
-    </div>
+    <ActionMenu
+      label={t("secrets.actions", { name })}
+      triggerClassName="flex size-9 items-center justify-center rounded-md text-ink-muted hover:bg-select-fill hover:text-ink"
+      iconClassName="size-5"
+      items={[...(edit === undefined ? [] : [edit]), { ...remove, tone: "danger" }]}
+    />
   );
 }
 
@@ -265,7 +223,7 @@ export function SecretsPanel({
   }
 
   if (!status.unlocked) {
-    return <LockScreen exists={status.exists} passwordless={status.passwordless ?? false} api={api} onOpen={() => void reload()} />;
+    return <LockScreen exists={status.exists} passwordless={status.passwordless ?? false} minPassphraseLength={status.minPassphraseLength} api={api} onOpen={() => void reload()} />;
   }
 
   const { credentials, dedicatedKeyPassphrases, keyHostUsageComplete } =

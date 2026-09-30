@@ -3,7 +3,8 @@ import { useCallback, useMemo, useState } from "react";
 // The three facts a screen reports about an operation it runs against the
 // engine: whether one is in flight, what the last one said went wrong, and
 // whether the last one landed. Every form, panel and dialog that talks to the
-// engine used to keep its own trio of useState; this is that trio, once.
+// engine reports these three, so they are kept here once rather than as three
+// useState calls in each screen.
 //
 // The returned object is stable between renders while its facts are unchanged,
 // so it can sit in an effect's dependency list without re-running the effect.

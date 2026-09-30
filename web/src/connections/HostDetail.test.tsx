@@ -2,6 +2,7 @@ import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { HostDetail } from "../api/config";
+import { vaultStatus } from "../testing/vaultStatus";
 import { HostDetailPanel } from "./HostDetail";
 import type { ConnectionSavedState } from "./connectionSavedState";
 import type { HostDetailApi } from "./HostDetail";
@@ -43,10 +44,7 @@ function savedState(): ConnectionSavedState {
   return {
     detail,
     keys: { status: "ready", value: [] },
-    vault: {
-      status: "ready",
-      value: { exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [], minPassphraseLength: 12 },
-    },
+    vault: { status: "ready", value: vaultStatus() },
     credentials: { status: "ready", value: [] },
     eligibility: { status: "ready", value: { alias: "bastion", storable: true, blockers: [], warnings: [] } },
   };
@@ -224,6 +222,19 @@ describe("HostDetailPanel", () => {
 
     expect(screen.getByLabelText("Remote text encoding")).toHaveValue("");
     expect(harness.props.onDirtyChange).toHaveBeenLastCalledWith(false);
+  });
+
+  it("keeps the Advanced mark on while its draft survives a reload of the same file", async () => {
+    const user = userEvent.setup();
+    const harness = renderPanel({ panel: "Advanced", advanced: "Raw", savedRevision: 1 });
+    const raw = screen.getByLabelText(/Block text/);
+    await user.type(raw, "\tPort 2200\n");
+    expect(harness.props.onDirtyChange).toHaveBeenLastCalledWith(true);
+
+    harness.rerender(<HostDetailPanel {...harness.props} panel="Advanced" advanced="Raw" savedRevision={2} />);
+
+    expect(screen.getByLabelText(/Block text/)).toHaveValue(`${detail.form.raw}\tPort 2200\n`);
+    expect(harness.props.onDirtyChange).toHaveBeenLastCalledWith(true);
   });
 
   it("shows the advanced subview named directly by the route", () => {

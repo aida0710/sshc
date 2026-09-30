@@ -22,7 +22,7 @@ function api(overrides: Partial<Pick<DiagnosticsApi, "effective" | "reachability
       outcome: "reached",
       elapsedMs: 12,
       detail: "",
-      notice: "Direct destination check.",
+      notice: "Engine notice that the screen does not show.",
     }),
     authentication: vi.fn().mockResolvedValue({
       outcome: "authenticated",
@@ -57,9 +57,9 @@ describe("ConnectionChecks", () => {
     expect(integrations.authentication).not.toHaveBeenCalled();
   });
 
-  it("shows why a connection with a VPN profile was not dialled", async () => {
-    const notice =
-      "This connection goes through a VPN profile, so the check did not dial the destination: a direct dial from this machine does not use the VPN route. The authentication test connects through the VPN.";
+  it("says in the screen's words why a connection with a VPN profile was not dialled", async () => {
+    // engine の notice は英語の定数で、画面は読まない。
+    const notice = "Engine notice that the screen does not show.";
     const integrations = api({
       reachability: vi.fn().mockResolvedValue({
         address: "10.9.9.1:22",
@@ -73,8 +73,10 @@ describe("ConnectionChecks", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Check reachability" }));
 
-    expect(await screen.findByText("not_checked")).toBeInTheDocument();
-    expect(screen.getByText(notice)).toBeInTheDocument();
+    expect(await screen.findByText("Not checked, because this connection goes through a VPN profile.")).toBeInTheDocument();
+    expect(screen.getByText(/does not use the VPN route\. The authentication check connects through the VPN\./)).toBeInTheDocument();
+    expect(screen.queryByText(/ProxyJump, ProxyCommand and any jump-host firewall/)).not.toBeInTheDocument();
+    expect(screen.queryByText(notice)).not.toBeInTheDocument();
   });
 
   it("preflights saved settings and authenticates directly when no directive can execute", async () => {
@@ -83,7 +85,7 @@ describe("ConnectionChecks", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Check authentication with saved settings" }));
 
-    expect(await screen.findByText("authenticated")).toBeInTheDocument();
+    expect(await screen.findByText("Authentication succeeded.")).toBeInTheDocument();
     expect(integrations.effective).toHaveBeenCalledWith("bastion");
     expect(integrations.authentication).toHaveBeenCalledWith("bastion", false);
   });
@@ -111,7 +113,7 @@ describe("ConnectionChecks", () => {
     expect(screen.getByText("/usr/bin/nc %h %p")).toBeInTheDocument();
     expect(integrations.authentication).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole("button", { name: "Acknowledge and check authentication" }));
-    expect(await screen.findByText("authenticated")).toBeInTheDocument();
+    expect(await screen.findByText("Authentication succeeded.")).toBeInTheDocument();
     expect(integrations.authentication).toHaveBeenCalledWith("bastion", true);
   });
 

@@ -31,7 +31,7 @@ printf '\e]0;hello\a'
 
 When a program asks for a notification through OSC 9, OSC 99, or OSC 777, sshc marks that pane as unread.
 
-- A notification that arrives while the sshc tab is in the background, or while you are looking at another pane, marks the session in the console list and the workspace as unread. Showing that pane clears the mark.
+- A notification that arrives while the sshc tab is in the background, or while you are looking at another pane, marks the session in the session list and the workspace as unread. Showing that pane clears the mark.
 - While the tab is in the background, sshc also shows a browser notification (if allowed under Settings → Notifications) and plays the selected sound. The browser notification is titled with the pane name (with the alias for SSH) and its body carries the title and text the program sent.
 - A notification for the pane you are currently viewing produces neither an unread mark nor a sound.
 - A bare BEL (`\a`) is not treated as a notification because shells ring it for routine events such as failed completion.

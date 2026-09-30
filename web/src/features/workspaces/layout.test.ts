@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { paneIDs, paneSessionIDs, reduceLayout, restoreLayout, storeLayout, type StoredNode } from "./layout";
+import { paneIds, paneSessionIds, reduceLayout, restoreLayout, storeLayout, type StoredNode } from "./layout";
 
 const stored: StoredNode = {
   split: {
@@ -39,7 +39,7 @@ describe("workspace layout", () => {
       pane: { id: "logs", alias: "logs-prod" },
     });
     expect(next.focusedPaneId).toBe("logs");
-    expect(paneIDs(next.root)).toEqual(["web", "logs"]);
+    expect(paneIds(next.root)).toEqual(["web", "logs"]);
     expect(next.root.split?.ratio).toBe(50);
   });
 
@@ -124,7 +124,7 @@ describe("workspace layout", () => {
     });
 
     expect(docked.root.split?.ratio).toBe(60);
-    expect(paneIDs(docked.root)).toEqual(["db", "web"]);
+    expect(paneIds(docked.root)).toEqual(["db", "web"]);
   });
 
   it("docks an existing pane at the chosen edge instead of only swapping it", () => {
@@ -148,8 +148,8 @@ describe("workspace layout", () => {
       pane: { id: "logs", alias: "logs-prod", state: "connected", sessionId: "logs-session" },
     });
 
-    expect(paneIDs(docked.root)).toEqual(["logs", "web", "db"]);
-    expect(paneSessionIDs(docked.root)).toEqual(["logs-session", "web-session", "db-session"]);
+    expect(paneIds(docked.root)).toEqual(["logs", "web", "db"]);
+    expect(paneSessionIds(docked.root)).toEqual(["logs-session", "web-session", "db-session"]);
     expect(docked.root.split?.first.split?.direction).toBe("vertical");
     expect(docked.focusedPaneId).toBe("logs");
   });
@@ -163,8 +163,8 @@ describe("workspace layout", () => {
       pane: { id: "metrics", alias: "metrics-prod", state: "connected", sessionId: "metrics-session" },
     });
 
-    expect(paneIDs(state.root)).toEqual(["web", "db", "metrics"]);
-    expect(paneSessionIDs(state.root)).toContain("metrics-session");
+    expect(paneIds(state.root)).toEqual(["web", "db", "metrics"]);
+    expect(paneSessionIds(state.root)).toContain("metrics-session");
     expect(state.root.split?.second.split?.direction).toBe("horizontal");
   });
 
@@ -199,7 +199,7 @@ describe("workspace layout", () => {
       edge: "top",
       pane: { id: "metrics", alias: "metrics-prod", state: "reconnect_required" },
     });
-    expect(paneIDs(moved.root)).toHaveLength(4);
-    expect(paneIDs(moved.root)[0]).toBe("metrics");
+    expect(paneIds(moved.root)).toHaveLength(4);
+    expect(paneIds(moved.root)[0]).toBe("metrics");
   });
 });

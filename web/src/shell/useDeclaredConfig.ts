@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { configApi, type FileNode, type HostEntry } from "../api/config";
+import { configApi, type FileNode, type HostEntry, type HostMetadata } from "../api/config";
 import type { TerminalAppearance } from "../api/settings";
 import type { Section } from "../routing/sectionRoute";
 
@@ -24,33 +24,10 @@ export function useDeclaredConfig(enabled: boolean, section: Section | null) {
       .then((overview) => {
         if (!active) return;
         setGroups((overview.metadata.groups ?? []).map((group) => group.name));
-        setHostAppearance(
-          new Map(
-            (overview.metadata.hosts ?? []).flatMap((host) =>
-              host.appearance === undefined || host.identity.alias === ""
-                ? []
-                : [[host.identity.alias, host.appearance] as const],
-            ),
-          ),
-        );
-        setHostOSC52(
-          new Map(
-            (overview.metadata.hosts ?? []).flatMap((host) =>
-              host.osc52 === undefined || host.identity.alias === ""
-                ? []
-                : [[host.identity.alias, host.osc52] as const],
-            ),
-          ),
-        );
-        setHostVPN(
-          new Map(
-            (overview.metadata.hosts ?? []).flatMap((host) =>
-              host.vpn === undefined || host.vpn === "" || host.identity.alias === ""
-                ? []
-                : [[host.identity.alias, host.vpn] as const],
-            ),
-          ),
-        );
+        const hostMetadata = overview.metadata.hosts ?? [];
+        setHostAppearance(hostSettingByAlias(hostMetadata, (host) => host.appearance));
+        setHostOSC52(hostSettingByAlias(hostMetadata, (host) => host.osc52));
+        setHostVPN(hostSettingByAlias(hostMetadata, (host) => host.vpn === "" ? undefined : host.vpn));
         setKnownAliases([
           ...new Set(
             overview.hosts
@@ -68,4 +45,20 @@ export function useDeclaredConfig(enabled: boolean, section: Section | null) {
   }, [enabled, section]);
 
   return { groups, hostAppearance, hostOSC52, setHostOSC52, hostVPN, knownAliases, hosts, files };
+}
+
+// hostSettingByAlias は、alias の付いた接続のうち pick が値を返したものだけを、
+// alias から値を引ける Map にする。値の無い接続は Map に入れず、既定の扱いにする。
+function hostSettingByAlias<Setting>(
+  hosts: HostMetadata[],
+  pick: (host: HostMetadata) => Setting | undefined,
+): Map<string, Setting> {
+  return new Map(
+    hosts.flatMap((host) => {
+      const setting = pick(host);
+      return setting === undefined || host.identity.alias === ""
+        ? []
+        : [[host.identity.alias, setting] as const];
+    }),
+  );
 }

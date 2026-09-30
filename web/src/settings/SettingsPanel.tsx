@@ -4,7 +4,7 @@ import { vaultApi, type PasswordVaultStatus, type VaultApi } from "../api/vault"
 import { useTranslate } from "../i18n/context";
 import { PageHeader } from "../ui/page";
 import { Card } from "../ui/surface";
-import { ConsoleSettingsSection, type ConsoleSettingsConsoles } from "./ConsoleSettingsSection";
+import { SessionSettingsSection, type SessionSettingsState } from "./SessionSettingsSection";
 import { EngineSettingsSection } from "./EngineSettingsSection";
 import { MasterPasswordSection } from "./MasterPasswordSection";
 import { NotificationSettingsSection } from "./NotificationSettingsSection";
@@ -22,10 +22,12 @@ const mobileTouchTargets =
 
 type SettingsPanelProps = {
   onVaultChanged?: ((status: PasswordVaultStatus) => void) | undefined;
+  // Whether the vault has no master password; the engine never locks one.
+  passwordless?: boolean;
   api?: SettingsPanelApi;
   page?: SettingsPage | "All";
   onTerminalSettingsChange?: (settings: TerminalSettings) => void | Promise<void>;
-  consoles?: ConsoleSettingsConsoles;
+  terminalSessions?: SessionSettingsState;
 };
 
 // The settings page is a list of independent sections; each owns its own
@@ -33,8 +35,9 @@ type SettingsPanelProps = {
 export function SettingsPanel({
   api = settingsPanelApi,
   page = "All",
-  consoles,
+  terminalSessions,
   onVaultChanged,
+  passwordless = false,
   onTerminalSettingsChange,
 }: SettingsPanelProps) {
   const t = useTranslate();
@@ -53,10 +56,10 @@ export function SettingsPanel({
             <KeyConfig />
           </SettingsSection>
         ) : null}
-        {shows("Engine") ? <EngineSettingsSection api={api} showHeading={all} /> : null}
+        {shows("Engine") ? <EngineSettingsSection api={api} showHeading={all} passwordless={passwordless} /> : null}
         {shows("Terminal") ? <TerminalSettingsSection api={api} showHeading={all} onSettingsChange={onTerminalSettingsChange} /> : null}
         {shows("Notifications") ? <NotificationSettingsSection showHeading={all} /> : null}
-        {consoles !== undefined && shows("Connections") ? <ConsoleSettingsSection consoles={consoles} showHeading={all} /> : null}
+        {terminalSessions !== undefined && shows("Connections") ? <SessionSettingsSection terminalSessions={terminalSessions} showHeading={all} /> : null}
         {shows("Password") ? <MasterPasswordSection api={api} showHeading={all} onVaultChanged={onVaultChanged} /> : null}
       </Card>
     </div>

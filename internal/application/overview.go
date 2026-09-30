@@ -155,10 +155,8 @@ func (s *Service) HostDetail(relative, alias string) (HostDetail, error) {
 		File:      contents,
 		Metadata:  HostMetadata{Identity: identity},
 	}
-	for _, host := range stored.Hosts {
-		if host.Identity == identity {
-			detail.Metadata = host
-		}
+	if index := hostMetadataIndex(stored.Hosts, identity); index >= 0 {
+		detail.Metadata = stored.Hosts[index]
 	}
 	return detail, nil
 }

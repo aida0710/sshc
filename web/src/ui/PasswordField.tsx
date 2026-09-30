@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { useTranslate } from "../i18n/context";
+import type { DescribableControlProps } from "./describeControl";
 import { Field, control } from "./form";
 
 type PasswordFieldProps = {
@@ -14,7 +15,8 @@ type PasswordFieldProps = {
   initialShown?: boolean;
 };
 
-type PasswordInputProps = Omit<PasswordFieldProps, "hint" | "error"> & {
+// Field が結び付ける hint と誤りの id（DescribableControlProps）は、中の <input> へ渡す。
+type PasswordInputProps = Omit<PasswordFieldProps, "hint" | "error"> & DescribableControlProps & {
   className?: string;
   placeholder?: string;
 };
@@ -28,6 +30,8 @@ export function PasswordInput({
   initialShown = false,
   className = control,
   placeholder,
+  "aria-describedby": describedBy,
+  "aria-invalid": invalid,
 }: PasswordInputProps): ReactNode {
   const t = useTranslate();
   const [shown, setShown] = useState(initialShown);
@@ -36,6 +40,8 @@ export function PasswordInput({
       <input
         type={shown ? "text" : "password"}
         aria-label={label}
+        aria-describedby={describedBy}
+        aria-invalid={invalid}
         value={value}
         autoFocus={autoFocus ?? false}
         autoCapitalize="none"

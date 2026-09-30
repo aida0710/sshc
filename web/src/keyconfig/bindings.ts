@@ -1,6 +1,14 @@
 import { useMemo, useSyncExternalStore } from "react";
+import { isValidShortcutChord } from "../rules/shortcutChord";
+import { maxShortcutKeysPerAction, shortcutActions } from "../rules/shortcuts.generated";
 import { readStoredValue } from "../ui/browserStorage";
+import { localStorageKeys } from "../ui/browserStorageKeys";
 
+export { shortcutActions };
+export type ShortcutAction = (typeof shortcutActions)[number];
+export type Bindings = Record<ShortcutAction, string[]>;
+// `satisfies` refuses a default for an action the engine does not store and
+// a missing default for one it does.
 export const defaultBindings = {
   palette: ["Ctrl+K", "Meta+K"],
   terminalSearch: ["Ctrl+F", "Meta+F"],
@@ -10,35 +18,27 @@ export const defaultBindings = {
   previousSession: ["Alt+PageUp"],
   home: [],
   sftp: [],
-} satisfies Record<string, string[]>;
-export type ShortcutAction = keyof typeof defaultBindings;
-export type Bindings = Record<ShortcutAction, string[]>;
-export const shortcutActions = Object.keys(defaultBindings) as ShortcutAction[];
-export const storageKey = "sshc.shortcuts.v1";
+} satisfies Bindings;
 const changedEvent = "sshc-shortcuts-changed";
-const keyPattern = /^(?:[A-Z0-9]|F(?:[1-9]|1[0-2])|Arrow(?:Up|Down|Left|Right)|PageUp|PageDown|Home|End|Insert|Delete|Backspace|Enter|Tab|Escape|Space|[-=,.;/\[\]\\'`])$/;
 
+// shortcutKey names the chord a key press makes, or null when it is not one
+// the engine stores. Both sides read the grammar from internal/validate, so a
+// recorded chord is never refused on save. A '+' key cannot be told apart from
+// the separator, so it never makes a chord.
 export function shortcutKey(event: KeyboardEvent): string | null {
   if (event.isComposing || event.keyCode === 229 || event.getModifierState("AltGraph")) return null;
   if (["Control", "Shift", "Alt", "Meta", "Dead", "Unidentified"].includes(event.key)) return null;
-  if (!event.ctrlKey && !event.metaKey && !event.altKey && !/^F([1-9]|1[0-2])$/.test(event.key)) return null;
   const key = event.key === " " ? "Space" : event.key.length === 1 ? event.key.toUpperCase() : event.key;
-  // '+' is ambiguous in the serialized format. Use another chord.
-  if (!keyPattern.test(key)) return null;
-  return [event.ctrlKey && "Ctrl", event.altKey && "Alt", event.shiftKey && "Shift", event.metaKey && "Meta", key].filter(Boolean).join("+");
+  const chord = [event.ctrlKey && "Ctrl", event.altKey && "Alt", event.shiftKey && "Shift", event.metaKey && "Meta", key].filter(Boolean).join("+");
+  return isValidShortcutChord(chord) ? chord : null;
 }
 
 function validShortcut(value: unknown): value is string {
-  if (typeof value !== "string") return false;
-  const parts = value.split("+");
-  const key = parts.pop() ?? "";
-  if (!keyPattern.test(key)) return false;
-  const event = new KeyboardEvent("keydown", { key: key === "Space" ? " " : key, ctrlKey: parts.includes("Ctrl"), altKey: parts.includes("Alt"), shiftKey: parts.includes("Shift"), metaKey: parts.includes("Meta") });
-  return shortcutKey(event) === value;
+  return typeof value === "string" && isValidShortcutChord(value);
 }
 
 function snapshot(): string {
-  return readStoredValue(storageKey) ?? "";
+  return readStoredValue(localStorageKeys.shortcutBindings) ?? "";
 }
 
 export function parseBindings(raw: string): Bindings {
@@ -48,7 +48,7 @@ export function parseBindings(raw: string): Bindings {
     const result: Bindings = { ...defaultBindings };
     for (const action of shortcutActions) {
       const keys = (value as Record<string, unknown>)[action];
-      if (Array.isArray(keys) && keys.length <= 3 && keys.every(validShortcut)) result[action] = [...new Set(keys)];
+      if (Array.isArray(keys) && keys.length <= maxShortcutKeysPerAction && keys.every(validShortcut)) result[action] = [...new Set(keys)];
     }
     // Reject conflicting storage (including hand edits) as a whole.
     const all = Object.values(result).flat();
@@ -56,13 +56,13 @@ export function parseBindings(raw: string): Bindings {
   } catch { return defaultBindings; }
 }
 
-export const selectionKey = "sshc.shortcuts.selected.v1";
-
 export function loadBindings(): Bindings { return parseBindings(snapshot()); }
-// saveBindings answers an explicit edit, so a refused storage is shown to the
-// user rather than swallowed like the preferences in ui/browserStorage.
+// saveBindings throws when the browser refuses storage instead of swallowing
+// it like the preferences in ui/browserStorage: this tab reads its shortcuts
+// back from storage, so a refused write leaves the old ones in force. Callers
+// decide whether that is worth telling the user.
 export function saveBindings(value: Bindings): void {
-  window.localStorage.setItem(storageKey, JSON.stringify(value));
+  window.localStorage.setItem(localStorageKeys.shortcutBindings, JSON.stringify(value));
   window.dispatchEvent(new Event(changedEvent));
 }
 function subscribe(listener: () => void): () => void {

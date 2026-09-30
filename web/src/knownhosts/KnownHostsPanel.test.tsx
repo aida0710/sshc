@@ -1,10 +1,11 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { KnownHostsPanel } from "./KnownHostsPanel";
 import { ApiError } from "../api/client";
+import { LanguageProvider } from "../i18n/context";
 import type { KnownHostCandidate } from "../api/knownHosts";
-import type { KnownHostsApi } from "../api/knownHosts";
+import type { KnownHostsApi, KnownHostsResponse } from "../api/knownHosts";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -33,11 +34,11 @@ const candidate: KnownHostCandidate = {
   verified: false,
 };
 
-const scanNotice =
-  "ssh-keyscan proves only that something answered at this address. It does not prove the host's identity.";
+// engine の notice は英語の定数で、画面は読まない。
+const engineNotice = "Engine notice that the screen does not show.";
 
 function scanResult(...candidates: KnownHostCandidate[]) {
-  return { notice: scanNotice, candidates };
+  return { notice: engineNotice, candidates };
 }
 
 function buildApi(overrides: Partial<KnownHostsApi> = {}): KnownHostsApi {
@@ -67,6 +68,27 @@ describe("KnownHostsPanel", () => {
 
     const row = await screen.findByRole("row", { name: /bastion\.example\.com/ });
     expect(within(row).getByText(/SHA256:bytFrSjx/)).toBeInTheDocument();
+  });
+
+  it("keeps the listing of the latest query when an earlier search answers last", async () => {
+    const path = "~/.ssh/known_hosts";
+    const web0 = { ...entry, line: 3, hosts: ["web0.example.com"] };
+    const web01 = { ...entry, line: 4, hosts: ["web01.example.com"] };
+    let answerWeb0: (listing: KnownHostsResponse) => void = () => undefined;
+    const knownHosts = vi.fn((query: string): Promise<KnownHostsResponse> => {
+      if (query === "web0") return new Promise((resolve) => { answerWeb0 = resolve; });
+      if (query === "web01") return Promise.resolve({ path, entries: [web01] });
+      return Promise.resolve({ path, entries: [entry] });
+    });
+    render(<KnownHostsPanel api={buildApi({ knownHosts })} />);
+    await screen.findByRole("row", { name: /bastion\.example\.com/ });
+
+    await userEvent.type(screen.getByLabelText("Search"), "web01");
+    await screen.findByRole("row", { name: /web01\.example\.com/ });
+    await act(async () => answerWeb0({ path, entries: [web0] }));
+
+    expect(screen.getByRole("row", { name: /web01\.example\.com/ })).toBeInTheDocument();
+    expect(screen.queryByRole("row", { name: /web0\.example\.com/ })).toBeNull();
   });
 
   it("sorts trusted entries from every data-column header", async () => {
@@ -105,6 +127,16 @@ describe("KnownHostsPanel", () => {
     await waitFor(() =>
       expect(api.deleteKnownHosts).toHaveBeenCalledWith([{ line: 2, digest: "a".repeat(64) }], "~/.ssh/known_hosts"),
     );
+  });
+
+  it("warns in the screen's language that a scan does not prove the host's identity", async () => {
+    render(<LanguageProvider initial="ja"><KnownHostsPanel api={buildApi()} /></LanguageProvider>);
+
+    await userEvent.type(await screen.findByLabelText("スキャンするホスト"), "new.example.com");
+    await userEvent.click(screen.getByRole("button", { name: "スキャン" }));
+
+    expect(await screen.findByText(/ホストの身元は証明されません/)).toBeInTheDocument();
+    expect(screen.queryByText(engineNotice)).not.toBeInTheDocument();
   });
 
   it("marks every scanned key unverified and refuses to call it trusted", async () => {
@@ -260,7 +292,23 @@ describe("KnownHostsPanel", () => {
     await userEvent.click(within(row).getByRole("button", { name: "Delete" }));
     await userEvent.click(await screen.findByRole("button", { name: "Confirm delete" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(/could not/i);
+    const dialog = screen.getByRole("dialog");
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent(/could not/i);
+    expect(within(dialog).getByRole("button", { name: "Confirm delete" })).toBeEnabled();
+  });
+
+  it("sends one deletion however often confirm is pressed while it is pending", async () => {
+    const deleteKnownHosts = vi.fn(() => new Promise<never>(() => undefined));
+    render(<KnownHostsPanel api={buildApi({ deleteKnownHosts })} />);
+
+    const row = await screen.findByRole("row", { name: /bastion\.example\.com/ });
+    await userEvent.click(within(row).getByRole("button", { name: "Delete" }));
+    const confirm = await screen.findByRole("button", { name: "Confirm delete" });
+    await userEvent.click(confirm);
+    await userEvent.click(confirm);
+
+    expect(deleteKnownHosts).toHaveBeenCalledTimes(1);
+    expect(confirm).toBeDisabled();
   });
 
   it("says a symlinked known_hosts is why it cannot be listed and that ssh can add a host", async () => {

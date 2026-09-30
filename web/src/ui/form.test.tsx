@@ -13,6 +13,14 @@ describe("Field", () => {
     expect(input).toHaveAttribute("aria-describedby", alert.id);
     expect(alert).toHaveTextContent("Invalid port");
   });
+
+  it("reads its hint as the control's description even without an error", () => {
+    render(<Field label="Port" hint="Leave empty to use 22."><input /></Field>);
+
+    const input = screen.getByLabelText("Port");
+    expect(input).toHaveAccessibleDescription("Leave empty to use 22.");
+    expect(input).not.toHaveAttribute("aria-invalid");
+  });
 });
 
 describe("CheckboxField", () => {

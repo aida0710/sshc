@@ -38,6 +38,9 @@ export function useAppSession({
   const [failure, setFailure] = useState("");
   const [vaultExists, setVaultExists] = useState(false);
   const [passwordless, setPasswordless] = useState(false);
+  // The lock screen needs the engine's minimum to create a vault. It is an
+  // engine constant, so the status read at start is enough.
+  const [minPassphraseLength, setMinPassphraseLength] = useState<number | undefined>(undefined);
   const [version, setVersion] = useState("");
   const [requestFailure, setRequestFailure] =
     useState<RequestFailureDiagnostic | null>(null);
@@ -63,6 +66,7 @@ export function useAppSession({
         if (!active || status === null) return;
         setVaultExists(status.exists);
         setPasswordless(status.passwordless ?? false);
+        setMinPassphraseLength(status.minPassphraseLength);
         setState(status.unlocked ? "ready" : "locked");
       })
       .catch((reason: unknown) => {
@@ -200,6 +204,7 @@ export function useAppSession({
     failure,
     vaultExists,
     passwordless,
+    minPassphraseLength,
     version,
     requestFailure,
     vaultMigration,

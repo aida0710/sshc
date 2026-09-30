@@ -1,15 +1,10 @@
 import type { SFTPSort, SFTPSortState } from "./SFTPPanel";
 import { isLocalPath, localHostAlias } from "./localHost";
-import { blankPane, identifier, maxPanes, maxTabsPerPane, paneOf, type SFTPPane, type SFTPTab } from "./sftpPanes";
+import { blankPane, maxPanes, maxTabsPerPane, paneOf, type SFTPPane, type SFTPTab } from "./sftpPanes";
 import { clampSplitRatio } from "../ui/SplitResizeHandle";
 import { readStoredJSON, readStoredValue, writeStoredJSON, writeStoredValue } from "../ui/browserStorage";
-
-// The workspace layout is one versioned document: the panes from left to
-// right, each with its tabs and the position of the selected tab. Changing
-// its shape means a new version of the key, and anything else stored under
-// it restores as a single blank pane.
-const panesKey = "sshc.sftp.panes.v1";
-const splitRatioKey = "sshc.sftp.splitRatio";
+import { localStorageKeys } from "../ui/browserStorageKeys";
+import { newIdentifier } from "../ui/randomIdentifier";
 
 type StoredTab = { alias: string; path: string; sortKey: SFTPSort; sortDirection: SFTPSortState["direction"] };
 type StoredPane = { tabs: StoredTab[]; activeIndex: number };
@@ -32,7 +27,7 @@ function restoreTab(value: unknown): SFTPTab[] {
   const alias = typeof value.alias === "string" ? value.alias : "";
   const path = typeof value.path === "string" &&
     (alias === localHostAlias ? isLocalPath(value.path) : value.path.startsWith("/")) ? value.path : "";
-  return [{ id: identifier(), alias, path, sort: restoredSort(value) }];
+  return [{ id: newIdentifier(), alias, path, sort: restoredSort(value) }];
 }
 
 function restoreActiveId(value: unknown, tabs: SFTPTab[]): string {
@@ -49,7 +44,7 @@ function restorePane(value: unknown): SFTPPane[] {
 }
 
 export function restorePanes(): SFTPPane[] {
-  const stored = readStoredJSON(panesKey, []);
+  const stored = readStoredJSON(localStorageKeys.sftpPanes, []);
   const panes = Array.isArray(stored) ? stored.flatMap(restorePane).slice(0, maxPanes) : [];
   return panes.length === 0 ? [blankPane()] : panes;
 }
@@ -63,14 +58,14 @@ function storedPane(pane: SFTPPane): StoredPane {
 }
 
 export function rememberPanes(panes: SFTPPane[]): void {
-  writeStoredJSON(panesKey, panes.map(storedPane));
+  writeStoredJSON(localStorageKeys.sftpPanes, panes.map(storedPane));
 }
 
 export function restoreSplitRatio(): number {
-  const stored = readStoredValue(splitRatioKey);
+  const stored = readStoredValue(localStorageKeys.sftpSplitRatio);
   return stored === null || stored.trim() === "" ? 50 : clampSplitRatio(Number(stored));
 }
 
 export function rememberSplitRatio(ratio: number): void {
-  writeStoredValue(splitRatioKey, String(ratio));
+  writeStoredValue(localStorageKeys.sftpSplitRatio, String(ratio));
 }

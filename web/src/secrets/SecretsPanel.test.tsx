@@ -1,16 +1,17 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { vaultStatus } from "../testing/vaultStatus";
 import { SecretsPanel } from "./SecretsPanel";
 import { ApiError } from "../api/client";
 import type { SecretsApi } from "./SecretsPanel";
 
 function buildApi(overrides: Partial<SecretsApi> = {}): SecretsApi {
   return {
-    passwordVault: vi.fn().mockResolvedValue({ exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [] }),
-    initialiseVault: vi.fn().mockResolvedValue({ exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [] }),
-    unlockVault: vi.fn().mockResolvedValue({ exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [] }),
-    lockVault: vi.fn().mockResolvedValue({ exists: true, unlocked: false, aliases: [], dedicatedKeyPassphrases: [] }),
+    passwordVault: vi.fn().mockResolvedValue(vaultStatus()),
+    initialiseVault: vi.fn().mockResolvedValue(vaultStatus()),
+    unlockVault: vi.fn().mockResolvedValue(vaultStatus()),
+    lockVault: vi.fn().mockResolvedValue(vaultStatus({ unlocked: false })),
     credentials: vi.fn().mockResolvedValue({
       credentials: [
         { kind: "password", name: "office-vm", uses: ["web-1", "web-2"], hosts: ["web-1", "web-2"] },
@@ -50,7 +51,7 @@ function buildApi(overrides: Partial<SecretsApi> = {}): SecretsApi {
       remainingSeconds: 17,
     }),
     changeMasterPassword: vi.fn().mockResolvedValue({
-      vault: { exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [] },
+      vault: vaultStatus(),
     }),
     updateStatus: vi.fn().mockResolvedValue({ current: "dev", available: false, restartRequired: false }),
     ...overrides,
@@ -367,7 +368,7 @@ describe("SecretsPanel", () => {
 
   it("offers to unlock rather than showing an empty list", async () => {
     const api = buildApi({
-      passwordVault: vi.fn().mockResolvedValue({ exists: true, unlocked: false, aliases: [], dedicatedKeyPassphrases: [] }),
+      passwordVault: vi.fn().mockResolvedValue(vaultStatus({ unlocked: false })),
       credentials: vi.fn(),
     });
     render(<SecretsPanel api={api} />);
@@ -380,14 +381,14 @@ describe("SecretsPanel", () => {
 });
 
 it("does not offer manual locking for a passwordless vault", async () => {
-  const api = buildApi({ passwordVault: vi.fn().mockResolvedValue({ exists: true, unlocked: true, passwordless: true, aliases: [], dedicatedKeyPassphrases: [] }) });
+  const api = buildApi({ passwordVault: vi.fn().mockResolvedValue(vaultStatus({ passwordless: true })) });
   render(<SecretsPanel api={api} />);
   await screen.findByText("office-vm");
   expect(screen.queryByRole("button", { name: "Lock sshc" })).not.toBeInTheDocument();
 });
 
 it("does not show a lock screen when protection was removed before the lock request", async () => {
-  const api = buildApi({ lockVault: vi.fn().mockResolvedValue({ exists: true, unlocked: true, passwordless: true, aliases: [], dedicatedKeyPassphrases: [] }) });
+  const api = buildApi({ lockVault: vi.fn().mockResolvedValue(vaultStatus({ passwordless: true })) });
   const onLock = vi.fn();
   render(<SecretsPanel api={api} onLock={onLock} />);
   await userEvent.click(await screen.findByRole("button", { name: "Lock sshc" }));

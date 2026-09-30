@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import type { HostDetail } from "../api/config";
 import type { Credential } from "../api/credentials";
-import type { PasswordEligibility, PasswordVaultStatus } from "../api/vault";
+import type { PasswordEligibility } from "../api/vault";
 import type { KeyInventoryResponse, KeyItem, KeysApi } from "../keys/api";
+import { vaultStatus } from "../testing/vaultStatus";
 import {
   loadConnectionSavedState,
   summarizeConnection,
@@ -37,13 +38,7 @@ const inventory: KeyInventoryResponse = {
   agentIdentities: [],
 };
 
-const unlockedVault: PasswordVaultStatus = {
-  exists: true,
-  unlocked: true,
-  aliases: ["edge"],
-  dedicatedKeyPassphrases: [],
-  minPassphraseLength: 12,
-};
+const unlockedVault = vaultStatus({ aliases: ["edge"] });
 
 const eligibility: PasswordEligibility = {
   alias: "edge",
@@ -217,7 +212,7 @@ describe("connection saved state", () => {
 
     const empty: ConnectionSavedState = {
       ...dedicated,
-      vault: { status: "ready", value: { ...unlockedVault, aliases: [], dedicatedKeyPassphrases: [] } },
+      vault: { status: "ready", value: vaultStatus() },
     };
     expect(summarizeConnection(empty).accountPassword).toEqual({ state: "none" });
     expect(summarizeConnection(empty).keyPassphrase).toEqual({ state: "none" });

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useLayoutEffect, useMemo, useState } from "react";
 import type { VPNProfile, VPNSecrets } from "../api/vpn";
 import { useTranslate } from "../i18n/context";
 import { Field, control, hintText, sectionHeading } from "../ui/form";
@@ -48,6 +48,7 @@ export function VPNProfileForm({
   revealSecrets,
   onSave,
   onCancel,
+  onDirtyChange,
 }: {
   busy: boolean;
   // editing は、編集する保存済みのプロファイルである。無ければ新しく作る。
@@ -57,9 +58,13 @@ export function VPNProfileForm({
   onSave: (profile: VPNProfile, secrets: VPNSecrets) => Promise<VPNProfileSaveResult>;
   // onCancel は、編集をやめる。作成のフォームには無い。
   onCancel?: () => void;
+  // onDirtyChange は、入力を開いたときから変えたかを伝える。画面を離れる前に確かめるため。
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
   const t = useTranslate();
-  const [draft, setDraft] = useState<VPNProfileDraft>(() => (editing === undefined ? emptyDraft : draftOf(editing)));
+  // openedDraft は、フォームを開いたときの入力である。変えたかどうかはこれと比べる。
+  const [openedDraft] = useState<VPNProfileDraft>(() => (editing === undefined ? emptyDraft : draftOf(editing)));
+  const [draft, setDraft] = useState<VPNProfileDraft>(openedDraft);
   const [refusal, setRefusal] = useState<VPNFieldError | null>(null);
   const { reveal, forget } = useVPNSecretsReveal({
     name: editing?.name,
@@ -81,6 +86,18 @@ export function VPNProfileForm({
     [editing, draft.backend, revealed],
   );
   const heading = editing === undefined ? t("vpn.addHeading") : t("vpn.editHeading", { name: editing.name });
+
+  // 取り出したシークレットは欄に入るので、それを入れただけでは変えたことにしない。
+  const untouchedDraft = useMemo(
+    () => (revealed === null ? openedDraft : withSecrets(openedDraft, revealed)),
+    [openedDraft, revealed],
+  );
+  const changed = JSON.stringify(draft) !== JSON.stringify(untouchedDraft);
+  // フォームを閉じれば入力は消えるので、外すときは変更なしと伝える。
+  useLayoutEffect(() => {
+    onDirtyChange?.(changed);
+    return () => onDirtyChange?.(false);
+  }, [changed, onDirtyChange]);
 
   // storedConfigFacts は、保存済みの設定ファイルから読んで、プロファイルに持っている値である。
   // WireGuard の設定ファイルの欄を空欄に戻したときは、これに戻す。

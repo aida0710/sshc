@@ -1,5 +1,7 @@
 import { clickAndAwait, expect, masterPassword, test, openApplication, sessionStatus, openLocalShell } from "./support/environment";
 import { drawnRowFont, drawnRows, outsideTerminal, screenRect, terminalKeyboard } from "./support/terminal";
+import { everySection } from "./support/sectionNavigation";
+import { answerNoVPNProfiles } from "./support/vpn";
 
 
 const hosts = "Host alpha\n\tHostName 198.51.100.10\n\nHost bravo\n\tHostName 198.51.100.11\n";
@@ -38,25 +40,6 @@ async function mockMobileWorkspace(page: import("@playwright/test").Page) {
     focusModePaneId: null,
   })));
 }
-
-const sections = [
-  { navigation: "Connections", heading: "Connections" },
-  { navigation: "SFTP", heading: "Remote files" },
-  { navigation: "Snippets", heading: "Snippets" },
-  { navigation: "Config", heading: "Configuration files" },
-  { navigation: "Groups", heading: "Groups" },
-  { navigation: "Keys", heading: "Keys" },
-  { navigation: "Known Hosts", heading: "Known Hosts" },
-  { navigation: "Install Key on Server", heading: "Install Key on Server" },
-  { navigation: "Ad hoc checks", heading: "Ad hoc checks" },
-  { navigation: "Account passwords", heading: "Account passwords" },
-  { navigation: "Key passphrases", heading: "Key passphrases" },
-  { navigation: "OTP", heading: "One-time passwords (TOTP)" },
-  { navigation: "Engine", heading: "Engine" },
-  { navigation: "Sync", heading: "Remote sync" },
-  { navigation: "History", heading: "History" },
-  { navigation: "Terminal", heading: "No session is open" },
-] as const;
 
 async function openSectionThroughDrawer(
   page: import("@playwright/test").Page,
@@ -651,6 +634,7 @@ test("keeps every section inside 360 pixels", async ({ page, installation }) => 
       }),
     });
   });
+  await answerNoVPNProfiles(page);
   await openApplication(page, installation);
   await expect(page.getByRole("heading", { name: "Your connections", exact: true })).toBeVisible();
   await expectNoHorizontalOverflow(page, "Home");
@@ -678,7 +662,7 @@ test("keeps every section inside 360 pixels", async ({ page, installation }) => 
     });
   }
 
-  for (const section of sections) {
+  for (const section of everySection) {
     await openSectionThroughDrawer(page, section.navigation, section.heading);
     await expectNoHorizontalOverflow(page, section.navigation);
     await expectNothingCutOff(page, section.navigation);
@@ -934,7 +918,7 @@ test("lays a selectable layer over the terminal, outside the element that blocks
   expect(selected).toContain("zzq");
 });
 
-test("asks before closing a live console, in the middle of the screen and not inside the drawer", async ({
+test("asks before closing a live session, in the middle of the screen and not inside the drawer", async ({
   page,
   installation,
 }) => {

@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ThemeProvider, useTheme } from "./context";
-import { themeStorageKey } from "./theme";
+import { localStorageKeys } from "../ui/browserStorageKeys";
 
 let prefersDark = false;
 const listeners = new Set<() => void>();
@@ -59,7 +59,7 @@ describe("ThemeProvider", () => {
 
     expect(screen.getByText("choice dark resolved dark")).toBeInTheDocument();
     expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
-    expect(window.localStorage.getItem(themeStorageKey)).toBe("dark");
+    expect(window.localStorage.getItem(localStorageKeys.theme)).toBe("dark");
   });
 
   it("ignores the system once a theme was chosen", async () => {

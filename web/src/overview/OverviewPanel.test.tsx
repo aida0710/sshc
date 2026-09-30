@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { Overview } from "../api/config";
 import type { SyncStatus } from "../api/sync";
+import { formatDateTime } from "../ui/format";
 import { OverviewPanel } from "./OverviewPanel";
 
 const overview = {
@@ -140,7 +141,7 @@ describe("OverviewPanel", () => {
         launch={launch}
         onNavigate={vi.fn()}
         onNavigateLocation={vi.fn()}
-        onConsoleOpened={opened}
+        onSessionOpened={opened}
       />,
     );
 
@@ -204,6 +205,44 @@ describe("OverviewPanel", () => {
     expect(navigate).toHaveBeenCalledWith("Config");
     expect(screen.queryByRole("button", { name: "Open diagnostics" })).not.toBeInTheDocument();
     expect(loadOverview).toHaveBeenCalledTimes(1);
+  });
+
+  it("reads the SSH configuration again when asked after it could not be read", async () => {
+    const loadOverview = vi.fn()
+      .mockRejectedValueOnce(new Error("config_failed"))
+      .mockResolvedValue({ ...overview, diagnostics: [] });
+    render(
+      <OverviewPanel
+        loadOverview={loadOverview}
+        loadSync={vi.fn().mockResolvedValue(sync)}
+        loadRecent={vi.fn().mockResolvedValue({ connections: [] })}
+        loadWorkspaces={vi.fn().mockResolvedValue([])}
+        onNavigate={vi.fn()}
+        onNavigateLocation={vi.fn()}
+      />,
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("The SSH configuration could not be read.");
+    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+
+    await screen.findByText("database");
+    expect(loadOverview).toHaveBeenCalledTimes(2);
+  });
+
+  it("says connection history could not be read instead of showing none", async () => {
+    render(
+      <OverviewPanel
+        loadOverview={vi.fn().mockResolvedValue({ ...overview, diagnostics: [] })}
+        loadSync={vi.fn().mockResolvedValue(sync)}
+        loadRecent={vi.fn().mockRejectedValue(new Error("history_failed"))}
+        loadWorkspaces={vi.fn().mockResolvedValue([])}
+        onNavigate={vi.fn()}
+        onNavigateLocation={vi.fn()}
+      />,
+    );
+
+    expect(await screen.findByText("Connection history or saved layouts could not be read.")).toBeInTheDocument();
+    expect(screen.getByText("database")).toBeInTheDocument();
   });
 
   it("keeps sync accessible without showing an empty attention section", async () => {
@@ -281,7 +320,7 @@ describe("OverviewPanel", () => {
     expect(card).not.toBeNull();
     expect(within(card as HTMLElement).getByText("deploy@db.example.com:2202")).toBeInTheDocument();
     expect(card).toHaveTextContent("work");
-    expect(card).toHaveTextContent("Last connected");
+    expect(card).toHaveTextContent(`Last connected ${formatDateTime("2026-08-24T15:30:00Z", "en")}`);
     await userEvent.click(within(card as HTMLElement).getByRole("button", { name: "Actions for database" }));
     await userEvent.click(screen.getByRole("menuitem", { name: "Connect" }));
     await waitFor(() => expect(launch).toHaveBeenCalledWith("database"));

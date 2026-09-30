@@ -1,4 +1,4 @@
-export const consoleDragMimeType = "application/x-sshc-console";
+export const sessionDragMimeType = "application/x-sshc-session";
 
 export type LiveWorkspaceSummary = {
   id: string;

@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from "react";
-import { failureCode } from "../../api/client";
 import type { TerminalSession } from "../../api/terminalSessions";
+import { useTranslate } from "../../i18n/context";
 import { workspaceApi } from "./api";
 import { reduceLayout, restoreLayout, type LayoutState } from "./layout";
 import { visit } from "./panes";
+import { describeWorkspaceFailure } from "./workspaceProblem";
 
 export type WorkspaceRestoreRequest = { id: string; sequence: number };
 
 type RestoreAttempt = {
   generation: number;
-  openedSessionIDs: Set<string>;
+  openedSessionIds: Set<string>;
   cleanup: Promise<void>;
 };
 
@@ -19,6 +20,7 @@ type RestoreAttempt = {
 export function useWorkspaceRestore({
   restoreRequest,
   onRestoreConsumed,
+  onRestoringChange,
   onOpenAlias,
   onOpenShell,
   onClose,
@@ -29,6 +31,9 @@ export function useWorkspaceRestore({
 }: {
   restoreRequest: WorkspaceRestoreRequest | null;
   onRestoreConsumed: (sequence: number) => void;
+  // Unmounting abandons a restore and closes the sessions it opened, so the
+  // owner keeps this hook mounted while it reports true.
+  onRestoringChange: (restoring: boolean) => void;
   onOpenAlias: (alias: string) => Promise<TerminalSession | null>;
   onOpenShell: () => Promise<TerminalSession | null>;
   onClose: (id: string) => Promise<void>;
@@ -39,30 +44,35 @@ export function useWorkspaceRestore({
   // The outcome for the problem banner; "" clears it.
   report: (problem: string) => void;
 }) {
+  const t = useTranslate();
   const consumed = useRef(0);
   const generationRef = useRef(0);
   const activeAttempt = useRef<RestoreAttempt | null>(null);
   const onCloseRef = useRef(onClose);
   useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
+  const onRestoringChangeRef = useRef(onRestoringChange);
+  useEffect(() => { onRestoringChangeRef.current = onRestoringChange; }, [onRestoringChange]);
 
   // A superseded restore no longer owns visible panes, so every session it
   // created must be retired. Chain closes to keep mutation listings ordered.
   const retireSession = useCallback((attempt: RestoreAttempt, id: string): Promise<void> => {
-    if (!attempt.openedSessionIDs.delete(id)) return attempt.cleanup;
+    if (!attempt.openedSessionIds.delete(id)) return attempt.cleanup;
     attempt.cleanup = attempt.cleanup
       .then(() => onCloseRef.current(id))
       .catch(() => undefined);
     return attempt.cleanup;
   }, []);
   const retireAttempt = useCallback((attempt: RestoreAttempt): Promise<void> => {
-    for (const id of [...attempt.openedSessionIDs]) void retireSession(attempt, id);
+    for (const id of [...attempt.openedSessionIds]) void retireSession(attempt, id);
     return attempt.cleanup;
   }, [retireSession]);
   useEffect(() => () => {
     generationRef.current += 1;
     const attempt = activeAttempt.current;
     activeAttempt.current = null;
-    if (attempt !== null) void retireAttempt(attempt);
+    if (attempt === null) return;
+    void retireAttempt(attempt);
+    onRestoringChangeRef.current(false);
   }, [retireAttempt]);
 
   const restoreWorkspace = useCallback(async (id: string) => {
@@ -72,13 +82,17 @@ export function useWorkspaceRestore({
     const generation = generationRef.current + 1;
     generationRef.current = generation;
     const previous = activeAttempt.current;
-    const attempt: RestoreAttempt = { generation, openedSessionIDs: new Set(), cleanup: Promise.resolve() };
+    const attempt: RestoreAttempt = { generation, openedSessionIds: new Set(), cleanup: Promise.resolve() };
     activeAttempt.current = attempt;
     if (previous !== null) void retireAttempt(previous);
+    onRestoringChangeRef.current(true);
     const current = () => attempt.generation === generationRef.current;
     const settle = (problem: string) => {
-      if (activeAttempt.current === attempt) activeAttempt.current = null;
-      attempt.openedSessionIDs.clear();
+      if (activeAttempt.current === attempt) {
+        activeAttempt.current = null;
+        onRestoringChangeRef.current(false);
+      }
+      attempt.openedSessionIds.clear();
       report(problem);
     };
     try {
@@ -101,7 +115,7 @@ export function useWorkspaceRestore({
           }));
           return;
         }
-        attempt.openedSessionIDs.add(session.id);
+        attempt.openedSessionIds.add(session.id);
         if (!current()) {
           await retireSession(attempt, session.id);
           return;
@@ -121,9 +135,9 @@ export function useWorkspaceRestore({
         await retireAttempt(attempt);
         return;
       }
-      settle(failureCode(error) || "workspace_failed");
+      settle(describeWorkspaceFailure(t, error));
     }
-  }, [onActive, onBegin, onOpenAlias, onOpenShell, report, retireAttempt, retireSession, setLayout]);
+  }, [onActive, onBegin, onOpenAlias, onOpenShell, report, retireAttempt, retireSession, setLayout, t]);
 
   useEffect(() => {
     if (restoreRequest === null || restoreRequest.sequence <= consumed.current) return;

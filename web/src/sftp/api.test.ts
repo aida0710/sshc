@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { apiClient, whenRequestFailed } from "../api/client";
+import { apiClient, whenLocked, whenRequestFailed } from "../api/client";
 import { sftpApi } from "./api";
 
 describe("sftpApi resumable download", () => {
@@ -12,6 +12,7 @@ describe("sftpApi resumable download", () => {
 
   afterEach(() => {
     apiClient.clear();
+    whenLocked(null);
     whenRequestFailed(null);
     vi.restoreAllMocks();
   });
@@ -44,6 +45,29 @@ describe("sftpApi resumable download", () => {
     ];
     for (const read of reads) await expect(read()).rejects.toMatchObject({ code: "vpn_profile_unknown" });
     expect(diagnostic).not.toHaveBeenCalled();
+  });
+
+  it("keeps the Problem of a refused preview and hands a locked vault to the lock screen", async () => {
+    const locked = vi.fn();
+    whenLocked(locked);
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(
+      JSON.stringify({ code: "sftp_preview_type", message: "request rejected" }),
+      { status: 415, headers: { "Content-Type": "application/problem+json" } },
+    ));
+
+    await expect(sftpApi.previewFile("edge", "/notes.txt")).rejects.toMatchObject({
+      code: "sftp_preview_type",
+      status: 415,
+      problem: { code: "sftp_preview_type" },
+    });
+    expect(locked).not.toHaveBeenCalled();
+
+    fetchMock.mockResolvedValue(new Response(
+      JSON.stringify({ code: "vault_locked", message: "request rejected" }),
+      { status: 423, headers: { "Content-Type": "application/problem+json" } },
+    ));
+    await expect(sftpApi.previewFile("edge", "/photo.png")).rejects.toMatchObject({ code: "vault_locked" });
+    expect(locked).toHaveBeenCalledTimes(1);
   });
 
   it("omits the path query when opening the remote user's initial directory", async () => {

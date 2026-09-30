@@ -6,6 +6,8 @@ type Layer = {
   id: symbol;
   containers: () => readonly (HTMLElement | null)[];
   dismiss: (reason: DismissReason) => void;
+  // false の間は、Escape・戻る操作・外側のクリックで閉じず、フォーカスも動かさない。
+  dismissible: () => boolean;
   closeOnOutside: boolean;
   restoreFocus: () => HTMLElement | null;
   initialFocus: () => HTMLElement | null;
@@ -13,6 +15,17 @@ type Layer = {
 };
 
 const layers: Layer[] = [];
+
+const escapeOwnerAttribute = "data-escape-owner";
+
+// エディタの検索欄や補完を閉じる、シェルへ ESC を送るなど、Escape を自分で使う領域に付ける。
+// この中で押した Escape は先にその領域へ渡し、使われずに document まで届いたときだけ
+// 最前面のレイヤーを閉じる。
+export const escapeOwnerProps = { [escapeOwnerAttribute]: "" } as const;
+
+function insideEscapeOwner(target: EventTarget | null): boolean {
+  return target instanceof Element && target.closest(`[${escapeOwnerAttribute}]`) !== null;
+}
 
 function topLayer(): Layer | undefined {
   return layers[layers.length - 1];
@@ -36,7 +49,7 @@ function focusableElements(container: HTMLElement): HTMLElement[] {
 function dismissOutside(event: PointerEvent) {
   const layer = topLayer();
   const target = event.target;
-  if (layer === undefined || !layer.closeOnOutside || !(target instanceof Node)) return;
+  if (layer === undefined || !layer.closeOnOutside || !layer.dismissible() || !(target instanceof Node)) return;
   if (layer.containers().some((container) => container?.contains(target) === true)) return;
   layer.dismiss("outside");
 }
@@ -58,11 +71,25 @@ function dismissWithEscape(event: KeyboardEvent) {
     }
     return;
   }
-  if (event.key !== "Escape") return;
+  if (event.key !== "Escape" || insideEscapeOwner(event.target)) return;
   event.preventDefault();
   event.stopImmediatePropagation();
+  dismissAndRestoreFocus(layer, "escape");
+}
+
+// Monaco と xterm は使った Escape の伝播を止める。ここまで届いたものは使われなかった Escape。
+function dismissWithUnusedEscape(event: KeyboardEvent) {
+  const layer = topLayer();
+  if (layer === undefined || event.key !== "Escape" || event.defaultPrevented || !insideEscapeOwner(event.target)) return;
+  event.preventDefault();
+  dismissAndRestoreFocus(layer, "escape");
+}
+
+function dismissAndRestoreFocus(layer: Layer, reason: DismissReason) {
+  // 閉じないのにフォーカスだけ開いた元へ戻すと、開いたままのダイアログから離れる。
+  if (!layer.dismissible()) return;
   const returnTarget = layer.restoreFocus();
-  layer.dismiss("escape");
+  layer.dismiss(reason);
   queueMicrotask(() => {
     if (returnTarget?.isConnected === true) returnTarget.focus();
   });
@@ -82,17 +109,14 @@ function dismissForAndroidBack(event: Event) {
   if (layer === undefined) return;
   event.preventDefault();
   event.stopImmediatePropagation();
-  const returnTarget = layer.restoreFocus();
-  layer.dismiss("android-back");
-  queueMicrotask(() => {
-    if (returnTarget?.isConnected === true) returnTarget.focus();
-  });
+  dismissAndRestoreFocus(layer, "android-back");
 }
 
 function listen() {
   if (layers.length !== 1) return;
   document.addEventListener("pointerdown", dismissOutside, true);
   document.addEventListener("keydown", dismissWithEscape, true);
+  document.addEventListener("keydown", dismissWithUnusedEscape);
   document.addEventListener("focusin", keepModalFocus, true);
   window.addEventListener("sshc-android-back", dismissForAndroidBack, true);
 }
@@ -101,6 +125,7 @@ function unlisten() {
   if (layers.length !== 0) return;
   document.removeEventListener("pointerdown", dismissOutside, true);
   document.removeEventListener("keydown", dismissWithEscape, true);
+  document.removeEventListener("keydown", dismissWithUnusedEscape);
   document.removeEventListener("focusin", keepModalFocus, true);
   window.removeEventListener("sshc-android-back", dismissForAndroidBack, true);
 }
@@ -109,6 +134,7 @@ export function useDismissibleLayer({
   open,
   containerRefs,
   onDismiss,
+  dismissible = true,
   closeOnOutside = true,
   returnFocusRef,
   initialFocusRef,
@@ -117,6 +143,7 @@ export function useDismissibleLayer({
   open: boolean;
   containerRefs: readonly RefObject<HTMLElement | null>[];
   onDismiss: (reason: DismissReason) => void;
+  dismissible?: boolean;
   closeOnOutside?: boolean;
   returnFocusRef?: RefObject<HTMLElement | null>;
   initialFocusRef?: RefObject<HTMLElement | null>;
@@ -125,10 +152,12 @@ export function useDismissibleLayer({
   const id = useRef(Symbol("dismissible-layer"));
   const containers = useRef(containerRefs);
   const dismiss = useRef(onDismiss);
+  const canDismiss = useRef(dismissible);
   const returnFocus = useRef(returnFocusRef);
   const initialFocus = useRef(initialFocusRef);
   containers.current = containerRefs;
   dismiss.current = onDismiss;
+  canDismiss.current = dismissible;
   returnFocus.current = returnFocusRef;
   initialFocus.current = initialFocusRef;
 
@@ -139,6 +168,7 @@ export function useDismissibleLayer({
       id: id.current,
       containers: () => containers.current.map((ref) => ref.current),
       dismiss: (reason) => dismiss.current(reason),
+      dismissible: () => canDismiss.current,
       closeOnOutside,
       restoreFocus: () => returnFocus.current?.current ?? opener,
       initialFocus: () => initialFocus.current?.current ?? null,

@@ -12,12 +12,15 @@ import type { PasswordVaultStatus } from "../api/vault";
 import { connectionSecretsApi, type ConnectionSecretsApi } from "./secretsApi";
 import { useTranslate } from "../i18n/context";
 import { keysApi, selectablePrivateKeys, type KeyItem, type KeysApi } from "../keys/api";
-import { control, Field, fieldLabel, hintText, sectionHeading } from "../ui/form";
+import { control, Field, hintText, sectionHeading } from "../ui/form";
 import { PasswordField } from "../ui/PasswordField";
-import { isValidHostName } from "../rules/rules";
+import { createConnectionFieldErrors } from "./createConnectionValidation";
+import { AuthenticationMethodChoice } from "./AuthenticationMethodChoice";
+import { CreateConnectionVaultPrompt } from "./CreateConnectionVaultPrompt";
 import { Button, Notice } from "../ui/surface";
 import { Icon } from "../ui/icons";
 import { ModalShell } from "../ui/ModalShell";
+import { meetsMasterPasswordMinimum } from "../secrets/masterPasswordLength";
 
 type AuthenticationKind = CreateConnectionAuthentication["kind"];
 
@@ -30,7 +33,7 @@ export type CreateConnectionDraft = {
   authentication: AuthenticationKind;
   savedCredential: string;
   newCredential: string;
-  keyID: string;
+  keyId: string;
 };
 
 export type CreationPrerequisite = "Groups" | "Keys";
@@ -48,7 +51,6 @@ type CreateConnectionModalProps = {
 
 type TouchedField = "alias" | "hostName" | "user" | "port";
 
-const aliasPattern = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 function optional(value: string): string | undefined {
   return value === "" ? undefined : value;
 }
@@ -76,7 +78,7 @@ export function CreateConnectionModal({
   const [savedCredential, setSavedCredential] = useState(initialDraft?.savedCredential ?? "");
   const [newCredential, setNewCredential] = useState(initialDraft?.newCredential ?? "");
   const [newSharedPassword, setNewSharedPassword] = useState("");
-  const [keyID, setKeyID] = useState(initialDraft?.keyID ?? "");
+  const [keyId, setKeyId] = useState(initialDraft?.keyId ?? "");
   const [privateKeys, setPrivateKeys] = useState<KeyItem[]>([]);
   const [credentials, setCredentials] = useState<Credential[]>([]);
   const [vault, setVault] = useState<PasswordVaultStatus | null>(null);
@@ -88,6 +90,10 @@ export function CreateConnectionModal({
   const [error, setError] = useState("");
   const [touched, setTouched] = useState<Set<TouchedField>>(() => new Set());
 
+  // Passwords leave the form when it closes, when another authentication is
+  // chosen, when a prerequisite screen takes over, and when a request lands. A
+  // refused request keeps them so that the refusal is fixed without retyping,
+  // as the lock screen and the VPN profile form do.
   function clearSecrets() {
     setDedicatedPassword("");
     setNewSharedPassword("");
@@ -117,7 +123,7 @@ export function CreateConnectionModal({
             : passwordCredentials[0]?.name ?? "",
         );
         setPrivateKeys(identities);
-        setKeyID((current) => identities.some((identity) => identity.id === current) ? current : identities[0]?.id ?? "");
+        setKeyId((current) => identities.some((identity) => identity.id === current) ? current : identities[0]?.id ?? "");
         if (initialDraft === undefined && identities.length > 0) setAuthentication("identity_file");
         setLoading(false);
       })
@@ -131,28 +137,19 @@ export function CreateConnectionModal({
     };
   }, [initialDraft, keys, secrets, t]);
 
-  const aliasError = alias === ""
-    ? t("conn.createAliasRequired")
-    : aliasPattern.test(alias)
-      ? ""
-      : t("conn.createAliasInvalid");
-  const hostError = hostName === ""
-    ? t("conn.createHostRequired")
-    : isValidHostName(hostName)
-      ? ""
-      : t("conn.createHostInvalid");
-  const userError = user !== "" && /[\s\p{Cc}]/u.test(user) ? t("conn.createUserInvalid") : "";
-  const parsedPort = Number(port);
-  const portError = port !== "" && (!/^\d+$/.test(port) || parsedPort < 1 || parsedPort > 65535)
-    ? t("conn.createPortInvalid")
-    : "";
+  const {
+    alias: aliasError,
+    hostName: hostError,
+    user: userError,
+    port: portError,
+  } = createConnectionFieldErrors(t, { alias, hostName, user, port });
 
   const authenticationReady = (() => {
     switch (authentication) {
       case "dedicated_password": return dedicatedPassword !== "";
       case "saved_password": return savedCredential !== "";
       case "new_shared_password": return newCredential !== "" && newSharedPassword !== "";
-      case "identity_file": return keyID !== "";
+      case "identity_file": return keyId !== "";
     }
   })();
   const vaultReady = authentication === "identity_file" || vault?.unlocked === true;
@@ -175,7 +172,7 @@ export function CreateConnectionModal({
       authentication,
       savedCredential,
       newCredential,
-      keyID,
+      keyId,
     };
   }
 
@@ -202,7 +199,6 @@ export function CreateConnectionModal({
       setMasterPassword("");
       setMasterConfirmation("");
     } catch {
-      clearSecrets();
       setError(t(vault.exists ? "conn.createUnlockFailed" : "conn.createVaultFailed"));
     } finally {
       setVaultBusy(false);
@@ -218,7 +214,7 @@ export function CreateConnectionModal({
       case "new_shared_password":
         return { kind: authentication, credential: newCredential, password: newSharedPassword };
       case "identity_file":
-        return { kind: authentication, keyId: keyID };
+        return { kind: authentication, keyId };
     }
   }
 
@@ -236,14 +232,13 @@ export function CreateConnectionModal({
     };
     const selectedUser = optional(user);
     if (selectedUser !== undefined) request.user = selectedUser;
-    if (port !== "") request.port = parsedPort;
+    if (port !== "") request.port = Number(port);
 
     try {
       const result = await config.createConnection(request);
       clearSecrets();
       onCreated(result);
     } catch (caught) {
-      clearSecrets();
       const code = failureCode(caught);
       switch (code) {
         case "alias_already_declared": setError(t("conn.createAliasTaken")); break;
@@ -258,8 +253,7 @@ export function CreateConnectionModal({
     }
   }
 
-  const minimum = vault?.minPassphraseLength ?? 12;
-  const canOpenVault = vault !== null && masterPassword.length >= minimum &&
+  const canOpenVault = vault !== null && meetsMasterPasswordMinimum(masterPassword, vault.minPassphraseLength) &&
     (vault.exists || masterConfirmation === masterPassword);
   const disabledReason = (() => {
     if (canSubmit || busy) return "";
@@ -387,45 +381,19 @@ export function CreateConnectionModal({
               <h3 id="create-auth-section" className={sectionHeading}>{t("conn.createAuthenticationSection")}</h3>
               {loading ? <p className={hintText}>{t("conn.createLoadingOptions")}</p> : null}
               {vault !== null && !vault.unlocked && authentication !== "identity_file" ? (
-                <div className="flex flex-col gap-3 rounded-lg border border-notice-line bg-notice p-3">
-                  <p className="text-sm text-notice-ink">
-                    {t(vault.exists ? "conn.createVaultLocked" : "conn.createVaultMissing")}
-                  </p>
-                  <PasswordField label={t("conn.createMasterPassword")} value={masterPassword} onChange={setMasterPassword} />
-                  {vault.exists ? null : (
-                    <PasswordField
-                      label={t("conn.createConfirmMaster")}
-                      value={masterConfirmation}
-                      onChange={setMasterConfirmation}
-                    />
-                  )}
-                  <Button kind="primary" disabled={vaultBusy || !canOpenVault} onClick={() => void openVault()}>
-                    {t(vault.exists ? "conn.createUnlockVault" : "conn.createInitialiseVault")}
-                  </Button>
-                </div>
+                <CreateConnectionVaultPrompt
+                  vault={vault}
+                  masterPassword={masterPassword}
+                  onMasterPasswordChange={setMasterPassword}
+                  masterConfirmation={masterConfirmation}
+                  onMasterConfirmationChange={setMasterConfirmation}
+                  canOpen={canOpenVault}
+                  busy={vaultBusy}
+                  onOpen={() => void openVault()}
+                />
               ) : null}
 
-              <fieldset className="grid gap-2 sm:grid-cols-2" disabled={loading}>
-                <legend className={fieldLabel}>{t("conn.createAuthenticationMethod")}</legend>
-                {([
-                  ["identity_file", "conn.createIdentityFile"],
-                  ["dedicated_password", "conn.createDedicatedPassword"],
-                  ["saved_password", "conn.createSavedPassword"],
-                  ["new_shared_password", "conn.createNewSharedPassword"],
-                ] as const).map(([kind, label]) => (
-                  <label key={kind} className="flex cursor-pointer items-center gap-2 rounded-lg border border-line bg-card p-3 text-sm text-ink transition-colors hover:bg-select-fill has-[:checked]:border-accent has-[:checked]:bg-select-fill">
-                    <input
-                      type="radio"
-                      name="create-authentication"
-                      value={kind}
-                      checked={authentication === kind}
-                      onChange={() => chooseAuthentication(kind)}
-                      className="accent-accent"
-                    />
-                    <span>{t(label)}</span>
-                  </label>
-                ))}
-              </fieldset>
+              <AuthenticationMethodChoice value={authentication} disabled={loading} onChange={chooseAuthentication} />
 
               {!loading && privateKeys.length === 0 ? (
                 <div>
@@ -436,7 +404,7 @@ export function CreateConnectionModal({
 
               {authentication === "identity_file" ? (
                 <Field label={t("conn.createPrivateKey")}>
-                  <select value={keyID} onChange={(event) => setKeyID(event.target.value)} className={control}>
+                  <select value={keyId} onChange={(event) => setKeyId(event.target.value)} className={control}>
                     {privateKeys.length === 0 ? <option value="">{t("conn.createNoPrivateKeys")}</option> : null}
                     {privateKeys.map((key) => (
                       <option key={key.id} value={key.id}>{key.relativePath}{key.fingerprint === "" ? "" : ` · ${key.fingerprint}`}</option>

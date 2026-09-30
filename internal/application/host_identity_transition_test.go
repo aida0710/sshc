@@ -15,7 +15,7 @@ func TestMovingAHostAppliesItsNewGroupsSettings(t *testing.T) {
 		{Name: "old", Settings: []Setting{{Keyword: "Port", Values: []string{"2222"}}}},
 		{Name: "new", Settings: []Setting{{Keyword: "Port", Values: []string{"3333"}}}},
 	}
-	if _, err := service.Save(EditRequest{Kind: EditGroups, Metadata: &metadata}); err != nil {
+	if _, err := service.Save(EditRequest{Kind: EditGroups, Groups: metadata.Groups}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := service.Save(EditRequest{Kind: EditMove, Path: relative, Base: readFile(t, workspace, relative), Alias: "audit", DestinationGroup: "new"}); err != nil {
@@ -42,7 +42,7 @@ func TestHostRenameRebuildsInheritedGroupSettings(t *testing.T) {
 	writeGroupFile(t, workspace, "work", "host.conf", "Host audit-old\n\tHostName server.example\n")
 	metadata := NewMetadata()
 	metadata.Groups = []GroupMetadata{{Name: "work", Settings: []Setting{{Keyword: "Port", Values: []string{"2222"}}}}}
-	if _, err := service.Save(EditRequest{Kind: EditGroups, Metadata: &metadata}); err != nil {
+	if _, err := service.Save(EditRequest{Kind: EditGroups, Groups: metadata.Groups}); err != nil {
 		t.Fatal(err)
 	}
 	relative := GroupDirectory("work") + "/host.conf"
@@ -82,7 +82,7 @@ func TestCreatingAndDeletingAHostUpdatesItsGroupsHostList(t *testing.T) {
 	harness := newConnectionCreateHarness(t)
 	metadata := NewMetadata()
 	metadata.Groups = []GroupMetadata{{Name: "home-lab/others", Settings: []Setting{{Keyword: "ServerAliveInterval", Values: []string{"45"}}}}}
-	if _, err := harness.service.Save(EditRequest{Kind: EditGroups, Metadata: &metadata}); err != nil {
+	if _, err := harness.service.Save(EditRequest{Kind: EditGroups, Groups: metadata.Groups}); err != nil {
 		t.Fatal(err)
 	}
 	created, err := harness.service.CreateConnection(harness.inventory, keyCreateRequest(t, harness))

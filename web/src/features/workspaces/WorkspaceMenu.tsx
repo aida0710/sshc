@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { useTranslate } from "../../i18n/context";
 import { Icon } from "../../ui/icons";
-import { Button } from "../../ui/surface";
+import { Button, Notice } from "../../ui/surface";
 import { useDismissibleLayer } from "../../ui/useDismissibleLayer";
 import type { SavedWorkspace } from "./api";
 import { MAX_WORKSPACE_PANES } from "./layout";
@@ -16,6 +16,8 @@ export function WorkspaceMenu({
   inFocusMode,
   onExitFocusMode,
   saved,
+  savedLoadFailed,
+  onReloadSaved,
   selected,
   onSelect,
   canSave,
@@ -30,6 +32,9 @@ export function WorkspaceMenu({
   inFocusMode: boolean;
   onExitFocusMode: () => void;
   saved: SavedWorkspace[];
+  // 一覧を読めなかったときは、空の一覧と見分けられるように知らせて、読み直せるようにする。
+  savedLoadFailed: boolean;
+  onReloadSaved: () => void;
   // The id of the saved layout the menu works on; "" means a new one.
   selected: string;
   onSelect: (id: string) => void;
@@ -47,7 +52,7 @@ export function WorkspaceMenu({
     onDismiss: () => setOpen(false),
   });
   return (
-    <div data-desktop-workspace-controls className="hidden h-8 shrink-0 items-center gap-2 border-b border-line bg-toolbar px-2 md:flex">
+    <div data-desktop-workspace-controls className="flex h-8 shrink-0 items-center gap-2 border-b border-line bg-toolbar px-2">
       {paneCount > 0 ? (
         <div className="flex min-w-0 items-center gap-2">
           <span className="max-w-52 truncate text-[11px] font-semibold text-ink">{displayName}</span>
@@ -72,6 +77,14 @@ export function WorkspaceMenu({
             <option value="">{t("workspace.new")}</option>
             {saved.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
           </select>
+          {savedLoadFailed ? (
+            <div className="mt-2">
+              <Notice compact>
+                <span className="grow">{t("workspace.savedLoadFailed")}</span>
+                <Button onClick={onReloadSaved}>{t("shell.bootstrapRetry")}</Button>
+              </Notice>
+            </div>
+          ) : null}
           <div className="mt-3 flex flex-wrap gap-2">
             <Button disabled={!canSave} onClick={onSave}>{t("workspace.save")}</Button>
             <Button disabled={selected === ""} onClick={() => onReopen(selected)}>{t("workspace.reopen")}</Button>

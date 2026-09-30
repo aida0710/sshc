@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslate } from "../i18n/context";
 import { sftpProblemText } from "./sftpProblemText";
+import { comparisonStatusLabelKeys, entryTypeLabelKeys } from "./sftpMessageKeys";
 import { formatBytes } from "../ui/format";
 import { ModalShell } from "../ui/ModalShell";
 import { Button, Notice } from "../ui/surface";
@@ -108,11 +109,11 @@ export function SFTPCompareDialog({ left, right, onDismiss }: { left: Location; 
           </tr></thead>
           <tbody>{changes.map((difference) => (
             <tr key={difference.relativePath} className="border-t border-line/40 hover:bg-select-fill/40">
-              <td className="px-3 py-2"><input type="checkbox" checked={selected.has(difference.relativePath)} onChange={() => toggle(difference.relativePath)} className="size-4 accent-accent" /></td>
+              <td className="px-3 py-2"><input type="checkbox" aria-label={t("sftp.selectEntry", { name: difference.relativePath })} checked={selected.has(difference.relativePath)} onChange={() => toggle(difference.relativePath)} className="size-4 accent-accent" /></td>
               <td className="px-2 py-2 font-mono text-ink">{difference.relativePath}</td>
-              <td className="px-2 py-2 text-xs text-ink-muted">{t(`sftp.compare.${difference.status}`)}</td>
-              <td className="px-2 py-2 text-right text-xs text-ink-muted">{difference.left?.type === "file" ? formatBytes(difference.left.size) : difference.left === undefined ? "—" : t(`sftp.type.${difference.left.type}`)}</td>
-              <td className="px-2 py-2 text-right text-xs text-ink-muted">{difference.right?.type === "file" ? formatBytes(difference.right.size) : difference.right === undefined ? "—" : t(`sftp.type.${difference.right.type}`)}</td>
+              <td className="px-2 py-2 text-xs text-ink-muted">{t(comparisonStatusLabelKeys[difference.status])}</td>
+              <td className="px-2 py-2 text-right text-xs text-ink-muted">{difference.left?.type === "file" ? formatBytes(difference.left.size) : difference.left === undefined ? "—" : t(entryTypeLabelKeys[difference.left.type])}</td>
+              <td className="px-2 py-2 text-right text-xs text-ink-muted">{difference.right?.type === "file" ? formatBytes(difference.right.size) : difference.right === undefined ? "—" : t(entryTypeLabelKeys[difference.right.type])}</td>
             </tr>
           ))}</tbody>
         </table>}

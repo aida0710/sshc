@@ -28,7 +28,7 @@ function watchForPolicyViolations(page: import("@playwright/test").Page): string
   return violations;
 }
 
-async function typeIntoConsole(page: import("@playwright/test").Page, line: string) {
+async function typeIntoTerminal(page: import("@playwright/test").Page, line: string) {
   const screen = page.getByRole("region", { name: /^Terminal for / });
   await expect(screen).toBeVisible();
   await expect(screen).toContainText(/[$#%>]/, { timeout: 20_000 });
@@ -38,13 +38,13 @@ async function typeIntoConsole(page: import("@playwright/test").Page, line: stri
   return screen;
 }
 
-async function openConsolePanel(page: import("@playwright/test").Page) {
+async function openSessionList(page: import("@playwright/test").Page) {
   const nav = page.getByRole("navigation", { name: "Primary" });
   await expect(nav.getByRole("button", { name: "New session" })).toBeVisible();
   return nav;
 }
 
-async function reopenFirstConsole(panel: Locator) {
+async function reopenFirstSession(panel: Locator) {
   await panel
     .getByRole("list", { name: "Open sessions" })
     .getByRole("listitem")
@@ -93,17 +93,17 @@ test("opens a local shell, runs a command and shows its output", async ({ page, 
   const emptyState = page.getByRole("heading", { name: "No session is open" }).locator("..");
   await expect(emptyState.locator("[data-sshc-brand-mark]")).toBeVisible();
   await expect(emptyState).not.toContainText(">_");
-  await openConsolePanel(page);
+  await openSessionList(page);
   await openLocalShell(page);
 
   const screen = page.getByRole("region", { name: /^Terminal for / });
   await expect(screen).toBeVisible();
 
-  await typeIntoConsole(page, "echo embedded-terminal-canary");
+  await typeIntoTerminal(page, "echo embedded-terminal-canary");
 
   await expect(screen).toContainText("embedded-terminal-canary", { timeout: 20_000 });
   if (process.platform !== "win32") {
-    await typeIntoConsole(page, 'printf "TERM=%s\\n" "$TERM"');
+    await typeIntoTerminal(page, 'printf "TERM=%s\\n" "$TERM"');
     await expect(screen).toContainText("TERM=xterm-256color", { timeout: 20_000 });
   }
   expect(violations).toEqual([]);
@@ -125,7 +125,7 @@ test("keeps image-backed terminal editing free of stale glyphs", async ({ page, 
   });
   await openApplication(page, installation);
 
-  await openConsolePanel(page);
+  await openSessionList(page);
   await openLocalShell(page);
   const screen = page.getByRole("region", { name: /^Terminal for / });
   await expect(screen).toBeVisible();
@@ -154,29 +154,29 @@ test("keeps WebGL disabled when the terminal setting turns it off", async ({ pag
   );
   await openApplication(page, installation);
 
-  await openConsolePanel(page);
+  await openSessionList(page);
   await openLocalShell(page);
   const screen = page.getByRole("region", { name: /^Terminal for / });
   await expect(screen).toBeVisible();
   await expect.poll(() => terminalCanvasCount(page)).toBe(0);
 
-  await typeIntoConsole(page, "printf webgl-disabled");
+  await typeIntoTerminal(page, "printf webgl-disabled");
   await expect(screen).toContainText("webgl-disabled", { timeout: 20_000 });
 });
 
 test("keeps the session and replays its scrollback after a reload", async ({ page, installation }) => {
   await openApplication(page, installation);
 
-  await openConsolePanel(page);
+  await openSessionList(page);
   await openLocalShell(page);
   await expect(page.getByRole("region", { name: /^Terminal for / })).toBeVisible();
 
-  const screen = await typeIntoConsole(page, "echo survives-a-reload");
+  const screen = await typeIntoTerminal(page, "echo survives-a-reload");
   await expect(screen).toContainText("survives-a-reload", { timeout: 20_000 });
 
   await page.reload();
   await expect(page.getByRole("heading", { name: "sshc" })).toBeVisible();
-  const reopened = await openConsolePanel(page);
+  const reopened = await openSessionList(page);
   const row = reopened.getByRole("list", { name: "Open sessions" }).getByRole("listitem").first();
   await expect(row).toBeVisible();
   await row.getByRole("button").first().click();
@@ -185,14 +185,14 @@ test("keeps the session and replays its scrollback after a reload", async ({ pag
     .toContainText("survives-a-reload", { timeout: 20_000 });
 });
 
-test("refuses to open more consoles than the configured limit", async ({ page, installation }) => {
+test("refuses to open more sessions than the configured limit", async ({ page, installation }) => {
   await installation.write(
     "sshc/metadata.json",
     JSON.stringify({ schemaVersion: 3, embeddedTerminal: { maxSessions: 2, scrollbackBytes: 16384 } }),
   );
   await openApplication(page, installation);
 
-  const panel = await openConsolePanel(page);
+  const panel = await openSessionList(page);
   const openShell = panel.getByRole("button", { name: "New session" });
 
   const rows = panel.getByRole("list", { name: "Open sessions" }).getByRole("listitem");
@@ -206,13 +206,13 @@ test("refuses to open more consoles than the configured limit", async ({ page, i
   await expect(panel).toContainText("limit of 2 open sessions");
 });
 
-test("shows an open console again after a reload instead of claiming there are none", async ({
+test("shows an open session again after a reload instead of claiming there are none", async ({
   page,
   installation,
 }) => {
   await openApplication(page, installation);
 
-  await openConsolePanel(page);
+  await openSessionList(page);
   await openLocalShell(page);
   await expect(page.getByRole("region", { name: /^Terminal for / })).toBeVisible();
 
@@ -235,7 +235,7 @@ test("applies the session limit set from the settings screen", async ({ page, in
     expect.objectContaining({ embeddedTerminal: expect.objectContaining({ maxSessions: 1 }) }),
   );
 
-  const panel = await openConsolePanel(page);
+  const panel = await openSessionList(page);
   const created = page.waitForResponse((response) => {
     const request = response.request();
     return new URL(response.url()).pathname === "/api/v1/terminal/sessions" && request.method() === "POST";
@@ -248,8 +248,8 @@ test("applies the session limit set from the settings screen", async ({ page, in
   expect((await created).status()).toBe(201);
   const listed = await refreshed;
   expect((await listed.json()).maxSessions).toBe(1);
-  const consoles = panel.getByRole("list", { name: "Open sessions" }).getByRole("listitem");
-  await expect(consoles).toHaveCount(1);
+  const terminalSessions = panel.getByRole("list", { name: "Open sessions" }).getByRole("listitem");
+  await expect(terminalSessions).toHaveCount(1);
 
   await expect(panel.getByRole("button", { name: "New session" })).toBeDisabled();
   await expect(panel).toContainText("limit of 1 open sessions");
@@ -264,22 +264,22 @@ test("starts local shells where the setting says", async ({ page, installation }
   await region.getByLabel("Starting directory").fill("~/workspace");
   await saveTerminalSettings(page, region);
 
-  await openConsolePanel(page);
+  await openSessionList(page);
   await openLocalShell(page);
-  const screen = await typeIntoConsole(page, "pwd");
+  const screen = await typeIntoTerminal(page, "pwd");
   await expect(screen).toContainText(
     process.platform === "win32" ? "\\workspace" : "/workspace",
     { timeout: 20_000 },
   );
 });
 
-test("copies what was selected in the console as soon as selection finishes", async ({ page, context, installation }) => {
+test("copies what was selected in the terminal as soon as selection finishes", async ({ page, context, installation }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await openApplication(page, installation);
 
-  await openConsolePanel(page);
+  await openSessionList(page);
   await openLocalShell(page);
-  const screen = await typeIntoConsole(page, "echo selectable-canary");
+  const screen = await typeIntoTerminal(page, "echo selectable-canary");
   await expect(screen).toContainText("selectable-canary", { timeout: 20_000 });
 
   const rows = drawnRows(page);
@@ -296,11 +296,11 @@ test("copies what was selected in the console as soon as selection finishes", as
     .toContain("selectable-canary");
 });
 
-test("pastes the clipboard into the console with right click", async ({ page, context, installation }) => {
+test("pastes the clipboard into the terminal with right click", async ({ page, context, installation }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await openApplication(page, installation);
 
-  await openConsolePanel(page);
+  await openSessionList(page);
   await openLocalShell(page);
   const screen = page.getByRole("region", { name: /^Terminal for / });
   await expect(screen).toContainText(/[$#%>]/, { timeout: 20_000 });
@@ -313,7 +313,7 @@ test("pastes the clipboard into the console with right click", async ({ page, co
 });
 
 for (const chord of ["Control+v", "Control+Shift+V"]) {
-  test(`pastes ${chord} into the console only once`, async ({ page, context, installation }) => {
+  test(`pastes ${chord} into the terminal only once`, async ({ page, context, installation }) => {
     const inputFrames: string[] = [];
     page.on("websocket", (socket) => socket.on("framesent", ({ payload }) => {
       inputFrames.push(typeof payload === "string" ? payload : payload.toString("utf8"));
@@ -321,11 +321,11 @@ for (const chord of ["Control+v", "Control+Shift+V"]) {
     await context.grantPermissions(["clipboard-read", "clipboard-write"]);
     await openApplication(page, installation);
 
-    await openConsolePanel(page);
+    await openSessionList(page);
     await openLocalShell(page);
     const screen = page.getByRole("region", { name: /^Terminal for / });
     await expect(screen).toContainText(/[$#%>]/, { timeout: 20_000 });
-    await typeIntoConsole(page, 'rm -f "$HOME/keyboard-paste-data"');
+    await typeIntoTerminal(page, 'rm -f "$HOME/keyboard-paste-data"');
     await page.evaluate(() => navigator.clipboard.writeText('printf x >> "$HOME/keyboard-paste-data"; '));
 
     await terminalKeyboard(page).focus();
@@ -337,7 +337,7 @@ for (const chord of ["Control+v", "Control+Shift+V"]) {
       pastedFrames[0]!.split("keyboard-paste-data").length - 1,
       JSON.stringify(pastedFrames[0]),
     ).toBe(1);
-    await typeIntoConsole(page, 'echo keyboard-paste-count=$(wc -c < "$HOME/keyboard-paste-data")');
+    await typeIntoTerminal(page, 'echo keyboard-paste-count=$(wc -c < "$HOME/keyboard-paste-data")');
 
     await expect(screen).toContainText("keyboard-paste-count=1", { timeout: 20_000 });
   });
@@ -351,7 +351,7 @@ test("reviews a multiline paste before sending any terminal input", async ({ pag
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await openApplication(page, installation);
 
-  await openConsolePanel(page);
+  await openSessionList(page);
   await openLocalShell(page);
   const screen = page.getByRole("region", { name: /^Terminal for / });
   await expect(screen).toContainText(/[$#%>]/, { timeout: 20_000 });
@@ -389,7 +389,7 @@ test("edits a multiline paste before sending the changed text", async ({ page, c
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await openApplication(page, installation);
 
-  await openConsolePanel(page);
+  await openSessionList(page);
   await openLocalShell(page);
   const screen = page.getByRole("region", { name: /^Terminal for / });
   await expect(screen).toContainText(/[$#%>]/, { timeout: 20_000 });
@@ -424,18 +424,18 @@ test("edits a multiline paste before sending the changed text", async ({ page, c
 test("keeps terminal drawing stable while scrollback search overlays it", async ({ page, installation }) => {
   await openApplication(page, installation);
 
-  await openConsolePanel(page);
+  await openSessionList(page);
   await openLocalShell(page);
-  const console = page.getByRole("region", { name: /^Terminal for / });
-  await expect(console).toContainText(/[$#%>]/, { timeout: 20_000 });
-  await typeIntoConsole(page, "echo search-overlay-canary");
-  await expect(console).toContainText("search-overlay-canary", { timeout: 20_000 });
+  const terminal = page.getByRole("region", { name: /^Terminal for / });
+  await expect(terminal).toContainText(/[$#%>]/, { timeout: 20_000 });
+  await typeIntoTerminal(page, "echo search-overlay-canary");
+  await expect(terminal).toContainText("search-overlay-canary", { timeout: 20_000 });
   const before = await terminalFitRects(page);
 
-  await console.getByRole("button", { name: "Find" }).click();
-  const searchInput = console.getByRole("textbox", { name: "Search terminal output" });
+  await terminal.getByRole("button", { name: "Find" }).click();
+  const searchInput = terminal.getByRole("textbox", { name: "Search terminal output" });
   await expect(searchInput).toBeVisible();
-  await console.getByRole("button", { name: "Use regular expression" }).click();
+  await terminal.getByRole("button", { name: "Use regular expression" }).click();
   await searchInput.fill("search-overlay-(canary|missing)");
   await expect(searchInput.locator("..").getByRole("status")).toHaveText(/\d+\/\d+/);
   const opened = await terminalFitRects(page);
@@ -443,12 +443,12 @@ test("keeps terminal drawing stable while scrollback search overlays it", async 
   expect(Math.abs(opened.root.height - before.root.height)).toBeLessThanOrEqual(1);
   expect(opened.root.y + opened.root.height).toBeLessThanOrEqual(opened.host.y + opened.host.height + 1);
 
-  await console.getByRole("button", { name: "Close search" }).click();
-  await expect(console.getByRole("textbox", { name: "Search terminal output" })).toHaveCount(0);
+  await terminal.getByRole("button", { name: "Close search" }).click();
+  await expect(terminal.getByRole("textbox", { name: "Search terminal output" })).toHaveCount(0);
   await expect.poll(async () => Math.abs((await terminalFitRects(page)).root.height - before.root.height)).toBeLessThanOrEqual(1);
 });
 
-test("can turn automatic selection copy off for an already open console", async ({
+test("can turn automatic selection copy off for an already open session", async ({
   page,
   context,
   installation,
@@ -457,16 +457,16 @@ test("can turn automatic selection copy off for an already open console", async 
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await openApplication(page, installation);
 
-  const panel = await openConsolePanel(page);
+  const panel = await openSessionList(page);
   await openLocalShell(page);
-  const screen = await typeIntoConsole(page, "echo copy-setting-canary");
+  const screen = await typeIntoTerminal(page, "echo copy-setting-canary");
   await expect(screen).toContainText("copy-setting-canary", { timeout: 20_000 });
 
   const settings = await openLoadedTerminalSettings(page);
   await settings.getByRole("checkbox", { name: "Copy selected text automatically" }).uncheck();
   await saveTerminalSettings(page, settings);
 
-  await reopenFirstConsole(panel);
+  await reopenFirstSession(panel);
   await page.evaluate(() => navigator.clipboard.writeText("clipboard-sentinel"));
   const rows = drawnRows(page);
   const box = await rows.boundingBox();
@@ -484,7 +484,7 @@ test("can turn automatic selection copy off for an already open console", async 
 test("fits the terminal inside the space it was given", async ({ page, installation }) => {
   await openApplication(page, installation);
 
-  await openConsolePanel(page);
+  await openSessionList(page);
   await openLocalShell(page);
   await expect(page.getByRole("region", { name: /^Terminal for / })).toBeVisible();
 
@@ -499,13 +499,13 @@ test("fits the terminal inside the space it was given", async ({ page, installat
   expect(measured.rows).toBeLessThanOrEqual(measured.frame);
 });
 
-test("keeps the top of the navigation still while the console list scrolls", async ({
+test("keeps the top of the navigation still while the session list scrolls", async ({
   page,
   installation,
 }) => {
   await openApplication(page, installation);
 
-  const panel = await openConsolePanel(page);
+  const panel = await openSessionList(page);
   const anchor = panel.getByRole("link", { name: "Connections", exact: true });
   const before = await anchor.boundingBox();
 
@@ -531,7 +531,7 @@ test("keeps the top of the navigation still while the console list scrolls", asy
 test("closes every open connection from the settings screen", async ({ page, installation }) => {
   await openApplication(page, installation);
 
-  const panel = await openConsolePanel(page);
+  const panel = await openSessionList(page);
   const rows = panel.getByRole("list", { name: "Open sessions" }).getByRole("listitem");
   await openLocalShell(page);
   await expect(rows).toHaveCount(1);
@@ -545,14 +545,14 @@ test("closes every open connection from the settings screen", async ({ page, ins
   await page.getByRole("button", { name: "Close them all" }).click();
 
   await expect(region.getByText("0 open")).toBeVisible();
-  await openConsolePanel(page);
+  await openSessionList(page);
   await expect(rows).toHaveCount(0);
 });
 
 test("force closes a live local shell with one confirmation", async ({ page, installation }) => {
   await openApplication(page, installation);
 
-  const panel = await openConsolePanel(page);
+  const panel = await openSessionList(page);
   const rows = panel.getByRole("list", { name: "Open sessions" }).getByRole("listitem");
   await openLocalShell(page);
   await expect(rows).toHaveCount(1);
@@ -575,7 +575,7 @@ test("force closes a live local shell with one confirmation", async ({ page, ins
 test("previews and closes a live connection immediately while Shift is held", async ({ page, installation }) => {
   await openApplication(page, installation);
 
-  const panel = await openConsolePanel(page);
+  const panel = await openSessionList(page);
   const rows = panel.getByRole("list", { name: "Open sessions" }).getByRole("listitem");
   await openLocalShell(page);
   await expect(rows).toHaveCount(1);
@@ -622,7 +622,7 @@ test("moves to its own screen and leaves the connection detail alone", async ({ 
   await expect(page.getByRole("region", { name: /^Terminal for / })).toBeHidden();
 });
 
-test("shows why a connection failed in the console itself", async ({ page, installation }) => {
+test("shows why a connection failed in the terminal itself", async ({ page, installation }) => {
   await installation.write(
     "conf.d/20-refused.conf",
     ["Host refused", "\tHostName 127.0.0.1", "\tPort 1", "\tConnectTimeout 2", ""].join("\n"),
@@ -642,9 +642,9 @@ test("shows why a connection failed in the console itself", async ({ page, insta
 test("tells the pseudo-terminal how big it is as soon as it attaches", async ({ page, installation }) => {
   await openApplication(page, installation);
 
-  await openConsolePanel(page);
+  await openSessionList(page);
   await openLocalShell(page);
-  const screen = await typeIntoConsole(page, shellSays.size);
+  const screen = await typeIntoTerminal(page, shellSays.size);
   await expect(screen).toContainText(/\d+-\d+/, { timeout: 20_000 });
 
   const reported = (await screen.innerText()).match(/(\d+)-(\d+)/);
@@ -657,18 +657,18 @@ test("tells the pseudo-terminal how big it is as soon as it attaches", async ({ 
 test("keeps the same terminal alive while another screen is shown", async ({ page, installation }) => {
   await openApplication(page, installation);
 
-  await openConsolePanel(page);
+  await openSessionList(page);
   await openLocalShell(page);
-  const screen = await typeIntoConsole(page, "echo stays-mounted");
+  const screen = await typeIntoTerminal(page, "echo stays-mounted");
   await expect(screen).toContainText("stays-mounted", { timeout: 20_000 });
 
   const sameTerminal = await markTerminal(page, "1");
-  await typeIntoConsole(page, shellSays.lateEcho("late-42"));
+  await typeIntoTerminal(page, shellSays.lateEcho("late-42"));
 
   await openSettingsPage(page, "Engine");
   await expect(screen).toBeHidden();
 
-  const reopened = await openConsolePanel(page);
+  const reopened = await openSessionList(page);
   await reopened
     .getByRole("list", { name: "Open sessions" })
     .getByRole("listitem")
@@ -686,20 +686,20 @@ test("keeps the same terminal alive while another screen is shown", async ({ pag
 test("does not hand npm's own environment to the shell", async ({ page, installation }) => {
   await openApplication(page, installation);
 
-  await openConsolePanel(page);
+  await openSessionList(page);
   await openLocalShell(page);
-  const screen = await typeIntoConsole(page, 'echo "prefix=[${npm_config_prefix}]"');
+  const screen = await typeIntoTerminal(page, 'echo "prefix=[${npm_config_prefix}]"');
 
   await expect(screen).toContainText("prefix=[]", { timeout: 20_000 });
 });
 
-test("paints the console in the colour scheme that was chosen", async ({ page, installation }) => {
+test("paints the terminal in the colour scheme that was chosen", async ({ page, installation }) => {
   await seedTerminalSettings(installation);
   await openApplication(page, installation);
 
-  const panel = await openConsolePanel(page);
+  const panel = await openSessionList(page);
   await openLocalShell(page);
-  const screen = await typeIntoConsole(page, shellSays.redWord("zzred"));
+  const screen = await typeIntoTerminal(page, shellSays.redWord("zzred"));
   await expect(screen).toContainText("zzred", { timeout: 20_000 });
 
   const surface = () => surfaceToken(page, "--ui-term-bg");
@@ -715,18 +715,18 @@ test("paints the console in the colour scheme that was chosen", async ({ page, i
   await settings.getByLabel("Colour scheme").selectOption("dracula");
   await saveTerminalSettings(page, settings);
 
-  await reopenFirstConsole(panel);
+  await reopenFirstSession(panel);
   await expect.poll(surface).toBe("#282a36");
   await expect.poll(drawnRed).toBe("rgb(255, 85, 85)");
   expect(beforeSurface).not.toBe("#282a36");
   expect(beforeRed).not.toBe("rgb(255, 85, 85)");
 });
 
-test("loads the font it ships and hands it to the console", async ({ page, installation }) => {
+test("loads the font it ships and hands it to the terminal", async ({ page, installation }) => {
   await seedTerminalSettings(installation);
   await openApplication(page, installation);
 
-  const panel = await openConsolePanel(page);
+  const panel = await openSessionList(page);
   await openLocalShell(page);
   await expect(page.getByRole("region", { name: /^Terminal for / })).toBeVisible();
 
@@ -737,7 +737,7 @@ test("loads the font it ships and hands it to the console", async ({ page, insta
   await settings.getByLabel("Font family").selectOption("jetbrains-mono");
   await saveTerminalSettings(page, settings);
 
-  await reopenFirstConsole(panel);
+  await reopenFirstSession(panel);
   await expect.poll(family).toContain("JetBrains Mono");
   await expect
     .poll(async () => page.evaluate(() => document.fonts.check('13px "JetBrains Mono"')))
@@ -748,7 +748,7 @@ test("wears the image that was brought in, and gets out of its way", async ({ pa
   await seedTerminalSettings(installation);
   await openApplication(page, installation);
 
-  const panel = await openConsolePanel(page);
+  const panel = await openSessionList(page);
   await openLocalShell(page);
   await expect(page.getByRole("region", { name: /^Terminal for / })).toBeVisible();
 
@@ -776,7 +776,7 @@ test("wears the image that was brought in, and gets out of its way", async ({ pa
   await library.getByRole("button", { name: "Use this image", exact: true }).click();
   await saveTerminalSettings(page, settings);
 
-  await reopenFirstConsole(panel);
+  await reopenFirstSession(panel);
   const wiring = {
     image: await surfaceBackgroundImage(page),
     viewport: await viewportBackground(page),
@@ -791,14 +791,14 @@ test("wears the image that was brought in, and gets out of its way", async ({ pa
   expect(saved.request().postDataJSON()).not.toHaveProperty("appearance");
   await expect(cleared).toContainText("Saved");
 
-  await reopenFirstConsole(panel);
+  await reopenFirstSession(panel);
   await expect.poll(() => surfaceBackgroundImage(page)).toBe("none");
 });
 
 
-test("selects only the visible screen and opens a console from row padding", async ({ page, installation }) => {
+test("selects only the visible screen and opens a session from row padding", async ({ page, installation }) => {
   await openApplication(page, installation);
-  const panel = await openConsolePanel(page);
+  const panel = await openSessionList(page);
   await openLocalShell(page);
   const row = panel.getByRole("list", { name: "Open sessions" }).getByRole("listitem").first();
   await expect(row.locator("[aria-current=true]")).toHaveCount(1);
@@ -807,7 +807,7 @@ test("selects only the visible screen and opens a console from row padding", asy
     await expect(row.locator("[aria-current]")).toHaveCount(0);
     // Bottom-right padding, below the actual action buttons, belongs to the row.
     const box = await row.boundingBox();
-    if (box === null) throw new Error("missing console row");
+    if (box === null) throw new Error("missing session row");
     await page.mouse.click(box.x + box.width - 3, box.y + box.height - 3);
     await expect(row.locator("[aria-current=true]")).toHaveCount(1);
     await expect(page.getByRole("region", { name: /^Terminal for / })).toBeVisible();

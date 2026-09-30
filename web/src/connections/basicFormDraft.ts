@@ -12,6 +12,7 @@ import { directIdentityFields, isConcreteIdentityValue } from "./authenticationP
 import { deriveBasicField, type BasicFieldState, type BasicKeyword } from "./basicFields";
 import type { Translate } from "../i18n/context";
 import type { ConnectionSecretsModel } from "./useConnectionSecrets";
+import { meetsMasterPasswordMinimum } from "../secrets/masterPasswordLength";
 
 export type PasswordAction = UpdateConnectionPassword["kind"];
 export type TOTPAction = UpdateConnectionTOTP["kind"];
@@ -273,8 +274,7 @@ export function deriveBasicForm(
   const needsVault = (changesPassword && !passwordResourcesReady) ||
     (hasKeyPassphraseDraft && !keyPassphraseResourcesReady) ||
     (changesTOTP && !totpResourcesReady);
-  const minimum = vault?.minPassphraseLength ?? 12;
-  const canOpenVault = vault !== null && draft.masterPassword.length >= minimum &&
+  const canOpenVault = vault !== null && meetsMasterPasswordMinimum(draft.masterPassword, vault.minPassphraseLength) &&
     (vault.exists || draft.masterConfirmation === draft.masterPassword);
 
   function request(): UpdateConnectionRequest {

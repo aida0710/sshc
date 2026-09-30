@@ -1,11 +1,6 @@
-import { useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { useTranslate } from "../i18n/context";
 import { connectionLocation } from "../routing/connectionRoute";
-import { Icon } from "../ui/icons";
-import { useDismissibleLayer } from "../ui/useDismissibleLayer";
-import { useMenuKeyboard } from "../ui/useMenuKeyboard";
-import { useAnchoredMenu } from "../ui/useAnchoredMenu";
+import { ActionMenu } from "../ui/ActionMenu";
 
 type ConnectionActionsProps = {
   alias: string;
@@ -25,68 +20,16 @@ export function ConnectionActions({
   onConnect,
 }: ConnectionActionsProps) {
   const t = useTranslate();
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  useDismissibleLayer({
-    open,
-    containerRefs: [rootRef, menuRef],
-    onDismiss: () => setOpen(false),
-    returnFocusRef: triggerRef,
-  });
-  useMenuKeyboard({ open, menuRef, onClose: () => setOpen(false) });
-
-  useAnchoredMenu({ open, anchorRef: triggerRef, menuRef });
-
   const settingsLocation = connectionLocation({ path, alias, panel: "Basic", advanced: "Jump" });
 
   return (
-    <div ref={rootRef} className="relative shrink-0">
-      <button
-        ref={triggerRef}
-        type="button"
-        aria-label={t("home.connectionActions", { alias })}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        onClick={() => setOpen((current) => !current)}
-        className="pointer-events-auto flex size-8 items-center justify-center rounded-md text-ink-muted hover:bg-hover hover:text-ink"
-      >
-        <Icon name="moreHorizontal" className="size-4" />
-      </button>
-      {open ? createPortal(
-        <div
-          ref={menuRef}
-          role="menu"
-          className="fixed z-50 w-56 overflow-y-auto rounded-lg border border-line bg-card p-1 shadow-lg"
-        >
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              setOpen(false);
-              onOpenSettings(settingsLocation);
-            }}
-            className="block min-h-10 w-full rounded-md px-3 py-2 text-left text-sm text-ink hover:bg-hover focus:bg-hover focus:outline-none md:min-h-0"
-          >
-            {t("home.openConnectionSettings")}
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            disabled={busy}
-            onClick={() => {
-              setOpen(false);
-              onConnect();
-            }}
-            className="block min-h-10 w-full rounded-md px-3 py-2 text-left text-sm text-ink hover:bg-hover focus:bg-hover focus:outline-none disabled:text-ink-faint md:min-h-0"
-          >
-            {opening ? t("home.opening") : t("home.connect")}
-          </button>
-        </div>,
-        document.body,
-      ) : null}
-    </div>
+    <ActionMenu
+      label={t("home.connectionActions", { alias })}
+      triggerClassName="pointer-events-auto flex size-8 items-center justify-center rounded-md text-ink-muted hover:bg-hover hover:text-ink"
+      items={[
+        { label: t("home.openConnectionSettings"), onSelect: () => onOpenSettings(settingsLocation) },
+        { label: opening ? t("home.opening") : t("home.connect"), onSelect: onConnect, disabled: busy },
+      ]}
+    />
   );
 }

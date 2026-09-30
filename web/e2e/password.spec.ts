@@ -47,10 +47,10 @@ test("selecting a key removes the stored password assignment and returning to ag
   await page.getByRole("navigation", { name: "Connections" }).getByRole("button", { name: "bastion" }).click();
   panel = page.getByRole("region", { name: "Authentication" });
   const keyChoice = panel.getByLabel("SSH private key");
-  const keyID = await keyChoice.getByRole("option", { name: /id_exclusive_auth/ }).getAttribute("value");
-  expect(keyID).not.toBeNull();
+  const keyId = await keyChoice.getByRole("option", { name: /id_exclusive_auth/ }).getAttribute("value");
+  expect(keyId).not.toBeNull();
 
-  await keyChoice.selectOption(keyID);
+  await keyChoice.selectOption(keyId);
   await expect(panel.getByLabel("Stored password action")).toHaveCount(0);
   await expect(panel.getByText(/will remove this connection's assignment/)).toBeVisible();
   const connectionURL = page.url();

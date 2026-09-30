@@ -12,14 +12,10 @@ import {
 } from "../ui/form";
 import { Button, Card, Notice } from "../ui/surface";
 import { MetricCard, MetricGrid, PageHeader } from "../ui/page";
-import {
-  compareText,
-  nextSort,
-  ordered,
-  SortableTableHeader,
-  type SortDirection,
-} from "../ui/tableSort";
+import { SortableTableHeader } from "../ui/tableSort";
+import { useTableSort, type SortValue } from "../ui/useTableSort";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
+import { useRequestGeneration } from "../ui/useRequestGeneration";
 
 type KnownHostsPanelProps = { api?: KnownHostsApi };
 type CandidateSort = "host" | "type" | "fingerprint" | "trust";
@@ -39,68 +35,70 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
   const [listing, setListing] = useState<KnownHostsResponse | null>(null);
   const [pending, setPending] = useState<KnownHostEntry | null>(null);
   const [scanHost, setScanHost] = useState("");
-  const [notice, setNotice] = useState("");
+  // スキャンの結果には、身元を証明しないという注意を必ず添える。文は engine の英語の
+  // notice ではなく、画面の言語で出す。
+  const [scanned, setScanned] = useState(false);
   const [candidates, setCandidates] = useState<KnownHostCandidate[]>([]);
   const [adding, setAdding] = useState<KnownHostCandidate | null>(null);
   const [expectedFingerprint, setExpectedFingerprint] = useState("");
   const [acknowledged, setAcknowledged] = useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
-  const [candidateSort, setCandidateSort] = useState<{ key: CandidateSort; direction: SortDirection }>({
-    key: "host",
-    direction: "ascending",
-  });
-  const [trustedSort, setTrustedSort] = useState<{ key: TrustedSort; direction: SortDirection }>({
-    key: "host",
-    direction: "ascending",
-  });
+  const [deleteError, setDeleteError] = useState("");
+  const candidateSort = useTableSort<CandidateSort>("host");
+  const trustedSort = useTableSort<TrustedSort>("host");
+
+  // The search runs on every keystroke, and answers can arrive out of order:
+  // only the answer to the latest query may replace the listing.
+  const listingRequests = useRequestGeneration();
 
   useEffect(() => {
-    let active = true;
+    const isCurrent = listingRequests.begin();
     void api
       .knownHosts("")
       .then((result) => {
-        if (active) setListing(result);
+        if (isCurrent()) setListing(result);
       })
       .catch((failure: unknown) => {
-        if (active) setError(failureMessage(t, failure, t("kh.unreadable")));
+        if (isCurrent()) setError(failureMessage(t, failure, t("kh.unreadable")));
       });
-    return () => {
-      active = false;
-    };
-  }, [api, t]);
+    return listingRequests.retire;
+  }, [api, listingRequests, t]);
 
   async function search(next: string) {
+    const isCurrent = listingRequests.begin();
     setError("");
     try {
-      setListing(await api.knownHosts(next));
+      const result = await api.knownHosts(next);
+      if (isCurrent()) setListing(result);
     } catch (failure) {
-      setError(failureMessage(t, failure, t("kh.unreadable")));
+      if (isCurrent()) setError(failureMessage(t, failure, t("kh.unreadable")));
     }
   }
 
+  // 削除の失敗は確認ダイアログの中に出し、ダイアログは開いたままにする。
   async function confirmDelete() {
     if (!pending || !listing) return;
-    setError("");
-    try {
-      const result = await api.deleteKnownHosts(
-        [{ line: pending.line, digest: pending.digest }],
-        listing.path,
-      );
-      setStatus(t("kh.removed", { id: result.transactionId }));
-      setPending(null);
-      await search(query);
-    } catch (failure) {
-      setError(failureMessage(t, failure, t("kh.removeFailed")));
-      setPending(null);
+    setDeleteError("");
+    const removed = await api
+      .deleteKnownHosts([{ line: pending.line, digest: pending.digest }], listing.path)
+      .catch((failure: unknown) => {
+        setDeleteError(failureMessage(t, failure, t("kh.removeFailed")));
+        return null;
+      });
+    if (removed === null) {
+      return;
     }
+    setStatus(t("kh.removed", { id: removed.transactionId }));
+    setPending(null);
+    await search(query);
   }
 
   async function scan() {
     setError("");
     try {
       const result = await api.scanKnownHosts(scanHost, 22);
-      setNotice(result.notice);
+      setScanned(true);
       setCandidates(result.candidates);
     } catch {
       setError(t("kh.scanFailed"));
@@ -153,27 +151,26 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
   }
 
   const provenOrAcknowledged = expectedFingerprint.trim() !== "" || acknowledged;
-  const displayedCandidates = ordered(candidates, (left, right) => {
-    if (candidateSort.key === "type") return compareText(left.keyType, right.keyType);
-    if (candidateSort.key === "fingerprint") return compareText(left.fingerprint, right.fingerprint);
-    if (candidateSort.key === "trust") return 0;
-    return compareText(left.host, right.host);
-  }, candidateSort.direction);
-  const displayedEntries = ordered(listing?.entries ?? [], (left, right) => {
-    if (trustedSort.key === "type") return compareText(left.keyType, right.keyType);
-    if (trustedSort.key === "fingerprint") return compareText(left.fingerprint, right.fingerprint);
-    const leftHost = left.hashed ? t("kh.hashed") : left.hosts.join(", ");
-    const rightHost = right.hashed ? t("kh.hashed") : right.hosts.join(", ");
-    return compareText(leftHost, rightHost);
-  }, trustedSort.direction);
-
-  function changeCandidateSort(key: CandidateSort) {
-    setCandidateSort((current) => nextSort(current.key, current.direction, key));
-  }
-
-  function changeTrustedSort(key: TrustedSort) {
-    setTrustedSort((current) => nextSort(current.key, current.direction, key));
-  }
+  // スキャンで見つけた鍵は、どれもまだ確かめていない。
+  const candidateTrustText = t("kh.unverified");
+  const candidateSortValue = (candidate: KnownHostCandidate, column: CandidateSort): SortValue => {
+    switch (column) {
+      case "host": return candidate.host;
+      case "type": return candidate.keyType;
+      case "fingerprint": return candidate.fingerprint;
+      case "trust": return candidateTrustText;
+    }
+  };
+  const trustedHostText = (entry: KnownHostEntry) => (entry.hashed ? t("kh.hashed") : entry.hosts.join(", "));
+  const trustedSortValue = (entry: KnownHostEntry, column: TrustedSort): SortValue => {
+    switch (column) {
+      case "host": return trustedHostText(entry);
+      case "type": return entry.keyType;
+      case "fingerprint": return entry.fingerprint;
+    }
+  };
+  const displayedCandidates = candidateSort.sorted(candidates, candidateSortValue);
+  const displayedEntries = trustedSort.sorted(listing?.entries ?? [], trustedSortValue);
 
   return (
     <section aria-label={t("kh.heading")} className="mx-auto flex w-full max-w-5xl flex-col gap-6 [&_button]:min-h-10 sm:[&_button]:min-h-0">
@@ -220,17 +217,17 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
           </div>
         </div>
 
-        {notice ? <p className="border-t border-notice-line bg-notice px-4 py-3 text-sm text-notice-ink">{notice}</p> : null}
+        {scanned ? <p className="border-t border-notice-line bg-notice px-4 py-3 text-sm text-notice-ink">{t("kh.unverifiedNotice")}</p> : null}
         {candidates.length > 0 ? (
           <div className="overflow-x-auto px-4 py-3">
             <table className="w-full text-sm">
               <caption className="mb-2 text-left text-ink-muted">{t("kh.scanCandidates")}</caption>
               <thead>
                 <tr className={tableHeadRow}>
-                  <SortableTableHeader column="host" activeColumn={candidateSort.key} direction={candidateSort.direction} onSort={changeCandidateSort} className={tableHeadCell}>{t("kh.columnHost")}</SortableTableHeader>
-                  <SortableTableHeader column="type" activeColumn={candidateSort.key} direction={candidateSort.direction} onSort={changeCandidateSort} className={tableHeadCell}>{t("kh.columnType")}</SortableTableHeader>
-                  <SortableTableHeader column="fingerprint" activeColumn={candidateSort.key} direction={candidateSort.direction} onSort={changeCandidateSort} className={tableHeadCell}>{t("kh.columnFingerprint")}</SortableTableHeader>
-                  <SortableTableHeader column="trust" activeColumn={candidateSort.key} direction={candidateSort.direction} onSort={changeCandidateSort} className={tableHeadCell}>{t("kh.columnTrust")}</SortableTableHeader>
+                  <SortableTableHeader column="host" {...candidateSort.headerProps} className={tableHeadCell}>{t("kh.columnHost")}</SortableTableHeader>
+                  <SortableTableHeader column="type" {...candidateSort.headerProps} className={tableHeadCell}>{t("kh.columnType")}</SortableTableHeader>
+                  <SortableTableHeader column="fingerprint" {...candidateSort.headerProps} className={tableHeadCell}>{t("kh.columnFingerprint")}</SortableTableHeader>
+                  <SortableTableHeader column="trust" {...candidateSort.headerProps} className={tableHeadCell}>{t("kh.columnTrust")}</SortableTableHeader>
                   <th scope="col" className={tableHeadCell}>{t("kh.columnActions")}</th>
                 </tr>
               </thead>
@@ -241,7 +238,7 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
                     <td className="py-2 pr-3 text-ink-muted">{candidate.keyType}</td>
                     <td className="py-2 pr-3 font-mono text-xs text-ink-muted">{candidate.fingerprint}</td>
 
-                    <td className="py-2 pr-3"><span className="rounded-full bg-notice px-2 py-1 text-xs font-medium text-notice-ink">{t("kh.unverified")}</span></td>
+                    <td className="py-2 pr-3"><span className="rounded-full bg-notice px-2 py-1 text-xs font-medium text-notice-ink">{candidateTrustText}</span></td>
                     <td className="py-2">
                       <Button
                         onClick={() => openAdd(candidate)}
@@ -320,9 +317,9 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
               <caption className="sr-only">{listing.path}</caption>
               <thead className="hidden sm:table-header-group">
                 <tr className={tableHeadRow}>
-                  <SortableTableHeader column="host" activeColumn={trustedSort.key} direction={trustedSort.direction} onSort={changeTrustedSort} className={tableHeadCell}>{t("kh.columnHost")}</SortableTableHeader>
-                  <SortableTableHeader column="type" activeColumn={trustedSort.key} direction={trustedSort.direction} onSort={changeTrustedSort} className={tableHeadCell}>{t("kh.columnType")}</SortableTableHeader>
-                  <SortableTableHeader column="fingerprint" activeColumn={trustedSort.key} direction={trustedSort.direction} onSort={changeTrustedSort} className={tableHeadCell}>{t("kh.columnFingerprint")}</SortableTableHeader>
+                  <SortableTableHeader column="host" {...trustedSort.headerProps} className={tableHeadCell}>{t("kh.columnHost")}</SortableTableHeader>
+                  <SortableTableHeader column="type" {...trustedSort.headerProps} className={tableHeadCell}>{t("kh.columnType")}</SortableTableHeader>
+                  <SortableTableHeader column="fingerprint" {...trustedSort.headerProps} className={tableHeadCell}>{t("kh.columnFingerprint")}</SortableTableHeader>
                   <th scope="col" className={tableHeadCell}>{t("kh.columnActions")}</th>
                 </tr>
               </thead>
@@ -331,7 +328,7 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
                   <tr key={`${item.line}-${item.digest}`} className="grid gap-2 border-b border-line py-3 last:border-b-0 sm:table-row sm:py-0">
                     <td className="flex min-w-0 items-start justify-between gap-4 sm:table-cell sm:py-2 sm:pr-3">
                       <span aria-hidden="true" className="shrink-0 text-xs font-medium uppercase tracking-wide text-ink-muted sm:hidden">{t("kh.columnHost")}</span>
-                      <span className="min-w-0 break-all text-right sm:text-left">{item.hashed ? t("kh.hashed") : item.hosts.join(", ")}</span>
+                      <span className="min-w-0 break-all text-right sm:text-left">{trustedHostText(item)}</span>
                     </td>
                     <td className="flex min-w-0 items-start justify-between gap-4 text-ink-muted sm:table-cell sm:py-2 sm:pr-3">
                       <span aria-hidden="true" className="shrink-0 text-xs font-medium uppercase tracking-wide sm:hidden">{t("kh.columnType")}</span>
@@ -344,7 +341,10 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
                     <td className="flex justify-end sm:table-cell sm:py-2">
                       <Button
                         className="w-full sm:w-auto"
-                        onClick={() => setPending(item)}
+                        onClick={() => {
+                          setDeleteError("");
+                          setPending(item);
+                        }}
                       >
                         {t("kh.delete")}
                       </Button>
@@ -364,8 +364,9 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
           body={<p className="text-sm text-ink-muted">{t("kh.confirmRemove", { line: pending.line, fingerprint: pending.fingerprint })}</p>}
           confirmLabel={t("kh.confirmDelete")}
           cancelLabel={t("kh.cancel")}
-          onConfirm={() => void confirmDelete()}
+          onConfirm={confirmDelete}
           onCancel={() => setPending(null)}
+          error={deleteError}
         />
       )}
     </section>

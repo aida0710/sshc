@@ -2,11 +2,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { failureCode } from "../api/client";
 import { vpnApi, type VPNApi, type VPNOverview, type VPNProfile, type VPNSecrets } from "../api/vpn";
 import { useTranslate } from "../i18n/context";
+import type { NavigateLocationOptions, NavigationBlocker } from "../routing/useSectionRoute";
+import { useDraftDiscardConfirmation } from "../routing/useDraftDiscardConfirmation";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
+import { DiscardDraftDialog } from "../ui/DiscardDraftDialog";
 import { hintText } from "../ui/form";
 import { InputDialog } from "../ui/InputDialog";
 import { PageHeader } from "../ui/page";
 import { PanelState } from "../ui/PanelState";
+import { useRequestGeneration } from "../ui/useRequestGeneration";
 import { Button, Notice } from "../ui/surface";
 import { useAsyncOperation } from "../ui/useAsyncOperation";
 import { usePolling } from "../ui/usePolling";
@@ -26,9 +30,11 @@ import { VPNUnavailableNotice } from "./VPNUnavailableNotice";
 
 type VPNPanelProps = {
   api?: VPNApi;
+  onNavigationBlockerChange?: ((blocker: NavigationBlocker | null) => void) | undefined;
+  onNavigateLocation?: ((url: string, options?: NavigateLocationOptions) => void) | undefined;
 };
 
-export function VPNPanel({ api = vpnApi }: VPNPanelProps) {
+export function VPNPanel({ api = vpnApi, onNavigationBlockerChange, onNavigateLocation }: VPNPanelProps) {
   const t = useTranslate();
   const operation = useAsyncOperation();
   const [overview, setOverview] = useState<VPNOverview | null>(null);
@@ -48,60 +54,70 @@ export function VPNPanel({ api = vpnApi }: VPNPanelProps) {
   // failedProfile は、直前に経路を用意できなかったプロファイルである。失敗の文の
   // 横からそのログを開けるようにする。
   const [failedProfile, setFailedProfile] = useState("");
+  // 編集と作成のフォームに、保存していない入力があるか。画面を離れると入力は消える。
+  const [editFormDirty, setEditFormDirty] = useState(false);
+  const [createFormDirty, setCreateFormDirty] = useState(false);
+  const draftDiscard = useDraftDiscardConfirmation({
+    dirty: editFormDirty || createFormDirty,
+    onNavigationBlockerChange,
+    onNavigateLocation,
+  });
+
+  // 別のプロファイルの編集を開くと、いま開いている編集のフォームは閉じて入力が消えるので、
+  // その入力を変えていれば先に確かめる。作成のフォームは残るので、その入力では確かめない。
+  function openEditor(name: string) {
+    if (editFormDirty) draftDiscard.confirmBefore(() => setEditingProfile(name));
+    else setEditingProfile(name);
+  }
 
   // 一覧を書き換えた応答の世代。操作を始めるときと終えるときに進め、読み始めたあとに
   // 世代が変わった応答は捨てる。遅れて届いたポーリングの応答が、操作の運んだ新しい
   // 一覧を古い一覧で上書きしないためである。
-  const generation = useRef(0);
+  const overviewGeneration = useRequestGeneration();
 
   const describe = useCallback((error: unknown) => describeVPNProblem(t, error) ?? t("vpn.failed"), [t]);
 
   const { run, fail, clearError } = operation;
-  // runWithGeneration は、一覧を返す操作 work を、世代を進めてから走らせ、終わったら
-  // もう一度進める。work が受け取る adoptIfLatest は、応答の一覧を、その間に別の操作が
-  // 始まっていなければ採る。
-  const runWithGeneration = useCallback(
-    async <T,>(work: (adoptIfLatest: (next: VPNOverview) => void) => Promise<T>): Promise<T> => {
-      generation.current += 1;
-      const started = generation.current;
-      setFailedProfile("");
-      try {
-        return await work((next) => {
-          if (generation.current === started) setOverview(next);
-        });
-      } finally {
-        if (generation.current === started) generation.current += 1;
-      }
+  // act は、一覧を返す操作を、画面全体を待たせて走らせる。応答の一覧は、その間に別の操作が
+  // 始まっていなければ採る。失敗の言い方は describeFailure で変えられる。成功したかどうかを返す。
+  const act = useCallback(
+    async (work: () => Promise<VPNOverview>, describeFailure: (error: unknown) => string = describe) => {
+      const isCurrent = overviewGeneration.begin();
+      const succeeded = await run(work, {
+        apply: (next) => {
+          if (isCurrent()) setOverview(next);
+        },
+        describe: describeFailure,
+      });
+      if (isCurrent()) overviewGeneration.retire();
+      return succeeded;
     },
-    [],
+    [describe, overviewGeneration, run],
   );
 
-  // act は、一覧を返す操作を、画面全体を待たせて走らせる。失敗の言い方は describeFailure で
-  // 変えられる。成功したかどうかを返す。
-  const act = useCallback(
-    (work: () => Promise<VPNOverview>, describeFailure: (error: unknown) => string = describe) =>
-      runWithGeneration((adoptIfLatest) => run(work, { apply: adoptIfLatest, describe: describeFailure })),
-    [describe, run, runWithGeneration],
+  // 開いたときは、経路の状態を docker から読むのを待たずに一覧を読む。docker は
+  // mac では1回に1秒前後かかる。経路の状態は、下の読み直しが埋める。以降は、操作の
+  // 応答と読み直しが最新の一覧を運ぶ。
+  const loadOverview = useCallback(
+    () => void act(() => api.vpnOverview({ waitForRoutes: false })),
+    [act, api],
   );
 
   useEffect(() => {
-    // 開いたときは、経路の状態を docker から読むのを待たずに一覧を読む。docker は
-    // mac では1回に1秒前後かかる。経路の状態は、下の読み直しが埋める。以降は、操作の
-    // 応答と読み直しが最新の一覧を運ぶ。
-    void act(() => api.vpnOverview({ waitForRoutes: false }));
-  }, [api, act]);
+    loadOverview();
+  }, [loadOverview]);
 
   // refresh は、一覧を読み直す。読み始めたあとに操作が始まっていれば、その応答の方が
   // 新しいので、読んだ一覧は捨てる。
   const refresh = useCallback(() => {
-    const started = generation.current;
+    const isCurrent = overviewGeneration.observe();
     return api
       .vpnOverview()
       .then((next) => {
-        if (generation.current === started) setOverview(next);
+        if (isCurrent()) setOverview(next);
       })
       .catch(() => undefined);
-  }, [api]);
+  }, [api, overviewGeneration]);
 
   // 経路の状態をまだ確かめていない一覧が届いたら、すぐに確かめに行く。
   const checking = overview?.checking ?? false;
@@ -115,17 +131,18 @@ export function VPNPanel({ api = vpnApi }: VPNPanelProps) {
       setStartingProfiles((current) => new Set(current).add(name));
       abandonedStarts.current.delete(name);
       clearError();
+      // 応答の一覧は、act と同じく、その間に別の操作が始まっていなければ採る。
+      const isCurrent = overviewGeneration.begin();
       try {
-        await runWithGeneration(async (adoptIfLatest) => {
-          try {
-            adoptIfLatest(await api.startVPNRoute(name));
-          } catch (error) {
-            if (abandonedStarts.current.has(name)) return;
-            if (failureCode(error) === "vpn_route_failed") setFailedProfile(name);
-            fail(describe(error));
-          }
-        });
+        const next = await api.startVPNRoute(name);
+        if (isCurrent()) setOverview(next);
+      } catch (error) {
+        if (!abandonedStarts.current.has(name)) {
+          if (failureCode(error) === "vpn_route_failed") setFailedProfile(name);
+          fail(describe(error));
+        }
       } finally {
+        if (isCurrent()) overviewGeneration.retire();
         abandonedStarts.current.delete(name);
         setStartingProfiles((current) => {
           const next = new Set(current);
@@ -134,7 +151,7 @@ export function VPNPanel({ api = vpnApi }: VPNPanelProps) {
         });
       }
     },
-    [api, clearError, describe, fail, runWithGeneration],
+    [api, clearError, describe, fail, overviewGeneration],
   );
 
   // saveProfile は、プロファイルを保存する操作を走らせる。項目の誤りは、フォームの
@@ -207,6 +224,9 @@ export function VPNPanel({ api = vpnApi }: VPNPanelProps) {
       <PanelState
         tone={operation.error === "" ? "loading" : "failed"}
         title={operation.error === "" ? t("vpn.loading") : operation.error}
+        {...(operation.error === ""
+          ? {}
+          : { action: <Button onClick={loadOverview}>{t("shell.bootstrapRetry")}</Button> })}
       />
     );
   }
@@ -242,6 +262,7 @@ export function VPNPanel({ api = vpnApi }: VPNPanelProps) {
                     revealSecrets={api.revealVPNSecrets}
                     onSave={updateProfile}
                     onCancel={() => setEditingProfile("")}
+                    onDirtyChange={setEditFormDirty}
                   />
                 ) : (
                   <VPNProfileCard
@@ -254,7 +275,7 @@ export function VPNPanel({ api = vpnApi }: VPNPanelProps) {
                       onStart: () => void startProfile(name),
                       onStop: () => requestDisconnect(name, status.openConnections),
                       onShowLogs: () => setShownLogs(name),
-                      onEdit: () => setEditingProfile(name),
+                      onEdit: () => openEditor(name),
                       onRename: () => setPendingRename(name),
                       onRemove: () => setPendingRemoval(name),
                     }}
@@ -266,7 +287,11 @@ export function VPNPanel({ api = vpnApi }: VPNPanelProps) {
         </ul>
       )}
 
-      <VPNProfileForm busy={operation.busy} onSave={createProfile} />
+      <VPNProfileForm busy={operation.busy} onSave={createProfile} onDirtyChange={setCreateFormDirty} />
+
+      {draftDiscard.confirming ? (
+        <DiscardDraftDialog id="vpn-draft-discard-heading" onConfirm={draftDiscard.confirmDiscard} onCancel={draftDiscard.keepEditing} />
+      ) : null}
 
       {pendingDisconnect === null ? null : (
         <ConfirmDialog

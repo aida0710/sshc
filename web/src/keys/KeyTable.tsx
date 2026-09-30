@@ -5,13 +5,8 @@ import type { KeyCertificate, KeyInventoryResponse, KeyItem } from "./api";
 import { tableHeadCell, tableHeadRow } from "../ui/form";
 import { describeKeyKind, noteLabels, rowAction, rowDanger, rowPrimary } from "./labels";
 import { keyItemGroups } from "./organizer";
-import {
-  compareText,
-  nextSort,
-  ordered,
-  SortableTableHeader,
-  type SortDirection,
-} from "../ui/tableSort";
+import { SortableTableHeader } from "../ui/tableSort";
+import { useTableSort, type SortValue } from "../ui/useTableSort";
 
 type KeySort = "file" | "kind" | "state";
 
@@ -54,19 +49,17 @@ export function KeyTable({
 }) {
   const t = useTranslate();
   const [expandedRelated, setExpandedRelated] = useState<ReadonlySet<string>>(new Set());
-  const [sort, setSort] = useState<{ key: KeySort; direction: SortDirection }>({
-    key: "file",
-    direction: "ascending",
-  });
-  const grouped = keyItemGroups(items);
-  const compareItems = (left: KeyItem, right: KeyItem) => {
-    if (sort.key === "kind") {
-      return compareText(`${left.kind}\u0000${left.algorithm}\u0000${left.bits}`, `${right.kind}\u0000${right.algorithm}\u0000${right.bits}`);
+  const keySort = useTableSort<KeySort>("file");
+  // 種類と状態のセルは1つの文ではなく、ラベルやバッジを並べて出す。並べ替えは、
+  // それらの元の値をつないだ文字列で比べる。
+  const keySortValue = (item: KeyItem, column: KeySort): SortValue => {
+    switch (column) {
+      case "file": return item.relativePath;
+      case "kind": return `${item.kind}\u0000${item.algorithm}\u0000${item.bits}`;
+      case "state": return keyState(item, inventory);
     }
-    if (sort.key === "state") return compareText(keyState(left, inventory), keyState(right, inventory));
-    return compareText(left.relativePath, right.relativePath);
   };
-  const sortedGroups = ordered(grouped, (left, right) => compareItems(left.primary, right.primary), sort.direction);
+  const sortedGroups = keySort.sorted(keyItemGroups(items), (group, column) => keySortValue(group.primary, column));
   const displayed = sortedGroups.flatMap((group) => {
     const relatedExpanded = revealRelated || expandedRelated.has(group.primary.id);
     return [
@@ -77,7 +70,7 @@ export function KeyTable({
         relatedTo: null as string | null,
       },
       ...(relatedExpanded
-        ? ordered(group.related, compareItems, sort.direction).map((item) => ({
+        ? keySort.sorted(group.related, keySortValue).map((item) => ({
             item,
             relatedCount: 0,
             relatedExpanded: false,
@@ -96,10 +89,6 @@ export function KeyTable({
     });
   }
 
-  function changeSort(key: KeySort) {
-    setSort((current) => nextSort(current.key, current.direction, key));
-  }
-
   return (
     <table className="block w-full text-left text-sm md:table md:min-w-[56rem]">
       <caption className="sr-only">{t("keys.tableCaption")}</caption>
@@ -108,9 +97,9 @@ export function KeyTable({
           <th scope="col" className={`${tableHeadCell} w-12 pl-3`}>
             <span className="sr-only">{t("keys.colChoose")}</span>
           </th>
-          <SortableTableHeader column="file" activeColumn={sort.key} direction={sort.direction} onSort={changeSort} className={`${tableHeadCell} w-[30%] whitespace-nowrap`}>{t("keys.colFile")}</SortableTableHeader>
-          <SortableTableHeader column="kind" activeColumn={sort.key} direction={sort.direction} onSort={changeSort} className={`${tableHeadCell} w-[18%] whitespace-nowrap`}>{t("keys.colKind")}</SortableTableHeader>
-          <SortableTableHeader column="state" activeColumn={sort.key} direction={sort.direction} onSort={changeSort} className={`${tableHeadCell} w-[20%] whitespace-nowrap`}>{t("keys.colState")}</SortableTableHeader>
+          <SortableTableHeader column="file" {...keySort.headerProps} className={`${tableHeadCell} w-[30%] whitespace-nowrap`}>{t("keys.colFile")}</SortableTableHeader>
+          <SortableTableHeader column="kind" {...keySort.headerProps} className={`${tableHeadCell} w-[18%] whitespace-nowrap`}>{t("keys.colKind")}</SortableTableHeader>
+          <SortableTableHeader column="state" {...keySort.headerProps} className={`${tableHeadCell} w-[20%] whitespace-nowrap`}>{t("keys.colState")}</SortableTableHeader>
           <th scope="col" className={`${tableHeadCell} whitespace-nowrap text-right`}>{t("keys.colActions")}</th>
         </tr>
       </thead>

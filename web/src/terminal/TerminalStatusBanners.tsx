@@ -6,6 +6,23 @@ import type { StreamLink } from "./streamLink";
 
 const notice = "shrink-0 border-b border-notice-line bg-notice px-3 py-1.5 text-xs text-notice-ink";
 
+function StreamLinkMessage({ link }: { link: Exclude<StreamLink, { phase: "live" }> }) {
+  const t = useTranslate();
+  if (link.phase === "connecting") {
+    return link.attempt === 1 ? t("terminal.linkConnecting") : t("terminal.linkRetrying", { attempt: String(link.attempt) });
+  }
+  if (link.phase === "stopped") return link.gone ? t("terminal.linkGone") : t("terminal.linkStopped");
+  // 秒読みは毎秒変わるので読み上げず、試行の回数が変わったときだけ読み上げる。
+  return (
+    <>
+      <span aria-hidden="true">
+        {t("terminal.linkWaiting", { seconds: String(link.seconds), attempt: String(link.attempt) })}
+      </span>
+      <span className="sr-only">{t("terminal.linkWaitingAnnouncement", { attempt: String(link.attempt) })}</span>
+    </>
+  );
+}
+
 // The strip of one-line notices between the terminal header and the screen:
 // the engine's reconnect progress, the browser's own stream link, and how
 // the program ended. Each row only appears while it has something to say.
@@ -94,15 +111,7 @@ export function TerminalStatusBanners({ session, problem, link, onLinkNow, onLin
       {link.phase === "live" ? null : (
         <div role="status" className={`flex items-center gap-2 ${notice}`}>
           <p className="min-w-0 grow">
-            {link.phase === "connecting"
-              ? link.attempt === 1
-                ? t("terminal.linkConnecting")
-                : t("terminal.linkRetrying", { attempt: String(link.attempt) })
-              : link.phase === "waiting"
-                ? t("terminal.linkWaiting", { seconds: String(link.seconds), attempt: String(link.attempt) })
-                : link.gone
-                  ? t("terminal.linkGone")
-                  : t("terminal.linkStopped")}
+            <StreamLinkMessage link={link} />
           </p>
           {link.phase === "stopped" && link.gone ? null : (
             <button

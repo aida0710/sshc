@@ -28,10 +28,8 @@ func (s *Service) ConnectionVPN(alias string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	for _, host := range stored.Hosts {
-		if host.Identity == identity {
-			return host.VPN, nil
-		}
+	if index := hostMetadataIndex(stored.Hosts, identity); index >= 0 {
+		return stored.Hosts[index].VPN, nil
 	}
 	return "", nil
 }
@@ -94,15 +92,9 @@ func (s *Service) SetConnectionVPN(alias, profile string) (SaveResult, error) {
 	if err != nil {
 		return SaveResult{}, err
 	}
-	updated := false
-	for index, host := range stored.Hosts {
-		if host.Identity == identity {
-			stored.Hosts[index].VPN = profile
-			updated = true
-			break
-		}
-	}
-	if !updated {
+	if index := hostMetadataIndex(stored.Hosts, identity); index >= 0 {
+		stored.Hosts[index].VPN = profile
+	} else {
 		stored.Hosts = append(stored.Hosts, HostMetadata{Identity: identity, VPN: profile})
 	}
 	return s.commitMetadata(stored, precondition, "vpn.connection.bind")

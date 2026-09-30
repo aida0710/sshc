@@ -1,11 +1,16 @@
-import { useEffect, useMemo, useState } from "react";
-import { failureCode } from "../api/client";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import { Button, Notice } from "../ui/surface";
+import { useAsyncOperation } from "../ui/useAsyncOperation";
 import { PasswordInput } from "../ui/PasswordField";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
+import { DiscardDraftDialog } from "../ui/DiscardDraftDialog";
+import type { NavigateLocationOptions, NavigationBlocker } from "../routing/useSectionRoute";
+import { useDraftDiscardConfirmation } from "../routing/useDraftDiscardConfirmation";
+import { PanelState } from "../ui/PanelState";
 import { usePolling } from "../ui/usePolling";
+import { describeSnippetFailure } from "./snippetFailure";
 import {
   snippetsApi,
   type Job,
@@ -95,12 +100,29 @@ const blank: SnippetDraft = {
   variables: [],
 };
 
+// draftOf は、保存済みのスニペット（新規なら空）を編集欄の形にする。未保存の変更の
+// 有無は、編集欄をこれと比べて決める。
+function draftOf(snippet: Snippet | null): SnippetDraft {
+  return snippet === null
+    ? blank
+    : {
+        name: snippet.name,
+        description: snippet.description ?? "",
+        command: snippet.command,
+        variables: snippet.variables,
+      };
+}
+
 export function SnippetsPanel({
   aliases,
   selectedSnippetId = null,
+  onNavigationBlockerChange,
+  onNavigateLocation,
 }: {
   aliases: string[];
   selectedSnippetId?: string | null;
+  onNavigationBlockerChange?: ((blocker: NavigationBlocker | null) => void) | undefined;
+  onNavigateLocation?: ((url: string, options?: NavigateLocationOptions) => void) | undefined;
 }) {
   const t = useTranslate();
   const [snippets, setSnippets] = useState<Snippet[]>([]);
@@ -111,10 +133,15 @@ export function SnippetsPanel({
   const [inputs, setInputs] = useState<Record<string, string>>({});
   const [preview, setPreview] = useState<Preview | null>(null);
   const [job, setJob] = useState<Job | null>(null);
-  const [startupAlias, setStartupAlias] = useState(aliases[0] ?? "");
-  const [problem, setProblem] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [chosenStartupAlias, setChosenStartupAlias] = useState("");
+  const [libraryState, setLibraryState] = useState<"loading" | "ready" | "failed">("loading");
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const operation = useAsyncOperation();
+  const { clearError } = operation;
+  const describeFailure = (error: unknown) => describeSnippetFailure(t, error);
+  // ホストの一覧は後から届くので、選んだホストが一覧に無いあいだは先頭を選んでいるとみなす。
+  // select が表示するホストと、ボタンで送るホストを同じ値にする。
+  const startupAlias = aliases.includes(chosenStartupAlias) ? chosenStartupAlias : (aliases[0] ?? "");
   const current = useMemo(
     () => snippets.find((snippet) => snippet.id === selected) ?? null,
     [snippets, selected],
@@ -123,18 +150,44 @@ export function SnippetsPanel({
     .filter((assignment) => assignment.stale)
     .map((assignment) => assignment.alias);
   const startupStale = staleStartupAliases.includes(startupAlias);
+  const draftChanged = JSON.stringify(draft) !== JSON.stringify(draftOf(current));
+  const draftDiscard = useDraftDiscardConfirmation({
+    dirty: draftChanged,
+    discard: () => setDraft(draftOf(current)),
+    onNavigationBlockerChange,
+    onNavigateLocation,
+  });
 
-  async function reload() {
+  const reload = useCallback(async () => {
     const library = await snippetsApi.library();
     setSnippets(library.snippets);
     setStartupAssignments(library.startup);
-  }
+    setLibraryState("ready");
+  }, []);
+
+  // 読めなかった一覧を「保存済みスニペットはありません」と見せないように、読み込みの
+  // 状態を持つ。
+  const loadLibrary = useCallback(async () => {
+    setLibraryState("loading");
+    try {
+      await reload();
+    } catch {
+      setLibraryState("failed");
+    }
+  }, [reload]);
 
   useEffect(() => {
-    void reload().catch((error: unknown) =>
-      setProblem(failureCode(error) || "snippet_failed"),
-    );
-  }, []);
+    void loadLibrary();
+  }, [loadLibrary]);
+
+  const edit = useCallback((snippet: Snippet | null) => {
+    setSelected(snippet?.id ?? null);
+    setDraft(draftOf(snippet));
+    setInputs({});
+    setPreview(null);
+    setJob(null);
+    clearError();
+  }, [clearError]);
 
   useEffect(() => {
     if (selectedSnippetId === null) return;
@@ -142,35 +195,19 @@ export function SnippetsPanel({
       (candidate) => candidate.id === selectedSnippetId,
     );
     if (snippet !== undefined && selected !== snippet.id) edit(snippet);
-  }, [selected, selectedSnippetId, snippets]);
+  }, [edit, selected, selectedSnippetId, snippets]);
 
-  usePolling(async () => {
+  // Choosing another snippet, previewing again or cancelling stops the polling
+  // while a question may still be on its way. Its answer is dropped, so it
+  // cannot bring back a job the user has left under the snippet now shown.
+  usePolling(async (isCurrent) => {
     if (job === null) return;
-    setJob(await snippetsApi.job(job.id));
+    const polled = await snippetsApi.job(job.id);
+    if (isCurrent()) setJob(polled);
   }, { intervalMs: snippetJobPollIntervalMs, enabled: job?.status === "running", whileHidden: true });
 
-  function edit(snippet: Snippet | null) {
-    setSelected(snippet?.id ?? null);
-    setDraft(
-      snippet === null
-        ? blank
-        : {
-            name: snippet.name,
-            description: snippet.description ?? "",
-            command: snippet.command,
-            variables: snippet.variables,
-          },
-    );
-    setInputs({});
-    setPreview(null);
-    setJob(null);
-    setProblem("");
-  }
-
   async function save() {
-    setBusy(true);
-    setProblem("");
-    try {
+    await operation.run(async () => {
       const value = {
         ...draft,
         variables: variablesFor(draft.command, draft.variables),
@@ -181,39 +218,32 @@ export function SnippetsPanel({
           : await snippetsApi.update(selected, value);
       await reload();
       edit(saved);
-    } catch (error) {
-      setProblem(failureCode(error) || "snippet_failed");
-    } finally {
-      setBusy(false);
-    }
+    }, { describe: describeFailure });
   }
 
   async function makePreview() {
     if (selected === null || targets.length === 0) return;
-    setBusy(true);
-    setProblem("");
     setJob(null);
-    try {
-      setPreview(await snippetsApi.preview(selected, targets, inputs));
-    } catch (error) {
-      setProblem(failureCode(error) || "snippet_failed");
-    } finally {
-      setBusy(false);
-    }
+    await operation.run(() => snippetsApi.preview(selected, targets, inputs), {
+      apply: setPreview,
+      describe: describeFailure,
+    });
   }
 
   async function run() {
     if (preview === null) return;
-    setBusy(true);
-    setProblem("");
-    try {
+    await operation.run(async () => {
       setJob(await snippetsApi.start(preview, targets, inputs));
       setPreview(null);
-    } catch (error) {
-      setProblem(failureCode(error) || "snippet_failed");
-    } finally {
-      setBusy(false);
-    }
+    }, { describe: describeFailure });
+  }
+
+  // 取り消しの前にジョブが終わると、サーバーは 409 snippet_job_finished で断る。
+  async function cancelJob(jobId: string) {
+    await operation.run(() => snippetsApi.cancel(jobId), {
+      apply: setJob,
+      describe: describeFailure,
+    });
   }
 
   function updateVariable(name: string, update: Partial<SnippetVariable>) {
@@ -228,35 +258,23 @@ export function SnippetsPanel({
 
   async function removeCurrent() {
     if (current === null) return;
-    setBusy(true);
-    setProblem("");
-    try {
+    await operation.run(async () => {
       await snippetsApi.remove(current.id);
       edit(null);
       await reload();
-    } catch (error) {
-      setProblem(failureCode(error) || "snippet_failed");
-    } finally {
-      setBusy(false);
-    }
+    }, { describe: describeFailure });
   }
 
   async function updateStartup(snippetId: string) {
     if (startupAlias === "") return;
-    setBusy(true);
-    setProblem("");
-    try {
+    await operation.run(async () => {
       await snippetsApi.setStartup(
         startupAlias,
         snippetId,
         snippetId === "" ? {} : inputs,
       );
       await reload();
-    } catch (error) {
-      setProblem(failureCode(error) || "snippet_failed");
-    } finally {
-      setBusy(false);
-    }
+    }, { describe: describeFailure });
   }
 
   return (
@@ -269,12 +287,22 @@ export function SnippetsPanel({
           <h2 id="snippets-heading" className="grow font-medium">
             {t("snippets.heading")}
           </h2>
-          <Button onClick={() => edit(null)}>{t("snippets.new")}</Button>
+          <Button onClick={() => draftDiscard.confirmBefore(() => edit(null))}>{t("snippets.new")}</Button>
         </div>
+        {libraryState === "failed" ? (
+          <PanelState
+            tone="failed"
+            title={t("snippets.loadFailed")}
+            action={<Button onClick={() => void loadLibrary()}>{t("shell.bootstrapRetry")}</Button>}
+          />
+        ) : null}
         <select
           aria-label={t("snippets.heading")}
           value={selected ?? ""}
-          onChange={(event) => edit(snippets.find((snippet) => snippet.id === event.target.value) ?? null)}
+          onChange={(event) => {
+            const next = snippets.find((snippet) => snippet.id === event.target.value) ?? null;
+            draftDiscard.confirmBefore(() => edit(next));
+          }}
           className="w-full rounded border border-control-line bg-control px-3 py-2 text-sm xl:hidden"
         >
           <option value="">{t("snippets.new")}</option>
@@ -285,7 +313,7 @@ export function SnippetsPanel({
             <button
               key={snippet.id}
               type="button"
-              onClick={() => edit(snippet)}
+              onClick={() => draftDiscard.confirmBefore(() => edit(snippet))}
               className={`rounded-md px-3 py-2 text-left text-sm ${selected === snippet.id ? "bg-select-fill" : "hover:bg-select-fill"}`}
             >
               <span className="block truncate font-medium">{snippet.name}</span>
@@ -294,14 +322,14 @@ export function SnippetsPanel({
               </code>
             </button>
           ))}
-          {snippets.length === 0 ? (
+          {libraryState === "ready" && snippets.length === 0 ? (
             <p className="text-sm text-ink-muted">{t("snippets.empty")}</p>
           ) : null}
         </div>
       </div>
 
       <div className="flex min-w-0 flex-col gap-3 rounded-lg border border-line bg-card p-4">
-        {problem === "" ? null : <Notice tone="danger">{problem}</Notice>}
+        {operation.error === "" ? null : <Notice tone="danger">{operation.error}</Notice>}
         <label className="text-xs text-ink-muted">
           {t("snippets.name")}
           <input
@@ -414,13 +442,13 @@ export function SnippetsPanel({
         <div className="flex flex-wrap gap-2">
           <Button
             kind="primary"
-            disabled={busy || draft.name.trim() === "" || draft.command === ""}
+            disabled={operation.busy || draft.name.trim() === "" || draft.command === ""}
             onClick={() => void save()}
           >
             {t("snippets.save")}
           </Button>
           {current === null ? null : (
-            <Button disabled={busy} onClick={() => setConfirmingDelete(true)}>
+            <Button disabled={operation.busy} onClick={() => setConfirmingDelete(true)}>
               {t("snippets.delete")}
             </Button>
           )}
@@ -451,7 +479,7 @@ export function SnippetsPanel({
           </div>
           <Button
             className="mt-3"
-            disabled={busy || selected === null || targets.length === 0}
+            disabled={operation.busy || selected === null || targets.length === 0}
             onClick={() => void makePreview()}
           >
             {t("snippets.preview")}
@@ -482,7 +510,7 @@ export function SnippetsPanel({
                 </pre>
               </div>
             ))}
-            <Button kind="primary" className="mt-3" disabled={busy} onClick={() => void run()}>
+            <Button kind="primary" className="mt-3" disabled={operation.busy} onClick={() => void run()}>
               {t("snippets.run")}
             </Button>
           </section>
@@ -495,7 +523,7 @@ export function SnippetsPanel({
               </h3>
               {job.status === "running" ? (
                 <Button
-                  onClick={() => void snippetsApi.cancel(job.id).then(setJob)}
+                  onClick={() => void cancelJob(job.id)}
                 >
                   {t("snippets.cancel")}
                 </Button>
@@ -553,8 +581,9 @@ export function SnippetsPanel({
             </div>
           ) : null}
           <select
+            aria-label={t("snippets.startupHost")}
             value={startupAlias}
-            onChange={(event) => setStartupAlias(event.target.value)}
+            onChange={(event) => setChosenStartupAlias(event.target.value)}
             className="mt-2 w-full rounded border border-control-line bg-control px-2 py-1.5 text-sm"
           >
             {aliases.map((alias) => (
@@ -568,7 +597,7 @@ export function SnippetsPanel({
           ) : null}
           <Button
             className="mt-2"
-            disabled={busy || selected === null || startupAlias === ""}
+            disabled={operation.busy || selected === null || startupAlias === ""}
             onClick={() =>
               selected === null ? undefined : void updateStartup(selected)
             }
@@ -576,7 +605,7 @@ export function SnippetsPanel({
             {t("snippets.setStartup")}
           </Button>
           <button
-            disabled={busy || startupAlias === ""}
+            disabled={operation.busy || startupAlias === ""}
             className="ml-2 text-xs text-ink-muted disabled:opacity-50"
             onClick={() => void updateStartup("")}
           >
@@ -584,6 +613,9 @@ export function SnippetsPanel({
           </button>
         </section>
       </div>
+      {draftDiscard.confirming ? (
+        <DiscardDraftDialog id="snippet-draft-discard-heading" onConfirm={draftDiscard.confirmDiscard} onCancel={draftDiscard.keepEditing} />
+      ) : null}
       {confirmingDelete && current !== null ? (
         <ConfirmDialog
           id="snippet-delete-heading"

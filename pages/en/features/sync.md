@@ -47,7 +47,7 @@ When automatic sync is enabled, sshc polls the remote once a minute while the Va
 
 ![Search and exclude files from synchronization](/images/sync-exclusions-desktop-en.png)
 
-Use Files to sync on the Sync screen to search current files and include or exclude them. The advanced editor manages `.sshcignore` at the workspace root with Gitignore-like patterns. These are globs rather than regular expressions: use `*`, `**`, `?`, `!` to re-include a path, and a leading `/` to anchor a rule at the root.
+Use Files to sync on the Sync screen to search current files and include or exclude them. The advanced editor manages `.sshcignore` at the root of `~/.ssh` with Gitignore-like patterns. These are globs rather than regular expressions: use `*`, `**`, `?`, `!` to re-include a path, and a leading `/` to anchor a rule at the root.
 
 The initial rules exclude common OS metadata, backup files, temporary files, lock files, SSH authorized keys and known host files, and the login environment and initialization script:
 

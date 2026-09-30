@@ -1,7 +1,7 @@
 import tseslint from "typescript-eslint";
 import reactHooks from "eslint-plugin-react-hooks";
 
-// TypeScript の型検査では検出できない Promise と React Hooks の規則だけを扱う。
+// TypeScript の型検査では検出できない Promise と React Hooks の規則と、識別子の綴りの規則だけを扱う。
 // 新しい規則は既存コードの誤検出を確認してから追加する。
 export default tseslint.config(
   {
@@ -46,6 +46,13 @@ export default tseslint.config(
           caughtErrorsIgnorePattern: "^_",
           destructuredArrayIgnorePattern: "^_",
         },
+      ],
+
+      // 識別子は API の JSON と同じ `Id` の綴りに揃える。`sessionID` と `sessionId` が
+      // 混ざると、grep で片方しか見つからない。
+      "@typescript-eslint/naming-convention": [
+        "error",
+        { selector: "default", format: null, custom: { regex: "[a-z]IDs?$", match: false } },
       ],
     },
   },

@@ -201,16 +201,24 @@ func writeProblemReply(c *echo.Context, reply problemReply) error {
 	return problemDetail(c, reply.status, reply.code, reply.detail)
 }
 
+// problemDetailLimit は、problem の detail に載せる文の上限である。detail は内部のエラーの
+// 文で、長さに上限が無いと応答が際限なく大きくなる。
+const problemDetailLimit = 512
+
+func boundedProblemDetail(detail string) string {
+	if len(detail) > problemDetailLimit {
+		return detail[:problemDetailLimit]
+	}
+	return detail
+}
+
 // problemDetail は上限のある説明付きで拒否を返す。
 //
 // 呼び出し元は、固定文字列か、platform 層がすでに無害化した
 // メッセージのどちらかを渡さなければならない。detail に鍵材料、
 // パスフレーズ、セッションやアクショントークン、絶対パスを含めてはならない。
 func problemDetail(c *echo.Context, status int, code, detail string) error {
-	const detailLimit = 512
-	if len(detail) > detailLimit {
-		detail = detail[:detailLimit]
-	}
+	detail = boundedProblemDetail(detail)
 	c.Response().Header().Set(echo.HeaderContentType, "application/problem+json")
 	return c.JSON(status, api.Problem{Code: code, Message: "request rejected", Detail: &detail})
 }
