@@ -1,16 +1,11 @@
 package httpserver
 
 import (
-	"bytes"
-	"crypto/subtle"
-	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 
 	"github.com/labstack/echo/v5"
 
-	"sshc/internal/handoff"
 	"sshc/internal/secret"
 )
 
@@ -34,73 +29,39 @@ type vaultChangeRequest struct {
 	Next    *string `json:"next"`
 }
 
-func registerVaultCLIRoutes(engine *echo.Echo, handlers ConnectHandlers) {
-	engine.GET(VaultStatusPath, handlers.VaultStatus)
-	engine.POST(VaultCreatePath, handlers.VaultCreate)
-	engine.POST(VaultUnlockPath, handlers.VaultUnlock)
-	engine.POST(VaultVerifyPath, handlers.VaultVerify)
-	engine.POST(VaultLockPath, handlers.VaultLock)
-	engine.POST(VaultChangePath, handlers.VaultChange)
+// registerVaultCLIRoutes は、handoff の秘密を確かめる /cli の group に Vault の操作を登録する。
+func registerVaultCLIRoutes(authenticated *echo.Group, handlers CLIHandlers) {
+	authenticated.GET(cliRoute(VaultStatusPath), handlers.VaultStatus)
+	authenticated.POST(cliRoute(VaultCreatePath), handlers.VaultCreate)
+	authenticated.POST(cliRoute(VaultUnlockPath), handlers.VaultUnlock)
+	authenticated.POST(cliRoute(VaultVerifyPath), handlers.VaultVerify)
+	authenticated.POST(cliRoute(VaultLockPath), handlers.VaultLock)
+	authenticated.POST(cliRoute(VaultChangePath), handlers.VaultChange)
 }
 
-// cliAuthorised は同じ長さの handoff secret を constant-time で比較する。
-func cliAuthorised(request *http.Request, expected string) bool {
-	presented := request.Header.Get(handoff.HeaderName)
-	return expected != "" && len(presented) == len(expected) &&
-		subtle.ConstantTimeCompare([]byte(presented), []byte(expected)) == 1
-}
-
+// decodeVaultCLIJSON は decodeJSONWithin の規則で読み、断るときの状態コードを返す。
+// 読めたときは 0 を返す。CLI は大きすぎるボディを 413 で見分ける。
 func decodeVaultCLIJSON(c *echo.Context, target any) int {
-	request := c.Request()
-	if request.Body == nil {
-		return http.StatusBadRequest
-	}
-	if request.ContentLength > maxVaultCLIBody {
+	err := decodeJSONWithin(c, maxVaultCLIBody, target)
+	switch {
+	case err == nil:
+		return 0
+	case errors.Is(err, errBodyTooLarge):
 		return http.StatusRequestEntityTooLarge
-	}
-	limited := http.MaxBytesReader(c.Response(), request.Body, maxVaultCLIBody)
-	body, err := io.ReadAll(limited)
-	if err != nil {
-		var tooLarge *http.MaxBytesError
-		if errors.As(err, &tooLarge) {
-			return http.StatusRequestEntityTooLarge
-		}
+	default:
 		return http.StatusBadRequest
 	}
-	if bytes.Equal(bytes.TrimSpace(body), []byte("null")) {
-		return http.StatusBadRequest
-	}
-	decoder := json.NewDecoder(bytes.NewReader(body))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(target); err != nil {
-		return http.StatusBadRequest
-	}
-	var trailing any
-	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
-		return http.StatusBadRequest
-	}
-	return 0
 }
 
-func (h ConnectHandlers) vaultAuthorised(c *echo.Context) bool {
-	return cliAuthorised(c.Request(), h.Secret)
-}
-
-func (h ConnectHandlers) VaultStatus(c *echo.Context) error {
-	if !h.vaultAuthorised(c) {
-		return c.NoContent(http.StatusUnauthorized)
-	}
+func (h CLIHandlers) VaultStatus(c *echo.Context) error {
 	answer, err := h.cliStatus()
 	if err != nil {
-		return c.NoContent(http.StatusInternalServerError)
+		return unexpectedNoContent(c, err)
 	}
 	return c.JSON(http.StatusOK, answer)
 }
 
-func (h ConnectHandlers) VaultCreate(c *echo.Context) error {
-	if !h.vaultAuthorised(c) {
-		return c.NoContent(http.StatusUnauthorized)
-	}
+func (h CLIHandlers) VaultCreate(c *echo.Context) error {
 	var request vaultPassphraseRequest
 	if status := decodeVaultCLIJSON(c, &request); status != 0 {
 		return c.NoContent(status)
@@ -108,16 +69,15 @@ func (h ConnectHandlers) VaultCreate(c *echo.Context) error {
 	if request.Passphrase == nil {
 		return c.NoContent(http.StatusBadRequest)
 	}
-	if err := h.vault.Initialise(*request.Passphrase); err != nil {
+	if err := withVault(h.Vault, func(vault *secret.Service) error {
+		return vault.Initialise(*request.Passphrase)
+	}); err != nil {
 		return vaultCLIProblem(c, err)
 	}
 	return c.NoContent(http.StatusNoContent)
 }
 
-func (h ConnectHandlers) VaultUnlock(c *echo.Context) error {
-	if !h.vaultAuthorised(c) {
-		return c.NoContent(http.StatusUnauthorized)
-	}
+func (h CLIHandlers) VaultUnlock(c *echo.Context) error {
 	var request vaultPassphraseRequest
 	if status := decodeVaultCLIJSON(c, &request); status != 0 {
 		return c.NoContent(status)
@@ -125,17 +85,16 @@ func (h ConnectHandlers) VaultUnlock(c *echo.Context) error {
 	if request.Passphrase == nil {
 		return c.NoContent(http.StatusBadRequest)
 	}
-	if err := h.vault.Unlock(*request.Passphrase); err != nil {
+	if err := withVault(h.Vault, func(vault *secret.Service) error {
+		return vault.Unlock(*request.Passphrase)
+	}); err != nil {
 		return vaultCLIProblem(c, err)
 	}
 	return c.NoContent(http.StatusNoContent)
 }
 
 // VaultVerify checks the current password without changing the unlocked state.
-func (h ConnectHandlers) VaultVerify(c *echo.Context) error {
-	if !h.vaultAuthorised(c) {
-		return c.NoContent(http.StatusUnauthorized)
-	}
+func (h CLIHandlers) VaultVerify(c *echo.Context) error {
 	var request vaultPassphraseRequest
 	if status := decodeVaultCLIJSON(c, &request); status != 0 {
 		return c.NoContent(status)
@@ -143,31 +102,31 @@ func (h ConnectHandlers) VaultVerify(c *echo.Context) error {
 	if request.Passphrase == nil {
 		return c.NoContent(http.StatusBadRequest)
 	}
-	if err := h.vault.Verify(*request.Passphrase); err != nil {
+	if err := withVault(h.Vault, func(vault *secret.Service) error {
+		valid, err := vault.Verify(*request.Passphrase)
+		if err == nil && !valid {
+			return secret.ErrWrongPassphrase
+		}
+		return err
+	}); err != nil {
 		return vaultCLIProblem(c, err)
 	}
 	return c.NoContent(http.StatusNoContent)
 }
 
-func (h ConnectHandlers) VaultLock(c *echo.Context) error {
-	if !h.vaultAuthorised(c) {
-		return c.NoContent(http.StatusUnauthorized)
-	}
+func (h CLIHandlers) VaultLock(c *echo.Context) error {
 	var request struct{}
 	if status := decodeVaultCLIJSON(c, &request); status != 0 {
 		return c.NoContent(status)
 	}
 	// session と vault は別の寿命を持つ。ここで触るのは導出済みの vault key だけである。
-	if err := h.vault.Lock(); err != nil {
+	if err := withVault(h.Vault, (*secret.Service).LockManually); err != nil {
 		return vaultCLIProblem(c, err)
 	}
 	return c.NoContent(http.StatusNoContent)
 }
 
-func (h ConnectHandlers) VaultChange(c *echo.Context) error {
-	if !h.vaultAuthorised(c) {
-		return c.NoContent(http.StatusUnauthorized)
-	}
+func (h CLIHandlers) VaultChange(c *echo.Context) error {
 	var request vaultChangeRequest
 	if status := decodeVaultCLIJSON(c, &request); status != 0 {
 		return c.NoContent(status)
@@ -175,13 +134,23 @@ func (h ConnectHandlers) VaultChange(c *echo.Context) error {
 	if request.Current == nil || request.Next == nil {
 		return c.NoContent(http.StatusBadRequest)
 	}
-	if err := h.vault.Change(c.Request().Context(), *request.Current, *request.Next); err != nil {
+	if err := withVault(h.Vault, func(vault *secret.Service) error {
+		return vault.ChangeMasterPassword(c.Request().Context(), *request.Current, *request.Next)
+	}); err != nil {
 		return vaultCLIProblem(c, err)
 	}
 	return c.NoContent(http.StatusNoContent)
 }
 
+// vaultCLIProblem は、CLI の Vault の route の拒否を本文なしの状態コードにする。
+//
+// 中断した変更と workspace の busy は、ブラウザの handler と同じく boundaryRefusalFor で
+// 409 にし、想定外の失敗として記録しない。/cli/ の route は本文を返さないので、CLI は
+// この 2 つをほかの 409 と見分けられず、中断した変更を History で復旧する案内も出せない。
 func vaultCLIProblem(c *echo.Context, err error) error {
+	if refusal, ok := boundaryRefusalFor(err); ok {
+		return c.NoContent(refusal.status)
+	}
 	switch {
 	case errors.Is(err, secret.ErrAlreadyExists), errors.Is(err, secret.ErrNoVault), errors.Is(err, secret.ErrLocked):
 		return c.NoContent(http.StatusConflict)
@@ -190,6 +159,6 @@ func vaultCLIProblem(c *echo.Context, err error) error {
 	case errors.Is(err, secret.ErrWeakPassphrase):
 		return c.NoContent(http.StatusBadRequest)
 	default:
-		return c.NoContent(http.StatusInternalServerError)
+		return unexpectedNoContent(c, err)
 	}
 }

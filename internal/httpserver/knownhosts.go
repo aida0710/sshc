@@ -71,14 +71,19 @@ func knownHostsProblem(c *echo.Context, err error) error {
 	if knownhosts.IsExternalChange(err) {
 		return problem(c, http.StatusConflict, "external_change")
 	}
-	return problem(c, http.StatusInternalServerError, "known_hosts_failed")
+	return unexpectedProblem(c, "known_hosts_failed", err)
 }
+
+// maxKnownHostsQueryLength は、known_hosts の一覧を絞り込む検索語の上限。
+// 検索語はホスト・鍵種別・フィンガープリント・コメントのどれにも当たるので、
+// alias の上限とは別に持つ。
+const maxKnownHostsQueryLength = 255
 
 // List はクエリに合致するエントリを返す。読むだけなので、
 // 確認は要らない。
 func (h KnownHostsHandlers) List(c *echo.Context) error {
 	query := c.Request().URL.Query().Get("query")
-	if len(query) > maxAliasLength {
+	if len(query) > maxKnownHostsQueryLength {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
 	listing, err := h.Service.Listing(query)

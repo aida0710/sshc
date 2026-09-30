@@ -1,11 +1,8 @@
 package httpserver
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
-	"io"
 	"math"
 	"net/http"
 	"time"
@@ -16,7 +13,6 @@ import (
 	"sshc/internal/application"
 	"sshc/internal/keys"
 	"sshc/internal/platform"
-	"sshc/internal/secret"
 	"sshc/internal/session"
 )
 
@@ -26,8 +22,6 @@ const ActionHeader = "X-SSHC-Action"
 
 // maxKeyRequestBody は鍵 vault のリクエストボディを制限する。
 const maxKeyRequestBody = 64 << 10
-
-var errBodyTooLarge = errors.New("request body is larger than the supported maximum")
 
 // confirmationSubjects は、session パッケージが共有する action の用語を
 // このサブシステム独自のものへ対応付ける。通信上の値を session パッケージが
@@ -65,7 +59,6 @@ type KeyHandlers struct {
 	// これは何かが反映される前に再パースと再解決を行う。鍵 vault 自身の
 	// マネージャには、意図的にそのような validator がない。
 	Config   *application.Service
-	Secrets  *secret.Service
 	Sessions *session.Manager
 	// Actions は確認を発行し、消費する。それを発行するエンドポイントは
 	// 他のすべてのサブシステムと共有されるので、どこか別の場所で一度だけ登録される。
@@ -89,35 +82,6 @@ func registerKeyRoutes(engine *echo.Echo, handlers KeyHandlers) {
 	engine.DELETE("/api/v1/trash/:entryId", handlers.Purge)
 }
 
-// decodeBody は、上限付きのリクエストボディを読み取り、生のバイト列を上書きする。
-//
-// JSON からデコードされたパスフレーズは Go の string になる。これは
-// immutable で消去できない。消去できるのは生のバッファだけである。
-// この限界は保証として示すのではなく、ここに明記されている。
-func decodeBody(c *echo.Context, target any) error {
-	body := c.Request().Body
-	if body == nil {
-		return errBodyTooLarge
-	}
-	raw, err := io.ReadAll(io.LimitReader(body, maxKeyRequestBody+1))
-	if err != nil {
-		return err
-	}
-	defer wipeBuffer(raw)
-	if len(raw) > maxKeyRequestBody {
-		return errBodyTooLarge
-	}
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(target); err != nil {
-		return err
-	}
-	if decoder.More() {
-		return errBodyTooLarge
-	}
-	return nil
-}
-
 func wipeBuffer(buffer []byte) {
 	for index := range buffer {
 		buffer[index] = 0
@@ -137,7 +101,7 @@ func (h KeyHandlers) consumeAction(c *echo.Context, kind, target string) (bool, 
 func (h KeyHandlers) List(c *echo.Context) error {
 	inventory, err := h.Keys.Inventory()
 	if err != nil {
-		return problem(c, http.StatusInternalServerError, "inventory_failed")
+		return unexpectedProblem(c, "inventory_failed", err)
 	}
 	identities, available := h.Keys.AgentIdentities(c.Request().Context())
 	return c.JSON(http.StatusOK, inventoryResponse(inventory, identities, available))
@@ -163,7 +127,7 @@ func (h KeyHandlers) Algorithms(c *echo.Context) error {
 
 func (h KeyHandlers) Generate(c *echo.Context) error {
 	var body api.GenerateKeyRequest
-	if err := decodeBody(c, &body); err != nil {
+	if err := decodeJSONWithin(c, maxKeyRequestBody, &body); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
 	result, err := h.Keys.Generate(keys.GenerateRequest{
@@ -192,7 +156,7 @@ func (h KeyHandlers) Generate(c *echo.Context) error {
 
 func (h KeyHandlers) HardwareCommand(c *echo.Context) error {
 	var body api.HardwareCommandRequest
-	if err := decodeBody(c, &body); err != nil {
+	if err := decodeJSONWithin(c, maxKeyRequestBody, &body); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
 	command, err := h.Keys.HardwareCommand(keys.Algorithm(body.Algorithm), body.FileName, optionalString(body.Group), body.Comment)
@@ -208,7 +172,7 @@ func (h KeyHandlers) HardwareCommand(c *echo.Context) error {
 
 func (h KeyHandlers) ChangePassphrase(c *echo.Context) error {
 	var body api.ChangePassphraseRequest
-	if err := decodeBody(c, &body); err != nil {
+	if err := decodeJSONWithin(c, maxKeyRequestBody, &body); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
 	result, err := h.Keys.ChangePassphrase(keys.PassphraseChange{
@@ -278,12 +242,12 @@ func (h KeyHandlers) PublicKey(c *echo.Context) error {
 // 組み立てる前に計算される。
 func (h KeyHandlers) Relocate(c *echo.Context) error {
 	var body api.RelocateKeyRequest
-	if err := decodeBody(c, &body); err != nil {
+	if err := decodeJSONWithin(c, maxKeyRequestBody, &body); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
 	inventory, err := h.Keys.Inventory()
 	if err != nil {
-		return problem(c, http.StatusInternalServerError, "inventory_failed")
+		return unexpectedProblem(c, "inventory_failed", err)
 	}
 	result, err := h.Config.RelocateKey(inventory, application.KeyRelocateRequest{
 		KeyID:   c.Param("keyId"),
@@ -297,20 +261,7 @@ func (h KeyHandlers) Relocate(c *echo.Context) error {
 	if err != nil {
 		return keyProblem(c, err)
 	}
-	if h.Secrets != nil {
-		if err := h.Secrets.RelocateKeyPassphrases(keyRelocationMap(result.Files)); err != nil {
-			return serviceProblem(c, err)
-		}
-	}
 	return c.JSON(http.StatusOK, response)
-}
-
-func keyRelocationMap(files []application.RelocatedKeyFile) map[string]string {
-	relocations := make(map[string]string, len(files))
-	for _, file := range files {
-		relocations[file.From] = file.To
-	}
-	return relocations
 }
 
 func relocateKeyResponse(result application.KeyRelocateResult) api.RelocateKeyResponse {
@@ -365,7 +316,7 @@ func (h KeyHandlers) Deregister(c *echo.Context) error {
 
 func (h KeyHandlers) Register(c *echo.Context) error {
 	var body api.RegisterKeyRequest
-	if err := decodeBody(c, &body); err != nil {
+	if err := decodeJSONWithin(c, maxKeyRequestBody, &body); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
 	result, err := h.Keys.Register(c.Request().Context(), keys.RegisterRequest{
@@ -401,7 +352,7 @@ func (h KeyHandlers) Trash(c *echo.Context) error {
 func (h KeyHandlers) ListTrash(c *echo.Context) error {
 	entries, err := h.Keys.ListTrash()
 	if err != nil {
-		return problem(c, http.StatusInternalServerError, "trash_unreadable")
+		return unexpectedProblem(c, "trash_unreadable", err)
 	}
 	response := api.TrashListResponse{
 		Entries:       make([]api.TrashEntrySummary, 0, len(entries)),
@@ -468,7 +419,7 @@ func keyProblem(c *echo.Context, err error) error {
 		return problem(c, http.StatusBadRequest, "location_unchanged")
 	case errors.Is(err, application.ErrKeyRelocateNotSupported):
 		return problem(c, http.StatusUnprocessableEntity, "relocate_not_supported")
-	case errors.Is(err, application.ErrKeyReferenceMoved):
+	case errors.Is(err, application.ErrKeyReferenceMoved), errors.Is(err, application.ErrKeyFilesChanged):
 		return problem(c, http.StatusConflict, "external_change")
 	case errors.Is(err, application.ErrInvalidGroupName):
 		return problem(c, http.StatusBadRequest, "invalid_request")
@@ -498,7 +449,22 @@ func keyProblem(c *echo.Context, err error) error {
 	if keys.IsExternalChange(err) {
 		return problem(c, http.StatusConflict, "external_change")
 	}
-	return problem(c, http.StatusInternalServerError, "operation_failed")
+	if isConfigRefusal(err) {
+		// 鍵の移動は設定ファイルの参照も書き換えるので、設定の保存と同じ拒否が起きる。
+		return serviceProblem(c, err)
+	}
+	if refusal, ok := boundaryRefusalFor(err); ok {
+		return writeProblemReply(c, refusal)
+	}
+	return unexpectedProblem(c, "operation_failed", err)
+}
+
+// isConfigRefusal は、err が設定ファイルの読み込みか保存の拒否（構文、グラフ、外部での変更）かを報告する。
+func isConfigRefusal(err error) bool {
+	var syntaxError *application.SyntaxError
+	var graphError *application.GraphError
+	var conflictError *application.ConflictError
+	return errors.As(err, &syntaxError) || errors.As(err, &graphError) || errors.As(err, &conflictError)
 }
 
 func inventoryResponse(inventory *keys.Inventory, identities []platform.AgentIdentity, agentAvailable bool) api.KeyInventoryResponse {

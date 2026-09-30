@@ -2,6 +2,7 @@ package secret_test
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"errors"
 	"io/fs"
@@ -372,6 +373,26 @@ func TestAdoptTravelDocumentRefusesCiphertextItsBoundedReaderCannotReopen(t *tes
 
 func assignTestPasswordCredential(service *secret.Service, subject, name string) error {
 	return service.AssignBoundCredential(secret.BoundAssignment{Kind: secret.KindPassword, Subject: subject, Name: name, Binding: testAuthenticationBinding})
+}
+
+// relocateKeyPassphrases は、鍵の移動を伴わない vault だけの変更として割り当てを移す。
+// 本番では application が鍵ファイルの移動と同じ storage トランザクションに載せる。
+func relocateKeyPassphrases(t *testing.T, service *secret.Service, home string, relocations map[string]string) {
+	t.Helper()
+	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager := storage.NewManager(workspace, time.Now, rand.Reader)
+	_, err = service.WithKeyPassphraseRelocation(relocations, func(change *storage.Change) (storage.Result, error) {
+		if change == nil {
+			t.Fatal("relocating an assigned key passphrase produced no vault change")
+		}
+		return manager.Commit(storage.Request{Operation: "test.key-passphrase-relocate", Changes: []storage.Change{*change}})
+	})
+	if err != nil {
+		t.Fatalf("WithKeyPassphraseRelocation = %v", err)
+	}
 }
 
 type syncCASFileSystem struct {
@@ -1101,11 +1122,9 @@ func TestKeyPassphraseRelocationPersists(t *testing.T) {
 	if err := service.AssignCredential(secret.KindKeyPassphrase, "keys/work/id_work", "work"); err != nil {
 		t.Fatal(err)
 	}
-	if err := service.RelocateKeyPassphrases(map[string]string{
+	relocateKeyPassphrases(t, service, home, map[string]string{
 		"keys/work/id_work": "keys/client-a/id_work",
-	}); err != nil {
-		t.Fatalf("RelocateKeyPassphrases = %v", err)
-	}
+	})
 
 	reopened := mustReopen(t, home)
 	if err := reopened.Unlock(passphrase); err != nil {
@@ -1116,6 +1135,42 @@ func TestKeyPassphraseRelocationPersists(t *testing.T) {
 	}
 	if value, ok := reopened.KeyPassphraseFor("keys/client-a/id_work"); !ok || value != "phrase" {
 		t.Errorf("relocated key passphrase = %q, %v", value, ok)
+	}
+}
+
+func TestKeyPassphraseRelocationOnALockedVaultWritesNothing(t *testing.T) {
+	service, _ := newService(t)
+	if err := service.Initialise(passphrase); err != nil {
+		t.Fatal(err)
+	}
+	service.Lock()
+	committed := false
+	_, err := service.WithKeyPassphraseRelocation(map[string]string{
+		"keys/work/id_work": "keys/client-a/id_work",
+	}, func(*storage.Change) (storage.Result, error) {
+		committed = true
+		return storage.Result{}, nil
+	})
+	if !errors.Is(err, secret.ErrLocked) {
+		t.Fatalf("WithKeyPassphraseRelocation on a locked vault = %v, want ErrLocked", err)
+	}
+	if committed {
+		t.Error("the key files were allowed to move while the passphrase assignments could not follow")
+	}
+}
+
+func TestKeyPassphraseRelocationWithoutAVaultCommitsTheFilesAlone(t *testing.T) {
+	service, _ := newService(t)
+	var received *storage.Change
+	called := false
+	_, err := service.WithKeyPassphraseRelocation(map[string]string{
+		"keys/work/id_work": "keys/client-a/id_work",
+	}, func(change *storage.Change) (storage.Result, error) {
+		called, received = true, change
+		return storage.Result{}, nil
+	})
+	if err != nil || !called || received != nil {
+		t.Fatalf("relocation without a vault = %v, called %v, vault change %v", err, called, received)
 	}
 }
 
@@ -1408,7 +1463,7 @@ func TestChangingTheMasterPasswordReSealsTheVaultTheSettingsAndTheBackups(t *tes
 	}
 
 	const next = "a different master password"
-	if err := service.ChangeMasterPassword(passphrase, next); err != nil {
+	if err := service.ChangeMasterPassword(context.Background(), passphrase, next); err != nil {
 		t.Fatalf("ChangeMasterPassword = %v", err)
 	}
 
@@ -1550,7 +1605,7 @@ func TestChangingTheMasterPasswordAlsoSealsRegisteredApplicationDocuments(t *tes
 	protectedBackup := filepath.Join(result.BackupDir, "sshc", "snippets-with-backup")
 
 	const next = "a different master password"
-	if err := service.ChangeMasterPassword(passphrase, next); err != nil {
+	if err := service.ChangeMasterPassword(context.Background(), passphrase, next); err != nil {
 		t.Fatal(err)
 	}
 	sealed, err := os.ReadFile(path)
@@ -1654,7 +1709,7 @@ func TestChangingTheMasterPasswordIsAtomicWhenAnyBackupCannotBeOpened(t *testing
 	}
 
 	const next = "a different master password"
-	if err := service.ChangeMasterPassword(passphrase, next); err == nil {
+	if err := service.ChangeMasterPassword(context.Background(), passphrase, next); err == nil {
 		t.Fatal("ChangeMasterPassword accepted an unreadable backup")
 	}
 	for path, want := range before {
@@ -1791,7 +1846,7 @@ func TestChangingTheMasterPasswordRollsBackEveryTargetAfterApplyFailure(t *testi
 		t.Run(test.name, func(t *testing.T) {
 			service, _, faults, _, before := newRekeyFaultHarness(t)
 			test.configure(faults)
-			if err := service.ChangeMasterPassword(passphrase, next); !errors.Is(err, faults.failure) {
+			if err := service.ChangeMasterPassword(context.Background(), passphrase, next); !errors.Is(err, faults.failure) {
 				t.Fatalf("ChangeMasterPassword = %v, want injected failure", err)
 			}
 			assertRekeyGeneration(t, service, before, passphrase, next)
@@ -1805,7 +1860,7 @@ func TestChangingTheMasterPasswordRecoversTheOldGenerationAfterProcessCrash(t *t
 	// The first failure interrupts forward apply; the second interrupts the
 	// automatic rollback, leaving exactly the state a process crash would expose.
 	faults.failRenames = map[int]bool{2: true, 3: true}
-	if err := service.ChangeMasterPassword(passphrase, next); !errors.Is(err, faults.failure) {
+	if err := service.ChangeMasterPassword(context.Background(), passphrase, next); !errors.Is(err, faults.failure) {
 		t.Fatalf("ChangeMasterPassword = %v, want injected failure", err)
 	}
 	pending, err := manager.Pending()
@@ -1832,7 +1887,7 @@ func TestChangingTheMasterPasswordFinalizesTheNewGenerationAfterCommitPointCrash
 	const next = "a different master password"
 	service, manager, faults, home, _ := newRekeyFaultHarness(t)
 	faults.failCleanupSync = true
-	if err := service.ChangeMasterPassword(passphrase, next); err != nil {
+	if err := service.ChangeMasterPassword(context.Background(), passphrase, next); err != nil {
 		t.Fatalf("ChangeMasterPassword = %v", err)
 	}
 	service.Lock()
@@ -1866,7 +1921,7 @@ func TestChangingTheMasterPasswordRefusesTheWrongCurrentOne(t *testing.T) {
 	if err := service.Initialise(passphrase); err != nil {
 		t.Fatal(err)
 	}
-	if err := service.ChangeMasterPassword("not the master password", "a new master password"); !errors.Is(err, secret.ErrWrongPassphrase) {
+	if err := service.ChangeMasterPassword(context.Background(), "not the master password", "a new master password"); !errors.Is(err, secret.ErrWrongPassphrase) {
 		t.Errorf("ChangeMasterPassword with the wrong current = %v, want ErrWrongPassphrase", err)
 	}
 	// そして、それが持っていた鍵でいまも開く。
@@ -2378,7 +2433,7 @@ func TestPasswordMutationUsesTheRekeyedVaultAsItsBaseline(t *testing.T) {
 		t.Fatal(err)
 	}
 	const nextPassphrase = "the next correct horse battery staple"
-	if err := service.ChangeMasterPassword(passphrase, nextPassphrase); err != nil {
+	if err := service.ChangeMasterPassword(context.Background(), passphrase, nextPassphrase); err != nil {
 		t.Fatalf("ChangeMasterPassword = %v", err)
 	}
 	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
@@ -2713,11 +2768,9 @@ func TestDedicatedKeyPassphraseRelocationPersists(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := service.RelocateKeyPassphrases(map[string]string{
+	relocateKeyPassphrases(t, service, home, map[string]string{
 		"keys/work/id_a": "keys/client/id_a",
-	}); err != nil {
-		t.Fatal(err)
-	}
+	})
 	if got := service.DedicatedKeyPassphrases(); !slices.Equal(got, []string{"keys/client/id_a"}) {
 		t.Fatalf("dedicated subjects after relocation = %#v", got)
 	}

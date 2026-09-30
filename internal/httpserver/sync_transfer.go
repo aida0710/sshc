@@ -99,7 +99,7 @@ func (h SyncHandlers) Pull(c *echo.Context) error {
 		(request.ExpectedETag == nil || request.ExpectedRevision == nil) {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
-	if (request.HistoryKey != nil && (len(*request.HistoryKey) == 0 || len(*request.HistoryKey) > 1024)) ||
+	if (request.HistoryKey != nil && (len(*request.HistoryKey) == 0 || len(*request.HistoryKey) > remotesync.MaxHistoryKeyLength)) ||
 		(request.ExpectedETag != nil && len(*request.ExpectedETag) > 1024) ||
 		(request.ExpectedRevision != nil && !validSyncRevision(*request.ExpectedRevision)) {
 		return problem(c, http.StatusBadRequest, "invalid_request")

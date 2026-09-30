@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/binary"
+	"errors"
 	"io"
 	"net"
 	"os"
@@ -401,6 +402,20 @@ func TestForwardSpecificationsAreReadTheWayOpenSSHWritesThem(t *testing.T) {
 // agent へ届く。
 func TestAgentForwardingLendsTheAgentToTheRemote(t *testing.T) {
 	socket, agentKey := runTestAgent(t, "")
+	assertAgentForwarded(t, unixSocketAgent(socket), agentKey)
+}
+
+// Windows の OpenSSH agent は named pipe で待つ。転送も unix socket と決め打ちせず、
+// 認証と同じ agent の開き方で貸す。
+func TestAgentForwardingLendsAnAgentReachedThroughItsOwnTransport(t *testing.T) {
+	keyring, agentKey := agentKeyring(t)
+	assertAgentForwarded(t, pipeAgent{keyring: keyring}, agentKey)
+}
+
+// assertAgentForwarded は、connector の agent をリモートへ貸し、リモートがその鍵を
+// 見られることを確かめる。
+func assertAgentForwarded(t *testing.T, connector sshclient.AgentConnector, agentKey ssh.Signer) {
+	t.Helper()
 	path, contents, public := keyPair(t)
 
 	seen := make(chan string, 1)
@@ -421,8 +436,8 @@ func TestAgentForwardingLendsTheAgentToTheRemote(t *testing.T) {
 		},
 	})
 	auth := sshclient.Auth{
-		ReadFile:    func(string) ([]byte, error) { return contents, nil },
-		AgentSocket: socket,
+		ReadFile: func(string) ([]byte, error) { return contents, nil },
+		Agent:    connector,
 	}
 	target := targetWith(server, path)
 	target.AgentForward = true
@@ -478,6 +493,56 @@ func TestAgentForwardingWithoutAnAgentStillConnects(t *testing.T) {
 	forwards := process.(terminal.Forwarder).Forwards()
 	if len(forwards) != 1 || forwards[0].Problem == "" {
 		t.Fatalf("forwards = %#v, want the reason recorded", forwards)
+	}
+}
+
+// multiLineUnreachableAgent は、宛先はあるが開けず、その理由を 2 行で返す agent である。
+type multiLineUnreachableAgent struct{}
+
+func (multiLineUnreachableAgent) Address() string { return windowsAgentPipe }
+
+func (multiLineUnreachableAgent) Connect(context.Context) (net.Conn, error) {
+	return nil, errors.New("no ssh-agent is reachable from this process\nthe agent pipe is not there")
+}
+
+// 転送できなかった理由は、どの行もターミナルの行頭から始まる。xterm は LF だけでは
+// 行頭へ戻らないので、LF のまま書くと表示が階段状に崩れる。
+func TestAgentForwardingFailureStartsEveryReasonLineAtTheLeftEdge(t *testing.T) {
+	for name, connector := range map[string]sshclient.AgentConnector{
+		"a socket nobody listens on":    unixSocketAgent(filepath.Join(t.TempDir(), "gone.sock")),
+		"a reason written on two lines": multiLineUnreachableAgent{},
+	} {
+		t.Run(name, func(t *testing.T) {
+			path, contents, public := keyPair(t)
+			server := newTestServer(t, serverOptions{
+				AcceptKeys: []ssh.PublicKey{public},
+				OnShell: func(channel ssh.Channel) {
+					_, _ = io.WriteString(channel, "ready\r\n")
+					_, _ = io.Copy(io.Discard, channel)
+				},
+			})
+			auth := sshclient.Auth{
+				ReadFile: func(string) ([]byte, error) { return contents, nil },
+				Agent:    connector,
+			}
+			target := targetWith(server, path)
+			target.AgentForward = true
+
+			process, err := dialerFor(t, server, auth).Open(
+				context.Background(), target, terminal.Size{Cols: 80, Rows: 24})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = process.Close() }()
+
+			seen := readUntil(t, process, "ready")
+			if !strings.Contains(seen, "sshc: agent forwarding: ") {
+				t.Fatalf("the terminal does not say why the agent was not forwarded: %q", seen)
+			}
+			if strings.Contains(strings.ReplaceAll(seen, "\r\n", ""), "\n") {
+				t.Errorf("a line of the reason does not return to the left edge: %q", seen)
+			}
+		})
 	}
 }
 
@@ -626,7 +691,7 @@ func TestClosingTheSessionReleasesTheForwardedAgentSocket(t *testing.T) {
 			_, _ = io.Copy(io.Discard, channel)
 		},
 	})
-	auth := sshclient.Auth{ReadFile: func(string) ([]byte, error) { return contents, nil }, AgentSocket: socket}
+	auth := sshclient.Auth{ReadFile: func(string) ([]byte, error) { return contents, nil }, Agent: unixSocketAgent(socket)}
 	target := targetWith(server, path)
 	target.AgentForward = true
 

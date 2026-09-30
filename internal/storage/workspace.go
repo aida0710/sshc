@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"sshc/internal/enginelock"
+	"sshc/internal/filelock"
 	"sshc/internal/platform/nativepath"
 	"sshc/internal/platform/nofollow"
 )
@@ -25,12 +25,17 @@ var (
 
 // ErrPendingTransaction reports a durable, interrupted mutation which must be
 // completed or rolled back before another workspace generation is observed.
-// It wraps ErrWorkspaceBusy so existing API clients keep their stable conflict
-// response while local callers can distinguish recovery from lock contention.
+// It wraps ErrWorkspaceBusy so a caller that only knows about lock contention
+// still refuses to proceed. Waiting does not clear it, so anything that tells
+// the user what to do (the HTTP problem mapping, sync failure codes) must check
+// ErrPendingTransaction before ErrWorkspaceBusy and point to recovery instead.
 var ErrPendingTransaction = fmt.Errorf("%w: a pending transaction must be recovered first", ErrWorkspaceBusy)
 
 const (
 	mutationLockName = "mutation.lock"
+	// mutationLockWait は、別プロセスの書き込みが終わるのを待つ上限である。
+	// 同期の取り込みのような大きいトランザクションは待ち、止まったプロセスが
+	// 握り続けるロックでは書き込みを永久には止めない。
 	mutationLockWait = 30 * time.Second
 )
 
@@ -75,26 +80,18 @@ func (w *Workspace) lockMutation() (func(), error) {
 		}
 	}
 
-	lockPath := filepath.Join(lockDirectory, mutationLockName)
-	deadline := time.Now().Add(mutationLockWait)
-	for {
-		release, err := enginelock.Acquire(lockPath)
-		if err == nil {
-			return func() {
-				_ = release()
-				w.mutation.Unlock()
-			}, nil
-		}
-		if !errors.Is(err, enginelock.ErrRunning) {
-			w.mutation.Unlock()
-			return nil, err
-		}
-		if time.Now().After(deadline) {
-			w.mutation.Unlock()
+	release, err := filelock.AcquireWithin(filepath.Join(lockDirectory, mutationLockName), mutationLockWait)
+	if err != nil {
+		w.mutation.Unlock()
+		if errors.Is(err, filelock.ErrHeld) {
 			return nil, ErrWorkspaceBusy
 		}
-		time.Sleep(10 * time.Millisecond)
+		return nil, err
 	}
+	return func() {
+		_ = release()
+		w.mutation.Unlock()
+	}, nil
 }
 
 // privateFileReader は任意実装とし、FileSystem の fake と呼び出し側へ Windows 固有の
@@ -232,16 +229,9 @@ func (w *Workspace) Contains(candidate string) bool {
 // ホーム配下にないパスは、正規化されたうえで、それ以外は手を触れずに返る。
 func (w *Workspace) Normalise(candidate string) string {
 	cleaned := filepath.Clean(candidate)
-	homeRoot := filepath.Join(w.home, ".ssh")
-	if !nativepath.Contains(homeRoot, cleaned) {
+	relative, inside := nativepath.Relative(filepath.Join(w.home, ".ssh"), cleaned)
+	if !inside {
 		return cleaned
-	}
-	relative, err := filepath.Rel(homeRoot, cleaned)
-	if err != nil {
-		return cleaned
-	}
-	if relative == "." {
-		return w.root
 	}
 	return filepath.Join(w.root, relative)
 }
@@ -397,7 +387,7 @@ func (w *Workspace) EnsureDirectory(candidate string) error {
 			return ErrSymlinkPath
 		case !info.IsDir():
 			return ErrNotDirectory
-		case current == w.StateDir() || strings.HasPrefix(current, w.StateDir()+string(filepath.Separator)):
+		case privateStateContains(w.StateDir(), current):
 			// 既存 state が親から緩い ACL を継承していた場合も、秘密を次に書く前に
 			// OS adapter で締め直す。ユーザー管理の ~/.ssh 配下は対象外にする。
 			if err := w.fileSystem.MkdirAll(current, DirectoryPermission); err != nil {

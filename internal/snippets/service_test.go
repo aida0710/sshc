@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -54,7 +55,10 @@ func testService(repository Repository, run func(context.Context, string, string
 			if alias == "missing" {
 				return Resolution{}, errors.New("not found")
 			}
-			resolution := Resolution{Target: Target{Alias: alias, HostName: alias + ".example", User: "aida", Port: "22"}}
+			resolution := Resolution{
+				Target:  Target{Alias: alias, HostName: alias + ".example", User: "aida", Port: "22"},
+				Binding: "destination-of-" + alias,
+			}
 			if run != nil {
 				resolution.Run = func(ctx context.Context, command string) (CommandOutput, error) {
 					return run(ctx, alias, command)
@@ -250,8 +254,8 @@ func TestStartupStoresEncryptedSecretInputsAndAnEditCannotBreakAnAssignment(t *t
 		t.Fatalf("PrepareStartupCommand = %#v, %v", preparedStartup, err)
 	}
 	bindings, err := service.Startup()
-	if err != nil || len(bindings) != 1 || len(bindings[0].Inputs) != 0 {
-		t.Fatalf("public Startup exposed encrypted inputs: %#v, %v", bindings, err)
+	if err != nil || len(bindings) != 1 || bindings[0].Stale {
+		t.Fatalf("Startup = %#v, %v", bindings, err)
 	}
 
 	plain := createSnippet(t, service, Draft{Name: "Plain", Command: "echo ok"})
@@ -605,4 +609,131 @@ func waitForJob(t *testing.T, service *Service, id string) Job {
 	}
 	t.Fatalf("job %s did not finish", id)
 	return Job{}
+}
+
+// changingDestinationService は、alias の接続先を途中で変えられる resolver を持つ。
+func changingDestinationService(repository Repository, destination *string) *Service {
+	return NewService(Options{
+		Repository: repository,
+		Resolve: func(alias string) (Resolution, error) {
+			return Resolution{
+				Target:  Target{Alias: alias, HostName: *destination, User: "aida", Port: "22"},
+				Binding: "destination-of-" + *destination,
+			}, nil
+		},
+		Now:    func() time.Time { return time.Date(2026, 8, 24, 8, 0, 0, 0, time.UTC) },
+		Random: strings.NewReader(strings.Repeat("abcdefghijklmnopqrstuvwxyz0123456789", 20)),
+	})
+}
+
+func TestAStartupSnippetIsNotSentOnceTheDestinationChanges(t *testing.T) {
+	destination := "203.0.113.10"
+	service := changingDestinationService(&memoryRepository{}, &destination)
+	secret := createSnippet(t, service, Draft{
+		Name: "Secret", Command: "echo {{token}}",
+		Variables: []Variable{{Name: "token", Type: VariableSecret, Required: true}},
+	})
+	if err := service.SetStartup("bastion", secret.ID, map[string]string{"token": "hidden"}); err != nil {
+		t.Fatal(err)
+	}
+
+	destination = "198.51.100.20"
+
+	if prepared, err := service.PrepareStartupCommand("bastion"); !errors.Is(err, ErrStartupDestinationChanged) {
+		t.Fatalf("PrepareStartupCommand = %#v, %v; want ErrStartupDestinationChanged", prepared, err)
+	}
+	assignments, err := service.Startup()
+	if err != nil || len(assignments) != 1 || !assignments[0].Stale {
+		t.Fatalf("Startup = %#v, %v; want the assignment reported stale", assignments, err)
+	}
+}
+
+func TestReassigningAStaleStartupSnippetBindsItToTheNewDestination(t *testing.T) {
+	destination := "203.0.113.10"
+	service := changingDestinationService(&memoryRepository{}, &destination)
+	check := createSnippet(t, service, Draft{Name: "Check", Command: "uptime"})
+	if err := service.SetStartup("bastion", check.ID, nil); err != nil {
+		t.Fatal(err)
+	}
+	destination = "198.51.100.20"
+
+	if err := service.SetStartup("bastion", check.ID, nil); err != nil {
+		t.Fatal(err)
+	}
+	prepared, err := service.PrepareStartupCommand("bastion")
+	if err != nil || prepared.Command != "uptime" {
+		t.Fatalf("PrepareStartupCommand = %#v, %v", prepared, err)
+	}
+}
+
+func TestAStartupAssignmentWithoutABindingIsNotSent(t *testing.T) {
+	destination := "203.0.113.10"
+	repository := &memoryRepository{}
+	service := changingDestinationService(repository, &destination)
+	check := createSnippet(t, service, Draft{Name: "Check", Command: "uptime"})
+	if err := repository.Mutate(func(library *Library) error {
+		library.Startup = append(library.Startup, Startup{Alias: "bastion", SnippetID: check.ID})
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := service.PrepareStartupCommand("bastion"); !errors.Is(err, ErrStartupDestinationChanged) {
+		t.Fatalf("PrepareStartupCommand = %v, want ErrStartupDestinationChanged", err)
+	}
+}
+
+func TestCreatingASnippetInAFullLibraryIsRefusedAsALimitNotACorruptDocument(t *testing.T) {
+	full := Library{}
+	for index := range MaxSnippets {
+		full.Snippets = append(full.Snippets, Snippet{ID: "snippet-" + strconv.Itoa(index), Name: "Snippet", Command: "true"})
+	}
+	service := testService(&memoryRepository{library: full}, nil)
+
+	_, err := service.Create(Draft{Name: "One more", Command: "true"})
+	if !errors.Is(err, ErrTooManySnippets) || errors.Is(err, ErrInvalidDocument) {
+		t.Fatalf("Create in a full library = %v, want ErrTooManySnippets", err)
+	}
+}
+
+// 上限は一斉実行の対象数とは別の、起動スニペットを割り当てたホストの数である。
+// 上限に達していても、すでに割り当てたホストの割り当ては変えられる。
+func TestAssigningAStartupSnippetBeyondTheHostLimitIsRefusedButReassigningIsNot(t *testing.T) {
+	repository := &memoryRepository{}
+	service := testService(repository, nil)
+	snippet := createSnippet(t, service, Draft{Name: "Attach", Command: "tmux attach"})
+	for index := range MaxStartupBindings {
+		if err := service.SetStartup("host-"+strconv.Itoa(index), snippet.ID, nil); err != nil {
+			t.Fatalf("assignment %d: %v", index, err)
+		}
+	}
+
+	err := service.SetStartup("one-more-host", snippet.ID, nil)
+	if !errors.Is(err, ErrTooManyStartupBindings) || errors.Is(err, ErrInvalidDocument) {
+		t.Fatalf("assignment beyond the limit = %v, want ErrTooManyStartupBindings", err)
+	}
+	if err := service.SetStartup("host-0", snippet.ID, nil); err != nil {
+		t.Fatalf("reassigning an assigned host at the limit = %v", err)
+	}
+}
+
+func TestOutputHidesALongerSecretThatStartsWithAnotherSecret(t *testing.T) {
+	shown, _ := publicOutput([]byte("db=hunter2 admin=hunter2-admin-9f"), []string{"hunter2", "hunter2-admin-9f"}, false)
+	if shown != "db=[secret] admin=[secret]" {
+		t.Fatalf("stdout = %q", shown)
+	}
+}
+
+func TestOutputCutByTheCaptureLimitHidesTheHeadOfASecretAtTheEnd(t *testing.T) {
+	shown, _ := publicOutput([]byte("token=top-se"), []string{"top-secret"}, true)
+	if shown != "token=[secret]" {
+		t.Fatalf("stdout = %q", shown)
+	}
+}
+
+func TestOutputThatWasNotCutKeepsATailThatOnlyStartsLikeASecret(t *testing.T) {
+	shown, _ := publicOutput([]byte("token=top-se"), []string{"top-secret"}, false)
+	if shown != "token=top-se" {
+		t.Fatalf("stdout = %q", shown)
+	}
 }

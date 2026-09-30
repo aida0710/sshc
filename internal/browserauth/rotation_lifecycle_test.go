@@ -13,7 +13,7 @@ func TestSignOutRevokesEveryGraceToken(t *testing.T) {
 	}
 	second, _ := recover(t, store, first)
 	third, _ := recover(t, store, second)
-	if removed, err := store.Forget(third); err != nil || !removed {
+	if removed, err := store.Forget(third); err != nil || removed == "" {
 		t.Fatalf("Forget: %v, %v", removed, err)
 	}
 	if registered, err := store.HasRegistrations(); err != nil || registered {
@@ -32,7 +32,7 @@ func TestSigningOutWithAnOlderGraceTokenRevokesTheCurrentRegistration(t *testing
 	}
 	second, _ := recover(t, store, first)
 	third, _ := recover(t, store, second)
-	if removed, err := store.Forget(first); err != nil || !removed {
+	if removed, err := store.Forget(first); err != nil || removed == "" {
 		t.Fatalf("sign-out using grace token: %v, %v", removed, err)
 	}
 	for _, token := range []string{first, second, third} {
@@ -71,5 +71,35 @@ func TestGraceReturnsTheLatestToken(t *testing.T) {
 	latest, accepted := recover(t, store, first)
 	if !accepted || latest != third {
 		t.Fatal("a delayed tab receives a retired token and overwrites shared localStorage")
+	}
+}
+
+// 登録の識別子は token を差し替えても変わらない。複製を検知して消した登録も
+// 同じ識別子で知らせるので、その登録から入ったセッションをまとめて失効できる。
+func TestARegistrationKeepsItsIdentifierAcrossRotationsAndTheft(t *testing.T) {
+	store, clock := newStore(t, randomBytes(t, 32*8))
+	first, _, err := store.Register("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rotated, err := store.Recover(first)
+	if err != nil || !rotated.Accepted() {
+		t.Fatalf("Recover(first) = %+v, %v", rotated, err)
+	}
+	again, err := store.Recover(rotated.Token)
+	if err != nil || !again.Accepted() {
+		t.Fatalf("Recover(rotated) = %+v, %v", again, err)
+	}
+	if rotated.Registration == "" || again.Registration != rotated.Registration {
+		t.Fatalf("identifiers across a rotation = %q, %q", rotated.Registration, again.Registration)
+	}
+
+	clock.advance(2 * time.Minute)
+	copied, err := store.Recover(rotated.Token)
+	if err != nil || copied.Accepted() {
+		t.Fatalf("Recover(retired after the grace) = %+v, %v", copied, err)
+	}
+	if copied.Stolen != rotated.Registration {
+		t.Fatalf("stolen = %q, want %q", copied.Stolen, rotated.Registration)
 	}
 }

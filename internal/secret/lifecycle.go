@@ -116,12 +116,10 @@ func (s *Service) State() (State, error) {
 	if err != nil {
 		return State{}, err
 	}
-	localKey, err := s.localKey()
+	passwordless, err := s.hasLocalKey()
 	if err != nil {
 		return State{}, err
 	}
-	passwordless := len(localKey) > 0
-	clear(localKey)
 	s.mu.Lock()
 	if !exists {
 		// disk 上の vault を失ったあとも導出済み key だけを使い続けない。
@@ -269,6 +267,11 @@ func (s *Service) refuse() {
 func (s *Service) Unlock(passphrase string) error {
 	s.mutationMu.Lock()
 	defer s.mutationMu.Unlock()
+	return s.unlockHeld(passphrase)
+}
+
+// unlockHeld は Unlock の本体である。呼び手が mutationMu を持っている。
+func (s *Service) unlockHeld(passphrase string) error {
 	passwordless := passphrase == ""
 	passphrase, err := s.resolvePassphrase(passphrase)
 	if err != nil {
@@ -521,9 +524,37 @@ func (s *Service) replaceVault(
 // Lock は、導出された鍵と未使用のトークンをすべて忘れる。
 //
 // ロック前に発行したトークンで資格情報を取得できないよう、トークンも削除する。
+//
+// パスワードなしの Vault でも鍵を破棄する。engine の終了処理が使う。利用者の操作に
+// よるロックは LockManually を使う。
 func (s *Service) Lock() {
 	s.mutationMu.Lock()
 	defer s.mutationMu.Unlock()
+	s.lockHeld()
+}
+
+// LockManually は、利用者の操作（画面のロックボタンや sshc vault lock）でロックする。
+//
+// パスワードなしの Vault は手動のロックを受け付けない。ロックしても、解錠に要る
+// 鍵がこのマシンにあるので守るものが無いからである。そのときは解錠したままにし、
+// 施錠中なら解錠する。判定と遷移を同じ mutationMu の中で行い、あいだに別の変更を
+// 挟ませない。
+func (s *Service) LockManually() error {
+	s.mutationMu.Lock()
+	defer s.mutationMu.Unlock()
+	passwordless, err := s.hasLocalKey()
+	if err != nil {
+		return err
+	}
+	if !passwordless {
+		s.lockHeld()
+		return nil
+	}
+	return s.unlockPasswordlessHeld()
+}
+
+// lockHeld は Lock の本体である。呼び手が mutationMu を持っている。
+func (s *Service) lockHeld() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.backupVault != nil && s.backupVault != s.vault {

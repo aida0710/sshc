@@ -8,6 +8,11 @@ import (
 )
 
 // KeyHosts returns the concrete configured aliases whose effective
+// IdentityFile values name each requested workspace-relative key path.
+//
+// It expands IdentityFile values with the same conservative rules as the key
+// inventory (keys.ExpandsTo), and it looks only at concrete aliases the
+// application already shows, so open-ended Host patterns are never guessed.
 func (s *Service) KeyHosts(relativePaths []string) (map[string][]string, error) {
 	hostsByKey := make(map[string][]string, len(relativePaths))
 	absoluteByKey := make(map[string]string, len(relativePaths))

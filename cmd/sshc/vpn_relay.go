@@ -15,7 +15,7 @@ import (
 	"sshc/internal/vpn"
 )
 
-// VPN 経路の中継へ繋ぐ。`sshc <接続先>` と、ホストの ssh が ProxyCommand として
+// VPN 経路の中継へ繋ぐ。`sshc ssh <alias>` と、ホストの ssh が ProxyCommand として
 // 使う `sshc vpn proxy` が使う。
 
 // errVPNRelayMissing は、engine が経路を差し出さなかったことを表す。

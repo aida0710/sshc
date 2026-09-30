@@ -21,8 +21,8 @@ const (
 // Control returns explicit lifecycle state and a cursor-addressed, bounded
 // plain-text scrollback fragment for CLI automation.
 func (h TerminalHandlers) Control(c *echo.Context) error {
-	id := c.Param("id")
-	if id == "" || len(id) > maxSessionIdentifier {
+	id, ok := sessionIDParam(c)
+	if !ok {
 		return problem(c, http.StatusNotFound, "terminal_session_not_found")
 	}
 	session, ok := h.Registry.Lookup(id)

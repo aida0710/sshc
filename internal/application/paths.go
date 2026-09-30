@@ -4,6 +4,8 @@ import (
 	"errors"
 	"path/filepath"
 	"strings"
+
+	"sshc/internal/platform/nativepath"
 )
 
 var ErrExternalPath = errors.New("path is outside the ssh directory")
@@ -12,18 +14,11 @@ func RelativePath(root, absolute string) (string, error) {
 	if !filepath.IsAbs(absolute) {
 		return "", ErrExternalPath
 	}
-	cleaned := filepath.Clean(absolute)
-	if cleaned == filepath.Clean(root) {
+	relative, ok := nativepath.RelativeSlash(root, absolute)
+	if !ok {
 		return "", ErrExternalPath
 	}
-	relative, err := filepath.Rel(filepath.Clean(root), cleaned)
-	if err != nil {
-		return "", ErrExternalPath
-	}
-	if relative == "." || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
-		return "", ErrExternalPath
-	}
-	return filepath.ToSlash(relative), nil
+	return relative, nil
 }
 
 func AbsolutePath(root, relative string) (string, error) {

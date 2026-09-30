@@ -17,7 +17,7 @@ import (
 
 	"sshc/internal/app"
 	"sshc/internal/handoff"
-	"sshc/internal/selfupdate"
+	"sshc/internal/releasecheck"
 	"sshc/internal/ui"
 )
 
@@ -50,17 +50,17 @@ type engineOptions struct {
 
 func runEngine(
 	ctx context.Context,
-	home string,
+	paths userPaths,
 	options engineOptions,
 	stdin io.Reader,
 	stdout, stderr io.Writer,
 ) int {
-	return runEngineWithDependencies(ctx, home, options, stdin, stdout, stderr, defaultEngineDependencies())
+	return runEngineWithDependencies(ctx, paths, options, stdin, stdout, stderr, defaultEngineDependencies())
 }
 
 func runEngineWithDependencies(
 	ctx context.Context,
-	home string,
+	paths userPaths,
 	options engineOptions,
 	stdin io.Reader,
 	stdout, stderr io.Writer,
@@ -74,11 +74,11 @@ func runEngineWithDependencies(
 	// 所有権はロックより先である。持ち主が既に居なくなっていたなら、
 	// ロックを取ってはならない。取れば、誰も待っていないエンジンが 1 台分の
 	// 席を占める。
-	release, err := dependencies.acquire(app.HandoffDir(home))
+	release, err := dependencies.acquire(paths.stateDir)
 	if errors.Is(err, errEngineRunning) {
 		// 2 台目は立てない。ただし、どこで起動したか分からない engine を探して
 		// 回らずに畳めるよう、走っているものを止める道は用意する。
-		taken, takeErr := replaceRunningEngine(signalCtx, home, options, stdin, stdout, stderr, dependencies.acquire)
+		taken, takeErr := replaceRunningEngine(signalCtx, paths.stateDir, options, stdin, stdout, stderr, dependencies.acquire)
 		if takeErr != nil {
 			if signalCtx.Err() != nil {
 				return exitForCause(context.Cause(signalCtx))
@@ -103,7 +103,7 @@ func runEngineWithDependencies(
 		return exitForCause(context.Cause(signalCtx))
 	}
 
-	code := runEngineApp(signalCtx, home, options, stdout, logger, dependencies)
+	code := runEngineApp(signalCtx, paths.home, options, stdout, logger, dependencies)
 
 	// ロックを手放すのは最後である。これより後に状態を変えるものは何も無い。
 	if err := release(); err != nil {
@@ -139,7 +139,7 @@ func runEngineApp(
 	}()
 
 	parts := newPlatformParts()
-	updates := &selfupdate.Checker{
+	updates := &releasecheck.Checker{
 		API:  latestReleaseAPI,
 		HTTP: &http.Client{Timeout: releaseCheckTimeout},
 	}
@@ -206,7 +206,7 @@ const (
 
 // reportAvailableUpdate はengineが受付を始めた直後に一度だけ確認し、新しいバージョンがある
 // 場合だけ通知する。ネットワーク障害や出力失敗はengineの成否へ影響させない。
-func reportAvailableUpdate(ctx context.Context, checker *selfupdate.Checker, current string, out io.Writer, logger *slog.Logger) {
+func reportAvailableUpdate(ctx context.Context, checker *releasecheck.Checker, current string, out io.Writer, logger *slog.Logger) {
 	checkCtx, cancel := context.WithTimeout(ctx, startupUpdateCheckTimeout)
 	defer cancel()
 	latest, err := checker.Latest(checkCtx)
@@ -216,7 +216,7 @@ func reportAvailableUpdate(ctx context.Context, checker *selfupdate.Checker, cur
 		}
 		return
 	}
-	if !selfupdate.Newer(current, latest.Version) || checkCtx.Err() != nil {
+	if !releasecheck.Newer(current, latest.Version) || checkCtx.Err() != nil {
 		return
 	}
 	if _, err := fmt.Fprint(out, availableUpdateNotice(latest.Version, runtime.GOOS)); err != nil && logger != nil {

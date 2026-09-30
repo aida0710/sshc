@@ -1,7 +1,6 @@
 package remotesync
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -13,6 +12,7 @@ import (
 	"sshc/internal/envelope"
 	"sshc/internal/objectstore"
 	"sshc/internal/storage"
+	"sshc/internal/strictjson"
 )
 
 // KeyRecoveryPath records only remote generation metadata for an interrupted
@@ -268,9 +268,7 @@ func (s *Service) readKeyRecovery() (keyRecoveryJournal, bool, error) {
 		return keyRecoveryJournal{}, false, err
 	}
 	var journal keyRecoveryJournal
-	decoder := json.NewDecoder(bytes.NewReader(body))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&journal); err != nil || journal.SchemaVersion != keyRecoverySchemaVersion ||
+	if err := strictjson.Decode(body, &journal); err != nil || journal.SchemaVersion != keyRecoverySchemaVersion ||
 		journal.Target == "" || journal.ObjectKey == "" || journal.OldETag == "" ||
 		len(journal.OldCiphertextSHA256) != 64 || len(journal.NewCiphertextSHA256) != 64 ||
 		(journal.Phase != keyRecoveryPrepared && journal.Phase != keyRecoveryRemoteAdvanced) ||

@@ -141,10 +141,22 @@ func TestVaultAutoLockRefusesAmbiguousOrOutOfRangeSettings(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			metadata := NewMetadata()
 			metadata.Engine = &EngineSettings{VaultAutoLock: &chosen}
-			if _, err := EncodeMetadata(metadata); !errors.Is(err, ErrMetadataEngine) {
-				t.Fatalf("EncodeMetadata = %v, want ErrMetadataEngine", err)
+			if _, err := EncodeMetadata(metadata); !errors.Is(err, ErrMetadataVaultAutoLock) ||
+				!errors.Is(err, ErrMetadataEngine) {
+				t.Fatalf("EncodeMetadata = %v, want ErrMetadataVaultAutoLock within ErrMetadataEngine", err)
 			}
 		})
+	}
+}
+
+func TestEnginePortOutsideTheUnprivilegedRangeIsRefused(t *testing.T) {
+	for _, port := range []int{80, 1023, 65536} {
+		metadata := NewMetadata()
+		metadata.Engine = &EngineSettings{Port: port}
+		if _, err := EncodeMetadata(metadata); !errors.Is(err, ErrMetadataEnginePort) ||
+			!errors.Is(err, ErrMetadataEngine) {
+			t.Fatalf("EncodeMetadata(port %d) = %v, want ErrMetadataEnginePort within ErrMetadataEngine", port, err)
+		}
 	}
 }
 

@@ -22,6 +22,13 @@ var (
 	ErrMissingDirectory = storage.ErrMissingDirectory
 	// ErrNotDirectory は、ディレクトリでないものをディレクトリとして扱う要求を断る。
 	ErrNotDirectory = storage.ErrNotDirectory
+	// ErrWorkspaceBusy は、別の sshc が workspace の lock を持ち続けていて書き込めないことを報告する。
+	ErrWorkspaceBusy = storage.ErrWorkspaceBusy
+	// ErrPendingTransaction は、中断した変更が残っていて、復旧するまで書き込めないことを報告する。
+	// ErrWorkspaceBusy を包むので、両方を見分けるときはこちらを先に判定する。
+	ErrPendingTransaction = storage.ErrPendingTransaction
+	// ErrFileTooLarge は、読み書きするファイルが扱える大きさを超えていることを報告する。
+	ErrFileTooLarge = storage.ErrFileTooLarge
 )
 
 // IsExternalChange は、読んだときと書くときで中身が変わっていたことを報告する。

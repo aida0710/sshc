@@ -70,13 +70,16 @@ func (s *Service) planFileRename(graph *config.Graph, request EditRequest) (plan
 	if _, err := s.workspace.ResolveForWrite(source); err != nil {
 		return planned{}, err
 	}
+	if err := s.checkConfigurationPath(destination); err != nil {
+		return planned{}, err
+	}
 	if _, exists, err := s.readFile(destination); err != nil {
 		return planned{}, err
 	} else if exists {
 		return planned{}, ErrDestinationExists
 	}
 
-	current, exists, err := s.readFile(source)
+	current, exists, err := s.readConfigurationFile(source)
 	if err != nil {
 		return planned{}, err
 	}
@@ -156,7 +159,7 @@ func (s *Service) planFileDelete(graph *config.Graph, request EditRequest) (plan
 	if _, err := s.workspace.ResolveForWrite(target); err != nil {
 		return planned{}, err
 	}
-	current, exists, err := s.readFile(target)
+	current, exists, err := s.readConfigurationFile(target)
 	if err != nil {
 		return planned{}, err
 	}

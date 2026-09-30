@@ -17,6 +17,12 @@ type (
 	Credentials = objectstore.Credentials
 )
 
+// Credentials の入力上限。CLI の対話入力と HTTP の設定画面が同じ値で断る。
+const (
+	MaxAccessKeyIDLength     = 512
+	MaxSecretAccessKeyLength = 512
+)
+
 var (
 	// ErrInsecureEndpoint は、平文で通信する行き先を断る。
 	ErrInsecureEndpoint = objectstore.ErrInsecureEndpoint
@@ -42,6 +48,8 @@ var (
 	ErrUnsupportedEnvelopeVersion = envelope.ErrUnsupportedVersion
 	// ErrWorkspaceBusy は、別の処理が同じワークスペースを更新中であることを報告する。
 	ErrWorkspaceBusy = storage.ErrWorkspaceBusy
+	// ErrPendingTransaction は、中断した変更が残っていて、復旧するまで書き込めないことを報告する。
+	ErrPendingTransaction = storage.ErrPendingTransaction
 )
 
 // IsLocalChange reports that files changed between the pull preview and its

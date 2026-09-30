@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"sshc/internal/validate"
 )
 
 type invocationKind uint8
@@ -129,7 +131,7 @@ func parseInvocation(argv []string) (invocation, error) {
 		return parseHelpInvocation(word, args)
 	// 旗も語も、同じところへ着く。`sshc version` が正式だが、`--version` は
 	// 誰もが最初に打つ形である。受けないと、入れた直後の一行目が usage と
-	// 終了コード 2 になる。実際 docs/release-install.md はそれを案内していた。
+	// 終了コード 2 になる。
 	case cliCommandVersion:
 		if word == canonicalCLICommand(cliCommandVersion) && helpRequested(args) {
 			return helpInvocation(canonicalCLICommand(cliCommandVersion)), nil
@@ -266,8 +268,9 @@ var engineCommandOptions = commandOptions{command: "engine", options: []commandO
 	switchOption("--replace"), valueOption("--port"),
 }}
 
-// enginePortBounds は、`sshc engine --port` が受ける範囲である。特権の要らない port だけを受ける。
-var enginePortBounds = integerBounds{minimum: 1024, maximum: 65535, kind: "a number"}
+// enginePortBounds は、`sshc engine --port` が受ける範囲である。範囲は engine の設定の
+// 検査（validate.EnginePort）と同じ出どころから取る。
+var enginePortBounds = integerBounds{minimum: validate.MinEnginePort, maximum: validate.MaxEnginePort, kind: "a number"}
 
 // parseEngineFlags は `sshc engine` のオプションを解析する。
 func parseEngineFlags(args []string) (invocation, error) {

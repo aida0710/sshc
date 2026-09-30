@@ -13,7 +13,6 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"sshc/internal/app"
 	"sshc/internal/handoff"
 	"sshc/internal/httpserver"
 	"sshc/internal/storage"
@@ -130,7 +129,7 @@ func TestServiceReadinessDoesNotSendTheSecretToAnUnprovenEngine(t *testing.T) {
 	}))
 	defer server.Close()
 	home := t.TempDir()
-	writeTestHandoff(t, app.HandoffDir(home), server.URL)
+	writeTestHandoff(t, mustStateDir(t, home), server.URL)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*serviceReadyPollInterval)
 	defer cancel()

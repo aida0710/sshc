@@ -4,7 +4,8 @@
 // （ワークスペースの root を含む）を symlink に差し替えられる。開いた root の
 // descriptor から openat で 1 要素ずつ降りることで、後続の lookup はすべて
 // symlink をたどらずに開いた directory descriptor を基準にできる。
-// storage のワークスペースと enginelock の state directory が同じ歩き方を使う。
+// storage のワークスペース、filelock のロックファイルの置き場所、handoff のファイルが
+// 同じ歩き方を使う。
 package nofollow
 
 import "errors"

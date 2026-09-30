@@ -37,6 +37,29 @@ func (s *Service) localKey() ([]byte, error) {
 	return body, nil
 }
 
+// unlockPasswordlessHeld は、施錠中のパスワードなしの Vault を解錠する。呼び手が
+// mutationMu を持っている。パスワードのある Vault と解錠中の Vault には何もしない。
+func (s *Service) unlockPasswordlessHeld() error {
+	if s.Unlocked() {
+		return nil
+	}
+	passwordless, err := s.hasLocalKey()
+	if err != nil || !passwordless {
+		return err
+	}
+	return s.autoUnlockHeld()
+}
+
+// hasLocalKey は、このマシンに解錠用の鍵がある（パスワードなしの Vault）かを返す。
+func (s *Service) hasLocalKey() (bool, error) {
+	body, err := s.localKey()
+	if err != nil {
+		return false, err
+	}
+	defer clear(body)
+	return len(body) > 0, nil
+}
+
 func (s *Service) resolvePassphrase(passphrase string) (string, error) {
 	if passphrase != "" {
 		return passphrase, nil
@@ -79,6 +102,17 @@ func (s *Service) prepareProtection(passphrase string) (storage.Change, string, 
 // AutoUnlock is called once by the engine after all protected documents have
 // been registered. Explicit Lock still destroys the in-memory key.
 func (s *Service) AutoUnlock() error {
+	s.mutationMu.Lock()
+	defer s.mutationMu.Unlock()
+	return s.autoUnlockHeld()
+}
+
+// autoUnlockHeld は AutoUnlock の本体である。呼び手が mutationMu を持っている。
+//
+// 中断した secret.vault と secret.rekey を完了・巻き戻しするので、mutationMu の外で
+// 走らせてはならない。storage の Pending は実行中のトランザクションの記録も読むので、
+// 走っている ChangeMasterPassword の rekey を、中断したものとして扱ってしまう。
+func (s *Service) autoUnlockHeld() error {
 	// Restore one complete generation before consulting the device key. These
 	// atomic transactions keep raw rollback material and need no unlocked vault.
 	pending, err := s.transactions.Pending()
@@ -102,13 +136,9 @@ func (s *Service) AutoUnlock() error {
 		}
 	}
 
-	body, err := s.localKey()
-	if err != nil {
+	passwordless, err := s.hasLocalKey()
+	if err != nil || !passwordless {
 		return err
 	}
-	defer clear(body)
-	if len(body) == 0 {
-		return nil
-	}
-	return s.Unlock("")
+	return s.unlockHeld("")
 }

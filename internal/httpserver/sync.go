@@ -12,6 +12,7 @@ import (
 	"sshc/internal/remotesync"
 	"sshc/internal/secret"
 	"sshc/internal/session"
+	"sshc/internal/syncrestore"
 )
 
 var (
@@ -22,9 +23,9 @@ var (
 // SyncHandlers はリモートのスナップショットを提供する。
 type SyncHandlers struct {
 	Service *remotesync.Service
-	// Secrets は、同期対象外の暗号化ファイルに object store 設定を保存する。
+	// Vault は、同期対象外の暗号化ファイルに object store 設定を保存する。
 	// nil の場合は設定を保存できないので、/sync/setup は vault_locked で断る。
-	Secrets *secret.Service
+	Vault *secret.Service
 	// ObjectStoreHTTP は bucket へ話す HTTP client である。nil なら既定の client を
 	// 使う。このパッケージのテストはネットワークに触れてはならないので、bucket の
 	// 代わりへ要求を渡す client をここへ注入する。
@@ -75,25 +76,7 @@ func addSyncActions(registry actionRegistry, service *remotesync.Service) {
 // restore は、vault のロック解除後に保存済み設定から client を構成する。
 // ロック中はエラーにせず、status の Locked フィールドで通知する。
 func (h SyncHandlers) restore() {
-	if h.Secrets == nil || !h.Secrets.Unlocked() || h.Service.Configured() {
-		return
-	}
-	settings, err := h.Secrets.SyncSettings()
-	if err != nil || settings.Bucket == "" {
-		return
-	}
-	direction, ok := remotesync.ParseDirection(settings.Direction)
-	if !ok {
-		return
-	}
-	credentials := remotesync.Credentials{
-		AccessKeyID: settings.AccessKeyID, SecretAccessKey: settings.SecretAccessKey,
-	}
-	config := remotesync.Config{
-		Endpoint: settings.Endpoint, Bucket: settings.Bucket, Path: settings.Path,
-		Region: settings.Region, Direction: direction,
-	}
-	_, _ = h.Service.ConfigureIfUnconfigured(config, credentials, h.objectStoreClient(config, credentials))
+	syncrestore.FromVault(h.Service, h.Vault, h.ObjectStoreHTTP)
 }
 
 func snapshotSummaryResponse(summary remotesync.SnapshotSummary) api.SnapshotSummary {
@@ -133,7 +116,7 @@ func (h SyncHandlers) statusResponse() api.SyncStatus {
 		Synced:     state.Synced,
 		Direction:  api.SyncDirection(h.Service.Direction()),
 		// access key と secret は返さず、入力欄が空になる理由を Locked で示す。
-		Locked:        h.Secrets != nil && !h.Secrets.Unlocked(),
+		Locked:        h.Vault != nil && !h.Vault.Unlocked(),
 		KeyConfigured: h.keyConfigured(),
 		Auto:          h.autoResponse(),
 	}

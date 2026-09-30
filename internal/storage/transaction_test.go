@@ -710,6 +710,76 @@ func TestCommitAtomicRollsBackAppliedWritesForLateFailures(t *testing.T) {
 	}
 }
 
+func TestCommitAtomicPutsMovesRemovalsAndEmptiedDirectoriesBackWhenALaterStepFails(t *testing.T) {
+	workspace := newTestWorkspace(t)
+	vault := writeWorkspaceFile(t, workspace, "vault.bin", "vault before\n", 0o600)
+	if err := workspace.EnsureDirectory(filepath.Join(workspace.Root(), "old")); err != nil {
+		t.Fatal(err)
+	}
+	moved := writeWorkspaceFile(t, workspace, "old/id_work", "key\n", 0o600)
+	removed := writeWorkspaceFile(t, workspace, "old/config", "config\n", 0o600)
+	oldDirectory := filepath.Dir(moved)
+	newDirectory := filepath.Join(workspace.Root(), "new")
+	if err := workspace.EnsureDirectory(newDirectory); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(newDirectory, "id_work")
+	workspace.fileSystem = faultyFileSystem{
+		FileSystem: OSFileSystem{},
+		failOn: func(operation, path string) error {
+			if operation == "remove" && path == oldDirectory {
+				return errors.New("removing the emptied directory failed")
+			}
+			return nil
+		},
+	}
+	manager := NewManager(workspace, fixedClock(), bytes.NewReader(bytes.Repeat([]byte{0x41}, 4096)))
+
+	_, err := manager.CommitAtomic(Request{
+		Operation: "config.group_rename",
+		Changes: []Change{{
+			Path: vault, Contents: []byte("vault after\n"),
+			Precondition: Precondition{Exists: true, Digest: Digest([]byte("vault before\n"))},
+		}},
+		Moves:             []Move{{From: moved, To: target}},
+		Removals:          []Removal{{Path: removed, Precondition: Precondition{Exists: true, Digest: Digest([]byte("config\n"))}, Backup: true}},
+		RemoveDirectories: []DirectoryRemoval{{Path: oldDirectory}},
+	})
+	if err == nil {
+		t.Fatal("CommitAtomic unexpectedly succeeded")
+	}
+	for path, want := range map[string]string{vault: "vault before\n", moved: "key\n", removed: "config\n"} {
+		contents, readErr := os.ReadFile(path)
+		if readErr != nil || string(contents) != want {
+			t.Fatalf("%s = %q, %v; want %q", path, contents, readErr, want)
+		}
+	}
+	if _, statErr := os.Stat(target); !errors.Is(statErr, fs.ErrNotExist) {
+		t.Fatalf("move target after rollback: %v", statErr)
+	}
+	pending, err := manager.Pending()
+	if err != nil || len(pending) != 0 {
+		t.Fatalf("pending after atomic rollback = %#v, %v", pending, err)
+	}
+}
+
+func TestCommitAtomicRefusesARemovalItCouldNotPutBack(t *testing.T) {
+	workspace := newTestWorkspace(t)
+	key := writeWorkspaceFile(t, workspace, "id_work", "key\n", 0o600)
+	manager := NewManager(workspace, fixedClock(), bytes.NewReader(bytes.Repeat([]byte{0x41}, 4096)))
+
+	_, err := manager.CommitAtomic(Request{
+		Operation: "keys.delete",
+		Removals:  []Removal{{Path: key, Precondition: Precondition{Exists: true, Digest: Digest([]byte("key\n"))}}},
+	})
+	if !errors.Is(err, ErrIrreversibleRemoval) {
+		t.Fatalf("CommitAtomic with a removal that keeps no backup = %v, want ErrIrreversibleRemoval", err)
+	}
+	if _, statErr := os.Stat(key); statErr != nil {
+		t.Fatalf("the key was removed: %v", statErr)
+	}
+}
+
 func TestCommitAtomicRecoveryReconstructsProgressAfterRollbackAlsoFails(t *testing.T) {
 	workspace := newTestWorkspace(t)
 	first := writeWorkspaceFile(t, workspace, "first.conf", "first before\n", 0o600)

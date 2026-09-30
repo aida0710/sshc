@@ -79,7 +79,7 @@ func (output *traceOutput) Write(contents []byte) (int, error) {
 // `debug2` で grep すれば深さ 2 の行だけを拾える。深さの印が無い `[sshc]` は、
 // 設定に関係なく出る行（ProxyCommand の実行、再接続の通知）である。
 func linePrefix(level connectionlog.Level) string {
-	return fmt.Sprintf("[sshc][debug%d] ", int(level))
+	return connectionlog.Mark(connectionlog.Notice) + connectionlog.Mark(level) + " "
 }
 
 // say は、その level が求められていれば 1 行書く。
@@ -99,7 +99,7 @@ func (t *tracer) announce(format string, args ...any) {
 	if t == nil || t.writer == nil {
 		return
 	}
-	t.writeLines("[sshc] ", fmt.Sprintf(format, args...))
+	t.writeLines(connectionlog.Mark(connectionlog.Notice)+" ", fmt.Sprintf(format, args...))
 }
 
 // writeLines は、text を行ごとに、印を付けて CRLF で終えて書く。

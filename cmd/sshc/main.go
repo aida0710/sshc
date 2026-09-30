@@ -9,6 +9,8 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+
+	"sshc/internal/app"
 )
 
 var version = "dev"
@@ -52,22 +54,27 @@ func main() {
 		fmt.Fprintf(os.Stderr, "sshc: %v\n", err)
 		os.Exit(exitFailure)
 	}
+	stateDir, err := app.StateDir(home)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "sshc: find the sshc state directory: %v\n", err)
+		os.Exit(exitFailure)
+	}
 	client := &http.Client{Timeout: connectTimeout}
-	os.Exit(dispatchInvocation(called, home, client))
+	os.Exit(dispatchInvocation(called, userPaths{home: home, stateDir: stateDir}, client))
 }
 
 // dispatchInvocation は、解析済みの呼び出しを、その owner ごとの処理へ渡す。
 // parser が形を保証するため、ここでは argv を読み直さない。将来 engine の ownership
 // transport を入れても、CLI の引数解釈へ戻らずこの境界だけを置き換えられる。
-func dispatchInvocation(called invocation, home string, client *http.Client) int {
+func dispatchInvocation(called invocation, paths userPaths, client *http.Client) int {
 	ctx := context.Background()
 	switch called.Kind {
 	case invocationOpenInBrowser:
 		// 引数なしでは engine の UI URL を取得し、ブラウザで開く。engine は起動しない。
-		return runOpen(ctx, systemCommandEnvironment(home, client), true)
+		return runOpen(ctx, systemCommandEnvironment(paths, client), true)
 	case invocationEngine:
 		// engine は stdin を読み取らない。
-		return runEngine(ctx, home,
+		return runEngine(ctx, paths,
 			engineOptions{Port: called.Port, Replace: called.Replace},
 			os.Stdin, os.Stdout, os.Stderr)
 	case invocationConnect:
@@ -75,9 +82,9 @@ func dispatchInvocation(called invocation, home string, client *http.Client) int
 		// ターミナルを戻す defer を通らない。
 		connectCtx, stopSignals := notifySignals(ctx)
 		defer stopSignals()
-		return runConnect(connectCtx, called.Args[0], systemCommandEnvironment(home, client))
+		return runConnect(connectCtx, called.Args[0], systemCommandEnvironment(paths, client))
 	case invocationRun:
-		return runRemote(ctx, called.Args[0], remoteCommand(called.Args[1:]), systemCommandEnvironment(home, client))
+		return runRemote(ctx, called.Args[0], remoteCommand(called.Args[1:]), systemCommandEnvironment(paths, client))
 	case invocationChoose:
 		query := ""
 		if len(called.Args) != 0 {
@@ -88,7 +95,7 @@ func dispatchInvocation(called invocation, home string, client *http.Client) int
 		chooseCtx, stopSignals := notifySignals(ctx)
 		defer stopSignals()
 		alias, err := chooseTUIHost(chooseCtx, tuiPicker{
-			home: home, initialQuery: query, input: os.Stdin, output: os.Stdout, stderr: os.Stderr,
+			home: paths.home, initialQuery: query, input: os.Stdin, output: os.Stdout, stderr: os.Stderr,
 		})
 		if err != nil {
 			if errors.Is(err, errTUIClosed) {
@@ -100,37 +107,37 @@ func dispatchInvocation(called invocation, home string, client *http.Client) int
 			fmt.Fprintf(os.Stderr, "sshc: %v\n", err)
 			return exitFailure
 		}
-		return runConnect(chooseCtx, alias, systemCommandEnvironment(home, client))
+		return runConnect(chooseCtx, alias, systemCommandEnvironment(paths, client))
 	case invocationList:
-		return runList(home, os.Stdout, os.Stderr)
+		return runList(paths.home, os.Stdout, os.Stderr)
 	case invocationInfo:
-		return runInfo(called.Args[0], home, called.JSON, os.Stdout, os.Stderr)
+		return runInfo(called.Args[0], paths.home, called.JSON, os.Stdout, os.Stderr)
 	case invocationOpen:
-		return runOpen(ctx, systemCommandEnvironment(home, client), false)
+		return runOpen(ctx, systemCommandEnvironment(paths, client), false)
 	case invocationStatus:
-		return runStatus(ctx, systemCommandEnvironment(home, client), called.JSON)
+		return runStatus(ctx, systemCommandEnvironment(paths, client), called.JSON)
 	case invocationUpdate:
 		updateCtx, cancel := signal.NotifyContext(ctx, os.Interrupt)
 		defer cancel()
 		return runUpdate(updateCtx, updateRun{
-			current: version, yes: called.Yes, home: home, stdout: os.Stdout, stderr: os.Stderr,
+			current: version, yes: called.Yes, home: paths.home, stdout: os.Stdout, stderr: os.Stderr,
 			dependencies: defaultUpdateDependencies(),
 		})
 	case invocationService:
 		serviceCtx, cancel := signal.NotifyContext(ctx, os.Interrupt)
 		defer cancel()
 		return runService(serviceCtx, serviceRun{
-			action: called.Args[0], yes: called.Yes, home: home, stdout: os.Stdout, stderr: os.Stderr,
+			action: called.Args[0], yes: called.Yes, home: paths.home, stdout: os.Stdout, stderr: os.Stderr,
 			dependencies: defaultServiceDependencies(),
 		})
 	case invocationOTP:
 		otpCtx, cancel := signal.NotifyContext(ctx, os.Interrupt)
 		defer cancel()
-		return runOTP(otpCtx, *called.OTP, systemCommandEnvironment(home, client))
+		return runOTP(otpCtx, *called.OTP, systemCommandEnvironment(paths, client))
 	case invocationVPN:
 		vpnCtx, cancel := signal.NotifyContext(ctx, os.Interrupt)
 		defer cancel()
-		return runVPN(vpnCtx, *called.VPN, systemCommandEnvironment(home, client))
+		return runVPN(vpnCtx, *called.VPN, systemCommandEnvironment(paths, client))
 	case invocationVault:
 		// password 読み取り中と loopback request 中の Ctrl-C を public 130 にする。
 		// SIGTERM と SIGHUP も同じく取り消しにする。既定のまま落ちると、エコーを
@@ -139,19 +146,19 @@ func dispatchInvocation(called invocation, home string, client *http.Client) int
 		// だけを対象にする。
 		vaultCtx, stopSignals := notifySignals(ctx)
 		defer stopSignals()
-		return runVault(vaultCtx, called.Args[0], systemCommandEnvironment(home, vaultCommandClient(client)))
+		return runVault(vaultCtx, called.Args[0], systemCommandEnvironment(paths, vaultCommandClient(client)))
 	case invocationSync:
 		syncCtx, cancel := signal.NotifyContext(ctx, os.Interrupt)
 		defer cancel()
-		return runSync(syncCtx, *called.Sync, systemCommandEnvironment(home, client))
+		return runSync(syncCtx, *called.Sync, systemCommandEnvironment(paths, client))
 	case invocationTerminal:
 		terminalCtx, cancel := signal.NotifyContext(ctx, os.Interrupt)
 		defer cancel()
-		return runTerminal(terminalCtx, *called.Terminal, systemCommandEnvironment(home, client))
+		return runTerminal(terminalCtx, *called.Terminal, systemCommandEnvironment(paths, client))
 	case invocationSFTP:
 		sftpCtx, cancel := signal.NotifyContext(ctx, os.Interrupt)
 		defer cancel()
-		return runSFTP(sftpCtx, *called.SFTP, systemCommandEnvironment(home, client))
+		return runSFTP(sftpCtx, *called.SFTP, systemCommandEnvironment(paths, client))
 	default:
 		fmt.Fprintln(os.Stderr, "sshc: invalid invocation")
 		return exitUsage

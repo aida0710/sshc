@@ -447,7 +447,12 @@ export const en = {
   "snippets.cancel": "Cancel",
   "snippets.startup": "Connection startup",
   "snippets.startupHint":
-    "Run this snippet after the selected host's shell is ready. It is sent on every connection and automatic reconnection, so secret variable values are stored encrypted with the binding and may remain in the remote shell history or on screen.",
+    "Run this snippet after the selected host's shell is ready. It is sent on every connection and automatic reconnection, so secret variable values are stored encrypted with the binding and may remain in the remote shell history or on screen. It is not sent once the destination or authentication settings (host name, user, port, jump hosts, ProxyCommand, ForwardAgent, and so on) change after the assignment.",
+  "snippets.startupStale":
+    "Stopped. The destination or authentication settings changed after this snippet was assigned, so it is not sent to this host. Check the destination and assign it again.",
+  "snippets.startupStaleCount":
+    "Stopped assignments: {count}. Select a host, check its destination, and assign it again.",
+  "snippets.startupStaleHosts": "Hosts with a stopped assignment",
   "snippets.setStartup": "Set startup snippet",
   "snippets.clearStartup": "Clear",
   "host.duplicateKeyword":
@@ -1052,6 +1057,8 @@ export const en = {
     "The app's private storage is read-only. Restart the device and try again.",
   "lock.storageBusy":
     "Another vault update is still finishing. Wait a moment and try again.",
+  "lock.pendingTransaction":
+    "An interrupted change is still pending, so the vault could not be written.",
   "lock.storageIO":
     "Android reported an input/output failure while accessing the app's private storage.",
   "lock.schemaOlder":
@@ -1334,6 +1341,10 @@ export const en = {
   "diagnostic.requestFailed": "The operation could not be completed",
   "diagnostic.requestFailedHint":
     "sshc reported {code}. Open the safe diagnostic details when reporting the problem.",
+  "diagnostic.workspaceBusy":
+    "Another sshc process has kept updating settings on this machine for more than 30 seconds. Try again after it finishes.",
+  "diagnostic.workspacePendingTransaction":
+    "An interrupted change is still pending, so nothing was saved. Complete or roll it back in History, then try again.",
   "diagnostic.showDetails": "Show diagnostic details",
   "diagnostic.dismiss": "Dismiss error",
 
@@ -1642,6 +1653,8 @@ export const en = {
     "Settings on this machine changed after the preview. Nothing was overwritten. Check for changes again.",
   "sync.workspaceBusy":
     "Another operation is updating settings on this machine. Try again after it finishes.",
+  "sync.pendingTransaction":
+    "An interrupted change is still pending, so sync could not run. Complete or roll it back in History, then try again.",
   "sync.endpointPath":
     "The endpoint is the account address only — no bucket name and no path. Put the bucket name in the field below.",
   "sync.autoHint.both":
@@ -2261,7 +2274,7 @@ export const en = {
   "conn.basicAssignedTOTP": "Assigned: {name}",
   "conn.basicRouteConfirmHeading": "Use saved credentials on this route?",
   "conn.basicRouteConfirmBody":
-    "The authentication route changed. Saving allows the assigned password or one-time password to be used on the current route.",
+    "The authentication route changed. Saving allows the assigned password or one-time password to be used on the current route. A startup snippet assignment is not moved to the new route and stops; check the destination on the Snippets screen and assign it again.",
   "conn.basicRouteConfirmSave": "Save and confirm",
   "conn.basicRouteConfirmCancel": "Cancel",
   "conn.basicTOTPAction": "One-time password action",

@@ -69,6 +69,8 @@ func TestConnectionAnswerIsReadOnlyInTheEngineShape(t *testing.T) {
 		{"engine shape", `{"alias":"server-a","warnings":[]}`, true},
 		{"unknown field", `{"alias":"server-a","warnings":[],"surprise":true}`, false},
 		{"trailing JSON", `{"alias":"server-a","warnings":[]}{}`, false},
+		{"extra closing brace", `{"alias":"server-a","warnings":[]}}`, false},
+		{"too large", `{"alias":"server-a","warnings":["` + strings.Repeat("x", maxConnectAnswer) + `"]}`, false},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			server := engineTestServer(http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {

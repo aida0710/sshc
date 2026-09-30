@@ -31,9 +31,18 @@ type Spec struct {
 	// 書く1行を返す。nil か空なら、設定を直すよう促す既定の文を書く。
 	ReconnectStopNotice func(problem string) string
 	// Startup は、Process が使える状態になるたびに（再接続を含む）、その Process へ
-	// 送るコマンドを返す。各コマンドの後に CR を付けて送る。nil なら何も送らない。
-	Startup func() []string
+	// 送るものを返す。nil なら何も送らない。
+	Startup func() Startup
 	Cleanup func()
+}
+
+// Startup は、使える状態になった Process へ、接続のたびに送るものである。
+type Startup struct {
+	// Notice は、コマンドより先にターミナルへ書く 1 行である。空なら書かない。
+	// Process が Announcer でなければ（ローカルのシェルなど）書かない。
+	Notice string
+	// Commands は、Notice のあとで 1 つずつ CR を付けて送るコマンドである。
+	Commands []string
 }
 
 // Registry は、開いているセッションと、終了して残しているセッションを持つ。

@@ -290,6 +290,26 @@ describe("apiClient", () => {
     expect(diagnostic).not.toHaveBeenCalled();
   });
 
+  it.each(["workspace_busy", "workspace_pending_transaction"])(
+    "reports a workspace refusal no screen explains even though it is a 409 (%s)",
+    async (code) => {
+      const diagnostic = vi.fn();
+      whenRequestFailed(diagnostic);
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(
+        JSON.stringify({ code, message: "request rejected", detail: "fixed detail" }),
+        { status: 409, headers: { "Content-Type": "application/problem+json" } },
+      )));
+      apiClient.setCSRF("c".repeat(43));
+
+      await expect(apiClient.mutate("/api/v1/config/save", { method: "POST", body: "{}" }))
+        .rejects.toMatchObject({ code });
+
+      expect(diagnostic).toHaveBeenCalledWith({
+        code, status: 409, method: "POST", path: "/api/v1/config/save", detail: "fixed detail",
+      });
+    },
+  );
+
   it.each([
     [409, "sync_remote_moved"],
     [502, "update_check_failed"],

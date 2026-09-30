@@ -24,10 +24,10 @@ var testPasswordBinding = strings.Repeat("ab", 32)
 
 func fixedPasswordBinding(string) (string, error) { return testPasswordBinding, nil }
 
-func connectEngine(t *testing.T, handlers ConnectHandlers) *echo.Echo {
+func connectEngine(t *testing.T, handlers CLIHandlers) *echo.Echo {
 	t.Helper()
 	engine := echo.New()
-	registerConnectRoutes(engine, handlers)
+	registerCLIRoutes(engine, handlers)
 	return engine
 }
 
@@ -52,8 +52,8 @@ func TestAnAccountPasswordNeverComesBackAsAKeyPassphrase(t *testing.T) {
 	if err := vault.SetBound("bastion", "legacy-password", testPasswordBinding); err != nil {
 		t.Fatal(err)
 	}
-	engine := connectEngine(t, ConnectHandlers{
-		Secret: cliSecret, Passwords: vault, PasswordBinding: fixedPasswordBinding,
+	engine := connectEngine(t, CLIHandlers{
+		Secret: cliSecret, Vault: vault, PasswordBinding: fixedPasswordBinding,
 	})
 	recorder := send(t, engine, http.MethodPost, ConnectPath, `{"alias":"bastion"}`,
 		map[string]string{handoff.HeaderName: cliSecret})
@@ -75,8 +75,8 @@ func TestAnAccountPasswordNeverComesBackAsAKeyPassphrase(t *testing.T) {
 		t.Fatalf("the destination binding did not accompany the password: %+v", answer)
 	}
 
-	retargeted := connectEngine(t, ConnectHandlers{
-		Secret: cliSecret, Passwords: vault,
+	retargeted := connectEngine(t, CLIHandlers{
+		Secret: cliSecret, Vault: vault,
 		PasswordBinding: func(string) (string, error) { return strings.Repeat("cd", 32), nil },
 	})
 	refused := send(t, retargeted, http.MethodPost, ConnectPath, `{"alias":"bastion"}`,
@@ -113,8 +113,8 @@ func TestTOTPProvisioningTravelsOnlyForTheBoundJumpChain(t *testing.T) {
 	if err := vault.AssignBoundCredential(secret.BoundAssignment{Kind: secret.KindTOTP, Subject: "edge", Name: "edge-token", Binding: testPasswordBinding}); err != nil {
 		t.Fatal(err)
 	}
-	engine := connectEngine(t, ConnectHandlers{
-		Secret: cliSecret, Passwords: vault,
+	engine := connectEngine(t, CLIHandlers{
+		Secret: cliSecret, Vault: vault,
 		Aliases:         func(alias string) []string { return []string{"edge", alias} },
 		PasswordBinding: fixedPasswordBinding,
 	})
@@ -129,8 +129,8 @@ func TestTOTPProvisioningTravelsOnlyForTheBoundJumpChain(t *testing.T) {
 		t.Fatalf("TOTP chain response = %+v", answer)
 	}
 
-	stale := connectEngine(t, ConnectHandlers{
-		Secret: cliSecret, Passwords: vault,
+	stale := connectEngine(t, CLIHandlers{
+		Secret: cliSecret, Vault: vault,
 		Aliases:         func(alias string) []string { return []string{"edge", alias} },
 		PasswordBinding: func(string) (string, error) { return strings.Repeat("cd", 32), nil },
 	})
@@ -142,6 +142,66 @@ func TestTOTPProvisioningTravelsOnlyForTheBoundJumpChain(t *testing.T) {
 	}
 	if len(answer.TOTPs) != 0 || len(answer.StaleTOTPs) != 1 || answer.StaleTOTPs[0] != "edge" {
 		t.Fatalf("stale TOTP response = %+v", answer)
+	}
+}
+
+// 接続 1 回で、alias ごとの認証先は一度だけ解く。途中で設定が変わっても、
+// パスワードと TOTP は同じ認証先に結び付いた値として返る。
+func TestConnectResolvesEachAliasBindingOnceForPasswordAndTOTP(t *testing.T) {
+	const cliSecret = "the secret for this run"
+	home := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	vault := secret.NewService(workspace, storage.NewManager(workspace, time.Now, rand.Reader), time.Now)
+	if err := vault.Initialise(testPassphrase); err != nil {
+		t.Fatal(err)
+	}
+	if err := vault.SetBound("edge", "the way in", testPasswordBinding); err != nil {
+		t.Fatal(err)
+	}
+	if err := vault.SetCredential(secret.KindTOTP, "edge-token", "JBSWY3DPEHPK3PXP"); err != nil {
+		t.Fatal(err)
+	}
+	if err := vault.AssignBoundCredential(secret.BoundAssignment{Kind: secret.KindTOTP, Subject: "edge", Name: "edge-token", Binding: testPasswordBinding}); err != nil {
+		t.Fatal(err)
+	}
+	// 2 回目からは別の認証先を返す。解き直せば、TOTP だけが古い経路として断られる。
+	resolutions := map[string]int{}
+	engine := connectEngine(t, CLIHandlers{
+		Secret: cliSecret, Vault: vault,
+		Aliases: func(alias string) []string { return []string{"edge", alias} },
+		PasswordBinding: func(alias string) (string, error) {
+			resolutions[alias]++
+			if resolutions[alias] == 1 {
+				return testPasswordBinding, nil
+			}
+			return strings.Repeat("cd", 32), nil
+		},
+	})
+
+	recorder := send(t, engine, http.MethodPost, ConnectPath, `{"alias":"target"}`,
+		map[string]string{handoff.HeaderName: cliSecret})
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("connect = %d: %s", recorder.Code, recorder.Body.String())
+	}
+	var answer connectResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &answer); err != nil {
+		t.Fatal(err)
+	}
+	if resolutions["edge"] != 1 || resolutions["target"] != 1 {
+		t.Fatalf("bindings resolved per alias = %v, want once each", resolutions)
+	}
+	if answer.Passwords["edge"] != "the way in" || answer.PasswordBindings["edge"] != testPasswordBinding {
+		t.Fatalf("password answer = %+v", answer)
+	}
+	if !strings.Contains(answer.TOTPs["edge"], "secret=JBSWY3DPEHPK3PXP") ||
+		answer.TOTPBindings["edge"] != testPasswordBinding || len(answer.StaleTOTPs) != 0 {
+		t.Fatalf("TOTP answer = %+v", answer)
 	}
 }
 
@@ -164,8 +224,8 @@ func TestAnAliasWithOnlyAnAccountPasswordCarriesNoKey(t *testing.T) {
 	if err := vault.SetBound("password-only", "stored-account-password", testPasswordBinding); err != nil {
 		t.Fatal(err)
 	}
-	engine := connectEngine(t, ConnectHandlers{
-		Secret: cliSecret, Passwords: vault, PasswordBinding: fixedPasswordBinding,
+	engine := connectEngine(t, CLIHandlers{
+		Secret: cliSecret, Vault: vault, PasswordBinding: fixedPasswordBinding,
 	})
 	recorder := send(t, engine, http.MethodPost, ConnectPath, `{"alias":"password-only"}`,
 		map[string]string{handoff.HeaderName: cliSecret})
@@ -208,8 +268,8 @@ func TestConnectCarriesThePasswordsOfTheWholeJumpChain(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	engine := connectEngine(t, ConnectHandlers{
-		Secret: cliSecret, Passwords: vault,
+	engine := connectEngine(t, CLIHandlers{
+		Secret: cliSecret, Vault: vault,
 		Aliases:         func(alias string) []string { return []string{"edge", alias} },
 		PasswordBinding: fixedPasswordBinding,
 	})
@@ -254,8 +314,8 @@ func TestConnectAnswersWithTheKeyPassphraseForTheDirectStoredKey(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	engine := connectEngine(t, ConnectHandlers{
-		Secret: cliSecret, Passwords: vault,
+	engine := connectEngine(t, CLIHandlers{
+		Secret: cliSecret, Vault: vault,
 		WorkspaceKeys: func(alias string) ([]string, error) {
 			if alias != "bastion" {
 				return nil, nil
@@ -297,8 +357,8 @@ func TestConnectDoesNotFallBackToAnAccountPasswordWhenKeyResolutionFails(t *test
 	if err := vault.SetBound("bastion", "stored-password", testPasswordBinding); err != nil {
 		t.Fatal(err)
 	}
-	engine := connectEngine(t, ConnectHandlers{
-		Secret: cliSecret, Passwords: vault,
+	engine := connectEngine(t, CLIHandlers{
+		Secret: cliSecret, Vault: vault,
 		WorkspaceKeys: func(string) ([]string, error) {
 			return nil, os.ErrPermission
 		},
@@ -317,13 +377,13 @@ func TestConnectDoesNotFallBackToAnAccountPasswordWhenKeyResolutionFails(t *test
 // secret がなければ、このエンドポイントは何も語らない。alias が
 // 未知であることも、パスワードが保存されていることも、いないことも。
 func TestConnectRefusesWithoutTheSecretAndSaysNothingElse(t *testing.T) {
-	engine := connectEngine(t, ConnectHandlers{Secret: "the secret for this run"})
+	engine := connectEngine(t, CLIHandlers{Secret: "the secret for this run"})
 
 	for _, presented := range []string{"", "the wrong secret", "the secret for this ru"} {
 		recorder := send(t, engine, http.MethodPost, ConnectPath, `{"alias":"bastion"}`,
 			map[string]string{handoff.HeaderName: presented})
-		if recorder.Code != http.StatusForbidden {
-			t.Errorf("with %q = %d, want 403", presented, recorder.Code)
+		if recorder.Code != http.StatusUnauthorized {
+			t.Errorf("with %q = %d, want 401", presented, recorder.Code)
 		}
 		if recorder.Body.Len() != 0 {
 			t.Errorf("with %q the body is %q", presented, recorder.Body.String())
@@ -331,14 +391,46 @@ func TestConnectRefusesWithoutTheSecretAndSaysNothingElse(t *testing.T) {
 	}
 }
 
+// /cli/ に足したルートも、handler で検査を書かなくても秘密なしでは届かない。
+// Challenge だけは、CLI が秘密を見せる前に呼ぶので例外である。
+func TestEveryCLIRouteExceptChallengeRefusesAMissingOrWrongSecret(t *testing.T) {
+	stopped := false
+	engine := connectEngine(t, CLIHandlers{
+		Secret: "the secret for this run", Vault: newCLIVaultService(t),
+		StopEngine: func() { stopped = true },
+	})
+
+	checked := 0
+	for _, route := range engine.Router().Routes() {
+		if !strings.HasPrefix(route.Path, cliPrefix+"/") || route.Path == ChallengePath || route.Method == echo.RouteNotFound {
+			continue
+		}
+		checked++
+		for _, presented := range []string{"", "the wrong secret"} {
+			recorder := send(t, engine, route.Method, route.Path, `{}`, map[string]string{handoff.HeaderName: presented})
+			if recorder.Code != http.StatusUnauthorized || recorder.Body.Len() != 0 {
+				t.Errorf("%s %s with %q = %d %q, want an empty 401", route.Method, route.Path, presented, recorder.Code, recorder.Body.String())
+			}
+		}
+	}
+	// 接続、ブラウザを開く、CLI セッションの発行と取り消し、状態、停止、Vault の 6 本。
+	const authenticatedCLIRoutes = 12
+	if checked != authenticatedCLIRoutes {
+		t.Errorf("checked %d /cli/ routes, want %d", checked, authenticatedCLIRoutes)
+	}
+	if stopped {
+		t.Error("a request without the secret stopped the engine")
+	}
+}
+
 // handoff を書けなかったサーバーは、すべてを受け入れるのではなく
 // 何も受け入れない。
 func TestConnectWithNoSecretConfiguredRefusesEveryone(t *testing.T) {
-	engine := connectEngine(t, ConnectHandlers{})
+	engine := connectEngine(t, CLIHandlers{})
 	recorder := send(t, engine, http.MethodPost, ConnectPath, `{"alias":"bastion"}`,
 		map[string]string{handoff.HeaderName: ""})
-	if recorder.Code != http.StatusForbidden {
-		t.Errorf("= %d, want 403", recorder.Code)
+	if recorder.Code != http.StatusUnauthorized {
+		t.Errorf("= %d, want 401", recorder.Code)
 	}
 }
 
@@ -346,7 +438,7 @@ func TestConnectWithNoSecretConfiguredRefusesEveryone(t *testing.T) {
 // OpenSSH 自身がパスワードを尋ねる。
 func TestConnectAnswersWithNothingWhenNothingIsStored(t *testing.T) {
 	const secret = "the secret for this run"
-	engine := connectEngine(t, ConnectHandlers{
+	engine := connectEngine(t, CLIHandlers{
 		Secret:   secret,
 		Warnings: func(string) []string { return []string{"ProxyCommand runs on connect"} },
 	})
@@ -370,7 +462,7 @@ func TestConnectAnswersWithNothingWhenNothingIsStored(t *testing.T) {
 
 func TestConnectRefusesAnAliasItWouldNotPutOnACommandLine(t *testing.T) {
 	const secret = "the secret for this run"
-	engine := connectEngine(t, ConnectHandlers{Secret: secret})
+	engine := connectEngine(t, CLIHandlers{Secret: secret})
 	for _, alias := range []string{"", "-oProxyCommand=id", "a b", "a;b"} {
 		body := `{"alias":"` + alias + `"}`
 		if code := send(t, engine, http.MethodPost, ConnectPath, body,
@@ -396,8 +488,8 @@ func TestStatusAnswersWithTheLockAndTheLiveCount(t *testing.T) {
 	if err := vault.Initialise(testPassphrase); err != nil {
 		t.Fatal(err)
 	}
-	engine := connectEngine(t, ConnectHandlers{
-		Secret: cliSecret, Passwords: vault, Sessions: func() int { return 3 },
+	engine := connectEngine(t, CLIHandlers{
+		Secret: cliSecret, Vault: vault, LiveTerminalCount: func() int { return 3 },
 	})
 
 	recorder := send(t, engine, http.MethodGet, StatusPath, "",
@@ -422,7 +514,7 @@ func TestCLIStatusIncludesOwner(t *testing.T) {
 	server, err := New(Options{
 		Listener:        fakeListener{address: &net.TCPAddr{IP: net.IP{127, 0, 0, 1}, Port: 43123}},
 		CLISecret:       cliSecret,
-		Passwords:       service,
+		Vault:           service,
 		Owner:           handoff.OwnerEngine,
 		Version:         "v1.2.3-test",
 		ProtocolVersion: handoff.ProtocolVersion,
@@ -467,7 +559,7 @@ func TestStatusSaysThereIsNoVaultToUnlock(t *testing.T) {
 	}
 	// Initialise を呼ばない。新規インストール直後の姿である。
 	vault := secret.NewService(workspace, storage.NewManager(workspace, time.Now, rand.Reader), time.Now)
-	engine := connectEngine(t, ConnectHandlers{Secret: cliSecret, Passwords: vault})
+	engine := connectEngine(t, CLIHandlers{Secret: cliSecret, Vault: vault})
 
 	recorder := send(t, engine, http.MethodGet, StatusPath, "",
 		map[string]string{handoff.HeaderName: cliSecret})
@@ -485,23 +577,23 @@ func TestStatusSaysThereIsNoVaultToUnlock(t *testing.T) {
 
 // handoff の秘密を持たないものには応答しない。
 func TestStatusRefusesWithoutTheSecret(t *testing.T) {
-	engine := connectEngine(t, ConnectHandlers{Secret: "the secret for this run"})
-	if recorder := send(t, engine, http.MethodGet, StatusPath, "", nil); recorder.Code != http.StatusForbidden {
-		t.Fatalf("status = %d, want 403", recorder.Code)
+	engine := connectEngine(t, CLIHandlers{Secret: "the secret for this run"})
+	if recorder := send(t, engine, http.MethodGet, StatusPath, "", nil); recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", recorder.Code)
 	}
 }
 
-// liveSessions が実際に「実行中」を数えていることを、registry を組み立てずに見る。
+// countLiveTerminals が実際に「実行中」を数えていることを、registry を組み立てずに見る。
 // 終了済み（Exited が非 nil）を混ぜても、数に入るのは実行中ものだけである。
-func TestLiveSessionsCountsOnlyTheOnesStillRunning(t *testing.T) {
+func TestCountLiveTerminalsCountsOnlyTheOnesStillRunning(t *testing.T) {
 	views := []terminal.View{
 		{ID: "running-1"},
 		{ID: "finished", Exited: &terminal.ExitInfo{Code: 0}},
 		{ID: "running-2"},
 		{ID: "running-3"},
 	}
-	if got := liveSessions(views); got != 3 {
-		t.Fatalf("liveSessions = %d, want 3", got)
+	if got := countLiveTerminals(views); got != 3 {
+		t.Fatalf("countLiveTerminals = %d, want 3", got)
 	}
 }
 
@@ -521,7 +613,7 @@ func TestUnlockOpensTheVaultFromTheCommandLine(t *testing.T) {
 		t.Fatal(err)
 	}
 	vault.Lock()
-	engine := connectEngine(t, ConnectHandlers{Secret: cliSecret, Passwords: vault})
+	engine := connectEngine(t, CLIHandlers{Secret: cliSecret, Vault: vault})
 
 	body := `{"passphrase":"` + testPassphrase + `"}`
 	recorder := send(t, engine, http.MethodPost, VaultUnlockPath, body,
@@ -550,7 +642,7 @@ func TestUnlockRefusesTheWrongPassphrase(t *testing.T) {
 		t.Fatal(err)
 	}
 	vault.Lock()
-	engine := connectEngine(t, ConnectHandlers{Secret: cliSecret, Passwords: vault})
+	engine := connectEngine(t, CLIHandlers{Secret: cliSecret, Vault: vault})
 
 	recorder := send(t, engine, http.MethodPost, VaultUnlockPath, `{"passphrase":"wrong"}`,
 		map[string]string{handoff.HeaderName: cliSecret})
@@ -561,7 +653,7 @@ func TestUnlockRefusesTheWrongPassphrase(t *testing.T) {
 
 // handoff の秘密を持たないものには応答しない。
 func TestUnlockRefusesWithoutTheSecret(t *testing.T) {
-	engine := connectEngine(t, ConnectHandlers{Secret: "the secret for this run"})
+	engine := connectEngine(t, CLIHandlers{Secret: "the secret for this run"})
 	if recorder := send(t, engine, http.MethodPost, VaultUnlockPath, `{"passphrase":"anything"}`, nil); recorder.Code != http.StatusUnauthorized {
 		t.Fatalf("unlock = %d, want 401", recorder.Code)
 	}
@@ -595,8 +687,8 @@ func TestKeyPassphrasesTravelForEveryHopOfTheConnection(t *testing.T) {
 		}
 	}
 
-	engine := connectEngine(t, ConnectHandlers{
-		Secret: cliSecret, Passwords: vault,
+	engine := connectEngine(t, CLIHandlers{
+		Secret: cliSecret, Vault: vault,
 		Aliases: func(alias string) []string { return []string{"edge", alias} },
 		WorkspaceKeys: func(alias string) ([]string, error) {
 			return map[string][]string{"edge": {"id_edge"}, "target": {"id_target"}}[alias], nil
@@ -623,7 +715,7 @@ func TestKeyPassphrasesTravelForEveryHopOfTheConnection(t *testing.T) {
 // 答えは challenge ごとに違い、秘密そのものは含まない。
 func TestTheChallengeProvesTheHandoffSecretWithoutRevealingIt(t *testing.T) {
 	const cliSecret = "the secret for this run"
-	engine := connectEngine(t, ConnectHandlers{Secret: cliSecret})
+	engine := connectEngine(t, CLIHandlers{Secret: cliSecret})
 	challenge, err := handoff.MintChallenge(rand.Reader)
 	if err != nil {
 		t.Fatal(err)
@@ -648,7 +740,7 @@ func TestTheChallengeProvesTheHandoffSecretWithoutRevealingIt(t *testing.T) {
 		}
 	}
 	// handoff を書けなかった engine は秘密を持たないので、何も証明しない。
-	unproven := connectEngine(t, ConnectHandlers{})
+	unproven := connectEngine(t, CLIHandlers{})
 	if refused := send(t, unproven, http.MethodGet, ChallengePath, "", map[string]string{handoff.ChallengeHeader: challenge}); refused.Code != http.StatusBadRequest {
 		t.Fatalf("an engine without a secret answered: %d", refused.Code)
 	}

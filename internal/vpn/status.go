@@ -168,7 +168,7 @@ func (manager *Manager) Logs(ctx context.Context, profileName string, secrets Se
 		}
 		containerLogs = "（読めませんでした：" + err.Error() + "）"
 	}
-	return lastBytes(redact(joinLogSections(record, containerLogs), secrets), maxLogBytes), nil
+	return lastBytes(redactLogs(joinLogSections(record, containerLogs), secrets), maxLogBytes), nil
 }
 
 // currentContainerLogs は、コンテナのログを返す。コンテナが無ければ、最後に

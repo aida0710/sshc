@@ -1,9 +1,7 @@
 package httpserver
 
 import (
-	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"strings"
 
@@ -17,11 +15,16 @@ import (
 const (
 	maxRequestBody = 2 << 20
 	maxPathLength  = 512
-	maxAliasLength = 255
-	maxFieldEdits  = 256
-	maxFieldValues = 64
-	maxValueLength = 1024
-	maxRawLength   = 1 << 20
+	// maxHostBlockAliasLength は、ファイルにある Host ブロックを指す alias の上限。
+	// validate.MaxAliasLength（アプリが接続・保存に使う alias）より広いのは、
+	// 起動できない長い alias でも、ファイルにある以上は詳細の表示と生の編集は
+	// できるからである。接続エディタの保存（PATCH /connections）はドメインと
+	// Vault に合わせて validate.MaxAliasLength を使う。
+	maxHostBlockAliasLength = 255
+	maxFieldEdits           = 256
+	maxFieldValues          = 64
+	maxValueLength          = 1024
+	maxRawLength            = 1 << 20
 	// maxCommentLength は、1 個の Host ブロックに付くコメントを制限する。
 	// ファイル全体よりはるかに小さいのは、コメントが 1 個の接続についての
 	// 散文だからであり、この上限があるからこそ、ログ全体をうっかり設定に
@@ -84,24 +87,6 @@ func problemWith(c *echo.Context, status int, payload problemPayload) error {
 	return c.JSON(status, payload)
 }
 
-// decodeJSON は、上限付きで厳密な JSON ボディを読む。未知のフィールドは
-// 拒否されるので、タイプミスが暗黙に既定値になることはない。
-func decodeJSON(c *echo.Context, target any) error {
-	body := c.Request().Body
-	if body == nil {
-		return errInvalidBody
-	}
-	decoder := json.NewDecoder(io.LimitReader(body, maxRequestBody+1))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(target); err != nil {
-		return errInvalidBody
-	}
-	if decoder.More() {
-		return errInvalidBody
-	}
-	return nil
-}
-
 // validatePathParameter は、traversal も制御文字もない、単一ルートの
 // 相対 path のみを受け付ける。正式なチェックはワークスペースが行うが、これは
 // 明らかに悪意ある入力をアプリケーション層から締め出すためのものである。
@@ -120,8 +105,11 @@ func validatePathParameter(value string) error {
 	return nil
 }
 
-func validateAliasParameter(value string) error {
-	if value == "" || len(value) > maxAliasLength {
+// validateHostBlockAlias は、ファイルにある Host ブロックを指す alias を受け付ける。
+// maxHostBlockAliasLength までの、制御文字と空白を含まない値なら通す。
+// validate.Alias より広い理由は maxHostBlockAliasLength に書いてある。
+func validateHostBlockAlias(value string) error {
+	if value == "" || len(value) > maxHostBlockAliasLength {
 		return errInvalidAlias
 	}
 	for _, character := range value {
@@ -171,7 +159,7 @@ func validateEditRequest(request application.EditRequest) error {
 
 	switch request.Kind {
 	case application.EditHostFields:
-		if err := validateAliasParameter(request.Alias); err != nil {
+		if err := validateHostBlockAlias(request.Alias); err != nil {
 			return err
 		}
 		if len(request.Fields) == 0 || len(request.Fields) > maxFieldEdits {
@@ -183,14 +171,14 @@ func validateEditRequest(request application.EditRequest) error {
 			}
 		}
 	case application.EditBlockRaw:
-		if err := validateAliasParameter(request.Alias); err != nil {
+		if err := validateHostBlockAlias(request.Alias); err != nil {
 			return err
 		}
 		if request.Raw == "" {
 			return errInvalidEdit
 		}
 	case application.EditComment:
-		if err := validateAliasParameter(request.Alias); err != nil {
+		if err := validateHostBlockAlias(request.Alias); err != nil {
 			return err
 		}
 		// 空のコメントはコメントを削除する手段なので、最小長というものはない。
@@ -206,14 +194,14 @@ func validateEditRequest(request application.EditRequest) error {
 		// 既存のファイルを誤った空書き込みから守るのは、長さのチェックではなく
 		// base digest の事前条件である。
 	case application.EditRename, application.EditDuplicate:
-		if err := validateAliasParameter(request.Alias); err != nil {
+		if err := validateHostBlockAlias(request.Alias); err != nil {
 			return err
 		}
 		if err := application.ValidateAlias(request.NewAlias); err != nil {
 			return errInvalidAlias
 		}
 	case application.EditMove:
-		if err := validateAliasParameter(request.Alias); err != nil {
+		if err := validateHostBlockAlias(request.Alias); err != nil {
 			return err
 		}
 		// move は移動先を二通りのいずれかで指定する。path をサービスが導出する
@@ -348,6 +336,7 @@ func serviceProblem(c *echo.Context, err error) error {
 		errors.Is(err, application.ErrMetadataSecret), errors.Is(err, application.ErrMetadataPath),
 		errors.Is(err, application.ErrMetadataGroup), errors.Is(err, application.ErrMetadataVersion),
 		errors.Is(err, application.ErrMetadataTerminal), errors.Is(err, application.ErrMetadataEncoding),
+		errors.Is(err, application.ErrMetadataEngine),
 		errors.Is(err, application.ErrSameFileMove), errors.Is(err, application.ErrAmbiguousDestination),
 		errors.Is(err, application.ErrInvalidGroupName), errors.Is(err, application.ErrGroupSelfNesting),
 		errors.Is(err, application.ErrKeyRelocateUnchanged),
@@ -361,6 +350,10 @@ func serviceProblem(c *echo.Context, err error) error {
 		errors.Is(err, application.ErrEditLineNotDirective), errors.Is(err, application.ErrDuplicateEditLine),
 		errors.Is(err, application.ErrUnknownEditAction):
 		return problemWith(c, http.StatusUnprocessableEntity, problemPayload{Code: "invalid_edit"})
+	case errors.Is(err, application.ErrKeyFilesChanged), application.IsExternalChange(err):
+		// 設定ファイル以外（Vault、鍵ファイル、metadata.json）が、読んだあとに
+		// 変わっていた。何も書いていないので、読み直してやり直せばよい。
+		return problemWith(c, http.StatusConflict, problemPayload{Code: "external_change"})
 	case errors.Is(err, application.ErrAliasAlreadyDeclared),
 		errors.Is(err, application.ErrDuplicateDestinationAlias):
 		// invalid_edit ではなく専用の code である。リクエストの形式に問題はなく、
@@ -368,6 +361,10 @@ func serviceProblem(c *echo.Context, err error) error {
 		// 名前がすでに使われているということだからだ。
 		return problemWith(c, http.StatusConflict, problemPayload{Code: "alias_already_declared"})
 	default:
+		if refusal, ok := boundaryRefusalFor(err); ok {
+			return writeProblemReply(c, refusal)
+		}
+		logUnexpectedFailure(c, "internal_error", err)
 		return problemWith(c, http.StatusInternalServerError, problemPayload{Code: "internal_error"})
 	}
 }

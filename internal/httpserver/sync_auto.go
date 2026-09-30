@@ -38,14 +38,14 @@ func (h SyncHandlers) SetAuto(c *echo.Context) error {
 	if err := decodeJSON(c, &request); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
-	if h.Secrets == nil {
+	if h.Vault == nil {
 		return problem(c, http.StatusConflict, "vault_locked")
 	}
-	if err := h.Secrets.SetSyncAuto(request.Enabled); err != nil {
+	if err := h.Vault.SetSyncAuto(request.Enabled); err != nil {
 		if vaultUnavailable(err) {
 			return problem(c, http.StatusConflict, "vault_locked")
 		}
-		return problem(c, http.StatusInternalServerError, "vault_failed")
+		return unexpectedProblem(c, "vault_failed", err)
 	}
 	if request.Enabled && h.Auto != nil {
 		h.restore()

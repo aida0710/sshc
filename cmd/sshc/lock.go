@@ -1,24 +1,29 @@
 package main
 
 import (
+	"errors"
+	"fmt"
 	"path/filepath"
 
-	"sshc/internal/enginelock"
+	"sshc/internal/filelock"
 )
 
 // errEngineRunning は、エンジンを起動する資格を既に別のプロセスが握っていることを言う。
 //
 // 呼び出し側（runEngineWithDependencies）は、これを受けると走っている engine を
 // 置き換えるかを決める（replaceRunningEngine）。置き換えないなら exit 1 で終わる。
-//
-// enginelock の同じ値をそのまま指定しているので、ロック側が理由を包んで返しても
-// 呼び出し側の分岐はそのまま成立し、包まれた後始末エラーも捨てずに済む。
-var errEngineRunning = enginelock.ErrRunning
+var errEngineRunning = errors.New("an sshc engine is already running")
 
 // lockEngineStart は、状態ディレクトリの engine.lock を OS のロックで押さえる。
 //
-// 仕組みそのものは internal/enginelock にある。ここに残っているのは、この
-// コマンドが状態ディレクトリからロックのパスを組み立てるという事実だけである。
+// 仕組みそのものは internal/filelock にある。ここに残っているのは、この
+// コマンドが状態ディレクトリからロックのパスを組み立てることと、engine.lock を
+// 握っているのは別の engine だと言い換えることだけである。filelock の失敗は
+// 包んで返すので、後始末のエラーも捨てずに済む。
 func lockEngineStart(stateDir string) (func() error, error) {
-	return enginelock.Acquire(filepath.Join(stateDir, "engine.lock"))
+	release, err := filelock.TryAcquire(filepath.Join(stateDir, "engine.lock"))
+	if errors.Is(err, filelock.ErrHeld) {
+		return nil, fmt.Errorf("%w: %w", errEngineRunning, err)
+	}
+	return release, err
 }

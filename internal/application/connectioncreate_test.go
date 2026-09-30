@@ -58,6 +58,7 @@ func newConnectionCreateHarness(t *testing.T) connectionCreateHarness {
 	if err := secrets.Initialise(connectionCreatePassphrase); err != nil {
 		t.Fatal(err)
 	}
+	service.SetVault(secrets)
 	return connectionCreateHarness{
 		service: service, secrets: secrets, inventory: keyInventory(t, workspace),
 		workspace: workspace, manager: manager,
@@ -89,7 +90,7 @@ func TestCreateConnectionWritesACompleteKeyHostIntoAnEmptyNestedGroup(t *testing
 	harness := newConnectionCreateHarness(t)
 	request := keyCreateRequest(t, harness)
 
-	result, err := harness.service.CreateConnection(harness.secrets, harness.inventory, request)
+	result, err := harness.service.CreateConnection(harness.inventory, request)
 	if err != nil {
 		t.Fatalf("CreateConnection = %v", err)
 	}
@@ -137,7 +138,7 @@ func TestCreateConnectionWithoutAGroupAppendsToTheEntryAndOmitsBlankUser(t *test
 	request.User = ""
 	request.Port = pointerTo(2222)
 
-	result, err := harness.service.CreateConnection(harness.secrets, harness.inventory, request)
+	result, err := harness.service.CreateConnection(harness.inventory, request)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -197,7 +198,7 @@ func TestCreateConnectionCommitsEveryPasswordModeWithTheConfig(t *testing.T) {
 				Alias: alias, Group: "home-lab/others", HostName: "password.example", Port: pointerTo(22),
 				Authentication: test.auth,
 			}
-			result, err := harness.service.CreateConnection(harness.secrets, harness.inventory, request)
+			result, err := harness.service.CreateConnection(harness.inventory, request)
 			if err != nil {
 				t.Fatalf("CreateConnection = %v", err)
 			}
@@ -246,7 +247,7 @@ func TestCreateConnectionBindsASavedCredentialToTheCreatedDestination(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := harness.service.CreateConnection(harness.secrets, harness.inventory, CreateConnectionRequest{
+	result, err := harness.service.CreateConnection(harness.inventory, CreateConnectionRequest{
 		Alias: "restored", HostName: "restored.example", User: "deploy",
 		Authentication: CreateAuthentication{Kind: CreateAuthenticationSavedPassword, Credential: "office"},
 	})
@@ -319,7 +320,7 @@ func TestCreateConnectionRejectsInvalidOrConflictingInputsWithoutWriting(t *test
 				t.Fatal(err)
 			}
 
-			_, err = harness.service.CreateConnection(harness.secrets, harness.inventory, request)
+			_, err = harness.service.CreateConnection(harness.inventory, request)
 			if !errors.Is(err, test.wantErr) {
 				t.Fatalf("CreateConnection = %v, want %v", err, test.wantErr)
 			}
@@ -353,7 +354,7 @@ func TestCreateConnectionCommitFailureLeavesConfigAndVaultUnchanged(t *testing.T
 		t.Fatal(err)
 	}
 
-	_, err = failingService.CreateConnection(harness.secrets, harness.inventory, request)
+	_, err = failingService.CreateConnection(harness.inventory, request)
 	if err == nil {
 		t.Fatal("CreateConnection succeeded with an exhausted transaction ID source")
 	}

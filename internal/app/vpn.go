@@ -36,8 +36,8 @@ const (
 // 起動したときに、前回の engine が残したコンテナを回収する。引き継がないのは、
 // そのコンテナがどの設定で経路を張ったのかを確かめられないからである。その後は、
 // 誰も通っていない経路を畳み続ける。
-func superviseVPNSessions(ctx context.Context, sessions *vpn.Manager, logger *slog.Logger) {
-	if err := sessions.DiscardOrphans(ctx); err != nil && logger != nil &&
+func superviseVPNSessions(ctx context.Context, vpnManager *vpn.Manager, logger *slog.Logger) {
+	if err := vpnManager.DiscardOrphans(ctx); err != nil && logger != nil &&
 		!errors.Is(err, vpn.ErrDockerMissing) {
 		logger.Warn("discard vpn sessions left by a previous engine", "error", err)
 	}
@@ -48,7 +48,7 @@ func superviseVPNSessions(ctx context.Context, sessions *vpn.Manager, logger *sl
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			sessions.StopIdle(ctx, vpnIdleTimeout)
+			vpnManager.StopIdle(ctx, vpnIdleTimeout)
 		}
 	}
 }
@@ -59,16 +59,16 @@ func superviseVPNSessions(ctx context.Context, sessions *vpn.Manager, logger *sl
 // Terminal の接続ログに日本語の文で出す。
 func vpnRoute(
 	profiles *vpnprofile.Service,
-	sessions *vpn.Manager,
+	vpnManager *vpn.Manager,
 ) func(context.Context, string, string) (net.Conn, error) {
 	return func(ctx context.Context, name, address string) (net.Conn, error) {
-		if err := refuseRestartAfterDisconnect(ctx, name, sessions.Disconnected(name)); err != nil {
+		if err := refuseRestartAfterDisconnect(ctx, name, vpnManager.Disconnected(name)); err != nil {
 			return nil, err
 		}
 		profile, secrets, err := profiles.Route(name)
 		if err == nil {
 			var connection net.Conn
-			if connection, err = sessions.Dial(ctx, profile, secrets, address); err == nil {
+			if connection, err = vpnManager.Dial(ctx, profile, secrets, address); err == nil {
 				return connection, nil
 			}
 		}

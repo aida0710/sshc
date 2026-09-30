@@ -1,8 +1,9 @@
-//go:build unix
-
 package handoff
 
 import (
+	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -22,7 +23,7 @@ func TestMutationLockSerializesActors(t *testing.T) {
 		}
 	}()
 
-	acquired := make(chan func(), 1)
+	acquired := make(chan func() error, 1)
 	errors := make(chan error, 1)
 	go func() {
 		release, err := lockMutation(directory)
@@ -51,5 +52,17 @@ func TestMutationLockSerializesActors(t *testing.T) {
 		t.Fatalf("second lockMutation = %v", err)
 	case <-time.After(time.Second):
 		t.Fatal("second actor did not acquire the mutation lock after release")
+	}
+}
+
+// 一度も書かれていない state directory からの Remove は、何もしない。ロックのために
+// ディレクトリを作らない。
+func TestRemoveFromAMissingStateDirectoryCreatesNothing(t *testing.T) {
+	directory := filepath.Join(t.TempDir(), "sshc")
+	if err := Remove(directory, "any secret"); err != nil {
+		t.Fatalf("Remove from a missing directory = %v", err)
+	}
+	if _, err := os.Lstat(directory); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("Remove created the state directory: %v", err)
 	}
 }

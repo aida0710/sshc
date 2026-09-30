@@ -82,7 +82,9 @@ func MoveHostBlock(source, destination *config.File, alias string) ([]config.Lin
 	return extracted, nil
 }
 
-// movedAliases は移動したブロックが宣言する具体的な alias を列挙し、呼び出し側が move
+// movedAliases は、移動したブロックが宣言する具体的な alias を返す。呼び出し側は、移動の
+// 前後でそれぞれの alias の実効設定がどう変わるかを preview に載せる。wildcard と否定の
+// pattern は 1 つの接続先を指す名前ではないので含めない。
 func movedAliases(lines []config.Line) []string {
 	block := &config.File{Lines: lines}
 	var aliases []string

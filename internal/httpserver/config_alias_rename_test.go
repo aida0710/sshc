@@ -36,7 +36,9 @@ func TestFailedCredentialRenameDoesNotCommitTheConfig(t *testing.T) {
 	if err := other.SetBound("other", "synthetic-other-password", testPasswordBinding); err != nil {
 		t.Fatal(err)
 	}
-	handler := ConfigHandlers{Service: harness.service, Secrets: secrets}
+	harness.service.SetVault(secrets)
+	harness.service.SetStartupRenamer(application.NoStartupRenamer{})
+	handler := ConfigHandlers{Service: harness.service}
 	body, err := json.Marshal(application.EditRequest{Kind: application.EditRename, Path: "config", Base: handlerConfig, Alias: "bastion", NewAlias: "edge"})
 	if err != nil {
 		t.Fatal(err)
@@ -72,9 +74,14 @@ func TestRenamingAHostCarriesItsStartupSnippet(t *testing.T) {
 		Seal: secrets.SealDocument, Open: secrets.OpenDocument, WithMutation: secrets.WithStableSnapshot,
 	})
 	harness.service.SetStartupRenamer(store)
+	harness.service.SetVault(secrets)
 	service := snippets.NewService(snippets.Options{Repository: store, Now: time.Now, Random: rand.Reader,
 		Resolve: func(alias string) (snippets.Resolution, error) {
-			return snippets.Resolution{Target: snippets.Target{Alias: alias, HostName: "server.example", User: "ops", Port: "22"}}, nil
+			// binding は alias を含まない。改名しても同じ接続先なら同じ値になる。
+			return snippets.Resolution{
+				Target:  snippets.Target{Alias: alias, HostName: "server.example", User: "ops", Port: "22"},
+				Binding: "destination-of-server.example",
+			}, nil
 		},
 	})
 	created, err := service.Create(snippets.Draft{Name: "Startup", Command: "echo audit"})
@@ -91,7 +98,7 @@ func TestRenamingAHostCarriesItsStartupSnippet(t *testing.T) {
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/config/save", bytes.NewReader(body))
 	request.Header.Set(echo.HeaderContentType, "application/json")
 	response := httptest.NewRecorder()
-	if err := (ConfigHandlers{Service: harness.service, Secrets: secrets}).Save(harness.echo.NewContext(request, response)); err != nil {
+	if err := (ConfigHandlers{Service: harness.service}).Save(harness.echo.NewContext(request, response)); err != nil {
 		t.Fatal(err)
 	}
 	if response.Code != http.StatusOK {

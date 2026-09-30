@@ -27,23 +27,10 @@ func groupRenameFixture(t *testing.T) (*Service, *storage.Workspace) {
 func TestGroupRenameMovesEveryFileAndRewritesEveryLineThatNamedIt(t *testing.T) {
 	service, workspace := groupRenameFixture(t)
 
-	result, err := service.RenameGroup(keyInventory(t, workspace), "work", "client-a")
+	_, err := service.RenameGroup(keyInventory(t, workspace), "work", "client-a")
 	if err != nil {
 		t.Fatalf("RenameGroup error = %v", err)
 	}
-	wantRelocations := map[string]string{
-		"keys/work/id_work":     "keys/client-a/id_work",
-		"keys/work/id_work.pub": "keys/client-a/id_work.pub",
-	}
-	for _, relocation := range result.KeyRelocations {
-		if wantRelocations[relocation.From] == relocation.To {
-			delete(wantRelocations, relocation.From)
-		}
-	}
-	if len(wantRelocations) != 0 {
-		t.Errorf("KeyRelocations omitted %#v: %#v", wantRelocations, result.KeyRelocations)
-	}
-
 	for _, name := range []string{
 		"connections/client-a/web.conf",
 		"connections/client-a/eu/lon.conf",
@@ -298,5 +285,53 @@ func TestDeleteGroupHoldingAKeyNeedsNoDestination(t *testing.T) {
 	}
 	if _, err := os.Lstat(filepath.Join(workspace.Root(), "id_work")); err == nil {
 		t.Error("the key was left loose in the workspace root")
+	}
+}
+
+// groupKeyInsideGroupFixture は、グループ内の接続がそのグループの鍵を指す、鍵を生成して割り当てたときと同じ配置を作る。
+func groupKeyInsideGroupFixture(t *testing.T) (*Service, *storage.Workspace) {
+	t.Helper()
+	service, workspace := newTestService(t)
+	declareGroup(t, service, "work", "archive")
+	writeGroupFile(t, workspace, "work", "web.conf",
+		"Host web-1\n\tHostName 203.0.113.10\n\tIdentityFile ~/.ssh/keys/work/id_work\n")
+	writeKeyPair(t, workspace, "keys/work/id_work")
+	return service, workspace
+}
+
+func TestGroupRenameRewritesAKeyReferenceInsideAConnectionThatMovesWithIt(t *testing.T) {
+	service, workspace := groupKeyInsideGroupFixture(t)
+
+	if _, err := service.RenameGroup(keyInventory(t, workspace), "work", "client-a"); err != nil {
+		t.Fatalf("RenameGroup error = %v", err)
+	}
+
+	moved := readFile(t, workspace, "connections/client-a/web.conf")
+	if !strings.Contains(moved, "IdentityFile ~/.ssh/keys/client-a/id_work\n") {
+		t.Errorf("the moved connection still names the old key path: %q", moved)
+	}
+	for _, name := range []string{"connections/work/web.conf", "keys/work/id_work"} {
+		if _, err := os.Lstat(filepath.Join(workspace.Root(), filepath.FromSlash(name))); err == nil {
+			t.Errorf("%s was left at the old place", name)
+		}
+	}
+	if _, err := os.Lstat(filepath.Join(workspace.Root(), "keys", "client-a", "id_work")); err != nil {
+		t.Errorf("the group's key did not follow: %v", err)
+	}
+}
+
+func TestDeleteGroupRewritesAKeyReferenceInsideAConnectionThatMovesWithIt(t *testing.T) {
+	service, workspace := groupKeyInsideGroupFixture(t)
+
+	if _, err := service.DeleteGroup(keyInventory(t, workspace), "work", "archive"); err != nil {
+		t.Fatalf("DeleteGroup error = %v", err)
+	}
+
+	moved := readFile(t, workspace, "connections/archive/web.conf")
+	if !strings.Contains(moved, "IdentityFile ~/.ssh/keys/archive/id_work\n") {
+		t.Errorf("the moved connection still names the old key path: %q", moved)
+	}
+	if _, err := os.Lstat(filepath.Join(workspace.Root(), "connections", "work", "web.conf")); err == nil {
+		t.Error("the connection was left at the old place")
 	}
 }

@@ -4,16 +4,15 @@
 package secret
 
 import (
-	"bytes"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"io"
 	"maps"
 	"slices"
 	"strings"
 
 	"sshc/internal/envelope"
+	"sshc/internal/strictjson"
 	"sshc/internal/totp"
 	"sshc/internal/validate"
 )
@@ -89,6 +88,14 @@ func (e *SchemaVersionError) Is(target error) bool {
 
 // MinPassphraseLength は、これが受け付ける最短の vault パスフレーズ長。
 const MinPassphraseLength = 4
+
+// 利用者が打ち込んで Vault に入れる値の上限。HTTP の入口も同じ値で断る。
+const (
+	// MaxCredentialNameLength は、共有の認証情報に付ける名前の上限。
+	MaxCredentialNameLength = 128
+	// MaxPasswordLength は、保存するパスワードと鍵のパスフレーズの上限。
+	MaxPasswordLength = 1024
+)
 
 // Kind は、資格情報の名前空間を表す。
 //
@@ -273,15 +280,7 @@ func openDocumentWithMigrations(
 		return nil, Migration{}, err
 	}
 	var parsed document
-	decoder := json.NewDecoder(bytes.NewReader(plaintext))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&parsed); err != nil {
-		if migration.Applied() {
-			return nil, Migration{}, &MigrationError{From: migration.From, To: migration.To, Cause: err}
-		}
-		return nil, Migration{}, ErrWrongPassphrase
-	}
-	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+	if err := strictjson.Decode(plaintext, &parsed); err != nil {
 		if migration.Applied() {
 			return nil, Migration{}, &MigrationError{From: migration.From, To: migration.To, Cause: err}
 		}
@@ -856,7 +855,7 @@ func (v *Vault) RelocateSubjects(kind Kind, relocations map[string]string) (bool
 // alias ではない。資格情報は、それが何のためのものかにちなんで名付けられ、それは
 // ホスト名ではなく「オフィスの VM 群」かもしれないからだ。
 func validCredentialName(name string) bool {
-	if name == "" || len(name) > 128 {
+	if name == "" || len(name) > MaxCredentialNameLength {
 		return false
 	}
 	return !strings.ContainsAny(name, "\x00\r\n")

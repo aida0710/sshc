@@ -15,6 +15,10 @@ Execution has a preview step showing targets, expanded commands, and required in
 
 Under Menu → Snippets, "Connection startup" assigns one Snippet per host. On the first connection and on every automatic reconnection, sshc sends the command and Enter only after authentication and the remote shell have started; it never writes to an authentication prompt. Variable values, secret ones included, are stored encrypted with the assignment, and because the expanded value is typed on every connection it may remain in the remote shell history, TTY echo, or scrollback.
 
+An assignment is bound to the destination and authentication settings it resolved to at that time: host name, user, port, jump hosts, ProxyCommand, ForwardAgent, and so on. If any of these change after the assignment, sshc stops sending the Snippet to that host so that secret values do not reach a different machine. The terminal says that the Snippet was not sent, and "Connection startup" on the Snippets screen lists the hosts whose assignment stopped. Check the destination and assign it again.
+
+Assignments made by an earlier version, which did not record the destination, are stopped in the same way. Saving a connection on the Connections screen so that its saved password or one-time password works on the new route does not move a startup snippet assignment.
+
 The Snippets screen can also run one Snippet against several hosts as non-interactive SSH executions. It previews the expanded command and the resolved targets before starting and reports the result per host. One run takes up to 64 targets and executes 4 at a time. These executions use their own connections and do not inherit the working directory or shell state of an open pane.
 
 With two or more panes, Command Center can target selected SSH and local-shell panes. It previews an ad-hoc command or Snippet before writing the command and Enter to each PTY.

@@ -97,6 +97,11 @@ const (
 // this additional state.
 type Progressing interface{ ConnectionProgress() ConnectionProgress }
 
+// Announcer は、接続ログの設定に関係なく出す行（[sshc] で始まる）を、そのセッションの
+// ターミナルへ 1 行書ける Process である。接続の後で、利用者の操作が要ることを
+// そのターミナルで知らせるために使う。
+type Announcer interface{ Announce(message string) }
+
 // ExactInput accepts one complete input frame or returns an error without
 // silently dropping bytes. Interactive SSH implements this separately from
 // Process.Write, whose keystroke-oriented contract intentionally tolerates a

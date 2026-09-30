@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -487,11 +488,11 @@ func TestSSHStartupChangesToTheRequestedDirectoryAndThenRunsTheStartupSnippet(t 
 		Connect: func(context.Context, string, terminal.Size) (terminal.Process, error) {
 			return newScriptedPTY(), nil
 		},
-		Startup: func(alias string) (string, bool) {
+		Startup: func(alias string) StartupSnippet {
 			if alias != "production" {
 				t.Fatalf("startup alias = %q", alias)
 			}
-			return "tmux attach", true
+			return StartupSnippet{Command: "tmux attach"}
 		},
 	}
 	alias, directory := "production", "/srv/it's"
@@ -504,8 +505,8 @@ func TestSSHStartupChangesToTheRequestedDirectoryAndThenRunsTheStartupSnippet(t 
 	}
 	got := spec.Startup()
 	want := []string{`cd -- '/srv/it'"'"'s'`, "tmux attach"}
-	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
-		t.Fatalf("startup = %q, want %q", got, want)
+	if !slices.Equal(got.Commands, want) || got.Notice != "" {
+		t.Fatalf("startup = %#v, want the commands %q", got, want)
 	}
 }
 

@@ -397,8 +397,6 @@ func valueOr(values Values, keyword, fallback string) string {
 	return fallback
 }
 
-// declaresExactly は、Host 行がパターンによる一致ではなくこの alias を指定して
-// いるかを報告する。catch-all は全 alias に一致し、何も宣言しない。
 // DeclaresExactly は、Host ブロックのパターンが alias をそのまま名指ししているかを
 // 返す。ワイルドカードや否定でたまたま一致するブロックは「この alias を主張する
 // ブロック」には数えない。

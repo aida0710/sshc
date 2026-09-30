@@ -59,7 +59,7 @@ func finishVPNFailure(called vpnInvocation, err error, environment commandEnviro
 	return exitFailure
 }
 
-// vpnRouteError は、`sshc <接続先>` が VPN 経路を用意できなかったことを、
+// vpnRouteError は、`sshc ssh <alias>` が VPN 経路を用意できなかったことを、
 // `sshc vpn up` と同じ言い方で表す。元の失敗は Unwrap で辿れる。
 type vpnRouteError struct {
 	sentence string

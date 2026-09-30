@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"sshc/internal/config"
+	"sshc/internal/platform/nativepath"
 	"sshc/internal/storage"
 )
 
@@ -126,14 +127,8 @@ func (index *ReferenceIndex) record(
 		})
 		return
 	}
-	if !workspace.Contains(absolute) {
-		index.unresolved = append(index.unresolved, UnresolvedReference{
-			Directive: directive, Value: value, ConfigPath: configPath, Line: line, Reason: ReasonOutsideWorkspace,
-		})
-		return
-	}
-	relative, err := filepath.Rel(workspace.Root(), absolute)
-	if err != nil {
+	relative, inside := nativepath.Relative(workspace.Root(), absolute)
+	if !inside {
 		index.unresolved = append(index.unresolved, UnresolvedReference{
 			Directive: directive, Value: value, ConfigPath: configPath, Line: line, Reason: ReasonOutsideWorkspace,
 		})
@@ -227,13 +222,9 @@ func ResolveWorkspaceKeyPath(workspace *storage.Workspace, value string) (relati
 		return "", "", false
 	}
 	normalised := workspace.Normalise(filepath.Clean(expanded))
-	if !workspace.Contains(normalised) || normalised == workspace.Root() {
+	relative, ok = nativepath.RelativeSlash(workspace.Root(), normalised)
+	if !ok {
 		return "", "", false
 	}
-	relative, err := filepath.Rel(workspace.Root(), normalised)
-	if err != nil || relative == "." || relative == ".." ||
-		strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
-		return "", "", false
-	}
-	return filepath.ToSlash(relative), filepath.Clean(normalised), true
+	return relative, filepath.Clean(normalised), true
 }

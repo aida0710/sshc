@@ -34,11 +34,11 @@ func newStore(t *testing.T, random []byte) (*browserauth.Store, *testClock) {
 
 func recover(t *testing.T, store *browserauth.Store, token string) (string, bool) {
 	t.Helper()
-	rotated, accepted, err := store.Recover(token)
+	recovery, err := store.Recover(token)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return rotated, accepted
+	return recovery.Token, recovery.Accepted()
 }
 
 func TestRegisterStoresOnlyAHashAndRecoversAfterRestart(t *testing.T) {
@@ -122,6 +122,60 @@ func TestRegistrationsExpireWhenUnusedForTheLifetime(t *testing.T) {
 	}
 	if registered, err := store.HasRegistrations(); err != nil || registered {
 		t.Fatalf("HasRegistrations after expiry = (%t, %v)", registered, err)
+	}
+}
+
+// 上限に達したら、登録した順ではなく最後に使った順で消す。毎日使うブラウザは、あとから
+// 一度だけ登録されたプライベートウィンドウや別のブラウザに押し出されない。
+// recoverで入るブラウザも、`sshc open`（bootstrap）で入り直すブラウザも同じである。
+func TestAFullStoreDropsTheRegistrationUnusedForTheLongest(t *testing.T) {
+	tests := []struct {
+		name string
+		// use は、毎日使うブラウザが1回入り直し、次に提示するtokenを返す。
+		use func(t *testing.T, store *browserauth.Store, token string) string
+	}{
+		{name: "recover", use: func(t *testing.T, store *browserauth.Store, token string) string {
+			rotated, accepted := recover(t, store, token)
+			if !accepted {
+				t.Fatal("the browser in daily use could not recover")
+			}
+			return rotated
+		}},
+		{name: "bootstrap", use: func(t *testing.T, store *browserauth.Store, token string) string {
+			if fresh, issued, err := store.Register(token); err != nil || issued || fresh != "" {
+				t.Fatalf("Register(valid) = (%q, %t, %v), want the registration kept", fresh, issued, err)
+			}
+			return token
+		}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			store, clock := newStore(t, randomBytes(t, 32*(2*browserauth.MaxRegistrations+4)))
+			daily, _, err := store.Register("")
+			if err != nil {
+				t.Fatal(err)
+			}
+			var others []string
+			for range browserauth.MaxRegistrations {
+				clock.advance(24 * time.Hour)
+				daily = test.use(t, store, daily)
+				other, issued, err := store.Register("")
+				if err != nil || !issued {
+					t.Fatalf("Register(\"\") = (%t, %v)", issued, err)
+				}
+				others = append(others, other)
+			}
+
+			if _, accepted := recover(t, store, daily); !accepted {
+				t.Fatal("the browser used every day was dropped for a newer registration")
+			}
+			if _, accepted := recover(t, store, others[0]); accepted {
+				t.Fatal("the registration unused for the longest survived the limit")
+			}
+			if _, accepted := recover(t, store, others[1]); !accepted {
+				t.Fatal("a registration newer than the dropped one was also dropped")
+			}
+		})
 	}
 }
 
@@ -212,8 +266,8 @@ func TestForgetRemovesTheRegistrationSoItCannotRecoverAgain(t *testing.T) {
 
 	// The retired token still names the same registration during the grace.
 	forgotten, err := store.Forget(token)
-	if err != nil || !forgotten {
-		t.Fatalf("Forget(retired) = (%t, %v), want (true, nil)", forgotten, err)
+	if err != nil || forgotten == "" {
+		t.Fatalf("Forget(retired) = (%q, %v), want the registration", forgotten, err)
 	}
 	if _, accepted := recover(t, store, rotated); accepted {
 		t.Fatal("a forgotten registration recovered a session")
@@ -221,7 +275,7 @@ func TestForgetRemovesTheRegistrationSoItCannotRecoverAgain(t *testing.T) {
 	if registered, err := store.HasRegistrations(); err != nil || registered {
 		t.Fatalf("HasRegistrations after Forget = (%t, %v)", registered, err)
 	}
-	if forgotten, err := store.Forget("unknown-token-of-the-right-length-43-chars"); err != nil || forgotten {
-		t.Fatalf("Forget(unknown) = (%t, %v), want (false, nil)", forgotten, err)
+	if forgotten, err := store.Forget("unknown-token-of-the-right-length-43-chars"); err != nil || forgotten != "" {
+		t.Fatalf("Forget(unknown) = (%q, %v), want nothing forgotten", forgotten, err)
 	}
 }

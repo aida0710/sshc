@@ -49,6 +49,9 @@ func requestBodyCeiling(request *http.Request) int64 {
 		strings.Contains(request.URL.Path, "/uploads/") && request.URL.Query().Get("range") == "true" {
 		return MaxSFTPUploadRangeBodyCeiling
 	}
+	if request.Method == http.MethodPost && request.URL.Path == backgroundsRoute {
+		return MaxBackgroundUploadBodyCeiling
+	}
 	return MaxRequestBodyCeiling
 }
 
@@ -61,15 +64,20 @@ type Security struct {
 }
 
 // gateExempt は、vault がロック中でも利用できる初期化・認証ルートを指定する。
+// session/bootstrap と session/recover は gate より前に通すので、ここには無い。
+// recover-compatible-backup と reset-unsupported は、別の版が書いた Vault を
+// 開けず施錠されたままのときにだけ意味を持つため、施錠中に通す必要がある。
+// どちらも unlock と同じく master password を検証する。
 func gateExempt(method, path string) bool {
 	switch path {
 	case "/api/v1/health":
 		return method == http.MethodGet
-	case "/api/v1/session/bootstrap", "/api/v1/session/recover", "/api/v1/session/renew":
+	case "/api/v1/session/renew":
 		return method == http.MethodPost
 	case "/api/v1/passwords":
 		return method == http.MethodGet
-	case "/api/v1/passwords/initialise", "/api/v1/passwords/unlock":
+	case "/api/v1/passwords/initialise", "/api/v1/passwords/unlock",
+		"/api/v1/passwords/recover-compatible-backup", "/api/v1/passwords/reset-unsupported":
 		return method == http.MethodPost
 	}
 	return false
@@ -129,9 +137,11 @@ func (s Security) Middleware(next echo.HandlerFunc) echo.HandlerFunc {
 		if s.Sessions == nil {
 			return problem(c, http.StatusUnauthorized, "invalid_session")
 		}
-		if !s.Sessions.Authenticate(cookie.Value) {
+		endRequest, authenticated := s.Sessions.BeginRequest(cookie.Value)
+		if !authenticated {
 			return problem(c, http.StatusUnauthorized, "invalid_session")
 		}
+		defer endRequest()
 		// トークンは書き込みだけでなく読み取りにも必要である。cookie は
 		// ポートに紐づかず site もそうなので、127.0.0.1 上の別のサーバーが
 		// これを受け取ってしまう。SameSite は scheme と registrable domain
@@ -173,6 +183,22 @@ func setSecurityHeaders(header http.Header, apiResponse bool) {
 func problem(c *echo.Context, status int, code string) error {
 	c.Response().Header().Set(echo.HeaderContentType, "application/problem+json")
 	return c.JSON(status, api.Problem{Code: code, Message: "request rejected"})
+}
+
+// problemReply は、problem 応答の status、code、説明である。いくつかの対応付けが同じ形で
+// 返すときに、組み立てと書き出しを分けるために使う。
+type problemReply struct {
+	status int
+	code   string
+	// detail は problemDetail と同じ決まりに従う固定文である。空なら説明を付けない。
+	detail string
+}
+
+func writeProblemReply(c *echo.Context, reply problemReply) error {
+	if reply.detail == "" {
+		return problem(c, reply.status, reply.code)
+	}
+	return problemDetail(c, reply.status, reply.code, reply.detail)
 }
 
 // problemDetail は上限のある説明付きで拒否を返す。

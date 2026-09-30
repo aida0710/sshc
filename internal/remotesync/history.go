@@ -257,13 +257,17 @@ func (s *Service) History(ctx context.Context, passphrase string) (HistoryView, 
 	return view, nil
 }
 
+// MaxHistoryKeyLength は、履歴のスナップショットを指すオブジェクトキーの上限。
+// HTTP の入口も同じ値で断る。
+const MaxHistoryKeyLength = 1024
+
 func historyObjectKey(config Config, key string) (string, error) {
 	key = strings.TrimPrefix(key, "/")
 	configuredPrefix := strings.Trim(config.Path, "/")
 	if configuredPrefix != "" {
 		key = strings.TrimPrefix(key, configuredPrefix+"/")
 	}
-	if len(key) > 1024 || !strings.HasPrefix(key, SnapshotPrefix) ||
+	if len(key) > MaxHistoryKeyLength || !strings.HasPrefix(key, SnapshotPrefix) ||
 		!strings.HasSuffix(key, "."+archiveSuffix) || strings.Contains(key, "..") ||
 		strings.ContainsAny(key, "\\\r\n\x00") {
 		return "", ErrHistoryTarget
