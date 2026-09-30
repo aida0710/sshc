@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { vaultStatus } from "../testing/vaultStatus";
 import { ApiError } from "../api/client";
 import { LanguageProvider } from "../i18n/context";
 import { ThemeProvider } from "../theme/context";
@@ -9,8 +10,8 @@ import type { VaultApi } from "../api/vault";
 
 function buildApi(overrides: Partial<VaultApi> = {}): VaultApi {
   return {
-    initialiseVault: vi.fn().mockResolvedValue({ exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [] }),
-    unlockVault: vi.fn().mockResolvedValue({ exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [] }),
+    initialiseVault: vi.fn().mockResolvedValue(vaultStatus()),
+    unlockVault: vi.fn().mockResolvedValue(vaultStatus()),
     ...overrides,
   } as unknown as VaultApi;
 }
@@ -20,7 +21,7 @@ describe("LockScreen", () => {
     render(
       <ThemeProvider initial="dark">
         <LanguageProvider initial="en">
-          <LockScreen exists={false} onOpen={vi.fn()} api={buildApi()} />
+          <LockScreen exists={false} minPassphraseLength={4} onOpen={vi.fn()} api={buildApi()} />
         </LanguageProvider>
       </ThemeProvider>,
     );
@@ -35,7 +36,7 @@ describe("LockScreen", () => {
   it("says a new master password cannot be recovered, and asks for it twice", async () => {
     const api = buildApi();
     const onOpen = vi.fn();
-    const { container } = render(<LockScreen exists={false} onOpen={onOpen} api={api} />);
+    const { container } = render(<LockScreen exists={false} minPassphraseLength={4} onOpen={onOpen} api={api} />);
 
     expect(screen.getByText(/cannot be recovered/i)).toBeInTheDocument();
     expect(container.querySelector('[data-icon="secrets"]')).not.toBeInTheDocument();
@@ -62,11 +63,31 @@ describe("LockScreen", () => {
   });
 
   it("refuses a password too short to be worth deriving a key from", async () => {
-    render(<LockScreen exists={false} onOpen={vi.fn()} api={buildApi()} />);
+    render(<LockScreen exists={false} minPassphraseLength={4} onOpen={vi.fn()} api={buildApi()} />);
 
     await userEvent.type(screen.getByLabelText("Master password"), "abc");
     await userEvent.type(screen.getByLabelText("Confirm master password"), "abc");
 
+    expect(screen.getByRole("button", { name: "Create the vault" })).toBeDisabled();
+  });
+
+  it("requires the minimum length the engine reports when creating a vault", async () => {
+    render(<LockScreen exists={false} minPassphraseLength={6} onOpen={vi.fn()} api={buildApi()} />);
+
+    await userEvent.type(screen.getByLabelText("Master password"), "abcde");
+    await userEvent.type(screen.getByLabelText("Confirm master password"), "abcde");
+    expect(screen.getByRole("button", { name: "Create the vault" })).toBeDisabled();
+
+    await userEvent.type(screen.getByLabelText("Master password"), "f");
+    await userEvent.type(screen.getByLabelText("Confirm master password"), "f");
+    expect(screen.getByRole("button", { name: "Create the vault" })).toBeEnabled();
+  });
+
+  it("does not create a password vault before the engine has reported its minimum", async () => {
+    render(<LockScreen exists={false} onOpen={vi.fn()} api={buildApi()} />);
+
+    await userEvent.type(screen.getByLabelText("Master password"), "a long enough password");
+    await userEvent.type(screen.getByLabelText("Confirm master password"), "a long enough password");
     expect(screen.getByRole("button", { name: "Create the vault" })).toBeDisabled();
   });
 
@@ -101,6 +122,35 @@ describe("LockScreen", () => {
     expect(onOpen).not.toHaveBeenCalled();
   });
 
+  it("says unlocking failed when the engine refuses an unlock for an unknown reason", async () => {
+    const api = buildApi({ unlockVault: vi.fn().mockRejectedValue(new ApiError("internal_error", 500, null)) });
+    render(
+      <LanguageProvider initial="ja">
+        <LockScreen exists onOpen={vi.fn()} api={api} />
+      </LanguageProvider>,
+    );
+
+    await userEvent.type(screen.getByLabelText("マスターパスワード"), "the master password");
+    await userEvent.click(screen.getByRole("button", { name: "ロックを解除" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("ロックを解除できませんでした。");
+  });
+
+  it("says creating failed when the engine refuses a new vault for an unknown reason", async () => {
+    const api = buildApi({ initialiseVault: vi.fn().mockRejectedValue(new ApiError("internal_error", 500, null)) });
+    render(
+      <LanguageProvider initial="ja">
+        <LockScreen exists={false} minPassphraseLength={4} onOpen={vi.fn()} api={api} />
+      </LanguageProvider>,
+    );
+
+    await userEvent.type(screen.getByLabelText("マスターパスワード"), "a long enough password");
+    await userEvent.type(screen.getByLabelText("マスターパスワード（確認）"), "a long enough password");
+    await userEvent.click(screen.getByRole("button", { name: "Vaultを作成" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Vaultを作成できませんでした。");
+  });
+
   it("shows exact vault schema versions and restores a compatible backup", async () => {
     const onOpen = vi.fn();
     const api = buildApi({
@@ -110,12 +160,7 @@ describe("LockScreen", () => {
         currentVersion: 3,
         requiredVersion: 4,
       })),
-      recoverCompatibleVault: vi.fn().mockResolvedValue({
-        exists: true,
-        unlocked: true,
-        aliases: [],
-        dedicatedKeyPassphrases: [],
-      }),
+      recoverCompatibleVault: vi.fn().mockResolvedValue(vaultStatus()),
     });
     render(
       <LanguageProvider initial="ja">
@@ -143,12 +188,7 @@ describe("LockScreen", () => {
         currentVersion: 5,
         requiredVersion: 4,
       })),
-      resetUnsupportedVault: vi.fn().mockResolvedValue({
-        exists: true,
-        unlocked: true,
-        aliases: [],
-        dedicatedKeyPassphrases: [],
-      }),
+      resetUnsupportedVault: vi.fn().mockResolvedValue(vaultStatus()),
     });
     render(<LockScreen exists onOpen={onOpen} api={api} />);
 
@@ -225,7 +265,7 @@ describe("LockScreen", () => {
         detail: "the operating system denied access to the app's private storage",
       })),
     });
-    render(<LockScreen exists={false} version="0.13.6" onOpen={vi.fn()} api={api} />);
+    render(<LockScreen exists={false} minPassphraseLength={4} version="0.13.6" onOpen={vi.fn()} api={api} />);
 
     await userEvent.type(screen.getByLabelText("Master password"), "a long enough password");
     await userEvent.type(screen.getByLabelText("Confirm master password"), "a long enough password");
@@ -243,15 +283,10 @@ describe("LockScreen", () => {
     const onExists = vi.fn();
     const api = buildApi({
       initialiseVault: vi.fn().mockRejectedValue(new ApiError("vault_already_exists", 409, null)),
-      passwordVault: vi.fn().mockResolvedValue({
-        exists: true,
-        unlocked: false,
-        aliases: [],
-        dedicatedKeyPassphrases: [],
-      }),
+      passwordVault: vi.fn().mockResolvedValue(vaultStatus({ unlocked: false })),
     });
     const { rerender } = render(
-      <LockScreen exists={false} version="0.13.6" onOpen={vi.fn()} onExists={onExists} api={api} />,
+      <LockScreen exists={false} minPassphraseLength={4} version="0.13.6" onOpen={vi.fn()} onExists={onExists} api={api} />,
     );
 
     await userEvent.type(screen.getByLabelText("Master password"), "a long enough password");
@@ -269,7 +304,7 @@ describe("LockScreen", () => {
 it("creates a passwordless vault only after selecting that mode", async () => {
   const api = buildApi();
   const onOpen = vi.fn();
-  render(<LockScreen exists={false} api={api} onOpen={onOpen} />);
+  render(<LockScreen exists={false} minPassphraseLength={4} api={api} onOpen={onOpen} />);
   expect(screen.getByRole("button", { name: "Create the vault" })).toBeDisabled();
   await userEvent.click(screen.getByLabelText("Use without a password"));
   expect(screen.queryByLabelText("Master password")).not.toBeInTheDocument();
@@ -280,7 +315,7 @@ it("creates a passwordless vault only after selecting that mode", async () => {
 
 it("accepts four Unicode characters and explains short-password protection", async () => {
   const api = buildApi();
-  render(<LockScreen exists={false} api={api} onOpen={vi.fn()} />);
+  render(<LockScreen exists={false} minPassphraseLength={4} api={api} onOpen={vi.fn()} />);
   await userEvent.type(screen.getByLabelText("Master password"), "あいうえ");
   await userEvent.type(screen.getByLabelText("Confirm master password"), "あいうえ");
   expect(screen.getByText(/A short password offers limited protection/)).toBeInTheDocument();

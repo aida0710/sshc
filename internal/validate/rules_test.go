@@ -39,9 +39,11 @@ func TestEveryReservedNameIsRefused(t *testing.T) {
 // 書き方だけを使う。後方参照も先読みも、片方にしか無い。
 func TestThePatternsStayInTheSharedSubset(t *testing.T) {
 	for name, pattern := range map[string]string{
-		"group segment": validate.GroupSegmentPattern,
-		"alias":         validate.AliasPattern,
-		"hostname":      validate.HostnamePattern,
+		"group segment":         validate.GroupSegmentPattern,
+		"alias":                 validate.AliasPattern,
+		"hostname":              validate.HostnamePattern,
+		"shortcut key":          validate.ShortcutKeyPattern,
+		"shortcut function key": validate.ShortcutFunctionKeyPattern,
 	} {
 		for _, forbidden := range []string{`(?`, `\b`, `\k`, `(?<`} {
 			if strings.Contains(pattern, forbidden) {

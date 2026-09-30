@@ -1,5 +1,5 @@
 import { apiClient } from "../api/client";
-import { issueAction, jsonHeaders, postJSON } from "../api/guards";
+import { issueAction, postJSON, sendJSON } from "../api/guards";
 import type { components } from "../api/schema";
 import { validateOpenAPISchema } from "../api/validators.generated";
 
@@ -30,6 +30,10 @@ export type PurgeTrashResponse = components["schemas"]["PurgeTrashResponse"];
 
 export const REVEAL_ACTION_KIND = "private_key.reveal";
 export const PURGE_ACTION_KIND = "trash.purge";
+
+// A relocation or restore that something stands in the way of is answered
+// under 409 Conflict with its blockers; any other 409 is a Problem.
+const blockedStatus = 409;
 
 export function selectablePrivateKeys(inventory: Pick<KeyInventoryResponse, "items">): KeyItem[] {
   return inventory.items.filter((item) => item.kind === "private_key");
@@ -134,15 +138,11 @@ export const keysApi: KeysApi = {
     return validatePublicKey(await apiClient.read(`/api/v1/keys/${encodeURIComponent(keyId)}/public`));
   },
   async relocate(keyId, change) {
-    const response = await apiClient.send(`/api/v1/keys/${encodeURIComponent(keyId)}/location`, {
+    return validateRelocate(await sendJSON<unknown>(`/api/v1/keys/${encodeURIComponent(keyId)}/location`, {
       method: "POST",
-      headers: jsonHeaders,
-      body: JSON.stringify(change),
-    });
-    if (!response.ok && response.status !== 409) {
-      throw new Error("api_mutation_failed");
-    }
-    return validateRelocate(await response.json());
+      body: change,
+      refusalStatus: blockedStatus,
+    }));
   },
   async registerWithAgent(keyId, input) {
     return validateRegister(
@@ -162,13 +162,11 @@ export const keysApi: KeysApi = {
     return validateTrashList(await apiClient.read("/api/v1/trash"));
   },
   async restore(entryId) {
-    const response = await apiClient.send(`/api/v1/trash/${encodeURIComponent(entryId)}/restore`, {
-      method: "POST",
-    });
-    if (!response.ok && response.status !== 409) {
-      throw new Error("api_mutation_failed");
-    }
-    return validateRestore(await response.json());
+    return validateRestore(await apiClient.mutate<unknown>(
+      `/api/v1/trash/${encodeURIComponent(entryId)}/restore`,
+      { method: "POST" },
+      { refusalStatus: blockedStatus },
+    ));
   },
   async purge(entryId) {
     const token = await issueAction(PURGE_ACTION_KIND, entryId);

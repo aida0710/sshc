@@ -22,10 +22,8 @@ func (s *Service) ObserveConnectionOS(target sshclient.Target) func(string) {
 	if err != nil {
 		return nil
 	}
-	for _, host := range stored.Hosts {
-		if host.Identity == identity && host.OS != "" {
-			return nil
-		}
+	if index := hostMetadataIndex(stored.Hosts, identity); index >= 0 && stored.Hosts[index].OS != "" {
+		return nil
 	}
 	binding := target.AuthenticationBinding()
 	return func(name string) { _ = s.recordConnectionOS(identity, binding, name) }
@@ -48,20 +46,13 @@ func (s *Service) recordConnectionOS(identity HostIdentity, binding, name string
 	if err != nil {
 		return err
 	}
-	index := -1
-	for i, host := range stored.Hosts {
-		if host.Identity != identity {
-			continue
-		}
-		if host.OS != "" || (host.DetectedOS == name && host.DetectedOSBinding == binding) {
-			return nil
-		}
-		index = i
-		break
-	}
+	index := hostMetadataIndex(stored.Hosts, identity)
 	if index < 0 {
 		stored.Hosts = append(stored.Hosts, HostMetadata{Identity: identity})
 		index = len(stored.Hosts) - 1
+	}
+	if host := stored.Hosts[index]; host.OS != "" || (host.DetectedOS == name && host.DetectedOSBinding == binding) {
+		return nil
 	}
 	stored.Hosts[index].DetectedOS = name
 	stored.Hosts[index].DetectedOSBinding = binding

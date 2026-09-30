@@ -22,7 +22,7 @@ read_strongswan_documents() {
 		# 名前は engine が決めたものだけだが、runtime の外へ書かないよう確かめる。
 		case "$name" in
 		.* | *[!A-Za-z0-9._-]*)
-			echo "設定のファイル名が正しくありません: $name" >&2
+			echo "設定のファイル名が正しくありません：$name" >&2
 			return 1
 			;;
 		esac
@@ -38,12 +38,12 @@ resolve_server_address() {
 	resolve_first_ipv4 "$server"
 	server_address=$resolved_address
 	if [ -z "$server_address" ]; then
-		fail server_unresolved "VPNサーバーの名前解決に失敗しました: $server"
+		fail server_unresolved "VPNサーバーの名前解決に失敗しました：$server"
 	fi
 	for document in "$@"; do
 		sed -i "s|%SERVER_ADDRESS%|$server_address|g" "$document"
 	done
-	printf 'VPNサーバーの名前解決: %s → %s\n' "$server" "$server_address"
+	printf 'VPNサーバーの名前解決：%s → %s\n' "$server" "$server_address"
 }
 
 # wait_for_file は、デーモンが制御の口を開くまで待つ。

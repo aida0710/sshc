@@ -35,6 +35,10 @@ const blockerLabels: Record<string, MessageKey> = {
   key_group_not_declared: "keys.blockerGroupNotDeclared",
   key_destination_is_config: "keys.blockerDestinationIsConfig",
   key_in_state_directory: "keys.blockerStateDirectory",
+  // ゴミ箱からの復元を止める理由（internal/keys/trash.go の Blocker*）。
+  restore_path_occupied: "keys.blockerTargetOccupied",
+  restore_fingerprint_present: "keys.blockerFingerprintPresent",
+  restore_entry_incomplete: "keys.blockerEntryIncomplete",
 };
 
 export function describeBlocker(blocker: string, t: Translate): string {
@@ -42,4 +46,8 @@ export function describeBlocker(blocker: string, t: Translate): string {
   const code = separator < 0 ? blocker : blocker.slice(0, separator);
   const detail = separator < 0 ? blocker : blocker.slice(separator + 1);
   return t(blockerLabels[code] ?? "keys.blockerOther", { detail });
+}
+
+export function describeBlockers(blockers: readonly string[], t: Translate): string {
+  return blockers.map((blocker) => describeBlocker(blocker, t)).join(t("keys.blockerSeparator"));
 }

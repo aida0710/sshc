@@ -33,11 +33,11 @@ func newGroupHarness(t *testing.T, groups ...string) *testHarness {
 	registerConfigRoutes(engine, ConfigHandlers{Service: harness.service, Keys: keyService})
 	harness.echo = engine
 
-	metadata := application.NewMetadata()
+	declared := make([]application.GroupMetadata, 0, len(groups))
 	for _, name := range groups {
-		metadata.Groups = append(metadata.Groups, application.GroupMetadata{Name: name})
+		declared = append(declared, application.GroupMetadata{Name: name})
 	}
-	if _, err := harness.service.Save(application.EditRequest{Kind: application.EditGroups, Metadata: &metadata}); err != nil {
+	if _, err := harness.service.Save(application.EditRequest{Kind: application.EditGroups, Groups: declared}); err != nil {
 		t.Fatalf("declare %v: %v", groups, err)
 	}
 	return harness

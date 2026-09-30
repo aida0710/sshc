@@ -5,7 +5,7 @@ import type { AdvancedArea } from "../routing/connectionRoute";
 import { control, hintText, narrowControl } from "../ui/form";
 import { Button, Card, Notice, Row } from "../ui/surface";
 import { formatDirectiveValues, parseDirectiveValues } from "../rules/rules";
-import { identityKey } from "./connectionBrowser";
+import { draftResetKey } from "./draftResetKey";
 import { activateTabFromKeyboard } from "../ui/tabKeyboard";
 import { DraftSaveBar } from "./DraftSaveBar";
 import { useDraftSave } from "./useDraftSave";
@@ -57,7 +57,7 @@ export function AdvancedSettings({
   const [blockRaw, setBlockRaw] = useState(detail.form.raw);
   const [localError, setLocalError] = useState("");
 
-  const resetKey = `${identityKey(detail.form.entry.identity)}\u0000${detail.file.contents}`;
+  const resetKey = draftResetKey(detail.form.entry.identity, detail.file.contents);
   useEffect(() => {
     setDrafts({});
     setRemoved([]);

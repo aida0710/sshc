@@ -1,6 +1,6 @@
 import type { TerminalSession } from "../../api/terminalSessions";
 import { terminalSubtitle } from "../../terminal/terminalPresentation";
-import { paneIDs, type LayoutState } from "./layout";
+import { paneIds, type LayoutState } from "./layout";
 import { findPane } from "./panes";
 import type { WorkspaceCommandTarget } from "./WorkspaceCommandCenter";
 
@@ -9,12 +9,12 @@ import type { WorkspaceCommandTarget } from "./WorkspaceCommandCenter";
 export function commandTargetsFor(
   visibleLayout: LayoutState | null,
   active: TerminalSession | null,
-  sessionByID: ReadonlyMap<string, TerminalSession>,
+  sessionById: ReadonlyMap<string, TerminalSession>,
 ): WorkspaceCommandTarget[] {
-  if (visibleLayout !== null) return paneIDs(visibleLayout.root).map((id, index) => {
+  if (visibleLayout !== null) return paneIds(visibleLayout.root).map((id, index) => {
     const pane = findPane(visibleLayout.root, id);
     if (pane === null) throw new Error("workspace pane disappeared");
-    const session = pane.sessionId === undefined ? undefined : sessionByID.get(pane.sessionId);
+    const session = pane.sessionId === undefined ? undefined : sessionById.get(pane.sessionId);
     const connected = session?.state === "connected";
     return {
       targetId: pane.id,

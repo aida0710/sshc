@@ -82,17 +82,21 @@ func TestValidateEditRequestEnforcesEveryKindsRequirements(t *testing.T) {
 			Kind: application.EditMove, Path: "config", Base: "Host a\n", Alias: "a",
 			DestinationPath: "conf.d/10-home.conf", DestinationBase: strings.Repeat("a", maxRawLength+1),
 		}, true},
-		{"groups without metadata", application.EditRequest{Kind: application.EditGroups}, true},
+		{"groups with key material", application.EditRequest{
+			Kind:   application.EditGroups,
+			Groups: []application.GroupMetadata{{Name: "work", Note: "x", Settings: []application.Setting{{Keyword: "IdentityFile", Values: []string{"-----BEGIN OPENSSH PRIVATE KEY-----"}}}}},
+		}, true},
+		{"metadata without an alias", application.EditRequest{Kind: application.EditMetadata, Path: "config"}, true},
 		{"metadata with key material", application.EditRequest{
-			Kind: application.EditMetadata,
-			Metadata: &application.Metadata{
-				SchemaVersion: application.MetadataSchemaVersion,
-				GroupsFile:    application.DefaultGroupsFile,
-				Hosts: []application.HostMetadata{{
-					Identity: application.HostIdentity{Path: "config", Alias: "a"},
-					Note:     "-----BEGIN OPENSSH PRIVATE KEY-----",
-				}},
+			Kind: application.EditMetadata, Path: "config", Alias: "a",
+			HostMetadata: &application.HostMetadata{
+				Identity: application.HostIdentity{Path: "config", Alias: "a"},
+				Note:     "-----BEGIN OPENSSH PRIVATE KEY-----",
 			},
+		}, true},
+		{"metadata whose base belongs to another connection", application.EditRequest{
+			Kind: application.EditMetadata, Path: "config", Alias: "a",
+			HostMetadataBase: &application.HostMetadata{Identity: application.HostIdentity{Path: "config", Alias: "b"}},
 		}, true},
 	}
 	for _, test := range tests {

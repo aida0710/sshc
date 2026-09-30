@@ -30,6 +30,15 @@ const (
 	ForwardAgent   = "agent"
 )
 
+// 転送を開けなかった理由の語。画面は語を言語ごとの文にする。Go のエラーの文は、
+// 設定から開いた転送ではターミナルへ書く 1 行に、一時転送では API の detail に残す。
+const (
+	ForwardProblemAddressInUse     = "address_in_use"
+	ForwardProblemPermissionDenied = "permission_denied"
+	ForwardProblemAgentUnreachable = "agent_unreachable"
+	ForwardProblemFailed           = "failed"
+)
+
 // Forward は、そのセッションが開いている転送ひとつである。
 type Forward struct {
 	// ID は同じセッション内で一意な、停止操作用の不透明な識別子。
@@ -39,7 +48,7 @@ type Forward struct {
 	Listen string
 	// To は、その先。dynamic と agent では空。
 	To string
-	// Problem は、開けなかった理由。空なら開いている。
+	// Problem は、開けなかった理由の語（ForwardProblem*）。空なら開いている。
 	Problem string
 	// Temporary は接続後に追加され、設定ファイルには由来しない転送を表す。
 	Temporary bool

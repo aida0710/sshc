@@ -61,6 +61,34 @@ describe("TerminalPortForwards", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("address already in use");
   });
 
+  it("says a port already in use in words instead of the engine's error", async () => {
+    const api = {
+      startTerminalForward: vi.fn().mockRejectedValue(new ApiError("terminal_forward_bind_failed", 409, {
+        code: "terminal_forward_bind_failed",
+        message: "request rejected",
+        reason: "address_in_use",
+        detail: "listen tcp 127.0.0.1:8080: bind: address already in use",
+      })),
+      stopTerminalForward: vi.fn(),
+    };
+    render(<LanguageProvider><TerminalPortForwards session={session} api={api} onClose={vi.fn()} /></LanguageProvider>);
+    await userEvent.type(screen.getByLabelText("Local port"), "8080");
+    await userEvent.type(screen.getByLabelText("Destination"), "db.internal:5432");
+    await userEvent.click(screen.getByRole("button", { name: "Start" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("The local port is already in use.");
+    expect(screen.queryByText(/bind: address already in use/)).not.toBeInTheDocument();
+  });
+
+  it("says why a saved forwarding could not be opened in words", () => {
+    const failed = { ...session, forwards: [{
+      id: "", kind: "local", listen: "127.0.0.1:8080", to: "db.internal:5432",
+      problem: "address_in_use", temporary: false,
+    }] };
+    render(<LanguageProvider><TerminalPortForwards session={failed} api={{ startTerminalForward: vi.fn(), stopTerminalForward: vi.fn() }} onClose={vi.fn()} /></LanguageProvider>);
+    expect(screen.getByRole("alert")).toHaveTextContent("The local port is already in use.");
+    expect(screen.queryByText("address_in_use")).not.toBeInTheDocument();
+  });
+
   it("optionally writes the same forwarding to the selected connection", async () => {
     const forward = {
       id: "pf-1", kind: "dynamic", listen: "127.0.0.1:1080", to: "",

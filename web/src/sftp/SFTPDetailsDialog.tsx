@@ -9,6 +9,7 @@ import { Button } from "../ui/surface";
 import { sftpApi, type RemoteDirectoryStats, type RemoteEntry } from "./api";
 import { formatBytes } from "../ui/format";
 import { entryKind } from "./entryKind";
+import { entryTypeLabelKeys } from "./sftpMessageKeys";
 import { symbolicModeToOctal } from "./transfers";
 
 // Long text is previewed, not edited. Rendering a whole 2 MiB file into a <pre>
@@ -158,7 +159,7 @@ export function SFTPDetailsDialog({
           ) : (
             <>
               <Property label={t("sftp.path")}>{entry.path}</Property>
-              <Property label={t("sftp.type")}>{t(`sftp.type.${entry.type}`)}</Property>
+              <Property label={t("sftp.type")}>{t(entryTypeLabelKeys[entry.type])}</Property>
               {entry.type === "symlink" ? (
                 <Property label={t("sftp.linkTarget")}>
                   {entry.targetType === undefined ? t("sftp.brokenLink", { target: entry.linkTarget ?? "" }) : entry.linkTarget ?? ""}
@@ -221,7 +222,7 @@ export function SFTPDetailsDialog({
           ) : preview.kind === "unavailable" ? (
             <p className="text-sm text-ink-muted">{t(preview.reason)}</p>
           ) : (
-            <p className="text-sm text-ink-muted">{t(`sftp.type.${entry.type}`)}</p>
+            <p className="text-sm text-ink-muted">{t(entryTypeLabelKeys[entry.type])}</p>
           )}
         </div>
 

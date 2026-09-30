@@ -64,9 +64,7 @@ func TestGroupRenameCarriesTheMetadataIdentityAndPresentation(t *testing.T) {
 		Identity: HostIdentity{Path: "connections/work/web.conf", Alias: "web-1"},
 		Colour:   "#22d3ee",
 	}}
-	if _, err := service.Save(EditRequest{Kind: EditMetadata, Metadata: &metadata}); err != nil {
-		t.Fatal(err)
-	}
+	seedMetadata(t, service, metadata)
 
 	if _, err := service.RenameGroup(keyInventory(t, workspace), "work", "client-a"); err != nil {
 		t.Fatalf("RenameGroup error = %v", err)

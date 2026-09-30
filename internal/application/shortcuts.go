@@ -8,6 +8,7 @@ import (
 	"unicode/utf8"
 
 	"sshc/internal/storage"
+	"sshc/internal/validate"
 )
 
 type ShortcutPreset struct {
@@ -19,28 +20,28 @@ type ShortcutPreset struct {
 var ErrShortcutPresets = errors.New("invalid shortcut presets")
 var ErrShortcutConflict = errors.New("shortcut presets changed; reload before saving")
 var shortcutID = regexp.MustCompile(`^[a-zA-Z0-9-]{1,64}$`)
-var shortcutChord = regexp.MustCompile("^(Ctrl\\+)?(Alt\\+)?(Shift\\+)?(Meta\\+)?([A-Z0-9]|F([1-9]|1[0-2])|Arrow(Up|Down|Left|Right)|PageUp|PageDown|Home|End|Insert|Delete|Backspace|Enter|Tab|Escape|Space|[-=,.;/\\[\\]\\\\'`])$")
-var shortcutFunction = regexp.MustCompile(`^F([1-9]|1[0-2])$`)
-var shortcutActions = []string{"palette", "terminalSearch", "copy", "paste", "nextSession", "previousSession", "home", "sftp"}
 
+// validateShortcutPresets uses the chord grammar, action list and limits of
+// internal/validate, which the settings screen receives through rulegen, so a
+// chord the screen records is one this accepts.
 func validateShortcutPresets(presets []ShortcutPreset) error {
-	if len(presets) > MaxShortcutPresets {
+	if len(presets) > validate.MaxShortcutPresets {
 		return ErrShortcutPresets
 	}
 	ids := map[string]bool{}
 	for _, p := range presets {
-		if !shortcutID.MatchString(p.ID) || p.ID == "default" || ids[p.ID] || strings.TrimSpace(p.Name) == "" || utf8.RuneCountInString(p.Name) > MaxShortcutPresetNameRunes || strings.ContainsAny(p.Name, "\r\n\x00") || len(p.Bindings) != len(shortcutActions) {
+		if !shortcutID.MatchString(p.ID) || p.ID == "default" || ids[p.ID] || strings.TrimSpace(p.Name) == "" || utf8.RuneCountInString(p.Name) > validate.MaxShortcutPresetNameLength || strings.ContainsAny(p.Name, "\r\n\x00") || len(p.Bindings) != len(validate.ShortcutActions) {
 			return ErrShortcutPresets
 		}
 		ids[p.ID] = true
 		seen := map[string]bool{}
-		for _, action := range shortcutActions {
+		for _, action := range validate.ShortcutActions {
 			keys, ok := p.Bindings[action]
-			if !ok || keys == nil || len(keys) > MaxShortcutKeysPerAction {
+			if !ok || keys == nil || len(keys) > validate.MaxShortcutKeysPerAction {
 				return ErrShortcutPresets
 			}
 			for _, key := range keys {
-				if !shortcutChord.MatchString(key) || seen[key] || (!strings.Contains(key, "Ctrl+") && !strings.Contains(key, "Alt+") && !strings.Contains(key, "Meta+") && !shortcutFunction.MatchString(key)) {
+				if validate.ShortcutChord(key) != nil || seen[key] {
 					return ErrShortcutPresets
 				}
 				seen[key] = true

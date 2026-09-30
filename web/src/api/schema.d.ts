@@ -3508,7 +3508,10 @@ export interface components {
             fields?: components["schemas"]["FieldEdit"][];
             raw?: string;
             comment?: string;
-            metadata?: components["schemas"]["Metadata"];
+            hostMetadata?: components["schemas"]["HostMetadata"];
+            hostMetadataBase?: components["schemas"]["HostMetadata"];
+            groups?: components["schemas"]["GroupMetadata"][];
+            groupsBase?: components["schemas"]["GroupMetadata"][];
             destinationGroup?: string;
             destinationPath?: string;
             destinationBase?: string;

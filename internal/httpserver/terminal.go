@@ -186,9 +186,9 @@ func (h TerminalHandlers) StartForward(c *echo.Context) error {
 		(request.Kind == "dynamic" && destination != "") {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
-	_, err := h.Registry.StartForward(id, string(request.Kind), strconv.Itoa(request.ListenPort), destination)
+	forward, err := h.Registry.StartForward(id, string(request.Kind), strconv.Itoa(request.ListenPort), destination)
 	if err != nil {
-		return terminalForwardProblem(c, err)
+		return terminalForwardProblem(c, err, forward.Problem)
 	}
 	return c.JSON(http.StatusCreated, h.list())
 }
@@ -201,12 +201,15 @@ func (h TerminalHandlers) StopForward(c *echo.Context) error {
 		return problem(c, http.StatusNotFound, "terminal_forward_not_found")
 	}
 	if err := h.Registry.StopForward(id, forwardID); err != nil {
-		return terminalForwardProblem(c, err)
+		return terminalForwardProblem(c, err, "")
 	}
 	return c.JSON(http.StatusOK, h.list())
 }
 
-func terminalForwardProblem(c *echo.Context, err error) error {
+// terminalForwardProblem は、転送の操作の失敗を problem にする。bindReason は、待ち受けを
+// 開けなかった理由の語（terminal.ForwardProblem*）で、画面が訳す。Go のエラーの文は
+// 補足として detail に入れる。
+func terminalForwardProblem(c *echo.Context, err error, bindReason string) error {
 	switch {
 	case errors.Is(err, terminal.ErrNotFound):
 		return problem(c, http.StatusNotFound, "terminal_session_not_found")
@@ -217,7 +220,9 @@ func terminalForwardProblem(c *echo.Context, err error) error {
 	case errors.Is(err, terminal.ErrNotConnected), errors.Is(err, terminal.ErrForwardUnavailable):
 		return problem(c, http.StatusConflict, "terminal_forward_unavailable")
 	default:
-		return problemDetail(c, http.StatusConflict, "terminal_forward_bind_failed", err.Error())
+		return problemWith(c, http.StatusConflict, problemPayload{
+			Code: "terminal_forward_bind_failed", Reason: bindReason, Detail: boundedProblemDetail(err.Error()),
+		})
 	}
 }
 

@@ -32,7 +32,6 @@ const (
 	// 貼り付けてしまうことが防がれる。
 	maxCommentLength = 4 << 10
 	maxGroupCount    = 256
-	maxHostCount     = 4096
 	maxIDLength      = 128
 )
 
@@ -149,11 +148,11 @@ func validateEditRequest(request application.EditRequest) error {
 	case application.EditHostFields, application.EditBlockRaw, application.EditFileRaw,
 		application.EditRename, application.EditDuplicate, application.EditMove, application.EditComment,
 		application.EditFileRename, application.EditFileDelete,
-		application.EditDirectoryCreate, application.EditDirectoryDelete:
+		application.EditDirectoryCreate, application.EditDirectoryDelete, application.EditMetadata:
 		if err := validatePathParameter(request.Path); err != nil {
 			return err
 		}
-	case application.EditGroups, application.EditMetadata:
+	case application.EditGroups:
 	default:
 		return errInvalidEdit
 	}
@@ -224,18 +223,42 @@ func validateEditRequest(request application.EditRequest) error {
 	case application.EditFileDelete:
 		// base がすべての事前条件である。delete は新しいバイトを一切
 		// 伴わないので、ここで他に検証すべきことは何もない。
-	case application.EditGroups, application.EditMetadata:
-		if request.Metadata == nil {
+	case application.EditMetadata:
+		return validateHostMetadataEdit(request)
+	case application.EditGroups:
+		if len(request.Groups) > maxGroupCount || len(request.GroupsBase) > maxGroupCount {
 			return errInvalidEdit
 		}
-		if len(request.Metadata.Groups) > maxGroupCount || len(request.Metadata.Hosts) > maxHostCount {
-			return errInvalidEdit
-		}
-		if err := application.ValidateMetadata(*request.Metadata); err != nil {
+		// 送られたグループの設定だけで形を確かめる。ほかの節はディスクの値を使うので、
+		// ここでは見ない。
+		if err := application.ValidateMetadata(application.Metadata{Groups: request.Groups}); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// validateHostMetadataEdit は、接続 1 件の metadata の変更を確かめる。base と新しい
+// entry のどちらも、Path と Alias が指す接続のものでなければならない。新しい entry
+// だけは、orphan を付け直すために別の接続を指してよい。
+func validateHostMetadataEdit(request application.EditRequest) error {
+	if err := validateHostBlockAlias(request.Alias); err != nil {
+		return err
+	}
+	identity := application.HostIdentity{Path: request.Path, Alias: request.Alias}
+	if base := request.HostMetadataBase; base != nil && base.Identity != identity {
+		return errInvalidEdit
+	}
+	if request.HostMetadata == nil {
+		return nil
+	}
+	if err := validatePathParameter(request.HostMetadata.Identity.Path); err != nil {
+		return err
+	}
+	if err := validateHostBlockAlias(request.HostMetadata.Identity.Alias); err != nil {
+		return err
+	}
+	return application.ValidateMetadata(application.Metadata{Hosts: []application.HostMetadata{*request.HostMetadata}})
 }
 
 func validateFieldEdit(edit application.FieldEdit) error {
@@ -307,6 +330,9 @@ func serviceProblem(c *echo.Context, err error) error {
 	case errors.Is(err, application.ErrHostNotFound), errors.Is(err, application.ErrUnknownTransaction),
 		errors.Is(err, application.ErrFileNotFound):
 		return problemWith(c, http.StatusNotFound, problemPayload{Code: "not_found"})
+	case errors.Is(err, application.ErrMetadataChanged):
+		// 画面の写しは古い。読み直してから変更し直してもらう。
+		return problemWith(c, http.StatusConflict, problemPayload{Code: "metadata_changed"})
 	case errors.Is(err, application.ErrCannotTouchEntryFile):
 		return problemWith(c, http.StatusConflict, problemPayload{Code: "entry_file_protected"})
 	case errors.Is(err, application.ErrDestinationExists):

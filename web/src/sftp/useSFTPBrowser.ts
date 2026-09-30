@@ -5,6 +5,7 @@ import { sftpProblemText } from "./sftpProblemText";
 import type { RemoteEntry } from "./api";
 import { localHostAlias } from "./localHost";
 import { sourceFor, type SFTPListing } from "./sftpSource";
+import { useRequestGeneration } from "../ui/useRequestGeneration";
 
 export type SFTPLocation = { alias: string; path: string };
 // A restored location, plus whether it was live when the tab was put away. A
@@ -57,7 +58,7 @@ export function useSFTPBrowser({
   const [problem, setProblem] = useState("");
   const [pendingPath, setPendingPath] = useState<string | null>(null);
   const [navigation, setNavigation] = useState<{ paths: string[]; index: number }>({ paths: [], index: -1 });
-  const loadGeneration = useRef(0);
+  const loadGeneration = useRequestGeneration();
   const requestedPath = useRef("");
   const openedInitialLocation = useRef(false);
   const reportLocation = useRef(onLocationChange);
@@ -73,7 +74,7 @@ export function useSFTPBrowser({
   async function load(nextPath: string = latest.current.path, options: LoadOptions = {}): Promise<RemoteEntry[] | null> {
     const targetAlias = options.alias ?? latest.current.alias;
     const target = sourceFor(targetAlias);
-    const generation = ++loadGeneration.current;
+    const isCurrent = loadGeneration.begin();
     if (target === null) {
       setBusy(false);
       return null;
@@ -86,7 +87,7 @@ export function useSFTPBrowser({
     setProblem("");
     try {
       const listing = await target.list(nextPath);
-      if (generation !== loadGeneration.current) return null;
+      if (!isCurrent()) return null;
       const changed = listing.path !== latest.current.path || targetAlias !== latest.current.alias;
       setPath(listing.path);
       setHome(listing.home);
@@ -103,15 +104,15 @@ export function useSFTPBrowser({
       onLoaded?.(listing, { refresh, changed });
       return listing.entries;
     } catch (error) {
-      if (generation !== loadGeneration.current) return null;
+      if (!isCurrent()) return null;
       if (!target.local && failureCode(error) === "sftp_failed") {
         setProblem(t("sftp.connectionFailed"));
       } else {
-        setProblem(sftpProblemText(t, error, target.local ? "sftp_failed" : t("sftp.connectionFailed")));
+        setProblem(sftpProblemText(t, error, target.local ? "sftp.problem.failed" : "sftp.connectionFailed"));
       }
       return null;
     } finally {
-      if (generation === loadGeneration.current) {
+      if (isCurrent()) {
         setBusy(false);
         setPendingPath(null);
       }
@@ -122,20 +123,20 @@ export function useSFTPBrowser({
   // busy state, loading overlay and staleness rule as a listing. Resolves to
   // null when it failed or when the user moved on before it answered.
   async function track<T>(pending: string, work: () => Promise<T>): Promise<T | null> {
-    const generation = ++loadGeneration.current;
+    const isCurrent = loadGeneration.begin();
     setBusy(true);
     setPendingPath(pending);
     setProblem("");
     try {
       const result = await work();
-      return generation === loadGeneration.current ? result : null;
+      return isCurrent() ? result : null;
     } catch (error) {
-      if (generation === loadGeneration.current) {
+      if (isCurrent()) {
         setProblem(sftpProblemText(t, error));
       }
       return null;
     } finally {
-      if (generation === loadGeneration.current) {
+      if (isCurrent()) {
         setBusy(false);
         setPendingPath(null);
       }
@@ -146,7 +147,7 @@ export function useSFTPBrowser({
     // Invalidate every request started for the previous host before React runs
     // the alias effect. Keeping its rows visible would also let an action for
     // host A be submitted with host B's alias during the hand-off render.
-    loadGeneration.current += 1;
+    loadGeneration.retire();
     reportLocation.current(nextAlias, "");
     setAlias(nextAlias);
     setConnected(false);
@@ -169,7 +170,7 @@ export function useSFTPBrowser({
     if (restored === null || !knownHost(initialLocation.alias) ||
         (initialLocation.path !== "" && !restored.acceptsPath(initialLocation.path))) return;
     openedInitialLocation.current = true;
-    loadGeneration.current += 1;
+    loadGeneration.retire();
     setAlias(initialLocation.alias);
     setPath(initialLocation.path);
     setConnected(false);
@@ -216,8 +217,9 @@ export function useSFTPBrowser({
     canForward,
     load,
     track,
-    // Callers that write to the source read this before and after, so that a
-    // host switched mid-flight cannot receive the result.
+    // Callers that write to the source observe this before the write and
+    // check it after, so that a host switched mid-flight cannot receive the
+    // result.
     generation: loadGeneration,
     selectHost,
     connect: () => load(latest.current.path),

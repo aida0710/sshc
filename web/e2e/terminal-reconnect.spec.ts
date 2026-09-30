@@ -59,9 +59,9 @@ test("reconnects an exited SSH terminal in the same view", async ({ page, instal
 
   await openApplication(page, installation);
   await openSection(page, "Terminal");
-  const console = page.getByRole("region", { name: "Terminal for production-api" });
-  await expect(console).toContainText("before disconnect");
-  const reconnect = console.getByRole("button", { name: "Reconnect", exact: true });
+  const terminal = page.getByRole("region", { name: "Terminal for production-api" });
+  await expect(terminal).toContainText("before disconnect");
+  const reconnect = terminal.getByRole("button", { name: "Reconnect", exact: true });
   await expect(reconnect).toBeVisible();
 
   const visualDirectory = process.env.SSHC_VISUAL_DIR;
@@ -74,6 +74,6 @@ test("reconnects an exited SSH terminal in the same view", async ({ page, instal
 
   await reconnect.click();
   await expect.poll(() => reconnects).toBe(1);
-  await expect(console).toContainText("reconnected; this is a new shell");
+  await expect(terminal).toContainText("reconnected; this is a new shell");
   await expect(reconnect).toBeHidden();
 });

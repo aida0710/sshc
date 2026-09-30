@@ -6,12 +6,13 @@ import {
   identityKey,
   type BrowserServer,
 } from "../connections/connectionBrowser";
-import { useTranslate } from "../i18n/context";
+import { useLanguage } from "../i18n/context";
 import { control } from "../ui/form";
 import { Segmented } from "../ui/surface";
 import { Icon } from "../ui/icons";
 import { OperatingSystemIcon } from "../ui/OperatingSystemIcon";
 import { readStoredValue, writeStoredValue } from "../ui/browserStorage";
+import { localStorageKeys } from "../ui/browserStorageKeys";
 import { ConnectionActions } from "./ConnectionActions";
 import { hostMatchesQuery, normalizeHostQuery } from "../connections/hostSearch";
 import { formatDateTime } from "../ui/format";
@@ -26,14 +27,12 @@ type QuickConnectBrowserProps = {
 
 type QuickConnectView = "panel" | "list";
 
-const viewStorageKey = "sshc.home.quick-connect-view";
-
 function storedView(): QuickConnectView {
-  return readStoredValue(viewStorageKey) === "list" ? "list" : "panel";
+  return readStoredValue(localStorageKeys.quickConnectView) === "list" ? "list" : "panel";
 }
 
 function rememberView(view: QuickConnectView) {
-  writeStoredValue(viewStorageKey, view);
+  writeStoredValue(localStorageKeys.quickConnectView, view);
 }
 
 function destination(hostName: string, user: string, port: string): string {
@@ -64,7 +63,7 @@ export function QuickConnectBrowser({
   onConnect,
   onOpenSettings,
 }: QuickConnectBrowserProps) {
-  const t = useTranslate();
+  const { t, locale } = useLanguage();
   const [query, setQuery] = useState("");
   const [groupTrail, setGroupTrail] = useState<string[]>([]);
   const [view, setView] = useState<QuickConnectView>(storedView);
@@ -112,7 +111,7 @@ export function QuickConnectBrowser({
     const target = connectionDestination(server);
     const lastConnected = recentConnection === undefined
       ? ""
-      : t("home.lastConnected", { at: formatDateTime(recentConnection.lastConnectedAt) });
+      : t("connection.lastConnected", { at: formatDateTime(recentConnection.lastConnectedAt, locale) });
     const selected = selectedAlias === alias;
     const opening = launching === alias;
     const panel = view === "panel";

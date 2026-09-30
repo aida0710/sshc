@@ -30,6 +30,15 @@ type PaletteItem = {
   host?: HostIdentity;
 };
 
+const kindLabelKeys: Record<PaletteItem["kind"], MessageKey> = {
+  command: "palette.kind.command",
+  session: "palette.kind.session",
+  host: "palette.kind.host",
+  file: "palette.kind.file",
+  snippet: "palette.kind.snippet",
+  setting: "palette.kind.setting",
+};
+
 const searchableSections: Section[] = [
   "Connections", "Config", "Groups", "Keys", "Known Hosts", "Remote Keys",
   "Diagnostics", "Passwords", "Key Passphrases", "OTP", "Snippets", "Settings", "Sync", "VPN", "History",
@@ -114,7 +123,7 @@ export function CommandPalette({
       action: command.run,
     })),
     // Hosts come before open sessions: the palette is mostly used to start a
-    // connection, and a session to a host is reachable from the console list.
+    // connection, and a session to a host is reachable from the session list.
     ...hosts.map((host) => ({
       id: `host:${host.identity.path}:${host.identity.alias}`,
       kind: "host" as const,
@@ -176,7 +185,8 @@ export function CommandPalette({
     await item.action();
   }
 
-  function useKeyboard(event: KeyboardEvent<HTMLInputElement>) {
+  // Arrow keys move through the results; Enter runs the selected one.
+  function navigateResultsByKey(event: KeyboardEvent<HTMLInputElement>) {
     if (event.key === "ArrowDown") {
       event.preventDefault();
       setSelected((current) => visible.length === 0 ? 0 : (current + 1) % visible.length);
@@ -212,7 +222,7 @@ export function CommandPalette({
             aria-activedescendant={visible[selected] === undefined ? undefined : `command-palette-option-${selected}`}
             value={query}
             onChange={(event) => { setQuery(event.target.value); setSelected(0); }}
-            onKeyDown={useKeyboard}
+            onKeyDown={navigateResultsByKey}
             placeholder={t("palette.placeholder")}
             className="min-w-0 flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-ink-faint"
           />
@@ -230,7 +240,7 @@ export function CommandPalette({
                 onClick={() => void choose(item)}
                 className={`grid w-full grid-cols-[4.5rem_minmax(0,1fr)] items-center gap-x-3 rounded px-2.5 py-2 text-left text-sm ${item.host === undefined ? "" : "pr-12"} ${selected === index ? "bg-select-fill" : "hover:bg-hover"}`}
               >
-                <span className="row-span-2 font-mono text-[10px] uppercase tracking-wide text-ink-faint">{t(`palette.kind.${item.kind}` as MessageKey)}</span>
+                <span className="row-span-2 font-mono text-[10px] uppercase tracking-wide text-ink-faint">{t(kindLabelKeys[item.kind])}</span>
                 <span className="truncate font-medium text-ink">{item.label}</span>
                 <span className="truncate font-mono text-[11px] text-ink-muted">{item.detail}</span>
               </button>

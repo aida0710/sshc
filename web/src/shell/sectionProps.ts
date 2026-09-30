@@ -13,6 +13,7 @@ import type { HostEntry } from "../api/config";
 export type Navigation = {
   location: BrowserLocation;
   fileTarget: FileTarget | null;
+  onFileTargetHandled: (request: number) => void;
   onNavigate: (section: Section) => void;
   onNavigateLocation: (url: string, options?: NavigateLocationOptions) => void;
   onNavigateForCreation: (section: CreationPrerequisite) => void;
@@ -34,9 +35,13 @@ export type Handoff = {
 export type Shell = {
   onLock: () => void;
   onVaultChanged?: (status: PasswordVaultStatus) => void;
+  // passwordless は、Vaultにマスターパスワードが無いかである。
+  passwordless: boolean;
   onInspector: (content: InspectorContent) => void;
-  consoles: TerminalSessionsState;
-  onShowConsole: (id: string) => void;
+  terminalSessions: TerminalSessionsState;
+  onShowSession: (id: string) => void;
+  // onOpenSSHSession は、接続を開いてからそのターミナルを表示する。cwd は開始位置である。
+  onOpenSSHSession: (alias: string, cwd?: string) => Promise<void>;
   onOpenWorkspace: (id: string) => void;
   onTerminalSettingsChange: (settings: TerminalSettings) => Promise<void>;
 };

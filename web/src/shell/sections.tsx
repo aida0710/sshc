@@ -216,8 +216,7 @@ export function SectionView(props: SectionViewProps) {
         onNavigationBlockerChange={props.navigation.onNavigationBlockerChange}
         preferredKey={props.handoff.connectionKey}
         onPreferredKeyApplied={props.handoff.onConnectionKeyApplied}
-        consoles={props.shell.consoles}
-        onShowConsole={props.shell.onShowConsole}
+        onOpenSSHSession={props.shell.onOpenSSHSession}
       />
     );
   }
@@ -244,9 +243,11 @@ function PaddedSection({
   const {
     onLock,
     onVaultChanged,
+    passwordless,
     onInspector,
-    consoles,
-    onShowConsole,
+    terminalSessions,
+    onShowSession,
+    onOpenSSHSession,
     onOpenWorkspace,
     onTerminalSettingsChange,
   } = shell;
@@ -255,7 +256,7 @@ function PaddedSection({
       <OverviewPanel
         onNavigate={onNavigate}
         onNavigateLocation={onNavigateLocation}
-        onConsoleOpened={onShowConsole}
+        onSessionOpened={onShowSession}
         onOpenWorkspace={onOpenWorkspace}
       />
     );
@@ -270,7 +271,14 @@ function PaddedSection({
     );
   }
   if (section === "Config") {
-    return <ConfigExplorer target={fileTarget} />;
+    return (
+      <ConfigExplorer
+        target={fileTarget}
+        onTargetHandled={navigation.onFileTargetHandled}
+        onNavigationBlockerChange={navigation.onNavigationBlockerChange}
+        onNavigateLocation={onNavigateLocation}
+      />
+    );
   }
   if (section === "Files") {
     return (
@@ -282,10 +290,7 @@ function PaddedSection({
         onTargetHandled={onSftpTargetHandled}
         onNavigationBlockerChange={navigation.onNavigationBlockerChange}
         onNavigateLocation={onNavigateLocation}
-        onOpenTerminal={async (alias, path) => {
-          const opened = await consoles.open({ kind: "ssh", alias, cwd: path });
-          if (opened !== null) onShowConsole(opened.id);
-        }}
+        onOpenTerminal={onOpenSSHSession}
       />
     );
   }
@@ -293,6 +298,8 @@ function PaddedSection({
     return (
       <SnippetsPanel
         aliases={declared.knownAliases}
+        onNavigationBlockerChange={navigation.onNavigationBlockerChange}
+        onNavigateLocation={onNavigateLocation}
         selectedSnippetId={new URLSearchParams(navigation.location.search).get(
           "snippet",
         )}
@@ -300,7 +307,13 @@ function PaddedSection({
     );
   }
   if (section === "Groups") {
-    return <GroupsPanel onInspector={onInspector} />;
+    return (
+      <GroupsPanel
+        onInspector={onInspector}
+        onNavigationBlockerChange={navigation.onNavigationBlockerChange}
+        onNavigateLocation={onNavigateLocation}
+      />
+    );
   }
   if (section === "Passwords" || section === "Key Passphrases" || section === "OTP") {
     const kind = section === "Passwords"
@@ -314,9 +327,10 @@ function PaddedSection({
     return (
       <SettingsPanel
         page={parseSettingsPage(navigation.location.pathname) ?? "Engine"}
-        consoles={consoles}
+        terminalSessions={terminalSessions}
         onTerminalSettingsChange={onTerminalSettingsChange}
         onVaultChanged={onVaultChanged}
+        passwordless={passwordless}
       />
     );
   }
@@ -324,7 +338,12 @@ function PaddedSection({
     return <SyncPanel />;
   }
   if (section === "VPN") {
-    return <VPNPanel />;
+    return (
+      <VPNPanel
+        onNavigationBlockerChange={navigation.onNavigationBlockerChange}
+        onNavigateLocation={onNavigateLocation}
+      />
+    );
   }
   if (section === "History") {
     return <HistoryPanel />;

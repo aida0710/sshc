@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ApiError } from "../../api/client";
 import { WorkspaceCommandCenter, type WorkspaceCommandTarget } from "./WorkspaceCommandCenter";
 
 const snippets = vi.hoisted(() => ({ library: vi.fn() }));
@@ -50,12 +51,38 @@ describe("WorkspaceCommandCenter", () => {
     expect(close).toHaveBeenCalledTimes(1);
   });
 
-  it("closes when the backdrop is clicked", async () => {
+  it("keeps the typed command when the backdrop is clicked", async () => {
     const close = vi.fn();
+    const user = userEvent.setup();
     render(<WorkspaceCommandCenter paneTargets={[edge]} onClose={close} />);
+    await user.type(screen.getByLabelText("Command"), "uptime");
 
-    await userEvent.click(document.body);
+    await user.click(document.body);
 
+    expect(close).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Command")).toHaveValue("uptime");
+  });
+
+  it("stays open until a running dispatch reports which panes received the command", async () => {
+    let answerDispatch: (dispatch: Awaited<ReturnType<typeof commands.dispatch>>) => void = () => undefined;
+    commands.dispatch.mockImplementation(() => new Promise((resolve) => { answerDispatch = resolve; }));
+    const close = vi.fn();
+    const user = userEvent.setup();
+    render(<WorkspaceCommandCenter paneTargets={[edge]} onClose={close} />);
+    await user.type(screen.getByLabelText("Command"), "uptime");
+    await user.click(screen.getByRole("button", { name: "Preview execution" }));
+    await user.click(await screen.findByRole("button", { name: "Send to 1 terminals" }));
+
+    await user.keyboard("{Escape}");
+    expect(close).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Close command delivery" })).toBeDisabled();
+
+    answerDispatch({
+      results: [{ targetId: "pane-a", sessionId: "session-a", alias: "edge", title: "Primary terminal", status: "delivered" }],
+    });
+    expect(await screen.findByText(/Primary terminal · Pane 1 · Sent/)).toBeVisible();
+    expect(screen.getByRole("button", { name: "Close command delivery" })).toBeEnabled();
+    await user.keyboard("{Escape}");
     expect(close).toHaveBeenCalledOnce();
   });
 
@@ -113,6 +140,27 @@ describe("WorkspaceCommandCenter", () => {
     expect(await screen.findByText(/Primary terminal · Pane 1 · Sent/)).toBeVisible();
     expect(screen.getByText(/does not mean the command has finished/)).toBeVisible();
     expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
+  });
+
+  it("explains a refused preview and a terminal that did not receive the command in words", async () => {
+    commands.preview.mockRejectedValueOnce(new ApiError("terminal_command_target_unavailable", 409, null));
+    commands.dispatch.mockResolvedValueOnce({
+      results: [{
+        targetId: "pane-a", sessionId: "session-a", alias: "edge", title: "Primary terminal",
+        status: "failed", problem: "terminal_command_target_changed",
+      }],
+    });
+    const user = userEvent.setup();
+    render(<WorkspaceCommandCenter paneTargets={[edge]} onClose={() => undefined} />);
+    await user.type(screen.getByLabelText("Command"), "uptime");
+    await user.click(screen.getByRole("button", { name: "Preview execution" }));
+    expect(await screen.findByText(/A terminal is not connected or was reconnected/)).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Preview execution" }));
+    await user.click(await screen.findByRole("button", { name: "Send to 1 terminals" }));
+
+    expect(await screen.findByText(/disconnected or reconnected before the command arrived/)).toBeVisible();
+    expect(screen.queryByText(/terminal_command_/)).not.toBeInTheDocument();
   });
 
   it("invalidates a preview when a pane is rebound to another session", async () => {

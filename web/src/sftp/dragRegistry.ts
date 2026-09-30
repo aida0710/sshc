@@ -1,4 +1,5 @@
 import type { RemoteDragPayload } from "./transfers";
+import { unguessableToken } from "../ui/randomIdentifier";
 
 // The HTML drag data store is not isolated by origin: a page in another tab
 // can start a drag whose data claims to be sshc rows, and the user can drop it
@@ -10,14 +11,8 @@ import type { RemoteDragPayload } from "./transfers";
 
 const active = new Map<string, RemoteDragPayload>();
 
-function mintToken(): string {
-  const bytes = new Uint8Array(16);
-  crypto.getRandomValues(bytes);
-  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
 export function registerDrag(payload: RemoteDragPayload): string {
-  const token = mintToken();
+  const token = unguessableToken();
   active.set(token, payload);
   return token;
 }

@@ -2,9 +2,6 @@ import { StrictMode, useEffect, useState } from "react";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-
-const openVault = () =>
-  Promise.resolve({ exists: true, unlocked: true, aliases: [] as string[], dedicatedKeyPassphrases: [], minPassphraseLength: 12 });
 import { App } from "./App";
 import { vaultStatePollIntervalMs } from "./session/useAppSession";
 import { resolveOSC52 } from "./shell/TerminalScreen";
@@ -14,6 +11,8 @@ import { ThemeProvider } from "./theme/context";
 import { ja } from "./i18n/messages";
 import { ApiError, apiClient } from "./api/client";
 import { announceVaultLocked } from "./secrets/vaultLockSignal";
+import type { PasswordVaultStatus } from "./api/vault";
+import { vaultStatus } from "./testing/vaultStatus";
 
 type BroadcastListener = (event: MessageEvent<unknown>) => void;
 
@@ -112,7 +111,7 @@ vi.mock("./connections/ConnectionsPage", () => ({
         onClick={() => {
           onCreationDraftChange?.({
             alias: "lab-node", group: "", hostName: "host.example", user: "", port: "",
-            authentication: "dedicated_password", savedCredential: "", newCredential: "", keyID: "",
+            authentication: "dedicated_password", savedCredential: "", newCredential: "", keyId: "",
           });
           onNavigateForCreation?.("Keys");
         }}
@@ -238,8 +237,8 @@ describe("App", () => {
       return originalSetInterval(handler, delay, ...args) as unknown as ReturnType<typeof setInterval>;
     });
     const vault = vi.fn()
-      .mockResolvedValueOnce({ exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [], minPassphraseLength: 12 })
-      .mockResolvedValue({ exists: true, unlocked: false, aliases: [], dedicatedKeyPassphrases: [], minPassphraseLength: 12 });
+      .mockResolvedValueOnce(vaultStatus())
+      .mockResolvedValue(vaultStatus({ unlocked: false }));
 
     render(
       <App
@@ -268,9 +267,9 @@ describe("App", () => {
       if (delay === vaultStatePollIntervalMs && typeof handler === "function") poll = handler as () => void;
       return originalSetInterval(handler, delay, ...args) as unknown as ReturnType<typeof setInterval>;
     });
-    const resumed = deferred<Awaited<ReturnType<typeof openVault>>>();
+    const resumed = deferred<PasswordVaultStatus>();
     const vault = vi.fn()
-      .mockImplementationOnce(openVault)
+      .mockImplementationOnce(() => Promise.resolve(vaultStatus()))
       .mockReturnValueOnce(resumed.promise);
     vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
     render(
@@ -295,21 +294,21 @@ describe("App", () => {
     expect(screen.queryByRole("navigation", { name: "Primary" })).toBeNull();
     expect(screen.getByText(/Checking that the vault is still unlocked/)).toBeVisible();
 
-    await act(async () => resumed.resolve(await openVault()));
+    await act(async () => resumed.resolve(vaultStatus()));
     expect(await screen.findByRole("navigation", { name: "Primary" })).toBeInTheDocument();
     expect(vault).toHaveBeenCalledTimes(2);
   });
 
-  it("rechecks an ordinary window focus without concealing the console", async () => {
+  it("rechecks an ordinary window focus without concealing the screen", async () => {
     let poll: (() => void) | null = null;
     const originalSetInterval = window.setInterval.bind(window);
     vi.spyOn(window, "setInterval").mockImplementation((handler, delay, ...args) => {
       if (delay === vaultStatePollIntervalMs && typeof handler === "function") poll = handler as () => void;
       return originalSetInterval(handler, delay, ...args) as unknown as ReturnType<typeof setInterval>;
     });
-    const focused = deferred<Awaited<ReturnType<typeof openVault>>>();
+    const focused = deferred<PasswordVaultStatus>();
     const vault = vi.fn()
-      .mockImplementationOnce(openVault)
+      .mockImplementationOnce(() => Promise.resolve(vaultStatus()))
       .mockReturnValueOnce(focused.promise);
     vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
     render(
@@ -330,15 +329,15 @@ describe("App", () => {
     expect(screen.getByRole("navigation", { name: "Primary" })).toBeInTheDocument();
     expect(screen.queryByText(/Checking that the vault is still unlocked/)).toBeNull();
 
-    await act(async () => focused.resolve(await openVault()));
+    await act(async () => focused.resolve(vaultStatus()));
   });
 
   it("keeps an in-progress form mounted while the resumed vault check conceals it", async () => {
     window.history.replaceState(null, "", "/settings/engine");
-    const resumed = deferred<Awaited<ReturnType<typeof openVault>>>();
+    const resumed = deferred<PasswordVaultStatus>();
     const vault = vi
       .fn()
-      .mockImplementationOnce(openVault)
+      .mockImplementationOnce(() => Promise.resolve(vaultStatus()))
       .mockReturnValueOnce(resumed.promise);
     vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
     const user = userEvent.setup();
@@ -359,7 +358,7 @@ describe("App", () => {
     expect(screen.queryByRole("navigation", { name: "Primary" })).toBeNull();
     expect(document.body.querySelector<HTMLInputElement>('input[value="keep this input"]')).not.toBeNull();
 
-    await act(async () => resumed.resolve(await openVault()));
+    await act(async () => resumed.resolve(vaultStatus()));
     expect(await screen.findByLabelText("settings draft")).toHaveValue("keep this input");
   });
 
@@ -370,11 +369,11 @@ describe("App", () => {
       if (delay === vaultStatePollIntervalMs && typeof handler === "function") poll = handler as () => void;
       return originalSetInterval(handler, delay, ...args) as unknown as ReturnType<typeof setInterval>;
     });
-    const resumed = deferred<Awaited<ReturnType<typeof openVault>>>();
+    const resumed = deferred<PasswordVaultStatus>();
     const vault = vi.fn()
-      .mockImplementationOnce(openVault)
+      .mockImplementationOnce(() => Promise.resolve(vaultStatus()))
       .mockReturnValueOnce(resumed.promise)
-      .mockImplementationOnce(openVault);
+      .mockImplementationOnce(() => Promise.resolve(vaultStatus()));
     vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
     render(
       <App
@@ -405,9 +404,9 @@ describe("App", () => {
   it("applies a broadcast lock, cleans up its observer, and ignores a late resume response", async () => {
     vi.stubGlobal("BroadcastChannel", FakeBroadcastChannel);
     vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
-    const resumed = deferred<Awaited<ReturnType<typeof openVault>>>();
+    const resumed = deferred<PasswordVaultStatus>();
     const vault = vi.fn()
-      .mockImplementationOnce(openVault)
+      .mockImplementationOnce(() => Promise.resolve(vaultStatus()))
       .mockReturnValueOnce(resumed.promise);
     const view = render(
       <App
@@ -425,7 +424,7 @@ describe("App", () => {
     act(() => announceVaultLocked());
     expect(await screen.findByText("existing vault fixture")).toBeInTheDocument();
 
-    await act(async () => resumed.resolve(await openVault()));
+    await act(async () => resumed.resolve(vaultStatus()));
     expect(screen.getByText("existing vault fixture")).toBeInTheDocument();
     expect(screen.queryByRole("navigation", { name: "Primary" })).toBeNull();
 
@@ -439,7 +438,7 @@ describe("App", () => {
       <App
         bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
         health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
-        vault={openVault}
+        vault={() => Promise.resolve(vaultStatus())}
       />,
     );
 
@@ -499,7 +498,7 @@ describe("App", () => {
         <App
           bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
           health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
-          vault={openVault}
+          vault={() => Promise.resolve(vaultStatus())}
         />
       </LanguageProvider>,
     );
@@ -535,7 +534,7 @@ describe("App", () => {
       <App
         bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
         health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
-        vault={openVault}
+        vault={() => Promise.resolve(vaultStatus())}
       />,
     );
 
@@ -559,7 +558,7 @@ describe("App", () => {
       <App
         bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
         health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
-        vault={openVault}
+        vault={() => Promise.resolve(vaultStatus())}
       />,
     );
 
@@ -586,7 +585,7 @@ describe("App", () => {
       <App
         bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
         health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
-        vault={openVault}
+        vault={() => Promise.resolve(vaultStatus())}
       />,
     );
     await user.click(await screen.findByRole("link", { name: "Connections" }));
@@ -616,7 +615,7 @@ describe("App", () => {
       <App
         bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
         health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
-        vault={openVault}
+        vault={() => Promise.resolve(vaultStatus())}
       />,
     );
     await user.click(await screen.findByRole("link", { name: "Connections" }));
@@ -641,7 +640,7 @@ describe("App", () => {
         <App
           bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
           health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
-          vault={openVault}
+          vault={() => Promise.resolve(vaultStatus())}
         />
       </ThemeProvider>,
     );
@@ -658,7 +657,7 @@ describe("App", () => {
   });
 
   it("shows the starting status before session setup completes", () => {
-    render(<App bootstrap={() => new Promise(() => undefined)} health={vi.fn()} vault={openVault} />);
+    render(<App bootstrap={() => new Promise(() => undefined)} health={vi.fn()} vault={() => Promise.resolve(vaultStatus())} />);
 
     expect(screen.getByRole("status")).toHaveTextContent("Starting secure local session…");
   });
@@ -668,7 +667,7 @@ describe("App", () => {
       <App
         bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
         health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
-      vault={openVault}
+      vault={() => Promise.resolve(vaultStatus())}
       />,
     );
 
@@ -687,7 +686,7 @@ describe("App", () => {
       <App
         bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
         health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
-        vault={openVault}
+        vault={() => Promise.resolve(vaultStatus())}
       />,
     );
 
@@ -713,7 +712,7 @@ describe("App", () => {
       <App
         bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
         health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
-        vault={openVault}
+        vault={() => Promise.resolve(vaultStatus())}
       />,
     );
 
@@ -728,7 +727,7 @@ describe("App", () => {
       <App
         bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
         health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
-        vault={openVault}
+        vault={() => Promise.resolve(vaultStatus())}
       />,
     );
 
@@ -743,7 +742,7 @@ describe("App", () => {
       <App
         bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
         health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
-        vault={openVault}
+        vault={() => Promise.resolve(vaultStatus())}
       />,
     );
 
@@ -761,7 +760,7 @@ describe("App", () => {
       <App
         bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
         health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
-        vault={openVault}
+        vault={() => Promise.resolve(vaultStatus())}
       />,
     );
 
@@ -789,7 +788,7 @@ describe("App", () => {
       <App
         bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
         health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
-        vault={openVault}
+        vault={() => Promise.resolve(vaultStatus())}
       />,
     );
 
@@ -811,7 +810,7 @@ describe("App", () => {
       <App
         bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
         health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
-        vault={openVault}
+        vault={() => Promise.resolve(vaultStatus())}
       />,
     );
 
@@ -835,7 +834,7 @@ describe("App", () => {
       <App
         bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
         health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
-        vault={openVault}
+        vault={() => Promise.resolve(vaultStatus())}
       />,
     );
 
@@ -853,7 +852,7 @@ describe("App", () => {
       <App
         bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
         health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
-        vault={openVault}
+        vault={() => Promise.resolve(vaultStatus())}
       />,
     );
 
@@ -881,7 +880,7 @@ describe("App", () => {
       <App
         bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
         health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
-        vault={openVault}
+        vault={() => Promise.resolve(vaultStatus())}
       />,
     );
 
@@ -904,7 +903,7 @@ describe("App", () => {
       <App
         bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
         health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
-        vault={openVault}
+        vault={() => Promise.resolve(vaultStatus())}
       />,
     );
 
@@ -925,7 +924,7 @@ describe("App", () => {
       <App
         bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
         health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
-        vault={openVault}
+        vault={() => Promise.resolve(vaultStatus())}
       />,
     );
     expect(await screen.findByText("keys panel")).toBeInTheDocument();
@@ -946,7 +945,7 @@ describe("App", () => {
       <App
         bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
         health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
-        vault={vi.fn().mockResolvedValue({ exists: true, unlocked: false, aliases: [], dedicatedKeyPassphrases: [], minPassphraseLength: 12 })}
+        vault={vi.fn().mockResolvedValue(vaultStatus({ unlocked: false }))}
       />,
     );
 
@@ -963,13 +962,7 @@ describe("App", () => {
       <App
         bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
         health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
-        vault={vi.fn().mockResolvedValue({
-          exists: true,
-          unlocked: false,
-          aliases: [],
-          dedicatedKeyPassphrases: [],
-          minPassphraseLength: 12,
-        })}
+        vault={vi.fn().mockResolvedValue(vaultStatus({ unlocked: false }))}
       />,
     );
 
@@ -995,7 +988,7 @@ describe("App", () => {
       <App
         bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
         health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
-        vault={vi.fn().mockResolvedValue({ exists: true, unlocked: false, aliases: [], dedicatedKeyPassphrases: [] })}
+        vault={vi.fn().mockResolvedValue(vaultStatus({ unlocked: false }))}
       />,
     );
 
@@ -1013,13 +1006,7 @@ describe("App", () => {
       <App
         bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
         health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
-        vault={vi.fn().mockResolvedValue({
-          exists: false,
-          unlocked: false,
-          aliases: [],
-          dedicatedKeyPassphrases: [],
-          minPassphraseLength: 12,
-        })}
+        vault={vi.fn().mockResolvedValue(vaultStatus({ exists: false, unlocked: false }))}
       />,
     );
 
@@ -1038,7 +1025,7 @@ describe("App", () => {
       <App
         bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
         health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
-        vault={openVault}
+        vault={() => Promise.resolve(vaultStatus())}
       />,
     );
 
@@ -1059,7 +1046,7 @@ describe("App", () => {
         <App
           bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
           health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
-          vault={openVault}
+          vault={() => Promise.resolve(vaultStatus())}
         />
       </LanguageProvider>,
     );
@@ -1074,7 +1061,7 @@ describe("App", () => {
       <App
         bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
         health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
-      vault={openVault}
+      vault={() => Promise.resolve(vaultStatus())}
       />,
     );
 
@@ -1090,7 +1077,7 @@ describe("App", () => {
       <App
         bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
         health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
-        vault={openVault}
+        vault={() => Promise.resolve(vaultStatus())}
       />,
     );
 
@@ -1111,7 +1098,7 @@ describe("App", () => {
       <App
         bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
         health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
-      vault={openVault}
+      vault={() => Promise.resolve(vaultStatus())}
       />,
     );
 
@@ -1130,7 +1117,7 @@ describe("App", () => {
       <App
         bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
         health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
-      vault={openVault}
+      vault={() => Promise.resolve(vaultStatus())}
       />,
     );
 
@@ -1146,7 +1133,7 @@ describe("App", () => {
       <App
         bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
         health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
-      vault={openVault}
+      vault={() => Promise.resolve(vaultStatus())}
       />,
     );
 
@@ -1156,7 +1143,7 @@ describe("App", () => {
   });
 
   it("shows a recovery action when bootstrap fails", async () => {
-    render(<App bootstrap={vi.fn().mockRejectedValue(new Error("rejected"))} health={vi.fn()} vault={openVault} />);
+    render(<App bootstrap={vi.fn().mockRejectedValue(new Error("rejected"))} health={vi.fn()} vault={() => Promise.resolve(vaultStatus())} />);
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
     "Secure local session could not be started. Run sshc in a terminal to enrol this browser again.",
@@ -1164,7 +1151,7 @@ describe("App", () => {
   });
 
   it("shows a centered session-ended recovery screen when startup renewal says the session expired", async () => {
-    render(<App bootstrap={vi.fn().mockRejectedValue(new Error("session_expired"))} health={vi.fn()} vault={openVault} />);
+    render(<App bootstrap={vi.fn().mockRejectedValue(new Error("session_expired"))} health={vi.fn()} vault={() => Promise.resolve(vaultStatus())} />);
 
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("Reload to recover the local session automatically");
@@ -1190,7 +1177,7 @@ describe("App", () => {
       <App
         bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
         health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
-        vault={openVault}
+        vault={() => Promise.resolve(vaultStatus())}
       />,
     );
     await screen.findByRole("status", { name: "" });
@@ -1214,7 +1201,7 @@ describe("App", () => {
 
     render(
       <StrictMode>
-        <App bootstrap={() => sessionPromise} health={health} vault={openVault} />
+        <App bootstrap={() => sessionPromise} health={health} vault={() => Promise.resolve(vaultStatus())} />
       </StrictMode>,
     );
 
@@ -1229,7 +1216,7 @@ describe("App", () => {
         <App
           bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
           health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
-        vault={openVault}
+        vault={() => Promise.resolve(vaultStatus())}
         />
       </LanguageProvider>,
     );
@@ -1249,7 +1236,7 @@ describe("App", () => {
         <App
           bootstrap={vi.fn().mockResolvedValue({ csrfToken })}
           health={vi.fn().mockResolvedValue({ status: "ok", version: "0.1.0" })}
-        vault={openVault}
+        vault={() => Promise.resolve(vaultStatus())}
         />
       </LanguageProvider>,
     );

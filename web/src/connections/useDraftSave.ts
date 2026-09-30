@@ -22,16 +22,18 @@ export function useDraftSave({ draft, saved }: { draft: unknown; saved: unknown 
   const [outcome, setOutcome] = useState<SaveOutcome | null>(null);
   const result = outcome !== null && outcome.draft === draft && outcome.saved === saved ? outcome.result : null;
 
-  // save は、write（保存できなかったときは reject する）で下書きを書き込む。
-  async function save(write: () => Promise<void>): Promise<void> {
+  // save は、write（保存できなかったときは reject する）で下書きを書き込み、書き込めたかを返す。
+  async function save(write: () => Promise<void>): Promise<boolean> {
     const started = { draft, saved };
     setSaving(true);
     setOutcome(null);
     try {
       await write();
       setOutcome({ ...started, result: "written" });
+      return true;
     } catch {
       setOutcome({ ...started, result: "failed" });
+      return false;
     } finally {
       setSaving(false);
     }

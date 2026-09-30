@@ -24,7 +24,7 @@ function overlayClass(edge: DockEdge): string {
   }
 }
 
-// Shades the half of a pane a dragged console would take.
+// Shades the half of a pane a dragged session would take.
 export function DockPreview({ edge }: { edge: DockEdge }) {
   const t = useTranslate();
   const label = edge === "left" ? t("workspace.dock.left")

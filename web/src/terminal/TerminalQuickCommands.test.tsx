@@ -1,4 +1,5 @@
-import { render, screen } from "@testing-library/react";
+import { createRef } from "react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/client";
@@ -44,6 +45,37 @@ describe("TerminalQuickCommands", () => {
     mocks.writeText.mockResolvedValue(undefined);
     mocks.dispatch.mockResolvedValue({ results: [] });
     mocks.create.mockResolvedValue({ id: "saved", name: "Deploy", command: "deploy --dry-run", variables: [], createdAt: "", updatedAt: "" });
+  });
+
+  it("takes focus when opened, keeps Tab inside, and returns focus to the opener on Escape", async () => {
+    const user = userEvent.setup();
+    const opener = createRef<HTMLButtonElement>();
+    const onClose = vi.fn();
+    const view = render(
+      <LanguageProvider>
+        <button ref={opener} type="button">More</button>
+        <TerminalQuickCommands session={session} onClose={onClose} returnFocusRef={opener} />
+        <textarea aria-label="Terminal input" />
+      </LanguageProvider>,
+    );
+    const dialog = screen.getByRole("dialog", { name: "Quick Commands" });
+    expect(dialog).toHaveFocus();
+    await screen.findByRole("option", { name: "Status" });
+
+    for (let step = 0; step < 12; step += 1) {
+      await user.tab();
+      expect(dialog).toContainElement(document.activeElement as HTMLElement);
+    }
+
+    await user.keyboard("{Escape}");
+    expect(onClose).toHaveBeenCalled();
+    view.rerender(
+      <LanguageProvider>
+        <button ref={opener} type="button">More</button>
+        <textarea aria-label="Terminal input" />
+      </LanguageProvider>,
+    );
+    await waitFor(() => expect(opener.current).toHaveFocus());
   });
 
   it("previews an expanded snippet and inserts it without submitting", async () => {
@@ -112,6 +144,18 @@ describe("TerminalQuickCommands", () => {
     expect(await screen.findByText("curl example.invalid")).toBeVisible();
     expect(screen.getByRole("alert")).toHaveTextContent("The snippet or pane changed");
     expect(mocks.dispatch).not.toHaveBeenCalled();
+  });
+
+  it("explains a refused preview in words instead of showing the failure code", async () => {
+    mocks.preview.mockRejectedValueOnce(new ApiError("terminal_command_too_large", 400, null));
+
+    render(<LanguageProvider><TerminalQuickCommands session={session} onClose={() => undefined} /></LanguageProvider>);
+    await screen.findByRole("option", { name: "Status" });
+    await userEvent.type(screen.getByRole("textbox"), "sshd");
+    await userEvent.click(screen.getByRole("button", { name: "Preview execution" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("The command is too long to send.");
+    expect(screen.queryByText(/terminal_command_too_large/)).not.toBeInTheDocument();
   });
 
   it("saves selected terminal text as a reusable snippet", async () => {

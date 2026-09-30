@@ -156,10 +156,15 @@ type forwardingReadinessPTY struct {
 	*readinessPTY
 	forwards []terminal.Forward
 	next     int
+	// bindFailure は、StartForward が待ち受けを開けなかったことにする理由である。
+	bindFailure error
 }
 
 func (p *forwardingReadinessPTY) Forwards() []terminal.Forward { return p.forwards }
 func (p *forwardingReadinessPTY) StartForward(kind, listenPort, destination string) (terminal.Forward, error) {
+	if p.bindFailure != nil {
+		return terminal.Forward{Kind: kind, Problem: terminal.ForwardProblemAddressInUse, Temporary: true}, p.bindFailure
+	}
 	p.next++
 	forward := terminal.Forward{
 		ID: fmt.Sprintf("pf-%d", p.next), Kind: kind, Listen: "127.0.0.1:" + listenPort,
@@ -216,8 +221,10 @@ type terminalFixture struct {
 	sshReady   []*readinessPTY
 	asyncSSH   bool
 	forwarding bool
-	forwarders []*forwardingReadinessPTY
-	recorded   []string
+	// forwardBindFailure は、次に作る転送できるセッションの StartForward が返す失敗である。
+	forwardBindFailure error
+	forwarders         []*forwardingReadinessPTY
+	recorded           []string
 }
 
 func (f *terminalFixture) connect(alias string) terminal.Process {
@@ -228,7 +235,7 @@ func (f *terminalFixture) connect(alias string) terminal.Process {
 	f.ssh = append(f.ssh, process)
 	if f.forwarding {
 		ready := newReadinessPTY(process)
-		forwarder := &forwardingReadinessPTY{readinessPTY: ready}
+		forwarder := &forwardingReadinessPTY{readinessPTY: ready, bindFailure: f.forwardBindFailure}
 		f.forwarders = append(f.forwarders, forwarder)
 		ready.finishOpen(nil)
 		return forwarder
@@ -286,6 +293,37 @@ func TestTemporaryForwardRoutesStartListAndStopOneListener(t *testing.T) {
 	}
 	if listed.Sessions[0].Forwards != nil && len(*listed.Sessions[0].Forwards) != 0 {
 		t.Fatalf("forwards after stop = %#v", listed.Sessions[0].Forwards)
+	}
+}
+
+// 待ち受けを開けなかった理由は、画面が訳す語を reason に、Go のエラーの文を補足として
+// detail に入れて返す。
+func TestTemporaryForwardBindFailureCarriesTheReasonWordAndTheDetail(t *testing.T) {
+	fixture := newTerminalFixture(t, terminal.Limits{MaxSessions: 4, Scrollback: 1 << 12})
+	fixture.forwarding = true
+	fixture.forwardBindFailure = errors.New("listen tcp 127.0.0.1:18080: bind: address already in use")
+	response, body := fixture.do(t, http.MethodPost, "/api/v1/terminal/sessions", `{"kind":"ssh","alias":"bastion"}`)
+	if response.StatusCode != http.StatusCreated {
+		t.Fatalf("open = %d: %s", response.StatusCode, body)
+	}
+	var opened api.OpenTerminalSessionResponse
+	if err := json.Unmarshal([]byte(body), &opened); err != nil {
+		t.Fatal(err)
+	}
+	testwait.Until(t, func() bool {
+		session, ok := fixture.registry.Lookup(opened.Session.Id)
+		return ok && session.View().State == terminal.StateConnected
+	})
+
+	path := "/api/v1/terminal/sessions/" + opened.Session.Id + "/forwards"
+	response, body = fixture.do(t, http.MethodPost, path, `{"kind":"local","listenPort":18080,"destination":"db.internal:5432"}`)
+	var refused problemPayload
+	if err := json.Unmarshal([]byte(body), &refused); err != nil {
+		t.Fatal(err)
+	}
+	if response.StatusCode != http.StatusConflict || refused.Code != "terminal_forward_bind_failed" ||
+		refused.Reason != terminal.ForwardProblemAddressInUse || !strings.Contains(refused.Detail, "address already in use") {
+		t.Fatalf("start = %d: %s", response.StatusCode, body)
 	}
 }
 

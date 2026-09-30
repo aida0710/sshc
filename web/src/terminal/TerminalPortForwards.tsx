@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { ApiError } from "../api/client";
 import { configApi } from "../api/config";
 import { terminalSessionsApi, type TerminalForward, type TerminalSession, type TerminalSessionsApi } from "../api/terminalSessions";
 import { useTranslate } from "../i18n/context";
+import { describeForwardProblem, forwardProblemIsSpecific } from "./forwardProblem";
+import { terminalSubtitle } from "./terminalPresentation";
 import { clipboard } from "../ui/clipboard";
 import { CheckboxField, Field, control, hintText } from "../ui/form";
 import { Button, Card, Notice } from "../ui/surface";
@@ -43,7 +45,7 @@ export function TerminalPortForwards({
     ? ""
     : t("conn.forwardInvalidDestination");
   const canStart = connected && validPort(listenPort) && (kind === "dynamic" || validDestination(destination));
-  const title = useMemo(() => session.alias ?? session.title, [session.alias, session.title]);
+  const title = terminalSubtitle(session, t);
 
   async function start() {
     if (!canStart) return;
@@ -134,7 +136,7 @@ export function TerminalPortForwards({
                       </div>
                       <p className="mt-1 break-all font-mono text-xs text-ink-muted">{forwardAddress(forward)}</p>
                       {forward.temporary || forward.kind === "agent" ? null : <p className={`mt-1 ${hintText}`}>{t("terminal.forwardSavedStopHint")}</p>}
-                      {forward.problem === "" ? null : <p role="alert" className="mt-1 break-all text-xs text-danger">{forward.problem}</p>}
+                      {forward.problem === "" ? null : <p role="alert" className="mt-1 text-xs text-danger">{describeForwardProblem(t, forward.problem)}</p>}
                       {forward.problem === "" ? null : <p className={`mt-1 ${hintText}`}>{t("terminal.forwardRetryHint")}</p>}
                     </div>
                     <div className="flex shrink-0 gap-2">
@@ -249,8 +251,10 @@ async function copyForward(
 
 function forwardError(t: ReturnType<typeof useTranslate>, caught: unknown): string {
   if (caught instanceof ApiError) {
-    if (caught.code === "terminal_forward_bind_failed" && caught.problem?.detail) {
-      return t("terminal.forwardBindFailed", { detail: caught.problem.detail });
+    if (caught.code === "terminal_forward_bind_failed") {
+      const reason = caught.problem?.reason ?? "";
+      if (forwardProblemIsSpecific(reason)) return describeForwardProblem(t, reason);
+      if (caught.problem?.detail) return t("terminal.forwardBindFailed", { detail: caught.problem.detail });
     }
     if (caught.code === "terminal_forward_unavailable") return t("terminal.forwardUnavailable");
     if (caught.code === "invalid_terminal_forward" || caught.code === "invalid_request") return t("terminal.forwardInvalid");

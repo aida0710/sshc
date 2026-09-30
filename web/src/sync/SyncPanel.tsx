@@ -1,15 +1,14 @@
-import { useCallback, useEffect, useState } from "react";
-import { DisclosureChevron } from "../ui/DisclosureChevron";
+import { useState } from "react";
 import { vaultApi, type VaultApi } from "../api/vault";
-import { syncApi, type SyncApi, type PushResponse, type SyncHistoryDiff, type SyncStatus } from "../api/sync";
+import { syncApi, type SyncApi, type PushResponse, type SyncHistoryDiff } from "../api/sync";
 import { useLanguage, useTranslate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
-import { hintText } from "../ui/form";
 import { Button, Notice } from "../ui/surface";
 import { PanelState } from "../ui/PanelState";
-import { PageHeader } from "../ui/page";
-import { usePolling } from "../ui/usePolling";
 import { SyncResultCard } from "./SyncResultCard";
+import { SyncPageFrame } from "./SyncPageFrame";
+import { SyncDetailsSection } from "./SyncDetailsSection";
+import { useSyncStatus } from "./useSyncStatus";
 import { SyncExclusionsPanel } from "./SyncExclusionsPanel";
 import { useSyncSetupForm } from "./useSyncSetupForm";
 import { useSyncRemoteState } from "./useSyncRemoteState";
@@ -17,8 +16,6 @@ import { useSyncOperation } from "./useSyncOperation";
 import { useSyncPullPreview } from "./useSyncPullPreview";
 import { SyncForcePushDialog } from "./SyncForcePushDialog";
 import { SyncPullPreviewDialog } from "./SyncPullPreviewDialog";
-import { SyncHistorySection } from "./SyncHistorySection";
-import { SyncBucketStateSection } from "./SyncBucketStateSection";
 import { SyncErrorNotice } from "./SyncErrorNotice";
 import { SyncOverviewCard } from "./SyncOverviewCard";
 import { SyncSettingsSection } from "./SyncSettingsSection";
@@ -26,17 +23,11 @@ import { SyncTransferCard } from "./SyncTransferCard";
 import { SyncUnlockCard } from "./SyncUnlockCard";
 import { syncPathRefusals, syncRefusals } from "./syncRefusals";
 
-// Another device's push shows up within half a minute; the bucket listing
-// is a paid request, so the panel does not ask more often.
-const bucketPollIntervalMs = 30_000;
-
 // Setting the shared key needs the vault open; everything else is sync.
 export type SyncPanelApi = SyncApi & Pick<VaultApi, "unlockVault">;
 export const syncPanelApi: SyncPanelApi = { ...syncApi, ...vaultApi };
 
 type SyncPanelProps = { api?: SyncPanelApi };
-
-const mobileTouchTargets = "[&_button]:min-h-10 md:[&_button]:min-h-0";
 
 // The three things to do, in order, before sync is set up.
 function SyncFlowSteps() {
@@ -63,16 +54,8 @@ function SyncFlowSteps() {
   );
 }
 
-type SyncStatusState =
-  | { phase: "loading" }
-  | { phase: "error"; message: string }
-  | { phase: "ready"; value: SyncStatus };
-
 export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
   const { locale, t } = useLanguage();
-  const [statusState, setStatusState] = useState<SyncStatusState>({
-    phase: "loading",
-  });
   const form = useSyncSetupForm();
   const [master, setMaster] = useState("");
   // A freshly generated key, shown once and never stored in the browser.
@@ -117,51 +100,16 @@ export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
     acceptedRemovals,
     resolve,
   } = pull;
-  const reload = useCallback(async () => {
-    setStatusState({ phase: "loading" });
-    try {
-      const next = await api.syncStatus();
-      setStatusState({ phase: "ready", value: next });
-      if (next.configured) void refreshBucket();
-      else resetBucket();
-      if (next.configured && next.keyConfigured) void refreshHistory();
-      else resetHistory();
-      if (next.configured && next.direction !== "pull") {
-        void refreshPushDraft();
-      } else {
-        resetPush();
-      }
-      if (
-        next.direction === "pull" &&
-        next.auto.phase === "blocked" &&
-        next.auto.detail === "remote_moved"
-      ) {
-        clearError();
-      }
-    } catch {
-      setStatusState({ phase: "error", message: t("sync.statusFailed") });
-    }
-  }, [
+  const { statusState, reload, adopt: adoptStatus } = useSyncStatus({
     api,
     refreshBucket,
-    refreshHistory,
-    refreshPushDraft,
     resetBucket,
+    refreshHistory,
     resetHistory,
+    refreshPushDraft,
     resetPush,
-    t,
     clearError,
-  ]);
-
-  useEffect(() => {
-    void reload();
-  }, [reload]);
-
-  const shouldPollBucket =
-    statusState.phase === "ready" &&
-    statusState.value.configured &&
-    !statusState.value.locked;
-  usePolling(refreshBucket, { intervalMs: bucketPollIntervalMs, enabled: shouldPollBucket });
+  });
 
   async function run<T>(
     operation: () => Promise<T>,
@@ -233,18 +181,12 @@ export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
 
   if (statusState.phase === "error") {
     return (
-      <div
-        className={`mx-auto flex w-full max-w-5xl flex-col gap-6 ${mobileTouchTargets}`}
-      >
-        <PageHeader
-          title={t("sync.heading")}
-          description={t("sync.pageDescription")}
-        />
+      <SyncPageFrame>
         <Notice tone="danger">{statusState.message}</Notice>
         <Button onClick={() => void reload()} className="self-start">
           {t("shell.bootstrapRetry")}
         </Button>
-      </div>
+      </SyncPageFrame>
     );
   }
 
@@ -252,13 +194,7 @@ export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
 
   if (status.locked) {
     return (
-      <div
-        className={`mx-auto flex w-full max-w-5xl flex-col gap-6 ${mobileTouchTargets}`}
-      >
-        <PageHeader
-          title={t("sync.heading")}
-          description={t("sync.pageDescription")}
-        />
+      <SyncPageFrame>
         <SyncErrorNotice message={error} code={errorCode} />
         <SyncUnlockCard
           master={master}
@@ -276,7 +212,7 @@ export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
             )
           }
         />
-      </div>
+      </SyncPageFrame>
     );
   }
 
@@ -286,7 +222,7 @@ export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
   // Pushed or force-pushed: the engine's status and result replace what
   // the screen was showing, and everything derived from the bucket reloads.
   function adoptPush(next: PushResponse, noticeKey: "sync.pushed" | "sync.forcePushed") {
-    setStatusState({ phase: "ready", value: next.status });
+    adoptStatus(next.status);
     pull.close();
     setResultView({ kind: "push", result: next.result });
     setNotice(t(noticeKey));
@@ -297,17 +233,12 @@ export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
   }
 
   return (
-    <div
-      className={`mx-auto flex w-full max-w-5xl flex-col gap-6 ${mobileTouchTargets}`}
-    >
-      <PageHeader
-        title={t("sync.heading")}
-        description={t("sync.pageDescription")}
-      />
-
+    <SyncPageFrame>
       {status.configured ? null : <SyncFlowSteps />}
 
-      <SyncErrorNotice message={error} code={errorCode} />
+      {/* 強制送信と適用のダイアログは、同じ失敗を自分の中に出す。背面にも出すと、
+          スクリーンリーダーが同じ文を 2 回読み上げる。 */}
+      {forcePushOpen || preview !== null ? null : <SyncErrorNotice message={error} code={errorCode} />}
       {notice === "" ? null : (
         <p role="status" className="text-sm text-ink-muted">
           {notice}
@@ -330,20 +261,24 @@ export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
           onToggleAuto={(checked) =>
             void run(
               () => api.setAutoSync(checked),
-              (next) => setStatusState({ phase: "ready", value: next }),
+              adoptStatus,
               t("sync.autoFailed"),
             )
           }
           onSyncNow={() =>
             void run(
               () => api.syncNow(),
-              (next) => setStatusState({ phase: "ready", value: next }),
+              adoptStatus,
               t("sync.autoNowFailed"),
             )
           }
           onPreviewRemoteHead={() => void previewCurrentRemoteHead()}
           onPreview={() => void previewWith(undefined)}
-          onForcePush={() => setForcePushOpen(true)}
+          onForcePush={() => {
+            // 前の操作の失敗をダイアログの中に持ち込まない。
+            clearError();
+            setForcePushOpen(true);
+          }}
         />
       ) : null}
 
@@ -363,45 +298,19 @@ export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
         onCheckSetup={() =>
           void run(
             () => api.checkSyncSetup(form.setupInput),
-            (next) => {
-              form.setSetupCheck(next);
-              form.setOwnKey("");
-              form.setChooseOwn(false);
-            },
+            form.acceptSetupCheck,
             t("sync.configureFailed"),
           )
         }
         onCompleteSetup={() => {
-          const { setupCheck, chooseOwn, ownKey } = form;
-          if (setupCheck === null) return;
+          const request = form.setupRequest();
+          if (request === null) return;
           void run(
-            () =>
-              api.completeSyncSetup({
-                ...form.setupInput,
-                direction: form.direction,
-                expectedState: setupCheck.state,
-                ...(setupCheck.etag === undefined
-                  ? {}
-                  : { expectedETag: setupCheck.etag }),
-                historyPresent: setupCheck.historyPresent,
-                reuseKey: false,
-                key:
-                  setupCheck.state === "existing" || chooseOwn
-                    ? ownKey
-                    : "",
-              }),
+            () => api.completeSyncSetup(request),
             (next) => {
-              setStatusState({
-                phase: "ready",
-                value: next.status,
-              });
+              adoptStatus(next.status);
               setRevealed(next.generatedKey ?? "");
-              form.setOwnKey("");
-              form.setAccessKeyId("");
-              form.setSecretAccessKey("");
-              form.setSetupCheck(null);
-              form.setEditingSettings(false);
-              form.setSettingsOpen(false);
+              form.finishSetup();
               setNotice(
                 next.generatedKey === undefined
                   ? t("sync.setup.saved")
@@ -452,51 +361,28 @@ export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
       ) : null}
 
       {status.configured ? (
-        <details className="overflow-hidden rounded-md border border-control-line bg-card">
-          <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 bg-toolbar px-4 py-3 marker:hidden hover:bg-select-fill">
-            <span className="flex items-center gap-3 text-sm font-medium text-ink">
-              <DisclosureChevron className="size-4 text-ink-muted" />
-              {t("sync.detailsHeading")}
-            </span>
-            <span className={hintText}>
-              {status.synced
-                ? t("sync.lastSynced", {
-                    at: status.lastSyncedAt ?? "",
-                    count: status.fileCount ?? 0,
-                  })
-                : t("sync.neverSynced")}
-            </span>
-          </summary>
-          <div className="grid gap-4 border-t border-line bg-surface-subtle p-4 lg:grid-cols-2">
-            <SyncBucketStateSection
-              bucketState={bucketState}
-              locale={locale}
-              busy={busy}
-              historyExpanded={bucketHistoryExpanded}
-              onToggleHistory={toggleBucketHistory}
-              onRefresh={() => void refreshBucket()}
-            />
-
-            <SyncHistorySection
-              busy={busy}
-              direction={status.direction}
-              historyDiff={historyDiff}
-              historyState={historyState}
-              keyConfigured={status.keyConfigured}
-              locale={locale}
-              selectedKey={selectedHistoryKey}
-              t={t}
-              onPreview={(key) => void previewWith(undefined, key)}
-              onRefresh={() => void refreshHistory()}
-              onSelect={(key) => void selectHistory(key)}
-            />
-          </div>
-        </details>
+        <SyncDetailsSection
+          status={status}
+          locale={locale}
+          busy={busy}
+          bucketState={bucketState}
+          bucketHistoryExpanded={bucketHistoryExpanded}
+          onToggleBucketHistory={toggleBucketHistory}
+          onRefreshBucket={() => void refreshBucket()}
+          historyState={historyState}
+          historyDiff={historyDiff}
+          selectedHistoryKey={selectedHistoryKey}
+          onRefreshHistory={() => void refreshHistory()}
+          onSelectHistory={(key) => void selectHistory(key)}
+          onPreviewHistory={(key) => void previewWith(undefined, key)}
+        />
       ) : null}
 
       {forcePushOpen ? (
         <SyncForcePushDialog
           busy={busy}
+          error={error}
+          errorCode={errorCode}
           keyConfigured={status.keyConfigured}
           message={pushMessage}
           t={t}
@@ -529,6 +415,8 @@ export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
           acceptRemoteHead={previewAcceptRemoteHead}
           acceptedRemovals={acceptedRemovals}
           busy={busy}
+          error={error}
+          errorCode={errorCode}
           direction={status.direction}
           t={t}
           onAcceptRemovals={pull.acceptRemovals}
@@ -557,6 +445,6 @@ export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
           }
         />
       )}
-    </div>
+    </SyncPageFrame>
   );
 }

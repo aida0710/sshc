@@ -6,9 +6,9 @@ import { CopyButton } from "./CopyButton";
 describe("CopyButton", () => {
   it("writes exactly the value it was given", async () => {
     const user = userEvent.setup();
-    render(<CopyButton value="ssh -- bastion" label="copy.command" />);
+    render(<CopyButton value="ssh -- bastion" label="copy.remoteCommand" />);
 
-    await user.click(screen.getByRole("button", { name: "Copy command" }));
+    await user.click(screen.getByRole("button", { name: "Copy remote command" }));
 
     expect(await navigator.clipboard.readText()).toBe("ssh -- bastion");
     expect(screen.getByText("Copied.")).toBeInTheDocument();
@@ -17,9 +17,9 @@ describe("CopyButton", () => {
   it("says the write was refused rather than claiming it succeeded", async () => {
     const user = userEvent.setup();
     vi.spyOn(navigator.clipboard, "writeText").mockRejectedValue(new Error("denied"));
-    render(<CopyButton value="ssh -- bastion" label="copy.command" />);
+    render(<CopyButton value="ssh -- bastion" label="copy.remoteCommand" />);
 
-    await user.click(screen.getByRole("button", { name: "Copy command" }));
+    await user.click(screen.getByRole("button", { name: "Copy remote command" }));
 
     expect(await screen.findByText(/refused to write to the clipboard/)).toBeInTheDocument();
     expect(screen.queryByText("Copied.")).not.toBeInTheDocument();
@@ -27,12 +27,12 @@ describe("CopyButton", () => {
 
   it("stops claiming a copy once the value has changed underneath it", async () => {
     const user = userEvent.setup();
-    const { rerender } = render(<CopyButton value="first" label="copy.command" />);
+    const { rerender } = render(<CopyButton value="first" label="copy.remoteCommand" />);
 
-    await user.click(screen.getByRole("button", { name: "Copy command" }));
+    await user.click(screen.getByRole("button", { name: "Copy remote command" }));
     expect(screen.getByText("Copied.")).toBeInTheDocument();
 
-    rerender(<CopyButton value="second" label="copy.command" />);
+    rerender(<CopyButton value="second" label="copy.remoteCommand" />);
 
     expect(screen.queryByText("Copied.")).not.toBeInTheDocument();
     expect(await navigator.clipboard.readText()).toBe("first");

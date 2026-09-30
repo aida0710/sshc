@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { storageKey } from "../i18n/locale";
+import { localStorageKeys } from "../ui/browserStorageKeys";
 import { CrashBoundary } from "./CrashBoundary";
 
 function Broken(): never {
@@ -13,7 +13,7 @@ describe("CrashBoundary", () => {
   });
 
   it("names the failure instead of leaving an empty page", () => {
-    window.localStorage.setItem(storageKey, "en");
+    window.localStorage.setItem(localStorageKeys.locale, "en");
     const quiet = vi.spyOn(console, "error").mockImplementation(() => {});
     render(
       <CrashBoundary>
@@ -28,14 +28,14 @@ describe("CrashBoundary", () => {
   });
 
   it("uses the saved Japanese locale for the fallback", () => {
-    window.localStorage.setItem(storageKey, "ja");
+    window.localStorage.setItem(localStorageKeys.locale, "ja");
     const quiet = vi.spyOn(console, "error").mockImplementation(() => {});
     render(
       <CrashBoundary>
         <Broken />
       </CrashBoundary>,
     );
-    expect(screen.getByRole("heading", { name: "sshc の画面を表示できませんでした" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "sshcの画面を表示できませんでした" })).toBeInTheDocument();
     expect(screen.getByText(/下の内容にはエラー情報だけが含まれています/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "再読み込み" })).toBeInTheDocument();
     expect(screen.getByText(/TypeError: undefined is not a function/)).toBeInTheDocument();

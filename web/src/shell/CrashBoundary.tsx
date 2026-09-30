@@ -16,7 +16,7 @@ const crashCopy: Record<Locale, CrashCopy> = {
     reload: "Reload",
   },
   ja: {
-    heading: "sshc の画面を表示できませんでした",
+    heading: "sshcの画面を表示できませんでした",
     note: "アプリの不具合です。下の内容にはエラー情報だけが含まれています。コピーして不具合報告に添えてください。",
     reload: "再読み込み",
   },

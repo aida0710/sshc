@@ -1,10 +1,11 @@
 import type { SyncDirection, SyncHistoryDiff } from "../api/sync";
 import type { Translate } from "../i18n/context";
 import type { Locale } from "../i18n/locale";
-import type { MessageKey } from "../i18n/messages";
 import { hintText, sectionHeading } from "../ui/form";
+import { formatDateTime } from "../ui/format";
 import { Button, Notice } from "../ui/surface";
 import { formatBytes } from "./SyncResultCard";
+import { syncHistoryRelationLabelKeys } from "./syncMessageKeys";
 import type { HistoryState } from "./useSyncRemoteState";
 
 type SyncHistorySectionProps = {
@@ -117,14 +118,12 @@ export function SyncHistorySection({
                         {revision.revision.slice(0, 12)}
                       </span>
                       <span className="rounded-full bg-toolbar px-2 py-0.5 text-[11px] font-medium text-ink-muted">
-                        {t(
-                          `sync.historyRelation.${revision.relation}` as MessageKey,
-                        )}
+                        {t(syncHistoryRelationLabelKeys[revision.relation])}
                       </span>
                     </span>
                     <span className="mt-1 block text-xs text-ink-muted">
                       {t("sync.historyRevisionMeta", {
-                        at: revision.createdAt,
+                        at: formatDateTime(revision.createdAt, locale),
                         count: revision.fileCount,
                         origin: revision.origin.slice(0, 8),
                       })}
@@ -167,17 +166,17 @@ export function SyncHistorySection({
                     <div className="grid gap-2 text-xs sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
                       {(
                         [
-                          ["added", historyDiff.added, "text-success"],
-                          ["modified", historyDiff.modified, "text-notice-ink"],
-                          ["removed", historyDiff.removed, "text-danger"],
+                          ["added", "sync.historyDiff.added", historyDiff.added, "text-success"],
+                          ["modified", "sync.historyDiff.modified", historyDiff.modified, "text-notice-ink"],
+                          ["removed", "sync.historyDiff.removed", historyDiff.removed, "text-danger"],
                         ] as const
-                      ).map(([kind, paths, tone]) => (
+                      ).map(([kind, labelKey, paths, tone]) => (
                         <div
                           key={kind}
                           className="min-w-0 rounded bg-toolbar p-2"
                         >
                           <p className={`font-medium ${tone}`}>
-                            {t(`sync.historyDiff.${kind}` as MessageKey, {
+                            {t(labelKey, {
                               count: paths.length,
                             })}
                           </p>

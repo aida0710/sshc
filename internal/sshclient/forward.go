@@ -173,8 +173,8 @@ func (f *forwards) close() {
 // open は、この接続の上に設定が求めた転送を開く。
 //
 // 開けなかった転送があっても接続は続ける。ポートが埋まっているのは普通の
-// 出来事であり、それを理由にセッションごと失う方が困る。理由はその転送の
-// Problem に残り、端末にも 1 行出る。
+// 出来事であり、それを理由にセッションごと失う方が困る。理由の語はその転送の
+// Problem に残り、エラーの文は端末に 1 行出る。
 func (f *forwards) open(client *ssh.Client, specs []ForwardSpec, report io.Writer) {
 	for _, spec := range specs {
 		f.openFromConfig(client, spec, report)
@@ -223,7 +223,7 @@ func (f *forwards) listen(client *ssh.Client, spec ForwardSpec, origin forwardOr
 		Temporary: origin == forwardTemporary,
 	}
 	if err != nil {
-		entry.Problem = err.Error()
+		entry.Problem = listenProblem(err)
 		return entry, err
 	}
 
@@ -394,14 +394,14 @@ func closeWrite(conn net.Conn) {
 func (f *forwards) forwardAgent(client *ssh.Client, session *ssh.Session, connector AgentConnector, report io.Writer) {
 	entry := terminal.Forward{Kind: terminal.ForwardAgent}
 	if connector == nil || connector.Address() == "" {
-		entry.Problem = "no agent is reachable from this process"
+		entry.Problem = terminal.ForwardProblemAgentUnreachable
 		_, _ = io.WriteString(report, "sshc: agent forwarding was asked for but no agent is reachable\r\n")
 		f.note(entry)
 		return
 	}
 	conn, err := connector.Connect(context.Background())
 	if err != nil {
-		entry.Problem = err.Error()
+		entry.Problem = terminal.ForwardProblemAgentUnreachable
 		// 理由は agent の実装が書いた文で、改行を含みうる。LF のままではターミナルの
 		// 次の行が行頭へ戻らない。
 		_, _ = io.WriteString(report, "sshc: agent forwarding: "+terminalNewlines(err.Error())+"\r\n")
@@ -409,13 +409,15 @@ func (f *forwards) forwardAgent(client *ssh.Client, session *ssh.Session, connec
 		return
 	}
 	if err := agent.ForwardToAgent(client, agent.NewClient(conn)); err != nil {
-		entry.Problem = err.Error()
+		entry.Problem = terminal.ForwardProblemFailed
+		_, _ = io.WriteString(report, "sshc: agent forwarding: "+err.Error()+"\r\n")
 		_ = conn.Close()
 		f.note(entry)
 		return
 	}
 	if err := agent.RequestAgentForwarding(session); err != nil {
-		entry.Problem = err.Error()
+		entry.Problem = terminal.ForwardProblemFailed
+		_, _ = io.WriteString(report, "sshc: agent forwarding: "+err.Error()+"\r\n")
 		_ = conn.Close()
 		f.note(entry)
 		return

@@ -71,7 +71,8 @@ verify-ui-dist:
 verify-generated: generate verify-ui-dist
 	git diff --exit-code -- cmd/sshc/cli_contract.gen.go internal/api/models.gen.go \
 		web/src/api/schema.d.ts web/src/api/validators.generated.ts \
-		web/src/rules/generated.ts web/src/rules/corpus.generated.json
+		web/src/rules/generated.ts web/src/rules/corpus.generated.json \
+		web/src/rules/shortcuts.generated.ts web/src/rules/shortcutCorpus.generated.json
 
 # VERSION を caller が渡した場合は専用の build channel へそのまま渡す。空なら
 # helper が argv で git describe を実行し、exact tag がなければ dev を使う。

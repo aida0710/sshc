@@ -24,16 +24,25 @@ const (
 
 // EditRequest は、要求された 1 個の変更である。
 type EditRequest struct {
-	Kind             EditKind    `json:"kind"`
-	Path             string      `json:"path,omitempty"`
-	Base             string      `json:"base,omitempty"`
-	Alias            string      `json:"alias,omitempty"`
-	NewAlias         string      `json:"newAlias,omitempty"`
-	Fields           []FieldEdit `json:"fields,omitempty"`
-	Raw              string      `json:"raw,omitempty"`
-	Comment          string      `json:"comment,omitempty"`
-	Metadata         *Metadata   `json:"metadata,omitempty"`
-	DestinationGroup string      `json:"destinationGroup,omitempty"`
+	Kind     EditKind    `json:"kind"`
+	Path     string      `json:"path,omitempty"`
+	Base     string      `json:"base,omitempty"`
+	Alias    string      `json:"alias,omitempty"`
+	NewAlias string      `json:"newAlias,omitempty"`
+	Fields   []FieldEdit `json:"fields,omitempty"`
+	Raw      string      `json:"raw,omitempty"`
+	Comment  string      `json:"comment,omitempty"`
+	// HostMetadata と HostMetadataBase は kind "metadata" の、Path と Alias が指す
+	// 接続 1 件の新しい metadata と、画面が読み込んだときのその metadata である。
+	// HostMetadata が nil なら entry を消し、HostMetadataBase が nil なら画面は
+	// entry を見ていない。
+	HostMetadata     *HostMetadata `json:"hostMetadata,omitempty"`
+	HostMetadataBase *HostMetadata `json:"hostMetadataBase,omitempty"`
+	// Groups と GroupsBase は kind "groups" の、新しいグループの設定と、画面が
+	// 読み込んだときのグループの設定である。
+	Groups           []GroupMetadata `json:"groups,omitempty"`
+	GroupsBase       []GroupMetadata `json:"groupsBase,omitempty"`
+	DestinationGroup string          `json:"destinationGroup,omitempty"`
 	// DestinationPath と DestinationBase は、move の 2 番目のファイルを記述する。
 	DestinationPath string `json:"destinationPath,omitempty"`
 	DestinationBase string `json:"destinationBase,omitempty"`

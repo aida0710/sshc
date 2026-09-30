@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "../../ui/icons";
-import { failureCode } from "../../api/client";
 import { useTranslate } from "../../i18n/context";
 import { snippetsApi, type Snippet } from "../../snippets/api";
+import { describeTerminalCommandFailure, terminalCommandProblemText } from "./terminalCommandProblem";
 import { Button, Notice, Segmented } from "../../ui/surface";
 import { ModalShell } from "../../ui/ModalShell";
-import { PasswordInput } from "../../ui/PasswordField";
+import { SnippetVariableInputs } from "../../snippets/SnippetVariableInputs";
 import {
   terminalCommandApi,
   type TerminalCommandDispatch,
@@ -76,10 +76,8 @@ export function WorkspaceCommandCenter({
         setSnippets(library.snippets);
         setSnippetId((current) => current || library.snippets[0]?.id || "");
       })
-      .catch((error: unknown) =>
-        setProblem(failureCode(error) || "snippet_failed"),
-      );
-  }, []);
+      .catch(() => setProblem(t("snippets.loadFailed")));
+  }, [t]);
 
   useEffect(() => {
     operationSequence.current += 1;
@@ -124,7 +122,7 @@ export function WorkspaceCommandCenter({
         setPrepared({ request: next, preview: nextPreview });
     } catch (error) {
       if (operationSequence.current === operation)
-        setProblem(failureCode(error) || "terminal_command_failed");
+        setProblem(describeTerminalCommandFailure(t, error));
     } finally {
       if (operationSequence.current === operation) setBusy(false);
     }
@@ -146,7 +144,7 @@ export function WorkspaceCommandCenter({
       }
     } catch (error) {
       if (operationSequence.current === operation)
-        setProblem(failureCode(error) || "terminal_command_failed");
+        setProblem(describeTerminalCommandFailure(t, error));
     } finally {
       if (operationSequence.current === operation) setBusy(false);
     }
@@ -169,7 +167,8 @@ export function WorkspaceCommandCenter({
     <ModalShell
       labelledBy="workspace-command-heading"
       onDismiss={onClose}
-      closeOnOutside
+      // 実行中に閉じると、どのペインへ届いたかを確かめられないので、終わるまで閉じない。
+      dismissible={!busy}
       initialFocusRef={closeButton}
       panelClassName="max-h-[90vh] w-full max-w-5xl overflow-auto rounded-lg p-4"
     >
@@ -189,9 +188,10 @@ export function WorkspaceCommandCenter({
           <button
             ref={closeButton}
             type="button"
+            disabled={busy}
             onClick={onClose}
             aria-label={t("workspace.commandClose")}
-            className="flex size-8 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-select-fill"
+            className="flex size-8 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-select-fill disabled:opacity-50"
           >
             <Icon name="close" className="size-4" />
           </button>
@@ -252,79 +252,21 @@ export function WorkspaceCommandCenter({
                     {selectedSnippet.command}
                   </code>
                 )}
-                {selectedSnippet?.variables.map((variable) => (
-                  <div key={variable.name} className="text-xs text-ink-muted">
-                    <span>
-                      <code>{`{{${variable.name}}}`}</code>
-                      {variable.description ? ` · ${variable.description}` : ""}
-                    </span>
-                    {variable.type === "boolean" ? (
-                      <select
-                        aria-label={variable.name}
-                        value={inputs[variable.name] ?? ""}
-                        onChange={(event) => {
-                          const value = event.target.value;
-                          setInputs((current) =>
-                            value === ""
-                              ? Object.fromEntries(
-                                  Object.entries(current).filter(
-                                    ([key]) => key !== variable.name,
-                                  ),
-                                )
-                              : { ...current, [variable.name]: value },
-                          );
-                          invalidate();
-                        }}
-                        className="mt-1 block w-full rounded border border-control-line bg-control px-2 py-1.5 text-sm"
-                      >
-                        <option value="">
-                          {variable.default === undefined
-                            ? ""
-                            : `${t("workspace.useDefault")} (${variable.default})`}
-                        </option>
-                        <option value="true">true</option>
-                        <option value="false">false</option>
-                      </select>
-                    ) : variable.type === "secret" ? (
-                      <PasswordInput
-                        label={variable.name}
-                        value={inputs[variable.name] ?? ""}
-                        placeholder={
-                          variable.default === undefined
-                            ? ""
-                            : `${t("workspace.useDefault")}: ${variable.default}`
-                        }
-                        onChange={(value) => {
-                          setInputs((current) => ({
-                            ...current,
-                            [variable.name]: value,
-                          }));
-                          invalidate();
-                        }}
-                        className="mt-1 block w-full rounded border border-control-line bg-control px-2 py-1.5 text-sm"
-                      />
-                    ) : (
-                      <input
-                        aria-label={variable.name}
-                        type={variable.type === "integer" ? "number" : "text"}
-                        value={inputs[variable.name] ?? ""}
-                        placeholder={
-                          variable.default === undefined
-                            ? ""
-                            : `${t("workspace.useDefault")}: ${variable.default}`
-                        }
-                        onChange={(event) => {
-                          setInputs((current) => ({
-                            ...current,
-                            [variable.name]: event.target.value,
-                          }));
-                          invalidate();
-                        }}
-                        className="mt-1 block w-full rounded border border-control-line bg-control px-2 py-1.5 text-sm"
-                      />
-                    )}
-                  </div>
-                ))}
+                {selectedSnippet === null ? null : (
+                  <SnippetVariableInputs
+                    variables={selectedSnippet.variables}
+                    inputs={inputs}
+                    onChange={(variable, value) => {
+                      // 真偽値の「既定値を使用」は、値を送らないことで既定値を使わせる。
+                      setInputs((current) =>
+                        variable.type === "boolean" && value === ""
+                          ? Object.fromEntries(Object.entries(current).filter(([key]) => key !== variable.name))
+                          : { ...current, [variable.name]: value },
+                      );
+                      invalidate();
+                    }}
+                  />
+                )}
               </>
             )}
           </div>
@@ -420,7 +362,7 @@ export function WorkspaceCommandCenter({
                     )}
                   </p>
                   {result.problem ? (
-                    <p className="mt-1 text-xs text-danger">{result.problem}</p>
+                    <p className="mt-1 text-xs text-danger">{terminalCommandProblemText(t, result.problem)}</p>
                   ) : null}
                 </div>
               ))}

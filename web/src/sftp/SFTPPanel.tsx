@@ -14,20 +14,25 @@ import type { RemoteEntry } from "./api";
 import { formatBytes } from "../ui/format";
 import { entryKind, movable } from "./entryKind";
 import { SFTPDetailsDialog } from "./SFTPDetailsDialog";
-import { SFTPEntryList, sortEntries, useSFTPEntryList, type SFTPSort, type SFTPSortState } from "./SFTPEntryList";
-import { SFTPTextEditor, useSFTPTextEditor } from "./SFTPTextEditor";
+import { SFTPEntryList } from "./SFTPEntryList";
+import { sortEntries, type SFTPSort, type SFTPSortState } from "./sftpEntrySort";
+import { sortColumnLabelKeys } from "./sftpMessageKeys";
+import { useSFTPEntryList } from "./useSFTPEntryList";
+import { SFTPTextEditor } from "./SFTPTextEditor";
+import { useSFTPTextEditor } from "./useSFTPTextEditor";
 import { SFTPToolbar } from "./SFTPToolbar";
 import { TransferManagerList } from "./TransferManagerList";
 import { sftpTransferManager } from "./transferManager";
 import { remoteParentOf } from "./sftpSource";
 import { useSFTPBrowser, type RestoredSFTPLocation } from "./useSFTPBrowser";
-import { SFTPEntryActionDialogs, useSFTPEntryActions } from "./useSFTPEntryActions";
+import { SFTPEntryActionDialogs } from "./SFTPEntryActionDialogs";
+import { useSFTPEntryActions } from "./useSFTPEntryActions";
 import { useSFTPSearch } from "./useSFTPSearch";
 import { useSFTPTransfers, type SFTPCounterpart } from "./useSFTPTransfers";
 
 const noHosts: HostEntry[] = [];
 
-export type { SFTPSort, SFTPSortState } from "./SFTPEntryList";
+export type { SFTPSort, SFTPSortState } from "./sftpEntrySort";
 
 // The overflow button and the row context menu open the same list of actions.
 // Anchoring them to one shape keeps a right click from offering less than the
@@ -297,6 +302,9 @@ export function SFTPPanel({
     if (completed.length === 0) return;
     for (const job of completed) refreshedDeletes.current.add(job.id);
     void search.refreshAfterChange(path, alias);
+    // useSFTPSearch returns a new object on every render, so `search` itself is
+    // not watched; its search root (search.search) is what decides which rows a
+    // deletion covers. remoteParentOf is a module function.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [transferJobs, alias, path, connected, dirty, search.search, local]);
 
@@ -387,7 +395,7 @@ export function SFTPPanel({
       { key: "selectAll", label: t("sftp.selectAll"), disabled: busy || displayedEntries.length === 0, run: list.selectAllDisplayed },
       ...(["name", "type", "size", "modified"] as const).map((key) => ({
         key: `sort-${key}`,
-        label: `${t(`sftp.${key}`)}${t(sort.key === key && sort.direction === "ascending" ? "table.sortDescending" : "table.sortAscending")}`,
+        label: `${t(sortColumnLabelKeys[key])}${t(sort.key === key && sort.direction === "ascending" ? "table.sortDescending" : "table.sortAscending")}`,
         run: () => { changeSort(key); setMenu(null); },
       })),
     ];

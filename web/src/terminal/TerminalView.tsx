@@ -3,7 +3,6 @@ import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
-import { failureCode } from "../api/client";
 import { terminalSessionsApi, type TerminalSession, type TerminalSessionsApi } from "../api/terminalSessions";
 import { useTranslate } from "../i18n/context";
 import { useTheme } from "../theme/context";
@@ -19,7 +18,6 @@ import { prefersNativeSelection } from "./nativeSelection";
 import { cellHeight, observeTerminalSize, syncTerminalInputPosition } from "./metrics";
 import { attachTouchScroll } from "./touchScroll";
 import { KeyBar, applyModifiers, encodeKey, type Modifiers } from "./KeyBar";
-import { openStream, type TerminalStream } from "./stream";
 import { attachTerminalClipboard, prepareTerminalPaste, type TerminalClipboardSettings } from "./clipboard";
 import { terminalDisplayTitle, terminalSubtitle } from "./terminalPresentation";
 import { recentBufferText } from "./buffer";
@@ -34,14 +32,16 @@ import { TerminalPortForwards } from "./TerminalPortForwards";
 import { attachWebglRenderer } from "./webgl";
 import { attachOSC7Directory } from "./osc7";
 import { attachCommandMarkers } from "./commandMarkers";
-import { showBrowserNotification } from "./terminalNotifications";
+import { showBrowserNotification } from "../ui/browserNotifications";
 import { applyTerminalRuntimeOptions } from "./runtimeOptions";
 import { Icon } from "../ui/icons";
+import { escapeOwnerProps } from "../ui/useDismissibleLayer";
 import { useTerminalSearch } from "./useTerminalSearch";
 import { TerminalSearchBar } from "./TerminalSearchBar";
 import { TerminalStatusBanners } from "./TerminalStatusBanners";
 import { VPNProfileChip } from "../vpn/VPNProfileChip";
-import type { StreamLink } from "./streamLink";
+import { createStreamLink, type StreamLink, type StreamLinkController } from "./streamLink";
+import { defaultBrowserScrollbackLines } from "./browserScrollback";
 import { inspectTerminalPaste } from "./pasteGuard";
 import { TerminalPasteDialog } from "./TerminalPasteDialog";
 import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
@@ -72,9 +72,23 @@ type TerminalViewProps = {
   jisYenBackslash?: boolean;
 };
 
-const backoff = [1, 2, 4, 8, 15];
+// Long enough to read a one-line notice such as "Copied" without it lingering
+// over the output.
+const terminalNoticeMs = 2500;
 
-const settled = 10_000;
+// A command shorter than this usually finishes while the user is still
+// watching, so a desktop notification for it would only be noise.
+const longCommandNotifyMs = 30_000;
+
+// The link popover opens just below and to the right of the pointer so it does
+// not cover the link that was clicked.
+const linkPopoverOffsetPx = 8;
+
+// When the settings leave the size unset, a phone (mobileViewportQuery, the
+// same condition as its toolbar and KeyBar) gets a larger size so the text
+// stays legible on its small screen.
+const mobileTerminalFontSize = 15;
+const desktopTerminalFontSize = 13;
 
 export function TerminalView({
   session,
@@ -94,7 +108,7 @@ export function TerminalView({
   onOpenRemotePath,
   osc52Enabled: initialOsc52Enabled = false,
   vpnProfile = "",
-  scrollbackLines = 5000,
+  scrollbackLines = defaultBrowserScrollbackLines,
   onOsc52Change,
   onForwardsChanged,
   jisYenBackslash = false,
@@ -103,6 +117,7 @@ export function TerminalView({
   const { resolved } = useTheme();
   const reducedMotion = useMediaQuery(reducedMotionQuery);
   const mobile = useMediaQuery(mobileViewportQuery);
+  const resolvedFontSize = fontSize ?? (mobile ? mobileTerminalFontSize : desktopTerminalFontSize);
   const reducedMotionRef = useRef(reducedMotion);
   reducedMotionRef.current = reducedMotion;
   const host = useRef<HTMLDivElement>(null);
@@ -125,7 +140,7 @@ export function TerminalView({
   intlYenRef.current = jisYenBackslash;
   const [terminalNotice, setTerminalNotice] = useState("");
   const [pendingPaste, setPendingPaste] = useState<{
-    sessionID: string;
+    sessionId: string;
     raw: string;
   } | null>(null);
   const sendPaste = useRef<(text: string) => void>(() => {});
@@ -137,7 +152,7 @@ export function TerminalView({
   const overflowTrigger = useRef<HTMLButtonElement>(null);
   const [portForwardsOpen, setPortForwardsOpen] = useState(false);
   const [linkSelection, setLinkSelection] = useState<TerminalLinkSelection | null>(null);
-  const control = useRef<{ now: () => void; stop: () => void }>({ now: () => {}, stop: () => {} });
+  const streamLinkController = useRef<StreamLinkController | null>(null);
 
   const [modifiers, setModifiers] = useState<Modifiers>({ ctrl: false, alt: false });
   const armed = useRef<Modifiers>(modifiers);
@@ -153,7 +168,7 @@ export function TerminalView({
 
   useEffect(() => {
     if (terminalNotice === "") return;
-    const timer = window.setTimeout(() => setTerminalNotice(""), 2500);
+    const timer = window.setTimeout(() => setTerminalNotice(""), terminalNoticeMs);
     return () => window.clearTimeout(timer);
   }, [terminalNotice]);
 
@@ -162,6 +177,8 @@ export function TerminalView({
     if (container === null) return;
 
     const coarse = prefersNativeSelection((query) => window.matchMedia(query));
+    const selectLinkAt = (link: TerminalLinkSelection["link"], event: MouseEvent) =>
+      setLinkSelection({ link, x: event.clientX + linkPopoverOffsetPx, y: event.clientY + linkPopoverOffsetPx });
 
     let view: Terminal;
     view = new Terminal({
@@ -172,7 +189,7 @@ export function TerminalView({
       convertEol: false,
       cursorBlink: session.state !== "exited" && cursorAnimationEnabled(reducedMotion),
       fontFamily: fontStack(font ?? ""),
-      fontSize: fontSize ?? (window.matchMedia("(max-width: 767px)").matches ? 15 : 13),
+      fontSize: resolvedFontSize,
       theme: terminalTheme(container, hasBackground),
       scrollback: scrollbackLines,
       linkHandler: {
@@ -185,7 +202,7 @@ export function TerminalView({
             openTerminalURL(link.target);
             return;
           }
-          setLinkSelection({ link, x: event.clientX + 8, y: event.clientY + 8 });
+          selectLinkAt(link, event);
         },
       },
     });
@@ -227,7 +244,7 @@ export function TerminalView({
     });
     const osc7Directory = attachOSC7Directory(view.parser, setCurrentDirectory);
     const commandMarkers = attachCommandMarkers(view, ({ durationMilliseconds }) => {
-      if (durationMilliseconds < 30_000 || !document.hidden) return;
+      if (durationMilliseconds < longCommandNotifyMs || !document.hidden) return;
       showBrowserNotification({
         title: "sshc",
         body: t("terminal.longCommandCompleted", {
@@ -240,25 +257,54 @@ export function TerminalView({
     const terminalLinks = attachLinkProvider(view, {
       remote: session.kind === "ssh",
       open: openTerminalURL,
-      select: (link, event) => setLinkSelection({ link, x: event.clientX + 8, y: event.clientY + 8 }),
+      select: selectLinkAt,
     });
 
-    let stream: TerminalStream | null = null;
-    let live = true;
-    let stopped = false;
-    let attempts = 0;
-    let linkedAt = 0;
-    let timer: ReturnType<typeof setInterval> | undefined;
     let decoder = new TextDecoder();
-    let cursor: number | undefined;
-
     let sent = "";
     const syncSize = () => {
+      const stream = linkController.currentStream();
       const size = `${view.cols}x${view.rows}`;
       if (stream === null || view.cols === 0 || view.rows === 0 || size === sent) return;
       sent = size;
       stream.resize(view.cols, view.rows);
     };
+
+    const linkController = createStreamLink({
+      sessionId: session.id,
+      api,
+      onLink: setLink,
+      onAttached: () => {
+        sent = "";
+        if (!coarse && session.state !== "exited" && !search.hasFocus()) {
+          view.focus();
+        }
+        syncSize();
+      },
+      onReplay: (replay) => {
+        if (!replay.truncated) return;
+        decoder = new TextDecoder();
+        // The retained ring may begin in the middle of CSI or OSC.
+        // CAN makes xterm abandon that parser state without clearing
+        // the visible screen as a full terminal reset would.
+        view.write("\u0018");
+        setTerminalNotice(t("terminal.replayTruncated"));
+      },
+      onOutput: (chunk) => {
+        // A confirmation belongs to the exact terminal context the user
+        // reviewed. Any output can be a new prompt or the reconnect
+        // notice for a replacement shell, so require a fresh paste.
+        setPendingPaste(null);
+        view.write(decoder.decode(chunk, { stream: true }));
+      },
+      onExit: () => {
+        view.options.cursorBlink = false;
+        setPendingPaste(null);
+        onExit?.();
+      },
+      onClose: () => setPendingPaste(null),
+    });
+    streamLinkController.current = linkController;
 
     const fitAndSync = () => {
       if (container.clientWidth === 0 || container.clientHeight === 0) return;
@@ -273,8 +319,7 @@ export function TerminalView({
     };
     // Keyboard/orientation changes must resize the PTY even while text is
     // selected; the selection overlay releases its handles when its shape changes.
-    const measure = fitAndSync;
-    measure();
+    fitAndSync();
     refit.current = fitAndSync;
 
     const detachTouchScroll = attachTouchScroll(container, view, () => cellHeight(view, container), {
@@ -294,109 +339,25 @@ export function TerminalView({
       sendInput.current(encoded);
       if (ctrl || alt) setModifiers({ ctrl: false, alt: false });
     };
-    sendInput.current = (text) => stream?.send(text);
+    sendInput.current = (text) => linkController.currentStream()?.send(text);
     send.current = (name: string) => {
       const { ctrl, alt } = armed.current;
       const encoded = encodeKey(name, ctrl, alt);
-      stream?.send(encoded);
+      linkController.currentStream()?.send(encoded);
       if (ctrl || alt) setModifiers({ ctrl: false, alt: false });
     };
     view.onData(typed);
 
-    const attach = () => {
-      clearInterval(timer);
-      stopped = false;
-      attempts += 1;
-      setLink({ phase: "connecting", attempt: attempts });
-      void api
-        .terminalStreamTicket(session.id, cursor)
-        .then((issued) => {
-          if (!live || stopped) return;
-          sent = "";
-          linkedAt = Date.now();
-          stream = openStream(issued.streamTicket, {
-            onReplay: (replay) => {
-              cursor = replay.start;
-              if (replay.truncated) {
-                decoder = new TextDecoder();
-                // The retained ring may begin in the middle of CSI or OSC.
-                // CAN makes xterm abandon that parser state without clearing
-                // the visible screen as a full terminal reset would.
-                view.write("\u0018");
-                setTerminalNotice(t("terminal.replayTruncated"));
-              }
-            },
-            onOutput: (chunk) => {
-              // A confirmation belongs to the exact terminal context the user
-              // reviewed. Any output can be a new prompt or the reconnect
-              // notice for a replacement shell, so require a fresh paste.
-              setPendingPaste(null);
-              view.write(decoder.decode(chunk, { stream: true }));
-              cursor = (cursor ?? 0) + chunk.byteLength;
-            },
-            onExit: () => {
-              view.options.cursorBlink = false;
-              stopped = true;
-              setPendingPaste(null);
-              setLink({ phase: "live" });
-              onExit?.();
-            },
-            onClose: () => {
-              stream = null;
-              setPendingPaste(null);
-              retry();
-            },
-          });
-          setLink({ phase: "live" });
-          if (!coarse && session.state !== "exited" && !search.hasFocus()) {
-            view.focus();
-          }
-          syncSize();
-        })
-        .catch((error: unknown) => {
-          if (!live || stopped) return;
-          if (failureCode(error) === "terminal_session_not_found") {
-            setLink({ phase: "stopped", gone: true });
-            return;
-          }
-          retry();
-        });
-    };
+    linkController.connect();
 
-    const retry = () => {
-      if (!live || stopped) return;
-      if (linkedAt !== 0 && Date.now() - linkedAt > settled) attempts = 1;
-      let left = backoff[Math.min(attempts - 1, backoff.length - 1)] ?? 1;
-      const next = attempts + 1;
-      setLink({ phase: "waiting", attempt: next, seconds: left });
-      timer = setInterval(() => {
-        left -= 1;
-        if (left > 0) {
-          setLink({ phase: "waiting", attempt: next, seconds: left });
-          return;
-        }
-        attach();
-      }, 1000);
-    };
-
-    control.current = {
-      now: attach,
-      stop: () => {
-        stopped = true;
-        clearInterval(timer);
-        setLink({ phase: "stopped", gone: false });
-      },
-    };
-    attach();
-
-    sendPaste.current = (text) => stream?.send(prepareTerminalPaste(text, view.modes.bracketedPasteMode));
+    sendPaste.current = (text) => linkController.currentStream()?.send(prepareTerminalPaste(text, view.modes.bracketedPasteMode));
     const detachClipboard = attachTerminalClipboard({
       container,
       terminal: view,
       paste: (text) => {
         const inspection = inspectTerminalPaste(text);
         if (inspection.requiresConfirmation) {
-          setPendingPaste({ sessionID: session.id, raw: text });
+          setPendingPaste({ sessionId: session.id, raw: text });
           return;
         }
         sendPaste.current(text);
@@ -406,15 +367,15 @@ export function TerminalView({
       settings: () => clipboardSettings.current,
       refuse: () => setProblem(t("terminal.clipboardRefused")),
       enhancedKey: (event) => encodeIntlYen(event, intlYenRef.current) ?? kittyKeyboard.encode(event),
-      sendEnhancedKey: (sequence) => stream?.send(sequence),
+      sendEnhancedKey: (sequence) => linkController.currentStream()?.send(sequence),
     });
 
-    const stopObservingSize = observeTerminalSize(view, container, measure);
+    const stopObservingSize = observeTerminalSize(view, container, fitAndSync);
 
     return () => {
-      live = false;
       terminalDisposed = true;
-      clearInterval(timer);
+      linkController.close();
+      streamLinkController.current = null;
       stopObservingSize();
       detachTouchScroll();
       releaseImeKeys();
@@ -427,7 +388,6 @@ export function TerminalView({
       terminalLinks.dispose();
       webgl?.dispose();
       unbindSearch();
-      stream?.close();
       view.dispose();
       terminal.current = null;
       sendInput.current = () => {};
@@ -455,11 +415,11 @@ export function TerminalView({
     if (terminal.current === null) return;
     const changed = applyTerminalRuntimeOptions(terminal.current.options, {
       cursorBlink: session.state !== "exited" && cursorAnimationEnabled(reducedMotion),
-      fontSize: fontSize ?? (window.matchMedia("(max-width: 767px)").matches ? 15 : 13),
+      fontSize: resolvedFontSize,
       scrollback: scrollbackLines,
     });
     if (changed.refit) refit.current?.();
-  }, [fontSize, reducedMotion, scrollbackLines, session.state]);
+  }, [resolvedFontSize, reducedMotion, scrollbackLines, session.state]);
 
   const connectionStatus = session.state === "connecting" || session.state === "reconnecting"
     ? connectionProgressText(t, session)
@@ -467,7 +427,7 @@ export function TerminalView({
       ? t("terminal.connected")
       : t("terminal.exitedWith", { code: String(session.exited?.code ?? 0) });
   const displayTitle = terminalDisplayTitle(session);
-  const subtitle = terminalSubtitle(session);
+  const subtitle = terminalSubtitle(session, t);
   const remoteAlias = session.kind === "ssh" ? session.alias : undefined;
 
   return (
@@ -543,8 +503,8 @@ export function TerminalView({
         session={session}
         problem={problem}
         link={link}
-        onLinkNow={() => control.current.now()}
-        onLinkStop={() => control.current.stop()}
+        onLinkNow={() => streamLinkController.current?.connect()}
+        onLinkStop={() => streamLinkController.current?.stopRetrying()}
         {...(onStopReconnect === undefined ? {} : { onStopReconnect })}
         {...(onReconnect === undefined ? {} : { onReconnect })}
       />
@@ -553,6 +513,7 @@ export function TerminalView({
         <div
           ref={host}
           data-terminal-host=""
+          {...escapeOwnerProps}
           {...(palette === undefined || palette === "" ? {} : { "data-term-palette": palette })}
           {...(font === undefined || font === "" ? {} : { "data-term-font": font })}
           {...(hasBackground ? { "data-term-background": background ?? "" } : {})}
@@ -597,9 +558,9 @@ export function TerminalView({
             : {})}
         />
       )}
-      {pendingPaste === null || pendingPaste.sessionID !== session.id ? null : (
+      {pendingPaste === null || pendingPaste.sessionId !== session.id ? null : (
         <TerminalPasteDialog
-          target={session.alias ?? session.title}
+          target={subtitle}
           text={pendingPaste.raw}
           onCancel={() => setPendingPaste(null)}
           onPaste={(raw) => {

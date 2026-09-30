@@ -9,6 +9,7 @@ import { credentialsApi } from "../api/credentials";
 import { terminalSessionsApi } from "../api/terminalSessions";
 import { vaultApi } from "../api/vault";
 import { keysApi } from "../keys/api";
+import { vaultStatus } from "../testing/vaultStatus";
 
 vi.mock("../api/config", async () => {
   const actual = await vi.importActual<typeof import("../api/config")>("../api/config");
@@ -69,16 +70,8 @@ const detail = {
   },
 };
 
-const consoleProps = {
-  consoles: {
-    sessions: [], maxSessions: 50, busy: false, problem: "", loaded: true,
-    rename: vi.fn(async () => true), open: vi.fn(async () => null), close: vi.fn(async () => undefined),
-    reconnect: vi.fn(async () => false),
-    stopReconnect: vi.fn(async () => false),
-    closeAll: vi.fn(async () => undefined),
-    refresh: vi.fn(async () => undefined), markExited: vi.fn(),
-  },
-  onShowConsole: vi.fn(),
+const terminalSessionProps = {
+  onOpenSSHSession: vi.fn(async () => undefined),
 };
 
 beforeEach(() => {
@@ -88,12 +81,10 @@ beforeEach(() => {
   vi.mocked(terminalSessionsApi.terminalSessions).mockResolvedValue({ sessions: [], maxSessions: 50 } as never);
   vi.mocked(terminalSessionsApi.closeTerminalSession).mockResolvedValue({ sessions: [], maxSessions: 50 } as never);
   vi.mocked(terminalSessionsApi.openTerminalSession).mockResolvedValue({
-    session: { id: "console-1", kind: "ssh", alias: "bastion", title: "bastion", startedAt: "2026-08-13T09:00:00Z", state: "connected", problem: "" },
+    session: { id: "session-1", kind: "ssh", alias: "bastion", title: "bastion", startedAt: "2026-08-13T09:00:00Z", state: "connected", problem: "" },
     streamTicket: "one-time",
   } as never);
-  vi.mocked(vaultApi.passwordVault).mockResolvedValue({
-    exists: true, unlocked: true, aliases: [], dedicatedKeyPassphrases: [], minPassphraseLength: 12,
-  } as never);
+  vi.mocked(vaultApi.passwordVault).mockResolvedValue(vaultStatus());
   vi.mocked(credentialsApi.credentials).mockResolvedValue({ credentials: [] } as never);
   vi.mocked(vaultApi.passwordEligibility).mockResolvedValue({
     alias: "bastion", storable: true, blockers: [], warnings: [],
@@ -121,7 +112,7 @@ describe("ConnectionsPage", () => {
     } as never);
     render(
       <ConnectionsPage
-        {...consoleProps}
+        {...terminalSessionProps}
         onInspector={() => undefined}
         location={{ pathname: "/connections/servers", search: "" }}
       />,
@@ -138,7 +129,7 @@ describe("ConnectionsPage", () => {
     const onNavigateLocation = vi.fn();
     render(
       <ConnectionsPage
-        {...consoleProps}
+        {...terminalSessionProps}
         onInspector={() => undefined}
         location={{ pathname: "/connections", search: "?tab=raw" }}
         onNavigateLocation={onNavigateLocation}
@@ -154,7 +145,7 @@ describe("ConnectionsPage", () => {
     window.localStorage.removeItem("sshc.connections.list-width.v1");
     render(
       <ConnectionsPage
-        {...consoleProps}
+        {...terminalSessionProps}
         onInspector={() => undefined}
         location={{ pathname: "/connections/servers", search: "" }}
       />,
@@ -172,7 +163,7 @@ describe("ConnectionsPage", () => {
   it("opens a connection and tab from the URL", async () => {
     render(
       <ConnectionsPage
-        {...consoleProps}
+        {...terminalSessionProps}
         onInspector={() => undefined}
         location={{
           pathname: "/connections/servers",
@@ -191,7 +182,7 @@ describe("ConnectionsPage", () => {
     const user = userEvent.setup();
     render(
       <ConnectionsPage
-        {...consoleProps}
+        {...terminalSessionProps}
         onInspector={() => undefined}
         location={{
           pathname: "/connections/servers",
@@ -215,7 +206,7 @@ describe("ConnectionsPage", () => {
     const onNavigateLocation = vi.fn();
     render(
       <ConnectionsPage
-        {...consoleProps}
+        {...terminalSessionProps}
         onInspector={() => undefined}
         location={{ pathname: "/connections/servers", search: "" }}
         onNavigateLocation={onNavigateLocation}
@@ -249,7 +240,7 @@ describe("ConnectionsPage", () => {
     } as never);
     render(
       <ConnectionsPage
-        {...consoleProps}
+        {...terminalSessionProps}
         onInspector={() => undefined}
         location={{
           pathname: "/connections/servers",
@@ -277,7 +268,7 @@ describe("ConnectionsPage", () => {
     const onNavigateLocation = vi.fn();
     const harness = render(
       <ConnectionsPage
-        {...consoleProps}
+        {...terminalSessionProps}
         onInspector={() => undefined}
         location={{ pathname: "/connections/files", search: "" }}
         onNavigateLocation={onNavigateLocation}
@@ -290,7 +281,7 @@ describe("ConnectionsPage", () => {
 
     harness.rerender(
       <ConnectionsPage
-        {...consoleProps}
+        {...terminalSessionProps}
         onInspector={() => undefined}
         location={{ pathname: "/connections/groups/gone", search: "" }}
         onNavigateLocation={onNavigateLocation}
@@ -305,7 +296,7 @@ describe("ConnectionsPage", () => {
     vi.mocked(configApi.host).mockRejectedValue(new Error("not found"));
     render(
       <ConnectionsPage
-        {...consoleProps}
+        {...terminalSessionProps}
         onInspector={() => undefined}
         location={{ pathname: "/connections/servers", search: "?path=config&host=gone&panel=basic" }}
         onNavigateLocation={onNavigateLocation}
@@ -326,7 +317,7 @@ describe("ConnectionsPage", () => {
       ],
     } as never);
 
-    render(<ConnectionsPage {...consoleProps} onInspector={() => undefined} />);
+    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
 
     expect(await screen.findByText(/Another block declares the same alias/)).toBeInTheDocument();
     expect(screen.queryByText(/catch-all block can override/)).not.toBeInTheDocument();
@@ -339,7 +330,7 @@ describe("ConnectionsPage", () => {
       transactionId: "t1", written: ["config"], preview: { operation: "connection.update", diffs: [] },
     } as never);
 
-    render(<ConnectionsPage {...consoleProps} onInspector={() => undefined} />);
+    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: /bastion/ }));
     const input = await screen.findByLabelText("Port");
@@ -360,7 +351,7 @@ describe("ConnectionsPage", () => {
 
   it("shares one committed resource load between the summary and persistent Basic editor", async () => {
     const user = userEvent.setup();
-    render(<ConnectionsPage {...consoleProps} onInspector={() => undefined} />);
+    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: /bastion/ }));
     expect(await screen.findByText("bastion:22")).toBeInTheDocument();
@@ -384,6 +375,18 @@ describe("ConnectionsPage", () => {
     expect(screen.getByLabelText("Port")).toHaveValue(2222);
   });
 
+  it("keeps a single management panel while the page renders again with it open", async () => {
+    const user = userEvent.setup();
+    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
+
+    await user.click(await screen.findByRole("button", { name: /bastion/ }));
+    await user.click(await screen.findByRole("button", { name: "Manage connection" }));
+    await user.click(screen.getByRole("tab", { name: "Analysis" }));
+    await user.click(screen.getByRole("tab", { name: "Basic" }));
+
+    expect(screen.getAllByRole("region", { name: "Manage connection" })).toHaveLength(1);
+  });
+
   it("registers a same-identity-aware navigation blocker and beforeunload guard for drafts", async () => {
     const user = userEvent.setup();
     let blocker: ((next: { pathname: string; search: string }) => boolean) | null = null;
@@ -392,7 +395,7 @@ describe("ConnectionsPage", () => {
     });
     render(
       <ConnectionsPage
-        {...consoleProps}
+        {...terminalSessionProps}
         onInspector={() => undefined}
         onNavigationBlockerChange={onNavigationBlockerChange}
       />,
@@ -451,7 +454,7 @@ describe("ConnectionsPage", () => {
     });
     render(
       <ConnectionsPage
-        {...consoleProps}
+        {...terminalSessionProps}
         onInspector={() => undefined}
         onNavigateLocation={onNavigateLocation}
         onNavigationBlockerChange={(next) => {
@@ -487,7 +490,7 @@ describe("ConnectionsPage", () => {
       .mockResolvedValueOnce(detail as never)
       .mockRejectedValueOnce(new Error("reload failed"));
 
-    render(<ConnectionsPage {...consoleProps} onInspector={() => undefined} />);
+    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: /bastion/ }));
     const input = await screen.findByLabelText("Port");
@@ -500,6 +503,7 @@ describe("ConnectionsPage", () => {
     )).toBeInTheDocument();
     expect(screen.queryByText(/Nothing was changed/)).not.toBeInTheDocument();
     expect(configApi.updateConnection).toHaveBeenCalledTimes(1);
+    expect(screen.getByLabelText("Port")).toHaveValue(2222);
     expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Reload saved connection" })).toBeEnabled();
 
@@ -507,36 +511,73 @@ describe("ConnectionsPage", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "Connect" })).toBeEnabled());
   });
 
-  it("opens the selected host in an embedded console only after an explicit connect action", async () => {
+  it("does not show a connection's reload failure after moving to another connection", async () => {
     const user = userEvent.setup();
-    const opened = {
-      id: "console-1", kind: "ssh" as const, alias: "bastion", title: "bastion",
-      startedAt: "2026-08-13T09:00:00Z", state: "connected" as const, problem: "",
+    const edgeHost = {
+      ...overview.hosts[0],
+      identity: { path: "config", alias: "edge" },
+      patterns: ["edge"],
+      line: 4,
     };
-    const consoles = { ...consoleProps.consoles, open: vi.fn(async () => opened) };
-    const onShowConsole = vi.fn();
+    const edgeDetail = {
+      ...detail,
+      form: { ...detail.form, entry: edgeHost, raw: "Host edge\n\tPort 22\n" },
+      metadata: { identity: edgeHost.identity },
+      effective: { ...detail.effective, alias: "edge" },
+      file: { ...detail.file, contents: "Host edge\n\tPort 22\n", digest: "edge" },
+    };
+    vi.mocked(configApi.overview).mockResolvedValue({
+      ...overview,
+      hosts: [...overview.hosts, edgeHost],
+    } as never);
+    vi.mocked(configApi.updateConnection).mockResolvedValue({
+      transactionId: "t1", written: ["config"], preview: { operation: "connection.update", diffs: [] },
+    } as never);
+    vi.mocked(configApi.host)
+      .mockResolvedValueOnce(detail as never)
+      .mockRejectedValueOnce(new Error("reload failed"))
+      .mockResolvedValue(edgeDetail as never);
+    const failure = "The settings were saved, but the updated connection could not be loaded. Reload this connection.";
+
+    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
+
+    await user.click(await screen.findByRole("button", { name: /^bastion/ }));
+    const input = await screen.findByLabelText("Port");
+    await user.clear(input);
+    await user.type(input, "2222");
+    await user.click(screen.getByRole("button", { name: "Save Basic settings" }));
+    expect(await screen.findByText(failure)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /^edge/ }));
+
+    expect(await screen.findByRole("heading", { name: "edge" })).toBeInTheDocument();
+    expect(screen.queryByText(failure)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Reload saved connection" })).not.toBeInTheDocument();
+  });
+
+  it("opens the selected host in an embedded terminal only after an explicit connect action", async () => {
+    const user = userEvent.setup();
+    const onOpenSSHSession = vi.fn(async () => undefined);
     render(
       <ConnectionsPage
-        {...consoleProps}
-        consoles={consoles}
-        onShowConsole={onShowConsole}
+        {...terminalSessionProps}
+        onOpenSSHSession={onOpenSSHSession}
         onInspector={() => undefined}
       />,
     );
 
-    expect(consoles.open).not.toHaveBeenCalled();
+    expect(onOpenSSHSession).not.toHaveBeenCalled();
     await user.click(await screen.findByRole("button", { name: /bastion/ }));
-    expect(consoles.open).not.toHaveBeenCalled();
+    expect(onOpenSSHSession).not.toHaveBeenCalled();
     await user.click(await screen.findByRole("button", { name: "Connect" }));
 
-    expect(consoles.open).toHaveBeenCalledWith({ kind: "ssh", alias: "bastion" });
-    await waitFor(() => expect(onShowConsole).toHaveBeenCalledWith("console-1"));
+    expect(onOpenSSHSession).toHaveBeenCalledWith("bastion");
   });
 
   it("keeps connection-specific display settings in the fourth editor tab", async () => {
     const user = userEvent.setup();
     const inspector = vi.fn();
-    render(<ConnectionsPage {...consoleProps} onInspector={inspector} />);
+    render(<ConnectionsPage {...terminalSessionProps} onInspector={inspector} />);
 
     await waitFor(() => expect(inspector).toHaveBeenCalled());
     expect(inspector.mock.calls.every(([content]) => content === null)).toBe(true);
@@ -558,7 +599,7 @@ describe("ConnectionsPage", () => {
     vi.mocked(configApi.host)
       .mockResolvedValueOnce(detail as never)
       .mockResolvedValue(savedDetail as never);
-    render(<ConnectionsPage {...consoleProps} onInspector={() => undefined} />);
+    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: /bastion/ }));
     await user.click(await screen.findByRole("tab", { name: "sshc" }));
@@ -572,9 +613,13 @@ describe("ConnectionsPage", () => {
     await user.click(screen.getByRole("button", { name: "Save sshc-only settings" }));
 
     await waitFor(() => expect(configApi.save).toHaveBeenCalledTimes(1));
+    // 送るのはこの接続 1 件と、読み込んだときのその値だけで、metadata 全体は送らない。
     expect(configApi.save).toHaveBeenCalledWith({
       kind: "metadata",
-      metadata: { schemaVersion: 1, hosts: [{ identity: { path: "config", alias: "bastion" }, encoding: "shift_jis" }] },
+      path: "config",
+      alias: "bastion",
+      hostMetadataBase: { identity: { path: "config", alias: "bastion" } },
+      hostMetadata: { identity: { path: "config", alias: "bastion" }, encoding: "shift_jis" },
     });
     await waitFor(() => expect(screen.queryByRole("button", { name: "Save sshc-only settings" })).not.toBeInTheDocument());
     expect(screen.getByLabelText("Remote text encoding")).toHaveValue("shift_jis");
@@ -596,7 +641,7 @@ describe("ConnectionsPage", () => {
     vi.mocked(configApi.save).mockResolvedValue({
       transactionId: "t1", written: ["config"], preview: { operation: "config.save", diffs: [] },
     } as never);
-    render(<ConnectionsPage {...consoleProps} onInspector={() => undefined} />);
+    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
     return { finishListReload: () => finishListReload() };
   }
 
@@ -637,6 +682,45 @@ describe("ConnectionsPage", () => {
     await act(async () => finishListReload());
   });
 
+  it("keeps the saved Basic values on screen while the saved connection is read again", async () => {
+    const user = userEvent.setup();
+    const { finishListReload } = renderWhileTheListReloads();
+    vi.mocked(configApi.updateConnection).mockResolvedValue({
+      transactionId: "t1", written: ["config"], preview: { operation: "connection.update", diffs: [] },
+    } as never);
+
+    await user.click(await screen.findByRole("button", { name: /^bastion/ }));
+    const port = await screen.findByLabelText("Port");
+    await user.clear(port);
+    await user.type(port, "2222");
+    await user.click(screen.getByRole("button", { name: "Save Basic settings" }));
+    await waitFor(() => expect(configApi.overview).toHaveBeenCalledTimes(2));
+
+    expect(screen.getByLabelText("Port")).toHaveValue(2222);
+    expect(screen.queryByRole("button", { name: "Save Basic settings" })).not.toBeInTheDocument();
+    await act(async () => finishListReload());
+  });
+
+  it("asks nothing when another connection is chosen right after the Basic settings are saved", async () => {
+    const user = userEvent.setup();
+    const { finishListReload } = renderWhileTheListReloads();
+    vi.mocked(configApi.updateConnection).mockResolvedValue({
+      transactionId: "t1", written: ["config"], preview: { operation: "connection.update", diffs: [] },
+    } as never);
+
+    await user.click(await screen.findByRole("button", { name: /^bastion/ }));
+    const port = await screen.findByLabelText("Port");
+    await user.clear(port);
+    await user.type(port, "2222");
+    await user.click(screen.getByRole("button", { name: "Save Basic settings" }));
+    await waitFor(() => expect(configApi.overview).toHaveBeenCalledTimes(2));
+    await user.click(screen.getByRole("button", { name: /^edge/ }));
+
+    expect(screen.queryByRole("dialog", { name: "Discard changes" })).not.toBeInTheDocument();
+    await waitFor(() => expect(configApi.host).toHaveBeenCalledWith("config", "edge"));
+    await act(async () => finishListReload());
+  });
+
   it("moves the focus to the reload button when the reload after a save fails, without saying it is reloading", async () => {
     const user = userEvent.setup();
     vi.mocked(configApi.overview)
@@ -645,7 +729,7 @@ describe("ConnectionsPage", () => {
     vi.mocked(configApi.save).mockResolvedValue({
       transactionId: "t1", written: ["sshc/metadata.json"], preview: { operation: "config.metadata", diffs: [] },
     } as never);
-    render(<ConnectionsPage {...consoleProps} onInspector={() => undefined} />);
+    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: /^bastion/ }));
     await user.click(await screen.findByRole("tab", { name: "sshc" }));
@@ -666,7 +750,7 @@ describe("ConnectionsPage", () => {
     vi.mocked(configApi.save).mockResolvedValue({
       transactionId: "t1", written: ["sshc/metadata.json"], preview: { operation: "config.metadata", diffs: [] },
     } as never);
-    render(<ConnectionsPage {...consoleProps} onInspector={() => undefined} />);
+    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: /^bastion/ }));
     await user.click(await screen.findByRole("tab", { name: "sshc" }));
@@ -684,7 +768,7 @@ describe("ConnectionsPage", () => {
       code: "metadata_invalid",
       message: "request rejected",
     }));
-    render(<ConnectionsPage {...consoleProps} onInspector={() => undefined} />);
+    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: /bastion/ }));
     await user.click(await screen.findByRole("tab", { name: "sshc" }));
@@ -699,11 +783,48 @@ describe("ConnectionsPage", () => {
     expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
   });
 
+  it("says the sshc settings changed elsewhere and keeps the draft when the save is refused as stale", async () => {
+    const user = userEvent.setup();
+    vi.mocked(configApi.save).mockRejectedValue(new ApiError("metadata_changed", 409, {
+      code: "metadata_changed",
+      message: "metadata changed since it was loaded; reload before saving",
+    }));
+    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
+
+    await user.click(await screen.findByRole("button", { name: /bastion/ }));
+    await user.click(await screen.findByRole("tab", { name: "sshc" }));
+    await user.selectOptions(screen.getByLabelText("OSC 52 clipboard"), "deny");
+    await user.click(screen.getByRole("button", { name: "Save sshc-only settings" }));
+
+    expect(await screen.findByText(/sshc settings changed in another window, the CLI or sync/)).toBeInTheDocument();
+    expect(screen.getByLabelText("OSC 52 clipboard")).toHaveValue("deny");
+    expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+  });
+
+  it("says the settings changed elsewhere when discarding settings whose connection is gone is refused as stale", async () => {
+    const user = userEvent.setup();
+    vi.mocked(configApi.overview).mockResolvedValue({
+      ...overview,
+      metadata: { schemaVersion: 1, hosts: [{ identity: { path: "config", alias: "retired" }, note: "old", orphan: true }] },
+    } as never);
+    vi.mocked(configApi.save).mockRejectedValue(new ApiError("metadata_changed", 409, {
+      code: "metadata_changed",
+      message: "metadata changed since it was loaded; reload before saving",
+    }));
+    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
+
+    await user.click(await screen.findByRole("button", { name: "Discard retired settings" }));
+
+    await waitFor(() => expect(configApi.save).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText(/sshc settings changed in another window, the CLI or sync/)).toBeInTheDocument();
+    expect(screen.getByText("retired in config")).toBeInTheDocument();
+  });
+
   it("discards the sshc draft when leaving for another connection is confirmed", async () => {
     const user = userEvent.setup();
     const edgeHost = { ...overview.hosts[0], identity: { path: "config", alias: "edge" }, patterns: ["edge"], line: 4 };
     vi.mocked(configApi.overview).mockResolvedValue({ ...overview, hosts: [...overview.hosts, edgeHost] } as never);
-    render(<ConnectionsPage {...consoleProps} onInspector={() => undefined} />);
+    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: /^bastion/ }));
     await user.click(await screen.findByRole("tab", { name: "sshc" }));
@@ -718,7 +839,7 @@ describe("ConnectionsPage", () => {
 
   it("keeps global terminal editing out of connection detail", async () => {
     const user = userEvent.setup();
-    render(<ConnectionsPage {...consoleProps} onInspector={() => undefined} />);
+    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
     await user.click(await screen.findByRole("button", { name: /bastion/ }));
 
     expect(screen.queryByLabelText("Open with")).not.toBeInTheDocument();
@@ -744,7 +865,7 @@ describe("ConnectionsPage", () => {
       },
     } as never);
 
-    render(<ConnectionsPage {...consoleProps} onInspector={() => undefined} />);
+    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: /bastion/ }));
     const input = await screen.findByLabelText("Port");
@@ -782,7 +903,7 @@ describe("ConnectionsPage", () => {
       },
     } as never);
 
-    render(<ConnectionsPage {...consoleProps} onInspector={() => undefined} />);
+    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: /bastion/ }));
     const input = await screen.findByLabelText("Port");
@@ -816,7 +937,7 @@ describe("ConnectionsPage", () => {
       return await new Promise(() => undefined);
     });
 
-    render(<ConnectionsPage {...consoleProps} onInspector={() => undefined} />);
+    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
     await user.click(await screen.findByRole("button", { name: /bastion/ }));
     expect(await screen.findByRole("heading", { name: /^bastion$/ })).toBeInTheDocument();
 
@@ -839,7 +960,7 @@ describe("ConnectionsPage", () => {
       ],
     } as never);
 
-    render(<ConnectionsPage {...consoleProps} onInspector={() => undefined} />);
+    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
 
     expect(await screen.findByRole("button", { name: "bastion" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Host \*/ })).not.toBeInTheDocument();
@@ -860,7 +981,7 @@ describe("ConnectionsPage", () => {
       },
     }));
 
-    render(<ConnectionsPage {...consoleProps} onInspector={() => undefined} />);
+    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: /bastion/ }));
     const input = await screen.findByLabelText("Port");
@@ -879,7 +1000,7 @@ describe("ConnectionsPage", () => {
       code: "alias_already_declared",
       message: "request rejected",
     }));
-    render(<ConnectionsPage {...consoleProps} onInspector={() => undefined} />);
+    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: /bastion/ }));
     await user.click(screen.getByRole("button", { name: "Manage connection" }));
@@ -897,7 +1018,7 @@ describe("ConnectionsPage", () => {
       code: "alias_already_declared",
       message: "request rejected",
     }));
-    render(<ConnectionsPage {...consoleProps} onInspector={() => undefined} />);
+    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
 
     await user.click(await screen.findByRole("button", { name: /bastion/ }));
     await user.click(screen.getByRole("button", { name: "Manage connection" }));
@@ -935,7 +1056,7 @@ describe("ConnectionsPage", () => {
 
     render(
       <ConnectionsPage
-        {...consoleProps}
+        {...terminalSessionProps}
         onInspector={() => undefined}
         onNavigateLocation={onNavigateLocation}
       />,
@@ -972,7 +1093,7 @@ describe("ConnectionsPage", () => {
     } as never);
     render(
       <ConnectionsPage
-        {...consoleProps}
+        {...terminalSessionProps}
         onInspector={() => undefined}
         onNavigateLocation={onNavigateLocation}
       />,
@@ -1001,7 +1122,7 @@ describe("ConnectionsPage", () => {
     } as never);
     render(
       <ConnectionsPage
-        {...consoleProps}
+        {...terminalSessionProps}
         onInspector={() => undefined}
         onNavigateLocation={onNavigateLocation}
       />,
@@ -1041,7 +1162,7 @@ describe("ConnectionsPage", () => {
 
     render(
       <ConnectionsPage
-        {...consoleProps}
+        {...terminalSessionProps}
         onInspector={() => undefined}
         onNavigateLocation={onNavigateLocation}
       />,
@@ -1085,7 +1206,7 @@ describe("ConnectionsPage", () => {
     vi.mocked(configApi.save).mockRejectedValue(new Error("move conflict"));
     render(
       <ConnectionsPage
-        {...consoleProps}
+        {...terminalSessionProps}
         onInspector={() => undefined}
         onNavigateLocation={onNavigateLocation}
       />,
@@ -1112,7 +1233,7 @@ describe("ConnectionsPage", () => {
 
     render(
       <ConnectionsPage
-        {...consoleProps}
+        {...terminalSessionProps}
         onInspector={() => undefined}
         onNavigateLocation={onNavigateLocation}
       />,
@@ -1138,7 +1259,7 @@ describe("ConnectionsPage", () => {
     vi.mocked(configApi.save).mockRejectedValue(new Error("delete conflict"));
     render(
       <ConnectionsPage
-        {...consoleProps}
+        {...terminalSessionProps}
         onInspector={() => undefined}
         onNavigateLocation={onNavigateLocation}
       />,
@@ -1174,7 +1295,7 @@ describe("taking a connection out of every group", () => {
       transactionId: "tx", written: [], preview: { operation: "config.move", diffs: [] },
     } as never);
 
-    render(<ConnectionsPage {...consoleProps} onInspector={() => undefined} />);
+    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
     await user.click(await screen.findByRole("button", { name: /bastion/ }));
     await user.click(screen.getByRole("button", { name: "Manage connection" }));
     await user.selectOptions(await screen.findByLabelText("Primary group"), "");
@@ -1247,7 +1368,7 @@ describe("dropping in the tree", () => {
   });
 
   it("moves a direct connection into a visible child group", async () => {
-    render(<ConnectionsPage {...consoleProps} onInspector={() => undefined} />);
+    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
     const row = await screen.findByRole("button", { name: /nas/ });
 
     drag(row, screen.getByRole("button", { name: "home/eu" }), {
@@ -1282,7 +1403,7 @@ describe("dropping in the tree", () => {
 
     render(
       <ConnectionsPage
-        {...consoleProps}
+        {...terminalSessionProps}
         onInspector={() => undefined}
         onNavigateLocation={onNavigateLocation}
       />,
@@ -1300,7 +1421,7 @@ describe("dropping in the tree", () => {
   });
 
   it("moves a connection out of every group by sending it to the entry file", async () => {
-    render(<ConnectionsPage {...consoleProps} onInspector={() => undefined} />);
+    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
     const row = await screen.findByRole("button", { name: /nas/ });
 
     drag(row, screen.getByRole("button", { name: "Ungrouped" }), {
@@ -1318,7 +1439,7 @@ describe("dropping in the tree", () => {
     vi.mocked(configApi.renameGroup).mockResolvedValue({
       transactionId: "tx", written: [], preview: { operation: "config.group_rename", diffs: [] },
     } as never);
-    render(<ConnectionsPage {...consoleProps} onInspector={() => undefined} />);
+    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
     await screen.findByRole("button", { name: /nas/ });
     const source = screen.getByRole("button", { name: "work" });
 
@@ -1368,7 +1489,7 @@ describe("dropping in the tree", () => {
     } as never);
     render(
       <ConnectionsPage
-        {...consoleProps}
+        {...terminalSessionProps}
         onInspector={() => undefined}
         onNavigateLocation={onNavigateLocation}
       />,
@@ -1390,7 +1511,7 @@ describe("dropping in the tree", () => {
     vi.mocked(configApi.renameGroup).mockResolvedValue({
       transactionId: "tx", written: [], preview: { operation: "config.group_rename", diffs: [] },
     } as never);
-    render(<ConnectionsPage {...consoleProps} onInspector={() => undefined} />);
+    render(<ConnectionsPage {...terminalSessionProps} onInspector={() => undefined} />);
     await screen.findByRole("button", { name: /nas/ });
     const source = screen.getByRole("button", { name: "home/eu" });
 

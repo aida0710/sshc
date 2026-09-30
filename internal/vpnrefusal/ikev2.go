@@ -7,8 +7,8 @@ var ikev2RouteReasons = map[vpn.FailureReason]string{
 	vpn.FailureIKEAuthentication:   "IKEv2の認証に失敗しました。ユーザー名、パスワード、事前共有鍵、IDを確認してください。",
 	vpn.FailureIKEServerUnverified: "VPNサーバーの証明書を検証できませんでした。サーバーのIDとCAの証明書を確認してください。",
 	vpn.FailureIKEProposalMismatch: "暗号スイートのネゴシエーションに失敗しました。IKEとESPの暗号スイートを確認してください。",
-	vpn.FailureIKENoResponse: "VPNサーバーから応答がありません。サーバーの指定と、UDPの500番と4500番に届くかを" +
-		"確認してください。",
+	vpn.FailureIKENoResponse: "VPNサーバーから応答がありません。サーバーの指定と、UDPの500番と4500番でVPNサーバーに" +
+		"到達できるかを確認してください。",
 	vpn.FailureXFRMInterface: "IPsecのXFRMインターフェースを作成できませんでした。DockerのLinuxカーネルが" +
 		"対応していない可能性があります。",
 }

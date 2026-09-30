@@ -21,10 +21,8 @@ func (s *Service) ConnectionEncoding(alias string) (textencoding.Name, error) {
 	if err != nil {
 		return "", err
 	}
-	for _, host := range stored.Hosts {
-		if host.Identity == identity {
-			return textencoding.Parse(host.Encoding)
-		}
+	if index := hostMetadataIndex(stored.Hosts, identity); index >= 0 {
+		return textencoding.Parse(stored.Hosts[index].Encoding)
 	}
 	return textencoding.UTF8, nil
 }

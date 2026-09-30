@@ -32,8 +32,18 @@ export function TerminalLinkPopover({
 }) {
   const t = useTranslate();
   const panel = useRef<HTMLDivElement>(null);
+  const firstAction = useRef<HTMLButtonElement>(null);
 
-  useDismissibleLayer({ open: true, containerRefs: [panel], onDismiss: onClose });
+  // キーボードやスクリーンリーダーでも操作を選べるように、開いたら最初の操作へ
+  // フォーカスを移し、Tab をパネルの中で回す。外へ出すと xterm が Tab をシェルへ
+  // 送ってしまう。閉じたら、開く前にフォーカスのあったターミナルへ戻る。
+  useDismissibleLayer({
+    open: true,
+    containerRefs: [panel],
+    onDismiss: onClose,
+    initialFocusRef: firstAction,
+    trapFocus: true,
+  });
 
   function copy() {
     void clipboard.writeText(selection.link.target).finally(onClose);
@@ -51,6 +61,19 @@ export function TerminalLinkPopover({
     onClose();
   }
 
+  const actions: { label: string; run: () => void }[] = [
+    ...(selection.link.kind === "url"
+      ? [{ label: t("terminal.linkOpenBrowser"), run: openURL }]
+      : onRemotePath === undefined
+        ? []
+        : [
+            { label: t("terminal.linkBrowseSFTP"), run: () => remote("browse") },
+            { label: t("terminal.linkEditSFTP"), run: () => remote("edit") },
+            { label: t("terminal.linkDownloadSFTP"), run: () => remote("download") },
+          ]),
+    { label: t("terminal.linkCopy"), run: copy },
+  ];
+
   return createPortal(
     <div
       ref={panel}
@@ -61,16 +84,17 @@ export function TerminalLinkPopover({
     >
       <p className="truncate px-2 py-1 font-mono text-xs text-ink-muted" title={selection.link.target}>{selection.link.target}</p>
       <div className="mt-1 grid gap-1">
-        {selection.link.kind === "url" ? (
-          <button type="button" className="rounded px-2 py-1.5 text-left text-sm hover:bg-select-fill" onClick={openURL}>{t("terminal.linkOpenBrowser")}</button>
-        ) : onRemotePath === undefined ? null : (
-          <>
-            <button type="button" className="rounded px-2 py-1.5 text-left text-sm hover:bg-select-fill" onClick={() => remote("browse")}>{t("terminal.linkBrowseSFTP")}</button>
-            <button type="button" className="rounded px-2 py-1.5 text-left text-sm hover:bg-select-fill" onClick={() => remote("edit")}>{t("terminal.linkEditSFTP")}</button>
-            <button type="button" className="rounded px-2 py-1.5 text-left text-sm hover:bg-select-fill" onClick={() => remote("download")}>{t("terminal.linkDownloadSFTP")}</button>
-          </>
-        )}
-        <button type="button" className="rounded px-2 py-1.5 text-left text-sm hover:bg-select-fill" onClick={copy}>{t("terminal.linkCopy")}</button>
+        {actions.map((action, index) => (
+          <button
+            key={action.label}
+            ref={index === 0 ? firstAction : undefined}
+            type="button"
+            className="rounded px-2 py-1.5 text-left text-sm hover:bg-select-fill"
+            onClick={action.run}
+          >
+            {action.label}
+          </button>
+        ))}
       </div>
     </div>,
     document.body,

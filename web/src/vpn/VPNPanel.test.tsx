@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/client";
 import type { VPNApi, VPNOverview, VPNProfile } from "../api/vpn";
+import { captureNavigationBlocker } from "../testing/navigationBlocker";
 import { VPNPanel } from "./VPNPanel";
 import { overviewRefreshIntervalMs, routeProgressIntervalMs } from "./vpnOverviewPolling";
 
@@ -113,6 +114,17 @@ describe("VPNPanel", () => {
     expect(within(route).getByText("L2TP/IPsec · vpn.example.jp · route open")).toBeVisible();
     const connections = within(route).getByRole("list", { name: "Connections using this profile" });
     expect(within(connections).getByText("lab")).toBeVisible();
+  });
+
+  it("reads the VPN profiles again when asked after the first read fails", async () => {
+    const vpnOverview = vi.fn()
+      .mockRejectedValueOnce(new Error("vpn_failed"))
+      .mockResolvedValue(overview());
+    render(<VPNPanel api={buildApi({ vpnOverview })} />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Try again" }));
+
+    expect(await screen.findByRole("article", { name: "tohoku" })).toBeVisible();
   });
 
   it("only lists the connections, and says the profile is attached to a connection in Connections", async () => {
@@ -637,6 +649,36 @@ describe("VPNPanel", () => {
     await waitFor(() => expect(within(route).getByRole("button", { name: "Connect" })).toBeEnabled());
   });
 
+  it("asks before removing a profile, and removes it once confirmed", async () => {
+    const user = userEvent.setup();
+    const removeVPNProfile = vi.fn().mockResolvedValue(overview({ profiles: [] }));
+    render(<VPNPanel api={buildApi({ removeVPNProfile })} />);
+    const route = await screen.findByRole("article", { name: "tohoku" });
+
+    await user.click(within(route).getByRole("button", { name: "Remove" }));
+
+    const dialog = screen.getByRole("dialog", { name: "Remove tohoku?" });
+    expect(removeVPNProfile).not.toHaveBeenCalled();
+    await user.click(within(dialog).getByRole("button", { name: "Remove" }));
+    expect(removeVPNProfile).toHaveBeenCalledWith("tohoku");
+    expect(await screen.findByText("No VPN profiles yet. Add one below.")).toBeVisible();
+    expect(screen.queryByRole("article", { name: "tohoku" })).toBeNull();
+  });
+
+  it("keeps the profile when removing is cancelled", async () => {
+    const user = userEvent.setup();
+    const removeVPNProfile = vi.fn().mockResolvedValue(overview({ profiles: [] }));
+    render(<VPNPanel api={buildApi({ removeVPNProfile })} />);
+    const route = await screen.findByRole("article", { name: "tohoku" });
+
+    await user.click(within(route).getByRole("button", { name: "Remove" }));
+    await user.click(within(screen.getByRole("dialog", { name: "Remove tohoku?" })).getByRole("button", { name: "Cancel" }));
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(removeVPNProfile).not.toHaveBeenCalled();
+    expect(screen.getByRole("article", { name: "tohoku" })).toBeVisible();
+  });
+
   it("keeps what was typed, secrets included, when the engine refuses to save", async () => {
     const user = userEvent.setup();
     const createVPNProfile = vi.fn().mockRejectedValue(
@@ -683,7 +725,7 @@ describe("VPNPanel", () => {
 
     const resolvers = within(form).getByLabelText("DNS inside the VPN");
     expect(resolvers).toHaveAttribute("aria-invalid", "true");
-    expect(resolvers).toHaveAccessibleDescription("Not an IPv4 address.");
+    expect(resolvers).toHaveAccessibleDescription(expect.stringContaining("Not an IPv4 address."));
     expect(createVPNProfile).not.toHaveBeenCalled();
   });
 
@@ -719,7 +761,7 @@ describe("VPNPanel", () => {
     await user.click(within(form).getByRole("button", { name: "Save" }));
 
     expect(within(form).getByLabelText("Word to send as the second answer")).toHaveAccessibleDescription(
-      "Too long: up to 32 characters.",
+      expect.stringContaining("Too long: up to 32 characters."),
     );
     expect(createVPNProfile).not.toHaveBeenCalled();
   });
@@ -959,5 +1001,47 @@ describe("VPNPanel", () => {
 
     expect(await within(form).findByText("Enter a value.")).toBeVisible();
     expect(screen.getByRole("region", { name: "Edit tohoku" })).toBeVisible();
+  });
+
+  it("asks before opening another profile's editor over changed values, and switches without asking when nothing changed", async () => {
+    const user = userEvent.setup();
+    const osakaProfile: VPNProfile = { name: "osaka", backend: "l2tp_ipsec", l2tp: { server: "vpn.osaka.example.jp", username: "tester" } };
+    const twoProfiles = overview();
+    twoProfiles.profiles.push({ profile: osakaProfile, running: false, relaySocket: "", connections: [], openConnections: 0 });
+    render(<VPNPanel api={buildApi({ vpnOverview: vi.fn().mockResolvedValue(twoProfiles) })} />);
+
+    await user.click(within(await screen.findByRole("article", { name: "tohoku" })).getByRole("button", { name: "Edit" }));
+    const tohoku = screen.getByRole("region", { name: "Edit tohoku" });
+    // 取り出したシークレットが欄に入っただけでは、変えたことにならない。
+    await waitFor(() => expect(within(tohoku).getByLabelText("VPN password")).toHaveValue("the stored password"));
+    await user.click(within(screen.getByRole("article", { name: "osaka" })).getByRole("button", { name: "Edit" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    const osaka = screen.getByRole("region", { name: "Edit osaka" });
+
+    await user.type(within(osaka).getByLabelText("VPN server"), "x");
+    await user.click(within(screen.getByRole("article", { name: "tohoku" })).getByRole("button", { name: "Edit" }));
+    expect(screen.getByRole("dialog", { name: "Discard unsaved changes?" })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Keep editing" }));
+    expect(within(screen.getByRole("region", { name: "Edit osaka" })).getByLabelText("VPN server")).toHaveValue("vpn.osaka.example.jpx");
+
+    await user.click(within(screen.getByRole("article", { name: "tohoku" })).getByRole("button", { name: "Edit" }));
+    await user.click(screen.getByRole("button", { name: "Discard" }));
+    expect(screen.getByRole("region", { name: "Edit tohoku" })).toBeVisible();
+    expect(screen.queryByRole("region", { name: "Edit osaka" })).toBeNull();
+  });
+
+  it("stops leaving the screen while a new profile is being typed", async () => {
+    const user = userEvent.setup();
+    const navigation = captureNavigationBlocker();
+    const onNavigateLocation = vi.fn();
+    render(<VPNPanel api={buildApi()} onNavigationBlockerChange={navigation.onNavigationBlockerChange} onNavigateLocation={onNavigateLocation} />);
+    const form = await screen.findByRole("region", { name: "Add a VPN profile" });
+    expect(navigation.registered()).toBe(false);
+
+    await user.type(within(form).getByLabelText("Name"), "lab");
+    expect(navigation.tryNavigate("/keys")).toBe(false);
+    await user.click(screen.getByRole("button", { name: "Discard" }));
+
+    expect(onNavigateLocation).toHaveBeenCalledWith("/keys");
   });
 });

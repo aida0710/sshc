@@ -35,9 +35,9 @@ export function InputDialog({
   const inputRef = useRef<HTMLInputElement>(null);
   const normalized = value.trim();
   const validation = useMemo(() => validate?.(normalized) ?? "", [normalized, validate]);
-  const errorID = `${id}-error`;
-  const inputID = `${id}-input`;
-  const descriptionID = description === undefined ? undefined : `${id}-description`;
+  const errorId = `${id}-error`;
+  const inputId = `${id}-input`;
+  const descriptionId = description === undefined ? undefined : `${id}-description`;
 
   function submit() {
     setTouched(true);
@@ -48,7 +48,7 @@ export function InputDialog({
   return (
     <ModalShell
       labelledBy={id}
-      {...(descriptionID === undefined ? {} : { describedBy: descriptionID })}
+      {...(descriptionId === undefined ? {} : { describedBy: descriptionId })}
       onDismiss={onCancel}
       initialFocusRef={inputRef}
       {...(returnFocusRef === undefined ? {} : { returnFocusRef })}
@@ -56,7 +56,7 @@ export function InputDialog({
     >
       <div>
         <h2 id={id} className="text-base font-semibold text-ink">{heading}</h2>
-        {description === undefined ? null : <div id={descriptionID} className={`mt-1 ${hintText}`}>{description}</div>}
+        {description === undefined ? null : <div id={descriptionId} className={`mt-1 ${hintText}`}>{description}</div>}
       </div>
       <form
         className="flex flex-col gap-4"
@@ -66,18 +66,18 @@ export function InputDialog({
         }}
       >
         <div className="flex flex-col gap-1">
-          <label htmlFor={inputID} className="text-xs font-medium tracking-wide text-ink-muted">{label}</label>
+          <label htmlFor={inputId} className="text-xs font-medium tracking-wide text-ink-muted">{label}</label>
           <input
-            id={inputID}
+            id={inputId}
             ref={inputRef}
             value={value}
             inputMode={inputMode}
             aria-invalid={touched && validation !== ""}
-            aria-describedby={touched && validation !== "" ? errorID : undefined}
+            aria-describedby={touched && validation !== "" ? errorId : undefined}
             onChange={(event) => setValue(event.target.value)}
             className={control}
           />
-          {touched && validation !== "" ? <span id={errorID} role="alert" className="text-xs text-danger">{validation}</span> : null}
+          {touched && validation !== "" ? <span id={errorId} role="alert" className="text-xs text-danger">{validation}</span> : null}
         </div>
         <div className="flex justify-end gap-2">
           <Button onClick={onCancel}>{cancelLabel}</Button>

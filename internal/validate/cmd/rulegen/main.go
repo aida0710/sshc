@@ -89,7 +89,10 @@ func write(root string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(directory, "corpus.generated.json"), append(body, '\n'), 0o644)
+	if err := os.WriteFile(filepath.Join(directory, "corpus.generated.json"), append(body, '\n'), 0o644); err != nil {
+		return err
+	}
+	return writeShortcutRules(directory)
 }
 
 func constants() string {

@@ -1,4 +1,5 @@
 import type { SFTPSortState } from "./SFTPPanel";
+import { newIdentifier } from "../ui/randomIdentifier";
 
 // The SFTP workspace shows one or two panes side by side. Each pane owns an
 // ordered list of tabs and remembers which one is selected. Every pane always
@@ -13,16 +14,12 @@ export type PaneSide = "left" | "right";
 // Where a tab is dropped: onto another pane, or beside the only pane to open a second one.
 export type TabDestination = { paneId: string } | { side: PaneSide };
 
-export function identifier(): string {
-  return globalThis.crypto?.randomUUID?.() ?? `tab_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-}
-
 export function blankTab(): SFTPTab {
-  return { id: identifier(), alias: "", path: "", sort: { key: "name", direction: "ascending" } };
+  return { id: newIdentifier(), alias: "", path: "", sort: { key: "name", direction: "ascending" } };
 }
 
 export function paneOf(tabs: SFTPTab[], activeId = tabs[0]?.id ?? ""): SFTPPane {
-  return { id: identifier(), tabs, activeId };
+  return { id: newIdentifier(), tabs, activeId };
 }
 
 export function blankPane(): SFTPPane {

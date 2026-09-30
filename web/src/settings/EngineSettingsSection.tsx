@@ -1,10 +1,13 @@
-import { useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import type { SettingsApi } from "../api/settings";
 import { useTranslate } from "../i18n/context";
+import type { MessageKey } from "../i18n/messages";
 import { Field, control } from "../ui/form";
 import { Button, Notice } from "../ui/surface";
 import { ActionArea, SettingsSection } from "./SettingsSection";
 import { useAsyncOperation } from "../ui/useAsyncOperation";
+import { SettingsLoadFailure } from "./SettingsLoadFailure";
+import { useSettingsLoad } from "./useSettingsLoad";
 
 export type EngineSettingsApi = Pick<SettingsApi, "engineSettings" | "setEngineSettings">;
 
@@ -18,28 +21,27 @@ type EngineDraft = {
 const initialDraft: EngineDraft = { port: "", vaultAutoLockMode: "idle", vaultAutoLockValue: "12", vaultAutoLockUnit: "hours" };
 
 // The engine's listening port and how long the vault stays open unattended.
-export function EngineSettingsSection({ api, showHeading }: { api: EngineSettingsApi; showHeading: boolean }) {
+// The engine never locks a passwordless vault, so there the saved auto-lock
+// choice stays visible but cannot be changed until a master password is set.
+export function EngineSettingsSection({ api, showHeading, passwordless }: {
+  api: EngineSettingsApi;
+  showHeading: boolean;
+  passwordless: boolean;
+}) {
   const t = useTranslate();
   const [draft, setDraft] = useState<EngineDraft>(initialDraft);
-  const [loaded, setLoaded] = useState(false);
   const save = useAsyncOperation();
-
-  useEffect(() => {
-    let active = true;
-    void api.engineSettings()
-      .then((settings) => {
-        if (!active) return;
-        setDraft({
-          port: settings.port === undefined ? "" : String(settings.port),
-          vaultAutoLockMode: settings.vaultAutoLock?.mode === "restart" ? "restart" : "idle",
-          vaultAutoLockValue: settings.vaultAutoLock?.mode === "idle" ? String(settings.vaultAutoLock.value ?? 12) : initialDraft.vaultAutoLockValue,
-          vaultAutoLockUnit: settings.vaultAutoLock?.mode === "idle" ? settings.vaultAutoLock.unit ?? "hours" : initialDraft.vaultAutoLockUnit,
-        });
-      })
-      .catch(() => undefined)
-      .finally(() => { if (active) setLoaded(true); });
-    return () => { active = false; };
+  const loadSettings = useCallback(async () => {
+    const settings = await api.engineSettings();
+    setDraft({
+      port: settings.port === undefined ? "" : String(settings.port),
+      vaultAutoLockMode: settings.vaultAutoLock?.mode === "restart" ? "restart" : "idle",
+      vaultAutoLockValue: settings.vaultAutoLock?.mode === "idle" ? String(settings.vaultAutoLock.value ?? 12) : initialDraft.vaultAutoLockValue,
+      vaultAutoLockUnit: settings.vaultAutoLock?.mode === "idle" ? settings.vaultAutoLock.unit ?? "hours" : initialDraft.vaultAutoLockUnit,
+    });
   }, [api]);
+  const settingsLoad = useSettingsLoad(loadSettings);
+  const loaded = settingsLoad.state === "loaded";
 
   function edit(patch: Partial<EngineDraft>) {
     setDraft((current) => ({ ...current, ...patch }));
@@ -68,9 +70,14 @@ export function EngineSettingsSection({ api, showHeading }: { api: EngineSetting
   }
 
   const disabled = !loaded || save.busy;
+  const autoLockDisabled = disabled || passwordless;
+  const autoLockNotice: MessageKey | null = passwordless
+    ? "engine.vaultAutoLockPasswordless"
+    : draft.vaultAutoLockMode === "restart" ? "engine.vaultAutoLockRestartWarning" : null;
   return (
     <SettingsSection id="settings-engine" label={t("engine.heading")} icon="settings" showHeading={showHeading}>
       <div className="max-w-2xl">
+        <SettingsLoadFailure settingsLoad={settingsLoad} title={t("engine.loadFailed")} />
         <Field label={t("engine.portLabel")} hint={t("engine.portHint")}>
           <input
             type="number"
@@ -88,7 +95,7 @@ export function EngineSettingsSection({ api, showHeading }: { api: EngineSetting
             <select
               className={control}
               value={draft.vaultAutoLockMode}
-              disabled={disabled}
+              disabled={autoLockDisabled}
               onChange={(event) => edit({ vaultAutoLockMode: event.target.value as "idle" | "restart" })}
             >
               <option value="idle">{t("engine.vaultAutoLockIdle")}</option>
@@ -104,7 +111,7 @@ export function EngineSettingsSection({ api, showHeading }: { api: EngineSetting
                   max={999}
                   className={control}
                   value={draft.vaultAutoLockValue}
-                  disabled={disabled}
+                  disabled={autoLockDisabled}
                   onChange={(event) => edit({ vaultAutoLockValue: event.target.value })}
                 />
               </Field>
@@ -112,7 +119,7 @@ export function EngineSettingsSection({ api, showHeading }: { api: EngineSetting
                 <select
                   className={control}
                   value={draft.vaultAutoLockUnit}
-                  disabled={disabled}
+                  disabled={autoLockDisabled}
                   onChange={(event) => edit({ vaultAutoLockUnit: event.target.value as "minutes" | "hours" })}
                 >
                   <option value="minutes">{t("engine.vaultAutoLockMinutes")}</option>
@@ -120,16 +127,17 @@ export function EngineSettingsSection({ api, showHeading }: { api: EngineSetting
                 </select>
               </Field>
             </div>
-          ) : (
+          ) : null}
+          {autoLockNotice === null ? null : (
             <div className="mt-4">
-              <Notice>{t("engine.vaultAutoLockRestartWarning")}</Notice>
+              <Notice>{t(autoLockNotice)}</Notice>
             </div>
           )}
         </div>
         <ActionArea status={save.error === ""
-          ? (!loaded
+          ? (settingsLoad.state === "loading"
               ? <p role="status" className="text-sm text-ink-muted">{t("engine.loading")}</p>
-              : !save.saved ? undefined : <Notice tone="notice">{t("engine.saved")}</Notice>)
+              : !loaded || !save.saved ? undefined : <Notice tone="notice">{t("engine.saved")}</Notice>)
           : <Notice tone="danger">{save.error}</Notice>}
         >
           <Button kind="primary" disabled={disabled} onClick={() => void submit()}>

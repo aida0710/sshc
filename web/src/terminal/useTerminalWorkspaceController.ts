@@ -7,7 +7,7 @@ import type { TerminalSessionsState } from "./sessions";
 
 type TerminalWorkspaceControllerOptions = {
   api: Pick<SettingsApi, "terminalSettings" | "localShellProfiles">;
-  consoles: TerminalSessionsState;
+  terminalSessions: TerminalSessionsState;
   enabled: boolean;
   section: Section | null;
   navigate: (section: Section) => void;
@@ -16,7 +16,7 @@ type TerminalWorkspaceControllerOptions = {
 
 export function useTerminalWorkspaceController({
   api,
-  consoles,
+  terminalSessions,
   enabled,
   section,
   navigate,
@@ -24,17 +24,18 @@ export function useTerminalWorkspaceController({
 }: TerminalWorkspaceControllerOptions) {
   const [settings, setSettings] = useState<TerminalSettings>({});
   const [localShellProfiles, setLocalShellProfiles] = useState<LocalShellProfileList["profiles"]>([]);
-  const [activeConsole, setActiveConsole] = useState<string | null>(null);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [liveWorkspace, setLiveWorkspace] =
     useState<LiveWorkspaceSummary | null>(null);
   const [restoreRequest, setRestoreRequest] =
     useState<WorkspaceRestoreRequest | null>(null);
   const [renameRequest, setRenameRequest] =
     useState<WorkspaceRenameRequest | null>(null);
-  const [consoleOrder, setConsoleOrder] = useState<string[]>([]);
+  const [workspaceRestoring, setWorkspaceRestoring] = useState(false);
+  const [sessionOrder, setSessionOrder] = useState<string[]>([]);
   const restoreSequence = useRef(0);
   const renameSequence = useRef(0);
-  const pendingConsole = useRef<string | null>(null);
+  const pendingSessionId = useRef<string | null>(null);
 
   useEffect(() => {
     if (!enabled) return;
@@ -59,33 +60,33 @@ export function useTerminalWorkspaceController({
   }, [api, enabled, section]);
 
   useEffect(() => {
-    if (activeConsole === null) return;
-    if (consoles.sessions.some((session) => session.id === activeConsole)) {
-      pendingConsole.current = null;
+    if (activeSessionId === null) return;
+    if (terminalSessions.sessions.some((session) => session.id === activeSessionId)) {
+      pendingSessionId.current = null;
       return;
     }
     // 開いた直後は一覧の再取得がまだ届いていない。取得が終わるまで選択を保ち、
     // 一覧の先頭へ勝手に戻らないようにする。
-    if (pendingConsole.current === activeConsole) return;
-    setActiveConsole(null);
-  }, [consoles.sessions, activeConsole]);
+    if (pendingSessionId.current === activeSessionId) return;
+    setActiveSessionId(null);
+  }, [terminalSessions.sessions, activeSessionId]);
 
   useEffect(() => {
-    if (activeConsole !== null || consoles.sessions.length === 0) return;
-    setActiveConsole(consoles.sessions[0]?.id ?? null);
-  }, [consoles.sessions, activeConsole]);
+    if (activeSessionId !== null || terminalSessions.sessions.length === 0) return;
+    setActiveSessionId(terminalSessions.sessions[0]?.id ?? null);
+  }, [terminalSessions.sessions, activeSessionId]);
 
-  const showConsole = useCallback(
+  const showSession = useCallback(
     (id: string) => {
-      pendingConsole.current = id;
-      setActiveConsole(id);
+      pendingSessionId.current = id;
+      setActiveSessionId(id);
       closeNavigation();
       navigate("Terminal");
-      void consoles.refresh().finally(() => {
-        if (pendingConsole.current === id) pendingConsole.current = null;
+      void terminalSessions.refresh().finally(() => {
+        if (pendingSessionId.current === id) pendingSessionId.current = null;
       });
     },
-    [closeNavigation, consoles, navigate],
+    [closeNavigation, terminalSessions, navigate],
   );
 
   const openWorkspace = useCallback(
@@ -119,61 +120,84 @@ export function useTerminalWorkspaceController({
     );
   }, []);
 
-  const orderedConsoles = useMemo(() => {
-    const rank = new Map(consoleOrder.map((id, index) => [id, index]));
-    return consoles.sessions
+  // The terminal screen stays drawn behind other sections while it holds a
+  // session. A workspace restore counts too: its first session may not exist
+  // yet, and removing the screen would abandon the restore and close every
+  // session it has opened.
+  const terminalScreenMounted =
+    section === "Terminal" || activeSessionId !== null || workspaceRestoring;
+
+  const orderedSessions = useMemo(() => {
+    const rank = new Map(sessionOrder.map((id, index) => [id, index]));
+    return terminalSessions.sessions
       .map((session, index) => ({
         session,
-        rank: rank.get(session.id) ?? consoleOrder.length + index,
+        rank: rank.get(session.id) ?? sessionOrder.length + index,
       }))
       .sort((left, right) => left.rank - right.rank)
       .map((entry) => entry.session);
-  }, [consoles.sessions, consoleOrder]);
+  }, [terminalSessions.sessions, sessionOrder]);
 
   const openLocalShell = useCallback(
     async (profileId?: string) => {
-      const opened = await consoles.open({
+      const opened = await terminalSessions.open({
         kind: "shell",
         ...(profileId === undefined ? {} : { profileId }),
       });
-      if (opened !== null) showConsole(opened.id);
+      if (opened !== null) showSession(opened.id);
     },
-    [consoles, showConsole],
+    [terminalSessions, showSession],
   );
 
-  const duplicateConsole = useCallback(
+  // cwd は、SFTP で開いているフォルダからターミナルを開くときの開始位置である。
+  const openSSHSession = useCallback(
+    async (alias: string, cwd?: string) => {
+      const opened = await terminalSessions.open({
+        kind: "ssh",
+        alias,
+        ...(cwd === undefined ? {} : { cwd }),
+      });
+      if (opened !== null) showSession(opened.id);
+    },
+    [terminalSessions, showSession],
+  );
+
+  const duplicateSession = useCallback(
     async (id: string) => {
-      const session = consoles.sessions.find(
+      const session = terminalSessions.sessions.find(
         (candidate) => candidate.id === id,
       );
       if (session === undefined) return null;
-      const opened = await consoles.open(
+      const opened = await terminalSessions.open(
         session.kind === "ssh" && session.alias !== undefined
           ? { kind: "ssh", alias: session.alias }
           : { kind: "shell" },
       );
-      if (opened !== null) showConsole(opened.id);
+      if (opened !== null) showSession(opened.id);
       return opened;
     },
-    [consoles, showConsole],
+    [terminalSessions, showSession],
   );
 
   return {
     settings,
     localShellProfiles,
-    activeConsole,
+    activeSessionId,
+    terminalScreenMounted,
     liveWorkspace,
     restoreRequest,
     renameRequest,
-    orderedConsoles,
-    showConsole,
+    orderedSessions,
+    showSession,
     openWorkspace,
     renameWorkspace,
     openLocalShell,
-    duplicateConsole,
+    openSSHSession,
+    duplicateSession,
     consumeRestore,
+    setWorkspaceRestoring,
     consumeRename,
-    reorderConsoles: setConsoleOrder,
+    reorderSessions: setSessionOrder,
     setLiveWorkspace,
     setSettings,
   };

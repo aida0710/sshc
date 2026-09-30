@@ -345,7 +345,7 @@ describe("HostInspector", () => {
     render(<HostInspector detail={detail} onSave={vi.fn()} vpnProfiles={profiles} />);
 
     expect(screen.getByLabelText("VPN profile")).toHaveAccessibleDescription(
-      "This HostName is a host name, so office needs a DNS server inside the VPN. Edit office on the VPN screen to add one, or set HostName to an IPv4 address.",
+      expect.stringContaining("This HostName is a host name, so office needs a DNS server inside the VPN. Edit office on the VPN screen to add one, or set HostName to an IPv4 address."),
     );
   });
 

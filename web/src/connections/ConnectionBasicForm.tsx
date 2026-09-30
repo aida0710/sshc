@@ -10,7 +10,7 @@ import { ConfirmDialog } from "../ui/ConfirmDialog";
 import type { BasicFieldState } from "./basicFields";
 import type { GeneratedPrivateKeyHandoff } from "../keys/workflow";
 import type { ConnectionSavedState } from "./connectionSavedState";
-import { identityKey } from "./connectionBrowser";
+import { draftResetKey } from "./draftResetKey";
 import { BasicPasswordSection } from "./BasicPasswordSection";
 import { BasicPrivateKeyField } from "./BasicPrivateKeyField";
 import { BasicTOTPSection } from "./BasicTOTPSection";
@@ -28,6 +28,7 @@ import {
   type PasswordAction,
 } from "./basicFormDraft";
 import { useConnectionSecrets } from "./useConnectionSecrets";
+import { useDraftSave } from "./useDraftSave";
 import { useReportDirty } from "./useReportDirty";
 
 type ConnectionBasicFormProps = {
@@ -41,7 +42,6 @@ type ConnectionBasicFormProps = {
   savedState?: ConnectionSavedState | undefined;
   onDirtyChange?: ((dirty: boolean) => void) | undefined;
   onDiscardReady?: ((discard: (() => void) | null) => void) | undefined;
-  onRequestRefresh?: (() => Promise<void>) | undefined;
   disabled?: boolean | undefined;
 };
 
@@ -105,12 +105,11 @@ export function ConnectionBasicForm({
   savedState,
   onDirtyChange,
   onDiscardReady,
-  onRequestRefresh,
   disabled = false,
 }: ConnectionBasicFormProps) {
   const t = useTranslate();
   const identity = detail.form.entry.identity;
-  const resetKey = `${identityKey(identity)}\u0000${detail.file.contents}`;
+  const resetKey = draftResetKey(identity, detail.file.contents);
   const secrets = useConnectionSecrets({ detail, resetKey, keys, secrets: secretsApi, savedState });
   const keySelection = useMemo(
     () => keySelectionOf(detail, secrets.privateKeys, secrets.keyOptionsStatus === "ready", preferredKey),
@@ -119,26 +118,42 @@ export function ConnectionBasicForm({
   const [draft, setDraft] = useState<BasicDraft>(() => initialDraft(detail));
   const [preferredSuperseded, setPreferredSuperseded] = useState(false);
   const [keyPassphraseOpen, setKeyPassphraseOpen] = useState(false);
-  const [busy, setBusy] = useState(false);
   const [routeConfirmationOpen, setRouteConfirmationOpen] = useState(false);
   const derived = deriveBasicForm(detail, draft, keySelection, secrets, t);
   const { setError } = secrets;
+  // The part of the draft that stays after a save: where to connect and which
+  // key. A save wipes the secrets and resets the password and TOTP choices, so
+  // they are left out; wiping them would change the reference, and the written
+  // draft would count as unsaved again while the page reads it back.
+  const savedDraft = useMemo(
+    () => ({ hostName: draft.hostName, user: draft.user, port: draft.port, selectedKey: draft.selectedKey }),
+    [draft.hostName, draft.user, draft.port, draft.selectedKey],
+  );
+  const { saving, written, save: saveDraft } = useDraftSave({ draft: savedDraft, saved: detail });
+  const dirty = !written && derived.dirty;
 
   function edit(patch: Partial<BasicDraft>, clearError = false) {
     setDraft((current) => ({ ...current, ...patch }));
     if (clearError) setError("");
   }
 
-  // A different host, file revision or handed-off key starts the form over.
+  // A different host or file revision (resetKey) or handed-off key starts the
+  // form over. So does anything that makes useConnectionSecrets read the keys and
+  // the vault again (keys, secretsApi, savedState, which a save refreshes), so
+  // the draft starts from what was just read. `detail` is read through
+  // resetKey: refetching the same revision keeps the draft. The display
+  // language is not a reason to throw the draft away.
   useEffect(() => {
     setDraft(initialDraft(detail));
     setRouteConfirmationOpen(false);
     setPreferredSuperseded(false);
     return () => { setDraft((current) => ({ ...current, ...clearedSecrets })); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resetKey, keys, secretsApi, t, preferredKey, savedState]);
+  }, [resetKey, keys, secretsApi, preferredKey, savedState]);
 
   // The key list arrives after the rest of the draft; the select follows it.
+  // onPreferredKeyApplied only tells the parent; a new callback from a parent
+  // render must not pick the key again over the user's choice.
   useEffect(() => {
     setDraft((current) => ({ ...current, selectedKey: keySelection.initialSelected }));
     if (keySelection.preferredAlreadyApplied) onPreferredKeyApplied?.();
@@ -158,7 +173,7 @@ export function ConnectionBasicForm({
     setDraft((current) => ({ ...current, ...clearedPasswordSecrets, ...clearedPasswordChoice }));
   }, [derived.draftHasExplicitKey]);
 
-  useReportDirty(derived.dirty, onDirtyChange);
+  useReportDirty(dirty, onDirtyChange);
 
   const discardDraft = useCallback(() => {
     setDraft(initialDraft(detail, keySelection.initialKey));
@@ -191,26 +206,23 @@ export function ConnectionBasicForm({
     if (!canSave) return;
     const request = derived.request();
     const { identityFileChange, keyPassphraseChange } = derived;
-    setBusy(true);
     setError("");
-    try {
-      await onSave(request);
-      if (keyPassphraseChange.kind !== "unchanged") setKeyPassphraseOpen(false);
-      if (preferredKey !== null && (
-        preferredSuperseded ||
-        (identityFileChange?.action === "set" && identityFileChange.keyId === preferredKey.privateKeyId)
-      )) {
-        onPreferredKeyApplied?.();
-      }
-      edit({ ...clearedSecrets, ...clearedPasswordChoice, totpAction: "unchanged" });
-      if (onRequestRefresh !== undefined) await onRequestRefresh();
-      else if (savedState === undefined) await secrets.refreshCredentials();
-    } catch {
+    if (!await saveDraft(() => onSave(request))) {
       edit(clearedSecrets);
       setError(t("conn.basicSaveFailed"));
-    } finally {
-      setBusy(false);
+      return;
     }
+    if (keyPassphraseChange.kind !== "unchanged") setKeyPassphraseOpen(false);
+    if (preferredKey !== null && (
+      preferredSuperseded ||
+      (identityFileChange?.action === "set" && identityFileChange.keyId === preferredKey.privateKeyId)
+    )) {
+      onPreferredKeyApplied?.();
+    }
+    edit({ ...clearedSecrets, ...clearedPasswordChoice, totpAction: "unchanged" });
+    // The page reads the saved connection again, savedState included. Without
+    // one, the form reads what the vault now holds for this host itself.
+    if (savedState === undefined) await secrets.refreshCredentials();
   }
 
   function submit(event: FormEvent) {
@@ -223,7 +235,7 @@ export function ConnectionBasicForm({
     void save();
   }
 
-  const canSave = !disabled && !secrets.loading && !busy && derived.vaultAllowsConfig && derived.dirty && derived.valid;
+  const canSave = !disabled && !secrets.loading && !saving && derived.vaultAllowsConfig && dirty && derived.valid;
   const serverHostError = problem?.code === "connection_hostname_invalid" ? t("conn.createHostInvalid") : "";
   const serverUserError = problem?.code === "connection_user_invalid" ? t("conn.createUserInvalid") : "";
   const serverPortError = problem?.code === "connection_port_invalid" ? t("conn.createPortInvalid") : "";
@@ -301,14 +313,14 @@ export function ConnectionBasicForm({
         </div>
       </section>
 
-      {derived.dirty ? <DraftSaveBar
+      {dirty ? <DraftSaveBar
         note={derived.needsVault
           ? t("conn.basicNeedVault")
           : !derived.passwordAllowed ? t("conn.basicPasswordBlocked") : ""}
         saveLabel={t("conn.basicSave")}
-        saving={busy}
+        saving={saving}
         saveDisabled={!canSave}
-        discardDisabled={busy}
+        discardDisabled={saving}
         onDiscard={discardDraft}
       /> : null}
       </fieldset>
