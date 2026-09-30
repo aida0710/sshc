@@ -454,11 +454,18 @@ func verifyEnum(t *testing.T, schema map[string]any, typeID reflect.Type) {
 	}
 }
 
+// backendNames は、engine の backends の表にある方式の名前である。OpenAPI の enum と
+// 表を直接比べ、方式を足したときにどちらかだけを変えると落ちるようにする。
+func backendNames() []string {
+	var names []string
+	for _, backend := range vpn.Backends() {
+		names = append(names, string(backend))
+	}
+	return names
+}
+
 var wireEnumValues = map[reflect.Type][]string{
-	reflect.TypeOf(vpn.BackendName("")): {
-		string(vpn.WireGuard), string(vpn.L2TPIPsec), string(vpn.OpenConnect),
-		string(vpn.OpenVPN), string(vpn.IKEv2),
-	},
+	reflect.TypeOf(vpn.BackendName("")): backendNames(),
 	reflect.TypeOf(VPNUnavailable("")): {
 		string(VPNDockerMissing), string(VPNDockerNotRunning),
 	},

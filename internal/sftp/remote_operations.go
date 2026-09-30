@@ -602,11 +602,11 @@ func (c *remoteCopy) copyFile(ctx context.Context, sourcePath, targetPath string
 // 公開した target の両方を copy 時の revision と照合する。copy 後に変わった file、copy
 // していない entry、target で別の entry に置き換わった file があれば ErrConflict で止まる。
 // 止まるまでに消した file は target に同じ内容が公開済みである。
-func (c *remoteCopy) removeCopiedTree(ctx context.Context, target string) error {
+func (c *remoteCopy) removeCopiedTree(ctx context.Context, sourcePath string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	info, err := c.source.Lstat(target)
+	info, err := c.source.Lstat(sourcePath)
 	if err != nil {
 		return err
 	}
@@ -614,7 +614,7 @@ func (c *remoteCopy) removeCopiedTree(ctx context.Context, target string) error 
 		if !info.Mode().IsRegular() {
 			return ErrConflict
 		}
-		copied, ok := c.copied[target]
+		copied, ok := c.copied[sourcePath]
 		if !ok || copied.sourceRevision != metadataRevision(info) {
 			return ErrConflict
 		}
@@ -622,16 +622,16 @@ func (c *remoteCopy) removeCopiedTree(ctx context.Context, target string) error 
 		if err != nil || metadataRevision(published) != copied.targetRevision {
 			return ErrConflict
 		}
-		return c.source.Remove(target)
+		return c.source.Remove(sourcePath)
 	}
-	infos, err := readChildren(ctx, c.source, target)
+	infos, err := readChildren(ctx, c.source, sourcePath)
 	if err != nil {
 		return err
 	}
 	now := time.Now()
 	for _, child := range infos {
 		if isAbandonedTemporary(child, now) {
-			if err := c.source.Remove(path.Join(target, child.Name())); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			if err := c.source.Remove(path.Join(sourcePath, child.Name())); err != nil && !errors.Is(err, fs.ErrNotExist) {
 				return err
 			}
 			continue
@@ -639,11 +639,11 @@ func (c *remoteCopy) removeCopiedTree(ctx context.Context, target string) error 
 		if isInternalName(child.Name()) {
 			return ErrConflict
 		}
-		if err := c.removeCopiedTree(ctx, path.Join(target, child.Name())); err != nil {
+		if err := c.removeCopiedTree(ctx, path.Join(sourcePath, child.Name())); err != nil {
 			return err
 		}
 	}
-	return c.source.RemoveDirectory(target)
+	return c.source.RemoveDirectory(sourcePath)
 }
 
 type progressWriter struct {

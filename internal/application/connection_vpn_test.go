@@ -1,42 +1,16 @@
 package application
 
 import (
-	"crypto/rand"
 	"errors"
-	"os"
-	"path/filepath"
 	"slices"
 	"testing"
-	"time"
 
-	"sshc/internal/storage"
 	"sshc/internal/vpn"
 )
 
 func serviceWithVPNMetadata(t *testing.T, metadata Metadata) *Service {
 	t.Helper()
-	home := t.TempDir()
-	root := filepath.Join(home, ".ssh")
-	if err := os.MkdirAll(root, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(root, "config"), []byte("Host lab\n  HostName 10.9.9.1\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
-	if err != nil {
-		t.Fatal(err)
-	}
-	manager := storage.NewManager(workspace, time.Now, rand.Reader)
-	service := NewService(workspace, manager)
-	change, err := service.metadata.Change(metadata, storage.Precondition{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := manager.Commit(storage.Request{Operation: "test", Changes: []storage.Change{change}}); err != nil {
-		t.Fatal(err)
-	}
-	return service
+	return serviceWithConfig(t, "Host lab\n  HostName 10.9.9.1\n", metadata)
 }
 
 func labProfile() VPNProfile {
@@ -47,7 +21,8 @@ func labProfile() VPNProfile {
 	}
 }
 
-// 接続に結び付けたVPNプロファイルの名前を読める。
+// 接続に結び付けたVPNプロファイルの名前を読める。alias は接続先の解決と同じく大文字と
+// 小文字を区別するので、LAB にはどの Host ブロックも適用されず、VPN も付かない。
 func TestAConnectionCarriesTheNameOfItsVPNProfile(t *testing.T) {
 	metadata := NewMetadata()
 	metadata.VPNProfiles = []VPNProfile{labProfile()}
@@ -56,9 +31,12 @@ func TestAConnectionCarriesTheNameOfItsVPNProfile(t *testing.T) {
 	}}
 	service := serviceWithVPNMetadata(t, metadata)
 
-	name, err := service.ConnectionVPN("LAB")
+	name, err := service.ConnectionVPN("lab")
 	if err != nil || name != "lab" {
 		t.Fatalf("ConnectionVPN = %q, %v", name, err)
+	}
+	if other, err := service.ConnectionVPN("LAB"); err != nil || other != "" {
+		t.Fatalf("ConnectionVPN(LAB) = %q, %v", other, err)
 	}
 	unbound, err := service.ConnectionVPN("other")
 	if err != nil || unbound != "" {
@@ -117,27 +95,28 @@ func TestAProfileForAnUnknownBackendIsNotSaved(t *testing.T) {
 	}
 }
 
-// 方式と違う節は、保存するときに落とす。使っていない値を残さない。
-func TestSavingAProfileDropsTheSettingsOfOtherBackends(t *testing.T) {
-	service := serviceWithVPNMetadata(t, NewMetadata())
-	profile := labProfile()
-	profile.L2TP = &L2TPProfile{Server: "vpn.example.jp", Username: "user"}
-	profile.DNS = []string{}
+// 方式と違う節を持つプロファイルは、作るときも置き換えるときも、その節を名指しして断る。
+// 黙って落とすと、送った値が消えたことに気づけない。
+func TestSavingAProfileWithTheSettingsOfAnotherBackendIsRefused(t *testing.T) {
+	metadata := NewMetadata()
+	metadata.VPNProfiles = []VPNProfile{labProfile()}
+	service := serviceWithVPNMetadata(t, metadata)
+	withL2TP := labProfile()
+	withL2TP.L2TP = &L2TPProfile{Server: "vpn.example.jp", Username: "user"}
+	created := withL2TP
+	created.Name = "office"
 
-	change, err := service.PlanVPNProfileCreate(profile)
-	if err != nil {
-		t.Fatalf("PlanVPNProfileCreate = %v", err)
-	}
-	if _, err := service.CommitVPNProfileChange(change, nil); err != nil {
-		t.Fatalf("CommitVPNProfileChange = %v", err)
-	}
+	_, createErr := service.PlanVPNProfileCreate(created)
+	_, updateErr := service.PlanVPNProfileUpdate(withL2TP)
 
-	profiles, err := service.VPNProfiles()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(profiles) != 1 || profiles[0].L2TP != nil || profiles[0].DNS != nil || profiles[0].WireGuard == nil {
-		t.Fatalf("profiles = %+v", profiles)
+	for operation, err := range map[string]error{"create": createErr, "update": updateErr} {
+		var refused *vpn.FieldError
+		if !errors.Is(err, ErrMetadataVPN) || !errors.As(err, &refused) {
+			t.Fatalf("%s = %v, want a field error", operation, err)
+		}
+		if refused.Field != "l2tp" || refused.Reason != vpn.ReasonUnexpected {
+			t.Fatalf("%s refused %s/%s, want l2tp/unexpected", operation, refused.Field, refused.Reason)
+		}
 	}
 }
 

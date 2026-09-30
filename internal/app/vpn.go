@@ -31,15 +31,15 @@ const (
 	vpnStopTimeout = 30 * time.Second
 )
 
-// superviseVPNSessions は、engine が動いているあいだ経路の寿命を見る。
+// superviseVPNRoutes は、engine が動いているあいだ経路の寿命を見る。
 //
 // 起動したときに、前回の engine が残したコンテナを回収する。引き継がないのは、
 // そのコンテナがどの設定で経路を張ったのかを確かめられないからである。その後は、
 // 誰も通っていない経路を畳み続ける。
-func superviseVPNSessions(ctx context.Context, vpnManager *vpn.Manager, logger *slog.Logger) {
-	if err := vpnManager.DiscardOrphans(ctx); err != nil && logger != nil &&
+func superviseVPNRoutes(ctx context.Context, routes *vpn.Manager, logger *slog.Logger) {
+	if err := routes.DiscardOrphans(ctx); err != nil && logger != nil &&
 		!errors.Is(err, vpn.ErrDockerMissing) {
-		logger.Warn("discard vpn sessions left by a previous engine", "error", err)
+		logger.Warn("discard vpn routes left by a previous engine", "error", err)
 	}
 	ticker := time.NewTicker(vpnSweepInterval)
 	defer ticker.Stop()
@@ -48,7 +48,7 @@ func superviseVPNSessions(ctx context.Context, vpnManager *vpn.Manager, logger *
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			vpnManager.StopIdle(ctx, vpnIdleTimeout)
+			routes.StopIdle(ctx, vpnIdleTimeout)
 		}
 	}
 }
@@ -59,18 +59,19 @@ func superviseVPNSessions(ctx context.Context, vpnManager *vpn.Manager, logger *
 // Terminal の接続ログに日本語の文で出す。
 func vpnRoute(
 	profiles *vpnprofile.Service,
-	vpnManager *vpn.Manager,
+	routes *vpn.Manager,
 ) func(context.Context, string, string) (net.Conn, error) {
 	return func(ctx context.Context, name, address string) (net.Conn, error) {
-		if err := refuseRestartAfterDisconnect(ctx, name, vpnManager.Disconnected(name)); err != nil {
+		if err := refuseRestartAfterDisconnect(ctx, name, routes.Disconnected(name)); err != nil {
 			return nil, err
 		}
-		profile, secrets, err := profiles.Route(name)
+		connection, err := routes.Dial(ctx, vpn.DialRequest{Profile: name, Source: profiles.RouteSource(name), Address: address})
 		if err == nil {
-			var connection net.Conn
-			if connection, err = vpnManager.Dial(ctx, profile, secrets, address); err == nil {
-				return connection, nil
-			}
+			return connection, nil
+		}
+		// 起動の途中で利用者が切断した。自動再接続を断るときと同じ文で知らせる。
+		if errors.Is(err, vpn.ErrRouteDisconnected) {
+			return nil, routeDisconnectedError(name)
 		}
 		refusal, known := vpnrefusal.Of(err)
 		if !known {
@@ -78,7 +79,7 @@ func vpnRoute(
 		}
 		sentence := vpnrefusal.Sentence(refusal)
 		if vpnrefusal.HasLogs(refusal.Code) {
-			sentence += "詳しくはVPN画面の「ログ」、または sshc vpn logs " + name + " で確認してください。"
+			sentence += "詳しくはVPN画面の「ログ」、または " + vpnrefusal.ProfileCommand("logs", name) + " で確認してください。"
 		}
 		return nil, &sshclient.ExplainedError{Sentence: sentence, Err: err}
 	}
@@ -95,6 +96,12 @@ func refuseRestartAfterDisconnect(ctx context.Context, name string, disconnected
 	if !disconnected || !terminal.IsAutomaticReconnect(ctx) {
 		return nil
 	}
+	return routeDisconnectedError(name)
+}
+
+// routeDisconnectedError は、利用者が経路 name を切断したので接続しなかったことを、
+// ［再接続］で接続し直せることと一緒に知らせる。
+func routeDisconnectedError(name string) error {
 	return &sshclient.ExplainedError{
 		Sentence: fmt.Sprintf("VPN経路「%s」は切断されています。［再接続］を押すと、VPN経路を起動して接続し直します。", name),
 		Err:      vpn.ErrRouteDisconnected,

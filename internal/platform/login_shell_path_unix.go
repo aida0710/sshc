@@ -6,14 +6,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
 
 	"sshc/internal/iowrite"
+	"sshc/internal/platform/process"
 )
 
 // シェル設定の入力待ちや大量出力で接続が止まらないための上限。
@@ -44,30 +43,19 @@ func WithLoginShellPath(ctx context.Context, environment []string) ([]string, er
 	ctx, cancel := context.WithTimeout(ctx, loginShellPathTimeout)
 	defer cancel()
 	// -iは.zshrc、ログイン用argv[0]は.zprofileなどのPATH設定も読むため。
-	process := exec.CommandContext(ctx, shell, "-i", "-c", loginShellPathCommand)
-	process.Args[0] = LoginArgv0(shell)
-	process.Env = environment
+	command := exec.CommandContext(ctx, shell, "-i", "-c", loginShellPathCommand)
+	command.Args[0] = LoginArgv0(shell)
+	command.Env = environment
 	if home, _ := lookup("HOME"); filepath.IsAbs(home) {
-		process.Dir = home
+		command.Dir = home
 	}
-	// 新しいsessionで起動し、engineの制御端末を継がせない。前面やtmuxで動くengineの
-	// 端末を継ぐと、対話シェルはjob controlのために端末を取りに行き、背景のprocess
-	// groupとしてSIGTTOU／SIGTTINで止まり、上限まで待たされる。
-	process.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-	process.Cancel = func() error {
-		// session leaderはprocess group leaderでもあるので、起動設定が待っている
-		// 子プロセスもまとめてキャンセルできる。
-		err := syscall.Kill(-process.Process.Pid, syscall.SIGKILL)
-		if errors.Is(err, syscall.ESRCH) {
-			return os.ErrProcessDone
-		}
-		return err
-	}
-	process.WaitDelay = loginShellPathWaitDelay
+	// 新しいsessionで起動し、engineの制御端末を継がせない。起動設定が待っている
+	// 子プロセスもまとめてキャンセルする。
+	process.KillSessionOnCancel(command, loginShellPathWaitDelay)
 	output := iowrite.NewCappedBuffer(loginShellPathOutputLimit)
-	process.Stdout = output
+	command.Stdout = output
 	// stdinは/dev/null、stderrは破棄する。起動設定の出力や秘密をSSHへ流さない。
-	if err := process.Run(); err != nil {
+	if err := command.Run(); err != nil {
 		if ctx.Err() != nil {
 			return environment, ctx.Err()
 		}

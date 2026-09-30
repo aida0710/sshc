@@ -62,6 +62,10 @@ type Service struct {
 	Authentication Authentication
 	// Facts は Match localuser などの解決に使うローカル環境情報。
 	Facts effective.LocalFacts
+	// VPNBinding は、alias が通る VPN プロファイルの名前を返す。空なら VPN を通らない。
+	// 紐付けは ~/.ssh/config ではなく sshc の設定にあるので、設定グラフからは読めない。
+	// nil なら、どの接続も VPN を通らないものとして扱う。
+	VPNBinding func(alias string) (string, error)
 }
 
 // NewService は本番用の依存を配線する。
@@ -215,16 +219,51 @@ func (s *Service) Destination(alias string) (string, string, error) {
 // ErrUnresolvedDestination は、設定から単一の接続先を解決できないことを表す。
 var ErrUnresolvedDestination = errors.New("this configuration does not resolve to one destination")
 
+// ErrUnsafeDestination は、Reach が設定から、ダイヤルしてよい接続先を1つに決められないことを
+// 表す。接続先を解決できない場合と、ホスト名が安全でない場合である。
+var ErrUnsafeDestination = errors.New("the destination is not safe to dial")
+
 // Reach は接続先へ直接ダイヤルし、ProxyJump を無視する。
+//
+// VPN プロファイルを付けた接続ではダイヤルしない。VPN の中でしか引けない名前を
+// このマシンの DNS へ問い合わせ、VPN の中にしか無いアドレスへこのマシンの回線で
+// 繋ぐことになり、結果が実際の接続経路と関係しないからである。
 func (s *Service) Reach(ctx context.Context, alias string) (ReachabilityResult, error) {
 	hostname, port, err := s.Destination(alias)
+	if errors.Is(err, ErrUnresolvedDestination) {
+		return ReachabilityResult{}, fmt.Errorf("%w: %w", ErrUnsafeDestination, err)
+	}
 	if err != nil {
+		// 設定を読めないのは、接続先が安全でないことを意味しない。
 		return ReachabilityResult{}, err
 	}
 	if err := validate.Hostname(hostname); err != nil {
+		return ReachabilityResult{}, fmt.Errorf("%w: %w", ErrUnsafeDestination, err)
+	}
+	routedThroughVPN, err := s.routedThroughVPN(alias)
+	if err != nil {
 		return ReachabilityResult{}, err
 	}
+	if routedThroughVPN {
+		return ReachabilityResult{
+			Address: net.JoinHostPort(hostname, port),
+			Outcome: ReachabilityNotChecked,
+			Notice:  VPNRouteNotice,
+		}, nil
+	}
 	return s.Reachability.Check(ctx, hostname, port), nil
+}
+
+// routedThroughVPN は、alias に VPN プロファイルが付いているかを返す。
+func (s *Service) routedThroughVPN(alias string) (bool, error) {
+	if s.VPNBinding == nil {
+		return false, nil
+	}
+	profile, err := s.VPNBinding(alias)
+	if err != nil {
+		return false, err
+	}
+	return profile != "", nil
 }
 
 // Authenticate は、alias に対する認証テストを実行する。

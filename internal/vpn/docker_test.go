@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"sshc/internal/connectionlog"
 )
@@ -18,15 +19,17 @@ import (
 //
 // launchd が起動した engine の PATH には、Docker Desktop の /usr/local/bin が無い。
 func TestDockerIsFoundInThePathItWillRunWith(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("実行の許可の bit で確かめる")
-	}
 	first, second := t.TempDir(), t.TempDir()
 	docker := filepath.Join(second, "docker")
+	if runtime.GOOS == "windows" {
+		// Windows では拡張子で実行できるかが決まる。docker.exe を探す。
+		docker += ".exe"
+	}
 	if err := os.WriteFile(docker, []byte("#!/bin/sh\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	// 実行できないファイルは飛ばす。
+	// 実行できないファイルは飛ばす。Windows では拡張子の無い docker、ほかでは実行の
+	// 許可の bit の無い docker が、実行できないファイルである。
 	if err := os.WriteFile(filepath.Join(first, "docker"), []byte("not a program"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +51,7 @@ func TestARunThatCouldNotPassTheDeviceSaysSo(t *testing.T) {
 	if err := runFailure("/dev/ppp", refused); !errors.Is(err, ErrTunnelDevice) {
 		t.Fatalf("runFailure = %v", err)
 	}
-	if err := runFailure("/dev/ppp", errors.New("conflict")); !errors.Is(err, ErrSessionFailed) {
+	if err := runFailure("/dev/ppp", errors.New("conflict")); !errors.Is(err, ErrRouteFailed) {
 		t.Fatalf("runFailure = %v", err)
 	}
 }
@@ -68,7 +71,8 @@ func TestShownLogsKeepTheirNewestPartWithinTheLimit(t *testing.T) {
 }
 
 // fakeDocker は、script を本体とする docker を置き、それを起動する dockerCommand を
-// 返す。
+// 返す。sh の script なので、Windows では検査を飛ばす。決まった出力を書くだけで
+// よい検査は、Windows でも走る fakeDockerProgram を使う。
 func fakeDocker(t *testing.T, script string) dockerCommand {
 	t.Helper()
 	if runtime.GOOS == "windows" {
@@ -84,7 +88,10 @@ func fakeDocker(t *testing.T, script string) dockerCommand {
 // コンテナが無いことは問い合わせの答えである。失敗として返さず、接続ログにも
 // 失敗と書かない。
 func TestAnAbsentContainerIsAnAnswerNotAFailure(t *testing.T) {
-	docker := fakeDocker(t, "echo 'Error response from daemon: No such container: sshc-vpn-lab' >&2\nexit 1\n")
+	docker := fakeDockerProgram(t, fakeDockerReply{
+		Writes:   []fakeDockerWrite{{Stderr: true, Text: "Error response from daemon: No such container: sshc-vpn-lab\n"}},
+		ExitCode: 1,
+	})
 	var record attemptRecord
 	ctx := connectionlog.With(context.Background(), &record)
 
@@ -102,7 +109,10 @@ func TestAnAbsentContainerIsAnAnswerNotAFailure(t *testing.T) {
 
 // docker そのものの失敗は、問い合わせでも失敗として返し、その出力を接続ログに書く。
 func TestADaemonFailureDuringAProbeIsStillAFailure(t *testing.T) {
-	docker := fakeDocker(t, "echo 'Cannot connect to the Docker daemon' >&2\nexit 1\n")
+	docker := fakeDockerProgram(t, fakeDockerReply{
+		Writes:   []fakeDockerWrite{{Stderr: true, Text: "Cannot connect to the Docker daemon\n"}},
+		ExitCode: 1,
+	})
 	var record attemptRecord
 	ctx := connectionlog.With(context.Background(), &record)
 
@@ -119,7 +129,9 @@ func TestADaemonFailureDuringAProbeIsStillAFailure(t *testing.T) {
 
 // 標準出力と標準エラーは、書かれた順に合わせる。つなぎ直すと前後が入れ替わる。
 func TestCombinedOutputKeepsTheOrderItWasWritten(t *testing.T) {
-	docker := fakeDocker(t, "echo 1\necho 2 >&2\necho 3\n")
+	docker := fakeDockerProgram(t, fakeDockerReply{Writes: []fakeDockerWrite{
+		{Text: "1\n"}, {Stderr: true, Text: "2\n"}, {Text: "3\n"},
+	}})
 
 	got, err := docker.combined(context.Background(), "logs", "sshc-vpn-lab")
 
@@ -133,7 +145,7 @@ func TestCombinedOutputKeepsTheOrderItWasWritten(t *testing.T) {
 func TestWaitingForTheTunnelDoesNotLogEachCheck(t *testing.T) {
 	directory := t.TempDir()
 	profile := Profile{Name: "lab", Backend: WireGuard}
-	manager := &Manager{directory: directory}
+	manager := &Manager{directory: directory, now: time.Now}
 	status := filepath.Join(manager.routeDirectory(profile.Name), statusFileName)
 	if err := os.MkdirAll(filepath.Dir(status), 0o700); err != nil {
 		t.Fatal(err)
@@ -169,7 +181,7 @@ func TestTheImagePhaseIsReportedOnlyWhenTheImageIsBuilt(t *testing.T) {
 		},
 	} {
 		t.Run(probe.name, func(t *testing.T) {
-			manager := &Manager{docker: fakeDocker(t, probe.script)}
+			manager := &Manager{docker: fakeDocker(t, probe.script), imageName: defaultImageName}
 			var record attemptRecord
 			ctx := connectionlog.With(context.Background(), &record)
 			var phases []string
@@ -210,7 +222,7 @@ exit 0
 	var connectionLog attemptRecord
 	ctx := connectionlog.With(context.Background(), &connectionLog)
 
-	err := manager.Start(ctx, validProfile(), validSecrets())
+	err := manager.Start(ctx, validProfile().Name, fixedRoute(validProfile(), validSecrets()))
 
 	if !errors.Is(err, ErrImageBuild) {
 		t.Fatalf("Start = %v", err)
@@ -256,7 +268,7 @@ build) echo '#6 0.676 Get:1 http://archive.example noble InRelease' >&2
 esac
 exit 0
 `)
-	manager := &Manager{docker: docker, sessions: map[string]*sessionState{}}
+	manager := &Manager{docker: docker, routes: map[string]*routeState{}}
 	var shown shownLines
 	ctx := manager.recording(connectionlog.With(context.Background(), &shown), "tohoku")
 
@@ -272,5 +284,71 @@ exit 0
 	}
 	if record := manager.state("tohoku").record.text(); strings.Contains(record, "Setting up iproute2") {
 		t.Errorf("記録に docker build の行を残した:\n%s", record)
+	}
+}
+
+// 経路の起動を取り消すと、docker が起動した子プロセス（docker build の docker-buildx の
+// ような）が出力を持っていても、待たずに戻る。
+func TestCancellingDockerDoesNotWaitForItsChildren(t *testing.T) {
+	const promptly = 5 * time.Second
+	// 子を起動したら印を置く。印より前に取り消すと、子の無いまま戻り、確かめたいことを
+	// 確かめずに通ってしまう。
+	childStarted := filepath.Join(t.TempDir(), "child-started")
+	docker := fakeDocker(t, "sleep 60 &\ntouch '"+childStarted+"'\nsleep 60\n")
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		_, err := docker.output(ctx, "build", "--tag", "sshc-vpn:test", ".")
+		done <- err
+	}()
+	waitFor(t, "偽の docker が子を起動する", fileExists(childStarted))
+
+	started := time.Now()
+	cancel()
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("取り消したのに成功した")
+		}
+		if took := time.Since(started); took > promptly {
+			t.Fatalf("取り消してから戻るまで %v かかった", took)
+		}
+	case <-time.After(dockerWaitDelay + promptly):
+		t.Fatal("取り消しても戻らない")
+	}
+}
+
+// docker logs が出力のあとで失敗しても、接続ログと経路の記録にシークレットを書かない。
+// 読めた行は伏せてから返す。
+func TestContainerLogsThatFailMidwayAreRedacted(t *testing.T) {
+	const secretPassword = "hunter2-secret"
+	secrets := Secrets{L2TP: &L2TPSecrets{Password: secretPassword, PreSharedKey: "psk-secret-value"}}
+	for _, failing := range []struct {
+		name    string
+		script  string
+		timeout time.Duration
+	}{
+		{name: "0以外で終わる", script: "echo 'line password=" + secretPassword + "'\nexit 1\n", timeout: 5 * time.Second},
+		{name: "上限で打ち切られる", script: "echo 'line password=" + secretPassword + "'\nsleep 30\n", timeout: 300 * time.Millisecond},
+	} {
+		t.Run(failing.name, func(t *testing.T) {
+			manager := &Manager{docker: fakeDocker(t, failing.script)}
+			var record attemptRecord
+			ctx, cancel := context.WithTimeout(connectionlog.With(context.Background(), &record), failing.timeout)
+			defer cancel()
+
+			logs := manager.containerLogs(ctx, "sshc-vpn-lab", secrets)
+
+			if strings.Contains(record.text(), secretPassword) {
+				t.Fatalf("記録にシークレットが出た:\n%s", record.text())
+			}
+			if !strings.Contains(record.text(), "コンテナのログを最後まで読めませんでした") {
+				t.Fatalf("読めなかったことを書いていない:\n%s", record.text())
+			}
+			if logs != "line password="+redactedMark {
+				t.Fatalf("containerLogs = %q", logs)
+			}
+		})
 	}
 }

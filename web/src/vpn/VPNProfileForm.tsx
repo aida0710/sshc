@@ -5,7 +5,7 @@ import { Field, control, hintText, sectionHeading } from "../ui/form";
 import { PasswordField } from "../ui/PasswordField";
 import { Button, Card, Notice } from "../ui/surface";
 import { IKEv2ProfileFields } from "./IKEv2ProfileFields";
-import { vpnBackendLabel, vpnBackends, type VPNBackend } from "./vpnBackends";
+import { settingsSection, vpnBackendLabel, vpnBackends, type VPNBackend } from "./vpnBackends";
 import { describeVPNFieldError, type VPNFieldError } from "./vpnFieldErrors";
 import { OpenVPNProfileFields } from "./OpenVPNProfileFields";
 import { WireGuardProfileFields } from "./WireGuardProfileFields";
@@ -16,7 +16,6 @@ import {
   hasRequiredValues,
   profileOf,
   secretsOf,
-  settingsSection,
   storedSecretKeys,
   withOpenVPNConfig,
   withSecrets,

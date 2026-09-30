@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -183,6 +184,20 @@ func TestStateChangingDiagnosticsRequireCSRFAndAOneTimeActionToken(t *testing.T)
 	replay := sendKeyRequest(t, engine, credentials, http.MethodPost, "/api/v1/diagnostics/reachability", body, token)
 	if replay.Code != http.StatusForbidden {
 		t.Fatalf("replayed token = %d, want 403", replay.Code)
+	}
+}
+
+// VPN の紐付けを読めないことは、接続先が安全でないという理由では返さない。
+func TestReachabilityDoesNotBlameTheDestinationWhenTheVPNBindingCannotBeRead(t *testing.T) {
+	engine, credentials, _, service := newDiagnosticsServer(t)
+	service.VPNBinding = func(string) (string, error) { return "", errors.New("metadata is unreadable") }
+	token := diagnosticsToken(t, engine, credentials, session.ActionReachability, "bastion")
+
+	response := sendKeyRequest(t, engine, credentials, http.MethodPost, "/api/v1/diagnostics/reachability",
+		mustMarshal(t, api.AliasRequest{Alias: "bastion"}), token)
+
+	if response.Code != http.StatusInternalServerError || problemCode(t, response.Body.Bytes()) != "internal_error" {
+		t.Fatalf("reachability = %d: %s, want 500 internal_error", response.Code, response.Body.String())
 	}
 }
 

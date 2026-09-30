@@ -39,9 +39,9 @@ type Vault interface {
 	) (storage.Result, error)
 }
 
-// Routes は、動いている経路を止める。*vpn.Manager が満たす。
+// Routes は、動いている経路を止め、その名前の記録を捨てる。*vpn.Manager が満たす。
 type Routes interface {
-	Stop(ctx context.Context, name string) error
+	Forget(ctx context.Context, name string) error
 }
 
 // Dependencies は、Service が使う3つの持ち主である。
@@ -53,7 +53,8 @@ type Dependencies struct {
 
 // Service は、プロファイルの手順を持つ。状態を持たないので、同じ持ち主から
 // 複数作ってよい。書き込みの整合は、metadata の前提（precondition）と Vault の
-// 書き手の直列化が守る。
+// 書き手の直列化が守る。保存済みの秘密に重ねる更新は、重ねる元の秘密を直列にした
+// あとで読む（secret.VPNSecretsRewrite）。
 type Service struct {
 	configuration Configuration
 	vault         Vault
@@ -86,6 +87,9 @@ func (s *Service) Create(profile application.VPNProfile, secrets vpn.SecretsDocu
 // 秘密は、送られた項目だけを保存済みのものに重ねる。空の項目は保存済みの値を残す。
 // 設定だけを直すときに、秘密を入れ直させないためである。方式を変えた場合は、
 // 前の方式の秘密を捨てる。sent が nil なら秘密は送られていない。
+//
+// 重ねる元の秘密は、Vault の書き手と直列にしてから読む。同じプロファイルの保存が2つ
+// 重なっても（パスワードだけと、事前共有鍵だけ）、どちらの変更も残る。
 func (s *Service) Update(profile application.VPNProfile, sent *vpn.SecretsDocument) error {
 	change, err := s.configuration.PlanVPNProfileUpdate(profile)
 	if err != nil {
@@ -95,15 +99,24 @@ func (s *Service) Update(profile application.VPNProfile, sent *vpn.SecretsDocume
 	if err != nil {
 		return err
 	}
-	stored, err := s.storedSecrets(previous)
-	if err != nil {
-		return err
-	}
-	merged := stored.Document()
-	if sent != nil {
-		merged = overlaySecrets(merged, *sent)
-	}
-	return s.writeSecrets(change, secretsToWrite{profile: profile, secrets: merged.Secrets()})
+	return s.commitWithVault(change, secret.VPNSecretsMutation{
+		Kind: secret.VPNSecretsRewrite, Profile: profile.Name,
+		Rewrite: func(current string, exists bool) (string, error) {
+			stored := vpn.Secrets{}
+			if exists {
+				read, err := readSecrets(previous, current)
+				if err != nil {
+					return "", err
+				}
+				stored = read
+			}
+			merged := stored.Document()
+			if sent != nil {
+				merged = overlaySecrets(merged, *sent)
+			}
+			return encodeOwnSecrets(secretsToWrite{profile: profile, secrets: merged.Secrets()})
+		},
+	})
 }
 
 // Rename は、プロファイルの名前を変える。設定・秘密・接続の紐付けを1回で書く。
@@ -128,7 +141,7 @@ func (s *Service) Rename(ctx context.Context, from, to string) error {
 	}); err != nil {
 		return err
 	}
-	s.stopRoute(ctx, from)
+	s.forgetRoute(ctx, from)
 	return nil
 }
 
@@ -147,12 +160,20 @@ func (s *Service) Remove(ctx context.Context, name string) error {
 	if err := s.commitWithVault(change, secret.VPNSecretsMutation{Kind: secret.VPNSecretsRemove, Profile: name}); err != nil {
 		return err
 	}
-	s.stopRoute(ctx, name)
+	s.forgetRoute(ctx, name)
 	return nil
 }
 
-// Route は、保存済みの設定と秘密を、経路ひとつぶんとして集める。
-func (s *Service) Route(name string) (vpn.Profile, vpn.Secrets, error) {
+// RouteSource は、name の経路の設定と秘密を、読むたびに集め直す読み手を返す。経路の
+// 起動（vpn.Manager の Start と Dial）は、起動と停止の鍵を取ってからこれを呼ぶ。削除と
+// 改名は書き込みのあとで経路を止めるので、止めたあとに起動する側は、消えた名前を
+// 「そのプロファイルは無い」で断られる。
+func (s *Service) RouteSource(name string) vpn.RouteSource {
+	return func() (vpn.Profile, vpn.Secrets, error) { return s.LoadProfileAndSecrets(name) }
+}
+
+// LoadProfileAndSecrets は、保存済みの設定と秘密を、経路ひとつぶんとして集める。
+func (s *Service) LoadProfileAndSecrets(name string) (vpn.Profile, vpn.Secrets, error) {
 	stored, err := s.configuration.StoredVPNProfile(name)
 	if err != nil {
 		return vpn.Profile{}, vpn.Secrets{}, err
@@ -233,21 +254,27 @@ type secretsToWrite struct {
 
 // writeSecrets は、方式に合う秘密だけを残して確かめ、metadata の変更と一緒に書く。
 func (s *Service) writeSecrets(change application.VPNProfileChange, written secretsToWrite) error {
-	profile, err := written.profile.Normalized().Profile()
-	if err != nil {
-		return err
-	}
-	own := profile.OwnSecrets(written.secrets)
-	if err := profile.ValidateSecrets(own); err != nil {
-		return err
-	}
-	document, err := vpn.EncodeSecrets(own)
+	document, err := encodeOwnSecrets(written)
 	if err != nil {
 		return err
 	}
 	return s.commitWithVault(change, secret.VPNSecretsMutation{
-		Kind: secret.VPNSecretsSet, Profile: profile.Name, Document: document,
+		Kind: secret.VPNSecretsSet, Profile: written.profile.Name, Document: document,
 	})
+}
+
+// encodeOwnSecrets は、方式に合う秘密だけを残して確かめ、Vault の記録の本文にする。
+// 方式を変えた場合は、前の方式の秘密をここで捨てる。
+func encodeOwnSecrets(written secretsToWrite) (string, error) {
+	profile, err := written.profile.Profile()
+	if err != nil {
+		return "", err
+	}
+	own := profile.OwnSecrets(written.secrets)
+	if err := profile.ValidateSecrets(own); err != nil {
+		return "", err
+	}
+	return vpn.EncodeSecrets(own)
 }
 
 // commitWithVault は、metadata の変更と Vault の変更を、ひとつの storage.Request で書く。
@@ -288,14 +315,14 @@ func (s *Service) requireUnlockedVault() error {
 	return nil
 }
 
-// stopRoute は、設定を書き終えたあとで、古い名前の経路を止める。
+// forgetRoute は、設定を書き終えたあとで、古い名前の経路を止め、その名前の記録を捨てる。
 //
 // 止めるのは書いたあとである。先に止めると、止めてから書くまでのあいだに、
-// Terminal の再接続が古い設定で経路を起こし直す。書いたあとなら、再接続は
-// 「そのプロファイルは無い」で断られる。
+// Terminal の再接続が古い設定で経路を起こし直す。書いたあとなら、経路の起動は鍵を
+// 取ってから設定を読み直すので（RouteSource）、「そのプロファイルは無い」で断られる。
 //
 // 止められなくても失敗にしない。設定はもう書いてある。Docker が止まっていれば
 // コンテナも止まっており、残った経路は、無操作の停止か、次の engine の起動で片付く。
-func (s *Service) stopRoute(ctx context.Context, name string) {
-	_ = s.routes.Stop(ctx, name)
+func (s *Service) forgetRoute(ctx context.Context, name string) {
+	_ = s.routes.Forget(ctx, name)
 }

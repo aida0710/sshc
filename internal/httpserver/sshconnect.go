@@ -13,8 +13,8 @@ import (
 )
 
 // problemVPNRouteDisconnected は、利用者が切断した VPN 経路のために、自動再接続を
-// 止めたことを表す語である。
-const problemVPNRouteDisconnected = "vpn_route_disconnected"
+// 止めたことを表す語である。VPN の操作が断るときの語と同じ語を使う。
+const problemVPNRouteDisconnected = vpnrefusal.CodeRouteDisconnected
 
 // reconnectStopNotice は、再接続を止めた理由のうち、既定の文（設定を直すよう促す）が
 // 当てはまらないものについて、ターミナルへ書く文を返す。

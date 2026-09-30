@@ -42,8 +42,8 @@ func readWireGuardProfile(p vpnProfilePrompter, previous application.VPNProfile,
 		settings := &application.WireGuardProfile{Servers: previous.WireGuard.Servers}
 		return wireGuardInput{settings: settings, resolvers: previous.DNS}, nil
 	}
-	text, err := readVPNConfigFile(vpnConfigFile{
-		path: path, limit: vpn.MaxWireGuardConfigLength, kind: vpn.ErrSecrets,
+	text, err := readVPNInputFile(vpnInputFile{
+		path: path, limit: vpn.MaxWireGuardConfigLength, description: "configuration file", kind: vpn.ErrSecrets,
 		field: "secrets." + vpn.SecretKeyWireGuardConfig,
 	})
 	if err != nil {

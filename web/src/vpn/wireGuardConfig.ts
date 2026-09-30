@@ -1,5 +1,6 @@
 import { addressBits, isUnroutableIPv4, parseAddress, parseGoInt, parsePrefix, type ParsedPrefix } from "./vpnAddressSyntax";
 import type { VPNFieldError, VPNFieldReason } from "./vpnFieldErrors";
+import { utf8Length } from "./utf8Length";
 
 // WireGuard の設定ファイル（wg-quick の形）を、送る前に engine と同じ規則で確かめ、一覧に出す
 // Endpoint のサーバーと、プロファイルの DNS にする DNS を読み取る。設定ファイルは鍵を含むので、
@@ -75,10 +76,6 @@ function refuse(reason: VPNFieldReason, line = 0, directive = "", limit?: number
     ...(directive === "" ? {} : { directive }),
     ...(limit === undefined ? {} : { limit }),
   });
-}
-
-function utf8Length(text: string): number {
-  return new TextEncoder().encode(text).length;
 }
 
 // cleanLine は、注釈を除き、空白をすべて取り除く（config_read_line）。

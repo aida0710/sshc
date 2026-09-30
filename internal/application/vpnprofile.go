@@ -106,24 +106,23 @@ func (stored VPNProfile) withoutWireGuardFields() VPNProfile {
 
 // Profile は、保存した設定を internal/vpn が使う形へ直す。
 //
-// backend に合う節だけを移す。古いバージョンや別の画面が残した、使っていない節には
-// 引きずられない。
+// どの節もそのまま移す。backend と違う節があれば、vpn.Profile.Validate がその節の名前を
+// 項目にして断る。
 func (stored VPNProfile) Profile() (vpn.Profile, error) {
-	normalized := stored.Normalized()
 	profile := vpn.Profile{
-		Name:    normalized.Name,
-		Backend: normalized.Backend,
-		DNS:     append([]string(nil), normalized.DNS...),
+		Name:    stored.Name,
+		Backend: stored.Backend,
+		DNS:     append([]string(nil), stored.DNS...),
 	}
-	if settings := normalized.WireGuard; settings != nil {
+	if settings := stored.WireGuard; settings != nil {
 		profile.WireGuard = &vpn.WireGuardSettings{Servers: append([]string(nil), settings.Servers...)}
 	}
-	if fields, found := normalized.WireGuardFields(); found {
+	if fields, found := stored.WireGuardFields(); found {
 		if err := fields.Validate(); err != nil {
 			return vpn.Profile{}, fmt.Errorf("%w: %w", ErrMetadataVPN, err)
 		}
 	}
-	if settings := normalized.OpenConnect; settings != nil {
+	if settings := stored.OpenConnect; settings != nil {
 		profile.OpenConnect = &vpn.OpenConnectSettings{
 			Server:            settings.Server,
 			Username:          settings.Username,
@@ -133,48 +132,21 @@ func (stored VPNProfile) Profile() (vpn.Profile, error) {
 			ApprovalWord:      settings.ApprovalWord,
 		}
 	}
-	if settings := normalized.L2TP; settings != nil {
+	if settings := stored.L2TP; settings != nil {
 		profile.L2TP = &vpn.L2TPSettings{
 			Server: settings.Server, Username: settings.Username, IKE: settings.IKE, ESP: settings.ESP,
 		}
 	}
-	if settings := normalized.OpenVPN; settings != nil {
+	if settings := stored.OpenVPN; settings != nil {
 		profile.OpenVPN = settings.openVPNSettings()
 	}
-	if settings := normalized.IKEv2; settings != nil {
+	if settings := stored.IKEv2; settings != nil {
 		profile.IKEv2 = settings.ikev2Settings()
 	}
 	if err := profile.Validate(); err != nil {
 		return vpn.Profile{}, fmt.Errorf("%w: %w", ErrMetadataVPN, err)
 	}
 	return profile, nil
-}
-
-// Normalized は、backend と違う節を落とし、空の DNS を無しに揃えた写しを返す。
-//
-// 画面は方式を切り替えたあとに古い節を送ってくることがある。断らずに落とすのは、
-// 利用者が直せる誤りではないからである。
-func (stored VPNProfile) Normalized() VPNProfile {
-	normalized := stored
-	if len(normalized.DNS) == 0 {
-		normalized.DNS = nil
-	}
-	if normalized.Backend != vpn.WireGuard {
-		normalized.WireGuard = nil
-	}
-	if normalized.Backend != vpn.L2TPIPsec {
-		normalized.L2TP = nil
-	}
-	if normalized.Backend != vpn.OpenConnect {
-		normalized.OpenConnect = nil
-	}
-	if normalized.Backend != vpn.OpenVPN {
-		normalized.OpenVPN = nil
-	}
-	if normalized.Backend != vpn.IKEv2 {
-		normalized.IKEv2 = nil
-	}
-	return normalized
 }
 
 // validateVPNProfiles は、保存してよい形かを確かめる。

@@ -98,8 +98,8 @@ function buildApi(overrides: Partial<VPNApi> = {}): VPNApi {
     removeVPNProfile: vi.fn().mockResolvedValue(overview({ profiles: [] })),
     renameVPNProfile: vi.fn().mockResolvedValue(overview()),
     vpnLogs: vi.fn().mockResolvedValue({ lines: "starting IPsec\n" }),
-    startVPNSession: vi.fn().mockResolvedValue(overview()),
-    stopVPNSession: vi.fn().mockResolvedValue(overview()),
+    startVPNRoute: vi.fn().mockResolvedValue(overview()),
+    disconnectVPNRoute: vi.fn().mockResolvedValue(overview()),
     revealVPNSecrets: vi.fn().mockResolvedValue(storedTohokuSecrets),
     ...overrides,
   };
@@ -363,7 +363,7 @@ describe("VPNPanel", () => {
     await user.click(within(route).getByRole("button", { name: "Rename" }));
     const dialog = screen.getByRole("dialog");
     await user.clear(within(dialog).getByLabelText("New name"));
-    await user.type(within(dialog).getByLabelText("New name"), "tohoku office");
+    await user.type(within(dialog).getByLabelText("New name"), "tohoku/office");
     await user.click(within(dialog).getByRole("button", { name: "Rename" }));
 
     expect(within(dialog).getByLabelText("New name")).toHaveAccessibleDescription(
@@ -399,9 +399,9 @@ describe("VPNPanel", () => {
         answerLateReading = resolve;
       });
       const vpnOverview = vi.fn().mockResolvedValueOnce(startingOverview()).mockReturnValueOnce(lateReading);
-      const stopVPNSession = vi.fn().mockResolvedValue(stoppedOverview());
+      const disconnectVPNRoute = vi.fn().mockResolvedValue(stoppedOverview());
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      render(<VPNPanel api={buildApi({ vpnOverview, stopVPNSession })} />);
+      render(<VPNPanel api={buildApi({ vpnOverview, disconnectVPNRoute })} />);
       expect(await screen.findByText(/building the image/)).toBeVisible();
 
       // 読み直しが始まり、その応答が返る前に、利用者が経路を止める。
@@ -428,9 +428,9 @@ describe("VPNPanel", () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
       const vpnOverview = vi.fn().mockResolvedValue(startingOverview());
-      const stopVPNSession = vi.fn().mockReturnValue(new Promise<VPNOverview>(() => undefined));
+      const disconnectVPNRoute = vi.fn().mockReturnValue(new Promise<VPNOverview>(() => undefined));
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      render(<VPNPanel api={buildApi({ vpnOverview, stopVPNSession })} />);
+      render(<VPNPanel api={buildApi({ vpnOverview, disconnectVPNRoute })} />);
       expect(await screen.findByText(/building the image/)).toBeVisible();
 
       await user.click(screen.getByRole("button", { name: "Disconnect" }));
@@ -450,9 +450,9 @@ describe("VPNPanel", () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
       const vpnOverview = vi.fn().mockResolvedValueOnce(stoppedOverview()).mockResolvedValue(startingOverview());
-      const startVPNSession = vi.fn().mockReturnValue(new Promise<VPNOverview>(() => undefined));
+      const startVPNRoute = vi.fn().mockReturnValue(new Promise<VPNOverview>(() => undefined));
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      render(<VPNPanel api={buildApi({ vpnOverview, startVPNSession })} />);
+      render(<VPNPanel api={buildApi({ vpnOverview, startVPNRoute })} />);
       const route = await screen.findByRole("article", { name: "tohoku" });
 
       await user.click(within(route).getByRole("button", { name: "Connect" }));
@@ -549,10 +549,10 @@ describe("VPNPanel", () => {
 
   it("asks before disconnecting a route that connections are using, and says how many are cut", async () => {
     const user = userEvent.setup();
-    const stopVPNSession = vi.fn().mockResolvedValue(stoppedOverview());
+    const disconnectVPNRoute = vi.fn().mockResolvedValue(stoppedOverview());
     const inUse = overview();
     inUse.profiles[0]!.openConnections = 2;
-    render(<VPNPanel api={buildApi({ vpnOverview: vi.fn().mockResolvedValue(inUse), stopVPNSession })} />);
+    render(<VPNPanel api={buildApi({ vpnOverview: vi.fn().mockResolvedValue(inUse), disconnectVPNRoute })} />);
     const route = await screen.findByRole("article", { name: "tohoku" });
 
     await user.click(within(route).getByRole("button", { name: "Disconnect" }));
@@ -561,38 +561,80 @@ describe("VPNPanel", () => {
     expect(dialog).toHaveTextContent(
       "The connections using this VPN route (2) are disconnected too, and do not reconnect automatically.",
     );
-    expect(stopVPNSession).not.toHaveBeenCalled();
+    expect(disconnectVPNRoute).not.toHaveBeenCalled();
     await user.click(within(dialog).getByRole("button", { name: "Disconnect" }));
-    expect(stopVPNSession).toHaveBeenCalledWith("tohoku");
+    expect(disconnectVPNRoute).toHaveBeenCalledWith("tohoku");
     await waitFor(() => expect(within(route).getByText(/stopped/)).toBeVisible());
   });
 
   it("keeps the route when disconnecting is cancelled", async () => {
     const user = userEvent.setup();
-    const stopVPNSession = vi.fn().mockResolvedValue(stoppedOverview());
+    const disconnectVPNRoute = vi.fn().mockResolvedValue(stoppedOverview());
     const inUse = overview();
     inUse.profiles[0]!.openConnections = 1;
-    render(<VPNPanel api={buildApi({ vpnOverview: vi.fn().mockResolvedValue(inUse), stopVPNSession })} />);
+    render(<VPNPanel api={buildApi({ vpnOverview: vi.fn().mockResolvedValue(inUse), disconnectVPNRoute })} />);
     const route = await screen.findByRole("article", { name: "tohoku" });
 
     await user.click(within(route).getByRole("button", { name: "Disconnect" }));
     await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Cancel" }));
 
     expect(screen.queryByRole("dialog")).toBeNull();
-    expect(stopVPNSession).not.toHaveBeenCalled();
+    expect(disconnectVPNRoute).not.toHaveBeenCalled();
     expect(within(route).getByText(/route open/)).toBeVisible();
   });
 
   it("disconnects a route that no connection is using without asking", async () => {
     const user = userEvent.setup();
-    const stopVPNSession = vi.fn().mockResolvedValue(stoppedOverview());
-    render(<VPNPanel api={buildApi({ stopVPNSession })} />);
+    const disconnectVPNRoute = vi.fn().mockResolvedValue(stoppedOverview());
+    render(<VPNPanel api={buildApi({ disconnectVPNRoute })} />);
     const route = await screen.findByRole("article", { name: "tohoku" });
 
     await user.click(within(route).getByRole("button", { name: "Disconnect" }));
 
     expect(screen.queryByRole("dialog")).toBeNull();
-    expect(stopVPNSession).toHaveBeenCalledWith("tohoku");
+    expect(disconnectVPNRoute).toHaveBeenCalledWith("tohoku");
+  });
+
+  it("keeps the other profiles usable while one route is being opened", async () => {
+    const user = userEvent.setup();
+    const officeProfile: VPNProfile = { ...tohokuProfile, name: "office" };
+    const both = overview({
+      profiles: [
+        { profile: tohokuProfile, running: false, relaySocket: "", connections: [], openConnections: 0 },
+        { profile: officeProfile, running: true, relaySocket: "/run/office.sock", connections: [], openConnections: 0 },
+      ],
+    });
+    const startVPNRoute = vi.fn().mockReturnValue(new Promise<VPNOverview>(() => undefined));
+    const disconnectVPNRoute = vi.fn().mockResolvedValue(both);
+    render(<VPNPanel api={buildApi({ vpnOverview: vi.fn().mockResolvedValue(both), startVPNRoute, disconnectVPNRoute })} />);
+    const tohoku = await screen.findByRole("article", { name: "tohoku" });
+    const office = screen.getByRole("article", { name: "office" });
+
+    await user.click(within(tohoku).getByRole("button", { name: "Connect" }));
+
+    expect(within(tohoku).getByRole("button", { name: "Edit" })).toBeDisabled();
+    expect(within(office).getByRole("button", { name: "Edit" })).toBeEnabled();
+    await user.click(within(office).getByRole("button", { name: "Disconnect" }));
+    expect(disconnectVPNRoute).toHaveBeenCalledWith("office");
+  });
+
+  it("lets a route being opened be disconnected, and does not report the start it cut short", async () => {
+    const user = userEvent.setup();
+    let failStart: (error: unknown) => void = () => undefined;
+    const startVPNRoute = vi.fn().mockReturnValue(new Promise<VPNOverview>((_, reject) => { failStart = reject; }));
+    const disconnectVPNRoute = vi.fn().mockResolvedValue(stoppedOverview());
+    render(<VPNPanel api={buildApi({ vpnOverview: vi.fn().mockResolvedValue(stoppedOverview()), startVPNRoute, disconnectVPNRoute })} />);
+    const route = await screen.findByRole("article", { name: "tohoku" });
+
+    await user.click(within(route).getByRole("button", { name: "Connect" }));
+    await user.click(within(route).getByRole("button", { name: "Disconnect" }));
+    await act(async () => {
+      failStart(new ApiError("vpn_route_disconnected", 409, { code: "vpn_route_disconnected", message: "request rejected" }));
+    });
+
+    expect(disconnectVPNRoute).toHaveBeenCalledWith("tohoku");
+    expect(screen.queryByText("The VPN route was disconnected, so starting it was cancelled.")).toBeNull();
+    await waitFor(() => expect(within(route).getByRole("button", { name: "Connect" })).toBeEnabled());
   });
 
   it("keeps what was typed, secrets included, when the engine refuses to save", async () => {
@@ -736,15 +778,15 @@ describe("VPNPanel", () => {
 
   it("says why the route did not come up and offers its logs", async () => {
     const user = userEvent.setup();
-    const startVPNSession = vi.fn().mockRejectedValue(
-      new ApiError("vpn_session_failed", 409, {
-        code: "vpn_session_failed",
+    const startVPNRoute = vi.fn().mockRejectedValue(
+      new ApiError("vpn_route_failed", 409, {
+        code: "vpn_route_failed",
         message: "request rejected",
         reason: "handshake_timeout",
       }),
     );
     const vpnLogs = vi.fn().mockResolvedValue({ lines: "no handshake" });
-    render(<VPNPanel api={buildApi({ startVPNSession, vpnLogs })} />);
+    render(<VPNPanel api={buildApi({ startVPNRoute, vpnLogs })} />);
     const route = await screen.findByRole("article", { name: "tohoku" });
 
     await user.click(within(route).getByRole("button", { name: "Connect" }));
@@ -758,10 +800,10 @@ describe("VPNPanel", () => {
 
   it("points to the logs when the engine did not say why the route failed", async () => {
     const user = userEvent.setup();
-    const startVPNSession = vi.fn().mockRejectedValue(
-      new ApiError("vpn_session_failed", 409, { code: "vpn_session_failed", message: "request rejected" }),
+    const startVPNRoute = vi.fn().mockRejectedValue(
+      new ApiError("vpn_route_failed", 409, { code: "vpn_route_failed", message: "request rejected" }),
     );
-    render(<VPNPanel api={buildApi({ startVPNSession })} />);
+    render(<VPNPanel api={buildApi({ startVPNRoute })} />);
     const route = await screen.findByRole("article", { name: "tohoku" });
 
     await user.click(within(route).getByRole("button", { name: "Connect" }));

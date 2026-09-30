@@ -3,10 +3,11 @@ import type { VPNDestinationReason } from "./vpnDestination";
 
 // 理由の語（problem の reason）を持つ VPN の拒否と、その理由の画面での言い方。engine の
 // vpn.FailureReason と vpn.Reason と同じ語を使う。文は Go の internal/vpnrefusal と同じ
-// 言い方に揃える。
+// 言い方に揃える。失敗の理由の語の網羅は、vpnFailureReasons.test.ts が Go と共有する表
+// （internal/vpnrefusal/testdata/failure-reasons.json）で確かめる。
 
-// 経路を用意できなかった理由（vpn_session_failed）である。
-const sessionFailureMessages: Record<string, MessageKey> = {
+// 経路を用意できなかった理由（vpn_route_failed）である。
+const routeFailureMessages: Record<string, MessageKey> = {
   unknown: "vpn.failure.unknown",
   timeout: "vpn.failure.timeout",
   server_unresolved: "vpn.failure.server_unresolved",
@@ -48,8 +49,8 @@ const destinationMessages: Record<VPNDestinationReason, MessageKey> = {
 };
 
 // 理由の語が無いか、この画面の知らない語なら、原因を特定できなかったとしてログへ案内する。
-export function vpnSessionFailureMessage(reason: string): MessageKey {
-  return sessionFailureMessages[reason] ?? "vpn.failure.unknown";
+export function vpnRouteFailureMessage(reason: string): MessageKey {
+  return routeFailureMessages[reason] ?? "vpn.failure.unknown";
 }
 
 export function vpnTargetFailureMessage(reason: string): MessageKey {

@@ -51,7 +51,7 @@ func TestVersionSevenWireGuardProfilesKeepTheirFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EncodeMetadata = %v", err)
 	}
-	for _, kept := range []string{`"schemaVersion": 8`, `"server": "vpn.example.jp:51820"`, testPeerPublicKey, `"servers"`} {
+	for _, kept := range []string{`"schemaVersion": 9`, `"server": "vpn.example.jp:51820"`, testPeerPublicKey, `"servers"`} {
 		if !strings.Contains(string(encoded), kept) {
 			t.Fatalf("書き直した文書に %s が無い:\n%s", kept, encoded)
 		}

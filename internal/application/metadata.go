@@ -22,7 +22,7 @@ import (
 
 const (
 	// MetadataSchemaVersion はこのビルドが書き込むバージョンである。
-	MetadataSchemaVersion = 8
+	MetadataSchemaVersion = 9
 	MetadataFileName      = "metadata.json"
 	DefaultGroupsFile     = "groups.sshc.conf"
 )
@@ -310,7 +310,7 @@ func DecodeMetadata(contents []byte) (Metadata, error) {
 		return Metadata{}, err
 	}
 	switch version.SchemaVersion {
-	case MetadataSchemaVersion, 7, 6, 5, 4, 3:
+	case MetadataSchemaVersion, 8, 7, 6, 5, 4, 3:
 	default:
 		return Metadata{}, ErrMetadataVersion
 	}
@@ -333,6 +333,15 @@ func DecodeMetadata(contents []byte) (Metadata, error) {
 	// 設定ファイルはVaultにあり、項目の形（server、peerPublicKey、address）のプロファイルは
 	// 保存し直すまで項目のまま読む（metadata_wireguard.go）。v8は、項目の無い設定ファイルの
 	// 形のプロファイルを旧バージョンに読ませないための境界である。
+	// v8→v9は、IKEv2のサーバーのIDのうち、どのサーバーにも一致する値（`*`、`0.0.0.0`
+	// など）を外す（metadata_ikev2.go）。VPNプロファイルのbackendと違う節も外す
+	// （metadata_vpnsections.go）。v9は、空白や日本語を含むVPNプロファイル名を
+	// 旧バージョンに読ませないための境界でもある。旧バージョンはその名前の metadata を
+	// 書けなくなる。
+	if version.SchemaVersion < 9 {
+		clearUnpinnedServerIdentities(&metadata)
+		clearForeignVPNSections(&metadata)
+	}
 	metadata.SchemaVersion = MetadataSchemaVersion
 	if metadata.GroupsFile == "" {
 		metadata.GroupsFile = DefaultGroupsFile

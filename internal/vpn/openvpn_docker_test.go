@@ -24,7 +24,7 @@ import (
 //
 // サーバーは sshc と同じイメージで起動する（イメージに openvpn が入っている）。証明書と
 // 鍵はテストの中で作り、設定ファイルにインラインで埋め込む。SSHC_VPN_DOCKER_TEST=1 の
-// ときだけ走る（session_docker_test.go と同じ）。
+// ときだけ走る（route_container_docker_test.go と同じ）。
 
 const (
 	// openVPNServerTunnelAddress は、テスト用のサーバーがトンネル側で名乗るアドレスである。
@@ -345,7 +345,10 @@ func TestAnOpenVPNTunnelCarriesAConnectionWithACertificate(t *testing.T) {
 
 	requireOpenVPNLeavesTheServerSettingsAlone(t, manager, ctx, route.profile.Name)
 	// OpenVPN が実際に繋いだサーバーは、接続先にできない。
-	connection, err := manager.Dial(ctx, route.profile, route.secrets, fmt.Sprintf("%s:%d", route.server, echoPort))
+	connection, err := manager.Dial(ctx, DialRequest{
+		Profile: route.profile.Name, Source: fixedRoute(route.profile, route.secrets),
+		Address: fmt.Sprintf("%s:%d", route.server, echoPort),
+	})
 	if err == nil {
 		_ = connection.Close()
 		t.Fatal("VPNサーバーそのものへの経路を作った")
@@ -398,7 +401,7 @@ func TestAWrongOpenVPNPasswordSaysTheServerRefusedIt(t *testing.T) {
 	route := newOpenVPNRoute(t, manager, ctx, "openvpn-refused", byPassword)
 	route.secrets.OpenVPN.Password = "wrong-password"
 
-	err := manager.Start(ctx, route.profile, route.secrets)
+	err := manager.Start(ctx, route.profile.Name, fixedRoute(route.profile, route.secrets))
 
 	requireFailureReason(t, err, FailureOpenVPNAuthentication)
 	logs := requireLogs(t, manager, ctx, route.profile.Name, route.secrets)
@@ -418,7 +421,7 @@ func TestAnUntrustedOpenVPNServerSaysTheTLSHandshakeFailed(t *testing.T) {
 	start, end := strings.Index(config, "<ca>"), strings.Index(config, "</ca>")+len("</ca>\n")
 	route.secrets.OpenVPN.Config = config[:start] + inline("ca", stranger.ca) + config[end:]
 
-	err := manager.Start(ctx, route.profile, route.secrets)
+	err := manager.Start(ctx, route.profile.Name, fixedRoute(route.profile, route.secrets))
 
 	requireFailureReason(t, err, FailureOpenVPNTLS)
 }
@@ -435,7 +438,7 @@ func TestAnOpenVPNServerThatNeverAnswersSaysSo(t *testing.T) {
 	}}
 	t.Cleanup(func() { _ = manager.Stop(context.Background(), profile.Name) })
 
-	err := manager.Start(ctx, profile, secrets)
+	err := manager.Start(ctx, profile.Name, fixedRoute(profile, secrets))
 
 	requireFailureReason(t, err, FailureOpenVPNNoResponse)
 }

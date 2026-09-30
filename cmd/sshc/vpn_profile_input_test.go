@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"strings"
 	"testing"
 
 	"sshc/internal/application"
@@ -91,5 +92,25 @@ func TestAddingNeedsEverySecret(t *testing.T) {
 
 	if _, err := readVPNProfile(p, "office", nil); !errors.Is(err, errVPNInputMissing) {
 		t.Fatalf("readVPNProfile = %v, want errVPNInputMissing", err)
+	}
+}
+
+// 方式の質問と誤りの文はどの方式の名前も挙げ、readVPNProfile はどの方式も方式として
+// 読み進める。足し忘れると、足した方式を CLI から選べない。
+func TestTheCLIOffersEveryBackend(t *testing.T) {
+	for _, backend := range vpn.Backends() {
+		if !strings.Contains(vpnBackendPrompt, string(backend)) {
+			t.Errorf("方式の質問に %s が無い: %q", backend, vpnBackendPrompt)
+		}
+		if !strings.Contains(errVPNInputBackend.sentence, string(backend)) {
+			t.Errorf("誤りの文に %s が無い: %q", backend, errVPNInputBackend.sentence)
+		}
+		// 2行目は DNS の質問への空の答えである。方式の分かれ道まで読み進めさせる。
+		if _, err := readVPNProfile(profilePrompter(t, string(backend)+"\n\n"), "office", nil); errors.Is(err, errVPNInputBackend) {
+			t.Errorf("%s を方式として読まない", backend)
+		}
+	}
+	if _, err := readVPNProfile(profilePrompter(t, "pptp\n\n"), "office", nil); !errors.Is(err, errVPNInputBackend) {
+		t.Fatalf("知らない方式: readVPNProfile = %v, want errVPNInputBackend", err)
 	}
 }

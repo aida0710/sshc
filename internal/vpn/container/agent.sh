@@ -32,8 +32,9 @@ profile_wait_seconds=30
 # 既に張られている接続は切れている。
 tunnel_check_seconds=5
 
-# 止める合図を受けてから、backend が相手へ切断を伝え終わるまで待つ上限。docker
-# stop の猶予（10秒）より短くする。
+# 止める合図を受けてから、相手を待っている最中のコマンドを止め、backend が相手へ切断を
+# 伝え終わるまでの持ち時間。docker stop の猶予（10秒）より短くする。止める手順はどれも
+# この残り（shutdown_seconds_left）の中で待つ。
 shutdown_seconds=5
 
 umask 077
@@ -56,13 +57,21 @@ fail() {
 	chmod 644 "$shared_directory/failure.json" 2>/dev/null || true
 	# connect が新しい接続を受けないよう、経路の控えを先に消す。
 	rm -f "$runtime/route.env"
+	start_shutdown_budget
 	backend_down 2>/dev/null || true
 	exit 1
 }
 
+# seconds_since_boot は、カーネルが起動してからの秒数である。締め切りはこれで数える。
+# 壁時計（date）は、Docker Desktop などの VM が時計を合わせ直すと飛ぶ。
+seconds_since_boot() {
+	read -r since_boot _ </proc/uptime
+	echo "${since_boot%%.*}"
+}
+
 # remaining_seconds は、engine が決めた締め切りまでの残りの秒数である。
 remaining_seconds() {
-	left=$((deadline - $(date +%s)))
+	left=$((deadline - $(seconds_since_boot)))
 	if [ "$left" -lt 0 ]; then
 		left=0
 	fi
@@ -79,6 +88,89 @@ timeout_seconds() {
 	echo "$left"
 }
 
+# waiting_pid は、相手を待っている最中のコマンド（wait_for_step で待っているもの）で
+# ある。止める合図を受けたら、shutdown がこれを止める。
+waiting_pid=
+
+# wait_for_step は、背後で起動した、相手を待つコマンド（PID が $1）が終わるまで待ち、
+# その終了コードを返す。
+#
+# sh は前面のコマンドが終わるまで trap を実行しない。承認待ちや応えない相手を前面で
+# 待つと、止める合図を受けても、docker stop の猶予を使い切って SIGKILL で終わり、相手へ
+# 切断を伝えられない。背後で起動して wait で待てば、合図を受けたときに shutdown が動く。
+wait_for_step() {
+	waiting_pid=$1
+	step_status=0
+	wait "$waiting_pid" || step_status=$?
+	waiting_pid=
+	return "$step_status"
+}
+
+# resolve_first_ipv4 は、$1 をこのコンテナの DNS で名前解決し、最初の IPv4 アドレスを
+# resolved_address に入れる。名前解決できなければ空にする。締め切りまでしか待たない。
+# コマンド置換の中で待つと止める合図が届かないので、背後で名前解決してファイルに書く。
+resolve_first_ipv4() {
+	resolved_address=
+	timeout "$(timeout_seconds)" getent ahostsv4 -- "$1" >"$runtime/resolved" 2>/dev/null &
+	if wait_for_step $!; then
+		resolved_address=$(awk 'NR==1{print $1}' "$runtime/resolved")
+	fi
+	rm -f "$runtime/resolved"
+}
+
+# start_shutdown_budget は、止める手順の持ち時間（shutdown_seconds）を数え始める。
+start_shutdown_budget() {
+	shutdown_deadline=$(($(seconds_since_boot) + shutdown_seconds))
+}
+
+# shutdown_seconds_left は、止める手順の持ち時間の残りの秒数である。0 なら使い切った。
+shutdown_seconds_left() {
+	left=$((shutdown_deadline - $(seconds_since_boot)))
+	if [ "$left" -lt 0 ]; then
+		left=0
+	fi
+	echo "$left"
+}
+
+# shutdown_timeout_seconds は、止める手順のコマンドの timeout に渡す秒数である。GNU
+# timeout は 0 を上限なしと読むので、使い切っていても 1 秒にする。
+shutdown_timeout_seconds() {
+	left=$(shutdown_seconds_left)
+	if [ "$left" -lt 1 ]; then
+		left=1
+	fi
+	echo "$left"
+}
+
+# step_interrupt_seconds は、相手を待っている最中のコマンドへ SIGINT を送ってから、
+# SIGTERM を送るまでの長さである。openconnect は SIGINT を受けると、装置へログアウトを
+# 送ってから終わる。sh は背後で起動したコマンドの SIGINT を無視させるので、timeout を
+# 挟まずに起動したもの（swanctl）は SIGTERM で止める。
+step_interrupt_seconds=2
+
+# stop_waiting_step は、相手を待っている最中のコマンドを、止める手順の持ち時間の中で
+# 止める。SIGINT、SIGTERM の順に送り、それでも終わらなければ SIGKILL で止める。timeout は
+# 受けた合図をコマンドへ渡す。
+#
+# 終わったコマンドは wait で片付けるまで残る（kill -0 が成功し続ける）ので、見張りの
+# プロセスに合図を送らせて、こちらは wait で待つ。
+stop_waiting_step() {
+	if [ -z "$waiting_pid" ]; then
+		return 0
+	fi
+	kill -INT "$waiting_pid" 2>/dev/null || true
+	(
+		sleep "$step_interrupt_seconds"
+		kill -TERM "$waiting_pid" 2>/dev/null
+		sleep "$(shutdown_seconds_left)"
+		kill -KILL "$waiting_pid" 2>/dev/null
+	) </dev/null >/dev/null 2>&1 &
+	watchdog_pid=$!
+	wait "$waiting_pid" 2>/dev/null || true
+	kill "$watchdog_pid" 2>/dev/null || true
+	waiting_pid=
+}
+
 # wait_for_address は、interface にアドレスが付くまで、締め切りまで待つ。
 wait_for_address() {
 	while ! ip -4 address show dev "$interface" 2>/dev/null | grep -q 'inet '; do
@@ -93,7 +185,9 @@ wait_for_address() {
 # 終わると、装置の側にセッションが残る。
 shutdown() {
 	trap - TERM INT
+	start_shutdown_budget
 	rm -f "$runtime/route.env"
+	stop_waiting_step
 	backend_down 2>/dev/null || true
 	exit 0
 }
@@ -115,9 +209,10 @@ done
 backend=$(jq -r '.backend' "$profile")
 # VPNの中で名前解決するDNSサーバー。空なら、接続先はアドレスでしか指定できない。
 resolvers=$(jq -r 'if .dns then .dns[] else empty end' "$profile" | tr '\n' ' ')
-# 応えない相手を待つ締め切り（UNIX 秒）。engine が待つのをやめるより先に諦め、
-# どこで止まったかをログへ残す。値は engine が決める。
-deadline=$(jq -r '.deadline' "$profile")
+# 応えない相手を待つ締め切り（seconds_since_boot の秒数）。engine が待つのをやめるより
+# 先に諦め、どこで止まったかをログへ残す。待つ長さは engine が決め、受け取ったときから
+# 数える。
+deadline=$(($(seconds_since_boot) + $(jq -r '.attemptSeconds' "$profile")))
 
 # 読み込むのは知っている方式の手順だけにする。方式の名前は設定から読むので、そのまま
 # パスに使うと、イメージの中の別のファイルを読み込みうる。
@@ -148,6 +243,10 @@ if [ -n "$resolvers" ]; then
 	for resolver in $resolvers; do
 		printf 'nameserver %s\n' "$resolver" >>"$runtime/resolv.conf"
 	done
+	# 応えない DNS サーバーを長く待たない。glibc の既定（1台5秒・2回）では、3台で28秒
+	# かかり、connect の名前解決が engine の待つ上限を超える（connect.sh の
+	# resolve_timeout_seconds）。
+	printf 'options timeout:2 attempts:1\n' >>"$runtime/resolv.conf"
 	# /etc/resolv.conf は Docker の bind mount である。置き換えられないので、
 	# 中身だけを書き換える。
 	cat "$runtime/resolv.conf" >/etc/resolv.conf

@@ -589,7 +589,7 @@ export const en = {
   "terminal.keyPassphraseRequired":
     "The private key needs a passphrase. Unlock the Vault or save the correct passphrase for this key.",
   "terminal.vpnRouteRefused": "The VPN route cannot be prepared, so automatic reconnection was stopped. Check the reason shown in the terminal.",
-  "terminal.vpnRouteDisconnected": "The VPN route was disconnected, so automatic reconnection was stopped. Reconnect to start the VPN route and connect again.",
+  "terminal.vpnRouteDisconnected": "The VPN route was disconnected, so the connection was cancelled. Connecting again starts the VPN route first.",
   "terminal.connectFailed":
     "The connection could not be established. The reason is shown in the terminal. Check the settings and network, then reconnect.",
   "terminal.reconnectFailed":
@@ -1248,9 +1248,11 @@ export const en = {
   "vpn.dockerNotRunning": "Docker is not running. Start Docker Desktop or similar, then try again. If it is running, check that the current user may use Docker.",
   "vpn.tunnelDeviceMissing": "Docker cannot use the tunnel device this type needs (/dev/net/tun, /dev/ppp).",
   "vpn.imageBuildFailed": "Building the VPN container image failed. Check the network and Docker.",
-  "vpn.socketPathTooLong": "The path where sshc keeps its data is too long for the VPN route's relay. Give the VPN profile a shorter name.",
+  "vpn.socketPathTooLong": "The path where sshc keeps its data (~/.ssh/sshc) is too long for the VPN route's relay. Move ~/.ssh to a folder with a shorter path and put a symbolic link in its place.",
   "vpn.changedConcurrently": "Another operation changed the same settings at the same time, so nothing was saved. Try again.",
-  "vpn.sessionFailed": "Connecting to the VPN failed. {reason}",
+  "vpn.routeDisconnected": "The VPN route was disconnected, so starting it was cancelled.",
+  "vpn.routeStopped": "The VPN route was stopped, so starting it was cancelled.",
+  "vpn.routeFailed": "Connecting to the VPN failed. {reason}",
   "vpn.targetFailed": "The destination could not be reached through the VPN. {reason}",
   "vpn.failureShowLogs": "Show the logs",
   "vpn.fieldRefused": "Some values were not accepted. See the reason next to each field.",

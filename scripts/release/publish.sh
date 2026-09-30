@@ -164,12 +164,46 @@ verify_public_release() {
   printf 'release: verified https://github.com/%s/releases/tag/%s\n' "$repository" "$tag"
 }
 
+# vpn_snapshot_warning_days は、VPNイメージが固定したUbuntu snapshotの古さの目安である。
+# 固定した時刻より後のセキュリティ修正はイメージに入らず、タグは中身から決まるので、
+# Dockerfileを書き換えない限り利用者のマシンのイメージも作り直されない。月に一度は上げる。
+vpn_snapshot_warning_days=30
+
+# civil_day_number は、YYYYMMDDの日付を暦の通し日数にする。dateの日付の読み方は
+# GNUとBSDで違うので、算術で数える。
+civil_day_number() {
+  local year=$((10#${1:0:4})) month=$((10#${1:4:2})) day=$((10#${1:6:2}))
+  if [ "$month" -le 2 ]; then
+    year=$((year - 1))
+    month=$((month + 12))
+  fi
+  echo $((365 * year + year / 4 - year / 100 + year / 400 + (153 * (month - 3) + 2) / 5 + day))
+}
+
+# warn_stale_vpn_snapshot は、VPNイメージのUbuntu snapshotが古ければ警告する。時刻で
+# リリースが止まらないよう、失敗にはしない。
+warn_stale_vpn_snapshot() {
+  local snapshot age
+  snapshot=$(grep -Eo 'snapshot=[0-9]{8}T[0-9]{6}Z' internal/vpn/container/Dockerfile | head -n 1 || true)
+  snapshot=${snapshot#snapshot=}
+  if [ -z "$snapshot" ]; then
+    printf 'release: warning: no Ubuntu snapshot time was found in internal/vpn/container/Dockerfile\n' >&2
+    return 0
+  fi
+  age=$(($(civil_day_number "$(date -u +%Y%m%d)") - $(civil_day_number "${snapshot:0:8}")))
+  if [ "$age" -gt "$vpn_snapshot_warning_days" ]; then
+    printf 'release: warning: the VPN image pins Ubuntu snapshot %s (%d days old); raise it with the base digest and the InRelease hashes (docs/releasing.md)\n' \
+      "$snapshot" "$age" >&2
+  fi
+}
+
 if [ "$mode" = verify ]; then
   verify_public_release
   exit 0
 fi
 
 [ -z "$(git status --porcelain)" ] || die 'worktree must be clean before publishing'
+warn_stale_vpn_snapshot
 [ -f "docs/releases/$tag.md" ] || die "release notes are missing: docs/releases/$tag.md"
 case "$tag" in
   *-*|*+*) ;;

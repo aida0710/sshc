@@ -13,7 +13,8 @@ import (
 // HTTP 境界におけるランタイム上限。生成された型は形を記述するが、
 // こちらはサイズを制限する。ローカルな API であっても API には変わりないからだ。
 const (
-	maxRequestBody = 2 << 20
+	// 設定の要求は、API 全体の上限（MaxRequestBodyCeiling）いっぱいまで受ける。
+	maxRequestBody = MaxRequestBodyCeiling
 	maxPathLength  = 512
 	// maxHostBlockAliasLength は、ファイルにある Host ブロックを指す alias の上限。
 	// validate.MaxAliasLength（アプリが接続・保存に使う alias）より広いのは、

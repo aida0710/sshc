@@ -1,49 +1,28 @@
 package application
 
 import (
-	"crypto/rand"
-	"os"
-	"path/filepath"
 	"testing"
-	"time"
 
-	"sshc/internal/storage"
 	"sshc/internal/textencoding"
 )
 
 func TestConnectionEncodingFollowsTheConcreteHostMetadata(t *testing.T) {
-	home := t.TempDir()
-	root := filepath.Join(home, ".ssh")
-	if err := os.MkdirAll(root, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(root, "config"), []byte("Host legacy\n  HostName example.test\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
-	if err != nil {
-		t.Fatal(err)
-	}
-	manager := storage.NewManager(workspace, time.Now, rand.Reader)
-	service := NewService(workspace, manager)
 	metadata := NewMetadata()
 	metadata.Hosts = []HostMetadata{{
 		Identity: HostIdentity{Path: "config", Alias: "legacy"}, Encoding: string(textencoding.ShiftJIS),
 	}}
-	change, err := service.metadata.Change(metadata, storage.Precondition{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := manager.Commit(storage.Request{Operation: "test", Changes: []storage.Change{change}}); err != nil {
-		t.Fatal(err)
-	}
+	service := serviceWithConfig(t, "Host legacy\n  HostName example.test\n", metadata)
 
-	got, err := service.ConnectionEncoding("LEGACY")
+	got, err := service.ConnectionEncoding("legacy")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got != textencoding.ShiftJIS {
 		t.Fatalf("encoding = %q", got)
+	}
+	// 接続先の解決と同じく大文字と小文字を区別する。LEGACY にはどのブロックも適用されない。
+	if other, err := service.ConnectionEncoding("LEGACY"); err != nil || other != textencoding.UTF8 {
+		t.Fatalf("encoding(LEGACY) = %q, %v", other, err)
 	}
 	defaulted, err := service.ConnectionEncoding("other")
 	if err != nil {

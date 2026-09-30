@@ -107,9 +107,9 @@ func TestTheContainerIsToldThatItWaitsForApproval(t *testing.T) {
 func TestAnApprovedRouteIsGivenLongerToComeUp(t *testing.T) {
 	profile := validOpenConnectProfile()
 
-	plain := relayDeadline(profile)
+	plain := tunnelReadyTimeout(profile)
 	profile.OpenConnect.SecondFactor = SecondFactorApprove
-	approved := relayDeadline(profile)
+	approved := tunnelReadyTimeout(profile)
 
 	if approved <= plain {
 		t.Fatalf("承認を待つ経路の猶予 = %v、普通の経路 = %v", approved, plain)
@@ -279,10 +279,10 @@ func TestTheContainerGivesUpBeforeTheEngineStopsWaiting(t *testing.T) {
 			profile.OpenConnect = &settings
 			test.prepare(&profile)
 
-			attempt := agentDeadline(profile, testClock).Sub(testClock)
+			attempt := agentAttempt(profile)
 
-			if attempt >= relayDeadline(profile) {
-				t.Fatalf("コンテナの上限 %v が engine の上限 %v より短くない", attempt, relayDeadline(profile))
+			if attempt >= tunnelReadyTimeout(profile) {
+				t.Fatalf("コンテナの上限 %v が engine の上限 %v より短くない", attempt, tunnelReadyTimeout(profile))
 			}
 			if attempt <= 0 {
 				t.Fatalf("コンテナの上限 = %v", attempt)

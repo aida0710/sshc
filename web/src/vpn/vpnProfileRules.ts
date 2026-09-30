@@ -1,8 +1,9 @@
 import type { VPNProfile } from "../api/vpn";
-import { isUnroutableIPv4, parseAddress } from "./vpnAddressSyntax";
-import { isVPNBackend } from "./vpnBackends";
+import { isUnroutableIPv4, parseAddress, parsePrefix } from "./vpnAddressSyntax";
+import { isVPNBackend, settingsSection } from "./vpnBackends";
 import { isPEMCertificateList } from "./vpnCertificateSyntax";
 import type { VPNFieldError, VPNFieldReason } from "./vpnFieldErrors";
+import { utf8Length } from "./utf8Length";
 
 // VPN プロファイルの設定（シークレットを除く）を送る前に、engine と同じ規則で確かめる。
 //
@@ -11,11 +12,12 @@ import type { VPNFieldError, VPNFieldReason } from "./vpnFieldErrors";
 // internal/vpn/testdata/profile-cases.json に対するテストで保つ。どちらかだけを変えると
 // そのテストが落ちる。検査の順番も Go と同じにする。最初に断られる項目が変わるからである。
 //
-// Go は len で UTF-8 のバイト数を数えるので、長さはここもバイト数で数える。API の
-// maxLength（送る前の検査は文字数で数える）より厳しいか同じなので、ここを
-// 通った値は送る前の検査でも断られない。
+// Go は名前のほかは len で UTF-8 のバイト数を数えるので、長さはここもバイト数で数える。
+// API の maxLength（文字数で数える）より厳しいか同じなので、ここを通った値は送る前の
+// 検査でも断られない。名前だけは、Go も API も文字数で数える。
 
-// maxProfileNameLength は、コンテナ名とソケットのパスに入る長さである。
+// maxProfileNameLength は、プロファイル名の上限（文字数）である。一覧の1行に収まる長さで、
+// Go と API と同じ値である。名前はコンテナ名やパスには入らないので、字の種類は問わない。
 const maxProfileNameLength = 48;
 // maxResolvers は、1つの経路が使う DNS サーバーの数の上限である。
 const maxResolvers = 3;
@@ -64,29 +66,22 @@ function refuse(field: string, reason: VPNFieldReason): VPNFieldError {
   return { field, reason };
 }
 
-function isASCIIAlphanumeric(character: string): boolean {
-  return /^[A-Za-z0-9]$/.test(character);
-}
-
-function utf8Length(text: string): number {
-  return new TextEncoder().encode(text).length;
-}
-
 function validateLength(field: string, value: string, limit: number): Outcome {
   return utf8Length(value) > limit ? { field, reason: "too_long", limit } : null;
 }
 
+// 名前に使えない字である。Go の unicode.IsGraphic の外（制御文字、書式の字、私用の字、
+// 行と段落の区切り）と、API のパスの区切りと読まれうる / と \ である。
+const profileNameForbidden = /[\p{Cc}\p{Cf}\p{Cs}\p{Co}\p{Cn}\p{Zl}\p{Zp}/\\]/u;
+// 名前の前後に置けない空白である。前後の空白は、見た目では同じ名前を2つ作る。
+const surroundingWhitespace = /^\s|\s$/u;
+
 // vpnProfileNameError は、プロファイル名として使えないなら、その理由を返す。
-// 作成と「名前を変更」の両方が使う。
+// 作成と「名前を変更」の両方が使う。長さは Go と同じく文字数（コードポイントの数）で数える。
 export function vpnProfileNameError(name: string): VPNFieldError | null {
   if (name === "") return refuse("name", "required");
-  const tooLong = validateLength("name", name, maxProfileNameLength);
-  if (tooLong !== null) return tooLong;
-  for (const character of name) {
-    if (!isASCIIAlphanumeric(character) && character !== "-" && character !== "_") {
-      return refuse("name", "format");
-    }
-  }
+  if ([...name].length > maxProfileNameLength) return { field: "name", reason: "too_long", limit: maxProfileNameLength };
+  if (profileNameForbidden.test(name) || surroundingWhitespace.test(name)) return refuse("name", "format");
   return null;
 }
 
@@ -141,13 +136,31 @@ function validateL2TP(settings: NonNullable<VPNProfile["l2tp"]>): Outcome {
   return validateProposals("l2tp", settings.ike ?? "", settings.esp ?? "");
 }
 
-// validateServerIdentity は、サーバーの ID を確かめる。`%` で始まる値（`%any` など）は
-// strongSwan が「どの ID でもよい」などと読むので断る。
+// identityRangeTypes は、strongSwan がアドレスの網や範囲として読む ID の型の接頭辞である。
+const identityRangeTypes = ["ipv4net:", "ipv6net:", "ipv4range:", "ipv6range:"];
+
+// matchesManyServers は、Go の vpn.ServerIdentityMatchesManyServers と同じく、strongSwan が
+// どの ID にも、または複数の ID に一致すると読む値かを返す（`%any`、`*` を含む値、未指定の
+// アドレス、アドレスの網と範囲）。
+function matchesManyServers(identity: string): boolean {
+  if (identity.startsWith("%") || identity.includes("*")) return true;
+  const lowered = identity.toLowerCase();
+  if (identityRangeTypes.some((prefix) => lowered.startsWith(prefix))) return true;
+  const address = lowered.replace(/^ipv4:/, "").replace(/^ipv6:/, "");
+  const parsed = parseAddress(address);
+  if (parsed !== null && parsed.zone === "" && parsed.octets.every((octet) => octet === 0)) return true;
+  if (parsePrefix(address) !== null) return true;
+  const dash = address.indexOf("-");
+  return dash >= 0 && parseAddress(address.slice(0, dash)) !== null && parseAddress(address.slice(dash + 1)) !== null;
+}
+
+// validateServerIdentity は、サーバーの ID を確かめる。ひとつのサーバーに決まらない値は
+// 断る。認証局の証明書を持つ誰とでも繋いでしまうからである。
 function validateServerIdentity(identity: string): Outcome {
   if (identity === "") return null;
   const field = "ikev2.serverIdentity";
   return validateLength(field, identity, maxUsernameLength) ??
-    (usernameForbidden.test(identity) || identity.startsWith("%") ? refuse(field, "format") : null);
+    (usernameForbidden.test(identity) || matchesManyServers(identity) ? refuse(field, "format") : null);
 }
 
 function validateCACertificate(settings: NonNullable<VPNProfile["ikev2"]>): Outcome {
@@ -227,14 +240,24 @@ function validateBackendSettings(profile: VPNProfile): Outcome {
   }
 }
 
+// validateForeignSection は、backend と違う方式の節があれば、その節を断る。画面は
+// 選んだ方式の節だけを送る（profileOf）が、engine と同じ答えを返すために確かめる。
+function validateForeignSection(profile: VPNProfile): Outcome {
+  const own = settingsSection[profile.backend];
+  const foreign = Object.values(settingsSection).find(
+    (section) => section !== own && profile[section] !== undefined,
+  );
+  return foreign === undefined ? null : refuse(foreign, "unexpected");
+}
+
 // vpnProfileFieldError は、engine がこのプロファイルを断るなら、最初に断る項目と理由を
 // 返す。通るなら null を返す。
 export function vpnProfileFieldError(profile: VPNProfile): VPNFieldError | null {
-  // backend と違う節は、保存するときに落とすので見ない（Go の Normalized と同じ）。
   return (
     vpnProfileNameError(profile.name) ??
     (isVPNBackend(profile.backend) ? null : refuse("backend", "unsupported")) ??
     validateResolvers(profile.dns ?? []) ??
+    validateForeignSection(profile) ??
     validateBackendSettings(profile)
   );
 }

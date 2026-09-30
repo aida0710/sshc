@@ -24,8 +24,8 @@ var openVPNFieldReasons = map[vpn.Reason]string{
 	vpn.ReasonRequiredByConfig: "設定ファイルがユーザー名とパスワードを要求しています（auth-user-pass）。ユーザー名を入力してください。",
 }
 
-// openVPNSessionReasons は、OpenVPN の経路を用意できなかった理由の言い方である。
-var openVPNSessionReasons = map[vpn.FailureReason]string{
+// openVPNRouteReasons は、OpenVPN の経路を用意できなかった理由の言い方である。
+var openVPNRouteReasons = map[vpn.FailureReason]string{
 	vpn.FailureOpenVPNAuthentication: "VPNサーバーが認証を拒否しました。ユーザー名とパスワードを確認してください。",
 	vpn.FailureOpenVPNTLS: "TLSのハンドシェイクに失敗しました。設定ファイルの証明書と鍵、" +
 		"サーバーの証明書の確認の設定（remote-cert-tlsなど）を確認してください。",
@@ -35,16 +35,56 @@ var openVPNSessionReasons = map[vpn.FailureReason]string{
 	vpn.FailureOpenVPN:              "OpenVPNが終了しました。ログで理由を確認してください。",
 }
 
+// openVPNEnglishDirectiveReasons は、openVPNDirectiveReasons の英語である。
+var openVPNEnglishDirectiveReasons = map[vpn.Reason]string{
+	vpn.ReasonFileReference: "\"%[1]s\" names a file, which the container cannot read. " +
+		"Embed its contents as <%[1]s>…</%[1]s>.",
+	vpn.ReasonServerMode: "\"%s\" is a VPN server setting, so it cannot be used.",
+}
+
+// openVPNEnglishFieldReasons は、openVPNFieldReasons の英語である。
+var openVPNEnglishFieldReasons = map[vpn.Reason]string{
+	vpn.ReasonFileReference:     "Directives that name a file cannot be used. Embed the contents in the configuration file.",
+	vpn.ReasonServerMode:        "VPN server settings cannot be used.",
+	vpn.ReasonUnsupportedInline: "This directive cannot be embedded as a block.",
+	vpn.ReasonUnclosedInline:    "An embedded block has no closing line.",
+	vpn.ReasonNotClient: "This is not an OpenVPN client configuration file. " +
+		"Use a file that has client or tls-client.",
+	vpn.ReasonNoRemote: "The configuration file names no VPN server (remote).",
+	vpn.ReasonRequiredByConfig: "The configuration file asks for a username and a password (auth-user-pass). " +
+		"Enter the username.",
+}
+
+// openVPNEnglishRouteReasons は、openVPNRouteReasons の英語である。
+var openVPNEnglishRouteReasons = map[vpn.FailureReason]string{
+	vpn.FailureOpenVPNAuthentication: "The VPN server refused the authentication. Check the username and the password.",
+	vpn.FailureOpenVPNTLS: "The TLS handshake failed. Check the certificates and keys in the file, " +
+		"and how it verifies the server (remote-cert-tls and similar).",
+	vpn.FailureOpenVPNNoResponse: "The VPN server did not answer. Check remote in the file, the network, " +
+		"and the tls-auth and tls-crypt keys.",
+	vpn.FailureOpenVPNConfiguration: "OpenVPN could not load the configuration file. Check the logs for the reason.",
+	vpn.FailureOpenVPN:              "OpenVPN exited. Check the logs for the reason.",
+}
+
 // init は、OpenVPN に固有の理由を、共通の言い方の表に加える。文は Sentence と
 // fieldSentence がまとめて組み立てる。
 func init() {
-	for reason, sentence := range openVPNSessionReasons {
-		sessionReasons[reason] = sentence
+	for reason, sentence := range openVPNRouteReasons {
+		routeReasons[reason] = sentence
 	}
 	for reason, sentence := range openVPNFieldReasons {
 		fieldReasons[reason] = sentence
 	}
 	for reason, pattern := range openVPNDirectiveReasons {
 		directiveReasons[reason] = pattern
+	}
+	for reason, sentence := range openVPNEnglishRouteReasons {
+		englishRouteReasons[reason] = sentence
+	}
+	for reason, sentence := range openVPNEnglishFieldReasons {
+		englishFieldReasons[reason] = sentence
+	}
+	for reason, pattern := range openVPNEnglishDirectiveReasons {
+		englishDirectiveReasons[reason] = pattern
 	}
 }

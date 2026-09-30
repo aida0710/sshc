@@ -1,6 +1,8 @@
 package vpn
 
 import (
+	"context"
+	"net"
 	"strings"
 	"testing"
 	"time"
@@ -8,7 +10,7 @@ import (
 
 // 通っている接続がある経路は、無操作にならない。
 func TestARouteWithOpenConnectionsIsNeverIdle(t *testing.T) {
-	state := &sessionState{}
+	state := &routeState{}
 	start := time.Date(2026, 9, 23, 12, 0, 0, 0, time.UTC)
 
 	state.borrow()
@@ -31,15 +33,21 @@ func TestARouteWithOpenConnectionsIsNeverIdle(t *testing.T) {
 //
 // 数を間違えると、まだ使われている経路を無操作と見なして畳んでしまう。
 func TestClosingOneConnectionTwiceCountsOnce(t *testing.T) {
-	state := &sessionState{}
+	state := &routeState{}
 	start := time.Date(2026, 9, 23, 12, 0, 0, 0, time.UTC)
 	state.borrow()
 	state.borrow()
 
-	closed := &countedConnection{release: func() { state.release(start) }}
-	closed.once.Do(closed.release)
-	closed.once.Do(closed.release)
+	near, far := net.Pipe()
+	defer far.Close()
+	closed := &countedConnection{Conn: near, release: func() { state.release(start) }}
 
+	_ = closed.Close()
+	_ = closed.Close()
+
+	if open := state.openConnections(); open != 1 {
+		t.Fatalf("2本のうち1本を二重に閉じたあとの接続の数 = %d, want 1", open)
+	}
 	if idle := state.idleFor(start.Add(time.Hour)); idle != 0 {
 		t.Fatalf("1本閉じただけで無操作になった: %v", idle)
 	}
@@ -49,7 +57,7 @@ func TestClosingOneConnectionTwiceCountsOnce(t *testing.T) {
 //
 // 起こしたばかりの経路を、次の接続が来る前に畳まないためである。
 func TestARouteThatWasNeverUsedIsNotReportedAsIdle(t *testing.T) {
-	state := &sessionState{}
+	state := &routeState{}
 
 	if idle := state.idleFor(time.Now()); idle != 0 {
 		t.Fatalf("使われる前の経路を無操作と数えた: %v", idle)
@@ -60,10 +68,12 @@ func TestARouteThatWasNeverUsedIsNotReportedAsIdle(t *testing.T) {
 //
 // 段階を state.transition で守ると、起動が終わるまで状態を読む側が待たされる。
 // 何分かかるか分からない相手を待っているときに、何も答えられなくなる。
-func TestThePhaseIsReadableWhileAStartHoldsTheSessionLock(t *testing.T) {
-	state := &sessionState{}
-	state.transition.Lock()
-	defer state.transition.Unlock()
+func TestThePhaseIsReadableWhileAStartHoldsTheTransitionLock(t *testing.T) {
+	state := &routeState{}
+	if err := state.transition.lock(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	defer state.transition.unlock()
 
 	state.enterPhase(PhaseImage)
 	if phase := state.currentPhase(); phase != PhaseImage {
@@ -77,7 +87,7 @@ func TestThePhaseIsReadableWhileAStartHoldsTheSessionLock(t *testing.T) {
 
 // 用意していない経路は、どの段階にもいない。
 func TestARouteThatIsNotBeingOpenedReportsNoPhase(t *testing.T) {
-	state := &sessionState{}
+	state := &routeState{}
 
 	if phase := state.currentPhase(); phase != "" {
 		t.Fatalf("phase = %q", phase)
@@ -93,7 +103,7 @@ func TestARouteThatIsNotBeingOpenedReportsNoPhase(t *testing.T) {
 //
 // 数えないと、`vpn up` だけの経路が engine の寿命のあいだ残り続ける。
 func TestARouteThatWasOnlyStartedCountsIdleFromItsStart(t *testing.T) {
-	state := &sessionState{}
+	state := &routeState{}
 	start := time.Date(2026, 9, 23, 12, 0, 0, 0, time.UTC)
 
 	state.markStarted(routeIdentity{profile: Profile{Name: "lab"}}, nil, start)
@@ -105,7 +115,7 @@ func TestARouteThatWasOnlyStartedCountsIdleFromItsStart(t *testing.T) {
 
 // 前に使い終えた時刻が古くても、作り直した経路は作り直した時刻から数える。
 func TestARestartedRouteForgetsTheIdleTimeOfItsPreviousUse(t *testing.T) {
-	state := &sessionState{}
+	state := &routeState{}
 	long := time.Date(2026, 9, 23, 12, 0, 0, 0, time.UTC)
 	state.borrow()
 	state.release(long)
@@ -120,7 +130,7 @@ func TestARestartedRouteForgetsTheIdleTimeOfItsPreviousUse(t *testing.T) {
 
 // 起動を待っている接続（予約）がある経路は、無操作にならない。
 func TestAReservationKeepsTheRouteFromBeingIdle(t *testing.T) {
-	state := &sessionState{}
+	state := &routeState{}
 	start := time.Date(2026, 9, 23, 12, 0, 0, 0, time.UTC)
 	state.markStarted(routeIdentity{profile: Profile{Name: "lab"}}, nil, start)
 
@@ -133,7 +143,7 @@ func TestAReservationKeepsTheRouteFromBeingIdle(t *testing.T) {
 
 // 用意の途中の経路は、無操作として畳まない。
 func TestARouteBeingPreparedIsNotIdle(t *testing.T) {
-	state := &sessionState{}
+	state := &routeState{}
 	start := time.Date(2026, 9, 23, 12, 0, 0, 0, time.UTC)
 	state.markStarted(routeIdentity{profile: Profile{Name: "lab"}}, nil, start)
 
@@ -149,7 +159,7 @@ func TestARouteBeingPreparedIsNotIdle(t *testing.T) {
 // CLI は起動を求めてから engine の中継へ繋ぐ。そのあいだに、前回の接続から数えた
 // 無操作で停止されないためである。
 func TestAskingForARunningRouteRestartsItsIdleClock(t *testing.T) {
-	state := &sessionState{}
+	state := &routeState{}
 	start := time.Date(2026, 9, 23, 12, 0, 0, 0, time.UTC)
 	state.borrow()
 	state.release(start)
@@ -163,7 +173,7 @@ func TestAskingForARunningRouteRestartsItsIdleClock(t *testing.T) {
 
 // 通っている接続がある経路の起点は動かさない。
 func TestTouchingARouteInUseChangesNothing(t *testing.T) {
-	state := &sessionState{}
+	state := &routeState{}
 	start := time.Date(2026, 9, 23, 12, 0, 0, 0, time.UTC)
 	state.borrow()
 
@@ -188,7 +198,7 @@ func TestOnlyLongOrHumanPhasesHaveANotice(t *testing.T) {
 // 経路を止めると切れる接続の数には、経路を待っている接続も入る。画面は切断の前に
 // この数を見せる。
 func TestTheConnectionsAStopWouldCutIncludeThoseWaitingForTheRoute(t *testing.T) {
-	state := &sessionState{}
+	state := &routeState{}
 	start := time.Date(2026, 9, 29, 12, 0, 0, 0, time.UTC)
 
 	state.borrow() // 通っている接続
@@ -205,7 +215,7 @@ func TestTheConnectionsAStopWouldCutIncludeThoseWaitingForTheRoute(t *testing.T)
 // 設定が同じでも、シークレットが変わった経路は作り直す。WireGuard と OpenVPN では、設定
 // ファイルがシークレットなので、直した設定ファイルがそのまま使われ続けないようにする。
 func TestARouteIsRebuiltWhenOnlyItsSecretsChange(t *testing.T) {
-	state := &sessionState{}
+	state := &routeState{}
 	started := newRouteIdentity(validProfile(), validSecrets())
 	state.markStarted(started, &engineRelay{}, time.Date(2026, 9, 29, 12, 0, 0, 0, time.UTC))
 	edited := Secrets{WireGuard: &WireGuardSecrets{

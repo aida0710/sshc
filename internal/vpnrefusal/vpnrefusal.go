@@ -1,13 +1,15 @@
 // Package vpnrefusal は、VPN の操作や接続を断った理由を、決まった語と、利用者
-// 向けの日本語の1文に直す。
+// 向けの1文に直す。
 //
 // HTTP API の problem、engine の中継の答え、CLI の表示、Terminal の接続ログが同じ
-// 語を使う。画面は語を i18n カタログで訳し、この文は使わない。
+// 語を使う。文は2つの言語で持つ。sshcエンジンの Terminal の接続ログは日本語の文
+// （Sentence）を、CLI は英語の文（EnglishSentence）を使う。画面は語を i18n カタログで
+// 訳し、この文は使わない。英語の文は、画面の英語（web/src/i18n/messages/en.ts の
+// vpn.*）と同じ文面にする。
 package vpnrefusal
 
 import (
 	"errors"
-	"fmt"
 
 	"sshc/internal/application"
 	"sshc/internal/secret"
@@ -16,7 +18,7 @@ import (
 
 // Refusal は、断った理由の語である。
 type Refusal struct {
-	// Code は、断った種類である（`vpn_session_failed` など）。
+	// Code は、断った種類である（`vpn_route_failed` など）。
 	Code string
 	// Field は、項目の誤りのときの項目の JSON パスである。
 	Field string
@@ -48,9 +50,15 @@ const (
 	// CodeChangedConcurrently は、読んでから書くまでのあいだに、ほかの操作が同じ
 	// 設定を変えたことを表す。何も書いていない。
 	CodeChangedConcurrently = "vpn_changed_concurrently"
-	CodeDestinationInvalid  = vpn.CodeDestinationInvalid
-	CodeTargetFailed        = vpn.CodeTargetFailed
-	CodeSessionFailed       = vpn.CodeSessionFailed
+	// CodeRouteDisconnected は、利用者が経路を切断したため、経路を起動しなかった（起動の
+	// 途中なら中止した）ことを表す。
+	CodeRouteDisconnected = "vpn_route_disconnected"
+	// CodeRouteStopped は、起動の途中で経路が停止されたため、起動を中止したことを表す。
+	// sshcエンジンの終了と、プロファイルの削除・名前の変更が経路を停止する。
+	CodeRouteStopped       = "vpn_route_stopped"
+	CodeDestinationInvalid = vpn.CodeDestinationInvalid
+	CodeTargetFailed       = vpn.CodeTargetFailed
+	CodeRouteFailed        = vpn.CodeRouteFailed
 )
 
 // kinds は、失敗の種類と語の対応である。上から順に照らし、最初に当たったものを使う。
@@ -69,15 +77,17 @@ var kinds = []struct {
 	{secret.ErrUnknownCredential, CodeSecretsMissing},
 	{secret.ErrLocked, CodeVaultLocked},
 	{secret.ErrNoVault, CodeVaultMissing},
+	{vpn.ErrRouteDisconnected, CodeRouteDisconnected},
+	{vpn.ErrRouteStopped, CodeRouteStopped},
 	{vpn.ErrDockerMissing, CodeDockerMissing},
 	{vpn.ErrDockerNotRunning, CodeDockerNotRunning},
 	{vpn.ErrTunnelDevice, CodeTunnelDeviceMissing},
 	{vpn.ErrImageBuild, CodeImageBuildFailed},
-	{vpn.ErrSessionForeign, CodeContainerForeign},
+	{vpn.ErrContainerForeign, CodeContainerForeign},
 	{vpn.ErrSocketPath, CodeSocketPathTooLong},
 	{vpn.ErrDestination, CodeDestinationInvalid},
 	{vpn.ErrTargetFailed, CodeTargetFailed},
-	{vpn.ErrSessionFailed, CodeSessionFailed},
+	{vpn.ErrRouteFailed, CodeRouteFailed},
 }
 
 // Known は、code がこの package の語かを返す。engine が返した problem のうち、
@@ -120,9 +130,9 @@ func Of(err error) (Refusal, bool) {
 		if errors.As(err, &target) {
 			refusal.Reason = string(target.Reason)
 		}
-		var session *vpn.SessionFailure
-		if errors.As(err, &session) {
-			refusal.Reason = string(session.Reason)
+		var route *vpn.RouteFailure
+		if errors.As(err, &route) {
+			refusal.Reason = string(route.Reason)
 		}
 		return refusal, true
 	}
@@ -133,7 +143,7 @@ func Of(err error) (Refusal, bool) {
 // 案内の文に「ログを確認してください」を添えるかどうかに使う。
 func HasLogs(code string) bool {
 	switch code {
-	case CodeSessionFailed, CodeImageBuildFailed, CodeTargetFailed, CodeDockerNotRunning:
+	case CodeRouteFailed, CodeImageBuildFailed, CodeTargetFailed, CodeDockerNotRunning:
 		return true
 	}
 	return false
@@ -150,7 +160,7 @@ func (refusal Refusal) RequiresAction() bool {
 			return false
 		}
 		return true
-	case CodeSessionFailed:
+	case CodeRouteFailed:
 		switch vpn.FailureReason(refusal.Reason) {
 		case vpn.FailureTunnelLost, vpn.FailureTimeout, vpn.FailureUnknown:
 			return false
@@ -177,9 +187,13 @@ var sentences = map[string]string{
 	CodeTunnelDeviceMissing: "この方式に必要なトンネル用のデバイス（/dev/net/tun、/dev/ppp）をDockerで使用できません。",
 	CodeImageBuildFailed:    "VPNのコンテナイメージの作成に失敗しました。ネットワークとDockerを確認してください。",
 	CodeContainerForeign:    "sshc以外が作成した同じ名前のコンテナがあるため、操作を中止しました。",
-	CodeSocketPathTooLong: "sshcのデータの保存場所のパスが長すぎるため、VPN経路の中継を作成できません。" +
-		"VPNプロファイルの名前を短くしてください。",
+	// ソケットの場所は、プロファイル名から作る固定長の識別子で決まり、名前の長さに
+	// 左右されない（vpn.routeDirectory）。長さを変えられるのは ~/.ssh の実際の場所だけである。
+	CodeSocketPathTooLong: "sshcのデータの保存場所（~/.ssh/sshc）のパスが長すぎるため、VPN経路の中継を作成できません。" +
+		"~/.sshをパスの短いフォルダへ移し、元の場所にシンボリックリンクを置いてください。",
 	CodeChangedConcurrently: "ほかの操作と同時に変更されたため、保存しませんでした。もう一度やり直してください。",
+	CodeRouteDisconnected:   "VPN経路が切断されたため、起動を中止しました。",
+	CodeRouteStopped:        "VPN経路が停止されたため、起動を中止しました。",
 }
 
 // fieldReasons は、項目を受け取れなかった理由の言い方である。%d を含むものには上限が入る。
@@ -204,8 +218,8 @@ var destinationReasons = map[vpn.Reason]string{
 	vpn.ReasonNameNeedsDNS: "接続先をホスト名で指定する場合は、VPNプロファイルにVPN内のDNSサーバーを指定してください。",
 }
 
-// sessionReasons は、経路を用意できなかった理由の言い方である。
-var sessionReasons = map[vpn.FailureReason]string{
+// routeReasons は、経路を用意できなかった理由の言い方である。
+var routeReasons = map[vpn.FailureReason]string{
 	vpn.FailureUnknown:           "原因を特定できませんでした。",
 	vpn.FailureTimeout:           "接続がタイムアウトしました。",
 	vpn.FailureServerUnresolved:  "VPNサーバーの名前解決に失敗しました。サーバーの指定を確認してください。",
@@ -226,51 +240,25 @@ var targetReasons = map[vpn.FailureReason]string{
 	vpn.FailureTimeout:           "接続がタイムアウトしました。",
 }
 
-// Sentence は、理由を利用者向けの日本語の1文にする。
-func Sentence(refusal Refusal) string {
-	switch refusal.Code {
-	case CodeProfileInvalid, CodeSecretsMissing:
-		return fieldSentence(refusal)
-	case CodeDestinationInvalid:
-		sentence, known := destinationReasons[vpn.Reason(refusal.Reason)]
-		if !known {
-			sentence = destinationReasons[vpn.ReasonFormat]
-		}
-		return sentence
-	case CodeTargetFailed:
-		sentence, known := targetReasons[vpn.FailureReason(refusal.Reason)]
-		if !known {
-			sentence = sessionReasons[vpn.FailureUnknown]
-		}
-		return "VPN経由で接続先に接続できませんでした。" + sentence
-	case CodeSessionFailed:
-		sentence, known := sessionReasons[vpn.FailureReason(refusal.Reason)]
-		if !known {
-			sentence = sessionReasons[vpn.FailureUnknown]
-		}
-		return "VPNの接続に失敗しました。" + sentence
-	}
-	if sentence, known := sentences[refusal.Code]; known {
-		return sentence
-	}
-	return "VPNの操作に失敗しました。"
+// japanese は、sshcエンジンの Terminal の接続ログとコンテナのログが使う日本語の言い方である。
+var japanese = phrasebook{
+	codes: sentences, fields: fieldReasons, destinations: destinationReasons,
+	routes: routeReasons, targets: targetReasons, directives: directiveReasons,
+	frames: phraseFrames{
+		routeFailed:     "VPNの接続に失敗しました。%s",
+		targetFailed:    "VPN経由で接続先に接続できませんでした。%s",
+		operationFailed: "VPNの操作に失敗しました。",
+		secretsMissing:  "このVPNプロファイルのシークレット（秘密鍵やパスワード）が保存されていません。",
+		profileInvalid:  "VPNプロファイルに使用できない値があります。VPNサーバーとDNSサーバーの指定を確認してください。",
+		lineDirective:   "%d行目の%s",
+		line:            "%d行目：%s",
+		peerMissing:     "%d行目の[Peer]に「%s」がありません。",
+		fileMissing:     "設定ファイルに「%s」がありません。",
+	},
 }
 
-// fieldSentence は、項目の誤りを「項目: 理由」の1文にする。項目が分からなければ、
-// 何を確かめればよいかだけを言う。
-func fieldSentence(refusal Refusal) string {
-	sentence, known := fieldReasons[vpn.Reason(refusal.Reason)]
-	if refusal.Field == "" || !known {
-		if refusal.Code == CodeSecretsMissing {
-			return "このVPNプロファイルのシークレット（秘密鍵やパスワード）が保存されていません。"
-		}
-		return "VPNプロファイルに使用できない値があります。VPNサーバーとDNSサーバーの指定を確認してください。"
-	}
-	if refusal.Limit > 0 {
-		sentence = fmt.Sprintf(sentence, refusal.Limit)
-	}
-	if refusal.Line > 0 || refusal.Directive != "" {
-		sentence = configLineSentence(refusal, sentence)
-	}
-	return refusal.Field + ": " + sentence
-}
+// Sentence は、理由を sshcエンジンの接続ログに書く日本語の1文にする。
+func Sentence(refusal Refusal) string { return japanese.sentence(refusal) }
+
+// EnglishSentence は、理由を CLI に書く英語の1文にする。
+func EnglishSentence(refusal Refusal) string { return english.sentence(refusal) }

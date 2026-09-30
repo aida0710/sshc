@@ -2,8 +2,6 @@ package vpn
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"strconv"
 	"strings"
 	"sync"
@@ -14,22 +12,6 @@ import (
 // コンテナは、利用者（uid）と workspace の2つの札で自分のものと見分ける。uid だけ
 // では、同じ利用者が HOME を変えて動かしている別の engine のコンテナまで止めて
 // しまう。
-
-// workspaceIdentityLength は、workspace の識別子に使うハッシュの桁数である。
-// コンテナ名に入るので短くし、衝突しない程度には長くする。
-const workspaceIdentityLength = 12
-
-// workspaceIdentity は、中継を置く directory から workspace の識別子を作る。
-// 同じ workspace で起動し直した engine は、同じ識別子になる。
-func workspaceIdentity(directory string) string {
-	digest := sha256.Sum256([]byte(directory))
-	return hex.EncodeToString(digest[:])[:workspaceIdentityLength]
-}
-
-// containerName は、この利用者のこの workspace のこのプロファイルのコンテナ名である。
-func (manager *Manager) containerName(profileName string) string {
-	return "sshc-vpn-" + profileName + "-" + strconv.Itoa(manager.owner) + "-" + manager.workspace
-}
 
 // orphanGate は、回収が終わるまで経路の起動を待たせる。
 //

@@ -543,11 +543,17 @@ func (v *Vault) RelocateSubjects(kind Kind, relocations map[string]string) (bool
 	return true, nil
 }
 
+// maxVaultNameLength は、Vault が資格情報の名前として受け付ける上限（UTF-8 のバイト数）
+// である。共有の認証情報の名前は、HTTP の入口が MaxCredentialNameLength で先に断る。VPN
+// プロファイルのシークレットはプロファイル名を名前にする。プロファイル名は 48 文字まで
+// 使えるので（internal/vpn）、4 バイトの字だけの名前でも収まる長さにする。
+const maxVaultNameLength = 192
+
 // validCredentialName は、ユーザーが打ち込み、画面が表示できる名前を受け付ける。これは
 // alias ではない。資格情報は、それが何のためのものかにちなんで名付けられ、それは
 // ホスト名ではなく「オフィスの VM 群」かもしれないからだ。
 func validCredentialName(name string) bool {
-	if name == "" || len(name) > MaxCredentialNameLength {
+	if name == "" || len(name) > maxVaultNameLength {
 		return false
 	}
 	return !strings.ContainsAny(name, "\x00\r\n")

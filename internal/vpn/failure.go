@@ -1,6 +1,9 @@
 package vpn
 
-import "fmt"
+import (
+	"fmt"
+	"slices"
+)
 
 // FailureReason は、コンテナが経路を用意できなかった理由の語である。
 //
@@ -81,16 +84,27 @@ var knownFailureReasons = map[FailureReason]bool{
 	FailureTargetNotAllowed: true,
 }
 
-// SessionFailure は、経路を用意できなかったことと、その理由である。
+// FailureReasons は、agent が書いてよい理由の語を、語の順に返す。理由の言い方を持つ層
+// （internal/vpnrefusal、画面）のテストが、言い方の足し忘れを見つけるのに使う。
+func FailureReasons() []FailureReason {
+	reasons := make([]FailureReason, 0, len(knownFailureReasons))
+	for reason := range knownFailureReasons {
+		reasons = append(reasons, reason)
+	}
+	slices.Sort(reasons)
+	return reasons
+}
+
+// RouteFailure は、経路を用意できなかったことと、その理由である。
 //
-// errors.Is(err, ErrSessionFailed) でも見分けられる。
-type SessionFailure struct {
+// errors.Is(err, ErrRouteFailed) でも見分けられる。
+type RouteFailure struct {
 	Profile string
 	Reason  FailureReason
 }
 
-func (failure *SessionFailure) Error() string {
-	return fmt.Sprintf("%v: %s: %s", ErrSessionFailed, failure.Profile, failure.Reason)
+func (failure *RouteFailure) Error() string {
+	return fmt.Sprintf("%v: %s: %s", ErrRouteFailed, failure.Profile, failure.Reason)
 }
 
-func (failure *SessionFailure) Unwrap() error { return ErrSessionFailed }
+func (failure *RouteFailure) Unwrap() error { return ErrRouteFailed }

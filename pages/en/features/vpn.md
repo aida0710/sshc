@@ -9,7 +9,7 @@ Route a chosen SSH connection through a VPN that belongs to that connection alon
 
 A VPN profile holds only what it takes to reach the VPN: its settings and secrets. It has no target. Like a password, a profile is attached to connections in Connections, and each connection reaches its own `HostName` and `Port` through it. One profile can serve many connections.
 
-This needs Docker on the machine. When Docker is missing or not running, sshc says so and refuses rather than falling back.
+This needs Docker 20.10 or later on the machine (the container is started with `docker run --pull never`). When Docker is missing or not running, sshc says so and refuses rather than falling back.
 
 ## What happens
 
@@ -31,13 +31,15 @@ The container adds a route and a packet filter only for the targets connections 
 
 ## What "does not touch the host" covers
 
-The host default route, DNS, NetworkManager and an already-connected VPN are left alone. Neither `--privileged` nor `--network host` is used. The container gets one tunnel device (`/dev/net/tun` for WireGuard, OpenConnect and OpenVPN, `/dev/ppp` for L2TP/IPsec; none for IKEv2/IPsec, which uses the kernel's XFRM interface) and only the capabilities that backend needs; for WireGuard and OpenVPN everything but `CAP_NET_ADMIN`, `CAP_NET_RAW`, `CAP_DAC_OVERRIDE` and `CAP_CHOWN` is dropped.
+The host default route, DNS, NetworkManager and an already-connected VPN are left alone. Neither `--privileged` nor `--network host` is used. The container gets one tunnel device (`/dev/net/tun` for WireGuard, OpenConnect and OpenVPN, `/dev/ppp` for L2TP/IPsec; none for IKEv2/IPsec, which uses the kernel's XFRM interface) and capabilities that depend on the backend. WireGuard and OpenVPN drop everything but `CAP_NET_ADMIN`, `CAP_NET_RAW` and `CAP_DAC_OVERRIDE`. L2TP/IPsec, OpenConnect and IKEv2/IPsec keep Docker's default capabilities and add `CAP_NET_ADMIN`; the capabilities these backends need have not yet been confirmed against real VPN servers, so the defaults are not dropped.
 
 It is not unrelated to the host: it uses Docker's bridge and the kernel's tunnel support, and anyone who can drive Docker generally holds strong host privileges. What is isolated is the VPN's routes, DNS and connection state, and the application traffic sent into it.
 
 ## Creating a profile
 
 Create one from the VPN screen or with `sshc vpn add <name>`.
+
+A name may contain spaces and non-ASCII letters, up to 48 characters. Leading or trailing spaces, `/`, `\` and control characters such as line breaks are not allowed. On the command line, quote a name that contains spaces, as in `sshc vpn up "Lab VPN"`.
 
 | Field | Meaning |
 |---|---|
@@ -172,7 +174,7 @@ With a username and password, the server's certificate is verified before the pa
 - Leave it blank to verify against the public certificate authorities (those in Ubuntu's `ca-certificates`).
 - A server that cannot be verified is never connected to, and the password is never sent to it.
 
-The name in the certificate is checked against **Server ID (remote ID)**, which defaults to the VPN server field. When the VPN server is given as an address but the certificate carries a hostname, give that hostname as the server ID. Values starting with `%`, such as `%any`, are refused.
+The name in the certificate is checked against **Server ID (remote ID)**, which defaults to the VPN server field. When the VPN server is given as an address but the certificate carries a hostname, give that hostname as the server ID. A value that does not pin down one server is refused: one starting with `%` such as `%any`, one containing `*` such as `*.example.jp`, `0.0.0.0` or `::`, and address ranges such as `10.0.0.0/8`. Any of them would accept a certificate from any server and could hand the password exchange to the wrong one.
 
 With a pre-shared key, the server authenticates with the same key. The local ID is the ID the VPN server knows this machine by. No CA certificate is used.
 
@@ -212,7 +214,7 @@ If you interrupt a connection with `Ctrl-C` while it is waiting, or close the pa
 
 Closing a route tells the VPN device first. OpenConnect sends a logout, L2TP/IPsec sends an L2TP disconnect and ends the IPsec session, and IKEv2/IPsec ends the IPsec session. OpenVPN tells the server when the configuration file has `explicit-exit-notify`. No session is left behind on the device, so its concurrent-connection slot is freed as well.
 
-**Disconnect** on the VPN screen closes the route and the connections that use it (Terminal, SFTP, `sshc <target>`). When connections are using the route, the screen shows how many and asks before disconnecting. The VPN screen keeps the state of each route current while it is open, so a route started from another screen or the command line can be disconnected without reopening the screen. When the screen opens, the profiles are listed right away, and each route shows "checking" until its state has been read from Docker.
+**Disconnect** on the VPN screen closes the route and the connections that use it (Terminal, SFTP, `sshc <target>`). When connections are using the route, the screen shows how many and asks before disconnecting. The VPN screen keeps the state of each route current while it is open, so a route started from another screen or the command line can be disconnected without reopening the screen. A route that is still being opened, while its image is built or while it waits for approval, can be stopped the same way with **Disconnect** or `sshc vpn down`. While one route is being opened, the other profiles can still be used. When the screen opens, the profiles are listed right away, and each route shows "checking" until its state has been read from Docker.
 
 Terminal does not reconnect the connections closed by **Disconnect** or `sshc vpn down` automatically. Reconnecting them automatically would start the route again right after it was disconnected. Press **Reconnect** in Terminal, or open the connection again, to start the route and connect.
 
@@ -255,11 +257,14 @@ Host lab
   ProxyCommand sshc vpn proxy tohoku %h %p
 ```
 
+Quote a name that contains spaces: `ProxyCommand sshc vpn proxy "Lab VPN" %h %p`.
+
 When the target cannot be reached, it refuses rather than falling back to the ordinary uplink and says why on standard error. The handshake, the keys and `known_hosts` stay with whoever called it; sshc only carries the bytes.
 
 ## Limits
 
-- A target is an IPv4 address or a name; IPv6 addresses are not supported. The VPN server itself cannot be a target.
+- A target is an IPv4 address or a name; IPv6 addresses are not supported. Write an IPv4 address as four numbers, as in `10.0.0.1`; shorthand such as `10.1` and numbers with a leading zero such as `010.0.0.1` are refused. The VPN server itself cannot be a target.
 - Not available for hops beyond a jump host: those travel inside the first SSH connection, where this machine's VPN cannot apply.
 - A connection with a profile cannot also use `ProxyCommand`, which runs on this machine and is therefore outside the VPN. To reach the route from a `ProxyCommand`, leave the profile off and use `sshc vpn proxy` as shown above.
+- **Check reachability** does not dial a connection with a profile, because a direct dial from this machine does not travel through the VPN. Use **Test authentication** to see whether the host answers through the VPN; it goes through the route and starts the route when it is not up.
 - Verified on Linux so far. IKEv2/IPsec uses the XFRM interface of Docker's Linux kernel (Linux 4.19 or later).

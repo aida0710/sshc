@@ -1,23 +1,11 @@
 package application
 
 import (
-	"strings"
-
 	"sshc/internal/config"
 	"sshc/internal/remoteos"
 	"sshc/internal/sshclient"
 	"sshc/internal/storage"
 )
-
-func (s *Service) osIdentity(graph *config.Graph, alias string) HostIdentity {
-	hosts, _ := ProjectHosts(graph, s.workspace.Root())
-	for _, host := range hosts {
-		if strings.EqualFold(host.Identity.Alias, alias) {
-			return host.Identity
-		}
-	}
-	return HostIdentity{}
-}
 
 // ObserveConnectionOS binds the eventual detection to the configuration that
 // opened the connection. A deleted, moved or retargeted host is never updated.
@@ -26,7 +14,7 @@ func (s *Service) ObserveConnectionOS(target sshclient.Target) func(string) {
 	if err != nil {
 		return nil
 	}
-	identity := s.osIdentity(graph, target.Alias)
+	identity := s.connectionIdentity(graph, target.Alias)
 	if identity.IsZero() {
 		return nil
 	}
@@ -53,14 +41,7 @@ func (s *Service) recordConnectionOS(identity HostIdentity, binding, name string
 	if err != nil {
 		return err
 	}
-	if s.osIdentity(graph, identity.Alias) != identity {
-		return nil
-	}
-	current, err := s.passwordBindingForGraph(graph, identity.Alias)
-	if err != nil {
-		return err
-	}
-	if current != binding {
+	if !s.detectionApplies(graph, identity, binding) {
 		return nil
 	}
 	stored, precondition, err := s.metadata.Load()
@@ -93,4 +74,20 @@ func (s *Service) recordConnectionOS(identity HostIdentity, binding, name string
 	}
 	_, err = s.manager.Commit(storage.Request{Operation: "host.detect-os", Changes: []storage.Change{change}})
 	return err
+}
+
+// detectionApplies は、認証の組み合わせ binding の接続で検出した OS が、いまの設定の
+// identity のブロックにまだ当てはまるかを返す。ブロックが消えた、前のブロックに alias を
+// すべて取られた、接続先や認証が変わった、のどれかなら当てはまらない。
+//
+// 確かめ直すのは、そのブロックへ接続する alias である。primary alias は前のブロックに
+// 取られていることがあり（`Host a web` の後ろの `Host web b`）、それで確かめると別の
+// ブロックの接続を見てしまう。
+func (s *Service) detectionApplies(graph *config.Graph, identity HostIdentity, binding string) bool {
+	alias, found := s.connectingAlias(graph, identity)
+	if !found {
+		return false
+	}
+	current, err := s.passwordBindingForGraph(graph, alias)
+	return err == nil && current == binding
 }

@@ -15,23 +15,25 @@ type agentDocument struct {
 	Backend string `json:"backend"`
 	// DNS は、接続先をVPNの中で名前解決するためのDNSサーバーである。
 	DNS []string `json:"dns,omitempty"`
-	// Deadline は、応えない相手を待つのをやめる時刻（UNIX 秒）である。agent の
-	// 待ちはどれも、この時刻までの残りだけ待つ。engine が待つのをやめるより
-	// 先に諦めて、どこで止まったかをログへ残す。
+	// AttemptSeconds は、応えない相手を待つ長さ（秒）である。agent は設定を受け取った
+	// ときから数え、どの待ちもその残りだけ待つ。engine が待つのをやめるより先に諦めて、
+	// どこで止まったかをログへ残す。
 	//
-	// engine とコンテナは同じカーネルの時計を見るので、時刻で渡してよい。
-	Deadline    int64                `json:"deadline"`
-	WireGuard   *wireGuardDocument   `json:"wireguard,omitempty"`
-	L2TP        *strongSwanDocument  `json:"l2tp,omitempty"`
-	OpenConnect *openConnectDocument `json:"openconnect,omitempty"`
-	OpenVPN     *openVPNDocument     `json:"openvpn,omitempty"`
-	IKEv2       *ikev2Document       `json:"ikev2,omitempty"`
+	// 時刻ではなく長さで渡す。macOS と Windows の Docker Desktop、OrbStack、colima では、
+	// コンテナは Linux の VM の時計を読む。VM の時計はスリープ明けなどにホストとずれる
+	// ので、ホストの時刻で渡すと、待つ長さがずれの分だけ狂う。
+	AttemptSeconds int64                `json:"attemptSeconds"`
+	WireGuard      *wireGuardDocument   `json:"wireguard,omitempty"`
+	L2TP           *strongSwanDocument  `json:"l2tp,omitempty"`
+	OpenConnect    *openConnectDocument `json:"openconnect,omitempty"`
+	OpenVPN        *openVPNDocument     `json:"openvpn,omitempty"`
+	IKEv2          *ikev2Document       `json:"ikev2,omitempty"`
 }
 
 // newAgentDocument は、プロファイルと秘密から、コンテナへ渡す設定を作る。
 //
-// now は、二段目のコードを作る時刻であり、締め切りを数え始める時刻である。
-// コードは 30 秒で変わるので、この文書はコンテナへ渡す直前に作る。
+// now は、二段目のコードを作る時刻である。コードは 30 秒で変わるので、この文書は
+// コンテナへ渡す直前に作る。
 func newAgentDocument(profile Profile, secrets Secrets, now time.Time) (string, error) {
 	if err := profile.Validate(); err != nil {
 		return "", err
@@ -40,9 +42,9 @@ func newAgentDocument(profile Profile, secrets Secrets, now time.Time) (string, 
 		return "", err
 	}
 	document := agentDocument{
-		Backend:  string(profile.Backend),
-		DNS:      profile.DNS,
-		Deadline: agentDeadline(profile, now).Unix(),
+		Backend:        string(profile.Backend),
+		DNS:            profile.DNS,
+		AttemptSeconds: int64(agentAttempt(profile) / time.Second),
 	}
 	request := agentSectionRequest{profile: profile, secrets: secrets, now: now}
 	if err := backends[profile.Backend].writeAgentSection(request, &document); err != nil {

@@ -3,8 +3,6 @@ package vpn
 import (
 	"context"
 	"encoding/json"
-	"os"
-	"path/filepath"
 	"strings"
 )
 
@@ -138,8 +136,8 @@ func (manager *Manager) containerStatus(profileName string, running bool) Status
 // tunnelStatus は、agent が書き出した様子を読む。読めなければゼロ値を返す。
 // 状態が読めないことは失敗ではない。経路があることは中継のソケットが示している。
 func (manager *Manager) tunnelStatus(profileName string) TunnelStatus {
-	contents, err := os.ReadFile(filepath.Join(manager.routeDirectory(profileName), statusFileName))
-	if err != nil || len(contents) > maxStatusBytes {
+	contents, err := manager.readRouteFile(profileName, statusFileName, maxStatusBytes)
+	if err != nil {
 		return TunnelStatus{}
 	}
 	var tunnel TunnelStatus
