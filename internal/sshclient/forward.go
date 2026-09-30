@@ -386,9 +386,9 @@ func closeWrite(conn net.Conn) {
 	}
 }
 
-// agentForwardingFailed は、ssh-agent 転送を開始できなかったときの接続ログの行の
+// agentForwardingFailedNotice は、ssh-agent 転送を開始できなかったときの接続ログの行の
 // 書き出しである。理由はこのあとに続ける。
-const agentForwardingFailed = "ssh-agent転送を開始できませんでした"
+const agentForwardingFailedNotice = "ssh-agent転送を開始できませんでした"
 
 // forwardAgent は、こちらの agent をリモートへ貸す。
 //
@@ -400,7 +400,7 @@ func (f *forwards) forwardAgent(client *ssh.Client, session *ssh.Session, connec
 	entry := terminal.Forward{Kind: terminal.ForwardAgent}
 	if connector == nil || connector.Address() == "" {
 		entry.Problem = terminal.ForwardProblemAgentUnreachable
-		trace.announce("%s。接続できるssh-agentがありません。", agentForwardingFailed)
+		trace.announce("%s。接続できるssh-agentがありません。", agentForwardingFailedNotice)
 		f.note(entry)
 		return
 	}
@@ -409,20 +409,20 @@ func (f *forwards) forwardAgent(client *ssh.Client, session *ssh.Session, connec
 		entry.Problem = terminal.ForwardProblemAgentUnreachable
 		// 理由は agent の実装が書いた文で、改行を含みうる。announce は行ごとに
 		// 接続ログの印を付け、CRLF で終える。
-		trace.announce("%s。ssh-agentに接続できません：%v", agentForwardingFailed, err)
+		trace.announce("%s。ssh-agentに接続できません：%v", agentForwardingFailedNotice, err)
 		f.note(entry)
 		return
 	}
 	if err := agent.ForwardToAgent(client, agent.NewClient(conn)); err != nil {
 		entry.Problem = terminal.ForwardProblemFailed
-		trace.announce("%s：%v", agentForwardingFailed, err)
+		trace.announce("%s：%v", agentForwardingFailedNotice, err)
 		_ = conn.Close()
 		f.note(entry)
 		return
 	}
 	if err := agent.RequestAgentForwarding(session); err != nil {
 		entry.Problem = terminal.ForwardProblemFailed
-		trace.announce("%s：%v", agentForwardingFailed, err)
+		trace.announce("%s：%v", agentForwardingFailedNotice, err)
 		_ = conn.Close()
 		f.note(entry)
 		return
