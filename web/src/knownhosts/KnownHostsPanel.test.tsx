@@ -262,6 +262,35 @@ describe("KnownHostsPanel", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/could not/i);
   });
+
+  it("says a symlinked known_hosts is why it cannot be listed and that ssh can add a host", async () => {
+    const symlinked = new ApiError("known_hosts_symlink", 403, {
+      code: "known_hosts_symlink",
+      message: "known_hosts_symlink",
+    });
+    const api = buildApi({ knownHosts: vi.fn().mockRejectedValue(symlinked) });
+    render(<KnownHostsPanel api={api} />);
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("~/.ssh/known_hosts is a symbolic link");
+    expect(alert).toHaveTextContent("connect to the host once with ssh");
+  });
+
+  it("gives the same reason when a key cannot be added to a symlinked known_hosts", async () => {
+    const symlinked = new ApiError("known_hosts_symlink", 403, {
+      code: "known_hosts_symlink",
+      message: "known_hosts_symlink",
+    });
+    const api = buildApi({ addKnownHost: vi.fn().mockRejectedValue(symlinked) });
+    await openAddForm(api);
+
+    await userEvent.click(screen.getByLabelText(acknowledgement));
+    await userEvent.click(screen.getByRole("button", { name: "Add to known_hosts" }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("~/.ssh/known_hosts is a symbolic link");
+    expect(alert).not.toHaveTextContent("known_hosts_symlink");
+  });
 });
 
 describe("where the scan control sits", () => {

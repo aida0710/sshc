@@ -41,7 +41,18 @@ sshcで変更を保存すると、変更前のファイルをバックアップ�
 
 ## SSHホスト鍵
 
-未知のホスト鍵は、対話的なTerminalでは利用者の確認後に保存します。`StrictHostKeyChecking`を`no`または`accept-new`にした接続先では、OpenSSHと同じく確認なしで保存します。保存済みの鍵が変わっていた場合は、この設定に関係なく接続できません。非対話SSH、SFTP、公開鍵登録では、最終接続先とすべてのProxyJump踏み台のホスト鍵が登録済みである必要があります。
+ホスト鍵は、OpenSSHと同じく`UserKnownHostsFile`と`GlobalKnownHostsFile`のすべてのファイルと照合しています。`HostKeyAlias`がある接続先では、その名前で照合しています。設定に書かれていない場合は、次のファイルを使います。
+
+- `UserKnownHostsFile`: `~/.ssh/known_hosts`と`~/.ssh/known_hosts2`
+- `GlobalKnownHostsFile`: macOSとLinuxでは`/etc/ssh/ssh_known_hosts`と`/etc/ssh/ssh_known_hosts2`、Windowsでは`%ProgramData%\ssh\ssh_known_hosts`と`%ProgramData%\ssh\ssh_known_hosts2`
+
+未知のホスト鍵は、対話的なTerminalでは利用者が確認したあとに保存されます。`StrictHostKeyChecking`を`no`または`accept-new`にした接続先では、OpenSSHと同じく確認なしで保存されます。`yes`（`true`）にした接続先では、保存せず、接続しません。保存先は`UserKnownHostsFile`の最初のファイルです。sshcが保存するのは`~/.ssh`の中のファイルだけで、`/dev/null`などそれ以外を指している場合は保存されません。`KnownHostsCommand`は実行しないため、これを設定した接続先では、`StrictHostKeyChecking`が`no`や`accept-new`でも確認が表示されます。
+
+`~/.ssh/known_hosts`などの保存先がシンボリックリンクの場合、sshcはリンク先に書き込まないため、新しいホストには接続できません。登録済みのホストには接続できます。新しいホストの鍵は、`ssh`で一度接続すると登録できます。`~/.ssh`そのものがシンボリックリンクの場合は、リンク先のフォルダに保存されます。
+
+保存済みの鍵が変わっていた場合は、この設定に関係なく接続できません。非対話SSH、SFTP、公開鍵登録では、最終接続先とすべてのProxyJump踏み台のホスト鍵が登録済みである必要があります。
+
+Known Hostsで表示・削除できるのは、`~/.ssh/known_hosts`のエントリーだけです。`~/.ssh/known_hosts2`、`UserKnownHostsFile`で指定したほかのファイル、`GlobalKnownHostsFile`にある鍵は表示されません。これらのファイルにある鍵が変わって接続できない場合は、そのファイルを直接編集してください。`~/.ssh/known_hosts`がシンボリックリンクの場合、Known Hostsには一覧が表示されません。
 
 ## ProxyCommand
 

@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import corpus from "./corpus.generated.json";
-import { formatValues, isValidAlias, isValidGroupName, isValidHostName, parseValues } from "./rules";
+import {
+  formatDirectiveValues,
+  formatValues,
+  isValidAlias,
+  isValidGroupName,
+  isValidHostName,
+  parseDirectiveValues,
+  parseValues,
+} from "./rules";
 
 
 function neverStricter(
@@ -56,4 +64,25 @@ describe("ssh_config の文字列検証", () => {
       expect(parseValues(item.input)).toEqual(item.values ?? []);
     });
   }
+});
+
+describe("行の残りを値にするキーワード", () => {
+  it("ProxyCommand の値は引用し直さずに書かれたとおりに見せる", () => {
+    expect(formatDirectiveValues("ProxyCommand", ["sh -c 'exec nc $(cat /tmp/h) %p'"])).toBe("sh -c 'exec nc $(cat /tmp/h) %p'");
+  });
+
+  it("RemoteCommand の編集は引数に分けず、前後の空白だけを落としてひとつの値で送る", () => {
+    expect(parseDirectiveValues("remotecommand", "  awk '{print $1}' /etc/passwd # it's\t")).toEqual(["awk '{print $1}' /etc/passwd # it's"]);
+    expect(parseDirectiveValues("RemoteCommand", "  ")).toEqual([]);
+  });
+
+  it("閉じない引用は、行末のコメントの外にあるときだけ断る", () => {
+    expect(() => parseDirectiveValues("ProxyCommand", "nc 'oops %h %p")).toThrow("unbalanced_quote");
+    expect(parseDirectiveValues("ProxyCommand", "nc %h %p # it's")).toEqual(["nc %h %p # it's"]);
+  });
+
+  it("ほかのキーワードは argv_split の規則で引用する", () => {
+    expect(formatDirectiveValues("SetEnv", ["GREETING=hello world"])).toBe('"GREETING=hello world"');
+    expect(parseDirectiveValues("SetEnv", "'GREETING=hello world'")).toEqual(["GREETING=hello world"]);
+  });
 });

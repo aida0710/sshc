@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io/fs"
 	"path/filepath"
+	"slices"
 	"sort"
 
 	"sshc/internal/platform/nativepath"
@@ -151,8 +152,8 @@ func (r Resolver) walk(graph *Graph, filePath string, chain []string, depth int)
 
 	generatedStart, generatedEnd, generated := r.generatedLines(node.File)
 
-	for index, line := range node.File.Lines {
-		lineNumber := index + 1
+	for lineIndex, line := range node.File.Lines {
+		lineNumber := lineIndex + 1
 		if line.Kind == LineUnstructured {
 			graph.diagnose(SeverityInfo, DiagnosticUnstructuredLine, filePath, lineNumber, "line is preserved verbatim and can only be edited as raw text")
 			continue
@@ -161,9 +162,12 @@ func (r Resolver) walk(graph *Graph, filePath string, chain []string, depth int)
 			continue
 		}
 
-		condition := node.File.Condition(node.File.BlockAt(index))
+		// Host / Match の中の Include は OpenSSH の正しい書き方であり、
+		// internal/effective も取り込み元の一致状態を引き継いで読む。値の説明は
+		// 欠けないので、条件付きであることだけを知らせる。
+		condition := node.File.Condition(node.File.BlockAt(lineIndex))
 		if condition != "" {
-			graph.diagnose(SeverityWarning, DiagnosticIncludeConditional, filePath, lineNumber, condition)
+			graph.diagnose(SeverityInfo, DiagnosticIncludeConditional, filePath, lineNumber, condition)
 		}
 		values := line.Values()
 		if len(values) == 0 {
@@ -191,14 +195,14 @@ func (r Resolver) walk(graph *Graph, filePath string, chain []string, depth int)
 			// 生の表記を残すと、同じファイルが二つの名前で現れる。その場合、辺をたどる
 			// ディレクティブ走査、実効設定、スナップショット、Include 行の書き換えが
 			// その節点を見つけられなくなる。
-			for index, match := range matches {
-				matches[index] = r.canonical(match)
+			for matchIndex, match := range matches {
+				matches[matchIndex] = r.canonical(match)
 			}
 			sort.Strings(matches)
 			// 生成領域の内側では診断を出さない。その行を書いたのはこのアプリケーション自身で、
 			// 宣言されたグループがまだ空であることは正常な状態である。外側はユーザーが
 			// 書いた行なので、何にも一致しないのは打ち間違いかもしれない。
-			insideGenerated := generated && index > generatedStart && index < generatedEnd
+			insideGenerated := generated && lineIndex > generatedStart && lineIndex < generatedEnd
 			if len(matches) == 0 && !insideGenerated {
 				graph.diagnose(SeverityWarning, DiagnosticIncludeNoMatch, filePath, lineNumber, expanded)
 			}
@@ -210,7 +214,7 @@ func (r Resolver) walk(graph *Graph, filePath string, chain []string, depth int)
 					graph.diagnose(SeverityInfo, DiagnosticIncludeOutsideRoot, filePath, lineNumber, match)
 				}
 				identity := nativepath.Identity(match)
-				if slicesContains(currentChain, identity) {
+				if slices.Contains(currentChain, identity) {
 					graph.diagnose(SeverityError, DiagnosticIncludeCycle, filePath, lineNumber, match)
 					continue
 				}
@@ -227,13 +231,4 @@ func (r Resolver) walk(graph *Graph, filePath string, chain []string, depth int)
 			}
 		}
 	}
-}
-
-func slicesContains(values []string, candidate string) bool {
-	for _, value := range values {
-		if value == candidate {
-			return true
-		}
-	}
-	return false
 }

@@ -402,7 +402,7 @@ func TestErrorBodiesCarryLocationsNeverConfigurationText(t *testing.T) {
 		// lossless edit のルールにより拒否された編集。
 		harness.call(t, http.MethodPost, "/api/v1/config/save", application.EditRequest{
 			Kind: application.EditHostFields, Path: "config", Base: handlerConfig, Alias: "bastion",
-			Fields: []application.FieldEdit{{Action: application.ActionSet, Line: 2, Values: []string{`echo "hi"`}}},
+			Fields: []application.FieldEdit{{Action: application.ActionSet, Line: 2, Values: []string{"echo\nhi"}}},
 		}, true, true),
 		// 未知の host。
 		harness.call(t, http.MethodGet, "/api/v1/config/host?path=config&alias=absent", nil, true, true),

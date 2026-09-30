@@ -36,7 +36,7 @@ func ReadConnections(home string) ([]Connection, error) {
 			connection.HostName = value
 		}
 		connection.User = resolution.Values.First("user")
-		if port := resolution.Values.First("port"); port != "" && port != "22" {
+		if port := resolution.Values.First("port"); port != "" && port != effective.DefaultPort {
 			connection.Port = port
 		}
 		listed = append(listed, connection)

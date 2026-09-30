@@ -507,9 +507,15 @@ function RemoteKeyPlanCard({ plan, manual }: { plan: RemoteKeyPlan; manual: bool
   );
 }
 
+// failureMessages は、利用者が直すものがほかの失敗と違う code に、専用の文を割り当てる。
+const failureMessages: Readonly<Record<string, MessageKey>> = {
+  config_not_confirmable: "rk.configNotConfirmable",
+};
+
 function describeFailure(failure: unknown, t: Translate, fallback: MessageKey): string {
   const code = failureCode(failure);
-  return code === "" ? t(fallback) : t("rk.withCode", { message: t(fallback), code });
+  if (code === "") return t(fallback);
+  return t("rk.withCode", { message: t(failureMessages[code] ?? fallback), code });
 }
 
 async function settleWithLimit<Input, Output>(

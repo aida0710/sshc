@@ -199,6 +199,7 @@ paths:
               schema: { $ref: "#/components/schemas/RemoteKeyPlan" }
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
   /api/v1/remote-keys/register:
     post:
       operationId: registerRemoteKey
@@ -238,6 +239,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/KnownHostsResponse" }
         "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
   /api/v1/known-hosts/delete:
     post:
       operationId: deleteKnownHosts
@@ -4108,7 +4110,13 @@ components:
       required: [keyword, values]
       properties:
         keyword: { type: string }
-        values: { type: array, items: { type: string } }
+        values:
+          type: array
+          items: { type: string }
+          description: >-
+            The arguments of the directive. ProxyCommand, RemoteCommand, LocalCommand and
+            KnownHostsCommand take the rest of the line as one value, written without
+            requoting; a request with more than one value for them is refused.
     HostMetadata:
       type: object
       additionalProperties: false

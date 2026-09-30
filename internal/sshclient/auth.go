@@ -224,7 +224,10 @@ func (a Auth) keyboard(target Target, prompt Prompter, stored storedCredentials)
 		if passwordRejected {
 			context = "Saved password was rejected.\r\n" + context
 		}
-		answers, err := answerKeyboardChallenge(prompt, context, name, instruction, questions, echos, round.answers, round.answered)
+		challenge := keyboardChallenge{
+			context: context, name: name, instruction: instruction, questions: questions, echos: echos,
+		}
+		answers, err := answerKeyboardChallenge(prompt, challenge, challengeAnswers{values: round.answers, answered: round.answered})
 		return answers, stored.explainUnanswered(err)
 	}
 }
@@ -387,7 +390,8 @@ func isPasswordQuestion(question string) bool {
 func (a Auth) publicKey(target Target, prompt Prompter) (ssh.AuthMethod, bool) {
 	if len(target.Identities) == 0 && (target.IdentitiesOnly || !a.agentConfigured()) {
 		// 鍵がひとつも無い。OpenSSH の既定の探索順（~/.ssh/id_ed25519 など）は
-		// 持たない。B1 が既定値表を持たないと決めた理由がそのまま当てはまる。
+		// 持たない。バージョンとビルドで変わる表であり、internal/effective が
+		// IdentityFile の既定を持たないのと同じ理由である。
 		return nil, false
 	}
 	return ssh.PublicKeysCallback(func() ([]ssh.Signer, error) {
@@ -536,27 +540,35 @@ func (a Auth) read(path string) ([]byte, error) {
 // question before it is written to the terminal.
 const maxChallengeTextRunes = 1024
 
-func answerKeyboardChallenge(
-	prompt Prompter,
-	context, name, instruction string,
-	questions []string,
-	echos []bool,
-	answers []string,
-	answered []bool,
-) ([]string, error) {
+// keyboardChallenge は、サーバーが出した keyboard-interactive の問いひとそろいと、
+// その前に置くこちらの説明（context）である。
+type keyboardChallenge struct {
+	context, name, instruction string
+	questions                  []string
+	echos                      []bool
+}
+
+// challengeAnswers は、問いごとの答えと、保存済みの資格情報ですでに答えたかである。
+type challengeAnswers struct {
+	values   []string
+	answered []bool
+}
+
+// answerKeyboardChallenge は、まだ答えていない問いを利用者に尋ね、答えを返す。
+func answerKeyboardChallenge(prompt Prompter, challenge keyboardChallenge, answers challengeAnswers) ([]string, error) {
 	// name と instruction は、サーバーがユーザーへ向けて書いた文である。捨てると
 	// 「何を応答すればよいか」がそのユーザーに届かない。最初の未回答の問いの前に置く。
 	// ただし端末へそのまま書く文なので、OpenSSH の vis() と同じく制御文字は落とす。
-	preamble := strings.TrimSpace(strings.TrimSpace(context) + "\r\n" +
-		terminal.DisplayText(name, maxChallengeTextRunes) + "\r\n" +
-		terminal.DisplayText(instruction, maxChallengeTextRunes))
+	preamble := strings.TrimSpace(strings.TrimSpace(challenge.context) + "\r\n" +
+		terminal.DisplayText(challenge.name, maxChallengeTextRunes) + "\r\n" +
+		terminal.DisplayText(challenge.instruction, maxChallengeTextRunes))
 	preambleShown := false
-	for index, question := range questions {
-		if index < len(answered) && answered[index] {
+	for index, question := range challenge.questions {
+		if index < len(answers.answered) && answers.answered[index] {
 			continue
 		}
 		ask := prompt.Secret
-		if index < len(echos) && echos[index] {
+		if index < len(challenge.echos) && challenge.echos[index] {
 			ask = prompt.Line
 		}
 		question = terminal.DisplayText(question, maxChallengeTextRunes)
@@ -568,9 +580,9 @@ func answerKeyboardChallenge(
 		if err != nil {
 			return nil, err
 		}
-		answers[index] = answer
+		answers.values[index] = answer
 	}
-	return answers, nil
+	return answers.values, nil
 }
 
 func authenticationTarget(target Target) string {

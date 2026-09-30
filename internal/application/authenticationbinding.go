@@ -18,8 +18,18 @@ func (s *Service) PasswordBinding(alias string) (string, error) {
 }
 
 func (s *Service) passwordBindingForGraph(graph *config.Graph, alias string) (string, error) {
+	target, err := s.targetForGraph(graph, alias)
+	if err != nil {
+		return "", err
+	}
+	return target.AuthenticationBinding(), nil
+}
+
+// targetForGraph は、読み終えた設定グラフから、接続が使うのと同じ Target を組み立てる。
+func (s *Service) targetForGraph(graph *config.Graph, alias string) (sshclient.Target, error) {
+	facts := s.localFacts()
 	resolve := func(candidate string) (effective.Values, error) {
-		resolution := effective.Resolve(graph, candidate, s.localFacts())
+		resolution := effective.Resolve(graph, candidate, facts)
 		if len(resolution.Refusals) == 0 {
 			return resolution.Values, nil
 		}
@@ -30,9 +40,5 @@ func (s *Service) passwordBindingForGraph(graph *config.Graph, alias string) (st
 		}
 		return effective.Values{}, failure
 	}
-	target, err := sshclient.NewTarget(alias, resolve, s.workspace.Home())
-	if err != nil {
-		return "", err
-	}
-	return target.AuthenticationBinding(), nil
+	return sshclient.NewTarget(alias, resolve, facts)
 }

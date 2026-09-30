@@ -2,9 +2,11 @@ package effective
 
 import (
 	"errors"
+	"net/netip"
 	"strings"
 
 	"sshc/internal/config"
+	"sshc/internal/sshmatch"
 )
 
 // 解決を諦める理由。
@@ -48,26 +50,20 @@ type Resolution struct {
 	Refusals []Refusal
 	// Notes は、結果は確定しているが読み手が知っておくべきこと。
 	//
-	// 権威になる前は、これらは「だから ssh -G に委ねる」という意味の
-	// complexity だった。いまは結果が出るので意味が変わる。同じ alias を
-	// 二つのブロックが主張していても、勝つのはどちらかが決まっている。
-	// それでも書いたユーザー本人には見えていないので、印は残す。
+	// 同じ alias を二つのブロックが主張していても、勝つ方は決まっている。それでも
+	// 書いた本人には見えていないので、印を残す。
 	Notes []Complexity
 }
 
-// defaultPort は、Port が書かれていないときの値。
-const defaultPort = "22"
-
 // IdentityFile に既定値は持たない。
 //
-// これは実測に基づく判断である。一度は OpenSSH の既定の並びを写したが、
-// 差分テストが macOS と Linux で違う結果を返した。Linux 側のビルドは
-// ~/.ssh/id_xmss を含んでいた。バージョンとビルドオプションで変わる表であり、
-// 「OpenSSH の既定値表を丸ごと持たない」という判断がここにも当てはまる。
+// OpenSSH の既定の並びはバージョンとビルドオプションで変わる。差分テストでは、Linux の
+// ビルドだけが ~/.ssh/id_xmss を含んでいた。「OpenSSH の既定値表を丸ごと持たない」
+// という判断がここにも当てはまる。
 //
 // 書かれていなければ、この解決器は IdentityFile を応答しない。接続に使う鍵を
-// 選ぶのはプロセス内 SSH クライアント（B2）であり、そちらは OpenSSH の探索順
-// ではなく、利用者が選んだ鍵と鍵の一覧を使う。
+// 選ぶのは internal/sshclient であり、そちらは OpenSSH の探索順ではなく、利用者が
+// 選んだ鍵と鍵の一覧を使う。
 
 // expandsTokens は、解決の時点でトークンを展開するキーワードと、そこで
 // 許されるトークンを対応づける。
@@ -81,8 +77,8 @@ const defaultPort = "22"
 // `HostName %r.example.com` は "unknown key %r" で落ちる。全トークンを
 // 展開すると、本物なら起動しない設定に、こちらだけが結果を出すことになる。
 //
-// 接続に使うときの展開はプロセス内 SSH クライアント（B2）の仕事である。
-// ExpandTokens はそのために置いてある。
+// 接続に使うときの展開は internal/sshclient の仕事である。ExpandTokens は
+// そのために置いてある。
 var expandsTokens = map[string]string{"hostname": "h"}
 
 // Resolve は、この alias に接続したときに実際に使われる値を返す。
@@ -91,167 +87,19 @@ var expandsTokens = map[string]string{"hostname": "h"}
 // 結果を暗黙に返さないのは、接続に使う値がひとつでも確定しないなら、その alias は
 // 解決できていないからである。
 func Resolve(graph *config.Graph, alias string, facts LocalFacts) Resolution {
-	values := Values{Entries: map[string][]string{}}
 	if graph == nil {
-		return Resolution{Values: values}
+		return Resolution{Values: Values{Entries: map[string][]string{}}}
 	}
+	walk := newResolveWalk(alias, facts)
+	walkLoadOrder(graph, loadOrderVisitor{enterBlock: walk.enterBlock, directive: walk.directive})
+	walk.notes = append(walk.notes, unresolvedIncludeNotes(graph.Diagnostics)...)
 
-	var refusals []Refusal
-	var accepted []Accepted
-	var notes []Complexity
-	matchedHostBlocks := 0
-	claimed := map[string]bool{}
-	applies := true
-
-	set := func(keyword, value string) bool {
-		// 引数の無いディレクティブは値を主張しない。`User` とだけ書かれた行を
-		// 通すと、user が空文字のまま接続に使われる。それは alias と同じ扱いを
-		// 受けるべき欠落であって、確定した空の値ではない。本物の ssh は設定
-		// 全体を撥ねるが、こちらは書かれていないものとして既定値を埋める。
-		// 行そのものは config の診断が別に報告する。
-		lowered := strings.ToLower(keyword)
-		if value == "" {
-			return false
-		}
-		if claimed[lowered] && !cumulativeKeywords[lowered] {
-			return false
-		}
-		if _, seen := values.Entries[lowered]; !seen {
-			values.Keywords = append(values.Keywords, lowered)
-		}
-		values.Entries[lowered] = append(values.Entries[lowered], value)
-		claimed[lowered] = true
-		return true
-	}
-
-	// Match の判定は、そこまでに解決した値を見る。OpenSSH も同じ順で決めるので、
-	// 走査しながら組み立てる。
-	context := func() MatchContext {
-		user := valueOr(values, "user", facts.User)
-		return MatchContext{
-			Alias: alias, OriginalAlias: alias, HostName: matchHostName(values, alias),
-			User: user, LocalUser: facts.User, Tags: values.Entries["tag"],
-		}
-	}
-
-	condition := ""
-	enterBlock := func(filePath string, file *config.File, block config.Block) {
-		condition = file.Condition(block)
-		switch block.Kind {
-		case config.BlockGlobal:
-			applies = true
-		case config.BlockHost:
-			var kind string
-			kind, applies = blockApplies(block, alias)
-			if !applies {
-				return
-			}
-			// 数えるのは alias を指定しているブロックだけである。たまたま
-			// 一致した catch-all は「二つのブロックがこの名前を主張している」
-			// ではない。それはワイルドカードで一致したという別の話である。
-			if DeclaresExactly(block.Patterns, alias) {
-				matchedHostBlocks++
-				if matchedHostBlocks > 1 {
-					notes = append(notes, Complexity{
-						Code: ComplexityDuplicateAlias, Path: filePath, Line: block.Header + 1,
-						Condition: condition, Detail: "more than one Host block claims this alias",
-					})
-				}
-			}
-			if kind == SourceWildcard {
-				notes = append(notes, Complexity{
-					Code: ComplexityWildcardPattern, Path: filePath, Line: block.Header + 1,
-					Condition: condition, Detail: "this block matched through a wildcard pattern",
-				})
-			}
-			for _, pattern := range block.Patterns {
-				if !pattern.Negated {
-					continue
-				}
-				notes = append(notes, Complexity{
-					Code: ComplexityNegatedPattern, Path: filePath, Line: block.Header + 1,
-					Condition: condition, Detail: "this block excludes hosts through " + pattern.Raw,
-				})
-				break
-			}
-		case config.BlockMatch:
-			applies = false
-			for _, criterion := range block.Criteria {
-				if strings.EqualFold(criterion.Keyword, "final") {
-					refusals = append(refusals, Refusal{
-						Code: RefusalMatchFinal, Path: filePath, Line: block.Header + 1,
-						Detail: "Match final needs a second pass this resolver does not make",
-					})
-					return
-				}
-			}
-			matched, err := MatchApplies(block.Criteria, context())
-			switch {
-			case errors.Is(err, ErrMatchExec):
-				refusals = append(refusals, Refusal{
-					Code: RefusalMatchExec, Path: filePath, Line: block.Header + 1,
-					Detail: "this resolver runs nothing, so Match exec cannot be evaluated",
-				})
-			case err != nil:
-				refusals = append(refusals, Refusal{
-					Code: RefusalMatchUnknown, Path: filePath, Line: block.Header + 1,
-					Detail: err.Error(),
-				})
-			default:
-				applies = matched
-			}
-		}
-	}
-
-	directive := func(filePath string, index int, line config.Line) {
-		if !applies {
-			return
-		}
-		if config.EqualKeyword(line.Keyword, "CanonicalizeHostname") &&
-			!strings.EqualFold(argumentText(line), "no") {
-			refusals = append(refusals, Refusal{
-				Code: RefusalCanonicalize, Path: filePath, Line: index + 1,
-				Detail: "canonicalisation re-reads the configuration, which this resolver does not do",
-			})
-			return
-		}
-		if ignored, reason := proxyDirectiveIgnored(line.Keyword, values); ignored {
-			notes = append(notes, Complexity{
-				Code: ComplexityProxyIgnored, Path: filePath, Line: index + 1,
-				Condition: condition, Detail: reason,
-			})
-			return
-		}
-		if set(line.Keyword, argumentText(line)) {
-			accepted = append(accepted, Accepted{
-				Keyword: line.Keyword, Values: line.Values(),
-				Path: filePath, Line: index + 1, Condition: condition,
-			})
-		}
-	}
-
-	walkLoadOrder(graph, graph.Root, map[string]bool{}, enterBlock, directive)
-
-	// 読めない Include は拒否ではなく印である。読めた範囲で解決する。
-	//
-	// 拒否にすると、まだ作られていないディレクトリを Include が指している間、
-	// その alias を解決できなくなる。グループを作る保存はまさにその
-	// 状態を通るので、保存前後の比較が空になっていた。
-	for _, diagnostic := range graph.Diagnostics {
-		if diagnostic.Severity == config.SeverityInfo {
-			continue
-		}
-		notes = append(notes, Complexity{
-			Code: ComplexityUnresolvedInclude, Path: diagnostic.Path,
-			Line: diagnostic.Line, Detail: diagnostic.Code,
-		})
-	}
-
-	if len(refusals) > 0 {
+	if len(walk.refusals) > 0 {
 		// 部分的な結果を返さない。ひとつでも確定しないなら解決できていない。
-		return Resolution{Values: Values{Entries: map[string][]string{}}, Refusals: refusals}
+		return Resolution{Values: Values{Entries: map[string][]string{}}, Refusals: walk.refusals}
 	}
 
+	values := walk.values
 	applyDefaults(&values, alias, facts)
 	if refusal, ok := expandAll(&values, alias, facts); !ok {
 		return Resolution{
@@ -259,7 +107,140 @@ func Resolve(graph *config.Graph, alias string, facts LocalFacts) Resolution {
 			Refusals: []Refusal{refusal},
 		}
 	}
-	return Resolution{Values: values, Accepted: accepted, Notes: notes}
+	lowerHostName(&values)
+	return Resolution{Values: values, Accepted: walk.accepted, Notes: walk.notes}
+}
+
+// lowerHostName は、確定した HostName を OpenSSH と同じく小文字にする。
+//
+// ssh.c は HostName の %h を展開したあと、アドレスのリテラルでなければ lowercase()
+// する。`HostName 2001:DB8::1` は `ssh -G` でもそのまま出る。小文字にするのは ASCII
+// の英字だけで、全角の文字などは変えない。
+func lowerHostName(values *Values) {
+	for index, hostName := range values.Entries["hostname"] {
+		if _, err := netip.ParseAddr(hostName); err == nil {
+			continue
+		}
+		values.Entries["hostname"][index] = sshmatch.LowerASCII(hostName)
+	}
+}
+
+// resolveWalk は、Resolve が読み込み順の走査のあいだに積み上げるものである。
+type resolveWalk struct {
+	alias     string
+	facts     LocalFacts
+	values    Values
+	claimed   map[string]bool
+	accepted  []Accepted
+	refusals  []Refusal
+	notes     []Complexity
+	hostNotes hostBlockNotes
+}
+
+func newResolveWalk(alias string, facts LocalFacts) *resolveWalk {
+	return &resolveWalk{
+		alias: alias, facts: facts,
+		values:    Values{Entries: map[string][]string{}},
+		claimed:   map[string]bool{},
+		hostNotes: hostBlockNotes{alias: alias},
+	}
+}
+
+func (w *resolveWalk) enterBlock(header blockHeader) (string, bool) {
+	if header.block.Kind == config.BlockMatch {
+		return "", w.enterMatch(header)
+	}
+	kind, applies := hostBlockApplies(header.block, w.alias)
+	if applies && !header.neverMatch {
+		w.notes = append(w.notes, w.hostNotes.observe(header, kind)...)
+	}
+	return kind, applies
+}
+
+// enterMatch は、Match ブロックがこの alias に効くかを決める。決められなければ
+// refusals に理由を積み、効かないと答える。
+func (w *resolveWalk) enterMatch(header blockHeader) bool {
+	for _, criterion := range header.block.Criteria {
+		// 一致しない Include の中の Match final でも、OpenSSH は二周目を始める。
+		if strings.EqualFold(criterion.Keyword, "final") {
+			w.refuse(header, RefusalMatchFinal, "Match final needs a second pass this resolver does not make")
+			return false
+		}
+	}
+	// 一致しない Include の中の Match は、評価の結果にかかわらず効かない。値は
+	// 決まるので、exec を評価できないことは拒否の理由にならない。
+	if header.neverMatch {
+		return false
+	}
+	matched, err := MatchApplies(header.block.Criteria, w.matchContext())
+	switch {
+	case errors.Is(err, ErrMatchExec):
+		w.refuse(header, RefusalMatchExec, "this resolver runs nothing, so Match exec cannot be evaluated")
+	case err != nil:
+		w.refuse(header, RefusalMatchUnknown, err.Error())
+	}
+	return err == nil && matched
+}
+
+func (w *resolveWalk) refuse(header blockHeader, code, detail string) {
+	w.refusals = append(w.refusals, Refusal{Code: code, Path: header.path, Line: header.number(), Detail: detail})
+}
+
+// matchContext は、Match の判定が見る「そこまでに解決した値」である。OpenSSH も
+// 同じ順で決めるので、走査しながら組み立てる。
+func (w *resolveWalk) matchContext() MatchContext {
+	return MatchContext{
+		Alias: w.alias, OriginalAlias: w.alias, HostName: matchHostName(w.values, w.alias),
+		User: valueOr(w.values, "user", w.facts.User), LocalUser: w.facts.User, Tags: w.values.Entries["tag"],
+	}
+}
+
+func (w *resolveWalk) directive(found directiveLine) {
+	line := found.line
+	entries := directiveValues(line)
+	if config.EqualKeyword(line.Keyword, "CanonicalizeHostname") &&
+		!strings.EqualFold(strings.Join(entries, " "), "no") {
+		w.refusals = append(w.refusals, Refusal{
+			Code: RefusalCanonicalize, Path: found.path, Line: found.number,
+			Detail: "canonicalisation re-reads the configuration, which this resolver does not do",
+		})
+		return
+	}
+	if ignored, reason := proxyDirectiveIgnored(line.Keyword, w.values); ignored {
+		w.notes = append(w.notes, Complexity{
+			Code: ComplexityProxyIgnored, Path: found.path, Line: found.number,
+			Condition: found.state.condition, Detail: reason,
+		})
+		return
+	}
+	if w.set(line.Keyword, entries) {
+		w.accepted = append(w.accepted, Accepted{
+			Keyword: line.Keyword, Values: entries,
+			Path: found.path, Line: found.number, Condition: found.state.condition,
+		})
+	}
+}
+
+// set は、ディレクティブ一行の値を採用するかを決め、採用したら values に積む。
+//
+// 引数の無いディレクティブは値を主張しない。`User` とだけ書かれた行を通すと、
+// user が空文字のまま接続に使われる。それは書かれていないのと同じ扱いを受ける
+// べき欠落であって、確定した空の値ではない。本物の ssh は設定全体を撥ねるが、
+// こちらは既定値を埋める。行そのものは config の診断が別に報告する。
+func (w *resolveWalk) set(keyword string, entries []string) bool {
+	lowered := strings.ToLower(keyword)
+	if len(entries) == 0 {
+		return false
+	}
+	if w.claimed[lowered] && !cumulativeKeywords[lowered] {
+		return false
+	}
+	if _, seen := w.values.Entries[lowered]; !seen {
+		w.values.Keywords = append(w.values.Keywords, lowered)
+	}
+	w.values.Entries[lowered] = append(w.values.Entries[lowered], entries...)
+	w.claimed[lowered] = true
+	return true
 }
 
 // proxyDirectiveIgnored は、ProxyCommand と ProxyJump のうち後から来た方を OpenSSH が
@@ -303,7 +284,7 @@ func applyDefaults(values *Values, alias string, facts LocalFacts) {
 	}
 	fill("hostname", alias)
 	fill("user", facts.User)
-	fill("port", defaultPort)
+	fill("port", DefaultPort)
 }
 
 // matchHostName は、`Match host` が比較する「ここまでに解決した HostName」を返す。
@@ -355,7 +336,7 @@ func expandAll(values *Values, alias string, facts LocalFacts) (Refusal, bool) {
 	target := TokenTarget{
 		Alias:      alias,
 		HostName:   valueOr(*values, "hostname", alias),
-		Port:       valueOr(*values, "port", defaultPort),
+		Port:       valueOr(*values, "port", DefaultPort),
 		RemoteUser: valueOr(*values, "user", facts.User),
 	}
 	for keyword := range values.Entries {

@@ -60,15 +60,37 @@ func Scan(graph *config.Graph) Report {
 }
 
 // ScanForAlias は、その alias の接続時に適用されうる実行可能ディレクティブを集める。
-// 別の Host ブロックにだけある ProxyCommand などを警告へ混ぜない。一方、Match exec
-// は設定を読む過程で評価されうるため、Match ブロックは保守的に残す。
+//
+// 読み込み順と Include の扱いは Resolve と同じ walkLoadOrder に従う。別の Host
+// ブロックにだけある ProxyCommand などを警告へ混ぜず、Resolve が接続に使う
+// ProxyCommand は必ず挙げる。Host pcluster-head の中から読み込まれたファイルの先頭に
+// ある ProxyCommand は、pcluster-head にだけ適用される。
+//
+// Match は接続時の user やアドレスや exec の結果に依存しうる。ここで実行して判定
+// せず、到達した Match は効くものとして保守的に扱う。Match exec は、一致していない
+// ブロックの中の Include から読まれたものでも OpenSSH が実行するので、必ず挙げる。
 func ScanForAlias(graph *config.Graph, alias string) Report {
 	report := Report{}
 	if graph == nil {
 		return report
 	}
 	seen := make(map[string]bool)
-	scanAliasFile(graph, graph.Root, alias, true, "", map[string]bool{}, seen, &report)
+	walkLoadOrder(graph, loadOrderVisitor{
+		enterBlock: func(header blockHeader) (string, bool) {
+			if header.block.Kind != config.BlockMatch {
+				return hostBlockApplies(header.block, alias)
+			}
+			for _, execution := range matchExecutions(header) {
+				appendExecutable(&report, seen, execution)
+			}
+			return "", true
+		},
+		directive: func(found directiveLine) {
+			if directive, ok := executableAt(found); ok {
+				appendExecutable(&report, seen, directive)
+			}
+		},
+	})
 	return report
 }
 
@@ -83,122 +105,56 @@ func scanAll(graph *config.Graph) Report {
 			continue
 		}
 		for _, block := range node.File.Blocks() {
-			condition := node.File.Condition(block)
+			header := blockHeader{path: filePath, block: block, condition: node.File.Condition(block)}
 			if block.Kind == config.BlockMatch {
-				for _, criterion := range block.Criteria {
-					// config は Match の criterion キーワードを小文字にする。
-					if criterion.Keyword != "exec" {
-						continue
-					}
-					report.Directives = append(report.Directives, Executable{
-						Keyword:    "Match exec",
-						Command:    criterion.Argument,
-						Path:       filePath,
-						Line:       block.Header + 1,
-						Condition:  condition,
-						OnEvaluate: true,
-						OnConnect:  true,
-					})
-				}
+				report.Directives = append(report.Directives, matchExecutions(header)...)
 			}
 			for index := block.Start; index < block.End; index++ {
-				line := node.File.Lines[index]
-				if line.Kind != config.LineDirective {
-					continue
+				found := directiveLine{
+					path: filePath, number: index + 1, line: node.File.Lines[index],
+					state: blockState{condition: header.condition},
 				}
-				template, ok := executableDirectives[strings.ToLower(line.Keyword)]
-				if !ok {
-					continue
+				if directive, ok := executableAt(found); ok {
+					report.Directives = append(report.Directives, directive)
 				}
-				directive := template
-				directive.Command = argumentText(line)
-				directive.Path = filePath
-				directive.Line = index + 1
-				directive.Condition = condition
-				report.Directives = append(report.Directives, directive)
 			}
 		}
 	}
 	return report
 }
 
-// scanAliasFile は Include を、その行が置かれた Host / Match の適用状態ごと
-// 引き継いで読む。ファイル先頭の「グローバル」ブロックは、Include 元では実際には
-// 独立したグローバル設定ではない。たとえば Host pcluster-head の中から読み込まれた
-// ファイルの先頭に ProxyCommand があれば、そのコマンドは pcluster-head にだけ
-// 適用される。この状態を渡さず graph.Order を走査すると、別ホストの警告へ漏れる。
-func scanAliasFile(
-	graph *config.Graph,
-	filePath string,
-	alias string,
-	inheritedApplies bool,
-	inheritedCondition string,
-	chain map[string]bool,
-	seen map[string]bool,
-	report *Report,
-) {
-	node := graph.Nodes[filePath]
-	if node == nil || node.File == nil || chain[filePath] {
-		return
+// matchExecutions は、Match の見出しにある exec の条件をそれぞれ Executable にする。
+func matchExecutions(header blockHeader) []Executable {
+	var executions []Executable
+	for _, criterion := range header.block.Criteria {
+		// config は Match の criterion キーワードを小文字にする。
+		if criterion.Keyword != "exec" {
+			continue
+		}
+		executions = append(executions, Executable{
+			Keyword: "Match exec", Command: criterion.Argument,
+			Path: header.path, Line: header.number(), Condition: header.condition,
+			OnEvaluate: true, OnConnect: true,
+		})
 	}
-	chain[filePath] = true
-	defer delete(chain, filePath)
+	return executions
+}
 
-	blocks := node.File.Blocks()
-	position := 0
-	applies := inheritedApplies
-	condition := inheritedCondition
-
-	for index, line := range node.File.Lines {
-		if position+1 < len(blocks) && blocks[position+1].Header == index {
-			position++
-			block := blocks[position]
-			condition = node.File.Condition(block)
-			switch block.Kind {
-			case config.BlockHost:
-				_, applies = blockApplies(block, alias)
-			case config.BlockMatch:
-				// Match は接続時の user / address や exec に依存しうる。ここで
-				// 実行して判定せず、到達した Match は保守的に警告へ残す。
-				applies = true
-				for _, criterion := range block.Criteria {
-					if criterion.Keyword != "exec" {
-						continue
-					}
-					appendExecutable(report, seen, Executable{
-						Keyword: "Match exec", Command: criterion.Argument,
-						Path: filePath, Line: block.Header + 1, Condition: condition,
-						OnEvaluate: true, OnConnect: true,
-					})
-				}
-			}
-			continue
-		}
-		if line.Kind != config.LineDirective || !applies {
-			continue
-		}
-		if config.EqualKeyword(line.Keyword, "Include") {
-			for _, edge := range node.Includes {
-				if edge.Line != index+1 {
-					continue
-				}
-				for _, match := range edge.Matches {
-					scanAliasFile(graph, match, alias, applies, condition, chain, seen, report)
-				}
-			}
-			continue
-		}
-		template, ok := executableDirectives[strings.ToLower(line.Keyword)]
-		if !ok {
-			continue
-		}
-		directive := template
-		directive.Command = argumentText(line)
-		directive.Path = filePath
-		directive.Line = index + 1
-		directive.Condition = condition
-		appendExecutable(report, seen, directive)
+// executableAt は、行がプログラムを実行させうるディレクティブなら、その Executable を返す。
+func executableAt(found directiveLine) (Executable, bool) {
+	if found.line.Kind != config.LineDirective {
+		return Executable{}, false
 	}
+	template, ok := executableDirectives[strings.ToLower(found.line.Keyword)]
+	if !ok {
+		return Executable{}, false
+	}
+	directive := template
+	directive.Command = strings.Join(directiveValues(found.line), " ")
+	directive.Path = found.path
+	directive.Line = found.number
+	directive.Condition = found.state.condition
+	return directive, true
 }
 
 func appendExecutable(report *Report, seen map[string]bool, directive Executable) {
@@ -237,15 +193,4 @@ func (r Report) Evidence() string {
 	sort.Strings(entries)
 	sum := sha256.Sum256([]byte(strings.Join(entries, "\n")))
 	return hex.EncodeToString(sum[:])
-}
-
-// argumentText は、ディレクティブの引数部分を、インデント・キーワード・区切り・
-// 行末を除いて、書かれたとおりに返す。
-func argumentText(line config.Line) string {
-	var builder strings.Builder
-	for _, argument := range line.Arguments {
-		builder.WriteString(argument.Lead)
-		builder.WriteString(argument.Raw)
-	}
-	return strings.TrimSpace(builder.String())
 }

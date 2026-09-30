@@ -2,6 +2,7 @@ package sshclient_test
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -10,6 +11,9 @@ import (
 	"sshc/internal/effective"
 	"sshc/internal/sshclient"
 )
+
+// testFacts は、トークンと ~ の展開に使うこのマシンの事実である。
+var testFacts = effective.LocalFacts{User: "tester", Home: testHome, Hostname: "laptop.local", UID: "501"}
 
 // valuesFor は、解決器の結果を手で組み立てる。
 //
@@ -82,11 +86,12 @@ func TestNewTargetTakesTheValuesTheResolverDecided(t *testing.T) {
 			"user":     {"ops"},
 			// 設定に書かれる表記はスラッシュ区切りである。解くのはこの下。
 			"identityfile": {"~/.ssh/first", testOutsideKey},
-			"setenv":       {"ONE=1 TWO=2"},
+			// 解決器は代入ひとつずつを返す。値の中の空白は代入の区切りではない。
+			"setenv": {"ONE=1", "GREETING=hello world"},
 		},
 	})
 
-	target, err := sshclient.NewTarget("bastion", resolve, testHome)
+	target, err := sshclient.NewTarget("bastion", resolve, testFacts)
 	notices := target.Notices
 	if err != nil {
 		t.Fatal(err)
@@ -103,7 +108,8 @@ func TestNewTargetTakesTheValuesTheResolverDecided(t *testing.T) {
 	if len(target.Identities) != 2 || target.Identities[0] != want[0] || target.Identities[1] != want[1] {
 		t.Errorf("identities = %#v, want %#v", target.Identities, want)
 	}
-	if len(target.SetEnv) != 2 || target.SetEnv[0] != (sshclient.EnvVar{Name: "ONE", Value: "1"}) {
+	if len(target.SetEnv) != 2 || target.SetEnv[0] != (sshclient.EnvVar{Name: "ONE", Value: "1"}) ||
+		target.SetEnv[1] != (sshclient.EnvVar{Name: "GREETING", Value: "hello world"}) {
 		t.Errorf("setenv = %#v", target.SetEnv)
 	}
 }
@@ -112,7 +118,7 @@ func TestNewTargetTakesTheValuesTheResolverDecided(t *testing.T) {
 // ここに来る時点で hostname も port も user も決まっている。
 func TestNewTargetRefusesWhenNoHostNameWasDecided(t *testing.T) {
 	resolve := resolverFor(map[string]map[string][]string{"bare": {}})
-	if _, err := sshclient.NewTarget("bare", resolve, testHome); !errors.Is(err, sshclient.ErrNoHostName) {
+	if _, err := sshclient.NewTarget("bare", resolve, testFacts); !errors.Is(err, sshclient.ErrNoHostName) {
 		t.Fatalf("NewTarget = %v, want ErrNoHostName", err)
 	}
 }
@@ -131,7 +137,7 @@ func TestNewTargetCarriesProxyCommandWithItsTokensExpanded(t *testing.T) {
 			"proxycommand": {"/usr/bin/nc %h %p"},
 		},
 	})
-	target, err := sshclient.NewTarget("jump", resolve, testHome)
+	target, err := sshclient.NewTarget("jump", resolve, testFacts)
 	if err != nil {
 		t.Fatalf("NewTarget = %v", err)
 	}
@@ -149,7 +155,7 @@ func TestNewTargetAcceptsProxyCommandWhenProxyJumpIsOff(t *testing.T) {
 			"proxyjump":    {"none"},
 		},
 	})
-	target, err := sshclient.NewTarget("one", resolve, testHome)
+	target, err := sshclient.NewTarget("one", resolve, testFacts)
 	if err != nil {
 		t.Fatalf("NewTarget = %v", err)
 	}
@@ -163,7 +169,7 @@ func TestNewTargetAcceptsProxyCommandTurnedOff(t *testing.T) {
 	resolve := resolverFor(map[string]map[string][]string{
 		"direct": {"hostname": {"198.51.100.9"}, "proxycommand": {"none"}},
 	})
-	target, err := sshclient.NewTarget("direct", resolve, testHome)
+	target, err := sshclient.NewTarget("direct", resolve, testFacts)
 	if err != nil {
 		t.Fatalf("NewTarget = %v", err)
 	}
@@ -179,7 +185,7 @@ func TestNewTargetExpandsTheProxyJumpChainInOrder(t *testing.T) {
 		"final": {"hostname": {"10.0.0.9"}, "proxyjump": {"inner"}},
 	})
 
-	target, err := sshclient.NewTarget("final", resolve, testHome)
+	target, err := sshclient.NewTarget("final", resolve, testFacts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -199,7 +205,7 @@ func TestAJumpListOverridesTheHopOwnUserAndPort(t *testing.T) {
 		"edge":   {"hostname": {"198.51.100.1"}, "user": {"gate"}, "port": {"2200"}},
 	})
 
-	target, err := sshclient.NewTarget("target", resolve, testHome)
+	target, err := sshclient.NewTarget("target", resolve, testFacts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -223,7 +229,7 @@ func TestAJumpListOverrideAlsoReachesTheHopProxyCommandTokens(t *testing.T) {
 		},
 	})
 
-	target, err := sshclient.NewTarget("target", resolve, testHome)
+	target, err := sshclient.NewTarget("target", resolve, testFacts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -255,7 +261,7 @@ func TestProxyJumpTokensAreExpandedAgainstTheFinalDestination(t *testing.T) {
 		"gateway.example": {"hostname": {"gateway.example"}, "user": {"nobody"}},
 	})
 
-	target, err := sshclient.NewTarget("far", resolve, testHome)
+	target, err := sshclient.NewTarget("far", resolve, testFacts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -275,7 +281,7 @@ func TestProxyJumpRefusesATokenOpenSSHDoesNotAllowThere(t *testing.T) {
 	resolve := resolverFor(map[string]map[string][]string{
 		"far": {"hostname": {"10.0.0.9"}, "proxyjump": {"%u@gateway.example"}},
 	})
-	if _, err := sshclient.NewTarget("far", resolve, testHome); err == nil {
+	if _, err := sshclient.NewTarget("far", resolve, testFacts); err == nil {
 		t.Fatal("NewTarget accepted a token ProxyJump does not take")
 	}
 }
@@ -285,7 +291,7 @@ func TestAProxyJumpCycleStopsAtTheDepthLimit(t *testing.T) {
 		"a": {"hostname": {"10.0.0.1"}, "proxyjump": {"b"}},
 		"b": {"hostname": {"10.0.0.2"}, "proxyjump": {"a"}},
 	})
-	if _, err := sshclient.NewTarget("a", resolve, testHome); !errors.Is(err, sshclient.ErrJumpDepth) {
+	if _, err := sshclient.NewTarget("a", resolve, testFacts); !errors.Is(err, sshclient.ErrJumpDepth) {
 		t.Fatalf("NewTarget = %v, want ErrJumpDepth", err)
 	}
 }
@@ -295,7 +301,7 @@ func TestProxyJumpNoneLeavesNoChain(t *testing.T) {
 	resolve := resolverFor(map[string]map[string][]string{
 		"plain": {"hostname": {"10.0.0.9"}, "proxyjump": {"none"}},
 	})
-	target, err := sshclient.NewTarget("plain", resolve, testHome)
+	target, err := sshclient.NewTarget("plain", resolve, testFacts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -316,7 +322,7 @@ func TestUnhonouredKeywordsBecomeNoticesRatherThanRefusals(t *testing.T) {
 		},
 	})
 
-	target, err := sshclient.NewTarget("work", resolve, testHome)
+	target, err := sshclient.NewTarget("work", resolve, testFacts)
 	notices := target.Notices
 	if err != nil {
 		t.Fatal(err)
@@ -345,7 +351,7 @@ func TestMethodOrderFollowsPreferredAuthentications(t *testing.T) {
 			"kbdinteractiveauthentication": {"no"},
 		},
 	})
-	target, err := sshclient.NewTarget("host", resolve, testHome)
+	target, err := sshclient.NewTarget("host", resolve, testFacts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -379,7 +385,7 @@ func TestNumericValuesBecomeDurations(t *testing.T) {
 			"connecttimeout":      {"nonsense"},
 		},
 	})
-	target, err := sshclient.NewTarget("host", resolve, testHome)
+	target, err := sshclient.NewTarget("host", resolve, testFacts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -406,7 +412,7 @@ func TestDroppedKeywordsSayWhyRatherThanPromisingThemLater(t *testing.T) {
 	}
 	resolve := resolverFor(map[string]map[string][]string{"work": entries})
 
-	target, err := sshclient.NewTarget("work", resolve, testHome)
+	target, err := sshclient.NewTarget("work", resolve, testFacts)
 	notices := target.Notices
 	if err != nil {
 		t.Fatal(err)
@@ -437,7 +443,7 @@ func TestForwardsAreCarriedRatherThanNoticed(t *testing.T) {
 			"forwardagent":   {"yes"},
 		},
 	})
-	target, err := sshclient.NewTarget("work", resolve, testHome)
+	target, err := sshclient.NewTarget("work", resolve, testFacts)
 	notices := target.Notices
 	if err != nil {
 		t.Fatal(err)
@@ -466,7 +472,7 @@ func TestANonLoopbackBindIsFoldedOntoLoopback(t *testing.T) {
 	resolve := resolverFor(map[string]map[string][]string{
 		"work": {"hostname": {"10.0.0.9"}, "localforward": {"0.0.0.0:8080 10.0.0.5:80"}},
 	})
-	target, err := sshclient.NewTarget("work", resolve, testHome)
+	target, err := sshclient.NewTarget("work", resolve, testFacts)
 	notices := target.Notices
 	if err != nil {
 		t.Fatal(err)
@@ -487,7 +493,7 @@ func TestAnUnreadableForwardIsSkippedRatherThanFatal(t *testing.T) {
 			"localforward": {"nonsense", "8080 10.0.0.5:80"},
 		},
 	})
-	target, err := sshclient.NewTarget("work", resolve, testHome)
+	target, err := sshclient.NewTarget("work", resolve, testFacts)
 	notices := target.Notices
 	if err != nil {
 		t.Fatalf("an unreadable forward refused the connection: %v", err)
@@ -510,7 +516,7 @@ func TestAnUnreadableForwardIsSkippedRatherThanFatal(t *testing.T) {
 // hostname と user と port の三つだけであり、それに頼っている。
 func TestHostKeyAlgorithmsStaysEmptyWhenNothingWasWritten(t *testing.T) {
 	resolve := resolverFor(map[string]map[string][]string{"host": {"hostname": {"10.0.0.9"}}})
-	target, err := sshclient.NewTarget("host", resolve, testHome)
+	target, err := sshclient.NewTarget("host", resolve, testFacts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -525,7 +531,7 @@ func TestHostKeyAlgorithmsFollowsWhatWasWritten(t *testing.T) {
 		resolve := resolverFor(map[string]map[string][]string{
 			"host": {"hostname": {"10.0.0.9"}, "hostkeyalgorithms": {written}},
 		})
-		target, err := sshclient.NewTarget("host", resolve, testHome)
+		target, err := sshclient.NewTarget("host", resolve, testFacts)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -571,5 +577,200 @@ func TestHostKeyAlgorithmsFollowsWhatWasWritten(t *testing.T) {
 	}
 	if seen != 1 {
 		t.Errorf("^rsa-sha2-256 appears %d times: %#v", seen, moved)
+	}
+}
+
+// IdentityFile のトークンは、ProxyJump の上書きのあとの、この行き先の値で展開する。
+// ホストごとに鍵を分ける `~/.ssh/%r@%h` がそのまま接続で使える。
+func TestNewTargetExpandsIdentityFileTokensForThisDestination(t *testing.T) {
+	resolve := resolverFor(map[string]map[string][]string{
+		"web": {
+			"hostname": {"web.example"}, "port": {"22"}, "user": {"deploy"},
+			"proxyjump":    {"ops@bastion:2222"},
+			"identityfile": {"~/.ssh/%r@%h", "%d/.ssh/id_%n", "~/.ssh/100%%"},
+		},
+		"bastion": {
+			"hostname": {"jump.example"}, "port": {"22"}, "user": {"nobody"},
+			"identityfile": {"~/.ssh/%r-%p"},
+		},
+	})
+
+	target, err := sshclient.NewTarget("web", resolve, testFacts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		filepath.Join(testHome, ".ssh", "deploy@web.example"),
+		filepath.Join(testHome, ".ssh", "id_web"),
+		filepath.Join(testHome, ".ssh", "100%"),
+	}
+	if strings.Join(target.Identities, "\n") != strings.Join(want, "\n") {
+		t.Errorf("identities = %#v, want %#v", target.Identities, want)
+	}
+	// 踏み台の %r と %p は、ProxyJump に書かれた ops と 2222 である。
+	hop := filepath.Join(testHome, ".ssh", "ops-2222")
+	if len(target.Jump) != 1 || len(target.Jump[0].Identities) != 1 || target.Jump[0].Identities[0] != hop {
+		t.Errorf("jump identities = %#v, want %q", target.Jump, hop)
+	}
+}
+
+// 展開できない値の鍵は、文字どおりのファイル名として探しにいかず、理由を notice にする。
+func TestNewTargetSkipsIdentityFilesItCannotExpandAndSaysWhy(t *testing.T) {
+	resolve := resolverFor(map[string]map[string][]string{
+		"web": {
+			"hostname": {"web.example"}, "port": {"22"}, "user": {"deploy"},
+			"identityfile": {"~/.ssh/%T", "keys/relative", "${KEYS}/web", "~other/.ssh/id", "~/.ssh/kept"},
+		},
+	})
+
+	target, err := sshclient.NewTarget("web", resolve, testFacts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := filepath.Join(testHome, ".ssh", "kept"); len(target.Identities) != 1 || target.Identities[0] != want {
+		t.Errorf("identities = %#v, want only %q", target.Identities, want)
+	}
+	skipped := 0
+	for _, notice := range target.Notices {
+		if notice.Keyword == "identityfile" {
+			skipped++
+		}
+	}
+	if skipped != 4 {
+		t.Errorf("notices = %#v, want one per skipped key", target.Notices)
+	}
+}
+
+// StrictHostKeyChecking の true は yes、false と off は no である（OpenSSH の
+// multistate_strict_hostkey）。true を尋ねる扱いにすると、未知のホストを断る
+// 設定が確認だけで通る。
+func TestNewTargetReadsStrictHostKeyCheckingLikeOpenSSH(t *testing.T) {
+	for written, want := range map[string]string{
+		"yes": "yes", "true": "yes", "True": "yes",
+		"no": "no", "false": "no", "off": "no",
+		"accept-new": "accept-new", "ask": "ask", "": "",
+	} {
+		resolve := resolverFor(map[string]map[string][]string{
+			"web": {"hostname": {"web.example"}, "port": {"22"}, "user": {"deploy"}, "stricthostkeychecking": {written}},
+		})
+		target, err := sshclient.NewTarget("web", resolve, testFacts)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if target.Strict != want {
+			t.Errorf("StrictHostKeyChecking %q = %q, want %q", written, target.Strict, want)
+		}
+	}
+}
+
+// UserKnownHostsFile と GlobalKnownHostsFile は、書かれていなければ OpenSSH の既定の
+// ファイルを使う。書かれていれば OpenSSH と同じく、User は ~・${NAME}・トークンを、
+// Global は ~ だけを展開し、none ならファイルを使わない。
+func TestNewTargetReadsTheKnownHostsFilesLikeOpenSSH(t *testing.T) {
+	resolve := resolverFor(map[string]map[string][]string{
+		"plain": {"hostname": {"plain.example"}, "port": {"22"}, "user": {"deploy"}},
+		"work": {
+			"hostname": {"Work.Example"}, "port": {"22"}, "user": {"deploy"},
+			"userknownhostsfile":   {"~/.ssh/known_hosts.d/%k", "${SSHC_SHARED}/%h"},
+			"globalknownhostsfile": {"~/global/%h"},
+			"hostkeyalias":         {"WorkAlias"},
+		},
+		"disposable": {
+			"hostname": {"disposable.example"}, "port": {"22"}, "user": {"deploy"},
+			"userknownhostsfile": {"/dev/null"}, "globalknownhostsfile": {"none"}, "stricthostkeychecking": {"no"},
+		},
+	})
+	facts := testFacts
+	facts.LookupEnv = func(name string) (string, bool) {
+		if name == "SSHC_SHARED" {
+			return testHome + "/shared", true
+		}
+		return "", false
+	}
+	facts.GlobalKnownHostsFiles = []string{"/etc/ssh/ssh_known_hosts"}
+
+	plain, err := sshclient.NewTarget("plain", resolve, facts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := filepath.Join(testHome, ".ssh", "known_hosts"); len(plain.KnownHosts.User) != 2 || plain.KnownHosts.User[0] != want {
+		t.Errorf("default user files = %#v, want %q first", plain.KnownHosts.User, want)
+	}
+	if strings.Join(plain.KnownHosts.Global, "\n") != strings.Join(facts.GlobalKnownHostsFiles, "\n") {
+		t.Errorf("default global files = %#v, want this machine's %#v", plain.KnownHosts.Global, facts.GlobalKnownHostsFiles)
+	}
+
+	work, err := sshclient.NewTarget("work", resolve, facts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// OpenSSH は HostKeyAlias を小文字にし、%k はその値になる。
+	wantUser := []string{
+		filepath.Join(testHome, ".ssh", "known_hosts.d", "workalias"),
+		filepath.Join(testHome, "shared", "Work.Example"),
+	}
+	wantGlobal := []string{filepath.Join(testHome, "global", "%h")}
+	if strings.Join(work.KnownHosts.User, "\n") != strings.Join(wantUser, "\n") ||
+		strings.Join(work.KnownHosts.Global, "\n") != strings.Join(wantGlobal, "\n") {
+		t.Errorf("known hosts = %#v, want user %#v and global %#v", work.KnownHosts, wantUser, wantGlobal)
+	}
+	if work.HostKeyAlias != "workalias" {
+		t.Errorf("HostKeyAlias = %q", work.HostKeyAlias)
+	}
+
+	// /dev/null はどの OS でもこの OS の null デバイスを指す。
+	disposable, err := sshclient.NewTarget("disposable", resolve, facts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(disposable.KnownHosts.User) != 1 || disposable.KnownHosts.User[0] != os.DevNull || len(disposable.KnownHosts.Global) != 0 {
+		t.Errorf("known hosts = %#v, want the null device and no global file", disposable.KnownHosts)
+	}
+}
+
+// 展開できない UserKnownHostsFile は、ホスト鍵の照合のときにだけ断る。読み飛ばすと、
+// そこにある鍵と照合しないまま未知のホストとして受け入れることになる。Target の
+// 組み立てまで失敗させると、認証の束縛が計算できず、設定の保存まで止まる。
+func TestAnUnexpandableKnownHostsFileRefusesOnlyTheHostKeyCheck(t *testing.T) {
+	resolve := resolverFor(map[string]map[string][]string{
+		"broken": {
+			"hostname": {"broken.example"}, "port": {"22"}, "user": {"deploy"},
+			"userknownhostsfile": {"~/.ssh/known_hosts.d/${SSHC_UNSET}"},
+		},
+	})
+	broken, err := sshclient.NewTarget("broken", resolve, testFacts)
+	if err != nil {
+		t.Fatalf("NewTarget = %v, want a target whose host key check refuses", err)
+	}
+	if broken.AuthenticationBinding() == "" {
+		t.Error("AuthenticationBinding is empty")
+	}
+	read := func(string) ([]byte, error) { return nil, nil }
+	if _, err := (sshclient.HostKeys{Read: read}).Knows(broken); !errors.Is(err, sshclient.ErrKnownHostsFile) {
+		t.Errorf("Knows = %v, want ErrKnownHostsFile", err)
+	}
+}
+
+// KnownHostsCommand の鍵とは照合できないので、未知に見えるホストを尋ねずに受け入れない。
+func TestNewTargetAsksAboutUnknownHostsWhenKnownHostsCommandIsSet(t *testing.T) {
+	resolve := resolverFor(map[string]map[string][]string{
+		"web": {
+			"hostname": {"web.example"}, "port": {"22"}, "user": {"deploy"},
+			"stricthostkeychecking": {"accept-new"}, "knownhostscommand": {"/usr/local/bin/hostkeys %H"},
+		},
+	})
+	target, err := sshclient.NewTarget("web", resolve, testFacts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if target.Strict != "ask" {
+		t.Errorf("Strict = %q, want ask", target.Strict)
+	}
+	noticed := false
+	for _, notice := range target.Notices {
+		noticed = noticed || notice.Keyword == "knownhostscommand"
+	}
+	if !noticed {
+		t.Errorf("notices = %#v, want one about KnownHostsCommand", target.Notices)
 	}
 }

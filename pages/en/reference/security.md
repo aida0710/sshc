@@ -29,7 +29,18 @@ The backups and records of changes outside these limits are deleted automaticall
 
 ## SSH host keys
 
-In an interactive terminal an unknown host key is saved after you confirm it; hosts configured with `StrictHostKeyChecking no` or `accept-new` save it without confirmation, as OpenSSH does. A changed saved key is rejected regardless of that setting. Non-interactive SSH, SFTP and public-key installation require known keys for the final host and every ProxyJump hop.
+Host keys are checked against every file in `UserKnownHostsFile` and `GlobalKnownHostsFile`, as OpenSSH does. A host with `HostKeyAlias` is looked up under that name. When the configuration names no file, these are used:
+
+- `UserKnownHostsFile`: `~/.ssh/known_hosts` and `~/.ssh/known_hosts2`
+- `GlobalKnownHostsFile`: `/etc/ssh/ssh_known_hosts` and `/etc/ssh/ssh_known_hosts2` on macOS and Linux, `%ProgramData%\ssh\ssh_known_hosts` and `%ProgramData%\ssh\ssh_known_hosts2` on Windows
+
+In an interactive terminal an unknown host key is saved after you confirm it; hosts configured with `StrictHostKeyChecking no` or `accept-new` save it without confirmation, as OpenSSH does, and hosts configured with `yes` (or `true`) do not save it and do not connect. The key is saved to the first `UserKnownHostsFile`. sshc saves only to files inside `~/.ssh`; when that file is elsewhere, such as `/dev/null`, the key is not saved. sshc does not run `KnownHostsCommand`, so hosts that set it are asked about even with `StrictHostKeyChecking no` or `accept-new`.
+
+When the file to save to, such as `~/.ssh/known_hosts`, is a symbolic link, sshc does not write through the link, so a new host does not connect. Hosts already saved still connect. To add a new host's key, connect to the host once with `ssh`. When `~/.ssh` itself is a symbolic link, keys are saved in the folder it points to.
+
+A changed saved key is rejected regardless of that setting. Non-interactive SSH, SFTP and public-key installation require known keys for the final host and every ProxyJump hop.
+
+The Known Hosts screen lists and deletes only the entries in `~/.ssh/known_hosts`. Keys in `~/.ssh/known_hosts2`, in other files named by `UserKnownHostsFile` and in `GlobalKnownHostsFile` are not shown there. If a changed key in one of those files blocks a connection, edit that file directly. When `~/.ssh/known_hosts` is a symbolic link, the Known Hosts screen does not list it.
 
 ## ProxyCommand
 

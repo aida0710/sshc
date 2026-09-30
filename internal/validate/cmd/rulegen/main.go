@@ -1,8 +1,8 @@
 // Command rulegen は、ブラウザにも同じ答えを出してほしい規則を web 側へ配る。
 //
-// 配るのは 2 つである。ひとつは表。予約語・パターン・上限。で、これは
-// TypeScript の定数として出す。もうひとつは適合コーパスで、入力の一覧と、それらに
-// 対する Go の判定を持つ。
+// 配るのは 2 つである。ひとつは表（予約語・パターン・上限・行の残りを値にする
+// キーワード）で、TypeScript の定数として出す。もうひとつは適合コーパスで、
+// 入力の一覧と、それらに対する Go の判定を持つ。
 //
 // 守る契約は「ブラウザはサーバーより厳しくしない」である。コーパスがあれば、
 // それを検査として書ける。Go が通す入力を web が断ったら赤くなる。逆向き（web の
@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"sshc/internal/config"
+	"sshc/internal/effective"
 	"sshc/internal/validate"
 )
 
@@ -118,6 +119,13 @@ func constants() string {
 	for _, name := range validate.ReservedNames {
 		fmt.Fprintf(&out, "  %q,\n", name)
 	}
+	out.WriteString("]);\n\n")
+	out.WriteString("// 値が行の残りそのものであるキーワード（小文字）。値を引数に分けず、引用し直さずに書く。\n")
+	out.WriteString("// 値を読むのはシェルで、引用し直すとシェルが読む文字列が変わる。\n")
+	out.WriteString("export const restOfLineKeywords: ReadonlySet<string> = new Set([\n")
+	for _, keyword := range effective.RestOfLineKeywords() {
+		fmt.Fprintf(&out, "  %q,\n", keyword)
+	}
 	out.WriteString("]);\n")
 	return out.String()
 }
@@ -193,8 +201,11 @@ var renderCases = []struct {
 	{[]string{"has space"}, "空白があるので引用する"},
 	{[]string{""}, "空の値も引用で表す"},
 	{[]string{"#comment"}, "`#` 始まりは引用しないとコメントになる"},
-	{[]string{`quote"inside`}, "二重引用符。OpenSSH に綴りが無いので Go は断る"},
-	{[]string{"line\nbreak"}, "改行。同上"},
+	{[]string{`quote"inside`}, "二重引用符。引用して \\\" と書く"},
+	{[]string{"it's"}, "一重引用符も引用を開くので引用する"},
+	{[]string{`C:\Users\me\.ssh\id`}, "エスケープにならないバックスラッシュはそのまま"},
+	{[]string{`C:\dir\`}, "末尾のバックスラッシュは次の空白をエスケープするので引用して二重にする"},
+	{[]string{"line\nbreak"}, "改行。設定の行に書けないので Go は断る"},
 	{[]string{"a", "b c"}, "複数の値"},
 	{[]string{"tab\there"}, "タブがあるので引用する"},
 }
@@ -203,8 +214,13 @@ var parseCases = []struct{ input, why string }{
 	{"a b", "ふつう"},
 	{`a "b c"`, "引用された値"},
 	{`"unbalanced`, "閉じない引用。Go は非構造化として扱う"},
-	{`a"b`, "語の途中の引用符"},
-	{`"a"b`, "引用の直後に文字が続く"},
+	{`a"b`, "語の途中で開いて閉じない引用"},
+	{`a"b c"d`, "語の途中で開閉する引用。OpenSSH の argv_split と同じく一語になる"},
+	{`"a"b`, "引用の直後に文字が続く。一語になる"},
+	{`'single quoted' x`, "一重引用符"},
+	{`my\ key`, "引用の外の \\ と空白はエスケープ"},
+	{`"esc\"aped"`, "引用の中のエスケープした二重引用符"},
+	{`C:\Users\me`, "エスケープにならないバックスラッシュはそのまま"},
 	{"  spaced  out  ", "前後と間の空白"},
 	{"", "空"},
 }

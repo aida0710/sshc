@@ -4,10 +4,8 @@ import (
 	"context"
 	"crypto/subtle"
 	"errors"
-	"io/fs"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 
 	"sshc/internal/storage"
@@ -18,6 +16,10 @@ var (
 	ErrEntryChanged        = errors.New("the entry on disk is not the entry that was displayed")
 	ErrNoSuchEntry         = errors.New("no such known_hosts entry")
 	ErrUnsupportedKeyType  = errors.New("unsupported host key type")
+	// ErrNotWritable は、sshc が書かない場所の known_hosts へ鍵を書こうとしたことを
+	// 報告する。書き込みはワークスペース（~/.ssh）の中だけで、journal と世代
+	// バックアップを残す。/dev/null を指す UserKnownHostsFile もここに当たる。
+	ErrNotWritable = errors.New("sshc writes known_hosts files only inside ~/.ssh")
 )
 
 // supportedKeyTypes は、このアプリケーションが known_hosts に書き込む種別の集合。
@@ -49,6 +51,13 @@ type Listing struct {
 	Lines []Line
 }
 
+// storage.Request の操作名。known_hosts は ssh_config ではないので、設定と共有する
+// storage.Manager の検証は、この操作が書くファイルを ssh_config として読まない。
+const (
+	OperationAdd    = "known_hosts.add"
+	OperationDelete = "known_hosts.delete"
+)
+
 // Service は、トランザクションマネージャを通して known_hosts を読み書きする。
 type Service struct {
 	Workspace *storage.Workspace
@@ -64,17 +73,7 @@ func NewService(workspace *storage.Workspace, manager *storage.Manager, scanner 
 // Path は、このサービスが管理する known_hosts ファイル。
 func (s *Service) Path() string { return filepath.Join(s.Workspace.Root(), "known_hosts") }
 
-func (s *Service) read() ([]byte, error) {
-	contents, err := s.Workspace.FileSystem().ReadFile(s.Path())
-	if errors.Is(err, fs.ErrNotExist) {
-		return nil, nil
-	}
-	return contents, err
-}
-
-// Contents は、known_hosts をコメント・空行・解析できない行も含めて原文のまま返す。
-// ファイルが無ければ空である。行番号はこの原文の物理行で数える。
-func (s *Service) Contents() ([]byte, error) { return s.read() }
+func (s *Service) read() ([]byte, error) { return readInWorkspace(s.Workspace, s.Path()) }
 
 // Listing は query に一致するエントリを返す。
 func (s *Service) Listing(query string) (Listing, error) {
@@ -138,7 +137,7 @@ func (s *Service) Delete(targets []Target) (storage.Result, error) {
 		}
 		remaining.Lines = append(remaining.Lines, line)
 	}
-	return s.commit("known_hosts.delete", contents, remaining.Render())
+	return s.commit(OperationDelete, replacement(s.Path(), contents, remaining.Render()))
 }
 
 // Add は、ユーザーが意図した鍵であると証明したうえで、スキャンした鍵を 1 行追加する。
@@ -147,13 +146,7 @@ func (s *Service) Delete(targets []Target) (storage.Result, error) {
 // は未検証であると明示的に承認したかのいずれかである。行は、クライアントが送って
 // きたテキストを信用せず、検証済みの部品から組み立て直される。
 func (s *Service) Add(candidate Candidate, expectedFingerprint string, acknowledged bool) (storage.Result, error) {
-	if !supportedKeyTypes[candidate.KeyType] {
-		return storage.Result{}, ErrUnsupportedKeyType
-	}
-	if !base64Pattern.MatchString(candidate.Key) {
-		return storage.Result{}, ErrInvalidKey
-	}
-	fingerprint, err := Fingerprint(candidate.Key)
+	fingerprint, err := candidateFingerprint(candidate)
 	if err != nil {
 		return storage.Result{}, err
 	}
@@ -165,43 +158,96 @@ func (s *Service) Add(candidate Candidate, expectedFingerprint string, acknowled
 	case !acknowledged:
 		return storage.Result{}, ErrUnverifiedCandidate
 	}
+	return s.appendEntry(s.Path(), candidate)
+}
 
-	hostField := candidate.Host
-	if candidate.Port != 22 {
-		hostField = "[" + candidate.Host + "]:" + strconv.Itoa(candidate.Port)
+// Remember は、接続の握手で受け入れたホスト鍵を path の known_hosts へ 1 行追加する。
+//
+// 鍵を受け入れるかは、接続がすでに StrictHostKeyChecking と利用者の確認で決めて
+// いる。path は UserKnownHostsFile の最初のファイルである。sshc が書けるのは
+// ワークスペース（~/.ssh）の中だけで、外のファイルには ErrNotWritable を返す。
+// ~/.ssh がシンボリックリンクでも、ホームの表記の path はリンク先の実体へ書く。
+func (s *Service) Remember(path string, candidate Candidate) error {
+	if _, err := candidateFingerprint(candidate); err != nil {
+		return err
 	}
-	newLine := hostField + " " + candidate.KeyType + " " + candidate.Key
+	resolved := s.Workspace.Normalise(path)
+	if !s.Workspace.Contains(resolved) {
+		return ErrNotWritable
+	}
+	_, err := s.appendEntry(resolved, candidate)
+	return err
+}
 
-	contents, err := s.read()
+// ReadFile は、照合に使う known_hosts のファイルひとつを読む（パッケージの ReadFile）。
+// UserKnownHostsFile と GlobalKnownHostsFile はワークスペースの外を指してよい。
+func (s *Service) ReadFile(path string) ([]byte, error) { return ReadFile(s.Workspace, path) }
+
+// candidateFingerprint は、書く前に鍵の種類と表記を確かめてから、フィンガープリントを返す。
+func candidateFingerprint(candidate Candidate) (string, error) {
+	if !supportedKeyTypes[candidate.KeyType] {
+		return "", ErrUnsupportedKeyType
+	}
+	if !base64Pattern.MatchString(candidate.Key) {
+		return "", ErrInvalidKey
+	}
+	return Fingerprint(candidate.Key)
+}
+
+// appendAttempts は、追加が別の書き込みと重なったときに読み直す回数の上限である。
+//
+// 追加は読む・重複を確かめる・書くの三段で、Workspace の全ペインを並行に開くと、
+// 未知のホストを同時に書く接続どうしが重なる。追加は完全一致の重複を書かないので、
+// 読み直して繰り返しても利用者の同意の意味は変わらない。数回で足りないのは誰かが
+// 書き続けている場合で、そのときは衝突として返す。
+const appendAttempts = 5
+
+// appendEntry は path の known_hosts に鍵を 1 行追加する。同じ行がすでにあれば何もしない。
+func (s *Service) appendEntry(path string, candidate Candidate) (storage.Result, error) {
+	newLine := HostField(candidate.Host, candidate.Port) + " " + candidate.KeyType + " " + candidate.Key
+	var result storage.Result
+	var err error
+	for attempt := 0; attempt < appendAttempts; attempt++ {
+		result, err = s.appendOnce(path, newLine)
+		if !IsExternalChange(err) {
+			return result, err
+		}
+	}
+	return result, err
+}
+
+func (s *Service) appendOnce(path, newLine string) (storage.Result, error) {
+	contents, err := readInWorkspace(s.Workspace, path)
 	if err != nil {
 		return storage.Result{}, err
 	}
-	file := ParseFile(contents)
-	for _, line := range file.Lines {
+	for _, line := range ParseFile(contents).Lines {
 		if strings.TrimSpace(line.Raw) == newLine {
 			// 完全な重複。書くものはない。
 			return storage.Result{}, nil
 		}
 	}
-
 	updated := string(contents)
 	if updated != "" && !strings.HasSuffix(updated, "\n") {
 		updated += "\n"
 	}
 	updated += newLine + "\n"
-	return s.commit("known_hosts.add", contents, []byte(updated))
+	return s.commit(OperationAdd, replacement(path, contents, []byte(updated)))
 }
 
-func (s *Service) commit(operation string, previous, updated []byte) (storage.Result, error) {
-	if err := s.Workspace.EnsureDirectory(s.Workspace.Root()); err != nil {
+// replacement は、previous と読んだ path を updated に置き換える変更である。
+// 読んだあとに別の書き込みがあれば、Precondition が外れて衝突になる。
+func replacement(path string, previous, updated []byte) storage.Change {
+	return storage.Change{
+		Path:         path,
+		Contents:     updated,
+		Precondition: storage.Precondition{Exists: previous != nil, Digest: storage.Digest(previous)},
+	}
+}
+
+func (s *Service) commit(operation string, change storage.Change) (storage.Result, error) {
+	if err := s.Workspace.EnsureDirectory(filepath.Dir(change.Path)); err != nil {
 		return storage.Result{}, err
 	}
-	return s.Manager.Commit(storage.Request{
-		Operation: operation,
-		Changes: []storage.Change{{
-			Path:         s.Path(),
-			Contents:     updated,
-			Precondition: storage.Precondition{Exists: previous != nil, Digest: storage.Digest(previous)},
-		}},
-	})
+	return s.Manager.Commit(storage.Request{Operation: operation, Changes: []storage.Change{change}})
 }

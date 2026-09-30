@@ -40,7 +40,8 @@ type sshParts struct {
 	encoding func(string) (textencoding.Name, error)
 	// vpnBinding は、この alias が通るVPNプロファイルの名前を返す。
 	vpnBinding func(string) (string, error)
-	home       string
+	// facts は、IdentityFile の ~ とトークンを展開するこのマシンの事実である。
+	facts effective.LocalFacts
 }
 
 // sshDependencies は、プロセス内 SSH クライアントが要るものである。
@@ -109,13 +110,13 @@ func newSSHParts(dependencies sshDependencies) sshParts {
 			}
 			return config.ConnectionVPN(alias)
 		},
-		home: home,
+		facts: application.LocalFactsFor(home),
 	}
 }
 
 // target は、alias ひとつ分の接続を組み立てる。
 func (p sshParts) target(alias string) (sshclient.Target, error) {
-	target, err := sshclient.NewTarget(alias, p.resolve, p.home)
+	target, err := sshclient.NewTarget(alias, p.resolve, p.facts)
 	if err != nil {
 		return sshclient.Target{}, err
 	}
@@ -347,25 +348,21 @@ func storedTOTP(vault *secret.Service) func(sshclient.Target, string) (string, b
 	}
 }
 
-func readKnownHosts(hosts *knownhosts.Service) func() ([]byte, error) {
+func readKnownHosts(hosts *knownhosts.Service) func(string) ([]byte, error) {
 	if hosts == nil {
 		return nil
 	}
-	// 接続ログは一致した行を「known_hostsの何行目」と書く。known_hosts画面と同じ物理行で
-	// 数えるため、エントリだけに詰め直さず原文を渡す。
-	return hosts.Contents
+	// 接続ログは一致した行を「<ファイル>の何行目」と書く。known_hosts画面やエディタと同じ
+	// 物理行で数えるため、エントリだけに詰め直さずファイルの原文を渡す。
+	return hosts.ReadFile
 }
 
-// addKnownHost は、受け入れた鍵を known_hosts へ書く。
-func addKnownHost(hosts *knownhosts.Service) func(knownhosts.Candidate) error {
+// addKnownHost は、受け入れた鍵を UserKnownHostsFile の最初のファイルへ書く。
+func addKnownHost(hosts *knownhosts.Service) func(string, knownhosts.Candidate) error {
 	if hosts == nil {
 		return nil
 	}
-	return func(candidate knownhosts.Candidate) error {
-		// フィンガープリントは、いま握手した鍵そのものから計算されている。
-		_, err := hosts.Add(candidate, candidate.Fingerprint, false)
-		return err
-	}
+	return hosts.Remember
 }
 
 // CLIConnection は、`sshc ssh <alias>` が使うプロセス内 SSH である。
