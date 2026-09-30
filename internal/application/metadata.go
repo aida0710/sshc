@@ -37,6 +37,9 @@ var (
 	ErrMetadataEngine   = errors.New("metadata engine settings are invalid")
 	ErrMetadataEncoding = errors.New("metadata terminal encoding is invalid")
 	ErrMetadataOSC52    = errors.New("metadata OSC 52 policy is invalid")
+	// ErrMetadataDuplicateHost は、同じ接続の entry が 2 つあることを表す。schema 9 より
+	// 前の形で、移行（DecodeMetadata）だけが 1 つにする。
+	ErrMetadataDuplicateHost = errors.New("metadata has two entries for one connection")
 
 	// ErrMetadataEnginePort と ErrMetadataVaultAutoLock は ErrMetadataEngine の種類。
 	// 画面に、どちらの入力を直せばよいかを返すために分ける。
@@ -339,11 +342,13 @@ func DecodeMetadata(contents []byte) (Metadata, error) {
 	// （metadata_vpnsections.go）。v9は、空白や日本語を含むVPNプロファイル名を
 	// 旧バージョンに読ませないための境界でもある。旧バージョンはその名前の metadata を
 	// 書けなくなる。グループ設定の ProxyCommand などを複数の値で保存した前の形は、
-	// 行の残りの 1 つの値にする（metadata_groupsettings.go）。
+	// 行の残りの 1 つの値にする（metadata_groupsettings.go）。同じ接続の entry が 2 つ
+	// あれば 1 つにする（metadata_duplicatehosts.go）。
 	if version.SchemaVersion < 9 {
 		clearUnpinnedServerIdentities(&metadata)
 		clearForeignVPNSections(&metadata)
 		joinSplitRestOfLineSettings(&metadata)
+		keepOneEntryPerConnection(&metadata)
 	}
 	metadata.SchemaVersion = MetadataSchemaVersion
 	if metadata.GroupsFile == "" {
@@ -465,10 +470,15 @@ func ValidateMetadata(metadata Metadata) error {
 	if err := validateVPNProfiles(metadata.VPNProfiles); err != nil {
 		return err
 	}
+	identities := make(map[HostIdentity]bool, len(metadata.Hosts))
 	for _, host := range metadata.Hosts {
 		if _, err := checkRelative(host.Identity.Path); err != nil {
 			return err
 		}
+		if identities[host.Identity] {
+			return fmt.Errorf("%w: %s %s", ErrMetadataDuplicateHost, host.Identity.Path, host.Identity.Alias)
+		}
+		identities[host.Identity] = true
 		if host.VPN != "" {
 			// 名前の形だけを見る。指している先があるかは、繋ぐときに確かめる。
 			// 参照が外れただけで metadata 全体を保存できなくしない。
@@ -625,11 +635,6 @@ func ClearHostNote(metadata Metadata, identity HostIdentity) Metadata {
 }
 
 // hostMetadataIndex は、識別子 identity の entry の位置を返す。無ければ -1 を返す。
-//
-// 同じ識別子の entry が 2 つ以上ある metadata.json では先頭を使う。画面へ返す値
-// （HostDetail）と、保存のときに画面の写しと比べる値（applyHostMetadataEdit）が
-// 別の entry を見ると、何度読み直しても写しが古いと判断して保存を断り続けるので、
-// entry を選ぶところはすべてこの関数を通す。
 func hostMetadataIndex(hosts []HostMetadata, identity HostIdentity) int {
 	for index, host := range hosts {
 		if host.Identity == identity {

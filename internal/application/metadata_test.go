@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -305,6 +306,41 @@ func TestSplitRestOfLineValuesAreJoinedOnlyWhenMigratingAnOlderSchema(t *testing
 	}
 	if _, err := EncodeMetadata(current); !errors.Is(err, ErrMetadataGroup) {
 		t.Errorf("saving schema %d split values = %v, want ErrMetadataGroup", MetadataSchemaVersion, err)
+	}
+}
+
+// 同じ接続の entry が 2 つある metadata.json は、schema 9 より前の sshc が書いた形である。
+// 1 つにするのは schema 9 より前の metadata を移行するときだけで、今の形は保存で断る。
+func TestEntriesForTheSameConnectionAreMergedOnlyWhenMigratingAnOlderSchema(t *testing.T) {
+	document := func(version int) []byte {
+		return []byte(fmt.Sprintf(`{"schemaVersion":%d,"hosts":[`+
+			`{"identity":{"path":"config","alias":"jump"},"note":"first"},`+
+			`{"identity":{"path":"config","alias":"web"},"note":"left behind","orphan":true},`+
+			`{"identity":{"path":"config","alias":"jump"},"note":"second"},`+
+			`{"identity":{"path":"config","alias":"web"},"note":"renamed here"}]}`, version))
+	}
+
+	migrated, err := DecodeMetadata(document(8))
+	if err != nil {
+		t.Fatal(err)
+	}
+	notes := make([]string, 0, len(migrated.Hosts))
+	for _, host := range migrated.Hosts {
+		notes = append(notes, host.Note)
+	}
+	if want := []string{"first", "renamed here"}; !reflect.DeepEqual(notes, want) {
+		t.Errorf("schema 8 notes = %q, want %q: the entry without the orphan mark, else the first", notes, want)
+	}
+
+	current, err := DecodeMetadata(document(MetadataSchemaVersion))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(current.Hosts) != 4 {
+		t.Errorf("schema %d hosts = %#v, want them left as stored", MetadataSchemaVersion, current.Hosts)
+	}
+	if _, err := EncodeMetadata(current); !errors.Is(err, ErrMetadataDuplicateHost) {
+		t.Errorf("saving schema %d duplicate entries = %v, want ErrMetadataDuplicateHost", MetadataSchemaVersion, err)
 	}
 }
 

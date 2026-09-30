@@ -4,6 +4,7 @@ import (
 	"errors"
 	"testing"
 
+	"sshc/internal/platform/windowsacl/acltest"
 	"sshc/internal/storage"
 )
 
@@ -181,11 +182,12 @@ func TestSavingGroupsFromAStaleCopyIsRefused(t *testing.T) {
 	}
 }
 
-func TestSavingOneHostsMetadataWithDuplicateEntriesAcceptsTheEntryTheScreenReadAndKeepsOne(t *testing.T) {
+func TestSavingOneHostsMetadataFromAnOlderFileWithTwoEntriesForItKeepsOne(t *testing.T) {
 	service, _ := newTestService(t)
-	metadata := NewMetadata()
-	metadata.Hosts = []HostMetadata{{Identity: bastion, Note: "first"}, {Identity: bastion, Note: "second"}}
-	seedMetadata(t, service, metadata)
+	// schema 9 より前の sshc は、同じ接続の entry を 2 つ残すことがあった。
+	acltest.WritePrivateFile(t, service.metadata.Path(), []byte(`{"schemaVersion":8,"hosts":[`+
+		`{"identity":{"path":"config","alias":"bastion"},"note":"first"},`+
+		`{"identity":{"path":"config","alias":"bastion"},"note":"second"}]}`))
 
 	detail, err := service.HostDetail(bastion.Path, bastion.Alias)
 	if err != nil {
@@ -202,7 +204,7 @@ func TestSavingOneHostsMetadataWithDuplicateEntriesAcceptsTheEntryTheScreenReadA
 	}
 
 	hosts := loadMetadata(t, service).Hosts
-	if len(hosts) != 1 || hosts[0].Note != detail.Metadata.Note || len(hosts[0].Tags) != 1 {
+	if len(hosts) != 1 || hosts[0].Note != "first" || len(hosts[0].Tags) != 1 {
 		t.Fatalf("hosts = %#v, want one entry built from the copy the screen read", hosts)
 	}
 }
