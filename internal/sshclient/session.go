@@ -13,12 +13,6 @@ import (
 	"sshc/internal/terminal"
 )
 
-// TermName は、リモートへ伝える端末の種別である。
-//
-// 画面を描くのは xterm.js なので、その能力に合った名前を送る。ここが実際と
-// 違うと、vim も less も間違った制御列を送ってくる。
-const TermName = "xterm-256color"
-
 // Session は、開かれている SSH のセッションひとつである。
 //
 // terminal.Process を満たすが、プロセスを持たない。PTY も確保しない。

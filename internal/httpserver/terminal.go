@@ -242,7 +242,7 @@ func (h TerminalHandlers) Open(c *echo.Context) error {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
 
-	size := terminal.Size{Cols: 80, Rows: 24}
+	size := terminal.DefaultSize()
 	if request.Cols != nil && request.Rows != nil {
 		// uint16 へ切り詰める前に検査する。65616 を uint16 にすると 80 になり、
 		// 範囲外の値が別の寸法として通ってしまう。

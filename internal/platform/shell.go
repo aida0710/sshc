@@ -3,9 +3,9 @@ package platform
 import (
 	"errors"
 	"strings"
-)
 
-const LocalTerminalType = "xterm-256color"
+	"sshc/internal/terminal"
+)
 
 // ErrNoLoginShell は、起動できるシェルがこのマシンに見つからないことを報告する。
 var ErrNoLoginShell = errors.New("no login shell was found")
@@ -73,5 +73,5 @@ func LoginEnvironment(environ []string) []string {
 		}
 		kept = append(kept, entry)
 	}
-	return append(kept, "TERM="+LocalTerminalType)
+	return append(kept, "TERM="+terminal.DefaultTerminalType)
 }

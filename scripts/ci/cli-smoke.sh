@@ -65,10 +65,12 @@ trap cleanup EXIT
 info=$("$binary" info smoke-info --json)
 printf '%s\n' "$info" | jq -e '
   .schemaVersion == 1 and
-  .alias == "smoke-info" and
-  .destination.hostName == "192.0.2.10" and
-  .destination.user == "smoke-user" and
-  .destination.port == "22"
+  .success == true and
+  .result.schemaVersion == 1 and
+  .result.alias == "smoke-info" and
+  .result.destination.hostName == "192.0.2.10" and
+  .result.destination.user == "smoke-user" and
+  .result.destination.port == "22"
 ' >/dev/null
 say "info resolved smoke-info without an engine"
 

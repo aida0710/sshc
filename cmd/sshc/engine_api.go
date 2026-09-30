@@ -89,7 +89,9 @@ type engineStatusWire struct {
 // 確かめてから返す。status、vault、connect、service の全経路がここを通る。
 func fetchEngineStatus(ctx context.Context, client *http.Client, found handoff.Handoff, path string) (statusAnswer, error) {
 	var wire engineStatusWire
-	if err := handoffJSON(ctx, noRedirectClient(client), found, http.MethodGet, path, &wire); err != nil {
+	err := newHandoffEndpoint(found, client).exchange(ctx,
+		handoffCall{method: http.MethodGet, path: path}, handoffAnswer{status: http.StatusOK, into: &wire})
+	if err != nil {
 		return statusAnswer{}, err
 	}
 	if wire.Vault == nil || wire.Unlocked == nil || wire.Sessions == nil ||
@@ -128,16 +130,10 @@ func openEngineAPI(ctx context.Context, stateDir string, base *http.Client) (*en
 		return nil, errEngineVaultLocked
 	}
 
-	request, err := newHandoffRequest(ctx, found, http.MethodPost, httpserver.CLISessionPath, nil)
+	response, err := newHandoffEndpoint(found, client).send(ctx,
+		handoffCall{method: http.MethodPost, path: httpserver.CLISessionPath})
 	if err != nil {
 		return nil, err
-	}
-	response, err := client.Do(request)
-	if err != nil {
-		if response != nil {
-			discardEngineResponse(response)
-		}
-		return nil, transportProblem(err, false)
 	}
 	if response.StatusCode != http.StatusOK {
 		return nil, decodeEngineProblem(response)
@@ -187,47 +183,6 @@ func noRedirectClient(base *http.Client) *http.Client {
 	cloned := *base
 	cloned.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	return &cloned
-}
-
-func newHandoffRequest(
-	ctx context.Context, found handoff.Handoff, method, path string, body io.Reader,
-) (*http.Request, error) {
-	request, err := http.NewRequestWithContext(ctx, method, found.URL+path, body)
-	if err != nil {
-		return nil, err
-	}
-	request.Header.Set(handoff.HeaderName, found.Secret)
-	return request, nil
-}
-
-func handoffJSON(
-	ctx context.Context,
-	client *http.Client,
-	found handoff.Handoff,
-	method, path string,
-	target any,
-) error {
-	request, err := newHandoffRequest(ctx, found, method, path, nil)
-	if err != nil {
-		return err
-	}
-	response, err := client.Do(request)
-	if err != nil {
-		if response != nil {
-			discardEngineResponse(response)
-		}
-		return transportProblem(err, false)
-	}
-	if response.StatusCode != http.StatusOK {
-		return decodeEngineProblem(response)
-	}
-	if err := decodeEngineJSONResponse(response, target); err != nil {
-		if ctx.Err() != nil {
-			return transportProblem(ctx.Err(), false)
-		}
-		return err
-	}
-	return nil
 }
 
 func (engine *engineAPI) getJSON(ctx context.Context, path string, target any) error {
@@ -394,19 +349,12 @@ func (engine *engineAPI) Close() error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), engineCloseTimeout)
 	defer cancel()
-	request, err := http.NewRequestWithContext(ctx, http.MethodDelete,
-		engine.origin+httpserver.CLISessionPath, nil)
+	endpoint := newHandoffEndpoint(handoff.Handoff{URL: engine.origin, Secret: engine.secret}, engine.client)
+	response, err := endpoint.send(ctx, handoffCall{
+		method: http.MethodDelete, path: httpserver.CLISessionPath, sessionCookie: &engine.cookie,
+	})
 	if err != nil {
-		return errEngineInvalidResponse
-	}
-	request.Header.Set(handoff.HeaderName, engine.secret)
-	request.AddCookie(&engine.cookie)
-	response, err := engine.client.Do(request)
-	if err != nil {
-		if response != nil {
-			discardEngineResponse(response)
-		}
-		return transportProblem(err, false)
+		return err
 	}
 	if response.StatusCode != http.StatusNoContent {
 		return decodeEngineProblem(response)
@@ -429,7 +377,13 @@ func (reader *oneShotSecretPayload) Read(destination []byte) (int, error) {
 }
 
 func decodeEngineJSONResponse(response *http.Response, target any) error {
-	body, err := readAndCloseEngineResponse(response)
+	return decodeBoundedJSONResponse(response, target, maxEngineAPIResponse)
+}
+
+// decodeBoundedJSONResponse は本文を limit まで読んで閉じ、1 つの JSON 文書として厳しく読む。
+// 読んだ bytes は、成功しても失敗しても消す。
+func decodeBoundedJSONResponse(response *http.Response, target any, limit int) error {
+	body, err := readAndCloseBounded(response, limit, errEngineInvalidResponse, errEngineResponseTooLarge)
 	defer zeroBytes(body)
 	if err != nil {
 		return err
@@ -455,13 +409,21 @@ func decodeStrictJSON(body []byte, target any) error {
 }
 
 func consumeEngineResponse(response *http.Response, mutation bool) error {
-	body, err := readAndCloseEngineResponse(response)
-	defer zeroBytes(body)
-	if err != nil {
+	if err := readEmptyResponse(response, maxEngineAPIResponse); err != nil {
 		return responseProblem(err, response.StatusCode, mutation)
 	}
+	return nil
+}
+
+// readEmptyResponse は本文を limit まで読んで閉じ、空白のほかに何も無いことを確かめる。
+func readEmptyResponse(response *http.Response, limit int) error {
+	body, err := readAndCloseBounded(response, limit, errEngineInvalidResponse, errEngineResponseTooLarge)
+	defer zeroBytes(body)
+	if err != nil {
+		return err
+	}
 	if len(bytes.TrimSpace(body)) != 0 {
-		return responseProblem(errEngineInvalidResponse, response.StatusCode, mutation)
+		return errEngineInvalidResponse
 	}
 	return nil
 }
@@ -533,8 +495,11 @@ func responseProblem(err error, status int, mutation bool) error {
 	}
 }
 
+// transportErrorCode は、engine の応答を得られなかったことを表す engineProblem の Code。
+const transportErrorCode = "transport_error"
+
 func transportProblem(err error, mutation bool) error {
-	problem := engineProblem{Code: "transport_error", Retryable: true, OutcomeUnknown: mutation}
+	problem := engineProblem{Code: transportErrorCode, Retryable: true, OutcomeUnknown: mutation}
 	switch {
 	case errors.Is(err, context.Canceled):
 		problem.Retryable = false

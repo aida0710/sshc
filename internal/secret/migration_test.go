@@ -232,22 +232,21 @@ func TestUnlockPublishesAMigratedVaultOnlyAfterTheDiskCommitPoint(t *testing.T) 
 
 	result := make(chan error, 1)
 	go func() { result <- service.Unlock(migrationTestPassphrase) }()
+	// 待ちに上限を置かない。Unlock は commit の地点で止まるか、そこへ届かずに戻るかの
+	// どちらかである。どちらにもならずに止まれば、go test の -timeout が goroutine の
+	// 一覧とともに知らせる。Windows の runner は混むと鍵の導出と seal だけで数秒かかり、
+	// 固定の上限では遅いだけの Unlock を失敗と取り違える。
 	select {
 	case <-blocking.entered:
-	case <-time.After(5 * time.Second):
-		t.Fatal("migration did not reach its disk commit point")
+	case err := <-result:
+		t.Fatalf("Unlock returned before the disk commit point: %v", err)
 	}
 	if service.Unlocked() {
 		t.Fatal("migrated vault became visible before the disk commit point")
 	}
 	close(blocking.release)
-	select {
-	case err := <-result:
-		if err != nil {
-			t.Fatal(err)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("migration did not finish after the disk commit point")
+	if err := <-result; err != nil {
+		t.Fatal(err)
 	}
 	if !service.Unlocked() {
 		t.Fatal("committed migrated vault was not published")

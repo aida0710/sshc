@@ -86,6 +86,42 @@ func TestOTPCLIListsNamesWithoutCodesOrProvisioningData(t *testing.T) {
 	}
 }
 
+func TestOTPCLIJSONWrapsTheListAndTheCodesInASuccessEnvelope(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		called otpInvocation
+		check  func(t *testing.T, output string)
+	}{
+		{name: "list", called: otpInvocation{Action: otpList, JSON: true}, check: func(t *testing.T, output string) {
+			var listed []otpListEntry
+			decodeCommandSuccess(t, output, &listed)
+			if len(listed) != 1 || listed[0].Name != "production" {
+				t.Fatalf("list result = %+v", listed)
+			}
+		}},
+		{name: "show", called: otpInvocation{Action: otpShow, Name: "production", JSON: true}, check: func(t *testing.T, output string) {
+			var codes api.TOTPCodeSet
+			decodeCommandSuccess(t, output, &codes)
+			if codes.Current != "222222" || codes.RemainingSeconds != 17 {
+				t.Fatalf("show result = %+v", codes)
+			}
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			server, _ := otpCommandServer(t)
+			defer server.Close()
+			stateDir := t.TempDir()
+			writeTestHandoff(t, stateDir, server.URL)
+			var stdout, stderr bytes.Buffer
+			code := runOTP(context.Background(), test.called, commandEnvironment{stateDir: stateDir, client: server.Client(), stdout: &stdout, stderr: &stderr})
+			if code != 0 || stderr.Len() != 0 {
+				t.Fatalf("runOTP = %d, stderr %q", code, stderr.String())
+			}
+			test.check(t, stdout.String())
+		})
+	}
+}
+
 func TestOTPCLIShowsAdjacentCodesWithoutProvisioningData(t *testing.T) {
 	server, closed := otpCommandServer(t)
 	defer server.Close()

@@ -9,6 +9,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"sshc/internal/terminal"
 )
 
 func TestDialNormalizesAddressAndAppliesDefaults(t *testing.T) {
@@ -26,7 +28,7 @@ func TestDialNormalizesAddressAndAppliesDefaults(t *testing.T) {
 	if network != "tcp" || address != "router.example:23" {
 		t.Fatalf("dial = %q %q, want tcp router.example:23", network, address)
 	}
-	if connection.terminalType != DefaultTerminalType || connection.windowWidth != 80 || connection.windowHeight != 24 {
+	if connection.terminalType != terminal.DefaultTerminalType || connection.windowWidth != terminal.DefaultSize().Cols || connection.windowHeight != terminal.DefaultSize().Rows {
 		t.Fatalf("defaults = terminal %q size %dx%d", connection.terminalType, connection.windowWidth, connection.windowHeight)
 	}
 }

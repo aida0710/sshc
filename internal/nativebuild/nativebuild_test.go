@@ -47,7 +47,7 @@ func TestNativeBuildRejectsInvalidExplicitInputs(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			executor := &recordingNativeExecutor{}
-			err := runNativeBuild(test.args, nativeBuildDeps{
+			err := runNativeBuild(test.args, nativeBuildDependencies{
 				hostOS:      "linux",
 				hostArch:    "amd64",
 				hostCGO:     "0",
@@ -72,9 +72,6 @@ func TestNativeEnvironmentValuesUseExactCanonicalSpelling(t *testing.T) {
 		nativeGOARCHEnvironment,
 		nativeCGOEnvironment,
 		nativeOutputEnvironment,
-		nativeMacBundlesEnvironment,
-		nativeLinuxBundlesEnvironment,
-		nativeWindowsBundlesEnvironment,
 		nativeReleaseTargetsEnvironment,
 		nativeReleaseArchesEnvironment,
 		nativeReleaseDirEnvironment,
@@ -97,7 +94,7 @@ func TestNativeEnvironmentValuesUseExactCanonicalSpelling(t *testing.T) {
 func TestNativeBuildRejectsDuplicateCanonicalEnvironmentBeforeActions(t *testing.T) {
 	executor := &recordingNativeExecutor{}
 	mkdirCalls := 0
-	err := runNativeBuild([]string{"build"}, nativeBuildDeps{
+	err := runNativeBuild([]string{"build"}, nativeBuildDependencies{
 		hostOS:   "linux",
 		hostArch: "amd64",
 		hostCGO:  "0",
@@ -126,7 +123,7 @@ func TestNativeBuildRejectsDuplicateCanonicalEnvironmentBeforeActions(t *testing
 func TestNativeBuildRejectsAliasWithoutCanonicalEnvironmentBeforeActions(t *testing.T) {
 	executor := &recordingNativeExecutor{}
 	mkdirCalls := 0
-	err := runNativeBuild([]string{"build"}, nativeBuildDeps{
+	err := runNativeBuild([]string{"build"}, nativeBuildDependencies{
 		hostOS:   "linux",
 		hostArch: "amd64",
 		hostCGO:  "0",
@@ -160,7 +157,7 @@ func TestNativeBuildPreservesOutputPathWithSpacesInArgv(t *testing.T) {
 		"--goarch", "amd64",
 		"--output", output,
 		"--cgo", "0",
-	}, nativeBuildDeps{
+	}, nativeBuildDependencies{
 		hostOS:      "darwin",
 		hostArch:    "arm64",
 		hostCGO:     "1",
@@ -198,7 +195,7 @@ func TestNativeBuildRejectsMalformedExplicitVersionBeforeSideEffects(t *testing.
 		"--goarch", "amd64",
 		"--output", "dist/sshc-linux-amd64",
 		"--cgo", "0",
-	}, nativeBuildDeps{
+	}, nativeBuildDependencies{
 		hostOS:      "linux",
 		hostArch:    "amd64",
 		hostCGO:     "0",
@@ -226,7 +223,7 @@ func TestNativeBuildRejectsMalformedGitVersionBeforeBuildOrMkdir(t *testing.T) {
 		"--goarch", "amd64",
 		"--output", "dist/sshc-linux-amd64",
 		"--cgo", "0",
-	}, nativeBuildDeps{
+	}, nativeBuildDependencies{
 		hostOS:   "linux",
 		hostArch: "amd64",
 		hostCGO:  "0",
@@ -246,7 +243,7 @@ func TestNativeBuildRejectsMalformedGitVersionBeforeBuildOrMkdir(t *testing.T) {
 
 func TestHostBuildRunsWebBuildOnlyAfterValidation(t *testing.T) {
 	executor := &recordingNativeExecutor{}
-	err := runNativeBuild([]string{"host-build", "--output-dir", "bin"}, nativeBuildDeps{
+	err := runNativeBuild([]string{"host-build", "--output-dir", "bin"}, nativeBuildDependencies{
 		hostOS:      "linux",
 		hostArch:    "amd64",
 		hostCGO:     "0",
@@ -271,7 +268,7 @@ func TestHostBuildRunsWebBuildOnlyAfterValidation(t *testing.T) {
 func TestHostBuildRejectsMalformedVersionBeforeReadingCGO(t *testing.T) {
 	executor := &recordingNativeExecutor{output: []byte("1\n")}
 	mkdirCalls := 0
-	err := runNativeBuild([]string{"host-build", "--output-dir", "bin"}, nativeBuildDeps{
+	err := runNativeBuild([]string{"host-build", "--output-dir", "bin"}, nativeBuildDependencies{
 		hostOS:      "linux",
 		hostArch:    "amd64",
 		environment: []string{nativeVersionEnvironment + "=v1.2.3 -w"},
@@ -296,7 +293,7 @@ func TestReleaseCurrentRejectsUnsupportedHostBeforeAllActions(t *testing.T) {
 		"release-current",
 		"--arches", "amd64 arm64",
 		"--output-dir", "dist",
-	}, nativeBuildDeps{
+	}, nativeBuildDependencies{
 		hostOS:      "freebsd",
 		hostArch:    "amd64",
 		hostCGO:     "0",
@@ -317,7 +314,7 @@ func TestReleaseCurrentRejectsUnsupportedHostBeforeAllActions(t *testing.T) {
 
 func TestNativeHostGuardRejectsOverrideableTargetOS(t *testing.T) {
 	executor := &recordingNativeExecutor{}
-	err := runNativeBuild([]string{"guard-host", "--host", "windows"}, nativeBuildDeps{
+	err := runNativeBuild([]string{"guard-host", "--host", "windows"}, nativeBuildDependencies{
 		hostOS:      "linux",
 		hostArch:    "amd64",
 		hostCGO:     "0",
@@ -339,7 +336,7 @@ func TestBuildMatrixRunsWebThenVerifiesEveryArtifact(t *testing.T) {
 		"matrix",
 		"--targets", "linux/amd64:0 linux/arm64:0",
 		"--output-dir", "release output",
-	}, nativeBuildDeps{
+	}, nativeBuildDependencies{
 		hostOS:      "linux",
 		hostArch:    "amd64",
 		hostCGO:     "0",
@@ -350,16 +347,101 @@ func TestBuildMatrixRunsWebThenVerifiesEveryArtifact(t *testing.T) {
 	if err != nil {
 		t.Fatalf("runNativeBuild() error: %v", err)
 	}
-	if len(executor.commands) != 5 {
-		t.Fatalf("commands = %#v, want web plus two build/verifier pairs", executor.commands)
+	if len(executor.commands) != 6 {
+		t.Fatalf("commands = %#v, want web, its comparison, and two build/verifier pairs", executor.commands)
 	}
 	if executor.commands[0].name != "npm" {
 		t.Fatalf("first command = %s, want npm", executor.commands[0].name)
 	}
-	for _, index := range []int{2, 4} {
+	assertComparesEmbeddedUI(t, executor.commands[1])
+	for _, index := range []int{3, 5} {
 		if executor.commands[index].name != "sh" {
 			t.Errorf("command %d = %s, want shell verifier", index, executor.commands[index].name)
 		}
+	}
+}
+
+// リリースの runner で作り直した UI がコミット済みの UI と違えば、配布物を作らない。
+// 同じ tag の Homebrew と APK は、コミット済みの UI を埋め込むからである。
+func TestReleaseBuildsStopWhenTheRebuiltUIDiffersFromTheCommittedOne(t *testing.T) {
+	for name, args := range map[string][]string{
+		"matrix":             {"matrix", "--targets", "linux/amd64:0", "--output-dir", "release output"},
+		"release-current":    {"release-current", "--arches", "amd64 arm64", "--output-dir", "release output"},
+		"verify-embedded-ui": {"verify-embedded-ui"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			executor := &recordingNativeExecutor{output: []byte(" M internal/ui/dist/index.html\n?? internal/ui/dist/assets/new-hash.js\n")}
+			err := runNativeBuild(args, nativeBuildDependencies{
+				hostOS:      "linux",
+				hostArch:    "amd64",
+				hostCGO:     "0",
+				environment: []string{nativeVersionEnvironment + "=v1.2.3"},
+				executor:    executor,
+				mkdirAll:    func(string, os.FileMode) error { return nil },
+			}, io.Discard, io.Discard)
+			if err == nil || !strings.Contains(err.Error(), "internal/ui/dist/assets/new-hash.js") {
+				t.Fatalf("runNativeBuild() error = %v, want the differing embedded UI listed", err)
+			}
+			for _, command := range executor.commands {
+				if command.name == "go" {
+					t.Fatalf("a binary was built after the UI differed: %#v", executor.commands)
+				}
+			}
+		})
+	}
+}
+
+// 公開の前に照合だけを試す入口（.github/workflows/release-ui-check.yml）は、リリースと
+// 同じ手順で UI を作り直して照合し、バイナリも出力先も作らない。
+func TestEmbeddedUIVerificationComparesTheRebuiltUIWithoutBuildingBinaries(t *testing.T) {
+	for _, hostOS := range []string{"darwin", "linux", "windows"} {
+		t.Run(hostOS, func(t *testing.T) {
+			executor := &recordingNativeExecutor{}
+			mkdirCalls := 0
+			err := runNativeBuild([]string{"verify-embedded-ui"}, nativeBuildDependencies{
+				hostOS:   hostOS,
+				hostArch: "amd64",
+				executor: executor,
+				mkdirAll: func(string, os.FileMode) error {
+					mkdirCalls++
+					return nil
+				},
+			}, io.Discard, io.Discard)
+			if err != nil {
+				t.Fatalf("runNativeBuild() error: %v", err)
+			}
+			if len(executor.commands) != 2 || mkdirCalls != 0 {
+				t.Fatalf("commands = %#v mkdir = %d, want only the web build and its comparison", executor.commands, mkdirCalls)
+			}
+			if command := executor.commands[0]; command.name != "npm" || !reflect.DeepEqual(command.args, []string{"run", "build"}) || command.directory != "web" {
+				t.Fatalf("first command = %s %q in %q, want npm web build in web", command.name, command.args, command.directory)
+			}
+			assertComparesEmbeddedUI(t, executor.commands[1])
+		})
+	}
+}
+
+func TestEmbeddedUIVerificationRejectsArgumentsBeforeBuildingTheUI(t *testing.T) {
+	executor := &recordingNativeExecutor{}
+	err := runNativeBuild([]string{"verify-embedded-ui", "--output-dir", "dist"}, nativeBuildDependencies{
+		hostOS:   "linux",
+		hostArch: "amd64",
+		executor: executor,
+		mkdirAll: func(string, os.FileMode) error { return nil },
+	}, io.Discard, io.Discard)
+	if err == nil {
+		t.Fatal("runNativeBuild() accepted an option the verification does not take")
+	}
+	if len(executor.commands) != 0 {
+		t.Fatalf("commands = %#v, want none", executor.commands)
+	}
+}
+
+func assertComparesEmbeddedUI(t *testing.T, command nativeCommand) {
+	t.Helper()
+	want := []string{"status", "--porcelain=v1", "--untracked-files=all", "--", "internal/ui/dist"}
+	if command.name != "git" || !reflect.DeepEqual(command.args, want) {
+		t.Fatalf("command after the web build = %s %q, want git %q", command.name, command.args, want)
 	}
 }
 
@@ -391,7 +473,7 @@ func TestReleaseCurrentUsesActualHostForBothArchitectures(t *testing.T) {
 				"release-current",
 				"--arches", "amd64 arm64",
 				"--output-dir", root,
-			}, nativeBuildDeps{
+			}, nativeBuildDependencies{
 				hostOS:      test.hostOS,
 				hostArch:    "amd64",
 				hostCGO:     test.hostCGO,
@@ -409,14 +491,15 @@ func TestReleaseCurrentUsesActualHostForBothArchitectures(t *testing.T) {
 			if got := commandOutputs(executor.commands); !reflect.DeepEqual(got, wantOutputs) {
 				t.Fatalf("outputs = %q, want %q", got, wantOutputs)
 			}
-			if len(executor.commands) != 5 {
-				t.Fatalf("commands = %d, want web build plus two build/verifier pairs: %#v", len(executor.commands), executor.commands)
+			if len(executor.commands) != 6 {
+				t.Fatalf("commands = %d, want web build, its comparison, and two build/verifier pairs: %#v", len(executor.commands), executor.commands)
 			}
 			if command := executor.commands[0]; command.name != "npm" || !reflect.DeepEqual(command.args, []string{"run", "build"}) || command.directory != "web" {
 				t.Fatalf("first command = %s %q in %q, want npm web build in web", command.name, command.args, command.directory)
 			}
+			assertComparesEmbeddedUI(t, executor.commands[1])
 			for index, command := range executor.commands {
-				if index == 0 || index%2 == 0 {
+				if index < 2 || index%2 == 1 {
 					continue
 				}
 				if got := recordedEnvValue(command.environment, "GOOS"); got != test.hostOS {
@@ -427,7 +510,7 @@ func TestReleaseCurrentUsesActualHostForBothArchitectures(t *testing.T) {
 				}
 			}
 			for index, architecture := range []string{"amd64", "arm64"} {
-				verify := executor.commands[2+index*2]
+				verify := executor.commands[3+index*2]
 				wantArtifact := wantOutputs[index]
 				if test.hostOS == "windows" {
 					want := []string{"-NoProfile", "-File", "scripts/verify-artifact-name.ps1", "-Artifact", wantArtifact, "-OS", "windows", "-Architecture", architecture}

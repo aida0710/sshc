@@ -141,7 +141,7 @@ func TestAttachDoesNotChangeAPipe(t *testing.T) {
 		t.Errorf("what was typed did not reach the remote: %q", written)
 	}
 	// 大きさは既定のまま。問い合わせられない相手に問い合わせない。
-	if len(sizes) != 1 || sizes[0] != sshclient.DefaultLocalSize {
+	if len(sizes) != 1 || sizes[0] != terminal.DefaultSize() {
 		t.Errorf("sizes = %#v, want only the default", sizes)
 	}
 }

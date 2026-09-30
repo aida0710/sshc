@@ -22,21 +22,14 @@ const readRights = windows.FILE_READ_DATA |
 	windows.GENERIC_READ |
 	windows.GENERIC_ALL
 
-// ReadableByOthers は、その道の中身を、所有者・SYSTEM・Administrators 以外の
-// 誰かが読めるかを返す。
+// ReadableByOthers は、この利用者本人・SYSTEM・Administrators 以外の誰かが、
+// その道の中身を読めるか、読めるようにできるかを返す。
 //
 // これが Windows で判定できる唯一の問いである。mode ビットには誰が読める
 // かが入っていない。Go は通常ファイルに 0666 を合成して返すだけで、それを
 // Unix と同じ式で見れば秘密鍵は必ず「危険」になる。誰が読めるかを決めているのは
-// DACL であり、だからここは DACL を歩く。
-//
-// 拒否 (deny) は数えない。許可と拒否の効き方は ACE の並び順で決まり、
-// 順序の壊れた DACL では許可が先に効く。そこで拒否を引き算すると、実際には
-// 読める鍵を「安全」と報告しうる。間違える方向としてそれが最も悪い。
-// 読ませない意図の deny があるのに警告が出るのは、その逆よりずっと軽い。
-//
-// 読めない形は、安全とみなさない。解釈できない種類の ACE に出会ったら、
-// 閉じていることを確かめられなかったのだから、危険の側へ倒す。
+// 所有者と DACL であり、だからここは記述子を読む。判定の規則は readableByOthers
+// にある。
 func ReadableByOthers(path string) (bool, error) {
 	file, err := openFileNoReparse(path, windows.READ_CONTROL)
 	if err != nil {
@@ -55,62 +48,93 @@ func ReadableByOthers(path string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+	security, err := keySecurityOf(descriptor, owner)
+	if err != nil {
+		return false, err
+	}
+	notOthers, err := principalsNotOthers(owner)
+	if err != nil {
+		return false, err
+	}
+	exposed, err := readableByOthers(security, notOthers)
+	if err != nil {
+		return exposed, fmt.Errorf("%s: %w", path, err)
+	}
+	return exposed, nil
+}
+
+// keySecurityOf は、記述子の所有者と DACL を、判定に要る形へ写す。
+func keySecurityOf(descriptor *windows.SECURITY_DESCRIPTOR, owner *windows.SID) (keySecurity, error) {
 	dacl, _, err := descriptor.DACL()
 	if err != nil {
-		return false, err
+		return keySecurity{}, err
 	}
-	// DACL が無いことは、誰でも読めることである。空の DACL（ACE が
-	// ひとつも無い）とは違う。あちらは誰も読めない。
+	security := keySecurity{hasDACL: dacl != nil}
+	if owner != nil {
+		security.owner = owner.String()
+	}
 	if dacl == nil {
-		return true, nil
+		return security, nil
 	}
-
-	system, err := windows.CreateWellKnownSid(windows.WinLocalSystemSid)
-	if err != nil {
-		return false, err
-	}
-	administrators, err := windows.CreateWellKnownSid(windows.WinBuiltinAdministratorsSid)
-	if err != nil {
-		return false, err
-	}
-	// 記述子の所有者だけでは足りない。昇格したトークンが作ったファイルの
-	// 所有者は、その利用者ではなく Administrators になる。そこで所有者だけを
-	// 見ると、鍵を実際に持っているユーザー本人が「別のユーザー」に分類される。
-	// 普通に閉じている鍵が、全部危険と報告されることになる。
-	//
-	// 実機で確かめた: 昇格した SSH セッションが書いたファイルの所有者は
-	// S-1-5-32-544 で、DACL が読みを与えている相手はその利用者の SID だった。
-	me, err := currentUserSID()
-	if err != nil {
-		return false, err
-	}
-
 	for index := uint32(0); index < uint32(dacl.AceCount); index++ {
 		var header *windows.ACCESS_ALLOWED_ACE
 		if err := windows.GetAce(dacl, index, &header); err != nil {
-			return false, err
+			return keySecurity{}, err
 		}
-		switch header.Header.AceType {
-		case windows.ACCESS_DENIED_ACE_TYPE:
-			// 上の理由により数えない。
-			continue
-		case windows.ACCESS_ALLOWED_ACE_TYPE:
-			if header.Mask&readRights == 0 {
-				continue
-			}
-			trustee := (*windows.SID)(unsafe.Pointer(&header.SidStart))
-			if trustee.Equals(owner) || trustee.Equals(me) ||
-				trustee.Equals(system) || trustee.Equals(administrators) {
-				continue
-			}
-			return true, nil
-		default:
-			// object ACE などは、ここでは読み方を持たない。ファイルの DACL に
-			// 現れることはまず無いが、現れたなら閉じていると言える根拠が
-			// 無いので、そう返す。
-			return true, fmt.Errorf("%s carries an access entry of type %d that sshc does not read",
-				path, header.Header.AceType)
-		}
+		security.entries = append(security.entries, accessEntryOf(header))
 	}
-	return false, nil
+	return security, nil
+}
+
+// accessEntryOf は ACE ひとつを写す。相手の SID を読むのは許可の ACE だけである。
+// object ACE などは SID の位置が違い、拒否の ACE は判定に相手を使わない。
+func accessEntryOf(header *windows.ACCESS_ALLOWED_ACE) accessEntry {
+	entry := accessEntry{aceType: header.Header.AceType, grantsRead: header.Mask&readRights != 0}
+	switch header.Header.AceType {
+	case windows.ACCESS_ALLOWED_ACE_TYPE:
+		entry.kind = accessAllowed
+		entry.trustee = (*windows.SID)(unsafe.Pointer(&header.SidStart)).String()
+	case windows.ACCESS_DENIED_ACE_TYPE:
+		entry.kind = accessDenied
+	default:
+		entry.kind = accessUnreadable
+	}
+	return entry
+}
+
+// principalsNotOthers は、鍵の所有者や読み手として現れても「ほかの誰か」に
+// 数えない SID を返す。
+//
+// 記述子の所有者だけでは足りない。昇格したトークンが作ったファイルの
+// 所有者は、その利用者ではなく Administrators になる。そこで所有者だけを
+// 見ると、鍵を実際に持っているユーザー本人が「別のユーザー」に分類される。
+// 普通に閉じている鍵が、全部危険と報告されることになる。
+//
+// 実機で確かめた: 昇格した SSH セッションが書いたファイルの所有者は
+// S-1-5-32-544 で、DACL が読みを与えている相手はその利用者の SID だった。
+//
+// 所有者を入れるのは、それがこのトークンのものと言えるときだけである。
+// 書き込みの側（restrictNativeHandle）と同じく ownedByThisToken で判断する。
+func principalsNotOthers(owner *windows.SID) ([]string, error) {
+	me, err := currentUserSID()
+	if err != nil {
+		return nil, err
+	}
+	system, err := windows.CreateWellKnownSid(windows.WinLocalSystemSid)
+	if err != nil {
+		return nil, err
+	}
+	administrators, err := windows.CreateWellKnownSid(windows.WinBuiltinAdministratorsSid)
+	if err != nil {
+		return nil, err
+	}
+	notOthers := []string{me.String(), system.String(), administrators.String()}
+	mine, err := ownedByThisToken(owner)
+	if err != nil {
+		return nil, err
+	}
+	if mine {
+		notOthers = append(notOthers, owner.String())
+	}
+	return notOthers, nil
 }

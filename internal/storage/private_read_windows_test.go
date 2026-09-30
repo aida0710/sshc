@@ -22,21 +22,7 @@ func TestWindowsWorkspacePrivateReadRejectsParentJunction(t *testing.T) {
 	if err := windowsacl.EnsureDirectory(targetDirectory); err != nil {
 		t.Fatal(err)
 	}
-	temporary, err := windowsacl.CreateTemp(targetDirectory, ".document-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := temporary.Write([]byte("redirected")); err != nil {
-		_ = temporary.Close()
-		t.Fatal(err)
-	}
-	if err := temporary.Close(); err != nil {
-		t.Fatal(err)
-	}
-	target := filepath.Join(targetDirectory, "document")
-	if err := os.Rename(temporary.Name(), target); err != nil {
-		t.Fatal(err)
-	}
+	acltest.WritePrivateFile(t, filepath.Join(targetDirectory, "document"), []byte("redirected"))
 
 	junction := filepath.Join(workspace.StateDir(), "redirect")
 	if output, err := exec.Command("cmd.exe", "/c", "mklink", "/J", junction, targetDirectory).CombinedOutput(); err != nil {

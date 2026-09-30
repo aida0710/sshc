@@ -17,7 +17,7 @@ import (
 // 終わる。
 //
 // `syscall.SIGTERM` は、Windows では窓を閉じる・サインアウトする・シャットダウン
-// することの写像である。Unix と同じく、監督者が止めたのだから 0 で終わる。
+// することの写像である。Unix と同じく、監督者が止めた理由として運ぶ。
 func notifySignals(ctx context.Context) (context.Context, func()) {
 	signals := make(chan os.Signal, 2)
 	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)

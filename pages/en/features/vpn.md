@@ -236,10 +236,10 @@ When the VPN is up but the target cannot be reached, the terminal and `sshc <ali
 
 | Message | What to check |
 |---|---|
-| The target's name could not be resolved by the DNS servers inside the VPN | The profile's DNS servers and the connection's `HostName` |
-| The target did not answer or refused the connection | The connection's `HostName` and `Port`, and whether its SSH server is running |
+| The DNS servers inside the VPN could not resolve the destination | The profile's DNS servers and the connection's `HostName` |
+| The destination did not answer or refused the connection | The connection's `HostName` and `Port`, and whether its SSH server is running |
 | The destination is outside the AllowedIPs of every WireGuard [Peer] | `AllowedIPs` in the configuration file, and the connection's `HostName` |
-| The target is the VPN server itself | The VPN server cannot be reached through its own VPN |
+| The destination is the VPN server's own address | The VPN server cannot be reached through its own VPN |
 
 When the failure will repeat until a setting is fixed (no VPN secret saved, Docker not running and so on), the terminal does not keep reconnecting.
 

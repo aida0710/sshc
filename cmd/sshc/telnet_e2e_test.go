@@ -147,7 +147,7 @@ func TestRunTelnetEndToEndTimesOutWhenPeerStopsResponding(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := runTransportInvocation(ctx, *called.Transport, nil, &stdout, &stderr)
 	release()
-	if code != transportTimeoutExit || stderr.Len() != 0 {
+	if code != exitTimeout || stderr.Len() != 0 {
 		t.Fatalf("code = %d, stderr = %q, stdout = %q", code, stderr.String(), stdout.String())
 	}
 	select {

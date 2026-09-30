@@ -66,21 +66,12 @@ func (systemPasswordTerminal) ReadPasswordMasked(
 	return readWindowsPasswordWithFeedback(ctx, windows.Handle(input.Fd()), systemWindowsPasswordOperations(), prompt, feedback)
 }
 
-// readWindowsPassword はコンソール入力とキャンセルイベントを同時に待つ。
-// 補助 goroutine は専用イベントを通知するだけで、イベントを閉じて保存済みの
-// コンソールモードを復元する前に終了を待つ。
-func readWindowsPassword(
-	ctx context.Context, input windows.Handle, operations windowsPasswordOperations,
-) (password []byte, resultErr error) {
-	return readWindowsPasswordWithFeedback(ctx, input, operations, nil, nil)
-}
-
-func readWindowsPasswordWithPrompt(
-	ctx context.Context, input windows.Handle, operations windowsPasswordOperations, prompt func() error,
-) (password []byte, resultErr error) {
-	return readWindowsPasswordWithFeedback(ctx, input, operations, prompt, nil)
-}
-
+// readWindowsPasswordWithFeedback は、エコーを止めたコンソールからパスワードを 1 行読む。
+//
+// コンソール入力とキャンセルイベントを同時に待つので、ctx が止まれば入力の途中でも
+// 戻る。補助 goroutine は専用イベントを通知するだけで、イベントを閉じて保存済みの
+// コンソールモードを復元する前に終了を待つ。prompt はエコーを止めた後、読む前に呼ぶ。
+// feedback は、入力した文字数が変わるたびにその数を受け取る。どちらも nil でよい。
 func readWindowsPasswordWithFeedback(
 	ctx context.Context,
 	input windows.Handle,

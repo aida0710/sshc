@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -86,9 +85,7 @@ func TestInfoJSONUsesTheConnectionTargetWithoutAnEngine(t *testing.T) {
 		t.Fatalf("stderr = %q", stderr.String())
 	}
 	var got infoDocument
-	if err := json.Unmarshal([]byte(stdout.String()), &got); err != nil {
-		t.Fatalf("JSON = %v\n%s", err, stdout.String())
-	}
+	decodeCommandSuccess(t, stdout.String(), &got)
 	if got.SchemaVersion != 1 || got.Alias != "edge" {
 		t.Fatalf("identity = %+v", got)
 	}
@@ -169,9 +166,7 @@ Host nested
 		t.Fatalf("runInfo = %d, stderr = %s", code, stderr.String())
 	}
 	var got infoDocument
-	if err := json.Unmarshal([]byte(stdout.String()), &got); err != nil {
-		t.Fatal(err)
-	}
+	decodeCommandSuccess(t, stdout.String(), &got)
 	if len(got.ProxyJump) != 2 || got.ProxyJump[0].Alias != "gateway" ||
 		got.ProxyJump[1].Alias != "bastion" {
 		t.Fatalf("proxy jump route = %+v", got.ProxyJump)
@@ -267,6 +262,36 @@ func TestInfoRefusesInvalidAndUnresolvableAliasesWithoutPartialOutput(t *testing
 		}
 		if stderr.Len() == 0 {
 			t.Errorf("runInfo(%q) gave no error", test.alias)
+		}
+	}
+}
+
+func TestInfoJSONReportsInvalidAndUnresolvableAliasesAsAFailureEnvelope(t *testing.T) {
+	home := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	configuration := "Host refused\n  HostName refused.internal\nMatch exec true\n  Port 2200\n"
+	if err := os.WriteFile(filepath.Join(home, ".ssh", "config"), []byte(configuration), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		alias string
+		code  int
+		kind  string
+	}{
+		{alias: "-option", code: 2, kind: "invalid_alias"},
+		{alias: "refused", code: 1, kind: "unresolvable_target"},
+	} {
+		var stdout, stderr strings.Builder
+		if code := runInfo(test.alias, home, true, &stdout, &stderr); code != test.code {
+			t.Errorf("runInfo(%q) = %d, want %d", test.alias, code, test.code)
+		}
+		if failure := decodeCommandFailure(t, stdout.String()); failure.Kind != test.kind || failure.Retryable {
+			t.Errorf("runInfo(%q) failure = %+v, want kind %q", test.alias, failure, test.kind)
+		}
+		if stderr.Len() != 0 {
+			t.Errorf("runInfo(%q) also wrote stderr %q", test.alias, stderr.String())
 		}
 	}
 }

@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"errors"
-	"io"
+	"fmt"
 	"net/http"
 
 	"sshc/internal/handoff"
@@ -16,17 +16,17 @@ type engineProbe interface {
 	Connection(context.Context, string) (connectAnswer, error)
 }
 
-// errInterrupted は Ctrl-C による中断を表し、終了コード 130 に変換される。
-var errInterrupted = errors.New("interrupted")
-
 // httpProbe は生成時に取得した handoff の engine だけに要求を送る。
 type httpProbe struct {
 	found  handoff.Handoff
 	client *http.Client
 }
 
+// Status は `sshc status` と同じ状態の要求を送る。engine に断られたときは、`sshc ssh` の
+// 断りの文（refusedRequestError）にする。`sshc status` 自身の文は変えない。
 func (probe httpProbe) Status(ctx context.Context) (statusAnswer, error) {
-	return requestStatus(ctx, probe.found, probe.client)
+	answer, err := requestStatus(ctx, probe.found, probe.client)
+	return answer, explainRefusedRequest(err)
 }
 
 func (probe httpProbe) Connection(ctx context.Context, alias string) (connectAnswer, error) {
@@ -34,14 +34,18 @@ func (probe httpProbe) Connection(ctx context.Context, alias string) (connectAns
 }
 
 // reachUnlockedEngine は稼働中で解錠済みの engine を返す。
-// engine は起動せず、停止中または施錠中の場合は復旧手順を返す。
+// engine は起動せず、届かない場合と施錠中の場合は、理由ごとの復旧手順を返す。
 func reachUnlockedEngine(
 	ctx context.Context, stateDir string, client *http.Client,
-	newProbe func(handoff.Handoff) engineProbe, stderr io.Writer,
+	newProbe func(handoff.Handoff) engineProbe,
 ) (engineProbe, error) {
 	found, status, err := liveEngineStatus(ctx, stateDir, client, newProbe)
 	if err != nil {
-		return nil, errors.New("sshc is not running; run sshc engine in another terminal, or use ssh to connect without it")
+		err = explainEngineUnreachable(ctx, err)
+		if isEngineNotRunning(err) {
+			return nil, fmt.Errorf("%w, or use ssh to connect without it", err)
+		}
+		return nil, err
 	}
 
 	probe := newProbe(found)
@@ -50,9 +54,9 @@ func reachUnlockedEngine(
 	}
 	// Vault 未作成と解錠済みを区別する。
 	if !status.Vault {
-		return nil, errors.New("this installation has no vault; run sshc vault create")
+		return nil, errors.New(vaultMissingAdvice)
 	}
-	return nil, errors.New("the sshc vault is locked; run sshc vault unlock")
+	return nil, errors.New(vaultLockedAdvice)
 }
 
 // liveEngineStatus は handoff を読み、対象 engine の状態を取得する。

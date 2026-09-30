@@ -50,8 +50,8 @@ type Dependencies struct {
 	StopEngine func()
 	Port       int
 	// DefaultPort is used only when neither --port nor saved settings choose a
-	// port. Desktop uses a stable origin; mobile leaves this zero and keeps an
-	// ephemeral listener behind its native WebView.
+	// port. Desktop keeps a stable origin for bookmarks and installed web apps;
+	// mobile uses its own value so the native WebView keeps its storage.
 	DefaultPort int
 	UI          fs.FS
 	Logger      *slog.Logger
@@ -79,8 +79,18 @@ type Dependencies struct {
 	ShutdownTimeout time.Duration
 }
 
-// DefaultShutdownTimeout は、承認済みの内側の締切である。
+// DefaultShutdownTimeout は、停止を始めた engine が、ターミナルと HTTP の要求が
+// 自分から終わるのを待つ上限である。過ぎると両方を強制的に閉じる（unwind）。
+// 停止は Ctrl+C、サービスの停止、sshc engine --replace で利用者が待っているときに
+// 起きるので、応答しない接続先のターミナル1つがそれを止めないよう秒の単位で打ち切る。
+// そのうえで、応答する接続先には切断を送り終えるだけの猶予を残す長さにしてある。
 const DefaultShutdownTimeout = 4 * time.Second
+
+// MaxShutdownDuration は、停止を始めた engine が engine lock を手放すまでの上限である
+// （ShutdownTimeout が既定のとき）。ターミナルと HTTP を強制で閉じるまでの
+// DefaultShutdownTimeout のあとに、VPN の経路を畳む vpnStopTimeout が続く。
+// engine の外で終わりを待つ側（sshc engine --replace）は、待ち時間をここから導く。
+const MaxShutdownDuration = DefaultShutdownTimeout + vpnStopTimeout
 
 // Readiness は、受け付けを始めた常駐がどんな状態かを述べる。
 type Readiness struct {
@@ -88,6 +98,9 @@ type Readiness struct {
 	// Entrance は起動時に使用する UI URL である。
 	Entrance    string
 	VaultExists bool
+	// VaultUnlocked は、受け付けを始めた時点で Vault のロックが解除されているかを述べる。
+	// パスワードなしの Vault は起動時にロックが解除されるので、利用者に解除を求めない。
+	VaultUnlocked bool
 	// BrowserRegistrationRequired is true only before any browser profile has
 	// enrolled on this device. Native runners may open Entrance once in this case.
 	BrowserRegistrationRequired bool
@@ -107,6 +120,11 @@ func buildKeyService(workspace *storage.Workspace, dependencies Dependencies, co
 	}), transactions
 }
 
+// Build は、Run と同じ組み立てを通った HTTP サーバーと bootstrap を返す。
+// Serve も、VPN の経路の監視と自動同期の開始も、停止の後始末もしない。
+//
+// 製品は Run を使い、これを呼ばない。受け入れテスト（internal/acceptance）が、
+// 製品と同じ配線のサーバーを自分で Serve して要求を送るための入口である。
 func Build(dependencies Dependencies, version string) (*httpserver.Server, string, error) {
 	built, err := build(dependencies, version)
 	return built.server, built.bootstrap, err
@@ -268,7 +286,11 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 		Version:         version,
 		ProtocolVersion: handoff.ProtocolVersion,
 	}
-	// handoff を書けないことは致命である。書けなかった常駐は、`sshc ssh <alias>`
+	// handoff を書けないことは致命である。書けなかった常駐は `sshc ssh <alias>` から
+	// 見えないまま動き続け、2 台目の engine が同じ handoff を書きに来る。
+	// 書き込みは rename のあとのディレクトリの同期で失敗しうるので、公開されたかは
+	// 不定である。どの失敗のあとでも自分の秘密で Remove を試みる。置き換わって
+	// いなければ、または別の秘密の handoff があれば、Remove は何も消さない。
 	if err := handoff.Write(HandoffDir(dependencies.Home), document); err != nil {
 		if removeErr := handoff.Remove(HandoffDir(dependencies.Home), document.Secret); removeErr != nil {
 			err = errors.Join(err, fmt.Errorf("remove the possibly published handoff: %w", removeErr))
@@ -319,16 +341,17 @@ func Run(ctx context.Context, dependencies Dependencies, version string) error {
 	}
 
 	if dependencies.Announce != nil {
-		exists := false
+		var vault secret.State
 		if built.passwords != nil {
-			if exists, err = built.passwords.Exists(); err != nil {
+			if vault, err = built.passwords.State(); err != nil {
 				return stop(fmt.Errorf("read the vault state: %w", err))
 			}
 		}
 		readiness := Readiness{
-			Owner:       dependencies.Owner,
-			Entrance:    built.server.URL() + "/#bootstrap=" + built.bootstrap,
-			VaultExists: exists,
+			Owner:         dependencies.Owner,
+			Entrance:      built.server.URL() + "/#bootstrap=" + built.bootstrap,
+			VaultExists:   vault.Exists,
+			VaultUnlocked: vault.Unlocked,
 		}
 		registered, registrationErr := built.browserAuth.HasRegistrations()
 		if registrationErr != nil {

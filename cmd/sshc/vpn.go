@@ -106,10 +106,8 @@ func runVPN(ctx context.Context, called vpnInvocation, environment commandEnviro
 			return finishVPNFailure(called, err, environment)
 		}
 		if called.JSON {
-			if err := writeCommandEnvelope(stdout, commandEnvelope{
-				SchemaVersion: 1, Success: true, Result: logs,
-			}); err != nil {
-				return 1
+			if err := writeCommandSuccess(stdout, logs); err != nil {
+				return exitFailure
 			}
 			return 0
 		}
@@ -124,10 +122,8 @@ func runVPN(ctx context.Context, called vpnInvocation, environment commandEnviro
 		}
 	}
 	if called.JSON {
-		if err := writeCommandEnvelope(stdout, commandEnvelope{
-			SchemaVersion: 1, Success: true, Result: overview,
-		}); err != nil {
-			return 1
+		if err := writeCommandSuccess(stdout, overview); err != nil {
+			return exitFailure
 		}
 		return 0
 	}

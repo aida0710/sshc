@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"crypto/rand"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -18,30 +17,37 @@ import (
 )
 
 // runStatus は engine の状態を表形式または JSON で出力する。
-func runStatus(
-	ctx context.Context, stateDir string, client *http.Client, asJSON bool, stdout, stderr io.Writer,
-) int {
-	found, err := verifiedHandoff(ctx, stateDir, client)
+func runStatus(ctx context.Context, environment commandEnvironment, asJSON bool) int {
+	found, answer, err := verifiedStatus(ctx, environment.stateDir, environment.client)
 	if err != nil {
-		fmt.Fprintf(stderr, "sshc: %v\n", err)
-		return 1
-	}
-	answer, err := requestStatus(ctx, found, client)
-	if err != nil {
-		fmt.Fprintf(stderr, "sshc: %v\n", err)
-		return 1
+		if asJSON {
+			return finishCommandFailure(commandFailureReport{
+				cause: err, failure: classifyCommandFailure(err), asJSON: true, stdout: environment.stdout,
+			})
+		}
+		// engine に届かなかった理由は、sshc open や sshc ssh と同じ分け方で出す。
+		return reportEngineUnreachable(ctx, err, environment.stderr)
 	}
 	if asJSON {
-		encoded, err := json.Marshal(answer)
-		if err != nil {
-			fmt.Fprintf(stderr, "sshc: %v\n", err)
-			return 1
+		if err := writeCommandSuccess(environment.stdout, answer); err != nil {
+			fmt.Fprintf(environment.stderr, "sshc: %v\n", err)
+			return exitFailure
 		}
-		fmt.Fprintln(stdout, string(encoded))
 		return 0
 	}
-	writeStatus(stdout, found, answer)
+	writeStatus(environment.stdout, found, answer)
 	return 0
+}
+
+// verifiedStatus は、handoff の engine が秘密を持つことを確かめてから、その engine に
+// 状態を尋ねる。
+func verifiedStatus(ctx context.Context, stateDir string, client *http.Client) (handoff.Handoff, statusAnswer, error) {
+	found, err := verifiedHandoff(ctx, stateDir, client)
+	if err != nil {
+		return handoff.Handoff{}, statusAnswer{}, err
+	}
+	answer, err := requestStatus(ctx, found, client)
+	return found, answer, err
 }
 
 // writeStatus は status と vault status で共有する表形式を出力する。
@@ -52,7 +58,9 @@ func writeStatus(out io.Writer, found handoff.Handoff, answer statusAnswer) {
 		{"version", answer.Version},
 		{"protocol", strconv.Itoa(answer.ProtocolVersion)},
 		{"vault", vaultState(answer)},
-		{"consoles", strconv.Itoa(answer.Sessions)},
+		// engine は終了していないターミナルだけを数える。sshc terminal list は終了済みも
+		// 並べるので、件数が違っても読み違えないよう「open」を付ける。
+		{"terminals", fmt.Sprintf("%d open", answer.Sessions)},
 	}
 	width := 0
 	for _, row := range rows {
@@ -97,12 +105,6 @@ type statusAnswer struct {
 	Sessions int  `json:"sessions"`
 }
 
-// readHandoff は CLI の全サブコマンドで同じ互換性判定を使う。旧形式を補完すると、
-// owner や protocol を知らないまま稼働中の app へ要求を送れてしまうため、バージョンを
-// そろえるという復旧可能な失敗として返す。
-//
-// 互換性エラーには現在の実行ファイルを含める。engine と CLI のどちらが古いかは
-// 判定できないため、特定の側の再起動は案内しない。
 // verifiedHandoff は handoff を読み、その URL にいる process が handoff の秘密を持つ
 // engine であることを確かめてから返す。engine が終了処理を経ずに消えると handoff
 // だけが残り、同じ port を別の process が取れる。確かめる前は秘密も資格情報も送らない。
@@ -111,7 +113,9 @@ func verifiedHandoff(ctx context.Context, stateDir string, client *http.Client) 
 	if err != nil {
 		return handoff.Handoff{}, err
 	}
-	if err := proveEngine(ctx, found, engineCommandClient(client)); err != nil {
+	// 呼び出し側の上限のまま確かめる。応答しない process の前で、status や ssh が
+	// 長いコマンド用の上限まで待たないようにする。
+	if err := proveEngine(ctx, found, noRedirectClient(client)); err != nil {
 		return handoff.Handoff{}, err
 	}
 	return found, nil
@@ -143,6 +147,12 @@ func proveEngine(ctx context.Context, found handoff.Handoff, client *http.Client
 	return nil
 }
 
+// readHandoff は CLI の全サブコマンドで同じ互換性判定を使う。旧形式を補完すると、
+// owner や protocol を知らないまま稼働中の app へ要求を送れてしまうため、バージョンを
+// そろえるという復旧可能な失敗として返す。
+//
+// 互換性エラーには現在の実行ファイルを含める。engine と CLI のどちらが古いかは
+// 判定できないため、特定の側の再起動は案内しない。
 func readHandoff(stateDir string) (handoff.Handoff, error) {
 	found, err := handoff.Read(stateDir)
 	if errors.Is(err, handoff.ErrSchemaVersion) || errors.Is(err, handoff.ErrProtocolVersion) {

@@ -3,9 +3,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -21,26 +18,27 @@ import (
 )
 
 const (
-	latestReleaseAPI  = "https://api.github.com/repos/aida0710/sshc/releases/latest"
-	homebrewFormula   = "aida0710/tap/sshc"
-	installRepository = "aida0710/sshc"
-	receiptFileName   = ".sshc-install-receipt.json"
-	maxInstallerSize  = 1 << 20
+	latestReleaseAPI = "https://api.github.com/repos/aida0710/sshc/releases/latest"
+	maxInstallerSize = 1 << 20
+
+	// updateReleaseCheckTimeout は、sshc update が最新リリースを尋ねる上限である。
+	// 利用者は確認そのものを求めて待っているので、engine の起動時の確認
+	// （releaseCheckTimeout）より長く、遅い回線でも答えを待つ。
+	updateReleaseCheckTimeout = 30 * time.Second
+	// installerDownloadTimeout は、installer（maxInstallerSize 以下のスクリプト）1 本を
+	// 取得する上限である。本体の取得は installer 自身が行うので、ここには含まれない。
+	installerDownloadTimeout = 30 * time.Second
+	// taggedInstallerHost は、tag 固定の install.sh を取得してよい唯一の host である。
+	// 取得したスクリプトは sh で実行するので、redirect されてもこの host の外へは出ない。
+	taggedInstallerHost = "raw.githubusercontent.com"
 )
 
-type installManager uint8
-
-const (
-	managerUnknown installManager = iota
-	managerHomebrew
-	managerShell
-)
-
-type installation struct {
-	manager    installManager
-	executable string
-	brew       string
-}
+// errHomebrewTapNotRefreshed は、brew upgrade が成功で終わったのに、新しい版が
+// 入らなかったことを表す。Homebrew は tap を更新しないまま upgrade すると
+// （HOMEBREW_NO_AUTO_UPDATE を設定している、数分以内に更新したばかり）、新しい
+// formula を知らないので、今の版を最新とみなして成功で終わる。
+var errHomebrewTapNotRefreshed = errors.New("Homebrew may not have refreshed " + homebrewTap +
+	", for example because HOMEBREW_NO_AUTO_UPDATE is set")
 
 type updateDependencies struct {
 	executable        func() (string, error)
@@ -49,373 +47,327 @@ type updateDependencies struct {
 	install           func(context.Context, installation, selfupdate.Release, io.Writer, io.Writer) error
 	serviceExecutable func(context.Context, installation) (string, error)
 	restartService    func(context.Context, string) (bool, error)
-	confirm           actionConfirmer
+	// engineStatus は、再起動した engine の Vault の状態を読み、次にすることを選ぶために使う。
+	engineStatus engineStatusReader
+	confirm      actionConfirmer
 }
 
 func defaultUpdateDependencies() updateDependencies {
 	checker := &selfupdate.Checker{
 		API:  latestReleaseAPI,
-		HTTP: &http.Client{Timeout: 30 * time.Second},
+		HTTP: &http.Client{Timeout: updateReleaseCheckTimeout},
 	}
-	installerClient := &http.Client{
-		Timeout: 30 * time.Second,
-		CheckRedirect: func(request *http.Request, _ []*http.Request) error {
-			if request.URL.Scheme != "https" || request.URL.Hostname() != "raw.githubusercontent.com" {
-				return errors.New("the tagged installer redirected outside raw.githubusercontent.com")
-			}
-			return nil
-		},
-	}
-	commands := osUpdateCommands{}
+	installerClient := taggedInstallerHTTPClient()
+	commands := systemInstallationCommands{}
 	return updateDependencies{
 		executable: os.Executable,
 		detect:     detectInstallation,
 		latest:     checker.Latest,
 		install: func(ctx context.Context, found installation, release selfupdate.Release, stdout, stderr io.Writer) error {
-			return installUpdate(ctx, found, release, installerClient, commands, stdout, stderr)
+			installer := updateInstaller{client: installerClient, commands: commands, stdout: stdout, stderr: stderr}
+			return installer.install(ctx, found, release)
 		},
 		serviceExecutable: func(ctx context.Context, found installation) (string, error) {
 			return managedInstallationExecutable(ctx, found, commands)
 		},
 		restartService: restartManagedServiceAfterUpdate,
+		engineStatus:   readEngineStatus,
 		confirm:        systemActionConfirmer,
 	}
 }
 
-func runUpdate(ctx context.Context, current string, yes bool, stdout, stderr io.Writer, dependencies updateDependencies) int {
-	executable, err := dependencies.executable()
-	if err != nil {
-		fmt.Fprintf(stderr, "sshc: find this executable: %v\n", err)
-		return 1
-	}
-	found, err := dependencies.detect(executable)
-	if err != nil {
-		fmt.Fprintf(stderr, "sshc: inspect this installation: %v\n", err)
-		return 1
-	}
-	if found.manager == managerUnknown {
-		fmt.Fprintf(stderr, "sshc: %s is not managed by Homebrew or sshc's install.sh, so it cannot be updated automatically\n", executable)
-		fmt.Fprintln(stderr, "sshc: update it with the method that installed it")
-		return 1
-	}
+// updateRun は、`sshc update` の 1 回の実行である。
+type updateRun struct {
+	// current は、走っている sshc の版である。
+	current string
+	// yes は、更新の確認を省く。
+	yes bool
+	// home は、再起動した service の engine を handoff から見つけるために使う。
+	home         string
+	stdout       io.Writer
+	stderr       io.Writer
+	dependencies updateDependencies
+}
 
-	latest, err := dependencies.latest(ctx)
-	if err != nil {
-		if errors.Is(ctx.Err(), context.Canceled) {
-			return 130
-		}
-		if errors.Is(err, selfupdate.ErrNoRelease) {
-			fmt.Fprintln(stderr, "sshc: no release is available")
-		} else {
-			fmt.Fprintf(stderr, "sshc: check the latest release: %v\n", err)
-		}
-		return 1
-	}
-	tag, ok := selfupdate.StableTag(latest.Version)
-	if !ok {
-		fmt.Fprintf(stderr, "sshc: the latest release has an invalid version %q\n", latest.Version)
-		return 1
-	}
-	latest.Version = tag
-	if !selfupdate.Newer(current, tag) {
-		fmt.Fprintf(stdout, "sshc: %s is already the latest release\n", current)
-		return 0
-	}
-	serviceExecutable := ""
-	if dependencies.restartService != nil {
-		if dependencies.serviceExecutable == nil {
-			fmt.Fprintln(stderr, "sshc: update cannot identify the executable registered with the managed service")
-			return 1
-		}
-		serviceExecutable, err = dependencies.serviceExecutable(ctx, found)
-		if err != nil {
-			fmt.Fprintf(stderr, "sshc: identify the executable registered with the managed service: %v\n", err)
-			return 1
-		}
-	}
-	manager := "sshc's install.sh"
-	if found.manager == managerHomebrew {
-		manager = "Homebrew"
-	}
-	fmt.Fprintf(stdout, "sshc: update %s from %s to %s using %s\n", found.executable, current, tag, manager)
-	if dependencies.restartService != nil {
-		fmt.Fprintln(stdout, "sshc: if its managed service is active, it will restart and the vault will lock")
-	}
-	confirmed, code := confirmAction(ctx, yes, "Continue? [y/N] ", dependencies.confirm, stderr)
+// updatePlan は、確認のあとで行う更新の中身である。
+type updatePlan struct {
+	found installation
+	// latest の Version は、安定版の tag にそろえてある。
+	latest selfupdate.Release
+	// serviceExecutable は、管理された service に登録する実行ファイルである。
+	// service を再起動しないときは空である。
+	serviceExecutable string
+}
+
+// runUpdate は、管理元と最新の版を確かめ、確認のあとで新しい版を入れ、管理された
+// service が動いていれば再起動する。各段は、続けられなければ終える終了コードを返す。
+func runUpdate(ctx context.Context, run updateRun) int {
+	found, code := run.findInstallation()
 	if code != 0 {
 		return code
 	}
-	if !confirmed {
-		fmt.Fprintln(stdout, "sshc: canceled; nothing changed")
+	latest, code := run.latestRelease(ctx)
+	if code != 0 {
+		return code
+	}
+	if !selfupdate.Newer(run.current, latest.Version) {
+		fmt.Fprintf(run.stdout, "sshc: %s is already the latest release\n", run.current)
 		return 0
 	}
+	serviceExecutable, code := run.registeredServiceExecutable(ctx, found)
+	if code != 0 {
+		return code
+	}
+	plan := updatePlan{found: found, latest: latest, serviceExecutable: serviceExecutable}
+	if confirmed, code := run.confirm(ctx, plan); !confirmed {
+		return code
+	}
+	if code := run.install(ctx, plan); code != 0 {
+		return code
+	}
+	return run.restartAfterInstall(ctx, plan)
+}
 
-	fmt.Fprintf(stdout, "sshc: updating %s to %s\n", current, tag)
-	if err := dependencies.install(ctx, found, latest, stdout, stderr); err != nil {
+// findInstallation は、この実行ファイルを入れた管理元を見つける。管理元が分からない
+// 実行ファイルは、sshc update では入れ替えない。
+func (run updateRun) findInstallation() (installation, int) {
+	executable, err := run.dependencies.executable()
+	if err != nil {
+		fmt.Fprintf(run.stderr, "sshc: find this executable: %v\n", err)
+		return installation{}, exitFailure
+	}
+	found, err := run.dependencies.detect(executable)
+	if err != nil {
+		fmt.Fprintf(run.stderr, "sshc: inspect this installation: %v\n", err)
+		return installation{}, exitFailure
+	}
+	if found.manager == managerUnknown {
+		fmt.Fprint(run.stderr, unmanagedInstallationNotice(executable, runtime.GOOS))
+		return installation{}, exitFailure
+	}
+	return found, 0
+}
+
+// latestRelease は、最新のリリースを尋ね、その版を安定版の tag にそろえて返す。
+func (run updateRun) latestRelease(ctx context.Context) (selfupdate.Release, int) {
+	latest, err := run.dependencies.latest(ctx)
+	if err != nil {
 		if errors.Is(ctx.Err(), context.Canceled) {
-			return 130
+			return selfupdate.Release{}, exitInterrupted
 		}
-		fmt.Fprintf(stderr, "sshc: update failed: %v\n", err)
-		return 1
+		if errors.Is(err, selfupdate.ErrNoRelease) {
+			fmt.Fprintln(run.stderr, "sshc: no release is available")
+		} else {
+			fmt.Fprintf(run.stderr, "sshc: check the latest release: %v\n", err)
+		}
+		return selfupdate.Release{}, exitFailure
 	}
-	fmt.Fprintf(stdout, "sshc: updated to %s\n", tag)
-	if dependencies.restartService != nil {
-		restarted, err := dependencies.restartService(ctx, serviceExecutable)
-		if err != nil {
-			if errors.Is(ctx.Err(), context.Canceled) {
-				return 130
-			}
-			fmt.Fprintf(stderr, "sshc: update succeeded, but restart the managed service: %v\n", err)
-			fmt.Fprintln(stderr, "sshc: run `sshc service install` to retry the service restart")
-			return 1
-		}
-		if restarted {
-			fmt.Fprintln(stdout, "sshc: managed service restarted; vault is locked")
-			fmt.Fprintln(stdout, "sshc: run `sshc vault unlock` from an interactive terminal")
-			return 0
-		}
+	tag, ok := selfupdate.StableTag(latest.Version)
+	if !ok {
+		fmt.Fprintf(run.stderr, "sshc: the latest release has an invalid version %q\n", latest.Version)
+		return selfupdate.Release{}, exitFailure
 	}
-	fmt.Fprintln(stdout, "sshc: restart any running `sshc engine` to use the new version")
+	latest.Version = tag
+	return latest, 0
+}
+
+// registeredServiceExecutable は、管理された service を再起動するときに登録する
+// 実行ファイルを、入れ替える前に決める。service を再起動しないなら空を返す。
+func (run updateRun) registeredServiceExecutable(ctx context.Context, found installation) (string, int) {
+	if run.dependencies.restartService == nil {
+		return "", 0
+	}
+	if run.dependencies.serviceExecutable == nil {
+		fmt.Fprintln(run.stderr, "sshc: update cannot identify the executable registered with the managed service")
+		return "", exitFailure
+	}
+	executable, err := run.dependencies.serviceExecutable(ctx, found)
+	if err != nil {
+		fmt.Fprintf(run.stderr, "sshc: identify the executable registered with the managed service: %v\n", err)
+		return "", exitFailure
+	}
+	return executable, 0
+}
+
+// confirm は、何をどう入れ替えるかを出し、進めてよいかを尋ねる。
+func (run updateRun) confirm(ctx context.Context, plan updatePlan) (bool, int) {
+	manager := "sshc's install.sh"
+	if plan.found.manager == managerHomebrew {
+		manager = "Homebrew"
+	}
+	fmt.Fprintf(run.stdout, "sshc: update %s from %s to %s using %s\n",
+		plan.found.executable, run.current, plan.latest.Version, manager)
+	if run.dependencies.restartService != nil {
+		fmt.Fprintln(run.stdout, "sshc: if its managed service is active, it will restart and a password-protected vault will lock")
+	}
+	return confirmChange(ctx, changeConfirmation{
+		yes: run.yes, confirmer: run.dependencies.confirm, stdout: run.stdout, stderr: run.stderr,
+	})
+}
+
+// install は、見つけた管理元で新しい版を入れる。
+func (run updateRun) install(ctx context.Context, plan updatePlan) int {
+	fmt.Fprintf(run.stdout, "sshc: updating %s to %s\n", run.current, plan.latest.Version)
+	if err := run.dependencies.install(ctx, plan.found, plan.latest, run.stdout, run.stderr); err != nil {
+		if errors.Is(ctx.Err(), context.Canceled) {
+			return exitInterrupted
+		}
+		fmt.Fprintf(run.stderr, "sshc: update failed: %v\n", err)
+		if errors.Is(err, errHomebrewTapNotRefreshed) {
+			fmt.Fprintln(run.stderr, "sshc: run `brew update`, then `sshc update` again")
+		}
+		return exitFailure
+	}
+	fmt.Fprintf(run.stdout, "sshc: updated to %s\n", plan.latest.Version)
 	return 0
 }
 
-type installReceipt struct {
-	SchemaVersion int    `json:"schemaVersion"`
-	Manager       string `json:"manager"`
-	Repository    string `json:"repository"`
-	Version       string `json:"version"`
-	SHA256        string `json:"sha256"`
-}
-
-func detectInstallation(executable string) (installation, error) {
-	absolute, err := filepath.Abs(executable)
-	if err != nil {
-		return installation{}, err
-	}
-	resolved, err := filepath.EvalSymlinks(absolute)
-	if err != nil {
-		return installation{}, err
-	}
-	if runtime.GOOS != "windows" {
-		if brew, ok := homebrewForExecutable(resolved); ok {
-			return installation{manager: managerHomebrew, executable: resolved, brew: brew}, nil
+// restartAfterInstall は、管理された service が動いていれば新しい版で再起動し、
+// そうでなければ、手で起動した engine を再起動するよう案内する。service の定義が
+// 以前の版の sshc が書いた形のままなら、再起動せずに sshc service install を案内する。
+func (run updateRun) restartAfterInstall(ctx context.Context, plan updatePlan) int {
+	if run.dependencies.restartService != nil {
+		restarted, err := run.dependencies.restartService(ctx, plan.serviceExecutable)
+		if err != nil {
+			if errors.Is(ctx.Err(), context.Canceled) {
+				return exitInterrupted
+			}
+			if errors.Is(err, errOutdatedServiceDefinition) {
+				fmt.Fprintf(run.stdout, "sshc: %s\n", outdatedServiceDefinitionAdvice)
+				return 0
+			}
+			fmt.Fprintf(run.stderr, "sshc: update succeeded, but restart the managed service: %v\n", err)
+			fmt.Fprintln(run.stderr, "sshc: run `sshc service install` to retry the service restart")
+			return exitFailure
 		}
-		if filepath.Base(resolved) != "sshc" {
-			return installation{manager: managerUnknown, executable: resolved}, nil
-		}
-		matched, receiptErr := shellReceiptMatches(resolved)
-		if receiptErr != nil {
-			return installation{}, receiptErr
-		}
-		if matched {
-			return installation{manager: managerShell, executable: resolved}, nil
+		if restarted {
+			fmt.Fprintln(run.stdout, "sshc: managed service restarted")
+			if advice := vaultNextStep(ctx, run.dependencies.engineStatus, run.home); advice != "" {
+				fmt.Fprintf(run.stdout, "sshc: %s\n", advice)
+			}
+			return 0
 		}
 	}
-	return installation{manager: managerUnknown, executable: resolved}, nil
+	fmt.Fprintln(run.stdout, "sshc: restart any running `sshc engine` to use the new version")
+	return 0
 }
 
-func homebrewForExecutable(executable string) (string, bool) {
-	clean := filepath.Clean(executable)
-	parts := strings.Split(clean, string(filepath.Separator))
-	for index := 0; index+3 < len(parts); index++ {
-		if parts[index] != "Cellar" || parts[index+1] != "sshc" {
-			continue
-		}
-		prefix := strings.Join(parts[:index], string(filepath.Separator))
-		if filepath.IsAbs(clean) && prefix == "" {
-			prefix = string(filepath.Separator)
-		}
-		brew := filepath.Join(prefix, "bin", "brew")
-		if info, err := os.Stat(brew); err == nil && !info.IsDir() && info.Mode()&0o111 != 0 {
-			return brew, true
-		}
-	}
-	return "", false
+// updateInstaller は、見つけた管理方法で新しい版を入れ、入った実行ファイルが
+// その版を名乗ることまで確かめる。
+type updateInstaller struct {
+	// client は tag 固定の install.sh の取得にだけ使う。
+	client   *http.Client
+	commands installationCommands
+	stdout   io.Writer
+	stderr   io.Writer
 }
 
-func shellReceiptMatches(executable string) (bool, error) {
-	path := filepath.Join(filepath.Dir(executable), receiptFileName)
-	linkInfo, err := os.Lstat(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	if !linkInfo.Mode().IsRegular() || linkInfo.Size() > 4096 {
-		return false, fmt.Errorf("%s is not a valid regular install receipt", path)
-	}
-	file, err := os.Open(path)
-	if err != nil {
-		return false, err
-	}
-	defer file.Close()
-	info, err := file.Stat()
-	if err != nil {
-		return false, err
-	}
-	if !info.Mode().IsRegular() || info.Size() > 4096 {
-		return false, fmt.Errorf("%s is not a valid install receipt", path)
-	}
-	var receipt installReceipt
-	decoder := json.NewDecoder(io.LimitReader(file, 4097))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&receipt); err != nil {
-		return false, fmt.Errorf("read %s: %w", path, err)
-	}
-	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		return false, fmt.Errorf("%s contains trailing data", path)
-	}
-	if receipt.SchemaVersion != 1 || receipt.Manager != "install.sh" || receipt.Repository != installRepository {
-		return false, fmt.Errorf("%s does not describe an sshc install.sh installation", path)
-	}
-	if _, ok := selfupdate.StableTag(receipt.Version); !ok || len(receipt.SHA256) != sha256.Size*2 {
-		return false, fmt.Errorf("%s contains invalid release metadata", path)
-	}
-	if _, err := hex.DecodeString(receipt.SHA256); err != nil {
-		return false, fmt.Errorf("%s contains an invalid SHA-256 digest", path)
-	}
-	digest, err := fileSHA256(executable)
-	if err != nil {
-		return false, err
-	}
-	if !strings.EqualFold(receipt.SHA256, digest) {
-		return false, fmt.Errorf("%s does not match the installed executable", path)
-	}
-	return true, nil
-}
-
-func fileSHA256(path string) (string, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return "", err
-	}
-	defer file.Close()
-	digest := sha256.New()
-	if _, err := io.Copy(digest, file); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(digest.Sum(nil)), nil
-}
-
-type updateCommands interface {
-	Output(context.Context, string, ...string) ([]byte, error)
-	Run(context.Context, string, []string, []string, io.Reader, io.Writer, io.Writer) error
-}
-
-type osUpdateCommands struct{}
-
-func (osUpdateCommands) Output(ctx context.Context, name string, args ...string) ([]byte, error) {
-	command := exec.CommandContext(ctx, name, args...)
-	configureUpdateCommand(command)
-	return command.Output()
-}
-
-func (osUpdateCommands) Run(ctx context.Context, name string, args []string, environment []string, stdin io.Reader, stdout, stderr io.Writer) error {
-	command := exec.CommandContext(ctx, name, args...)
-	configureUpdateCommand(command)
-	if environment != nil {
-		command.Env = environment
-	}
-	command.Stdin, command.Stdout, command.Stderr = stdin, stdout, stderr
-	return command.Run()
-}
-
-func installUpdate(ctx context.Context, found installation, release selfupdate.Release, client *http.Client, commands updateCommands, stdout, stderr io.Writer) error {
+func (installer updateInstaller) install(ctx context.Context, found installation, release selfupdate.Release) error {
 	switch found.manager {
 	case managerHomebrew:
-		return upgradeHomebrew(ctx, found, release.Version, commands, stdout, stderr)
+		return installer.upgradeHomebrew(ctx, found, release.Version)
 	case managerShell:
-		return runTaggedInstaller(ctx, found, release.Version, client, commands, stdout, stderr)
+		return installer.runTaggedInstaller(ctx, found, release.Version)
 	default:
 		return errors.New("unsupported installation manager")
 	}
 }
 
-func upgradeHomebrew(ctx context.Context, found installation, tag string, commands updateCommands, stdout, stderr io.Writer) error {
-	managedPath, err := homebrewManagedExecutable(ctx, found, commands)
+func (installer updateInstaller) upgradeHomebrew(ctx context.Context, found installation, tag string) error {
+	managedPath, err := homebrewManagedExecutable(ctx, found, installer.commands)
 	if err != nil {
 		return err
 	}
-	if err := commands.Run(ctx, found.brew,
-		[]string{"upgrade", "--formula", "--no-ask", homebrewFormula}, nil, nil, stdout, stderr); err != nil {
+	if err := installer.commands.Run(ctx, installationProcess{
+		name:   found.brew,
+		args:   []string{"upgrade", "--formula", "--no-ask", homebrewFormula},
+		stdout: installer.stdout,
+		stderr: installer.stderr,
+	}); err != nil {
 		return fmt.Errorf("brew upgrade: %w", err)
 	}
-	line, err := commands.Output(ctx, managedPath, "version")
-	if err != nil {
+	if err := installer.verifyReportedVersion(ctx, managedPath, tag); err != nil {
+		if errors.As(err, new(unexpectedVersionError)) {
+			err = fmt.Errorf("%w; %w", err, errHomebrewTapNotRefreshed)
+		}
 		return fmt.Errorf("verify the upgraded Homebrew executable: %w", err)
-	}
-	if !reportsVersion(line, tag) {
-		return fmt.Errorf("Homebrew completed but %s does not report version %s", managedPath, tag)
 	}
 	return nil
 }
 
-// homebrewManagedExecutable は、現在の実行ファイルを所有するformulaの安定パスを返す。
-// Cellar内のversion付きパスをunitへ保存するとupgrade後に古いkegへ固定されるため、
-// serviceとupdateの両方がこの照合済みパスを使う。
-func homebrewManagedExecutable(ctx context.Context, found installation, commands updateCommands) (string, error) {
-	prefixOutput, err := commands.Output(ctx, found.brew, "--prefix", "--installed", homebrewFormula)
-	if err != nil {
-		return "", fmt.Errorf("Homebrew does not report %s as installed: %w", homebrewFormula, err)
-	}
-	prefix := strings.TrimSpace(string(prefixOutput))
-	if prefix == "" || !filepath.IsAbs(prefix) || strings.ContainsAny(prefix, "\r\n") {
-		return "", errors.New("Homebrew returned an invalid formula prefix")
-	}
-	managedPath := filepath.Join(prefix, "bin", "sshc")
-	managed, err := os.Stat(managedPath)
-	if err != nil {
-		return "", fmt.Errorf("inspect Homebrew's sshc: %w", err)
-	}
-	running, err := os.Stat(found.executable)
-	if err != nil {
-		return "", fmt.Errorf("inspect this sshc: %w", err)
-	}
-	if !os.SameFile(managed, running) {
-		return "", fmt.Errorf("Homebrew manages %s, not the running executable %s", managedPath, found.executable)
-	}
-	return managedPath, nil
-}
-
-func runTaggedInstaller(ctx context.Context, found installation, tag string, client *http.Client, commands updateCommands, stdout, stderr io.Writer) error {
+func (installer updateInstaller) runTaggedInstaller(ctx context.Context, found installation, tag string) error {
 	if runtime.GOOS == "windows" {
 		return errors.New("install.sh updates are not supported on Windows")
 	}
 	if stable, ok := selfupdate.StableTag(tag); !ok || stable != tag {
 		return fmt.Errorf("refuse installer tag %q", tag)
 	}
-	url := "https://raw.githubusercontent.com/aida0710/sshc/" + tag + "/install.sh"
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	script, err := installer.downloadTaggedInstaller(ctx, tag)
 	if err != nil {
 		return err
 	}
-	response, err := client.Do(request)
+	if err := installer.runInstallerScript(ctx, script, taggedInstallerEnvironment(found, tag)); err != nil {
+		return err
+	}
+	matched, err := shellReceiptMatches(found.executable)
 	if err != nil {
-		return fmt.Errorf("download the tagged installer: %w", err)
+		return fmt.Errorf("verify the updated install receipt: %w", err)
+	}
+	if !matched {
+		return errors.New("install.sh completed without a valid install receipt")
+	}
+	if err := installer.verifyReportedVersion(ctx, found.executable, tag); err != nil {
+		return fmt.Errorf("verify the updated executable: %w", err)
+	}
+	return nil
+}
+
+// downloadTaggedInstaller は、tag の時点の install.sh を maxInstallerSize まで取得する。
+func (installer updateInstaller) downloadTaggedInstaller(ctx context.Context, tag string) ([]byte, error) {
+	url := "https://" + taggedInstallerHost + "/" + installRepository + "/" + tag + "/install.sh"
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	response, err := installer.client.Do(request)
+	if err != nil {
+		return nil, fmt.Errorf("download the tagged installer: %w", err)
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
-		return fmt.Errorf("download the tagged installer: HTTP %d", response.StatusCode)
+		return nil, fmt.Errorf("download the tagged installer: HTTP %d", response.StatusCode)
 	}
 	if response.ContentLength > maxInstallerSize {
-		return errors.New("the tagged installer is unexpectedly large")
+		return nil, errors.New("the tagged installer is unexpectedly large")
 	}
-	body, err := io.ReadAll(io.LimitReader(response.Body, maxInstallerSize+1))
+	script, err := io.ReadAll(io.LimitReader(response.Body, maxInstallerSize+1))
 	if err != nil {
-		return fmt.Errorf("read the tagged installer: %w", err)
+		return nil, fmt.Errorf("read the tagged installer: %w", err)
 	}
-	if len(body) > maxInstallerSize {
-		return errors.New("the tagged installer is unexpectedly large")
+	if len(script) > maxInstallerSize {
+		return nil, errors.New("the tagged installer is unexpectedly large")
 	}
+	return script, nil
+}
 
+// taggedInstallerEnvironment は、install.sh が入れる版と置き場所を、見つけた
+// installation に固定した環境を作る。
+func taggedInstallerEnvironment(found installation, tag string) []string {
+	return replaceEnvironment(os.Environ(), map[string]string{
+		"SSHC_VERSION":     tag,
+		"SSHC_INSTALL_DIR": filepath.Dir(found.executable),
+	})
+}
+
+// runInstallerScript は、script を一時ファイルに書いて sh で実行し、終われば消す。
+func (installer updateInstaller) runInstallerScript(ctx context.Context, script []byte, environment []string) error {
 	temporary, err := os.CreateTemp("", "sshc-install-*.sh")
 	if err != nil {
 		return err
 	}
 	temporaryPath := temporary.Name()
 	defer os.Remove(temporaryPath)
-	if _, err := temporary.Write(body); err != nil {
+	if _, err := temporary.Write(script); err != nil {
 		temporary.Close()
 		return err
 	}
@@ -427,26 +379,51 @@ func runTaggedInstaller(ctx context.Context, found installation, tag string, cli
 	if err != nil {
 		return errors.New("sh is required to run the install.sh updater")
 	}
-	environment := replaceEnvironment(os.Environ(), map[string]string{
-		"SSHC_VERSION":     tag,
-		"SSHC_INSTALL_DIR": filepath.Dir(found.executable),
-	})
-	if err := commands.Run(ctx, shell, []string{temporaryPath}, environment, nil, stdout, stderr); err != nil {
+	if err := installer.commands.Run(ctx, installationProcess{
+		name:        shell,
+		args:        []string{temporaryPath},
+		environment: environment,
+		stdout:      installer.stdout,
+		stderr:      installer.stderr,
+	}); err != nil {
 		return fmt.Errorf("install.sh: %w", err)
 	}
-	matched, err := shellReceiptMatches(found.executable)
+	return nil
+}
+
+// verifyReportedVersion は、入れ終えた実行ファイル自身に版を尋ね、tag と同じかを確かめる。
+func (installer updateInstaller) verifyReportedVersion(ctx context.Context, executable, tag string) error {
+	line, err := installer.commands.Output(ctx, executable, "version")
 	if err != nil {
-		return fmt.Errorf("verify the updated install receipt: %w", err)
-	}
-	if !matched {
-		return errors.New("install.sh completed without a valid install receipt")
-	}
-	line, err := commands.Output(ctx, found.executable, "version")
-	if err != nil {
-		return fmt.Errorf("verify the updated executable: %w", err)
+		return err
 	}
 	if !reportsVersion(line, tag) {
-		return fmt.Errorf("install.sh completed but the executable does not report version %s", tag)
+		return unexpectedVersionError{executable: executable, tag: tag}
+	}
+	return nil
+}
+
+// unexpectedVersionError は、入れ終えた実行ファイルが tag と違う版を名乗ったことを表す。
+// 版を尋ねられなかった失敗と分けるのは、Homebrew ではこれが tap の古さを示すからである。
+type unexpectedVersionError struct {
+	executable string
+	tag        string
+}
+
+func (failure unexpectedVersionError) Error() string {
+	return fmt.Sprintf("%s does not report version %s", failure.executable, failure.tag)
+}
+
+// taggedInstallerHTTPClient は、tag 固定の install.sh の取得に使う client を作る。
+func taggedInstallerHTTPClient() *http.Client {
+	return &http.Client{Timeout: installerDownloadTimeout, CheckRedirect: allowTaggedInstallerRedirect}
+}
+
+// allowTaggedInstallerRedirect は、https の taggedInstallerHost への redirect だけを許す。
+// Go の既定の client は、別の host への redirect にも http への格下げにも従う。
+func allowTaggedInstallerRedirect(request *http.Request, _ []*http.Request) error {
+	if request.URL.Scheme != "https" || request.URL.Hostname() != taggedInstallerHost {
+		return errors.New("the tagged installer redirected outside https://" + taggedInstallerHost)
 	}
 	return nil
 }

@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -16,15 +15,26 @@ import (
 	"sshc/internal/textencoding"
 )
 
-const (
-	transportFailureExit     = 1
-	transportUsageExit       = 2
-	transportTimeoutExit     = 124
-	transportInterruptedExit = 130
-)
-
 var telnetPlaintextWarning = "Telnet is unencrypted and does not authenticate the server; do not send secrets unless the surrounding network is trusted"
 var errNoTransportOutput = errors.New("no output was received")
+
+// 自動処理を Ctrl+C やシグナルで止めたときの、結果の failure の kind と文。
+// 接続の前でも後でも同じにする。
+const transportInterruptedKind = "interrupted"
+
+var errTransportInterrupted = errors.New("operation was interrupted")
+
+// transportExitCode は、Serial／Telnet の終了コードを、シグナルで止まった理由で直す。
+//
+// 対話接続を SIGTERM や SIGHUP で止めたのは、監督者か端末を閉じた利用者なので、
+// 失敗ではなく 0 で終える。自動処理は止められた時点で結果が出ていないので、
+// Ctrl-C と同じ 130 のまま返し、呼び出し側のスクリプトに成功と読ませない。
+func transportExitCode(kind invocationKind, code int, cause error) int {
+	if kind == invocationTransport && code == exitInterrupted && errors.Is(cause, errTerminated) {
+		return 0
+	}
+	return code
+}
 
 func runTransportInvocation(ctx context.Context, called transportInvocation, stdin *os.File, stdout, stderr io.Writer) int {
 	return runTransportInvocationWithDependencies(ctx, called, stdin, stdout, stderr, defaultTransportDependencies())
@@ -65,14 +75,14 @@ func runTransportInvocationWithDependencies(ctx context.Context, called transpor
 	stream, err := openTransport(ctx, called, dependencies)
 	if err != nil {
 		fmt.Fprintf(stderr, "sshc: %v\n", safeTransportError(called, err))
-		return transportFailureExit
+		return exitFailure
 	}
 	if err := attachTransport(ctx, stream, stdin, stdout, stderr); err != nil {
 		if errors.Is(err, context.Canceled) {
-			return transportInterruptedExit
+			return exitInterrupted
 		}
 		fmt.Fprintf(stderr, "sshc: %v\n", safeTransportError(called, err))
-		return transportFailureExit
+		return exitFailure
 	}
 	return 0
 }
@@ -87,21 +97,22 @@ type serialDeviceReport struct {
 	Manufacturer string `json:"manufacturer,omitempty"`
 }
 
+// serialDeviceList は `sshc serial --json` の result。
+type serialDeviceList struct {
+	Devices []serialDeviceReport `json:"devices"`
+}
+
 func runSerialList(ctx context.Context, asJSON bool, stdout, stderr io.Writer, dependencies transportDependencies) int {
 	devices, err := dependencies.listSerial(ctx)
 	if err != nil {
 		if asJSON {
-			if encodeErr := json.NewEncoder(stdout).Encode(struct {
-				SchemaVersion int                  `json:"schemaVersion"`
-				Devices       []serialDeviceReport `json:"devices"`
-				Error         string               `json:"error"`
-			}{SchemaVersion: 1, Devices: []serialDeviceReport{}, Error: "serial_enumeration_failed"}); encodeErr != nil {
+			if encodeErr := writeCommandFailure(stdout, commandFailure{Kind: "serial_enumeration_failed"}); encodeErr != nil {
 				fmt.Fprintln(stderr, "sshc: could not write JSON result")
 			}
 		} else {
 			fmt.Fprintln(stderr, "sshc: serial devices could not be enumerated")
 		}
-		return transportFailureExit
+		return exitFailure
 	}
 	if asJSON {
 		reported := make([]serialDeviceReport, len(devices))
@@ -111,19 +122,16 @@ func runSerialList(ctx context.Context, asJSON bool, stdout, stderr io.Writer, d
 				SerialNumber: device.SerialNumber, Product: device.Product, Manufacturer: device.Manufacturer,
 			}
 		}
-		if err := json.NewEncoder(stdout).Encode(struct {
-			SchemaVersion int                  `json:"schemaVersion"`
-			Devices       []serialDeviceReport `json:"devices"`
-		}{SchemaVersion: 1, Devices: reported}); err != nil {
+		if err := writeCommandSuccess(stdout, serialDeviceList{Devices: reported}); err != nil {
 			fmt.Fprintln(stderr, "sshc: could not write JSON result")
-			return transportFailureExit
+			return exitFailure
 		}
 		return 0
 	}
 	for _, device := range devices {
 		if _, err := fmt.Fprintln(stdout, describeSerialDevice(device)); err != nil {
 			fmt.Fprintln(stderr, "sshc: could not write serial device list")
-			return transportFailureExit
+			return exitFailure
 		}
 	}
 	return 0
@@ -156,17 +164,21 @@ func describeSerialDevice(device serialtransport.Device) string {
 func runTransportAutomation(ctx context.Context, called transportInvocation, warnings []string, stdin io.Reader, stdout, stderr io.Writer, dependencies transportDependencies) int {
 	script, err := buildTransportScript(called, stdin)
 	if err != nil {
-		return reportTransportSetupFailure(called, warnings, "invalid_script", err, transportUsageExit, stdout, stderr)
+		return reportTransportSetupFailure(called, warnings, "invalid_script", err, exitUsage, stdout, stderr)
 	}
 	options := streamrun.Options{
 		Timeout: called.Timeout, MaxBytes: called.MaxBytes, LookupEnv: os.LookupEnv, Settle: called.Settle,
 	}
 	if err := streamrun.Validate(script.Script, options); err != nil {
-		return reportTransportSetupFailure(called, warnings, "invalid_script", safeStreamRunError(err), transportUsageExit, stdout, stderr)
+		return reportTransportSetupFailure(called, warnings, "invalid_script", safeStreamRunError(err), exitUsage, stdout, stderr)
 	}
 	stream, err := openTransport(ctx, called, dependencies)
 	if err != nil {
-		return reportTransportSetupFailure(called, warnings, "open_failed", safeTransportError(called, err), transportFailureExit, stdout, stderr)
+		// 接続の途中で止めても、接続の失敗ではなく、止められたとして返す。
+		if errors.Is(ctx.Err(), context.Canceled) {
+			return reportTransportSetupFailure(called, warnings, transportInterruptedKind, errTransportInterrupted, exitInterrupted, stdout, stderr)
+		}
+		return reportTransportSetupFailure(called, warnings, "open_failed", safeTransportError(called, err), exitFailure, stdout, stderr)
 	}
 	defer stream.Close()
 	result, runErr := streamrun.Run(ctx, stream, script.Script, options)
@@ -182,13 +194,13 @@ func runTransportAutomation(ctx context.Context, called transportInvocation, war
 		report := newTransportRunReport(called, result, runErr, warnings, cleanupReport)
 		if err := writeTransportReport(stdout, report); err != nil {
 			fmt.Fprintln(stderr, "sshc: could not write JSON result")
-			return transportFailureExit
+			return exitFailure
 		}
 	} else {
 		if len(transcript) > 0 {
 			if _, err := stdout.Write(transcript); err != nil {
 				fmt.Fprintln(stderr, "sshc: could not write stream output")
-				return transportFailureExit
+				return exitFailure
 			}
 		}
 		if runErr != nil {
@@ -203,12 +215,12 @@ func runTransportAutomation(ctx context.Context, called transportInvocation, war
 	}
 	var failure *streamrun.Error
 	if errors.As(runErr, &failure) && failure.Kind == streamrun.FailureTimeout {
-		return transportTimeoutExit
+		return exitTimeout
 	}
 	if errors.Is(runErr, context.Canceled) {
-		return transportInterruptedExit
+		return exitInterrupted
 	}
-	return transportFailureExit
+	return exitFailure
 }
 
 func runTransportFailureCleanup(ctx context.Context, stream io.Writer, cleanup transportFailureCleanup) *transportFailureCleanupReport {
@@ -260,7 +272,7 @@ func reportTransportSetupFailure(called transportInvocation, warnings []string, 
 		}
 		if writeErr := writeTransportReport(stdout, report); writeErr != nil {
 			fmt.Fprintln(stderr, "sshc: could not write JSON result")
-			return transportFailureExit
+			return exitFailure
 		}
 	} else {
 		fmt.Fprintf(stderr, "sshc: %v\n", err)
@@ -362,7 +374,7 @@ func safeTransportError(called transportInvocation, err error) error {
 		}
 	}
 	if errors.Is(err, context.Canceled) {
-		return errors.New("operation was interrupted")
+		return errTransportInterrupted
 	}
 	return err
 }
@@ -373,7 +385,7 @@ func safeStreamRunError(err error) error {
 		return errors.New(failure.Error())
 	}
 	if errors.Is(err, context.Canceled) {
-		return errors.New("operation was interrupted")
+		return errTransportInterrupted
 	}
 	return errors.New("stream operation failed")
 }

@@ -3,6 +3,7 @@ package mobile
 import (
 	"context"
 	"errors"
+	"net/url"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -91,6 +92,32 @@ func TestStartReplacesTheRunningEngine(t *testing.T) {
 	}
 	if got := LastStartFailureCode(); got != "none" {
 		t.Errorf("LastStartFailureCode() = %q, want none", got)
+	}
+}
+
+// engine を起動し直しても WebView の origin が変わらず、localStorage と OPFS が保たれる
+// ことを検証する。
+func TestStartKeepsTheWebViewOriginAcrossEngineRestarts(t *testing.T) {
+	home, cache := t.TempDir(), t.TempDir()
+	first, err := Start(home, cache)
+	if err != nil {
+		t.Fatalf("first Start = %v", err)
+	}
+	if err := Stop(); err != nil {
+		t.Fatalf("Stop = %v", err)
+	}
+	second, err := Start(home, cache)
+	if err != nil {
+		t.Fatalf("second Start = %v", err)
+	}
+	t.Cleanup(func() { _ = Stop() })
+	firstURL, firstErr := url.Parse(first)
+	secondURL, secondErr := url.Parse(second)
+	if firstErr != nil || secondErr != nil {
+		t.Fatalf("entrances = %q, %q", first, second)
+	}
+	if firstURL.Host != secondURL.Host {
+		t.Errorf("origin moved from %s to %s across an engine restart", firstURL.Host, secondURL.Host)
 	}
 }
 

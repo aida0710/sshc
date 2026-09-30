@@ -42,7 +42,7 @@ func finishVPNFailure(called vpnInvocation, err error, environment commandEnviro
 	var input *vpnInputError
 	if !called.JSON && errors.As(err, &input) {
 		fmt.Fprintln(environment.stderr, "sshc: "+input.sentence)
-		return 1
+		return exitFailure
 	}
 	var problem engineProblem
 	if called.JSON || !errors.As(err, &problem) || problem.OutcomeUnknown {
@@ -54,9 +54,9 @@ func finishVPNFailure(called vpnInvocation, err error, environment commandEnviro
 	}
 	fmt.Fprintln(environment.stderr, "sshc: "+sentence)
 	if errors.Is(err, context.Canceled) {
-		return 130
+		return exitInterrupted
 	}
-	return 1
+	return exitFailure
 }
 
 // vpnRouteError は、`sshc <接続先>` が VPN 経路を用意できなかったことを、

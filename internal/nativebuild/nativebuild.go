@@ -20,9 +20,6 @@ const (
 	nativeGOARCHEnvironment         = "SSHC_NATIVE_GOARCH"
 	nativeCGOEnvironment            = "SSHC_NATIVE_CGO"
 	nativeOutputEnvironment         = "SSHC_NATIVE_OUTPUT"
-	nativeMacBundlesEnvironment     = "SSHC_NATIVE_MAC_BUNDLES"
-	nativeLinuxBundlesEnvironment   = "SSHC_NATIVE_LINUX_BUNDLES"
-	nativeWindowsBundlesEnvironment = "SSHC_NATIVE_WINDOWS_BUNDLES"
 	nativeReleaseTargetsEnvironment = "SSHC_NATIVE_RELEASE_TARGETS"
 	nativeReleaseArchesEnvironment  = "SSHC_NATIVE_RELEASE_ARCHES"
 	nativeReleaseDirEnvironment     = "SSHC_NATIVE_RELEASE_DIR"
@@ -36,9 +33,6 @@ var nativeEnvironmentKeys = []string{
 	nativeGOARCHEnvironment,
 	nativeCGOEnvironment,
 	nativeOutputEnvironment,
-	nativeMacBundlesEnvironment,
-	nativeLinuxBundlesEnvironment,
-	nativeWindowsBundlesEnvironment,
 	nativeReleaseTargetsEnvironment,
 	nativeReleaseArchesEnvironment,
 	nativeReleaseDirEnvironment,
@@ -92,7 +86,7 @@ func allowedNativeProgram(name string) bool {
 	}
 }
 
-type nativeBuildDeps struct {
+type nativeBuildDependencies struct {
 	hostOS      string
 	hostArch    string
 	hostCGO     string
@@ -118,7 +112,7 @@ type nativeBuildRequest struct {
 // 対象値は明示的な継承環境で渡し、パスとバージョンを shell 展開しない。
 func RunNativeBuild(args []string, stdout, stderr io.Writer) error {
 	environment := os.Environ()
-	return runNativeBuild(args, nativeBuildDeps{
+	return runNativeBuild(args, nativeBuildDependencies{
 		hostOS:       runtime.GOOS,
 		hostArch:     runtime.GOARCH,
 		hostCGO:      os.Getenv("CGO_ENABLED"),
@@ -129,36 +123,38 @@ func RunNativeBuild(args []string, stdout, stderr io.Writer) error {
 	}, stdout, stderr)
 }
 
-func runNativeBuild(args []string, deps nativeBuildDeps, stdout, stderr io.Writer) error {
+func runNativeBuild(args []string, dependencies nativeBuildDependencies, stdout, stderr io.Writer) error {
 	if len(args) == 0 {
 		return errors.New("command is required")
 	}
-	if deps.executor == nil || deps.mkdirAll == nil {
+	if dependencies.executor == nil || dependencies.mkdirAll == nil {
 		return errors.New("native build dependencies are incomplete")
 	}
-	environment, err := canonicalizeNativeEnvironment(deps.environment)
+	environment, err := canonicalizeNativeEnvironment(dependencies.environment)
 	if err != nil {
 		return err
 	}
-	deps.environment = environment
+	dependencies.environment = environment
 
 	switch args[0] {
 	case "build":
-		return runExplicitBuild(args[1:], deps, stdout, stderr)
+		return runExplicitBuild(args[1:], dependencies, stdout, stderr)
 	case "host-build":
-		return runHostBuild(args[1:], deps, stdout, stderr)
+		return runHostBuild(args[1:], dependencies, stdout, stderr)
 	case "guard-host":
-		return runHostGuard(args[1:], deps, stderr)
+		return runHostGuard(args[1:], dependencies, stderr)
 	case "matrix":
-		return runBuildMatrix(args[1:], deps, stdout, stderr)
+		return runBuildMatrix(args[1:], dependencies, stdout, stderr)
 	case "release-current":
-		return runCurrentRelease(args[1:], deps, stdout, stderr)
+		return runCurrentRelease(args[1:], dependencies, stdout, stderr)
+	case "verify-embedded-ui":
+		return runEmbeddedUIVerification(args[1:], dependencies, stderr)
 	default:
 		return errors.New("unsupported native build command")
 	}
 }
 
-func runHostGuard(args []string, deps nativeBuildDeps, stderr io.Writer) error {
+func runHostGuard(args []string, dependencies nativeBuildDependencies, stderr io.Writer) error {
 	flags := newNativeFlagSet("guard-host", stderr)
 	expectedHost := flags.String("host", "", "required host operating system")
 	if err := parseNativeFlags(flags, args); err != nil {
@@ -167,18 +163,18 @@ func runHostGuard(args []string, deps nativeBuildDeps, stderr io.Writer) error {
 	if !supportedOS(*expectedHost) {
 		return errors.New("unsupported required host")
 	}
-	if deps.hostOS != *expectedHost {
-		return fmt.Errorf("target requires %s host; actual host is %s", *expectedHost, deps.hostOS)
+	if dependencies.hostOS != *expectedHost {
+		return fmt.Errorf("target requires %s host; actual host is %s", *expectedHost, dependencies.hostOS)
 	}
 	return nil
 }
 
-func runExplicitBuild(args []string, deps nativeBuildDeps, stdout, stderr io.Writer) error {
+func runExplicitBuild(args []string, dependencies nativeBuildDependencies, stdout, stderr io.Writer) error {
 	flags := newNativeFlagSet("build", stderr)
-	goos := flags.String("goos", environmentValue(deps.environment, nativeGOOSEnvironment), "target operating system")
-	goarch := flags.String("goarch", environmentValue(deps.environment, nativeGOARCHEnvironment), "target architecture")
-	output := flags.String("output", environmentValue(deps.environment, nativeOutputEnvironment), "output file")
-	cgo := flags.String("cgo", environmentValue(deps.environment, nativeCGOEnvironment), "CGO_ENABLED value")
+	goos := flags.String("goos", environmentValue(dependencies.environment, nativeGOOSEnvironment), "target operating system")
+	goarch := flags.String("goarch", environmentValue(dependencies.environment, nativeGOARCHEnvironment), "target architecture")
+	output := flags.String("output", environmentValue(dependencies.environment, nativeOutputEnvironment), "output file")
+	cgo := flags.String("cgo", environmentValue(dependencies.environment, nativeCGOEnvironment), "CGO_ENABLED value")
 	if err := parseNativeFlags(flags, args); err != nil {
 		return err
 	}
@@ -186,14 +182,14 @@ func runExplicitBuild(args []string, deps nativeBuildDeps, stdout, stderr io.Wri
 	if err := validateBuildRequest(request); err != nil {
 		return err
 	}
-	version, err := resolveVersion(deps)
+	version, err := resolveVersion(dependencies)
 	if err != nil {
 		return err
 	}
-	return buildNativeCLI(request, version, deps, stdout)
+	return buildNativeCLI(request, version, dependencies, stdout)
 }
 
-func runHostBuild(args []string, deps nativeBuildDeps, stdout, stderr io.Writer) error {
+func runHostBuild(args []string, dependencies nativeBuildDependencies, stdout, stderr io.Writer) error {
 	flags := newNativeFlagSet("host-build", stderr)
 	outputDir := flags.String("output-dir", "", "host output directory")
 	if err := parseNativeFlags(flags, args); err != nil {
@@ -202,43 +198,43 @@ func runHostBuild(args []string, deps nativeBuildDeps, stdout, stderr io.Writer)
 	if err := validateDirectoryPath("OUTPUT directory", *outputDir); err != nil {
 		return err
 	}
-	if !supportedOS(deps.hostOS) {
+	if !supportedOS(dependencies.hostOS) {
 		return errors.New("unsupported host OS")
 	}
-	if !supportedArchitecture(deps.hostArch) {
+	if !supportedArchitecture(dependencies.hostArch) {
 		return errors.New("unsupported host architecture")
 	}
-	version, err := resolveVersion(deps)
+	version, err := resolveVersion(dependencies)
 	if err != nil {
 		return err
 	}
-	cgo, err := resolveHostCGO(deps)
+	cgo, err := resolveHostCGO(dependencies)
 	if err != nil {
 		return err
 	}
 	name := "sshc"
-	if deps.hostOS == "windows" {
+	if dependencies.hostOS == "windows" {
 		name += ".exe"
 	}
 	request := nativeBuildRequest{
-		goos:   deps.hostOS,
-		goarch: deps.hostArch,
+		goos:   dependencies.hostOS,
+		goarch: dependencies.hostArch,
 		output: filepath.Join(*outputDir, name),
 		cgo:    cgo,
 	}
 	if err := validateBuildRequest(request); err != nil {
 		return err
 	}
-	if err := runWebBuild(deps); err != nil {
+	if err := runWebBuild(dependencies); err != nil {
 		return err
 	}
-	return buildNativeCLI(request, version, deps, stdout)
+	return buildNativeCLI(request, version, dependencies, stdout)
 }
 
-func runBuildMatrix(args []string, deps nativeBuildDeps, stdout, stderr io.Writer) error {
+func runBuildMatrix(args []string, dependencies nativeBuildDependencies, stdout, stderr io.Writer) error {
 	flags := newNativeFlagSet("matrix", stderr)
-	targets := flags.String("targets", environmentValue(deps.environment, nativeReleaseTargetsEnvironment), "space separated GOOS/GOARCH:CGO records")
-	outputDir := flags.String("output-dir", environmentValue(deps.environment, nativeReleaseDirEnvironment), "release output directory")
+	targets := flags.String("targets", environmentValue(dependencies.environment, nativeReleaseTargetsEnvironment), "space separated GOOS/GOARCH:CGO records")
+	outputDir := flags.String("output-dir", environmentValue(dependencies.environment, nativeReleaseDirEnvironment), "release output directory")
 	if err := parseNativeFlags(flags, args); err != nil {
 		return err
 	}
@@ -249,29 +245,29 @@ func runBuildMatrix(args []string, deps nativeBuildDeps, stdout, stderr io.Write
 	if err != nil {
 		return err
 	}
-	version, err := resolveVersion(deps)
+	version, err := resolveVersion(dependencies)
 	if err != nil {
 		return err
 	}
-	if err := runWebBuild(deps); err != nil {
+	if err := rebuildEmbeddedUIAndCompare(dependencies); err != nil {
 		return err
 	}
 	for _, request := range requests {
-		if err := buildAndVerifyStandalone(request, version, deps, stdout); err != nil {
+		if err := buildAndVerifyStandalone(request, version, dependencies, stdout); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func runCurrentRelease(args []string, deps nativeBuildDeps, stdout, stderr io.Writer) error {
+func runCurrentRelease(args []string, dependencies nativeBuildDependencies, stdout, stderr io.Writer) error {
 	flags := newNativeFlagSet("release-current", stderr)
-	arches := flags.String("arches", environmentValue(deps.environment, nativeReleaseArchesEnvironment), "space separated release architectures")
-	outputDir := flags.String("output-dir", environmentValue(deps.environment, nativeReleaseDirEnvironment), "release output directory")
+	arches := flags.String("arches", environmentValue(dependencies.environment, nativeReleaseArchesEnvironment), "space separated release architectures")
+	outputDir := flags.String("output-dir", environmentValue(dependencies.environment, nativeReleaseDirEnvironment), "release output directory")
 	if err := parseNativeFlags(flags, args); err != nil {
 		return err
 	}
-	if !supportedOS(deps.hostOS) {
+	if !supportedOS(dependencies.hostOS) {
 		return errors.New("unsupported host OS")
 	}
 	if err := validateDirectoryPath("release output directory", *outputDir); err != nil {
@@ -282,19 +278,19 @@ func runCurrentRelease(args []string, deps nativeBuildDeps, stdout, stderr io.Wr
 		return err
 	}
 	cgo := "0"
-	if deps.hostOS == "darwin" {
+	if dependencies.hostOS == "darwin" {
 		cgo = "1"
 	}
 	suffix := ""
-	if deps.hostOS == "windows" {
+	if dependencies.hostOS == "windows" {
 		suffix = ".exe"
 	}
 	requests := make([]nativeBuildRequest, 0, len(architectures))
 	for _, architecture := range architectures {
 		request := nativeBuildRequest{
-			goos:   deps.hostOS,
+			goos:   dependencies.hostOS,
 			goarch: architecture,
-			output: filepath.Join(*outputDir, "sshc-"+deps.hostOS+"-"+architecture+suffix),
+			output: filepath.Join(*outputDir, "sshc-"+dependencies.hostOS+"-"+architecture+suffix),
 			cgo:    cgo,
 		}
 		if err := validateBuildRequest(request); err != nil {
@@ -302,19 +298,39 @@ func runCurrentRelease(args []string, deps nativeBuildDeps, stdout, stderr io.Wr
 		}
 		requests = append(requests, request)
 	}
-	version, err := resolveVersion(deps)
+	version, err := resolveVersion(dependencies)
 	if err != nil {
 		return err
 	}
-	if err := runWebBuild(deps); err != nil {
+	if err := rebuildEmbeddedUIAndCompare(dependencies); err != nil {
 		return err
 	}
 	for _, request := range requests {
-		if err := buildAndVerifyStandalone(request, version, deps, stdout); err != nil {
+		if err := buildAndVerifyStandalone(request, version, dependencies, stdout); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// runEmbeddedUIVerification は、リリースの runner と同じ手順で UI を作り直して照合するだけで、
+// バイナリは作らない。照合がその OS で通るかを、公開の前に試すための入口である
+// （.github/workflows/release-ui-check.yml、docs/releasing.md）。
+func runEmbeddedUIVerification(args []string, dependencies nativeBuildDependencies, stderr io.Writer) error {
+	flags := newNativeFlagSet("verify-embedded-ui", stderr)
+	if err := parseNativeFlags(flags, args); err != nil {
+		return err
+	}
+	return rebuildEmbeddedUIAndCompare(dependencies)
+}
+
+// rebuildEmbeddedUIAndCompare は、配布するバイナリに埋め込む UI を作り直し、コミット済みの
+// UI と同じであることを確かめる。リリースの build と、公開の前の照合が同じ手順を通る。
+func rebuildEmbeddedUIAndCompare(dependencies nativeBuildDependencies) error {
+	if err := runWebBuild(dependencies); err != nil {
+		return err
+	}
+	return verifyEmbeddedUIMatchesCommit(dependencies)
 }
 
 // npm はその package のディレクトリで走らせる。--prefix に頼らない。
@@ -323,24 +339,54 @@ func runCurrentRelease(args []string, deps nativeBuildDeps, stdout, stderr io.Wr
 // Windows ではカレントの package.json を読みに行き、この repository の root には
 // それが無いので ENOENT で落ちる。Linux と macOS では同じ呼び出しが通るので、
 // Windows でだけ静かに壊れる種類の違いである。
-func runWebBuild(deps nativeBuildDeps) error {
-	return deps.executor.Run(nativeCommand{
+func runWebBuild(dependencies nativeBuildDependencies) error {
+	return dependencies.executor.Run(nativeCommand{
 		name:        "npm",
 		args:        []string{"run", "build"},
 		directory:   "web",
-		environment: deps.environment,
+		environment: dependencies.environment,
 	})
 }
 
-func buildAndVerifyStandalone(request nativeBuildRequest, version string, deps nativeBuildDeps, stdout io.Writer) error {
-	if err := buildNativeCLI(request, version, deps, stdout); err != nil {
-		return err
+// embeddedUIDirectory は、web のビルドの出力先（web/vite.config.ts の outDir）で、
+// Go のバイナリが埋め込む UI（internal/ui/embed.go）である。
+const embeddedUIDirectory = "internal/ui/dist"
+
+// verifyEmbeddedUIMatchesCommit は、いま作り直した UI が、コミット済みの UI と同じで
+// あることを確かめる。配布するバイナリを作る前に呼ぶ。
+//
+// Homebrew と APK は、コミット済みの UI をそのまま埋め込む。その UI は、CI の web job
+// が Linux で作り直して照合している。リリースの runner（macOS・Windows・Linux）で
+// 作り直した UI は、その照合を経ていない。OS ごとのネイティブの依存（rollup、
+// lightningcss など）や Node の minor の違いで出力がずれれば、同じ tag の配布物が
+// 別々の UI を持つことになる。ずれたら配布物を作らずに止める。
+//
+// 検査は scripts/ci/check-ui-dist.sh と同じ git status である。sh を通さないので、
+// Windows の runner でも同じ検査になる。
+func verifyEmbeddedUIMatchesCommit(dependencies nativeBuildDependencies) error {
+	changes, err := dependencies.executor.Output(nativeCommand{
+		name:        "git",
+		args:        []string{"status", "--porcelain=v1", "--untracked-files=all", "--", embeddedUIDirectory},
+		environment: dependencies.environment,
+	})
+	if err != nil {
+		return fmt.Errorf("compare the rebuilt embedded UI with the committed one: %w", err)
 	}
-	return verifyStandaloneArtifact(request, deps)
+	if listed := strings.TrimSpace(string(changes)); listed != "" {
+		return fmt.Errorf("the embedded UI built on this runner differs from the committed %s:\n%s", embeddedUIDirectory, listed)
+	}
+	return nil
 }
 
-func verifyStandaloneArtifact(request nativeBuildRequest, deps nativeBuildDeps) error {
-	command := nativeCommand{environment: deps.environment}
+func buildAndVerifyStandalone(request nativeBuildRequest, version string, dependencies nativeBuildDependencies, stdout io.Writer) error {
+	if err := buildNativeCLI(request, version, dependencies, stdout); err != nil {
+		return err
+	}
+	return verifyStandaloneArtifact(request, dependencies)
+}
+
+func verifyStandaloneArtifact(request nativeBuildRequest, dependencies nativeBuildDependencies) error {
+	command := nativeCommand{environment: dependencies.environment}
 	if request.goos == "windows" {
 		command.name = "pwsh"
 		command.args = []string{
@@ -358,29 +404,29 @@ func verifyStandaloneArtifact(request nativeBuildRequest, deps nativeBuildDeps) 
 			request.goarch,
 		}
 	}
-	return deps.executor.Run(command)
+	return dependencies.executor.Run(command)
 }
 
-func buildNativeCLI(request nativeBuildRequest, version string, deps nativeBuildDeps, stdout io.Writer) error {
+func buildNativeCLI(request nativeBuildRequest, version string, dependencies nativeBuildDependencies, stdout io.Writer) error {
 	parent := filepath.Dir(filepath.Clean(request.output))
-	if err := deps.mkdirAll(parent, 0o755); err != nil {
+	if err := dependencies.mkdirAll(parent, 0o755); err != nil {
 		return fmt.Errorf("create output directory: %w", err)
 	}
 	fmt.Fprintf(stdout, "==> %s/%s (CGO_ENABLED=%s)\n", request.goos, request.goarch, request.cgo)
-	if err := buildOne(request, version, deps); err != nil {
+	if err := buildOne(request, version, dependencies); err != nil {
 		return err
 	}
 	// ファイル名ではなくバイナリヘッダーからターゲットを検証する。
 	// 焼いた直後にしか安く確かめられない。配ってからでは、動かない機械の
 	// 上でしか分からない。
-	if deps.verifyBinary == nil {
+	if dependencies.verifyBinary == nil {
 		return nil
 	}
-	return deps.verifyBinary(request.output, request.goos, request.goarch)
+	return dependencies.verifyBinary(request.output, request.goos, request.goarch)
 }
 
-func buildOne(request nativeBuildRequest, version string, deps nativeBuildDeps) error {
-	return deps.executor.Run(nativeCommand{
+func buildOne(request nativeBuildRequest, version string, dependencies nativeBuildDependencies) error {
+	return dependencies.executor.Run(nativeCommand{
 		name: "go",
 		args: []string{
 			"build",
@@ -389,7 +435,7 @@ func buildOne(request nativeBuildRequest, version string, deps nativeBuildDeps) 
 			"-o", request.output,
 			"./cmd/sshc",
 		},
-		environment: withTargetEnvironment(deps.environment, request),
+		environment: withTargetEnvironment(dependencies.environment, request),
 	})
 }
 
@@ -507,14 +553,14 @@ func parseReleaseArchitectures(value string) ([]string, error) {
 	return architectures, nil
 }
 
-func resolveHostCGO(deps nativeBuildDeps) (string, error) {
-	if deps.hostCGO == "0" || deps.hostCGO == "1" {
-		return deps.hostCGO, nil
+func resolveHostCGO(dependencies nativeBuildDependencies) (string, error) {
+	if dependencies.hostCGO == "0" || dependencies.hostCGO == "1" {
+		return dependencies.hostCGO, nil
 	}
-	output, err := deps.executor.Output(nativeCommand{
+	output, err := dependencies.executor.Output(nativeCommand{
 		name:        "go",
 		args:        []string{"env", "CGO_ENABLED"},
-		environment: deps.environment,
+		environment: dependencies.environment,
 	})
 	if err != nil {
 		return "", fmt.Errorf("read host CGO setting: %w", err)
@@ -526,17 +572,17 @@ func resolveHostCGO(deps nativeBuildDeps) (string, error) {
 	return cgo, nil
 }
 
-func resolveVersion(deps nativeBuildDeps) (string, error) {
-	if version := environmentValue(deps.environment, nativeVersionEnvironment); version != "" {
+func resolveVersion(dependencies nativeBuildDependencies) (string, error) {
+	if version := environmentValue(dependencies.environment, nativeVersionEnvironment); version != "" {
 		if err := validateBuildVersion(version); err != nil {
 			return "", err
 		}
 		return version, nil
 	}
-	output, err := deps.executor.Output(nativeCommand{
+	output, err := dependencies.executor.Output(nativeCommand{
 		name:        "git",
 		args:        []string{"describe", "--tags", "--exact-match"},
-		environment: deps.environment,
+		environment: dependencies.environment,
 	})
 	if err != nil || strings.TrimSpace(string(output)) == "" {
 		return "dev", nil

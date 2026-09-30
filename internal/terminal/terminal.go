@@ -97,10 +97,28 @@ type ExactInput interface {
 	WriteExact(context.Context, []byte) error
 }
 
-// Size は端末の桁数と行数である。
+// DefaultTerminalType は、sshc のターミナルが名乗る種別（TERM の値）である。
+//
+// 画面を描くのは xterm.js なので、その能力に合った名前にする。SSH の PTY の
+// 要求、ローカルシェルの TERM、Telnet の TERMINAL-TYPE がどれもこれを名乗る。
+// 名前を変えるときはここだけを変える。1か所でもずれると、vim や less が
+// 接続の種類ごとに違う制御列を送ってくる。
+const DefaultTerminalType = "xterm-256color"
+
+// Size はターミナルの桁数と行数である。
 type Size struct {
 	Cols uint16
 	Rows uint16
+}
+
+// DefaultSize は、ターミナルの大きさが分からないときに使う値を返す。
+//
+// ブラウザが大きさを送ってこないときや、パイプの中で走っていて問い合わせられ
+// ないときがそれである。80x24 は、それでも読める既定として長く使われてきた
+// 寸法であり、別の数を選ぶ理由が無い。受け取った側が書き換えても、ほかの
+// パッケージの既定が変わらないよう、呼ぶたびに新しい値を返す。
+func DefaultSize() Size {
+	return Size{Cols: 80, Rows: 24}
 }
 
 // 端末の大きさの上限。ブラウザが送ってくる値であり、TIOCSWINSZ へそのまま渡る。

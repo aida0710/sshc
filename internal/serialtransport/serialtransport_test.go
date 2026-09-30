@@ -54,7 +54,7 @@ func TestConfigDefaultsAndValidation(t *testing.T) {
 
 func TestListReturnsSortedUniqueValidDevices(t *testing.T) {
 	backend := &fakeBackend{ports: []string{"COM10", "", "COM2", "COM2", "bad\nname"}}
-	transport := mustTransport(t, backend)
+	transport := &Transport{backend: backend}
 	devices, err := transport.List(context.Background())
 	if err != nil {
 		t.Fatalf("List() = %v", err)
@@ -69,7 +69,7 @@ func TestListHonorsCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	backend := &fakeBackend{}
-	transport := mustTransport(t, backend)
+	transport := &Transport{backend: backend}
 	if _, err := transport.List(ctx); !errors.Is(err, context.Canceled) {
 		t.Fatalf("List() = %v, want context.Canceled", err)
 	}
@@ -88,7 +88,7 @@ func TestOpenPassesNormalizedModeAndProvidesByteStream(t *testing.T) {
 	port := newFakePort()
 	port.readData = []byte("ready> ")
 	backend := &fakeBackend{port: port}
-	transport := mustTransport(t, backend)
+	transport := &Transport{backend: backend}
 	stream, err := transport.Open(context.Background(), Config{Device: "/dev/ttyACM0"})
 	if err != nil {
 		t.Fatalf("Open() = %v", err)
@@ -124,7 +124,7 @@ func TestOpenPassesNormalizedModeAndProvidesByteStream(t *testing.T) {
 func TestContextCancellationClosesPortAndUnblocksRead(t *testing.T) {
 	port := newFakePort()
 	port.blockRead = true
-	transport := mustTransport(t, &fakeBackend{port: port})
+	transport := &Transport{backend: &fakeBackend{port: port}}
 	ctx, cancel := context.WithCancel(context.Background())
 	stream, err := transport.Open(ctx, Config{Device: "COM7"}.Normalize())
 	if err != nil {
@@ -168,7 +168,7 @@ func TestClosePreservesBackendErrorAndRunsOnce(t *testing.T) {
 	closeErr := errors.New("driver close failed")
 	port := newFakePort()
 	port.closeErr = closeErr
-	transport := mustTransport(t, &fakeBackend{port: port})
+	transport := &Transport{backend: &fakeBackend{port: port}}
 	stream, err := transport.Open(context.Background(), Config{Device: "COM8"}.Normalize())
 	if err != nil {
 		t.Fatalf("Open() = %v", err)
@@ -187,7 +187,7 @@ func TestOpenClosesPortWhenContextIsCanceledByBackend(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	port := newFakePort()
 	backend := &fakeBackend{port: port, cancelOpen: cancel}
-	transport := mustTransport(t, backend)
+	transport := &Transport{backend: backend}
 	if stream, err := transport.Open(ctx, Config{Device: "COM9"}.Normalize()); stream != nil || !errors.Is(err, context.Canceled) {
 		t.Fatalf("Open() = %#v, %v; want nil, context.Canceled", stream, err)
 	}
@@ -198,7 +198,7 @@ func TestOpenClosesPortWhenContextIsCanceledByBackend(t *testing.T) {
 
 func TestDiscardPendingStopsWhenContinuousInputReachesDeadline(t *testing.T) {
 	port := &continuousPort{}
-	transport := mustTransport(t, &fakeBackend{port: port})
+	transport := &Transport{backend: &fakeBackend{port: port}}
 	stream, err := transport.Open(context.Background(), Config{Device: "COM11"}.Normalize())
 	if err != nil {
 		t.Fatal(err)
@@ -238,7 +238,7 @@ func TestBackendErrorsHaveStableClassification(t *testing.T) {
 func TestStreamClassifiesDriverPortClosedError(t *testing.T) {
 	port := newFakePort()
 	port.readErr = fakePortError{code: serial.PortClosed}
-	transport := mustTransport(t, &fakeBackend{port: port})
+	transport := &Transport{backend: &fakeBackend{port: port}}
 	stream, err := transport.Open(context.Background(), Config{Device: "COM4"}.Normalize())
 	if err != nil {
 		t.Fatalf("Open() = %v", err)
@@ -249,32 +249,16 @@ func TestStreamClassifiesDriverPortClosedError(t *testing.T) {
 	}
 }
 
-func TestNilBackendAndNilPortAreRejected(t *testing.T) {
-	if _, err := NewWithBackend(nil); !errors.Is(err, ErrInvalidConfig) {
-		t.Fatalf("NewWithBackend(nil) = %v", err)
-	}
-	var typedNilBackend *fakeBackend
-	if _, err := NewWithBackend(typedNilBackend); !errors.Is(err, ErrInvalidConfig) {
-		t.Fatalf("NewWithBackend(typed nil) = %v", err)
-	}
-	transport := mustTransport(t, &fakeBackend{})
+func TestOpenRefusesABackendThatReturnsANilPort(t *testing.T) {
+	transport := &Transport{backend: &fakeBackend{}}
 	if stream, err := transport.Open(context.Background(), Config{Device: "COM5"}.Normalize()); stream != nil || err == nil {
 		t.Fatalf("Open(nil port) = %#v, %v", stream, err)
 	}
 	var typedNilPort *fakePort
-	transport = mustTransport(t, &fakeBackend{port: typedNilPort})
+	transport = &Transport{backend: &fakeBackend{port: typedNilPort}}
 	if stream, err := transport.Open(context.Background(), Config{Device: "COM5"}.Normalize()); stream != nil || err == nil {
 		t.Fatalf("Open(typed nil port) = %#v, %v", stream, err)
 	}
-}
-
-func mustTransport(t *testing.T, backend Backend) *Transport {
-	t.Helper()
-	transport, err := NewWithBackend(backend)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return transport
 }
 
 type fakeBackend struct {

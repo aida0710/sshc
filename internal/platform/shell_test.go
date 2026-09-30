@@ -4,6 +4,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"sshc/internal/terminal"
 )
 
 // 端末は、それを起動したものの事情を継がない。
@@ -39,7 +41,7 @@ func TestLoginEnvironmentAlwaysDescribesTheEmbeddedTerminal(t *testing.T) {
 		{"Term=dumb", "HOME=/Users/someone"},
 	} {
 		kept := LoginEnvironment(environment)
-		if got := kept[len(kept)-1]; got != "TERM="+LocalTerminalType {
+		if got := kept[len(kept)-1]; got != "TERM="+terminal.DefaultTerminalType {
 			t.Errorf("LoginEnvironment(%q) terminal = %q", environment, got)
 		}
 		count := 0

@@ -30,17 +30,22 @@ type launchdServiceManager struct {
 	uid       int
 	runner    serviceCommandRunner
 	files     storage.FileSystem
-	waitReady func(context.Context, string, int, serviceCommandRunner) error
+	waitReady func(context.Context, *launchdServiceManager) error
 	lock      func() (func() error, error)
-}
-
-type launchdPlistSnapshot struct {
-	state    serviceState
-	contents []byte
 }
 
 func (manager *launchdServiceManager) plistPath() string {
 	return filepath.Join(manager.home, "Library", "LaunchAgents", launchdPlistName)
+}
+
+func (manager *launchdServiceManager) definitionFile() serviceDefinitionFile {
+	return serviceDefinitionFile{
+		files:  manager.files,
+		path:   manager.plistPath(),
+		marker: launchdPlistMarker,
+		name:   "launchd service definition",
+		render: func(executable string) (string, error) { return launchdPlist(executable, manager.home) },
+	}
 }
 
 func (manager *launchdServiceManager) domain() string {
@@ -68,7 +73,8 @@ func (manager *launchdServiceManager) Install(ctx context.Context, executable st
 		return err
 	}
 	defer func() { result = errors.Join(result, release()) }()
-	snapshot, err := manager.readPlistSnapshot()
+	definition := manager.definitionFile()
+	snapshot, err := definition.readSnapshot()
 	if err != nil {
 		return err
 	}
@@ -88,7 +94,7 @@ func (manager *launchdServiceManager) Install(ctx context.Context, executable st
 			return err
 		}
 	}
-	if err := manager.ensurePlistUnchanged(snapshot); err != nil {
+	if err := definition.ensureUnchanged(snapshot); err != nil {
 		return err
 	}
 	if err := manager.files.MkdirAll(filepath.Dir(manager.plistPath()), 0o700); err != nil {
@@ -103,18 +109,11 @@ func (manager *launchdServiceManager) Install(ctx context.Context, executable st
 	if err := manager.waitUntilReady(ctx); err != nil {
 		return fmt.Errorf("service did not become ready: %w", err)
 	}
-	matches, err := manager.plistMatches(executable)
-	if err != nil {
-		return err
-	}
-	if !matches {
-		return errors.New("launchd service definition changed while the service was starting")
-	}
-	return nil
+	return definition.ensureStillMatches(executable, "starting")
 }
 
 func (manager *launchdServiceManager) Status(ctx context.Context) (serviceState, error) {
-	snapshot, err := manager.readPlistSnapshot()
+	snapshot, err := manager.definitionFile().readSnapshot()
 	if err != nil || snapshot.state == serviceAbsent || snapshot.state == serviceUnmanaged {
 		return snapshot.state, err
 	}
@@ -128,47 +127,16 @@ func (manager *launchdServiceManager) Status(ctx context.Context) (serviceState,
 	return serviceInactive, nil
 }
 
-func (manager *launchdServiceManager) RestartIfActive(ctx context.Context, executable string) (restarted bool, result error) {
-	release, err := manager.acquireOperationLock()
-	if err != nil {
-		return false, err
-	}
-	defer func() { result = errors.Join(result, release()) }()
-	matches, err := manager.plistMatches(executable)
-	if err != nil || !matches {
-		return false, err
-	}
-	state, err := manager.Status(ctx)
-	if err != nil || state != serviceActive {
-		return false, err
-	}
-	matches, err = manager.plistMatches(executable)
-	if err != nil || !matches {
-		return false, err
-	}
-	if err := manager.run(ctx, "kickstart", "-k", manager.target()); err != nil {
-		return false, err
-	}
-	// kickstart は job が消えていても成功する。systemd 側と同じく、再起動後も
-	// 動いていることを確かめてから準備完了を待つ。
-	state, err = manager.Status(ctx)
-	if err != nil {
-		return false, err
-	}
-	if state != serviceActive {
-		return false, nil
-	}
-	if err := manager.waitUntilReady(ctx); err != nil {
-		return false, fmt.Errorf("restarted service did not become ready: %w", err)
-	}
-	matches, err = manager.plistMatches(executable)
-	if err != nil {
-		return false, err
-	}
-	if !matches {
-		return false, errors.New("launchd service definition changed while the service was restarting")
-	}
-	return true, nil
+func (manager *launchdServiceManager) RestartIfActive(ctx context.Context, executable string) (bool, error) {
+	return restartServiceIfActive(ctx, manager, executable)
+}
+
+func (manager *launchdServiceManager) IsDefinitionOutdated() (bool, error) {
+	return manager.definitionFile().isOutdated()
+}
+
+func (manager *launchdServiceManager) restartRunning(ctx context.Context) error {
+	return manager.run(ctx, "kickstart", "-k", manager.target())
 }
 
 func (manager *launchdServiceManager) Disable(ctx context.Context) (removed bool, result error) {
@@ -177,7 +145,8 @@ func (manager *launchdServiceManager) Disable(ctx context.Context) (removed bool
 		return false, err
 	}
 	defer func() { result = errors.Join(result, release()) }()
-	snapshot, err := manager.readPlistSnapshot()
+	definition := manager.definitionFile()
+	snapshot, err := definition.readSnapshot()
 	if err != nil {
 		return false, err
 	}
@@ -196,7 +165,7 @@ func (manager *launchdServiceManager) Disable(ctx context.Context) (removed bool
 			return false, err
 		}
 	}
-	if err := manager.ensurePlistUnchanged(snapshot); err != nil {
+	if err := definition.ensureUnchanged(snapshot); err != nil {
 		return false, err
 	}
 	if err := manager.files.Remove(manager.plistPath()); err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -206,62 +175,28 @@ func (manager *launchdServiceManager) Disable(ctx context.Context) (removed bool
 }
 
 func (manager *launchdServiceManager) acquireOperationLock() (func() error, error) {
-	if manager.lock == nil {
-		return nil, errors.New("service operation lock is unavailable")
-	}
-	return manager.lock()
+	return acquireServiceOperationLock(manager.lock)
 }
 
 func (manager *launchdServiceManager) waitUntilReady(ctx context.Context) error {
 	if manager.waitReady == nil {
-		return errors.New("service readiness check is unavailable")
+		return errServiceReadinessUnavailable
 	}
-	return manager.waitReady(ctx, manager.home, manager.uid, manager.runner)
-}
-
-func (manager *launchdServiceManager) readPlistSnapshot() (launchdPlistSnapshot, error) {
-	contents, err := manager.files.ReadFile(manager.plistPath())
-	if errors.Is(err, os.ErrNotExist) {
-		return launchdPlistSnapshot{state: serviceAbsent}, nil
-	}
-	if err != nil {
-		return launchdPlistSnapshot{}, fmt.Errorf("read %s: %w", manager.plistPath(), err)
-	}
-	if !bytes.HasPrefix(contents, []byte(launchdPlistMarker)) {
-		return launchdPlistSnapshot{state: serviceUnmanaged, contents: contents}, nil
-	}
-	return launchdPlistSnapshot{state: serviceInactive, contents: contents}, nil
-}
-
-func (manager *launchdServiceManager) ensurePlistUnchanged(expected launchdPlistSnapshot) error {
-	actual, err := manager.readPlistSnapshot()
-	if err != nil {
-		return err
-	}
-	if actual.state != expected.state || !bytes.Equal(actual.contents, expected.contents) {
-		return errors.New("launchd service definition changed during the operation; it was left in place")
-	}
-	return nil
-}
-
-func (manager *launchdServiceManager) plistMatches(executable string) (bool, error) {
-	expected, err := launchdPlist(executable, manager.home)
-	if err != nil {
-		return false, err
-	}
-	contents, err := manager.files.ReadFile(manager.plistPath())
-	if errors.Is(err, os.ErrNotExist) {
-		return false, nil
-	}
-	if err != nil {
-		return false, fmt.Errorf("read %s: %w", manager.plistPath(), err)
-	}
-	return bytes.Equal(contents, []byte(expected)), nil
+	return manager.waitReady(ctx, manager)
 }
 
 func (manager *launchdServiceManager) isLoaded(ctx context.Context) (bool, error) {
 	loaded, _, err := manager.inspectJob(ctx)
 	return loaded, err
+}
+
+// mainPID は、launchd が報告する job の main PID を返す。job が無い、または読めなければ 0。
+func (manager *launchdServiceManager) mainPID(ctx context.Context) int {
+	_, pid, err := manager.inspectJob(ctx)
+	if err != nil {
+		return 0
+	}
+	return pid
 }
 
 func (manager *launchdServiceManager) inspectJob(ctx context.Context) (bool, int, error) {
@@ -314,6 +249,10 @@ func launchdPlist(executable, home string) (string, error) {
 	}
 	executable = filepath.Clean(executable)
 	home = filepath.Clean(home)
+	// KeepAliveはsystemdのRestart=on-failureとそろえ、0以外で終わったときだけ再起動する。
+	// engineは`sshc engine --replace`による置き換えとSIGTERMで0で終わる。無条件に再起動
+	// すると、置き換えで止めたserviceのengineが戻って前面のengineとロックを取り合う。
+	// launchdにはSuccessExitStatus=130に当たる指定が無いため、SIGINTによる130は再起動する。
 	return launchdPlistMarker +
 		"<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n" +
 		"<plist version=\"1.0\">\n<dict>\n" +
@@ -321,7 +260,7 @@ func launchdPlist(executable, home string) (string, error) {
 		"  <key>ProgramArguments</key>\n  <array>\n    <string>" + xmlText(executable) + "</string>\n    <string>engine</string>\n  </array>\n" +
 		"  <key>WorkingDirectory</key>\n  <string>" + xmlText(home) + "</string>\n" +
 		"  <key>RunAtLoad</key>\n  <true/>\n" +
-		"  <key>KeepAlive</key>\n  <true/>\n" +
+		"  <key>KeepAlive</key>\n  <dict>\n    <key>SuccessfulExit</key>\n    <false/>\n  </dict>\n" +
 		"  <key>ThrottleInterval</key>\n  <integer>5</integer>\n" +
 		"</dict>\n</plist>\n", nil
 }
@@ -332,30 +271,16 @@ func xmlText(value string) string {
 	return output.String()
 }
 
-func waitForLaunchdServiceReady(ctx context.Context, home string, uid int, runner serviceCommandRunner) error {
-	target := fmt.Sprintf("gui/%d/%s", uid, launchdServiceLabel)
-	return waitForEngineReady(ctx, home, engineReadiness{
-		mainPID: func(ctx context.Context) int {
-			result, err := runner.Run(ctx, "print", target)
-			if err != nil || result.ExitCode != 0 {
-				return 0
-			}
-			match := launchdPIDPattern.FindSubmatch(result.Output)
-			if len(match) != 2 {
-				return 0
-			}
-			pid, parseErr := strconv.Atoi(string(match[1]))
-			if parseErr != nil {
-				return 0
-			}
-			return pid
-		},
-		failureDetail: func(ctx context.Context) string { return launchdFailureDetail(ctx, runner, target) },
+func waitForLaunchdServiceReady(ctx context.Context, manager *launchdServiceManager) error {
+	return waitForEngineReady(ctx, manager.home, engineReadiness{
+		mainPID:       manager.mainPID,
+		failureDetail: manager.failureDetail,
 	})
 }
 
-func launchdFailureDetail(ctx context.Context, runner serviceCommandRunner, target string) string {
-	result, err := runner.Run(ctx, "print", target)
+// failureDetail は、準備が間に合わなかったときに launchd が報告する job の状態を返す。
+func (manager *launchdServiceManager) failureDetail(ctx context.Context) string {
+	result, err := manager.runner.Run(ctx, "print", manager.target())
 	if err != nil || result.ExitCode != 0 {
 		return ""
 	}

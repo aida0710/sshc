@@ -14,10 +14,6 @@ fun versionCodeOf(name: String): Int {
     return major.toInt() * 1_000_000 + minor.toInt() * 1_000 + patch.toInt()
 }
 
-// 署名情報は環境変数から受け取り、リポジトリには保存しない。リリース workflow
-// では apksigner でも成果物を検証する。
-val keystorePath: String? = System.getenv("ANDROID_KEYSTORE_PATH")
-
 android {
     namespace = "com.github.aida0710.sshc"
     compileSdk = 36
@@ -30,26 +26,12 @@ android {
         versionName = taggedVersionName
     }
 
+    // release の APK は Gradle では署名しない。.github/workflows/release.yml が未署名の
+    // APK を作り、stage-release の job の apksigner で署名と検証をする。
     buildTypes {
         getByName("debug") {
             applicationIdSuffix = ".dev"
             versionNameSuffix = "-dev"
-        }
-    }
-
-    if (keystorePath != null) {
-        signingConfigs {
-            create("release") {
-                storeFile = file(keystorePath)
-                storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
-                keyAlias = System.getenv("ANDROID_KEY_ALIAS")
-                keyPassword = System.getenv("ANDROID_KEY_PASSWORD")
-            }
-        }
-        buildTypes {
-            getByName("release") {
-                signingConfig = signingConfigs.getByName("release")
-            }
         }
     }
 

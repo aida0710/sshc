@@ -3,7 +3,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -12,7 +11,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"unicode"
 
 	"sshc/internal/storage"
 )
@@ -32,26 +30,36 @@ type linuxServiceManager struct {
 	lock      func() (func() error, error)
 }
 
-type serviceUnitSnapshot struct {
-	state    serviceState
-	contents []byte
-}
-
 func newPlatformServiceManager(home string) (engineServiceManager, error) {
 	if !filepath.IsAbs(home) {
 		return nil, errors.New("home directory is not absolute")
 	}
-	systemctl, err := resolveSystemctl(defaultSystemctlCandidates, exec.LookPath, os.Stat)
-	if err != nil {
+	manager := newServiceManagerWithoutTool(filepath.Clean(home))
+	if err := manager.resolveTool(); err != nil {
 		return nil, err
 	}
+	return manager, nil
+}
+
+// newServiceManagerWithoutTool は、systemctl をまだ探していない manager を返す。
+// home は絶対パスで、Clean 済みであること。
+func newServiceManagerWithoutTool(home string) *linuxServiceManager {
 	return &linuxServiceManager{
-		home:      filepath.Clean(home),
-		runner:    osServiceCommandRunner{path: systemctl},
+		home:      home,
 		files:     storage.OSFileSystem{},
 		waitReady: waitForServiceReady,
-		lock:      serviceOperationLock(filepath.Clean(home)),
-	}, nil
+		lock:      serviceOperationLock(home),
+	}
+}
+
+// resolveTool は、systemctl を探して、この manager が実行するツールにする。
+func (manager *linuxServiceManager) resolveTool() error {
+	systemctl, err := resolveSystemctl(defaultSystemctlCandidates, exec.LookPath, os.Stat)
+	if err != nil {
+		return err
+	}
+	manager.runner = osServiceCommandRunner{path: systemctl}
+	return nil
 }
 
 func resolveSystemctl(
@@ -64,6 +72,16 @@ func resolveSystemctl(
 
 func (manager *linuxServiceManager) unitPath() string {
 	return filepath.Join(manager.home, ".config", "systemd", "user", serviceUnitName)
+}
+
+func (manager *linuxServiceManager) definitionFile() serviceDefinitionFile {
+	return serviceDefinitionFile{
+		files:  manager.files,
+		path:   manager.unitPath(),
+		marker: serviceUnitMarker,
+		name:   serviceUnitName,
+		render: systemdUnit,
+	}
 }
 
 func (manager *linuxServiceManager) InstallPlan(executable string) (string, error) {
@@ -83,7 +101,8 @@ func (manager *linuxServiceManager) Install(ctx context.Context, executable stri
 		return err
 	}
 	defer func() { result = errors.Join(result, release()) }()
-	snapshot, err := manager.readUnitSnapshot()
+	definition := manager.definitionFile()
+	snapshot, err := definition.readSnapshot()
 	if err != nil {
 		return err
 	}
@@ -97,7 +116,7 @@ func (manager *linuxServiceManager) Install(ctx context.Context, executable stri
 	if err := manager.files.MkdirAll(filepath.Dir(manager.unitPath()), 0o700); err != nil {
 		return fmt.Errorf("create systemd user directory: %w", err)
 	}
-	if err := manager.ensureUnitUnchanged(snapshot); err != nil {
+	if err := definition.ensureUnchanged(snapshot); err != nil {
 		return err
 	}
 	if err := storage.WriteAtomicFile(manager.files, manager.unitPath(), ".sshc-service-", 0o600, []byte(unit)); err != nil {
@@ -117,20 +136,13 @@ func (manager *linuxServiceManager) Install(ctx context.Context, executable stri
 	if err := manager.waitUntilReady(ctx); err != nil {
 		return fmt.Errorf("service did not become ready: %w", err)
 	}
-	matches, err := manager.unitMatches(executable)
-	if err != nil {
-		return err
-	}
-	if !matches {
-		return errors.New("sshc.service changed while the service was starting")
-	}
-	return nil
+	return definition.ensureStillMatches(executable, "starting")
 }
 
 func (manager *linuxServiceManager) Status(ctx context.Context) (serviceState, error) {
-	state, err := manager.unitState()
-	if err != nil || state == serviceAbsent || state == serviceUnmanaged {
-		return state, err
+	snapshot, err := manager.definitionFile().readSnapshot()
+	if err != nil || snapshot.state == serviceAbsent || snapshot.state == serviceUnmanaged {
+		return snapshot.state, err
 	}
 	result, err := manager.runner.Run(ctx, "--user", "is-active", "--quiet", serviceUnitName)
 	if err != nil {
@@ -146,62 +158,25 @@ func (manager *linuxServiceManager) Status(ctx context.Context) (serviceState, e
 	}
 }
 
-// RestartIfActive はsshc管理下で現在動作中のunitだけを再起動する。停止中のunitを
-// updateが勝手に起動せず、手書きunitにも触れないための更新連携用境界である。
-func (manager *linuxServiceManager) RestartIfActive(ctx context.Context, executable string) (restarted bool, result error) {
-	release, err := manager.acquireOperationLock()
-	if err != nil {
-		return false, err
-	}
-	defer func() { result = errors.Join(result, release()) }()
-	matches, err := manager.unitMatches(executable)
-	if err != nil || !matches {
-		return false, err
-	}
-	state, err := manager.Status(ctx)
-	if err != nil {
-		return false, err
-	}
-	if state != serviceActive {
-		return false, nil
-	}
-	matches, err = manager.unitMatches(executable)
-	if err != nil || !matches {
-		return false, err
-	}
-	if err := manager.run(ctx, "--user", "try-restart", serviceUnitName); err != nil {
-		return false, err
-	}
-	state, err = manager.Status(ctx)
-	if err != nil {
-		return false, err
-	}
-	if state != serviceActive {
-		return false, nil
-	}
-	if err := manager.waitUntilReady(ctx); err != nil {
-		return false, fmt.Errorf("restarted service did not become ready: %w", err)
-	}
-	matches, err = manager.unitMatches(executable)
-	if err != nil {
-		return false, err
-	}
-	if !matches {
-		return false, errors.New("sshc.service changed while the service was restarting")
-	}
-	return true, nil
+func (manager *linuxServiceManager) RestartIfActive(ctx context.Context, executable string) (bool, error) {
+	return restartServiceIfActive(ctx, manager, executable)
+}
+
+func (manager *linuxServiceManager) IsDefinitionOutdated() (bool, error) {
+	return manager.definitionFile().isOutdated()
+}
+
+func (manager *linuxServiceManager) restartRunning(ctx context.Context) error {
+	return manager.run(ctx, "--user", "try-restart", serviceUnitName)
 }
 
 func (manager *linuxServiceManager) acquireOperationLock() (func() error, error) {
-	if manager.lock == nil {
-		return nil, errors.New("service operation lock is unavailable")
-	}
-	return manager.lock()
+	return acquireServiceOperationLock(manager.lock)
 }
 
 func (manager *linuxServiceManager) waitUntilReady(ctx context.Context) error {
 	if manager.waitReady == nil {
-		return errors.New("service readiness check is unavailable")
+		return errServiceReadinessUnavailable
 	}
 	return manager.waitReady(ctx, manager.home, manager.runner)
 }
@@ -237,28 +212,14 @@ func serviceFailureDetail(ctx context.Context, runner serviceCommandRunner) stri
 	return "systemd reports " + strings.Join(lines, "/")
 }
 
-func (manager *linuxServiceManager) unitMatches(executable string) (bool, error) {
-	expected, err := systemdUnit(executable)
-	if err != nil {
-		return false, err
-	}
-	contents, err := manager.files.ReadFile(manager.unitPath())
-	if errors.Is(err, os.ErrNotExist) {
-		return false, nil
-	}
-	if err != nil {
-		return false, fmt.Errorf("read %s: %w", manager.unitPath(), err)
-	}
-	return bytes.Equal(contents, []byte(expected)), nil
-}
-
 func (manager *linuxServiceManager) Disable(ctx context.Context) (removed bool, result error) {
 	release, err := manager.acquireOperationLock()
 	if err != nil {
 		return false, err
 	}
 	defer func() { result = errors.Join(result, release()) }()
-	snapshot, err := manager.readUnitSnapshot()
+	definition := manager.definitionFile()
+	snapshot, err := definition.readSnapshot()
 	if err != nil {
 		return false, err
 	}
@@ -271,7 +232,7 @@ func (manager *linuxServiceManager) Disable(ctx context.Context) (removed bool, 
 	if err := manager.run(ctx, "--user", "disable", "--now", serviceUnitName); err != nil {
 		return false, err
 	}
-	if err := manager.ensureUnitUnchanged(snapshot); err != nil {
+	if err := definition.ensureUnchanged(snapshot); err != nil {
 		return false, err
 	}
 	if err := manager.files.Remove(manager.unitPath()); err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -281,36 +242,6 @@ func (manager *linuxServiceManager) Disable(ctx context.Context) (removed bool, 
 		return false, err
 	}
 	return true, nil
-}
-
-func (manager *linuxServiceManager) unitState() (serviceState, error) {
-	snapshot, err := manager.readUnitSnapshot()
-	return snapshot.state, err
-}
-
-func (manager *linuxServiceManager) readUnitSnapshot() (serviceUnitSnapshot, error) {
-	contents, err := manager.files.ReadFile(manager.unitPath())
-	if errors.Is(err, os.ErrNotExist) {
-		return serviceUnitSnapshot{state: serviceAbsent}, nil
-	}
-	if err != nil {
-		return serviceUnitSnapshot{state: serviceAbsent}, fmt.Errorf("read %s: %w", manager.unitPath(), err)
-	}
-	if !strings.HasPrefix(string(contents), serviceUnitMarker) {
-		return serviceUnitSnapshot{state: serviceUnmanaged, contents: contents}, nil
-	}
-	return serviceUnitSnapshot{state: serviceInactive, contents: contents}, nil
-}
-
-func (manager *linuxServiceManager) ensureUnitUnchanged(expected serviceUnitSnapshot) error {
-	actual, err := manager.readUnitSnapshot()
-	if err != nil {
-		return err
-	}
-	if actual.state != expected.state || !bytes.Equal(actual.contents, expected.contents) {
-		return errors.New("sshc.service changed during the operation; it was left in place")
-	}
-	return nil
 }
 
 func (manager *linuxServiceManager) run(ctx context.Context, arguments ...string) error {
@@ -332,10 +263,8 @@ func systemdUnit(executable string) (string, error) {
 	if !filepath.IsAbs(executable) {
 		return "", errors.New("service executable path is not absolute")
 	}
-	for _, character := range executable {
-		if unicode.IsControl(character) {
-			return "", errors.New("service executable path contains a control character")
-		}
+	if containsControl(executable) {
+		return "", errors.New("service executable path contains a control character")
 	}
 	escaped := strings.NewReplacer(
 		`\`, `\\`,

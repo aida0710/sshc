@@ -63,19 +63,42 @@ func confirmAction(ctx context.Context, yes bool, prompt string, confirmer actio
 	}
 	if confirmer == nil {
 		fmt.Fprintln(stderr, "sshc: confirmation is unavailable; rerun with --yes")
-		return false, 1
+		return false, exitFailure
 	}
 	confirmed, err := confirmer(ctx, prompt)
 	if err != nil {
 		if errors.Is(ctx.Err(), context.Canceled) {
-			return false, 130
+			return false, exitInterrupted
 		}
 		if errors.Is(err, errConfirmationUnavailable) {
 			fmt.Fprintln(stderr, "sshc: confirmation requires an interactive terminal; rerun with --yes")
 		} else {
 			fmt.Fprintf(stderr, "sshc: read confirmation: %v\n", err)
 		}
-		return false, 1
+		return false, exitFailure
 	}
 	return confirmed, 0
+}
+
+// changeConfirmation は、変更の計画を出したあとで、進めてよいかを尋ねる確認である。
+type changeConfirmation struct {
+	// yes は、尋ねずに進める。
+	yes       bool
+	confirmer actionConfirmer
+	stdout    io.Writer
+	stderr    io.Writer
+}
+
+// confirmChange は、「Continue? [y/N]」で進めてよいかを尋ねる。進めないときは、終える
+// 終了コードを返す。利用者が断ったときは、何も変えていないと伝えて 0 で終える。
+func confirmChange(ctx context.Context, confirmation changeConfirmation) (bool, int) {
+	confirmed, code := confirmAction(ctx, confirmation.yes, "Continue? [y/N] ", confirmation.confirmer, confirmation.stderr)
+	if code != 0 {
+		return false, code
+	}
+	if !confirmed {
+		fmt.Fprintln(confirmation.stdout, "sshc: canceled; nothing changed")
+		return false, 0
+	}
+	return true, 0
 }

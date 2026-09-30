@@ -5,6 +5,7 @@ package nativepath
 import (
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
 // foldIdentity は、Windows の大小文字同一視に合わせて鍵をひとつに畳む。
@@ -37,3 +38,27 @@ func foldRune(letter rune) rune {
 	}
 	return minimum
 }
+
+// matchPrefix は、区切り文字の違いと、foldIdentity と同じ大小文字の同一視を
+// 許して比べる。区切り文字を同一視するのは、Identity が通す filepath.Clean が
+// `/` を `\` に揃えるからである。
+func matchPrefix(text, path string) (int, bool) {
+	consumed := 0
+	for _, want := range path {
+		got, size := utf8.DecodeRuneInString(text[consumed:])
+		if size == 0 || !sameLetter(got, want) {
+			return 0, false
+		}
+		consumed += size
+	}
+	return consumed, true
+}
+
+func sameLetter(got, want rune) bool {
+	if isSeparator(got) && isSeparator(want) {
+		return true
+	}
+	return foldRune(got) == foldRune(want)
+}
+
+func isSeparator(letter rune) bool { return letter == '/' || letter == '\\' }

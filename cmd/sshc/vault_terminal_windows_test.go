@@ -36,10 +36,10 @@ func TestWindowsPasswordPromptRunsAfterNoEchoSetupAndBeforeRead(t *testing.T) {
 		return readInput(handle)
 	}
 
-	password, err := readWindowsPasswordWithPrompt(context.Background(), windows.Handle(40), operations, func() error {
+	password, err := readWindowsPasswordWithFeedback(context.Background(), windows.Handle(40), operations, func() error {
 		events = append(events, "prompt")
 		return nil
-	})
+	}, nil)
 	defer zeroBytes(password)
 	if err != nil || len(password) != 0 {
 		t.Fatalf("password=%q error=%v", password, err)
@@ -53,8 +53,8 @@ func TestWindowsPasswordPromptRunsAfterNoEchoSetupAndBeforeRead(t *testing.T) {
 func TestWindowsPasswordPromptFailureRestoresNoEchoModeBeforeReturning(t *testing.T) {
 	promptFailure := errors.New("prompt failed")
 	fake := newFakeWindowsPasswordOperations()
-	password, err := readWindowsPasswordWithPrompt(
-		context.Background(), windows.Handle(40), fake.operations(), func() error { return promptFailure },
+	password, err := readWindowsPasswordWithFeedback(
+		context.Background(), windows.Handle(40), fake.operations(), func() error { return promptFailure }, nil,
 	)
 	if password != nil || !errors.Is(err, promptFailure) {
 		t.Fatalf("prompt failure=%v, %v", password, err)
@@ -70,7 +70,7 @@ func TestWindowsPasswordReaderCancellationWakesWaitAndRestoresExactMode(t *testi
 	ctx, cancel := context.WithCancel(context.Background())
 	result := make(chan windowsPasswordTestResult, 1)
 	go func() {
-		password, err := readWindowsPassword(ctx, windows.Handle(41), fake.operations())
+		password, err := readWindowsPasswordWithFeedback(ctx, windows.Handle(41), fake.operations(), nil, nil)
 		result <- windowsPasswordTestResult{password: password, err: err}
 	}()
 	// 待ちへ入ってから取り消す。ここで確かめたいのは「待っている reader を
@@ -118,7 +118,7 @@ func TestWindowsPasswordReaderEditsUnicodeAndBoundsInput(t *testing.T) {
 			fake := newFakeWindowsPasswordOperations()
 			fake.events = append(fake.events, test.events...)
 			close(fake.inputReady)
-			password, err := readWindowsPassword(context.Background(), windows.Handle(42), fake.operations())
+			password, err := readWindowsPasswordWithFeedback(context.Background(), windows.Handle(42), fake.operations(), nil, nil)
 			defer zeroBytes(password)
 			if !errors.Is(err, test.wantError) {
 				t.Fatalf("error = %v, want %v", err, test.wantError)
@@ -135,7 +135,7 @@ func TestWindowsPasswordReaderRestoresModeOnEventAndReadFailures(t *testing.T) {
 	createFailure := errors.New("create event failed")
 	fake := newFakeWindowsPasswordOperations()
 	fake.createEventError = createFailure
-	password, err := readWindowsPassword(context.Background(), windows.Handle(43), fake.operations())
+	password, err := readWindowsPasswordWithFeedback(context.Background(), windows.Handle(43), fake.operations(), nil, nil)
 	if password != nil || !errors.Is(err, createFailure) {
 		t.Fatalf("create event failure = %v, %v", password, err)
 	}
@@ -145,7 +145,7 @@ func TestWindowsPasswordReaderRestoresModeOnEventAndReadFailures(t *testing.T) {
 	fake = newFakeWindowsPasswordOperations()
 	fake.readError = readFailure
 	close(fake.inputReady)
-	password, err = readWindowsPassword(context.Background(), windows.Handle(44), fake.operations())
+	password, err = readWindowsPasswordWithFeedback(context.Background(), windows.Handle(44), fake.operations(), nil, nil)
 	if password != nil || !errors.Is(err, readFailure) {
 		t.Fatalf("read failure = %v, %v", password, err)
 	}
@@ -154,7 +154,7 @@ func TestWindowsPasswordReaderRestoresModeOnEventAndReadFailures(t *testing.T) {
 	waitFailure := errors.New("wait failed")
 	fake = newFakeWindowsPasswordOperations()
 	fake.waitError = waitFailure
-	password, err = readWindowsPassword(context.Background(), windows.Handle(48), fake.operations())
+	password, err = readWindowsPasswordWithFeedback(context.Background(), windows.Handle(48), fake.operations(), nil, nil)
 	if password != nil || !errors.Is(err, waitFailure) {
 		t.Fatalf("wait failure = %v, %v", password, err)
 	}
@@ -167,7 +167,7 @@ func TestWindowsPasswordReaderRestoreFailurePreservesCancellationAndZeroesResult
 	fake.events = windowsTextEvents([]uint16{0x03})
 	fake.restoreError = restoreFailure
 	close(fake.inputReady)
-	password, err := readWindowsPassword(context.Background(), windows.Handle(47), fake.operations())
+	password, err := readWindowsPasswordWithFeedback(context.Background(), windows.Handle(47), fake.operations(), nil, nil)
 	if password != nil || !errors.Is(err, context.Canceled) || !errors.Is(err, restoreFailure) {
 		t.Fatalf("restore plus cancel = %v, %v", password, err)
 	}
@@ -197,7 +197,7 @@ func TestWindowsPasswordReaderAlreadyCanceledDoesNotTouchConsole(t *testing.T) {
 	fake := newFakeWindowsPasswordOperations()
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	password, err := readWindowsPassword(ctx, windows.Handle(45), fake.operations())
+	password, err := readWindowsPasswordWithFeedback(ctx, windows.Handle(45), fake.operations(), nil, nil)
 	if password != nil || !errors.Is(err, context.Canceled) || fake.getModeCalls != 0 || len(fake.setModes) != 0 {
 		t.Fatalf("pre-cancel = %v, %v, get=%d set=%v", password, err, fake.getModeCalls, fake.setModes)
 	}
@@ -207,7 +207,7 @@ func TestWindowsPasswordReaderModeSetupFailuresDoNotStartAWaiter(t *testing.T) {
 	getFailure := errors.New("get mode failed")
 	fake := newFakeWindowsPasswordOperations()
 	fake.getModeError = getFailure
-	password, err := readWindowsPassword(context.Background(), windows.Handle(49), fake.operations())
+	password, err := readWindowsPasswordWithFeedback(context.Background(), windows.Handle(49), fake.operations(), nil, nil)
 	if password != nil || !errors.Is(err, getFailure) || fake.getModeCalls != 1 || len(fake.setModes) != 0 {
 		t.Fatalf("get mode failure = %v, %v, get=%d set=%v", password, err, fake.getModeCalls, fake.setModes)
 	}
@@ -215,7 +215,7 @@ func TestWindowsPasswordReaderModeSetupFailuresDoNotStartAWaiter(t *testing.T) {
 	rawFailure := errors.New("set raw mode failed")
 	fake = newFakeWindowsPasswordOperations()
 	fake.rawModeError = rawFailure
-	password, err = readWindowsPassword(context.Background(), windows.Handle(50), fake.operations())
+	password, err = readWindowsPasswordWithFeedback(context.Background(), windows.Handle(50), fake.operations(), nil, nil)
 	if password != nil || !errors.Is(err, rawFailure) || fake.getModeCalls != 1 || len(fake.setModes) != 1 {
 		t.Fatalf("set raw failure = %v, %v, get=%d set=%v", password, err, fake.getModeCalls, fake.setModes)
 	}
@@ -228,7 +228,7 @@ func TestWindowsPasswordReaderReadCancelRaceReturnsAndRestoresMode(t *testing.T)
 		ctx, cancel := context.WithCancel(context.Background())
 		result := make(chan windowsPasswordTestResult, 1)
 		go func() {
-			password, err := readWindowsPassword(ctx, windows.Handle(46), fake.operations())
+			password, err := readWindowsPasswordWithFeedback(ctx, windows.Handle(46), fake.operations(), nil, nil)
 			result <- windowsPasswordTestResult{password: password, err: err}
 		}()
 		<-fake.modeChanged

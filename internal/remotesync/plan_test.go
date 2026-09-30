@@ -388,10 +388,10 @@ func TestPlanNeedsNothingStorageDoesNotAlreadyHave(t *testing.T) {
 // 押したユーザーは、その中身を見たことすら無いかもしれない。
 func TestARemovalCarriedByAPullKeepsACopy(t *testing.T) {
 	base := remotesync.Manifest{Files: []remotesync.Entry{
-		{Path: "config", SHA256: "aaa"},
-		{Path: "connections/old.conf", SHA256: "bbb"},
+		{Path: "config", SHA256: "aaa", Mode: "0600"},
+		{Path: "connections/old.conf", SHA256: "bbb", Mode: "0600"},
 	}}
-	remote := remotesync.Manifest{Files: []remotesync.Entry{{Path: "config", SHA256: "aaa"}}}
+	remote := remotesync.Manifest{Files: []remotesync.Entry{{Path: "config", SHA256: "aaa", Mode: "0600"}}}
 	local := map[string]string{"config": "aaa", "connections/old.conf": "bbb"}
 
 	request, conflicts, err := remotesync.PlanForTest("/root", &base, local, remote, map[string][]byte{}, remotesync.ResolveNone)
@@ -403,6 +403,24 @@ func TestARemovalCarriedByAPullKeepsACopy(t *testing.T) {
 	}
 	if !request.Removals[0].Backup {
 		t.Fatal("the removal keeps no copy; History would have nothing to restore")
+	}
+}
+
+// 検証を通らずに届いた manifest の mode を、0600 と見なして計画しない。
+// 黙って補うと、manifest の不具合が鍵の権限の食い違いとして隠れる。
+func TestAManifestEntryWithoutModeIsRefusedInsteadOfAssumed0600(t *testing.T) {
+	withMode := remotesync.Manifest{Files: []remotesync.Entry{{Path: "config", SHA256: "aaa", Mode: "0600"}}}
+	withoutMode := remotesync.Manifest{Files: []remotesync.Entry{{Path: "config", SHA256: "aaa"}}}
+	local := map[string]string{"config": "aaa"}
+
+	for name, manifests := range map[string]struct{ base, remote remotesync.Manifest }{
+		"base":   {base: withoutMode, remote: withMode},
+		"remote": {base: withMode, remote: withoutMode},
+	} {
+		_, _, err := remotesync.PlanForTest(root, &manifests.base, local, manifests.remote, map[string][]byte{}, remotesync.ResolveNone)
+		if !errors.Is(err, remotesync.ErrUnsafeMode) {
+			t.Errorf("%s without mode: err = %v, want ErrUnsafeMode", name, err)
+		}
 	}
 }
 

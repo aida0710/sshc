@@ -19,7 +19,7 @@ func PlanForTest(root string, base *Manifest, local map[string]string, remote Ma
 func PlanWithIgnoreForTest(root string, base *Manifest, local map[string]string, remote Manifest, contents map[string][]byte, resolve Resolution, ignored func(string) bool) (storage.Request, []Conflict, error) {
 	entries := make(map[string]LocalEntry, len(local))
 	for path, digest := range local {
-		entries[path] = entryState(digest, "0600")
+		entries[path] = LocalEntry{SHA256: digest, Mode: "0600"}
 	}
 	return PlanEntriesWithIgnore(root, base, entries, remote, contents, resolve, ignored)
 }

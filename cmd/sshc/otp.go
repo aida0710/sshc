@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"net/http"
 	"net/url"
 	"sort"
@@ -21,17 +20,16 @@ type otpListEntry struct {
 }
 
 func runOTP(ctx context.Context, called otpInvocation, environment commandEnvironment) int {
-	stateDir, client, stdin, stdout, stderr, terminal :=
-		environment.stateDir, environment.client, environment.stdin, environment.stdout, environment.stderr, environment.terminal
+	stdin, stdout, stderr, terminal := environment.stdin, environment.stdout, environment.stderr, environment.terminal
 	if err := ctx.Err(); err != nil {
 		return finishOTPFailure(called.JSON, err, stdout, stderr)
 	}
 	if (called.Action == otpAdd || called.Action == otpEdit) &&
 		(stdin == nil || terminal == nil || !terminal.IsTerminal(int(stdin.Fd()))) {
 		fmt.Fprintln(stderr, "sshc: TOTP setup keys require an interactive terminal")
-		return 1
+		return exitFailure
 	}
-	engine, err := openEngineAPI(ctx, stateDir, client)
+	engine, err := openEngineAPI(ctx, environment.stateDir, environment.client)
 	if err != nil {
 		return finishOTPFailure(called.JSON, err, stdout, stderr)
 	}
@@ -41,105 +39,141 @@ func runOTP(ctx context.Context, called otpInvocation, environment commandEnviro
 	if err != nil {
 		return finishOTPFailure(called.JSON, err, stdout, stderr)
 	}
+	run := otpRun{called: called, environment: environment, engine: engine, listed: listed}
 	switch called.Action {
 	case otpList:
-		if called.JSON {
-			return writeOTPJSON(stdout, listed)
-		}
-		if len(listed) == 0 {
-			fmt.Fprintln(stdout, "No TOTP credentials are stored.")
-			return 0
-		}
-		for _, entry := range listed {
-			hosts := "not assigned"
-			if len(entry.Hosts) > 0 {
-				hosts = strings.Join(entry.Hosts, ", ")
-			}
-			fmt.Fprintf(stdout, "%s\t%s\n", safeTerminalCell(entry.Name), safeTerminalCell(hosts))
-		}
-		return 0
+		return run.list()
 	case otpShow:
-		if !hasOTP(listed, called.Name) {
-			return finishOTPFailure(called.JSON, engineProblem{Status: http.StatusNotFound, Code: "unknown_credential"}, stdout, stderr)
-		}
-		codes, err := generateOTPCodes(ctx, engine, called.Name)
-		if err != nil {
-			return finishOTPFailure(called.JSON, err, stdout, stderr)
-		}
-		if called.JSON {
-			return writeOTPJSON(stdout, codes)
-		}
-		fmt.Fprintf(stdout, "previous  %s\ncurrent   %s  (%ds remaining)\nnext      %s\n",
-			codes.Previous, codes.Current, codes.RemainingSeconds, codes.Next)
-		return 0
+		return run.show(ctx)
 	case otpAdd, otpEdit:
-		exists := hasOTP(listed, called.Name)
-		if called.Action == otpAdd && exists {
-			fmt.Fprintln(stderr, "sshc: a TOTP credential with that name already exists; use `sshc otp edit`")
-			return 1
-		}
-		if called.Action == otpEdit && !exists {
-			fmt.Fprintln(stderr, "sshc: no TOTP credential has that name; use `sshc otp add`")
-			return 1
-		}
-		setup, err := promptMaskedPassword(ctx, stdin, stderr, terminal, "TOTP setup key or otpauth URI: ")
-		defer zeroBytes(setup)
-		if err != nil {
-			if errors.Is(ctx.Err(), context.Canceled) {
-				return 130
-			}
-			fmt.Fprintln(stderr, "sshc: could not read the TOTP setup key")
-			return 1
-		}
-		payload, err := json.Marshal(api.StoreCredentialRequest{Secret: string(setup)})
-		if err != nil {
-			fmt.Fprintln(stderr, "sshc: could not encode the TOTP setup key safely")
-			return 1
-		}
-		zeroBytes(setup)
-		var updated api.CredentialList
-		path := "/api/v1/credentials/totp/" + url.PathEscape(called.Name)
-		if err := engine.sendSecretJSON(ctx, http.MethodPut, path, payload, &updated); err != nil {
-			return finishOTPFailure(false, err, stdout, stderr)
-		}
-		verb := "added"
-		if called.Action == otpEdit {
-			verb = "updated"
-		}
-		fmt.Fprintf(stdout, "TOTP %s: %s\n", verb, safeTerminalCell(called.Name))
-		return 0
+		return run.save(ctx)
 	case otpRemove:
-		entry, found := findOTP(listed, called.Name)
-		if !found {
-			fmt.Fprintln(stderr, "sshc: no TOTP credential has that name")
-			return 1
-		}
-		if len(entry.Hosts) > 0 {
-			fmt.Fprintf(stderr, "sshc: TOTP is still assigned to: %s\n", safeTerminalCell(strings.Join(entry.Hosts, ", ")))
-			fmt.Fprintln(stderr, "sshc: remove those assignments from Connections before deleting it")
-			return 1
-		}
-		confirmed, exit := confirmAction(ctx, called.Yes,
-			fmt.Sprintf("Remove saved TOTP %q? [y/N] ", safeTerminalCell(called.Name)),
-			systemActionConfirmer, stderr)
-		if exit != 0 {
-			return exit
-		}
-		if !confirmed {
-			fmt.Fprintln(stdout, "No changes made.")
-			return 0
-		}
-		var updated api.CredentialList
-		if err := engine.sendJSON(ctx, http.MethodDelete,
-			"/api/v1/credentials/totp/"+url.PathEscape(called.Name), nil, &updated); err != nil {
-			return finishOTPFailure(false, err, stdout, stderr)
-		}
-		fmt.Fprintf(stdout, "TOTP removed: %s\n", safeTerminalCell(called.Name))
-		return 0
+		return run.remove(ctx)
 	default:
 		fmt.Fprintln(stderr, "sshc: unknown otp action")
-		return 2
+		return exitUsage
 	}
+}
+
+// otpRun は、engine に繋いで保存済みの TOTP を読んだあとの、`sshc otp` の 1 回の実行である。
+type otpRun struct {
+	called      otpInvocation
+	environment commandEnvironment
+	engine      *engineAPI
+	// listed は、engine に保存されている TOTP の一覧である。
+	listed []otpListEntry
+}
+
+// list は、保存済みの TOTP と、それを使う接続を出す。
+func (run otpRun) list() int {
+	stdout, stderr := run.environment.stdout, run.environment.stderr
+	if run.called.JSON {
+		return writeOTPJSON(stdout, stderr, run.listed)
+	}
+	if len(run.listed) == 0 {
+		fmt.Fprintln(stdout, "No TOTP credentials are stored.")
+		return 0
+	}
+	for _, entry := range run.listed {
+		hosts := "not assigned"
+		if len(entry.Hosts) > 0 {
+			hosts = strings.Join(entry.Hosts, ", ")
+		}
+		fmt.Fprintf(stdout, "%s\t%s\n", safeTerminalCell(entry.Name), safeTerminalCell(hosts))
+	}
+	return 0
+}
+
+// show は、前・今・次のコードを出す。
+func (run otpRun) show(ctx context.Context) int {
+	called, stdout, stderr := run.called, run.environment.stdout, run.environment.stderr
+	if !hasOTP(run.listed, called.Name) {
+		return finishOTPFailure(called.JSON, engineProblem{Status: http.StatusNotFound, Code: "unknown_credential"}, stdout, stderr)
+	}
+	codes, err := generateOTPCodes(ctx, run.engine, called.Name)
+	if err != nil {
+		return finishOTPFailure(called.JSON, err, stdout, stderr)
+	}
+	if called.JSON {
+		return writeOTPJSON(stdout, stderr, codes)
+	}
+	fmt.Fprintf(stdout, "previous  %s\ncurrent   %s  (%ds remaining)\nnext      %s\n",
+		codes.Previous, codes.Current, codes.RemainingSeconds, codes.Next)
+	return 0
+}
+
+// save は、画面に出さずに読んだ設定キーを、add なら新しい名前で、edit なら既存の
+// 名前へ保存する。
+func (run otpRun) save(ctx context.Context) int {
+	called, environment := run.called, run.environment
+	stdout, stderr := environment.stdout, environment.stderr
+	exists := hasOTP(run.listed, called.Name)
+	if called.Action == otpAdd && exists {
+		fmt.Fprintln(stderr, "sshc: a TOTP credential with that name already exists; use `sshc otp edit`")
+		return exitFailure
+	}
+	if called.Action == otpEdit && !exists {
+		fmt.Fprintln(stderr, "sshc: no TOTP credential has that name; use `sshc otp add`")
+		return exitFailure
+	}
+	setup, err := promptMaskedPassword(ctx, environment.stdin, stderr, environment.terminal, "TOTP setup key or otpauth URI: ")
+	defer zeroBytes(setup)
+	if err != nil {
+		if errors.Is(ctx.Err(), context.Canceled) {
+			return exitInterrupted
+		}
+		fmt.Fprintln(stderr, "sshc: could not read the TOTP setup key")
+		return exitFailure
+	}
+	payload, err := json.Marshal(api.StoreCredentialRequest{Secret: string(setup)})
+	if err != nil {
+		fmt.Fprintln(stderr, "sshc: could not encode the TOTP setup key safely")
+		return exitFailure
+	}
+	zeroBytes(setup)
+	var updated api.CredentialList
+	path := "/api/v1/credentials/totp/" + url.PathEscape(called.Name)
+	if err := run.engine.sendSecretJSON(ctx, http.MethodPut, path, payload, &updated); err != nil {
+		return finishOTPFailure(false, err, stdout, stderr)
+	}
+	verb := "added"
+	if called.Action == otpEdit {
+		verb = "updated"
+	}
+	fmt.Fprintf(stdout, "TOTP %s: %s\n", verb, safeTerminalCell(called.Name))
+	return 0
+}
+
+// remove は、どの接続にも割り当てられていない TOTP を、確認のあとで消す。
+func (run otpRun) remove(ctx context.Context) int {
+	called, stdout, stderr := run.called, run.environment.stdout, run.environment.stderr
+	entry, found := findOTP(run.listed, called.Name)
+	if !found {
+		fmt.Fprintln(stderr, "sshc: no TOTP credential has that name")
+		return exitFailure
+	}
+	if len(entry.Hosts) > 0 {
+		fmt.Fprintf(stderr, "sshc: TOTP is still assigned to: %s\n", safeTerminalCell(strings.Join(entry.Hosts, ", ")))
+		fmt.Fprintln(stderr, "sshc: remove those assignments from Connections before deleting it")
+		return exitFailure
+	}
+	confirmed, exit := confirmAction(ctx, called.Yes,
+		fmt.Sprintf("Remove saved TOTP %q? [y/N] ", safeTerminalCell(called.Name)),
+		systemActionConfirmer, stderr)
+	if exit != 0 {
+		return exit
+	}
+	if !confirmed {
+		fmt.Fprintln(stdout, "No changes made.")
+		return 0
+	}
+	var updated api.CredentialList
+	if err := run.engine.sendJSON(ctx, http.MethodDelete,
+		"/api/v1/credentials/totp/"+url.PathEscape(called.Name), nil, &updated); err != nil {
+		return finishOTPFailure(false, err, stdout, stderr)
+	}
+	fmt.Fprintf(stdout, "TOTP removed: %s\n", safeTerminalCell(called.Name))
+	return 0
 }
 
 func listOTP(ctx context.Context, engine *engineAPI) ([]otpListEntry, error) {
@@ -187,43 +221,33 @@ func generateOTPCodes(ctx context.Context, engine *engineAPI, name string) (api.
 	return codes, err
 }
 
-func writeOTPJSON(out io.Writer, value any) int {
-	if err := json.NewEncoder(out).Encode(value); err != nil {
-		return 1
+func writeOTPJSON(stdout, stderr io.Writer, result any) int {
+	if err := writeCommandSuccess(stdout, result); err != nil {
+		fmt.Fprintln(stderr, "sshc: could not write JSON result")
+		return exitFailure
 	}
 	return 0
 }
 
 func finishOTPFailure(asJSON bool, err error, stdout, stderr io.Writer) int {
-	exit := 1
-	if errors.Is(err, context.Canceled) {
-		exit = 130
-	}
-	failure := classifyCommandFailure(err)
-	if asJSON {
-		_ = writeCommandEnvelope(stdout, commandEnvelope{
-			SchemaVersion: 1, Success: false, Failure: &failure,
-		})
-		return exit
-	}
-	var problem engineProblem
-	switch {
-	case errors.Is(err, fs.ErrNotExist):
-		fmt.Fprintln(stderr, "sshc: no engine is running; start the desktop app or run sshc engine")
-	case errors.Is(err, errEngineVaultMissing):
-		fmt.Fprintln(stderr, "sshc: no vault exists; run sshc vault create")
-	case errors.Is(err, errEngineVaultLocked):
-		fmt.Fprintln(stderr, "sshc: the vault is locked; run sshc vault unlock")
-	case errors.As(err, &problem) && problem.Code == "unknown_credential":
+	return finishCommandFailure(commandFailureReport{
+		cause: err, failure: classifyCommandFailure(err),
+		asJSON: asJSON, stdout: stdout, stderr: stderr, writeHuman: writeHumanOTPFailure,
+	})
+}
+
+// writeHumanOTPFailure は、OTP 固有の失敗の種別を人向けの文で書く。
+func writeHumanOTPFailure(stderr io.Writer, failure commandFailure) {
+	switch failure.Kind {
+	case "unknown_credential":
 		fmt.Fprintln(stderr, "sshc: no TOTP credential has that name")
-	case errors.As(err, &problem) && problem.Code == "invalid_request":
+	case "invalid_request":
 		fmt.Fprintln(stderr, "sshc: the TOTP name or setup key is invalid")
-	case errors.As(err, &problem) && problem.Code == "credential_in_use":
+	case "credential_in_use":
 		fmt.Fprintln(stderr, "sshc: the TOTP is still assigned to a connection")
-	case errors.Is(err, context.Canceled):
+	case "canceled":
 		fmt.Fprintln(stderr, "sshc: OTP operation was canceled")
 	default:
 		fmt.Fprintln(stderr, "sshc: the running engine could not complete the OTP operation")
 	}
-	return exit
 }

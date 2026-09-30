@@ -4,11 +4,7 @@
 package windowsacl
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
-	"fmt"
-	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -19,11 +15,7 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-const (
-	fullAccess          = windows.ACCESS_MASK(0x001f01ff)
-	tempRandomByteCount = 16
-	tempCollisionLimit  = 128
-)
+const fullAccess = windows.ACCESS_MASK(0x001f01ff)
 
 var (
 	ErrUnexpectedOwner = errors.New("private Windows object has an unexpected owner")
@@ -31,45 +23,6 @@ var (
 	ErrReparsePoint    = errors.New("private Windows object is a reparse point")
 	ErrInvalidACL      = errors.New("private Windows object does not have the required ACL")
 )
-
-// CreateTemp は、CreateFile が返る時点で所有者と保護 DACL が有効な空ファイルを作る。
-// この処理が成功する前に秘密のバイト列は書き込まれない。
-func CreateTemp(directory, prefix string) (*os.File, error) {
-	if err := ValidatePrivatePath(directory); err != nil {
-		return nil, err
-	}
-	return createTempWith(directory, prefix, rand.Reader, createPrivateFile)
-}
-
-func createTempWith(directory, prefix string, random io.Reader, create func(string) (*os.File, bool, error)) (*os.File, error) {
-	if prefix != filepath.Base(prefix) || strings.ContainsRune(prefix, os.PathSeparator) {
-		return nil, os.ErrInvalid
-	}
-	for attempt := 0; attempt < tempCollisionLimit; attempt++ {
-		randomBytes := make([]byte, tempRandomByteCount)
-		if _, err := io.ReadFull(random, randomBytes); err != nil {
-			return nil, err
-		}
-		path := filepath.Join(directory, prefix+hex.EncodeToString(randomBytes))
-		file, created, err := create(path)
-		for index := range randomBytes {
-			randomBytes[index] = 0
-		}
-		if err == nil {
-			return file, nil
-		}
-		if created {
-			if cleanupErr := discardCreatedFile(file); cleanupErr != nil {
-				return nil, errors.Join(err, fmt.Errorf("remove failed private Windows temp: %w", cleanupErr))
-			}
-		}
-		if errors.Is(err, windows.ERROR_FILE_EXISTS) || errors.Is(err, windows.ERROR_ALREADY_EXISTS) {
-			continue
-		}
-		return nil, err
-	}
-	return nil, fmt.Errorf("create private Windows temp: collision limit exceeded")
-}
 
 // OpenOrCreateFile は非公開の空ファイルをアトミックに作成する。既存の場合は、現在の
 // ユーザーが所有する通常ファイルを開き、呼び出し側へ返す同じハンドルで権限を制限する。
@@ -237,21 +190,8 @@ func ensureParents(path string) error {
 	return RestrictDirectory(parent)
 }
 
-// RestrictFile は末尾の reparse point を追わずに最終パスを開き、そのハンドルで
-// ポリシーを適用する。
-func RestrictFile(path string) error {
-	if err := ValidatePrivatePath(path); err != nil {
-		return err
-	}
-	file, err := openObject(path, true, false)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-	return restrictFileHandle(file)
-}
-
-// RestrictDirectory は RestrictFile のディレクトリ版である。
+// RestrictDirectory は末尾の reparse point を追わずにディレクトリを開き、その
+// ハンドルでポリシーを適用する。
 func RestrictDirectory(path string) error {
 	if err := validatePrivateDirectoryPath(path); err != nil {
 		return err

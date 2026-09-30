@@ -51,13 +51,23 @@ type LocalEntry struct {
 	ModeObserved bool
 }
 
-func entryState(digest, mode string) LocalEntry {
-	// Unit-level callers which predate mode-aware planning omit Mode. Production
-	// manifests have already passed snapshot validation and always carry it.
-	if mode == "" {
-		mode = "0600"
+// manifestEntries は、manifest の除外されないファイルを、計画で比べる形にする。
+//
+// 製品の manifest は検証を通ってから届くので、mode は 0600 か 0700 である。
+// それ以外を既定値に置き換えずに断るのは、検証を通らずに届いた manifest を
+// 黙って 0600 として扱うと、その不具合が鍵の権限の食い違いとして隠れるからである。
+func manifestEntries(manifest Manifest, isIgnored func(string) bool) (map[string]LocalEntry, error) {
+	entries := make(map[string]LocalEntry, len(manifest.Files))
+	for _, item := range manifest.Files {
+		if isIgnored(item.Path) {
+			continue
+		}
+		if err := checkMode(item.Mode); err != nil {
+			return nil, err
+		}
+		entries[item.Path] = LocalEntry{SHA256: item.SHA256, Mode: item.Mode}
 	}
-	return LocalEntry{SHA256: digest, Mode: mode}
+	return entries, nil
 }
 
 func synchronizedEqual(left, right LocalEntry) bool {
@@ -76,19 +86,14 @@ func PlanEntriesWithIgnore(root string, base *Manifest, local map[string]LocalEn
 	isIgnored := func(path string) bool { return ignored != nil && ignored(path) }
 	baseEntries := map[string]LocalEntry{}
 	if base != nil {
-		for _, item := range base.Files {
-			if isIgnored(item.Path) {
-				continue
-			}
-			baseEntries[item.Path] = entryState(item.SHA256, item.Mode)
+		var err error
+		if baseEntries, err = manifestEntries(*base, isIgnored); err != nil {
+			return storage.Request{}, nil, err
 		}
 	}
-	remoteEntries := map[string]LocalEntry{}
-	for _, item := range remote.Files {
-		if isIgnored(item.Path) {
-			continue
-		}
-		remoteEntries[item.Path] = entryState(item.SHA256, item.Mode)
+	remoteEntries, err := manifestEntries(remote, isIgnored)
+	if err != nil {
+		return storage.Request{}, nil, err
 	}
 
 	request := storage.Request{Operation: "sync.pull"}
@@ -99,7 +104,7 @@ func PlanEntriesWithIgnore(root string, base *Manifest, local map[string]LocalEn
 			continue
 		}
 		localEntry, present := local[item.Path]
-		remoteEntry := entryState(item.SHA256, item.Mode)
+		remoteEntry := remoteEntries[item.Path]
 		if present && synchronizedEqual(localEntry, remoteEntry) {
 			continue
 		}

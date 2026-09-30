@@ -45,6 +45,21 @@ func TestWindowsCaseAliasesAreTheSamePlace(t *testing.T) {
 	}
 }
 
+// 文中のパスを探すときも、Contains と同じく大小文字と区切り文字を同一視する。
+// 返す長さは text 側の綴りのバイト数である。
+func TestWindowsMatchPrefixFindsCaseAndSeparatorAliases(t *testing.T) {
+	root := `C:\Users\A\.ssh`
+	for _, text := range []string{`c:\users\a\.ssh\config`, `C:/USERS/A/.SSH/config`} {
+		length, ok := MatchPrefix(text, root)
+		if !ok || length != len(`c:\users\a\.ssh`) {
+			t.Errorf("MatchPrefix(%q, %q) = %d, %v, want %d, true", text, root, length, ok, len(`c:\users\a\.ssh`))
+		}
+	}
+	if _, ok := MatchPrefix(`C:\Users\B\.ssh\config`, root); ok {
+		t.Error("a different account matched the root")
+	}
+}
+
 func TestWindowsSeparatesOtherVolumesAndShares(t *testing.T) {
 	for _, test := range []struct{ root, candidate string }{
 		{`C:\Users\A\.ssh`, `D:\Users\A\.ssh\config`},

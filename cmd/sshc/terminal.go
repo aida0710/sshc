@@ -17,18 +17,26 @@ import (
 )
 
 type terminalControlWire struct {
-	Session    api.TerminalSession `json:"session"`
-	Generation uint64              `json:"generation"`
-	State      string              `json:"state"`
-	Cursor     struct {
-		Requested uint64 `json:"requested"`
-		Start     uint64 `json:"start"`
-		Next      uint64 `json:"next"`
-		End       uint64 `json:"end"`
-		Truncated bool   `json:"truncated"`
-	} `json:"cursor"`
-	Output string `json:"output"`
+	Session    api.TerminalSession   `json:"session"`
+	Generation uint64                `json:"generation"`
+	State      string                `json:"state"`
+	Cursor     terminalControlCursor `json:"cursor"`
+	Output     string                `json:"output"`
 }
+
+// terminalControlCursor は、engine が返した出力の範囲である。
+type terminalControlCursor struct {
+	Requested uint64 `json:"requested"`
+	Start     uint64 `json:"start"`
+	Next      uint64 `json:"next"`
+	End       uint64 `json:"end"`
+	Truncated bool   `json:"truncated"`
+}
+
+// maxTerminalSessionIDLength は、engine の応答に載るセッション ID の長さの上限である。
+// engine がパスで受け取る識別子の上限（internal/httpserver の maxSessionIdentifier）と
+// 同じにする。これより長い ID はどの操作にも使えないので、壊れた応答とみなす。
+const maxTerminalSessionIDLength = 64
 
 var (
 	errTerminalSessionNotFound   = errors.New("terminal session was not found")
@@ -37,11 +45,9 @@ var (
 	errTerminalDeliveryFailed    = errors.New("terminal command was not delivered")
 )
 
-func runTerminal(
-	ctx context.Context, called terminalInvocation, stateDir string, client *http.Client,
-	stdout, stderr io.Writer,
-) int {
-	engine, err := openEngineAPI(ctx, stateDir, client)
+func runTerminal(ctx context.Context, called terminalInvocation, environment commandEnvironment) int {
+	stdout, stderr := environment.stdout, environment.stderr
+	engine, err := openEngineAPI(ctx, environment.stateDir, environment.client)
 	if err != nil {
 		return finishTerminalFailure(called.JSON, err, stdout, stderr)
 	}
@@ -52,8 +58,8 @@ func runTerminal(
 		return finishTerminalFailure(called.JSON, err, stdout, stderr)
 	}
 	if called.JSON {
-		if err := writeCommandEnvelope(stdout, commandEnvelope{SchemaVersion: 1, Success: true, Result: result}); err != nil {
-			return 1
+		if err := writeCommandSuccess(stdout, result); err != nil {
+			return exitFailure
 		}
 		return 0
 	}
@@ -125,7 +131,7 @@ func terminalSessions(ctx context.Context, engine *engineAPI) (api.TerminalSessi
 		return api.TerminalSessionList{}, err
 	}
 	for _, session := range listed.Sessions {
-		if session.Id == "" || len(session.Id) > 64 {
+		if session.Id == "" || len(session.Id) > maxTerminalSessionIDLength {
 			return api.TerminalSessionList{}, errEngineInvalidResponse
 		}
 	}
@@ -174,21 +180,24 @@ func readTerminalControl(
 		return terminalControlWire{}, err
 	}
 	if control.Session.Id != id || control.Generation == 0 || !validTerminalWaitState(control.State) ||
-		!validTerminalControlCursor(control.Cursor.Requested, control.Cursor.Start, control.Cursor.Next,
-			control.Cursor.End, control.Cursor.Truncated, cursor, limit) || !plainTerminalOutput(control.Output, limit) {
+		!control.Cursor.validFor(cursor, limit) || !plainTerminalOutput(control.Output, limit) {
 		return terminalControlWire{}, errEngineInvalidResponse
 	}
 	return control, nil
 }
 
-func validTerminalControlCursor(requested, start, next, end uint64, truncated bool, cursor uint64, limit int) bool {
-	if requested != cursor || start > next || next > end || next-start > uint64(limit) {
+// validFor は、この範囲が、cursor から最大 limit バイトを求めた問いへの答えとして
+// 辻褄が合うかを返す。求めた位置より前の出力が消えていれば、Truncated を立てて、
+// 残っている先頭から返すはずである。
+func (reply terminalControlCursor) validFor(cursor uint64, limit int) bool {
+	if reply.Requested != cursor || reply.Start > reply.Next || reply.Next > reply.End ||
+		reply.Next-reply.Start > uint64(limit) {
 		return false
 	}
-	if truncated {
-		return start > cursor
+	if reply.Truncated {
+		return reply.Start > cursor
 	}
-	return start == cursor
+	return reply.Start == cursor
 }
 
 func plainTerminalOutput(output string, limit int) bool {
@@ -241,12 +250,17 @@ func sendTerminalCommand(
 	return response.Results[0], nil
 }
 
+// terminalWaitPollInterval は、terminal wait がセッションの状態を尋ね直す間隔で
+// ある。状態が変わってから気付くまでの遅れがこの間隔以下になり、スクリプトが
+// 次へ進むのを人が待たされたと感じない。
+const terminalWaitPollInterval = 200 * time.Millisecond
+
 func waitForTerminal(
 	ctx context.Context, engine *engineAPI, id, wanted string, timeout time.Duration,
 ) (terminalControlWire, error) {
 	waitContext, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	ticker := time.NewTicker(200 * time.Millisecond)
+	ticker := time.NewTicker(terminalWaitPollInterval)
 	defer ticker.Stop()
 	for {
 		control, err := readTerminalControl(waitContext, engine, id, 0, 0)
@@ -302,25 +316,30 @@ func writeTerminalResult(stdout, stderr io.Writer, called terminalInvocation, re
 }
 
 func finishTerminalFailure(asJSON bool, err error, stdout, stderr io.Writer) int {
-	failure := classifyCommandFailure(err)
+	return finishCommandFailure(commandFailureReport{
+		cause: err, failure: classifyTerminalFailure(err),
+		asJSON: asJSON, stdout: stdout, stderr: stderr, writeHuman: writeHumanTerminalFailure,
+	})
+}
+
+// classifyTerminalFailure は、ターミナルの操作に固有の失敗を種別に分け、ほかは共通の分け方に任せる。
+func classifyTerminalFailure(err error) commandFailure {
 	switch {
 	case errors.Is(err, errTerminalSessionNotFound):
-		failure = commandFailure{Kind: "terminal_session_not_found", Retryable: false}
+		return commandFailure{Kind: "terminal_session_not_found", Retryable: false}
 	case errors.Is(err, errTerminalSelectorAmbiguous):
-		failure = commandFailure{Kind: "terminal_session_ambiguous", Retryable: false}
+		return commandFailure{Kind: "terminal_session_ambiguous", Retryable: false}
 	case errors.Is(err, errTerminalWaitTimeout):
-		failure = commandFailure{Kind: "terminal_wait_timeout", Retryable: true}
+		return commandFailure{Kind: "terminal_wait_timeout", Retryable: true}
 	case errors.Is(err, errTerminalDeliveryFailed):
-		failure = commandFailure{Kind: "terminal_command_delivery_failed", Retryable: true}
+		return commandFailure{Kind: "terminal_command_delivery_failed", Retryable: true}
+	default:
+		return classifyCommandFailure(err)
 	}
-	exit := 1
-	if errors.Is(err, context.Canceled) {
-		exit = 130
-	}
-	if asJSON {
-		_ = writeCommandEnvelope(stdout, commandEnvelope{SchemaVersion: 1, Success: false, Failure: &failure})
-		return exit
-	}
+}
+
+// writeHumanTerminalFailure は、ターミナルの操作に固有の失敗の種別を人向けの文で書く。
+func writeHumanTerminalFailure(stderr io.Writer, failure commandFailure) {
 	switch failure.Kind {
 	case "terminal_session_not_found":
 		fmt.Fprintln(stderr, "sshc: no terminal matches that session ID")
@@ -330,12 +349,7 @@ func finishTerminalFailure(asJSON bool, err error, stdout, stderr io.Writer) int
 		fmt.Fprintln(stderr, "sshc: terminal wait timed out")
 	case "terminal_command_delivery_failed", "terminal_command_target_unavailable", "terminal_command_target_changed":
 		fmt.Fprintln(stderr, "sshc: the terminal changed or exited before the command could be delivered")
-	case "vault_locked":
-		fmt.Fprintln(stderr, "sshc: the vault is locked; run sshc vault unlock")
-	case "engine_not_running":
-		fmt.Fprintln(stderr, "sshc: no engine is running; start the desktop app or run sshc engine")
 	default:
 		fmt.Fprintf(stderr, "sshc: terminal operation failed (%s)\n", failure.Kind)
 	}
-	return exit
 }

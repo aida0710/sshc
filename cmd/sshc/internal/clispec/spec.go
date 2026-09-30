@@ -3,6 +3,12 @@
 // from this package; semantic flag parsing remains beside each command handler.
 package clispec
 
+import (
+	"fmt"
+
+	sftpcore "sshc/internal/sftp"
+)
+
 type Command struct {
 	Name    string
 	Route   string
@@ -71,29 +77,7 @@ Print the resolved SSH target without connecting.
 		{Name: "rename", Help: "usage:\n  sshc terminal rename <session-id> <title> [--json]\n\nSet the title of a terminal owned by the running engine.\n"},
 		{Name: "close", Help: "usage:\n  sshc terminal close <session-id> [--json]\n\nClose a terminal owned by the running engine.\n"},
 	}},
-	{Name: "sftp", Route: "sftp", Help: `usage:
-  sshc sftp get <alias> <remote-path> <local-path> [options]
-  sshc sftp put <alias> <local-path> <remote-path> [options]
-  sshc sftp settings [split-options]
-
-Transfer files through the running engine and its SSH/Vault configuration.
-Remote paths must be absolute POSIX paths.
-
-Options:
-  -r, --recursive   copy directories recursively
-  --overwrite       replace existing destination files after confirmation
-  --skip-existing   leave existing destination files unchanged
-  --dry-run         inspect the transfer plan without changing files
-  -j, --jobs <n>    transfer up to 1..8 files in parallel (default 1)
-  --split-size <MiB> split files at 16..1024 MiB (engine default 100)
-  --split-jobs <n>  use 1..128 streams per large file (engine default 4; 1 disables)
-  --chunk-size <MiB> split range size from 8..4096 MiB (engine default 32)
-  --max-depth <n>    recursive get depth limit (default 64; maximum 256)
-  --max-entries <n>  recursive get item limit (default 10000; maximum 1000000)
-  --max-total-size <MiB> recursive get total size limit (default 1024; maximum 8388608)
-  --json            print one machine-readable result on stdout
-  -y, --yes         skip the --overwrite confirmation
-`, Actions: []Action{
+	{Name: "sftp", Route: "sftp", Help: sftpHelp(), Actions: []Action{
 		{Name: "get", Help: "usage:\n  sshc sftp get <alias> <remote-path> <local-path> [options]\n\nDownload a file or, with --recursive, a directory. Existing files require\n--overwrite and confirmation, or --skip-existing.\n"},
 		{Name: "put", Help: "usage:\n  sshc sftp put <alias> <local-path> <remote-path> [options]\n\nUpload a file or, with --recursive, a directory. Existing files require\n--overwrite and confirmation, or --skip-existing.\n"},
 		{Name: "settings", Help: "usage:\n  sshc sftp settings [--split-size <MiB>] [--split-jobs <n>] [--chunk-size <MiB>] [--json]\n\nShow the engine-wide split-transfer defaults. Supplied values are persisted and\nused by Web and CLI transfers; get/put flags still override one invocation.\n"},
@@ -256,4 +240,40 @@ const GlobalHelp = `usage:
   sshc help [<command> ...]
                        print all commands or help for one command
 
+An option that takes a value accepts both --name value and --name=value.
+A short name such as -j accepts only -j value. Giving an option twice is an error.
+
 `
+
+// sftpHelp は、分割転送の範囲と既定値を engine の定数から書く。engine の値を変えたときに
+// ヘルプだけが古い値のまま残らないようにするためである。
+func sftpHelp() string {
+	return fmt.Sprintf(`usage:
+  sshc sftp get <alias> <remote-path> <local-path> [options]
+  sshc sftp put <alias> <local-path> <remote-path> [options]
+  sshc sftp settings [split-options]
+
+Transfer files through the running engine and its SSH/Vault configuration.
+Remote paths must be absolute POSIX paths.
+
+Options:
+  -r, --recursive   copy directories recursively
+  --overwrite       replace existing destination files after confirmation
+  --skip-existing   leave existing destination files unchanged
+  --dry-run         inspect the transfer plan without changing files
+  -j, --jobs <n>    transfer up to 1..%d files in parallel (default 1)
+  --split-size <MiB> split files at %d..%d MiB (engine default %d)
+  --split-jobs <n>  use 1..%d streams per large file (engine default %d; 1 disables)
+  --chunk-size <MiB> split range size from %d..%d MiB (engine default %d)
+  --max-depth <n>    recursive get depth limit (default 64; maximum 256)
+  --max-entries <n>  recursive get item limit (default 10000; maximum 1000000)
+  --max-total-size <MiB> recursive get total size limit (default 1024; maximum 8388608)
+  --json            print one machine-readable result on stdout
+  -y, --yes         skip the --overwrite confirmation
+`,
+		sftpcore.MaxTransferConcurrency,
+		sftpcore.MinLargeFileThreshold>>20, sftpcore.MaxLargeFileThreshold>>20, sftpcore.DefaultLargeFileThreshold>>20,
+		sftpcore.MaxLargeFileParallelism, sftpcore.DefaultLargeFileParallelism,
+		sftpcore.MinLargeFileChunkBytes>>20, sftpcore.MaxLargeFileChunkBytes>>20, sftpcore.DefaultLargeFileChunkBytes>>20,
+	)
+}

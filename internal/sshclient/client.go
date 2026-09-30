@@ -180,9 +180,9 @@ func (d Dialer) start(remote *ssh.Session, target Target, size terminal.Size, se
 		// raw mode. Let the server keep its native PTY speeds and only request the
 		// interactive echo behaviour the browser terminal expects.
 		modes := ssh.TerminalModes{ssh.ECHO: 1}
-		session.trace.say(Detailed, "PTYを要求します：%d列 × %d行（TERM=%s）。", size.Cols, size.Rows, TermName)
+		session.trace.say(Detailed, "PTYを要求します：%d列 × %d行（TERM=%s）。", size.Cols, size.Rows, terminal.DefaultTerminalType)
 		started := session.trace.now()
-		if err := remote.RequestPty(TermName, int(size.Rows), int(size.Cols), modes); err != nil {
+		if err := remote.RequestPty(terminal.DefaultTerminalType, int(size.Rows), int(size.Cols), modes); err != nil {
 			session.trace.say(Detailed, "PTY要求が失敗しました（%s）：%v", connectionlog.Elapsed(session.trace.since(started)), err)
 			return err
 		}

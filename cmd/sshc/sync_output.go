@@ -139,18 +139,11 @@ func syncChangeCounts(changes []syncChange) map[syncChangeKind]int {
 	return counts
 }
 
+// writeHumanSyncFailure は、sync 固有の失敗の種別を人向けの文で書く。
 func writeHumanSyncFailure(stderr io.Writer, failure commandFailure) {
 	switch failure.Kind {
 	case "canceled":
 		fmt.Fprintln(stderr, "sshc: sync was canceled")
-	case "engine_not_running":
-		fmt.Fprintln(stderr, "sshc: no engine is running; start the desktop app or run sshc engine in another terminal")
-	case "engine_incompatible", "engine_mismatch":
-		fmt.Fprintln(stderr, "sshc: the CLI and running engine are incompatible; update whichever is older and restart it")
-	case "vault_missing":
-		fmt.Fprintln(stderr, "sshc: no vault exists; run sshc vault create")
-	case "vault_locked":
-		fmt.Fprintln(stderr, "sshc: the vault is locked; run sshc vault unlock")
 	case "interactive_terminal_required":
 		fmt.Fprintln(stderr, "sshc: sync setup requires interactive terminal input and prompt output")
 	case "invalid_setup_input":

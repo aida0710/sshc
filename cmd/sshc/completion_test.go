@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"sshc/cmd/sshc/internal/clispec"
 )
 
 func TestCompletionScriptsReadCurrentSSHAliases(t *testing.T) {
@@ -30,6 +32,22 @@ func TestCompletionScriptsReadCurrentSSHAliases(t *testing.T) {
 	}
 }
 
+// 補完のスクリプトは利用者のシェルの設定へそのまま入るので、中のコメントも CLI の
+// 出力として英語で書く。
+func TestCompletionScriptsAreWrittenInEnglish(t *testing.T) {
+	for _, shell := range []string{"bash", "zsh", "fish"} {
+		var output bytes.Buffer
+		if err := writeCompletion(&output, shell); err != nil {
+			t.Fatal(err)
+		}
+		for number, line := range strings.Split(output.String(), "\n") {
+			if containsJapanese(line) {
+				t.Errorf("%s completion line %d is not English: %q", shell, number+1, line)
+			}
+		}
+	}
+}
+
 func TestCompletionRejectsAnUnsupportedShell(t *testing.T) {
 	if err := writeCompletion(&bytes.Buffer{}, "powershell"); err == nil {
 		t.Fatal("unsupported shell was accepted")
@@ -40,11 +58,6 @@ func TestEveryShellCompletesThePublishedCommandTree(t *testing.T) {
 	grammar := cliCompletionGrammar
 	required := []string{
 		strings.Join(grammar.topLevel, " "),
-		strings.Join(grammar.syncActions, " "),
-		strings.Join(grammar.terminalActions, " "),
-		strings.Join(grammar.vaultActions, " "),
-		strings.Join(grammar.serviceActions, " "),
-		strings.Join(grammar.otpActions, " "),
 		strings.Join(grammar.encodings, " "),
 		strings.Join(grammar.waitStates, " "),
 	}
@@ -66,29 +79,92 @@ func TestEveryShellCompletesThePublishedCommandTree(t *testing.T) {
 	}
 }
 
-func TestCompletionGrammarOnlyPublishesValidHelpTopics(t *testing.T) {
+// specActions は clispec に書いたアクションを、補完の一覧と同じ並びで返す。
+// 補完の側（cliActions）ではなく定義の側から数えるので、補完に届かないアクションを見落とさない。
+func specActions() map[string][]string {
+	actions := map[string][]string{}
+	for _, command := range clispec.Commands {
+		for _, action := range command.Actions {
+			actions[command.Name] = append(actions[command.Name], action.Name)
+		}
+	}
+	return actions
+}
+
+func TestCompletionOffersEveryPublishedActionAndOnlyValidHelpTopics(t *testing.T) {
 	grammar := cliCompletionGrammar
 	for _, topic := range grammar.helpTopics {
 		if !validHelpTopic(topic) {
 			t.Errorf("completion publishes unknown help topic %q", topic)
 		}
 	}
-	for parent, actions := range map[string][]string{
-		"sync": grammar.syncActions, "terminal": grammar.terminalActions,
-		"sftp":    grammar.sftpActions,
-		"service": grammar.serviceActions, "vault": grammar.vaultActions,
-		"otp": grammar.otpActions,
-	} {
+	for command, actions := range specActions() {
 		for _, action := range actions {
-			topic := parent + " " + action
-			if !validHelpTopic(topic) {
-				t.Errorf("completion publishes unknown help topic %q", topic)
+			if !containsCompletion(cliActions[command], action) {
+				t.Errorf("completion does not offer %q %q", command, action)
+			}
+		}
+	}
+	for command, actions := range cliActions {
+		for _, action := range actions {
+			if !validHelpTopic(command+" "+action) || !validCLIAction(command, action) {
+				t.Errorf("completion publishes unknown action %q %q", command, action)
 			}
 		}
 	}
 }
 
-func TestBashCompletionUsesLiveAliasesAndNestedValues(t *testing.T) {
+func TestZshAndFishCompleteEveryActionAfterItsCommandAndAfterHelp(t *testing.T) {
+	for command := range specActions() {
+		actions := strings.Join(cliActions[command], " ")
+		for shell, fragments := range map[string][]string{
+			"zsh": {
+				"_sshc_values '" + actions + " ",
+				command + ") _sshc_values '" + actions + "' ;;",
+			},
+			"fish": {
+				"-n '__sshc_prefix " + command + "' -a '" + actions,
+				"-n '__sshc_prefix help " + command + "' -a '" + actions + "'",
+			},
+		} {
+			var output bytes.Buffer
+			if err := writeCompletion(&output, shell); err != nil {
+				t.Fatal(err)
+			}
+			for _, fragment := range fragments {
+				if !strings.Contains(output.String(), fragment) {
+					t.Errorf("%s completion for %q lacks %q", shell, command, fragment)
+				}
+			}
+		}
+	}
+}
+
+func TestBashCompletesEveryActionAfterItsCommandAndAfterHelp(t *testing.T) {
+	completion := newBashCompletionFixture(t)
+	for command, actions := range specActions() {
+		afterCommand := completion.candidates(t, "sshc", command, "")
+		afterHelp := completion.candidates(t, "sshc", "help", command, "")
+		for _, action := range actions {
+			if !containsCompletion(afterCommand, action) {
+				t.Errorf("sshc %s <Tab> = %q; want %q", command, afterCommand, action)
+			}
+			if !containsCompletion(afterHelp, action) {
+				t.Errorf("sshc help %s <Tab> = %q; want %q", command, afterHelp, action)
+			}
+		}
+	}
+}
+
+// bashCompletionFixture は、補完の雛形と、alias を固定で返す偽の sshc を一時ディレクトリに置く。
+type bashCompletionFixture struct {
+	bash           string
+	completionPath string
+	directory      string
+}
+
+func newBashCompletionFixture(t *testing.T) bashCompletionFixture {
+	t.Helper()
 	bash, err := exec.LookPath("bash")
 	if err != nil {
 		t.Skip("bash is not installed")
@@ -103,7 +179,30 @@ func TestBashCompletionUsesLiveAliasesAndNestedValues(t *testing.T) {
 	if err := os.WriteFile(fakePath, []byte(fake), 0o700); err != nil {
 		t.Fatal(err)
 	}
+	return bashCompletionFixture{bash: bash, completionPath: completionPath, directory: directory}
+}
 
+func (fixture bashCompletionFixture) candidates(t *testing.T, words ...string) []string {
+	t.Helper()
+	arguments := append([]string{"-c", `source "$COMPLETION"
+COMP_WORDS=("$@")
+COMP_CWORD=$((${#COMP_WORDS[@]} - 1))
+_sshc_completion
+printf '%s\n' "${COMPREPLY[@]}"`, "completion-test"}, words...)
+	command := exec.Command(fixture.bash, arguments...)
+	command.Env = append(os.Environ(),
+		"COMPLETION="+fixture.completionPath,
+		"PATH="+fixture.directory+string(os.PathListSeparator)+os.Getenv("PATH"),
+	)
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("completion failed: %v\n%s", err, output)
+	}
+	return strings.Fields(string(output))
+}
+
+func TestBashCompletionUsesLiveAliasesAndNestedValues(t *testing.T) {
+	completion := newBashCompletionFixture(t)
 	tests := []struct {
 		name  string
 		words []string
@@ -121,24 +220,15 @@ func TestBashCompletionUsesLiveAliasesAndNestedValues(t *testing.T) {
 		{name: "sftp alias", words: []string{"sshc", "sftp", "get", "b"}, want: "beta-prod"},
 		{name: "sftp settings option", words: []string{"sshc", "sftp", "settings", "--split"}, want: "--split-size"},
 		{name: "encoding", words: []string{"sshc", "serial", "/dev/ttyUSB0", "--encoding", "shift"}, want: "shift_jis"},
+		{name: "vpn list json", words: []string{"sshc", "vpn", "--j"}, want: "--json"},
+		{name: "vpn bind alias", words: []string{"sshc", "vpn", "bind", "b"}, want: "beta-prod"},
+		{name: "vpn unbind alias", words: []string{"sshc", "vpn", "unbind", "a"}, want: "alpha"},
+		{name: "vpn remove yes", words: []string{"sshc", "vpn", "remove", "office", "--y"}, want: "--yes"},
+		{name: "vpn up json", words: []string{"sshc", "vpn", "up", "office", "--j"}, want: "--json"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			arguments := append([]string{"-c", `source "$COMPLETION"
-COMP_WORDS=("$@")
-COMP_CWORD=$((${#COMP_WORDS[@]} - 1))
-_sshc_completion
-printf '%s\n' "${COMPREPLY[@]}"`, "completion-test"}, test.words...)
-			command := exec.Command(bash, arguments...)
-			command.Env = append(os.Environ(),
-				"COMPLETION="+completionPath,
-				"PATH="+directory+string(os.PathListSeparator)+os.Getenv("PATH"),
-			)
-			output, err := command.CombinedOutput()
-			if err != nil {
-				t.Fatalf("completion failed: %v\n%s", err, output)
-			}
-			if candidates := strings.Fields(string(output)); !containsCompletion(candidates, test.want) {
+			if candidates := completion.candidates(t, test.words...); !containsCompletion(candidates, test.want) {
 				t.Fatalf("completion = %q; want %q", candidates, test.want)
 			}
 		})
