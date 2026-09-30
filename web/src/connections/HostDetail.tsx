@@ -16,7 +16,7 @@ import { ConnectionBasicForm } from "./ConnectionBasicForm";
 import { ConnectionChecks } from "./ConnectionChecks";
 import type { ConnectionSavedState } from "./connectionSavedState";
 import { NoticeList, SavePreviewPanel } from "./SavePreview";
-import { identityKey } from "./connectionBrowser";
+import { draftResetKey } from "./draftResetKey";
 import { HostInspector } from "./HostInspector";
 import { useReportDirty } from "./useReportDirty";
 import { activateTabFromKeyboard } from "../ui/tabKeyboard";
@@ -45,7 +45,6 @@ type HostDetailPanelProps = {
   onDirtyChange?: ((dirty: boolean) => void) | undefined;
   // onDiscardReady は、すべてのタブの下書きを破棄する関数を受け取る。
   onDiscardReady?: ((discard: (() => void) | null) => void) | undefined;
-  onRequestRefresh?: (() => Promise<void>) | undefined;
   disabled?: boolean | undefined;
   savedRevision?: number | undefined;
   // vpnProfiles は、この接続を通せるVPNプロファイルである。
@@ -80,7 +79,6 @@ export function HostDetailPanel({
   onPreferredKeyApplied,
   onDirtyChange,
   onDiscardReady,
-  onRequestRefresh,
   disabled = false,
   savedRevision = 0,
   vpnProfiles = [],
@@ -96,7 +94,7 @@ export function HostDetailPanel({
   const advancedArea = panel === "Advanced" ? (controlledAdvanced ?? lastAdvanced) : lastAdvanced;
   const dirty = basicDirty || advancedDirty || sshcDirty;
   const identity = detail.form.entry.identity;
-  const resetKey = `${identityKey(identity)}\u0000${detail.file.contents}\u0000${savedRevision}`;
+  const resetKey = `${draftResetKey(identity, detail.file.contents)}\u0000${savedRevision}`;
 
   useEffect(() => {
     if (panel === "Advanced") setLastAdvanced(advancedArea);
@@ -105,13 +103,11 @@ export function HostDetailPanel({
   useEffect(() => {
     if (controlledPanel === undefined) setLocalPanel("Basic");
     setLastAdvanced("Jump");
-    setBasicDirty(false);
-    setAdvancedDirty(false);
-    // Runs only when the host or file revision behind resetKey changes; the
-    // controlled panel prop is read, not watched, so a parent toggling it
-    // does not wipe the dirty marks. The sshc mark is left alone: HostInspector
-    // starts its draft over only when the saved metadata changes, and reports
-    // the mark itself, so an unrelated reload keeps the draft and its mark.
+    // Runs only when the host, file revision or saved revision behind resetKey
+    // changes; the controlled panel prop is read, not watched, so a parent
+    // toggling it does not move the tabs. The dirty marks are not touched here:
+    // each tab starts its own draft over on its own condition and reports the
+    // mark itself (useReportDirty), so a mark never disagrees with its draft.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resetKey]);
 
@@ -197,7 +193,6 @@ export function HostDetailPanel({
               onPreferredKeyApplied={onPreferredKeyApplied}
               onDirtyChange={setBasicDirty}
               onDiscardReady={discardReceivers.Basic}
-              onRequestRefresh={onRequestRefresh}
               disabled={disabled || advancedDirty || sshcDirty}
             />
           </div>

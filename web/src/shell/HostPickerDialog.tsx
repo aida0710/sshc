@@ -1,16 +1,17 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import type { HostEntry } from "../api/config";
 import { recentConnectionsApi, type RecentConnection } from "../api/recentConnections";
-import { useTranslate } from "../i18n/context";
+import { useLanguage } from "../i18n/context";
 import { hostMatchesQuery, normalizeHostQuery } from "../connections/hostSearch";
 import { Icon } from "../ui/icons";
+import { formatDateTime } from "../ui/format";
 import { ModalShell } from "../ui/ModalShell";
 import { activateTabFromKeyboard } from "../ui/tabKeyboard";
 
 type HostChoice = { alias: string; group: string; hostName: string; user: string };
 
 // A LocalChoice is pinned above the SSH hosts. SFTP offers the engine's own
-// file system; the console list offers local shells, one per profile.
+// file system; the session list offers local shells, one per profile.
 // `current` marks the choice the pane already shows.
 export type LocalChoice = { id: string; label: string; detail: string; current?: boolean };
 
@@ -37,7 +38,7 @@ function hostChoices(aliases: string[], hosts: HostEntry[]): HostChoice[] {
 }
 
 // HostPickerDialog is the one place a connection is chosen from: search,
-// recently used hosts and the declared groups. SFTP and the console list
+// recently used hosts and the declared groups. SFTP and the session list
 // share it so both destinations look and behave the same.
 export function HostPickerDialog({
   open,
@@ -66,7 +67,7 @@ export function HostPickerDialog({
   onChooseLocal?: (id: string) => void;
   onClose: () => void;
 }) {
-  const t = useTranslate();
+  const { t, locale } = useLanguage();
   const [query, setQuery] = useState("");
   const [view, setView] = useState<"recent" | "groups">("groups");
   const [recent, setRecent] = useState<RecentConnection[]>([]);
@@ -128,30 +129,80 @@ export function HostPickerDialog({
   });
 
   return (
-    <ModalShell open={open} labelledBy="host-picker-heading" onDismiss={close} closeOnOutside initialFocusRef={initialFocus === "close" ? closeButton : search} {...(returnFocusRef === undefined ? {} : { returnFocusRef })} placement="palette" panelClassName="flex max-h-[76vh] w-full max-w-xl flex-col overflow-hidden rounded-xl">
+    <ModalShell
+      open={open}
+      labelledBy="host-picker-heading"
+      onDismiss={close}
+      closeOnOutside
+      initialFocusRef={initialFocus === "close" ? closeButton : search}
+      {...(returnFocusRef === undefined ? {} : { returnFocusRef })}
+      placement="palette"
+      panelClassName="flex max-h-[76vh] w-full max-w-xl flex-col overflow-hidden rounded-xl"
+    >
       <div className="border-b border-line p-3">
         <div className="mb-3 flex items-center justify-between gap-3">
           <h2 id="host-picker-heading" className="font-semibold">{heading}</h2>
-          <button ref={closeButton} type="button" aria-label={t("sftp.closeHostPicker")} onClick={close} className="flex size-8 items-center justify-center rounded text-ink-muted hover:bg-select-fill"><Icon name="close" className="size-4" /></button>
+          <button
+            ref={closeButton}
+            type="button"
+            aria-label={t("sftp.closeHostPicker")}
+            onClick={close}
+            className="flex size-8 items-center justify-center rounded text-ink-muted hover:bg-select-fill"
+          >
+            <Icon name="close" className="size-4" />
+          </button>
         </div>
         <label className="relative block">
           <span className="sr-only">{t("sftp.searchHosts")}</span>
           <Icon name="search" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-muted" />
-          <input ref={search} type="search" aria-label={t("sftp.searchHosts")} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("sftp.searchHostsPlaceholder")} className="w-full rounded-md border border-control-line bg-control py-2 pl-9 pr-3 text-sm" />
+          <input
+            ref={search}
+            type="search"
+            aria-label={t("sftp.searchHosts")}
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={t("sftp.searchHostsPlaceholder")}
+            className="w-full rounded-md border border-control-line bg-control py-2 pl-9 pr-3 text-sm"
+          />
         </label>
-        {normalized === "" ? <div className="mt-3 flex gap-1 rounded-md bg-toolbar p-1" role="tablist" aria-label={t("sftp.hostViews")}>
-          <button type="button" role="tab" aria-selected={view === "recent"} tabIndex={view === "recent" ? 0 : -1} disabled={recentChoices.length === 0} onClick={() => setView("recent")} onKeyDown={(event) => activateTabFromKeyboard(event, 0, views, setView)} className={`grow rounded px-3 py-1.5 text-sm disabled:text-ink-faint ${view === "recent" ? "bg-card shadow-sm" : "text-ink-muted"}`}>{t("sftp.recentHosts")}</button>
-          <button type="button" role="tab" aria-selected={view === "groups"} tabIndex={view === "groups" ? 0 : -1} onClick={() => setView("groups")} onKeyDown={(event) => activateTabFromKeyboard(event, views.length - 1, views, setView)} className={`grow rounded px-3 py-1.5 text-sm ${view === "groups" ? "bg-card shadow-sm" : "text-ink-muted"}`}>{t("sftp.hostGroups")}</button>
-        </div> : null}
+        {normalized === "" ? (
+          <div className="mt-3 flex gap-1 rounded-md bg-toolbar p-1" role="tablist" aria-label={t("sftp.hostViews")}>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={view === "recent"}
+              tabIndex={view === "recent" ? 0 : -1}
+              disabled={recentChoices.length === 0}
+              onClick={() => setView("recent")}
+              onKeyDown={(event) => activateTabFromKeyboard(event, 0, views, setView)}
+              className={`grow rounded px-3 py-1.5 text-sm disabled:text-ink-faint ${view === "recent" ? "bg-card shadow-sm" : "text-ink-muted"}`}
+            >
+              {t("sftp.recentHosts")}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={view === "groups"}
+              tabIndex={view === "groups" ? 0 : -1}
+              onClick={() => setView("groups")}
+              onKeyDown={(event) => activateTabFromKeyboard(event, views.length - 1, views, setView)}
+              className={`grow rounded px-3 py-1.5 text-sm ${view === "groups" ? "bg-card shadow-sm" : "text-ink-muted"}`}
+            >
+              {t("sftp.hostGroups")}
+            </button>
+          </div>
+        ) : null}
       </div>
       <div className="min-h-0 overflow-y-auto p-2">
         {localMatches.length > 0 ? <div className="mb-2 border-b border-line pb-2">{localMatches.map(localRow)}</div> : null}
         {normalized !== "" ? (
-          matches.length === 0 && localMatches.length === 0 ? <p className="p-4 text-center text-sm text-ink-muted">{t("sftp.noHostMatches")}</p> : matches.map((host) => hostRow(host, host.group || host.hostName))
+          matches.length === 0 && localMatches.length === 0 ? (
+            <p className="p-4 text-center text-sm text-ink-muted">{t("sftp.noHostMatches")}</p>
+          ) : matches.map((host) => hostRow(host, host.group || host.hostName))
         ) : view === "recent" && recentChoices.length > 0 ? (
           <section aria-labelledby="host-picker-recent-heading">
             <h3 id="host-picker-recent-heading" className="px-3 py-2 text-xs font-medium uppercase tracking-wide text-ink-muted">{t("sftp.recentHosts")}</h3>
-            {recentChoices.map((host) => hostRow(host, t("sftp.lastConnected", { at: new Date(host.lastConnectedAt).toLocaleString() })))}
+            {recentChoices.map((host) => hostRow(host, t("connection.lastConnected", { at: formatDateTime(host.lastConnectedAt, locale) })))}
           </section>
         ) : (
           [...grouped.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([group, groupHosts]) => (

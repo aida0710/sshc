@@ -9,10 +9,18 @@ import {
   tableHeadRow,
 } from "../ui/form";
 import { useTranslate } from "../i18n/context";
+import {
+  complexityShowsDetail,
+  describeAuthentication,
+  describeComplexity,
+  describeReachability,
+  reachabilityNoticeKey,
+} from "./diagnosticLabels";
 import { Button, Card, Notice } from "../ui/surface";
 import { PageHeader } from "../ui/page";
 import { Icon } from "../ui/icons";
 import { useAsyncOperation } from "../ui/useAsyncOperation";
+import { useRequestGeneration } from "../ui/useRequestGeneration";
 
 const mobileTouchTargets = "[&_button]:min-h-10 md:[&_button]:min-h-0";
 
@@ -33,6 +41,10 @@ export function DiagnosticsPanel({ api = diagnosticsApi, host, hosts = [] }: Dia
   const [auth, setAuth] = useState<AuthenticationResponse | null>(null);
   const check = useAsyncOperation();
   const { fail: reportFailure, clearError } = check;
+  // The alias can change while a check runs (typed, or a new fixed host), and a
+  // result does not name the alias it is for. A check whose alias has changed
+  // since it started is dropped instead of answering for the new alias.
+  const checkRequests = useRequestGeneration();
 
   useEffect(() => {
     if (embedded) return;
@@ -51,14 +63,21 @@ export function DiagnosticsPanel({ api = diagnosticsApi, host, hosts = [] }: Dia
   }, [api, embedded, t, reportFailure]);
 
   useEffect(() => {
+    checkRequests.retire();
     setEffective(null);
     setReach(null);
     setAuth(null);
     clearError();
-  }, [alias, clearError]);
+  }, [alias, checkRequests, clearError]);
 
   function run<T>(operation: () => Promise<T>, apply: (value: T) => void, failure: string) {
-    return check.run(operation, { apply, describe: () => failure });
+    const isCurrent = checkRequests.begin();
+    return check.run(operation, {
+      apply: (value) => {
+        if (isCurrent()) apply(value);
+      },
+      describe: () => (isCurrent() ? failure : ""),
+    });
   }
 
   const directives = effective?.executableDirectives ?? [];
@@ -283,10 +302,10 @@ export function DiagnosticsPanel({ api = diagnosticsApi, host, hosts = [] }: Dia
           <ul className="mt-2 flex flex-col gap-1">
             {effective.complexities.map((note, index) => (
               <li key={`${note.code}-${note.path}-${note.line}-${index}`}>
-                <span className="text-ink">{note.code}</span>
+                <span className="text-ink">{describeComplexity(t, note.code)}</span>
                 <span className="ml-2 text-ink-muted">{`${note.path}:${note.line}`}</span>
                 {note.condition === "" ? null : <span className="ml-2 text-ink-faint">{t("diag.inside", { condition: note.condition })}</span>}
-                {note.detail === "" ? null : <p className="text-ink-muted">{note.detail}</p>}
+                {note.detail === "" || !complexityShowsDetail(note.code) ? null : <p className="font-mono text-xs text-ink-muted">{note.detail}</p>}
               </li>
             ))}
           </ul>
@@ -301,8 +320,8 @@ export function DiagnosticsPanel({ api = diagnosticsApi, host, hosts = [] }: Dia
               <span className="h-2 w-2 rounded-full bg-live" />
             </div>
             <p className="font-mono text-xs text-ink">{reach.address}</p>
-            <p className="font-medium text-ink">{reach.outcome}</p>
-            <p className={hintText}>{reach.notice}</p>
+            <p className="font-medium text-ink">{describeReachability(t, reach.outcome)}</p>
+            <p className={hintText}>{t(reachabilityNoticeKey(reach.outcome))}</p>
           </section>
         ) : null}
 
@@ -312,7 +331,7 @@ export function DiagnosticsPanel({ api = diagnosticsApi, host, hosts = [] }: Dia
               <h3 className={sectionHeading}>{t("diag.authentication")}</h3>
               <span className={`h-2 w-2 rounded-full ${auth.authenticated ? "bg-live" : "bg-notice-ink"}`} />
             </div>
-            <p className="font-medium text-ink">{auth.outcome}</p>
+            <p className="font-medium text-ink">{describeAuthentication(t, auth.outcome)}</p>
             {auth.method ? (
               <p className={hintText}>{t("diag.authenticationMethod", { method: auth.method })}</p>
             ) : null}

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { apiClient } from "../api/client";
+import { apiClient, whenLocked } from "../api/client";
 import { keysApi, PURGE_ACTION_KIND, REVEAL_ACTION_KIND, selectablePrivateKeys, type KeyItem } from "./api";
 import { sentJson } from "../testing/requests";
 
@@ -19,6 +19,7 @@ beforeEach(() => {
 
 afterEach(() => {
   apiClient.clear();
+  whenLocked(null);
   vi.unstubAllGlobals();
 });
 
@@ -100,6 +101,42 @@ describe("keysApi", () => {
   it("still throws when a restore fails for any other reason", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ code: "not_found", message: "x" }, 404)));
     await expect(keysApi.restore("entry-1")).rejects.toThrow();
+  });
+
+  it("hands a restore refused by a locked vault to the lock screen with its code", async () => {
+    const locked = vi.fn();
+    whenLocked(locked);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ code: "vault_locked", message: "x" }, 423)));
+
+    await expect(keysApi.restore("entry-1")).rejects.toMatchObject({ code: "vault_locked" });
+    expect(locked).toHaveBeenCalledTimes(1);
+  });
+
+  it("reads the blockers out of a refused relocation", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({
+      id: "key-one",
+      relativePath: "id_work",
+      group: "",
+      files: [],
+      references: [],
+      skipped: [],
+      notes: [],
+      blockers: ["target_exists:keys/id_work"],
+      transactionId: "",
+    }, 409)));
+
+    const result = await keysApi.relocate("key-one", { newName: "id_work" });
+    expect(result.blockers).toEqual(["target_exists:keys/id_work"]);
+  });
+
+  it("keeps the code of a relocation refused because the file changed underneath it", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ code: "external_change", message: "x" }, 409)));
+
+    await expect(keysApi.relocate("key-one", { newName: "id_work" })).rejects.toMatchObject({
+      code: "external_change",
+      status: 409,
+      problem: { code: "external_change" },
+    });
   });
 
   it("rejects an inventory payload that does not match the contract", async () => {

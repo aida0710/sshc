@@ -1,5 +1,5 @@
 import type { components } from "./schema";
-import { clearSessionCSRF, storeSessionCSRF } from "../session/bootstrap";
+import { clearSessionCSRF } from "../session/bootstrap";
 import { validateAPIRequest, validateAPIResponse, validateOpenAPISchema } from "./validators.generated";
 import { isWorkspaceRefusal } from "./workspaceRefusals";
 
@@ -16,6 +16,14 @@ export type RequestFailureDiagnostic = Readonly<{
 
 type RequestFailureOptions = Readonly<{
   locallyHandledCodes?: readonly string[];
+}>;
+
+export type MutationOptions = RequestFailureOptions & Readonly<{
+  // The status under which the endpoint answers a refusal with its declared
+  // response body (the blockers of a key relocation or restore) instead of a
+  // Problem. That body is returned like a success; a Problem under the same
+  // status still fails as an ApiError.
+  refusalStatus?: number;
 }>;
 
 export class ApiError extends Error {
@@ -109,6 +117,10 @@ function notifyResponseFailure(
   });
 }
 
+async function isDeclaredRefusal(response: Response, options: MutationOptions): Promise<boolean> {
+  return response.status === options.refusalStatus && (await readProblem(response.clone())) === null;
+}
+
 async function failure(
   response: Response,
   method: string,
@@ -133,16 +145,6 @@ function validateHealth(value: unknown): HealthResponse {
 }
 
 let csrfToken: string | null = null;
-let renewal: Readonly<{ token: string; attempt: symbol; promise: Promise<boolean> }> | null = null;
-
-function validCSRF(value: unknown): value is { csrfToken: string } {
-  try {
-    validateOpenAPISchema<components["schemas"]["BootstrapResponse"]>("BootstrapResponse", value);
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 function apiPath(path: string): string {
   return new URL(path, window.location.origin).pathname;
@@ -165,46 +167,12 @@ function validateJSONRequest(method: string, path: string, init: RequestInit): v
   validateAPIRequest(method, apiPath(path), payload);
 }
 
-function endSession(expectedToken?: string) {
-  if (expectedToken !== undefined && csrfToken !== expectedToken) return;
+function endSession(rejectedToken: string) {
+  // A token installed after this request left belongs to a newer session.
+  if (csrfToken !== rejectedToken) return;
   csrfToken = null;
   clearSessionCSRF();
   onSessionEnded?.();
-}
-
-async function renewCSRF(expectedToken: string): Promise<boolean> {
-  if (csrfToken !== expectedToken) return csrfToken !== null;
-  if (renewal?.token === expectedToken) return renewal.promise;
-  const attempt = Symbol("csrf-renewal");
-  const promise = (async () => {
-    try {
-      const response = await fetch("/api/v1/session/renew", {
-        method: "POST",
-        credentials: "same-origin",
-        headers: { "X-SSHC-CSRF": expectedToken },
-      });
-      if (csrfToken !== expectedToken) return csrfToken !== null;
-      if (!response.ok) {
-        endSession(expectedToken);
-        return false;
-      }
-      const payload = await validatedJSON<unknown>(response, "POST", "/api/v1/session/renew");
-      if (!validCSRF(payload)) {
-        endSession(expectedToken);
-        return false;
-      }
-      csrfToken = payload.csrfToken;
-      storeSessionCSRF(payload.csrfToken);
-      return true;
-    } catch {
-      endSession(expectedToken);
-      return false;
-    } finally {
-      if (renewal?.attempt === attempt) renewal = null;
-    }
-  })();
-  renewal = { token: expectedToken, attempt, promise };
-  return promise;
 }
 
 async function sessionFailureCode(response: Response): Promise<string> {
@@ -212,36 +180,19 @@ async function sessionFailureCode(response: Response): Promise<string> {
   return (await readProblem(response.clone()))?.code ?? "";
 }
 
-async function requestWithSession(
-  path: string,
-  init: RequestInit,
-  token: string,
-  mayRenew = true,
-): Promise<Response> {
+async function requestWithSession(path: string, init: RequestInit, token: string): Promise<Response> {
   const headers = new Headers(init.headers);
   headers.set("X-SSHC-CSRF", token);
   const response = await fetch(path, { ...init, credentials: "same-origin", headers });
   const code = await sessionFailureCode(response);
-  if (response.status === 401 && (code === "session_required" || code === "invalid_session")) {
-    const fresh = csrfToken;
-    if (mayRenew && fresh !== null && fresh !== token) return requestWithSession(path, init, fresh, false);
-    endSession(token);
-    return response;
-  }
-  if (response.status !== 403 || code !== "invalid_csrf") return response;
-  if (!mayRenew) {
-    endSession(token);
-    return response;
-  }
-
-  // A concurrent request may already have replaced the token after this request left.
-  // In that case retry with that token instead of rotating it again.
-  if (csrfToken === token && !(await renewCSRF(token))) return response;
-  const fresh = csrfToken;
-  if (fresh === null) return response;
-  // The security middleware rejects invalid_csrf before dispatching the handler, so
-  // retrying a mutation here cannot repeat an operation that already ran.
-  return requestWithSession(path, init, fresh, false);
+  const sessionMissing = response.status === 401 && (code === "session_required" || code === "invalid_session");
+  // The engine renews a token only after verifying it (POST /api/v1/session/renew
+  // checks X-SSHC-CSRF like any other request), so a rejected token cannot be
+  // exchanged for a new one. Reloading the page recovers through the registered
+  // browser token instead.
+  const tokenRejected = response.status === 403 && code === "invalid_csrf";
+  if (sessionMissing || tokenRejected) endSession(token);
+  return response;
 }
 
 export const apiClient = {
@@ -250,7 +201,6 @@ export const apiClient = {
   },
   clear() {
     csrfToken = null;
-    renewal = null;
     clearSessionCSRF();
   },
   async health(): Promise<HealthResponse> {
@@ -267,6 +217,11 @@ export const apiClient = {
     return validateHealth(await response.json());
   },
   async read(path: string, options: RequestFailureOptions = {}): Promise<unknown> {
+    return validatedJSON<unknown>(await this.readResponse(path, options), "GET", path);
+  },
+  // readResponse is read for a body that is not JSON (a file preview): the
+  // caller reads the body and its headers, and a failure is the same ApiError.
+  async readResponse(path: string, options: RequestFailureOptions = {}): Promise<Response> {
     if (!csrfToken) throw new Error("csrf_unavailable");
     let response: Response;
     try {
@@ -276,7 +231,7 @@ export const apiClient = {
       throw error;
     }
     if (!response.ok) throw await failure(response, "GET", path, options);
-    return validatedJSON<unknown>(response, "GET", path);
+    return response;
   },
   async send(path: string, init: RequestInit, options: RequestFailureOptions = {}): Promise<Response> {
     const target = new URL(path, window.location.origin);
@@ -302,10 +257,10 @@ export const apiClient = {
     }
     return response;
   },
-  async mutate<T>(path: string, init: RequestInit, options: RequestFailureOptions = {}): Promise<T> {
+  async mutate<T>(path: string, init: RequestInit, options: MutationOptions = {}): Promise<T> {
     const method = init.method ?? "POST";
     const response = await this.send(path, init, options);
-    if (!response.ok) throw await failure(response, method, path, options);
+    if (!response.ok && !(await isDeclaredRefusal(response, options))) throw await failure(response, method, path, options);
     if (response.status === 204) {
       return validateAPIResponse<T>(method, apiPath(path), response.status, undefined);
     }

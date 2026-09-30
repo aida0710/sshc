@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { DisclosureSummary } from "../ui/DisclosureSummary";
 import { toProblem } from "../api/guards";
 import type { Problem } from "../api/client";
-import { configApi, type GroupMetadata, type Metadata, type Overview, type SavePreview } from "../api/config";
+import { configApi, type EditRequest, type GroupMetadata, type Metadata, type Overview, type SavePreview } from "../api/config";
 import { NoticeList, SavePreviewPanel } from "../connections/SavePreview";
 import { formatDirectiveValues, parseDirectiveValues } from "../rules/rules";
 import {
@@ -19,6 +19,9 @@ import type { InspectorContent } from "../ui/Inspector";
 import { GroupInspector } from "./GroupInspector";
 import { MetricCard, MetricGrid, PageHeader } from "../ui/page";
 import { PanelState } from "../ui/PanelState";
+import { DiscardDraftDialog } from "../ui/DiscardDraftDialog";
+import type { NavigateLocationOptions, NavigationBlocker } from "../routing/useSectionRoute";
+import { useDraftDiscardConfirmation } from "../routing/useDraftDiscardConfirmation";
 
 
 function depthOf(name: string): number {
@@ -55,9 +58,11 @@ import { isValidGroupName } from "../rules/rules";
 
 type GroupsPanelProps = {
   onInspector?: (content: InspectorContent) => void;
+  onNavigationBlockerChange?: ((blocker: NavigationBlocker | null) => void) | undefined;
+  onNavigateLocation?: ((url: string, options?: NavigateLocationOptions) => void) | undefined;
 };
 
-export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
+export function GroupsPanel({ onInspector, onNavigationBlockerChange, onNavigateLocation }: GroupsPanelProps = {}) {
   const t = useTranslate();
   const [overview, setOverview] = useState<Overview | null>(null);
   const [metadata, setMetadata] = useState<Metadata | null>(null);
@@ -117,6 +122,15 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected, metadata, overview, onInspector]);
 
+  // グループを選び直しても下書きは残るが、画面を離れる・リロードすると消える。
+  const unsaved = overview !== null && metadata !== null && JSON.stringify(metadata) !== JSON.stringify(overview.metadata);
+  const draftDiscard = useDraftDiscardConfirmation({
+    dirty: unsaved,
+    discard: () => setMetadata(overview?.metadata ?? null),
+    onNavigationBlockerChange,
+    onNavigateLocation,
+  });
+
   if (overview === null || metadata === null) {
     return problem === null ? (
       <PanelState tone="loading" title={t("groups.loading")} />
@@ -134,7 +148,6 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
     ["group_not_declared", "group_directory_missing"].includes(notice.code),
   );
   const savedGroups = new Set((overview.metadata.groups ?? []).map((group) => group.name));
-  const unsaved = JSON.stringify(loaded) !== JSON.stringify(overview.metadata);
 
   function membersOf(name: string): string[] {
     return hosts.filter((host) => host.group === name).map((host) => host.identity.alias);
@@ -237,13 +250,19 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
   }
 
   async function run(action: "preview" | "save") {
+    // 読み込んだときのグループの設定を base に送る。ほかで変わっていればサーバーが断る。
+    const request: EditRequest = {
+      kind: "groups",
+      groupsBase: savedMetadata.groups ?? [],
+      groups: loaded.groups ?? [],
+    };
     try {
       if (action === "preview") {
-        setPreview(await configApi.preview({ kind: "groups", metadata: loaded }));
+        setPreview(await configApi.preview(request));
         setProblem(null);
         return;
       }
-      const result = await configApi.save({ kind: "groups", metadata: loaded });
+      const result = await configApi.save(request);
       setPreview(result.preview);
       setProblem(null);
       await reload();
@@ -525,6 +544,9 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
       )}
 
       <SavePreviewPanel preview={preview} conflict={problem?.conflict ?? null} problem={problem} />
+      {draftDiscard.confirming ? (
+        <DiscardDraftDialog id="groups-draft-discard-heading" onConfirm={draftDiscard.confirmDiscard} onCancel={draftDiscard.keepEditing} />
+      ) : null}
     </div>
   );
 }

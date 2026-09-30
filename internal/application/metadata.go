@@ -624,28 +624,62 @@ func ClearHostNote(metadata Metadata, identity HostIdentity) Metadata {
 	return cleared
 }
 
+// hostMetadataIndex は、識別子 identity の entry の位置を返す。無ければ -1 を返す。
+//
+// 同じ識別子の entry が 2 つ以上ある metadata.json では先頭を使う。画面へ返す値
+// （HostDetail）と、保存のときに画面の写しと比べる値（applyHostMetadataEdit）が
+// 別の entry を見ると、何度読み直しても写しが古いと判断して保存を断り続けるので、
+// entry を選ぶところはすべてこの関数を通す。
+func hostMetadataIndex(hosts []HostMetadata, identity HostIdentity) int {
+	for index, host := range hosts {
+		if host.Identity == identity {
+			return index
+		}
+	}
+	return -1
+}
+
+// RelocateHostIdentities は、fromPath の entry をすべて toPath へ付け直す。toPath に
+// 同じ別名の entry が残っていれば（多くは接続先が消えた orphan）捨てる。残すと同じ
+// 識別子の entry が 2 つになる。
 func RelocateHostIdentities(metadata Metadata, fromPath, toPath string) Metadata {
+	moving := map[string]bool{}
+	for _, host := range metadata.Hosts {
+		if host.Identity.Path == fromPath {
+			moving[host.Identity.Alias] = true
+		}
+	}
 	relocated := metadata
-	relocated.Hosts = append([]HostMetadata(nil), metadata.Hosts...)
-	for index := range relocated.Hosts {
-		if relocated.Hosts[index].Identity.Path != fromPath {
+	relocated.Hosts = make([]HostMetadata, 0, len(metadata.Hosts))
+	for _, host := range metadata.Hosts {
+		switch {
+		case host.Identity.Path == fromPath:
+			host.Identity.Path = toPath
+			host.Orphan = false
+		case host.Identity.Path == toPath && moving[host.Identity.Alias]:
 			continue
 		}
-		relocated.Hosts[index].Identity.Path = toPath
-		relocated.Hosts[index].Orphan = false
+		relocated.Hosts = append(relocated.Hosts, host)
 	}
 	return relocated
 }
 
+// RenameHostIdentity は、from の entry を to へ付け直す。to に entry が残っていれば
+// （多くは接続先が消えた orphan）捨てる。残すと同じ識別子の entry が 2 つになる。
+// from に entry が無ければ何も付け直さないので、to の entry もそのまま残す。
 func RenameHostIdentity(metadata Metadata, from, to HostIdentity) Metadata {
+	moving := hostMetadataIndex(metadata.Hosts, from) >= 0
 	renamed := metadata
-	renamed.Hosts = append([]HostMetadata(nil), metadata.Hosts...)
-	for index := range renamed.Hosts {
-		if renamed.Hosts[index].Identity != from {
+	renamed.Hosts = make([]HostMetadata, 0, len(metadata.Hosts))
+	for _, host := range metadata.Hosts {
+		switch {
+		case host.Identity == from:
+			host.Identity = to
+			host.Orphan = false
+		case moving && host.Identity == to:
 			continue
 		}
-		renamed.Hosts[index].Identity = to
-		renamed.Hosts[index].Orphan = false
+		renamed.Hosts = append(renamed.Hosts, host)
 	}
 	return renamed
 }

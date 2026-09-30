@@ -1,9 +1,10 @@
 import type { SyncStatus } from "../api/sync";
-import { useTranslate } from "../i18n/context";
-import type { MessageKey } from "../i18n/messages";
+import { useLanguage } from "../i18n/context";
 import { CheckboxField, hintText, sectionHeading } from "../ui/form";
 import { Button, Card, Notice } from "../ui/surface";
+import { describeLastSync } from "./describeLastSync";
 import { SyncErrorNotice } from "./SyncErrorNotice";
+import { syncAutoHintKeys, syncDirectionLabelKeys, syncNowLabelKeys } from "./syncMessageKeys";
 import { syncRefusals } from "./syncRefusals";
 
 // Where the configured sync stands: last run, the automatic sync switch and
@@ -29,29 +30,22 @@ export function SyncOverviewCard({
   onPreview: () => void;
   onForcePush: () => void;
 }) {
-  const t = useTranslate();
+  const { locale, t } = useLanguage();
   return (
     <Card as="section" radius="md">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line bg-toolbar px-4 py-3">
         <div>
           <h3 className={sectionHeading}>{t("sync.overviewHeading")}</h3>
-          <p className={`mt-1 ${hintText}`}>
-            {status.synced
-              ? t("sync.lastSynced", {
-                  at: status.lastSyncedAt ?? "",
-                  count: status.fileCount ?? 0,
-                })
-              : t("sync.neverSynced")}
-          </p>
+          <p className={`mt-1 ${hintText}`}>{describeLastSync(t, status, locale)}</p>
         </div>
         <span className="rounded-full bg-select-fill px-2 py-1 text-xs font-medium text-accent">
-          {t(`sync.direction.${status.direction}`)}
+          {t(syncDirectionLabelKeys[status.direction])}
         </span>
       </header>
       <div className="flex flex-col gap-4 p-4">
         <CheckboxField
             label={t("sync.autoEnable")}
-            hint={t(`sync.autoHint.${status.direction}` as MessageKey)}
+            hint={t(syncAutoHintKeys[status.direction])}
             checked={status.auto.enabled}
             disabled={busy || !status.keyConfigured}
             onChange={onToggleAuto}
@@ -103,7 +97,7 @@ export function SyncOverviewCard({
             {t(
               remoteHeadBlocked
                 ? "sync.remoteHeadReview"
-                : (`sync.autoNow.${status.direction}` as MessageKey),
+                : syncNowLabelKeys[status.direction],
             )}
           </Button>
           {status.direction === "push" || remoteHeadBlocked ? null : (

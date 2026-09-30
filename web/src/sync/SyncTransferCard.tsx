@@ -1,6 +1,5 @@
 import type { SyncPushDraft, SyncStatus } from "../api/sync";
 import { useTranslate } from "../i18n/context";
-import type { MessageKey } from "../i18n/messages";
 import { control, hintText, sectionHeading } from "../ui/form";
 import { Button, Card } from "../ui/surface";
 
@@ -31,7 +30,7 @@ export function SyncTransferCard({ status, busy, pushDraft, pushMessage, onMessa
         {t("sync.transferHeading")}
       </h3>
       <p className="text-sm leading-6 text-ink-muted">
-        {t(`sync.transferHint.${status.direction}` as MessageKey)}
+        {t(status.direction === "push" ? "sync.transferHint.push" : "sync.transferHint.both")}
       </p>
       <div className="flex flex-col gap-1 border-t border-line pt-3 text-sm text-ink">
         <label htmlFor="sync-commit-message" className="font-medium">

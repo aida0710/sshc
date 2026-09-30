@@ -26,7 +26,7 @@ afterEach(() => {
 });
 
 describe("useTerminalSessions", () => {
-  it("separates the session limit from a console that could not be opened", async () => {
+  it("separates the session limit from a session that could not be opened", async () => {
     const openTerminalSession = vi
       .fn()
       .mockRejectedValueOnce(
@@ -92,6 +92,80 @@ describe("useTerminalSessions", () => {
       await secondOpen;
     });
     expect(result.current.busy).toBe(false);
+  });
+
+  it("keeps an opened session listed when a close answered before the session existed", async () => {
+    const existing = {
+      id: "old", kind: "shell", title: "bash", startedAt: "2026-09-30T00:00:00Z", state: "connected", problem: "",
+    } as const;
+    const opened = {
+      id: "new", kind: "shell", title: "zsh", startedAt: "2026-09-30T00:00:01Z", state: "connected", problem: "",
+    } as const;
+    const pendingRead = new Promise(() => undefined);
+    const terminalSessions = vi.fn()
+      .mockResolvedValueOnce({ sessions: [existing], maxSessions: 50 })
+      .mockReturnValue(pendingRead);
+    let create: (value: unknown) => void = () => undefined;
+    const openTerminalSession = vi.fn(() => new Promise((resolve) => { create = resolve; }));
+    let answerClose: (value: unknown) => void = () => undefined;
+    const closeTerminalSession = vi.fn(() => new Promise((resolve) => { answerClose = resolve; }));
+    const client = api({ terminalSessions, openTerminalSession, closeTerminalSession } as never);
+    const { result } = renderHook(() => useTerminalSessions(client, translate));
+    await waitFor(() => expect(result.current.sessions).toEqual([existing]));
+
+    act(() => {
+      void result.current.open({ kind: "shell" });
+      void result.current.close("old");
+    });
+    await waitFor(() => expect(closeTerminalSession).toHaveBeenCalledTimes(1));
+    await act(async () => { create({ session: opened, streamTicket: "ticket" }); });
+    expect(result.current.sessions).toEqual([existing, opened]);
+
+    // The engine listed the sessions for this close before it created the new one.
+    await act(async () => { answerClose({ sessions: [], maxSessions: 50 }); });
+
+    expect(result.current.sessions.map((session) => session.id)).toContain("new");
+  });
+
+  it("hands back an opened session, already listed, while the list is still being read again", async () => {
+    const opened = {
+      id: "new", kind: "shell", title: "zsh", startedAt: "2026-09-30T00:00:00Z", state: "connected", problem: "",
+    } as const;
+    const terminalSessions = vi.fn()
+      .mockResolvedValueOnce(list)
+      .mockReturnValue(new Promise(() => undefined));
+    const openTerminalSession = vi.fn().mockResolvedValue({ session: opened, streamTicket: "ticket" });
+    const client = api({ terminalSessions, openTerminalSession });
+    const { result } = renderHook(() => useTerminalSessions(client, translate));
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+
+    let handedBack: unknown = null;
+    act(() => {
+      void result.current.open({ kind: "shell" }).then((session) => { handedBack = session; });
+    });
+
+    await waitFor(() => expect(handedBack).toEqual(opened));
+    expect(result.current.sessions).toEqual([opened]);
+    expect(terminalSessions).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps an opened session listed when the list cannot be read afterwards", async () => {
+    const opened = {
+      id: "new", kind: "shell", title: "zsh", startedAt: "2026-09-30T00:00:00Z", state: "connected", problem: "",
+    } as const;
+    const terminalSessions = vi.fn()
+      .mockResolvedValueOnce(list)
+      .mockRejectedValue(new Error("offline"));
+    const openTerminalSession = vi.fn().mockResolvedValue({ session: opened, streamTicket: "ticket" });
+    const client = api({ terminalSessions, openTerminalSession });
+    const { result } = renderHook(() => useTerminalSessions(client, translate));
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+
+    await act(async () => {
+      await result.current.open({ kind: "shell" });
+    });
+
+    expect(result.current.sessions).toEqual([opened]);
   });
 
   it("reports a finished load even when the list could not be read", async () => {
@@ -379,14 +453,15 @@ describe("useTerminalSessions", () => {
     expect(result.current.problem).toBe("");
   });
 
-  it("keeps trying while a session takes several attempts to die", async () => {
-    const server = [{ id: "a" }];
-    const listing = () => ({ sessions: [...server] as never, maxSessions: 50 });
-    const closeTerminalSession = vi.fn(async () => {
-      if (closeTerminalSession.mock.calls.length >= 3) server.length = 0;
-      return listing();
-    });
-    const client = api({ terminalSessions: vi.fn(async () => listing()), closeTerminalSession });
+  it("does not call a close a failure when the session was already gone", async () => {
+    const one = [{ id: "a" }] as never;
+    const terminalSessions = vi.fn()
+      .mockResolvedValueOnce({ sessions: one, maxSessions: 50 })
+      .mockResolvedValue(list);
+    const closeTerminalSession = vi.fn().mockRejectedValue(
+      new ApiError("terminal_session_not_found", 404, { code: "terminal_session_not_found", message: "gone" }),
+    );
+    const client = api({ terminalSessions, closeTerminalSession });
     const { result } = renderHook(() => useTerminalSessions(client, translate));
     await waitFor(() => expect(result.current.sessions).toHaveLength(1));
 
@@ -394,6 +469,7 @@ describe("useTerminalSessions", () => {
       await result.current.closeAll();
     });
 
+    expect(closeTerminalSession).toHaveBeenCalledTimes(1);
     expect(result.current.sessions).toEqual([]);
     expect(result.current.problem).toBe("");
   });

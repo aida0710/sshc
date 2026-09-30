@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { usePolling } from "../ui/usePolling";
+import { useRequestGeneration, type IsCurrentRequest } from "../ui/useRequestGeneration";
 import { failureCode } from "../api/client";
 import type { OpenTerminalSessionRequest, TerminalSession, TerminalSessionsApi as SessionsApi } from "../api/terminalSessions";
 import type { Translate } from "../i18n/context";
@@ -33,9 +34,6 @@ export type TerminalSessionsState = {
   markExited: (id: string) => void;
 };
 
-const closeAllRounds = 10;
-const closeAllPause = 100;
-
 export function useTerminalSessions(
   api: TerminalSessionsApi,
   translate: Translate,
@@ -46,8 +44,8 @@ export function useTerminalSessions(
   const [pendingOperations, setPendingOperations] = useState(0);
   const [problem, setProblem] = useState("");
   const [loaded, setLoaded] = useState(false);
-  const refreshGeneration = useRef(0);
-  const mutationGeneration = useRef(0);
+  const refreshGeneration = useRequestGeneration();
+  const mutationGeneration = useRequestGeneration();
   const busy = pendingOperations > 0;
 
   const beginOperation = useCallback(() => {
@@ -61,39 +59,37 @@ export function useTerminalSessions(
   const beginMutation = useCallback(() => {
     // A response from a list request which began before this mutation cannot
     // describe its result.
-    refreshGeneration.current += 1;
-    mutationGeneration.current += 1;
-    return mutationGeneration.current;
-  }, []);
+    refreshGeneration.retire();
+    return mutationGeneration.begin();
+  }, [mutationGeneration, refreshGeneration]);
 
   const adoptMutationListing = useCallback((
     listed: { sessions: TerminalSession[]; maxSessions: number },
-    generation: number,
+    isCurrent: IsCurrentRequest,
   ): boolean => {
-    if (generation !== mutationGeneration.current) return false;
+    if (!isCurrent()) return false;
     // A mutation response describes state after the requested change. Retire
     // every list request that started before this response so a slow poll
     // cannot resurrect a closed session or restore an old title/state.
-    refreshGeneration.current += 1;
+    refreshGeneration.retire();
     setSessions(listed.sessions);
     setMaxSessions(listed.maxSessions);
     return true;
-  }, []);
+  }, [refreshGeneration]);
 
   const refresh = useCallback(async () => {
     if (!enabled) return;
-    const generation = refreshGeneration.current + 1;
-    refreshGeneration.current = generation;
+    const isCurrent = refreshGeneration.begin();
     try {
       const listed = await api.terminalSessions();
-      if (generation !== refreshGeneration.current) return;
+      if (!isCurrent()) return;
       setSessions(listed.sessions);
       setMaxSessions(listed.maxSessions);
     } catch {
     } finally {
-      if (generation === refreshGeneration.current) setLoaded(true);
+      if (isCurrent()) setLoaded(true);
     }
-  }, [api, enabled]);
+  }, [api, enabled, refreshGeneration]);
 
   // applyMutation runs one request whose response is the listing after the
   // change. A response that lost the race to a newer mutation is discarded in
@@ -103,10 +99,10 @@ export function useTerminalSessions(
     reportFailure: (error: unknown) => Promise<void> | void,
   ): Promise<boolean> => {
     beginOperation();
-    const generation = beginMutation();
+    const isCurrent = beginMutation();
     try {
       const listed = await request();
-      if (!adoptMutationListing(listed, generation)) await refresh();
+      if (!adoptMutationListing(listed, isCurrent)) await refresh();
       return true;
     } catch (error) {
       await reportFailure(error);
@@ -126,16 +122,16 @@ export function useTerminalSessions(
   useEffect(() => {
     void refresh();
     return () => {
-      refreshGeneration.current += 1;
+      refreshGeneration.retire();
     };
-  }, [refresh]);
+  }, [refresh, refreshGeneration]);
 
   const connectionInProgress = sessions.some(
     (session) => session.state === "connecting" || session.state === "reconnecting",
   );
 
-  // 接続中だけ細かく確認する。通常稼働中の一覧は従来どおり低頻度に保ち、
-  // ProxyJumpのホップや認証待ちだけを人が追える速さで更新する。
+  // Only while a session is connecting or reconnecting does the list switch to
+  // the faster interval, for the reason given at connectingPollIntervalMs.
   // Terminal notifications must still be observed while the app is in the
   // background; that is precisely when delivering them is useful.
   usePolling(refresh, {
@@ -147,11 +143,22 @@ export function useTerminalSessions(
   const open = useCallback(
     async (request: OpenTerminalSessionRequest): Promise<TerminalSession | null> => {
       beginOperation();
-      beginMutation();
       setProblem("");
       try {
         const opened = await api.openTerminalSession(request);
-        await refresh();
+        // Any listing requested before the engine created this session cannot
+        // contain it. Retire those and show the session now, so a workspace
+        // pane given its ID never finds it missing from the list.
+        beginMutation();
+        setSessions((current) =>
+          current.some((session) => session.id === opened.session.id) ? current : [...current, opened.session],
+        );
+        // Hand the session back without waiting for the list to be read again,
+        // so a caller that selects it does so in the render that lists it. A
+        // wait here would show the new row for one round trip while the old
+        // session is still selected, and a session shortcut pressed then would
+        // move from the old one.
+        void refresh();
         return opened.session;
       } catch (error) {
         setProblem(translate(terminalProblemKey(failureCode(error))));
@@ -188,28 +195,27 @@ export function useTerminalSessions(
 
   const closeAll = useCallback(async () => {
     beginOperation();
-    let failed = false;
     try {
-      let remaining = sessions;
-      for (let round = 0; round < closeAllRounds && remaining.length > 0; round += 1) {
-        if (round > 0) await new Promise((resume) => setTimeout(resume, closeAllPause));
-        for (const session of remaining) {
-          try {
-            const generation = beginMutation();
-            const listed = await api.closeTerminalSession(session.id);
-            if (!adoptMutationListing(listed, generation)) await refresh();
-            remaining = listed.sessions;
-          } catch {
-            failed = true;
-          }
+      // The engine stops a session and removes it from the list before its
+      // close answers, so one close per session is enough.
+      const refusedIds = new Set<string>();
+      for (const session of sessions) {
+        try {
+          const isCurrent = beginMutation();
+          const listed = await api.closeTerminalSession(session.id);
+          if (!adoptMutationListing(listed, isCurrent)) await refresh();
+        } catch {
+          refusedIds.add(session.id);
         }
-        const generation = beginMutation();
-        const listed = await api.terminalSessions().catch(() => null);
-        if (listed === null) break;
-        if (!adoptMutationListing(listed, generation)) await refresh();
-        remaining = listed.sessions;
       }
-      if (failed && remaining.length > 0) setProblem(translate("terminal.closeFailed"));
+      if (refusedIds.size === 0) return;
+      // A close is also refused for a session that already went away, so only
+      // one still listed afterwards was left open.
+      const isCurrent = beginMutation();
+      const listed = await api.terminalSessions().catch(() => null);
+      if (listed !== null && !adoptMutationListing(listed, isCurrent)) await refresh();
+      const leftOpen = listed === null || listed.sessions.some((session) => refusedIds.has(session.id));
+      if (leftOpen) setProblem(translate("terminal.closeFailed"));
     } finally {
       finishOperation();
     }
@@ -228,8 +234,7 @@ export function useTerminalSessions(
   );
 
   const markExited = useCallback((id: string) => {
-    refreshGeneration.current += 1;
-    mutationGeneration.current += 1;
+    beginMutation();
     setSessions((current) =>
       current.map((session) =>
         session.id === id && session.exited === undefined
@@ -237,7 +242,7 @@ export function useTerminalSessions(
           : session,
       ),
     );
-  }, []);
+  }, [beginMutation]);
 
   return { sessions, maxSessions, busy, problem, loaded, rename, unpinTitle, open, reconnect, stopReconnect, close, closeAll, refresh, markExited };
 }

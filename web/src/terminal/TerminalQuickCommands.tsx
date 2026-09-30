@@ -6,8 +6,10 @@ import { useTranslate } from "../i18n/context";
 import { snippetsApi, type Snippet } from "../snippets/api";
 import { clipboard } from "../ui/clipboard";
 import { terminalCommandApi } from "../features/workspaces/commandApi";
+import { describeTerminalCommandFailure, terminalCommandProblemText } from "../features/workspaces/terminalCommandProblem";
+import { describeSnippetFailure } from "../snippets/snippetFailure";
 import { useDismissibleLayer } from "../ui/useDismissibleLayer";
-import { PasswordInput } from "../ui/PasswordField";
+import { SnippetVariableInputs } from "../snippets/SnippetVariableInputs";
 import { Notice } from "../ui/surface";
 
 type Prepared = {
@@ -43,6 +45,7 @@ export function TerminalQuickCommands({
     [selectedId, snippets],
   );
 
+  // 表示の言語を変えると読み直すので、選んでいたスニペットは残す。
   useEffect(() => {
     let active = true;
     void snippetsApi
@@ -50,22 +53,25 @@ export function TerminalQuickCommands({
       .then((library) => {
         if (!active) return;
         setSnippets(library.snippets);
-        setSelectedId(library.snippets[0]?.id ?? "");
+        setSelectedId((current) => current || (library.snippets[0]?.id ?? ""));
       })
-      .catch(
-        (error: unknown) =>
-          active && setProblem(failureCode(error) || "snippet_failed"),
-      )
+      .catch(() => active && setProblem(t("snippets.loadFailed")))
       .finally(() => active && setBusy(false));
     return () => {
       active = false;
     };
-  }, []);
+  }, [t]);
 
+  // キーボードで「…」から開いた人がパネルへ入れるように、開いたらパネルへフォーカスを
+  // 移し、Tab をパネルの中で回す。外へ出すと xterm が Tab をシェルへ送ってしまい、
+  // 戻る道がない。スニペットの select は読み込みの後に出るので、最初の行き先は
+  // 描画直後からあるパネル自身にする。
   useDismissibleLayer({
     open: true,
     containerRefs: [panel],
     onDismiss: onClose,
+    initialFocusRef: panel,
+    trapFocus: true,
     ...(returnFocusRef === undefined ? {} : { returnFocusRef }),
   });
 
@@ -98,7 +104,7 @@ export function TerminalQuickCommands({
       setSaveName("");
       setTerminalSelectionSaved(true);
     } catch (error) {
-      setProblem(failureCode(error) || "snippet_failed");
+      setProblem(describeSnippetFailure(t, error));
     } finally {
       setBusy(false);
     }
@@ -125,10 +131,7 @@ export function TerminalQuickCommands({
         throw new Error("invalid_response");
       setPrepared({ command: target.command, preview, request });
     } catch (error) {
-      setProblem(
-        failureCode(error) ||
-          (error instanceof Error ? error.message : "terminal_command_failed"),
-      );
+      setProblem(describeTerminalCommandFailure(t, error));
       setPrepared(null);
     } finally {
       setBusy(false);
@@ -214,11 +217,7 @@ export function TerminalQuickCommands({
   async function handleActionFailure(error: unknown, current: Prepared) {
     const code = failureCode(error);
     if (code !== "terminal_command_preview_changed") {
-      setProblem(
-        code === "terminal_command_insert_unsafe"
-          ? t("terminal.quickCommandInsertUnsafe")
-          : code || "terminal_command_failed",
-      );
+      setProblem(terminalCommandProblemText(t, code));
       return;
     }
     try {
@@ -239,7 +238,7 @@ export function TerminalQuickCommands({
       setProblem(t("terminal.quickCommandChanged"));
     } catch (refreshError) {
       setPrepared(null);
-      setProblem(failureCode(refreshError) || "terminal_command_failed");
+      setProblem(describeTerminalCommandFailure(t, refreshError));
     }
   }
 
@@ -248,7 +247,8 @@ export function TerminalQuickCommands({
       ref={panel}
       role="dialog"
       aria-label={t("terminal.quickCommands")}
-      className="absolute right-2 top-11 z-30 flex max-h-[min(32rem,75vh)] w-[min(24rem,calc(100vw-1rem))] flex-col gap-3 overflow-auto rounded-md border border-control-line bg-card p-3 shadow-2xl"
+      tabIndex={-1}
+      className="focus:outline-none absolute right-2 top-11 z-30 flex max-h-[min(32rem,75vh)] w-[min(24rem,calc(100vw-1rem))] flex-col gap-3 overflow-auto rounded-md border border-control-line bg-card p-3 shadow-2xl"
     >
       <div className="flex items-center gap-2">
         <h3 className="grow text-sm font-semibold">
@@ -339,67 +339,13 @@ export function TerminalQuickCommands({
           {selected?.description ? (
             <p className="text-xs text-ink-muted">{selected.description}</p>
           ) : null}
-          {selected?.variables.map((variable) => (
-            <div key={variable.name} className="text-xs text-ink-muted">
-              <span>
-                <code>{`{{${variable.name}}}`}</code>
-                {variable.description ? ` · ${variable.description}` : ""}
-              </span>
-              {variable.type === "boolean" ? (
-                <select
-                  aria-label={variable.name}
-                  value={inputs[variable.name] ?? ""}
-                  onChange={(event) =>
-                    invalidate({
-                      ...inputs,
-                      [variable.name]: event.target.value,
-                    })
-                  }
-                  className="mt-1 block w-full rounded border border-control-line bg-control px-2 py-1.5 text-sm text-ink"
-                >
-                  <option value="">
-                    {variable.default === undefined
-                      ? ""
-                      : `${t("workspace.useDefault")} (${variable.default})`}
-                  </option>
-                  <option value="true">true</option>
-                  <option value="false">false</option>
-                </select>
-              ) : variable.type === "secret" ? (
-                <PasswordInput
-                  label={variable.name}
-                  value={inputs[variable.name] ?? ""}
-                  placeholder={
-                    variable.default === undefined
-                      ? ""
-                      : `${t("workspace.useDefault")}: ${variable.default}`
-                  }
-                  onChange={(value) =>
-                    invalidate({ ...inputs, [variable.name]: value })
-                  }
-                  className="mt-1 block w-full rounded border border-control-line bg-control px-2 py-1.5 text-sm text-ink"
-                />
-              ) : (
-                <input
-                  type={variable.type === "integer" ? "number" : "text"}
-                  aria-label={variable.name}
-                  value={inputs[variable.name] ?? ""}
-                  placeholder={
-                    variable.default === undefined
-                      ? ""
-                      : `${t("workspace.useDefault")}: ${variable.default}`
-                  }
-                  onChange={(event) =>
-                    invalidate({
-                      ...inputs,
-                      [variable.name]: event.target.value,
-                    })
-                  }
-                  className="mt-1 block w-full rounded border border-control-line bg-control px-2 py-1.5 text-sm text-ink"
-                />
-              )}
-            </div>
-          ))}
+          {selected === null ? null : (
+            <SnippetVariableInputs
+              variables={selected.variables}
+              inputs={inputs}
+              onChange={(variable, value) => invalidate({ ...inputs, [variable.name]: value })}
+            />
+          )}
           {prepared === null ? (
             <button
               type="button"

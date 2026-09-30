@@ -147,8 +147,8 @@ func TestABindFailureDoesNotEndTheSession(t *testing.T) {
 	}})
 
 	forwards := process.(terminal.Forwarder).Forwards()
-	if len(forwards) != 1 || forwards[0].Problem == "" {
-		t.Fatalf("forwards = %#v, want the failure recorded", forwards)
+	if len(forwards) != 1 || forwards[0].Problem != terminal.ForwardProblemAddressInUse {
+		t.Fatalf("forwards = %#v, want the port in use recorded as %q", forwards, terminal.ForwardProblemAddressInUse)
 	}
 	// セッションは実行中。ポートひとつのためにコンソールを失わない。
 	if _, err := process.Write([]byte("still here\r")); err != nil {
@@ -491,8 +491,8 @@ func TestAgentForwardingWithoutAnAgentStillConnects(t *testing.T) {
 		t.Errorf("the terminal does not say why the agent was not forwarded: %q", seen)
 	}
 	forwards := process.(terminal.Forwarder).Forwards()
-	if len(forwards) != 1 || forwards[0].Problem == "" {
-		t.Fatalf("forwards = %#v, want the reason recorded", forwards)
+	if len(forwards) != 1 || forwards[0].Problem != terminal.ForwardProblemAgentUnreachable {
+		t.Fatalf("forwards = %#v, want the reason recorded as %q", forwards, terminal.ForwardProblemAgentUnreachable)
 	}
 }
 

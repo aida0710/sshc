@@ -97,8 +97,8 @@ export function useSFTPTransfers({
   const counterpartLocal = counterpart !== null && counterpart.alias === localHostAlias;
   const counterpartRemote = counterpart !== null && !counterpartLocal && counterpart.alias !== "";
 
-  function report(error: unknown, fallback = "sftp_failed") {
-    setProblem(sftpProblemText(t, error, fallback));
+  function report(error: unknown) {
+    setProblem(sftpProblemText(t, error));
   }
 
   function openQueue() {

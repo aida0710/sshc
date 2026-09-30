@@ -3,7 +3,7 @@ import { createElement, type ReactNode } from "react";
 import { describe, expect, it } from "vitest";
 import { LanguageProvider, useTranslate, type Translate } from "../i18n/context";
 import type { Locale } from "../i18n/locale";
-import { formatBytes, formatDateTime, formatDuration } from "./format";
+import { formatBytes, formatDateTime, formatDuration, formatOptionalDateTime } from "./format";
 
 function translatorFor(locale: Locale): Translate {
   const { result } = renderHook(() => useTranslate(), {
@@ -66,5 +66,15 @@ describe("formatDuration", () => {
     [5_400, "1時間30分"],
   ])("shows %d seconds as %s on a Japanese screen", (seconds, expected) => {
     expect(formatDuration(seconds, translatorFor("ja"))).toBe(expected);
+  });
+});
+
+describe("formatOptionalDateTime", () => {
+  it("shows a dash when no moment was recorded", () => {
+    expect(formatOptionalDateTime(undefined)).toBe("—");
+  });
+
+  it("formats a recorded moment like formatDateTime", () => {
+    expect(formatOptionalDateTime("2026-09-18T04:05:00Z", "en-US")).toBe(formatDateTime("2026-09-18T04:05:00Z", "en-US"));
   });
 });

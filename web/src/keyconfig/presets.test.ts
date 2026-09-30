@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { apiClient } from "../api/client";
 import { defaultBindings, loadBindings } from "./bindings";
-import { refreshPresets, savePresetBindings, selectPreset, selectionKey, updatePresets, type Preset } from "./presets";
+import { localStorageKeys } from "../ui/browserStorageKeys";
+import { refreshPresets, savePresetBindings, selectPreset, updatePresets, type Preset } from "./presets";
 let remote: Preset[];
 beforeEach(async () => {
   localStorage.clear(); remote = [];
@@ -22,7 +23,7 @@ it("stores nothing while the browser only shows the default shortcuts", async ()
   expect(localStorage.length).toBe(0);
   expect(loadBindings()).toEqual(defaultBindings);
   selectPreset("work");
-  expect(localStorage.getItem(selectionKey)).toBe("work");
+  expect(localStorage.getItem(localStorageKeys.shortcutPresetSelection)).toBe("work");
 });
 it("keeps selection local while applying remote edits and recovering from deletion", async () => {
   remote = [{ id: "work", name: "Work", bindings: { ...defaultBindings, home: ["Alt+H"] } }];
@@ -35,7 +36,7 @@ it("keeps selection local while applying remote edits and recovering from deleti
   expect(loadBindings().home).toEqual(["Alt+J"]);
   remote = [];
   await refreshPresets();
-  expect(localStorage.getItem(selectionKey)).toBe("default");
+  expect(localStorage.getItem(localStorageKeys.shortcutPresetSelection)).toBe("default");
   expect(loadBindings()).toEqual(defaultBindings);
 });
 it("rejects stale edits without overwriting remote presets or current bindings", async () => {
@@ -55,5 +56,30 @@ it("does not let an older refresh response undo a completed save", async () => {
   finish({ schemaVersion: 5, shortcutPresets: [] });
   await pending;
   expect(loadBindings().home).toEqual(["Alt+H"]);
-  expect(localStorage.getItem(selectionKey)).toBe(remote[0]!.id);
+  expect(localStorage.getItem(localStorageKeys.shortcutPresetSelection)).toBe(remote[0]!.id);
+});
+function refuseStoringBindings() {
+  const store = Storage.prototype.setItem;
+  return vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (this: Storage, key: string, value: string) {
+    if (key === localStorageKeys.shortcutBindings) throw new DOMException("The quota has been exceeded.", "QuotaExceededError");
+    store.call(this, key, value);
+  });
+}
+it("keeps presets editable when a background refresh cannot store the bindings", async () => {
+  await savePresetBindings({ ...defaultBindings, home: ["Alt+H"] });
+  remote[0]!.bindings.home = ["Alt+J"];
+  const refusal = refuseStoringBindings();
+  await refreshPresets();
+  expect(loadBindings().home).toEqual(["Alt+H"]);
+  refusal.mockRestore();
+  await savePresetBindings({ ...defaultBindings, home: ["Alt+K"] });
+  expect(loadBindings().home).toEqual(["Alt+K"]);
+});
+it("reports a refused storage when the user picks a preset and keeps the previous choice", async () => {
+  remote = [{ id: "work", name: "Work", bindings: { ...defaultBindings, home: ["Alt+H"] } }];
+  await refreshPresets();
+  refuseStoringBindings();
+  expect(() => selectPreset("work")).toThrow("quota");
+  expect(localStorage.getItem(localStorageKeys.shortcutPresetSelection)).toBeNull();
+  expect(loadBindings()).toEqual(defaultBindings);
 });

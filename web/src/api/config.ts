@@ -34,6 +34,20 @@ export type UpdateConnectionPassword = components["schemas"]["UpdateConnectionPa
 export type UpdateConnectionKeyPassphrase = components["schemas"]["UpdateConnectionKeyPassphrase"];
 export type UpdateConnectionTOTP = components["schemas"]["UpdateConnectionTOTP"];
 
+// hostMetadataEditRequest は、接続 1 件の metadata だけを変える保存要求を作る。base は
+// 画面が読み込んだときのその接続の metadata（無ければ識別子だけ）で、サーバーはいまの
+// ディスクと違えば metadata_changed で断る。next が null ならその entry を消し、識別子が
+// base と違えば別の接続へ付け直す。
+export function hostMetadataEditRequest(base: HostMetadata, next: HostMetadata | null): EditRequest {
+  return {
+    kind: "metadata",
+    path: base.identity.path,
+    alias: base.identity.alias,
+    hostMetadataBase: base,
+    ...(next === null ? {} : { hostMetadata: next }),
+  };
+}
+
 
 
 

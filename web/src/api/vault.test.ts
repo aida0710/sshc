@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { apiClient } from "./client";
 import { vaultApi } from "./vault";
 import { sentJson } from "../testing/requests";
+import { vaultStatus } from "../testing/vaultStatus";
 
 const csrfToken = "c".repeat(43);
 
@@ -23,12 +24,7 @@ afterEach(() => {
 });
 
 describe("vaultApi vault format recovery", () => {
-  const status = {
-    exists: true,
-    unlocked: true,
-    aliases: [],
-    dedicatedKeyPassphrases: [],
-  };
+  const status = vaultStatus();
 
   it("requests the newest compatible backup with the supplied master password", async () => {
     const fetcher = vi.fn().mockResolvedValue(jsonResponse(status));
@@ -65,13 +61,7 @@ describe("vaultApi.passwordVault", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
-        jsonResponse({
-          exists: true,
-          unlocked: true,
-          aliases: ["edge"],
-          dedicatedKeyPassphrases: ["keys/id_edge"],
-          minPassphraseLength: 12,
-        }),
+        jsonResponse(vaultStatus({ aliases: ["edge"], dedicatedKeyPassphrases: ["keys/id_edge"] })),
       ),
     );
 
@@ -84,14 +74,7 @@ describe("vaultApi.passwordVault", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
-        jsonResponse({
-          exists: true,
-          unlocked: true,
-          aliases: [],
-          dedicatedKeyPassphrases: [],
-          migratedFromVersion: 4,
-          migratedToVersion: 5,
-        }),
+        jsonResponse(vaultStatus({ migratedFromVersion: 4, migratedToVersion: 5 })),
       ),
     );
 
@@ -108,13 +91,7 @@ describe("vaultApi.passwordVault", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
-        jsonResponse({
-          exists: true,
-          unlocked: true,
-          aliases: [],
-          dedicatedKeyPassphrases: [],
-          ...migration,
-        }),
+        jsonResponse({ ...vaultStatus(), ...migration }),
       ),
     );
 
@@ -123,20 +100,11 @@ describe("vaultApi.passwordVault", () => {
     );
   });
 
+  const { dedicatedKeyPassphrases: _omitted, ...withoutDedicatedKeyPassphrases } = vaultStatus();
   it.each([
-    { exists: true, unlocked: true, aliases: [] },
-    {
-      exists: true,
-      unlocked: true,
-      aliases: [],
-      dedicatedKeyPassphrases: "keys/id_edge",
-    },
-    {
-      exists: true,
-      unlocked: true,
-      aliases: [],
-      dedicatedKeyPassphrases: [false],
-    },
+    withoutDedicatedKeyPassphrases,
+    { ...vaultStatus(), dedicatedKeyPassphrases: "keys/id_edge" },
+    { ...vaultStatus(), dedicatedKeyPassphrases: [false] },
   ])("rejects a malformed dedicated key-passphrase status", async (body) => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(body)));
 

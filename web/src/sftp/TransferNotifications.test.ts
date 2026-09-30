@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Translate } from "../i18n/context";
+import { en } from "../i18n/messages";
 import type { TransferNotice } from "./transferManager";
 
 const showBrowserNotification = vi.hoisted(() => vi.fn());
-vi.mock("../terminal/terminalNotifications", () => ({ showBrowserNotification }));
+vi.mock("../ui/browserNotifications", () => ({ showBrowserNotification }));
 
 const { notifyBackgroundTransfers } = await import("./TransferNotifications");
 
@@ -44,5 +45,17 @@ describe("transfer browser notifications", () => {
     notifyBackgroundTransfers([notice], delivered, t, true);
 
     expect(showBrowserNotification).not.toHaveBeenCalled();
+  });
+
+  it("says why a background transfer failed in words instead of its code", () => {
+    const failed: TransferNotice = { ...notice, id: "job-1:failed:1", status: "failed", problem: "sftp_permission_denied" };
+    const t: Translate = (key, values) =>
+      en[key].replace(/\{(\w+)\}/g, (_, name: string) => String(values?.[name] ?? ""));
+
+    notifyBackgroundTransfers([failed], new Set<string>(), t, true);
+
+    expect(showBrowserNotification).toHaveBeenCalledWith(expect.objectContaining({
+      body: "Download failed: backup.tar. Permission denied. Check the permissions on the host.",
+    }));
   });
 });

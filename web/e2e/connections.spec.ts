@@ -190,9 +190,9 @@ test("creates a key-authenticated connection in an empty nested declared group",
   await dialog.getByLabel("User (optional)").fill("root");
   await dialog.getByRole("radio", { name: "SSH private key" }).check();
   const keyChoice = dialog.getByRole("combobox", { name: "SSH private key" });
-  const keyID = await keyChoice.locator("option", { hasText: "id_connection_e2e" }).getAttribute("value");
-  expect(keyID).not.toBeNull();
-  await keyChoice.selectOption(keyID);
+  const keyId = await keyChoice.locator("option", { hasText: "id_connection_e2e" }).getAttribute("value");
+  expect(keyId).not.toBeNull();
+  await keyChoice.selectOption(keyId);
 
   expect(await clickAndAwait(page, "Create connection", "/api/v1/connections")).toBe(201);
 
@@ -368,9 +368,9 @@ test("saves and replaces a key-owned passphrase without changing another key's s
     .getByRole("button", { name: "bastion" })
     .click();
   const keyChoice = page.getByLabel("SSH private key");
-  const ownedID = await keyChoice.locator("option", { hasText: "id_connection_owned" }).getAttribute("value");
-  expect(ownedID).not.toBeNull();
-  await keyChoice.selectOption(ownedID);
+  const ownedId = await keyChoice.locator("option", { hasText: "id_connection_owned" }).getAttribute("value");
+  expect(ownedId).not.toBeNull();
+  await keyChoice.selectOption(ownedId);
   await expect(page.getByText(/uses the shared saved passphrase “shared-sibling-phrase”/)).not.toBeVisible();
   await page.getByText("Save or change key passphrase").click();
   await expect(page.getByText(/uses the shared saved passphrase “shared-sibling-phrase”/)).toBeVisible();

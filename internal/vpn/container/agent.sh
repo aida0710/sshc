@@ -222,7 +222,7 @@ wireguard | l2tp_ipsec | openconnect | openvpn | ikev2)
 	;;
 *)
 	rm -f "$profile"
-	echo "対応していない方式です: $backend" >&2
+	echo "対応していない方式です：$backend" >&2
 	exit 1
 	;;
 esac

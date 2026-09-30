@@ -4987,6 +4987,16 @@ components:
         line: { type: integer }
         keyword: { type: string }
         values: { type: array, items: { type: string } }
+    # kind "metadata" と "groups" は metadata.json の一部分だけを送る。サーバーは
+    # いまのディスクの metadata にその部分だけを合わせ、ほかの節（VPN プロファイル、
+    # ターミナル設定、ショートカットなど）は保つ。送った base がディスクと違えば、
+    # 画面の写しが古いので 409 metadata_changed で断る。
+    # - hostMetadata: kind "metadata" の、path と alias が指す接続の新しい metadata。
+    #   省くとその entry を消す。identity が違えば、その entry を別の接続へ付け直す
+    #   （orphan の関連付け直し）。
+    # - hostMetadataBase: 画面が読み込んだときのその entry。無かったときは省く。
+    # - groups / groupsBase: kind "groups" の、新しいグループの設定と、画面が
+    #   読み込んだときのグループの設定。
     EditRequest:
       type: object
       additionalProperties: false
@@ -5000,7 +5010,10 @@ components:
         fields: { type: array, items: { $ref: "#/components/schemas/FieldEdit" } }
         raw: { type: string }
         comment: { type: string }
-        metadata: { $ref: "#/components/schemas/Metadata" }
+        hostMetadata: { $ref: "#/components/schemas/HostMetadata" }
+        hostMetadataBase: { $ref: "#/components/schemas/HostMetadata" }
+        groups: { type: array, maxItems: 256, items: { $ref: "#/components/schemas/GroupMetadata" } }
+        groupsBase: { type: array, maxItems: 256, items: { $ref: "#/components/schemas/GroupMetadata" } }
         destinationGroup: { type: string, maxLength: 400 }
         destinationPath: { type: string }
         destinationBase: { type: string }

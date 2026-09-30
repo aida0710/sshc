@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { HostEntry, HostIdentity, Overview } from "../api/config";
-import { buildConnectionBrowserIndex, identityKey } from "./connectionBrowser";
+import { buildConnectionBrowserIndex, hostMetadataByIdentity, identityKey } from "./connectionBrowser";
 
 function host(path: string, alias: string, group?: string): HostEntry {
   return {
@@ -170,5 +170,17 @@ describe("ホストの識別子を鍵にする", () => {
   it("鍵は identity の全項目を綴っている", () => {
     const keyed: Record<keyof HostIdentity, true> = { path: true, alias: true };
     expect(Object.keys(keyed).sort()).toEqual(["alias", "path"]);
+  });
+});
+
+describe("接続ごとの metadata を識別子で引く", () => {
+  it("同じ識別子の entry が 2 つあれば、サーバーと同じく先頭を使う", () => {
+    const identity = { path: "config", alias: "jump" };
+    const byIdentity = hostMetadataByIdentity([
+      { identity, note: "first" },
+      { identity, note: "second" },
+    ]);
+
+    expect(byIdentity.get(identityKey(identity))?.note).toBe("first");
   });
 });

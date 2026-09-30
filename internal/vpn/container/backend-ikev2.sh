@@ -83,7 +83,7 @@ ikev2_failure_sentence() {
 	ike_proposal_mismatch) echo "暗号スイートのネゴシエーションに失敗しました。IKEとESPの暗号スイートを確認してください。" ;;
 	ike_server_unverified) echo "VPNサーバーの証明書を検証できませんでした。サーバーのIDとCAの証明書を確認してください。" ;;
 	ike_authentication) echo "IKEv2の認証に失敗しました。ユーザー名、パスワード、事前共有鍵、IDを確認してください。" ;;
-	ike_no_response) echo "VPNサーバーから応答がありません。サーバーの指定と、UDPの500番と4500番に届くかを確認してください。" ;;
+	ike_no_response) echo "VPNサーバーから応答がありません。サーバーの指定と、UDPの500番と4500番でVPNサーバーに到達できるかを確認してください。" ;;
 	*) echo "IPsecのネゴシエーションに失敗しました。IPsecのログを確認してください。" ;;
 	esac
 }

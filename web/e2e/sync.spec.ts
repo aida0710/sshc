@@ -476,7 +476,7 @@ test("shows push, preview, apply, persisted success, and a later failure as dist
     await page.setViewportSize({ width: 1280, height: 720 });
     await changeDisplayLanguage(page, "en");
   }
-  await page.getByRole("button", { name: "Push this workspace" }).click();
+  await page.getByRole("button", { name: "Push this machine's settings" }).click();
   expect(pushedMessage).toBe("Update config");
   await expect(page.getByRole("heading", { name: "This push" })).toBeVisible();
   await expect(
@@ -486,7 +486,7 @@ test("shows push, preview, apply, persisted success, and a later failure as dist
     page.getByText("There are no local changes to push."),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Push this workspace" }),
+    page.getByRole("button", { name: "Push this machine's settings" }),
   ).toBeDisabled();
   if (visualDirectory !== undefined) {
     await page.getByLabel("Commit message").scrollIntoViewIfNeeded();
@@ -518,7 +518,7 @@ test("shows push, preview, apply, persisted success, and a later failure as dist
   ).toBeVisible();
   await page.getByText("Manage sync settings").click();
   refusePush = true;
-  await page.getByRole("button", { name: "Push this workspace" }).click();
+  await page.getByRole("button", { name: "Push this machine's settings" }).click();
   await expect(page.getByRole("alert")).toContainText("update was cancelled");
   await expect(page.getByRole("alert")).toContainText(
     "cancelled before retrying",

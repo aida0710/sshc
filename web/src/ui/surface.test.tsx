@@ -29,6 +29,18 @@ describe("Row", () => {
     expect(screen.getByLabelText("Port")).toHaveValue("22");
     expect(screen.getByText("OpenSSH defaults to 22 when this is unset.")).toBeInTheDocument();
   });
+
+  it("reads its hint as the control's description", () => {
+    render(
+      <Card>
+        <Row label="Port" hint="OpenSSH defaults to 22 when this is unset.">
+          <input defaultValue="22" />
+        </Row>
+      </Card>,
+    );
+
+    expect(screen.getByLabelText("Port")).toHaveAccessibleDescription("OpenSSH defaults to 22 when this is unset.");
+  });
 });
 
 describe("Row's trailing action", () => {

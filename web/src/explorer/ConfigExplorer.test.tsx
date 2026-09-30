@@ -1,8 +1,10 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ConfigExplorer } from "./ConfigExplorer";
+import { ApiError } from "../api/client";
 import { configApi } from "../api/config";
+import { captureNavigationBlocker } from "../testing/navigationBlocker";
 
 vi.mock("../api/config", async () => {
   const actual = await vi.importActual<typeof import("../api/config")>("../api/config");
@@ -40,6 +42,7 @@ const overview = {
 };
 
 beforeEach(() => {
+  vi.clearAllMocks();
   vi.mocked(configApi.overview).mockResolvedValue(overview as never);
   vi.mocked(configApi.file).mockImplementation(async (path) => ({
     file: { path, absolute: `/home/tester/.ssh/${path}` },
@@ -215,8 +218,28 @@ describe("ConfigExplorer", () => {
     }));
   });
 
+  it("shows a refused delete once, inside the confirmation, and keeps the confirmation open", async () => {
+    const user = userEvent.setup();
+    vi.mocked(configApi.save).mockRejectedValue(
+      new ApiError("config_conflict", 409, { code: "config_conflict", message: "changed on disk" }),
+    );
+
+    render(<ConfigExplorer />);
+
+    await user.click(await screen.findByRole("button", { name: "conf.d/10-home.conf" }));
+    await screen.findByLabelText(/File text/);
+    await user.click(screen.getByRole("button", { name: "Delete file" }));
+    const dialog = screen.getByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: "Delete it" }));
+
+    const failure = await within(dialog).findByRole("alert");
+    expect(failure).toHaveTextContent("The file changed outside this application. Nothing was written.");
+    expect(screen.getAllByRole("alert")).toEqual([failure]);
+    expect(screen.getByRole("dialog")).toBe(dialog);
+  });
+
   it("opens a target file and selects the targeted line", async () => {
-    render(<ConfigExplorer target={{ path: "conf.d/10-home.conf", line: 2 }} />);
+    render(<ConfigExplorer target={{ path: "conf.d/10-home.conf", line: 2, request: 1 }} />);
 
     const editor = await screen.findByLabelText<HTMLTextAreaElement>(/File text/);
 
@@ -225,6 +248,20 @@ describe("ConfigExplorer", () => {
     expect(editor.selectionEnd).toBe("Host nas\n\tUser aida".length);
     expect(editor).toHaveFocus();
     expect(screen.getByText(/conf\.d\/10-home\.conf.*line 2/)).toBeInTheDocument();
+  });
+
+  it("clears the handed target at once and still selects its line instead of opening the entry file", async () => {
+    const onTargetHandled = vi.fn();
+    const { rerender } = render(
+      <ConfigExplorer target={{ path: "conf.d/10-home.conf", line: 2, request: 4 }} onTargetHandled={onTargetHandled} />,
+    );
+    expect(onTargetHandled).toHaveBeenCalledWith(4);
+    rerender(<ConfigExplorer target={null} onTargetHandled={onTargetHandled} />);
+
+    const editor = await screen.findByLabelText<HTMLTextAreaElement>(/File text.*conf\.d/);
+    await waitFor(() => expect(editor.selectionStart).toBe("Host nas\n".length));
+    expect(configApi.file).not.toHaveBeenCalledWith("config");
+    expect(onTargetHandled).toHaveBeenCalledTimes(1);
   });
 
   it("creates a new configuration file inside ~/.ssh", async () => {
@@ -244,5 +281,80 @@ describe("ConfigExplorer", () => {
       base: "",
       raw: "# created by sshc\n",
     }));
+  });
+
+  it("asks before another file replaces an unsaved draft, and keeps the draft when editing continues", async () => {
+    const user = userEvent.setup();
+    render(<ConfigExplorer />);
+    const editor = await screen.findByLabelText(/File text.*config/);
+    await user.type(editor, "Host lab");
+
+    await user.click(screen.getByRole("button", { name: "conf.d/10-home.conf" }));
+    expect(screen.getByRole("dialog", { name: "Discard unsaved changes?" })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Keep editing" }));
+
+    expect(configApi.file).not.toHaveBeenCalledWith("conf.d/10-home.conf");
+    expect(screen.getByLabelText(/File text.*config/)).toHaveValue("Include conf.d/*.conf\nHost lab");
+
+    await user.click(screen.getByRole("button", { name: "conf.d/10-home.conf" }));
+    await user.click(screen.getByRole("button", { name: "Discard" }));
+
+    expect(await screen.findByLabelText(/File text.*conf\.d/)).toHaveValue("Host nas\n\tUser aida\n");
+  });
+
+  it("asks before a target in another file replaces an unsaved draft", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(<ConfigExplorer />);
+    await user.type(await screen.findByLabelText(/File text.*config/), "Host lab");
+
+    rerender(<ConfigExplorer target={{ path: "conf.d/10-home.conf", line: 1, request: 1 }} />);
+
+    expect(await screen.findByRole("dialog", { name: "Discard unsaved changes?" })).toBeVisible();
+    expect(configApi.file).not.toHaveBeenCalledWith("conf.d/10-home.conf");
+  });
+
+  it("keeps the draft instead of reading the file again when the open file is chosen again", async () => {
+    const user = userEvent.setup();
+    render(<ConfigExplorer />);
+    const editor = await screen.findByLabelText(/File text.*config/);
+    await user.type(editor, "Host lab");
+
+    await user.click(screen.getByRole("button", { name: "config" }));
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(configApi.file).toHaveBeenCalledTimes(1);
+    expect(screen.getByLabelText(/File text.*config/)).toHaveValue("Include conf.d/*.conf\nHost lab");
+  });
+
+  it("asks before creating a file, because the new file replaces the unsaved draft", async () => {
+    const user = userEvent.setup();
+    render(<ConfigExplorer />);
+    await user.type(await screen.findByLabelText(/File text.*config/), "Host lab");
+    await user.type(screen.getByLabelText("New file path"), "conf.d/30-lab.conf");
+
+    await user.click(screen.getByRole("button", { name: "Create file" }));
+
+    expect(screen.getByRole("dialog", { name: "Discard unsaved changes?" })).toBeVisible();
+    expect(configApi.save).not.toHaveBeenCalled();
+  });
+
+  it("stops leaving Config with an unsaved draft, but lets a move inside Config through", async () => {
+    const user = userEvent.setup();
+    const navigation = captureNavigationBlocker();
+    const onNavigateLocation = vi.fn();
+    render(
+      <ConfigExplorer
+        onNavigationBlockerChange={navigation.onNavigationBlockerChange}
+        onNavigateLocation={onNavigateLocation}
+      />,
+    );
+    await user.type(await screen.findByLabelText(/File text.*config/), "Host lab");
+
+    expect(navigation.tryNavigate("/config")).toBe(true);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(navigation.tryNavigate("/keys")).toBe(false);
+    await user.click(screen.getByRole("button", { name: "Discard" }));
+
+    expect(onNavigateLocation).toHaveBeenCalledWith("/keys");
   });
 });

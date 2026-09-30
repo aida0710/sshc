@@ -224,7 +224,7 @@ test("keeps a chunked SFTP upload visible while another section is open", async 
     await expect(secondTabs.getByRole("tab", { name: /^nas:/ })).toBeVisible();
     await expect(page.locator("[data-sftp-pane-tabs]").nth(1).getByRole("button", { name: "新しいタブ" })).toBeVisible();
     await expect(secondPane.getByRole("button", { name: "backups" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "ここでTerminalを開く" })).toHaveCount(2);
+    await expect(page.getByRole("button", { name: "ここでターミナルを開く" })).toHaveCount(2);
     await page.screenshot({ path: `${visualDirectory}/sftp-two-pane-desktop.png`, fullPage: true });
     const projectRow = page.getByLabel("1つ目のリモートペイン").getByRole("button", { name: "project", exact: true })
       .locator("xpath=ancestor::*[@draggable='true'][1]");
@@ -306,7 +306,8 @@ test("keeps a chunked SFTP upload visible while another section is open", async 
     const mobileTransferManager = page.getByRole("dialog", { name: "転送マネージャー" });
     await expect(mobileTransferManager).toBeVisible();
     await expect(mobileTransferManager.getByRole("separator")).toHaveCount(0);
-    await expect(mobileTransferManager.getByText("失敗 · sftp_failed", { exact: true })).toBeVisible();
+    await expect(mobileTransferManager.getByText("失敗", { exact: true })).toBeVisible();
+    await expect(mobileTransferManager.getByText("SFTPの操作に失敗しました。", { exact: true })).toBeVisible();
     await mobileTransferManager.getByRole("button", { name: "転送キューの操作" }).click();
     await expect(page.getByRole("menuitem", { name: "すべてキャンセル" })).toBeInViewport();
     await expect(page.getByRole("menuitem", { name: "失敗項目を一覧から削除" })).toBeInViewport();

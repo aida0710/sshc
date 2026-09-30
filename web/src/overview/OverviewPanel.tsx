@@ -11,7 +11,7 @@ import { QuickConnectBrowser } from "./QuickConnectBrowser";
 import { workspaceApi, type SavedWorkspace } from "../features/workspaces/api";
 import { storedPaneCount } from "../features/workspaces/layout";
 import { PanelState } from "../ui/PanelState";
-import { formatDateTime } from "../ui/format";
+import { formatDateTime, formatOptionalDateTime } from "../ui/format";
 
 export type OverviewDestination = "Connections" | "Config" | "Sync" | "History";
 
@@ -23,7 +23,7 @@ type OverviewPanelProps = {
   launch?: (alias: string) => Promise<{ session: { id: string } }>;
   onNavigate: (destination: OverviewDestination) => void;
   onNavigateLocation: (location: string) => void;
-  onConsoleOpened?: (id: string) => void;
+  onSessionOpened?: (id: string) => void;
   onOpenWorkspace?: (id: string) => void;
 };
 
@@ -42,7 +42,7 @@ export function OverviewPanel({
   launch = launchDefault,
   onNavigate,
   onNavigateLocation,
-  onConsoleOpened,
+  onSessionOpened,
   onOpenWorkspace = () => undefined,
 }: OverviewPanelProps) {
   const t = useTranslate();
@@ -54,22 +54,33 @@ export function OverviewPanel({
   const [launching, setLaunching] = useState("");
   const launchPending = useRef(false);
   const [problem, setProblem] = useState("");
+  // 読めなかったことを「無い」と見分けられるように、履歴と保存レイアウトの失敗は
+  // 空の一覧とは別に持つ。SSH設定を読めなかったときは overview を null にする。
+  const [listsFailed, setListsFailed] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
 
   useEffect(() => {
     let active = true;
     void Promise.allSettled([loadOverview(), loadSync(), loadRecent(), loadWorkspaces()]).then(([workspace, remote, history, saved]) => {
       if (!active) return;
-      if (workspace.status === "fulfilled") setOverview(workspace.value);
-      else setProblem(t("home.loadFailed"));
+      setOverview(workspace.status === "fulfilled" ? workspace.value : null);
       if (remote.status === "fulfilled") setSync(remote.value);
       if (history.status === "fulfilled") setRecent(history.value.connections);
       if (saved.status === "fulfilled") setWorkspaces(saved.value);
+      setListsFailed(history.status === "rejected" || saved.status === "rejected");
       setLoading(false);
     });
     return () => {
       active = false;
     };
-  }, [loadOverview, loadSync, loadRecent, loadWorkspaces, t]);
+  }, [loadOverview, loadSync, loadRecent, loadWorkspaces, loadAttempt]);
+
+  function reload() {
+    setLoading(true);
+    setLoadAttempt((attempt) => attempt + 1);
+  }
+
+  const retryButton = <Button onClick={reload}>{t("shell.bootstrapRetry")}</Button>;
 
   async function connect(alias: string) {
     if (launchPending.current) return;
@@ -78,7 +89,7 @@ export function OverviewPanel({
     setProblem("");
     try {
       const opened = await launch(alias);
-      onConsoleOpened?.(opened.session.id);
+      onSessionOpened?.(opened.session.id);
     } catch (error) {
       setProblem(
         failureCode(error) === "terminal_session_limit"
@@ -108,11 +119,19 @@ export function OverviewPanel({
       </div>
 
       {problem === "" ? null : <Notice tone="danger">{problem}</Notice>}
+      {loading || overview === null || !listsFailed ? null : (
+        <Notice>
+          <span className="grow">{t("home.listsLoadFailed")}</span>
+          {retryButton}
+        </Notice>
+      )}
 
       <section aria-label={t("home.quickConnect")}>
         {loading ? (
           <PanelState tone="loading" title={t("home.loading")} />
-        ) : overview === null ? null : (
+        ) : overview === null ? (
+          <PanelState tone="failed" title={t("home.loadFailed")} action={retryButton} />
+        ) : (
           <QuickConnectBrowser
             overview={overview}
             recent={recent}
@@ -176,7 +195,7 @@ export function OverviewPanel({
             : !sync.configured
               ? t("home.syncNotConfigured")
               : sync.synced
-                ? t("home.syncLast", { at: sync.lastSyncedAt === undefined ? "—" : formatDateTime(sync.lastSyncedAt), count: sync.fileCount ?? 0 })
+                ? t("home.syncLast", { at: formatOptionalDateTime(sync.lastSyncedAt), count: sync.fileCount ?? 0 })
                 : t("home.syncNever")}
         </p>
         <Button onClick={() => onNavigate("Sync")}>{t("home.openSync")}</Button>

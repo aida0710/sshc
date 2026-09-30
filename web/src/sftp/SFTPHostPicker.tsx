@@ -9,7 +9,7 @@ import { localHostAlias } from "./localHost";
 const noHosts: HostEntry[] = [];
 
 // SFTPHostPicker is the pane's destination button. The dialog behind it is
-// shared with the console list so every place a host is chosen looks alike.
+// shared with the session list so every place a host is chosen looks alike.
 export function SFTPHostPicker({
   aliases,
   hosts = noHosts,
@@ -44,8 +44,30 @@ export function SFTPHostPicker({
 
   return (
     <>
-      <button ref={trigger} type="button" aria-label={t("sftp.host")} data-value={value} disabled={disabled || (aliases.length === 0 && !includeLocal)} onClick={() => setOpen(true)} title={value === localHostAlias ? localName : value || t("sftp.chooseHost")} className={compact ? "flex size-11 shrink-0 items-center justify-center rounded-md border border-control-line bg-control text-ink-muted active:bg-select-fill disabled:text-ink-faint" : "flex min-h-9 min-w-0 max-w-full items-center justify-between gap-2 rounded-md border border-control-line bg-control px-3 py-1.5 text-left text-sm disabled:text-ink-faint md:min-h-8 md:py-1"}>
-        {compact ? <Icon name={value === localHostAlias ? "home" : "terminal"} className="size-4" /> : <><span className="truncate">{value === localHostAlias ? localName : value || t(aliases.length === 0 && !includeLocal ? "sftp.noHosts" : "sftp.chooseHost")}</span><Icon name="chevronRight" className="size-3 rotate-90 text-ink-muted" /></>}
+      <button
+        ref={trigger}
+        type="button"
+        aria-label={t("sftp.host")}
+        data-value={value}
+        disabled={disabled || (aliases.length === 0 && !includeLocal)}
+        onClick={() => setOpen(true)}
+        title={value === localHostAlias ? localName : value || t("sftp.chooseHost")}
+        className={compact
+          ? "flex size-11 shrink-0 items-center justify-center rounded-md border border-control-line bg-control text-ink-muted active:bg-select-fill disabled:text-ink-faint"
+          : "flex min-h-9 min-w-0 max-w-full items-center justify-between gap-2 rounded-md border border-control-line bg-control px-3 py-1.5 text-left text-sm disabled:text-ink-faint md:min-h-8 md:py-1"}
+      >
+        {compact ? (
+          <Icon name={value === localHostAlias ? "home" : "terminal"} className="size-4" />
+        ) : (
+          <>
+            <span className="truncate">
+              {value === localHostAlias
+                ? localName
+                : value || t(aliases.length === 0 && !includeLocal ? "sftp.noHosts" : "sftp.chooseHost")}
+            </span>
+            <Icon name="chevronRight" className="size-3 rotate-90 text-ink-muted" />
+          </>
+        )}
       </button>
       <HostPickerDialog
         open={open}

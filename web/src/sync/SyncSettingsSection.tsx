@@ -1,12 +1,14 @@
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 import { DisclosureChevron } from "../ui/DisclosureChevron";
 import type { SyncDirection, SyncStatus } from "../api/sync";
 import { useTranslate } from "../i18n/context";
+import { describeControl } from "../ui/describeControl";
 import { CheckboxField, control, hintText, sectionHeading } from "../ui/form";
 import { Icon } from "../ui/icons";
 import { PasswordInput } from "../ui/PasswordField";
 import { Button, Notice } from "../ui/surface";
 import { SyncKeySection } from "./SyncKeySection";
+import { syncDirectionHintKeys, syncSetupStateKeys } from "./syncMessageKeys";
 import type { SyncSetupForm } from "./useSyncSetupForm";
 
 function SyncRow({
@@ -20,13 +22,14 @@ function SyncRow({
   hint?: string;
   interactiveChildren?: boolean;
 }) {
+  const hintId = useId();
   const contents = (
     <>
       <span className="w-full shrink-0 text-sm text-ink-muted sm:w-32">
         {label}
       </span>
       <span className="flex min-w-0 flex-1 justify-start sm:ml-auto sm:justify-end">
-        {children}
+        {describeControl(children, { descriptionIds: [hint === undefined ? undefined : hintId] })}
       </span>
     </>
   );
@@ -42,7 +45,7 @@ function SyncRow({
         </label>
       )}
       {hint === undefined ? null : (
-        <p className={`px-3 pb-3 sm:pb-2 ${hintText}`}>{hint}</p>
+        <p id={hintId} className={`px-3 pb-3 sm:pb-2 ${hintText}`}>{hint}</p>
       )}
     </div>
   );
@@ -203,7 +206,7 @@ export function SyncSettingsSection({ status, busy, form, onCheckSetup, onComple
 
                 <SyncRow
                   label={t("sync.direction")}
-                  hint={t(`sync.direction.${direction}.hint`)}
+                  hint={t(syncDirectionHintKeys[direction])}
                 >
                   <select
                     value={direction}
@@ -227,7 +230,7 @@ export function SyncSettingsSection({ status, busy, form, onCheckSetup, onComple
                       setupCheck.state === "incomplete" ? "danger" : "notice"
                     }
                   >
-                    {t(`sync.setup.${setupCheck.state}`)}
+                    {t(syncSetupStateKeys[setupCheck.state])}
                     {setupCheck.state === "incomplete"
                       ? ` ${t("sync.setup.useAnotherPath")}`
                       : ""}

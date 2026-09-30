@@ -4,11 +4,13 @@ import (
 	"errors"
 	"reflect"
 	"testing"
+
+	"sshc/internal/validate"
 )
 
 func testShortcutPreset() ShortcutPreset {
 	bindings := map[string][]string{}
-	for _, a := range shortcutActions {
+	for _, a := range validate.ShortcutActions {
 		bindings[a] = []string{}
 	}
 	bindings["palette"] = []string{"Ctrl+K", "Meta+K"}
@@ -49,5 +51,16 @@ func TestShortcutPresetsRejectConflictsAndMalformedBindings(t *testing.T) {
 	delete(p.Bindings, "copy")
 	if validateShortcutPresets([]ShortcutPreset{p}) == nil {
 		t.Fatal("missing action accepted")
+	}
+}
+
+// 画面はファンクションキーを修飾なしでも Shift などの修飾付きでも記録する。
+// 保存がそれを断ると、利用者は理由の分からない保存の失敗を見る。
+func TestShortcutPresetsAcceptFunctionKeysWithAnyModifiers(t *testing.T) {
+	p := testShortcutPreset()
+	p.Bindings["home"] = []string{"F2", "Shift+F2", "Ctrl+Shift+F13"}
+	p.Bindings["sftp"] = []string{"F24"}
+	if err := validateShortcutPresets([]ShortcutPreset{p}); err != nil {
+		t.Fatalf("function keys were refused: %v", err)
 	}
 }

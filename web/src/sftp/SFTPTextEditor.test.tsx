@@ -3,7 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/client";
 import type { RemoteEntry, RemoteTextFile } from "./api";
-import { SFTPTextEditor, useSFTPTextEditor, type SFTPTextSource } from "./SFTPTextEditor";
+import { SFTPTextEditor } from "./SFTPTextEditor";
+import { useSFTPTextEditor, type SFTPTextSource } from "./useSFTPTextEditor";
 
 vi.mock("./MonacoEditor", () => ({
   MonacoEditor: ({ value, onChange, readOnly }: { value: string; onChange: (value: string) => void; readOnly: boolean }) => (

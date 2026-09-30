@@ -43,6 +43,9 @@ type phraseFrames struct {
 	peerMissing string
 	// fileMissing は、設定ファイルに指示（%s）が無いことを言う。
 	fileMissing string
+	// fieldSeparator は、項目の誤りの項目名と理由の間に置く区切りである。画面の
+	// vpn.fieldRefusedAt と同じく、日本語は全角の「：」、英語は「: 」にする。
+	fieldSeparator string
 }
 
 // sentence は、理由を1文にする。
@@ -75,7 +78,7 @@ func (book phrasebook) sentence(refusal Refusal) string {
 	return book.frames.operationFailed
 }
 
-// fieldSentence は、項目の誤りを「項目: 理由」の1文にする。項目が分からなければ、
+// fieldSentence は、項目の誤りを「項目」と「理由」を区切りでつないだ1文にする。項目が分からなければ、
 // 何を確かめればよいかだけを言う。
 func (book phrasebook) fieldSentence(refusal Refusal) string {
 	sentence, known := book.fields[vpn.Reason(refusal.Reason)]
@@ -91,7 +94,7 @@ func (book phrasebook) fieldSentence(refusal Refusal) string {
 	if refusal.Line > 0 || refusal.Directive != "" {
 		sentence = book.configLineSentence(refusal, sentence)
 	}
-	return refusal.Field + ": " + sentence
+	return refusal.Field + book.frames.fieldSeparator + sentence
 }
 
 // configLineSentence は、設定ファイルの中の誤りを、行番号と指示を添えた文にする。

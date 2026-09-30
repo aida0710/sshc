@@ -1,9 +1,14 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { failureCode } from "../api/client";
 import type { LocalShellProfile, SettingsApi, TerminalSettings } from "../api/settings";
 import { useTranslate } from "../i18n/context";
 import { AppearancePicker } from "../terminal/AppearancePicker";
 import { BackgroundPicker } from "../terminal/BackgroundPicker";
+import {
+  defaultBrowserScrollbackLines,
+  maxBrowserScrollbackLines,
+  minBrowserScrollbackLines,
+} from "../terminal/browserScrollback";
 import { appearanceOf } from "../terminal/appearance";
 import { fonts } from "../terminal/fonts";
 import { palettes } from "../terminal/palettes";
@@ -12,6 +17,8 @@ import { Button, Notice } from "../ui/surface";
 import { ActionArea, SettingsSection } from "./SettingsSection";
 import { TerminalPreview } from "./TerminalPreview";
 import { useAsyncOperation } from "../ui/useAsyncOperation";
+import { SettingsLoadFailure } from "./SettingsLoadFailure";
+import { useSettingsLoad } from "./useSettingsLoad";
 
 export type TerminalSettingsApi = Pick<SettingsApi, "terminalSettings" | "setTerminalSettings" | "localShellProfiles">;
 
@@ -122,16 +129,14 @@ export function TerminalSettingsSection({ api, showHeading, onSettingsChange }: 
 }) {
   const t = useTranslate();
   const [draft, setDraft] = useState<TerminalDraft>(initialDraft);
-  const [loaded, setLoaded] = useState(false);
   const [profiles, setProfiles] = useState<LocalShellProfile[]>([]);
   const save = useAsyncOperation();
+  const loadSettings = useCallback(async () => { setDraft(draftOf(await api.terminalSettings())); }, [api]);
+  const settingsLoad = useSettingsLoad(loadSettings);
+  const loaded = settingsLoad.state === "loaded";
 
   useEffect(() => {
     let active = true;
-    void api.terminalSettings()
-      .then((settings) => { if (active) setDraft(draftOf(settings)); })
-      .catch(() => undefined)
-      .finally(() => { if (active) setLoaded(true); });
     if (api.localShellProfiles !== undefined) {
       void api.localShellProfiles()
         .then((answer) => { if (active) setProfiles(answer.profiles); })
@@ -153,13 +158,13 @@ export function TerminalSettingsSection({ api, showHeading, onSettingsChange }: 
     }
     await save.run(async () => {
       await api.setTerminalSettings(next);
-      // The PUT above is the durable operation. A live-console refresh is a
+      // The PUT above is the durable operation. A live-session refresh is a
       // best-effort follow-up and must not turn a completed save into a false
       // failure message.
       try {
         await onSettingsChange?.(next);
       } catch {
-        // The normal console poll will reconcile the view shortly.
+        // The normal session poll will reconcile the view shortly.
       }
     }, { describe: (error) => t(saveFailureKey(error)) });
   }
@@ -167,6 +172,7 @@ export function TerminalSettingsSection({ api, showHeading, onSettingsChange }: 
   const busy = save.busy;
   return (
     <SettingsSection id="settings-terminal" label={t("terminal.settingsHeading")} icon="terminal" showHeading={showHeading}>
+      <SettingsLoadFailure settingsLoad={settingsLoad} title={t("terminal.settingsLoadFailed")} />
       <fieldset
         disabled={!loaded || busy}
         className="min-w-0 border-0 p-0 disabled:opacity-70"
@@ -228,14 +234,21 @@ export function TerminalSettingsSection({ api, showHeading, onSettingsChange }: 
               onChange={(event) => edit({ scrollback: event.target.value })}
             />
           </Field>
-          <Field label={t("terminal.browserScrollbackLabel")} hint={t("terminal.browserScrollbackHint")}>
+          <Field
+            label={t("terminal.browserScrollbackLabel")}
+            hint={t("terminal.browserScrollbackHint", {
+              min: minBrowserScrollbackLines,
+              max: maxBrowserScrollbackLines,
+              default: defaultBrowserScrollbackLines,
+            })}
+          >
             <input
               type="number"
-              min={1000}
-              max={100000}
+              min={minBrowserScrollbackLines}
+              max={maxBrowserScrollbackLines}
               className={control}
               value={draft.browserScrollbackLines}
-              placeholder="5000"
+              placeholder={String(defaultBrowserScrollbackLines)}
               disabled={busy}
               onChange={(event) => edit({ browserScrollbackLines: event.target.value })}
             />
@@ -336,14 +349,12 @@ export function TerminalSettingsSection({ api, showHeading, onSettingsChange }: 
         </div>
       </div>
       <ActionArea status={save.error === ""
-        ? (!loaded
+        ? (settingsLoad.state === "loading"
             ? <p role="status" className="text-sm text-ink-muted">{t("terminal.settingsLoading")}</p>
-            : !save.saved
-              ? undefined
-              : <p role="status" className="text-sm text-live">{t("terminal.settingsSaved")}</p>)
+            : !loaded || !save.saved ? undefined : <p role="status" className="text-sm text-live">{t("terminal.settingsSaved")}</p>)
         : <Notice tone="danger">{save.error}</Notice>}
       >
-        <Button kind="primary" disabled={busy} onClick={() => void submit()}>
+        <Button kind="primary" disabled={!loaded || busy} onClick={() => void submit()}>
           {t("terminal.startSave")}
         </Button>
       </ActionArea>

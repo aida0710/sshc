@@ -113,6 +113,7 @@ export function SyncExclusionsPanel({ api, initial, onSaved }: Props) {
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               className={control}
+              aria-label={t("sync.exclusions.search")}
               placeholder={t("sync.exclusions.search")}
             />
             <div className="max-h-64 overflow-auto rounded-md border border-hairline">

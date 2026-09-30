@@ -3,7 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LanguageProvider, useTranslate, useLanguage } from "./context";
 import { en, ja } from "./messages";
-import { detectLocale, storageKey } from "./locale";
+import { detectLocale } from "./locale";
+import { localStorageKeys } from "../ui/browserStorageKeys";
 
 afterEach(() => {
   window.localStorage.clear();
@@ -48,7 +49,6 @@ describe("the catalogue", () => {
         "groups.metricConnections",
         "groups.pageTitle",
         "history.pageTitle",
-        "home.connections",
         "host.tabJump",
         "host.tabRaw",
         "keys.agentHeading",
@@ -62,7 +62,6 @@ describe("the catalogue", () => {
         "menu.language",
         "menu.others",
         "menu.theme",
-        "rk.alias",
         "rk.hostAlias",
         "section.connections",
         "section.files",
@@ -98,7 +97,6 @@ describe("the catalogue", () => {
         "terminal.rowDetail",
         "terminal.settingsHeading",
         "tree.navLabel",
-        "vpn.fieldRefusedAt",
         "vpn.heading",
         "workspace.groupCount",
       ].sort(),
@@ -179,7 +177,7 @@ describe("the language switch", () => {
     await user.click(screen.getByRole("button", { name: "to japanese" }));
 
     expect(screen.getByText(ja["shell.starting"])).toBeInTheDocument();
-    expect(window.localStorage.getItem(storageKey)).toBe("ja");
+    expect(window.localStorage.getItem(localStorageKeys.locale)).toBe("ja");
   });
 
   it("writes nothing but the language, and nothing at all until it is changed", async () => {
@@ -194,7 +192,7 @@ describe("the language switch", () => {
 
     await user.click(screen.getByRole("button", { name: "to japanese" }));
 
-    expect(Object.keys(window.localStorage)).toEqual([storageKey]);
+    expect(Object.keys(window.localStorage)).toEqual([localStorageKeys.locale]);
     expect(window.sessionStorage.length).toBe(0);
   });
 });
@@ -205,7 +203,7 @@ describe("locale detection", () => {
   });
 
   it("prefers the stored choice over the browser", () => {
-    window.localStorage.setItem(storageKey, "ja");
+    window.localStorage.setItem(localStorageKeys.locale, "ja");
     vi.spyOn(navigator, "languages", "get").mockReturnValue(["en-GB"]);
 
     expect(detectLocale()).toBe("ja");
@@ -224,7 +222,7 @@ describe("locale detection", () => {
   });
 
   it("ignores a stored value that is not a language it has", () => {
-    window.localStorage.setItem(storageKey, "../etc/passwd");
+    window.localStorage.setItem(localStorageKeys.locale, "../etc/passwd");
     vi.spyOn(navigator, "languages", "get").mockReturnValue(["en-US"]);
 
     expect(detectLocale()).toBe("en");

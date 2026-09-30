@@ -20,20 +20,20 @@ export function TerminalPasteDialog({
   const [draft, setDraft] = useState(text);
   const inspection = inspectTerminalPaste(draft);
   const cancel = useRef<HTMLButtonElement>(null);
-  const headingID = useId();
-  const descriptionID = useId();
+  const headingId = useId();
+  const descriptionId = useId();
   return (
     <ModalShell
-      labelledBy={headingID}
-      describedBy={descriptionID}
+      labelledBy={headingId}
+      describedBy={descriptionId}
       onDismiss={onCancel}
       initialFocusRef={cancel}
       panelClassName="flex max-h-[90dvh] overflow-y-auto w-full max-w-2xl flex-col gap-3 rounded-lg p-4"
     >
-      <h2 id={headingID} className="text-base font-semibold text-ink">
+      <h2 id={headingId} className="text-base font-semibold text-ink">
         {t("terminal.pasteHeading", { target })}
       </h2>
-      <p id={descriptionID} className="text-sm text-ink-muted">
+      <p id={descriptionId} className="text-sm text-ink-muted">
         {t("terminal.pasteDescription", { lines: String(inspection.lineCount) })}
       </p>
       <ul className="list-disc space-y-1 pl-5 text-sm text-notice-ink">

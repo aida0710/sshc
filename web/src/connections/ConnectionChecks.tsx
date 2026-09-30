@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { AuthenticationResponse, DiagnosticsApi, EffectiveResponse, ReachabilityResponse } from "../api/diagnostics";
 import { useTranslate } from "../i18n/context";
+import { describeAuthentication, describeReachability, reachabilityNoticeKey } from "../diagnostics/diagnosticLabels";
 import { hintText, sectionHeading } from "../ui/form";
 import { Button, Notice } from "../ui/surface";
 
@@ -126,14 +127,14 @@ export function ConnectionChecks({ alias, api, disabled, resetKey }: ConnectionC
             <div className="flex flex-col gap-1.5 p-3 text-sm">
               <h3 className={sectionHeading}>{t("diag.reachability")}</h3>
               <p className="font-mono text-xs text-ink">{reachability.address}</p>
-              <p className="font-medium text-ink">{reachability.outcome}</p>
-              <p className={hintText}>{reachability.notice}</p>
+              <p className="font-medium text-ink">{describeReachability(t, reachability.outcome)}</p>
+              <p className={hintText}>{t(reachabilityNoticeKey(reachability.outcome))}</p>
             </div>
           )}
           {authentication === null ? null : (
             <div className="flex flex-col gap-1.5 border-t border-line p-3 text-sm sm:border-t-0">
               <h3 className={sectionHeading}>{t("diag.authentication")}</h3>
-              <p className="font-medium text-ink">{authentication.outcome}</p>
+              <p className="font-medium text-ink">{describeAuthentication(t, authentication.outcome)}</p>
               {authentication.method === "" ? null : (
                 <p className={hintText}>{t("diag.authenticationMethod", { method: authentication.method })}</p>
               )}

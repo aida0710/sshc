@@ -4,7 +4,9 @@ import {
   type ElementType,
   type HTMLAttributes,
   type ReactNode,
+  useId,
 } from "react";
+import { describeControl } from "./describeControl";
 import { dangerAction, hintText, primaryAction, secondaryAction } from "./form";
 
 type CardElement = "div" | "section" | "article" | "dl" | "ul";
@@ -60,6 +62,7 @@ export function Row({
   stackOnNarrow?: boolean;
   interactiveChildren?: boolean;
 }) {
+  const hintId = useId();
   const rowLayout = stackOnNarrow
     ? "flex flex-col items-stretch gap-2 px-3 py-3 sm:flex-row sm:items-center sm:gap-3 sm:py-2"
     : "flex items-center gap-3 px-3 py-2";
@@ -76,7 +79,7 @@ export function Row({
       <span
         className={`${stackOnNarrow ? "w-full sm:w-auto" : "ml-auto"} flex min-w-0 flex-1 justify-end`}
       >
-        {children}
+        {describeControl(children, { descriptionIds: [hint === undefined ? undefined : hintId] })}
       </span>
     </>
   );
@@ -93,7 +96,7 @@ export function Row({
         )}
       </div>
       {hint === undefined ? null : (
-        <p className={`px-3 pb-2 ${hintText}`}>{hint}</p>
+        <p id={hintId} className={`px-3 pb-2 ${hintText}`}>{hint}</p>
       )}
       {warning === undefined ? null : (
         <p role="status" className="px-3 pb-2 text-xs text-notice-ink">

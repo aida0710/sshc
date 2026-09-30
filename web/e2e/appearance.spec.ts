@@ -1,26 +1,11 @@
 import { expect, test } from "./support/environment";
 import { openApplication, openSection, sessionStatus } from "./support/environment";
-
-const sections = [
-  "Home",
-  "Connections",
-  "SFTP",
-  "Snippets",
-  "Config",
-  "Groups",
-  "Keys",
-  "Known Hosts",
-  "Install Key on Server",
-  "Ad hoc checks",
-  "Account passwords",
-  "Key passphrases",
-  "OTP",
-  "Sync",
-  "History",
-];
+import { everySection } from "./support/sectionNavigation";
+import { answerNoVPNProfiles } from "./support/vpn";
 
 for (const appearance of ["light", "dark"] as const) {
   test(`every section renders in ${appearance}`, async ({ page, installation }) => {
+    await answerNoVPNProfiles(page);
     await openApplication(page, installation);
 
     await expect(page.locator("[data-session-status-badge]")).toBeVisible();
@@ -43,8 +28,8 @@ for (const appearance of ["light", "dark"] as const) {
     await expect(page.locator("html")).toHaveAttribute("data-theme", appearance);
     await expect(sessionStatus(page)).toContainText("Local session active");
 
-    for (const name of sections) {
-      await openSection(page, name);
+    for (const { navigation } of everySection) {
+      await openSection(page, navigation);
 
       await expect(page.locator("html")).toHaveAttribute("data-theme", appearance);
       await expect(page.locator("main")).toBeVisible();

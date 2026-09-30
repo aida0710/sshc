@@ -57,12 +57,12 @@ describe("newTouchScroll", () => {
 function flickHarness(options: { canScroll?: () => boolean; reducedMotion?: () => boolean } = {}) {
   const { view, sent } = recorder();
   let time = 0;
-  let nextID = 0;
+  let nextId = 0;
   const frames = new Map<number, FrameRequestCallback>();
   const scroll = newTouchScroll(view, () => 20, {
     ...options,
     now: () => time,
-    requestFrame: (callback) => { frames.set(++nextID, callback); return nextID; },
+    requestFrame: (callback) => { frames.set(++nextId, callback); return nextId; },
     cancelFrame: (id) => { frames.delete(id); },
   });
   const advance = (milliseconds: number) => {

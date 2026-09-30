@@ -5,8 +5,8 @@ import {
   isTheme,
   rememberTheme,
   resolveTheme,
-  themeStorageKey,
 } from "./theme";
+import { localStorageKeys } from "../ui/browserStorageKeys";
 
 afterEach(() => {
   window.localStorage.clear();
@@ -30,12 +30,12 @@ describe("detectTheme", () => {
 
   it("reads a remembered choice", () => {
     rememberTheme("light");
-    expect(window.localStorage.getItem(themeStorageKey)).toBe("light");
+    expect(window.localStorage.getItem(localStorageKeys.theme)).toBe("light");
     expect(detectTheme()).toBe("light");
   });
 
   it("falls back to dark when the stored value is not a theme", () => {
-    window.localStorage.setItem(themeStorageKey, "solarized");
+    window.localStorage.setItem(localStorageKeys.theme, "solarized");
     expect(detectTheme()).toBe("dark");
   });
 });

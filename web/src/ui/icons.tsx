@@ -55,7 +55,7 @@ import {
 } from "lucide-react";
 
 // 画面のアイコンは lucide（https://lucide.dev/icons/）から選び、形を手で描かない。
-// 手で描いた形は、似た別のもの（歯車のつもりが太陽）に見えることがあった。
+// 小さく手で描いた形は、似た別のもの（歯車と太陽など）に見えやすいからである。
 // 名前は画面の中での役割で付け、どの lucide のアイコンを使うかはここだけで決める。
 const shapes = {
   home: House,
@@ -117,8 +117,8 @@ export type IconName = keyof typeof shapes;
 
 export const iconNames = Object.keys(shapes) as IconName[];
 
-// iconStrokeWidth は、手で描いていたころのアイコンと同じ線の太さである。lucide の既定（2）
-// にすると、画面のアイコンがすべて一段太くなる。
+// iconStrokeWidth は、すべてのアイコンに共通の線の太さである。lucide の既定（2）では
+// 隣に並ぶ文字よりアイコンが一段太く見えるので、それより細くする。
 const iconStrokeWidth = 1.7;
 
 export function Icon({ name, className = "h-4 w-4" }: { name: IconName; className?: string }) {

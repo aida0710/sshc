@@ -62,10 +62,10 @@ export class DownloadPlane {
   // ago, and the part files of those jobs and of finished ones, except a
   // finished one whose save this page still holds.
   removeOrphans(listed: readonly ManagedTransferJob[]): Promise<void> {
-    const listedIDs = new Set(listed.map((job) => job.id));
+    const listedIds = new Set(listed.map((job) => job.id));
     const now = this.now();
     for (const [id, held] of [...this.browserSaves]) {
-      if (!listedIDs.has(id) || now - held.handedAt >= browserSaveRetentionMs) this.releaseBrowserSave(id);
+      if (!listedIds.has(id) || now - held.handedAt >= browserSaveRetentionMs) this.releaseBrowserSave(id);
     }
     return this.sinks.removeOrphans(new Set(listed
       .filter((job) => !["completed", "cancelled"].includes(job.status) || this.browserSaves.has(job.id))

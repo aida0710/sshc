@@ -35,12 +35,12 @@ func TestAWireGuardConfigRefusalNamesTheLineAndTheDirective(t *testing.T) {
 		want   string
 	}{
 		{"[Interface]\nPrivateKey = " + testKey + "\nAddress = 10.0.0.2/32\nPostUp = iptables -A FORWARD\n",
-			"secrets.wireguardConfig: 4行目の「PostUp」は、コマンドやプログラムを実行する指示のため使用できません。"},
-		{"[Interface]\nAddress = 10.0.0.2/32\n", "secrets.wireguardConfig: 設定ファイルに「PrivateKey」がありません。"},
+			"secrets.wireguardConfig：4行目の「PostUp」は、コマンドやプログラムを実行する指示のため使用できません。"},
+		{"[Interface]\nAddress = 10.0.0.2/32\n", "secrets.wireguardConfig：設定ファイルに「PrivateKey」がありません。"},
 		{"[Interface]\nPrivateKey = " + testKey + "\nAddress = 10.0.0.2/32\n[Peer]\nAllowedIPs = 10.0.0.0/8\n",
-			"secrets.wireguardConfig: 4行目の[Peer]に「PublicKey」がありません。"},
+			"secrets.wireguardConfig：4行目の[Peer]に「PublicKey」がありません。"},
 		{"[Interface]\nPrivateKey = " + testKey + "\nAddress = 10.0.0.2/32\nEndpoint = vpn.example.jp:51820\n",
-			"secrets.wireguardConfig: 4行目の「Endpoint」は、この節には書けません。"},
+			"secrets.wireguardConfig：4行目の「Endpoint」は、この節には書けません。"},
 	} {
 		_, err := vpn.ParseWireGuardConfig([]byte(test.config))
 		refusal, known := Of(err)

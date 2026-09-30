@@ -124,7 +124,9 @@ describe("SFTPPanel uploads", () => {
     expect(api.startUpload).toHaveBeenCalledWith({ alias: "edge", id: expect.any(String), remotePath: "/remote/first.txt", size: first.size, sourceFingerprint: expect.stringMatching(/^tree-sha256:/) });
     expect(api.startUpload).toHaveBeenCalledWith({ alias: "edge", id: expect.any(String), remotePath: "/remote/second.txt", size: second.size, sourceFingerprint: expect.stringMatching(/^tree-sha256:/) });
     expect(await screen.findByText("Completed")).toBeInTheDocument();
-    expect(await screen.findByText("Failed · upload_failed")).toBeInTheDocument();
+    expect(await screen.findByText("The SFTP operation failed.")).toBeInTheDocument();
+    expect(screen.getByText("Failed")).toBeInTheDocument();
+    expect(screen.queryByText(/upload_failed/)).toBeNull();
   });
 
   it("says which VPN route the chosen host is reached through", async () => {
@@ -405,6 +407,53 @@ describe("SFTPPanel uploads", () => {
     addRemoteTransfers.mockRestore();
   });
 
+  it("keeps the delete confirmation open and says why when no deletion could be queued", async () => {
+    const addRemoteTransfers = vi.spyOn(sftpTransferManager, "addRemoteTransfers").mockRejectedValue(new Error("queue_unavailable"));
+    api.list.mockResolvedValue({
+      path: "/remote",
+      entries: [{ name: "old.txt", path: "/remote/old.txt", type: "file", size: 1, mode: "0644", modifiedAt: "", revision: "old" }],
+    });
+    render(<SFTPPanel aliases={["edge"]} />);
+    await chooseHost("edge");
+    const row = await screen.findByRole("button", { name: "old.txt" });
+    await userEvent.click(row);
+    fireEvent.keyDown(row, { key: "Delete" });
+
+    const dialog = await screen.findByRole("dialog", { name: "Delete this remote entry?" });
+    await userEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
+
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("The selected entries could not be deleted.");
+    expect(screen.getByRole("dialog", { name: "Delete this remote entry?" })).toBe(dialog);
+    addRemoteTransfers.mockRestore();
+  });
+
+  it("queues a deletion once even when the confirmation is pressed again while it is being queued", async () => {
+    let finishQueueing: (ids: string[]) => void = () => undefined;
+    const addRemoteTransfers = vi.spyOn(sftpTransferManager, "addRemoteTransfers").mockImplementation(
+      () => new Promise<string[]>((resolve) => { finishQueueing = resolve; }),
+    );
+    api.list.mockResolvedValue({
+      path: "/remote",
+      entries: [{ name: "old.txt", path: "/remote/old.txt", type: "file", size: 1, mode: "0644", modifiedAt: "", revision: "old" }],
+    });
+    render(<SFTPPanel aliases={["edge"]} />);
+    await chooseHost("edge");
+    const row = await screen.findByRole("button", { name: "old.txt" });
+    await userEvent.click(row);
+    fireEvent.keyDown(row, { key: "Delete" });
+
+    const dialog = await screen.findByRole("dialog", { name: "Delete this remote entry?" });
+    const confirm = within(dialog).getByRole("button", { name: "Delete" });
+    fireEvent.click(confirm);
+    fireEvent.click(confirm);
+
+    expect(addRemoteTransfers).toHaveBeenCalledTimes(1);
+    expect(confirm).toBeDisabled();
+    finishQueueing(["delete-one"]);
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Delete this remote entry?" })).not.toBeInTheDocument());
+    addRemoteTransfers.mockRestore();
+  });
+
   it("refreshes the current directory on demand", async () => {
     render(<SFTPPanel aliases={["edge"]} />);
     await chooseHost("edge");
@@ -608,6 +657,16 @@ describe("SFTPPanel uploads", () => {
     expect(screen.queryByText("sftp_failed")).not.toBeInTheDocument();
   });
 
+  it("says a directory could not be opened for lack of permission instead of showing the code", async () => {
+    api.list.mockRejectedValueOnce(new ApiError("sftp_permission_denied", 403, null));
+    render(<SFTPPanel aliases={["miyabi"]} />);
+
+    await chooseHost("miyabi");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Permission denied. Check the permissions on the host.");
+    expect(screen.queryByText(/sftp_permission_denied/)).not.toBeInTheDocument();
+  });
+
   it("says why the VPN route could not reach the host, in the VPN screen's words", async () => {
     api.list.mockRejectedValueOnce(new ApiError("vpn_target_failed", 502, {
       code: "vpn_target_failed",
@@ -705,7 +764,8 @@ describe("SFTPPanel uploads", () => {
     const folderPicker = container.querySelector<HTMLInputElement>('input[webkitdirectory]');
     fireEvent.change(folderPicker as HTMLInputElement, { target: { files: [nested] } });
 
-    expect(await screen.findByText("sftp_transfer_limit")).toBeVisible();
+    expect(await screen.findByText(/The transfer limit has been reached/)).toBeVisible();
+    expect(screen.queryByText("sftp_transfer_limit")).toBeNull();
     expect(api.mkdir).not.toHaveBeenCalled();
     const plain = new File(["plain"], "plain.txt");
     const filePicker = container.querySelectorAll<HTMLInputElement>('input[type="file"]')[0];

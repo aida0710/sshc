@@ -1,14 +1,6 @@
 import { usePresetSync } from "./keyconfig/presets";
 import { useBindings } from "./keyconfig/bindings";
-import {
-  Suspense,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type CSSProperties,
-  type MouseEvent,
-} from "react";
+import { Suspense, useEffect, type CSSProperties, type MouseEvent } from "react";
 import { type HealthResponse } from "./api/client";
 import { terminalSessionsApi } from "./api/terminalSessions";
 import { settingsApi } from "./api/settings";
@@ -17,10 +9,8 @@ import type { SessionState } from "./session/bootstrap";
 import type { CreationPrerequisite } from "./connections/CreateConnectionModal";
 import { LockScreen } from "./secrets/LockScreen";
 import { useLanguage } from "./i18n/context";
-import { Icon } from "./ui/icons";
-import { InspectorPane, InspectorToggle, type InspectorContent } from "./ui/Inspector";
+import { InspectorPane, InspectorToggle } from "./ui/Inspector";
 import { useTheme } from "./theme/context";
-import { Button } from "./ui/surface";
 import { usePolling } from "./ui/usePolling";
 import { RouteSkeleton } from "./ui/RouteSkeleton";
 import { sectionPath, type Section } from "./routing/sectionRoute";
@@ -35,12 +25,14 @@ import { TransferNotifications } from "./sftp/TransferNotifications";
 import { sftpTransferManager } from "./sftp/transferManager";
 import { useTransferUnloadWarning } from "./sftp/useTransferUnloadWarning";
 import { ErrorDiagnosticNotice } from "./shell/ErrorDiagnosticNotice";
-import { CommandPalette, type PaletteCommand } from "./shell/CommandPalette";
+import { CommandPalette } from "./shell/CommandPalette";
+import { MobileNavigation } from "./shell/MobileNavigation";
+import { SectionNotices } from "./shell/SectionNotices";
+import { usePaletteCommands } from "./shell/usePaletteCommands";
 import { setAndroidAppearance } from "./android/native";
-import { useTerminalNotifications } from "./terminal/terminalNotifications";
+import { useTerminalNotifications } from "./terminal/useTerminalNotifications";
 import { useAppSession } from "./session/useAppSession";
 import { useTerminalWorkspaceController } from "./terminal/useTerminalWorkspaceController";
-import { useDismissibleLayer } from "./ui/useDismissibleLayer";
 import { mobileViewportQuery, useMediaQuery } from "./ui/useMediaQuery";
 import { useAppViewport } from "./ui/useAppViewport";
 import { BootstrapErrorScreen, NotFoundSection, SessionEndedScreen, VaultRecheckOverlay } from "./shell/AppFallbackScreens";
@@ -49,6 +41,7 @@ import { TerminalScreen } from "./shell/TerminalScreen";
 import { useDeclaredConfig } from "./shell/useDeclaredConfig";
 import { useOSC52Policy } from "./shell/useOSC52Policy";
 import { useSectionHandoffs } from "./shell/useSectionHandoffs";
+import { useShellLayers } from "./shell/useShellLayers";
 import { useAppShortcuts } from "./shell/useAppShortcuts";
 
 const transferReconcileIntervalMs = 2_000;
@@ -60,7 +53,7 @@ type AppProps = {
 };
 
 // The shell around every section: the session with the engine, the frame
-// (header, navigation, inspector, command palette), the consoles that stay
+// (header, navigation, inspector, command palette), the terminal sessions that stay
 // alive behind the sections, and what one section hands to the next.
 export function App({
   bootstrap,
@@ -89,66 +82,34 @@ export function App({
   usePresetSync(state === "ready");
   const handoffs = useSectionHandoffs(navigate);
   const declared = useDeclaredConfig(state === "ready", section);
-  const [navigationOpen, setNavigationOpen] = useState(false);
-  const navigationPanelRef = useRef<HTMLElement>(null);
-  const navigationTriggerRef = useRef<HTMLButtonElement>(null);
   const [desktopNavigationWidth, resizeDesktopNavigation] = useStoredColumnWidth(navigationWidth);
-  const [inspectorOpen, setInspectorOpen] = useState(false);
-  const [inspector, setInspector] = useState<InspectorContent>(null);
-  const inspectorPanelRef = useRef<HTMLElement>(null);
-  const inspectorTriggerRef = useRef<HTMLButtonElement>(null);
-  const inspectorIsOverlay = useMediaQuery("(max-width: 1023px)");
-  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
-  const commandPaletteReturnFocusRef = useRef<HTMLElement>(null);
-
-  useDismissibleLayer({
-    open: navigationOpen,
-    containerRefs: [navigationPanelRef, navigationTriggerRef],
-    onDismiss: () => setNavigationOpen(false),
-    returnFocusRef: navigationTriggerRef,
-    trapFocus: mobileLayout,
-  });
-  useDismissibleLayer({
-    open: inspectorOpen && inspector !== null && inspectorIsOverlay,
-    containerRefs: [inspectorPanelRef, inspectorTriggerRef],
-    onDismiss: () => setInspectorOpen(false),
-    closeOnOutside: false,
-    returnFocusRef: inspectorTriggerRef,
-    initialFocusRef: inspectorPanelRef,
-    trapFocus: true,
-  });
+  const {
+    navigationOpen,
+    setNavigationOpen,
+    closeNavigation,
+    navigationPanelRef,
+    navigationTriggerRef,
+    inspector,
+    setInspector,
+    inspectorOpen,
+    setInspectorOpen,
+    inspectorPanelRef,
+    inspectorTriggerRef,
+    commandPaletteOpen,
+    closePalette,
+    commandPaletteReturnFocusRef,
+    openPalette,
+    openPaletteFromNavigation,
+  } = useShellLayers({ mobileLayout, ready: state === "ready", section });
 
   useEffect(() => {
     setAndroidAppearance(resolvedTheme);
   }, [resolvedTheme]);
 
-  useEffect(() => {
-    if (state !== "ready") setCommandPaletteOpen(false);
-  }, [state]);
-
-  useEffect(() => {
-    function closeTransientUi(event: Event) {
-      if (commandPaletteOpen) {
-        event.preventDefault();
-        setCommandPaletteOpen(false);
-      } else if (navigationOpen) {
-        event.preventDefault();
-        setNavigationOpen(false);
-      } else if (inspectorOpen) {
-        event.preventDefault();
-        setInspectorOpen(false);
-      }
-    }
-    window.addEventListener("sshc-android-back", closeTransientUi);
-    return () =>
-      window.removeEventListener("sshc-android-back", closeTransientUi);
-  }, [commandPaletteOpen, inspectorOpen, navigationOpen]);
-
-  const consoles = useTerminalSessions(terminalSessionsApi, t, state === "ready");
-  const closeNavigation = useCallback(() => setNavigationOpen(false), []);
+  const terminalSessions = useTerminalSessions(terminalSessionsApi, t, state === "ready");
   const terminalWorkspace = useTerminalWorkspaceController({
     api: settingsApi,
-    consoles,
+    terminalSessions,
     enabled: state === "ready",
     section,
     navigate,
@@ -157,35 +118,34 @@ export function App({
   const {
     settings: terminalSettings,
     localShellProfiles,
-    activeConsole,
+    activeSessionId,
+    terminalScreenMounted,
     liveWorkspace,
     restoreRequest: workspaceRestoreRequest,
     renameRequest: workspaceRenameRequest,
-    orderedConsoles,
-    showConsole,
+    orderedSessions,
+    showSession,
     openWorkspace,
     renameWorkspace,
     openLocalShell,
-    duplicateConsole,
+    openSSHSession,
+    duplicateSession,
     consumeRestore: consumeWorkspaceRestore,
+    setWorkspaceRestoring,
     consumeRename: consumeWorkspaceRename,
-    reorderConsoles: setConsoleOrder,
+    reorderSessions: setSessionOrder,
     setLiveWorkspace,
     setSettings: setTerminalSettings,
   } = terminalWorkspace;
 
-  const openPalette = useCallback(() => {
-    commandPaletteReturnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    setCommandPaletteOpen(true);
-  }, []);
   useAppShortcuts({
     enabled: state === "ready",
     shortcuts,
     terminalFace,
-    orderedConsoles,
-    activeConsole,
+    orderedSessions,
+    activeSessionId,
     navigate,
-    showConsole,
+    showSession,
     openPalette,
   });
 
@@ -198,60 +158,21 @@ export function App({
   useTransferUnloadWarning();
 
   const unreadSessions = useTerminalNotifications(
-    consoles.sessions,
-    terminalFace ? activeConsole : null,
+    terminalSessions.sessions,
+    terminalFace ? activeSessionId : null,
     t,
-    showConsole,
+    showSession,
   );
 
-  useEffect(() => {
-    setInspector(null);
-  }, [section]);
 
-
-  // Ctrl/Cmd+K performs as well as navigates. These are the actions that are
-  // otherwise several clicks deep from wherever the user happens to be.
-  const paletteCommands: PaletteCommand[] = [
-    {
-      id: "new-connection",
-      label: t("palette.newConnection"),
-      detail: t("palette.newConnectionDetail"),
-      search: "new connection create host add 新規 接続 追加 作成",
-      run: () => {
-        handoffs.setConnectionDraft({
-          alias: "", group: "", hostName: "", user: "", port: "",
-          authentication: "dedicated_password", savedCredential: "", newCredential: "", keyID: "",
-        });
-        navigate("Connections");
-      },
-    },
-    {
-      id: "open-files",
-      label: t("palette.openRemoteFiles"),
-      detail: t("palette.openRemoteFilesDetail"),
-      search: "sftp files remote browse ファイル リモート 転送",
-      run: () => navigate("Files"),
-    },
-    {
-      id: "open-shell",
-      label: t("palette.openLocalShell"),
-      detail: t("palette.openLocalShellDetail"),
-      search: "shell local terminal console シェル ローカル ターミナル",
-      run: () => void openLocalShell(),
-    },
-    ...(!session.passwordless ? [{
-      id: "lock-vault",
-      label: t("palette.lockVault"),
-      detail: t("palette.lockVaultDetail"),
-      search: "lock vault secure ロック 保管庫 施錠",
-      run: () => {
-        void vaultApi.lockVault().then((status) => {
-          if (status.unlocked) session.openVault(status);
-          else session.lock();
-        }).catch(() => undefined);
-      },
-    }] : []),
-  ];
+  const paletteCommands = usePaletteCommands({
+    passwordless: session.passwordless,
+    navigate,
+    startConnectionDraft: handoffs.setConnectionDraft,
+    openLocalShell: () => void openLocalShell(),
+    onLocked: session.lock,
+    onStillUnlocked: session.openVault,
+  });
 
   function followSectionLink(
     event: MouseEvent<HTMLAnchorElement>,
@@ -271,6 +192,11 @@ export function App({
     navigate(target);
   }
 
+  function navigateFromMenu(event: MouseEvent<HTMLAnchorElement>, target: Section) {
+    setNavigationOpen(false);
+    followSectionLink(event, target);
+  }
+
   const changeOSC52 = useOSC52Policy({
     settings: terminalSettings,
     setSettings: setTerminalSettings,
@@ -282,6 +208,7 @@ export function App({
       <LockScreen
         exists={vaultExists}
         passwordless={session.passwordless}
+        minPassphraseLength={session.minPassphraseLength}
         version={version}
         onExists={session.markVaultExists}
         onOpen={session.openVault}
@@ -363,32 +290,22 @@ export function App({
             section={section}
             sectionIcons={sectionIcons}
             sectionLabels={sectionLabels}
-            onNavigate={(event, name) => {
-              setNavigationOpen(false);
-              followSectionLink(event, name);
-            }}
-            consoles={consoles}
-            orderedConsoles={orderedConsoles}
-            activeConsole={activeConsole}
+            onNavigate={navigateFromMenu}
+            terminalSessions={terminalSessions}
+            orderedSessions={orderedSessions}
+            activeSessionId={activeSessionId}
             liveWorkspace={liveWorkspace}
             onRenameWorkspace={renameWorkspace}
             unreadBySession={unreadSessions}
-            onShowConsole={showConsole}
-            onDuplicateConsole={(id) => void duplicateConsole(id)}
-            onReorderConsoles={setConsoleOrder}
+            onShowSession={showSession}
+            onDuplicateSession={(id) => void duplicateSession(id)}
+            onReorderSessions={setSessionOrder}
             localShellProfiles={localShellProfiles}
             onOpenShell={(profileId) => void openLocalShell(profileId)}
             aliases={declared.knownAliases}
             hosts={declared.hosts}
-            onConnect={(alias) => void (async () => {
-              const opened = await consoles.open({ kind: "ssh", alias });
-              if (opened !== null) showConsole(opened.id);
-            })()}
-            onOpenCommandPalette={() => {
-              commandPaletteReturnFocusRef.current = navigationTriggerRef.current;
-              setNavigationOpen(false);
-              setCommandPaletteOpen(true);
-            }}
+            onConnect={(alias) => void openSSHSession(alias)}
+            onOpenCommandPalette={openPaletteFromNavigation}
           />
 
           <main className="relative flex min-h-0 min-w-0 flex-col overflow-hidden">
@@ -402,64 +319,36 @@ export function App({
                 />
               </span>
             )}
-            {vaultMigration === null ? null : (
-              <div
-                role="status"
-                className="flex shrink-0 items-center gap-3 border-b border-notice-line bg-notice px-4 py-2 text-sm text-notice-ink"
-              >
-                <p className="min-w-0 grow">
-                  {t("lock.migrationCompleted", {
-                    current: vaultMigration.from,
-                    required: vaultMigration.to,
-                  })}
-                </p>
-                <Button
-                  className="shrink-0"
-                  onClick={session.clearVaultMigration}
-                >
-                  {t("lock.migrationDismiss")}
-                </Button>
-              </div>
-            )}
-            {handoffs.connectionDraft !== null &&
-            (section === "Groups" || section === "Keys") ? (
-              <div className="flex shrink-0 items-center gap-3 border-b border-notice-line bg-notice px-4 py-2 text-sm text-notice-ink">
-                <p className="min-w-0 grow truncate">
-                  {t("conn.createDraftWaiting", {
-                    alias:
-                      handoffs.connectionDraft.alias || t("conn.createUntitledDraft"),
-                  })}
-                </p>
-                <Button
-                  className="shrink-0"
-                  onClick={() => navigate("Connections")}
-                >
-                  {t("conn.createReturnToDraft")}
-                </Button>
-              </div>
-            ) : null}
+            <SectionNotices
+              section={section}
+              vaultMigration={vaultMigration}
+              onDismissVaultMigration={session.clearVaultMigration}
+              connectionDraft={handoffs.connectionDraft}
+              onReturnToConnectionDraft={() => navigate("Connections")}
+            />
             {state === "ready" ? (
               <div className="relative min-h-0 flex-1 overflow-hidden">
-                {terminalFace || activeConsole !== null ? (
+                {terminalScreenMounted ? (
                   <div className={terminalFace ? "h-full" : "hidden"}>
                     <TerminalScreen
                       visible={terminalFace}
-                      consoles={consoles}
-                      activeConsole={activeConsole}
+                      terminalSessions={terminalSessions}
+                      activeSessionId={activeSessionId}
                       settings={terminalSettings}
                       hostAppearance={declared.hostAppearance}
                       hostOSC52={declared.hostOSC52}
                       hostVPN={declared.hostVPN}
-                      onActive={showConsole}
+                      onActive={showSession}
                       onLiveWorkspaceChange={setLiveWorkspace}
                       onOpenAlias={(alias) =>
-                        consoles.open({ kind: "ssh", alias })
+                        terminalSessions.open({ kind: "ssh", alias })
                       }
-                      onOpenShell={() => consoles.open({ kind: "shell" })}
+                      onOpenShell={() => terminalSessions.open({ kind: "shell" })}
                       onOSC52Change={changeOSC52}
                       onOpenRemotePath={handoffs.openRemotePath}
                       restoreRequest={workspaceRestoreRequest}
                       onRestoreConsumed={consumeWorkspaceRestore}
+                      onRestoringChange={setWorkspaceRestoring}
                       renameRequest={workspaceRenameRequest}
                       onRenameConsumed={consumeWorkspaceRename}
                     />
@@ -473,6 +362,7 @@ export function App({
                       navigation={{
                         location,
                         fileTarget: handoffs.fileTarget,
+                        onFileTargetHandled: handoffs.consumeFileTarget,
                         onNavigate: navigate,
                         onNavigateLocation: navigateLocation,
                         onNavigateForCreation: (target: CreationPrerequisite) =>
@@ -493,18 +383,20 @@ export function App({
                       shell={{
                         onLock: session.lock,
                         onVaultChanged: session.openVault,
+                        passwordless: session.passwordless,
                         onInspector: setInspector,
-                        consoles,
-                        onShowConsole: showConsole,
+                        terminalSessions,
+                        onShowSession: showSession,
+                        onOpenSSHSession: openSSHSession,
                         onOpenWorkspace: openWorkspace,
                         onTerminalSettingsChange: async (settings) => {
                           setTerminalSettings(settings);
-                          await consoles.refresh();
+                          await terminalSessions.refresh();
                         },
                       }}
                       declared={{ groups: declared.groups, knownAliases: declared.knownAliases, hosts: declared.hosts, hostVPN: declared.hostVPN }}
                       sftpTarget={handoffs.sftpTarget}
-                      onSftpTargetHandled={handoffs.handleSftpTarget}
+                      onSftpTargetHandled={handoffs.consumeSftpTarget}
                     />
                   </Suspense>
                 ) : (
@@ -520,24 +412,7 @@ export function App({
           ) : null}
         </div>
         {state === "ready" && mobileLayout ? (
-          <nav aria-label={t("shell.mobileNavigation")} className="sshc-mobile-navigation grid shrink-0 grid-cols-5 border-t border-line bg-toolbar">
-            {(["Home", "Connections", "Files", "Terminal", "Menu"] as const).map((name) => (
-              <a
-                key={name}
-                href={sectionPath(name)}
-                aria-current={section === name ? "page" : undefined}
-                onClick={(event) => {
-                  setNavigationOpen(false);
-                  followSectionLink(event, name);
-                }}
-                className={`relative flex min-h-13 min-w-0 flex-col items-center justify-center gap-0.5 px-1 py-1 text-[10px] transition-colors ${section === name ? "bg-select-fill font-semibold text-accent" : "text-ink-muted active:bg-hover"}`}
-              >
-                {section === name ? <span aria-hidden="true" className="absolute inset-x-4 top-0 h-0.5 rounded-full bg-accent" /> : null}
-                <Icon name={sectionIcons[name]} className="size-5" />
-                <span className="max-w-full truncate">{t(sectionLabels[name])}</span>
-              </a>
-            ))}
-          </nav>
+          <MobileNavigation section={section} onNavigate={navigateFromMenu} />
         ) : null}
         {state === "ready" ? <TransferNotifications /> : null}
         {state === "ready" ? (
@@ -547,14 +422,11 @@ export function App({
             returnFocusRef={commandPaletteReturnFocusRef}
             hosts={declared.hosts}
             files={declared.files}
-            sessions={orderedConsoles}
+            sessions={orderedSessions}
             unreadBySession={unreadSessions}
             sectionLabels={sectionLabels}
-            onClose={() => setCommandPaletteOpen(false)}
-            onConnect={async (alias) => {
-              const opened = await consoles.open({ kind: "ssh", alias });
-              if (opened !== null) showConsole(opened.id);
-            }}
+            onClose={closePalette}
+            onConnect={openSSHSession}
             onOpenHostSettings={(identity) =>
               navigateLocation(
                 connectionLocation({
@@ -572,7 +444,7 @@ export function App({
                 `${sectionPath("Snippets")}?snippet=${encodeURIComponent(id)}`,
               )
             }
-            onOpenSession={showConsole}
+            onOpenSession={showSession}
           />
         ) : null}
       </div>

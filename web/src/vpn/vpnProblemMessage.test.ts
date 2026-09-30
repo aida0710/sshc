@@ -44,7 +44,7 @@ describe("describeVPNProblem", () => {
 
   it("names the field an invalid value was in", () => {
     expect(describeVPNProblem(t, refusal("vpn_profile_invalid", { field: "name", reason: "too_long", limit: 48 }))).toBe(
-      "名前: 長すぎます（48文字まで）。",
+      "名前：長すぎます（48文字まで）。",
     );
   });
 

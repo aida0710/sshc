@@ -1,0 +1,89 @@
+{
+  "chord": [
+    {
+      "input": "Shift+F1",
+      "valid": true,
+      "why": "Shift 付きのファンクションキー。画面は記録し engine は断っていた"
+    },
+    {
+      "input": "Ctrl+Shift+F5",
+      "valid": true,
+      "why": "修飾を重ねたファンクションキー"
+    },
+    {
+      "input": "F1",
+      "valid": true,
+      "why": "修飾なしのファンクションキー"
+    },
+    {
+      "input": "F13",
+      "valid": true,
+      "why": "外付けのキーボードで増やせるファンクションキー"
+    },
+    {
+      "input": "F24",
+      "valid": true,
+      "why": "ファンクションキーの上限"
+    },
+    {
+      "input": "F25",
+      "valid": false,
+      "why": "ファンクションキーの上限を超える"
+    },
+    {
+      "input": "Ctrl+K",
+      "valid": true,
+      "why": "ふつうの和音"
+    },
+    {
+      "input": "Ctrl+Alt+Shift+Meta+K",
+      "valid": true,
+      "why": "修飾を全部、決まった順に"
+    },
+    {
+      "input": "Shift+Ctrl+K",
+      "valid": false,
+      "why": "修飾の順が違う"
+    },
+    {
+      "input": "Ctrl+Ctrl+K",
+      "valid": false,
+      "why": "同じ修飾が重なる"
+    },
+    {
+      "input": "Shift+A",
+      "valid": false,
+      "why": "Shift だけでは文字の入力と見分けられない"
+    },
+    {
+      "input": "A",
+      "valid": false,
+      "why": "修飾なしの文字"
+    },
+    {
+      "input": "Ctrl+f",
+      "valid": false,
+      "why": "キー名は大文字で書く"
+    },
+    {
+      "input": "Ctrl+-",
+      "valid": true,
+      "why": "記号のキー"
+    },
+    {
+      "input": "Ctrl++",
+      "valid": false,
+      "why": "'+' は区切りと見分けられない"
+    },
+    {
+      "input": "Alt+PageDown",
+      "valid": true,
+      "why": "名前のあるキー"
+    },
+    {
+      "input": "",
+      "valid": false,
+      "why": "空"
+    }
+  ]
+}

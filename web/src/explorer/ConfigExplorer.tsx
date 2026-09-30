@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { DisclosureSummary } from "../ui/DisclosureSummary";
 import { DisclosureChevron } from "../ui/DisclosureChevron";
 import { toProblem } from "../api/guards";
 import { Button, Card } from "../ui/surface";
@@ -7,23 +6,38 @@ import { useTranslate } from "../i18n/context";
 import type { Problem } from "../api/client";
 import { configApi, type FileContents, type Overview, type SavePreview } from "../api/config";
 import { SavePreviewPanel } from "../connections/SavePreview";
+import { saveProblemMessage } from "../ui/saveProblemMessage";
 import { Icon } from "../ui/icons";
-import {
-  control,
-  fieldLabel,
-  hintText,
-  sectionHeading,
-} from "../ui/form";
+import { hintText, sectionHeading } from "../ui/form";
 import { MetricCard, MetricGrid, PageHeader } from "../ui/page";
 import { PanelState } from "../ui/PanelState";
+import { useRequestGeneration } from "../ui/useRequestGeneration";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
+import { DiscardDraftDialog } from "../ui/DiscardDraftDialog";
+import type { BrowserLocation, NavigateLocationOptions, NavigationBlocker } from "../routing/useSectionRoute";
+import { useDraftDiscardConfirmation } from "../routing/useDraftDiscardConfirmation";
+import { sectionPath } from "../routing/sectionRoute";
+import { ConfigFileList } from "./ConfigFileList";
+import { ConfigPathActions } from "./ConfigPathActions";
+import { ConfigDiagnostics } from "./ConfigDiagnostics";
+import { ConfigFileOperations } from "./ConfigFileOperations";
 
-export type FileTarget = { path: string; line: number };
+// request numbers each handoff, so the handoff that was taken is the one cleared.
+export type FileTarget = { path: string; line: number; request: number };
 
 type ConfigExplorerProps = {
   target?: FileTarget | null;
+  onTargetHandled?: (request: number) => void;
+  onNavigationBlockerChange?: ((blocker: NavigationBlocker | null) => void) | undefined;
+  onNavigateLocation?: ((url: string, options?: NavigateLocationOptions) => void) | undefined;
 };
 
+
+// Config の中の移動（コマンドパレットからファイルを開くなど）は下書きを捨てない。開く
+// ファイルが変わるときは requestOpen が確かめる。
+function staysInConfig(next: BrowserLocation): boolean {
+  return next.pathname === sectionPath("Config");
+}
 
 function lineRange(contents: string, line: number): { start: number; end: number } {
   const lines = contents.split("\n");
@@ -32,7 +46,7 @@ function lineRange(contents: string, line: number): { start: number; end: number
   return { start, end: start + (lines[index]?.length ?? 0) };
 }
 
-export function ConfigExplorer({ target = null }: ConfigExplorerProps) {
+export function ConfigExplorer({ target = null, onTargetHandled = () => undefined, onNavigationBlockerChange, onNavigateLocation }: ConfigExplorerProps) {
   const t = useTranslate();
   const [overview, setOverview] = useState<Overview | null>(null);
   const [file, setFile] = useState<FileContents | null>(null);
@@ -46,8 +60,11 @@ export function ConfigExplorer({ target = null }: ConfigExplorerProps) {
   const [hierarchyOpen, setHierarchyOpen] = useState(false);
   const [opening, setOpening] = useState(false);
   const editorRef = useRef<HTMLTextAreaElement>(null);
-  const jumped = useRef<FileTarget | null>(null);
-  const openRequest = useRef(0);
+  // The handed line is kept here once the handoff is cleared, until the file
+  // it names has opened and the line is selected.
+  const [pendingJump, setPendingJump] = useState<FileTarget | null>(null);
+  const handledTarget = useRef<number | null>(null);
+  const openGeneration = useRequestGeneration();
   const autoOpened = useRef(false);
 
   const reload = useCallback(async () => {
@@ -62,39 +79,44 @@ export function ConfigExplorer({ target = null }: ConfigExplorerProps) {
     void reload();
   }, [reload]);
 
+  // Clear the handoff as soon as it is taken: otherwise every later visit to
+  // Config would open this file at this line again instead of the entry file.
   useEffect(() => {
-    if (target === null) return;
-    void open(target.path);
-  }, [target]);
+    if (target === null || target.request === handledTarget.current) return;
+    handledTarget.current = target.request;
+    onTargetHandled(target.request);
+    autoOpened.current = true;
+    setPendingJump(target);
+    requestOpenRef.current(target.path);
+  }, [onTargetHandled, target]);
 
   useEffect(() => {
-    if (autoOpened.current || target !== null || overview === null || file !== null) return;
+    if (autoOpened.current || overview === null || file !== null) return;
     if (overview.entry.path === undefined) return;
     autoOpened.current = true;
-    void open(overview.entry.path);
-  }, [file, overview, target]);
+    requestOpenRef.current(overview.entry.path);
+  }, [file, overview]);
 
   useEffect(() => {
-    if (target === null || jumped.current === target) return;
-    if (file === null || file.file.path !== target.path) return;
+    if (pendingJump === null || file === null || file.file.path !== pendingJump.path) return;
     const editor = editorRef.current;
     if (editor === null) return;
-    jumped.current = target;
-    const range = lineRange(file.contents, target.line);
+    setPendingJump(null);
+    const range = lineRange(file.contents, pendingJump.line);
     editor.focus();
     editor.setSelectionRange(range.start, range.end);
-    setJump(t("explorer.opened", { path: target.path, line: target.line }));
-  }, [file, target, t]);
+    setJump(t("explorer.opened", { path: pendingJump.path, line: pendingJump.line }));
+  }, [file, pendingJump, t]);
 
   async function open(path: string) {
-    const request = ++openRequest.current;
+    const isCurrent = openGeneration.begin();
     setOpening(true);
     setHierarchyOpen(false);
     setFile(null);
     setDraft("");
     try {
       const loaded = await configApi.file(path);
-      if (request !== openRequest.current) return;
+      if (!isCurrent()) return;
       setFile(loaded);
       setDraft(loaded.contents);
       setPreview(null);
@@ -102,10 +124,10 @@ export function ConfigExplorer({ target = null }: ConfigExplorerProps) {
       setRenameTo("");
       setConfirmingDelete(false);
     } catch (error) {
-      if (request !== openRequest.current) return;
+      if (!isCurrent()) return;
       setProblem(toProblem(error));
     } finally {
-      if (request === openRequest.current) setOpening(false);
+      if (isCurrent()) setOpening(false);
     }
   }
 
@@ -149,6 +171,7 @@ export function ConfigExplorer({ target = null }: ConfigExplorerProps) {
     }
   }
 
+  // 作ったファイルを開くので、いまの下書きは消える。呼び手が先に破棄を確かめる。
   async function createFile() {
     if (newPath === "") return;
     const path = newPath;
@@ -212,6 +235,24 @@ export function ConfigExplorer({ target = null }: ConfigExplorerProps) {
     }
   }
 
+  const modified = file !== null && draft !== file.contents;
+  const draftDiscard = useDraftDiscardConfirmation({
+    dirty: modified,
+    discard: () => setDraft(file?.contents ?? ""),
+    navigationKeepsDraft: staysInConfig,
+    onNavigationBlockerChange,
+    onNavigateLocation,
+  });
+
+  // 開いているファイル自身をもう一度開いても読み直さない。読み直すと手編集の下書きが
+  // 消える。別のファイルを開くときは、下書きを捨ててよいかを先に確かめる。
+  function requestOpen(path: string) {
+    if (file !== null && file.file.path === path) return;
+    draftDiscard.confirmBefore(() => void open(path));
+  }
+  const requestOpenRef = useRef(requestOpen);
+  requestOpenRef.current = requestOpen;
+
   if (overview === null) {
     return problem === null ? (
       <PanelState tone="loading" title={t("explorer.loading")} />
@@ -221,7 +262,6 @@ export function ConfigExplorer({ target = null }: ConfigExplorerProps) {
   }
 
   const openPath = file?.file.path ?? file?.file.absolute ?? "";
-  const modified = file !== null && draft !== file.contents;
   const editableFiles = overview.files.filter((node) => node.editable).length;
 
   return (
@@ -260,99 +300,15 @@ export function ConfigExplorer({ target = null }: ConfigExplorerProps) {
           </div>
 
           <div id="config-hierarchy" className={`${hierarchyOpen ? "flex" : "hidden"} min-h-0 flex-1 flex-col lg:flex`}>
-          <ul className="flex max-h-96 flex-col gap-0.5 overflow-y-auto p-2 lg:max-h-none lg:flex-1">
-            {overview.files.map((node) => {
-              const current = (node.file.path ?? node.file.absolute) === openPath;
-              const state = t("explorer.fileState", {
-                missing: node.missing === true ? t("explorer.missing") : "",
-                loads: node.loads > 1 ? t("explorer.readTimes", { count: node.loads }) : "",
-                editable: node.editable ? t("explorer.editable") : t("explorer.readOnly"),
-              });
-              return (
-                <li key={node.file.absolute} className={`rounded-lg ${current ? "bg-select-fill" : "hover:bg-surface-subtle"}`}>
-                  <div className="flex items-start gap-2.5 px-2.5 py-2">
-                    <span data-config-node-icon aria-hidden="true" className={`mt-5 shrink-0 md:mt-2.5 [@media(pointer:coarse)]:mt-[1.375rem] ${current ? "text-accent" : "text-ink-faint"}`}>
-                      <Icon name="config" className="h-4 w-4" />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      {node.file.path === undefined ? (
-                        <p className="text-sm text-ink-muted">
-                          <span className="block break-all font-mono text-xs">{node.file.absolute}</span>
-                          <span className="mt-1 block text-xs leading-5 text-notice-ink">{t("explorer.externalFile")}</span>
-                        </p>
-                      ) : (
-                        <button
-                          type="button"
-                          aria-current={current ? "true" : "false"}
-                          onClick={() => void open(node.file.path ?? "")}
-                          className={`block min-h-10 w-full truncate text-left font-mono text-sm md:min-h-0 ${current ? "font-semibold text-ink" : "text-ink-muted hover:text-ink"}`}
-                        >
-                          {node.file.path}
-                        </button>
-                      )}
-                      <p className="mt-0.5 text-xs text-ink-faint">{state}</p>
-                      {(node.includes ?? []).map((include) => (
-                        <div key={`${node.file.absolute}:${include.line}:${include.pattern}`} className="mt-2 min-w-0 overflow-hidden rounded-md bg-surface-subtle px-2 py-1.5 text-xs text-ink-muted">
-                          <span className="block break-all font-mono leading-5">{include.pattern}</span>
-                          {include.condition === undefined ? null : (
-                            <span className="mt-0.5 block break-words leading-5 text-notice-ink">{t("explorer.insideCondition", { condition: include.condition })}</span>
-                          )}
-                          <ul className="mt-1">
-                            {(include.matches ?? []).map((match) => (
-                              <li key={match.absolute} className="flex min-w-0 items-center gap-1 font-mono text-ink-faint" title={match.path ?? match.absolute}>
-                                <Icon name="arrowRight" className="size-3" />
-                                <span className="truncate">{match.path ?? match.absolute}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-
-          <div className="flex flex-col gap-2 border-t border-line bg-toolbar p-3">
-            <h3 className={sectionHeading}>{t("explorer.workspaceActions")}</h3>
-            <label htmlFor="new-file-path" className={fieldLabel}>{t("explorer.newFilePath")}</label>
-            <input
-              id="new-file-path"
-              value={newPath}
-              onChange={(event) => setNewPath(event.target.value)}
-              placeholder="conf.d/30-lab.conf"
-              className={`${control} min-h-10 font-mono text-xs md:min-h-0`}
+            <ConfigFileList files={overview.files} openPath={openPath} onOpen={requestOpen} />
+            <ConfigPathActions
+              path={newPath}
+              onPathChange={setNewPath}
+              onCreateFile={() => draftDiscard.confirmBefore(() => void createFile())}
+              onCreateDirectory={() => void createDirectory()}
+              onDeleteDirectory={() => void deleteDirectory()}
             />
-            <div className="flex flex-wrap gap-2">
-              <Button className="min-h-10 md:min-h-0" onClick={() => void createFile()} disabled={newPath === ""}>{t("explorer.createFile")}</Button>
-              <Button className="min-h-10 md:min-h-0" onClick={() => void createDirectory()} disabled={newPath === ""}>{t("explorer.createDirectory")}</Button>
-              <Button kind="danger" className="min-h-10 md:min-h-0" onClick={() => void deleteDirectory()} disabled={newPath === ""}>{t("explorer.deleteDirectory")}</Button>
-            </div>
-            <p className={hintText}>{t("explorer.newFileNote")}</p>
-            <details className="text-xs text-ink-muted">
-              <DisclosureSummary className="text-ink">{t("explorer.directoryHelp")}</DisclosureSummary>
-              <p className="mt-2 leading-5">{t("explorer.directoryNote")}</p>
-            </details>
-          </div>
-
-          <div className={`border-t border-line p-3 ${overview.diagnostics.length > 0 ? "bg-notice" : "bg-toolbar"}`}>
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <h3 className={sectionHeading}>{t("explorer.diagnostics")}</h3>
-              <span className={`font-mono text-xs ${overview.diagnostics.length > 0 ? "text-notice-ink" : "text-ink-faint"}`}>{overview.diagnostics.length}</span>
-            </div>
-            {overview.diagnostics.length === 0 ? (
-              <p className={hintText}>{t("explorer.noIncludeProblem")}</p>
-            ) : (
-              <ul className="flex flex-col gap-1">
-                {overview.diagnostics.map((diagnostic, index) => (
-                  <li key={`${diagnostic.code}-${index}`} className={`font-mono text-xs ${diagnostic.severity === "error" ? "text-danger" : diagnostic.severity === "warning" ? "text-notice-ink" : "text-ink-muted"}`}>
-                    {`${diagnostic.code} ${diagnostic.path ?? diagnostic.absolute ?? ""}${diagnostic.line === undefined ? "" : `:${diagnostic.line}`} ${diagnostic.detail ?? ""}`}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
+            <ConfigDiagnostics diagnostics={overview.diagnostics} />
           </div>
         </section>
 
@@ -398,34 +354,29 @@ export function ConfigExplorer({ target = null }: ConfigExplorerProps) {
               </div>
 
               {file.file.path === undefined || !file.editable ? null : (
-                <div className="flex flex-col gap-2 border-t border-line bg-surface-subtle p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <h4 className={sectionHeading}>{t("explorer.fileOperations")}</h4>
-                      <p className={`mt-1 ${hintText}`}>{t("explorer.fileOperationsNote")}</p>
-                    </div>
-                    <div className="flex min-w-0 flex-1 flex-wrap items-end justify-end gap-2 sm:flex-nowrap">
-                      <label htmlFor="rename-file-path" className="sr-only">{t("explorer.renameTo")}</label>
-                      <input
-                        id="rename-file-path"
-                        value={renameTo}
-                        onChange={(event) => setRenameTo(event.target.value)}
-                        placeholder={file.file.path}
-                        className={`${control} min-h-10 min-w-48 max-w-sm font-mono text-xs md:min-h-0`}
-                      />
-                      <Button className="min-h-10 md:min-h-0" onClick={() => void renameFile()} disabled={renameTo === "" || renameTo === file.file.path || modified}>{t("explorer.renameFile")}</Button>
-                      <Button className="min-h-10 md:min-h-0" onClick={() => setConfirmingDelete(true)} disabled={modified}>{t("explorer.deleteFile")}</Button>
-                    </div>
-                  </div>
-                  <p className={hintText}>{modified ? t("explorer.saveOrDiscardFirst") : t("explorer.deleteIsRecoverable")}</p>
-                </div>
+                <ConfigFileOperations
+                  path={file.file.path}
+                  modified={modified}
+                  renameTo={renameTo}
+                  onRenameToChange={setRenameTo}
+                  onRename={() => void renameFile()}
+                  onDelete={() => {
+                    setProblem(null);
+                    setConfirmingDelete(true);
+                  }}
+                />
               )}
             </>
           )}
         </section>
       </Card>
 
-      <SavePreviewPanel preview={preview} conflict={problem?.conflict ?? null} problem={problem} />
+      {/* 削除の確認ダイアログは、同じ失敗を自分の中に出す。背面にも出すと、
+          スクリーンリーダーが同じ文を 2 回読み上げる。 */}
+      <SavePreviewPanel preview={preview} conflict={problem?.conflict ?? null} problem={confirmingDelete ? null : problem} />
+      {draftDiscard.confirming ? (
+        <DiscardDraftDialog id="config-draft-discard-heading" onConfirm={draftDiscard.confirmDiscard} onCancel={draftDiscard.keepEditing} />
+      ) : null}
       {confirmingDelete && file?.file.path !== undefined ? (
         <ConfirmDialog
           id="config-file-delete-heading"
@@ -433,8 +384,9 @@ export function ConfigExplorer({ target = null }: ConfigExplorerProps) {
           body={<div className="flex flex-col gap-2 text-sm text-ink-muted"><p className="break-all font-mono">{file.file.path}</p><p>{t("explorer.deleteIsRecoverable")}</p></div>}
           confirmLabel={t("explorer.confirmDelete")}
           cancelLabel={t("explorer.cancelDelete")}
-          onConfirm={() => void deleteFile()}
+          onConfirm={deleteFile}
           onCancel={() => setConfirmingDelete(false)}
+          error={problem === null ? "" : saveProblemMessage(problem, t)}
         />
       ) : null}
     </div>

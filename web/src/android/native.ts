@@ -1,3 +1,5 @@
+import { newIdentifier } from "../ui/randomIdentifier";
+
 type AndroidBridge = {
   chooseSave(requestId: string, suggestedName: string, mimeType: string): string;
   writeSaveChunk(requestId: string, encoded: string): string;
@@ -17,12 +19,6 @@ type SaveEvent = CustomEvent<{ requestId?: unknown; status?: unknown }>;
 
 const saveChunkSize = 256 * 1024;
 
-function requestId(): string {
-  const uuid = globalThis.crypto?.randomUUID?.();
-  if (uuid !== undefined) return uuid.replaceAll("-", "");
-  return `${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}_save`;
-}
-
 function base64(bytes: Uint8Array): string {
   let binary = "";
   for (let offset = 0; offset < bytes.byteLength; offset += 0x8000) {
@@ -35,7 +31,7 @@ function base64(bytes: Uint8Array): string {
 export async function saveWithAndroid(blob: Blob, suggestedName: string): Promise<boolean> {
   const bridge = window.sshcAndroid;
   if (bridge === undefined) return false;
-  const id = requestId();
+  const id = newIdentifier();
   const status = await new Promise<string>((resolve, reject) => {
     const listener = (event: Event) => {
       const detail = (event as SaveEvent).detail;

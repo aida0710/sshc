@@ -2,7 +2,9 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { GroupsPanel, treeOrder } from "./GroupsPanel";
+import { ApiError } from "../api/client";
 import { configApi } from "../api/config";
+import { captureNavigationBlocker } from "../testing/navigationBlocker";
 
 vi.mock("../api/config", async () => {
   const actual = await vi.importActual<typeof import("../api/config")>("../api/config");
@@ -143,9 +145,8 @@ describe("GroupsPanel", () => {
       expect(configApi.save).toHaveBeenCalledWith(
         expect.objectContaining({
           kind: "groups",
-          metadata: expect.objectContaining({
-            groups: expect.arrayContaining([expect.objectContaining({ name: "company/work" })]),
-          }),
+          groupsBase: overview.metadata.groups ?? [],
+          groups: expect.arrayContaining([expect.objectContaining({ name: "company/work" })]),
         }),
       ),
     );
@@ -165,16 +166,14 @@ describe("GroupsPanel", () => {
     await waitFor(() =>
       expect(configApi.preview).toHaveBeenCalledWith(
         expect.objectContaining({
-          metadata: expect.objectContaining({
-            groups: [
-              expect.objectContaining({
-                settings: [
-                  { keyword: "ServerAliveInterval", values: ["30"] },
-                  { keyword: "ProxyCommand", values: ["sh -c 'exec nc %h %p'"] },
-                ],
-              }),
-            ],
-          }),
+          groups: [
+            expect.objectContaining({
+              settings: [
+                { keyword: "ServerAliveInterval", values: ["30"] },
+                { keyword: "ProxyCommand", values: ["sh -c 'exec nc %h %p'"] },
+              ],
+            }),
+          ],
         }),
       ),
     );
@@ -205,6 +204,23 @@ describe("GroupsPanel", () => {
     await user.click(screen.getByRole("button", { name: "Add setting" }));
 
     expect(screen.getByText("SendEnv LANG LC_*")).toBeInTheDocument();
+  });
+
+  it("says the groups changed elsewhere and keeps the draft when the save is refused as stale", async () => {
+    const user = userEvent.setup();
+    vi.mocked(configApi.save).mockRejectedValue(new ApiError("metadata_changed", 409, {
+      code: "metadata_changed",
+      message: "metadata changed since it was loaded; reload before saving",
+    }));
+    render(<GroupsPanel />);
+
+    await user.type(await screen.findByLabelText("New group name"), "lab");
+    await user.click(screen.getByRole("button", { name: "Add group" }));
+    await user.click(screen.getByRole("button", { name: "Save groups" }));
+
+    expect(await screen.findByText(/sshc settings changed in another window, the CLI or sync/)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "lab" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Unsaved group changes" })).toBeInTheDocument();
   });
 
   it("refuses a name that is not a safe relative directory", async () => {
@@ -359,5 +375,20 @@ describe("hiding a group from the connections tree", () => {
     expect(await screen.findByText(/no Include line references it/)).toBeInTheDocument();
 
     expect(screen.queryByText(/declared and holds nothing/)).toBeNull();
+  });
+
+  it("stops leaving the screen while group changes are unsaved, and leaves once they are discarded", async () => {
+    const user = userEvent.setup();
+    const navigation = captureNavigationBlocker();
+    const onNavigateLocation = vi.fn();
+    render(<GroupsPanel onNavigationBlockerChange={navigation.onNavigationBlockerChange} onNavigateLocation={onNavigateLocation} />);
+    await user.type(await screen.findByLabelText("New group name"), "lab");
+    await user.click(screen.getByRole("button", { name: "Add group" }));
+
+    expect(navigation.tryNavigate("/keys")).toBe(false);
+    await user.click(screen.getByRole("button", { name: "Discard" }));
+
+    expect(onNavigateLocation).toHaveBeenCalledWith("/keys");
+    expect(screen.queryByRole("heading", { name: "lab" })).toBeNull();
   });
 });

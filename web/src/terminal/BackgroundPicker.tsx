@@ -8,9 +8,12 @@ import { control } from "../ui/form";
 import { Icon } from "../ui/icons";
 import { InputDialog } from "../ui/InputDialog";
 import { ModalShell } from "../ui/ModalShell";
+import { PanelState } from "../ui/PanelState";
 import { Button } from "../ui/surface";
-import { useBackgroundImage } from "./backgroundImage";
 import { formatBytes } from "../ui/format";
+import { BackgroundCapacity } from "./BackgroundCapacity";
+import { BackgroundCard } from "./BackgroundCard";
+import { BackgroundThumbnail } from "./BackgroundThumbnail";
 
 type BackgroundApi = Pick<SettingsApi, "terminalBackgrounds" | "addTerminalBackground" | "setTerminalBackgroundCapacity" | "renameTerminalBackground" | "deleteTerminalBackground">;
 
@@ -52,6 +55,7 @@ export function BackgroundPicker({ value, onChange, tint, onTintChange, unchosen
   const [draft, setDraft] = useState(value);
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
+  const [deleteProblem, setDeleteProblem] = useState("");
   const chooser = useRef<HTMLInputElement>(null);
   const openButton = useRef<HTMLButtonElement>(null);
 
@@ -61,8 +65,21 @@ export function BackgroundPicker({ value, onChange, tint, onTintChange, unchosen
     setCapacity(listed.capacityBytes);
     setCapacityInput(String(Math.round(listed.capacityBytes / MiB)));
   }, []);
-  const reload = useCallback(async () => applyList(await api.terminalBackgrounds()), [api, applyList]);
-  useEffect(() => { void reload().catch(() => undefined); }, [reload]);
+  // 読めなかった一覧を「保存済みの画像はありません」と見せないように、読み込みの状態を持つ。
+  const [libraryState, setLibraryState] = useState<"loading" | "ready" | "failed">("loading");
+  const reload = useCallback(async () => {
+    applyList(await api.terminalBackgrounds());
+    setLibraryState("ready");
+  }, [api, applyList]);
+  const loadLibrary = useCallback(async () => {
+    setLibraryState("loading");
+    try {
+      await reload();
+    } catch {
+      setLibraryState("failed");
+    }
+  }, [reload]);
+  useEffect(() => { void loadLibrary(); }, [loadLibrary]);
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase();
@@ -89,16 +106,22 @@ export function BackgroundPicker({ value, onChange, tint, onTintChange, unchosen
     finally { setBusy(false); }
   }
 
+  // 削除の失敗は確認ダイアログの中に出す。ライブラリの画面はダイアログの背面にある。
+  // 削除したあとで一覧を読み直せなければ、古い一覧を残さずに読み込みの失敗を出す。
   async function drop(name: string) {
-    setBusy(true); setProblem("");
+    setBusy(true); setDeleteProblem("");
     try {
       await api.deleteTerminalBackground(name);
-      if (draft === name) setDraft("");
-      if (value === name) onChange("");
-      setDeleteTarget(null);
-      await reload();
-    } catch { setProblem(t("terminal.backgroundFailed")); }
-    finally { setBusy(false); }
+    } catch {
+      setDeleteProblem(t("terminal.backgroundDeleteFailed"));
+      setBusy(false);
+      return;
+    }
+    if (draft === name) setDraft("");
+    if (value === name) onChange("");
+    setDeleteTarget(null);
+    await loadLibrary();
+    setBusy(false);
   }
 
   async function rename(nextName: string) {
@@ -119,33 +142,123 @@ export function BackgroundPicker({ value, onChange, tint, onTintChange, unchosen
   return (
     <div className="flex flex-col gap-2">
       <div className="flex min-w-0 flex-wrap items-center gap-3 rounded-md bg-surface-subtle p-2.5 sm:flex-nowrap">
-        {selected === undefined ? <div className="flex size-14 shrink-0 items-center justify-center rounded-md bg-control text-ink-faint"><Icon name="image" className="size-5" /></div> : <Thumbnail name={selected.name} chosen className="size-14 rounded-md" />}
-        <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium text-ink">{selected?.name ?? unchosen}</p><p className="mt-0.5 text-xs text-ink-faint">{selected === undefined ? t("terminal.backgroundNotSelected") : formatBytes(selected.bytes)}</p></div>
+        {selected === undefined ? (
+          <div className="flex size-14 shrink-0 items-center justify-center rounded-md bg-control text-ink-faint"><Icon name="image" className="size-5" /></div>
+        ) : <BackgroundThumbnail name={selected.name} chosen className="size-14 rounded-md" />}
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium text-ink">{selected?.name ?? unchosen}</p>
+          <p className="mt-0.5 text-xs text-ink-faint">{selected === undefined ? t("terminal.backgroundNotSelected") : formatBytes(selected.bytes)}</p>
+        </div>
         <Button ref={openButton} onClick={() => { setDraft(value); setProblem(""); setLibraryOpen(true); }}>{t("terminal.backgroundChoose")}</Button>
         {value === "" ? null : <Button onClick={() => onChange("")}>{t("terminal.backgroundClear")}</Button>}
       </div>
 
-      {value === "" ? null : <label className="flex flex-col gap-1"><span className="text-xs text-ink-muted">{t("terminal.tintLabel")} · {tint ?? ""}</span><input type="range" min={0} max={100} step={5} value={tint ?? 55} onChange={(event) => onTintChange(Number(event.target.value))} /><span className="text-xs text-ink-faint">{t("terminal.tintHint")}</span></label>}
+      {value === "" ? null : (
+        <label className="flex flex-col gap-1">
+          <span className="text-xs text-ink-muted">{t("terminal.tintLabel")} · {tint ?? ""}</span>
+          <input type="range" min={0} max={100} step={5} value={tint ?? 55} onChange={(event) => onTintChange(Number(event.target.value))} />
+          <span className="text-xs text-ink-faint">{t("terminal.tintHint")}</span>
+        </label>
+      )}
 
-      {libraryOpen ? <ModalShell labelledBy="terminal-background-library-heading" onDismiss={() => setLibraryOpen(false)} returnFocusRef={openButton} placement="sheet" panelClassName="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-lg">
-        <header className="flex items-center gap-3 border-b border-line bg-toolbar px-4 py-3"><h3 id="terminal-background-library-heading" className="min-w-0 flex-1 text-sm font-semibold text-ink">{t("terminal.backgroundLibrary")}</h3><Button onClick={() => setLibraryOpen(false)}>{t("terminal.backgroundClose")}</Button></header>
+      {libraryOpen ? <ModalShell
+        labelledBy="terminal-background-library-heading"
+        onDismiss={() => setLibraryOpen(false)}
+        returnFocusRef={openButton}
+        placement="sheet"
+        panelClassName="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-lg"
+      >
+        <header className="flex items-center gap-3 border-b border-line bg-toolbar px-4 py-3">
+          <h3 id="terminal-background-library-heading" className="min-w-0 flex-1 text-sm font-semibold text-ink">{t("terminal.backgroundLibrary")}</h3>
+          <Button onClick={() => setLibraryOpen(false)}>{t("terminal.backgroundClose")}</Button>
+        </header>
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-4">
-          <div className="flex flex-col gap-2 sm:flex-row"><label className="relative min-w-0 flex-1"><span className="sr-only">{t("terminal.backgroundSearch")}</span><Icon name="search" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-faint" /><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} className={`${control} pl-9`} placeholder={t("terminal.backgroundSearch")} /></label><input ref={chooser} type="file" className="hidden" accept="image/png,image/jpeg,image/webp,image/gif" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file !== undefined) void add(file); }} /><Button kind="primary" onClick={() => chooser.current?.click()} disabled={busy}>{t("terminal.backgroundAdd")}</Button></div>
-          {filtered.length === 0 ? <div className="flex min-h-48 flex-col items-center justify-center rounded-md bg-surface-subtle px-4 text-center"><p className="text-sm font-medium text-ink">{t("terminal.backgroundEmpty")}</p><p className="mt-1 text-xs text-ink-muted">{t("terminal.backgroundEmptyHint")}</p></div> : <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">{filtered.map((background) => <li key={background.name} className={`relative overflow-hidden rounded-md bg-surface-subtle ring-1 ${draft === background.name ? "ring-accent" : "ring-hairline"}`}><button type="button" onClick={() => setDraft(background.name)} className="block w-full text-left"><Thumbnail name={background.name} chosen={draft === background.name} className="aspect-video w-full" /><span className="block px-2.5 pb-2.5 pt-2"><span className="block truncate text-sm font-medium text-ink">{background.name}</span><span className="mt-0.5 block text-xs text-ink-faint">{formatBytes(background.bytes)}</span></span></button><details className="absolute right-2 top-2"><summary aria-label={t("terminal.backgroundActions", { name: background.name })} className="flex size-8 cursor-pointer list-none items-center justify-center rounded-md bg-canvas/80 text-ink shadow-sm marker:hidden hover:bg-card"><Icon name="moreHorizontal" className="size-4" /></summary><div className="absolute right-0 top-9 z-10 min-w-36 rounded-md border border-line bg-card p-1 shadow-xl"><button type="button" className="block w-full rounded px-2.5 py-2 text-left text-sm text-ink hover:bg-select-fill" onClick={() => { setRenameProblem(""); setRenameTarget(background); }}>{t("terminal.backgroundRenameAction")}</button><button type="button" className="block w-full rounded px-2.5 py-2 text-left text-sm text-danger hover:bg-select-fill" onClick={() => setDeleteTarget(background)}>{t("terminal.backgroundDeleteAction")}</button></div></details></li>)}</ul>}
-          <section className="rounded-md bg-surface-subtle p-3" aria-label={t("terminal.backgroundCapacityHeading")}><div className="flex flex-col gap-3 sm:flex-row sm:items-end"><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-3 text-xs text-ink-muted"><span>{t("terminal.backgroundCapacityUsage", { used: formatBytes(used), capacity: formatBytes(capacity) })}</span><span>{Math.min(100, Math.round((used / Math.max(capacity, 1)) * 100))}%</span></div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-control"><div className="h-full rounded-full bg-accent" style={{ width: `${Math.min(100, (used / Math.max(capacity, 1)) * 100)}%` }} /></div></div><label className="flex items-end gap-2"><span className="flex flex-col gap-1 text-xs text-ink-muted">{t("terminal.backgroundCapacityLabel")}<span className="flex items-center gap-1"><input type="number" min={1} max={1024} value={capacityInput} onChange={(event) => setCapacityInput(event.target.value)} className={`${control} w-24`} /><span>MiB</span></span></span><Button disabled={busy || capacityInput === String(Math.round(capacity / MiB))} onClick={() => void saveCapacity()}>{t("terminal.backgroundCapacitySave")}</Button></label></div><p className="mt-2 text-xs text-ink-faint">{t("terminal.backgroundCapacityHint")}</p></section>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <label className="relative min-w-0 flex-1">
+              <span className="sr-only">{t("terminal.backgroundSearch")}</span>
+              <Icon name="search" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-faint" />
+              <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} className={`${control} pl-9`} placeholder={t("terminal.backgroundSearch")} />
+            </label>
+            <input
+              ref={chooser}
+              type="file"
+              className="hidden"
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = "";
+                if (file !== undefined) void add(file);
+              }}
+            />
+            <Button kind="primary" onClick={() => chooser.current?.click()} disabled={busy}>{t("terminal.backgroundAdd")}</Button>
+          </div>
+          {libraryState === "failed" ? (
+            <PanelState tone="failed" title={t("terminal.backgroundLoadFailed")} action={<Button onClick={() => void loadLibrary()}>{t("shell.bootstrapRetry")}</Button>} />
+          ) : libraryState === "loading" ? (
+            <PanelState tone="loading" title={t("terminal.backgroundLoading")} />
+          ) : filtered.length === 0 ? (
+            <div className="flex min-h-48 flex-col items-center justify-center rounded-md bg-surface-subtle px-4 text-center">
+              <p className="text-sm font-medium text-ink">{t("terminal.backgroundEmpty")}</p>
+              <p className="mt-1 text-xs text-ink-muted">{t("terminal.backgroundEmptyHint")}</p>
+            </div>
+          ) : (
+            <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+              {filtered.map((background) => (
+                <BackgroundCard
+                  key={background.name}
+                  background={background}
+                  chosen={draft === background.name}
+                  onChoose={() => setDraft(background.name)}
+                  onRename={() => { setRenameProblem(""); setRenameTarget(background); }}
+                  onDelete={() => { setDeleteProblem(""); setDeleteTarget(background); }}
+                />
+              ))}
+            </ul>
+          )}
+          <BackgroundCapacity
+            usedBytes={used}
+            capacityBytes={capacity}
+            capacityInput={capacityInput}
+            onCapacityInputChange={setCapacityInput}
+            canSave={!busy && capacityInput !== String(Math.round(capacity / MiB))}
+            onSave={() => void saveCapacity()}
+          />
           {problem === "" ? null : <p role="alert" className="text-xs text-danger">{problem}</p>}
         </div>
-        <footer className="flex items-center justify-between gap-3 border-t border-line bg-toolbar px-4 py-3"><button type="button" className="text-sm text-ink-muted hover:text-ink" onClick={() => setDraft("")}>{t("terminal.backgroundUseNone")}</button><Button kind="primary" disabled={busy} onClick={() => { onChange(draft); setLibraryOpen(false); }}>{t("terminal.backgroundUse")}</Button></footer>
+        <footer className="flex items-center justify-between gap-3 border-t border-line bg-toolbar px-4 py-3">
+          <button type="button" className="text-sm text-ink-muted hover:text-ink" onClick={() => setDraft("")}>{t("terminal.backgroundUseNone")}</button>
+          <Button kind="primary" disabled={busy} onClick={() => { onChange(draft); setLibraryOpen(false); }}>{t("terminal.backgroundUse")}</Button>
+        </footer>
       </ModalShell> : null}
 
-      {renameTarget === null ? null : <InputDialog key={renameTarget.name} id="terminal-background-rename" heading={t("terminal.backgroundRenameHeading")} description={renameProblem === "" ? t("terminal.backgroundRenameHint") : <span role="alert" className="text-danger">{renameProblem}</span>} label={t("terminal.backgroundRenameLabel")} initialValue={renameTarget.name} submitLabel={t("terminal.backgroundRenameSubmit")} cancelLabel={t("terminal.backgroundRenameCancel")} validate={(next) => next === "" ? t("terminal.backgroundRenameRequired") : ""} onSubmit={(next) => void rename(next)} onCancel={() => { setRenameProblem(""); setRenameTarget(null); }} />}
-      {deleteTarget === null ? null : <ConfirmDialog id="terminal-background-delete" heading={t("terminal.backgroundDeleteHeading")} body={<p className="text-sm text-ink-muted">{t("terminal.backgroundDeleteHint", { name: deleteTarget.name })}</p>} confirmLabel={t("terminal.backgroundDeleteAction")} cancelLabel={t("terminal.backgroundRenameCancel")} onConfirm={() => void drop(deleteTarget.name)} onCancel={() => setDeleteTarget(null)} />}
+      {renameTarget === null ? null : (
+        <InputDialog
+          key={renameTarget.name}
+          id="terminal-background-rename"
+          heading={t("terminal.backgroundRenameHeading")}
+          description={renameProblem === "" ? t("terminal.backgroundRenameHint") : <span role="alert" className="text-danger">{renameProblem}</span>}
+          label={t("terminal.backgroundRenameLabel")}
+          initialValue={renameTarget.name}
+          submitLabel={t("terminal.backgroundRenameSubmit")}
+          cancelLabel={t("terminal.backgroundRenameCancel")}
+          validate={(next) => next === "" ? t("terminal.backgroundRenameRequired") : ""}
+          onSubmit={(next) => void rename(next)}
+          onCancel={() => { setRenameProblem(""); setRenameTarget(null); }}
+        />
+      )}
+      {deleteTarget === null ? null : (
+        <ConfirmDialog
+          id="terminal-background-delete"
+          heading={t("terminal.backgroundDeleteHeading")}
+          body={<p className="text-sm text-ink-muted">{t("terminal.backgroundDeleteHint", { name: deleteTarget.name })}</p>}
+          confirmLabel={t("terminal.backgroundDeleteAction")}
+          cancelLabel={t("terminal.backgroundRenameCancel")}
+          onConfirm={() => drop(deleteTarget.name)}
+          onCancel={() => setDeleteTarget(null)}
+          busy={busy}
+          error={deleteProblem}
+        />
+      )}
     </div>
   );
-}
-
-function Thumbnail({ name, chosen, className = "h-16 w-24 rounded-md" }: { name: string; chosen: boolean; className?: string }) {
-  const url = useBackgroundImage(name);
-  if (url === "") return <div className={`${className} bg-control`} />;
-  return <img src={url} alt={name} className={`${className} object-cover ${chosen ? "brightness-105" : ""}`} />;
 }

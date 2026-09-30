@@ -2,6 +2,7 @@ import { useTranslate } from "../i18n/context";
 import { DisclosureSummary } from "../ui/DisclosureSummary";
 import type { Locale } from "../i18n/locale";
 import { hintText, sectionHeading } from "../ui/form";
+import { formatDateTime, formatOptionalDateTime } from "../ui/format";
 import { PanelState } from "../ui/PanelState";
 import { Button } from "../ui/surface";
 import { formatBytes } from "./SyncResultCard";
@@ -69,7 +70,7 @@ export function SyncBucketStateSection({ bucketState, locale, busy, historyExpan
                       bucketState.value.live.size,
                       locale,
                     ),
-                    at: bucketState.value.live.lastModified ?? "—",
+                    at: formatOptionalDateTime(bucketState.value.live.lastModified, locale),
                   })}
                 </p>
                 <p
@@ -125,7 +126,7 @@ export function SyncBucketStateSection({ bucketState, locale, busy, historyExpan
                       <p className={hintText}>
                         {t("sync.bucketObjectMeta", {
                           size: formatBytes(item.size, locale),
-                          at: item.lastModified ?? "—",
+                          at: formatOptionalDateTime(item.lastModified, locale),
                         })}
                       </p>
                       <details className="mt-1 text-xs text-ink-muted">
@@ -157,7 +158,7 @@ export function SyncBucketStateSection({ bucketState, locale, busy, historyExpan
 
           <p className={`lg:col-span-2 ${hintText}`}>
             {t("sync.bucketCheckedAt", {
-              at: bucketState.value.checkedAt,
+              at: formatDateTime(bucketState.value.checkedAt, locale),
             })}
           </p>
         </div>

@@ -475,6 +475,54 @@ func TestRenameHostIdentityMovesExactlyOneEntry(t *testing.T) {
 	}
 }
 
+func TestRenameHostIdentityReplacesAnEntryLeftAtTheDestination(t *testing.T) {
+	bastion := HostIdentity{Path: "config", Alias: "bastion"}
+	jump := HostIdentity{Path: "config", Alias: "jump"}
+	metadata := NewMetadata()
+	metadata.Hosts = []HostMetadata{{Identity: jump, Note: "retired", Orphan: true}, {Identity: bastion, Note: "renamed"}}
+
+	renamed := RenameHostIdentity(metadata, bastion, jump)
+
+	if len(renamed.Hosts) != 1 || renamed.Hosts[0].Identity != jump || renamed.Hosts[0].Note != "renamed" {
+		t.Fatalf("hosts = %#v, want only the renamed entry", renamed.Hosts)
+	}
+}
+
+func TestRenameHostIdentityKeepsTheDestinationEntryWhenNothingMoves(t *testing.T) {
+	jump := HostIdentity{Path: "config", Alias: "jump"}
+	metadata := NewMetadata()
+	metadata.Hosts = []HostMetadata{{Identity: jump, Note: "retired", Orphan: true}}
+
+	renamed := RenameHostIdentity(metadata, HostIdentity{Path: "config", Alias: "bastion"}, jump)
+
+	if len(renamed.Hosts) != 1 || renamed.Hosts[0].Note != "retired" {
+		t.Fatalf("hosts = %#v, want the destination entry kept", renamed.Hosts)
+	}
+}
+
+func TestRelocateHostIdentitiesReplacesEntriesLeftAtTheDestinationWithTheSameAlias(t *testing.T) {
+	metadata := NewMetadata()
+	metadata.Hosts = []HostMetadata{
+		{Identity: HostIdentity{Path: "conf.d/new.conf", Alias: "nas"}, Note: "retired", Orphan: true},
+		{Identity: HostIdentity{Path: "conf.d/new.conf", Alias: "printer"}, Note: "other host"},
+		{Identity: HostIdentity{Path: "conf.d/old.conf", Alias: "nas"}, Note: "moved"},
+	}
+
+	relocated := RelocateHostIdentities(metadata, "conf.d/old.conf", "conf.d/new.conf")
+
+	if len(relocated.Hosts) != 2 {
+		t.Fatalf("hosts = %#v, want the leftover nas entry dropped", relocated.Hosts)
+	}
+	for _, host := range relocated.Hosts {
+		if host.Identity.Path != "conf.d/new.conf" {
+			t.Fatalf("host = %#v, want every entry under the destination", host)
+		}
+		if host.Identity.Alias == "nas" && host.Note != "moved" {
+			t.Fatalf("nas = %#v, want the moved entry", host)
+		}
+	}
+}
+
 func TestGroupMetadataCarriesTheHiddenFlagThroughARoundTrip(t *testing.T) {
 	metadata := NewMetadata()
 	metadata.Groups = []GroupMetadata{{Name: "dubguild", Hidden: true}, {Name: "dubguild/mdx"}}

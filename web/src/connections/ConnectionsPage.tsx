@@ -2,24 +2,17 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties } from "re
 import { toProblem } from "../api/guards";
 import {
   configApi,
-  type EditRequest,
+  hostMetadataEditRequest,
   type CreateConnectionResponse,
-  type FieldEdit,
-  type HostDetail,
   type HostEntry,
-  type HostMetadata,
-  type Metadata,
   type Overview,
-  type SaveResult,
-  type UpdateConnectionRequest,
 } from "../api/config";
-import { type HostSelection } from "./ConnectionTree";
 import { ConnectionListPane } from "./ConnectionListPane";
 import { ColumnResizeHandle } from "../ui/ColumnResizeHandle";
 import { useStoredColumnWidth, type StoredColumnWidth } from "../ui/useStoredColumnWidth";
+import { localStorageKeys } from "../ui/browserStorageKeys";
 import { MissingConnection, NoConnectionSelected } from "./DetailPlaceholders";
-import { useOverlays, useSaveFeedback, useSelectionState, type RefreshState } from "./pageState";
-import type { DragPayload } from "./dragdrop";
+import { useOverlays, useSaveFeedback } from "./pageState";
 import { HostDetailPanel } from "./HostDetail";
 import {
   CreateConnectionModal,
@@ -27,38 +20,33 @@ import {
   type CreationPrerequisite,
 } from "./CreateConnectionModal";
 import { NoticeList } from "./SavePreview";
+import { saveProblemMessage } from "../ui/saveProblemMessage";
 import { OrphanPanel } from "./OrphanPanel";
 import { useTranslate } from "../i18n/context";
 import type { InspectorContent } from "../ui/Inspector";
 import { Button, Notice } from "../ui/surface";
-import { removeHostBlock } from "./blocks";
-import type { TerminalSessionsState } from "../terminal/sessions";
+import { useUnsavedDraftGuard } from "../routing/useUnsavedDraftGuard";
 import type {
   BrowserLocation,
   NavigationBlocker,
   NavigateLocationOptions,
 } from "../routing/useSectionRoute";
-import {
-  connectionLocation,
-  parseConnectionLocation,
-  type AdvancedArea,
-  type ConnectionPanel,
-} from "../routing/connectionRoute";
+import { parseConnectionLocation } from "../routing/connectionRoute";
 import type { GeneratedPrivateKeyHandoff } from "../keys/workflow";
-import { keysApi } from "../keys/api";
 import { ConnectionSummary } from "./ConnectionSummary";
-import { loadConnectionSavedState, type ConnectionSavedState } from "./connectionSavedState";
 import { ManageConnection } from "./ManageConnection";
+import { identityKey } from "./connectionBrowser";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { PanelState } from "../ui/PanelState";
 import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
-import { useBeforeUnloadWarning } from "../ui/useBeforeUnloadWarning";
 import { hostDetailApi } from "./HostDetail";
-import { connectionSecretsApi } from "./secretsApi";
-import { groupAfterRename, movedHostIdentity } from "./connectionMoves";
+import { useConnectionSelection } from "./useConnectionSelection";
+import { useSelectedConnection } from "./useSelectedConnection";
+import { useConnectionSave } from "./useConnectionSave";
+import { useConnectionManagement } from "./useConnectionManagement";
 
 // Wide enough for an alias, host and status on one row; the editor keeps the rest.
-const connectionListWidth: StoredColumnWidth = { key: "sshc.connections.list-width.v1", fallback: 400, minimum: 256, maximum: 720 };
+const connectionListWidth: StoredColumnWidth = { key: localStorageKeys.connectionListWidth, fallback: 400, minimum: 256, maximum: 720 };
 
 const groupNoticeCodes = new Set([
   "group_not_declared",
@@ -88,23 +76,16 @@ type ConnectionsPageProps = {
   onNavigationBlockerChange?: (blocker: NavigationBlocker | null) => void;
   preferredKey?: GeneratedPrivateKeyHandoff | null;
   onPreferredKeyApplied?: () => void;
-  consoles: TerminalSessionsState;
-  onShowConsole: (id: string) => void;
+  onOpenSSHSession: (alias: string) => Promise<void>;
 };
-
-// A host source for a move: the file it lives in now and that file's
-// contents at the time the move was decided.
-type MoveSource = { path: string; alias: string; base: string };
-
-type SaveAttempt =
-  | { saved: false; overview: null }
-  | { saved: true; overview: Overview | null };
 
 type DiscardIntent =
   | { kind: "create" }
   | { kind: "select"; host: HostEntry }
   | { kind: "navigate"; location: BrowserLocation };
 
+// ConnectionsPage は、接続の一覧と選んだ接続のエディタを並べ、未保存の下書きを捨てる前に確かめる。
+// URLと選択の同期、保存済みの内容の読み込み、保存、管理の操作は、それぞれのhookが持つ。
 export function ConnectionsPage({
   onInspector,
   creationDraft = null,
@@ -115,36 +96,21 @@ export function ConnectionsPage({
   onNavigationBlockerChange,
   preferredKey = null,
   onPreferredKeyApplied,
-  consoles,
-  onShowConsole,
+  onOpenSSHSession,
 }: ConnectionsPageProps) {
   const t = useTranslate();
-  const initialRoute = parseConnectionLocation(location);
-  const initialTarget = initialRoute.kind === "valid" ? initialRoute.target : null;
   const compact = useMediaQuery(mobileViewportQuery);
   const [overview, setOverview] = useState<Overview | null>(null);
-  const entryPath = overview?.entry.path ?? "config";
-  const {
-    selection, setSelection,
-    invalidLocation, setInvalidLocation,
-    activePanel, setActivePanel,
-    activeAdvanced, setActiveAdvanced,
-    missingSelection, setMissingSelection,
-  } = useSelectionState(initialTarget, initialRoute.kind === "invalid");
-  const selectionRef = useRef<HostSelection | null>(selection);
-  const [detail, setDetail] = useState<HostDetail | null>(null);
   const [listWidth, setListWidth] = useStoredColumnWidth(connectionListWidth);
-  const [savedState, setSavedState] = useState<ConnectionSavedState | null>(null);
-  const [refreshState, setRefreshState] = useState<RefreshState>("idle");
-  const [savedRevision, setSavedRevision] = useState(0);
   const [discardIntent, setDiscardIntent] = useState<DiscardIntent | null>(null);
   const draftDiscardRef = useRef<(() => void) | null>(null);
+  const feedback = useSaveFeedback();
   const {
     editorDirty, setEditorDirty,
     preview, setPreview,
     problem, setProblem,
     localError, setLocalError,
-  } = useSaveFeedback();
+  } = feedback;
   const editorDirtyRef = useRef(editorDirty);
   editorDirtyRef.current = editorDirty;
   const {
@@ -153,60 +119,74 @@ export function ConnectionsPage({
     managing, setManaging,
   } = useOverlays(creationDraft !== null);
 
-  useEffect(() => {
-    selectionRef.current = selection;
-  }, [selection]);
+  const {
+    selection,
+    invalidLocation,
+    activePanel,
+    activeAdvanced,
+    isCurrentSelection,
+    navigateTarget,
+    clearTarget,
+    dismissInvalidLocation,
+    followCommittedIdentity,
+    leaveCommittedIdentityUnknown,
+    clearSelection,
+    selectHost,
+  } = useConnectionSelection({
+    location,
+    onNavigateLocation,
+    // selected はすぐ下で作る。この2つは描画のあと（effect と操作）でしか呼ばれないので参照できる。
+    onSelectionMoved: () => {
+      selected.reset();
+      setEditorDirty(false);
+      setPreview(null);
+      setProblem(null);
+      setLocalError("");
+      setManaging(false);
+    },
+    onIdentityFollowed: () => selected.forget(),
+  });
+  const selected = useSelectedConnection({
+    selection,
+    isCurrentSelection,
+    onOverviewLoaded: setOverview,
+    setProblem,
+    setLocalError,
+  });
+  const { detail, savedState, missingSelection, refreshState, savedRevision, refreshCommittedConnection } = selected;
 
-  function emitLocation(url: string, options?: NavigateLocationOptions): boolean {
-    const result = options === undefined
-      ? onNavigateLocation?.(url)
-      : onNavigateLocation?.(url, options);
-    return result !== false;
-  }
+  const reload = useCallback(async (): Promise<Overview | null> => {
+    try {
+      const loaded = await configApi.overview();
+      setOverview(loaded);
+      return loaded;
+    } catch (error) {
+      setProblem(toProblem(error));
+      return null;
+    }
+  }, [setProblem]);
 
-  function navigateTarget(
-    identity: HostSelection,
-    panel: ConnectionPanel,
-    advanced: AdvancedArea,
-    options?: NavigateLocationOptions,
-  ): boolean {
-    if (!emitLocation(connectionLocation({
-      path: identity.path,
-      alias: identity.alias,
-      panel,
-      advanced,
-    }), options)) return false;
-    setActivePanel(panel);
-    setActiveAdvanced(advanced);
-    setInvalidLocation(false);
-    return true;
-  }
-
-  function clearTarget(options?: NavigateLocationOptions): boolean {
-    return emitLocation(connectionLocation(null), options);
-  }
-
-  function followCommittedIdentity(
-    identity: HostSelection,
-    panel: ConnectionPanel = activePanel,
-    advanced: AdvancedArea = activeAdvanced,
-  ) {
-    selectionRef.current = identity;
-    setSelection(identity);
-    setDetail(null);
-    setSavedState(null);
-    setMissingSelection(false);
-    navigateTarget(identity, panel, advanced, { replace: true });
-  }
-
-  function leaveCommittedIdentityUnknown() {
-    selectionRef.current = null;
-    setSelection(null);
-    setDetail(null);
-    setSavedState(null);
-    setMissingSelection(false);
-    clearTarget({ replace: true });
-  }
+  const save = useConnectionSave({
+    selection,
+    selected,
+    feedback,
+    reload,
+    followCommittedIdentity,
+  });
+  const movesDisabled = editorDirty || refreshState !== "idle";
+  const management = useConnectionManagement({
+    overview,
+    selection,
+    detail,
+    movesDisabled,
+    feedback,
+    submit: save.submit,
+    reload,
+    followCommittedIdentity,
+    leaveCommittedIdentityUnknown,
+    clearSelection,
+    clearTarget,
+  });
 
   function beginCreation() {
     if (editorDirty) {
@@ -242,421 +222,36 @@ export function ConnectionsPage({
     onNavigateForCreation?.(section);
   }
 
-  const reload = useCallback(async (): Promise<Overview | null> => {
-    try {
-      const loaded = await configApi.overview();
-      setOverview(loaded);
-      return loaded;
-    } catch (error) {
-      setProblem(toProblem(error));
-      return null;
-    }
-  }, [setProblem]);
-
   useEffect(() => {
     void reload();
   }, [reload]);
 
-  useEffect(() => {
-    const parsed = parseConnectionLocation(location);
-    if (parsed.kind === "redirect") {
-      emitLocation(parsed.location, { replace: true });
-      setInvalidLocation(false);
-      if (selectionRef.current === null) return;
-      selectionRef.current = null;
-      setSelection(null);
-      setDetail(null);
-      setSavedState(null);
-      setEditorDirty(false);
-      setRefreshState("idle");
-      setActivePanel("Basic");
-      setActiveAdvanced("Jump");
-      setMissingSelection(false);
-      setPreview(null);
-      setProblem(null);
-      setManaging(false);
-      return;
-    }
-    if (parsed.kind === "invalid") {
-      setInvalidLocation(true);
-      if (selectionRef.current === null) return;
-      selectionRef.current = null;
-      setSelection(null);
-      setDetail(null);
-      setSavedState(null);
-      setEditorDirty(false);
-      setRefreshState("idle");
-      setActivePanel("Basic");
-      setActiveAdvanced("Jump");
-      setMissingSelection(false);
-      setPreview(null);
-      setProblem(null);
-      setManaging(false);
-      return;
-    }
-
-    setInvalidLocation(false);
-    const target = parsed.target;
-    const current = selectionRef.current;
-    if (target === null) {
-      if (current === null) return;
-      selectionRef.current = null;
-      setSelection(null);
-      setDetail(null);
-      setSavedState(null);
-      setEditorDirty(false);
-      setRefreshState("idle");
-      setActivePanel("Basic");
-      setActiveAdvanced("Jump");
-      setMissingSelection(false);
-      setPreview(null);
-      setProblem(null);
-      setManaging(false);
-      return;
-    }
-
-    setActivePanel(target.panel);
-    setActiveAdvanced(target.advanced);
-    if (current?.path === target.path && current.alias === target.alias) return;
-    const nextSelection = { path: target.path, alias: target.alias };
-    selectionRef.current = nextSelection;
-    setSelection(nextSelection);
-    setDetail(null);
-    setSavedState(null);
-    setEditorDirty(false);
-    setRefreshState("idle");
-    setMissingSelection(false);
-    setPreview(null);
-    setProblem(null);
-    setManaging(false);
-    // The URL is the single source for the selection; the state setters and
-    // the current selection ref are read, not watched, so navigating back to
-    // the same location does not reset an open editor.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.pathname, location.search]);
-
-  useEffect(() => {
-    if (!editorDirty) {
-      onNavigationBlockerChange?.(null);
-      return;
-    }
-    const blocker: NavigationBlocker = (next) => {
-      if (!editorDirtyRef.current) return true;
-      const parsed = parseConnectionLocation(next);
-      if (parsed.kind === "valid" && selection !== null) {
-        const target = parsed.target;
-        if (target !== null && target.path === selection.path && target.alias === selection.alias) {
-          return true;
-        }
+  // 同じ接続への移動（保存後の URL の置き換えなど）は、下書きを捨てないので通す。
+  const leaveEditorBlocker = useCallback<NavigationBlocker>((next) => {
+    if (!editorDirtyRef.current) return true;
+    const parsed = parseConnectionLocation(next);
+    if (parsed.kind === "valid" && selection !== null) {
+      const target = parsed.target;
+      if (target !== null && target.path === selection.path && target.alias === selection.alias) {
+        return true;
       }
-      setDiscardIntent({ kind: "navigate", location: next });
-      return false;
-    };
-    onNavigationBlockerChange?.(blocker);
-    return () => onNavigationBlockerChange?.(null);
-  }, [editorDirty, onNavigationBlockerChange, selection]);
-
-  useBeforeUnloadWarning(editorDirty);
-
-
-
+    }
+    setDiscardIntent({ kind: "navigate", location: next });
+    return false;
+  }, [selection]);
+  useUnsavedDraftGuard({ dirty: editorDirty, blocker: leaveEditorBlocker, onNavigationBlockerChange });
 
   useEffect(() => {
     onInspector(null);
     return () => onInspector(null);
   }, [onInspector]);
 
-  const selectedPath = selection === null ? "" : selection.path;
-  const selectedAlias = selection === null ? "" : selection.alias;
-  useEffect(() => {
-    if (selectedAlias === "") return;
-    let active = true;
-    void configApi
-      .host(selectedPath, selectedAlias)
-      .then(async (loaded) => ({
-        detail: loaded,
-        saved: await loadConnectionSavedState(loaded, keysApi, connectionSecretsApi),
-      }))
-      .then(({ detail: loaded, saved }) => {
-        if (active) {
-          setDetail(loaded);
-          setSavedState(saved);
-          setRefreshState("idle");
-          setProblem(null);
-          setMissingSelection(false);
-        }
-      })
-      .catch((error: unknown) => {
-        if (active) {
-          setDetail(null);
-          setSavedState(null);
-          setProblem(toProblem(error));
-          setMissingSelection(true);
-        }
-      });
-    return () => {
-      active = false;
-    };
-  }, [selectedPath, selectedAlias, setDetail, setSavedState, setProblem, setMissingSelection]);
-
-  async function submit(request: EditRequest, reselect = true): Promise<SaveAttempt> {
-    let result: Awaited<ReturnType<typeof configApi.save>>;
-    try {
-      result = await configApi.save(request);
-    } catch (error) {
-      setPreview(null);
-      const rejected = toProblem(error);
-      if (request.kind === "duplicate" && rejected.code === "alias_already_declared") {
-        setProblem(null);
-        setLocalError(t("conn.duplicateAliasTaken", { alias: request.newAlias ?? "" }));
-      } else {
-        setProblem(rejected);
-      }
-      return { saved: false, overview: null };
-    }
-
-    setPreview(result.preview);
-    setProblem(null);
-    const selectedBeforeSave = selection;
-    const renamedSelection =
-      request.kind === "rename" && selectedBeforeSave !== null
-        ? {
-            path: selectedBeforeSave.path,
-            alias: request.newAlias ?? selectedBeforeSave.alias,
-          }
-        : null;
-    if (renamedSelection !== null) followCommittedIdentity(renamedSelection);
-
-    const nextOverview = await reload();
-    if (reselect && selectedBeforeSave !== null && renamedSelection === null) {
-      try {
-        const loaded = await configApi.host(selectedBeforeSave.path, selectedBeforeSave.alias);
-        const saved = await loadConnectionSavedState(loaded, keysApi, connectionSecretsApi);
-        const currentSelection = selectionRef.current;
-        if (currentSelection?.path === selectedBeforeSave.path && currentSelection.alias === selectedBeforeSave.alias) {
-          setDetail(loaded);
-          setSavedState(saved);
-          setSavedRevision((current) => current + 1);
-        }
-      } catch (error) {
-        const currentSelection = selectionRef.current;
-        if (currentSelection?.path === selectedBeforeSave.path && currentSelection.alias === selectedBeforeSave.alias) {
-          setProblem(toProblem(error));
-          setMissingSelection(true);
-        }
-      }
-    }
-    return { saved: true, overview: nextOverview };
-  }
-
-  // writeDraft は、接続エディタのタブの下書きを書き込む。書き込めた時点で resolve し、
-  // 保存済みの接続の読み直しは待たない。タブはここで下書きを保存済みとして扱うので、
-  // 読み直しの途中で別の接続を選んでも、破棄の確認は出ない。読み直すあいだは refreshState が
-  // エディタを止めるので、読み直した値で下書きをやり直しても、途中の編集は消えない。
-  // 書き込めなかったときは理由を problem に出して reject し、タブは下書きを残す。
-  async function writeDraft(write: () => Promise<SaveResult>) {
-    let result: SaveResult;
-    try {
-      result = await write();
-    } catch (error) {
-      setPreview(null);
-      setProblem(toProblem(error));
-      throw error;
-    }
-
-    setPreview(result.preview);
-    setProblem(null);
-    setLocalError("");
-    setRefreshState("refreshing");
-  }
-
-  // Basicタブは useDraftSave を使わず、書き込めた時点で下書きを破棄して未保存の変更をなくす。
-  // 読み直しは、タブが onRequestRefresh で呼び、終わるまで待つ。
-  async function onBasicSave(request: UpdateConnectionRequest) {
-    await writeDraft(() => configApi.updateConnection(request));
-    draftDiscardRef.current?.();
-  }
-
-  // saveEditorDraft は、Advancedタブと sshcタブの下書きを書き込み、保存済みの接続を読み直す。
-  async function saveEditorDraft(request: EditRequest) {
-    await writeDraft(() => configApi.save(request));
-    void refreshCommittedConnection();
-  }
-
-  function savedResourcesConfirmed(saved: ConnectionSavedState): boolean {
-    return saved.keys.status !== "failed" &&
-      saved.vault.status !== "failed" &&
-      saved.credentials.status !== "failed" &&
-      saved.eligibility.status !== "failed";
-  }
-
-  async function refreshCommittedConnection() {
-    if (selection === null) return;
-    const identity = selection;
-    setRefreshState("refreshing");
-    try {
-      const [nextOverview, nextDetail] = await Promise.all([
-        configApi.overview(),
-        configApi.host(identity.path, identity.alias),
-      ]);
-      const nextSaved = await loadConnectionSavedState(nextDetail, keysApi, connectionSecretsApi);
-      if (!savedResourcesConfirmed(nextSaved)) throw new Error("saved_state_refresh_failed");
-      const currentSelection = selectionRef.current;
-      if (currentSelection?.path !== identity.path || currentSelection.alias !== identity.alias) return;
-      setOverview(nextOverview);
-      setDetail(nextDetail);
-      setSavedState(nextSaved);
-      setSavedRevision((current) => current + 1);
-      setRefreshState("idle");
-      setLocalError("");
-      setProblem(null);
-    } catch {
-      const currentSelection = selectionRef.current;
-      if (currentSelection?.path !== identity.path || currentSelection.alias !== identity.alias) return;
-      setRefreshState("failed");
-      setLocalError(t("conn.connectionRefreshFailed"));
-    }
-  }
-
-  function selectHost(host: HostEntry) {
-    if (host.identity.alias === "") return;
-    const nextSelection = { path: host.identity.path, alias: host.identity.alias };
-    const currentSelection = selectionRef.current;
-    const selectingCurrent = currentSelection?.path === nextSelection.path
-      && currentSelection.alias === nextSelection.alias;
-    if (!navigateTarget(nextSelection, "Basic", "Jump")) return;
-    if (selectingCurrent) return;
-    setPreview(null);
-    setProblem(null);
-    setDetail(null);
-    setSavedState(null);
-    setMissingSelection(false);
-    setManaging(false);
-    selectionRef.current = nextSelection;
-    setSelection(nextSelection);
-    setActivePanel("Basic");
-    setActiveAdvanced("Jump");
-  }
-
   function onSelect(host: HostEntry) {
-    const current = selectionRef.current;
-    const switching = current?.path !== host.identity.path || current.alias !== host.identity.alias;
-    if (editorDirty && switching) {
+    if (editorDirty && !isCurrentSelection(host.identity)) {
       setDiscardIntent({ kind: "select", host });
       return;
     }
     selectHost(host);
-  }
-
-  async function onFieldEdits(fields: FieldEdit[]) {
-    if (detail === null || selection === null) throw new Error("no_connection_open");
-    await saveEditorDraft({
-      kind: "host_fields",
-      path: selection.path,
-      alias: selection.alias,
-      base: detail.file.contents,
-      fields,
-    });
-  }
-
-  async function onBlockRaw(raw: string) {
-    if (detail === null || selection === null) throw new Error("no_connection_open");
-    await saveEditorDraft({ kind: "block_raw", path: selection.path, alias: selection.alias, base: detail.file.contents, raw });
-  }
-
-  function onRename(newName: string) {
-    if (detail === null || selection === null) return;
-    setLocalError("");
-    void submit({
-      kind: "rename",
-      path: selection.path,
-      alias: selection.alias,
-      base: detail.file.contents,
-      newAlias: newName,
-    });
-  }
-
-  // moveHostToGroup moves the host into group, or into the entry file when
-  // group is "" (a host without a group lives there). When follow is set,
-  // the selection follows the host to wherever the engine put it.
-  async function moveHostToGroup(source: MoveSource, group: string, follow: boolean) {
-    if (group !== "") {
-      const attempt = await submit({ kind: "move", ...source, destinationGroup: group }, false);
-      if (!attempt.saved || !follow) return;
-      const moved = movedHostIdentity(attempt.overview, source.alias, group);
-      if (moved !== undefined) followCommittedIdentity(moved);
-      else leaveCommittedIdentityUnknown();
-      return;
-    }
-    const destination = await configApi.file(entryPath);
-    const attempt = await submit({
-      kind: "move", ...source, destinationPath: entryPath, destinationBase: destination.contents,
-    }, false);
-    if (!attempt.saved || !follow) return;
-    followCommittedIdentity({ path: entryPath, alias: source.alias });
-  }
-
-  async function onMoveToGroup(group: string) {
-    if (detail === null) return;
-    const source = { path: detail.form.entry.file.path ?? "", alias: detail.form.entry.identity.alias, base: detail.file.contents };
-    try {
-      await moveHostToGroup(source, group, true);
-    } catch (error) {
-      setProblem(toProblem(error));
-    }
-  }
-
-  async function onGroupDrop(name: string, target: string) {
-    const base = name.slice(name.lastIndexOf("/") + 1);
-    const destinationName = target === "" ? base : `${target}/${base}`;
-    const selectedHost = overview?.hosts.find(
-      (host) => host.identity.path === selection?.path && host.identity.alias === selection.alias,
-    );
-    const selectedDestinationGroup = groupAfterRename(selectedHost?.group, name, destinationName);
-    const result = await configApi.renameGroup(name, destinationName);
-    setPreview(result.preview);
-    setProblem(null);
-    const nextOverview = await reload();
-    if (selection === null || selectedDestinationGroup === null) return;
-    const moved = movedHostIdentity(nextOverview, selection.alias, selectedDestinationGroup);
-    if (moved !== undefined) followCommittedIdentity(moved);
-    else leaveCommittedIdentityUnknown();
-  }
-
-  async function onTreeDrop(payload: DragPayload, target: string) {
-    if (editorDirty || refreshState !== "idle") return;
-    try {
-      if (payload.kind === "group") {
-        await onGroupDrop(payload.name, target);
-        return;
-      }
-      const file = await configApi.file(payload.path);
-      const followsSelection = selection?.path === payload.path && selection.alias === payload.alias;
-      await moveHostToGroup({ path: payload.path, alias: payload.alias, base: file.contents }, target, followsSelection);
-    } catch (error) {
-      setPreview(null);
-      setProblem(toProblem(error));
-    }
-  }
-
-  function onComment(comment: string) {
-    if (detail === null || selection === null) return;
-    void submit({
-      kind: "comment",
-      path: selection.path,
-      alias: selection.alias,
-      base: detail.file.contents,
-      comment,
-    });
-  }
-
-  async function onMetadataSave(host: HostMetadata) {
-    if (overview === null) throw new Error("overview_not_loaded");
-    const others = (overview.metadata.hosts ?? []).filter(
-      (entry) => entry.identity.path !== host.identity.path || entry.identity.alias !== host.identity.alias,
-    );
-    const metadata: Metadata = { ...overview.metadata, hosts: [...others, host] };
-    await saveEditorDraft({ kind: "metadata", metadata });
   }
 
   async function onConnectionCreated(result: CreateConnectionResponse) {
@@ -666,8 +261,6 @@ export function ConnectionsPage({
     setProblem(null);
     setLocalError("");
     setManaging(false);
-    setActivePanel("Basic");
-    setActiveAdvanced("Jump");
     followCommittedIdentity(result.identity, "Basic", "Jump");
     await reload();
   }
@@ -676,68 +269,8 @@ export function ConnectionsPage({
     if (selection === null || launching || editorDirty || refreshState !== "idle") return;
     setLaunching(true);
     setLocalError("");
-    const opened = await consoles.open({ kind: "ssh", alias: selection.alias });
-    if (opened !== null) onShowConsole(opened.id);
+    await onOpenSSHSession(selection.alias);
     setLaunching(false);
-  }
-
-  function duplicateHost() {
-    if (detail === null || selection === null) return;
-    setLocalError("");
-    void submit({
-      kind: "duplicate",
-      path: selection.path,
-      base: detail.file.contents,
-      alias: selection.alias,
-      newAlias: `${selection.alias}-copy`,
-    });
-  }
-
-  async function moveHost(target: string) {
-    if (detail === null || selection === null || target === "") return;
-    try {
-      const destination = await configApi.file(target);
-      const source = selection;
-      const attempt = await submit({
-        kind: "move",
-        path: source.path,
-        base: detail.file.contents,
-        alias: source.alias,
-        destinationPath: target,
-        destinationBase: destination.contents,
-      }, false);
-      if (!attempt.saved) return;
-      followCommittedIdentity({ path: target, alias: source.alias });
-      setLocalError("");
-    } catch (error) {
-      setProblem(toProblem(error));
-    }
-  }
-
-  async function deleteHost() {
-    if (detail === null || selection === null) return;
-    let raw: string;
-    try {
-      raw = removeHostBlock(
-        detail.file.contents,
-        detail.form.entry.line,
-        detail.form.raw,
-        detail.form.commentLines,
-      );
-    } catch {
-      setLocalError(t("conn.blockMoved"));
-      return;
-    }
-    const path = selection.path;
-    const base = detail.file.contents;
-    const attempt = await submit({ kind: "file_raw", path, base, raw }, false);
-    if (!attempt.saved) return;
-    setSelection(null);
-    selectionRef.current = null;
-    setDetail(null);
-    setSavedState(null);
-    setLocalError("");
-    clearTarget({ replace: true });
   }
 
   if (overview === null) {
@@ -788,14 +321,10 @@ export function ConnectionsPage({
           overview={overview}
           selection={selection}
           invalidLocation={invalidLocation}
-          onDismissInvalidLocation={() => {
-            if (emitLocation(connectionLocation(null), { replace: true })) {
-              setInvalidLocation(false);
-            }
-          }}
+          onDismissInvalidLocation={dismissInvalidLocation}
           onSelect={onSelect}
-          onDrop={(payload, target) => void onTreeDrop(payload, target)}
-          movesDisabled={editorDirty || refreshState !== "idle"}
+          onDrop={(payload, target) => void management.dropOnTree(payload, target)}
+          movesDisabled={movesDisabled}
         />
         <div
           className={`min-h-0 flex-col gap-4 overflow-y-auto bg-card p-4 lg:p-5 ${compact ? "" : "md:flex"} ${
@@ -815,13 +344,18 @@ export function ConnectionsPage({
         <OrphanPanel
           metadata={overview.metadata}
           hosts={overview.hosts}
-          onSave={(metadata) => void submit({ kind: "metadata", metadata })}
+          onSave={(base, next) => void save.submit(hostMetadataEditRequest(base, next))}
         />
         {localError === "" ? null : <Notice tone="danger">{localError}</Notice>}
         {detail === null && missingSelection && selection !== null ? (
           <MissingConnection onBackToList={() => clearTarget({ replace: true })} />
         ) : detail === null || savedState === null ? (
-          <NoConnectionSelected preferredKey={preferredKey} onBeginCreation={beginCreation} />
+          <>
+            {/* 接続を開いていないと、保存の結果を出す HostDetailPanel が無い。接続先が存在しない
+                設定の関連付け直しや破棄を断られたときは、その理由をここに出す。 */}
+            {problem === null ? null : <Notice tone="danger">{saveProblemMessage(problem, t)}</Notice>}
+            <NoConnectionSelected preferredKey={preferredKey} onBeginCreation={beginCreation} />
+          </>
         ) : (
           <>
             <ConnectionSummary
@@ -841,29 +375,35 @@ export function ConnectionsPage({
                 {t("conn.reloadConnection")}
               </Button>
             ) : null}
+            {/* 別の接続を開いたら管理の欄と編集欄を作り直す。前の接続の下書きのまま1回描画されることがなく、
+                各タブのeffectは、同じ接続で版が変わったときだけを扱えばよい。
+                2つは同じfragmentの兄弟なので、keyの頭に欄の名前を付けて重ならないようにする。
+                同じkeyにすると、Reactが描き直すたびに古い管理の欄を消さずに新しい欄を足す。 */}
             {managing ? (
               <ManageConnection
+                key={`manage:${identityKey(detail.form.entry.identity)}`}
                 detail={detail}
                 groups={overview.groups}
                 files={overview.files}
                 disabled={editorDirty || refreshState !== "idle"}
-                onRename={onRename}
-                onMoveToGroup={(group) => void onMoveToGroup(group)}
-                onComment={onComment}
-                onDuplicate={duplicateHost}
-                onMoveToFile={(path) => void moveHost(path)}
-                onDelete={() => void deleteHost()}
+                onRename={management.rename}
+                onMoveToGroup={(group) => void management.moveToGroup(group)}
+                onComment={management.comment}
+                onDuplicate={management.duplicate}
+                onMoveToFile={(path) => void management.moveToFile(path)}
+                onDelete={() => void management.remove()}
               />
             ) : null}
             <HostDetailPanel
+              key={`detail:${identityKey(detail.form.entry.identity)}`}
               detail={detail}
               savedState={savedState}
               preview={preview}
               problem={problem}
-              onFieldEdits={onFieldEdits}
-              onBlockRaw={onBlockRaw}
-              onBasicSave={onBasicSave}
-              onMetadataSave={onMetadataSave}
+              onFieldEdits={save.onFieldEdits}
+              onBlockRaw={save.onBlockRaw}
+              onBasicSave={save.onBasicSave}
+              onMetadataSave={save.onMetadataSave}
               integrations={hostDetailApi}
               panel={activePanel}
               advanced={activeAdvanced}
@@ -876,7 +416,6 @@ export function ConnectionsPage({
               onDiscardReady={(discard) => {
                 draftDiscardRef.current = discard;
               }}
-              onRequestRefresh={refreshCommittedConnection}
               savedRevision={savedRevision}
               vpnProfiles={overview.metadata.vpnProfiles ?? []}
               disabled={refreshState !== "idle"}

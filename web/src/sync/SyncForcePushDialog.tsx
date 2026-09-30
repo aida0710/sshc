@@ -3,9 +3,13 @@ import type { Translate } from "../i18n/context";
 import { CheckboxField, Field, control, sectionHeading } from "../ui/form";
 import { Button, Notice } from "../ui/surface";
 import { ModalShell } from "../ui/ModalShell";
+import { SyncErrorNotice } from "./SyncErrorNotice";
 
+// 送信の失敗は、このダイアログの中に出す。背面の画面に出すとダイアログに隠れる。
 type SyncForcePushDialogProps = {
   busy: boolean;
+  error: string;
+  errorCode: string;
   keyConfigured: boolean;
   message: string;
   t: Translate;
@@ -16,6 +20,8 @@ type SyncForcePushDialogProps = {
 
 export function SyncForcePushDialog({
   busy,
+  error,
+  errorCode,
   keyConfigured,
   message,
   t,
@@ -43,6 +49,7 @@ export function SyncForcePushDialog({
         </header>
         <div className="flex flex-col gap-4 p-4">
           <Notice tone="danger">{t("sync.forceHint")}</Notice>
+          <SyncErrorNotice message={error} code={errorCode} />
           <Field label={t("sync.commitMessage")}>
             <input
               value={message}

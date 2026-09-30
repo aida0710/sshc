@@ -2,9 +2,11 @@ import { act, createEvent, fireEvent, render, screen, waitFor } from "@testing-l
 import userEvent from "@testing-library/user-event";
 import { useState, type ComponentProps } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ApiError } from "../../api/client";
 import type { TerminalSession } from "../../api/terminalSessions";
 import { TerminalWorkspace as ProductionTerminalWorkspace } from "./TerminalWorkspace";
-import { liveWorkspaceStorageKey } from "./livePersistence";
+import { sessionStorageKeys } from "../../ui/browserStorageKeys";
+import { mobileViewportQuery } from "../../ui/useMediaQuery";
 
 function TerminalWorkspace({ onClose = async () => undefined, ...props }: Omit<ComponentProps<typeof ProductionTerminalWorkspace>, "onClose"> & {
   onClose?: ComponentProps<typeof ProductionTerminalWorkspace>["onClose"];
@@ -12,7 +14,7 @@ function TerminalWorkspace({ onClose = async () => undefined, ...props }: Omit<C
   return <ProductionTerminalWorkspace {...props} onClose={onClose} />;
 }
 
-beforeEach(() => window.sessionStorage.removeItem(liveWorkspaceStorageKey));
+beforeEach(() => window.sessionStorage.removeItem(sessionStorageKeys.liveWorkspace));
 
 const workspace = vi.hoisted(() => ({
   list: vi.fn().mockResolvedValue([]),
@@ -97,13 +99,13 @@ function dragAt(target: HTMLElement, kind: "dragEnter" | "drop", dataTransfer: o
   fireEvent(target, event);
 }
 
-function consoleTransfer(sessionId: string) {
+function sessionTransfer(sessionId: string) {
   return {
     effectAllowed: "none",
     dropEffect: "none",
-    types: ["application/x-sshc-console"],
+    types: ["application/x-sshc-session"],
     setData: vi.fn(),
-    getData: (kind: string) => kind === "application/x-sshc-console" ? sessionId : "",
+    getData: (kind: string) => kind === "application/x-sshc-session" ? sessionId : "",
   };
 }
 
@@ -111,12 +113,12 @@ function dockConnectedSession(container: HTMLElement, sessionId = secondary.id) 
   const target = container.querySelector<HTMLElement>("[data-single-terminal-drop-target]");
   expect(target).not.toBeNull();
   Object.defineProperty(target, "getBoundingClientRect", { value: () => ({ left: 0, right: 100, top: 0, bottom: 100, width: 100, height: 100 }) });
-  dragAt(target as HTMLElement, "drop", consoleTransfer(sessionId), 95, 50);
+  dragAt(target as HTMLElement, "drop", sessionTransfer(sessionId), 95, 50);
 }
 
 describe("TerminalWorkspace pane movement", () => {
   it("reattaches a live split with its ratio and focused pane after remount", async () => {
-    window.sessionStorage.setItem(liveWorkspaceStorageKey, JSON.stringify({
+    window.sessionStorage.setItem(sessionStorageKeys.liveWorkspace, JSON.stringify({
       version: 1,
       root: {
         split: {
@@ -154,7 +156,7 @@ describe("TerminalWorkspace pane movement", () => {
   });
 
   it("waits for the engine session listing before reconciling the live snapshot", async () => {
-    window.sessionStorage.setItem(liveWorkspaceStorageKey, JSON.stringify({
+    window.sessionStorage.setItem(sessionStorageKeys.liveWorkspace, JSON.stringify({
       version: 1,
       root: {
         split: {
@@ -180,7 +182,7 @@ describe("TerminalWorkspace pane movement", () => {
     const { container, rerender } = render(<TerminalWorkspace {...properties} sessionsLoaded={false} />);
     expect(container.querySelectorAll("[data-workspace-pane]")).toHaveLength(0);
     expect(screen.getByText("Primary terminal")).toBeVisible();
-    expect(window.sessionStorage.getItem(liveWorkspaceStorageKey)).not.toBeNull();
+    expect(window.sessionStorage.getItem(sessionStorageKeys.liveWorkspace)).not.toBeNull();
 
     rerender(<TerminalWorkspace {...properties} sessionsLoaded />);
     await waitFor(() => expect(container.querySelectorAll("[data-workspace-pane]")).toHaveLength(2));
@@ -188,7 +190,7 @@ describe("TerminalWorkspace pane movement", () => {
   });
 
   it("restores Focus Mode for a surviving pane", async () => {
-    window.sessionStorage.setItem(liveWorkspaceStorageKey, JSON.stringify({
+    window.sessionStorage.setItem(sessionStorageKeys.liveWorkspace, JSON.stringify({
       version: 1,
       root: {
         split: {
@@ -218,7 +220,7 @@ describe("TerminalWorkspace pane movement", () => {
     expect(screen.getAllByRole("button", { name: /Exit focus mode/ }).length).toBeGreaterThan(0);
   });
 
-  it("shows the sshc command name when no console is open", async () => {
+  it("shows the sshc command name when no session is open", async () => {
     const { container } = render(
       <TerminalWorkspace
         sessions={[]}
@@ -232,7 +234,7 @@ describe("TerminalWorkspace pane movement", () => {
 
     expect(await screen.findByRole("status")).toHaveTextContent("sshc host");
     expect(screen.getByRole("status")).not.toHaveTextContent("ssh host");
-    expect(container.querySelector("[data-desktop-workspace-controls]")).toHaveClass("hidden", "md:flex");
+    expect(container.querySelector("[data-desktop-workspace-controls]")).toBeVisible();
     expect(screen.queryByRole("button", { name: "Split right" })).toBeNull();
   });
 
@@ -270,7 +272,7 @@ describe("TerminalWorkspace pane movement", () => {
     const dataTransfer = {
       effectAllowed: "none",
       dropEffect: "none",
-      types: ["application/x-sshc-console"],
+      types: ["application/x-sshc-session"],
       setData: (kind: string, value: string) => values.set(kind, value),
       getData: (kind: string) => values.get(kind) ?? "",
     };
@@ -311,9 +313,9 @@ describe("TerminalWorkspace pane movement", () => {
     const dataTransfer = {
       effectAllowed: "none",
       dropEffect: "none",
-      types: ["application/x-sshc-console"],
+      types: ["application/x-sshc-session"],
       setData: vi.fn(),
-      getData: (kind: string) => kind === "application/x-sshc-console" ? secondary.id : "",
+      getData: (kind: string) => kind === "application/x-sshc-session" ? secondary.id : "",
     };
 
     dragAt(target as HTMLElement, "dragEnter", dataTransfer, 95, 50);
@@ -361,7 +363,7 @@ describe("TerminalWorkspace pane movement", () => {
       name: "Build workers",
       memberSessionIds: [localPrimary.id, localSecondary.id],
     })));
-    await waitFor(() => expect(JSON.parse(window.sessionStorage.getItem(liveWorkspaceStorageKey) ?? "{}")).toEqual(expect.objectContaining({
+    await waitFor(() => expect(JSON.parse(window.sessionStorage.getItem(sessionStorageKeys.liveWorkspace) ?? "{}")).toEqual(expect.objectContaining({
       name: "Build workers",
     })));
   });
@@ -435,7 +437,7 @@ describe("TerminalWorkspace pane movement", () => {
       const target = container.querySelector<HTMLElement>("[data-workspace-pane]");
       expect(target).not.toBeNull();
       Object.defineProperty(target, "getBoundingClientRect", { configurable: true, value: () => ({ left: 0, right: 100, top: 0, bottom: 100, width: 100, height: 100 }) });
-      dragAt(target as HTMLElement, "drop", consoleTransfer(session.id), 95, 50);
+      dragAt(target as HTMLElement, "drop", sessionTransfer(session.id), 95, 50);
       if (session.id !== "worker-session") {
         await waitFor(() => expect(container.querySelectorAll("[data-workspace-pane]")).toHaveLength(session.id === "logs-session" ? 3 : 4));
       }
@@ -446,10 +448,10 @@ describe("TerminalWorkspace pane movement", () => {
     expect(screen.queryByText("Worker terminal")).toBeNull();
   });
 
-  it("shows one workspace terminal at a time on a compact viewport", async () => {
+  it("shows one workspace terminal at a time without the management strip on a phone", async () => {
     const originalMatchMedia = window.matchMedia;
     window.matchMedia = vi.fn().mockImplementation((query: string) => ({
-      matches: query === "(max-width: 767px)",
+      matches: query === mobileViewportQuery,
       media: query,
       onchange: null,
       addEventListener: vi.fn(),
@@ -478,16 +480,16 @@ describe("TerminalWorkspace pane movement", () => {
       const dataTransfer = {
         effectAllowed: "none",
         dropEffect: "none",
-        types: ["application/x-sshc-console"],
+        types: ["application/x-sshc-session"],
         setData: vi.fn(),
-        getData: (kind: string) => kind === "application/x-sshc-console" ? secondary.id : "",
+        getData: (kind: string) => kind === "application/x-sshc-session" ? secondary.id : "",
       };
       dragAt(target as HTMLElement, "drop", dataTransfer, 95, 50);
 
       await waitFor(() => expect(screen.getByRole("navigation", { name: "Workspace terminals" })).toBeVisible());
       expect(container.querySelectorAll("[data-workspace-pane]")).toHaveLength(1);
       expect(container.querySelector("[data-pane-toolbar]")).toBeNull();
-      expect(container.querySelector("[data-desktop-workspace-controls]")).toHaveClass("hidden", "md:flex");
+      expect(container.querySelector("[data-desktop-workspace-controls]")).toBeNull();
       expect(screen.getByText("Database terminal")).toBeVisible();
       expect(screen.queryByText("Primary terminal")).toBeNull();
 
@@ -499,7 +501,7 @@ describe("TerminalWorkspace pane movement", () => {
     }
   });
 
-  it("keeps a workspace through a transiently incomplete session refresh", async () => {
+  it("closes the pane of a session as soon as the session leaves the list", async () => {
     function ReconciliationHarness({ available }: { available: TerminalSession[] }) {
       const [active, setActive] = useState(primary.id);
       return <TerminalWorkspace
@@ -518,18 +520,16 @@ describe("TerminalWorkspace pane movement", () => {
     const dataTransfer = {
       effectAllowed: "none",
       dropEffect: "none",
-      types: ["application/x-sshc-console"],
+      types: ["application/x-sshc-session"],
       setData: vi.fn(),
-      getData: (kind: string) => kind === "application/x-sshc-console" ? secondary.id : "",
+      getData: (kind: string) => kind === "application/x-sshc-session" ? secondary.id : "",
     };
     dragAt(target as HTMLElement, "drop", dataTransfer, 95, 50);
     await waitFor(() => expect(container.querySelectorAll("[data-workspace-pane]")).toHaveLength(2));
 
     rerender(<ReconciliationHarness available={[primary]} />);
-    rerender(<ReconciliationHarness available={[primary, secondary]} />);
-    await new Promise((resolve) => window.setTimeout(resolve, 550));
 
-    expect(container.querySelectorAll("[data-workspace-pane]")).toHaveLength(2);
+    expect(container.querySelectorAll("[data-workspace-pane]")).toHaveLength(0);
   });
 
   it("resizes a split with the keyboard and can focus one pane", async () => {
@@ -681,6 +681,83 @@ describe("TerminalWorkspace pane movement", () => {
     await new Promise((resolve) => window.setTimeout(resolve, 0));
     expect(workspace.restore).toHaveBeenCalledTimes(1);
     expect(open).toHaveBeenCalledTimes(2);
+  });
+
+  it("reports a restore as running until its panes have opened", async () => {
+    let resolveStored: (value: unknown) => void = () => undefined;
+    workspace.restore.mockReturnValueOnce(new Promise((resolve) => { resolveStored = resolve; }));
+    const onRestoringChange = vi.fn();
+    render(<TerminalWorkspace
+      sessions={[]}
+      activeSessionId={null}
+      onActive={() => undefined}
+      onOpenAlias={async (alias) => ({ ...primary, id: `${alias}-session`, alias })}
+      onOpenShell={vi.fn()}
+      restoreRequest={{ id: "workspace-1", sequence: 1 }}
+      onRestoringChange={onRestoringChange}
+      renderTerminal={() => null}
+    />);
+
+    await waitFor(() => expect(onRestoringChange).toHaveBeenCalledWith(true));
+    expect(onRestoringChange).not.toHaveBeenCalledWith(false);
+
+    await act(async () => resolveStored({
+      id: "workspace-1",
+      name: "Workspace",
+      layout: { pane: { id: "pane-a", alias: "web-a" } },
+      focusedPaneId: "pane-a",
+      createdAt: "2026-08-24T10:00:00Z",
+      updatedAt: "2026-08-24T11:00:00Z",
+    }));
+    await waitFor(() => expect(onRestoringChange).toHaveBeenLastCalledWith(false));
+  });
+
+  it("reports an unmounted restore as no longer running and closes what it opened", async () => {
+    workspace.restore.mockResolvedValueOnce({
+      id: "workspace-1",
+      name: "Workspace",
+      layout: { pane: { id: "pane-a", alias: "web-a" } },
+      focusedPaneId: "pane-a",
+      createdAt: "2026-08-24T10:00:00Z",
+      updatedAt: "2026-08-24T11:00:00Z",
+    });
+    let resolveOpened: (value: TerminalSession) => void = () => undefined;
+    const opened = new Promise<TerminalSession>((resolve) => { resolveOpened = resolve; });
+    const onRestoringChange = vi.fn();
+    const close = vi.fn(async () => undefined);
+    const { unmount } = render(<TerminalWorkspace
+      sessions={[]}
+      activeSessionId={null}
+      onActive={() => undefined}
+      onOpenAlias={() => opened}
+      onOpenShell={vi.fn()}
+      onClose={close}
+      restoreRequest={{ id: "workspace-1", sequence: 1 }}
+      onRestoringChange={onRestoringChange}
+      renderTerminal={() => null}
+    />);
+    await waitFor(() => expect(onRestoringChange).toHaveBeenCalledWith(true));
+
+    unmount();
+    expect(onRestoringChange).toHaveBeenLastCalledWith(false);
+    await act(async () => { resolveOpened({ ...primary, id: "web-a-session", alias: "web-a" }); await opened; });
+    await waitFor(() => expect(close).toHaveBeenCalledWith("web-a-session"));
+  });
+
+  it("explains a saved layout that could not be reopened in words instead of the failure code", async () => {
+    workspace.restore.mockRejectedValueOnce(new ApiError("workspace_not_found", 404, null));
+    render(<TerminalWorkspace
+      sessions={[]}
+      activeSessionId={null}
+      onActive={() => undefined}
+      onOpenAlias={vi.fn()}
+      onOpenShell={vi.fn()}
+      restoreRequest={{ id: "workspace-gone", sequence: 1 }}
+      renderTerminal={() => null}
+    />);
+
+    expect(await screen.findByText(/The saved layout was not found/)).toBeInTheDocument();
+    expect(screen.queryByText("workspace_not_found")).not.toBeInTheDocument();
   });
 
   it("keeps the latest restore when saved layouts arrive in reverse order", async () => {

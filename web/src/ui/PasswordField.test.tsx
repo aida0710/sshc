@@ -54,4 +54,20 @@ describe("PasswordField", () => {
     );
     expect(screen.getByText("Stored only in memory.")).toBeInTheDocument();
   });
+
+  it("marks the input invalid and reads the hint and the error as its description", () => {
+    render(
+      <PasswordField
+        label="Master password"
+        value="short"
+        onChange={vi.fn()}
+        hint="Stored only in memory."
+        error="Use at least 12 characters."
+      />,
+    );
+
+    const input = screen.getByLabelText("Master password");
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(input).toHaveAccessibleDescription("Stored only in memory. Use at least 12 characters.");
+  });
 });

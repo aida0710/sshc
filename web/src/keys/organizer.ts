@@ -6,6 +6,17 @@ export function groupOfKeyPath(relativePath: string): string {
   return segments.slice(1, -1).join("/");
 }
 
+// relocateStem は、鍵を移すときに名前の欄へ最初に入れる名前である。公開鍵と
+// 証明書は、対になる秘密鍵と同じ名前になるように拡張子を外す。
+export function relocateStem(item: KeyItem): string {
+  const base = item.relativePath.split("/").pop() ?? item.relativePath;
+  if (item.kind === "private_key") return base;
+  for (const suffix of ["-cert.pub", ".pub"]) {
+    if (base.endsWith(suffix) && base.length > suffix.length) return base.slice(0, -suffix.length);
+  }
+  return base;
+}
+
 export type Folder = { kind: "all" } | { kind: "ungrouped" } | { kind: "group"; name: string };
 
 export type MoveTarget = Exclude<Folder, { kind: "all" }>;
@@ -64,31 +75,31 @@ export function keyItemGroups(items: KeyItem[]): KeyItemGroup[] {
   }
 
   const relatedByPrivate = new Map<string, KeyItem[]>();
-  const relatedIDs = new Set<string>();
+  const relatedIds = new Set<string>();
   for (const item of items) {
     const fingerprint = relatedFingerprint(item);
     if (fingerprint === "") continue;
     const privateKey = privateByFingerprint.get(fingerprint);
     if (privateKey === undefined) continue;
     relatedByPrivate.set(privateKey.id, [...(relatedByPrivate.get(privateKey.id) ?? []), item]);
-    relatedIDs.add(item.id);
+    relatedIds.add(item.id);
   }
 
   return items.flatMap((item) => {
-    if (relatedIDs.has(item.id)) return [];
+    if (relatedIds.has(item.id)) return [];
     return [{ primary: item, related: relatedByPrivate.get(item.id) ?? [] }];
   });
 }
 
 export function includeKeyPairContext(items: KeyItem[], matched: KeyItem[]): KeyItem[] {
-  const matchedIDs = new Set(matched.map((item) => item.id));
+  const matchedIds = new Set(matched.map((item) => item.id));
   for (const group of keyItemGroups(items)) {
     const members = [group.primary, ...group.related];
-    if (members.some((item) => matchedIDs.has(item.id))) {
-      for (const item of members) matchedIDs.add(item.id);
+    if (members.some((item) => matchedIds.has(item.id))) {
+      for (const item of members) matchedIds.add(item.id);
     }
   }
-  return items.filter((item) => matchedIDs.has(item.id));
+  return items.filter((item) => matchedIds.has(item.id));
 }
 
 export type MoveOutcome = {
