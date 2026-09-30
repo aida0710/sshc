@@ -177,26 +177,53 @@ func (f *forwards) close() {
 // Problem に残り、端末にも 1 行出る。
 func (f *forwards) open(client *ssh.Client, specs []ForwardSpec, report io.Writer) {
 	for _, spec := range specs {
-		_, _ = f.start(client, spec, false, report, true)
+		f.openFromConfig(client, spec, report)
 	}
 }
 
-// start opens one forwarding listener. Configuration-derived failures remain in
-// the session list; an explicitly requested temporary failure is returned and
-// leaves no misleading entry behind.
-func (f *forwards) start(
-	client *ssh.Client, spec ForwardSpec, temporary bool, report io.Writer, keepFailure bool,
-) (terminal.Forward, error) {
+// forwardOrigin は、転送を開いたきっかけである。一覧で一時転送かどうかを見分ける
+// ために、転送の項目へ残す。
+type forwardOrigin int
+
+const (
+	// forwardFromConfig は、設定の LocalForward・DynamicForward から開く転送である。
+	forwardFromConfig forwardOrigin = iota
+	// forwardTemporary は、利用者が接続中に求めた一時転送である。
+	forwardTemporary
+)
+
+// openFromConfig は、設定の転送を1つ開き、その結果をターミナルへ1行書く。
+// 開けなかった転送も、理由を読めるよう一覧に残す。
+func (f *forwards) openFromConfig(client *ssh.Client, spec ForwardSpec, report io.Writer) {
+	entry, err := f.listen(client, spec, forwardFromConfig)
+	switch {
+	case errors.Is(err, terminal.ErrNotConnected):
+		// 接続がもう閉じているので、一覧にもターミナルにも残す先が無い。
+		return
+	case err != nil:
+		f.note(entry)
+		_, _ = io.WriteString(report, "sshc: "+spec.Address()+" could not be opened: "+err.Error()+"\r\n")
+	default:
+		_, _ = io.WriteString(report, "sshc: forwarding "+describe(spec)+"\r\n")
+	}
+}
+
+// startTemporary は、利用者が接続中に求めた一時転送を開く。失敗は呼び出し元へ返す
+// だけにし、誤解を招く項目を一覧に残さない。
+func (f *forwards) startTemporary(client *ssh.Client, spec ForwardSpec) (terminal.Forward, error) {
+	return f.listen(client, spec, forwardTemporary)
+}
+
+// listen は、転送の listener を1つ開いて一覧に載せ、届く接続を流し始める。
+// 開けなかったときは、Problem に理由を入れた項目を一覧に載せずに返す。
+func (f *forwards) listen(client *ssh.Client, spec ForwardSpec, origin forwardOrigin) (terminal.Forward, error) {
 	listener, err := net.Listen("tcp", spec.Address())
-	entry := terminal.Forward{Kind: spec.Kind, Listen: spec.Address(), To: spec.To, Temporary: temporary}
+	entry := terminal.Forward{
+		Kind: spec.Kind, Listen: spec.Address(), To: spec.To,
+		Temporary: origin == forwardTemporary,
+	}
 	if err != nil {
 		entry.Problem = err.Error()
-		if keepFailure {
-			f.note(entry)
-		}
-		if report != nil {
-			_, _ = io.WriteString(report, "sshc: "+spec.Address()+" could not be opened: "+err.Error()+"\r\n")
-		}
 		return entry, err
 	}
 
@@ -210,9 +237,6 @@ func (f *forwards) start(
 	entry.Listen = listener.Addr().String()
 	f.opened = append(f.opened, managedForward{view: entry, listener: listener})
 	f.mutex.Unlock()
-	if report != nil {
-		_, _ = io.WriteString(report, "sshc: forwarding "+describe(spec)+"\r\n")
-	}
 	go accept(listener, client, spec)
 	return entry, nil
 }
@@ -284,6 +308,14 @@ func acceptLimited(listener net.Listener, limit int, handle func(net.Conn)) {
 	}
 }
 
+const (
+	// lingeringDrainTimeout は、断ったあとに相手の読み残しを読み捨てる締切。
+	lingeringDrainTimeout = time.Second
+	// lingeringDrainBytes は、断ったあとに読み捨てる量の上限。SOCKS5 の挨拶と要求は
+	// 合わせても 600 バイトに満たないので、読み残しはこれで空になる。
+	lingeringDrainBytes = 4096
+)
+
 // lingeringClose は、最後に書いたものが相手に届く見込みを作ってから閉じる。
 //
 // 順番が要点である: 先に FIN を送って「もう書かない」と伝え、それから残りを
@@ -295,8 +327,8 @@ func lingeringClose(conn net.Conn) {
 	if half, ok := conn.(interface{ CloseWrite() error }); ok {
 		_ = half.CloseWrite()
 	}
-	_ = conn.SetReadDeadline(time.Now().Add(time.Second))
-	_, _ = io.Copy(io.Discard, io.LimitReader(conn, 4096))
+	_ = conn.SetReadDeadline(time.Now().Add(lingeringDrainTimeout))
+	_, _ = io.Copy(io.Discard, io.LimitReader(conn, lingeringDrainBytes))
 }
 
 func serve(local net.Conn, client *ssh.Client, spec ForwardSpec) {

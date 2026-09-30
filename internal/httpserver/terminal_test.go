@@ -20,6 +20,7 @@ import (
 	"sshc/internal/api"
 	"sshc/internal/platform"
 	"sshc/internal/terminal"
+	"sshc/internal/testwait"
 )
 
 // scriptedPTY は、テストが押し込んだものを返す擬似端末である。実プロセスは
@@ -133,10 +134,22 @@ type scriptedStarter struct {
 
 type readinessPTY struct {
 	*scriptedPTY
-	connected chan error
+	connected    chan struct{}
+	connectedErr error
 }
 
-func (p *readinessPTY) Ready() <-chan error { return p.connected }
+func newReadinessPTY(process *scriptedPTY) *readinessPTY {
+	return &readinessPTY{scriptedPTY: process, connected: make(chan struct{})}
+}
+
+func (p *readinessPTY) Ready() <-chan struct{} { return p.connected }
+func (p *readinessPTY) ReadyErr() error        { return p.connectedErr }
+
+// finishOpen は、非同期の接続が終わったことを知らせる。
+func (p *readinessPTY) finishOpen(err error) {
+	p.connectedErr = err
+	close(p.connected)
+}
 
 type forwardingReadinessPTY struct {
 	*readinessPTY
@@ -213,15 +226,14 @@ func (f *terminalFixture) connect(alias string) terminal.Process {
 	process := newScriptedPTY()
 	f.ssh = append(f.ssh, process)
 	if f.forwarding {
-		ready := &readinessPTY{scriptedPTY: process, connected: make(chan error, 1)}
+		ready := newReadinessPTY(process)
 		forwarder := &forwardingReadinessPTY{readinessPTY: ready}
 		f.forwarders = append(f.forwarders, forwarder)
-		ready.connected <- nil
-		close(ready.connected)
+		ready.finishOpen(nil)
 		return forwarder
 	}
 	if f.asyncSSH {
-		ready := &readinessPTY{scriptedPTY: process, connected: make(chan error, 1)}
+		ready := newReadinessPTY(process)
 		f.sshReady = append(f.sshReady, ready)
 		return ready
 	}
@@ -241,7 +253,7 @@ func TestTemporaryForwardRoutesStartListAndStopOneListener(t *testing.T) {
 	}
 	// Ready is observed asynchronously; creating the session does not guarantee
 	// that its connected state is visible before the forwarding request.
-	waitUntil(t, func() bool {
+	testwait.Until(t, func() bool {
 		session, ok := fixture.registry.Lookup(opened.Session.Id)
 		return ok && session.View().State == terminal.StateConnected
 	})
@@ -470,57 +482,39 @@ func TestLocalShellProfileUsesStoredDefaultAndOneShotOverride(t *testing.T) {
 	}
 }
 
-func TestStartupSnippetWaitsForEverySSHConnectionToBecomeReady(t *testing.T) {
-	var opened []*readinessPTY
+func TestSSHStartupChangesToTheRequestedDirectoryAndThenRunsTheStartupSnippet(t *testing.T) {
 	handlers := TerminalHandlers{
-		Connect: func(_ context.Context, _ string, _ terminal.Size) (terminal.Process, error) {
-			process := &readinessPTY{scriptedPTY: newScriptedPTY(), connected: make(chan error, 1)}
-			opened = append(opened, process)
-			return process, nil
+		Connect: func(context.Context, string, terminal.Size) (terminal.Process, error) {
+			return newScriptedPTY(), nil
 		},
 		Startup: func(alias string) (string, bool) {
 			if alias != "production" {
 				t.Fatalf("startup alias = %q", alias)
 			}
-			return "cd /srv/app", true
+			return "tmux attach", true
 		},
 	}
-	alias := "production"
-	spec, err := handlers.spec(terminal.KindSSH, &alias, nil, terminal.Size{Cols: 80, Rows: 24})
+	alias, directory := "production", "/srv/it's"
+	spec, err := handlers.spec(terminal.KindSSH, &alias, &directory, terminal.Size{Cols: 80, Rows: 24})
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	for attempt := 0; attempt < 2; attempt++ {
-		process, err := spec.Open(context.Background(), terminal.Size{Cols: 80, Rows: 24})
-		if err != nil {
-			t.Fatal(err)
-		}
-		candidate := opened[attempt]
-		if got := candidate.keystrokes(); got != "" {
-			t.Fatalf("attempt %d wrote before ready: %q", attempt, got)
-		}
-		candidate.connected <- nil
-		close(candidate.connected)
-		deadline := time.Now().Add(time.Second)
-		for candidate.keystrokes() == "" && time.Now().Before(deadline) {
-			time.Sleep(time.Millisecond)
-		}
-		if got := candidate.keystrokes(); got != "cd /srv/app\r" {
-			t.Fatalf("attempt %d startup = %q", attempt, got)
-		}
-		candidate.exit(terminal.ExitInfo{})
-		_ = process.Close()
+	if spec.Startup == nil {
+		t.Fatal("the SSH spec has no startup commands")
+	}
+	got := spec.Startup()
+	want := []string{`cd -- '/srv/it'"'"'s'`, "tmux attach"}
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("startup = %q, want %q", got, want)
 	}
 }
 
-func TestSSHSessionLifetimePreservesForwarderCapability(t *testing.T) {
-	underlying := &forwardingReadinessPTY{
-		readinessPTY: &readinessPTY{scriptedPTY: newScriptedPTY(), connected: make(chan error, 1)},
-		forwards:     []terminal.Forward{{Kind: terminal.ForwardLocal, Listen: "127.0.0.1:9000", To: "db:5432"}},
-	}
+func TestSSHSpecOpenReturnsTheConnectedProcessWithEveryCapability(t *testing.T) {
+	underlying := &forwardingReadinessPTY{readinessPTY: newReadinessPTY(newScriptedPTY())}
+	var connectContext context.Context
 	handlers := TerminalHandlers{
-		Connect: func(context.Context, string, terminal.Size) (terminal.Process, error) {
+		Connect: func(ctx context.Context, _ string, _ terminal.Size) (terminal.Process, error) {
+			connectContext = ctx
 			return underlying, nil
 		},
 	}
@@ -529,30 +523,20 @@ func TestSSHSessionLifetimePreservesForwarderCapability(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	process, err := spec.Open(context.Background(), terminal.Size{Cols: 80, Rows: 24})
+	request, cancelRequest := context.WithCancel(context.Background())
+	process, err := spec.Open(request, terminal.Size{Cols: 80, Rows: 24})
 	if err != nil {
 		t.Fatal(err)
 	}
-	forwarder, ok := process.(terminal.Forwarder)
-	if !ok {
-		t.Fatal("SSH lifetime wrapper dropped the Forwarder capability")
+	// 包みを返すと、包みが素通ししない能力（接続の進捗など）が黙って消える。
+	if process != terminal.Process(underlying) {
+		t.Fatalf("spec.Open returned %T, want the connected process itself", process)
 	}
-	if forwards := forwarder.Forwards(); len(forwards) != 1 || forwards[0] != underlying.forwards[0] {
-		t.Fatalf("forwards = %#v, want %#v", forwards, underlying.forwards)
+	cancelRequest()
+	if err := connectContext.Err(); err != nil {
+		t.Fatalf("the SSH session context ended with the HTTP request: %v", err)
 	}
-	controller, ok := process.(terminal.ForwardController)
-	if !ok {
-		t.Fatal("SSH lifetime wrapper dropped the ForwardController capability")
-	}
-	added, err := controller.StartForward(terminal.ForwardDynamic, "1080", "")
-	if err != nil || added.ID == "" {
-		t.Fatalf("start forward = %#v, %v", added, err)
-	}
-	if err := controller.StopForward(added.ID); err != nil {
-		t.Fatalf("stop forward: %v", err)
-	}
-	underlying.connected <- nil
-	close(underlying.connected)
+	underlying.finishOpen(nil)
 	underlying.exit(terminal.ExitInfo{})
 	_ = process.Close()
 }
@@ -599,6 +583,30 @@ func TestOpeningAnSSHSessionNeedsASafeAlias(t *testing.T) {
 	}
 }
 
+// SFTP で開いているフォルダの名前は接続先が決める。制御文字は PTY の行編集を
+// 操作するので、cd の行に書く前に断る。
+func TestOpeningATerminalInAFolderWhoseNameHasControlCharactersIsRefused(t *testing.T) {
+	fixture := newTerminalFixture(t, terminal.Limits{MaxSessions: 4, Scrollback: 1 << 12})
+
+	for name, character := range map[string]string{
+		"Ctrl-U erases the cd line": `\u0015`,
+		"Ctrl-C interrupts it":      `\u0003`,
+		"ESC starts a sequence":     `\u001b`,
+		"DEL erases a character":    `\u007f`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			body := `{"kind":"ssh","alias":"bastion","cwd":"/srv/a` + character + `id"}`
+			response, contents := fixture.do(t, http.MethodPost, "/api/v1/terminal/sessions", body)
+			if response.StatusCode != http.StatusBadRequest || !strings.Contains(contents, "remote_working_directory_unsupported") {
+				t.Fatalf("status = %d: %s", response.StatusCode, contents)
+			}
+		})
+	}
+	if opened := fixture.starter.opened(); len(opened) != 0 {
+		t.Fatalf("a refused folder still opened %#v", opened)
+	}
+}
+
 func TestASuccessfulSSHSessionIsRecordedAfterItCanBeStreamed(t *testing.T) {
 	fixture := newTerminalFixture(t, terminal.Limits{MaxSessions: 4, Scrollback: 1 << 12})
 	response, body := fixture.do(t, http.MethodPost, "/api/v1/terminal/sessions", `{"kind":"ssh","alias":"bastion"}`)
@@ -633,14 +641,13 @@ func TestAsynchronousSSHIsNotRecordedOrConnectedBeforeReady(t *testing.T) {
 	ready := fixture.sshReady[0]
 	fixture.mutex.Unlock()
 
-	ready.connected <- nil
-	close(ready.connected)
-	waitUntil(t, func() bool {
+	ready.finishOpen(nil)
+	testwait.Until(t, func() bool {
 		fixture.mutex.Lock()
 		defer fixture.mutex.Unlock()
 		return len(fixture.recorded) == 1 && fixture.recorded[0] == "bastion"
 	})
-	waitUntil(t, func() bool {
+	testwait.Until(t, func() bool {
 		session, ok := fixture.registry.Lookup(opened.Session.Id)
 		return ok && session.View().State == terminal.StateConnected
 	})
@@ -675,12 +682,12 @@ func TestExitedSSHSessionCanBeExplicitlyReconnectedInPlace(t *testing.T) {
 	first := fixture.ssh[0]
 	fixture.mutex.Unlock()
 	first.feed("before manual reconnect\r\n")
-	waitUntil(t, func() bool {
+	testwait.Until(t, func() bool {
 		session, ok := fixture.registry.Lookup(opened.Session.Id)
 		return ok && strings.Contains(string(snapshotOf(session)), "before manual reconnect")
 	})
 	first.exit(terminal.ExitInfo{Code: 255})
-	waitUntil(t, func() bool {
+	testwait.Until(t, func() bool {
 		session, ok := fixture.registry.Lookup(opened.Session.Id)
 		return ok && session.Exit() != nil
 	})
@@ -745,8 +752,8 @@ func TestAutomaticReconnectCanBeStoppedFromTheAPI(t *testing.T) {
 	fixture.mutex.Lock()
 	first := fixture.ssh[0]
 	fixture.mutex.Unlock()
-	first.exit(terminal.ExitInfo{Code: terminal.TransportLost})
-	waitUntil(t, func() bool {
+	first.exit(terminal.ExitInfo{Code: terminal.ExitCodeUnknown, TransportLost: true})
+	testwait.Until(t, func() bool {
 		session, ok := fixture.registry.Lookup(opened.Session.Id)
 		return ok && session.View().State == terminal.StateReconnecting
 	})
@@ -773,7 +780,7 @@ func TestExplicitReconnectRefusesALocalShell(t *testing.T) {
 	fixture := newTerminalFixture(t, terminal.Limits{MaxSessions: 4, Scrollback: 1 << 12})
 	id, _ := fixture.openShell(t)
 	fixture.starter.last().exit(terminal.ExitInfo{})
-	waitUntil(t, func() bool {
+	testwait.Until(t, func() bool {
 		session, ok := fixture.registry.Lookup(id)
 		return ok && session.Exit() != nil
 	})
@@ -913,7 +920,7 @@ func TestTheStreamCarriesOutputKeystrokesAndTheExit(t *testing.T) {
 	if err := connection.Write(ctx, websocket.MessageBinary, []byte("echo hi\r")); err != nil {
 		t.Fatal(err)
 	}
-	waitUntil(t, func() bool { return process.keystrokes() == "echo hi\r" })
+	testwait.Until(t, func() bool { return process.keystrokes() == "echo hi\r" })
 
 	// 終了はテキストフレームで届く。
 	process.exit(terminal.ExitInfo{Code: 42})
@@ -991,7 +998,7 @@ func TestReattachingReplaysTheScrollbackAndKeepsTheSessionAlive(t *testing.T) {
 	// feed は擬似 PTY の読み取り待ちへ出力を渡すだけなので、pump がそれを
 	// scrollback へ格納する前に再接続するとライブ出力として次のフレームへ届く。
 	// このテストは「切断中に蓄えた scrollback の再生」を検査するため、格納を待つ。
-	waitUntil(t, func() bool {
+	testwait.Until(t, func() bool {
 		return strings.Contains(string(snapshotOf(session)), "while detached")
 	})
 
@@ -1061,29 +1068,14 @@ func readReplayNotice(t *testing.T, connection *websocket.Conn, ctx context.Cont
 	return message.Replay
 }
 
-func waitUntil(t *testing.T, condition func() bool) {
-	t.Helper()
-	// CI の全 package race 実行では、プロセス終了を観測する goroutine が
-	// CPU 飽和中に数秒止まることがある。実時間ではなく状態を検査する helper
-	// なので、正常系を遅くせずに過負荷時だけ十分待てる上限にする。
-	deadline := time.Now().Add(15 * time.Second)
-	for time.Now().Before(deadline) {
-		if condition() {
-			return
-		}
-		time.Sleep(time.Millisecond)
-	}
-	t.Fatal("the condition never became true")
-}
-
 // 改名は表示だけを変え、応答は一覧を返す。名前が要るのは、同じ相手へ
 // 複数本開いたときに行が見分けられなくなるからである。
 func TestRenamingASessionChangesTheListedTitle(t *testing.T) {
 	fixture := newTerminalFixture(t, terminal.Limits{MaxSessions: 4, Scrollback: 1 << 12})
 	id, _ := fixture.openShell(t)
 
-	response, body := fixture.do(t, http.MethodPatch,
-		"/api/v1/terminal/sessions/"+id, `{"title":"  ログ監視  "}`)
+	path := "/api/v1/terminal/sessions/" + id + "/title"
+	response, body := fixture.do(t, http.MethodPut, path, `{"title":"  ログ監視  "}`)
 	if response.StatusCode != http.StatusOK {
 		t.Fatalf("rename = %d: %s", response.StatusCode, body)
 	}
@@ -1099,7 +1091,7 @@ func TestRenamingASessionChangesTheListedTitle(t *testing.T) {
 	// ので、名前としては受け取らない。
 	refusals := []string{`{"title":""}`, `{"title":"esc\u001b[2J"}`, `{"nope":1}`}
 	for _, refused := range refusals {
-		response, body := fixture.do(t, http.MethodPatch, "/api/v1/terminal/sessions/"+id, refused)
+		response, body := fixture.do(t, http.MethodPut, path, refused)
 		if response.StatusCode != http.StatusBadRequest {
 			t.Errorf("rename %s = %d, want 400: %s", refused, response.StatusCode, body)
 		}
@@ -1109,7 +1101,7 @@ func TestRenamingASessionChangesTheListedTitle(t *testing.T) {
 		t.Errorf("a refused rename replaced the name: %s", body)
 	}
 
-	response, _ = fixture.do(t, http.MethodPatch, "/api/v1/terminal/sessions/absent", `{"title":"x"}`)
+	response, _ = fixture.do(t, http.MethodPut, "/api/v1/terminal/sessions/absent/title", `{"title":"x"}`)
 	if response.StatusCode != http.StatusNotFound {
 		t.Errorf("rename of an unknown session = %d, want 404", response.StatusCode)
 	}
@@ -1132,7 +1124,7 @@ func TestTerminalOSCTitleAndNotificationReachTheSessionList(t *testing.T) {
 	fixture.ssh[0].feed("の修正\x1b\\\x1b]777;notify;Claude Code;入力待ちです\aafter")
 
 	var listed api.TerminalSessionList
-	waitUntil(t, func() bool {
+	testwait.Until(t, func() bool {
 		_, current := fixture.do(t, http.MethodGet, "/api/v1/terminal/sessions", "")
 		if json.Unmarshal([]byte(current), &listed) != nil || len(listed.Sessions) != 1 {
 			return false

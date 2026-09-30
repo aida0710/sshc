@@ -14,6 +14,8 @@ import (
 	"unsafe"
 
 	"golang.org/x/sys/windows"
+
+	"sshc/internal/platform/windowsjob"
 )
 
 // forcedExitCode は、TerminateJobObject が木のすべてのプロセスに刻む値である。
@@ -143,8 +145,9 @@ func startPseudoConsole(command Command, size Size, environment *uint16) (_ Proc
 		return nil, fmt.Errorf("terminal: start %s: %w", command.Path, err)
 	}
 
-	job, err := assignToJob(information.Process)
+	job, err := windowsjob.KillOnClose(information.Process)
 	if err != nil {
+		err = fmt.Errorf("terminal: %w", err)
 		windows.TerminateProcess(information.Process, forcedExitCode)
 		windows.CloseHandle(information.Thread)
 		windows.CloseHandle(information.Process)
@@ -169,30 +172,6 @@ func startPseudoConsole(command Command, size Size, environment *uint16) (_ Proc
 	}
 	go started.watch()
 	return started, nil
-}
-
-// assignToJob はプロセスツリーを一括終了できる Job Object を作成する。
-func assignToJob(process windows.Handle) (windows.Handle, error) {
-	job, err := windows.CreateJobObject(nil, nil)
-	if err != nil {
-		return 0, fmt.Errorf("terminal: create the job object: %w", err)
-	}
-	limits := windows.JOBOBJECT_EXTENDED_LIMIT_INFORMATION{}
-	limits.BasicLimitInformation.LimitFlags = windows.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
-	// SetInformationJobObject は (ret, err) を返し、ret == 0 が失敗である。
-	if ret, err := windows.SetInformationJobObject(
-		job, windows.JobObjectExtendedLimitInformation,
-		uintptr(unsafe.Pointer(&limits)), uint32(unsafe.Sizeof(limits)),
-	); ret == 0 {
-		windows.CloseHandle(job)
-		return 0, fmt.Errorf("terminal: limit the job object: %w", err)
-	}
-	// 入れられないことは致命である。回避しない。 入れ子のジョブは Windows 8
-	if err := windows.AssignProcessToJobObject(job, process); err != nil {
-		windows.CloseHandle(job)
-		return 0, fmt.Errorf("terminal: put the console process in its job: %w", err)
-	}
-	return job, nil
 }
 
 // composeCommandLine は argv を Windows コマンドライン形式へ変換する。
@@ -331,17 +310,17 @@ func (p *windowsProcess) watch() {
 	defer close(p.exited)
 	info := ExitInfo{At: time.Now()}
 	if _, err := windows.WaitForSingleObject(p.process, windows.INFINITE); err != nil {
-		info.Code = -1
+		info.Code = ExitCodeUnknown
 	} else {
 		var code uint32
 		if err := windows.GetExitCodeProcess(p.process, &code); err != nil {
-			info.Code = -1
+			info.Code = ExitCodeUnknown
 		} else {
 			info.Code = int(code)
 		}
 	}
 	if p.wasForced() {
-		info.Code = -1
+		info.Code = ExitCodeUnknown
 		info.Signal = "killed"
 	}
 	p.exit = info

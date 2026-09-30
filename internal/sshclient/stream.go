@@ -7,6 +7,8 @@ import (
 	"io"
 
 	"golang.org/x/crypto/ssh"
+
+	"sshc/internal/connectionlog"
 )
 
 // RemoteFailureExit は、相手のコマンドが終了状態を残さずに終わったときの番号
@@ -48,15 +50,15 @@ func (d Dialer) Stream(
 	strict := requireKnownHosts(target)
 	// ProxyCommand is a local process, not remote command stderr. It must still
 	// be visible at this CLI boundary even when connection verbosity is quiet.
-	// Explicit connection-log settings also apply to `sshc run`; hard-coding
-	// Quiet here made -vv/-vvv diagnostics disappear only on the CLI path.
-	level := Quiet
+	// Explicit connection-log settings also apply to `sshc run`, so -vv/-vvv
+	// diagnostics appear on the CLI path as they do in the terminal.
+	level := connectionlog.Notice
 	if d.Verbosity != nil {
 		level = d.Verbosity()
 	}
 	trace := newTracer(level, streams.Err)
 	streams.Err = trace.writer
-	trace.say(Full, "接続ログ：すべて（-vvv）")
+	trace.say(connectionlog.Full, "接続ログ：すべて（-vvv）")
 
 	client, closers, err := d.chain(ctx, strict, noPrompt, trace)
 	if err != nil {

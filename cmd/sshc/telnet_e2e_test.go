@@ -11,6 +11,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"sshc/internal/iowrite"
 )
 
 const (
@@ -202,12 +204,12 @@ func serveTelnetConversation(listener net.Listener, firstWritten chan<- struct{}
 	if command != "show version\r\n" {
 		return fmt.Errorf("Telnet command = %q", command)
 	}
-	if err := writeAllForTest(connection, []byte("ver")); err != nil {
+	if err := iowrite.WriteAll(connection, []byte("ver")); err != nil {
 		return err
 	}
 	close(firstWritten)
 	<-continueResponse
-	return writeAllForTest(connection, []byte("sion 1\r\nrouter# "))
+	return iowrite.WriteAll(connection, []byte("sion 1\r\nrouter# "))
 }
 
 func serveSilentTelnetPeer(listener net.Listener, commandReceived chan<- struct{}, release <-chan struct{}) error {
@@ -235,7 +237,7 @@ func serveSilentTelnetPeer(listener net.Listener, commandReceived chan<- struct{
 }
 
 func negotiateEcho(connection net.Conn) error {
-	if err := writeAllForTest(connection, []byte{testTelnetIAC, testTelnetWILL, testTelnetECHO}); err != nil {
+	if err := iowrite.WriteAll(connection, []byte{testTelnetIAC, testTelnetWILL, testTelnetECHO}); err != nil {
 		return err
 	}
 	reply := make([]byte, 3)
@@ -262,18 +264,4 @@ func readThrough(reader io.Reader, suffix string, limit int) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("input exceeded %d bytes", limit)
-}
-
-func writeAllForTest(writer io.Writer, payload []byte) error {
-	for len(payload) > 0 {
-		written, err := writer.Write(payload)
-		if err != nil {
-			return err
-		}
-		if written == 0 {
-			return io.ErrShortWrite
-		}
-		payload = payload[written:]
-	}
-	return nil
 }

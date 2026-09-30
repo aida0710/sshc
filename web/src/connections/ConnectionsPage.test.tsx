@@ -24,7 +24,7 @@ vi.mock("../api/config", async () => {
 vi.mock("../api/terminalSessions", () => ({
   terminalSessionsApi: {
     terminalSessions: vi.fn(), openTerminalSession: vi.fn(), terminalStreamTicket: vi.fn(),
-    reconnectTerminalSession: vi.fn(), stopTerminalReconnect: vi.fn(), closeTerminalSession: vi.fn(), renameTerminalSession: vi.fn(),
+    reconnectTerminalSession: vi.fn(), stopTerminalReconnect: vi.fn(), closeTerminalSession: vi.fn(), setTerminalSessionTitle: vi.fn(),
   },
 }));
 

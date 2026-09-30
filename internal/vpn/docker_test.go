@@ -30,10 +30,9 @@ func TestDockerIsFoundInThePathItWillRunWith(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(first, "docker"), []byte("not a program"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	variables := []string{"PATH=/nowhere", "HOME=/home/user", "PATH=relative" + string(filepath.ListSeparator) +
-		first + string(filepath.ListSeparator) + second}
+	path := "relative" + string(filepath.ListSeparator) + first + string(filepath.ListSeparator) + second
 
-	found, err := lookPathIn("docker", pathVariable(variables))
+	found, err := lookPathIn("docker", path)
 	if err != nil || found != docker {
 		t.Fatalf("lookPathIn = %q, %v", found, err)
 	}

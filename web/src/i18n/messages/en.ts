@@ -441,6 +441,9 @@ export const en = {
   "snippets.status.succeeded": "Succeeded",
   "snippets.status.failed": "Failed",
   "snippets.status.unknown": "Status unavailable",
+  "snippets.problem.timedOut": "Timed out",
+  "snippets.problem.cancelled": "Stopped by cancellation",
+  "snippets.problem.runFailed": "Could not run the command",
   "snippets.cancel": "Cancel",
   "snippets.startup": "Connection startup",
   "snippets.startupHint":
@@ -553,6 +556,8 @@ export const en = {
   "terminal.limitRefused": "No more sessions can be opened. Close one first.",
   "terminal.unresolvable":
     "The settings for this connection could not be resolved. Open Analysis to see why.",
+  "terminal.remoteWorkingDirectoryUnsupported":
+    "A terminal cannot be opened in this folder because its path contains control characters.",
   "terminal.jumpDepthExceeded":
     "The ProxyJump chain exceeds the supported depth.",
   "terminal.hostKeyUnknown":
@@ -566,11 +571,17 @@ export const en = {
   "terminal.authenticationUnavailable":
     "No supported authentication method is available for this connection.",
   "terminal.authenticationCancelled": "Authentication was cancelled.",
+  "terminal.authenticationRejected":
+    "The server rejected authentication. Check the key or password, then connect again.",
+  "terminal.routeMisconfigured":
+    "The route settings conflict, so this host cannot be reached. Check how the VPN profile, ProxyJump and ProxyCommand are combined.",
   "terminal.proxyAuthenticationRequired": "The ProxyCommand needs authentication, so automatic reconnection was stopped. Follow the login instructions in the terminal, then reconnect.",
   "terminal.keyPassphraseRequired":
     "The private key needs a passphrase. Unlock the Vault or save the correct passphrase for this key.",
   "terminal.vpnRouteRefused": "The VPN route cannot be prepared, so automatic reconnection was stopped. Check the reason shown in the terminal.",
   "terminal.vpnRouteDisconnected": "The VPN route was disconnected, so automatic reconnection was stopped. Reconnect to start the VPN route and connect again.",
+  "terminal.connectFailed":
+    "The connection could not be established. The reason is shown in the terminal. Check the settings and network, then reconnect.",
   "terminal.reconnectFailed":
     "The reconnect attempt failed. sshc will retry within the configured limit.",
   "terminal.reconnectExhausted":

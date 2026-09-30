@@ -33,7 +33,7 @@ type contextDiscardingStream struct{}
 
 func (*contextDiscardingStream) Read([]byte) (int, error)         { return 0, io.EOF }
 func (*contextDiscardingStream) Write(buffer []byte) (int, error) { return len(buffer), nil }
-func (*contextDiscardingStream) DiscardPending(ctx context.Context) error {
+func (*contextDiscardingStream) DiscardPending(ctx context.Context, _ time.Duration) error {
 	<-ctx.Done()
 	return ctx.Err()
 }
@@ -322,6 +322,61 @@ func TestValidateRequiresReadForToBeFinal(t *testing.T) {
 	}}, Options{})
 	var failure *Error
 	if !errors.As(err, &failure) || failure.Kind != FailureInvalid {
+		t.Fatalf("error = %#v", err)
+	}
+}
+
+type failingWriterStream struct{}
+
+func (failingWriterStream) Read([]byte) (int, error)  { return 0, io.EOF }
+func (failingWriterStream) Write([]byte) (int, error) { return 0, errors.New("broken pipe") }
+
+func TestRunReportsStreamFailureRatherThanTimeoutWhenStepHasTimeout(t *testing.T) {
+	cases := []struct {
+		name   string
+		stream io.ReadWriter
+		step   Step
+		want   FailureKind
+	}{
+		{
+			name:   "expect sees EOF",
+			stream: &scriptedStream{reader: strings.NewReader("")},
+			step:   Step{Expect: "prompt> ", LineEnding: EndingNone, Timeout: time.Second},
+			want:   FailureRead,
+		},
+		{
+			name:   "readFor sees EOF",
+			stream: &scriptedStream{reader: strings.NewReader("partial")},
+			step:   Step{ReadFor: time.Second, LineEnding: EndingNone, Timeout: time.Second},
+			want:   FailureRead,
+		},
+		{
+			name:   "send fails to write",
+			stream: failingWriterStream{},
+			step:   Step{Send: ptr("show"), LineEnding: EndingCR, Timeout: time.Second},
+			want:   FailureWrite,
+		},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			_, err := Run(context.Background(), testCase.stream, Script{Steps: []Step{testCase.step}}, Options{Timeout: 2 * time.Second})
+			var failure *Error
+			if !errors.As(err, &failure) || failure.Kind != testCase.want {
+				t.Fatalf("error = %#v, want kind %q", err, testCase.want)
+			}
+		})
+	}
+}
+
+func TestRunReportsStepTimeoutWhenStepDeadlinePassesFirst(t *testing.T) {
+	reader, writer := io.Pipe()
+	defer writer.Close()
+	stream := &scriptedStream{reader: reader}
+	_, err := Run(context.Background(), stream, Script{Steps: []Step{{
+		Expect: "never", LineEnding: EndingNone, Timeout: 20 * time.Millisecond,
+	}}}, Options{Timeout: time.Second})
+	var failure *Error
+	if !errors.As(err, &failure) || failure.Kind != FailureTimeout {
 		t.Fatalf("error = %#v", err)
 	}
 }

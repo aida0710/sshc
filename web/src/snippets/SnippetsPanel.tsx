@@ -72,6 +72,21 @@ export function snippetStatusLabelKey(status: string): MessageKey {
   }
 }
 
+// snippetProblemLabelKey は、ホストごとの結果が失敗した理由（API の固定コード）を
+// 画面の文言にする。知らないコードには文言を出さず、状態と終了コードだけを見せる。
+export function snippetProblemLabelKey(problem: string | undefined): MessageKey | undefined {
+  switch (problem) {
+    case "timed_out":
+      return "snippets.problem.timedOut";
+    case "cancelled":
+      return "snippets.problem.cancelled";
+    case "run_failed":
+      return "snippets.problem.runFailed";
+    default:
+      return undefined;
+  }
+}
+
 const blank: SnippetDraft = {
   name: "",
   description: "",
@@ -479,24 +494,28 @@ export function SnippetsPanel({
                 </Button>
               ) : null}
             </div>
-            {job.results.map((result) => (
-              <div key={result.targetId} className="mt-3">
-                <p className="text-xs font-medium">
-                  {result.alias} · {t(snippetStatusLabelKey(result.status))}
-                  {result.exitCode === undefined ? "" : ` (${result.exitCode})`}
-                </p>
-                {result.stdout ? (
-                  <pre className="mt-1 max-h-40 overflow-auto rounded bg-code-bg p-2 text-code-fg text-xs">
-                    {result.stdout}
-                  </pre>
-                ) : null}
-                {result.stderr ? (
-                  <pre className="mt-1 max-h-40 overflow-auto rounded bg-danger/10 p-2 text-xs text-danger">
-                    {result.stderr}
-                  </pre>
-                ) : null}
-              </div>
-            ))}
+            {job.results.map((result) => {
+              const problemKey = result.status === "failed" ? snippetProblemLabelKey(result.problem) : undefined;
+              return (
+                <div key={result.targetId} className="mt-3">
+                  <p className="text-xs font-medium">
+                    {result.alias} · {t(snippetStatusLabelKey(result.status))}
+                    {result.exitCode === undefined ? "" : ` (${result.exitCode})`}
+                    {problemKey ? ` · ${t(problemKey)}` : ""}
+                  </p>
+                  {result.stdout ? (
+                    <pre className="mt-1 max-h-40 overflow-auto rounded bg-code-bg p-2 text-code-fg text-xs">
+                      {result.stdout}
+                    </pre>
+                  ) : null}
+                  {result.stderr ? (
+                    <pre className="mt-1 max-h-40 overflow-auto rounded bg-danger/10 p-2 text-xs text-danger">
+                      {result.stderr}
+                    </pre>
+                  ) : null}
+                </div>
+              );
+            })}
           </section>
         )}
         <section className="rounded-lg border border-line bg-card p-4">

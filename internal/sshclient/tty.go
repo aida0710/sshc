@@ -58,6 +58,8 @@ func Attach(ctx context.Context, process terminal.Process, in *os.File, out io.W
 
 	_, copyErr := io.Copy(out, process)
 	info := process.Wait()
+	// 終わり方の文は Process の出力に含まれないので、リモートの出力のあとにここで書く。
+	_, _ = io.WriteString(out, info.Notice)
 	finish()
 	if copyErr != nil && info.Code == 0 {
 		return 0, copyErr

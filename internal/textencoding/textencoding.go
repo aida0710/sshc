@@ -8,6 +8,7 @@ import (
 	"io"
 	"strings"
 	"sync"
+	"time"
 
 	"golang.org/x/text/encoding"
 	"golang.org/x/text/encoding/japanese"
@@ -165,12 +166,14 @@ func (stream *convertedStream) Close() error {
 
 // DiscardPending preserves the automation capability of Serial and Telnet.
 // It runs against raw bytes before any following decoded Read begins.
-func (stream *convertedStream) DiscardPending(ctx context.Context) error {
-	discarder, ok := stream.raw.(interface{ DiscardPending(context.Context) error })
+func (stream *convertedStream) DiscardPending(ctx context.Context, quiet time.Duration) error {
+	discarder, ok := stream.raw.(interface {
+		DiscardPending(context.Context, time.Duration) error
+	})
 	if !ok {
 		return nil
 	}
-	return discarder.DiscardPending(ctx)
+	return discarder.DiscardPending(ctx, quiet)
 }
 
 // SetWindowSize preserves Telnet NAWS through the conversion wrapper.

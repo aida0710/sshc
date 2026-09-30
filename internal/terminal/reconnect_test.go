@@ -11,23 +11,29 @@ import (
 	"time"
 
 	"sshc/internal/terminal"
+	"sshc/internal/testwait"
 )
+
+// transportLost は、SSH の接続が落ちたときに sshclient が返す終わり方である。
+var transportLost = terminal.ExitInfo{Code: terminal.ExitCodeUnknown, TransportLost: true}
 
 type readyProcess struct {
 	*fakeProcess
-	ready  chan error
-	prompt atomic.Bool
+	ready    chan struct{}
+	readyErr error
+	prompt   atomic.Bool
 }
 
 func newReadyProcess() *readyProcess {
-	return &readyProcess{fakeProcess: newFakeProcess(), ready: make(chan error, 1)}
+	return &readyProcess{fakeProcess: newFakeProcess(), ready: make(chan struct{})}
 }
 
-func (p *readyProcess) Ready() <-chan error  { return p.ready }
-func (p *readyProcess) AwaitingPrompt() bool { return p.prompt.Load() }
+func (p *readyProcess) Ready() <-chan struct{} { return p.ready }
+func (p *readyProcess) ReadyErr() error        { return p.readyErr }
+func (p *readyProcess) AwaitingPrompt() bool   { return p.prompt.Load() }
 
 func (p *readyProcess) finishOpen(err error) {
-	p.ready <- err
+	p.readyErr = err
 	close(p.ready)
 }
 
@@ -128,24 +134,24 @@ func TestAReconnectedShellStartsAtTheLatestTerminalSize(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	spy.at(0).exit(terminal.ExitInfo{Code: terminal.TransportLost})
-	waitFor(t, func() bool { return spy.count() >= 2 })
+	spy.at(0).exit(transportLost)
+	testwait.Until(t, func() bool { return spy.count() >= 2 })
 	if got := spy.sizeAt(1); got != (terminal.Size{Cols: 200, Rows: 50}) {
 		t.Fatalf("automatic reconnect opened with %+v, want the latest 200x50", got)
 	}
-	spy.at(1).exit(terminal.ExitInfo{Code: terminal.TransportLost})
-	waitFor(t, func() bool { return spy.count() >= 3 })
+	spy.at(1).exit(transportLost)
+	testwait.Until(t, func() bool { return spy.count() >= 3 })
 	if got := spy.sizeAt(2); got != (terminal.Size{Cols: 200, Rows: 50}) {
 		t.Fatalf("second automatic reconnect opened with %+v, want 200x50", got)
 	}
 
 	// A manual reconnect after an ordinary exit must use it too.
 	spy.at(2).exit(terminal.ExitInfo{Code: 0})
-	waitFor(t, func() bool { return !session.Live() })
+	testwait.Until(t, func() bool { return !session.Live() })
 	if _, err := registry.Reconnect(context.Background(), session.ID()); err != nil {
 		t.Fatal(err)
 	}
-	waitFor(t, func() bool { return spy.count() >= 4 })
+	testwait.Until(t, func() bool { return spy.count() >= 4 })
 	if got := spy.sizeAt(3); got != (terminal.Size{Cols: 200, Rows: 50}) {
 		t.Fatalf("manual reconnect opened with %+v, want the latest 200x50", got)
 	}
@@ -163,22 +169,22 @@ func TestAResizeWhileWaitingToReconnectShapesTheNextShell(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	spy.at(0).exit(terminal.ExitInfo{Code: terminal.TransportLost})
-	waitFor(t, func() bool { return session.View().State == terminal.StateReconnecting })
+	spy.at(0).exit(transportLost)
+	testwait.Until(t, func() bool { return session.View().State == terminal.StateReconnecting })
 
 	// The browser window grows while there is nothing to resize yet. The
 	// request must not be lost: the browser will not send it again.
 	if err := session.Resize(terminal.Size{Cols: 200, Rows: 50}); err != nil {
 		t.Fatalf("resize while reconnecting = %v", err)
 	}
-	waitFor(t, func() bool { return spy.count() >= 2 })
+	testwait.Until(t, func() bool { return spy.count() >= 2 })
 	if got := spy.sizeAt(1); got != (terminal.Size{Cols: 200, Rows: 50}) {
 		t.Fatalf("reconnect after a resize while waiting opened with %+v, want 200x50", got)
 	}
 	if err := registry.Close(session.ID()); err != nil {
 		t.Fatal(err)
 	}
-	waitFor(t, func() bool { return !session.Live() })
+	testwait.Until(t, func() bool { return !session.Live() })
 }
 
 func TestALostTransportIsDialledAgain(t *testing.T) {
@@ -191,14 +197,14 @@ func TestALostTransportIsDialledAgain(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	spy.at(0).exit(terminal.ExitInfo{Code: terminal.TransportLost})
+	spy.at(0).exit(transportLost)
 
-	waitFor(t, func() bool { return spy.count() >= 2 }) // 繋ぎ直しに行かなかった
+	testwait.Until(t, func() bool { return spy.count() >= 2 }) // 繋ぎ直しに行かなかった
 	if !session.Live() {
 		t.Error("繋ぎ直しているあいだに、終了済みにされた")
 	}
 
-	waitFor(t, func() bool {
+	testwait.Until(t, func() bool {
 		return strings.Contains(string(snapshotOf(session)), "再接続しました")
 	})
 	if !strings.Contains(string(snapshotOf(session)), "新しいシェル") {
@@ -218,7 +224,7 @@ func TestAShellThatExitedIsLeftAlone(t *testing.T) {
 
 	spy.at(0).exit(terminal.ExitInfo{Code: 0})
 
-	waitFor(t, func() bool { return !session.Live() }) // 終わらなかった
+	testwait.Until(t, func() bool { return !session.Live() }) // 終わらなかった
 	if spy.count() != 1 {
 		t.Errorf("繋ぎ直しに行った: 呼ばれた回数 %d", spy.count())
 	}
@@ -233,9 +239,9 @@ func TestGivingUpIsSaidOutLoud(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	spy.at(0).exit(terminal.ExitInfo{Code: terminal.TransportLost})
+	spy.at(0).exit(transportLost)
 
-	waitFor(t, func() bool { return !session.Live() }) // 諦めなかった
+	testwait.Until(t, func() bool { return !session.Live() }) // 諦めなかった
 	if !strings.Contains(string(snapshotOf(session)), "再接続できる回数の上限に達しました") {
 		t.Error("諦めたことを言っていない")
 	}
@@ -266,22 +272,22 @@ func TestAsynchronousHandshakeFailuresConsumeTheReconnectBudget(t *testing.T) {
 	default:
 	}
 	spy.at(0).finishOpen(nil)
-	waitFor(t, func() bool { return session.View().State == terminal.StateConnected })
+	testwait.Until(t, func() bool { return session.View().State == terminal.StateConnected })
 	select {
 	case <-connected:
 	case <-time.After(time.Second):
 		t.Fatal("connected callback did not run after Ready succeeded")
 	}
-	spy.at(0).exit(terminal.ExitInfo{Code: terminal.TransportLost})
+	spy.at(0).exit(transportLost)
 
 	for attempt := 1; attempt <= terminal.MaxReconnects; attempt++ {
-		waitFor(t, func() bool { return spy.count() > attempt })
+		testwait.Until(t, func() bool { return spy.count() > attempt })
 		candidate := spy.at(attempt)
 		candidate.finishOpen(context.DeadlineExceeded)
 		candidate.exit(terminal.ExitInfo{Code: 255})
 	}
 
-	waitFor(t, func() bool { return !session.Live() })
+	testwait.Until(t, func() bool { return !session.Live() })
 	if calls := spy.count(); calls != 1+terminal.MaxReconnects {
 		t.Fatalf("open calls = %d, want initial + %d reconnects", calls, terminal.MaxReconnects)
 	}
@@ -308,13 +314,13 @@ func TestAsynchronousHandshakeErrorKeepsItsTypedClassification(t *testing.T) {
 		t.Fatal(err)
 	}
 	spy.at(0).finishOpen(nil)
-	waitFor(t, func() bool { return session.View().State == terminal.StateConnected })
-	spy.at(0).exit(terminal.ExitInfo{Code: terminal.TransportLost})
-	waitFor(t, func() bool { return spy.count() == 2 })
+	testwait.Until(t, func() bool { return session.View().State == terminal.StateConnected })
+	spy.at(0).exit(transportLost)
+	testwait.Until(t, func() bool { return spy.count() == 2 })
 	spy.at(1).finishOpen(fmt.Errorf("wrapped: %w", classified))
 	spy.at(1).exit(terminal.ExitInfo{Code: 255})
 
-	waitFor(t, func() bool { return !session.Live() })
+	testwait.Until(t, func() bool { return !session.Live() })
 	if calls := spy.count(); calls != 2 {
 		t.Fatalf("open calls = %d, want classification to stop after one reconnect", calls)
 	}
@@ -333,9 +339,9 @@ func TestReconnectStateIsVisibleWhileWaiting(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	spy.at(0).exit(terminal.ExitInfo{Code: terminal.TransportLost})
+	spy.at(0).exit(transportLost)
 
-	waitFor(t, func() bool { return session.View().State == terminal.StateReconnecting })
+	testwait.Until(t, func() bool { return session.View().State == terminal.StateReconnecting })
 	view := session.View()
 	if view.Reconnect == nil || view.Reconnect.Attempt != 1 || view.Reconnect.Limit != terminal.MaxReconnects {
 		t.Fatalf("reconnect = %#v", view.Reconnect)
@@ -346,7 +352,7 @@ func TestReconnectStateIsVisibleWhileWaiting(t *testing.T) {
 	if err := registry.Close(session.ID()); err != nil {
 		t.Fatal(err)
 	}
-	waitFor(t, func() bool { return !session.Live() })
+	testwait.Until(t, func() bool { return !session.Live() })
 }
 
 func TestStoppingTheReconnectWaitLeavesAnExitedPaneToReconnectByHand(t *testing.T) {
@@ -362,13 +368,13 @@ func TestStoppingTheReconnectWaitLeavesAnExitedPaneToReconnectByHand(t *testing.
 	if err := registry.StopReconnecting(context.Background(), session.ID()); !errors.Is(err, terminal.ErrNotReconnecting) {
 		t.Fatalf("stopping a live session = %v, want ErrNotReconnecting", err)
 	}
-	spy.at(0).exit(terminal.ExitInfo{Code: terminal.TransportLost})
-	waitFor(t, func() bool { return session.View().State == terminal.StateReconnecting })
+	spy.at(0).exit(transportLost)
+	testwait.Until(t, func() bool { return session.View().State == terminal.StateReconnecting })
 
 	if err := registry.StopReconnecting(context.Background(), session.ID()); err != nil {
 		t.Fatal(err)
 	}
-	waitFor(t, func() bool { return session.View().State == terminal.StateExited })
+	testwait.Until(t, func() bool { return session.View().State == terminal.StateExited })
 	view := session.View()
 	if view.Problem != "reconnect_stopped" || view.Reconnect != nil || view.Exited == nil {
 		t.Fatalf("view after stop = state=%s problem=%q reconnect=%v exited=%v", view.State, view.Problem, view.Reconnect, view.Exited)
@@ -387,11 +393,11 @@ func TestStoppingTheReconnectWaitLeavesAnExitedPaneToReconnectByHand(t *testing.
 	if _, err := registry.Reconnect(context.Background(), session.ID()); err != nil {
 		t.Fatalf("manual reconnect after stop: %v", err)
 	}
-	waitFor(t, func() bool { return session.View().State == terminal.StateConnected && spy.count() == 2 })
+	testwait.Until(t, func() bool { return session.View().State == terminal.StateConnected && spy.count() == 2 })
 	if err := registry.Close(session.ID()); err != nil {
 		t.Fatal(err)
 	}
-	waitFor(t, func() bool { return !session.Live() })
+	testwait.Until(t, func() bool { return !session.Live() })
 }
 
 func TestReconnectStopsWhenTheFailureNeedsUserAction(t *testing.T) {
@@ -404,9 +410,9 @@ func TestReconnectStopsWhenTheFailureNeedsUserAction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	spy.at(0).exit(terminal.ExitInfo{Code: terminal.TransportLost})
+	spy.at(0).exit(transportLost)
 
-	waitFor(t, func() bool { return !session.Live() })
+	testwait.Until(t, func() bool { return !session.Live() })
 	if spy.count() != 2 {
 		t.Fatalf("open calls = %d, want initial + one reconnect", spy.count())
 	}
@@ -426,9 +432,9 @@ func TestALocalShellIsNeverDialledAgain(t *testing.T) {
 	}
 	before := len(starter.processes)
 
-	starter.processes[len(starter.processes)-1].exit(terminal.ExitInfo{Code: terminal.TransportLost})
+	starter.processes[len(starter.processes)-1].exit(transportLost)
 
-	waitFor(t, func() bool { return !session.Live() }) // 終わらなかった
+	testwait.Until(t, func() bool { return !session.Live() }) // 終わらなかった
 	if len(starter.processes) != before {
 		t.Error("ローカルのシェルを繋ぎ直しに行った")
 	}
@@ -451,17 +457,17 @@ func TestKeystrokesDuringAReconnectAreDropped(t *testing.T) {
 		t.Fatal(err)
 	}
 	first := spy.at(0)
-	first.exit(terminal.ExitInfo{Code: terminal.TransportLost})
+	first.exit(transportLost)
 
-	waitFor(t, func() bool {
+	testwait.Until(t, func() bool {
 		return strings.Contains(string(snapshotOf(session)), "再接続します")
 	})
 	if _, err := session.Write([]byte("rm -rf /tmp/half")); err != nil {
 		t.Fatalf("繋ぎ直しのあいだの打鍵が失敗した: %v", err)
 	}
 
-	waitFor(t, func() bool { return spy.count() >= 2 })
-	waitFor(t, func() bool {
+	testwait.Until(t, func() bool { return spy.count() >= 2 })
+	testwait.Until(t, func() bool {
 		return strings.Contains(string(snapshotOf(session)), "再接続しました")
 	})
 
@@ -481,12 +487,12 @@ func TestKeystrokesDuringReconnectHandshakeAreDroppedUntilReady(t *testing.T) {
 	}
 	first := spy.at(0)
 	first.finishOpen(nil)
-	waitFor(t, func() bool { return session.View().State == terminal.StateConnected })
-	first.exit(terminal.ExitInfo{Code: terminal.TransportLost})
+	testwait.Until(t, func() bool { return session.View().State == terminal.StateConnected })
+	first.exit(transportLost)
 
-	waitFor(t, func() bool { return spy.count() >= 2 })
+	testwait.Until(t, func() bool { return spy.count() >= 2 })
 	second := spy.at(1)
-	waitFor(t, func() bool { return session.View().State == terminal.StateReconnecting })
+	testwait.Until(t, func() bool { return session.View().State == terminal.StateReconnecting })
 	if _, err := session.Write([]byte("dangerous-command\r")); err != nil {
 		t.Fatalf("Write during handshake = %v", err)
 	}
@@ -496,6 +502,38 @@ func TestKeystrokesDuringReconnectHandshakeAreDroppedUntilReady(t *testing.T) {
 
 	second.finishOpen(nil)
 	second.exit(terminal.ExitInfo{Code: 0})
+}
+
+func TestStartupCommandsAreSentOnceEveryConnectionBecomesReady(t *testing.T) {
+	spy := &readyOpenSpy{}
+	registry, _ := newFastRegistry()
+	session, err := registry.Open(context.Background(), terminal.Spec{
+		Kind: terminal.KindSSH, Alias: "gateway", Title: "gateway", Open: spy.open,
+		Startup: func() []string { return []string{"cd /srv/app"} },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := spy.at(0)
+	if got := first.keystrokes(); got != "" {
+		t.Fatalf("startup was sent before Ready: %q", got)
+	}
+	first.finishOpen(nil)
+	testwait.Until(t, func() bool { return first.keystrokes() == "cd /srv/app\r" })
+	first.exit(transportLost)
+
+	testwait.Until(t, func() bool { return spy.count() >= 2 })
+	second := spy.at(1)
+	if got := second.keystrokes(); got != "" {
+		t.Fatalf("startup reached the reconnected shell before Ready: %q", got)
+	}
+	second.finishOpen(nil)
+	testwait.Until(t, func() bool { return second.keystrokes() == "cd /srv/app\r" })
+	if got := first.keystrokes(); got != "cd /srv/app\r" {
+		t.Fatalf("the first shell received the startup again: %q", got)
+	}
+	second.exit(terminal.ExitInfo{Code: 0})
+	testwait.Until(t, func() bool { return !session.Live() })
 }
 
 func TestAuthenticationPromptStillAcceptsInputBeforeReady(t *testing.T) {
@@ -516,7 +554,7 @@ func TestAuthenticationPromptStillAcceptsInputBeforeReady(t *testing.T) {
 		t.Fatalf("prompt answer = %q", got)
 	}
 	process.finishOpen(context.Canceled)
-	process.exit(terminal.ExitInfo{Code: terminal.TransportLost})
+	process.exit(transportLost)
 }
 
 type closingSpy struct {
@@ -591,7 +629,7 @@ func TestStoppingDuringReconnectOpenCancelsAndReclaimsTheReturnedProcess(t *test
 			if err != nil {
 				t.Fatal(err)
 			}
-			spy.initial.exit(terminal.ExitInfo{Code: terminal.TransportLost})
+			spy.initial.exit(transportLost)
 			select {
 			case <-spy.entered:
 			case <-time.After(time.Second):
@@ -619,7 +657,7 @@ func TestStoppingDuringReconnectOpenCancelsAndReclaimsTheReturnedProcess(t *test
 			case <-time.After(time.Second):
 				t.Fatal("stop did not join the reconnect lifecycle")
 			}
-			waitFor(t, func() bool { return !session.Live() })
+			testwait.Until(t, func() bool { return !session.Live() })
 			if state := session.View().State; state == terminal.StateConnected {
 				t.Fatal("a Process returned after stop was published as connected")
 			}
@@ -629,7 +667,7 @@ func TestStoppingDuringReconnectOpenCancelsAndReclaimsTheReturnedProcess(t *test
 
 func (s *closingSpy) open(_ context.Context, _ terminal.Size) (terminal.Process, error) {
 	process := newFakeProcess()
-	process.onHangup = func(p *fakeProcess) { p.exit(terminal.ExitInfo{Code: terminal.TransportLost}) }
+	process.onHangup = func(p *fakeProcess) { p.exit(transportLost) }
 	s.mutex.Lock()
 	s.processes = append(s.processes, process)
 	s.mutex.Unlock()
@@ -656,7 +694,7 @@ func TestClosingAConsoleDoesNotPromiseToDialAgain(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	waitFor(t, func() bool { return !session.Live() })
+	testwait.Until(t, func() bool { return !session.Live() })
 	if strings.Contains(string(snapshotOf(session)), "繋ぎ直します") {
 		t.Errorf("closed session announced a reconnect that will not occur:\n%s", snapshotOf(session))
 	}
@@ -678,7 +716,7 @@ func TestAConsoleThePersonClosedLeavesTheList(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	waitFor(t, func() bool { return len(registry.Sessions()) == 0 })
+	testwait.Until(t, func() bool { return len(registry.Sessions()) == 0 })
 }
 
 func TestAConsoleThatDroppedStaysToBeRead(t *testing.T) {
@@ -692,11 +730,11 @@ func TestAConsoleThatDroppedStaysToBeRead(t *testing.T) {
 	}
 
 	for attempt := 0; attempt <= terminal.MaxReconnects; attempt++ {
-		waitFor(t, func() bool { return spy.count() >= attempt+1 })
-		spy.at(attempt).exit(terminal.ExitInfo{Code: terminal.TransportLost})
+		testwait.Until(t, func() bool { return spy.count() >= attempt+1 })
+		spy.at(attempt).exit(transportLost)
 	}
 
-	waitFor(t, func() bool { return !session.Live() })
+	testwait.Until(t, func() bool { return !session.Live() })
 	if len(registry.Sessions()) != 1 {
 		t.Errorf("sessions = %d, want the dropped console kept so its reason can be read", len(registry.Sessions()))
 	}
@@ -705,7 +743,7 @@ func TestAConsoleThatDroppedStaysToBeRead(t *testing.T) {
 func TestChoosingNoReconnectEndsTheSessionAtOnce(t *testing.T) {
 	spy := &openSpy{}
 	registry, _ := newFastRegistry()
-	registry.Reconnects = func() int { return 0 }
+	registry.ReconnectLimit = func() int { return 0 }
 	session, err := registry.Open(context.Background(), terminal.Spec{
 		Kind: terminal.KindSSH, Alias: "gateway", Title: "gateway", Open: spy.open,
 	})
@@ -713,9 +751,9 @@ func TestChoosingNoReconnectEndsTheSessionAtOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	spy.at(0).exit(terminal.ExitInfo{Code: terminal.TransportLost})
+	spy.at(0).exit(transportLost)
 
-	waitFor(t, func() bool { return !session.Live() })
+	testwait.Until(t, func() bool { return !session.Live() })
 	if spy.count() != 1 {
 		t.Errorf("開き直しを %d 回試みた。0 を選んだのに繋ぎ直している", spy.count())
 	}
@@ -731,7 +769,7 @@ func TestLoweringTheReconnectCountStopsASessionAlreadyTrying(t *testing.T) {
 
 	var allowed atomic.Int64
 	allowed.Store(int64(terminal.MaxReconnects))
-	registry.Reconnects = func() int { return int(allowed.Load()) }
+	registry.ReconnectLimit = func() int { return int(allowed.Load()) }
 
 	session, err := registry.Open(context.Background(), terminal.Spec{
 		Kind: terminal.KindSSH, Alias: "gateway", Title: "gateway", Open: spy.open,
@@ -740,14 +778,14 @@ func TestLoweringTheReconnectCountStopsASessionAlreadyTrying(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	spy.at(0).exit(terminal.ExitInfo{Code: terminal.TransportLost})
-	waitFor(t, func() bool { return spy.count() >= 2 })
+	spy.at(0).exit(transportLost)
+	testwait.Until(t, func() bool { return spy.count() >= 2 })
 	if !session.Live() {
 		t.Fatal("まだ粘っているはずが、もう終わっていた")
 	}
 
 	allowed.Store(0)
-	waitFor(t, func() bool { return !session.Live() })
+	testwait.Until(t, func() bool { return !session.Live() })
 }
 
 func TestReconnectCountsOutsideTheRangeFallBackToTheCeiling(t *testing.T) {
@@ -770,13 +808,13 @@ func TestStopReconnectingDuringTheHandshakeEndsTheSessionInsteadOfDroppingInput(
 		t.Fatal(err)
 	}
 	spy.at(0).finishOpen(nil)
-	waitFor(t, func() bool { return session.View().State == terminal.StateConnected })
+	testwait.Until(t, func() bool { return session.View().State == terminal.StateConnected })
 
-	spy.at(0).exit(terminal.ExitInfo{Code: terminal.TransportLost})
+	spy.at(0).exit(transportLost)
 	// reopen has returned the replacement process; its handshake (Ready) is
 	// still pending when the user asks to stop.
-	waitFor(t, func() bool { return spy.count() >= 2 })
-	waitFor(t, func() bool { return session.View().State == terminal.StateReconnecting })
+	testwait.Until(t, func() bool { return spy.count() >= 2 })
+	testwait.Until(t, func() bool { return session.View().State == terminal.StateReconnecting })
 	if err := session.StopReconnecting(); err != nil {
 		t.Fatalf("StopReconnecting during handshake: %v", err)
 	}
@@ -784,7 +822,7 @@ func TestStopReconnectingDuringTheHandshakeEndsTheSessionInsteadOfDroppingInput(
 		t.Fatal("the handshaking process was left running")
 	}
 	spy.at(1).finishOpen(nil)
-	waitFor(t, func() bool { return session.View().State == terminal.StateExited })
+	testwait.Until(t, func() bool { return session.View().State == terminal.StateExited })
 	view := session.View()
 	if view.Problem != "reconnect_stopped" || view.Exited == nil {
 		t.Fatalf("view after stop = state %s problem %q exited %v", view.State, view.Problem, view.Exited)
@@ -806,14 +844,14 @@ func TestOnlyAutomaticReconnectAttemptsAreMarked(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	spy.at(0).exit(terminal.ExitInfo{Code: terminal.TransportLost})
-	waitFor(t, func() bool { return spy.count() >= 2 })
+	spy.at(0).exit(transportLost)
+	testwait.Until(t, func() bool { return spy.count() >= 2 })
 	spy.at(1).exit(terminal.ExitInfo{Code: 0})
-	waitFor(t, func() bool { return !session.Live() })
+	testwait.Until(t, func() bool { return !session.Live() })
 	if _, err := registry.Reconnect(context.Background(), session.ID()); err != nil {
 		t.Fatal(err)
 	}
-	waitFor(t, func() bool { return spy.count() >= 3 })
+	testwait.Until(t, func() bool { return spy.count() >= 3 })
 
 	for index, want := range []bool{false, true, false} {
 		if got := spy.automaticAt(index); got != want {
@@ -848,13 +886,121 @@ func TestTheReconnectStopNoticeFollowsTheReason(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			spy.at(0).finishOpen(errors.New("refused"))
-			spy.at(0).exit(terminal.ExitInfo{Code: 255})
+			spy.at(0).finishOpen(nil)
+			testwait.Until(t, func() bool { return session.View().State == terminal.StateConnected })
+			spy.at(0).exit(transportLost)
+			testwait.Until(t, func() bool { return spy.count() == 2 })
+			spy.at(1).finishOpen(errors.New("refused"))
+			spy.at(1).exit(terminal.ExitInfo{Code: 255})
 
-			waitFor(t, func() bool { return !session.Live() })
+			testwait.Until(t, func() bool { return !session.Live() })
 			if output := string(snapshotOf(session)); !strings.Contains(output, test.want) {
 				t.Fatalf("output = %q, want %q", output, test.want)
 			}
 		})
+	}
+}
+
+func TestAFirstConnectionThatFailsItsHandshakeExitsWithoutReconnecting(t *testing.T) {
+	spy := &readyOpenSpy{}
+	registry, _ := newFastRegistry()
+	session, err := registry.Open(context.Background(), terminal.Spec{
+		Kind: terminal.KindSSH, Alias: "gateway", Title: "gateway", Open: spy.open,
+		ReconnectError: func(error) (bool, string) { return true, "reconnect_failed" },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	spy.at(0).finishOpen(errors.New("connection refused"))
+	spy.at(0).exit(terminal.ExitInfo{Code: 255})
+
+	testwait.Until(t, func() bool { return !session.Live() })
+	if calls := spy.count(); calls != 1 {
+		t.Fatalf("open calls = %d, want only the first connection", calls)
+	}
+	view := session.View()
+	if view.State != terminal.StateExited || view.Problem != "connect_failed" {
+		t.Fatalf("state/problem = %q/%q, want exited/connect_failed", view.State, view.Problem)
+	}
+	if output := string(snapshotOf(session)); strings.Contains(output, "SSH接続が切れました") {
+		t.Fatalf("a connection that never connected was reported as lost: %q", output)
+	}
+}
+
+func TestAFirstConnectionThatNeedsUserActionExitsWithoutTheStopNotice(t *testing.T) {
+	spy := &readyOpenSpy{}
+	registry, _ := newFastRegistry()
+	session, err := registry.Open(context.Background(), terminal.Spec{
+		Kind: terminal.KindSSH, Alias: "gateway", Title: "gateway", Open: spy.open,
+		ReconnectError: func(error) (bool, string) { return false, "authentication_rejected" },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	spy.at(0).finishOpen(errors.New("unable to authenticate"))
+	spy.at(0).exit(terminal.ExitInfo{Code: 255})
+
+	testwait.Until(t, func() bool { return !session.Live() })
+	if problem := session.View().Problem; problem != "authentication_rejected" {
+		t.Fatalf("problem = %q, want the classified reason", problem)
+	}
+	if output := string(snapshotOf(session)); strings.Contains(output, "自動再接続を停止しました") {
+		t.Fatalf("a connection that never reconnected said it stopped reconnecting: %q", output)
+	}
+}
+
+func TestAManualReconnectThatFailsItsHandshakeExitsWithoutReconnecting(t *testing.T) {
+	spy := &readyOpenSpy{}
+	registry, _ := newFastRegistry()
+	session, err := registry.Open(context.Background(), terminal.Spec{
+		Kind: terminal.KindSSH, Alias: "gateway", Title: "gateway", Open: spy.open,
+		ReconnectError: func(error) (bool, string) { return true, "reconnect_failed" },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	spy.at(0).finishOpen(nil)
+	testwait.Until(t, func() bool { return session.View().State == terminal.StateConnected })
+	spy.at(0).exit(terminal.ExitInfo{Code: 0})
+	testwait.Until(t, func() bool { return !session.Live() })
+
+	if _, err := registry.Reconnect(context.Background(), session.ID()); err != nil {
+		t.Fatalf("Reconnect = %v", err)
+	}
+	testwait.Until(t, func() bool { return spy.count() == 2 })
+	spy.at(1).finishOpen(errors.New("connection refused"))
+	spy.at(1).exit(terminal.ExitInfo{Code: 255})
+
+	testwait.Until(t, func() bool { return !session.Live() })
+	if calls := spy.count(); calls != 2 {
+		t.Fatalf("open calls = %d, want the first connection and the manual reconnect", calls)
+	}
+	if problem := session.View().Problem; problem != "connect_failed" {
+		t.Fatalf("problem = %q, want connect_failed", problem)
+	}
+}
+
+// 手動の再接続は再試行しない。Ready の前に開けなかった失敗も、Ready で失敗した
+// ときと同じく connect_failed で表し、「上限まで再試行します」の文を選ばせない。
+func TestAManualReconnectThatCannotOpenReportsConnectFailed(t *testing.T) {
+	spy := &openSpy{failUpTo: 2}
+	registry, _ := newFastRegistry()
+	session, err := registry.Open(context.Background(), terminal.Spec{
+		Kind: terminal.KindSSH, Alias: "gateway", Title: "gateway", Open: spy.open,
+		ReconnectError: func(error) (bool, string) { return true, "reconnect_failed" },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	spy.at(0).exit(terminal.ExitInfo{Code: 0})
+	testwait.Until(t, func() bool { return !session.Live() })
+
+	if _, err := registry.Reconnect(context.Background(), session.ID()); err == nil {
+		t.Fatal("Reconnect succeeded although the connection could not be opened")
+	}
+	if problem := session.View().Problem; problem != "connect_failed" {
+		t.Fatalf("problem = %q, want connect_failed", problem)
 	}
 }

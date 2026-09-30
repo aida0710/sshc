@@ -176,16 +176,7 @@ func snapshotJob(state *jobState) Job {
 }
 
 func (s *Service) newJobIDLocked() (string, error) {
-	for range 8 {
-		id, err := s.newID()
-		if err != nil {
-			return "", err
-		}
-		if s.active[id] == nil {
-			return id, nil
-		}
-	}
-	return "", ErrTooManyJobs
+	return s.newUnusedID(func(id string) (bool, error) { return s.active[id] != nil, nil })
 }
 
 func (s *Service) pruneJobsLocked() {

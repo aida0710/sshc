@@ -30,6 +30,17 @@ const (
 	// accumulate per field before it is delivered. Anything past the delivered
 	// rune limits is discarded, so a stream of d=0 chunks cannot grow memory.
 	maxKittyChunkBytes = 4 * MaxNotificationBodyRunes
+	// maxKittyPendingIdentifiers bounds how many kitty notifications, told
+	// apart by their i= identifier, may be buffered at once. A program usually
+	// builds one notification at a time, so a few identifiers cover senders that
+	// interleave. When one more identifier arrives, every pending notification
+	// is dropped, which caps the buffered text at
+	// maxKittyPendingIdentifiers * 2 * maxKittyChunkBytes (title and body).
+	maxKittyPendingIdentifiers = 8
+	// maxOSCNumberDigits bounds the number read before ';'. Every number this
+	// observer handles (0, 1, 2, 9, 99, 777) fits; a longer one is skipped to the
+	// end of its sequence without buffering a payload.
+	maxOSCNumberDigits = 4
 )
 
 type oscState uint8
@@ -85,7 +96,7 @@ func (o *oscObserver) Observe(chunk []byte) {
 			}
 		case oscNumber:
 			switch {
-			case value >= '0' && value <= '9' && len(o.number) < 4:
+			case value >= '0' && value <= '9' && len(o.number) < maxOSCNumberDigits:
 				o.number = append(o.number, value)
 			case value == ';' && len(o.number) > 0:
 				o.state = oscPayload
@@ -232,7 +243,7 @@ func (o *oscObserver) notifyKitty(payload string) {
 	}
 	pending := o.chunks[identifier]
 	if pending == nil {
-		if len(o.chunks) >= 8 {
+		if len(o.chunks) >= maxKittyPendingIdentifiers {
 			o.chunks = make(map[string]*kittyNotification)
 		}
 		pending = &kittyNotification{}

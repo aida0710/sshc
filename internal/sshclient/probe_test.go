@@ -169,3 +169,47 @@ func TestProbeCarriesTheServerBanner(t *testing.T) {
 		t.Errorf("banner = %q", probe.Banner)
 	}
 }
+
+// 保存済みの値が拒否されたことは、非対話の接続でも拒否として見分けられる。
+// 認証テストはこれを authentication_denied と報告し、「入力が要る」だけでは終えない。
+func TestProbeReportsARejectedStoredCredentialAsARejection(t *testing.T) {
+	cases := []struct {
+		name   string
+		server serverOptions
+		auth   sshclient.Auth
+		naming string
+	}{
+		{
+			name:   "totp",
+			server: serverOptions{Keyboard: map[string]string{"Verification code: ": "654321"}},
+			auth: sshclient.Auth{TOTP: func(sshclient.Target, string) (string, bool) {
+				return "123456", true
+			}},
+			naming: "saved verification code",
+		},
+		{
+			name:   "password",
+			server: serverOptions{Password: "hunter2"},
+			auth: sshclient.Auth{Password: func(sshclient.Target) (string, bool) {
+				return "what it used to be", true
+			}},
+			naming: "saved password",
+		},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			server := newTestServer(t, test.server)
+
+			_, err := dialerFor(t, server, test.auth).Probe(context.Background(), targetWith(server))
+			if !errors.Is(err, sshclient.ErrAuthenticationRejected) {
+				t.Fatalf("Probe = %v, want an authentication rejection", err)
+			}
+			if !errors.Is(err, sshclient.ErrPromptUnavailable) {
+				t.Fatalf("Probe = %v; the refusal to ask is no longer recognisable", err)
+			}
+			if !strings.Contains(err.Error(), test.naming) {
+				t.Fatalf("Probe = %q, want it to name the %s", err.Error(), test.naming)
+			}
+		})
+	}
+}

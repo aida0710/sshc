@@ -3,11 +3,12 @@ package session
 import (
 	"crypto/sha256"
 	"crypto/subtle"
-	"encoding/base64"
 	"errors"
 	"io"
 	"sync"
 	"time"
+
+	"sshc/internal/randomid"
 )
 
 var (
@@ -67,16 +68,8 @@ type Manager struct {
 	Now func() time.Time
 }
 
-func token(random io.Reader) (string, error) {
-	raw := make([]byte, 32)
-	if _, err := io.ReadFull(random, raw); err != nil {
-		return "", err
-	}
-	return base64.RawURLEncoding.EncodeToString(raw), nil
-}
-
 func NewManager(random io.Reader) (*Manager, string, error) {
-	bootstrap, err := token(random)
+	bootstrap, err := randomid.Token(random)
 	if err != nil {
 		return nil, "", err
 	}
@@ -99,7 +92,7 @@ func NewManager(random io.Reader) (*Manager, string, error) {
 // すでに確立しているセッションは確立したままである。これが置き換えるのは、まだ
 // セッションを持たないブラウザのためのアクセス URLだけだ。
 func (m *Manager) Reissue() (string, error) {
-	fresh, err := token(m.random)
+	fresh, err := randomid.Token(m.random)
 	if err != nil {
 		return "", err
 	}
@@ -145,7 +138,7 @@ func (m *Manager) JoinOrIssue(existingSessionID string) (Credentials, bool, erro
 
 func (m *Manager) joinOrIssueLocked(existingSessionID string) (Credentials, bool, error) {
 	if existing, ok := m.sessionLocked(existingSessionID); ok {
-		csrf, err := token(m.random)
+		csrf, err := randomid.Token(m.random)
 		if err != nil {
 			return Credentials{}, false, err
 		}
@@ -202,11 +195,11 @@ func (s Session) expired(now time.Time) bool {
 }
 
 func (m *Manager) issueLocked(expiresAt time.Time) (Credentials, error) {
-	sessionID, err := token(m.random)
+	sessionID, err := randomid.Token(m.random)
 	if err != nil {
 		return Credentials{}, err
 	}
-	csrf, err := token(m.random)
+	csrf, err := randomid.Token(m.random)
 	if err != nil {
 		return Credentials{}, err
 	}
@@ -270,7 +263,7 @@ func (m *Manager) RenewCSRF(sessionID, presented string) (string, bool) {
 	if !csrfMatches(existing.csrfHashes, presented) {
 		return "", false
 	}
-	csrf, err := token(m.random)
+	csrf, err := randomid.Token(m.random)
 	if err != nil {
 		return "", false
 	}

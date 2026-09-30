@@ -207,7 +207,7 @@ func TestDiscardPendingStopsWhenContinuousInputReachesDeadline(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer cancel()
 	started := time.Now()
-	if err := stream.DiscardPending(ctx); !errors.Is(err, context.DeadlineExceeded) {
+	if err := stream.DiscardPending(ctx, 20*time.Millisecond); !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("DiscardPending() = %v, want deadline exceeded", err)
 	}
 	if elapsed := time.Since(started); elapsed > time.Second {

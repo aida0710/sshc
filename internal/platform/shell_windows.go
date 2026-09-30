@@ -4,7 +4,6 @@ package platform
 
 import (
 	"path/filepath"
-	"strings"
 
 	"golang.org/x/sys/windows"
 
@@ -57,17 +56,25 @@ func ShellProfiles(lookup func(string) (string, bool)) []ShellProfile {
 		profiles = append(profiles, ShellProfile{ID: id, Label: label, Path: path, Arguments: args})
 	}
 	if programFiles, ok := lookup("ProgramFiles"); ok {
-		add("powershell", "PowerShell 7", filepath.Join(programFiles, "PowerShell", "7", "pwsh.exe"), []string{"-NoLogo"})
+		powerShell := trusted.PowerShell7Path(programFiles)
+		add("powershell", "PowerShell 7", powerShell, trusted.LoginArguments(powerShell))
 		add("git-bash", "Git Bash", filepath.Join(programFiles, "Git", "bin", "bash.exe"), []string{"--login"})
 	}
 	if windowsDirectory, ok := lookup("WINDIR"); ok {
-		add("windows-powershell", "Windows PowerShell", filepath.Join(windowsDirectory, "System32", "WindowsPowerShell", "v1.0", "powershell.exe"), []string{"-NoLogo"})
+		powerShell := trusted.WindowsPowerShellPath(windowsDirectory)
+		add("windows-powershell", "Windows PowerShell", powerShell, trusted.LoginArguments(powerShell))
 		add("wsl", "WSL", filepath.Join(windowsDirectory, "System32", "wsl.exe"), nil)
 	}
-	if comSpec, ok := lookup("ComSpec"); ok && strings.EqualFold(filepath.Base(comSpec), "cmd.exe") {
-		add("cmd", "Command Prompt", comSpec, nil)
+	if commandProcessor, err := trusted.CommandProcessor(lookup, nil); err == nil {
+		add("cmd", "Command Prompt", commandProcessor, nil)
 	}
 	return profiles
+}
+
+// CommandProcessor は、cmd.exe の文法で書かれた行を渡してよい cmd.exe の絶対パスを
+// 返す。Windows ディレクトリは Windows 自身に尋ね、lookup からは %ComSpec% だけを読む。
+func CommandProcessor(lookup func(string) (string, bool)) (string, error) {
+	return trusted.CommandProcessor(systemLookup(lookup), nil)
 }
 
 // systemLookup は、シェルの在り処を Windows 自身に尋ねる。
@@ -81,8 +88,7 @@ func systemLookup(lookup func(string) (string, bool)) func(string) (string, bool
 	return func(name string) (string, bool) {
 		switch name {
 		case "WINDIR":
-			directory, err := windows.GetSystemWindowsDirectory()
-			return directory, err == nil
+			return WindowsDirectory()
 		case "ProgramFiles":
 			directory, err := windows.KnownFolderPath(windows.FOLDERID_ProgramFiles, windows.KF_FLAG_DEFAULT)
 			return directory, err == nil

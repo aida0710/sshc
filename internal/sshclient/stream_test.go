@@ -12,6 +12,7 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
+	"sshc/internal/connectionlog"
 	"sshc/internal/knownhosts"
 	"sshc/internal/sshclient"
 	"sshc/internal/textencoding"
@@ -101,7 +102,7 @@ func TestStreamAnnouncesTheLocalProxyCommandOnStderr(t *testing.T) {
 
 func TestStreamHonoursTheConfiguredConnectionLog(t *testing.T) {
 	_, dialer, target := streamSetup(t, serverOptions{})
-	dialer.Verbosity = func() sshclient.Verbosity { return sshclient.Full }
+	dialer.Verbosity = func() connectionlog.Level { return connectionlog.Full }
 	var errOut bytes.Buffer
 	if _, err := dialer.Stream(context.Background(), target, "true", sshclient.Streams{
 		Out: io.Discard, Err: &errOut,
@@ -215,9 +216,11 @@ func TestStreamRefusesAnUnknownProxyJumpWithoutPersistingIt(t *testing.T) {
 func TestStreamStopsWhenTheContextIsDone(t *testing.T) {
 	release := make(chan struct{})
 	t.Cleanup(func() { close(release) })
+	started := make(chan struct{})
 	_, dialer, target := streamSetup(t, serverOptions{
 		OnShell: func(ssh.Channel) {
 			// 何も書かず、終わらない相手を演じる。
+			close(started)
 			<-release
 		},
 	})
@@ -229,7 +232,9 @@ func TestStreamStopsWhenTheContextIsDone(t *testing.T) {
 			sshclient.Streams{Out: io.Discard, Err: io.Discard})
 		finished <- err
 	}()
-	time.Sleep(300 * time.Millisecond)
+	// コマンドが走り出してから取り消す。接続の途中で取り消すと、動いている
+	// ストリームを止める経路ではなく、接続を諦める経路を試すことになる。
+	<-started
 	cancel()
 
 	select {

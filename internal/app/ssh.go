@@ -16,6 +16,7 @@ import (
 	pkgsftp "github.com/pkg/sftp"
 
 	"sshc/internal/application"
+	"sshc/internal/connectionlog"
 	"sshc/internal/effective"
 	"sshc/internal/httpserver"
 	"sshc/internal/knownhosts"
@@ -71,8 +72,8 @@ func newSSHParts(dependencies sshDependencies) sshParts {
 				return config.ObserveConnectionOS(target)
 			},
 			// 接続のたびに読む。 設定は走っているあいだに変えられる。
-			Verbosity: func() sshclient.Verbosity {
-				return sshclient.Verbosity(config.TerminalSettings().Verbosity)
+			Verbosity: func() connectionlog.Level {
+				return connectionlog.Level(config.TerminalSettings().Verbosity)
 			},
 			Auth: sshclient.Auth{
 				AgentSocket: os.Getenv("SSH_AUTH_SOCK"),
@@ -168,9 +169,9 @@ func (p sshParts) probe() func(ctx context.Context, alias string) (sshclient.Pro
 }
 
 // run は、決まった接続でコマンドを 1 本走らせる。何も尋ねない。
-func (p sshParts) run() func(ctx context.Context, target sshclient.Target, command string, stdin []byte) (sshclient.Output, error) {
-	return func(ctx context.Context, target sshclient.Target, command string, stdin []byte) (sshclient.Output, error) {
-		return p.dialer.Run(ctx, target, command, stdin)
+func (p sshParts) run() func(ctx context.Context, target sshclient.Target, command sshclient.Command) (sshclient.Output, error) {
+	return func(ctx context.Context, target sshclient.Target, command sshclient.Command) (sshclient.Output, error) {
+		return p.dialer.Run(ctx, target, command)
 	}
 }
 
@@ -401,13 +402,13 @@ func NewCLIConnection(options CLIConnectionOptions) (CLIConnection, error) {
 	configuredVerbosity := parts.dialer.Verbosity
 	// `sshc ssh` はブラウザの接続中表示を持たないため、最低限の接続段階を
 	// 常に端末へ残す。詳細度を上げた設定はそのまま尊重する。
-	parts.dialer.Verbosity = func() sshclient.Verbosity {
-		level := sshclient.Quiet
+	parts.dialer.Verbosity = func() connectionlog.Level {
+		level := connectionlog.Notice
 		if configuredVerbosity != nil {
 			level = configuredVerbosity()
 		}
-		if level < sshclient.Brief {
-			return sshclient.Brief
+		if level < connectionlog.Brief {
+			return connectionlog.Brief
 		}
 		return level
 	}

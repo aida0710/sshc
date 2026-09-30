@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"sshc/internal/keys"
+	"sshc/internal/platform"
 	"sshc/internal/platform/windows"
 )
 
@@ -15,28 +16,18 @@ import (
 // Windows の PATH には利用者が書き込めるディレクトリが並び、その並びを決めているのは
 // このアプリケーションではない。Toolchain が答えるのは、ハードウェア鍵の項目を出して
 // よいかだけで、見つけたパスで鍵を生成することはない。画面に出す ssh-keygen の
-// コマンドは、利用者のシェルが PATH で解決する。信頼の起点は %SystemRoot% であり、
-// それを読むのはこの配線の仕事である。internal/platform/windows は環境変数を
-// 知らないままでいる。
+// コマンドは、利用者のシェルが PATH で解決する。信頼の起点は Windows ディレクトリ
+// であり、環境変数の SystemRoot ではなく Windows 自身に尋ねる
+// （platform.WindowsDirectory）。尋ねられなければ空を渡し、NewToolchain はそれを
+// 「起点が無い」として扱う。internal/platform/windows は環境も Win32 も知らないままでいる。
 //
 // KeyAgent は Windows の OpenSSH エージェントが待つ固定の named pipe へ接続する。
 // lookup を渡すのは Unix と同じ signature を保つためだけで、あちらはそれを
 // 読まない。
 func newPlatformParts() platformParts {
+	windowsDirectory, _ := platform.WindowsDirectory()
 	return platformParts{
-		Toolchain: windows.NewToolchain(systemRoot()),
+		Toolchain: windows.NewToolchain(windowsDirectory),
 		KeyAgent:  keys.NewAgent(os.LookupEnv),
 	}
-}
-
-// systemRoot は Windows ディレクトリの表記を返す。
-//
-// 正しい表記は SystemRoot である。windir も同じ場所を指すが、こちらは利用者の
-// 環境に残っていることがある古い表記なので、後ろに置く。どちらも無いなら空を
-// 返す。NewToolchain は空を「起点が無い」として扱い、相対パスを組み立てない。
-func systemRoot() string {
-	if root := os.Getenv("SystemRoot"); root != "" {
-		return root
-	}
-	return os.Getenv("windir")
 }

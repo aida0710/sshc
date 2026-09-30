@@ -10,6 +10,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"sshc/internal/connectionlog"
 )
 
 func TestProxyCommandFindsBothAwsAndItsPluginInTheSuppliedPath(t *testing.T) {
@@ -25,7 +27,7 @@ func TestProxyCommandFindsBothAwsAndItsPluginInTheSuppliedPath(t *testing.T) {
 	dialer := Dialer{ProxyEnvironment: func(context.Context) ([]string, error) {
 		return []string{"PATH=" + directory, "AWS_PROFILE=kept-profile"}, nil
 	}}
-	connection, err := dialer.open(context.Background(), Target{ProxyCommand: "aws"}, nil, newTracer(Quiet, io.Discard))
+	connection, err := dialer.open(context.Background(), Target{ProxyCommand: "aws"}, nil, newTracer(connectionlog.Notice, io.Discard))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,7 +43,7 @@ func TestProxyCommandUsesInheritedEnvironmentWhenPathLoadingFails(t *testing.T) 
 	dialer := Dialer{ProxyEnvironment: func(context.Context) ([]string, error) {
 		return []string{"PATH=/usr/bin:/bin", "SSHC_TEST_VALUE=inherited"}, errors.New("shell failed")
 	}}
-	connection, err := dialer.open(context.Background(), Target{ProxyCommand: `printf '%s' "$SSHC_TEST_VALUE"`}, nil, newTracer(Quiet, &log))
+	connection, err := dialer.open(context.Background(), Target{ProxyCommand: `printf '%s' "$SSHC_TEST_VALUE"`}, nil, newTracer(connectionlog.Notice, &log))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,7 +61,7 @@ func TestCancellingPathLoadingDoesNotStartTheProxyCommand(t *testing.T) {
 		cancel()
 		return nil, ctx.Err()
 	}}
-	connection, err := dialer.open(ctx, Target{ProxyCommand: "sleep 60"}, nil, newTracer(Quiet, io.Discard))
+	connection, err := dialer.open(ctx, Target{ProxyCommand: "sleep 60"}, nil, newTracer(connectionlog.Notice, io.Discard))
 	if connection != nil {
 		_ = connection.Close()
 		t.Fatal("started a ProxyCommand after cancellation")

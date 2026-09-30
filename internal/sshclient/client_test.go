@@ -9,11 +9,13 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"golang.org/x/crypto/ssh"
 
+	"sshc/internal/connectionlog"
 	"sshc/internal/keys"
 	"sshc/internal/knownhosts"
 	"sshc/internal/sshclient"
@@ -69,6 +71,13 @@ func keyPair(t *testing.T) (path string, contents []byte, public ssh.PublicKey) 
 // 検査は、その事実を「動かない」と誤って報告する。
 func drain(process terminal.Process) {
 	go func() { _, _ = io.Copy(io.Discard, process) }()
+}
+
+// awaitReady は、SSH の Process が使える状態になるか失敗するまで待ち、その結果を返す。
+func awaitReady(process terminal.Process) error {
+	readier := process.(terminal.Readier)
+	<-readier.Ready()
+	return readier.ReadyErr()
 }
 
 // readUntil は、その断片が現れるまで Process を読む。
@@ -146,6 +155,81 @@ func TestTheRemoteExitCodeReachesTheSessionListing(t *testing.T) {
 	}
 }
 
+func TestAShellEndingWithoutExitStatusOnALiveTransportIsNotALostConnection(t *testing.T) {
+	path, contents, public := keyPair(t)
+	server := newTestServer(t, serverOptions{
+		AcceptKeys: []ssh.PublicKey{public}, OmitExitStatus: true,
+		OnShell: func(channel ssh.Channel) { _, _ = io.WriteString(channel, "ready\r\n") },
+	})
+	auth := sshclient.Auth{ReadFile: func(string) ([]byte, error) { return contents, nil }}
+
+	process, err := dialerFor(t, server, auth).Open(
+		context.Background(), targetWith(server, path), terminal.Size{Cols: 80, Rows: 24})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = process.Close() }()
+
+	output := readUntil(t, process, "ready")
+	rest, _ := io.ReadAll(process)
+	info := process.Wait()
+	if info.TransportLost {
+		t.Fatalf("exit = %+v; a shell that ended on a live transport was reported as a lost connection", info)
+	}
+	if info.Code != sshclient.RemoteFailureExit {
+		t.Fatalf("exit = %+v, want %d", info, sshclient.RemoteFailureExit)
+	}
+	// 終わり方の文は出力に書かずに返す。engine がモードを戻してから書く。
+	if output += string(rest); strings.Contains(output, "終了コードを送らずに") {
+		t.Fatalf("output = %q; the notice was written before the modes could be reset", output)
+	}
+	if !strings.Contains(info.Notice, "終了コードを送らずに") {
+		t.Fatalf("notice = %q, want the server closed the session without an exit status", info.Notice)
+	}
+}
+
+func TestATransportCutDuringTheShellIsALostConnection(t *testing.T) {
+	path, contents, public := keyPair(t)
+	server := newTestServer(t, serverOptions{
+		AcceptKeys: []ssh.PublicKey{public},
+		OnShell: func(channel ssh.Channel) {
+			_, _ = io.WriteString(channel, "ready\r\n")
+			_, _ = io.Copy(io.Discard, channel)
+		},
+	})
+	auth := sshclient.Auth{ReadFile: func(string) ([]byte, error) { return contents, nil }}
+	dialed := make(chan net.Conn, 1)
+	dialer := dialerFor(t, server, auth)
+	dialer.Dial = func(ctx context.Context, network, address string) (net.Conn, error) {
+		conn, err := (&net.Dialer{}).DialContext(ctx, network, address)
+		if err == nil {
+			dialed <- conn
+		}
+		return conn, err
+	}
+
+	process, err := dialer.Open(context.Background(), targetWith(server, path), terminal.Size{Cols: 80, Rows: 24})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = process.Close() }()
+
+	output := readUntil(t, process, "ready")
+	_ = (<-dialed).Close()
+	rest, _ := io.ReadAll(process)
+	info := process.Wait()
+	if !info.TransportLost {
+		t.Fatalf("exit = %+v; a cut transport was reported as the end of the shell", info)
+	}
+	// 切れた理由は出力に書かずに返す。engine がモードを戻してから書く。
+	if strings.TrimSpace(info.Notice) == "" {
+		t.Fatalf("exit = %+v; the reason the transport was lost is missing", info)
+	}
+	if output += string(rest); strings.Contains(output, strings.TrimSpace(info.Notice)) {
+		t.Fatalf("output = %q; the reason was written before the modes could be reset", output)
+	}
+}
+
 func TestWhatIsTypedReachesTheRemoteStdin(t *testing.T) {
 	path, contents, public := keyPair(t)
 	echoed := make(chan string, 1)
@@ -167,9 +251,11 @@ func TestWhatIsTypedReachesTheRemoteStdin(t *testing.T) {
 	}
 	defer func() { _ = process.Close() }()
 
-	// シェルが始まってから書く。始まる前に書いたぶんは、まだ問いの結果として
-	// 読まれうる。それは握手の間だけ成り立つ約束である。
-	time.Sleep(200 * time.Millisecond)
+	// シェルが始まってから書く。Ready の前に書いたぶんは、認証の問いが出て
+	// いなければ捨てられる。
+	if err := awaitReady(process); err != nil {
+		t.Fatalf("the shell never became ready: %v", err)
+	}
 	if _, err := process.Write([]byte("echo hello\r")); err != nil {
 		t.Fatal(err)
 	}
@@ -204,8 +290,7 @@ func TestOnlyAnExplicitAuthenticationPromptAcceptsInputBeforeReady(t *testing.T)
 	if _, err := process.Write([]byte("hunter2\r")); err != nil {
 		t.Fatal(err)
 	}
-	readier := process.(terminal.Readier)
-	if readyErr := <-readier.Ready(); readyErr != nil {
+	if readyErr := awaitReady(process); readyErr != nil {
 		t.Fatalf("Ready = %v", readyErr)
 	}
 	if prompting.AwaitingPrompt() {
@@ -269,6 +354,54 @@ func TestResizeSendsAWindowChange(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	t.Fatalf("window-change never arrived: %v", server.Sizes())
+}
+
+func TestResizeDuringSetEnvReachesTheRemotePTY(t *testing.T) {
+	path, contents, public := keyPair(t)
+	envArrived := make(chan struct{})
+	releaseEnv := make(chan struct{})
+	server := newTestServer(t, serverOptions{
+		AcceptKeys: []ssh.PublicKey{public},
+		BeforeEnvReply: func() {
+			close(envArrived)
+			<-releaseEnv
+		},
+		OnShell: func(channel ssh.Channel) {
+			_, _ = io.WriteString(channel, "ready\r\n")
+			_, _ = io.Copy(io.Discard, channel)
+		},
+	})
+	auth := sshclient.Auth{ReadFile: func(string) ([]byte, error) { return contents, nil }}
+	target := targetWith(server, path)
+	target.SetEnv = []sshclient.EnvVar{{Name: "SSHC", Value: "yes"}}
+
+	process, err := dialerFor(t, server, auth).Open(
+		context.Background(), target, terminal.Size{Cols: 80, Rows: 24})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = process.Close() }()
+
+	select {
+	case <-envArrived:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the env request never arrived")
+	}
+	if err := process.Resize(terminal.Size{Cols: 200, Rows: 60}); err != nil {
+		t.Fatal(err)
+	}
+	close(releaseEnv)
+	readUntil(t, process, "ready")
+
+	wanted := [2]uint32{200, 60}
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if server.EffectivePTYSize() == wanted {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatalf("the remote PTY kept %v; window-changes were %v", server.EffectivePTYSize(), server.Sizes())
 }
 
 func TestSetEnvReachesTheRemote(t *testing.T) {
@@ -484,7 +617,7 @@ func TestProxyJumpUsesTheSavedPasswordForEachAlias(t *testing.T) {
 			}
 		}},
 		HostKeys:  sshclient.HostKeys{Read: func() ([]byte, error) { return []byte(known), nil }},
-		Verbosity: func() sshclient.Verbosity { return sshclient.Brief },
+		Verbosity: func() connectionlog.Level { return connectionlog.Brief },
 	}
 	target := targetWith(inner)
 	target.Alias = "destination"
@@ -544,11 +677,10 @@ func TestAChangedHostKeyStopsTheConnectionBeforeAuthentication(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = process.Close() }()
-	readier, ok := process.(terminal.Readier)
-	if !ok {
+	if _, ok := process.(terminal.Readier); !ok {
 		t.Fatal("SSH process does not expose asynchronous readiness")
 	}
-	if readyErr := <-readier.Ready(); !errors.Is(readyErr, sshclient.ErrHostKeyChanged) {
+	if readyErr := awaitReady(process); !errors.Is(readyErr, sshclient.ErrHostKeyChanged) {
 		t.Fatalf("Ready error = %v, want ErrHostKeyChanged", readyErr)
 	}
 
@@ -628,6 +760,168 @@ func TestAnUnreachableAddressFailsWithinItsTimeout(t *testing.T) {
 	}
 }
 
+func TestAHandshakeTheServerNeverAnswersFailsWithinItsTimeout(t *testing.T) {
+	clientEnd, serverEnd := net.Pipe()
+	t.Cleanup(func() { _ = serverEnd.Close() })
+	go func() { _, _ = io.Copy(io.Discard, serverEnd) }()
+	dialer := sshclient.Dialer{Dial: func(context.Context, string, string) (net.Conn, error) {
+		return clientEnd, nil
+	}}
+	target := sshclient.Target{
+		Alias: "silent", HostName: "127.0.0.1", Port: "22", User: "ops",
+		Timeout: 200 * time.Millisecond, Methods: sshclient.DefaultMethods(),
+	}
+
+	process, err := dialer.Open(context.Background(), target, terminal.Size{Cols: 80, Rows: 24})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = process.Close() }()
+	drain(process)
+
+	select {
+	case <-process.(terminal.Readier).Ready():
+		if readyErr := process.(terminal.Readier).ReadyErr(); !errors.Is(readyErr, context.DeadlineExceeded) {
+			t.Fatalf("Ready = %v, want the connect timeout", readyErr)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the handshake did not give up within its timeout")
+	}
+}
+
+func TestAPasswordTypedAfterTheConnectTimeoutStillAuthenticates(t *testing.T) {
+	const connectTimeout = 300 * time.Millisecond
+	// 利用者が ConnectTimeout より長く考えてから答える。
+	const thinkingTime = 2 * connectTimeout
+	server := newTestServer(t, serverOptions{Password: "hunter2"})
+	target := targetWith(server)
+	target.Timeout = connectTimeout
+
+	process, err := dialerFor(t, server, sshclient.Auth{}).Open(
+		context.Background(), target, terminal.Size{Cols: 80, Rows: 24})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = process.Close() }()
+	readUntil(t, process, "Password for ")
+	drain(process)
+
+	time.Sleep(thinkingTime)
+	if _, err := process.Write([]byte("hunter2\r")); err != nil {
+		t.Fatal(err)
+	}
+	if readyErr := awaitReady(process); readyErr != nil {
+		t.Fatalf("Ready = %v", readyErr)
+	}
+}
+
+// 認証中の待ちは、利用者の入力のほかにサーバーの側（プッシュ承認、PAMの遅延）や
+// エージェントの側（Touch ID）にもある。OpenSSH と同じく ConnectTimeout では数えない。
+func TestAServerThatChecksAPasswordLongerThanTheConnectTimeoutStillAuthenticates(t *testing.T) {
+	const connectTimeout = 300 * time.Millisecond
+	// サーバーがパスワードを確かめるのに ConnectTimeout より長く掛かる。
+	const checkingTime = 2 * connectTimeout
+	server := newTestServer(t, serverOptions{
+		Password:            "hunter2",
+		BeforePasswordReply: func() { time.Sleep(checkingTime) },
+	})
+	target := targetWith(server)
+	target.Timeout = connectTimeout
+	auth := sshclient.Auth{Password: func(sshclient.Target) (string, bool) { return "hunter2", true }}
+
+	if _, err := dialerFor(t, server, auth).Run(context.Background(), target, sshclient.Command{Line: "true"}); err != nil {
+		t.Fatalf("Run = %v", err)
+	}
+}
+
+// silencingConn は、silence のあとにサーバーから届くものをクライアントへ渡さない。
+// 利用者が答えたあとに応答しなくなったサーバーを再現する。
+type silencingConn struct {
+	net.Conn
+	silenced  atomic.Bool
+	closed    chan struct{}
+	closeOnce sync.Once
+}
+
+func newSilencingConn(conn net.Conn) *silencingConn {
+	return &silencingConn{Conn: conn, closed: make(chan struct{})}
+}
+
+func (c *silencingConn) silence() { c.silenced.Store(true) }
+
+func (c *silencingConn) Read(buffer []byte) (int, error) {
+	read, err := c.Conn.Read(buffer)
+	if c.silenced.Load() {
+		<-c.closed
+		return 0, net.ErrClosed
+	}
+	return read, err
+}
+
+func (c *silencingConn) Close() error {
+	c.closeOnce.Do(func() { close(c.closed) })
+	return c.Conn.Close()
+}
+
+// 答えたら同じ長さで数え直す。数え直さなければ、答えたあとに応答しなくなった
+// サーバーへの接続は、利用者が閉じるまで終わらない。
+func TestAServerThatFallsSilentAfterTheHostKeyIsAcceptedFailsWithinTheConnectTimeout(t *testing.T) {
+	const connectTimeout = 300 * time.Millisecond
+	// 利用者が ConnectTimeout より長く考えてから答える。
+	const thinkingTime = 2 * connectTimeout
+	// 数え直した時計が切れるまでの待ちの上限。ConnectTimeout に十分な余裕を足す。
+	const giveUpWithin = 10 * connectTimeout
+	server := newTestServer(t, serverOptions{Password: "hunter2"})
+	dialed := make(chan *silencingConn, 1)
+	dialer := sshclient.Dialer{
+		Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
+			conn, err := (&net.Dialer{}).DialContext(ctx, network, address)
+			if err != nil {
+				return nil, err
+			}
+			transport := newSilencingConn(conn)
+			dialed <- transport
+			return transport, nil
+		},
+		HostKeys: sshclient.HostKeys{
+			Read: func() ([]byte, error) { return nil, nil },
+			Add:  func(knownhosts.Candidate) error { return nil },
+		},
+	}
+	target := targetWith(server)
+	target.Timeout = connectTimeout
+
+	process, err := dialer.Open(context.Background(), target, terminal.Size{Cols: 80, Rows: 24})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = process.Close() }()
+	readUntil(t, process, "Are you sure you want to continue connecting")
+	drain(process)
+	transport := <-dialed
+
+	time.Sleep(thinkingTime)
+	ready := process.(terminal.Readier).Ready()
+	select {
+	case <-ready:
+		t.Fatalf("the connection gave up while the user was deciding: %v", process.(terminal.Readier).ReadyErr())
+	default:
+	}
+	transport.silence()
+	if _, err := process.Write([]byte("yes\r")); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case <-ready:
+		if readyErr := process.(terminal.Readier).ReadyErr(); !errors.Is(readyErr, context.DeadlineExceeded) {
+			t.Fatalf("Ready = %v, want the connect timeout", readyErr)
+		}
+	case <-time.After(giveUpWithin):
+		t.Fatal("the connection kept waiting for a silent server after the user answered")
+	}
+}
+
 func TestClosingASessionCancelsAHandshakeAndClosesItsRawTransport(t *testing.T) {
 	clientEnd, serverEnd := net.Pipe()
 	t.Cleanup(func() { _ = serverEnd.Close() })
@@ -704,7 +998,7 @@ func TestTheConnectionLogReachesTheTerminalWhenItIsAsked(t *testing.T) {
 	auth := sshclient.Auth{ReadFile: func(string) ([]byte, error) { return contents, nil }}
 
 	dialer := dialerFor(t, server, auth)
-	dialer.Verbosity = func() sshclient.Verbosity { return sshclient.Detailed }
+	dialer.Verbosity = func() connectionlog.Level { return connectionlog.Detailed }
 	process, err := dialer.Open(context.Background(), targetWith(server, path), terminal.Size{Cols: 80, Rows: 24})
 	if err != nil {
 		t.Fatal(err)
@@ -728,7 +1022,7 @@ func TestFullConnectionLogExplainsAnAutomaticallyAnsweredEchoedTOTP(t *testing.T
 		return "123456", question == "Verification code: "
 	}}
 	dialer := dialerFor(t, server, auth)
-	dialer.Verbosity = func() sshclient.Verbosity { return sshclient.Full }
+	dialer.Verbosity = func() connectionlog.Level { return connectionlog.Full }
 	process, err := dialer.Open(context.Background(), targetWith(server), terminal.Size{Cols: 80, Rows: 24})
 	if err != nil {
 		t.Fatal(err)
@@ -739,8 +1033,8 @@ func TestFullConnectionLogExplainsAnAutomaticallyAnsweredEchoedTOTP(t *testing.T
 	for _, want := range []string{
 		"接続ログ：すべて（-vvv）",
 		"認証方式を試します：keyboard-interactive",
-		"keyboard-interactiveの質問1/1：Verification code:（入力表示：あり）",
-		"保存済みTOTPをbastionの認証コード質問へ入力しました。",
+		"keyboard-interactiveのプロンプト1/1：Verification code:（入力表示：あり）",
+		"保存済みTOTPをbastionの認証コードのプロンプトへ入力しました。",
 		"認証方式keyboard-interactiveで認証されました。",
 	} {
 		if !strings.Contains(seen, want) {

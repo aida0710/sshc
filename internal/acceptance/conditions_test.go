@@ -293,7 +293,7 @@ func completionConditions() []completionCondition {
 	}
 }
 
-func TestDesignCompletionConditions(t *testing.T) {
+func TestDesignCompletionConditionsNameExistingProofsAndStateTheirGaps(t *testing.T) {
 	repository := filepath.Join("..", "..")
 	sources := collectSources(t, repository)
 

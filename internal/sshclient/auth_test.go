@@ -1,12 +1,14 @@
 package sshclient_test
 
 import (
+	"context"
 	"crypto/ed25519"
 	"crypto/rand"
 	"errors"
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -222,6 +224,165 @@ func TestStoredTOTPAnswersAnExplicitChallengeWithoutPrompting(t *testing.T) {
 	}
 	if len(prompt.asked) != 0 {
 		t.Fatalf("stored TOTP still prompted: %#v", prompt.asked)
+	}
+}
+
+// 拒否は設定か資格情報を直すまで続くので、呼び出し側が型で見分けて再試行を止める。
+func TestARefusedKeyIsReportedAsAnAuthenticationRejection(t *testing.T) {
+	_, _, accepted := keyPair(t)
+	path, contents, _ := keyPair(t)
+	server := newTestServer(t, serverOptions{AcceptKeys: []ssh.PublicKey{accepted}})
+	auth := sshclient.Auth{ReadFile: func(string) ([]byte, error) { return contents, nil }}
+
+	_, err := dialerFor(t, server, auth).Run(context.Background(), targetWith(server, path), sshclient.Command{Line: "true"})
+	if !errors.Is(err, sshclient.ErrAuthenticationRejected) {
+		t.Fatalf("Run = %v, want an authentication rejection", err)
+	}
+	if !strings.Contains(err.Error(), "unable to authenticate") {
+		t.Fatalf("the rejection lost the server's reason: %q", err.Error())
+	}
+}
+
+// エージェントに鍵を多く入れていると、サーバーは「no supported methods remain」に
+// なる前に MaxAuthTries で接続を切る。これも設定を直すまで続く拒否である。
+func TestAServerThatDisconnectsAfterTooManyRefusedKeysIsReportedAsAnAuthenticationRejection(t *testing.T) {
+	// サーバーの MaxAuthTries より多くの鍵を差し出す。
+	const maxAuthTries, refusedKeys = 2, 4
+	_, _, accepted := keyPair(t)
+	offered := map[string][]byte{}
+	paths := make([]string, 0, refusedKeys)
+	for index := range refusedKeys {
+		_, contents, _ := keyPair(t)
+		path := "/keys/refused_" + strconv.Itoa(index)
+		offered[path] = contents
+		paths = append(paths, path)
+	}
+	server := newTestServer(t, serverOptions{AcceptKeys: []ssh.PublicKey{accepted}, MaxAuthTries: maxAuthTries})
+	auth := sshclient.Auth{ReadFile: func(path string) ([]byte, error) { return offered[path], nil }}
+
+	_, err := dialerFor(t, server, auth).Run(context.Background(), targetWith(server, paths...), sshclient.Command{Line: "true"})
+	if !errors.Is(err, sshclient.ErrAuthenticationRejected) {
+		t.Fatalf("Run = %v, want an authentication rejection", err)
+	}
+	if !strings.Contains(err.Error(), "too many authentication failures") {
+		t.Fatalf("the rejection lost the server's reason: %q", err.Error())
+	}
+}
+
+// 断られたコードを送り直しても、同じ時間窓では同じコードになり、また断られる。
+func TestARejectedStoredTOTPAsksTheUserInsteadOfSendingItAgain(t *testing.T) {
+	server := newTestServer(t, serverOptions{Keyboard: map[string]string{"Verification code: ": "654321"}})
+	prompt := &scriptedPrompter{answers: []string{"654321"}}
+	generated := 0
+	auth := sshclient.Auth{TOTP: func(sshclient.Target, string) (string, bool) {
+		generated++
+		return "123456", true
+	}}
+
+	if err := connect(t, server, targetWith(server), auth, prompt); err != nil {
+		t.Fatalf("connect = %v", err)
+	}
+	if generated != 1 {
+		t.Fatalf("the stored TOTP was generated %d times in one connection", generated)
+	}
+	if len(prompt.secretly) != 1 || !strings.Contains(prompt.secretly[0], "Saved verification code was rejected") {
+		t.Fatalf("the user was not asked after the stored code was refused: %#v", prompt.secretly)
+	}
+}
+
+func TestANonInteractiveConnectionStopsAfterItsStoredTOTPIsRejected(t *testing.T) {
+	server := newTestServer(t, serverOptions{Keyboard: map[string]string{"Verification code: ": "654321"}})
+	generated := 0
+	auth := sshclient.Auth{TOTP: func(sshclient.Target, string) (string, bool) {
+		generated++
+		return "123456", true
+	}}
+
+	_, err := dialerFor(t, server, auth).Run(context.Background(), targetWith(server), sshclient.Command{Line: "true"})
+	if !errors.Is(err, sshclient.ErrPromptUnavailable) {
+		t.Fatalf("Run = %v, want the refusal to ask", err)
+	}
+	if generated != 1 {
+		t.Fatalf("the stored TOTP was generated %d times in one connection", generated)
+	}
+}
+
+// storedTOTPAndPassword は、拒否されるTOTPと、取り出された回数を数える保存済み
+// パスワードの両方を持つ Auth を作る。
+func storedTOTPAndPassword(passwordReleased *int) sshclient.Auth {
+	return sshclient.Auth{
+		TOTP: func(sshclient.Target, string) (string, bool) { return "123456", true },
+		Password: func(sshclient.Target) (string, bool) {
+			*passwordReleased++
+			return "saved-account-password", true
+		},
+	}
+}
+
+func answersContain(answers [][]string, wanted string) bool {
+	for _, round := range answers {
+		for _, answer := range round {
+			if answer == wanted {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// TOTPの質問にアカウントのパスワードを答えると、パスワードが別の用途の欄へ
+// 送られ、正しい保存値が拒否されたと表示される。
+func TestARejectedStoredTOTPQuestionIsNeverAnsweredWithTheSavedPassword(t *testing.T) {
+	server := newTestServer(t, serverOptions{Keyboard: map[string]string{"Verification code: ": "654321"}})
+	prompt := &scriptedPrompter{answers: []string{"654321"}}
+	passwordReleased := 0
+
+	if err := connect(t, server, targetWith(server), storedTOTPAndPassword(&passwordReleased), prompt); err != nil {
+		t.Fatalf("connect = %v", err)
+	}
+	if passwordReleased != 0 {
+		t.Fatalf("the saved password was released %d times to a TOTP question", passwordReleased)
+	}
+	if answersContain(server.KeyboardAnswers(), "saved-account-password") {
+		t.Fatalf("the saved password reached the server as a verification code: %#v", server.KeyboardAnswers())
+	}
+	if len(prompt.secretly) != 1 || strings.Contains(prompt.secretly[0], "Saved password was rejected") {
+		t.Fatalf("the user was told about a password that was never sent: %#v", prompt.secretly)
+	}
+}
+
+func TestAVerificationCodeQuestionWithoutAStoredTOTPAsksTheUserInsteadOfSendingTheSavedPassword(t *testing.T) {
+	server := newTestServer(t, serverOptions{Keyboard: map[string]string{"Verification code: ": "654321"}})
+	prompt := &scriptedPrompter{answers: []string{"654321"}}
+	passwordReleased := 0
+	auth := storedTOTPAndPassword(&passwordReleased)
+	auth.TOTP = func(sshclient.Target, string) (string, bool) { return "", false }
+
+	if err := connect(t, server, targetWith(server), auth, prompt); err != nil {
+		t.Fatalf("connect = %v", err)
+	}
+	if passwordReleased != 0 {
+		t.Fatalf("the saved password was released %d times to a TOTP question", passwordReleased)
+	}
+	if len(prompt.secretly) != 1 {
+		t.Fatalf("the user was not asked for the verification code: %#v", prompt.secretly)
+	}
+}
+
+func TestANonInteractiveConnectionSendsOneAnswerWhenItsStoredTOTPIsRejected(t *testing.T) {
+	server := newTestServer(t, serverOptions{Keyboard: map[string]string{"Verification code: ": "654321"}})
+	passwordReleased := 0
+
+	_, err := dialerFor(t, server, storedTOTPAndPassword(&passwordReleased)).
+		Run(context.Background(), targetWith(server), sshclient.Command{Line: "true"})
+	if !errors.Is(err, sshclient.ErrPromptUnavailable) {
+		t.Fatalf("Run = %v, want the refusal to ask", err)
+	}
+	if passwordReleased != 0 {
+		t.Fatalf("the saved password was released %d times to a TOTP question", passwordReleased)
+	}
+	if answers := server.KeyboardAnswers(); len(answers) != 1 {
+		t.Fatalf("the server received %d rounds of answers, want only the stored TOTP: %#v", len(answers), answers)
 	}
 }
 
@@ -518,6 +679,26 @@ func TestAStaleStoredPasswordStillLetsTheUserAnswer(t *testing.T) {
 	}
 	if !strings.Contains(prompt.secretly[0], "Saved password was rejected") {
 		t.Fatalf("the fallback prompt hid why it asked again: %q", prompt.secretly[0])
+	}
+}
+
+// 同じ問いで送ったばかりのパスワードは、まだ拒否されていない。残りの質問を
+// 尋ねるときに「拒否された」と言えば、利用者は正しい保存値を書き換えかねない。
+func TestAPasswordSentInTheSameChallengeIsNotCalledRejected(t *testing.T) {
+	server := newTestServer(t, serverOptions{Keyboard: map[string]string{
+		"Password: ": "hunter2", "Verification code: ": "123456", "Token PIN: ": "42",
+	}})
+	prompt := &scriptedPrompter{answers: []string{"42"}}
+	auth := sshclient.Auth{
+		Password: func(sshclient.Target) (string, bool) { return "hunter2", true },
+		TOTP:     func(sshclient.Target, string) (string, bool) { return "123456", true },
+	}
+
+	if err := connect(t, server, targetWith(server), auth, prompt); err != nil {
+		t.Fatalf("connect = %v", err)
+	}
+	if len(prompt.secretly) != 1 || strings.Contains(prompt.secretly[0], "was rejected") {
+		t.Fatalf("the remaining question claimed a rejection that did not happen: %#v", prompt.secretly)
 	}
 }
 

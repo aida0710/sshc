@@ -28,7 +28,8 @@ func TestRunSendsStdinAndReadsTheOutput(t *testing.T) {
 	auth := sshclient.Auth{ReadFile: func(string) ([]byte, error) { return contents, nil }}
 
 	output, err := dialerFor(t, server, auth).Run(
-		context.Background(), targetWith(server, path), "install-key", []byte("ssh-ed25519 AAAA fixture\n"))
+		context.Background(), targetWith(server, path),
+		sshclient.Command{Line: "install-key", Stdin: []byte("ssh-ed25519 AAAA fixture\n")})
 	if err != nil {
 		t.Fatalf("Run = %v", err)
 	}
@@ -54,7 +55,7 @@ func TestRunRequestsNoTerminal(t *testing.T) {
 	auth := sshclient.Auth{ReadFile: func(string) ([]byte, error) { return contents, nil }}
 
 	if _, err := dialerFor(t, server, auth).Run(
-		context.Background(), targetWith(server, path), "true", nil,
+		context.Background(), targetWith(server, path), sshclient.Command{Line: "true"},
 	); err != nil {
 		t.Fatalf("Run = %v", err)
 	}
@@ -70,7 +71,7 @@ func TestRunReportsANonZeroExitAsAResult(t *testing.T) {
 	auth := sshclient.Auth{ReadFile: func(string) ([]byte, error) { return contents, nil }}
 
 	output, err := dialerFor(t, server, auth).Run(
-		context.Background(), targetWith(server, path), "false", nil)
+		context.Background(), targetWith(server, path), sshclient.Command{Line: "false"})
 	if err != nil {
 		t.Fatalf("Run = %v", err)
 	}
@@ -92,7 +93,7 @@ func TestRunCapsWhatItTakesIn(t *testing.T) {
 	auth := sshclient.Auth{ReadFile: func(string) ([]byte, error) { return contents, nil }}
 
 	output, err := dialerFor(t, server, auth).Run(
-		context.Background(), targetWith(server, path), "talk", nil)
+		context.Background(), targetWith(server, path), sshclient.Command{Line: "talk"})
 	if err != nil {
 		t.Fatalf("Run = %v", err)
 	}
@@ -109,7 +110,7 @@ func TestRunNeverAsksTheUser(t *testing.T) {
 	server := newTestServer(t, serverOptions{Password: "hunter2"})
 	// パスワード認証しか受け付けないサーバーに、尋ねる手段の無い接続で挑む。
 	if _, err := dialerFor(t, server, sshclient.Auth{}).Run(
-		context.Background(), targetWith(server), "true", nil,
+		context.Background(), targetWith(server), sshclient.Command{Line: "true"},
 	); err == nil {
 		t.Fatal("Run authenticated without anything to offer")
 	}
@@ -125,7 +126,7 @@ func TestRunUsesAStoredPasswordWithoutAskingTheUser(t *testing.T) {
 	}}
 
 	output, err := dialerFor(t, server, auth).Run(
-		context.Background(), targetWith(server), "true", nil,
+		context.Background(), targetWith(server), sshclient.Command{Line: "true"},
 	)
 
 	if err != nil {
@@ -133,6 +134,63 @@ func TestRunUsesAStoredPasswordWithoutAskingTheUser(t *testing.T) {
 	}
 	if output.ExitCode != 0 {
 		t.Fatalf("exit = %d, want 0", output.ExitCode)
+	}
+}
+
+func TestRunLetsACommandOutliveTheConnectTimeout(t *testing.T) {
+	path, contents, public := keyPair(t)
+	server := newTestServer(t, serverOptions{
+		AcceptKeys: []ssh.PublicKey{public},
+		OnShell:    func(ssh.Channel) { time.Sleep(600 * time.Millisecond) },
+	})
+	auth := sshclient.Auth{ReadFile: func(string) ([]byte, error) { return contents, nil }}
+	target := targetWith(server, path)
+	target.Timeout = 200 * time.Millisecond
+
+	output, err := dialerFor(t, server, auth).Run(context.Background(), target, sshclient.Command{Line: "backup"})
+	if err != nil {
+		t.Fatalf("Run = %v; the connect timeout cut a command that was already running", err)
+	}
+	if output.ExitCode != 0 {
+		t.Fatalf("exit code = %d, want 0", output.ExitCode)
+	}
+}
+
+func TestRunSendsTheConfiguredKeepAliveWhileACommandRuns(t *testing.T) {
+	path, contents, public := keyPair(t)
+	server := newTestServer(t, serverOptions{
+		AcceptKeys: []ssh.PublicKey{public},
+		OnShell:    func(ssh.Channel) { time.Sleep(300 * time.Millisecond) },
+	})
+	auth := sshclient.Auth{ReadFile: func(string) ([]byte, error) { return contents, nil }}
+	target := targetWith(server, path)
+	target.KeepAlive = 50 * time.Millisecond
+
+	if _, err := dialerFor(t, server, auth).Run(context.Background(), target, sshclient.Command{Line: "backup"}); err != nil {
+		t.Fatal(err)
+	}
+	if server.KeepAlives() == 0 {
+		t.Fatal("no keepalive reached the server during a long command")
+	}
+}
+
+func TestRunStopsACommandAtItsLimit(t *testing.T) {
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
+	path, contents, public := keyPair(t)
+	server := newTestServer(t, serverOptions{
+		AcceptKeys: []ssh.PublicKey{public},
+		OnShell:    func(ssh.Channel) { <-release },
+	})
+	auth := sshclient.Auth{ReadFile: func(string) ([]byte, error) { return contents, nil }}
+
+	_, err := dialerFor(t, server, auth).Run(context.Background(), targetWith(server, path),
+		sshclient.Command{Line: "sleep forever", Limit: 200 * time.Millisecond})
+	if !errors.Is(err, sshclient.ErrCommandTimedOut) {
+		t.Fatalf("Run = %v, want ErrCommandTimedOut", err)
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Run = %v; callers cannot recognise it as a deadline", err)
 	}
 }
 
@@ -148,7 +206,7 @@ func TestRunStopsWhenTheContextIsDone(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	finished := make(chan error, 1)
 	go func() {
-		_, err := dialerFor(t, server, auth).Run(ctx, targetWith(server, path), "sleep forever", nil)
+		_, err := dialerFor(t, server, auth).Run(ctx, targetWith(server, path), sshclient.Command{Line: "sleep forever"})
 		finished <- err
 	}()
 	deadline := time.Now().Add(5 * time.Second)
@@ -177,7 +235,7 @@ func TestRunUsesFailureExitWhenTheRemoteOmitsAStatus(t *testing.T) {
 	auth := sshclient.Auth{ReadFile: func(string) ([]byte, error) { return contents, nil }}
 
 	output, err := dialerFor(t, server, auth).Run(
-		context.Background(), targetWith(server, path), "broken", nil,
+		context.Background(), targetWith(server, path), sshclient.Command{Line: "broken"},
 	)
 	if err == nil {
 		t.Fatal("Run accepted a command result without an exit status")
@@ -209,7 +267,7 @@ func TestRunRefusesAnUnknownProxyJumpWithoutPersistingIt(t *testing.T) {
 	jump.Strict = "no"
 	target.Jump = []sshclient.Target{jump}
 
-	output, err := dialer.Run(context.Background(), target, "true", nil)
+	output, err := dialer.Run(context.Background(), target, sshclient.Command{Line: "true"})
 	if !errors.Is(err, sshclient.ErrHostKeyUnknown) {
 		t.Fatalf("Run = %v, want ErrHostKeyUnknown", err)
 	}

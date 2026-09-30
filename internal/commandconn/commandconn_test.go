@@ -94,22 +94,3 @@ func TestAnExitedCommandReportsHowItEndedBeforeClose(t *testing.T) {
 		t.Fatalf("Complaints = %q", conn.Complaints())
 	}
 }
-
-// stderr は覚えるが、覚えすぎない。
-//
-// 何時間も喋り続けるプログラムがあれば、それはこのプロセスのメモリになる。
-func TestTheComplaintsBufferStopsAtItsLimit(t *testing.T) {
-	buffer := &boundedBuffer{limit: 8}
-	written, err := buffer.Write([]byte("0123456789abcdef"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	// 捨てた分も書けたと返す。そうしないと os/exec は写しを止め、
-	// プログラム側の書き込みが詰まる。
-	if written != 16 {
-		t.Errorf("Write = %d, want 16", written)
-	}
-	if buffer.String() != "01234567" {
-		t.Errorf("kept %q", buffer.String())
-	}
-}

@@ -540,25 +540,6 @@ paths:
         "409": { $ref: "#/components/responses/Problem" }
         "500": { $ref: "#/components/responses/Problem" }
   /api/v1/terminal/sessions/{id}:
-    patch:
-      operationId: renameTerminalSession
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string, minLength: 1, maxLength: 64 }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/RenameTerminalSessionRequest" }
-      responses:
-        "200":
-          description: The session list after the rename
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/TerminalSessionList" }
-
     delete:
       operationId: closeTerminalSession
       description: Force-stops a live SSH or local process and removes the session from the returned list in one request.
@@ -3103,13 +3084,8 @@ components:
       properties:
         profiles: { type: array, items: { $ref: "#/components/schemas/LocalShellProfile" } }
     # 名前は一覧の表示だけのものである。走っているプロセスにも ssh の相手にも
-    # 触れず、metadata へも書かない。セッションと一緒に消える。
-    RenameTerminalSessionRequest:
-      type: object
-      additionalProperties: false
-      required: [title]
-      properties:
-        title: { type: string, minLength: 1, maxLength: 64 }
+    # 触れず、metadata へも書かない。セッションと一緒に消える。null は、利用者が
+    # 付けた名前を外し、プログラムが付けた名前か接続先の名前へ戻す。
     SetTerminalSessionTitleRequest:
       type: object
       additionalProperties: false
