@@ -95,7 +95,7 @@ func TestReadingThroughASymlinkKeepsTheLinksPathAndSavingRewritesTheTarget(t *te
 }
 
 func TestDownloadingASymlinkSendsTheFileItPointsTo(t *testing.T) {
-	prepared, err := serviceFor(remoteWith(linkedTree())).PrepareDownload(context.Background(), "edge", "/srv/notes-link")
+	prepared, err := serviceFor(remoteWith(linkedTree())).PrepareDownloadForTest(context.Background(), "edge", "/srv/notes-link")
 	if err != nil {
 		t.Fatalf("PrepareDownload(link) = %v", err)
 	}
@@ -117,7 +117,7 @@ func TestOpeningABrokenOrLoopingSymlinkFails(t *testing.T) {
 	if _, err := service.ReadText(context.Background(), "edge", "/srv/loop-a"); !errors.Is(err, sftp.ErrLinkLoop) {
 		t.Fatalf("ReadText(loop) = %v, want %v", err, sftp.ErrLinkLoop)
 	}
-	if _, err := service.PrepareDownload(context.Background(), "edge", "/srv/data-link"); !errors.Is(err, sftp.ErrNotRegularFile) {
+	if _, err := service.PrepareDownloadForTest(context.Background(), "edge", "/srv/data-link"); !errors.Is(err, sftp.ErrNotRegularFile) {
 		t.Fatalf("PrepareDownload(directory link) = %v, want %v", err, sftp.ErrNotRegularFile)
 	}
 }

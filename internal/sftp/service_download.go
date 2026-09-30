@@ -102,10 +102,6 @@ func (download *PreparedDownload) WriteFrom(ctx context.Context, offset int64, d
 	return copyContext(ctx, destination, io.LimitReader(download.file, download.Size-offset), 0)
 }
 
-func (s Service) PrepareDownload(ctx context.Context, alias, remotePath string) (_ *PreparedDownload, resultErr error) {
-	return s.prepareDownload(ctx, DownloadRequest{Alias: alias, RemotePath: remotePath, SplitParallelism: 1})
-}
-
 // DownloadRequest は、リモートのファイルを spool へ取り込む条件。
 type DownloadRequest struct {
 	Alias      string
@@ -163,7 +159,8 @@ func (s Service) prepareDownload(ctx context.Context, request DownloadRequest) (
 		return nil, ErrTransferTooLarge
 	}
 	// Reserve the complete known size before opening or creating a spool. This
-	// makes the process-wide disk quota a hard bound even with concurrent jobs.
+	// makes the spool quota that every sshc process of the user shares a hard
+	// bound even with concurrent jobs.
 	if reserve != nil {
 		if err := reserve(before.Size()); err != nil {
 			return nil, err
@@ -247,9 +244,9 @@ func copyDownloadSequential(
 	}
 	var written int64
 	if fastSource, ok := source.(io.WriterTo); ok {
-		// pkg/sftp pipelines reads only through File.WriteTo. Wrapping the
-		// source in LimitReader/copyContext forces one 32 KiB request per RTT.
-		// Bound the writer instead so the pipelined path remains available.
+		// File.WriteTo keeps pkg/sftp's read pipeline full across the whole
+		// file, where copyContext lets it drain after every chunk. Wrapping the
+		// source would hide WriteTo, so the writer carries the bound instead.
 		written, err = fastSource.WriteTo(&boundedContextWriter{ctx: ctx, destination: output, remaining: size})
 	} else {
 		written, err = copyContext(ctx, output, io.LimitReader(source, size), 0)

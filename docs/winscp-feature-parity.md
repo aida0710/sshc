@@ -33,7 +33,7 @@ sshcのSFTPは、安全なアップロード／ダウンロード、フォルダ
 | Commander型のlocal／remote 2 panel | 部分対応 | 接続先メニューに固定表示した「ローカル」で、左右どちらのペインにもsshcエンジン側のファイルを表示する。ペインはリモートと同じ`SFTPPanel`で、`SFTPSource`の`can`（connect／edit／createEntries／rename／chmod／delete／search／details／browserUpload／download／dragOut／terminal）に応じて操作を出し分ける。ツールバー、絞り込み、名前・更新日時・サイズ・種別・権限の列、sort、全選択、Shift／Ctrl範囲選択、キーボード操作、右クリック／長押しメニュー、狭幅時の2行リストを共有し、行をリモートへドラッグするとput、リモートの行をローカルへ落とすとgetになる。初期位置はエンジンユーザーのホーム。上階層を含めOS権限の範囲で移動でき、file／directoryをengine queue経由で直接転送する。ブラウザのフォルダ権限は不要 | ローカル／リモートの同期・比較は未対応 |
 | remote／remote 2 panel | 対応 | desktopで2つのhost／directoryを並べる。左右が独立したtab列を持ち、表示中のtab間でfile／directoryをDrag & Dropしてcopy／moveできる | 維持 |
 | `..`による親directory移動 | 対応 | リモート・ローカルとも一覧先頭の`..`行で移動する。ローカルもOSルートまで移動でき、ルートでは`..`を表示しない | 維持 |
-| path breadcrumb／直接入力 | 部分対応 | リモート・ローカルとも階層をクリックでき、パスバーの空白クリックまたは編集ボタンで絶対pathを直接入力できる。ローカルは`~/`から始まるpathも受け付ける。現在のpathはコピーボタンで取得できる | 維持 |
+| path breadcrumb／直接入力 | 部分対応 | リモート・ローカルとも階層をクリックでき、パスバーの空白クリックまたは編集ボタンで絶対pathを直接入力できる。ローカルは`~/`から始まるpathも受け付ける（Windowsでは`~\`も）。現在のpathはコピーボタンで取得できる | 維持 |
 | Back／Forward履歴 | 対応 | リモート・ローカルともhostを切り替えるまでpath履歴を保持する。ローカルは別tab表示中も履歴と一覧を保持する | 維持 |
 | Home directoryへ移動 | 対応 | serverのworking directoryを再解決して移動 | 維持 |
 | Root directoryへ移動 | 対応 | navigation buttonまたは`/`の直接入力 | 維持 |
@@ -312,7 +312,7 @@ sshcのSFTPは、安全なアップロード／ダウンロード、フォルダ
 - Transfer Manager UI: `web/src/sftp/TransferManagerList.tsx`
 - browser transfer scheduler: `web/src/sftp/transferManager.ts`
 - SFTP service: `internal/sftp/service.go`
-- authoritative queue: `internal/sftp/jobs.go`
+- authoritative queue: `internal/sftp/jobs*.go`
 - API contract: `api/openapi.yaml`
 - user documentation: `pages/features/sftp.md`, `pages/sftp/transfers.md`
 - app-state Sync（SFTP directory syncとは別）: `pages/features/sync.md`

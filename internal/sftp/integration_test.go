@@ -108,11 +108,11 @@ func TestRemoteCopyMoveAndCompareAgainstOpenSSHSFTP(t *testing.T) {
 			path.Join(targetRoot, "copy.txt"), path.Join(targetRoot, "move.txt"),
 			sourceFile, movingFile,
 		} {
-			_ = service.Delete(context.Background(), "integration", candidate)
+			_ = service.DeleteTreeForTest(context.Background(), "integration", candidate)
 		}
-		_ = service.Delete(context.Background(), "integration", sourceRoot)
-		_ = service.Delete(context.Background(), "integration", targetRoot)
-		_ = service.Delete(context.Background(), "integration", root)
+		_ = service.DeleteTreeForTest(context.Background(), "integration", sourceRoot)
+		_ = service.DeleteTreeForTest(context.Background(), "integration", targetRoot)
+		_ = service.DeleteTreeForTest(context.Background(), "integration", root)
 	})
 	for _, directory := range []string{root, sourceRoot, targetRoot} {
 		if _, err := service.Mkdir(t.Context(), "integration", directory); err != nil {
@@ -148,7 +148,7 @@ func TestRemoteCopyMoveAndCompareAgainstOpenSSHSFTP(t *testing.T) {
 		t.Fatalf("moved source still exists: %v", err)
 	}
 	var downloaded bytes.Buffer
-	prepared, err := service.PrepareDownload(t.Context(), "integration-target", path.Join(targetRoot, "move.txt"))
+	prepared, err := service.PrepareDownloadForTest(t.Context(), "integration-target", path.Join(targetRoot, "move.txt"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -159,7 +159,7 @@ func TestRemoteCopyMoveAndCompareAgainstOpenSSHSFTP(t *testing.T) {
 	if downloaded.String() != "moved directly\n" {
 		t.Fatalf("moved contents = %q", downloaded.String())
 	}
-	if err := service.Delete(t.Context(), "integration", targetRoot); err != nil {
+	if err := service.DeleteTreeForTest(t.Context(), "integration", targetRoot); err != nil {
 		t.Fatalf("delete non-empty directory: %v", err)
 	}
 	if _, err := service.Stat(t.Context(), "integration", targetRoot); !errors.Is(err, fs.ErrNotExist) {
@@ -169,20 +169,20 @@ func TestRemoteCopyMoveAndCompareAgainstOpenSSHSFTP(t *testing.T) {
 
 func integrationUpload(t *testing.T, service *sftp.Service, target string, payload []byte, overwrite bool) {
 	t.Helper()
-	manager := sftp.NewTransferManager(service)
+	manager := newTestTransferManager(t, service)
 	id := fmt.Sprintf("transfer_%x", time.Now().UnixNano())
-	started, err := manager.Start(t.Context(), "integration", id, target, sftp.StartUploadOptions{Size: int64(len(payload)), Overwrite: overwrite})
+	started, err := manager.StartUploadPartForTest(t.Context(), "integration", id, target, sftp.StartUploadOptions{Size: int64(len(payload)), Overwrite: overwrite})
 	if err != nil {
 		t.Fatalf("start fixture upload: %v", err)
 	}
-	if _, err := manager.Append(t.Context(), "integration", id, target, 0, int64(len(payload)), payload); err != nil {
+	if _, err := manager.AppendUploadPartForTest(t.Context(), sftp.UploadAppend{Target: sftp.UploadTarget{Alias: "integration", ID: id, RemotePath: target}, Offset: 0, Total: int64(len(payload)), Contents: payload}); err != nil {
 		t.Fatalf("append fixture upload: %v", err)
 	}
 	fingerprint, err := sftp.SourceFingerprint(t.Context(), bytes.NewReader(payload), int64(len(payload)))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := manager.Complete(t.Context(), "integration", id, target, int64(len(payload)), started.ExpectedRevision, fingerprint); err != nil {
+	if _, err := manager.CompleteUploadPartForTest(t.Context(), sftp.UploadCompletion{Target: sftp.UploadTarget{Alias: "integration", ID: id, RemotePath: target}, Total: int64(len(payload)), ExpectedRevision: started.ExpectedRevision, SourceFingerprint: fingerprint}); err != nil {
 		t.Fatalf("complete fixture upload: %v", err)
 	}
 }
@@ -206,9 +206,9 @@ func TestServiceRoundTripsFilesAgainstOpenSSHSFTP(t *testing.T) {
 	renamed := path.Join(root, "renamed.bin")
 	t.Cleanup(func() {
 		for _, candidate := range []string{first, second, renamed} {
-			_ = service.Delete(context.Background(), "integration", candidate)
+			_ = service.DeleteTreeForTest(context.Background(), "integration", candidate)
 		}
-		_ = service.Delete(context.Background(), "integration", root)
+		_ = service.DeleteTreeForTest(context.Background(), "integration", root)
 	})
 
 	if _, err := service.Mkdir(t.Context(), "integration", root); err != nil {
@@ -218,7 +218,7 @@ func TestServiceRoundTripsFilesAgainstOpenSSHSFTP(t *testing.T) {
 	integrationUpload(t, &service, second, []byte{0, 1, 2, 3}, false)
 
 	var downloaded bytes.Buffer
-	prepared, err := service.PrepareDownload(t.Context(), "integration", first)
+	prepared, err := service.PrepareDownloadForTest(t.Context(), "integration", first)
 	if err != nil {
 		t.Fatalf("prepare download: %v", err)
 	}
@@ -251,10 +251,11 @@ func TestServiceRoundTripsFilesAgainstOpenSSHSFTP(t *testing.T) {
 	if _, err := service.Rename(t.Context(), "integration", second, renamed); err != nil {
 		t.Fatalf("rename: %v", err)
 	}
-	entries, err := service.List(t.Context(), "integration", root)
+	listing, err := service.ListDirectory(t.Context(), "integration", root)
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
+	entries := listing.Entries
 	if len(entries) != 2 || entries[0].Name != "first.txt" || entries[1].Name != "renamed.bin" {
 		t.Fatalf("entries = %#v", entries)
 	}
@@ -278,25 +279,25 @@ func TestServiceRoundTripsFilesAgainstOpenSSHSFTP(t *testing.T) {
 	}
 
 	for _, candidate := range []string{first, renamed} {
-		if err := service.Delete(t.Context(), "integration", candidate); err != nil {
+		if err := service.DeleteTreeForTest(t.Context(), "integration", candidate); err != nil {
 			t.Fatalf("delete %s: %v", candidate, err)
 		}
 	}
-	if err := service.Delete(t.Context(), "integration", root); err != nil {
+	if err := service.DeleteTreeForTest(t.Context(), "integration", root); err != nil {
 		t.Fatalf("delete directory: %v", err)
 	}
 }
 
 func TestResumableTransferAgainstOpenSSHSFTP(t *testing.T) {
 	service := integrationService(t)
-	manager := sftp.NewTransferManager(&service)
+	manager := newTestTransferManager(t, &service)
 	root := fmt.Sprintf("/tmp/sshc-sftp-resume-%d", time.Now().UnixNano())
 	target := path.Join(root, "large.bin")
 	cancelled := path.Join(root, "cancel.bin")
 	t.Cleanup(func() {
-		_ = service.Delete(context.Background(), "integration", target)
-		_ = manager.Cancel(context.Background(), "integration", "cancel_transfer_123", cancelled)
-		_ = service.Delete(context.Background(), "integration", root)
+		_ = service.DeleteTreeForTest(context.Background(), "integration", target)
+		_ = manager.CancelUploadPartForTest(context.Background(), "integration", "cancel_transfer_123", cancelled)
+		_ = service.DeleteTreeForTest(context.Background(), "integration", root)
 	})
 	if _, err := service.Mkdir(t.Context(), "integration", root); err != nil {
 		t.Fatal(err)
@@ -305,24 +306,24 @@ func TestResumableTransferAgainstOpenSSHSFTP(t *testing.T) {
 	for index := range payload {
 		payload[index] = byte((index*31 + 17) % 251)
 	}
-	started, err := manager.Start(t.Context(), "integration", "large_transfer_123", target, sftp.StartUploadOptions{Size: int64(len(payload))})
+	started, err := manager.StartUploadPartForTest(t.Context(), "integration", "large_transfer_123", target, sftp.StartUploadOptions{Size: int64(len(payload))})
 	if err != nil {
 		t.Fatal(err)
 	}
 	const chunk = 1 << 20
 	const resumeAfter = 7 << 20
 	for offset := 0; offset < resumeAfter; offset += chunk {
-		if _, err := manager.Append(t.Context(), "integration", started.ID, target, int64(offset), int64(len(payload)), payload[offset:offset+chunk]); err != nil {
+		if _, err := manager.AppendUploadPartForTest(t.Context(), sftp.UploadAppend{Target: sftp.UploadTarget{Alias: "integration", ID: started.ID, RemotePath: target}, Offset: int64(offset), Total: int64(len(payload)), Contents: payload[offset : offset+chunk]}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	resumed, err := manager.Start(t.Context(), "integration", started.ID, target, sftp.StartUploadOptions{Size: int64(len(payload)), ExpectedRevision: started.ExpectedRevision})
+	resumed, err := manager.StartUploadPartForTest(t.Context(), "integration", started.ID, target, sftp.StartUploadOptions{Size: int64(len(payload)), ExpectedRevision: started.ExpectedRevision})
 	if err != nil || resumed.Offset != int64(resumeAfter) {
 		t.Fatalf("resume = %+v, %v", resumed, err)
 	}
 	for offset := resumeAfter; offset < len(payload); offset += chunk {
 		end := min(offset+chunk, len(payload))
-		if _, err := manager.Append(t.Context(), "integration", started.ID, target, int64(offset), int64(len(payload)), payload[offset:end]); err != nil {
+		if _, err := manager.AppendUploadPartForTest(t.Context(), sftp.UploadAppend{Target: sftp.UploadTarget{Alias: "integration", ID: started.ID, RemotePath: target}, Offset: int64(offset), Total: int64(len(payload)), Contents: payload[offset:end]}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -330,11 +331,11 @@ func TestResumableTransferAgainstOpenSSHSFTP(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := manager.Complete(t.Context(), "integration", started.ID, target, int64(len(payload)), started.ExpectedRevision, fingerprint); err != nil {
+	if _, err := manager.CompleteUploadPartForTest(t.Context(), sftp.UploadCompletion{Target: sftp.UploadTarget{Alias: "integration", ID: started.ID, RemotePath: target}, Total: int64(len(payload)), ExpectedRevision: started.ExpectedRevision, SourceFingerprint: fingerprint}); err != nil {
 		t.Fatal(err)
 	}
 	downloaded := sha256.New()
-	prepared, err := service.PrepareDownload(t.Context(), "integration", target)
+	prepared, err := service.PrepareDownloadForTest(t.Context(), "integration", target)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -355,14 +356,14 @@ func TestResumableTransferAgainstOpenSSHSFTP(t *testing.T) {
 		t.Fatalf("resumed download digest = %x, want %x", tail.Sum(nil), wantTail)
 	}
 
-	cancelStart, err := manager.Start(t.Context(), "integration", "cancel_transfer_123", cancelled, sftp.StartUploadOptions{Size: 4})
+	cancelStart, err := manager.StartUploadPartForTest(t.Context(), "integration", "cancel_transfer_123", cancelled, sftp.StartUploadOptions{Size: 4})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := manager.Append(t.Context(), "integration", cancelStart.ID, cancelled, 0, 4, []byte("part")); err != nil {
+	if _, err := manager.AppendUploadPartForTest(t.Context(), sftp.UploadAppend{Target: sftp.UploadTarget{Alias: "integration", ID: cancelStart.ID, RemotePath: cancelled}, Offset: 0, Total: 4, Contents: []byte("part")}); err != nil {
 		t.Fatal(err)
 	}
-	if err := manager.Cancel(t.Context(), "integration", cancelStart.ID, cancelled); err != nil {
+	if err := manager.CancelUploadPartForTest(t.Context(), "integration", cancelStart.ID, cancelled); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := service.Stat(t.Context(), "integration", cancelled); !errors.Is(err, fs.ErrNotExist) {
@@ -372,14 +373,14 @@ func TestResumableTransferAgainstOpenSSHSFTP(t *testing.T) {
 
 func TestConcurrentFilesAgainstOpenSSHSFTP(t *testing.T) {
 	service := integrationService(t)
-	manager := sftp.NewTransferManager(&service)
+	manager := newTestTransferManager(t, &service)
 	root := fmt.Sprintf("/tmp/sshc-sftp-concurrent-%d", time.Now().UnixNano())
 	t.Cleanup(func() {
 		_ = manager.Close()
 		for index := 0; index < 8; index++ {
-			_ = service.Delete(context.Background(), "integration", path.Join(root, fmt.Sprintf("file-%02d.bin", index)))
+			_ = service.DeleteTreeForTest(context.Background(), "integration", path.Join(root, fmt.Sprintf("file-%02d.bin", index)))
 		}
-		_ = service.Delete(context.Background(), "integration", root)
+		_ = service.DeleteTreeForTest(context.Background(), "integration", root)
 	})
 	if _, err := service.Mkdir(t.Context(), "integration", root); err != nil {
 		t.Fatal(err)
@@ -403,14 +404,14 @@ func TestConcurrentFilesAgainstOpenSSHSFTP(t *testing.T) {
 			defer uploads.Done()
 			target := path.Join(root, fmt.Sprintf("file-%02d.bin", index))
 			id := fmt.Sprintf("parallel_%02d", index)
-			started, err := manager.Start(t.Context(), "integration", id, target, sftp.StartUploadOptions{Size: fileSize})
+			started, err := manager.StartUploadPartForTest(t.Context(), "integration", id, target, sftp.StartUploadOptions{Size: fileSize})
 			if err != nil {
 				errorsFound <- fmt.Errorf("start file %d: %w", index, err)
 				return
 			}
 			for offset := 0; offset < fileSize; offset += 1 << 20 {
 				end := min(offset+(1<<20), fileSize)
-				if _, err := manager.Append(t.Context(), "integration", id, target, int64(offset), fileSize, payloads[index][offset:end]); err != nil {
+				if _, err := manager.AppendUploadPartForTest(t.Context(), sftp.UploadAppend{Target: sftp.UploadTarget{Alias: "integration", ID: id, RemotePath: target}, Offset: int64(offset), Total: fileSize, Contents: payloads[index][offset:end]}); err != nil {
 					errorsFound <- fmt.Errorf("append file %d at %d: %w", index, offset, err)
 					return
 				}
@@ -420,7 +421,7 @@ func TestConcurrentFilesAgainstOpenSSHSFTP(t *testing.T) {
 				errorsFound <- fmt.Errorf("fingerprint file %d: %w", index, err)
 				return
 			}
-			if _, err := manager.Complete(t.Context(), "integration", id, target, fileSize, started.ExpectedRevision, fingerprint); err != nil {
+			if _, err := manager.CompleteUploadPartForTest(t.Context(), sftp.UploadCompletion{Target: sftp.UploadTarget{Alias: "integration", ID: id, RemotePath: target}, Total: fileSize, ExpectedRevision: started.ExpectedRevision, SourceFingerprint: fingerprint}); err != nil {
 				errorsFound <- fmt.Errorf("complete file %d: %w", index, err)
 			}
 		}()
@@ -436,7 +437,7 @@ func TestConcurrentFilesAgainstOpenSSHSFTP(t *testing.T) {
 
 	for index, payload := range payloads {
 		target := path.Join(root, fmt.Sprintf("file-%02d.bin", index))
-		prepared, err := service.PrepareDownload(t.Context(), "integration", target)
+		prepared, err := service.PrepareDownloadForTest(t.Context(), "integration", target)
 		if err != nil {
 			t.Fatalf("prepare file %d: %v", index, err)
 		}
@@ -474,7 +475,7 @@ func TestEngineLocalRoundTripAgainstOpenSSHSFTP(t *testing.T) {
 		t.Fatalf("local home listing = %+v, %v", listing, err)
 	}
 	remoteRoot := fmt.Sprintf("/tmp/sshc-sftp-local-%d", time.Now().UnixNano())
-	t.Cleanup(func() { _ = service.Delete(context.Background(), "integration", remoteRoot) })
+	t.Cleanup(func() { _ = service.DeleteTreeForTest(context.Background(), "integration", remoteRoot) })
 	if _, err := service.Mkdir(t.Context(), "integration", remoteRoot); err != nil {
 		t.Fatal(err)
 	}

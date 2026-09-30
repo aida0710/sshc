@@ -3,7 +3,6 @@
 package sftp
 
 import (
-	"encoding/binary"
 	"errors"
 	"io"
 	"io/fs"
@@ -94,8 +93,8 @@ func downloadSpoolOwnerState(path string) (managed, inactive bool, resultErr err
 	return true, true, unlockErr
 }
 
-func holdDownloadSpoolQuota(temporaryRoot string) (io.Closer, error) {
-	file, err := windowsacl.OpenOrCreateFile(filepath.Join(temporaryRoot, ".sshc-sftp-spool-quota.lock"))
+func holdDownloadSpoolQuota(spoolRoot string) (io.Closer, error) {
+	file, err := windowsacl.OpenOrCreateFile(filepath.Join(spoolRoot, ".sshc-sftp-spool-quota.lock"))
 	if err != nil {
 		return nil, err
 	}
@@ -110,49 +109,13 @@ func holdDownloadSpoolQuota(temporaryRoot string) (io.Closer, error) {
 	return owner, nil
 }
 
-func readDownloadSpoolReservation(directory string) (int64, error) {
-	file, err := windowsacl.OpenAuthenticatedFileForRead(filepath.Join(directory, ".reserved"))
-	if err != nil {
-		return 0, err
-	}
-	defer file.Close()
-	var encoded [8]byte
-	if _, err := io.ReadFull(file, encoded[:]); err != nil {
-		return 0, err
-	}
-	var extra [1]byte
-	if count, err := file.Read(extra[:]); err != io.EOF || count != 0 {
-		if err != nil {
-			return 0, err
-		}
-		return 0, os.ErrInvalid
-	}
-	value := binary.BigEndian.Uint64(encoded[:])
-	if value > uint64(maxProcessDownloadSpoolBytes) {
-		return 0, os.ErrInvalid
-	}
-	return int64(value), nil
+// openSpoolFileForRead and openOrCreateSpoolFile open a file of the spool
+// that only this user may read or write. The reservation format itself is in
+// spool_reservation.go.
+func openSpoolFileForRead(path string) (*os.File, error) {
+	return windowsacl.OpenAuthenticatedFileForRead(path)
 }
 
-func writeDownloadSpoolReservation(directory string, reserved int64) error {
-	if reserved < 0 || reserved > maxProcessDownloadSpoolBytes {
-		return os.ErrInvalid
-	}
-	file, err := windowsacl.OpenOrCreateFile(filepath.Join(directory, ".reserved"))
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-	if err := file.Truncate(0); err != nil {
-		return err
-	}
-	if _, err := file.Seek(0, io.SeekStart); err != nil {
-		return err
-	}
-	var encoded [8]byte
-	binary.BigEndian.PutUint64(encoded[:], uint64(reserved))
-	if _, err := file.Write(encoded[:]); err != nil {
-		return err
-	}
-	return file.Sync()
+func openOrCreateSpoolFile(path string) (*os.File, error) {
+	return windowsacl.OpenOrCreateFile(path)
 }

@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"io/fs"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -19,7 +21,7 @@ func TestDeleteDirectoryRecursivelyWithoutFollowingSymlinks(t *testing.T) {
 		"/outside":              file("outside", "keep", 0o644),
 	})
 	service := sftp.Service{Open: func(context.Context, string) (sftp.Remote, error) { return remote, nil }}
-	if err := service.Delete(context.Background(), "edge", "/work"); err != nil {
+	if err := service.DeleteTreeForTest(context.Background(), "edge", "/work"); err != nil {
 		t.Fatal(err)
 	}
 	for _, candidate := range []string{"/work", "/work/nested", "/work/nested/file.txt", "/work/link"} {
@@ -30,7 +32,7 @@ func TestDeleteDirectoryRecursivelyWithoutFollowingSymlinks(t *testing.T) {
 	if _, exists := remote.nodes["/outside"]; !exists {
 		t.Fatal("symlink target was removed")
 	}
-	if err := service.Delete(context.Background(), "edge", "/"); !errors.Is(err, sftp.ErrRootOperation) {
+	if err := service.DeleteTreeForTest(context.Background(), "edge", "/"); !errors.Is(err, sftp.ErrRootOperation) {
 		t.Fatalf("root deletion = %v", err)
 	}
 }
@@ -42,7 +44,7 @@ func TestDeleteDirectoryRejectsActiveInternalEntryBeforeRemovingAnything(t *test
 		"/work/.file.sshc-upload-12345678.part": file(".file.sshc-upload-12345678.part", "in progress", 0o600),
 	})
 	service := sftp.Service{Open: func(context.Context, string) (sftp.Remote, error) { return remote, nil }}
-	if err := service.Delete(context.Background(), "edge", "/work"); !errors.Is(err, sftp.ErrConflict) {
+	if err := service.DeleteTreeForTest(context.Background(), "edge", "/work"); !errors.Is(err, sftp.ErrConflict) {
 		t.Fatalf("delete with active internal entry = %v", err)
 	}
 	if len(remote.removals) != 0 {
@@ -56,9 +58,9 @@ func TestQueuedDirectoryDeleteCompletes(t *testing.T) {
 		"/work/file.txt": file("file.txt", "payload", 0o644),
 	})
 	service := &sftp.Service{Open: func(context.Context, string) (sftp.Remote, error) { return remote, nil }}
-	manager := sftp.NewTransferManager(service)
+	manager := newTestTransferManager(t, service)
 	defer manager.Close()
-	job, err := manager.CreateJob(sftp.CreateTransferJob{
+	_, err := manager.CreateJob(sftp.CreateTransferJob{
 		ID: "delete_remote_01", BatchID: "delete_batch_01", Alias: "edge", RemotePath: "/work",
 		SourceAlias: "edge", SourcePath: "/work", Operation: sftp.RemoteDelete,
 		Direction: sftp.TransferRemote, Kind: sftp.TransferFolder, Name: "work", TotalBytes: -1,
@@ -66,7 +68,6 @@ func TestQueuedDirectoryDeleteCompletes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	manager.ScheduleRemoteJob(job.ID)
 	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
 		jobs, err := manager.ListJobs()
@@ -85,6 +86,63 @@ func TestQueuedDirectoryDeleteCompletes(t *testing.T) {
 		time.Sleep(5 * time.Millisecond)
 	}
 	t.Fatal("queued delete did not complete")
+}
+
+func TestQueuedDeleteOfATreeDeeperThanTheLimitFailsAsTraversalLimitAndRemovesNothing(t *testing.T) {
+	nodes := map[string]node{"/work": directory("work")}
+	deepest := "/work"
+	for range sftp.MaxDeleteDepthForTest + 1 {
+		deepest += "/d"
+		nodes[deepest] = directory("d")
+	}
+	remote := remoteWith(nodes)
+	service := &sftp.Service{Open: func(context.Context, string) (sftp.Remote, error) { return fakeConnection{remote}, nil }}
+	manager := newTestTransferManager(t, service)
+	defer manager.Close()
+	const id = "delete_too_deep"
+	if _, err := manager.CreateJob(sftp.CreateTransferJob{
+		ID: id, BatchID: "batch_" + id, Alias: "edge", RemotePath: "/work",
+		SourceAlias: "edge", SourcePath: "/work", Operation: sftp.RemoteDelete,
+		Direction: sftp.TransferRemote, Kind: sftp.TransferFolder, Name: "work", TotalBytes: -1,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	job := waitForJob(t, manager, id, hasStatus(sftp.TransferFailed))
+	if job.Problem != "sftp_traversal_limit" {
+		t.Fatalf("problem = %q, want sftp_traversal_limit", job.Problem)
+	}
+	if len(remote.removals) != 0 {
+		t.Fatalf("removed entries of a tree it refused: %v", remote.removals)
+	}
+}
+
+func TestQueuedCopyOfAFolderWithMoreEntriesThanTheLimitFailsAsTraversalLimit(t *testing.T) {
+	nodes := map[string]node{"/data": directory("data")}
+	for index := range sftp.MaxTransferTreeEntriesForTest + 1 {
+		name := "f" + strconv.Itoa(index)
+		nodes["/data/"+name] = file(name, "", 0o644)
+	}
+	source := remoteWith(nodes)
+	target := remoteWith(nil)
+	manager := newCopyJobManager(t, source, target)
+	defer manager.Close()
+	const id = "copy_too_many_entries"
+	if _, err := manager.CreateJob(sftp.CreateTransferJob{
+		ID: id, BatchID: "batch_" + id, Alias: "target", RemotePath: "/data",
+		SourceAlias: "source", SourcePath: "/data", Operation: sftp.RemoteCopy,
+		Direction: sftp.TransferRemote, Kind: sftp.TransferFolder, Name: "data", TotalBytes: -1,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	job := waitForJob(t, manager, id, hasStatus(sftp.TransferFailed))
+	if job.Problem != "sftp_traversal_limit" {
+		t.Fatalf("problem = %q, want sftp_traversal_limit", job.Problem)
+	}
+	if _, exists := target.nodes["/data"]; exists {
+		t.Fatal("the copy wrote to the target before refusing the tree")
+	}
 }
 
 func TestCopyRemoteStreamsFileWithoutLocalSpool(t *testing.T) {
@@ -221,6 +279,63 @@ func TestRemoteDirectoryCannotBeCopiedIntoItself(t *testing.T) {
 	}
 }
 
+func TestRemoteDirectoryCannotBeCopiedIntoItselfThroughAnotherAliasOfTheSameServer(t *testing.T) {
+	t.Parallel()
+	server := remoteWith(map[string]node{
+		"/source":          {name: "source", mode: fs.ModeDir | 0o755, modTime: testTime},
+		"/source/file.txt": {name: "file.txt", mode: 0o644, content: []byte("contents"), modTime: testTime},
+	})
+	service := sftp.Service{Open: func(context.Context, string) (sftp.Remote, error) { return server, nil }}
+
+	for _, operation := range []sftp.RemoteTransferOperation{sftp.RemoteCopy, sftp.RemoteMove} {
+		err := service.CopyRemote(context.Background(), sftp.RemoteTransferRequest{
+			SourceAlias: "web", SourcePath: "/source",
+			TargetAlias: "web-admin", TargetPath: "/source/nested", Operation: operation,
+		}, nil)
+		if !errors.Is(err, sftp.ErrInvalidTransfer) {
+			t.Fatalf("CopyRemote(%s) error = %v, want ErrInvalidTransfer", operation, err)
+		}
+	}
+	for candidate := range server.nodes {
+		if candidate != "/" && candidate != "/source" && candidate != "/source/file.txt" {
+			t.Fatalf("refused copy left %s on the server", candidate)
+		}
+	}
+}
+
+func TestRemoteDirectoryCanBeCopiedBelowTheSamePathOnAnotherServer(t *testing.T) {
+	t.Parallel()
+	sourceServer := remoteWith(map[string]node{
+		"/source":          {name: "source", mode: fs.ModeDir | 0o755, modTime: testTime},
+		"/source/file.txt": {name: "file.txt", mode: 0o644, content: []byte("contents"), modTime: testTime},
+	})
+	targetServer := remoteWith(map[string]node{
+		"/source": {name: "source", mode: fs.ModeDir | 0o755, modTime: testTime},
+	})
+	service := sftp.Service{Open: func(_ context.Context, alias string) (sftp.Remote, error) {
+		if alias == "origin" {
+			return sourceServer, nil
+		}
+		return targetServer, nil
+	}}
+
+	err := service.CopyRemote(context.Background(), sftp.RemoteTransferRequest{
+		SourceAlias: "origin", SourcePath: "/source",
+		TargetAlias: "mirror", TargetPath: "/source/nested", Operation: sftp.RemoteCopy,
+	}, nil)
+	if err != nil {
+		t.Fatalf("CopyRemote() error = %v", err)
+	}
+	if got := string(targetServer.nodes["/source/nested/file.txt"].content); got != "contents" {
+		t.Fatalf("copied file = %q, want contents", got)
+	}
+	for candidate := range targetServer.nodes {
+		if strings.Contains(candidate, ".sshc-") {
+			t.Fatalf("copy left %s on the target server", candidate)
+		}
+	}
+}
+
 // hostileListingRemote は、trap directory の最初の ReadDir だけに server が返した
 // 名前として inject を混ぜる。pkg/sftp は "x/.." を path.Base で ".." に縮めるので、
 // 悪性 server はこの形で親 directory の外を指せる。
@@ -279,7 +394,7 @@ func TestListingRejectsEveryServerNameThatLeavesTheDirectory(t *testing.T) {
 	for _, name := range []string{"", ".", "..", "a/b", "nul\x00"} {
 		remote := &hostileListingRemote{fakeRemote: remoteWith(map[string]node{"/work": directory("work")}), trap: "/work", inject: name}
 		service := sftp.Service{Open: func(context.Context, string) (sftp.Remote, error) { return remote, nil }}
-		if _, err := service.List(context.Background(), "edge", "/work"); !errors.Is(err, sftp.ErrInvalidPath) {
+		if _, err := service.ListDirectory(context.Background(), "edge", "/work"); !errors.Is(err, sftp.ErrInvalidPath) {
 			t.Fatalf("List() with server name %q = %v, want ErrInvalidPath", name, err)
 		}
 	}
@@ -318,5 +433,119 @@ func TestRemoteMoveKeepsASourceFileThatChangedAfterItWasCopied(t *testing.T) {
 	}
 	if got := string(target.nodes["/inbox/data/keep.txt"].content); got != "before" {
 		t.Fatalf("copied target = %q", got)
+	}
+}
+
+func TestSameHostFolderMoveMergesIntoAnExistingFolderOnceOverwriteIsApproved(t *testing.T) {
+	remote := remoteWith(map[string]node{
+		"/incoming":                  directory("incoming"),
+		"/incoming/new.txt":          file("new.txt", "new", 0o644),
+		"/incoming/same.txt":         file("same.txt", "fresh", 0o644),
+		"/incoming/nested":           directory("nested"),
+		"/incoming/nested/n.txt":     file("n.txt", "nested", 0o644),
+		"/incoming/sub":              directory("sub"),
+		"/incoming/sub/s.txt":        file("s.txt", "sub", 0o644),
+		"/archive":                   directory("archive"),
+		"/archive/incoming":          directory("incoming"),
+		"/archive/incoming/old.txt":  file("old.txt", "old", 0o644),
+		"/archive/incoming/same.txt": file("same.txt", "stale", 0o644),
+		"/archive/incoming/nested":   directory("nested"),
+	})
+	service := sftp.Service{Open: func(context.Context, string) (sftp.Remote, error) { return fakeConnection{remote}, nil }}
+	request := sftp.RemoteTransferRequest{
+		SourceAlias: "edge", SourcePath: "/incoming", TargetAlias: "edge", TargetPath: "/archive/incoming",
+		Operation: sftp.RemoteMove,
+	}
+	if err := service.CopyRemote(context.Background(), request, nil); !errors.Is(err, sftp.ErrAlreadyExists) {
+		t.Fatalf("move without approval: err = %v", err)
+	}
+	request.Overwrite = true
+	if err := service.CopyRemote(context.Background(), request, nil); err != nil {
+		t.Fatalf("approved move: %v", err)
+	}
+	for candidate, contents := range map[string]string{
+		"/archive/incoming/old.txt":      "old",
+		"/archive/incoming/same.txt":     "fresh",
+		"/archive/incoming/new.txt":      "new",
+		"/archive/incoming/nested/n.txt": "nested",
+		"/archive/incoming/sub/s.txt":    "sub",
+	} {
+		if got := string(remote.nodes[candidate].content); got != contents {
+			t.Fatalf("%s = %q, want %q", candidate, got, contents)
+		}
+	}
+	for candidate := range remote.nodes {
+		if candidate == "/incoming" || strings.HasPrefix(candidate, "/incoming/") {
+			t.Fatalf("source entry %s is left after the move", candidate)
+		}
+	}
+}
+
+func TestCopyOfAFolderWithoutOwnerWriteWritesItsChildrenAndKeepsItsMode(t *testing.T) {
+	source := remoteWith(map[string]node{
+		"/mod":           {name: "mod", mode: fs.ModeDir | 0o555, modTime: testTime},
+		"/mod/go.mod":    file("go.mod", "module example", 0o444),
+		"/mod/sub":       {name: "sub", mode: fs.ModeDir | 0o555, modTime: testTime},
+		"/mod/sub/a.txt": file("a.txt", "nested", 0o444),
+	})
+	target := remoteWith(map[string]node{"/inbox": directory("inbox")})
+	service := sftp.Service{Open: func(_ context.Context, alias string) (sftp.Remote, error) {
+		if alias == "source" {
+			return fakeConnection{source}, nil
+		}
+		return fakeConnection{target}, nil
+	}}
+	if err := service.CopyRemote(context.Background(), sftp.RemoteTransferRequest{
+		SourceAlias: "source", SourcePath: "/mod", TargetAlias: "target", TargetPath: "/inbox/mod",
+		Operation: sftp.RemoteCopy,
+	}, nil); err != nil {
+		t.Fatalf("copy: %v", err)
+	}
+	if got := string(target.nodes["/inbox/mod/sub/a.txt"].content); got != "nested" {
+		t.Fatalf("nested file = %q", got)
+	}
+	for _, folder := range []string{"/inbox/mod", "/inbox/mod/sub"} {
+		if mode := target.nodes[folder].mode; !mode.IsDir() || mode.Perm() != 0o555 {
+			t.Fatalf("%s mode = %v, want the source's dr-xr-xr-x", folder, mode)
+		}
+	}
+}
+
+func TestAnApprovedOverwriteOfAFileWithAFolderFailsAsAConflictInsteadOfAskingAgain(t *testing.T) {
+	folder := map[string]node{"/data": directory("data"), "/data/a.txt": file("a.txt", "folder child", 0o644)}
+	fileInTheWay := map[string]node{"/inbox": directory("inbox"), "/inbox/data": file("data", "file", 0o644)}
+	sameHost := remoteWith(map[string]node{})
+	for name, entry := range folder {
+		sameHost.nodes[name] = entry
+	}
+	for name, entry := range fileInTheWay {
+		sameHost.nodes[name] = entry
+	}
+	sameHostService := sftp.Service{Open: func(context.Context, string) (sftp.Remote, error) { return fakeConnection{sameHost}, nil }}
+	otherHostTarget := remoteWith(fileInTheWay)
+	for _, run := range []struct {
+		name    string
+		service sftp.Service
+		target  *fakeRemote
+		request sftp.RemoteTransferRequest
+	}{
+		{
+			name: "move on one host", service: sameHostService, target: sameHost,
+			request: sftp.RemoteTransferRequest{SourceAlias: "edge", SourcePath: "/data", TargetAlias: "edge", TargetPath: "/inbox/data", Operation: sftp.RemoteMove, Overwrite: true},
+		},
+		{
+			name: "copy between hosts", service: twoHostService(fakeConnection{remoteWith(folder)}, fakeConnection{otherHostTarget}), target: otherHostTarget,
+			request: sftp.RemoteTransferRequest{SourceAlias: "source", SourcePath: "/data", TargetAlias: "target", TargetPath: "/inbox/data", Operation: sftp.RemoteCopy, Overwrite: true},
+		},
+	} {
+		t.Run(run.name, func(t *testing.T) {
+			err := run.service.CopyRemote(context.Background(), run.request, nil)
+			if !errors.Is(err, sftp.ErrConflict) || errors.Is(err, sftp.ErrAlreadyExists) {
+				t.Fatalf("err = %v, want a conflict rather than another overwrite question", err)
+			}
+			if got := string(run.target.nodes["/inbox/data"].content); got != "file" {
+				t.Fatalf("the file in the way = %q, want it untouched", got)
+			}
+		})
 	}
 }

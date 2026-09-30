@@ -32,16 +32,23 @@ export type RemotePreview = {
   revision: string;
 };
 
+// A read from the file browser opens the SFTP connection first. A host it
+// cannot reach, or a VPN route the engine refused, is answered by the screen
+// that asked: the list, the search and the comparison say why
+// (sftpProblemText), and the details dialog marks the value unavailable. The
+// application-wide failure notice on top would repeat it.
+const connectionProblems = ["sftp_failed", ...vpnProblemCodes];
+
 // preview が返しうる問題は、詳細モーダルがその場で言葉にする。共通の失敗
 // 通知まで重ねると、preview できない普通のファイルを開くたびに全画面の
 // 警告が出る。
 const previewProblems = [
+  ...connectionProblems,
   "sftp_preview_type",
   "sftp_preview_too_large",
   "sftp_not_found",
   "sftp_wrong_type",
   "sftp_conflict",
-  "sftp_failed",
 ];
 
 // Background transfer failures are rendered by TransferManagerList and its
@@ -54,6 +61,8 @@ const transferProblems = [
   "sftp_exists",
   "sftp_not_found",
   "sftp_range_invalid",
+  "sftp_spool_full",
+  "sftp_spool_unavailable",
   "sftp_transfer_limit",
   "sftp_transfer_not_found",
   "sftp_transfer_state",
@@ -68,6 +77,24 @@ export type StreamDownloadOptions = {
   onRevision?: (revision: string) => void;
   onReset?: (total: number | null) => void | Promise<void>;
 };
+
+// The running upload job and the remote file it writes.
+export type UploadTarget = { alias: string; id: string; remotePath: string };
+export type UploadStart = UploadTarget & { size: number; sourceFingerprint: string };
+// One chunk of an upload. A range chunk is one configured slice of a split
+// upload and may arrive in any order; a sequential chunk starts where the
+// engine's part file ends.
+export type UploadChunk = UploadTarget & { offset: number; total: number; chunk: Blob; range: boolean; signal?: AbortSignal };
+export type UploadCompletion = UploadTarget & { size: number; expectedRevision: string; sourceFingerprint: string };
+// The running download job and the remote entry it reads.
+export type DownloadTarget = { alias: string; jobId: string; remotePath: string };
+// Where a download response starts: a folder is always sent whole as a zip.
+export type DownloadStream = DownloadTarget & { directory: boolean; offset: number };
+// A save the browser carries on by itself after saveDownload returns: it reads
+// the blob later and never says when it has finished. The caller keeps what
+// backs the blob and calls release once nothing will read it again.
+export type BrowserSave = { release(): void };
+export type ModeChange = { alias: string; remotePath: string; mode: string; expectedRevision: string; recursive: boolean };
 
 function pathFor(alias: string, suffix: string, remotePath: string): string {
   return `/api/v1/sftp/${encodeURIComponent(alias)}/${suffix}?path=${encodeURIComponent(remotePath)}`;
@@ -112,7 +139,7 @@ export const sftpApi = {
   async compareDirectories(leftAlias: string, leftPath: string, rightAlias: string, rightPath: string): Promise<DirectoryComparison> {
     const query = new URLSearchParams({ leftAlias, leftPath, rightAlias, rightPath });
     return validateOpenAPISchema<DirectoryComparison>("SFTPDirectoryComparison", await apiClient.read(`/api/v1/sftp/compare?${query.toString()}`, {
-      locallyHandledCodes: ["sftp_failed", "sftp_compare_limit", "sftp_not_found"],
+      locallyHandledCodes: [...connectionProblems, "sftp_compare_limit", "sftp_not_found"],
     }));
   },
   async clearFinishedTransfers(): Promise<void> {
@@ -129,31 +156,28 @@ export const sftpApi = {
   async checkpointDownload(id: string, offset: number, revision: string): Promise<TransferJob> {
     return transferJob(await postJSON<unknown>(`/api/v1/sftp/transfers/${encodeURIComponent(id)}/download-checkpoint`, { offset, revision }, undefined, transferProblems));
   },
-  async verifyDownload(alias: string, jobId: string, remotePath: string, revision: string): Promise<void> {
+  async verifyDownload({ alias, jobId, remotePath }: DownloadTarget, revision: string): Promise<void> {
     const endpoint = `${pathFor(alias, "download", remotePath)}&jobId=${encodeURIComponent(jobId)}&verify=true`;
     const response = await apiClient.send(endpoint, { method: "GET", headers: { "If-Range": revision } });
     if (response.status !== 204) throw new Error("download_changed");
   },
   async list(alias: string, remotePath = ""): Promise<{ path: string; entries: RemoteEntry[] }> {
-    // Directory listing also establishes the SFTP connection. An unavailable host, or a
-    // VPN route that could not reach it, is an expected result handled inline by
-    // SFTPPanel, not an application-wide failure.
     const endpoint = remotePath === ""
       ? `/api/v1/sftp/${encodeURIComponent(alias)}/entries`
       : pathFor(alias, "entries", remotePath);
     return validateOpenAPISchema<components["schemas"]["SFTPListing"]>("SFTPListing", await apiClient.read(endpoint, {
-      locallyHandledCodes: ["sftp_failed", ...vpnProblemCodes],
+      locallyHandledCodes: connectionProblems,
     }));
   },
   async search(alias: string, remotePath: string, query: string): Promise<RemoteSearchResult> {
     const endpoint = `/api/v1/sftp/${encodeURIComponent(alias)}/search?path=${encodeURIComponent(remotePath)}&query=${encodeURIComponent(query)}`;
     return validateOpenAPISchema<RemoteSearchResult>("SFTPSearchResult", await apiClient.read(endpoint, {
-      locallyHandledCodes: ["sftp_failed", "sftp_not_found", "invalid_request"],
+      locallyHandledCodes: [...connectionProblems, "sftp_not_found", "invalid_request"],
     }));
   },
   async directoryStats(alias: string, remotePath: string): Promise<RemoteDirectoryStats> {
     return validateOpenAPISchema<RemoteDirectoryStats>("SFTPDirectoryStats", await apiClient.read(pathFor(alias, "stats", remotePath), {
-      locallyHandledCodes: ["sftp_failed", "sftp_not_found", "sftp_wrong_type"],
+      locallyHandledCodes: [...connectionProblems, "sftp_not_found", "sftp_wrong_type"],
     }));
   },
   async previewFile(alias: string, remotePath: string): Promise<RemotePreview> {
@@ -185,19 +209,12 @@ export const sftpApi = {
   async rename(alias: string, from: string, to: string): Promise<RemoteEntry> {
     return entry(await patchJSON<unknown>(`/api/v1/sftp/${encodeURIComponent(alias)}/entry`, { from, to }));
   },
-  async remove(alias: string, remotePath: string): Promise<void> {
-    const target = `${alias}:${remotePath}`;
-    const token = await issueAction("sftp.delete", target);
-    await apiClient.mutate<unknown>(pathFor(alias, "entry", remotePath), {
-      method: "DELETE",
-      headers: { "X-SSHC-Action": token },
-    });
-  },
-  async startUpload(alias: string, id: string, remotePath: string, size: number, sourceFingerprint: string): Promise<ResumableUpload> {
+  async startUpload({ alias, id, remotePath, size, sourceFingerprint }: UploadStart): Promise<ResumableUpload> {
     return resumableUpload(await postJSON<unknown>(`/api/v1/sftp/${encodeURIComponent(alias)}/uploads/${encodeURIComponent(id)}`, { path: remotePath, size, sourceFingerprint }, undefined, transferProblems));
   },
-  async appendUpload(alias: string, id: string, remotePath: string, offset: number, total: number, chunk: Blob, signal?: AbortSignal): Promise<ResumableUpload> {
-    const query = `/api/v1/sftp/${encodeURIComponent(alias)}/uploads/${encodeURIComponent(id)}?path=${encodeURIComponent(remotePath)}&offset=${offset}&total=${total}`;
+  async appendUpload({ alias, id, remotePath, offset, total, chunk, range, signal }: UploadChunk): Promise<ResumableUpload> {
+    const rangeQuery = range ? `&range=true&length=${chunk.size}` : "";
+    const query = `/api/v1/sftp/${encodeURIComponent(alias)}/uploads/${encodeURIComponent(id)}?path=${encodeURIComponent(remotePath)}&offset=${offset}&total=${total}${rangeQuery}`;
     return resumableUpload(await apiClient.mutate<unknown>(query, {
       method: "PATCH",
       headers: { "Content-Type": "application/octet-stream" },
@@ -205,24 +222,15 @@ export const sftpApi = {
       ...(signal === undefined ? {} : { signal }),
     }, { locallyHandledCodes: transferProblems }));
   },
-  async appendUploadRange(alias: string, id: string, remotePath: string, offset: number, total: number, chunk: Blob, signal?: AbortSignal): Promise<ResumableUpload> {
-    const query = `/api/v1/sftp/${encodeURIComponent(alias)}/uploads/${encodeURIComponent(id)}?path=${encodeURIComponent(remotePath)}&offset=${offset}&total=${total}&range=true&length=${chunk.size}`;
-    return resumableUpload(await apiClient.mutate<unknown>(query, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/octet-stream" },
-      body: chunk,
-      ...(signal === undefined ? {} : { signal }),
-    }, { locallyHandledCodes: transferProblems }));
-  },
-  async completeUpload(alias: string, id: string, remotePath: string, size: number, expectedRevision: string, sourceFingerprint: string): Promise<void> {
+  async completeUpload({ alias, id, remotePath, size, expectedRevision, sourceFingerprint }: UploadCompletion): Promise<void> {
     await postJSON<unknown>(`/api/v1/sftp/${encodeURIComponent(alias)}/uploads/${encodeURIComponent(id)}/complete`, { path: remotePath, size, expectedRevision, sourceFingerprint }, undefined, transferProblems);
   },
-  async cancelUpload(alias: string, id: string, remotePath: string): Promise<void> {
+  async cancelUpload({ alias, id, remotePath }: UploadTarget): Promise<void> {
     await apiClient.mutate<unknown>(`/api/v1/sftp/${encodeURIComponent(alias)}/uploads/${encodeURIComponent(id)}?path=${encodeURIComponent(remotePath)}`, {
       method: "DELETE",
     }, { locallyHandledCodes: transferProblems });
   },
-  async streamDownload(alias: string, jobId: string, remotePath: string, directory: boolean, offset: number, options: StreamDownloadOptions): Promise<{ bytes: number; total: number | null }> {
+  async streamDownload({ alias, jobId, remotePath, directory, offset }: DownloadStream, options: StreamDownloadOptions): Promise<{ bytes: number; total: number | null }> {
     const headers = !directory && offset > 0
       ? { Range: `bytes=${offset}-`, ...(options.revision === undefined ? {} : { "If-Range": options.revision }) }
       : undefined;
@@ -255,20 +263,22 @@ export const sftpApi = {
     }
     return { bytes, total };
   },
-  async saveDownload(remotePath: string, directory: boolean, chunks: BlobPart[]): Promise<void> {
+  // Resolves to null when the bytes are in the saved file already (Android
+  // copies them before returning), and otherwise to the browser's save.
+  async saveDownload(remotePath: string, directory: boolean, chunks: BlobPart[]): Promise<BrowserSave | null> {
     const blob = new Blob(chunks, { type: directory ? "application/zip" : "application/octet-stream" });
     const components = remotePath.split("/").filter(Boolean);
     const name = `${components[components.length - 1] ?? "download"}${directory ? ".zip" : ""}`;
-    if (await saveWithAndroid(blob, name)) return;
+    if (await saveWithAndroid(blob, name)) return null;
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
     anchor.download = name;
     anchor.click();
-    // WebView/Safari may consume the object URL after click() returns.
-    globalThis.setTimeout(() => URL.revokeObjectURL(url), 30_000);
+    // WebView and Safari may resolve the object URL after click() returns.
+    return { release: () => URL.revokeObjectURL(url) };
   },
-  async chmod(alias: string, remotePath: string, mode: string, expectedRevision: string, recursive = false): Promise<RemoteEntry> {
+  async chmod({ alias, remotePath, mode, expectedRevision, recursive }: ModeChange): Promise<RemoteEntry> {
     const target = `${alias}:${remotePath}:${mode}${recursive ? ":recursive" : ""}`;
     const token = await issueAction("sftp.chmod", target);
     return entry(await patchJSON<unknown>(`/api/v1/sftp/${encodeURIComponent(alias)}/mode`, { path: remotePath, mode, expectedRevision, recursive }, token));

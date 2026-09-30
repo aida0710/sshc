@@ -2,51 +2,78 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
+	"sshc/internal/httpserver"
+
 	"golang.org/x/term"
 )
 
-type sftpCLIProgressJob struct {
-	ID            string                `json:"id"`
-	DownloadParts []sftpCLIDownloadPart `json:"downloadParts"`
-}
-
+// sftpCLIProgressDisplay draws the downloads in progress on a terminal. A
+// finished download leaves the drawing, so a recursive get of many files
+// redraws only the files its workers are transferring.
 type sftpCLIProgressDisplay struct {
 	engine    *engineAPI
 	output    io.Writer
 	refreshMu sync.Mutex
 	mu        sync.Mutex
-	tracked   map[string]string
-	jobs      map[string]sftpCLIProgressJob
+	state     sftpCLIProgressState
 	lines     int
 }
 
-func newSFTPCLIProgressDisplay(engine *engineAPI, output io.Writer, jsonOutput bool) *sftpCLIProgressDisplay {
-	if jsonOutput || engine == nil {
+// sftpCLIProgressState is what one drawing shows.
+type sftpCLIProgressState struct {
+	// active lists the downloads in progress in the order they started, so a
+	// line keeps its place while its file transfers.
+	active []sftpCLIActiveDownload
+	jobs   map[string]httpserver.SFTPTransferJob
+	// files is how many files this get transfers. With more than one, a first
+	// line counts the finished ones.
+	files    int
+	finished int
+}
+
+type sftpCLIActiveDownload struct {
+	id   string
+	name string
+}
+
+func newSFTPCLIProgressDisplay(engine *engineAPI, output io.Writer, files int) *sftpCLIProgressDisplay {
+	if engine == nil {
 		return nil
 	}
 	file, ok := output.(*os.File)
 	if !ok || !term.IsTerminal(int(file.Fd())) {
 		return nil
 	}
-	return &sftpCLIProgressDisplay{
-		engine: engine, output: output, tracked: make(map[string]string), jobs: make(map[string]sftpCLIProgressJob),
-	}
+	return &sftpCLIProgressDisplay{engine: engine, output: output, state: sftpCLIProgressState{files: files}}
 }
 
 func (display *sftpCLIProgressDisplay) track(id, name string) {
 	display.mu.Lock()
-	display.tracked[id] = name
+	display.state.active = append(display.state.active, sftpCLIActiveDownload{id: id, name: name})
 	display.mu.Unlock()
+}
+
+// untrack takes a download that succeeded, failed or was canceled out of the
+// drawing and counts it as finished.
+func (display *sftpCLIProgressDisplay) untrack(id string) {
+	display.mu.Lock()
+	defer display.mu.Unlock()
+	display.state.active = slices.DeleteFunc(display.state.active, func(download sftpCLIActiveDownload) bool {
+		return download.id == id
+	})
+	delete(display.state.jobs, id)
+	display.state.finished++
+	display.renderLocked(display.state.lines())
 }
 
 // sftpProgressRequestTimeout は、進捗を 1 回尋ねる上限である。応答しない engine の
@@ -61,61 +88,69 @@ func (display *sftpCLIProgressDisplay) refresh(ctx context.Context) {
 	defer display.refreshMu.Unlock()
 	requestContext, cancel := context.WithTimeout(ctx, sftpProgressRequestTimeout)
 	defer cancel()
-	var queue sftpCLITransferQueue
+	var queue httpserver.SFTPTransferJobList
 	if err := display.engine.sendJSON(requestContext, http.MethodGet, "/api/v1/sftp/transfers", nil, &queue); err != nil {
 		return
 	}
 	display.mu.Lock()
-	for _, encoded := range queue.Jobs {
-		var job sftpCLIProgressJob
-		if json.Unmarshal(encoded, &job) != nil || job.ID == "" || !validSFTPDownloadParts(job.DownloadParts) {
+	defer display.mu.Unlock()
+	for _, job := range queue.Jobs {
+		if job.ID == "" || !validSFTPDownloadParts(job.DownloadParts) {
 			continue
 		}
-		if _, tracked := display.tracked[job.ID]; tracked {
-			display.jobs[job.ID] = job
-		}
+		display.state.record(job)
 	}
-	lines := sftpProgressLines(display.tracked, display.jobs)
-	display.renderLocked(lines)
-	display.mu.Unlock()
+	display.renderLocked(display.state.lines())
 }
 
+// renderLocked redraws over the previous drawing. Lines left over from a
+// longer previous drawing are cleared.
 func (display *sftpCLIProgressDisplay) renderLocked(lines []string) {
-	if len(lines) == 0 {
-		return
-	}
 	if display.lines > 0 {
 		fmt.Fprintf(display.output, "\x1b[%dA", display.lines)
 	}
 	for _, line := range lines {
 		fmt.Fprintf(display.output, "\r\x1b[2K%s\n", line)
 	}
+	if len(lines) < display.lines {
+		fmt.Fprint(display.output, "\r\x1b[J")
+	}
 	display.lines = len(lines)
 }
 
-func sftpProgressLines(tracked map[string]string, jobs map[string]sftpCLIProgressJob) []string {
-	ids := make([]string, 0, len(tracked))
-	for id := range tracked {
-		ids = append(ids, id)
+// record keeps the engine's progress for a download still in progress. A job
+// reported after its download finished is ignored.
+func (state *sftpCLIProgressState) record(job httpserver.SFTPTransferJob) {
+	if !slices.ContainsFunc(state.active, func(download sftpCLIActiveDownload) bool { return download.id == job.ID }) {
+		return
 	}
-	sort.Strings(ids)
-	lines := make([]string, 0)
-	for _, id := range ids {
-		job, found := jobs[id]
+	if state.jobs == nil {
+		state.jobs = make(map[string]httpserver.SFTPTransferJob)
+	}
+	state.jobs[job.ID] = job
+}
+
+func (state sftpCLIProgressState) lines() []string {
+	lines := make([]string, 0, len(state.active)+1)
+	if state.files > 1 {
+		lines = append(lines, fmt.Sprintf("finished   %d / %d files", state.finished, state.files))
+	}
+	for _, download := range state.active {
+		job, found := state.jobs[download.id]
 		if !found || len(job.DownloadParts) == 0 {
-			lines = append(lines, fmt.Sprintf("preparing  %s", tracked[id]))
+			lines = append(lines, fmt.Sprintf("preparing  %s", download.name))
 			continue
 		}
-		parts := append([]sftpCLIDownloadPart(nil), job.DownloadParts...)
+		parts := append([]httpserver.SFTPDownloadPartProgress(nil), job.DownloadParts...)
 		sort.Slice(parts, func(i, j int) bool { return parts[i].Index < parts[j].Index })
 		for _, part := range parts {
-			lines = append(lines, formatSFTPProgressLine(part, tracked[id]))
+			lines = append(lines, formatSFTPProgressLine(part, download.name))
 		}
 	}
 	return lines
 }
 
-func formatSFTPProgressLine(part sftpCLIDownloadPart, name string) string {
+func formatSFTPProgressLine(part httpserver.SFTPDownloadPartProgress, name string) string {
 	const width = 24
 	percent := 0
 	if part.TotalBytes > 0 {

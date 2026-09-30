@@ -23,6 +23,8 @@ func TestResolveUnderHome(t *testing.T) {
 		{name: "absolute is kept", given: testAbsolute, want: testAbsolute},
 		{name: "absolute is cleaned", given: testAbsoluteUncleaned, want: testAbsolute},
 		{name: "another user's home", given: "~someone/x", err: platform.ErrDirectoryUser},
+		// PowerShell の書き方でも、保存する綴りは同期先の OS で意味が変わるので断る。
+		{name: "home followed by a backslash is refused", given: `~\work`, err: platform.ErrDirectoryRelative},
 		{name: "relative is refused", given: "work", err: platform.ErrDirectoryRelative},
 		{name: "dot is refused", given: ".", err: platform.ErrDirectoryRelative},
 	} {

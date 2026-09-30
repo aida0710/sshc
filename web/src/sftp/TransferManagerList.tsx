@@ -5,23 +5,22 @@ import { failureCode } from "../api/client";
 import { useTranslate } from "../i18n/context";
 import { Icon, type IconName } from "../ui/icons";
 import { ModalShell } from "../ui/ModalShell";
+import { Notice } from "../ui/surface";
 import { useDismissibleLayer } from "../ui/useDismissibleLayer";
 import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
 import { useMenuKeyboard } from "../ui/useMenuKeyboard";
 import { readStoredJSON, writeStoredJSON } from "../ui/browserStorage";
-import { formatBytes as bytes } from "../ui/format";
+import { formatBytes, formatDuration } from "../ui/format";
 import { sftpTransferManager, type ManagedTransferJob } from "./transferManager";
-
-function duration(seconds: number): string {
-  if (seconds < 60) return `${seconds}s`;
-  if (seconds < 3600) return `${Math.ceil(seconds / 60)}m`;
-  return `${Math.floor(seconds / 3600)}h ${Math.ceil((seconds % 3600) / 60)}m`;
-}
+import type { TransferSettings } from "./api";
 
 const viewStorageKey = "sshc.sftp.queueView";
 const minQueueHeight = 96;
 const maxQueueHeight = 560;
 const defaultQueueHeight = 224;
+// An arrow key moves the divider by this much, so about fifteen presses cross
+// the whole range from minQueueHeight to maxQueueHeight.
+const keyboardResizeStep = 32;
 const concurrencyChoices = [1, 2, 3, 4, 5, 6, 7, 8];
 const autoClearChoices = [0, 30, 300, 3600];
 const mebibyte = 1 << 20;
@@ -29,23 +28,28 @@ const maxLargeFileParallelism = 128;
 
 type QueueView = { collapsed: boolean; height: number };
 
-function MiBSetting({ label, valueBytes, min, max, onCommit }: {
+// A whole number typed into the transfer settings, shown in `scale` units
+// (a MiB setting has a scale of 1 MiB) and committed in the setting's own
+// unit. A value outside min and max, counted in the shown unit, is put back.
+function IntegerSetting({ label, value, min, max, scale = 1, unit, onCommit }: {
   label: string;
-  valueBytes: number;
+  value: number;
   min: number;
   max: number;
-  onCommit: (valueBytes: number) => void;
+  scale?: number;
+  unit?: string;
+  onCommit: (value: number) => void;
 }) {
-  const valueMiB = valueBytes / mebibyte;
-  const [draft, setDraft] = useState(String(valueMiB));
-  useEffect(() => setDraft(String(valueMiB)), [valueMiB]);
+  const shownValue = value / scale;
+  const [draft, setDraft] = useState(String(shownValue));
+  useEffect(() => setDraft(String(shownValue)), [shownValue]);
   function commit() {
     const parsed = Number(draft);
     if (!Number.isInteger(parsed) || parsed < min || parsed > max) {
-      setDraft(String(valueMiB));
+      setDraft(String(shownValue));
       return;
     }
-    onCommit(parsed * mebibyte);
+    onCommit(parsed * scale);
   }
   return (
     <label className="flex items-center gap-1 text-ink-muted">
@@ -63,56 +67,13 @@ function MiBSetting({ label, valueBytes, min, max, onCommit }: {
         onKeyDown={(event) => {
           if (event.key === "Enter") event.currentTarget.blur();
           if (event.key === "Escape") {
-            setDraft(String(valueMiB));
+            setDraft(String(shownValue));
             event.currentTarget.blur();
           }
         }}
         className="w-16 rounded border border-control-line bg-control px-1 py-0.5 text-right text-xs tabular-nums"
       />
-      <span aria-hidden="true">MiB</span>
-    </label>
-  );
-}
-
-function IntegerSetting({ label, value, min, max, onCommit }: {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  onCommit: (value: number) => void;
-}) {
-  const [draft, setDraft] = useState(String(value));
-  useEffect(() => setDraft(String(value)), [value]);
-  function commit() {
-    const parsed = Number(draft);
-    if (!Number.isInteger(parsed) || parsed < min || parsed > max) {
-      setDraft(String(value));
-      return;
-    }
-    onCommit(parsed);
-  }
-  return (
-    <label className="flex items-center gap-1 text-ink-muted">
-      <span>{label}</span>
-      <input
-        type="number"
-        inputMode="numeric"
-        aria-label={label}
-        min={min}
-        max={max}
-        step={1}
-        value={draft}
-        onChange={(event) => setDraft(event.target.value)}
-        onBlur={commit}
-        onKeyDown={(event) => {
-          if (event.key === "Enter") event.currentTarget.blur();
-          if (event.key === "Escape") {
-            setDraft(String(value));
-            event.currentTarget.blur();
-          }
-        }}
-        className="w-14 rounded border border-control-line bg-control px-1 py-0.5 text-right text-xs tabular-nums"
-      />
+      {unit === undefined ? null : <span aria-hidden="true">{unit}</span>}
     </label>
   );
 }
@@ -156,10 +117,13 @@ function statusClass(status: DisplayedStatus): string {
 
 // A Remote→Remote job whose external copy or move already crossed its commit
 // point, but whose terminal result could not be recorded, must not read as an
-// upload waiting for the same local file again.
+// upload waiting for the same local file again, nor as an ordinary pause. It
+// is the engine's remoteOutcomeUnrecorded (internal/sftp/jobs_state.go), which also
+// leaves cancel as the only allowed action; a running job carries the same
+// problem while its operation is in flight.
 function needsReconciliation(job: ManagedTransferJob): boolean {
-  return job.direction === "remote" && job.status === "reattach" &&
-    job.problem === "sftp_reconciliation_required";
+  return job.direction === "remote" && job.problem === "sftp_reconciliation_required" &&
+    job.status !== "running";
 }
 
 export function TransferManagerList({ openRequest = 0 }: { openRequest?: number }) {
@@ -261,26 +225,20 @@ export function TransferManagerList({ openRequest = 0 }: { openRequest?: number 
   function resizeWithKeyboard(key: string) {
     if (key === "Home") changeQueueHeight(minQueueHeight, true);
     else if (key === "End") changeQueueHeight(maxQueueHeight, true);
-    else if (key === "ArrowUp") changeQueueHeight(clampHeight(queueHeight + 32), true);
-    else if (key === "ArrowDown") changeQueueHeight(clampHeight(queueHeight - 32), true);
+    else if (key === "ArrowUp") changeQueueHeight(clampHeight(queueHeight + keyboardResizeStep), true);
+    else if (key === "ArrowDown") changeQueueHeight(clampHeight(queueHeight - keyboardResizeStep), true);
   }
 
-  function applySettings(next: {
-    maxConcurrent?: number;
-    clearCompletedAfterSeconds?: number;
-    processingStopped?: boolean;
-    largeFileThresholdBytes?: number;
-    largeFileParallelism?: number;
-    largeFileChunkBytes?: number;
-  }) {
-    runControl(() => sftpTransferManager.applySettings(
-      next.maxConcurrent ?? maxConcurrent,
-      next.clearCompletedAfterSeconds ?? clearCompletedAfter,
-      next.processingStopped ?? processingStopped,
-      next.largeFileThresholdBytes ?? largeFileThreshold,
-      next.largeFileParallelism ?? largeFileParallelism,
-      next.largeFileChunkBytes ?? largeFileChunkBytes,
-    ));
+  function applySettings(next: Partial<TransferSettings>) {
+    const current: TransferSettings = {
+      maxConcurrent,
+      clearCompletedAfterSeconds: clearCompletedAfter,
+      processingStopped,
+      largeFileThresholdBytes: largeFileThreshold,
+      largeFileParallelism,
+      largeFileChunkBytes,
+    };
+    runControl(() => sftpTransferManager.applySettings({ ...current, ...next }));
   }
 
   function runControl(operation: () => Promise<void>) {
@@ -323,15 +281,17 @@ export function TransferManagerList({ openRequest = 0 }: { openRequest?: number 
             className="rounded border border-control-line bg-control px-1 py-0.5 text-xs"
           >
             {autoClearChoices.map((choice) => (
-              <option key={choice} value={choice}>{choice === 0 ? t("sftp.manager.autoClearOff") : duration(choice)}</option>
+              <option key={choice} value={choice}>{choice === 0 ? t("sftp.manager.autoClearOff") : formatDuration(choice, t)}</option>
             ))}
           </select>
         </label>
-        <MiBSetting
+        <IntegerSetting
           label={t("sftp.manager.largeFileThreshold")}
-          valueBytes={largeFileThreshold}
+          value={largeFileThreshold}
           min={16}
           max={1024}
+          scale={mebibyte}
+          unit="MiB"
           onCommit={(value) => applySettings({ largeFileThresholdBytes: value })}
         />
         <IntegerSetting
@@ -341,11 +301,13 @@ export function TransferManagerList({ openRequest = 0 }: { openRequest?: number 
           max={maxLargeFileParallelism}
           onCommit={(value) => applySettings({ largeFileParallelism: value })}
         />
-        <MiBSetting
+        <IntegerSetting
           label={t("sftp.manager.largeFileChunk")}
-          valueBytes={largeFileChunkBytes}
+          value={largeFileChunkBytes}
           min={8}
           max={4096}
+          scale={mebibyte}
+          unit="MiB"
           onCommit={(value) => applySettings({ largeFileChunkBytes: value })}
         />
 </>;
@@ -382,7 +344,7 @@ export function TransferManagerList({ openRequest = 0 }: { openRequest?: number 
           <>
             <span className="min-w-0 grow truncate font-medium text-ink">
               {activeJobs.length > 0
-                ? t("sftp.manager.summaryRunning", { count: activeJobs.length, progress: aggregateProgress, speed: bytes(aggregateSpeed) })
+                ? t("sftp.manager.summaryRunning", { count: activeJobs.length, progress: aggregateProgress, speed: formatBytes(aggregateSpeed) })
                 : t("sftp.manager.summaryIdle", { count: jobs.length })}
             </span>
             {aggregateTotal > 0 ? <progress className="hidden w-28 sm:block" max={aggregateTotal} value={aggregateTransferred} /> : null}
@@ -418,7 +380,7 @@ export function TransferManagerList({ openRequest = 0 }: { openRequest?: number 
         {compactViewport ? <button ref={closeSheet} type="button" aria-label={t("sftp.manager.close")} onClick={dismissSheet} className="flex size-11 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-select-fill"><Icon name="close" className="size-4" /></button> : null}
       </div>
       {compactViewport ? <details className="shrink-0 border-b border-line px-3"><DisclosureSummary className="py-3 text-sm text-ink-muted">{t("sftp.manager.settings")}</DisclosureSummary><div className="flex max-h-40 flex-wrap items-center gap-3 overflow-y-auto pb-3">{settings}</div></details> : null}
-      {controlProblem !== "" ? <div role="alert" className="mx-2.5 mb-2 flex items-start gap-2 rounded bg-danger/10 px-2.5 py-2 text-danger"><span className="grow">{controlProblem}</span><button type="button" aria-label={t("sftp.manager.dismissError")} onClick={() => setControlProblem("")} className="shrink-0 text-ink-muted hover:text-ink"><Icon name="close" className="size-3.5" /></button></div> : null}
+      {controlProblem !== "" ? <div className="mx-2.5 mb-2"><Notice tone="danger" compact><span className="grow">{controlProblem}</span><button type="button" aria-label={t("sftp.manager.dismissError")} onClick={() => setControlProblem("")} className="shrink-0 text-ink-muted hover:text-ink"><Icon name="close" className="size-3.5" /></button></Notice></div> : null}
       {compactViewport && jobs.length === 0 ? <p className="p-6 text-center text-ink-muted">{t("sftp.manager.summaryIdle", { count: 0 })}</p> : null}
       {collapsed || jobs.length === 0 ? null : <div id={`${headingId}-jobs`} style={compactViewport ? undefined : { height: queueHeight }} className={`space-y-1.5 overflow-auto overscroll-contain px-2.5 pb-2.5 ${compactViewport ? "min-h-0 flex-1 pt-2" : ""}`}>
         {batches.map(([batchId, items]) => {
@@ -448,10 +410,10 @@ export function TransferManagerList({ openRequest = 0 }: { openRequest?: number 
                       <span className="truncate font-mono" title={`${item.alias}:${item.remotePath}`}>{item.name}</span>
                       <span className="flex items-center justify-self-end gap-1">
                         <progress className="w-14" max={Math.max(total, 1)} value={item.transferredBytes} />
-                        <span className="tabular-nums text-ink-muted">{item.operation === "delete" ? `${item.transferredBytes}/${Math.max(item.totalBytes, 0)}` : item.totalBytes < 0 ? bytes(item.transferredBytes) : `${bytes(item.transferredBytes)}/${bytes(item.totalBytes)}`}</span>
+                        <span className="tabular-nums text-ink-muted">{item.operation === "delete" ? `${item.transferredBytes}/${Math.max(item.totalBytes, 0)}` : item.totalBytes < 0 ? formatBytes(item.transferredBytes) : `${formatBytes(item.transferredBytes)}/${formatBytes(item.totalBytes)}`}</span>
                       </span>
-                      <span className="tabular-nums text-ink-muted">{item.operation === "delete" ? t("sftp.manager.delete") : item.bytesPerSecond > 0 ? `${bytes(item.bytesPerSecond)}/s` : "—"}</span>
-                      <span className="tabular-nums text-ink-muted">{item.remainingSeconds >= 0 && item.status === "running" ? t("sftp.manager.remaining", { duration: duration(item.remainingSeconds) }) : "—"}</span>
+                      <span className="tabular-nums text-ink-muted">{item.operation === "delete" ? t("sftp.manager.delete") : item.bytesPerSecond > 0 ? `${formatBytes(item.bytesPerSecond)}/s` : "—"}</span>
+                      <span className="tabular-nums text-ink-muted">{item.remainingSeconds >= 0 && item.status === "running" ? t("sftp.manager.remaining", { duration: formatDuration(item.remainingSeconds, t) }) : "—"}</span>
                       <span className="col-span-2 flex flex-wrap items-center justify-end gap-2 whitespace-nowrap">
                         <span className={statusClass(displayedStatus)}>
                           {displayedStatus === "failed"
@@ -500,7 +462,7 @@ export function TransferManagerList({ openRequest = 0 }: { openRequest?: number 
         <Icon name="chevronRight" className="size-3 -rotate-90 text-ink-muted" />
         <span className="shrink-0 font-medium">{t("sftp.manager.heading")}</span>
         <span className="min-w-0 flex-1 truncate text-ink-muted">{activeJobs.length > 0
-          ? t("sftp.manager.summaryRunning", { count: activeJobs.length, progress: aggregateProgress, speed: bytes(aggregateSpeed) })
+          ? t("sftp.manager.summaryRunning", { count: activeJobs.length, progress: aggregateProgress, speed: formatBytes(aggregateSpeed) })
           : t("sftp.manager.summaryIdle", { count: jobs.length })}</span>
         {aggregateTotal > 0 ? <span aria-hidden="true" className="absolute bottom-0 left-0 h-0.5 bg-accent transition-[width]" style={{ width: `${aggregateProgress}%` }} /> : null}
       </button>

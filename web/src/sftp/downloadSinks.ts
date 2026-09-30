@@ -78,8 +78,8 @@ export class DownloadSinkStore {
     } catch { /* OPFS is optional. */ }
   }
 
-  // Deletes part files whose job the engine no longer lists as unfinished.
-  async removeOrphans(active: Set<string>): Promise<void> {
+  // Deletes every part file whose job is not in kept.
+  async removeOrphans(kept: Set<string>): Promise<void> {
     try {
       const root = await opfsRoot();
       if (root === null) return;
@@ -87,7 +87,7 @@ export class DownloadSinkStore {
       for await (const entry of entries) {
         const match = /^sshc-sftp-(.+)\.part$/.exec(entry.name);
         const id = match?.[1];
-        if (id !== undefined && !active.has(id)) await root.removeEntry(entry.name).catch(() => undefined);
+        if (id !== undefined && !kept.has(id)) await root.removeEntry(entry.name).catch(() => undefined);
       }
     } catch { /* OPFS is optional. */ }
   }

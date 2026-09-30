@@ -3,7 +3,7 @@ import type { VPNApi } from "../api/vpn";
 import { useTranslate } from "../i18n/context";
 import { hintText } from "../ui/form";
 import { ModalShell } from "../ui/ModalShell";
-import { Button } from "../ui/surface";
+import { Button, Notice } from "../ui/surface";
 
 // engine が経路を用意した記録と、コンテナの直近の出力を見せる。繋がらないときに
 // 最初に見る場所で、利用者に docker を直接叩かせないためにある。秘密は engine の
@@ -54,9 +54,7 @@ export function VPNLogsDialog({
         <p className={`mt-1 ${hintText}`}>{t("vpn.logsHint")}</p>
       </div>
       {failure !== "" ? (
-        <p role="alert" className="text-sm text-danger">
-          {failure}
-        </p>
+        <Notice tone="danger">{failure}</Notice>
       ) : lines === null ? (
         <p className={hintText}>{t("vpn.logsLoading")}</p>
       ) : lines.trim() === "" ? (

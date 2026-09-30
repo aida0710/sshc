@@ -1,6 +1,7 @@
 import { useId, useState, type RefObject } from "react";
 import { failureCode } from "../api/client";
 import { useTranslate } from "../i18n/context";
+import type { MessageKey } from "../i18n/messages";
 import { sftpProblemText } from "./sftpProblemText";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { clipboard } from "../ui/clipboard";
@@ -20,6 +21,37 @@ type SFTPInputIntent =
   | { kind: "rename"; entry: RemoteEntry }
   | { kind: "chmod"; entry: RemoteEntry; recursive: boolean };
 
+// What the input dialog says for each kind of change. A recursive chmod has
+// its own heading (inputDialogHeading); everything else reads from here.
+const inputDialogText: Record<SFTPInputIntent["kind"], { heading: MessageKey; label: MessageKey; submit: MessageKey }> = {
+  mkdir: { heading: "sftp.newFolder", label: "sftp.mkdirPrompt", submit: "sftp.newFolder" },
+  createFile: { heading: "sftp.newFile", label: "sftp.newFilePrompt", submit: "sftp.newFile" },
+  rename: { heading: "sftp.rename", label: "sftp.renamePrompt", submit: "sftp.rename" },
+  duplicate: { heading: "sftp.duplicate", label: "sftp.renamePrompt", submit: "sftp.duplicate" },
+  moveTo: { heading: "sftp.moveTo", label: "sftp.moveToPrompt", submit: "sftp.move" },
+  chmod: { heading: "sftp.chmod", label: "sftp.chmodPrompt", submit: "sftp.chmod" },
+};
+
+function inputDialogHeading(intent: SFTPInputIntent): MessageKey {
+  return intent.kind === "chmod" && intent.recursive ? "sftp.chmodRecursive" : inputDialogText[intent.kind].heading;
+}
+
+function initialInputValue(intent: SFTPInputIntent, currentPath: string): string {
+  switch (intent.kind) {
+    case "mkdir":
+    case "createFile":
+      return "";
+    case "rename":
+      return intent.entry.name;
+    case "duplicate":
+      return `${intent.entry.name}.copy`;
+    case "moveTo":
+      return currentPath;
+    case "chmod":
+      return symbolicModeToOctal(intent.entry.mode);
+  }
+}
+
 // Everything that changes entries on a host: creating, renaming, moving,
 // copying, changing modes and deleting, with the dialogs that ask for a name
 // or a confirmation, and the one-step undo for the changes that have one.
@@ -33,7 +65,10 @@ export function useSFTPEntryActions({
   onInteract,
 }: {
   browser: SFTPBrowserModel;
-  list: SFTPEntryListModel;
+  // Only the selection and the focus request: the list's keyboard and row
+  // handling stay its own.
+  list: Pick<SFTPEntryListModel,
+    "selectedEntries" | "selectedEntry" | "rowKeys" | "setSelectedPaths" | "focusAfterReload" | "cancelPendingFocus">;
   // Re-reads whatever the rows currently show, which is the search results
   // rather than a directory while a search is open.
   refreshAfterChange: (directory: string, alias: string) => Promise<unknown>;
@@ -44,7 +79,7 @@ export function useSFTPEntryActions({
   const t = useTranslate();
   const { alias, path, setProblem } = browser;
   const generation = browser.generation;
-  const { selectedEntries, selectedEntry, rowKeys, pendingFocus, setSelectedPaths } = list;
+  const { selectedEntries, selectedEntry, rowKeys, setSelectedPaths, focusAfterReload, cancelPendingFocus } = list;
   const [acting, setActing] = useState(false);
   const [inputIntent, setInputIntent] = useState<SFTPInputIntent | null>(null);
   const [deleting, setDeleting] = useState<RemoteEntry[] | null>(null);
@@ -79,7 +114,7 @@ export function useSFTPEntryActions({
     try {
       await sftpApi.mkdir(targetAlias, join(targetPath, name));
       if (current !== generation.current) return;
-      pendingFocus.current = join(targetPath, name);
+      focusAfterReload(join(targetPath, name));
       await browser.load(targetPath, { alias: targetAlias });
     } catch (error) {
       if (current !== generation.current) return;
@@ -99,7 +134,7 @@ export function useSFTPEntryActions({
     try {
       await sftpApi.createEmptyFile(targetAlias, createdPath);
       if (current !== generation.current) return;
-      pendingFocus.current = createdPath;
+      focusAfterReload(createdPath);
       await browser.load(targetPath, { alias: targetAlias });
     } catch (error) {
       if (current !== generation.current) return;
@@ -118,11 +153,11 @@ export function useSFTPEntryActions({
     try {
       await sftpApi.rename(targetAlias, entry.path, renamed);
       if (current !== generation.current) return;
-      pendingFocus.current = renamed;
+      focusAfterReload(renamed);
       await refreshAfterChange(targetPath, targetAlias);
       offerUndo(t("sftp.renamedTo", { name }), async () => {
         await sftpApi.rename(targetAlias, renamed, entry.path);
-        pendingFocus.current = entry.path;
+        focusAfterReload(entry.path);
         await refreshAfterChange(targetPath, targetAlias);
       });
     } catch (error) {
@@ -141,13 +176,13 @@ export function useSFTPEntryActions({
     const previous = symbolicModeToOctal(entry.mode);
     setActing(true);
     try {
-      await sftpApi.chmod(targetAlias, entry.path, mode, entry.revision, recursive);
+      await sftpApi.chmod({ alias: targetAlias, remotePath: entry.path, mode, expectedRevision: entry.revision, recursive });
       if (current !== generation.current) return;
       const reloaded = await browser.load(targetPath, { alias: targetAlias, refresh: true });
       const now = reloaded?.find((candidate) => candidate.path === entry.path);
       if (!recursive && now !== undefined && previous !== mode) {
         offerUndo(t("sftp.permissionsChanged", { mode }), async () => {
-          await sftpApi.chmod(targetAlias, entry.path, previous, now.revision, false);
+          await sftpApi.chmod({ alias: targetAlias, remotePath: entry.path, mode: previous, expectedRevision: now.revision, recursive: false });
           await browser.load(targetPath, { alias: targetAlias, refresh: true });
         });
       }
@@ -212,7 +247,7 @@ export function useSFTPEntryActions({
     // removed row's place.
     const removed = new Set(selectedEntries.map((entry) => entry.path));
     const survivor = rowKeys.slice(rowKeys.findIndex((key) => removed.has(key)) + 1).find((key) => !removed.has(key));
-    pendingFocus.current = survivor ?? rowKeys.filter((key) => !removed.has(key)).pop() ?? parentRowKey;
+    focusAfterReload(survivor ?? rowKeys.filter((key) => !removed.has(key)).pop() ?? parentRowKey);
     onInteract?.();
     setDeleting(selectedEntries);
   }
@@ -250,7 +285,7 @@ export function useSFTPEntryActions({
     deleting,
     ask,
     cancelInput: () => setInputIntent(null),
-    cancelDelete: () => { pendingFocus.current = null; setDeleting(null); },
+    cancelDelete: () => { cancelPendingFocus(); setDeleting(null); },
     deleteSelection,
     renameSelection,
     copySelected,
@@ -303,11 +338,11 @@ export function SFTPEntryActionDialogs({ actions, currentPath, returnFocusRef }:
       {inputIntent === null ? null : (
         <InputDialog
           id={`${id}-input`}
-          heading={t(inputIntent.kind === "mkdir" ? "sftp.newFolder" : inputIntent.kind === "createFile" ? "sftp.newFile" : inputIntent.kind === "rename" ? "sftp.rename" : inputIntent.kind === "duplicate" ? "sftp.duplicate" : inputIntent.kind === "moveTo" ? "sftp.moveTo" : inputIntent.recursive ? "sftp.chmodRecursive" : "sftp.chmod")}
-          label={t(inputIntent.kind === "chmod" ? "sftp.chmodPrompt" : inputIntent.kind === "rename" || inputIntent.kind === "duplicate" ? "sftp.renamePrompt" : inputIntent.kind === "createFile" ? "sftp.newFilePrompt" : inputIntent.kind === "moveTo" ? "sftp.moveToPrompt" : "sftp.mkdirPrompt")}
-          initialValue={inputIntent.kind === "mkdir" || inputIntent.kind === "createFile" ? "" : inputIntent.kind === "rename" ? inputIntent.entry.name : inputIntent.kind === "duplicate" ? `${inputIntent.entry.name}.copy` : inputIntent.kind === "moveTo" ? currentPath : symbolicModeToOctal(inputIntent.entry.mode)}
+          heading={t(inputDialogHeading(inputIntent))}
+          label={t(inputDialogText[inputIntent.kind].label)}
+          initialValue={initialInputValue(inputIntent, currentPath)}
           inputMode={inputIntent.kind === "chmod" ? "numeric" : "text"}
-          submitLabel={t(inputIntent.kind === "mkdir" ? "sftp.newFolder" : inputIntent.kind === "createFile" ? "sftp.newFile" : inputIntent.kind === "rename" ? "sftp.rename" : inputIntent.kind === "duplicate" ? "sftp.duplicate" : inputIntent.kind === "moveTo" ? "sftp.move" : "sftp.chmod")}
+          submitLabel={t(inputDialogText[inputIntent.kind].submit)}
           cancelLabel={t("sftp.cancel")}
           returnFocusRef={returnFocusRef}
           validate={(value) => {

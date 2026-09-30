@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"sshc/internal/httpserver"
 	sftpcore "sshc/internal/sftp"
 )
 
@@ -43,29 +44,29 @@ func TestSFTPOptionsAcceptExactlyTheEngineRange(t *testing.T) {
 }
 
 func TestSFTPSettingsResponseIsValidAtEveryEngineLimit(t *testing.T) {
-	lowest := sftpCLITransferQueue{
+	lowest := httpserver.SFTPTransferJobList{
 		MaxConcurrent: 1, ClearCompletedAfterSeconds: 0,
 		LargeFileThresholdBytes: sftpcore.MinLargeFileThreshold, LargeFileParallelism: 1,
 		LargeFileChunkBytes: sftpcore.MinLargeFileChunkBytes,
 	}
-	highest := sftpCLITransferQueue{
+	highest := httpserver.SFTPTransferJobList{
 		MaxConcurrent:              sftpcore.MaxTransferConcurrency,
 		ClearCompletedAfterSeconds: int(sftpcore.MaxClearCompletedAfter / time.Second),
 		LargeFileThresholdBytes:    sftpcore.MaxLargeFileThreshold, LargeFileParallelism: sftpcore.MaxLargeFileParallelism,
 		LargeFileChunkBytes: sftpcore.MaxLargeFileChunkBytes,
 	}
-	for name, settings := range map[string]sftpCLITransferQueue{"lowest": lowest, "highest": highest} {
+	for name, settings := range map[string]httpserver.SFTPTransferJobList{"lowest": lowest, "highest": highest} {
 		if !validSFTPCLITransferSettings(settings) {
 			t.Errorf("%s engine settings %#v were refused", name, settings)
 		}
 	}
 
-	outside := []func(*sftpCLITransferQueue){
-		func(settings *sftpCLITransferQueue) { settings.MaxConcurrent++ },
-		func(settings *sftpCLITransferQueue) { settings.ClearCompletedAfterSeconds++ },
-		func(settings *sftpCLITransferQueue) { settings.LargeFileThresholdBytes++ },
-		func(settings *sftpCLITransferQueue) { settings.LargeFileParallelism++ },
-		func(settings *sftpCLITransferQueue) { settings.LargeFileChunkBytes++ },
+	outside := []func(*httpserver.SFTPTransferJobList){
+		func(settings *httpserver.SFTPTransferJobList) { settings.MaxConcurrent++ },
+		func(settings *httpserver.SFTPTransferJobList) { settings.ClearCompletedAfterSeconds++ },
+		func(settings *httpserver.SFTPTransferJobList) { settings.LargeFileThresholdBytes++ },
+		func(settings *httpserver.SFTPTransferJobList) { settings.LargeFileParallelism++ },
+		func(settings *httpserver.SFTPTransferJobList) { settings.LargeFileChunkBytes++ },
 	}
 	for index, change := range outside {
 		settings := highest

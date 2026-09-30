@@ -78,6 +78,10 @@ type Dependencies struct {
 	// SessionNow は、セッションマネージャがアクショントークンの失効に使う時計。
 	SessionNow      func() time.Time
 	ShutdownTimeout time.Duration
+	// SFTPDownloadSpoolRoot is where SFTP downloads are prepared, a directory
+	// only this user can write. The desktop engine passes its user cache and
+	// Android the app's cache; empty leaves downloads unavailable.
+	SFTPDownloadSpoolRoot string
 }
 
 // DefaultShutdownTimeout は、停止を始めた engine が、ターミナルと HTTP の要求が
@@ -237,6 +241,7 @@ func build(dependencies Dependencies, version string) (runtime, error) {
 		Recent:                services.recent,
 		SFTP:                  services.sftp,
 		SFTPTransferStatePath: filepath.Join(services.workspace.StateDir(), sftpTransferStateName),
+		SFTPDownloadSpoolRoot: dependencies.SFTPDownloadSpoolRoot,
 		Workspaces:            services.workspaces,
 		Snippets:              services.snippets,
 		Vault:                 services.vault,
