@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"sshc/internal/config"
+	"sshc/internal/configresolver"
 	"sshc/internal/storage"
 )
 
@@ -48,7 +49,7 @@ func newIntegrationWorkspace(t *testing.T) *storage.Workspace {
 
 func TestResolveEditAndCommitPreservesEveryOtherByte(t *testing.T) {
 	workspace := newIntegrationWorkspace(t)
-	resolver := storage.NewResolver(workspace)
+	resolver := configresolver.ForWorkspace(workspace)
 	entry := filepath.Join(workspace.Root(), "config")
 
 	graph, err := resolver.Resolve(entry)
@@ -156,7 +157,7 @@ func TestResolverReportsUnsupportedTokensInsteadOfGuessing(t *testing.T) {
 	if err := os.WriteFile(entry, []byte("Include %h/other.conf\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	graph, err := storage.NewResolver(workspace).Resolve(entry)
+	graph, err := configresolver.ForWorkspace(workspace).Resolve(entry)
 	if err != nil {
 		t.Fatal(err)
 	}

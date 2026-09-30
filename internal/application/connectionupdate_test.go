@@ -11,8 +11,10 @@ import (
 	"testing"
 	"time"
 
+	"sshc/internal/configresolver"
 	"sshc/internal/keys"
 	"sshc/internal/secret"
+	"sshc/internal/secret/secrettest"
 	"sshc/internal/storage"
 	"sshc/internal/validate"
 )
@@ -44,7 +46,7 @@ func newConnectionUpdateHarness(t *testing.T, contents string) connectionUpdateH
 		t.Fatal(err)
 	}
 	keyService := keys.NewService(keys.ServiceOptions{
-		Workspace: workspace, Transactions: manager, Resolver: storage.NewResolver(workspace),
+		Workspace: workspace, Transactions: manager, Resolver: configresolver.ForWorkspace(workspace),
 	})
 	service.SetKeyPassphraseVerifier(keyService)
 	service.SetVault(secrets)
@@ -263,9 +265,9 @@ func TestUpdateConnectionRollsBackWhenTheSecondFileCommitFails(t *testing.T) {
 	if err := secrets.Initialise(connectionUpdatePassphrase); err != nil {
 		t.Fatal(err)
 	}
-	setPasswordForCurrentTarget(t, service, secrets, "edge", "must-be-cleaned")
+	setPasswordForCurrentTarget(t, connectionUpdateHarness{service: service, secrets: secrets, manager: manager}, "edge", "must-be-cleaned")
 	keyService := keys.NewService(keys.ServiceOptions{
-		Workspace: workspace, Transactions: manager, Resolver: storage.NewResolver(workspace),
+		Workspace: workspace, Transactions: manager, Resolver: configresolver.ForWorkspace(workspace),
 	})
 	service.SetKeyPassphraseVerifier(keyService)
 	inventory := keyInventory(t, workspace)
@@ -569,7 +571,9 @@ func TestChangingAuthenticationDestinationStopsAutomaticPasswordRelease(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := harness.secrets.SetBound("edge", "must-not-travel", original); err != nil {
+	if err := secrettest.StoreDedicatedPassword(harness.secrets, harness.manager, secrettest.DedicatedPassword{
+		Alias: "edge", Password: "must-not-travel", Binding: original,
+	}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -603,7 +607,9 @@ func TestWebConfirmationRebindsSavedAuthenticationValuesToTheUpdatedRoute(t *tes
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := harness.secrets.SetBound("edge", "must-follow-confirmation", original); err != nil {
+	if err := secrettest.StoreDedicatedPassword(harness.secrets, harness.manager, secrettest.DedicatedPassword{
+		Alias: "edge", Password: "must-follow-confirmation", Binding: original,
+	}); err != nil {
 		t.Fatal(err)
 	}
 	if err := harness.secrets.SetCredential(secret.KindTOTP, "edge-code", "JBSWY3DPEHPK3PXP"); err != nil {
@@ -672,14 +678,14 @@ func TestUpdateConnectionRemovesDedicatedOrUnassignsReusablePassword(t *testing.
 	const before = "Host edge\n\tHostName edge.example\n"
 	tests := []struct {
 		name    string
-		prepare func(*testing.T, *secret.Service)
+		prepare func(*testing.T, connectionUpdateHarness)
 		verify  func(*testing.T, *secret.Service)
 	}{
 		{
 			name: "dedicated",
-			prepare: func(t *testing.T, service *secret.Service) {
+			prepare: func(t *testing.T, harness connectionUpdateHarness) {
 				t.Helper()
-				if err := setTestBoundPassword(service, "edge", "dedicated"); err != nil {
+				if err := setTestBoundPassword(harness, "edge", "dedicated"); err != nil {
 					t.Fatal(err)
 				}
 			},
@@ -692,12 +698,12 @@ func TestUpdateConnectionRemovesDedicatedOrUnassignsReusablePassword(t *testing.
 		},
 		{
 			name: "reusable",
-			prepare: func(t *testing.T, service *secret.Service) {
+			prepare: func(t *testing.T, harness connectionUpdateHarness) {
 				t.Helper()
-				if err := service.SetCredential(secret.KindPassword, "office", "shared"); err != nil {
+				if err := harness.secrets.SetCredential(secret.KindPassword, "office", "shared"); err != nil {
 					t.Fatal(err)
 				}
-				if err := assignTestBoundPassword(service, "edge", "office"); err != nil {
+				if err := assignTestBoundPassword(harness.secrets, "edge", "office"); err != nil {
 					t.Fatal(err)
 				}
 			},
@@ -717,7 +723,7 @@ func TestUpdateConnectionRemovesDedicatedOrUnassignsReusablePassword(t *testing.
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			harness := newConnectionUpdateHarness(t, before)
-			test.prepare(t, harness.secrets)
+			test.prepare(t, harness)
 			result, err := harness.service.UpdateConnection(harness.inventory, UpdateConnectionRequest{
 				Identity: HostIdentity{Path: "config", Alias: "edge"}, Base: before,
 				Password: UpdateConnectionPassword{Kind: UpdatePasswordRemove},
@@ -913,13 +919,13 @@ func TestUpdateConnectionDirectKeyCleansDedicatedOrReusablePassword(t *testing.T
 	const before = "Host edge\n\tIdentityFile ~/.ssh/id_update\n"
 	tests := []struct {
 		name    string
-		prepare func(*testing.T, *secret.Service)
+		prepare func(*testing.T, connectionUpdateHarness)
 		verify  func(*testing.T, *secret.Service)
 	}{
 		{
 			name: "dedicated",
-			prepare: func(t *testing.T, service *secret.Service) {
-				if err := setTestBoundPassword(service, "edge", "dedicated"); err != nil {
+			prepare: func(t *testing.T, harness connectionUpdateHarness) {
+				if err := setTestBoundPassword(harness, "edge", "dedicated"); err != nil {
 					t.Fatal(err)
 				}
 			},
@@ -931,12 +937,12 @@ func TestUpdateConnectionDirectKeyCleansDedicatedOrReusablePassword(t *testing.T
 		},
 		{
 			name: "reusable association only",
-			prepare: func(t *testing.T, service *secret.Service) {
-				if err := service.SetCredential(secret.KindPassword, "office", "shared"); err != nil {
+			prepare: func(t *testing.T, harness connectionUpdateHarness) {
+				if err := harness.secrets.SetCredential(secret.KindPassword, "office", "shared"); err != nil {
 					t.Fatal(err)
 				}
 				for _, alias := range []string{"edge", "nas"} {
-					if err := assignTestBoundPassword(service, alias, "office"); err != nil {
+					if err := assignTestBoundPassword(harness.secrets, alias, "office"); err != nil {
 						t.Fatal(err)
 					}
 				}
@@ -955,7 +961,7 @@ func TestUpdateConnectionDirectKeyCleansDedicatedOrReusablePassword(t *testing.T
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			harness := newConnectionUpdateHarness(t, before)
-			test.prepare(t, harness.secrets)
+			test.prepare(t, harness)
 			result, err := harness.service.UpdateConnection(harness.inventory, UpdateConnectionRequest{
 				Identity: HostIdentity{Path: "config", Alias: "edge"}, Base: before,
 				Password: unchangedPassword(),

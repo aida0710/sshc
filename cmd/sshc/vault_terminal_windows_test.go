@@ -40,7 +40,7 @@ func TestWindowsPasswordPromptRunsAfterNoEchoSetupAndBeforeRead(t *testing.T) {
 		events = append(events, "prompt")
 		return nil
 	}, nil)
-	defer zeroBytes(password)
+	defer clear(password)
 	if err != nil || len(password) != 0 {
 		t.Fatalf("password=%q error=%v", password, err)
 	}
@@ -119,7 +119,7 @@ func TestWindowsPasswordReaderEditsUnicodeAndBoundsInput(t *testing.T) {
 			fake.events = append(fake.events, test.events...)
 			close(fake.inputReady)
 			password, err := readWindowsPasswordWithFeedback(context.Background(), windows.Handle(42), fake.operations(), nil, nil)
-			defer zeroBytes(password)
+			defer clear(password)
 			if !errors.Is(err, test.wantError) {
 				t.Fatalf("error = %v, want %v", err, test.wantError)
 			}
@@ -246,7 +246,7 @@ func TestWindowsPasswordReaderReadCancelRaceReturnsAndRestoresMode(t *testing.T)
 		if answer.err == nil && !bytes.Equal(answer.password, []byte("ok")) {
 			t.Fatalf("iteration %d: password = %q", iteration, answer.password)
 		}
-		zeroBytes(answer.password)
+		clear(answer.password)
 		fake.assertRestored(t)
 	}
 }

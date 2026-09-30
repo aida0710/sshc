@@ -25,6 +25,10 @@ const (
 	manifestVersion    = 1
 )
 
+// TrashPathRelative は、ごみ箱のワークスペースからのスラッシュ区切りの相対パス。
+// このマシンで消した鍵の退避先なので、同期では運ばない。
+const TrashPathRelative = StateDirectoryName + "/" + trashDirectoryName
+
 var (
 	ErrUnknownTrashEntry = errors.New("no trash entry with that identifier")
 	ErrRestoreBlocked    = errors.New("restore would overwrite or duplicate an existing key")
@@ -136,17 +140,19 @@ func (service *Service) Trash(keyID string) (TrashResult, error) {
 		return TrashResult{}, err
 	}
 	entryRelative := filepath.Join(StateDirectoryName, trashDirectoryName, entryID)
-	entryDirectory := filepath.Join(service.workspace.Root(), entryRelative)
-	if err := service.workspace.EnsureDirectory(entryDirectory); err != nil {
-		return TrashResult{}, err
-	}
+	entryDirectory := service.absolutePath(entryRelative)
 
 	manifest := trashManifest{
 		SchemaVersion: manifestVersion,
 		EntryID:       entryID,
 		DeletedAt:     service.now().UTC().Format(time.RFC3339),
 	}
-	request := storage.Request{Operation: "key.trash"}
+	// エントリのディレクトリも同じトランザクションで作る。失敗した削除が空の
+	// ディレクトリを残さない。
+	request := storage.Request{
+		Operation:   "key.trash",
+		Directories: []storage.DirectoryCreate{{Path: entryDirectory}},
+	}
 	files := make([]TrashFile, 0, len(group))
 	usedNames := make(map[string]bool, len(group))
 
@@ -158,18 +164,16 @@ func (service *Service) Trash(keyID string) (TrashResult, error) {
 		usedNames[baseName] = true
 
 		absolute := service.absolutePath(member.RelativePath)
-		contents, readErr := service.workspace.FileSystem().ReadFile(absolute)
-		if readErr != nil {
-			return TrashResult{}, readErr
+		precondition, err := service.existingPrecondition(absolute)
+		if err != nil {
+			return TrashResult{}, err
 		}
-		digest := storage.Digest(contents)
-		Wipe(contents)
 
 		trashRelative := filepath.Join(entryRelative, baseName)
 		request.Moves = append(request.Moves, storage.Move{
 			From:         absolute,
-			To:           filepath.Join(service.workspace.Root(), trashRelative),
-			Precondition: storage.Precondition{Exists: true, Digest: digest},
+			To:           service.absolutePath(trashRelative),
+			Precondition: precondition,
 		})
 		files = append(files, TrashFile{
 			OriginalRelativePath: member.RelativePath,
@@ -192,7 +196,7 @@ func (service *Service) Trash(keyID string) (TrashResult, error) {
 		return TrashResult{}, err
 	}
 	request.Changes = append(request.Changes, storage.Change{
-		Path:     filepath.Join(entryDirectory, manifestFileName),
+		Path:     service.manifestPath(entryID),
 		Contents: append(document, '\n'),
 	})
 
@@ -277,12 +281,40 @@ func (service *Service) ListTrash() ([]TrashEntry, error) {
 	return entries, nil
 }
 
+// manifestPath は、ごみ箱エントリの manifest のパス。
+func (service *Service) manifestPath(entryID string) string {
+	return filepath.Join(service.trashRoot(), entryID, manifestFileName)
+}
+
+// existingPrecondition は、absolute にいまあるファイルを読んで digest を取り、そのファイルが
+// 読んだときのままでなければ変更を断る Precondition を返す。中身は鍵かもしれないので、
+// digest を取ったらすぐ消す。読めなければ ReadFile のエラーをそのまま返し、呼び出し側が
+// fs.ErrNotExist を見分けられるようにする。
+func (service *Service) existingPrecondition(absolute string) (storage.Precondition, error) {
+	contents, err := service.workspace.FileSystem().ReadFile(absolute)
+	if err != nil {
+		return storage.Precondition{}, err
+	}
+	digest := storage.Digest(contents)
+	clear(contents)
+	return storage.Precondition{Exists: true, Digest: digest}, nil
+}
+
+// manifestRemoval は、ごみ箱エントリの manifest を、読んだときのままなら消す Removal を返す。
+func (service *Service) manifestRemoval(entryID string) (storage.Removal, error) {
+	path := service.manifestPath(entryID)
+	precondition, err := service.existingPrecondition(path)
+	if err != nil {
+		return storage.Removal{}, err
+	}
+	return storage.Removal{Path: path, Precondition: precondition}, nil
+}
+
 func (service *Service) readManifest(entryID string) (trashManifest, error) {
 	if !trashEntryPattern.MatchString(entryID) {
 		return trashManifest{}, ErrUnknownTrashEntry
 	}
-	path := filepath.Join(service.trashRoot(), entryID, manifestFileName)
-	contents, err := service.workspace.FileSystem().ReadFile(path)
+	contents, err := service.workspace.FileSystem().ReadFile(service.manifestPath(entryID))
 	if errors.Is(err, fs.ErrNotExist) {
 		return trashManifest{}, ErrUnknownTrashEntry
 	}
@@ -329,11 +361,11 @@ func (service *Service) restoreBlockers(inventory *Inventory, manifest trashMani
 	fileSystem := service.workspace.FileSystem()
 	blockers := make([]string, 0)
 	for _, file := range manifest.Files {
-		if _, err := fileSystem.Lstat(filepath.Join(service.workspace.Root(), file.TrashPath)); err != nil {
+		if _, err := fileSystem.Lstat(service.absolutePath(file.TrashPath)); err != nil {
 			blockers = append(blockers, BlockerEntryIncomplete+":"+file.OriginalPath)
 			continue
 		}
-		if _, err := fileSystem.Lstat(filepath.Join(service.workspace.Root(), file.OriginalPath)); err == nil {
+		if _, err := fileSystem.Lstat(service.absolutePath(file.OriginalPath)); err == nil {
 			blockers = append(blockers, BlockerPathOccupied+":"+file.OriginalPath)
 			continue
 		}
@@ -354,9 +386,8 @@ func (service *Service) restoreBlockers(inventory *Inventory, manifest trashMani
 }
 
 // Restore は、ごみ箱エントリのすべてのファイルを元のパスへ戻し、そのエントリの
-// manifest を取り除く。すべてひとつのジャーナル付きトランザクションで行う。空に
-// なったエントリのディレクトリは残る。マネージャが所有するのはファイルであって
-// ディレクトリではないからだ。ListTrash は manifest のないディレクトリを無視する。
+// manifest と、空になったエントリのディレクトリを取り除く。戻し先に欠けている
+// ディレクトリも作る。すべてひとつのジャーナル付きトランザクションで行う。
 func (service *Service) Restore(entryID string) (RestoreResult, error) {
 	manifest, err := service.readManifest(entryID)
 	if err != nil {
@@ -370,38 +401,34 @@ func (service *Service) Restore(entryID string) (RestoreResult, error) {
 		return RestoreResult{EntryID: entryID, Blockers: blockers}, ErrRestoreBlocked
 	}
 
-	fileSystem := service.workspace.FileSystem()
 	request := storage.Request{Operation: "key.restore"}
 	restored := make([]string, 0, len(manifest.Files))
+	destinations := make([]string, 0, len(manifest.Files))
 	for _, file := range manifest.Files {
-		trashAbsolute := filepath.Join(service.workspace.Root(), file.TrashPath)
-		originalAbsolute := filepath.Join(service.workspace.Root(), file.OriginalPath)
-		if err := service.workspace.EnsureDirectory(filepath.Dir(originalAbsolute)); err != nil {
+		trashAbsolute := service.absolutePath(file.TrashPath)
+		originalAbsolute := service.absolutePath(file.OriginalPath)
+		destinations = append(destinations, originalAbsolute)
+		precondition, err := service.existingPrecondition(trashAbsolute)
+		if err != nil {
 			return RestoreResult{}, err
 		}
-		contents, readErr := fileSystem.ReadFile(trashAbsolute)
-		if readErr != nil {
-			return RestoreResult{}, readErr
-		}
-		digest := storage.Digest(contents)
-		Wipe(contents)
 		request.Moves = append(request.Moves, storage.Move{
 			From:         trashAbsolute,
 			To:           originalAbsolute,
-			Precondition: storage.Precondition{Exists: true, Digest: digest},
+			Precondition: precondition,
 		})
 		restored = append(restored, file.OriginalPath)
 	}
 
-	manifestPath := filepath.Join(service.trashRoot(), entryID, manifestFileName)
-	manifestContents, err := fileSystem.ReadFile(manifestPath)
+	removal, err := service.manifestRemoval(entryID)
 	if err != nil {
 		return RestoreResult{}, err
 	}
-	request.Removals = append(request.Removals, storage.Removal{
-		Path:         manifestPath,
-		Precondition: storage.Precondition{Exists: true, Digest: storage.Digest(manifestContents)},
-	})
+	request.Removals = append(request.Removals, removal)
+	request.Directories = storage.ParentDirectoryCreates(service.workspace.Root(), destinations)
+	if err := service.removeEntryDirectoryIfEmptied(&request, entryID); err != nil {
+		return RestoreResult{}, err
+	}
 
 	result, err := service.transactions.Commit(request)
 	if err != nil {
@@ -418,41 +445,62 @@ func (service *Service) Purge(entryID string) (PurgeResult, error) {
 	if err != nil {
 		return PurgeResult{}, err
 	}
-	fileSystem := service.workspace.FileSystem()
 	request := storage.Request{Operation: "key.purge"}
 	removed := make([]string, 0, len(manifest.Files))
 
 	for _, file := range manifest.Files {
-		absolute := filepath.Join(service.workspace.Root(), file.TrashPath)
-		contents, readErr := fileSystem.ReadFile(absolute)
-		if errors.Is(readErr, fs.ErrNotExist) {
+		absolute := service.absolutePath(file.TrashPath)
+		precondition, err := service.existingPrecondition(absolute)
+		if errors.Is(err, fs.ErrNotExist) {
 			continue
 		}
-		if readErr != nil {
-			return PurgeResult{}, readErr
+		if err != nil {
+			return PurgeResult{}, err
 		}
-		digest := storage.Digest(contents)
-		Wipe(contents)
-		request.Removals = append(request.Removals, storage.Removal{
-			Path:         absolute,
-			Precondition: storage.Precondition{Exists: true, Digest: digest},
-		})
+		request.Removals = append(request.Removals, storage.Removal{Path: absolute, Precondition: precondition})
 		removed = append(removed, file.OriginalPath)
 	}
 
-	manifestPath := filepath.Join(service.trashRoot(), entryID, manifestFileName)
-	manifestContents, err := fileSystem.ReadFile(manifestPath)
+	removal, err := service.manifestRemoval(entryID)
 	if err != nil {
 		return PurgeResult{}, err
 	}
-	request.Removals = append(request.Removals, storage.Removal{
-		Path:         manifestPath,
-		Precondition: storage.Precondition{Exists: true, Digest: storage.Digest(manifestContents)},
-	})
+	request.Removals = append(request.Removals, removal)
+	if err := service.removeEntryDirectoryIfEmptied(&request, entryID); err != nil {
+		return PurgeResult{}, err
+	}
 
 	result, err := service.transactions.Commit(request)
 	if err != nil {
 		return PurgeResult{}, err
 	}
 	return PurgeResult{EntryID: entryID, Removed: removed, TransactionID: result.ID}, nil
+}
+
+// removeEntryDirectoryIfEmptied は、request がごみ箱エントリのディレクトリを空に
+// するときだけ、そのディレクトリも取り除かせる。
+//
+// manifest に無いファイルが置かれていたら、ディレクトリは残して復元と完全削除を
+// 続ける。空でないディレクトリの削除はトランザクション全体を断らせるので、知らない
+// ファイルひとつで鍵を戻せなくしない。
+func (service *Service) removeEntryDirectoryIfEmptied(request *storage.Request, entryID string) error {
+	directory := filepath.Join(service.trashRoot(), entryID)
+	children, err := service.workspace.FileSystem().ReadDir(directory)
+	if err != nil {
+		return err
+	}
+	leaving := make(map[string]bool, len(request.Moves)+len(request.Removals))
+	for _, move := range request.Moves {
+		leaving[move.From] = true
+	}
+	for _, removal := range request.Removals {
+		leaving[removal.Path] = true
+	}
+	for _, child := range children {
+		if !leaving[filepath.Join(directory, child.Name())] {
+			return nil
+		}
+	}
+	request.RemoveDirectories = append(request.RemoveDirectories, storage.DirectoryRemoval{Path: directory})
+	return nil
 }

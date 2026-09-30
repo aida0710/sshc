@@ -14,6 +14,10 @@ const AutoInterval = time.Minute
 // ひとつの画面操作が複数の永続化処理を伴っても、1つのsnapshotへまとめる。
 const AutoPushDelay = 5 * time.Second
 
+// autoBackoffMaxは、一時的な失敗が続いた同じ世代を再び試すまでの待ちの上限。
+// 同期先の障害が続くあいだは要求を数分に1回へ抑え、直ったあとは遅くとも5分で同期を再開する。
+const autoBackoffMax = 5 * time.Minute
+
 // AutoPhase は自動同期の現在状態。
 type AutoPhase string
 
@@ -53,30 +57,32 @@ type Auto struct {
 	Enabled func() bool
 	// Unattended は、自動処理による参照を vault の利用時刻に数えないようにする。
 	Unattended func(run func())
-	// Clock はbackoff判定に使う単調時計である。未指定ならtime.Nowを使う。
-	// testは実時間のsleepに依存せず、期限の前後を明示的に進められる。
-	Clock func() time.Time
 	// Prepare restores the persisted binding after the vault is unlocked. It is
 	// called before every user-requested or scheduled operation and must not
 	// perform network I/O.
 	Prepare func()
-	// PushDelay is configurable only to keep scheduler tests fast. Production
-	// leaves it at AutoPushDelay.
-	PushDelay time.Duration
 
 	interval time.Duration
 	now      func() string
+	// clock は、backoff と送信の期限を決める時計である。本番は time.Now のまま
+	// 差し替えない。テストは SetClockForTest で替え、実時間の sleep に頼らずに
+	// 期限の前後を進める。送信の期限を待つ timer も、テストでは同じ時計に合わせて
+	// 発火させる（newPushTimer）。
+	clock    func() time.Time
 	pushWake chan struct{}
-	pushMu   sync.Mutex
-	pushDue  time.Time
-	pending  bool
+	// newPushTimer は、Run が送信の期限を待つ timer を作る。本番は time.Timer で、
+	// テストは clock と一緒に進めて自分で発火させる timer に替える。
+	newPushTimer func(delay time.Duration) pushTimer
+	pushMutex    sync.Mutex
+	pushDue      time.Time
+	pending      bool
 
-	// cycleMu は、一巡が重ならないようにする。時計が来たときと、ユーザーが「今すぐ」を
+	// cycleMutex は、一巡が重ならないようにする。時計が来たときと、ユーザーが「今すぐ」を
 	// 押したときが同時に起きうる。
-	cycleMu sync.Mutex
+	cycleMutex sync.Mutex
 
-	mu   sync.Mutex
-	view AutoView
+	mutex sync.Mutex
+	view  AutoView
 	// blockedETag is the remote generation which needs a human decision. A
 	// ticker still performs HEAD, but does not download or derive a key again
 	// until that generation changes or a manual Apply advances local state.
@@ -101,20 +107,20 @@ func NewAuto(service *Service, interval time.Duration, now func() string) *Auto 
 		interval = AutoInterval
 	}
 	return &Auto{
-		service:   service,
-		interval:  interval,
-		now:       now,
-		Clock:     time.Now,
-		PushDelay: AutoPushDelay,
-		pushWake:  make(chan struct{}, 1),
-		view:      AutoView{Phase: AutoIdle},
+		service:      service,
+		interval:     interval,
+		now:          now,
+		clock:        time.Now,
+		pushWake:     make(chan struct{}, 1),
+		newPushTimer: newSystemPushTimer,
+		view:         AutoView{Phase: AutoIdle},
 	}
 }
 
 // View は、画面へ渡す形の現在地。
 func (a *Auto) View() AutoView {
-	a.mu.Lock()
-	defer a.mu.Unlock()
+	a.mutex.Lock()
+	defer a.mutex.Unlock()
 	view := a.view
 	view.Enabled = a.enabled()
 	return view
@@ -126,13 +132,8 @@ func (a *Auto) enabled() bool { return a.Enabled != nil && a.Enabled() }
 func (a *Auto) Run(ctx context.Context) {
 	ticker := time.NewTicker(a.interval)
 	defer ticker.Stop()
-	var pushTimer *time.Timer
-	var pushTimerC <-chan time.Time
-	defer func() {
-		if pushTimer != nil {
-			pushTimer.Stop()
-		}
-	}()
+	schedule := pushSchedule{start: a.newPushTimer}
+	defer schedule.stop()
 	for {
 		select {
 		case <-ctx.Done():
@@ -140,49 +141,28 @@ func (a *Auto) Run(ctx context.Context) {
 		case <-ticker.C:
 			a.Poll(ctx)
 		case <-a.pushWake:
-			delay, ok := a.pushWait()
-			if !ok {
+			if delay, ok := a.pushWait(); ok {
+				schedule.reset(delay)
+			}
+		case <-schedule.fired:
+			if delay, due := a.takeScheduledPush(); !due {
+				schedule.reset(delay)
 				continue
 			}
-			if pushTimer == nil {
-				pushTimer = time.NewTimer(delay)
-			} else {
-				if !pushTimer.Stop() {
-					select {
-					case <-pushTimer.C:
-					default:
-					}
-				}
-				pushTimer.Reset(delay)
-			}
-			pushTimerC = pushTimer.C
-		case <-pushTimerC:
-			delay, due := a.takeScheduledPush()
-			if !due {
-				if pushTimer != nil {
-					pushTimer.Reset(delay)
-					pushTimerC = pushTimer.C
-				}
-				continue
-			}
-			pushTimerC = nil
+			schedule.clear()
 			a.SendScheduled(ctx)
 		}
 	}
 }
 
 // NotifyLocalChange schedules one upload after local changes have been quiet
-// for five seconds. Repeated notifications move the same deadline instead of
+// for AutoPushDelay. Repeated notifications move the same deadline instead of
 // creating one timer or snapshot per write.
 func (a *Auto) NotifyLocalChange() {
-	delay := a.PushDelay
-	if delay <= 0 {
-		delay = AutoPushDelay
-	}
-	a.pushMu.Lock()
+	a.pushMutex.Lock()
 	a.pending = true
-	a.pushDue = time.Now().Add(delay)
-	a.pushMu.Unlock()
+	a.pushDue = a.clock().Add(AutoPushDelay)
+	a.pushMutex.Unlock()
 	select {
 	case a.pushWake <- struct{}{}:
 	default:
@@ -190,21 +170,21 @@ func (a *Auto) NotifyLocalChange() {
 }
 
 func (a *Auto) pushWait() (time.Duration, bool) {
-	a.pushMu.Lock()
-	defer a.pushMu.Unlock()
+	a.pushMutex.Lock()
+	defer a.pushMutex.Unlock()
 	if !a.pending {
 		return 0, false
 	}
-	return max(time.Until(a.pushDue), 0), true
+	return max(a.pushDue.Sub(a.clock()), 0), true
 }
 
 func (a *Auto) takeScheduledPush() (time.Duration, bool) {
-	a.pushMu.Lock()
-	defer a.pushMu.Unlock()
+	a.pushMutex.Lock()
+	defer a.pushMutex.Unlock()
 	if !a.pending {
 		return 0, true
 	}
-	if wait := time.Until(a.pushDue); wait > 0 {
+	if wait := a.pushDue.Sub(a.clock()); wait > 0 {
 		return wait, false
 	}
 	a.pending = false
@@ -215,8 +195,8 @@ func (a *Auto) takeScheduledPush() (time.Duration, bool) {
 // Poll performs only the receive half of automatic synchronization. If it
 // observes local divergence, upload is scheduled through the debounce path.
 func (a *Auto) Poll(ctx context.Context) AutoView {
-	a.cycleMu.Lock()
-	defer a.cycleMu.Unlock()
+	a.cycleMutex.Lock()
+	defer a.cycleMutex.Unlock()
 	if a.Unattended != nil {
 		var view AutoView
 		a.Unattended(func() { view = a.poll(ctx) })
@@ -230,14 +210,14 @@ func (a *Auto) poll(ctx context.Context) AutoView {
 		return a.View()
 	}
 	a.prepare()
-	a.service.operationMu.Lock()
-	key, ok := a.keyFor()
+	a.service.operationMutex.Lock()
+	syncKey, ok := a.currentSyncKey()
 	if !ok {
-		a.service.operationMu.Unlock()
+		a.service.operationMutex.Unlock()
 		return a.View()
 	}
 	a.enter(AutoRunning, "")
-	phase, detail, done := a.receive(ctx, key)
+	phase, detail, done := a.receive(ctx, syncKey)
 	shouldPush := false
 	if !done && a.service.Direction() != DirectionPull {
 		changed, err := a.service.diverged()
@@ -247,7 +227,7 @@ func (a *Auto) poll(ctx context.Context) AutoView {
 			shouldPush = changed
 		}
 	}
-	a.service.operationMu.Unlock()
+	a.service.operationMutex.Unlock()
 	if done {
 		a.enter(phase, detail)
 		return a.View()
@@ -262,8 +242,8 @@ func (a *Auto) poll(ctx context.Context) AutoView {
 // SendScheduled は、NotifyLocalChange で予約した送信を今行う。Run の timer が
 // 呼ぶほか、テストは Poll と組で 1 巡（受信してから送信）を同期的に進める。
 func (a *Auto) SendScheduled(ctx context.Context) AutoView {
-	a.cycleMu.Lock()
-	defer a.cycleMu.Unlock()
+	a.cycleMutex.Lock()
+	defer a.cycleMutex.Unlock()
 	if a.Unattended != nil {
 		var view AutoView
 		a.Unattended(func() { view = a.sendScheduledEnabled(ctx) })
@@ -277,59 +257,52 @@ func (a *Auto) sendScheduledEnabled(ctx context.Context) AutoView {
 		return a.View()
 	}
 	a.prepare()
-	a.service.operationMu.Lock()
-	defer a.service.operationMu.Unlock()
-	key, ok := a.keyFor()
+	a.service.operationMutex.Lock()
+	defer a.service.operationMutex.Unlock()
+	syncKey, ok := a.currentSyncKey()
 	if !ok {
 		return a.View()
 	}
 	a.enter(AutoRunning, "")
-	phase, detail := a.send(ctx, key)
+	phase, detail := a.send(ctx, syncKey)
 	a.enter(phase, detail)
 	return a.View()
 }
 
 // Now runs one user-requested cycle even when scheduled automatic sync is off.
 func (a *Auto) Now(ctx context.Context) AutoView {
-	a.cycleMu.Lock()
-	defer a.cycleMu.Unlock()
-	return a.runEnabled(ctx, false)
+	a.cycleMutex.Lock()
+	defer a.cycleMutex.Unlock()
+	a.prepare()
+	a.service.operationMutex.Lock()
+	defer a.service.operationMutex.Unlock()
+	// Read the key only after winning the same operation boundary as ReplaceKey.
+	// Otherwise a waiter can retain the old key, observe the new ETag, and push
+	// old-key ciphertext over the freshly rotated live object.
+	syncKey, ok := a.currentSyncKey()
+	if !ok {
+		return a.View()
+	}
+	a.enter(AutoRunning, "")
+
+	if phase, detail, done := a.receive(ctx, syncKey); done {
+		a.enter(phase, detail)
+		return a.View()
+	}
+	phase, detail := a.send(ctx, syncKey)
+	a.enter(phase, detail)
+	return a.View()
 }
 
 // ManualApplyCompleted clears a decision which was satisfied by an explicit
 // preview-and-apply operation. Serialize with a running cycle so an older cycle
 // cannot restore a stale blocked view after the apply has advanced local state.
 func (a *Auto) ManualApplyCompleted() {
-	a.cycleMu.Lock()
-	defer a.cycleMu.Unlock()
+	a.cycleMutex.Lock()
+	defer a.cycleMutex.Unlock()
 	a.clearBlocked()
 	a.clearFailed()
 	a.enter(AutoIdle, "")
-}
-
-func (a *Auto) runEnabled(ctx context.Context, requireEnabled bool) AutoView {
-	if requireEnabled && !a.enabled() {
-		return a.View()
-	}
-	a.prepare()
-	a.service.operationMu.Lock()
-	defer a.service.operationMu.Unlock()
-	// Read the key only after winning the same operation boundary as ReplaceKey.
-	// Otherwise a waiter can retain the old key, observe the new ETag, and push
-	// old-key ciphertext over the freshly rotated live object.
-	key, ok := a.keyFor()
-	if !ok {
-		return a.View()
-	}
-	a.enter(AutoRunning, "")
-
-	if phase, detail, done := a.receive(ctx, key); done {
-		a.enter(phase, detail)
-		return a.View()
-	}
-	phase, detail := a.send(ctx, key)
-	a.enter(phase, detail)
-	return a.View()
 }
 
 func (a *Auto) prepare() {
@@ -338,16 +311,16 @@ func (a *Auto) prepare() {
 	}
 }
 
-func (a *Auto) keyFor() (string, bool) {
+func (a *Auto) currentSyncKey() (string, bool) {
 	if a.Key == nil {
 		return "", false
 	}
-	key, ok := a.Key()
-	return key, ok && key != ""
+	syncKey, ok := a.Key()
+	return syncKey, ok && syncKey != ""
 }
 
 // receive はリモート更新を取り込む。done はこの巡回を終了すべきことを示す。
-func (a *Auto) receive(ctx context.Context, key string) (AutoPhase, string, bool) {
+func (a *Auto) receive(ctx context.Context, syncKey string) (AutoPhase, string, bool) {
 	if a.service.Direction() == DirectionPush {
 		generation, err := a.service.inspectRemoteGeneration(ctx)
 		if err != nil {
@@ -386,11 +359,11 @@ func (a *Auto) receive(ctx context.Context, key string) (AutoPhase, string, bool
 	if detail, ok := a.blocked(generation.target, generation.etag); ok {
 		return AutoBlocked, detail, true
 	}
-	if detail, ok := a.failed(generation, key); ok {
+	if detail, ok := a.failed(generation, syncKey); ok {
 		return AutoFailed, detail, true
 	}
 	// 自動同期では競合の解決先を選ばない。
-	result, err := a.service.pull(ctx, key, ResolveNone, "")
+	result, err := a.service.pull(ctx, syncKey, ResolveNone, "")
 	switch {
 	case errors.Is(err, ErrNoSnapshot):
 		return AutoIdle, "", false
@@ -400,7 +373,7 @@ func (a *Auto) receive(ctx context.Context, key string) (AutoPhase, string, bool
 	case err != nil && !errors.Is(err, ErrNothingToApply):
 		a.reportFailure("pull", err)
 		detail := failureDetail(err)
-		a.rememberFailed(generation, key, err, detail)
+		a.rememberFailed(generation, syncKey, err, detail)
 		return AutoFailed, detail, true
 	}
 	a.clearFailed()
@@ -436,10 +409,13 @@ func (a *Auto) reportFailure(stage string, err error) {
 }
 
 // send はローカルに変更があれば push する。
-func (a *Auto) send(ctx context.Context, key string) (AutoPhase, string) {
+func (a *Auto) send(ctx context.Context, syncKey string) (AutoPhase, string) {
 	if a.service.Direction() == DirectionPull {
 		return AutoIdle, ""
 	}
+	// push の前に、中身を持たずに digest だけで変更の有無を見る。送信の予約は同期以外の
+	// どの書き込みでも入るので、送るものの無い送信が多い。push を直接呼ぶと、そのたびに
+	// ~/.ssh 全体を中身ごとメモリへ読むことになる。
 	changed, err := a.service.diverged()
 	if err != nil {
 		return AutoFailed, failureDetail(err)
@@ -447,7 +423,7 @@ func (a *Auto) send(ctx context.Context, key string) (AutoPhase, string) {
 	if !changed {
 		return AutoIdle, ""
 	}
-	if _, err := a.service.push(ctx, key, "", ""); err != nil {
+	if _, err := a.service.push(ctx, syncKey, "", ""); err != nil {
 		switch {
 		case errors.Is(err, ErrPushRefused), errors.Is(err, ErrNothingToPush):
 			return AutoIdle, ""
@@ -461,32 +437,32 @@ func (a *Auto) send(ctx context.Context, key string) (AutoPhase, string) {
 }
 
 func (a *Auto) rememberBlocked(target, etag, detail string) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
+	a.mutex.Lock()
+	defer a.mutex.Unlock()
 	a.blockedTarget = target
 	a.blockedETag = etag
 	a.blockedDetail = detail
 }
 
 func (a *Auto) blocked(target, etag string) (string, bool) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
+	a.mutex.Lock()
+	defer a.mutex.Unlock()
 	return a.blockedDetail, target != "" && etag != "" &&
 		a.blockedTarget == target && a.blockedETag == etag
 }
 
 func (a *Auto) clearBlocked() {
-	a.mu.Lock()
-	defer a.mu.Unlock()
+	a.mutex.Lock()
+	defer a.mutex.Unlock()
 	a.blockedETag = ""
 	a.blockedTarget = ""
 	a.blockedDetail = ""
 }
 
-func (a *Auto) rememberFailed(generation remoteGeneration, key string, cause error, detail string) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	keyID := Digest([]byte(key))
+func (a *Auto) rememberFailed(generation remoteGeneration, syncKey string, cause error, detail string) {
+	a.mutex.Lock()
+	defer a.mutex.Unlock()
+	keyID := Digest([]byte(syncKey))
 	same := a.failedTarget == generation.target && a.failedETag == generation.etag && a.failedKeyID == keyID
 	if same {
 		a.failedAttempts++
@@ -504,22 +480,25 @@ func (a *Auto) rememberFailed(generation remoteGeneration, key string, cause err
 		a.failedUntil = time.Time{}
 		return
 	}
-	delay := a.interval
-	for attempt := 1; attempt < a.failedAttempts && delay < 5*time.Minute; attempt++ {
-		delay *= 2
-	}
-	if delay > 5*time.Minute {
-		delay = 5 * time.Minute
-	}
-	a.failedUntil = a.clock().Add(delay)
+	a.failedUntil = a.clock().Add(backoffDelay(a.interval, a.failedAttempts))
 }
 
-func (a *Auto) failed(generation remoteGeneration, key string) (string, bool) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
+// backoffDelayは、同じ世代への一時的な失敗がfailedAttempts回続いたあと、次に試すまで
+// 待つ時間。巡回の間隔から倍に延ばし、autoBackoffMaxで止める。
+func backoffDelay(interval time.Duration, failedAttempts int) time.Duration {
+	delay := interval
+	for attempt := 1; attempt < failedAttempts && delay < autoBackoffMax; attempt++ {
+		delay *= 2
+	}
+	return min(delay, autoBackoffMax)
+}
+
+func (a *Auto) failed(generation remoteGeneration, syncKey string) (string, bool) {
+	a.mutex.Lock()
+	defer a.mutex.Unlock()
 	match := generation.etag != "" &&
 		a.failedTarget == generation.target && a.failedETag == generation.etag &&
-		a.failedKeyID == Digest([]byte(key))
+		a.failedKeyID == Digest([]byte(syncKey))
 	if !match {
 		return "", false
 	}
@@ -529,16 +508,9 @@ func (a *Auto) failed(generation remoteGeneration, key string) (string, bool) {
 	return "", false
 }
 
-func (a *Auto) clock() time.Time {
-	if a.Clock == nil {
-		return time.Now()
-	}
-	return a.Clock()
-}
-
 func (a *Auto) clearFailed() {
-	a.mu.Lock()
-	defer a.mu.Unlock()
+	a.mutex.Lock()
+	defer a.mutex.Unlock()
 	a.failedETag = ""
 	a.failedTarget = ""
 	a.failedKeyID = ""
@@ -565,8 +537,8 @@ func deterministicSyncFailure(err error) bool {
 }
 
 func (a *Auto) enter(phase AutoPhase, detail string) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
+	a.mutex.Lock()
+	defer a.mutex.Unlock()
 	a.view.Phase = phase
 	a.view.Detail = detail
 	if phase != AutoRunning {

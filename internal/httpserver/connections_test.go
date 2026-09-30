@@ -18,6 +18,7 @@ import (
 	"sshc/internal/keys"
 	"sshc/internal/recent"
 	"sshc/internal/secret"
+	"sshc/internal/secret/secrettest"
 	"sshc/internal/session"
 	"sshc/internal/storage"
 )
@@ -38,8 +39,10 @@ const connectionHTTPKeyID = "0123456789abcdef0123456789abcdef"
 type connectionHTTPHarness struct {
 	*testHarness
 	passwords *secret.Service
-	keys      *stubKeyService
-	recent    *recent.Store
+	// transactions は passwords が vault を書く Manager で、前準備の書き込みにも使う。
+	transactions *storage.Manager
+	keys         *stubKeyService
+	recent       *recent.Store
 }
 
 func setPasswordForHTTPConnection(t *testing.T, harness *connectionHTTPHarness, alias, password string) {
@@ -48,7 +51,9 @@ func setPasswordForHTTPConnection(t *testing.T, harness *connectionHTTPHarness, 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := harness.passwords.SetBound(alias, password, binding); err != nil {
+	if err := secrettest.StoreDedicatedPassword(harness.passwords, harness.transactions, secrettest.DedicatedPassword{
+		Alias: alias, Password: password, Binding: binding,
+	}); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -140,7 +145,7 @@ func newConnectionHTTPHarness(t *testing.T, initialise bool) *connectionHTTPHarn
 			echo: engine, cookie: &http.Cookie{Name: SessionCookie, Value: credentials.SessionID},
 			csrf: credentials.CSRFToken, root: workspace.Root(), service: service,
 		},
-		passwords: passwords, keys: keyStub, recent: recentStore,
+		passwords: passwords, transactions: manager, keys: keyStub, recent: recentStore,
 	}
 }
 

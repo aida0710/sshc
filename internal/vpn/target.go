@@ -70,7 +70,7 @@ func (manager *Manager) connectTarget(ctx context.Context, profileName string, d
 	arguments := []string{"exec", "--interactive", manager.containerName(profileName),
 		connectPath, destination.Host, strconv.Itoa(destination.Port)}
 	connectionlog.Say(ctx, connectionlog.Full, "docker %s", describeArguments(arguments))
-	conn, err := manager.docker.stream(watch, arguments...)
+	connection, err := manager.docker.stream(watch, arguments...)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrSessionFailed, err)
 	}
@@ -79,18 +79,18 @@ func (manager *Manager) connectTarget(ctx context.Context, profileName string, d
 	// connect が書いた行を接続ログへ写す。繋がった場合も、繋げなかった場合も写す。
 	defer watch.describe(ctx)
 	refuse := func(reason FailureReason) error {
-		_ = conn.Close()
+		_ = connection.Close()
 		return &TargetFailure{Profile: profileName, Destination: destination.Address(), Reason: reason}
 	}
 	select {
 	case <-watch.started:
-		return conn, nil
-	case <-conn.Exited():
+		return connection, nil
+	case <-connection.Exited():
 		return nil, refuse(watch.failureReason())
 	case <-timer.C:
 		return nil, refuse(FailureTimeout)
 	case <-ctx.Done():
-		_ = conn.Close()
+		_ = connection.Close()
 		return nil, ctx.Err()
 	}
 }

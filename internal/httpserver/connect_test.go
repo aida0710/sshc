@@ -16,6 +16,7 @@ import (
 
 	"sshc/internal/handoff"
 	"sshc/internal/secret"
+	"sshc/internal/secret/secrettest"
 	"sshc/internal/storage"
 	"sshc/internal/terminal"
 )
@@ -45,11 +46,14 @@ func TestAnAccountPasswordNeverComesBackAsAKeyPassphrase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	vault := secret.NewService(workspace, storage.NewManager(workspace, time.Now, rand.Reader), time.Now)
+	transactions := storage.NewManager(workspace, time.Now, rand.Reader)
+	vault := secret.NewService(workspace, transactions, time.Now)
 	if err := vault.Initialise(testPassphrase); err != nil {
 		t.Fatal(err)
 	}
-	if err := vault.SetBound("bastion", "legacy-password", testPasswordBinding); err != nil {
+	if err := secrettest.StoreDedicatedPassword(vault, transactions, secrettest.DedicatedPassword{
+		Alias: "bastion", Password: "legacy-password", Binding: testPasswordBinding,
+	}); err != nil {
 		t.Fatal(err)
 	}
 	engine := connectEngine(t, CLIHandlers{
@@ -157,11 +161,14 @@ func TestConnectResolvesEachAliasBindingOnceForPasswordAndTOTP(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	vault := secret.NewService(workspace, storage.NewManager(workspace, time.Now, rand.Reader), time.Now)
+	transactions := storage.NewManager(workspace, time.Now, rand.Reader)
+	vault := secret.NewService(workspace, transactions, time.Now)
 	if err := vault.Initialise(testPassphrase); err != nil {
 		t.Fatal(err)
 	}
-	if err := vault.SetBound("edge", "the way in", testPasswordBinding); err != nil {
+	if err := secrettest.StoreDedicatedPassword(vault, transactions, secrettest.DedicatedPassword{
+		Alias: "edge", Password: "the way in", Binding: testPasswordBinding,
+	}); err != nil {
 		t.Fatal(err)
 	}
 	if err := vault.SetCredential(secret.KindTOTP, "edge-token", "JBSWY3DPEHPK3PXP"); err != nil {
@@ -217,11 +224,14 @@ func TestAnAliasWithOnlyAnAccountPasswordCarriesNoKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	vault := secret.NewService(workspace, storage.NewManager(workspace, time.Now, rand.Reader), time.Now)
+	transactions := storage.NewManager(workspace, time.Now, rand.Reader)
+	vault := secret.NewService(workspace, transactions, time.Now)
 	if err := vault.Initialise(testPassphrase); err != nil {
 		t.Fatal(err)
 	}
-	if err := vault.SetBound("password-only", "stored-account-password", testPasswordBinding); err != nil {
+	if err := secrettest.StoreDedicatedPassword(vault, transactions, secrettest.DedicatedPassword{
+		Alias: "password-only", Password: "stored-account-password", Binding: testPasswordBinding,
+	}); err != nil {
 		t.Fatal(err)
 	}
 	engine := connectEngine(t, CLIHandlers{
@@ -257,14 +267,17 @@ func TestConnectCarriesThePasswordsOfTheWholeJumpChain(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	vault := secret.NewService(workspace, storage.NewManager(workspace, time.Now, rand.Reader), time.Now)
+	transactions := storage.NewManager(workspace, time.Now, rand.Reader)
+	vault := secret.NewService(workspace, transactions, time.Now)
 	if err := vault.Initialise(testPassphrase); err != nil {
 		t.Fatal(err)
 	}
 	for alias, password := range map[string]string{
 		"far": "the destination", "edge": "the way in", "elsewhere": "nothing to do with this",
 	} {
-		if err := vault.SetBound(alias, password, testPasswordBinding); err != nil {
+		if err := secrettest.StoreDedicatedPassword(vault, transactions, secrettest.DedicatedPassword{
+			Alias: alias, Password: password, Binding: testPasswordBinding,
+		}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -350,11 +363,14 @@ func TestConnectDoesNotFallBackToAnAccountPasswordWhenKeyResolutionFails(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	vault := secret.NewService(workspace, storage.NewManager(workspace, time.Now, rand.Reader), time.Now)
+	transactions := storage.NewManager(workspace, time.Now, rand.Reader)
+	vault := secret.NewService(workspace, transactions, time.Now)
 	if err := vault.Initialise(testPassphrase); err != nil {
 		t.Fatal(err)
 	}
-	if err := vault.SetBound("bastion", "stored-password", testPasswordBinding); err != nil {
+	if err := secrettest.StoreDedicatedPassword(vault, transactions, secrettest.DedicatedPassword{
+		Alias: "bastion", Password: "stored-password", Binding: testPasswordBinding,
+	}); err != nil {
 		t.Fatal(err)
 	}
 	engine := connectEngine(t, CLIHandlers{

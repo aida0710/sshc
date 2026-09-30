@@ -189,7 +189,7 @@ func TestWriteRestrictsWindowsHandoffState(t *testing.T) {
 	for _, path := range []string{
 		directory,
 		filepath.Join(directory, FileName),
-		filepath.Join(directory, mutationLockName),
+		filepath.Join(directory, MutationLockName),
 	} {
 		assertRestrictedWindowsPath(t, path)
 	}

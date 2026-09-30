@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"time"
 
 	"github.com/labstack/echo/v5"
 
@@ -63,9 +62,7 @@ func registerSyncRoutes(engine *echo.Echo, handlers SyncHandlers) {
 
 func addSyncActions(registry actionRegistry, service *remotesync.Service) {
 	registry[session.ActionSyncForcePush] = actionKind{
-		evidence: func(parent context.Context, target string) (string, error) {
-			ctx, cancel := context.WithTimeout(parent, 30*time.Second)
-			defer cancel()
+		evidence: func(ctx context.Context, target string) (string, error) {
 			confirmation, err := service.ForcePushConfirmation(ctx, target)
 			return confirmation.Evidence, err
 		},

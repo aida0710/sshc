@@ -178,7 +178,7 @@ func (fakeAgent) List(context.Context) ([]platform.AgentIdentity, error) {
 func (fakeAgent) Add(context.Context, platform.AgentAddRequest) error {
 	return platform.ErrAgentUnavailable
 }
-func (fakeAgent) Remove(context.Context, string) error { return platform.ErrAgentUnavailable }
+func (fakeAgent) Remove(context.Context, []byte) error { return platform.ErrAgentUnavailable }
 
 // testClock はサーバー側の goroutine から読まれ、テスト側から
 // 進められるため、時刻は素の field ではなく atomic に保持する。

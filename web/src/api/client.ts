@@ -36,6 +36,11 @@ export function failureCode(error: unknown): string {
   return error instanceof ApiError ? error.code : "";
 }
 
+// failurePath は、engine が失敗の原因として示したファイルのパスを返す。示していなければ空。
+export function failurePath(error: unknown): string {
+  return error instanceof ApiError ? (error.problem?.path ?? "") : "";
+}
+
 async function readProblem(response: Response): Promise<Problem | null> {
   try {
     const payload: unknown = await response.json();

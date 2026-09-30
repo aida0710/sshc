@@ -38,7 +38,7 @@ func readOpenVPNProfile(
 		}
 		summary, err := vpn.InspectOpenVPNConfig(config)
 		if err != nil {
-			zeroBytes(config)
+			clear(config)
 			return nil, nil, vpnConfigInputError(err)
 		}
 		settings.Servers = summary.Servers
@@ -48,7 +48,7 @@ func readOpenVPNProfile(
 	// 設定ファイルが auth-user-pass を含むなら、ユーザー名とパスワードが要る。含まなければ
 	// 空のままでよい（証明書だけで認証する）。
 	if settings.Username, err = p.optional("VPN username", previous.Username); err != nil {
-		zeroBytes(config)
+		clear(config)
 		return nil, nil, err
 	}
 	fields := []vpnSecretField{{name: vpn.SecretKeyOpenVPNConfig, value: config}}
@@ -57,7 +57,7 @@ func readOpenVPNProfile(
 		keepsPassword := keeps && previous.Username != ""
 		password, err := p.secret("VPN password", keepsPassword)
 		if err != nil {
-			zeroBytes(config)
+			clear(config)
 			return nil, nil, err
 		}
 		fields = append(fields, vpnSecretField{name: vpn.SecretKeyOpenVPNPassword, value: password})

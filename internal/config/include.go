@@ -48,8 +48,8 @@ type Resolver struct {
 	Tokens    map[byte]string
 	MaxDepth  int
 	// GeneratedRegion は、そのファイルのうち、このアプリケーション自身が書いた
-	// Include が並ぶ行範囲を半開区間 [start, end] で返す。見つからなければ ok が
-	// false になる。
+	// Include が並ぶ範囲を、開始と終了のマーカー行の添字で返す。範囲はマーカー行を
+	// 含まない（start < index < end の行）。見つからなければ ok が false になる。
 	//
 	// 何のためにあるかというと、その範囲内の Include が何にも一致しなかったことを
 	// 報告しないためである。その行は宣言されたグループごとに 1 本ずつ置かれており、

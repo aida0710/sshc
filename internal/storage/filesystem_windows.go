@@ -21,6 +21,10 @@ import (
 
 const fileDeleteChild = 0x00000040
 
+// nativeReportsExecutableBit: Go の Windows 実装は通常ファイルの権限を読み取り専用属性
+// から 0666 か 0444 として作るので、owner の実行ビットは読み返せない。
+const nativeReportsExecutableBit = false
+
 const (
 	tempRandomByteCount = 16
 	tempCollisionLimit  = 128
@@ -242,6 +246,18 @@ func (OSFileSystem) ReadPrivateFileLimited(path string, maximum int64) ([]byte, 
 	}
 	defer file.Close()
 	return readBoundedRegularFile(file, maximum)
+}
+
+func (OSFileSystem) DigestPrivateFileLimited(path string, maximum int64) (string, error) {
+	if maximum < 0 {
+		return "", ErrFileTooLarge
+	}
+	file, err := windowsacl.OpenAuthenticatedFileForRead(path)
+	if err != nil {
+		return "", mapPrivateOpenError(err)
+	}
+	defer file.Close()
+	return digestBoundedRegularFile(file, maximum)
 }
 
 func (OSFileSystem) ReadPrivateFilePrefix(path string, maximum int) ([]byte, error) {

@@ -14,7 +14,6 @@ import (
 	"container/heap"
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -36,21 +35,23 @@ var (
 	ErrPreconditionFailed = errors.New("the object changed since it was last read")
 	// ErrNotFound は、そのキーの下にオブジェクトが存在しないことを報告する。
 	ErrNotFound = errors.New("no object under that key")
-	// ErrRefused は、それ以外の拒否をすべて報告する。本文は持ち回らない。S3 の
-	// エラードキュメントにはバケット名とリクエスト ID が含まれるが、どちらもこの
-	// アプリケーションが表示するメッセージに入れてよいものではない。
+	// ErrRefused は、下の4つ（認証、アクセス、要求頻度、5xx）のどれにも当たらない
+	// 拒否を報告する。4つはこれを包まないので、呼び出し側は並べる順序に頼らずに
+	// 拒否の種類を見分けられる。本文は持ち回らない。S3 のエラードキュメントには
+	// バケット名とリクエスト ID が含まれるが、どちらもこのアプリケーションが表示する
+	// メッセージに入れてよいものではない。
 	ErrRefused = errors.New("the object store refused the request")
-	// ErrAuthenticationFailed は、object storeが資格情報を認証できなかったことを
-	// 報告する。ErrRefusedにも一致させ、従来の呼び出し側との互換性を保つ。
-	ErrAuthenticationFailed = fmt.Errorf("the object store could not authenticate the request: %w", ErrRefused)
+	// ErrAuthenticationFailed は、object storeが認証情報を認証できなかったことを
+	// 報告する。
+	ErrAuthenticationFailed = errors.New("the object store could not authenticate the request")
 	// ErrAccessDenied は、認証済みかどうかにかかわらず、object storeが対象への
 	// アクセスを許可しなかったことを報告する。
-	ErrAccessDenied = fmt.Errorf("the object store denied access to the target: %w", ErrRefused)
+	ErrAccessDenied = errors.New("the object store denied access to the target")
 	// ErrRateLimited は、object storeが要求頻度を制限したことを報告する。
-	ErrRateLimited = fmt.Errorf("the object store rate limited the request: %w", ErrRefused)
+	ErrRateLimited = errors.New("the object store rate limited the request")
 	// ErrServiceUnavailable は、object store自身が5xxで処理不能を報告したことを
 	// 示す。ネットワーク到達不能とは区別する。
-	ErrServiceUnavailable = fmt.Errorf("the object store service could not process the request: %w", ErrRefused)
+	ErrServiceUnavailable = errors.New("the object store service could not process the request")
 	// ErrBothConditions は、If-Match と If-None-Match を同時に設定した呼び出しを
 	// 拒否する。これはプログラミングの誤りであり、リクエストを送る前に捕まえる。
 	ErrBothConditions = errors.New("If-Match and If-None-Match are mutually exclusive")
@@ -98,8 +99,8 @@ type ObjectInfo struct {
 // Client は、このアプリケーションで使用する S3 API を呼び出す。
 type Client struct {
 	HTTP *http.Client
-	// RequestTimeout はリクエスト全体の上限。0 なら 60 秒である。テストや、明示的に
-	// より短い上限を必要とする呼び出し側だけが設定する。
+	// RequestTimeout はリクエスト全体の上限。0 なら defaultRequestTimeout（30 分）で
+	// ある。テストや、明示的により短い上限を必要とする呼び出し側だけが設定する。
 	RequestTimeout time.Duration
 	// Endpoint はアカウントのエンドポイント。たとえば
 	// https://<account>.r2.cloudflarestorage.com。https でなければならない。
@@ -107,8 +108,8 @@ type Client struct {
 	Bucket   string
 	// Region は R2 では "auto"。本物の AWS ではバケットのリージョンでなければ
 	// ならない。署名スコープに入るので、食い違えばストアが拒否する。
-	Region string
-	Creds  Credentials
+	Region      string
+	Credentials Credentials
 }
 
 // ErrInsecureEndpoint は、ループバックでない平文のエンドポイントを拒否する。
@@ -150,7 +151,7 @@ func (c Client) api() (*s3.Client, error) {
 		// カスタムエンドポイントのホスト名と TLS 証明書を壊すため固定している。
 		UsePathStyle: true,
 		Credentials: credentials.NewStaticCredentialsProvider(
-			c.Creds.AccessKeyID, c.Creds.SecretAccessKey, ""),
+			c.Credentials.AccessKeyID, c.Credentials.SecretAccessKey, ""),
 		// 既定では、送るものごとに CRC32 を計算して aws-chunked のトレーラーで
 		// 送る。本文はここへ届く前に封をされており、その中身は AEAD のタグが
 		// 守っている。転送の破損は署名が捕まえる。要求されたときだけ計算させて、

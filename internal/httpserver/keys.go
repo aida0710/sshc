@@ -82,12 +82,6 @@ func registerKeyRoutes(engine *echo.Echo, handlers KeyHandlers) {
 	engine.DELETE("/api/v1/trash/:entryId", handlers.Purge)
 }
 
-func wipeBuffer(buffer []byte) {
-	for index := range buffer {
-		buffer[index] = 0
-	}
-}
-
 // consumeAction は、この操作が必要とする一度限りのトークンを消費する。
 //
 // evidence はリクエストから受け取るのではなく再計算される。そのため
@@ -202,7 +196,7 @@ func (h KeyHandlers) Reveal(c *echo.Context) error {
 	if err != nil {
 		return keyProblem(c, err)
 	}
-	defer keys.Wipe(result.Contents)
+	defer clear(result.Contents)
 	c.Response().Header().Set("Cache-Control", "no-store")
 	return c.JSON(http.StatusOK, api.RevealPrivateKeyResponse{
 		Id:            result.ID,
@@ -419,7 +413,8 @@ func keyProblem(c *echo.Context, err error) error {
 		return problem(c, http.StatusBadRequest, "location_unchanged")
 	case errors.Is(err, application.ErrKeyRelocateNotSupported):
 		return problem(c, http.StatusUnprocessableEntity, "relocate_not_supported")
-	case errors.Is(err, application.ErrKeyReferenceMoved), errors.Is(err, application.ErrKeyFilesChanged):
+	case errors.Is(err, application.ErrKeyReferenceMoved), errors.Is(err, application.ErrKeyFilesChanged),
+		errors.Is(err, keys.ErrKeyChanged):
 		return problem(c, http.StatusConflict, "external_change")
 	case errors.Is(err, application.ErrInvalidGroupName):
 		return problem(c, http.StatusBadRequest, "invalid_request")

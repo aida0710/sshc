@@ -30,7 +30,7 @@ Receive-only is useful for a secondary read-only device. If its history diverges
 
 Connection and receive failures distinguish authentication refusal, timeout, DNS, TLS, an incorrect encryption key, unsupported formats and damaged snapshots. An unclassified failure shows a stable diagnostic code for support.
 
-During receive, files are restored from the authoritative remote snapshot with their contents and permissions intact. sshc distinguishes regular `0600` files from executable `0700` files, so a permission-only change is synchronized as well. OpenSSH settings that sshc cannot structure, or syntax problems already present in that snapshot, do not make replication fail; inspect them afterward in Connections or Diagnostics.
+During receive, files are restored from the authoritative remote snapshot with their contents and permissions intact. sshc distinguishes regular `0600` files from executable `0700` files, so a permission-only change is synchronized as well. Windows has no executable bit, so a Windows machine sends the permissions from the last sync and never turns another machine's `0700` into `0600`. Files created on Windows are sent as `0600`. OpenSSH settings that sshc cannot structure, or syntax problems already present in that snapshot, do not make replication fail; inspect them afterward in Connections or Diagnostics.
 
 ## Git-like flow
 

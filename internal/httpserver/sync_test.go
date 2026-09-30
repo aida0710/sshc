@@ -35,6 +35,7 @@ func testSyncIntegrations(secrets *secret.Service) remotesync.IntegrationHooks {
 		SealVault:          secrets.AdoptTravelDocument,
 		EmptyVaultDocument: secrets.EmptyTravelDocument,
 		VaultAdopted:       secrets.Reload,
+		KeyedTravelDigest:  secrets.KeyedTravelDigest,
 		OpenSnippets:       func() ([]byte, error) { return nil, nil },
 		SealSnippets:       func(document []byte) ([]byte, error) { return document, nil },
 		SecretMutation:     func(run func() error) error { return run() },
@@ -117,11 +118,15 @@ func syncEngineWithVault(t *testing.T) (*echo.Echo, *remotesync.Service, *secret
 		t.Fatal(err)
 	}
 	manager := storage.NewManager(workspace, time.Now, rand.Reader)
-	service := remotesync.NewService(workspace, manager,
+	secrets := secret.NewService(workspace, manager, time.Now)
+	service, err := remotesync.NewIntegratedService(workspace, manager,
 		func() string { return "2026-08-05T00:00:00Z" },
 		func() (string, error) { return "origin-test", nil },
+		testSyncIntegrations(secrets),
 	)
-	secrets := secret.NewService(workspace, manager, time.Now)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	engine := echo.New()
 	registerSyncRoutes(engine, SyncHandlers{Service: service, Vault: secrets, ObjectStoreHTTP: inProcessBucket(&measuredSyncBucket{})})
@@ -304,7 +309,7 @@ func newMeasuredSyncInstallation(t *testing.T, bucket *measuredSyncBucket, files
 	credentials := objectstore.Credentials{AccessKeyID: "AKID", SecretAccessKey: "secret"}
 	config := remotesync.Config{Endpoint: server.URL, Bucket: "sshc", Region: "auto", Direction: remotesync.DirectionBoth}
 	client := &objectstore.Client{
-		HTTP: server.Client(), Endpoint: server.URL, Bucket: "sshc", Region: "auto", Creds: credentials,
+		HTTP: server.Client(), Endpoint: server.URL, Bucket: "sshc", Region: "auto", Credentials: credentials,
 	}
 	secrets := secret.NewService(workspace, storage.NewManager(workspace, time.Now, rand.Reader), time.Now)
 	if err := secrets.Initialise(syncTestPassphrase); err != nil {
@@ -813,6 +818,22 @@ func TestSyncProblemClassifiesLocalWorkspaceRaces(t *testing.T) {
 	}
 }
 
+// 送る対象のファイル名が移植できないときは、スナップショットの破損ではなく
+// ローカルの名前の問題として返し、名前を変えるか除外すべきファイルを示す。
+func TestSyncProblemNamesTheLocalFileWhoseNameIsNotPortable(t *testing.T) {
+	recorder := syncProblemResponse(errors.Join(errors.New("collect"), &remotesync.UnportablePathError{Path: "connections/aux.conf"}))
+	var body struct {
+		Code string `json:"code"`
+		Path string `json:"path"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if recorder.Code != http.StatusConflict || body.Code != "sync_local_path_unportable" || body.Path != "connections/aux.conf" {
+		t.Fatalf("problem = %d: %s", recorder.Code, recorder.Body.String())
+	}
+}
+
 func TestApplyRejectsARemoteGenerationThatChangedAfterPreview(t *testing.T) {
 	bucket := &measuredSyncBucket{}
 	_, producer, _ := measuredSyncEngine(t, bucket, map[string]string{"config": "Host first\n"})
@@ -1179,10 +1200,14 @@ func TestSetupThatCannotReachTheBucketIsNotStored(t *testing.T) {
 		t.Fatal(err)
 	}
 	manager := storage.NewManager(workspace, time.Now, rand.Reader)
-	service := remotesync.NewService(workspace, manager,
-		func() string { return "2026-08-05T00:00:00Z" },
-		func() (string, error) { return "origin-test", nil })
 	secrets := secret.NewService(workspace, manager, time.Now)
+	service, err := remotesync.NewIntegratedService(workspace, manager,
+		func() string { return "2026-08-05T00:00:00Z" },
+		func() (string, error) { return "origin-test", nil },
+		testSyncIntegrations(secrets))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := secrets.Initialise(syncTestPassphrase); err != nil {
 		t.Fatal(err)
 	}

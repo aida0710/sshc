@@ -20,14 +20,16 @@ func TestUnixPrivateStateContainmentRemainsCaseSensitive(t *testing.T) {
 }
 
 func TestUnixLoadedJournalClaimsRemainCaseSensitive(t *testing.T) {
-	claimed := []string{"/home/aida/.ssh/keys/id_work"}
-	if journalPathAlreadyClaimed(claimed, "/home/aida/.ssh/keys/id_other") {
+	const work = "/home/aida/.ssh/keys/id_work"
+	claimed := newClaimedPaths(1)
+	claimed.claim(work)
+	if claimed.contains("/home/aida/.ssh/keys/id_other") {
 		t.Fatal("different Unix path was treated as already claimed")
 	}
-	if journalPathAlreadyClaimed(claimed, "/home/aida/.ssh/KEYS/ID_WORK") {
+	if claimed.contains("/home/aida/.ssh/KEYS/ID_WORK") {
 		t.Fatal("Unix case alias was treated as the same path")
 	}
-	if !journalPathAlreadyClaimed(claimed, claimed[0]) {
+	if !claimed.contains(work) || claimed.claim("/home/aida/.ssh/keys/../keys/id_work") {
 		t.Fatal("exact Unix path was not treated as already claimed")
 	}
 }

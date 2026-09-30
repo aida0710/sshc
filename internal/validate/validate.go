@@ -21,18 +21,17 @@ import (
 const (
 	// MaxAliasLength は、このアプリケーションが受け付ける Host alias の長さの上限。
 	MaxAliasLength = 64
-	// MaxHostnameLength は DNS の上限。ssh-keyscan の対象はこれを超えてはならない。
+	// MaxHostnameLength は、ssh の HostName と ssh-keyscan の対象として受け付ける長さの
+	// 上限である。DNS の名前の上限（wire 形式で 255 オクテット）に合わせている。
+	// VPN の中で引く名前は、テキスト形式の上限 253 で別に確かめる（internal/vpn の
+	// maxHostNameLength）。そちらはコンテナの中でそのまま名前解決に渡す名前だからである。
 	MaxHostnameLength = 255
-	// MinEnginePort より下は OS が特権ポートとして扱う番号なので、engine には使わせない。
-	MinEnginePort = 1024
-	MaxEnginePort = 65535
 )
 
 var (
 	ErrUnsafeAlias    = errors.New("alias contains characters this application refuses to accept")
 	ErrUnsafeHostname = errors.New("hostname contains characters this application refuses to accept")
 	ErrUnsafePort     = errors.New("port is outside the TCP range")
-	ErrEnginePort     = errors.New("engine port is outside the unprivileged TCP range")
 	// ErrInvalidGroupName は、connections ディレクトリ配下の安全な相対ディレクトリ
 	// パスになっていないグループ名を報告する。
 	ErrInvalidGroupName = errors.New("group name is not a safe relative directory path")
@@ -82,17 +81,6 @@ func Hostname(host string) error {
 func Port(port int) error {
 	if port < 1 || port > 65535 {
 		return ErrUnsafePort
-	}
-	return nil
-}
-
-// EnginePort は、この番号を engine の待ち受けに使えるかを報告する。
-//
-// CLI の --port、設定画面、metadata.json、ブラウザの登録が保存する origin の
-// ポートが、同じ範囲を使う。
-func EnginePort(port int) error {
-	if port < MinEnginePort || port > MaxEnginePort {
-		return ErrEnginePort
 	}
 	return nil
 }

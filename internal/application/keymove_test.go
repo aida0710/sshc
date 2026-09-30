@@ -5,9 +5,12 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 
+	"sshc/internal/configresolver"
 	"sshc/internal/keys"
 	"sshc/internal/storage"
 )
@@ -29,7 +32,7 @@ func keyInventory(t *testing.T, workspace *storage.Workspace) *keys.Inventory {
 	service := keys.NewService(keys.ServiceOptions{
 		Workspace:    workspace,
 		Transactions: storage.NewManager(workspace, nil, rand.Reader),
-		Resolver:     storage.NewResolver(workspace),
+		Resolver:     configresolver.ForWorkspace(workspace),
 	})
 	inventory, err := service.Inventory()
 	if err != nil {
@@ -293,4 +296,38 @@ func TestRelocateKeyIsOneTransactionThatCopiesNoKeyMaterial(t *testing.T) {
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("walk backups: %v", err)
 	}
+}
+
+// 移動先のグループのディレクトリも、鍵の移動と同じトランザクションで作る。
+// トランザクションの外で作ると、失敗やクラッシュのあとに空のディレクトリが残る。
+func TestRelocateKeyCreatesTheGroupDirectoryInItsOwnTransaction(t *testing.T) {
+	service, workspace := newTestService(t)
+	declareGroup(t, service, "work")
+	writeKeyPair(t, workspace, "id_work")
+	groupDirectory := filepath.Join(workspace.Root(), "keys", "work")
+	if _, err := os.Lstat(groupDirectory); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("the group directory exists before the relocation: %v", err)
+	}
+
+	result, err := service.RelocateKey(keyInventory(t, workspace), KeyRelocateRequest{
+		KeyID: keys.ItemID("id_work"),
+		Group: stringPointer("work"),
+	})
+	if err != nil {
+		t.Fatalf("RelocateKey error = %v", err)
+	}
+
+	history, err := storage.NewManager(workspace, time.Now, rand.Reader).History()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, record := range history {
+		if record.ID == result.TransactionID {
+			if !slices.Contains(record.Paths, groupDirectory) {
+				t.Fatalf("transaction paths = %v, want the group directory it created", record.Paths)
+			}
+			return
+		}
+	}
+	t.Fatalf("no history record for transaction %q", result.TransactionID)
 }

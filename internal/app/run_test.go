@@ -262,7 +262,7 @@ func (stubKeyAgent) List(context.Context) ([]platform.AgentIdentity, error) {
 func (stubKeyAgent) Add(context.Context, platform.AgentAddRequest) error {
 	return platform.ErrAgentUnavailable
 }
-func (stubKeyAgent) Remove(context.Context, string) error { return platform.ErrAgentUnavailable }
+func (stubKeyAgent) Remove(context.Context, []byte) error { return platform.ErrAgentUnavailable }
 
 type keyVaultSession struct {
 	base    string

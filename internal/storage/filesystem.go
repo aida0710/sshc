@@ -50,6 +50,34 @@ type FileSystem interface {
 // OSFileSystem は FileSystem のネイティブ OS 実装。
 type OSFileSystem struct{}
 
+// executableBitReporter は任意実装とする。実装しない FileSystem は OS の実装を包んで
+// いるものとみなし、nativeReportsExecutableBit に従う。
+type executableBitReporter interface {
+	ReportsExecutableBit() bool
+}
+
+// ReportsExecutableBit は、Lstat が最後に書いた owner の実行ビットを返すかを言う。
+// Windows の Lstat は読み取り専用属性から 0666 か 0444 を作るだけなので、0700 で
+// 書いたファイルも 0600 と読める。同期と復旧は、この違いを変更と読んではならない。
+func ReportsExecutableBit(fileSystem FileSystem) bool {
+	if reporter, ok := fileSystem.(executableBitReporter); ok {
+		return reporter.ReportsExecutableBit()
+	}
+	return nativeReportsExecutableBit
+}
+
+func (OSFileSystem) ReportsExecutableBit() bool { return nativeReportsExecutableBit }
+
+// observableOwnerMode は、owner の権限のうちこの FileSystem が読み返せる部分だけを
+// 残す。実行ビットを持たない FileSystem で残るのは書き込みビットだけで、これは
+// Windows の読み取り専用属性に対応する。
+func observableOwnerMode(fileSystem FileSystem, mode fs.FileMode) fs.FileMode {
+	if ReportsExecutableBit(fileSystem) {
+		return mode.Perm() & 0o700
+	}
+	return mode.Perm() & 0o200
+}
+
 // atomicFileWriter は、一時ファイルの作成から rename と親 directory の同期まで、
 // 同じ検証済み directory handle に固定できるネイティブ実装である。FileSystem の
 // fault-injection fake は従来どおり各段階を包めるよう、任意 interface にしておく。

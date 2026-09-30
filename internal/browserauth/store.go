@@ -22,10 +22,10 @@ import (
 	"sync"
 	"time"
 
+	"sshc/internal/handoff"
 	"sshc/internal/randomid"
 	"sshc/internal/storage"
 	"sshc/internal/strictjson"
-	"sshc/internal/validate"
 )
 
 const (
@@ -137,7 +137,7 @@ func (s *Store) Port() (int, error) {
 // origin, so every capability issued for the previous port is revoked in the
 // same atomic state update. Reusing the same port preserves restart recovery.
 func (s *Store) SetPort(port int) error {
-	if validate.EnginePort(port) != nil {
+	if handoff.EnginePort(port) != nil {
 		return ErrInvalidDocument
 	}
 	s.mutex.Lock()
@@ -352,7 +352,7 @@ func (s *Store) load() (document, error) {
 	}
 	if stored.SchemaVersion != SchemaVersion ||
 		len(stored.Registrations) > MaxRegistrations ||
-		(stored.Port != 0 && validate.EnginePort(stored.Port) != nil) {
+		(stored.Port != 0 && handoff.EnginePort(stored.Port) != nil) {
 		return document{}, ErrInvalidDocument
 	}
 	seen := make(map[string]bool, len(stored.Registrations))

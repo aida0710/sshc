@@ -7,7 +7,7 @@ import (
 
 var (
 	ErrAgentUnavailable = errors.New("no ssh-agent is reachable from this process")
-	ErrAgentRejected    = errors.New("ssh-add rejected the request")
+	ErrAgentRejected    = errors.New("the ssh-agent rejected the request")
 )
 
 // AgentIdentity は、ユーザーの ssh-agent に現在読み込まれている鍵ひとつ。
@@ -20,11 +20,17 @@ type AgentIdentity struct {
 
 // AgentAddRequest はエージェントに秘密鍵を 1 つ読み込ませる。
 //
-// Passphrase は子プロセスの標準入力を通る。引数になることも環境変数になることも
-// 決してない。どちらも、同じユーザーで動くどのプロセスからも読めるもの
-// だからである。
+// 鍵はファイルのパスではなく中身で渡す。ファイルを読むのは呼び手（keys.Service）で、
+// ほかの鍵の読み込みと同じくシンボリックリンクをたどらず、大きさに上限を設けて読む。
+// KeyAgent はファイルに触れず、agent との通信だけを受け持つ。
+//
+// Passphrase は、このプロセスの中で鍵を復号するためだけに使い、agent へは渡さない。
+// agent が受け取るのは復号済みの鍵である。
 type AgentAddRequest struct {
-	PrivateKeyPath  string
+	// PrivateKey は秘密鍵ファイルの中身である。
+	PrivateKey []byte
+	// Comment は、agent の一覧で鍵に付く名前である。
+	Comment         string
 	Passphrase      []byte
 	LifetimeSeconds int
 }
@@ -35,5 +41,7 @@ type KeyAgent interface {
 	Available(ctx context.Context) bool
 	List(ctx context.Context) ([]AgentIdentity, error)
 	Add(ctx context.Context, request AgentAddRequest) error
-	Remove(ctx context.Context, publicKeyPath string) error
+	// Remove は、publicKey（公開鍵ファイルの中身。authorized_keys と同じ 1 行の形式）
+	// が指す鍵を agent から外す。
+	Remove(ctx context.Context, publicKey []byte) error
 }

@@ -23,7 +23,7 @@ const (
 	ReconnectJitterMaxPercent = 120
 )
 
-// ReconnectBackoff は、n 回目の再接続までに待つ基準の秒数。表の末尾以降は最後の
+// ReconnectBackoff は、n 回目の再接続までに待つ基準の待ち時間。表の末尾以降は最後の
 // 値を繰り返す。設定画面の文言はこの表から総所要時間を言う。
 var ReconnectBackoff = []time.Duration{time.Second, 2 * time.Second, 5 * time.Second, 10 * time.Second, 15 * time.Second}
 

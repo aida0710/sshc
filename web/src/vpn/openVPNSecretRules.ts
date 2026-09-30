@@ -5,7 +5,8 @@ import type { VPNSecretKey } from "./vpnSecretRules";
 // OpenVPN のシークレット（設定ファイルとパスワード）を、送る前に engine と同じ順番で確かめる。
 //
 // 規則の正本は Go（internal/vpn/openvpn.go の validateSecrets）にある。長さの上限は API
-// （api/openapi.yaml の VPNSecrets）の写しで、送る前の検査と同じく UTF-16 の長さで数える。
+// （api/openapi.yaml の VPNSecrets）の写しで、UTF-16 の長さで数える。UTF-16 の長さは
+// engine の数える UTF-8 のバイト数を超えないので、engine が通す値をここで断ることはない。
 
 // maxConfigLength は、設定ファイルの長さの上限である（API と同じ値）。
 const maxConfigLength = 65536;

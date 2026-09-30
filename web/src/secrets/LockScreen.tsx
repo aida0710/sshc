@@ -163,7 +163,16 @@ export function LockScreen({
       onOpen(status);
     } catch (caught) {
       const code = caught instanceof ApiError ? caught.code : "network_request_failed";
-      setError(t(code === "vault_compatible_backup_missing" ? "lock.noCompatibleBackup" : "lock.recoveryFailed"));
+      switch (code) {
+        case "vault_compatible_backup_missing":
+          setError(t("lock.noCompatibleBackup"));
+          break;
+        case "vault_backups_too_many":
+          setError(t("lock.tooManyBackups"));
+          break;
+        default:
+          setError(t("lock.recoveryFailed"));
+      }
     } finally {
       setBusy(false);
     }
@@ -179,8 +188,9 @@ export function LockScreen({
       setVersionMismatch(null);
       setResetAcknowledged(false);
       onOpen(status);
-    } catch {
-      setError(t("lock.resetFailed"));
+    } catch (caught) {
+      const code = caught instanceof ApiError ? caught.code : "network_request_failed";
+      setError(t(code === "vault_backups_too_many" ? "lock.tooManyBackups" : "lock.resetFailed"));
     } finally {
       setBusy(false);
     }

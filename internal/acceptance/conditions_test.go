@@ -155,7 +155,7 @@ func completionConditions() []completionCondition {
 				{proofPlaywright, "lists generated keys and reveals one only after an explicit confirmation"},
 				{proofGoTest, "TestGenerateWritesAnEncryptedPairThroughATransaction"},
 				{proofGoTest, "TestTrashMovesTheWholeKeyPairAndKeepsItsPermissions"},
-				{proofGoTest, "TestRegisterSendsTheKeyPathAndPassphraseToTheAgentOnly"},
+				{proofGoTest, "TestRegisterSendsTheKeyContentsNamedByItsPathAndThePassphraseToTheAgentOnly"},
 				{proofGoTest, "TestEveryGuardedRouteRefusesAMissingWrongOrExpiredToken"},
 				{proofGoTest, "TestNoResponseCarriesASecretItIsNotEntitledTo"},
 			},

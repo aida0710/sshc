@@ -7,6 +7,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
+
+	"golang.org/x/sys/unix"
 )
 
 func TestASymlinkAnywhereOnThePathIsRefused(t *testing.T) {
@@ -64,5 +67,41 @@ func TestARelativePathAndTheRootItselfAreRefused(t *testing.T) {
 		if _, err := OpenOrCreateDirectory(path, 0o700); err == nil {
 			t.Fatalf("OpenOrCreateDirectory(%q) succeeded, want an error", path)
 		}
+	}
+}
+
+// fifoOpenDeadline は、FIFO を開く呼び出しが戻るまで待つ上限。open はすぐに戻る
+// はずなので、遅いテスト環境でも誤って落ちない程度に余裕を持たせる。
+const fifoOpenDeadline = 5 * time.Second
+
+// 保留記録の対象が FIFO に置き換わっても、読み手は書き手を待って止まらない。
+// 止まると、engine の起動や設定画面が戻らなくなる。
+func TestOpenRegularReturnsForAFIFOWithoutWaitingForAWriter(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "fifo")
+	if err := unix.Mkfifo(path, 0o600); err != nil {
+		t.Skipf("FIFOs are not available: %v", err)
+	}
+	opened := make(chan os.FileMode, 1)
+	go func() {
+		file, err := OpenRegular(path)
+		if err != nil {
+			opened <- 0
+			return
+		}
+		defer file.Close()
+		info, err := file.Stat()
+		if err != nil {
+			opened <- 0
+			return
+		}
+		opened <- info.Mode()
+	}()
+	select {
+	case mode := <-opened:
+		if mode.IsRegular() {
+			t.Fatalf("a FIFO was reported as a regular file: %v", mode)
+		}
+	case <-time.After(fifoOpenDeadline):
+		t.Fatal("OpenRegular on a FIFO is still waiting for a writer")
 	}
 }

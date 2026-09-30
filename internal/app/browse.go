@@ -8,6 +8,7 @@ import (
 
 	"sshc/internal/application"
 	"sshc/internal/config"
+	"sshc/internal/configresolver"
 	"sshc/internal/effective"
 	"sshc/internal/storage"
 )
@@ -80,7 +81,7 @@ func readConfigGraph(home string) (*storage.Workspace, *config.Graph, error) {
 		return nil, nil, err
 	}
 	entry := filepath.Join(workspace.Root(), "config")
-	graph, err := storage.NewResolver(workspace).Resolve(entry)
+	graph, err := configresolver.ForWorkspace(workspace).Resolve(entry)
 	if err != nil {
 		return nil, nil, fmt.Errorf("read config: %w", err)
 	}

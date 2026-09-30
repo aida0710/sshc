@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { failureCode } from "../api/client";
+import { failureCode, failurePath } from "../api/client";
 import type { Translate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
 import type { SyncResultView } from "./SyncResultCard";
@@ -7,7 +7,11 @@ import type { SyncResultView } from "./SyncResultCard";
 type Refusals = Readonly<Partial<Record<string, MessageKey>>>;
 type Recover = (code: string) => Promise<boolean>;
 
-export function useSyncOperation(t: Translate, refusals: Refusals) {
+export function useSyncOperation(
+  t: Translate,
+  refusals: Refusals,
+  pathRefusals: Refusals,
+) {
   const [resultView, setResultView] = useState<SyncResultView | null>(null);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
@@ -18,6 +22,18 @@ export function useSyncOperation(t: Translate, refusals: Refusals) {
     setError("");
     setErrorCode("");
   }, []);
+
+  // engine がファイルを示した失敗は、そのパスを入れた文で説明する。
+  function describeRefusal(
+    code: string,
+    path: string,
+    failure: string,
+  ): string {
+    const namedWithPath = path === "" ? undefined : pathRefusals[code];
+    if (namedWithPath !== undefined) return t(namedWithPath, { path });
+    const named = refusals[code];
+    return named === undefined ? failure : t(named);
+  }
 
   async function execute<T>(
     operation: () => Promise<T>,
@@ -34,9 +50,10 @@ export function useSyncOperation(t: Translate, refusals: Refusals) {
     } catch (caught) {
       const code = failureCode(caught);
       if (recover !== undefined && (await recover(code))) return;
-      const named = refusals[code];
       setErrorCode(code);
-      setError(explain?.(code) || (named === undefined ? failure : t(named)));
+      setError(
+        explain?.(code) || describeRefusal(code, failurePath(caught), failure),
+      );
     } finally {
       setBusy(false);
     }

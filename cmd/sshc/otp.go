@@ -117,7 +117,7 @@ func (run otpRun) save(ctx context.Context) int {
 		return exitFailure
 	}
 	setup, err := promptMaskedPassword(ctx, environment.stdin, stderr, environment.terminal, "TOTP setup key or otpauth URI: ")
-	defer zeroBytes(setup)
+	defer clear(setup)
 	if err != nil {
 		if errors.Is(ctx.Err(), context.Canceled) {
 			return exitInterrupted
@@ -130,7 +130,7 @@ func (run otpRun) save(ctx context.Context) int {
 		fmt.Fprintln(stderr, "sshc: could not encode the TOTP setup key safely")
 		return exitFailure
 	}
-	zeroBytes(setup)
+	clear(setup)
 	var updated api.CredentialList
 	path := "/api/v1/credentials/totp/" + url.PathEscape(called.Name)
 	if err := run.engine.sendSecretJSON(ctx, http.MethodPut, path, payload, &updated); err != nil {

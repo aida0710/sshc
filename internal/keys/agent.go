@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"os"
 	"time"
 
 	"golang.org/x/crypto/ssh"
@@ -20,12 +19,11 @@ const defaultAgentTimeout = 10 * time.Second
 
 // Agent は、ユーザーの ssh-agent とプロトコルで直接通信する。
 //
-// ssh-add は起動しない。以前は agent プロトコルを直接実装していなかったため
-// ssh-add を使用していた。接続の公開鍵認証が既に同じソケットから鍵を
-// 読んでいるので、同じソケットに二つの通信方式を持たない。
+// 外部のプログラムは起動しない。接続の公開鍵認証も同じソケットから鍵を読むので、
+// 同じソケットに二つの通信方式を持たない。
 //
-// パスフレーズは、このプロセスの中で鍵を復号してから登録する。子プロセスの
-// 標準入力を通らないため、子プロセスへ秘密を渡さずに済む。
+// パスフレーズは、このプロセスの中で鍵を復号してから登録する。秘密を子プロセスへ
+// 渡すことはない。
 type Agent struct {
 	// Socket は agent の宛先を返す。Unix は SSH_AUTH_SOCK の値、Windows は固定の
 	// named pipe である。空なら agent は設定されていない。
@@ -89,14 +87,9 @@ func (a Agent) List(ctx context.Context) ([]platform.AgentIdentity, error) {
 // Add は秘密鍵を 1 つ読み込ませる。
 //
 // 鍵の復号はここで行う。agent が受け取るのは復号済みの鍵であり、パスフレーズ
-// そのものは agent へ渡らない。それが渡るのは ssh-add に読ませていたときの
-// 都合であって、プロトコルの要求ではない。
+// そのものは agent へ渡らない。agent プロトコルが求めるのは復号済みの鍵だけである。
 func (a Agent) Add(ctx context.Context, request platform.AgentAddRequest) error {
-	contents, err := os.ReadFile(request.PrivateKeyPath)
-	if err != nil {
-		return err
-	}
-	private, err := DecodePrivateKey(contents, request.Passphrase)
+	private, err := DecodePrivateKey(request.PrivateKey, request.Passphrase)
 	if err != nil {
 		return err
 	}
@@ -107,7 +100,7 @@ func (a Agent) Add(ctx context.Context, request platform.AgentAddRequest) error 
 	}
 	defer func() { _ = conn.Close() }()
 
-	added := agent.AddedKey{PrivateKey: private, Comment: request.PrivateKeyPath}
+	added := agent.AddedKey{PrivateKey: private, Comment: request.Comment}
 	if request.LifetimeSeconds > 0 {
 		added.LifetimeSecs = uint32(request.LifetimeSeconds)
 	}
@@ -117,13 +110,9 @@ func (a Agent) Add(ctx context.Context, request platform.AgentAddRequest) error 
 	return nil
 }
 
-// Remove は、その公開鍵ファイルが指す鍵を agent から外す。
-func (a Agent) Remove(ctx context.Context, publicKeyPath string) error {
-	line, err := os.ReadFile(publicKeyPath)
-	if err != nil {
-		return err
-	}
-	public, _, _, _, err := ssh.ParseAuthorizedKey(line)
+// Remove は、その公開鍵が指す鍵を agent から外す。
+func (a Agent) Remove(ctx context.Context, publicKey []byte) error {
+	public, _, _, _, err := ssh.ParseAuthorizedKey(publicKey)
 	if err != nil {
 		return fmt.Errorf("%w: %s", ErrNotPublicKey, err)
 	}

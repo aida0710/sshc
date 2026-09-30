@@ -71,18 +71,6 @@ type PublicKeyInfo struct {
 	SignedKeyFingerprint   string
 }
 
-// Wipe は、秘密を保持するバッファをゼロで上書きする。
-//
-// これはベストエフォートにすぎない。Go のガベージコレクタは、スライスの拡張や
-// スタックの移動の際にすでにバイト列をコピーしているかもしれず、ランタイムには
-// そのコピーを見つけたり消したりする手段がない。Wipe は、秘密がこのプロセス内で
-// 読める時間の幅を縮めるだけで、消去を保証するものではない。
-func Wipe(secret []byte) {
-	for index := range secret {
-		secret[index] = 0
-	}
-}
-
 // InspectPrivateKey は、パスフレーズを必要とせずに、秘密鍵ファイルが何を保持して
 // いるか、そしてパスフレーズで保護されているかを報告する。
 func InspectPrivateKey(contents []byte) (Material, error) {

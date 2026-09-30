@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"path"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -155,6 +156,12 @@ func (fileSystem workspaceFileSystem) ReadFilePrefix(path string, maximum int) (
 	return contents[:min(len(contents), maximum)], nil
 }
 
+// ReportsExecutableBit は包んだ FileSystem の答えをそのまま返す。埋め込みだけでは
+// 任意実装のメソッドが見えなくなり、OS の既定値へ戻ってしまう。
+func (fileSystem workspaceFileSystem) ReportsExecutableBit() bool {
+	return ReportsExecutableBit(fileSystem.FileSystem)
+}
+
 func (fileSystem workspaceFileSystem) WriteAtomic(path, prefix string, permission fs.FileMode, contents []byte) error {
 	if writer, ok := fileSystem.FileSystem.(atomicFileWriter); ok {
 		return writer.WriteAtomic(path, prefix, permission, contents)
@@ -183,7 +190,7 @@ func NewWorkspace(fileSystem FileSystem, home string) (*Workspace, error) {
 	if privateReader, ok := fileSystem.(privateFileReader); ok {
 		workspace.fileSystem = workspaceFileSystem{
 			FileSystem:     fileSystem,
-			stateDirectory: filepath.Join(root, "sshc"),
+			stateDirectory: filepath.Join(root, StateDirectoryName),
 			privateReader:  privateReader,
 		}
 	}
@@ -196,8 +203,25 @@ func (w *Workspace) Home() string { return w.home }
 
 func (w *Workspace) Root() string { return w.root }
 
+// StateDirectoryName は、ワークスペース（~/.ssh）の中で sshc が自分の状態を置く
+// ディレクトリの名前。
+const StateDirectoryName = "sshc"
+
 // StateDir は、ジャーナル・履歴・バックアップを保持するディレクトリ。
-func (w *Workspace) StateDir() string { return filepath.Join(w.root, "sshc") }
+func (w *Workspace) StateDir() string { return filepath.Join(w.root, StateDirectoryName) }
+
+// DeviceLocalPaths は、このパッケージがワークスペースの中に置く、このマシンだけの帳簿
+// （ジャーナル、履歴、バックアップ、書き込みのロック）を、ワークスペースからの
+// スラッシュ区切りの相対パスで返す。別のマシンのジャーナルやバックアップは、ここでは
+// 一度も起きていない書き込みを記述しているので、同期はこれらを運ばない。
+func DeviceLocalPaths() []string {
+	return []string{
+		path.Join(StateDirectoryName, journalDirectoryName),
+		path.Join(StateDirectoryName, historyDirectoryName),
+		path.Join(StateDirectoryName, backupDirectoryName),
+		path.Join(StateDirectoryName, mutationLockName),
+	}
+}
 
 // Contains は、candidate がルートであるか、その下にあるかを報告する。
 //
@@ -218,13 +242,11 @@ func (w *Workspace) Contains(candidate string) bool {
 // 指定することになる。dotfiles のチェックアウトや、/var が private/var への
 // リンクである macOS のあらゆる一時ディレクトリで、そうなる。
 //
-// "~" や "%d" を展開する呼び出し側は、ホームの表記に着地する。それを Root と
-// 比べると、ワークスペースそのものであるパスがワークスペースの外にあると言われて
-// しまい、それを尋ねる二か所（鍵の参照インデックスと、IdentityFile 行を書き換える
-// 再配置）の両方が「いいえ」と応答していた。目に見える結果は、ファイルは移動する
-// のにそれらを指定するディレクティブを何ひとつ書き換えない鍵の名前変更が、暗黙に
-// 起きることであり、そして Keys 画面が設定全体を解決不能として報告することで
-// あった。
+// "~" や "%d" を展開する呼び出し側は、ホームの表記に着地する。それをそのまま
+// Root と比べると、ワークスペースそのものであるパスがワークスペースの外にあると
+// 判定される。それを尋ねる二か所（鍵の参照インデックスと、IdentityFile 行を書き換える
+// 再配置）が、ここで表記を揃えてから比べる。揃えなければ、鍵の名前変更がファイルだけを
+// 移して IdentityFile 行を書き換えず、Keys 画面は設定全体を解決できないと報告する。
 //
 // ホーム配下にないパスは、正規化されたうえで、それ以外は手を触れずに返る。
 func (w *Workspace) Normalise(candidate string) string {

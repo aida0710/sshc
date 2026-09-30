@@ -39,8 +39,8 @@ const ManifestName = "manifest.json"
 // SchemaVersion は、マニフェスト文書のバージョン。
 //
 // バージョン 6 は、revision、parent、messageに加えて、認証済みのancestor chainを
-// 必須契約とする。読み取りは v5 だけを registeredSnapshotMigrations で v6 へ
-// 一段変換して受け付け、それより古い形式は受け付けない。
+// 必須契約とする。読み取りはこの版だけを受け付け、古い版も新しい版も
+// ErrUnsupportedVersion で断る。
 const SchemaVersion = 6
 
 // MaxCommitMessageRunes は、履歴へ保存する一行メッセージの最大長。
@@ -50,13 +50,6 @@ const MaxCommitMessageRunes = 240
 // 従来どおり1 MiBまでだが、利用者が明示的に許可した無変換の背景画像を同じ
 // workspace snapshotで運べるよう、asset分の余地を持つ。
 const MaxSnapshotBytes = (1024 + 64) << 20
-
-func maxEntryBytes(relative string) int64 {
-	if strings.HasPrefix(relative, "sshc/backgrounds/") {
-		return storage.MaxAssetFileSize
-	}
-	return storage.MaxFileSize
-}
 
 // MaxEntries は、ひとつのスナップショットが運べるファイル数に上限を設ける。
 const MaxEntries = 4096
@@ -116,33 +109,12 @@ type Manifest struct {
 	ParentRevision string `json:"parentRevision,omitempty"`
 	// Ancestors begins with ParentRevision and continues toward the root. It is
 	// encrypted and authenticated by the snapshot envelope, so the object store
-	// neither learns nor alters it. It is excluded from Revision so a validated
-	// v5 revision keeps its identity while the manifest migrates to v6.
+	// neither learns nor alters it. It is a cache derived from the parent links,
+	// so RevisionFor leaves it out of the content identity.
 	Ancestors []string `json:"ancestors,omitempty"`
 	// Message はremoteでは暗号化manifest内だけに保存し、object metadataへ複製しない。
 	Message string  `json:"message"`
 	Files   []Entry `json:"files"`
-}
-
-// manifestV5 is the exact previous snapshot contract. Keeping it separate from
-// Manifest makes DisallowUnknownFields meaningful during migration: a document
-// cannot claim to be v5 while carrying fields which only v6 understands.
-type manifestV5 struct {
-	SchemaVersion  int     `json:"schemaVersion"`
-	CreatedAt      string  `json:"createdAt"`
-	Origin         string  `json:"origin"`
-	Revision       string  `json:"revision"`
-	ParentRevision string  `json:"parentRevision,omitempty"`
-	Message        string  `json:"message"`
-	Files          []Entry `json:"files"`
-}
-
-type snapshotMigration func(*Manifest) error
-
-const snapshotMigrationBaseVersion = 5
-
-var registeredSnapshotMigrations = map[int]snapshotMigration{
-	5: migrateSnapshotV5ToV6,
 }
 
 type revisionDocument struct {
@@ -170,33 +142,6 @@ func RevisionFor(manifest Manifest) (string, error) {
 	return Digest(document), nil
 }
 
-func migrateSnapshotV5ToV6(manifest *Manifest) error {
-	if manifest.SchemaVersion != 5 || len(manifest.Ancestors) != 0 {
-		return ErrManifestMismatch
-	}
-	if manifest.ParentRevision != "" {
-		manifest.Ancestors = []string{manifest.ParentRevision}
-	}
-	manifest.SchemaVersion = 6
-	return nil
-}
-
-func migrateSnapshotManifest(manifest Manifest) (Manifest, error) {
-	if manifest.SchemaVersion < snapshotMigrationBaseVersion || manifest.SchemaVersion > SchemaVersion {
-		return Manifest{}, ErrUnsupportedVersion
-	}
-	for manifest.SchemaVersion < SchemaVersion {
-		step := registeredSnapshotMigrations[manifest.SchemaVersion]
-		if step == nil {
-			return Manifest{}, ErrUnsupportedVersion
-		}
-		if err := step(&manifest); err != nil {
-			return Manifest{}, err
-		}
-	}
-	return manifest, nil
-}
-
 func decodeManifest(document []byte) (Manifest, error) {
 	var version struct {
 		SchemaVersion int `json:"schemaVersion"`
@@ -205,27 +150,14 @@ func decodeManifest(document []byte) (Manifest, error) {
 		return Manifest{}, ErrNotASnapshot
 	}
 
-	var manifest Manifest
-	switch version.SchemaVersion {
-	case 5:
-		var legacy manifestV5
-		if err := strictjson.Decode(document, &legacy); err != nil {
-			return Manifest{}, ErrNotASnapshot
-		}
-		manifest = Manifest{
-			SchemaVersion: legacy.SchemaVersion,
-			CreatedAt:     legacy.CreatedAt, Origin: legacy.Origin,
-			Revision: legacy.Revision, ParentRevision: legacy.ParentRevision,
-			Message: legacy.Message, Files: legacy.Files,
-		}
-	case SchemaVersion:
-		if err := strictjson.Decode(document, &manifest); err != nil {
-			return Manifest{}, ErrNotASnapshot
-		}
-	default:
+	if version.SchemaVersion != SchemaVersion {
 		return Manifest{}, ErrUnsupportedVersion
 	}
-	return migrateSnapshotManifest(manifest)
+	var manifest Manifest
+	if err := strictjson.Decode(document, &manifest); err != nil {
+		return Manifest{}, ErrNotASnapshot
+	}
+	return manifest, nil
 }
 
 // FinalizeManifest prepares a new manifest for writing and records its parent.
@@ -353,7 +285,7 @@ func Build(manifest Manifest, contents map[string][]byte) ([]byte, error) {
 	}
 	total := int64(len(document))
 	for _, entry := range manifest.Files {
-		if int64(len(contents[entry.Path])) > maxEntryBytes(entry.Path) {
+		if int64(len(contents[entry.Path])) > storage.PayloadLimit(entry.Path) {
 			return nil, ErrSnapshotTooLarge
 		}
 		total += int64(len(contents[entry.Path]))
@@ -414,13 +346,13 @@ func Read(archive []byte) (Manifest, map[string][]byte, error) {
 			// 何の意味も持たず、好意的に解釈すべきものでもない。
 			return Manifest{}, nil, ErrUnsafePath
 		}
-		if header.Size < 0 || header.Size > maxEntryBytes(header.Name) {
+		if header.Size < 0 || header.Size > storage.PayloadLimit(header.Name) {
 			return Manifest{}, nil, ErrSnapshotTooLarge
 		}
 		if len(contents) >= MaxEntries {
 			return Manifest{}, nil, ErrSnapshotTooLarge
 		}
-		maximum := maxEntryBytes(header.Name)
+		maximum := storage.PayloadLimit(header.Name)
 		body, err := io.ReadAll(io.LimitReader(reader, maximum+1))
 		if err != nil {
 			return Manifest{}, nil, ErrNotASnapshot
@@ -515,11 +447,20 @@ func checkPath(name string) error {
 		if segment == "" || segment == "." || segment == ".." {
 			return ErrUnsafePath
 		}
-		if strings.HasSuffix(segment, ".") || strings.HasSuffix(segment, " ") || windowsReservedName(segment) {
+		if strings.HasSuffix(segment, ".") || strings.HasSuffix(segment, " ") || windowsReservedName(segment) ||
+			strings.ContainsFunc(segment, windowsForbiddenCharacter) {
 			return ErrUnsafePath
 		}
 	}
 	return nil
+}
+
+// windowsForbiddenCharacter は、Windows のファイル名に使えない文字を見分ける。
+// Linux や macOS では作れても、Windows のマシンはその名前で書けず、受け取った
+// スナップショット全体を適用できなくなる。「:」は NTFS では代替データストリームの
+// 区切りでもある。
+func windowsForbiddenCharacter(character rune) bool {
+	return character < 0x20 || strings.ContainsRune(`<>:"|?*`, character)
 }
 
 // windowsReservedName recognizes device names which Win32 resolves as devices

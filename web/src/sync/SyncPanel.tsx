@@ -24,7 +24,7 @@ import { SyncOverviewCard } from "./SyncOverviewCard";
 import { SyncSettingsSection } from "./SyncSettingsSection";
 import { SyncTransferCard } from "./SyncTransferCard";
 import { SyncUnlockCard } from "./SyncUnlockCard";
-import { syncRefusals } from "./syncRefusals";
+import { syncPathRefusals, syncRefusals } from "./syncRefusals";
 
 // Another device's push shows up within half a minute; the bucket listing
 // is a paid request, so the panel does not ask more often.
@@ -97,7 +97,7 @@ export function SyncPanel({ api = syncPanelApi }: SyncPanelProps) {
   } = useSyncRemoteState(api, t);
   const [historyDiff, setHistoryDiff] = useState<SyncHistoryDiff | null>(null);
   const [forcePushOpen, setForcePushOpen] = useState(false);
-  const operation = useSyncOperation(t, syncRefusals);
+  const operation = useSyncOperation(t, syncRefusals, syncPathRefusals);
   const {
     resultView,
     notice,

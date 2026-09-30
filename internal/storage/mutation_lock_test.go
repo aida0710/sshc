@@ -121,9 +121,11 @@ func TestDiscardBackupPublishRunsBeforeMutationBarrierRelease(t *testing.T) {
 	entered := make(chan struct{})
 	finished := make(chan error, 1)
 	crossed := false
-	_, err := manager.CommitAtomicDiscardBackupsAndPublish(Request{
-		Operation: "publish-generation",
-		Changes:   []Change{{Path: target, Contents: []byte("new-generation")}},
+	_, err := manager.CommitAtomicDiscardBackupsAndPublish(func() (Request, error) {
+		return Request{
+			Operation: "publish-generation",
+			Changes:   []Change{{Path: target, Contents: []byte("new-generation")}},
+		}, nil
 	}, func() {
 		go func() {
 			finished <- manager.WithSnapshot(func() error {

@@ -12,7 +12,7 @@ import (
 // DefaultScanTimeout は、ひとつのアドレスを尋ねるのに掛ける上限である。
 //
 // 種別ごとではなく全体の予算である。種別ごとにすると、届かないアドレスに
-// 対して上限が種別の数だけ掛かる。
+// 対して上限が種別の数（ScanAlgorithms の長さ）だけ掛かり、その倍数だけ待たされる。
 const DefaultScanTimeout = 15 * time.Second
 
 // errKeyCollected は、鍵を受け取ったので握手を止めるという合図である。

@@ -120,7 +120,7 @@ func TestWriterGeneratedCompletedHistoryFormsRoundTrip(t *testing.T) {
 
 func assertGeneratedHistoryActions(t *testing.T, manager *Manager, want []string) {
 	t.Helper()
-	records, err := manager.readRecords(manager.historyDirectory())
+	records, err := manager.readRecords(manager.historyDirectory(), skipOtherJournalVersions)
 	if err != nil || len(records) != 1 {
 		t.Fatalf("generated history records = %#v, %v", records, err)
 	}

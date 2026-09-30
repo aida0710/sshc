@@ -5,14 +5,12 @@ package secret
 
 import (
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"maps"
 	"slices"
 	"strings"
 
 	"sshc/internal/envelope"
-	"sshc/internal/strictjson"
 	"sshc/internal/totp"
 	"sshc/internal/validate"
 )
@@ -22,31 +20,7 @@ import (
 // 名前も持たない。
 const WorkspacePath = "sshc/secrets"
 
-// SettingsPath は、マスターパスワードで暗号化したオブジェクトストア設定の保存先。
-// 同期先への資格情報がスナップショットに含まれないよう、vault とは別に保存する。
-const SettingsPath = "sshc/sync-settings"
-
-// SchemaVersion は、暗号化の内側にある平文文書のバージョン。ヘッダーは envelope
-// 用に自前のバージョンを運ぶ。
-const SchemaVersion = 6
-
-// envelope のエラーは再エクスポートしてある。vault を扱う呼び出し側が、どの
-// パッケージがそれを暗号化したかを知らずに済むようにするためだ。
 var (
-	ErrWrongPassphrase    = envelope.ErrWrongPassphrase
-	ErrNotAVault          = envelope.ErrNotAnEnvelope
-	ErrUnsupportedVersion = envelope.ErrUnsupportedVersion
-	ErrCostRefused        = envelope.ErrCostRefused
-	ErrWeakPassphrase     = envelope.ErrWeakPassphrase
-)
-
-var (
-	// ErrOlderSchema は、復号には成功したものの、平文documentが現行schemaより古い
-	// ことを報告する。envelope形式の不一致と分けることで、画面が「新しすぎる」と
-	// 誤案内せず、安全な復旧操作だけを提示できる。
-	ErrOlderSchema = errors.New("the vault schema is older than this application supports")
-	// ErrNewerSchema は、復号済みdocumentがこのbuildより新しいschemaを要求する。
-	ErrNewerSchema = errors.New("the vault schema is newer than this application supports")
 	// ErrUnsafeName は、安全な alias ではない alias を拒否する。
 	ErrUnsafeName = errors.New("that is not a safe host alias")
 	// ErrEmptySecret は空のパスワードを拒否する。プロンプト上では、誤ったものと
@@ -64,27 +38,6 @@ var (
 	// RFC 6238 の設定として解釈できないことを報告する。
 	ErrInvalidTOTP = errors.New("the TOTP setup key is invalid")
 )
-
-// SchemaVersionError は、復号後に判明したvault documentのバージョンの違いである。schema番号は
-// 秘密ではなく、診断へ載せても資格情報やpassphraseを明かさない。
-type SchemaVersionError struct {
-	Found     int
-	Supported int
-}
-
-func (e *SchemaVersionError) Error() string {
-	return "vault schema version is not supported"
-}
-
-func (e *SchemaVersionError) Is(target error) bool {
-	if target == ErrUnsupportedVersion {
-		return true
-	}
-	if e.Found < e.Supported {
-		return target == ErrOlderSchema
-	}
-	return target == ErrNewerSchema
-}
 
 // MinPassphraseLength は、これが受け付ける最短の vault パスフレーズ長。
 const MinPassphraseLength = 4
@@ -138,54 +91,26 @@ func storedKind(kind Kind) bool {
 	return ValidKind(kind) || kind == KindVPN
 }
 
-// SyncSettings は、オブジェクトストアが必要とするもの。
-//
-// vault と同じマスターパスワードで暗号化し、同期対象外の専用ファイルに保存する。
-type SyncSettings struct {
-	Endpoint string `json:"endpoint,omitempty"`
-	Bucket   string `json:"bucket,omitempty"`
-	// Path は、すべてのオブジェクトが置かれる接頭辞。空ならバケットのルート。
-	Path            string `json:"path,omitempty"`
-	Region          string `json:"region,omitempty"`
-	AccessKeyID     string `json:"accessKeyId,omitempty"`
-	SecretAccessKey string `json:"secretAccessKey,omitempty"`
-	Direction       string `json:"direction,omitempty"`
-	// Auto は、この設置で自動同期を入れてあるか。
-	//
-	// 他の同期の設定と同じ場所に住む。巡回に必要なものは、鍵も資格情報も
-	// この入切も、すべて保管庫が開いてから読める。閉じている間は何も読めず、
-	// 何も起きない。それがこの機能の唯一の条件である。
-	Auto bool `json:"auto,omitempty"`
-	// Key は、リモートのスナップショットを暗号化する値である。
-	//
-	// マスターパスワードではない。それを使っていたので、マスターパスワードが
-	// 端末をまたいだ共有秘密になっていた。1 台で変えれば他の全端末が締め出され、
-	// 打つユーザーが居ないところでは復号できなかった。ここに置くことで、
-	// マスターパスワードは端末ごとのローカルな秘密に戻る。
-	Key string `json:"key,omitempty"`
+// subjectIsAlias は、kind の subject がホストの alias かを報告する。パスワードと TOTP は
+// ホストに割り当て、鍵のパスフレーズは鍵のワークスペース相対のパスに割り当てる。
+func subjectIsAlias(kind Kind) bool {
+	return kind == KindPassword || kind == KindTOTP
 }
 
-// document は平文であり、この形でこのパッケージの外へ出ることは決してない。
-//
-// 資格情報のマップが二つ、そして種別ごとに参照のマップがひとつ。ホストは alias で、
-// 鍵はワークスペース相対のパスでキー付けされる。名前の付いた秘密は、いくつの
-// subject が指していても一度だけ保存される。この形により、
-// 20 台のマシンが共有するパスワードを、一か所でローテーションできる。
-type document struct {
-	SchemaVersion           int               `json:"schemaVersion"`
-	Passwords               map[string]string `json:"passwords"`
-	DedicatedPasswords      map[string]string `json:"dedicatedPasswords,omitempty"`
-	KeyPassphrases          map[string]string `json:"keyPassphrases"`
-	DedicatedKeyPassphrases map[string]string `json:"dedicatedKeyPassphrases,omitempty"`
-	Hosts                   map[string]string `json:"hosts"`
-	PasswordBindings        map[string]string `json:"passwordBindings,omitempty"`
-	Keys                    map[string]string `json:"keys"`
-	TOTPs                   map[string]string `json:"totps"`
-	TOTPHosts               map[string]string `json:"totpHosts"`
-	TOTPBindings            map[string]string `json:"totpBindings,omitempty"`
-	// VPNs は、VPN プロファイルの秘密である。名前はプロファイル名で、subject を
-	// 持たない。host にも鍵にも割り当てないからである。
-	VPNs map[string]string `json:"vpns"`
+// validateSubject は、subject が kind の割り当て先の名前として使えるかを確かめる。
+// alias の種類は alias の規則で、鍵のパスフレーズは「空でなく NUL を含まない」で
+// 確かめる。
+func validateSubject(kind Kind, subject string) error {
+	if subjectIsAlias(kind) {
+		if validate.Alias(subject) != nil {
+			return ErrUnsafeName
+		}
+		return nil
+	}
+	if subject == "" || strings.ContainsRune(subject, '\x00') {
+		return ErrUnsafeName
+	}
+	return nil
 }
 
 // Vault は、開かれた secrets ファイル。
@@ -212,177 +137,6 @@ func newMaps() (map[Kind]map[string]string, map[Kind]map[string]string) {
 		map[Kind]map[string]string{KindPassword: {}, KindKeyPassphrase: {}, KindTOTP: {}}
 }
 
-// Create は、passphrase で暗号化された空の vault を返す。
-func Create(passphrase string) (*Vault, error) {
-	key, err := envelope.DeriveWithMinimum(passphrase, MinPassphraseLength)
-	if err != nil {
-		return nil, err
-	}
-	secrets, subjects := newMaps()
-	return &Vault{
-		key: key, secrets: secrets, subjects: subjects,
-		dedicatedPasswords:      map[string]string{},
-		passwordBindings:        map[string]string{},
-		totpBindings:            map[string]string{},
-		dedicatedKeyPassphrases: map[string]string{},
-	}, nil
-}
-
-// Open は、passphrase で sealed を復号する。
-func Open(sealed []byte, passphrase string) (*Vault, error) {
-	vault, _, err := openSealedWithMigrations(sealed, passphrase, registeredDocumentMigrations)
-	return vault, err
-}
-
-func openSealedWithMigrations(
-	sealed []byte,
-	passphrase string,
-	migrations migrationRegistry,
-) (*Vault, Migration, error) {
-	plaintext, key, err := envelope.Open(sealed, passphrase)
-	if err != nil {
-		return nil, Migration{}, err
-	}
-	return openDocumentWithMigrations(plaintext, key, migrations)
-}
-
-// OpenWith は、すでに導出してある鍵で vault を開く。
-// 同期後の再読込ではマスターパスワードを保持していないため、この関数を使う。
-func OpenWith(sealed []byte, key envelope.Key) (*Vault, error) {
-	plaintext, err := key.Open(sealed)
-	if err != nil {
-		return nil, err
-	}
-	return openDocument(plaintext, key.Clone())
-}
-
-func openDocument(plaintext []byte, key envelope.Key) (*Vault, error) {
-	vault, _, err := openDocumentWithMigrations(plaintext, key, registeredDocumentMigrations)
-	return vault, err
-}
-
-func openDocumentWithMigrations(
-	plaintext []byte,
-	key envelope.Key,
-	migrations migrationRegistry,
-) (*Vault, Migration, error) {
-	// key is transferred into this function. Keep it only when a Vault is
-	// successfully returned; malformed or unsupported documents must not leave
-	// their derived key material waiting for the garbage collector.
-	published := false
-	defer func() {
-		if !published {
-			key.Destroy()
-		}
-	}()
-	plaintext, migration, err := migrateDocument(plaintext, migrations)
-	if err != nil {
-		return nil, Migration{}, err
-	}
-	var parsed document
-	if err := strictjson.Decode(plaintext, &parsed); err != nil {
-		if migration.Applied() {
-			return nil, Migration{}, &MigrationError{From: migration.From, To: migration.To, Cause: err}
-		}
-		return nil, Migration{}, ErrWrongPassphrase
-	}
-	if parsed.SchemaVersion != SchemaVersion {
-		return nil, Migration{}, &SchemaVersionError{Found: parsed.SchemaVersion, Supported: SchemaVersion}
-	}
-	secrets, subjects := newMaps()
-	for kind, stored := range map[Kind]map[string]string{
-		KindPassword:      parsed.Passwords,
-		KindKeyPassphrase: parsed.KeyPassphrases,
-		KindTOTP:          parsed.TOTPs,
-		KindVPN:           parsed.VPNs,
-	} {
-		for name, value := range stored {
-			secrets[kind][name] = value
-		}
-	}
-	for kind, stored := range map[Kind]map[string]string{
-		KindPassword:      parsed.Hosts,
-		KindKeyPassphrase: parsed.Keys,
-		KindTOTP:          parsed.TOTPHosts,
-	} {
-		for subject, name := range stored {
-			subjects[kind][subject] = name
-		}
-	}
-	dedicatedPasswords := maps.Clone(parsed.DedicatedPasswords)
-	if dedicatedPasswords == nil {
-		dedicatedPasswords = map[string]string{}
-	}
-	dedicatedKeyPassphrases := maps.Clone(parsed.DedicatedKeyPassphrases)
-	if dedicatedKeyPassphrases == nil {
-		dedicatedKeyPassphrases = map[string]string{}
-	}
-	opened := &Vault{
-		key: key, secrets: secrets, subjects: subjects,
-		dedicatedPasswords:      dedicatedPasswords,
-		passwordBindings:        maps.Clone(parsed.PasswordBindings),
-		totpBindings:            maps.Clone(parsed.TOTPBindings),
-		dedicatedKeyPassphrases: dedicatedKeyPassphrases,
-	}
-	published = true
-	return opened, migration, nil
-}
-
-// SealSettings は、オブジェクトストアの設定を vault 自身の鍵で暗号化する。隣に置く
-// ファイルのためである。同じマスターパスワードで、違うファイル。こちらは移動
-// しない。
-func (v *Vault) SealSettings(settings SyncSettings) ([]byte, error) {
-	plaintext, err := json.Marshal(settings)
-	if err != nil {
-		return nil, err
-	}
-	return v.key.Seal(plaintext)
-}
-
-// OpenSettings は、SealSettings が書いたファイルを復号する。
-func (v *Vault) OpenSettings(sealed []byte) (SyncSettings, error) {
-	plaintext, err := v.key.Open(sealed)
-	if err != nil {
-		return SyncSettings{}, err
-	}
-	var settings SyncSettings
-	if err := json.Unmarshal(plaintext, &settings); err != nil {
-		return SyncSettings{}, ErrWrongPassphrase
-	}
-	return settings, nil
-}
-
-// Seal は、書き込みのために vault を暗号化する。
-// Rekey は passphrase から新しい鍵を導出し、それを採用する。
-//
-// 中身には手を触れない。変わるのは、それを開くものの方だ。古い鍵が暗号化したものは
-// すべて、同じ流れの中で呼び出し側が暗号化し直さなければならない。これが新しい vault
-// ではなく vault のメソッドである理由はそこにある。呼び出し側は、二つの鍵を同時に
-// 必要とするからだ。
-func (v *Vault) Rekey(passphrase string) (envelope.Key, error) {
-	key, err := envelope.DeriveWithMinimum(passphrase, MinPassphraseLength)
-	if err != nil {
-		return envelope.Key{}, err
-	}
-	previous := v.key
-	v.key = key
-	return previous, nil
-}
-
-// SealBytes は、任意のバイト列をこの vault の鍵で暗号化する。
-//
-// これが、世代バックアップのディレクトリを、以前のファイル内容の山、バックアップ
-// をまったく拒んでいた書き込みについては、以前の秘密鍵そのもの、から、暗号文の
-// 山へと変える。
-func (v *Vault) SealBytes(plaintext []byte) ([]byte, error) {
-	return v.key.Seal(plaintext)
-}
-
-// OpenBytes はその逆で、巻き戻しや復元のためにある。
-func (v *Vault) OpenBytes(sealed []byte) ([]byte, error) {
-	return v.key.Open(sealed)
-}
-
 // Empty は、この vault が資格情報も参照も保持していないことを報告する。
 // 初回 pull では空のローカル vault を競合する編集として扱わない。
 func (v *Vault) Empty() bool {
@@ -397,39 +151,6 @@ func (v *Vault) Empty() bool {
 		}
 	}
 	return len(v.dedicatedPasswords) == 0 && len(v.dedicatedKeyPassphrases) == 0
-}
-
-// Document は、同期用に復号済みの vault 文書を返す。
-// 呼び出し側は、この文書を同期鍵で暗号化したアーカイブにだけ格納する。
-func (v *Vault) Document() ([]byte, error) {
-	if v.passwordBindings == nil {
-		v.passwordBindings = map[string]string{}
-	}
-	if v.totpBindings == nil {
-		v.totpBindings = map[string]string{}
-	}
-	return json.Marshal(document{
-		SchemaVersion:           SchemaVersion,
-		Passwords:               v.secrets[KindPassword],
-		DedicatedPasswords:      v.dedicatedPasswords,
-		KeyPassphrases:          v.secrets[KindKeyPassphrase],
-		DedicatedKeyPassphrases: v.dedicatedKeyPassphrases,
-		Hosts:                   v.subjects[KindPassword],
-		PasswordBindings:        v.passwordBindings,
-		Keys:                    v.subjects[KindKeyPassphrase],
-		TOTPs:                   v.secrets[KindTOTP],
-		TOTPHosts:               v.subjects[KindTOTP],
-		TOTPBindings:            v.totpBindings,
-		VPNs:                    v.secrets[KindVPN],
-	})
-}
-
-func (v *Vault) Seal() ([]byte, error) {
-	plaintext, err := v.Document()
-	if err != nil {
-		return nil, err
-	}
-	return v.key.Seal(plaintext)
 }
 
 // Names は、ある種別の資格情報名をソートして返す。名前そのものは秘密ではない。
@@ -515,8 +236,8 @@ func validAuthenticationBinding(binding string) bool {
 // key. It is deliberately separate from named credentials so replacing it
 // cannot rotate the passphrase used by any other key.
 func (v *Vault) SetDedicatedKeyPassphrase(relativePath, value string) error {
-	if relativePath == "" || strings.ContainsRune(relativePath, '\x00') {
-		return ErrUnsafeName
+	if err := validateSubject(KindKeyPassphrase, relativePath); err != nil {
+		return err
 	}
 	if value == "" {
 		return ErrEmptySecret
@@ -548,16 +269,6 @@ func (v *Vault) clone() *Vault {
 		totpBindings:            maps.Clone(v.totpBindings),
 		dedicatedKeyPassphrases: maps.Clone(v.dedicatedKeyPassphrases),
 	}
-}
-
-// Destroy best-effort clears the independently owned derived key. Secret
-// values are Go strings and cannot be reliably overwritten in place; dropping
-// the Vault still releases those references as before.
-func (v *Vault) Destroy() {
-	if v == nil {
-		return
-	}
-	v.key.Destroy()
 }
 
 // Set は、名前の下に資格情報を保存する。新規作成か、値の置き換えである。
@@ -646,12 +357,8 @@ func (v *Vault) Assign(kind Kind, subject, name string) error {
 	if !ValidKind(kind) {
 		return ErrUnknownKind
 	}
-	if kind == KindPassword || kind == KindTOTP {
-		if err := validate.Alias(subject); err != nil {
-			return ErrUnsafeName
-		}
-	} else if subject == "" || strings.ContainsAny(subject, "\x00") {
-		return ErrUnsafeName
+	if err := validateSubject(kind, subject); err != nil {
+		return err
 	}
 	if _, ok := v.secrets[kind][name]; !ok {
 		return ErrUnknownCredential
@@ -727,33 +434,26 @@ func (v *Vault) BoundFor(kind Kind, subject, binding string) (string, bool) {
 	return v.SecretFor(kind, subject)
 }
 
-// Rename は、subject の参照を新しい名前へ引き継ぐ。ホストの名前変更はこれを
+// Rename は、ホストの alias の変更に合わせて、alias を subject とする種類
+// （パスワードと TOTP）の参照を新しい名前へ引き継ぐ。ホストの名前変更はこれを
 // しなければならず、さもなければ参照は、誰も尋ねない名前の下に暗黙に孤児に
-// なる。
+// なる。鍵の subject（パス）の移動は RelocateSubjects が担う。
 func (v *Vault) Rename(kind Kind, from, to string) error {
+	if !subjectIsAlias(kind) {
+		return ErrUnknownKind
+	}
 	if from == to {
 		return nil
 	}
 	if kind == KindPassword {
 		if value, ok := v.dedicatedPasswords[from]; ok {
-			if err := validate.Alias(to); err != nil {
-				return ErrUnsafeName
+			if err := validateSubject(kind, to); err != nil {
+				return err
 			}
 			delete(v.dedicatedPasswords, from)
 			delete(v.subjects[kind], to)
 			v.dedicatedPasswords[to] = value
-			v.moveBinding(KindPassword, from, to)
-			return nil
-		}
-	}
-	if kind == KindKeyPassphrase {
-		if value, ok := v.dedicatedKeyPassphrases[from]; ok {
-			if to == "" || strings.ContainsRune(to, '\x00') {
-				return ErrUnsafeName
-			}
-			delete(v.dedicatedKeyPassphrases, from)
-			delete(v.subjects[kind], to)
-			v.dedicatedKeyPassphrases[to] = value
+			v.moveBinding(kind, from, to)
 			return nil
 		}
 	}
@@ -761,18 +461,14 @@ func (v *Vault) Rename(kind Kind, from, to string) error {
 	if !ok {
 		return nil
 	}
-	if kind == KindPassword || kind == KindTOTP {
-		if err := validate.Alias(to); err != nil {
-			return ErrUnsafeName
-		}
+	if err := validateSubject(kind, to); err != nil {
+		return err
 	}
 	delete(v.subjects[kind], from)
 	// A retired destination may still own a dedicated value. Its binding must
 	// never be replaced with the source's while that unrelated value survives.
 	if kind == KindPassword {
 		delete(v.dedicatedPasswords, to)
-	} else if kind == KindKeyPassphrase {
-		delete(v.dedicatedKeyPassphrases, to)
 	}
 	v.subjects[kind][to] = name
 	v.moveBinding(kind, from, to)
@@ -812,12 +508,8 @@ func (v *Vault) RelocateSubjects(kind Kind, relocations map[string]string) (bool
 		if from == to {
 			continue
 		}
-		if kind == KindPassword || kind == KindTOTP {
-			if err := validate.Alias(to); err != nil {
-				return false, ErrUnsafeName
-			}
-		} else if to == "" || strings.ContainsRune(to, '\x00') {
-			return false, ErrUnsafeName
+		if err := validateSubject(kind, to); err != nil {
+			return false, err
 		}
 		if name, ok := v.subjects[kind][from]; ok {
 			moved[to] = name
