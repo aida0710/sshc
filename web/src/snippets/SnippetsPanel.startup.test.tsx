@@ -59,7 +59,7 @@ it("shows a startup assignment as stopped once its destination changed", async (
   render(<SnippetsPanel aliases={["test-host"]} />);
   expect(
     await screen.findByText(
-      /The destination or authentication settings changed after this snippet was assigned/,
+      /The destination, the authentication settings, or the VPN profile changed after this snippet was assigned/,
     ),
   ).toBeInTheDocument();
 });

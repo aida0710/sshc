@@ -92,7 +92,7 @@ func runConnect(ctx context.Context, alias string, environment commandEnvironmen
 		return exitFailure
 	}
 
-	// 解錠確認後、指定された alias の接続情報を一度だけ要求する。
+	// ロックの解除を確かめたあと、指定された alias の接続情報を一度だけ要求する。
 	answer, err := session.Connection(ctx, alias)
 	if err != nil {
 		if code, stopped := interactiveStopExitCode(ctx); stopped {

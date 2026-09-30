@@ -1437,7 +1437,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        get: operations["getEngineSettings"];
         put: operations["setEngineSettings"];
         post?: never;
         delete?: never;
@@ -3238,7 +3238,6 @@ export interface components {
             shortcutPresets?: components["schemas"]["ShortcutPreset"][];
             groupsFile?: string;
             embeddedTerminal?: components["schemas"]["EmbeddedTerminal"];
-            engine?: components["schemas"]["EngineSettings"];
             fileTransfers?: components["schemas"]["FileTransferSettings"];
             backgrounds?: components["schemas"]["BackgroundSettings"];
             groups?: components["schemas"]["GroupMetadata"][];
@@ -3295,6 +3294,7 @@ export interface components {
             profile: string;
         };
         VPNProfile: {
+            id?: string;
             name: string;
             /** @enum {string} */
             backend: "wireguard" | "l2tp_ipsec" | "openconnect" | "openvpn" | "ikev2";
@@ -6762,6 +6762,29 @@ export interface operations {
                 };
             };
             400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+        };
+    };
+    getEngineSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description This machine's engine settings; an omitted item is unset */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EngineSettings"];
+                };
+            };
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
             409: components["responses"]["Problem"];

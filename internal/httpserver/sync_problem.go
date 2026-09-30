@@ -14,8 +14,8 @@ import (
 // 決め、ここは大分類を status に変えるだけである。自動同期の表示が持つ code も
 // 同じ表から出るので、同じ失敗が場所によって別の名前になることはない。
 
-// vaultUnavailable は、Sync の操作が保管庫に届かなかった理由のうち、利用者が解錠
-// （または作成）すれば解ける 2 つをまとめる。Sync の文脈ではどちらも「保管庫が
+// vaultUnavailable は、Sync の操作が保管庫に届かなかった理由のうち、利用者がロックを
+// 解除（または作成）すれば解ける 2 つをまとめる。Sync の文脈ではどちらも「保管庫が
 // 使えない」なので同じ vault_locked で返す。
 func vaultUnavailable(err error) bool {
 	return errors.Is(err, secret.ErrLocked) || errors.Is(err, secret.ErrNoVault)

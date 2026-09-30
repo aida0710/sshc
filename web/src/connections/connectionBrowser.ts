@@ -34,15 +34,10 @@ export function identityKey(identity: HostIdentity): string {
 }
 
 // hostMetadataByIdentity は、接続ごとの metadata を識別子で引ける表にする。同じ識別子の
-// entry が 2 つ以上あれば先頭を使う。サーバーも先頭を画面へ返し、保存のときにその
-// entry と比べる（hostMetadataIndex）。別の entry を写しにすると保存が断られ続ける。
+// entry は 1 つしか無い（以前のバージョンが残した重複は、サーバーが metadata.json の
+// schema 9 への移行で 1 つにし、今の形では保存で断る）。
 export function hostMetadataByIdentity(entries: readonly HostMetadata[] | undefined): ReadonlyMap<string, HostMetadata> {
-  const byIdentity = new Map<string, HostMetadata>();
-  for (const entry of entries ?? []) {
-    const key = identityKey(entry.identity);
-    if (!byIdentity.has(key)) byIdentity.set(key, entry);
-  }
-  return byIdentity;
+  return new Map((entries ?? []).map((entry) => [identityKey(entry.identity), entry]));
 }
 
 // The closest ancestor group that is declared, so an undeclared "a/b/c" hangs

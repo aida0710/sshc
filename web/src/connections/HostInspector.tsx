@@ -185,6 +185,7 @@ export function HostInspector({
         <HostVPNProfileField
           detail={detail}
           value={draft.vpn ?? ""}
+          saved={saved.vpn ?? ""}
           profiles={vpnProfiles}
           onChange={(profile) => setDraft(withOptionalChoice(draft, "vpn", profile))}
         />

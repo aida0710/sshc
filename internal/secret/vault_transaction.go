@@ -10,7 +10,7 @@ import (
 const (
 	// operationInitialise は vault を作る。
 	operationInitialise = "secret.initialise"
-	// operationVault、operationCredentialUpdate は、解錠中の vault を書き換える
+	// operationVault、operationCredentialUpdate は、ロックを解除した vault を書き換える
 	// （commitVaultOnlyTransaction）。
 	operationVault            = "secret.vault"
 	operationCredentialUpdate = "secret.credential.update"
@@ -43,8 +43,8 @@ var (
 // メモリ上の vault を差し替える」手順を踏む。手順そのものはここに 1 か所だけ置き、
 // 変更の中身と書き方だけを呼び手が渡す。
 type vaultTransaction struct {
-	// apply は、写し（clone）へ変更を加え、変わったかを返す。current は解錠中の
-	// vault そのもので、変わったかを比べるために読むだけである。
+	// apply は、写し（clone）へ変更を加え、変わったかを返す。current はロックを
+	// 解除した vault そのもので、変わったかを比べるために読むだけである。
 	apply func(current, clone *Vault) (bool, error)
 	// commitsWithoutVault は、vault がまだ作られていないときに、vault を書かずに
 	// commit へ進めてよいかである。消すだけの変更は、消す相手が無いので進めてよい。

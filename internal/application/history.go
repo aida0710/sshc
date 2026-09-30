@@ -36,14 +36,19 @@ func (s *Service) Pending() ([]PendingView, error) {
 func (s *Service) Recover(identifier, action string) error {
 	s.saveMutex.Lock()
 	defer s.saveMutex.Unlock()
+	var err error
 	switch action {
 	case "complete":
-		return s.manager.Complete(identifier)
+		err = s.manager.Complete(identifier)
 	case "rollback":
-		return s.manager.Rollback(identifier)
+		err = s.manager.Rollback(identifier)
 	default:
 		return ErrUnknownRecoveryAction
 	}
+	// 中断した変更が sshc エンジンの設定を書いていたら、完了でも取り消しでも自動ロックの
+	// 時間が変わりうる。
+	s.applyVaultAutoLock()
+	return err
 }
 
 func (s *Service) History() ([]HistoryEntry, error) {
@@ -109,10 +114,6 @@ func (s *Service) Restore(identifier, relative string) (SaveResult, error) {
 	if err != nil {
 		return SaveResult{}, err
 	}
-	precondition := storage.Precondition{}
-	if exists {
-		precondition = storage.Precondition{Exists: true, Digest: storage.Digest(current)}
-	}
 	graph, err := s.resolve()
 	if err != nil {
 		return SaveResult{}, err
@@ -123,7 +124,7 @@ func (s *Service) Restore(identifier, relative string) (SaveResult, error) {
 	}
 	result, err := s.manager.Commit(storage.Request{
 		Operation: "config.restore",
-		Changes:   []storage.Change{{Path: absolute, Contents: contents, Precondition: precondition}},
+		Changes:   []storage.Change{{Path: absolute, Contents: contents, Precondition: preconditionFor(current, exists)}},
 		Validation: configurationEdit{
 			base:     map[string][]byte{filepath.Clean(absolute): current},
 			baseline: diagnosticBaseline(graph),
@@ -132,6 +133,7 @@ func (s *Service) Restore(identifier, relative string) (SaveResult, error) {
 	if err != nil {
 		return SaveResult{}, err
 	}
+	s.applyVaultAutoLock()
 	return SaveResult{
 		TransactionID: result.ID,
 		Written:       []string{relative},

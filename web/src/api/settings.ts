@@ -57,9 +57,13 @@ export const settingsApi: SettingsApi = {
       await apiClient.read("/api/v1/terminal/shell-profiles"),
     );
   },
+  // The engine settings belong to this machine and are not part of the synced
+  // metadata, so they have their own endpoint.
   async engineSettings() {
-    const metadata = validateMetadata(await apiClient.read("/api/v1/metadata"));
-    return metadata.engine ?? {};
+    return validateOpenAPISchema<EngineSettings>(
+      "EngineSettings",
+      await apiClient.read("/api/v1/metadata/engine"),
+    );
   },
   async setEngineSettings(settings) {
     await putJSON("/api/v1/metadata/engine", settings);

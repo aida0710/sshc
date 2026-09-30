@@ -110,15 +110,9 @@ describe("settingsApi terminal settings", () => {
 describe("settingsApi engine settings", () => {
   it("restores timed and restart-only Vault locking without inventing defaults", async () => {
     const fetcher = vi.fn()
-      .mockResolvedValueOnce(jsonResponse({
-        schemaVersion: 4,
-        engine: { port: 43123, vaultAutoLock: { mode: "idle", value: 45, unit: "minutes" } },
-      }))
-      .mockResolvedValueOnce(jsonResponse({
-        schemaVersion: 4,
-        engine: { vaultAutoLock: { mode: "restart" } },
-      }))
-      .mockResolvedValueOnce(jsonResponse({ schemaVersion: 4 }));
+      .mockResolvedValueOnce(jsonResponse({ port: 43123, vaultAutoLock: { mode: "idle", value: 45, unit: "minutes" } }))
+      .mockResolvedValueOnce(jsonResponse({ vaultAutoLock: { mode: "restart" } }))
+      .mockResolvedValueOnce(jsonResponse({}));
     vi.stubGlobal("fetch", fetcher);
 
     await expect(settingsApi.engineSettings()).resolves.toEqual({
@@ -129,5 +123,14 @@ describe("settingsApi engine settings", () => {
       vaultAutoLock: { mode: "restart" },
     });
     await expect(settingsApi.engineSettings()).resolves.toEqual({});
+  });
+
+  it("reads this machine's settings, which the synced metadata does not carry", async () => {
+    const fetcher = vi.fn().mockResolvedValue(jsonResponse({ port: 43123 }));
+    vi.stubGlobal("fetch", fetcher);
+
+    await settingsApi.engineSettings();
+
+    expect(String(fetcher.mock.calls[0]?.[0])).toMatch(/\/api\/v1\/metadata\/engine$/);
   });
 });

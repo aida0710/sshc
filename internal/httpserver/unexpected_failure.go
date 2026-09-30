@@ -27,7 +27,8 @@ func unexpectedReply(c *echo.Context, reply problemReply, err error) error {
 	return writeProblemReply(c, reply)
 }
 
-// unexpectedNoContent は、本文なしで答える /cli/ のルートの想定外の失敗について、原因を記録する。
+// unexpectedNoContent は、本文なしで答える /cli/ のルート（CLI セッションと Vault の操作）の
+// 想定外の失敗について、原因を記録する。
 func unexpectedNoContent(c *echo.Context, err error) error {
 	logUnexpectedFailure(c, "", err)
 	return c.NoContent(http.StatusInternalServerError)

@@ -320,6 +320,26 @@ describe("HostInspector", () => {
     expect(onSave).toHaveBeenLastCalledWith(expect.not.objectContaining({ vpn: expect.anything() }));
   });
 
+  it("warns that saved credentials and a startup snippet stop only while the VPN profile differs from the saved one", async () => {
+    const user = userEvent.setup();
+    const detail = build();
+    detail.metadata = { ...detail.metadata, vpn: "tohoku" };
+    const warning =
+      "If a saved password, one-time password, or startup snippet is assigned to this connection, it stops being used once you save. " +
+      "Save the Basic settings again to use the password and one-time password, and assign the startup snippet again under Snippets.";
+    render(<HostInspector detail={detail} onSave={vi.fn()} vpnProfiles={profiles} />);
+    expect(screen.queryByText(warning)).toBeNull();
+
+    await user.selectOptions(screen.getByLabelText("VPN profile"), "office");
+    expect(screen.getByText(warning)).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText("VPN profile"), "");
+    expect(screen.getByText(warning)).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText("VPN profile"), "tohoku");
+    expect(screen.queryByText(warning)).toBeNull();
+  });
+
   it("still names a VPN profile that no longer exists, instead of showing no route", () => {
     const detail = build();
     detail.metadata = { ...detail.metadata, vpn: "retired" };

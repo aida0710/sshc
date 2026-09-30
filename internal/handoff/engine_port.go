@@ -15,8 +15,8 @@ var ErrEnginePort = errors.New("engine port is outside the unprivileged TCP rang
 
 // EnginePort は、この番号を engine の待ち受けに使えるかを報告する。
 //
-// CLI の --port、設定画面、metadata.json、ブラウザの登録が保存する origin の
-// ポート、handoff の URL が、同じ範囲を使う。
+// CLI の --port、設定画面、このマシンの sshc エンジンの設定（engine-settings.json）、
+// ブラウザの登録が保存する origin のポート、handoff の URL が、同じ範囲を使う。
 func EnginePort(port int) error {
 	if port < MinEnginePort || port > MaxEnginePort {
 		return ErrEnginePort

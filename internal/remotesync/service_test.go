@@ -542,7 +542,7 @@ func TestPersistedRestoreCannotOverwriteAnExplicitBinding(t *testing.T) {
 	}
 }
 
-// Forget は、アクセスキーとシークレットを含む接続一式を手放す。解錠後は、保存した
+// Forget は、アクセスキーとシークレットを含む接続一式を手放す。ロックを解除したあとは、保存した
 // 設定から組み直せる。
 func TestForgetDropsTheCredentialsUntilTheBindingIsRestored(t *testing.T) {
 	installation := newInstallation(t, &fakeBucket{}, map[string]string{"config": "Host current\n"})

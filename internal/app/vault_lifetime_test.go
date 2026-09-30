@@ -63,6 +63,10 @@ func TestTheEngineRestoresTheConfiguredVaultClock(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			// 設定の保存は、前の内容の控えを Vault の鍵で封じるので、Vault が要る。
+			if err := first.vault.Initialise(""); err != nil {
+				t.Fatal(err)
+			}
 			if _, err := first.config.SetEngineSettings(application.EngineSettings{
 				VaultAutoLock: &test.autoLock,
 			}); err != nil {

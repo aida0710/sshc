@@ -39,12 +39,12 @@ func (s *Service) recordConnectionOS(identity HostIdentity, binding, name string
 	if err != nil {
 		return err
 	}
-	if !s.detectionApplies(graph, identity, binding) {
-		return nil
-	}
 	stored, precondition, err := s.metadata.Load()
 	if err != nil {
 		return err
+	}
+	if !s.detectionApplies(graph, stored, osDetection{identity: identity, binding: binding}) {
+		return nil
 	}
 	index := hostMetadataIndex(stored.Hosts, identity)
 	if index < 0 {
@@ -67,18 +67,26 @@ func (s *Service) recordConnectionOS(identity HostIdentity, binding, name string
 	return err
 }
 
-// detectionApplies は、認証の組み合わせ binding の接続で検出した OS が、いまの設定の
-// identity のブロックにまだ当てはまるかを返す。ブロックが消えた、前のブロックに alias を
-// すべて取られた、接続先や認証が変わった、のどれかなら当てはまらない。
+// osDetection は、OS を検出した接続である。
+type osDetection struct {
+	// identity は、接続したブロックである。
+	identity HostIdentity
+	// binding は、その接続の認証の組み合わせ（AuthenticationBinding）である。
+	binding string
+}
+
+// detectionApplies は、detection の接続で検出した OS が、いまの設定と metadata で
+// そのブロックにまだ当てはまるかを返す。ブロックが消えた、前のブロックに alias を
+// すべて取られた、接続先や認証や VPN プロファイルが変わった、のどれかなら当てはまらない。
 //
 // 確かめ直すのは、そのブロックへ接続する alias である。primary alias は前のブロックに
 // 取られていることがあり（`Host a web` の後ろの `Host web b`）、それで確かめると別の
 // ブロックの接続を見てしまう。
-func (s *Service) detectionApplies(graph *config.Graph, identity HostIdentity, binding string) bool {
-	alias, found := s.connectingAlias(graph, identity)
+func (s *Service) detectionApplies(graph *config.Graph, stored Metadata, detection osDetection) bool {
+	alias, found := s.connectingAlias(graph, detection.identity)
 	if !found {
 		return false
 	}
-	current, err := s.passwordBindingForGraph(graph, alias)
-	return err == nil && current == binding
+	current, err := s.passwordBindingForGraph(graph, stored, alias)
+	return err == nil && current == detection.binding
 }

@@ -90,7 +90,7 @@ func (s *Service) BoundFor(kind Kind, alias, binding string) string {
 	return value
 }
 
-// HasAssignmentFor は、解錠中の vault に alias の割り当てがあるかを、秘密を
+// HasAssignmentFor は、ロックを解除した vault に alias の割り当てがあるかを、秘密を
 // 解放せずに返す。呼び手はこれで「割り当てなし」と「束縛が古い」を区別する。
 func (s *Service) HasAssignmentFor(kind Kind, alias string) bool {
 	s.mutex.Lock()
@@ -144,7 +144,7 @@ func (s *Service) KeyPassphraseFor(relativePath string) (string, bool) {
 // 載せる。秘密の値には触れず、vault 内の subject 参照だけを移す。
 //
 // 鍵ファイルの移動と別の commit にすると、vault の書き込みだけが失敗したときに割り当てが
-// 旧パスに残り、あとから旧パスに置いた別の鍵にその割り当てが効く。そのため施錠中は
+// 旧パスに残り、あとから旧パスに置いた別の鍵にその割り当てが効く。そのためロック中は
 // 何も書かずに ErrLocked で断る。vault がまだ無ければ移すものも無いので、vault を
 // 書かずに commit へ進む。
 func (s *Service) WithKeyPassphraseRelocation(

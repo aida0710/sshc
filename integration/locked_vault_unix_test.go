@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-// createLockedVault は、保管庫を作ってから施錠する。
+// createLockedVault は、Vault を作ってからロックする。
 func createLockedVault(t *testing.T, home string) {
 	t.Helper()
 	create := startOnTerminal(t, home, "vault", "create")
@@ -27,7 +27,7 @@ func createLockedVault(t *testing.T, home string) {
 	}
 }
 
-// 施錠されていたら待たない。かつては窓を前へ出して解錠を待っていたが、
+// ロックされていたら待たない。かつては窓を前へ出してロックの解除を待っていたが、
 // 前へ出す窓が無くなった。engine を動かしているユーザーは端末に居るのだから、打つべき
 // 語を渡して終わる方が短い。
 func TestALockedVaultRefusesPromptlyWithTheVaultCommand(t *testing.T) {

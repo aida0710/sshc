@@ -31,8 +31,8 @@ func boundaryRefusalFor(err error) (problemReply, bool) {
 			detail: fmt.Sprintf("another sshc process kept this workspace locked for more than %d seconds",
 				int(secret.StorageBusyWait/time.Second)),
 		}, true
-	// 施錠中の要求は Security middleware が先に断る。ここへ来るのは、処理の途中で
-	// 施錠された場合だけである。画面がロック画面へ移れるよう、同じ code にする。
+	// ロック中の要求は Security middleware が先に断る。ここへ来るのは、処理の途中で
+	// ロックされた場合だけである。画面がロック画面へ移れるよう、同じ code にする。
 	case errors.Is(err, secret.ErrLocked):
 		return problemReply{status: http.StatusConflict, code: "vault_locked"}, true
 	case errors.Is(err, application.ErrConnectionChanged):
