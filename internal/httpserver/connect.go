@@ -45,9 +45,12 @@ type CLIHandlers struct {
 	// Aliases は、この接続に現れる alias を、ProxyJump の手前も含めて返す。
 	// nil なら行き先ひとつだけを見る。
 	Aliases func(alias string) []string
-	// PasswordBinding resolves the authentication destination digest for each
-	// alias in the connection chain.
-	PasswordBinding func(alias string) (string, error)
+	// RouteBindings は、alias への接続に現れる alias ごとの認証先の digest
+	// （sshclient.Target.AuthenticationBinding）を、その接続が組み立てるとおりに返す。
+	// ProxyJump の踏み台はホップとしての値で、単独で繋ぐときの値とは違いうる（ホップは
+	// VPN を通らない）。埋め込みターミナルが照合するのも同じ値である。nil なら保存済みの
+	// パスワードと TOTP を返さない。
+	RouteBindings func(alias string) (map[string]string, error)
 	// Bootstrap はブラウザ用 URL を生成し、BaseURL はその接続先を返す。
 	// 両方が nil であれば、このアプリケーションはコマンドラインから開けない。
 	// これは session manager を持たないビルドの状態である。
@@ -107,21 +110,19 @@ type connectResponse struct {
 	Warnings     []string          `json:"warnings"`
 }
 
-// authenticationBindings は、この接続に現れる alias ごとの認証先の digest を返す。
+// authenticationBindings は、alias への接続に現れる alias ごとの認証先の digest を返す。
 //
-// パスワードと TOTP は同じ map を使うので、alias ごとに一度だけ解く。種類ごとに
+// パスワードと TOTP は同じ map を使うので、接続ごとに一度だけ解く。種類ごとに
 // 解き直すと、そのあいだに設定が変わったとき、2 つが別の経路に結び付いた値として
-// 返る。解けない alias は含めない。その alias の秘密は返らず、CLI が入力を求める。
-// 保管庫が無ければ返す秘密も無いので、設定を解かない。
-func (h CLIHandlers) authenticationBindings(aliases []string) map[string]string {
-	if h.Vault == nil || h.PasswordBinding == nil {
+// 返る。接続を組み立てられなければ空で、秘密は返らず、CLI が入力を求める（接続
+// そのものも同じ理由で失敗する）。保管庫が無ければ返す秘密も無いので、設定を解かない。
+func (h CLIHandlers) authenticationBindings(alias string) map[string]string {
+	if h.Vault == nil || h.RouteBindings == nil {
 		return nil
 	}
-	bindings := make(map[string]string, len(aliases))
-	for _, alias := range aliases {
-		if binding, err := h.PasswordBinding(alias); err == nil {
-			bindings[alias] = binding
-		}
+	bindings, err := h.RouteBindings(alias)
+	if err != nil {
+		return nil
 	}
 	return bindings
 }
@@ -423,7 +424,7 @@ func (h CLIHandlers) Connect(c *echo.Context) error {
 	// 鍵もパスワードも、同じ連鎖を見る。
 	aliases := h.connectionAliases(decoded.Alias)
 	answer.Passphrases = savedPassphrases(h.Vault, aliases, h.WorkspaceKeys)
-	bindings := h.authenticationBindings(aliases)
+	bindings := h.authenticationBindings(decoded.Alias)
 	answer.Passwords, answer.PasswordBindings, answer.StalePasswords =
 		h.savedBoundSecrets(secret.KindPassword, aliases, bindings)
 	answer.TOTPs, answer.TOTPBindings, answer.StaleTOTPs =

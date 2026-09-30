@@ -50,6 +50,10 @@ type Options struct {
 	// ConnectAliases は、その接続に現れる alias を ProxyJump の手前も含めて
 	// 返す。保存済みパスワードを渡す相手をそこに限るために使う。
 	ConnectAliases func(alias string) []string
+	// ConnectBindings は、その接続に現れる alias ごとの認証先の digest を、接続が
+	// 組み立てるとおりに返す（CLIHandlers.RouteBindings）。nil なら CLI へ保存済みの
+	// パスワードと TOTP を渡さない。
+	ConnectBindings func(alias string) (map[string]string, error)
 	// Updates はプロジェクトのリリースを調べる。nil の場合、バージョンを
 	// 報告するのみで何も提示しない。比較すべきリリースを持たないビルドが
 	// すべきことはこれである。
@@ -535,16 +539,11 @@ func newCLIHandlers(options Options, host string) CLIHandlers {
 			}
 			return options.Config.UnlockableWorkspaceKeys(alias, options.Keys.Inventory)
 		},
-		Warnings: options.ConnectWarnings,
-		Aliases:  options.ConnectAliases,
-		PasswordBinding: func(alias string) (string, error) {
-			if options.Config == nil {
-				return "", errors.New("configuration unavailable")
-			}
-			return options.Config.PasswordBinding(alias)
-		},
-		Bootstrap: options.Sessions,
-		BaseURL:   "http://" + host,
+		Warnings:      options.ConnectWarnings,
+		Aliases:       options.ConnectAliases,
+		RouteBindings: options.ConnectBindings,
+		Bootstrap:     options.Sessions,
+		BaseURL:       "http://" + host,
 		LiveTerminalCount: func() int {
 			if options.Terminals == nil {
 				return 0

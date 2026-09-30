@@ -25,6 +25,17 @@ var testPasswordBinding = strings.Repeat("ab", 32)
 
 func fixedPasswordBinding(string) (string, error) { return testPasswordBinding, nil }
 
+// routeBoundTo は、行き先と、その手前の hops のどれにも binding を返す RouteBindings である。
+func routeBoundTo(binding string, hops ...string) func(string) (map[string]string, error) {
+	return func(alias string) (map[string]string, error) {
+		bindings := map[string]string{alias: binding}
+		for _, hop := range hops {
+			bindings[hop] = binding
+		}
+		return bindings, nil
+	}
+}
+
 func connectEngine(t *testing.T, handlers CLIHandlers) *echo.Echo {
 	t.Helper()
 	engine := echo.New()
@@ -57,7 +68,7 @@ func TestAnAccountPasswordNeverComesBackAsAKeyPassphrase(t *testing.T) {
 		t.Fatal(err)
 	}
 	engine := connectEngine(t, CLIHandlers{
-		Secret: cliSecret, Vault: vault, PasswordBinding: fixedPasswordBinding,
+		Secret: cliSecret, Vault: vault, RouteBindings: routeBoundTo(testPasswordBinding),
 	})
 	recorder := send(t, engine, http.MethodPost, ConnectPath, `{"alias":"bastion"}`,
 		map[string]string{handoff.HeaderName: cliSecret})
@@ -80,8 +91,7 @@ func TestAnAccountPasswordNeverComesBackAsAKeyPassphrase(t *testing.T) {
 	}
 
 	retargeted := connectEngine(t, CLIHandlers{
-		Secret: cliSecret, Vault: vault,
-		PasswordBinding: func(string) (string, error) { return strings.Repeat("cd", 32), nil },
+		Secret: cliSecret, Vault: vault, RouteBindings: routeBoundTo(strings.Repeat("cd", 32)),
 	})
 	refused := send(t, retargeted, http.MethodPost, ConnectPath, `{"alias":"bastion"}`,
 		map[string]string{handoff.HeaderName: cliSecret})
@@ -119,8 +129,8 @@ func TestTOTPProvisioningTravelsOnlyForTheBoundJumpChain(t *testing.T) {
 	}
 	engine := connectEngine(t, CLIHandlers{
 		Secret: cliSecret, Vault: vault,
-		Aliases:         func(alias string) []string { return []string{"edge", alias} },
-		PasswordBinding: fixedPasswordBinding,
+		Aliases:       func(alias string) []string { return []string{"edge", alias} },
+		RouteBindings: routeBoundTo(testPasswordBinding, "edge"),
 	})
 	recorder := send(t, engine, http.MethodPost, ConnectPath, `{"alias":"target"}`,
 		map[string]string{handoff.HeaderName: cliSecret})
@@ -135,8 +145,8 @@ func TestTOTPProvisioningTravelsOnlyForTheBoundJumpChain(t *testing.T) {
 
 	stale := connectEngine(t, CLIHandlers{
 		Secret: cliSecret, Vault: vault,
-		Aliases:         func(alias string) []string { return []string{"edge", alias} },
-		PasswordBinding: func(string) (string, error) { return strings.Repeat("cd", 32), nil },
+		Aliases:       func(alias string) []string { return []string{"edge", alias} },
+		RouteBindings: routeBoundTo(strings.Repeat("cd", 32), "edge"),
 	})
 	response := send(t, stale, http.MethodPost, ConnectPath, `{"alias":"target"}`,
 		map[string]string{handoff.HeaderName: cliSecret})
@@ -149,9 +159,9 @@ func TestTOTPProvisioningTravelsOnlyForTheBoundJumpChain(t *testing.T) {
 	}
 }
 
-// 接続 1 回で、alias ごとの認証先は一度だけ解く。途中で設定が変わっても、
-// パスワードと TOTP は同じ認証先に結び付いた値として返る。
-func TestConnectResolvesEachAliasBindingOnceForPasswordAndTOTP(t *testing.T) {
+// 接続 1 回で、経路の認証先は一度だけ解く。途中で設定が変わっても、パスワードと
+// TOTP は同じ認証先に結び付いた値として返る。
+func TestConnectResolvesTheRouteBindingsOnceForPasswordAndTOTP(t *testing.T) {
 	const cliSecret = "the secret for this run"
 	home := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
@@ -178,16 +188,16 @@ func TestConnectResolvesEachAliasBindingOnceForPasswordAndTOTP(t *testing.T) {
 		t.Fatal(err)
 	}
 	// 2 回目からは別の認証先を返す。解き直せば、TOTP だけが古い経路として断られる。
-	resolutions := map[string]int{}
+	resolutions := 0
 	engine := connectEngine(t, CLIHandlers{
 		Secret: cliSecret, Vault: vault,
 		Aliases: func(alias string) []string { return []string{"edge", alias} },
-		PasswordBinding: func(alias string) (string, error) {
-			resolutions[alias]++
-			if resolutions[alias] == 1 {
-				return testPasswordBinding, nil
+		RouteBindings: func(alias string) (map[string]string, error) {
+			resolutions++
+			if resolutions == 1 {
+				return routeBoundTo(testPasswordBinding, "edge")(alias)
 			}
-			return strings.Repeat("cd", 32), nil
+			return routeBoundTo(strings.Repeat("cd", 32), "edge")(alias)
 		},
 	})
 
@@ -200,8 +210,8 @@ func TestConnectResolvesEachAliasBindingOnceForPasswordAndTOTP(t *testing.T) {
 	if err := json.Unmarshal(recorder.Body.Bytes(), &answer); err != nil {
 		t.Fatal(err)
 	}
-	if resolutions["edge"] != 1 || resolutions["target"] != 1 {
-		t.Fatalf("bindings resolved per alias = %v, want once each", resolutions)
+	if resolutions != 1 {
+		t.Fatalf("route bindings resolved %d times, want once", resolutions)
 	}
 	if answer.Passwords["edge"] != "the way in" || answer.PasswordBindings["edge"] != testPasswordBinding {
 		t.Fatalf("password answer = %+v", answer)
@@ -235,7 +245,7 @@ func TestAnAliasWithOnlyAnAccountPasswordCarriesNoKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	engine := connectEngine(t, CLIHandlers{
-		Secret: cliSecret, Vault: vault, PasswordBinding: fixedPasswordBinding,
+		Secret: cliSecret, Vault: vault, RouteBindings: routeBoundTo(testPasswordBinding),
 	})
 	recorder := send(t, engine, http.MethodPost, ConnectPath, `{"alias":"password-only"}`,
 		map[string]string{handoff.HeaderName: cliSecret})
@@ -283,8 +293,8 @@ func TestConnectCarriesThePasswordsOfTheWholeJumpChain(t *testing.T) {
 	}
 	engine := connectEngine(t, CLIHandlers{
 		Secret: cliSecret, Vault: vault,
-		Aliases:         func(alias string) []string { return []string{"edge", alias} },
-		PasswordBinding: fixedPasswordBinding,
+		Aliases:       func(alias string) []string { return []string{"edge", alias} },
+		RouteBindings: routeBoundTo(testPasswordBinding, "edge"),
 	})
 
 	recorder := send(t, engine, http.MethodPost, ConnectPath, `{"alias":"far"}`,
