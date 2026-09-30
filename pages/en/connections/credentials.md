@@ -49,7 +49,7 @@ An account password or TOTP assignment is bound to the destination and the route
 - `StrictHostKeyChecking`, `HostKeyAlias`, `HostKeyAlgorithms`, the authentication methods, `ForwardAgent`
 - The VPN profile attached to the connection: attaching one, detaching it, replacing it with another profile, or deleting the attached profile
 
-The VPN profile is included because the same `HostName` can be a different machine on the network of another VPN. Attaching a profile recreated under the name of a deleted one does not bring the assignment back. Renaming a VPN profile does not change the route, so its assignments keep working.
+The VPN profile is included because the same `HostName` can be a different machine on the network of another VPN. Attaching a profile recreated under the name of a deleted one does not bring the assignment back, even when the profile was detached from the connection before it was deleted. Renaming or editing a VPN profile keeps its assignments working. To move a connection to a VPN on another network, create a new profile and attach it instead ([Per-connection VPN](/en/features/vpn)).
 
 Connections shows **Saved password paused** in the summary for an account password that stopped. Pressing **Save Basic settings** under **Basic** asks for confirmation, and **Save and confirm** makes the assigned password and one-time password work with the changed destination.
 

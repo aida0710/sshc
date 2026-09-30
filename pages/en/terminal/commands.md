@@ -20,9 +20,9 @@ An assignment is bound to the destination and authentication settings it resolve
 For the VPN profile, the assignment stops in these cases, because the same address can be a different machine on the network of another VPN:
 
 - A VPN profile is attached to the connection, detached from it, or replaced with another profile.
-- The VPN profile attached to the connection is deleted. Attaching a profile recreated under the same name does not bring the assignment back; assign it again.
+- The VPN profile attached to the connection is deleted. Attaching a profile recreated under the same name does not bring the assignment back, even when the profile was detached from the connection before it was deleted; assign it again.
 
-Renaming the VPN profile does not change the route, so the assignment keeps working.
+Renaming or editing the VPN profile keeps the assignment working.
 
 Assignments made by an earlier version, which did not record the destination, are stopped in the same way. Saving a connection on the Connections screen so that its saved password or one-time password works on the new route does not move a startup snippet assignment.
 
