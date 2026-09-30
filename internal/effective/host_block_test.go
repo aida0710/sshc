@@ -29,8 +29,8 @@ func TestHostBlockAppliesFollowsOpenSSHPatternRules(t *testing.T) {
 	for _, test := range tests {
 		header := config.Parse([]byte("Host " + test.patterns + "\n"))
 		block := header.Blocks()[1]
-		if _, got := blockApplies(block, test.candidate); got != test.want {
-			t.Errorf("blockApplies(%q, %q) = %v, want %v", test.patterns, test.candidate, got, test.want)
+		if _, got := hostBlockApplies(block, test.candidate); got != test.want {
+			t.Errorf("hostBlockApplies(%q, %q) = %v, want %v", test.patterns, test.candidate, got, test.want)
 		}
 	}
 }

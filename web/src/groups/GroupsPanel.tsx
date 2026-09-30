@@ -4,7 +4,7 @@ import { toProblem } from "../api/guards";
 import type { Problem } from "../api/client";
 import { configApi, type GroupMetadata, type Metadata, type Overview, type SavePreview } from "../api/config";
 import { NoticeList, SavePreviewPanel } from "../connections/SavePreview";
-import { formatValues, parseValues } from "../rules/rules";
+import { formatDirectiveValues, parseDirectiveValues } from "../rules/rules";
 import {
   Field,
   control,
@@ -162,7 +162,7 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
     }
     let values: string[];
     try {
-      values = parseValues(settingValue);
+      values = parseDirectiveValues(settingKeyword, settingValue);
     } catch {
       setLocalError(t("groups.unbalancedQuote"));
       return;
@@ -362,7 +362,7 @@ export function GroupsPanel({ onInspector }: GroupsPanelProps = {}) {
             {(group.settings ?? []).length === 0 ? null : (
               <ul className="mt-2 ml-[1.125rem] flex flex-wrap gap-1.5 font-mono text-xs text-ink-muted">
                 {(group.settings ?? []).map((setting, index) => (
-                  <li key={`${setting.keyword}-${index}`} className="rounded-md bg-surface px-2 py-1">{`${setting.keyword} ${formatValues(setting.values)}`}</li>
+                  <li key={`${setting.keyword}-${index}`} className="rounded-md bg-surface px-2 py-1">{`${setting.keyword} ${formatDirectiveValues(setting.keyword, setting.values) ?? ""}`}</li>
                 ))}
               </ul>
             )}

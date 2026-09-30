@@ -232,3 +232,63 @@ func TestUnplannedWritesStillRefuseErrorsTheyIntroduce(t *testing.T) {
 		t.Fatalf("writing an include cycle = %v, want a GraphError", err)
 	}
 }
+
+func TestKnownHostsWhoseCommentsHoldQuotesStillTakeAddedAndRememberedKeys(t *testing.T) {
+	service, workspace := newTestService(t)
+	hosts := knownhosts.NewService(workspace, service.manager, knownhosts.Scanner{})
+	const existingKey = "AAAAC3NzaC1lZDI1NTE5AAAAIGZpeHR1cmVrZXlmaXh0dXJla2V5Zml4dHVyZWtl"
+	// ssh_config の字句解析で読むと、どちらの行も閉じない引用になる。
+	commented := "old.example ssh-ed25519 " + existingKey + " aida's laptop\n" +
+		"legacy.example ssh-ed25519 " + existingKey + " the \"work\n"
+	for _, name := range []string{"known_hosts", "known_hosts2"} {
+		if err := os.WriteFile(filepath.Join(workspace.Root(), name), []byte(commented), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	candidate := knownhosts.Candidate{
+		Host: "new.example", Port: 22, KeyType: "ssh-ed25519",
+		Key: "AAAAC3NzaC1lZDI1NTE5AAAAIPr0nHGmQb99GXmUofxJM4BXGwGzO0jGsQFBspODbkvS",
+	}
+
+	if _, err := hosts.Add(candidate, "", true); err != nil {
+		t.Fatalf("Add = %v", err)
+	}
+	if err := hosts.Remember(filepath.Join(workspace.Root(), "known_hosts2"), candidate); err != nil {
+		t.Fatalf("Remember = %v", err)
+	}
+
+	const added = "new.example ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPr0nHGmQb99GXmUofxJM4BXGwGzO0jGsQFBspODbkvS\n"
+	for _, name := range []string{"known_hosts", "known_hosts2"} {
+		if got := readFile(t, workspace, name); got != commented+added {
+			t.Errorf("%s =\n%s\nwant\n%s", name, got, commented+added)
+		}
+	}
+}
+
+// known_hosts の操作は中身を ssh_config として検証しないので、UserKnownHostsFile が
+// 誤って設定ファイルや metadata.json を指していても、鍵の行を足す先だけは断る。
+func TestAKnownHostsOperationDoesNotWriteAConfigurationFileOrMetadata(t *testing.T) {
+	service, workspace := newTestService(t)
+	hosts := knownhosts.NewService(workspace, service.manager, knownhosts.Scanner{})
+	metadata := writeServiceMetadata(t, service, workspace, NewMetadata())
+	candidate := knownhosts.Candidate{
+		Host: "new.example", Port: 22, KeyType: "ssh-ed25519",
+		Key: "AAAAC3NzaC1lZDI1NTE5AAAAIPr0nHGmQb99GXmUofxJM4BXGwGzO0jGsQFBspODbkvS",
+	}
+
+	for _, relative := range []string{"config", "conf.d/10-home.conf"} {
+		before := readFile(t, workspace, relative)
+		if err := hosts.Remember(filepath.Join(workspace.Root(), filepath.FromSlash(relative)), candidate); !errors.Is(err, ErrNotEditable) {
+			t.Errorf("Remember into %s = %v, want ErrNotEditable", relative, err)
+		}
+		if after := readFile(t, workspace, relative); after != before {
+			t.Errorf("%s was changed to\n%s", relative, after)
+		}
+	}
+	if err := hosts.Remember(service.metadata.Path(), candidate); !errors.Is(err, ErrNotEditable) {
+		t.Errorf("Remember into metadata.json = %v, want ErrNotEditable", err)
+	}
+	if after, err := os.ReadFile(service.metadata.Path()); err != nil || string(after) != string(metadata) {
+		t.Errorf("metadata.json = %q, %v; want it unchanged", after, err)
+	}
+}

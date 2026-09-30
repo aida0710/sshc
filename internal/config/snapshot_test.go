@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-func TestSnapshotRefusesAnInlinedGraphLargerThanTheCLIResponseLimit(t *testing.T) {
+func TestSnapshotRefusesAnInlinedGraphLargerThanItsLimit(t *testing.T) {
 	files := map[string]string{
 		testConfig: "Include conf.d/*.conf\n",
 	}
@@ -77,7 +77,9 @@ func TestSnapshotKeepsFileBoundariesWhenAnIncludedFileHasNoFinalNewline(t *testi
 	}
 }
 
-func TestSnapshotRefusesAConditionalIncludeInsteadOfChangingItsMeaning(t *testing.T) {
+// Host の中の Include は、effective が OpenSSH と同じく取り込み元の一致状態を
+// 引き継いで読む。証拠には取り込み先の中身も入り、変われば確認は無効になる。
+func TestSnapshotFixesAConditionalIncludeAsEvidence(t *testing.T) {
 	graph, err := resolverFor(map[string]string{
 		testConfig:                            "Host ignored\n\tInclude child.conf\nHost bastion\n\tHostName good.example\n",
 		filepath.Join(testRoot, "child.conf"): "Host bastion\n\tHostName wrong.example\n",
@@ -86,8 +88,12 @@ func TestSnapshotRefusesAConditionalIncludeInsteadOfChangingItsMeaning(t *testin
 		t.Fatal(err)
 	}
 
-	if _, err := Snapshot(graph); !errors.Is(err, ErrSnapshotIncomplete) {
-		t.Fatalf("Snapshot = %v, want ErrSnapshotIncomplete", err)
+	got, err := Snapshot(graph)
+	if err != nil {
+		t.Fatalf("Snapshot = %v", err)
+	}
+	if !strings.Contains(string(got), "wrong.example") {
+		t.Fatalf("snapshot = %q, want the included file's bytes", got)
 	}
 }
 

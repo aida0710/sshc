@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"sshc/internal/config"
+	"sshc/internal/sshmatch"
 )
 
 // ErrMatchExec は、この解決器が Match exec を評価しないことを報告する。
@@ -80,6 +81,7 @@ func MatchApplies(criteria []config.Criterion, context MatchContext) (bool, erro
 }
 
 func criterionApplies(criterion config.Criterion, context MatchContext) (bool, error) {
+	patterns := strings.Split(criterion.Argument, ",")
 	switch strings.ToLower(criterion.Keyword) {
 	case "all":
 		return true, nil
@@ -88,16 +90,18 @@ func criterionApplies(criterion config.Criterion, context MatchContext) (bool, e
 	case "final":
 		return context.Final, nil
 	case "host":
-		return matchesAny(criterion.Argument, context.hostForMatch()), nil
+		// host と originalhost は OpenSSH の match_hostname で比べる。値もパターンも
+		// ASCII を小文字にしてから比べるので、HostName に大文字があっても一致する。
+		return sshmatch.PatternList(patterns, context.hostForMatch(), sshmatch.IgnoreCase), nil
 	case "originalhost":
-		return matchesAny(criterion.Argument, context.OriginalAlias), nil
+		return sshmatch.PatternList(patterns, context.OriginalAlias, sshmatch.IgnoreCase), nil
 	case "user":
-		return matchesAny(criterion.Argument, context.User), nil
+		return sshmatch.PatternList(patterns, context.User, sshmatch.CaseSensitive), nil
 	case "localuser":
-		return matchesAny(criterion.Argument, context.LocalUser), nil
+		return sshmatch.PatternList(patterns, context.LocalUser, sshmatch.CaseSensitive), nil
 	case "tagged":
 		for _, tag := range context.Tags {
-			if matchesAny(criterion.Argument, tag) {
+			if sshmatch.PatternList(patterns, tag, sshmatch.CaseSensitive) {
 				return true, nil
 			}
 		}
@@ -109,29 +113,4 @@ func criterionApplies(criterion config.Criterion, context MatchContext) (bool, e
 		// 書いていないブロックを適用することになるので、判定できないと言う。
 		return false, ErrMatchUnsupported
 	}
-}
-
-// matchesAny は、カンマ区切りのパターン列のどれかに一致するかを報告する。
-//
-// 否定は Match 行の属性そのものに付く（`!host`）ほか、パターン側にも書ける
-// （`Match host !web,*`）。後者は OpenSSH と同じく、否定に当たった時点で
-// その属性全体が偽になる。
-func matchesAny(argument, value string) bool {
-	matched := false
-	for _, pattern := range strings.Split(argument, ",") {
-		pattern = strings.TrimSpace(pattern)
-		if pattern == "" {
-			continue
-		}
-		if negated := strings.HasPrefix(pattern, "!"); negated {
-			if MatchPattern(strings.TrimPrefix(pattern, "!"), value) {
-				return false
-			}
-			continue
-		}
-		if MatchPattern(pattern, value) {
-			matched = true
-		}
-	}
-	return matched
 }

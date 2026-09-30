@@ -14,6 +14,11 @@ import (
 //
 // 別名であって包み直しではない。errors.Is はどちらの表記でも通る。
 
+// ErrSymlinkPath は、シンボリックリンクを経由する known_hosts の読み書きを断る。
+// 照合のための読み取り（ReadFile）はリンクをたどるが、鍵の保存と Known Hosts 画面は
+// たどらない。dotfiles の管理で ~/.ssh/known_hosts をリンクにしていると当たる。
+var ErrSymlinkPath = storage.ErrSymlinkPath
+
 // ContentDigest は、確認から実行までの間に対象が変わっていないことを縛る印である。
 func ContentDigest(contents []byte) string { return storage.Digest(contents) }
 

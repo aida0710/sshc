@@ -29,6 +29,9 @@ type Service struct {
 	keyPassphrases KeyPassphraseVerifier
 	startupRenamer StartupRenamer
 	vault          *secret.Service
+	// factsFor は、トークン展開と既定の GlobalKnownHostsFile に要るこのマシンの事実を読む。
+	// テストは本物の /etc/ssh の known_hosts へ届かないように差し替える。
+	factsFor func(home string) effective.LocalFacts
 }
 
 func resolverFor(workspace *storage.Workspace) config.Resolver {
@@ -44,6 +47,7 @@ func NewService(workspace *storage.Workspace, manager *storage.Manager) *Service
 		resolver:  resolverFor(workspace),
 		metadata:  NewMetadataStore(workspace),
 		entryPath: filepath.Join(workspace.Root(), entryFileName),
+		factsFor:  LocalFactsFor,
 	}
 	manager.Validate = service.validate
 	return service
@@ -82,9 +86,9 @@ func (s *Service) readFile(absolute string) (contents []byte, exists bool, err e
 	return contents, true, nil
 }
 
-// localFacts は、トークン展開に要るこのプロセスの事実である。
+// localFacts は、トークン展開と既定の GlobalKnownHostsFile に要るこのプロセスの事実である。
 func (s *Service) localFacts() effective.LocalFacts {
-	return LocalFactsFor(s.workspace.Home())
+	return s.factsFor(s.workspace.Home())
 }
 
 func (s *Service) resolve() (*config.Graph, error) {

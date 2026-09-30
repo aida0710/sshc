@@ -49,8 +49,8 @@ const (
 // 生成すれば、エントリ設定ファイルが作られてその中身が秘密鍵になり、`keys` という
 // 名前の鍵は、あとでグループを作るときに要る `keys/` と同じ場所を取り合う。
 //
-// 以前この一覧は internal/application と internal/keys に別々にあり、doc の文まで
-// 同じでありながら後者には `connections` と `keys` が無かった。
+// internal/application と internal/keys はこの一覧を共有する。別々に持つと、
+// 片方にだけ名前が足りない状態が起きる。
 //
 // 比較は大小文字を区別しない。既定の macOS ボリュームは "Config" と "config" を
 // 同じディレクトリエントリとして扱う。

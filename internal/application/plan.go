@@ -279,6 +279,11 @@ func (s *Service) planMetadataEdit(graph *config.Graph, request EditRequest) (pl
 	if request.Metadata == nil {
 		return planned{}, ErrUnknownEditKind
 	}
+	if request.Kind == EditGroups {
+		if err := checkGroupSettingsWritable(*request.Metadata); err != nil {
+			return planned{}, err
+		}
+	}
 	root := s.workspace.Root()
 	hosts, _ := ProjectHosts(graph, root)
 	identities := make([]HostIdentity, 0, len(hosts))

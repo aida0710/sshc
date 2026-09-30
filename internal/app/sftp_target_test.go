@@ -27,7 +27,7 @@ func TestSFTPPoolIdentityTracksConnectionAndJumpSettings(t *testing.T) {
 				"other-jump": {Entries: map[string][]string{"hostname": {"other-jump.example"}, "user": {"operator"}}},
 			}
 			parts := sshParts{
-				home:       t.TempDir(),
+				facts:      effective.LocalFacts{Home: t.TempDir()},
 				resolve:    func(alias string) (effective.Values, error) { return settings[alias], nil },
 				encoding:   func(string) (textencoding.Name, error) { return textencoding.UTF8, nil },
 				vpnBinding: func(string) (string, error) { return "", nil },

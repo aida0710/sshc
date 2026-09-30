@@ -11,7 +11,7 @@ import (
 
 func TestConnectionOSPersistsAndDoesNotOverwriteAnOverride(t *testing.T) {
 	service, workspace := newTestService(t)
-	target, err := sshclient.NewTarget("bastion", service.ResolveConnection, workspace.Home())
+	target, err := sshclient.NewTarget("bastion", service.ResolveConnection, LocalFactsFor(workspace.Home()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,7 +46,7 @@ func TestConnectionOSPersistsAndDoesNotOverwriteAnOverride(t *testing.T) {
 
 func TestConnectionOSRejectsLateResultsAfterRetargetingAndHidesOldIcon(t *testing.T) {
 	service, workspace := newTestService(t)
-	target, err := sshclient.NewTarget("bastion", service.ResolveConnection, workspace.Home())
+	target, err := sshclient.NewTarget("bastion", service.ResolveConnection, LocalFactsFor(workspace.Home()))
 	if err != nil {
 		t.Fatal(err)
 	}

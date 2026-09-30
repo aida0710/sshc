@@ -16,6 +16,11 @@ import (
 // maxDeleteTargets は一度の削除リクエストの上限を定める。
 const maxDeleteTargets = 256
 
+// problemKnownHostsSymlink は、known_hosts がシンボリックリンクのため、sshc が
+// 読み書きしないことを表す語である。Known Hosts 画面の操作と、新しいホストの鍵を
+// 保存できずに失敗した接続の両方が使う。鍵は ssh で一度接続すれば登録できる。
+const problemKnownHostsSymlink = "known_hosts_symlink"
+
 // KnownHostsHandlers は known_hosts の検索と保守を公開する。
 type KnownHostsHandlers struct {
 	Service *knownhosts.Service
@@ -67,6 +72,9 @@ func knownHostsProblem(c *echo.Context, err error) error {
 		return problem(c, http.StatusBadRequest, "unsafe_hostname")
 	case errors.Is(err, validate.ErrUnsafePort):
 		return problem(c, http.StatusBadRequest, "unsafe_port")
+	case errors.Is(err, knownhosts.ErrSymlinkPath):
+		// ほかの設定ファイルがシンボリックリンクのとき（path_not_editable）と同じ 403。
+		return problem(c, http.StatusForbidden, problemKnownHostsSymlink)
 	}
 	if knownhosts.IsExternalChange(err) {
 		return problem(c, http.StatusConflict, "external_change")

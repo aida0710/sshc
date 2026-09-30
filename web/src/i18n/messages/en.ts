@@ -576,6 +576,8 @@ export const en = {
     "The host key changed. Review Known Hosts before connecting again.",
   "terminal.hostKeyRevoked":
     "The host key is marked as revoked and cannot be used.",
+  "terminal.knownHostsSymlink":
+    "The host key could not be saved because known_hosts is a symbolic link. Connect once with ssh to add the key, then connect again.",
   "terminal.identityUnavailable":
     "No usable identity or SSH agent key is available.",
   "terminal.authenticationUnavailable":
@@ -1897,6 +1899,8 @@ export const en = {
   "kh.columnTrust": "Trust",
   "kh.columnActions": "Actions",
   "kh.unreadable": "The known_hosts file could not be read.",
+  "kh.symlink":
+    "~/.ssh/known_hosts is a symbolic link, so sshc cannot show or change it. Hosts already in it still connect. To add a new host's key, connect to the host once with ssh.",
   "kh.removeFailed": "The entry could not be removed. Nothing was changed.",
   "kh.scanFailed": "The host could not be scanned.",
   "kh.addFailed": "The key could not be added. Nothing was changed.",
@@ -1956,6 +1960,8 @@ export const en = {
   "rk.registerMany": "Register on {count} hosts",
   "rk.plannedHosts": "Reviewed {count} hosts",
   "rk.planFailed": "The change could not be described. Nothing was contacted.",
+  "rk.configNotConfirmable":
+    "The change could not be described because an Include in the SSH configuration cannot be read the way OpenSSH reads it, such as an unreadable file, a path containing ${…}, a cycle or nesting that is too deep, or because the configuration it reads adds up to more than 4 MiB. Fix the configuration and check again. Nothing was contacted.",
   "rk.registerFailed":
     "The key was not registered. The remote host was left as it was.",
   "rk.publicKeyUnreadable":
@@ -2050,7 +2056,7 @@ export const en = {
     "A group with this name already exists. Enter a different name.",
   "groups.chooseGroupAndKeyword": "Choose a group and a directive keyword.",
   "groups.unbalancedQuote":
-    "A value has an unbalanced quote. OpenSSH has no escape inside quotes, so this cannot be saved.",
+    "A value has a quote that is not closed. Close it, or put a backslash before a quote you want to keep as a character.",
   "groups.renameNeedsName": "Enter a new name for the group.",
   "groups.renameCollides":
     "{name} already exists. Rename it to something else, or remove one of the two.",
@@ -2448,7 +2454,7 @@ export const en = {
   "host.tabJump": "Jump Host",
   "host.tabRaw": "Raw",
   "host.unbalancedQuote":
-    "A value has an unbalanced quote. OpenSSH has no escape inside quotes, so this cannot be saved.",
+    "A value has a quote that is not closed. Close it, or put a backslash before a quote you want to keep as a character.",
   "host.needsKeyword": "A directive needs a keyword.",
   "host.dangerousField":
     "{keyword} can run a command when OpenSSH evaluates this host. It is stored as written and never executed here.",

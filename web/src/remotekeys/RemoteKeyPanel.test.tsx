@@ -358,6 +358,22 @@ describe("RemoteKeyPanel", () => {
     expect(screen.getByRole("button", { name: "Register the key" })).toBeDisabled();
   });
 
+  it("tells the user to fix the Include or the size when the configuration cannot back a confirmation", async () => {
+    const api = buildApi({
+      plan: vi.fn().mockRejectedValue(
+        new ApiError("config_not_confirmable", 422, { code: "config_not_confirmable", message: "" }),
+      ),
+    });
+    render(<RemoteKeyPanel api={api} keys={buildKeys()} />);
+    await fillForm();
+    await userEvent.click(screen.getByRole("button", { name: "Show what this would do" }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("an Include in the SSH configuration cannot be read");
+    expect(alert).toHaveTextContent("more than 4 MiB");
+    expect(alert).toHaveTextContent("config_not_confirmable");
+  });
+
   it("surfaces the refusal code from the register endpoint and stores nothing", async () => {
     const frameworkGlobals = ["IS_REACT_ACT_ENVIRONMENT"];
     const globalsBefore = Object.keys(window);

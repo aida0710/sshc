@@ -258,6 +258,8 @@ export function terminalProblemKey(code: string): MessageKey {
       return "terminal.hostKeyChanged";
     case "host_key_revoked":
       return "terminal.hostKeyRevoked";
+    case "known_hosts_symlink":
+      return "terminal.knownHostsSymlink";
     case "identity_unavailable":
       return "terminal.identityUnavailable";
     case "authentication_unavailable":

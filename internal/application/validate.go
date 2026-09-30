@@ -2,6 +2,7 @@ package application
 
 import (
 	"bytes"
+	"fmt"
 	"io/fs"
 	"path/filepath"
 	"sort"
@@ -9,6 +10,7 @@ import (
 	"strings"
 
 	"sshc/internal/config"
+	"sshc/internal/knownhosts"
 	"sshc/internal/platform/nativepath"
 	"sshc/internal/storage"
 )
@@ -171,6 +173,13 @@ func (s *Service) validate(request storage.Request) error {
 	if request.Operation == "sync.pull" || request.Operation == "sync.ignore" {
 		return nil
 	}
+	// known_hosts は ssh_config ではない。行末のコメントの ' や " を引用として読むと、
+	// 正しい known_hosts を構文の誤りとして断り、Known Hosts 画面の追加も、接続で
+	// 受け入れた鍵の保存もできなくなる。書く行は knownhosts が鍵の種類と表記を
+	// 確かめてから組み立てている。ここでは書く先だけを確かめる。
+	if request.Operation == knownhosts.OperationAdd || request.Operation == knownhosts.OperationDelete {
+		return s.checkKnownHostsDestinations(request)
+	}
 	pending, gone := overlayFor(request)
 	edit, planned := request.Validation.(configurationEdit)
 
@@ -208,7 +217,7 @@ func (s *Service) validate(request storage.Request) error {
 
 	baseline := edit.baseline
 	if !planned {
-		// このサービスが計画していない要求（known_hosts の追加など）は、ディスク上の
+		// このサービスが計画していない要求（鍵ファイルの書き込みなど）は、ディスク上の
 		// グラフにすでにある診断を基準にする。基準が無いと、~/.ssh/config が無い
 		// マシンでは既存の IncludeUnreadable を新しく入ったものと扱い、設定と関係の
 		// ない書き込みまで断ってしまう。validate は storage の書き込みロックの中で
@@ -234,6 +243,28 @@ func (s *Service) validate(request storage.Request) error {
 	}
 	if len(introduced) > 0 {
 		return &GraphError{Diagnostics: introduced}
+	}
+	return nil
+}
+
+// checkKnownHostsDestinations は、known_hosts の操作が sshc の状態（metadata.json など）と
+// Include グラフの設定ファイルを書かないことを確かめる。
+//
+// UserKnownHostsFile が誤ってそれらを指すと、接続で受け入れた鍵の行がそこに足される。
+// known_hosts の操作は中身を ssh_config として検証しないので、ここで断らないと止まらない。
+func (s *Service) checkKnownHostsDestinations(request storage.Request) error {
+	graph, err := s.resolve()
+	if err != nil {
+		return err
+	}
+	stateDir := filepath.Clean(s.workspace.StateDir())
+	for _, changes := range [][]storage.Change{request.Changes, request.FinalChanges} {
+		for _, change := range changes {
+			cleaned := filepath.Clean(change.Path)
+			if nativepath.Contains(stateDir, cleaned) || graph.Nodes[cleaned] != nil {
+				return fmt.Errorf("%w: %s is not a known_hosts file", ErrNotEditable, s.displayPath(cleaned))
+			}
+		}
 	}
 	return nil
 }

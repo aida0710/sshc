@@ -1,6 +1,7 @@
 package effective_test
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -318,5 +319,62 @@ func TestResolveKeepsWhicheverOfProxyCommandAndProxyJumpCameFirst(t *testing.T) 
 				t.Errorf("proxy_ignored noted = %v, want %v: %#v", noted, test.ignored, resolution.Notes)
 			}
 		})
+	}
+}
+
+// OpenSSH 8.7 以降は、語の先頭の # から後ろをコメントとして捨て、引用符を外す。行の
+// 残りを値にする ProxyCommand と RemoteCommand だけは、コメントも引用符も残す。SetEnv と
+// SendEnv は引数のひとつずつが値である。期待値は ssh -G（OpenSSH 10.2p1）の出力である。
+// ssh の無いマシンでも、この規則が崩れたら落ちるようにする。
+func TestResolveDropsTrailingCommentsAndQuotesExceptFromCommands(t *testing.T) {
+	graph := graphFor(t, map[string]string{
+		testConfig: "Host office\n" +
+			"\tHostName Office.Example.COM # front door\n" +
+			"\tPort \"2222\"\n" +
+			"\tUser ops # on call\n" +
+			"\tIdentityFile \"~/.ssh/office key\" # laptop\n" +
+			"\tRemoteCommand tmux new -A -s \"main\"  # attach\n" +
+			"\tProxyCommand nc %h %p # \"quoted\"\n" +
+			"\tSetEnv X=\"a b\" ONE=1 # tail\n" +
+			"\tSendEnv LANG LC_*\n",
+	})
+
+	values := effective.Resolve(graph, "office", resolveFacts()).Values
+
+	for keyword, want := range map[string][]string{
+		"hostname":      {"office.example.com"},
+		"port":          {"2222"},
+		"user":          {"ops"},
+		"identityfile":  {"~/.ssh/office key"},
+		"remotecommand": {`tmux new -A -s "main"  # attach`},
+		"proxycommand":  {`nc %h %p # "quoted"`},
+		"setenv":        {"X=a b", "ONE=1"},
+		"sendenv":       {"LANG", "LC_*"},
+	} {
+		if got := values.All(keyword); !slices.Equal(got, want) {
+			t.Errorf("%s = %q, want %q", keyword, got, want)
+		}
+	}
+}
+
+// 確定した HostName は ASCII の英字を小文字にする。alias から来た HostName も、%h を
+// 展開した HostName も同じである。アドレスのリテラルと、ASCII でない英字（全角）は
+// そのまま残る。期待値は ssh -G（OpenSSH 10.2p1）の出力である。
+func TestResolveLowersOnlyTheASCIILettersOfTheResolvedHostName(t *testing.T) {
+	graph := graphFor(t, map[string]string{
+		testConfig: "Host six\n\tHostName 2001:DB8::1\n" +
+			"Host wide\n\tHostName Ｗeb.Example\n" +
+			"Host EDGE\n\tHostName %h.Example.com\n",
+	})
+
+	for alias, want := range map[string]string{
+		"six":          "2001:DB8::1",
+		"wide":         "Ｗeb.example",
+		"EDGE":         "edge.example.com",
+		"Bare.Example": "bare.example",
+	} {
+		if got := effective.Resolve(graph, alias, resolveFacts()).Values.First("hostname"); got != want {
+			t.Errorf("hostname of %s = %q, want %q", alias, got, want)
+		}
 	}
 }

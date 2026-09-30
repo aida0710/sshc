@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"sshc/internal/config"
+	"sshc/internal/effective"
 	"sshc/internal/validate"
 )
 
@@ -81,7 +82,8 @@ func ApplyFieldEdits(file *config.File, block config.Block, edits []FieldEdit) e
 			continue
 		}
 		current := staged.BlockAt(block.Header)
-		line, err := buildDirectiveLine(blockIndent(staged, current), edit.Keyword, edit.Values, blockEnding(staged, current))
+		added := blankDirectiveLine(blockIndent(staged, current), blockEnding(staged, current))
+		line, err := rebuildDirective(added, edit.Keyword, edit.Values)
 		if err != nil {
 			return err
 		}
@@ -169,6 +171,9 @@ func rebuildDirective(line config.Line, keyword string, values []string) (config
 	if err := validateKeyword(keyword); err != nil {
 		return config.Line{}, err
 	}
+	if effective.TakesRestOfLine(keyword) {
+		return rebuildRestOfLine(line, keyword, values)
+	}
 	return rebuildLine(line, keyword, values)
 }
 
@@ -214,11 +219,11 @@ func renderArgument(lead, value string) (config.Argument, error) {
 	return argument, nil
 }
 
-func buildDirectiveLine(indent, keyword string, values []string, ending string) (config.Line, error) {
-	if err := validateKeyword(keyword); err != nil {
-		return config.Line{}, err
-	}
-	return buildLine(indent, keyword, values, ending)
+// blankDirectiveLine は、キーワードも値も無いディレクティブ行を返す。新しい行は、
+// これを rebuildDirective で書き直して作る。既存の行の書き換えと同じく、行の残りを
+// 値にするキーワードを引用し直さずに書くためである。
+func blankDirectiveLine(indent, ending string) config.Line {
+	return config.Line{Kind: config.LineDirective, Indent: indent, Separator: " ", Ending: ending}
 }
 
 // buildLine は keyword のポリシーチェックなしでディレクティブ行を組み立てる。

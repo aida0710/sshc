@@ -23,6 +23,7 @@
 
 - `~/.ssh/config` と `Include` 先を構成情報の保存元として読み書きします。無変更の parse/render は byte-for-byte で一致し、コメント、空行、引用、`key=value`、未知のディレクティブを保持します。
 - 解釈できない行は `LineUnstructured` として原文のまま保持し、UI からは Raw 編集だけを許可します。推測による整形や削除は行いません。
+- 画面で編集した値は、OpenSSH の argv_split が同じ値に読み戻す引用で書きます。ただし `ProxyCommand`、`RemoteCommand`、`LocalCommand`、`KnownHostsCommand` は OpenSSH が行の残りをそのまま値にし、シェルが読むため、書かれたとおりの行の残りを 1 つの値として編集し、引用し直さずに書きます。グループの共通設定も同じです。閉じない引用、改行、先頭の `=` を含む値は断ります。以前のバージョンがグループ設定に空白で分けて保存した値は、metadata を schema 9 へ移行するときに、以前のバージョンが書いていた行と同じ 1 つの値にまとめます。
 - 書き込みは解決済みの `~/.ssh` 配下だけに限定します。`..`、シンボリックリンク、外部パスで書き込み範囲は広がりません。読み取りは `O_NOFOLLOW` を使います。`~/.ssh`自身や`$HOME`がシンボリックリンクの場合（GNU stowでまとめた`~/.ssh`など）は、解決した先をrootにします。engine lock、handoff、SFTPの転送キューも`app.StateDir`で同じ解決済みのstate directoryに置くので、設定を書く側とengineを起動する側でstate directoryの場所が分かれません。
 - `Include` が `~/.ssh` の外を指す場合は、グラフ表示と読み取りのみ許可します。
 - `%h` など接続先が決まるまで確定しないトークンは展開せず、`include_unsupported_expansion` として報告します。
@@ -202,7 +203,9 @@
 - 転送用 listener はループバックにだけ bind します。`LocalForward 0.0.0.0:8080` や `GatewayPorts yes` が設定されていても、他のマシンには公開しません。ただしループバックは同一OSユーザーへの隔離ではなく、共有ホストでは別のローカルユーザーから利用される可能性があります。ループバック以外の指定は警告します。ポートを確保できない転送があっても SSH 接続は継続し、失敗理由を一覧に表示します。
 - 転送の存続期間はセッションと同じです。コンソールを閉じると listener も閉じます。`DynamicForward` は SOCKS5 の CONNECT だけに対応します。agent 転送では鍵データではなく、agent を通じて署名する機能をリモートへ提供します。
 - 接続中に対話が必要になるのは、未知のホスト鍵、鍵のパスフレーズ、パスワード、keyboard-interactive の 4 種類です。保管庫に対応する値がない場合、または保存値が拒否された場合に端末へプロンプトを表示します。入力値は端末に再表示せず、接続中に入力した鍵パスフレーズも保存しません。保存は Secrets 画面から明示的に行います。
-- ホスト鍵が `known_hosts` と一致しない場合は、確認を求めず接続を拒否します。未知のホストは `StrictHostKeyChecking` に従い、承認した鍵は Known Hosts 画面と同じトランザクションで保存します。読み取りには同じ parser を使用します。
+- ホスト鍵は OpenSSH と同じく `UserKnownHostsFile` と `GlobalKnownHostsFile` のすべてのファイルと照合し、`HostKeyAlias` があればその名前で照合します。一致しない場合は、確認を求めず接続を拒否します。未知のホストは `StrictHostKeyChecking` に従い（`true` は `yes`、`false` と `off` は `no`）、承認した鍵は `UserKnownHostsFile` の最初のファイルへ、Known Hosts 画面と同じトランザクションで保存します。保存するのは `~/.ssh` の中のファイルだけです。読み取りには同じ parser を使用します。照合のための読み取りは、`~/.ssh` の中のファイルも OpenSSH と同じくシンボリックリンクをたどり、開けないファイルと通常のファイルでないものは空として扱います。保存と Known Hosts 画面の読み取りはシンボリックリンクをたどらず、読めないファイルはエラーにします。保存先がシンボリックリンクを経由するときは、未知のホストの鍵を保存できないので接続を失敗にし、リンクのため保存できないことと、`ssh` で一度接続すれば登録できることを接続の失敗の文と Terminal の表示で伝えます。保存しないまま接続を続けると、`accept-new` では未知のホストを毎回確認なしで受け入れることになるためです。Known Hosts 画面も、`~/.ssh/known_hosts` がシンボリックリンクなら一覧を表示せず、同じ理由と対処を表示します。
+  - ファイル名は OpenSSH と同じく展開します。`UserKnownHostsFile` は `~`、`${環境変数}`（engine のプロセスの環境）、`%C`・`%d`・`%h`・`%i`・`%j`・`%k`・`%L`・`%l`・`%n`・`%p`・`%r`・`%u` を展開し、`GlobalKnownHostsFile` は `~` だけを展開します。展開できない値（値の無い環境変数、知らないトークン、相対パス）があるときは、ホスト鍵の照合で接続を拒否します。設定の保存と認証の束縛の計算は止めません。
+- `IdentityFile` は、接続先ごとに `UserKnownHostsFile` と同じ規則（`~`、`${環境変数}`、同じトークン）で展開します。相対パス、`~user`、展開できないトークン、値の無い環境変数を含む鍵は使わず、`identityfile` の notice（接続ログと `sshc info`）にして、ほかの鍵で接続を続けます。相対パスは、OpenSSH が `ssh` を起動したディレクトリから開くもので、engine にはそのディレクトリがないためです。Keys 画面が設定に書かれた鍵のパスを読むときは、接続先が決まっていないので、`~`、`%d`、`%%` だけを展開します。
 - `ProxyJump` はプロセス内で処理し、`ProxyCommand` は上記の条件で外部プログラムとして実行します。両方を同時に指定した設定と、jump host 経由の接続先で `ProxyCommand` を指定した設定は拒否します。
 - 接続失敗の詳細は対象コンソールに表示します。設定を解決できず接続を開始できない場合はセッションを作成せず、エラーコード付きの理由を返します。到達不能や認証失敗など接続開始後のエラーは、作成済みセッション内に表示します。
 - 外部プロセスは argv を直接組み立てて実行します。シェル、`sh -c`、文字列連結した AppleScript は使いません。alias、hostname、user は OpenSSH が受理する値であっても信頼しません。
@@ -320,7 +323,7 @@
 - リクエスト本文には二段の上限があります。middleware の `MaxRequestBodyCeiling`（2 MiB）が全 `/api/` 要求の天井で（例外は SFTP の range upload `PATCH …/uploads/{id}?range=true` の 4 GiB と、背景画像の追加`POST /api/v1/terminal/backgrounds`の1 GiBだけ）、各ハンドラーはさらに小さい上限を持ちます。背景画像の1枚の大きさは、ハンドラーが背景の容量設定で押さえます。宣言された `Content-Length` が天井を超える要求はハンドラーへ届く前に 413 で拒否し、長さを宣言しない chunked 要求は読み取り自体を天井で打ち切ります。本文を読まないルート（`/api/v1/diagnostics/config` や `/api/v1/keys/{keyId}/trash`）にも同じ天井が掛かるのは前者のためです。
 - リモートコマンドの出力は `sshclient.MaxCapturedOutput`（64 KiB）で打ち切られます。認証テストの banner と失敗理由は `diagnostics.MaxReportedOutput`（8 KiB）までに制限して表示します。
 - `make fuzz` は `FUZZ_TARGETS` に列挙した全 target を順に実行します。`go test -fuzz` は一度に 1 target しか動かせないため、1 行で書くと最初の target しか回りません。target を追加して一覧に加え忘れると `TestMakefileFuzzTargetsCoverEveryFuzzFunction` が失敗します。
-- fuzz の対象は、設定パーサーのラウンドトリップ、Include パターン展開、`known_hosts` リーダー、実効値の解決、`ssh -G` 出力パーサー、HTTP リクエストデコーダー、リモートスナップショットのリーダーの 7 つです。いずれも実 fixture を seed にしています。
+- fuzz の対象は、設定パーサーのラウンドトリップ、引数の書き出しと読み戻し、Include パターン展開、`known_hosts` リーダー、実効値の解決、`ssh -G` 出力パーサー、OSC の読み取り、HTTP リクエストデコーダー、リモートスナップショットのリーダーの 9 つです。seed には実 fixture か、規則の境界に当たる値を使っています。
 - アクセス URL を表示するのは `sshc` と `sshc open` だけで、要求ごとに 1 つ発行します。`sshc engine` はアクセス URL を表示しません。旧バージョンの `--own-engine` と `-open=false` はどちらも未定義であり、alias や互換用 option もありません。
 - 配布物は UI を埋め込んだ単一バイナリです。`otool -L` はシステムライブラリのみを表示し、同梱ランタイムはありません。`make e2e` は毎回ビルドし直した実バイナリを Playwright で駆動するため、埋め込み済み UI が古いままだと E2E が失敗します。
 - `make verify-generated` は `api/openapi.yaml` から Go と TypeScript の型を再生成し、コミット済みの生成物と一致しなければ失敗します。生成物を手で編集してはいけません。

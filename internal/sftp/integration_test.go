@@ -72,12 +72,13 @@ func integrationService(t *testing.T) sftp.Service {
 		Auth: sshclient.Auth{Stored: func(candidate string) (string, bool) {
 			return os.Getenv("SSHC_TEST_SSH_KEY_PASSPHRASE"), candidate == identity
 		}},
-		HostKeys: sshclient.HostKeys{Read: func() ([]byte, error) { return []byte(known.String()), nil }},
+		HostKeys: sshclient.HostKeys{Read: func(string) ([]byte, error) { return []byte(known.String()), nil }},
 	}
 	target := sshclient.Target{
 		Alias: "integration", HostName: host, Port: port, User: os.Getenv("SSHC_TEST_SSH_USER"),
 		Methods: sshclient.DefaultMethods(), Identities: []string{identity}, IdentitiesOnly: true,
 		Timeout: 30 * time.Second, Strict: "yes",
+		KnownHosts: sshclient.KnownHostsFiles{User: []string{"known_hosts"}},
 	}
 	return sftp.Service{Open: func(ctx context.Context, alias string) (sftp.Remote, error) {
 		if alias != target.Alias && alias != "integration-source" && alias != "integration-target" {

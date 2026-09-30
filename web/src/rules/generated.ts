@@ -32,3 +32,12 @@ export const reservedNames: ReadonlySet<string> = new Set([
   "rc",
   "sshc",
 ]);
+
+// 値が行の残りそのものであるキーワード（小文字）。値を引数に分けず、引用し直さずに書く。
+// 値を読むのはシェルで、引用し直すとシェルが読む文字列が変わる。
+export const restOfLineKeywords: ReadonlySet<string> = new Set([
+  "knownhostscommand",
+  "localcommand",
+  "proxycommand",
+  "remotecommand",
+]);

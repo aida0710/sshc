@@ -442,4 +442,8 @@ describe("terminalProblemKey", () => {
       "terminal.remoteWorkingDirectoryUnsupported",
     );
   });
+
+  it("says that a symlinked known_hosts could not save the host key, not that the terminal failed to open", () => {
+    expect(terminalProblemKey("known_hosts_symlink")).toBe("terminal.knownHostsSymlink");
+  });
 });

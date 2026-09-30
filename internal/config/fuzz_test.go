@@ -17,6 +17,10 @@ func FuzzParseRendersOriginalBytes(f *testing.F) {
 	f.Add([]byte("Host=a\r\n\t# comment\nInclude \"conf.d/*.conf\"\n"))
 	f.Add([]byte("ProxyCommand \"unterminated\nPort 22"))
 	f.Add([]byte(" \t\n\x00\xff=\"\"\n"))
+	// argv_split の引用とエスケープ。一重引用符、引用の外の "\ "、語中の引用符、
+	// エスケープした引用符を含む Match 行、引用符を含むコメント。
+	f.Add([]byte("User 'bob'\nIdentityFile ~/.ssh/my\\ key\nUser b\"o\"b # don't\n"))
+	f.Add([]byte("Match exec \"test \\\"a\\\" = \\\"b\\\"\"\n\tUser office\n"))
 	f.Fuzz(func(t *testing.T, source []byte) {
 		file := Parse(source)
 		rendered := file.Render()
@@ -27,6 +31,27 @@ func FuzzParseRendersOriginalBytes(f *testing.F) {
 			if line.Kind == LineDirective && line.Keyword == "" {
 				t.Fatalf("line %d is a directive without a keyword", index)
 			}
+		}
+	})
+}
+
+// FuzzRenderArgumentReadsBack は、書き出した引数が argv_split の規則で同じ値に
+// 読み戻ることを確かめる。書けない値（改行と NUL）は断られなければならない。
+func FuzzRenderArgumentReadsBack(f *testing.F) {
+	for _, seed := range []string{"plain", "", "has space", `quote"inside`, "it's", `C:\dir\`, `a\\b`, "#x", "=x"} {
+		f.Add(seed)
+	}
+	f.Fuzz(func(t *testing.T, value string) {
+		argument, err := RenderArgument(" ", value)
+		if err != nil {
+			if !strings.ContainsAny(value, "\n\r\x00") {
+				t.Fatalf("RenderArgument(%q) refused a writable value: %v", value, err)
+			}
+			return
+		}
+		arguments, _, ok := splitArguments(argument.Raw + " next")
+		if !ok || len(arguments) != 2 || arguments[0].Value != value {
+			t.Fatalf("RenderArgument(%q) wrote %q, which reads back as %#v", value, argument.Raw, arguments)
 		}
 	})
 }

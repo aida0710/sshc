@@ -169,7 +169,7 @@ func TestStreamRefusesAnUnknownHostInsteadOfTrustingIt(t *testing.T) {
 	_, dialer, target := streamSetup(t, serverOptions{})
 	// 覚えていない状態にする。設定が accept-new でも、この経路は yes で読む。
 	target.Strict = "accept-new"
-	dialer.HostKeys = sshclient.HostKeys{Read: func() ([]byte, error) { return nil, nil }}
+	dialer.HostKeys = sshclient.HostKeys{Read: func(string) ([]byte, error) { return nil, nil }}
 
 	_, err := dialer.Stream(context.Background(), target, "hostname",
 		sshclient.Streams{Out: io.Discard, Err: io.Discard})
@@ -190,10 +190,10 @@ func TestStreamRefusesAnUnknownProxyJumpWithoutPersistingIt(t *testing.T) {
 	dialer := sshclient.Dialer{
 		Auth: sshclient.Auth{ReadFile: func(string) ([]byte, error) { return contents, nil }},
 		HostKeys: sshclient.HostKeys{
-			Read: func() ([]byte, error) {
+			Read: func(string) ([]byte, error) {
 				return []byte(knownHostsLine("["+inner.Host()+"]:"+inner.Port(), inner.HostKey.PublicKey())), nil
 			},
-			Add: func(knownhosts.Candidate) error { written++; return nil },
+			Add: func(string, knownhosts.Candidate) error { written++; return nil },
 		},
 	}
 	target := targetWith(inner, path)
@@ -432,7 +432,7 @@ func TestStreamKeepsStoredPasswordBindingsAcrossAProxyJump(t *testing.T) {
 			password, found := passwords[candidate.Alias]
 			return password, found && candidate.AuthenticationBinding() == bindings[candidate.Alias]
 		}},
-		HostKeys: sshclient.HostKeys{Read: func() ([]byte, error) { return []byte(known), nil }},
+		HostKeys: sshclient.HostKeys{Read: func(string) ([]byte, error) { return []byte(known), nil }},
 	}
 
 	code, err := dialer.Stream(context.Background(), target, "hostname",
