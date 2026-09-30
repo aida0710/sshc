@@ -35,12 +35,37 @@ if ($gitExit -ne 0) {
 $pathText = [Text.UTF8Encoding]::new($false, $true).GetString($rawPathBytes)
 $goFiles = @($pathText.Split([char]0, [StringSplitOptions]::RemoveEmptyEntries))
 
-$unformatted = @()
-if ($goFiles.Count -gt 0) {
-    $unformatted = @(& gofmt -l -- @goFiles)
+# Windowsのコマンドラインは32,767文字までなので、全パスを1回のgofmtへ渡すとプロセスを
+# 起動できない。引用符と区切りの空白の分を見込んで、上限の半分の文字数ごとに分けて渡す。
+$maxBatchCharacters = 16000
+
+$batches = [Collections.Generic.List[string[]]]::new()
+$batch = [Collections.Generic.List[string]]::new()
+$batchCharacters = 0
+foreach ($path in $goFiles) {
+    # 引用符2つと区切りの空白1つの分を足す。
+    $pathCharacters = $path.Length + 3
+    if ($batch.Count -gt 0 -and $batchCharacters + $pathCharacters -gt $maxBatchCharacters) {
+        $batches.Add($batch.ToArray())
+        $batch.Clear()
+        $batchCharacters = 0
+    }
+    $batch.Add($path)
+    $batchCharacters += $pathCharacters
+}
+if ($batch.Count -gt 0) {
+    $batches.Add($batch.ToArray())
+}
+
+$unformatted = [Collections.Generic.List[string]]::new()
+foreach ($batchPaths in $batches) {
+    $batchUnformatted = @(& gofmt -l -- @batchPaths)
     $gofmtExit = $LASTEXITCODE
     if ($gofmtExit -ne 0) {
         exit $gofmtExit
+    }
+    foreach ($path in $batchUnformatted) {
+        $unformatted.Add([string]$path)
     }
 }
 
