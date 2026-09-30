@@ -26,7 +26,7 @@ func validDocument() handoff.Handoff {
 	}
 }
 
-// 旧形式を受け入れると、所有者と互換性を確かめられないまま別版のエンジンへ接続する。
+// 旧形式を受け入れると、所有者と互換性を確かめられないまま別バージョンのエンジンへ接続する。
 func TestReadRejectsTheLegacyURLAndSecretDocument(t *testing.T) {
 	directory := filepath.Join(t.TempDir(), "state")
 	acltest.WritePrivateFile(t, filepath.Join(directory, handoff.FileName), []byte(`{"url":"http://127.0.0.1:52865","secret":"old"}`))

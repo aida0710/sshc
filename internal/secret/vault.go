@@ -66,7 +66,7 @@ var (
 	ErrInvalidTOTP = errors.New("the TOTP setup key is invalid")
 )
 
-// SchemaVersionError は、復号後に判明したvault documentの版差である。schema番号は
+// SchemaVersionError は、復号後に判明したvault documentのバージョンの違いである。schema番号は
 // 秘密ではなく、診断へ載せても資格情報やpassphraseを明かさない。
 type SchemaVersionError struct {
 	Found     int

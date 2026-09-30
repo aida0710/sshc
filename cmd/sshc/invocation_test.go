@@ -472,7 +472,7 @@ func sameStrings(got, want []string) bool {
 	return true
 }
 
-// 版を訊く道は、打たれる形すべてで通らなければならない。
+// バージョンを訊く道は、打たれる形すべてで通らなければならない。
 //
 // `sshc version` が正式だが、`--version` は誰もが最初に打つ形である。受けないと
 // usage と終了コード 2 になり、入れた直後の一行目が失敗する。実際
@@ -489,7 +489,7 @@ func TestEveryWayOfAskingForTheVersionIsAccepted(t *testing.T) {
 	}
 }
 
-// 版は引数を取らない。取ると alias と見分けが付かなくなる。
+// バージョンは引数を取らない。取ると alias と見分けが付かなくなる。
 func TestAskingForTheVersionTakesNoArguments(t *testing.T) {
 	if _, err := parseInvocation([]string{"sshc", "version", "extra"}); err == nil {
 		t.Fatal("version accepted an argument")
@@ -497,7 +497,7 @@ func TestAskingForTheVersionTakesNoArguments(t *testing.T) {
 }
 
 // 入っているものを言うときは、どの機械のものかも言う。入れ方が増えたので、
-// 「入ったが動かない」の相談で最初に要るのは版よりもそちらである。
+// 「入ったが動かない」の相談で最初に要るのはバージョンよりもそちらである。
 func TestTheVersionLineNamesTheBuildTarget(t *testing.T) {
 	var out strings.Builder
 	printVersion(&out)

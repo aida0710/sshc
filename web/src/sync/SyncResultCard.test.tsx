@@ -62,7 +62,7 @@ describe("SyncResultCard", () => {
     expect(screen.getByRole("heading", { name: "今回の送信" })).toBeInTheDocument();
     expect(screen.getByText("12ファイル · 4.8 MB")).toBeInTheDocument();
     expect(screen.getByText("暗号化スナップショット：1.9 MB")).toBeInTheDocument();
-    expect(screen.getByText("S3転送：3.8 MB（2オブジェクト、履歴＋現在版）")).toBeInTheDocument();
+    expect(screen.getByText("S3転送：3.8 MB（2オブジェクト、履歴＋現在のバージョン）")).toBeInTheDocument();
     expect(screen.getByText(/スナップショット作成/)).toBeInTheDocument();
     expect(screen.getByText(/操作完了/)).toBeInTheDocument();
   });
@@ -96,6 +96,6 @@ describe("SyncResultCard", () => {
     renderJapanese({ kind: "previous", operation });
 
     expect(screen.getByRole("heading", { name: "前回の成功" })).toBeInTheDocument();
-    expect(screen.getByText("S3転送：3.8 MB（2オブジェクト、履歴＋現在版）")).toBeInTheDocument();
+    expect(screen.getByText("S3転送：3.8 MB（2オブジェクト、履歴＋現在のバージョン）")).toBeInTheDocument();
   });
 });

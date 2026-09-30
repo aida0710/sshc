@@ -23,7 +23,7 @@ OS 分岐のコピペも**ほぼ無い** — `vault_terminal_*`・`ownership` �
 
 ## 0.5 実行による検証
 
-固定版のツールチェーン（Go 1.26.6 / Node 22.19.0 / npm 11.7.0）を導入して実際に走らせた結果。
+バージョンを固定したツールチェーン（Go 1.26.6 / Node 22.19.0 / npm 11.7.0）を導入して実際に走らせた結果。
 
 | 検証 | 結果 |
 |---|---|
@@ -1034,7 +1034,7 @@ L8 entry: `cmd/sshc`, `mobile`。**config/effective/application/storage への�
 | interface 差し替え | 6 個（`platform.Toolchain` / `platform.KeyAgent` / `secret.Guardian` / `terminal.Starter` / `desktopLauncher` / `ownershipMonitor`） | 「OS の道具」の抽象 |
 | nil = 機能の不在 | 11 箇所（Toolchain 1・KeyAgent 3・Guardian 6・Updates 1）。**internal/platform 内には 0 箇所** | Android / Windows の欠落表現 |
 | 実行時プローブ | 3 個（`Agent.Available` が実 dial、`macos.Biometric.available` が実 `SecItemAdd`、`Toolchain.KeyGen` が stat） | 「本当に使えるか」 |
-| 別バイナリ | Electron: `process.platform` 6 箇所 + `app.dock !== undefined` の duck-typing 3 箇所（`desktop/main.js:228,354,413`）／Android Java: **OS 分岐ゼロ**、`Build.VERSION.SDK_INT` の版分岐のみ | 外殻 |
+| 別バイナリ | Electron: `process.platform` 6 箇所 + `app.dock !== undefined` の duck-typing 3 箇所（`desktop/main.js:228,354,413`）／Android Java: **OS 分岐ゼロ**、`Build.VERSION.SDK_INT` によるバージョンの分岐のみ | 外殻 |
 
 **擁護すべき点を先に置く。** Android 固有の振る舞い 6 点はすべて根拠付きで表現されている——CLI 無し（成果物に含めないだけ）、ssh-keygen/ssh-agent 無し（`mobile/dependencies.go:43-44` の nil）、自己更新無し（同 `:50`）、HOME=filesDir（`EngineService.java:72` が渡す）、`/system/bin/sh`（`shell_unix.go:27`）、CGO 必須（`Makefile:61-68`）。`shellFallbacks(goos)` が引数で goos を取る設計（`shell_unix.go:21-22` に理由明記）は優秀で、Android の表は Linux ホスト上でも `shell_unix_test.go:78` が検査できている。Web UI には OS スニッフィングが 1 行も無く、機能の出し分けはサーバが返す capability boolean（`biometric.available` / `agentAvailable` / catalogue）だけで行われている——**これがこのリポジトリで最も正しい分岐点である。**
 
@@ -1169,13 +1169,13 @@ startup.sh は 481 コミット前から取り残されており、参照も無�
 - [stale-doc] **README:327 が「Go 側でプログラムを起こす場所は 2 つ」と書いているが実際は 5 つ**
   - 場所: `README.md:327, internal/acceptance/programs_test.go:32-53`
   - 根拠: README.md:327 は launch_darwin.go と internal/terminal/pty_unix.go の 2 件だけを名指ししている。実際の allowedToStartPrograms（programs_test.go:32-53）は cmd/sshc/launch_darwin.go, cmd/sshc/launch_linux.go, cmd/sshc/launch_windows.go, internal/terminal/pty_unix.go, internal/buildcontract/nativebuild.go の 5 件。launch_linux.go:76 と launch_windows.go:49 の `exec.CommandContext(ctx, path).Start()` は README の記述の外にある
-- [stale-doc] **README:380-381 が 2026-08-14 版の接続フローを説明したまま。実装は 08-15 版に置き換わっている**
+- [stale-doc] **README:380-381 が 2026-08-14 時点の接続フローを説明したまま。実装は 08-15 のものに置き換わっている**
   - 場所: `README.md:380, README.md:381, cmd/sshc/connectflow.go:146-160, cmd/sshc/connect.go:99-108, internal/httpserver/vault_cli.go:17-22`
   - 根拠: README:380 は「macOS ではアプリを隠しで起こします（open -g -b <bundleID> --args --hidden）」「~/.ssh/sshc/cli が現れるまで最大 20 秒待ちます」「Linux にはこの起こし方がまだありません」と書くが、(a) --hidden 経路は死んだ launchBackground の中にしかない、(b) waitForHandoff（connect.go:99-108）は 40 回 × 100ms = 4 秒、(c) launch_linux.go は 2026-08-15 の plan で追加済み。README:381 は「vault が施錠されていれば、その場でマスターパスワードを端末で尋ねます…本体の /cli/unlock へ渡して解錠を試みます」と書くが、connectflow.go:146-160 は尋ねずに「run sshc vault unlock」と案内して待つだけで、/cli/unlock は internal/httpserver に存在しない（vault_cli.go:17-22 は /cli/vault/* のみ。/cli/unlock は vault_cli_test.go:347 に「もう無い」ことを確かめる test としてだけ残る）
 
 ### internal/remotesync, internal/objectstore, internal/selfupdate, internal/buildcontract, internal/diagnostics（および対応する web/src/diagnostics）
 
-**責務** — この5領域は「アプリ本体が自分以外の世界と接する面」をそれぞれ担う。remotesync + objectstore は ~/.ssh のワークスペース全体を1オブジェクトの暗号化 tar.gz として S3 互換ストアへ条件付き PUT で往復させ、pull を storage.Request 1件へ畳んでトランザクション層の安全性（journal・世代バックアップ・再解析）を丸ごと継承する。selfupdate は GitHub の最新リリースを1回 GET して版を比べるだけで、取得も置換もしない。diagnostics は設定グラフの検査・直接 TCP ダイヤル・プロセス内 SSH 認証テストという3つの「人が明示的に押す検査」を提供する。buildcontract だけは配布物ではなくビルド系の住人で、Makefile / GitHub Actions から `go run` される移植可能なビルド CLI と、Makefile・workflow YAML・シェルスクリプトの中身を固定するメタテスト群を抱えている。
+**責務** — この5領域は「アプリ本体が自分以外の世界と接する面」をそれぞれ担う。remotesync + objectstore は ~/.ssh のワークスペース全体を1オブジェクトの暗号化 tar.gz として S3 互換ストアへ条件付き PUT で往復させ、pull を storage.Request 1件へ畳んでトランザクション層の安全性（journal・世代バックアップ・再解析）を丸ごと継承する。selfupdate は GitHub の最新リリースを1回 GET してバージョンを比べるだけで、取得も置換もしない。diagnostics は設定グラフの検査・直接 TCP ダイヤル・プロセス内 SSH 認証テストという3つの「人が明示的に押す検査」を提供する。buildcontract だけは配布物ではなくビルド系の住人で、Makefile / GitHub Actions から `go run` される移植可能なビルド CLI と、Makefile・workflow YAML・シェルスクリプトの中身を固定するメタテスト群を抱えている。
 
 **所見** — この5領域は「設計が破綻している」というより、**方針転換のたびに古い側を消し切らずに残したことが一定量ある**、という状態である。転換の痕跡は3系統に分けられる。
 

@@ -63,7 +63,7 @@ type Options struct {
 	Owner       handoff.Owner
 	// StopEngine は engine の停止を要求する。nil の場合、停止 API は未実装として応答する。
 	StopEngine func()
-	// ProtocolVersion は handoff と同じ CLI contract の版である。
+	// ProtocolVersion は handoff と同じ CLI contract のバージョンである。
 	ProtocolVersion int
 	Logger          *slog.Logger
 	Config          *application.Service

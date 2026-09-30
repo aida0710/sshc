@@ -15,7 +15,7 @@
 #   6. 稼働中の engine とインストール対象のバージョンが一致するか
 #
 # 環境変数:
-#   SSHC_VERSION      入れる版（既定: 最新）
+#   SSHC_VERSION      入れるバージョン（既定: 最新）
 #   SSHC_INSTALL_DIR  置き先（既定: root なら /usr/local/bin、他は ~/.local/bin）
 
 set -eu
@@ -50,7 +50,7 @@ case "$arch" in
 esac
 asset="sshc-$goos-$goarch"
 
-# ── 版を決める ────────────────────────────────────────────────
+# ── バージョンを決める ────────────────────────────────────────────
 if [ -n "${SSHC_VERSION:-}" ]; then
   tag="$SSHC_VERSION"
   case "$tag" in v*) ;; *) tag="v$tag" ;; esac
@@ -129,7 +129,7 @@ fi
 
 chmod 0755 "$work/sshc"
 
-# ── ⑥ 走っている engine と同じ版か ────────────────────────────
+# ── ⑥ 走っている engine と同じバージョンか ────────────────────────
 # 稼働中の engine と新しい CLI のバージョンが異なる場合は事前に通知する。
 running=""
 if command -v sshc >/dev/null 2>&1; then
@@ -150,7 +150,7 @@ staged=$(mktemp "$dir/.sshc.install.XXXXXX") || die "could not stage the executa
 cp "$work/sshc" "$staged" && chmod 0755 "$staged" || die "could not stage the executable in $dir"
 
 # install.sh由来であることをpathの推測に頼らず判定できるよう、実際に配置する
-# binaryのdigestと版をreceiptへ結び付ける。receiptも同じdirectoryで原子的に公開する。
+# binaryのdigestとバージョンをreceiptへ結び付ける。receiptも同じdirectoryで原子的に公開する。
 receipt="$dir/.sshc-install-receipt.json"
 receipt_staged=$(mktemp "$dir/.sshc.receipt.XXXXXX") || die "could not stage the install receipt in $dir"
 printf '{"schemaVersion":1,"manager":"install.sh","repository":"%s","version":"%s","sha256":"%s"}\n' \

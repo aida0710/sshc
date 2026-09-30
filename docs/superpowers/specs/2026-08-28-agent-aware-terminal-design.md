@@ -418,7 +418,7 @@ OpenCodeはglobalまたはproject pluginからtyped eventを購読でき、`sess
 | `session.deleted` | `ended` |
 
 OpenCodeには既存backendへ`attach`する経路もあるが、これはagent conversation resumeより
-強いprocess／server continuityである。初期版では他製品と同じsession resumeだけを扱い、
+強いprocess／server continuityである。最初のバージョンでは他製品と同じsession resumeだけを扱い、
 `opencode attach`はRemote PTY persistence側の後続検討へ分ける。
 
 event coverageが完全でない場合は進行中の`working`／`attention`をTTL後に`unknown`へ移す。

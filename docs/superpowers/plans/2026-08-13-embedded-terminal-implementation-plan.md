@@ -40,7 +40,7 @@
 
 代わりに、いま `cmd/sshc/connect.go` に閉じている 3 つ — `connectArguments`、`connectEnvironmentForCredential`、`createConnectionConfig` — を `internal/platform` へ引き上げ、**CLI と埋め込みターミナルの両方がそれを呼ぶ**。二つ目の実装は作らない。凍結した ssh 設定の後始末は、セッション終了時に一度だけ走る `Spec.Cleanup` が持つ。
 
-### D3. metadata は新しいキーを使い、スキーマ版を 3 へ上げる
+### D3. metadata は新しいキーを使い、スキーマのバージョンを 3 へ上げる
 
 v2 の文書は `"terminal": "iterm2"` という**文字列**を持つ。同じキーをオブジェクトへ変えると `json.Unmarshal` は文書全体で失敗し、グループも色もお気に入りも道連れに読めなくなる。これは「知らない値が書かれていても metadata 全体を読めなくはせず、既定へ戻す」という既存の規則を正面から破る。
 
