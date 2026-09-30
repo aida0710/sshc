@@ -227,3 +227,31 @@ func TestRenamingOntoALeftoverOrphanKeepsOnlyTheRenamedHostsMetadata(t *testing.
 		t.Fatalf("hosts = %#v, want only the renamed host's entry", hosts)
 	}
 }
+
+// 同じ接続の entry が 2 つある今の形の metadata.json（手で編集したものなど）は、履歴から
+// 復元しない。書いてしまうと、以後の metadata の保存がすべて断られ、画面から直せない。
+func TestRestoringAMetadataFileThatCouldNotBeSavedIsRefused(t *testing.T) {
+	service, _ := newTestService(t)
+	seedMetadata(t, service, NewMetadata())
+	handEdited := []byte(`{"schemaVersion":9,"hosts":[` +
+		`{"identity":{"path":"config","alias":"bastion"},"note":"first"},` +
+		`{"identity":{"path":"config","alias":"bastion"},"note":"second"}]}`)
+	acltest.WritePrivateFile(t, service.metadata.Path(), handEdited)
+	// 手で編集したものを控えに残して、正しい metadata.json に戻した変更。
+	seedMetadata(t, service, NewMetadata())
+	history, err := service.History()
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixed := history[0]
+	if len(fixed.Restorable) != 1 {
+		t.Fatalf("restorable = %#v, want the hand-edited metadata.json", fixed.Restorable)
+	}
+
+	if _, err := service.Restore(fixed.ID, fixed.Restorable[0]); !errors.Is(err, ErrMetadataDuplicateHost) {
+		t.Fatalf("Restore = %v, want ErrMetadataDuplicateHost", err)
+	}
+	if hosts := loadMetadata(t, service).Hosts; len(hosts) != 0 {
+		t.Fatalf("hosts = %#v, want the metadata.json before the restore", hosts)
+	}
+}

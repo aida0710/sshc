@@ -190,7 +190,13 @@ func (s *Service) validate(request storage.Request) error {
 		for _, change := range changes {
 			cleaned := filepath.Clean(change.Path)
 			if cleaned == metadataPath {
-				if _, err := DecodeMetadata(change.Contents); err != nil {
+				// 読めるだけでなく、保存できる形かも確かめる。履歴から戻した文書が保存の
+				// 検査を通らないと、以後の metadata の保存がすべて断られ、画面から直せない。
+				decoded, err := DecodeMetadata(change.Contents)
+				if err != nil {
+					return err
+				}
+				if err := ValidateMetadata(decoded); err != nil {
 					return err
 				}
 				continue
