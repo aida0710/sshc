@@ -2,7 +2,9 @@ package httpserver
 
 import (
 	"errors"
+	"net"
 	"net/http"
+	"net/netip"
 
 	"github.com/labstack/echo/v5"
 
@@ -15,6 +17,10 @@ type Handlers struct {
 	Sessions    *session.Manager
 	BrowserAuth *browserauth.Store
 	Version     string
+	// PeerMayBelongToAnotherUser は、TCP 接続が同じマシンの別 OS ユーザーのものかも
+	// しれないかを返す。持ち主を読む前に client が閉じた接続も、そうかもしれないものに
+	// 含める。nil なら確かめない。
+	PeerMayBelongToAnotherUser func(client, server netip.AddrPort) bool
 }
 
 // Renew は、cookie と現在の CSRF token が指しているセッションに対して新しい
@@ -41,6 +47,10 @@ func (h Handlers) Renew(c *echo.Context) error {
 func (h Handlers) Bootstrap(c *echo.Context) error {
 	if h.Sessions == nil {
 		return problem(c, http.StatusInternalServerError, "bootstrap_failed")
+	}
+	// bootstrap を消費する前に断る。正規のブラウザがあとから同じ bootstrap で入れる。
+	if h.mayBeFromAnotherOSUser(c.Request()) {
+		return problem(c, http.StatusForbidden, "bootstrap_forbidden")
 	}
 
 	existing := sessionCookie(c.Request())
@@ -73,6 +83,33 @@ func (h Handlers) Bootstrap(c *echo.Context) error {
 		setSessionCookie(c, credentials.SessionID)
 	}
 	return c.JSON(http.StatusOK, response)
+}
+
+// mayBeFromAnotherOSUser は、要求の TCP 接続を同じマシンの別 OS ユーザーが張った
+// かもしれないかを返す。
+//
+// Linux では、ブラウザへ渡した bootstrap URL を別 OS ユーザーも
+// /proc/<pid>/cmdline から読める。bootstrap は最初に提示した者が使えるので、
+// 読まれても使わせないよう、接続の持ち主で断る。要求を送ってすぐ閉じた接続は
+// 持ち主を読めないので、これも断る。正規のブラウザは応答を待つので、閉じた接続を
+// 断っても困らない。
+func (h Handlers) mayBeFromAnotherOSUser(request *http.Request) bool {
+	if h.PeerMayBelongToAnotherUser == nil {
+		return false
+	}
+	client, err := netip.ParseAddrPort(request.RemoteAddr)
+	if err != nil {
+		return false
+	}
+	local, ok := request.Context().Value(http.LocalAddrContextKey).(net.Addr)
+	if !ok {
+		return false
+	}
+	server, err := netip.ParseAddrPort(local.String())
+	if err != nil {
+		return false
+	}
+	return h.PeerMayBelongToAnotherUser(client, server)
 }
 
 // Recover restores a browser session from the device-local enrolment capability. It is

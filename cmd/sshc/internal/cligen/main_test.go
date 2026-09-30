@@ -27,7 +27,7 @@ func TestGenerateProducesFormattedDeterministicContract(t *testing.T) {
 	}
 }
 
-func TestEveryPublishedCommandFeedsDispatchHelpAndCompletion(t *testing.T) {
+func TestEveryPublishedCommandAndActionReachesDispatchAndHelp(t *testing.T) {
 	contract, err := generate()
 	if err != nil {
 		t.Fatal(err)

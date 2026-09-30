@@ -16,7 +16,6 @@ import (
 
 	"sshc/internal/app"
 	"sshc/internal/enginelock"
-	"sshc/internal/handoff"
 )
 
 // systemd（Linux）と launchd（macOS）の service 管理が共有する骨格。ツールの探索、
@@ -58,6 +57,69 @@ func (runner osServiceCommandRunner) Run(ctx context.Context, arguments ...strin
 		return serviceCommandResult{ExitCode: exitError.ExitCode(), Output: output}, nil
 	}
 	return serviceCommandResult{}, err
+}
+
+// errServiceReadinessUnavailable は、manager に engine の準備完了の確かめ方が渡されて
+// いないことを表す。
+var errServiceReadinessUnavailable = errors.New("service readiness check is unavailable")
+
+// acquireServiceOperationLock は、manager に排他の手段が渡されていなければ操作を始めない。
+func acquireServiceOperationLock(lock func() (func() error, error)) (func() error, error) {
+	if lock == nil {
+		return nil, errors.New("service operation lock is unavailable")
+	}
+	return lock()
+}
+
+// restartableService は、restartServiceIfActive が OS ごとの manager に求める操作である。
+type restartableService interface {
+	definitionFile() serviceDefinitionFile
+	acquireOperationLock() (func() error, error)
+	Status(context.Context) (serviceState, error)
+	// restartRunning は、動いている service だけを再起動する（systemctl try-restart、
+	// launchctl kickstart -k）。
+	restartRunning(context.Context) error
+	waitUntilReady(context.Context) error
+}
+
+// restartServiceIfActive は、sshc 管理下で今動いている service だけを再起動する。停止中の
+// service を update が勝手に起動せず、手書きの定義にも触れないための更新連携用の境界である。
+func restartServiceIfActive(ctx context.Context, service restartableService, executable string) (restarted bool, result error) {
+	release, err := service.acquireOperationLock()
+	if err != nil {
+		return false, err
+	}
+	defer func() { result = errors.Join(result, release()) }()
+	definition := service.definitionFile()
+	matches, err := definition.matches(executable)
+	if err != nil || !matches {
+		return false, err
+	}
+	state, err := service.Status(ctx)
+	if err != nil || state != serviceActive {
+		return false, err
+	}
+	// 状態を確かめる間に定義が差し替わっていれば、その service は再起動しない。
+	matches, err = definition.matches(executable)
+	if err != nil || !matches {
+		return false, err
+	}
+	if err := service.restartRunning(ctx); err != nil {
+		return false, err
+	}
+	// try-restart と kickstart は、その間に service が止まっていても成功する。止まった
+	// service を起こしたことにせず、動いていることを確かめてから準備完了を待つ。
+	state, err = service.Status(ctx)
+	if err != nil || state != serviceActive {
+		return false, err
+	}
+	if err := service.waitUntilReady(ctx); err != nil {
+		return false, fmt.Errorf("restarted service did not become ready: %w", err)
+	}
+	if err := definition.ensureStillMatches(executable, "restarting"); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // serviceOperationLock は、install／disable／restart を同じ home で直列化する。
@@ -138,6 +200,9 @@ type engineReadiness struct {
 // waitForEngineReady は、service の main PID が handoff の PID と一致し、その engine が
 // 自分の handoff どおりの status を返すまで待つ。手で起動した engine が同じ home に
 // 居れば handoff は別の PID を指すので、そのことを案内して失敗する。
+//
+// status を尋ねる前に、handoff の URL に居るのが秘密を持つ engine であることを
+// challenge で確かめる。ほかの CLI の要求と同じく、確かめる前は秘密を送らない。
 func waitForEngineReady(ctx context.Context, home string, readiness engineReadiness) error {
 	readyCtx, cancel := context.WithTimeout(ctx, serviceReadyTimeout)
 	defer cancel()
@@ -147,7 +212,7 @@ func waitForEngineReady(ctx context.Context, home string, readiness engineReadin
 
 	for {
 		if pid := readiness.mainPID(readyCtx); pid > 0 {
-			document, readErr := handoff.Read(app.HandoffDir(home))
+			document, readErr := verifiedHandoff(readyCtx, app.HandoffDir(home), client)
 			if readErr == nil && document.PID == pid {
 				if _, statusErr := requestStatus(readyCtx, document, client); statusErr == nil {
 					return nil

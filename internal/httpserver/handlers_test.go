@@ -2,10 +2,13 @@ package httpserver
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"strings"
 	"testing"
 
@@ -189,6 +192,56 @@ func TestBootstrapHandlerRejectsWrongTokenWithoutCookie(t *testing.T) {
 	}
 	if cookies := response.Result().Cookies(); len(cookies) != 0 {
 		t.Fatalf("cookies = %#v", cookies)
+	}
+}
+
+func TestBootstrapFromAnotherOSUserIsRefusedAndLeftForTheBrowser(t *testing.T) {
+	manager, bootstrap, err := session.NewManager(bytes.NewReader(bytes.Repeat([]byte{0x64}, 96)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	engineAddress := netip.MustParseAddrPort("127.0.0.1:43123")
+	intruder := netip.MustParseAddrPort("127.0.0.1:50001")
+	var checked []netip.AddrPort
+	e := echo.New()
+	e.Use((Security{
+		ExpectedHost:   engineAddress.String(),
+		ExpectedOrigin: "http://" + engineAddress.String(),
+		Sessions:       manager, Unlocked: alwaysUnlocked,
+	}).Middleware)
+	e.POST("/api/v1/session/bootstrap", (Handlers{
+		Sessions: manager,
+		PeerMayBelongToAnotherUser: func(client, server netip.AddrPort) bool {
+			checked = append(checked, client, server)
+			return client == intruder
+		},
+	}).Bootstrap)
+	call := func(client netip.AddrPort) *httptest.ResponseRecorder {
+		request := httptest.NewRequest(http.MethodPost, "/api/v1/session/bootstrap", nil)
+		request = request.WithContext(context.WithValue(request.Context(), http.LocalAddrContextKey,
+			net.TCPAddrFromAddrPort(engineAddress)))
+		request.RemoteAddr = client.String()
+		request.Host = engineAddress.String()
+		request.Header.Set(echo.HeaderOrigin, "http://"+engineAddress.String())
+		request.Header.Set("Sec-Fetch-Site", "same-origin")
+		request.Header.Set("X-SSHC-Bootstrap", bootstrap)
+		response := httptest.NewRecorder()
+		e.ServeHTTP(response, request)
+		return response
+	}
+
+	refused := call(intruder)
+	if refused.Code != http.StatusForbidden {
+		t.Fatalf("status from another OS user = %d, want %d", refused.Code, http.StatusForbidden)
+	}
+	if cookies := refused.Result().Cookies(); len(cookies) != 0 {
+		t.Fatalf("cookies for another OS user = %#v", cookies)
+	}
+	if len(checked) != 2 || checked[0] != intruder || checked[1] != engineAddress {
+		t.Fatalf("checked addresses = %v, want client %v and server %v", checked, intruder, engineAddress)
+	}
+	if accepted := call(netip.MustParseAddrPort("127.0.0.1:50002")); accepted.Code != http.StatusOK {
+		t.Fatalf("status for the browser after the refusal = %d, want %d", accepted.Code, http.StatusOK)
 	}
 }
 

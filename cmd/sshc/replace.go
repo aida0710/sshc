@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -29,10 +28,21 @@ import (
 
 // engineReleaseTimeout は、頼んだ engine が席を空けるのを待つ上限である。
 //
-// engine 自身の締切から導く。あちらが畳むのに使ってよい時間より短く待てば、
-// 間に合ったはずのものを諦めることになる。倍率は、頼みが届いてから畳み始める
-// までの往復と、ロックが落ちるのを見に行く間隔ぶんの余裕である。
-const engineReleaseTimeout = 5 * app.DefaultShutdownTimeout
+// engine 自身が engine lock を手放すまでの上限（VPN の経路を畳む時間を含む）から
+// 導く。あちらが畳むのに使ってよい時間より短く待てば、間に合ったはずのものを
+// 諦めることになる。
+const engineReleaseTimeout = app.MaxShutdownDuration + engineReleaseMargin
+
+// engineReleaseMargin は、engine の締切の外で掛かる時間への余裕である。頼みが
+// 届いてから畳み始めるまでの往復、強制で閉じたあとの締切の無い後始末（SFTP の
+// 接続を閉じる、Vault をロックする）、ロックが落ちるのを見に行く間隔がここに入る。
+// 測った値ではないので、どれもが遅れたときにも足りるよう、多めに取っている。
+const engineReleaseMargin = 10 * time.Second
+
+// engineReleasePollInterval は、席が空いたかをロックで確かめ直す間隔である。
+// 空いてから起動するまでの遅れがこの間隔以下になる。ロックの取得はファイルを
+// 開いて OS のロックを試すだけなので、この頻度で試しても負担にならない。
+const engineReleasePollInterval = 100 * time.Millisecond
 
 // askToReplace は、走っている engine を止めてよいかを決める。
 //
@@ -52,7 +62,7 @@ func askToReplace(
 	}
 	fmt.Fprintf(stdout, "sshc: an sshc engine is already running (pid %d, %s)\n", found.PID, found.URL)
 	if sessions > 0 {
-		fmt.Fprintf(stdout, "sshc: it has %d live console(s); stopping it closes them\n", sessions)
+		fmt.Fprintf(stdout, "sshc: it has %d open terminal(s); stopping it closes them\n", sessions)
 	}
 	fmt.Fprintln(stdout, "sshc: stopping it also locks the password vault")
 	fmt.Fprint(stdout, "sshc: stop it and start here? [y/N] ")
@@ -93,26 +103,24 @@ func stopRunningEngine(
 	ctx context.Context, stateDir string, found handoff.Handoff, client *http.Client,
 	acquire func(string) (func() error, error),
 ) error {
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, found.URL+httpserver.StopPath, bytes.NewReader([]byte("{}")))
-	if err != nil {
-		return err
-	}
-	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set(handoff.HeaderName, found.Secret)
-	response, err := client.Do(request)
-	if err != nil {
+	err := newHandoffEndpoint(found, client).exchange(ctx,
+		handoffCall{method: http.MethodPost, path: httpserver.StopPath, body: strings.NewReader("{}")},
+		handoffAnswer{status: http.StatusAccepted})
+	refusal, refused := engineRefusal(err)
+	switch {
+	case isTransportProblem(err):
 		return fmt.Errorf("the running engine did not answer: %w", err)
-	}
-	_ = response.Body.Close()
-	if response.StatusCode != http.StatusAccepted {
-		return fmt.Errorf("the running engine refused to stop (%d)", response.StatusCode)
+	case refused:
+		return fmt.Errorf("the running engine refused to stop (%d)", refusal.Status)
+	case err != nil:
+		return err
 	}
 
 	// 席が空くまで待つ。頼んだ直後に自分が握りにいくと、まだ畳んでいる
 	// 相手からロックを奪えず、理由の分からない失敗になる。
 	timeout := time.NewTimer(engineReleaseTimeout)
 	defer timeout.Stop()
-	retry := time.NewTicker(100 * time.Millisecond)
+	retry := time.NewTicker(engineReleasePollInterval)
 	defer retry.Stop()
 	for {
 		release, err := acquire(stateDir)
@@ -141,7 +149,9 @@ func replaceRunningEngine(
 	acquire func(string) (func() error, error),
 ) (func() error, error) {
 	stateDir := app.HandoffDir(home)
-	client := &http.Client{Timeout: 10 * time.Second}
+	// 確かめる、状態を尋ねる、止まるよう頼む、のどれも engine へ送る短い要求なので、
+	// ほかのコマンドと同じ上限にする。止まり終えるのを待つのは engineReleaseTimeout。
+	client := &http.Client{Timeout: connectTimeout}
 	found, err := verifiedHandoff(ctx, stateDir, client)
 	if errors.Is(err, errEngineUnproven) {
 		return nil, err

@@ -7,7 +7,7 @@
 // Windows のホームはどれも「絶対パスではない」ことになり、設定はひとつも
 // 読めない。
 //
-// ここにあるのは、標準ライブラリの `path/filepath` が応答しない三つだけである。
+// ここにあるのは、標準ライブラリの `path/filepath` が応答しない判断だけである。
 // 残りはすべて `filepath` に任せる。ボリュームの扱いも、Windows の大小文字
 // 同一視も、そちらが持っているからだ。
 package nativepath
@@ -77,4 +77,15 @@ func RelativeSlash(root, absolute string) (string, bool) {
 // 二重に現れ、循環はいつまでも見つからない。
 func Identity(path string) string {
 	return foldIdentity(filepath.Clean(path))
+}
+
+// MatchPrefix は、text が path と同じパスの表記で始まるかを言い、一致した部分の
+// text でのバイト数を返す。
+//
+// 表記の比べ方は Identity と同じである。Windows では大小文字と区切り文字
+// （/ と \）の違いを同一視する。Unix では表記がそのまま一致するときだけである。
+// 文中のパスを探す側（ホームを伏せる処理）も、Include の重複の判定と同じ規則で
+// 同じパスを見分けられるよう、ここに置く。
+func MatchPrefix(text, path string) (int, bool) {
+	return matchPrefix(text, path)
 }

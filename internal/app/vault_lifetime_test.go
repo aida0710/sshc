@@ -1,8 +1,13 @@
 package app
 
 import (
+	"context"
 	"crypto/rand"
+	"io"
+	"log/slog"
+	"net"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"sshc/internal/application"
@@ -93,6 +98,52 @@ func TestEngineAutomaticallyOpensOnlyPasswordlessVaults(t *testing.T) {
 			defer restarted.passwords.Lock()
 			if got := restarted.passwords.Unlocked(); got != (password == "") {
 				t.Fatalf("unlocked = %v", got)
+			}
+		})
+	}
+}
+
+// engine は、受付を始めたことを伝えるとき、パスワードなしの Vault をロック解除済みとして
+// 伝える。CLI はこれを見て、要らない sshc vault unlock を案内しない。
+func TestReadinessReportsOnlyAPasswordlessVaultAsUnlocked(t *testing.T) {
+	for _, password := range []string{"", "1234"} {
+		t.Run(password, func(t *testing.T) {
+			home := t.TempDir()
+			first, err := newEngineServices(Dependencies{Home: home, Random: rand.Reader})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := first.passwords.Initialise(password); err != nil {
+				t.Fatal(err)
+			}
+			first.passwords.Lock()
+
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			announced := make(chan Readiness, 1)
+			dependencies := Dependencies{
+				Random: rand.Reader,
+				Announce: func(readiness Readiness) error {
+					announced <- readiness
+					return nil
+				},
+				Listen: net.Listen,
+				UI:     fstest.MapFS{"index.html": {Data: []byte("ok")}},
+				Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+				Home:   home,
+				Owner:  handoff.OwnerEngine,
+				PID:    4242,
+			}
+			done := make(chan error, 1)
+			go func() { done <- Run(ctx, dependencies, "test") }()
+
+			readiness := <-announced
+			cancel()
+			if err := <-done; err != nil {
+				t.Fatalf("Run = %v", err)
+			}
+			if !readiness.VaultExists || readiness.VaultUnlocked != (password == "") {
+				t.Fatalf("readiness vault exists=%v unlocked=%v", readiness.VaultExists, readiness.VaultUnlocked)
 			}
 		})
 	}

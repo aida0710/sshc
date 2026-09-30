@@ -16,6 +16,7 @@ import (
 
 	"sshc/internal/handoff"
 	"sshc/internal/httpserver"
+	"sshc/internal/secret"
 )
 
 const (
@@ -24,6 +25,11 @@ const (
 	maxVaultPasswordBytes = 4 << 10
 	vaultCommandTimeout   = 3 * time.Minute
 )
+
+// newVaultPasswordGuidance は、新しいマスターパスワードを尋ねる前に出す案内である。
+// 最短の長さは、engine が確かめる secret.MinPassphraseLength から作る。
+var newVaultPasswordGuidance = fmt.Sprintf("Enter at least %d characters, or press Enter without typing "+
+	"a new password to use a passwordless vault. Leave the confirmation blank too.", secret.MinPassphraseLength)
 
 var (
 	errVaultResponseTooLarge = errors.New("vault response is too large")
@@ -56,44 +62,40 @@ type systemPasswordTerminal struct{}
 func (systemPasswordTerminal) IsTerminal(fd int) bool { return term.IsTerminal(fd) }
 
 // runVault は、起動済み engine の Vault operation だけを行う。engine を起動しない
-// のは、desktop と headless の owner をこの補助コマンドが勝手に選ばないためである。
+// のは、CLI の補助コマンドが engine の持ち主にならないためである。engine は
+// `sshc engine` か service が起動し、終了まで持ち続ける。
 func runVault(ctx context.Context, action string, environment commandEnvironment) int {
 	stateDir, client, stdin, stdout, stderr, terminal :=
 		environment.stateDir, environment.client, environment.stdin, environment.stdout, environment.stderr, environment.terminal
 	if err := ctx.Err(); err != nil {
-		return 130
+		return exitInterrupted
 	}
 	if action != "status" && action != "create" && action != "unlock" &&
 		action != "lock" && action != "change-password" {
 		fmt.Fprintln(stderr, "sshc: unknown vault action")
-		return 2
+		return exitUsage
 	}
 
 	needsPassword := action == "create" || action == "change-password"
 	if needsPassword && (stdin == nil || terminal == nil || !terminal.IsTerminal(int(stdin.Fd()))) {
 		fmt.Fprintln(stderr, "sshc: vault passwords require an interactive terminal")
-		return 1
+		return exitFailure
 	}
 
 	found, err := verifiedHandoff(ctx, stateDir, client)
 	if err != nil {
-		if errors.Is(err, errEngineUnproven) {
-			fmt.Fprintf(stderr, "sshc: %v\n", err)
-			return 1
-		}
-		fmt.Fprintln(stderr, "sshc: no compatible running engine; start the desktop app or run sshc engine")
-		return 1
+		return reportEngineUnreachable(ctx, err, stderr)
 	}
 	status, err := fetchVaultStatus(ctx, found, client)
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {
-			return 130
+			return exitInterrupted
 		}
 		fmt.Fprintln(stderr, "sshc: the running engine did not return a valid vault status")
-		return 1
+		return exitFailure
 	}
 	if ctx.Err() != nil {
-		return 130
+		return exitInterrupted
 	}
 	if action == "status" {
 		// `sshc status` と同じ表を出す。同じ内容を二通りに書いていた間、
@@ -106,13 +108,13 @@ func runVault(ctx context.Context, action string, environment commandEnvironment
 	case "create":
 		if status.Vault {
 			fmt.Fprintln(stderr, "sshc: a vault already exists")
-			return 1
+			return exitFailure
 		}
 		return runVaultCreate(ctx, found, environment)
 	case "unlock":
 		if !status.Vault {
-			fmt.Fprintln(stderr, "sshc: no vault exists; run sshc vault create")
-			return 1
+			fmt.Fprintln(stderr, "sshc: "+vaultMissingAdvice)
+			return exitFailure
 		}
 		if status.Unlocked {
 			fmt.Fprintln(stdout, "vault is already unlocked")
@@ -123,7 +125,7 @@ func runVault(ctx context.Context, action string, environment commandEnvironment
 		}
 		if stdin == nil || terminal == nil || !terminal.IsTerminal(int(stdin.Fd())) {
 			fmt.Fprintln(stderr, "sshc: vault passwords require an interactive terminal")
-			return 1
+			return exitFailure
 		}
 		return runVaultUnlock(ctx, found, environment)
 	case "lock":
@@ -133,29 +135,29 @@ func runVault(ctx context.Context, action string, environment commandEnvironment
 		return runVaultLock(ctx, found, environment)
 	case "change-password":
 		if !status.Vault {
-			fmt.Fprintln(stderr, "sshc: no vault exists; run sshc vault create")
-			return 1
+			fmt.Fprintln(stderr, "sshc: "+vaultMissingAdvice)
+			return exitFailure
 		}
 		if !status.Unlocked && !status.Passwordless {
-			fmt.Fprintln(stderr, "sshc: the vault is locked; run sshc vault unlock first")
-			return 1
+			fmt.Fprintln(stderr, "sshc: "+vaultLockedAdvice)
+			return exitFailure
 		}
 		return runVaultChange(ctx, found, environment, status.Passwordless)
 	default:
-		return 2
+		return exitUsage
 	}
 }
 
 func runVaultCreate(ctx context.Context, found handoff.Handoff, environment commandEnvironment) int {
 	stdin, stderr, terminal := environment.stdin, environment.stderr, environment.terminal
-	fmt.Fprintln(stderr, "Enter at least 4 characters, or press Enter without typing a new password to use a passwordless vault. Leave the confirmation blank too.")
+	fmt.Fprintln(stderr, newVaultPasswordGuidance)
 	next, err := promptVaultPassword(ctx, stdin, stderr, terminal, "New master password: ")
 	defer zeroBytes(next)
 	if err != nil {
 		return vaultPromptFailure(ctx, err, stderr)
 	}
 	if ctx.Err() != nil {
-		return 130
+		return exitInterrupted
 	}
 	confirmation, err := promptVaultPassword(ctx, stdin, stderr, terminal, "Confirm new master password: ")
 	defer zeroBytes(confirmation)
@@ -163,16 +165,16 @@ func runVaultCreate(ctx context.Context, found handoff.Handoff, environment comm
 		return vaultPromptFailure(ctx, err, stderr)
 	}
 	if ctx.Err() != nil {
-		return 130
+		return exitInterrupted
 	}
 	if !bytes.Equal(next, confirmation) {
 		fmt.Fprintln(stderr, "sshc: password confirmation did not match")
-		return 1
+		return exitFailure
 	}
 	payload, err := vaultPassphrasePayload(next)
 	if err != nil {
 		fmt.Fprintln(stderr, "sshc: the password could not be encoded safely")
-		return 1
+		return exitFailure
 	}
 	zeroBytes(next)
 	zeroBytes(confirmation)
@@ -187,12 +189,12 @@ func runVaultUnlock(ctx context.Context, found handoff.Handoff, environment comm
 		return vaultPromptFailure(ctx, err, stderr)
 	}
 	if ctx.Err() != nil {
-		return 130
+		return exitInterrupted
 	}
 	payload, err := vaultPassphrasePayload(password)
 	if err != nil {
 		fmt.Fprintln(stderr, "sshc: the password could not be encoded safely")
-		return 1
+		return exitFailure
 	}
 	zeroBytes(password)
 	return finishVaultMutation(ctx, environment, vaultMutation{found: found, path: httpserver.VaultUnlockPath, payload: payload, success: "vault unlocked"})
@@ -214,24 +216,24 @@ func runVaultChange(ctx context.Context, found handoff.Handoff, environment comm
 		return vaultPromptFailure(ctx, err, stderr)
 	}
 	if ctx.Err() != nil {
-		return 130
+		return exitInterrupted
 	}
 	payload, err := vaultPassphrasePayload(current)
 	if err != nil {
 		fmt.Fprintln(stderr, "sshc: the password could not be encoded safely")
-		return 1
+		return exitFailure
 	}
 	if code := finishVaultMutation(ctx, environment, vaultMutation{found: found, path: httpserver.VaultVerifyPath, payload: payload, success: ""}); code != 0 {
 		return code
 	}
-	fmt.Fprintln(stderr, "Enter at least 4 characters, or press Enter without typing a new password to use a passwordless vault. Leave the confirmation blank too.")
+	fmt.Fprintln(stderr, newVaultPasswordGuidance)
 	next, err := promptVaultPassword(ctx, stdin, stderr, terminal, "New master password: ")
 	defer zeroBytes(next)
 	if err != nil {
 		return vaultPromptFailure(ctx, err, stderr)
 	}
 	if ctx.Err() != nil {
-		return 130
+		return exitInterrupted
 	}
 	confirmation, err := promptVaultPassword(ctx, stdin, stderr, terminal, "Confirm new master password: ")
 	defer zeroBytes(confirmation)
@@ -239,16 +241,16 @@ func runVaultChange(ctx context.Context, found handoff.Handoff, environment comm
 		return vaultPromptFailure(ctx, err, stderr)
 	}
 	if ctx.Err() != nil {
-		return 130
+		return exitInterrupted
 	}
 	if !bytes.Equal(next, confirmation) {
 		fmt.Fprintln(stderr, "sshc: password confirmation did not match")
-		return 1
+		return exitFailure
 	}
 	payload, err = vaultChangePayload(current, next)
 	if err != nil {
 		fmt.Fprintln(stderr, "sshc: a password could not be encoded safely")
-		return 1
+		return exitFailure
 	}
 	zeroBytes(current)
 	zeroBytes(next)
@@ -317,10 +319,10 @@ func promptMaskedPassword(
 
 func vaultPromptFailure(ctx context.Context, err error, stderr io.Writer) int {
 	if errors.Is(err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {
-		return 130
+		return exitInterrupted
 	}
 	fmt.Fprintln(stderr, "sshc: could not read the vault password")
-	return 1
+	return exitFailure
 }
 
 // vaultMutation は engine の vault へ送る 1 つの変更。success は成功時に stdout へ
@@ -337,24 +339,24 @@ func finishVaultMutation(ctx context.Context, environment commandEnvironment, mu
 	found, path, payload, success := mutation.found, mutation.path, mutation.payload, mutation.success
 	if err := ctx.Err(); err != nil {
 		zeroBytes(payload)
-		return 130
+		return exitInterrupted
 	}
 	response, err := sendVaultPOST(ctx, client, found, path, payload)
 	if err != nil {
 		writeUncertainVaultResult(path, stderr)
 		if errors.Is(err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {
-			return 130
+			return exitInterrupted
 		}
-		return 1
+		return exitFailure
 	}
 	body, err := readAndCloseVaultResponse(response)
 	defer zeroBytes(body)
 	if err != nil {
 		fmt.Fprintln(stderr, "sshc: the running engine returned an invalid vault response")
 		if errors.Is(err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {
-			return 130
+			return exitInterrupted
 		}
-		return 1
+		return exitFailure
 	}
 	if response.StatusCode == http.StatusNoContent {
 		if success != "" {
@@ -384,7 +386,7 @@ func finishVaultMutation(ctx context.Context, environment commandEnvironment, mu
 	default:
 		fmt.Fprintln(stderr, "sshc: the vault operation failed")
 	}
-	return 1
+	return exitFailure
 }
 
 func writeUncertainVaultResult(path string, stderr io.Writer) {
@@ -415,20 +417,8 @@ func sendVaultPOST(
 	payload []byte,
 ) (*http.Response, error) {
 	defer zeroBytes(payload)
-	request, err := newHandoffRequest(ctx, found, http.MethodPost, path, &oneShotSecretPayload{body: payload})
-	if err != nil {
-		return nil, err
-	}
-	request.Header.Set("Content-Type", "application/json")
-	response, err := vaultClient(client).Do(request)
-	if err != nil && response != nil {
-		discardAndCloseVaultResponse(response)
-	}
-	return response, err
-}
-
-func vaultClient(client *http.Client) *http.Client {
-	return noRedirectClient(client)
+	return newHandoffEndpoint(found, client).send(ctx,
+		handoffCall{method: http.MethodPost, path: path, body: &oneShotSecretPayload{body: payload}})
 }
 
 // vaultCommandClient は対話的な Vault 操作を短い接続確認タイムアウトから分離する。
@@ -445,13 +435,6 @@ func vaultCommandClient(client *http.Client) *http.Client {
 
 func readAndCloseVaultResponse(response *http.Response) ([]byte, error) {
 	return readAndCloseBounded(response, maxVaultResponseBody, errInvalidVaultResponse, errVaultResponseTooLarge)
-}
-
-// discardAndCloseVaultResponse は、Do が error と response の両方を返した経路でも
-// server が反射した秘密を heap に残さない。close だけでは読み済みbufferは消えない。
-func discardAndCloseVaultResponse(response *http.Response) {
-	body, _ := readAndCloseVaultResponse(response)
-	zeroBytes(body)
 }
 
 func vaultPassphrasePayload(password []byte) ([]byte, error) {

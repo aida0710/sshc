@@ -3,30 +3,21 @@ package main
 import (
 	"fmt"
 	"io"
-
-	"sshc/internal/app"
-	"sshc/internal/validate"
 )
 
-// この一覧は shell 補完の候補にもなる。OpenSSH は `Host $(id)` のような alias も
-// 読むため、validate.Alias の外にある alias はここで落とす。起動も評価もされない
-// と決めた値を shell へ渡さないための多層防御である。黙って消すと接続先が消えた
-// ように見えるので、落とした alias は stderr に理由付きで出す。
+// runList は、接続できる alias を 1 行に 1 つずつ出す。この一覧は shell 補完の
+// 候補にもなる。readConnectableConnections で落とすのは、起動も評価もしないと
+// 決めた値を shell へ渡さないための多層防御でもある。
 func runList(home string, stdout, stderr io.Writer) int {
-	connections, err := app.ReadConnections(home)
+	connections, err := readConnectableConnections(home, stderr)
 	if err != nil {
 		fmt.Fprintf(stderr, "sshc: %v\n", err)
-		return 1
+		return exitFailure
 	}
 	for _, connection := range connections {
-		if err := validate.Alias(connection.Alias); err != nil {
-			// alias は端末制御文字を含みうる。そのまま書くと表示を細工されるため引用する。
-			fmt.Fprintf(stderr, "sshc: skipping alias %q: %v\n", connection.Alias, err)
-			continue
-		}
 		if _, err := fmt.Fprintln(stdout, connection.Alias); err != nil {
 			fmt.Fprintf(stderr, "sshc: write host list: %v\n", err)
-			return 1
+			return exitFailure
 		}
 	}
 	return 0

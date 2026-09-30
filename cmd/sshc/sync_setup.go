@@ -257,59 +257,6 @@ func promptVisibleSetup(
 	return value, nil
 }
 
-// readBoundedVisibleLine reads exactly through one newline without buffering
-// bytes from the next hidden prompt. The fixed capacity also prevents an old
-// heap buffer from retaining abandoned input after append growth.
-func readBoundedVisibleLine(ctx context.Context, input *os.File) ([]byte, error) {
-	line := make([]byte, 0, maxSyncSetupLine)
-	for {
-		if err := ctx.Err(); err != nil {
-			zeroBytes(line)
-			return nil, err
-		}
-		var one [1]byte
-		count, err := input.Read(one[:])
-		if count > 0 {
-			switch one[0] {
-			case '\n':
-				if !utf8.Valid(line) {
-					zeroBytes(line)
-					return nil, errSyncSetupInput
-				}
-				return line, nil
-			case '\r':
-				// Canonical Unix terminals normally deliver Enter as LF, while
-				// Windows consoles can deliver CRLF. Ignore CR so its following
-				// LF is consumed by this prompt instead of the next one.
-			case 0x03:
-				zeroBytes(line)
-				return nil, context.Canceled
-			default:
-				if len(line) == maxSyncSetupLine {
-					zeroBytes(line)
-					return nil, errSyncSetupInput
-				}
-				line = append(line, one[0])
-			}
-		}
-		if err != nil {
-			if ctx.Err() != nil {
-				zeroBytes(line)
-				return nil, ctx.Err()
-			}
-			if errors.Is(err, io.EOF) && len(line) > 0 && utf8.Valid(line) {
-				return line, nil
-			}
-			zeroBytes(line)
-			return nil, err
-		}
-		if count == 0 {
-			zeroBytes(line)
-			return nil, io.ErrNoProgress
-		}
-	}
-}
-
 func validSyncSetupTarget(endpoint, bucket, path, region string) bool {
 	_, err := remotesync.ValidateTarget(remotesync.TargetInput{Endpoint: endpoint, Bucket: bucket, Path: path, Region: region})
 	return err == nil

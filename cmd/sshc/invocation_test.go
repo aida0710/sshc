@@ -42,13 +42,13 @@ func TestTheRemoteCommandIsJoinedWithoutRequoting(t *testing.T) {
 	}
 }
 
-func TestParseInvocationSeparatesOwnersFromDesktopActivation(t *testing.T) {
+func TestParseInvocationSeparatesOwnersFromOpeningTheBrowser(t *testing.T) {
 	tests := []struct {
 		argv []string
 		kind invocationKind
 		args []string
 	}{
-		{[]string{"sshc"}, invocationDesktop, nil},
+		{[]string{"sshc"}, invocationOpenInBrowser, nil},
 		{[]string{"sshc", "engine"}, invocationEngine, nil},
 		{[]string{"sshc", "ssh"}, invocationChoose, nil},
 		{[]string{"sshc", "ssh", "headless"}, invocationConnect, []string{"headless"}},
@@ -641,6 +641,84 @@ func TestSFTPRejectsAmbiguousOrUnsafeFlagCombinations(t *testing.T) {
 	} {
 		if _, err := parseInvocation(argv); err == nil {
 			t.Errorf("parseInvocation(%q) accepted invalid arguments", argv)
+		}
+	}
+}
+
+// 値を取る長い名前のオプションは、どのコマンドでも --name=value の形も受ける。
+func TestEveryLongValueOptionAlsoAcceptsTheEqualsForm(t *testing.T) {
+	const id = "01234567"
+	for _, test := range []struct {
+		argv  []string
+		check func(invocation) bool
+	}{
+		{[]string{"sshc", "engine", "--port=34567"}, func(called invocation) bool { return called.Port == 34567 }},
+		{[]string{"sshc", "sftp", "get", "server-a", "/a", "b", "--split-size=64", "--split-jobs=2", "--chunk-size=16"},
+			func(called invocation) bool {
+				return called.SFTP.SplitSizeMiB == 64 && called.SFTP.SplitJobs == 2 && called.SFTP.ChunkSizeMiB == 16
+			}},
+		{[]string{"sshc", "sftp", "get", "server-a", "/a", "b", "-r", "--max-depth=3", "--max-entries=5", "--max-total-size=7"},
+			func(called invocation) bool {
+				return called.SFTP.MaxDepth == 3 && called.SFTP.MaxEntries == 5 && called.SFTP.MaxTotalMiB == 7
+			}},
+		{[]string{"sshc", "sftp", "settings", "--split-jobs=4"}, func(called invocation) bool { return called.SFTP.SplitJobs == 4 }},
+		{[]string{"sshc", "terminal", "read", id, "--cursor=3", "--limit=10"},
+			func(called invocation) bool { return called.Terminal.Cursor == 3 && called.Terminal.Limit == 10 }},
+		{[]string{"sshc", "terminal", "send", id, "--text=uptime"}, func(called invocation) bool { return called.Terminal.Text == "uptime" }},
+		{[]string{"sshc", "terminal", "wait", id, "--for=connected", "--timeout=30s"},
+			func(called invocation) bool {
+				return called.Terminal.WaitFor == "connected" && called.Terminal.Timeout == 30*time.Second
+			}},
+		{[]string{"sshc", "telnet", "router", "--connect-timeout=3s"},
+			func(called invocation) bool { return called.Transport.ConnectTimeout == 3*time.Second }},
+	} {
+		called, err := parseInvocation(test.argv)
+		if err != nil || !test.check(called) {
+			t.Errorf("parseInvocation(%q) = %#v, %v", test.argv, called, err)
+		}
+	}
+}
+
+// 同じオプションの 2 回目は、どのコマンドでも同じ文で断る。
+func TestEveryCommandRefusesARepeatedOptionTheSameWay(t *testing.T) {
+	const id = "01234567"
+	for _, argv := range [][]string{
+		{"sshc", "engine", "--port", "34567", "--port", "34568"},
+		{"sshc", "status", "--json", "--json"},
+		{"sshc", "info", "edge", "--json", "--json"},
+		{"sshc", "update", "-y", "--yes"},
+		{"sshc", "sync", "push", "--force", "--force"},
+		{"sshc", "sync", "now", "--json", "--json"},
+		{"sshc", "vpn", "up", "office", "--json", "--json"},
+		{"sshc", "vpn", "remove", "office", "-y", "-y"},
+		{"sshc", "otp", "remove", "production", "--yes", "-y"},
+		{"sshc", "otp", "production", "--json", "--json"},
+		{"sshc", "sftp", "get", "server-a", "/a", "b", "-r", "--max-depth", "2", "--max-depth", "3"},
+		{"sshc", "sftp", "get", "server-a", "/a", "b", "-j", "2", "--jobs=3"},
+		{"sshc", "sftp", "settings", "--split-size", "64", "--split-size=65"},
+		{"sshc", "terminal", "list", "--json", "--json"},
+		{"sshc", "terminal", "read", id, "--limit", "1", "--limit", "2"},
+		{"sshc", "terminal", "read", id, "--cursor", "1", "--cursor", "2"},
+		{"sshc", "serial", "COM3", "--baud", "9600", "--baud=115200"},
+	} {
+		called, err := parseInvocation(argv)
+		if err == nil || called.Kind != invocationInvalid || !strings.Contains(err.Error(), "only once") {
+			t.Errorf("parseInvocation(%q) = %#v, %v; want the second option refused", argv, called, err)
+		}
+	}
+}
+
+// 値を取らないオプションに値を付けたり、短い名前を = の形で書いたりしたら断る。
+func TestOptionsRefuseAValueTheyDoNotTake(t *testing.T) {
+	for _, argv := range [][]string{
+		{"sshc", "status", "--json=true"},
+		{"sshc", "sftp", "get", "server-a", "/a", "b", "--overwrite=yes"},
+		{"sshc", "sftp", "get", "server-a", "/a", "b", "-j=2"},
+		{"sshc", "serial", "COM3", "--non-interactive=1", "--read-for", "1s", "--", "show"},
+		{"sshc", "engine", "--replace=true"},
+	} {
+		if called, err := parseInvocation(argv); err == nil || called.Kind != invocationInvalid {
+			t.Errorf("parseInvocation(%q) = %#v, %v; want usage error", argv, called, err)
 		}
 	}
 }

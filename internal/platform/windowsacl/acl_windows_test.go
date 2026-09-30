@@ -3,13 +3,11 @@
 package windowsacl
 
 import (
-	"bytes"
 	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"testing"
 	"unsafe"
 
@@ -95,28 +93,19 @@ func TestPrivateObjectsAreRestrictedWhenCreationReturns(t *testing.T) {
 	assertExactlyRestricted(t, privateParent)
 	assertExactlyRestricted(t, directory)
 
-	temporary, err := CreateTemp(directory, ".secret-")
-	if err != nil {
-		t.Fatalf("CreateTemp = %v", err)
-	}
-	temporaryPath := temporary.Name()
-	defer func() {
-		_ = temporary.Close()
-		_ = os.Remove(temporaryPath)
-	}()
-	assertExactlyRestricted(t, temporaryPath)
-	if info, err := temporary.Stat(); err != nil {
-		t.Fatal(err)
-	} else if info.Size() != 0 {
-		t.Fatalf("new private temp size = %d, want 0", info.Size())
-	}
-
 	lockPath := filepath.Join(directory, ".lock")
 	lockFile, err := OpenOrCreateFile(lockPath)
 	if err != nil {
 		t.Fatalf("OpenOrCreateFile = %v", err)
 	}
 	assertExactlyRestricted(t, lockPath)
+	if info, err := lockFile.Stat(); err != nil {
+		_ = lockFile.Close()
+		t.Fatal(err)
+	} else if info.Size() != 0 {
+		_ = lockFile.Close()
+		t.Fatalf("new private file size = %d, want 0", info.Size())
+	}
 	if err := lockFile.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -138,19 +127,15 @@ func TestOpenAuthenticatedFileRejectsAParentJunction(t *testing.T) {
 	if err := EnsureDirectory(targetDirectory); err != nil {
 		t.Fatal(err)
 	}
-	file, err := CreateTemp(targetDirectory, ".document-")
+	file, err := OpenOrCreateFile(filepath.Join(targetDirectory, "document"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	targetPath := filepath.Join(targetDirectory, "document")
 	if _, err := file.Write([]byte("authenticated")); err != nil {
 		_ = file.Close()
 		t.Fatal(err)
 	}
 	if err := file.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Rename(file.Name(), targetPath); err != nil {
 		t.Fatal(err)
 	}
 
@@ -165,71 +150,6 @@ func TestOpenAuthenticatedFileRejectsAParentJunction(t *testing.T) {
 	if !errors.Is(err, ErrReparsePoint) {
 		t.Fatalf("OpenAuthenticatedFile through parent junction = %v, want ErrReparsePoint", err)
 	}
-}
-
-func TestCreateTempCleansAnEmptyCandidateWhenPrivateCreationFails(t *testing.T) {
-	directory := t.TempDir()
-	want := errors.New("post-create validation failed")
-	create := func(path string) (*os.File, bool, error) {
-		file, created, err := createPrivateFile(path)
-		if err != nil {
-			return file, created, err
-		}
-		return file, created, want
-	}
-
-	if _, err := createTempWith(directory, ".secret-", bytes.NewReader(make([]byte, 16)), create); !errors.Is(err, want) {
-		t.Fatalf("createTempWith = %v, want %v", err, want)
-	}
-	entries, err := os.ReadDir(directory)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(entries) != 0 {
-		t.Fatalf("failed private creation left entries: %#v", entries)
-	}
-}
-
-func TestCreateTempDoesNotRemoveACandidateItDidNotCreate(t *testing.T) {
-	directory := t.TempDir()
-	candidate := filepath.Join(directory, ".secret-"+strings.Repeat("00", tempRandomByteCount))
-	if err := os.Mkdir(candidate, 0o700); err != nil {
-		t.Fatal(err)
-	}
-
-	random := bytes.NewReader(make([]byte, tempRandomByteCount*tempCollisionLimit))
-	if _, err := createTempWith(directory, ".secret-", random, createPrivateFile); err == nil {
-		t.Fatal("createTempWith unexpectedly succeeded over an existing directory candidate")
-	}
-	if info, err := os.Stat(candidate); err != nil {
-		t.Fatalf("unowned candidate was removed: %v", err)
-	} else if !info.IsDir() {
-		t.Fatalf("unowned candidate type changed: %v", info.Mode())
-	}
-}
-
-func TestCreateTempStopsBeforeCreateWhenRandomnessFails(t *testing.T) {
-	want := errors.New("random source failed")
-	createCalled := false
-	create := func(string) (*os.File, bool, error) {
-		createCalled = true
-		return nil, false, nil
-	}
-
-	if _, err := createTempWith(t.TempDir(), ".secret-", errorReader{err: want}, create); !errors.Is(err, want) {
-		t.Fatalf("createTempWith = %v, want %v", err, want)
-	}
-	if createCalled {
-		t.Fatal("create was called after random generation failed")
-	}
-}
-
-type errorReader struct {
-	err error
-}
-
-func (reader errorReader) Read([]byte) (int, error) {
-	return 0, reader.err
 }
 
 func TestPrivateDirectoryValidationRejectsBroadOrRelativeTargets(t *testing.T) {

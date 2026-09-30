@@ -146,25 +146,22 @@ func TestTerminalSelectorRejectsAmbiguousPrefixes(t *testing.T) {
 }
 
 func TestTerminalControlCursorRequiresConsistentTruncationEvidence(t *testing.T) {
+	const requested = 7
 	tests := []struct {
-		name                        string
-		requested, start, next, end uint64
-		truncated                   bool
-		want                        bool
+		name  string
+		reply terminalControlCursor
+		want  bool
 	}{
-		{name: "exact range", requested: 7, start: 7, next: 11, end: 11, want: true},
-		{name: "retained range", requested: 7, start: 9, next: 11, end: 13, truncated: true, want: true},
-		{name: "false truncation claim", requested: 7, start: 7, next: 11, end: 11, truncated: true},
-		{name: "unreported truncation", requested: 7, start: 9, next: 11, end: 11},
-		{name: "past transcript end", requested: 7, start: 7, next: 12, end: 11},
+		{name: "exact range", reply: terminalControlCursor{Requested: requested, Start: 7, Next: 11, End: 11}, want: true},
+		{name: "retained range", reply: terminalControlCursor{Requested: requested, Start: 9, Next: 11, End: 13, Truncated: true}, want: true},
+		{name: "false truncation claim", reply: terminalControlCursor{Requested: requested, Start: 7, Next: 11, End: 11, Truncated: true}},
+		{name: "unreported truncation", reply: terminalControlCursor{Requested: requested, Start: 9, Next: 11, End: 11}},
+		{name: "past transcript end", reply: terminalControlCursor{Requested: requested, Start: 7, Next: 12, End: 11}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := validTerminalControlCursor(
-				test.requested, test.start, test.next, test.end, test.truncated, test.requested, 64,
-			)
-			if got != test.want {
-				t.Fatalf("validTerminalControlCursor() = %v, want %v", got, test.want)
+			if got := test.reply.validFor(requested, 64); got != test.want {
+				t.Fatalf("validFor() = %v, want %v", got, test.want)
 			}
 		})
 	}

@@ -20,18 +20,15 @@ func runRemote(ctx context.Context, alias, command string, environment commandEn
 		environment.home, environment.stateDir, environment.client, environment.stdin, environment.stdout, environment.stderr
 	if err := validate.Alias(alias); err != nil {
 		fmt.Fprintf(stderr, "sshc: %q is not an alias this will connect to\n", alias)
-		return 2
+		return exitUsage
 	}
 
 	// 非対話実行では Vault の解錠を待機せず、施錠状態をエラーとして返す。
 	session, err := reachUnlockedEngine(ctx, stateDir, client,
 		func(found handoff.Handoff) engineProbe {
 			return httpProbe{found: found, client: client}
-		}, stderr)
+		})
 	if err != nil {
-		if errors.Is(err, errInterrupted) {
-			return 130
-		}
 		fmt.Fprintf(stderr, "sshc: %v\n", err)
 		return sshclient.RemoteFailureExit
 	}
@@ -72,7 +69,7 @@ func runAdvice(err error, alias string) error {
 	case errors.Is(err, sshclient.ErrPromptUnavailable):
 		return fmt.Errorf("%w; confirm a saved credential for %s in Connections, or use sshc ssh %s without --non-interactive to answer the prompt", err, alias, alias)
 	}
-	return err
+	return describeConnectionFailure(err)
 }
 
 // remoteCommand は引数をリモートシェル用の単一文字列に結合する。

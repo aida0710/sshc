@@ -125,12 +125,6 @@ func generate() ([]byte, error) {
 	source.WriteString(`type completionGrammar struct {
 	topLevel []string
 	helpTopics []string
-	syncActions []string
-	terminalActions []string
-	sftpActions []string
-	serviceActions []string
-	otpActions []string
-	vaultActions []string
 	encodings []string
 	waitStates []string
 	serialOptions []string
@@ -141,28 +135,11 @@ func generate() ([]byte, error) {
 
 `)
 	fmt.Fprintf(&source, "var cliCompletionGrammar = completionGrammar{\n\ttopLevel: %s,\n\thelpTopics: %s,\n", stringSlice(topLevel), stringSlice(helpTopics))
-	for _, key := range []string{"sync", "terminal", "sftp", "service", "otp", "vault"} {
-		fmt.Fprintf(&source, "\t%sActions: %s,\n", key, stringSlice(actionsFor(commands, key)))
-	}
 	fmt.Fprintf(&source, "\tencodings: %s,\n\twaitStates: %s,\n\tserialOptions: %s,\n\ttelnetOptions: %s,\n\tsftpOptions: %s,\n\tsftpSettingsOptions: %s,\n}\n",
 		stringSlice(clispec.Values["encodings"]), stringSlice(clispec.Values["wait-states"]),
 		stringSlice(clispec.Values["serial-options"]), stringSlice(clispec.Values["telnet-options"]),
 		stringSlice(clispec.Values["sftp-options"]), stringSlice(clispec.Values["sftp-settings-options"]))
 	return format.Source(source.Bytes())
-}
-
-func actionsFor(commands []clispec.Command, name string) []string {
-	for _, command := range commands {
-		if command.Name != name {
-			continue
-		}
-		values := make([]string, 0, len(command.Actions))
-		for _, action := range command.Actions {
-			values = append(values, action.Name)
-		}
-		return values
-	}
-	return nil
 }
 
 func exported(value string) string {

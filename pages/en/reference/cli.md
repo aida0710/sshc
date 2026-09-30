@@ -7,9 +7,24 @@ description: The main sshc CLI commands.
 
 Use `sshc help` for the full command list. Use `sshc <command...> --help` or `sshc help <command...>` for the exact arguments accepted by an individual command, for example `sshc sync push --help` or `sshc help terminal send`.
 
+An option that takes a value accepts both `--jobs 4` and `--jobs=4`. A short name such as `-j` accepts only `-j 4`. Giving the same option twice is an error.
+
 The CLI uses the same OpenSSH configuration and the running engine's vault and sessions. For automation, use supported `--json` output instead of parsing human-readable text.
 
 Codex and other AI agents can call the CLI directly. When the vault is unlocked and every host key and credential required by the route is already saved, non-interactive SSH uses the stored password, key passphrase, and assigned TOTP. The agent does not need the credential itself.
+
+## `--json` output
+
+A command run with `--json` prints exactly one JSON value on stdout, whether it succeeds or fails:
+
+```json
+{"schemaVersion":1,"success":true,"result":{}}
+{"schemaVersion":1,"success":false,"failure":{"kind":"engine_not_running","retryable":true}}
+```
+
+When `success` is `true`, `result` holds the command's result. When it is `false`, `failure` holds the kind of failure (`kind`) and whether retrying the same operation later may succeed (`retryable`), and the exit code is non-zero. Decide on `success` and `kind` instead of parsing human-readable text. Only the report of a non-interactive Serial or Telnet run (`--non-interactive`) uses its own shape, which includes the transcript.
+
+When sshc cannot parse the arguments, for example because an argument is missing or malformed or an option is given twice, the command does not start and prints no JSON even with `--json`. It writes the reason and the usage on stderr and exits with status 2. Stdout is empty in that case, so check the exit status before reading it as JSON.
 
 ## Engine and vault
 
@@ -65,7 +80,7 @@ sshc ssh <alias> --non-interactive -- <command...>
 sshc info <alias> --json
 ```
 
-The Homebrew formula installs completions for bash, zsh, and fish. For other installation methods, add the matching command below to your shell startup file. Completion covers subcommands, options, enumerated values, and connection aliases for `sshc ssh`, `sshc info`, `sshc terminal create ssh`, and `sshc sftp`. Alias candidates are read from the current `~/.ssh/config` and reachable `Include` files whenever you press Tab. An alias containing characters sshc refuses to launch or evaluate (shell metacharacters, whitespace, a leading `-`) is left out of both `sshc ssh --list` and completion, and the reason is reported on stderr.
+The Homebrew formula installs completions for bash, zsh, and fish. For other installation methods, add the matching command below to your shell startup file. Completion covers subcommands, options, enumerated values, and connection aliases for `sshc ssh`, `sshc info`, `sshc terminal create ssh`, `sshc sftp`, and `sshc vpn bind`/`unbind`. Alias candidates are read from the current `~/.ssh/config` and reachable `Include` files whenever you press Tab. An alias containing characters sshc refuses to launch or evaluate (shell metacharacters, whitespace, a leading `-`) is left out of both `sshc ssh --list` and completion, and the reason is reported on stderr.
 
 Command parsing, per-command help, and bash, zsh, and fish completion are built from the same command definition. Names and choices offered by completion therefore match `sshc help` from the installed version.
 

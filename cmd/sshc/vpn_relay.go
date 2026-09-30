@@ -188,7 +188,7 @@ func runVPNProxy(ctx context.Context, called vpnInvocation, environment commandE
 	if err != nil {
 		if errors.Is(err, errVPNRelayMissing) {
 			fmt.Fprintf(environment.stderr, "sshc: %v\n", err)
-			return 1
+			return exitFailure
 		}
 		return finishVPNFailure(called, err, environment)
 	}
@@ -201,7 +201,7 @@ func runVPNProxy(ctx context.Context, called vpnInvocation, environment commandE
 	}()
 	if _, err := io.Copy(relay, environment.stdin); err != nil {
 		fmt.Fprintf(environment.stderr, "sshc: VPN接続でのデータ送信に失敗しました: %v\n", err)
-		return 1
+		return exitFailure
 	}
 	// 送る側が終わったことを相手へ伝える。伝えないと、相手は入力の終わりを
 	// 待ち続ける。
@@ -210,7 +210,7 @@ func runVPNProxy(ctx context.Context, called vpnInvocation, environment commandE
 	}
 	if err := <-fromRelay; err != nil {
 		fmt.Fprintf(environment.stderr, "sshc: VPN接続でのデータ受信に失敗しました: %v\n", err)
-		return 1
+		return exitFailure
 	}
 	return 0
 }

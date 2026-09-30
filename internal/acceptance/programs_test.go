@@ -43,10 +43,13 @@ var allowedToStartPrograms = []string{
 	// loopback の URL ひとつだけである。開けなくても失敗ではない。URL は
 	// 標準出力にも出ているので、貼れる表記はユーザーの手元に残る。
 	"cmd/sshc/browser.go",
+	// sshc update と sshc service が導入元のプログラムを動かすのは、ここの
+	// systemInstallationCommands だけである。argv を組むのは update.go と installation.go。
 	// updateは任意のinstallerを選ばない。実行中binaryとSameFileで結び付けたHomebrew
 	// だけを固定argvで呼ぶか、digest付きreceiptが一致したinstall.sh版だけを公開済み
-	// tagのscriptへ委ねる。どちらにも該当しない実行ファイルからは起動しない。
-	"cmd/sshc/update.go",
+	// tagのscriptへ委ねる。どちらにも該当しない実行ファイルからは起動しない。serviceは
+	// Homebrewへ固定argvでformulaの場所を尋ねるだけである。
+	"cmd/sshc/installation_commands.go",
 	// service command（Linux は systemctl、macOS は launchctl）はここの runner だけから
 	// 起動する。tool は既知のpathまたはPATHから実行可能な絶対pathへ一度解決し、
 	// 固定argvで呼ぶ。利用者の入力をprogramや引数へ渡さず、sshc管理marker付きの

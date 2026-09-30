@@ -50,13 +50,9 @@ type ConnectHandlers struct {
 	// Bootstrap はブラウザ用 URL を生成し、BaseURL はその接続先を返す。
 	// 両方が nil であれば、このアプリケーションはコマンドラインから開けない。
 	// これは session manager を持たないビルドの状態である。
-	//
-	// かつては Sessions という名だった。その名は下の、実行中コンソール
-	// の本数を返す field に譲った。`sshc status` が尋ねるのは本数であり、
-	// *session.Manager そのものではないので、そちらのほうが呼び出し側に近い名である。
 	Bootstrap *session.Manager
 	BaseURL   string
-	// Sessions は、実行中コンソールの本数を返す。nil なら 0。
+	// Sessions は、終了していないターミナルの本数を返す。nil なら 0。
 	Sessions func() int
 	// Owner、Version、ProtocolVersion は handoff を読んだ CLI が、応答元を
 	// 自分が見つけた engine と照合するための値である。
@@ -242,7 +238,7 @@ type CLIStatus struct {
 	// Unlocked は vault が開いているか。
 	Unlocked     bool `json:"unlocked"`
 	Passwordless bool `json:"passwordless"`
-	// Sessions は実行中コンソールの本数。終了済みは数えない。
+	// Sessions は終了していないターミナルの本数。終了済みは数えない。
 	// 「閉じてよいか」を問うための数だからである。
 	Sessions int `json:"sessions"`
 }

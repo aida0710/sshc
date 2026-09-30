@@ -1,0 +1,48 @@
+# リリースの runner で埋め込み UI を作り直し、コミット済みの internal/ui/dist と照合する。
+# 照合は release.yml の macOS・Linux・Windows の job が release-current の中で行うものと
+# 同じ手順（nativebuild の rebuildEmbeddedUIAndCompare）で、ここではバイナリを作らない。
+# OS ごとに UI の出力がずれると、公開の当日に Release が止まる。公開の前に手で走らせて、
+# 先に確かめる（docs/releasing.md）。
+name: Release UI check
+
+on:
+  workflow_dispatch:
+
+# 公開・署名・tag の権限は持たせない。読むのは checkout するソースだけである。
+permissions:
+  contents: read
+
+jobs:
+  embedded-ui:
+    name: Embedded UI (${{ matrix.name }})
+    # runner は release.yml の macos・linux・windows の job と揃える。
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            name: macOS
+          - os: ubuntu-24.04
+            name: Linux
+          - os: windows-2025
+            name: Windows
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci --prefix web
+
+      # 違えば、違ったファイルを git status の形で出して失敗する。
+      - name: Rebuild the embedded UI and compare it with the committed one
+        run: go run ./internal/nativebuild/cmd/nativebuild verify-embedded-ui

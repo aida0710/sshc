@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
@@ -56,28 +55,33 @@ type infoDocument struct {
 }
 
 func runInfo(alias, home string, asJSON bool, stdout, stderr io.Writer) int {
+	failed := func(kind, message string, exit int) int {
+		if asJSON {
+			_ = writeCommandFailure(stdout, commandFailure{Kind: kind})
+			return exit
+		}
+		fmt.Fprintln(stderr, message)
+		return exit
+	}
 	if err := validate.Alias(alias); err != nil {
-		fmt.Fprintf(stderr, "sshc: %q is not an alias this can describe\n", alias)
-		return 2
+		return failed("invalid_alias", fmt.Sprintf("sshc: %q is not an alias this can describe", alias), 2)
 	}
 	// info は接続しない。解決した設定を見せるだけなので、経路も秘密も要らない。
 	connection, err := app.NewCLIConnection(app.CLIConnectionOptions{Home: home})
 	if err != nil {
-		fmt.Fprintln(stderr, "sshc: could not read the SSH configuration")
-		return 1
+		return failed("ssh_config_unreadable", "sshc: could not read the SSH configuration", 1)
 	}
 	target, err := connection.Resolve(alias)
 	if err != nil {
 		// Resolver errors can contain user-authored ProxyCommand or SetEnv text.
 		// Those values are intentionally outside the info allowlist.
-		fmt.Fprintf(stderr, "sshc: could not resolve %q as an SSH target\n", alias)
-		return 1
+		return failed("unresolvable_target", fmt.Sprintf("sshc: could not resolve %q as an SSH target", alias), 1)
 	}
 	document := describeInfoTarget(target)
 	if asJSON {
-		if err := json.NewEncoder(stdout).Encode(document); err != nil {
+		if err := writeCommandSuccess(stdout, document); err != nil {
 			fmt.Fprintln(stderr, "sshc: could not encode the resolved SSH target")
-			return 1
+			return exitFailure
 		}
 		return 0
 	}

@@ -65,6 +65,17 @@ esac
 	if err := os.WriteFile(filepath.Join(commands, "curl"), []byte(fakeCurl), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	// 既に入っている sshc は、status --json に成功の封筒で答える。install.sh は
+	// その result の version を読んで、動いている engine との版の違いを知らせる。
+	const runningEngineVersion = "v9.8.6"
+	fakeInstalled := `#!/bin/sh
+if [ "$1 $2" = "status --json" ]; then
+  printf '%s\n' '{"schemaVersion":1,"success":true,"result":{"passwordless":false,"version":"` + runningEngineVersion + `","protocolVersion":3,"vault":true,"unlocked":true,"sessions":0}}'
+fi
+`
+	if err := os.WriteFile(filepath.Join(commands, "sshc"), []byte(fakeInstalled), 0o755); err != nil {
+		t.Fatal(err)
+	}
 
 	script, err := filepath.Abs(filepath.Join("..", "..", "install.sh"))
 	if err != nil {
@@ -91,6 +102,9 @@ esac
 	}
 	if want := "sshc: installed sshc v9.8.7 " + runtime.GOOS + "/" + runtime.GOARCH + "\n"; !strings.Contains(string(output), want) {
 		t.Fatalf("install.sh did not report the installed version %q:\n%s", want, output)
+	}
+	if want := "an engine is running version " + runningEngineVersion; !strings.Contains(string(output), want) {
+		t.Fatalf("install.sh did not read the running version from the status envelope %q:\n%s", want, output)
 	}
 	target := filepath.Join(installDirectory, "sshc")
 	installed, err := os.ReadFile(target)

@@ -467,34 +467,6 @@ func TestSyncSetupCanceledDuringHiddenPrompts(t *testing.T) {
 	}
 }
 
-func TestSyncSetupCanceledAtEveryVisiblePrompt(t *testing.T) {
-	answers := []string{
-		"https://objects.example.test",
-		"ssh-config",
-		"team/hosts",
-		"ap-northeast-1",
-		"both",
-	}
-	for cancelAt := range answers {
-		t.Run(answers[cancelAt], func(t *testing.T) {
-			script, server, stateDir := newSyncSetupServer(t, api.Empty)
-			defer server.Close()
-			visible := strings.Join(answers[:cancelAt], "\n")
-			if visible != "" {
-				visible += "\n"
-			}
-			visible += string([]byte{0x03})
-			terminal := &setupPasswordTerminal{answers: standardHiddenSetup(false)}
-			result := runSetupFixture(t, stateDir, server.Client(), visible, terminal)
-			if result.code != 130 || len(script.checkBodies) != 0 || len(script.completeBodies) != 0 || terminal.reads != 0 {
-				t.Fatalf("code=%d check=%d complete=%d hiddenReads=%d stdout=%q prompt=%q",
-					result.code, len(script.checkBodies), len(script.completeBodies), terminal.reads,
-					result.stdout, result.prompt)
-			}
-		})
-	}
-}
-
 func TestSyncSetupRejectsInvalidOrOversizedInputBeforeCheck(t *testing.T) {
 	tests := []struct {
 		name    string

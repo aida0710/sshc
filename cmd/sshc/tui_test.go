@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -58,11 +59,39 @@ func TestTUIRenderFitsTheTerminalWidth(t *testing.T) {
 	}}}
 	var output bytes.Buffer
 	renderTUI(&output, model, 40, 24)
-	for _, line := range strings.Split(output.String(), "\r\n") {
-		plain := strings.NewReplacer("\x1b[H\x1b[2J", "", "\x1b[1m", "", "\x1b[7m", "",
-			"\x1b[36m", "", "\x1b[2m", "", "\x1b[0m", "").Replace(line)
-		if len([]rune(plain)) > 40 {
-			t.Errorf("line is %d columns wide: %q", len([]rune(plain)), plain)
+	for _, line := range strings.Split(withoutTUIStyling(output.String()), "\r\n") {
+		if len([]rune(line)) > 40 {
+			t.Errorf("line is %d columns wide: %q", len([]rune(line)), line)
+		}
+	}
+}
+
+// withoutTUIStyling は、renderTUI 自身が書く制御シーケンスを取り除き、画面に
+// 見える文字だけを残す。
+func withoutTUIStyling(screen string) string {
+	return strings.NewReplacer("\x1b[H\x1b[2J", "", "\x1b[1m", "", "\x1b[7m", "",
+		"\x1b[36m", "", "\x1b[2m", "", "\x1b[0m", "").Replace(screen)
+}
+
+// ssh_config と metadata.json の値に含まれた制御文字は、そのままターミナルへ
+// 届くと画面やウィンドウタイトル、クリップボードを書き換えられる。
+func TestTUIRenderShowsControlCharactersFromConfigAsText(t *testing.T) {
+	model := &tuiModel{hosts: []tuiHost{{
+		Alias:    "alpha\x1b[2J",
+		Hostname: "alpha.example\x1b]0;title\x07",
+		User:     "ops\x1b]52;c;cGF5bG9hZA==\x07",
+		Port:     "22\u009b1m",
+		Tags:     []string{"eu\x1b[31m", "jump"},
+	}}}
+	var output bytes.Buffer
+	renderTUI(&output, model, 200, 24)
+	screen := withoutTUIStyling(output.String())
+	if strings.ContainsAny(screen, "\x1b\x07\u009b") {
+		t.Fatalf("the screen carries raw control characters: %q", screen)
+	}
+	for _, shown := range []string{`alpha\u001B[2J`, `ops\u001B]52;c;cGF5bG9hZA==\u0007@`, `[eu\u001B[31m jump]`} {
+		if !strings.Contains(screen, shown) {
+			t.Errorf("screen = %q, want it to show %q", screen, shown)
 		}
 	}
 }
@@ -137,9 +166,13 @@ func TestTUILoadsConcreteHostsAndSortsByAlias(t *testing.T) {
 	metadata := `{"schemaVersion":3,"hosts":[` +
 		`{"identity":{"path":"config","alias":"bastion"},"tags":["eu"]}]}`
 	acltest.WritePrivateFile(t, filepath.Join(ssh, "sshc", "metadata.json"), []byte(metadata))
-	hosts, err := loadTUIHosts(home)
+	var stderr bytes.Buffer
+	hosts, err := loadTUIHosts(home, &stderr)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if stderr.Len() != 0 {
+		t.Errorf("stderr = %q", stderr.String())
 	}
 	if len(hosts) != 2 || hosts[0].Alias != "alpha" || hosts[1].Alias != "bastion" {
 		t.Fatalf("hosts = %#v", hosts)
@@ -165,7 +198,35 @@ func TestTUIReportsAConfigItCannotRead(t *testing.T) {
 		t.Fatal(err)
 	}
 	denyConfigRead(t, configPath)
-	if _, err := loadTUIHosts(home); err == nil || !strings.Contains(err.Error(), "cannot read") {
+	if _, err := loadTUIHosts(home, io.Discard); err == nil || !strings.Contains(err.Error(), "cannot read") {
 		t.Fatalf("loadTUIHosts = %v, want the unreadable config to be reported", err)
+	}
+}
+
+// 選んでも runConnect が断る alias を並べると、選んだ後で接続できないと分かる。
+// `sshc list` と同じく一覧から外し、外した理由を伝える。
+func TestTUILeavesOutAliasesThatCannotBeConnected(t *testing.T) {
+	home := t.TempDir()
+	ssh := filepath.Join(home, ".ssh")
+	if err := os.MkdirAll(ssh, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	config := "Host $(id)\n  HostName evil.example\nHost alpha\n  HostName alpha.example\nHost \x1b[2Jboom\n"
+	if err := os.WriteFile(filepath.Join(ssh, "config"), []byte(config), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var stderr bytes.Buffer
+	hosts, err := loadTUIHosts(home, &stderr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(hosts) != 1 || hosts[0].Alias != "alpha" {
+		t.Fatalf("hosts = %#v, want only alpha", hosts)
+	}
+	if !strings.Contains(stderr.String(), "$(id)") {
+		t.Errorf("stderr = %q, want it to report the skipped alias", stderr.String())
+	}
+	if strings.ContainsRune(stderr.String(), '\x1b') {
+		t.Errorf("stderr = %q, want the escape sequence quoted", stderr.String())
 	}
 }

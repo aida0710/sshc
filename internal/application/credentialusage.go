@@ -39,12 +39,8 @@ func (s *Service) KeyHosts(relativePaths []string) (map[string][]string, error) 
 			if !config.EqualKeyword(entry.Keyword, "IdentityFile") {
 				continue
 			}
-			for _, value := range entry.Values {
-				for relative, absolute := range absoluteByKey {
-					if keys.ExpandsTo(s.workspace, value, absolute) {
-						seen[relative][alias] = true
-					}
-				}
+			for _, relative := range s.keysNamedBy(entry.Values, absoluteByKey) {
+				seen[relative][alias] = true
 			}
 		}
 	}
@@ -56,4 +52,16 @@ func (s *Service) KeyHosts(relativePaths []string) (map[string][]string, error) 
 		slices.Sort(hostsByKey[relative])
 	}
 	return hostsByKey, nil
+}
+
+// keysNamedBy は、IdentityFile の値 values が指す鍵を、absoluteByKey のキー（ワーク
+// スペース相対のパス）で返す。
+func (s *Service) keysNamedBy(values []string, absoluteByKey map[string]string) []string {
+	var named []string
+	for relative, absolute := range absoluteByKey {
+		if slices.ContainsFunc(values, func(value string) bool { return keys.ExpandsTo(s.workspace, value, absolute) }) {
+			named = append(named, relative)
+		}
+	}
+	return named
 }

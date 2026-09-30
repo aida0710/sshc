@@ -7,7 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"strings"
+	"runtime"
 	"testing"
 
 	"sshc/internal/selfupdate"
@@ -27,8 +27,8 @@ func TestEngineStartupReportsOnlyANewerRelease(t *testing.T) {
 	var out bytes.Buffer
 	reportAvailableUpdate(context.Background(), checker, "v0.13.6", &out,
 		slog.New(slog.NewTextHandler(io.Discard, nil)))
-	if got := out.String(); !strings.Contains(got, "v0.14.0 is available") || !strings.Contains(got, "sshc update") {
-		t.Fatalf("startup update notice = %q", got)
+	if got, want := out.String(), availableUpdateNotice("v0.14.0", runtime.GOOS); got != want {
+		t.Fatalf("startup update notice = %q, want %q", got, want)
 	}
 
 	out.Reset()

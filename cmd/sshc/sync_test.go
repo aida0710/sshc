@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -135,18 +134,10 @@ func TestSyncStatusJSONUsesOneStableEnvelope(t *testing.T) {
 	if code != 0 || stderr.Len() != 0 {
 		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
-	decoder := json.NewDecoder(strings.NewReader(stdout.String()))
-	var envelope commandEnvelope
-	if err := decoder.Decode(&envelope); err != nil {
-		t.Fatal(err)
-	}
-	var extra any
-	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
-		t.Fatalf("stdout contains more than one JSON value: %q", stdout.String())
-	}
-	if envelope.SchemaVersion != 1 || !envelope.Success || envelope.Status == nil ||
-		!envelope.Status.Configured || envelope.Failure != nil || envelope.Result != nil {
-		t.Fatalf("envelope = %+v", envelope)
+	var got api.SyncStatus
+	decodeCommandSuccess(t, stdout.String(), &got)
+	if !got.Configured {
+		t.Fatalf("result = %+v", got)
 	}
 }
 
@@ -156,19 +147,8 @@ func TestSyncJSONFailureIsOneStdoutObjectAndNoStderr(t *testing.T) {
 	if code != 1 || stderr.Len() != 0 {
 		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
-	decoder := json.NewDecoder(strings.NewReader(stdout.String()))
-	var envelope commandEnvelope
-	if err := decoder.Decode(&envelope); err != nil {
-		t.Fatal(err)
-	}
-	var extra any
-	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
-		t.Fatalf("stdout contains more than one JSON value: %q", stdout.String())
-	}
-	if envelope.SchemaVersion != 1 || envelope.Success || envelope.Status != nil ||
-		envelope.Failure == nil || envelope.Failure.Kind != "engine_not_running" ||
-		!envelope.Failure.Retryable {
-		t.Fatalf("failure envelope = %+v", envelope)
+	if failure := decodeCommandFailure(t, stdout.String()); failure.Kind != "engine_not_running" || !failure.Retryable {
+		t.Fatalf("failure = %+v", failure)
 	}
 }
 
@@ -205,7 +185,8 @@ func TestSyncStatusHumanFailureIsActionableAndDoesNotUseStdout(t *testing.T) {
 	if code != 1 || stdout.Len() != 0 {
 		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "sshc engine") || !strings.Contains(stderr.String(), "desktop") {
+	// 案内するのは sshc engine の起動だけで、配布していないデスクトップアプリには触れない。
+	if !strings.Contains(stderr.String(), engineNotRunning{}.Error()) || strings.Contains(stderr.String(), "desktop") {
 		t.Fatalf("failure is not actionable: %q", stderr.String())
 	}
 }

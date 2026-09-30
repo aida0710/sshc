@@ -71,25 +71,25 @@ func TestAndroidAnnouncesAsTheDesktopOwner(t *testing.T) {
 // 意図的に空にするか、既定値へ委ねるかを記録する。
 var androidFieldIntent = map[string]string{
 	// 配線する。
-	"Random":   "wired: crypto/rand",
-	"Announce": "wired: 入口の URL を Java 側へ渡す",
-	"Listen":   "wired: net.Listen",
-	"UI":       "wired: 埋め込んだ SPA",
-	"Logger":   "wired: 呼び出し元が渡す",
-	"Home":     "wired: アプリの filesDir",
-	"Owner":    "wired: handoff.OwnerEngine",
-	"PID":      "wired: このプロセス",
-	"Lookup":   "wired: 常に未検出を返し、SHELL の値には依存しない",
-	"Environ":  "wired: 固定の環境。Android アプリの環境に有用な PATH が無い",
+	"Random":      "wired: crypto/rand",
+	"Announce":    "wired: 入口の URL を Java 側へ渡す",
+	"Listen":      "wired: net.Listen",
+	"DefaultPort": "wired: WebView の localStorage と OPFS を起動をまたいで保つため、origin を固定する。desktop の固定 origin とは共有しない",
+	"UI":          "wired: 埋め込んだ SPA",
+	"Logger":      "wired: 呼び出し元が渡す",
+	"Home":        "wired: アプリの filesDir",
+	"Owner":       "wired: handoff.OwnerEngine",
+	"PID":         "wired: このプロセス",
+	"Lookup":      "wired: 常に未検出を返し、SHELL の値には依存しない",
+	"Environ":     "wired: 固定の環境。Android アプリの環境に有用な PATH が無い",
 
 	// 意図して空にする。
 	"Toolchain": "absent: ssh-keygen が Android に居ない",
 	"KeyAgent":  "absent: ssh-agent が Android に居ない",
 	"Updates":   "absent: バイナリを置き換える経路が無い",
 
-	"StopEngine":  "default: Run が自分で埋める。engine を止められるのは engine 自身だけである",
-	"Port":        "default: WebView は通知された URL を使うため、ポート番号を指定させない",
-	"DefaultPort": "default: native WebView は空きポートを使い、desktopの固定originを共有しない",
+	"StopEngine": "default: Run が自分で埋める。engine を止められるのは engine 自身だけである",
+	"Port":       "default: WebView は通知された URL を使うため、ポート番号を指定させない",
 
 	// 空で既定に落ちるのが正しいもの。
 	"ScanHostKeys":      "default: internal/sshclient がプロセス内で SSH 通信する",

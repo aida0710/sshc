@@ -114,7 +114,7 @@ func TestOpenRunsAShellAndCarriesItsOutput(t *testing.T) {
 	}
 	// 端末の大きさは pty-req で届く。届かないと vim も top も壊れた幅で描く。
 	term, size := server.PTY()
-	if term != sshclient.TermName || size != [2]uint32{120, 40} {
+	if term != terminal.DefaultTerminalType || size != [2]uint32{120, 40} {
 		t.Errorf("pty-req = %q %v", term, size)
 	}
 	modes := server.PTYModes()
