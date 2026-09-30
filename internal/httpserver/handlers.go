@@ -31,7 +31,7 @@ type Handlers struct {
 // reload に必要な token は browser の port-origin scoped sessionStorage に残す。
 func (h Handlers) Renew(c *echo.Context) error {
 	if h.Sessions == nil {
-		return problem(c, http.StatusInternalServerError, "bootstrap_failed")
+		return unexpectedProblem(c, "bootstrap_failed", nil)
 	}
 	cookie, err := c.Request().Cookie(SessionCookie)
 	if err != nil {
@@ -46,7 +46,7 @@ func (h Handlers) Renew(c *echo.Context) error {
 
 func (h Handlers) Bootstrap(c *echo.Context) error {
 	if h.Sessions == nil {
-		return problem(c, http.StatusInternalServerError, "bootstrap_failed")
+		return unexpectedProblem(c, "bootstrap_failed", nil)
 	}
 	// bootstrap を消費する前に断る。正規のブラウザがあとから同じ bootstrap で入れる。
 	if h.mayBeFromAnotherOSUser(c.Request()) {
@@ -63,7 +63,7 @@ func (h Handlers) Bootstrap(c *echo.Context) error {
 	case errors.Is(err, session.ErrBootstrapUsed):
 		return problem(c, http.StatusConflict, "bootstrap_used")
 	case err != nil:
-		return problem(c, http.StatusInternalServerError, "bootstrap_failed")
+		return unexpectedProblem(c, "bootstrap_failed", err)
 	}
 
 	response := api.BootstrapResponse{CsrfToken: credentials.CSRFToken}
@@ -73,7 +73,7 @@ func (h Handlers) Bootstrap(c *echo.Context) error {
 			if setCookie {
 				h.Sessions.Revoke(credentials.SessionID)
 			}
-			return problem(c, http.StatusInternalServerError, "browser_registration_failed")
+			return unexpectedProblem(c, "browser_registration_failed", registerErr)
 		}
 		if issued {
 			response.BrowserToken = &browserToken
@@ -121,39 +121,38 @@ func (h Handlers) Recover(c *echo.Context) error {
 	if h.Sessions == nil || h.BrowserAuth == nil {
 		return problem(c, http.StatusUnauthorized, "browser_registration_required")
 	}
-	rotated, accepted, err := h.BrowserAuth.Recover(c.Request().Header.Get("X-SSHC-Browser"))
-	if err != nil {
-		return problem(c, http.StatusInternalServerError, "browser_registration_failed")
-	}
-	if !accepted {
+	entry, err := h.entrance().Recover(sessionCookie(c.Request()), c.Request().Header.Get("X-SSHC-Browser"))
+	switch {
+	case errors.Is(err, browserauth.ErrRegistrationRejected):
 		return problem(c, http.StatusUnauthorized, "invalid_browser_registration")
+	case errors.Is(err, browserauth.ErrSessionNotIssued):
+		return unexpectedProblem(c, "bootstrap_failed", err)
+	case err != nil:
+		return unexpectedProblem(c, "browser_registration_failed", err)
 	}
-	credentials, setCookie, err := h.Sessions.JoinOrIssue(sessionCookie(c.Request()))
-	if err != nil {
-		return problem(c, http.StatusInternalServerError, "bootstrap_failed")
+	if entry.SetCookie {
+		setSessionCookie(c, entry.Credentials.SessionID)
 	}
-	if setCookie {
-		setSessionCookie(c, credentials.SessionID)
-	}
-	return c.JSON(http.StatusOK, api.BootstrapResponse{CsrfToken: credentials.CSRFToken, BrowserToken: &rotated})
+	return c.JSON(http.StatusOK, api.BootstrapResponse{CsrfToken: entry.Credentials.CSRFToken, BrowserToken: &entry.BrowserToken})
 }
 
 // SignOut は、このブラウザーのセッションを消し、登録 token が添えられていれば
-// 登録も消す。cookie と CSRF の検査は他の API と同じ経路で済んでいる。
-// 登録を消すと engine を再起動しても入り直せないので、次に入るには `sshc open`
-// の URL が要る。
+// 登録と、その登録から入ったほかのセッションも消す。cookie と CSRF の検査は他の
+// API と同じ経路で済んでいる。登録を消すと engine を再起動しても入り直せないので、
+// 次に入るには `sshc open` の URL が要る。
 func (h Handlers) SignOut(c *echo.Context) error {
 	if h.Sessions == nil {
-		return problem(c, http.StatusInternalServerError, "bootstrap_failed")
+		return unexpectedProblem(c, "bootstrap_failed", nil)
 	}
-	if presented := c.Request().Header.Get("X-SSHC-Browser"); presented != "" && h.BrowserAuth != nil {
-		if _, err := h.BrowserAuth.Forget(presented); err != nil {
-			return problem(c, http.StatusInternalServerError, "browser_registration_failed")
-		}
+	if err := h.entrance().SignOut(sessionCookie(c.Request()), c.Request().Header.Get("X-SSHC-Browser")); err != nil {
+		return unexpectedProblem(c, "browser_registration_failed", err)
 	}
-	h.Sessions.Revoke(sessionCookie(c.Request()))
 	clearSessionCookie(c)
 	return c.NoContent(http.StatusNoContent)
+}
+
+func (h Handlers) entrance() browserauth.Entrance {
+	return browserauth.Entrance{Registrations: h.BrowserAuth, Sessions: h.Sessions}
 }
 
 func sessionCookie(request *http.Request) string {

@@ -59,6 +59,9 @@ func requireKnownHosts(target Target) Target {
 // Client exposes the authenticated transport to SSH channel protocols.
 func (c *Connection) Client() *ssh.Client { return c.client }
 
+// Wait blocks until the final transport ends, whether the peer or Close ended it.
+func (c *Connection) Wait() error { return c.client.Wait() }
+
 // Close releases the final transport and every ProxyJump hop, deepest first.
 func (c *Connection) Close() error {
 	c.once.Do(func() {

@@ -26,10 +26,10 @@ import (
 	"sshc/internal/loopbackpeer"
 	"sshc/internal/platform"
 	"sshc/internal/recent"
+	"sshc/internal/releasecheck"
 	"sshc/internal/remotekey"
 	"sshc/internal/remotesync"
 	"sshc/internal/secret"
-	"sshc/internal/selfupdate"
 	"sshc/internal/session"
 	sshcSFTP "sshc/internal/sftp"
 	"sshc/internal/snippets"
@@ -53,7 +53,7 @@ type Options struct {
 	// Updates はプロジェクトのリリースを調べる。nil の場合、バージョンを
 	// 報告するのみで何も提示しない。比較すべきリリースを持たないビルドが
 	// すべきことはこれである。
-	Updates  *selfupdate.Checker
+	Updates  *releasecheck.Checker
 	Listener net.Listener
 	Sessions *session.Manager
 	// BrowserAuth keeps only hashes of browser enrolment capabilities. It is
@@ -86,10 +86,11 @@ type Options struct {
 	SFTPTransferStatePath string
 	Workspaces            *workspace.Service
 	Snippets              *snippets.Service
-	// Passwords は保存されたパスワードの vault である。nil の service は
-	// すべてのパスワード用ルートを未登録のままに
-	// する。これは、それを配線しないテストが当てにしていることである。
-	Passwords *secret.Service
+	// Vault は、アカウントのパスワード、鍵のパスフレーズ、TOTP、同期の設定、
+	// VPN のシークレットを暗号化して持ち、マスターパスワードでのロックとロックの解除を扱う。
+	// nil の service は /api/v1/passwords と /api/v1/credentials のルートを未登録の
+	// ままにする。これは、それを配線しないテストが当てにしていることである。
+	Vault *secret.Service
 	// Sync はワークスペースを object store へ運ぶ。nil の service は
 	// すべての sync ルートを未登録のままにする。
 	Sync *remotesync.Service
@@ -116,7 +117,17 @@ type Options struct {
 	TerminalEnvironment func() []string
 }
 
-var ErrNonLoopbackListener = errors.New("listener must use 127.0.0.1")
+var ErrNonLoopbackListener = errors.New("listener must use " + handoff.EngineHost)
+
+const (
+	// requestHeaderTimeout は、接続またはkeep-aliveの次のリクエストでヘッダが揃うまで待つ上限。
+	// 何も送らない接続を抱え続けないためで、loopbackのブラウザとCLIには十分に長い。
+	requestHeaderTimeout = 5 * time.Second
+	// idleConnectionTimeout は、リクエストを終えたkeep-alive接続を次のリクエストまで残す上限。
+	// ブラウザが自分で閉じる長さ（Firefoxは115秒、Chromiumは5分）より長くして正規の接続は
+	// 先に切らず、放置された接続や異常終了したクライアントの接続だけを回収する。
+	idleConnectionTimeout = 6 * time.Minute
+)
 
 type Server struct {
 	listener  net.Listener
@@ -300,12 +311,15 @@ func New(options Options) (*Server, error) {
 		return nil, ErrNonLoopbackListener
 	}
 	tcpAddress, ok := options.Listener.Addr().(*net.TCPAddr)
-	if !ok || len(tcpAddress.IP) != net.IPv4len || tcpAddress.IP[0] != 127 || tcpAddress.IP[1] != 0 || tcpAddress.IP[2] != 0 || tcpAddress.IP[3] != 1 {
+	if !ok || len(tcpAddress.IP) != net.IPv4len || tcpAddress.IP.String() != handoff.EngineHost {
 		return nil, ErrNonLoopbackListener
 	}
 
-	host := net.JoinHostPort("127.0.0.1", strconv.Itoa(tcpAddress.Port))
+	host := net.JoinHostPort(handoff.EngineHost, strconv.Itoa(tcpAddress.Port))
 	e := echo.New()
+	// echo の既定の logger は stdout へ書く。注入された logger だけが秘密混入の検査を
+	// 受けるので、注入が無いときは何も出さない。
+	e.Logger = slog.New(slog.DiscardHandler)
 	if options.Logger != nil {
 		e.Logger = options.Logger
 	}
@@ -313,8 +327,8 @@ func New(options Options) (*Server, error) {
 		ExpectedHost:   host,
 		ExpectedOrigin: "http://" + host,
 		Sessions:       options.Sessions,
-		// Passwords が未設定の場合も安全側としてロック済みと扱う。
-		Unlocked: func() bool { return options.Passwords != nil && options.Passwords.Unlocked() },
+		// Vault が未設定の場合も安全側としてロック済みと扱う。
+		Unlocked: func() bool { return options.Vault != nil && options.Vault.Unlocked() },
 	}).Middleware)
 
 	baseCtx, baseCancel := context.WithCancel(context.Background())
@@ -338,9 +352,9 @@ func New(options Options) (*Server, error) {
 	e.POST("/api/v1/session/sign-out", handlers.SignOut)
 	e.GET("/api/v1/health", handlers.Health)
 	if options.Config != nil {
-		registerConfigRoutes(e, ConfigHandlers{Service: options.Config, Keys: options.Keys, Secrets: options.Passwords})
+		registerConfigRoutes(e, ConfigHandlers{Service: options.Config, Keys: options.Keys, Vault: options.Vault})
 		registerConnectionRoutes(e, ConnectionHandlers{
-			Service: options.Config, Keys: options.Keys, Secrets: options.Passwords, Recent: options.Recent,
+			Service: options.Config, Keys: options.Keys, Recent: options.Recent,
 		})
 	}
 
@@ -352,7 +366,7 @@ func New(options Options) (*Server, error) {
 
 	if options.Keys != nil {
 		registerKeyRoutes(e, KeyHandlers{
-			Keys: options.Keys, Config: options.Config, Secrets: options.Passwords,
+			Keys: options.Keys, Config: options.Config,
 			Sessions: options.Sessions, Actions: actions,
 		})
 	}
@@ -383,11 +397,10 @@ func New(options Options) (*Server, error) {
 	if options.Snippets != nil {
 		registerSnippetRoutes(e, SnippetHandlers{Service: options.Snippets, Actions: actions, BaseContext: baseCtx})
 	}
-	vault := newVaultOperations(options.Passwords)
-	if options.Passwords != nil {
+	if options.Vault != nil {
 		// Eligibility and authentication-destination binding come from the
 		// configuration graph. A missing configuration service leaves password
-		// writes fail-closed in PasswordHandlers.
+		// writes fail-closed in VaultHandlers.
 		var eligibility func(string) (application.PasswordEligibility, error)
 		var passwordBinding func(string) (string, error)
 		if options.Config != nil {
@@ -398,9 +411,8 @@ func New(options Options) (*Server, error) {
 		if options.Config != nil {
 			keyHosts = options.Config.KeyHosts
 		}
-		registerPasswordRoutes(e, PasswordHandlers{
-			Service:     options.Passwords,
-			vault:       vault,
+		registerVaultRoutes(e, VaultHandlers{
+			Service:     options.Vault,
 			Actions:     actions,
 			KeyHosts:    keyHosts,
 			Eligibility: eligibility,
@@ -409,10 +421,10 @@ func New(options Options) (*Server, error) {
 	}
 	registerUpdateRoutes(e, &UpdateHandlers{Current: options.Version, Checker: options.Updates})
 
-	registerConnectRoutes(e, newConnectHandlers(options, vault, host))
+	registerCLIRoutes(e, newCLIHandlers(options, host))
 	if options.Sync != nil {
 		registerSyncRoutes(e, SyncHandlers{
-			Service: options.Sync, Secrets: options.Passwords, Auto: options.AutoSync,
+			Service: options.Sync, Vault: options.Vault, Auto: options.AutoSync,
 			Actions: actions,
 		})
 	}
@@ -423,7 +435,7 @@ func New(options Options) (*Server, error) {
 		registerVPNRoutes(e, VPNHandlers{
 			Config:   options.Config,
 			Profiles: options.VPNProfiles,
-			Sessions: options.VPN,
+			VPN:      options.VPN,
 			Actions:  actions,
 		})
 	}
@@ -437,7 +449,8 @@ func New(options Options) (*Server, error) {
 	server.url = "http://" + host
 	server.http = &http.Server{
 		Handler:           e,
-		ReadHeaderTimeout: 5 * time.Second,
+		ReadHeaderTimeout: requestHeaderTimeout,
+		IdleTimeout:       idleConnectionTimeout,
 		// 配ったリクエスト用 context は BeginStopping が一斉に取り消す。
 		// これが無いと、停止の合図はハンドラの内側にも WebSocket にも届かない。
 		BaseContext: func(net.Listener) context.Context { return baseCtx },
@@ -465,8 +478,8 @@ func newActionRegistry(options Options) actionRegistry {
 	if options.Sync != nil {
 		addSyncActions(registry, options.Sync)
 	}
-	if options.Passwords != nil {
-		addCredentialActions(registry, options.Passwords)
+	if options.Vault != nil {
+		addCredentialActions(registry, options.Vault)
 	}
 	if options.VPN != nil && options.VPNProfiles != nil {
 		addVPNActions(registry, options.VPNProfiles)
@@ -516,13 +529,12 @@ func newTransferManager(options Options) (*sshcSFTP.TransferManager, error) {
 	return transfers, nil
 }
 
-// newConnectHandlers wires what `sshc ssh <alias>` asks the engine for
-// when it opens one connection.
-func newConnectHandlers(options Options, vault *vaultOperations, host string) ConnectHandlers {
-	return ConnectHandlers{
+// newCLIHandlers wires the /cli/ routes that sshc commands call with the
+// handoff secret.
+func newCLIHandlers(options Options, host string) CLIHandlers {
+	return CLIHandlers{
 		Secret:          options.CLISecret,
-		Passwords:       options.Passwords,
-		vault:           vault,
+		Vault:           options.Vault,
 		Owner:           options.Owner,
 		Version:         options.Version,
 		ProtocolVersion: options.ProtocolVersion,
@@ -543,11 +555,11 @@ func newConnectHandlers(options Options, vault *vaultOperations, host string) Co
 		},
 		Bootstrap: options.Sessions,
 		BaseURL:   "http://" + host,
-		Sessions: func() int {
+		LiveTerminalCount: func() int {
 			if options.Terminals == nil {
 				return 0
 			}
-			return liveSessions(options.Terminals.Sessions())
+			return countLiveTerminals(options.Terminals.Sessions())
 		},
 	}
 }
@@ -565,19 +577,9 @@ func newTerminalHandlers(options Options, actions ActionHandlers, host string) T
 		Environment:         options.TerminalEnvironment,
 		StartDirectory:      options.TerminalStartDirectory,
 		Connected:           options.ConnectionOpened,
-		Startup: func(alias string) (string, bool) {
-			if options.Snippets == nil {
-				return "", false
-			}
-			prepared, err := options.Snippets.PrepareStartupCommand(alias)
-			if err != nil {
-				return "", false
-			}
-			return prepared.Command, true
+		Startup: func(alias string) StartupSnippet {
+			return prepareStartupSnippet(options.Snippets, options.Logger, alias)
 		},
-		// askpass はここに無い。この経路はもう外部の ssh を起動しない。
-		// パスフレーズは vault から直接読むか、端末で尋ねる。ヘルパーが
-		// 残っているのは、CLI と診断がまだ OpenSSH を起動するからである。
 		ExpectedOrigin: "http://" + host,
 	}
 }

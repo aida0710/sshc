@@ -25,16 +25,16 @@ func (h SyncHandlers) sealingKey(c *echo.Context) (string, bool, error) {
 	case errors.Is(err, errSyncKeyMissing):
 		return "", false, problem(c, http.StatusConflict, "sync_key_missing")
 	case err != nil:
-		return "", false, problem(c, http.StatusInternalServerError, "vault_unreadable")
+		return "", false, unexpectedProblem(c, "vault_unreadable", err)
 	}
 	return key, true, nil
 }
 
 func (h SyncHandlers) currentSyncKey() (string, error) {
-	if h.Secrets == nil {
+	if h.Vault == nil {
 		return "", errSyncKeyMissing
 	}
-	settings, err := h.Secrets.SyncSettings()
+	settings, err := h.Vault.SyncSettings()
 	if err != nil {
 		return "", err
 	}
@@ -72,12 +72,12 @@ func (h SyncHandlers) SetKey(c *echo.Context) error {
 	if err := decodeJSON(c, &request); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
-	if h.Secrets == nil {
+	if h.Vault == nil {
 		return problem(c, http.StatusConflict, "vault_locked")
 	}
 	key := ""
 	if request.Key != nil {
-		if len(*request.Key) == 0 || len(*request.Key) > 1024 {
+		if len(*request.Key) == 0 || len(*request.Key) > remotesync.MaxKeyLength {
 			return problem(c, http.StatusBadRequest, "invalid_request")
 		}
 		key = strings.TrimSpace(*request.Key)
@@ -85,7 +85,7 @@ func (h SyncHandlers) SetKey(c *echo.Context) error {
 	if key == "" {
 		generated, err := remotesync.NewKey()
 		if err != nil {
-			return problem(c, http.StatusInternalServerError, "key_generation_failed")
+			return unexpectedProblem(c, "key_generation_failed", err)
 		}
 		key = generated
 	}
@@ -94,16 +94,16 @@ func (h SyncHandlers) SetKey(c *echo.Context) error {
 		if errors.Is(err, remotesync.ErrWeakPassphrase) {
 			return problem(c, http.StatusBadRequest, "passphrase_too_short")
 		}
-		return problem(c, http.StatusInternalServerError, "vault_unreadable")
+		return unexpectedProblem(c, "vault_unreadable", err)
 	}
 	confirmHistoryLoss := request.ConfirmHistoryLoss != nil && *request.ConfirmHistoryLoss
 	if err := h.Service.ReplaceKeyUsing(c.Request().Context(), key, confirmHistoryLoss, func() (string, func() error, error) {
-		settings, err := h.Secrets.SyncSettings()
+		settings, err := h.Vault.SyncSettings()
 		if err != nil {
 			return "", nil, err
 		}
 		commit := func() error {
-			if err := h.Secrets.SetSyncKeyIfSettingsMatch(settings, key); errors.Is(err, secret.ErrSyncSettingsChanged) {
+			if err := h.Vault.SetSyncKeyIfSettingsMatch(settings, key); errors.Is(err, secret.ErrSyncSettingsChanged) {
 				return remotesync.ErrRemoteMoved
 			} else {
 				return err
@@ -120,16 +120,16 @@ func (h SyncHandlers) SetKey(c *echo.Context) error {
 			errors.Is(err, remotesync.ErrHistoryKeyLossConfirmation) {
 			return syncProblem(c, err)
 		}
-		return problem(c, http.StatusInternalServerError, "vault_failed")
+		return unexpectedProblem(c, "vault_failed", err)
 	}
 	return c.JSON(http.StatusOK, api.SyncKeyResponse{Key: key})
 }
 
 // keyConfigured は、vault から値を公開せず、同期鍵の設定有無だけを返す。
 func (h SyncHandlers) keyConfigured() bool {
-	if h.Secrets == nil {
+	if h.Vault == nil {
 		return false
 	}
-	settings, err := h.Secrets.SyncSettings()
+	settings, err := h.Vault.SyncSettings()
 	return err == nil && settings.Key != ""
 }

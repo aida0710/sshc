@@ -60,7 +60,7 @@ func remoteKeyPlanProblem(c *echo.Context, err error) error {
 	if errors.Is(err, remotekey.ErrInvalidPublicKey) || errors.Is(err, validate.ErrUnsafeAlias) {
 		return remoteKeyProblem(c, err)
 	}
-	return problem(c, http.StatusInternalServerError, "config_unreadable")
+	return unexpectedProblem(c, "config_unreadable", err)
 }
 
 func registerRemoteKeyRoutes(engine *echo.Echo, handlers RemoteKeyHandlers) {
@@ -79,7 +79,7 @@ func remoteKeyProblem(c *echo.Context, err error) error {
 	case errors.Is(err, validate.ErrUnsafeAlias):
 		return problem(c, http.StatusBadRequest, "unsafe_alias")
 	}
-	return problem(c, http.StatusInternalServerError, "registration_failed")
+	return unexpectedProblem(c, "registration_failed", err)
 }
 
 // Plan はリモートホストに接続せずに変更内容を説明する。
@@ -95,10 +95,10 @@ func (h RemoteKeyHandlers) Plan(c *echo.Context) error {
 		return remoteKeyPlanProblem(c, err)
 	}
 	plan := prepared.plan
-	issued, err := h.Actions.issueEvidence(c, session.ActionRemoteKeyRegister, plan.Alias,
+	issued, allowed, response := h.Actions.issueEvidence(c, session.ActionRemoteKeyRegister, plan.Alias,
 		plan.Evidence(prepared.report.Evidence(), prepared.config))
-	if err != nil {
-		return err
+	if !allowed {
+		return response
 	}
 	return c.JSON(http.StatusOK, api.RemoteKeyPlan{
 		Alias:                plan.Alias,

@@ -30,6 +30,7 @@ import (
 	"unicode"
 
 	"sshc/internal/storage"
+	"sshc/internal/strictjson"
 )
 
 // ManifestName は、すべてのスナップショットの最初のエントリ。
@@ -208,7 +209,7 @@ func decodeManifest(document []byte) (Manifest, error) {
 	switch version.SchemaVersion {
 	case 5:
 		var legacy manifestV5
-		if err := decodeStrictJSON(document, &legacy); err != nil {
+		if err := strictjson.Decode(document, &legacy); err != nil {
 			return Manifest{}, ErrNotASnapshot
 		}
 		manifest = Manifest{
@@ -218,25 +219,13 @@ func decodeManifest(document []byte) (Manifest, error) {
 			Message: legacy.Message, Files: legacy.Files,
 		}
 	case SchemaVersion:
-		if err := decodeStrictJSON(document, &manifest); err != nil {
+		if err := strictjson.Decode(document, &manifest); err != nil {
 			return Manifest{}, ErrNotASnapshot
 		}
 	default:
 		return Manifest{}, ErrUnsupportedVersion
 	}
 	return migrateSnapshotManifest(manifest)
-}
-
-func decodeStrictJSON(document []byte, target any) error {
-	decoder := json.NewDecoder(bytes.NewReader(document))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(target); err != nil {
-		return err
-	}
-	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		return ErrNotASnapshot
-	}
-	return nil
 }
 
 // FinalizeManifest prepares a new manifest for writing and records its parent.

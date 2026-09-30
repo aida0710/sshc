@@ -2,8 +2,9 @@ package vpn
 
 import (
 	"encoding/json"
-	"strings"
 	"time"
+
+	"sshc/internal/redact"
 )
 
 // agentDocument は、コンテナのagentへ標準入力で渡す設定である。
@@ -57,21 +58,14 @@ func newAgentDocument(profile Profile, secrets Secrets, now time.Time) (string, 
 // redactedMark は、伏せた秘密の代わりに出す印である。
 const redactedMark = "[REDACTED]"
 
-// redact は、表示する文字列から秘密を伏せる。docker logs をそのまま見せない。
+// redactLogs は、表示する文字列から秘密を伏せる。docker logs をそのまま見せない。
 //
 // どの backend の秘密が混じっているかは分からないので、持っている秘密をすべて
 // 伏せる。
-func redact(text string, secrets Secrets) string {
-	var replacements []string
+func redactLogs(text string, secrets Secrets) string {
+	var values []string
 	for _, chosen := range backends {
-		for _, value := range chosen.secretValues(secrets) {
-			if value != "" {
-				replacements = append(replacements, value, redactedMark)
-			}
-		}
+		values = append(values, chosen.secretValues(secrets)...)
 	}
-	if len(replacements) == 0 {
-		return text
-	}
-	return strings.NewReplacer(replacements...).Replace(text)
+	return redact.Values(text, values, redactedMark)
 }

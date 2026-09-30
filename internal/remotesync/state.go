@@ -1,13 +1,13 @@
 package remotesync
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"io/fs"
 	"path/filepath"
 
 	"sshc/internal/storage"
+	"sshc/internal/strictjson"
 )
 
 // StatePath は、このマシンが最後に何を同期したかを記録する場所。ワークスペース
@@ -57,9 +57,7 @@ func (s *Service) readState() (state, error) {
 		return state{}, err
 	}
 	var parsed state
-	decoder := json.NewDecoder(bytes.NewReader(body))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&parsed); err != nil || parsed.SchemaVersion != stateSchemaVersion ||
+	if err := strictjson.Decode(body, &parsed); err != nil || parsed.SchemaVersion != stateSchemaVersion ||
 		parsed.ETag == "" || parsed.Key == "" || parsed.Base == nil || parsed.LastOperation == nil {
 		// 壊れた state ファイルは回復可能である。次の pull はこのマシンを、一度も
 		// 同期していないマシンとして扱う。それは保守的な扱いだ、何も削除せず、

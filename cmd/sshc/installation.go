@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -13,7 +12,8 @@ import (
 	"runtime"
 	"strings"
 
-	"sshc/internal/selfupdate"
+	"sshc/internal/releasecheck"
+	"sshc/internal/strictjson"
 )
 
 // sshc を入れる方法（Homebrew と install.sh）が、どこから何を入れるか。
@@ -120,19 +120,20 @@ func shellReceiptMatches(executable string) (bool, error) {
 	if !info.Mode().IsRegular() || info.Size() > 4096 {
 		return false, fmt.Errorf("%s is not a valid install receipt", path)
 	}
-	var receipt installReceipt
-	decoder := json.NewDecoder(io.LimitReader(file, 4097))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&receipt); err != nil {
+	contents, err := io.ReadAll(io.LimitReader(file, 4097))
+	if err != nil {
 		return false, fmt.Errorf("read %s: %w", path, err)
 	}
-	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+	var receipt installReceipt
+	if err := strictjson.Decode(contents, &receipt); errors.Is(err, strictjson.ErrTrailingData) {
 		return false, fmt.Errorf("%s contains trailing data", path)
+	} else if err != nil {
+		return false, fmt.Errorf("read %s: %w", path, err)
 	}
 	if receipt.SchemaVersion != 1 || receipt.Manager != "install.sh" || receipt.Repository != installRepository {
 		return false, fmt.Errorf("%s does not describe an sshc install.sh installation", path)
 	}
-	if _, ok := selfupdate.StableTag(receipt.Version); !ok || len(receipt.SHA256) != sha256.Size*2 {
+	if _, ok := releasecheck.StableTag(receipt.Version); !ok || len(receipt.SHA256) != sha256.Size*2 {
 		return false, fmt.Errorf("%s contains invalid release metadata", path)
 	}
 	if _, err := hex.DecodeString(receipt.SHA256); err != nil {

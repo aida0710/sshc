@@ -10,7 +10,6 @@
 package browserauth
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
@@ -25,6 +24,8 @@ import (
 
 	"sshc/internal/randomid"
 	"sshc/internal/storage"
+	"sshc/internal/strictjson"
+	"sshc/internal/validate"
 )
 
 const (
@@ -70,16 +71,34 @@ type rotation struct {
 
 // Store は、登録情報の検証と更新をひとつのengine内で直列化する。
 type Store struct {
-	workspace *storage.Workspace
-	random    io.Reader
-	now       func() time.Time
-	mutex     sync.Mutex
-	rotations map[string]rotation
+	workspace   *storage.Workspace
+	random      io.Reader
+	now         func() time.Time
+	mutex       sync.Mutex
+	rotations   map[string]rotation
+	identifiers registrationIdentifiers
 }
 
 func NewStore(workspace *storage.Workspace, random io.Reader) *Store {
-	return &Store{workspace: workspace, random: random, now: time.Now, rotations: map[string]rotation{}}
+	return &Store{
+		workspace: workspace, random: random, now: time.Now,
+		rotations: map[string]rotation{}, identifiers: registrationIdentifiers{byHash: map[string]string{}},
+	}
 }
+
+// Recovery は Recover の結果である。
+type Recovery struct {
+	// Token は差し替え後の登録 token。受け付けたときだけ入る。
+	Token string
+	// Registration は、受け付けた登録のこのプロセスの中だけの識別子。
+	Registration string
+	// Stolen は、複製を検知して消した登録の識別子。その登録から入った
+	// セッションは、呼び出し側が失効させる。
+	Stolen string
+}
+
+// Accepted は、提示された token で入り直せるかを返す。
+func (r Recovery) Accepted() bool { return r.Token != "" }
 
 // WithClock は、期限と猶予の判定に使う時計を差し替える。httpserver と
 // browserauth のテストが時計を差し替えるために使い、製品は NewStore の
@@ -118,7 +137,7 @@ func (s *Store) Port() (int, error) {
 // origin, so every capability issued for the previous port is revoked in the
 // same atomic state update. Reusing the same port preserves restart recovery.
 func (s *Store) SetPort(port int) error {
-	if !validPort(port) {
+	if validate.EnginePort(port) != nil {
 		return ErrInvalidDocument
 	}
 	s.mutex.Lock()
@@ -141,15 +160,15 @@ func (s *Store) SetPort(port int) error {
 //
 // 差し替え前の token は猶予のあいだだけ同じ新 token を返す。猶予の後に提示された
 // 退役 token は盗まれたものとみなし、その登録を消して拒否する。
-func (s *Store) Recover(presented string) (string, bool, error) {
+func (s *Store) Recover(presented string) (Recovery, error) {
 	if !randomid.IsToken(presented) {
-		return "", false, nil
+		return Recovery{}, nil
 	}
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	stored, err := s.load()
 	if err != nil {
-		return "", false, err
+		return Recovery{}, err
 	}
 	now := s.now()
 	presentedHash := hashToken(presented)
@@ -158,45 +177,48 @@ func (s *Store) Recover(presented string) (string, bool, error) {
 	if index := indexOf(live, presentedHash, currentHash); index >= 0 {
 		token, err := randomid.Token(s.random)
 		if err != nil {
-			return "", false, err
+			return Recovery{}, err
 		}
 		live[index].Previous = live[index].Hash
 		live[index].Hash = hashToken(token)
 		live[index].LastUsedAt = now
 		stored.Registrations = live
 		if err := s.write(stored); err != nil {
-			return "", false, err
+			return Recovery{}, err
 		}
 		s.rotateCachedTokens(presentedHash, token, now.Add(rotationGrace))
-		return token, true, nil
+		registration := s.identifiers.rotate(presentedHash, live[index].Hash)
+		return Recovery{Token: token, Registration: registration}, nil
 	}
 	if recent, ok := s.rotations[presentedHash]; ok && now.Before(recent.until) {
-		return recent.token, true, nil
+		return Recovery{Token: recent.token, Registration: s.identifiers.of(hashToken(recent.token))}, nil
 	}
 	if index := indexOf(live, presentedHash, previousHash); index >= 0 {
 		// 猶予を過ぎた退役 token の提示。正規のブラウザは既に新しい token で
 		// 動いているので、これは複製された token である。登録ごと失効する。
+		stolen := s.identifiers.of(live[index].Hash)
 		stored.Registrations = append(live[:index:index], live[index+1:]...)
 		if err := s.write(stored); err != nil {
-			return "", false, err
+			return Recovery{}, err
 		}
 		s.pruneRotations(stored.Registrations)
+		return Recovery{Stolen: stolen}, nil
 	}
-	return "", false, nil
+	return Recovery{}, nil
 }
 
-// Forget は、提示された token の登録を消す。サインアウトしたブラウザは engine の
-// 再起動後にこの token で入り直せなくなる。差し替え猶予中の旧 token も同じ登録を
-// 指すので受け付ける。知らない token は何もせず false を返す。
-func (s *Store) Forget(presented string) (bool, error) {
+// Forget は、提示された token の登録を消し、その識別子を返す。サインアウトした
+// ブラウザは engine の再起動後にこの token で入り直せなくなる。差し替え猶予中の
+// 旧 token も同じ登録を指すので受け付ける。知らない token は何もせず空を返す。
+func (s *Store) Forget(presented string) (string, error) {
 	if !randomid.IsToken(presented) {
-		return false, nil
+		return "", nil
 	}
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	stored, err := s.load()
 	if err != nil {
-		return false, err
+		return "", err
 	}
 	presentedHash := hashToken(presented)
 	live := s.live(stored.Registrations)
@@ -211,18 +233,20 @@ func (s *Store) Forget(presented string) (bool, error) {
 		}
 	}
 	if index < 0 {
-		return false, nil
+		return "", nil
 	}
+	forgotten := s.identifiers.of(live[index].Hash)
 	stored.Registrations = append(live[:index:index], live[index+1:]...)
 	if err := s.write(stored); err != nil {
-		return false, err
+		return "", err
 	}
 	s.pruneRotations(stored.Registrations)
-	return true, nil
+	return forgotten, nil
 }
 
-// Register returns an existing valid registration unchanged. A one-time bootstrap may
-// call it with an empty or stale value to enrol the current browser and receive a new token.
+// Register keeps the token of an existing valid registration and records the bootstrap
+// as its use. A one-time bootstrap may call it with an empty or stale value to enrol the
+// current browser and receive a new token.
 func (s *Store) Register(presented string) (string, bool, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
@@ -232,16 +256,25 @@ func (s *Store) Register(presented string) (string, bool, error) {
 	}
 	live := s.live(stored.Registrations)
 	s.pruneRotations(live)
-	if randomid.IsToken(presented) && indexOf(live, hashToken(presented), currentHash) >= 0 {
-		return "", false, nil
+	now := s.now()
+	if randomid.IsToken(presented) {
+		if index := indexOf(live, hashToken(presented), currentHash); index >= 0 {
+			// `sshc open` だけで入るブラウザも使われている。記録しないと、上限に
+			// 達したときや30日後に、使っていないブラウザとして消される。
+			live[index].LastUsedAt = now
+			stored.Registrations = live
+			return "", false, s.write(stored)
+		}
 	}
 	token, err := randomid.Token(s.random)
 	if err != nil {
 		return "", false, err
 	}
-	now := s.now()
-	if len(live) == MaxRegistrations {
-		live = append(live[:0], live[1:]...)
+	if len(live) >= MaxRegistrations {
+		// 登録順ではなく使った順で選ぶ。毎日使うブラウザを、一度だけ開いた
+		// プライベートウィンドウや別のブラウザの登録より先に押し出さない。
+		longestUnused := leastRecentlyUsed(live)
+		live = append(live[:longestUnused:longestUnused], live[longestUnused+1:]...)
 	}
 	stored.Registrations = append(live, registration{Hash: hashToken(token), IssuedAt: now, LastUsedAt: now})
 	if err := s.write(stored); err != nil {
@@ -263,6 +296,20 @@ func (s *Store) live(registrations []registration) []registration {
 	return kept
 }
 
+// leastRecentlyUsed は、最後に使ってから最も時間の経った登録の位置を返す。
+// 最後に使った時刻が同じなら、先に発行された方を選ぶ。
+func leastRecentlyUsed(registrations []registration) int {
+	oldest := 0
+	for index, entry := range registrations {
+		candidate := registrations[oldest]
+		if entry.LastUsedAt.Before(candidate.LastUsedAt) ||
+			entry.LastUsedAt.Equal(candidate.LastUsedAt) && entry.IssuedAt.Before(candidate.IssuedAt) {
+			oldest = index
+		}
+	}
+	return oldest
+}
+
 func currentHash(entry registration) string  { return entry.Hash }
 func previousHash(entry registration) string { return entry.Previous }
 
@@ -276,19 +323,6 @@ func indexOf(registrations []registration, hash string, field func(registration)
 		}
 	}
 	return found
-}
-
-const (
-	// lowestPort は、ブラウザの origin に使える番号の下端。engine の port の設定
-	// （application.ValidateMetadata）と同じく、特権ポート（1024 未満）は使わない。
-	lowestPort = 1024
-	// highestPort は、TCP のポート番号の上端。
-	highestPort = 65535
-)
-
-// validPort は、port がブラウザの origin として保存できる番号かを返す。
-func validPort(port int) bool {
-	return port >= lowestPort && port <= highestPort
 }
 
 func hashToken(token string) string {
@@ -312,15 +346,13 @@ func (s *Store) load() (document, error) {
 		// 形式が変わった端末では登録なしから始める。
 		return document{SchemaVersion: SchemaVersion, Registrations: []registration{}}, nil
 	}
-	decoder := json.NewDecoder(bytes.NewReader(contents))
-	decoder.DisallowUnknownFields()
 	var stored document
-	if err := decoder.Decode(&stored); err != nil {
+	if err := strictjson.Decode(contents, &stored); err != nil {
 		return document{}, fmt.Errorf("%w: %v", ErrInvalidDocument, err)
 	}
-	if decoder.Decode(&struct{}{}) != io.EOF || stored.SchemaVersion != SchemaVersion ||
+	if stored.SchemaVersion != SchemaVersion ||
 		len(stored.Registrations) > MaxRegistrations ||
-		(stored.Port != 0 && !validPort(stored.Port)) {
+		(stored.Port != 0 && validate.EnginePort(stored.Port) != nil) {
 		return document{}, ErrInvalidDocument
 	}
 	seen := make(map[string]bool, len(stored.Registrations))

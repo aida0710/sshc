@@ -2,7 +2,6 @@ package keys
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -28,9 +27,10 @@ const defaultAgentTimeout = 10 * time.Second
 // パスフレーズは、このプロセスの中で鍵を復号してから登録する。子プロセスの
 // 標準入力を通らないため、子プロセスへ秘密を渡さずに済む。
 type Agent struct {
-	// Socket は SSH_AUTH_SOCK を読む。テストが差し替えるためにある。
+	// Socket は agent の宛先を返す。Unix は SSH_AUTH_SOCK の値、Windows は固定の
+	// named pipe である。空なら agent は設定されていない。
 	Socket func() string
-	// Dial はソケットを開く。nil なら unix ソケットとして開く。
+	// Dial はその宛先を開く。nil なら開かず ErrAgentUnavailable を返す。
 	Dial    func(ctx context.Context, address string) (net.Conn, error)
 	Timeout time.Duration
 }
@@ -40,7 +40,9 @@ type Agent struct {
 // どこへ繋ぐかは OS ごとに違う。Unix は SSH_AUTH_SOCK の指す unix ソケット
 // で、Windows は固定の named pipe である。その差は agent_unix.go と
 // agent_windows.go が持ち、ここから先のプロトコルは同じひとつである。
-func NewAgent(lookup func(string) (string, bool)) platform.KeyAgent {
+// Keys 画面の登録と、接続の公開鍵認証・agent 転送（sshclient.AgentConnector）
+// は、どちらもここで組んだ値を使う。宛先の決め方を二か所に持たない。
+func NewAgent(lookup func(string) (string, bool)) Agent {
 	return newPlatformAgent(lookup)
 }
 
@@ -138,35 +140,61 @@ func (a Agent) Remove(ctx context.Context, publicKeyPath string) error {
 	return nil
 }
 
-func (a Agent) open(ctx context.Context) (net.Conn, error) {
-	socket := ""
-	if a.Socket != nil {
-		socket = a.Socket()
+// Address は、いまの宛先を返す。空なら agent は設定されていない。
+func (a Agent) Address() string {
+	if a.Socket == nil {
+		return ""
 	}
+	return a.Socket()
+}
+
+// Connect は、接続の公開鍵認証と agent 転送のために agent を開く。
+//
+// 開くまでは Timeout で区切るが、開いた後の読み書きには期限を付けない。
+// 署名の要求は、認証の途中や転送のあいだのいつ来るか分からないからである。
+func (a Agent) Connect(ctx context.Context) (net.Conn, error) {
+	ctx, cancel := context.WithTimeout(ctx, a.timeout())
+	defer cancel()
+	return a.dial(ctx)
+}
+
+// open は、Keys 画面の一往復のために agent を開き、読み書きにも同じ期限を付ける。
+func (a Agent) open(ctx context.Context) (net.Conn, error) {
+	ctx, cancel := context.WithTimeout(ctx, a.timeout())
+	defer cancel()
+	conn, err := a.dial(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if deadline, ok := ctx.Deadline(); ok {
+		_ = conn.SetDeadline(deadline)
+	}
+	return conn, nil
+}
+
+func (a Agent) timeout() time.Duration {
+	if a.Timeout <= 0 {
+		return defaultAgentTimeout
+	}
+	return a.Timeout
+}
+
+func (a Agent) dial(ctx context.Context) (net.Conn, error) {
+	socket := a.Address()
 	if socket == "" {
 		return nil, platform.ErrAgentUnavailable
 	}
-
-	timeout := a.Timeout
-	if timeout <= 0 {
-		timeout = defaultAgentTimeout
-	}
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
-	dial := a.Dial
-	if dial == nil {
+	if a.Dial == nil {
 		// 既定を持たない。ここで unix ソケットへ落とすと、Windows で
 		// Dial を配線し忘れた日に「unix ソケットが開けない」という、その OS に
 		// 存在しない理由が返る。宛先を知っているのは組み立てた側だけである。
 		return nil, platform.ErrAgentUnavailable
 	}
-	conn, err := dial(ctx, socket)
+	conn, err := a.Dial(ctx, socket)
 	if err != nil {
-		return nil, errors.Join(platform.ErrAgentUnavailable, err)
-	}
-	if deadline, ok := ctx.Deadline(); ok {
-		_ = conn.SetDeadline(deadline)
+		// 改行を含めず 1 行で包む。この文は agent 転送の失敗として、ターミナルへも
+		// そのまま出る。
+		return nil, fmt.Errorf("%w: %w", platform.ErrAgentUnavailable, err)
 	}
 	return conn, nil
 }

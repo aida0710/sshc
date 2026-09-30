@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"sshc/internal/config"
+	"sshc/internal/platform/nativepath"
 	"sshc/internal/storage"
 )
 
@@ -102,6 +103,16 @@ func overlayFor(request storage.Request) (map[string][]byte, map[string]bool) {
 	return pending, gone
 }
 
+// configurationEdit は、このサービスが計画した設定の編集の検査の文脈で、
+// storage.Request.Validation に載せて validate へ渡す。
+type configurationEdit struct {
+	// base は、編集したファイルの編集前の内容。すでに parse できない行を、
+	// この編集が持ち込んだものと取り違えないために使う。
+	base map[string][]byte
+	// baseline は、編集前のグラフにすでにあった診断。
+	baseline map[string]bool
+}
+
 func diagnosticKey(diagnostic config.Diagnostic) string {
 	return diagnostic.Code + "\x00" + diagnostic.Path + "\x00" + strconv.Itoa(diagnostic.Line)
 }
@@ -161,6 +172,7 @@ func (s *Service) validate(request storage.Request) error {
 		return nil
 	}
 	pending, gone := overlayFor(request)
+	edit, planned := request.Validation.(configurationEdit)
 
 	metadataPath := filepath.Clean(s.metadata.Path())
 	stateDir := filepath.Clean(s.workspace.StateDir())
@@ -173,7 +185,7 @@ func (s *Service) validate(request storage.Request) error {
 				}
 				continue
 			}
-			if isInside(stateDir, cleaned) {
+			if nativepath.Contains(stateDir, cleaned) {
 				continue
 			}
 			parsed := config.Parse(change.Contents)
@@ -181,7 +193,7 @@ func (s *Service) validate(request storage.Request) error {
 				return &SyntaxError{Path: s.displayPath(cleaned), Line: 1, Column: 1, Detail: "parsed file does not render back to the same bytes"}
 			}
 			var base *config.File
-			if contents, ok := s.pendingBase[cleaned]; ok {
+			if contents, ok := edit.base[cleaned]; ok {
 				base = config.Parse(contents)
 			}
 			if line, column, found := newUnstructuredLine(base, parsed); found {
@@ -194,6 +206,19 @@ func (s *Service) validate(request storage.Request) error {
 		return nil
 	}
 
+	baseline := edit.baseline
+	if !planned {
+		// このサービスが計画していない要求（known_hosts の追加など）は、ディスク上の
+		// グラフにすでにある診断を基準にする。基準が無いと、~/.ssh/config が無い
+		// マシンでは既存の IncludeUnreadable を新しく入ったものと扱い、設定と関係の
+		// ない書き込みまで断ってしまう。validate は storage の書き込みロックの中で
+		// 走るので、ここで読むディスクの状態は要求の前提と同じである。
+		current, err := s.resolve()
+		if err != nil {
+			return err
+		}
+		baseline = diagnosticBaseline(current)
+	}
 	resolver := s.resolver
 	resolver.Loader = overlayLoader{base: s.resolver.Loader, pending: pending, gone: gone}
 	graph, err := resolver.Resolve(s.entryPath)
@@ -202,7 +227,7 @@ func (s *Service) validate(request storage.Request) error {
 	}
 	var introduced []DiagnosticView
 	for _, diagnostic := range graph.Diagnostics {
-		if diagnostic.Severity != config.SeverityError || s.pendingBaseline[diagnosticKey(diagnostic)] {
+		if diagnostic.Severity != config.SeverityError || baseline[diagnosticKey(diagnostic)] {
 			continue
 		}
 		introduced = append(introduced, NewDiagnosticView(s.workspace.Root(), diagnostic))
@@ -218,7 +243,7 @@ func (s *Service) touchesConfiguration(request storage.Request) bool {
 	metadataPath := filepath.Clean(s.metadata.Path())
 	outside := func(path string) bool {
 		cleaned := filepath.Clean(path)
-		return cleaned != metadataPath && !isInside(stateDir, cleaned)
+		return cleaned != metadataPath && !nativepath.Contains(stateDir, cleaned)
 	}
 	for _, changes := range [][]storage.Change{request.Changes, request.FinalChanges} {
 		for _, change := range changes {
@@ -238,16 +263,4 @@ func (s *Service) touchesConfiguration(request storage.Request) bool {
 		}
 	}
 	return len(request.Directories) > 0 || len(request.RemoveDirectories) > 0
-}
-
-// isInside は、path が directory それ自体かその下にあるかを報告する。
-func isInside(directory, path string) bool {
-	if path == directory {
-		return true
-	}
-	relative, err := filepath.Rel(directory, path)
-	if err != nil {
-		return false
-	}
-	return relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))
 }

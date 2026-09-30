@@ -15,8 +15,12 @@ const vaultStateUnknownAdvice = "could not read the vault state; run sshc vault 
 
 // readEngineStatus は、home の handoff が指す engine を確かめてから状態を尋ねる。
 func readEngineStatus(ctx context.Context, home string) (statusAnswer, error) {
+	stateDir, err := app.StateDir(home)
+	if err != nil {
+		return statusAnswer{}, err
+	}
 	client := &http.Client{Timeout: connectTimeout}
-	_, answer, err := verifiedStatus(ctx, app.HandoffDir(home), client)
+	_, answer, err := verifiedStatus(ctx, stateDir, client)
 	return answer, err
 }
 

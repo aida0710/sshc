@@ -159,7 +159,7 @@ func TestShownLogsHideTheOpenVPNSecrets(t *testing.T) {
 	secrets.OpenVPN.Password = "fixture-password"
 	logs := "AUTH: fixture-password\nkey " + testOpenVPNKeyLine + "\n-----BEGIN PRIVATE KEY-----\nremote vpn.example.jp 1194"
 
-	shown := redact(logs, secrets)
+	shown := redactLogs(logs, secrets)
 
 	for _, hidden := range []string{"fixture-password", testOpenVPNKeyLine} {
 		if strings.Contains(shown, hidden) {

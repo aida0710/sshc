@@ -90,3 +90,32 @@ func TestRelativeSlashKeepsDotDotPrefixedNamesInsideTheRoot(t *testing.T) {
 		}
 	}
 }
+
+// Relative は root 自身を "." として含み、RelativeBelow は含まない。どちらも
+// ネイティブ区切りのまま返す。呼び出し側はこの 2 つの違いだけで「root を含むか」を
+// 選び、境界の判定を書き直さない。
+func TestRelativeAndRelativeBelowDifferOnlyInTheRootItself(t *testing.T) {
+	root := filepath.Join(string(filepath.Separator), "home", "aida", ".ssh")
+	for _, test := range []struct {
+		candidate      string
+		relative       string
+		inside         bool
+		below          string
+		strictlyInside bool
+	}{
+		{root, ".", true, "", false},
+		{filepath.Join(root, "conf.d", "work.conf"), filepath.Join("conf.d", "work.conf"), true, filepath.Join("conf.d", "work.conf"), true},
+		{filepath.Join(root, "..key"), "..key", true, "..key", true},
+		{filepath.Join(root, "..", "elsewhere"), "", false, "", false},
+		{root + "-other", "", false, "", false},
+	} {
+		relative, inside := Relative(root, test.candidate)
+		if relative != test.relative || inside != test.inside {
+			t.Errorf("Relative(%q) = (%q, %v), want (%q, %v)", test.candidate, relative, inside, test.relative, test.inside)
+		}
+		below, strictlyInside := RelativeBelow(root, test.candidate)
+		if below != test.below || strictlyInside != test.strictlyInside {
+			t.Errorf("RelativeBelow(%q) = (%q, %v), want (%q, %v)", test.candidate, below, strictlyInside, test.below, test.strictlyInside)
+		}
+	}
+}

@@ -27,7 +27,7 @@ func TestTheVaultClosesOnTheSameClockWhoeverStartedTheEngine(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if idle := services.passwords.IdleTimeout(); idle != secret.IdleTimeout {
+			if idle := services.vault.IdleTimeout(); idle != secret.IdleTimeout {
 				t.Errorf("%s の engine は %v で閉じるべきだが、idle=%v だった",
 					owner, secret.IdleTimeout, idle)
 			}
@@ -72,7 +72,7 @@ func TestTheEngineRestoresTheConfiguredVaultClock(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got := services.passwords.IdleTimeout(); got != test.want {
+			if got := services.vault.IdleTimeout(); got != test.want {
 				t.Fatalf("IdleTimeout = %v, want %v", got, test.want)
 			}
 		})
@@ -87,16 +87,16 @@ func TestEngineAutomaticallyOpensOnlyPasswordlessVaults(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := first.passwords.Initialise(password); err != nil {
+			if err := first.vault.Initialise(password); err != nil {
 				t.Fatal(err)
 			}
-			first.passwords.Lock()
+			first.vault.Lock()
 			restarted, err := newEngineServices(Dependencies{Home: home, Random: rand.Reader})
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer restarted.passwords.Lock()
-			if got := restarted.passwords.Unlocked(); got != (password == "") {
+			defer restarted.vault.Lock()
+			if got := restarted.vault.Unlocked(); got != (password == "") {
 				t.Fatalf("unlocked = %v", got)
 			}
 		})
@@ -113,10 +113,10 @@ func TestReadinessReportsOnlyAPasswordlessVaultAsUnlocked(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := first.passwords.Initialise(password); err != nil {
+			if err := first.vault.Initialise(password); err != nil {
 				t.Fatal(err)
 			}
-			first.passwords.Lock()
+			first.vault.Lock()
 
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()

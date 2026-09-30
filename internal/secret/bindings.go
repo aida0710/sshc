@@ -3,7 +3,6 @@ package secret
 import (
 	"crypto/subtle"
 	"errors"
-	"slices"
 
 	"sshc/internal/storage"
 )
@@ -140,55 +139,25 @@ func (s *Service) KeyPassphraseFor(relativePath string) (string, bool) {
 	return vault.SecretFor(KindKeyPassphrase, relativePath)
 }
 
-// RelocateKeyPassphrases は鍵のパス変更に名前付きパスフレーズの割り当てを
-// 追従させる。秘密の値には触れず、vault 内の subject 参照だけを一度に移す。
-func (s *Service) RelocateKeyPassphrases(relocations map[string]string) error {
-	s.mutationMu.Lock()
-	defer s.mutationMu.Unlock()
-	s.mu.Lock()
-	vault := s.use()
-	if vault == nil {
-		s.mu.Unlock()
-		return ErrLocked
-	}
-	clone := vault.clone()
-	published := false
-	defer func() {
-		if !published {
-			clone.Destroy()
-		}
-	}()
-	changed, err := clone.RelocateSubjects(KindKeyPassphrase, relocations)
-	baseline := slices.Clone(s.baseline)
-	s.mu.Unlock()
-	if err != nil || !changed {
-		return err
-	}
-	if len(baseline) == 0 {
-		return ErrNoVault
-	}
-	sealed, err := clone.Seal()
-	if err != nil {
-		return err
-	}
-	_, err = s.transactions.Commit(storage.Request{
-		Operation: "secret.key-passphrase-relocate",
-		Changes: []storage.Change{{
-			Path: s.path(), Contents: sealed,
-			Precondition: storage.Precondition{Exists: true, Digest: storage.Digest(baseline)},
-		}},
+// WithKeyPassphraseRelocation は、鍵のパス変更に名前付きパスフレーズの割り当てと
+// 専用パスフレーズを追従させる vault の変更を作り、呼び手の storage トランザクションに
+// 載せる。秘密の値には触れず、vault 内の subject 参照だけを移す。
+//
+// 鍵ファイルの移動と別の commit にすると、vault の書き込みだけが失敗したときに割り当てが
+// 旧パスに残り、あとから旧パスに置いた別の鍵にその割り当てが効く。そのため施錠中は
+// 何も書かずに ErrLocked で断る。vault がまだ無ければ移すものも無いので、vault を
+// 書かずに commit へ進む。
+func (s *Service) WithKeyPassphraseRelocation(
+	relocations map[string]string,
+	commit func(vaultChange *storage.Change) (storage.Result, error),
+) (storage.Result, error) {
+	return s.commitVaultTransaction(vaultTransaction{
+		apply: func(_, clone *Vault) (bool, error) {
+			return clone.RelocateSubjects(KindKeyPassphrase, relocations)
+		},
+		commitsWithoutVault: true,
+		commit:              commit,
 	})
-	if err != nil {
-		return err
-	}
-	s.mu.Lock()
-	s.vault.Destroy()
-	s.vault = clone
-	published = true
-	s.baseline = slices.Clone(sealed)
-	s.used = s.now()
-	s.mu.Unlock()
-	return nil
 }
 
 // WithPasswordMutation prepares a password-vault replacement and lets the

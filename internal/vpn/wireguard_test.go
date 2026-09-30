@@ -131,7 +131,7 @@ func TestAConfigRefusalNamesTheSecretFieldAndTheLine(t *testing.T) {
 func TestShownLogsHideTheWireGuardKeys(t *testing.T) {
 	logs := "key " + testPrivateKey + " psk " + testPresharedKey
 
-	shown := redact(logs, wireGuardConfigSecrets())
+	shown := redactLogs(logs, wireGuardConfigSecrets())
 
 	if strings.Contains(shown, testPrivateKey) || strings.Contains(shown, testPresharedKey) {
 		t.Fatalf("redact = %q", shown)

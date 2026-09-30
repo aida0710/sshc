@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { failureCode } from "../api/client";
 import { settingsApi, type SettingsApi, type TerminalBackground } from "../api/settings";
 import { useTranslate } from "../i18n/context";
+import type { MessageKey } from "../i18n/messages";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { control } from "../ui/form";
 import { Icon } from "../ui/icons";
@@ -23,6 +24,19 @@ type BackgroundPickerProps = {
 };
 
 const MiB = 1 << 20;
+
+// request_body_too_large は、1 枚の絶対上限を超えた本文を engine の入口が断ったときの code。
+// 利用者にとっては background_too_large と同じ「大きすぎる」である。
+const addFailureMessages: Partial<Record<string, MessageKey>> = {
+  background_too_large: "terminal.backgroundTooLarge",
+  request_body_too_large: "terminal.backgroundTooLarge",
+  backgrounds_full: "terminal.backgroundsFull",
+  not_an_image: "terminal.backgroundNotAnImage",
+};
+
+function addFailureMessage(code: string): MessageKey {
+  return addFailureMessages[code] ?? "terminal.backgroundFailed";
+}
 
 export function BackgroundPicker({ value, onChange, tint, onTintChange, unchosen, api = settingsApi }: BackgroundPickerProps) {
   const t = useTranslate();
@@ -62,8 +76,7 @@ export function BackgroundPicker({ value, onChange, tint, onTintChange, unchosen
       await reload();
       setDraft(added.name);
     } catch (error) {
-      const code = failureCode(error);
-      setProblem(code === "background_too_large" ? t("terminal.backgroundTooLarge") : code === "backgrounds_full" ? t("terminal.backgroundsFull") : code === "not_an_image" ? t("terminal.backgroundNotAnImage") : t("terminal.backgroundFailed"));
+      setProblem(t(addFailureMessage(failureCode(error))));
     } finally { setBusy(false); }
   }
 

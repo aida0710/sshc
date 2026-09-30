@@ -42,7 +42,10 @@ func TestFailedAliasRenameRestoresConfigSecretsAndStartup(t *testing.T) {
 			library := snippets.NewService(snippets.Options{
 				Repository: store, Now: time.Now, Random: rand.Reader,
 				Resolve: func(alias string) (snippets.Resolution, error) {
-					return snippets.Resolution{Target: snippets.Target{Alias: alias, HostName: "edge.example", Port: "22"}}, nil
+					return snippets.Resolution{
+						Target:  snippets.Target{Alias: alias, HostName: "edge.example", Port: "22"},
+						Binding: "destination-of-edge.example",
+					}, nil
 				},
 			})
 			snippet, err := library.Create(snippets.Draft{Name: "Startup", Command: "echo ready"})
@@ -62,7 +65,8 @@ func TestFailedAliasRenameRestoresConfigSecretsAndStartup(t *testing.T) {
 			}
 			injected := errors.New("injected alias commit failure")
 			fileSystem.path, fileSystem.err = filepath.Join(workspace.Root(), filepath.FromSlash(failedPath)), injected
-			_, err = service.SaveWithSecrets(secrets, EditRequest{
+			service.SetVault(secrets)
+			_, err = service.SaveWithSecrets(EditRequest{
 				Kind: EditRename, Path: "config", Base: before, Alias: "edge", NewAlias: "renamed",
 			})
 			if !errors.Is(err, injected) {
@@ -85,5 +89,27 @@ func TestFailedAliasRenameRestoresConfigSecretsAndStartup(t *testing.T) {
 				t.Fatalf("rollback left pending transactions: %v, %v", pending, err)
 			}
 		})
+	}
+}
+
+// 起動時コマンドの移し先を配線し忘れた構成で、Vault を開いたまま改名すると、起動時
+// コマンドが旧 alias に残る。黙って成功させず、設定も Vault も書かずに断る。
+func TestUnlockedAliasRenameWithoutAStartupRenamerIsRefusedWithoutWriting(t *testing.T) {
+	const before = "Host edge\n\tHostName edge.example\n\tPort 22\n"
+	harness := newConnectionUpdateHarness(t, before)
+	setPasswordForCurrentTarget(t, harness.service, harness.secrets, "edge", "original-password")
+
+	_, err := harness.service.SaveWithSecrets(EditRequest{
+		Kind: EditRename, Path: "config", Base: before, Alias: "edge", NewAlias: "renamed",
+	})
+	if !errors.Is(err, ErrStartupRenamerMissing) {
+		t.Fatalf("rename without a startup renamer = %v, want ErrStartupRenamerMissing", err)
+	}
+	contents, err := os.ReadFile(filepath.Join(harness.workspace.Root(), "config"))
+	if err != nil || string(contents) != before {
+		t.Fatalf("refused rename changed the config: %q, %v", contents, err)
+	}
+	if got := passwordForCurrentTarget(t, harness.service, harness.secrets, "edge"); got != "original-password" {
+		t.Fatal("refused rename moved the saved password")
 	}
 }

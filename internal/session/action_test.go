@@ -52,7 +52,7 @@ func addSession(t *testing.T, manager *Manager, sessionID string) {
 	manager.mu.Lock()
 	defer manager.mu.Unlock()
 	manager.sessions[sha256.Sum256([]byte(sessionID))] = Session{
-		csrfHashes: [][sha256.Size]byte{sha256.Sum256([]byte("csrf-" + sessionID))},
+		csrfTokens: newIssuedCSRFTokens("csrf-" + sessionID),
 		actions:    make(map[[sha256.Size]byte]actionRecord),
 	}
 }
@@ -133,11 +133,11 @@ func TestExpiredSessionCannotIssueOrConsumeActions(t *testing.T) {
 	}
 	now := time.Unix(1_800_000_000, 0).UTC()
 	manager.Now = func() time.Time { return now }
-	issuer, err := manager.IssueExpiring(time.Minute)
+	issuer, err := manager.IssueExpiring(Expiry{Lifetime: time.Minute})
 	if err != nil {
 		t.Fatal(err)
 	}
-	consumer, err := manager.IssueExpiring(time.Minute)
+	consumer, err := manager.IssueExpiring(Expiry{Lifetime: time.Minute})
 	if err != nil {
 		t.Fatal(err)
 	}

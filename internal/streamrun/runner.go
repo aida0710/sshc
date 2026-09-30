@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"sshc/internal/iowrite"
+	"sshc/internal/redact"
 )
 
 const (
@@ -553,46 +554,27 @@ func writeWithin(ctx context.Context, writer io.Writer, payload []byte) error {
 // Redact replaces exact secret byte sequences before a transcript leaves the
 // process. It intentionally operates on bytes so invalid UTF-8 cannot bypass it.
 func Redact(transcript []byte, secrets []Secret) []byte {
-	redacted := append([]byte(nil), transcript...)
-	for index := len(secrets) - 1; index >= 0; index-- {
-		secret := secrets[index]
-		if len(secret.Value) == 0 {
-			continue
-		}
-		start := min(max(secret.TranscriptStart, 0), len(redacted))
-		segment := redacted[start:]
-		segment = bytes.ReplaceAll(segment, secret.Value, []byte("[REDACTED]"))
-		// Password echoes are line-oriented. Before the first newline after
-		// sendEnv, mask a secret prefix only when it reaches the captured
-		// boundary. Searching arbitrary prefixes would corrupt ordinary output
-		// such as "shell ready" when the secret also begins with "s".
-		lineEnd := len(segment)
-		if offset := bytes.IndexAny(segment, "\r\n"); offset >= 0 {
-			lineEnd = offset
-		}
-		line := redactTruncatedSecretSuffix(segment[:lineEnd], secret.Value)
-		combined := make([]byte, 0, len(line)+len(segment)-lineEnd)
-		combined = append(combined, line...)
-		combined = append(combined, segment[lineEnd:]...)
-		redacted = append(redacted[:start], combined...)
+	shared := make([]redact.Secret, 0, len(secrets))
+	for _, secret := range secrets {
+		from := min(max(secret.TranscriptStart, 0), len(transcript))
+		shared = append(shared, redact.Secret{
+			Value: secret.Value,
+			From:  from,
+			// Password echoes are line-oriented. Before the first newline after
+			// sendEnv, mask a secret prefix only when it reaches the captured
+			// boundary.
+			CutAt: firstLineEnd(transcript, from),
+		})
 	}
-	return redacted
+	return redact.Bytes(transcript, shared, redactedMark)
 }
 
-func redactTruncatedSecretSuffix(line, secret []byte) []byte {
-	for length := min(len(secret)-1, len(line)); length > 0; length-- {
-		start := len(line) - length
-		if start > 0 && isSecretWordByte(line[start-1]) {
-			continue
-		}
-		if bytes.Equal(line[start:], secret[:length]) {
-			redacted := append([]byte(nil), line[:start]...)
-			return append(redacted, []byte("[REDACTED]")...)
-		}
-	}
-	return append([]byte(nil), line...)
-}
+// redactedMark stands in for every secret in a transcript.
+const redactedMark = "[REDACTED]"
 
-func isSecretWordByte(value byte) bool {
-	return value >= 'a' && value <= 'z' || value >= 'A' && value <= 'Z' || value >= '0' && value <= '9' || value == '_'
+func firstLineEnd(transcript []byte, from int) int {
+	if offset := bytes.IndexAny(transcript[from:], "\r\n"); offset >= 0 {
+		return from + offset
+	}
+	return len(transcript)
 }

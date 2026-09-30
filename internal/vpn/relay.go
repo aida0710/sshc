@@ -16,7 +16,7 @@ import (
 
 // engine が経路ごとに差し出す中継である。
 //
-// CLI（`sshc <接続先>`）とホストの ssh（`sshc vpn proxy`）は、ここへ繋ぐ。engine を
+// CLI（`sshc ssh <alias>`）とホストの ssh（`sshc vpn proxy`）は、ここへ繋ぐ。engine を
 // 通すのは、どの入口からの接続も同じように数えるためである。数えられない接続が
 // あると、使っている経路を無操作と見なして停止してしまう。
 //

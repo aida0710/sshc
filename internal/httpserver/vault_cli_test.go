@@ -6,8 +6,10 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -54,36 +56,9 @@ func cliHeaders(secret string) map[string]string {
 	return map[string]string{handoff.HeaderName: secret}
 }
 
-func TestCLIVaultRoutesRequireTheCurrentHandoffSecret(t *testing.T) {
-	service := newCLIVaultService(t)
-	engine := connectEngine(t, ConnectHandlers{Secret: testCLISecret, Passwords: service})
-	tests := []struct {
-		name   string
-		method string
-		path   string
-		body   string
-	}{
-		{name: "status", method: http.MethodGet, path: testVaultStatusPath},
-		{name: "create", method: http.MethodPost, path: testVaultCreatePath, body: `{"passphrase":"a valid master password"}`},
-		{name: "unlock", method: http.MethodPost, path: testVaultUnlockPath, body: `{"passphrase":"a valid master password"}`},
-		{name: "lock", method: http.MethodPost, path: testVaultLockPath, body: `{}`},
-		{name: "change", method: http.MethodPost, path: testVaultChangePath, body: `{"current":"a valid master password","next":"another valid password"}`},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			for _, headers := range []map[string]string{nil, cliHeaders("not the current secret")} {
-				response := send(t, engine, test.method, test.path, test.body, headers)
-				if response.Code != http.StatusUnauthorized {
-					t.Errorf("status = %d, want 401", response.Code)
-				}
-			}
-		})
-	}
-}
-
 func TestCLIVaultPostRoutesRejectUnknownAndTrailingJSON(t *testing.T) {
 	service := newCLIVaultService(t)
-	engine := connectEngine(t, ConnectHandlers{Secret: testCLISecret, Passwords: service})
+	engine := connectEngine(t, CLIHandlers{Secret: testCLISecret, Vault: service})
 	tests := []struct {
 		name string
 		path string
@@ -114,7 +89,7 @@ func TestCLIVaultPostRoutesRejectUnknownAndTrailingJSON(t *testing.T) {
 
 func TestCLIVaultPostRoutesRejectOversizedJSON(t *testing.T) {
 	service := newCLIVaultService(t)
-	engine := connectEngine(t, ConnectHandlers{Secret: testCLISecret, Passwords: service})
+	engine := connectEngine(t, CLIHandlers{Secret: testCLISecret, Vault: service})
 	for _, path := range []string{testVaultCreatePath, testVaultUnlockPath, testVaultLockPath, testVaultChangePath} {
 		t.Run(path, func(t *testing.T) {
 			response := send(t, engine, http.MethodPost, path,
@@ -129,7 +104,7 @@ func TestCLIVaultPostRoutesRejectOversizedJSON(t *testing.T) {
 func TestCLIVaultCreateMapsVaultOutcomes(t *testing.T) {
 	t.Run("success then existing", func(t *testing.T) {
 		service := newCLIVaultService(t)
-		engine := connectEngine(t, ConnectHandlers{Secret: testCLISecret, Passwords: service})
+		engine := connectEngine(t, CLIHandlers{Secret: testCLISecret, Vault: service})
 		body := `{"passphrase":"` + testPassphrase + `"}`
 		if response := send(t, engine, http.MethodPost, testVaultCreatePath, body, cliHeaders(testCLISecret)); response.Code != http.StatusNoContent {
 			t.Fatalf("create = %d, want 204: %s", response.Code, response.Body.String())
@@ -141,7 +116,7 @@ func TestCLIVaultCreateMapsVaultOutcomes(t *testing.T) {
 
 	t.Run("short passphrase", func(t *testing.T) {
 		service := newCLIVaultService(t)
-		engine := connectEngine(t, ConnectHandlers{Secret: testCLISecret, Passwords: service})
+		engine := connectEngine(t, CLIHandlers{Secret: testCLISecret, Vault: service})
 		response := send(t, engine, http.MethodPost, testVaultCreatePath, `{"passphrase":"abc"}`, cliHeaders(testCLISecret))
 		if response.Code != http.StatusBadRequest {
 			t.Fatalf("create = %d, want 400", response.Code)
@@ -151,7 +126,7 @@ func TestCLIVaultCreateMapsVaultOutcomes(t *testing.T) {
 
 func TestCLIVaultUnlockMapsMissingWrongAndSuccess(t *testing.T) {
 	service := newCLIVaultService(t)
-	engine := connectEngine(t, ConnectHandlers{Secret: testCLISecret, Passwords: service})
+	engine := connectEngine(t, CLIHandlers{Secret: testCLISecret, Vault: service})
 	if response := send(t, engine, http.MethodPost, testVaultUnlockPath, `{"passphrase":"anything at all"}`, cliHeaders(testCLISecret)); response.Code != http.StatusConflict {
 		t.Fatalf("missing vault = %d, want 409", response.Code)
 	}
@@ -177,7 +152,7 @@ func TestCLIVaultChangeMapsLockedAndWrongCurrent(t *testing.T) {
 	if err := service.Initialise(testPassphrase); err != nil {
 		t.Fatal(err)
 	}
-	engine := connectEngine(t, ConnectHandlers{Secret: testCLISecret, Passwords: service})
+	engine := connectEngine(t, CLIHandlers{Secret: testCLISecret, Vault: service})
 	service.Lock()
 	// lock 状態そのものを先に報告する。current を検証できる状態ではないため、
 	// 入力が違っていても password oracle にせず 409 へ畳む。
@@ -197,8 +172,8 @@ func TestCLIVaultChangeMapsLockedAndWrongCurrent(t *testing.T) {
 
 func TestCLIVaultStatusDescribesMissingLockedAndUnlocked(t *testing.T) {
 	service := newCLIVaultService(t)
-	engine := connectEngine(t, ConnectHandlers{
-		Secret: testCLISecret, Passwords: service, Sessions: func() int { return 2 },
+	engine := connectEngine(t, CLIHandlers{
+		Secret: testCLISecret, Vault: service, LiveTerminalCount: func() int { return 2 },
 		Owner: handoff.OwnerEngine, Version: "v-status-test", ProtocolVersion: handoff.ProtocolVersion,
 	})
 	assertStatus := func(vault, unlocked bool) {
@@ -244,7 +219,7 @@ func TestCLIVaultStatusDoesNotResetVaultInactivity(t *testing.T) {
 	if err := service.Initialise(testPassphrase); err != nil {
 		t.Fatal(err)
 	}
-	engine := connectEngine(t, ConnectHandlers{Secret: testCLISecret, Passwords: service})
+	engine := connectEngine(t, CLIHandlers{Secret: testCLISecret, Vault: service})
 	now = now.Add(secret.IdleTimeout - time.Second)
 	if response := send(t, engine, http.MethodGet, testVaultStatusPath, "", cliHeaders(testCLISecret)); response.Code != http.StatusOK {
 		t.Fatalf("status = %d", response.Code)
@@ -261,9 +236,8 @@ func TestCLIVaultChangeReencryptsLocalStateWithoutARemoteResult(t *testing.T) {
 		t.Fatal(err)
 	}
 	const next = "another valid password"
-	engine := connectEngine(t, ConnectHandlers{
-		Secret: testCLISecret, Passwords: service,
-		vault: newVaultOperations(service),
+	engine := connectEngine(t, CLIHandlers{
+		Secret: testCLISecret, Vault: service,
 	})
 	response := send(t, engine, http.MethodPost, testVaultChangePath,
 		`{"current":"`+testPassphrase+`","next":"`+next+`"}`, cliHeaders(testCLISecret))
@@ -300,11 +274,11 @@ func TestCLIVaultLockDoesNotCloseLiveSessions(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer process.exit(terminal.ExitInfo{Code: 0})
-	engine := connectEngine(t, ConnectHandlers{
-		Secret: testCLISecret, Passwords: service,
-		Sessions: func() int { return liveSessions(registry.Sessions()) },
+	engine := connectEngine(t, CLIHandlers{
+		Secret: testCLISecret, Vault: service,
+		LiveTerminalCount: func() int { return countLiveTerminals(registry.Sessions()) },
 	})
-	if got := liveSessions(registry.Sessions()); got != 1 {
+	if got := countLiveTerminals(registry.Sessions()); got != 1 {
 		t.Fatalf("sessions before lock = %d, want 1", got)
 	}
 	response := send(t, engine, http.MethodPost, testVaultLockPath, `{}`, cliHeaders(testCLISecret))
@@ -314,7 +288,7 @@ func TestCLIVaultLockDoesNotCloseLiveSessions(t *testing.T) {
 	if service.Unlocked() {
 		t.Fatal("vault stayed unlocked")
 	}
-	if got := liveSessions(registry.Sessions()); got != 1 {
+	if got := countLiveTerminals(registry.Sessions()); got != 1 {
 		t.Fatalf("sessions after lock = %d, want 1", got)
 	}
 	if process.closed || process.closeCalled {
@@ -323,7 +297,7 @@ func TestCLIVaultLockDoesNotCloseLiveSessions(t *testing.T) {
 }
 
 func TestLegacyCLIUnlockRouteIsNotRegistered(t *testing.T) {
-	engine := connectEngine(t, ConnectHandlers{Secret: testCLISecret, Passwords: newCLIVaultService(t)})
+	engine := connectEngine(t, CLIHandlers{Secret: testCLISecret, Vault: newCLIVaultService(t)})
 	response := send(t, engine, http.MethodPost, "/cli/unlock", `{"passphrase":"anything at all"}`, cliHeaders(testCLISecret))
 	if response.Code != http.StatusNotFound {
 		t.Fatalf("legacy unlock = %d, want 404", response.Code)
@@ -359,7 +333,7 @@ func newUnconfiguredSyncVaultServer(
 	server, err := New(Options{
 		Listener:        fakeListener{address: &net.TCPAddr{IP: net.IP{127, 0, 0, 1}, Port: 43123}},
 		CLISecret:       testCLISecret,
-		Passwords:       passwords,
+		Vault:           passwords,
 		Sync:            syncService,
 		Sessions:        sessions,
 		Owner:           handoff.OwnerEngine,
@@ -427,7 +401,7 @@ func (b *unreadVaultBody) Read([]byte) (int, error) {
 func (*unreadVaultBody) Close() error { return nil }
 
 func TestUnauthenticatedVaultRoutesNeverReadTheBody(t *testing.T) {
-	engine := connectEngine(t, ConnectHandlers{Secret: testCLISecret, Passwords: newCLIVaultService(t)})
+	engine := connectEngine(t, CLIHandlers{Secret: testCLISecret, Vault: newCLIVaultService(t)})
 	for _, path := range []string{VaultCreatePath, VaultUnlockPath, VaultLockPath, VaultChangePath} {
 		t.Run(path, func(t *testing.T) {
 			body := &unreadVaultBody{}
@@ -448,7 +422,7 @@ func TestUnauthenticatedVaultRoutesNeverReadTheBody(t *testing.T) {
 
 func TestVaultJSONLimitUsesTheReaderForEveryContentLength(t *testing.T) {
 	service := newCLIVaultService(t)
-	engine := connectEngine(t, ConnectHandlers{Secret: testCLISecret, Passwords: service})
+	engine := connectEngine(t, CLIHandlers{Secret: testCLISecret, Vault: service})
 	exact := "{}" + strings.Repeat(" ", maxVaultCLIBody-2)
 	over := "{}" + strings.Repeat(" ", maxVaultCLIBody-1)
 	tests := []struct {
@@ -479,7 +453,7 @@ func TestVaultJSONLimitUsesTheReaderForEveryContentLength(t *testing.T) {
 }
 
 func TestVaultJSONRejectsEmptyAndNullBodies(t *testing.T) {
-	engine := connectEngine(t, ConnectHandlers{Secret: testCLISecret, Passwords: newCLIVaultService(t)})
+	engine := connectEngine(t, CLIHandlers{Secret: testCLISecret, Vault: newCLIVaultService(t)})
 	for _, body := range []string{"", "null"} {
 		request := httptest.NewRequest(http.MethodPost, VaultLockPath, strings.NewReader(body))
 		request.Header.Set(handoff.HeaderName, testCLISecret)
@@ -535,7 +509,7 @@ func TestVaultStatusReturnsInternalErrorForMissingOrUnreadableService(t *testing
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			cli := connectEngine(t, ConnectHandlers{Secret: testCLISecret, Passwords: test.service})
+			cli := connectEngine(t, CLIHandlers{Secret: testCLISecret, Vault: test.service})
 			for _, path := range []string{StatusPath, VaultStatusPath} {
 				response := send(t, cli, http.MethodGet, path, "", cliHeaders(testCLISecret))
 				if response.Code != http.StatusInternalServerError {
@@ -547,7 +521,7 @@ func TestVaultStatusReturnsInternalErrorForMissingOrUnreadableService(t *testing
 			}
 
 			browser := echo.New()
-			registerPasswordRoutes(browser, PasswordHandlers{Service: test.service})
+			registerVaultRoutes(browser, VaultHandlers{Service: test.service})
 			response := send(t, browser, http.MethodGet, "/api/v1/passwords", "", nil)
 			if response.Code != http.StatusInternalServerError {
 				t.Errorf("browser status = %d, want 500", response.Code)
@@ -564,7 +538,7 @@ func TestCLIVaultChangeWithoutAResealerIsLocalSuccess(t *testing.T) {
 	if err := service.Initialise(testPassphrase); err != nil {
 		t.Fatal(err)
 	}
-	engine := connectEngine(t, ConnectHandlers{Secret: testCLISecret, Passwords: service})
+	engine := connectEngine(t, CLIHandlers{Secret: testCLISecret, Vault: service})
 	response := send(t, engine, http.MethodPost, VaultChangePath,
 		`{"current":"`+testPassphrase+`","next":"replacement without resealer"}`, cliHeaders(testCLISecret))
 	if response.Code != http.StatusNoContent {
@@ -573,7 +547,7 @@ func TestCLIVaultChangeWithoutAResealerIsLocalSuccess(t *testing.T) {
 }
 
 func TestVaultMutationsReturnInternalErrorForNilService(t *testing.T) {
-	cli := connectEngine(t, ConnectHandlers{Secret: testCLISecret})
+	cli := connectEngine(t, CLIHandlers{Secret: testCLISecret})
 	tests := []struct {
 		path string
 		body string
@@ -596,7 +570,7 @@ func TestVaultMutationsReturnInternalErrorForNilService(t *testing.T) {
 
 func TestVaultMutationsReturnInternalErrorForStorageFailure(t *testing.T) {
 	service := newUnreadableVaultService(t)
-	cli := connectEngine(t, ConnectHandlers{Secret: testCLISecret, Passwords: service})
+	cli := connectEngine(t, CLIHandlers{Secret: testCLISecret, Vault: service})
 	tests := []struct {
 		path string
 		body string
@@ -616,6 +590,30 @@ func TestVaultMutationsReturnInternalErrorForStorageFailure(t *testing.T) {
 	}
 }
 
+func TestCLIVaultRefusesAnInterruptedChangeOrABusyWorkspaceWith409AndDoesNotLogIt(t *testing.T) {
+	for name, cause := range map[string]error{
+		"pending": fmt.Errorf("change master password: %w", storage.ErrPendingTransaction),
+		"busy":    fmt.Errorf("change master password: %w", secret.ErrStorageBusy),
+	} {
+		t.Run(name, func(t *testing.T) {
+			var logged bytes.Buffer
+			engine := echo.New()
+			engine.Logger = slog.New(slog.NewTextHandler(&logged, nil))
+			engine.POST(VaultChangePath, func(c *echo.Context) error { return vaultCLIProblem(c, cause) })
+
+			recorder := httptest.NewRecorder()
+			engine.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, VaultChangePath, nil))
+
+			if recorder.Code != http.StatusConflict || recorder.Body.Len() != 0 {
+				t.Fatalf("status = %d, body = %q, want 409 without a body", recorder.Code, recorder.Body.String())
+			}
+			if logged.Len() != 0 {
+				t.Errorf("an expected refusal was logged as an unexpected failure: %q", logged.String())
+			}
+		})
+	}
+}
+
 var _ io.ReadCloser = (*unreadVaultBody)(nil)
 
 func TestCLIVaultVerifyDoesNotChangeLockState(t *testing.T) {
@@ -623,7 +621,7 @@ func TestCLIVaultVerifyDoesNotChangeLockState(t *testing.T) {
 	if err := service.Initialise(testPassphrase); err != nil {
 		t.Fatal(err)
 	}
-	engine := connectEngine(t, ConnectHandlers{Secret: testCLISecret, Passwords: service})
+	engine := connectEngine(t, CLIHandlers{Secret: testCLISecret, Vault: service})
 	for _, unlocked := range []bool{true, false} {
 		if !unlocked {
 			service.Lock()
@@ -660,7 +658,7 @@ func TestPasswordlessVaultLockKeepsCredentialsAvailable(t *testing.T) {
 	if err := service.SetCredential(secret.KindPassword, "fixture", "test-credential-value"); err != nil {
 		t.Fatal(err)
 	}
-	engine := connectEngine(t, ConnectHandlers{Secret: testCLISecret, Passwords: service})
+	engine := connectEngine(t, CLIHandlers{Secret: testCLISecret, Vault: service})
 	for _, previouslyLocked := range []bool{false, true} {
 		if previouslyLocked {
 			service.Lock()

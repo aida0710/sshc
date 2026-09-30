@@ -124,15 +124,9 @@ func (r Resolver) insideRoot(candidate string) bool {
 // ルートの外はそのまま返す。よそのファイルの表記をこちらで決める理由が無い。
 func (r Resolver) canonical(candidate string) string {
 	cleaned := filepath.Clean(candidate)
-	if !nativepath.Contains(r.Root, cleaned) {
+	relative, inside := nativepath.Relative(r.Root, cleaned)
+	if !inside {
 		return cleaned
-	}
-	relative, err := filepath.Rel(r.Root, cleaned)
-	if err != nil {
-		return cleaned
-	}
-	if relative == "." {
-		return filepath.Clean(r.Root)
 	}
 	return filepath.Join(r.Root, relative)
 }

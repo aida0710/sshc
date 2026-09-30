@@ -11,6 +11,7 @@ import (
 
 	"sshc/internal/config"
 	"sshc/internal/keys"
+	"sshc/internal/platform/nativepath"
 	"sshc/internal/secret"
 	"sshc/internal/storage"
 	"sshc/internal/validate"
@@ -25,6 +26,8 @@ var (
 )
 
 // CreateAuthenticationKind identifies the one source of authentication a new
+// connection uses. Passwords are written only to the encrypted vault; private
+// keys are represented in ssh_config by an IdentityFile directive.
 type CreateAuthenticationKind string
 
 const (
@@ -57,8 +60,8 @@ type CreateConnectionResult struct {
 }
 
 // CreateConnection creates a complete Host block and, for password modes, the
+// matching vault assignment in the same journalled storage transaction.
 func (s *Service) CreateConnection(
-	secrets *secret.Service,
 	inventory *keys.Inventory,
 	request CreateConnectionRequest,
 ) (CreateConnectionResult, error) {
@@ -87,17 +90,18 @@ func (s *Service) CreateConnection(
 	case CreateAuthenticationDedicatedPassword,
 		CreateAuthenticationSavedPassword,
 		CreateAuthenticationNewSharedPassword:
-		if secrets == nil {
+		vault := s.vault
+		if vault == nil {
 			return CreateConnectionResult{}, secret.ErrNoVault
 		}
-		exists, err := secrets.Exists()
+		exists, err := vault.Exists()
 		if err != nil {
 			return CreateConnectionResult{}, err
 		}
 		if !exists {
 			return CreateConnectionResult{}, secret.ErrNoVault
 		}
-		if !secrets.Unlocked() {
+		if !vault.Unlocked() {
 			return CreateConnectionResult{}, secret.ErrLocked
 		}
 
@@ -109,7 +113,7 @@ func (s *Service) CreateConnection(
 		}
 		mutation := passwordMutationForCreate(request, initial.authenticationBinding)
 		var created CreateConnectionResult
-		_, err = secrets.WithPasswordMutation(mutation, func(vaultChange storage.Change) (storage.Result, error) {
+		_, err = vault.WithPasswordMutation(mutation, func(vaultChange storage.Change) (storage.Result, error) {
 			s.saveMutex.Lock()
 			defer s.saveMutex.Unlock()
 
@@ -369,12 +373,15 @@ func (s *Service) identityFileForCreate(inventory *keys.Inventory, keyID string)
 	if !ok || item.Kind != keys.KindPrivateKey {
 		return "", ErrInvalidIdentityFile
 	}
-	relative := filepath.Clean(filepath.FromSlash(item.RelativePath))
-	if relative == "." || filepath.IsAbs(relative) || relative == ".." ||
-		len(relative) >= 3 && relative[:3] == ".."+string(filepath.Separator) {
+	nativeRelative := filepath.FromSlash(item.RelativePath)
+	if filepath.IsAbs(nativeRelative) {
 		return "", ErrInvalidIdentityFile
 	}
-	absolute := filepath.Join(s.workspace.Root(), relative)
+	absolute := filepath.Join(s.workspace.Root(), nativeRelative)
+	relative, ok := nativepath.RelativeSlash(s.workspace.Root(), absolute)
+	if !ok {
+		return "", ErrInvalidIdentityFile
+	}
 	if _, err := s.workspace.ResolveForWrite(absolute); err != nil {
 		return "", ErrInvalidIdentityFile
 	}
@@ -382,7 +389,7 @@ func (s *Service) identityFileForCreate(inventory *keys.Inventory, keyID string)
 	if err != nil || info.Mode()&fs.ModeSymlink != 0 || !info.Mode().IsRegular() {
 		return "", ErrInvalidIdentityFile
 	}
-	return "~/.ssh/" + filepath.ToSlash(relative), nil
+	return "~/.ssh/" + relative, nil
 }
 
 func (s *Service) commitCreatedConnection(prepared planned) (storage.Result, error) {

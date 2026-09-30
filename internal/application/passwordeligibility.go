@@ -16,7 +16,9 @@ import (
 
 // ホストと保存されたパスワードとの間に立ちはだかるものを表す code である。
 const (
-	// BlockerPasswordAuthenticationOff は、このホストに PasswordAuthentication
+	// BlockerPasswordAuthenticationOff は、このホストに PasswordAuthentication no が
+	// 効いていることを報告する。クライアント側の設定なので、パスワードを保存しても
+	// 認証に使われない。
 	BlockerPasswordAuthenticationOff = "password_authentication_off"
 	BlockerAliasNotSimple            = "alias_not_simple"
 	BlockerIdentityFileConfigured    = "identity_file_configured"

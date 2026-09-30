@@ -237,7 +237,7 @@ func TestShownLogsHideTheOpenConnectPassword(t *testing.T) {
 		TOTPSecret: "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
 	}}
 
-	shown := redact("認証に失敗しました: fixture-password / GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", secrets)
+	shown := redactLogs("認証に失敗しました: fixture-password / GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", secrets)
 
 	for _, forbidden := range []string{secrets.OpenConnect.Password, secrets.OpenConnect.TOTPSecret} {
 		if strings.Contains(shown, forbidden) {

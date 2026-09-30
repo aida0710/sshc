@@ -48,8 +48,7 @@ const IdleTimeout = 12 * time.Hour
 // Service は、プロセスの寿命のあいだ、開いた vault を所有する。
 //
 // 導出された鍵はこの構造体で保持し、ログやAPIへ返さない。パスワードなしの
-// 場合だけ、導出元となる端末専用の乱数をローカルファイルへ保存する。外へ出るのはパスワードひとつだけであり、それも、この
-// サービスが発行したトークンをひとつ持つ askpass リクエストひとつに対してである。
+// 場合だけ、導出元となる端末専用の乱数をローカルファイルへ保存する。
 type Service struct {
 	workspace    *storage.Workspace
 	transactions *storage.Manager

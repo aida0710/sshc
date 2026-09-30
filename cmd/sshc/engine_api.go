@@ -14,6 +14,7 @@ import (
 	"sshc/internal/api"
 	"sshc/internal/handoff"
 	"sshc/internal/httpserver"
+	"sshc/internal/strictjson"
 )
 
 const (
@@ -388,22 +389,8 @@ func decodeBoundedJSONResponse(response *http.Response, target any, limit int) e
 	if err != nil {
 		return err
 	}
-	if err := decodeStrictJSON(body, target); err != nil {
+	if err := strictjson.Decode(body, target); err != nil {
 		return errEngineInvalidResponse
-	}
-	return nil
-}
-
-// decodeStrictJSON は、未知の項目も末尾の余りも許さずに 1 つの JSON 文書を読む。
-func decodeStrictJSON(body []byte, target any) error {
-	decoder := json.NewDecoder(bytes.NewReader(body))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(target); err != nil {
-		return err
-	}
-	var trailing any
-	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
-		return errors.New("trailing data after the JSON document")
 	}
 	return nil
 }
@@ -466,18 +453,13 @@ func decodeEngineProblem(response *http.Response) error {
 	decoded := engineProblem{Status: status, Code: "http_error", Retryable: retryableStatus(status)}
 	if err == nil {
 		var problem api.Problem
-		decoder := json.NewDecoder(bytes.NewReader(body))
-		decoder.DisallowUnknownFields()
-		if decodeErr := decoder.Decode(&problem); decodeErr == nil && problem.Code != "" {
-			var trailing any
-			if trailingErr := decoder.Decode(&trailing); errors.Is(trailingErr, io.EOF) {
-				decoded.Code = problem.Code
-				decoded.Field = valueOrZero(problem.Field)
-				decoded.Reason = valueOrZero(problem.Reason)
-				decoded.Limit = valueOrZero(problem.Limit)
-				decoded.Line = valueOrZero(problem.Line)
-				decoded.Directive = valueOrZero(problem.Directive)
-			}
+		if decodeErr := strictjson.Decode(body, &problem); decodeErr == nil && problem.Code != "" {
+			decoded.Code = problem.Code
+			decoded.Field = valueOrZero(problem.Field)
+			decoded.Reason = valueOrZero(problem.Reason)
+			decoded.Limit = valueOrZero(problem.Limit)
+			decoded.Line = valueOrZero(problem.Line)
+			decoded.Directive = valueOrZero(problem.Directive)
 		}
 	} else if errors.Is(err, errEngineResponseTooLarge) {
 		decoded.Code = "response_too_large"

@@ -1,11 +1,9 @@
 package snippets
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"path/filepath"
 	"sort"
@@ -14,6 +12,7 @@ import (
 	"time"
 
 	"sshc/internal/storage"
+	"sshc/internal/strictjson"
 	"sshc/internal/validate"
 )
 
@@ -77,12 +76,20 @@ func (s *Store) Load() (Library, error) {
 	return library, err
 }
 
+// loadedDocument は、ディスクの snippets.json を開いた結果である。
 type loadedDocument struct {
-	library  Library
-	contents []byte
-	legacy   bool
+	library Library
+	// contents はディスク上のバイト列で、書き換えの前提条件に使う。plaintext は
+	// それを開いたもの。
+	contents  []byte
+	plaintext []byte
+	// legacy は、暗号化を入れる前の版が書いた平文の文書だったことを表す。
+	// 読んだ側は、それを封印して書き直すかを決める。
+	legacy bool
 }
 
+// readDocument は snippets.json を開く。平文の文書を受け付けるのはここだけにし、
+// 読む入口がどれも同じ検証を通るようにする。
 func (s *Store) readDocument() (loadedDocument, error) {
 	contents, err := s.workspace.FileSystem().ReadFile(s.Path())
 	if errors.Is(err, fs.ErrNotExist) {
@@ -102,7 +109,7 @@ func (s *Store) readDocument() (loadedDocument, error) {
 	if err != nil {
 		return loadedDocument{}, err
 	}
-	return loadedDocument{library: library, contents: contents, legacy: legacy}, nil
+	return loadedDocument{library: library, contents: contents, plaintext: plaintext, legacy: legacy}, nil
 }
 
 func (s *Store) load(migrate bool) (Library, error) {
@@ -111,12 +118,8 @@ func (s *Store) load(migrate bool) (Library, error) {
 		return Library{}, err
 	}
 	if migrate && loaded.legacy {
-		sealed, sealErr := s.sealDocument(loaded.contents)
-		if sealErr != nil {
-			return Library{}, sealErr
-		}
-		if writeErr := storage.WriteAtomicFile(s.workspace.FileSystem(), s.Path(), temporaryName, storage.FilePermission, sealed); writeErr != nil {
-			return Library{}, writeErr
+		if err := s.saveLocked(loaded.plaintext); err != nil {
+			return Library{}, err
 		}
 	}
 	return loaded.library, nil
@@ -124,25 +127,46 @@ func (s *Store) load(migrate bool) (Library, error) {
 
 func decodeDocument(contents []byte) (Library, error) {
 	var stored document
-	decoder := json.NewDecoder(bytes.NewReader(contents))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&stored); err != nil {
+	if err := strictjson.Decode(contents, &stored); err != nil {
 		return Library{}, fmt.Errorf("%w: %v", ErrInvalidDocument, err)
-	}
-	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		return Library{}, ErrInvalidDocument
 	}
 	if stored.SchemaVersion > SchemaVersion {
 		return Library{}, ErrUnsupportedVersion
 	}
-	if stored.SchemaVersion != SchemaVersion {
-		return Library{}, ErrInvalidDocument
+	if err := migrateDocument(&stored); err != nil {
+		return Library{}, err
 	}
 	library := Library{Snippets: stored.Snippets, Startup: stored.Startup}
 	if err := validateLibrary(library); err != nil {
 		return Library{}, fmt.Errorf("%w: %v", ErrInvalidDocument, err)
 	}
 	return cloneLibrary(library), nil
+}
+
+// schemaWithoutStartupBinding は、起動スニペットの割り当てが接続先の binding を
+// 持たなかった形式である。
+const schemaWithoutStartupBinding = 1
+
+// migrateDocument は、古い形式の文書を今の形式へ移す。旧形式を読むのはここだけにする。
+//
+// 形式 1 の割り当ては binding を持たない。割り当てた時の接続先はもう分からないので、
+// 推測で結び付けず空のままにする。空の割り当ては接続時に送らず、画面は停止中と
+// 表示するので、利用者が割り当て直す。次の保存で形式 2 として書く。
+func migrateDocument(stored *document) error {
+	switch stored.SchemaVersion {
+	case SchemaVersion:
+		return nil
+	case schemaWithoutStartupBinding:
+		for _, startup := range stored.Startup {
+			if startup.Binding != "" {
+				return ErrInvalidDocument
+			}
+		}
+		stored.SchemaVersion = SchemaVersion
+		return nil
+	default:
+		return ErrInvalidDocument
+	}
 }
 
 func (s *Store) Save(library Library) error {
@@ -225,36 +249,19 @@ func encodeDocument(library Library) ([]byte, error) {
 func (s *Store) TravelDocument() ([]byte, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
-	contents, err := s.workspace.FileSystem().ReadFile(s.Path())
-	if errors.Is(err, fs.ErrNotExist) {
-		return nil, nil
-	}
+	loaded, err := s.readDocument()
 	if err != nil {
 		return nil, err
 	}
-	plaintext, openErr := s.protect.Open(contents)
-	if errors.Is(openErr, ErrNotEncrypted) {
-		plaintext = contents
-	} else if openErr != nil {
-		return nil, openErr
-	}
-	library, err := decodeDocument(plaintext)
-	if err != nil {
-		return nil, err
-	}
-	if errors.Is(openErr, ErrNotEncrypted) {
-		sealed, sealErr := s.sealDocument(plaintext)
-		if sealErr != nil {
-			return nil, sealErr
-		}
-		if writeErr := storage.WriteAtomicFile(s.workspace.FileSystem(), s.Path(), temporaryName, storage.FilePermission, sealed); writeErr != nil {
-			return nil, writeErr
+	if loaded.legacy {
+		if err := s.saveLocked(loaded.plaintext); err != nil {
+			return nil, err
 		}
 	}
-	if len(library.Snippets) == 0 && len(library.Startup) == 0 {
+	if len(loaded.library.Snippets) == 0 && len(loaded.library.Startup) == 0 {
 		return nil, nil
 	}
-	return append([]byte(nil), plaintext...), nil
+	return append([]byte(nil), loaded.plaintext...), nil
 }
 
 // AdoptTravelDocument validates a remote logical document and seals it with
@@ -297,8 +304,11 @@ func (s *Store) withMutation(fn func() error) error {
 }
 
 func validateLibrary(library Library) error {
-	if len(library.Snippets) > MaxSnippets || len(library.Startup) > MaxTargets {
-		return ErrInvalidDocument
+	if len(library.Snippets) > MaxSnippets {
+		return ErrTooManySnippets
+	}
+	if len(library.Startup) > MaxStartupBindings {
+		return ErrTooManyStartupBindings
 	}
 	byID := make(map[string]Snippet, len(library.Snippets))
 	for _, snippet := range library.Snippets {
@@ -396,6 +406,7 @@ func cloneLibrary(library Library) Library {
 	for index, startup := range library.Startup {
 		cloned.Startup[index] = Startup{
 			Alias: startup.Alias, SnippetID: startup.SnippetID, Inputs: cloneInputs(startup.Inputs),
+			Binding: startup.Binding,
 		}
 	}
 	return cloned

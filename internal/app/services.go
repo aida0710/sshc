@@ -25,6 +25,7 @@ import (
 	"sshc/internal/snippets"
 	"sshc/internal/sshclient"
 	"sshc/internal/storage"
+	"sshc/internal/syncrestore"
 	"sshc/internal/terminal"
 	"sshc/internal/vpn"
 	"sshc/internal/vpnprofile"
@@ -40,7 +41,7 @@ type engineServices struct {
 	keys         *keys.Service
 	diagnostics  *diagnostics.Service
 	knownHosts   *knownhosts.Service
-	passwords    *secret.Service
+	vault        *secret.Service
 	remoteKeys   *remotekey.Service
 	sync         *remotesync.Service
 	autoSync     *remotesync.Auto
@@ -82,9 +83,11 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 	knownHostsService := knownhosts.NewService(workspace, transactions,
 		knownhosts.Scanner{Collect: collectHostKeys})
 
-	// パスワード保管用の vault も設定のトランザクションマネージャを共有する。~/.ssh
-	passwordService := secret.NewService(workspace, transactions, time.Now)
-	passwordService.SetIdleTimeout(configService.EngineSettings().VaultIdleTimeout(secret.IdleTimeout))
+	// Vault も設定のトランザクションマネージャを共有する。Vault は ~/.ssh の下の
+	// 管理対象ファイルのひとつにすぎないので、ジャーナルはひとつで足りる。
+	vault := secret.NewService(workspace, transactions, time.Now)
+	vault.SetIdleTimeout(configService.EngineSettings().VaultIdleTimeout(secret.IdleTimeout))
+	configService.SetVault(vault)
 	recentStore := recent.NewStore(workspace, time.Now)
 
 	// ProxyCommand と docker は、ログインシェルの PATH で起動する。launchd や
@@ -103,23 +106,23 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 
 	// VPN 経路はこの engine が持つ。コンテナも中継のソケットも、この利用者の
 	// ものだけを扱う。
-	vpnSessions := vpn.New(filepath.Join(workspace.Root(), vpnStateDirectory), os.Getuid(), dockerEnvironment)
+	vpnManager := vpn.New(filepath.Join(workspace.Root(), vpnStateDirectory), os.Getuid(), dockerEnvironment)
 	// 設定・秘密・経路をひとつの操作として扱う。engine の接続と HTTP API が同じものを使う。
 	vpnProfiles := vpnprofile.New(vpnprofile.Dependencies{
-		Configuration: configService, Vault: passwordService, Routes: vpnSessions,
+		Configuration: configService, Vault: vault, Routes: vpnManager,
 	})
 
 	// プロセス内 SSH クライアントの依存関係をここで一度だけ組み立てる。
-	ssh := newSSHParts(sshDependencies{
+	inProcessSSH := newSSHParts(sshDependencies{
 		config: configService, knownHosts: knownHostsService, home: workspace.Home(),
-		passphrase:  storedPassphrase(passwordService, workspace.Root()),
-		password:    storedPassword(passwordService),
-		oneTimeCode: storedTOTP(passwordService),
-		vpnRoute:    vpnRoute(vpnProfiles, vpnSessions),
+		passphrase:  storedPassphrase(vault, workspace.Root()),
+		password:    storedPassword(vault),
+		oneTimeCode: storedTOTP(vault),
+		vpnRoute:    vpnRoute(vpnProfiles, vpnManager),
 	})
-	ssh.dialer.ProxyEnvironment = loginShellEnvironment
+	inProcessSSH.dialer.ProxyEnvironment = loginShellEnvironment
 	recentService := recent.NewService(recentStore, func(alias string) (recent.Target, error) {
-		target, err := ssh.target(alias)
+		target, err := inProcessSSH.target(alias)
 		if err != nil {
 			return recent.Target{}, err
 		}
@@ -127,37 +130,37 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 			Alias: target.Alias, HostName: target.HostName, User: target.User, Port: target.Port,
 		}, nil
 	})
-	sftpPool := sshcSFTP.NewRemotePool(ssh.sftp())
-	sftpService := &sshcSFTP.Service{Open: sftpPool.Open, ConnectionLimit: sftpConnectionLimit(passwordService, ssh.target)}
+	sftpPool := sshcSFTP.NewRemotePool(inProcessSSH.sftp())
+	sftpService := &sshcSFTP.Service{Open: sftpPool.Open, ConnectionLimit: sftpConnectionLimit(vault, inProcessSSH.target)}
 	workspaceService := terminalworkspace.NewService(terminalworkspace.NewStore(workspace), time.Now, dependencies.Random)
 	probe := dependencies.Probe
 	if probe == nil {
-		probe = ssh.probe()
+		probe = inProcessSSH.probe()
 	}
 	diagnosticsService.Authentication.Dial = probe
 
 	// 公開鍵のリモート登録も同じ接続を通る。外部の ssh は起動しない。
 	remoteRun := dependencies.RemoteRun
 	if remoteRun == nil {
-		remoteRun = ssh.run()
+		remoteRun = inProcessSSH.run()
 	}
-	remoteKeyService := &remotekey.Service{Resolve: ssh.target, Run: remoteRun}
+	remoteKeyService := &remotekey.Service{Resolve: inProcessSSH.target, Run: remoteRun}
 	snippetStore := snippets.NewStore(workspace, snippets.Protection{
-		Seal: passwordService.SealDocument,
+		Seal: vault.SealDocument,
 		Open: func(contents []byte) ([]byte, error) {
-			plaintext, err := passwordService.OpenDocument(contents)
+			plaintext, err := vault.OpenDocument(contents)
 			if errors.Is(err, secret.ErrNotAVault) {
 				return nil, snippets.ErrNotEncrypted
 			}
 			return plaintext, err
 		},
 		WithMutation: func(mutation func() error) error {
-			return passwordService.WithStableSnapshot(func() error {
+			return vault.WithStableSnapshot(func() error {
 				return transactions.WithSnapshot(mutation)
 			})
 		},
 	})
-	if err := passwordService.RegisterProtectedDocument(secret.ProtectedDocument{
+	if err := vault.RegisterProtectedDocument(secret.ProtectedDocument{
 		Path: snippetStore.Path(), Validate: snippetStore.ValidateDocument,
 	}); err != nil {
 		return nil, err
@@ -166,7 +169,7 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 	snippetService := snippets.NewService(snippets.Options{
 		Repository: snippetStore,
 		Resolve: func(alias string) (snippets.Resolution, error) {
-			target, err := ssh.target(alias)
+			target, err := inProcessSSH.target(alias)
 			if err != nil {
 				return snippets.Resolution{}, err
 			}
@@ -175,6 +178,7 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 					Alias: target.Alias, HostName: target.HostName, User: target.User, Port: target.Port,
 					Route: snippetRoute(target),
 				},
+				Binding: target.AuthenticationBinding(),
 				Run: func(ctx context.Context, command string) (snippets.CommandOutput, error) {
 					// Snippet のコマンドは長く走ることがある（apt-get update、バックアップ）。
 					// 上限は置かず、job の取り消しと engine の停止だけで止める。
@@ -188,13 +192,13 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 		Now: time.Now, Random: dependencies.Random,
 	})
 
-	keyService.SetStoredPassphrase(passwordService.KeyPassphraseFor)
+	keyService.SetStoredPassphrase(vault.KeyPassphraseFor)
 
 	for _, manager := range []*storage.Manager{transactions, keyTransactions} {
-		manager.Seal = passwordService.SealBackup
-		manager.Unseal = passwordService.OpenBackup
+		manager.Seal = vault.SealBackup
+		manager.Unseal = vault.OpenBackup
 	}
-	if err := passwordService.AutoUnlock(); err != nil && !errors.Is(err, secret.ErrUnsupportedVersion) {
+	if err := vault.AutoUnlock(); err != nil && !errors.Is(err, secret.ErrUnsupportedVersion) {
 		return nil, fmt.Errorf("auto-unlock vault: %w", err)
 	}
 	// vault のロック状態は secret.Service が管理する。
@@ -203,12 +207,12 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 		workspace: workspace, transactions: transactions,
 		browserAuth: browserauth.NewStore(workspace, dependencies.Random),
 		config:      configService, keys: keyService, diagnostics: diagnosticsService,
-		knownHosts: knownHostsService, passwords: passwordService,
+		knownHosts: knownHostsService, vault: vault,
 		remoteKeys: remoteKeyService, recentStore: recentStore, recent: recentService,
 		sftp: sftpService, sftpPool: sftpPool, workspaces: workspaceService, snippets: snippetService,
-		vpn: vpnSessions, vpnProfiles: vpnProfiles, ssh: ssh,
+		vpn: vpnManager, vpnProfiles: vpnProfiles, ssh: inProcessSSH,
 	}
-	services.sync, services.autoSync, err = buildSync(workspace, transactions, passwordService, snippetStore, dependencies)
+	services.sync, services.autoSync, err = buildSync(workspace, transactions, vault, snippetStore, dependencies)
 	if err != nil {
 		return nil, err
 	}
@@ -244,7 +248,7 @@ func snippetRoute(target sshclient.Target) []snippets.RouteHop {
 func buildSync(
 	workspace *storage.Workspace,
 	transactions *storage.Manager,
-	passwordService *secret.Service,
+	vault *secret.Service,
 	snippetStore *snippets.Store,
 	dependencies Dependencies,
 ) (*remotesync.Service, *remotesync.Auto, error) {
@@ -252,15 +256,15 @@ func buildSync(
 		func() string { return time.Now().UTC().Format(time.RFC3339) },
 		newOrigin(dependencies.Random),
 		remotesync.IntegrationHooks{
-			OpenVault:          passwordService.TravelDocument,
-			SealVault:          passwordService.AdoptTravelDocument,
-			EmptyVaultDocument: passwordService.EmptyTravelDocument,
-			VaultAdopted:       passwordService.Reload,
+			OpenVault:          vault.TravelDocument,
+			SealVault:          vault.AdoptTravelDocument,
+			EmptyVaultDocument: vault.EmptyTravelDocument,
+			VaultAdopted:       vault.Reload,
 			OpenSnippets:       snippetStore.TravelDocument,
 			SealSnippets:       snippetStore.AdoptTravelDocument,
-			SecretMutation:     passwordService.WithStableSnapshot,
+			SecretMutation:     vault.WithStableSnapshot,
 			StableSnapshot: func(snapshot func() error) error {
-				return passwordService.WithStableSnapshot(func() error {
+				return vault.WithStableSnapshot(func() error {
 					return transactions.WithSnapshot(snapshot)
 				})
 			},
@@ -279,40 +283,18 @@ func buildSync(
 		}
 	}
 	autoSync.Enabled = func() bool {
-		settings, err := passwordService.SyncSettings()
+		settings, err := vault.SyncSettings()
 		return err == nil && settings.Auto
 	}
-	autoSync.Unattended = passwordService.Unattended
+	autoSync.Unattended = vault.Unattended
 	autoSync.Key = func() (string, bool) {
-		settings, err := passwordService.SyncSettings()
+		settings, err := vault.SyncSettings()
 		if err != nil || settings.Key == "" {
 			return "", false
 		}
 		return settings.Key, true
 	}
-	autoSync.Prepare = func() {
-		if syncService.Configured() || !passwordService.Unlocked() {
-			return
-		}
-		settings, err := passwordService.SyncSettings()
-		if err != nil || settings.Bucket == "" {
-			return
-		}
-		direction, ok := remotesync.ParseDirection(settings.Direction)
-		if !ok {
-			return
-		}
-		config := remotesync.Config{
-			Endpoint: settings.Endpoint, Bucket: settings.Bucket, Path: settings.Path,
-			Region: settings.Region, Direction: direction,
-		}
-		credentials := remotesync.Credentials{
-			AccessKeyID: settings.AccessKeyID, SecretAccessKey: settings.SecretAccessKey,
-		}
-		_, _ = syncService.ConfigureIfUnconfigured(
-			config, credentials, remotesync.NewClient(config, credentials),
-		)
-	}
+	autoSync.Prepare = func() { syncrestore.FromVault(syncService, vault, nil) }
 
 	return syncService, autoSync, nil
 }

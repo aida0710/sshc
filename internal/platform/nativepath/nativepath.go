@@ -43,28 +43,45 @@ func deviceNamespace(path string) bool {
 	return false
 }
 
-// Contains は、candidate が root そのものか、その下にあるかを言う。
+// Relative は、candidate が root そのものかその下にあるとき、root からの
+// ネイティブ区切りの相対パスを返す。root そのものは "." になる。外なら偽を返す。
 //
 // 素の文字列前置比較ではなく filepath.Rel を通すのは、そこにボリュームの一致と
 // Windows の大小文字同一視が既に入っているからである。前置比較だけでは
 // `~/.ssh-other` が `~/.ssh` の中になり、`C:\x` と `D:\x` が区別されない。
-func Contains(root, candidate string) bool {
+// Rel が絶対パスを返すこと（Windows で要素に `C:` を含むパス）も外として扱う。
+// `..foo` のような名前は親への参照と取り違えない。
+func Relative(root, candidate string) (string, bool) {
 	relative, err := filepath.Rel(filepath.Clean(root), filepath.Clean(candidate))
-	if err != nil || filepath.IsAbs(relative) {
-		return false
+	if err != nil || filepath.IsAbs(relative) || relative == ".." ||
+		strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		return "", false
 	}
-	return relative == "." || relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))
+	return relative, true
+}
+
+// RelativeBelow は、root 自身を除いて、candidate が root の下にあるときだけ
+// Relative と同じ相対パスを返す。
+func RelativeBelow(root, candidate string) (string, bool) {
+	relative, ok := Relative(root, candidate)
+	if !ok || relative == "." {
+		return "", false
+	}
+	return relative, true
+}
+
+// Contains は、candidate が root そのものか、その下にあるかを言う。
+func Contains(root, candidate string) bool {
+	_, ok := Relative(root, candidate)
+	return ok
 }
 
 // RelativeSlash は、root の下にある absolute を root からの slash 区切りの相対パスに
 // する。root の外（root 自身を含む）なら偽を返す。鍵の絶対パスを vault の保存値へ
-// 対応づける経路が使うもので、`..foo` のような名前を親への参照と取り違えない。
+// 対応づける経路のように、ワークスペース相対の識別子が要る場所が使う。
 func RelativeSlash(root, absolute string) (string, bool) {
-	if !Contains(root, absolute) {
-		return "", false
-	}
-	relative, err := filepath.Rel(filepath.Clean(root), filepath.Clean(absolute))
-	if err != nil || relative == "." {
+	relative, ok := RelativeBelow(root, absolute)
+	if !ok {
 		return "", false
 	}
 	return filepath.ToSlash(relative), true

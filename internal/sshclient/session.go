@@ -168,6 +168,12 @@ func (s *Session) markReady(err error) {
 
 func (s *Session) Read(b []byte) (int, error) { return s.reader.Read(b) }
 
+// Announce は、接続ログの設定に関係なく出す行を、このセッションのターミナルへ書く。
+//
+// 書き先の接続ログは接続の途中で決まるので、Ready が成功を返した後に呼ぶ。出力は
+// ターミナルが読むまで進まないので、読み手と同じ goroutine からは呼ばない。
+func (s *Session) Announce(message string) { s.trace.announce("%s", message) }
+
 // Write は、打たれたバイト列を受け取る。
 //
 // 握手のあいだは問いの結果になり、シェルが始まったあとはリモートへ流れる。

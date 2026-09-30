@@ -454,7 +454,12 @@ export const ja = {
   "snippets.cancel": "中止",
   "snippets.startup": "接続時の自動実行",
   "snippets.startupHint":
-    "選択したホストのシェル準備後に実行します。初回接続と自動再接続のたびに送るため、シークレット変数の値も暗号化した設定に保存され、リモートのシェル履歴や画面に残ることがあります。",
+    "選択したホストのシェル準備後に実行します。初回接続と自動再接続のたびに送るため、シークレット変数の値も暗号化した設定に保存され、リモートのシェル履歴や画面に残ることがあります。割り当てた後で接続先または認証の設定（ホスト名、ユーザー、ポート、踏み台、ProxyCommand、ForwardAgentなど）が変わると送りません。",
+  "snippets.startupStale":
+    "停止中です。割り当てた後で接続先または認証の設定が変わったため、このホストには送りません。接続先を確認してから、もう一度割り当ててください。",
+  "snippets.startupStaleCount":
+    "停止中の割り当てが{count}件あります。ホストを選んで接続先を確認し、もう一度割り当ててください。",
+  "snippets.startupStaleHosts": "停止中の割り当てのホスト",
   "snippets.setStartup": "接続時に自動実行",
   "snippets.clearStartup": "解除",
   "host.duplicateKeyword":
@@ -1054,6 +1059,8 @@ export const ja = {
     "アプリ専用ストレージが読み取り専用です。デバイスを再起動してから再試行してください。",
   "lock.storageBusy":
     "別のVault更新が完了していません。少し待ってから再試行してください。",
+  "lock.pendingTransaction":
+    "中断した変更が残っているため、Vaultを書き込めませんでした。",
   "lock.storageIO":
     "Androidがアプリ専用ストレージへの入出力エラーを報告しました。",
   "lock.schemaOlder":
@@ -1336,6 +1343,10 @@ export const ja = {
   "diagnostic.requestFailed": "操作を完了できませんでした",
   "diagnostic.requestFailedHint":
     "sshcでエラーが発生しました（{code}）。問い合わせの際は診断情報を確認してください。",
+  "diagnostic.workspaceBusy":
+    "別のsshcがこのマシンの設定を30秒以上更新し続けています。完了してから、もう一度お試しください。",
+  "diagnostic.workspacePendingTransaction":
+    "中断した変更が残っているため、保存できませんでした。「History」で中断した変更を完了するか取り消してから、もう一度お試しください。",
   "diagnostic.showDetails": "診断情報を表示",
   "diagnostic.dismiss": "エラーを閉じる",
 
@@ -1647,6 +1658,8 @@ export const ja = {
     "確認後にこのマシンの設定が変更されました。上書きせずに停止しました。もう一度「変更を確認」からやり直してください。",
   "sync.workspaceBusy":
     "別の処理がこのマシンの設定を更新しています。完了してから、もう一度お試しください。",
+  "sync.pendingTransaction":
+    "中断した変更が残っているため、同期できませんでした。「History」で中断した変更を完了するか取り消してから、もう一度お試しください。",
   "sync.endpointPath":
     "エンドポイントにはアカウントのURLだけを指定し、バケット名やパスは含めないでください。バケット名は下の欄に入力してください。",
   "sync.autoHint.both":
@@ -2267,7 +2280,7 @@ export const ja = {
   "conn.basicAssignedTOTP": "割り当て済み：{name}",
   "conn.basicRouteConfirmHeading": "保存済みの認証情報をこの経路で使いますか？",
   "conn.basicRouteConfirmBody":
-    "認証経路が変更されています。保存すると、割り当て済みのパスワードまたはワンタイムパスワードを現在の経路で使用できるようにします。",
+    "認証経路が変更されています。保存すると、割り当て済みのパスワードまたはワンタイムパスワードを現在の経路で使用できるようにします。起動スニペットの割り当ては結び直さないため、停止中になります。［Snippets］画面で接続先を確認して、もう一度割り当ててください。",
   "conn.basicRouteConfirmSave": "保存して再確認",
   "conn.basicRouteConfirmCancel": "キャンセル",
   "conn.basicTOTPAction": "ワンタイムパスワードの操作",

@@ -1,11 +1,9 @@
 package workspace
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"path/filepath"
 	"sort"
@@ -13,6 +11,7 @@ import (
 	"time"
 
 	"sshc/internal/storage"
+	"sshc/internal/strictjson"
 )
 
 const temporaryName = ".workspaces-"
@@ -125,14 +124,9 @@ func (store *Store) load() ([]Workspace, error) {
 	if err != nil {
 		return nil, err
 	}
-	decoder := json.NewDecoder(bytes.NewReader(contents))
-	decoder.DisallowUnknownFields()
 	var stored document
-	if err := decoder.Decode(&stored); err != nil {
+	if err := strictjson.Decode(contents, &stored); err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrInvalidDocument, err)
-	}
-	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		return nil, ErrInvalidDocument
 	}
 	if stored.SchemaVersion > SchemaVersion {
 		return nil, ErrUnsupportedSchema

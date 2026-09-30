@@ -4,6 +4,8 @@ import (
 	"context"
 	"sync"
 	"time"
+
+	"sshc/internal/redact"
 )
 
 type jobState struct {
@@ -105,8 +107,8 @@ func (s *Service) execute(ctx context.Context, state *jobState, planned []planne
 				state.mutex.Lock()
 				result := &state.view.Results[index]
 				result.ExitCode = output.ExitCode
-				stdout, stdoutCut := publicOutput(output.Stdout, planned[index].secrets)
-				stderr, stderrCut := publicOutput(output.Stderr, planned[index].secrets)
+				stdout, stdoutCut := publicOutput(output.Stdout, planned[index].secrets, output.Truncated)
+				stderr, stderrCut := publicOutput(output.Stderr, planned[index].secrets, output.Truncated)
 				result.Stdout = stdout
 				result.Stderr = stderr
 				result.Truncated = output.Truncated || stdoutCut || stderrCut
@@ -199,8 +201,21 @@ func (s *Service) pruneJobsLocked() {
 	}
 }
 
-func publicOutput(output []byte, secrets []string) (string, bool) {
-	redacted := redact(string(output), secrets)
+// publicOutput は、伏せた出力を MaxResultBytes までに切り、切ったかどうかを返す。
+//
+// captureTruncated が真なら、出力は取り込みの上限で切れていて、末尾にシークレットの頭だけが
+// 残っているかもしれない。stdout と stderr のどちらが切れたかは分からないので、
+// 両方の末尾でその頭を伏せる。切れていない出力の末尾を余分に伏せるほうが、頭を出すより害が小さい。
+func publicOutput(output []byte, secrets []string, captureTruncated bool) (string, bool) {
+	cutAt := 0
+	if captureTruncated {
+		cutAt = len(output)
+	}
+	shared := make([]redact.Secret, 0, len(secrets))
+	for _, secret := range secrets {
+		shared = append(shared, redact.Secret{Value: []byte(secret), CutAt: cutAt})
+	}
+	redacted := string(redact.Bytes(output, shared, secretRedaction))
 	if len(redacted) <= MaxResultBytes {
 		return redacted, false
 	}

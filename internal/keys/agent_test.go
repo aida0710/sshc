@@ -7,7 +7,9 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
@@ -84,7 +86,7 @@ func writeAgentKey(t *testing.T, directory string, passphrase []byte) (string, s
 // SSH_AUTH_SOCK を読まない。ここで確かめたいのは宛先の決め方ではなく、
 // 繋がったあとのプロトコルの通信方式なので、宛先はテストが直接与える。
 // unix ソケットは Windows 10 以降も使えるので、この管はどのホストでも通る。
-func agentFor(socket string) platform.KeyAgent {
+func agentFor(socket string) keys.Agent {
 	return keys.Agent{
 		Socket: func() string { return socket },
 		Dial: func(ctx context.Context, address string) (net.Conn, error) {
@@ -166,6 +168,70 @@ func TestAgentReportsAnUnreachableSocketAsUnavailable(t *testing.T) {
 	}
 	if _, err := adapter.List(context.Background()); !errors.Is(err, platform.ErrAgentUnavailable) {
 		t.Fatalf("List = %v, want ErrAgentUnavailable", err)
+	}
+}
+
+// 開けなかった理由は、agent 転送の失敗としてターミナルへそのまま出る。改行を含むと、
+// 次の行が行頭へ戻らない。
+func TestAgentExplainsAnUnreachableSocketOnOneLine(t *testing.T) {
+	adapter := agentFor(filepath.Join(t.TempDir(), "nobody-is-here.sock"))
+
+	_, err := adapter.Connect(context.Background())
+	if !errors.Is(err, platform.ErrAgentUnavailable) {
+		t.Fatalf("Connect = %v, want ErrAgentUnavailable", err)
+	}
+	if strings.ContainsAny(err.Error(), "\r\n") {
+		t.Fatalf("the reason spans several lines: %q", err.Error())
+	}
+}
+
+// deadlineRecordingConn は、SetDeadline が呼ばれたかを覚える接続である。
+type deadlineRecordingConn struct {
+	net.Conn
+	deadlineSet bool
+}
+
+func (conn *deadlineRecordingConn) SetDeadline(deadline time.Time) error {
+	conn.deadlineSet = true
+	return conn.Conn.SetDeadline(deadline)
+}
+
+// agentOver は、開くと必ず conn を返す agent である。
+func agentOver(conn net.Conn) keys.Agent {
+	return keys.Agent{
+		Socket: func() string { return "recorded" },
+		Dial:   func(context.Context, string) (net.Conn, error) { return conn, nil },
+	}
+}
+
+// 署名の要求は、接続の認証や agent 転送のあいだのいつ来るか分からない。Connect が
+// 開いた接続に期限を付けると、転送した agent は Timeout の後に切れる。
+func TestConnectLeavesTheOpenedAgentWithoutADeadline(t *testing.T) {
+	client, server := net.Pipe()
+	defer func() { _ = server.Close() }()
+	recorded := &deadlineRecordingConn{Conn: client}
+
+	conn, err := agentOver(recorded).Connect(context.Background())
+	if err != nil {
+		t.Fatalf("Connect = %v", err)
+	}
+	defer func() { _ = conn.Close() }()
+	if recorded.deadlineSet {
+		t.Fatal("Connect put a deadline on the agent connection")
+	}
+}
+
+// Keys 画面の一往復は、応答しない agent で止まらないよう、開いた接続にも期限を付ける。
+func TestTheKeysScreenBoundsEachAgentRoundTripWithADeadline(t *testing.T) {
+	client, server := net.Pipe()
+	defer func() { _ = server.Close() }()
+	recorded := &deadlineRecordingConn{Conn: client}
+
+	if !agentOver(recorded).Available(context.Background()) {
+		t.Fatal("an agent that opens reported itself unavailable")
+	}
+	if !recorded.deadlineSet {
+		t.Fatal("the Keys screen opened the agent without a deadline")
 	}
 }
 
