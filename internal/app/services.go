@@ -77,8 +77,10 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 	}
 	configService := application.NewService(workspace, transactions)
 	// 受け口のポートと Vault の時計が読む前に、このマシンの sshc エンジンの設定を決める。
-	if err := configService.InitialiseEngineSettings(); err != nil {
-		return nil, fmt.Errorf("engine settings: %w", err)
+	// 前の metadata.json から移せなくても起動は止めない。設定は既定のまま動き、設定の
+	// ファイルを作らないので、直したあとの起動で移し直す。
+	if err := configService.InitialiseEngineSettings(); err != nil && dependencies.Logger != nil {
+		dependencies.Logger.Error("move the engine settings from metadata.json", "error", err)
 	}
 	keyService, keyTransactions := buildKeyService(workspace, dependencies, configService)
 	configService.SetKeyPassphraseVerifier(keyService)

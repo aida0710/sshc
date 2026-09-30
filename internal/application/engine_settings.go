@@ -203,7 +203,9 @@ func (s *Service) SetEngineSettings(settings EngineSettings) (SaveResult, error)
 // ファイルがまだ無いとき（このバージョンで初めて起動したとき）だけである。そのあとに
 // 同期や履歴の復元で前の形の metadata.json が届いても、別のマシンの設定なので移さない。
 // 移すものが無くても空の設定でファイルを作り、移し終えたことを残す。metadata.json が
-// JSON として読めなければ、直したあとの起動で移せるよう、まだ作らない。
+// JSON として読めなければ、直したあとの起動で移せるよう、まだ作らない。ファイルを
+// 読めないなどで失敗したときも何も作らずに理由を返す。sshc エンジンは起動を止めず、
+// 既定の設定で動く（internal/app の newEngineServices）。
 //
 // metadata.json は書き換えない。engine 節は、次に metadata.json を保存するときに消える。
 // Vault のロックを解除する前に動くので、変更の履歴を通さずに書く。

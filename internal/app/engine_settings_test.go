@@ -7,8 +7,10 @@ import (
 	"io"
 	"log/slog"
 	"net"
+	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -151,5 +153,42 @@ func TestAPortFromAnotherMachineNeitherMovesTheEngineNorRevokesTheBrowsers(t *te
 	}
 	if recovery, err := registrations.Recover(token); err != nil || !recovery.Accepted() {
 		t.Fatalf("this machine's browser registration was revoked: accepted=%t err=%v", recovery.Accepted(), err)
+	}
+}
+
+// このマシンの sshcエンジンの設定を前の metadata.json から移せなくても（読めない
+// metadata.json など）、sshcエンジンは既定の設定で起動し、理由をログに残す。設定の
+// ファイルは作らないので、直したあとの起動で移し直す。
+func TestTheEngineStartsWithTheDefaultSettingsWhenItCannotMoveThemAndMovesThemOnTheNextStart(t *testing.T) {
+	home := t.TempDir()
+	metadataPath := filepath.Join(home, ".ssh", "sshc", application.MetadataFileName)
+	// ファイルとして読めない metadata.json。どの OS でも読み取りが失敗する。
+	if err := os.MkdirAll(metadataPath, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&logs, nil))
+
+	services, err := newEngineServices(Dependencies{Home: home, Random: rand.Reader, Logger: logger})
+	if err != nil {
+		t.Fatalf("newEngineServices with an unreadable metadata.json = %v, want the engine to start", err)
+	}
+	if got := services.config.EngineSettings(); got != (application.EngineSettings{}) {
+		t.Fatalf("engine settings = %+v, want the defaults", got)
+	}
+	if !strings.Contains(logs.String(), "move the engine settings") {
+		t.Fatalf("logs = %q, want the reason the settings were not moved", logs.String())
+	}
+
+	if err := os.Remove(metadataPath); err != nil {
+		t.Fatal(err)
+	}
+	writeMetadata(t, home, `{"schemaVersion":8,"engine":{"port":43123}}`)
+	restarted, err := newEngineServices(Dependencies{Home: home, Random: rand.Reader, Logger: logger})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := restarted.config.EngineSettings().Port; got != 43123 {
+		t.Fatalf("port on the next start = %d, want the port moved from metadata.json", got)
 	}
 }
