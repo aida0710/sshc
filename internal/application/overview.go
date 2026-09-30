@@ -51,7 +51,7 @@ func (s *Service) Overview() (Overview, error) {
 		if host.DetectedOS == "" {
 			continue
 		}
-		if !s.detectionApplies(graph, host.Identity, host.DetectedOSBinding) {
+		if !s.detectionApplies(graph, stored.Hosts, osDetection{identity: host.Identity, binding: host.DetectedOSBinding}) {
 			reconciled.Hosts[i].DetectedOS = ""
 			reconciled.Hosts[i].DetectedOSBinding = ""
 		}

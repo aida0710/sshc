@@ -195,9 +195,13 @@ func appendJumpRoute(route []Target, hop Target) []Target {
 }
 
 // AuthenticationBinding returns a stable digest of the resolved destination and
-// the route used to authenticate it. Saved account passwords are released only
-// when this digest still matches the value recorded when the assignment was made.
+// the route used to authenticate it, including the VPN profile. Saved account
+// passwords, TOTP seeds and startup snippets are released only when this digest
+// still matches the value recorded when the assignment was made.
 // Alias is deliberately absent: renaming an alias does not change its peer.
+//
+// NewTarget does not fill VPN, so a caller that records or compares a binding
+// must set VPN exactly as the connection that uses the binding does.
 func (t Target) AuthenticationBinding() string {
 	if t.authenticationBindingOverride != "" {
 		return t.authenticationBindingOverride
@@ -215,12 +219,16 @@ func (t Target) AuthenticationBinding() string {
 		// HostKeyAlias は、どの known_hosts の行が相手を認めるかを変える。書かれて
 		// いない接続では省き、保存済みの割り当ての digest を変えない。
 		HostKeyAlias string `json:",omitempty"`
+		// VPN は、どのネットワークの HostName へ繋ぐかを変える。同じアドレスが別の
+		// VPN の中では別のマシンでありうる。VPN を付けていない接続では省き、
+		// 保存済みの割り当ての digest を変えない。
+		VPN string `json:",omitempty"`
 	}
 	bound := destination{
 		HostName: t.HostName, Port: t.Port, User: t.User,
 		ProxyCommand: t.ProxyCommand, AgentForward: t.AgentForward, Strict: t.Strict,
 		HostKeyAlgorithms: slices.Clone(t.HostKeyAlgorithms), Methods: t.Methods.Order(),
-		HostKeyAlias: t.HostKeyAlias,
+		HostKeyAlias: t.HostKeyAlias, VPN: t.VPN,
 	}
 	for _, hop := range t.Jump {
 		bound.Jump = append(bound.Jump, hop.AuthenticationBinding())

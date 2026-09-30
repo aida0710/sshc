@@ -68,6 +68,51 @@ func TestAuthenticationBindingCoversDestinationAndJumpRoute(t *testing.T) {
 	}
 }
 
+// 同じ HostName でも、VPN プロファイルが違えば別のネットワークの相手でありうる。
+// プロファイルを付けたとき、付け替えたとき、外したときに、保存済みのパスワード・
+// TOTP・起動スニペットをそのまま送らないよう、結び付けの値が変わる。
+func TestAuthenticationBindingChangesWhenTheVPNProfileChanges(t *testing.T) {
+	direct := sshclient.Target{
+		Alias: "lab", HostName: "10.9.9.1", Port: "22", User: "deploy",
+		Strict: "yes", Methods: sshclient.DefaultMethods(),
+	}
+	throughLab := direct
+	throughLab.VPN = "lab"
+	throughOffice := direct
+	throughOffice.VPN = "office"
+
+	bindings := map[string]string{
+		"no VPN":         direct.AuthenticationBinding(),
+		"through lab":    throughLab.AuthenticationBinding(),
+		"through office": throughOffice.AuthenticationBinding(),
+	}
+	seen := map[string]string{}
+	for route, binding := range bindings {
+		if other, duplicate := seen[binding]; duplicate {
+			t.Fatalf("%s and %s share the binding %s", route, other, binding)
+		}
+		seen[binding] = route
+	}
+}
+
+// VPN を付けていない接続の結び付けは、VPN を結び付けに入れる前と同じ値になる。
+// 変わると、VPN と関係の無い接続の保存済みの割り当てまで、すべて停止中になる。
+func TestAuthenticationBindingWithoutAVPNKeepsTheValueSavedAssignmentsHold(t *testing.T) {
+	target := sshclient.Target{
+		Alias: "edge", HostName: "edge.example", Port: "22", User: "deploy",
+		Strict: "yes", Methods: sshclient.DefaultMethods(),
+		Jump: []sshclient.Target{{
+			Alias: "bastion", HostName: "jump.example", Port: "2222", User: "ops",
+			Strict: "yes", Methods: sshclient.DefaultMethods(),
+		}},
+	}
+	// VPN を結び付けに入れる前の AuthenticationBinding が返した値である。
+	const savedBeforeVPN = "a11781082024c713e84da7b5c6e5817a6f0fed554bd1cc0b5a2151a91fe0019b"
+	if got := target.AuthenticationBinding(); got != savedBeforeVPN {
+		t.Fatalf("binding = %s, want %s", got, savedBeforeVPN)
+	}
+}
+
 func resolverFor(table map[string]map[string][]string) sshclient.Resolver {
 	return func(alias string) (effective.Values, error) {
 		entries, known := table[alias]

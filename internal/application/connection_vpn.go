@@ -28,10 +28,19 @@ func (s *Service) ConnectionVPN(alias string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if index := hostMetadataIndex(stored.Hosts, identity); index >= 0 {
-		return stored.Hosts[index].VPN, nil
+	return vpnProfileOf(stored.Hosts, identity), nil
+}
+
+// vpnProfileOf は、identity のブロックに付けたVPNプロファイルの名前を hosts から返す。
+// 付けていなければ空である。
+func vpnProfileOf(hosts []HostMetadata, identity HostIdentity) string {
+	if identity.IsZero() {
+		return ""
 	}
-	return "", nil
+	if index := hostMetadataIndex(hosts, identity); index >= 0 {
+		return hosts[index].VPN
+	}
+	return ""
 }
 
 // VPNProfile は、名前で保存済みのVPNプロファイルを返す。
