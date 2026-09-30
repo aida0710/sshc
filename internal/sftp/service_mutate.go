@@ -86,6 +86,13 @@ func (s Service) ChmodRecursive(ctx context.Context, alias, remotePath string, m
 	return s.chmod(ctx, alias, remotePath, mode, expectedRevision, true)
 }
 
+// chmodTarget は chmod する項目と、走査で見たときの metadata revision。変える直前に
+// 同じ revision かを確かめ、走査のあとに置き換わった項目を変えない。
+type chmodTarget struct {
+	path     string
+	revision string
+}
+
 func (s Service) chmod(ctx context.Context, alias, remotePath string, mode fs.FileMode, expectedRevision string, recursive bool) (Entry, error) {
 	if expectedRevision == "" {
 		return Entry{}, ErrRevisionRequired
@@ -109,48 +116,24 @@ func (s Service) chmod(ctx context.Context, alias, remotePath string, mode fs.Fi
 	if metadataRevision(info) != expectedRevision {
 		return Entry{}, ErrConflict
 	}
-	targets := []struct {
-		path     string
-		revision string
-	}{{path: cleaned, revision: metadataRevision(info)}}
+	targets := []chmodTarget{{path: cleaned, revision: metadataRevision(info)}}
 	if recursive {
 		if !info.IsDir() {
 			return Entry{}, ErrNotDirectory
 		}
-		pending := []string{cleaned}
-		visited := 0
-		for depth := 0; depth <= maxSearchDepth && len(pending) > 0; depth++ {
-			var next []string
-			for _, directory := range pending {
-				if err := ctx.Err(); err != nil {
-					return Entry{}, err
+		// 読めないディレクトリがあれば失敗にする。飛ばすと、利用者が頼んだ木の一部だけが変わる。
+		err = walkBoundedTree(ctx, remote, boundedTreeWalk{
+			root: cleaned,
+			visit: func(directory string, child fs.FileInfo) error {
+				if child.Mode()&fs.ModeSymlink != 0 || (!child.Mode().IsRegular() && !child.IsDir()) {
+					return nil
 				}
-				children, err := readChildren(ctx, remote, directory)
-				if err != nil {
-					return Entry{}, err
-				}
-				for _, child := range children {
-					if isInternalName(child.Name()) || child.Mode()&fs.ModeSymlink != 0 || (!child.Mode().IsRegular() && !child.IsDir()) {
-						continue
-					}
-					visited++
-					if visited > maxSearchVisited {
-						return Entry{}, ErrTraversalLimit
-					}
-					childPath := path.Join(directory, child.Name())
-					targets = append(targets, struct {
-						path     string
-						revision string
-					}{path: childPath, revision: metadataRevision(child)})
-					if child.IsDir() {
-						next = append(next, childPath)
-					}
-				}
-			}
-			if depth == maxSearchDepth && len(next) > 0 {
-				return Entry{}, ErrTraversalLimit
-			}
-			pending = next
+				targets = append(targets, chmodTarget{path: path.Join(directory, child.Name()), revision: metadataRevision(child)})
+				return nil
+			},
+		})
+		if err != nil {
+			return Entry{}, err
 		}
 	}
 	for index := len(targets) - 1; index >= 0; index-- {
@@ -203,11 +186,6 @@ func (s Service) Rename(ctx context.Context, alias, from, to string) (Entry, err
 		return Entry{}, err
 	}
 	return entryFrom(path.Dir(target), namedInfo{FileInfo: info, name: path.Base(target)}), nil
-}
-
-// Delete は選択された項目を配下ごと削除する。
-func (s Service) Delete(ctx context.Context, alias, remotePath string) error {
-	return s.DeleteWithProgress(ctx, alias, remotePath, -1, nil)
 }
 
 func (s Service) replace(

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"io/fs"
 
 	"sshc/internal/handoff"
 )
@@ -50,7 +49,7 @@ func classifyCommandFailure(err error) commandFailure {
 	switch {
 	case errors.Is(err, context.Canceled):
 		return commandFailure{Kind: "canceled", Retryable: true}
-	case errors.Is(err, fs.ErrNotExist):
+	case errors.As(err, new(engineNotRunning)):
 		return commandFailure{Kind: "engine_not_running", Retryable: true}
 	case errors.Is(err, handoff.ErrSchemaVersion), errors.Is(err, handoff.ErrProtocolVersion):
 		return commandFailure{Kind: "engine_incompatible", Retryable: false}

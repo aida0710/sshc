@@ -2,6 +2,8 @@ import {
   useEffect,
   useRef,
   useState,
+  type ComponentPropsWithoutRef,
+  type ComponentPropsWithRef,
   type DragEvent as ReactDragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
@@ -87,6 +89,8 @@ export function useSFTPEntryList({
   // Dialogs opened from a menu outlive their trigger, so they are handed the
   // row itself as the element that takes focus back.
   const activeRow = useRef<HTMLElement | null>(null);
+  // Written only through focusAfterReload and cancelPendingFocus, so that the
+  // request's lifetime stays with this hook.
   const pendingFocus = useRef<string | null>(null);
   const longPress = useRef<{ timer: ReturnType<typeof globalThis.setTimeout>; x: number; y: number } | null>(null);
   const suppressNextClick = useRef(false);
@@ -130,8 +134,19 @@ export function useSFTPEntryList({
     onActivate(entry);
   }
 
+  // Asks for `key` to take focus when the next listing arrives: a created or
+  // renamed entry, the row that takes a deleted one's place, or the parent row
+  // after going up. A later request replaces an earlier one.
+  function focusAfterReload(key: string) {
+    pendingFocus.current = key;
+  }
+
+  function cancelPendingFocus() {
+    pendingFocus.current = null;
+  }
+
   function openParent() {
-    pendingFocus.current = parentRowKey;
+    focusAfterReload(parentRowKey);
     onOpenParent();
   }
 
@@ -166,7 +181,7 @@ export function useSFTPEntryList({
       suppressNextClick.current = false;
       return;
     }
-    if (busy || locked) return;
+    if (busy) return;
     setFocusedKey(entry.path);
     if (mobileInteraction && !event.shiftKey && !event.metaKey && !event.ctrlKey) {
       if (selectedPaths.size > 0) toggleSelection(entry);
@@ -394,8 +409,8 @@ export function useSFTPEntryList({
     setFocusedKey,
     focusRow,
     registerRow,
-    pendingFocus,
-    selectionAnchor,
+    focusAfterReload,
+    cancelPendingFocus,
     activeRow,
     selectAll,
     activate,
@@ -435,6 +450,17 @@ function EntryName({ entry }: { entry: RemoteEntry }) {
   return <>{entry.name}<span className="font-normal text-ink-muted">{` → ${target}`}</span></>;
 }
 
+function ParentRowLabel() {
+  const t = useTranslate();
+  return (
+    <>
+      <Icon name="groups" className="size-4 text-ink-muted" />
+      <span aria-hidden="true" className="font-mono">..</span>
+      <span className="sr-only">{t("sftp.parentDirectory")}</span>
+    </>
+  );
+}
+
 // The rows themselves: a table with sortable columns where there is room, and
 // a two-line list where there is not. Both read the same model.
 export function SFTPEntryList({
@@ -471,6 +497,38 @@ export function SFTPEntryList({
     rowContextMenu, beginLongPress, trackLongPress, cancelLongPress,
   } = model;
   const rowDraggable = (entry: RemoteEntry) => !mobileInteraction && draggable(entry);
+  // Both layouts wire their rows through these three, so that focus, selection
+  // and the long press work the same whichever layout is on screen. Only the
+  // markup around them differs.
+  const parentButtonProps: ComponentPropsWithRef<"button"> = {
+    ref: (node) => { registerRow(parentRowKey, node); },
+    tabIndex: activeRowKey === parentRowKey ? 0 : -1,
+    disabled: busy || locked,
+    onFocus: () => setFocusedKey(parentRowKey),
+    onClick: openParent,
+  };
+  const entryCheckboxProps = (entry: RemoteEntry): ComponentPropsWithoutRef<"input"> => ({
+    "aria-label": t("sftp.selectEntry", { name: entry.name }),
+    checked: selectedPaths.has(entry.path),
+    tabIndex: activeRowKey === entry.path ? 0 : -1,
+    disabled: busy,
+    onChange: () => toggleSelection(entry),
+    className: "size-4 accent-accent",
+  });
+  // A locked list still lets a row be selected; the model refuses to open it.
+  const entryButtonProps = (entry: RemoteEntry): ComponentPropsWithRef<"button"> => ({
+    ref: (node) => { registerRow(entry.path, node); },
+    "aria-label": entry.name,
+    "aria-pressed": selectedPaths.has(entry.path),
+    tabIndex: activeRowKey === entry.path ? 0 : -1,
+    disabled: busy,
+    onFocus: () => setFocusedKey(entry.path),
+    onClick: (event) => clickEntry(entry, event),
+    onPointerDown: (event) => beginLongPress(event, entry),
+    onPointerMove: trackLongPress,
+    onPointerUp: cancelLongPress,
+    onPointerCancel: cancelLongPress,
+  });
 
   // Touch devices get two-line rows with targets of at least 44px. Every
   // pointer-driven pane, however narrow, keeps the full table and scrolls it
@@ -482,16 +540,10 @@ export function SFTPEntryList({
           <li data-row-key={parentRowKey}>
             <button
               type="button"
-              ref={(node) => { registerRow(parentRowKey, node); }}
-              tabIndex={activeRowKey === parentRowKey ? 0 : -1}
-              disabled={busy || locked}
-              onFocus={() => setFocusedKey(parentRowKey)}
-              onClick={openParent}
+              {...parentButtonProps}
               className="flex min-h-11 w-full items-center gap-2 px-2 py-1.5 text-left text-sm hover:bg-hover disabled:text-ink-faint md:min-h-8 md:py-0.5"
             >
-              <Icon name="groups" className="size-4 text-ink-muted" />
-              <span aria-hidden="true" className="font-mono">..</span>
-              <span className="sr-only">{t("sftp.parentDirectory")}</span>
+              <ParentRowLabel />
             </button>
           </li>
         ) : null}
@@ -505,30 +557,12 @@ export function SFTPEntryList({
             onDragStart={(event) => onDragStart?.(event, entry)}
           >
             <label className="flex size-11 shrink-0 items-center justify-center">
-              <input
-                type="checkbox"
-                aria-label={t("sftp.selectEntry", { name: entry.name })}
-                checked={selectedPaths.has(entry.path)}
-                tabIndex={activeRowKey === entry.path ? 0 : -1}
-                disabled={busy}
-                onChange={() => toggleSelection(entry)}
-                className="size-4 accent-accent"
-              />
+              <input type="checkbox" {...entryCheckboxProps(entry)} />
             </label>
             <button
               type="button"
-              ref={(node) => { registerRow(entry.path, node); }}
-              aria-label={entry.name}
-              aria-pressed={selectedPaths.has(entry.path)}
-              tabIndex={activeRowKey === entry.path ? 0 : -1}
+              {...entryButtonProps(entry)}
               className="flex min-h-12 min-w-0 grow touch-pan-y select-none items-center gap-2 px-2 py-2 text-left hover:bg-hover active:bg-select-fill disabled:text-ink-faint"
-              onFocus={() => setFocusedKey(entry.path)}
-              onClick={(event) => clickEntry(entry, event)}
-              disabled={busy || locked}
-              onPointerDown={(event) => beginLongPress(event, entry)}
-              onPointerMove={trackLongPress}
-              onPointerUp={cancelLongPress}
-              onPointerCancel={cancelLongPress}
             >
               <Icon name={entryIcon(entry)} className="size-4 shrink-0 text-ink-muted" />
               <span className="min-w-0 grow">
@@ -571,16 +605,10 @@ export function SFTPEntryList({
             <td className="px-2 py-1 md:py-0.5" colSpan={6}>
               <button
                 type="button"
-                ref={(node) => { registerRow(parentRowKey, node); }}
-                tabIndex={activeRowKey === parentRowKey ? 0 : -1}
-                disabled={busy || locked}
-                onFocus={() => setFocusedKey(parentRowKey)}
-                onClick={openParent}
+                {...parentButtonProps}
                 className="flex w-full items-center gap-2 rounded py-0.5 text-left text-sm focus:outline-none focus-visible:ring-1 focus-visible:ring-accent disabled:text-ink-faint"
               >
-                <Icon name="groups" className="size-4 text-ink-muted" />
-                <span aria-hidden="true" className="font-mono">..</span>
-                <span className="sr-only">{t("sftp.parentDirectory")}</span>
+                <ParentRowLabel />
               </button>
             </td>
           </tr>
@@ -597,30 +625,12 @@ export function SFTPEntryList({
             className={`cursor-default border-t border-line/40 transition-colors ${selectedPaths.has(entry.path) ? "bg-select-fill/75" : "hover:bg-hover/55"}`}
           >
             <td className="w-9 px-2 py-1 md:py-0.5">
-              <input
-                type="checkbox"
-                aria-label={t("sftp.selectEntry", { name: entry.name })}
-                checked={selectedPaths.has(entry.path)}
-                tabIndex={activeRowKey === entry.path ? 0 : -1}
-                disabled={busy}
-                onChange={() => toggleSelection(entry)}
-                onDoubleClick={(event) => event.stopPropagation()}
-                className="size-4 accent-accent"
-              />
+              <input type="checkbox" {...entryCheckboxProps(entry)} onDoubleClick={(event) => event.stopPropagation()} />
             </td>
             <td className="max-w-64 px-2 py-1 md:py-0.5">
               <button
                 type="button"
-                ref={(node) => { registerRow(entry.path, node); }}
-                aria-label={entry.name}
-                aria-pressed={selectedPaths.has(entry.path)}
-                tabIndex={activeRowKey === entry.path ? 0 : -1}
-                onFocus={() => setFocusedKey(entry.path)}
-                onClick={(event) => clickEntry(entry, event)}
-                onPointerDown={(event) => beginLongPress(event, entry)}
-                onPointerMove={trackLongPress}
-                onPointerUp={cancelLongPress}
-                onPointerCancel={cancelLongPress}
+                {...entryButtonProps(entry)}
                 className="flex w-full min-w-0 items-center gap-2 rounded text-left focus:outline-none focus-visible:ring-1 focus-visible:ring-accent"
               >
                 <Icon name={entryIcon(entry)} className="size-4 text-ink-muted" />

@@ -9,18 +9,18 @@ import (
 )
 
 func TestDownloadSpoolUsesAnUnpredictablePrivateDirectory(t *testing.T) {
-	temporaryRoot := t.TempDir()
+	spoolRoot := t.TempDir()
 	outside := t.TempDir()
-	predictable := filepath.Join(temporaryRoot, "sshc-sftp-spool")
+	predictable := filepath.Join(spoolRoot, "sshc-sftp-spool")
 	if err := os.Symlink(outside, predictable); err != nil {
 		t.Fatal(err)
 	}
 
-	root := createDownloadSpoolDirectory(temporaryRoot)
-	if root == "" {
-		t.Fatal("createDownloadSpoolDirectory returned no directory")
+	root, owner, err := createDownloadSpoolDirectory(spoolRoot)
+	if err != nil {
+		t.Fatalf("createDownloadSpoolDirectory() = %v", err)
 	}
-	t.Cleanup(func() { _ = os.RemoveAll(root) })
+	t.Cleanup(func() { _ = owner.Close() })
 	if root == predictable {
 		t.Fatal("download spool reused the attacker-controlled predictable path")
 	}

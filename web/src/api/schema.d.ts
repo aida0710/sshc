@@ -1878,7 +1878,7 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        delete: operations["deleteSFTPEntry"];
+        delete?: never;
         options?: never;
         head?: never;
         patch: operations["renameSFTPEntry"];
@@ -7559,34 +7559,6 @@ export interface operations {
             400: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
             502: components["responses"]["Problem"];
-        };
-    };
-    deleteSFTPEntry: {
-        parameters: {
-            query: {
-                path: string;
-            };
-            header: {
-                "X-SSHC-Action": string;
-            };
-            path: {
-                alias: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Entry deleted */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ChangedResponse"];
-                };
-            };
-            403: components["responses"]["Problem"];
-            404: components["responses"]["Problem"];
         };
     };
     renameSFTPEntry: {

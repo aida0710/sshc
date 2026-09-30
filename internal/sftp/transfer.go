@@ -23,8 +23,10 @@ var editorTemporaryNamePattern = regexp.MustCompile(`^\..+\.sshc-[0-9a-f]{24}\.t
 //     prepared download の spool。upload_plane.go／download_plane.go／spool.go。
 //     同じ再開用の part file への操作は operation lock で直列にし、別のファイルへの
 //     操作は並行に進める。
-//   - job 台帳（jobsMutex）: queue の記録・順序・設定・永続化。jobs.go／
-//     jobs_settings.go／queue_store.go。
+//   - job 台帳（jobsMutex）: queue の記録・順序・設定・永続化。jobs.go（台帳の
+//     初期化・一覧・写し）、jobs_types.go、jobs_admission.go（受け入れと追い出し）、
+//     jobs_state.go（状態遷移）、jobs_order.go、jobs_removal.go、jobs_expiry.go
+//     （滞留と期限切れ）、jobs_settings.go、transfer_settings.go、queue_store.go。
 //   - remote worker（remoteJobsMutex）: engine 内で走る copy／move／delete／
 //     put／get。remote_jobs.go。
 //
@@ -34,11 +36,18 @@ type TransferManager struct {
 	Service *Service
 
 	// データプレーン。mutex が守る。
-	mutex     sync.Mutex
-	locks     map[string]*transferLock
-	remotes   map[string]Remote
+	mutex   sync.Mutex
+	locks   map[string]*transferLock
+	remotes map[string]Remote
+	// idleRemotes marks the connections in remotes that no request holds:
+	// the ones a sequential upload keeps for its next chunk.
+	idleRemotes map[string]*idleTransferRemote
+	// after schedules the discard of an idle connection. Tests replace it to
+	// fire the discard when they choose. It runs under mutex, so it must not
+	// call the discard before returning.
+	after     func(time.Duration, func()) *time.Timer
 	downloads map[string]preparedDownloadCache
-	spoolDir  string
+	spool     *downloadSpool
 	closed    bool
 	closeOnce sync.Once
 	closeErr  error
@@ -61,11 +70,50 @@ type TransferManager struct {
 	queuePath            string
 	lastQueuePersist     time.Time
 	queuePersistError    error
+	// slotReleased is closed when a slot may have opened; see slotWait.
+	slotReleased chan struct{}
 
 	// remote worker。remoteJobsMutex が守る。
 	remoteJobsMutex sync.Mutex
-	remoteCancels   map[string]context.CancelFunc
+	remoteRuns      map[string]*remoteRun
 	remoteWorkers   sync.WaitGroup
+
+	// 転送キューの設定の更新。settingsMutex が一つずつ通す。
+	settingsMutex sync.Mutex
+	// saveSettings は、engine に適用する前に設定を残す。nil なら設定は
+	// engine の process が生きているあいだだけ効く。
+	saveSettings func(TransferSettings) error
+}
+
+// transferRemoteIdleTimeout is how long a sequential upload keeps its
+// connection for a next chunk that does not come. A client sends the next
+// chunk as soon as the previous one returns, and the stale sweep counts a job
+// silent this long as gone. That sweep only runs when a request reaches the
+// queue, and after every sshc window closed none may come.
+const transferRemoteIdleTimeout = staleRunningTransferAfter
+
+// idleTransferRemote is one period during which a connection kept in remotes
+// waits for its next request. Each period has its own mark, so the timer of a
+// period that a request already ended finds a different mark and does nothing.
+type idleTransferRemote struct {
+	remote Remote
+	// timer discards the connection when the period runs out. Ending the
+	// period stops it, so a sequential upload sending a chunk per request
+	// keeps one timer alive rather than one per chunk.
+	timer *time.Timer
+}
+
+// endIdlePeriodLocked removes the idle mark of key and stops its timer. The
+// caller holds m.mutex.
+func (m *TransferManager) endIdlePeriodLocked(key string) {
+	idle := m.idleRemotes[key]
+	if idle == nil {
+		return
+	}
+	delete(m.idleRemotes, key)
+	if idle.timer != nil {
+		idle.timer.Stop()
+	}
 }
 
 type transferLock struct {
@@ -73,10 +121,28 @@ type transferLock struct {
 	refs  int
 }
 
-func NewTransferManager(service *Service) *TransferManager {
-	manager := &TransferManager{Service: service, locks: make(map[string]*transferLock), remotes: make(map[string]Remote), downloads: make(map[string]preparedDownloadCache), spoolDir: downloadSpoolDirectory(), remoteCancels: make(map[string]context.CancelFunc)}
+// NewTransferManager prepares downloads under downloadSpoolRoot, a directory
+// that only this user can write and that every sshc process of the user
+// shares for the quota. The caller chooses it: the engine passes the user's
+// cache, Android the app's cache and tests their own temporary directory, so
+// this package never guesses from HOME. The directory is created when missing.
+// With an empty root, downloads fail with ErrSpoolUnavailable.
+func NewTransferManager(service *Service, downloadSpoolRoot string) *TransferManager {
+	manager := &TransferManager{
+		Service: service, locks: make(map[string]*transferLock), remotes: make(map[string]Remote),
+		idleRemotes: make(map[string]*idleTransferRemote), after: time.AfterFunc,
+		downloads: make(map[string]preparedDownloadCache), spool: newDownloadSpool(downloadSpoolRoot),
+		remoteRuns: make(map[string]*remoteRun),
+	}
 	manager.ConfigureJobs(DefaultTransferConcurrency, time.Now)
 	return manager
+}
+
+// DownloadSpoolError reports why the spool root given to NewTransferManager
+// cannot hold downloads, or nil when it can. The engine logs it at start,
+// because each download only reports sftp_spool_unavailable.
+func (m *TransferManager) DownloadSpoolError() error {
+	return m.spool.rootErr
 }
 
 // Close releases resources intentionally retained between transfer requests.
@@ -94,6 +160,9 @@ func (m *TransferManager) Close() error {
 			delete(m.remotes, key)
 			remotes = append(remotes, remote)
 		}
+		for key := range m.idleRemotes {
+			m.endIdlePeriodLocked(key)
+		}
 		downloads := make([]*PreparedDownload, 0, len(m.downloads))
 		for id, cached := range m.downloads {
 			delete(m.downloads, id)
@@ -101,8 +170,8 @@ func (m *TransferManager) Close() error {
 		}
 		m.mutex.Unlock()
 		m.remoteJobsMutex.Lock()
-		for _, cancel := range m.remoteCancels {
-			cancel()
+		for _, run := range m.remoteRuns {
+			run.cancel()
 		}
 		m.remoteJobsMutex.Unlock()
 		// A remote-to-remote worker owns request-scoped SFTP connections which
@@ -120,6 +189,9 @@ func (m *TransferManager) Close() error {
 			if err := download.Close(); err != nil {
 				joined = append(joined, err)
 			}
+		}
+		if err := m.spool.close(); err != nil {
+			joined = append(joined, err)
 		}
 		m.closeErr = errors.Join(joined...)
 	})
@@ -218,6 +290,14 @@ func transferRemoteKey(alias, id, target string) string {
 	return alias + "\x00" + id + "\x00" + target
 }
 
+// jobOwnerLockKey is the operation lock that serializes everything owning a
+// job's upload state: publishing an upload and pausing, failing or removing
+// the job. Every caller must use this key; a differently spelled one would be
+// a separate mutex and silently drop that exclusion.
+func jobOwnerLockKey(id string) string {
+	return "\x00job-owner:" + id
+}
+
 func (m *TransferManager) transferRemote(ctx context.Context, alias, id, target string) (Remote, error) {
 	key := transferRemoteKey(alias, id, target)
 	m.mutex.Lock()
@@ -226,6 +306,7 @@ func (m *TransferManager) transferRemote(ctx context.Context, alias, id, target 
 		return nil, ErrUnavailable
 	}
 	remote := m.remotes[key]
+	m.endIdlePeriodLocked(key)
 	m.mutex.Unlock()
 	if remote != nil {
 		return remote, nil
@@ -248,6 +329,41 @@ func (m *TransferManager) transferRemote(ctx context.Context, alias, id, target 
 	m.remotes[key] = remote
 	m.mutex.Unlock()
 	return remote, nil
+}
+
+// keepRemoteIdle leaves a connection in remotes for the next chunk of the same
+// sequential upload, and discards it if no request takes it within
+// transferRemoteIdleTimeout.
+func (m *TransferManager) keepRemoteIdle(alias, id, target string, remote Remote) {
+	key := transferRemoteKey(alias, id, target)
+	idle := &idleTransferRemote{remote: remote}
+	m.mutex.Lock()
+	if m.closed || m.remotes[key] != remote {
+		// Close or a cancelled request has already taken the connection.
+		m.mutex.Unlock()
+		return
+	}
+	m.endIdlePeriodLocked(key)
+	m.idleRemotes[key] = idle
+	// after only schedules the discard, so it may run under the lock that
+	// makes the timer part of the mark before any request can end the period.
+	idle.timer = m.after(transferRemoteIdleTimeout, func() { m.discardIdleRemote(key, idle) })
+	m.mutex.Unlock()
+}
+
+// discardIdleRemote closes a connection that stayed idle for the whole
+// period idle marks. A request that took the connection in the meantime
+// ended that period, and the connection is then left alone.
+func (m *TransferManager) discardIdleRemote(key string, idle *idleTransferRemote) {
+	m.mutex.Lock()
+	if m.idleRemotes[key] != idle || m.remotes[key] != idle.remote {
+		m.mutex.Unlock()
+		return
+	}
+	delete(m.idleRemotes, key)
+	delete(m.remotes, key)
+	m.mutex.Unlock()
+	discardRemote(idle.remote)
 }
 
 // watchRemoteCancellation closes and detaches a retained upload transport only
@@ -286,6 +402,7 @@ func (m *TransferManager) releaseRemoteIf(alias, id, target string, expected Rem
 	remote := m.remotes[key]
 	if remote == expected {
 		delete(m.remotes, key)
+		m.endIdlePeriodLocked(key)
 	} else {
 		remote = nil
 	}
@@ -310,6 +427,7 @@ func (m *TransferManager) detachRemote(alias, id, target string) Remote {
 	m.mutex.Lock()
 	remote := m.remotes[key]
 	delete(m.remotes, key)
+	m.endIdlePeriodLocked(key)
 	m.mutex.Unlock()
 	return remote
 }

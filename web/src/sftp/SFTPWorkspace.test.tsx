@@ -40,6 +40,22 @@ function currentPath(): HTMLElement {
   return within(screen.getByRole("tabpanel")).getByTestId("sftp-current-path");
 }
 
+// The remembered layout in the shape the workspace stores it: the panes from
+// left to right, each with its tabs and the position of the selected tab.
+const storedPanesKey = "sshc.sftp.panes.v1";
+type StoredPane = {
+  tabs: { alias: string; path: string; sortKey?: string; sortDirection?: string }[];
+  activeIndex?: number;
+};
+
+function seedStoredPanes(panes: StoredPane[]): void {
+  window.localStorage.setItem(storedPanesKey, JSON.stringify(panes));
+}
+
+function storedPanes(): StoredPane[] {
+  return JSON.parse(window.localStorage.getItem(storedPanesKey) ?? "[]") as StoredPane[];
+}
+
 // Opens a blank tab and moves it into a new pane on the right. Shift+Arrow is
 // the keyboard route to what a drag onto the right half of the pane does.
 async function openSecondPane(): Promise<HTMLElement> {
@@ -177,10 +193,10 @@ describe("SFTP tabs", () => {
   });
 
   it("restores tab locations without reconnecting until requested", async () => {
-    window.localStorage.setItem("sshc.sftp.tabs", JSON.stringify([
+    seedStoredPanes([{ tabs: [
       { alias: "edge", path: "/var/log" },
       { alias: "miyabi", path: "/srv" },
-    ]));
+    ] }]);
 
     render(<SFTPWorkspace aliases={["edge", "miyabi"]} />);
 
@@ -195,7 +211,7 @@ describe("SFTP tabs", () => {
   });
 
   it("restores a local tab and opens its remembered Windows directory without SSH hosts", async () => {
-    window.localStorage.setItem("sshc.sftp.tabs", JSON.stringify([{ alias: localHostAlias, path: "C:/Users" }]));
+    seedStoredPanes([{ tabs: [{ alias: localHostAlias, path: "C:/Users" }] }]);
     api.listLocal.mockResolvedValue({ path: "C:/Users", home: "C:/Users", entries: [] });
     render(<SFTPWorkspace aliases={[]} />);
 
@@ -268,8 +284,7 @@ describe("SFTP tabs", () => {
     await userEvent.click(within(table).getByRole("button", { name: /Size.*sort ascending/ }));
     await userEvent.click(within(table).getByRole("button", { name: /Size.*sort descending/ }));
     expect(within(table).getByRole("columnheader", { name: /Size/ })).toHaveAttribute("aria-sort", "descending");
-    expect(window.localStorage.getItem("sshc.sftp.tabs")).toContain('"sortKey":"size"');
-    expect(window.localStorage.getItem("sshc.sftp.tabs")).toContain('"sortDirection":"descending"');
+    expect(storedPanes()[0]?.tabs[0]).toMatchObject({ sortKey: "size", sortDirection: "descending" });
 
     first.unmount();
     render(<SFTPWorkspace aliases={["edge"]} />);
@@ -279,7 +294,7 @@ describe("SFTP tabs", () => {
   });
 
   it("ignores remembered tabs whose host is no longer declared", async () => {
-    window.localStorage.setItem("sshc.sftp.tabs", JSON.stringify([{ alias: "removed", path: "/gone" }]));
+    seedStoredPanes([{ tabs: [{ alias: "removed", path: "/gone" }] }]);
 
     render(<SFTPWorkspace aliases={["edge"]} />);
 
@@ -294,7 +309,7 @@ describe("SFTP tabs", () => {
     await chooseHost("edge");
     await waitFor(() => expect(currentPath()).toHaveAttribute("data-path", "/home/edge"));
     const second = await openSecondPane();
-    expect(window.localStorage.getItem("sshc.sftp.split")).toBe("true");
+    expect(storedPanes()).toHaveLength(2);
     const leftTabs = screen.getByRole("tablist", { name: "Left pane tabs" });
     const rightTabs = screen.getByRole("tablist", { name: "Right pane tabs" });
     expect(within(leftTabs).getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["edge:edge"]);
@@ -305,7 +320,7 @@ describe("SFTP tabs", () => {
 
     await chooseHost("miyabi", second);
     await waitFor(() => expect(api.list).toHaveBeenCalledWith("miyabi", ""));
-    expect(window.localStorage.getItem("sshc.sftp.secondaryTabs")).toContain("miyabi");
+    expect(storedPanes()[1]?.tabs.map((tab) => tab.alias)).toEqual(["miyabi"]);
 
     (await within(rightTabs).findByRole("tab", { name: "miyabi:edge" })).focus();
     await userEvent.keyboard("{Shift>}{ArrowLeft}{/Shift}");
@@ -313,8 +328,8 @@ describe("SFTP tabs", () => {
     expect(screen.queryByLabelText("Second remote pane")).not.toBeInTheDocument();
     expect(within(leftTabs).getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["edge:edge", "miyabi:edge"]);
     expect(within(leftTabs).getByRole("tab", { name: "miyabi:edge" })).toHaveAttribute("aria-selected", "true");
-    expect(window.localStorage.getItem("sshc.sftp.split")).toBe("false");
-    expect(window.localStorage.getItem("sshc.sftp.tabs")).toContain("miyabi");
+    expect(storedPanes()).toEqual([expect.objectContaining({ activeIndex: 1 })]);
+    expect(storedPanes()[0]?.tabs.map((tab) => tab.alias)).toEqual(["edge", "miyabi"]);
     // The moved tab reopens where it was without another host round trip.
     expect(within(screen.getByRole("tabpanel")).getByRole("button", { name: "Host" })).toHaveAttribute("data-value", "miyabi");
   });
@@ -460,7 +475,7 @@ describe("SFTP tabs", () => {
       await userEvent.click(within(table).getByRole("button", { name: /Size.*sort ascending/ }));
       expect(within(table).getAllByRole("row")[2]).toHaveTextContent("docs");
       expect(within(table).getAllByRole("row")[4]).toHaveTextContent("beta.txt");
-      expect(window.localStorage.getItem("sshc.sftp.secondaryTabs")).toContain('"sortKey":"size"');
+      expect(storedPanes()[1]?.tabs[0]).toMatchObject({ alias: localHostAlias, sortKey: "size" });
       // Shift-click extends the selection and the toolbar sums it up like the remote one.
       await userEvent.click(within(table).getByRole("button", { name: "docs" }));
       fireEvent.click(within(table).getByRole("button", { name: "beta.txt" }), { shiftKey: true });
@@ -653,10 +668,10 @@ describe("SFTP tabs", () => {
       contents: "hello\n",
       revision: "rev",
     });
-    window.localStorage.setItem("sshc.sftp.split", "true");
-    window.localStorage.setItem("sshc.sftp.secondaryTabs", JSON.stringify([
-      { alias: "edge", path: "/remote" },
-    ]));
+    seedStoredPanes([
+      { tabs: [{ alias: "", path: "" }] },
+      { tabs: [{ alias: "edge", path: "/remote" }] },
+    ]);
     render(<SFTPWorkspace aliases={["edge"]} />);
 
     const second = screen.getByLabelText("Second remote pane");
@@ -679,15 +694,10 @@ describe("SFTP tabs", () => {
   });
 
   it("restores independent tabs in both panes", async () => {
-    window.localStorage.setItem("sshc.sftp.split", "true");
-    window.localStorage.setItem("sshc.sftp.tabs", JSON.stringify([
-      { alias: "edge", path: "/var/log" },
-    ]));
-    window.localStorage.setItem("sshc.sftp.secondaryTabs", JSON.stringify([
-      { alias: "miyabi", path: "/srv" },
-      { alias: "edge", path: "/tmp" },
-    ]));
-    window.localStorage.setItem("sshc.sftp.secondaryActiveTab", "1");
+    seedStoredPanes([
+      { tabs: [{ alias: "edge", path: "/var/log" }] },
+      { tabs: [{ alias: "miyabi", path: "/srv" }, { alias: "edge", path: "/tmp" }], activeIndex: 1 },
+    ]);
 
     render(<SFTPWorkspace aliases={["edge", "miyabi"]} />);
 
@@ -702,12 +712,26 @@ describe("SFTP tabs", () => {
     expect(within(screen.getByLabelText("Second remote pane")).getByText("edge is disconnected")).toBeVisible();
   });
 
+  it("leaves out a remembered pane without usable tabs and selects the first tab when the stored position is out of range", () => {
+    window.localStorage.setItem(storedPanesKey, JSON.stringify([
+      { tabs: "broken" },
+      { tabs: [{ alias: "edge", path: "/srv" }, { alias: "miyabi", path: "/tmp" }], activeIndex: 5 },
+    ]));
+
+    render(<SFTPWorkspace aliases={["edge", "miyabi"]} />);
+
+    expect(screen.queryByRole("tablist", { name: "Right pane tabs" })).not.toBeInTheDocument();
+    const tabs = within(screen.getByRole("tablist", { name: "Left pane tabs" })).getAllByRole("tab");
+    expect(tabs.map((tab) => tab.textContent)).toEqual(["edge:srv", "miyabi:tmp"]);
+    expect(tabs[0]).toHaveAttribute("aria-selected", "true");
+  });
+
   it("renders only the primary tab strip and pane on a compact viewport", () => {
     const originalMatchMedia = window.matchMedia;
-    window.localStorage.setItem("sshc.sftp.split", "true");
-    window.localStorage.setItem("sshc.sftp.secondaryTabs", JSON.stringify([
-      { alias: "miyabi", path: "/srv" },
-    ]));
+    seedStoredPanes([
+      { tabs: [{ alias: "", path: "" }] },
+      { tabs: [{ alias: "miyabi", path: "/srv" }] },
+    ]);
     window.matchMedia = vi.fn().mockImplementation((query: string) => ({
       matches: query.includes("(max-width: 767px)"),
       media: query,
@@ -728,7 +752,7 @@ describe("SFTP tabs", () => {
       expect(screen.getByLabelText("Second remote pane")).not.toBeVisible();
       expect(screen.queryByRole("separator", { name: "Resize the panes" })).not.toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Compare directories" })).not.toBeInTheDocument();
-      expect(window.localStorage.getItem("sshc.sftp.split")).toBe("true");
+      expect(storedPanes()).toHaveLength(2);
     } finally {
       window.matchMedia = originalMatchMedia;
     }
@@ -773,7 +797,7 @@ describe("SFTP tabs", () => {
   });
 
   it("downloads a terminal-linked remote file while the visible tab still shows Local", async () => {
-    window.localStorage.setItem("sshc.sftp.tabs", JSON.stringify([{ alias: localHostAlias, path: "/home/edge" }]));
+    seedStoredPanes([{ tabs: [{ alias: localHostAlias, path: "/home/edge" }] }]);
     api.listLocal.mockResolvedValue({ path: "/home/edge", home: "/home/edge", entries: [] });
     api.list.mockResolvedValue({
       path: "/var/log",

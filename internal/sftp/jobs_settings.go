@@ -1,7 +1,27 @@
 package sftp
 
-import (
-	"time"
+import "time"
+
+const (
+	DefaultTransferConcurrency = 2
+	MaxTransferConcurrency     = 8
+	DefaultLargeFileThreshold  = int64(100 << 20)
+	MinLargeFileThreshold      = int64(16 << 20)
+	MaxLargeFileThreshold      = int64(1 << 30)
+	// One connection by default: a single pipelined SFTP stream already fills
+	// most links, and a second connection is where hosts with one-time codes,
+	// per-user session caps or slow authentication start to fail. Parallel
+	// ranges are opted into per engine or per CLI run.
+	DefaultLargeFileParallelism = 1
+	MaxLargeFileParallelism     = 128
+	DefaultLargeFileChunkBytes  = int64(32 << 20)
+	MinLargeFileChunkBytes      = int64(8 << 20)
+	MaxLargeFileChunkBytes      = int64(4 << 30)
+
+	// 完了項目の自動消去は、押し忘れても消える程度に長く、履歴として頼れる
+	// ほどには短い範囲に収める。0 は自動消去なしである。
+	MinClearCompletedAfter = 10 * time.Second
+	MaxClearCompletedAfter = 24 * time.Hour
 )
 
 func (m *TransferManager) ConfigureJobs(maxConcurrent int, now func() time.Time) {
@@ -14,6 +34,7 @@ func (m *TransferManager) ConfigureJobs(maxConcurrent int, now func() time.Time)
 	m.jobsMutex.Lock()
 	defer m.jobsMutex.Unlock()
 	m.maxConcurrent = maxConcurrent
+	m.signalSlotLocked()
 	m.largeFileThreshold = DefaultLargeFileThreshold
 	m.largeFileParallelism = DefaultLargeFileParallelism
 	m.largeFileChunkBytes = DefaultLargeFileChunkBytes
@@ -24,32 +45,6 @@ func (m *TransferManager) ConfigureJobs(maxConcurrent int, now func() time.Time)
 	if m.dataPlane == nil {
 		m.dataPlane = make(map[string]int)
 	}
-}
-
-// KeepJobActive protects an in-flight server-owned data operation from the
-// stale-running sweep. It covers long remote hashing/spooling periods where no
-// response bytes are available yet to report as progress.
-func (m *TransferManager) KeepJobActive(id string) (func(), error) {
-	if !transferIDPattern.MatchString(id) {
-		return nil, ErrInvalidTransfer
-	}
-	m.jobsMutex.Lock()
-	m.initializeJobsLocked()
-	if m.jobs[id] == nil {
-		m.jobsMutex.Unlock()
-		return nil, ErrTransferNotFound
-	}
-	m.dataPlane[id]++
-	m.jobsMutex.Unlock()
-	return func() {
-		m.jobsMutex.Lock()
-		if m.dataPlane[id] <= 1 {
-			delete(m.dataPlane, id)
-		} else {
-			m.dataPlane[id]--
-		}
-		m.jobsMutex.Unlock()
-	}, nil
 }
 
 func (m *TransferManager) MaxConcurrent() int {
@@ -90,111 +85,51 @@ func (m *TransferManager) LargeFileParallelism() int {
 	return m.largeFileParallelism
 }
 
+// largeFileSplit is how a job divides a large file into ranges.
+type largeFileSplit struct {
+	threshold   int64
+	parallelism int
+	chunkBytes  int64
+}
+
+// divides says whether a file of size is transferred as ranges over
+// parallel connections.
+func (split largeFileSplit) divides(size int64) bool {
+	return size >= split.threshold && split.parallelism > 1 && split.chunkBytes > 0
+}
+
+// largeFileSplitLocked takes the job's own values and the engine settings for
+// the ones the job left at zero. StartOwned records the result in an upload
+// job, so the engine settings count only until the upload first starts. A
+// download reads them once, when it prepares its spool.
+func (m *TransferManager) largeFileSplitLocked(job TransferJob) largeFileSplit {
+	split := largeFileSplit{
+		threshold: m.largeFileThreshold, parallelism: m.largeFileParallelism, chunkBytes: m.largeFileChunkBytes,
+	}
+	if job.LargeFileThresholdBytes != 0 {
+		split.threshold = job.LargeFileThresholdBytes
+	}
+	if job.LargeFileParallelism != 0 {
+		split.parallelism = job.LargeFileParallelism
+	}
+	if job.LargeFileChunkBytes != 0 {
+		split.chunkBytes = job.LargeFileChunkBytes
+	}
+	return split
+}
+
+// uploadSplit trims the parallel connections of a split upload to what the
+// host allows. Only StartOwned applies it; the ranges and the completion that
+// follow use the choice StartOwned recorded, so a change of the limit takes
+// effect at the next start instead of refusing ranges already in flight.
+func (m *TransferManager) uploadSplit(alias string, split largeFileSplit) largeFileSplit {
+	split.parallelism = m.Service.boundedParallelism(alias, split.parallelism)
+	return split
+}
+
 func (m *TransferManager) LargeFileChunkBytes() int64 {
 	m.jobsMutex.Lock()
 	defer m.jobsMutex.Unlock()
 	m.initializeJobsLocked()
 	return m.largeFileChunkBytes
-}
-
-// SetTransferSettings は、同時転送数、完了項目の自動消去時間、キュー処理の
-// 停止を差し替える。
-//
-// 転送は engine の資源であって browser のものではないため、値は engine 側に
-// 一つだけ置く。永続化は呼び出し側の責務である。
-func (m *TransferManager) SetTransferSettings(
-	maxConcurrent int, clearCompletedAfter time.Duration, processingStopped bool,
-	largeFileThreshold int64, largeFileParallelism int, largeFileChunkBytes int64,
-) error {
-	if maxConcurrent < 1 || maxConcurrent > MaxTransferConcurrency {
-		return ErrInvalidTransfer
-	}
-	if clearCompletedAfter != 0 && (clearCompletedAfter < MinClearCompletedAfter || clearCompletedAfter > MaxClearCompletedAfter) {
-		return ErrInvalidTransfer
-	}
-	if largeFileThreshold < MinLargeFileThreshold || largeFileThreshold > MaxLargeFileThreshold ||
-		largeFileParallelism < 1 || largeFileParallelism > MaxLargeFileParallelism ||
-		largeFileChunkBytes < MinLargeFileChunkBytes || largeFileChunkBytes > MaxLargeFileChunkBytes {
-		return ErrInvalidTransfer
-	}
-	m.jobsMutex.Lock()
-	defer m.jobsMutex.Unlock()
-	m.initializeJobsLocked()
-	m.maxConcurrent = maxConcurrent
-	m.clearCompletedAfter = clearCompletedAfter
-	m.processingStopped = processingStopped
-	m.largeFileThreshold = largeFileThreshold
-	m.largeFileParallelism = largeFileParallelism
-	m.largeFileChunkBytes = largeFileChunkBytes
-	return nil
-}
-
-// MoveQueuedJob は、待機中の job だけを待機列の中で入れ替える。running や
-// paused の位置は動かないので、並べ替えても走っている転送は影響を受けない。
-func (m *TransferManager) MoveQueuedJob(id string, move TransferQueueMove) error {
-	if !transferIDPattern.MatchString(id) {
-		return ErrInvalidTransfer
-	}
-	switch move {
-	case TransferMoveUp, TransferMoveDown, TransferMoveTop, TransferMoveBottom:
-	default:
-		return ErrInvalidTransfer
-	}
-	m.jobsMutex.Lock()
-	defer m.jobsMutex.Unlock()
-	m.initializeJobsLocked()
-	record := m.jobs[id]
-	if record == nil {
-		return ErrTransferNotFound
-	}
-	if record.job.Status != TransferQueued {
-		return ErrTransferState
-	}
-	slots := make([]int, 0, len(m.jobOrder))
-	current := -1
-	for index, candidate := range m.jobOrder {
-		waiting := m.jobs[candidate]
-		if waiting == nil || waiting.job.Status != TransferQueued {
-			continue
-		}
-		if candidate == id {
-			current = len(slots)
-		}
-		slots = append(slots, index)
-	}
-	if current < 0 || len(slots) < 2 {
-		return nil
-	}
-	destination := current
-	switch move {
-	case TransferMoveUp:
-		destination = current - 1
-	case TransferMoveDown:
-		destination = current + 1
-	case TransferMoveTop:
-		destination = 0
-	case TransferMoveBottom:
-		destination = len(slots) - 1
-	}
-	if destination < 0 || destination >= len(slots) || destination == current {
-		return nil
-	}
-	originalOrder := append([]string(nil), m.jobOrder...)
-	// 待機中の id だけを取り出し、順番を変えて同じ位置へ書き戻す。running の
-	// job が占める index は触らないので、待機列だけが並び替わる。
-	waiting := make([]string, 0, len(slots))
-	for _, index := range slots {
-		waiting = append(waiting, m.jobOrder[index])
-	}
-	moved := waiting[current]
-	waiting = append(waiting[:current], waiting[current+1:]...)
-	waiting = append(waiting[:destination], append([]string{moved}, waiting[destination:]...)...)
-	for position, index := range slots {
-		m.jobOrder[index] = waiting[position]
-	}
-	if err := m.persistJobsLocked(true); err != nil {
-		m.jobOrder = originalOrder
-		return err
-	}
-	return nil
 }

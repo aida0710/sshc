@@ -187,7 +187,7 @@ sshc sftp put bastion ./disk.img /backup/disk.img --split-size 100 --split-jobs 
 
 Recursive downloads default to a safety budget of 64 levels below the selected root, 10,000 files and directories in total, and 1,024 MiB of file data. If a limit is reached, sshc stops before transferring anything. For an intentionally larger tree, raise the per-run limit with `--max-depth` (up to 256), `--max-entries` (up to 1,000,000), or `--max-total-size` (MiB, up to 8 TiB). These options apply only to `get --recursive`.
 
-In an interactive terminal, `sshc sftp get` displays one progress bar for each SFTP connection while the engine prepares the remote file. A split transfer therefore shows one line per connection, while a non-split transfer shows one. Progress is suppressed for `--json` and non-interactive output so automation remains clean.
+In an interactive terminal, `sshc sftp get` displays one progress bar for each SFTP connection while the engine prepares the remote file. A split transfer therefore shows one line per connection, while a non-split transfer shows one. Only files still transferring are shown, and a file's lines disappear when it finishes. When several files are transferred, the first line counts the finished files. Progress is suppressed for `--json` and non-interactive output so automation remains clean.
 
 Existing files are never overwritten implicitly. `--overwrite` shows one confirmation before replacing them; add `--yes` only when automation must skip that confirmation. Use `--skip-existing` to preserve existing files or `--dry-run` to inspect the plan without changing anything. With `--json`, stdout contains one JSON result while progress remains on stderr. Pressing `Ctrl+C` also cancels the remote temporary upload.
 

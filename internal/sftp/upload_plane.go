@@ -15,18 +15,24 @@ import (
 	"time"
 )
 
-// StartOwned chooses sequential or ranged upload from the settings captured by
-// the job. The owner lock serializes preparation with append, complete, pause
-// and cancel; ranged writes later share this lock with each other.
+// StartOwned chooses sequential or ranged upload from the job's split
+// settings and the host's current connection limit, and records the choice for
+// the ranges and the completion that follow. A setting the job left to the
+// engine is fixed in the job at its first start, so a change of the engine
+// settings during the upload cannot refuse the chunks the client was told to
+// send, nor a later resume of the same part. The owner lock serializes
+// preparation with append, complete, pause and cancel; ranged writes later
+// share this lock with each other.
 func (m *TransferManager) StartOwned(ctx context.Context, alias, id, remotePath string, options StartUploadOptions) (ResumableUpload, error) {
-	unlock := m.lock("", "\x00job-owner:"+id)
+	unlock := m.lock("", jobOwnerLockKey(id))
 	defer unlock()
 	done, err := m.KeepJobActive(id)
 	if err != nil {
 		return ResumableUpload{}, err
 	}
 	defer done()
-	if err := m.AuthorizeUpload(id, alias, remotePath, options.Size, false); err != nil {
+	target := UploadTarget{Alias: alias, ID: id, RemotePath: remotePath}
+	if err := m.AuthorizeUpload(target, options.Size, false); err != nil {
 		return ResumableUpload{}, err
 	}
 	if options.SourceFingerprint != "" && !sourceFingerprintPattern.MatchString(options.SourceFingerprint) {
@@ -55,25 +61,18 @@ func (m *TransferManager) StartOwned(ctx context.Context, alias, id, remotePath 
 	job := record.job
 	options.Overwrite = job.Overwrite
 	options.ExpectedRevision = job.ExpectedRevision
-	threshold, parallelism, chunkBytes := m.largeFileThreshold, m.largeFileParallelism, m.largeFileChunkBytes
-	if job.LargeFileThresholdBytes != 0 {
-		threshold = job.LargeFileThresholdBytes
-	}
-	if job.LargeFileParallelism != 0 {
-		parallelism = job.LargeFileParallelism
-	}
-	if job.LargeFileChunkBytes != 0 {
-		chunkBytes = job.LargeFileChunkBytes
-	}
+	settings := m.largeFileSplitLocked(job)
 	completed := append([]UploadRange(nil), job.UploadRanges...)
+	acknowledged := acknowledgedUploadPrefix(job)
 	m.jobsMutex.Unlock()
-	parallel := options.Size >= threshold && parallelism > 1 && chunkBytes > 0
+	split := m.uploadSplit(alias, settings)
 	var upload ResumableUpload
-	if parallel {
-		upload, err = m.startParallelUpload(ctx, alias, id, remotePath, options, completed, parallelism, chunkBytes)
+	if split.divides(options.Size) {
+		upload, err = m.startParallelUpload(ctx, target, options, completed)
+		upload.Parallelism, upload.ChunkBytes = split.parallelism, split.chunkBytes
 	} else {
-		upload, err = m.Start(ctx, alias, id, remotePath, options)
-		upload.Parallelism, upload.ChunkBytes = 1, chunkBytes
+		upload, err = m.startSequentialUpload(ctx, target, options, acknowledged)
+		upload.Parallelism, upload.ChunkBytes = 1, split.chunkBytes
 	}
 	if err != nil {
 		return ResumableUpload{}, err
@@ -87,6 +86,10 @@ func (m *TransferManager) StartOwned(ctx context.Context, alias, id, remotePath 
 		return ResumableUpload{}, ErrTransferState
 	}
 	original := cloneTransferJobRecord(record)
+	record.uploadParallelism = upload.Parallelism
+	record.job.LargeFileThresholdBytes = settings.threshold
+	record.job.LargeFileParallelism = settings.parallelism
+	record.job.LargeFileChunkBytes = settings.chunkBytes
 	record.job.ExpectedRevision = upload.ExpectedRevision
 	record.job.UploadRanges = append([]UploadRange(nil), upload.CompletedRanges...)
 	record.job.TransferredBytes = offset
@@ -107,16 +110,19 @@ func (m *TransferManager) StartOwned(ctx context.Context, alias, id, remotePath 
 // AppendRangeOwned streams one complete configured range to an independent
 // SFTP connection. Successful ranges are persisted and coalesced, so an
 // interrupted browser or CLI only resends ranges whose acknowledgement was
-// not made durable.
-func (m *TransferManager) AppendRangeOwned(ctx context.Context, alias, id, remotePath string, offset, total, length int64, contents io.Reader) (ResumableUpload, error) {
-	unlock := m.readLock("", "\x00job-owner:"+id)
+// not made durable. Ranges are accepted only while the part is prepared for
+// them by StartOwned, even if the host's connection limit changed since.
+func (m *TransferManager) AppendRangeOwned(ctx context.Context, write UploadRangeWrite) (ResumableUpload, error) {
+	id, total := write.Target.ID, write.Total
+	offset, length := write.Range.Offset, write.Range.Size
+	unlock := m.readLock("", jobOwnerLockKey(id))
 	defer unlock()
 	done, err := m.KeepJobActive(id)
 	if err != nil {
 		return ResumableUpload{}, err
 	}
 	defer done()
-	if err := m.AuthorizeUpload(id, alias, remotePath, total, false); err != nil {
+	if err := m.AuthorizeUpload(write.Target, total, false); err != nil {
 		return ResumableUpload{}, err
 	}
 	m.jobsMutex.Lock()
@@ -125,28 +131,20 @@ func (m *TransferManager) AppendRangeOwned(ctx context.Context, alias, id, remot
 		m.jobsMutex.Unlock()
 		return ResumableUpload{}, ErrTransferNotFound
 	}
-	threshold, parallelism, chunkBytes := m.largeFileThreshold, m.largeFileParallelism, m.largeFileChunkBytes
-	if record.job.LargeFileThresholdBytes != 0 {
-		threshold = record.job.LargeFileThresholdBytes
-	}
-	if record.job.LargeFileParallelism != 0 {
-		parallelism = record.job.LargeFileParallelism
-	}
-	if record.job.LargeFileChunkBytes != 0 {
-		chunkBytes = record.job.LargeFileChunkBytes
-	}
+	chunkBytes := m.largeFileSplitLocked(record.job).chunkBytes
+	parallelism := record.uploadParallelism
 	expectedRevision := record.job.ExpectedRevision
 	already := uploadRangeCovered(record.job.UploadRanges, offset, length)
 	m.jobsMutex.Unlock()
-	if total < threshold || parallelism <= 1 || chunkBytes <= 0 || offset < 0 || length <= 0 || offset%chunkBytes != 0 ||
+	if parallelism < 2 || offset < 0 || length <= 0 || offset%chunkBytes != 0 ||
 		length != min(chunkBytes, total-offset) || offset+length > total {
 		return ResumableUpload{}, ErrInvalidTransfer
 	}
 	if !already {
-		if err := m.writeUploadRange(ctx, alias, id, remotePath, offset, total, length, contents); err != nil {
+		if err := m.writeUploadRange(ctx, write); err != nil {
 			return ResumableUpload{}, err
 		}
-	} else if err := consumeExactUploadRange(ctx, io.Discard, contents, length); err != nil {
+	} else if err := consumeExactUploadRange(ctx, io.Discard, write.Contents, length); err != nil {
 		return ResumableUpload{}, err
 	}
 	m.jobsMutex.Lock()
@@ -156,7 +154,7 @@ func (m *TransferManager) AppendRangeOwned(ctx context.Context, alias, id, remot
 		return ResumableUpload{}, ErrTransferState
 	}
 	original := cloneTransferJobRecord(record)
-	record.job.UploadRanges = addUploadRange(record.job.UploadRanges, UploadRange{Offset: offset, Size: length})
+	record.job.UploadRanges = addUploadRange(record.job.UploadRanges, write.Range)
 	record.job.TransferredBytes = uploadRangeBytes(record.job.UploadRanges)
 	now := m.now().UTC()
 	m.updateRateLocked(record, now)
@@ -165,15 +163,18 @@ func (m *TransferManager) AppendRangeOwned(ctx context.Context, alias, id, remot
 		*record = original
 		return ResumableUpload{}, err
 	}
-	return ResumableUpload{ID: id, Path: path.Clean(remotePath), Offset: record.job.TransferredBytes, Size: total,
+	return ResumableUpload{ID: id, Path: path.Clean(write.Target.RemotePath), Offset: record.job.TransferredBytes, Size: total,
 		ExpectedRevision: expectedRevision, CompletedRanges: append([]UploadRange(nil), record.job.UploadRanges...),
 		Parallelism: parallelism, ChunkBytes: chunkBytes}, nil
 }
 
+// startParallelUpload prepares the part file that split ranges write into.
+// The caller fills in Parallelism and ChunkBytes from the job's split.
 func (m *TransferManager) startParallelUpload(
-	ctx context.Context, alias, id, remotePath string, options StartUploadOptions, completed []UploadRange, parallelism int, chunkBytes int64,
-) (_ ResumableUpload, resultErr error) {
-	cleaned, err := resumablePath(id, remotePath)
+	ctx context.Context, target UploadTarget, options StartUploadOptions, completed []UploadRange,
+) (ResumableUpload, error) {
+	alias, id := target.Alias, target.ID
+	cleaned, err := resumablePath(id, target.RemotePath)
 	if err != nil || options.Size < 0 || validateUploadRanges(completed, options.Size) != nil {
 		return ResumableUpload{}, ErrInvalidTransfer
 	}
@@ -236,8 +237,7 @@ func (m *TransferManager) startParallelUpload(
 		completed = nil
 	}
 	return ResumableUpload{ID: id, Path: cleaned, Offset: uploadRangeBytes(completed), Size: options.Size,
-		ExpectedRevision: expected, CompletedRanges: append([]UploadRange(nil), completed...),
-		Parallelism: parallelism, ChunkBytes: chunkBytes}, nil
+		ExpectedRevision: expected, CompletedRanges: append([]UploadRange(nil), completed...)}, nil
 }
 
 // clearParallelUploadRangesBeforeReset commits the loss of resumable ranges
@@ -269,32 +269,32 @@ func (m *TransferManager) clearParallelUploadRangesBeforeReset(id string, comple
 	return nil
 }
 
-func (m *TransferManager) writeUploadRange(ctx context.Context, alias, id, remotePath string, offset, total, length int64, contents io.Reader) error {
-	cleaned, err := resumablePath(id, remotePath)
+func (m *TransferManager) writeUploadRange(ctx context.Context, write UploadRangeWrite) error {
+	cleaned, err := resumablePath(write.Target.ID, write.Target.RemotePath)
 	if err != nil {
 		return err
 	}
-	unlock := m.readLock(alias, cleaned)
+	unlock := m.readLock(write.Target.Alias, cleaned)
 	defer unlock()
-	remote, err := m.Service.openRequest(ctx, alias)
+	remote, err := m.Service.openRequest(ctx, write.Target.Alias)
 	if err != nil {
 		return err
 	}
 	defer remote.Close()
-	part := uploadPartPath(cleaned, id)
+	part := uploadPartPath(cleaned, write.Target.ID)
 	info, err := remote.Lstat(part)
 	if err != nil {
 		return err
 	}
-	if !info.Mode().IsRegular() || info.Size() != total {
+	if !info.Mode().IsRegular() || info.Size() != write.Total {
 		return ErrOffsetMismatch
 	}
 	file, err := remote.OpenFile(part, os.O_WRONLY)
 	if err != nil {
 		return err
 	}
-	if _, err = file.Seek(offset, io.SeekStart); err == nil {
-		err = consumeExactUploadRange(ctx, file, contents, length)
+	if _, err = file.Seek(write.Range.Offset, io.SeekStart); err == nil {
+		err = consumeExactUploadRange(ctx, file, write.Contents, write.Range.Size)
 	}
 	closeErr := file.Close()
 	if err != nil {
@@ -369,23 +369,25 @@ func uploadRangeBytes(ranges []UploadRange) int64 {
 // AppendOwned advances both the remote part and its server-side job in one
 // serialized request. A browser disconnect after the write cannot leave the
 // job waiting for a second client-authored progress request.
-func (m *TransferManager) AppendOwned(ctx context.Context, alias, id, remotePath string, offset, total int64, contents []byte) (ResumableUpload, error) {
-	unlock := m.lock("", "\x00job-owner:"+id)
+func (m *TransferManager) AppendOwned(ctx context.Context, chunk UploadAppend) (ResumableUpload, error) {
+	alias, id, remotePath := chunk.Target.Alias, chunk.Target.ID, chunk.Target.RemotePath
+	offset, total := chunk.Offset, chunk.Total
+	unlock := m.lock("", jobOwnerLockKey(id))
 	defer unlock()
 	done, err := m.KeepJobActive(id)
 	if err != nil {
 		return ResumableUpload{}, err
 	}
 	defer done()
-	if err := m.AuthorizeUpload(id, alias, remotePath, total, false); err != nil {
+	if err := m.AuthorizeUpload(chunk.Target, total, false); err != nil {
 		return ResumableUpload{}, err
 	}
-	if acknowledged, ok, err := m.replayAcknowledgedAppend(id, alias, remotePath, offset, total, len(contents)); err != nil {
+	if acknowledged, ok, err := m.replayAcknowledgedAppend(id, alias, remotePath, offset, total, len(chunk.Contents)); err != nil {
 		return ResumableUpload{}, err
 	} else if ok {
 		return acknowledged, nil
 	}
-	upload, err := m.Append(ctx, alias, id, remotePath, offset, total, contents)
+	upload, err := m.appendUploadPart(ctx, chunk)
 	if err != nil {
 		return ResumableUpload{}, err
 	}
@@ -396,10 +398,7 @@ func (m *TransferManager) AppendOwned(ctx context.Context, alias, id, remotePath
 	m.jobsMutex.Lock()
 	if record := m.jobs[id]; record != nil {
 		upload.ExpectedRevision = record.job.ExpectedRevision
-		upload.ChunkBytes = m.largeFileChunkBytes
-		if record.job.LargeFileChunkBytes != 0 {
-			upload.ChunkBytes = record.job.LargeFileChunkBytes
-		}
+		upload.ChunkBytes = m.largeFileSplitLocked(record.job).chunkBytes
 	}
 	m.jobsMutex.Unlock()
 	upload.Parallelism = 1
@@ -410,8 +409,10 @@ func (m *TransferManager) AppendOwned(ctx context.Context, alias, id, remotePath
 // CompleteOwned publishes the part and commits the completed job before the
 // request returns, so the remote file is never renamed into place while the
 // job record still describes an unfinished upload.
-func (m *TransferManager) CompleteOwned(ctx context.Context, alias, id, remotePath string, total int64, expectedRevision, sourceFingerprint string) (Transfer, error) {
-	unlock := m.lock("", "\x00job-owner:"+id)
+func (m *TransferManager) CompleteOwned(ctx context.Context, completion UploadCompletion) (Transfer, error) {
+	alias, id, remotePath := completion.Target.Alias, completion.Target.ID, completion.Target.RemotePath
+	total, expectedRevision, sourceFingerprint := completion.Total, completion.ExpectedRevision, completion.SourceFingerprint
+	unlock := m.lock("", jobOwnerLockKey(id))
 	defer unlock()
 	if replay, ok, err := m.replayCompletedUpload(id, alias, remotePath, total); err != nil {
 		return Transfer{}, err
@@ -423,7 +424,7 @@ func (m *TransferManager) CompleteOwned(ctx context.Context, alias, id, remotePa
 		return Transfer{}, err
 	}
 	defer done()
-	if err := m.AuthorizeUpload(id, alias, remotePath, total, false); err != nil {
+	if err := m.AuthorizeUpload(completion.Target, total, false); err != nil {
 		return Transfer{}, err
 	}
 	m.jobsMutex.Lock()
@@ -444,19 +445,13 @@ func (m *TransferManager) CompleteOwned(ctx context.Context, alias, id, remotePa
 			return Transfer{}, err
 		}
 	}
-	threshold, parallelism := m.largeFileThreshold, m.largeFileParallelism
-	if record.job.LargeFileThresholdBytes != 0 {
-		threshold = record.job.LargeFileThresholdBytes
-	}
-	if record.job.LargeFileParallelism != 0 {
-		parallelism = record.job.LargeFileParallelism
-	}
-	if total >= threshold && parallelism > 1 && uploadRangeBytes(record.job.UploadRanges) != total {
-		m.jobsMutex.Unlock()
+	preparedForRanges := record.uploadParallelism > 1
+	uploaded := uploadRangeBytes(record.job.UploadRanges)
+	m.jobsMutex.Unlock()
+	if preparedForRanges && uploaded != total {
 		return Transfer{}, ErrUploadIncomplete
 	}
-	m.jobsMutex.Unlock()
-	transfer, err := m.Complete(ctx, alias, id, remotePath, total, expectedRevision, sourceFingerprint)
+	transfer, err := m.completeUploadPart(ctx, completion)
 	if err != nil {
 		return Transfer{}, err
 	}
@@ -484,13 +479,9 @@ func (m *TransferManager) replayAcknowledgedAppend(id, alias, remotePath string,
 	if record.job.TransferredBytes != end {
 		return ResumableUpload{}, false, ErrOffsetMismatch
 	}
-	chunkBytes := m.largeFileChunkBytes
-	if record.job.LargeFileChunkBytes != 0 {
-		chunkBytes = record.job.LargeFileChunkBytes
-	}
 	return ResumableUpload{
 		ID: id, Path: cleaned, Offset: end, Size: total, ExpectedRevision: record.job.ExpectedRevision,
-		CompletedRanges: []UploadRange{}, Parallelism: 1, ChunkBytes: chunkBytes,
+		CompletedRanges: []UploadRange{}, Parallelism: 1, ChunkBytes: m.largeFileSplitLocked(record.job).chunkBytes,
 	}, true, nil
 }
 
@@ -519,7 +510,7 @@ func (m *TransferManager) replayCompletedUpload(id, alias, remotePath string, to
 // unpublished part. A cleanup failure remains visible to the caller, while the
 // cancelled state still prevents a racing append from writing more bytes.
 func (m *TransferManager) CancelOwned(ctx context.Context, alias, id, remotePath string) error {
-	unlock := m.lock("", "\x00job-owner:"+id)
+	unlock := m.lock("", jobOwnerLockKey(id))
 	defer unlock()
 	m.jobsMutex.Lock()
 	m.initializeJobsLocked()
@@ -542,30 +533,37 @@ func (m *TransferManager) CancelOwned(ctx context.Context, alias, id, remotePath
 	if errors.Is(err, ErrTransferNotFound) {
 		// Queue state is intentionally process-local. After an engine restart the
 		// deterministic unpublished part can outlive its job record, so DELETE must
-		// still remove that exact part. Cancel validates both the transfer ID and
-		// remote path and never addresses the published target.
-		return m.Cancel(ctx, alias, id, remotePath)
+		// still remove that exact part. cancelUploadPart validates both the
+		// transfer ID and remote path and never addresses the published target.
+		return m.cancelUploadPart(ctx, alias, id, remotePath)
 	}
 	if err != nil {
 		return err
 	}
 	defer done()
-	if err := m.AuthorizeUpload(id, alias, remotePath, -1, true); err != nil {
+	if err := m.AuthorizeUpload(UploadTarget{Alias: alias, ID: id, RemotePath: remotePath}, -1, true); err != nil {
 		return err
 	}
-	if err := m.Cancel(ctx, alias, id, remotePath); err != nil {
-		_, _ = m.updateUploadJob(id, UpdateTransferJob{Action: TransferFailAction, Problem: "sftp_cleanup_pending"})
+	if err := m.cancelUploadPart(ctx, alias, id, remotePath); err != nil {
+		_, _ = m.updateUploadJob(id, UpdateTransferJob{Action: TransferFailAction, Problem: CleanupPendingProblem})
 		return err
 	}
 	_, err = m.updateUploadJob(id, UpdateTransferJob{Action: TransferCancelAction})
 	return err
 }
 
-func (m *TransferManager) Start(ctx context.Context, alias, id, remotePath string, options StartUploadOptions) (ResumableUpload, error) {
+// startSequentialUpload prepares a part written as one stream. A part that was
+// prepared for ranges already has the final size and may have holes between
+// them, so a full-size part is cut back to acknowledged, the leading bytes its
+// job recorded as written, before one stream continues from its end.
+func (m *TransferManager) startSequentialUpload(
+	ctx context.Context, target UploadTarget, options StartUploadOptions, acknowledged int64,
+) (ResumableUpload, error) {
 	if m.isClosed() {
 		return ResumableUpload{}, ErrUnavailable
 	}
-	cleaned, err := resumablePath(id, remotePath)
+	alias, id := target.Alias, target.ID
+	cleaned, err := resumablePath(id, target.RemotePath)
 	if err != nil || options.Size < 0 {
 		return ResumableUpload{}, ErrInvalidTransfer
 	}
@@ -582,7 +580,9 @@ func (m *TransferManager) Start(ctx context.Context, alias, id, remotePath strin
 	defer stopCancellation()
 	keepRemote := false
 	defer func() {
-		if !keepRemote {
+		if keepRemote {
+			m.keepRemoteIdle(alias, id, cleaned, remote)
+		} else {
 			m.releaseRemote(alias, id, cleaned)
 		}
 	}()
@@ -612,11 +612,49 @@ func (m *TransferManager) Start(ctx context.Context, alias, id, remotePath strin
 	if info.Size() > options.Size {
 		return ResumableUpload{}, ErrOffsetMismatch
 	}
+	offset := info.Size()
+	if offset == options.Size && acknowledged < offset {
+		if err := truncateRemoteFile(remote, part, acknowledged); err != nil {
+			return ResumableUpload{}, err
+		}
+		offset = acknowledged
+	}
 	keepRemote = true
-	return ResumableUpload{ID: id, Path: cleaned, Offset: info.Size(), Size: options.Size, ExpectedRevision: expected}, nil
+	return ResumableUpload{ID: id, Path: cleaned, Offset: offset, Size: options.Size, ExpectedRevision: expected}, nil
 }
 
-func (m *TransferManager) Append(ctx context.Context, alias, id, remotePath string, offset, total int64, contents []byte) (ResumableUpload, error) {
+// acknowledgedUploadPrefix is how many leading bytes of the job's part the job
+// has recorded as written: the progress of one stream, or the range that
+// starts the file when the part was written as ranges.
+func acknowledgedUploadPrefix(job TransferJob) int64 {
+	if len(job.UploadRanges) == 0 {
+		return job.TransferredBytes
+	}
+	if leading := job.UploadRanges[0]; leading.Offset == 0 {
+		return leading.Size
+	}
+	return 0
+}
+
+func truncateRemoteFile(remote Remote, name string, size int64) error {
+	file, err := remote.OpenFile(name, os.O_WRONLY)
+	if err != nil {
+		return err
+	}
+	err = file.Truncate(size)
+	if closeErr := file.Close(); err == nil {
+		err = closeErr
+	}
+	return err
+}
+
+// appendUploadPart writes contents at offset in the part. It and the other
+// *UploadPart functions check a request against the part only, not against the
+// job's state, its owner lock or its queue slot. Requests reach it through
+// AppendOwned, which checks those first.
+func (m *TransferManager) appendUploadPart(ctx context.Context, chunk UploadAppend) (ResumableUpload, error) {
+	alias, id, remotePath := chunk.Target.Alias, chunk.Target.ID, chunk.Target.RemotePath
+	offset, total, contents := chunk.Offset, chunk.Total, chunk.Contents
 	if m.isClosed() {
 		return ResumableUpload{}, ErrUnavailable
 	}
@@ -634,7 +672,9 @@ func (m *TransferManager) Append(ctx context.Context, alias, id, remotePath stri
 	defer stopCancellation()
 	keepRemote := false
 	defer func() {
-		if !keepRemote {
+		if keepRemote {
+			m.keepRemoteIdle(alias, id, cleaned, remote)
+		} else {
 			m.releaseRemote(alias, id, cleaned)
 		}
 	}()
@@ -684,7 +724,11 @@ func (m *TransferManager) Append(ctx context.Context, alias, id, remotePath stri
 	return ResumableUpload{ID: id, Path: cleaned, Offset: updated.Size(), Size: total}, nil
 }
 
-func (m *TransferManager) Complete(ctx context.Context, alias, id, remotePath string, total int64, expectedRevision, sourceFingerprint string) (Transfer, error) {
+// completeUploadPart publishes a part that holds every byte and matches the
+// source fingerprint. Requests reach it through CompleteOwned.
+func (m *TransferManager) completeUploadPart(ctx context.Context, completion UploadCompletion) (Transfer, error) {
+	alias, id, remotePath := completion.Target.Alias, completion.Target.ID, completion.Target.RemotePath
+	total, expectedRevision, sourceFingerprint := completion.Total, completion.ExpectedRevision, completion.SourceFingerprint
 	if m.isClosed() {
 		return Transfer{}, ErrUnavailable
 	}
@@ -796,7 +840,9 @@ func SourceFingerprint(ctx context.Context, source io.Reader, size int64) (strin
 	return "tree-sha256:" + hex.EncodeToString(summary.Sum(nil)), nil
 }
 
-func (m *TransferManager) Cancel(ctx context.Context, alias, id, remotePath string) error {
+// cancelUploadPart removes the part. Requests reach it through CancelOwned,
+// and a failed upload's part is removed through cleanupEvictedUploadPart.
+func (m *TransferManager) cancelUploadPart(ctx context.Context, alias, id, remotePath string) error {
 	if m.isClosed() {
 		return ErrUnavailable
 	}
@@ -946,8 +992,9 @@ func uploadPartPath(target, id string) string {
 // AuthorizeUpload binds the data-plane upload endpoints to the queue record
 // that owns their slot. Without this check, callers could append or complete a
 // part file without ever acquiring one of the backend concurrency slots.
-func (m *TransferManager) AuthorizeUpload(id, alias, remotePath string, total int64, cancelling bool) error {
-	cleaned, err := cleanPublicPath(remotePath, false)
+func (m *TransferManager) AuthorizeUpload(target UploadTarget, total int64, cancelling bool) error {
+	id := target.ID
+	cleaned, err := cleanPublicPath(target.RemotePath, false)
 	if err != nil || !transferIDPattern.MatchString(id) {
 		return ErrInvalidTransfer
 	}
@@ -959,7 +1006,7 @@ func (m *TransferManager) AuthorizeUpload(id, alias, remotePath string, total in
 		return ErrTransferNotFound
 	}
 	job := record.job
-	if job.Direction != TransferUpload || job.Kind != TransferFile || job.Alias != alias ||
+	if job.Direction != TransferUpload || job.Kind != TransferFile || job.Alias != target.Alias ||
 		job.RemotePath != cleaned || (total >= 0 && job.TotalBytes != total) {
 		return ErrConflict
 	}

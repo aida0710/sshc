@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"runtime"
 	"time"
 
@@ -144,6 +145,11 @@ func runEngineApp(
 		HTTP: &http.Client{Timeout: releaseCheckTimeout},
 	}
 	announce := announceReadiness(stdout)
+	spoolRoot, err := sftpDownloadSpoolRoot()
+	if err != nil {
+		// engine は止めない。SFTP のダウンロードだけが sftp_spool_unavailable で失敗する。
+		logger.Warn("SFTP downloads are unavailable without a user cache directory", "error", err)
+	}
 	dependencyValues := app.Dependencies{
 		Random:      rand.Reader,
 		Port:        options.Port,
@@ -177,6 +183,8 @@ func runEngineApp(
 		Lookup:          os.LookupEnv,
 		Environ:         os.Environ,
 		ShutdownTimeout: dependencies.shutdownTimeout,
+
+		SFTPDownloadSpoolRoot: spoolRoot,
 	}
 
 	runErr := dependencies.runApp(runCtx, dependencyValues, version)
@@ -186,6 +194,16 @@ func runEngineApp(
 		return exitFailure
 	}
 	return exitForCause(cause)
+}
+
+// sftpDownloadSpoolRoot は、SFTP のダウンロードを送る前に用意する場所である。
+// 利用者のキャッシュは、ほかのアカウントから書き込めない。
+func sftpDownloadSpoolRoot() (string, error) {
+	cache, err := os.UserCacheDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(cache, "sshc", "sftp-spool"), nil
 }
 
 func terminalOutput(output io.Writer) bool {

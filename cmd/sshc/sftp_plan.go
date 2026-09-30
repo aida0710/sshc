@@ -11,8 +11,10 @@ import (
 	"path"
 	"path/filepath"
 	"sort"
-	"strings"
-	"time"
+
+	"sshc/internal/api"
+	"sshc/internal/httpserver"
+	sftpcore "sshc/internal/sftp"
 )
 
 type sftpCLIRecursiveLimitError struct {
@@ -58,16 +60,22 @@ func (plan *sftpCLIPlan) skip(entryPath, reason string) {
 	plan.SkippedPaths = append(plan.SkippedPaths, sftpCLISkip{Path: entryPath, Reason: reason})
 }
 
-// opensAs is what a remote entry behaves as when transferred: a symlink
-// stands in for what it points to, because the engine follows links when it
-// reads. An empty result is something that cannot be transferred.
-func (entry sftpCLIEntry) opensAs() string {
+// sftpEntryOpensAs is what a remote entry behaves as when transferred: a
+// symlink stands in for what it points to, because the engine follows links
+// when it reads. An empty result is something that cannot be transferred.
+func sftpEntryOpensAs(entry api.SFTPEntry) api.SFTPEntryType {
 	switch entry.Type {
-	case "file", "directory":
+	case api.File, api.Directory:
 		return entry.Type
-	case "symlink":
-		if entry.TargetType == "file" || entry.TargetType == "directory" {
-			return entry.TargetType
+	case api.Symlink:
+		if entry.TargetType == nil {
+			return ""
+		}
+		switch *entry.TargetType {
+		case api.SFTPEntryTargetTypeFile:
+			return api.File
+		case api.SFTPEntryTargetTypeDirectory:
+			return api.Directory
 		}
 	}
 	return ""
@@ -79,53 +87,53 @@ func (entry sftpCLIEntry) opensAs() string {
 type remoteListings struct {
 	engine      *engineAPI
 	alias       string
-	byDirectory map[string]sftpCLIListing
+	byDirectory map[string]httpserver.SFTPListing
 	failures    map[string]error
 }
 
 func newRemoteListings(engine *engineAPI, alias string) *remoteListings {
-	return &remoteListings{engine: engine, alias: alias, byDirectory: map[string]sftpCLIListing{}, failures: map[string]error{}}
+	return &remoteListings{engine: engine, alias: alias, byDirectory: map[string]httpserver.SFTPListing{}, failures: map[string]error{}}
 }
 
-func (listings *remoteListings) list(ctx context.Context, directory string) (sftpCLIListing, error) {
+func (listings *remoteListings) list(ctx context.Context, directory string) (httpserver.SFTPListing, error) {
 	if listing, ok := listings.byDirectory[directory]; ok {
 		return listing, nil
 	}
 	if err, ok := listings.failures[directory]; ok {
-		return sftpCLIListing{}, err
+		return httpserver.SFTPListing{}, err
 	}
 	// Nothing exists below a directory that does not exist; a put into a new
 	// tree would otherwise ask about every directory it is about to create.
 	if parent := path.Dir(directory); parent != directory {
 		if err, ok := listings.failures[parent]; ok && sftpIsNotFound(err) {
 			listings.failures[directory] = err
-			return sftpCLIListing{}, err
+			return httpserver.SFTPListing{}, err
 		}
 	}
 	listing, err := sftpList(ctx, listings.engine, listings.alias, directory)
 	if err != nil {
 		listings.failures[directory] = err
-		return sftpCLIListing{}, err
+		return httpserver.SFTPListing{}, err
 	}
 	listings.byDirectory[directory] = listing
 	return listing, nil
 }
 
-func (listings *remoteListings) stat(ctx context.Context, remotePath string) (sftpCLIEntry, error) {
+func (listings *remoteListings) stat(ctx context.Context, remotePath string) (api.SFTPEntry, error) {
 	cleaned := path.Clean(remotePath)
 	if cleaned == "/" {
-		return sftpCLIEntry{Name: "/", Path: "/", Type: "directory"}, nil
+		return api.SFTPEntry{Name: "/", Path: "/", Type: api.Directory}, nil
 	}
 	listing, err := listings.list(ctx, path.Dir(cleaned))
 	if err != nil {
-		return sftpCLIEntry{}, err
+		return api.SFTPEntry{}, err
 	}
 	for _, entry := range listing.Entries {
 		if entry.Path == cleaned {
 			return entry, nil
 		}
 	}
-	return sftpCLIEntry{}, engineProblem{Status: http.StatusNotFound, Code: "sftp_not_found"}
+	return api.SFTPEntry{}, engineProblem{Status: http.StatusNotFound, Code: "sftp_not_found"}
 }
 
 type sftpCLIRecursiveBudget struct {
@@ -157,7 +165,7 @@ func recursiveSFTPCLIBudget(called sftpInvocation) sftpCLIRecursiveBudget {
 	}
 }
 
-func (budget *sftpCLIRecursiveBudget) include(entry sftpCLIEntry, depth int) error {
+func (budget *sftpCLIRecursiveBudget) include(entry api.SFTPEntry, depth int) error {
 	if depth > budget.maxDepth {
 		return sftpCLIRecursiveLimitError{resource: "depth", limit: int64(budget.maxDepth)}
 	}
@@ -165,7 +173,7 @@ func (budget *sftpCLIRecursiveBudget) include(entry sftpCLIEntry, depth int) err
 		return sftpCLIRecursiveLimitError{resource: "entries", limit: int64(budget.maxEntries)}
 	}
 	budget.entries++
-	if entry.opensAs() != "file" {
+	if sftpEntryOpensAs(entry) != api.File {
 		return nil
 	}
 	if entry.Size < 0 {
@@ -196,7 +204,7 @@ func buildSFTPGetPlan(ctx context.Context, engine *engineAPI, called sftpInvocat
 	if localErr != nil && !errors.Is(localErr, fs.ErrNotExist) {
 		return plan, localErr
 	}
-	if source.opensAs() == "file" {
+	if sftpEntryOpensAs(source) == api.File {
 		if localExists && info.IsDir() {
 			destination = filepath.Join(destination, source.Name)
 		}
@@ -209,7 +217,7 @@ func buildSFTPGetPlan(ctx context.Context, engine *engineAPI, called sftpInvocat
 		plan.Bytes = source.Size
 		return plan, nil
 	}
-	if source.opensAs() != "directory" {
+	if sftpEntryOpensAs(source) != api.Directory {
 		return plan, fmt.Errorf("%w: %s", errSFTPUnsupportedLocal, source.Path)
 	}
 	if !called.Recursive {
@@ -234,12 +242,11 @@ func buildSFTPGetPlan(ctx context.Context, engine *engineAPI, called sftpInvocat
 
 // modifiedUnix is the entry's modification time in milliseconds, or 0 when
 // the engine gave none, so the local copy can be given the same time.
-func modifiedUnix(entry sftpCLIEntry) int64 {
-	modified, err := time.Parse(time.RFC3339Nano, entry.ModifiedAt)
-	if err != nil || modified.IsZero() {
+func modifiedUnix(entry api.SFTPEntry) int64 {
+	if entry.ModifiedAt.IsZero() {
 		return 0
 	}
-	return modified.UnixMilli()
+	return entry.ModifiedAt.UnixMilli()
 }
 
 func walkRemoteGetPlan(
@@ -256,15 +263,15 @@ func walkRemoteGetPlan(
 	}
 	sort.Slice(listing.Entries, func(i, j int) bool { return listing.Entries[i].Name < listing.Entries[j].Name })
 	for _, entry := range listing.Entries {
-		if entry.Name == "" || entry.Name == "." || entry.Name == ".." || path.Base(entry.Name) != entry.Name || strings.Contains(entry.Name, "\\") {
-			return errEngineInvalidResponse
+		if !sftpcore.ValidLocalChildName(entry.Name) {
+			return fmt.Errorf("%w: %q", errSFTPLocalName, entry.Name)
 		}
 		if entry.Path != path.Join(remoteRoot, entry.Name) {
 			return errEngineInvalidResponse
 		}
 		target := filepath.Join(localRoot, entry.Name)
-		switch entry.opensAs() {
-		case "directory":
+		switch sftpEntryOpensAs(entry) {
+		case api.Directory:
 			if err := budget.include(entry, depth+1); err != nil {
 				return err
 			}
@@ -277,7 +284,7 @@ func walkRemoteGetPlan(
 			if err := walkRemoteGetPlan(ctx, listings, entry.Path, target, depth+1, budget, plan); err != nil {
 				return err
 			}
-		case "file":
+		case api.File:
 			if err := budget.include(entry, depth+1); err != nil {
 				return err
 			}
@@ -289,9 +296,9 @@ func walkRemoteGetPlan(
 			plan.Bytes += entry.Size
 		default:
 			switch entry.Type {
-			case "symlink":
+			case api.Symlink:
 				plan.skip(entry.Path, "the link target cannot be read")
-			case "other":
+			case api.Other:
 				plan.skip(entry.Path, "not a file or a directory")
 			default:
 				return errEngineInvalidResponse
@@ -312,7 +319,7 @@ func buildSFTPPutPlan(ctx context.Context, engine *engineAPI, called sftpInvocat
 	// A symlink given on the command line is followed, as WinSCP and scp do.
 	info, err := os.Stat(source)
 	if err != nil {
-		return sftpCLIPlan{}, err
+		return sftpCLIPlan{}, markLocalSourceMissing(err)
 	}
 	if !info.Mode().IsRegular() && !info.IsDir() {
 		return sftpCLIPlan{}, fmt.Errorf("%w: %s", errSFTPUnsupportedLocal, source)
@@ -326,7 +333,7 @@ func buildSFTPPutPlan(ctx context.Context, engine *engineAPI, called sftpInvocat
 	}
 	plan := sftpCLIPlan{Action: "put", Alias: called.Alias, Source: source, Destination: destination}
 	if info.Mode().IsRegular() {
-		if remoteExists && remoteDestination.opensAs() == "directory" {
+		if remoteExists && sftpEntryOpensAs(remoteDestination) == api.Directory {
 			destination = path.Join(destination, filepath.Base(source))
 			remoteDestination, remoteErr = listings.stat(ctx, destination)
 			remoteExists = remoteErr == nil
@@ -334,7 +341,7 @@ func buildSFTPPutPlan(ctx context.Context, engine *engineAPI, called sftpInvocat
 				return plan, remoteErr
 			}
 		}
-		if remoteExists && remoteDestination.opensAs() != "file" {
+		if remoteExists && sftpEntryOpensAs(remoteDestination) != api.File {
 			return plan, errSFTPTypeMismatch
 		}
 		if !remoteExists {
@@ -354,7 +361,7 @@ func buildSFTPPutPlan(ctx context.Context, engine *engineAPI, called sftpInvocat
 	}
 	root := destination
 	if remoteExists {
-		if remoteDestination.opensAs() != "directory" {
+		if sftpEntryOpensAs(remoteDestination) != api.Directory {
 			return plan, errSFTPTypeMismatch
 		}
 		root = path.Join(destination, filepath.Base(source))
@@ -387,7 +394,7 @@ func (walk *localPutWalk) directory(localDirectory, remoteDirectory string, dept
 	}
 	resolved, err := filepath.EvalSymlinks(localDirectory)
 	if err != nil {
-		return err
+		return markLocalSourceMissing(err)
 	}
 	if walk.ancestors[resolved] {
 		walk.plan.skip(localDirectory, "a link back into a directory being uploaded")
@@ -397,7 +404,7 @@ func (walk *localPutWalk) directory(localDirectory, remoteDirectory string, dept
 	defer delete(walk.ancestors, resolved)
 	entries, err := os.ReadDir(localDirectory)
 	if err != nil {
-		return err
+		return markLocalSourceMissing(err)
 	}
 	for _, entry := range entries {
 		localPath := filepath.Join(localDirectory, entry.Name())
@@ -408,7 +415,7 @@ func (walk *localPutWalk) directory(localDirectory, remoteDirectory string, dept
 				walk.plan.skip(localPath, "the link target does not exist")
 				continue
 			}
-			return err
+			return markLocalSourceMissing(err)
 		}
 		remoteEntry, statErr := walk.listings.stat(walk.ctx, remotePath)
 		exists := statErr == nil
@@ -417,7 +424,7 @@ func (walk *localPutWalk) directory(localDirectory, remoteDirectory string, dept
 		}
 		switch {
 		case info.IsDir():
-			if exists && remoteEntry.opensAs() != "directory" {
+			if exists && sftpEntryOpensAs(remoteEntry) != api.Directory {
 				return errSFTPTypeMismatch
 			}
 			walk.plan.Directories = append(walk.plan.Directories, remotePath)
@@ -425,7 +432,7 @@ func (walk *localPutWalk) directory(localDirectory, remoteDirectory string, dept
 				return err
 			}
 		case info.Mode().IsRegular():
-			if exists && remoteEntry.opensAs() != "file" {
+			if exists && sftpEntryOpensAs(remoteEntry) != api.File {
 				return errSFTPTypeMismatch
 			}
 			walk.plan.Files = append(walk.plan.Files, sftpCLIFile{Source: localPath, Destination: remotePath, Size: info.Size(), ModifiedUnix: info.ModTime().UnixMilli(), Exists: exists})
@@ -450,28 +457,28 @@ func transferableSFTPFiles(files []sftpCLIFile, skipExisting bool) []sftpCLIFile
 	return selected
 }
 
-func sftpList(ctx context.Context, engine *engineAPI, alias, remotePath string) (sftpCLIListing, error) {
-	var listing sftpCLIListing
+func sftpList(ctx context.Context, engine *engineAPI, alias, remotePath string) (httpserver.SFTPListing, error) {
+	var listing httpserver.SFTPListing
 	requestPath := "/api/v1/sftp/" + url.PathEscape(alias) + "/entries?" + url.Values{"path": {remotePath}}.Encode()
 	err := engine.getJSON(ctx, requestPath, &listing)
 	return listing, err
 }
 
-func sftpRemoteStat(ctx context.Context, engine *engineAPI, alias, remotePath string) (sftpCLIEntry, error) {
+func sftpRemoteStat(ctx context.Context, engine *engineAPI, alias, remotePath string) (api.SFTPEntry, error) {
 	cleaned := path.Clean(remotePath)
 	if cleaned == "/" {
-		return sftpCLIEntry{Name: "/", Path: "/", Type: "directory"}, nil
+		return api.SFTPEntry{Name: "/", Path: "/", Type: api.Directory}, nil
 	}
 	listing, err := sftpList(ctx, engine, alias, path.Dir(cleaned))
 	if err != nil {
-		return sftpCLIEntry{}, err
+		return api.SFTPEntry{}, err
 	}
 	for _, entry := range listing.Entries {
 		if entry.Path == cleaned {
 			return entry, nil
 		}
 	}
-	return sftpCLIEntry{}, engineProblem{Status: http.StatusNotFound, Code: "sftp_not_found"}
+	return api.SFTPEntry{}, engineProblem{Status: http.StatusNotFound, Code: "sftp_not_found"}
 }
 
 func sftpEnsureRemoteDirectory(ctx context.Context, engine *engineAPI, alias, remotePath string) error {
@@ -480,7 +487,7 @@ func sftpEnsureRemoteDirectory(ctx context.Context, engine *engineAPI, alias, re
 	}
 	entry, err := sftpRemoteStat(ctx, engine, alias, remotePath)
 	if err == nil {
-		if entry.Type != "directory" {
+		if entry.Type != api.Directory {
 			return errSFTPTypeMismatch
 		}
 		return nil
@@ -491,8 +498,17 @@ func sftpEnsureRemoteDirectory(ctx context.Context, engine *engineAPI, alias, re
 	if err := sftpEnsureRemoteDirectory(ctx, engine, alias, path.Dir(remotePath)); err != nil {
 		return err
 	}
-	var created sftpCLIEntry
+	var created api.SFTPEntry
 	return engine.sendJSON(ctx, http.MethodPost, "/api/v1/sftp/"+url.PathEscape(alias)+"/entries", map[string]string{"path": remotePath, "type": "directory"}, &created)
+}
+
+// markLocalSourceMissing tags a vanished local source with errSFTPLocalMissing;
+// other errors pass through unchanged.
+func markLocalSourceMissing(err error) error {
+	if errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("%w: %w", errSFTPLocalMissing, err)
+	}
+	return err
 }
 
 func localFileConflict(localPath string) (bool, error) {

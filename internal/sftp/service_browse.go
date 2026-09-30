@@ -3,6 +3,7 @@ package sftp
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"path"
 	"sort"
 	"strings"
@@ -48,6 +49,13 @@ func (s Service) ListDirectory(ctx context.Context, alias, remotePath string) (L
 		entries = append(entries, entryFrom(cleaned, info))
 	}
 	describeLinks(remote, entries)
+	sortListing(entries)
+	return Listing{Path: cleaned, Entries: entries}, nil
+}
+
+// sortListing puts what opens as a folder first, then orders by name without
+// regard to case. The remote and the local pane share this order.
+func sortListing(entries []Entry) {
 	sort.Slice(entries, func(left, right int) bool {
 		if entries[left].opensAsDirectory() && !entries[right].opensAsDirectory() {
 			return true
@@ -61,7 +69,6 @@ func (s Service) ListDirectory(ctx context.Context, alias, remotePath string) (L
 		}
 		return leftName < rightName
 	})
-	return Listing{Path: cleaned, Entries: entries}, nil
 }
 
 // Search は、あるディレクトリ配下から名前に query を含む項目を集める。
@@ -83,51 +90,28 @@ func (s Service) Search(ctx context.Context, alias, remotePath, query string) (S
 	defer remote.Close()
 
 	result := SearchResult{Path: root, Query: query}
-	visited := 0
-	pending := []string{root}
-	for depth := 0; depth <= maxSearchDepth && len(pending) > 0; depth++ {
-		var next []string
-		for _, directory := range pending {
-			if err := ctx.Err(); err != nil {
-				return SearchResult{}, err
+	err = walkBoundedTree(ctx, remote, boundedTreeWalk{
+		root: root,
+		// 読めない枝は飛ばす。権限のない一つのディレクトリで検索全体を落とすほうが、
+		// 利用者にとって役に立たない。
+		skipUnreadable: func() { result.Truncated = true },
+		visit: func(directory string, child fs.FileInfo) error {
+			entry := entryFrom(directory, child)
+			if !strings.Contains(strings.ToLower(entry.Name), needle) {
+				return nil
 			}
-			infos, err := readChildren(ctx, remote, directory)
-			if err != nil {
-				// 読めない枝は飛ばす。権限のない一つのディレクトリで検索
-				// 全体を落とすほうが、利用者にとって役に立たない。
-				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-					return SearchResult{}, err
-				}
+			if len(result.Entries) >= maxSearchResults {
 				result.Truncated = true
-				continue
+				return errStopWalk
 			}
-			for _, info := range infos {
-				if isInternalName(info.Name()) {
-					continue
-				}
-				visited++
-				if visited > maxSearchVisited {
-					result.Truncated = true
-					return result, nil
-				}
-				entry := entryFrom(directory, info)
-				if strings.Contains(strings.ToLower(entry.Name), needle) {
-					if len(result.Entries) >= maxSearchResults {
-						result.Truncated = true
-						return result, nil
-					}
-					result.Entries = append(result.Entries, entry)
-				}
-				if entry.Type == EntryDirectory {
-					next = append(next, entry.Path)
-				}
-			}
-		}
-		if depth == maxSearchDepth && len(next) > 0 {
-			result.Truncated = true
-			break
-		}
-		pending = next
+			result.Entries = append(result.Entries, entry)
+			return nil
+		},
+	})
+	if errors.Is(err, ErrTraversalLimit) {
+		result.Truncated = true
+	} else if err != nil {
+		return SearchResult{}, err
 	}
 	return result, nil
 }
@@ -154,57 +138,30 @@ func (s Service) DirectoryStats(ctx context.Context, alias, remotePath string) (
 	}
 
 	result := DirectoryStats{Path: root, Directories: 1}
-	visited := 0
-	pending := []string{root}
-	for depth := 0; depth <= maxSearchDepth && len(pending) > 0; depth++ {
-		var next []string
-		for _, directory := range pending {
-			if err := ctx.Err(); err != nil {
-				return DirectoryStats{}, err
-			}
-			infos, err := readChildren(ctx, remote, directory)
-			if err != nil {
-				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-					return DirectoryStats{}, err
-				}
-				result.Truncated = true
-				continue
-			}
-			for _, child := range infos {
-				if isInternalName(child.Name()) {
-					continue
-				}
-				visited++
-				if visited > maxSearchVisited {
+	err = walkBoundedTree(ctx, remote, boundedTreeWalk{
+		root:           root,
+		skipUnreadable: func() { result.Truncated = true },
+		visit: func(_ string, child fs.FileInfo) error {
+			switch {
+			case child.Mode().IsRegular():
+				result.Files++
+				if child.Size() >= 0 && result.Bytes <= int64(^uint64(0)>>1)-child.Size() {
+					result.Bytes += child.Size()
+				} else {
 					result.Truncated = true
-					return result, nil
 				}
-				switch {
-				case child.Mode().IsRegular():
-					result.Files++
-					if child.Size() >= 0 && result.Bytes <= int64(^uint64(0)>>1)-child.Size() {
-						result.Bytes += child.Size()
-					} else {
-						result.Truncated = true
-					}
-				case child.IsDir():
-					result.Directories++
-					next = append(next, path.Join(directory, child.Name()))
-				}
+			case child.IsDir():
+				result.Directories++
 			}
-		}
-		if depth == maxSearchDepth && len(next) > 0 {
-			result.Truncated = true
-			break
-		}
-		pending = next
+			return nil
+		},
+	})
+	if errors.Is(err, ErrTraversalLimit) {
+		result.Truncated = true
+	} else if err != nil {
+		return DirectoryStats{}, err
 	}
 	return result, nil
-}
-
-func (s Service) List(ctx context.Context, alias, remotePath string) ([]Entry, error) {
-	listing, err := s.ListDirectory(ctx, alias, remotePath)
-	return listing.Entries, err
 }
 
 func (s Service) Stat(ctx context.Context, alias, remotePath string) (Entry, error) {

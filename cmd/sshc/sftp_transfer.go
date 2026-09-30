@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
-	"crypto/sha256"
-	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -19,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"sshc/internal/httpserver"
 	sftpcore "sshc/internal/sftp"
 )
 
@@ -70,7 +69,9 @@ func executeSFTPGet(ctx context.Context, engine *engineAPI, plan sftpCLIPlan, ca
 	for _, file := range files {
 		fmt.Fprintf(stderr, "get  %s:%s -> %s\n", plan.Alias, file.Source, file.Destination)
 	}
-	batch.progress = newSFTPCLIProgressDisplay(engine, stderr, called.JSON)
+	if !called.JSON {
+		batch.progress = newSFTPCLIProgressDisplay(engine, stderr, len(files))
+	}
 	return runSFTPFileWorkers(ctx, files, called.Jobs, func(workerContext context.Context, file sftpCLIFile) error {
 		return sftpDownloadFile(workerContext, batch, file)
 	})
@@ -151,6 +152,7 @@ func sftpDownloadFile(ctx context.Context, batch sftpTransferBatch, file sftpCLI
 	}
 	if progress != nil {
 		progress.track(jobID, path.Base(file.Source))
+		defer progress.untrack(jobID)
 	}
 	defer func() {
 		if returnErr != nil {
@@ -257,7 +259,9 @@ const (
 	// 後始末の短い要求なので、CLI のセッションを閉じる要求と同じ上限にする。
 	sftpUploadCancelTimeout = engineCloseTimeout
 	// sftpStartRetryInterval は、転送の同時数の上限に当たったときに開始を頼み
-	// 直す間隔である。前の転送が終われば、この間隔以内に次が始まる。
+	// 直す間隔である。engine は sftp_transfer_limit と答えるだけで、枠が空いたことを
+	// CLI へ知らせられないので問い合わせ直す。前の転送が終われば、この間隔以内に
+	// 次が始まり、engine へ頼みすぎることもない。
 	sftpStartRetryInterval = 250 * time.Millisecond
 )
 
@@ -292,7 +296,7 @@ func waitForSFTPDownloadResponse(
 	}
 }
 
-func validSFTPDownloadParts(parts []sftpCLIDownloadPart) bool {
+func validSFTPDownloadParts(parts []httpserver.SFTPDownloadPartProgress) bool {
 	if len(parts) > sftpcore.MaxLargeFileParallelism {
 		return false
 	}
@@ -313,7 +317,7 @@ func sftpUploadFile(ctx context.Context, batch sftpTransferBatch, file sftpCLIFi
 	engine, alias := batch.engine, batch.alias
 	input, err := os.Open(file.Source)
 	if err != nil {
-		return err
+		return markLocalSourceMissing(err)
 	}
 	defer input.Close()
 	fingerprint, err := sftpFingerprint(ctx, input, file.Size)
@@ -347,7 +351,7 @@ func sftpUploadFile(ctx context.Context, batch sftpTransferBatch, file sftpCLIFi
 		return err
 	}
 	basePath := "/api/v1/sftp/" + url.PathEscape(alias) + "/uploads/" + url.PathEscape(jobID)
-	var upload sftpCLIUpload
+	var upload httpserver.SFTPResumableUpload
 	if err := engine.sendJSON(ctx, http.MethodPost, basePath, map[string]any{
 		"path": file.Destination, "size": file.Size, "sourceFingerprint": fingerprint,
 	}, &upload); err != nil {
@@ -363,7 +367,7 @@ func sftpUploadFile(ctx context.Context, batch sftpTransferBatch, file sftpCLIFi
 		if err := sftpUploadFileRanges(ctx, engine, input, basePath, file, upload); err != nil {
 			return err
 		}
-		var completed sftpCLITransfer
+		var completed httpserver.SFTPTransfer
 		return engine.sendJSON(ctx, http.MethodPost, basePath+"/complete", map[string]any{
 			"path": file.Destination, "size": file.Size, "expectedRevision": upload.ExpectedRevision,
 			"sourceFingerprint": fingerprint,
@@ -396,7 +400,7 @@ func sftpUploadFile(ctx context.Context, batch sftpTransferBatch, file sftpCLIFi
 		if err != nil {
 			return err
 		}
-		var appended sftpCLIUpload
+		var appended httpserver.SFTPResumableUpload
 		if err := decodeEngineJSONResponse(response, &appended); err != nil {
 			return err
 		}
@@ -405,14 +409,14 @@ func sftpUploadFile(ctx context.Context, batch sftpTransferBatch, file sftpCLIFi
 		}
 		offset = appended.Offset
 	}
-	var completed sftpCLITransfer
+	var completed httpserver.SFTPTransfer
 	return engine.sendJSON(ctx, http.MethodPost, basePath+"/complete", map[string]any{
 		"path": file.Destination, "size": file.Size, "expectedRevision": upload.ExpectedRevision,
 		"sourceFingerprint": fingerprint,
 	}, &completed)
 }
 
-func validSFTPUploadRanges(ranges []sftpCLIUploadRange, transferred, total, chunkBytes int64) bool {
+func validSFTPUploadRanges(ranges []sftpcore.UploadRange, transferred, total, chunkBytes int64) bool {
 	if chunkBytes <= 0 || len(ranges) > 65536 || transferred < 0 || transferred > total {
 		return false
 	}
@@ -432,8 +436,8 @@ func validSFTPUploadRanges(ranges []sftpCLIUploadRange, transferred, total, chun
 	return completed == transferred
 }
 
-func sftpUploadFileRanges(ctx context.Context, engine *engineAPI, input *os.File, basePath string, file sftpCLIFile, upload sftpCLIUpload) error {
-	ranges := make([]sftpCLIUploadRange, 0)
+func sftpUploadFileRanges(ctx context.Context, engine *engineAPI, input *os.File, basePath string, file sftpCLIFile, upload httpserver.SFTPResumableUpload) error {
+	ranges := make([]sftpcore.UploadRange, 0)
 	for offset := int64(0); offset < file.Size; offset += upload.ChunkBytes {
 		size := min(upload.ChunkBytes, file.Size-offset)
 		covered := false
@@ -444,12 +448,12 @@ func sftpUploadFileRanges(ctx context.Context, engine *engineAPI, input *os.File
 			}
 		}
 		if !covered {
-			ranges = append(ranges, sftpCLIUploadRange{Offset: offset, Size: size})
+			ranges = append(ranges, sftpcore.UploadRange{Offset: offset, Size: size})
 		}
 	}
 	workerContext, cancel := context.WithCancel(ctx)
 	defer cancel()
-	work := make(chan sftpCLIUploadRange, len(ranges))
+	work := make(chan sftpcore.UploadRange, len(ranges))
 	for _, portion := range ranges {
 		work <- portion
 	}
@@ -465,7 +469,7 @@ func sftpUploadFileRanges(ctx context.Context, engine *engineAPI, input *os.File
 					"range": {"true"}, "length": {fmt.Sprint(portion.Size)}}
 				response, err := engine.doRaw(workerContext, http.MethodPatch, basePath+"?"+query.Encode(), "application/octet-stream", io.NewSectionReader(input, portion.Offset, portion.Size))
 				if err == nil {
-					var result sftpCLIUpload
+					var result httpserver.SFTPResumableUpload
 					err = decodeEngineJSONResponse(response, &result)
 				}
 				if err != nil {
@@ -543,33 +547,29 @@ func sftpIdentifier(prefix string) (string, error) {
 	return prefix + "_" + hex.EncodeToString(contents), nil
 }
 
+// errLocalSourceChanged means the source no longer ended at the size the plan
+// found, so its bytes cannot be the ones the fingerprint describes.
+var errLocalSourceChanged = errors.New("local source changed while it was being read")
+
+// sftpFingerprint is the fingerprint the engine computes again from the
+// uploaded part when the upload completes, so it comes from the engine's own
+// function. The source must also end exactly at size: one that grew or shrank
+// after the plan changed while it was read.
 func sftpFingerprint(ctx context.Context, file *os.File, size int64) (string, error) {
-	chunkHashes := make([]byte, 0, int((size+sftpCLIChunkBytes-1)/sftpCLIChunkBytes)*sha256.Size)
-	buffer := make([]byte, sftpCLIChunkBytes)
-	var total int64
-	for {
-		if err := ctx.Err(); err != nil {
-			return "", err
-		}
-		read, err := file.Read(buffer)
-		if read > 0 {
-			total += int64(read)
-			digest := sha256.Sum256(buffer[:read])
-			chunkHashes = append(chunkHashes, digest[:]...)
-		}
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if err != nil {
-			return "", err
-		}
+	fingerprint, err := sftpcore.SourceFingerprint(ctx, file, size)
+	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+		return "", errLocalSourceChanged
 	}
-	if total != size {
-		return "", errors.New("local source changed while it was being read")
+	if err != nil {
+		return "", err
 	}
-	summary := make([]byte, 8+len(chunkHashes))
-	binary.BigEndian.PutUint64(summary[:8], uint64(size))
-	copy(summary[8:], chunkHashes)
-	digest := sha256.Sum256(summary)
-	return "tree-sha256:" + hex.EncodeToString(digest[:]), nil
+	var beyondSize [1]byte
+	_, err = io.ReadFull(file, beyondSize[:])
+	if err == nil {
+		return "", errLocalSourceChanged
+	}
+	if !errors.Is(err, io.EOF) {
+		return "", err
+	}
+	return fingerprint, nil
 }

@@ -1,5 +1,16 @@
+import { renderHook } from "@testing-library/react";
+import { createElement, type ReactNode } from "react";
 import { describe, expect, it } from "vitest";
-import { formatBytes, formatDateTime } from "./format";
+import { LanguageProvider, useTranslate, type Translate } from "../i18n/context";
+import type { Locale } from "../i18n/locale";
+import { formatBytes, formatDateTime, formatDuration } from "./format";
+
+function translatorFor(locale: Locale): Translate {
+  const { result } = renderHook(() => useTranslate(), {
+    wrapper: ({ children }: { children: ReactNode }) => createElement(LanguageProvider, { initial: locale, children }),
+  });
+  return result.current;
+}
 
 describe("formatBytes", () => {
   it.each([
@@ -34,5 +45,26 @@ describe("formatDateTime", () => {
 
   it("formats a timestamp in the requested locale", () => {
     expect(formatDateTime("2026-09-18T04:05:00Z", "en-US")).toMatch(/Sep 18, 2026/);
+  });
+});
+
+describe("formatDuration", () => {
+  it.each([
+    [45, "45s"],
+    [90, "2m"],
+    [3_660, "1h 1m"],
+    [3_541, "1h 0m"],
+    [3_599, "1h 0m"],
+    [7_199, "2h 0m"],
+  ])("shows %d seconds as %s on an English screen", (seconds, expected) => {
+    expect(formatDuration(seconds, translatorFor("en"))).toBe(expected);
+  });
+
+  it.each([
+    [45, "45秒"],
+    [300, "5分"],
+    [5_400, "1時間30分"],
+  ])("shows %d seconds as %s on a Japanese screen", (seconds, expected) => {
+    expect(formatDuration(seconds, translatorFor("ja"))).toBe(expected);
   });
 });

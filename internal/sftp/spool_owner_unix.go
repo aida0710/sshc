@@ -3,7 +3,6 @@
 package sftp
 
 import (
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -92,9 +91,14 @@ func downloadSpoolOwnerState(path string) (managed, inactive bool, resultErr err
 	return true, true, unix.Flock(int(file.Fd()), unix.LOCK_UN)
 }
 
-func holdDownloadSpoolQuota(temporaryRoot string) (io.Closer, error) {
-	quotaPath := filepath.Join(temporaryRoot, fmt.Sprintf(".sshc-sftp-spool-quota-%d.lock", os.Getuid()))
-	file, err := openUnixPrivateFile(quotaPath, unix.O_CREAT|unix.O_RDWR)
+// downloadSpoolQuotaPath is the lock every sshc process of this user takes
+// before it counts the spools under spoolRoot.
+func downloadSpoolQuotaPath(spoolRoot string) string {
+	return filepath.Join(spoolRoot, fmt.Sprintf(".sshc-sftp-spool-quota-%d.lock", os.Getuid()))
+}
+
+func holdDownloadSpoolQuota(spoolRoot string) (io.Closer, error) {
+	file, err := openUnixPrivateFile(downloadSpoolQuotaPath(spoolRoot), unix.O_CREAT|unix.O_RDWR)
 	if err != nil {
 		return nil, err
 	}
@@ -105,49 +109,13 @@ func holdDownloadSpoolQuota(temporaryRoot string) (io.Closer, error) {
 	return &unixSpoolOwner{file: file}, nil
 }
 
-func readDownloadSpoolReservation(directory string) (int64, error) {
-	file, err := openUnixPrivateFile(filepath.Join(directory, ".reserved"), unix.O_RDONLY)
-	if err != nil {
-		return 0, err
-	}
-	defer file.Close()
-	var encoded [8]byte
-	if _, err := io.ReadFull(file, encoded[:]); err != nil {
-		return 0, err
-	}
-	var extra [1]byte
-	if count, err := file.Read(extra[:]); err != io.EOF || count != 0 {
-		if err != nil {
-			return 0, err
-		}
-		return 0, os.ErrInvalid
-	}
-	value := binary.BigEndian.Uint64(encoded[:])
-	if value > uint64(maxProcessDownloadSpoolBytes) {
-		return 0, os.ErrInvalid
-	}
-	return int64(value), nil
+// openSpoolFileForRead and openOrCreateSpoolFile open a file of the spool
+// that only this user may read or write. The reservation format itself is in
+// spool_reservation.go.
+func openSpoolFileForRead(path string) (*os.File, error) {
+	return openUnixPrivateFile(path, unix.O_RDONLY)
 }
 
-func writeDownloadSpoolReservation(directory string, reserved int64) error {
-	if reserved < 0 || reserved > maxProcessDownloadSpoolBytes {
-		return os.ErrInvalid
-	}
-	file, err := openUnixPrivateFile(filepath.Join(directory, ".reserved"), unix.O_CREAT|unix.O_RDWR)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-	if err := file.Truncate(0); err != nil {
-		return err
-	}
-	if _, err := file.Seek(0, io.SeekStart); err != nil {
-		return err
-	}
-	var encoded [8]byte
-	binary.BigEndian.PutUint64(encoded[:], uint64(reserved))
-	if _, err := file.Write(encoded[:]); err != nil {
-		return err
-	}
-	return file.Sync()
+func openOrCreateSpoolFile(path string) (*os.File, error) {
+	return openUnixPrivateFile(path, unix.O_CREAT|unix.O_RDWR)
 }

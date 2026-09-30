@@ -1,5 +1,5 @@
 import { failureCode } from "../api/client";
-import { sftpApi, type TransferJobList, type TransferKind, type TransferQueueMove } from "./api";
+import { sftpApi, type TransferJobList, type TransferKind, type TransferQueueMove, type TransferSettings } from "./api";
 import { DownloadPlane } from "./downloadPlane";
 import { TransferLedger, type ManagedTransferJob, type TransferNotice } from "./transferLedger";
 import type { TransferManagerAPI, TransferPlaneContext } from "./transferPlane";
@@ -95,7 +95,7 @@ export class SFTPTransferManager {
       reconcile: () => this.reconcile(),
     };
     this.uploads = new UploadPlane(api, context);
-    this.downloads = new DownloadPlane(api, context);
+    this.downloads = new DownloadPlane(api, context, now);
   }
 
   getSnapshot = (): readonly ManagedTransferJob[] => this.ledger.snapshot();
@@ -107,6 +107,11 @@ export class SFTPTransferManager {
   getLargeFileParallelism = (): number => this.largeFileParallelism;
   getLargeFileChunkBytes = (): number => this.largeFileChunkBytes;
   hasUploadSource = (id: string): boolean => this.uploads.has(id);
+  // Whether closing this page would cut a transfer short: the page is running
+  // it, or holds the File of an upload waiting to run, which no other page has.
+  hasBrowserTransfers = (): boolean => this.jobs.some((job) =>
+    (job.status === "running" && this.inFlight.has(job.id)) ||
+    (job.status === "queued" && job.direction === "upload" && this.uploads.has(job.id)));
   subscribe = (listener: () => void): (() => void) => this.ledger.subscribe(listener);
   subscribeNotices = (listener: () => void): (() => void) => this.ledger.subscribeNotices(listener);
 
@@ -121,25 +126,14 @@ export class SFTPTransferManager {
       // Stale listing; the next poll lists again with the newer state.
       return;
     }
-    await this.downloads.removeOrphans(new Set(listed.jobs
-      .filter((job) => !["completed", "cancelled"].includes(job.status))
-      .map((job) => job.id)));
+    await this.downloads.removeOrphans(listed.jobs);
     this.kick();
   }
 
   // The queue belongs to the engine, so the settings do too: one value, shared
   // by every browser and every tab looking at the same engine.
-  async applySettings(
-    maxConcurrent: number,
-    clearCompletedAfterSeconds: number,
-    processingStopped: boolean,
-    largeFileThresholdBytes: number,
-    largeFileParallelism: number,
-    largeFileChunkBytes: number,
-  ): Promise<void> {
-    const listed = await this.api.updateTransferSettings({
-      maxConcurrent, clearCompletedAfterSeconds, processingStopped, largeFileThresholdBytes, largeFileParallelism, largeFileChunkBytes,
-    });
+  async applySettings(settings: TransferSettings): Promise<void> {
+    const listed = await this.api.updateTransferSettings(settings);
     this.adoptQueue(listed);
     this.kick();
   }
@@ -195,7 +189,7 @@ export class SFTPTransferManager {
         largeFileChunkBytes: this.largeFileChunkBytes,
       });
       this.uploads.attach(id, selection.file);
-      this.ledger.commit([...this.jobs, job]);
+      this.ledger.replaceServer(job);
     }
     this.kick();
     return batchId;
@@ -211,7 +205,7 @@ export class SFTPTransferManager {
       direction: "download", kind, name, remotePath, totalBytes, lastModified: 0,
     });
     this.downloads.prepare(id);
-    this.ledger.commit([...this.jobs, job]);
+    this.ledger.replaceServer(job);
     this.kick();
     return id;
   }
@@ -239,7 +233,7 @@ export class SFTPTransferManager {
         totalBytes: selection.totalBytes,
         lastModified: 0,
       });
-      this.ledger.commit([...this.jobs, job]);
+      this.ledger.replaceServer(job);
       ids.push(id);
     }
     await this.reconcile();
@@ -322,7 +316,7 @@ export class SFTPTransferManager {
     this.controllers.get(id)?.abort();
     if (job.direction === "upload") {
       try {
-        await this.api.cancelUpload(job.alias, id, job.remotePath);
+        await this.api.cancelUpload({ alias: job.alias, id, remotePath: job.remotePath });
       } catch (error) {
         if (missingServerTransfer(error)) {
           this.uploads.detach(id);
@@ -346,9 +340,11 @@ export class SFTPTransferManager {
   }
 
   async clearFinished(): Promise<void> {
+    // Only jobs finished before the request are surely gone; one finishing
+    // meanwhile is left to the next listing.
     const removed = this.jobs.filter((job) => job.status === "completed" || job.status === "cancelled").map((job) => job.id);
     await this.api.clearFinishedTransfers();
-    this.ledger.commit(this.jobs.filter((job) => job.status !== "completed" && job.status !== "cancelled"));
+    this.ledger.removeServer(removed);
     for (const id of removed) {
       void this.downloads.discard(id);
     }
@@ -360,7 +356,7 @@ export class SFTPTransferManager {
     await this.api.removeTransfer(id);
     this.uploads.detach(id);
     await this.downloads.discard(id);
-    this.ledger.commit(this.jobs.filter((candidate) => candidate.id !== id));
+    this.ledger.removeServer([id]);
   }
 
   async clearFailed(): Promise<void> {

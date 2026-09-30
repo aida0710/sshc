@@ -33,6 +33,7 @@ import { useSectionRoute } from "./routing/useSectionRoute";
 import { useTerminalSessions } from "./terminal/sessions";
 import { TransferNotifications } from "./sftp/TransferNotifications";
 import { sftpTransferManager } from "./sftp/transferManager";
+import { useTransferUnloadWarning } from "./sftp/useTransferUnloadWarning";
 import { ErrorDiagnosticNotice } from "./shell/ErrorDiagnosticNotice";
 import { CommandPalette, type PaletteCommand } from "./shell/CommandPalette";
 import { setAndroidAppearance } from "./android/native";
@@ -194,6 +195,7 @@ export function App({
   usePolling(() => sftpTransferManager.reconcile(), {
     intervalMs: transferReconcileIntervalMs, enabled: state === "ready", whileHidden: true, immediately: true,
   });
+  useTransferUnloadWarning();
 
   const unreadSessions = useTerminalNotifications(
     consoles.sessions,

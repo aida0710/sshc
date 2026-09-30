@@ -7,9 +7,19 @@ import (
 	"path"
 	"sort"
 	"strings"
+	"time"
 )
 
+// maxComparedEntries bounds how many entries a directory comparison reads from
+// both sides together.
 const maxComparedEntries = 20_000
+
+// maxTransferTreeEntries bounds the entries a remote copy, move or get walks in
+// one folder tree. Planning and the transfer itself count against the same
+// limit, so a source that grows in between cannot keep a job running without
+// end. It is separate from maxComparedEntries so that changing what a
+// comparison may read does not change what a transfer may copy.
+const maxTransferTreeEntries = 20_000
 
 // CompareDirectories compares metadata without downloading file contents.
 // Symlinks are listed but never followed.
@@ -188,8 +198,8 @@ func treeBytes(ctx context.Context, remote Remote, root string) (int64, error) {
 				continue
 			}
 			visited++
-			if visited > maxComparedEntries {
-				return 0, ErrCompareLimit
+			if visited > maxTransferTreeEntries {
+				return 0, ErrTraversalLimit
 			}
 			if info.IsDir() {
 				pending = append(pending, path.Join(directory, info.Name()))
@@ -219,28 +229,32 @@ func (s Service) CopyRemote(ctx context.Context, request RemoteTransferRequest, 
 		return err
 	}
 	defer source.Close()
-	target, err := s.openRequest(ctx, request.TargetAlias)
-	if err != nil {
-		return err
+	// Within one host both ends share the connection. A host that answers a
+	// one-time code refuses a second login in the same window.
+	target := source
+	if request.TargetAlias != request.SourceAlias {
+		target, err = s.openRequest(ctx, request.TargetAlias)
+		if err != nil {
+			return err
+		}
+		defer target.Close()
 	}
-	defer target.Close()
 	info, err := source.Lstat(sourcePath)
 	if err != nil {
 		return err
 	}
-	if info.IsDir() && request.SourceAlias == request.TargetAlias && isDescendant(sourcePath, targetPath) {
-		return ErrInvalidTransfer
+	if info.IsDir() && isDescendant(sourcePath, targetPath) {
+		inside, err := s.targetInsideSource(request, source, target, targetPath)
+		if err != nil {
+			return err
+		}
+		if inside {
+			return ErrInvalidTransfer
+		}
 	}
 	if request.SourceAlias == request.TargetAlias && request.Operation == RemoteMove {
-		if _, statErr := target.Lstat(targetPath); statErr == nil && !request.Overwrite {
-			return ErrAlreadyExists
-		} else if statErr != nil && !errors.Is(statErr, fs.ErrNotExist) {
-			return statErr
-		}
-		if request.Overwrite && !info.IsDir() {
-			return target.Replace(sourcePath, targetPath)
-		}
-		return target.Rename(sourcePath, targetPath)
+		move := &renameMove{remote: target, overwrite: request.Overwrite, published: newPublishedNames()}
+		return move.move(ctx, sourcePath, targetPath, info)
 	}
 	if request.Operation == RemoteMove {
 		// A move must be all-or-nothing from the user's perspective. Reject trees
@@ -251,8 +265,11 @@ func (s Service) CopyRemote(ctx context.Context, request RemoteTransferRequest, 
 		}
 	}
 	copier := &remoteCopy{
-		service: s, source: source, target: target, overwrite: request.Overwrite, progress: progress,
-		copied: make(map[string]string),
+		service: s, source: source, target: target, targetAlias: request.TargetAlias,
+		overwrite: request.Overwrite, progress: progress, published: newPublishedNames(),
+	}
+	if request.Operation == RemoteMove {
+		copier.copied = make(map[string]copiedFile)
 	}
 	if info.IsDir() {
 		err = copier.copyDirectory(ctx, sourcePath, targetPath, info.Mode())
@@ -268,6 +285,60 @@ func (s Service) CopyRemote(ctx context.Context, request RemoteTransferRequest, 
 		return copier.removeCopiedTree(ctx, sourcePath)
 	}
 	return nil
+}
+
+// renameMove は同じ接続先の中の move を rename で行う。承認された上書きで転送先に
+// 同名のフォルダがあるとき、フォルダを丸ごと rename することはできない（OpenSSH の
+// sftp-server は既存の移動先への rename を拒む）。そこで中へ降り、無い子は rename、
+// 既存のファイルは置換、既存のフォルダはさらに中へ降りて統合する。別の接続先への
+// move が copy で既存のフォルダへ統合するのと同じ結果になり、データは engine を通らない。
+type renameMove struct {
+	remote    Remote
+	overwrite bool
+	// published は、統合で一度置いた名前を、同じ実行の別の名前で上書きしないための記録。
+	// 同じ接続先でも、source と転送先が大文字小文字の扱いの違う mount にありうる。
+	published *publishedNames
+}
+
+func (m *renameMove) move(ctx context.Context, sourcePath, targetPath string, info fs.FileInfo) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	targetInfo, err := m.remote.Lstat(targetPath)
+	if errors.Is(err, fs.ErrNotExist) {
+		if err := m.remote.Rename(sourcePath, targetPath); err != nil {
+			return err
+		}
+		m.published.record(targetPath)
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if err := m.published.existingEntryError(targetPath, m.overwrite); err != nil {
+		return err
+	}
+	if !info.IsDir() {
+		if err := m.remote.Replace(sourcePath, targetPath); err != nil {
+			return err
+		}
+		m.published.record(targetPath)
+		return nil
+	}
+	if !targetInfo.IsDir() {
+		return differentKindError(targetPath)
+	}
+	m.published.record(targetPath)
+	children, err := readChildren(ctx, m.remote, sourcePath)
+	if err != nil {
+		return err
+	}
+	for _, child := range children {
+		if err := m.move(ctx, path.Join(sourcePath, child.Name()), path.Join(targetPath, child.Name()), child); err != nil {
+			return err
+		}
+	}
+	return m.remote.RemoveDirectory(sourcePath)
 }
 
 func cleanRemoteTransferRequest(request RemoteTransferRequest) (string, string, error) {
@@ -295,21 +366,78 @@ func isDescendant(parent, candidate string) bool {
 	return strings.HasPrefix(candidate, parent+"/")
 }
 
+// targetInsideSource は、source のパスの配下にある targetPath が、実際に source と
+// 同じファイルを指すかを返す。そうなら folder の copy は自分で作ったディレクトリを
+// source として読み直し、木の上限に当たるまで入れ子を作り続ける。
+//
+// 別の alias（web と web-admin など）が同じサーバーを指すことがあり、alias の一致では
+// 分からない。SFTP は inode も返さない。そこで target から一時ファイルの名前で空の
+// ファイルを作り、source から同じパスに見えるかで確かめる。消し損ねても、一時ファイルの
+// 名前なので一覧に出ず、abandonedTemporaryAge を過ぎれば置き去りとして扱われる。
+func (s Service) targetInsideSource(request RemoteTransferRequest, source, target Remote, targetPath string) (bool, error) {
+	if request.SourceAlias == request.TargetAlias {
+		return true, nil
+	}
+	// copy が書き込む場所に作る。統合先の folder があればその中、無ければ copy が
+	// folder を作る親の中である。
+	directory := path.Dir(targetPath)
+	if existing, err := target.Lstat(targetPath); err == nil && existing.IsDir() {
+		directory = targetPath
+	}
+	probe, err := s.temporaryPath(path.Join(directory, "sshc-probe"))
+	if err != nil {
+		return false, err
+	}
+	written, err := target.Create(probe)
+	if err != nil {
+		return false, err
+	}
+	if err := written.Close(); err != nil {
+		return false, errors.Join(err, target.Remove(probe))
+	}
+	_, seenErr := source.Lstat(probe)
+	if err := target.Remove(probe); err != nil {
+		return false, err
+	}
+	switch {
+	case seenErr == nil:
+		return true, nil
+	case errors.Is(seenErr, fs.ErrNotExist):
+		return false, nil
+	default:
+		return false, seenErr
+	}
+}
+
 // remoteCopy は 1 回の remote→remote copy／move を実行する。source が返す名前や
 // listing は信用せず、entry 数を plan と同じ予算で数え、copy 済み file の revision を
 // 覚えて move の削除前に照合する。
 type remoteCopy struct {
-	service   Service
-	source    Remote
-	target    Remote
-	overwrite bool
-	progress  func(int64) error
+	service     Service
+	source      Remote
+	target      Remote
+	targetAlias string
+	overwrite   bool
+	progress    func(int64) error
+	// published は、上書きの承認を、この実行より前から target にあった entry だけに
+	// 効かせるための記録。
+	published *publishedNames
 
 	transferred int64
 	visited     int
-	// copied は copy 済み regular file の source path と、copy 直後に確認した
-	// metadata revision。move はこれと一致した file だけを削除する。
-	copied map[string]string
+	// copied は move のときだけ持つ。copy 済み regular file の source path ごとに、
+	// source と target の revision を覚える。move はどちらも一致した file だけを削除する。
+	copied map[string]copiedFile
+}
+
+// copiedFile は、move が source の file を消してよいかを決める材料。
+type copiedFile struct {
+	// sourceRevision は copy 直後に確認した source の metadata revision。
+	sourceRevision string
+	target         string
+	// targetRevision は公開した直後の target の metadata revision。削除の直前に
+	// target が別の entry に置き換わっていれば、source が唯一の複製になる。
+	targetRevision string
 }
 
 func (c *remoteCopy) report(delta int64) error {
@@ -324,8 +452,8 @@ func (c *remoteCopy) report(delta int64) error {
 // listing を差し替えても、copy が際限なく続くことはない。
 func (c *remoteCopy) visit() error {
 	c.visited++
-	if c.visited > maxComparedEntries {
-		return ErrCompareLimit
+	if c.visited > maxTransferTreeEntries {
+		return ErrTraversalLimit
 	}
 	return nil
 }
@@ -334,23 +462,23 @@ func (c *remoteCopy) copyDirectory(ctx context.Context, sourcePath, targetPath s
 	if err := c.visit(); err != nil {
 		return err
 	}
+	created := false
 	if targetInfo, err := c.target.Lstat(targetPath); err == nil {
-		if !targetInfo.IsDir() {
-			return ErrAlreadyExists
+		if err := c.published.existingEntryError(targetPath, c.overwrite); err != nil {
+			return err
 		}
-		if !c.overwrite {
-			return ErrAlreadyExists
+		if !targetInfo.IsDir() {
+			return differentKindError(targetPath)
 		}
 	} else if errors.Is(err, fs.ErrNotExist) {
 		if err := c.target.Mkdir(targetPath); err != nil {
 			return err
 		}
-		if err := c.target.Chmod(targetPath, mode.Perm()); err != nil {
-			return err
-		}
+		created = true
 	} else {
 		return err
 	}
+	c.published.record(targetPath)
 	infos, err := readChildren(ctx, c.source, sourcePath)
 	if err != nil {
 		return err
@@ -378,16 +506,24 @@ func (c *remoteCopy) copyDirectory(ctx context.Context, sourcePath, targetPath s
 			return ErrUnsupportedEntry
 		}
 	}
-	return nil
+	if !created {
+		return nil
+	}
+	// The source mode is applied only after the children are written: a folder
+	// without owner write (a Go module cache, the Nix store) would refuse them.
+	// A copy that stops earlier leaves the folder writable, so it can be rerun.
+	return c.target.Chmod(targetPath, mode.Perm())
 }
 
 func (c *remoteCopy) copyFile(ctx context.Context, sourcePath, targetPath string, before fs.FileInfo) (resultErr error) {
 	if err := c.visit(); err != nil {
 		return err
 	}
-	if _, err := c.target.Lstat(targetPath); err == nil && !c.overwrite {
-		return ErrAlreadyExists
-	} else if err != nil && !errors.Is(err, fs.ErrNotExist) {
+	if _, err := c.target.Lstat(targetPath); err == nil {
+		if err := c.published.existingEntryError(targetPath, c.overwrite); err != nil {
+			return err
+		}
+	} else if !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
 	input, err := c.source.Open(sourcePath)
@@ -409,7 +545,8 @@ func (c *remoteCopy) copyFile(ctx context.Context, sourcePath, targetPath string
 			resultErr = closeErr
 		}
 		if cleanup {
-			_ = c.target.Remove(temporary)
+			unpublished := unpublishedFile{service: c.service, alias: c.targetAlias, remote: c.target, path: temporary}
+			resultErr = errors.Join(resultErr, unpublished.remove(ctx))
 		}
 	}()
 	written, err := copyContext(ctx, &progressWriter{Writer: output, report: c.report}, input, before.Size())
@@ -426,9 +563,6 @@ func (c *remoteCopy) copyFile(ctx context.Context, sourcePath, targetPath string
 	if err := c.target.Chmod(temporary, before.Mode().Perm()); err != nil {
 		return err
 	}
-	if err := c.target.Chtimes(temporary, before.ModTime()); err != nil {
-		return err
-	}
 	after, err := c.source.Lstat(sourcePath)
 	if err != nil || metadataRevision(before) != metadataRevision(after) {
 		return ErrConflict
@@ -442,13 +576,32 @@ func (c *remoteCopy) copyFile(ctx context.Context, sourcePath, targetPath string
 		return err
 	}
 	cleanup = false
-	c.copied[sourcePath] = metadataRevision(after)
+	c.published.record(targetPath)
+	// The source's time is set only after publishing: until then the
+	// temporary must keep the time of its last write, or a delete or move
+	// of the folder would take it for an abandoned one (isAbandonedTemporary).
+	if err := c.target.Chtimes(targetPath, before.ModTime()); err != nil {
+		return err
+	}
+	if c.copied == nil {
+		return nil
+	}
+	published, err := c.target.Lstat(targetPath)
+	if err != nil {
+		return err
+	}
+	c.copied[sourcePath] = copiedFile{
+		sourceRevision: metadataRevision(after),
+		target:         targetPath,
+		targetRevision: metadataRevision(published),
+	}
 	return nil
 }
 
-// removeCopiedTree は move の後半として source を消す。各 file は削除の直前に copy 時の
-// revision と照合し、copy 後に変わった file や copy していない entry があれば
-// ErrConflict で止まる。止まるまでに消した file は target に同じ内容が公開済みである。
+// removeCopiedTree は move の後半として source を消す。各 file は削除の直前に、source と
+// 公開した target の両方を copy 時の revision と照合する。copy 後に変わった file、copy
+// していない entry、target で別の entry に置き換わった file があれば ErrConflict で止まる。
+// 止まるまでに消した file は target に同じ内容が公開済みである。
 func (c *remoteCopy) removeCopiedTree(ctx context.Context, target string) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -461,7 +614,12 @@ func (c *remoteCopy) removeCopiedTree(ctx context.Context, target string) error 
 		if !info.Mode().IsRegular() {
 			return ErrConflict
 		}
-		if revision, copied := c.copied[target]; !copied || revision != metadataRevision(info) {
+		copied, ok := c.copied[target]
+		if !ok || copied.sourceRevision != metadataRevision(info) {
+			return ErrConflict
+		}
+		published, err := c.target.Lstat(copied.target)
+		if err != nil || metadataRevision(published) != copied.targetRevision {
 			return ErrConflict
 		}
 		return c.source.Remove(target)
@@ -470,7 +628,14 @@ func (c *remoteCopy) removeCopiedTree(ctx context.Context, target string) error 
 	if err != nil {
 		return err
 	}
+	now := time.Now()
 	for _, child := range infos {
+		if isAbandonedTemporary(child, now) {
+			if err := c.source.Remove(path.Join(target, child.Name())); err != nil && !errors.Is(err, fs.ErrNotExist) {
+				return err
+			}
+			continue
+		}
 		if isInternalName(child.Name()) {
 			return ErrConflict
 		}
@@ -497,6 +662,7 @@ func (writer *progressWriter) Write(contents []byte) (int, error) {
 func validateMovableTree(ctx context.Context, remote Remote, root string) error {
 	pending := []string{root}
 	visited := 0
+	now := time.Now()
 	for len(pending) > 0 {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -508,8 +674,8 @@ func validateMovableTree(ctx context.Context, remote Remote, root string) error 
 			return err
 		}
 		visited++
-		if visited > maxComparedEntries {
-			return ErrCompareLimit
+		if visited > maxTransferTreeEntries {
+			return ErrTraversalLimit
 		}
 		if info.Mode().IsRegular() {
 			continue
@@ -522,6 +688,10 @@ func validateMovableTree(ctx context.Context, remote Remote, root string) error 
 			return err
 		}
 		for _, child := range children {
+			if isAbandonedTemporary(child, now) {
+				// Not copied, and removed with the source afterwards.
+				continue
+			}
 			if isInternalName(child.Name()) {
 				return ErrConflict
 			}

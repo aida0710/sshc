@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"path"
+	"path/filepath"
 
 	"sshc/internal/app"
 	"sshc/internal/handoff"
@@ -50,6 +51,9 @@ func newDependencies(
 		Environ: mobileEnvironment(goos, home, cache),
 		// モバイルアプリからバイナリを置換できないため、自己更新を無効にする。
 		Updates: nil,
+		// SFTP のダウンロードはアプリのキャッシュで用意する。アプリのプロセスには
+		// HOME が無く、既定の一時ディレクトリ（/data/local/tmp）には書き込めない。
+		SFTPDownloadSpoolRoot: filepath.Join(cache, "sftp-spool"),
 	}, nil
 }
 

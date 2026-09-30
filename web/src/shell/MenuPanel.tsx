@@ -7,7 +7,7 @@ import { useTheme } from "../theme/context";
 import { themes, type Theme } from "../theme/theme";
 import { autoControl } from "../ui/form";
 import { Icon, type IconName } from "../ui/icons";
-import { Button } from "../ui/surface";
+import { Button, Notice } from "../ui/surface";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { useAsyncOperation } from "../ui/useAsyncOperation";
 import { signOut } from "../session/signOut";
@@ -162,7 +162,7 @@ export function MenuPanel({
           <p className="mt-2 text-sm leading-6 text-ink-muted">{t("menu.signOutHint")}</p>
           <div className="mt-3 flex flex-wrap items-center gap-3">
             <Button kind="danger" disabled={signingOut.busy} onClick={() => setConfirmingSignOut(true)}>{t("menu.signOut")}</Button>
-            {signingOut.error === "" ? null : <p role="alert" className="text-sm text-danger">{signingOut.error}</p>}
+            {signingOut.error === "" ? null : <Notice tone="danger">{signingOut.error}</Notice>}
           </div>
         </section>
       </div>

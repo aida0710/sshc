@@ -3,6 +3,7 @@ package sftp
 import (
 	"context"
 	"path"
+	"time"
 )
 
 type deleteEntry struct {
@@ -19,13 +20,14 @@ const (
 // tree before removing anything. The postorder list keeps directories last.
 func collectDeleteTree(ctx context.Context, remote Remote, root string) ([]deleteEntry, error) {
 	entries := make([]deleteEntry, 0, 16)
+	now := time.Now()
 	var walk func(string, int) error
 	walk = func(candidate string, depth int) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
 		if depth > maxDeleteDepth || len(entries) >= maxDeleteEntries {
-			return ErrCompareLimit
+			return ErrTraversalLimit
 		}
 		info, err := remote.Lstat(candidate)
 		if err != nil {
@@ -37,7 +39,9 @@ func collectDeleteTree(ctx context.Context, remote Remote, root string) ([]delet
 				return err
 			}
 			for _, child := range children {
-				if isInternalName(child.Name()) {
+				// An internal file still being written belongs to a live transfer or
+				// save; an abandoned temporary goes with its folder.
+				if isInternalName(child.Name()) && !isAbandonedTemporary(child, now) {
 					return ErrConflict
 				}
 				if err := walk(path.Join(candidate, child.Name()), depth+1); err != nil {
@@ -47,7 +51,7 @@ func collectDeleteTree(ctx context.Context, remote Remote, root string) ([]delet
 		}
 		entries = append(entries, deleteEntry{path: candidate, directory: info.IsDir()})
 		if len(entries) > maxDeleteEntries {
-			return ErrCompareLimit
+			return ErrTraversalLimit
 		}
 		return nil
 	}
