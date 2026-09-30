@@ -14,6 +14,9 @@ import (
 // fieldsProfile は、v0.40.0 までの項目の形で保存した WireGuard のプロファイルである。
 func fieldsProfile() application.VPNProfile {
 	return application.VPNProfile{
+		// 今の形の metadata に書くので識別子も持たせる。v0.40.0 が書いた文書では、
+		// 読み込みの移行が識別子を与える。
+		ID:   "0123456789abcdef0123456789abcdef",
 		Name: "lab", Backend: vpn.WireGuard, DNS: []string{"10.9.9.53"},
 		WireGuard: &application.WireGuardProfile{
 			Servers: []string{"vpn.example.jp"}, Server: "vpn.example.jp:51820",

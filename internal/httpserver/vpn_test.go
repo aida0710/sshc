@@ -59,9 +59,7 @@ func newVPNServices(t *testing.T) vpnServices {
 		t.Fatal(err)
 	}
 	vpnRoutes := vpn.New(filepath.Join(root, "sshc", "vpn"), os.Getuid(), nil)
-	profiles := vpnprofile.New(vpnprofile.Dependencies{
-		Configuration: config, Vault: secrets, Routes: vpnRoutes, Startup: vpnprofile.NoStartupRebinder{},
-	})
+	profiles := vpnprofile.New(vpnprofile.Dependencies{Configuration: config, Vault: secrets, Routes: vpnRoutes})
 	return vpnServices{config: config, secrets: secrets, profiles: profiles, vpnRoutes: vpnRoutes}
 }
 

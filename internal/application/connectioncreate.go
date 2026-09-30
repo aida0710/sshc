@@ -311,7 +311,7 @@ func (s *Service) planCreateConnection(
 		ComputeEffective(graph, s.workspace.Root(), request.Alias, s.localFacts()),
 		ComputeEffective(after, s.workspace.Root(), request.Alias, s.localFacts()),
 	)}
-	prepared.authenticationBinding, err = s.passwordBindingForGraph(after, metadata.Hosts, request.Alias)
+	prepared.authenticationBinding, err = s.passwordBindingForGraph(after, metadata, request.Alias)
 	if err != nil {
 		return planned{}, HostIdentity{}, err
 	}

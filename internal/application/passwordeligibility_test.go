@@ -249,7 +249,7 @@ func TestUserKnownHostsFileTokensAreExpandedAndAnUnexpandableOneStopsOnlyTheConn
 	if err != nil {
 		t.Fatal(err)
 	}
-	if binding, err := service.passwordBindingForGraph(graph, nil, "unsetvariable"); err != nil || binding == "" {
+	if binding, err := service.passwordBindingForGraph(graph, NewMetadata(), "unsetvariable"); err != nil || binding == "" {
 		t.Errorf("passwordBindingForGraph = %q, %v; want a binding", binding, err)
 	}
 }

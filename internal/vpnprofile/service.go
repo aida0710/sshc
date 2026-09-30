@@ -25,7 +25,7 @@ type Configuration interface {
 	PlanVPNProfileUpdate(profile application.VPNProfile) (application.VPNProfileChange, error)
 	PlanVPNProfileRename(from, to string) (application.VPNProfileChange, error)
 	PlanVPNProfileRemove(name string) (application.VPNProfileChange, error)
-	CommitVPNProfileChange(change application.VPNProfileChange, alongside ...*storage.Change) (application.SaveResult, error)
+	CommitVPNProfileChange(change application.VPNProfileChange, vaultChange *storage.Change) (application.SaveResult, error)
 }
 
 // Vault は、プロファイルの秘密を持つ。*secret.Service が満たす。
@@ -44,39 +44,11 @@ type Routes interface {
 	Forget(ctx context.Context, name string) error
 }
 
-// StartupRebinder は、起動スニペットの割り当てが持つ結び付けの値を、metadata と Vault と
-// 同じ書き込みで書き換える。*snippets.Store が満たす。
-type StartupRebinder interface {
-	WithStartupRebind(
-		rebind func(alias, binding string) (string, bool),
-		commit func(*storage.Change) (storage.Result, error),
-	) (storage.Result, error)
-}
-
-// NoStartupRebinder は、起動スニペットを持たない構成（テストなど）が明示で渡す
-// StartupRebinder である。metadata と Vault だけを書く。
-type NoStartupRebinder struct{}
-
-func (NoStartupRebinder) WithStartupRebind(
-	_ func(alias, binding string) (string, bool),
-	commit func(*storage.Change) (storage.Result, error),
-) (storage.Result, error) {
-	return commit(nil)
-}
-
-// ErrStartupRebinderMissing は、改名か削除で、起動スニペットの割り当てを書き換える
-// StartupRebinder が渡されていないことを表す。nil を「起動スニペットが無い」と読むと、
-// 配線を忘れた構成が、改名した接続の起動スニペットを停止中にしたまま成功を返す。
-var ErrStartupRebinderMissing = errors.New("vpn profile change has no startup snippet rebinder")
-
-// Dependencies は、Service が使う持ち主である。
+// Dependencies は、Service が使う3つの持ち主である。
 type Dependencies struct {
 	Configuration Configuration
 	Vault         Vault
 	Routes        Routes
-	// Startup は、改名と削除に必須である。起動スニペットを持たない構成は
-	// NoStartupRebinder を渡す。
-	Startup StartupRebinder
 }
 
 // Service は、プロファイルの手順を持つ。状態を持たないので、同じ持ち主から
@@ -87,7 +59,6 @@ type Service struct {
 	configuration Configuration
 	vault         Vault
 	routes        Routes
-	startup       StartupRebinder
 }
 
 // New は、Service を組む。
@@ -96,7 +67,6 @@ func New(dependencies Dependencies) *Service {
 		configuration: dependencies.Configuration,
 		vault:         dependencies.Vault,
 		routes:        dependencies.Routes,
-		startup:       dependencies.Startup,
 	}
 }
 
@@ -308,36 +278,12 @@ func encodeOwnSecrets(written secretsToWrite) (string, error) {
 }
 
 // commitWithVault は、metadata の変更と Vault の変更を、ひとつの storage.Request で書く。
-// 改名と削除では、保存済みのパスワード・TOTP・起動スニペットの割り当てが持つ結び付けの
-// 値も、同じ書き込みで書き換える（application.VPNProfileChange.AssignmentRebind）。
 func (s *Service) commitWithVault(change application.VPNProfileChange, mutation secret.VPNSecretsMutation) error {
-	rebind := change.AssignmentRebind()
-	if rebind != nil && s.startup == nil {
-		return ErrStartupRebinderMissing
-	}
-	// 改名と削除は、ロック中の Vault を requireUnlockedVault で先に断っている。ここで
-	// ロックが解除されていなければ Vault の無いマシンで、パスワードと TOTP の割り当ても、
-	// Vault の鍵で封じる起動スニペットも無い。書き換えるものが無いので、封じた文書を
-	// 開こうとしない。
-	if !s.vault.Unlocked() {
-		rebind = nil
-	}
-	mutation.RebindAssignments = rebind
 	_, err := s.vault.WithVPNSecretsTransaction(mutation, func(vaultChange *storage.Change) (storage.Result, error) {
-		if rebind == nil {
-			return s.commit(change, vaultChange)
-		}
-		return s.startup.WithStartupRebind(rebind, func(startupChange *storage.Change) (storage.Result, error) {
-			return s.commit(change, vaultChange, startupChange)
-		})
+		saved, err := s.configuration.CommitVPNProfileChange(change, vaultChange)
+		return storage.Result{ID: saved.TransactionID, Written: saved.Written}, err
 	})
 	return err
-}
-
-// commit は、metadata の変更を、一緒に書く変更とひとつの storage.Request で書く。
-func (s *Service) commit(change application.VPNProfileChange, alongside ...*storage.Change) (storage.Result, error) {
-	saved, err := s.configuration.CommitVPNProfileChange(change, alongside...)
-	return storage.Result{ID: saved.TransactionID, Written: saved.Written}, err
 }
 
 // storedSecrets は、保存済みのプロファイルの秘密を返す。まだ無ければ空である。

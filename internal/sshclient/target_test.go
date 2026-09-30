@@ -70,21 +70,25 @@ func TestAuthenticationBindingCoversDestinationAndJumpRoute(t *testing.T) {
 
 // 同じ HostName でも、VPN プロファイルが違えば別のネットワークの相手でありうる。
 // プロファイルを付けたとき、付け替えたとき、外したときに、保存済みのパスワード・
-// TOTP・起動スニペットをそのまま送らないよう、結び付けの値が変わる。
+// TOTP・起動スニペットをそのまま送らないよう、結び付けの値が変わる。付けた
+// プロファイルが見つからない接続も、VPN を付けていない接続とは別の値になる。
 func TestAuthenticationBindingChangesWhenTheVPNProfileChanges(t *testing.T) {
 	direct := sshclient.Target{
 		Alias: "lab", HostName: "10.9.9.1", Port: "22", User: "deploy",
 		Strict: "yes", Methods: sshclient.DefaultMethods(),
 	}
 	throughLab := direct
-	throughLab.VPN = "lab"
+	throughLab.VPN, throughLab.VPNProfileID = "lab", "0123456789abcdef0123456789abcdef"
 	throughOffice := direct
-	throughOffice.VPN = "office"
+	throughOffice.VPN, throughOffice.VPNProfileID = "office", "fedcba9876543210fedcba9876543210"
+	throughMissing := direct
+	throughMissing.VPN = "missing"
 
 	bindings := map[string]string{
-		"no VPN":         direct.AuthenticationBinding(),
-		"through lab":    throughLab.AuthenticationBinding(),
-		"through office": throughOffice.AuthenticationBinding(),
+		"no VPN":                direct.AuthenticationBinding(),
+		"through lab":           throughLab.AuthenticationBinding(),
+		"through office":        throughOffice.AuthenticationBinding(),
+		"through a missing lab": throughMissing.AuthenticationBinding(),
 	}
 	seen := map[string]string{}
 	for route, binding := range bindings {
@@ -92,6 +96,28 @@ func TestAuthenticationBindingChangesWhenTheVPNProfileChanges(t *testing.T) {
 			t.Fatalf("%s and %s share the binding %s", route, other, binding)
 		}
 		seen[binding] = route
+	}
+}
+
+// 結び付けの値は、VPN プロファイルを名前ではなく識別子で持つ。プロファイルの名前を
+// 変えても、同じプロファイルを通る接続の値は変わらない。削除して同じ名前で作り直した
+// プロファイルは識別子が違うので、別の値になる。
+func TestAuthenticationBindingFollowsTheVPNProfileIDRatherThanItsName(t *testing.T) {
+	throughLab := sshclient.Target{
+		Alias: "web", HostName: "10.9.9.1", Port: "22", User: "deploy",
+		Strict: "yes", Methods: sshclient.DefaultMethods(),
+		VPN: "lab", VPNProfileID: "0123456789abcdef0123456789abcdef",
+	}
+	renamed := throughLab
+	renamed.VPN = "lab 2"
+	recreated := throughLab
+	recreated.VPNProfileID = "fedcba9876543210fedcba9876543210"
+
+	if renamed.AuthenticationBinding() != throughLab.AuthenticationBinding() {
+		t.Fatal("renaming the VPN profile changed the binding")
+	}
+	if recreated.AuthenticationBinding() == throughLab.AuthenticationBinding() {
+		t.Fatal("a profile recreated under the same name shares the binding of the removed one")
 	}
 }
 

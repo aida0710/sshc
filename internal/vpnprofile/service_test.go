@@ -48,7 +48,7 @@ type failingCommit struct {
 
 var errCommitRefused = errors.New("the storage transaction failed")
 
-func (failingCommit) CommitVPNProfileChange(application.VPNProfileChange, ...*storage.Change) (application.SaveResult, error) {
+func (failingCommit) CommitVPNProfileChange(application.VPNProfileChange, *storage.Change) (application.SaveResult, error) {
 	return application.SaveResult{}, errCommitRefused
 }
 
@@ -102,10 +102,8 @@ func newFixtureWithoutVault(t *testing.T, fileSystem storage.FileSystem) fixture
 	transactions.Seal, transactions.Unseal = vault.SealBackup, vault.OpenBackup
 	routes := &recordedRoutes{}
 	return fixture{
-		profiles: vpnprofile.New(vpnprofile.Dependencies{
-			Configuration: config, Vault: vault, Routes: routes, Startup: vpnprofile.NoStartupRebinder{},
-		}),
-		config: config, vault: vault, routes: routes, transactions: transactions, workspace: workspace,
+		profiles: vpnprofile.New(vpnprofile.Dependencies{Configuration: config, Vault: vault, Routes: routes}),
+		config:   config, vault: vault, routes: routes, transactions: transactions, workspace: workspace,
 	}
 }
 
@@ -307,7 +305,7 @@ func TestAFailedCommitChangesNeitherTheProfileNorItsSecrets(t *testing.T) {
 	f := newFixture(t)
 	f.create(t, labProfile(), labSecrets())
 	failing := vpnprofile.New(vpnprofile.Dependencies{
-		Configuration: failingCommit{f.config}, Vault: f.vault, Routes: f.routes, Startup: vpnprofile.NoStartupRebinder{},
+		Configuration: failingCommit{f.config}, Vault: f.vault, Routes: f.routes,
 	})
 
 	if err := failing.Remove(context.Background(), "lab"); !errors.Is(err, errCommitRefused) {
@@ -478,26 +476,5 @@ func TestRemovingStopsTheRouteAndForgetsEverything(t *testing.T) {
 	}
 	if _, err := f.vault.VPNSecrets("lab"); !errors.Is(err, secret.ErrUnknownCredential) {
 		t.Fatalf("VPNSecrets = %v", err)
-	}
-}
-
-// 起動スニペットの割り当てを書き換える部品を配線し忘れた構成では、改名も削除も、何も
-// 書かずに断る。黙って成功させると、改名した接続の起動スニペットが停止中のまま残る。
-func TestRenamingOrRemovingWithoutAStartupRebinderIsRefusedWithoutWriting(t *testing.T) {
-	f := newFixture(t)
-	f.create(t, labProfile(), labSecrets())
-	unwired := vpnprofile.New(vpnprofile.Dependencies{Configuration: f.config, Vault: f.vault, Routes: f.routes})
-
-	if err := unwired.Rename(context.Background(), "lab", "lab2"); !errors.Is(err, vpnprofile.ErrStartupRebinderMissing) {
-		t.Fatalf("Rename = %v, want ErrStartupRebinderMissing", err)
-	}
-	if err := unwired.Remove(context.Background(), "lab"); !errors.Is(err, vpnprofile.ErrStartupRebinderMissing) {
-		t.Fatalf("Remove = %v, want ErrStartupRebinderMissing", err)
-	}
-	if names := f.profileNames(t); len(names) != 1 || names[0] != "lab" {
-		t.Fatalf("profiles = %v, want lab untouched", names)
-	}
-	if len(f.routes.stopped) != 0 {
-		t.Fatalf("a refused change stopped routes: %v", f.routes.stopped)
 	}
 }

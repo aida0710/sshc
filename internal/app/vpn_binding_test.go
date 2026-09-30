@@ -31,18 +31,24 @@ func engineServicesWithVPNProfiles(t *testing.T) *engineServices {
 	t.Cleanup(services.vault.Lock)
 	writeSSHConfig(t, services, startupConfig)
 	for _, name := range []string{"lab", "office"} {
-		change, err := services.config.PlanVPNProfileCreate(application.VPNProfile{
-			Name: name, Backend: vpn.WireGuard,
-			WireGuard: &application.WireGuardProfile{Servers: []string{name + ".vpn.example.jp"}},
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err := services.config.CommitVPNProfileChange(change, nil); err != nil {
-			t.Fatal(err)
-		}
+		createVPNProfile(t, services, name, name+".vpn.example.jp")
 	}
 	return services
+}
+
+// createVPNProfile は、server へ繋ぐ WireGuard のプロファイル name を作る。
+func createVPNProfile(t *testing.T, services *engineServices, name, server string) {
+	t.Helper()
+	change, err := services.config.PlanVPNProfileCreate(application.VPNProfile{
+		Name: name, Backend: vpn.WireGuard,
+		WireGuard: &application.WireGuardProfile{Servers: []string{server}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := services.config.CommitVPNProfileChange(change, nil); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func attachVPN(t *testing.T, services *engineServices, alias, profile string) {
@@ -184,6 +190,31 @@ func TestRenamingAVPNProfileKeepsTheAssignmentsOfItsConnections(t *testing.T) {
 	}
 }
 
+// プロファイルを編集しても識別子は変わらないので、サーバーを変えても割り当ては停止中に
+// ならない。別のネットワークの VPN へ差し替えるなら、新しいプロファイルを作って付け替える
+// （pages の「接続ごとのVPN」）。
+func TestEditingAVPNProfileKeepsTheAssignmentsOfItsConnections(t *testing.T) {
+	services := engineServicesWithVPNProfiles(t)
+	attachVPN(t, services, "web", "lab")
+	assignEverythingToWeb(t, services)
+
+	change, err := services.config.PlanVPNProfileUpdate(application.VPNProfile{
+		Name: "lab", Backend: vpn.WireGuard,
+		WireGuard: &application.WireGuardProfile{Servers: []string{"another.vpn.example.jp"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := services.config.CommitVPNProfileChange(change, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	got := assignmentsReleasedToWeb(t, services)
+	if got.password != "web-password" || !got.totp || got.startup != nil {
+		t.Fatalf("after editing lab, web gets %+v; want the password, the TOTP and the startup snippet", got)
+	}
+}
+
 // プロファイルを削除すると、そのプロファイルを付けていた接続の割り当ては停止中になる。
 // 同じ名前で作り直したプロファイルを付け直しても、前の割り当ては使われない。作り直した
 // プロファイルは別の VPN でありうるからである。
@@ -195,20 +226,59 @@ func TestAVPNProfileRecreatedUnderARemovedNameDoesNotReviveTheAssignments(t *tes
 	if err := services.vpnProfiles.Remove(context.Background(), "lab"); err != nil {
 		t.Fatalf("remove = %v", err)
 	}
-	change, err := services.config.PlanVPNProfileCreate(application.VPNProfile{
-		Name: "lab", Backend: vpn.WireGuard,
-		WireGuard: &application.WireGuardProfile{Servers: []string{"another.vpn.example.jp"}},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := services.config.CommitVPNProfileChange(change, nil); err != nil {
-		t.Fatal(err)
-	}
+	createVPNProfile(t, services, "lab", "another.vpn.example.jp")
 	attachVPN(t, services, "web", "lab")
 
+	assertEveryAssignmentStopped(t, services, "through the recreated lab")
+}
+
+// assertEveryAssignmentStopped は、web へ保存済みのパスワードも TOTP も渡らず、起動
+// スニペットも送らないことを確かめる。
+func assertEveryAssignmentStopped(t *testing.T, services *engineServices, situation string) {
+	t.Helper()
 	got := assignmentsReleasedToWeb(t, services)
 	if got.password != "" || got.totp || !errors.Is(got.startup, snippets.ErrStartupDestinationChanged) {
-		t.Fatalf("through the recreated lab, web gets %+v; want every assignment stopped", got)
+		t.Fatalf("%s, web gets %+v; want every assignment stopped", situation, got)
+	}
+}
+
+// 接続から VPN を外すと割り当ては停止中になる。そのあとでプロファイルを削除し、同じ名前で
+// 別のサーバーのプロファイルを作り直して付けても、外す前の割り当ては戻らない。「外して
+// から削除する」は自然な手順なので、削除の時点で付けていなかった割り当ても守る。
+func TestDetachingThenRemovingAndRecreatingAVPNProfileUnderTheSameNameDoesNotReviveTheAssignments(t *testing.T) {
+	services := engineServicesWithVPNProfiles(t)
+	attachVPN(t, services, "web", "lab")
+	assignEverythingToWeb(t, services)
+	attachVPN(t, services, "web", "")
+
+	if err := services.vpnProfiles.Remove(context.Background(), "lab"); err != nil {
+		t.Fatalf("remove = %v", err)
+	}
+	createVPNProfile(t, services, "lab", "another.vpn.example.jp")
+	attachVPN(t, services, "web", "lab")
+
+	assertEveryAssignmentStopped(t, services, "through lab recreated after detaching and removing")
+}
+
+// 接続から VPN を外してからプロファイルを改名し、前の名前で新しいプロファイルを作って
+// 付けても、外す前の割り当ては戻らない。新しいプロファイルは別の VPN である。改名した
+// プロファイルを付け直せば、同じ経路なので割り当てはそのまま使える。
+func TestDetachingThenRenamingAVPNProfileDoesNotHandItsAssignmentsToANewProfileUnderTheOldName(t *testing.T) {
+	services := engineServicesWithVPNProfiles(t)
+	attachVPN(t, services, "web", "lab")
+	assignEverythingToWeb(t, services)
+	attachVPN(t, services, "web", "")
+
+	if err := services.vpnProfiles.Rename(context.Background(), "lab", "lab 2"); err != nil {
+		t.Fatalf("rename = %v", err)
+	}
+	createVPNProfile(t, services, "lab", "another.vpn.example.jp")
+	attachVPN(t, services, "web", "lab")
+	assertEveryAssignmentStopped(t, services, "through a new lab created after detaching and renaming")
+
+	attachVPN(t, services, "web", "lab 2")
+	got := assignmentsReleasedToWeb(t, services)
+	if got.password != "web-password" || !got.totp || got.startup != nil {
+		t.Fatalf("back through the renamed lab 2, web gets %+v; want the password, the TOTP and the startup snippet", got)
 	}
 }

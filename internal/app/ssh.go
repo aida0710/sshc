@@ -38,8 +38,8 @@ type sshParts struct {
 	dialer   sshclient.Dialer
 	resolve  sshclient.Resolver
 	encoding func(string) (textencoding.Name, error)
-	// vpnBinding は、この alias が通るVPNプロファイルの名前を返す。
-	vpnBinding func(string) (string, error)
+	// vpnProfile は、この alias が通るVPNプロファイルの名前と識別子を返す。
+	vpnProfile func(string) (application.AttachedVPNProfile, error)
 	// facts は、IdentityFile の ~ とトークンを展開するこのマシンの事実である。
 	facts effective.LocalFacts
 }
@@ -104,11 +104,11 @@ func newSSHParts(dependencies sshDependencies) sshParts {
 			}
 			return config.ConnectionEncoding(alias)
 		},
-		vpnBinding: func(alias string) (string, error) {
+		vpnProfile: func(alias string) (application.AttachedVPNProfile, error) {
 			if config == nil {
-				return "", errNoConfiguration
+				return application.AttachedVPNProfile{}, errNoConfiguration
 			}
-			return config.ConnectionVPN(alias)
+			return config.ConnectionVPNProfile(alias)
 		},
 		facts: application.LocalFactsFor(home),
 	}
@@ -125,11 +125,11 @@ func (p sshParts) target(alias string) (sshclient.Target, error) {
 		return sshclient.Target{}, err
 	}
 	target.Encoding = encoding
-	profile, err := p.vpnBinding(alias)
+	profile, err := p.vpnProfile(alias)
 	if err != nil {
 		return sshclient.Target{}, err
 	}
-	target.VPN = profile
+	target.VPN, target.VPNProfileID = profile.Name, profile.ID
 	return target, nil
 }
 

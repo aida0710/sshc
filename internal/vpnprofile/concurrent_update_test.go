@@ -38,16 +38,12 @@ func l2tpProfile() application.VPNProfile {
 func TestTwoOverlappingUpdatesKeepBothSecrets(t *testing.T) {
 	f := newFixture(t)
 	f.create(t, l2tpProfile(), vpn.SecretsDocument{L2TPPassword: "old-password", IPsecPSK: "old-psk"})
-	other := vpnprofile.New(vpnprofile.Dependencies{
-		Configuration: f.config, Vault: f.vault, Routes: f.routes, Startup: vpnprofile.NoStartupRebinder{},
-	})
+	other := vpnprofile.New(vpnprofile.Dependencies{Configuration: f.config, Vault: f.vault, Routes: f.routes})
 	var otherErr error
 	vault := &interleavingVault{Service: f.vault, during: func() {
 		otherErr = other.Update(l2tpProfile(), &vpn.SecretsDocument{IPsecPSK: "new-psk"})
 	}}
-	first := vpnprofile.New(vpnprofile.Dependencies{
-		Configuration: f.config, Vault: vault, Routes: f.routes, Startup: vpnprofile.NoStartupRebinder{},
-	})
+	first := vpnprofile.New(vpnprofile.Dependencies{Configuration: f.config, Vault: vault, Routes: f.routes})
 
 	firstErr := first.Update(l2tpProfile(), &vpn.SecretsDocument{L2TPPassword: "new-password"})
 

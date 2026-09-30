@@ -16,7 +16,6 @@ internal/app/run.go	Build	internal/acceptance のテストが engine を組み�
 internal/httpserver/server.go	Server.Routes	hardening と acceptance のテストが登録済みの全ルートを列挙し、後から足したルートにも同じ検査を掛ける。
 internal/browserauth/store.go	Store.WithClock	テストが期限と猶予の判定に使う時計を差し替える。本番は NewStore の time.Now を使う。
 internal/application/alias_rename.go	NoStartupRenamer.WithStartupRename	起動時コマンドを持たない構成が明示で渡す StartupRenamer。本番の engine は snippets の改名を渡すので、使うのは httpserver のテストだけ。別の package のテストが使うので export_test.go へは移せない。
-internal/vpnprofile/service.go	NoStartupRebinder.WithStartupRebind	起動スニペットを持たない構成が明示で渡す StartupRebinder。本番の engine は snippets.Store を渡すので、使うのは vpnprofile と httpserver のテストだけ。別の package のテストが使うので export_test.go へは移せない。
 internal/remotesync/collect.go	NeverTravels	app のテストが、自分の持つパスがスナップショットから除外されていることを remotesync の規則で確かめる。別の package のテストが使うので export_test.go へは移せない。
 internal/vpn/backend.go	Backends	backends の表の外に方式の並びを持つ層（acceptance と httpserver の OpenAPI の enum の照合、cmd/sshc の VPN プロファイルの入力）のテストが、足し忘れを見つける。
 internal/vpn/failure.go	FailureReasons	理由の言い方を持つ internal/vpnrefusal のテストが、言い方の足し忘れを見つける。

@@ -18,12 +18,12 @@ func (s *Service) PasswordBinding(alias string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return s.passwordBindingForGraph(graph, stored.Hosts, alias)
+	return s.passwordBindingForGraph(graph, stored, alias)
 }
 
-// passwordBindingForGraph は、読み終えた設定グラフと metadata の hosts から、接続が
-// 照合するのと同じ結び付けの値を返す。
-func (s *Service) passwordBindingForGraph(graph *config.Graph, hosts []HostMetadata, alias string) (string, error) {
+// passwordBindingForGraph は、読み終えた設定グラフと metadata から、接続が照合するのと
+// 同じ結び付けの値を返す。
+func (s *Service) passwordBindingForGraph(graph *config.Graph, stored Metadata, alias string) (string, error) {
 	target, err := s.targetForGraph(graph, alias)
 	if err != nil {
 		return "", err
@@ -31,7 +31,8 @@ func (s *Service) passwordBindingForGraph(graph *config.Graph, hosts []HostMetad
 	// 接続（internal/app の sshParts.target）と同じく、VPN は行き先の alias にだけ付ける。
 	// ProxyJump のホップは VPN を通らない。片方だけが VPN を含むと、VPN を付けた接続では
 	// 保存済みの値が一度も照合に通らない。
-	target.VPN = vpnProfileOf(hosts, s.connectionIdentity(graph, alias))
+	attached := attachedVPNProfile(stored, s.connectionIdentity(graph, alias))
+	target.VPN, target.VPNProfileID = attached.Name, attached.ID
 	return target.AuthenticationBinding(), nil
 }
 

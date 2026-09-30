@@ -3,7 +3,6 @@ package application
 import (
 	"errors"
 	"fmt"
-	"slices"
 
 	"sshc/internal/storage"
 	"sshc/internal/vpn"
@@ -22,27 +21,12 @@ var ErrVPNProfileExists = errors.New("a vpn profile with that name already exist
 // CommitVPNProfileChange へ渡すまで、何も書かれていない。
 type VPNProfileChange struct {
 	planned metadataCommit
-	// assignmentRebind は、改名と削除で、割り当ての結び付けの値を書き換える。作成と
-	// 更新では nil である。
-	assignmentRebind func(alias, binding string) (string, bool)
-}
-
-// AssignmentRebind は、この変更に合わせて、保存済みのパスワード・TOTP・起動スニペットの
-// 割り当てが持つ結び付けの値をどう書き換えるかを返す。nil なら書き換えない。
-//
-// 結び付けの値は、接続に付けたVPNプロファイルの名前を含む。改名と削除は metadata と
-// 同じ書き込みで割り当ても書き換えないと、改名した接続の割り当てが停止中になり、
-// 削除した名前で作り直したプロファイルに前の割り当てが引き継がれる。
-//
-// alias の割り当てがいま binding に結び付いていれば、書き換えたあとの値と true を返す。
-// 空の値は、結び付けを捨てて割り当てを停止中にすることを表す。false なら、その割り当てに
-// 触れない。
-func (change VPNProfileChange) AssignmentRebind() func(alias, binding string) (string, bool) {
-	return change.assignmentRebind
 }
 
 // PlanVPNProfileCreate は、新しいプロファイルを加える変更を作る。同じ名前が
 // あれば ErrVPNProfileExists を返す。
+//
+// 識別子は新しく決める。削除したプロファイルと同じ名前でも、前の識別子は引き継がない。
 func (s *Service) PlanVPNProfileCreate(profile VPNProfile) (VPNProfileChange, error) {
 	profile = profile.withoutWireGuardFields()
 	if _, err := profile.Profile(); err != nil {
@@ -55,6 +39,9 @@ func (s *Service) PlanVPNProfileCreate(profile VPNProfile) (VPNProfileChange, er
 	if vpnProfileIndex(stored.VPNProfiles, profile.Name) >= 0 {
 		return VPNProfileChange{}, fmt.Errorf("%w: %s", ErrVPNProfileExists, profile.Name)
 	}
+	if profile.ID, err = newVPNProfileID(); err != nil {
+		return VPNProfileChange{}, err
+	}
 	stored.VPNProfiles = append(stored.VPNProfiles, profile)
 	return VPNProfileChange{planned: metadataCommit{
 		operation: "vpn.profile.create", metadata: stored, precondition: precondition,
@@ -65,7 +52,8 @@ func (s *Service) PlanVPNProfileCreate(profile VPNProfile) (VPNProfileChange, er
 // 無ければ ErrUnknownVPNProfile を返す。
 //
 // 作るときも置き換えるときも、WireGuard の v0.40.0 までの項目は書かない。設定ファイルは、
-// 呼び手が同じ書き込みで Vault に置く。
+// 呼び手が同じ書き込みで Vault に置く。識別子は保存済みのものを保つので、編集しても
+// 割り当ては停止中にならない。
 func (s *Service) PlanVPNProfileUpdate(profile VPNProfile) (VPNProfileChange, error) {
 	profile = profile.withoutWireGuardFields()
 	if _, err := profile.Profile(); err != nil {
@@ -79,6 +67,7 @@ func (s *Service) PlanVPNProfileUpdate(profile VPNProfile) (VPNProfileChange, er
 	if index < 0 {
 		return VPNProfileChange{}, fmt.Errorf("%w: %s", ErrUnknownVPNProfile, profile.Name)
 	}
+	profile.ID = stored.VPNProfiles[index].ID
 	stored.VPNProfiles[index] = profile
 	return VPNProfileChange{planned: metadataCommit{
 		operation: "vpn.profile.update", metadata: stored, precondition: precondition,
@@ -89,7 +78,8 @@ func (s *Service) PlanVPNProfileUpdate(profile VPNProfile) (VPNProfileChange, er
 // 紐付けも追従させる変更を作る。
 //
 // 別々に直すと、古い名前を指したままの接続が残る。その接続は繋ぐたびに断られ、
-// 利用者は設定のどこを直せばよいかを探すことになる。
+// 利用者は設定のどこを直せばよいかを探すことになる。識別子は変えないので、割り当ての
+// 結び付けの値は変わらず、保存済みのパスワードなどは割り当て直さずに使える。
 func (s *Service) PlanVPNProfileRename(from, to string) (VPNProfileChange, error) {
 	if err := vpn.ValidateName(to); err != nil {
 		return VPNProfileChange{}, fmt.Errorf("%w: %w", ErrMetadataVPN, err)
@@ -105,20 +95,15 @@ func (s *Service) PlanVPNProfileRename(from, to string) (VPNProfileChange, error
 	if from != to && vpnProfileIndex(stored.VPNProfiles, to) >= 0 {
 		return VPNProfileChange{}, fmt.Errorf("%w: %s", ErrVPNProfileExists, to)
 	}
-	before := slices.Clone(stored.Hosts)
 	stored.VPNProfiles[index].Name = to
 	for hostIndex, host := range stored.Hosts {
 		if host.VPN == from {
 			stored.Hosts[hostIndex].VPN = to
 		}
 	}
-	rebind, err := s.assignmentRebind(vpnProfileTransition{profile: from, before: before, after: stored.Hosts})
-	if err != nil {
-		return VPNProfileChange{}, err
-	}
 	return VPNProfileChange{planned: metadataCommit{
 		operation: "vpn.profile.rename", metadata: stored, precondition: precondition,
-	}, assignmentRebind: rebind}, nil
+	}}, nil
 }
 
 // PlanVPNProfileRemove は、プロファイルと、それを指している接続の紐付けを
@@ -135,30 +120,25 @@ func (s *Service) PlanVPNProfileRemove(name string) (VPNProfileChange, error) {
 	if index < 0 {
 		return VPNProfileChange{}, fmt.Errorf("%w: %s", ErrUnknownVPNProfile, name)
 	}
-	before := slices.Clone(stored.Hosts)
 	stored.VPNProfiles = append(stored.VPNProfiles[:index:index], stored.VPNProfiles[index+1:]...)
 	for hostIndex, host := range stored.Hosts {
 		if host.VPN == name {
 			stored.Hosts[hostIndex].VPN = ""
 		}
 	}
-	rebind, err := s.assignmentRebind(vpnProfileTransition{profile: name, before: before, after: stored.Hosts})
-	if err != nil {
-		return VPNProfileChange{}, err
-	}
 	return VPNProfileChange{planned: metadataCommit{
 		operation: "vpn.profile.remove", metadata: stored, precondition: precondition,
-	}, assignmentRebind: rebind}, nil
+	}}, nil
 }
 
-// CommitVPNProfileChange は、計画した metadata の変更と、一緒に書く変更（Vault と
-// 起動スニペット）を、ひとつの storage.Request で書く。途中で失敗すれば全部を巻き戻す。
-// nil の変更は書かない。
+// CommitVPNProfileChange は、計画した metadata の変更と Vault の変更を、ひとつの
+// storage.Request で書く。途中で失敗すれば両方を巻き戻す。vaultChange が nil なら
+// metadata だけを書く。
 //
 // 計画のあとに metadata が書き換えられていれば、読んだときの前提が崩れているので
 // 何も書かずに断る。
-func (s *Service) CommitVPNProfileChange(change VPNProfileChange, alongside ...*storage.Change) (SaveResult, error) {
-	return s.commitMetadataWith(change.planned, alongside...)
+func (s *Service) CommitVPNProfileChange(change VPNProfileChange, vaultChange *storage.Change) (SaveResult, error) {
+	return s.commitMetadataWith(change.planned, vaultChange)
 }
 
 // vpnProfileIndex は、名前の一致するプロファイルの位置を返す。無ければ -1。

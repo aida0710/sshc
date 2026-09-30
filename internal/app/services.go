@@ -98,14 +98,6 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 	// 管理対象ファイルのひとつにすぎないので、ジャーナルはひとつで足りる。
 	vault := secret.NewService(workspace, transactions, time.Now)
 	configService.SetVault(vault)
-	// 起動スニペットの割り当ては、接続先の改名と、VPNプロファイルの改名・削除にも付いて
-	// 動く。どちらも設定と Vault と同じ書き込みで書き換える。
-	snippetStore, err := newSnippetStore(workspace, vault, transactions)
-	if err != nil {
-		return nil, err
-	}
-	configService.SetStartupRenamer(snippetStore)
-	configService.SetStartupRemover(snippetStore)
 	recentStore := recent.NewStore(workspace, time.Now)
 
 	// ProxyCommand と docker は、ログインシェルの PATH で起動する。launchd や
@@ -127,7 +119,7 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 	vpnRoutes := vpn.New(filepath.Join(workspace.Root(), vpnStateDirectory), os.Getuid(), dockerEnvironment)
 	// 設定・秘密・経路をひとつの操作として扱う。engine の接続と HTTP API が同じものを使う。
 	vpnProfiles := vpnprofile.New(vpnprofile.Dependencies{
-		Configuration: configService, Vault: vault, Routes: vpnRoutes, Startup: snippetStore,
+		Configuration: configService, Vault: vault, Routes: vpnRoutes,
 	})
 
 	// プロセス内 SSH クライアントの依存関係をここで一度だけ組み立てる。
@@ -163,6 +155,28 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 		remoteRun = inProcessSSH.run()
 	}
 	remoteKeyService := &remotekey.Service{Resolve: inProcessSSH.target, Run: remoteRun}
+	snippetStore := snippets.NewStore(workspace, snippets.Protection{
+		Seal: vault.SealDocument,
+		Open: func(contents []byte) ([]byte, error) {
+			plaintext, err := vault.OpenDocument(contents)
+			if errors.Is(err, secret.ErrNotAVault) {
+				return nil, snippets.ErrNotEncrypted
+			}
+			return plaintext, err
+		},
+		WithMutation: func(mutation func() error) error {
+			return vault.WithStableSnapshot(func() error {
+				return transactions.WithSnapshot(mutation)
+			})
+		},
+	})
+	if err := vault.RegisterProtectedDocument(secret.ProtectedDocument{
+		Path: snippetStore.Path(), Validate: snippetStore.ValidateDocument,
+	}); err != nil {
+		return nil, err
+	}
+	configService.SetStartupRenamer(snippetStore)
+	configService.SetStartupRemover(snippetStore)
 	snippetService := snippets.NewService(snippets.Options{
 		Repository: snippetStore,
 		Resolve: func(alias string) (snippets.Resolution, error) {
@@ -239,32 +253,6 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 	snippetStore.SetAfterChange(services.autoSync.NotifyLocalChange)
 	services.terminals = buildTerminals(configService, dependencies)
 	return services, nil
-}
-
-// newSnippetStore は、スニペットの文書を Vault の鍵で封じる store を組み、マスター
-// パスワードの変更で封じ直す文書として Vault に登録する。
-func newSnippetStore(workspace *storage.Workspace, vault *secret.Service, transactions *storage.Manager) (*snippets.Store, error) {
-	store := snippets.NewStore(workspace, snippets.Protection{
-		Seal: vault.SealDocument,
-		Open: func(contents []byte) ([]byte, error) {
-			plaintext, err := vault.OpenDocument(contents)
-			if errors.Is(err, secret.ErrNotAVault) {
-				return nil, snippets.ErrNotEncrypted
-			}
-			return plaintext, err
-		},
-		WithMutation: func(mutation func() error) error {
-			return vault.WithStableSnapshot(func() error {
-				return transactions.WithSnapshot(mutation)
-			})
-		},
-	})
-	if err := vault.RegisterProtectedDocument(secret.ProtectedDocument{
-		Path: store.Path(), Validate: store.ValidateDocument,
-	}); err != nil {
-		return nil, err
-	}
-	return store, nil
 }
 
 func snippetRoute(target sshclient.Target) []snippets.RouteHop {

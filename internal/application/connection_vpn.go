@@ -10,37 +10,58 @@ import (
 
 // 接続とVPNプロファイルの紐付けを読む。書き込みは metadata の保存と同じ経路を通る。
 
+// AttachedVPNProfile は、接続に付けたVPNプロファイルである。Name は経路の起動に、ID は
+// 保存済みのパスワードなどの結び付けの値（sshclient.Target.VPNProfileID）に使う。
+//
+// Name が空なら、この接続はVPNを通らない。付けた名前のプロファイルが無ければ ID が空に
+// なる。その接続は経路を起動できない。
+type AttachedVPNProfile struct {
+	Name string
+	ID   string
+}
+
 // ConnectionVPN は、この alias へ届くために通るVPNプロファイルの名前を返す。
 //
 // 空なら、この接続はVPNを通らない。
 func (s *Service) ConnectionVPN(alias string) (string, error) {
+	attached, err := s.ConnectionVPNProfile(alias)
+	return attached.Name, err
+}
+
+// ConnectionVPNProfile は、この alias へ届くために通るVPNプロファイルの名前と識別子を返す。
+func (s *Service) ConnectionVPNProfile(alias string) (AttachedVPNProfile, error) {
 	graph, err := s.resolve()
 	if err != nil {
-		return "", err
+		return AttachedVPNProfile{}, err
 	}
 	identity := s.connectionIdentity(graph, alias)
 	// 外部ファイルやワイルドカードだけの規則は編集できる identity を持たない。
 	// 同じ名前の内部ホストの設定を借りない。
 	if identity.IsZero() {
-		return "", nil
+		return AttachedVPNProfile{}, nil
 	}
 	stored, _, err := s.metadata.Load()
 	if err != nil {
-		return "", err
+		return AttachedVPNProfile{}, err
 	}
-	return vpnProfileOf(stored.Hosts, identity), nil
+	return attachedVPNProfile(stored, identity), nil
 }
 
-// vpnProfileOf は、identity のブロックに付けたVPNプロファイルの名前を hosts から返す。
+// attachedVPNProfile は、identity のブロックに付けたVPNプロファイルを metadata から返す。
 // 付けていなければ空である。
-func vpnProfileOf(hosts []HostMetadata, identity HostIdentity) string {
+func attachedVPNProfile(stored Metadata, identity HostIdentity) AttachedVPNProfile {
 	if identity.IsZero() {
-		return ""
+		return AttachedVPNProfile{}
 	}
-	if index := hostMetadataIndex(hosts, identity); index >= 0 {
-		return hosts[index].VPN
+	index := hostMetadataIndex(stored.Hosts, identity)
+	if index < 0 || stored.Hosts[index].VPN == "" {
+		return AttachedVPNProfile{}
 	}
-	return ""
+	attached := AttachedVPNProfile{Name: stored.Hosts[index].VPN}
+	if profile := vpnProfileIndex(stored.VPNProfiles, attached.Name); profile >= 0 {
+		attached.ID = stored.VPNProfiles[profile].ID
+	}
+	return attached
 }
 
 // VPNProfile は、名前で保存済みのVPNプロファイルを返す。
@@ -124,7 +145,7 @@ func (s *Service) hostIdentity(alias string) (HostIdentity, error) {
 
 // commitMetadata は、metadata だけを書く。
 func (s *Service) commitMetadata(stored Metadata, precondition storage.Precondition, operation string) (SaveResult, error) {
-	return s.commitMetadataWith(metadataCommit{operation: operation, metadata: stored, precondition: precondition})
+	return s.commitMetadataWith(metadataCommit{operation: operation, metadata: stored, precondition: precondition}, nil)
 }
 
 // metadataCommit は、書く前の metadata と、読んだときの前提である。
@@ -135,12 +156,12 @@ type metadataCommit struct {
 }
 
 // commitMetadataWith は、metadata と、あれば別の変更（vault など）を、ひとつの
-// storage.Request で書く。どれかだけが書かれることはない。nil の変更は書かない。
+// storage.Request で書く。どちらかだけが書かれることはない。
 //
 // 別の変更があれば、接続の作成と同じく CommitAtomic で書き、書き込みの途中で失敗
-// したときに全部をその場で巻き戻す。metadata だけを書いて vault が古いまま残ると、
+// したときに両方をその場で巻き戻す。metadata だけを書いて vault が古いまま残ると、
 // 改名したプロファイルのシークレットが見つからず、保留の記録がほかの保存も止める。
-func (s *Service) commitMetadataWith(planned metadataCommit, alongside ...*storage.Change) (SaveResult, error) {
+func (s *Service) commitMetadataWith(planned metadataCommit, alongside *storage.Change) (SaveResult, error) {
 	if err := s.metadata.EnsureDirectory(); err != nil {
 		return SaveResult{}, err
 	}
@@ -150,11 +171,9 @@ func (s *Service) commitMetadataWith(planned metadataCommit, alongside ...*stora
 	}
 	request := storage.Request{Operation: planned.operation, Changes: []storage.Change{change}}
 	commit := s.manager.Commit
-	for _, other := range alongside {
-		if other != nil {
-			request.Changes = append(request.Changes, *other)
-			commit = s.manager.CommitAtomic
-		}
+	if alongside != nil {
+		request.Changes = append(request.Changes, *alongside)
+		commit = s.manager.CommitAtomic
 	}
 	result, err := commit(request)
 	if err != nil {

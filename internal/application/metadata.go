@@ -262,12 +262,13 @@ func DecodeMetadata(contents []byte) (Metadata, error) {
 	// あれば 1 つにする（metadata_duplicatehosts.go）。sshc エンジンの設定（engine 節）は
 	// 読まない。このマシンの設定として engine-settings.json へ移すのは、初めて起動した
 	// ときの InitialiseEngineSettings である（metadata_engine.go）。engine 節は、書き直すと
-	// 消える。
+	// 消える。VPN プロファイルに、名前から決めた識別子を与える（vpnprofile_id.go）。
 	if version.SchemaVersion < 9 {
 		clearUnpinnedServerIdentities(&metadata)
 		clearForeignVPNSections(&metadata)
 		joinSplitRestOfLineSettings(&metadata)
 		keepOneEntryPerConnection(&metadata)
+		giveVPNProfilesMigratedIDs(&metadata)
 	}
 	metadata.SchemaVersion = MetadataSchemaVersion
 	if metadata.GroupsFile == "" {

@@ -4626,6 +4626,10 @@ components:
       additionalProperties: false
       required: [name, backend]
       properties:
+        # sshc エンジンがプロファイルを作るときに決める識別子。名前を変更しても、編集しても
+        # 変わらない。削除して同じ名前で作り直すと別の値になる。保存済みのパスワードなどの
+        # 割り当ては、接続に付けたプロファイルをこれで区別する。保存の要求に書いた値は使わない。
+        id: { type: string, pattern: "^[0-9a-f]{32}$" }
         name: { type: string, minLength: 1, maxLength: 48 }
         backend:
           type: string

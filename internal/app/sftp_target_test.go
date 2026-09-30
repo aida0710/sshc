@@ -3,6 +3,7 @@ package app
 import (
 	"testing"
 
+	"sshc/internal/application"
 	"sshc/internal/effective"
 	"sshc/internal/textencoding"
 )
@@ -30,7 +31,7 @@ func TestSFTPPoolIdentityTracksConnectionAndJumpSettings(t *testing.T) {
 				facts:      effective.LocalFacts{Home: t.TempDir()},
 				resolve:    func(alias string) (effective.Values, error) { return settings[alias], nil },
 				encoding:   func(string) (textencoding.Name, error) { return textencoding.UTF8, nil },
-				vpnBinding: func(string) (string, error) { return "", nil },
+				vpnProfile: func(string) (application.AttachedVPNProfile, error) { return application.AttachedVPNProfile{}, nil },
 			}
 			resolve := parts.sftp()
 			before, err := resolve(t.Context(), "edge")

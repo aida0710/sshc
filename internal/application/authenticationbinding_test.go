@@ -10,7 +10,7 @@ import (
 // officeProfile は、labProfile と同じ設定で名前だけが違うプロファイルである。
 func officeProfile() VPNProfile {
 	office := labProfile()
-	office.Name = "office"
+	office.ID, office.Name = "fedcba9876543210fedcba9876543210", "office"
 	return office
 }
 
@@ -53,9 +53,10 @@ func TestThePasswordBindingChangesWithTheVPNProfileOfTheConnection(t *testing.T)
 	}
 }
 
-// VPN を付けた接続で検出した OS は、その接続の一覧に残る。検出を記録するときと一覧に
-// 出すときの両方で、接続（sshclient.Target）と同じく VPN を含めて照合する。
-func TestTheDetectedOSOfAConnectionThroughAVPNIsKept(t *testing.T) {
+// serviceWithOSDetectedThroughLab は、プロファイル lab を付けた接続 lab で、ubuntu を
+// 検出した状態の Service を返す。
+func serviceWithOSDetectedThroughLab(t *testing.T) *Service {
+	t.Helper()
 	metadata := NewMetadata()
 	metadata.VPNProfiles = []VPNProfile{labProfile()}
 	metadata.Hosts = []HostMetadata{{Identity: HostIdentity{Path: "config", Alias: "lab"}, VPN: "lab"}}
@@ -65,20 +66,48 @@ func TestTheDetectedOSOfAConnectionThroughAVPNIsKept(t *testing.T) {
 		t.Fatal(err)
 	}
 	// 接続は、alias のブロックに付けた VPN を Target に入れて開く（internal/app の sshParts.target）。
-	target.VPN = "lab"
+	target.VPN, target.VPNProfileID = "lab", labProfile().ID
 
 	observed := service.ObserveConnectionOS(target)
 	if observed == nil {
 		t.Fatal("missing observer")
 	}
 	observed("ubuntu")
+	return service
+}
 
+func detectedOSOfLab(t *testing.T, service *Service) string {
+	t.Helper()
 	overview, err := service.Overview()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(overview.Metadata.Hosts) != 1 || overview.Metadata.Hosts[0].DetectedOS != "ubuntu" {
-		t.Fatalf("hosts = %+v, want ubuntu detected on lab", overview.Metadata.Hosts)
+	if len(overview.Metadata.Hosts) != 1 {
+		t.Fatalf("hosts = %+v, want lab only", overview.Metadata.Hosts)
+	}
+	return overview.Metadata.Hosts[0].DetectedOS
+}
+
+// VPN を付けた接続で検出した OS は、その接続の一覧に残る。検出を記録するときと一覧に
+// 出すときの両方で、接続（sshclient.Target）と同じく VPN を含めて照合する。
+func TestTheDetectedOSOfAConnectionThroughAVPNIsKept(t *testing.T) {
+	service := serviceWithOSDetectedThroughLab(t)
+
+	if got := detectedOSOfLab(t, service); got != "ubuntu" {
+		t.Fatalf("detected OS = %q, want ubuntu", got)
+	}
+}
+
+// VPN プロファイルの名前を変えても経路は変わらないので、検出した OS は次に接続するのを
+// 待たずに一覧に残る。
+func TestRenamingTheVPNProfileKeepsTheDetectedOS(t *testing.T) {
+	service := serviceWithOSDetectedThroughLab(t)
+
+	change, err := service.PlanVPNProfileRename("lab", "lab 2")
+	commitVPNProfileChange(t, service, change, err)
+
+	if got := detectedOSOfLab(t, service); got != "ubuntu" {
+		t.Fatalf("detected OS after renaming the profile = %q, want ubuntu", got)
 	}
 }
 

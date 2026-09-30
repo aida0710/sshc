@@ -454,7 +454,7 @@ func (s *Service) planConnectionUpdate(inventory *keys.Inventory, request Update
 		_, prepared.explicitIdentityFile = directIdentityFile(file, block)
 		_, prepared.passwordAuthenticationOff = passwordAuthenticationDisabled(
 			effective.Resolve(graph, request.Identity.Alias, s.localFacts()))
-		prepared.authenticationBinding, err = s.passwordBindingForGraph(graph, stored.Hosts, request.Identity.Alias)
+		prepared.authenticationBinding, err = s.passwordBindingForGraph(graph, stored, request.Identity.Alias)
 		if err != nil {
 			return planned{}, false, err
 		}
@@ -495,7 +495,7 @@ func (s *Service) planConnectionUpdate(inventory *keys.Inventory, request Update
 	_, prepared.explicitIdentityFile = directIdentityFile(file, updatedBlock)
 	_, prepared.passwordAuthenticationOff = passwordAuthenticationDisabled(
 		effective.Resolve(after, request.Identity.Alias, s.localFacts()))
-	prepared.authenticationBinding, err = s.passwordBindingForGraph(after, stored.Hosts, request.Identity.Alias)
+	prepared.authenticationBinding, err = s.passwordBindingForGraph(after, stored, request.Identity.Alias)
 	if err != nil {
 		return planned{}, false, err
 	}

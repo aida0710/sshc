@@ -43,7 +43,7 @@ func (s *Service) recordConnectionOS(identity HostIdentity, binding, name string
 	if err != nil {
 		return err
 	}
-	if !s.detectionApplies(graph, stored.Hosts, osDetection{identity: identity, binding: binding}) {
+	if !s.detectionApplies(graph, stored, osDetection{identity: identity, binding: binding}) {
 		return nil
 	}
 	index := hostMetadataIndex(stored.Hosts, identity)
@@ -75,18 +75,18 @@ type osDetection struct {
 	binding string
 }
 
-// detectionApplies は、detection の接続で検出した OS が、いまの設定と metadata の hosts で
+// detectionApplies は、detection の接続で検出した OS が、いまの設定と metadata で
 // そのブロックにまだ当てはまるかを返す。ブロックが消えた、前のブロックに alias を
 // すべて取られた、接続先や認証や VPN プロファイルが変わった、のどれかなら当てはまらない。
 //
 // 確かめ直すのは、そのブロックへ接続する alias である。primary alias は前のブロックに
 // 取られていることがあり（`Host a web` の後ろの `Host web b`）、それで確かめると別の
 // ブロックの接続を見てしまう。
-func (s *Service) detectionApplies(graph *config.Graph, hosts []HostMetadata, detection osDetection) bool {
+func (s *Service) detectionApplies(graph *config.Graph, stored Metadata, detection osDetection) bool {
 	alias, found := s.connectingAlias(graph, detection.identity)
 	if !found {
 		return false
 	}
-	current, err := s.passwordBindingForGraph(graph, hosts, alias)
+	current, err := s.passwordBindingForGraph(graph, stored, alias)
 	return err == nil && current == detection.binding
 }
