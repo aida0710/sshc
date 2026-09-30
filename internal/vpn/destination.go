@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/netip"
 	"strconv"
+	"strings"
 )
 
 // 経路の先で繋ぐ相手（接続先）を確かめる。
@@ -56,11 +57,19 @@ func (profile Profile) Destination(address string) (Endpoint, error) {
 		}
 		return Endpoint{Host: host, Port: port}, nil
 	}
-	if !validHostName(host) {
+	// 数字とドットだけの名前は、getaddrinfo が IPv4 アドレスの略記と読む（10.1 は
+	// 10.0.0.1、010.0.0.1 は 8.0.0.1）。経路とパケットフィルタは別のアドレスと読むので、
+	// 接続がトンネルの外へ出うる。アドレスは4つの10進数で書いてもらう。
+	if !validHostName(host) || numericDotted(host) {
 		return refuse(ReasonFormat)
 	}
 	if len(profile.DNS) == 0 {
 		return refuse(ReasonNameNeedsDNS)
 	}
 	return Endpoint{Host: host, Port: port}, nil
+}
+
+// numericDotted は、数字とドットだけでできているかを返す。
+func numericDotted(host string) bool {
+	return strings.Trim(host, "0123456789.") == ""
 }

@@ -13,8 +13,8 @@ func TestEveryIKEv2ReasonHasASentence(t *testing.T) {
 		vpn.FailureIKEAuthentication, vpn.FailureIKEServerUnverified, vpn.FailureIKEProposalMismatch,
 		vpn.FailureIKENoResponse, vpn.FailureXFRMInterface,
 	} {
-		sentence := Sentence(Refusal{Code: CodeSessionFailed, Reason: string(reason)})
-		if !strings.HasPrefix(sentence, "VPNの接続に失敗しました。") || sentence == Sentence(Refusal{Code: CodeSessionFailed}) {
+		sentence := Sentence(Refusal{Code: CodeRouteFailed, Reason: string(reason)})
+		if !strings.HasPrefix(sentence, "VPNの接続に失敗しました。") || sentence == Sentence(Refusal{Code: CodeRouteFailed}) {
 			t.Errorf("%s: sentence = %q", reason, sentence)
 		}
 	}
@@ -24,7 +24,7 @@ func TestEveryIKEv2ReasonHasASentence(t *testing.T) {
 // Terminal は再接続を繰り返さない。
 func TestIKEv2RefusalsStopTheReconnect(t *testing.T) {
 	for _, reason := range []vpn.FailureReason{vpn.FailureIKEAuthentication, vpn.FailureIKENoResponse} {
-		if refusal := (Refusal{Code: CodeSessionFailed, Reason: string(reason)}); !refusal.RequiresAction() {
+		if refusal := (Refusal{Code: CodeRouteFailed, Reason: string(reason)}); !refusal.RequiresAction() {
 			t.Errorf("%s は再接続を繰り返す", reason)
 		}
 	}

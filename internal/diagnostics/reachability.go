@@ -12,11 +12,17 @@ import (
 	"time"
 )
 
-// ProxyJumpNotice は、すべての到達性の結果に付随する。このチェックは接続先へ
-// 自分でダイヤルするので、踏み台ホスト経由でしか到達できないホストはここで失敗
-// するのが当然である。UI は、そのホストが落ちていると受け取られないよう、その旨を
+// DirectDialNotice は、ダイヤルした到達性の結果に付随する。このチェックは接続先へ
+// 自分でダイヤルするので、踏み台ホストや VPN 経由でしか到達できないホストはここで
+// 失敗するのが当然である。UI は、そのホストが落ちていると受け取られないよう、その旨を
 // 述べなければならない。
-const ProxyJumpNotice = "This check dialled the destination directly. ProxyJump, ProxyCommand and any jump-host firewall were not used."
+const DirectDialNotice = "This check dialled the destination directly. ProxyJump, ProxyCommand, VPN profiles and any jump-host firewall were not used."
+
+// VPNRouteNotice は、VPN プロファイルを付けた接続の結果に付随する。このマシンから
+// 直接ダイヤルしても VPN の経路を通らないので、結果は実際の接続と関係が無い。VPN の
+// 経路を起動すると、ボタン1回でコンテナの起動やスマートフォンでの承認が走るので、
+// それもしない。
+const VPNRouteNotice = "This connection goes through a VPN profile, so the check did not dial the destination: a direct dial from this machine does not use the VPN route. The authentication test connects through the VPN."
 
 // DefaultReachabilityTimeout は、TCP ダイヤル一回に上限を設ける。
 const DefaultReachabilityTimeout = 5 * time.Second
@@ -28,6 +34,8 @@ const (
 	ReachabilityTimeout    = "timeout"
 	ReachabilityDNSFailure = "dns_failure"
 	ReachabilityFailed     = "failed"
+	// ReachabilityNotChecked は、ダイヤルしなかったことを表す。理由は Notice が述べる。
+	ReachabilityNotChecked = "not_checked"
 )
 
 // Dialer は TCP 接続を開く。*net.Dialer がこれを満たす。テストは関数で差し替え、
@@ -45,7 +53,7 @@ type ReachabilityResult struct {
 	Notice  string
 }
 
-// Reachability は接続先へ直接ダイヤルし、意図的に ProxyJump を無視する。
+// Reachability は接続先へ直接ダイヤルし、意図的に ProxyJump と VPN を無視する。
 type Reachability struct {
 	Dialer  Dialer
 	Timeout time.Duration
@@ -61,7 +69,7 @@ func (r Reachability) Check(ctx context.Context, hostname, port string) Reachabi
 	defer cancel()
 
 	address := net.JoinHostPort(hostname, port)
-	result := ReachabilityResult{Address: address, Notice: ProxyJumpNotice}
+	result := ReachabilityResult{Address: address, Notice: DirectDialNotice}
 
 	started := time.Now()
 	connection, err := r.Dialer.DialContext(dialContext, "tcp", address)

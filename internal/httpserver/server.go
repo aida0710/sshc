@@ -435,10 +435,10 @@ func New(options Options) (*Server, error) {
 	}
 	if options.VPN != nil {
 		registerVPNRoutes(e, VPNHandlers{
-			Config:   options.Config,
-			Profiles: options.VPNProfiles,
-			VPN:      options.VPN,
-			Actions:  actions,
+			Config:    options.Config,
+			Profiles:  options.VPNProfiles,
+			VPNRoutes: options.VPN,
+			Actions:   actions,
 		})
 	}
 	if len(registry) > 0 {

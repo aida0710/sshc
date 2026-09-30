@@ -5,6 +5,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"net/netip"
 	"strings"
 )
 
@@ -60,9 +61,11 @@ type IKEv2Secrets struct {
 }
 
 const (
-	// maxCACertificateLength は、CA の証明書（PEM）の長さの上限である。中間 CA を
-	// 含めて数枚を並べても収まる大きさにする。API の IKEv2Profile と同じ値にする。
-	maxCACertificateLength = 16384
+	// MaxCACertificateLength は、CA の証明書（PEM）の長さの上限（バイト数）である。中間
+	// CA を含めて数枚を並べても収まる大きさにする。API の IKEv2Profile と同じ値にする。
+	MaxCACertificateLength = 16384
+	// IKEv2CACertificateField は、CA の証明書を断るときに名指す項目の JSON パスである。
+	IKEv2CACertificateField = "ikev2.caCertificate"
 	// pemCertificateType は、PEM のうち CA の証明書として受け付ける種類である。
 	pemCertificateType = "CERTIFICATE"
 )
@@ -129,9 +132,8 @@ func (ikev2Backend) validateSettings(profile Profile) error {
 // validateServerIdentity は、サーバーの ID として swanctl.conf へ引用符で囲んで
 // 書けるかを確かめる。空はサーバーの名前を使う。
 //
-// `%` で始まる値（`%any` など）は、strongSwan が「どの ID でもよい」などの特別な
-// 意味に読む。サーバーの ID をそれにすると、信頼する認証局の証明書を持つ誰とでも
-// 繋いでしまう。
+// ひとつのサーバーに決まらない値は断る。サーバーの ID をそれにすると、信頼する
+// 認証局の証明書を持つ誰とでも繋ぎ、EAP のユーザー名とパスワードの応答を渡してしまう。
 func validateServerIdentity(identity string) error {
 	const field = "ikev2.serverIdentity"
 	if identity == "" {
@@ -140,23 +142,59 @@ func validateServerIdentity(identity string) error {
 	if err := validateLength(field, identity, maxUsernameLength); err != nil {
 		return err
 	}
-	if strings.ContainsAny(identity, "\r\n\"\\") || strings.HasPrefix(identity, "%") {
+	if strings.ContainsAny(identity, "\r\n\"\\") || ServerIdentityMatchesManyServers(identity) {
 		return fieldError(ErrSettings, field, ReasonFormat)
 	}
 	return nil
 }
 
+// identityRangeTypes は、strongSwan がアドレスの網や範囲として読む ID の型の接頭辞である。
+var identityRangeTypes = []string{"ipv4net:", "ipv6net:", "ipv4range:", "ipv6range:"}
+
+// ServerIdentityMatchesManyServers は、strongSwan がどの ID にも、または複数の ID に
+// 一致すると読む値かを返す。IKEv2 のサーバーの ID には使えない。
+//
+//   - `%` で始まる値（`%any` など）と、`*` を含む値（`*`、`@*`、`*.example.jp`、`CN=*`）
+//   - 未指定のアドレス（`0.0.0.0`、`::`、`0::0`）。strongSwan はどの ID とも読む
+//   - アドレスの網と範囲（`10.0.0.0/8`、`10.0.0.1-10.0.0.9` と、その型の接頭辞）
+func ServerIdentityMatchesManyServers(identity string) bool {
+	if strings.HasPrefix(identity, "%") || strings.Contains(identity, "*") {
+		return true
+	}
+	lowered := strings.ToLower(identity)
+	for _, prefix := range identityRangeTypes {
+		if strings.HasPrefix(lowered, prefix) {
+			return true
+		}
+	}
+	address := strings.TrimPrefix(strings.TrimPrefix(lowered, "ipv4:"), "ipv6:")
+	if parsed, err := netip.ParseAddr(address); err == nil && parsed.IsUnspecified() {
+		return true
+	}
+	if _, err := netip.ParsePrefix(address); err == nil {
+		return true
+	}
+	first, last, isRange := strings.Cut(address, "-")
+	return isRange && isAddress(first) && isAddress(last)
+}
+
+// isAddress は、IP アドレスとして読めるかを返す。
+func isAddress(text string) bool {
+	_, err := netip.ParseAddr(text)
+	return err == nil
+}
+
 // validateCACertificate は、CA の証明書が PEM の証明書だけでできているかを確かめる。
 // 秘密鍵などを貼り付けたまま保存させない。
 func validateCACertificate(settings *IKEv2Settings) error {
-	const field = "ikev2.caCertificate"
+	const field = IKEv2CACertificateField
 	if settings.CACertificate == "" {
 		return nil
 	}
 	if settings.Authentication == IKEv2AuthenticationPSK {
 		return fieldError(ErrSettings, field, ReasonUnexpected)
 	}
-	if err := validateLength(field, settings.CACertificate, maxCACertificateLength); err != nil {
+	if err := validateLength(field, settings.CACertificate, MaxCACertificateLength); err != nil {
 		return err
 	}
 	if _, err := caCertificateBlocks(settings.CACertificate); err != nil {

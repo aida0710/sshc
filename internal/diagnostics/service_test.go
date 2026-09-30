@@ -208,4 +208,69 @@ func TestAnUnresolvableAliasHasNoDestination(t *testing.T) {
 	if _, err := service.ConnectionSnapshot("gateway"); !errors.Is(err, diagnostics.ErrUnresolvedDestination) {
 		t.Errorf("ConnectionSnapshot = %v, want ErrUnresolvedDestination", err)
 	}
+	if _, err := service.Reach(context.Background(), "gateway"); !errors.Is(err, diagnostics.ErrUnsafeDestination) {
+		t.Errorf("Reach = %v, want ErrUnsafeDestination", err)
+	}
+}
+
+// VPN を付けた接続では、このマシンからダイヤルしない。直接のダイヤルは VPN の経路を
+// 通らず、VPN の中の名前をこのマシンの DNS へ問い合わせることになるからである。
+func TestReachDoesNotDialAConnectionThatGoesThroughAVPN(t *testing.T) {
+	service := diagnostics.NewService(newServiceWorkspace(t, serviceConfig), nil, effective.LocalFacts{})
+	var dialled []string
+	service.Reachability = diagnostics.Reachability{
+		Dialer: dialerFunc(func(_ context.Context, _, address string) (net.Conn, error) {
+			dialled = append(dialled, address)
+			return nil, errRefusedForTest
+		}),
+	}
+	service.VPNBinding = func(alias string) (string, error) {
+		if alias == "bastion" {
+			return "office", nil
+		}
+		return "", nil
+	}
+
+	result, err := service.Reach(context.Background(), "bastion")
+	if err != nil {
+		t.Fatalf("Reach = %v", err)
+	}
+	if len(dialled) != 0 {
+		t.Fatalf("dialled %v, want no dial", dialled)
+	}
+	want := diagnostics.ReachabilityResult{
+		Address: "203.0.113.10:2222", Outcome: diagnostics.ReachabilityNotChecked, Notice: diagnostics.VPNRouteNotice,
+	}
+	if result != want {
+		t.Fatalf("result = %#v, want %#v", result, want)
+	}
+
+	if _, err := service.Reach(context.Background(), "unlisted"); err != nil {
+		t.Fatalf("Reach(unlisted) = %v", err)
+	}
+	if len(dialled) != 1 || dialled[0] != "unlisted:22" {
+		t.Fatalf("dialled %v, want the connection without a VPN dialled directly", dialled)
+	}
+}
+
+// VPN の紐付けを読めないときは、直接ダイヤルせずに断る。接続先の問題としては断らない。
+func TestReachRefusesWhenTheVPNBindingCannotBeRead(t *testing.T) {
+	service := diagnostics.NewService(newServiceWorkspace(t, serviceConfig), nil, effective.LocalFacts{})
+	dialled := false
+	service.Reachability = diagnostics.Reachability{
+		Dialer: dialerFunc(func(context.Context, string, string) (net.Conn, error) {
+			dialled = true
+			return nil, errRefusedForTest
+		}),
+	}
+	unreadable := errors.New("metadata is unreadable")
+	service.VPNBinding = func(string) (string, error) { return "", unreadable }
+
+	_, err := service.Reach(context.Background(), "bastion")
+	if !errors.Is(err, unreadable) || errors.Is(err, diagnostics.ErrUnsafeDestination) {
+		t.Fatalf("Reach = %v, want %v alone", err, unreadable)
+	}
+	if dialled {
+		t.Fatal("dialled although the VPN binding could not be read")
+	}
 }

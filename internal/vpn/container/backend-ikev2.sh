@@ -41,9 +41,13 @@ backend_read() {
 # swanctl は、イメージに入っていないプラグインを読もうとして1つずつ警告を書き、
 # 公的な認証局の証明書を1枚ずつ読んだと書く。どちらも接続の成否に関係なく、失敗した
 # ときに見せるログの行数を食うので、swanctl.log からは除く。
+#
+# 応えない相手には --timeout まで IKE を送り直すので、止める合図を受けられるよう背後で
+# 待つ（wait_for_step）。
 swanctl_run() {
 	status=0
-	swanctl "$@" >"$runtime/swanctl.out" 2>&1 || status=$?
+	swanctl "$@" >"$runtime/swanctl.out" 2>&1 &
+	wait_for_step $! || status=$?
 	grep -v -e "^plugin '[^']*': failed to load" -e "^loaded certificate from '$swanctl_directory/x509ca/" \
 		"$runtime/swanctl.out" >>"$runtime/swanctl.log" || true
 	return "$status"
@@ -163,8 +167,8 @@ backend_alive() {
 # 側にセッションと仮想 IP の割り当てが残る。
 backend_down() {
 	if [ -S "$vici_socket" ]; then
-		timeout "$shutdown_seconds" swanctl --terminate --ike "$connection" \
-			--timeout "$shutdown_seconds" --loglevel -1 >/dev/null 2>&1 || true
+		timeout "$(shutdown_timeout_seconds)" swanctl --terminate --ike "$connection" \
+			--timeout "$(shutdown_timeout_seconds)" --loglevel -1 >/dev/null 2>&1 || true
 	fi
 	if [ -n "${charon_pid:-}" ]; then
 		kill "$charon_pid" 2>/dev/null || true

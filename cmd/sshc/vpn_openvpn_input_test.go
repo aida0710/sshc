@@ -79,7 +79,7 @@ func TestAnOpenVPNConfigWithARefusedDirectiveIsNotSent(t *testing.T) {
 	_, err := readVPNProfile(p, "provider", nil)
 
 	var input *vpnInputError
-	if !errors.As(err, &input) || !strings.Contains(input.sentence, "3行目の「up」") {
+	if !errors.As(err, &input) || !strings.Contains(input.sentence, `Line 3: "up"`) {
 		t.Fatalf("readVPNProfile = %v", err)
 	}
 }
@@ -92,7 +92,7 @@ func TestAMissingOpenVPNConfigFileIsNamed(t *testing.T) {
 	_, err := readVPNProfile(p, "provider", nil)
 
 	var input *vpnInputError
-	if !errors.As(err, &input) || !strings.Contains(input.sentence, "ファイルが見つかりません") {
+	if !errors.As(err, &input) || !strings.Contains(input.sentence, "The file does not exist.") {
 		t.Fatalf("readVPNProfile = %v", err)
 	}
 }

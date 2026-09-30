@@ -35,7 +35,8 @@ read_strongswan_documents() {
 # そのアドレスで置き換える。アドレスは server_address に残す。connect は、接続先が
 # サーバーそのものでないかを、このアドレスで確かめる。
 resolve_server_address() {
-	server_address=$(getent ahostsv4 "$server" | awk 'NR==1{print $1}')
+	resolve_first_ipv4 "$server"
+	server_address=$resolved_address
 	if [ -z "$server_address" ]; then
 		fail server_unresolved "VPNサーバーの名前解決に失敗しました: $server"
 	fi

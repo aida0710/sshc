@@ -46,6 +46,13 @@ func (record *attemptRecord) Write(level connectionlog.Level, message string) {
 	}
 }
 
+// forget は、記録を空にする。
+func (record *attemptRecord) forget() {
+	record.mutex.Lock()
+	defer record.mutex.Unlock()
+	record.lines = nil
+}
+
 // text は、記録を 1 つの文字列で返す。
 func (record *attemptRecord) text() string {
 	record.mutex.Lock()
@@ -72,13 +79,32 @@ const maxShownOutputLines = 240
 
 // sayOutput は、コマンドの出力の最後の行を、字下げして接続ログへ書く。
 func sayOutput(ctx context.Context, level connectionlog.Level, output string) {
+	for _, line := range shownOutputLines(output) {
+		connectionlog.Say(ctx, level, "  %s", line)
+	}
+}
+
+// showOutputOutsideTheRecord は、sayOutput と同じ行を、その場で接続を見ている書き先
+// （Terminal）へだけ書き、経路の記録には書かない。記録とは別に残してある出力
+// （コンテナのログ）を、記録へ重ねないために使う。
+func showOutputOutsideTheRecord(ctx context.Context, level connectionlog.Level, output string) {
+	for _, line := range shownOutputLines(output) {
+		connectionlog.Progress(ctx, level, "  %s", line)
+	}
+}
+
+// shownOutputLines は、出力のうち接続ログへ写す行（空でない、最後の maxShownOutputLines
+// 行まで）を返す。
+func shownOutputLines(output string) []string {
 	lines := strings.Split(strings.TrimRight(output, "\n"), "\n")
 	if len(lines) > maxShownOutputLines {
 		lines = lines[len(lines)-maxShownOutputLines:]
 	}
+	shown := make([]string, 0, len(lines))
 	for _, line := range lines {
 		if strings.TrimSpace(line) != "" {
-			connectionlog.Say(ctx, level, "  %s", line)
+			shown = append(shown, line)
 		}
 	}
+	return shown
 }

@@ -2,22 +2,27 @@ import type { VPNSecrets } from "../api/vpn";
 import type { VPNBackend } from "./vpnBackends";
 import type { VPNFieldError } from "./vpnFieldErrors";
 import { openVPNSecretsFieldError } from "./openVPNSecretRules";
+import { utf8Length } from "./utf8Length";
 import { wireGuardSecretsFieldError } from "./wireGuardSecretRules";
 
 // VPN プロファイルのシークレットを、送る前に項目ごとに確かめる。
 //
-// 未入力は engine（Go の validateSecrets）の規則の写しで、検査の順番も同じにする。OpenVPN と
-// WireGuard の設定ファイルは、中身まで openVPNSecretRules.ts と wireGuardSecretRules.ts が
-// 確かめる。長さの上限は engine（Go の requireSecret）と API（api/openapi.yaml の
-// VPNSecrets）と同じ値である。送る前の検査（validateAPIRequest）は上限を超えた値を
-// 項目の名前なしで断るので、その前にここで項目ごとの理由を出す。長さは UTF-16 の
-// 長さで数える。UTF-16 の長さは engine の数える UTF-8 のバイト数を超えないので、
-// engine が通す値をここで断ることはない。
+// 規則の正本は engine（Go の各方式の validateSecrets）にあり、ここはその写しである。検査の
+// 順番も同じにする。同じ入力に同じ項目と理由を返すことを、internal/vpn/testdata/secret-cases.json
+// に対するテストで保つ。OpenVPN と WireGuard の設定ファイルは、中身まで openVPNSecretRules.ts と
+// wireGuardSecretRules.ts が確かめる。
+//
+// 長さの上限は engine と API（api/openapi.yaml の VPNSecrets）と同じ値である。engine は UTF-8 の
+// バイト数で数えるので、ここもバイト数で数える。API の maxLength（文字数で数える）より厳しいか
+// 同じなので、ここを通った値は送る前の検査でも断られない。
+//
+// OpenConnect の TOTP の種の形（base32 または otpauth の URI）は、engine（internal/totp）だけが
+// 確かめる。engine の断りは、ほかの項目と同じく欄ごとの理由として出る。
 
 // VPNSecretKey は、フォームの欄ひとつに入力するシークレットである。
 export type VPNSecretKey = keyof VPNSecrets;
 
-// 設定ファイル以外のシークレットの上限である（API と同じ値）。
+// 設定ファイル以外のシークレットの上限（UTF-8 のバイト数）である（engine と API と同じ値）。
 const maxPasswordLength = 256;
 const maxTOTPSecretLength = 512;
 
@@ -79,7 +84,7 @@ export function vpnSecretsFieldError({ secrets, stored, ...choice }: VPNSecretsD
       return { field, reason: "required" };
     }
     const limit = secretLimits[key];
-    if (limit !== undefined && value.length > limit) return { field, reason: "too_long", limit };
+    if (limit !== undefined && utf8Length(value) > limit) return { field, reason: "too_long", limit };
   }
   return null;
 }

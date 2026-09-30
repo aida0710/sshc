@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -96,7 +97,8 @@ func TestL2TPStartsOnlyAfterItsIPsecTransportSAIsInstalled(t *testing.T) {
 			directory := t.TempDir()
 			stageBackendScript(t, directory, L2TPIPsec)
 			// Match stroke's successful exit code even when no CHILD_SA was created.
-			script := `runtime=$1
+			script := agentFunctions(t, "wait_for_step") + `
+runtime=$1
 backend_directory=$runtime
 . "$runtime/backend.sh"
 status=$2
@@ -126,5 +128,42 @@ echo l2tp-start
 				t.Fatalf("failure omitted IPsec state: %s", output)
 			}
 		})
+	}
+}
+
+// L2TP の切断から IPsec の後始末までは、どの段が応えなくても、合わせて止める手順の
+// 持ち時間に収まる。docker stop の猶予を超えると、SIGKILL で途中で終わる。
+func TestL2TPShutdownFitsTheShutdownBudget(t *testing.T) {
+	if _, err := os.Stat("/proc/uptime"); err != nil {
+		t.Skip("/proc/uptime が無い（コンテナの中は Linux）")
+	}
+	const shutdownSeconds = 3
+	const slack = 700 * time.Millisecond
+	directory := t.TempDir()
+	stageBackendScript(t, directory, L2TPIPsec)
+	if err := os.WriteFile(filepath.Join(directory, "l2tp-control"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// どのコマンドも応えず、timeout の上限まで止まる。PPP のアドレスも消えない。
+	script := agentFunctions(t, "seconds_since_boot", "start_shutdown_budget", "shutdown_seconds_left",
+		"shutdown_timeout_seconds") + `
+runtime=$1
+backend_directory=$runtime
+. "$runtime/backend.sh"
+shutdown_seconds=` + strconv.Itoa(shutdownSeconds) + `
+timeout() { sleep "$1"; }
+backend_alive() { return 0; }
+start_shutdown_budget
+backend_down
+echo down
+`
+	started := time.Now()
+	output := runBackendScript(t, script, directory)
+
+	if took := time.Since(started); took > shutdownSeconds*time.Second+slack {
+		t.Fatalf("止める手順に %v かかった（持ち時間 %d 秒）: %s", took, shutdownSeconds, output)
+	}
+	if output != "down\n" {
+		t.Fatalf("output = %q", output)
 	}
 }

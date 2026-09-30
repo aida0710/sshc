@@ -31,7 +31,7 @@ describe("describeVPNProblem", () => {
   });
 
   it("says a route failure and its reason in one sentence", () => {
-    expect(describeVPNProblem(t, refusal("vpn_session_failed", { reason: "ppp_authentication" }))).toBe(
+    expect(describeVPNProblem(t, refusal("vpn_route_failed", { reason: "ppp_authentication" }))).toBe(
       "VPNの接続に失敗しました。PPPの認証に失敗しました。ユーザー名とパスワードを確認してください。",
     );
   });

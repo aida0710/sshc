@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"sshc/internal/application"
 	"sshc/internal/httpserver"
@@ -27,7 +28,7 @@ func vpnOverviewFixture() string {
 }
 
 // 一覧は、プロファイルと状態と、それを通る接続を見せる。
-func TestVPNListShowsEachProfileWithItsSessionAndConnections(t *testing.T) {
+func TestVPNListShowsEachProfileWithItsRouteAndConnections(t *testing.T) {
 	harness, server, stateDir := newSyncCommandHarness(t, func(response http.ResponseWriter, request *http.Request) {
 		response.Header().Set("Content-Type", "application/json")
 		_, _ = response.Write([]byte(vpnOverviewFixture()))
@@ -52,7 +53,7 @@ func TestVPNListShowsEachProfileWithItsSessionAndConnections(t *testing.T) {
 	}
 }
 
-// 経路を作れないマシンでは、理由を日本語の文で見せ、docker の生の文を添える。
+// 経路を作れないマシンでは、理由を英語の文で見せ、docker の生の文を添える。
 func TestVPNListSaysWhyTheMachineCannotOpenRoutes(t *testing.T) {
 	_, server, stateDir := newSyncCommandHarness(t, func(response http.ResponseWriter, request *http.Request) {
 		response.Header().Set("Content-Type", "application/json")
@@ -69,7 +70,7 @@ func TestVPNListSaysWhyTheMachineCannotOpenRoutes(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("code=%d stderr=%q", code, stderr.String())
 	}
-	for _, want := range []string{"Dockerが見つかりません", "詳細: docker is not installed"} {
+	for _, want := range []string{"Docker was not found.", "Detail: docker is not installed"} {
 		if !strings.Contains(stdout.String(), want) {
 			t.Fatalf("output omitted %q: %q", want, stdout.String())
 		}
@@ -239,15 +240,7 @@ func relayStub(t *testing.T, reply string, greeting string) (socket string, requ
 			return
 		}
 		defer func() { _ = connection.Close() }()
-		line := []byte{}
-		one := make([]byte, 1)
-		for {
-			if _, err := io.ReadFull(connection, one); err != nil || one[0] == '\n' {
-				break
-			}
-			line = append(line, one[0])
-		}
-		addresses <- string(line)
+		addresses <- readRequestedAddress(connection)
 		_, _ = connection.Write([]byte(reply + "\n"))
 		if reply != "{}" {
 			return
@@ -257,6 +250,18 @@ func relayStub(t *testing.T, reply string, greeting string) (socket string, requ
 		bodies <- received
 	}()
 	return socket, addresses, bodies
+}
+
+// readRequestedAddress は、繋ぐ側が1行目に送った接続先を読む。
+func readRequestedAddress(connection net.Conn) string {
+	line := []byte{}
+	one := make([]byte, 1)
+	for {
+		if _, err := io.ReadFull(connection, one); err != nil || one[0] == '\n' {
+			return string(line)
+		}
+		line = append(line, one[0])
+	}
 }
 
 // relayOverview は、経路が起動していて、その中継が socket にある一覧である。
@@ -293,7 +298,80 @@ func TestTheProxyPipesStandardInputAndOutputThroughTheRoute(t *testing.T) {
 	}
 }
 
-// 接続先へ繋げなかったときは、engine が答えた理由を日本語の文で出し、標準出力には
+// proxyReturnTimeout は、proxy が戻らないのを固まったと見なすまでの待ち。遅い CI の
+// マシンでも、中継が閉じてから戻るまでには十分な長さにする。
+const proxyReturnTimeout = 5 * time.Second
+
+// closingRelayStub は、1行目に "{}" と答えて greeting を返したあと、closeRelay で
+// 中継の側から先に閉じる。
+func closingRelayStub(t *testing.T, greeting string, closeRelay func(net.Conn)) string {
+	t.Helper()
+	socket := filepath.Join(shortSocketDirectory(t), "engine.sock")
+	listener, err := net.Listen("unix", socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = listener.Close() })
+	go func() {
+		connection, err := listener.Accept()
+		if err != nil {
+			return
+		}
+		defer func() { _ = connection.Close() }()
+		readRequestedAddress(connection)
+		_, _ = connection.Write([]byte("{}\n" + greeting))
+		closeRelay(connection)
+	}()
+	return socket
+}
+
+// 接続先の切断、sshc vpn down、engine の終了で中継が先に閉じたら、proxy は標準入力が
+// 開いたままでも戻る。ssh は ProxyCommand の標準出力が閉じるまで切断に気付かない。
+func TestTheProxyReturnsWhenTheRelayClosesFirstWhileStandardInputStaysOpen(t *testing.T) {
+	closings := map[string]func(net.Conn){
+		"中継が接続を閉じる": func(connection net.Conn) { _ = connection.Close() },
+		"中継が送る側だけを閉じる": func(connection net.Conn) {
+			_ = connection.(*net.UnixConn).CloseWrite()
+			_, _ = io.Copy(io.Discard, connection)
+		},
+	}
+	for name, closeRelay := range closings {
+		t.Run(name, func(t *testing.T) {
+			socket := closingRelayStub(t, "SSH-2.0-remote\r\n", closeRelay)
+			_, server, stateDir := newSyncCommandHarness(t, func(response http.ResponseWriter, request *http.Request) {
+				response.Header().Set("Content-Type", "application/json")
+				_, _ = response.Write([]byte(relayOverview(t, socket)))
+			})
+			defer server.Close()
+			stdin, stdinWriter, err := os.Pipe()
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = stdinWriter.Close(); _ = stdin.Close() })
+			var stdout, stderr strings.Builder
+
+			code := make(chan int, 1)
+			go func() {
+				code <- runVPN(context.Background(), vpnInvocation{Action: vpnProxy, Name: "lab", Target: "10.9.9.1:22"},
+					commandEnvironment{stateDir: stateDir, client: server.Client(), stdin: stdin, stdout: &stdout, stderr: &stderr})
+			}()
+
+			select {
+			case got := <-code:
+				if got != 0 || stderr.Len() != 0 {
+					t.Fatalf("code = %d, stderr = %q", got, stderr.String())
+				}
+			case <-time.After(proxyReturnTimeout):
+				t.Fatal("中継が閉じたのに proxy が標準入力を待ち続けた")
+			}
+			if stdout.String() != "SSH-2.0-remote\r\n" {
+				t.Fatalf("標準出力 = %q", stdout.String())
+			}
+		})
+	}
+}
+
+// 接続先へ繋げなかったときは、engine が答えた理由を英語の文で出し、標準出力には
 // 何も書かない。
 func TestTheProxySaysWhyTheRouteCouldNotReachTheDestination(t *testing.T) {
 	socket, _, _ := relayStub(t, `{"code":"vpn_target_failed","reason":"target_unresolved"}`, "")
@@ -314,7 +392,7 @@ func TestTheProxySaysWhyTheRouteCouldNotReachTheDestination(t *testing.T) {
 	if stdout.Len() != 0 {
 		t.Fatalf("標準出力に何か書いた: %q", stdout.String())
 	}
-	if !strings.Contains(stderr.String(), "名前解決に失敗しました") {
+	if !strings.Contains(stderr.String(), "could not resolve the destination") {
 		t.Fatalf("stderr = %q", stderr.String())
 	}
 }
@@ -358,7 +436,7 @@ func TestBringingARouteUpSaysWhatItIsWaitingForAndWhereToLookWhenItFails(t *test
 	_, server, stateDir := newSyncCommandHarness(t, func(response http.ResponseWriter, request *http.Request) {
 		response.Header().Set("Content-Type", "application/problem+json")
 		response.WriteHeader(http.StatusConflict)
-		_, _ = response.Write([]byte(`{"code":"vpn_session_failed","message":"the tunnel did not come up"}`))
+		_, _ = response.Write([]byte(`{"code":"vpn_route_failed","message":"the tunnel did not come up"}`))
 	})
 	defer server.Close()
 	var stdout, stderr strings.Builder
@@ -370,7 +448,7 @@ func TestBringingARouteUpSaysWhatItIsWaitingForAndWhereToLookWhenItFails(t *test
 	if code == 0 {
 		t.Fatalf("code = %d, stderr = %q", code, stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "VPNに接続しています") {
+	if !strings.Contains(stderr.String(), `Connecting to the VPN "lab".`) {
 		t.Fatalf("待っているあいだの案内が無い: %q", stderr.String())
 	}
 	if !strings.Contains(stderr.String(), "sshc vpn logs lab") {
@@ -397,6 +475,15 @@ func TestTheListSaysHowFarAStartingRouteHasGot(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), "starting: waiting for the tunnel") {
 		t.Fatalf("output = %q", stdout.String())
+	}
+}
+
+// 経路を用意しているどの段階も、一覧の状態の欄では段階の語のままでなく英語の言葉で言う。
+func TestEveryStartPhaseHasAStateWordInTheList(t *testing.T) {
+	for _, phase := range []vpn.StartPhase{vpn.PhaseImage, vpn.PhaseContainer, vpn.PhaseTunnel, vpn.PhaseApproval} {
+		if word := vpnPhaseWord(phase); word == string(phase) {
+			t.Errorf("%s に状態の欄の語が無い", phase)
+		}
 	}
 }
 
@@ -449,6 +536,42 @@ func TestVPNRenameSendsTheNewName(t *testing.T) {
 	}
 }
 
+// 空白と日本語を含む名前も、そのまま1つの名前として engine へ届く。
+func TestVPNRenameCarriesNamesWithSpacesIntact(t *testing.T) {
+	var sent map[string]string
+	harness, server, stateDir := newSyncCommandHarness(t, func(response http.ResponseWriter, request *http.Request) {
+		response.Header().Set("Content-Type", "application/json")
+		if request.Method == http.MethodPost {
+			_ = json.NewDecoder(request.Body).Decode(&sent)
+		}
+		_, _ = response.Write([]byte(vpnOverviewFixture()))
+	})
+	defer server.Close()
+	var stdout, stderr strings.Builder
+
+	code := runVPN(context.Background(), vpnInvocation{Action: vpnRename, Name: "研究室 VPN", Rename: "研究室, 別館"},
+		commandEnvironment{stateDir: stateDir, client: server.Client(), stdout: &stdout, stderr: &stderr})
+
+	if code != 0 || sent["name"] != "研究室, 別館" {
+		t.Fatalf("code=%d sent=%v stderr=%q", code, sent, stderr.String())
+	}
+	if strings.Join(harness.paths, ",") != "/api/v1/vpn/profiles/研究室 VPN/rename" {
+		t.Fatalf("paths = %v", harness.paths)
+	}
+}
+
+// 一覧の列は、全角の字を2桁と数えて揃える。
+func TestTheVPNListAlignsJapaneseNamesByTheirWidthOnTheTerminal(t *testing.T) {
+	var output strings.Builder
+
+	writeAlignedRows(&output, [][2]string{{"研究室 VPN", "wireguard  up"}, {"lab", "openvpn  stopped"}})
+
+	lines := strings.Split(strings.TrimSuffix(output.String(), "\n"), "\n")
+	if len(lines) != 2 || lines[0] != "研究室 VPN  wireguard  up" || lines[1] != "lab         openvpn  stopped" {
+		t.Fatalf("output:\n%s", output.String())
+	}
+}
+
 // 受け取り方を間違えた呼び出しは、engine へ届く前に断る。
 func TestVPNInvocationsAreAcceptedOnlyInTheirDocumentedShapes(t *testing.T) {
 	for _, test := range []struct {
@@ -482,6 +605,8 @@ func TestVPNInvocationsAreAcceptedOnlyInTheirDocumentedShapes(t *testing.T) {
 		{[]string{"vpn", "logs"}, false},
 		{[]string{"vpn", "proxy", "lab"}, false},
 		{[]string{"vpn", "proxy", "lab", "10.9.9.1", "22"}, true},
+		{[]string{"vpn", "proxy", "研究室 VPN", "10.9.9.1", "22"}, true},
+		{[]string{"vpn", "up", "研究室 VPN"}, true},
 		{[]string{"vpn", "proxy", "lab", "10.9.9.1"}, false},
 		{[]string{"vpn", "proxy"}, false},
 		{[]string{"vpn", "wat"}, false},

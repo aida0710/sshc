@@ -30,8 +30,8 @@ func readOpenVPNProfile(
 	settings := &application.OpenVPNProfile{Servers: previous.Servers}
 	var config []byte
 	if path != "" {
-		if config, err = readVPNConfigFile(vpnConfigFile{
-			path: path, limit: vpn.MaxOpenVPNConfigLength, kind: vpn.ErrSecrets,
+		if config, err = readVPNInputFile(vpnInputFile{
+			path: path, limit: vpn.MaxOpenVPNConfigLength, description: "configuration file", kind: vpn.ErrSecrets,
 			field: "secrets." + vpn.SecretKeyOpenVPNConfig,
 		}); err != nil {
 			return nil, nil, err

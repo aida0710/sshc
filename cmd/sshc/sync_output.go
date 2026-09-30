@@ -114,7 +114,7 @@ func pushChanges(result api.PushResult) []syncChange {
 
 // writeSyncResult は、要約の表を書き、変更したファイルがあれば一行空けて続ける。
 func writeSyncResult(out io.Writer, rows [][2]string, changes []syncChange) {
-	writeSyncRows(out, rows)
+	writeAlignedRows(out, rows)
 	if len(changes) == 0 {
 		return
 	}
@@ -128,7 +128,7 @@ func writeSyncChanges(out io.Writer, changes []syncChange) {
 	for _, change := range changes {
 		rows = append(rows, [2]string{string(change.kind), change.path})
 	}
-	writeSyncRows(out, rows)
+	writeAlignedRows(out, rows)
 }
 
 func syncChangeCounts(changes []syncChange) map[syncChangeKind]int {
@@ -169,7 +169,7 @@ func writeHumanSyncFailure(stderr io.Writer, failure commandFailure) {
 	case "transport_error", "bucket_refused", "engine_unavailable":
 		fmt.Fprintln(stderr, "sshc: the engine or sync target is unavailable; check the engine and network, then try again")
 	case "invalid_engine_response", "response_too_large", "http_error":
-		fmt.Fprintln(stderr, "sshc: the running engine returned an invalid response; check that the CLI and engine versions match")
+		fmt.Fprintf(stderr, "sshc: %s\n", engineInvalidResponseAdvice)
 	default:
 		fmt.Fprintf(stderr, "sshc: sync failed (%s); inspect sshc sync status before trying again\n", failure.Kind)
 	}
@@ -210,7 +210,7 @@ func writeSyncStatus(out io.Writer, status api.SyncStatus) {
 	} else {
 		rows = append(rows, [2]string{"last operation", "-"})
 	}
-	writeSyncRows(out, rows)
+	writeAlignedRows(out, rows)
 }
 
 func accessKeyStatus(status api.SyncStatus) string {
@@ -221,18 +221,6 @@ func accessKeyStatus(status api.SyncStatus) string {
 		return "configured"
 	}
 	return "missing"
-}
-
-func writeSyncRows(out io.Writer, rows [][2]string) {
-	width := 0
-	for _, row := range rows {
-		if len(row[0]) > width {
-			width = len(row[0])
-		}
-	}
-	for _, row := range rows {
-		fmt.Fprintf(out, "%-*s  %s\n", width, safeTerminalCell(row[0]), safeTerminalCell(row[1]))
-	}
 }
 
 func yesNo(value bool) string {

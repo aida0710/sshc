@@ -670,6 +670,20 @@
       "directive": "http-proxy"
     },
     {
+      "name": "setenv opt を付けた http-proxy の認証のファイルも断る",
+      "config": [
+        "client",
+        "dev tun",
+        "proto udp",
+        "remote vpn.example.jp 1194",
+        "nobind",
+        "setenv opt http-proxy proxy.example.jp 8080 /etc/proxy-credentials"
+      ],
+      "reason": "file_reference",
+      "line": 6,
+      "directive": "http-proxy"
+    },
+    {
       "name": "connection の中の指示も確かめる",
       "config": [
         "client",
@@ -814,6 +828,38 @@
       "directive": ""
     },
     {
+      "name": "16語より後ろは読まない（OpenVPN の MAX_PARMS）",
+      "config": [
+        "client",
+        "dev tun",
+        "proto udp",
+        "remote vpn.example.jp 1194",
+        "nobind",
+        "setenv opt sshc-padding 4 5 6 7 8 9 10 11 12 13 14 15 16 \"17"
+      ],
+      "servers": [
+        "vpn.example.jp"
+      ],
+      "asksCredentials": false,
+      "reason": "",
+      "line": 0,
+      "directive": ""
+    },
+    {
+      "name": "16語目に閉じない引用符があれば断る",
+      "config": [
+        "client",
+        "dev tun",
+        "proto udp",
+        "remote vpn.example.jp 1194",
+        "nobind",
+        "setenv opt sshc-padding 4 5 6 7 8 9 10 11 12 13 14 15 \"16"
+      ],
+      "reason": "format",
+      "line": 6,
+      "directive": ""
+    },
+    {
       "name": "NUL を含む行は断る",
       "config": [
         "client",
@@ -821,6 +867,24 @@
       ],
       "reason": "format",
       "line": 2,
+      "directive": ""
+    },
+    {
+      "name": "OpenVPN が途中で切らない長さの行は通る",
+      "config": [
+        "client",
+        "dev tun",
+        "proto udp",
+        "remote vpn.example.jp 1194",
+        "nobind",
+        "setenv PADDING aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      ],
+      "servers": [
+        "vpn.example.jp"
+      ],
+      "asksCredentials": false,
+      "reason": "",
+      "line": 0,
       "directive": ""
     },
     {

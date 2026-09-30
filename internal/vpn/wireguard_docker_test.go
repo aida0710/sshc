@@ -13,7 +13,7 @@ import (
 )
 
 // 設定ファイル（wg-quick の形）で作った WireGuard の経路を、本物のコンテナと本物の
-// トンネルで確かめる。相手は session_docker_test.go と同じテスト用の WireGuard である。
+// トンネルで確かめる。相手は route_container_docker_test.go と同じテスト用の WireGuard である。
 // SSHC_VPN_DOCKER_TEST=1 のときだけ走る。
 
 // wireGuardTestMTU は、設定ファイルに書くトンネルの MTU である。wireguard-go の既定（1420）
@@ -104,7 +104,10 @@ func TestATargetOutsideTheAllowedIPsSaysSo(t *testing.T) {
 
 	requireAnswer(t, manager, ctx, dialTarget{profile: route.profile, secrets: route.secrets,
 		address: fmt.Sprintf("%s:%d", tunnelServerAddress, echoPort)}, "tunnelled")
-	connection, err := manager.Dial(ctx, route.profile, route.secrets, "10.77.0.9:22")
+	connection, err := manager.Dial(ctx, DialRequest{
+		Profile: route.profile.Name, Source: fixedRoute(route.profile, route.secrets),
+		Address: "10.77.0.9:22",
+	})
 	if err == nil {
 		_ = connection.Close()
 		t.Fatal("AllowedIPs に無い接続先へ繋いだ")

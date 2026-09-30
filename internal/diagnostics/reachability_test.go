@@ -38,8 +38,10 @@ func TestCheckReportsALoopbackListenerAsReached(t *testing.T) {
 	if result.Address != "127.0.0.1:"+strconv.Itoa(address.Port) {
 		t.Errorf("address = %q", result.Address)
 	}
-	if !strings.Contains(result.Notice, "ProxyJump") {
-		t.Errorf("notice = %q, want an explicit statement that ProxyJump was ignored", result.Notice)
+	for _, ignored := range []string{"ProxyJump", "VPN"} {
+		if !strings.Contains(result.Notice, ignored) {
+			t.Errorf("notice = %q, want an explicit statement that %s was ignored", result.Notice, ignored)
+		}
 	}
 }
 

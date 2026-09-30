@@ -153,7 +153,7 @@ paths:
             schema: { $ref: "#/components/schemas/AliasRequest" }
       responses:
         "200":
-          description: Direct TCP reachability, ignoring ProxyJump
+          description: Direct TCP reachability, ignoring ProxyJump and ProxyCommand. A connection with a VPN profile is not dialled and its outcome is not_checked.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ReachabilityResponse" }
@@ -593,7 +593,7 @@ paths:
           schema: { type: boolean, default: true }
       responses:
         "200":
-          description: Configured VPN profiles, their sessions, and whether this machine can open routes
+          description: Configured VPN profiles, their routes, and whether this machine can open routes
           content:
             application/json:
               schema: { $ref: "#/components/schemas/VPNOverview" }
@@ -707,11 +707,11 @@ paths:
         "401": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
-  /api/v1/vpn/profiles/{name}/session:
+  /api/v1/vpn/profiles/{name}/route:
     parameters:
       - { name: name, in: path, required: true, schema: { type: string, minLength: 1, maxLength: 48 } }
     post:
-      operationId: startVPNSession
+      operationId: startVPNRoute
       responses:
         "200":
           description: The route is up and its relay is listening
@@ -723,10 +723,10 @@ paths:
         "404": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
     delete:
-      operationId: stopVPNSession
+      operationId: disconnectVPNRoute
       responses:
         "200":
-          description: The container was stopped and its relay socket removed
+          description: The route was disconnected; its container was stopped and its relay socket removed
           content:
             application/json:
               schema: { $ref: "#/components/schemas/VPNOverview" }
@@ -2346,7 +2346,7 @@ components:
         # blockers は拒否理由を安定したコードで返す。
         # field・reason・limit は、入力のどの項目をどの理由で受け取れなかったかを
         # 決まった語で返す。field は保存形式の JSON のパス、limit は長さや数の上限。
-        # VPN の経路や接続先へ届かなかった応答（vpn_session_failed、vpn_target_failed、
+        # VPN の経路や接続先へ届かなかった応答（vpn_route_failed、vpn_target_failed、
         # vpn_destination_invalid）では reason だけが入る。
         field: { type: string }
         reason: { type: string }

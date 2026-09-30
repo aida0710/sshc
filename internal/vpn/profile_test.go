@@ -2,6 +2,7 @@ package vpn
 
 import (
 	"errors"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -26,6 +27,11 @@ func testWireGuardFields() WireGuardFields {
 }
 
 // validSecrets は、validProfile に合う設定ファイルである。
+// fixedRoute は、決まった設定とシークレットを返す読み手である。検査で Start と Dial へ渡す。
+func fixedRoute(profile Profile, secrets Secrets) RouteSource {
+	return func() (Profile, Secrets, error) { return profile, secrets, nil }
+}
+
 func validSecrets() Secrets {
 	return Secrets{WireGuard: &WireGuardSecrets{Config: testWireGuardFields().Config(testPrivateKey)}}
 }
@@ -148,10 +154,11 @@ func TestContainerNamesSeparateProfilesUsersAndWorkspaces(t *testing.T) {
 	directory := t.TempDir()
 	mine := New(directory, 1000, nil)
 	names := map[string]string{
-		"同じ設定":        mine.containerName("tohoku"),
-		"別の利用者":       New(directory, 1001, nil).containerName("tohoku"),
-		"別のプロファイル":    mine.containerName("office"),
-		"別のworkspace": New(t.TempDir(), 1000, nil).containerName("tohoku"),
+		"同じ設定":         mine.containerName("tohoku"),
+		"別の利用者":        New(directory, 1001, nil).containerName("tohoku"),
+		"別のプロファイル":     mine.containerName("office"),
+		"大文字と小文字だけが違う": mine.containerName("Tohoku"),
+		"別のworkspace":  New(t.TempDir(), 1000, nil).containerName("tohoku"),
 	}
 	seen := map[string]string{}
 	for label, name := range names {
@@ -178,7 +185,7 @@ func TestTheImageTagFollowsTheEmbeddedContents(t *testing.T) {
 	if tag != again {
 		t.Fatalf("imageTag is not stable: %q then %q", tag, again)
 	}
-	if !strings.HasPrefix(tag, imageName+":") || len(tag) != len(imageName)+13 {
+	if !regexp.MustCompile(`^[0-9a-f]{12}$`).MatchString(tag) {
 		t.Fatalf("imageTag = %q", tag)
 	}
 }
@@ -324,6 +331,19 @@ func TestContainersStartWithAnInitProcess(t *testing.T) {
 	})
 
 	if !strings.Contains(strings.Join(arguments, " "), " --init ") {
+		t.Fatalf("arguments = %v", arguments)
+	}
+}
+
+// イメージが無ければ、コンテナの起動は Docker Hub へ取りに行かずに失敗する。
+// docker.io/library/sshc-vpn は sshc が作ったイメージではない。
+func TestAMissingImageIsNotPulledFromARegistry(t *testing.T) {
+	arguments := runArguments(containerRun{
+		name: "sshc-vpn-lab", image: "sshc-vpn:test", profile: validProfile(), owner: 1000,
+		workspace: "000000000000", routeDirectory: "/tmp/lab", backend: backends[WireGuard],
+	})
+
+	if !strings.Contains(strings.Join(arguments, " "), " --pull never ") {
 		t.Fatalf("arguments = %v", arguments)
 	}
 }

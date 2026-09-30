@@ -155,11 +155,11 @@ func (h DiagnosticsHandlers) Reachability(c *echo.Context) error {
 
 	result, err := h.Service.Reach(c.Request().Context(), request.Alias)
 	switch {
-	case errors.Is(err, diagnostics.ErrUnresolvedDestination), errors.Is(err, validate.ErrUnsafeHostname):
+	case errors.Is(err, diagnostics.ErrUnsafeDestination):
 		return problem(c, http.StatusBadRequest, "unsafe_destination")
 	case err != nil:
-		// 設定を読めなかったのは接続先の問題ではない。確認 token を発行するときの読み込みの
-		// 失敗と同じく config_unreadable で返す。
+		// 設定や VPN の紐付けを読めなかったのは接続先の問題ではない。確認 token を発行する
+		// ときの読み込みの失敗と同じく config_unreadable で返す。
 		return diagnosticsProblem(c, err)
 	}
 	return c.JSON(http.StatusOK, api.ReachabilityResponse{

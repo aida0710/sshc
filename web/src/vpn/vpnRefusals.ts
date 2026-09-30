@@ -20,10 +20,12 @@ export const vpnRefusalMessages = {
   vpn_container_foreign: "vpn.containerForeign",
   vpn_socket_path_too_long: "vpn.socketPathTooLong",
   vpn_changed_concurrently: "vpn.changedConcurrently",
+  vpn_route_disconnected: "vpn.routeDisconnected",
+  vpn_route_stopped: "vpn.routeStopped",
 } as const satisfies Record<string, MessageKey>;
 
 // 理由の語（problem の reason）で言い方が決まる拒否である。言い方は vpnFailureReasons.ts にある。
-const vpnReasonedRefusals = ["vpn_destination_invalid", "vpn_target_failed", "vpn_session_failed"];
+const vpnReasonedRefusals = ["vpn_destination_invalid", "vpn_target_failed", "vpn_route_failed"];
 
 // vpnProblemCodes は、engine が VPN の拒否として返す code のすべてである（Go の
 // vpnrefusal.Known と同じ）。これらは共通の失敗通知に回さず、受け取った画面が説明する。

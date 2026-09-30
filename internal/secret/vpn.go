@@ -27,6 +27,10 @@ const (
 	VPNSecretsRename VPNSecretsMutationKind = "rename"
 	// VPNSecretsRemove は、Profile の記録を消す。
 	VPNSecretsRemove VPNSecretsMutationKind = "remove"
+	// VPNSecretsRewrite は、Profile のいまの記録から Rewrite で作った記録に置き換える。
+	// いまの記録は、ほかの書き手と直列にしてから読む。読んでから書くまでのあいだに
+	// 別の保存が割り込み、その変更を黙って上書きすることがない。
+	VPNSecretsRewrite VPNSecretsMutationKind = "rewrite"
 )
 
 // VPNSecretsMutation は、プロファイルひとつぶんの秘密への変更である。
@@ -37,6 +41,9 @@ type VPNSecretsMutation struct {
 	NewName string
 	// Document は、VPNSecretsSet のときの記録の本文である。
 	Document string
+	// Rewrite は、VPNSecretsRewrite のときに、いまの記録から新しい記録の本文を作る。
+	// 記録が無ければ exists が false で、current は空である。
+	Rewrite func(current string, exists bool) (string, error)
 }
 
 // VPNSecrets は、プロファイルひとつぶんの秘密を返す。
@@ -57,8 +64,10 @@ func (s *Service) VPNSecrets(profile string) (string, error) {
 // WithVPNSecretsTransaction は、秘密への変更を封じた vault の差し替えを作り、
 // 呼び手が metadata の変更と同じ storage.Request で書けるようにする。
 //
-// vault がロック中なら、何も書かずに ErrLocked を返す。メモリ上の vault は、
-// commit が成功したときだけ差し替わる。秘密が変わらないときは、commit に nil を渡す。
+// vault がロック中なら、何も書かずに ErrLocked を返す。vault がまだ無ければ、改名と
+// 削除だけは vault を書かずに commit へ進み、置き換えは ErrNoVault を返す。メモリ上の
+// vault は、commit が成功したときだけ差し替わる。秘密が変わらないときは、commit に
+// nil を渡す。
 func (s *Service) WithVPNSecretsTransaction(
 	mutation VPNSecretsMutation,
 	commit func(vaultChange *storage.Change) (storage.Result, error),
@@ -67,10 +76,17 @@ func (s *Service) WithVPNSecretsTransaction(
 		apply: func(vault, clone *Vault) (bool, error) {
 			return applyVPNSecretsMutation(vault, clone, mutation)
 		},
-		// vault が一度も作られていなければ、改名や削除で動かす記録も無い。
-		commitsWithoutVault: mutation.Kind != VPNSecretsSet,
+		commitsWithoutVault: movesOrRemovesOnly(mutation.Kind),
 		commit:              commit,
 	})
+}
+
+// movesOrRemovesOnly は、vault が一度も作られていなくても進めてよい変更かを返す。
+// 改名と削除は、動かす記録も消す記録も無いので、何も書かずに済む。置き換え
+// （Set と Rewrite）は、送られたシークレットを書く先が無いので進めない。進めると、
+// シークレットを捨てたまま metadata だけが変わり、成功したように見える。
+func movesOrRemovesOnly(kind VPNSecretsMutationKind) bool {
+	return kind == VPNSecretsRename || kind == VPNSecretsRemove
 }
 
 func applyVPNSecretsMutation(vault, clone *Vault, mutation VPNSecretsMutation) (bool, error) {
@@ -102,6 +118,15 @@ func applyVPNSecretsMutation(vault, clone *Vault, mutation VPNSecretsMutation) (
 			return false, nil
 		}
 		return true, clone.Delete(KindVPN, mutation.Profile)
+	case VPNSecretsRewrite:
+		document, err := mutation.Rewrite(current, exists)
+		if err != nil {
+			return false, err
+		}
+		if exists && current == document {
+			return false, nil
+		}
+		return true, clone.Set(KindVPN, mutation.Profile, document)
 	default:
 		return false, ErrUnknownVPNSecretsMutation
 	}

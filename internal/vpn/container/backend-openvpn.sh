@@ -80,7 +80,8 @@ openvpn_fail_after_deadline() {
 # OpenVPN を起動しても繋がらない。OpenVPN と同じく、コンテナの既定の DNS で名前解決する。
 openvpn_require_server() {
 	for server in $servers; do
-		if getent ahostsv4 -- "$server" >/dev/null 2>&1; then
+		resolve_first_ipv4 "$server"
+		if [ -n "$resolved_address" ]; then
 			return 0
 		fi
 	done
@@ -172,9 +173,7 @@ backend_down() {
 		return 0
 	fi
 	kill -TERM "$openvpn_pid" 2>/dev/null || true
-	seconds=0
-	while openvpn_running && [ "$seconds" -lt "$shutdown_seconds" ]; do
+	while openvpn_running && [ "$(shutdown_seconds_left)" -gt 0 ]; do
 		pause 1
-		seconds=$((seconds + 1))
 	done
 }

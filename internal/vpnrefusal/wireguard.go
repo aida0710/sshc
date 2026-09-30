@@ -35,6 +35,35 @@ var wireGuardTargetReasons = map[vpn.FailureReason]string{
 		"設定ファイルのAllowedIPsと、接続のHostNameを確認してください。",
 }
 
+// wireGuardEnglishDirectiveReasons は、wireGuardDirectiveReasons の英語である。
+var wireGuardEnglishDirectiveReasons = map[vpn.Reason]string{
+	vpn.ReasonNotIPv4:            "\"%s\" has no IPv4 address.",
+	vpn.ReasonUnroutable:         "\"%s\" has an address that cannot be used (loopback, multicast or unspecified).",
+	vpn.ReasonOutOfRange:         "the port in \"%s\" must be between 0 and 65535.",
+	vpn.ReasonDuplicate:          "\"%s\" appears more than once. Keep only one.",
+	vpn.ReasonMisplacedDirective: "\"%s\" cannot be written in this section.",
+	vpn.ReasonNotInAllowedIPs:    "the address in \"%s\" is outside the AllowedIPs of every [Peer].",
+}
+
+// wireGuardEnglishFieldReasons は、wireGuardFieldReasons の英語である。
+var wireGuardEnglishFieldReasons = map[vpn.Reason]string{
+	vpn.ReasonUnknownDirective:   "This item cannot be used in a WireGuard configuration file.",
+	vpn.ReasonMisplacedDirective: "This item cannot be written in this section.",
+	vpn.ReasonMissingDirective:   "A required item is missing.",
+	vpn.ReasonDuplicate:          "The same item appears more than once.",
+	vpn.ReasonNoEndpoint:         "The configuration file names no VPN server (Endpoint).",
+	vpn.ReasonNotInAllowedIPs:    "A DNS server is outside the AllowedIPs of every [Peer].",
+	vpn.ReasonKeepaliveTooLong: "PersistentKeepalive must be %d seconds or less; " +
+		"sshc tells a dropped VPN by whether handshakes keep coming.",
+	vpn.ReasonMTUOutOfRange: "MTU must be between 576 and 65535.",
+}
+
+// wireGuardEnglishTargetReasons は、wireGuardTargetReasons の英語である。
+var wireGuardEnglishTargetReasons = map[vpn.FailureReason]string{
+	vpn.FailureTargetNotAllowed: "The destination is outside the AllowedIPs of every WireGuard [Peer]. " +
+		"Check AllowedIPs in the configuration file and the connection's HostName.",
+}
+
 func init() {
 	for reason, pattern := range wireGuardDirectiveReasons {
 		directiveReasons[reason] = pattern
@@ -44,5 +73,14 @@ func init() {
 	}
 	for reason, sentence := range wireGuardTargetReasons {
 		targetReasons[reason] = sentence
+	}
+	for reason, pattern := range wireGuardEnglishDirectiveReasons {
+		englishDirectiveReasons[reason] = pattern
+	}
+	for reason, sentence := range wireGuardEnglishFieldReasons {
+		englishFieldReasons[reason] = sentence
+	}
+	for reason, sentence := range wireGuardEnglishTargetReasons {
+		englishTargetReasons[reason] = sentence
 	}
 }

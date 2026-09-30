@@ -23,3 +23,17 @@ export function isVPNBackend(name: string): name is VPNBackend {
 export function vpnBackendLabel(backend: VPNBackend): string {
   return vpnBackendLabels[backend];
 }
+
+// VPNSettingsSection は、VPNProfile のうち、方式ごとの設定を持つ項目の名前である。
+export type VPNSettingsSection = "wireguard" | "l2tp" | "openconnect" | "openvpn" | "ikev2";
+
+// settingsSection は、方式ごとの設定の節の名前である。engine が返す項目の JSON パスの
+// 先頭になる。並びは Go の foreignSection と同じにする。違う節が2つあるとき、最初に断る
+// 節が同じになるからである。
+export const settingsSection: Record<VPNBackend, VPNSettingsSection> = {
+  wireguard: "wireguard",
+  l2tp_ipsec: "l2tp",
+  openconnect: "openconnect",
+  openvpn: "openvpn",
+  ikev2: "ikev2",
+};

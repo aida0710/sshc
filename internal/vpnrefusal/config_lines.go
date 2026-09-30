@@ -1,13 +1,10 @@
 package vpnrefusal
 
-import (
-	"fmt"
-
-	"sshc/internal/vpn"
-)
+import "sshc/internal/vpn"
 
 // 利用者が書いた設定ファイル（OpenVPN の .ovpn、WireGuard の設定ファイル）の中の誤りの
-// 言い方である。指示を名指しする理由は、「12行目の「up」は、…」の形で言う。
+// 言い方である。指示を名指しする理由は、「12行目の「up」は、…」（英語では
+// 「Line 12: "up" …」）の形で言う（phrasebook.configLineSentence）。
 
 // directiveReasons は、指示ひとつを断った理由の言い方である。%s には断った指示が入る。
 // backend に固有のものは、その backend の file の init が足す。
@@ -26,28 +23,27 @@ var configFieldReasons = map[vpn.Reason]string{
 	vpn.ReasonConfigMismatch: "設定ファイルの内容と一致しません。設定ファイルを読み込み直してください。",
 }
 
+// englishDirectiveReasons は、directiveReasons の英語である。
+var englishDirectiveReasons = map[vpn.Reason]string{
+	vpn.ReasonRunsCommand:   "\"%s\" runs a command or loads a program, so it cannot be used.",
+	vpn.ReasonChangesRoutes: "\"%s\" changes routes or DNS, so it cannot be used. sshc adds a route for each destination.",
+	vpn.ReasonDecidedBySshc: "\"%s\" is decided by sshc, so it cannot be used.",
+	vpn.ReasonFormat:        "\"%s\" is not written in a form it accepts.",
+}
+
+// englishConfigFieldReasons は、configFieldReasons の英語である。
+var englishConfigFieldReasons = map[vpn.Reason]string{
+	vpn.ReasonRunsCommand:    "Directives that run a command or load a program cannot be used.",
+	vpn.ReasonChangesRoutes:  "Directives that change routes or DNS cannot be used.",
+	vpn.ReasonDecidedBySshc:  "Settings that sshc decides cannot be used.",
+	vpn.ReasonConfigMismatch: "This does not match the configuration file. Load the configuration file again.",
+}
+
 func init() {
 	for reason, sentence := range configFieldReasons {
 		fieldReasons[reason] = sentence
 	}
-}
-
-// configLineSentence は、設定ファイルの中の誤りを、行番号と指示を添えた文にする。
-// sentence は、行を添えない場合の理由の文である。
-func configLineSentence(refusal Refusal, sentence string) string {
-	reason := vpn.Reason(refusal.Reason)
-	if reason == vpn.ReasonMissingDirective && refusal.Directive != "" {
-		if refusal.Line > 0 {
-			// 行を添えて足りないと言うのは、[Peer] に PublicKey が無いときだけである。
-			return fmt.Sprintf("%d行目の[Peer]に「%s」がありません。", refusal.Line, refusal.Directive)
-		}
-		return fmt.Sprintf("設定ファイルに「%s」がありません。", refusal.Directive)
+	for reason, sentence := range englishConfigFieldReasons {
+		englishFieldReasons[reason] = sentence
 	}
-	if refusal.Line == 0 {
-		return sentence
-	}
-	if pattern, known := directiveReasons[reason]; known && refusal.Directive != "" {
-		return fmt.Sprintf("%d行目の", refusal.Line) + fmt.Sprintf(pattern, refusal.Directive)
-	}
-	return fmt.Sprintf("%d行目：%s", refusal.Line, sentence)
 }
