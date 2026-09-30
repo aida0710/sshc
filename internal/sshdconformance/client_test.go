@@ -76,6 +76,8 @@ func (s server) target() sshclient.Target {
 		User:     s.user,
 		Methods:  sshclient.DefaultMethods(),
 		Timeout:  30 * time.Second,
+		// 偽の Read はパスを見ないので、名前はひとつあればよい。
+		KnownHosts: sshclient.KnownHostsFiles{User: []string{"known_hosts"}},
 	}
 }
 
@@ -125,7 +127,7 @@ func (s server) keyDialer(t *testing.T, observed *[]string) sshclient.Dialer {
 				}
 			},
 		},
-		HostKeys: sshclient.HostKeys{Read: func() ([]byte, error) { return known, nil }},
+		HostKeys: sshclient.HostKeys{Read: func(string) ([]byte, error) { return known, nil }},
 	}
 }
 
@@ -147,7 +149,7 @@ func (s server) passwordDialer(t *testing.T) sshclient.Dialer {
 		Auth: sshclient.Auth{Password: func(target sshclient.Target) (string, bool) {
 			return s.password, target.Alias == "integration"
 		}},
-		HostKeys: sshclient.HostKeys{Read: func() ([]byte, error) { return known, nil }},
+		HostKeys: sshclient.HostKeys{Read: func(string) ([]byte, error) { return known, nil }},
 	}
 }
 
@@ -238,7 +240,7 @@ func TestOpenAsksForThePasswordAndRunsAShell(t *testing.T) {
 	}
 	known := remote.knownHosts(t)
 	dialer := sshclient.Dialer{
-		HostKeys: sshclient.HostKeys{Read: func() ([]byte, error) { return known, nil }},
+		HostKeys: sshclient.HostKeys{Read: func(string) ([]byte, error) { return known, nil }},
 	}
 
 	// 鍵は渡さない。残る方式はパスワードだけである。

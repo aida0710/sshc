@@ -1,10 +1,11 @@
 package keys
 
 import (
+	"errors"
 	"path/filepath"
-	"strings"
 
 	"sshc/internal/config"
+	"sshc/internal/effective"
 	"sshc/internal/platform/nativepath"
 	"sshc/internal/storage"
 )
@@ -79,7 +80,10 @@ func BuildReferenceIndex(graph *config.Graph, workspace *storage.Workspace) *Ref
 				patterns = append(patterns, pattern.Raw)
 			}
 			for _, value := range line.Values() {
-				index.record(workspace, directive, value, path, lineIndex+1, condition, patterns)
+				index.record(workspace, Reference{
+					Directive: directive, ConfigPath: path, Line: lineIndex + 1,
+					Condition: condition, HostPatterns: patterns, Value: value,
+				})
 			}
 		}
 	}
@@ -95,21 +99,9 @@ func matchDirective(keyword string) (string, bool) {
 	return "", false
 }
 
-func (index *ReferenceIndex) record(
-	workspace *storage.Workspace,
-	directive, value, configPath string,
-	line int,
-	condition string,
-	patterns []string,
-) {
-	reference := Reference{
-		Directive:    directive,
-		ConfigPath:   configPath,
-		Line:         line,
-		Condition:    condition,
-		HostPatterns: patterns,
-		Value:        value,
-	}
+// record は、ディレクティブの値ひとつが指すファイルを解決し、索引に記録する。
+func (index *ReferenceIndex) record(workspace *storage.Workspace, reference Reference) {
+	directive, value, configPath, line := reference.Directive, reference.Value, reference.ConfigPath, reference.Line
 	if directive == "IdentityAgent" {
 		index.agent = append(index.agent, reference)
 		if value == "none" || value == "SSH_AUTH_SOCK" {
@@ -142,50 +134,22 @@ func (index *ReferenceIndex) record(
 	index.byRelativePath[key] = append(index.byRelativePath[key], reference)
 }
 
-// expandKeyPath は、IdentityFile 形式の引数を絶対パスへ解決する。
+// expandKeyPath は、IdentityFile 形式の引数を、接続と同じ規則で絶対パスへ解決する。
 //
-// 展開するのは '%d' と先頭の '~/' だけである。接続先ホストが決まる前に意味の
+// 展開するのは '~' と '%d' と '%%' だけである。接続先ホストが決まる前に意味の
 // 定まる形式はそれだけだからだ。相対パスは推測せずに報告する。OpenSSH はそれを
 // ssh プロセスの作業ディレクトリに対して解決するが、このアプリケーションには
-// それが分からない。
+// それが分からない。接続も同じ理由で相対パスの鍵を使わない。
 func expandKeyPath(value, home string) (absolute string, reason string) {
-	if value == "" {
-		return "", ReasonUnsupportedToken
-	}
-	expanded := value
-	if strings.ContainsRune(expanded, '%') {
-		var builder strings.Builder
-		for index := 0; index < len(expanded); index++ {
-			if expanded[index] != '%' {
-				builder.WriteByte(expanded[index])
-				continue
-			}
-			index++
-			if index >= len(expanded) {
-				return "", ReasonUnsupportedToken
-			}
-			switch expanded[index] {
-			case '%':
-				builder.WriteByte('%')
-			case 'd':
-				builder.WriteString(home)
-			default:
-				return "", ReasonUnsupportedToken
-			}
-		}
-		expanded = builder.String()
-	}
+	expanded, err := effective.ExpandLocalFilePath(value, home)
 	switch {
-	case expanded == "~":
-		expanded = home
-	case strings.HasPrefix(expanded, "~/"):
-		expanded = filepath.Join(home, expanded[2:])
-	case strings.HasPrefix(expanded, "~"):
-		return "", ReasonUnsupportedToken
-	case !filepath.IsAbs(expanded):
+	case err == nil:
+		return expanded, ""
+	case errors.Is(err, effective.ErrRelativePath):
 		return "", ReasonRelativePath
+	default:
+		return "", ReasonUnsupportedToken
 	}
-	return filepath.Clean(expanded), ""
 }
 
 // AttachReferences は、各ファイルを指定している Host をそのインベントリの item

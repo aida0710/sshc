@@ -29,13 +29,33 @@ func newEligibilityService(t *testing.T) *Service {
 		"\n" +
 		"Host oddport\n" +
 		"\tHostName 203.0.113.20\n" +
-		"\tPort 2222\n"
+		"\tPort 2222\n" +
+		"\n" +
+		"Host plainonly\n" +
+		"\tHostName 203.0.113.10\n" +
+		"\tPort 2222\n" +
+		"\n" +
+		"Host bykeyalias\n" +
+		"\tHostName 203.0.113.30\n" +
+		"\tUserKnownHostsFile ~/.ssh/known_hosts.d/%k\n" +
+		"\n" +
+		"Host unsetvariable\n" +
+		"\tHostName 203.0.113.10\n" +
+		"\tUserKnownHostsFile ~/.ssh/${SSHC_TEST_VARIABLE_THAT_IS_NEVER_SET}\n"
 	if err := os.WriteFile(filepath.Join(workspace.Root(), "config"), []byte(entry), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	known := "203.0.113.10 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGZpeHR1cmVrZXlmaXh0dXJla2V5Zml4dHVyZWtl fixture\n" +
 		"[203.0.113.20]:2222 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGZpeHR1cmVrZXlmaXh0dXJla2V5Zml4dHVyZWtl fixture\n"
 	if err := os.WriteFile(filepath.Join(workspace.Root(), "known_hosts"), []byte(known), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	perAlias := filepath.Join(workspace.Root(), "known_hosts.d")
+	if err := os.MkdirAll(perAlias, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	byKeyAlias := "203.0.113.30 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGZpeHR1cmVrZXlmaXh0dXJla2V5Zml4dHVyZWtl fixture\n"
+	if err := os.WriteFile(filepath.Join(perAlias, "bykeyalias"), []byte(byKeyAlias), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	return service
@@ -205,6 +225,35 @@ func TestAnUnknownHostKeyIsReportedBecauseTheHelperWillNotAnswerThatQuestion(t *
 	}
 }
 
+// OpenSSH 8.4 以降が示す `UserKnownHostsFile ~/.ssh/known_hosts.d/%k` は、%k を
+// alias に展開したファイルで照合する。展開できない値があっても、パスワードを
+// 保存できるかの判断と認証の束縛の計算は止めない。接続はホスト鍵の照合で断る。
+func TestUserKnownHostsFileTokensAreExpandedAndAnUnexpandableOneStopsOnlyTheConnection(t *testing.T) {
+	service := newEligibilityService(t)
+	report, err := service.PasswordEligibility("bykeyalias")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if codesOf(report.Warnings)[WarnHostKeyUnknown] {
+		t.Errorf("a host in known_hosts.d/%%k was reported as unknown: %#v", report.Warnings)
+	}
+
+	unset, err := service.PasswordEligibility("unsetvariable")
+	if err != nil {
+		t.Fatalf("PasswordEligibility = %v, want a report", err)
+	}
+	if !codesOf(unset.Warnings)[WarnHostKeyUnknown] {
+		t.Errorf("a host whose known_hosts cannot be named was not reported: %#v", unset.Warnings)
+	}
+	graph, err := service.resolve()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if binding, err := service.passwordBindingForGraph(graph, "unsetvariable"); err != nil || binding == "" {
+		t.Errorf("passwordBindingForGraph = %q, %v; want a binding", binding, err)
+	}
+}
+
 func TestANonDefaultPortIsLookedUpInTheFormKnownHostsUses(t *testing.T) {
 	report, err := newEligibilityService(t).PasswordEligibility("oddport")
 	if err != nil {
@@ -215,6 +264,19 @@ func TestANonDefaultPortIsLookedUpInTheFormKnownHostsUses(t *testing.T) {
 	}
 	if codesOf(report.Warnings)[WarnHostKeyUnknown] {
 		t.Errorf("a host known at its own port was reported as unknown: %#v", report.Warnings)
+	}
+}
+
+// 2222 番の接続は [host]:2222 の行だけと照合する。22 番の素の行は別の sshd の
+// 記録なので、それしか無ければ警告する。警告しないと、パスワードを保存したあとの
+// 初回接続が未知のホストとして失敗する。
+func TestANonDefaultPortIsNotKnownThroughThePlainForm(t *testing.T) {
+	report, err := newEligibilityService(t).PasswordEligibility("plainonly")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !codesOf(report.Warnings)[WarnHostKeyUnknown] {
+		t.Errorf("a host known only at port 22 was not reported: %#v", report.Warnings)
 	}
 }
 

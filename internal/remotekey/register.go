@@ -191,15 +191,26 @@ func (s Service) Plan(alias string, key PublicKey, fingerprint, user, hostname, 
 	}
 }
 
+// Registration は、登録ひとつ分の入力である。
+type Registration struct {
+	// Report は、確認画面が示した、接続で実行されうるディレクティブである。
+	Report effective.Report
+	Alias  string
+	Key    PublicKey
+	// Acknowledged は、利用者が Report のコマンドの実行を承認したかである。
+	Acknowledged bool
+}
+
 // Register はリモートのシェルを調べ、そのうえで鍵をインストールする。
-func (s Service) Register(ctx context.Context, report effective.Report, configSnapshot []byte, alias string, key PublicKey, acknowledged bool) (Result, error) {
+func (s Service) Register(ctx context.Context, registration Registration) (Result, error) {
+	alias, key := registration.Alias, registration.Key
 	if err := validate.Alias(alias); err != nil {
 		return Result{}, err
 	}
 	if _, _, err := ParsePublicKey(key.Line); err != nil {
 		return Result{}, err
 	}
-	if len(report.Unavoidable()) > 0 && !acknowledged {
+	if len(registration.Report.Unavoidable()) > 0 && !registration.Acknowledged {
 		return Result{}, ErrNotAcknowledged
 	}
 	if s.Run == nil || s.Resolve == nil {

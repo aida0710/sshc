@@ -21,13 +21,13 @@ func TestParseChainReadsEveryDestinationForm(t *testing.T) {
 		t.Errorf("hop 0 = %#v", first)
 	}
 	second := chain.Hops[1]
-	if second.Host != "inner" || second.Port != effective.DefaultJumpPort || second.PortExplicit {
+	if second.Host != "inner" || second.Port != effective.DefaultPort || second.PortExplicit {
 		t.Errorf("hop 1 = %#v", second)
 	}
 	if third := chain.Hops[2]; third.Host != "2001:db8::1" || third.Port != "2202" {
 		t.Errorf("hop 2 = %#v", third)
 	}
-	if fourth := chain.Hops[3]; fourth.Host != "2001:db8::2" || fourth.Port != effective.DefaultJumpPort {
+	if fourth := chain.Hops[3]; fourth.Host != "2001:db8::2" || fourth.Port != effective.DefaultPort {
 		t.Errorf("hop 3 = %#v", fourth)
 	}
 

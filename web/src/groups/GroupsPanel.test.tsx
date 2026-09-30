@@ -151,6 +151,62 @@ describe("GroupsPanel", () => {
     );
   });
 
+  it("keeps a ProxyCommand as typed, single quotes included, instead of splitting it into values", async () => {
+    const user = userEvent.setup();
+    render(<GroupsPanel />);
+    await select(user, "company");
+
+    await user.type(screen.getByLabelText("Directive"), "ProxyCommand");
+    await user.type(screen.getByLabelText("Value"), "sh -c 'exec nc %h %p'");
+    await user.click(screen.getByRole("button", { name: "Add setting" }));
+
+    expect(screen.getByText("ProxyCommand sh -c 'exec nc %h %p'")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Preview group changes" }));
+    await waitFor(() =>
+      expect(configApi.preview).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: expect.objectContaining({
+            groups: [
+              expect.objectContaining({
+                settings: [
+                  { keyword: "ServerAliveInterval", values: ["30"] },
+                  { keyword: "ProxyCommand", values: ["sh -c 'exec nc %h %p'"] },
+                ],
+              }),
+            ],
+          }),
+        }),
+      ),
+    );
+  });
+
+  it("refuses a ProxyCommand with a quote that is not closed before it reaches the draft", async () => {
+    const user = userEvent.setup();
+    render(<GroupsPanel />);
+    await select(user, "company");
+
+    await user.type(screen.getByLabelText("Directive"), "ProxyCommand");
+    await user.type(screen.getByLabelText("Value"), "nc 'oops %h %p");
+    await user.click(screen.getByRole("button", { name: "Add setting" }));
+
+    expect(screen.getByText(/A value has a quote that is not closed/)).toBeInTheDocument();
+    expect(screen.queryByText(/^ProxyCommand/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save groups" })).toBeNull();
+    expect(configApi.save).not.toHaveBeenCalled();
+  });
+
+  it("splits the value of an ordinary directive into its arguments", async () => {
+    const user = userEvent.setup();
+    render(<GroupsPanel />);
+    await select(user, "company");
+
+    await user.type(screen.getByLabelText("Directive"), "SendEnv");
+    await user.type(screen.getByLabelText("Value"), "LANG 'LC_*'");
+    await user.click(screen.getByRole("button", { name: "Add setting" }));
+
+    expect(screen.getByText("SendEnv LANG LC_*")).toBeInTheDocument();
+  });
+
   it("refuses a name that is not a safe relative directory", async () => {
     const user = userEvent.setup();
     render(<GroupsPanel />);

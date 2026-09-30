@@ -14,11 +14,9 @@ const (
 )
 
 // cumulativeKeywords は、最初の値だけを残すのではなく OpenSSH が積み上げる
-// ディレクティブである。他のキーワードはすべて先勝ちに従う。
+// ディレクティブである。他のキーワードはすべて先勝ちに従う。Resolve と Project が
+// この表を共有し、累積の判定を一か所に保つ。
 //
-// この表を解決処理と共有し、累積キーワードの判定を一箇所に保つ。
-// 以前は internal/application にだけあり、この射影は一律の先勝ちだった。その結果、
-// IdentityFile を 2 行書いた設定では 2 行目が「採用されない」と画面に出ていた。
 // SetEnv はここに無い。実機の ssh -G で確かめた結果である。二行書くと
 // 最初の行しか出力されない。複数の変数を渡すには `SetEnv ONE=1 TWO=2` と
 // 一行に並べる。SendEnv は ssh_config(5) が「複数の SendEnv に分けてよい」と
@@ -81,97 +79,52 @@ type Projection struct {
 // ブロックへ帰属させる。これは OpenSSH がしていることである。
 //
 // 値を決めるのは Resolve であって、これではない。ここが返すのは「どの行が
-// この値を書いたのか」と「なぜ言い切れないのか」である。この射影は
-// internal/diagnostics の表示にだけ使う。接続値や認証情報の判定には、
-// Match ブロックを含む Resolve の結果を使う。
+// この値を書いたのか」と「なぜ言い切れないのか」であり、internal/diagnostics の
+// 表示にだけ使う。接続値や認証情報の判定には、Match ブロックを含む Resolve の結果を
+// 直接使う。
 //
-// 読み込み順はファイル順ではない。OpenSSH は Include をその行のある位置で読むので、
-// Include より下に書かれたブロックは、include されたファイル全体のあとで読まれる。
-// そして最初の値が勝つので、include されたファイルの方が勝つ。ファイル単位でグラフ
-// を走査すると、エントリファイルのすべてのブロックが include された側のすべてより
-// 前に来てしまい、生成されたグループのリージョンが依存しているまさにその場合を
-// 逆転させる。Include はユーザーの catch-all の上に置かれ、グループの値が既定に
-// 勝つようになっているのに、ファイル順の帰属は既定を報告してしまう。
+// 読み込み順と Include の扱いは Resolve と同じ walkLoadOrder に従う。生成された
+// グループの領域は、Include をユーザーの catch-all の上に置いてグループの値を
+// 既定に勝たせている。ファイル順で帰属させると、その場合の出所を逆に報告する。
 //
 // Match ブロックが値を寄与することは決してない。その条件は、接続中にしか存在しない
-// 状態に依存するからである。代わりに、グラフのどこかにある Match ブロックは
-// complexity として記録される。それは、この射影があとの Host ブロックへ帰属させた
-// 値を、影に隠すこともできるからだ。
+// 状態に依存するからである。代わりに、到達する Match ブロックは complexity として
+// 記録される。それは、この射影があとの Host ブロックへ帰属させた値を、影に隠す
+// こともできるからだ。
 func Project(graph *config.Graph, alias string) Projection {
 	projection := Projection{Alias: alias}
 	if graph == nil {
 		return projection
 	}
 	claimed := make(map[string]bool)
-	matchedHostBlocks := 0
-	kind, applies, condition := SourceGlobal, true, ""
+	hostNotes := hostBlockNotes{alias: alias}
 
-	enterBlock := func(filePath string, file *config.File, block config.Block) {
-		condition = file.Condition(block)
-		kind, applies = blockApplies(block, alias)
-		if block.Kind == config.BlockMatch {
-			projection.Complexities = append(projection.Complexities, Complexity{
-				Code:      ComplexityMatchBlock,
-				Path:      filePath,
-				Line:      block.Header + 1,
-				Condition: condition,
-				Detail:    "Match criteria are evaluated while connecting, so this block may override values shown here",
-			})
-			return
-		}
-		if !applies || block.Kind != config.BlockHost {
-			return
-		}
-		// Resolve と同じ基準で数える。`Host *` のような catch-all に当たったことは
-		// 「二つのブロックがこの名前を主張している」ではない。
-		if DeclaresExactly(block.Patterns, alias) {
-			matchedHostBlocks++
-			if matchedHostBlocks > 1 {
+	enterBlock := func(header blockHeader) (string, bool) {
+		if header.block.Kind == config.BlockMatch {
+			if !header.neverMatch {
 				projection.Complexities = append(projection.Complexities, Complexity{
-					Code:      ComplexityDuplicateAlias,
-					Path:      filePath,
-					Line:      block.Header + 1,
-					Condition: condition,
-					Detail:    "more than one Host block claims this alias",
+					Code: ComplexityMatchBlock, Path: header.path, Line: header.number(), Condition: header.condition,
+					Detail: "Match criteria are evaluated while connecting, so this block may override values shown here",
 				})
 			}
+			return "", false
 		}
-		if kind == SourceWildcard {
-			projection.Complexities = append(projection.Complexities, Complexity{
-				Code:      ComplexityWildcardPattern,
-				Path:      filePath,
-				Line:      block.Header + 1,
-				Condition: condition,
-				Detail:    "this block matched through a wildcard pattern",
-			})
+		kind, applies := hostBlockApplies(header.block, alias)
+		if applies && !header.neverMatch {
+			projection.Complexities = append(projection.Complexities, hostNotes.observe(header, kind)...)
 		}
-		for _, pattern := range block.Patterns {
-			if !pattern.Negated {
-				continue
-			}
-			projection.Complexities = append(projection.Complexities, Complexity{
-				Code:      ComplexityNegatedPattern,
-				Path:      filePath,
-				Line:      block.Header + 1,
-				Condition: condition,
-				Detail:    "this block excludes hosts through " + pattern.Raw,
-			})
-			break
-		}
+		return kind, applies
 	}
 
-	directive := func(filePath string, index int, line config.Line) {
-		if !applies {
-			return
-		}
-		keyword := strings.ToLower(line.Keyword)
+	directive := func(found directiveLine) {
+		keyword := strings.ToLower(found.line.Keyword)
 		projection.Sources = append(projection.Sources, Source{
-			Keyword:   line.Keyword,
-			Value:     argumentText(line),
-			Path:      filePath,
-			Line:      index + 1,
-			Condition: condition,
-			Kind:      kind,
+			Keyword:   found.line.Keyword,
+			Value:     strings.Join(directiveValues(found.line), " "),
+			Path:      found.path,
+			Line:      found.number,
+			Condition: found.state.condition,
+			Kind:      found.state.kind,
 			// 積み上がるキーワードは、二行目以降も採用される。OpenSSH が
 			// そうするので、一律の先勝ちで印を付けると誤りになる。
 			Winner: !claimed[keyword] || cumulativeKeywords[keyword],
@@ -179,128 +132,7 @@ func Project(graph *config.Graph, alias string) Projection {
 		claimed[keyword] = true
 	}
 
-	walkLoadOrder(graph, graph.Root, map[string]bool{}, enterBlock, directive)
-
-	for _, diagnostic := range graph.Diagnostics {
-		if diagnostic.Severity == config.SeverityInfo {
-			continue
-		}
-		projection.Complexities = append(projection.Complexities, Complexity{
-			Code:   ComplexityUnresolvedInclude,
-			Path:   diagnostic.Path,
-			Line:   diagnostic.Line,
-			Detail: diagnostic.Code,
-		})
-	}
+	walkLoadOrder(graph, loadOrderVisitor{enterBlock: enterBlock, directive: directive})
+	projection.Complexities = append(projection.Complexities, unresolvedIncludeNotes(graph.Diagnostics)...)
 	return projection
-}
-
-// walkLoadOrder は、ひとつのファイルのブロックとディレクティブを OpenSSH が読む
-// 順に訪れ、各 Include をその行のある位置で降りていく。
-//
-// chain は循環を止める。二度 include されたファイルは二度走査される。OpenSSH が
-// そうするからだ。二度目の読みは何も寄与しない。最初の値がすでに取られているから
-// である。
-func walkLoadOrder(
-	graph *config.Graph,
-	filePath string,
-	chain map[string]bool,
-	enterBlock func(string, *config.File, config.Block),
-	directive func(string, int, config.Line),
-) {
-	node := graph.Nodes[filePath]
-	if node == nil || node.File == nil || chain[filePath] {
-		return
-	}
-	chain[filePath] = true
-	defer delete(chain, filePath)
-
-	blocks := node.File.Blocks()
-	position := 0
-	enterBlock(filePath, node.File, blocks[0])
-	for index, line := range node.File.Lines {
-		if position+1 < len(blocks) && blocks[position+1].Header == index {
-			position++
-			enterBlock(filePath, node.File, blocks[position])
-			continue
-		}
-		if line.Kind != config.LineDirective {
-			continue
-		}
-		if config.EqualKeyword(line.Keyword, "Include") {
-			for _, edge := range node.Includes {
-				if edge.Line != index+1 {
-					continue
-				}
-				for _, match := range edge.Matches {
-					walkLoadOrder(graph, match, chain, enterBlock, directive)
-				}
-			}
-			continue
-		}
-		directive(filePath, index, line)
-	}
-}
-
-// blockApplies は、ブロックが alias を支配するか、そしてどう一致したかを報告する。
-func blockApplies(block config.Block, alias string) (kind string, applies bool) {
-	switch block.Kind {
-	case config.BlockGlobal:
-		return SourceGlobal, true
-	case config.BlockMatch:
-		return "", false
-	}
-	for _, pattern := range block.Patterns {
-		if pattern.Negated && MatchPattern(pattern.Value, alias) {
-			return "", false
-		}
-	}
-	for _, pattern := range block.Patterns {
-		if pattern.Negated || !MatchPattern(pattern.Value, alias) {
-			continue
-		}
-		if pattern.Wildcard {
-			return SourceWildcard, true
-		}
-		return SourceExact, true
-	}
-	return "", false
-}
-
-// MatchPattern は OpenSSH の match_pattern を実装する。'*' は任意の並びに、'?' は
-// ちょうど 1 文字に一致し、他のメタ文字に特別な意味はない。
-//
-// 比較は大文字小文字を区別する。以前は区別しておらず、Host BASTION のブロックが
-// alias bastion に適用されると応答していた。実物はそうしない。Host BASTION だけを
-// 持つ設定に `ssh -G bastion` を投げると、そのブロックではなく Host * の値が返る。
-// 区別しない実装は、OpenSSH が適用しないブロックへ値の出所を帰属させることになり、
-// それは「実際に使われる設定を説明する」というこのパッケージの仕事を外す。
-//
-// known_hosts の側は区別しないままでよい。あちらのホスト名は OpenSSH が小文字化して
-// 保存するので、同じ 29 行に見えても同じ判断ではない。
-func MatchPattern(pattern, value string) bool {
-	patternIndex, valueIndex := 0, 0
-	starIndex, resumeIndex := -1, 0
-	for valueIndex < len(value) {
-		switch {
-		case patternIndex < len(pattern) &&
-			(pattern[patternIndex] == '?' || pattern[patternIndex] == value[valueIndex]):
-			patternIndex++
-			valueIndex++
-		case patternIndex < len(pattern) && pattern[patternIndex] == '*':
-			starIndex = patternIndex
-			resumeIndex = valueIndex
-			patternIndex++
-		case starIndex >= 0:
-			patternIndex = starIndex + 1
-			resumeIndex++
-			valueIndex = resumeIndex
-		default:
-			return false
-		}
-	}
-	for patternIndex < len(pattern) && pattern[patternIndex] == '*' {
-		patternIndex++
-	}
-	return patternIndex == len(pattern)
 }

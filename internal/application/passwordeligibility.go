@@ -2,7 +2,6 @@ package application
 
 import (
 	"errors"
-	"io/fs"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -12,6 +11,7 @@ import (
 	"sshc/internal/effective"
 	"sshc/internal/keys"
 	"sshc/internal/knownhosts"
+	"sshc/internal/sshclient"
 )
 
 // ホストと保存されたパスワードとの間に立ちはだかるものを表す code である。
@@ -79,7 +79,7 @@ func (s *Service) PasswordEligibility(alias string) (PasswordEligibility, error)
 		}
 	}
 
-	known, err := s.hostKeyIsKnown(host, report.Port)
+	known, err := s.hostKeyIsKnown(graph, alias)
 	if err != nil {
 		return PasswordEligibility{}, err
 	}
@@ -170,28 +170,24 @@ func (s *Service) UnlockableWorkspaceKeys(
 	return usable, nil
 }
 
-// hostKeyIsKnown は、known_hosts が既にこのホストの鍵を保持しているかを報告する。
-func (s *Service) hostKeyIsKnown(host, port string) (bool, error) {
-	body, err := s.workspace.FileSystem().ReadFile(filepath.Join(s.workspace.Root(), "known_hosts"))
+// hostKeyIsKnown は、接続が照合する known_hosts のどれかが、すでにこのホストの鍵を
+// 保持しているかを報告する。
+//
+// 接続と同じ Target と照合で調べる。ホスト欄の形（[host]:port、HostKeyAlias）や
+// 読むファイル（UserKnownHostsFile、GlobalKnownHostsFile）がずれると、警告すべき
+// ホストで警告が出ず、パスワードを保存したあとの初回接続が失敗する。
+func (s *Service) hostKeyIsKnown(graph *config.Graph, alias string) (bool, error) {
+	target, err := s.targetForGraph(graph, alias)
 	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return false, nil
-		}
-		return false, err
+		// 接続先を決められない alias について、鍵を知っているとは言えない。
+		return false, nil
 	}
-	candidates := []string{host}
-	if port != "" && port != "22" {
-		candidates = append(candidates, "["+host+"]:"+port)
+	read := func(path string) ([]byte, error) { return knownhosts.ReadFile(s.workspace, path) }
+	known, err := sshclient.HostKeys{Read: read}.Knows(target)
+	if errors.Is(err, sshclient.ErrKnownHostsFile) {
+		// 照合するファイルを決められない alias も、鍵を知っているとは言えない。
+		// 接続はホスト鍵の照合でこの理由を示して断る。
+		return false, nil
 	}
-	for _, line := range knownhosts.ParseFile(body).Entries() {
-		if line.Entry == nil {
-			continue
-		}
-		for _, candidate := range candidates {
-			if line.Entry.MatchesHost(candidate) {
-				return true, nil
-			}
-		}
-	}
-	return false, nil
+	return known, err
 }

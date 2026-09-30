@@ -141,6 +141,38 @@ describe("AdvancedSettings", () => {
     expect(screen.getByText(/OpenSSH keeps the first one/)).toBeInTheDocument();
   });
 
+  it("keeps the single quotes of a command the user edits, because the shell reads it", async () => {
+    const user = userEvent.setup();
+    const withCommand: HostDetail = {
+      ...detail,
+      form: {
+        ...detail.form,
+        fields: [
+          ...detail.form.fields,
+          { line: 4, keyword: "RemoteCommand", values: ["awk '{print $1}' /etc/passwd"], category: "advanced", editable: true },
+        ],
+      },
+    };
+    const harness = renderAdvanced("Directives", withCommand);
+    const command = screen.getByLabelText("RemoteCommand");
+    expect(command).toHaveValue("awk '{print $1}' /etc/passwd");
+
+    await user.clear(command);
+    await user.click(command);
+    await user.paste("awk -F: '{print $1}' /etc/passwd");
+    await user.click(screen.getByLabelText("New directive"));
+    await user.paste("LocalCommand");
+    await user.click(screen.getByLabelText("New value"));
+    await user.paste("sh -c 'echo $PPID'");
+    await user.click(screen.getByRole("button", { name: "Add directive" }));
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(harness.props.onFieldEdits).toHaveBeenCalledWith([
+      { action: "set", line: 4, values: ["awk -F: '{print $1}' /etc/passwd"] },
+      { action: "add", keyword: "LocalCommand", values: ["sh -c 'echo $PPID'"] },
+    ]);
+  });
+
   it("adds and removes Local and Dynamic forwarding through semantic edits", async () => {
     const forwarded: HostDetail = {
       ...detail,

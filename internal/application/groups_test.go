@@ -64,6 +64,74 @@ func TestCompileGroupsRendersParsableLosslessConfiguration(t *testing.T) {
 	}
 }
 
+// oneMemberGroup は、company グループにメンバーひとりを置き、settings を持たせる。
+func oneMemberGroup(settings []Setting) ([]string, Metadata, []HostEntry) {
+	metadata := NewMetadata()
+	metadata.Groups = []GroupMetadata{{Name: "company", Settings: settings}}
+	hosts := []HostEntry{{Identity: HostIdentity{Path: "connections/company/web.conf", Alias: "web01"}, Group: "company"}}
+	return []string{"company"}, metadata, hosts
+}
+
+func TestAGroupProxyCommandSavedAsSplitValuesKeepsTheLineAnEarlierSshcWrote(t *testing.T) {
+	// 前の sshc は、画面の入力を空白で分け、一重引用符を引用として読まずに保存していた。
+	// 書くときは、空白を含む値だけを二重引用符で囲んでいた。
+	stored, err := DecodeMetadata([]byte(`{"schemaVersion":8,"groups":[{"name":"company","settings":[` +
+		`{"keyword":"ProxyCommand","values":["sh","-c","'exec","nc","%h","%p'"]},` +
+		`{"keyword":"RemoteCommand","values":["tmux","new","-A -s main"]}]}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	declared, _, hosts := oneMemberGroup(nil)
+
+	contents, notices := CompileGroups(declared, stored, hosts, "\n")
+
+	for _, want := range []string{
+		"\tProxyCommand sh -c 'exec nc %h %p'\n",
+		"\tRemoteCommand tmux new \"-A -s main\"\n",
+	} {
+		if !strings.Contains(string(contents), want) {
+			t.Errorf("contents =\n%s\nwant a line %q", contents, want)
+		}
+	}
+	if len(notices) != 0 {
+		t.Fatalf("notices = %#v", notices)
+	}
+}
+
+func TestAGroupRemoteCommandIsWrittenAsTypedWithoutRequoting(t *testing.T) {
+	declared, metadata, hosts := oneMemberGroup([]Setting{
+		{Keyword: "RemoteCommand", Values: []string{`awk '{print $1}' /etc/hosts`}},
+	})
+
+	contents, notices := CompileGroups(declared, metadata, hosts, "\n")
+
+	// 二重引用符で書き直すと、コマンドを読むシェルが $1 を展開してしまう。
+	const want = "\tRemoteCommand awk '{print $1}' /etc/hosts\n"
+	if !strings.Contains(string(contents), want) {
+		t.Fatalf("contents =\n%s\nwant a line %q", contents, want)
+	}
+	if len(notices) != 0 {
+		t.Fatalf("notices = %#v", notices)
+	}
+}
+
+// グループの保存は書けない設定を先に断る。ここは、ほかの操作で生成ファイルを
+// 作り直すときに、保存済みの metadata に書けない設定が残っていた場合である。
+func TestAGroupSettingThatCannotBeWrittenSkipsTheGroupWithANotice(t *testing.T) {
+	declared, metadata, hosts := oneMemberGroup([]Setting{
+		{Keyword: "ProxyCommand", Values: []string{"nc 'unterminated %h %p"}},
+	})
+
+	contents, notices := CompileGroups(declared, metadata, hosts, "\n")
+
+	if strings.Contains(string(contents), "ProxyCommand") {
+		t.Fatalf("contents =\n%s\nwant no ProxyCommand line", contents)
+	}
+	if len(notices) != 1 || notices[0].Code != NoticeComplexExternalRule {
+		t.Fatalf("notices = %#v", notices)
+	}
+}
+
 func TestAGroupCanNeverBeItsOwnAncestor(t *testing.T) {
 	for _, name := range []string{"a/b/c", "work", "a/b/a"} {
 		seen := map[string]bool{}

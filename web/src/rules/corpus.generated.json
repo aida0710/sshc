@@ -264,9 +264,33 @@
       "input": [
         "quote\"inside"
       ],
-      "output": "",
-      "refused": true,
-      "why": "二重引用符。OpenSSH に綴りが無いので Go は断る"
+      "output": "\"quote\\\"inside\"",
+      "refused": false,
+      "why": "二重引用符。引用して \\\" と書く"
+    },
+    {
+      "input": [
+        "it's"
+      ],
+      "output": "\"it's\"",
+      "refused": false,
+      "why": "一重引用符も引用を開くので引用する"
+    },
+    {
+      "input": [
+        "C:\\Users\\me\\.ssh\\id"
+      ],
+      "output": "C:\\Users\\me\\.ssh\\id",
+      "refused": false,
+      "why": "エスケープにならないバックスラッシュはそのまま"
+    },
+    {
+      "input": [
+        "C:\\dir\\"
+      ],
+      "output": "\"C:\\dir\\\\\"",
+      "refused": false,
+      "why": "末尾のバックスラッシュは次の空白をエスケープするので引用して二重にする"
     },
     {
       "input": [
@@ -274,7 +298,7 @@
       ],
       "output": "",
       "refused": true,
-      "why": "改行。同上"
+      "why": "改行。設定の行に書けないので Go は断る"
     },
     {
       "input": [
@@ -323,13 +347,56 @@
       "input": "a\"b",
       "values": null,
       "refused": true,
-      "why": "語の途中の引用符"
+      "why": "語の途中で開いて閉じない引用"
+    },
+    {
+      "input": "a\"b c\"d",
+      "values": [
+        "ab cd"
+      ],
+      "refused": false,
+      "why": "語の途中で開閉する引用。OpenSSH の argv_split と同じく一語になる"
     },
     {
       "input": "\"a\"b",
-      "values": null,
-      "refused": true,
-      "why": "引用の直後に文字が続く"
+      "values": [
+        "ab"
+      ],
+      "refused": false,
+      "why": "引用の直後に文字が続く。一語になる"
+    },
+    {
+      "input": "'single quoted' x",
+      "values": [
+        "single quoted",
+        "x"
+      ],
+      "refused": false,
+      "why": "一重引用符"
+    },
+    {
+      "input": "my\\ key",
+      "values": [
+        "my key"
+      ],
+      "refused": false,
+      "why": "引用の外の \\ と空白はエスケープ"
+    },
+    {
+      "input": "\"esc\\\"aped\"",
+      "values": [
+        "esc\"aped"
+      ],
+      "refused": false,
+      "why": "引用の中のエスケープした二重引用符"
+    },
+    {
+      "input": "C:\\Users\\me",
+      "values": [
+        "C:\\Users\\me"
+      ],
+      "refused": false,
+      "why": "エスケープにならないバックスラッシュはそのまま"
     },
     {
       "input": "  spaced  out  ",

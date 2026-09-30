@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"sshc/internal/effective"
 	"sshc/internal/platform/windowsacl/acltest"
 	"sshc/internal/secret"
 	"sshc/internal/storage"
@@ -48,7 +49,16 @@ func newTestService(t *testing.T) (*Service, *storage.Workspace) {
 	service := NewService(workspace, manager)
 	// 本番と同じく Vault を渡す。Vault のファイルはまだ作らない。
 	service.SetVault(secret.NewService(workspace, manager, time.Now))
+	service.factsFor = factsWithoutGlobalKnownHosts
 	return service, workspace
+}
+
+// factsWithoutGlobalKnownHosts は、テストを走らせるマシンの /etc/ssh の known_hosts を
+// 読まない事実である。そこに何があるかで結果が変わらないようにする。
+func factsWithoutGlobalKnownHosts(home string) effective.LocalFacts {
+	facts := LocalFactsFor(home)
+	facts.GlobalKnownHostsFiles = nil
+	return facts
 }
 
 func writeGroupFile(t *testing.T, workspace *storage.Workspace, group, name, contents string) string {
@@ -436,6 +446,37 @@ func TestSaveGroupsWritesConfigurationAndMetadataInOneTransaction(t *testing.T) 
 	}
 	if !found {
 		t.Fatalf("effective entries = %#v", detail.Effective.Entries)
+	}
+}
+
+// 書けないグループ設定を通すと、生成ファイルからそのグループが外れ、同じグループの
+// ほかの設定まで接続に効かなくなる。接続の編集と同じく、保存の前に断る。
+func TestSavingGroupsRefusesAProxyCommandWithAQuoteThatIsNotClosed(t *testing.T) {
+	service, workspace := newTestService(t)
+	if err := os.Remove(filepath.Join(workspace.Root(), "conf.d", "10-home.conf")); err != nil {
+		t.Fatal(err)
+	}
+	writeGroupFile(t, workspace, "home", "nas.conf", "Host nas\n\tUser aida\n")
+	metadata := NewMetadata()
+	metadata.Groups = []GroupMetadata{{
+		Name: "home",
+		Settings: []Setting{
+			{Keyword: "ServerAliveInterval", Values: []string{"30"}},
+			{Keyword: "ProxyCommand", Values: []string{"nc 'oops %h %p"}},
+		},
+	}}
+
+	if _, err := service.Preview(EditRequest{Kind: EditGroups, Metadata: &metadata}); !errors.Is(err, ErrUnquotableValue) {
+		t.Fatalf("Preview = %v, want ErrUnquotableValue", err)
+	}
+	if _, err := service.Save(EditRequest{Kind: EditGroups, Metadata: &metadata}); !errors.Is(err, ErrUnquotableValue) {
+		t.Fatalf("Save = %v, want ErrUnquotableValue", err)
+	}
+	if _, err := os.Stat(filepath.Join(workspace.Root(), DefaultGroupsFile)); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("a refused save left the groups file: %v", err)
+	}
+	if _, err := os.Stat(service.metadata.Path()); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("a refused save left metadata: %v", err)
 	}
 }
 

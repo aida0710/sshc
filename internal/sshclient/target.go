@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net"
-	"path/filepath"
 	"slices"
 	"sort"
 	"strconv"
@@ -16,6 +15,7 @@ import (
 	"time"
 
 	"sshc/internal/effective"
+	"sshc/internal/sshmatch"
 	"sshc/internal/textencoding"
 )
 
@@ -48,6 +48,8 @@ var unhonoured = map[string]string{
 	"localcommand":    "sshc runs nothing after connecting; the only command it starts for a connection is ProxyCommand, because that one is the connection",
 	"certificatefile": "sshc does not read host or user certificates; an organisation that hands out certificates hands out ssh with them",
 	"sendenv":         "the value would come from this application's environment, not from your shell, so sshc sends nothing rather than the wrong thing",
+	"knownhostscommand": "sshc does not run KnownHostsCommand; host keys are checked against the known_hosts files only, " +
+		"and an unknown host is asked about even with StrictHostKeyChecking no or accept-new",
 }
 
 // EnvVar は、チャンネルへ送る環境変数ひとつである。
@@ -107,8 +109,8 @@ type Target struct {
 	// SSH protocol has been decoded. Empty and UTF8 both mean UTF-8.
 	Encoding textencoding.Name
 
-	// Identities は解決済みの絶対パス。~ とトークンの展開は
-	// internal/effective が済ませている。同じ展開を二度書かない。
+	// Identities は鍵のファイルの絶対パス。~ とトークンは、この行き先の値で
+	// NewTarget が展開した。展開できなかった値は notice にして、ここには入れない。
 	Identities     []string
 	IdentitiesOnly bool
 
@@ -129,10 +131,9 @@ type Target struct {
 
 	// Notices は、この接続について言っておくべきことである。
 	//
-	// Target が持っている。以前は NewTarget が別の戻り値として返しており、
-	// 唯一の呼び出し元がそれを `_` で捨てていた。「読むが従わない」と書いた
-	// 7 つのキーワードは、誰にも届いていなかった。値と一緒に運べば、捨てるには
-	// 捨てると書かなければならない。
+	// 別の戻り値にせず Target に持たせるのは、値と一緒に運べば、捨てるには捨てると
+	// 書かなければならないからである。「読むが従わない」キーワードの知らせが、
+	// 呼び出し元の `_` で誰にも届かなくなることを防ぐ。
 	Notices []Notice
 
 	// Forwards は、この接続の上に開く転送である。
@@ -146,6 +147,11 @@ type Target struct {
 	// HostKeyAlgorithms は、交渉で名乗るホスト鍵アルゴリズムの順である。
 	// 空なら、すでに known_hosts に持っている鍵の種類が順を決める。
 	HostKeyAlgorithms []string
+	// KnownHosts は、ホスト鍵を照合する known_hosts のファイルである。
+	KnownHosts KnownHostsFiles
+	// HostKeyAlias は、known_hosts でこのホストを探して書く名前である。空なら
+	// HostName と Port から作る。
+	HostKeyAlias string
 
 	SetEnv        []EnvVar
 	KeepAlive     time.Duration
@@ -206,11 +212,15 @@ func (t Target) AuthenticationBinding() string {
 		Strict            string
 		HostKeyAlgorithms []string
 		Methods           []string
+		// HostKeyAlias は、どの known_hosts の行が相手を認めるかを変える。書かれて
+		// いない接続では省き、保存済みの割り当ての digest を変えない。
+		HostKeyAlias string `json:",omitempty"`
 	}
 	bound := destination{
 		HostName: t.HostName, Port: t.Port, User: t.User,
 		ProxyCommand: t.ProxyCommand, AgentForward: t.AgentForward, Strict: t.Strict,
 		HostKeyAlgorithms: slices.Clone(t.HostKeyAlgorithms), Methods: t.Methods.Order(),
+		HostKeyAlias: t.HostKeyAlias,
 	}
 	for _, hop := range t.Jump {
 		bound.Jump = append(bound.Jump, hop.AuthenticationBinding())
@@ -228,15 +238,27 @@ func (t Target) AuthenticationBinding() string {
 type Resolver func(alias string) (effective.Values, error)
 
 // NewTarget は、解決済みの値から接続ひとつ分を組み立てる。
-func NewTarget(alias string, resolve Resolver, home string) (Target, error) {
-	return newTarget(alias, resolve, home, effective.MaxJumpDepth, nil)
+//
+// facts はトークンと ~ の展開に使う。IdentityFile の %h や %r は、この行き先の
+// 値で展開する。
+func NewTarget(alias string, resolve Resolver, facts effective.LocalFacts) (Target, error) {
+	builder := targetBuilder{resolve: resolve, facts: facts}
+	return builder.build(alias, effective.MaxJumpDepth, nil)
 }
 
-func newTarget(alias string, resolve Resolver, home string, depth int, override *effective.Hop) (Target, error) {
+// targetBuilder は、ProxyJump のホップをたどりながら Target を組み立てる。
+type targetBuilder struct {
+	resolve Resolver
+	facts   effective.LocalFacts
+}
+
+// build は alias ひとつ分の Target を組み立てる。override は、ProxyJump のリストに
+// 明記された user と port である。
+func (b targetBuilder) build(alias string, depth int, override *effective.Hop) (Target, error) {
 	if depth <= 0 {
 		return Target{}, ErrJumpDepth
 	}
-	values, err := resolve(alias)
+	values, err := b.resolve(alias)
 	if err != nil {
 		return Target{}, err
 	}
@@ -247,9 +269,8 @@ func newTarget(alias string, resolve Resolver, home string, depth int, override 
 	target := Target{
 		Alias:          alias,
 		HostName:       values.First("hostname"),
-		Port:           firstOr(values, "port", effective.DefaultJumpPort),
+		Port:           firstOr(values, "port", effective.DefaultPort),
 		User:           values.First("user"),
-		Identities:     absolutePaths(values.All("identityfile"), home),
 		IdentitiesOnly: yes(values.First("identitiesonly")),
 		SetEnv:         parseEnv(values.All("setenv")),
 		KeepAlive:      seconds(values.First("serveraliveinterval")),
@@ -257,17 +278,18 @@ func newTarget(alias string, resolve Resolver, home string, depth int, override 
 		RemoteCommand:  noneToEmpty(values.First("remotecommand")),
 		RequestTTY:     values.First("requesttty"),
 		Timeout:        seconds(values.First("connecttimeout")),
-		Strict:         strings.ToLower(values.First("stricthostkeychecking")),
+		Strict:         strictHostKeyChecking(values.First("stricthostkeychecking")),
 		Methods:        methodsFrom(values),
 
 		HostKeyAlgorithms: hostKeyAlgorithmsFrom(values),
+		HostKeyAlias:      hostKeyAliasFrom(values),
 	}
 	if target.HostName == "" {
 		return Target{}, ErrNoHostName
 	}
 	// ProxyJump のリストに明記された user と port は、そのホップ自身の設定に
-	// 勝つ。ProxyCommand と入れ子の ProxyJump はこの直後にトークンを展開する
-	// ため、値の上書きも展開より前に行う。展開後に Target のフィールドだけを
+	// 勝つ。IdentityFile、ProxyCommand、入れ子の ProxyJump はこの直後にトークンを
+	// 展開するため、値の上書きも展開より前に行う。展開後に Target のフィールドだけを
 	// 変えると、認証上の宛先と ProxyCommand が実際に開く宛先が食い違う。
 	if override != nil {
 		if override.UserExplicit {
@@ -283,18 +305,12 @@ func newTarget(alias string, resolve Resolver, home string, depth int, override 
 	target.AgentForward = yes(values.First("forwardagent"))
 
 	notices := append(noticesFor(values), forwardNotices...)
-	// トークンを展開するのはここである。解決器は ProxyJump を生のまま返す
-	// `ssh -G` がそうするからだ。%r が指すのは、いま組み立てているこの行き先の
-	// 利用者であり、手前のホップのそれではない。
+	// トークンを展開するのはここである。解決器は IdentityFile と ProxyJump を
+	// 生のまま返す。`ssh -G` がそうするからだ。%r が指すのは、いま組み立てている
+	// この行き先の利用者であり、手前のホップのそれではない。
 	tokens := effective.TokenTarget{
 		Alias: alias, HostName: target.HostName, Port: target.Port, RemoteUser: target.User,
-	}
-	if proxyCommand != "" {
-		expanded, err := effective.ExpandProxyTokens(proxyCommand, tokens)
-		if err != nil {
-			return Target{}, err
-		}
-		target.ProxyCommand = expanded
+		HostKeyAlias: target.HostKeyAlias,
 	}
 	jump, err := effective.ExpandProxyTokens(values.First("proxyjump"), tokens)
 	if err != nil {
@@ -304,9 +320,26 @@ func newTarget(alias string, resolve Resolver, home string, depth int, override 
 	if err != nil {
 		return Target{}, err
 	}
+	tokens.JumpHost = jumpHostToken(chain)
+	identities, identityNotices := identityPaths(values.All("identityfile"), b.facts, tokens)
+	target.Identities = identities
+	notices = append(notices, identityNotices...)
+	target.KnownHosts = knownHostsFilesFrom(values, b.facts, tokens)
+	// KnownHostsCommand が返すはずの鍵と照合できないので、未知に見えるホストを
+	// 尋ねずに受け入れない。
+	if noneToEmpty(values.First("knownhostscommand")) != "" && (target.Strict == "no" || target.Strict == "accept-new") {
+		target.Strict = "ask"
+	}
+	if proxyCommand != "" {
+		expanded, err := effective.ExpandProxyTokens(proxyCommand, tokens)
+		if err != nil {
+			return Target{}, err
+		}
+		target.ProxyCommand = expanded
+	}
 	if !chain.Disabled {
 		for _, hop := range chain.Hops {
-			stage, err := newTarget(hop.Host, resolve, home, depth-1, &hop)
+			stage, err := b.build(hop.Host, depth-1, &hop)
 			if err != nil {
 				return Target{}, err
 			}
@@ -316,6 +349,41 @@ func newTarget(alias string, resolve Resolver, home string, depth int, override 
 	}
 	target.Notices = notices
 	return target, nil
+}
+
+// identityPaths は、IdentityFile の値を、この行き先について OpenSSH が開く鍵の
+// パスへ展開する。
+//
+// 展開できない値の鍵は使わず、理由を notice にする。文字どおりのファイル名として
+// 探しにいくと、存在しない鍵を黙って試し、認証の失敗だけが残る。
+func identityPaths(entries []string, facts effective.LocalFacts, tokens effective.TokenTarget) ([]string, []Notice) {
+	var paths []string
+	var notices []Notice
+	for _, entry := range entries {
+		path, err := effective.ExpandFilePath(entry, facts, tokens)
+		if err != nil {
+			notices = append(notices, Notice{
+				Keyword: "identityfile",
+				Detail:  "sshc does not use the key " + entry + ": " + identityPathProblem(err),
+			})
+			continue
+		}
+		paths = append(paths, path)
+	}
+	return paths, notices
+}
+
+func identityPathProblem(err error) string {
+	switch {
+	case errors.Is(err, effective.ErrRelativePath):
+		return "a relative path is opened from the directory ssh starts in, which sshc does not have"
+	case errors.Is(err, effective.ErrOtherUsersHome):
+		return "sshc does not look up another user's home directory"
+	case errors.Is(err, effective.ErrEnvironmentVariable):
+		return err.Error()
+	default:
+		return "it uses a token sshc does not expand"
+	}
 }
 
 // parseForwards は、設定に書かれた転送を読む。
@@ -401,22 +469,13 @@ func hostKeyAlgorithmsFrom(values effective.Values) []string {
 		removed := splitList(raw[1:])
 		kept := make([]string, 0, len(defaultHostKeyAlgorithms))
 		for _, algorithm := range defaultHostKeyAlgorithms {
-			if !matchesAny(removed, algorithm) {
+			if !sshmatch.PatternList(removed, algorithm, sshmatch.CaseSensitive) {
 				kept = append(kept, algorithm)
 			}
 		}
 		return kept
 	}
 	return dedupe(splitList(raw))
-}
-
-func matchesAny(patterns []string, value string) bool {
-	for _, pattern := range patterns {
-		if effective.MatchPattern(pattern, value) {
-			return true
-		}
-	}
-	return false
 }
 
 // splitList は、カンマ区切りの並びを読む。空の要素は落とす。
@@ -460,42 +519,35 @@ func methodsFrom(values effective.Values) Methods {
 	return methods
 }
 
-// parseEnv は SetEnv の値を読む。一行に複数の代入が並ぶ。`SetEnv ONE=1 TWO=2`。
+// parseEnv は SetEnv の値を読む。解決器は代入ひとつずつを別の値として返す。
+// `SetEnv X="a b" ONE=1` は "X=a b" と "ONE=1" であり、値の中の空白で分けない。
 func parseEnv(entries []string) []EnvVar {
 	var variables []EnvVar
-	for _, entry := range entries {
-		for _, assignment := range strings.Fields(entry) {
-			name, value, found := strings.Cut(assignment, "=")
-			if !found || name == "" {
-				continue
-			}
-			variables = append(variables, EnvVar{Name: name, Value: value})
+	for _, assignment := range entries {
+		name, value, found := strings.Cut(assignment, "=")
+		if !found || name == "" {
+			continue
 		}
+		variables = append(variables, EnvVar{Name: name, Value: value})
 	}
 	return variables
 }
 
-// absolutePaths は、鍵のパスを絶対パスにする。
+// strictHostKeyChecking は、StrictHostKeyChecking の書き方を、未知のホスト鍵の
+// 扱いを表す yes・no・accept-new・ask のどれかに揃える。
 //
-// ~ の展開は internal/effective が済ませていない。あちらは ssh -G と同じ結果を
-// 返す約束であり、ssh -G は ~ を残す。接続に使うのはこちらなので、ここで解く。
-func absolutePaths(entries []string, home string) []string {
-	var paths []string
-	for _, entry := range entries {
-		entry = strings.Trim(entry, `"`)
-		switch {
-		case entry == "":
-			continue
-		case entry == "~":
-			entry = home
-		case strings.HasPrefix(entry, "~/"):
-			entry = filepath.Join(home, entry[2:])
-		case !filepath.IsAbs(entry):
-			entry = filepath.Join(home, entry)
-		}
-		paths = append(paths, filepath.Clean(entry))
+// OpenSSH の multistate_strict_hostkey と同じ対応で、true は yes、false と off は
+// no である。true を ask と同じに扱うと、利用者が決めた「未知のホストは断る」が
+// 黙って「尋ねる」に弱まる。書かれていなければ空のまま返し、ask として扱う。
+func strictHostKeyChecking(value string) string {
+	switch lowered := strings.ToLower(value); lowered {
+	case "yes", "true":
+		return "yes"
+	case "no", "false", "off":
+		return "no"
+	default:
+		return lowered
 	}
-	return paths
 }
 
 func firstOr(values effective.Values, keyword, fallback string) string {

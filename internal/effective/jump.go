@@ -8,8 +8,9 @@ import (
 )
 
 const (
-	// DefaultJumpPort は、ポート指定のないホップに OpenSSH が使うポート。
-	DefaultJumpPort = "22"
+	// DefaultPort は、Port が書かれていない接続先と、ポート指定のない ProxyJump の
+	// ホップに OpenSSH が使うポート。
+	DefaultPort = "22"
 	// MaxJumpDepth は、入れ子になった ProxyJump をどこまでたどるかを制限する。
 	MaxJumpDepth = 8
 	// MaxRouteStages は、展開された経路ひとつが含みうるホップ数を制限する。
@@ -94,7 +95,7 @@ func ParseChain(raw string) (Chain, error) {
 		if element == "" {
 			return Chain{}, ErrInvalidJump
 		}
-		hop := Hop{Raw: element, Port: DefaultJumpPort}
+		hop := Hop{Raw: element, Port: DefaultPort}
 		destination := element
 		if at := strings.LastIndex(destination, "@"); at >= 0 {
 			hop.User = destination[:at]

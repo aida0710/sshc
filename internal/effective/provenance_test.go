@@ -119,38 +119,6 @@ func TestProjectReportsUnresolvedIncludesInsteadOfInventingValues(t *testing.T) 
 	}
 }
 
-func TestMatchPatternFollowsOpenSSHSemantics(t *testing.T) {
-	tests := []struct {
-		pattern string
-		value   string
-		want    bool
-	}{
-		{"bastion", "bastion", true},
-		// OpenSSH の match_pattern は大文字小文字を区別する。実物で確かめられる:
-		// Host BASTION だけを持つ設定に `ssh -G bastion` を投げると、そのブロックの
-		// 値ではなく Host * の値が返る。ここを緩めると、この engine は OpenSSH が
-		// 適用しないブロックへ値の出所を帰属させてしまう。それは「実際に使われる
-		// 設定を説明する」という、このパッケージの仕事そのものを外す。
-		{"BASTION", "bastion", false},
-		{"bastion", "BASTION", false},
-		{"BASTION", "BASTION", true},
-		{"*", "anything", true},
-		{"*.internal", "db.internal", true},
-		{"*.internal", "internal", false},
-		{"web-?", "web-1", true},
-		{"web-?", "web-12", false},
-		{"a*c*e", "abcde", true},
-		{"a*c*e", "abcd", false},
-		{"host*", "host", true},
-		{"[abc]", "a", false},
-	}
-	for _, test := range tests {
-		if got := effective.MatchPattern(test.pattern, test.value); got != test.want {
-			t.Errorf("MatchPattern(%q, %q) = %v, want %v", test.pattern, test.value, got, test.want)
-		}
-	}
-}
-
 // OpenSSH は IdentityFile を積み上げる。最初の 1 つだけを勝たせると、2 行目を
 // 書いたユーザーには「この行は効いていない」と表示されることになる。
 //

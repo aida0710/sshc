@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useTranslate } from "../i18n/context";
+import { useTranslate, type Translate } from "../i18n/context";
 import { failureCode } from "../api/client";
 import { knownHostsApi, type KnownHostCandidate, type KnownHostEntry, type KnownHostsApi, type KnownHostsResponse } from "../api/knownHosts";
 import {
@@ -24,6 +24,14 @@ import { ConfirmDialog } from "../ui/ConfirmDialog";
 type KnownHostsPanelProps = { api?: KnownHostsApi };
 type CandidateSort = "host" | "type" | "fingerprint" | "trust";
 type TrustedSort = Exclude<CandidateSort, "trust">;
+
+// sshc neither reads nor writes ~/.ssh/known_hosts through a symbolic link, so
+// every operation on the file fails the same way. That message says why and that
+// ssh, which follows the link, can still add a host's key. Any other failure keeps
+// the message of the operation that failed.
+function failureMessage(t: Translate, failure: unknown, otherwise: string): string {
+  return failureCode(failure) === "known_hosts_symlink" ? t("kh.symlink") : otherwise;
+}
 
 export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
   const t = useTranslate();
@@ -54,8 +62,8 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
       .then((result) => {
         if (active) setListing(result);
       })
-      .catch(() => {
-        if (active) setError(t("kh.unreadable"));
+      .catch((failure: unknown) => {
+        if (active) setError(failureMessage(t, failure, t("kh.unreadable")));
       });
     return () => {
       active = false;
@@ -66,8 +74,8 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
     setError("");
     try {
       setListing(await api.knownHosts(next));
-    } catch {
-      setError(t("kh.unreadable"));
+    } catch (failure) {
+      setError(failureMessage(t, failure, t("kh.unreadable")));
     }
   }
 
@@ -82,8 +90,8 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
       setStatus(t("kh.removed", { id: result.transactionId }));
       setPending(null);
       await search(query);
-    } catch {
-      setError(t("kh.removeFailed"));
+    } catch (failure) {
+      setError(failureMessage(t, failure, t("kh.removeFailed")));
       setPending(null);
     }
   }
@@ -134,9 +142,11 @@ export function KnownHostsPanel({ api = knownHostsApi }: KnownHostsPanelProps) {
     } catch (failure) {
       const code = failureCode(failure);
       setError(
-        code === ""
-          ? t("kh.addFailed")
-          : t("kh.addFailedCode", { code }),
+        failureMessage(
+          t,
+          failure,
+          code === "" ? t("kh.addFailed") : t("kh.addFailedCode", { code }),
+        ),
       );
       closeAdd();
     }

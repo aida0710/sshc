@@ -126,7 +126,7 @@ func TestBindingAVPNByAliasFollowsTheBlockTheConnectionUses(t *testing.T) {
 func TestTheDetectedOSOfABlockWhosePrimaryAliasIsTakenIsKept(t *testing.T) {
 	service := serviceWithConfig(t, primaryAliasTakenByAnEarlierBlock, NewMetadata())
 	for _, connection := range []struct{ alias, os string }{{"b", "ubuntu"}, {"web", "debian"}} {
-		target, err := sshclient.NewTarget(connection.alias, service.ResolveConnection, service.workspace.Home())
+		target, err := sshclient.NewTarget(connection.alias, service.ResolveConnection, LocalFactsFor(service.workspace.Home()))
 		if err != nil {
 			t.Fatal(err)
 		}

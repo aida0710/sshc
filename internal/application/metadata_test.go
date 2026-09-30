@@ -258,6 +258,56 @@ func TestValidateMetadataRefusesKeyMaterialAndUnknownPaths(t *testing.T) {
 	}
 }
 
+// ProxyCommand などの複数の値は schema 9 より前の形で、読み込みの移行だけが 1 つの値に
+// する。今の形で受け付けると、空白でつないで書いた行と、同じ値を前の形として移行した行とが
+// 食い違う。同じ値から違う行ができないよう、受け付けない。
+func TestValidateMetadataRefusesSeveralValuesForAKeywordThatTakesTheRestOfTheLine(t *testing.T) {
+	split := NewMetadata()
+	split.Groups = []GroupMetadata{{Name: "company", Settings: []Setting{
+		{Keyword: "proxycommand", Values: []string{"sh", "-c", "exec nc %h %p"}},
+	}}}
+	if err := ValidateMetadata(split); !errors.Is(err, ErrMetadataGroup) {
+		t.Errorf("split ProxyCommand error = %v, want ErrMetadataGroup", err)
+	}
+
+	whole := NewMetadata()
+	whole.Groups = []GroupMetadata{{Name: "company", Settings: []Setting{
+		{Keyword: "ProxyCommand", Values: []string{"sh -c 'exec nc %h %p'"}},
+		{Keyword: "SendEnv", Values: []string{"LANG", "LC_*"}},
+	}}}
+	if err := ValidateMetadata(whole); err != nil {
+		t.Errorf("one ProxyCommand value and several SendEnv values: %v", err)
+	}
+}
+
+// 前の形（ProxyCommand などを空白で分けた複数の値）を読み替えるのは、schema 9 より前の
+// metadata を移行するときだけである。今の schema の文書は読み替えず、保存で断る。
+func TestSplitRestOfLineValuesAreJoinedOnlyWhenMigratingAnOlderSchema(t *testing.T) {
+	document := func(version int) []byte {
+		return []byte(fmt.Sprintf(`{"schemaVersion":%d,"groups":[{"name":"company","settings":[`+
+			`{"keyword":"ProxyCommand","values":["sh","-c","exec nc %%h %%p"]}]}]}`, version))
+	}
+
+	migrated, err := DecodeMetadata(document(8))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := migrated.Groups[0].Settings[0].Values; len(got) != 1 || got[0] != `sh -c "exec nc %h %p"` {
+		t.Errorf("schema 8 values = %q, want the line an earlier sshc wrote", got)
+	}
+
+	current, err := DecodeMetadata(document(MetadataSchemaVersion))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := current.Groups[0].Settings[0].Values; len(got) != 3 {
+		t.Errorf("schema %d values = %q, want them left as stored", MetadataSchemaVersion, got)
+	}
+	if _, err := EncodeMetadata(current); !errors.Is(err, ErrMetadataGroup) {
+		t.Errorf("saving schema %d split values = %v, want ErrMetadataGroup", MetadataSchemaVersion, err)
+	}
+}
+
 func TestMetadataAcceptsOnlyCanonicalTerminalEncodings(t *testing.T) {
 	for _, encoding := range []string{"", "utf-8", "shift_jis", "euc-jp", "iso-2022-jp"} {
 		metadata := NewMetadata()

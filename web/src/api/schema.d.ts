@@ -3171,6 +3171,7 @@ export interface components {
         };
         Setting: {
             keyword: string;
+            /** @description The arguments of the directive. ProxyCommand, RemoteCommand, LocalCommand and KnownHostsCommand take the rest of the line as one value, written without requoting; a request with more than one value for them is refused. */
             values: string[];
         };
         HostMetadata: {
@@ -4282,6 +4283,7 @@ export interface operations {
             };
             400: components["responses"]["Problem"];
             401: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
         };
     };
     registerRemoteKey: {
@@ -4336,6 +4338,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
         };
     };
     deleteKnownHosts: {

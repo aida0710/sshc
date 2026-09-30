@@ -4,7 +4,7 @@ import { useTranslate } from "../i18n/context";
 import type { AdvancedArea } from "../routing/connectionRoute";
 import { control, hintText, narrowControl } from "../ui/form";
 import { Button, Card, Notice, Row } from "../ui/surface";
-import { formatValues, parseValues } from "../rules/rules";
+import { formatDirectiveValues, parseDirectiveValues } from "../rules/rules";
 import { identityKey } from "./connectionBrowser";
 import { activateTabFromKeyboard } from "../ui/tabKeyboard";
 import { DraftSaveBar } from "./DraftSaveBar";
@@ -91,7 +91,7 @@ export function AdvancedSettings({
   const { saving, written, save } = useDraftSave({ draft, saved: detail });
   const fieldDirty = !written && (removed.length > 0 || additions.length > 0 || Object.entries(drafts).some(([key, value]) => {
     const field = detail.form.fields.find((candidate) => fieldKey(candidate) === key);
-    return field !== undefined && value !== formatValues(field.values);
+    return field !== undefined && value !== formatDirectiveValues(field.keyword, field.values);
   }));
   const rawDirty = !written && blockRaw !== detail.form.raw;
   const dirty = fieldDirty || rawDirty;
@@ -119,7 +119,7 @@ export function AdvancedSettings({
   }, [discard, onDiscardReady]);
 
   function draftFor(field: FormField): string {
-    return drafts[fieldKey(field)] ?? formatValues(field.values) ?? "";
+    return drafts[fieldKey(field)] ?? formatDirectiveValues(field.keyword, field.values) ?? "";
   }
 
   function submitFieldEdits() {
@@ -131,8 +131,8 @@ export function AdvancedSettings({
           continue;
         }
         const fieldDraft = drafts[fieldKey(field)];
-        if (fieldDraft === undefined || fieldDraft === formatValues(field.values)) continue;
-        edits.push({ action: "set", line: field.line, values: parseValues(fieldDraft) });
+        if (fieldDraft === undefined || fieldDraft === formatDirectiveValues(field.keyword, field.values)) continue;
+        edits.push({ action: "set", line: field.line, values: parseDirectiveValues(field.keyword, fieldDraft) });
       }
       edits.push(...additions);
     } catch {
@@ -150,7 +150,7 @@ export function AdvancedSettings({
       return;
     }
     try {
-      setAdditions([...additions, { action: "add", keyword: newKeyword, values: parseValues(newValue) }]);
+      setAdditions([...additions, { action: "add", keyword: newKeyword, values: parseDirectiveValues(newKeyword, newValue) }]);
     } catch {
       setLocalError(t("host.unbalancedQuote"));
       return;

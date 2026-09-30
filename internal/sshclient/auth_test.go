@@ -100,7 +100,7 @@ func connect(t *testing.T, server *testServer, target sshclient.Target, auth ssh
 func targetWith(server *testServer, identities ...string) sshclient.Target {
 	return sshclient.Target{
 		Alias: "bastion", HostName: server.Host(), Port: server.Port(), User: "ops",
-		Identities: identities, Methods: sshclient.DefaultMethods(),
+		Identities: identities, Methods: sshclient.DefaultMethods(), KnownHosts: testKnownHosts,
 	}
 }
 

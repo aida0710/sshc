@@ -582,6 +582,8 @@ export const ja = {
     "ホスト鍵が変わりました。Known Hostsを確認してから接続し直してください。",
   "terminal.hostKeyRevoked":
     "ホスト鍵は失効済みとして登録されているため接続できません。",
+  "terminal.knownHostsSymlink":
+    "known_hostsがシンボリックリンクのため、ホスト鍵を保存できませんでした。sshで一度接続して鍵を登録してから、接続し直してください。",
   "terminal.identityUnavailable":
     "利用できる秘密鍵またはssh-agentの鍵がありません。",
   "terminal.authenticationUnavailable":
@@ -1901,6 +1903,8 @@ export const ja = {
   "kh.columnTrust": "信頼状態",
   "kh.columnActions": "操作",
   "kh.unreadable": "known_hostsを読み取れませんでした。",
+  "kh.symlink":
+    "~/.ssh/known_hostsがシンボリックリンクのため、sshcでは表示も変更もできません。登録済みのホストには接続できます。新しいホストの鍵は、sshで一度接続すると登録できます。",
   "kh.removeFailed": "エントリを削除できませんでした。何も変更していません。",
   "kh.scanFailed": "このホストをスキャンできませんでした。",
   "kh.addFailed": "鍵を追加できませんでした。何も変更していません。",
@@ -1963,6 +1967,8 @@ export const ja = {
   "rk.plannedHosts": "{count}台の内容を確認済み",
   "rk.planFailed":
     "登録内容を確認できませんでした。どのホストにも接続していません。",
+  "rk.configNotConfirmable":
+    "登録内容を確認できませんでした。SSH設定のIncludeに、OpenSSHと同じように読めない箇所（読めないファイル、${…}を含むパス、循環、深すぎる入れ子など）があるか、Includeで読み込む設定の合計が4 MiBを超えています。設定を直してから、もう一度確認してください。どのホストにも接続していません。",
   "rk.registerFailed":
     "鍵は登録されませんでした。リモートホストはそのままです。",
   "rk.publicKeyUnreadable":
@@ -2056,7 +2062,7 @@ export const ja = {
   "groups.chooseGroupAndKeyword":
     "グループとディレクティブのキーワードを選んでください。",
   "groups.unbalancedQuote":
-    "値の引用符が対応していません。OpenSSHは引用符内のエスケープに対応していないため、この値は保存できません。",
+    "値の引用符が閉じていません。引用符を閉じるか、文字として残す引用符の前に\\を付けてください。",
   "groups.renameNeedsName": "名前を変更するには、新しい名前が必要です。",
   "groups.renameCollides":
     "{name}は既に存在します。別の名前にするか、どちらか一方を削除してください。",
@@ -2457,7 +2463,7 @@ export const ja = {
   "host.tabJump": "Jump Host",
   "host.tabRaw": "Raw",
   "host.unbalancedQuote":
-    "値の引用符が対応していません。OpenSSHは引用符内のエスケープに対応していないため、この値は保存できません。",
+    "値の引用符が閉じていません。引用符を閉じるか、文字として残す引用符の前に\\を付けてください。",
   "host.needsKeyword": "ディレクティブにはキーワードが必要です。",
   "host.dangerousField":
     "{keyword}は、OpenSSHがこのホストを評価するときにコマンドを実行する可能性があります。記述どおり保存され、ここで実行されることはありません。",

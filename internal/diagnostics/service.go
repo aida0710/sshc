@@ -43,7 +43,7 @@ type Inspection struct {
 }
 
 // ConnectionSnapshot は、1 回だけ読み取った設定グラフから導出された接続計画と、
-// OpenSSH に渡せる単一の不変設定。
+// 確認の証拠にする設定のバイト列（config.Snapshot）。
 type ConnectionSnapshot struct {
 	Hostname string
 	Port     string
@@ -124,22 +124,14 @@ func (s *Service) ConnectionSnapshot(alias string) (ConnectionSnapshot, error) {
 		// 接続先を解決できない場合は alias をホスト名として代用しない。
 		return ConnectionSnapshot{}, fmt.Errorf("%w: %s", ErrUnresolvedDestination, resolution.Refusals[0].Code)
 	}
-	snapshot := ConnectionSnapshot{
-		Hostname: alias,
-		Port:     "22",
+	// HostName、Port、User の既定値は Resolve が埋めている。ここで二度目の既定を持たない。
+	return ConnectionSnapshot{
+		Hostname: resolution.Values.First("hostname"),
+		Port:     resolution.Values.First("port"),
+		User:     resolution.Values.First("user"),
 		Report:   effective.ScanForAlias(graph, alias),
 		Config:   flattened,
-	}
-	if found := resolution.Values.First("hostname"); found != "" {
-		snapshot.Hostname = found
-	}
-	if found := resolution.Values.First("port"); found != "" {
-		snapshot.Port = found
-	}
-	if found := resolution.Values.First("user"); found != "" {
-		snapshot.User = found
-	}
-	return snapshot, nil
+	}, nil
 }
 
 // ConfigCheck は、Include グラフとその診断を報告する。
@@ -205,15 +197,8 @@ func (s *Service) Destination(alias string) (string, string, error) {
 		// 解決できない場合は alias:22 を接続先として代用しない。
 		return "", "", fmt.Errorf("%w: %s", ErrUnresolvedDestination, resolution.Refusals[0].Code)
 	}
-	hostname := alias
-	if found := resolution.Values.First("hostname"); found != "" {
-		hostname = found
-	}
-	port := "22"
-	if found := resolution.Values.First("port"); found != "" {
-		port = found
-	}
-	return hostname, port, nil
+	// 既定の HostName（alias）と Port は Resolve が埋めている。
+	return resolution.Values.First("hostname"), resolution.Values.First("port"), nil
 }
 
 // ErrUnresolvedDestination は、設定から単一の接続先を解決できないことを表す。
