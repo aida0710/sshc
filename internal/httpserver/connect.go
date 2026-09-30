@@ -2,6 +2,7 @@ package httpserver
 
 import (
 	"crypto/subtle"
+	"errors"
 	"net/http"
 	"strings"
 
@@ -339,7 +340,7 @@ func (h CLIHandlers) Stop(c *echo.Context) error {
 func (h CLIHandlers) Status(c *echo.Context) error {
 	answer, err := h.cliStatus()
 	if err != nil {
-		return unexpectedNoContent(c, err)
+		return unexpectedProblem(c, "vault_unreadable", err)
 	}
 	return c.JSON(http.StatusOK, answer)
 }
@@ -367,11 +368,11 @@ func (h CLIHandlers) cliStatus() (CLIStatus, error) {
 // Open は、セッションを確立する URL で応答する。
 func (h CLIHandlers) Open(c *echo.Context) error {
 	if h.Bootstrap == nil || h.BaseURL == "" {
-		return c.NoContent(http.StatusServiceUnavailable)
+		return problem(c, http.StatusServiceUnavailable, "bootstrap_unavailable")
 	}
 	bootstrap, err := h.Bootstrap.Reissue()
 	if err != nil {
-		return unexpectedNoContent(c, err)
+		return unexpectedProblem(c, "bootstrap_failed", err)
 	}
 	return c.JSON(http.StatusOK, openResponse{URL: h.BaseURL + "/#bootstrap=" + bootstrap})
 }
@@ -389,21 +390,25 @@ func (h CLIHandlers) Challenge(c *echo.Context) error {
 
 // Connect は、1 個の接続が必要とするものだけを返し、それより長生きするものは何も返さない。
 //
-// あらゆる拒否は外から見て同じ形をしているので、このエンドポイントを
+// secret を持たない呼び出し側は何も知ることができない（requireHandoffSecret）。
+// secret を示した呼び出し側への断りは、要求の形の誤りだけを理由の code で伝える。
+// 未知の alias も、パスワードの無い alias も断らないので、このエンドポイントを
 // 使ってどの alias が存在するか、どれにパスワードがあるかを知ることはできない。
-// secret を持たない呼び出し側は何も知ることができない。
 func (h CLIHandlers) Connect(c *echo.Context) error {
 	request := c.Request()
 	if request.Header.Get(echo.HeaderContentType) != "application/json" {
-		return c.NoContent(http.StatusUnsupportedMediaType)
+		return problem(c, http.StatusUnsupportedMediaType, "unsupported_media_type")
 	}
 
 	var decoded connectRequest
 	if err := decodeJSONWithin(c, maxConnectBody, &decoded); err != nil {
-		return c.NoContent(http.StatusBadRequest)
+		if errors.Is(err, errBodyTooLarge) {
+			return problem(c, http.StatusRequestEntityTooLarge, "request_body_too_large")
+		}
+		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
 	if err := validate.Alias(decoded.Alias); err != nil {
-		return c.NoContent(http.StatusBadRequest)
+		return problem(c, http.StatusBadRequest, "unsafe_alias")
 	}
 
 	answer := connectResponse{Alias: decoded.Alias, Warnings: []string{}}

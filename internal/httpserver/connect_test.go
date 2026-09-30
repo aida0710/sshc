@@ -481,10 +481,74 @@ func TestConnectRefusesAnAliasItWouldNotPutOnACommandLine(t *testing.T) {
 	engine := connectEngine(t, CLIHandlers{Secret: secret})
 	for _, alias := range []string{"", "-oProxyCommand=id", "a b", "a;b"} {
 		body := `{"alias":"` + alias + `"}`
-		if code := send(t, engine, http.MethodPost, ConnectPath, body,
-			map[string]string{handoff.HeaderName: secret}).Code; code != http.StatusBadRequest {
-			t.Errorf("alias %q = %d, want 400", alias, code)
+		recorder := send(t, engine, http.MethodPost, ConnectPath, body,
+			map[string]string{handoff.HeaderName: secret})
+		if recorder.Code != http.StatusBadRequest {
+			t.Errorf("alias %q = %d, want 400", alias, recorder.Code)
+			continue
 		}
+		if code := problemCode(t, recorder.Body.Bytes()); code != "unsafe_alias" {
+			t.Errorf("alias %q was refused with code %q, want unsafe_alias", alias, code)
+		}
+	}
+}
+
+// 秘密を確かめたあとの断りは、problem の code で理由を名乗る。CLI はその code を
+// 「the engine refused the request (code X)」に載せるので、本文の無い status だと
+// どの断りも http_error になり、理由を追えない。秘密を持たない要求の断りは、
+// 変わらず本文の無い 401 である（TestEveryCLIRouteExceptChallengeRefusesAMissingOrWrongSecret）。
+func TestAuthenticatedCLIRequestsAreRefusedWithTheirReasonCode(t *testing.T) {
+	const secret = "the secret for this run"
+	engine := connectEngine(t, CLIHandlers{Secret: secret})
+	authenticated := map[string]string{handoff.HeaderName: secret}
+	for _, refusal := range []struct {
+		name       string
+		method     string
+		path       string
+		body       string
+		headers    map[string]string
+		wantStatus int
+		wantCode   string
+	}{
+		{
+			name: "connect with a body that is not JSON", method: http.MethodPost, path: ConnectPath,
+			body:       `{"alias":"bastion"}`,
+			headers:    map[string]string{handoff.HeaderName: secret, echo.HeaderContentType: "text/plain"},
+			wantStatus: http.StatusUnsupportedMediaType, wantCode: "unsupported_media_type",
+		},
+		{
+			name: "connect with a malformed body", method: http.MethodPost, path: ConnectPath,
+			body: `{"alias":"bastion"}}`, headers: authenticated,
+			wantStatus: http.StatusBadRequest, wantCode: "invalid_request",
+		},
+		{
+			name: "connect with a body over the limit", method: http.MethodPost, path: ConnectPath,
+			body: `{"alias":"` + strings.Repeat("a", maxConnectBody) + `"}`, headers: authenticated,
+			wantStatus: http.StatusRequestEntityTooLarge, wantCode: "request_body_too_large",
+		},
+		{
+			name: "open on an engine that cannot issue a browser URL", method: http.MethodPost, path: OpenPath,
+			body: `{}`, headers: authenticated,
+			wantStatus: http.StatusServiceUnavailable, wantCode: "bootstrap_unavailable",
+		},
+		{
+			name: "status on an engine whose Vault cannot be read", method: http.MethodGet, path: StatusPath,
+			headers:    authenticated,
+			wantStatus: http.StatusInternalServerError, wantCode: "vault_unreadable",
+		},
+	} {
+		t.Run(refusal.name, func(t *testing.T) {
+			recorder := send(t, engine, refusal.method, refusal.path, refusal.body, refusal.headers)
+			if recorder.Code != refusal.wantStatus {
+				t.Fatalf("status = %d, want %d: %q", recorder.Code, refusal.wantStatus, recorder.Body.String())
+			}
+			if contentType := recorder.Header().Get(echo.HeaderContentType); contentType != "application/problem+json" {
+				t.Errorf("Content-Type = %q, want application/problem+json", contentType)
+			}
+			if code := problemCode(t, recorder.Body.Bytes()); code != refusal.wantCode {
+				t.Errorf("code = %q, want %q", code, refusal.wantCode)
+			}
+		})
 	}
 }
 
