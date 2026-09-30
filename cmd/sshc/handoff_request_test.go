@@ -100,9 +100,9 @@ func TestSSHAndOpenNameTheCodeTheEngineRefusedWith(t *testing.T) {
 	}{
 		// 止まる途中の sshcエンジンは、POST の要求を stoppingGate が problem で断る。
 		{"problem", http.StatusServiceUnavailable, `{"code":"server_stopping","message":"request rejected"}`, "server_stopping"},
-		// /cli/ のルートは本文の無い status で断る（Vault の状態を読めない /cli/status の 500 など）。
-		// decodeEngineProblem はそれを http_error と読む。
-		{"bare status", http.StatusInternalServerError, "", "http_error"},
+		// 本文の無い status の断り（handoff の秘密が合わない要求への 401 など）は、
+		// decodeEngineProblem が http_error と読む。
+		{"bare status", http.StatusUnauthorized, "", "http_error"},
 	}
 	commands := []struct {
 		name string

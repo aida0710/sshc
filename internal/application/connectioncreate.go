@@ -285,10 +285,7 @@ func (s *Service) planCreateConnection(
 	}
 	updated := block.Render()
 
-	precondition := storage.Precondition{}
-	if exists {
-		precondition = storage.Precondition{Exists: true, Digest: storage.Digest(previous)}
-	}
+	precondition := preconditionFor(previous, exists)
 	cleaned := filepath.Clean(absolute)
 	prepared := planned{
 		operation:   "connection.create",
@@ -314,7 +311,7 @@ func (s *Service) planCreateConnection(
 		ComputeEffective(graph, s.workspace.Root(), request.Alias, s.localFacts()),
 		ComputeEffective(after, s.workspace.Root(), request.Alias, s.localFacts()),
 	)}
-	prepared.authenticationBinding, err = s.passwordBindingForGraph(after, request.Alias)
+	prepared.authenticationBinding, err = s.passwordBindingForGraph(after, metadata, request.Alias)
 	if err != nil {
 		return planned{}, HostIdentity{}, err
 	}

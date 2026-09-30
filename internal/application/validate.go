@@ -184,12 +184,25 @@ func (s *Service) validate(request storage.Request) error {
 	edit, planned := request.Validation.(configurationEdit)
 
 	metadataPath := filepath.Clean(s.metadata.Path())
+	engineSettingsPath := filepath.Clean(s.engineSettingsPath())
 	stateDir := filepath.Clean(s.workspace.StateDir())
 	for _, changes := range [][]storage.Change{request.Changes, request.FinalChanges} {
 		for _, change := range changes {
 			cleaned := filepath.Clean(change.Path)
 			if cleaned == metadataPath {
-				if _, err := DecodeMetadata(change.Contents); err != nil {
+				// 読めるだけでなく、保存できる形かも確かめる。履歴から戻した文書が保存の
+				// 検査を通らないと、以後の metadata の保存がすべて断られ、画面から直せない。
+				decoded, err := DecodeMetadata(change.Contents)
+				if err != nil {
+					return err
+				}
+				if err := ValidateMetadata(decoded); err != nil {
+					return err
+				}
+				continue
+			}
+			if cleaned == engineSettingsPath {
+				if _, err := decodeEngineSettings(change.Contents); err != nil {
 					return err
 				}
 				continue

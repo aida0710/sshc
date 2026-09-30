@@ -56,8 +56,8 @@ type Manager struct {
 	// succeeded and the callback must not attempt to change its result.
 	AfterCommit func(operation string)
 	// AfterRecovery は、保留記録を Complete か Rollback で片付けたあと、錠を手放して
-	// から、その記録が触れたパスを知らせる。ディスクの内容をメモリに持つ側（解錠中の
-	// Vault など）が読み直すための通知であり、片付けの結果は変えられない。
+	// から、その記録が触れたパスを知らせる。ディスクの内容をメモリに持つ側（ロックを
+	// 解除した Vault など）が読み直すための通知であり、片付けの結果は変えられない。
 	AfterRecovery func(paths []string)
 }
 

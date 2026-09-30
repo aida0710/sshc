@@ -76,6 +76,12 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 		dependencies.Logger.Error("prune the change history", "error", err)
 	}
 	configService := application.NewService(workspace, transactions)
+	// 受け口のポートと Vault の時計が読む前に、このマシンの sshc エンジンの設定を決める。
+	// 前の metadata.json から移せなくても起動は止めない。設定は既定のまま動き、設定の
+	// ファイルを作らないので、直したあとの起動で移し直す。
+	if err := configService.InitialiseEngineSettings(); err != nil && dependencies.Logger != nil {
+		dependencies.Logger.Error("move the engine settings from metadata.json", "error", err)
+	}
 	keyService, keyTransactions := buildKeyService(workspace, dependencies, configService)
 	configService.SetKeyPassphraseVerifier(keyService)
 	diagnosticsService := diagnostics.NewService(workspace, nil, application.LocalFactsFor(dependencies.Home))
@@ -93,7 +99,6 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 	// Vault も設定のトランザクションマネージャを共有する。Vault は ~/.ssh の下の
 	// 管理対象ファイルのひとつにすぎないので、ジャーナルはひとつで足りる。
 	vault := secret.NewService(workspace, transactions, time.Now)
-	vault.SetIdleTimeout(configService.EngineSettings().VaultIdleTimeout(secret.IdleTimeout))
 	configService.SetVault(vault)
 	recentStore := recent.NewStore(workspace, time.Now)
 

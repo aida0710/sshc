@@ -9,10 +9,8 @@ import (
 	"reflect"
 	"sort"
 	"strings"
-	"time"
 
 	"sshc/internal/effective"
-	"sshc/internal/handoff"
 	"sshc/internal/remoteos"
 	"sshc/internal/sshclient"
 	"sshc/internal/storage"
@@ -34,14 +32,11 @@ var (
 	ErrMetadataPath     = errors.New("metadata host path must be relative to the ssh directory")
 	ErrMetadataGroup    = errors.New("metadata group definition is invalid")
 	ErrMetadataTerminal = errors.New("metadata terminal settings are invalid")
-	ErrMetadataEngine   = errors.New("metadata engine settings are invalid")
 	ErrMetadataEncoding = errors.New("metadata terminal encoding is invalid")
 	ErrMetadataOSC52    = errors.New("metadata OSC 52 policy is invalid")
-
-	// ErrMetadataEnginePort と ErrMetadataVaultAutoLock は ErrMetadataEngine の種類。
-	// 画面に、どちらの入力を直せばよいかを返すために分ける。
-	ErrMetadataEnginePort    = fmt.Errorf("%w: port out of range", ErrMetadataEngine)
-	ErrMetadataVaultAutoLock = fmt.Errorf("%w: vault auto lock", ErrMetadataEngine)
+	// ErrMetadataDuplicateHost は、同じ接続の entry が 2 つあることを表す。schema 9 より
+	// 前の形で、移行（DecodeMetadata）だけが 1 つにする。
+	ErrMetadataDuplicateHost = errors.New("metadata has two entries for one connection")
 )
 
 var secretMarkers = []string{"-----BEGIN", "PRIVATE KEY", "ssh-rsa ", "ssh-ed25519 ", "ecdsa-sha2-"}
@@ -81,77 +76,6 @@ type HostMetadata struct {
 	// 空ならVPNを通らない。ssh_configには書かない。OpenSSHが解釈する語では
 	// なく、sshcだけが持つ紐付けだからである。
 	VPN string `json:"vpn,omitempty"`
-}
-
-// EngineSettings は、engine そのものの設定である。
-type EngineSettings struct {
-	Port          int            `json:"port,omitempty"`
-	VaultAutoLock *VaultAutoLock `json:"vaultAutoLock,omitempty"`
-}
-
-// VaultAutoLock は、導出済みのVault鍵をmemoryから破棄する条件である。
-// restartは自動タイマーを無効にするが、手動ロックとengine終了は引き続き鍵を破棄する。
-type VaultAutoLock struct {
-	Mode  string `json:"mode"`
-	Value int    `json:"value,omitempty"`
-	Unit  string `json:"unit,omitempty"`
-}
-
-const (
-	VaultAutoLockIdle    = "idle"
-	VaultAutoLockRestart = "restart"
-	VaultAutoLockMinutes = "minutes"
-	VaultAutoLockHours   = "hours"
-)
-
-// VaultAutoLock の Value（分または時間）の範囲。設定画面は 3 桁までの数で入力させる。
-// engine のポートの範囲は、ブラウザの登録も使うので validate にある。
-const (
-	MinVaultAutoLockValue = 1
-	MaxVaultAutoLockValue = 999
-)
-
-// validateEngineSettings は、EngineSettings の範囲を 1 か所で検査する。
-// 設定画面の保存と metadata.json の検証が使う。
-func validateEngineSettings(settings EngineSettings) error {
-	if settings.Port != 0 && handoff.EnginePort(settings.Port) != nil {
-		return fmt.Errorf("%w %d", ErrMetadataEnginePort, settings.Port)
-	}
-	chosen := settings.VaultAutoLock
-	if chosen == nil {
-		return nil
-	}
-	switch chosen.Mode {
-	case VaultAutoLockRestart:
-		if chosen.Value != 0 || chosen.Unit != "" {
-			return fmt.Errorf("%w: restart-only auto lock has a duration", ErrMetadataVaultAutoLock)
-		}
-	case VaultAutoLockIdle:
-		if chosen.Value < MinVaultAutoLockValue || chosen.Value > MaxVaultAutoLockValue ||
-			(chosen.Unit != VaultAutoLockMinutes && chosen.Unit != VaultAutoLockHours) {
-			return fmt.Errorf("%w: idle auto lock duration", ErrMetadataVaultAutoLock)
-		}
-	default:
-		return fmt.Errorf("%w: mode %q", ErrMetadataVaultAutoLock, chosen.Mode)
-	}
-	return nil
-}
-
-// VaultIdleTimeout は保存済みの選択を実行時の時間へ変換する。
-// 未設定はfallbackを使い、restartは自動ロックなしを表す0を返す。
-func (settings EngineSettings) VaultIdleTimeout(fallback time.Duration) time.Duration {
-	chosen := settings.VaultAutoLock
-	if chosen == nil {
-		return fallback
-	}
-	if chosen.Mode == VaultAutoLockRestart {
-		return 0
-	}
-	unit := time.Minute
-	if chosen.Unit == VaultAutoLockHours {
-		unit = time.Hour
-	}
-	return time.Duration(chosen.Value) * unit
 }
 
 // TerminalAppearance は、端末の見た目の選択である。
@@ -205,9 +129,6 @@ type GroupMetadata struct {
 }
 
 // FileTransferSettings は、SFTP転送キューの設定である。
-//
-// engine 節とは別に置く。Settings 画面の engine 保存は節をまるごと
-// 置き換えるので、同居させれば転送の設定はそのたびに消える。
 type FileTransferSettings struct {
 	MaxConcurrent              int   `json:"maxConcurrent,omitempty"`
 	ClearCompletedAfterSeconds int   `json:"clearCompletedAfterSeconds,omitempty"`
@@ -257,8 +178,6 @@ type Metadata struct {
 	SchemaVersion    int               `json:"schemaVersion"`
 	GroupsFile       string            `json:"groupsFile,omitempty"`
 	EmbeddedTerminal *EmbeddedTerminal `json:"embeddedTerminal,omitempty"`
-	// Engine は engine そのものの設定である。端末のものではない。
-	Engine *EngineSettings `json:"engine,omitempty"`
 	// FileTransfers は SFTP 転送キューの設定である。
 	FileTransfers *FileTransferSettings `json:"fileTransfers,omitempty"`
 	// Backgrounds は端末設定の保存で巻き戻らない独立したライブラリ設定である。
@@ -339,11 +258,17 @@ func DecodeMetadata(contents []byte) (Metadata, error) {
 	// （metadata_vpnsections.go）。v9は、空白や日本語を含むVPNプロファイル名を
 	// 旧バージョンに読ませないための境界でもある。旧バージョンはその名前の metadata を
 	// 書けなくなる。グループ設定の ProxyCommand などを複数の値で保存した前の形は、
-	// 行の残りの 1 つの値にする（metadata_groupsettings.go）。
+	// 行の残りの 1 つの値にする（metadata_groupsettings.go）。同じ接続の entry が 2 つ
+	// あれば 1 つにする（metadata_duplicatehosts.go）。sshc エンジンの設定（engine 節）は
+	// 読まない。このマシンの設定として engine-settings.json へ移すのは、初めて起動した
+	// ときの InitialiseEngineSettings である（metadata_engine.go）。engine 節は、書き直すと
+	// 消える。VPN プロファイルに、名前から決めた識別子を与える（vpnprofile_id.go）。
 	if version.SchemaVersion < 9 {
 		clearUnpinnedServerIdentities(&metadata)
 		clearForeignVPNSections(&metadata)
 		joinSplitRestOfLineSettings(&metadata)
+		keepOneEntryPerConnection(&metadata)
+		giveVPNProfilesMigratedIDs(&metadata)
 	}
 	metadata.SchemaVersion = MetadataSchemaVersion
 	if metadata.GroupsFile == "" {
@@ -388,11 +313,6 @@ func EncodeMetadata(metadata Metadata) ([]byte, error) {
 func ValidateMetadata(metadata Metadata) error {
 	if err := validateShortcutPresets(metadata.ShortcutPresets); err != nil {
 		return err
-	}
-	if settings := metadata.Engine; settings != nil {
-		if err := validateEngineSettings(*settings); err != nil {
-			return err
-		}
 	}
 	if settings := metadata.EmbeddedTerminal; settings != nil {
 		if settings.MaxSessions != 0 &&
@@ -465,10 +385,15 @@ func ValidateMetadata(metadata Metadata) error {
 	if err := validateVPNProfiles(metadata.VPNProfiles); err != nil {
 		return err
 	}
+	identities := make(map[HostIdentity]bool, len(metadata.Hosts))
 	for _, host := range metadata.Hosts {
 		if _, err := checkRelative(host.Identity.Path); err != nil {
 			return err
 		}
+		if identities[host.Identity] {
+			return fmt.Errorf("%w: %s %s", ErrMetadataDuplicateHost, host.Identity.Path, host.Identity.Alias)
+		}
+		identities[host.Identity] = true
 		if host.VPN != "" {
 			// 名前の形だけを見る。指している先があるかは、繋ぐときに確かめる。
 			// 参照が外れただけで metadata 全体を保存できなくしない。
@@ -625,11 +550,6 @@ func ClearHostNote(metadata Metadata, identity HostIdentity) Metadata {
 }
 
 // hostMetadataIndex は、識別子 identity の entry の位置を返す。無ければ -1 を返す。
-//
-// 同じ識別子の entry が 2 つ以上ある metadata.json では先頭を使う。画面へ返す値
-// （HostDetail）と、保存のときに画面の写しと比べる値（applyHostMetadataEdit）が
-// 別の entry を見ると、何度読み直しても写しが古いと判断して保存を断り続けるので、
-// entry を選ぶところはすべてこの関数を通す。
 func hostMetadataIndex(hosts []HostMetadata, identity HostIdentity) int {
 	for index, host := range hosts {
 		if host.Identity == identity {

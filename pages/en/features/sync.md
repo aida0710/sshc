@@ -81,7 +81,7 @@ These defaults apply when `.sshcignore` has not been saved. Existing saved exclu
 
 Once saved, `.sshcignore` itself is synchronized so every device sharing the target uses the same boundary. An existing local file that is excluded is neither overwritten nor removed by normal Pull or Force Pull. The screen warns when a rule excludes connection settings or keys because those files will not reach other devices.
 
-The `.sshcignore` control file and the encrypted transfer documents for Vault and snippets always synchronize, even under a broad rule such as `*`. sshc continues to exclude bucket credentials, device-local history, and live runtime locks independently.
+The `.sshcignore` control file and the encrypted transfer documents for Vault and snippets always synchronize, even under a broad rule such as `*`. sshc continues to exclude bucket credentials, device-local history, live runtime locks, and the port and Vault auto-lock chosen under Settings → Engine independently.
 
 The Sync screen keeps routine operations separate from configuration. Bucket credentials and the encryption key live under Manage sync settings. Snapshot differences and S3 history are under Details and history. History initially shows the latest five entries; expand it or reveal S3 object names only when needed.
 

@@ -477,9 +477,9 @@ export const ja = {
   "snippets.cancel": "中止",
   "snippets.startup": "接続時の自動実行",
   "snippets.startupHint":
-    "選択したホストのシェル準備後に実行します。初回接続と自動再接続のたびに送るため、シークレット変数の値も暗号化した設定に保存され、リモートのシェル履歴や画面に残ることがあります。割り当てた後で接続先または認証の設定（ホスト名、ユーザー、ポート、踏み台、ProxyCommand、ForwardAgentなど）が変わると送りません。",
+    "選択したホストのシェル準備後に実行します。初回接続と自動再接続のたびに送るため、シークレット変数の値も暗号化した設定に保存され、リモートのシェル履歴や画面に残ることがあります。割り当てた後で接続先または認証の設定（ホスト名、ユーザー、ポート、踏み台、ProxyCommand、ForwardAgent、VPNプロファイルなど）が変わると送りません。",
   "snippets.startupStale":
-    "停止中です。割り当てた後で接続先または認証の設定が変わったため、このホストには送りません。接続先を確認してから、もう一度割り当ててください。",
+    "停止中です。割り当てた後で接続先、認証の設定、またはVPNプロファイルが変わったため、このホストには送りません。接続先を確認してから、もう一度割り当ててください。",
   "snippets.startupStaleCount":
     "停止中の割り当てが{count}件あります。ホストを選んで接続先を確認し、もう一度割り当ててください。",
   "snippets.startupStaleHosts": "停止中の割り当てのホスト",
@@ -890,6 +890,7 @@ export const ja = {
   "connection.vpnNone": "VPNを使わない",
   "connection.vpnMissing": "{name}（削除されたプロファイル）",
   "connection.vpnNeedsDNS": "このHostNameはホスト名のため、{name}にVPN内のDNSサーバーの指定が必要です。VPN画面で{name}を編集してDNSサーバーを指定するか、HostNameにIPv4アドレスを指定してください。",
+  "connection.vpnChangeStopsAssignments": "この接続に保存済みパスワード、ワンタイムパスワード、起動スニペットを割り当てている場合、保存すると停止中になります。パスワードとワンタイムパスワードは［Basic］で基本設定を保存し直し、起動スニペットは［Snippets］で割り当て直してください。",
   "terminal.fontSizeHint":
     "ピクセル単位で指定します。空欄の場合は、狭い画面で15、それ以外で13になります。",
   "terminal.copyOnSelectLabel": "選択した文字列を自動的にコピーする",
@@ -966,7 +967,7 @@ export const ja = {
   "settings.pageDescription":
     "ターミナルの動作、sshcの起動設定、このマシンに保存するデータの暗号化を設定します。",
   "settings.engineDescription":
-    "sshcエンジンの待受ポートとVaultの自動ロックを設定します。",
+    "このマシンのsshcエンジンの待受ポートとVaultの自動ロックを設定します。この設定は同期されません。",
   "settings.terminalDescription":
     "新しいターミナルに適用する動作、表示、操作方法を設定します。",
   "settings.notificationsDescription":
@@ -1226,7 +1227,7 @@ export const ja = {
   "vpn.disconnectTitle": "{name}を切断しますか？",
   "vpn.disconnectBody": "このVPN経路を使っている接続（{count}本）も切断されます。切断した接続は自動では再接続しません。",
   "vpn.removeTitle": "{name}を削除しますか？",
-  "vpn.removeBody": "このプロファイルと保存済みのシークレットを削除し、このプロファイルを付けた接続からも設定を外します。接続中の経路は切断します。",
+  "vpn.removeBody": "このプロファイルと保存済みのシークレットを削除し、このプロファイルを付けた接続からも設定を外します。その接続に割り当てた保存済みパスワード、ワンタイムパスワード、起動スニペットは停止中になります。接続中の経路は切断します。",
   "vpn.connections": "このプロファイルを使う接続",
   "vpn.connectionsHint": "接続にプロファイルを付けたり外したりするには、［Connections］で接続を選び、［sshc］タブの「使用するVPNプロファイル」を変更します。",
   "vpn.noConnections": "まだありません。",
@@ -2386,7 +2387,7 @@ export const ja = {
   "conn.basicAssignedTOTP": "割り当て済み：{name}",
   "conn.basicRouteConfirmHeading": "保存済みの認証情報を変更後の設定で使いますか？",
   "conn.basicRouteConfirmBody":
-    "HostName、User、Port、ProxyJumpなどの接続の設定が、認証情報を割り当てたときと変わっています。保存すると、割り当て済みのパスワードまたはワンタイムパスワードを変更後の設定で使用できるようにします。起動スニペットの割り当ては結び直さないため、停止中になります。［Snippets］画面で接続先を確認して、もう一度割り当ててください。",
+    "HostName、User、Port、ProxyJump、VPNプロファイルなどの接続の設定が、認証情報を割り当てたときと変わっています。保存すると、割り当て済みのパスワードまたはワンタイムパスワードを変更後の設定で使用できるようにします。起動スニペットの割り当ては結び直さないため、停止中になります。［Snippets］画面で接続先を確認して、もう一度割り当ててください。",
   "conn.basicRouteConfirmSave": "保存して再確認",
   "conn.basicRouteConfirmCancel": "キャンセル",
   "conn.basicTOTPAction": "ワンタイムパスワードの操作",

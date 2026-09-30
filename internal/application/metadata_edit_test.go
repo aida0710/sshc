@@ -4,6 +4,7 @@ import (
 	"errors"
 	"testing"
 
+	"sshc/internal/platform/windowsacl/acltest"
 	"sshc/internal/storage"
 )
 
@@ -37,11 +38,11 @@ func loadMetadata(t *testing.T, service *Service) Metadata {
 	return stored
 }
 
-// changeEnginePortElsewhere は、画面が読み込んだあとにほかの書き手が別の節を変えた状態を作る。
-func changeEnginePortElsewhere(t *testing.T, service *Service) {
+// changeTransferSettingsElsewhere は、画面が読み込んだあとにほかの書き手が別の節を変えた状態を作る。
+func changeTransferSettingsElsewhere(t *testing.T, service *Service) {
 	t.Helper()
 	stored := loadMetadata(t, service)
-	stored.Engine = &EngineSettings{Port: 18422}
+	stored.FileTransfers = &FileTransferSettings{MaxConcurrent: 3}
 	seedMetadata(t, service, stored)
 }
 
@@ -49,7 +50,7 @@ var bastion = HostIdentity{Path: "config", Alias: "bastion"}
 
 func TestSavingOneHostsMetadataKeepsSectionsChangedElsewhere(t *testing.T) {
 	service, _ := newTestService(t)
-	changeEnginePortElsewhere(t, service)
+	changeTransferSettingsElsewhere(t, service)
 
 	if _, err := service.Save(EditRequest{
 		Kind: EditMetadata, Path: bastion.Path, Alias: bastion.Alias,
@@ -59,8 +60,8 @@ func TestSavingOneHostsMetadataKeepsSectionsChangedElsewhere(t *testing.T) {
 	}
 
 	stored := loadMetadata(t, service)
-	if stored.Engine == nil || stored.Engine.Port != 18422 {
-		t.Fatalf("engine settings = %#v, want the port written elsewhere", stored.Engine)
+	if stored.FileTransfers == nil || stored.FileTransfers.MaxConcurrent != 3 {
+		t.Fatalf("transfer settings = %#v, want the value written elsewhere", stored.FileTransfers)
 	}
 	if len(stored.Hosts) != 1 || stored.Hosts[0].Tags[0] != "prod" {
 		t.Fatalf("hosts = %#v", stored.Hosts)
@@ -181,11 +182,12 @@ func TestSavingGroupsFromAStaleCopyIsRefused(t *testing.T) {
 	}
 }
 
-func TestSavingOneHostsMetadataWithDuplicateEntriesAcceptsTheEntryTheScreenReadAndKeepsOne(t *testing.T) {
+func TestSavingOneHostsMetadataFromAnOlderFileWithTwoEntriesForItKeepsOne(t *testing.T) {
 	service, _ := newTestService(t)
-	metadata := NewMetadata()
-	metadata.Hosts = []HostMetadata{{Identity: bastion, Note: "first"}, {Identity: bastion, Note: "second"}}
-	seedMetadata(t, service, metadata)
+	// schema 9 より前の sshc は、同じ接続の entry を 2 つ残すことがあった。
+	acltest.WritePrivateFile(t, service.metadata.Path(), []byte(`{"schemaVersion":8,"hosts":[`+
+		`{"identity":{"path":"config","alias":"bastion"},"note":"first"},`+
+		`{"identity":{"path":"config","alias":"bastion"},"note":"second"}]}`))
 
 	detail, err := service.HostDetail(bastion.Path, bastion.Alias)
 	if err != nil {
@@ -202,7 +204,7 @@ func TestSavingOneHostsMetadataWithDuplicateEntriesAcceptsTheEntryTheScreenReadA
 	}
 
 	hosts := loadMetadata(t, service).Hosts
-	if len(hosts) != 1 || hosts[0].Note != detail.Metadata.Note || len(hosts[0].Tags) != 1 {
+	if len(hosts) != 1 || hosts[0].Note != "first" || len(hosts[0].Tags) != 1 {
 		t.Fatalf("hosts = %#v, want one entry built from the copy the screen read", hosts)
 	}
 }
@@ -223,5 +225,33 @@ func TestRenamingOntoALeftoverOrphanKeepsOnlyTheRenamedHostsMetadata(t *testing.
 	hosts := loadMetadata(t, service).Hosts
 	if len(hosts) != 1 || hosts[0].Identity != jump || hosts[0].Note != "bastion" {
 		t.Fatalf("hosts = %#v, want only the renamed host's entry", hosts)
+	}
+}
+
+// 同じ接続の entry が 2 つある今の形の metadata.json（手で編集したものなど）は、履歴から
+// 復元しない。書いてしまうと、以後の metadata の保存がすべて断られ、画面から直せない。
+func TestRestoringAMetadataFileThatCouldNotBeSavedIsRefused(t *testing.T) {
+	service, _ := newTestService(t)
+	seedMetadata(t, service, NewMetadata())
+	handEdited := []byte(`{"schemaVersion":9,"hosts":[` +
+		`{"identity":{"path":"config","alias":"bastion"},"note":"first"},` +
+		`{"identity":{"path":"config","alias":"bastion"},"note":"second"}]}`)
+	acltest.WritePrivateFile(t, service.metadata.Path(), handEdited)
+	// 手で編集したものを控えに残して、正しい metadata.json に戻した変更。
+	seedMetadata(t, service, NewMetadata())
+	history, err := service.History()
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixed := history[0]
+	if len(fixed.Restorable) != 1 {
+		t.Fatalf("restorable = %#v, want the hand-edited metadata.json", fixed.Restorable)
+	}
+
+	if _, err := service.Restore(fixed.ID, fixed.Restorable[0]); !errors.Is(err, ErrMetadataDuplicateHost) {
+		t.Fatalf("Restore = %v, want ErrMetadataDuplicateHost", err)
+	}
+	if hosts := loadMetadata(t, service).Hosts; len(hosts) != 0 {
+		t.Fatalf("hosts = %#v, want the metadata.json before the restore", hosts)
 	}
 }

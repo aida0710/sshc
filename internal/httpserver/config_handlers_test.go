@@ -3,6 +3,8 @@ package httpserver
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -225,52 +227,55 @@ func TestEngineSettingsRejectAPortOutsideTheUnprivilegedRange(t *testing.T) {
 	}
 }
 
-// config/save は metadata.json 全体を受け付けない。engine の設定（範囲外のポートを含む）を
-// 書けるのは /metadata/engine だけで、ここへ送られた metadata は要求の誤りとして断る。
+// config/save は metadata.json 全体を受け付けない。節ごとの設定は /metadata/* からだけ
+// 書け、ここへ送られた metadata は要求の誤りとして断る。
 func TestSavingWholeMetadataThroughConfigSaveIsABadRequest(t *testing.T) {
 	harness := newConfigHarness(t)
 	metadata := application.NewMetadata()
-	metadata.Engine = &application.EngineSettings{Port: 80}
+	metadata.FileTransfers = &application.FileTransferSettings{MaxConcurrent: 3}
 	response := harness.call(t, http.MethodPost, "/api/v1/config/save", map[string]any{
 		"kind": application.EditMetadata, "path": "config", "alias": "nas", "metadata": metadata,
 	}, true, true)
 	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "invalid_request") {
 		t.Fatalf("response = %d, body %s", response.Code, response.Body.String())
 	}
-	if settings := harness.service.EngineSettings(); settings != (application.EngineSettings{}) {
-		t.Fatalf("a refused save wrote engine settings: %#v", settings)
+	if settings := harness.service.FileTransferSettings(); settings != (application.FileTransferSettings{}) {
+		t.Fatalf("a refused save wrote transfer settings: %#v", settings)
 	}
 }
 
-func TestSavingEngineSettingsAppliesTheVaultClockImmediately(t *testing.T) {
+// sshc エンジンの設定はこのマシンだけのもので、同期する metadata.json には書かない。
+// 画面は /api/v1/metadata/engine で読む。
+func TestEngineSettingsAreReadFromThisMachineAndNotFromTheSyncedMetadata(t *testing.T) {
 	harness := newConfigHarness(t)
-	secrets := secret.NewService(harness.workspace,
-		storage.NewManager(harness.workspace, time.Now, bytes.NewReader(bytes.Repeat([]byte{0x33}, 4096))),
-		time.Now)
-	handler := ConfigHandlers{Service: harness.service, Vault: secrets}
-
-	call := func(body string) *httptest.ResponseRecorder {
-		t.Helper()
-		request := httptest.NewRequest(http.MethodPut, "/api/v1/metadata/engine", strings.NewReader(body))
-		request.Header.Set(echo.HeaderContentType, "application/json")
-		response := httptest.NewRecorder()
-		if err := handler.SetEngine(harness.echo.NewContext(request, response)); err != nil {
-			t.Fatal(err)
-		}
-		return response
+	if response := harness.call(t, http.MethodPut, "/api/v1/metadata/engine", map[string]any{
+		"port": 43123,
+	}, true, true); response.Code != http.StatusOK {
+		t.Fatalf("save = %d, body %s", response.Code, response.Body.String())
 	}
 
-	if response := call(`{"vaultAutoLock":{"mode":"idle","value":30,"unit":"minutes"}}`); response.Code != http.StatusOK {
-		t.Fatalf("timed save = %d, body %s", response.Code, response.Body.String())
+	response := harness.call(t, http.MethodGet, "/api/v1/metadata/engine", nil, true, true)
+	if response.Code != http.StatusOK {
+		t.Fatalf("engine = %d, body %s", response.Code, response.Body.String())
 	}
-	if got := secrets.IdleTimeout(); got != 30*time.Minute {
-		t.Fatalf("IdleTimeout = %v, want 30m", got)
+	var engine api.EngineSettings
+	if err := json.Unmarshal(response.Body.Bytes(), &engine); err != nil {
+		t.Fatal(err)
 	}
-	if response := call(`{"vaultAutoLock":{"mode":"restart"}}`); response.Code != http.StatusOK {
-		t.Fatalf("restart save = %d, body %s", response.Code, response.Body.String())
+	if engine.Port == nil || *engine.Port != 43123 {
+		t.Fatalf("engine = %s, want this machine's port", response.Body.String())
 	}
-	if got := secrets.IdleTimeout(); got != 0 {
-		t.Fatalf("IdleTimeout = %v, want disabled", got)
+
+	metadata := harness.call(t, http.MethodGet, "/api/v1/metadata", nil, true, true)
+	if metadata.Code != http.StatusOK || strings.Contains(metadata.Body.String(), "43123") {
+		t.Fatalf("metadata = %d, body %s, want no engine settings", metadata.Code, metadata.Body.String())
+	}
+	stored, err := os.ReadFile(filepath.Join(harness.workspace.StateDir(), application.MetadataFileName))
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(stored), "43123") {
+		t.Fatalf("metadata.json carries the port to other machines:\n%s", stored)
 	}
 }
 

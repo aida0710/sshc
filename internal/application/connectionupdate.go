@@ -353,6 +353,12 @@ func (s *Service) planConnectionUpdate(inventory *keys.Inventory, request Update
 	if err != nil {
 		return planned{}, false, err
 	}
+	// 基本設定の保存は metadata を変えない。結び付けの値に入れる VPN プロファイルは、
+	// いま保存されている metadata から読む。
+	stored, _, err := s.metadata.Load()
+	if err != nil {
+		return planned{}, false, err
+	}
 	absolute, err := AbsolutePath(s.workspace.Root(), request.Identity.Path)
 	if err != nil {
 		return planned{}, false, err
@@ -448,7 +454,7 @@ func (s *Service) planConnectionUpdate(inventory *keys.Inventory, request Update
 		_, prepared.explicitIdentityFile = directIdentityFile(file, block)
 		_, prepared.passwordAuthenticationOff = passwordAuthenticationDisabled(
 			effective.Resolve(graph, request.Identity.Alias, s.localFacts()))
-		prepared.authenticationBinding, err = s.passwordBindingForGraph(graph, request.Identity.Alias)
+		prepared.authenticationBinding, err = s.passwordBindingForGraph(graph, stored, request.Identity.Alias)
 		if err != nil {
 			return planned{}, false, err
 		}
@@ -489,7 +495,7 @@ func (s *Service) planConnectionUpdate(inventory *keys.Inventory, request Update
 	_, prepared.explicitIdentityFile = directIdentityFile(file, updatedBlock)
 	_, prepared.passwordAuthenticationOff = passwordAuthenticationDisabled(
 		effective.Resolve(after, request.Identity.Alias, s.localFacts()))
-	prepared.authenticationBinding, err = s.passwordBindingForGraph(after, request.Identity.Alias)
+	prepared.authenticationBinding, err = s.passwordBindingForGraph(after, stored, request.Identity.Alias)
 	if err != nil {
 		return planned{}, false, err
 	}

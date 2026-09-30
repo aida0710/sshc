@@ -4,9 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
-	"time"
 
 	"sshc/internal/platform/windowsacl/acltest"
 	"sshc/internal/storage"
@@ -100,64 +100,6 @@ func TestDecodeMetadataFallsBackToTheDefaultLimits(t *testing.T) {
 	}
 	if limits := kept.TerminalLimits(); limits.MaxSessions != 8 || limits.Scrollback != 32768 {
 		t.Fatalf("limits = %#v", limits)
-	}
-}
-
-func TestVaultAutoLockRoundTripsAndConvertsItsUnit(t *testing.T) {
-	for name, chosen := range map[string]struct {
-		setting *VaultAutoLock
-		want    time.Duration
-	}{
-		"default": {want: 12 * time.Hour},
-		"minutes": {setting: &VaultAutoLock{Mode: VaultAutoLockIdle, Value: 45, Unit: VaultAutoLockMinutes}, want: 45 * time.Minute},
-		"hours":   {setting: &VaultAutoLock{Mode: VaultAutoLockIdle, Value: 18, Unit: VaultAutoLockHours}, want: 18 * time.Hour},
-		"restart": {setting: &VaultAutoLock{Mode: VaultAutoLockRestart}, want: 0},
-	} {
-		t.Run(name, func(t *testing.T) {
-			metadata := NewMetadata()
-			metadata.Engine = &EngineSettings{VaultAutoLock: chosen.setting}
-			encoded, err := EncodeMetadata(metadata)
-			if err != nil {
-				t.Fatal(err)
-			}
-			decoded, err := DecodeMetadata(encoded)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if got := decoded.Engine.VaultIdleTimeout(12 * time.Hour); got != chosen.want {
-				t.Fatalf("VaultIdleTimeout = %v, want %v", got, chosen.want)
-			}
-		})
-	}
-}
-
-func TestVaultAutoLockRefusesAmbiguousOrOutOfRangeSettings(t *testing.T) {
-	for name, chosen := range map[string]VaultAutoLock{
-		"unknown mode":          {Mode: "forever"},
-		"restart with duration": {Mode: VaultAutoLockRestart, Value: 1, Unit: VaultAutoLockHours},
-		"zero":                  {Mode: VaultAutoLockIdle, Unit: VaultAutoLockMinutes},
-		"too large":             {Mode: VaultAutoLockIdle, Value: 1000, Unit: VaultAutoLockHours},
-		"unknown unit":          {Mode: VaultAutoLockIdle, Value: 1, Unit: "days"},
-	} {
-		t.Run(name, func(t *testing.T) {
-			metadata := NewMetadata()
-			metadata.Engine = &EngineSettings{VaultAutoLock: &chosen}
-			if _, err := EncodeMetadata(metadata); !errors.Is(err, ErrMetadataVaultAutoLock) ||
-				!errors.Is(err, ErrMetadataEngine) {
-				t.Fatalf("EncodeMetadata = %v, want ErrMetadataVaultAutoLock within ErrMetadataEngine", err)
-			}
-		})
-	}
-}
-
-func TestEnginePortOutsideTheUnprivilegedRangeIsRefused(t *testing.T) {
-	for _, port := range []int{80, 1023, 65536} {
-		metadata := NewMetadata()
-		metadata.Engine = &EngineSettings{Port: port}
-		if _, err := EncodeMetadata(metadata); !errors.Is(err, ErrMetadataEnginePort) ||
-			!errors.Is(err, ErrMetadataEngine) {
-			t.Fatalf("EncodeMetadata(port %d) = %v, want ErrMetadataEnginePort within ErrMetadataEngine", port, err)
-		}
 	}
 }
 
@@ -305,6 +247,41 @@ func TestSplitRestOfLineValuesAreJoinedOnlyWhenMigratingAnOlderSchema(t *testing
 	}
 	if _, err := EncodeMetadata(current); !errors.Is(err, ErrMetadataGroup) {
 		t.Errorf("saving schema %d split values = %v, want ErrMetadataGroup", MetadataSchemaVersion, err)
+	}
+}
+
+// 同じ接続の entry が 2 つある metadata.json は、schema 9 より前の sshc が書いた形である。
+// 1 つにするのは schema 9 より前の metadata を移行するときだけで、今の形は保存で断る。
+func TestEntriesForTheSameConnectionAreMergedOnlyWhenMigratingAnOlderSchema(t *testing.T) {
+	document := func(version int) []byte {
+		return []byte(fmt.Sprintf(`{"schemaVersion":%d,"hosts":[`+
+			`{"identity":{"path":"config","alias":"jump"},"note":"first"},`+
+			`{"identity":{"path":"config","alias":"web"},"note":"left behind","orphan":true},`+
+			`{"identity":{"path":"config","alias":"jump"},"note":"second"},`+
+			`{"identity":{"path":"config","alias":"web"},"note":"renamed here"}]}`, version))
+	}
+
+	migrated, err := DecodeMetadata(document(8))
+	if err != nil {
+		t.Fatal(err)
+	}
+	notes := make([]string, 0, len(migrated.Hosts))
+	for _, host := range migrated.Hosts {
+		notes = append(notes, host.Note)
+	}
+	if want := []string{"first", "renamed here"}; !reflect.DeepEqual(notes, want) {
+		t.Errorf("schema 8 notes = %q, want %q: the entry without the orphan mark, else the first", notes, want)
+	}
+
+	current, err := DecodeMetadata(document(MetadataSchemaVersion))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(current.Hosts) != 4 {
+		t.Errorf("schema %d hosts = %#v, want them left as stored", MetadataSchemaVersion, current.Hosts)
+	}
+	if _, err := EncodeMetadata(current); !errors.Is(err, ErrMetadataDuplicateHost) {
+		t.Errorf("saving schema %d duplicate entries = %v, want ErrMetadataDuplicateHost", MetadataSchemaVersion, err)
 	}
 }
 

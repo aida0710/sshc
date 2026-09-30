@@ -109,7 +109,7 @@ func TestAFailedVaultWriteLeavesNoPendingRecordAndKeepsMemoryWithDisk(t *testing
 	}
 }
 
-// 片付けた保留記録が vault のファイルに触れていれば、解錠中の vault を読み直す。
+// 片付けた保留記録が vault のファイルに触れていれば、ロックを解除した vault を読み直す。
 // 触れていなければ読み直さない。
 func TestReloadAfterRecoveryReadsTheVaultOnlyWhenTheRecordTouchedIt(t *testing.T) {
 	stale, home := newService(t)
@@ -212,7 +212,7 @@ func leavePendingVaultWrite(t *testing.T, masterPassword string, write func(*sec
 }
 
 // パスワードなしの vault なら、vault だけを書く変更の保留記録は、どの書き手のもの
-// でも起動時に片付く。控えを開く鍵は、起動時の自動解錠で手に入る。
+// でも起動時に片付く。控えを開く鍵は、起動時に自動でロックを解除するときに手に入る。
 func TestStartupRecoversAPendingRecordFromEveryVaultOnlyWriter(t *testing.T) {
 	for name, write := range vaultOnlyWriters {
 		t.Run(name, func(t *testing.T) {
@@ -233,7 +233,7 @@ func TestStartupRecoversAPendingRecordFromEveryVaultOnlyWriter(t *testing.T) {
 }
 
 // マスターパスワードの vault は起動時に開けない。控えを開く鍵が無いので、保留記録は
-// 残して engine を起動し、利用者が解錠したあとで巻き戻せるようにする。
+// 残して engine を起動し、利用者がロックを解除したあとで巻き戻せるようにする。
 func TestStartupWithALockedVaultLeavesAVaultWriteThatNeedsTheKeyForAfterUnlock(t *testing.T) {
 	for name, write := range vaultOnlyWriters {
 		t.Run(name, func(t *testing.T) {

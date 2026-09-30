@@ -150,7 +150,7 @@ func (h CLIHandlers) VaultChange(c *echo.Context) error {
 // vaultCLIProblem は、CLI の Vault の route の拒否を本文なしの状態コードにする。
 //
 // 中断した変更と workspace の busy は、ブラウザの handler と同じく boundaryRefusalFor で
-// 409 にし、想定外の失敗として記録しない。/cli/ の route は本文を返さないので、CLI は
+// 409 にし、想定外の失敗として記録しない。Vault の /cli/ の route は本文を返さないので、CLI は
 // この 2 つをほかの 409 と見分けられず、中断した変更を History で復旧する案内も出せない。
 func vaultCLIProblem(c *echo.Context, err error) error {
 	if refusal, ok := boundaryRefusalFor(err); ok {

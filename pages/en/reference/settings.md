@@ -21,6 +21,8 @@ Paste defaults to Ctrl+V (⌘V on Mac); Ctrl+Shift+V also remains available.
 
 Desktop uses a device-local stable port so bookmarks and the installed web app keep the same URL. It first tries `127.0.0.1:54447`, then stores an available fallback if that port is already in use. You may change the port, but must enrol the browser again at the new origin. The native Android app manages its own local port.
 
+The port and the Vault auto-lock under Engine belong to this device only. Sync does not carry them, so they never change another device's port, browser enrolment, or auto-lock.
+
 ## Appearance
 
 Use Preferences for:

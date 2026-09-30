@@ -174,10 +174,10 @@ func (f *forwards) close() {
 //
 // 開けなかった転送があっても接続は続ける。ポートが埋まっているのは普通の
 // 出来事であり、それを理由にセッションごと失う方が困る。理由の語はその転送の
-// Problem に残り、エラーの文は端末に 1 行出る。
-func (f *forwards) open(client *ssh.Client, specs []ForwardSpec, report io.Writer) {
+// Problem に残り、エラーの文は接続ログに 1 行出る。
+func (f *forwards) open(client *ssh.Client, specs []ForwardSpec, trace *tracer) {
 	for _, spec := range specs {
-		f.openFromConfig(client, spec, report)
+		f.openFromConfig(client, spec, trace)
 	}
 }
 
@@ -192,9 +192,9 @@ const (
 	forwardTemporary
 )
 
-// openFromConfig は、設定の転送を1つ開き、その結果をターミナルへ1行書く。
+// openFromConfig は、設定の転送を1つ開き、その結果を接続ログへ1行書く。
 // 開けなかった転送も、理由を読めるよう一覧に残す。
-func (f *forwards) openFromConfig(client *ssh.Client, spec ForwardSpec, report io.Writer) {
+func (f *forwards) openFromConfig(client *ssh.Client, spec ForwardSpec, trace *tracer) {
 	entry, err := f.listen(client, spec, forwardFromConfig)
 	switch {
 	case errors.Is(err, terminal.ErrNotConnected):
@@ -202,9 +202,9 @@ func (f *forwards) openFromConfig(client *ssh.Client, spec ForwardSpec, report i
 		return
 	case err != nil:
 		f.note(entry)
-		_, _ = io.WriteString(report, "sshc: "+spec.Address()+" could not be opened: "+err.Error()+"\r\n")
+		trace.announce("%sのポート転送を開始できませんでした：%v", spec.Address(), err)
 	default:
-		_, _ = io.WriteString(report, "sshc: forwarding "+describe(spec)+"\r\n")
+		trace.announce("ポート転送を開始しました：%s", describe(spec))
 	}
 }
 
@@ -265,11 +265,12 @@ func (f *forwards) stop(id string) error {
 	return listener.Close()
 }
 
+// describe は、接続ログに書く転送の中身（待ち受けるアドレスと転送先）を返す。
 func describe(spec ForwardSpec) string {
 	if spec.Kind == terminal.ForwardDynamic {
-		return spec.Address() + " as a SOCKS5 proxy"
+		return spec.Address() + "（SOCKS5プロキシ）"
 	}
-	return spec.Address() + " to " + spec.To
+	return spec.Address() + " → " + spec.To
 }
 
 // maxConcurrentForwardConnections は、ひとつの listener が同時に扱う接続数である。
@@ -385,44 +386,48 @@ func closeWrite(conn net.Conn) {
 	}
 }
 
+// agentForwardingFailedNotice は、ssh-agent 転送を開始できなかったときの接続ログの行の
+// 書き出しである。理由はこのあとに続ける。
+const agentForwardingFailedNotice = "ssh-agent転送を開始できませんでした"
+
 // forwardAgent は、こちらの agent をリモートへ貸す。
 //
 // 鍵そのものは渡らない。渡るのは鍵を使う権利である。リモートのプロセスが
 // 署名を求めると、その要求はこのチャンネルを通ってこちらの agent へ届く。
 // agent への接続は SSH 接続が閉じるまで生かし、forwards.close で閉じる。
 // x/crypto の ForwardToAgent は自分では閉じないので、ここで持たないと漏れる。
-func (f *forwards) forwardAgent(client *ssh.Client, session *ssh.Session, connector AgentConnector, report io.Writer) {
+func (f *forwards) forwardAgent(client *ssh.Client, session *ssh.Session, connector AgentConnector, trace *tracer) {
 	entry := terminal.Forward{Kind: terminal.ForwardAgent}
 	if connector == nil || connector.Address() == "" {
 		entry.Problem = terminal.ForwardProblemAgentUnreachable
-		_, _ = io.WriteString(report, "sshc: agent forwarding was asked for but no agent is reachable\r\n")
+		trace.announce("%s。接続できるssh-agentがありません。", agentForwardingFailedNotice)
 		f.note(entry)
 		return
 	}
 	conn, err := connector.Connect(context.Background())
 	if err != nil {
 		entry.Problem = terminal.ForwardProblemAgentUnreachable
-		// 理由は agent の実装が書いた文で、改行を含みうる。LF のままではターミナルの
-		// 次の行が行頭へ戻らない。
-		_, _ = io.WriteString(report, "sshc: agent forwarding: "+terminalNewlines(err.Error())+"\r\n")
+		// 理由は agent の実装が書いた文で、改行を含みうる。announce は行ごとに
+		// 接続ログの印を付け、CRLF で終える。
+		trace.announce("%s。ssh-agentに接続できません：%v", agentForwardingFailedNotice, err)
 		f.note(entry)
 		return
 	}
 	if err := agent.ForwardToAgent(client, agent.NewClient(conn)); err != nil {
 		entry.Problem = terminal.ForwardProblemFailed
-		_, _ = io.WriteString(report, "sshc: agent forwarding: "+err.Error()+"\r\n")
+		trace.announce("%s：%v", agentForwardingFailedNotice, err)
 		_ = conn.Close()
 		f.note(entry)
 		return
 	}
 	if err := agent.RequestAgentForwarding(session); err != nil {
 		entry.Problem = terminal.ForwardProblemFailed
-		_, _ = io.WriteString(report, "sshc: agent forwarding: "+err.Error()+"\r\n")
+		trace.announce("%s：%v", agentForwardingFailedNotice, err)
 		_ = conn.Close()
 		f.note(entry)
 		return
 	}
-	_, _ = io.WriteString(report, "sshc: forwarding this agent to the remote\r\n")
+	trace.announce("ssh-agent転送を開始しました。")
 	f.mutex.Lock()
 	if f.closed {
 		f.mutex.Unlock()

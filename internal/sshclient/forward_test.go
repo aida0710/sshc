@@ -56,6 +56,14 @@ func echoServer(t *testing.T) string {
 // forwardingSession は、その転送を持つセッションを一本開く。
 func forwardingSession(t *testing.T, forwards []sshclient.ForwardSpec) (terminal.Process, *testServer) {
 	t.Helper()
+	process, server, _ := forwardingSessionWithLog(t, forwards)
+	return process, server
+}
+
+// forwardingSessionWithLog は、forwardingSession と同じセッションを開き、シェルが
+// 出力を始めるまでにターミナルへ出た接続ログも返す。
+func forwardingSessionWithLog(t *testing.T, forwards []sshclient.ForwardSpec) (terminal.Process, *testServer, string) {
+	t.Helper()
 	path, contents, public := keyPair(t)
 	server := newTestServer(t, serverOptions{
 		AcceptKeys:       []ssh.PublicKey{public},
@@ -76,8 +84,8 @@ func forwardingSession(t *testing.T, forwards []sshclient.ForwardSpec) (terminal
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = process.Close() })
-	readUntil(t, process, "ready")
-	return process, server
+	connectionLog := readUntil(t, process, "ready")
+	return process, server, connectionLog
 }
 
 // freePort は、いま誰も使っていないポートを返す。
@@ -153,6 +161,38 @@ func TestABindFailureDoesNotEndTheSession(t *testing.T) {
 	// セッションは実行中。ポートひとつのためにコンソールを失わない。
 	if _, err := process.Write([]byte("still here\r")); err != nil {
 		t.Fatalf("the session died with the forward: %v", err)
+	}
+}
+
+// 転送を開いたことと開けなかったことは、画面のターミナルと sshc ssh に同じ
+// 接続ログの日本語の行（[sshc] で始まる）で出る。
+func TestTheConnectionLogSaysWhichForwardsOpenedAndWhichDidNot(t *testing.T) {
+	taken, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = taken.Close() }()
+	_, takenPort, err := net.SplitHostPort(taken.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	localPort := freePort(t)
+	dynamicPort := freePort(t)
+
+	_, _, connectionLog := forwardingSessionWithLog(t, []sshclient.ForwardSpec{
+		{Kind: terminal.ForwardLocal, ListenPort: localPort, To: "10.0.0.5:80"},
+		{Kind: terminal.ForwardDynamic, ListenPort: dynamicPort},
+		{Kind: terminal.ForwardLocal, ListenPort: takenPort, To: "10.0.0.6:80"},
+	})
+
+	for _, line := range []string{
+		"[sshc] ポート転送を開始しました：127.0.0.1:" + localPort + " → 10.0.0.5:80\r\n",
+		"[sshc] ポート転送を開始しました：127.0.0.1:" + dynamicPort + "（SOCKS5プロキシ）\r\n",
+		"[sshc] 127.0.0.1:" + takenPort + "のポート転送を開始できませんでした：",
+	} {
+		if !strings.Contains(connectionLog, line) {
+			t.Errorf("the connection log does not have %q: %q", line, connectionLog)
+		}
 	}
 }
 
@@ -448,7 +488,10 @@ func assertAgentForwarded(t *testing.T, connector sshclient.AgentConnector, agen
 		t.Fatal(err)
 	}
 	defer func() { _ = process.Close() }()
-	readUntil(t, process, "ready")
+	connectionLog := readUntil(t, process, "ready")
+	if !strings.Contains(connectionLog, "[sshc] ssh-agent転送を開始しました。\r\n") {
+		t.Errorf("the connection log does not say the agent is forwarded: %q", connectionLog)
+	}
 
 	select {
 	case fingerprint := <-seen:
@@ -487,7 +530,7 @@ func TestAgentForwardingWithoutAnAgentStillConnects(t *testing.T) {
 	defer func() { _ = process.Close() }()
 
 	seen := readUntil(t, process, "ready")
-	if !strings.Contains(seen, "no agent is reachable") {
+	if !strings.Contains(seen, "[sshc] ssh-agent転送を開始できませんでした。接続できるssh-agentがありません。\r\n") {
 		t.Errorf("the terminal does not say why the agent was not forwarded: %q", seen)
 	}
 	forwards := process.(terminal.Forwarder).Forwards()
@@ -505,13 +548,23 @@ func (multiLineUnreachableAgent) Connect(context.Context) (net.Conn, error) {
 	return nil, errors.New("no ssh-agent is reachable from this process\nthe agent pipe is not there")
 }
 
-// 転送できなかった理由は、どの行もターミナルの行頭から始まる。xterm は LF だけでは
-// 行頭へ戻らないので、LF のまま書くと表示が階段状に崩れる。
+// 転送できなかった理由は、どの行もターミナルの行頭から、接続ログの印を付けて始まる。
+// xterm は LF だけでは行頭へ戻らないので、LF のまま書くと表示が階段状に崩れる。
 func TestAgentForwardingFailureStartsEveryReasonLineAtTheLeftEdge(t *testing.T) {
-	for name, connector := range map[string]sshclient.AgentConnector{
-		"a socket nobody listens on":    unixSocketAgent(filepath.Join(t.TempDir(), "gone.sock")),
-		"a reason written on two lines": multiLineUnreachableAgent{},
+	for name, unreachable := range map[string]struct {
+		connector sshclient.AgentConnector
+		// laterReasonLine は、理由の 2 行目以降としてターミナルに出るはずの行である。
+		laterReasonLine string
+	}{
+		"a socket nobody listens on": {
+			connector: unixSocketAgent(filepath.Join(t.TempDir(), "gone.sock")),
+		},
+		"a reason written on two lines": {
+			connector:       multiLineUnreachableAgent{},
+			laterReasonLine: "[sshc] the agent pipe is not there\r\n",
+		},
 	} {
+		connector := unreachable.connector
 		t.Run(name, func(t *testing.T) {
 			path, contents, public := keyPair(t)
 			server := newTestServer(t, serverOptions{
@@ -536,11 +589,14 @@ func TestAgentForwardingFailureStartsEveryReasonLineAtTheLeftEdge(t *testing.T) 
 			defer func() { _ = process.Close() }()
 
 			seen := readUntil(t, process, "ready")
-			if !strings.Contains(seen, "sshc: agent forwarding: ") {
+			if !strings.Contains(seen, "[sshc] ssh-agent転送を開始できませんでした。ssh-agentに接続できません：") {
 				t.Fatalf("the terminal does not say why the agent was not forwarded: %q", seen)
 			}
 			if strings.Contains(strings.ReplaceAll(seen, "\r\n", ""), "\n") {
 				t.Errorf("a line of the reason does not return to the left edge: %q", seen)
+			}
+			if !strings.Contains(seen, unreachable.laterReasonLine) {
+				t.Errorf("a later line of the reason is not marked as the connection log: %q", seen)
 			}
 		})
 	}

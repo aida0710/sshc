@@ -24,6 +24,9 @@ var (
 // 接続先は持たない。接続先は、このプロファイルを付けた接続（hosts[].vpn）の
 // HostName と Port で決まる。
 type VPNProfile struct {
+	// ID は、sshc が作るときに決める識別子である（vpnprofile_id.go）。改名と編集では
+	// 変えない。保存の要求に書かれた値は使わない。
+	ID      string          `json:"id,omitempty"`
 	Name    string          `json:"name"`
 	Backend vpn.BackendName `json:"backend"`
 	// DNS は、接続先を VPN の中で名前解決するための DNS サーバーである。
@@ -157,6 +160,7 @@ func (stored VPNProfile) Profile() (vpn.Profile, error) {
 // 新しい schemaVersion の文書を読まないので、ここは知っている形だけを通す。
 func validateVPNProfiles(profiles []VPNProfile) error {
 	seen := map[string]bool{}
+	seenIDs := map[string]bool{}
 	for _, stored := range profiles {
 		if err := vpn.ValidateName(stored.Name); err != nil {
 			return fmt.Errorf("%w: %w", ErrMetadataVPN, err)
@@ -165,6 +169,15 @@ func validateVPNProfiles(profiles []VPNProfile) error {
 			return fmt.Errorf("%w: 同じ名前が二つあります: %s", ErrMetadataVPN, stored.Name)
 		}
 		seen[stored.Name] = true
+		// 識別子は割り当ての結び付けの値に入る。無い、または2つのプロファイルで同じだと、
+		// 別のプロファイルを通る接続に割り当てが渡りうる。
+		if !validVPNProfileID(stored.ID) {
+			return fmt.Errorf("%w: %s has no valid id", ErrMetadataVPN, stored.Name)
+		}
+		if seenIDs[stored.ID] {
+			return fmt.Errorf("%w: %s shares its id with another profile", ErrMetadataVPN, stored.Name)
+		}
+		seenIDs[stored.ID] = true
 		if _, err := stored.Profile(); err != nil {
 			return err
 		}

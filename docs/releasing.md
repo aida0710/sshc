@@ -1,6 +1,6 @@
 # リリース運用
 
-`scripts/release/publish.sh`は、main CIの待機から、タグの作成、`release` environmentの承認、公開後の検証までを1つのコマンドで実行します。ビルドはGitHub Actionsで進みますが、runの監視と承認、成果物の手動確認は不要です。publish.shを実行することが、その公開の承認になります（`docs/release-install.md`の「リポジトリ管理者向けの公開保護」）。
+`scripts/release/publish.sh`は、main CIと埋め込みUIの照合（`release-ui-check.yml`）の待機から、タグの作成、`release` environmentの承認、公開後の検証までを1つのコマンドで実行します。ビルドはGitHub Actionsで進みますが、runの監視と承認、成果物の手動確認は不要です。publish.shを実行することが、その公開の承認になります（`docs/release-install.md`の「リポジトリ管理者向けの公開保護」）。
 
 ## 事前条件
 
@@ -30,6 +30,8 @@ gh run watch <databaseId> --exit-status
 
 3つのjobがすべて成功したら、公開へ進んでください。失敗したjobのログには、コミット済みのものと違ったファイルが`git status --porcelain`の形式で表示されます。その場合は公開せず、差分の原因を調べてください。
 
+`publish.sh`も、公開するcommitでこのworkflowが成功したことを、main CIと同じやり方（同じSHAで`main`から走ったrunのうち、いちばん新しいもの）で確かめます。runが無ければ、main CIを待つ前にタグを作らずに終了します。runが実行中なら終わるまで待ち、失敗していればタグを作らずに終了します。
+
 ## 公開
 
 ```sh
@@ -38,14 +40,14 @@ scripts/release/publish.sh v0.33.2
 
 スクリプトは次を順番に行います。
 
-1. HEADと`origin/main`が同じで、同じSHAでmain CIが成功したことを照合
+1. HEADと`origin/main`が同じで、同じSHAでmain CIと`release-ui-check.yml`が成功したことを照合
 2. 注釈付きタグを作成してpush
 3. Releaseワークフローのrunを見つけ、`release` environmentだけを実行者の認証情報で承認（確認の入力は求めない）
 4. ワークフローのすべてのjobが成功するまで、状態の変化を表示
 5. Immutable Release、9つの成果物、`checksums.txt`、すべてのattestation、APK、このマシン向けのバイナリが報告するバージョン、Releaseの本文を検証
 6. 安定バージョンでは、Homebrewのformulaが指すタグとソースのSHA-256を検証
 
-main CIまたはReleaseワークフローが失敗した場合、タグを動かしたり削除したりせず終了します。対処は次の「失敗したとき」を参照してください。
+main CI、`release-ui-check.yml`、Releaseワークフローのどれかが失敗した場合、タグを動かしたり削除したりせず終了します。対処は次の「失敗したとき」を参照してください。
 
 ## 失敗したとき
 
@@ -53,7 +55,13 @@ main CIまたはReleaseワークフローが失敗した場合、タグを動か
 
 ### タグをpushする前に止まった場合
 
-main CIの失敗、CIを待つあいだの`origin/main`の更新、タグのpushの失敗では、タグはまだ作成されていません。タグのpushに失敗したときは、publish.shが作成したローカルのタグを削除してから終了します。main CIの失敗ではmainを直してpushしてから、それ以外は原因を取り除いてから、同じバージョンで`scripts/release/publish.sh <tag>`をもう一度実行します。
+次の場合、タグはまだ作成されていません。それぞれの対処をしてから、同じバージョンで`scripts/release/publish.sh <tag>`をもう一度実行します。
+
+- main CIの失敗: mainを直してpushする
+- `release-ui-check.yml`のrunが無い: 「公開の前に埋め込みUIの照合を試す」の手順で走らせる
+- `release-ui-check.yml`の失敗: 失敗したjobのログで、コミット済みのものと違ったファイルを調べて直す
+- CIを待つあいだの`origin/main`の更新: 公開するcommitを選び直す
+- タグのpushの失敗: 原因を取り除く。publish.shは、作成したローカルのタグを削除してから終了します
 
 ### タグのpush後にReleaseワークフローが始まらない場合
 

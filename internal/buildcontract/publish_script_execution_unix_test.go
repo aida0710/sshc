@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // verifiedReleaseTag は、publish.sh --verify-onlyへ渡す架空の公開済みtagである。
@@ -176,6 +177,172 @@ esac
 			}
 			for _, entry := range left {
 				t.Errorf("publish.sh left %s in TMPDIR after the %s check failed", entry.Name(), test.failure)
+			}
+		})
+	}
+}
+
+// publishedCommit は、publish.sh の公開の手順に渡す架空の HEAD と origin/main の SHA である。
+const publishedCommit = "0123456789abcdef0123456789abcdef01234567"
+
+// publishedPrereleaseTag は、公開の手順を走らせる架空の tag である。安定バージョンだけが走らせる
+// 導入例の照合（check-pinned-installers.sh）を、このテストの外に置くためにプレリリースにする。
+const publishedPrereleaseTag = "v9.8.7-rc.1"
+
+// writeFreshVPNSnapshot は、publish.sh が古さを警告する VPN イメージの Ubuntu snapshot を、
+// 今日の日付で置く。警告の行でテストの出力を埋めないためである。
+func writeFreshVPNSnapshot(t *testing.T, repository string) {
+	t.Helper()
+	directory := filepath.Join(repository, "internal", "vpn", "container")
+	if err := os.MkdirAll(directory, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	snapshot := "snapshot=" + time.Now().UTC().Format("20060102") + "T000000Z\n"
+	if err := os.WriteFile(filepath.Join(directory, "Dockerfile"), []byte(snapshot), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// workflowRun は、gh api が返す workflow の run の一覧の 1 行である。
+type workflowRun struct {
+	ID         int    `json:"id"`
+	HeadSHA    string `json:"head_sha"`
+	HeadBranch string `json:"head_branch"`
+	Event      string `json:"event"`
+	CreatedAt  string `json:"created_at"`
+}
+
+// workflowRunList は、gh api repos/…/actions/workflows/<file>/runs の応答の JSON である。
+func workflowRunList(t *testing.T, runs ...workflowRun) string {
+	t.Helper()
+	body, err := json.Marshal(struct {
+		WorkflowRuns []workflowRun `json:"workflow_runs"`
+	}{WorkflowRuns: append([]workflowRun{}, runs...)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(body)
+}
+
+// 公開する commit でリリースの runner の埋め込み UI の照合（release-ui-check.yml）が
+// 成功していなければ、publish.sh は tag を作らずに止まる。照合を走らせ忘れても、
+// 失敗を見落としても、公開の当日に Release の途中で止まることになるためである。
+func TestPublishTagsOnlyACommitWhoseReleaseUICheckSucceeded(t *testing.T) {
+	for _, tool := range []string{"bash", "jq"} {
+		if _, err := exec.LookPath(tool); err != nil {
+			t.Skipf("%s is required to run publish.sh", tool)
+		}
+	}
+	jq, _ := exec.LookPath("jq")
+	const uiCheckRunID = 22
+	ciRuns := workflowRunList(t, workflowRun{
+		ID: 11, HeadSHA: publishedCommit, HeadBranch: "main", Event: "push", CreatedAt: "2026-10-01T00:00:00Z",
+	})
+	uiCheckOnTheCommit := workflowRun{
+		ID: uiCheckRunID, HeadSHA: publishedCommit, HeadBranch: "main", Event: "workflow_dispatch", CreatedAt: "2026-10-01T00:10:00Z",
+	}
+	uiCheckOnAnotherCommit := uiCheckOnTheCommit
+	uiCheckOnAnotherCommit.HeadSHA = strings.Repeat("f", 40)
+	uiCheckOnAnotherBranch := uiCheckOnTheCommit
+	uiCheckOnAnotherBranch.HeadBranch = "fix/release-ui"
+
+	for _, test := range []struct {
+		name        string
+		uiCheckRuns string
+		conclusion  string
+		wantTag     bool
+		wantOutput  string
+	}{
+		{name: "the check was never run", uiCheckRuns: workflowRunList(t),
+			wantOutput: "no Release UI check run exists for " + publishedCommit},
+		{name: "the check ran on another commit", uiCheckRuns: workflowRunList(t, uiCheckOnAnotherCommit),
+			wantOutput: "no Release UI check run exists for " + publishedCommit},
+		{name: "the check ran on another branch", uiCheckRuns: workflowRunList(t, uiCheckOnAnotherBranch),
+			wantOutput: "no Release UI check run exists for " + publishedCommit},
+		{name: "the check failed", uiCheckRuns: workflowRunList(t, uiCheckOnTheCommit), conclusion: "failure",
+			wantOutput: "Release UI check failed"},
+		// 通ったあとは tag を作って push する。偽の git は push を断るので、そこで止まる。
+		{name: "the check succeeded", uiCheckRuns: workflowRunList(t, uiCheckOnTheCommit), conclusion: "success",
+			wantTag: true, wantOutput: "tag push failed"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			root := t.TempDir()
+			commands := filepath.Join(root, "commands")
+			repository := filepath.Join(root, "repository")
+			for _, directory := range []string{commands, filepath.Join(repository, "docs", "releases")} {
+				if err := os.MkdirAll(directory, 0o755); err != nil {
+					t.Fatal(err)
+				}
+			}
+			notes := filepath.Join(repository, "docs", "releases", publishedPrereleaseTag+".md")
+			if err := os.WriteFile(notes, []byte("# "+publishedPrereleaseTag+"\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			writeFreshVPNSnapshot(t, repository)
+			gitCalls := filepath.Join(root, "git-calls")
+
+			fakeCommands := map[string]string{
+				"git": `#!/bin/sh
+printf '%s\n' "$*" >> "$SSHC_TEST_GIT_CALLS"
+case "$1 $2" in
+  "rev-parse --show-toplevel") printf '%s\n' "$SSHC_TEST_REPOSITORY" ;;
+  "rev-parse HEAD"|"rev-parse refs/remotes/origin/main") printf '%s\n' "$SSHC_TEST_COMMIT" ;;
+  "push origin") exit 1 ;;
+esac
+exit 0
+`,
+				"gh": `#!/bin/sh
+[ "$1 $2" != "auth status" ] || exit 0
+for argument in "$@"; do
+  case "$argument" in repos/*) path=$argument ;; esac
+done
+case "$path" in
+  */actions/workflows/ci.yml/runs) printf '%s' "$SSHC_TEST_CI_RUNS" ;;
+  */actions/workflows/release-ui-check.yml/runs) printf '%s' "$SSHC_TEST_UI_CHECK_RUNS" ;;
+  */actions/runs/11) printf '{"status":"completed","conclusion":"success"}' ;;
+  */actions/runs/22) printf '{"status":"completed","conclusion":"%s"}' "$SSHC_TEST_UI_CHECK_CONCLUSION" ;;
+  *) exit 1 ;;
+esac
+`,
+				"unzip": "#!/bin/sh\nexit 1\n",
+				"curl":  "#!/bin/sh\nexit 1\n",
+			}
+			for name, body := range fakeCommands {
+				if err := os.WriteFile(filepath.Join(commands, name), []byte(body), 0o755); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			script, err := filepath.Abs(filepath.Join("..", "..", "scripts", "release", "publish.sh"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			command := exec.Command("bash", script, publishedPrereleaseTag)
+			command.Env = append(os.Environ(),
+				"PATH="+commands+":"+filepath.Dir(jq)+":/usr/bin:/bin",
+				"SSHC_RELEASE_REPOSITORY=aida0710/sshc",
+				"SSHC_RELEASE_POLL_SECONDS=0",
+				"SSHC_TEST_REPOSITORY="+repository,
+				"SSHC_TEST_COMMIT="+publishedCommit,
+				"SSHC_TEST_GIT_CALLS="+gitCalls,
+				"SSHC_TEST_CI_RUNS="+ciRuns,
+				"SSHC_TEST_UI_CHECK_RUNS="+test.uiCheckRuns,
+				"SSHC_TEST_UI_CHECK_CONCLUSION="+test.conclusion,
+			)
+			output, err := command.CombinedOutput()
+			if err == nil {
+				t.Fatalf("publish.sh succeeded against a fake that refuses the tag push:\n%s", output)
+			}
+			if !strings.Contains(string(output), test.wantOutput) {
+				t.Fatalf("publish.sh did not say %q:\n%s", test.wantOutput, output)
+			}
+			calls, err := os.ReadFile(gitCalls)
+			if err != nil {
+				t.Fatal(err)
+			}
+			tagged := strings.Contains(string(calls), "tag -a "+publishedPrereleaseTag+" "+publishedCommit)
+			if tagged != test.wantTag {
+				t.Fatalf("publish.sh created the tag = %t, want %t:\n%s", tagged, test.wantTag, output)
 			}
 		})
 	}

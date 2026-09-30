@@ -319,7 +319,7 @@ func TestLocalForwardCarriesTrafficThroughRealOpenSSH(t *testing.T) {
 		t.Fatalf("opening a session with local forwarding: %v", err)
 	}
 	t.Cleanup(func() { _ = process.Close() })
-	readUntil(t, process, "sshc: forwarding ")
+	readUntil(t, process, "[sshc] ポート転送を開始しました：")
 
 	connection, err := dialEventually(net.JoinHostPort(sshclient.LoopbackHost, port), 10*time.Second)
 	if err != nil {
@@ -345,7 +345,7 @@ func TestDynamicForwardCarriesSOCKSTrafficThroughRealOpenSSH(t *testing.T) {
 		t.Fatalf("opening a session with dynamic forwarding: %v", err)
 	}
 	t.Cleanup(func() { _ = process.Close() })
-	readUntil(t, process, "sshc: forwarding ")
+	readUntil(t, process, "[sshc] ポート転送を開始しました：")
 
 	connection, err := dialEventually(net.JoinHostPort(sshclient.LoopbackHost, port), 10*time.Second)
 	if err != nil {

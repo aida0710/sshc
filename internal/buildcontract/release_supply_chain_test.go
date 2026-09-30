@@ -156,8 +156,10 @@ func TestOperatorReleaseScriptPreservesTheReleaseGates(t *testing.T) {
 	for _, required := range []string{
 		`[ -z "$(git status --porcelain)" ]`,
 		`[ "$head_sha" = "$remote_main" ]`,
-		`actions/workflows/ci.yml/runs`,
+		`actions/workflows/$workflow/runs`,
 		`.head_sha == $sha and .head_branch == "main"`,
+		`ci_run=$(main_workflow_run ci.yml)`,
+		`ui_check_run=$(main_workflow_run release-ui-check.yml)`,
 		`git tag -a "$tag" "$head_sha"`,
 		`git push origin "refs/tags/$tag"`,
 		`.environment.name == "release"`,
