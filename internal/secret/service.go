@@ -46,6 +46,10 @@ var (
 	ErrNoCompatibleBackup = errors.New("no compatible vault backup was found")
 )
 
+// StorageBusyWait は、ErrStorageBusy を返すまでに別の workspace 更新を待つ上限である。
+// ErrStorageBusy と同じく、HTTP 層が storage を import せずに待ち時間を伝えるための別名である。
+const StorageBusyWait = storage.MutationLockWait
+
 // IdleTimeout は、最後に資格情報を使用してから vault を自動ロックするまでの時間。
 // engine の起動形態にかかわらず適用する。
 const IdleTimeout = 12 * time.Hour

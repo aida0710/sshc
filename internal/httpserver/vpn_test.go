@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -31,10 +32,10 @@ const (
 // vpnServices は、VPN の経路を扱う engine の持ち主である。Docker は使わない。
 // ここで確かめるのは、設定と秘密の扱いと、応答の形だからである。
 type vpnServices struct {
-	config   *application.Service
-	secrets  *secret.Service
-	profiles *vpnprofile.Service
-	vpn      *vpn.Manager
+	config    *application.Service
+	secrets   *secret.Service
+	profiles  *vpnprofile.Service
+	vpnRoutes *vpn.Manager
 }
 
 func newVPNServices(t *testing.T) vpnServices {
@@ -57,9 +58,9 @@ func newVPNServices(t *testing.T) vpnServices {
 	if err := secrets.Initialise(vaultPassphrase); err != nil {
 		t.Fatal(err)
 	}
-	vpnManager := vpn.New(filepath.Join(root, "sshc", "vpn"), os.Getuid(), nil)
-	profiles := vpnprofile.New(vpnprofile.Dependencies{Configuration: config, Vault: secrets, Routes: vpnManager})
-	return vpnServices{config: config, secrets: secrets, profiles: profiles, vpn: vpnManager}
+	vpnRoutes := vpn.New(filepath.Join(root, "sshc", "vpn"), os.Getuid(), nil)
+	profiles := vpnprofile.New(vpnprofile.Dependencies{Configuration: config, Vault: secrets, Routes: vpnRoutes})
+	return vpnServices{config: config, secrets: secrets, profiles: profiles, vpnRoutes: vpnRoutes}
 }
 
 // vpnEngine は、VPN の経路を扱う engine を一台組む。
@@ -68,7 +69,7 @@ func vpnEngine(t *testing.T) (*echo.Echo, *secret.Service, *application.Service)
 	services := newVPNServices(t)
 	engine := echo.New()
 	registerVPNRoutes(engine, VPNHandlers{
-		Config: services.config, Profiles: services.profiles, VPN: services.vpn,
+		Config: services.config, Profiles: services.profiles, VPNRoutes: services.vpnRoutes,
 	})
 	return engine, services.secrets, services.config
 }
@@ -94,7 +95,7 @@ func vpnRevealEngine(t *testing.T) (*echo.Echo, *secret.Service, session.Credent
 	actions := ActionHandlers{Sessions: manager, Kinds: registry}
 	registerActionRoutes(engine, actions)
 	registerVPNRoutes(engine, VPNHandlers{
-		Config: services.config, Profiles: services.profiles, VPN: services.vpn, Actions: actions,
+		Config: services.config, Profiles: services.profiles, VPNRoutes: services.vpnRoutes, Actions: actions,
 	})
 	return engine, services.secrets, credentials
 }
@@ -152,12 +153,12 @@ func TestASavedProfileIsListedWithTheConnectionsThatUseIt(t *testing.T) {
 	if len(overview.Profiles) != 1 {
 		t.Fatalf("profiles = %+v", overview.Profiles)
 	}
-	session := overview.Profiles[0]
-	if session.Profile.Name != "lab" || session.Profile.Backend != "wireguard" {
-		t.Fatalf("profile = %+v", session.Profile)
+	status := overview.Profiles[0]
+	if status.Profile.Name != "lab" || status.Profile.Backend != "wireguard" {
+		t.Fatalf("profile = %+v", status.Profile)
 	}
-	if len(session.Connections) != 1 || session.Connections[0] != "lab" {
-		t.Fatalf("connections = %v", session.Connections)
+	if len(status.Connections) != 1 || status.Connections[0] != "lab" {
+		t.Fatalf("connections = %v", status.Connections)
 	}
 	name, err := config.ConnectionVPN("lab")
 	if err != nil || name != "lab" {
@@ -271,6 +272,42 @@ func TestRenamingAProfileCarriesItsSecretsAndBindings(t *testing.T) {
 	}
 	if _, err := secrets.VPNSecrets("lab"); err == nil {
 		t.Fatal("古い名前の秘密が残った")
+	}
+}
+
+// browserEncoded は、画面が名前をパスに入れる書き方（encodeURIComponent）の写しである。
+// `&` は逃がし、`(` と `)` は逃がさない。
+func browserEncoded(name string) string {
+	return strings.NewReplacer("+", "%20", "%28", "(", "%29", ")").Replace(url.QueryEscape(name))
+}
+
+// 空白・日本語・記号を含む名前も、画面（encodeURIComponent）と CLI（url.PathEscape）の
+// どちらの書き方で送ったパスからも、同じプロファイルに届く。
+func TestAProfileNamedWithSpacesAndSymbolsIsReachedFromEitherClient(t *testing.T) {
+	engine, secrets, _ := vpnEngine(t)
+	name := "研究室 VPN (本郷)&1"
+	created := send(t, engine, http.MethodPost, "/api/v1/vpn/profiles",
+		strings.ReplaceAll(labProfileBody(true), `"lab"`, `"`+name+`"`), nil)
+	if created.Code != http.StatusOK {
+		t.Fatalf("create = %d: %s", created.Code, created.Body.String())
+	}
+
+	updated := send(t, engine, http.MethodPut, "/api/v1/vpn/profiles/"+browserEncoded(name),
+		strings.ReplaceAll(labProfileBody(false), `"lab"`, `"`+name+`"`), nil)
+	if updated.Code != http.StatusOK {
+		t.Fatalf("画面からの更新 = %d: %s", updated.Code, updated.Body.String())
+	}
+	renamed := send(t, engine, http.MethodPost, "/api/v1/vpn/profiles/"+url.PathEscape(name)+"/rename",
+		`{"name":"研究室, 別館"}`, nil)
+	if renamed.Code != http.StatusOK {
+		t.Fatalf("CLI からの改名 = %d: %s", renamed.Code, renamed.Body.String())
+	}
+	if _, err := secrets.VPNSecrets("研究室, 別館"); err != nil {
+		t.Fatalf("改名した名前のシークレット = %v", err)
+	}
+	removed := send(t, engine, http.MethodDelete, "/api/v1/vpn/profiles/"+browserEncoded("研究室, 別館"), "", nil)
+	if removed.Code != http.StatusOK || len(decodeOverview(t, removed.Body.Bytes()).Profiles) != 0 {
+		t.Fatalf("画面からの削除 = %d: %s", removed.Code, removed.Body.String())
 	}
 }
 
@@ -442,8 +479,8 @@ func TestVPNRefusalsCarryTheirCodes(t *testing.T) {
 			status: http.StatusConflict, want: problemPayload{Code: "vpn_socket_path_too_long"},
 		},
 		{
-			name: "経路を用意できなかった", err: &vpn.SessionFailure{Profile: "lab", Reason: vpn.FailureHandshakeTimeout},
-			status: http.StatusConflict, want: problemPayload{Code: "vpn_session_failed", Reason: "handshake_timeout"},
+			name: "経路を用意できなかった", err: &vpn.RouteFailure{Profile: "lab", Reason: vpn.FailureHandshakeTimeout},
+			status: http.StatusConflict, want: problemPayload{Code: "vpn_route_failed", Reason: "handshake_timeout"},
 		},
 		{
 			name: "同じ名前がある", err: fmt.Errorf("%w: lab", application.ErrVPNProfileExists),

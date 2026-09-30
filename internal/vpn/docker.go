@@ -16,6 +16,7 @@ import (
 	"sshc/internal/commandconn"
 	"sshc/internal/connectionlog"
 	"sshc/internal/platform"
+	"sshc/internal/platform/process"
 )
 
 var (
@@ -57,6 +58,11 @@ type dockerCommand struct {
 // ログインシェルの PATH を移した環境をここに渡す。nil なら engine の環境を使う。
 type Environment func(context.Context) ([]string, error)
 
+// dockerInfoTimeout は、docker info の答えを待つ上限である。起動の途中の Docker Desktop
+// では docker info が長く返らないことがある。そのあいだ、経路の起動と一覧と停止を待たせ
+// 続けない。動いている daemon なら1秒ほどで答える。
+const dockerInfoTimeout = 20 * time.Second
+
 // findDocker は、variables の PATH で使える docker を探す。variables が nil なら
 // engine の環境で探す。
 //
@@ -72,7 +78,9 @@ func findDocker(ctx context.Context, variables []string) (dockerCommand, error) 
 		return dockerCommand{}, fmt.Errorf("%w: %w", ErrDockerMissing, err)
 	}
 	command := dockerCommand{path: path, environment: variables}
-	summary, err := command.output(ctx, "info", "--format",
+	asking, cancel := context.WithTimeout(ctx, dockerInfoTimeout)
+	defer cancel()
+	summary, err := command.output(asking, "info", "--format",
 		"{{.OSType}}/{{.Architecture}}、Docker {{.ServerVersion}}、{{.OperatingSystem}}")
 	if err != nil {
 		return dockerCommand{}, fmt.Errorf("%w: %s: %w", ErrDockerNotRunning, path, err)
@@ -116,8 +124,11 @@ func (command dockerCommand) output(ctx context.Context, arguments ...string) (s
 // docker logs は、コンテナの標準出力をこちらの標準出力へ、標準エラーをこちらの
 // 標準エラーへ流す。agent は失敗の理由を標準エラーへ書くので、片方だけを読むと、
 // いちばん知りたい行が落ちる。別々に読んでつなぐと、行の前後が入れ替わる。
+//
+// コンテナのログにはシークレットが混じりうるので、失敗したときも出力を接続ログへ
+// 写さない。出力は *dockerFailure で返し、呼び出し側が伏せてから使う。
 func (command dockerCommand) combined(ctx context.Context, arguments ...string) (string, error) {
-	return command.run(ctx, dockerCall{arguments: arguments, mergeOutput: true})
+	return command.run(ctx, dockerCall{arguments: arguments, mergeOutput: true, callerShowsFailure: true})
 }
 
 // outputWithInput は、標準入力を渡して docker を実行する。秘密はここを通る。
@@ -171,10 +182,10 @@ func isAbsent(err error) bool {
 //
 // watch には docker の標準エラーが写る。接続先へ繋がったかどうかを読むのに使う。
 func (command dockerCommand) stream(watch *connectWatch, arguments ...string) (*commandconn.Conn, error) {
-	process := exec.Command(command.path, arguments...)
-	process.Env = command.environment
-	process.Stderr = watch
-	return commandconn.Start(process, "docker "+strings.Join(arguments, " "))
+	child := exec.Command(command.path, arguments...)
+	child.Env = command.environment
+	child.Stderr = watch
+	return commandconn.Start(child, "docker "+strings.Join(arguments, " "))
 }
 
 // maxDescribedArgumentBytes は、接続ログに出す docker の引数の長さの上限である。
@@ -208,43 +219,66 @@ type dockerCall struct {
 	absentSubject string
 }
 
+// dockerWaitDelay は、キャンセルで docker を止めたあと、出力のパイプが閉じるのを待つ
+// 上限である。docker はプロセスグループごと止めるので、docker build が起動した
+// docker-buildx のような子もすぐ終わる。グループの外へ出たプロセスがパイプを持って
+// いても、経路の起動と停止をそれ以上待たせない。
+const dockerWaitDelay = 2 * time.Second
+
 // run は、docker を1回実行し、標準出力を返す。失敗したときは、標準エラーを
 // エラーの文に含める。
 func (command dockerCommand) run(ctx context.Context, call dockerCall) (output string, err error) {
 	started := time.Now()
 	defer func() { sayRun(ctx, call, time.Since(started), err) }()
-	process := exec.CommandContext(ctx, command.path, call.arguments...)
-	process.Env = command.environment
+	child := exec.CommandContext(ctx, command.path, call.arguments...)
+	child.Env = command.environment
+	process.KillGroupOnCancel(child, dockerWaitDelay)
 	var stdout, stderr bytes.Buffer
-	process.Stdout = &limitedWriter{writer: &stdout, remaining: maxDockerOutputBytes}
-	process.Stderr = &limitedWriter{writer: &stderr, remaining: maxDockerOutputBytes}
+	child.Stdout = &limitedWriter{writer: &stdout, remaining: maxDockerOutputBytes}
+	child.Stderr = &limitedWriter{writer: &stderr, remaining: maxDockerOutputBytes}
 	if call.eachLine != nil {
 		splitter := &lineSplitter{emit: call.eachLine}
 		stdoutLines, stderrLines := splitter.stream(), splitter.stream()
-		process.Stdout = io.MultiWriter(process.Stdout, stdoutLines)
-		process.Stderr = io.MultiWriter(process.Stderr, stderrLines)
+		child.Stdout = io.MultiWriter(child.Stdout, stdoutLines)
+		child.Stderr = io.MultiWriter(child.Stderr, stderrLines)
 		defer stdoutLines.flush()
 		defer stderrLines.flush()
 	}
 	if call.mergeOutput {
 		// 同じ書き先を渡すと、exec は1本のパイプで受けるので、書かれた順が保たれる。
-		process.Stderr = process.Stdout
+		child.Stderr = child.Stdout
 	}
 	if call.input != "" {
-		process.Stdin = strings.NewReader(call.input)
+		child.Stdin = strings.NewReader(call.input)
 	}
-	if err := process.Run(); err != nil {
+	if err := child.Run(); err != nil {
 		detail := strings.TrimSpace(stderr.String())
 		if call.mergeOutput {
 			detail = strings.TrimSpace(stdout.String())
 		}
-		if detail == "" {
-			return "", err
-		}
-		return "", fmt.Errorf("%s: %w", detail, err)
+		return "", &dockerFailure{output: detail, cause: err}
 	}
 	return stdout.String(), nil
 }
+
+// dockerFailure は、docker が失敗したことである。output は、失敗するまでに docker が
+// 書いた出力（標準エラー。mergeOutput なら両方）で、エラーの文に含める。
+//
+// 出力にはシークレットが混じりうる（docker logs）。そのまま見せられない呼び出し側は、
+// cause だけを書き、output は伏せてから使う。
+type dockerFailure struct {
+	output string
+	cause  error
+}
+
+func (failure *dockerFailure) Error() string {
+	if failure.output == "" {
+		return failure.cause.Error()
+	}
+	return failure.output + ": " + failure.cause.Error()
+}
+
+func (failure *dockerFailure) Unwrap() error { return failure.cause }
 
 // sayRun は、実行したコマンドと掛かった時間を、接続ログの debug3 に書く。失敗した
 // ときは、docker の出力も書く。
@@ -254,6 +288,9 @@ func sayRun(ctx context.Context, call dockerCall, elapsed time.Duration, err err
 	switch {
 	case err == nil:
 		connectionlog.Say(ctx, connectionlog.Full, "docker %s（%s）", described, elapsed)
+	case stopCauseOf(ctx) != nil:
+		// 経路の停止で打ち切ったコマンドは失敗ではない。出力も失敗として写さない。
+		connectionlog.Say(ctx, connectionlog.Full, "docker %s を取り消しました（%s）。", described, elapsed)
 	case call.absentSubject != "" && isAbsent(err):
 		connectionlog.Say(ctx, connectionlog.Full, "docker %s（%s）：その%sはありません", described, elapsed,
 			call.absentSubject)

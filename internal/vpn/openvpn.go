@@ -51,11 +51,9 @@ type openVPNBackend struct{}
 
 func (openVPNBackend) device() string { return "/dev/net/tun" }
 
-// capabilities は、WireGuard と同じく、実際のコンテナで確かめた権限だけを渡す。
-// NET_ADMIN はトンネルと経路のため、NET_RAW は iptables のため、DAC_OVERRIDE は
-// 利用者のものであるソケット用ディレクトリへ書くため、CHOWN は中継のソケットを
-// 利用者のものにするためである。OpenVPN を別のユーザーで動かす指定（user、group）は
-// 断るので、SETUID と SETGID は要らない。
+// capabilities は、WireGuard と同じ権限（NET_ADMIN、NET_RAW、DAC_OVERRIDE）だけを渡す。
+// OpenVPN を別のユーザーで動かす指定（user、group、chroot）は断るので、SETUID、SETGID、
+// CHOWN、SYS_CHROOT は要らない。
 func (openVPNBackend) capabilities() []string { return wireGuardBackend{}.capabilities() }
 
 func (openVPNBackend) validateSettings(profile Profile) error {
@@ -142,23 +140,43 @@ func (openVPNBackend) secretValues(secrets Secrets) []string {
 	return append(values, openVPNInlineLines(secrets.OpenVPN.Config)...)
 }
 
-// minimumRedactedLineLength は、伏せるインラインの行の短さの下限である。鍵の行は
-// 64 字（PEM）か 32 字（OpenVPN の静的鍵）なので、それより短い行は鍵ではない。
+// minimumRedactedLineLength は、伏せる鍵の行の短さの下限である。鍵の行は 64 字（PEM）か
+// 32 字（OpenVPN の静的鍵）である。PEM の本文の最後の行だけは短いが、鍵の断片にすぎない。
 // 短い語まで伏せると、ログのふつうの語が消える。
 const minimumRedactedLineLength = 16
 
-// openVPNInlineLines は、インラインのブロックの中の、鍵でありうる行を返す。
-// 「-----BEGIN …」のような区切りの行と、<connection> の中の指示は伏せない。
+// openVPNCredentialBlocks は、ユーザー名とパスワードを書くインラインのブロックである。
+// 1行目がユーザー名、2行目がパスワードである（OpenVPN の get_user_pass）。
+var openVPNCredentialBlocks = map[string]bool{"auth-user-pass": true, "http-proxy-user-pass": true}
+
+// openVPNCredentialPasswordLine は、認証情報のブロックの中で、パスワードを書く行の番号
+// （1から数える）である。
+const openVPNCredentialPasswordLine = 2
+
+// openVPNInlineLines は、インラインのブロックの中の、伏せる行を返す。
+//
+// 鍵の行は長さで選ぶ。「-----BEGIN …」のような区切りの行と、<connection> の中の指示は
+// 伏せない。認証情報のブロックのパスワードは、Vault のパスワードと同じく長さに関係なく
+// 伏せる。
 func openVPNInlineLines(config string) []string {
 	var lines []string
-	inside := false
+	inside, credentials, lineInBlock := false, false, 0
 	for _, line := range strings.Split(config, "\n") {
 		trimmed := strings.TrimSpace(line)
 		if tag, isInline := inlineTag([]string{trimmed}); isInline {
 			inside = !strings.HasPrefix(tag, "/") && tag != "connection"
+			credentials = inside && openVPNCredentialBlocks[tag]
+			lineInBlock = 0
 			continue
 		}
-		if inside && len(trimmed) >= minimumRedactedLineLength && !strings.HasPrefix(trimmed, "-----") {
+		if !inside {
+			continue
+		}
+		lineInBlock++
+		switch {
+		case credentials && lineInBlock == openVPNCredentialPasswordLine && trimmed != "":
+			lines = append(lines, trimmed)
+		case len(trimmed) >= minimumRedactedLineLength && !strings.HasPrefix(trimmed, "-----"):
 			lines = append(lines, trimmed)
 		}
 	}

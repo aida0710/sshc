@@ -280,7 +280,7 @@ func TestModeOnlyDifferenceProducesAWrite(t *testing.T) {
 	local := map[string]remotesync.LocalEntry{
 		"script": {SHA256: digestOf("same"), Mode: "0600"},
 	}
-	request, conflicts, err := remotesync.PlanEntriesWithIgnore(root, &base, local, remote,
+	request, conflicts, err := remotesync.PlanEntries(root, &base, local, remote,
 		map[string][]byte{"script": []byte("same")}, remotesync.ResolveRemote, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -306,7 +306,7 @@ func TestPlanUsesTheObservedReadOnlyModeForItsPrecondition(t *testing.T) {
 		},
 	}
 
-	request, conflicts, err := remotesync.PlanEntriesWithIgnore(root, &base, local, remote,
+	request, conflicts, err := remotesync.PlanEntries(root, &base, local, remote,
 		map[string][]byte{"config": []byte("new")}, remotesync.ResolveNone, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -331,7 +331,7 @@ func TestPlanUsesTheObservedReadOnlyExecutableModeForItsPrecondition(t *testing.
 		},
 	}
 
-	request, conflicts, err := remotesync.PlanEntriesWithIgnore(root, &base, local, remote,
+	request, conflicts, err := remotesync.PlanEntries(root, &base, local, remote,
 		map[string][]byte{"script": []byte("new")}, remotesync.ResolveNone, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -351,7 +351,7 @@ func TestModeOnlyConflictCarriesAllThreeModes(t *testing.T) {
 		"script": {SHA256: digestOf("same"), Mode: "0700"},
 	}
 
-	request, conflicts, err := remotesync.PlanEntriesWithIgnore(root, &base, local, remote,
+	request, conflicts, err := remotesync.PlanEntries(root, &base, local, remote,
 		map[string][]byte{"script": []byte("remote")}, remotesync.ResolveNone, nil)
 	if err != nil {
 		t.Fatal(err)

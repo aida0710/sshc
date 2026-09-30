@@ -12,7 +12,7 @@ import (
 func TestLocalDeletionIsNotSilentlyRecreated(t *testing.T) {
 	base := manifestOf(file("keys/old", "private key"))
 	remote := manifestOf(file("keys/old", "remote changed key"))
-	request, conflicts, err := remotesync.PlanEntriesWithIgnore(root, &base, map[string]remotesync.LocalEntry{}, remote,
+	request, conflicts, err := remotesync.PlanEntries(root, &base, map[string]remotesync.LocalEntry{}, remote,
 		map[string][]byte{"keys/old": []byte("remote changed key")}, remotesync.ResolveLocal, nil)
 	if err != nil && !errors.Is(err, remotesync.ErrNothingToApply) {
 		t.Fatal(err)
@@ -50,7 +50,7 @@ func TestAutomaticPullDoesNotUndoLocalDeletion(t *testing.T) {
 func TestLocalDeletionConflictsWithRemoteEdit(t *testing.T) {
 	base := manifestOf(file("keys/old", "private key"))
 	remote := manifestOf(file("keys/old", "remote changed key"))
-	request, conflicts, err := remotesync.PlanEntriesWithIgnore(root, &base, map[string]remotesync.LocalEntry{}, remote,
+	request, conflicts, err := remotesync.PlanEntries(root, &base, map[string]remotesync.LocalEntry{}, remote,
 		map[string][]byte{"keys/old": []byte("remote changed key")}, remotesync.ResolveNone, nil)
 	if err != nil {
 		t.Fatal(err)

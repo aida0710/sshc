@@ -191,3 +191,14 @@ backend_allow "$2" && echo allowed
 		}
 	}
 }
+
+// WireGuard と OpenVPN のコンテナには、使う権限だけを渡す。中継のソケットは engine が
+// ホスト側で作るので、所有者を変える権限（CHOWN）は渡さない。
+func TestWireGuardAndOpenVPNContainersGetOnlyTheCapabilitiesTheyUse(t *testing.T) {
+	want := "--cap-drop ALL --cap-add NET_ADMIN --cap-add NET_RAW --cap-add DAC_OVERRIDE"
+	for _, name := range []BackendName{WireGuard, OpenVPN} {
+		if got := strings.Join(backends[name].capabilities(), " "); got != want {
+			t.Errorf("%s の権限 = %q, want %q", name, got, want)
+		}
+	}
+}

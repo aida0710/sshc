@@ -30,7 +30,8 @@ backend_up() {
 	echo "VPNに接続します（OpenConnect）。"
 	# サーバーのアドレスは、接続先がサーバーそのものでないかを connect が確かめる
 	# のに使う。openconnect と同じく、コンテナの既定のDNSで名前解決する。
-	server_address=$(getent ahostsv4 "$server" | awk 'NR==1{print $1}' || true)
+	resolve_first_ipv4 "$server"
+	server_address=$resolved_address
 	set -- --protocol="$protocol" --user="$username" --interface="$interface" \
 		--script="$backend_directory/vpnc-script" --passwd-on-stdin --non-inter --background \
 		--pid-file="$openconnect_pid_file"
@@ -44,9 +45,11 @@ backend_up() {
 		echo "スマートフォンでの承認を待っています。承認するまでサーバーは応答しません。"
 	fi
 	# --background は、繋がったあとに自分を背後へ回す。ここが 0 で返らなければ
-	# 繋がっていない。
-	if ! send_answers | timeout "$(timeout_seconds)" openconnect "$@" "$server" \
-		>"$runtime/openconnect.log" 2>&1; then
+	# 繋がっていない。承認待ちは長いので、止める合図を受けられるよう背後で待つ
+	# （wait_for_step）。$! は timeout で、timeout は受けた合図を openconnect へ渡す。
+	send_answers | timeout "$(timeout_seconds)" openconnect "$@" "$server" \
+		>"$runtime/openconnect.log" 2>&1 &
+	if ! wait_for_step $!; then
 		password=
 		second_factor=
 		sed -n '1,40p' "$runtime/openconnect.log" >&2
@@ -82,9 +85,7 @@ backend_down() {
 		return 0
 	fi
 	kill -INT "$(cat "$openconnect_pid_file")" 2>/dev/null || true
-	seconds=0
-	while openconnect_running && [ "$seconds" -lt "$shutdown_seconds" ]; do
+	while openconnect_running && [ "$(shutdown_seconds_left)" -gt 0 ]; do
 		sleep 1
-		seconds=$((seconds + 1))
 	done
 }

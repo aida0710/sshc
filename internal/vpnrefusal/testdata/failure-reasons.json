@@ -1,0 +1,35 @@
+{
+  "about": [
+    "engine が返す失敗の理由の語を、言い方の表ごとに並べた表である。route は経路を用意できなかった理由（vpn_route_failed）、target は経路はあるが接続先へ接続できなかった理由（vpn_target_failed）である。",
+    "Go のテスト（internal/vpnrefusal の routeReasons と targetReasons）と、画面のテスト（web/src/vpn/vpnFailureReasons.test.ts）が同じ表を読む。理由の語を足したら、ここと両方の言い方に足す。"
+  ],
+  "route": [
+    "handshake_timeout",
+    "ike_authentication",
+    "ike_no_response",
+    "ike_proposal_mismatch",
+    "ike_server_unverified",
+    "ipsec_negotiation",
+    "openconnect_failed",
+    "openvpn_authentication",
+    "openvpn_configuration",
+    "openvpn_failed",
+    "openvpn_no_response",
+    "openvpn_tls",
+    "ppp_authentication",
+    "server_unresolved",
+    "timeout",
+    "tunnel_lost",
+    "unknown",
+    "xfrm_interface_unavailable"
+  ],
+  "target": [
+    "target_is_server",
+    "target_needs_dns",
+    "target_not_allowed",
+    "target_unreachable",
+    "target_unresolved",
+    "timeout",
+    "tunnel_lost"
+  ]
+}

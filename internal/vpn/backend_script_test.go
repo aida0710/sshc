@@ -51,11 +51,10 @@ func TestTheAgentLoadsEveryBackendOfTheTable(t *testing.T) {
 		loaded = append(loaded, strings.TrimSpace(name))
 	}
 	var known []string
-	for name := range backends {
+	for _, name := range Backends() {
 		known = append(known, string(name))
 	}
 	sort.Strings(loaded)
-	sort.Strings(known)
 	if !slices.Equal(loaded, known) {
 		t.Fatalf("agent.sh が読み込む方式 = %v, backends の表 = %v", loaded, known)
 	}

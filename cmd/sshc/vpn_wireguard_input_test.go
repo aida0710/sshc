@@ -133,7 +133,7 @@ func TestAWireGuardConfigWithACommandIsNotSent(t *testing.T) {
 	_, err := readVPNProfile(p, "provider", nil)
 
 	var input *vpnInputError
-	if !errors.As(err, &input) || !strings.Contains(input.sentence, "4行目の「PostUp」") ||
+	if !errors.As(err, &input) || !strings.Contains(input.sentence, `Line 4: "PostUp"`) ||
 		strings.Contains(input.sentence, testVPNKey) {
 		t.Fatalf("readVPNProfile = %v", err)
 	}

@@ -85,7 +85,7 @@
       "reason": ""
     },
     {
-      "name": "backend と違う節は保存するときに落とすので断らない",
+      "name": "backend と違う節は、その節を断る",
       "profile": {
         "name": "lab",
         "backend": "wireguard",
@@ -99,8 +99,8 @@
           "username": "fixture"
         }
       },
-      "field": "",
-      "reason": ""
+      "field": "l2tp",
+      "reason": "unexpected"
     },
     {
       "name": "名前は48文字まで",
@@ -146,9 +146,122 @@
       "limit": 48
     },
     {
-      "name": "名前に使えない字がある",
+      "name": "名前に空白と日本語を使える",
       "profile": {
-        "name": "has space",
+        "name": "研究室 VPN（本郷）",
+        "backend": "wireguard",
+        "wireguard": {
+          "servers": [
+            "vpn.example.jp"
+          ]
+        }
+      },
+      "field": "",
+      "reason": ""
+    },
+    {
+      "name": "名前の長さは文字数で数える",
+      "profile": {
+        "name": "ああああああああああああああああああああああああああああああああああああああああああああああああ",
+        "backend": "wireguard",
+        "wireguard": {
+          "servers": [
+            "vpn.example.jp"
+          ]
+        }
+      },
+      "field": "",
+      "reason": ""
+    },
+    {
+      "name": "日本語の名前が長すぎる",
+      "profile": {
+        "name": "あああああああああああああああああああああああああああああああああああああああああああああああああ",
+        "backend": "wireguard",
+        "wireguard": {
+          "servers": [
+            "vpn.example.jp"
+          ]
+        }
+      },
+      "field": "name",
+      "reason": "too_long",
+      "limit": 48
+    },
+    {
+      "name": "名前の前に空白がある",
+      "profile": {
+        "name": " lab",
+        "backend": "wireguard",
+        "wireguard": {
+          "servers": [
+            "vpn.example.jp"
+          ]
+        }
+      },
+      "field": "name",
+      "reason": "format"
+    },
+    {
+      "name": "名前の後ろに全角の空白がある",
+      "profile": {
+        "name": "lab\u3000",
+        "backend": "wireguard",
+        "wireguard": {
+          "servers": [
+            "vpn.example.jp"
+          ]
+        }
+      },
+      "field": "name",
+      "reason": "format"
+    },
+    {
+      "name": "名前に制御文字がある",
+      "profile": {
+        "name": "lab\tvpn",
+        "backend": "wireguard",
+        "wireguard": {
+          "servers": [
+            "vpn.example.jp"
+          ]
+        }
+      },
+      "field": "name",
+      "reason": "format"
+    },
+    {
+      "name": "名前にスラッシュがある",
+      "profile": {
+        "name": "lab/vpn",
+        "backend": "wireguard",
+        "wireguard": {
+          "servers": [
+            "vpn.example.jp"
+          ]
+        }
+      },
+      "field": "name",
+      "reason": "format"
+    },
+    {
+      "name": "名前にバックスラッシュがある",
+      "profile": {
+        "name": "lab\\vpn",
+        "backend": "wireguard",
+        "wireguard": {
+          "servers": [
+            "vpn.example.jp"
+          ]
+        }
+      },
+      "field": "name",
+      "reason": "format"
+    },
+    {
+      "name": "名前に文字の向きを変える字がある",
+      "profile": {
+        "name": "lab\u202evpn",
         "backend": "wireguard",
         "wireguard": {
           "servers": [
@@ -1003,6 +1116,156 @@
       "reason": "format"
     },
     {
+      "name": "ikev2 のサーバーの ID を * にしない",
+      "profile": {
+        "name": "office",
+        "backend": "ikev2",
+        "ikev2": {
+          "server": "vpn.example.jp",
+          "authentication": "eap-mschapv2",
+          "identity": "fixture",
+          "serverIdentity": "*"
+        }
+      },
+      "field": "ikev2.serverIdentity",
+      "reason": "format"
+    },
+    {
+      "name": "ikev2 のサーバーの ID に * を含めない（型の接頭辞付き）",
+      "profile": {
+        "name": "office",
+        "backend": "ikev2",
+        "ikev2": {
+          "server": "vpn.example.jp",
+          "authentication": "eap-mschapv2",
+          "identity": "fixture",
+          "serverIdentity": "fqdn:*"
+        }
+      },
+      "field": "ikev2.serverIdentity",
+      "reason": "format"
+    },
+    {
+      "name": "ikev2 のサーバーの ID に * を含めない（ワイルドカード）",
+      "profile": {
+        "name": "office",
+        "backend": "ikev2",
+        "ikev2": {
+          "server": "vpn.example.jp",
+          "authentication": "eap-mschapv2",
+          "identity": "fixture",
+          "serverIdentity": "*.example.jp"
+        }
+      },
+      "field": "ikev2.serverIdentity",
+      "reason": "format"
+    },
+    {
+      "name": "ikev2 のサーバーの ID を未指定の IPv4 アドレスにしない",
+      "profile": {
+        "name": "office",
+        "backend": "ikev2",
+        "ikev2": {
+          "server": "vpn.example.jp",
+          "authentication": "eap-mschapv2",
+          "identity": "fixture",
+          "serverIdentity": "0.0.0.0"
+        }
+      },
+      "field": "ikev2.serverIdentity",
+      "reason": "format"
+    },
+    {
+      "name": "ikev2 のサーバーの ID を未指定の IPv6 アドレスにしない",
+      "profile": {
+        "name": "office",
+        "backend": "ikev2",
+        "ikev2": {
+          "server": "vpn.example.jp",
+          "authentication": "eap-mschapv2",
+          "identity": "fixture",
+          "serverIdentity": "0::0"
+        }
+      },
+      "field": "ikev2.serverIdentity",
+      "reason": "format"
+    },
+    {
+      "name": "ikev2 のサーバーの ID をアドレスの網にしない",
+      "profile": {
+        "name": "office",
+        "backend": "ikev2",
+        "ikev2": {
+          "server": "vpn.example.jp",
+          "authentication": "eap-mschapv2",
+          "identity": "fixture",
+          "serverIdentity": "10.0.0.0/8"
+        }
+      },
+      "field": "ikev2.serverIdentity",
+      "reason": "format"
+    },
+    {
+      "name": "ikev2 のサーバーの ID をアドレスの網の型にしない",
+      "profile": {
+        "name": "office",
+        "backend": "ikev2",
+        "ikev2": {
+          "server": "vpn.example.jp",
+          "authentication": "eap-mschapv2",
+          "identity": "fixture",
+          "serverIdentity": "ipv4net:10.0.0.0/8"
+        }
+      },
+      "field": "ikev2.serverIdentity",
+      "reason": "format"
+    },
+    {
+      "name": "ikev2 のサーバーの ID をアドレスの範囲にしない",
+      "profile": {
+        "name": "office",
+        "backend": "ikev2",
+        "ikev2": {
+          "server": "vpn.example.jp",
+          "authentication": "eap-mschapv2",
+          "identity": "fixture",
+          "serverIdentity": "10.0.0.1-10.0.0.9"
+        }
+      },
+      "field": "ikev2.serverIdentity",
+      "reason": "format"
+    },
+    {
+      "name": "ikev2 のサーバーの ID に IP アドレスを使える",
+      "profile": {
+        "name": "office",
+        "backend": "ikev2",
+        "ikev2": {
+          "server": "vpn.example.jp",
+          "authentication": "eap-mschapv2",
+          "identity": "fixture",
+          "serverIdentity": "192.0.2.1"
+        }
+      },
+      "field": "",
+      "reason": ""
+    },
+    {
+      "name": "ikev2 のサーバーの ID に識別名を使える",
+      "profile": {
+        "name": "office",
+        "backend": "ikev2",
+        "ikev2": {
+          "server": "vpn.example.jp",
+          "authentication": "eap-mschapv2",
+          "identity": "fixture",
+          "serverIdentity": "C=JP, O=Example, CN=vpn.example.jp"
+        }
+      },
+      "field": "",
+      "reason": ""
+    },
+    {
       "name": "ikev2 の事前共有鍵では CA の証明書を使わない",
       "profile": {
         "name": "office",
@@ -1122,6 +1385,184 @@
       },
       "field": "ikev2.ike",
       "reason": "format"
+    },
+    {
+      "name": "wireguard のサーバーの名前が長すぎる",
+      "profile": {
+        "name": "lab",
+        "backend": "wireguard",
+        "wireguard": {
+          "servers": [
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          ]
+        }
+      },
+      "field": "wireguard.servers",
+      "reason": "too_long",
+      "limit": 320
+    },
+    {
+      "name": "ikev2 のサーバーが無い",
+      "profile": {
+        "name": "office",
+        "backend": "ikev2",
+        "ikev2": {
+          "server": "",
+          "authentication": "eap-mschapv2",
+          "identity": "fixture"
+        }
+      },
+      "field": "ikev2.server",
+      "reason": "required"
+    },
+    {
+      "name": "ikev2 のサーバーに空白がある",
+      "profile": {
+        "name": "office",
+        "backend": "ikev2",
+        "ikev2": {
+          "server": "vpn example.jp",
+          "authentication": "eap-mschapv2",
+          "identity": "fixture"
+        }
+      },
+      "field": "ikev2.server",
+      "reason": "format"
+    },
+    {
+      "name": "ikev2 のサーバーの名前がちょうど上限の長さ",
+      "profile": {
+        "name": "office",
+        "backend": "ikev2",
+        "ikev2": {
+          "server": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "authentication": "eap-mschapv2",
+          "identity": "fixture"
+        }
+      },
+      "field": "",
+      "reason": ""
+    },
+    {
+      "name": "ikev2 のサーバーの名前が長すぎる",
+      "profile": {
+        "name": "office",
+        "backend": "ikev2",
+        "ikev2": {
+          "server": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "authentication": "eap-mschapv2",
+          "identity": "fixture"
+        }
+      },
+      "field": "ikev2.server",
+      "reason": "too_long",
+      "limit": 320
+    },
+    {
+      "name": "ikev2 のクライアントの ID に改行がある",
+      "profile": {
+        "name": "office",
+        "backend": "ikev2",
+        "ikev2": {
+          "server": "vpn.example.jp",
+          "authentication": "eap-mschapv2",
+          "identity": "fix\nture"
+        }
+      },
+      "field": "ikev2.identity",
+      "reason": "format"
+    },
+    {
+      "name": "ikev2 のクライアントの ID がちょうど上限のバイト数",
+      "profile": {
+        "name": "office",
+        "backend": "ikev2",
+        "ikev2": {
+          "server": "vpn.example.jp",
+          "authentication": "eap-mschapv2",
+          "identity": "あああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああa"
+        }
+      },
+      "field": "",
+      "reason": ""
+    },
+    {
+      "name": "ikev2 のクライアントの ID が、文字数は上限以内でもバイト数で長すぎる",
+      "profile": {
+        "name": "office",
+        "backend": "ikev2",
+        "ikev2": {
+          "server": "vpn.example.jp",
+          "authentication": "eap-mschapv2",
+          "identity": "ああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああ"
+        }
+      },
+      "field": "ikev2.identity",
+      "reason": "too_long",
+      "limit": 256
+    },
+    {
+      "name": "ikev2 の IKE の暗号スイートが長すぎる",
+      "profile": {
+        "name": "office",
+        "backend": "ikev2",
+        "ikev2": {
+          "server": "vpn.example.jp",
+          "authentication": "eap-mschapv2",
+          "identity": "fixture",
+          "ike": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "field": "ikev2.ike",
+      "reason": "too_long",
+      "limit": 256
+    },
+    {
+      "name": "ikev2 の ESP に空白がある",
+      "profile": {
+        "name": "office",
+        "backend": "ikev2",
+        "ikev2": {
+          "server": "vpn.example.jp",
+          "authentication": "eap-mschapv2",
+          "identity": "fixture",
+          "esp": "aes256 sha256"
+        }
+      },
+      "field": "ikev2.esp",
+      "reason": "format"
+    },
+    {
+      "name": "ikev2 の ESP の暗号スイートが長すぎる",
+      "profile": {
+        "name": "office",
+        "backend": "ikev2",
+        "ikev2": {
+          "server": "vpn.example.jp",
+          "authentication": "eap-mschapv2",
+          "identity": "fixture",
+          "esp": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "field": "ikev2.esp",
+      "reason": "too_long",
+      "limit": 256
+    },
+    {
+      "name": "ikev2 のサーバーの ID が長すぎる",
+      "profile": {
+        "name": "office",
+        "backend": "ikev2",
+        "ikev2": {
+          "server": "vpn.example.jp",
+          "authentication": "eap-mschapv2",
+          "identity": "fixture",
+          "serverIdentity": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "field": "ikev2.serverIdentity",
+      "reason": "too_long",
+      "limit": 256
     }
   ]
 }

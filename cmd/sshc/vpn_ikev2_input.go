@@ -1,29 +1,11 @@
 package main
 
 import (
-	"errors"
-	"io"
-	"os"
-
 	"sshc/internal/application"
 	"sshc/internal/vpn"
 )
 
 // IKEv2/IPsec のプロファイルの入力（sshc vpn add と sshc vpn edit）。
-
-// maxCACertificateFileBytes は、CA の証明書のファイルとして読む上限である。API の
-// IKEv2Profile.caCertificate と同じ値にする。これより大きいファイルは送っても断られる。
-const maxCACertificateFileBytes = 16384
-
-// 入力の誤りの文である。
-var (
-	errVPNInputCACertificateTooLarge = &vpnInputError{
-		sentence: "CAの証明書のファイルが大きすぎます（16384バイトまで）。", cause: errVPNSetupInput,
-	}
-	errVPNInputCACertificateUnreadable = &vpnInputError{
-		sentence: "CAの証明書のファイルを読み込めませんでした。", cause: errVPNSetupInput,
-	}
-)
 
 // readIKEv2Profile は、IKEv2/IPsec の設定と、認証の方式に合うシークレットを読む。
 func readIKEv2Profile(
@@ -113,23 +95,14 @@ func readCACertificate(p vpnProfilePrompter, current string) (string, error) {
 	case clearWord:
 		return "", nil
 	}
-	return readCACertificateFile(path)
-}
-
-// readCACertificateFile は、CA の証明書のファイルを上限まで読む。形は engine が
-// 確かめ、誤りは項目の誤りとして返す。
-func readCACertificateFile(path string) (string, error) {
-	file, err := os.Open(path)
+	// 送っても断られる大きさのファイルは、engine と同じ文で送る前に断る。形は engine が
+	// 確かめ、誤りは項目の誤りとして返す。
+	certificate, err := readVPNInputFile(vpnInputFile{
+		path: path, limit: vpn.MaxCACertificateLength, description: "CA certificate file",
+		kind: vpn.ErrSettings, field: vpn.IKEv2CACertificateField,
+	})
 	if err != nil {
-		return "", errVPNInputCACertificateUnreadable
+		return "", err
 	}
-	defer func() { _ = file.Close() }()
-	contents, err := io.ReadAll(io.LimitReader(file, maxCACertificateFileBytes+1))
-	if err != nil {
-		return "", errors.Join(errVPNInputCACertificateUnreadable, err)
-	}
-	if len(contents) > maxCACertificateFileBytes {
-		return "", errVPNInputCACertificateTooLarge
-	}
-	return string(contents), nil
+	return string(certificate), nil
 }

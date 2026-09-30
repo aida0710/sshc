@@ -30,9 +30,9 @@ func runVPN(ctx context.Context, called vpnInvocation, environment commandEnviro
 	var prompt *os.File
 	if called.Action == vpnAdd || called.Action == vpnEdit {
 		var err error
-		prompt, err = requireSyncSetupTerminal(stdin, stderr, terminal)
+		prompt, err = requireInteractivePrompt(stdin, stderr, terminal)
 		if err != nil {
-			return finishSyncFailure(false, errSyncSetupTTY, stdout, stderr)
+			return finishVPNFailure(vpnInvocation{Action: called.Action, Name: called.Name}, err, environment)
 		}
 	}
 	prompter := vpnProfilePrompter{ctx: ctx, stdin: stdin, prompt: prompt, terminal: terminal}
@@ -61,14 +61,14 @@ func runVPN(ctx context.Context, called vpnInvocation, environment commandEnviro
 		}
 	case vpnRemove:
 		confirmed, exit := confirmAction(ctx, called.Yes,
-			fmt.Sprintf("VPNプロファイル「%s」を削除しますか？保存済みのシークレットと、このプロファイルを使う接続の設定も削除されます。 [y/N] ",
-				safeTerminalCell(called.Name)),
+			fmt.Sprintf("Remove the VPN profile \"%s\"? This removes its stored secrets and detaches it from "+
+				"the connections it is attached to. [y/N] ", safeTerminalCell(called.Name)),
 			systemActionConfirmer, stderr)
 		if exit != 0 {
 			return exit
 		}
 		if !confirmed {
-			fmt.Fprintln(stdout, "キャンセルしました。何も変更していません。")
+			fmt.Fprintln(stdout, "Canceled; nothing was changed.")
 			return 0
 		}
 		if err := engine.sendJSON(ctx, http.MethodDelete, vpnProfilePath(called.Name), nil, &overview); err != nil {
@@ -78,20 +78,20 @@ func runVPN(ctx context.Context, called vpnInvocation, environment commandEnviro
 		// 経路が立つまで待つあいだ、何も出ないと止まって見える。初回はイメージの
 		// 用意だけで分単位になる。
 		if !called.JSON {
-			fmt.Fprintf(stderr, "「%s」のVPNに接続しています。初回はコンテナイメージの作成に数分かかることがあります…\n",
-				safeTerminalCell(called.Name))
+			fmt.Fprintf(stderr, "Connecting to the VPN \"%s\". The first time, building the container image "+
+				"can take a few minutes…\n", safeTerminalCell(called.Name))
 		}
-		if err := engine.sendJSON(ctx, http.MethodPost, vpnProfilePath(called.Name)+"/session", nil, &overview); err != nil {
+		if err := engine.sendJSON(ctx, http.MethodPost, vpnRoutePath(called.Name), nil, &overview); err != nil {
 			code := finishVPNFailure(called, err, environment)
 			// ログに理由が残るのは、コンテナが経路を用意できなかったときだけである。
 			var problem engineProblem
 			if !called.JSON && errors.As(err, &problem) && vpnrefusal.HasLogs(problem.Code) {
-				fmt.Fprintf(stderr, "詳しくは sshc vpn logs %s でログを確認してください。\n", safeTerminalCell(called.Name))
+				fmt.Fprintln(stderr, vpnLogsHint(called.Name))
 			}
 			return code
 		}
 	case vpnDown:
-		if err := engine.sendJSON(ctx, http.MethodDelete, vpnProfilePath(called.Name)+"/session", nil, &overview); err != nil {
+		if err := engine.sendJSON(ctx, http.MethodDelete, vpnRoutePath(called.Name), nil, &overview); err != nil {
 			return finishVPNFailure(called, err, environment)
 		}
 	case vpnRename:
@@ -138,51 +138,56 @@ func vpnProfilePath(name string) string {
 	return vpnProfilesPath + "/" + url.PathEscape(name)
 }
 
+// vpnRoutePath は、プロファイルの経路の場所である。POST で起動し、DELETE で切断する。
+func vpnRoutePath(name string) string {
+	return vpnProfilePath(name) + "/route"
+}
+
 // writeVPNOverview は、一覧と状態を人向けに書く。
 func writeVPNOverview(out io.Writer, overview httpserver.VPNOverview) {
 	if !overview.Available {
-		fmt.Fprintf(out, "このマシンではVPN経路を使用できません。%s\n",
-			vpnrefusal.Sentence(vpnrefusal.Refusal{Code: string(overview.Unavailable)}))
+		fmt.Fprintf(out, "VPN routes cannot be used on this machine. %s\n",
+			vpnrefusal.EnglishSentence(vpnrefusal.Refusal{Code: string(overview.Unavailable)}))
 		if overview.Detail != "" {
-			fmt.Fprintf(out, "詳細: %s\n", safeTerminalCell(overview.Detail))
+			fmt.Fprintf(out, "Detail: %s\n", safeTerminalCell(overview.Detail))
 		}
 		fmt.Fprintln(out)
 	}
 	if len(overview.Profiles) == 0 {
-		fmt.Fprintln(out, "VPNプロファイルはありません。sshc vpn add <名前> で作成できます。")
+		fmt.Fprintln(out, "There are no VPN profiles. Create one with sshc vpn add <name>.")
 		return
 	}
 	rows := make([][2]string, 0, len(overview.Profiles)*2)
-	for _, session := range overview.Profiles {
+	for _, status := range overview.Profiles {
 		state := "stopped"
 		switch {
-		case session.RelaySocket != "":
+		case status.RelaySocket != "":
 			state = "up"
-		case session.Phase != "":
-			state = "starting: " + vpnPhaseWord(session.Phase)
-		case session.Running:
+		case status.Phase != "":
+			state = "starting: " + vpnPhaseWord(status.Phase)
+		case status.Running:
 			state = "starting"
 		}
 		connections := "-"
-		if len(session.Connections) > 0 {
-			connections = strings.Join(session.Connections, ", ")
+		if len(status.Connections) > 0 {
+			connections = strings.Join(status.Connections, ", ")
 		}
 		rows = append(rows,
-			[2]string{session.Profile.Name, fmt.Sprintf("%s  %s", session.Profile.Backend, state)},
+			[2]string{status.Profile.Name, fmt.Sprintf("%s  %s", status.Profile.Backend, state)},
 			[2]string{"", "connections: " + connections},
 		)
-		if session.Tunnel != nil && session.Tunnel.Interface != "" {
+		if status.Tunnel != nil && status.Tunnel.Interface != "" {
 			rows = append(rows, [2]string{"", fmt.Sprintf("tunnel: %s %s since %s",
-				session.Tunnel.Interface, session.Tunnel.Address, session.Tunnel.Since)})
+				status.Tunnel.Interface, status.Tunnel.Address, status.Tunnel.Since)})
 		}
-		if len(session.Profile.DNS) > 0 {
-			rows = append(rows, [2]string{"", "dns: " + strings.Join(session.Profile.DNS, ", ")})
+		if len(status.Profile.DNS) > 0 {
+			rows = append(rows, [2]string{"", "dns: " + strings.Join(status.Profile.DNS, ", ")})
 		}
 	}
-	writeSyncRows(out, rows)
+	writeAlignedRows(out, rows)
 }
 
-// vpnPhaseWord は、経路を用意している段階を人向けの一語に直す。
+// vpnPhaseWord は、経路を用意している段階を状態の欄の語に直す。知らない段階は語のまま返す。
 func vpnPhaseWord(phase vpn.StartPhase) string {
 	switch phase {
 	case vpn.PhaseImage:

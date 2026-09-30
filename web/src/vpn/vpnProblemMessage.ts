@@ -1,7 +1,7 @@
 import { ApiError } from "../api/client";
 import type { Translate } from "../i18n/context";
 import type { MessageKey } from "../i18n/messages";
-import { vpnDestinationMessage, vpnSessionFailureMessage, vpnTargetFailureMessage } from "./vpnFailureReasons";
+import { vpnDestinationMessage, vpnRouteFailureMessage, vpnTargetFailureMessage } from "./vpnFailureReasons";
 import { describeVPNFieldRefusal, vpnFieldErrorOf } from "./vpnFieldErrors";
 import { vpnRefusalMessages } from "./vpnRefusals";
 
@@ -14,8 +14,8 @@ const refusalMessages: Record<string, MessageKey> = vpnRefusalMessages;
 // describeReasonedRefusal は、理由の語で言い方が決まる拒否を1文にする。そうでなければ null。
 function describeReasonedRefusal(t: Translate, code: string, reason: string): string | null {
   switch (code) {
-    case "vpn_session_failed":
-      return t("vpn.sessionFailed", { reason: t(vpnSessionFailureMessage(reason)) });
+    case "vpn_route_failed":
+      return t("vpn.routeFailed", { reason: t(vpnRouteFailureMessage(reason)) });
     case "vpn_target_failed":
       return t("vpn.targetFailed", { reason: t(vpnTargetFailureMessage(reason)) });
     case "vpn_destination_invalid":

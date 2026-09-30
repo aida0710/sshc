@@ -7,7 +7,7 @@ import (
 	"sshc/internal/storage"
 )
 
-// テストからだけ使う入口。製品は PlanEntriesWithIgnore と push の内部を使う。
+// テストからだけ使う入口。製品は PlanEntries と push の内部を使う。
 
 // PlanForTest は digest の表から LocalEntry を組み立てて計画する。mode を持たない
 // 単体テストのための包みで、製品の manifest は必ず mode を持つ。
@@ -21,7 +21,7 @@ func PlanWithIgnoreForTest(root string, base *Manifest, local map[string]string,
 	for path, digest := range local {
 		entries[path] = LocalEntry{SHA256: digest, Mode: "0600"}
 	}
-	return PlanEntriesWithIgnore(root, base, entries, remote, contents, resolve, ignored)
+	return PlanEntries(root, base, entries, remote, contents, resolve, ignored)
 }
 
 // SnapshotKeyForTest は、createdAt の snapshot が置かれる object key を返す。

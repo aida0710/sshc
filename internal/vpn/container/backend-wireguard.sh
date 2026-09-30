@@ -60,7 +60,7 @@ backend_ready() {
 	echo "ハンドシェイクの完了を待っています。"
 	while [ "$(latest_handshake)" = "0" ]; do
 		if [ "$(remaining_seconds)" -le 0 ]; then
-			fail handshake_timeout "ハンドシェイクに失敗しました。サーバーと鍵を確認してください。"
+			fail handshake_timeout "ハンドシェイクに失敗しました。鍵とサーバーの指定を確認してください。"
 		fi
 		pause 1
 	done

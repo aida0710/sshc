@@ -86,7 +86,8 @@ func TestIKEv2IsUpOnlyAfterItsChildSAIsInstalled(t *testing.T) {
 				t.Fatal(err)
 			}
 			// swanctl は、読み込みと開始には成功を返し、SA の一覧には scenario を返す。
-			script := `runtime=$1
+			script := agentFunctions(t, "wait_for_step") + `
+runtime=$1
 backend_directory=$runtime
 . "$runtime/backend.sh"
 sas=$2

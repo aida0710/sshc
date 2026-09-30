@@ -22,8 +22,8 @@ func TestEveryOpenVPNReasonHasASentence(t *testing.T) {
 		vpn.FailureOpenVPNAuthentication, vpn.FailureOpenVPNTLS, vpn.FailureOpenVPNNoResponse,
 		vpn.FailureOpenVPNConfiguration, vpn.FailureOpenVPN,
 	} {
-		if _, known := sessionReasons[reason]; !known {
-			t.Errorf("%s has no session sentence", reason)
+		if _, known := routeReasons[reason]; !known {
+			t.Errorf("%s has no route sentence", reason)
 		}
 	}
 }
@@ -58,7 +58,7 @@ func TestALineWithoutADirectiveIsStillNamed(t *testing.T) {
 
 // 認証の失敗は、何に失敗したかを先に書く。
 func TestAnOpenVPNAuthenticationFailureSaysWhatFailed(t *testing.T) {
-	sentence := Sentence(Refusal{Code: CodeSessionFailed, Reason: string(vpn.FailureOpenVPNAuthentication)})
+	sentence := Sentence(Refusal{Code: CodeRouteFailed, Reason: string(vpn.FailureOpenVPNAuthentication)})
 
 	if !strings.HasPrefix(sentence, "VPNの接続に失敗しました。VPNサーバーが認証を拒否しました。") {
 		t.Fatalf("sentence = %q", sentence)

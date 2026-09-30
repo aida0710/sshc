@@ -8,10 +8,6 @@ import (
 // ikev2 backend が agent へ渡す文書。charon の設定（strongswan.conf）と、接続と
 // 秘密（swanctl.conf）と、指定した CA の証明書を組み立てる。
 
-// agentRuntimeDirectory は、agent が設定と秘密を置く tmpfs である（agent.sh の
-// runtime、runArguments の --tmpfs）。swanctl.conf から CA の証明書を指すのに使う。
-const agentRuntimeDirectory = "/run/sshc-vpn"
-
 // ikev2VirtualIPRequest は、サーバーに仮想 IP（IPv4）を配ってもらう指定である。
 // ipsec.conf の leftsourceip=%config にあたる。
 const ikev2VirtualIPRequest = "0.0.0.0"
@@ -39,7 +35,7 @@ func ikev2Documents(settings IKEv2Settings, secrets IKEv2Secrets) (map[string]st
 	if settings.CACertificate != "" {
 		certificates, err := caCertificateBlocks(settings.CACertificate)
 		if err != nil {
-			return nil, fieldError(ErrSettings, "ikev2.caCertificate", ReasonFormat)
+			return nil, fieldError(ErrSettings, IKEv2CACertificateField, ReasonFormat)
 		}
 		for index, certificate := range certificates {
 			name := fmt.Sprintf("ca-%d.pem", index+1)

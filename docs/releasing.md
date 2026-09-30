@@ -8,6 +8,7 @@
 - `docs/releases/<tag>.md`を追加済みであること
 - stable releaseではREADME、`docs/release-install.md`、`install.sh`、`pages/guide/install.md`、`pages/en/guide/install.md`で固定したバージョンが同じtagであること（`internal/buildcontract` の契約テストが照合する）
 - 公開するcommitで、`release-ui-check.yml`の3つのjobが成功していること（次の「公開の前に埋め込みUIの照合を試す」）
+- VPNコンテナのイメージが固定したUbuntuのsnapshotの時刻（`internal/vpn/container/Dockerfile`の`snapshot=`）が30日より古ければ、先に上げてmainへ入れてあること。固定した時刻より後のセキュリティ修正はイメージに入らず、Dockerfileを書き換えない限り利用者のマシンのイメージも作り直されない。baseのdigestとsuiteごとのInReleaseのSHA-256を同じ変更で書き換え（手順はDockerfileのコメント）、CIの`vpn-image` jobでamd64とarm64の両方を確かめる。`publish.sh`は30日より古いと警告を出す（失敗にはしない）
 - `gh auth status`が成功し、repositoryと`release` environmentを操作できること
 - `git`、`gh`、`jq`、`curl`、`unzip`、`sha256sum`または`shasum`が利用できること
 

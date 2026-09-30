@@ -11,6 +11,7 @@ import (
 	"sshc/internal/application"
 	"sshc/internal/httpserver"
 	"sshc/internal/vpn"
+	"sshc/internal/vpnrefusal"
 )
 
 // VPN プロファイルの作成（sshc vpn add）と編集（sshc vpn edit）で、ターミナルから
@@ -44,11 +45,19 @@ func (failure *vpnInputError) Error() string { return failure.sentence }
 
 func (failure *vpnInputError) Unwrap() error { return failure.cause }
 
+// vpnBackendPrompt は、方式を聞く質問である。
+const vpnBackendPrompt = "Backend (wireguard/l2tp_ipsec/openconnect/openvpn/ikev2)"
+
 // 入力の誤りの文である。
 var (
-	errVPNInputMissing = &vpnInputError{sentence: "必須の項目が入力されていません。", cause: errVPNSetupInput}
-	errVPNInputBackend = &vpnInputError{sentence: "方式にはwireguard、l2tp_ipsec、openconnect、openvpn、ikev2のいずれかを指定してください。", cause: errVPNSetupInput}
-	errVPNInputUnknown = &vpnInputError{sentence: "指定したVPNプロファイルが見つかりません。sshc vpn で名前を確認してください。", cause: errVPNSetupInput}
+	errVPNInputMissing = &vpnInputError{sentence: "A required value was not entered.", cause: errVPNSetupInput}
+	errVPNInputBackend = &vpnInputError{
+		sentence: "Choose wireguard, l2tp_ipsec, openconnect, openvpn or ikev2 as the backend.", cause: errVPNSetupInput,
+	}
+	errVPNInputUnknown = &vpnInputError{
+		sentence: vpnrefusal.EnglishSentence(vpnrefusal.Refusal{Code: vpnrefusal.CodeProfileUnknown}),
+		cause:    errVPNSetupInput,
+	}
 )
 
 // vpnProfilePrompter は、プロファイルひとつ分の入力をターミナルから読む。
@@ -121,7 +130,7 @@ func readVPNProfile(p vpnProfilePrompter, name string, current *application.VPNP
 	if current != nil {
 		previous = *current
 	}
-	backend, err := p.required("Backend (wireguard/l2tp_ipsec/openconnect/openvpn/ikev2)", string(previous.Backend))
+	backend, err := p.required(vpnBackendPrompt, string(previous.Backend))
 	if err != nil {
 		return vpnProfileInput{}, err
 	}

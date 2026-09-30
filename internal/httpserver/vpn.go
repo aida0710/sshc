@@ -19,7 +19,7 @@ import (
 // 秘密は、一覧と保存の応答には現れない。保存のときに受け取って Vault へ渡し、取り出すのは
 // 確認のトークンを添えた RevealSecrets だけにする。
 
-// VPNHandlers は、プロファイルの保存と、経路の開始・停止を提供する。
+// VPNHandlers は、プロファイルの保存と、経路の起動・切断を提供する。
 //
 // プロファイルの手順（設定と秘密をまとめて書く、経路を止めてから改名する）は
 // vpnprofile.Service が持つ。ここは入力の検査と応答への変換だけをする。
@@ -27,7 +27,8 @@ type VPNHandlers struct {
 	// Config は、一覧と接続の紐付けを読み書きする。
 	Config   *application.Service
 	Profiles *vpnprofile.Service
-	VPN      *vpn.Manager
+	// VPNRoutes は、VPN 経路の起動・切断と状態を扱う。HTTP のルートではない。
+	VPNRoutes *vpn.Manager
 	// Actions は、秘密を取り出す確認のトークンを消費する。
 	Actions ActionHandlers
 }
@@ -35,14 +36,26 @@ type VPNHandlers struct {
 func registerVPNRoutes(engine *echo.Echo, handlers VPNHandlers) {
 	engine.GET("/api/v1/vpn", handlers.Overview)
 	engine.POST("/api/v1/vpn/profiles", handlers.CreateProfile)
-	engine.PUT("/api/v1/vpn/profiles/:name", handlers.UpdateProfile)
-	engine.DELETE("/api/v1/vpn/profiles/:name", handlers.DeleteProfile)
-	engine.POST("/api/v1/vpn/profiles/:name/rename", handlers.RenameProfile)
-	engine.POST("/api/v1/vpn/profiles/:name/reveal", handlers.RevealSecrets)
-	engine.GET("/api/v1/vpn/profiles/:name/logs", handlers.Logs)
-	engine.POST("/api/v1/vpn/profiles/:name/session", handlers.StartSession)
-	engine.DELETE("/api/v1/vpn/profiles/:name/session", handlers.StopSession)
+	engine.PUT("/api/v1/vpn/profiles/:name", profileNamed(handlers.UpdateProfile))
+	engine.DELETE("/api/v1/vpn/profiles/:name", profileNamed(handlers.DeleteProfile))
+	engine.POST("/api/v1/vpn/profiles/:name/rename", profileNamed(handlers.RenameProfile))
+	engine.POST("/api/v1/vpn/profiles/:name/reveal", profileNamed(handlers.RevealSecrets))
+	engine.GET("/api/v1/vpn/profiles/:name/logs", profileNamed(handlers.Logs))
+	engine.POST("/api/v1/vpn/profiles/:name/route", profileNamed(handlers.StartRoute))
+	engine.DELETE("/api/v1/vpn/profiles/:name/route", profileNamed(handlers.DisconnectRoute))
 	engine.PUT("/api/v1/vpn/bindings", handlers.SetBinding)
+}
+
+// profileNamed は、パスの :name をプロファイル名に戻してから handle を呼ぶ。名前には
+// 空白や記号を使えるので、逃がした形のまま渡さない。
+func profileNamed(handle func(c *echo.Context, name string) error) echo.HandlerFunc {
+	return func(c *echo.Context) error {
+		name, err := decodedPathParam(c, "name")
+		if err != nil {
+			return problem(c, http.StatusBadRequest, "invalid_request")
+		}
+		return handle(c, name)
+	}
 }
 
 // Overview は、保存済みのプロファイルと、それぞれのいまの状態を返す。
@@ -84,12 +97,12 @@ func (h VPNHandlers) CreateProfile(c *echo.Context) error {
 //
 // 秘密は省略でき、送られた項目だけが保存済みのものに重なる。設定だけを直すときに、
 // 秘密を入れ直させない。
-func (h VPNHandlers) UpdateProfile(c *echo.Context) error {
+func (h VPNHandlers) UpdateProfile(c *echo.Context, name string) error {
 	var request VPNProfileRequest
 	if err := decodeJSON(c, &request); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
-	if request.Profile.Name != c.Param("name") {
+	if request.Profile.Name != name {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
 	if err := h.Profiles.Update(request.Profile, request.Secrets); err != nil {
@@ -100,8 +113,8 @@ func (h VPNHandlers) UpdateProfile(c *echo.Context) error {
 
 // DeleteProfile は、プロファイルと、それを指している紐付けと、秘密を消す。
 // 動いている経路は止める。
-func (h VPNHandlers) DeleteProfile(c *echo.Context) error {
-	if err := h.Profiles.Remove(c.Request().Context(), c.Param("name")); err != nil {
+func (h VPNHandlers) DeleteProfile(c *echo.Context, name string) error {
+	if err := h.Profiles.Remove(c.Request().Context(), name); err != nil {
 		return vpnProblem(c, err)
 	}
 	return h.respond(c)
@@ -109,12 +122,12 @@ func (h VPNHandlers) DeleteProfile(c *echo.Context) error {
 
 // RenameProfile は、プロファイルの名前を変える。設定・秘密・接続の紐付けが
 // 一緒に移る。
-func (h VPNHandlers) RenameProfile(c *echo.Context) error {
+func (h VPNHandlers) RenameProfile(c *echo.Context, name string) error {
 	var request VPNRenameRequest
 	if err := decodeJSON(c, &request); err != nil {
 		return problem(c, http.StatusBadRequest, "invalid_request")
 	}
-	if err := h.Profiles.Rename(c.Request().Context(), c.Param("name"), request.Name); err != nil {
+	if err := h.Profiles.Rename(c.Request().Context(), name, request.Name); err != nil {
 		return vpnProblem(c, err)
 	}
 	return h.respond(c)
@@ -124,8 +137,7 @@ func (h VPNHandlers) RenameProfile(c *echo.Context) error {
 //
 // 確認のトークン（kind は vpn_profile.reveal、target はプロファイルの名前）が要る。Vault が
 // ロック中なら、ほかの取り出しと同じく vault_locked で断る。
-func (h VPNHandlers) RevealSecrets(c *echo.Context) error {
-	name := c.Param("name")
+func (h VPNHandlers) RevealSecrets(c *echo.Context, name string) error {
 	if allowed, response := h.Actions.consume(c, session.ActionRevealVPNSecrets, name); !allowed {
 		return response
 	}
@@ -148,35 +160,30 @@ func addVPNActions(registry actionRegistry, profiles *vpnprofile.Service) {
 // Logs は、engine がその経路を用意した記録とコンテナの直近の出力を、秘密を伏せて返す。
 //
 // 繋がらないときに最初に見る場所である。利用者に docker を直接叩かせない。
-func (h VPNHandlers) Logs(c *echo.Context) error {
-	name := c.Param("name")
+func (h VPNHandlers) Logs(c *echo.Context, name string) error {
 	secrets, err := h.Profiles.LogRedactions(name)
 	if err != nil {
 		return vpnProblem(c, err)
 	}
-	lines, err := h.VPN.Logs(c.Request().Context(), name, secrets)
+	lines, err := h.VPNRoutes.Logs(c.Request().Context(), name, secrets)
 	if err != nil {
 		return vpnProblem(c, err)
 	}
 	return c.JSON(http.StatusOK, VPNLogs{Lines: lines})
 }
 
-// StartSession は、プロファイルの経路を用意する。
-func (h VPNHandlers) StartSession(c *echo.Context) error {
-	profile, secrets, err := h.Profiles.Route(c.Param("name"))
-	if err != nil {
-		return vpnProblem(c, err)
-	}
-	if err := h.VPN.Start(c.Request().Context(), profile, secrets); err != nil {
+// StartRoute は、プロファイルの経路を用意する。
+func (h VPNHandlers) StartRoute(c *echo.Context, name string) error {
+	if err := h.VPNRoutes.Start(c.Request().Context(), name, h.Profiles.RouteSource(name)); err != nil {
 		return vpnProblem(c, err)
 	}
 	return h.respond(c)
 }
 
-// StopSession は、利用者の求めで経路を切断する。切断で切れた接続は、自動再接続では
+// DisconnectRoute は、利用者の求めで経路を切断する。切断で切れた接続は、自動再接続では
 // 経路を起動し直さない。
-func (h VPNHandlers) StopSession(c *echo.Context) error {
-	if err := h.VPN.Disconnect(c.Request().Context(), c.Param("name")); err != nil {
+func (h VPNHandlers) DisconnectRoute(c *echo.Context, name string) error {
+	if err := h.VPNRoutes.Disconnect(c.Request().Context(), name); err != nil {
 		return vpnProblem(c, err)
 	}
 	return h.respond(c)
@@ -215,10 +222,10 @@ func (h VPNHandlers) overview(c *echo.Context, waitForRoutes bool) error {
 	var statuses map[string]vpn.Status
 	if waitForRoutes {
 		// docker が見つからない、daemon が応えない、のどちらもここで分かる。
-		statuses, err = h.VPN.Statuses(c.Request().Context())
+		statuses, err = h.VPNRoutes.Statuses(c.Request().Context())
 	} else {
 		var known bool
-		statuses, known, err = h.VPN.KnownStatuses()
+		statuses, known, err = h.VPNRoutes.KnownStatuses()
 		response.Checking = !known
 	}
 	if err != nil {

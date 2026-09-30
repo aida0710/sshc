@@ -18,7 +18,6 @@ import (
 const maxSyncSetupLine = 4 << 10
 
 var (
-	errSyncSetupTTY        = errors.New("sync setup requires an interactive terminal")
 	errSyncSetupInput      = errors.New("sync setup input is invalid")
 	errSyncSetupIncomplete = errors.New("sync setup target is incomplete")
 )
@@ -32,17 +31,6 @@ type syncSetupInput struct {
 	accessKey        []byte
 	secretKey        []byte
 	reuseCredentials bool
-}
-
-func requireSyncSetupTerminal(
-	stdin *os.File, prompt io.Writer, terminal passwordTerminal,
-) (*os.File, error) {
-	promptFile, ok := prompt.(*os.File)
-	if !ok || stdin == nil || terminal == nil ||
-		!terminal.IsTerminal(int(stdin.Fd())) || !terminal.IsTerminal(int(promptFile.Fd())) {
-		return nil, errSyncSetupTTY
-	}
-	return promptFile, nil
 }
 
 func runSyncSetup(

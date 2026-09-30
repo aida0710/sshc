@@ -1,4 +1,5 @@
 import type { VPNFieldError, VPNFieldReason } from "./vpnFieldErrors";
+import { utf8Length } from "./utf8Length";
 
 // OpenVPN の設定ファイル（.ovpn）を、送る前に engine と同じ規則で確かめ、remote の
 // サーバーを取り出す。
@@ -72,10 +73,6 @@ function refuse(reason: VPNFieldReason, line: number, directive = "", limit?: nu
       ...(limit === undefined ? {} : { limit }),
     },
   };
-}
-
-function utf8Length(text: string): number {
-  return new TextEncoder().encode(text).length;
 }
 
 function isSpace(character: string): boolean {

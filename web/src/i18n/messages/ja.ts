@@ -595,7 +595,7 @@ export const ja = {
   "terminal.keyPassphraseRequired":
     "秘密鍵のパスフレーズが必要です。Vaultのロックを解除するか、この鍵に正しいパスフレーズを保存してください。",
   "terminal.vpnRouteRefused": "VPN経路を用意できないため、自動再接続を停止しました。ターミナルに表示された理由を確認してください。",
-  "terminal.vpnRouteDisconnected": "VPN経路が切断されたため、自動再接続を停止しました。［再接続］を押すと、VPN経路を起動して接続し直します。",
+  "terminal.vpnRouteDisconnected": "VPN経路が切断されたため、接続を中止しました。もう一度接続すると、VPN経路を起動してから接続します。",
   "terminal.connectFailed":
     "接続できませんでした。理由はターミナルに表示されています。設定とネットワークを確認してから再接続してください。",
   "terminal.reconnectFailed":
@@ -1250,9 +1250,11 @@ export const ja = {
   "vpn.dockerNotRunning": "Dockerが起動していません。Docker Desktopなどを起動してからやり直してください。起動している場合は、現在のユーザーにDockerを操作する権限があるかを確認してください。",
   "vpn.tunnelDeviceMissing": "この方式に必要なトンネル用のデバイス（/dev/net/tun、/dev/ppp）をDockerで使用できません。",
   "vpn.imageBuildFailed": "VPNのコンテナイメージの作成に失敗しました。ネットワークとDockerを確認してください。",
-  "vpn.socketPathTooLong": "sshcのデータの保存場所のパスが長すぎるため、VPN経路の中継を作成できません。VPNプロファイルの名前を短くしてください。",
+  "vpn.socketPathTooLong": "sshcのデータの保存場所（~/.ssh/sshc）のパスが長すぎるため、VPN経路の中継を作成できません。~/.sshをパスの短いフォルダへ移し、元の場所にシンボリックリンクを置いてください。",
   "vpn.changedConcurrently": "ほかの操作と同時に変更されたため、保存しませんでした。もう一度やり直してください。",
-  "vpn.sessionFailed": "VPNの接続に失敗しました。{reason}",
+  "vpn.routeDisconnected": "VPN経路が切断されたため、起動を中止しました。",
+  "vpn.routeStopped": "VPN経路が停止されたため、起動を中止しました。",
+  "vpn.routeFailed": "VPNの接続に失敗しました。{reason}",
   "vpn.targetFailed": "VPN経由で接続先に接続できませんでした。{reason}",
   "vpn.failureShowLogs": "ログを見る",
   "vpn.fieldRefused": "使用できない値があります。各項目のメッセージを確認してください。",

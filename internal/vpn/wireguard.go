@@ -40,17 +40,17 @@ type wireGuardBackend struct{}
 
 func (wireGuardBackend) device() string { return "/dev/net/tun" }
 
-// capabilities は、実際のコンテナで確かめた権限だけを渡す。NET_ADMIN はトンネル
-// と経路のため、NET_RAW は iptables のため、DAC_OVERRIDE は利用者のものである
-// ソケット用ディレクトリへ書くため、CHOWN は中継のソケットを利用者のものにする
-// ためである。既定で付いてくる残り（MKNOD・SYS_CHROOT・SETUID など）は要らない。
+// capabilities は、使う権限だけを渡す。NET_ADMIN はトンネルと経路のため、NET_RAW は
+// iptables のため、DAC_OVERRIDE は、利用者のもの（0700）であるホストと共有する
+// ディレクトリへ、agent が status.json と failure.json を書くためである。中継のソケットは
+// engine がホスト側で作るので、所有者を変える CHOWN は要らない。既定で付いてくる残り
+// （MKNOD・SYS_CHROOT・SETUID など）も要らない。
 func (wireGuardBackend) capabilities() []string {
 	return []string{
 		"--cap-drop", "ALL",
 		"--cap-add", "NET_ADMIN",
 		"--cap-add", "NET_RAW",
 		"--cap-add", "DAC_OVERRIDE",
-		"--cap-add", "CHOWN",
 	}
 }
 

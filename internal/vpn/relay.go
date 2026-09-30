@@ -36,7 +36,8 @@ const (
 	// maxRelayLineBytes は、1行目（接続先）と答えの長さの上限である。名前の上限
 	// （253 字）とポートが収まる。
 	maxRelayLineBytes = 300
-	// relayRequestTimeout は、繋いでから1行目が届くまで待つ上限である。
+	// relayRequestTimeout は、繋いでから1行目が届くまで待つ上限の既定値である。
+	// 繋いだまま何も送らない接続に、goroutine とファイル記述子を持たせ続けない。
 	relayRequestTimeout = 10 * time.Second
 	// acceptRetryLimit は、受け付けが一時的に失敗したときに待つ上限である
 	// （ファイル記述子が尽きた、など）。
@@ -49,8 +50,8 @@ const (
 	CodeDestinationInvalid = "vpn_destination_invalid"
 	// CodeTargetFailed は、経路はあるが接続先へ繋げなかったことを表す。
 	CodeTargetFailed = "vpn_target_failed"
-	// CodeSessionFailed は、経路が使えないことを表す。
-	CodeSessionFailed = "vpn_session_failed"
+	// CodeRouteFailed は、経路が使えないことを表す。
+	CodeRouteFailed = "vpn_route_failed"
 )
 
 // ErrSocketPath は、中継のソケットを置く場所のパスが長すぎることを表す。
@@ -75,18 +76,21 @@ type engineRelay struct {
 	// 接続先へ繋ぎに行っている接続を打ち切る。
 	lifetime context.Context
 	stop     context.CancelFunc
+	// requestTimeout は、繋いでから1行目が届くまで待つ上限である。
+	requestTimeout time.Duration
 }
 
 // openEngineRelay は、path で待ち受け、受けた接続を dial が返す接続とつなぐ。
+// 1行目が requestTimeout までに届かない接続は閉じる。
 //
 // dial は、数えられる接続を返す。受けた接続が終われば、その接続も閉じる。
-func openEngineRelay(path string, dial relayDialer) (*engineRelay, error) {
+func openEngineRelay(path string, dial relayDialer, requestTimeout time.Duration) (*engineRelay, error) {
 	if err := removeIfPresent(path); err != nil {
 		return nil, err
 	}
 	listener, err := net.Listen("unix", path)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrSessionFailed, err)
+		return nil, fmt.Errorf("%w: %w", ErrRouteFailed, err)
 	}
 	// ディレクトリは 0700 だが、ソケットそのものも利用者だけにする。
 	if err := os.Chmod(path, 0o600); err != nil {
@@ -96,6 +100,7 @@ func openEngineRelay(path string, dial relayDialer) (*engineRelay, error) {
 	lifetime, stop := context.WithCancel(context.Background())
 	relay := &engineRelay{
 		path: path, listener: listener, accepting: make(chan struct{}), lifetime: lifetime, stop: stop,
+		requestTimeout: requestTimeout,
 	}
 	go relay.accept(dial)
 	return relay, nil
@@ -124,7 +129,7 @@ func (relay *engineRelay) accept(dial relayDialer) {
 // serve は、1行目の接続先へ繋ぎ、答えを返してから、両方向へバイト列を運ぶ。
 func (relay *engineRelay) serve(client net.Conn, dial relayDialer) {
 	defer func() { _ = client.Close() }()
-	_ = client.SetReadDeadline(time.Now().Add(relayRequestTimeout))
+	_ = client.SetReadDeadline(time.Now().Add(relay.requestTimeout))
 	address, err := readRelayLine(client)
 	if err != nil {
 		return
@@ -203,11 +208,11 @@ func relayReplyFor(err error) RelayReply {
 	if errors.As(err, &target) {
 		return RelayReply{Code: CodeTargetFailed, Reason: string(target.Reason)}
 	}
-	var session *SessionFailure
-	if errors.As(err, &session) {
-		return RelayReply{Code: CodeSessionFailed, Reason: string(session.Reason)}
+	var route *RouteFailure
+	if errors.As(err, &route) {
+		return RelayReply{Code: CodeRouteFailed, Reason: string(route.Reason)}
 	}
-	return RelayReply{Code: CodeSessionFailed, Reason: string(FailureUnknown)}
+	return RelayReply{Code: CodeRouteFailed, Reason: string(FailureUnknown)}
 }
 
 // pipeRelay は、受けた接続と経路の接続のあいだで、両方向へバイト列を運ぶ。

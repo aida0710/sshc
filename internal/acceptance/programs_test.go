@@ -136,12 +136,6 @@ func TestOnlyTheNamedSubsystemsStartAProgram(t *testing.T) {
 	slices.Sort(found)
 
 	for _, path := range found {
-		// インターフェースそのものの宣言と実装は数えない。起動する場所ではなく、
-		// 起動し方を定めている場所である。
-		switch path {
-		case "internal/platform/command.go", "internal/platform/process/command.go":
-			continue
-		}
 		if !slices.Contains(allowedToStartPrograms, path) {
 			t.Errorf("%s starts a program but is not on the list; add it and say why", path)
 		}

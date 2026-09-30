@@ -475,7 +475,7 @@ func (r *runtime) startVPNSupervisor(parent context.Context, logger *slog.Logger
 	r.vpnDone = done
 	go func() {
 		defer close(done)
-		superviseVPNSessions(watching, r.vpn, logger)
+		superviseVPNRoutes(watching, r.vpn, logger)
 	}()
 }
 

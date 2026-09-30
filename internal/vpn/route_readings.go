@@ -152,6 +152,6 @@ func (manager *Manager) listContainers(ctx context.Context) (map[string]bool, er
 
 // noteChange は、sshcエンジンがこの経路を起動・停止したことを記録する。docker から
 // 読んだ状態より新しいので、状態を組み立てるときにこちらを使う。
-func (manager *Manager) noteChange(state *sessionState) {
+func (manager *Manager) noteChange(state *routeState) {
 	state.noteChanged(manager.changes.Add(1))
 }

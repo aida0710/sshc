@@ -205,11 +205,24 @@ function resolve(schema: Schema): Schema {
   return componentSchemas[name] ?? invalid();
 }
 
-// characterCount は、JSON Schema の minLength と maxLength が数える単位（コードポイント）で
-// 長さを返す。value.length は UTF-16 の単位で数えるので、絵文字のような補助面の文字を
-// 2 と数え、Go が rune で数えて通した値を断ってしまう。
-function characterCount(value: string): number {
-  return Array.from(value).length;
+// characterLength は、文字列の長さを JSON Schema の minLength・maxLength と同じく文字数
+// （コードポイントの数）で数える。value.length は UTF-16 の長さで、絵文字などを2と
+// 数えるので、engine が通した名前を画面が断ってしまう。for...of はコードポイントごとに
+// 進むので、Array.from と違って配列を作らない。SFTP のテキストの保存（2 MiB まで）でも
+// 文字列の写しを作らずに数える。
+function characterLength(value: string): number {
+  let length = 0;
+  for (const _codePoint of value) length += 1;
+  return length;
+}
+
+// validateLength は、文字列の長さを minLength・maxLength と照らす。長さは1回だけ数える。
+function validateLength(schema: Schema, value: string): void {
+  const { minLength, maxLength } = schema;
+  if (typeof minLength !== "number" && typeof maxLength !== "number") return;
+  const length = characterLength(value);
+  if (typeof minLength === "number" && length < minLength) invalid();
+  if (typeof maxLength === "number" && length > maxLength) invalid();
 }
 
 function validFormat(format: unknown, value: string): boolean {
@@ -258,8 +271,7 @@ function validate(schemaInput: Schema, value: unknown, depth = 0): void {
   switch (schema.type) {
     case "string": {
       if (typeof value !== "string") invalid();
-      if (typeof schema.minLength === "number" && characterCount(value) < schema.minLength) invalid();
-      if (typeof schema.maxLength === "number" && characterCount(value) > schema.maxLength) invalid();
+      validateLength(schema, value);
       if (typeof schema.pattern === "string" && !new RegExp(schema.pattern, "u").test(value)) invalid();
       if (!validFormat(schema.format, value)) invalid();
       return;

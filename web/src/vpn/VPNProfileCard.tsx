@@ -29,12 +29,16 @@ function serverOf(profile: VPNProfile): string {
 export function VPNProfileCard({
   status,
   busy,
+  starting,
   available,
   checking,
   actions,
 }: {
   status: VPNProfileStatus;
+  // busy は、画面全体を待たせる操作（保存、名前の変更、削除、切断）の最中であることを表す。
   busy: boolean;
+  // starting は、この画面がこのプロファイルの経路を用意させている最中であることを表す。
+  starting: boolean;
   // available は、このマシンが経路を作れるかどうかである。
   available: boolean;
   // checking は、経路の状態をまだ確かめていないことを表す。確かめるまでは、状態を
@@ -57,6 +61,9 @@ export function VPNProfileCard({
             ? t("vpn.stateStarting")
             : t("vpn.stateStopped");
   const summary = [vpnBackendLabel(status.profile.backend), serverOf(status.profile), state].filter((part) => part !== "");
+  // preparing は、この画面かほかの入口（CLI、Terminal）が経路を用意している最中である。
+  // 用意の途中でも切断でき、sshcエンジンは用意を打ち切る。
+  const preparing = starting || phase !== undefined;
   return (
     <Card as="article" padded aria-label={status.profile.name}>
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -65,22 +72,22 @@ export function VPNProfileCard({
           <p className={hintText}>{summary.join(" · ")}</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button disabled={busy || checking || !available} onClick={actions.onStart}>
+          <Button disabled={busy || preparing || checking || !available} onClick={actions.onStart}>
             {t("vpn.connect")}
           </Button>
-          <Button disabled={busy || checking || !status.running} onClick={actions.onStop}>
+          <Button disabled={busy || checking || !(status.running || preparing)} onClick={actions.onStop}>
             {t("vpn.disconnect")}
           </Button>
           <Button disabled={busy || !available} onClick={actions.onShowLogs}>
             {t("vpn.logs")}
           </Button>
-          <Button disabled={busy} onClick={actions.onEdit}>
+          <Button disabled={busy || starting} onClick={actions.onEdit}>
             {t("vpn.edit")}
           </Button>
-          <Button disabled={busy} onClick={actions.onRename}>
+          <Button disabled={busy || starting} onClick={actions.onRename}>
             {t("vpn.rename")}
           </Button>
-          <Button kind="danger" disabled={busy} onClick={actions.onRemove}>
+          <Button kind="danger" disabled={busy || starting} onClick={actions.onRemove}>
             {t("vpn.remove")}
           </Button>
         </div>

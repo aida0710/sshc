@@ -43,10 +43,16 @@ func (failure *TargetFailure) Unwrap() error { return ErrTargetFailed }
 const (
 	// connectPath は、コンテナの中の中継の場所である（container/Dockerfile）。
 	connectPath = "/usr/local/lib/sshc-vpn/connect"
-	// targetConnectTimeout は、接続先へ繋がるまで待つ上限である。connect の中の
-	// socat が自分で諦める時間（connect.sh の connect_timeout_seconds）より長くし、
-	// 理由を読めるようにする。
+	// targetConnectTimeout は、接続先へ繋がるまで待つ上限である。connect が自分で諦める
+	// 長さ（connect.sh の、鍵を待つ route_lock_seconds、名前解決の
+	// resolve_timeout_seconds、socat の connect_timeout_seconds の合計）に
+	// connectStartAllowance を足した長さより長くし、理由を読めるようにする。
 	targetConnectTimeout = 30 * time.Second
+	// connectStartAllowance は、connect が待つ上限の外でかかる長さの見込みである。
+	// targetConnectTimeout は docker exec で connect を起動する前から数え、Docker Desktop
+	// では exec の起動だけで1秒近くかかる。connect が経路とパケットフィルタを足す時間も
+	// 上限の外にある。
+	connectStartAllowance = 3 * time.Second
 
 	// connectFailurePrefix は、connect が繋げなかった理由を書く行の始まりである。
 	connectFailurePrefix = "sshc-vpn-failure: "
@@ -72,7 +78,7 @@ func (manager *Manager) connectTarget(ctx context.Context, profileName string, d
 	connectionlog.Say(ctx, connectionlog.Full, "docker %s", describeArguments(arguments))
 	connection, err := manager.docker.stream(watch, arguments...)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrSessionFailed, err)
+		return nil, fmt.Errorf("%w: %w", ErrRouteFailed, err)
 	}
 	timer := time.NewTimer(targetConnectTimeout)
 	defer timer.Stop()

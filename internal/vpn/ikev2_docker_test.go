@@ -327,7 +327,7 @@ func TestIKEv2RefusalsSayWhy(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Cleanup(func() { _ = manager.Stop(context.Background(), test.profile.Name) })
 
-			err := manager.Start(ctx, test.profile, test.secrets)
+			err := manager.Start(ctx, test.profile.Name, fixedRoute(test.profile, test.secrets))
 
 			requireFailureReason(t, err, test.want)
 			logs := requireLogs(t, manager, ctx, test.profile.Name, test.secrets)
@@ -363,7 +363,7 @@ func TestAnIKEv2ServerThatDoesNotAnswerSaysSo(t *testing.T) {
 	secrets := Secrets{IKEv2: &IKEv2Secrets{PreSharedKey: ikev2PreSharedKey}}
 	t.Cleanup(func() { _ = manager.Stop(context.Background(), profile.Name) })
 
-	err := manager.Start(ctx, profile, secrets)
+	err := manager.Start(ctx, profile.Name, fixedRoute(profile, secrets))
 
 	requireFailureReason(t, err, FailureIKENoResponse)
 }

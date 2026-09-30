@@ -1,6 +1,48 @@
 import { describe, expect, it } from "vitest";
+import secretCases from "../../../internal/vpn/testdata/secret-cases.json";
+import type { VPNProfile } from "../api/vpn";
 import { emptySecrets } from "./vpnProfileDraft";
-import { vpnSecretsFieldError } from "./vpnSecretRules";
+import { type VPNSecretKey, vpnSecretsFieldError } from "./vpnSecretRules";
+
+// SecretCase は、Go の保存の経路と共有する表（internal/vpn/testdata/secret-cases.json）の1行である。
+type SecretCase = {
+  name: string;
+  profile: VPNProfile;
+  secrets: Partial<Record<VPNSecretKey, string>>;
+  stored?: Partial<Record<VPNSecretKey, string>>;
+  field: string;
+  reason: string;
+  limit?: number;
+  engineOnly?: boolean;
+};
+
+const sharedSecretCases = secretCases.cases as SecretCase[];
+
+// Go の検査と同じ表に対して、画面の検査を確かめる。Go の側は
+// internal/vpnprofile/secret_cases_test.go が同じ表を読む。engineOnly の行は、画面では断らない。
+describe("vpnSecretsFieldError on the shared table", () => {
+  it("reads a table that has cases", () => {
+    expect(sharedSecretCases.length).toBeGreaterThan(0);
+  });
+
+  it.each(sharedSecretCases.map((test) => [test.name, test] as const))(
+    "answers the shared table the way the engine does: %s",
+    (_name, test) => {
+      const refused = vpnSecretsFieldError({
+        backend: test.profile.backend,
+        secondFactor: test.profile.openconnect?.secondFactor ?? "",
+        username: test.profile.openvpn?.username ?? "",
+        ikev2Authentication: test.profile.ikev2?.authentication ?? "",
+        secrets: { ...emptySecrets, ...test.secrets },
+        stored: new Set(Object.keys(test.stored ?? {}) as VPNSecretKey[]),
+      });
+      const expected = test.engineOnly || test.field === ""
+        ? null
+        : { field: test.field, reason: test.reason, ...(test.limit === undefined ? {} : { limit: test.limit }) };
+      expect(refused).toEqual(expected);
+    },
+  );
+});
 
 describe("vpnSecretsFieldError", () => {
   it("asks for every secret the type needs when nothing is stored yet", () => {

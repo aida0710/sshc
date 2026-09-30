@@ -123,11 +123,12 @@ func openWalkDirectoryAt(parent *os.File, component string, readable bool) (*os.
 	return fileFromDescriptor(fd, component)
 }
 
+// openRegularAt は、parent の中の component を読み取り用に開く。
+//
+// O_NONBLOCK を付けて開き、開いたあとでブロックに戻す。書き手のいない FIFO は、付けないと
+// open から戻らない。呼び手は開いたあとで通常のファイルかを確かめて断る。通常のファイルの
+// 読み書きは O_NONBLOCK に影響されない。
 func openRegularAt(parent *os.File, component string) (*os.File, error) {
-	// FIFO を O_NONBLOCK なしで開くと、書き手が現れるまで open が戻らない。
-	// 非ブロックで開いてからブロックに戻せば、FIFO も呼び出し側の「通常ファイル
-	// ではない」という判定まで進む。通常ファイルの読み書きは O_NONBLOCK に影響
-	// されない。
 	fd, err := unix.Openat(int(parent.Fd()), component, unix.O_RDONLY|unix.O_CLOEXEC|unix.O_NOFOLLOW|unix.O_NONBLOCK, 0)
 	if err != nil {
 		return nil, classifyOpenError(parent, component, err)

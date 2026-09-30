@@ -51,8 +51,7 @@ func (s *Service) Overview() (Overview, error) {
 		if host.DetectedOS == "" {
 			continue
 		}
-		binding, err := s.passwordBindingForGraph(graph, host.Identity.Alias)
-		if err != nil || binding != host.DetectedOSBinding || s.osIdentity(graph, host.Identity.Alias) != host.Identity {
+		if !s.detectionApplies(graph, host.Identity, host.DetectedOSBinding) {
 			reconciled.Hosts[i].DetectedOS = ""
 			reconciled.Hosts[i].DetectedOSBinding = ""
 		}

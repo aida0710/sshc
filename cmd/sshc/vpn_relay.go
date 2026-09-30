@@ -39,8 +39,8 @@ func vpnRouteThroughEngine(stateDir string, client *http.Client) func(context.Co
 	}
 }
 
-// maxCopiedRecordLines は、sshcエンジンの記録から CLI の接続ログへ写す行数の上限である。
-// 1回の接続の試みが収まる長さにする。
+// maxCopiedRecordLines は、sshcエンジンの記録とコンテナのログから、それぞれ CLI の接続
+// ログへ写す行数の上限である。1回の接続の試みが収まる長さにする。
 const maxCopiedRecordLines = 80
 
 // engineRecordRequest は、sshcエンジンの記録を取り寄せる先である。
@@ -50,12 +50,14 @@ type engineRecordRequest struct {
 	profile  string
 }
 
-// copyEngineRecord は、VPN 経路について sshcエンジンが行ったことの記録を、CLI の
-// 接続ログへ写す。
+// copyEngineRecord は、VPN 経路について sshcエンジンが行ったことの記録と、コンテナの
+// ログを、CLI の接続ログへ写す。
 //
 // CLI の接続では、経路の準備（docker、イメージ、コンテナ）は sshcエンジンの中で
 // 行われ、CLI の接続ログには何も出ない。失敗したときは debug2 から、成功した
-// ときは debug3 から写す。記録を読めなくても、接続の成否は変えない。
+// ときは debug3 から写す。記録を読めなくても、接続の成否は変えない。記録には、
+// 経路を用意できなかったときのコンテナのログを残したことだけが書かれ、行はコンテナの
+// ログの側にあるので、両方を写す。
 func copyEngineRecord(ctx context.Context, request engineRecordRequest, level connectionlog.Level) {
 	if !connectionlog.Enabled(ctx, level) {
 		return
@@ -71,31 +73,53 @@ func copyEngineRecord(ctx context.Context, request engineRecordRequest, level co
 		connectionlog.Say(ctx, level, "sshcエンジンの記録を読めませんでした：%v", err)
 		return
 	}
-	lines := engineRecordLines(logs.Lines)
-	if len(lines) > maxCopiedRecordLines {
-		lines = lines[len(lines)-maxCopiedRecordLines:]
-	}
+	record, container := engineLogSections(logs.Lines)
 	connectionlog.Say(ctx, level, "sshcエンジンの記録（VPNプロファイル「%s」、最後の%d行まで）：",
 		safeTerminalCell(request.profile), maxCopiedRecordLines)
-	for _, line := range lines {
+	for _, line := range lastLines(record, maxCopiedRecordLines) {
+		connectionlog.Say(ctx, level, "  %s", safeTerminalCell(line))
+	}
+	if len(container) == 0 {
+		return
+	}
+	connectionlog.Say(ctx, level, "  %s", containerLogsHeading)
+	for _, line := range lastLines(container, maxCopiedRecordLines) {
 		connectionlog.Say(ctx, level, "  %s", safeTerminalCell(line))
 	}
 }
 
-// engineRecordLines は、sshc vpn logs の出力から、sshcエンジンの記録の行だけを
-// 取り出す（internal/vpn の joinLogSections の形）。
-func engineRecordLines(logs string) []string {
-	const recordHeading, containerHeading = "== sshcエンジンの記録 ==", "== コンテナのログ =="
-	_, record, found := strings.Cut(logs, recordHeading)
+// sshc vpn logs の出力の見出しである（internal/vpn の joinLogSections）。
+const (
+	engineRecordHeading  = "== sshcエンジンの記録 =="
+	containerLogsHeading = "== コンテナのログ =="
+)
+
+// engineLogSections は、sshc vpn logs の出力を、sshcエンジンの記録の行とコンテナの
+// ログの行に分ける。空の行は除く。
+func engineLogSections(logs string) (record, container []string) {
+	_, sections, found := strings.Cut(logs, engineRecordHeading)
 	if !found {
-		return nil
+		return nil, nil
 	}
-	record, _, _ = strings.Cut(record, containerHeading)
+	recordText, containerText, _ := strings.Cut(sections, containerLogsHeading)
+	return nonEmptyLines(recordText), nonEmptyLines(containerText)
+}
+
+// nonEmptyLines は、text の空でない行を返す。
+func nonEmptyLines(text string) []string {
 	var lines []string
-	for _, line := range strings.Split(strings.TrimSpace(record), "\n") {
+	for _, line := range strings.Split(strings.TrimSpace(text), "\n") {
 		if strings.TrimSpace(line) != "" {
 			lines = append(lines, line)
 		}
+	}
+	return lines
+}
+
+// lastLines は、lines の最後の limit 行までを返す。
+func lastLines(lines []string, limit int) []string {
+	if len(lines) > limit {
+		return lines[len(lines)-limit:]
 	}
 	return lines
 }
@@ -148,15 +172,15 @@ func startVPNRoute(ctx context.Context, stateDir string, client *http.Client, pr
 		announcePhases(watching, phaseWatch{engine: engine, profile: profile, interval: phasePollInterval})
 	}()
 	var overview httpserver.VPNOverview
-	err = engine.sendJSON(ctx, http.MethodPost, vpnProfilePath(profile)+"/session", nil, &overview)
+	err = engine.sendJSON(ctx, http.MethodPost, vpnRoutePath(profile), nil, &overview)
 	stopWatching()
 	<-watched
 	if err != nil {
 		return "", err
 	}
-	for _, session := range overview.Profiles {
-		if session.Profile.Name == profile && session.RelaySocket != "" {
-			return session.RelaySocket, nil
+	for _, status := range overview.Profiles {
+		if status.Profile.Name == profile && status.RelaySocket != "" {
+			return status.RelaySocket, nil
 		}
 	}
 	return "", errVPNRelayMissing
@@ -199,17 +223,35 @@ func runVPNProxy(ctx context.Context, called vpnInvocation, environment commandE
 		_, err := io.Copy(environment.stdout, relay)
 		fromRelay <- err
 	}()
-	if _, err := io.Copy(relay, environment.stdin); err != nil {
-		fmt.Fprintf(environment.stderr, "sshc: VPN接続でのデータ送信に失敗しました: %v\n", err)
-		return exitFailure
+	toRelay := make(chan error, 1)
+	go func() {
+		_, err := io.Copy(relay, environment.stdin)
+		toRelay <- err
+	}()
+	select {
+	case err := <-fromRelay:
+		// 中継の側が先に閉じた（接続先の切断、sshc vpn down、engine の終了）。
+		// 標準入力の終わりを待たずに戻る。ssh は ProxyCommand の標準出力が閉じる
+		// までは切断に気付かず、待つと次に書き込むまで固まる。
+		return finishVPNProxyReceive(err, environment.stderr)
+	case err := <-toRelay:
+		if err != nil {
+			fmt.Fprintf(environment.stderr, "sshc: sending data through the VPN route failed: %v\n", err)
+			return exitFailure
+		}
 	}
 	// 送る側が終わったことを相手へ伝える。伝えないと、相手は入力の終わりを
 	// 待ち続ける。
 	if half, ok := relay.(interface{ CloseWrite() error }); ok {
 		_ = half.CloseWrite()
 	}
-	if err := <-fromRelay; err != nil {
-		fmt.Fprintf(environment.stderr, "sshc: VPN接続でのデータ受信に失敗しました: %v\n", err)
+	return finishVPNProxyReceive(<-fromRelay, environment.stderr)
+}
+
+// finishVPNProxyReceive は、中継から標準出力への写しの終わり方を終了コードにする。
+func finishVPNProxyReceive(err error, stderr io.Writer) int {
+	if err != nil {
+		fmt.Fprintf(stderr, "sshc: receiving data through the VPN route failed: %v\n", err)
 		return exitFailure
 	}
 	return 0
