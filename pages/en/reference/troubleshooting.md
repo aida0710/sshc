@@ -24,6 +24,10 @@ A master password cannot be recovered. If a new vault fails immediately, inspect
 
 Check whether `IdentityFile` points to the path restored on this device. Keys managed by sshc may be under a group path such as `~/.ssh/keys/...`. Remove stale absolute paths and inspect the resolved path in connection details.
 
+## A key from IdentityFile is not used
+
+sshc does not use a key whose `IdentityFile` is a relative path (`id_work`), another user's home directory (`~other/...`), a token sshc does not expand (`%T`) or `${NAME}` naming an unset variable. Earlier versions of sshc opened a relative path from the home directory, so a setting such as `IdentityFile id_work` can stop public key authentication after the update. Rewrite it as a path starting with `~` or an absolute path, such as `~/.ssh/id_work`. Set **Settings → Terminal → Connection log** to **Keys, hops and timings (-vv)** or above to see which keys were not used. [Keys and known hosts](/en/connections/keys) lists the forms that are expanded and the ones that are not used.
+
 ## ProxyJump asks for a password
 
 Every jump host as well as the final host needs the matching saved password or key passphrase. Run the authentication check to identify the failing hop. Prompts that cannot be answered from saved values, such as 2FA, remain visible in the terminal.

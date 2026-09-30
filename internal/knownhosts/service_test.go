@@ -2,10 +2,15 @@ package knownhosts_test
 
 import (
 	"bytes"
+	"crypto/rand"
 	"errors"
+	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -204,5 +209,180 @@ func TestEvidenceChangesWithTheFile(t *testing.T) {
 	}
 	if before == after {
 		t.Fatal("an edited known_hosts produced the same evidence")
+	}
+}
+
+// Known Hosts 画面は、読めない known_hosts を空として見せない。照合は OpenSSH と同じく
+// 空として続けるが、画面が空を見せると、利用者は保存済みの鍵が消えたと誤解する。
+func TestTheKnownHostsScreenReportsAFileItCannotRead(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("a file mode does not take away read access on Windows")
+	}
+	service := newTestService(t, fixtureFile, &recordingCollector{})
+	if err := os.Chmod(service.Path(), 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(service.Path(), 0o600) })
+	if _, err := os.ReadFile(service.Path()); err == nil {
+		t.Skip("this user reads a file of mode 0")
+	}
+
+	if _, err := service.Listing(""); !errors.Is(err, fs.ErrPermission) {
+		t.Errorf("Listing = %v, want a permission error", err)
+	}
+	if _, err := service.Evidence(); !errors.Is(err, fs.ErrPermission) {
+		t.Errorf("Evidence = %v, want a permission error", err)
+	}
+	if contents, err := service.ReadFile(service.Path()); err != nil || len(contents) != 0 {
+		t.Errorf("ReadFile for verification = %q, %v; want empty", contents, err)
+	}
+}
+
+// 接続が受け入れた鍵は、UserKnownHostsFile の最初のファイルへ書く。~/.ssh の外には
+// 書かない。/dev/null を指す設定もここに当たる。
+func TestRememberWritesOnlyInsideTheWorkspace(t *testing.T) {
+	service := newTestService(t, "", &recordingCollector{})
+	candidate := knownhosts.Candidate{Host: "db.example", Port: 2222, KeyType: fixtureKeyType, Key: fixtureKey}
+
+	work := filepath.Join(filepath.Dir(service.Path()), "work_hosts")
+	if err := service.Remember(work, candidate); err != nil {
+		t.Fatalf("Remember = %v", err)
+	}
+	contents, err := os.ReadFile(work)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "[db.example]:2222 " + fixtureKeyType + " " + fixtureKey + "\n"; string(contents) != want {
+		t.Fatalf("work_hosts = %q, want %q", contents, want)
+	}
+
+	outside := filepath.Join(t.TempDir(), "known_hosts")
+	if err := service.Remember(outside, candidate); !errors.Is(err, knownhosts.ErrNotWritable) {
+		t.Fatalf("Remember outside = %v, want ErrNotWritable", err)
+	}
+	if _, err := os.Stat(outside); !os.IsNotExist(err) {
+		t.Fatal("a file outside the workspace was written")
+	}
+}
+
+// dotfiles の stow などで ~/.ssh がシンボリックリンクでも、ホームの表記で渡された
+// 既定の UserKnownHostsFile は内側である。受け入れた鍵がリンク先の実体へ書かれ、
+// 同じ表記で読み戻せないと、接続のたびに未知のホストとして扱われる。
+func TestRememberWritesThroughASymlinkedSSHDirectory(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("creating a symlink needs a privilege on Windows")
+	}
+	home := t.TempDir()
+	dotfiles := filepath.Join(t.TempDir(), "dotfiles", "ssh")
+	if err := os.MkdirAll(dotfiles, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(dotfiles, filepath.Join(home, ".ssh")); err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager := storage.NewManager(workspace, time.Now, bytes.NewReader(bytes.Repeat([]byte{0x2f}, 4096)))
+	service := knownhosts.NewService(workspace, manager, knownhosts.Scanner{})
+	candidate := knownhosts.Candidate{Host: "db.example", Port: 22, KeyType: fixtureKeyType, Key: fixtureKey}
+	userKnownHostsFile := filepath.Join(home, ".ssh", "known_hosts")
+
+	if err := service.Remember(userKnownHostsFile, candidate); err != nil {
+		t.Fatalf("Remember = %v", err)
+	}
+	want := "db.example " + fixtureKeyType + " " + fixtureKey + "\n"
+	written, err := os.ReadFile(filepath.Join(dotfiles, "known_hosts"))
+	if err != nil || string(written) != want {
+		t.Fatalf("dotfiles known_hosts = %q, %v; want %q", written, err, want)
+	}
+	readBack, err := knownhosts.ReadFile(workspace, userKnownHostsFile)
+	if err != nil || string(readBack) != want {
+		t.Fatalf("ReadFile = %q, %v; want %q", readBack, err, want)
+	}
+}
+
+// ~/.ssh/known_hosts そのものがシンボリックリンクなら、鍵はリンク先へ書かず、
+// Known Hosts 画面も読まない。どちらも ErrSymlinkPath で断り、接続と画面が
+// リンクのためだと言えるようにする。照合の読み取りはこれまでどおりリンクをたどる。
+func TestASymlinkedKnownHostsFileIsNeitherWrittenNorListed(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("creating a symlink needs a privilege on Windows")
+	}
+	service := newTestService(t, "", &recordingCollector{})
+	shared := filepath.Join(t.TempDir(), "known_hosts")
+	if err := os.WriteFile(shared, []byte(fixtureFile), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(shared, service.Path()); err != nil {
+		t.Fatal(err)
+	}
+	candidate := knownhosts.Candidate{Host: "new.example", Port: 22, KeyType: fixtureKeyType, Key: fixtureKey}
+
+	if err := service.Remember(service.Path(), candidate); !errors.Is(err, knownhosts.ErrSymlinkPath) {
+		t.Errorf("Remember = %v, want ErrSymlinkPath", err)
+	}
+	if _, err := service.Listing(""); !errors.Is(err, knownhosts.ErrSymlinkPath) {
+		t.Errorf("Listing = %v, want ErrSymlinkPath", err)
+	}
+	if contents, err := os.ReadFile(shared); err != nil || string(contents) != fixtureFile {
+		t.Errorf("the linked file = %q, %v; want it unchanged", contents, err)
+	}
+	if contents, err := service.ReadFile(service.Path()); err != nil || string(contents) != fixtureFile {
+		t.Errorf("ReadFile for verification = %q, %v; want the linked file", contents, err)
+	}
+}
+
+// Workspace の全ペインを並行に開くと、未知のホストの鍵を同時に書く。後から書いた
+// 側が「外部で変更された」として失敗しないように、読み直して追加する。
+func TestConcurrentAdditionsAllLand(t *testing.T) {
+	home := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := knownhosts.NewService(workspace, storage.NewManager(workspace, time.Now, rand.Reader), knownhosts.Scanner{})
+
+	// 衝突した側は、そのたびに別の誰かの書き込みが済んでいる。書き手の数を
+	// 読み直しの上限より少なくすれば、全員が必ず書ける。
+	const writers = 4
+	var group sync.WaitGroup
+	failures := make(chan error, writers)
+	for index := range writers {
+		group.Add(1)
+		go func() {
+			defer group.Done()
+			candidate := knownhosts.Candidate{
+				Host: fmt.Sprintf("host-%d.example", index), Port: 22, KeyType: fixtureKeyType, Key: fixtureKey,
+			}
+			if err := service.Remember(service.Path(), candidate); err != nil {
+				failures <- err
+			}
+		}()
+	}
+	group.Wait()
+	close(failures)
+	for err := range failures {
+		t.Errorf("Remember = %v", err)
+	}
+	contents, err := os.ReadFile(service.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lines := strings.Count(string(contents), "\n"); lines != writers {
+		t.Fatalf("known_hosts has %d lines, want %d:\n%s", lines, writers, contents)
+	}
+}
+
+func TestHostFieldBracketsOnlyNonDefaultPorts(t *testing.T) {
+	if got := knownhosts.HostField("db.example", knownhosts.ParsePort("0022")); got != "db.example" {
+		t.Errorf("port 0022 = %q, want the plain name", got)
+	}
+	if got := knownhosts.HostField("db.example", knownhosts.ParsePort("2222")); got != "[db.example]:2222" {
+		t.Errorf("port 2222 = %q", got)
 	}
 }

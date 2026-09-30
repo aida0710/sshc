@@ -67,23 +67,75 @@ func TestApplyFieldEditsWithNoEditsRendersTheOriginalBytes(t *testing.T) {
 func TestApplyFieldEditsQuotesValuesAndRefusesUnrepresentableOnes(t *testing.T) {
 	file, block := parseEditFixture(t, editConfig)
 	if err := ApplyFieldEdits(file, block, []FieldEdit{
-		{Action: ActionAdd, Keyword: "RemoteCommand", Values: []string{"tmux new -A -s main"}},
-		{Action: ActionAdd, Keyword: "SetEnv", Values: []string{"EMPTY="}},
+		{Action: ActionAdd, Keyword: "SetEnv", Values: []string{"GREETING=hello world", "EMPTY="}},
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if got := string(file.Render()); !strings.Contains(got, "\tRemoteCommand \"tmux new -A -s main\"\n\tSetEnv EMPTY=\n") {
+	if got := string(file.Render()); !strings.Contains(got, "\tSetEnv \"GREETING=hello world\" EMPTY=\n") {
+		t.Fatalf("render = %q", got)
+	}
+
+	quoted, quotedBlock := parseEditFixture(t, editConfig)
+	if err := ApplyFieldEdits(quoted, quotedBlock, []FieldEdit{
+		{Action: ActionAdd, Keyword: "User", Values: []string{`it's "me"`}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got := string(quoted.Render()); !strings.Contains(got, "\tUser \"it's \\\"me\\\"\"\n") {
 		t.Fatalf("render = %q", got)
 	}
 
 	fresh, freshBlock := parseEditFixture(t, editConfig)
 	if err := ApplyFieldEdits(fresh, freshBlock, []FieldEdit{
-		{Action: ActionAdd, Keyword: "RemoteCommand", Values: []string{`echo "hi"`}},
+		{Action: ActionAdd, Keyword: "RemoteCommand", Values: []string{"echo\nhi"}},
 	}); !errors.Is(err, ErrUnquotableValue) {
 		t.Fatalf("error = %v, want ErrUnquotableValue", err)
 	}
 	if got := string(fresh.Render()); got != editConfig {
 		t.Fatal("a rejected edit must leave the file untouched")
+	}
+}
+
+// ProxyCommand などの値を読むのはシェルである。画面で編集しても、一重引用符と
+// 引用の中のバックスラッシュは書いたとおりに残る。二重引用符に書き直すと、シェルが
+// $1 を展開するようになる。
+func TestCommandKeywordsKeepTheirQuotingWhenEditedOnScreen(t *testing.T) {
+	const source = "Host bastion\n\tRemoteCommand awk '{print $1}' /etc/passwd # users\n"
+	file, block := parseEditFixture(t, source)
+	if got := formValues(file.Lines[1]); len(got) != 1 || got[0] != "awk '{print $1}' /etc/passwd # users" {
+		t.Fatalf("form values = %q, want the rest of the line as one value", got)
+	}
+
+	if err := ApplyFieldEdits(file, block, []FieldEdit{
+		{Action: ActionSet, Line: 2, Values: []string{"awk -F: '{print $1}' /etc/passwd # users"}},
+		{Action: ActionAdd, Keyword: "ProxyCommand", Values: []string{`sh -c 'exec nc $(cat /tmp/h) %p' # printf 'a\\b'`}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	const want = "Host bastion\n" +
+		"\tRemoteCommand awk -F: '{print $1}' /etc/passwd # users\n" +
+		"\tProxyCommand sh -c 'exec nc $(cat /tmp/h) %p' # printf 'a\\\\b'\n"
+	if got := string(file.Render()); got != want {
+		t.Fatalf("render =\n%q\nwant\n%q", got, want)
+	}
+	reparsed := config.Parse(file.Render())
+	if got := formValues(reparsed.Lines[1]); len(got) != 1 || got[0] != "awk -F: '{print $1}' /etc/passwd # users" {
+		t.Fatalf("form values after saving = %q", got)
+	}
+}
+
+// OpenSSH は閉じない引用のある行を設定ごと断り、値の先頭の '=' を区切りとして
+// 読み飛ばす。どちらも書いたとおりには読み戻せないので、ファイルを変えずに断る。
+func TestCommandKeywordsRefuseValuesTheLineCannotHold(t *testing.T) {
+	for _, value := range []string{"sh -c 'echo", "=nc %h %p", "echo\nhi"} {
+		file, block := parseEditFixture(t, editConfig)
+		err := ApplyFieldEdits(file, block, []FieldEdit{{Action: ActionAdd, Keyword: "ProxyCommand", Values: []string{value}}})
+		if !errors.Is(err, ErrUnquotableValue) {
+			t.Errorf("ProxyCommand %q: error = %v, want ErrUnquotableValue", value, err)
+		}
+		if got := string(file.Render()); got != editConfig {
+			t.Errorf("ProxyCommand %q: a rejected edit changed the file: %q", value, got)
+		}
 	}
 }
 

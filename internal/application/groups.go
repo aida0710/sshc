@@ -1,6 +1,7 @@
 package application
 
 import (
+	"fmt"
 	"strings"
 
 	"sshc/internal/config"
@@ -169,7 +170,10 @@ func CompileGroups(declared []string, metadata Metadata, hosts []HostEntry, endi
 		var block strings.Builder
 		valid := true
 		for _, setting := range group.Settings {
-			line, settingErr := buildDirectiveLine("\t", setting.Keyword, setting.Values, ending)
+			// グループの保存は、書けない設定を checkGroupSettingsWritable で先に断る。
+			// ここで飛ばすのは、ほかの操作のときに、保存済みの metadata に書けない
+			// 設定が残っていた場合である。
+			line, settingErr := groupSettingLine(setting, ending)
 			if settingErr != nil {
 				notices = appendNotice(notices, Notice{
 					Code: NoticeComplexExternalRule, Detail: name + ": " + setting.Keyword,
@@ -193,6 +197,28 @@ func CompileGroups(declared []string, metadata Metadata, hosts []HostEntry, endi
 		builder.WriteString(block.String())
 	}
 	return []byte(builder.String()), notices
+}
+
+// groupSettingLine は、グループ設定ひとつを生成ファイルの Host ブロックの行にする。
+func groupSettingLine(setting Setting, ending string) (config.Line, error) {
+	return rebuildDirective(blankDirectiveLine("\t", ending), setting.Keyword, setting.Values)
+}
+
+// checkGroupSettingsWritable は、グループ設定がすべて ssh_config の行として書けるかを
+// 確かめる。
+//
+// CompileGroups は、書けない設定のあるグループを notice を付けて生成ファイルから外す。
+// グループの保存でそれを通すと、保存は成功するのに、同じグループのほかの設定まで
+// 接続に効かなくなる。接続の編集（ApplyFieldEdits）と同じく、保存の前に断る。
+func checkGroupSettingsWritable(metadata Metadata) error {
+	for _, group := range metadata.Groups {
+		for _, setting := range group.Settings {
+			if _, err := groupSettingLine(setting, "\n"); err != nil {
+				return fmt.Errorf("group %s: %s: %w", group.Name, setting.Keyword, err)
+			}
+		}
+	}
+	return nil
 }
 
 func groupMembers(direct map[string][]string, aliasOrder []string, name string) []string {

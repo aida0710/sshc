@@ -73,7 +73,9 @@ func (d Dialer) probeChain(
 	var through *ssh.Client
 	var opened []io.Closer
 	for _, hop := range target.JumpRoute() {
-		client, err := d.connectOne(ctx, hop, through, noPrompt, nil, 1, 1)
+		client, err := d.connectOne(ctx, hopConnection{
+			hopDial: hopDial{target: hop, through: through}, prompt: noPrompt, number: 1, count: 1,
+		})
 		if err != nil {
 			closeAll(opened)
 			return nil, nil, err
@@ -91,15 +93,16 @@ func (d Dialer) probeChain(
 		closeAll(opened)
 		return nil, nil, err
 	}
+	hostKeys := d.HostKeys.lookup(target)
 	connection, channels, requests, err := newClientConn(ctx, conn, target.Address(), &ssh.ClientConfig{
 		User:            target.User,
 		Auth:            auth,
-		HostKeyCallback: d.HostKeys.Callback(target, nil),
-		// 認証テストは、実接続と同じ鍵の種類を名乗る。ここだけ既定の順序に
-		// 任せていたので、三種類の鍵を持つホストが known_hosts にある 1 行とは
-		// 違う種類を出し、実際には繋がるホストを認証テストが host_key_changed と
-		// 報告しうた。検査が本番と違う条件で繋ぐなら、それは検査ではない。
-		HostKeyAlgorithms: d.HostKeys.Algorithms(target),
+		HostKeyCallback: hostKeys.callback(nil, nil),
+		// 認証テストは、実接続と同じ鍵の種類を名乗る。既定の順序に任せると、
+		// 三種類の鍵を持つホストが known_hosts にある 1 行とは違う種類を出し、
+		// 実際には繋がるホストを host_key_changed と報告しうる。検査が本番と
+		// 違う条件で繋ぐなら、それは検査ではない。
+		HostKeyAlgorithms: hostKeys.algorithms(),
 		BannerCallback:    recorder.noteBanner,
 		Timeout:           timeout,
 	})

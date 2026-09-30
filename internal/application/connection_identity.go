@@ -3,6 +3,7 @@ package application
 import (
 	"sshc/internal/config"
 	"sshc/internal/effective"
+	"sshc/internal/sshmatch"
 )
 
 // 接続に付ける sshc の設定（VPN、文字コード、OS）を、どの Host ブロックが持つかを決める。
@@ -35,7 +36,7 @@ func (s *Service) connectionIdentity(graph *config.Graph, alias string) HostIden
 // excludedByNegation は、否定のパターン（`!web`）が alias を除くかを返す。
 func excludedByNegation(patterns []config.Pattern, alias string) bool {
 	for _, pattern := range patterns {
-		if pattern.Negated && effective.MatchPattern(pattern.Value, alias) {
+		if pattern.Negated && sshmatch.Pattern(pattern.Value, alias) {
 			return true
 		}
 	}

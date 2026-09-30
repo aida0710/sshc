@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"sshc/internal/keys"
+	"sshc/internal/knownhosts"
 	"sshc/internal/sshclient"
 	"sshc/internal/vpn"
 )
@@ -28,6 +29,7 @@ func TestConnectProblemNamesFailuresThatNeedUserAction(t *testing.T) {
 		{keys.ErrPassphraseRequired, "key_passphrase_required"},
 		{keys.ErrWrongPassphrase, "key_passphrase_required"},
 		{&sshclient.ExplainedError{Sentence: "切断されています。", Err: vpn.ErrRouteDisconnected}, "vpn_route_disconnected"},
+		{&sshclient.KnownHostsSymlinkError{Path: "/home/me/.ssh/known_hosts", Err: knownhosts.ErrSymlinkPath}, "known_hosts_symlink"},
 	} {
 		t.Run(test.code, func(t *testing.T) {
 			code, named := connectProblem(fmt.Errorf("wrapped: %w", test.err))

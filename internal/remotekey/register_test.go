@@ -18,8 +18,6 @@ const (
 	fingerprint = "SHA256:bytFrSjxj2qRszG8sHhWN+YO3b9vDSU3gQtMorwKpEs"
 )
 
-var configSnapshot = []byte("Host bastion\n\tHostName 203.0.113.10\n\tUser ops\n")
-
 // remoteCall は、リモートで走らせた 1 本のコマンドである。
 type remoteCall struct {
 	alias   string
@@ -96,7 +94,7 @@ func TestRegisterProbesThenSendsTheKeyOnStandardInput(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result, err := newService(runner).Register(context.Background(), effective.Report{}, configSnapshot, "bastion", key, false)
+	result, err := newService(runner).Register(context.Background(), remotekey.Registration{Report: effective.Report{}, Alias: "bastion", Key: key})
 	if err != nil {
 		t.Fatalf("Register = %v", err)
 	}
@@ -148,7 +146,7 @@ func TestRegisterEndsBothConnectionsByOneRegistrationDeadline(t *testing.T) {
 	}
 
 	started := time.Now()
-	if _, err := newService(runner).Register(context.Background(), effective.Report{}, configSnapshot, "bastion", key, false); err != nil {
+	if _, err := newService(runner).Register(context.Background(), remotekey.Registration{Report: effective.Report{}, Alias: "bastion", Key: key}); err != nil {
 		t.Fatalf("Register = %v", err)
 	}
 	finished := time.Now()
@@ -175,7 +173,7 @@ func TestRegisterReportsAnExistingKeyAndAnUnsupportedRemote(t *testing.T) {
 		{Stdout: []byte(remotekey.ProbeMarker + "\n")},
 		{Stdout: []byte("sshc: already-present\n")},
 	}}
-	result, err := newService(existing).Register(context.Background(), effective.Report{}, configSnapshot, "bastion", key, false)
+	result, err := newService(existing).Register(context.Background(), remotekey.Registration{Report: effective.Report{}, Alias: "bastion", Key: key})
 	if err != nil {
 		t.Fatalf("Register = %v", err)
 	}
@@ -186,7 +184,7 @@ func TestRegisterReportsAnExistingKeyAndAnUnsupportedRemote(t *testing.T) {
 	unsupported := &scriptedRunner{outputs: []sshclient.Output{
 		{Stdout: []byte("Windows PowerShell\n"), ExitCode: 0},
 	}}
-	if _, err := newService(unsupported).Register(context.Background(), effective.Report{}, configSnapshot, "bastion", key, false); !errors.Is(err, remotekey.ErrUnsupportedRemote) {
+	if _, err := newService(unsupported).Register(context.Background(), remotekey.Registration{Report: effective.Report{}, Alias: "bastion", Key: key}); !errors.Is(err, remotekey.ErrUnsupportedRemote) {
 		t.Fatalf("Register = %v, want ErrUnsupportedRemote", err)
 	}
 	if len(unsupported.calls) != 1 {
@@ -204,14 +202,14 @@ func TestRegisterRefusesUntilExecutableDirectivesAreAcknowledged(t *testing.T) {
 		{Keyword: "ProxyCommand", Command: "/usr/bin/nc %h %p", OnConnect: true},
 	}}
 
-	if _, err := newService(runner).Register(context.Background(), report, configSnapshot, "bastion", key, false); !errors.Is(err, remotekey.ErrNotAcknowledged) {
+	if _, err := newService(runner).Register(context.Background(), remotekey.Registration{Report: report, Alias: "bastion", Key: key}); !errors.Is(err, remotekey.ErrNotAcknowledged) {
 		t.Fatalf("Register = %v, want ErrNotAcknowledged", err)
 	}
 	if len(runner.calls) != 0 {
 		t.Fatal("a refused registration reached the remote")
 	}
 
-	if _, err := newService(runner).Register(context.Background(), effective.Report{}, configSnapshot, "bad alias", key, false); !errors.Is(err, validate.ErrUnsafeAlias) {
+	if _, err := newService(runner).Register(context.Background(), remotekey.Registration{Report: effective.Report{}, Alias: "bad alias", Key: key}); !errors.Is(err, validate.ErrUnsafeAlias) {
 		t.Fatalf("Register = %v, want ErrUnsafeAlias", err)
 	}
 	if len(runner.calls) != 0 {

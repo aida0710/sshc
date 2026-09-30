@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -268,5 +269,35 @@ func TestKnownHostsAddRefusesAnUnverifiedKeyUntilItIsProvenOrAcknowledged(t *tes
 	}
 	if !strings.Contains(string(written), "new.example.com "+knownHostKeyType) {
 		t.Errorf("known_hosts = %q", written)
+	}
+}
+
+// dotfiles の管理で ~/.ssh/known_hosts をリンクにしていると、sshc は読み書きしない。
+// 画面が理由と対処（ssh で一度接続すれば登録できる）を言えるよう、500 の
+// known_hosts_failed ではなく known_hosts_symlink で断る。鍵を追加する確認の発行も同じ。
+func TestKnownHostsNamesASymlinkedFileSoTheScreenCanSayWhy(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("creating a symbolic link needs a privilege on Windows")
+	}
+	engine, credentials, _, service := newKnownHostsServer(t)
+	shared := filepath.Join(t.TempDir(), "known_hosts")
+	if err := os.WriteFile(shared, []byte(knownHostsFixture), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(service.Path()); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(shared, service.Path()); err != nil {
+		t.Fatal(err)
+	}
+
+	listing := sendKeyRequest(t, engine, credentials, http.MethodGet, "/api/v1/known-hosts?query=", nil, "")
+	if listing.Code != http.StatusForbidden || problemCode(t, listing.Body.Bytes()) != problemKnownHostsSymlink {
+		t.Errorf("list = %d: %s; want 403 %s", listing.Code, listing.Body.String(), problemKnownHostsSymlink)
+	}
+	issue := sendKeyRequest(t, engine, credentials, http.MethodPost, "/api/v1/actions",
+		mustMarshal(t, api.IssueActionRequest{Kind: session.ActionKnownHostsAdd, Target: "new.example.com"}), "")
+	if issue.Code != http.StatusForbidden || problemCode(t, issue.Body.Bytes()) != problemKnownHostsSymlink {
+		t.Errorf("issue an add = %d: %s; want 403 %s", issue.Code, issue.Body.String(), problemKnownHostsSymlink)
 	}
 }

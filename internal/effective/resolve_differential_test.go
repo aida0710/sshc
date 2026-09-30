@@ -179,6 +179,132 @@ func TestResolveMatchesInstalledOpenSSH(t *testing.T) {
 			alias:    "nas",
 			keywords: []string{"port", "user"},
 		},
+		{
+			// Match host は match_hostname で比べる。値もパターンも ASCII を小文字にする。
+			name:     "match host ignores case",
+			contents: "Host web\n\tHostName web.example\nMatch host WEB.example\n\tPort 2222\n",
+			alias:    "web",
+			keywords: []string{"hostname", "port"},
+		},
+		{
+			name:     "match originalhost ignores case",
+			contents: "Match originalhost ALIAS\n\tPort 2222\n",
+			alias:    "alias",
+			keywords: []string{"port"},
+		},
+		{
+			// 確定した HostName は小文字になり、その後の Match host も一致する。
+			// 大文字の HostName に Match の ProxyJump と User が付く形。
+			name: "the resolved hostname is lower case",
+			contents: "Host prod\n\tHostName Prod.Example.com\n" +
+				"Match host *.example.com\n\tProxyJump bastion\n\tUser deploy\n",
+			alias:    "prod",
+			keywords: []string{"hostname", "proxyjump", "user"},
+		},
+		{
+			// 否定のパターンも大文字小文字を区別せずに当たる。
+			name:     "a negated match host pattern ignores case",
+			contents: "Host web\n\tHostName web.example\nMatch host !WEB.example,*\n\tPort 2222\n",
+			alias:    "web",
+			keywords: []string{"port"},
+		},
+		{
+			// alias から来た HostName も、%h を展開した HostName も小文字になる。
+			// Host 行のパターンは区別したまま比べる。
+			name:     "an alias written in capitals",
+			contents: "Host EDGE\n\tHostName %h.Example.com\nMatch host edge.example.com\n\tPort 2222\n",
+			alias:    "EDGE",
+			keywords: []string{"hostname", "port"},
+		},
+		{
+			// アドレスのリテラルは小文字にしない。全角の英字も変えない。
+			name:     "addresses keep their case",
+			contents: "Host six\n\tHostName 2001:DB8::1\nHost wide\n\tHostName Ｗeb.Example\n",
+			alias:    "six",
+			keywords: []string{"hostname"},
+		},
+		{
+			name:     "non-ASCII letters keep their case",
+			contents: "Host six\n\tHostName 2001:DB8::1\nHost wide\n\tHostName Ｗeb.Example\n",
+			alias:    "wide",
+			keywords: []string{"hostname"},
+		},
+		{
+			// Match user は区別する。
+			name:     "match user keeps case",
+			contents: "Host db\n\tUser ops\nMatch user OPS\n\tPort 2222\n",
+			alias:    "db",
+			keywords: []string{"user", "port"},
+		},
+		{
+			// 取り込んだファイルが Host ブロックで終わっても、戻ったあとの見出しのない
+			// 行はすべての alias に効く。
+			name:     "lines after an include apply to every alias again",
+			contents: "Include conf.d/*.conf\nUser everyone\nServerAliveInterval 30\n",
+			files:    map[string]string{"conf.d/10-home.conf": "Host nas\n\tPort 2201\n"},
+			alias:    "other",
+			keywords: []string{"user", "serveraliveinterval", "port"},
+		},
+		{
+			// 一致しない Host の中の Include は、先頭の行も中の Host も効かない。
+			name:     "an include inside an unmatched host contributes nothing",
+			contents: "Host work\n\tInclude work.conf\nHost *\n\tPort 2022\n",
+			files: map[string]string{"work.conf": "User alice\nProxyCommand ssh gateway -W %h:%p\n" +
+				"Host ordinary\n\tHostName leaked.example\n"},
+			alias:    "ordinary",
+			keywords: []string{"user", "proxycommand", "hostname", "port"},
+		},
+		{
+			// 一致する Host の中の Include は、先頭の行がその Host に効き、戻ったあとの
+			// 行も取り込み元の Host に効く。取り込み先の Host other の判定は持ち越さない。
+			name: "an include inside a matched host restores the host afterwards",
+			contents: "Host work\n\tInclude work.conf\n\tUser after\n\tServerAliveInterval 15\n" +
+				"Host *\n\tPort 2022\n",
+			files: map[string]string{"work.conf": "ProxyCommand ssh gateway -W %h:%p # via gateway\n" +
+				"Host other\n\tPort 2200\n"},
+			alias:    "work",
+			keywords: []string{"user", "serveraliveinterval", "proxycommand", "port"},
+		},
+		{
+			// Match も、一致しない Host の中の Include では効かない。
+			name:     "a match inside an unmatched include never applies",
+			contents: "Host other\n\tInclude match.conf\n",
+			files:    map[string]string{"match.conf": "Match all\n\tPort 1111\n\tUser matched\n"},
+			alias:    "web",
+			keywords: []string{"port", "user"},
+		},
+		{
+			// OpenSSH 8.7 以降は、語の先頭の # から後ろをコメントとして捨て、引用符を外す。
+			// 行の残りを使う ProxyCommand と RemoteCommand だけは、コメントも引用符も残る。
+			name: "comments and quotes are stripped except from commands",
+			contents: "Host office\n\tHostName Office.Example.COM # front door\n\tPort \"2222\"\n" +
+				"\tUser ops # on call\n\tIdentityFile \"~/.ssh/office key\" # laptop\n" +
+				"\tRemoteCommand tmux new -A -s \"main\"  # attach\n",
+			alias:    "office",
+			keywords: []string{"hostname", "port", "user", "identityfile", "remotecommand"},
+		},
+		{
+			// argv_split の一重引用符、引用の外の "\ "、語中の引用符。
+			name:     "single quotes, escaped spaces and quotes inside a word",
+			contents: "Host lab\n\tUser 'bob'\n\tIdentityFile ~/.ssh/my\\ key\n\tIdentityFile ~/.ssh/b\"o\"th\n",
+			alias:    "lab",
+			keywords: []string{"user", "identityfile"},
+		},
+		{
+			// SetEnv の値は引数ひとつずつである。空白でつなぐと "X=a b" の境界が消える。
+			name:     "set env keeps each assignment",
+			contents: "Host lab\n\tSetEnv X=\"a b\" ONE=1\n\tSendEnv LANG LC_*\n",
+			alias:    "lab",
+			keywords: []string{"setenv", "sendenv"},
+		},
+		{
+			// エスケープした引用符を含む Match 行もブロックの境界である。読めないと、
+			// 後ろの User が手前の Host * に付いて全ホストに効く。
+			name:     "a match line with escaped quotes still starts a block",
+			contents: "Host *\n\tPort 2022\nMatch host \"no\\\"match\"\n\tUser office\n\tProxyJump bastion\n",
+			alias:    "web",
+			keywords: []string{"port", "user", "proxyjump"},
+		},
 	}
 
 	for _, test := range tests {
@@ -246,8 +372,8 @@ func TestResolveMatchesInstalledOpenSSH(t *testing.T) {
 
 // runSSHG は本物の ssh を -G で走らせ、その出力を解析する。
 //
-// このフィクスチャ群はどれも ProxyCommand も Match exec も持たないので、評価が
-// プログラムを実行することはない。
+// このフィクスチャ群は Match exec を持たない。ProxyCommand と RemoteCommand は
+// 持つが、-G は設定を表示するだけで、それらを実行しない。
 func runSSHG(t *testing.T, sshPath, home, configPath, alias string) effective.Values {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

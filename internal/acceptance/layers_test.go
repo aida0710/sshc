@@ -36,6 +36,7 @@ var lowerLayers = map[string]string{
 	"sshc/internal/session":     layerInfrastructure,
 	"sshc/internal/config":      layerPureLogic,
 	"sshc/internal/effective":   layerPureLogic,
+	"sshc/internal/sshmatch":    layerPureLogic,
 	"sshc/internal/validate":    layerPureLogic,
 	"sshc/internal/api":         layerPureLogic,
 }

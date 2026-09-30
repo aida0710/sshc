@@ -91,8 +91,8 @@ func TestProbeRefusesAnUnknownHostEvenWhenTheConfigurationWouldNot(t *testing.T)
 	dialer := sshclient.Dialer{
 		Auth: auth,
 		HostKeys: sshclient.HostKeys{
-			Read: func() ([]byte, error) { return nil, nil },
-			Add:  func(knownhosts.Candidate) error { written++; return nil },
+			Read: func(string) ([]byte, error) { return nil, nil },
+			Add:  func(string, knownhosts.Candidate) error { written++; return nil },
 		},
 	}
 	target := targetWith(server, path)
@@ -117,10 +117,10 @@ func TestProbeRefusesAnUnknownProxyJumpWithoutPersistingIt(t *testing.T) {
 	dialer := sshclient.Dialer{
 		Auth: sshclient.Auth{ReadFile: func(string) ([]byte, error) { return contents, nil }},
 		HostKeys: sshclient.HostKeys{
-			Read: func() ([]byte, error) {
+			Read: func(string) ([]byte, error) {
 				return []byte(knownHostsLine("["+inner.Host()+"]:"+inner.Port(), inner.HostKey.PublicKey())), nil
 			},
-			Add: func(knownhosts.Candidate) error { written++; return nil },
+			Add: func(string, knownhosts.Candidate) error { written++; return nil },
 		},
 	}
 	target := targetWith(inner, path)

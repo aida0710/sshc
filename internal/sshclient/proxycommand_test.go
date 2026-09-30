@@ -102,12 +102,13 @@ func TestAConnectionGoesThroughItsProxyCommand(t *testing.T) {
 		Identities:   []string{path},
 		Methods:      sshclient.DefaultMethods(),
 		ProxyCommand: relayCommand(t, server.Address()),
+		KnownHosts:   testKnownHosts,
 	}
 
 	known := knownHostsLine("[127.0.0.1]:"+port, server.HostKey.PublicKey())
 	dialer := sshclient.Dialer{
 		Auth:     sshclient.Auth{ReadFile: func(string) ([]byte, error) { return contents, nil }},
-		HostKeys: sshclient.HostKeys{Read: func() ([]byte, error) { return []byte(known), nil }},
+		HostKeys: sshclient.HostKeys{Read: func(string) ([]byte, error) { return []byte(known), nil }},
 	}
 
 	process, err := dialer.Open(context.Background(), target, terminal.Size{Cols: 80, Rows: 24})
@@ -135,11 +136,12 @@ func TestTheProxyCommandIsAnnouncedEvenWhenQuiet(t *testing.T) {
 	target := sshclient.Target{
 		Alias: "bastion", HostName: "127.0.0.1", Port: port, User: "ops",
 		Identities: []string{path}, Methods: sshclient.DefaultMethods(), ProxyCommand: command,
+		KnownHosts: testKnownHosts,
 	}
 	known := knownHostsLine("[127.0.0.1]:"+port, server.HostKey.PublicKey())
 	dialer := sshclient.Dialer{
 		Auth:     sshclient.Auth{ReadFile: func(string) ([]byte, error) { return contents, nil }},
-		HostKeys: sshclient.HostKeys{Read: func() ([]byte, error) { return []byte(known), nil }},
+		HostKeys: sshclient.HostKeys{Read: func(string) ([]byte, error) { return []byte(known), nil }},
 		// 無言を選んでいる。それでもこの一行は出る。
 		Verbosity: func() connectionlog.Level { return connectionlog.Notice },
 	}
@@ -168,12 +170,12 @@ func TestAFailingProxyCommandSaysWhatItComplainedAbout(t *testing.T) {
 	target := sshclient.Target{
 		Alias: "bastion", HostName: "127.0.0.1", Port: port, User: "ops",
 		Identities: []string{path}, Methods: sshclient.DefaultMethods(),
-		ProxyCommand: "echo zzz-could-not-reach-it >&2; exit 1",
+		ProxyCommand: "echo zzz-could-not-reach-it >&2; exit 1", KnownHosts: testKnownHosts,
 	}
 	known := knownHostsLine("[127.0.0.1]:"+port, server.HostKey.PublicKey())
 	dialer := sshclient.Dialer{
 		Auth:     sshclient.Auth{ReadFile: func(string) ([]byte, error) { return contents, nil }},
-		HostKeys: sshclient.HostKeys{Read: func() ([]byte, error) { return []byte(known), nil }},
+		HostKeys: sshclient.HostKeys{Read: func(string) ([]byte, error) { return []byte(known), nil }},
 	}
 
 	process, err := dialer.Open(context.Background(), target, terminal.Size{Cols: 80, Rows: 24})
@@ -197,11 +199,11 @@ func TestAHopReachedThroughAnotherRefusesItsProxyCommand(t *testing.T) {
 	inner := sshclient.Target{
 		Alias: "inner", HostName: "203.0.113.9", Port: "22", User: "ops",
 		Identities: []string{path}, Methods: sshclient.DefaultMethods(),
-		ProxyCommand: "/bin/true",
+		ProxyCommand: "/bin/true", KnownHosts: testKnownHosts,
 	}
 	first := sshclient.Target{
 		Alias: "gateway", HostName: gateway.Host(), Port: gateway.Port(), User: "ops",
-		Identities: []string{path}, Methods: sshclient.DefaultMethods(),
+		Identities: []string{path}, Methods: sshclient.DefaultMethods(), KnownHosts: testKnownHosts,
 	}
 	// gateway を先に通り、その上で inner へ行く形。
 	inner.Jump = []sshclient.Target{first}
@@ -213,8 +215,8 @@ func TestAHopReachedThroughAnotherRefusesItsProxyCommand(t *testing.T) {
 	dialer := sshclient.Dialer{
 		Auth: sshclient.Auth{ReadFile: func(string) ([]byte, error) { return contents, nil }},
 		HostKeys: sshclient.HostKeys{
-			Read: func() ([]byte, error) { return []byte(known), nil },
-			Add:  func(knownhosts.Candidate) error { return nil },
+			Read: func(string) ([]byte, error) { return []byte(known), nil },
+			Add:  func(string, knownhosts.Candidate) error { return nil },
 		},
 	}
 

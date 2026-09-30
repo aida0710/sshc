@@ -8,6 +8,7 @@ FUZZTIME ?= 30s
 # 追加してここに加え忘れると TestMakefileFuzzTargetsCoverEveryFuzzFunction が失敗する。
 FUZZ_TARGETS = \
 	internal/config:FuzzParseRendersOriginalBytes \
+	internal/config:FuzzRenderArgumentReadsBack \
 	internal/config:FuzzExpandIncludePattern \
 	internal/effective:FuzzParseValues \
 	internal/effective:FuzzResolve \

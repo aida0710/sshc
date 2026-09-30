@@ -78,8 +78,8 @@ func (reader CatalogueReader) Read(context.Context) Catalogue {
 // HardwareCommand は、ハードウェアに裏打ちされた鍵のためにユーザーが Terminal で
 // 実行しなければならない引数リストを、そのまま返す。
 //
-// このサブシステムが Terminal を起動することは決してない。その段階はロードマップの
-// サブシステム 5 が所有する。各要素はシェルの引用を必要としない文字集合に対して
+// このパッケージが Terminal を起動することは決してない。コマンドは画面に表示し、
+// 利用者が自分で実行する。各要素はシェルの引用を必要としない文字集合に対して
 // 検査されるので、表示される行は曖昧さがなく、どの要素もオプションとして読み直され
 // えず、ここにあるものがあとで AppleScript やシェルの構文になることもない。
 func HardwareCommand(algorithm Algorithm, fileName, comment, sshDirectory string) ([]string, error) {

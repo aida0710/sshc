@@ -12,6 +12,8 @@ import (
 	"encoding/base64"
 	"errors"
 	"strings"
+
+	"sshc/internal/sshmatch"
 )
 
 // ErrInvalidKey は、鍵のブロブが妥当な base64 でないことを報告する。
@@ -141,28 +143,18 @@ func Fingerprint(encodedKey string) (string, error) {
 // |1|base64(salt)|base64(HMAC-SHA1(salt, host)) を保存するので、同じ計算をすれば
 // 何も明かさずに問いに判定できる。
 func (e *Entry) MatchesHost(host string) bool {
-	matched := false
+	if !e.Hashed {
+		// OpenSSH の match_hostname と同じく、大文字小文字を区別せず、`!` で始まる
+		// 否定パターンに一致した host はこのエントリ全体の対象外になる。
+		// `*.corp,!special.corp` は special.corp に鍵を提示しない。
+		return sshmatch.PatternList(e.Hosts, host, sshmatch.IgnoreCase)
+	}
 	for _, pattern := range e.Hosts {
-		if e.Hashed {
-			if hashedMatch(pattern, host) {
-				matched = true
-			}
-			continue
-		}
-		// OpenSSH の match_hostname と同じく、`!` で始まる否定パターンに一致した
-		// host はこのエントリ全体の対象外になる。`*.corp,!special.corp` は
-		// special.corp に鍵を提示しない。
-		if negated, found := strings.CutPrefix(pattern, "!"); found {
-			if matchHostPattern(negated, host) {
-				return false
-			}
-			continue
-		}
-		if matchHostPattern(pattern, host) {
-			matched = true
+		if hashedMatch(pattern, host) {
+			return true
 		}
 	}
-	return matched
+	return false
 }
 
 func hashedMatch(field, host string) bool {
@@ -178,38 +170,6 @@ func hashedMatch(field, host string) bool {
 	mac := hmac.New(sha1.New, salt)
 	mac.Write([]byte(host))
 	return hmac.Equal(mac.Sum(nil), expected)
-}
-
-// matchHostPattern は、known_hosts のパターンで OpenSSH が使う '*' と '?' の
-// マッチングを、大文字小文字を区別せずに実装する。
-func matchHostPattern(pattern, host string) bool {
-	loweredPattern := strings.ToLower(pattern)
-	loweredHost := strings.ToLower(host)
-
-	patternIndex, hostIndex := 0, 0
-	starIndex, resumeIndex := -1, 0
-	for hostIndex < len(loweredHost) {
-		switch {
-		case patternIndex < len(loweredPattern) &&
-			(loweredPattern[patternIndex] == '?' || loweredPattern[patternIndex] == loweredHost[hostIndex]):
-			patternIndex++
-			hostIndex++
-		case patternIndex < len(loweredPattern) && loweredPattern[patternIndex] == '*':
-			starIndex = patternIndex
-			resumeIndex = hostIndex
-			patternIndex++
-		case starIndex >= 0:
-			patternIndex = starIndex + 1
-			resumeIndex++
-			hostIndex = resumeIndex
-		default:
-			return false
-		}
-	}
-	for patternIndex < len(loweredPattern) && loweredPattern[patternIndex] == '*' {
-		patternIndex++
-	}
-	return patternIndex == len(loweredPattern)
 }
 
 // Search は、ホスト・鍵種別・フィンガープリント・コメントのいずれかに query を

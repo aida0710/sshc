@@ -9,6 +9,7 @@ import (
 	"sshc/internal/config"
 	"sshc/internal/effective"
 	"sshc/internal/platform"
+	"sshc/internal/sshclient"
 )
 
 // Source は値がどこから来たかを表す。
@@ -74,9 +75,18 @@ func ComputeEffective(graph *config.Graph, root, alias string, facts effective.L
 	return computed
 }
 
-// LocalFactsFor は、トークン展開に要るこのプロセスの事実を読む。
+// LocalFactsFor は、トークン展開と既定の GlobalKnownHostsFile に要るこのプロセスの
+// 事実を読む。
+//
+// ${NAME} はこのプロセスの環境変数で展開する。OpenSSH も ssh を起動した
+// プロセスの環境を使う。自動起動した engine は、ターミナルのシェルが設定した
+// 変数を持たないことがある。
 func LocalFactsFor(home string) effective.LocalFacts {
-	facts := effective.LocalFacts{Home: home}
+	facts := effective.LocalFacts{
+		Home:                  home,
+		LookupEnv:             os.LookupEnv,
+		GlobalKnownHostsFiles: sshclient.DefaultGlobalKnownHostsFiles(),
+	}
 	if current, err := user.Current(); err == nil {
 		facts.User = platform.LocalAccountName(current.Username)
 		facts.UID = current.Uid

@@ -100,9 +100,9 @@ func (d Dialer) Stream(
 		}
 	}()
 
-	// 設定された ServerAliveInterval を落とさない。対話セッションはこれを
-	// 尊重していて、こちらだけ無視していた。長く暗黙に走るコマンドこそ、
-	// 途中の機器に接続を捨てられて困る側である。既定を作りはしない（OpenSSH も
+	// 設定された ServerAliveInterval を落とさない。対話セッションと同じく
+	// 尊重する。長く暗黙に走るコマンドこそ、途中の機器に接続を捨てられて
+	// 困る側である。既定を作りはしない（OpenSSH も
 	// 既定では送らない）。設定したユーザーの指示を通すだけである。
 	if keepAlive := keepAliveLoop(client, keepAliveSettings{interval: strict.KeepAlive, count: strict.KeepAliveMax, done: finished, trace: trace}); keepAlive != nil {
 		stopped := make(chan struct{})

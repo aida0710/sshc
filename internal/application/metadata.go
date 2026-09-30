@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"sshc/internal/effective"
 	"sshc/internal/handoff"
 	"sshc/internal/remoteos"
 	"sshc/internal/sshclient"
@@ -337,10 +338,12 @@ func DecodeMetadata(contents []byte) (Metadata, error) {
 	// など）を外す（metadata_ikev2.go）。VPNプロファイルのbackendと違う節も外す
 	// （metadata_vpnsections.go）。v9は、空白や日本語を含むVPNプロファイル名を
 	// 旧バージョンに読ませないための境界でもある。旧バージョンはその名前の metadata を
-	// 書けなくなる。
+	// 書けなくなる。グループ設定の ProxyCommand などを複数の値で保存した前の形は、
+	// 行の残りの 1 つの値にする（metadata_groupsettings.go）。
 	if version.SchemaVersion < 9 {
 		clearUnpinnedServerIdentities(&metadata)
 		clearForeignVPNSections(&metadata)
+		joinSplitRestOfLineSettings(&metadata)
 	}
 	metadata.SchemaVersion = MetadataSchemaVersion
 	if metadata.GroupsFile == "" {
@@ -449,6 +452,13 @@ func ValidateMetadata(metadata Metadata) error {
 				if containsSecretMarker(value) {
 					return ErrMetadataSecret
 				}
+			}
+			// ProxyCommand などは行の残りを 1 つの値で持つ（metadata_groupsettings.go）。
+			// 複数の値は schema 9 より前の形で、読み込みの移行だけが 1 つの値にする。
+			// 今の形で受け付けると、空白でつないで書いた行と、同じ値を前の形として
+			// 移行した行とが食い違う。
+			if effective.TakesRestOfLine(setting.Keyword) && len(setting.Values) > 1 {
+				return fmt.Errorf("%w: %s takes the rest of the line as one value", ErrMetadataGroup, setting.Keyword)
 			}
 		}
 	}

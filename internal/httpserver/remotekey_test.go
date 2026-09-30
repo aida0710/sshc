@@ -412,3 +412,24 @@ func TestRemoteKeyRegisterResolvesTheDestinationOnce(t *testing.T) {
 		}
 	}
 }
+
+// 設定は読めても、確認画面の接続先を OpenSSH と同じと保証できない形なら、読めない
+// 設定とは別のコードで断る。利用者が直すべきものが違う。
+func TestRemoteKeyPlanRefusesAConfigurationItCannotConfirm(t *testing.T) {
+	engine, credentials, runner, configPath := newRemoteKeyServer(t, nil)
+	contents := "Include ${HOME}/hosts.conf\nHost bastion\n\tHostName 203.0.113.10\n"
+	if err := os.WriteFile(configPath, []byte(contents), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	response := sendKeyRequest(t, engine, credentials, http.MethodPost, "/api/v1/remote-keys/plan",
+		mustMarshal(t, api.RemoteKeyPlanRequest{
+			Alias: "bastion", KeyPath: "~/.ssh/id_ed25519.pub", PublicKey: remoteKeyLine,
+		}), "")
+	if response.Code != http.StatusUnprocessableEntity || !strings.Contains(response.Body.String(), "config_not_confirmable") {
+		t.Fatalf("plan = %d: %s", response.Code, response.Body.String())
+	}
+	if len(runner.commands) != 0 {
+		t.Fatal("a refused plan started a process")
+	}
+}

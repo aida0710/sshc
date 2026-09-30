@@ -239,7 +239,9 @@ func (d Dialer) chain(ctx context.Context, target Target, prompt Prompter, trace
 
 	hops := len(route) + 1
 	for index, hop := range route {
-		client, err := d.connectOne(ctx, hop, through, prompt, trace, index+1, hops)
+		client, err := d.connectOne(ctx, hopConnection{
+			hopDial: hopDial{target: hop, through: through, trace: trace}, prompt: prompt, number: index + 1, count: hops,
+		})
 		if err != nil {
 			closeAll(closers)
 			return nil, nil, err
@@ -248,7 +250,9 @@ func (d Dialer) chain(ctx context.Context, target Target, prompt Prompter, trace
 		through = client
 	}
 
-	client, err := d.connectOne(ctx, target, through, prompt, trace, hops, hops)
+	client, err := d.connectOne(ctx, hopConnection{
+		hopDial: hopDial{target: target, through: through, trace: trace}, prompt: prompt, number: hops, count: hops,
+	})
 	if err != nil {
 		closeAll(closers)
 		return nil, nil, err
@@ -256,11 +260,18 @@ func (d Dialer) chain(ctx context.Context, target Target, prompt Prompter, trace
 	return client, closers, nil
 }
 
+// hopConnection は、経路のホップひとつへ繋ぐのに要るものである。
+type hopConnection struct {
+	hopDial
+	prompt Prompter
+	// number は経路の中でこのホップが何番目か（1 始まり）、count は経路のホップ数。
+	number, count int
+}
+
 // connectOne は、ホップひとつへ繋ぐ。through が非 nil なら、その接続の上を通る。
-func (d Dialer) connectOne(
-	ctx context.Context, target Target, through *ssh.Client, prompt Prompter, trace *tracer,
-	hop, hops int,
-) (*ssh.Client, error) {
+func (d Dialer) connectOne(ctx context.Context, request hopConnection) (*ssh.Client, error) {
+	target, through, prompt, trace := request.target, request.through, request.prompt, request.trace
+	hop, hops := request.number, request.count
 	started := trace.now()
 	timeout := target.connectTimeout()
 
@@ -273,7 +284,7 @@ func (d Dialer) connectOne(
 	describeHop(trace, target)
 
 	trace.stage(terminal.ConnectionDialing, target, hop, hops)
-	conn, deadline, err := d.openWithTimeout(trace.withLog(ctx), hopDial{target: target, through: through, trace: trace}, timeout)
+	conn, deadline, err := d.openWithTimeout(trace.withLog(ctx), request.hopDial, timeout)
 	if err != nil {
 		trace.say(connectionlog.Brief, "%s", connectionFailureMessage("接続", err))
 		explainFailure(trace, err)
@@ -296,7 +307,8 @@ func (d Dialer) connectOne(
 	auth.Observe = deadline.stopAtAuthentication(auth.Observe)
 	authMethods, closeAuth := auth.methodsWithCleanup(target, prompt)
 	defer closeAuth()
-	verifyHostKey := d.HostKeys.callback(target, prompt, trace)
+	hostKeys := d.HostKeys.lookup(target)
+	verifyHostKey := hostKeys.callback(prompt, trace)
 	config := &ssh.ClientConfig{
 		User:         target.User,
 		Auth:         authMethods,
@@ -313,7 +325,7 @@ func (d Dialer) connectOne(
 		// すでに持っている鍵の種類を先に名乗る。既定の順序に任せると、
 		// 三種類の鍵を持つホストが known_hosts にある 1 行とは違う種類を出し、
 		// 正しい鍵が「一致しない鍵」として現れる。
-		HostKeyAlgorithms: d.HostKeys.Algorithms(target),
+		HostKeyAlgorithms: hostKeys.algorithms(),
 		BannerCallback:    func(message string) error { trace.banner(message); return nil },
 		Timeout:           timeout,
 	}

@@ -7,6 +7,7 @@ import (
 	"github.com/labstack/echo/v5"
 
 	"sshc/internal/api"
+	"sshc/internal/config"
 	"sshc/internal/diagnostics"
 	"sshc/internal/effective"
 	"sshc/internal/platform"
@@ -57,8 +58,12 @@ func (h RemoteKeyHandlers) prepare(alias, keyPath, publicKey string) (preparedRe
 }
 
 func remoteKeyPlanProblem(c *echo.Context, err error) error {
-	if errors.Is(err, remotekey.ErrInvalidPublicKey) || errors.Is(err, validate.ErrUnsafeAlias) {
+	switch {
+	case errors.Is(err, remotekey.ErrInvalidPublicKey) || errors.Is(err, validate.ErrUnsafeAlias):
 		return remoteKeyProblem(c, err)
+	case errors.Is(err, config.ErrSnapshotIncomplete):
+		// 設定は読めたが、確認画面の接続先を OpenSSH と同じと保証できない形である。
+		return problem(c, http.StatusUnprocessableEntity, "config_not_confirmable")
 	}
 	return unexpectedProblem(c, "config_unreadable", err)
 }
@@ -135,8 +140,9 @@ func (h RemoteKeyHandlers) Register(c *echo.Context) error {
 		return response
 	}
 
-	result, err := h.Service.Register(c.Request().Context(), prepared.report, prepared.config,
-		request.Alias, prepared.key, request.AcknowledgeExecutable)
+	result, err := h.Service.Register(c.Request().Context(), remotekey.Registration{
+		Report: prepared.report, Alias: request.Alias, Key: prepared.key, Acknowledged: request.AcknowledgeExecutable,
+	})
 	if err != nil {
 		return remoteKeyProblem(c, err)
 	}

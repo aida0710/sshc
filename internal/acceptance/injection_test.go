@@ -154,9 +154,9 @@ func TestTheRemoteSeamRefusesAHostileAliasWithoutTheHTTPGuard(t *testing.T) {
 	}
 
 	// 正のコントロール: 安全な alias はインターフェースに届く。
-	if _, err := service.Register(
-		context.Background(), effective.Report{}, nil, "bastion", key, true,
-	); err != nil {
+	if _, err := service.Register(context.Background(), remotekey.Registration{
+		Report: effective.Report{}, Alias: "bastion", Key: key, Acknowledged: true,
+	}); err != nil {
 		t.Fatalf("Register(bastion) = %v", err)
 	}
 	if len(reached) == 0 {
@@ -177,9 +177,9 @@ func TestTheRemoteSeamRefusesAHostileAliasWithoutTheHTTPGuard(t *testing.T) {
 			}
 
 			reached = nil
-			if _, err := service.Register(
-				context.Background(), effective.Report{}, nil, hostile, key, true,
-			); err == nil {
+			if _, err := service.Register(context.Background(), remotekey.Registration{
+				Report: effective.Report{}, Alias: hostile, Key: key, Acknowledged: true,
+			}); err == nil {
 				t.Fatalf("Register(%q) was accepted", hostile)
 			}
 			if len(reached) != 0 {

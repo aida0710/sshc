@@ -125,7 +125,7 @@ func TestTheDetailedLogPointsAtTheKnownHostsLineItComparedWith(t *testing.T) {
 	t.Run("matched", func(t *testing.T) {
 		known := "# written by hand\n" + knownHostsLine(hostField, server.HostKey.PublicKey())
 		dialer := sshclient.Dialer{Auth: auth, HostKeys: sshclient.HostKeys{
-			Read: func() ([]byte, error) { return []byte(known), nil },
+			Read: func(string) ([]byte, error) { return []byte(known), nil },
 		}}
 		process := openWithLog(t, dialer, targetWith(server, path), connectionlog.Detailed)
 		expectLines(t, readUntil(t, process, "ready"),
@@ -138,7 +138,7 @@ func TestTheDetailedLogPointsAtTheKnownHostsLineItComparedWith(t *testing.T) {
 		_, _, another := keyPair(t)
 		known := "# written by hand\n" + knownHostsLine(hostField, another)
 		dialer := sshclient.Dialer{Auth: auth, HostKeys: sshclient.HostKeys{
-			Read: func() ([]byte, error) { return []byte(known), nil },
+			Read: func(string) ([]byte, error) { return []byte(known), nil },
 		}}
 		process := openWithLog(t, dialer, targetWith(server, path), connectionlog.Detailed)
 		expectLines(t, readUntil(t, process, "ホスト鍵を受け入れませんでした"),

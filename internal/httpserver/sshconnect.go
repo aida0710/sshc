@@ -35,9 +35,12 @@ type Connector func(ctx context.Context, alias string, size terminal.Size) (term
 // connectProblem は、接続を組み立てられなかった理由を通信形式に変える。
 func connectProblem(err error) (string, bool) {
 	var unresolvable *application.ErrUnresolvable
+	var symlinkedKnownHosts *sshclient.KnownHostsSymlinkError
 	switch {
 	case errors.As(err, &unresolvable):
 		return "alias_unresolvable", true
+	case errors.As(err, &symlinkedKnownHosts):
+		return problemKnownHostsSymlink, true
 	case errors.Is(err, sshclient.ErrJumpDepth):
 		return "jump_depth_exceeded", true
 	case errors.Is(err, sshclient.ErrNoHostName):

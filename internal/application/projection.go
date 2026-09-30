@@ -236,7 +236,7 @@ func ProjectHostForm(graph *config.Graph, root string, identity HostIdentity) (H
 			field := FormField{
 				Line:      index + 1,
 				Keyword:   line.Keyword,
-				Values:    line.Values(),
+				Values:    formValues(line),
 				Category:  CategoryFor(line.Keyword),
 				Dangerous: IsDangerousKeyword(line.Keyword),
 				Duplicate: keywordSeen[lowered],

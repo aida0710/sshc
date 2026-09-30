@@ -42,7 +42,7 @@ func dialerFor(t *testing.T, server *testServer, auth sshclient.Auth) sshclient.
 	}
 	return sshclient.Dialer{
 		Auth:     auth,
-		HostKeys: sshclient.HostKeys{Read: func() ([]byte, error) { return []byte(known), nil }},
+		HostKeys: sshclient.HostKeys{Read: func(string) ([]byte, error) { return []byte(known), nil }},
 	}
 }
 
@@ -480,7 +480,7 @@ func TestProxyJumpReachesTheFinalHostThroughTheFirst(t *testing.T) {
 		knownHostsLine("["+inner.Host()+"]:"+inner.Port(), inner.HostKey.PublicKey())
 	dialer := sshclient.Dialer{
 		Auth:     auth,
-		HostKeys: sshclient.HostKeys{Read: func() ([]byte, error) { return []byte(known), nil }},
+		HostKeys: sshclient.HostKeys{Read: func(string) ([]byte, error) { return []byte(known), nil }},
 	}
 
 	target := targetWith(inner, path)
@@ -525,7 +525,7 @@ func TestNestedProxyJumpUsesTheSameFlattenedRouteAsTheResolvedTarget(t *testing.
 		knownHostsLine("["+final.Host()+"]:"+final.Port(), final.HostKey.PublicKey())
 	dialer := sshclient.Dialer{
 		Auth:     auth,
-		HostKeys: sshclient.HostKeys{Read: func() ([]byte, error) { return []byte(known), nil }},
+		HostKeys: sshclient.HostKeys{Read: func(string) ([]byte, error) { return []byte(known), nil }},
 		Dial: func(_ context.Context, _, address string) (net.Conn, error) {
 			if address != gateway.Address() {
 				return nil, errors.New("the first TCP connection bypassed the gateway")
@@ -566,7 +566,7 @@ func TestProxyJumpPasswordPromptAndProgressIdentifyTheHop(t *testing.T) {
 	known := knownHostsLine("["+edge.Host()+"]:"+edge.Port(), edge.HostKey.PublicKey()) +
 		knownHostsLine("["+inner.Host()+"]:"+inner.Port(), inner.HostKey.PublicKey())
 	dialer := sshclient.Dialer{HostKeys: sshclient.HostKeys{
-		Read: func() ([]byte, error) { return []byte(known), nil },
+		Read: func(string) ([]byte, error) { return []byte(known), nil },
 	}}
 	target := targetWith(inner)
 	target.Alias = "destination"
@@ -616,7 +616,7 @@ func TestProxyJumpUsesTheSavedPasswordForEachAlias(t *testing.T) {
 				return "", false
 			}
 		}},
-		HostKeys:  sshclient.HostKeys{Read: func() ([]byte, error) { return []byte(known), nil }},
+		HostKeys:  sshclient.HostKeys{Read: func(string) ([]byte, error) { return []byte(known), nil }},
 		Verbosity: func() connectionlog.Level { return connectionlog.Brief },
 	}
 	target := targetWith(inner)
@@ -669,7 +669,7 @@ func TestAChangedHostKeyStopsTheConnectionBeforeAuthentication(t *testing.T) {
 	other := knownHostsLine("["+server.Host()+"]:"+server.Port(), newHostKey(t).PublicKey())
 	dialer := sshclient.Dialer{
 		Auth:     auth,
-		HostKeys: sshclient.HostKeys{Read: func() ([]byte, error) { return []byte(other), nil }},
+		HostKeys: sshclient.HostKeys{Read: func(string) ([]byte, error) { return []byte(other), nil }},
 	}
 
 	process, err := dialer.Open(context.Background(), targetWith(server, path), terminal.Size{Cols: 80, Rows: 24})
@@ -703,8 +703,8 @@ func TestAnUnknownHostIsAskedThroughTheTerminal(t *testing.T) {
 	dialer := sshclient.Dialer{
 		Auth: auth,
 		HostKeys: sshclient.HostKeys{
-			Read: func() ([]byte, error) { return nil, nil },
-			Add:  func(candidate knownhosts.Candidate) error { added <- candidate; return nil },
+			Read: func(string) ([]byte, error) { return nil, nil },
+			Add:  func(_ string, candidate knownhosts.Candidate) error { added <- candidate; return nil },
 		},
 	}
 
@@ -884,8 +884,8 @@ func TestAServerThatFallsSilentAfterTheHostKeyIsAcceptedFailsWithinTheConnectTim
 			return transport, nil
 		},
 		HostKeys: sshclient.HostKeys{
-			Read: func() ([]byte, error) { return nil, nil },
-			Add:  func(knownhosts.Candidate) error { return nil },
+			Read: func(string) ([]byte, error) { return nil, nil },
+			Add:  func(string, knownhosts.Candidate) error { return nil },
 		},
 	}
 	target := targetWith(server)
