@@ -5,7 +5,8 @@ import { sftpProblemText } from "./sftpProblemText";
 import type { BrowserLocation, NavigationBlocker } from "../routing/useSectionRoute";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { ModalShell } from "../ui/ModalShell";
-import { Button } from "../ui/surface";
+import { Button, Notice } from "../ui/surface";
+import { useBeforeUnloadWarning } from "../ui/useBeforeUnloadWarning";
 import { sftpApi, type RemoteEntry, type RemoteTextFile } from "./api";
 
 const MonacoEditor = lazy(() =>
@@ -19,10 +20,19 @@ export type SFTPTextSource = {
 
 type OpenedText = { alias: string; file: RemoteTextFile };
 
+// A problem shown inside the editor, over which the pane's banner would be
+// hidden. `reloadable` offers to read the remote file again, after a save
+// refused because someone else changed it.
+type EditorProblem = { message: string; reloadable: boolean };
+
+// What the confirmation over the editor is asking before it drops unsaved
+// changes: closing the editor, or replacing them with the remote file.
+type DiscardConfirmation = "close" | "reload";
+
 // The text editor is one modal over the file list: it knows how to read,
 // edit and save a file with its revision, and how to keep the user from
 // losing an unsaved change by leaving. It does not know what a directory is;
-// the pane tells it when a save should be followed by a refresh.
+// the pane tells it what to refresh after a save.
 export function useSFTPTextEditor({
   source = sftpApi,
   onProblem,
@@ -32,12 +42,12 @@ export function useSFTPTextEditor({
   onNavigateLocation,
 }: {
   source?: SFTPTextSource;
-  // Shown in the pane's banner. An empty string clears it.
+  // Shown in the pane's banner when a file cannot be opened. An empty string
+  // clears it. Problems while a file is open are shown in the editor.
   onProblem: (message: string) => void;
-  // Runs after the file is written and before the editor shows the saved
-  // revision. Returning false keeps the previous revision on screen, for
-  // example because the directory could not be re-read.
-  onSaved: (alias: string, saved: RemoteTextFile) => Promise<boolean>;
+  // Runs after the file is written. The editor already edits the saved
+  // revision, whether or not this refresh succeeds.
+  onSaved: (alias: string, saved: RemoteTextFile) => Promise<void>;
   onNavigationBlockerChange?: ((blocker: NavigationBlocker | null) => void) | undefined;
   onDirtyChange?: ((path: string | null) => void) | undefined;
   onNavigateLocation?: ((url: string) => void) | undefined;
@@ -46,6 +56,8 @@ export function useSFTPTextEditor({
   const [opened, setOpened] = useState<OpenedText | null>(null);
   const [contents, setContents] = useState("");
   const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<EditorProblem | null>(null);
+  const [confirming, setConfirming] = useState<DiscardConfirmation | null>(null);
   const [leaving, setLeaving] = useState<BrowserLocation | null>(null);
   // Bumped whenever the editor is closed or reset, so that a read or a save
   // that was still in flight cannot reopen a file the user has left.
@@ -66,49 +78,59 @@ export function useSFTPTextEditor({
       setLeaving(next);
       return false;
     });
-    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-      event.returnValue = "";
-    };
-    window.addEventListener("beforeunload", warnBeforeUnload);
-    return () => {
-      onNavigationBlockerChange?.(null);
-      window.removeEventListener("beforeunload", warnBeforeUnload);
-    };
+    return () => onNavigationBlockerChange?.(null);
   }, [dirty, onNavigationBlockerChange]);
+  useBeforeUnloadWarning(dirty);
 
   function close() {
     generation.current += 1;
     setOpened(null);
     setContents("");
     setBusy(false);
+    setProblem(null);
+    setConfirming(null);
     setLeaving(null);
+  }
+
+  function readProblemText(error: unknown): string {
+    const code = failureCode(error);
+    if (code === "sftp_not_utf8") return t("sftp.binaryHint");
+    if (code === "sftp_text_too_large") return t("sftp.tooLargeHint");
+    return sftpProblemText(t, error);
+  }
+
+  // Reads a file into the editor, replacing what it shows.
+  async function read(alias: string, path: string, reportFailure: (message: string) => void) {
+    const current = ++generation.current;
+    setBusy(true);
+    try {
+      const file = await source.readText(alias, path);
+      if (current !== generation.current) return;
+      setOpened({ alias, file });
+      setContents(file.contents);
+      setProblem(null);
+    } catch (error) {
+      if (current !== generation.current) return;
+      reportFailure(readProblemText(error));
+    } finally {
+      if (current === generation.current) setBusy(false);
+    }
   }
 
   async function open(alias: string, entry: RemoteEntry) {
     if (dirty) {
-      onProblem(t("sftp.unsavedBlocked"));
+      setProblem({ message: t("sftp.unsavedBlocked"), reloadable: false });
       return;
     }
-    const current = ++generation.current;
-    setBusy(true);
     onProblem("");
-    try {
-      const file = await source.readText(alias, entry.path);
-      if (current !== generation.current) return;
-      setOpened({ alias, file });
-      setContents(file.contents);
-    } catch (error) {
-      if (current !== generation.current) return;
-      const code = failureCode(error);
-      if (code === "sftp_not_utf8" || code === "sftp_text_too_large") {
-        onProblem(t(code === "sftp_not_utf8" ? "sftp.binaryHint" : "sftp.tooLargeHint"));
-      } else {
-        onProblem(sftpProblemText(t, error));
-      }
-    } finally {
-      if (current === generation.current) setBusy(false);
-    }
+    // With a file already open, the pane's banner would sit behind the editor.
+    await read(alias, entry.path, opened === null ? onProblem : (message) => setProblem({ message, reloadable: false }));
+  }
+
+  async function reload() {
+    setConfirming(null);
+    if (opened === null) return;
+    await read(opened.alias, opened.file.entry.path, (message) => setProblem({ message, reloadable: true }));
   }
 
   async function save() {
@@ -116,27 +138,36 @@ export function useSFTPTextEditor({
     const current = generation.current;
     const { alias, file } = opened;
     setBusy(true);
-    onProblem("");
+    setProblem(null);
     try {
       const saved = await source.saveText(alias, file.entry.path, contents, file.revision);
       if (current !== generation.current) return;
-      const shown = await onSaved(alias, saved);
-      if (current !== generation.current || !shown) return;
+      // The server holds these contents now, so the next save must send
+      // this revision even if refreshing the listing fails.
       setOpened({ alias, file: saved });
       setContents(saved.contents);
+      await onSaved(alias, saved);
     } catch (error) {
       if (current !== generation.current) return;
-      onProblem(failureCode(error) === "sftp_conflict" ? t("sftp.conflict") : sftpProblemText(t, error));
+      const conflict = failureCode(error) === "sftp_conflict";
+      setProblem({ message: conflict ? t("sftp.conflict") : sftpProblemText(t, error), reloadable: conflict });
     } finally {
       if (current === generation.current) setBusy(false);
     }
   }
 
-  // Closing with an unsaved change is refused rather than confirmed: the
-  // banner says why, and the user can save or keep editing.
+  // Escape, Android back and the close button all land here. Unsaved changes
+  // are dropped only after the user confirms it.
   function dismiss() {
-    if (dirty) onProblem(t("sftp.unsavedBlocked"));
+    if (dirty) setConfirming("close");
     else close();
+  }
+
+  // Reloading replaces the editor's contents, so unsaved changes are
+  // confirmed first, as closing does.
+  function requestReload() {
+    if (dirty) setConfirming("reload");
+    else void reload();
   }
 
   function discardAndLeave() {
@@ -153,11 +184,16 @@ export function useSFTPTextEditor({
     setContents,
     dirty,
     busy,
+    problem,
+    confirming,
     leaving,
     open,
     save,
     close,
     dismiss,
+    requestReload,
+    reload,
+    keepEditing: () => setConfirming(null),
     discardAndLeave,
     stay: () => setLeaving(null),
   };
@@ -172,7 +208,7 @@ export function SFTPTextEditor({ editor, busy = false }: {
 }) {
   const t = useTranslate();
   const id = useId();
-  const { opened, contents, setContents, dirty, leaving } = editor;
+  const { opened, contents, setContents, dirty, problem, confirming, leaving } = editor;
   return (
     <>
       {opened === null ? null : (
@@ -185,14 +221,35 @@ export function SFTPTextEditor({ editor, busy = false }: {
             <h2 id={`${id}-editor`} className="min-w-0 grow truncate font-mono text-xs">{opened.entry.path}</h2>
             {dirty ? <span className="text-xs text-notice-ink">{t("sftp.unsaved")}</span> : null}
             <Button disabled={busy || editor.busy || !dirty} onClick={() => void editor.save()}>{t("sftp.save")}</Button>
-            <button type="button" disabled={dirty} className="text-xs text-ink-muted disabled:text-ink-faint" onClick={editor.close}>{t("sftp.close")}</button>
+            <button type="button" className="text-xs text-ink-muted" onClick={editor.dismiss}>{t("sftp.close")}</button>
           </div>
+          {problem === null ? null : (
+            <div className="border-b border-line px-3 py-2">
+              <Notice tone="danger">
+                <span className="grow">{problem.message}</span>
+                {problem.reloadable ? (
+                  <button type="button" disabled={editor.busy} className="shrink-0 text-accent disabled:text-ink-faint" onClick={editor.requestReload}>{t("sftp.editorReload")}</button>
+                ) : null}
+              </Notice>
+            </div>
+          )}
           <div className="min-h-0 flex-1">
             <Suspense fallback={<div className="p-4 text-sm text-ink-muted">{t("sftp.editorLoading")}</div>}>
               <MonacoEditor path={opened.entry.path} value={contents} onChange={setContents} readOnly={editor.busy} />
             </Suspense>
           </div>
         </ModalShell>
+      )}
+      {confirming === null ? null : (
+        <ConfirmDialog
+          id={`${id}-discard`}
+          heading={t(confirming === "close" ? "sftp.editorCloseHeading" : "sftp.editorReloadHeading")}
+          body={<p className="text-sm text-ink-muted">{t("sftp.leaveBody", { path: opened?.entry.path ?? "" })}</p>}
+          confirmLabel={t(confirming === "close" ? "sftp.editorCloseDiscard" : "sftp.editorReloadDiscard")}
+          cancelLabel={t("sftp.leaveStay")}
+          onConfirm={confirming === "close" ? editor.close : () => void editor.reload()}
+          onCancel={editor.keepEditing}
+        />
       )}
       {leaving === null ? null : (
         <ConfirmDialog

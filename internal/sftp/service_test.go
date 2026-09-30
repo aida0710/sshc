@@ -110,6 +110,7 @@ type fakeRemote struct {
 	createHook   func()
 	openHook     func(string)
 	lstatHook    func(string) error
+	readDirHook  func(string) error
 	tick         int
 }
 
@@ -144,6 +145,11 @@ func (r *fakeRemote) Getwd(ctx context.Context) (string, error) {
 func (r *fakeRemote) ReadDir(ctx context.Context, directory string) ([]fs.FileInfo, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
+	}
+	if r.readDirHook != nil {
+		if err := r.readDirHook(directory); err != nil {
+			return nil, err
+		}
 	}
 	if info, ok := r.nodes[directory]; !ok {
 		return nil, fs.ErrNotExist
@@ -205,7 +211,19 @@ func (r *fakeRemote) Open(candidate string) (io.ReadCloser, error) {
 	return io.NopCloser(bytes.NewReader(info.content)), nil
 }
 
+// requireWritableParent refuses to add an entry to a folder without owner
+// write, as a POSIX server running as a non-root user does.
+func (r *fakeRemote) requireWritableParent(candidate string) error {
+	if parent, ok := r.nodes[path.Dir(candidate)]; ok && parent.mode.Perm()&0o200 == 0 {
+		return fs.ErrPermission
+	}
+	return nil
+}
+
 func (r *fakeRemote) Create(candidate string) (io.WriteCloser, error) {
+	if err := r.requireWritableParent(candidate); err != nil {
+		return nil, err
+	}
 	r.nodes[candidate] = node{name: path.Base(candidate), mode: 0o666, modTime: testTime}
 	if r.createHook != nil {
 		r.createHook()
@@ -235,6 +253,9 @@ func (r *fakeRemote) Mkdir(candidate string) error {
 	if _, ok := r.nodes[candidate]; ok {
 		return fs.ErrExist
 	}
+	if err := r.requireWritableParent(candidate); err != nil {
+		return err
+	}
 	r.nodes[candidate] = node{name: path.Base(candidate), mode: fs.ModeDir | 0o755, modTime: r.now()}
 	return nil
 }
@@ -244,7 +265,8 @@ func (r *fakeRemote) Chmod(candidate string, mode fs.FileMode) error {
 	if !ok {
 		return fs.ErrNotExist
 	}
-	info.mode = mode
+	// SFTP SETSTAT changes permissions only; the entry keeps its type.
+	info.mode = info.mode.Type() | mode&^fs.ModeType
 	r.nodes[candidate] = info
 	return nil
 }
@@ -281,6 +303,13 @@ func (r *fakeRemote) move(from, to string) error {
 	info.name = path.Base(to)
 	// A rename keeps the modification time, as POSIX renames do.
 	r.nodes[to] = info
+	// A folder takes its whole subtree along.
+	for candidate, descendant := range r.nodes {
+		if strings.HasPrefix(candidate, from+"/") {
+			delete(r.nodes, candidate)
+			r.nodes[to+strings.TrimPrefix(candidate, from)] = descendant
+		}
+	}
 	return nil
 }
 
@@ -421,10 +450,11 @@ func TestListAndStatExposeStableMetadata(t *testing.T) {
 	})
 	service := serviceFor(remote)
 
-	entries, err := service.List(context.Background(), "edge", "/home/./")
+	listing, err := service.ListDirectory(context.Background(), "edge", "/home/./")
 	if err != nil {
-		t.Fatalf("List() = %v", err)
+		t.Fatalf("ListDirectory() = %v", err)
 	}
+	entries := listing.Entries
 	got := []string{entries[0].Name, entries[1].Name, entries[2].Name}
 	want := []string{"projects", "a.txt", "z.txt"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
@@ -664,7 +694,7 @@ func TestDownloadMkdirRenameAndDelete(t *testing.T) {
 	})
 	service := serviceFor(remote)
 	var downloaded bytes.Buffer
-	prepared, err := service.PrepareDownload(context.Background(), "edge", "/home/a")
+	prepared, err := service.PrepareDownloadForTest(context.Background(), "edge", "/home/a")
 	if err != nil {
 		t.Fatalf("PrepareDownload() = %v", err)
 	}
@@ -685,10 +715,10 @@ func TestDownloadMkdirRenameAndDelete(t *testing.T) {
 	if _, err := service.Rename(context.Background(), "edge", "/home/a", "/home/b"); err != nil {
 		t.Fatalf("Rename() = %v", err)
 	}
-	if err := service.Delete(context.Background(), "edge", "/home/b"); err != nil {
+	if err := service.DeleteTreeForTest(context.Background(), "edge", "/home/b"); err != nil {
 		t.Fatalf("Delete(file) = %v", err)
 	}
-	if err := service.Delete(context.Background(), "edge", "/home/new"); err != nil {
+	if err := service.DeleteTreeForTest(context.Background(), "edge", "/home/new"); err != nil {
 		t.Fatalf("Delete(directory) = %v", err)
 	}
 	if _, ok := remote.nodes["/home/b"]; ok {
@@ -702,7 +732,7 @@ func TestPrepareDownloadUsesPipelinedSFTPRead(t *testing.T) {
 		"/sample.bin": {name: "sample.bin", mode: 0o600, content: contents, modTime: testTime},
 	})}
 	service := sftp.Service{Open: func(context.Context, string) (sftp.Remote, error) { return remote, nil }}
-	prepared, err := service.PrepareDownload(t.Context(), "edge", "/sample.bin")
+	prepared, err := service.PrepareDownloadForTest(t.Context(), "edge", "/sample.bin")
 	if err != nil {
 		t.Fatalf("PrepareDownload() = %v", err)
 	}
@@ -728,7 +758,7 @@ func TestPrepareDownloadPipelinedReadStaysWithinAdvertisedSize(t *testing.T) {
 		reportedSize: &reportedSize,
 	}
 	service := sftp.Service{Open: func(context.Context, string) (sftp.Remote, error) { return remote, nil }}
-	if _, err := service.PrepareDownload(t.Context(), "edge", "/growing.bin"); !errors.Is(err, sftp.ErrConflict) {
+	if _, err := service.PrepareDownloadForTest(t.Context(), "edge", "/growing.bin"); !errors.Is(err, sftp.ErrConflict) {
 		t.Fatalf("PrepareDownload(growing file) = %v, want ErrConflict", err)
 	}
 	if !remote.usedWriteTo {
@@ -747,7 +777,7 @@ func TestPrepareDownloadRejectsFilesLargerThan512GiBBeforeReading(t *testing.T) 
 		return remote, nil
 	}}
 
-	if _, err := service.PrepareDownload(t.Context(), "edge", "/oversized.bin"); !errors.Is(err, sftp.ErrTransferTooLarge) {
+	if _, err := service.PrepareDownloadForTest(t.Context(), "edge", "/oversized.bin"); !errors.Is(err, sftp.ErrTransferTooLarge) {
 		t.Fatalf("PrepareDownload(512 GiB + 1) = %v, want ErrTransferTooLarge", err)
 	}
 	if opened {
@@ -761,7 +791,7 @@ func TestPrepareDownloadRevisionBindsTheExactServedContents(t *testing.T) {
 	})
 	service := serviceFor(remote)
 
-	first, err := service.PrepareDownload(t.Context(), "edge", "/report.bin")
+	first, err := service.PrepareDownloadForTest(t.Context(), "edge", "/report.bin")
 	if err != nil {
 		t.Fatalf("prepare first download: %v", err)
 	}
@@ -772,7 +802,7 @@ func TestPrepareDownloadRevisionBindsTheExactServedContents(t *testing.T) {
 	remote.nodes["/report.bin"] = node{
 		name: "report.bin", mode: 0o600, content: []byte("new-data"), modTime: testTime,
 	}
-	second, err := service.PrepareDownload(t.Context(), "edge", "/report.bin")
+	second, err := service.PrepareDownloadForTest(t.Context(), "edge", "/report.bin")
 	if err != nil {
 		t.Fatalf("prepare replacement download: %v", err)
 	}
@@ -961,12 +991,12 @@ func TestUnsafeInputsFailBeforeOpeningAConnection(t *testing.T) {
 		run  func() error
 		want error
 	}{
-		{name: "relative list", run: func() error { _, err := service.List(context.Background(), "edge", "tmp"); return err }, want: sftp.ErrInvalidPath},
-		{name: "root delete", run: func() error { return service.Delete(context.Background(), "edge", "/") }, want: sftp.ErrRootOperation},
+		{name: "relative list", run: func() error { _, err := service.ListDirectory(context.Background(), "edge", "tmp"); return err }, want: sftp.ErrInvalidPath},
+		{name: "root delete", run: func() error { return service.DeleteTreeForTest(context.Background(), "edge", "/") }, want: sftp.ErrRootOperation},
 		{name: "root mkdir", run: func() error { _, err := service.Mkdir(context.Background(), "edge", "/"); return err }, want: sftp.ErrRootOperation},
 		{name: "root empty file", run: func() error { _, err := service.CreateEmptyFile(context.Background(), "edge", "/"); return err }, want: sftp.ErrRootOperation},
 		{name: "empty alias", run: func() error { _, err := service.Stat(context.Background(), " ", "/"); return err }, want: sftp.ErrInvalidAlias},
-		{name: "hostile alias", run: func() error { _, err := service.List(context.Background(), "$(touch-pwned)", "/"); return err }, want: validate.ErrUnsafeAlias},
+		{name: "hostile alias", run: func() error { _, err := service.ListDirectory(context.Background(), "$(touch-pwned)", "/"); return err }, want: validate.ErrUnsafeAlias},
 		{name: "missing revision", run: func() error { _, err := service.SaveText(context.Background(), "edge", "/file", "x", ""); return err }, want: sftp.ErrRevisionRequired},
 	}
 	for _, test := range tests {
@@ -990,10 +1020,11 @@ func TestInternalTransferPathsAreHiddenAndRejectedByPublicOperations(t *testing.
 		editorTemporary: file(path.Base(editorTemporary), "staged", 0o600),
 	})
 	service := serviceFor(remote)
-	entries, err := service.List(t.Context(), "edge", "/")
+	listing, err := service.ListDirectory(t.Context(), "edge", "/")
 	if err != nil {
 		t.Fatal(err)
 	}
+	entries := listing.Entries
 	if len(entries) != 1 || entries[0].Path != "/report" {
 		t.Fatalf("public entries = %#v, want only /report", entries)
 	}
@@ -1001,7 +1032,7 @@ func TestInternalTransferPathsAreHiddenAndRejectedByPublicOperations(t *testing.
 		if _, err := service.Stat(t.Context(), "edge", internal); !errors.Is(err, sftp.ErrInvalidPath) {
 			t.Errorf("Stat(%q) = %v, want ErrInvalidPath", internal, err)
 		}
-		if err := service.Delete(t.Context(), "edge", internal); !errors.Is(err, sftp.ErrInvalidPath) {
+		if err := service.DeleteTreeForTest(t.Context(), "edge", internal); !errors.Is(err, sftp.ErrInvalidPath) {
 			t.Errorf("Delete(%q) = %v, want ErrInvalidPath", internal, err)
 		}
 		if _, err := service.Rename(t.Context(), "edge", internal, "/published"); !errors.Is(err, sftp.ErrInvalidPath) {
@@ -1050,7 +1081,7 @@ func TestRequestCancellationClosesABlockedRemoteRead(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	go func() {
-		_, err := service.PrepareDownload(ctx, "edge", "/large.bin")
+		_, err := service.PrepareDownloadForTest(ctx, "edge", "/large.bin")
 		done <- err
 	}()
 	<-remote.entered

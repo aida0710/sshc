@@ -33,35 +33,48 @@ func (s Service) DownloadArchive(ctx context.Context, alias, remotePath string, 
 		return Transfer{}, ErrNotDirectory
 	}
 	rootName := path.Base(cleaned)
-	if !validLocalChildName(rootName) {
+	if !ValidLocalChildName(rootName) {
 		return Transfer{}, ErrInvalidPath
 	}
-	archive := zip.NewWriter(destination)
-	var written int64
-	budget := &archiveBudget{entries: 1}
-	if err := archiveDirectory(ctx, archive, remote, cleaned, rootName, 1, budget, &written); err != nil {
-		_ = archive.Close()
+	walk := &archiveWalk{archive: zip.NewWriter(destination), remote: remote, budget: archiveBudget{entries: 1}}
+	if err := walk.addDirectory(ctx, archiveItem{remotePath: cleaned, archivePath: rootName, depth: 1}); err != nil {
+		_ = walk.archive.Close()
 		return Transfer{}, err
 	}
-	if err := archive.Close(); err != nil {
+	if err := walk.archive.Close(); err != nil {
 		return Transfer{}, err
 	}
-	return Transfer{Path: cleaned, Bytes: written, Revision: metadataRevision(info)}, nil
+	return Transfer{Path: cleaned, Bytes: walk.written, Revision: metadataRevision(info)}, nil
 }
 
-func archiveDirectory(
-	ctx context.Context, archive *zip.Writer, remote Remote, directory, archivePath string,
-	depth int, budget *archiveBudget, written *int64,
-) error {
+// archiveWalk is the state of writing one ZIP. The budget counts the whole
+// tree, not one folder.
+type archiveWalk struct {
+	archive *zip.Writer
+	remote  Remote
+	budget  archiveBudget
+	written int64
+}
+
+// archiveItem is one entry to add: where it is on the remote and what it is
+// called inside the ZIP.
+type archiveItem struct {
+	remotePath  string
+	archivePath string
+	// depth counts the root folder as 1.
+	depth int
+}
+
+func (w *archiveWalk) addDirectory(ctx context.Context, directory archiveItem) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	header := &zip.FileHeader{Name: strings.TrimSuffix(archivePath, "/") + "/", Method: zip.Store}
+	header := &zip.FileHeader{Name: strings.TrimSuffix(directory.archivePath, "/") + "/", Method: zip.Store}
 	header.SetMode(fs.ModeDir | 0o755)
-	if _, err := archive.CreateHeader(header); err != nil {
+	if _, err := w.archive.CreateHeader(header); err != nil {
 		return err
 	}
-	infos, err := readChildren(ctx, remote, directory)
+	infos, err := readChildren(ctx, w.remote, directory.remotePath)
 	if err != nil {
 		return err
 	}
@@ -73,80 +86,91 @@ func archiveDirectory(
 		if isInternalName(info.Name()) {
 			continue
 		}
-		if !validLocalChildName(info.Name()) {
+		if !ValidLocalChildName(info.Name()) {
 			return ErrInvalidPath
 		}
-		budget.entries++
-		if budget.entries > maxArchiveEntries {
+		w.budget.entries++
+		if w.budget.entries > maxArchiveEntries {
 			return ErrTransferTooLarge
 		}
-		remoteChild := path.Join(directory, info.Name())
-		archiveChild := path.Join(archivePath, info.Name())
+		child := archiveItem{
+			remotePath:  path.Join(directory.remotePath, info.Name()),
+			archivePath: path.Join(directory.archivePath, info.Name()),
+			depth:       directory.depth + 1,
+		}
 		switch {
 		case info.IsDir():
-			if depth >= maxArchiveDepth {
+			if directory.depth >= maxArchiveDepth {
 				return ErrTransferTooLarge
 			}
-			if err := archiveDirectory(ctx, archive, remote, remoteChild, archiveChild, depth+1, budget, written); err != nil {
-				return err
-			}
+			err = w.addDirectory(ctx, child)
 		case info.Mode()&fs.ModeSymlink != 0:
-			target, err := remote.ReadLink(remoteChild)
-			if err != nil {
-				return err
-			}
-			if int64(len(target)) > maxArchiveBytes-budget.bytes {
-				return ErrTransferTooLarge
-			}
-			budget.bytes += int64(len(target))
-			// Materialize the target as a regular text entry. Creating an actual
-			// symlink in an archive can escape the extraction directory.
-			header := &zip.FileHeader{Name: archiveChild, Method: zip.Store}
-			header.SetMode(0o600)
-			entry, err := archive.CreateHeader(header)
-			if err != nil {
-				return err
-			}
-			count, err := io.WriteString(entry, target)
-			*written += int64(count)
-			if err != nil {
-				return err
-			}
+			err = w.addLink(child)
 		case info.Mode().IsRegular():
-			available := maxArchiveBytes - budget.bytes
-			if info.Size() < 0 || info.Size() > available {
-				return ErrTransferTooLarge
-			}
-			header, err := zip.FileInfoHeader(info)
-			if err != nil {
-				return err
-			}
-			header.Name, header.Method = archiveChild, zip.Deflate
-			entry, err := archive.CreateHeader(header)
-			if err != nil {
-				return err
-			}
-			file, err := remote.Open(remoteChild)
-			if err != nil {
-				return err
-			}
-			count, copyErr := copyContext(ctx, entry, io.LimitReader(file, available+1), 0)
-			closeErr := file.Close()
-			*written += count
-			if copyErr != nil {
-				return copyErr
-			}
-			if closeErr != nil {
-				return closeErr
-			}
-			if count > available {
-				return ErrTransferTooLarge
-			}
-			if count != info.Size() {
-				return ErrConflict
-			}
-			budget.bytes += count
+			err = w.addFile(ctx, child, info)
+		}
+		if err != nil {
+			return err
 		}
 	}
+	return nil
+}
+
+// addLink materializes the link target as a regular text entry. Creating an
+// actual symlink in an archive can escape the extraction directory.
+func (w *archiveWalk) addLink(link archiveItem) error {
+	target, err := w.remote.ReadLink(link.remotePath)
+	if err != nil {
+		return err
+	}
+	if int64(len(target)) > maxArchiveBytes-w.budget.bytes {
+		return ErrTransferTooLarge
+	}
+	w.budget.bytes += int64(len(target))
+	header := &zip.FileHeader{Name: link.archivePath, Method: zip.Store}
+	header.SetMode(0o600)
+	entry, err := w.archive.CreateHeader(header)
+	if err != nil {
+		return err
+	}
+	count, err := io.WriteString(entry, target)
+	w.written += int64(count)
+	return err
+}
+
+func (w *archiveWalk) addFile(ctx context.Context, file archiveItem, info fs.FileInfo) error {
+	available := maxArchiveBytes - w.budget.bytes
+	if info.Size() < 0 || info.Size() > available {
+		return ErrTransferTooLarge
+	}
+	header, err := zip.FileInfoHeader(info)
+	if err != nil {
+		return err
+	}
+	header.Name, header.Method = file.archivePath, zip.Deflate
+	entry, err := w.archive.CreateHeader(header)
+	if err != nil {
+		return err
+	}
+	source, err := w.remote.Open(file.remotePath)
+	if err != nil {
+		return err
+	}
+	count, copyErr := copyContext(ctx, entry, io.LimitReader(source, available+1), 0)
+	closeErr := source.Close()
+	w.written += count
+	if copyErr != nil {
+		return copyErr
+	}
+	if closeErr != nil {
+		return closeErr
+	}
+	if count > available {
+		return ErrTransferTooLarge
+	}
+	if count != info.Size() {
+		return ErrConflict
+	}
+	w.budget.bytes += count
 	return nil
 }

@@ -84,6 +84,10 @@ type Options struct {
 	// SFTPTransferStatePath stores the device-local transfer ledger. Empty keeps
 	// the historical in-memory behavior used by small handler tests.
 	SFTPTransferStatePath string
+	// SFTPDownloadSpoolRoot is where downloads are prepared before they are
+	// sent (see sftp.NewTransferManager). Empty leaves downloads unavailable;
+	// the caller that could not find a place reports why.
+	SFTPDownloadSpoolRoot string
 	Workspaces            *workspace.Service
 	Snippets              *snippets.Service
 	// Vault は、アカウントのパスワード、鍵のパスフレーズ、TOTP、同期の設定、
@@ -387,9 +391,7 @@ func New(options Options) (*Server, error) {
 			return nil, err
 		}
 		server.transfers = transfers
-		registerSFTPRoutes(e, SFTPHandlers{
-			Service: options.SFTP, Transfers: transfers, Config: options.Config, Actions: actions,
-		})
+		registerSFTPRoutes(e, SFTPHandlers{Service: options.SFTP, Transfers: transfers, Actions: actions})
 	}
 	if options.Workspaces != nil {
 		registerWorkspaceRoutes(e, WorkspaceHandlers{Service: options.Workspaces})
@@ -490,35 +492,23 @@ func newActionRegistry(options Options) actionRegistry {
 // newTransferManager starts the SFTP queue with the stored settings and,
 // when a state path is given, the jobs left over from the last run.
 func newTransferManager(options Options) (*sshcSFTP.TransferManager, error) {
-	transfers := sshcSFTP.NewTransferManager(options.SFTP)
+	transfers := sshcSFTP.NewTransferManager(options.SFTP, options.SFTPDownloadSpoolRoot)
+	if options.SFTPDownloadSpoolRoot != "" && options.Logger != nil {
+		// Each download only reports sftp_spool_unavailable, so the cause is
+		// told once here.
+		if err := transfers.DownloadSpoolError(); err != nil {
+			options.Logger.Warn("SFTP downloads are unavailable", "spool", options.SFTPDownloadSpoolRoot, "error", err)
+		}
+	}
 	if options.Config != nil {
-		// 保存された設定を持って起動する。範囲外の値は握りつぶす。書けた
-		// 時点で範囲内だったものが、次の起動で engine を止めてはならない。
-		stored := options.Config.FileTransferSettings()
-		concurrency := stored.MaxConcurrent
-		if concurrency == 0 {
-			concurrency = sshcSFTP.DefaultTransferConcurrency
+		// 保存された設定を持って起動する。範囲外の項目があっても engine は
+		// 止めず、その項目だけを既定値にして、理由をログに残す。以後の更新は
+		// metadata.json へ保存できたものだけを適用する。
+		stored := engineTransferSettings(options.Config.FileTransferSettings())
+		if rejected := transfers.RestoreTransferSettings(stored); len(rejected) != 0 && options.Logger != nil {
+			options.Logger.Warn("SFTP transfer settings out of range were replaced with the defaults", "settings", rejected)
 		}
-		threshold := stored.LargeFileThresholdBytes
-		if threshold == 0 {
-			threshold = sshcSFTP.DefaultLargeFileThreshold
-		}
-		parallelism := stored.LargeFileParallelism
-		if parallelism == 0 {
-			parallelism = sshcSFTP.DefaultLargeFileParallelism
-		}
-		chunkBytes := stored.LargeFileChunkBytes
-		if chunkBytes == 0 {
-			chunkBytes = sshcSFTP.DefaultLargeFileChunkBytes
-		}
-		_ = transfers.SetTransferSettings(
-			concurrency,
-			time.Duration(stored.ClearCompletedAfterSeconds)*time.Second,
-			stored.ProcessingStopped,
-			threshold,
-			parallelism,
-			chunkBytes,
-		)
+		transfers.EnableTransferSettingsPersistence(saveTransferSettings(options.Config))
 	}
 	if options.SFTPTransferStatePath != "" {
 		if err := transfers.EnableQueuePersistence(options.SFTPTransferStatePath); err != nil {

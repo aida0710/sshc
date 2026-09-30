@@ -10,23 +10,23 @@ import (
 )
 
 func TestPreparedSpoolQuotaLivesUntilTheLastCloneCloses(t *testing.T) {
-	if downloadSpoolDirectory() == "" {
-		t.Fatal("download spool directory unavailable")
+	spool := newDownloadSpool(t.TempDir())
+	directory, err := spool.currentDirectory()
+	if err != nil {
+		t.Fatalf("download spool directory unavailable: %v", err)
 	}
-	temporary, err := os.CreateTemp(t.TempDir(), "lease-*.part")
+	t.Cleanup(func() { _ = spool.close() })
+	temporary, err := os.CreateTemp(directory, "lease-*.part")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := temporary.Write([]byte("data")); err != nil {
 		t.Fatal(err)
 	}
-	processSpoolMu.Lock()
-	original := processSpoolBytes
-	processSpoolMu.Unlock()
-	if err := reserveProcessSpool(4); err != nil {
+	if err := spool.reserve(4); err != nil {
 		t.Fatal(err)
 	}
-	lease := &preparedSpoolLease{path: temporary.Name(), reserved: 4, refs: 1}
+	lease := &preparedSpoolLease{spool: spool, path: temporary.Name(), reserved: 4, refs: 1}
 	owner := &PreparedDownload{file: temporary, name: temporary.Name(), lease: lease, Size: 4}
 	clone, err := clonePreparedDownload(owner)
 	if err != nil {
@@ -35,10 +35,7 @@ func TestPreparedSpoolQuotaLivesUntilTheLastCloneCloses(t *testing.T) {
 	if err := owner.Close(); err != nil {
 		t.Fatal(err)
 	}
-	processSpoolMu.Lock()
-	whileCloneOpen := processSpoolBytes
-	processSpoolMu.Unlock()
-	if whileCloneOpen != original+4 {
+	if whileCloneOpen := reservedSpoolBytes(spool); whileCloneOpen != 4 {
 		t.Fatalf("quota released with open clone: %d", whileCloneOpen)
 	}
 	if _, err := os.Stat(temporary.Name()); err != nil {
@@ -47,18 +44,21 @@ func TestPreparedSpoolQuotaLivesUntilTheLastCloneCloses(t *testing.T) {
 	if err := clone.Close(); err != nil {
 		t.Fatal(err)
 	}
-	processSpoolMu.Lock()
-	after := processSpoolBytes
-	processSpoolMu.Unlock()
-	if after != original {
-		t.Fatalf("quota after last close = %d, want %d", after, original)
+	if after := reservedSpoolBytes(spool); after != 0 {
+		t.Fatalf("quota after last close = %d, want 0", after)
 	}
 	if _, err := os.Stat(temporary.Name()); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("spool remains: %v", err)
 	}
 }
 
-func TestProcessSpoolQuotaIsReservedBeforeWriting(t *testing.T) {
+func reservedSpoolBytes(spool *downloadSpool) int64 {
+	spool.mutex.Lock()
+	defer spool.mutex.Unlock()
+	return spool.reservedBytes
+}
+
+func TestSpoolQuotaIsReservedBeforeWriting(t *testing.T) {
 	root := t.TempDir()
 	current := filepath.Join(root, "sshc-sftp-spool-current")
 	if err := os.Mkdir(current, 0o700); err != nil {

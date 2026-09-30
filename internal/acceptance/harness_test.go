@@ -269,6 +269,8 @@ func newFixture(t testing.TB) *fixture {
 		// 見つからず、VPN の一覧は docker を待たずに「使用できない」を返す。
 		DockerEnvironment: func(context.Context) ([]string, error) { return []string{"PATH="}, nil },
 		SessionNow:        clock.now,
+		// ダウンロードの一時領域もテストの一時ディレクトリに置き、利用者のキャッシュに触れない。
+		SFTPDownloadSpoolRoot: filepath.Join(home, "sftp-spool"),
 	}, "acceptance")
 	if err != nil {
 		t.Fatalf("app.Build() = %v", err)

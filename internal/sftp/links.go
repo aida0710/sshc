@@ -104,14 +104,19 @@ func describeLinks(remote Remote, entries []Entry) {
 			if err != nil {
 				return
 			}
-			entry.TargetType = linkTargetTypeOf(info)
-			// A link to a file transfers as that file, so the size and time a
-			// person sees, and a copy is given, are the file's own.
-			if info.Mode().IsRegular() {
-				entry.Size = info.Size()
-				entry.ModifiedAt = info.ModTime().UTC()
-			}
+			entry.describeTarget(info)
 		}(&entries[index])
 	}
 	pending.Wait()
+}
+
+// describeTarget records what a symlink chain ends at. A link to a file
+// transfers as that file, so the size and time a person sees, and a copy is
+// given, are the file's own.
+func (entry *Entry) describeTarget(target fs.FileInfo) {
+	entry.TargetType = linkTargetTypeOf(target)
+	if target.Mode().IsRegular() {
+		entry.Size = target.Size()
+		entry.ModifiedAt = target.ModTime().UTC()
+	}
 }

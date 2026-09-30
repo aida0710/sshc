@@ -3,12 +3,36 @@ package sftp
 import (
 	"context"
 	"errors"
-	"time"
 )
 
-// ScheduleRemoteJob starts an engine-owned remote operation. Repeated
-// calls are harmless; only one worker may own a job at a time.
-func (m *TransferManager) ScheduleRemoteJob(id string) {
+// remoteRun is one worker's ownership of a remote job. Pause and cancel end the
+// run by cancelling its context; resume and retry start a new run. A worker
+// whose run has ended may still be blocked in a slow SFTP request, and once it
+// returns the ledger refuses its reports (see transferUpdateRequest.run).
+type remoteRun struct {
+	ctx    context.Context
+	cancel context.CancelFunc
+}
+
+// ownershipError is nil while the run still owns its job. A nil run is a
+// report that does not come from a remote worker.
+func (r *remoteRun) ownershipError() error {
+	if r == nil {
+		return nil
+	}
+	return r.ctx.Err()
+}
+
+func (r *remoteRun) end() {
+	if r != nil {
+		r.cancel()
+	}
+}
+
+// scheduleRemoteJob starts an engine-owned remote operation. Repeated
+// calls are harmless: a job keeps its live run, and only a run that pause,
+// cancel or its own terminal report has ended is replaced by a new worker.
+func (m *TransferManager) scheduleRemoteJob(id string) {
 	if m == nil || m.Service == nil || !transferIDPattern.MatchString(id) {
 		return
 	}
@@ -19,60 +43,55 @@ func (m *TransferManager) ScheduleRemoteJob(id string) {
 		m.remoteJobsMutex.Unlock()
 		return
 	}
-	if _, running := m.remoteCancels[id]; running {
+	if current := m.remoteRuns[id]; current != nil && current.ownershipError() == nil {
 		m.remoteJobsMutex.Unlock()
 		return
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	m.remoteCancels[id] = cancel
+	run := &remoteRun{ctx: ctx, cancel: cancel}
+	m.remoteRuns[id] = run
 	m.remoteWorkers.Add(1)
 	m.remoteJobsMutex.Unlock()
 	go func() {
 		defer m.remoteWorkers.Done()
-		m.runRemoteJob(ctx, id)
+		m.runRemoteJob(run, id)
 	}()
 }
 
-func (m *TransferManager) cancelRemoteJob(id string) {
+// endRemoteRun ends the job's registered run, if any. The job itself keeps
+// the state its caller gave it.
+func (m *TransferManager) endRemoteRun(id string) {
 	m.remoteJobsMutex.Lock()
-	cancel := m.remoteCancels[id]
+	run := m.remoteRuns[id]
 	m.remoteJobsMutex.Unlock()
-	if cancel != nil {
-		cancel()
-	}
+	run.end()
 }
 
-func (m *TransferManager) finishRemoteWorker(id string) {
+// finishRemoteWorker unregisters run only while it is still the job's current
+// run. A newer run started by resume keeps its registration.
+func (m *TransferManager) finishRemoteWorker(id string, run *remoteRun) {
 	m.remoteJobsMutex.Lock()
-	if cancel := m.remoteCancels[id]; cancel != nil {
-		cancel()
-		delete(m.remoteCancels, id)
+	run.end()
+	if m.remoteRuns[id] == run {
+		delete(m.remoteRuns, id)
 	}
 	m.remoteJobsMutex.Unlock()
 }
 
-func (m *TransferManager) runRemoteJob(ctx context.Context, id string) {
-	defer m.finishRemoteWorker(id)
-	var job TransferJob
-	for {
-		if err := ctx.Err(); err != nil {
-			return
-		}
-		started, err := m.UpdateJob(id, UpdateTransferJob{Action: TransferStartAction})
-		if err == nil {
-			job = started
-			break
-		}
-		if !errors.Is(err, ErrTransferLimit) {
-			return
-		}
-		timer := time.NewTimer(200 * time.Millisecond)
-		select {
-		case <-ctx.Done():
-			timer.Stop()
-			return
-		case <-timer.C:
-		}
+// reportRemoteRun applies a worker's report on its own run.
+func (m *TransferManager) reportRemoteRun(run *remoteRun, id string, update UpdateTransferJob) (TransferJob, error) {
+	if m.isClosed() {
+		return TransferJob{}, ErrUnavailable
+	}
+	return m.updateJob(transferUpdateRequest{id: id, update: update, origin: transferUpdateInternal, run: run})
+}
+
+func (m *TransferManager) runRemoteJob(run *remoteRun, id string) {
+	defer m.finishRemoteWorker(id, run)
+	ctx := run.ctx
+	job, started := m.startRemoteJobWhenSlotFree(run, id)
+	if !started {
+		return
 	}
 	// Planning and the operation itself can walk a large tree for longer than
 	// the stale-running sweep tolerates without reporting progress. Holding the
@@ -82,83 +101,129 @@ func (m *TransferManager) runRemoteJob(ctx context.Context, id string) {
 		return
 	}
 	defer release()
-	var totalBytes int64
-	if job.Operation == RemoteDelete {
-		totalBytes, err = m.Service.PlanDelete(ctx, job.Alias, job.RemotePath)
-	} else if job.Operation == RemoteGet || job.Operation == RemotePut {
-		var plan RemoteTransferPlan
-		plan, err = m.Service.PlanLocalTransfer(ctx, RemoteTransferRequest{
-			SourceAlias: job.SourceAlias, SourcePath: job.SourcePath,
-			TargetAlias: job.Alias, TargetPath: job.RemotePath,
-			Operation: job.Operation, Overwrite: job.Overwrite,
-		})
-		totalBytes = plan.TotalBytes
-	} else {
-		var plan RemoteTransferPlan
-		plan, err = m.Service.PlanRemoteTransfer(ctx, RemoteTransferRequest{
-			SourceAlias: job.SourceAlias, SourcePath: job.SourcePath,
-			TargetAlias: job.Alias, TargetPath: job.RemotePath,
-			Operation: job.Operation, Overwrite: job.Overwrite,
-		})
-		totalBytes = plan.TotalBytes
-	}
+	operation := remoteJobOperationFor(m.Service, job)
+	totalBytes, err := operation.plan(ctx)
 	if err == nil {
 		zero := int64(0)
 		total := totalBytes
-		_, err = m.UpdateJob(id, UpdateTransferJob{Action: TransferProgressAction, TransferredBytes: &zero, TotalBytes: &total, ResetProgress: true})
+		_, err = m.reportRemoteRun(run, id, UpdateTransferJob{Action: TransferProgressAction, TransferredBytes: &zero, TotalBytes: &total, ResetProgress: true})
 	}
 	if err != nil {
-		m.finishRemoteJobWithError(id, err, false)
+		m.failRemoteJobBeforeOperation(run, id, err)
 		return
 	}
 	// Persist an explicit intent before the operation can publish target data or
 	// remove an entry. If the terminal queue commit later fails, restart restores
 	// this job as reconciliation-required instead of automatically repeating it.
-	if err = m.markRemoteCommitPending(id); err != nil {
+	if err = m.markRemoteCommitPending(run, id); err != nil {
 		// The intent could not be recorded, so the operation has not started and no
 		// external state changed. Report it like any other pre-transfer failure
 		// instead of leaving a running row for the stale sweep to reap.
-		m.finishRemoteJobWithError(id, err, false)
+		m.failRemoteJobBeforeOperation(run, id, err)
 		return
 	}
 	report := func(transferred int64) error {
-		_, progressErr := m.UpdateJob(id, UpdateTransferJob{Action: TransferProgressAction, TransferredBytes: &transferred})
+		_, progressErr := m.reportRemoteRun(run, id, UpdateTransferJob{Action: TransferProgressAction, TransferredBytes: &transferred})
 		return progressErr
 	}
-	if job.Operation == RemoteDelete {
-		err = m.Service.DeleteWithProgress(ctx, job.Alias, job.RemotePath, totalBytes, report)
-	} else if job.Operation == RemoteGet || job.Operation == RemotePut {
-		err = m.Service.CopyLocal(ctx, RemoteTransferRequest{
-			SourceAlias: job.SourceAlias, SourcePath: job.SourcePath,
-			TargetAlias: job.Alias, TargetPath: job.RemotePath,
-			Operation: job.Operation, Overwrite: job.Overwrite,
-		}, report)
-	} else {
-		err = m.Service.CopyRemote(ctx, RemoteTransferRequest{
-			SourceAlias: job.SourceAlias, SourcePath: job.SourcePath,
-			TargetAlias: job.Alias, TargetPath: job.RemotePath,
-			Operation: job.Operation, Overwrite: job.Overwrite,
-		}, report)
-	}
+	err = operation.run(ctx, totalBytes, report)
 	if err == nil {
 		completed := totalBytes
-		if _, commitErr := m.UpdateJob(id, UpdateTransferJob{Action: TransferCompleteAction, TransferredBytes: &completed}); commitErr != nil {
-			m.markRemoteReconciliationRequired(id, completed)
+		if _, commitErr := m.reportRemoteRun(run, id, UpdateTransferJob{Action: TransferCompleteAction, TransferredBytes: &completed}); commitErr != nil {
+			m.markRemoteReconciliationRequired(run, id, completed)
 		}
 		return
 	}
-	if errors.Is(err, context.Canceled) {
+	if ctx.Err() != nil || errors.Is(err, context.Canceled) {
+		m.clearCommitPendingAfterPause(id)
 		return
 	}
-	m.finishRemoteJobWithError(id, err, true)
+	m.failRemoteJobAfterOperation(run, id, err)
 }
 
-func (m *TransferManager) markRemoteCommitPending(id string) error {
+// startRemoteJobWhenSlotFree waits for a free transfer slot and marks the job
+// running. It reports false when the run ended or the job cannot start for a
+// reason other than a full queue.
+func (m *TransferManager) startRemoteJobWhenSlotFree(run *remoteRun, id string) (TransferJob, bool) {
+	for {
+		if run.ctx.Err() != nil {
+			return TransferJob{}, false
+		}
+		slotReleased, sweepAfter := m.slotWait()
+		started, err := m.reportRemoteRun(run, id, UpdateTransferJob{Action: TransferStartAction})
+		if err == nil {
+			return started, true
+		}
+		if !errors.Is(err, ErrTransferLimit) || !waitForSlot(run.ctx, slotReleased, sweepAfter) {
+			return TransferJob{}, false
+		}
+	}
+}
+
+// remoteJobOperation pairs how one kind of remote job is planned with how it
+// runs. plan returns the total the run reports progress against, so that a
+// new kind of job is added in one place.
+type remoteJobOperation struct {
+	plan func(ctx context.Context) (int64, error)
+	run  func(ctx context.Context, totalBytes int64, report func(int64) error) error
+}
+
+func remoteJobOperationFor(service *Service, job TransferJob) remoteJobOperation {
+	switch job.Operation {
+	case RemoteDelete:
+		return remoteJobOperation{
+			plan: func(ctx context.Context) (int64, error) {
+				return service.PlanDelete(ctx, job.Alias, job.RemotePath)
+			},
+			run: func(ctx context.Context, totalBytes int64, report func(int64) error) error {
+				return service.DeleteWithProgress(ctx, job.Alias, job.RemotePath, totalBytes, report)
+			},
+		}
+	case RemoteGet, RemotePut:
+		request := remoteTransferRequestFor(job)
+		return remoteJobOperation{
+			plan: func(ctx context.Context) (int64, error) {
+				plan, err := service.PlanLocalTransfer(ctx, request)
+				return plan.TotalBytes, err
+			},
+			run: func(ctx context.Context, _ int64, report func(int64) error) error {
+				return service.CopyLocal(ctx, request, report)
+			},
+		}
+	default: // RemoteCopy and RemoteMove
+		request := remoteTransferRequestFor(job)
+		return remoteJobOperation{
+			plan: func(ctx context.Context) (int64, error) {
+				plan, err := service.PlanRemoteTransfer(ctx, request)
+				return plan.TotalBytes, err
+			},
+			run: func(ctx context.Context, _ int64, report func(int64) error) error {
+				return service.CopyRemote(ctx, request, report)
+			},
+		}
+	}
+}
+
+// remoteTransferRequestFor names a get, put, copy or move job's source and
+// target the way the Service operations take them. The job's alias and path
+// are the target's.
+func remoteTransferRequestFor(job TransferJob) RemoteTransferRequest {
+	return RemoteTransferRequest{
+		SourceAlias: job.SourceAlias, SourcePath: job.SourcePath,
+		TargetAlias: job.Alias, TargetPath: job.RemotePath,
+		Operation: job.Operation, Overwrite: job.Overwrite,
+	}
+}
+
+func (m *TransferManager) markRemoteCommitPending(run *remoteRun, id string) error {
 	m.jobsMutex.Lock()
 	defer m.jobsMutex.Unlock()
 	record := m.jobs[id]
 	if record == nil {
 		return ErrTransferNotFound
+	}
+	if err := run.ownershipError(); err != nil {
+		return err
 	}
 	if record.job.Direction != TransferRemote || record.job.Status != TransferRunning {
 		return ErrTransferState
@@ -173,11 +238,36 @@ func (m *TransferManager) markRemoteCommitPending(id string) error {
 	return nil
 }
 
-func (m *TransferManager) markRemoteReconciliationRequired(id string, transferred int64) {
+// clearCommitPendingAfterPause runs after a pause interrupted the operation
+// with an error. The operation did not finish, so the job is in the same
+// position as a failed one that retry runs again: resume re-plans the rest.
+// Keeping the mark would leave a paused job that only cancel can clear.
+func (m *TransferManager) clearCommitPendingAfterPause(id string) {
+	m.jobsMutex.Lock()
+	defer m.jobsMutex.Unlock()
+	record := m.jobs[id]
+	if record == nil || record.job.Direction != TransferRemote || record.job.Status != TransferPaused ||
+		record.job.Problem != RemoteReconciliationProblem {
+		return
+	}
+	original := cloneTransferJobRecord(record)
+	record.job.Problem = ""
+	record.job.UpdatedAt = m.now().UTC()
+	if err := m.persistJobsLocked(true); err != nil {
+		// Without a durable record the mark must stay; a restart would otherwise
+		// restore the paused job still marked and the two views would disagree.
+		*record = original
+	}
+}
+
+func (m *TransferManager) markRemoteReconciliationRequired(run *remoteRun, id string, transferred int64) {
 	m.jobsMutex.Lock()
 	defer m.jobsMutex.Unlock()
 	record := m.jobs[id]
 	if record == nil || record.job.Direction != TransferRemote || record.job.Status != TransferRunning {
+		return
+	}
+	if run.ownershipError() != nil {
 		return
 	}
 	m.releaseJobLocked(record.job.Status)
@@ -191,26 +281,46 @@ func (m *TransferManager) markRemoteReconciliationRequired(id string, transferre
 	record.job.UpdatedAt = m.now().UTC()
 }
 
-func (m *TransferManager) finishRemoteJobWithError(id string, err error, externalSideEffectsPossible bool) {
-	var transitionErr error
+// failRemoteJobBeforeOperation reports a failure from before the operation
+// could change the remote side. A refused report leaves the job as it is:
+// nothing happened that running it again would repeat.
+func (m *TransferManager) failRemoteJobBeforeOperation(run *remoteRun, id string, err error) {
+	_ = m.reportRemoteFailure(run, id, err)
+}
+
+// failRemoteJobAfterOperation reports a failure of the operation itself, which
+// may already have published the target or removed the source. When that
+// cannot be recorded, the job is marked for reconciliation so that it is never
+// repeated automatically.
+func (m *TransferManager) failRemoteJobAfterOperation(run *remoteRun, id string, err error) {
+	if m.reportRemoteFailure(run, id, err) != nil {
+		m.markRemoteReconciliationRequired(run, id, -1)
+	}
+}
+
+// reportRemoteFailure records how the run failed: an existing target asks for
+// an overwrite, and anything else fails the job.
+func (m *TransferManager) reportRemoteFailure(run *remoteRun, id string, err error) error {
+	update := UpdateTransferJob{Action: TransferFailAction, Problem: remoteTransferProblem(err)}
 	if errors.Is(err, ErrAlreadyExists) {
-		_, transitionErr = m.UpdateJob(id, UpdateTransferJob{Action: TransferNeedsOverwriteAction})
-	} else {
-		_, transitionErr = m.UpdateJob(id, UpdateTransferJob{Action: TransferFailAction, Problem: remoteTransferProblem(err)})
+		update = UpdateTransferJob{Action: TransferNeedsOverwriteAction}
 	}
-	if transitionErr != nil && externalSideEffectsPossible {
-		m.markRemoteReconciliationRequired(id, -1)
-	}
+	_, reportErr := m.reportRemoteRun(run, id, update)
+	return reportErr
 }
 
 func remoteTransferProblem(err error) string {
 	switch {
 	case errors.Is(err, ErrConflict):
 		return "sftp_conflict"
+	case errors.Is(err, ErrNameCollision):
+		return "sftp_name_collision"
 	case errors.Is(err, ErrUnsupportedEntry):
 		return "sftp_unsupported_entry"
-	case errors.Is(err, ErrCompareLimit), errors.Is(err, ErrTransferTooLarge):
+	case errors.Is(err, ErrTransferTooLarge):
 		return "sftp_transfer_too_large"
+	case errors.Is(err, ErrTraversalLimit):
+		return "sftp_traversal_limit"
 	default:
 		return "sftp_failed"
 	}

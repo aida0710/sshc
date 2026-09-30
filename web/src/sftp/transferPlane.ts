@@ -1,5 +1,8 @@
 import type {
+  BrowserSave,
   CreateTransferJob,
+  DownloadStream,
+  DownloadTarget,
   ResumableUpload,
   StreamDownloadOptions,
   TransferJob,
@@ -7,6 +10,10 @@ import type {
   TransferJobList,
   TransferQueueMove,
   TransferSettings,
+  UploadChunk,
+  UploadCompletion,
+  UploadStart,
+  UploadTarget,
 } from "./api";
 import type { TransferLedger } from "./transferLedger";
 
@@ -19,14 +26,13 @@ export type TransferManagerAPI = {
   removeTransfer(id: string): Promise<void>;
   updateTransfer(id: string, action: TransferJobAction, options?: { transferredBytes?: number; totalBytes?: number; problem?: string; resetProgress?: boolean }): Promise<TransferJob>;
   checkpointDownload(id: string, offset: number, revision: string): Promise<TransferJob>;
-  verifyDownload(alias: string, jobId: string, remotePath: string, revision: string): Promise<void>;
-  startUpload(alias: string, id: string, remotePath: string, size: number, sourceFingerprint: string): Promise<ResumableUpload>;
-  appendUpload(alias: string, id: string, remotePath: string, offset: number, total: number, chunk: Blob, signal?: AbortSignal): Promise<ResumableUpload>;
-  appendUploadRange(alias: string, id: string, remotePath: string, offset: number, total: number, chunk: Blob, signal?: AbortSignal): Promise<ResumableUpload>;
-  completeUpload(alias: string, id: string, remotePath: string, size: number, expectedRevision: string, sourceFingerprint: string): Promise<void>;
-  cancelUpload(alias: string, id: string, remotePath: string): Promise<void>;
-  streamDownload(alias: string, jobId: string, remotePath: string, directory: boolean, offset: number, options: StreamDownloadOptions): Promise<{ bytes: number; total: number | null }>;
-  saveDownload(remotePath: string, directory: boolean, chunks: BlobPart[]): Promise<void> | void;
+  verifyDownload(target: DownloadTarget, revision: string): Promise<void>;
+  startUpload(upload: UploadStart): Promise<ResumableUpload>;
+  appendUpload(chunk: UploadChunk): Promise<ResumableUpload>;
+  completeUpload(completion: UploadCompletion): Promise<void>;
+  cancelUpload(target: UploadTarget): Promise<void>;
+  streamDownload(download: DownloadStream, options: StreamDownloadOptions): Promise<{ bytes: number; total: number | null }>;
+  saveDownload(remotePath: string, directory: boolean, chunks: BlobPart[]): Promise<BrowserSave | null>;
 };
 
 // What a transfer plane gets from the manager that scheduled it.

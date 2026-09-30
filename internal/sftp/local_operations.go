@@ -9,7 +9,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"sort"
 	"strings"
 )
 
@@ -22,15 +21,20 @@ type LocalListing struct {
 	Entries []Entry `json:"entries"`
 }
 
-func localRelative(value string) (string, error) {
+// cleanLocalPath is the local counterpart of cleanPublicPath: it checks that
+// value is an absolute path on the engine's file system and returns it cleaned,
+// with `/` as the separator. An empty value and a leading `~` stand for the
+// engine user's home. A path that cleaning would change beyond a trailing
+// separator is refused rather than silently rewritten.
+func cleanLocalPath(value string) (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
-	if value == "" || value == "~" || value == "~/" {
+	if value == "" {
 		value = home
-	} else if strings.HasPrefix(value, "~/") {
-		value = filepath.Join(home, filepath.FromSlash(strings.TrimPrefix(value, "~/")))
+	} else if belowHome, ok := cutLocalHomePrefix(value); ok {
+		value = filepath.Join(home, filepath.FromSlash(belowHome))
 	}
 	if strings.ContainsRune(value, 0) || !filepath.IsAbs(value) {
 		return "", ErrInvalidPath
@@ -43,21 +47,46 @@ func localRelative(value string) (string, error) {
 	}
 	return filepath.ToSlash(cleaned), nil
 }
-func localPublic(relative string, root *os.Root) string {
-	return filepath.ToSlash(filepath.Join(root.Name(), filepath.FromSlash(relative)))
+
+// cutLocalHomePrefix reports whether value starts at the engine user's home
+// and returns the part below it. Besides `~/`, the home may be followed by the
+// file system's own separator, so a Windows user can type `~\Documents` as in
+// PowerShell. A local path is resolved at once and never saved, so this
+// spelling cannot reach a machine where `\` belongs to a file name. The saved
+// start directory of a shell is different: platform.ResolveUnderHome keeps
+// refusing `~\` there.
+func cutLocalHomePrefix(value string) (string, bool) {
+	if value == "~" {
+		return "", true
+	}
+	if len(value) >= 2 && value[0] == '~' && os.IsPathSeparator(value[1]) {
+		return value[2:], true
+	}
+	return "", false
 }
+
+// openLocalRoot opens the file system root that holds value and returns value
+// relative to it. The folders above value are resolved first, absolute links
+// included, because os.Root refuses to follow a link to an absolute path.
+// value itself stays unresolved, so checkLocal still refuses a link named
+// directly.
 func openLocalRoot(value string) (*os.Root, string, error) {
-	absolute, err := localRelative(value)
+	absolute, err := cleanLocalPath(value)
 	if err != nil {
 		return nil, "", err
 	}
-	volume := filepath.VolumeName(filepath.FromSlash(absolute))
-	filesystemRoot := volume + string(filepath.Separator)
+	named := filepath.FromSlash(absolute)
+	parent, err := filepath.EvalSymlinks(filepath.Dir(named))
+	if err != nil {
+		return nil, "", err
+	}
+	resolved := filepath.Join(parent, filepath.Base(named))
+	filesystemRoot := filepath.VolumeName(resolved) + string(filepath.Separator)
 	root, err := os.OpenRoot(filesystemRoot)
 	if err != nil {
 		return nil, "", err
 	}
-	relative, err := filepath.Rel(filesystemRoot, filepath.FromSlash(absolute))
+	relative, err := filepath.Rel(filesystemRoot, resolved)
 	if err != nil {
 		root.Close()
 		return nil, "", err
@@ -96,57 +125,62 @@ func checkLocal(root *os.Root, relative string, allowMissing bool) (fs.FileInfo,
 	}
 	return nil, ErrInvalidPath
 }
+
+// ListLocal lists a folder of the engine's file system. Opening a folder
+// follows every link on the way, as opening a remote one does. A link inside
+// it is listed as a symlink with what it points to, so the pane refuses to
+// hand it to a transfer, which never follows links.
 func ListLocal(value string) (LocalListing, error) {
-	root, relative, err := openLocalRoot(value)
+	cleaned, err := cleanLocalPath(value)
 	if err != nil {
 		return LocalListing{}, err
 	}
-	defer root.Close()
-	info, err := root.Stat(relative)
+	directory := filepath.FromSlash(cleaned)
+	info, err := os.Stat(directory)
 	if err != nil {
 		return LocalListing{}, err
 	}
 	if !info.IsDir() {
 		return LocalListing{}, ErrNotDirectory
 	}
-	directory, err := root.Open(relative)
+	children, err := os.ReadDir(directory)
 	if err != nil {
 		return LocalListing{}, err
 	}
-	defer directory.Close()
-	infos, err := directory.Readdir(0)
-	if err != nil {
-		return LocalListing{}, err
-	}
-	entries := make([]Entry, 0, len(infos))
-	for _, item := range infos {
-		name := item.Name()
-		if item.Mode()&fs.ModeSymlink != 0 {
-			resolved, resolveErr := root.Stat(path.Join(relative, name))
-			if resolveErr != nil {
-				continue
-			}
-			item = resolved
-		}
-		if !item.Mode().IsRegular() && !item.IsDir() {
+	entries := make([]Entry, 0, len(children))
+	for _, child := range children {
+		childInfo, err := child.Info()
+		if err != nil {
+			// The entry was removed after the folder was read.
 			continue
 		}
-		entry := entryFrom("", item)
-		entry.Name = name
-		entry.Path = localPublic(path.Join(relative, name), root)
+		entry := entryFrom(cleaned, childInfo)
+		switch entry.Type {
+		case EntrySymlink:
+			describeLocalLink(&entry, filepath.Join(directory, child.Name()))
+		case EntryFile, EntryDirectory:
+		default:
+			continue
+		}
 		entries = append(entries, entry)
 	}
-	sort.Slice(entries, func(i, j int) bool {
-		if entries[i].Type != entries[j].Type {
-			return entries[i].Type == EntryDirectory
-		}
-		return strings.ToLower(entries[i].Name) < strings.ToLower(entries[j].Name)
-	})
+	sortListing(entries)
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return LocalListing{}, err
 	}
-	return LocalListing{Path: localPublic(relative, root), Home: filepath.ToSlash(home), Entries: entries}, nil
+	return LocalListing{Path: cleaned, Home: filepath.ToSlash(home), Entries: entries}, nil
+}
+
+// describeLocalLink fills in where a local symlink points and what it ends at,
+// as describeLinks does for a remote one. The target may be an absolute path.
+func describeLocalLink(entry *Entry, linkPath string) {
+	if target, err := os.Readlink(linkPath); err == nil {
+		entry.LinkTarget = filepath.ToSlash(target)
+	}
+	if info, err := os.Stat(linkPath); err == nil {
+		entry.describeTarget(info)
+	}
 }
 
 func (s Service) PlanLocalTransfer(ctx context.Context, request RemoteTransferRequest) (RemoteTransferPlan, error) {
@@ -158,7 +192,7 @@ func (s Service) PlanLocalTransfer(ctx context.Context, request RemoteTransferRe
 	} else {
 		return RemoteTransferPlan{}, ErrInvalidTransfer
 	}
-	if _, err := localRelative(localPath); err != nil {
+	if _, err := cleanLocalPath(localPath); err != nil {
 		return RemoteTransferPlan{}, err
 	}
 	if _, err := cleanPublicPath(remotePath, false); err != nil {
@@ -252,13 +286,9 @@ func (s Service) CopyLocal(ctx context.Context, request RemoteTransferRequest, p
 		return err
 	}
 	defer root.Close()
-	var transferred int64
-	report := func(delta int64) error {
-		transferred += delta
-		if progress != nil {
-			return progress(transferred)
-		}
-		return nil
+	transfer := &localCopy{
+		service: s, root: root, overwrite: request.Overwrite, progress: progress,
+		published: newPublishedNames(),
 	}
 	if request.Operation == RemotePut {
 		sourceInfo, err := checkLocal(root, relative, false)
@@ -270,7 +300,8 @@ func (s Service) CopyLocal(ctx context.Context, request RemoteTransferRequest, p
 			return err
 		}
 		defer remote.Close()
-		return s.putLocal(ctx, root, remote, relative, request.TargetPath, sourceInfo, request.Overwrite, report)
+		transfer.alias, transfer.remote = request.TargetAlias, remote
+		return transfer.put(ctx, relative, request.TargetPath, sourceInfo)
 	}
 	remote, err := s.openRequest(ctx, request.SourceAlias)
 	if err != nil {
@@ -281,25 +312,63 @@ func (s Service) CopyLocal(ctx context.Context, request RemoteTransferRequest, p
 	if err != nil {
 		return err
 	}
-	return s.getLocal(ctx, remote, root, request.SourcePath, relative, sourceInfo, request.Overwrite, report)
+	transfer.alias, transfer.remote = request.SourceAlias, remote
+	return transfer.get(ctx, request.SourcePath, relative, sourceInfo)
 }
-func (s Service) putLocal(ctx context.Context, root *os.Root, remote Remote, source, target string, info fs.FileInfo, overwrite bool, report func(int64) error) error {
+
+// downloadedFolderOwnerAccess is added to the mode of a folder that get
+// creates. Without owner write, a remote folder such as a Go module cache
+// (dr-xr-xr-x) would refuse its own children, and a rerun or a local delete
+// would fail too. get does not carry remote permissions to files either: they
+// are created 0600.
+const downloadedFolderOwnerAccess fs.FileMode = 0o700
+
+// localCopy runs one transfer between the engine's file system (root) and a
+// remote, in either direction.
+type localCopy struct {
+	service Service
+	root    *os.Root
+	// alias names the host remote is connected to.
+	alias     string
+	remote    Remote
+	overwrite bool
+	progress  func(int64) error
+	// published lets an approved overwrite replace only entries that were at
+	// the target before this run.
+	published *publishedNames
+
+	transferred int64
+}
+
+func (c *localCopy) report(delta int64) error {
+	c.transferred += delta
+	if c.progress == nil {
+		return nil
+	}
+	return c.progress(c.transferred)
+}
+
+func (c *localCopy) put(ctx context.Context, source, target string, info fs.FileInfo) (resultErr error) {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	if info.IsDir() {
-		if targetInfo, err := remote.Lstat(target); err == nil {
-			if !targetInfo.IsDir() || !overwrite {
-				return ErrAlreadyExists
+		if targetInfo, err := c.remote.Lstat(target); err == nil {
+			if err := c.published.existingEntryError(target, c.overwrite); err != nil {
+				return err
+			}
+			if !targetInfo.IsDir() {
+				return differentKindError(target)
 			}
 		} else if errors.Is(err, fs.ErrNotExist) {
-			if err := remote.Mkdir(target); err != nil {
+			if err := c.remote.Mkdir(target); err != nil {
 				return err
 			}
 		} else {
 			return err
 		}
-		directory, err := root.Open(source)
+		c.published.record(target)
+		directory, err := c.root.Open(source)
 		if err != nil {
 			return err
 		}
@@ -310,11 +379,11 @@ func (s Service) putLocal(ctx context.Context, root *os.Root, remote Remote, sou
 		}
 		for _, child := range children {
 			childSource := path.Join(source, child.Name())
-			checked, err := checkLocal(root, childSource, false)
+			checked, err := checkLocal(c.root, childSource, false)
 			if err != nil {
 				return err
 			}
-			if err := s.putLocal(ctx, root, remote, childSource, path.Join(target, child.Name()), checked, overwrite, report); err != nil {
+			if err := c.put(ctx, childSource, path.Join(target, child.Name()), checked); err != nil {
 				return err
 			}
 		}
@@ -323,26 +392,34 @@ func (s Service) putLocal(ctx context.Context, root *os.Root, remote Remote, sou
 	if !info.Mode().IsRegular() {
 		return ErrUnsupportedEntry
 	}
-	input, err := root.Open(source)
+	input, err := c.root.Open(source)
 	if err != nil {
 		return err
 	}
 	defer input.Close()
-	if _, err := remote.Lstat(target); err == nil && !overwrite {
-		return ErrAlreadyExists
-	} else if err != nil && !errors.Is(err, fs.ErrNotExist) {
+	if _, err := c.remote.Lstat(target); err == nil {
+		if err := c.published.existingEntryError(target, c.overwrite); err != nil {
+			return err
+		}
+	} else if !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
-	temporary, err := s.temporaryPath(target)
+	temporary, err := c.service.temporaryPath(target)
 	if err != nil {
 		return err
 	}
-	output, err := remote.Create(temporary)
+	output, err := c.remote.Create(temporary)
 	if err != nil {
 		return err
 	}
-	defer remote.Remove(temporary)
-	written, copyErr := copyContext(ctx, &progressWriter{Writer: output, report: report}, input, info.Size())
+	published := false
+	defer func() {
+		if !published {
+			unpublished := unpublishedFile{service: c.service, alias: c.alias, remote: c.remote, path: temporary}
+			resultErr = errors.Join(resultErr, unpublished.remove(ctx))
+		}
+	}()
+	written, copyErr := copyContext(ctx, &progressWriter{Writer: output, report: c.report}, input, info.Size())
 	closeErr := output.Close()
 	if copyErr != nil {
 		return copyErr
@@ -353,35 +430,50 @@ func (s Service) putLocal(ctx context.Context, root *os.Root, remote Remote, sou
 	if written != info.Size() {
 		return ErrConflict
 	}
-	after, err := checkLocal(root, source, false)
+	after, err := checkLocal(c.root, source, false)
 	if err != nil || metadataRevision(info) != metadataRevision(after) {
 		return ErrConflict
 	}
-	if err := remote.Chtimes(temporary, info.ModTime()); err != nil {
-		return err
+	if c.overwrite {
+		err = c.remote.Replace(temporary, target)
+	} else {
+		err = c.remote.Rename(temporary, target)
 	}
-	if overwrite {
-		return remote.Replace(temporary, target)
-	}
-	return remote.Rename(temporary, target)
-}
-func (s Service) getLocal(ctx context.Context, remote Remote, root *os.Root, source, target string, info fs.FileInfo, overwrite bool, report func(int64) error) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	existing, err := checkLocal(root, target, true)
 	if err != nil {
 		return err
 	}
-	if info.IsDir() {
-		if existing != nil {
-			if !existing.IsDir() || !overwrite {
-				return ErrAlreadyExists
-			}
-		} else if err := root.Mkdir(target, info.Mode().Perm()); err != nil {
+	published = true
+	c.published.record(target)
+	// The source's time is set only after publishing: until then the
+	// temporary must keep the time of its last write, or a delete or move
+	// of the folder would take it for an abandoned one (isAbandonedTemporary).
+	return c.remote.Chtimes(target, info.ModTime())
+}
+
+func (c *localCopy) get(ctx context.Context, source, target string, info fs.FileInfo) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	existing, err := checkLocal(c.root, target, true)
+	if err != nil {
+		return err
+	}
+	if existing != nil {
+		if err := c.published.existingEntryError(target, c.overwrite); err != nil {
 			return err
 		}
-		children, err := readChildren(ctx, remote, source)
+	}
+	if info.IsDir() {
+		if existing != nil && !existing.IsDir() {
+			return differentKindError(target)
+		}
+		if existing == nil {
+			if err := c.root.Mkdir(target, info.Mode().Perm()|downloadedFolderOwnerAccess); err != nil {
+				return err
+			}
+		}
+		c.published.record(target)
+		children, err := readChildren(ctx, c.remote, source)
 		if err != nil {
 			return err
 		}
@@ -389,10 +481,10 @@ func (s Service) getLocal(ctx context.Context, remote Remote, root *os.Root, sou
 			if isInternalName(child.Name()) {
 				continue
 			}
-			if !validLocalChildName(child.Name()) {
+			if !ValidLocalChildName(child.Name()) {
 				return ErrInvalidPath
 			}
-			if err := s.getLocal(ctx, remote, root, path.Join(source, child.Name()), path.Join(target, child.Name()), child, overwrite, report); err != nil {
+			if err := c.get(ctx, path.Join(source, child.Name()), path.Join(target, child.Name()), child); err != nil {
 				return err
 			}
 		}
@@ -401,13 +493,10 @@ func (s Service) getLocal(ctx context.Context, remote Remote, root *os.Root, sou
 	if !info.Mode().IsRegular() {
 		return ErrUnsupportedEntry
 	}
-	if existing != nil && !overwrite {
-		return ErrAlreadyExists
-	}
 	if existing != nil && !existing.Mode().IsRegular() {
-		return ErrAlreadyExists
+		return differentKindError(target)
 	}
-	input, err := remote.Open(source)
+	input, err := c.remote.Open(source)
 	if err != nil {
 		return err
 	}
@@ -417,12 +506,12 @@ func (s Service) getLocal(ctx context.Context, remote Remote, root *os.Root, sou
 		return err
 	}
 	temporary := path.Join(path.Dir(target), ".sshc-download-"+suffix)
-	output, err := root.OpenFile(temporary, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	output, err := c.root.OpenFile(temporary, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 	if err != nil {
 		return err
 	}
-	defer root.Remove(temporary)
-	written, copyErr := copyContext(ctx, &progressWriter{Writer: output, report: report}, input, info.Size())
+	defer c.root.Remove(temporary)
+	written, copyErr := copyContext(ctx, &progressWriter{Writer: output, report: c.report}, input, info.Size())
 	syncErr := output.Sync()
 	closeErr := output.Close()
 	if copyErr != nil {
@@ -437,30 +526,36 @@ func (s Service) getLocal(ctx context.Context, remote Remote, root *os.Root, sou
 	if written != info.Size() {
 		return ErrConflict
 	}
-	after, err := remote.Lstat(source)
+	after, err := c.remote.Lstat(source)
 	if err != nil || metadataRevision(info) != metadataRevision(after) {
 		return ErrConflict
 	}
-	if err := root.Chtimes(temporary, info.ModTime(), info.ModTime()); err != nil {
+	if err := c.root.Chtimes(temporary, info.ModTime(), info.ModTime()); err != nil {
 		return err
 	}
-	current, err := checkLocal(root, target, true)
+	// The download can take long enough for the target to change meanwhile, so
+	// the decision about an existing entry is made again right before publish.
+	current, err := checkLocal(c.root, target, true)
 	if err != nil {
 		return err
 	}
-	if current != nil && (!overwrite || !current.Mode().IsRegular()) {
-		return ErrAlreadyExists
-	}
-	if !overwrite {
-		if err := root.Link(temporary, target); err != nil {
-			if errors.Is(err, fs.ErrExist) {
-				return ErrAlreadyExists
-			}
+	if current != nil {
+		if err := c.published.existingEntryError(target, c.overwrite); err != nil {
 			return err
 		}
-		return nil
+		if !current.Mode().IsRegular() {
+			return differentKindError(target)
+		}
 	}
-	return root.Rename(temporary, target)
+	if !c.overwrite {
+		if err := publishLocalWithoutReplace(c.root, temporary, target); err != nil {
+			return err
+		}
+	} else if err := c.root.Rename(temporary, target); err != nil {
+		return err
+	}
+	c.published.record(target)
+	return nil
 }
 
 func newLocalSuffix() (string, error) {

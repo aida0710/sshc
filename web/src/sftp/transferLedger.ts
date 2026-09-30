@@ -23,8 +23,9 @@ export class TransferLedger {
   private notices: TransferNotice[] = [];
   private readonly listeners = new Set<() => void>();
   private readonly noticeListeners = new Set<() => void>();
-  // Counts the engine answers applied to single jobs. A listing that was
-  // requested before such an answer is older than it, even if it arrives later.
+  // Counts the engine answers applied to single jobs: a job created, changed
+  // or removed. A listing that was requested before such an answer is older
+  // than it, even if it arrives later.
   private mutationGeneration = 0;
 
   snapshot(): readonly ManagedTransferJob[] {
@@ -61,6 +62,14 @@ export class TransferLedger {
       : [...this.jobs, updated]);
   }
 
+  // Drops jobs the engine has just removed. A listing requested before the
+  // removal still holds them and must not bring them back.
+  removeServer(ids: readonly string[]): void {
+    this.mutationGeneration += 1;
+    const removed = new Set(ids);
+    this.commit(this.jobs.filter((job) => !removed.has(job.id)));
+  }
+
   // The generation to remember before requesting a listing from the engine.
   generation(): number {
     return this.mutationGeneration;
@@ -84,7 +93,7 @@ export class TransferLedger {
     return true;
   }
 
-  commit(jobs: ManagedTransferJob[]): void {
+  private commit(jobs: ManagedTransferJob[]): void {
     this.jobs = jobs;
     for (const listener of this.listeners) listener();
   }

@@ -28,6 +28,24 @@ describe("sftpApi resumable download", () => {
     expect(diagnostic).not.toHaveBeenCalled();
   });
 
+  it("leaves a refused VPN route to the screen that asked, for every file-browser read", async () => {
+    const diagnostic = vi.fn();
+    whenRequestFailed(diagnostic);
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(
+      JSON.stringify({ code: "vpn_profile_unknown", message: "request rejected" }),
+      { status: 502, headers: { "Content-Type": "application/problem+json" } },
+    ));
+    const reads = [
+      () => sftpApi.list("edge", "/"),
+      () => sftpApi.search("edge", "/", "needle"),
+      () => sftpApi.compareDirectories("edge", "/left", "other", "/right"),
+      () => sftpApi.directoryStats("edge", "/left"),
+      () => sftpApi.previewFile("edge", "/left/image.png"),
+    ];
+    for (const read of reads) await expect(read()).rejects.toMatchObject({ code: "vpn_profile_unknown" });
+    expect(diagnostic).not.toHaveBeenCalled();
+  });
+
   it("omits the path query when opening the remote user's initial directory", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
       path: "/home/aida", entries: [],
@@ -83,7 +101,9 @@ describe("sftpApi resumable download", () => {
       completedRanges: [], parallelism: 1, chunkBytes: 32 << 20,
     }), { status: 200, headers: { "Content-Type": "application/json" } }));
 
-    await sftpApi.startUpload("edge", "transfer_test01", "/remote/file.bin", 4, `tree-sha256:${"a".repeat(64)}`);
+    await sftpApi.startUpload({
+      alias: "edge", id: "transfer_test01", remotePath: "/remote/file.bin", size: 4, sourceFingerprint: `tree-sha256:${"a".repeat(64)}`,
+    });
 
     const request = fetchMock.mock.calls[0];
     expect(request?.[0]).toBe("/api/v1/sftp/edge/uploads/transfer_test01");
@@ -101,11 +121,24 @@ describe("sftpApi resumable download", () => {
     }), { status: 200, headers: { "Content-Type": "application/json" } }));
     const chunk = new Blob(["cdef"]);
 
-    await sftpApi.appendUploadRange("edge", "transfer_test01", "/remote/file.bin", 2, 8, chunk);
+    await sftpApi.appendUpload({ alias: "edge", id: "transfer_test01", remotePath: "/remote/file.bin", offset: 2, total: 8, chunk, range: true });
 
     const request = fetchMock.mock.calls[0];
     expect(request?.[0]).toContain("offset=2&total=8&range=true&length=4");
     expect(request?.[1]?.body).toBe(chunk);
+  });
+
+  it("sends a sequential upload chunk without a range or length", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+      id: "transfer_test01", path: "/remote/file.bin", offset: 6, size: 8, expectedRevision: "absent",
+      completedRanges: [], parallelism: 1, chunkBytes: 8 << 20,
+    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+
+    await sftpApi.appendUpload({
+      alias: "edge", id: "transfer_test01", remotePath: "/remote/file.bin", offset: 2, total: 8, chunk: new Blob(["cdef"]), range: false,
+    });
+
+    expect(fetchMock.mock.calls[0]?.[0]).toMatch(/offset=2&total=8$/);
   });
 
   it("streams a resumed file with Range and If-Range", async () => {
@@ -121,13 +154,13 @@ describe("sftpApi resumable download", () => {
       .mockResolvedValueOnce(new Response("def", { status: 206, headers: { "Content-Length": "3", "Content-Range": "bytes 3-5/6", ETag: '"revision-1"' } }));
 
     const firstChunks: Uint8Array[] = [];
-    await expect(sftpApi.streamDownload("edge", "transfer_test01", "/remote/file.bin", false, 0, {
+    await expect(sftpApi.streamDownload({ alias: "edge", jobId: "transfer_test01", remotePath: "/remote/file.bin", directory: false, offset: 0 }, {
       onChunk: (chunk) => { firstChunks.push(chunk); },
     })).rejects.toThrow("connection_lost");
     expect(firstChunks.reduce((sum, chunk) => sum + chunk.byteLength, 0)).toBe(3);
 
     const resumed: Uint8Array[] = [];
-    const result = await sftpApi.streamDownload("edge", "transfer_test01", "/remote/file.bin", false, 3, {
+    const result = await sftpApi.streamDownload({ alias: "edge", jobId: "transfer_test01", remotePath: "/remote/file.bin", directory: false, offset: 3 }, {
       revision: '"revision-1"', onChunk: (chunk) => { resumed.push(chunk); },
     });
     expect(result).toEqual({ bytes: 6, total: 6 });
@@ -150,11 +183,11 @@ describe("sftpApi resumable download", () => {
     })).mockResolvedValueOnce(new Response("abcxyz", {
       status: 200, headers: { "Content-Length": "6", ETag: '"new"' },
     }));
-    await expect(sftpApi.streamDownload("edge", "transfer_test01", "/remote/file.bin", false, 0, { onChunk: () => undefined })).rejects.toThrow();
+    await expect(sftpApi.streamDownload({ alias: "edge", jobId: "transfer_test01", remotePath: "/remote/file.bin", directory: false, offset: 0 }, { onChunk: () => undefined })).rejects.toThrow();
 
     const chunks: Uint8Array[] = [];
     let reset = false;
-    await sftpApi.streamDownload("edge", "transfer_test01", "/remote/file.bin", false, 3, {
+    await sftpApi.streamDownload({ alias: "edge", jobId: "transfer_test01", remotePath: "/remote/file.bin", directory: false, offset: 3 }, {
       revision: '"old"', onReset: () => { reset = true; }, onChunk: (chunk) => { chunks.push(chunk); },
     });
     expect(reset).toBe(true);

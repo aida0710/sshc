@@ -19,16 +19,19 @@ const MaxEditableFileBytes = 2 << 20
 const MaxPreviewFileBytes = 8 << 20
 
 var (
-	ErrUnavailable      = errors.New("sftp service is unavailable")
-	ErrInvalidAlias     = errors.New("ssh alias is required")
-	ErrInvalidPath      = errors.New("remote path must be an absolute POSIX path")
-	ErrRootOperation    = errors.New("operation on the remote root is not allowed")
-	ErrNotRegularFile   = errors.New("remote path is not a regular file")
-	ErrNotDirectory     = errors.New("remote path is not a directory")
-	ErrTextTooLarge     = errors.New("remote file is too large to edit")
-	ErrNotUTF8          = errors.New("remote file is not UTF-8 text")
-	ErrConflict         = errors.New("remote file changed since it was read")
-	ErrAlreadyExists    = errors.New("remote path already exists")
+	ErrUnavailable    = errors.New("sftp service is unavailable")
+	ErrInvalidAlias   = errors.New("ssh alias is required")
+	ErrInvalidPath    = errors.New("remote path must be an absolute POSIX path")
+	ErrRootOperation  = errors.New("operation on the remote root is not allowed")
+	ErrNotRegularFile = errors.New("remote path is not a regular file")
+	ErrNotDirectory   = errors.New("remote path is not a directory")
+	ErrTextTooLarge   = errors.New("remote file is too large to edit")
+	ErrNotUTF8        = errors.New("remote file is not UTF-8 text")
+	ErrConflict       = errors.New("remote file changed since it was read")
+	ErrAlreadyExists  = errors.New("remote path already exists")
+	// ErrNameCollision is a target entry that the same transfer already wrote
+	// under a name differing only by case or Unicode normalization.
+	ErrNameCollision    = errors.New("target resolves two source names to one entry")
 	ErrRevisionRequired = errors.New("content revision is required")
 	ErrTransferTooLarge = errors.New("transferred file exceeds the requested size limit")
 	ErrInvalidTransfer  = errors.New("invalid transfer identifier")
@@ -37,6 +40,8 @@ var (
 	ErrTransferNotFound = errors.New("transfer job was not found")
 	ErrTransferState    = errors.New("transfer job state transition is invalid")
 	ErrTransferLimit    = errors.New("transfer concurrency limit reached")
+	ErrSpoolUnavailable = errors.New("download spool is unavailable")
+	ErrSpoolFull        = errors.New("download spool does not have enough free space")
 	ErrPreviewTooLarge  = errors.New("remote file is too large to preview")
 	ErrPreviewType      = errors.New("remote file has no previewable type")
 	ErrInvalidQuery     = errors.New("search needs something to look for")
@@ -208,6 +213,42 @@ type UploadRange struct {
 	Size   int64 `json:"size"`
 }
 
+// UploadTarget names the running upload job and the remote file it writes.
+type UploadTarget struct {
+	Alias      string
+	ID         string
+	RemotePath string
+}
+
+// UploadRangeWrite is one configured range of a split upload. Range.Size is
+// the number of bytes Contents must deliver, and Total is the size of the
+// whole file, which every range of the job must agree on.
+type UploadRangeWrite struct {
+	Target   UploadTarget
+	Range    UploadRange
+	Total    int64
+	Contents io.Reader
+}
+
+// UploadAppend is the next chunk of a sequential upload: Contents goes at
+// Offset of the part, and Total is the size of the whole file.
+type UploadAppend struct {
+	Target   UploadTarget
+	Offset   int64
+	Total    int64
+	Contents []byte
+}
+
+// UploadCompletion asks to publish the part of an upload once it holds all
+// Total bytes of the source SourceFingerprint names. ExpectedRevision is the
+// target revision the upload started against.
+type UploadCompletion struct {
+	Target            UploadTarget
+	Total             int64
+	ExpectedRevision  string
+	SourceFingerprint string
+}
+
 type StartUploadOptions struct {
 	Size              int64
 	Overwrite         bool
@@ -223,7 +264,13 @@ type WriteSeekCloser interface {
 }
 
 // Remote は SFTP client のうち service が使う操作だけを表す。
-// 実装は同じ接続に対する呼び出しを直列化する必要はない。Service は操作ごとに接続を開く。
+//
+// 1つの Remote は1つの操作が占有し、別の操作へ同時に貸し出されることはない。ただし
+// RemotePool（remotepool.go）が同じ接続を次の操作へ使い回すので、接続は操作をまたいで
+// 生き続ける。1つの操作の中でも describeLinks のように複数の goroutine から同時に呼ぶ
+// ことがあるので、実装は並行呼び出しに安全でなければならない（pkg/sftp の Client は
+// 安全）。実装の Close は接続を本当に閉じる。プールへ返すか捨てるかは、操作に渡す前に
+// 包む pooledRemote と contextRemote の Close が決める。
 type Remote interface {
 	io.Closer
 	Getwd(ctx context.Context) (string, error)

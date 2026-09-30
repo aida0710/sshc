@@ -3,7 +3,7 @@ import { useTranslate } from "../i18n/context";
 import { sftpProblemText } from "./sftpProblemText";
 import { formatBytes } from "../ui/format";
 import { ModalShell } from "../ui/ModalShell";
-import { Button } from "../ui/surface";
+import { Button, Notice } from "../ui/surface";
 import { sftpApi, type DirectoryComparison } from "./api";
 import { sftpTransferManager, type RemoteTransferSelection } from "./transferManager";
 import { PanelState } from "../ui/PanelState";
@@ -94,7 +94,7 @@ export function SFTPCompareDialog({ left, right, onDismiss }: { left: Location; 
         <p className="mt-1 truncate font-mono text-xs text-ink-muted">{left.alias}:{left.path} ⇄ {right.alias}:{right.path}</p>
         <p className="mt-2 text-xs text-ink-muted">{t("sftp.compare.description")}</p>
       </header>
-      {problem === "" ? null : <p role="alert" className="border-b border-notice-line bg-notice px-5 py-2 text-sm text-notice-ink">{problem}</p>}
+      {problem === "" ? null : <div className="px-5 pt-3"><Notice tone="danger">{problem}</Notice></div>}
       <div className="min-h-0 flex-1 overflow-auto">
         {busy && comparison === null ? <PanelState tone="loading" title={t("sftp.compare.loading")} /> : null}
         {!busy && changes.length === 0 ? <PanelState tone="empty" title={t("sftp.compare.noChanges")} /> : null}

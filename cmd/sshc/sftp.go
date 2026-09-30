@@ -2,14 +2,13 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"net/http"
 	"time"
 
+	"sshc/internal/httpserver"
 	sftpcore "sshc/internal/sftp"
 )
 
@@ -51,49 +50,14 @@ var (
 	errSFTPMissingRevision        = errors.New("download response has no revision")
 	errSFTPRemotePath             = errors.New("remote path must be absolute")
 	errSFTPRecursiveLimit         = errors.New("recursive download safety limit exceeded")
+	// A remote entry whose name cannot be one file name on this machine, such
+	// as "a/b", or on Windows "CON" or "a:b". The engine's own get refuses the
+	// same names.
+	errSFTPLocalName = errors.New("a remote entry name cannot be used as a local file name")
+	// A local source that does not exist gets its own error because a missing
+	// engine handoff file is also fs.ErrNotExist.
+	errSFTPLocalMissing = errors.New("the local source does not exist")
 )
-
-type sftpCLIEntry struct {
-	Name       string `json:"name"`
-	Path       string `json:"path"`
-	Type       string `json:"type"`
-	Size       int64  `json:"size"`
-	Mode       string `json:"mode"`
-	ModifiedAt string `json:"modifiedAt"`
-	Revision   string `json:"revision"`
-	// Symlinks only: where the link points and what kind of entry that is.
-	// The engine follows the link for reads, so a link to a file transfers
-	// as that file and a link to a directory lists as that directory.
-	LinkTarget string `json:"linkTarget,omitempty"`
-	TargetType string `json:"targetType,omitempty"`
-}
-
-type sftpCLIListing struct {
-	Path    string         `json:"path"`
-	Entries []sftpCLIEntry `json:"entries"`
-}
-
-type sftpCLIUpload struct {
-	ID               string               `json:"id"`
-	Path             string               `json:"path"`
-	Offset           int64                `json:"offset"`
-	Size             int64                `json:"size"`
-	ExpectedRevision string               `json:"expectedRevision"`
-	CompletedRanges  []sftpCLIUploadRange `json:"completedRanges"`
-	Parallelism      int                  `json:"parallelism"`
-	ChunkBytes       int64                `json:"chunkBytes"`
-}
-
-type sftpCLIUploadRange struct {
-	Offset int64 `json:"offset"`
-	Size   int64 `json:"size"`
-}
-
-type sftpCLITransfer struct {
-	Path     string `json:"path"`
-	Bytes    int64  `json:"bytes"`
-	Revision string `json:"revision"`
-}
 
 type sftpCLIResult struct {
 	Action      string `json:"action"`
@@ -106,22 +70,6 @@ type sftpCLIResult struct {
 	Skipped     int    `json:"skipped"`
 	Overwritten int    `json:"overwritten"`
 	DryRun      bool   `json:"dryRun"`
-}
-
-type sftpCLITransferQueue struct {
-	MaxConcurrent              int               `json:"maxConcurrent"`
-	ClearCompletedAfterSeconds int               `json:"clearCompletedAfterSeconds"`
-	ProcessingStopped          bool              `json:"processingStopped"`
-	LargeFileThresholdBytes    int64             `json:"largeFileThresholdBytes"`
-	LargeFileParallelism       int               `json:"largeFileParallelism"`
-	LargeFileChunkBytes        int64             `json:"largeFileChunkBytes"`
-	Jobs                       []json.RawMessage `json:"jobs"`
-}
-
-type sftpCLIDownloadPart struct {
-	Index            int   `json:"index"`
-	TransferredBytes int64 `json:"transferredBytes"`
-	TotalBytes       int64 `json:"totalBytes"`
 }
 
 type sftpCLISettingsResult struct {
@@ -213,7 +161,7 @@ func runSFTP(ctx context.Context, called sftpInvocation, environment commandEnvi
 }
 
 func runSFTPSettings(ctx context.Context, engine *engineAPI, called sftpInvocation, stdout, stderr io.Writer) int {
-	var settings sftpCLITransferQueue
+	var settings httpserver.SFTPTransferJobList
 	if err := engine.sendJSON(ctx, http.MethodGet, "/api/v1/sftp/transfers", nil, &settings); err != nil {
 		return finishSFTPFailure(called.JSON, err, stdout, stderr)
 	}
@@ -257,7 +205,7 @@ func runSFTPSettings(ctx context.Context, engine *engineAPI, called sftpInvocati
 	return 0
 }
 
-func validSFTPCLITransferSettings(settings sftpCLITransferQueue) bool {
+func validSFTPCLITransferSettings(settings httpserver.SFTPTransferJobList) bool {
 	return settings.MaxConcurrent >= 1 && settings.MaxConcurrent <= sftpcore.MaxTransferConcurrency &&
 		settings.ClearCompletedAfterSeconds >= 0 && settings.ClearCompletedAfterSeconds <= sftpCLIMaxClearCompletedAfterSeconds &&
 		settings.LargeFileThresholdBytes >= sftpcore.MinLargeFileThreshold && settings.LargeFileThresholdBytes <= sftpcore.MaxLargeFileThreshold &&
@@ -321,9 +269,7 @@ func classifySFTPFailure(err error) commandFailure {
 		return commandFailure{Kind: "invalid_remote_path", Retryable: false}
 	case errors.Is(err, errSFTPRecursiveLimit):
 		return commandFailure{Kind: "recursive_limit", Retryable: false}
-	// handoff が無い（engine が動いていない）ことも fs.ErrNotExist なので、手元の
-	// 転送元が無いことと取り違えない。
-	case errors.Is(err, fs.ErrNotExist) && !isEngineNotRunning(err):
+	case errors.Is(err, errSFTPLocalMissing):
 		return commandFailure{Kind: "local_not_found", Retryable: false}
 	default:
 		return classifyCommandFailure(err)
@@ -349,7 +295,7 @@ func writeHumanSFTPFailure(stderr io.Writer, failure commandFailure, cause error
 	case "recursive_limit":
 		fmt.Fprintf(stderr, "sshc: %v; choose a narrower source or raise the recursive limit explicitly\n", cause)
 	case "local_not_found":
-		fmt.Fprintln(stderr, "sshc: the local source does not exist")
+		fmt.Fprintf(stderr, "sshc: %v\n", cause)
 	case "canceled":
 		fmt.Fprintln(stderr, "sshc: sftp transfer was canceled")
 	default:
