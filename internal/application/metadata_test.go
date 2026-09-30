@@ -476,8 +476,8 @@ func TestVersionFiveVPNProfilesLoseTheirTargetWhenRead(t *testing.T) {
 	}
 }
 
-// v6のファイルはそのまま読み、書くときはいまの版になる。v7は、新しいVPNの方式の
-// プロファイルを旧版に読ませない境界である。
+// v6のファイルはそのまま読み、書くときはいまのバージョンになる。v7は、新しいVPNの方式の
+// プロファイルを旧バージョンに読ませない境界である。
 func TestVersionSixMetadataIsReadAndWrittenAsTheCurrentVersion(t *testing.T) {
 	stored := `{"schemaVersion":6,` +
 		`"vpnProfiles":[{"name":"lab","backend":"l2tp_ipsec","l2tp":{"server":"vpn.example.jp","username":"user"}}],` +
@@ -496,7 +496,7 @@ func TestVersionSixMetadataIsReadAndWrittenAsTheCurrentVersion(t *testing.T) {
 	}
 }
 
-// これより新しい版のファイルは読まない。知らない項目を読み飛ばして書き直すと消える。
+// これより新しいバージョンのファイルは読まない。知らない項目を読み飛ばして書き直すと消える。
 func TestMetadataFromANewerSshcIsRefused(t *testing.T) {
 	if _, err := DecodeMetadata([]byte(`{"schemaVersion":9}`)); !errors.Is(err, ErrMetadataVersion) {
 		t.Fatalf("DecodeMetadata = %v", err)

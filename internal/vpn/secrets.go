@@ -10,7 +10,7 @@ import (
 // 作る・改名する・消すたびに複数件の整合を取ることになる。
 //
 // 記録の JSON のキーは、足すことはあっても、意味を変えない。Vault は端末のあいだで同期され、
-// 古い版が同じ記録を読む。v0.40.0 までの WireGuard の秘密鍵（wireguardPrivateKey）は、
+// 古いバージョンが同じ記録を読む。v0.40.0 までの WireGuard の秘密鍵（wireguardPrivateKey）は、
 // 設定ファイル（wireguardConfig）の形で保存し直すまで読む。Go の型との対応は、この file の
 // Encode と Decode に閉じる。
 

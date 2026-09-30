@@ -106,7 +106,7 @@ func TestAProfileThatCannotBecomeARouteIsNotSaved(t *testing.T) {
 	}
 }
 
-// この版が知らないbackendのプロファイルは保存しない。保存形式の変更は
+// このバージョンが知らないbackendのプロファイルは保存しない。保存形式の変更は
 // schemaVersion を上げて移行する。
 func TestAProfileForAnUnknownBackendIsNotSaved(t *testing.T) {
 	metadata := NewMetadata()

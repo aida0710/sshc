@@ -196,7 +196,7 @@ type Dependencies struct {
 
 - [ ] **Step 5: CLI read path で protocol mismatch を行動可能な error にする**
 
-`engineStatus`、`runOpen`、接続 client が同じ `readHandoff` helper を使い、mismatch は「running app と CLI を同じ版にして app を再起動する」と出す。旧 format へ fallback しない。
+`engineStatus`、`runOpen`、接続 client が同じ `readHandoff` helper を使い、mismatch は「running app と CLI を同じバージョンにして app を再起動する」と出す。旧 format へ fallback しない。
 
 - [ ] **Step 6: テスト、build、commit**
 

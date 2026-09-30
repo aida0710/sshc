@@ -62,7 +62,7 @@ type Service struct {
 	// よう注入する。
 	sleep func(time.Duration)
 
-	// mutationMu は vault の disk と memory の版をまたぐ変更を直列化する。storage
+	// mutationMu は vault の disk と memory のバージョンをまたぐ変更を直列化する。storage
 	// commit はバックアップを暗号化するために下の mu を再取得するので、commit 中に保持
 	// するのはこちらだけである。
 	mutationMu   sync.Mutex
@@ -73,7 +73,7 @@ type Service struct {
 	// open/useはこれを返さないため、diskのcommit pointより先に候補が公開されない。
 	backupVault *Vault
 	baseline    []byte
-	// lastMigrationは、この実行で最後にunlockが自動更新した版だけをstatusへ運ぶ。
+	// lastMigrationは、この実行で最後にunlockが自動更新したバージョンだけをstatusへ運ぶ。
 	// 秘密を含まず、lockまたは通常unlockで消える。
 	lastMigration Migration
 	// refusals は、連続して誤ったマスターパスワードの回数を数える。これが、拒否のたび

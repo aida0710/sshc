@@ -50,7 +50,7 @@ func TestEngineStatusReadsUnlockedAndSessions(t *testing.T) {
 	}
 }
 
-// 版の異なる CLI が古い規約で API を叩くと、拒否の原因が見えず利用者だけが
+// バージョンの異なる CLI が古い規約で API を叩くと、拒否の原因が見えず利用者だけが
 // 取り残される。読み口を一つにすることで、すべての CLI command が同じ復旧策を出す。
 //
 // 「アプリを再起動してください」とは言わない。食い違っているのがどちら側かを

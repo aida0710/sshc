@@ -41,7 +41,7 @@ const maxDockerOutputBytes = 1 << 20
 type dockerCommand struct {
 	path string
 	// summary は、docker info で分かった Docker の様子である（OS とアーキテクチャ、
-	// 版、どの製品か）。接続ログに出す。
+	// バージョン、どの製品か）。接続ログに出す。
 	summary string
 	// environment は、docker を起動するときの環境である。PATH はログインシェルの
 	// ものにしてある。docker は認証情報の補助（docker-credential-desktop）や

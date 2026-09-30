@@ -1731,7 +1731,7 @@ export const ja = {
   "sync.historyRevisionMeta": "{at} · {count}ファイル · 作成元：{origin}",
   "sync.historyParent": "親：{revision}",
   "sync.historySelect":
-    "世代を選ぶと、現在のリモート最新版との差分を確認できます。",
+    "世代を選ぶと、現在のリモートの最新バージョンとの差分を確認できます。",
   "sync.historySelected": "選択した世代",
   "sync.historyDiffLoading": "パスの差分を確認しています…",
   "sync.historyDiffEmpty": "この世代をもう一度選ぶとパスの差分を確認できます。",
@@ -1740,7 +1740,7 @@ export const ja = {
   "sync.historyDiff.modified": "変更{count}件",
   "sync.historyDiff.removed": "削除{count}件",
   "sync.historyRestoreHint":
-    "復元前にローカルの変更内容を確認します。リモートの最新版は巻き戻さず、次の送信でこの世代を親にした新しい最新版を作ります。",
+    "復元前にローカルの変更内容を確認します。リモートの最新バージョンは巻き戻さず、次の送信でこの世代を親にした新しい最新バージョンを作ります。",
   "sync.historyRestorePreview": "この世代の復元を確認",
   "sync.forceHeading": "リモートスナップショットを置き換える",
   "sync.forceHint":
@@ -1796,7 +1796,7 @@ export const ja = {
   "sync.result.filesSource": "{count}ファイル · {size}",
   "sync.result.encrypted": "暗号化スナップショット：{size}",
   "sync.result.uploaded":
-    "S3転送：{size}（{count}オブジェクト、履歴＋現在版）",
+    "S3転送：{size}（{count}オブジェクト、履歴＋現在のバージョン）",
   "sync.result.previewDownload": "取得：{downloaded} · 展開後：{source}",
   "sync.result.applyDownload": "適用時に再取得：{size}",
   "sync.result.changes":

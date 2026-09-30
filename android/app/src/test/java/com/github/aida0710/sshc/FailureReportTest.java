@@ -6,7 +6,7 @@ import org.junit.Test;
 
 public final class FailureReportTest {
     @Test
-    public void 共有用の版とcodeと詳細を整形する() {
+    public void 共有用のバージョンとcodeと詳細を整形する() {
         assertEquals(
                 "Version: 0.13.5\nCode: port_unavailable\nDetail: listen: permission denied"
                         + "\nAndroid: 16 (SDK 36)\nDevice: Google Pixel 9\nABI: arm64-v8a",

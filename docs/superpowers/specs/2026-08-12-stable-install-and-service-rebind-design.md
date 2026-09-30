@@ -29,7 +29,7 @@
 
 ### A. sshc 自身がログインサービスを更新する（採用）
 
-保守用の `sshc service refresh` と `sshc service disable` を追加する。`make install` は新しく配置したバイナリ自身に refresh を依頼し、`make uninstall` はリポジトリでビルドした同じ版に disable を依頼する。
+保守用の `sshc service refresh` と `sshc service disable` を追加する。`make install` は新しく配置したバイナリ自身に refresh を依頼し、`make uninstall` はリポジトリでビルドした同じバージョンに disable を依頼する。
 
 利点は、plist・systemd unit・launchctl・systemctlの知識が既存のplatform実装に一か所だけ残ること、任意の実行パスを引数として受け取らず `os.Executable()` の絶対パスだけを登録できることである。欠点は `service` がCLIの予約語になり、その名前のSSH aliasはsshc経由では使えなくなることである。
 
@@ -39,7 +39,7 @@
 
 ### C. コピーだけ行い、手動で設定を切り替えてもらう
 
-現在の挙動に警告を足すだけで安全だが、「インストールしたのに常駐版は古い」という問題を解決しない。利用者が一人でも、更新のたびに手順を覚えて実行する設計は導線として弱いため採用しない。
+現在の挙動に警告を足すだけで安全だが、「インストールしたのに常駐しているバージョンは古い」という問題を解決しない。利用者が一人でも、更新のたびに手順を覚えて実行する設計は導線として弱いため採用しない。
 
 ## CLI契約
 
@@ -76,7 +76,7 @@
 
 ### `make update`
 
-既存の `git pull --ff-only` と `make install` を維持する。したがって更新後は、有効なログインサービスも自動的に同じ版へ移る。
+既存の `git pull --ff-only` と `make install` を維持する。したがって更新後は、有効なログインサービスも自動的に同じバージョンへ移る。
 
 ### `make uninstall`
 
@@ -84,7 +84,7 @@
 2. そのバイナリで `service disable` を実行する。
 3. disableに成功した場合だけ `$(INSTALL_DIR)/sshc` を削除する。
 
-uninstallのために一度ビルドするのは、インストール済みバイナリがこの機能を持たない旧版でも、`service`をSSH aliasと誤解して接続を始めず、安全にサービスを解除できるようにするためである。
+uninstallのために一度ビルドするのは、インストール済みバイナリがこの機能を持たない旧バージョンでも、`service`をSSH aliasと誤解して接続を始めず、安全にサービスを解除できるようにするためである。
 
 ## OS別の再起動
 

@@ -10,9 +10,9 @@ import (
 	"time"
 )
 
-// 旧版の launchd / systemd unit が使った -open=false を受け付けると、unit が
+// 旧バージョンの launchd / systemd unit が使った -open=false を受け付けると、unit が
 // 新しいバイナリを起動した時点で engine.lock を先に握り、デスクトップの子が
-// 上がれなくなる。旧版からの移行を持たない以上、暗黙に常駐するより未定義の
+// 上がれなくなる。旧バージョンからの移行を持たない以上、暗黙に常駐するより未定義の
 // フラグとして直ちに拒む。
 func TestLegacyOpenFlagIsRejected(t *testing.T) {
 	repository := filepath.Join("..", "..")

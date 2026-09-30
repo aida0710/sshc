@@ -157,7 +157,7 @@ func runEngineApp(
 		Port:        options.Port,
 		DefaultPort: app.DefaultPort,
 		Announce: func(readiness app.Readiness) error {
-			// HTTP受付開始を先に知らせる。最新版確認が遅い／失敗する場合もengineは
+			// HTTP受付開始を先に知らせる。最新バージョンの確認が遅い／失敗する場合もengineは
 			// 既に利用でき、その失敗で停止させない。
 			if err := announce(readiness); err != nil {
 				return err
@@ -201,7 +201,7 @@ func terminalOutput(output io.Writer) bool {
 	return ok && term.IsTerminal(int(file.Fd()))
 }
 
-// reportAvailableUpdate はengineが受付を始めた直後に一度だけ確認し、新版がある
+// reportAvailableUpdate はengineが受付を始めた直後に一度だけ確認し、新しいバージョンがある
 // 場合だけ通知する。ネットワーク障害や出力失敗はengineの成否へ影響させない。
 func reportAvailableUpdate(ctx context.Context, checker *selfupdate.Checker, current string, out io.Writer, logger *slog.Logger) {
 	checkCtx, cancel := context.WithTimeout(ctx, 3*time.Second)

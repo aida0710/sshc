@@ -106,7 +106,7 @@ func (stored VPNProfile) withoutWireGuardFields() VPNProfile {
 
 // Profile は、保存した設定を internal/vpn が使う形へ直す。
 //
-// backend に合う節だけを移す。古い版や別の画面が残した、使っていない節には
+// backend に合う節だけを移す。古いバージョンや別の画面が残した、使っていない節には
 // 引きずられない。
 func (stored VPNProfile) Profile() (vpn.Profile, error) {
 	normalized := stored.Normalized()
@@ -179,7 +179,7 @@ func (stored VPNProfile) Normalized() VPNProfile {
 
 // validateVPNProfiles は、保存してよい形かを確かめる。
 //
-// 形の変わった保存形式は、metadata の schemaVersion を上げて移行する。古い版は
+// 形の変わった保存形式は、metadata の schemaVersion を上げて移行する。古いバージョンは
 // 新しい schemaVersion の文書を読まないので、ここは知っている形だけを通す。
 func validateVPNProfiles(profiles []VPNProfile) error {
 	seen := map[string]bool{}

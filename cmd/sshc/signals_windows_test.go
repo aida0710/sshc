@@ -22,12 +22,12 @@ const signalHelperEnvironment = "SSHC_SIGNAL_HELPER"
 
 // Ctrl-Break を別に登録しない。ランタイムがそれを os.Interrupt として
 // 配るので、Ctrl-C と同じ 130 になる。ここはその事実そのものを固定する
-// `syscall.SIGBREAK` を書こうとした版は、そもそもコンパイルが通らなかった。
+// `syscall.SIGBREAK` を書こうとしたバージョンは、そもそもコンパイルが通らなかった。
 func TestWindowsCtrlBreakEndsWithTheInterruptCode(t *testing.T) {
 	if os.Getenv(signalHelperEnvironment) != "" {
 		// 子は本物の登録をしてから待つ。登録しないまま待てば既定の動作で
 		// 殺され、終了コードは 130 ではなく NT の状態値になる。最初に書いた
-		// 版はまさにそれで、実 Windows がそう教えてくれた。
+		// バージョンはまさにそれで、実 Windows がそう教えてくれた。
 		ctx, stop := notifySignals(context.Background())
 		defer stop()
 		// 登録し終えたことを先に告げる。親がそれを待たずに送ると、まだ

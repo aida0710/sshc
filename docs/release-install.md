@@ -17,7 +17,7 @@ SSHC_VERSION=v0.41.0 sh -c \
   'curl -fsSL https://raw.githubusercontent.com/aida0710/sshc/v0.41.0/install.sh | sh'
 ```
 
-URLと`SSHC_VERSION`には同じ導入対象のタグを指定します。`main`上のスクリプトは次の変更で内容が変わるため、pipeで直接実行しません。新しい版へ更新するときは、[GitHub Releases](https://github.com/aida0710/sshc/releases)でタグを確認して両方を置き換えます。
+URLと`SSHC_VERSION`には同じ導入対象のタグを指定します。`main`上のスクリプトは次の変更で内容が変わるため、pipeで直接実行しません。新しいバージョンへ更新するときは、[GitHub Releases](https://github.com/aida0710/sshc/releases)でタグを確認して両方を置き換えます。
 
 スクリプトは次の項目を確認してからバイナリを配置します。
 
@@ -51,7 +51,7 @@ sshc update
 更新するバージョン、実行ファイル、管理元を表示した後に確認を求めます。CIなど対話端末のない環境で実行する場合は、内容を確認した上で`sshc update --yes`を使用してください。
 
 - Homebrew版は、`brew --prefix --installed aida0710/tap/sshc`の`bin/sshc`と実行中ファイルが同一であることを確認し、`brew upgrade --formula --no-ask aida0710/tap/sshc`を実行します。
-- `install.sh`版はdigest付きreceiptを確認し、GitHubの最新安定版tagに固定したinstallerを実行します。installerは公開された`checksums.txt`でバイナリを検証し、同一ディレクトリ内のrenameで置換します。
+- `install.sh`版はdigest付きreceiptを確認し、GitHubの最新の安定バージョンのtagに固定したinstallerを実行します。installerは公開された`checksums.txt`でバイナリを検証し、同一ディレクトリ内のrenameで置換します。
 - Windows（`install.ps1`版を含む）では`sshc update`は使えず、管理元不明として終了コード1で終わります。インストール時と同じPowerShellコマンドを手で再実行して更新します。
 - その他のWindows手動配置、ソースビルド、判定不能な導入は変更せず、元の導入方法で更新するよう表示します。
 
