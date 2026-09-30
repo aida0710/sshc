@@ -146,25 +146,25 @@ describe("the transfer queue", () => {
     expect(screen.getByRole("combobox", { name: "Clear finished after" })).toHaveValue("300");
 
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "Concurrent transfers" }), "5");
-    expect(manager.applySettings).toHaveBeenCalledWith(5, 300, false, 100 << 20, 4, 32 << 20);
+    expect(manager.applySettings).toHaveBeenCalledWith({ maxConcurrent: 5, clearCompletedAfterSeconds: 300, processingStopped: false, largeFileThresholdBytes: 100 << 20, largeFileParallelism: 4, largeFileChunkBytes: 32 << 20 });
 
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "Clear finished after" }), "0");
-    expect(manager.applySettings).toHaveBeenLastCalledWith(2, 0, false, 100 << 20, 4, 32 << 20);
+    expect(manager.applySettings).toHaveBeenLastCalledWith({ maxConcurrent: 2, clearCompletedAfterSeconds: 0, processingStopped: false, largeFileThresholdBytes: 100 << 20, largeFileParallelism: 4, largeFileChunkBytes: 32 << 20 });
 
     const splitAt = screen.getByRole("spinbutton", { name: "Split at" });
     fireEvent.change(splitAt, { target: { value: "73" } });
     fireEvent.blur(splitAt);
-    expect(manager.applySettings).toHaveBeenLastCalledWith(2, 300, false, 73 << 20, 4, 32 << 20);
+    expect(manager.applySettings).toHaveBeenLastCalledWith({ maxConcurrent: 2, clearCompletedAfterSeconds: 300, processingStopped: false, largeFileThresholdBytes: 73 << 20, largeFileParallelism: 4, largeFileChunkBytes: 32 << 20 });
 
     const streams = screen.getByRole("spinbutton", { name: "Streams" });
     fireEvent.change(streams, { target: { value: "128" } });
     fireEvent.blur(streams);
-    expect(manager.applySettings).toHaveBeenLastCalledWith(2, 300, false, 100 << 20, 128, 32 << 20);
+    expect(manager.applySettings).toHaveBeenLastCalledWith({ maxConcurrent: 2, clearCompletedAfterSeconds: 300, processingStopped: false, largeFileThresholdBytes: 100 << 20, largeFileParallelism: 128, largeFileChunkBytes: 32 << 20 });
 
     const chunk = screen.getByRole("spinbutton", { name: "Chunk" });
     fireEvent.change(chunk, { target: { value: "41" } });
     fireEvent.blur(chunk);
-    expect(manager.applySettings).toHaveBeenLastCalledWith(2, 300, false, 100 << 20, 4, 41 << 20);
+    expect(manager.applySettings).toHaveBeenLastCalledWith({ maxConcurrent: 2, clearCompletedAfterSeconds: 300, processingStopped: false, largeFileThresholdBytes: 100 << 20, largeFileParallelism: 4, largeFileChunkBytes: 41 << 20 });
   });
 
   it("stops the whole queue without touching what is already running", async () => {
@@ -172,7 +172,7 @@ describe("the transfer queue", () => {
     const { rerender } = render(<TransferManagerList />);
 
     await userEvent.click(screen.getByRole("button", { name: "Stop starting new transfers" }));
-    expect(manager.applySettings).toHaveBeenCalledWith(2, 0, true, 100 << 20, 4, 32 << 20);
+    expect(manager.applySettings).toHaveBeenCalledWith({ maxConcurrent: 2, clearCompletedAfterSeconds: 0, processingStopped: true, largeFileThresholdBytes: 100 << 20, largeFileParallelism: 4, largeFileChunkBytes: 32 << 20 });
 
     manager.getProcessingStopped.mockReturnValue(true);
     rerender(<TransferManagerList />);
@@ -255,10 +255,10 @@ describe("the transfer queue", () => {
     expect(manager.remove).toHaveBeenCalledWith("failed");
   });
 
-  it("asks for a destination check when a remote result could not be recorded", () => {
+  it.each(["reattach", "paused", "failed"])("asks for a destination check when a %s remote result could not be recorded", (status) => {
     manager.setJobs([job("remote", {
       direction: "remote",
-      status: "reattach",
+      status,
       problem: "sftp_reconciliation_required",
       allowedActions: ["cancel"],
     })]);
@@ -267,5 +267,17 @@ describe("the transfer queue", () => {
     expect(screen.queryByText("Select the same file")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Resume" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+  });
+
+  it("shows a remote job whose operation is in flight as running", () => {
+    manager.setJobs([job("remote", {
+      direction: "remote",
+      status: "running",
+      problem: "sftp_reconciliation_required",
+      allowedActions: ["pause", "cancel"],
+    })]);
+    render(<TransferManagerList />);
+    expect(screen.queryByText("Check the destination")).not.toBeInTheDocument();
+    expect(screen.getByText("Transferring…")).toBeInTheDocument();
   });
 });

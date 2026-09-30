@@ -27,7 +27,7 @@ func TestTransferQueueQuarantinesCorruptSnapshotAndStartsEmpty(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	manager := sftp.NewTransferManager(nil)
+	manager := newTestTransferManager(t, nil)
 	if err := manager.EnableQueuePersistence(filename); err != nil {
 		t.Fatalf("EnableQueuePersistence(corrupt) = %v", err)
 	}
@@ -62,7 +62,7 @@ func TestTransferQueueQuarantinesCorruptSnapshotAndStartsEmpty(t *testing.T) {
 func TestTransferQueueRestoresAfterEngineRestart(t *testing.T) {
 	t.Parallel()
 	filename := filepath.Join(t.TempDir(), "sshc", "transfers.json")
-	first := sftp.NewTransferManager(nil)
+	first := newTestTransferManager(t, nil)
 	if err := first.EnableQueuePersistence(filename); err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +78,7 @@ func TestTransferQueueRestoresAfterEngineRestart(t *testing.T) {
 	if _, err := first.UpdateJob(created.ID, sftp.UpdateTransferJob{Action: sftp.TransferPauseAction}); err != nil {
 		t.Fatal(err)
 	}
-	second := sftp.NewTransferManager(nil)
+	second := newTestTransferManager(t, nil)
 	if err := second.EnableQueuePersistence(filename); err != nil {
 		t.Fatal(err)
 	}
@@ -265,10 +265,9 @@ func TestTransferQueueSweepFailureRollsBackEveryJob(t *testing.T) {
 	t.Run("expiration", func(t *testing.T) {
 		now := base
 		manager, filename := persistentManagerWithClock(t, &now)
-		if err := manager.SetTransferSettings(
-			2, sftp.MinClearCompletedAfter, false,
-			sftp.DefaultLargeFileThreshold, sftp.DefaultLargeFileParallelism, sftp.DefaultLargeFileChunkBytes,
-		); err != nil {
+		settings := sftp.DefaultTransferSettings()
+		settings.ClearCompletedAfter = sftp.MinClearCompletedAfter
+		if err := manager.SetTransferSettings(settings); err != nil {
 			t.Fatal(err)
 		}
 		finished := downloadJob("transfer_expire1", "/finished")
@@ -307,21 +306,11 @@ func TestRemoteTransferCommitFailureRequiresReconciliationWithoutRepeating(t *te
 					return nil, errors.New("unexpected alias")
 				}
 			}}
-			manager := sftp.NewTransferManager(service)
+			manager := newTestTransferManager(t, service)
 			filename := filepath.Join(t.TempDir(), "state", "transfers.json")
 			if err := manager.EnableQueuePersistence(filename); err != nil {
 				t.Fatal(err)
 			}
-			id := "transfer_reconcile_" + string(operation)
-			job := sftp.CreateTransferJob{
-				ID: id, BatchID: "batch_reconcile1", Alias: "target", RemotePath: "/target.bin",
-				SourceAlias: "source", SourcePath: "/source.bin", Operation: operation, Overwrite: true,
-				Direction: sftp.TransferRemote, Kind: sftp.TransferFile, Name: "source.bin", TotalBytes: -1,
-			}
-			if _, err := manager.CreateJob(job); err != nil {
-				t.Fatal(err)
-			}
-
 			type hookOutcome struct {
 				snapshot []byte
 				err      error
@@ -337,7 +326,15 @@ func TestRemoteTransferCommitFailureRequiresReconciliationWithoutRepeating(t *te
 					hooked <- hookOutcome{snapshot: snapshot, err: readErr}
 				})
 			}
-			manager.ScheduleRemoteJob(id)
+			id := "transfer_reconcile_" + string(operation)
+			job := sftp.CreateTransferJob{
+				ID: id, BatchID: "batch_reconcile1", Alias: "target", RemotePath: "/target.bin",
+				SourceAlias: "source", SourcePath: "/source.bin", Operation: operation, Overwrite: true,
+				Direction: sftp.TransferRemote, Kind: sftp.TransferFile, Name: "source.bin", TotalBytes: -1,
+			}
+			if _, err := manager.CreateJob(job); err != nil {
+				t.Fatal(err)
+			}
 			outcome := <-hooked
 			if outcome.err != nil {
 				t.Fatal(outcome.err)
@@ -390,7 +387,7 @@ func TestRemoteTransferCommitFailureRequiresReconciliationWithoutRepeating(t *te
 			if err := os.WriteFile(restartPath, outcome.snapshot, 0o600); err != nil {
 				t.Fatal(err)
 			}
-			restarted := sftp.NewTransferManager(nil)
+			restarted := newTestTransferManager(t, nil)
 			if err := restarted.EnableQueuePersistence(restartPath); err != nil {
 				t.Fatal(err)
 			}
@@ -405,7 +402,7 @@ func TestRemoteTransferCommitFailureRequiresReconciliationWithoutRepeating(t *te
 func persistentManager(t *testing.T) (*sftp.TransferManager, string) {
 	t.Helper()
 	filename := filepath.Join(t.TempDir(), "state", "transfers.json")
-	manager := sftp.NewTransferManager(nil)
+	manager := newTestTransferManager(t, nil)
 	if err := manager.EnableQueuePersistence(filename); err != nil {
 		t.Fatal(err)
 	}
@@ -415,7 +412,7 @@ func persistentManager(t *testing.T) (*sftp.TransferManager, string) {
 func persistentManagerWithClock(t *testing.T, now *time.Time) (*sftp.TransferManager, string) {
 	t.Helper()
 	filename := filepath.Join(t.TempDir(), "state", "transfers.json")
-	manager := sftp.NewTransferManager(nil)
+	manager := newTestTransferManager(t, nil)
 	manager.ConfigureJobs(1, func() time.Time { return *now })
 	if err := manager.EnableQueuePersistence(filename); err != nil {
 		t.Fatal(err)
@@ -463,6 +460,58 @@ func downloadJob(id, remotePath string) sftp.CreateTransferJob {
 	}
 }
 
+func TestDownloadResumesFromItsCheckpointAfterAnEngineRestart(t *testing.T) {
+	filename := filepath.Join(t.TempDir(), "state", "transfers.json")
+	manager := newTestTransferManager(t, nil)
+	if err := manager.EnableQueuePersistence(filename); err != nil {
+		t.Fatal(err)
+	}
+	input := sftp.CreateTransferJob{
+		ID: "transfer_restart_dl", BatchID: "batch_restart_dl", Alias: "edge", Direction: sftp.TransferDownload,
+		Kind: sftp.TransferFile, Name: "file", RemotePath: "/file", TotalBytes: 8,
+	}
+	if _, err := manager.CreateJob(input); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.UpdateJob(input.ID, sftp.UpdateTransferJob{Action: sftp.TransferStartAction}); err != nil {
+		t.Fatal(err)
+	}
+	const revision = `"content-sha256:restart"`
+	if _, err := manager.BeginDownload(input.ID, 8, revision, 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.RecordDownloadSent(input.ID, 6, 8, revision); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.AcknowledgeDownload(input.ID, 4, revision); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.UpdateJobFromClient(input.ID, sftp.UpdateTransferJob{Action: sftp.TransferPauseAction}); err != nil {
+		t.Fatal(err)
+	}
+
+	restarted := newTestTransferManager(t, nil)
+	if err := restarted.EnableQueuePersistence(filename); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := restarted.UpdateJobFromClient(input.ID, sftp.UpdateTransferJob{Action: sftp.TransferResumeAction}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := restarted.UpdateJob(input.ID, sftp.UpdateTransferJob{Action: sftp.TransferStartAction}); err != nil {
+		t.Fatal(err)
+	}
+	resumed, err := restarted.BeginDownload(input.ID, 8, revision, 4)
+	if err != nil || resumed.TransferredBytes != 4 {
+		t.Fatalf("Range resume after restart = %+v, %v", resumed, err)
+	}
+	if _, err := restarted.RecordDownloadSent(input.ID, 8, 8, revision); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := restarted.AcknowledgeDownload(input.ID, 8, revision); err != nil {
+		t.Fatalf("ack after the resumed range = %v", err)
+	}
+}
+
 func listJobs(t *testing.T, manager *sftp.TransferManager) []sftp.TransferJob {
 	t.Helper()
 	jobs, err := manager.ListJobs()
@@ -499,10 +548,10 @@ func TestRemoteJobSurvivesAWalkLongerThanTheStaleSweep(t *testing.T) {
 		"/work/file.txt": file("file.txt", "payload", 0o644),
 	}), clock: testTime}
 	service := &sftp.Service{Open: func(context.Context, string) (sftp.Remote, error) { return remote, nil }}
-	manager := sftp.NewTransferManager(service)
+	manager := newTestTransferManager(t, service)
 	manager.ConfigureJobs(2, remote.now)
 	defer manager.Close()
-	job, err := manager.CreateJob(sftp.CreateTransferJob{
+	_, err := manager.CreateJob(sftp.CreateTransferJob{
 		ID: "delete_remote_01", BatchID: "delete_batch_01", Alias: "edge", RemotePath: "/work",
 		SourceAlias: "edge", SourcePath: "/work", Operation: sftp.RemoteDelete,
 		Direction: sftp.TransferRemote, Kind: sftp.TransferFolder, Name: "work", TotalBytes: -1,
@@ -510,7 +559,6 @@ func TestRemoteJobSurvivesAWalkLongerThanTheStaleSweep(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	manager.ScheduleRemoteJob(job.ID)
 	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
 		jobs := listJobs(t, manager)
@@ -544,8 +592,52 @@ func TestTransferQueueRefusesASymlinkedSnapshot(t *testing.T) {
 	if err := os.Symlink(elsewhere, filename); err != nil {
 		t.Fatal(err)
 	}
-	manager := sftp.NewTransferManager(nil)
+	manager := newTestTransferManager(t, nil)
 	if err := manager.EnableQueuePersistence(filename); !errors.Is(err, storage.ErrSymlinkPath) {
 		t.Fatalf("EnableQueuePersistence(symlink) = %v, want ErrSymlinkPath", err)
+	}
+}
+
+func TestEveryJobCreateJobAcceptsIsRestoredAfterEngineRestart(t *testing.T) {
+	t.Parallel()
+	local := filepath.ToSlash(filepath.Join(t.TempDir(), "local.bin"))
+	inputs := map[string]sftp.CreateTransferJob{
+		"upload": {Direction: sftp.TransferUpload, Kind: sftp.TransferFile, RemotePath: "/inbox/upload.bin",
+			LargeFileThresholdBytes: sftp.MinLargeFileThreshold, LargeFileParallelism: 2, LargeFileChunkBytes: sftp.MinLargeFileChunkBytes},
+		"download": {Direction: sftp.TransferDownload, Kind: sftp.TransferFolder, RemotePath: "/inbox/folder"},
+		"copy": {Direction: sftp.TransferRemote, Operation: sftp.RemoteCopy, Kind: sftp.TransferFile,
+			SourceAlias: "origin", SourcePath: "/from/copy.bin", RemotePath: "/to/copy.bin", Overwrite: true},
+		"move": {Direction: sftp.TransferRemote, Operation: sftp.RemoteMove, Kind: sftp.TransferFolder,
+			SourceAlias: "origin", SourcePath: "/from/folder", RemotePath: "/to/folder"},
+		"delete": {Direction: sftp.TransferRemote, Operation: sftp.RemoteDelete, Kind: sftp.TransferFile,
+			SourceAlias: "edge", SourcePath: "/inbox/old.bin", RemotePath: "/inbox/old.bin"},
+		"get": {Direction: sftp.TransferRemote, Operation: sftp.RemoteGet, Kind: sftp.TransferFile,
+			SourceAlias: "edge", SourcePath: "/inbox/get.bin", RemotePath: local},
+		"put": {Direction: sftp.TransferRemote, Operation: sftp.RemotePut, Kind: sftp.TransferFile,
+			SourceAlias: "edge", SourcePath: local, RemotePath: "/inbox/put.bin"},
+	}
+	for name, input := range inputs {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			filename := filepath.Join(t.TempDir(), "state", "transfers.json")
+			first := newTestTransferManager(t, nil)
+			if err := first.EnableQueuePersistence(filename); err != nil {
+				t.Fatal(err)
+			}
+			input.ID, input.BatchID, input.Alias, input.TotalBytes = "transfer_shape_"+name, "batch_shape_"+name, "edge", -1
+			created, err := first.CreateJob(input)
+			if err != nil {
+				t.Fatalf("CreateJob(%s) = %v", name, err)
+			}
+			restarted := newTestTransferManager(t, nil)
+			if err := restarted.EnableQueuePersistence(filename); err != nil {
+				t.Fatal(err)
+			}
+			restored := listJobs(t, restarted)
+			if len(restored) != 1 || restored[0].ID != created.ID || restored[0].RemotePath != created.RemotePath ||
+				restored[0].Operation != created.Operation || restored[0].SourcePath != created.SourcePath {
+				t.Fatalf("restored %s jobs = %+v, want %+v", name, restored, created)
+			}
+		})
 	}
 }

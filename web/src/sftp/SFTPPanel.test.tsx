@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { localHostAlias } from "./localHost";
@@ -6,6 +7,7 @@ import { SFTPPanel } from "./SFTPPanel";
 import { mobileViewportQuery } from "../ui/useMediaQuery";
 import { ApiError } from "../api/client";
 import { sftpTransferManager } from "./transferManager";
+import type { UploadChunk, UploadCompletion, UploadStart } from "./api";
 
 const api = vi.hoisted(() => ({
   list: vi.fn(),
@@ -17,11 +19,9 @@ const api = vi.hoisted(() => ({
   search: vi.fn(),
   directoryStats: vi.fn(),
   chmod: vi.fn(),
-  remove: vi.fn(),
   download: vi.fn(),
   startUpload: vi.fn(),
 	appendUpload: vi.fn(),
-	appendUploadRange: vi.fn(),
   completeUpload: vi.fn(),
   cancelUpload: vi.fn(),
   createTransfer: vi.fn(),
@@ -63,9 +63,8 @@ describe("SFTPPanel uploads", () => {
     api.rename.mockResolvedValue(undefined);
     api.directoryStats.mockResolvedValue({ path: "/remote/project", bytes: 0, files: 0, directories: 1, truncated: false });
     api.previewFile.mockRejectedValue(new ApiError("sftp_preview_type", 415, null));
-    api.remove.mockResolvedValue(undefined);
-	api.startUpload.mockImplementation(async (_alias: string, id: string, path: string, size: number) => ({ id, path, offset: 0, size, expectedRevision: "absent", completedRanges: [], parallelism: 1, chunkBytes: 32 << 20 }));
-	api.appendUpload.mockImplementation(async (_alias: string, id: string, path: string, _offset: number, total: number) => ({ id, path, offset: total, size: total, expectedRevision: "", completedRanges: [], parallelism: 1, chunkBytes: 32 << 20 }));
+	api.startUpload.mockImplementation(async ({ id, remotePath: path, size }: UploadStart) => ({ id, path, offset: 0, size, expectedRevision: "absent", completedRanges: [], parallelism: 1, chunkBytes: 32 << 20 }));
+	api.appendUpload.mockImplementation(async ({ id, remotePath: path, total }: UploadChunk) => ({ id, path, offset: total, size: total, expectedRevision: "", completedRanges: [], parallelism: 1, chunkBytes: 32 << 20 }));
 	api.completeUpload.mockResolvedValue(undefined);
 	api.cancelUpload.mockResolvedValue(undefined);
     const server = new Map<string, Record<string, unknown>>();
@@ -91,8 +90,8 @@ describe("SFTPPanel uploads", () => {
       return updated;
     });
     api.streamDownload.mockResolvedValue({ bytes: 10, total: 10 });
-    api.saveDownload.mockReturnValue(undefined);
-    api.completeUpload.mockImplementation(async (_alias: string, id: string, _path: string, size: number) => {
+    api.saveDownload.mockResolvedValue(null);
+    api.completeUpload.mockImplementation(async ({ id, size }: UploadCompletion) => {
       const current = server.get(id);
       if (current !== undefined) server.set(id, { ...current, transferredBytes: size, status: "completed", allowedActions: [], remainingSeconds: 0 });
     });
@@ -106,7 +105,7 @@ describe("SFTPPanel uploads", () => {
   });
 
   it("uploads every dropped file separately and keeps per-file results", async () => {
-    api.startUpload.mockImplementation(async (_alias, _id, remotePath, size) => {
+    api.startUpload.mockImplementation(async ({ remotePath, size }: UploadStart) => {
       if (remotePath.endsWith("second.txt")) throw new Error("upload_failed");
       return { id: "one", path: remotePath, offset: 0, size, expectedRevision: "absent" };
     });
@@ -122,8 +121,8 @@ describe("SFTPPanel uploads", () => {
     });
 
     await waitFor(() => expect(api.startUpload).toHaveBeenCalledTimes(2));
-    expect(api.startUpload).toHaveBeenCalledWith("edge", expect.any(String), "/remote/first.txt", first.size, expect.stringMatching(/^tree-sha256:/));
-    expect(api.startUpload).toHaveBeenCalledWith("edge", expect.any(String), "/remote/second.txt", second.size, expect.stringMatching(/^tree-sha256:/));
+    expect(api.startUpload).toHaveBeenCalledWith({ alias: "edge", id: expect.any(String), remotePath: "/remote/first.txt", size: first.size, sourceFingerprint: expect.stringMatching(/^tree-sha256:/) });
+    expect(api.startUpload).toHaveBeenCalledWith({ alias: "edge", id: expect.any(String), remotePath: "/remote/second.txt", size: second.size, sourceFingerprint: expect.stringMatching(/^tree-sha256:/) });
     expect(await screen.findByText("Completed")).toBeInTheDocument();
     expect(await screen.findByText("Failed · upload_failed")).toBeInTheDocument();
   });
@@ -402,7 +401,6 @@ describe("SFTPPanel uploads", () => {
       expect.objectContaining({ sourceAlias: "edge", sourcePath: "/remote/first.txt", targetPath: "/remote/first.txt" }),
       expect.objectContaining({ sourceAlias: "edge", sourcePath: "/remote/second.txt", targetPath: "/remote/second.txt" }),
     ], "delete"));
-    expect(api.remove).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "Collapse Transfer Manager" })).toBeInTheDocument();
     addRemoteTransfers.mockRestore();
   });
@@ -693,7 +691,7 @@ describe("SFTPPanel uploads", () => {
       ["edge", "/remote/project"],
       ["edge", "/remote/project/config"],
     ]);
-    expect(api.startUpload).toHaveBeenCalledWith("edge", expect.any(String), "/remote/project/config/file.txt", nested.size, expect.stringMatching(/^tree-sha256:/));
+    expect(api.startUpload).toHaveBeenCalledWith({ alias: "edge", id: expect.any(String), remotePath: "/remote/project/config/file.txt", size: nested.size, sourceFingerprint: expect.stringMatching(/^tree-sha256:/) });
   });
 
   it("rejects queue overflow before creating remote directories and always releases the busy state", async () => {
@@ -717,7 +715,7 @@ describe("SFTPPanel uploads", () => {
   });
 
   it("asks before retrying an existing remote file with overwrite enabled", async () => {
-    api.startUpload.mockRejectedValueOnce(new ApiError("sftp_exists", 409, null)).mockImplementationOnce(async (_alias: string, id: string, path: string, size: number) => ({ id, path, offset: 0, size, expectedRevision: "meta" }));
+    api.startUpload.mockRejectedValueOnce(new ApiError("sftp_exists", 409, null)).mockImplementationOnce(async ({ id, remotePath: path, size }: UploadStart) => ({ id, path, offset: 0, size, expectedRevision: "meta" }));
     const { container } = render(<SFTPPanel aliases={["edge"]} />);
     await chooseHost("edge");
     await waitFor(() => expect(api.list).toHaveBeenCalled());
@@ -728,7 +726,7 @@ describe("SFTPPanel uploads", () => {
     expect(await screen.findByText("Confirm overwrite")).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: "Overwrite" }));
     await waitFor(() => expect(api.startUpload).toHaveBeenCalledTimes(2));
-    expect(api.startUpload).toHaveBeenLastCalledWith("edge", expect.any(String), "/remote/existing.txt", file.size, expect.stringMatching(/^tree-sha256:/));
+    expect(api.startUpload).toHaveBeenLastCalledWith({ alias: "edge", id: expect.any(String), remotePath: "/remote/existing.txt", size: file.size, sourceFingerprint: expect.stringMatching(/^tree-sha256:/) });
   });
 
   it("moves the row cursor with the arrow keys, Home and End while selecting the row it lands on", async () => {
@@ -791,6 +789,7 @@ describe("SFTPPanel uploads", () => {
   });
 
   it("renames with F2 and deletes with Delete, returning focus to the row when the dialog is cancelled", async () => {
+    const addRemoteTransfers = vi.spyOn(sftpTransferManager, "addRemoteTransfers").mockResolvedValue([]);
     api.list.mockResolvedValue({
       path: "/remote",
       entries: [{ name: "notes.txt", path: "/remote/notes.txt", type: "file", size: 4, mode: "0644", modifiedAt: "", revision: "file" }],
@@ -810,7 +809,8 @@ describe("SFTPPanel uploads", () => {
     const deleteDialog = await screen.findByRole("dialog", { name: "Delete this remote entry?" });
     await userEvent.click(within(deleteDialog).getByRole("button", { name: "Cancel" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "notes.txt" })).toHaveFocus());
-    expect(api.remove).not.toHaveBeenCalled();
+    expect(addRemoteTransfers).not.toHaveBeenCalled();
+    addRemoteTransfers.mockRestore();
   });
 
   it("opens the same actions from a right click as from the overflow button", async () => {
@@ -1030,19 +1030,34 @@ describe("SFTPPanel uploads", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Actions for project" }));
     await userEvent.click(screen.getByRole("menuitem", { name: "Download" }));
-    await waitFor(() => expect(api.streamDownload).toHaveBeenCalledWith("edge", expect.any(String), "/remote/project", true, 0, expect.objectContaining({ signal: expect.any(AbortSignal) })));
+    await waitFor(() => expect(api.streamDownload).toHaveBeenCalledWith({ alias: "edge", jobId: expect.any(String), remotePath: "/remote/project", directory: true, offset: 0 }, expect.objectContaining({ signal: expect.any(AbortSignal) })));
     await userEvent.click(screen.getByRole("button", { name: "Actions for project" }));
     await userEvent.click(screen.getByRole("menuitem", { name: "Change permissions" }));
     const dialog = screen.getByRole("dialog", { name: "Change permissions" });
     expect(within(dialog).getByRole("textbox", { name: "Permissions (octal, for example 640)" })).toHaveValue("750");
     await userEvent.click(within(dialog).getByRole("button", { name: "Change permissions" }));
-    await waitFor(() => expect(api.chmod).toHaveBeenCalledWith("edge", "/remote/project", "750", "rev", false));
+    await waitFor(() => expect(api.chmod).toHaveBeenCalledWith({ alias: "edge", remotePath: "/remote/project", mode: "750", expectedRevision: "rev", recursive: false }));
 
     await userEvent.click(screen.getByRole("button", { name: "Actions for project" }));
     await userEvent.click(screen.getByRole("menuitem", { name: "Change permissions recursively" }));
     const recursiveDialog = screen.getByRole("dialog", { name: "Change permissions recursively" });
     await userEvent.click(within(recursiveDialog).getByRole("button", { name: "Change permissions" }));
-    await waitFor(() => expect(api.chmod).toHaveBeenLastCalledWith("edge", "/remote/project", "750", "rev", true));
+    await waitFor(() => expect(api.chmod).toHaveBeenLastCalledWith({ alias: "edge", remotePath: "/remote/project", mode: "750", expectedRevision: "rev", recursive: true }));
+  });
+  it("tells the parent of a new sort order once per click, even when StrictMode calls updaters twice", async () => {
+    api.list.mockResolvedValue({
+      path: "/remote",
+      entries: [{ name: "notes.txt", path: "/remote/notes.txt", type: "file", size: 12, mode: "0644", modifiedAt: "2026-08-24T11:00:00Z", revision: "notes" }],
+    });
+    const onSortChange = vi.fn();
+    render(<StrictMode><SFTPPanel aliases={["edge"]} onSortChange={onSortChange} /></StrictMode>);
+    await chooseHost("edge");
+    const table = await screen.findByRole("table");
+
+    await userEvent.click(within(table).getByRole("button", { name: /Size.*sort ascending/ }));
+
+    expect(onSortChange).toHaveBeenCalledTimes(1);
+    expect(onSortChange).toHaveBeenCalledWith({ key: "size", direction: "ascending" });
   });
   describe("narrow desktop pane", () => {
     // Two panes side by side leave each one under 680px, but the pointer is

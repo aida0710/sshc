@@ -52,6 +52,7 @@ import { ManageConnection } from "./ManageConnection";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { PanelState } from "../ui/PanelState";
 import { mobileViewportQuery, useMediaQuery } from "../ui/useMediaQuery";
+import { useBeforeUnloadWarning } from "../ui/useBeforeUnloadWarning";
 import { hostDetailApi } from "./HostDetail";
 import { connectionSecretsApi } from "./secretsApi";
 import { groupAfterRename, movedHostIdentity } from "./connectionMoves";
@@ -355,15 +356,7 @@ export function ConnectionsPage({
     return () => onNavigationBlockerChange?.(null);
   }, [editorDirty, onNavigationBlockerChange, selection]);
 
-  useEffect(() => {
-    if (!editorDirty) return;
-    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-      event.returnValue = "";
-    };
-    window.addEventListener("beforeunload", warnBeforeUnload);
-    return () => window.removeEventListener("beforeunload", warnBeforeUnload);
-  }, [editorDirty]);
+  useBeforeUnloadWarning(editorDirty);
 
 
 

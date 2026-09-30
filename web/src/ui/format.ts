@@ -1,6 +1,8 @@
 // Numbers and moments shown to people, spelled once so the same value reads
 // the same on every screen.
 
+import type { Translate } from "../i18n/context";
+
 export type ByteUnits = {
   // Object storage bills in decimal units (kB, MB); files on disk are shown in
   // the binary units (KiB, MiB) their tools use.
@@ -38,4 +40,21 @@ export function formatDateTime(value: string, locale?: string): string {
   const moment = new Date(value);
   if (Number.isNaN(moment.getTime())) return value;
   return new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(moment);
+}
+
+const secondsPerMinute = 60;
+const minutesPerHour = 60;
+
+// A remaining time or an interval in whole seconds, in the largest units that
+// keep it short. Minutes are rounded up, so a time left never reads shorter
+// than it is; the rounding comes before the split into hours, so 59m 59s
+// reads 1h 0m, not 60m. The unit names come from the catalogue.
+export function formatDuration(seconds: number, t: Translate): string {
+  if (seconds < secondsPerMinute) return t("duration.seconds", { seconds });
+  const totalMinutes = Math.ceil(seconds / secondsPerMinute);
+  if (totalMinutes < minutesPerHour) return t("duration.minutes", { minutes: totalMinutes });
+  return t("duration.hoursMinutes", {
+    hours: Math.floor(totalMinutes / minutesPerHour),
+    minutes: totalMinutes % minutesPerHour,
+  });
 }

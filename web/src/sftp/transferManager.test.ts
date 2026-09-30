@@ -1,5 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { CreateTransferJob, ResumableUpload, StreamDownloadOptions, TransferJob, TransferJobAction } from "./api";
+import type {
+  BrowserSave,
+  CreateTransferJob,
+  DownloadStream,
+  ResumableUpload,
+  StreamDownloadOptions,
+  TransferJob,
+  TransferJobAction,
+  UploadChunk,
+  UploadCompletion,
+  UploadStart,
+  UploadTarget,
+} from "./api";
+import { browserSaveRetentionMs } from "./downloadPlane";
 import { SFTPTransferManager } from "./transferManager";
 
 function engineAPI(overrides: Record<string, unknown> = {}) {
@@ -69,35 +82,68 @@ function engineAPI(overrides: Record<string, unknown> = {}) {
       return updated;
     }),
     verifyDownload: vi.fn(async () => undefined),
-    startUpload: vi.fn(async (_alias: string, id: string, path: string, size: number) => ({
+    startUpload: vi.fn(async ({ id, remotePath: path, size }: UploadStart) => ({
       id, path, offset: 0, size, expectedRevision: "absent", completedRanges: [] as ResumableUpload["completedRanges"], parallelism: 1, chunkBytes: 32 << 20,
     })),
-    appendUpload: vi.fn(async (_alias: string, id: string, path: string, _offset: number, total: number) => ({
-      id, path, offset: total, size: total, expectedRevision: "", completedRanges: [], parallelism: 1, chunkBytes: 32 << 20,
-    })),
-    appendUploadRange: vi.fn(async (_alias: string, id: string, path: string, offset: number, total: number, chunk: Blob) => ({
-      id, path, offset: offset + chunk.size, size: total, expectedRevision: "absent",
-      completedRanges: [{ offset, size: chunk.size }], parallelism: 4, chunkBytes: 8 << 20,
-    })),
-    completeUpload: vi.fn(async (_alias: string, id: string, _path: string, size: number) => {
+    appendUpload: vi.fn(async ({ id, remotePath: path, offset, total, chunk, range }: UploadChunk): Promise<ResumableUpload> => (range
+      ? {
+        id, path, offset: offset + chunk.size, size: total, expectedRevision: "absent",
+        completedRanges: [{ offset, size: chunk.size }], parallelism: 4, chunkBytes: 8 << 20,
+      }
+      : { id, path, offset: total, size: total, expectedRevision: "", completedRanges: [], parallelism: 1, chunkBytes: 32 << 20 })),
+    completeUpload: vi.fn(async ({ id, size }: UploadCompletion) => {
       const current = jobs.get(id);
       if (current !== undefined) jobs.set(id, { ...current, status: "completed", allowedActions: [], transferredBytes: size, remainingSeconds: 0 });
     }),
-    cancelUpload: vi.fn(async (_alias: string, id: string) => {
+    cancelUpload: vi.fn(async ({ id }: UploadTarget) => {
       const current = jobs.get(id);
       if (current !== undefined) jobs.set(id, { ...current, status: "cancelled", allowedActions: [], problem: "" });
     }),
-    streamDownload: vi.fn(async (
-      _alias: string, _id: string, _path: string, _directory: boolean, _offset: number,
-      options: StreamDownloadOptions,
-    ) => {
+    streamDownload: vi.fn(async (_download: DownloadStream, options: StreamDownloadOptions) => {
       options.onRevision?.('"revision"');
       await options.onChunk(new TextEncoder().encode("data"), 4);
       return { bytes: 4, total: 4 };
     }),
-    saveDownload: vi.fn((_remotePath: string, _directory: boolean, _parts: BlobPart[]) => undefined),
+    // Resolves as Android does: every byte is in the saved file on return.
+    saveDownload: vi.fn(async (_remotePath: string, _directory: boolean, _parts: BlobPart[]): Promise<BrowserSave | null> => null),
     ...overrides,
   };
+}
+
+// The origin private file system, held in memory, as the download part files
+// see it.
+function privateFileSystem() {
+  const files = new Map<string, Uint8Array<ArrayBuffer>>();
+  const root = {
+    async *values() {
+      for (const name of [...files.keys()]) yield { name };
+    },
+    getFileHandle: vi.fn(async (name: string) => {
+      if (!files.has(name)) files.set(name, new Uint8Array());
+      return {
+        getFile: async () => new File([files.get(name) ?? new Uint8Array()], name),
+        createWritable: async () => {
+          let contents = files.get(name) ?? new Uint8Array();
+          let position = 0;
+          return {
+            truncate: async (size: number) => { contents = contents.slice(0, size); },
+            seek: async (offset: number) => { position = offset; },
+            write: async (chunk: Uint8Array) => {
+              const grown = new Uint8Array(Math.max(contents.length, position + chunk.length));
+              grown.set(contents);
+              grown.set(chunk, position);
+              contents = grown;
+              position += chunk.length;
+            },
+            close: async () => { files.set(name, contents); },
+          };
+        },
+      };
+    }),
+    removeEntry: vi.fn(async (name: string) => { files.delete(name); }),
+  };
+  Object.defineProperty(globalThis.navigator, "storage", { configurable: true, value: { getDirectory: async () => root } });
+  return files;
 }
 
 describe("SFTPTransferManager engine ownership", () => {
@@ -145,6 +191,74 @@ describe("SFTPTransferManager engine ownership", () => {
     expect(manager.getSnapshot()[0]?.status).toBe("running");
   });
 
+  it("counts a waiting upload as this page's transfer while the page holds its File", async () => {
+    const api = engineAPI();
+    const manager = new SFTPTransferManager(api, 0);
+    await manager.addDownload("edge", "/queued.bin", "file", 4);
+    expect(manager.hasBrowserTransfers()).toBe(false);
+    await manager.addUploads([{ alias: "edge", remotePath: "/a.txt", localName: "a.txt", file: new File(["a"], "a.txt") }]);
+    expect(manager.hasBrowserTransfers()).toBe(true);
+    const upload = manager.getSnapshot().find((job) => job.direction === "upload")!;
+    await manager.pause(upload.id);
+    expect(manager.hasBrowserTransfers()).toBe(false);
+  });
+
+  it("counts a download as this page's transfer only while the page runs it", async () => {
+    let finishStream = () => {};
+    const api = engineAPI({
+      streamDownload: vi.fn(async (_download: DownloadStream, options: StreamDownloadOptions) => {
+        options.onRevision?.('"revision"');
+        await new Promise<void>((resolve) => { finishStream = resolve; });
+        await options.onChunk(new TextEncoder().encode("data"), 4);
+        return { bytes: 4, total: 4 };
+      }),
+    });
+    const manager = new SFTPTransferManager(api);
+    await manager.addDownload("edge", "/remote.bin", "file", 4);
+    await vi.waitFor(() => expect(api.streamDownload).toHaveBeenCalled());
+    expect(manager.hasBrowserTransfers()).toBe(true);
+    finishStream();
+    await vi.waitFor(() => expect(manager.getSnapshot()[0]?.status).toBe("completed"));
+    expect(manager.hasBrowserTransfers()).toBe(false);
+  });
+
+  it("keeps a download added while an older listing was on its way", async () => {
+    const api = engineAPI();
+    const emptyListing = { ...(await api.listTransfers()), processingStopped: true };
+    let answerListing = (_listing: typeof emptyListing) => {};
+    api.listTransfers.mockImplementationOnce(() => new Promise((resolve) => { answerListing = resolve; }));
+    const manager = new SFTPTransferManager(api, 0);
+    const staleListing = manager.reconcile();
+    const id = await manager.addDownload("edge", "/remote.bin", "file", 4);
+    answerListing(emptyListing);
+    await staleListing;
+    expect(manager.getSnapshot().map((job) => job.id)).toEqual([id]);
+  });
+
+  it("does not bring back removed jobs from a listing requested before the removal", async () => {
+    const api = engineAPI();
+    for (const id of ["transfer_failed01", "transfer_done0001"]) {
+      await api.createTransfer({
+        id, batchId: `batch_${id}`, batchName: "remote.bin", batchKind: "file",
+        alias: "edge", direction: "download", kind: "file", name: "remote.bin", remotePath: `/${id}`,
+        totalBytes: 4, lastModified: 0,
+      });
+    }
+    await api.updateTransfer("transfer_failed01", "fail");
+    await api.updateTransfer("transfer_done0001", "complete");
+    const manager = new SFTPTransferManager(api, 0);
+    await manager.reconcile();
+    const olderListing = await api.listTransfers();
+    let answerListing = (_listing: typeof olderListing) => {};
+    api.listTransfers.mockImplementationOnce(() => new Promise((resolve) => { answerListing = resolve; }));
+    const staleListing = manager.reconcile();
+    await manager.remove("transfer_failed01");
+    await manager.clearFinished();
+    answerListing(olderListing);
+    await staleListing;
+    expect(manager.getSnapshot()).toEqual([]);
+  });
+
   it("registers an upload in the engine before starting its data plane", async () => {
     const api = engineAPI();
     const manager = new SFTPTransferManager(api);
@@ -160,12 +274,12 @@ describe("SFTPTransferManager engine ownership", () => {
 
   it("uploads one large file as independent ranges and resumes completed ranges", async () => {
     const api = engineAPI();
-    api.startUpload.mockImplementation(async (_alias, id, path, size) => ({
+    api.startUpload.mockImplementation(async ({ id, remotePath: path, size }) => ({
       id, path, offset: 2, size, expectedRevision: "absent",
       completedRanges: [{ offset: 0, size: 2 }], parallelism: 2, chunkBytes: 2,
     }));
     const acknowledged: Array<{ offset: number; body: string }> = [];
-    api.appendUploadRange.mockImplementation(async (_alias, id, path, offset, total, chunk) => {
+    api.appendUpload.mockImplementation(async ({ id, remotePath: path, offset, total, chunk }) => {
       acknowledged.push({ offset, body: await chunk.text() });
       return {
         id, path, offset: 2 + acknowledged.reduce((sum, range) => sum + range.body.length, 0), size: total,
@@ -178,13 +292,14 @@ describe("SFTPTransferManager engine ownership", () => {
       alias: "edge", remotePath: "/large.bin", localName: "large.bin", file: new File(["abcdefgh"], "large.bin"),
     }]);
     await vi.waitFor(() => expect(manager.getSnapshot()[0]?.status).toBe("completed"));
-    expect(api.appendUpload).not.toHaveBeenCalled();
+    expect(api.appendUpload.mock.calls.every(([chunk]) => chunk.range)).toBe(true);
     expect(acknowledged.sort((left, right) => left.offset - right.offset)).toEqual([
       { offset: 2, body: "cd" }, { offset: 4, body: "ef" }, { offset: 6, body: "gh" },
     ]);
-    expect(api.completeUpload).toHaveBeenCalledWith(
-      "edge", expect.any(String), "/large.bin", 8, "absent", expect.stringMatching(/^tree-sha256:/),
-    );
+    expect(api.completeUpload).toHaveBeenCalledWith({
+      alias: "edge", id: expect.any(String), remotePath: "/large.bin", size: 8, expectedRevision: "absent",
+      sourceFingerprint: expect.stringMatching(/^tree-sha256:/),
+    });
   });
 
   it("registers downloads in the engine and mirrors engine progress", async () => {
@@ -197,9 +312,63 @@ describe("SFTPTransferManager engine ownership", () => {
     expect(api.saveDownload).toHaveBeenCalledOnce();
   });
 
+  it("keeps a finished download's part file for the browser's save until the job is cleared", async () => {
+    const files = privateFileSystem();
+    const release = vi.fn();
+    const api = engineAPI({ saveDownload: vi.fn(async (): Promise<BrowserSave | null> => ({ release })) });
+    const manager = new SFTPTransferManager(api);
+    const id = await manager.addDownload("edge", "/remote.bin", "file", 4);
+    await vi.waitFor(() => expect(manager.getSnapshot()[0]?.status).toBe("completed"));
+    await manager.reconcile();
+    expect(files.has(`sshc-sftp-${id}.part`)).toBe(true);
+    expect(release).not.toHaveBeenCalled();
+    await manager.clearFinished();
+    expect(release).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(files.has(`sshc-sftp-${id}.part`)).toBe(false));
+  });
+
+  it("lets go of a finished download's save after the retention even while the job stays listed", async () => {
+    const files = privateFileSystem();
+    const release = vi.fn();
+    let clock = 1_000;
+    const api = engineAPI({ saveDownload: vi.fn(async (): Promise<BrowserSave | null> => ({ release })) });
+    const manager = new SFTPTransferManager(api, 2, () => clock);
+    const id = await manager.addDownload("edge", "/remote.bin", "file", 4);
+    await vi.waitFor(() => expect(manager.getSnapshot()[0]?.status).toBe("completed"));
+    clock += browserSaveRetentionMs - 1;
+    await manager.reconcile();
+    expect(release).not.toHaveBeenCalled();
+    expect(files.has(`sshc-sftp-${id}.part`)).toBe(true);
+    clock += 1;
+    await manager.reconcile();
+    expect(release).toHaveBeenCalledOnce();
+    expect(files.has(`sshc-sftp-${id}.part`)).toBe(false);
+    expect(manager.getSnapshot()[0]?.status).toBe("completed");
+  });
+
+  it("deletes a finished download's part file once the save has written every byte", async () => {
+    const files = privateFileSystem();
+    const api = engineAPI();
+    const manager = new SFTPTransferManager(api);
+    const id = await manager.addDownload("edge", "/remote.bin", "file", 4);
+    await vi.waitFor(() => expect(manager.getSnapshot()[0]?.status).toBe("completed"));
+    expect(files.has(`sshc-sftp-${id}.part`)).toBe(false);
+  });
+
+  it("deletes the part file a closed page left for the browser's save", async () => {
+    const files = privateFileSystem();
+    const api = engineAPI({ saveDownload: vi.fn(async (): Promise<BrowserSave | null> => ({ release: vi.fn() })) });
+    const closed = new SFTPTransferManager(api);
+    const id = await closed.addDownload("edge", "/remote.bin", "file", 4);
+    await vi.waitFor(() => expect(closed.getSnapshot()[0]?.status).toBe("completed"));
+    const reopened = new SFTPTransferManager(api);
+    await reopened.reconcile();
+    expect(files.has(`sshc-sftp-${id}.part`)).toBe(false);
+  });
+
   it("checkpoints a download once its chunks add up, not after every chunk", async () => {
     const api = engineAPI();
-    api.streamDownload.mockImplementation(async (_alias, _id, _path, _directory, _offset, options) => {
+    api.streamDownload.mockImplementation(async (_download, options) => {
       options.onRevision?.('"revision-batched"');
       for (const part of ["ab", "cd", "ef"]) await options.onChunk(new TextEncoder().encode(part), 6);
       return { bytes: 6, total: 6 };
@@ -217,7 +386,7 @@ describe("SFTPTransferManager engine ownership", () => {
   it("resumes a file download after a transient disconnect", async () => {
     let calls = 0;
     const api = engineAPI();
-    api.streamDownload.mockImplementation(async (_alias, _id, _path, _directory, offset, options) => {
+    api.streamDownload.mockImplementation(async ({ offset }, options) => {
       options.onRevision?.('"revision-resume"');
       calls += 1;
       if (calls === 1) {
@@ -240,7 +409,7 @@ describe("SFTPTransferManager engine ownership", () => {
   it("checkpoints a download by volume and at the end instead of after every chunk", async () => {
     const api = engineAPI();
     const chunkCount = 64;
-    api.streamDownload.mockImplementation(async (_alias, _id, _path, _directory, _offset, options) => {
+    api.streamDownload.mockImplementation(async (_download, options) => {
       options.onRevision?.('"revision-many"');
       for (let index = 0; index < chunkCount; index += 1) {
         await options.onChunk(new Uint8Array(1024), chunkCount * 1024);
@@ -261,7 +430,7 @@ describe("SFTPTransferManager engine ownership", () => {
   it("retries only failed uploads in an engine-owned folder batch", async () => {
     let failBad = true;
     const api = engineAPI();
-    api.startUpload.mockImplementation(async (_alias, id, path, size) => {
+    api.startUpload.mockImplementation(async ({ id, remotePath: path, size }) => {
       if (path.endsWith("bad.txt") && failBad) throw new Error("connection_lost");
       return { id, path, offset: 0, size, expectedRevision: "absent", completedRanges: [], parallelism: 1, chunkBytes: 32 << 20 };
     });
@@ -271,7 +440,7 @@ describe("SFTPTransferManager engine ownership", () => {
       { alias: "edge", remotePath: "/project/bad.txt", localName: "project/bad.txt", file: new File(["bad"], "bad.txt") },
     ], { id: "batch_project1", name: "project", kind: "folder" });
     await vi.waitFor(() => expect(manager.getSnapshot().map((job) => job.status).sort()).toEqual(["completed", "failed"]));
-    const goodCalls = () => api.startUpload.mock.calls.filter((call) => call[2].endsWith("good.txt")).length;
+    const goodCalls = () => api.startUpload.mock.calls.filter((call) => call[0].remotePath.endsWith("good.txt")).length;
     expect(goodCalls()).toBe(1);
     failBad = false;
     await manager.retryFailed("batch_project1");
@@ -283,11 +452,11 @@ describe("SFTPTransferManager engine ownership", () => {
   it("uses the engine concurrency limit for uploads and downloads together", async () => {
     const releases: Array<() => void> = [];
     const api = engineAPI();
-    api.appendUpload.mockImplementation(async (_alias, id, path, _offset, total) => {
+    api.appendUpload.mockImplementation(async ({ id, remotePath: path, total }) => {
       await new Promise<void>((resolve) => releases.push(resolve));
       return { id, path, offset: total, size: total, expectedRevision: "", completedRanges: [], parallelism: 1, chunkBytes: 32 << 20 };
     });
-    api.streamDownload.mockImplementation(async (_alias, _id, _path, _directory, _offset, options) => {
+    api.streamDownload.mockImplementation(async (_download, options) => {
       options.onRevision?.('"revision-limit"');
       await new Promise<void>((resolve) => releases.push(resolve));
       await options.onChunk(new Uint8Array(4), 4);
@@ -445,9 +614,46 @@ describe("SFTPTransferManager engine ownership", () => {
     await manager.reconcile();
     await manager.retry(created.id);
     await vi.waitFor(() => expect(manager.getSnapshot()[0]?.status).toBe("completed"));
-    expect(api.verifyDownload).toHaveBeenCalledWith("edge", created.id, "/full.bin", '"content-sha256:full"');
+    expect(api.verifyDownload).toHaveBeenCalledWith({ alias: "edge", jobId: created.id, remotePath: "/full.bin" }, '"content-sha256:full"');
     expect(api.streamDownload).not.toHaveBeenCalled();
     expect(api.saveDownload).toHaveBeenCalledOnce();
+  });
+
+  it("cuts an OPFS part file back to the engine offset when the engine refuses the longer checkpoint", async () => {
+    const body = new Uint8Array([1, 2, 3, 4, 5, 6]);
+    const writer = {
+      truncate: vi.fn(async () => undefined), seek: vi.fn(async () => undefined),
+      write: vi.fn(async () => undefined), close: vi.fn(async () => undefined),
+    };
+    const handle = {
+      createWritable: vi.fn(async () => writer),
+      getFile: vi.fn(async () => new File([body], "part")),
+    };
+    const root = {
+      async *values() { /* no orphan entries */ },
+      getFileHandle: vi.fn(async () => handle), removeEntry: vi.fn(async () => undefined),
+    };
+    Object.defineProperty(globalThis.navigator, "storage", { configurable: true, value: { getDirectory: vi.fn(async () => root) } });
+    const api = engineAPI({
+      checkpointDownload: vi.fn(async () => { throw new Error("sftp_range_invalid"); }),
+    });
+    const created = await api.createTransfer({
+      id: "transfer_longopfs", batchId: "batch_longopfs", batchName: "long.bin", batchKind: "file",
+      alias: "edge", direction: "download", kind: "file", name: "long.bin", remotePath: "/long.bin",
+      totalBytes: 8, lastModified: 0,
+    });
+    api.jobs.set(created.id, {
+      ...created, transferredBytes: 4, downloadRevision: '"content-sha256:long"',
+      status: "paused", allowedActions: ["resume", "cancel"],
+    });
+    const manager = new SFTPTransferManager(api);
+    await manager.reconcile();
+    await manager.resume(created.id);
+    await vi.waitFor(() => expect(api.streamDownload).toHaveBeenCalled());
+    expect(writer.truncate).toHaveBeenCalledWith(4);
+    expect(writer.truncate).not.toHaveBeenCalledWith(0);
+    expect(api.streamDownload.mock.calls[0]?.[0].offset).toBe(4);
+    expect(api.updateTransfer).not.toHaveBeenCalledWith(created.id, "progress", expect.objectContaining({ resetProgress: true }));
   });
 
   it("does not admit more than 200 cached engine jobs", async () => {

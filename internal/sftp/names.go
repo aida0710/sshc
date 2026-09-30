@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
+	"path/filepath"
 	"strings"
 )
 
@@ -25,11 +26,14 @@ func validRemoteChildName(name string) bool {
 	return name != "" && name != "." && name != ".." && !strings.ContainsAny(name, "/\x00")
 }
 
-// validLocalChildName は、remote の entry 名を engine の local file system へそのまま
-// 書けるかを返す。Windows の区切り文字は OS に関係なく拒否し、同じ tree が OS ごとに
-// 違う場所へ展開されないようにする。
-func validLocalChildName(name string) bool {
-	return validRemoteChildName(name) && !strings.ContainsRune(name, '\\')
+// ValidLocalChildName は、remote の entry 名を、このマシンの file system の1つの名前
+// としてそのまま書けるかを返す。engine の get と folder の ZIP、CLI の sftp get が同じ
+// 規則を使う。Windows の区切り文字は OS に関係なく拒否し、同じ tree が OS ごとに違う
+// 場所へ展開されないようにする。filepath.IsLocal は Windows で「:」を含む名前（代替
+// データストリームやドライブの指定になる）と予約名（CON、NUL、COM1 など）を拒む。engine
+// の get は os.Root でも同じ名前を拒むが、os.Root を通さない CLI のためにここで断る。
+func ValidLocalChildName(name string) bool {
+	return validRemoteChildName(name) && !strings.ContainsRune(name, '\\') && filepath.IsLocal(name)
 }
 
 // readChildren は directory の entry を読み、server が返した名前を信用せずに検査する。

@@ -9,7 +9,7 @@ import {
   sectionCard,
   sectionHeading,
 } from "../ui/form";
-import { Button, Card, Row } from "../ui/surface";
+import { Button, Card, Notice, Row } from "../ui/surface";
 import { PasswordInput } from "../ui/PasswordField";
 import type {
   useAgentForm,
@@ -434,11 +434,13 @@ export function RelocateResult({
           : t("keys.relocateDone", { path: result.relativePath })}
       </h3>
       {result.blockers.length > 0 && (
-        <ul role="alert" className="text-notice-ink">
-          {result.blockers.map((blocker) => (
-            <li key={blocker}>{describeBlocker(blocker, t)}</li>
-          ))}
-        </ul>
+        <Notice tone="danger">
+          <span className="flex min-w-0 flex-col gap-1">
+            {result.blockers.map((blocker) => (
+              <span key={blocker}>{describeBlocker(blocker, t)}</span>
+            ))}
+          </span>
+        </Notice>
       )}
       {result.files.length > 0 && (
         <>

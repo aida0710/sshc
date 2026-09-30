@@ -3,12 +3,19 @@ package httpserver
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/labstack/echo/v5"
 
+	"sshc/internal/application"
 	sshcSFTP "sshc/internal/sftp"
 )
 
@@ -35,21 +42,141 @@ func TestDownloadOffsetAcceptsOnlySingleOpenEndedRange(t *testing.T) {
 	}
 }
 
-func TestTransferTooLargeUsesAFileTransferProblemCode(t *testing.T) {
-	engine := echo.New()
-	engine.GET("/too-large", func(c *echo.Context) error {
-		return sftpProblem(c, sshcSFTP.ErrTransferTooLarge)
+func TestTransferErrorsUseFileTransferProblemCodes(t *testing.T) {
+	tests := []struct {
+		err    error
+		status int
+		code   string
+	}{
+		{err: sshcSFTP.ErrTransferTooLarge, status: http.StatusRequestEntityTooLarge, code: "sftp_transfer_too_large"},
+		// Unlike sftp_transfer_limit, a spool that cannot be used does not clear by
+		// waiting, so it must not reach the browser as the retried limit code.
+		{err: fmt.Errorf("%w: %w", sshcSFTP.ErrSpoolUnavailable, os.ErrPermission), status: http.StatusServiceUnavailable, code: "sftp_spool_unavailable"},
+		{err: fmt.Errorf("%w: %w", sshcSFTP.ErrSpoolFull, &os.PathError{Op: "write", Path: "download.part", Err: os.ErrInvalid}), status: http.StatusInsufficientStorage, code: "sftp_spool_full"},
+	}
+	for _, test := range tests {
+		engine := echo.New()
+		engine.GET("/transfer", func(c *echo.Context) error {
+			return sftpProblem(c, test.err)
+		})
+		response := httptest.NewRecorder()
+		engine.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/transfer", nil))
+		if response.Code != test.status ||
+			!bytes.Contains(response.Body.Bytes(), []byte(`"code":"`+test.code+`"`)) {
+			t.Errorf("%v = %d: %s, want %d %s", test.err, response.Code, response.Body.String(), test.status, test.code)
+		}
+	}
+}
+
+func TestAnUnusableDownloadSpoolIsLoggedWhenTheTransferManagerStarts(t *testing.T) {
+	notADirectory := filepath.Join(t.TempDir(), "sftp-spool")
+	if err := os.WriteFile(notADirectory, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var logs bytes.Buffer
+	transfers, err := newTransferManager(Options{
+		SFTP:                  &sshcSFTP.Service{},
+		SFTPDownloadSpoolRoot: notADirectory,
+		Logger:                slog.New(slog.NewTextHandler(&logs, nil)),
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer transfers.Close()
+	// Only the base name is matched: the handler may quote a Windows path.
+	if !strings.Contains(logs.String(), "SFTP downloads are unavailable") || !strings.Contains(logs.String(), "sftp-spool") {
+		t.Fatalf("start log = %q, want the unusable spool and its cause", logs.String())
+	}
+}
+
+func TestTheTransferManagerStartsWithTheStoredSettingsAndLogsTheOutOfRangeOnes(t *testing.T) {
+	harness := newConfigHarness(t)
+	// A hand-edited metadata.json can hold a value out of range.
+	if _, err := harness.service.SetFileTransferSettings(application.FileTransferSettings{
+		MaxConcurrent: 3, ProcessingStopped: true, LargeFileParallelism: sshcSFTP.MaxLargeFileParallelism + 1,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var logs bytes.Buffer
+	transfers, err := newTransferManager(Options{
+		Config:                harness.service,
+		SFTPDownloadSpoolRoot: t.TempDir(),
+		Logger:                slog.New(slog.NewTextHandler(&logs, nil)),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer transfers.Close()
+	if transfers.MaxConcurrent() != 3 || !transfers.ProcessingStopped() ||
+		transfers.LargeFileParallelism() != sshcSFTP.DefaultLargeFileParallelism {
+		t.Fatalf("started with %d concurrent, stopped %v, %d connections",
+			transfers.MaxConcurrent(), transfers.ProcessingStopped(), transfers.LargeFileParallelism())
+	}
+	if !strings.Contains(logs.String(), "largeFileParallelism") {
+		t.Fatalf("start log = %q, want the setting replaced with its default", logs.String())
+	}
+}
+
+// putTransferSettings sends what the transfer panel and `sshc sftp settings`
+// send to the engine that newTransferManager starts over the harness's
+// metadata.json.
+func putTransferSettings(t *testing.T, harness *testHarness, body string) (*sshcSFTP.TransferManager, *httptest.ResponseRecorder) {
+	t.Helper()
+	manager, err := newTransferManager(Options{Config: harness.service, SFTPDownloadSpoolRoot: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = manager.Close() })
+	engine := echo.New()
+	registerSFTPRoutes(engine, SFTPHandlers{Transfers: manager})
 	response := httptest.NewRecorder()
-	engine.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/too-large", nil))
-	if response.Code != http.StatusRequestEntityTooLarge ||
-		!bytes.Contains(response.Body.Bytes(), []byte(`"code":"sftp_transfer_too_large"`)) {
-		t.Fatalf("transfer too large = %d: %s", response.Code, response.Body.String())
+	request := httptest.NewRequest(http.MethodPut, "/api/v1/sftp/transfers/settings", bytes.NewBufferString(body))
+	request.Header.Set("Content-Type", "application/json")
+	engine.ServeHTTP(response, request)
+	return manager, response
+}
+
+func TestSavedTransferSettingsAreAppliedAndKeptForTheNextStart(t *testing.T) {
+	harness := newConfigHarness(t)
+	manager, response := putTransferSettings(t, harness,
+		`{"maxConcurrent":5,"clearCompletedAfterSeconds":600,"processingStopped":true,"largeFileThresholdBytes":104857600,"largeFileParallelism":2,"largeFileChunkBytes":33554432}`,
+	)
+	if response.Code != http.StatusOK {
+		t.Fatalf("save = %d: %s", response.Code, response.Body.String())
+	}
+	want := application.FileTransferSettings{
+		MaxConcurrent: 5, ClearCompletedAfterSeconds: 600, ProcessingStopped: true,
+		LargeFileThresholdBytes: 104857600, LargeFileParallelism: 2, LargeFileChunkBytes: 33554432,
+	}
+	if stored := harness.service.FileTransferSettings(); stored != want {
+		t.Fatalf("metadata.json holds %+v, want %+v", stored, want)
+	}
+	if manager.MaxConcurrent() != 5 || manager.ClearCompletedAfter() != 10*time.Minute || !manager.ProcessingStopped() {
+		t.Fatalf("the engine runs %d concurrent, clears after %v, stopped %v",
+			manager.MaxConcurrent(), manager.ClearCompletedAfter(), manager.ProcessingStopped())
+	}
+}
+
+func TestTransferSettingsThatCannotBeSavedAreNotApplied(t *testing.T) {
+	harness := newConfigHarness(t)
+	// A folder in place of metadata.json makes every save fail.
+	if err := os.MkdirAll(filepath.Join(harness.workspace.StateDir(), application.MetadataFileName), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	manager, response := putTransferSettings(t, harness,
+		`{"maxConcurrent":5,"clearCompletedAfterSeconds":0,"processingStopped":true,"largeFileThresholdBytes":104857600,"largeFileParallelism":1,"largeFileChunkBytes":33554432}`,
+	)
+	if response.Code < http.StatusBadRequest {
+		t.Fatalf("save to an unwritable metadata.json = %d: %s", response.Code, response.Body.String())
+	}
+	if manager.MaxConcurrent() != sshcSFTP.DefaultTransferConcurrency || manager.ProcessingStopped() {
+		t.Fatalf("the engine took settings that were not saved: %d concurrent, stopped %v",
+			manager.MaxConcurrent(), manager.ProcessingStopped())
 	}
 }
 
 func TestQueuedRemoteDeleteRequiresActionToken(t *testing.T) {
-	manager := sshcSFTP.NewTransferManager(nil)
+	manager := sshcSFTP.NewTransferManager(nil, t.TempDir())
 	engine := echo.New()
 	registerSFTPRoutes(engine, SFTPHandlers{Transfers: manager})
 	body := []byte(`{"id":"delete_http_01","batchId":"delete_batch_01","batchName":"old","batchKind":"folder","alias":"edge","sourceAlias":"edge","sourcePath":"/old","operation":"delete","overwrite":false,"direction":"remote","kind":"folder","name":"old","remotePath":"/old","totalBytes":-1,"lastModified":0}`)
@@ -67,7 +194,7 @@ func TestQueuedRemoteDeleteRequiresActionToken(t *testing.T) {
 }
 
 func TestTransferManagerHTTPContractAndSharedLimit(t *testing.T) {
-	manager := sshcSFTP.NewTransferManager(nil)
+	manager := sshcSFTP.NewTransferManager(nil, t.TempDir())
 	manager.ConfigureJobs(1, nil)
 	engine := echo.New()
 	registerSFTPRoutes(engine, SFTPHandlers{Transfers: manager})

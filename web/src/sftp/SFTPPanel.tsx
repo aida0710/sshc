@@ -167,7 +167,9 @@ export function SFTPPanel({
   const editor = useSFTPTextEditor({
     onProblem: setProblem,
     // The saved revision is what the listing must show next.
-    onSaved: async (targetAlias, saved) => (await browser.load(remoteParentOf(saved.entry.path), { alias: targetAlias, refresh: true })) !== null,
+    onSaved: async (targetAlias, saved) => {
+      await browser.load(remoteParentOf(saved.entry.path), { alias: targetAlias, refresh: true });
+    },
     onNavigationBlockerChange,
     onDirtyChange,
     onNavigateLocation,
@@ -208,7 +210,7 @@ export function SFTPPanel({
     onDeleteKey: () => { if (can?.delete) actions.deleteSelection(); },
     onEscape: search.search === null ? undefined : search.endSearch,
   });
-  const { selectedPaths, selectedEntries, selectedEntry, pendingFocus, activeRow, activate, openParent } = list;
+  const { selectedPaths, selectedEntries, selectedEntry, focusAfterReload, activeRow, activate, openParent } = list;
   const actions = useSFTPEntryActions({
     browser,
     list,
@@ -227,12 +229,13 @@ export function SFTPPanel({
   // A terminal link's file, once its directory is listed, waiting for a render in which the pane shows that host and is idle.
   const [linkedEntry, setLinkedEntry] = useState<{ alias: string; action: "edit" | "download"; entry: RemoteEntry } | null>(null);
 
+  // The parent hears of the new order outside the state updater: React may
+  // call an updater twice or while rendering, and the parent's own setState
+  // must run once, from this event.
   function changeSort(key: SFTPSort) {
-    setSort((current) => {
-      const next = nextSort(current.key, current.direction, key);
-      onSortChange(next);
-      return next;
-    });
+    const next = nextSort(sort.key, sort.direction, key);
+    setSort(next);
+    onSortChange(next);
   }
 
   // Every listing from the pane closes an open menu first: the rows it acted
@@ -325,7 +328,7 @@ export function SFTPPanel({
         disabled: busy || dirty,
         run: () => {
           setMenu(null);
-          pendingFocus.current = selectedEntry.path;
+          focusAfterReload(selectedEntry.path);
           void load(remoteParentOf(selectedEntry.path));
         },
       });

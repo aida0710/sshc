@@ -2,6 +2,7 @@ package mobile
 
 import (
 	"log/slog"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
@@ -53,6 +54,15 @@ func TestAndroidTerminalInheritsAFixedEnvironment(t *testing.T) {
 	}
 }
 
+// アプリのプロセスには HOME が無いので、SFTP のダウンロードをアプリのキャッシュで
+// 用意することを検証する。
+func TestAndroidPreparesSFTPDownloadsInTheAppCache(t *testing.T) {
+	want := filepath.Join("/data/user/0/app/cache", "sftp-spool")
+	if got := build(t).SFTPDownloadSpoolRoot; got != want {
+		t.Errorf("SFTPDownloadSpoolRoot = %q, want %q", got, want)
+	}
+}
+
 // Android アプリの SHELL 環境変数に依存しないことを検証する。
 func TestAndroidResolvesTheShellFromFallbacksAlone(t *testing.T) {
 	if _, ok := build(t).Lookup("SHELL"); ok {
@@ -82,6 +92,8 @@ var androidFieldIntent = map[string]string{
 	"PID":         "wired: このプロセス",
 	"Lookup":      "wired: 常に未検出を返し、SHELL の値には依存しない",
 	"Environ":     "wired: 固定の環境。Android アプリの環境に有用な PATH が無い",
+
+	"SFTPDownloadSpoolRoot": "wired: アプリの cacheDir の下。アプリのプロセスには HOME が無い",
 
 	// 意図して空にする。
 	"Toolchain": "absent: ssh-keygen が Android に居ない",

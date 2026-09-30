@@ -41,7 +41,6 @@ output-options:
     - cancelSFTPResumableUpload
     - completeSFTPResumableUpload
     - renameSFTPEntry
-    - deleteSFTPEntry
     - chmodSFTPEntry
     - listTerminalWorkspaces
     - createTerminalWorkspace

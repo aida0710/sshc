@@ -8,10 +8,14 @@ import (
 	"runtime"
 	"sync/atomic"
 	"testing"
+	"time"
+
+	"sshc/internal/api"
+	"sshc/internal/httpserver"
 )
 
 // listingEngine answers directory listings from a map and counts them.
-func listingEngine(t *testing.T, listings map[string][]sftpCLIEntry, calls *atomic.Int32) *engineAPI {
+func listingEngine(t *testing.T, listings map[string][]api.SFTPEntry, calls *atomic.Int32) *engineAPI {
 	t.Helper()
 	server := engineTestServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if request.Method != http.MethodGet {
@@ -26,7 +30,7 @@ func listingEngine(t *testing.T, listings map[string][]sftpCLIEntry, calls *atom
 			writeTestJSON(response, http.StatusNotFound, map[string]string{"code": "sftp_not_found", "message": "not found"})
 			return
 		}
-		writeTestJSON(response, http.StatusOK, sftpCLIListing{Path: remotePath, Entries: entries})
+		writeTestJSON(response, http.StatusOK, httpserver.SFTPListing{Path: remotePath, Entries: entries})
 	}))
 	t.Cleanup(server.Close)
 	return testSFTPEngine(server)
@@ -62,7 +66,7 @@ func TestPutPlanListsEachRemoteDirectoryOnceAndFollowsLocalLinks(t *testing.T) {
 		t.Fatal(err)
 	}
 	var calls atomic.Int32
-	engine := listingEngine(t, map[string][]sftpCLIEntry{
+	engine := listingEngine(t, map[string][]api.SFTPEntry{
 		"/":                {{Name: "remote", Path: "/remote", Type: "directory"}},
 		"/remote":          {{Name: "existing", Path: "/remote/existing", Type: "directory"}},
 		"/remote/existing": {{Name: "a.txt", Path: "/remote/existing/a.txt", Type: "file", Size: 1}},
@@ -109,7 +113,7 @@ func TestPutPlanNamesAMissingRemoteDirectoryForASingleFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	var calls atomic.Int32
-	engine := listingEngine(t, map[string][]sftpCLIEntry{"/": {{Name: "remote", Path: "/remote", Type: "directory"}}}, &calls)
+	engine := listingEngine(t, map[string][]api.SFTPEntry{"/": {{Name: "remote", Path: "/remote", Type: "directory"}}}, &calls)
 	_, err := buildSFTPPutPlan(t.Context(), engine, sftpInvocation{Action: sftpPut, Alias: "edge", Source: source, Destination: "/remote/absent/one.txt"})
 	if !errors.Is(err, errSFTPRemoteDirectoryMissing) {
 		t.Fatalf("buildSFTPPutPlan() = %v, want %v", err, errSFTPRemoteDirectoryMissing)
@@ -119,13 +123,13 @@ func TestPutPlanNamesAMissingRemoteDirectoryForASingleFile(t *testing.T) {
 func TestGetPlanTransfersWhatRemoteLinksPointToAndSkipsBrokenOnes(t *testing.T) {
 	destination := t.TempDir()
 	var calls atomic.Int32
-	engine := listingEngine(t, map[string][]sftpCLIEntry{
+	engine := listingEngine(t, map[string][]api.SFTPEntry{
 		"/": {{Name: "srv", Path: "/srv", Type: "directory"}},
 		"/srv": {
-			{Name: "notes.txt", Path: "/srv/notes.txt", Type: "file", Size: 5, ModifiedAt: "2019-05-06T07:08:09Z"},
-			{Name: "notes-link", Path: "/srv/notes-link", Type: "symlink", Size: 5, ModifiedAt: "2019-05-06T07:08:09Z", LinkTarget: "notes.txt", TargetType: "file"},
-			{Name: "data-link", Path: "/srv/data-link", Type: "symlink", Size: 4, LinkTarget: "data", TargetType: "directory"},
-			{Name: "broken", Path: "/srv/broken", Type: "symlink", Size: 7, LinkTarget: "missing"},
+			{Name: "notes.txt", Path: "/srv/notes.txt", Type: "file", Size: 5, ModifiedAt: time.Date(2019, 5, 6, 7, 8, 9, 0, time.UTC)},
+			{Name: "notes-link", Path: "/srv/notes-link", Type: "symlink", Size: 5, ModifiedAt: time.Date(2019, 5, 6, 7, 8, 9, 0, time.UTC), LinkTarget: new("notes.txt"), TargetType: new(api.SFTPEntryTargetTypeFile)},
+			{Name: "data-link", Path: "/srv/data-link", Type: "symlink", Size: 4, LinkTarget: new("data"), TargetType: new(api.SFTPEntryTargetTypeDirectory)},
+			{Name: "broken", Path: "/srv/broken", Type: "symlink", Size: 7, LinkTarget: new("missing")},
 			{Name: "socket", Path: "/srv/socket", Type: "other", Size: 0},
 		},
 		"/srv/data-link": {{Name: "inside.txt", Path: "/srv/data-link/inside.txt", Type: "file", Size: 6}},

@@ -15,6 +15,17 @@ const (
 	// A queue holds up to 200 jobs, including paths and resumable ranges. Use
 	// one bound for both directions so every accepted snapshot can be restored.
 	maxTransferQueueBytes = 32 << 20
+	// maxPersistedUploadRanges bounds the upload ranges one restored job may
+	// carry. Finished chunks merge with the ranges next to them
+	// (addUploadRange), so an upload keeps one range per run of finished
+	// chunks, not one per chunk. The bound keeps the sorting and scanning each
+	// later chunk does over the ranges small even for a damaged queue file.
+	maxPersistedUploadRanges = 65536
+	// queuePersistInterval is how often progress alone rewrites the queue.
+	// Progress arrives many times a second and each write replaces the whole
+	// queue file, so a restart loses at most the progress of the last
+	// interval. Every other change is written at once (force).
+	queuePersistInterval = time.Second
 )
 
 type persistedTransferQueue struct {
@@ -95,6 +106,14 @@ func (m *TransferManager) EnableQueuePersistence(filename string) error {
 				job.UpdatedAt = m.now().UTC()
 			}
 			record := &transferJobRecord{job: job, sampleAt: m.now().UTC(), sampleBytes: job.TransferredBytes}
+			if job.Direction == TransferDownload && job.DownloadRevision != "" {
+				// A download's TransferredBytes only advances by an ACK that the engine
+				// checked against the bytes it had sent, so it is also proof of what was
+				// sent. Restoring both lets the browser resume from its checkpoint with
+				// a Range request instead of starting over after an engine restart.
+				record.revision = job.DownloadRevision
+				record.sentBytes = job.TransferredBytes
+			}
 			m.jobs[job.ID] = record
 			m.jobOrder = append(m.jobOrder, job.ID)
 		}
@@ -112,7 +131,7 @@ func (m *TransferManager) EnableQueuePersistence(filename string) error {
 	}
 	m.jobsMutex.Unlock()
 	for _, id := range remoteJobs {
-		m.ScheduleRemoteJob(id)
+		m.scheduleRemoteJob(id)
 	}
 	return nil
 }
@@ -133,62 +152,16 @@ func preserveCorruptQueue(filename string, contents []byte) error {
 }
 
 func validPersistedJob(job TransferJob) error {
-	if !transferIDPattern.MatchString(job.ID) || !transferIDPattern.MatchString(job.BatchID) ||
-		(job.Direction != TransferUpload && job.Direction != TransferDownload && job.Direction != TransferRemote) ||
-		(job.Kind != TransferFile && job.Kind != TransferFolder) || job.TotalBytes < -1 || job.TransferredBytes < 0 ||
-		(job.TotalBytes >= 0 && job.TransferredBytes > job.TotalBytes) || job.Attempt < 1 || job.CreatedAt.IsZero() || job.UpdatedAt.IsZero() {
-		return ErrInvalidTransfer
-	}
-	if err := validateAlias(job.Alias); err != nil {
+	if _, err := validateTransferJobShape(job.shape()); err != nil {
 		return err
 	}
-	var pathErr error
-	if job.Operation == RemoteGet {
-		_, pathErr = localRelative(job.RemotePath)
-	} else {
-		_, pathErr = cleanPublicPath(job.RemotePath, false)
-	}
-	if err := pathErr; err != nil {
-		return err
-	}
-	if (job.LargeFileThresholdBytes != 0 &&
-		(job.LargeFileThresholdBytes < MinLargeFileThreshold || job.LargeFileThresholdBytes > MaxLargeFileThreshold)) ||
-		(job.LargeFileParallelism != 0 &&
-			(job.LargeFileParallelism < 1 || job.LargeFileParallelism > MaxLargeFileParallelism)) ||
-		(job.LargeFileChunkBytes != 0 &&
-			(job.LargeFileChunkBytes < MinLargeFileChunkBytes || job.LargeFileChunkBytes > MaxLargeFileChunkBytes)) ||
-		(((job.Direction != TransferDownload && job.Direction != TransferUpload) || job.Kind != TransferFile) &&
-			(job.LargeFileThresholdBytes != 0 || job.LargeFileParallelism != 0 || job.LargeFileChunkBytes != 0)) {
+	if job.TransferredBytes < 0 || (job.TotalBytes >= 0 && job.TransferredBytes > job.TotalBytes) ||
+		job.Attempt < 1 || job.CreatedAt.IsZero() || job.UpdatedAt.IsZero() {
 		return ErrInvalidTransfer
 	}
 	if err := validateUploadRanges(job.UploadRanges, job.TotalBytes); err != nil ||
-		(job.Direction != TransferUpload && len(job.UploadRanges) != 0) || len(job.UploadRanges) > 65536 ||
+		(job.Direction != TransferUpload && len(job.UploadRanges) != 0) || len(job.UploadRanges) > maxPersistedUploadRanges ||
 		(len(job.UploadRanges) != 0 && uploadRangeBytes(job.UploadRanges) != job.TransferredBytes) {
-		return ErrInvalidTransfer
-	}
-	if job.Direction == TransferRemote {
-		if err := validateAlias(job.SourceAlias); err != nil {
-			return err
-		}
-		var sourceErr error
-		if job.Operation == RemotePut {
-			_, sourceErr = localRelative(job.SourcePath)
-		} else {
-			_, sourceErr = cleanPublicPath(job.SourcePath, false)
-		}
-		if err := sourceErr; err != nil {
-			return err
-		}
-		if job.Operation != RemoteCopy && job.Operation != RemoteMove && job.Operation != RemoteDelete && job.Operation != RemoteGet && job.Operation != RemotePut {
-			return ErrInvalidTransfer
-		}
-		if (job.Operation == RemoteGet || job.Operation == RemotePut) && job.SourceAlias != job.Alias {
-			return ErrInvalidTransfer
-		}
-		if job.Operation == RemoteDelete && (job.SourceAlias != job.Alias || job.SourcePath != job.RemotePath || job.Overwrite) {
-			return ErrInvalidTransfer
-		}
-	} else if job.SourceAlias != "" || job.SourcePath != "" || job.Operation != "" {
 		return ErrInvalidTransfer
 	}
 	switch job.Status {
@@ -204,7 +177,7 @@ func (m *TransferManager) persistJobsLocked(force bool) error {
 		return nil
 	}
 	now := m.now().UTC()
-	if !force && !m.lastQueuePersist.IsZero() && now.Sub(m.lastQueuePersist) < time.Second {
+	if !force && !m.lastQueuePersist.IsZero() && now.Sub(m.lastQueuePersist) < queuePersistInterval {
 		return nil
 	}
 	jobs := make([]TransferJob, 0, len(m.jobOrder))

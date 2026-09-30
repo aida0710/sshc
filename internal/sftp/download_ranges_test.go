@@ -61,7 +61,7 @@ func downloadedBytes(t *testing.T, prepared *sftp.PreparedDownload) []byte {
 func TestASplitDownloadFallsBackToOneConnectionWhenTheHostRefusesMore(t *testing.T) {
 	contents, remote := largeDownloadFixture()
 	opens := 0
-	manager := sftp.NewTransferManager(&sftp.Service{Open: func(context.Context, string) (sftp.Remote, error) {
+	manager := newTestTransferManager(t, &sftp.Service{Open: func(context.Context, string) (sftp.Remote, error) {
 		opens++
 		if opens > 1 {
 			// The second code in a one-time-code window, or a per-user
@@ -89,7 +89,7 @@ func TestASplitDownloadFallsBackToOneConnectionWhenTheHostRefusesMore(t *testing
 func TestAHostLimitedToOneConnectionIsNeverAskedForMore(t *testing.T) {
 	contents, remote := largeDownloadFixture()
 	opens := 0
-	manager := sftp.NewTransferManager(&sftp.Service{
+	manager := newTestTransferManager(t, &sftp.Service{
 		Open: func(context.Context, string) (sftp.Remote, error) {
 			opens++
 			return &rangedFake{fakeRemote: remote}, nil

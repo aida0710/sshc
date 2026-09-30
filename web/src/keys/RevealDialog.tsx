@@ -3,7 +3,7 @@ import { CopyButton } from "../ui/CopyButton";
 import { useTranslate } from "../i18n/context";
 import type { KeysApi } from "./api";
 import { ModalShell } from "../ui/ModalShell";
-import { Button } from "../ui/surface";
+import { Button, Notice } from "../ui/surface";
 
 type RevealDialogProps = {
   keyId: string;
@@ -77,9 +77,9 @@ export function RevealDialog({ keyId, relativePath, api, onClose }: RevealDialog
         </>
       )}
       {state === "error" && (
-        <p role="alert" className="mt-2 text-sm text-danger">
-          {t("reveal.failed")}
-        </p>
+        <div className="mt-2">
+          <Notice tone="danger">{t("reveal.failed")}</Notice>
+        </div>
       )}
       <Button className="mt-4" onClick={close}>
         {t("reveal.close")}

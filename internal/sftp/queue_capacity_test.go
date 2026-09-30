@@ -13,7 +13,7 @@ import (
 
 func TestQueueCanReadEverySnapshotItWrites(t *testing.T) {
 	filename := filepath.Join(t.TempDir(), "transfers.json")
-	manager := NewTransferManager(nil)
+	manager := NewTransferManager(nil, t.TempDir())
 	defer manager.Close()
 	if err := manager.EnableQueuePersistence(filename); err != nil {
 		t.Fatal(err)
@@ -34,7 +34,7 @@ func TestQueueCanReadEverySnapshotItWrites(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	restarted := NewTransferManager(nil)
+	restarted := NewTransferManager(nil, t.TempDir())
 	defer restarted.Close()
 	if err := restarted.EnableQueuePersistence(filename); err != nil {
 		t.Fatalf("engine cannot reopen its own %d-byte queue: %v", stored.Size(), err)
@@ -49,7 +49,7 @@ func TestOversizedQueueIsPreservedWithoutBlockingStartup(t *testing.T) {
 	if err := os.Truncate(filename, maxTransferQueueBytes+1); err != nil {
 		t.Fatal(err)
 	}
-	manager := NewTransferManager(nil)
+	manager := NewTransferManager(nil, t.TempDir())
 	defer manager.Close()
 	if err := manager.EnableQueuePersistence(filename); err != nil {
 		t.Fatalf("restore oversized queue: %v", err)

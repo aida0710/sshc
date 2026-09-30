@@ -1,7 +1,7 @@
 import { refreshPresets, savePresetBindings, selectPreset, updatePresets, usePresets } from "./presets";
 import { useState } from "react";
 import { useTranslate } from "../i18n/context";
-import { Button } from "../ui/surface";
+import { Button, Notice } from "../ui/surface";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { defaultBindings, shortcutActions, shortcutKey, useBindings, type Bindings, type ShortcutAction } from "./bindings";
 
@@ -62,7 +62,7 @@ export function KeyConfig() {
       onCancel={() => setConfirmingDelete(false)}
       onConfirm={() => { setConfirmingDelete(false); void manage("delete"); }}
     /> : null}
-    {library.error ? <div role="alert"><p>{t("shortcuts.reloadRequired")}</p><Button onClick={() => { void refreshPresets(); }}>{t("shortcuts.reload")}</Button></div> : null}
+    {library.error ? <Notice tone="danger"><span className="grow">{t("shortcuts.reloadRequired")}</span><Button className="shrink-0" onClick={() => { void refreshPresets(); }}>{t("shortcuts.reload")}</Button></Notice> : null}
     {library.loading ? <p role="status">{t("shortcuts.loading")}</p> : null}
     <fieldset disabled={unavailable}>
     <ul className="divide-y divide-line">
@@ -92,7 +92,7 @@ export function KeyConfig() {
       </li>)}
     </ul>
     <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
-      <div aria-live="polite">{error ? <p role="alert" className="text-sm text-danger">{error}</p> : message ? <p role="status" className="text-sm text-ink-muted">{message}</p> : null}</div>
+      <div aria-live="polite">{error ? <Notice tone="danger">{error}</Notice> : message ? <p role="status" className="text-sm text-ink-muted">{message}</p> : null}</div>
       <Button onClick={() => { void save(defaultBindings); }}>{t("shortcuts.reset")}</Button>
     </div>
     </fieldset>

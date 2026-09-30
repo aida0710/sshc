@@ -32,6 +32,15 @@ const (
 	AutoFailed AutoPhase = "failed"
 )
 
+// AutoBlocked のときの Detail。画面（SyncPanel、SyncOverviewCard）がこの値で
+// 文言を選ぶので、綴りを変えるときは画面側も合わせる。
+const (
+	blockedRemoteDeleted = "remote_deleted"
+	blockedRemoteMoved   = "remote_moved"
+	blockedConflicts     = "conflicts"
+	blockedRemovals      = "removals"
+)
+
 // AutoView は、画面が自動同期について言えることのすべてである。
 type AutoView struct {
 	// Enabled は、この設置で自動同期が入っているか。
@@ -332,7 +341,7 @@ func (a *Auto) receive(ctx context.Context, syncKey string) (AutoPhase, string, 
 			return AutoIdle, "", false
 		}
 		if generation.deleted {
-			return AutoBlocked, "remote_deleted", true
+			return AutoBlocked, blockedRemoteDeleted, true
 		}
 		if detail, ok := a.blocked(generation.target, generation.etag); ok {
 			return AutoBlocked, detail, true
@@ -340,8 +349,7 @@ func (a *Auto) receive(ctx context.Context, syncKey string) (AutoPhase, string, 
 		// A send-only installation cannot resolve a remote generation by
 		// downloading it. Stop before creating a history candidate and wait for
 		// an explicit force push or a direction change.
-		a.rememberBlocked(generation.target, generation.etag, "remote_moved")
-		return AutoBlocked, "remote_moved", true
+		return a.block(generation.target, generation.etag, blockedRemoteMoved)
 	}
 	// 動いていないものは取りに行かない。HEAD は ETag だけを返す。
 	generation, err := a.service.inspectRemoteGeneration(ctx)
@@ -354,7 +362,7 @@ func (a *Auto) receive(ctx context.Context, syncKey string) (AutoPhase, string, 
 		return AutoIdle, "", false
 	}
 	if generation.deleted {
-		return AutoBlocked, "remote_deleted", true
+		return AutoBlocked, blockedRemoteDeleted, true
 	}
 	if detail, ok := a.blocked(generation.target, generation.etag); ok {
 		return AutoBlocked, detail, true
@@ -368,8 +376,7 @@ func (a *Auto) receive(ctx context.Context, syncKey string) (AutoPhase, string, 
 	case errors.Is(err, ErrNoSnapshot):
 		return AutoIdle, "", false
 	case errors.Is(err, ErrRemoteMoved):
-		a.rememberBlocked(generation.target, generation.etag, "remote_moved")
-		return AutoBlocked, "remote_moved", true
+		return a.block(generation.target, generation.etag, blockedRemoteMoved)
 	case err != nil && !errors.Is(err, ErrNothingToApply):
 		a.reportFailure("pull", err)
 		detail := failureDetail(err)
@@ -378,13 +385,11 @@ func (a *Auto) receive(ctx context.Context, syncKey string) (AutoPhase, string, 
 	}
 	a.clearFailed()
 	if len(result.Conflicts) > 0 {
-		a.rememberBlocked(result.target, result.ETag, "conflicts")
-		return AutoBlocked, "conflicts", true
+		return a.block(result.target, result.ETag, blockedConflicts)
 	}
 	// 削除はユーザーの確認が必要なため自動適用しない。
 	if len(result.Removed) > 0 {
-		a.rememberBlocked(result.target, result.ETag, "removals")
-		return AutoBlocked, "removals", true
+		return a.block(result.target, result.ETag, blockedRemovals)
 	}
 	// 差分がなくてもApplyはremote世代を記録する。これを省くと同じsnapshotを
 	// 毎分取得し続け、次のpushも古いETagで拒否される。
@@ -436,12 +441,15 @@ func (a *Auto) send(ctx context.Context, syncKey string) (AutoPhase, string) {
 	return AutoIdle, ""
 }
 
-func (a *Auto) rememberBlocked(target, etag, detail string) {
+// block は target の世代 etag で止まったことを覚え、同じ理由で巡回を終える。
+// 覚える理由と返す理由を同じ値にするため、止めるときは必ずここを通す。
+func (a *Auto) block(target, etag, detail string) (AutoPhase, string, bool) {
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
 	a.blockedTarget = target
 	a.blockedETag = etag
 	a.blockedDetail = detail
+	return AutoBlocked, detail, true
 }
 
 func (a *Auto) blocked(target, etag string) (string, bool) {

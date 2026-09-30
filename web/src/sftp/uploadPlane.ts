@@ -2,7 +2,7 @@ import type { ResumableUpload } from "./api";
 import { retryOperation, type TransferManagerAPI, type TransferPlaneContext } from "./transferPlane";
 import { uploadChunkBytes } from "./uploadFingerprint";
 
-type UploadAPI = Pick<TransferManagerAPI, "startUpload" | "appendUpload" | "appendUploadRange" | "completeUpload">;
+type UploadAPI = Pick<TransferManagerAPI, "startUpload" | "appendUpload" | "completeUpload">;
 
 // Pushes the browser's File objects to the engine. Files only live in this
 // tab, so a job the engine still lists after a reload waits here until the
@@ -33,7 +33,7 @@ export class UploadPlane {
     const file = this.files.get(id);
     let job = ledger.find(id);
     if (file === undefined || job === undefined) return;
-    const started = await this.api.startUpload(job.alias, id, job.remotePath, job.totalBytes, sourceFingerprint);
+    const started = await this.api.startUpload({ alias: job.alias, id, remotePath: job.remotePath, size: job.totalBytes, sourceFingerprint });
     ledger.replace(id, { transferredBytes: started.offset, expectedRevision: started.expectedRevision });
     if (started.parallelism > 1) {
       await this.runParallel(id, file, started, sourceFingerprint);
@@ -45,7 +45,10 @@ export class UploadPlane {
       if (job === undefined || job.status !== "running") return;
       const controller = this.context.arm(id);
       const end = Math.min(offset + uploadChunkBytes, file.size);
-      const appended = await retryOperation(() => this.api.appendUpload(job!.alias, id, job!.remotePath, offset, file.size, file.slice(offset, end), controller.signal));
+      const appended = await retryOperation(() => this.api.appendUpload({
+        alias: job!.alias, id, remotePath: job!.remotePath, offset, total: file.size,
+        chunk: file.slice(offset, end), range: false, signal: controller.signal,
+      }));
       offset = appended.offset;
       this.context.progress(id, offset, file.size);
     }
@@ -73,10 +76,10 @@ export class UploadPlane {
         if (portion === undefined) return;
         const job = ledger.find(id);
         if (job === undefined || job.status !== "running") return;
-        const appended = await retryOperation(() => this.api.appendUploadRange(
-          job.alias, id, job.remotePath, portion.offset, file.size,
-          file.slice(portion.offset, portion.offset + portion.size), controller.signal,
-        ));
+        const appended = await retryOperation(() => this.api.appendUpload({
+          alias: job.alias, id, remotePath: job.remotePath, offset: portion.offset, total: file.size,
+          chunk: file.slice(portion.offset, portion.offset + portion.size), range: true, signal: controller.signal,
+        }));
         const current = ledger.find(id)?.transferredBytes ?? 0;
         this.context.progress(id, Math.max(current, appended.offset), file.size);
       }
@@ -90,7 +93,7 @@ export class UploadPlane {
   private async complete(id: string, expectedRevision: string, sourceFingerprint: string): Promise<void> {
     const { ledger } = this.context;
     const job = ledger.find(id)!;
-    await this.api.completeUpload(job.alias, id, job.remotePath, job.totalBytes, expectedRevision, sourceFingerprint);
+    await this.api.completeUpload({ alias: job.alias, id, remotePath: job.remotePath, size: job.totalBytes, expectedRevision, sourceFingerprint });
     this.files.delete(id);
     await this.context.reconcile();
     const completed = ledger.find(id);

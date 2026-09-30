@@ -15,10 +15,13 @@ type Service struct {
 	Open OpenRemote
 	// TemporaryPath はテスト時に差し替える。本番では対象と同じディレクトリへ予測不能な名前を作る。
 	TemporaryPath func(target string) (string, error)
-	// ConnectionLimit says how many SFTP connections may be open to a host at
-	// once, or 0 for no limit. A host that authenticates with a one-time code
-	// allows one: a second connection in the same window presents a code the
-	// server has already accepted, and is refused.
+	// ConnectionLimit says how many connections one transfer may open to a
+	// host at once, or 0 for no limit. A host that authenticates with a
+	// one-time code allows one: a second connection in the same window
+	// presents a code the server has already accepted, and is refused. Split
+	// downloads and split uploads bound their ranges by it, and a copy within
+	// one host shares one connection. The pool does not enforce it, so
+	// separate operations running at once may still open more.
 	ConnectionLimit func(alias string) int
 }
 
@@ -196,12 +199,25 @@ func entryFrom(parent string, info fs.FileInfo) Entry {
 	}
 }
 
+// copyChunkBytes is how much one read or write of a copy asks for. pkg/sftp
+// splits a larger request into 32 KiB packets and keeps up to 64 of them in
+// flight on one file, so 2 MiB fills that pipeline. With io.Copy's 32 KiB
+// buffer every packet waits a full round trip.
+const copyChunkBytes = 2 << 20
+
+var copyChunks = sync.Pool{New: func() any {
+	chunk := make([]byte, copyChunkBytes)
+	return &chunk
+}}
+
 func copyContext(ctx context.Context, destination io.Writer, source io.Reader, maxBytes int64) (int64, error) {
 	reader := io.Reader(&contextReader{ctx: ctx, reader: source})
 	if maxBytes > 0 {
 		reader = io.LimitReader(reader, maxBytes+1)
 	}
-	written, err := io.Copy(destination, reader)
+	chunk := copyChunks.Get().(*[]byte)
+	defer copyChunks.Put(chunk)
+	written, err := copyInChunks(destination, reader, *chunk)
 	if err != nil {
 		return written, err
 	}
@@ -209,6 +225,45 @@ func copyContext(ctx context.Context, destination io.Writer, source io.Reader, m
 		return written, ErrTransferTooLarge
 	}
 	return written, nil
+}
+
+// copyInChunks fills chunk before each write, so a source that returns a few
+// KiB at a time, such as an HTTP body, still reaches the SFTP file as large
+// writes. It is io.CopyBuffer without the WriterTo and ReaderFrom shortcuts:
+// *os.File.ReadFrom copies any other reader through a 32 KiB buffer.
+func copyInChunks(destination io.Writer, source io.Reader, chunk []byte) (int64, error) {
+	var written int64
+	for {
+		filled, readErr := fillChunk(source, chunk)
+		if filled > 0 {
+			count, writeErr := destination.Write(chunk[:filled])
+			written += int64(count)
+			if writeErr != nil {
+				return written, writeErr
+			}
+			if count != filled {
+				return written, io.ErrShortWrite
+			}
+		}
+		if readErr == io.EOF {
+			return written, nil
+		}
+		if readErr != nil {
+			return written, readErr
+		}
+	}
+}
+
+func fillChunk(source io.Reader, chunk []byte) (int, error) {
+	filled := 0
+	for filled < len(chunk) {
+		read, err := source.Read(chunk[filled:])
+		filled += read
+		if err != nil {
+			return filled, err
+		}
+	}
+	return filled, nil
 }
 
 type contextReader struct {

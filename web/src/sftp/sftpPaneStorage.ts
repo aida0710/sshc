@@ -1,17 +1,22 @@
 import type { SFTPSort, SFTPSortState } from "./SFTPPanel";
 import { isLocalPath, localHostAlias } from "./localHost";
-import { blankPane, identifier, maxTabsPerPane, paneOf, type SFTPPane, type SFTPTab } from "./sftpPanes";
+import { blankPane, identifier, maxPanes, maxTabsPerPane, paneOf, type SFTPPane, type SFTPTab } from "./sftpPanes";
 import { clampSplitRatio } from "../ui/SplitResizeHandle";
-import { readStoredJSON, readStoredValue, writeStoredValue } from "../ui/browserStorage";
+import { readStoredJSON, readStoredValue, writeStoredJSON, writeStoredValue } from "../ui/browserStorage";
 
-// The workspace layout lives in localStorage under one key per pane slot. The
-// left pane keeps the keys from the single-pane era so older layouts restore.
-const leftTabsKey = "sshc.sftp.tabs";
-const leftActiveKey = "sshc.sftp.activeTab";
-const splitKey = "sshc.sftp.split";
-const rightTabsKey = "sshc.sftp.secondaryTabs";
-const rightActiveKey = "sshc.sftp.secondaryActiveTab";
+// The workspace layout is one versioned document: the panes from left to
+// right, each with its tabs and the position of the selected tab. Changing
+// its shape means a new version of the key, and anything else stored under
+// it restores as a single blank pane.
+const panesKey = "sshc.sftp.panes.v1";
 const splitRatioKey = "sshc.sftp.splitRatio";
+
+type StoredTab = { alias: string; path: string; sortKey: SFTPSort; sortDirection: SFTPSortState["direction"] };
+type StoredPane = { tabs: StoredTab[]; activeIndex: number };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
 
 function restoredSort(value: Record<string, unknown>): SFTPSortState {
   const keys: readonly SFTPSort[] = ["name", "type", "size", "modified"];
@@ -22,56 +27,43 @@ function restoredSort(value: Record<string, unknown>): SFTPSortState {
   return { key, direction };
 }
 
-function restoreTabs(key: string): SFTPTab[] {
-  const raw = readStoredJSON(key, []);
-  if (!Array.isArray(raw)) return [];
-  return raw.flatMap((value): SFTPTab[] => {
-    if (typeof value !== "object" || value === null) return [];
-    const tab = value as Record<string, unknown>;
-    const alias = typeof tab.alias === "string" ? tab.alias : "";
-    const path = typeof tab.path === "string" &&
-      (alias === localHostAlias ? isLocalPath(tab.path) : tab.path.startsWith("/")) ? tab.path : "";
-    return [{ id: identifier(), alias, path, sort: restoredSort(tab) }];
-  }).slice(0, maxTabsPerPane);
+function restoreTab(value: unknown): SFTPTab[] {
+  if (!isRecord(value)) return [];
+  const alias = typeof value.alias === "string" ? value.alias : "";
+  const path = typeof value.path === "string" &&
+    (alias === localHostAlias ? isLocalPath(value.path) : value.path.startsWith("/")) ? value.path : "";
+  return [{ id: identifier(), alias, path, sort: restoredSort(value) }];
 }
 
-function restoreActiveId(key: string, tabs: SFTPTab[]): string {
-  const index = Number.parseInt(readStoredValue(key) ?? "0", 10);
-  return tabs[Number.isInteger(index) && index >= 0 && index < tabs.length ? index : 0]?.id ?? "";
+function restoreActiveId(value: unknown, tabs: SFTPTab[]): string {
+  const index = typeof value === "number" && Number.isInteger(value) && value >= 0 && value < tabs.length ? value : 0;
+  return tabs[index]?.id ?? "";
 }
 
-function restoreSplit(): boolean {
-  return readStoredValue(splitKey) === "true";
+// A pane with no usable tab is left out, just as a pane disappears when its
+// last tab leaves.
+function restorePane(value: unknown): SFTPPane[] {
+  if (!isRecord(value) || !Array.isArray(value.tabs)) return [];
+  const tabs = value.tabs.flatMap(restoreTab).slice(0, maxTabsPerPane);
+  return tabs.length === 0 ? [] : [paneOf(tabs, restoreActiveId(value.activeIndex, tabs))];
 }
 
 export function restorePanes(): SFTPPane[] {
-  const leftTabs = restoreTabs(leftTabsKey);
-  const left = leftTabs.length === 0 ? blankPane() : paneOf(leftTabs, restoreActiveId(leftActiveKey, leftTabs));
-  if (!restoreSplit()) return [left];
-  const rightTabs = restoreTabs(rightTabsKey);
-  return rightTabs.length === 0 ? [left] : [left, paneOf(rightTabs, restoreActiveId(rightActiveKey, rightTabs))];
+  const stored = readStoredJSON(panesKey, []);
+  const panes = Array.isArray(stored) ? stored.flatMap(restorePane).slice(0, maxPanes) : [];
+  return panes.length === 0 ? [blankPane()] : panes;
 }
 
-function storedTabs(pane: SFTPPane | undefined): string {
-  return JSON.stringify((pane?.tabs ?? []).map(({ alias, path, sort }) => ({
-    alias,
-    path,
-    sortKey: sort.key,
-    sortDirection: sort.direction,
-  })));
-}
-
-function storedActiveIndex(pane: SFTPPane | undefined): string {
-  const index = pane?.tabs.findIndex((tab) => tab.id === pane.activeId) ?? -1;
-  return String(index < 0 ? 0 : index);
+function storedPane(pane: SFTPPane): StoredPane {
+  const activeIndex = pane.tabs.findIndex((tab) => tab.id === pane.activeId);
+  return {
+    tabs: pane.tabs.map(({ alias, path, sort }) => ({ alias, path, sortKey: sort.key, sortDirection: sort.direction })),
+    activeIndex: Math.max(activeIndex, 0),
+  };
 }
 
 export function rememberPanes(panes: SFTPPane[]): void {
-  writeStoredValue(leftTabsKey, storedTabs(panes[0]));
-  writeStoredValue(leftActiveKey, storedActiveIndex(panes[0]));
-  writeStoredValue(rightTabsKey, storedTabs(panes[1]));
-  writeStoredValue(rightActiveKey, storedActiveIndex(panes[1]));
-  writeStoredValue(splitKey, String(panes.length > 1));
+  writeStoredJSON(panesKey, panes.map(storedPane));
 }
 
 export function restoreSplitRatio(): number {

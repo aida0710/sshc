@@ -10,7 +10,7 @@ import (
 // retry reuses the exact same representation instead of downloading and
 // hashing the remote file again. Callers receive independent file handles.
 func (m *TransferManager) PrepareOwnedDownload(ctx context.Context, id, alias, remotePath string) (*PreparedDownload, error) {
-	return m.prepareOwnedSpool(id, func() (*PreparedDownload, int64, error) {
+	return m.prepareOwnedSpool(id, func(directory string) (*PreparedDownload, int64, error) {
 		var reserved int64
 		m.resetDownloadParts(id)
 		threshold, parallelism, chunkBytes, err := m.transferSplitSettings(id)
@@ -18,9 +18,12 @@ func (m *TransferManager) PrepareOwnedDownload(ctx context.Context, id, alias, r
 			return nil, 0, err
 		}
 		prepared, err := m.Service.prepareDownload(ctx, DownloadRequest{
-			Alias: alias, RemotePath: remotePath, TemporaryDirectory: m.spoolDir,
+			Alias: alias, RemotePath: remotePath, TemporaryDirectory: directory,
 			Reserve: func(size int64) error {
-				if err := reserveProcessSpool(size); err != nil {
+				if err := ensureSpoolSpace(directory, size); err != nil {
+					return err
+				}
+				if err := m.spool.reserve(size); err != nil {
 					return err
 				}
 				reserved = size
@@ -31,7 +34,7 @@ func (m *TransferManager) PrepareOwnedDownload(ctx context.Context, id, alias, r
 		})
 		if err != nil {
 			if reserved > 0 {
-				releaseProcessSpool(reserved)
+				m.spool.release(reserved)
 			}
 			return nil, 0, err
 		}
@@ -72,41 +75,33 @@ func (m *TransferManager) transferSplitSettings(id string) (int64, int, int64, e
 	if record == nil {
 		return 0, 0, 0, ErrTransferNotFound
 	}
-	threshold, parallelism, chunkBytes := m.largeFileThreshold, m.largeFileParallelism, m.largeFileChunkBytes
-	if record.job.LargeFileThresholdBytes != 0 {
-		threshold = record.job.LargeFileThresholdBytes
-	}
-	if record.job.LargeFileParallelism != 0 {
-		parallelism = record.job.LargeFileParallelism
-	}
-	if record.job.LargeFileChunkBytes != 0 {
-		chunkBytes = record.job.LargeFileChunkBytes
-	}
-	return threshold, parallelism, chunkBytes, nil
+	split := m.largeFileSplitLocked(record.job)
+	return split.threshold, split.parallelism, split.chunkBytes, nil
 }
 
 func (m *TransferManager) PrepareOwnedArchive(ctx context.Context, id, alias, remotePath string) (*PreparedDownload, error) {
-	return m.prepareOwnedSpool(id, func() (*PreparedDownload, int64, error) {
-		if err := reserveProcessSpool(maxArchiveSpoolBytes); err != nil {
+	return m.prepareOwnedSpool(id, func(directory string) (*PreparedDownload, int64, error) {
+		if err := m.spool.reserve(maxArchiveSpoolBytes); err != nil {
 			return nil, 0, err
 		}
-		prepared, err := m.Service.prepareArchive(ctx, alias, remotePath, m.spoolDir, maxArchiveSpoolBytes)
+		prepared, err := m.Service.prepareArchive(ctx, alias, remotePath, directory, maxArchiveSpoolBytes)
 		if err != nil {
-			releaseProcessSpool(maxArchiveSpoolBytes)
+			m.spool.release(maxArchiveSpoolBytes)
 			return nil, 0, err
 		}
 		return prepared, maxArchiveSpoolBytes, nil
 	})
 }
 
-func (m *TransferManager) prepareOwnedSpool(id string, build func() (*PreparedDownload, int64, error)) (*PreparedDownload, error) {
+// prepareOwnedSpool hands build this manager's spool directory, where the
+// prepared file is written.
+func (m *TransferManager) prepareOwnedSpool(id string, build func(directory string) (*PreparedDownload, int64, error)) (*PreparedDownload, error) {
 	if m.isClosed() {
 		return nil, ErrUnavailable
 	}
-	if m.spoolDir == "" {
-		// Never fall back to the system temp directory when the private spool
-		// could not be initialized; that would bypass crash cleanup and quota.
-		return nil, ErrTransferLimit
+	directory, err := m.spool.currentDirectory()
+	if err != nil {
+		return nil, spoolUnavailable(err)
 	}
 	m.sweepPreparedDownloads()
 	unlock := m.lock("", "\x00download-prepare:"+id)
@@ -118,23 +113,23 @@ func (m *TransferManager) prepareOwnedSpool(id string, build func() (*PreparedDo
 		return clone, err
 	}
 	m.mutex.Unlock()
-	prepared, reserved, err := build()
+	prepared, reserved, err := build(directory)
 	if err != nil {
-		return nil, err
+		return nil, spoolWriteError(err)
 	}
 	if !m.canInstallPrepared(id) {
 		_ = prepared.Close()
-		releaseProcessSpool(reserved)
+		m.spool.release(reserved)
 		return nil, ErrTransferState
 	}
 	m.mutex.Lock()
 	if m.closed {
 		m.mutex.Unlock()
 		_ = prepared.Close()
-		releaseProcessSpool(reserved)
+		m.spool.release(reserved)
 		return nil, ErrUnavailable
 	}
-	lease := &preparedSpoolLease{path: prepared.name, reserved: reserved, refs: 1}
+	lease := &preparedSpoolLease{spool: m.spool, path: prepared.name, reserved: reserved, refs: 1}
 	prepared.remove, prepared.lease = false, lease
 	m.downloads[id] = preparedDownloadCache{download: prepared, created: time.Now()}
 	clone, cloneErr := clonePreparedDownload(prepared)
@@ -174,13 +169,19 @@ func (m *TransferManager) releasePreparedDownload(id string) {
 	}
 }
 
+// preparedDownloadCacheTTL is how long a prepared download stays cached for
+// its job. The entry normally goes when the job completes, is cancelled or is
+// removed. The limit frees one whose page went away and left the job behind,
+// so that it stops holding spool space, while a retry after a network drop
+// within the hour still reuses the file.
+const preparedDownloadCacheTTL = time.Hour
+
 func (m *TransferManager) sweepPreparedDownloads() {
-	const cacheTTL = time.Hour
 	now := time.Now()
 	var expired []*PreparedDownload
 	m.mutex.Lock()
 	for id, cached := range m.downloads {
-		if now.Sub(cached.created) <= cacheTTL {
+		if now.Sub(cached.created) <= preparedDownloadCacheTTL {
 			continue
 		}
 		delete(m.downloads, id)
@@ -190,30 +191,6 @@ func (m *TransferManager) sweepPreparedDownloads() {
 	for _, download := range expired {
 		_ = download.Close()
 	}
-}
-
-// AuthorizeDownload binds a GET data-plane request to a running download job
-// which already owns a shared queue slot.
-func (m *TransferManager) AuthorizeDownload(id, alias, remotePath string, kind TransferKind) (TransferJob, error) {
-	cleaned, err := cleanPublicPath(remotePath, false)
-	if err != nil || !transferIDPattern.MatchString(id) {
-		return TransferJob{}, ErrInvalidTransfer
-	}
-	m.jobsMutex.Lock()
-	defer m.jobsMutex.Unlock()
-	m.initializeJobsLocked()
-	record := m.jobs[id]
-	if record == nil {
-		return TransferJob{}, ErrTransferNotFound
-	}
-	job := record.job
-	if job.Direction != TransferDownload || job.Kind != kind || job.Alias != alias || job.RemotePath != cleaned {
-		return TransferJob{}, ErrConflict
-	}
-	if job.Status != TransferRunning {
-		return TransferJob{}, ErrTransferState
-	}
-	return job, nil
 }
 
 // StartDownloadDataPlane validates ownership and marks the operation active in
@@ -284,6 +261,10 @@ func (m *TransferManager) BeginDownload(id string, total int64, revision string,
 	}
 	job.DownloadRevision = record.revision
 	if offset != job.TransferredBytes || offset > record.sentBytes {
+		// A refused request leaves the ledger as it found it, like the other
+		// download entry points. Otherwise the reset above would persist with the
+		// next write and discard a checkpoint the browser still holds.
+		*record = original
 		return TransferJob{}, ErrOffsetMismatch
 	}
 	job.UpdatedAt = m.now().UTC()
