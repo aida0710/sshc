@@ -272,9 +272,9 @@ wait_for_successful_run() {
   done
 }
 
-# Release UI checkは手で走らせるworkflowなので、走らせ忘れをCIを待つ前に知らせる。
 ci_run=$(main_workflow_run ci.yml)
 [ -n "$ci_run" ] || die "no main CI run exists for $head_sha; push main and wait for CI first"
+# Release UI checkは手で走らせるworkflowなので、走らせ忘れをCIを待つ前に知らせる。
 ui_check_run=$(main_workflow_run release-ui-check.yml)
 [ -n "$ui_check_run" ] ||
   die "no Release UI check run exists for $head_sha; run 'gh workflow run release-ui-check.yml --ref main' and wait for it first (docs/releasing.md)"
