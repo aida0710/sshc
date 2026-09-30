@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"sshc/internal/config"
+	"sshc/internal/configresolver"
 	"sshc/internal/effective"
 	"sshc/internal/platform"
 	"sshc/internal/storage"
@@ -205,7 +206,7 @@ func TestResolveMatchesInstalledOpenSSH(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			graph, err := storage.NewResolver(workspace).Resolve(configPath)
+			graph, err := configresolver.ForWorkspace(workspace).Resolve(configPath)
 			if err != nil {
 				t.Fatal(err)
 			}

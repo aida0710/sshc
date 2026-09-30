@@ -19,6 +19,11 @@ import (
 // key rotation. Key material remains solely in the encrypted secret service.
 const KeyRecoveryPath = "sshc/sync-key-recovery.json"
 
+// keyRollbackTimeoutは、鍵の交換が同期先を進めたあとに失敗したとき、元の暗号文を書き戻す
+// PUTに与える時間。呼び出し元が取り消しても巻き戻しを一度は最後まで試せるよう、呼び出し元の
+// 期限とは別に持つ。同期先が応答しないときに、鍵の交換を終わらせないまま待ち続けないための上限。
+const keyRollbackTimeout = 30 * time.Second
+
 type keyRecoveryJournal struct {
 	SchemaVersion       int    `json:"schemaVersion"`
 	Phase               string `json:"phase"`
@@ -31,8 +36,8 @@ type keyRecoveryJournal struct {
 }
 
 func (s *Service) ReplaceKeyUsing(ctx context.Context, newKey string, confirmHistoryLoss bool, provider KeyReplacementProvider) error {
-	s.operationMu.Lock()
-	defer s.operationMu.Unlock()
+	s.operationMutex.Lock()
+	defer s.operationMutex.Unlock()
 	if provider == nil {
 		return errors.New("sync key replacement provider is not configured")
 	}
@@ -81,7 +86,7 @@ func (s *Service) replaceKey(ctx context.Context, oldKey, newKey string, confirm
 	if object.ETag != current.ETag {
 		return ErrRemoteMoved
 	}
-	archive, openedKey, err := envelope.OpenWithin(object.Body, oldKey, envelope.AcceptedFromRemote)
+	archive, openedKey, err := envelope.OpenRemote(object.Body, oldKey)
 	if err != nil {
 		return err
 	}
@@ -125,7 +130,7 @@ func (s *Service) replaceKey(ctx context.Context, oldKey, newKey string, confirm
 	recovery.Phase = keyRecoveryRemoteAdvanced
 	recovery.NewETag = newETag
 	rollback := func(cause error) error {
-		rollbackCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+		rollbackCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), keyRollbackTimeout)
 		defer cancel()
 		rollbackETag, rollbackErr := binding.client.Put(rollbackCtx, objectKey, object.Body, newETag, "")
 		if rollbackErr != nil {
@@ -227,7 +232,7 @@ func (s *Service) resolveKeyRecovery(ctx context.Context, binding remoteBinding,
 	if journal.Phase == keyRecoveryRemoteAdvanced && (journal.NewETag == "" || etag != journal.NewETag) {
 		return true, ErrRecoveryRequired
 	}
-	archive, openedKey, err := envelope.OpenWithin(object.Body, candidate, envelope.AcceptedFromRemote)
+	archive, openedKey, err := envelope.OpenRemote(object.Body, candidate)
 	if err != nil {
 		return true, err
 	}

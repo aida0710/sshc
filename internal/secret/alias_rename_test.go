@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"sshc/internal/secret"
+	"sshc/internal/secret/secrettest"
 )
 
 func TestAliasRenameDoesNotReuseAnUnrelatedDedicatedPassword(t *testing.T) {
@@ -12,7 +13,9 @@ func TestAliasRenameDoesNotReuseAnUnrelatedDedicatedPassword(t *testing.T) {
 	if err := service.Initialise(passphrase); err != nil {
 		t.Fatal(err)
 	}
-	if err := service.SetBound("edge", "old-destination-password", strings.Repeat("cd", 32)); err != nil {
+	if err := secrettest.StoreDedicatedPassword(service, service.TransactionsForTest(), secrettest.DedicatedPassword{
+		Alias: "edge", Password: "old-destination-password", Binding: strings.Repeat("cd", 32),
+	}); err != nil {
 		t.Fatal(err)
 	}
 	if err := service.SetCredential(secret.KindPassword, "shared", "source-password"); err != nil {
@@ -21,7 +24,7 @@ func TestAliasRenameDoesNotReuseAnUnrelatedDedicatedPassword(t *testing.T) {
 	if err := service.AssignBoundCredential(secret.BoundAssignment{Kind: secret.KindPassword, Subject: "bastion", Name: "shared", Binding: testAuthenticationBinding}); err != nil {
 		t.Fatal(err)
 	}
-	if err := service.Rename("bastion", "edge"); err != nil {
+	if err := renameTestAlias(service, "bastion", "edge"); err != nil {
 		t.Fatal(err)
 	}
 	if got := service.BoundFor(secret.KindPassword, "edge", testAuthenticationBinding); got != "source-password" {

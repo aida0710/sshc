@@ -1,6 +1,7 @@
 package envelope_test
 
 import (
+	"bytes"
 	"errors"
 	"sync"
 	"sync/atomic"
@@ -49,6 +50,41 @@ func TestAnotherKeyCannotOpenIt(t *testing.T) {
 
 	if _, err := theirs.Open(sealed); !errors.Is(err, envelope.ErrWrongPassphrase) {
 		t.Errorf("Open with another key = %v, want ErrWrongPassphrase", err)
+	}
+}
+
+func TestMACIsStableForOneKeyAndPurposeButDiffersForAnotherKeyOrPurpose(t *testing.T) {
+	mine, err := envelope.Derive("correct horse battery staple")
+	if err != nil {
+		t.Fatal(err)
+	}
+	theirs, err := envelope.Derive("a different master password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	message := []byte("the document digest")
+	mac := func(key envelope.Key, purpose string) []byte {
+		t.Helper()
+		sum, err := key.MAC(purpose, message)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return sum
+	}
+
+	first := mac(mine, "purpose one")
+	if !bytes.Equal(first, mac(mine.Clone(), "purpose one")) {
+		t.Error("the same key and purpose produced different MACs")
+	}
+	if bytes.Equal(first, mac(theirs, "purpose one")) {
+		t.Error("another key produced the same MAC")
+	}
+	if bytes.Equal(first, mac(mine, "purpose two")) {
+		t.Error("another purpose produced the same MAC")
+	}
+	mine.Destroy()
+	if _, err := mine.MAC("purpose one", message); !errors.Is(err, envelope.ErrNotAnEnvelope) {
+		t.Fatalf("destroyed key MAC = %v, want ErrNotAnEnvelope", err)
 	}
 }
 
@@ -160,14 +196,28 @@ func TestARemoteEnvelopeMayNotAskForWhatALocalOneMay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := envelope.OpenWithin(sealed, "a passphrase long enough", envelope.AcceptedFromRemote); err != nil {
+	if _, _, err := envelope.OpenRemote(sealed, "a passphrase long enough"); err != nil {
 		t.Fatalf("what Derive writes must open under the remote ceiling: %v", err)
 	}
 
-	// Derive が書く値を下回る上限は、コストを払わずに拒否する。
-	tiny := envelope.Limits{Time: 1, MemoryKiB: 1024, Threads: 1}
-	if _, _, err := envelope.OpenWithin(sealed, "a passphrase long enough", tiny); !errors.Is(err, envelope.ErrCostRefused) {
-		t.Errorf("OpenWithin under a tiny ceiling = %v, want ErrCostRefused", err)
+	// remote の上限より多くのスレッドを求める envelope は、ローカルでは開けても、
+	// ネットワーク越しに届いたものとしては断る。
+	previous := envelope.DerivationCost
+	envelope.DerivationCost = envelope.Limits{Time: 1, MemoryKiB: 1024, Threads: envelope.AcceptedFromRemote.Threads + 1}
+	t.Cleanup(func() { envelope.DerivationCost = previous })
+	demandingKey, err := envelope.Derive("a passphrase long enough")
+	if err != nil {
+		t.Fatal(err)
+	}
+	demanding, err := demandingKey.Seal([]byte("a snapshot"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := envelope.Open(demanding, "a passphrase long enough"); err != nil {
+		t.Fatalf("Open under the local ceiling = %v", err)
+	}
+	if _, _, err := envelope.OpenRemote(demanding, "a passphrase long enough"); !errors.Is(err, envelope.ErrCostRefused) {
+		t.Errorf("OpenRemote above the remote ceiling = %v, want ErrCostRefused", err)
 	}
 }
 
@@ -176,33 +226,6 @@ func TestARemoteEnvelopeMayNotAskForWhatALocalOneMay(t *testing.T) {
 func TestDerivationCostDefaultsToTheProductionCost(t *testing.T) {
 	if envelope.DerivationCost != envelope.AcceptedFromRemote {
 		t.Errorf("DerivationCost = %+v, want the production cost %+v", envelope.DerivationCost, envelope.AcceptedFromRemote)
-	}
-}
-
-// 下げたコストはヘッダーに書かれ、開く側はそのコストで開く。ほかのパッケージの
-// テストは、これを頼りに製品と同じ Open を安く通している。
-func TestALoweredDerivationCostIsWrittenToTheHeader(t *testing.T) {
-	lowered := envelope.Limits{Time: 1, MemoryKiB: 64, Threads: 1}
-	previous := envelope.DerivationCost
-	envelope.DerivationCost = lowered
-	t.Cleanup(func() { envelope.DerivationCost = previous })
-
-	key, err := envelope.Derive("a passphrase long enough")
-	if err != nil {
-		t.Fatal(err)
-	}
-	sealed, err := key.Seal([]byte("a snapshot"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	// 製品のコストでは断られる上限でも開けるなら、ヘッダーは下げたコストを述べている。
-	tiny := envelope.Limits{Time: 1, MemoryKiB: 1024, Threads: 1}
-	plaintext, _, err := envelope.OpenWithin(sealed, "a passphrase long enough", tiny)
-	if err != nil {
-		t.Fatalf("OpenWithin under a ceiling above the lowered cost = %v", err)
-	}
-	if string(plaintext) != "a snapshot" {
-		t.Errorf("plaintext = %q", plaintext)
 	}
 }
 
@@ -233,7 +256,7 @@ func TestRemoteDerivationsAreSerializedWithoutBlockingALocalDerivation(t *testin
 	t.Cleanup(func() { envelope.OnDerive = nil })
 
 	open := func(done chan<- error) {
-		_, _, err := envelope.OpenWithin(sealed, "a passphrase long enough", envelope.AcceptedFromRemote)
+		_, _, err := envelope.OpenRemote(sealed, "a passphrase long enough")
 		done <- err
 	}
 	remoteDone := make(chan error, 2)

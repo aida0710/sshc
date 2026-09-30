@@ -20,6 +20,11 @@ const (
 
 const maxVaultCLIBody = 4 << 10
 
+// VaultBackupsTooManyCode は、世代バックアップが多すぎてマスターパスワードを変えられない
+// ことを示す。画面の API と CLI の両方が同じ語で返し、CLI は 409 の本文からこれを
+// 読んで、ロック中や vault なしの 409 と見分ける。
+const VaultBackupsTooManyCode = "vault_backups_too_many"
+
 type vaultPassphraseRequest struct {
 	Passphrase *string `json:"passphrase"`
 }
@@ -158,6 +163,8 @@ func vaultCLIProblem(c *echo.Context, err error) error {
 		return c.NoContent(http.StatusUnauthorized)
 	case errors.Is(err, secret.ErrWeakPassphrase):
 		return c.NoContent(http.StatusBadRequest)
+	case errors.Is(err, secret.ErrTooManyBackups):
+		return problem(c, http.StatusConflict, VaultBackupsTooManyCode)
 	default:
 		return unexpectedNoContent(c, err)
 	}

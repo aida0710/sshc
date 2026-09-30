@@ -17,6 +17,7 @@ import (
 	"sshc/internal/envelope"
 	"sshc/internal/platform/windowsacl/acltest"
 	"sshc/internal/secret"
+	"sshc/internal/secret/secrettest"
 	"sshc/internal/storage"
 )
 
@@ -30,7 +31,19 @@ func newService(t *testing.T) (*secret.Service, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return secret.NewService(workspace, storage.NewManager(workspace, time.Now, rand.Reader), time.Now), home
+	service, _ := newSealedService(workspace, time.Now)
+	return service, home
+}
+
+// newSealedService は、本番の配線（internal/app/services.go）と同じく、世代バックアップを
+// vault の鍵で封をする Service を組む。封をしないマネージャで作ったバックアップは
+// 本番に無い形になり、マスターパスワードの変更などを本番と違う入力で確かめてしまう。
+func newSealedService(workspace *storage.Workspace, now func() time.Time) (*secret.Service, *storage.Manager) {
+	manager := storage.NewManager(workspace, time.Now, rand.Reader)
+	service := secret.NewService(workspace, manager, now)
+	manager.Seal = service.SealBackup
+	manager.Unseal = service.OpenBackup
+	return service, manager
 }
 
 func legacyVault(t *testing.T, password string) []byte {
@@ -56,10 +69,7 @@ func recoveryService(t *testing.T) (*secret.Service, *storage.Workspace, *storag
 	if err != nil {
 		t.Fatal(err)
 	}
-	manager := storage.NewManager(workspace, time.Now, rand.Reader)
-	service := secret.NewService(workspace, manager, time.Now)
-	manager.Seal = service.SealBackup
-	manager.Unseal = service.OpenBackup
+	service, manager := newSealedService(workspace, time.Now)
 	return service, workspace, manager
 }
 
@@ -321,7 +331,25 @@ func TestUnsupportedVaultCanBeResetWithoutRemovingSSHFiles(t *testing.T) {
 const testAuthenticationBinding = "abababababababababababababababababababababababababababababababab"
 
 func setTestPassword(service *secret.Service, alias, password string) error {
-	return service.SetBound(alias, password, testAuthenticationBinding)
+	return secrettest.StoreDedicatedPassword(service, service.TransactionsForTest(), secrettest.DedicatedPassword{
+		Alias: alias, Password: password, Binding: testAuthenticationBinding,
+	})
+}
+
+// renameTestAlias は、接続の改名（application.SaveWithSecrets）と同じ変更で、alias の
+// パスワードと TOTP の割り当てを新しい alias へ移す。設定ファイルは書かない。
+func renameTestAlias(service *secret.Service, from, to string) error {
+	_, err := service.WithConnectionSecretsTransaction(secret.ConnectionSecretsMutation{
+		Rename: &secret.AliasRename{From: from, To: to},
+	}, func(change *storage.Change) (storage.Result, error) {
+		if change == nil {
+			return storage.Result{}, nil
+		}
+		return service.TransactionsForTest().CommitAtomic(storage.Request{
+			Operation: "test.alias-rename", Changes: []storage.Change{*change},
+		})
+	})
+	return err
 }
 
 func testPasswordFor(service *secret.Service, alias string) string {
@@ -717,8 +745,8 @@ func TestNothingIsReadableUntilTheVaultIsUnlocked(t *testing.T) {
 	if service.Unlocked() {
 		t.Fatal("a new service reports itself unlocked")
 	}
-	if err := setTestPassword(service, "bastion", "hunter2"); !errors.Is(err, secret.ErrLocked) {
-		t.Errorf("Set while locked = %v, want ErrLocked", err)
+	if err := service.SetCredential(secret.KindPassword, "bastion", "hunter2"); !errors.Is(err, secret.ErrLocked) {
+		t.Errorf("SetCredential while locked = %v, want ErrLocked", err)
 	}
 	if service.HasAssignmentFor(secret.KindPassword, "bastion") {
 		t.Error("Has reported true while locked")
@@ -763,7 +791,8 @@ func mustReopen(t *testing.T, home string) *secret.Service {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return secret.NewService(workspace, storage.NewManager(workspace, time.Now, rand.Reader), time.Now)
+	service, _ := newSealedService(workspace, time.Now)
+	return service
 }
 
 func TestInitialiseRefusesToReplaceAnExistingVault(t *testing.T) {
@@ -821,10 +850,10 @@ func TestRenameCarriesThePasswordThroughAWrite(t *testing.T) {
 	if err := setTestPassword(service, "bastion", "hunter2"); err != nil {
 		t.Fatal(err)
 	}
-	if err := service.Rename("bastion", "edge"); err != nil {
-		t.Fatalf("Rename = %v", err)
+	if err := renameTestAlias(service, "bastion", "edge"); err != nil {
+		t.Fatalf("rename = %v", err)
 	}
-	if err := service.Rename("absent", "elsewhere"); err != nil {
+	if err := renameTestAlias(service, "absent", "elsewhere"); err != nil {
 		t.Errorf("renaming a host with no password = %v, want nil", err)
 	}
 
@@ -1018,7 +1047,7 @@ func TestTOTPCredentialRequiresAndPreservesAnAuthenticationBinding(t *testing.T)
 	if err != nil || !slices.Equal(listed[secret.KindTOTP]["production"], []string{"bastion"}) {
 		t.Fatalf("Credentials = %#v, %v", listed, err)
 	}
-	if err := service.Rename("bastion", "edge"); err != nil {
+	if err := renameTestAlias(service, "bastion", "edge"); err != nil {
 		t.Fatal(err)
 	}
 	if got := service.BoundFor(secret.KindTOTP, "edge", testAuthenticationBinding); got == "" {
@@ -1364,11 +1393,11 @@ func TestReadingTheStatusDoesNotHoldTheVaultOpen(t *testing.T) {
 
 // Verify は「これはマスターパスワードか」に、何も変えずに返す。
 //
-// スナップショットが二つ目のパスワードではなくマスターパスワードを使えるのは、
-// これのおかげだ。打ち込まれたパスワードは、鍵として使う前に検査できる。だから
-// 打ち間違いは、誰にも開けないアーカイブではなく、ここでの拒否になる。
+// CLI の change-password は、現在のパスワードを打ち込んだ直後にこれで確かめ、
+// 誤りなら新しいパスワードを尋ねない。
 func TestVerifyAnswersWhetherThatIsTheMasterPassword(t *testing.T) {
 	service, _ := newService(t)
+	service.SetSleep(func(time.Duration) {})
 	if _, err := service.Verify(passphrase); !errors.Is(err, secret.ErrNoVault) {
 		t.Errorf("Verify with no vault = %v, want ErrNoVault", err)
 	}
@@ -1385,8 +1414,7 @@ func TestVerifyAnswersWhetherThatIsTheMasterPassword(t *testing.T) {
 		t.Errorf("Verify with the wrong password = %v, %v, want false and no error", ok, err)
 	}
 
-	// そしてファイルから返すので、閉じた vault にも尋ねられる。尋ねる画面は、
-	// vault が閉じていると告げられたばかりの画面である。
+	// そしてファイルから返すので、ロック中の vault にも尋ねられる。
 	service.Lock()
 	if ok, err := service.Verify(passphrase); err != nil || !ok {
 		t.Errorf("Verify on a locked vault = %v, %v", ok, err)
@@ -1760,8 +1788,7 @@ func newRekeyFaultHarness(t *testing.T) (*secret.Service, *storage.Manager, *rek
 	if err != nil {
 		t.Fatal(err)
 	}
-	manager := storage.NewManager(workspace, time.Now, rand.Reader)
-	service := secret.NewService(workspace, manager, time.Now)
+	service, manager := newSealedService(workspace, time.Now)
 	if err := service.Initialise(passphrase); err != nil {
 		t.Fatal(err)
 	}
@@ -1970,6 +1997,65 @@ func TestWrongMasterPasswordsAreAnsweredMoreSlowly(t *testing.T) {
 	}
 	if len(waited) != 0 {
 		t.Errorf("a correct password waited: %v", waited)
+	}
+}
+
+// 誤ったマスターパスワードは、Unlock でも Verify でも ChangeMasterPassword でも
+// 同じ回数に数えられ、だんだん長く待つ。
+//
+// Verify はロック中にも尋ねられるので、ここで待たないと、Unlock の待ちを避けて
+// パスワードを次々に試す道になる。
+func TestWrongMasterPasswordsWaitTheSameThroughVerifyAndChange(t *testing.T) {
+	const wrong = "not the master password"
+	var waited []time.Duration
+	service, _ := newService(t)
+	service.SetSleep(func(d time.Duration) { waited = append(waited, d) })
+	if err := service.Initialise(passphrase); err != nil {
+		t.Fatal(err)
+	}
+	service.Lock()
+
+	if ok, err := service.Verify(wrong); err != nil || ok {
+		t.Fatalf("Verify with the wrong password = %v, %v", ok, err)
+	}
+	if err := service.Unlock(wrong); !errors.Is(err, secret.ErrWrongPassphrase) {
+		t.Fatalf("Unlock = %v", err)
+	}
+	if ok, err := service.Verify(wrong); err != nil || ok {
+		t.Fatalf("Verify with the wrong password = %v, %v", ok, err)
+	}
+	if len(waited) != 3 {
+		t.Fatalf("waits = %v, want one per refusal", waited)
+	}
+	for index := 1; index < len(waited); index++ {
+		if waited[index] <= waited[index-1] {
+			t.Errorf("waits = %v, want each refusal to wait longer than the one before", waited)
+		}
+	}
+	first := waited[0]
+
+	// 通ったパスワードは、Verify でも積み上がった待ちを消す。
+	waited = nil
+	if ok, err := service.Verify(passphrase); err != nil || !ok {
+		t.Fatalf("Verify with the right password = %v, %v", ok, err)
+	}
+	if ok, err := service.Verify(wrong); err != nil || ok {
+		t.Fatalf("Verify with the wrong password = %v, %v", ok, err)
+	}
+	if len(waited) != 1 || waited[0] != first {
+		t.Errorf("waits after the right password = %v, want only %v", waited, first)
+	}
+
+	// ChangeMasterPassword は Verify で現在のパスワードを確かめるので、同じく待つ。
+	if err := service.Unlock(passphrase); err != nil {
+		t.Fatal(err)
+	}
+	waited = nil
+	if err := service.ChangeMasterPassword(context.Background(), wrong, "a new master password"); !errors.Is(err, secret.ErrWrongPassphrase) {
+		t.Fatalf("ChangeMasterPassword with the wrong current = %v", err)
+	}
+	if len(waited) != 1 {
+		t.Errorf("waits for a refused change = %v, want one", waited)
 	}
 }
 
@@ -3037,5 +3123,39 @@ func TestAVaultLeftAloneShutsItself(t *testing.T) {
 	clock = clock.Add(secret.IdleTimeout + time.Minute)
 	if service.Unlocked() {
 		t.Error("既定のまま開き続けた: headless には OS の境界が無い")
+	}
+}
+
+// 同期状態に残す vault 文書の digest は、vault の鍵を持つ者にしか計算できない。
+// 素の SHA-256 から、あるいは別のマスターパスワードの世代から同じ値を作れれば、
+// ~/.ssh の写しから保存済みのシークレットを照合できてしまう。
+func TestKeyedTravelDigestNeedsTheOpenVaultAndChangesWithTheMasterPassword(t *testing.T) {
+	service, _ := newService(t)
+	if err := service.Initialise(passphrase); err != nil {
+		t.Fatal(err)
+	}
+	const digest = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	first, err := service.KeyedTravelDigest(digest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again, err := service.KeyedTravelDigest(digest); err != nil || again != first {
+		t.Fatalf("the same key keyed the digest as %q, %v; want %q", again, err, first)
+	}
+	if first == digest {
+		t.Fatal("the keyed digest is the plain digest")
+	}
+
+	const rotated = "a rotated master password for the digest"
+	if err := service.ChangeMasterPassword(context.Background(), passphrase, rotated); err != nil {
+		t.Fatal(err)
+	}
+	if next, err := service.KeyedTravelDigest(digest); err != nil || next == first {
+		t.Fatalf("after the master password changed the digest is %q, %v; want a new value", next, err)
+	}
+
+	service.Lock()
+	if _, err := service.KeyedTravelDigest(digest); !errors.Is(err, secret.ErrLocked) {
+		t.Fatalf("KeyedTravelDigest on a locked vault = %v, want ErrLocked", err)
 	}
 }

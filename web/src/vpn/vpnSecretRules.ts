@@ -8,10 +8,11 @@ import { wireGuardSecretsFieldError } from "./wireGuardSecretRules";
 //
 // 未入力は engine（Go の validateSecrets）の規則の写しで、検査の順番も同じにする。OpenVPN と
 // WireGuard の設定ファイルは、中身まで openVPNSecretRules.ts と wireGuardSecretRules.ts が
-// 確かめる。長さの上限は API（api/openapi.yaml の VPNSecrets）の写しである。
-// engine は長さを見ないが、送る前の検査（validateAPIRequest）は上限を超えた値を項目の
-// 名前なしで断るので、その前にここで項目ごとの理由を出す。送る前の検査と同じく、
-// 長さは UTF-16 の長さで数える。
+// 確かめる。長さの上限は engine（Go の requireSecret）と API（api/openapi.yaml の
+// VPNSecrets）と同じ値である。送る前の検査（validateAPIRequest）は上限を超えた値を
+// 項目の名前なしで断るので、その前にここで項目ごとの理由を出す。長さは UTF-16 の
+// 長さで数える。UTF-16 の長さは engine の数える UTF-8 のバイト数を超えないので、
+// engine が通す値をここで断ることはない。
 
 // VPNSecretKey は、フォームの欄ひとつに入力するシークレットである。
 export type VPNSecretKey = keyof VPNSecrets;

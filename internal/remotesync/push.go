@@ -7,41 +7,42 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	"sshc/internal/envelope"
 	"sshc/internal/objectstore"
 )
 
-func (s *Service) PushUsing(ctx context.Context, key KeyProvider, message string) (PushResult, error) {
-	s.operationMu.Lock()
-	defer s.operationMu.Unlock()
+func (s *Service) PushUsing(ctx context.Context, syncKeyProvider KeyProvider, message string) (PushResult, error) {
+	s.operationMutex.Lock()
+	defer s.operationMutex.Unlock()
 	// Preserve the public Push contract for a vault that has no remote target:
 	// configuration is the first prerequisite, before a synchronization key.
 	if _, err := s.configuredBinding(); err != nil {
 		return PushResult{}, err
 	}
-	passphrase, err := currentOperationKey(key)
+	syncKey, err := currentOperationKey(syncKeyProvider)
 	if err != nil {
 		return PushResult{}, err
 	}
-	return s.push(ctx, passphrase, "", message)
+	return s.push(ctx, syncKey, "", message)
 }
 
-func (s *Service) ForcePushUsing(ctx context.Context, key KeyProvider, confirmation ForcePushConfirmation, message string) (PushResult, error) {
-	s.operationMu.Lock()
-	defer s.operationMu.Unlock()
+func (s *Service) ForcePushUsing(ctx context.Context, syncKeyProvider KeyProvider, confirmation ForcePushConfirmation, message string) (PushResult, error) {
+	s.operationMutex.Lock()
+	defer s.operationMutex.Unlock()
 	binding, err := s.validateForcePushBinding(confirmation)
 	if err != nil {
 		return PushResult{}, err
 	}
-	passphrase, err := currentOperationKey(key)
+	syncKey, err := currentOperationKey(syncKeyProvider)
 	if err != nil {
 		return PushResult{}, err
 	}
 	if err := validateForcePushGeneration(ctx, binding, confirmation); err != nil {
 		return PushResult{}, err
 	}
-	return s.push(ctx, passphrase, confirmation.ETag, message)
+	return s.push(ctx, syncKey, confirmation.ETag, message)
 }
 
 func (s *Service) validateForcePushBinding(confirmation ForcePushConfirmation) (remoteBinding, error) {
@@ -73,21 +74,21 @@ func validateForcePushGeneration(ctx context.Context, binding remoteBinding, con
 	return nil
 }
 
-func currentOperationKey(provider KeyProvider) (string, error) {
-	if provider == nil {
+func currentOperationKey(syncKeyProvider KeyProvider) (string, error) {
+	if syncKeyProvider == nil {
 		return "", errors.New("synchronization key provider is not configured")
 	}
-	key, err := provider()
+	syncKey, err := syncKeyProvider()
 	if err != nil {
 		return "", err
 	}
-	if key == "" {
+	if syncKey == "" {
 		return "", ErrWeakPassphrase
 	}
-	return key, nil
+	return syncKey, nil
 }
 
-func (s *Service) push(ctx context.Context, passphrase, forcedETag, message string) (PushResult, error) {
+func (s *Service) push(ctx context.Context, syncKey, forcedETag, message string) (PushResult, error) {
 	binding, err := s.configuredBinding()
 	if err != nil {
 		return PushResult{}, err
@@ -98,7 +99,6 @@ func (s *Service) push(ctx context.Context, passphrase, forcedETag, message stri
 	if binding.config.Direction == DirectionPull {
 		return PushResult{}, ErrPushRefused
 	}
-	client := binding.client
 	current, err := s.readState()
 	if err != nil {
 		return PushResult{}, err
@@ -121,21 +121,20 @@ func (s *Service) push(ctx context.Context, passphrase, forcedETag, message stri
 		current.ETag = ""
 		current.Base = nil
 	}
+	// state の base は vault 文書の digest を鍵付きで持つ。いま集めた vault 文書と
+	// 比べられる形に戻してから差分を取る。
+	if current.Base, err = s.comparableBase(current.Base, travelDigest(&manifest)); err != nil {
+		return PushResult{}, err
+	}
 	// 親との差分は、保存するかどうかの判断、生成する message、利用者へ見せる
 	// 変更一覧で同じものを指す。ここで一度だけ求める。
 	changes := diffManifests(current.Base, manifest)
 	if forcedETag == "" && sameTarget && current.Base != nil && !changes.any() {
 		return PushResult{}, ErrNothingToPush
 	}
-	parentRevision := ""
-	if current.Base != nil {
-		parentRevision = current.Base.Revision
-		if parentRevision == "" {
-			parentRevision, err = RevisionFor(*current.Base)
-			if err != nil {
-				return PushResult{}, err
-			}
-		}
+	parentRevision, err := baseRevision(current.Base)
+	if err != nil {
+		return PushResult{}, err
 	}
 	manifest.Ancestors = manifestAncestors(current.Base)
 	if strings.TrimSpace(message) == "" {
@@ -145,16 +144,7 @@ func (s *Service) push(ctx context.Context, passphrase, forcedETag, message stri
 	if err := FinalizeManifest(&manifest, parentRevision); err != nil {
 		return PushResult{}, err
 	}
-	archive, err := Build(manifest, contents)
-	if err != nil {
-		return PushResult{}, err
-	}
-	key, err := envelope.Derive(passphrase)
-	if err != nil {
-		return PushResult{}, err
-	}
-	sealed, err := key.Seal(archive)
-	key.Destroy()
+	sealed, err := sealSnapshot(manifest, contents, syncKey)
 	if err != nil {
 		return PushResult{}, err
 	}
@@ -162,39 +152,13 @@ func (s *Service) push(ctx context.Context, passphrase, forcedETag, message stri
 		Summary: snapshotSummary(manifest, contents, len(sealed)),
 		Added:   changes.added, Modified: changes.modified, Removed: changes.removed,
 	}
-
-	ifMatch, ifNoneMatch := forcedETag, ""
-	if ifMatch == "" {
-		ifMatch = current.ETag
-		if ifMatch == "" {
-			ifNoneMatch = "*"
-		}
-	}
-	// 日付付きの候補が先。それが失敗すればライブは更新しない。ライブの条件付き
-	// 書き込みが競争に負けたことを確定できた場合は、この候補だけを削除する。
-	s.historySeq++
-	dated, err := snapshotKeyFor(binding.config, manifest.CreatedAt, current.Origin, sealed, s.historySeq)
+	etag, err := s.uploadSnapshot(ctx, snapshotUpload{
+		binding: binding, objectKey: objectKey, createdAt: manifest.CreatedAt, origin: current.Origin,
+		sealed: sealed, forcedETag: forcedETag, knownETag: current.ETag,
+	}, &result)
 	if err != nil {
 		return result, err
 	}
-	if _, err := client.Put(ctx, dated, sealed, "", "*"); err != nil {
-		return result, err
-	}
-	result.ObjectCount++
-	result.UploadedBytes += int64(len(sealed))
-
-	etag, err := client.Put(ctx, objectKey, sealed, ifMatch, ifNoneMatch)
-	if err != nil {
-		if errors.Is(err, objectstore.ErrPreconditionFailed) {
-			if cleanupErr := client.Delete(ctx, dated); cleanupErr != nil {
-				return result, errors.Join(ErrRemoteMoved, fmt.Errorf("remove the rejected history candidate: %w", cleanupErr))
-			}
-			return result, ErrRemoteMoved
-		}
-		return result, err
-	}
-	result.ObjectCount++
-	result.UploadedBytes += int64(len(sealed))
 	result.CompletedAt = s.now()
 	operation := SyncOperation{
 		Kind: OperationPush, Summary: result.Summary,
@@ -210,11 +174,97 @@ func (s *Service) push(ctx context.Context, passphrase, forcedETag, message stri
 	return result, nil
 }
 
+// baseRevision は、親にする base の revision を返す。base が無ければ空を返す。
+// revision を持たない base は、中身から求める。
+func baseRevision(base *Manifest) (string, error) {
+	if base == nil {
+		return "", nil
+	}
+	if base.Revision != "" {
+		return base.Revision, nil
+	}
+	return RevisionFor(*base)
+}
+
+// sealSnapshot は、manifest と中身を 1 つのアーカイブにし、同期鍵から導いた鍵で封じる。
+func sealSnapshot(manifest Manifest, contents map[string][]byte, syncKey string) ([]byte, error) {
+	archive, err := Build(manifest, contents)
+	if err != nil {
+		return nil, err
+	}
+	derivedKey, err := envelope.Derive(syncKey)
+	if err != nil {
+		return nil, err
+	}
+	sealed, err := derivedKey.Seal(archive)
+	derivedKey.Destroy()
+	return sealed, err
+}
+
+// snapshotUpload は、封じた世代を remote へ置くのに要るもの。
+type snapshotUpload struct {
+	binding   remoteBinding
+	objectKey string
+	createdAt string
+	origin    string
+	sealed    []byte
+	// forcedETag は、強制 push で利用者が確かめたライブの ETag である。空なら
+	// ふだんの push で、knownETag（前回の push か pull で知ったもの）を条件にする。
+	forcedETag string
+	knownETag  string
+}
+
+// liveWriteCondition は、ライブの条件付き書き込みの条件を返す。知っている ETag と
+// 一致するときだけ置き換え、ETag を知らなければ、まだ何も無いときだけ置く。
+func (u snapshotUpload) liveWriteCondition() (ifMatch, ifNoneMatch string) {
+	if u.forcedETag != "" {
+		return u.forcedETag, ""
+	}
+	if u.knownETag != "" {
+		return u.knownETag, ""
+	}
+	return "", "*"
+}
+
+// uploadSnapshot は、日付付きの履歴の候補を置いてから、ライブを条件付きで置き換え、
+// ライブの新しい ETag を返す。置けたオブジェクトの数とバイト数は、途中で失敗した
+// ときも result に数える。
+func (s *Service) uploadSnapshot(ctx context.Context, upload snapshotUpload, result *PushResult) (string, error) {
+	client := upload.binding.client
+	// 日付付きの候補が先。それが失敗すればライブは更新しない。ライブの条件付き
+	// 書き込みが競争に負けたことを確定できた場合は、この候補だけを削除する。
+	s.historySeq++
+	dated, err := snapshotKeyFor(upload.binding.config, upload.createdAt, upload.origin, upload.sealed, s.historySeq)
+	if err != nil {
+		return "", err
+	}
+	if _, err := client.Put(ctx, dated, upload.sealed, "", "*"); err != nil {
+		return "", err
+	}
+	result.ObjectCount++
+	result.UploadedBytes += int64(len(upload.sealed))
+
+	ifMatch, ifNoneMatch := upload.liveWriteCondition()
+	etag, err := client.Put(ctx, upload.objectKey, upload.sealed, ifMatch, ifNoneMatch)
+	if errors.Is(err, objectstore.ErrPreconditionFailed) {
+		if cleanupErr := client.Delete(ctx, dated); cleanupErr != nil {
+			return "", errors.Join(ErrRemoteMoved, fmt.Errorf("remove the rejected history candidate: %w", cleanupErr))
+		}
+		return "", ErrRemoteMoved
+	}
+	if err != nil {
+		return "", err
+	}
+	result.ObjectCount++
+	result.UploadedBytes += int64(len(upload.sealed))
+	return etag, nil
+}
+
 // PushDraft returns the same generated message used by unattended pushes.
 func (s *Service) PushDraft() (PushDraft, error) {
-	s.operationMu.Lock()
-	defer s.operationMu.Unlock()
-	manifest, _, err := s.Collect()
+	s.operationMutex.Lock()
+	defer s.operationMutex.Unlock()
+	manifest, err := s.collectManifest()
 	if err != nil {
 		return PushDraft{}, err
 	}
@@ -230,13 +280,17 @@ func (s *Service) PushDraft() (PushDraft, error) {
 	if !stateMatchesTarget(current, binding.config) {
 		base = nil
 	}
+	base, err = s.comparableBase(base, travelDigest(&manifest))
+	if err != nil {
+		return PushDraft{}, err
+	}
 	return draftFor(base, manifest), nil
 }
 
 func (s *Service) liveSnapshotFollows(
 	ctx context.Context,
 	binding remoteBinding,
-	passphrase string,
+	syncKey string,
 	base *Manifest,
 	incoming Manifest,
 	incomingCiphertextDigest string,
@@ -299,7 +353,7 @@ func (s *Service) liveSnapshotFollows(
 				return false, nil
 			}
 			openAttempts++
-			manifest, _, openErr := openSnapshotObject(object, passphrase)
+			manifest, _, openErr := openSnapshotObject(object, syncKey)
 			cached = cachedOpen{manifest: manifest, valid: openErr == nil}
 			opened[ciphertextDigest] = cached
 		}
@@ -355,13 +409,19 @@ type ForcePushConfirmation struct {
 	targetID       string
 }
 
+// forcePushConfirmationTimeout は、強制 push の確認を作るときに、同期先の今の ETag を
+// 問い合わせる上限。利用者は確認の画面の前で待っているので、応答しない object store に
+// objectstore の要求の上限（30分）まで待たせない。確認の発行と強制 push の本番の
+// どちらの入口から呼ばれても同じ上限になるよう、ハンドラではなくここで決める。
+const forcePushConfirmationTimeout = 30 * time.Second
+
 // ForcePushConfirmation binds one action token to the current configured
 // binding, target identity, and live ETag. ForcePush validates the complete
-// confirmation again while holding operationMu, then retains the remote CAS as
+// confirmation again while holding operationMutex, then retains the remote CAS as
 // the final guard against a writer outside this process.
 func (s *Service) ForcePushConfirmation(ctx context.Context, target string) (ForcePushConfirmation, error) {
-	s.operationMu.Lock()
-	defer s.operationMu.Unlock()
+	s.operationMutex.Lock()
+	defer s.operationMutex.Unlock()
 	if target != ForcePushTarget {
 		return ForcePushConfirmation{}, ErrForcePushTarget
 	}
@@ -370,7 +430,9 @@ func (s *Service) ForcePushConfirmation(ctx context.Context, target string) (For
 		return ForcePushConfirmation{}, err
 	}
 	objectKey := ObjectKeyFor(binding.config)
-	live, err := binding.client.Stat(ctx, objectKey)
+	statCtx, cancel := context.WithTimeout(ctx, forcePushConfirmationTimeout)
+	defer cancel()
+	live, err := binding.client.Stat(statCtx, objectKey)
 	if err != nil {
 		if errors.Is(err, objectstore.ErrNotFound) {
 			return ForcePushConfirmation{}, ErrNoSnapshot

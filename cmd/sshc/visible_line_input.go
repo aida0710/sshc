@@ -31,7 +31,7 @@ func readBoundedVisibleLine(ctx context.Context, input *os.File) ([]byte, error)
 	line := make([]byte, 0, maxSyncSetupLine)
 	for {
 		if err := wait.waitReadable(); err != nil {
-			zeroBytes(line)
+			clear(line)
 			return nil, err
 		}
 		var one [1]byte
@@ -41,11 +41,11 @@ func readBoundedVisibleLine(ctx context.Context, input *os.File) ([]byte, error)
 			case '\n':
 				// Ctrl-C と Enter が続いたときに、取り消しを空欄の回答（既定値）として扱わない。
 				if err := ctx.Err(); err != nil {
-					zeroBytes(line)
+					clear(line)
 					return nil, err
 				}
 				if !utf8.Valid(line) {
-					zeroBytes(line)
+					clear(line)
 					return nil, errSyncSetupInput
 				}
 				return line, nil
@@ -54,11 +54,11 @@ func readBoundedVisibleLine(ctx context.Context, input *os.File) ([]byte, error)
 				// Windows consoles can deliver CRLF. Ignore CR so its following
 				// LF is consumed by this prompt instead of the next one.
 			case 0x03:
-				zeroBytes(line)
+				clear(line)
 				return nil, context.Canceled
 			default:
 				if len(line) == maxSyncSetupLine {
-					zeroBytes(line)
+					clear(line)
 					return nil, errSyncSetupInput
 				}
 				line = append(line, one[0])
@@ -69,17 +69,17 @@ func readBoundedVisibleLine(ctx context.Context, input *os.File) ([]byte, error)
 				wait.waitForLateCancel()
 			}
 			if ctx.Err() != nil {
-				zeroBytes(line)
+				clear(line)
 				return nil, ctx.Err()
 			}
 			if errors.Is(err, io.EOF) && len(line) > 0 && utf8.Valid(line) {
 				return line, nil
 			}
-			zeroBytes(line)
+			clear(line)
 			return nil, err
 		}
 		if count == 0 {
-			zeroBytes(line)
+			clear(line)
 			return nil, io.ErrNoProgress
 		}
 	}

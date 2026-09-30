@@ -80,7 +80,7 @@ func draftFrom(changes manifestChanges) PushDraft {
 		return draft
 	}
 	if len(items) == 1 {
-		draft.Message = items[0].action + " " + items[0].path
+		draft.Message = fitCommitMessage(items[0].action + " " + items[0].path)
 		return draft
 	}
 	prefix := fmt.Sprintf("%d changes (+%d ~%d -%d): ", len(items), draft.Added, draft.Modified, draft.Removed)
@@ -93,10 +93,17 @@ func draftFrom(changes manifestChanges) PushDraft {
 		paths = paths[:len(paths)-1]
 		message = fmt.Sprintf("%s%s, and %d more", prefix, strings.Join(paths, ", "), len(items)-len(paths))
 	}
-	if len([]rune(message)) > MaxCommitMessageRunes {
-		runes := []rune(message)
-		message = string(runes[:MaxCommitMessageRunes-1]) + "…"
-	}
-	draft.Message = message
+	draft.Message = fitCommitMessage(message)
 	return draft
+}
+
+// fitCommitMessage は、下書きを履歴に保存できる長さ（MaxCommitMessageRunes）に収める。
+// 同期するパスに長さの上限は無いので、利用者が書いていない下書きが上限を超えて
+// push を止めることがないよう、超えた分を「…」に置き換える。
+func fitCommitMessage(message string) string {
+	runes := []rune(message)
+	if len(runes) <= MaxCommitMessageRunes {
+		return message
+	}
+	return string(runes[:MaxCommitMessageRunes-1]) + "…"
 }

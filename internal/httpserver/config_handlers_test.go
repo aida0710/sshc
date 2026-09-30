@@ -16,6 +16,7 @@ import (
 	"sshc/internal/api"
 	"sshc/internal/application"
 	"sshc/internal/secret"
+	"sshc/internal/secret/secrettest"
 	"sshc/internal/session"
 	"sshc/internal/storage"
 )
@@ -651,13 +652,14 @@ func TestMoveAliasConflictHasTheSameStableProblemCode(t *testing.T) {
 
 func TestRenamingAHostCarriesItsSavedPasswordToTheNewAlias(t *testing.T) {
 	harness := newConfigHarness(t)
-	secrets := secret.NewService(harness.workspace,
-		storage.NewManager(harness.workspace, time.Now, bytes.NewReader(bytes.Repeat([]byte{0x44}, 4096))),
-		time.Now)
+	transactions := storage.NewManager(harness.workspace, time.Now, bytes.NewReader(bytes.Repeat([]byte{0x44}, 4096)))
+	secrets := secret.NewService(harness.workspace, transactions, time.Now)
 	if err := secrets.Initialise(testPassphrase); err != nil {
 		t.Fatal(err)
 	}
-	if err := secrets.SetBound("bastion", "hunter2", testPasswordBinding); err != nil {
+	if err := secrettest.StoreDedicatedPassword(secrets, transactions, secrettest.DedicatedPassword{
+		Alias: "bastion", Password: "hunter2", Binding: testPasswordBinding,
+	}); err != nil {
 		t.Fatal(err)
 	}
 	harness.service.SetVault(secrets)

@@ -50,7 +50,7 @@ func integrationClient(t *testing.T) objectstore.Client {
 		Endpoint: endpoint,
 		Bucket:   bucket,
 		Region:   region,
-		Creds: objectstore.Credentials{
+		Credentials: objectstore.Credentials{
 			AccessKeyID:     os.Getenv(keyVariable),
 			SecretAccessKey: os.Getenv(secretVariable),
 		},

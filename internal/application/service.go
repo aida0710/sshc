@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"sshc/internal/config"
+	"sshc/internal/configresolver"
 	"sshc/internal/effective"
 	"sshc/internal/secret"
 	"sshc/internal/storage"
@@ -31,7 +32,7 @@ type Service struct {
 }
 
 func resolverFor(workspace *storage.Workspace) config.Resolver {
-	resolver := storage.NewResolver(workspace)
+	resolver := configresolver.ForWorkspace(workspace)
 	resolver.GeneratedRegion = GeneratedRegion
 	return resolver
 }

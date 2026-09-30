@@ -1,48 +1,19 @@
 package storage
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"io"
 	"io/fs"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
 	"sshc/internal/platform/nativepath"
 )
 
-const (
-	journalVersion       = 2
-	journalDirectoryName = "journal"
-	historyDirectoryName = "history"
-	backupDirectoryName  = "backups"
-	// BackupDirectoryName は同じ名前を公開する。このパッケージの外で、ディレクトリを
-	// 自分で読まなければならない唯一の呼び出し側のためである。マスターパスワードが
-	// 変わったときにすべてのバックアップを暗号化し直す処理は ReadBackup を通せない。
-	// ReadBackup は、暗号化したときの鍵ではなく、サービスがいま持っている鍵で開く
-	// からだ。
-	BackupDirectoryName = backupDirectoryName
-	temporaryPrefix     = ".sshc-"
-
-	statusStaging    = "staging"
-	statusStaged     = "staged"
-	statusApplied    = "applied"
-	statusCompleted  = "completed"
-	statusRolledBack = "rolled_back"
-)
-
-const (
-	actionWrite     = "write"
-	actionMove      = "move"
-	actionRemove    = "remove"
-	actionMakeDir   = "mkdir"
-	actionRemoveDir = "rmdir"
-	actionNote      = "note"
-)
+// temporaryPrefix は、ステージ用の一時ファイルの名前の先頭。トランザクションの
+// 一時ファイルは、この後ろに記録の ID と "-" が続く。
+const temporaryPrefix = ".sshc-"
 
 var (
 	ErrNoChanges        = errors.New("transaction has no changes")
@@ -58,250 +29,6 @@ var (
 	ErrIrreversibleRemoval = errors.New("a committed removal that kept no backup cannot be rolled back")
 	ErrAtomicWriteOnly     = errors.New("atomic commit accepts only reversible writes and directory creation")
 )
-
-// Precondition は、呼び出し側が新しい内容の前提とした状態を記録する。
-type Precondition struct {
-	Exists bool
-	Digest string
-	// Mode is checked only when non-zero. It lets callers bind a write to both
-	// the bytes and the owner permission bits they inspected.
-	Mode fs.FileMode
-}
-
-// Change は、トランザクションが置き換えるか新規作成するファイルひとつ。
-//
-// SkipBackup は、この変更が置き換える内容の世代バックアップを抑止する。理由は
-// ひとつだけだ。以前の内容が秘密鍵かもしれず、この設計は鍵素材の二つ目のコピーを
-// ~/.ssh/sshc/backups/ に残すことを拒む。これを選んだ変更も、ジャーナルには残り、
-// 中断後に完了させることもできるが、もはや巻き戻すことはできない。そして Rollback
-// は、できるふりをせずにその旨を述べる。ゼロ値は従来どおりの挙動を保つので、既存の
-// 呼び出し側には影響が
-// ない。
-type Change struct {
-	Path         string
-	Contents     []byte
-	Precondition Precondition
-	// Mode selects the exact owner-only permission set for the new file. Zero
-	// preserves the existing secure mode (or uses FilePermission for a new file).
-	// Sync uses this to restore executable 0700 files without broadening access.
-	Mode       fs.FileMode
-	SkipBackup bool
-}
-
-// Move は、ワークスペース内でファイルひとつを rename(2) により移す。
-//
-// 移動はバイトをコピーしないので、秘密鍵が世代バックアップのディレクトリへ複製
-// されることはない。また rename は、ファイルの既存の権限ビットをそのまま正確に
-// 保つ。
-type Move struct {
-	From         string
-	To           string
-	Precondition Precondition
-}
-
-// Removal はファイルをひとつ削除する。
-//
-// 既定ではバックアップを書かない。最初の呼び出し側が、ユーザーが二度確認した恒久
-// 削除であり、鍵素材をバックアップディレクトリへコピーすればその判断を台無しに
-// してしまうからだ。そうした削除は中断後に完了させられるが、巻き戻すことはでき
-// ない。そして Rollback は、できるふりをせずにその旨を
-// 述べる。
-//
-// Backup は世代コピーを明示的に選ぶ。エクスプローラから取り除いた設定ファイルなど、
-// 鍵素材ではないものを削除する呼び出し側のためである。その
-// 削除は、このアプリケーションが行う他のすべての変更と同じ振る舞いになる。History
-// に載り、取り消せる。
-type Removal struct {
-	Path         string
-	Precondition Precondition
-	Backup       bool
-}
-
-// DirectoryCreate は、ディレクトリひとつと、ルートより下で欠けている親を作る。
-//
-// これがあるおかげで、ファイルの配置と、その置き場所を作ることをひとつの
-// トランザクションにできる。これがなかった頃は、呼び出し側はジャーナルの外で
-// EnsureDirectory を呼び、mkdir とコミットのあいだでクラッシュすれば空の
-// ディレクトリが残ることを受け入れるしかなかった。
-type DirectoryCreate struct {
-	Path string
-}
-
-// DirectoryRemoval は、空のディレクトリをひとつ取り除く。
-//
-// 空のものだけである。再帰的な削除は、トランザクションが一度も読んでいない内容を
-// 復元しない限り巻き戻せない。したがって木をまるごと消したい呼び出し側は、
-// ファイルを Removal として、ディレクトリをここに、深いものから順に列挙する。
-type DirectoryRemoval struct {
-	Path string
-}
-
-// Request は、任意の数のファイルにまたがる論理的な編集ひとつ。
-//
-// この順序だけが成立しうる。変更には置き場所が要るのでディレクトリを最初に作り、
-// 次に変更・移動・削除を行う。ディレクトリの削除を最後にするのは、それらを空に
-// したのがこのリクエストだからである。
-type Request struct {
-	Operation   string
-	Directories []DirectoryCreate
-	Changes     []Change
-	Moves       []Move
-	Removals    []Removal
-	// RemoveDirectories は他のすべてのあとで、深いものから順に適用され、その時点で
-	// それぞれ空でなければならない。
-	RemoveDirectories []DirectoryRemoval
-	// FinalChanges are staged with every other write, but applied only after all
-	// moves, removals, and directory removals have succeeded. Generation markers
-	// such as sync-state belong here so they can never acknowledge a partially
-	// applied workspace.
-	FinalChanges []Change
-	// Validation は、この要求に固有の検査の文脈で、Manager.Validate へそのまま渡す。
-	// storage は中身を見ない。Manager は複数のサービスが共有するので、文脈を
-	// 要求の外（サービスのフィールドなど）に置くと、別の goroutine の要求の
-	// 検査がそれを読んでしまう。
-	Validation any
-}
-
-// Result は、完了したトランザクションを記述する。
-type Result struct {
-	ID        string
-	BackupDir string
-	Written   []string
-}
-
-// ConflictError は、ディスク上のファイルが呼び出し側の編集したファイルではないと
-// 報告する。Current はディスク上の内容を運ぶので、呼び出し側は三方向の差分を作れる。
-// Error がファイルの内容を含むことは決してない。
-type ConflictError struct {
-	Path     string
-	Expected string
-	Actual   string
-	Current  []byte
-}
-
-func (e *ConflictError) Error() string {
-	return "external change detected for " + e.Path
-}
-
-// ReadBackup は世代バックアップをひとつ読み、それを開く。
-//
-// 読み手はすべてここを通る。下の巻き戻しと、ファイルひとつの復元を提案する履歴
-// 画面である。したがって「バックアップは暗号文である」ことを知る場所はひとつだけ
-// になり、それを忘れて暗号化されたままのバイト列を誰かの設定の上に書いてしまう
-// 呼び出し側は存在しない。
-func (m *Manager) ReadBackup(path string) ([]byte, error) {
-	if !m.validBackupReadPath(path) {
-		return nil, invalidJournal("backup path is outside the expected tree")
-	}
-	contents, err := m.workspace.ReadTransactionFile(path)
-	if err != nil {
-		return nil, err
-	}
-	if m.Unseal == nil {
-		return contents, nil
-	}
-	plaintext, err := m.Unseal(contents)
-	// 暗号化された側も同じ秘密の写しである。開いたあとまで抱えない。
-	zeroBytes(contents)
-	return plaintext, err
-}
-
-func (m *Manager) validBackupReadPath(path string) bool {
-	if !m.validLoadedWorkspacePath(path) {
-		return false
-	}
-	backupRoot := filepath.Join(m.workspace.StateDir(), backupDirectoryName)
-	relative, ok := nativepath.RelativeBelow(backupRoot, path)
-	if !ok {
-		return false
-	}
-	parts := strings.Split(relative, string(filepath.Separator))
-	return len(parts) >= 2 && validJournalIdentifier(parts[0])
-}
-
-// Digest は、事前条件とジャーナルエントリに使う内容ハッシュ。
-func Digest(contents []byte) string {
-	sum := sha256.Sum256(contents)
-	return hex.EncodeToString(sum[:])
-}
-
-type journalEntry struct {
-	Action      string `json:"action,omitempty"`
-	Path        string `json:"path"`
-	Target      string `json:"target,omitempty"`
-	Temp        string `json:"temp,omitempty"`
-	Backup      string `json:"backup,omitempty"`
-	NoBackup    bool   `json:"noBackup,omitempty"`
-	HadPrevious bool   `json:"hadPrevious"`
-	// Mode is the state after a write. PreviousMode is the state before it.
-	// Other actions keep their single existing mode in Mode.
-	Mode           uint32 `json:"mode"`
-	PreviousMode   uint32 `json:"previousMode,omitempty"`
-	Digest         string `json:"digest"`
-	PreviousDigest string `json:"previousDigest,omitempty"`
-}
-
-// noOpWrite は、書いても中身が変わらない置き換えを言う。
-//
-// application 層は metadata の書き込みを毎回、変わっていなくても最後に足すので、
-// これは例外ではなく日常の記録である。巻き戻せない変更ではない。戻したあとの
-// 対象は同じバイト列であり、控えを残さなかったとしても失うものが無い。
-func (e journalEntry) noOpWrite() bool {
-	return e.sameContentsWrite() && e.Mode == e.beforeMode()
-}
-
-func (e journalEntry) sameContentsWrite() bool {
-	return e.Action == actionWrite && e.HadPrevious && e.Digest == e.PreviousDigest
-}
-
-func (e journalEntry) beforeMode() uint32 {
-	if e.PreviousMode != 0 {
-		return e.PreviousMode
-	}
-	// v1 and old hand-built fixtures had one mode because before and after were
-	// identical. Production v2 writes PreviousMode explicitly.
-	return e.Mode
-}
-
-// zeroBytes は、鍵素材を保持しているかもしれないバッファを上書きする。keys.Wipe と
-// 同じくベストエフォート。Go ランタイムがすでに別の場所へコピーしている場合がある。
-func zeroBytes(contents []byte) {
-	for index := range contents {
-		contents[index] = 0
-	}
-}
-
-type journalRecord struct {
-	ID         string     `json:"id"`
-	Version    int        `json:"version"`
-	Operation  string     `json:"operation"`
-	Status     string     `json:"status"`
-	StartedAt  time.Time  `json:"startedAt"`
-	FinishedAt *time.Time `json:"finishedAt,omitempty"`
-	Committed  int        `json:"committed"`
-	Atomic     bool       `json:"atomic,omitempty"`
-	// DiscardBackups marks an atomic replacement whose previous bytes exist only
-	// to recover an interrupted commit. They bypass the normal backup sealer and
-	// are removed once either the old or the new generation is authoritative.
-	DiscardBackups bool `json:"discardBackups,omitempty"`
-	// LegacyWriteModesUnknown marks a v1 record whose existing-file writes did
-	// not preserve their modes from before the write.
-	LegacyWriteModesUnknown bool           `json:"legacyWriteModesUnknown,omitempty"`
-	Entries                 []journalEntry `json:"entries"`
-}
-
-func (record journalRecord) appliedLegacyWriteModeUnknown() bool {
-	if !record.LegacyWriteModesUnknown {
-		return false
-	}
-	committed := min(record.Committed, len(record.Entries))
-	for _, entry := range record.Entries[:committed] {
-		if entry.Action == actionWrite && entry.HadPrevious {
-			return true
-		}
-	}
-	return false
-}
 
 // Manager は、ワークスペース内でジャーナル付きの原子的な複数ファイル書き込みを行う。
 //
@@ -320,8 +47,7 @@ type Manager struct {
 	// これらを注入するのは、秘密がどこにあるかは secret パッケージの領分であり、
 	// このパッケージはそれを尋ねるために import してはならないからだ。鍵 vault が
 	// パスフレーズを探すために import しないのと同じ理屈である。Seal を持たない
-	// マネージャは平文でバックアップを書く。マスターパスワードで暗号化されるように
-	// なる前は、これがそうしていたことだ。マスターパスワードを持つ配線は、いずれも
+	// マネージャは平文でバックアップを書く。マスターパスワードを持つ配線は、いずれも
 	// 両方を設定する。
 	Seal   func(plaintext []byte) ([]byte, error)
 	Unseal func(sealed []byte) ([]byte, error)
@@ -329,6 +55,18 @@ type Manager struct {
 	// been released. It is a notification only: the durable commit has already
 	// succeeded and the callback must not attempt to change its result.
 	AfterCommit func(operation string)
+	// AfterRecovery は、保留記録を Complete か Rollback で片付けたあと、錠を手放して
+	// から、その記録が触れたパスを知らせる。ディスクの内容をメモリに持つ側（解錠中の
+	// Vault など）が読み直すための通知であり、片付けの結果は変えられない。
+	AfterRecovery func(paths []string)
+}
+
+// IsTemporaryName は、name がこのパッケージの一時ファイルの名前かを返す。
+// クラッシュで残った一時ファイルを、設定や鍵、バックアップ、同期するファイルとして
+// 読まないために、ディレクトリを走査する側が使う。大文字小文字を区別しない
+// ファイルシステムから来た名前も同じに扱う。
+func IsTemporaryName(name string) bool {
+	return strings.HasPrefix(strings.ToLower(name), temporaryPrefix)
 }
 
 func NewManager(workspace *Workspace, now func() time.Time, random io.Reader) *Manager {
@@ -342,7 +80,7 @@ func NewManager(workspace *Workspace, now func() time.Time, random io.Reader) *M
 // は「完了させる」か「復元する」かを選べる。複数のファイルが関わるとき、それが
 // 唯一の誠実な選択肢である。
 func (m *Manager) Commit(request Request) (Result, error) {
-	result, err := m.commit(request, false, false, nil)
+	result, err := m.commit(request, commitMode{})
 	if err == nil {
 		m.notifyCommit(request.Operation)
 	}
@@ -358,20 +96,10 @@ func (m *Manager) Commit(request Request) (Result, error) {
 // 受け付けるのは巻き戻せる操作だけである。移動・空のディレクトリの削除・控えを
 // 残す削除は Rollback が元に戻せるが、控えを残さない書き込みと削除は戻せない。
 func (m *Manager) CommitAtomic(request Request) (Result, error) {
-	if request.Operation == "" {
-		return Result{}, ErrInvalidOperation
+	if err := validateAtomicRequest(request); err != nil {
+		return Result{}, err
 	}
-	for _, removal := range request.Removals {
-		if !removal.Backup {
-			return Result{}, ErrIrreversibleRemoval
-		}
-	}
-	for _, change := range append(append([]Change(nil), request.Changes...), request.FinalChanges...) {
-		if change.SkipBackup {
-			return Result{}, ErrIrreversibleChange
-		}
-	}
-	result, err := m.commit(request, true, false, nil)
+	result, err := m.commit(request, commitMode{rollbackOnError: true})
 	if err == nil {
 		m.notifyCommit(request.Operation)
 	}
@@ -383,18 +111,10 @@ func (m *Manager) CommitAtomic(request Request) (Result, error) {
 // being sealed a second time, and are discarded at the transaction boundary.
 // This is intentionally narrow: master-key rotation is its only caller.
 func (m *Manager) CommitAtomicDiscardBackups(request Request) (Result, error) {
-	if request.Operation == "" {
-		return Result{}, ErrInvalidOperation
+	if err := validateDiscardBackupsRequest(request); err != nil {
+		return Result{}, err
 	}
-	if len(request.Directories) > 0 || len(request.Moves) > 0 || len(request.Removals) > 0 || len(request.RemoveDirectories) > 0 {
-		return Result{}, ErrAtomicWriteOnly
-	}
-	for _, change := range append(append([]Change(nil), request.Changes...), request.FinalChanges...) {
-		if change.SkipBackup {
-			return Result{}, ErrAtomicWriteOnly
-		}
-	}
-	result, err := m.commit(request, true, true, nil)
+	result, err := m.commit(request, commitMode{rollbackOnError: true, discardBackups: true})
 	if err == nil {
 		m.notifyCommit(request.Operation)
 	}
@@ -405,26 +125,60 @@ func (m *Manager) CommitAtomicDiscardBackups(request Request) (Result, error) {
 // and publishes its in-memory key generation before releasing the workspace
 // mutation barrier. publish must be infallible: it runs only after the durable
 // applied marker is the authoritative commit point.
-func (m *Manager) CommitAtomicDiscardBackupsAndPublish(request Request, publish func()) (Result, error) {
-	if publish == nil {
-		return m.CommitAtomicDiscardBackups(request)
-	}
-	if request.Operation == "" {
-		return Result{}, ErrInvalidOperation
-	}
-	if len(request.Directories) > 0 || len(request.Moves) > 0 || len(request.Removals) > 0 || len(request.RemoveDirectories) > 0 {
-		return Result{}, ErrAtomicWriteOnly
-	}
-	for _, change := range append(append([]Change(nil), request.Changes...), request.FinalChanges...) {
-		if change.SkipBackup {
-			return Result{}, ErrAtomicWriteOnly
+//
+// build runs while the workspace mutation barrier is held. The rekey lists the
+// generation backups there, so a normal commit cannot add a backup sealed with
+// the old key between that listing and the commit.
+func (m *Manager) CommitAtomicDiscardBackupsAndPublish(build func() (Request, error), publish func()) (Result, error) {
+	var request Request
+	result, err := m.commitBuilt(func() (Request, error) {
+		built, err := build()
+		if err != nil {
+			return Request{}, err
 		}
-	}
-	result, err := m.commit(request, true, true, publish)
+		if err := validateDiscardBackupsRequest(built); err != nil {
+			return Request{}, err
+		}
+		request = built
+		return built, nil
+	}, commitMode{rollbackOnError: true, discardBackups: true, publish: publish})
 	if err == nil {
 		m.notifyCommit(request.Operation)
 	}
 	return result, err
+}
+
+// validateAtomicRequest は、CommitAtomic が受け付ける要求を、失敗したときに巻き戻せる
+// 操作に限る。書き込み・移動・ディレクトリの作成と空のディレクトリの削除・控えを残す
+// 削除は Rollback が元に戻せるが、控えを残さない書き込みと削除は戻せない。
+func validateAtomicRequest(request Request) error {
+	if request.Operation == "" {
+		return ErrInvalidOperation
+	}
+	for _, removal := range request.Removals {
+		if !removal.Backup {
+			return ErrIrreversibleRemoval
+		}
+	}
+	if request.hasChangeWithoutBackup() {
+		return ErrIrreversibleChange
+	}
+	return nil
+}
+
+// validateDiscardBackupsRequest は、バックアップを残さないトランザクションを、
+// 暗号化済み文書の置き換えだけに限る。巻き戻しに使う前のバイト列は封じずに持ち、
+// 境目で捨てるので、CommitAtomic が受け付ける移動・削除・ディレクトリの作成と削除も
+// 断る。
+func validateDiscardBackupsRequest(request Request) error {
+	if request.Operation == "" {
+		return ErrInvalidOperation
+	}
+	if len(request.Directories) > 0 || len(request.Moves) > 0 || len(request.Removals) > 0 ||
+		len(request.RemoveDirectories) > 0 || request.hasChangeWithoutBackup() {
+		return ErrAtomicWriteOnly
+	}
+	return nil
 }
 
 func (m *Manager) notifyCommit(operation string) {
@@ -433,12 +187,19 @@ func (m *Manager) notifyCommit(operation string) {
 	}
 }
 
+func (m *Manager) notifyRecovery(paths []string) {
+	if m.AfterRecovery != nil && len(paths) > 0 {
+		m.AfterRecovery(paths)
+	}
+}
+
 // WithSnapshot holds the same process and OS mutation barrier as Commit while
-// fn reads a coherent workspace generation. Callers that also coordinate
-// secrets must acquire their secret mutation barrier before entering here,
-// matching the established secret-writer -> workspace lock order.
-func (m *Manager) WithSnapshot(fn func() error) error {
-	if fn == nil {
+// WithSnapshot runs snapshot, which reads a coherent workspace generation.
+// Callers that also coordinate secrets must acquire their secret mutation
+// barrier before entering here, matching the established secret-writer ->
+// workspace lock order.
+func (m *Manager) WithSnapshot(snapshot func() error) error {
+	if snapshot == nil {
 		return nil
 	}
 	unlock, err := m.workspace.lockMutation()
@@ -449,11 +210,11 @@ func (m *Manager) WithSnapshot(fn func() error) error {
 	if err := m.ensureNoPendingTransaction(); err != nil {
 		return err
 	}
-	return fn()
+	return snapshot()
 }
 
 func (m *Manager) ensureNoPendingTransaction() error {
-	records, err := m.readRecords(m.journalDirectory())
+	records, err := m.readRecords(m.journalDirectory(), refuseOtherJournalVersions)
 	if err != nil {
 		return err
 	}
@@ -491,14 +252,41 @@ func (p *journalPlan) add(entry journalEntry, staged, previous []byte) {
 	p.previous = append(p.previous, previous)
 }
 
-func (m *Manager) commit(request Request, rollbackOnError, discardBackups bool, publish func()) (Result, error) {
+// commitMode は、commit が失敗したときの扱いと、以前の内容の後片付けを選ぶ。
+type commitMode struct {
+	// rollbackOnError は、適用の途中で失敗したら、このプロセスが適用した分を巻き戻して
+	// から返す（CommitAtomic）。偽なら保留の記録を残し、利用者に完了か復元を選ばせる。
+	rollbackOnError bool
+	// discardBackups は、以前の内容を中断したときの巻き戻しのためだけに残し、commit
+	// point を越えたら消す（マスターパスワード変更）。
+	discardBackups bool
+	// publish は、commit point を越えたあと、workspace のロックを放す前に呼ぶ。失敗しては
+	// ならない。nil なら何もしない。
+	publish func()
+}
+
+func (m *Manager) commit(request Request, mode commitMode) (Result, error) {
+	// 形の誤りはロックを待たずに返す。
+	if err := validateRequestShape(request); err != nil {
+		return Result{}, err
+	}
+	return m.commitBuilt(func() (Request, error) { return request, nil }, mode)
+}
+
+func validateRequestShape(request Request) error {
 	if request.Operation == "" {
-		return Result{}, ErrInvalidOperation
+		return ErrInvalidOperation
 	}
 	if len(request.Changes)+len(request.FinalChanges)+len(request.Moves)+len(request.Removals)+
 		len(request.Directories)+len(request.RemoveDirectories) == 0 {
-		return Result{}, ErrNoChanges
+		return ErrNoChanges
 	}
+	return nil
+}
+
+// commitBuilt は、workspace の変更のロックを取ってから build で request を組み立て、
+// そのまま commit する。
+func (m *Manager) commitBuilt(build func() (Request, error), mode commitMode) (Result, error) {
 	unlock, err := m.workspace.lockMutation()
 	if err != nil {
 		return Result{}, err
@@ -507,203 +295,41 @@ func (m *Manager) commit(request Request, rollbackOnError, discardBackups bool, 
 	if err := m.ensureNoPendingTransaction(); err != nil {
 		return Result{}, err
 	}
-
-	fileSystem := m.workspace.FileSystem()
-
-	capacity := len(request.Changes) + len(request.FinalChanges) + len(request.Moves) + len(request.Removals) +
-		len(request.Directories) + len(request.RemoveDirectories)
-	// 計画を組むのは commitBuilder である。ここから下はもう組み立てない。
-	// 記録し、ステージし、置き換えるだけである。
-	builder := &commitBuilder{
-		manager: m, request: request,
-		plan:    newJournalPlan(capacity),
-		written: make([]string, 0, capacity),
-		claimed: make([]string, 0, capacity*2),
-		planned: map[string]bool{},
-	}
-	for _, create := range request.Directories {
-		cleaned, err := m.workspace.ResolveDirectory(create.Path)
-		if err != nil {
-			return Result{}, err
-		}
-		for current := cleaned; m.workspace.Contains(current) && current != m.workspace.Root(); current = filepath.Dir(current) {
-			builder.planned[current] = true
-		}
-	}
-	if err := builder.stage(); err != nil {
+	request, err := build()
+	if err != nil {
 		return Result{}, err
 	}
-	plan, written := builder.plan, builder.written
-
+	if err := validateRequestShape(request); err != nil {
+		return Result{}, err
+	}
+	// 計画を組むのは planCommit である。ここから下はもう組み立てない。
+	// 記録し、ステージし、置き換えるだけである。
+	plan, written, err := m.planCommit(request)
+	if err != nil {
+		return Result{}, err
+	}
 	if m.Validate != nil {
 		if err := m.Validate(request); err != nil {
 			return Result{}, err
 		}
 	}
-
-	identifier, err := m.newIdentifier()
-	if err != nil {
+	run := &commitRun{manager: m, mode: mode, plan: plan}
+	if err := run.begin(request.Operation, written); err != nil {
 		return Result{}, err
 	}
-	journalDirectory := filepath.Join(m.workspace.StateDir(), journalDirectoryName)
-	historyDirectory := filepath.Join(m.workspace.StateDir(), historyDirectoryName)
-	backupDirectory := filepath.Join(m.workspace.StateDir(), backupDirectoryName, identifier)
-	for _, directory := range []string{journalDirectory, historyDirectory, backupDirectory} {
-		if err := m.workspace.EnsureDirectory(directory); err != nil {
-			return Result{}, err
-		}
-	}
-
-	record := journalRecord{
-		ID:             identifier,
-		Version:        journalVersion,
-		Operation:      request.Operation,
-		Status:         statusStaging,
-		StartedAt:      m.now().UTC(),
-		Entries:        plan.entries,
-		Atomic:         rollbackOnError,
-		DiscardBackups: discardBackups,
-	}
-	journalPath := filepath.Join(journalDirectory, identifier+".json")
-	if err := m.writeRecord(journalPath, record); err != nil {
-		return Result{}, err
-	}
-	result := Result{ID: identifier, BackupDir: backupDirectory, Written: written}
-	fail := func(commitErr error) (Result, error) {
-		if !rollbackOnError {
-			// 対象の変更は、それを記録するジャーナルの書き換えより先に起きる。
-			// したがって永続化された記録はファイルシステムより遅れうる。この
-			// プロセスが知っている進捗をここで残す。この書き込み自体が失敗した
-			// 場合は、復旧が対象の状態から照合し直す。
-			if record.Status == statusStaged {
-				if progressErr := m.writeRecord(journalPath, record); progressErr != nil {
-					commitErr = errors.Join(commitErr, progressErr)
-				}
-			}
-			return result, commitErr
-		}
-		// finish は履歴の公開前にメモリ上の記録を変更する。履歴の公開または current
-		// journal の削除に失敗した場合は、終端状態ではなく復旧可能な current 状態を保存する。
-		if record.Status == statusCompleted || record.Status == statusRolledBack || record.Status == statusApplied {
-			record.Status = statusStaged
-			record.FinishedAt = nil
-		}
-		// ロールバックを試す前にプロセス内の進捗を保存する。対象の rename 後に SyncDir
-		// または journal の再書き込みが失敗する場合があるため、再保存しないと
-		// ロールバック失敗後の永続記録がファイルシステムより遅れた状態になる。
-		if progressErr := m.writeRecord(journalPath, record); progressErr != nil {
-			commitErr = errors.Join(commitErr, progressErr)
-		}
-		if rollbackErr := m.rollbackRecord(&record, journalPath); rollbackErr != nil {
-			return result, errors.Join(commitErr, rollbackErr)
-		}
-		return Result{}, commitErr
-	}
-
-	// ディレクトリはここで作る。バリデータがリクエストを受理したあとなので、拒否
-	// されたリクエストは何も作らない。そして一時ファイルがステージされる前なので、
-	// ステージされるファイルには親が存在する。これらはジャーナルのエントリなので、
-	// 中断されたコミットは巻き戻せる。これがトランザクションの外の EnsureDirectory で
-	// ない理由のすべてである。
-	for index := range record.Entries {
-		entry := record.Entries[index]
-		if entry.Action != actionMakeDir {
-			continue
-		}
-		if err := m.workspace.EnsureDirectory(entry.Path); err != nil {
-			return fail(err)
-		}
-		record.Committed = index + 1
-	}
-
-	// 何かが置き換えられたり unlink されたりする前に、以前の内容をコピーする。移動に
-	// コピーは不要だ。ファイルの唯一のコピーをそのまま保つからである。置き換えには
-	// 常に必要で、削除には呼び出し側が求めたときにちょうど必要になる。
-	//
-	// record.Entries の添字は journalPlan の添字である。ジャーナルへ書いたのは
-	// plan.entries そのものなので、以前の内容もステージする内容も、同じ添字で引ける。
-	for index := range record.Entries {
-		entry := &record.Entries[index]
-		if entry.Action != actionWrite && entry.Action != actionRemove {
-			continue
-		}
-		if !entry.HadPrevious || entry.NoBackup {
-			continue
-		}
-		relative, err := filepath.Rel(m.workspace.Root(), entry.Path)
-		if err != nil {
-			return Result{}, err
-		}
-		backupPath := filepath.Join(backupDirectory, relative)
-		if err := m.workspace.EnsureDirectory(filepath.Dir(backupPath)); err != nil {
-			return fail(err)
-		}
-		contents := plan.previous[index]
-		if m.Seal != nil && !discardBackups {
-			sealed, err := m.Seal(contents)
-			if err != nil {
-				return fail(err)
-			}
-			contents = sealed
-		}
-		backupMode := entry.Mode
-		if entry.Action == actionWrite {
-			backupMode = entry.beforeMode()
-		}
-		if err := m.writeFile(backupPath, contents, fs.FileMode(backupMode)); err != nil {
-			return fail(err)
-		}
-		entry.Backup = backupPath
-	}
-
-	// 新しいファイルはすべて対象の隣にステージし、あとの rename が原子的になるようにする。
-	for index := range record.Entries {
-		entry := &record.Entries[index]
-		if entry.Action != actionWrite {
-			continue
-		}
-		temporaryPath, err := fileSystem.WriteTemp(
-			filepath.Dir(entry.Path),
-			temporaryPrefix+identifier+"-",
-			fs.FileMode(entry.Mode),
-			plan.staged[index],
-		)
-		if err != nil {
-			return fail(err)
-		}
-		entry.Temp = temporaryPath
-	}
-	record.Status = statusStaged
-	if err := m.writeRecord(journalPath, record); err != nil {
-		return fail(err)
-	}
-
-	if err := m.commitStaged(&record, journalPath); err != nil {
-		return fail(err)
-	}
-	if discardBackups {
-		// This durable marker is the commit point. Before it, recovery rolls all
-		// targets back. Once it exists, every target is already the new generation,
-		// so recovery only finishes deleting rollback material.
-		record.Status = statusApplied
-		if err := m.writeRecord(journalPath, record); err != nil {
-			return fail(err)
-		}
-		if publish != nil {
-			publish()
-		}
-		// Cleanup is idempotent. A failure here leaves the applied marker for a
-		// later Complete call, but cannot make the committed targets mixed again.
-		_ = m.finishApplied(&record, journalPath)
-		return result, nil
-	}
-	if err := m.finish(&record, journalPath, statusCompleted); err != nil {
-		return fail(err)
-	}
-	return result, nil
+	return run.apply()
 }
 
-func (m *Manager) commitStaged(record *journalRecord, journalPath string) error {
+// commitStaged は、ステージ済みのエントリを記録の順に適用し、メモリ上の進捗
+// （Committed と、rename が使い切った Temp）を進める。
+//
+// 進捗をエントリごとに journal へ書き直すことはしない。記録全体を毎回書き直すと
+// 時間がエントリ数の 2 乗で伸び、バックアップを数千件抱えるマスターパスワード変更では
+// workspace のロックを分単位で持ち続けるからである。書かなくても復旧は困らない。
+// Pending、Complete、Rollback は記録を使う前に reconcileRecord で対象の状態から
+// 進捗を数え直し、永続化した Committed を使わない。失敗したときは、呼び出し側の fail が
+// このプロセスの知っている進捗を書き残す。
+func (m *Manager) commitStaged(record *journalRecord) error {
 	fileSystem := m.workspace.FileSystem()
 	for index := record.Committed; index < len(record.Entries); index++ {
 		entry := record.Entries[index]
@@ -756,9 +382,6 @@ func (m *Manager) commitStaged(record *journalRecord, journalPath string) error 
 				return err
 			}
 		}
-		if err := m.writeRecord(journalPath, *record); err != nil {
-			return err
-		}
 	}
 	return nil
 }
@@ -795,7 +418,7 @@ func (m *Manager) sourceState(path string, precondition Precondition) (string, f
 		return "", 0, ErrMissingSource
 	}
 	digest := Digest(contents)
-	zeroBytes(contents)
+	clear(contents)
 
 	expected := ""
 	if precondition.Exists {
@@ -804,102 +427,24 @@ func (m *Manager) sourceState(path string, precondition Precondition) (string, f
 	if digest != expected {
 		return "", 0, &ConflictError{Path: path, Expected: expected, Actual: digest}
 	}
-	if precondition.Mode != 0 && mode != precondition.Mode {
+	if precondition.Mode != 0 && !m.ownerModesMatch(mode, precondition.Mode) {
 		return "", 0, &ConflictError{Path: path, Expected: expected, Actual: digest}
 	}
 	return digest, mode, nil
 }
 
-// Note は、ファイルを変えなかった完了済みの操作を記録する。秘密鍵の表示などが
-// これにあたる。
-//
-// note にはステージされた内容もバックアップもジャーナルファイルもない。復旧すべき
-// ものが何もないからだ。これがあるのは、履歴をアプリケーションが行ったことの完全な
-// 記録にするためである。構造上、ファイルの内容を持ちようがない。保存するのは操作名、
-// 時刻、関係したパスだけである。
-func (m *Manager) Note(operation string, paths []string) (Result, error) {
-	if operation == "" {
-		return Result{}, ErrInvalidOperation
-	}
-	if len(paths) == 0 {
-		return Result{}, ErrNoChanges
-	}
-	resolveEntries := func() ([]journalEntry, error) {
-		entries := make([]journalEntry, 0, len(paths))
-		claimed := make([]string, 0, len(paths))
-		for _, path := range paths {
-			resolved, err := m.workspace.ResolveForWrite(path)
-			if err != nil {
-				return nil, err
-			}
-			if journalPathAlreadyClaimed(claimed, resolved) {
-				return nil, ErrDuplicatePath
-			}
-			claimed = append(claimed, resolved)
-			entries = append(entries, journalEntry{Action: actionNote, Path: resolved})
-		}
-		return entries, nil
-	}
-	// Reject lexical/structural errors before acquiring the persistent lock. The
-	// same resolution is repeated under the lock so the preflight is not trusted
-	// as a TOCTOU security decision.
-	if _, err := resolveEntries(); err != nil {
-		return Result{}, err
-	}
-	unlock, err := m.workspace.lockMutation()
-	if err != nil {
-		return Result{}, err
-	}
-	defer unlock()
-	if err := m.ensureNoPendingTransaction(); err != nil {
-		return Result{}, err
-	}
-
-	entries, err := resolveEntries()
-	if err != nil {
-		return Result{}, err
-	}
-
-	identifier, err := m.newIdentifier()
-	if err != nil {
-		return Result{}, err
-	}
-	historyDirectory := filepath.Join(m.workspace.StateDir(), historyDirectoryName)
-	if err := m.workspace.EnsureDirectory(historyDirectory); err != nil {
-		return Result{}, err
-	}
-	recorded := m.now().UTC()
-	record := journalRecord{
-		ID:         identifier,
-		Version:    journalVersion,
-		Operation:  operation,
-		Status:     statusCompleted,
-		StartedAt:  recorded,
-		FinishedAt: &recorded,
-		Committed:  len(entries),
-		Entries:    entries,
-	}
-	if err := m.writeRecord(filepath.Join(historyDirectory, identifier+".json"), record); err != nil {
-		return Result{}, err
-	}
-	return Result{ID: identifier}, nil
-}
-
 func (m *Manager) finish(record *journalRecord, journalPath, status string) error {
 	fileSystem := m.workspace.FileSystem()
-	// ステージ済みファイルを手放すのはここだけである。完了なら rename が
-	// 使い切っており、巻き戻しなら捨てる。どちらでも、記録が履歴になる前に名前と
-	// 対象の両方が消える。復旧がこれを読むだけの経路でやると、走っている最中の
-	// トランザクションの一時ファイルを消せてしまう。
-	for index := range record.Entries {
-		temp := record.Entries[index].Temp
-		if temp == "" {
-			continue
-		}
-		if err := fileSystem.Remove(temp); err != nil && !errors.Is(err, fs.ErrNotExist) {
-			return err
-		}
-		record.Entries[index].Temp = ""
+	// ステージ済みファイルを手放すのは、錠を持ったここと、staging のまま失敗した
+	// commit だけである。完了なら rename が使い切っており、巻き戻しなら捨てる。
+	// どちらでも、記録が履歴になる前に名前と対象の両方が消える。復旧がこれを読む
+	// だけの経路でやると、走っている最中のトランザクションの一時ファイルを消せて
+	// しまう。
+	if err := m.removeStagedTemps(record); err != nil {
+		return err
+	}
+	if err := m.removeLeftoverTemps(record); err != nil {
+		return err
 	}
 	if record.DiscardBackups {
 		if err := m.discardRollbackBackups(record); err != nil {
@@ -916,7 +461,62 @@ func (m *Manager) finish(record *journalRecord, journalPath, status string) erro
 	if err := fileSystem.Remove(journalPath); err != nil {
 		return err
 	}
-	return fileSystem.SyncDir(filepath.Dir(journalPath))
+	if err := fileSystem.SyncDir(filepath.Dir(journalPath)); err != nil {
+		return err
+	}
+	// 保持の上限を超えた記録と控えは、変更が完了したこの時点で消す。消せなくても
+	// この変更の結果は変えない。次の完了か sshcエンジンの起動で、もう一度消す。
+	_ = m.pruneHistory(record.ID)
+	return nil
+}
+
+// removeStagedTemps は、記録が名前を持つステージ済みファイルを消し、名前を手放す。
+func (m *Manager) removeStagedTemps(record *journalRecord) error {
+	fileSystem := m.workspace.FileSystem()
+	for index := range record.Entries {
+		temp := record.Entries[index].Temp
+		if temp == "" {
+			continue
+		}
+		if err := fileSystem.Remove(temp); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+		record.Entries[index].Temp = ""
+	}
+	return nil
+}
+
+// removeLeftoverTemps は、この記録の ID で始まる一時ファイルのうち、記録に名前が
+// 載らなかったものを消す。ステージの途中でプロセスが落ちると、staging の記録は
+// 一時ファイルの名前を持たないまま残る。ID はトランザクションごとに一意なので、
+// 走っている別のトランザクションの一時ファイルは消さない。
+func (m *Manager) removeLeftoverTemps(record *journalRecord) error {
+	fileSystem := m.workspace.FileSystem()
+	prefix := temporaryPrefix + record.ID + "-"
+	scanned := map[string]bool{}
+	for _, entry := range record.Entries {
+		directory := filepath.Dir(entry.Path)
+		if entry.Action != actionWrite || scanned[directory] {
+			continue
+		}
+		scanned[directory] = true
+		children, err := fileSystem.ReadDir(directory)
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		for _, child := range children {
+			if !strings.HasPrefix(child.Name(), prefix) {
+				continue
+			}
+			if err := fileSystem.Remove(filepath.Join(directory, child.Name())); err != nil && !errors.Is(err, fs.ErrNotExist) {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func (m *Manager) finishApplied(record *journalRecord, journalPath string) error {
@@ -924,47 +524,6 @@ func (m *Manager) finishApplied(record *journalRecord, journalPath string) error
 		return ErrCannotComplete
 	}
 	return m.finish(record, journalPath, statusCompleted)
-}
-
-func (m *Manager) discardRollbackBackups(record *journalRecord) error {
-	fileSystem := m.workspace.FileSystem()
-	directories := map[string]bool{}
-	backupRoot := filepath.Join(m.workspace.StateDir(), backupDirectoryName, record.ID)
-	for index := range record.Entries {
-		backup := record.Entries[index].Backup
-		if backup == "" {
-			continue
-		}
-		if err := fileSystem.Remove(backup); err != nil && !errors.Is(err, fs.ErrNotExist) {
-			return err
-		}
-		if err := fileSystem.SyncDir(filepath.Dir(backup)); err != nil {
-			return err
-		}
-		record.Entries[index].Backup = ""
-		for directory := filepath.Dir(backup); privateStateContains(backupRoot, directory); directory = filepath.Dir(directory) {
-			directories[directory] = true
-			if sameJournalPath(directory, backupRoot) {
-				break
-			}
-		}
-	}
-	ordered := make([]string, 0, len(directories))
-	for directory := range directories {
-		ordered = append(ordered, directory)
-	}
-	sort.Slice(ordered, func(i, j int) bool { return len(ordered[i]) > len(ordered[j]) })
-	for _, directory := range ordered {
-		if err := fileSystem.Remove(directory); err != nil && !errors.Is(err, fs.ErrNotExist) {
-			// A directory can legitimately contain a normal generation backup when
-			// the transaction had a no-op entry. Leave it rather than broadening the
-			// cleanup into recursive deletion.
-			if !errors.Is(err, fs.ErrInvalid) {
-				continue
-			}
-		}
-	}
-	return nil
 }
 
 // currentState は、置き換えられるファイルを読む。返されるモードはownerの権限だけを
@@ -985,305 +544,14 @@ func (m *Manager) currentState(path string) (contents []byte, mode fs.FileMode, 
 	return contents, info.Mode().Perm() & 0o700, true, nil
 }
 
+// ownerModesMatch は、owner の権限をこのワークスペースの FileSystem が読み返せる範囲
+// だけで比べる。Windows では 0700 で書いたファイルが 0600 と読めるので、そのまま
+// 比べると自分の書いた姿を他人の変更と取り違える。
+func (m *Manager) ownerModesMatch(left, right fs.FileMode) bool {
+	fileSystem := m.workspace.FileSystem()
+	return observableOwnerMode(fileSystem, left) == observableOwnerMode(fileSystem, right)
+}
+
 func (m *Manager) writeFile(path string, contents []byte, permission fs.FileMode) error {
 	return WriteAtomicFile(m.workspace.FileSystem(), path, temporaryPrefix, permission, contents)
-}
-
-func (m *Manager) writeRecord(path string, record journalRecord) error {
-	contents, err := json.MarshalIndent(record, "", "  ")
-	if err != nil {
-		return err
-	}
-	return m.writeFile(path, append(contents, '\n'), FilePermission)
-}
-
-func (m *Manager) newIdentifier() (string, error) {
-	suffix := make([]byte, 4)
-	if _, err := io.ReadFull(m.random, suffix); err != nil {
-		return "", err
-	}
-	return m.now().UTC().Format("20060102T150405.000") + "-" + hex.EncodeToString(suffix), nil
-}
-
-// commitBuilder は、ひとつのコミットを組み立てる途中の状態である。
-//
-// フェーズをまたいで持ち回るものを、名前のある値にまとめてある。以前これらは
-// commit の 380 行の中に生の変数として並んでおり、どのフェーズが何を触るのかは、
-// 全体を頭に入れないと分からなかった。
-type commitBuilder struct {
-	manager *Manager
-	request Request
-	plan    *journalPlan
-	// written は、このコミットが触ったと呼び出し側へ報告する表記である。
-	written []string
-	// claimed は、すでに扱った表記である。同じ表記を二度含むリクエストは、
-	// 順序で結果が変わるので受け付けない。
-	claimed []string
-	// planned は、このリクエストが作るディレクトリと、ルートより下にあるその祖先で
-	// ある。まだディスクに無い場所への書き込みを解決できるのは、これがあるからである。
-	planned map[string]bool
-}
-
-// claim は、この表記を扱うのが初めてであることを確かめて台帳に載せる。
-func (b *commitBuilder) claim(path string) error {
-	if journalPathAlreadyClaimed(b.claimed, path) {
-		return ErrDuplicatePath
-	}
-	b.claimed = append(b.claimed, path)
-	return nil
-}
-
-// stage は、リクエストの全体を計画へ落とす。並びに意味がある。
-func (b *commitBuilder) stage() error {
-	for _, phase := range []func() error{
-		b.stageDirectories, b.stageChanges, b.stageMoves,
-		b.stageRemovals, b.stageDirectoryRemovals, b.stageFinalChanges,
-	} {
-		if err := phase(); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// stageDirectories は、ディレクトリを作る計画を立てる。
-//
-// これが先である。変更には置き場所が要り、移動には存在する行き先が要る。
-func (b *commitBuilder) stageDirectories() error {
-	// ディレクトリが先。変更には置き場所が要り、移動には存在する
-	// 行き先が要る。
-	for _, create := range b.request.Directories {
-		target, err := b.manager.workspace.ResolveDirectory(create.Path)
-		if err != nil {
-			return err
-		}
-		if err := b.claim(target); err != nil {
-			return err
-		}
-		// すでにそこにあるかどうかが、巻き戻しの内容を決める。このトランザクションが
-		// 作っていないディレクトリを取り除けば、誰も触れてくれと頼んでいないものを
-		// 削除することになる。
-		existed := false
-		if _, statErr := b.manager.workspace.FileSystem().Lstat(target); statErr == nil {
-			existed = true
-		} else if !errors.Is(statErr, fs.ErrNotExist) {
-			return statErr
-		}
-		b.plan.add(journalEntry{
-			Action:      actionMakeDir,
-			Path:        target,
-			HadPrevious: existed,
-			Mode:        uint32(DirectoryPermission),
-		}, nil, nil)
-	}
-	return nil
-}
-
-// stageChanges は、ファイルの置き換えを計画する。前提条件が合わなければ、ここで衝突を返す。
-func (b *commitBuilder) stageChanges() error {
-	return b.stageChangeSet(b.request.Changes)
-}
-
-// stageFinalChanges uses the same validation and staging contract as an
-// ordinary write. Its position in stage() is the only difference and is the
-// durable guarantee: recovery replays the recorded entry order unchanged.
-func (b *commitBuilder) stageFinalChanges() error {
-	return b.stageChangeSet(b.request.FinalChanges)
-}
-
-func (b *commitBuilder) stageChangeSet(changes []Change) error {
-	for _, change := range changes {
-		target, err := b.manager.workspace.ResolveForWriteUnder(change.Path, b.planned)
-		if err != nil {
-			return err
-		}
-		if err := b.claim(target); err != nil {
-			return err
-		}
-
-		if int64(len(change.Contents)) > b.manager.workspace.TransactionFileLimit(target) {
-			return ErrFileTooLarge
-		}
-		previous, mode, exists, err := b.manager.currentState(target)
-		if err != nil {
-			return err
-		}
-		actual := ""
-		expected := ""
-		if exists {
-			actual = Digest(previous)
-		}
-		if change.Precondition.Exists {
-			expected = change.Precondition.Digest
-		}
-		if actual != expected {
-			return &ConflictError{Path: target, Expected: expected, Actual: actual, Current: previous}
-		}
-		if change.Precondition.Mode != 0 && (!exists || mode != change.Precondition.Mode) {
-			return &ConflictError{Path: target, Expected: expected, Actual: actual, Current: previous}
-		}
-		targetMode := mode
-		if !exists {
-			targetMode = FilePermission
-		}
-		if change.Mode != 0 {
-			if change.Mode != FilePermission && change.Mode != DirectoryPermission {
-				return invalidJournal("invalid write mode")
-			}
-			targetMode = change.Mode
-		}
-
-		entry := journalEntry{
-			Action:      actionWrite,
-			Path:        target,
-			NoBackup:    change.SkipBackup,
-			HadPrevious: exists,
-			Mode:        uint32(targetMode),
-			Digest:      Digest(change.Contents),
-		}
-		if exists {
-			entry.PreviousDigest = actual
-			entry.PreviousMode = uint32(mode)
-		}
-		b.plan.add(entry, change.Contents, previous)
-		b.written = append(b.written, target)
-	}
-	return nil
-}
-
-// stageMoves は、ファイルの移動を計画する。行き先に何かあれば断る。
-func (b *commitBuilder) stageMoves() error {
-	for _, move := range b.request.Moves {
-		source, err := b.manager.workspace.ResolveForWrite(move.From)
-		if err != nil {
-			return err
-		}
-		target, err := b.manager.workspace.ResolveForWriteUnder(move.To, b.planned)
-		if err != nil {
-			return err
-		}
-		if err := b.claim(source); err != nil {
-			return err
-		}
-		if err := b.claim(target); err != nil {
-			return err
-		}
-		if _, statErr := b.manager.workspace.FileSystem().Lstat(target); statErr == nil {
-			return ErrMoveTargetExists
-		} else if !errors.Is(statErr, fs.ErrNotExist) {
-			return statErr
-		}
-
-		digest, mode, err := b.manager.sourceState(source, move.Precondition)
-		if err != nil {
-			return err
-		}
-		b.plan.add(journalEntry{
-			Action:         actionMove,
-			Path:           source,
-			Target:         target,
-			HadPrevious:    true,
-			Mode:           uint32(mode),
-			Digest:         digest,
-			PreviousDigest: digest,
-		}, nil, nil)
-		b.written = append(b.written, target)
-	}
-	return nil
-}
-
-// stageRemovals は、ファイルの削除を計画する。バックアップを取るかは呼び出し側が決める。
-func (b *commitBuilder) stageRemovals() error {
-	for _, removal := range b.request.Removals {
-		target, err := b.manager.workspace.ResolveForWrite(removal.Path)
-		if err != nil {
-			return err
-		}
-		if err := b.claim(target); err != nil {
-			return err
-		}
-		digest, mode, err := b.manager.sourceState(target, removal.Precondition)
-		if err != nil {
-			return err
-		}
-		var previous []byte
-		if removal.Backup {
-			if previous, err = b.manager.workspace.ReadTransactionFile(target); err != nil {
-				return err
-			}
-		}
-		b.plan.add(journalEntry{
-			Action:         actionRemove,
-			Path:           target,
-			NoBackup:       !removal.Backup,
-			HadPrevious:    true,
-			Mode:           uint32(mode),
-			Digest:         digest,
-			PreviousDigest: digest,
-		}, nil, previous)
-		b.written = append(b.written, target)
-	}
-	return nil
-}
-
-// stageDirectoryRemovals は、ディレクトリの削除を計画する。
-//
-// 最後である。実行される時点でそれぞれ空でなければならず、その検査は
-// 「このリクエストが残すディスクの状態」に対して行う。
-func (b *commitBuilder) stageDirectoryRemovals() error {
-	// ディレクトリの削除は最後で、実行される時点でそれぞれ空でなければならない。
-	// 検査は、このリクエストが残すことになるディスクの状態に対して行う。この同じ
-	// リクエストが移動させ、削除し、あるいはディレクトリとして取り除くエントリは、
-	// その親を生かし続けない。以前は現状のディスクに対して検査していたため、呼び出し
-	// 側は一方のトランザクションで木を空にし、次のトランザクションで取り除かねばなら
-	// なかった。つまり操作が自分で始めたことを終えられず、二つのあいだでクラッシュ
-	// すれば空の抜け殻が残った。
-	//
-	// 深いものから順が唯一成立する順序であり、ここで整列しておくことが、呼び出し側に
-	// それを知らせずに済ませている。
-	ordered := append([]DirectoryRemoval(nil), b.request.RemoveDirectories...)
-	sort.SliceStable(ordered, func(i, j int) bool {
-		return strings.Count(ordered[i].Path, string(filepath.Separator)) >
-			strings.Count(ordered[j].Path, string(filepath.Separator))
-	})
-	for _, removal := range ordered {
-		target, err := b.manager.workspace.ResolveDirectory(removal.Path)
-		if err != nil {
-			return err
-		}
-		if err := b.claim(target); err != nil {
-			return err
-		}
-		info, statErr := b.manager.workspace.FileSystem().Lstat(target)
-		if errors.Is(statErr, fs.ErrNotExist) {
-			// 何もすることがない。エラーでもない。すでに消えているディレクトリを
-			// 取り除くことは、呼び出し側が求めた状態である。
-			continue
-		}
-		if statErr != nil {
-			return statErr
-		}
-		if !info.IsDir() {
-			return ErrNotDirectory
-		}
-		contents, err := b.manager.workspace.FileSystem().ReadDir(target)
-		if err != nil {
-			return err
-		}
-		for _, entry := range contents {
-			// claimed は、このリクエストがすでに責任を引き受けたすべてのパスを
-			// 保持する。移動の元、削除、そしてこれより深いところに列挙された
-			// ディレクトリの削除である。
-			if !journalPathAlreadyClaimed(b.claimed, filepath.Join(target, entry.Name())) {
-				return ErrDirectoryNotEmpty
-			}
-		}
-		b.plan.add(journalEntry{
-			Action:      actionRemoveDir,
-			Path:        target,
-			HadPrevious: true,
-			Mode:        uint32(info.Mode().Perm()),
-		}, nil, nil)
-	}
-	return nil
 }

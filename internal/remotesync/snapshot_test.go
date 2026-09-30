@@ -156,43 +156,8 @@ func TestReadRefusesATamperedRevision(t *testing.T) {
 	}
 }
 
-func TestReadMigratesSchemaV5ToV6(t *testing.T) {
-	parent := strings.Repeat("a", 64)
-	manifest := remotesync.Manifest{
-		SchemaVersion: 5,
-		CreatedAt:     "2026-08-30T00:00:00Z", Origin: "v5-origin",
-		ParentRevision: parent, Message: "Existing v5 snapshot",
-		Files: []remotesync.Entry{entry("config", "Host migrated\n")},
-	}
-	manifest.Revision, _ = remotesync.RevisionFor(manifest)
-	archive := handBuilt(t, map[string]string{"config": "Host migrated\n"}, manifest)
-
-	migrated, _, err := remotesync.Read(archive)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if migrated.SchemaVersion != 6 || migrated.Revision != manifest.Revision ||
-		len(migrated.Ancestors) != 1 || migrated.Ancestors[0] != parent {
-		t.Fatalf("migrated manifest = %#v", migrated)
-	}
-}
-
-func TestReadRejectsAClaimedV5ManifestWithV6Fields(t *testing.T) {
-	parent := strings.Repeat("a", 64)
-	manifest := remotesync.Manifest{
-		SchemaVersion: 5,
-		CreatedAt:     "2026-08-30T00:00:00Z", Origin: "v5-origin",
-		ParentRevision: parent, Ancestors: []string{parent}, Message: "Not really v5",
-	}
-	manifest.Revision, _ = remotesync.RevisionFor(manifest)
-	archive := handBuilt(t, map[string]string{}, manifest)
-	if _, _, err := remotesync.Read(archive); !errors.Is(err, remotesync.ErrNotASnapshot) {
-		t.Fatalf("Read = %v, want ErrNotASnapshot", err)
-	}
-}
-
 func TestReadRejectsUnsupportedSchemaVersions(t *testing.T) {
-	versions := []int{1, 2, 3, 4, remotesync.SchemaVersion + 1}
+	versions := []int{1, 2, 3, 4, 5, remotesync.SchemaVersion + 1}
 	for _, version := range versions {
 		archive := handBuilt(t, map[string]string{}, remotesync.Manifest{SchemaVersion: version})
 		if _, _, err := remotesync.Read(archive); !errors.Is(err, remotesync.ErrUnsupportedVersion) {
@@ -258,6 +223,16 @@ func TestReadRefusesAPathWindowsCannotRepresent(t *testing.T) {
 		"config ",
 		"connections./work.conf",
 		"connections /work.conf",
+		"keys/id:backup",
+		"notes\x01",
+		"tab\tname",
+		"a<b",
+		"a>b",
+		`quote"x`,
+		"pipe|x",
+		"q?",
+		"star*",
+		"connections/a:b/key",
 	} {
 		t.Run(name, func(t *testing.T) {
 			archive := handBuilt(t, map[string]string{name: "x"}, remotesync.Manifest{
@@ -360,24 +335,14 @@ func TestReadRefusesCaseInsensitivePathCollisions(t *testing.T) {
 	}
 }
 
+// 持ち主のパッケージが決めたこのマシンだけの状態は、TestReadRefusesEveryOwnersDeviceLocalPath
+// が持ち主の定数で確かめる。ここは remotesync 自身の文書と、名前の揺れを見る。
 func TestReadRefusesDeviceLocalAndRawVaultPaths(t *testing.T) {
 	for _, name := range []string{
-		"sshc/secrets",
-		"sshc/sync-settings",
-		"sshc/local-vault-key",
+		remotesync.VaultPath,
 		"SSHC/LOCAL-VAULT-KEY",
 		"sshc/sync-state.json",
 		"sshc/sync-key-recovery.json",
-		"sshc/cli/request.json",
-		"sshc/.cli.mutation.lock",
-		"sshc/journal/20260830T000000.000000000Z-aaaaaaaaaaaaaaaa.json",
-		"sshc/backups/foreign/config",
-		"sshc/history/entry.json",
-		"sshc/trash/deleted.conf",
-		"sshc/recent-connections.json",
-		"sshc/browser-registrations.json",
-		"sshc/workspaces.json",
-		"sshc/mutation.lock",
 		"connections/.sshc-apply-temporary",
 		remotesync.TravelPath + "/child",
 		"SSHC/SNIPPETS.JSON",
@@ -491,17 +456,18 @@ func TestBuildRefusesAnEntryWithNoContents(t *testing.T) {
 }
 
 func TestBuildRefusesContentsLargerThanTheReadLimit(t *testing.T) {
+	const background = storage.BackgroundsDirectory + "/too-large.png"
 	body := bytes.Repeat([]byte{'x'}, remotesync.MaxSnapshotBytes+1)
 	manifest := remotesync.Manifest{
 		Message: "Test size limit",
 		Files: []remotesync.Entry{{
-			Path: "sshc/backgrounds/too-large.png", SHA256: remotesync.Digest(body), Mode: "0600",
+			Path: background, SHA256: remotesync.Digest(body), Mode: "0600",
 		}},
 	}
 	if err := remotesync.FinalizeManifest(&manifest, ""); err != nil {
 		t.Fatal(err)
 	}
-	_, err := remotesync.Build(manifest, map[string][]byte{"sshc/backgrounds/too-large.png": body})
+	_, err := remotesync.Build(manifest, map[string][]byte{background: body})
 	if !errors.Is(err, remotesync.ErrSnapshotTooLarge) {
 		t.Fatalf("Build = %v, want ErrSnapshotTooLarge", err)
 	}

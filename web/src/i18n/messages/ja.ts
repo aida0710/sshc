@@ -1084,6 +1084,8 @@ export const ja = {
     "保存済みパスワード、保存済み鍵パスフレーズ、同期設定が初期化されることを確認しました。SSH設定と鍵ファイルは残ります。",
   "lock.resetUnsupported": "空のVaultを作成",
   "lock.resetFailed": "未対応のVaultを安全に置き換えられませんでした。",
+  "lock.tooManyBackups":
+    "ローカルのバックアップが多すぎるため、1回の変更ですべてを暗号化し直せません。何も変更していません。~/.ssh/sshc/backupsから古いフォルダを削除してから、もう一度実行してください。削除したバックアップからは復元できなくなります。",
   "lock.failed": "Vaultを開けませんでした。",
   "section.sync": "Sync",
   "section.history": "History",
@@ -1383,8 +1385,8 @@ export const ja = {
   "history.completed": "完了した変更",
   "history.empty": "sshcで行った変更はまだありません。",
   "history.restorePath": "{path}を復元",
-  "history.backupsKept":
-    "世代バックアップは~/.ssh/sshc/backupsに保存され、自動では削除されません。復元操作も新しい変更として履歴に残るため、同じ方法で取り消せます。",
+  "history.backupRetention":
+    "変更前のファイルは~/.ssh/sshc/backupsにバックアップされます。新しい方から200件まで、かつ90日以内の変更の分を保持し、それより古いものは自動で削除されます。復元操作も新しい変更として履歴に残るため、同じ方法で取り消せます。",
 
   "notice.complex_external_rule":
     "ワイルドカード、否定、Matchブロック、aliasの重複のいずれかが含まれるため、この値を単純な形式では編集できません。値の参照元を表示します。",
@@ -1645,7 +1647,7 @@ export const ja = {
   "sync.snapshotCostRefused":
     "このスナップショットは復号時の負荷が安全上限を超えるため開けません。",
   "sync.snapshotSchemaUnsupported":
-    "このスナップショットは現在のsshcが対応していない形式です。スナップショットを作成したマシンと同じか、それ以降のバージョンのsshcに更新してください。",
+    "このスナップショットは現在のsshcが対応していない形式です。新しい形式なら、スナップショットを作成したマシンと同じか、それ以降のバージョンのsshcに更新してください。v0.24.0より前のsshcが作成した古い形式なら、送信できるマシンから強制送信で上書きしてください。",
   "sync.snapshotRejected":
     "取得したデータは有効なsshcスナップショットではないか、破損しています。何も上書きしていません。",
   "sync.snapshotTooLarge":
@@ -1660,6 +1662,10 @@ export const ja = {
     "別の処理がこのマシンの設定を更新しています。完了してから、もう一度お試しください。",
   "sync.pendingTransaction":
     "中断した変更が残っているため、同期できませんでした。「History」で中断した変更を完了するか取り消してから、もう一度お試しください。",
+  "sync.localPathUnportable":
+    "~/.sshに、ほかのマシンで同じ名前として扱えないファイルがあるため送信できません（Windowsの予約名、「:」や「?」などWindowsのファイル名に使えない文字を含む名前、末尾がピリオドか空白の名前、大文字と小文字だけが違う名前など）。名前を変更するか、「同期するファイル」で除外してください。",
+  "sync.localPathUnportableAt":
+    "~/.ssh/{path}は、ほかのマシンで同じ名前として扱えないため送信できません（Windowsの予約名、「:」や「?」などWindowsのファイル名に使えない文字を含む名前、末尾がピリオドか空白の名前、大文字と小文字だけが違う名前など）。名前を変更するか、「同期するファイル」で除外してください。",
   "sync.endpointPath":
     "エンドポイントにはアカウントのURLだけを指定し、バケット名やパスは含めないでください。バケット名は下の欄に入力してください。",
   "sync.autoHint.both":
@@ -2572,12 +2578,12 @@ export const ja = {
   "keys.agentIdentitiesCaption": "ssh-agentに登録されている鍵",
   "keys.colComment": "コメント",
   "keys.agentUnavailable":
-    "sshcからssh-agentに接続できないため、鍵を登録できません。ssh-addコマンドと、接続先を示すSSH_AUTH_SOCKの両方が必要です。",
+    "sshcからssh-agentに接続できないため、鍵を登録できません。macOSとLinuxでは、sshcの環境変数SSH_AUTH_SOCKでssh-agentのソケットを指定してください。Windowsでは、OpenSSH Authentication Agentサービスを起動してください。",
   "keys.agentDelegationsNote":
     "次の設定エントリは、鍵ファイルではなくssh-agentの鍵を使用します:",
   "keys.registerHeading": "ssh-agentに追加：{path}",
   "keys.registerNote":
-    "パスフレーズはssh-addの標準入力へ渡され、コマンドラインや子プロセスの環境変数には含まれません。sshcはパスフレーズを保存せず、この操作の完了後は保持しません。",
+    "パスフレーズはsshcの中で鍵の復号にだけ使い、ssh-agentには復号した鍵を渡します。sshcはパスフレーズを保存せず、この操作の完了後は保持しません。",
   "keys.keyPassphrase": "鍵のパスフレーズ",
   "keys.lifetime": "保持期間",
   "keys.lifetimeForever": "ssh-agentが終了するまで",

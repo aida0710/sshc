@@ -948,6 +948,28 @@ describe("SyncPanel", () => {
     ).toBeEnabled();
   });
 
+  it("names the local file whose name other machines cannot use", async () => {
+    const api = buildApi(configured, nothingToDo, {
+      pushSnapshot: vi.fn().mockRejectedValue(
+        new ApiError("sync_local_path_unportable", 409, {
+          code: "sync_local_path_unportable",
+          message: "request rejected",
+          path: "connections/aux.conf",
+        }),
+      ),
+    });
+    render(<SyncPanel api={api} />);
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Push this workspace" }),
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "~/.ssh/connections/aux.conf has a name other machines cannot use",
+    );
+    expect(screen.getByRole("alert")).not.toHaveTextContent(/snapshot/i);
+  });
+
   it("reports a refused push instead of claiming success", async () => {
     const api = buildApi(configured, nothingToDo, {
       pushSnapshot: vi.fn().mockRejectedValue(new Error("sync_remote_moved")),

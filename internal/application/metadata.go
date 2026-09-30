@@ -11,12 +11,12 @@ import (
 	"strings"
 	"time"
 
+	"sshc/internal/handoff"
 	"sshc/internal/remoteos"
 	"sshc/internal/sshclient"
 	"sshc/internal/storage"
 	"sshc/internal/terminal"
 	"sshc/internal/textencoding"
-	"sshc/internal/validate"
 	"sshc/internal/vpn"
 )
 
@@ -113,7 +113,7 @@ const (
 // validateEngineSettings は、EngineSettings の範囲を 1 か所で検査する。
 // 設定画面の保存と metadata.json の検証が使う。
 func validateEngineSettings(settings EngineSettings) error {
-	if settings.Port != 0 && validate.EnginePort(settings.Port) != nil {
+	if settings.Port != 0 && handoff.EnginePort(settings.Port) != nil {
 		return fmt.Errorf("%w %d", ErrMetadataEnginePort, settings.Port)
 	}
 	chosen := settings.VaultAutoLock

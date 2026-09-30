@@ -41,8 +41,8 @@ type VPNSecretsMutation struct {
 
 // VPNSecrets は、プロファイルひとつぶんの秘密を返す。
 func (s *Service) VPNSecrets(profile string) (string, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 	vault := s.use()
 	if vault == nil {
 		return "", ErrLocked

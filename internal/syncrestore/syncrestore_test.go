@@ -30,11 +30,25 @@ func newServices(t *testing.T) (*remotesync.Service, *secret.Service) {
 		t.Fatal(err)
 	}
 	manager := storage.NewManager(workspace, time.Now, rand.Reader)
-	service := remotesync.NewService(workspace, manager,
+	vault := secret.NewService(workspace, manager, time.Now)
+	service, err := remotesync.NewIntegratedService(workspace, manager,
 		func() string { return "2026-09-30T00:00:00Z" },
 		func() (string, error) { return "origin-test", nil },
+		remotesync.IntegrationHooks{
+			OpenVault:          vault.TravelDocument,
+			SealVault:          vault.AdoptTravelDocument,
+			EmptyVaultDocument: vault.EmptyTravelDocument,
+			VaultAdopted:       vault.Reload,
+			KeyedTravelDigest:  vault.KeyedTravelDigest,
+			OpenSnippets:       func() ([]byte, error) { return nil, nil },
+			SealSnippets:       func(document []byte) ([]byte, error) { return document, nil },
+			SecretMutation:     func(run func() error) error { return run() },
+			StableSnapshot:     func(run func() error) error { return run() },
+		},
 	)
-	vault := secret.NewService(workspace, manager, time.Now)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := vault.Initialise(testPassphrase); err != nil {
 		t.Fatal(err)
 	}

@@ -21,7 +21,10 @@ package envelope
 import (
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/hkdf"
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/binary"
 	"errors"
 	"slices"
@@ -46,12 +49,13 @@ var (
 	ErrWeakPassphrase = errors.New("the passphrase is too short")
 )
 
-// MinPassphraseLength は、このパッケージが封に使う最短のパスフレーズ長。
+// MinPassphraseLength は、Derive が受け付ける最短のパスフレーズ長で、同期鍵のように
+// 下限を指定しない封の既定である。別の下限が要る呼び出し側は DeriveWithMinimum に
+// 渡す（Vault のマスターパスワードは secret.MinPassphraseLength を使う）。
 //
-// 大雑把なルールであり、これが唯一のルールでもある。文字種の要件は課さない。
-// それはユーザーを、覚えられない短いパスフレーズへと追いやるからだ。暗号化したブロブは
-// マシンの外へコピーでき、好きなだけ時間をかけてオフラインで攻撃できる。それを
-// 高くつくものにするのは長さである。
+// 求めるのは長さだけで、文字種の要件は課さない。それはユーザーを、覚えられない
+// 短いパスフレーズへと追いやるからだ。暗号化したブロブはマシンの外へコピーでき、
+// 好きなだけ時間をかけてオフラインで攻撃できる。それを高くつくものにするのは長さである。
 const MinPassphraseLength = 12
 
 // Argon2id のパラメータ。すべてのヘッダーに書き込まれるので、あとで引き上げても
@@ -104,11 +108,11 @@ type Limits struct {
 	Threads   uint8
 }
 
-// Accepted は、このインストールが書いた envelope が要求してよい値。
+// Accepted は、このインストールが書いた envelope が要求してよい値。Open が使う。
 var Accepted = Limits{Time: maxKDFTime, MemoryKiB: maxKDFMemoryKiB, Threads: maxKDFThreads}
 
 // AcceptedFromRemote は、ネットワーク越しに届いた envelope が要求してよい値。
-// Derive が書く値を少し上回るところまでで、それ以上はない。
+// OpenRemote が使う。Derive が書く値までで、それ以上はない。
 var AcceptedFromRemote = Limits{Time: defaultTime, MemoryKiB: defaultMemoryKiB, Threads: defaultThreads}
 
 // DerivationCost は、Derive が新しい鍵に使う Argon2id のコスト。
@@ -191,8 +195,8 @@ func DeriveWithMinimum(passphrase string, minimum int) (Key, error) {
 // 用意した遅い remote envelope の終了待ちにしないため、総数は2件を維持する。
 const MaxConcurrentDerivations = 2
 
-// MaxConcurrentRemoteDerivations は、認証前の remote envelope に同時に費やしてよい
-// 鍵導出の数。1件あたりは現在の書き込み値である64 MiBまでに制限される。
+// MaxConcurrentRemoteDerivations は、OpenRemote が認証前の remote envelope に同時に
+// 費やしてよい鍵導出の数。1件あたりは現在の書き込み値である64 MiBまでに制限される。
 const MaxConcurrentRemoteDerivations = 1
 
 var derivations = make(chan struct{}, MaxConcurrentDerivations)
@@ -271,33 +275,71 @@ func (k Key) Open(sealed []byte) ([]byte, error) {
 }
 
 // Open は passphrase で sealed を復号し、平文とともに鍵も返す。呼び出し側が
-// 導出をやり直さずに暗号化し直せるようにするためである。
+// 導出をやり直さずに暗号化し直せるようにするためである。このインストールが書いた
+// envelope のためにあり、Accepted までのコストを払う。
 func Open(sealed []byte, passphrase string) ([]byte, Key, error) {
-	return OpenWithin(sealed, passphrase, Accepted)
-}
-
-// OpenWithin は上限を明示する Open。開こうとしている envelope を自分で書いた
-// わけではない呼び出し側のためにある。
-func OpenWithin(sealed []byte, passphrase string, limits Limits) ([]byte, Key, error) {
-	header, params, rest, err := readHeader(sealed)
+	checked, err := checkWithin(sealed, Accepted)
 	if err != nil {
 		return nil, Key{}, err
 	}
+	return checked.open(passphrase)
+}
+
+// OpenRemote は、ネットワーク越しに届いた envelope を Open と同じく開く。
+//
+// ヘッダーのコストを選んだのはそれを書いた誰かなので、AcceptedFromRemote までしか
+// 払わない。パスフレーズが合うかは鍵を導いたあとにしか分からないので、同じ入力を
+// 並列に投げられても低メモリのマシンの使用量が線形に増えないよう、鍵導出を
+// MaxConcurrentRemoteDerivations 件ずつに並べる。上限を超える envelope は、枠を
+// 待たずに断る。
+func OpenRemote(sealed []byte, passphrase string) ([]byte, Key, error) {
+	checked, err := checkWithin(sealed, AcceptedFromRemote)
+	if err != nil {
+		return nil, Key{}, err
+	}
+	remoteDerivations <- struct{}{}
+	defer func() { <-remoteDerivations }()
+	return checked.open(passphrase)
+}
+
+// IsEnvelope は、contents が envelope の形をしているかを返す。鍵は使わず、復号も
+// しない。このビルドが扱えないバージョンやコストのものも、envelope の形なら真を返す。
+// 暗号化する前の平文の文書を、暗号化した文書と見分けるためにある。
+func IsEnvelope(contents []byte) bool {
+	_, _, _, err := readHeader(contents)
+	return !errors.Is(err, ErrNotAnEnvelope)
+}
+
+// checkedEnvelope は、ヘッダーを読み、要求するコストを上限と照らし合わせ終えた envelope。
+type checkedEnvelope struct {
+	header     []byte
+	params     Params
+	nonce      []byte
+	ciphertext []byte
+}
+
+// checkWithin は sealed のヘッダーを読み、要求するコストが limits を超えないことを
+// 確かめる。鍵を導く前に断るので、上限を超える envelope には何も費やさない。
+func checkWithin(sealed []byte, limits Limits) (checkedEnvelope, error) {
+	header, params, rest, err := readHeader(sealed)
+	if err != nil {
+		return checkedEnvelope{}, err
+	}
 	if params.Time > limits.Time || params.Memory > limits.MemoryKiB || params.Threads > limits.Threads {
-		return nil, Key{}, ErrCostRefused
+		return checkedEnvelope{}, ErrCostRefused
 	}
 	if len(rest) < nonceLength {
-		return nil, Key{}, ErrNotAnEnvelope
+		return checkedEnvelope{}, ErrNotAnEnvelope
 	}
-	nonce, ciphertext := rest[:nonceLength], rest[nonceLength:]
+	return checkedEnvelope{
+		header: header, params: params,
+		nonce: rest[:nonceLength], ciphertext: rest[nonceLength:],
+	}, nil
+}
 
-	// AcceptedFromRemote は認証前のネットワーク入力に使う上限であり、同じ入力を
-	// 並列に投げられても低メモリ端末の使用量が線形に増えないよう直列化する。
-	if limits == AcceptedFromRemote {
-		remoteDerivations <- struct{}{}
-		defer func() { <-remoteDerivations }()
-	}
-	material := derive(passphrase, params)
+// open は passphrase から鍵を導いて復号する。
+func (e checkedEnvelope) open(passphrase string) ([]byte, Key, error) {
+	material := derive(passphrase, e.params)
 	published := false
 	defer func() {
 		if !published {
@@ -308,12 +350,29 @@ func OpenWithin(sealed []byte, passphrase string, limits Limits) ([]byte, Key, e
 	if err != nil {
 		return nil, Key{}, err
 	}
-	plaintext, err := gcm.Open(nil, nonce, ciphertext, header)
+	plaintext, err := gcm.Open(nil, e.nonce, e.ciphertext, e.header)
 	if err != nil {
 		return nil, Key{}, ErrWrongPassphrase
 	}
 	published = true
-	return plaintext, Key{material: material, params: params}, nil
+	return plaintext, Key{material: material, params: e.params}, nil
+}
+
+// MAC は、この鍵から purpose ごとに導いた鍵で message の HMAC-SHA256 を返す。
+// 暗号化の鍵をそのまま MAC に使い回さず、用途ごとに HKDF で分けるので、ある用途の
+// MAC がほかの用途の鍵や暗号文について何も明かさない。
+func (k Key) MAC(purpose string, message []byte) ([]byte, error) {
+	if len(k.material) != derivedKeyLength {
+		return nil, ErrNotAnEnvelope
+	}
+	subkey, err := hkdf.Key(sha256.New, k.material, nil, purpose, sha256.Size)
+	if err != nil {
+		return nil, err
+	}
+	defer clear(subkey)
+	mac := hmac.New(sha256.New, subkey)
+	mac.Write(message)
+	return mac.Sum(nil), nil
 }
 
 func newGCM(material []byte) (cipher.AEAD, error) {

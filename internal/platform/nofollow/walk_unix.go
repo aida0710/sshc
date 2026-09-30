@@ -124,9 +124,17 @@ func openWalkDirectoryAt(parent *os.File, component string, readable bool) (*os.
 }
 
 func openRegularAt(parent *os.File, component string) (*os.File, error) {
-	fd, err := unix.Openat(int(parent.Fd()), component, unix.O_RDONLY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
+	// FIFO を O_NONBLOCK なしで開くと、書き手が現れるまで open が戻らない。
+	// 非ブロックで開いてからブロックに戻せば、FIFO も呼び出し側の「通常ファイル
+	// ではない」という判定まで進む。通常ファイルの読み書きは O_NONBLOCK に影響
+	// されない。
+	fd, err := unix.Openat(int(parent.Fd()), component, unix.O_RDONLY|unix.O_CLOEXEC|unix.O_NOFOLLOW|unix.O_NONBLOCK, 0)
 	if err != nil {
 		return nil, classifyOpenError(parent, component, err)
+	}
+	if err := unix.SetNonblock(fd, false); err != nil {
+		_ = unix.Close(fd)
+		return nil, err
 	}
 	return fileFromDescriptor(fd, component)
 }

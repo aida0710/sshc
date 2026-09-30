@@ -141,7 +141,7 @@ func (t *tracer) banner(message string) {
 	}
 }
 
-// since は、始まりからの経過を返す。Full のときだけ意味を持つ。
+// since は、始まりからの経過を返す。診断の水準にかかわらず同じ値を返す。
 func (t *tracer) since(start time.Time) time.Duration { return t.now().Sub(start) }
 
 // enabled は、この level の診断が有効かを返す。

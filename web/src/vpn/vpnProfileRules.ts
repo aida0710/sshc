@@ -12,7 +12,7 @@ import type { VPNFieldError, VPNFieldReason } from "./vpnFieldErrors";
 // そのテストが落ちる。検査の順番も Go と同じにする。最初に断られる項目が変わるからである。
 //
 // Go は len で UTF-8 のバイト数を数えるので、長さはここもバイト数で数える。API の
-// maxLength（送る前の検査は UTF-16 の長さで数える）より厳しいか同じなので、ここを
+// maxLength（送る前の検査は文字数で数える）より厳しいか同じなので、ここを
 // 通った値は送る前の検査でも断られない。
 
 // maxProfileNameLength は、コンテナ名とソケットのパスに入る長さである。

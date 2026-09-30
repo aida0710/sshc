@@ -49,11 +49,11 @@ func readVPNConfigFile(wanted vpnConfigFile) ([]byte, error) {
 	// 上限より1バイト多く読み、上限を超えたかどうかを知る。
 	config, err := io.ReadAll(io.LimitReader(file, int64(wanted.limit)+1))
 	if err != nil {
-		zeroBytes(config)
+		clear(config)
 		return nil, err
 	}
 	if len(config) > wanted.limit {
-		zeroBytes(config)
+		clear(config)
 		return nil, vpnConfigInputError(&vpn.FieldError{
 			Kind: wanted.kind, Field: wanted.field, Reason: vpn.ReasonTooLong, Limit: wanted.limit,
 		})

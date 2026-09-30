@@ -33,6 +33,11 @@ var (
 	// ErrStorageBusy は、別のworkspace更新が完了せずvaultを書き込めないことを報告する。
 	// HTTP層へstorage実装を公開せず、利用者に再試行可能な競合として伝える境界である。
 	ErrStorageBusy = storage.ErrWorkspaceBusy
+	// ErrTooManyBackups は、世代バックアップが多すぎて、1 回のトランザクションで
+	// 暗号化し直せないことを報告する。マスターパスワード変更と、未対応の vault の
+	// 復旧・リセットはバックアップをすべて暗号化し直すので、件数が storage の上限を
+	// 超えると何も書かずに断る。HTTP 層へ storage 実装を公開しない境界である。
+	ErrTooManyBackups = storage.ErrTransactionTooLarge
 	// ErrRecoveryNotNeeded は現行vaultに対する復旧・再作成を拒否する。復旧APIが
 	// 通常のvaultを置き換える破壊的な近道にならないための境界である。
 	ErrRecoveryNotNeeded = errors.New("the current vault does not need format recovery")
@@ -48,7 +53,17 @@ const IdleTimeout = 12 * time.Hour
 // Service は、プロセスの寿命のあいだ、開いた vault を所有する。
 //
 // 導出された鍵はこの構造体で保持し、ログやAPIへ返さない。パスワードなしの
-// 場合だけ、導出元となる端末専用の乱数をローカルファイルへ保存する。
+// 場合だけ、導出元となるマシン専用の乱数をローカルファイルへ保存する。
+//
+// 復号した値を外へ返すのは次のメソッドだけである。値を返す経路を足すときは
+// ここへ並べ、監査の対象から漏れないようにする。
+//   - BoundFor、KeyPassphraseFor: 接続に使うパスワード、TOTP の provisioning
+//     data、鍵のパスフレーズ。埋め込みターミナルと /cli/connect が使う。
+//   - Credential、TOTPCodes: 名前付きの認証情報の値（reveal）と TOTP のコード。
+//   - VPNSecrets: VPN プロファイルのシークレット。
+//   - SyncSettings: 同期の設定と同期の鍵。
+//   - TravelDocument: 同期で持ち出す、復号した vault 文書。
+//   - OpenDocument: vault の鍵で封をしたアプリケーションの文書（snippets など）。
 type Service struct {
 	workspace    *storage.Workspace
 	transactions *storage.Manager
@@ -61,13 +76,13 @@ type Service struct {
 	// よう注入する。
 	sleep func(time.Duration)
 
-	// mutationMu は vault の disk と memory のバージョンをまたぐ変更を直列化する。storage
-	// commit はバックアップを暗号化するために下の mu を再取得するので、commit 中に保持
+	// mutationMutex は vault の disk と memory のバージョンをまたぐ変更を直列化する。storage
+	// commit はバックアップを暗号化するために下の mutex を再取得するので、commit 中に保持
 	// するのはこちらだけである。
-	mutationMu   sync.Mutex
-	mu           sync.Mutex
-	vault        *Vault
-	passwordless bool
+	mutationMutex sync.Mutex
+	mutex         sync.Mutex
+	vault         *Vault
+	passwordless  bool
 	// backupVaultは、未commitの候補鍵で世代backupを封じる間だけ存在する。
 	// open/useはこれを返さないため、diskのcommit pointより先に候補が公開されない。
 	backupVault *Vault
@@ -94,6 +109,18 @@ type Service struct {
 	// key as the vault. They participate in password rotation atomically, but
 	// keep their own plaintext schemas and package ownership.
 	protectedDocuments []ProtectedDocument
+	// afterLock は、開いていた vault が閉じた直後に呼ぶ（SetAfterLock）。nil なら
+	// 何もしない。
+	afterLock func()
+	// afterUnlock は、Unlock が vault を開いた直後に呼ぶ（SetAfterUnlock）。nil なら
+	// 何もしない。
+	afterUnlock func()
+	// keyBoundMigrationFailureReport は、ロックを解除したときの古い形の移行の失敗を
+	// 受け取る（SetReportKeyBoundMigrationFailure）。nil なら何もしない。
+	keyBoundMigrationFailureReport func(error)
+	// travelDigestRekey は、vault の鍵が変わる変更に載せる同期の記録の書き換えを
+	// 作る（SetTravelDigestRekey）。nil なら何も載せない。
+	travelDigestRekey func(TravelDigestRekey) ([]storage.Change, error)
 }
 
 // ProtectedDocument registers one master-key encrypted application document.
@@ -134,8 +161,8 @@ func (s *Service) RegisterProtectedDocument(document ProtectedDocument) error {
 	if err != nil {
 		return err
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 	for _, existing := range s.protectedDocuments {
 		if existing.Path == resolved {
 			return errors.New("protected document is already registered")
@@ -149,8 +176,8 @@ func (s *Service) RegisterProtectedDocument(document ProtectedDocument) error {
 // SealDocument and OpenDocument protect an application-owned document with
 // the current master key without exposing that key.
 func (s *Service) SealDocument(plaintext []byte) ([]byte, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 	vault := s.use()
 	if vault == nil {
 		return nil, ErrLocked
@@ -159,8 +186,8 @@ func (s *Service) SealDocument(plaintext []byte) ([]byte, error) {
 }
 
 func (s *Service) OpenDocument(sealed []byte) ([]byte, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 	vault := s.use()
 	if vault == nil {
 		return nil, ErrLocked

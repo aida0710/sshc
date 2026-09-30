@@ -24,19 +24,19 @@ var shortcutFunction = regexp.MustCompile(`^F([1-9]|1[0-2])$`)
 var shortcutActions = []string{"palette", "terminalSearch", "copy", "paste", "nextSession", "previousSession", "home", "sftp"}
 
 func validateShortcutPresets(presets []ShortcutPreset) error {
-	if len(presets) > 64 {
+	if len(presets) > MaxShortcutPresets {
 		return ErrShortcutPresets
 	}
 	ids := map[string]bool{}
 	for _, p := range presets {
-		if !shortcutID.MatchString(p.ID) || p.ID == "default" || ids[p.ID] || strings.TrimSpace(p.Name) == "" || utf8.RuneCountInString(p.Name) > 80 || strings.ContainsAny(p.Name, "\r\n\x00") || len(p.Bindings) != len(shortcutActions) {
+		if !shortcutID.MatchString(p.ID) || p.ID == "default" || ids[p.ID] || strings.TrimSpace(p.Name) == "" || utf8.RuneCountInString(p.Name) > MaxShortcutPresetNameRunes || strings.ContainsAny(p.Name, "\r\n\x00") || len(p.Bindings) != len(shortcutActions) {
 			return ErrShortcutPresets
 		}
 		ids[p.ID] = true
 		seen := map[string]bool{}
 		for _, action := range shortcutActions {
 			keys, ok := p.Bindings[action]
-			if !ok || keys == nil || len(keys) > 3 {
+			if !ok || keys == nil || len(keys) > MaxShortcutKeysPerAction {
 				return ErrShortcutPresets
 			}
 			for _, key := range keys {

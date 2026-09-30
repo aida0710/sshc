@@ -28,6 +28,7 @@ func TestFailureDetailKeepsAStableSafeCause(t *testing.T) {
 		{name: "cost", err: ErrCostRefused, want: "snapshot_cost_refused"},
 		{name: "remote size", err: ErrObjectTooLarge, want: "snapshot_too_large"},
 		{name: "snapshot size", err: ErrSnapshotTooLarge, want: "snapshot_too_large"},
+		{name: "unportable local name", err: &UnportablePathError{Path: "aux.conf"}, want: "sync_local_path_unportable"},
 		{name: "unknown internal", err: errors.New("private implementation detail"), want: "sync_internal_failed"},
 	}
 	for _, test := range tests {

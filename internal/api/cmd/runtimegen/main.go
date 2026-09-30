@@ -205,6 +205,13 @@ function resolve(schema: Schema): Schema {
   return componentSchemas[name] ?? invalid();
 }
 
+// characterCount は、JSON Schema の minLength と maxLength が数える単位（コードポイント）で
+// 長さを返す。value.length は UTF-16 の単位で数えるので、絵文字のような補助面の文字を
+// 2 と数え、Go が rune で数えて通した値を断ってしまう。
+function characterCount(value: string): number {
+  return Array.from(value).length;
+}
+
 function validFormat(format: unknown, value: string): boolean {
   if (format === undefined || format === "binary") return true;
   if (format !== "date-time") return true;
@@ -251,8 +258,8 @@ function validate(schemaInput: Schema, value: unknown, depth = 0): void {
   switch (schema.type) {
     case "string": {
       if (typeof value !== "string") invalid();
-      if (typeof schema.minLength === "number" && value.length < schema.minLength) invalid();
-      if (typeof schema.maxLength === "number" && value.length > schema.maxLength) invalid();
+      if (typeof schema.minLength === "number" && characterCount(value) < schema.minLength) invalid();
+      if (typeof schema.maxLength === "number" && characterCount(value) > schema.maxLength) invalid();
       if (typeof schema.pattern === "string" && !new RegExp(schema.pattern, "u").test(value)) invalid();
       if (!validFormat(schema.format, value)) invalid();
       return;

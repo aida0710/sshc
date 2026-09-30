@@ -69,6 +69,12 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 		return nil, fmt.Errorf("workspace state: %w", err)
 	}
 	transactions := storage.NewManager(workspace, time.Now, dependencies.Random)
+	// 保持の上限を超えた変更の履歴と控えを消す。変更が完了するたびにも消すが、長く
+	// 変更の無かったワークスペースで期間を過ぎたものは、ここで消す。消せなくても
+	// 起動は止めない。
+	if err := transactions.PruneHistory(); err != nil && dependencies.Logger != nil {
+		dependencies.Logger.Error("prune the change history", "error", err)
+	}
 	configService := application.NewService(workspace, transactions)
 	keyService, keyTransactions := buildKeyService(workspace, dependencies, configService)
 	configService.SetKeyPassphraseVerifier(keyService)
@@ -194,9 +200,23 @@ func newEngineServices(dependencies Dependencies) (*engineServices, error) {
 
 	keyService.SetStoredPassphrase(vault.KeyPassphraseFor)
 
+	reloadVaultAfterRecovery := func(paths []string) {
+		if err := vault.ReloadAfterRecovery(paths); err != nil && dependencies.Logger != nil {
+			dependencies.Logger.Error("reload vault after recovering a transaction", "error", err)
+		}
+	}
 	for _, manager := range []*storage.Manager{transactions, keyTransactions} {
 		manager.Seal = vault.SealBackup
 		manager.Unseal = vault.OpenBackup
+		manager.AfterRecovery = reloadVaultAfterRecovery
+	}
+	// 古いバージョンが残したスニペットと控えを移せなくても、ロックの解除は止めない。
+	// 何度やっても移せないものに気付けるよう、ログに残す。起動時の自動のロック解除にも
+	// 効くよう、AutoUnlock より前に取り付ける。
+	if dependencies.Logger != nil {
+		vault.SetReportKeyBoundMigrationFailure(func(err error) {
+			dependencies.Logger.Error("migrate the snippets and backups left by an older version", "error", err)
+		})
 	}
 	if err := vault.AutoUnlock(); err != nil && !errors.Is(err, secret.ErrUnsupportedVersion) {
 		return nil, fmt.Errorf("auto-unlock vault: %w", err)
@@ -260,6 +280,7 @@ func buildSync(
 			SealVault:          vault.AdoptTravelDocument,
 			EmptyVaultDocument: vault.EmptyTravelDocument,
 			VaultAdopted:       vault.Reload,
+			KeyedTravelDigest:  vault.KeyedTravelDigest,
 			OpenSnippets:       snippetStore.TravelDocument,
 			SealSnippets:       snippetStore.AdoptTravelDocument,
 			SecretMutation:     vault.WithStableSnapshot,
@@ -273,6 +294,22 @@ func buildSync(
 	if err != nil {
 		return nil, nil, fmt.Errorf("remote sync integration: %w", err)
 	}
+
+	// 同期先のアクセスキーとシークレットは Vault の中にある。Vault が閉じたら
+	// メモリからも手放す。
+	vault.SetAfterLock(syncService.Forget)
+	// 同期状態に残す Vault 文書の digest は Vault の鍵で鍵付きにしてある。鍵を変える
+	// 変更は、同じトランザクションでその値を新しい鍵へ移す。
+	vault.SetTravelDigestRekey(syncService.RekeyTravelDigest)
+	// 鍵付きにする前の版が書いた素の digest は、Vault を開いたときに移す。起動時に
+	// 自動でロックを解除した Vault は、この配線より前に開いているので、ここで一度移す。
+	migrateTravelDigest := func() {
+		if err := syncService.MigrateTravelDigest(); err != nil && !errors.Is(err, secret.ErrLocked) && dependencies.Logger != nil {
+			dependencies.Logger.Error("migrate the vault digest in the synchronization state", "error", err)
+		}
+	}
+	vault.SetAfterUnlock(migrateTravelDigest)
+	migrateTravelDigest()
 
 	autoSync := remotesync.NewAuto(syncService, remotesync.AutoInterval,
 		func() string { return time.Now().UTC().Format(time.RFC3339) })

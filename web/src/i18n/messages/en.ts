@@ -1082,6 +1082,8 @@ export const en = {
     "I understand that saved passwords, saved key passphrases, and synchronization settings will be reset. SSH configuration and key files remain.",
   "lock.resetUnsupported": "Create an empty vault",
   "lock.resetFailed": "The unsupported vault could not be safely replaced.",
+  "lock.tooManyBackups":
+    "There are too many local backups to re-encrypt in one change. Nothing was changed. Delete old folders from ~/.ssh/sshc/backups and try again. Deleted backups can no longer be restored.",
   "lock.failed": "The vault could not be opened.",
   "section.sync": "Sync",
   "section.history": "History",
@@ -1381,8 +1383,8 @@ export const en = {
   "history.completed": "Completed changes",
   "history.empty": "No change has been made through this application yet.",
   "history.restorePath": "Restore {path}",
-  "history.backupsKept":
-    "Generation backups are kept in ~/.ssh/sshc/backups and are never deleted automatically. A restore is itself a new transaction, so it can be undone the same way.",
+  "history.backupRetention":
+    "Previous versions of changed files are kept in ~/.ssh/sshc/backups for the newest 200 changes, as long as they are no older than 90 days; older ones are deleted automatically. A restore is itself a new transaction, so it can be undone the same way.",
 
   "notice.complex_external_rule":
     "This value cannot be edited in the simplified view because its source uses a wildcard, negation, Match block, or duplicate alias. The source is shown instead.",
@@ -1640,7 +1642,7 @@ export const en = {
   "sync.snapshotCostRefused":
     "This snapshot requires more decryption work than the safety limit allows.",
   "sync.snapshotSchemaUnsupported":
-    "This snapshot uses a format unsupported by this version of sshc. Update to the same or a newer version than the machine that created it.",
+    "This snapshot uses a format unsupported by this version of sshc. If it is newer, update to the same or a newer version than the machine that created it. If it was created by sshc before v0.24.0, overwrite it with Force send from a machine allowed to send.",
   "sync.snapshotRejected":
     "The downloaded data is not a valid sshc snapshot or is damaged. Nothing was overwritten.",
   "sync.snapshotTooLarge":
@@ -1655,6 +1657,10 @@ export const en = {
     "Another operation is updating settings on this machine. Try again after it finishes.",
   "sync.pendingTransaction":
     "An interrupted change is still pending, so sync could not run. Complete or roll it back in History, then try again.",
+  "sync.localPathUnportable":
+    "A file in ~/.ssh has a name other machines cannot use as the same name (a Windows reserved name, a name containing a character Windows does not allow in file names such as : or ?, a name ending in a period or space, or a name that differs from another only in letter case), so nothing was sent. Rename it or exclude it in Files to sync.",
+  "sync.localPathUnportableAt":
+    "~/.ssh/{path} has a name other machines cannot use as the same name (a Windows reserved name, a name containing a character Windows does not allow in file names such as : or ?, a name ending in a period or space, or a name that differs from another only in letter case), so nothing was sent. Rename it or exclude it in Files to sync.",
   "sync.endpointPath":
     "The endpoint is the account address only — no bucket name and no path. Put the bucket name in the field below.",
   "sync.autoHint.both":
@@ -2563,12 +2569,12 @@ export const en = {
   "keys.agentIdentitiesCaption": "Keys registered with ssh-agent",
   "keys.colComment": "Comment",
   "keys.agentUnavailable":
-    "This process cannot connect to ssh-agent, so keys cannot be registered. Both the ssh-add command and an SSH_AUTH_SOCK that identifies the agent are required.",
+    "This process cannot connect to ssh-agent, so keys cannot be registered. On macOS and Linux, set sshc's SSH_AUTH_SOCK environment variable to the ssh-agent socket. On Windows, start the OpenSSH Authentication Agent service.",
   "keys.agentDelegationsNote":
     "These configuration entries use a key from ssh-agent instead of referencing a key file:",
   "keys.registerHeading": "Add to ssh-agent: {path}",
   "keys.registerNote":
-    "The passphrase is passed to ssh-add through standard input, so it is not included in the command line or child-process environment. sshc does not store it or retain it after this operation.",
+    "sshc uses the passphrase only to decrypt the key and gives ssh-agent the decrypted key. sshc does not store the passphrase or retain it after this operation.",
   "keys.keyPassphrase": "Key passphrase",
   "keys.lifetime": "Lifetime",
   "keys.lifetimeForever": "Until ssh-agent exits",

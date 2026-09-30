@@ -26,7 +26,8 @@ const (
 var (
 	// ErrInsecureEndpoint は、平文で通信する行き先を断る。
 	ErrInsecureEndpoint = objectstore.ErrInsecureEndpoint
-	// ErrRefused は、相手が受け付けなかったことを報告する。
+	// ErrRefused は、相手が受け付けなかったことのうち、下の4つの個別の拒否に
+	// 当たらないものを報告する。4つはこれに一致しない。
 	ErrRefused = objectstore.ErrRefused
 	// ErrAuthenticationFailed は、object storeが資格情報を認証できなかったことを報告する。
 	ErrAuthenticationFailed = objectstore.ErrAuthenticationFailed
@@ -61,18 +62,18 @@ func IsLocalChange(err error) bool {
 
 // NewClient は、この設定で通信する相手を組む。
 //
-// 組み立てるのはここである。HTTP 層が自分で組んでいた頃、到達確認と保存後の
-// 設定とで別々に組まれており、片方だけが endpoint の末尾スラッシュを落としていた。
+// 組み立てるのはここだけである。到達確認と保存後の設定が同じ組み立てを通るので、
+// endpoint の末尾スラッシュのような正規化が片方だけに掛かることがない。
 func NewClient(config Config, credentials Credentials) *Client {
 	return &Client{
 		Endpoint: config.Endpoint, Bucket: config.Bucket,
-		Region: config.Region, Creds: credentials,
+		Region: config.Region, Credentials: credentials,
 	}
 }
 
 // ValidateKey は、暗号化処理の前に鍵の強度を検証する。
-func ValidateKey(key string) error {
-	derived, err := envelope.Derive(key)
+func ValidateKey(syncKey string) error {
+	derived, err := envelope.Derive(syncKey)
 	if err != nil {
 		return err
 	}

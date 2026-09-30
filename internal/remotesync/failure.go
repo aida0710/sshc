@@ -58,9 +58,11 @@ func is(targets ...error) func(error) bool {
 }
 
 // failureRules は、この package のあらゆる失敗を code と kind に写す唯一の表である。
-// HTTP の問題応答と自動同期の表示が同じ表を使うので、同じ失敗が場所によって別の
-// 名前になることはない。順序にも意味がある: io.ErrUnexpectedEOF は net.Error に
-// 包まれて届くことがあり、ネットワーク一般より先に見る。
+// HTTP の問題応答と自動同期の失敗（AutoFailed の Detail）が同じ表を使うので、同じ
+// 失敗が場所によって別の名前になることはない。自動同期が利用者の判断を待つ理由
+// （AutoBlocked の Detail の remote_moved、remote_deleted、conflicts、removals）は
+// この表の外の語で、auto.go が決める。順序にも意味がある: io.ErrUnexpectedEOF は
+// net.Error に包まれて届くことがあり、ネットワーク一般より先に見る。
 var failureRules = []failureRule{
 	{is(ErrNotConfigured), Failure{"sync_not_configured", FailureConflict}},
 	{is(ErrRemoteMoved), Failure{"sync_remote_moved", FailureConflict}},
@@ -99,6 +101,7 @@ var failureRules = []failureRule{
 	{IsLocalChange, Failure{"sync_local_changed", FailureConflict}},
 	// ErrPendingTransaction は ErrWorkspaceBusy を包む。待っても解消しないので、先に分ける。
 	{is(ErrPendingTransaction), Failure{"sync_pending_transaction", FailureConflict}},
+	{is(ErrLocalPathUnportable), Failure{"sync_local_path_unportable", FailureConflict}},
 	{is(ErrWorkspaceBusy), Failure{"sync_workspace_busy", FailureConflict}},
 }
 

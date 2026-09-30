@@ -23,7 +23,7 @@ func (h SyncHandlers) Push(c *echo.Context) error {
 	if err != nil {
 		return syncProblem(c, err)
 	}
-	result, err := h.Service.PushUsing(c.Request().Context(), h.keyProvider(), message)
+	result, err := h.Service.PushUsing(c.Request().Context(), h.syncKeyProvider(), message)
 	if err != nil {
 		return syncKeyProblem(c, err)
 	}
@@ -74,7 +74,7 @@ func (h SyncHandlers) ForcePush(c *echo.Context) error {
 		remotesync.ForcePushTarget, confirmation.Evidence); !allowed {
 		return response
 	}
-	result, err := h.Service.ForcePushUsing(c.Request().Context(), h.keyProvider(), confirmation, message)
+	result, err := h.Service.ForcePushUsing(c.Request().Context(), h.syncKeyProvider(), confirmation, message)
 	if err != nil {
 		return syncKeyProblem(c, err)
 	}
@@ -128,23 +128,23 @@ func (h SyncHandlers) Pull(c *echo.Context) error {
 	var err error
 	if request.Apply != nil && *request.Apply {
 		if acceptRemoteHead {
-			result, err = h.Service.PullAndApplyRemoteHeadUsing(c.Request().Context(), h.keyProvider(),
+			result, err = h.Service.PullAndApplyRemoteHeadUsing(c.Request().Context(), h.syncKeyProvider(),
 				*request.ExpectedETag, *request.ExpectedRevision)
 		} else {
-			result, err = h.Service.PullAndApplyUsing(c.Request().Context(), h.keyProvider(), resolve, historyKey,
+			result, err = h.Service.PullAndApplyUsing(c.Request().Context(), h.syncKeyProvider(), resolve, historyKey,
 				*request.ExpectedETag, *request.ExpectedRevision)
 		}
 	} else {
-		key, ok, keyErr := h.sealingKey(c)
+		syncKey, ok, keyErr := h.requireSyncKey(c)
 		if !ok {
 			return keyErr
 		}
 		if acceptRemoteHead {
-			result, err = h.Service.PullRemoteHead(c.Request().Context(), key)
+			result, err = h.Service.PullRemoteHead(c.Request().Context(), syncKey)
 		} else if historyKey == "" {
-			result, err = h.Service.Pull(c.Request().Context(), key, resolve)
+			result, err = h.Service.Pull(c.Request().Context(), syncKey, resolve)
 		} else {
-			result, err = h.Service.PullHistory(c.Request().Context(), key, historyKey, resolve)
+			result, err = h.Service.PullHistory(c.Request().Context(), syncKey, historyKey, resolve)
 		}
 	}
 	if err != nil && !errors.Is(err, remotesync.ErrNothingToApply) {

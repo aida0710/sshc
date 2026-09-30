@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"sshc/internal/config"
+	"sshc/internal/configresolver"
 	"sshc/internal/effective"
 	"sshc/internal/platform"
 	"sshc/internal/sshclient"
@@ -73,7 +74,7 @@ func NewService(
 ) *Service {
 	return &Service{
 		Workspace:      workspace,
-		Resolver:       storage.NewResolver(workspace),
+		Resolver:       configresolver.ForWorkspace(workspace),
 		Reachability:   Reachability{Dialer: &net.Dialer{}},
 		Authentication: Authentication{Dial: probe},
 		Facts:          facts,
@@ -160,11 +161,12 @@ func (s *Service) ConfigCheck() (ConfigReport, error) {
 	return report, nil
 }
 
-// Inspect は alias ひとつについて、エンジン自身の射影、ProxyJump の経路、
-// 実行されうるディレクティブの一覧を返す。
+// Inspect は alias ひとつを、設定を読むだけで説明する。
 //
-// 設定を読むだけで ssh もディレクティブのコマンドも実行しないので、呼び出し側の
-// 確認は要らない。
+// ssh も設定に書かれたコマンドも実行しないので、呼び出し側の確認は要らない。返すのは、
+// エンジン自身の射影、ProxyJump で経由するホストの並び、設定から届く実行を伴う
+// ディレクティブの一覧（Report）である。画面はこの一覧を見せてから、認証テストの前に
+// 確認を求める。
 func (s *Service) Inspect(alias string) (Inspection, error) {
 	if err := validate.Alias(alias); err != nil {
 		return Inspection{}, err
@@ -227,8 +229,9 @@ func (s *Service) Reach(ctx context.Context, alias string) (ReachabilityResult, 
 
 // Authenticate は、alias に対する認証テストを実行する。
 //
-// 結果の Detail はユーザーに表示されるので、先にホームディレクトリを "~" に
-// 書き換える。鍵を読めなかった理由には IdentityFile の絶対パスが入るため、
+// 認証はプロセス内の probe が一度だけ試し、外部のプログラムは起動しない。
+// 結果の Detail は利用者に表示するので、先にホームディレクトリを "~" に書き換える。
+// 鍵を読めなかった理由やサーバーの案内には IdentityFile などの絶対パスが入りうるので、
 // そうしないとアカウント名がレスポンスの本文へ運ばれてしまう。
 func (s *Service) Authenticate(ctx context.Context, alias string, acknowledged bool) (AuthenticationResult, error) {
 	if err := validate.Alias(alias); err != nil {

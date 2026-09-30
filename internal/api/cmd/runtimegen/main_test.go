@@ -2,6 +2,7 @@ package main
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -43,5 +44,26 @@ func TestMarshalStableOrdersSchemaKeys(t *testing.T) {
 	}
 	if string(got) != `{"a":2,"z":1}` {
 		t.Fatalf("marshalStable() = %s", got)
+	}
+}
+
+// JSON Schema の minLength と maxLength は文字（コードポイント）で数え、Go の検査も
+// rune で数える。生成する検査が UTF-16 の単位（value.length）で数えると、絵文字を
+// 含む正しい応答（同期の履歴のメッセージなど）を断り、その画面が読めなくなる。
+func TestGeneratedStringLengthChecksCountCodePoints(t *testing.T) {
+	for _, keyword := range []string{"minLength", "maxLength"} {
+		for _, comparison := range []string{" < ", " > "} {
+			if strings.Contains(runtimeTemplate, "value.length"+comparison+"schema."+keyword) {
+				t.Errorf("the generated %s check counts UTF-16 units", keyword)
+			}
+		}
+	}
+	for _, check := range []string{
+		"characterCount(value) < schema.minLength",
+		"characterCount(value) > schema.maxLength",
+	} {
+		if !strings.Contains(runtimeTemplate, check) {
+			t.Errorf("the generated validator does not contain %q", check)
+		}
 	}
 }

@@ -48,7 +48,7 @@ func integrationBucket(t *testing.T) (objectstore.Client, string) {
 		Endpoint: endpoint,
 		Bucket:   bucket,
 		Region:   region,
-		Creds: objectstore.Credentials{
+		Credentials: objectstore.Credentials{
 			AccessKeyID:     os.Getenv("SSHC_TEST_S3_KEY"),
 			SecretAccessKey: os.Getenv("SSHC_TEST_S3_SECRET"),
 		},
@@ -119,12 +119,12 @@ func realInstallationAt(t *testing.T, objectPath string, files map[string]string
 		Endpoint: endpoint, Bucket: client.Bucket, Path: objectPath, Region: client.Region,
 		Direction: remotesync.DirectionBoth,
 	}
-	if err := service.ConfigureForTest(config, client.Creds, &client); err != nil {
+	if err := service.ConfigureForTest(config, client.Credentials, &client); err != nil {
 		t.Fatal(err)
 	}
 	return installation{
 		service: service, workspace: workspace, manager: manager, home: home,
-		config: config, creds: client.Creds, client: &client,
+		config: config, credentials: client.Credentials, client: &client,
 	}
 }
 
@@ -311,7 +311,7 @@ func TestAgainstARealBucketFreshReceiveOnlySetupVerifiesAndPulls(t *testing.T) {
 		t.Fatalf("InspectSetupTarget = %v", err)
 	}
 	persisted := false
-	if err := receiver.CompleteSetup(context.Background(), config, sender.creds, &client, inspection, syncPassphrase, func() error {
+	if err := receiver.CompleteSetup(context.Background(), config, sender.credentials, &client, inspection, syncPassphrase, func() error {
 		persisted = true
 		return nil
 	}); err != nil {

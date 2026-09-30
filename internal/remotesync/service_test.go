@@ -8,10 +8,12 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"sort"
 	"strconv"
@@ -25,6 +27,7 @@ import (
 	"sshc/internal/platform/windowsacl/acltest"
 	"sshc/internal/remotesync"
 	"sshc/internal/secret"
+	"sshc/internal/secret/secrettest"
 	"sshc/internal/storage"
 )
 
@@ -143,7 +146,7 @@ func (b *fakeBucket) handler() http.HandlerFunc {
 			started, release := b.listStarted, b.releaseList
 			// A blocked listing models one in-flight BucketStatus request. Do not
 			// block a concurrent Push that happens to list history as part of its
-			// own work; the test is checking operationMu, not serialising S3.
+			// own work; the test is checking operationMutex, not serialising S3.
 			if release != nil {
 				b.listStarted = nil
 				b.releaseList = nil
@@ -305,9 +308,9 @@ type installation struct {
 
 	// Configure が何で呼ばれたか。テストがフィクスチャを組み立て直さずに、
 	// そのフィールドをひとつだけ変えられるようにするためである。
-	config remotesync.Config
-	creds  objectstore.Credentials
-	client *objectstore.Client
+	config      remotesync.Config
+	credentials objectstore.Credentials
+	client      *objectstore.Client
 }
 
 func defaultIntegrationHooks() remotesync.IntegrationHooks {
@@ -316,6 +319,7 @@ func defaultIntegrationHooks() remotesync.IntegrationHooks {
 		SealVault:          func(document []byte) ([]byte, error) { return document, nil },
 		EmptyVaultDocument: func() ([]byte, error) { return []byte("empty-vault"), nil },
 		VaultAdopted:       func() error { return nil },
+		KeyedTravelDigest:  func(digest string) (string, error) { return "keyed-" + digest, nil },
 		OpenSnippets:       func() ([]byte, error) { return nil, nil },
 		SealSnippets:       func(document []byte) ([]byte, error) { return document, nil },
 		SecretMutation:     func(run func() error) error { return run() },
@@ -335,7 +339,7 @@ func (i *installation) replaceIntegrations(t *testing.T, configure func(*remotes
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := service.ConfigureForTest(i.config, i.creds, i.client); err != nil {
+	if err := service.ConfigureForTest(i.config, i.credentials, i.client); err != nil {
 		t.Fatal(err)
 	}
 	i.service = service
@@ -346,12 +350,18 @@ func (i *installation) replaceIntegrations(t *testing.T, configure func(*remotes
 func (i installation) direct(direction remotesync.Direction) {
 	config := i.config
 	config.Direction = direction
-	if err := i.service.ConfigureForTest(config, i.creds, i.client); err != nil {
+	if err := i.service.ConfigureForTest(config, i.credentials, i.client); err != nil {
 		panic(err)
 	}
 }
 
 func newInstallation(t *testing.T, bucket *fakeBucket, files map[string]string) installation {
+	t.Helper()
+	return newInstallationOn(t, bucket, files, storage.OSFileSystem{})
+}
+
+// newInstallationOn は、ワークスペースの読み書きを fileSystem に通すインストールを作る。
+func newInstallationOn(t *testing.T, bucket *fakeBucket, files map[string]string, fileSystem storage.FileSystem) installation {
 	t.Helper()
 	home := t.TempDir()
 	root := filepath.Join(home, ".ssh")
@@ -374,7 +384,7 @@ func newInstallation(t *testing.T, bucket *fakeBucket, files map[string]string) 
 		}
 	}
 
-	workspace, err := storage.NewWorkspace(storage.OSFileSystem{}, home)
+	workspace, err := storage.NewWorkspace(fileSystem, home)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -395,14 +405,14 @@ func newInstallation(t *testing.T, bucket *fakeBucket, files map[string]string) 
 	credentials := objectstore.Credentials{AccessKeyID: "AKID", SecretAccessKey: "secret"}
 	client := &objectstore.Client{
 		HTTP: server.Client(), Endpoint: server.URL, Bucket: "sshc", Region: "auto",
-		Creds: credentials,
+		Credentials: credentials,
 	}
 	if err := service.ConfigureForTest(config, credentials, client); err != nil {
 		t.Fatal(err)
 	}
 	return installation{
 		service: service, workspace: workspace, manager: manager, home: home,
-		config: config, creds: credentials, client: client,
+		config: config, credentials: credentials, client: client,
 	}
 }
 
@@ -469,14 +479,14 @@ func TestCompleteSetupVerifiesRemoteBeforePersisting(t *testing.T) {
 	}
 	persisted := 0
 	persist := func() error { persisted++; return nil }
-	if err := reader.service.CompleteSetup(context.Background(), reader.config, reader.creds, reader.client,
+	if err := reader.service.CompleteSetup(context.Background(), reader.config, reader.credentials, reader.client,
 		existing, "a wrong but sufficiently long synchronization key", persist); !errors.Is(err, remotesync.ErrWrongPassphrase) {
 		t.Fatalf("CompleteSetup with wrong key = %v, want ErrWrongPassphrase", err)
 	}
 	if persisted != 0 {
 		t.Fatalf("wrong key persisted settings %d times", persisted)
 	}
-	if err := reader.service.CompleteSetup(context.Background(), reader.config, reader.creds, reader.client,
+	if err := reader.service.CompleteSetup(context.Background(), reader.config, reader.credentials, reader.client,
 		existing, syncPassphrase, persist); err != nil {
 		t.Fatal(err)
 	}
@@ -500,7 +510,7 @@ func TestCompleteSetupRefusesOrphanedHistory(t *testing.T) {
 		t.Fatalf("inspection state = %q, want incomplete", inspection.State)
 	}
 	persisted := false
-	err = writer.service.CompleteSetup(context.Background(), writer.config, writer.creds, writer.client,
+	err = writer.service.CompleteSetup(context.Background(), writer.config, writer.credentials, writer.client,
 		inspection, syncPassphrase, func() error { persisted = true; return nil })
 	if !errors.Is(err, remotesync.ErrSetupTargetIncomplete) {
 		t.Fatalf("CompleteSetup = %v, want ErrSetupTargetIncomplete", err)
@@ -517,7 +527,7 @@ func TestPersistedRestoreCannotOverwriteAnExplicitBinding(t *testing.T) {
 	restoredCredentials := objectstore.Credentials{AccessKeyID: "STALE", SecretAccessKey: "stale"}
 	restoredClient := *installation.client
 	restoredClient.Bucket = restoredConfig.Bucket
-	restoredClient.Creds = restoredCredentials
+	restoredClient.Credentials = restoredCredentials
 
 	applied, err := installation.service.ConfigureIfUnconfigured(restoredConfig, restoredCredentials, &restoredClient)
 	if err != nil {
@@ -529,6 +539,34 @@ func TestPersistedRestoreCannotOverwriteAnExplicitBinding(t *testing.T) {
 	_, bucket, _, _ := installation.service.Target()
 	if bucket != installation.config.Bucket {
 		t.Fatalf("bucket = %q, want explicit %q", bucket, installation.config.Bucket)
+	}
+}
+
+// Forget は、アクセスキーとシークレットを含む接続一式を手放す。解錠後は、保存した
+// 設定から組み直せる。
+func TestForgetDropsTheCredentialsUntilTheBindingIsRestored(t *testing.T) {
+	installation := newInstallation(t, &fakeBucket{}, map[string]string{"config": "Host current\n"})
+
+	installation.service.Forget()
+	if installation.service.Configured() {
+		t.Fatal("a forgotten binding still reports itself configured")
+	}
+	if suffix := installation.service.AccessKeySuffix(); suffix != "" {
+		t.Fatalf("AccessKeySuffix = %q, want nothing after Forget", suffix)
+	}
+	if _, bucket, _, _ := installation.service.Target(); bucket != "" {
+		t.Fatalf("bucket = %q, want nothing after Forget", bucket)
+	}
+	if _, err := installation.service.PushUsing(context.Background(), keyOf(syncPassphrase), "after forget"); !errors.Is(err, remotesync.ErrNotConfigured) {
+		t.Fatalf("Push = %v, want ErrNotConfigured", err)
+	}
+
+	applied, err := installation.service.ConfigureIfUnconfigured(installation.config, installation.credentials, installation.client)
+	if err != nil || !applied {
+		t.Fatalf("ConfigureIfUnconfigured = %v, %v; want the binding restored", applied, err)
+	}
+	if !installation.service.Configured() {
+		t.Fatal("the restored binding is not configured")
 	}
 }
 
@@ -666,6 +704,51 @@ func TestSnippetApplyRejectsALocalEditMadeAfterPreview(t *testing.T) {
 	}
 }
 
+// 受信で置き換える前のsnippetの暗号文は、保管庫と同じく世代バックアップに残る。
+func TestAPullThatReplacesSnippetsKeepsThePreviousCiphertextAsABackup(t *testing.T) {
+	bucket := &fakeBucket{}
+	first := newInstallation(t, bucket, map[string]string{remotesync.SnippetsPath: "ciphertext-a"})
+	remoteDocument := []byte(`{"schemaVersion":1,"snippets":[{"command":"remote"}]}`)
+	first.replaceIntegrations(t, func(hooks *remotesync.IntegrationHooks) {
+		hooks.OpenSnippets = func() ([]byte, error) { return remoteDocument, nil }
+	})
+	if _, err := first.service.PushUsing(context.Background(), keyOf(syncPassphrase), ""); err != nil {
+		t.Fatal(err)
+	}
+
+	second := newInstallation(t, bucket, map[string]string{remotesync.SnippetsPath: "ciphertext-before-pull"})
+	localDocument := []byte(`{"schemaVersion":1,"snippets":[{"command":"local"}]}`)
+	second.replaceIntegrations(t, func(hooks *remotesync.IntegrationHooks) {
+		hooks.OpenSnippets = func() ([]byte, error) { return localDocument, nil }
+		hooks.SealSnippets = func(document []byte) ([]byte, error) { return append([]byte("sealed:"), document...), nil }
+	})
+	result, err := second.service.Pull(context.Background(), syncPassphrase, remotesync.ResolveRemote)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := applyPreview(second.service, remotesync.ResolveRemote, "", result); err != nil {
+		t.Fatal(err)
+	}
+	if got := second.read(t, remotesync.SnippetsPath); got != "sealed:"+string(remoteDocument) {
+		t.Fatalf("local snippet file = %q", got)
+	}
+
+	history, err := second.manager.History()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(history) == 0 || history[0].Operation != "sync.pull" {
+		t.Fatalf("latest transaction = %#v, want sync.pull", history)
+	}
+	backup, err := os.ReadFile(filepath.Join(history[0].BackupDir, filepath.FromSlash(remotesync.SnippetsPath)))
+	if err != nil {
+		t.Fatalf("the pull kept no backup of the replaced snippets: %v", err)
+	}
+	if string(backup) != "ciphertext-before-pull" {
+		t.Fatalf("snippet backup = %q, want the ciphertext before the pull", backup)
+	}
+}
+
 func TestCollectDoesNotFollowSymbolicLinks(t *testing.T) {
 	installation := newInstallation(t, &fakeBucket{}, map[string]string{"config": "Host bastion\n"})
 	outsideDirectory := t.TempDir()
@@ -702,13 +785,120 @@ func TestCollectRefusesAPathWindowsCannotRepresent(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Windows cannot create these source paths")
 	}
-	for _, name := range []string{"NUL.conf", "connections/COM1/key", "trailing.", "trailing "} {
+	for _, name := range []string{
+		"NUL.conf", "connections/COM1/key", "trailing.", "trailing ",
+		"keys/id:backup", "notes\x01", "a<b", `quote"x`, "pipe|x", "q?", "star*",
+	} {
 		t.Run(name, func(t *testing.T) {
 			installation := newInstallation(t, &fakeBucket{}, map[string]string{"config": "Host portable\n", name: "x"})
-			if _, _, err := installation.service.Collect(); !errors.Is(err, remotesync.ErrUnsafePath) {
-				t.Fatalf("Collect = %v, want ErrUnsafePath", err)
+			_, _, err := installation.service.Collect()
+			var unportable *remotesync.UnportablePathError
+			if !errors.As(err, &unportable) || unportable.Path != name {
+				t.Fatalf("Collect = %v, want the unportable local path %q", err, name)
+			}
+			if got := remotesync.Classify(err).Code; got != "sync_local_path_unportable" {
+				t.Fatalf("Classify = %q, want a local name failure rather than a rejected snapshot", got)
 			}
 		})
+	}
+}
+
+// 送らないファイルの名前は、移植できなくても送信や除外設定の画面を止めない。
+// 止めると、名前を除外するための画面そのものが開けなくなる。
+func TestAnUnportableNameThatIsNotSentBlocksNeitherCollectNorExclusions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows cannot create these source paths")
+	}
+	for _, test := range []struct {
+		name  string
+		files map[string]string
+	}{
+		{name: "excluded by a shared rule", files: map[string]string{".sshcignore": "*.log\n", "aux.log": "x"}},
+		{name: "inside an excluded directory", files: map[string]string{".sshcignore": "scratch/\n", "scratch/con.txt": "x"}},
+		{name: "excluded by a default rule", files: map[string]string{"nul.bak": "x"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			files := map[string]string{"config": "Host portable\n"}
+			for name, contents := range test.files {
+				files[name] = contents
+			}
+			installation := newInstallation(t, &fakeBucket{}, files)
+			manifest, _, err := installation.service.Collect()
+			if err != nil {
+				t.Fatalf("Collect = %v", err)
+			}
+			for _, entry := range manifest.Files {
+				if _, unsent := test.files[entry.Path]; unsent && entry.Path != remotesync.IgnorePath {
+					t.Fatalf("snapshot carries %q", entry.Path)
+				}
+			}
+			if _, err := installation.service.Exclusions(); err != nil {
+				t.Fatalf("Exclusions = %v", err)
+			}
+			if _, err := installation.service.PushDraft(); err != nil {
+				t.Fatalf("PushDraft = %v", err)
+			}
+		})
+	}
+}
+
+// symlink はたどらず運ばないので、その名前も送信を止めない。
+func TestAnUnportableSymlinkNameDoesNotBlockCollect(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows cannot create these source paths")
+	}
+	installation := newInstallation(t, &fakeBucket{}, map[string]string{"config": "Host portable\n"})
+	if err := os.Symlink("config", filepath.Join(installation.home, ".ssh", "aux")); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := installation.service.Collect(); err != nil {
+		t.Fatalf("Collect = %v", err)
+	}
+}
+
+// ControlPath の socket は名前に「:」を含むことが多い（%r@%h:%p）。socket は運ばない
+// ので、その名前も送信を止めない。
+func TestAControlSocketWithAColonInItsNameDoesNotBlockCollect(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows cannot create these source paths")
+	}
+	installation := newInstallation(t, &fakeBucket{}, map[string]string{"config": "Host portable\n"})
+	// Unix ソケットのパスは macOS では 104 バイトまでで、t.TempDir の下の絶対パスでは
+	// 収まらない。作業ディレクトリをこのインストールの .ssh に移し、相対パスで bind する。
+	t.Chdir(filepath.Join(installation.home, ".ssh"))
+	listener, err := net.Listen("unix", "u@h:22")
+	if err != nil {
+		t.Fatalf("listen on a control socket: %v", err)
+	}
+	t.Cleanup(func() { _ = listener.Close() })
+	if _, _, err := installation.service.Collect(); err != nil {
+		t.Fatalf("Collect = %v", err)
+	}
+}
+
+// 送る対象の名前が移植できないとき、除外設定の画面はそのファイルを候補に出す。
+// 利用者はそこで除外を選べる。
+func TestExclusionsListAnUnportableNameSoItCanBeExcluded(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows cannot create these source paths")
+	}
+	installation := newInstallation(t, &fakeBucket{}, map[string]string{"config": "Host portable\n", "aux.conf": "x"})
+	view, err := installation.service.Exclusions()
+	if err != nil {
+		t.Fatalf("Exclusions = %v", err)
+	}
+	listed := false
+	for _, candidate := range view.Candidates {
+		listed = listed || candidate.Path == "aux.conf" && !candidate.Ignored
+	}
+	if !listed {
+		t.Fatalf("candidates = %+v, want aux.conf offered for exclusion", view.Candidates)
+	}
+	if _, err := installation.service.SaveExclusions(remotesync.DefaultIgnoreDocument + "/aux.conf\n"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := installation.service.Collect(); err != nil {
+		t.Fatalf("Collect after excluding the name = %v", err)
 	}
 }
 
@@ -721,8 +911,8 @@ func TestCollectRefusesCaseInsensitivePathCollisionsOnLinux(t *testing.T) {
 		{"Connections/a.conf": "upper directory", "connections/b.conf": "lower directory"},
 	} {
 		installation := newInstallation(t, &fakeBucket{}, files)
-		if _, _, err := installation.service.Collect(); !errors.Is(err, remotesync.ErrUnsafePath) {
-			t.Fatalf("Collect(%v) = %v, want ErrUnsafePath", files, err)
+		if _, _, err := installation.service.Collect(); !errors.Is(err, remotesync.ErrLocalPathUnportable) {
+			t.Fatalf("Collect(%v) = %v, want ErrLocalPathUnportable", files, err)
 		}
 	}
 }
@@ -1123,8 +1313,11 @@ func TestAnUnconfiguredServiceRefusesRatherThanPanicking(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	service := remotesync.NewService(workspace, storage.NewManager(workspace, time.Now, rand.Reader),
-		func() string { return "" }, func() (string, error) { return "o", nil })
+	service, err := remotesync.NewIntegratedService(workspace, storage.NewManager(workspace, time.Now, rand.Reader),
+		func() string { return "" }, func() (string, error) { return "o", nil }, defaultIntegrationHooks())
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if service.Configured() {
 		t.Error("an unconfigured service reports itself configured")
@@ -1196,7 +1389,7 @@ func TestPushRefusesAWorkspaceWithPendingRecoveryBeforeUploading(t *testing.T) {
 	config := remotesync.Config{Endpoint: server.URL, Bucket: "sshc", Region: "auto", Direction: remotesync.DirectionBoth}
 	credentials := objectstore.Credentials{AccessKeyID: "AKID", SecretAccessKey: "secret"}
 	client := &objectstore.Client{
-		HTTP: server.Client(), Endpoint: server.URL, Bucket: "sshc", Region: "auto", Creds: credentials,
+		HTTP: server.Client(), Endpoint: server.URL, Bucket: "sshc", Region: "auto", Credentials: credentials,
 	}
 	if err := service.ConfigureForTest(config, credentials, client); err != nil {
 		t.Fatal(err)
@@ -1563,27 +1756,18 @@ func TestDirectionAcceptsOnlyTheThreeCurrentValues(t *testing.T) {
 // 暗号化された設定は、まさにこのバケットのアクセスキーを保持している。したがって、
 // それを運ぶスナップショットは、スナップショットをひとつ入手した者が以後のすべてを
 // 取得できることを意味する。Collect は ~/.ssh 全体を歩くため、除外契約に漏れが
-// 生じたら気づくのがこのテストである。
+// 生じたら気づくのがこのテストである。ほかのマシンだけの状態の除外は、持ち主の
+// 定数で TestCollectLeavesOutEveryOwnersDeviceLocalPath が確かめる。
 func TestASnapshotCarriesTheVaultAndNotTheKeyToItsOwnBucket(t *testing.T) {
 	installation := newInstallation(t, &fakeBucket{}, map[string]string{
-		"config":                          "Include sshc/sync-settings\nHost bastion\n",
-		"sshc/secrets":                    "sealed vault bytes",
-		"sshc/snippets.json":              "device-master-key ciphertext",
-		"sshc/sync-settings":              "sealed access key",
-		"sshc/local-vault-key":            "device secret",
-		"SSHC/LOCAL-VAULT-KEY":            "case-variant device secret",
-		"SSHC/SYNC-SETTINGS":              "case-variant sealed access key",
-		"sshc/cli":                        `{"url":"http://127.0.0.1:1","secret":"s"}`,
-		"sshc/.cli.mutation.lock":         "runtime handoff lock state",
-		"sshc/journal/entry":              "machine-local journal",
-		"sshc/backups/entry":              "machine-local backup",
-		"sshc/history/entry":              "machine-local history",
-		"sshc/trash/entry":                "machine-local trash",
-		"sshc/recent-connections.json":    `{"schemaVersion":1,"entries":[]}`,
-		"sshc/browser-registrations.json": `{"schemaVersion":1,"hashes":["device-only"]}`,
-		"sshc/workspaces.json":            `{"schemaVersion":1}`,
-		"sshc/mutation.lock":              "runtime lock state",
-		"connections/.sshc-staged":        "transaction temporary file",
+		"config":                             "Include sshc/sync-settings\nHost bastion\n",
+		secret.WorkspacePath:                 "sealed vault bytes",
+		remotesync.SnippetsPath:              "device-master-key ciphertext",
+		secret.SettingsPath:                  "sealed access key",
+		secret.LocalKeyPath:                  "device secret",
+		strings.ToUpper(secret.LocalKeyPath): "case-variant device secret",
+		strings.ToUpper(secret.SettingsPath): "case-variant sealed access key",
+		"connections/.sshc-staged":           "transaction temporary file",
 	})
 
 	installation.replaceIntegrations(t, func(hooks *remotesync.IntegrationHooks) {
@@ -1600,7 +1784,7 @@ func TestASnapshotCarriesTheVaultAndNotTheKeyToItsOwnBucket(t *testing.T) {
 	for _, entry := range exchanged.Files {
 		packed[entry.Path] = true
 	}
-	if packed["sshc/secrets"] {
+	if packed[secret.WorkspacePath] {
 		t.Error("the sealed vault travelled even though its contents do")
 	}
 	if !packed[remotesync.TravelPath] {
@@ -1617,17 +1801,9 @@ func TestASnapshotCarriesTheVaultAndNotTheKeyToItsOwnBucket(t *testing.T) {
 	}
 	for _, excluded := range []string{
 		secret.SettingsPath,
-		"SSHC/SYNC-SETTINGS",
-		"sshc/cli",
-		"sshc/.cli.mutation.lock",
-		"sshc/journal/entry",
-		"sshc/backups/entry",
-		"sshc/history/entry",
-		"sshc/trash/entry",
-		"sshc/recent-connections.json",
-		"sshc/browser-registrations.json",
-		"sshc/workspaces.json",
-		"sshc/mutation.lock",
+		strings.ToUpper(secret.SettingsPath),
+		secret.LocalKeyPath,
+		strings.ToUpper(secret.LocalKeyPath),
 		"connections/.sshc-staged",
 	} {
 		if packed[excluded] {
@@ -1660,7 +1836,7 @@ func TestInspectSetupTargetRefusesABucketThatWillNotAnswer(t *testing.T) {
 	config := remotesync.Config{Endpoint: "https://127.0.0.1:1", Bucket: "sshc", Region: "auto", Direction: remotesync.DirectionBoth}
 	client := &objectstore.Client{
 		Endpoint: "https://127.0.0.1:1", Bucket: "sshc", Region: "auto",
-		Creds: objectstore.Credentials{AccessKeyID: "AKID", SecretAccessKey: "secret"},
+		Credentials: objectstore.Credentials{AccessKeyID: "AKID", SecretAccessKey: "secret"},
 	}
 	if _, err := remotesync.InspectSetupTarget(context.Background(), client, config); err == nil {
 		t.Error("InspectSetupTarget against an unreachable endpoint returned nil")
@@ -1671,7 +1847,7 @@ func TestInspectSetupTargetRefusesABucketThatWillNotAnswer(t *testing.T) {
 // 与えられたものがどこから来たかを信用せず、自分で切り詰めるからだ。
 func TestAStoredTrailingSlashIsTrimmedWhenItIsConfigured(t *testing.T) {
 	installation := newInstallation(t, &fakeBucket{}, map[string]string{"config": "Host bastion\n"})
-	if err := installation.service.ConfigureForTest(remotesync.Config{Endpoint: "https://s3.example.invalid/", Bucket: "b", Region: "auto", Direction: remotesync.DirectionBoth}, installation.creds, installation.client); err != nil {
+	if err := installation.service.ConfigureForTest(remotesync.Config{Endpoint: "https://s3.example.invalid/", Bucket: "b", Region: "auto", Direction: remotesync.DirectionBoth}, installation.credentials, installation.client); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1741,9 +1917,9 @@ func TestChangingToAnotherBucketDoesNotReuseThePreviousGeneration(t *testing.T) 
 	config.Endpoint = server.URL
 	client := &objectstore.Client{
 		HTTP: server.Client(), Endpoint: server.URL, Bucket: config.Bucket, Region: config.Region,
-		Creds: machine.creds,
+		Credentials: machine.credentials,
 	}
-	if err := machine.service.ConfigureForTest(config, machine.creds, client); err != nil {
+	if err := machine.service.ConfigureForTest(config, machine.credentials, client); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := machine.service.PushUsing(context.Background(), keyOf(syncPassphrase), "Start the new bucket"); err != nil {
@@ -1828,7 +2004,7 @@ func TestBucketStatusDoesNotHoldTheSyncOperationLockDuringS3Listing(t *testing.T
 			t.Fatalf("Push while BucketStatus was listing = %v", err)
 		}
 	case <-time.After(10 * time.Second):
-		t.Fatal("BucketStatus held operationMu across the S3 listing")
+		t.Fatal("BucketStatus held operationMutex across the S3 listing")
 	}
 	releaseListing()
 	if err := <-statusDone; !errors.Is(err, remotesync.ErrRemoteMoved) {
@@ -1967,6 +2143,38 @@ func TestPushDraftAndEncryptedHistoryMessages(t *testing.T) {
 	}
 }
 
+func TestASingleChangeWithALongPathStillPushesWithTheDraftMessage(t *testing.T) {
+	bucket := &fakeBucket{}
+	machine := newInstallation(t, bucket, map[string]string{"config": "Host one\n"})
+	if _, err := machine.service.PushUsing(context.Background(), keyOf(syncPassphrase), "Initial setup"); err != nil {
+		t.Fatal(err)
+	}
+	group := strings.Repeat("g", 60)
+	long := "connections/" + strings.Join([]string{group, group, group, group}, "/") + "/bastion.conf"
+
+	steps := []struct {
+		action string
+		change func()
+	}{
+		{"Add", func() { machine.write(t, long, "Host bastion\n") }},
+		{"Update", func() { machine.write(t, long, "Host bastion\n  Port 2222\n") }},
+		{"Remove", func() { machine.remove(t, long) }},
+	}
+	for _, step := range steps {
+		step.change()
+		draft, err := machine.service.PushDraft()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if runes := len([]rune(draft.Message)); runes > remotesync.MaxCommitMessageRunes || !strings.HasPrefix(draft.Message, step.action+" connections/") {
+			t.Fatalf("%s draft = %q (%d runes)", step.action, draft.Message, runes)
+		}
+		if _, err := machine.service.PushUsing(context.Background(), keyOf(syncPassphrase), ""); err != nil {
+			t.Fatalf("%s push with the draft message = %v", step.action, err)
+		}
+	}
+}
+
 func TestHistorySkipsAnUnreadableImmutableObject(t *testing.T) {
 	bucket := &fakeBucket{}
 	machine := newInstallation(t, bucket, map[string]string{"config": "Host one\n"})
@@ -2039,7 +2247,7 @@ func TestHistorySerializesRemoteDerivationAndDiscardsItsStaleGraph(t *testing.T)
 			},
 		)
 	}()
-	// Hold operationMu before releasing the history derivation so its final
+	// Hold operationMutex before releasing the history derivation so its final
 	// validation observes the rotation. Do not impose a wall-clock limit on Argon2.
 	<-rotationReady
 	releaseHistory()
@@ -2099,7 +2307,7 @@ func TestDiffHistorySerializesRemoteDerivationAndDiscardsItsStaleDiff(t *testing
 			},
 		)
 	}()
-	// Hold operationMu before releasing the history derivation so its final
+	// Hold operationMutex before releasing the history derivation so its final
 	// validation observes the rotation. Do not impose a wall-clock limit on Argon2.
 	<-rotationReady
 	releaseDiff()
@@ -2136,12 +2344,44 @@ func TestHistoryDiscardsAResultFromAReconfiguredBinding(t *testing.T) {
 	}()
 	<-started
 	other := newInstallation(t, &fakeBucket{}, map[string]string{})
-	if err := machine.service.ConfigureForTest(other.config, other.creds, other.client); err != nil {
+	if err := machine.service.ConfigureForTest(other.config, other.credentials, other.client); err != nil {
 		t.Fatal(err)
 	}
 	close(release)
 	if err := <-done; !errors.Is(err, remotesync.ErrRemoteMoved) {
 		t.Fatalf("History after Configure = %v, want ErrRemoteMoved", err)
+	}
+}
+
+// ロックで接続一式を手放しても、リモートは変わっていない。読みかけの履歴は
+// 「リモートが変わった」ではなく「未設定」で止める。
+func TestHistoryInterruptedByForgetReportsNotConfiguredRatherThanRemoteMoved(t *testing.T) {
+	machine := newInstallation(t, &fakeBucket{}, map[string]string{"config": "Host one\n"})
+	if _, err := machine.service.PushUsing(context.Background(), keyOf(syncPassphrase), "Initial setup"); err != nil {
+		t.Fatal(err)
+	}
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var once sync.Once
+	envelope.OnDerive = func(step func()) {
+		once.Do(func() {
+			close(started)
+			<-release
+		})
+		step()
+	}
+	t.Cleanup(func() { envelope.OnDerive = nil })
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := machine.service.History(context.Background(), syncPassphrase)
+		done <- err
+	}()
+	<-started
+	machine.service.Forget()
+	close(release)
+	if err := <-done; !errors.Is(err, remotesync.ErrNotConfigured) || errors.Is(err, remotesync.ErrRemoteMoved) {
+		t.Fatalf("History after Forget = %v, want ErrNotConfigured", err)
 	}
 }
 
@@ -2312,7 +2552,7 @@ func TestInterruptedKeyRotationCanBeRecoveredByReenteringTheNewKey(t *testing.T)
 	other := machine.config
 	other.Path = "other-target"
 	persisted := false
-	if err := machine.service.CompleteSetup(context.Background(), other, machine.creds, machine.client,
+	if err := machine.service.CompleteSetup(context.Background(), other, machine.credentials, machine.client,
 		remotesync.SetupInspection{State: remotesync.SetupTargetEmpty}, syncPassphrase,
 		func() error { persisted = true; return nil }); !errors.Is(err, remotesync.ErrRecoveryTargetChange) {
 		t.Fatalf("CompleteSetup during recovery = %v, want ErrRecoveryTargetChange", err)
@@ -2628,7 +2868,7 @@ func TestForcePushConfirmationCannotCrossConfiguredTargetsWithTheSameETag(t *tes
 	beforeBody := append([]byte(nil), secondBucket.object(remotesync.ObjectName)...)
 	beforeKeys := strings.Join(secondBucket.keys(), "\n")
 
-	if err := actor.service.ConfigureForTest(second.config, second.creds, second.client); err != nil {
+	if err := actor.service.ConfigureForTest(second.config, second.credentials, second.client); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := actor.service.ForcePushUsing(context.Background(), keyOf(syncPassphrase), confirmation, "Wrong target"); !errors.Is(err, remotesync.ErrRemoteMoved) {
@@ -2654,7 +2894,7 @@ func TestForcePushConfirmationBindsTheConfiguredCredentialGeneration(t *testing.
 
 	nextCredentials := objectstore.Credentials{AccessKeyID: "NEXT", SecretAccessKey: "next-secret"}
 	nextClient := *machine.client
-	nextClient.Creds = nextCredentials
+	nextClient.Credentials = nextCredentials
 	if err := machine.service.ConfigureForTest(machine.config, nextCredentials, &nextClient); err != nil {
 		t.Fatal(err)
 	}
@@ -2782,7 +3022,7 @@ func TestStatefulSyncOperationsAreSerializedByTheService(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := service.ConfigureForTest(machine.config, machine.creds, machine.client); err != nil {
+	if err := service.ConfigureForTest(machine.config, machine.credentials, machine.client); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2851,7 +3091,7 @@ func TestSetupWaitsForAnInFlightPush(t *testing.T) {
 	client := func(server *httptest.Server) *objectstore.Client {
 		return &objectstore.Client{
 			HTTP: server.Client(), Endpoint: server.URL, Bucket: "sshc", Region: "auto",
-			Creds: credentials,
+			Credentials: credentials,
 		}
 	}
 	if err := service.ConfigureForTest(remotesync.Config{
@@ -2948,7 +3188,7 @@ func TestPushReadsTheSynchronizationKeyAfterAConcurrentRotation(t *testing.T) {
 	select {
 	case <-providerCalled:
 		close(releaseCommit)
-		t.Fatal("Push captured the old key before ReplaceKey released operationMu")
+		t.Fatal("Push captured the old key before ReplaceKey released operationMutex")
 	case <-time.After(50 * time.Millisecond):
 	}
 	close(releaseCommit)
@@ -3106,7 +3346,7 @@ func TestAutoReadsTheSynchronizationKeyAfterAConcurrentRotation(t *testing.T) {
 	select {
 	case <-providerCalled:
 		close(releaseCommit)
-		t.Fatal("Auto captured the old key before ReplaceKey released operationMu")
+		t.Fatal("Auto captured the old key before ReplaceKey released operationMutex")
 	case <-time.After(50 * time.Millisecond):
 	}
 	close(releaseCommit)
@@ -3135,7 +3375,7 @@ func TestCompleteSetupPersistsSettingsAndSwapsBindingBeforeAWaitingPush(t *testi
 	config := machine.config
 	config.Endpoint = server.URL
 	config.Path = "new"
-	client := &objectstore.Client{HTTP: server.Client(), Endpoint: server.URL, Bucket: config.Bucket, Region: config.Region, Creds: machine.creds}
+	client := &objectstore.Client{HTTP: server.Client(), Endpoint: server.URL, Bucket: config.Bucket, Region: config.Region, Credentials: machine.credentials}
 	inspection, err := remotesync.InspectSetupTarget(context.Background(), client, config)
 	if err != nil {
 		t.Fatal(err)
@@ -3146,7 +3386,7 @@ func TestCompleteSetupPersistsSettingsAndSwapsBindingBeforeAWaitingPush(t *testi
 	releasePersist := make(chan struct{})
 	setupDone := make(chan error, 1)
 	go func() {
-		setupDone <- machine.service.CompleteSetup(context.Background(), config, machine.creds, client,
+		setupDone <- machine.service.CompleteSetup(context.Background(), config, machine.credentials, client,
 			inspection, newTargetKey, func() error {
 				currentKey = newTargetKey
 				close(persistEntered)
@@ -3179,7 +3419,7 @@ func TestCompleteSetupPersistsSettingsAndSwapsBindingBeforeAWaitingPush(t *testi
 	reader := newInstallation(t, newBucket, map[string]string{})
 	readerConfig := reader.config
 	readerConfig.Path = "new"
-	if err := reader.service.ConfigureForTest(readerConfig, reader.creds, reader.client); err != nil {
+	if err := reader.service.ConfigureForTest(readerConfig, reader.credentials, reader.client); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := reader.service.Pull(context.Background(), newTargetKey, remotesync.ResolveNone); err != nil {
@@ -3199,7 +3439,7 @@ func TestSetKeyWaitsForSetupPersistenceAndReadsTheNewGeneration(t *testing.T) {
 	config := machine.config
 	config.Endpoint = server.URL
 	config.Path = "new"
-	client := &objectstore.Client{HTTP: server.Client(), Endpoint: server.URL, Bucket: config.Bucket, Region: config.Region, Creds: machine.creds}
+	client := &objectstore.Client{HTTP: server.Client(), Endpoint: server.URL, Bucket: config.Bucket, Region: config.Region, Credentials: machine.credentials}
 	inspection, err := remotesync.InspectSetupTarget(context.Background(), client, config)
 	if err != nil {
 		t.Fatal(err)
@@ -3209,7 +3449,7 @@ func TestSetKeyWaitsForSetupPersistenceAndReadsTheNewGeneration(t *testing.T) {
 	releasePersist := make(chan struct{})
 	setupDone := make(chan error, 1)
 	go func() {
-		setupDone <- machine.service.CompleteSetup(context.Background(), config, machine.creds, client,
+		setupDone <- machine.service.CompleteSetup(context.Background(), config, machine.credentials, client,
 			inspection, syncPassphrase, func() error {
 				close(persistEntered)
 				<-releasePersist
@@ -3270,7 +3510,7 @@ func TestApplyRejectsAPreviewFromAReconfiguredBinding(t *testing.T) {
 	}
 	config := consumer.config
 	config.Path = "new"
-	if err := consumer.service.ConfigureForTest(config, consumer.creds, consumer.client); err != nil {
+	if err := consumer.service.ConfigureForTest(config, consumer.credentials, consumer.client); err != nil {
 		t.Fatal(err)
 	}
 	// 適用は今の接続先で取り直すので、preview を取った接続先とは別の（空の）
@@ -3340,7 +3580,7 @@ func TestChangingTheObjectKeyDoesNotStrandAMachineThatHasSynced(t *testing.T) {
 	// 設定がパスを指定するようになったので、ライブのオブジェクトは別の場所にある。
 	config := installation.config
 	config.Path = "laptops"
-	if err := installation.service.ConfigureForTest(config, installation.creds, installation.client); err != nil {
+	if err := installation.service.ConfigureForTest(config, installation.credentials, installation.client); err != nil {
 		t.Fatal(err)
 	}
 
@@ -3353,9 +3593,15 @@ func TestChangingTheObjectKeyDoesNotStrandAMachineThatHasSynced(t *testing.T) {
 }
 
 // withVault は、この設置に本物の保管庫を与え、同期へvault 変換関数を繋ぐ。
+//
+// 本番の配線（internal/app/services.go）と同じく、世代バックアップを vault の鍵で
+// 封じる。封じないマネージャの控えは本番に無い形（vault の控えが入れ子でない）になり、
+// マスターパスワードの変更がそれを断る。
 func withVault(t *testing.T, machine *installation, master string) *secret.Service {
 	t.Helper()
 	secrets := secret.NewService(machine.workspace, machine.manager, time.Now)
+	machine.manager.Seal = secrets.SealBackup
+	machine.manager.Unseal = secrets.OpenBackup
 	if err := secrets.Initialise(master); err != nil {
 		t.Fatalf("Initialise: %v", err)
 	}
@@ -3364,8 +3610,192 @@ func withVault(t *testing.T, machine *installation, master string) *secret.Servi
 		hooks.SealVault = secrets.AdoptTravelDocument
 		hooks.EmptyVaultDocument = secrets.EmptyTravelDocument
 		hooks.VaultAdopted = secrets.Reload
+		hooks.KeyedTravelDigest = secrets.KeyedTravelDigest
 	})
+	secrets.SetTravelDigestRekey(machine.service.RekeyTravelDigest)
 	return secrets
+}
+
+// sync-state.json に vault 文書の素の SHA-256 を残すと、~/.ssh の写しを手に入れた
+// 者が、保存済みのパスワードをマスターパスワードの Argon2id を経ずに照合できる。
+// state には鍵付きの digest だけを残し、それでも前回の同期との比較は変わらない。
+func TestTheSyncStateKeepsOnlyAKeyedDigestOfTheVaultDocument(t *testing.T) {
+	bucket := &fakeBucket{}
+	first := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
+	sender := withVault(t, &first, "the first machine's master")
+	const binding = "abababababababababababababababababababababababababababababababab"
+	if err := secrettest.StoreDedicatedPassword(sender, first.manager, secrettest.DedicatedPassword{
+		Alias: "bastion", Password: "hunter2", Binding: binding,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := first.service.PushUsing(context.Background(), keyOf(syncPassphrase), ""); err != nil {
+		t.Fatalf("Push = %v", err)
+	}
+
+	document, err := sender.TravelDocument()
+	if err != nil {
+		t.Fatal(err)
+	}
+	statePath := filepath.Join(first.workspace.Root(), filepath.FromSlash(remotesync.StatePath))
+	state, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(state), remotesync.Digest(document)) {
+		t.Fatalf("the sync state holds the plain digest of the vault document:\n%s", state)
+	}
+	if !strings.Contains(string(state), `"sha256": "hmac-sha256:`) {
+		t.Fatalf("the sync state does not hold a keyed digest of the vault document:\n%s", state)
+	}
+
+	// 鍵付きにしても、前回の同期から vault が変わっていないことは分かる。
+	draft, err := first.service.PushDraft()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if draft.Added+draft.Modified+draft.Removed != 0 {
+		t.Fatalf("an unchanged vault is reported as a change: %+v", draft)
+	}
+
+	// 別のマシンが vault を変えて送り出しても、こちらは変えていないので衝突しない。
+	second := newInstallation(t, bucket, map[string]string{})
+	receiver := withVault(t, &second, "the second machine's own master")
+	received, err := second.service.Pull(context.Background(), syncPassphrase, remotesync.ResolveNone)
+	if err != nil {
+		t.Fatalf("the second machine's Pull = %v", err)
+	}
+	if err := applyPreview(second.service, remotesync.ResolveNone, "", received); err != nil {
+		t.Fatalf("the second machine's Apply = %v", err)
+	}
+	if err := secrettest.StoreDedicatedPassword(receiver, second.manager, secrettest.DedicatedPassword{
+		Alias: "bastion", Password: "a changed password", Binding: binding,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := second.service.PushUsing(context.Background(), keyOf(syncPassphrase), ""); err != nil {
+		t.Fatalf("the second machine's Push = %v", err)
+	}
+	result, err := first.service.Pull(context.Background(), syncPassphrase, remotesync.ResolveNone)
+	if err != nil {
+		t.Fatalf("Pull = %v", err)
+	}
+	if len(result.Conflicts) != 0 {
+		t.Fatalf("a vault changed on one side only conflicted: %+v", result.Conflicts)
+	}
+}
+
+// マスターパスワードを変えると、state の鍵付きの digest を作った鍵も変わる。変更は
+// 同じトランザクションで state の値を新しい鍵へ移すので、このマシンの vault が
+// 変わっていなければ、ほかのマシンだけが変えた vault は衝突せずに受け取れる。
+func TestAMasterPasswordChangeKeepsTheVaultUnchangedSinceTheLastSync(t *testing.T) {
+	bucket := &fakeBucket{}
+	first := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
+	sender := withVault(t, &first, "the first machine's master")
+	const binding = "abababababababababababababababababababababababababababababababab"
+	if err := secrettest.StoreDedicatedPassword(sender, first.manager, secrettest.DedicatedPassword{
+		Alias: "bastion", Password: "hunter2", Binding: binding,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := first.service.PushUsing(context.Background(), keyOf(syncPassphrase), ""); err != nil {
+		t.Fatalf("Push = %v", err)
+	}
+	second := newInstallation(t, bucket, map[string]string{})
+	receiver := withVault(t, &second, "the second machine's own master")
+	received, err := second.service.Pull(context.Background(), syncPassphrase, remotesync.ResolveNone)
+	if err != nil {
+		t.Fatalf("the second machine's Pull = %v", err)
+	}
+	if err := applyPreview(second.service, remotesync.ResolveNone, "", received); err != nil {
+		t.Fatalf("the second machine's Apply = %v", err)
+	}
+
+	passwordChanges := []struct{ current, next string }{
+		{current: "the first machine's master", next: "the first machine's new master"},
+		// パスワードなしへの切り替えも、鍵を変える。
+		{current: "the first machine's new master", next: ""},
+	}
+	for _, change := range passwordChanges {
+		if err := sender.ChangeMasterPassword(context.Background(), change.current, change.next); err != nil {
+			t.Fatalf("ChangeMasterPassword to %q = %v", change.next, err)
+		}
+		draft, err := first.service.PushDraft()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if draft.Added+draft.Modified+draft.Removed != 0 {
+			t.Fatalf("after changing the master password to %q, the unchanged vault is reported as a change: %+v", change.next, draft)
+		}
+	}
+
+	if err := secrettest.StoreDedicatedPassword(receiver, second.manager, secrettest.DedicatedPassword{
+		Alias: "bastion", Password: "a changed password", Binding: binding,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := second.service.PushUsing(context.Background(), keyOf(syncPassphrase), ""); err != nil {
+		t.Fatalf("the second machine's Push = %v", err)
+	}
+	result, err := first.service.Pull(context.Background(), syncPassphrase, remotesync.ResolveNone)
+	if err != nil {
+		t.Fatalf("Pull = %v", err)
+	}
+	if len(result.Conflicts) != 0 {
+		t.Fatalf("a vault changed only on the other machine conflicted after a master password change: %+v", result.Conflicts)
+	}
+}
+
+// 鍵付きにする前の版は、vault 文書の素の SHA-256 を state に書いていた。移行は
+// それを今の鍵の値へ書き換え、前回の同期との比較は変えない。
+func TestMigratingTheTravelDigestReplacesAPlainDigestLeftByAnEarlierRelease(t *testing.T) {
+	bucket := &fakeBucket{}
+	first := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
+	sender := withVault(t, &first, "the first machine's master")
+	if err := secrettest.StoreDedicatedPassword(sender, first.manager, secrettest.DedicatedPassword{
+		Alias: "bastion", Password: "hunter2",
+		Binding: "abababababababababababababababababababababababababababababababab",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := first.service.PushUsing(context.Background(), keyOf(syncPassphrase), ""); err != nil {
+		t.Fatalf("Push = %v", err)
+	}
+	document, err := sender.TravelDocument()
+	if err != nil {
+		t.Fatal(err)
+	}
+	plain := remotesync.Digest(document)
+	statePath := filepath.Join(first.workspace.Root(), filepath.FromSlash(remotesync.StatePath))
+	state, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	earlier := regexp.MustCompile(`"hmac-sha256:[0-9a-f]+"`).ReplaceAll(state, []byte(`"`+plain+`"`))
+	if bytes.Equal(earlier, state) {
+		t.Fatalf("the sync state has no keyed digest to replace:\n%s", state)
+	}
+	if err := os.WriteFile(statePath, earlier, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := first.service.MigrateTravelDigest(); err != nil {
+		t.Fatalf("MigrateTravelDigest = %v", err)
+	}
+	migrated, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(migrated, []byte(plain)) || !bytes.Contains(migrated, []byte(`"sha256": "hmac-sha256:`)) {
+		t.Fatalf("the plain digest was not replaced by a keyed one:\n%s", migrated)
+	}
+	draft, err := first.service.PushDraft()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if draft.Added+draft.Modified+draft.Removed != 0 {
+		t.Fatalf("an unchanged vault is reported as a change after the migration: %+v", draft)
+	}
 }
 
 // これがこの設計そのものである。保存したパスワードは端末をまたいで運ばれ、
@@ -3376,7 +3806,9 @@ func TestSavedPasswordsTravelWhileMasterPasswordsStayLocal(t *testing.T) {
 	first := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
 	sender := withVault(t, &first, "the first machine's master")
 	const binding = "abababababababababababababababababababababababababababababababab"
-	if err := sender.SetBound("bastion", "the password for bastion", binding); err != nil {
+	if err := secrettest.StoreDedicatedPassword(sender, first.manager, secrettest.DedicatedPassword{
+		Alias: "bastion", Password: "the password for bastion", Binding: binding,
+	}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := first.service.PushUsing(context.Background(), keyOf(syncPassphrase), ""); err != nil {
@@ -3385,7 +3817,7 @@ func TestSavedPasswordsTravelWhileMasterPasswordsStayLocal(t *testing.T) {
 
 	// 送り出したものの中に、暗号化された保管庫は入っていない。
 	sealed := bucket.object(remotesync.ObjectName)
-	archive, _, err := envelope.OpenWithin(sealed, syncPassphrase, envelope.AcceptedFromRemote)
+	archive, _, err := envelope.OpenRemote(sealed, syncPassphrase)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3437,7 +3869,9 @@ func TestAnExplicitEmptyVaultClearsCredentialsOnAnotherInstallation(t *testing.T
 	first := newInstallation(t, bucket, map[string]string{"config": "Host bastion\n"})
 	sender := withVault(t, &first, "the first machine's master")
 	const binding = "abababababababababababababababababababababababababababababababab"
-	if err := sender.SetBound("bastion", "password to revoke", binding); err != nil {
+	if err := secrettest.StoreDedicatedPassword(sender, first.manager, secrettest.DedicatedPassword{
+		Alias: "bastion", Password: "password to revoke", Binding: binding,
+	}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := first.service.PushUsing(context.Background(), keyOf(syncPassphrase), "Store credential"); err != nil {
@@ -3469,7 +3903,7 @@ func TestAnExplicitEmptyVaultClearsCredentialsOnAnotherInstallation(t *testing.T
 	if _, err := first.service.PushUsing(context.Background(), keyOf(syncPassphrase), "Remove all credentials"); err != nil {
 		t.Fatal(err)
 	}
-	archive, _, err := envelope.OpenWithin(bucket.object(remotesync.ObjectName), syncPassphrase, envelope.AcceptedFromRemote)
+	archive, _, err := envelope.OpenRemote(bucket.object(remotesync.ObjectName), syncPassphrase)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3514,7 +3948,7 @@ func TestAnEmptyVaultDoesNotTravel(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	archive, _, err := envelope.OpenWithin(bucket.object(remotesync.ObjectName), syncPassphrase, envelope.AcceptedFromRemote)
+	archive, _, err := envelope.OpenRemote(bucket.object(remotesync.ObjectName), syncPassphrase)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3536,11 +3970,12 @@ func TestAnEmptyVaultDoesNotTravel(t *testing.T) {
 // 「選ばれているのに何も出ない」状態になる。そして Android はサンドボックスの
 // 外を見られないので、あの端末へ画像を持ち込む道はこれしかない。
 func TestASnapshotCarriesTheBackgroundImagesTheMetadataNames(t *testing.T) {
+	const background = storage.BackgroundsDirectory + "/office.png"
 	installation := newInstallation(t, &fakeBucket{}, map[string]string{
 		"config": "Host bastion\n",
 		"sshc/metadata.json": `{"schemaVersion":3,"hosts":[{"identity":{"path":"config","alias":"bastion"},` +
 			`"appearance":{"background":"office.png"}}]}`,
-		"sshc/backgrounds/office.png": "\x89PNG\r\n\x1a\nbytes",
+		background: "\x89PNG\r\n\x1a\nbytes",
 	})
 
 	manifest, contents, err := installation.service.Collect()
@@ -3551,10 +3986,10 @@ func TestASnapshotCarriesTheBackgroundImagesTheMetadataNames(t *testing.T) {
 	for _, entry := range manifest.Files {
 		packed[entry.Path] = true
 	}
-	if !packed["sshc/backgrounds/office.png"] {
+	if !packed[background] {
 		t.Fatalf("the background does not travel: %v", packed)
 	}
-	if string(contents["sshc/backgrounds/office.png"]) != "\x89PNG\r\n\x1a\nbytes" {
+	if string(contents[background]) != "\x89PNG\r\n\x1a\nbytes" {
 		t.Fatalf("the background travelled with the wrong bytes")
 	}
 }
@@ -3566,7 +4001,7 @@ func TestShortcutPresetsTravelInEncryptedSync(t *testing.T) {
 	if _, err := writer.service.PushUsing(context.Background(), keyOf(syncPassphrase), "Shortcut presets"); err != nil {
 		t.Fatal(err)
 	}
-	archive, _, err := envelope.OpenWithin(bucket.object(remotesync.ObjectName), syncPassphrase, envelope.AcceptedFromRemote)
+	archive, _, err := envelope.OpenRemote(bucket.object(remotesync.ObjectName), syncPassphrase)
 	if err != nil {
 		t.Fatal(err)
 	}

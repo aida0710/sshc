@@ -14,6 +14,7 @@ import (
 
 	"sshc/internal/application"
 	"sshc/internal/secret"
+	"sshc/internal/secret/secrettest"
 	"sshc/internal/storage"
 )
 
@@ -72,7 +73,9 @@ func TestCLIAutomatesPasswordAndTOTPAgainstRealOpenSSH(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := vault.SetBound("totp-integration", password, binding); err != nil {
+	if err := secrettest.StoreDedicatedPassword(vault, transactions, secrettest.DedicatedPassword{
+		Alias: "totp-integration", Password: password, Binding: binding,
+	}); err != nil {
 		t.Fatal(err)
 	}
 	if err := vault.SetCredential(secret.KindTOTP, "integration-token", setupKey); err != nil {

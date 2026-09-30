@@ -50,8 +50,9 @@ func (d Dialer) Stream(
 	strict := requireKnownHosts(target)
 	// ProxyCommand is a local process, not remote command stderr. It must still
 	// be visible at this CLI boundary even when connection verbosity is quiet.
-	// Explicit connection-log settings also apply to `sshc run`, so -vv/-vvv
-	// diagnostics appear on the CLI path as they do in the terminal.
+	// Explicit connection-log settings also apply to
+	// `sshc ssh <alias> --non-interactive -- <command>`, so -vv/-vvv diagnostics
+	// appear on the CLI path as they do in the terminal.
 	level := connectionlog.Notice
 	if d.Verbosity != nil {
 		level = d.Verbosity()

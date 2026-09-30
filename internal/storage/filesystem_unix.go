@@ -16,6 +16,9 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+// nativeReportsExecutableBit: Unix の Lstat は chmod した owner の実行ビットをそのまま返す。
+const nativeReportsExecutableBit = true
+
 const (
 	tempRandomByteCount = 16
 	tempCollisionLimit  = 128

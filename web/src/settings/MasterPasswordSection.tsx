@@ -41,13 +41,24 @@ export function MasterPasswordSection({ api, showHeading, onVaultChanged }: {
     setDraft((current) => ({ ...current, ...patch }));
   }
 
+  function describeChangeFailure(code: string): string {
+    switch (code) {
+      case "wrong_passphrase":
+        return t("secrets.wrongCurrent");
+      case "vault_backups_too_many":
+        return t("lock.tooManyBackups");
+      default:
+        return t("secrets.changeFailed");
+    }
+  }
+
   async function submit() {
     const { current, next, withoutPassword } = draft;
     await save.run(async () => {
       const result = await api.changeMasterPassword(passwordless ? "" : current, withoutPassword ? "" : next);
       setPasswordless(result.vault.passwordless ?? false);
       onVaultChanged?.(result.vault);
-    }, { describe: (error) => failureCode(error) === "wrong_passphrase" ? t("secrets.wrongCurrent") : t("secrets.changeFailed") });
+    }, { describe: (error) => describeChangeFailure(failureCode(error)) });
     setDraft((state) => ({ ...emptyDraft, withoutPassword: state.withoutPassword }));
   }
 
